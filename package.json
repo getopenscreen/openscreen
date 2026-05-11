@@ -20,6 +20,7 @@
 		"format": "biome format --write .",
 		"i18n:check": "node scripts/i18n-check.mjs",
 		"preview": "vite preview",
+		"build:native:mac": "node scripts/build-macos-screencapturekit-helper.mjs",
 		"build:mac": "tsc && vite build && electron-builder --mac",
 		"build:native:win": "node scripts/build-windows-wgc-helper.mjs",
 		"build:win": "npm run build:native:win && tsc && vite build && electron-builder --win --config.npmRebuild=false",

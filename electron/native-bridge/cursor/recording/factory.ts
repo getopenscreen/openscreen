@@ -1,4 +1,5 @@
 import type { Rectangle } from "electron";
+import { MacNativeCursorRecordingSession } from "./macNativeCursorRecordingSession";
 import type { CursorRecordingSession } from "./session";
 import { TelemetryRecordingSession } from "./telemetryRecordingSession";
 import { WindowsNativeRecordingSession } from "./windowsNativeRecordingSession";
@@ -25,9 +26,17 @@ export function createCursorRecordingSession(
 		});
 	}
 
-	// macOS / Linux: capture cursor positions via Electron's `screen` API on an
-	// interval. No cursor sprites/assets and no clicks — just position telemetry,
-	// which is what auto-zoom and other features consume.
+	if (options.platform === "darwin") {
+		return new MacNativeCursorRecordingSession({
+			getDisplayBounds: options.getDisplayBounds,
+			maxSamples: options.maxSamples,
+			sampleIntervalMs: options.sampleIntervalMs,
+			startTimeMs: options.startTimeMs,
+		});
+	}
+
+	// Linux: capture cursor positions via Electron's `screen` API on an interval.
+	// No cursor sprites/assets and no clicks — just position telemetry.
 	return new TelemetryRecordingSession({
 		getDisplayBounds: options.getDisplayBounds,
 		maxSamples: options.maxSamples,

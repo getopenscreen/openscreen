@@ -37,6 +37,7 @@ import type {
 import { mainT } from "../i18n";
 import { RECORDINGS_DIR } from "../main";
 import { createCursorRecordingSession } from "../native-bridge/cursor/recording/factory";
+import { requestMacCursorAccessibilityAccess } from "../native-bridge/cursor/recording/macNativeCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
 
@@ -1044,6 +1045,43 @@ export function registerIpcHandlers(
 	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
 	_switchToHud?: () => void,
 ) {
+	async function requestScreenAccess() {
+		if (process.platform !== "darwin") {
+			return { success: true, granted: true, status: "granted" };
+		}
+
+		try {
+			const status = systemPreferences.getMediaAccessStatus("screen");
+			if (status === "granted") {
+				return { success: true, granted: true, status };
+			}
+
+			// Screen recording has no askForMediaAccess equivalent. Trigger the
+			// TCC prompt without opening OpenScreen's source selector above it.
+			if (status === "not-determined") {
+				const mainWin = getMainWindow();
+				if (mainWin && !mainWin.isDestroyed()) {
+					if (!mainWin.isVisible()) {
+						mainWin.show();
+					}
+					mainWin.focus();
+				}
+				app.focus({ steal: true });
+				desktopCapturer
+					.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } })
+					.catch(() => {
+						// Permission probing failure is reported by the explicit status check below.
+					});
+				return { success: true, granted: false, status: "not-determined" };
+			}
+
+			return { success: true, granted: false, status };
+		} catch (error) {
+			console.error("Failed to request screen access:", error);
+			return { success: false, granted: false, status: "unknown", error: String(error) };
+		}
+	}
+
 	ipcMain.handle("get-sources", async (_, opts) => {
 		const sources = await desktopCapturer.getSources(opts);
 		lastEnumeratedSources = new Map(sources.map((source) => [source.id, source]));
@@ -1120,40 +1158,51 @@ export function registerIpcHandlers(
 	});
 
 	ipcMain.handle("request-screen-access", async () => {
-		if (process.platform !== "darwin") {
-			return { success: true, granted: true, status: "granted" };
-		}
-
-		try {
-			const status = systemPreferences.getMediaAccessStatus("screen");
-			if (status === "granted") {
-				return { success: true, granted: true, status };
-			}
-
-			// Screen recording has no askForMediaAccess equivalent — the TCC prompt
-			// is triggered by desktopCapturer.getSources(). Fire it and return so
-			// the renderer can re-check status after the user responds.
-			if (status === "not-determined") {
-				desktopCapturer.getSources({ types: ["screen"] }).catch(() => {
-					// Permission probing failure is reported by the explicit status check below.
-				});
-				return { success: true, granted: false, status: "not-determined" };
-			}
-
-			return { success: true, granted: false, status };
-		} catch (error) {
-			console.error("Failed to request screen access:", error);
-			return { success: false, granted: false, status: "unknown", error: String(error) };
-		}
+		return requestScreenAccess();
 	});
 
-	ipcMain.handle("open-source-selector", () => {
+	ipcMain.handle("request-native-mac-cursor-access", async () => {
+		return requestMacCursorAccessibilityAccess();
+	});
+
+	ipcMain.handle("open-source-selector", async () => {
+		const access = await requestScreenAccess();
+		if (!access.granted) {
+			if (process.platform === "darwin" && access.status !== "not-determined") {
+				const mainWin = getMainWindow();
+				const messageOptions = {
+					type: "warning",
+					buttons: ["Open System Settings", "Cancel"],
+					defaultId: 0,
+					cancelId: 1,
+					message: "Screen Recording permission is required",
+					detail:
+						"Allow OpenScreen in macOS System Settings, then come back and choose a screen or window.",
+				} satisfies Electron.MessageBoxOptions;
+				const result =
+					mainWin && !mainWin.isDestroyed()
+						? await dialog.showMessageBox(mainWin, messageOptions)
+						: await dialog.showMessageBox(messageOptions);
+				if (result.response === 0) {
+					await shell.openExternal(
+						"x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+					);
+				}
+			}
+			return {
+				opened: false,
+				reason: "screen-access-required",
+				access,
+			};
+		}
+
 		const sourceSelectorWin = getSourceSelectorWindow();
 		if (sourceSelectorWin) {
 			sourceSelectorWin.focus();
-			return;
+			return { opened: true };
 		}
 		createSourceSelectorWindow();
+		return { opened: true };
 	});
 
 	ipcMain.handle("switch-to-editor", () => {

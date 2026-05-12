@@ -31,10 +31,31 @@ interface Window {
 		switchToEditor: () => Promise<void>;
 		switchToHud: () => Promise<void>;
 		startNewRecording: () => Promise<{ success: boolean; error?: string }>;
-		openSourceSelector: () => Promise<void>;
+		openSourceSelector: () => Promise<{
+			opened: boolean;
+			reason?: string;
+			access?: {
+				success: boolean;
+				granted: boolean;
+				status: string;
+				error?: string;
+			};
+		}>;
 		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource | null>;
 		getSelectedSource: () => Promise<ProcessedDesktopSource | null>;
 		requestCameraAccess: () => Promise<{
+			success: boolean;
+			granted: boolean;
+			status: string;
+			error?: string;
+		}>;
+		requestScreenAccess: () => Promise<{
+			success: boolean;
+			granted: boolean;
+			status: string;
+			error?: string;
+		}>;
+		requestNativeMacCursorAccess: () => Promise<{
 			success: boolean;
 			granted: boolean;
 			status: string;

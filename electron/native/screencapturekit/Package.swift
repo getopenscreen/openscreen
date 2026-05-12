@@ -11,12 +11,20 @@ let package = Package(
 		.executable(
 			name: "openscreen-screencapturekit-helper",
 			targets: ["OpenScreenScreenCaptureKitHelper"]
+		),
+		.executable(
+			name: "openscreen-macos-cursor-helper",
+			targets: ["OpenScreenMacOSCursorHelper"]
 		)
 	],
 	targets: [
 		.executableTarget(
 			name: "OpenScreenScreenCaptureKitHelper",
 			path: "Sources/OpenScreenScreenCaptureKitHelper"
+		),
+		.executableTarget(
+			name: "OpenScreenMacOSCursorHelper",
+			path: "Sources/OpenScreenMacOSCursorHelper"
 		)
 	]
 )

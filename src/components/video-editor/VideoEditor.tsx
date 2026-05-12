@@ -251,13 +251,13 @@ export default function VideoEditor() {
 	const nextSpeedIdRef = useRef(1);
 
 	const { shortcuts, isMac } = useShortcuts();
-	// Windows-only: the synthetic cursor overlay + cursor customization settings
-	// only apply when there's an actual native cursor recording (cursor frames +
-	// position samples produced by WindowsNativeRecordingSession). Mac and Linux
-	// keep their telemetry positions for auto-zoom but never render a synthetic
-	// cursor or expose cursor customization settings.
+	// Native Windows recordings include captured cursor assets. Native macOS
+	// recordings hide the system cursor in ScreenCaptureKit and use telemetry
+	// samples with OpenScreen's default arrow asset for the editable overlay.
 	const hasEditableCursorRecording =
-		nativePlatform === "win32" && hasNativeCursorRecordingData(cursorRecordingData);
+		recordingCursorCaptureMode === "editable-overlay" &&
+		(nativePlatform === "win32" || nativePlatform === "darwin") &&
+		hasNativeCursorRecordingData(cursorRecordingData);
 	const effectiveShowCursor = showCursor && hasEditableCursorRecording;
 	const showCursorSettings = hasEditableCursorRecording;
 	const { locale, setLocale, t: rawT } = useI18n();

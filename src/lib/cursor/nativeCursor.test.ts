@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
 	getNativeCursorClickBounceProgress,
 	getNativeCursorClickBounceScale,
+	hasNativeCursorRecordingData,
+	resolveInterpolatedNativeCursorFrame,
 } from "./nativeCursor";
 
 describe("native cursor click bounce", () => {
@@ -30,5 +32,38 @@ describe("native cursor click bounce", () => {
 		expect(getNativeCursorClickBounceScale(5, 0.82)).toBeLessThan(0.9);
 		expect(getNativeCursorClickBounceScale(5, 0.28)).toBeGreaterThan(1.05);
 		expect(getNativeCursorClickBounceScale(5, 0)).toBe(1);
+	});
+
+	it("uses the default cursor asset for telemetry-only macOS recordings", () => {
+		const recordingData = {
+			version: 2,
+			provider: "none" as const,
+			assets: [],
+			samples: [
+				{ timeMs: 0, cx: 0.25, cy: 0.4, visible: true },
+				{ timeMs: 100, cx: 0.75, cy: 0.6, visible: true },
+			],
+		};
+
+		expect(hasNativeCursorRecordingData(recordingData)).toBe(true);
+		const frame = resolveInterpolatedNativeCursorFrame(recordingData, 50);
+		expect(frame?.asset.cursorType).toBe("arrow");
+		expect(frame?.sample.cx).toBeCloseTo(0.5);
+		expect(frame?.sample.cy).toBeCloseTo(0.5);
+	});
+
+	it("applies click bounce to telemetry-only macOS recordings", () => {
+		const recordingData = {
+			version: 2,
+			provider: "none" as const,
+			assets: [],
+			samples: [
+				{ timeMs: 0, cx: 0.5, cy: 0.5, visible: true, interactionType: "move" as const },
+				{ timeMs: 100, cx: 0.5, cy: 0.5, visible: true, interactionType: "click" as const },
+				{ timeMs: 133, cx: 0.5, cy: 0.5, visible: true, interactionType: "move" as const },
+			],
+		};
+
+		expect(getNativeCursorClickBounceProgress(recordingData, 133)).toBeGreaterThan(0);
 	});
 });

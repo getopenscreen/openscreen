@@ -934,7 +934,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 		const runId = countdownRunId.current + 1;
 		countdownRunId.current = runId;
-		setCountdownActive(true);
 
 		let selectedSource: ProcessedDesktopSource | null = null;
 		try {
@@ -954,6 +953,27 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			alert(t("recording.selectSource"));
 			return;
 		}
+
+		try {
+			const platform = await window.electronAPI.getPlatform();
+			if (platform === "darwin" && cursorCaptureMode === "editable-overlay") {
+				const access = await window.electronAPI.requestNativeMacCursorAccess();
+				if (!access.granted) {
+					toast.info(
+						"Allow Accessibility access for OpenScreen, then press record again to start the countdown.",
+					);
+					return;
+				}
+			}
+		} catch (error) {
+			console.warn("Failed to preflight macOS cursor accessibility before countdown:", error);
+		}
+
+		if (!isCountdownRunActive(runId)) {
+			return;
+		}
+
+		setCountdownActive(true);
 
 		let overlayHiddenBeforeStart = false;
 		try {

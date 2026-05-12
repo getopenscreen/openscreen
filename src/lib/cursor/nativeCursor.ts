@@ -220,6 +220,33 @@ const PRETTY_NATIVE_CURSOR_ASSETS: Partial<Record<NativeCursorType, PrettyNative
 	},
 };
 
+const TELEMETRY_CURSOR_ASSET: NativeCursorAsset = {
+	id: "telemetry-arrow",
+	platform: "darwin",
+	imageDataUrl: arrowUrl,
+	width: PRETTY_NATIVE_CURSOR_ASSETS.arrow?.width ?? 32,
+	height: PRETTY_NATIVE_CURSOR_ASSETS.arrow?.height ?? 32,
+	hotspotX: PRETTY_NATIVE_CURSOR_ASSETS.arrow?.hotspotX ?? 16,
+	hotspotY: PRETTY_NATIVE_CURSOR_ASSETS.arrow?.hotspotY ?? 16,
+	cursorType: "arrow",
+};
+
+function getTelemetryCursorAsset(sample?: CursorRecordingSample): NativeCursorAsset {
+	const cursorType = sample?.cursorType ?? "arrow";
+	const prettyAsset = PRETTY_NATIVE_CURSOR_ASSETS[cursorType] ?? PRETTY_NATIVE_CURSOR_ASSETS.arrow;
+
+	return {
+		...TELEMETRY_CURSOR_ASSET,
+		id: `telemetry-${cursorType}`,
+		imageDataUrl: prettyAsset?.imageDataUrl ?? TELEMETRY_CURSOR_ASSET.imageDataUrl,
+		width: prettyAsset?.width ?? TELEMETRY_CURSOR_ASSET.width,
+		height: prettyAsset?.height ?? TELEMETRY_CURSOR_ASSET.height,
+		hotspotX: prettyAsset?.hotspotX ?? TELEMETRY_CURSOR_ASSET.hotspotX,
+		hotspotY: prettyAsset?.hotspotY ?? TELEMETRY_CURSOR_ASSET.hotspotY,
+		cursorType,
+	};
+}
+
 function resolveUntypedPrettyNativeCursorAsset(asset: NativeCursorAsset) {
 	if (
 		asset.cursorType ||
@@ -244,9 +271,8 @@ export function hasNativeCursorRecordingData(
 ): recordingData is CursorRecordingData {
 	return Boolean(
 		recordingData &&
-			recordingData.provider === "native" &&
 			recordingData.samples.length > 0 &&
-			recordingData.assets.length > 0,
+			(recordingData.assets.length > 0 || recordingData.provider === "none"),
 	);
 }
 
@@ -329,7 +355,7 @@ export function getNativeCursorClickBounceProgress(
 	recordingData: CursorRecordingData | null | undefined,
 	timeMs: number,
 ) {
-	if (!recordingData || recordingData.provider !== "native" || recordingData.samples.length === 0) {
+	if (!recordingData || recordingData.samples.length === 0) {
 		return 0;
 	}
 
@@ -444,11 +470,13 @@ export function resolveActiveNativeCursorFrame(
 	if (index >= 0) {
 		const sample = recordingData.samples[index];
 
-		if (sample.visible === false || !sample.assetId) {
+		if (sample.visible === false) {
 			return null;
 		}
 
-		const asset = getNativeCursorAsset(recordingData, sample.assetId);
+		const asset = sample.assetId
+			? getNativeCursorAsset(recordingData, sample.assetId)
+			: getTelemetryCursorAsset(sample);
 		if (!asset) {
 			return null;
 		}
@@ -475,11 +503,13 @@ export function resolveInterpolatedNativeCursorFrame(
 	}
 
 	const activeSample = samples[activeIndex];
-	if (activeSample.visible === false || !activeSample.assetId) {
+	if (activeSample.visible === false) {
 		return null;
 	}
 
-	const asset = getNativeCursorAsset(recordingData, activeSample.assetId);
+	const asset = activeSample.assetId
+		? getNativeCursorAsset(recordingData, activeSample.assetId)
+		: getTelemetryCursorAsset(activeSample);
 	if (!asset) {
 		return null;
 	}
@@ -489,7 +519,7 @@ export function resolveInterpolatedNativeCursorFrame(
 		!nextSample ||
 		nextSample.timeMs <= activeSample.timeMs ||
 		nextSample.visible === false ||
-		nextSample.assetId !== activeSample.assetId ||
+		(nextSample.assetId ?? null) !== (activeSample.assetId ?? null) ||
 		timeMs <= activeSample.timeMs
 	) {
 		return { asset, sample: activeSample };

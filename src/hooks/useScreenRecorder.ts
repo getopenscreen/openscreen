@@ -3,6 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
+	type NativeMacRecordingRequest,
+	parseMacDisplayIdFromSourceId,
+	parseMacWindowIdFromSourceId,
+} from "@/lib/nativeMacRecording";
+import {
 	type NativeWindowsRecordingRequest,
 	parseWindowHandleFromSourceId,
 } from "@/lib/nativeWindowsRecording";
@@ -80,6 +85,11 @@ type NativeWindowsRecordingHandle = {
 	finalizing: boolean;
 };
 
+type NativeMacRecordingHandle = {
+	recordingId: number;
+	finalizing: boolean;
+};
+
 function createRecorderHandle(stream: MediaStream, options: MediaRecorderOptions): RecorderHandle {
 	const recorder = new MediaRecorder(stream, options);
 	const chunks: Blob[] = [];
@@ -118,6 +128,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const screenRecorder = useRef<RecorderHandle | null>(null);
 	const webcamRecorder = useRef<RecorderHandle | null>(null);
 	const nativeWindowsRecording = useRef<NativeWindowsRecordingHandle | null>(null);
+	const nativeMacRecording = useRef<NativeMacRecordingHandle | null>(null);
 	const stream = useRef<MediaStream | null>(null);
 	const screenStream = useRef<MediaStream | null>(null);
 	const microphoneStream = useRef<MediaStream | null>(null);
@@ -455,9 +466,64 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 	}, []);
 
+	const finalizeNativeMacRecording = useCallback(async (discard = false) => {
+		const activeNativeRecording = nativeMacRecording.current;
+		if (!activeNativeRecording || activeNativeRecording.finalizing) {
+			return false;
+		}
+
+		activeNativeRecording.finalizing = true;
+
+		const clearNativeRecordingState = () => {
+			nativeMacRecording.current = null;
+			setRecording(false);
+			setPaused(false);
+			setElapsedSeconds(0);
+			accumulatedDurationMs.current = 0;
+			segmentStartedAt.current = null;
+		};
+
+		try {
+			const result = await window.electronAPI.stopNativeMacRecording(discard);
+			if (discard || result.discarded) {
+				clearNativeRecordingState();
+				return true;
+			}
+			if (!result.success) {
+				console.error("Failed to stop native macOS recording:", result.error);
+				toast.error(result.error ?? "Failed to stop native macOS recording");
+				activeNativeRecording.finalizing = false;
+				return true;
+			}
+
+			clearNativeRecordingState();
+			if (result.session) {
+				await window.electronAPI.setCurrentRecordingSession(result.session);
+			} else if (result.path) {
+				await window.electronAPI.setCurrentVideoPath(result.path);
+			}
+
+			await window.electronAPI.switchToEditor();
+			return true;
+		} catch (error) {
+			console.error("Error saving native macOS recording:", error);
+			toast.error(error instanceof Error ? error.message : "Failed to save native macOS recording");
+			activeNativeRecording.finalizing = false;
+			return true;
+		} finally {
+			if (discardRecordingId.current === activeNativeRecording.recordingId) {
+				discardRecordingId.current = null;
+			}
+		}
+	}, []);
+
 	const stopRecording = useRef(() => {
 		if (nativeWindowsRecording.current) {
 			void finalizeNativeWindowsRecording(false);
+			return;
+		}
+		if (nativeMacRecording.current) {
+			void finalizeNativeMacRecording(false);
 			return;
 		}
 
@@ -529,6 +595,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (nativeWindowsRecording.current) {
 				void finalizeNativeWindowsRecording(true);
 			}
+			if (nativeMacRecording.current) {
+				void finalizeNativeMacRecording(true);
+			}
 
 			if (
 				screenRecorder.current?.recorder.state === "recording" ||
@@ -554,7 +623,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			webcamRecorder.current = null;
 			teardownMedia();
 		};
-	}, [teardownMedia, safeHideCountdownOverlay, finalizeNativeWindowsRecording]);
+	}, [
+		teardownMedia,
+		safeHideCountdownOverlay,
+		finalizeNativeWindowsRecording,
+		finalizeNativeMacRecording,
+	]);
 
 	const safeShowCountdownOverlay = async (value: number, runId: number) => {
 		try {
@@ -677,6 +751,106 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 	};
 
+	const startNativeMacRecordingIfAvailable = async (
+		selectedSource: ProcessedDesktopSource,
+		countdownRunToken?: number,
+	) => {
+		try {
+			const platform = await window.electronAPI.getPlatform();
+			if (platform !== "darwin") {
+				return false;
+			}
+
+			const availability = await window.electronAPI.isNativeMacCaptureAvailable();
+			if (!availability.success || !availability.available) {
+				if (availability.reason === "unsupported-platform") {
+					return false;
+				}
+
+				throw new Error(
+					availability.reason === "missing-helper"
+						? "Native macOS capture helper is not available."
+						: (availability.error ?? "Native macOS capture is not available."),
+				);
+			}
+
+			if (!isCountdownRunActive(countdownRunToken)) {
+				return true;
+			}
+
+			const activeRecordingId = Date.now();
+			const sourceType = selectedSource.id.startsWith("window:") ? "window" : "display";
+			const displayId =
+				Number(selectedSource.display_id) || parseMacDisplayIdFromSourceId(selectedSource.id);
+			const windowId = parseMacWindowIdFromSourceId(selectedSource.id);
+			if (webcamEnabled) {
+				stopWebcamPreviewStream();
+			}
+			const request: NativeMacRecordingRequest = {
+				schemaVersion: 1,
+				recordingId: activeRecordingId,
+				source: {
+					type: sourceType,
+					sourceId: selectedSource.id,
+					...(displayId ? { displayId } : {}),
+					...(windowId ? { windowId } : {}),
+				},
+				video: {
+					fps: TARGET_FRAME_RATE,
+					width: TARGET_WIDTH,
+					height: TARGET_HEIGHT,
+					bitrate: computeBitrate(TARGET_WIDTH, TARGET_HEIGHT),
+					hideSystemCursor: cursorCaptureMode === "editable-overlay",
+				},
+				audio: {
+					system: {
+						enabled: systemAudioEnabled,
+					},
+					microphone: {
+						enabled: microphoneEnabled,
+						deviceId: microphoneDeviceId,
+						deviceName: microphoneDeviceName,
+						gain: MIC_GAIN_BOOST,
+					},
+				},
+				webcam: {
+					enabled: webcamEnabled,
+					deviceId: webcamDeviceId,
+					deviceName: webcamDeviceName,
+					width: WEBCAM_TARGET_WIDTH,
+					height: WEBCAM_TARGET_HEIGHT,
+					fps: WEBCAM_TARGET_FRAME_RATE,
+				},
+				cursor: {
+					mode: cursorCaptureMode,
+				},
+				outputs: {
+					screenPath: "",
+				},
+			};
+			const result = await window.electronAPI.startNativeMacRecording(request);
+			if (!result.success || !result.recordingId) {
+				throw new Error(result.error ?? "Native macOS capture failed.");
+			}
+
+			recordingId.current = result.recordingId;
+			nativeMacRecording.current = {
+				recordingId: result.recordingId,
+				finalizing: false,
+			};
+			accumulatedDurationMs.current = 0;
+			segmentStartedAt.current = Date.now();
+			allowAutoFinalize.current = true;
+			setRecording(true);
+			setPaused(false);
+			setElapsedSeconds(0);
+			return true;
+		} catch (error) {
+			console.error("Native macOS capture failed:", error);
+			throw error;
+		}
+	};
+
 	const startRecordCountdown = async () => {
 		if (countdownActive || recording) {
 			return;
@@ -765,6 +939,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			if (await startNativeWindowsRecordingIfAvailable(selectedSource, countdownRunToken)) {
+				return;
+			}
+			if (await startNativeMacRecordingIfAvailable(selectedSource, countdownRunToken)) {
 				return;
 			}
 

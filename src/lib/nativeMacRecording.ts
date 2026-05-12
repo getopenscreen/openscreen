@@ -4,6 +4,7 @@ import type { CursorCaptureMode } from "./recordingSession";
 export type NativeMacSourceType = "display" | "window";
 
 export type NativeMacRecordingRequest = {
+	schemaVersion: 1;
 	recordingId?: number;
 	source: {
 		type: NativeMacSourceType;
@@ -46,6 +47,40 @@ export type NativeMacRecordingRequest = {
 		manifestPath?: string;
 	};
 };
+
+export type NativeMacHelperReadyEvent = {
+	event: "ready";
+	schemaVersion: 1;
+};
+
+export type NativeMacHelperRecordingStartedEvent = {
+	event: "recording-started";
+	timestampMs: number;
+};
+
+export type NativeMacHelperRecordingStoppedEvent = {
+	event: "recording-stopped";
+	screenPath: string;
+};
+
+export type NativeMacHelperWarningEvent = {
+	event: "warning";
+	code: string;
+	message: string;
+};
+
+export type NativeMacHelperErrorEvent = {
+	event: "error";
+	code: string;
+	message: string;
+};
+
+export type NativeMacHelperEvent =
+	| NativeMacHelperReadyEvent
+	| NativeMacHelperRecordingStartedEvent
+	| NativeMacHelperRecordingStoppedEvent
+	| NativeMacHelperWarningEvent
+	| NativeMacHelperErrorEvent;
 
 export type NativeMacRecordingStartResult = {
 	success: boolean;

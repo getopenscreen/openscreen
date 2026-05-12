@@ -127,7 +127,7 @@ export function LaunchWindow() {
 	const [isWebcamFocused, setIsWebcamFocused] = useState(false);
 	const webcamExpanded = isWebcamHovered || isWebcamFocused;
 	const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
-	const [isWindows, setIsWindows] = useState(false);
+	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageMenuPanelRef = useRef<HTMLDivElement | null>(null);
 	const [languageMenuStyle, setLanguageMenuStyle] = useState<{
@@ -192,12 +192,12 @@ export function LaunchWindow() {
 			.getPlatform()
 			.then((platform) => {
 				if (!cancelled) {
-					setIsWindows(platform === "win32");
+					setSupportsCursorModeToggle(platform === "win32" || platform === "darwin");
 				}
 			})
 			.catch(() => {
 				if (!cancelled) {
-					setIsWindows(false);
+					setSupportsCursorModeToggle(false);
 				}
 			});
 
@@ -608,7 +608,7 @@ export function LaunchWindow() {
 							? getIcon("webcamOn", "text-green-400")
 							: getIcon("webcamOff", "text-white/40")}
 					</button>
-					{isWindows && (
+					{supportsCursorModeToggle && (
 						<button
 							data-testid="launch-cursor-mode-button"
 							className={`${hudIconBtnClasses} ${

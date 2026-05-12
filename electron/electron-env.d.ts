@@ -78,10 +78,28 @@ interface Window {
 			reason?: string;
 			error?: string;
 		}>;
+		isNativeMacCaptureAvailable: () => Promise<{
+			success: boolean;
+			available: boolean;
+			helperPath?: string;
+			reason?: "unsupported-platform" | "missing-helper" | string;
+			error?: string;
+		}>;
 		startNativeWindowsRecording: (
 			request: import("../src/lib/nativeWindowsRecording").NativeWindowsRecordingRequest,
 		) => Promise<import("../src/lib/nativeWindowsRecording").NativeWindowsRecordingStartResult>;
 		stopNativeWindowsRecording: (discard?: boolean) => Promise<{
+			success: boolean;
+			path?: string;
+			session?: import("../src/lib/recordingSession").RecordingSession;
+			message?: string;
+			discarded?: boolean;
+			error?: string;
+		}>;
+		startNativeMacRecording: (
+			request: import("../src/lib/nativeMacRecording").NativeMacRecordingRequest,
+		) => Promise<import("../src/lib/nativeMacRecording").NativeMacRecordingStartResult>;
+		stopNativeMacRecording: (discard?: boolean) => Promise<{
 			success: boolean;
 			path?: string;
 			session?: import("../src/lib/recordingSession").RecordingSession;

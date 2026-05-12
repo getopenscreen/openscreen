@@ -15,6 +15,7 @@ import {
 	shell,
 	systemPreferences,
 } from "electron";
+import type { NativeMacRecordingRequest } from "../../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../../src/lib/nativeWindowsRecording";
 import {
 	type CursorCaptureMode,
@@ -276,6 +277,12 @@ let nativeWindowsCaptureRecordingId: number | null = null;
 let nativeWindowsCursorOffsetMs = 0;
 let nativeWindowsCursorCaptureMode: CursorCaptureMode = "editable-overlay";
 const NATIVE_WINDOWS_CAPTURE_STOP_TIMEOUT_MS = 15_000;
+let nativeMacCaptureProcess: ChildProcessWithoutNullStreams | null = null;
+let nativeMacCaptureOutput = "";
+let nativeMacCaptureTargetPath: string | null = null;
+let nativeMacCaptureRecordingId: number | null = null;
+let nativeMacCursorOffsetMs = 0;
+let nativeMacCursorCaptureMode: CursorCaptureMode = "editable-overlay";
 
 function normalizeCursorSample(sample: unknown): CursorRecordingSample | null {
 	if (!sample || typeof sample !== "object") {
@@ -488,6 +495,35 @@ async function findNativeWindowsCaptureHelperPath() {
 	}
 
 	for (const candidate of getNativeWindowsCaptureHelperCandidates()) {
+		try {
+			await fs.access(candidate, fsConstants.X_OK);
+			return candidate;
+		} catch {
+			// Try the next configured helper location.
+		}
+	}
+
+	return null;
+}
+
+function getNativeMacCaptureHelperCandidates() {
+	const envPath = process.env.OPENSCREEN_SCK_CAPTURE_EXE?.trim();
+	const archTag = process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
+	const helperName = "openscreen-screencapturekit-helper";
+	return [
+		envPath,
+		resolveUnpackedAppPath("electron", "native", "screencapturekit", "build", helperName),
+		resolveUnpackedAppPath("electron", "native", "bin", archTag, helperName),
+		resolvePackagedResourcePath("electron", "native", "bin", archTag, helperName),
+	].filter((candidate): candidate is string => Boolean(candidate));
+}
+
+async function findNativeMacCaptureHelperPath() {
+	if (process.platform !== "darwin") {
+		return null;
+	}
+
+	for (const candidate of getNativeMacCaptureHelperCandidates()) {
 		try {
 			await fs.access(candidate, fsConstants.X_OK);
 			return candidate;
@@ -785,6 +821,134 @@ function readNativeWindowsWebcamFormat(output: string) {
 	}
 }
 
+function tryParseNativeHelperEvent(line: string) {
+	try {
+		const parsed = JSON.parse(line);
+		return parsed && typeof parsed === "object" ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+function waitForNativeMacCaptureStart(proc: ChildProcessWithoutNullStreams) {
+	return new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			cleanup();
+			reject(new Error("Timed out waiting for native macOS capture to start"));
+		}, 10_000);
+
+		const inspect = (chunk: Buffer) => {
+			nativeMacCaptureOutput += chunk.toString();
+			for (const line of nativeMacCaptureOutput.split(/\r?\n/)) {
+				const event = tryParseNativeHelperEvent(line.trim());
+				if (!event) continue;
+				if (event.event === "recording-started") {
+					cleanup();
+					resolve();
+					return;
+				}
+				if (event.event === "error") {
+					cleanup();
+					reject(new Error(event.message ?? event.code ?? "Native macOS capture failed"));
+					return;
+				}
+			}
+		};
+
+		const onOutput = (chunk: Buffer) => inspect(chunk);
+		const onClose = (code: number | null) => {
+			cleanup();
+			reject(
+				new Error(
+					nativeMacCaptureOutput.trim() ||
+						`Native macOS capture exited before recording started (code=${code ?? "unknown"})`,
+				),
+			);
+		};
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
+		const cleanup = () => {
+			clearTimeout(timer);
+			proc.stdout.off("data", onOutput);
+			proc.stderr.off("data", onOutput);
+			proc.off("close", onClose);
+			proc.off("error", onError);
+		};
+
+		proc.stdout.on("data", onOutput);
+		proc.stderr.on("data", onOutput);
+		proc.once("close", onClose);
+		proc.once("error", onError);
+	});
+}
+
+function waitForNativeMacCaptureStop(proc: ChildProcessWithoutNullStreams) {
+	return new Promise<string>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			cleanup();
+			reject(
+				new Error(
+					`Timed out waiting for native macOS capture to stop. Output path: ${
+						nativeMacCaptureTargetPath ?? "unknown"
+					}. Output: ${nativeMacCaptureOutput.trim()}`,
+				),
+			);
+		}, 30_000);
+
+		const inspect = (chunk: Buffer) => {
+			nativeMacCaptureOutput += chunk.toString();
+			for (const line of nativeMacCaptureOutput.split(/\r?\n/)) {
+				const event = tryParseNativeHelperEvent(line.trim());
+				if (!event) continue;
+				if (event.event === "recording-stopped") {
+					cleanup();
+					resolve(event.screenPath ?? nativeMacCaptureTargetPath ?? "");
+					return;
+				}
+				if (event.event === "error") {
+					cleanup();
+					reject(new Error(event.message ?? event.code ?? "Native macOS capture failed"));
+					return;
+				}
+			}
+		};
+
+		const onOutput = (chunk: Buffer) => inspect(chunk);
+		const onClose = (code: number | null) => {
+			if (code === 0 && nativeMacCaptureTargetPath) {
+				cleanup();
+				resolve(nativeMacCaptureTargetPath);
+				return;
+			}
+			cleanup();
+			reject(
+				new Error(
+					nativeMacCaptureOutput.trim() ||
+						`Native macOS capture exited with code=${code ?? "unknown"}`,
+				),
+			);
+		};
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
+		const cleanup = () => {
+			clearTimeout(timer);
+			proc.stdout.off("data", onOutput);
+			proc.stderr.off("data", onOutput);
+			proc.off("close", onClose);
+			proc.off("error", onError);
+		};
+
+		proc.stdout.on("data", onOutput);
+		proc.stderr.on("data", onOutput);
+		proc.once("close", onClose);
+		proc.once("error", onError);
+	});
+}
+
 function setCurrentRecordingSessionState(session: RecordingSession | null) {
 	currentRecordingSession = session;
 	currentVideoPath = session?.screenVideoPath ?? null;
@@ -1041,6 +1205,17 @@ export function registerIpcHandlers(
 			: { success: true, available: false, reason: "missing-helper" };
 	});
 
+	ipcMain.handle("is-native-mac-capture-available", async () => {
+		if (process.platform !== "darwin") {
+			return { success: true, available: false, reason: "unsupported-platform" };
+		}
+
+		const helperPath = await findNativeMacCaptureHelperPath();
+		return helperPath
+			? { success: true, available: true, helperPath }
+			: { success: true, available: false, reason: "missing-helper" };
+	});
+
 	ipcMain.handle(
 		"start-native-windows-recording",
 		async (_, request: NativeWindowsRecordingRequest) => {
@@ -1217,6 +1392,121 @@ export function registerIpcHandlers(
 		},
 	);
 
+	ipcMain.handle("start-native-mac-recording", async (_, request: NativeMacRecordingRequest) => {
+		try {
+			if (process.platform !== "darwin") {
+				return { success: false, error: "Native macOS capture requires macOS." };
+			}
+			if (nativeMacCaptureProcess) {
+				return { success: false, error: "Native macOS capture is already running." };
+			}
+
+			const helperPath = await findNativeMacCaptureHelperPath();
+			if (!helperPath) {
+				return { success: false, error: "Native macOS capture helper is not available." };
+			}
+
+			if (!request?.source?.sourceId) {
+				return { success: false, error: "Native macOS capture request is missing a source." };
+			}
+
+			const recordingId =
+				typeof request.recordingId === "number" && Number.isFinite(request.recordingId)
+					? request.recordingId
+					: Date.now();
+			const outputPath = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
+			const cursorCaptureMode =
+				normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
+			const sourceDisplay =
+				request.source.type === "display" && typeof request.source.displayId === "number"
+					? (screen.getAllDisplays().find((display) => display.id === request.source.displayId) ??
+						null)
+					: getSelectedDisplay();
+			const bounds = request.source.bounds ?? sourceDisplay?.bounds ?? getSelectedSourceBounds();
+			const config: NativeMacRecordingRequest = {
+				...request,
+				schemaVersion: 1,
+				recordingId,
+				source: {
+					...request.source,
+					bounds,
+				},
+				video: {
+					...request.video,
+					hideSystemCursor: cursorCaptureMode === "editable-overlay",
+				},
+				cursor: {
+					mode: cursorCaptureMode,
+				},
+				outputs: {
+					screenPath: outputPath,
+					manifestPath: path.join(
+						RECORDINGS_DIR,
+						`${RECORDING_FILE_PREFIX}${recordingId}${RECORDING_SESSION_SUFFIX}`,
+					),
+				},
+			};
+
+			console.info("[native-sck] starting macOS capture", {
+				helperPath,
+				source: config.source,
+				audio: config.audio,
+				webcam: config.webcam,
+				cursor: config.cursor,
+				outputPath,
+			});
+
+			await fs.mkdir(RECORDINGS_DIR, { recursive: true });
+			nativeMacCaptureOutput = "";
+			nativeMacCaptureTargetPath = outputPath;
+			nativeMacCaptureRecordingId = recordingId;
+			nativeMacCursorOffsetMs = 0;
+			nativeMacCursorCaptureMode = cursorCaptureMode;
+
+			const cursorStartTimeMs = Date.now();
+			if (cursorCaptureMode === "editable-overlay") {
+				await startCursorRecording(cursorStartTimeMs);
+			} else {
+				pendingCursorRecordingData = null;
+			}
+
+			const proc = spawn(helperPath, [JSON.stringify(config)], {
+				cwd: RECORDINGS_DIR,
+				stdio: ["pipe", "pipe", "pipe"],
+			});
+			nativeMacCaptureProcess = proc;
+
+			await waitForNativeMacCaptureStart(proc);
+			const captureStartedAtMs = Date.now();
+			nativeMacCursorOffsetMs =
+				cursorCaptureMode === "editable-overlay"
+					? Math.max(0, captureStartedAtMs - cursorStartTimeMs)
+					: 0;
+
+			const source = selectedSource || { name: "Screen" };
+			if (onRecordingStateChange) {
+				onRecordingStateChange(true, source.name);
+			}
+
+			return {
+				success: true,
+				recordingId,
+				path: outputPath,
+				helperPath,
+			};
+		} catch (error) {
+			console.error("Failed to start native macOS recording:", error);
+			nativeMacCaptureProcess?.kill();
+			nativeMacCaptureProcess = null;
+			nativeMacCaptureTargetPath = null;
+			nativeMacCaptureRecordingId = null;
+			nativeMacCursorOffsetMs = 0;
+			nativeMacCursorCaptureMode = "editable-overlay";
+			await stopCursorRecording();
+			return { success: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	});
+
 	ipcMain.handle("stop-native-windows-recording", async (_, discard?: boolean) => {
 		const proc = nativeWindowsCaptureProcess;
 		const preferredPath = nativeWindowsCaptureTargetPath;
@@ -1294,6 +1584,81 @@ export function registerIpcHandlers(
 			nativeWindowsCaptureRecordingId = null;
 			nativeWindowsCursorOffsetMs = 0;
 			nativeWindowsCursorCaptureMode = "editable-overlay";
+			const source = selectedSource || { name: "Screen" };
+			if (onRecordingStateChange) {
+				onRecordingStateChange(false, source.name);
+			}
+		}
+	});
+
+	ipcMain.handle("stop-native-mac-recording", async (_, discard?: boolean) => {
+		const proc = nativeMacCaptureProcess;
+		const preferredPath = nativeMacCaptureTargetPath;
+		const recordingId = nativeMacCaptureRecordingId ?? Date.now();
+		const cursorCaptureMode = nativeMacCursorCaptureMode;
+
+		if (!proc) {
+			return { success: false, error: "Native macOS capture is not running." };
+		}
+
+		try {
+			const stoppedPathPromise = waitForNativeMacCaptureStop(proc);
+			proc.stdin.write("stop\n");
+			const stoppedPath = await stoppedPathPromise;
+			const screenVideoPath = stoppedPath || preferredPath;
+			if (!screenVideoPath) {
+				throw new Error("Native macOS capture did not return an output path.");
+			}
+
+			if (cursorCaptureMode === "editable-overlay") {
+				await stopCursorRecording();
+			} else {
+				pendingCursorRecordingData = null;
+			}
+			if (discard) {
+				pendingCursorRecordingData = null;
+				await Promise.all([
+					fs.rm(screenVideoPath, { force: true }),
+					fs.rm(`${screenVideoPath}.cursor.json`, { force: true }),
+				]);
+				return { success: true, discarded: true };
+			}
+
+			if (cursorCaptureMode === "editable-overlay") {
+				shiftPendingCursorTelemetry(nativeMacCursorOffsetMs);
+				await writePendingCursorTelemetry(screenVideoPath);
+			}
+
+			const session: RecordingSession = {
+				screenVideoPath,
+				createdAt: recordingId,
+				cursorCaptureMode,
+			};
+			setCurrentRecordingSessionState(session);
+			currentProjectPath = null;
+
+			const sessionManifestPath = path.join(
+				RECORDINGS_DIR,
+				`${path.parse(screenVideoPath).name}${RECORDING_SESSION_SUFFIX}`,
+			);
+			await fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8");
+
+			return {
+				success: true,
+				path: screenVideoPath,
+				session,
+				message: "Native macOS recording session stored successfully",
+			};
+		} catch (error) {
+			console.error("Failed to stop native macOS recording:", error);
+			await stopCursorRecording();
+			return { success: false, error: error instanceof Error ? error.message : String(error) };
+		} finally {
+			nativeMacCaptureProcess = null;
+			nativeMacCaptureTargetPath = null;
+			nativeMacCaptureRecordingId = null;
+			nativeMacCursorOffsetMs = 0;
+			nativeMacCursorCaptureMode = "editable-overlay";
 			const source = selectedSource || { name: "Screen" };
 			if (onRecordingStateChange) {
 				onRecordingStateChange(false, source.name);

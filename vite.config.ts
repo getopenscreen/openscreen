@@ -10,6 +10,11 @@ export default defineConfig({
 		electron({
 			main: {
 				entry: "electron/main.ts",
+				onstart({ startup }) {
+					const env = { ...process.env };
+					delete env.ELECTRON_RUN_AS_NODE;
+					return startup(["."], { env });
+				},
 				vite: {
 					build: {},
 				},

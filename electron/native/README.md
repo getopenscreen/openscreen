@@ -9,19 +9,23 @@ macOS native recording will use a ScreenCaptureKit helper with the same process 
 3. The helper owns ScreenCaptureKit/AVFoundation capture, timing, encoding, and muxing.
 4. Electron persists the resulting media/session manifest and reports helper errors explicitly.
 
-Expected development helper locations:
+Helper locations:
 
 1. `OPENSCREEN_SCK_CAPTURE_EXE`, for local development and diagnostics.
 2. `electron/native/screencapturekit/build/openscreen-screencapturekit-helper`, for locally built Swift output.
 3. `electron/native/bin/darwin-arm64/openscreen-screencapturekit-helper` or `electron/native/bin/darwin-x64/openscreen-screencapturekit-helper`, for packaged prebuilt helpers.
 
-The current macOS helper script is a placeholder:
+Build the macOS helper with:
 
 ```bash
 npm run build:native:mac
 ```
 
-On non-macOS hosts this command exits successfully and does not affect Windows/Linux development. On macOS it fails until the Swift ScreenCaptureKit helper lands.
+On non-macOS hosts this command exits successfully and does not affect Windows/Linux development. On macOS it builds the Swift package at `electron/native/screencapturekit`, writes the development binary to `electron/native/screencapturekit/build/openscreen-screencapturekit-helper`, and copies the redistributable binary to `electron/native/bin/darwin-${arch}/openscreen-screencapturekit-helper`.
+
+The current helper implementation supports the first native media slice: display/window ScreenCaptureKit video capture, cursor exclusion through `SCStreamConfiguration.showsCursor`, H.264 encoding, and MP4 muxing. System audio, microphone capture, webcam composition, and runtime controls are intentionally left as explicit roadmap phases.
+
+Electron exposes `is-native-mac-capture-available` for capability probing. It resolves the same helper locations listed above and reports `missing-helper` until a Swift helper binary is present; production recording is not routed through the macOS helper yet.
 
 See `docs/engineering/macos-native-recorder-roadmap.md` for the contract, rollout phases, and SSOT rules.
 

@@ -120,6 +120,14 @@ interface Window {
 		startNativeMacRecording: (
 			request: import("../src/lib/nativeMacRecording").NativeMacRecordingRequest,
 		) => Promise<import("../src/lib/nativeMacRecording").NativeMacRecordingStartResult>;
+		pauseNativeMacRecording: () => Promise<{
+			success: boolean;
+			error?: string;
+		}>;
+		resumeNativeMacRecording: () => Promise<{
+			success: boolean;
+			error?: string;
+		}>;
 		stopNativeMacRecording: (discard?: boolean) => Promise<{
 			success: boolean;
 			path?: string;

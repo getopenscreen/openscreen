@@ -87,6 +87,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	startNativeMacRecording: (request: NativeMacRecordingRequest) => {
 		return ipcRenderer.invoke("start-native-mac-recording", request);
 	},
+	pauseNativeMacRecording: () => {
+		return ipcRenderer.invoke("pause-native-mac-recording");
+	},
+	resumeNativeMacRecording: () => {
+		return ipcRenderer.invoke("resume-native-mac-recording");
+	},
 	stopNativeMacRecording: (discard?: boolean) => {
 		return ipcRenderer.invoke("stop-native-mac-recording", discard);
 	},

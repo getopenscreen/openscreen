@@ -123,7 +123,6 @@ func actionNames(_ element: AXUIElement) -> [String] {
 
 	return (value as NSArray).compactMap { $0 as? String }
 }
-
 func isTextInputRole(_ role: String?) -> Bool {
 	role == "AXTextField" ||
 		role == "AXTextArea" ||
@@ -147,8 +146,7 @@ func isPointerRole(_ role: String?, _ subrole: String?, _ description: String?) 
 		role == "AXSwitch" ||
 		role == "AXDisclosureTriangle" ||
 		role == "AXTab" ||
-		role == "AXMenuItem" ||
-		role == "AXCell"
+		role == "AXMenuItem"
 }
 
 func cursorTypeForElement(_ element: AXUIElement) -> String? {
@@ -167,7 +165,7 @@ func cursorTypeForElement(_ element: AXUIElement) -> String? {
 			return "text"
 		}
 
-		if isPointerRole(role, subrole, description) || actionNames(element).contains(kAXPressAction) {
+		if isPointerRole(role, subrole, description) {
 			return "pointer"
 		}
 

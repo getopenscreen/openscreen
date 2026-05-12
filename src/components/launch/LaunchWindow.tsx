@@ -98,6 +98,7 @@ export function LaunchWindow() {
 		elapsedSeconds,
 		toggleRecording,
 		togglePaused,
+		canPauseRecording,
 		restartRecording,
 		cancelRecording,
 		microphoneEnabled,
@@ -667,13 +668,18 @@ export function LaunchWindow() {
 
 				{recording && (
 					<div className={`flex items-center gap-0.5 ${styles.electronNoDrag}`}>
-						<Tooltip
-							content={paused ? t("tooltips.resumeRecording") : t("tooltips.pauseRecording")}
-						>
-							<button className={hudAuxIconBtnClasses} onClick={togglePaused}>
-								{getIcon(paused ? "resume" : "pause", paused ? "text-amber-400" : "text-white/60")}
-							</button>
-						</Tooltip>
+						{canPauseRecording && (
+							<Tooltip
+								content={paused ? t("tooltips.resumeRecording") : t("tooltips.pauseRecording")}
+							>
+								<button className={hudAuxIconBtnClasses} onClick={togglePaused}>
+									{getIcon(
+										paused ? "resume" : "pause",
+										paused ? "text-amber-400" : "text-white/60",
+									)}
+								</button>
+							</Tooltip>
+						)}
 						<Tooltip content={t("tooltips.restartRecording")}>
 							<button className={hudAuxIconBtnClasses} onClick={restartRecording}>
 								{getIcon("restart", "text-white/60")}

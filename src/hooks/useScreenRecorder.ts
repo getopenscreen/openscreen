@@ -55,6 +55,7 @@ type UseScreenRecorderReturn = {
 	elapsedSeconds: number;
 	toggleRecording: () => void;
 	togglePaused: () => void;
+	canPauseRecording: boolean;
 	restartRecording: () => void;
 	cancelRecording: () => void;
 	microphoneEnabled: boolean;
@@ -88,6 +89,7 @@ type NativeWindowsRecordingHandle = {
 type NativeMacRecordingHandle = {
 	recordingId: number;
 	finalizing: boolean;
+	paused: boolean;
 };
 
 function createRecorderHandle(stream: MediaStream, options: MediaRecorderOptions): RecorderHandle {
@@ -145,6 +147,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [countdownActive, setCountdownActive] = useState(false);
 	const webcamReady = useRef(false);
 	const webcamAcquireId = useRef(0);
+	const canPauseRecording =
+		recording &&
+		!nativeWindowsRecording.current &&
+		Boolean(
+			(nativeMacRecording.current && !nativeMacRecording.current.finalizing) ||
+				(screenRecorder.current && screenRecorder.current.recorder.state !== "inactive"),
+		);
 
 	const getRecordingDurationMs = useCallback(() => {
 		const segmentDuration =
@@ -912,6 +921,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			nativeMacRecording.current = {
 				recordingId: result.recordingId,
 				finalizing: false,
+				paused: false,
 			};
 			webcamRecorder.current = nativeWebcamRecorder;
 			accumulatedDurationMs.current = 0;
@@ -1297,6 +1307,46 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	};
 
 	const togglePaused = () => {
+		const activeNativeMacRecording = nativeMacRecording.current;
+		if (activeNativeMacRecording && !activeNativeMacRecording.finalizing) {
+			void (async () => {
+				const activeWebcamRecorder = webcamRecorder.current?.recorder;
+				try {
+					if (activeNativeMacRecording.paused) {
+						const result = await window.electronAPI.resumeNativeMacRecording();
+						if (!result.success) {
+							throw new Error(result.error ?? "Failed to resume native macOS recording");
+						}
+						if (activeWebcamRecorder?.state === "paused") {
+							activeWebcamRecorder.resume();
+						}
+						activeNativeMacRecording.paused = false;
+						segmentStartedAt.current = Date.now();
+						setPaused(false);
+						return;
+					}
+
+					const pausedAtMs = getRecordingDurationMs();
+					const result = await window.electronAPI.pauseNativeMacRecording();
+					if (!result.success) {
+						throw new Error(result.error ?? "Failed to pause native macOS recording");
+					}
+					if (activeWebcamRecorder?.state === "recording") {
+						activeWebcamRecorder.pause();
+					}
+					activeNativeMacRecording.paused = true;
+					accumulatedDurationMs.current = pausedAtMs;
+					segmentStartedAt.current = null;
+					setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
+					setPaused(true);
+				} catch (error) {
+					console.error("Failed to toggle native macOS pause state:", error);
+					toast.error(error instanceof Error ? error.message : "Failed to toggle pause state");
+				}
+			})();
+			return;
+		}
+
 		const activeScreenRecorder = screenRecorder.current?.recorder;
 		if (!activeScreenRecorder || activeScreenRecorder.state === "inactive") {
 			return;
@@ -1456,6 +1506,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		elapsedSeconds,
 		toggleRecording,
 		togglePaused,
+		canPauseRecording,
 		restartRecording,
 		cancelRecording,
 		microphoneEnabled,

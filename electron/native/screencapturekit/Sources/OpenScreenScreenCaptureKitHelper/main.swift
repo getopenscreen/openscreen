@@ -137,10 +137,14 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var didStartWriting = false
 	private var didEmitRecordingStarted = false
 	private var isStopping = false
+	private var isPaused = false
+	private var pauseStartedAt: CMTime?
+	private var totalPausedDuration = CMTime.zero
 	private var nativeMicrophoneEnabled = false
 	private var outputWidth = 1920
 	private var outputHeight = 1080
 	private let microphoneOutputTypeRawValue = 2
+	private let hostClock = CMClockGetHostTimeClock()
 
 	init(request: RecordingRequest) {
 		self.request = request
@@ -203,6 +207,51 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		await finishWriter()
 	}
 
+	func pause() {
+		let didPause = stateQueue.sync {
+			if isStopping || isPaused {
+				return false
+			}
+
+			isPaused = true
+			pauseStartedAt = CMClockGetTime(hostClock)
+			return true
+		}
+
+		if didPause {
+			emit([
+				"event": "recording-paused",
+				"timestampMs": Int(Date().timeIntervalSince1970 * 1000),
+			])
+		}
+	}
+
+	func resume() {
+		let didResume = stateQueue.sync {
+			if isStopping || !isPaused {
+				return false
+			}
+
+			if let pauseStartedAt {
+				let now = CMClockGetTime(hostClock)
+				totalPausedDuration = CMTimeAdd(
+					totalPausedDuration,
+					CMTimeSubtract(now, pauseStartedAt)
+				)
+			}
+			isPaused = false
+			pauseStartedAt = nil
+			return true
+		}
+
+		if didResume {
+			emit([
+				"event": "recording-resumed",
+				"timestampMs": Int(Date().timeIntervalSince1970 * 1000),
+			])
+		}
+	}
+
 	func stream(_ stream: SCStream, didStopWithError error: Error) {
 		emitError(code: "capture-stopped-with-error", message: "\(error)")
 		Task {
@@ -212,6 +261,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 	func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
 		guard CMSampleBufferDataIsReady(sampleBuffer) else {
+			return
+		}
+		let pauseState = currentPauseState()
+		if pauseState.paused {
+			return
+		}
+		guard let sampleBuffer = retimedSampleBuffer(sampleBuffer, subtracting: pauseState.offset) else {
 			return
 		}
 
@@ -450,6 +506,70 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		input.append(sampleBuffer)
 	}
 
+	private func currentPauseState() -> (paused: Bool, offset: CMTime) {
+		stateQueue.sync {
+			(isPaused, totalPausedDuration)
+		}
+	}
+
+	private func retimedSampleBuffer(_ sampleBuffer: CMSampleBuffer, subtracting offset: CMTime) -> CMSampleBuffer? {
+		if !offset.isValid || offset == .zero {
+			return sampleBuffer
+		}
+
+		let sampleCount = CMSampleBufferGetNumSamples(sampleBuffer)
+		if sampleCount <= 0 {
+			return sampleBuffer
+		}
+
+		var timing = Array(repeating: CMSampleTimingInfo(), count: sampleCount)
+		let timingStatus = CMSampleBufferGetSampleTimingInfoArray(
+			sampleBuffer,
+			entryCount: sampleCount,
+			arrayToFill: &timing,
+			entriesNeededOut: nil
+		)
+		if timingStatus != noErr {
+			emit([
+				"event": "warning",
+				"code": "sample-retime-failed",
+				"message": "Unable to read sample timing info: \(timingStatus).",
+			])
+			return sampleBuffer
+		}
+
+		for index in timing.indices {
+			if timing[index].presentationTimeStamp.isValid {
+				timing[index].presentationTimeStamp = CMTimeSubtract(
+					timing[index].presentationTimeStamp,
+					offset
+				)
+			}
+			if timing[index].decodeTimeStamp.isValid {
+				timing[index].decodeTimeStamp = CMTimeSubtract(timing[index].decodeTimeStamp, offset)
+			}
+		}
+
+		var retimedBuffer: CMSampleBuffer?
+		let copyStatus = CMSampleBufferCreateCopyWithNewTiming(
+			allocator: kCFAllocatorDefault,
+			sampleBuffer: sampleBuffer,
+			sampleTimingEntryCount: sampleCount,
+			sampleTimingArray: &timing,
+			sampleBufferOut: &retimedBuffer
+		)
+		if copyStatus != noErr {
+			emit([
+				"event": "warning",
+				"code": "sample-retime-failed",
+				"message": "Unable to copy sample timing info: \(copyStatus).",
+			])
+			return sampleBuffer
+		}
+
+		return retimedBuffer
+	}
+
 	private func isCompleteFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
 		guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
 			sampleBuffer,
@@ -526,9 +646,16 @@ struct OpenScreenScreenCaptureKitHelper {
 			let stopTask = Task.detached {
 				while let line = readLine() {
 					let command = line.trimmingCharacters(in: .whitespacesAndNewlines)
-					if command == "stop" {
+					switch command {
+					case "pause":
+						recorder.pause()
+					case "resume":
+						recorder.resume()
+					case "stop":
 						await recorder.stop()
 						exit(0)
+					default:
+						break
 					}
 				}
 			}

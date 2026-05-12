@@ -292,6 +292,10 @@ let nativeMacCaptureTargetPath: string | null = null;
 let nativeMacCaptureRecordingId: number | null = null;
 let nativeMacCursorOffsetMs = 0;
 let nativeMacCursorCaptureMode: CursorCaptureMode = "editable-overlay";
+let nativeMacCursorRecordingStartMs = 0;
+let nativeMacPauseStartedAtMs: number | null = null;
+let nativeMacPauseRanges: Array<{ startMs: number; endMs: number }> = [];
+let nativeMacIsPaused = false;
 
 function normalizeCursorSample(sample: unknown): CursorRecordingSample | null {
 	if (!sample || typeof sample !== "object") {
@@ -712,6 +716,62 @@ function shiftPendingCursorTelemetry(offsetMs: number) {
 			}))
 			.sort((a, b) => a.timeMs - b.timeMs),
 	};
+}
+
+function compactPendingCursorTelemetryPauseRanges(
+	ranges: Array<{ startMs: number; endMs: number }>,
+) {
+	if (!pendingCursorRecordingData || ranges.length === 0) {
+		return;
+	}
+
+	const normalizedRanges = ranges
+		.map((range) => ({
+			startMs: Math.max(0, Math.min(range.startMs, range.endMs)),
+			endMs: Math.max(0, Math.max(range.startMs, range.endMs)),
+		}))
+		.filter((range) => Number.isFinite(range.startMs) && Number.isFinite(range.endMs))
+		.filter((range) => range.endMs > range.startMs)
+		.sort((a, b) => a.startMs - b.startMs);
+
+	if (normalizedRanges.length === 0) {
+		return;
+	}
+
+	pendingCursorRecordingData = {
+		...pendingCursorRecordingData,
+		samples: pendingCursorRecordingData.samples
+			.map((sample) => {
+				let pausedBeforeSampleMs = 0;
+				for (const range of normalizedRanges) {
+					if (sample.timeMs >= range.startMs && sample.timeMs <= range.endMs) {
+						return null;
+					}
+					if (sample.timeMs > range.endMs) {
+						pausedBeforeSampleMs += range.endMs - range.startMs;
+					}
+				}
+
+				return {
+					...sample,
+					timeMs: Math.max(0, sample.timeMs - pausedBeforeSampleMs),
+				};
+			})
+			.filter((sample): sample is CursorRecordingSample => Boolean(sample))
+			.sort((a, b) => a.timeMs - b.timeMs),
+	};
+}
+
+function completeNativeMacCursorPauseRange(endMs = Date.now()) {
+	if (nativeMacPauseStartedAtMs === null || nativeMacCursorRecordingStartMs <= 0) {
+		return;
+	}
+
+	nativeMacPauseRanges.push({
+		startMs: Math.max(0, nativeMacPauseStartedAtMs - nativeMacCursorRecordingStartMs),
+		endMs: Math.max(0, endMs - nativeMacCursorRecordingStartMs),
+	});
+	nativeMacPauseStartedAtMs = null;
 }
 
 function waitForNativeWindowsCaptureStart(proc: ChildProcessWithoutNullStreams) {
@@ -1537,9 +1597,14 @@ export function registerIpcHandlers(
 			nativeMacCaptureRecordingId = recordingId;
 			nativeMacCursorOffsetMs = 0;
 			nativeMacCursorCaptureMode = cursorCaptureMode;
+			nativeMacCursorRecordingStartMs = 0;
+			nativeMacPauseStartedAtMs = null;
+			nativeMacPauseRanges = [];
+			nativeMacIsPaused = false;
 
 			const cursorStartTimeMs = Date.now();
 			if (cursorCaptureMode === "editable-overlay") {
+				nativeMacCursorRecordingStartMs = cursorStartTimeMs;
 				await startCursorRecording(cursorStartTimeMs);
 			} else {
 				pendingCursorRecordingData = null;
@@ -1577,7 +1642,55 @@ export function registerIpcHandlers(
 			nativeMacCaptureRecordingId = null;
 			nativeMacCursorOffsetMs = 0;
 			nativeMacCursorCaptureMode = "editable-overlay";
+			nativeMacCursorRecordingStartMs = 0;
+			nativeMacPauseStartedAtMs = null;
+			nativeMacPauseRanges = [];
+			nativeMacIsPaused = false;
 			await stopCursorRecording();
+			return { success: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	});
+
+	ipcMain.handle("pause-native-mac-recording", async () => {
+		const proc = nativeMacCaptureProcess;
+		if (!proc) {
+			return { success: false, error: "Native macOS capture is not running." };
+		}
+		if (nativeMacIsPaused) {
+			return { success: true };
+		}
+		if (!proc.stdin.writable) {
+			return { success: false, error: "Native macOS capture command channel is closed." };
+		}
+
+		try {
+			proc.stdin.write("pause\n");
+			nativeMacIsPaused = true;
+			nativeMacPauseStartedAtMs = Date.now();
+			return { success: true };
+		} catch (error) {
+			return { success: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	});
+
+	ipcMain.handle("resume-native-mac-recording", async () => {
+		const proc = nativeMacCaptureProcess;
+		if (!proc) {
+			return { success: false, error: "Native macOS capture is not running." };
+		}
+		if (!nativeMacIsPaused) {
+			return { success: true };
+		}
+		if (!proc.stdin.writable) {
+			return { success: false, error: "Native macOS capture command channel is closed." };
+		}
+
+		try {
+			proc.stdin.write("resume\n");
+			completeNativeMacCursorPauseRange();
+			nativeMacIsPaused = false;
+			return { success: true };
+		} catch (error) {
 			return { success: false, error: error instanceof Error ? error.message : String(error) };
 		}
 	});
@@ -1677,6 +1790,7 @@ export function registerIpcHandlers(
 		}
 
 		try {
+			completeNativeMacCursorPauseRange();
 			const stoppedPathPromise = waitForNativeMacCaptureStop(proc);
 			proc.stdin.write("stop\n");
 			const stoppedPath = await stoppedPathPromise;
@@ -1700,6 +1814,7 @@ export function registerIpcHandlers(
 			}
 
 			if (cursorCaptureMode === "editable-overlay") {
+				compactPendingCursorTelemetryPauseRanges(nativeMacPauseRanges);
 				shiftPendingCursorTelemetry(nativeMacCursorOffsetMs);
 				await writePendingCursorTelemetry(screenVideoPath);
 			}
@@ -1734,6 +1849,10 @@ export function registerIpcHandlers(
 			nativeMacCaptureRecordingId = null;
 			nativeMacCursorOffsetMs = 0;
 			nativeMacCursorCaptureMode = "editable-overlay";
+			nativeMacCursorRecordingStartMs = 0;
+			nativeMacPauseStartedAtMs = null;
+			nativeMacPauseRanges = [];
+			nativeMacIsPaused = false;
 			const source = selectedSource || { name: "Screen" };
 			if (onRecordingStateChange) {
 				onRecordingStateChange(false, source.name);

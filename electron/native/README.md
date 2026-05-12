@@ -23,9 +23,9 @@ npm run build:native:mac
 
 On non-macOS hosts this command exits successfully and does not affect Windows/Linux development. On macOS it builds the Swift package at `electron/native/screencapturekit`, writes the development binary to `electron/native/screencapturekit/build/openscreen-screencapturekit-helper`, and copies the redistributable binary to `electron/native/bin/darwin-${arch}/openscreen-screencapturekit-helper`.
 
-The current helper implementation supports the first native media slice: display/window ScreenCaptureKit video capture, cursor exclusion through `SCStreamConfiguration.showsCursor`, H.264 encoding, and MP4 muxing. System audio, microphone capture, webcam composition, and runtime controls are intentionally left as explicit roadmap phases.
+The current helper implementation supports display/window ScreenCaptureKit video capture, cursor exclusion through `SCStreamConfiguration.showsCursor`, H.264 encoding, MP4 muxing, and ScreenCaptureKit system audio. It also attempts native ScreenCaptureKit microphone capture when the running macOS version exposes that capability. Webcam recording currently stays as an Electron sidecar and is attached to the same recording session after the native screen capture stops.
 
-Electron exposes `is-native-mac-capture-available` for capability probing. It resolves the same helper locations listed above and reports `missing-helper` until a Swift helper binary is present; production recording is not routed through the macOS helper yet.
+Electron exposes `is-native-mac-capture-available` for capability probing. It resolves the same helper locations listed above and reports `missing-helper` until a Swift helper binary is present. When available, macOS recording routes screen/window capture through the native helper so editable cursor recordings do not bake the system cursor into the video.
 
 See `docs/engineering/macos-native-recorder-roadmap.md` for the contract, rollout phases, and SSOT rules.
 

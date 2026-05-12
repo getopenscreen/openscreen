@@ -107,6 +107,18 @@ interface Window {
 			discarded?: boolean;
 			error?: string;
 		}>;
+		attachNativeMacWebcamRecording: (payload: {
+			screenVideoPath: string;
+			recordingId: number;
+			webcam: import("../src/lib/recordingSession").RecordedVideoAssetInput;
+			cursorCaptureMode?: import("../src/lib/recordingSession").CursorCaptureMode;
+		}) => Promise<{
+			success: boolean;
+			path?: string;
+			session?: import("../src/lib/recordingSession").RecordingSession;
+			message?: string;
+			error?: string;
+		}>;
 		discardCursorTelemetry: (recordingId: number) => Promise<void>;
 		getCursorTelemetry: (videoPath?: string) => Promise<{
 			success: boolean;

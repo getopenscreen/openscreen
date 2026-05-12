@@ -107,6 +107,8 @@ The helper emits newline-delimited JSON events to stdout:
 
 ## Implementation Phases
 
+Current PR status: macOS screen/window capture routes through the ScreenCaptureKit helper when it is available so editable-cursor recordings can hide the system cursor. The helper now writes ScreenCaptureKit system audio into the primary MP4 and attempts runtime-gated native microphone capture on macOS versions that expose ScreenCaptureKit microphone output. Webcam capture is currently an Electron-recorded sidecar attached to the same recording session; native AVFoundation webcam composition remains the target end state.
+
 ### 1. Native Session Boundary
 
 - Add a structured macOS native recording request type.

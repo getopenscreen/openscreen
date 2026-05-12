@@ -23,6 +23,7 @@ import {
 	normalizeProjectMedia,
 	normalizeRecordingSession,
 	type ProjectMedia,
+	type RecordedVideoAssetInput,
 	type RecordingSession,
 	type StoreRecordedSessionInput,
 } from "../../src/lib/recordingSession";
@@ -214,6 +215,13 @@ type SelectedSource = {
 	id?: string;
 	display_id?: string;
 	[key: string]: unknown;
+};
+
+type AttachNativeMacWebcamRecordingInput = {
+	screenVideoPath?: string;
+	recordingId?: number;
+	webcam?: RecordedVideoAssetInput;
+	cursorCaptureMode?: CursorCaptureMode;
 };
 
 let selectedSource: SelectedSource | null = null;
@@ -1417,6 +1425,20 @@ export function registerIpcHandlers(
 			const outputPath = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
 			const cursorCaptureMode =
 				normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
+			try {
+				await desktopCapturer.getSources({
+					types: ["screen"],
+					thumbnailSize: { width: 1, height: 1 },
+				});
+			} catch {
+				// The helper reports the final ScreenCaptureKit permission status.
+			}
+			if (request.audio?.microphone?.enabled) {
+				const micStatus = systemPreferences.getMediaAccessStatus("microphone");
+				if (micStatus !== "granted") {
+					await systemPreferences.askForMediaAccess("microphone");
+				}
+			}
 			const sourceDisplay =
 				request.source.type === "display" && typeof request.source.displayId === "number"
 					? (screen.getAllDisplays().find((display) => display.id === request.source.displayId) ??
@@ -1434,6 +1456,10 @@ export function registerIpcHandlers(
 				video: {
 					...request.video,
 					hideSystemCursor: cursorCaptureMode === "editable-overlay",
+				},
+				webcam: {
+					...request.webcam,
+					enabled: false,
 				},
 				cursor: {
 					mode: cursorCaptureMode,
@@ -1665,6 +1691,63 @@ export function registerIpcHandlers(
 			}
 		}
 	});
+
+	ipcMain.handle(
+		"attach-native-mac-webcam-recording",
+		async (_, payload: AttachNativeMacWebcamRecordingInput) => {
+			try {
+				const screenVideoPath = normalizeVideoSourcePath(payload.screenVideoPath);
+				if (!screenVideoPath || !isPathWithinDir(screenVideoPath, RECORDINGS_DIR)) {
+					return {
+						success: false,
+						error: "Native macOS webcam attachment requires a recording output path.",
+					};
+				}
+
+				await fs.access(screenVideoPath, fsConstants.R_OK);
+
+				if (!payload.webcam?.fileName || !payload.webcam.videoData) {
+					return { success: false, error: "Native macOS webcam attachment is missing video data." };
+				}
+
+				const webcamVideoPath = resolveRecordingOutputPath(payload.webcam.fileName);
+				await fs.writeFile(webcamVideoPath, Buffer.from(payload.webcam.videoData));
+
+				const createdAt =
+					typeof payload.recordingId === "number" && Number.isFinite(payload.recordingId)
+						? payload.recordingId
+						: Date.now();
+				const cursorCaptureMode = normalizeCursorCaptureMode(payload.cursorCaptureMode);
+				const session: RecordingSession = {
+					screenVideoPath,
+					webcamVideoPath,
+					createdAt,
+					...(cursorCaptureMode ? { cursorCaptureMode } : {}),
+				};
+				setCurrentRecordingSessionState(session);
+				currentProjectPath = null;
+
+				const sessionManifestPath = path.join(
+					RECORDINGS_DIR,
+					`${path.parse(screenVideoPath).name}${RECORDING_SESSION_SUFFIX}`,
+				);
+				await fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8");
+
+				return {
+					success: true,
+					path: screenVideoPath,
+					session,
+					message: "Native macOS webcam recording attached successfully",
+				};
+			} catch (error) {
+				console.error("Failed to attach native macOS webcam recording:", error);
+				return {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				};
+			}
+		},
+	);
 
 	ipcMain.handle("store-recorded-session", async (_, payload: StoreRecordedSessionInput) => {
 		try {

@@ -197,6 +197,12 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		preparePreviewAudioTrack: (filePath: string) => Promise<{
+			success: boolean;
+			path?: string | null;
+			message?: string;
+			error?: string;
+		}>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
 		saveProjectFile: (
 			projectData: unknown,
@@ -237,6 +243,7 @@ interface Window {
 		hudOverlayHide: () => void;
 		hudOverlayClose: () => void;
 		setHudOverlayIgnoreMouseEvents: (ignore: boolean) => void;
+		moveHudOverlayBy: (deltaX: number, deltaY: number) => void;
 		showCountdownOverlay: (value: number, runId: number) => Promise<void>;
 		setCountdownOverlayValue: (value: number, runId: number) => Promise<void>;
 		hideCountdownOverlay: (runId: number) => Promise<void>;

@@ -30,6 +30,20 @@ ipcMain.on("hud-overlay-ignore-mouse-events", (_event, ignore: boolean) => {
 	}
 });
 
+ipcMain.on("hud-overlay-move-by", (_event, deltaX: number, deltaY: number) => {
+	if (
+		!hudOverlayWindow ||
+		hudOverlayWindow.isDestroyed() ||
+		!Number.isFinite(deltaX) ||
+		!Number.isFinite(deltaY)
+	) {
+		return;
+	}
+
+	const [x, y] = hudOverlayWindow.getPosition();
+	hudOverlayWindow.setPosition(Math.round(x + deltaX), Math.round(y + deltaY), false);
+});
+
 /**
  * Creates the always-on-top HUD overlay window centred at the bottom of the
  * primary display. The window is frameless, transparent, and follows the user

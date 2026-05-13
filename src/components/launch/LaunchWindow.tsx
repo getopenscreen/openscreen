@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Languages } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BsPauseCircle, BsPlayCircle, BsRecordCircle } from "react-icons/bs";
 import { FaRegStopCircle } from "react-icons/fa";
@@ -282,12 +282,22 @@ export function LaunchWindow() {
 		return () => cancelAnimationFrame(id);
 	}, [isLanguageMenuOpen]);
 
+	const setHudMouseEventsEnabled = useCallback((enabled: boolean) => {
+		window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(!enabled);
+	}, []);
+
 	useEffect(() => {
 		window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(true);
 		return () => {
 			window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(false);
 		};
 	}, []);
+
+	useEffect(() => {
+		if (isLanguageMenuOpen) {
+			setHudMouseEventsEnabled(true);
+		}
+	}, [isLanguageMenuOpen, setHudMouseEventsEnabled]);
 
 	const [selectedSource, setSelectedSource] = useState("Screen");
 	const [hasSelectedSource, setHasSelectedSource] = useState(false);
@@ -358,6 +368,29 @@ export function LaunchWindow() {
 			setMicrophoneEnabled(!microphoneEnabled);
 		}
 	};
+	const dragLastPositionRef = useRef<{ x: number; y: number } | null>(null);
+	const handleHudDragPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+		event.preventDefault();
+		event.stopPropagation();
+		setHudMouseEventsEnabled(true);
+		event.currentTarget.setPointerCapture(event.pointerId);
+		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
+	};
+	const handleHudDragPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+		const lastPosition = dragLastPositionRef.current;
+		if (!lastPosition) return;
+		const deltaX = event.screenX - lastPosition.x;
+		const deltaY = event.screenY - lastPosition.y;
+		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
+		window.electronAPI?.moveHudOverlayBy?.(deltaX, deltaY);
+	};
+	const handleHudDragPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+		dragLastPositionRef.current = null;
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+		setHudMouseEventsEnabled(true);
+	};
 
 	return (
 		// Root fills the HUD window only. Avoid w-screen/h-screen (100vw/100vh):
@@ -369,9 +402,13 @@ export function LaunchWindow() {
 			onPointerMove={(event) => {
 				const target = event.target as HTMLElement | null;
 				const shouldCapture = Boolean(target?.closest("[data-hud-interactive='true']"));
-				window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(!shouldCapture);
+				setHudMouseEventsEnabled(shouldCapture);
 			}}
-			onPointerLeave={() => window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(true)}
+			onPointerLeave={() => {
+				if (!isLanguageMenuOpen) {
+					setHudMouseEventsEnabled(false);
+				}
+			}}
 		>
 			{systemLocaleSuggestion && (
 				<div
@@ -548,9 +585,23 @@ export function LaunchWindow() {
 			<div
 				data-hud-interactive="true"
 				className={`fixed bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-2xl border border-white/[0.10] bg-[#07080a]/90 px-2 py-1.5 shadow-[0_20px_60px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-2xl backdrop-saturate-[140%]`}
+				onPointerEnter={() => setHudMouseEventsEnabled(true)}
+				onPointerDown={() => setHudMouseEventsEnabled(true)}
+				onMouseEnter={() => setHudMouseEventsEnabled(true)}
+				onMouseLeave={() => {
+					if (!isLanguageMenuOpen) {
+						setHudMouseEventsEnabled(false);
+					}
+				}}
 			>
 				{/* Drag handle */}
-				<div className={`flex items-center px-1 ${styles.electronDrag}`}>
+				<div
+					className={`flex h-8 w-7 cursor-grab items-center justify-center active:cursor-grabbing ${styles.electronNoDrag}`}
+					onPointerDown={handleHudDragPointerDown}
+					onPointerMove={handleHudDragPointerMove}
+					onPointerUp={handleHudDragPointerEnd}
+					onPointerCancel={handleHudDragPointerEnd}
+				>
 					{getIcon("drag", "text-white/30")}
 				</div>
 
@@ -742,6 +793,7 @@ export function LaunchWindow() {
 						? createPortal(
 								<div
 									ref={languageMenuPanelRef}
+									data-hud-interactive="true"
 									role="menu"
 									className={`${styles.languageMenuPanel} ${styles.languageMenuScroll} ${styles.electronNoDrag}`}
 									style={
@@ -754,6 +806,12 @@ export function LaunchWindow() {
 										} as React.CSSProperties
 									}
 									onPointerDown={(event) => event.stopPropagation()}
+									onPointerEnter={() => setHudMouseEventsEnabled(true)}
+									onPointerMove={() => setHudMouseEventsEnabled(true)}
+									onWheel={(event) => {
+										setHudMouseEventsEnabled(true);
+										event.stopPropagation();
+									}}
 								>
 									{availableLocales.map((loc) => (
 										<button

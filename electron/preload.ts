@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setHudOverlayIgnoreMouseEvents: (ignore: boolean) => {
 		ipcRenderer.send("hud-overlay-ignore-mouse-events", ignore);
 	},
+	moveHudOverlayBy: (deltaX: number, deltaY: number) => {
+		ipcRenderer.send("hud-overlay-move-by", deltaX, deltaY);
+	},
 	getSources: async (opts: Electron.SourcesOptions) => {
 		return await ipcRenderer.invoke("get-sources", opts);
 	},
@@ -141,6 +144,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	readBinaryFile: (filePath: string) => {
 		return ipcRenderer.invoke("read-binary-file", filePath);
+	},
+	preparePreviewAudioTrack: (filePath: string) => {
+		return ipcRenderer.invoke("prepare-preview-audio-track", filePath);
 	},
 	clearCurrentVideoPath: () => {
 		return ipcRenderer.invoke("clear-current-video-path");

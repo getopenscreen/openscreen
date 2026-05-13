@@ -195,6 +195,26 @@ function getEndedVideoDuration(video: HTMLVideoElement): number | null {
 	return null;
 }
 
+type AudioTrackListLike = {
+	length: number;
+	[index: number]: { enabled: boolean };
+};
+
+type VideoElementWithAudioTracks = HTMLVideoElement & {
+	audioTracks?: AudioTrackListLike;
+};
+
+function enableAllPreviewAudioTracks(video: HTMLVideoElement) {
+	const audioTracks = (video as VideoElementWithAudioTracks).audioTracks;
+	if (!audioTracks || audioTracks.length <= 1) {
+		return;
+	}
+
+	for (let index = 0; index < audioTracks.length; index += 1) {
+		audioTracks[index].enabled = true;
+	}
+}
+
 const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 	(
 		{
@@ -252,6 +272,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		ref,
 	) => {
 		const videoRef = useRef<HTMLVideoElement | null>(null);
+		const supplementalAudioRef = useRef<HTMLAudioElement | null>(null);
 		const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
 		const containerRef = useRef<HTMLDivElement | null>(null);
 		const appRef = useRef<Application | null>(null);
@@ -261,6 +282,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const timeUpdateAnimationRef = useRef<number | null>(null);
 		const [pixiReady, setPixiReady] = useState(false);
 		const [videoReady, setVideoReady] = useState(false);
+		const [supplementalAudioPath, setSupplementalAudioPath] = useState<string | null>(null);
 		const [overlaySize, setOverlaySize] = useState({ width: 800, height: 600 });
 		const [overlayElement, setOverlayElement] = useState<HTMLDivElement | null>(null);
 		const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -582,10 +604,19 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				if (!vid) return;
 				try {
 					allowPlaybackRef.current = true;
+					enableAllPreviewAudioTracks(vid);
 					await vid.play().catch((err) => {
 						console.log("PLAY ERROR:", err);
 						throw err;
 					});
+					const supplementalAudio = supplementalAudioRef.current;
+					if (supplementalAudio) {
+						supplementalAudio.currentTime = vid.currentTime;
+						supplementalAudio.playbackRate = vid.playbackRate;
+						await supplementalAudio.play().catch(() => {
+							// The main video remains the source of truth for playback state.
+						});
+					}
 				} catch (error) {
 					allowPlaybackRef.current = false;
 					throw error;
@@ -598,6 +629,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					return;
 				}
 				video.pause();
+				supplementalAudioRef.current?.pause();
 			},
 		}));
 
@@ -1005,11 +1037,30 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				lastResolvedDurationRef.current = null;
 				isResolvingDurationRef.current = false;
 				setVideoReady(false);
+				setSupplementalAudioPath(null);
 				return;
 			}
 
+			let cancelled = false;
+			window.electronAPI
+				?.preparePreviewAudioTrack?.(videoPath)
+				.then((result) => {
+					if (!cancelled) {
+						setSupplementalAudioPath(result.success ? (result.path ?? null) : null);
+					}
+				})
+				.catch(() => {
+					if (!cancelled) {
+						setSupplementalAudioPath(null);
+					}
+				});
+
 			const video = videoRef.current;
-			if (!video) return;
+			if (!video) {
+				return () => {
+					cancelled = true;
+				};
+			}
 			video.pause();
 			video.currentTime = 0;
 			allowPlaybackRef.current = false;
@@ -1026,7 +1077,41 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				videoReadyRafRef.current = null;
 			}
 			video.load();
+
+			return () => {
+				cancelled = true;
+			};
 		}, [videoPath]);
+
+		useEffect(() => {
+			const video = videoRef.current;
+			const supplementalAudio = supplementalAudioRef.current;
+			if (!video || !supplementalAudio || !supplementalAudioPath) {
+				return;
+			}
+
+			const activeSpeedRegion =
+				speedRegions.find(
+					(region) => currentTime * 1000 >= region.startMs && currentTime * 1000 < region.endMs,
+				) ?? null;
+			supplementalAudio.playbackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+
+			if (!isPlaying) {
+				supplementalAudio.pause();
+				if (Math.abs(supplementalAudio.currentTime - currentTime) > 0.05) {
+					supplementalAudio.currentTime = currentTime;
+				}
+				return;
+			}
+
+			if (Math.abs(supplementalAudio.currentTime - video.currentTime) > 0.15) {
+				supplementalAudio.currentTime = video.currentTime;
+			}
+
+			supplementalAudio.play().catch(() => {
+				// Keep video playback running even if supplemental preview audio is unavailable.
+			});
+		}, [currentTime, isPlaying, speedRegions, supplementalAudioPath]);
 
 		useEffect(() => {
 			if (!pixiReady || !videoReady) return;
@@ -1545,6 +1630,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 		const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
 			const video = e.currentTarget;
+			enableAllPreviewAudioTracks(video);
 			const hasResolvedDuration = syncResolvedDuration(video);
 			if (!hasResolvedDuration) {
 				forceResolveDuration(video);
@@ -1928,22 +2014,28 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					playsInline
 					onLoadedMetadata={handleLoadedMetadata}
 					onDurationChange={(e) => {
+						enableAllPreviewAudioTracks(e.currentTarget);
 						if (!syncResolvedDuration(e.currentTarget)) {
 							forceResolveDuration(e.currentTarget);
 						}
 					}}
 					onLoadedData={(e) => {
+						enableAllPreviewAudioTracks(e.currentTarget);
 						if (!syncResolvedDuration(e.currentTarget)) {
 							forceResolveDuration(e.currentTarget);
 						}
 					}}
 					onCanPlay={(e) => {
+						enableAllPreviewAudioTracks(e.currentTarget);
 						if (!syncResolvedDuration(e.currentTarget)) {
 							forceResolveDuration(e.currentTarget);
 						}
 					}}
 					onError={() => onError("Failed to load video")}
 				/>
+				{supplementalAudioPath && (
+					<audio ref={supplementalAudioRef} src={supplementalAudioPath} preload="auto" />
+				)}
 			</div>
 		);
 	},

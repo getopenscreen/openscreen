@@ -46,6 +46,7 @@ const SHORTCUTS_FILE = path.join(app.getPath("userData"), "shortcuts.json");
 const RECORDING_FILE_PREFIX = "recording-";
 const RECORDING_SESSION_SUFFIX = ".session.json";
 const ALLOWED_IMPORT_VIDEO_EXTENSIONS = new Set([".webm", ".mp4", ".mov", ".avi", ".mkv"]);
+const PREVIEW_AUDIO_DIR = path.join(app.getPath("userData"), "preview-audio");
 
 /**
  * Paths explicitly approved by the user via file picker dialogs or project loads.
@@ -103,6 +104,102 @@ function buildDialogOptions<T extends Electron.OpenDialogOptions | Electron.Save
 
 function hasAllowedImportVideoExtension(filePath: string): boolean {
 	return ALLOWED_IMPORT_VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+function runProcess(
+	command: string,
+	args: string[],
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+		let stdout = "";
+		let stderr = "";
+		child.stdout.on("data", (chunk) => {
+			stdout += chunk.toString();
+		});
+		child.stderr.on("data", (chunk) => {
+			stderr += chunk.toString();
+		});
+		child.on("error", reject);
+		child.on("close", (code) => resolve({ code, stdout, stderr }));
+	});
+}
+
+function parseAfinfoAudioTrackBitrates(output: string): number[] {
+	const bitrates: number[] = [];
+	const trackSections = output.split(/\n----\n/g).slice(1);
+	for (const section of trackSections) {
+		const match = section.match(/\bbit rate:\s*([0-9]+)\s*bits per second/i);
+		bitrates.push(match ? Number(match[1]) : 0);
+	}
+	return bitrates;
+}
+
+async function prepareSupplementalPreviewAudioTrack(videoPath: string) {
+	const normalizedPath = await approveReadableVideoPath(videoPath);
+	if (!normalizedPath) {
+		return {
+			success: false,
+			message: "File path is not approved or is not a supported video file",
+		};
+	}
+
+	if (process.platform !== "darwin" || path.extname(normalizedPath).toLowerCase() !== ".mp4") {
+		return { success: true, path: null };
+	}
+
+	const afinfo = await runProcess("/usr/bin/afinfo", [normalizedPath]);
+	if (afinfo.code !== 0) {
+		return { success: true, path: null };
+	}
+
+	const bitrates = parseAfinfoAudioTrackBitrates(`${afinfo.stdout}\n${afinfo.stderr}`);
+	if (bitrates.length <= 1) {
+		return { success: true, path: null };
+	}
+
+	let supplementalTrackIndex = 1;
+	for (let index = 2; index < bitrates.length; index += 1) {
+		if (bitrates[index] > bitrates[supplementalTrackIndex]) {
+			supplementalTrackIndex = index;
+		}
+	}
+
+	await fs.mkdir(PREVIEW_AUDIO_DIR, { recursive: true });
+	const sourceStat = await fs.stat(normalizedPath);
+	const parsedPath = path.parse(normalizedPath);
+	const outputPath = path.join(
+		PREVIEW_AUDIO_DIR,
+		`${parsedPath.name}.track-${supplementalTrackIndex}.${Math.round(sourceStat.mtimeMs)}.m4a`,
+	);
+
+	try {
+		const outputStat = await fs.stat(outputPath);
+		if (outputStat.mtimeMs >= sourceStat.mtimeMs) {
+			return { success: true, path: pathToFileURL(outputPath).toString() };
+		}
+	} catch {
+		// Generate below.
+	}
+
+	const conversion = await runProcess("/usr/bin/afconvert", [
+		"--read-track",
+		String(supplementalTrackIndex),
+		"-f",
+		"m4af",
+		"-d",
+		"aac",
+		normalizedPath,
+		outputPath,
+	]);
+	if (conversion.code !== 0) {
+		return {
+			success: false,
+			message: conversion.stderr || conversion.stdout || "Failed to prepare preview audio",
+		};
+	}
+
+	return { success: true, path: pathToFileURL(outputPath).toString() };
 }
 
 async function approveReadableVideoPath(
@@ -1273,6 +1370,16 @@ export function registerIpcHandlers(
 		createEditorWindow();
 	});
 
+	ipcMain.handle("switch-to-hud", () => {
+		_switchToHud?.();
+		return { success: true };
+	});
+
+	ipcMain.handle("start-new-recording", () => {
+		_switchToHud?.();
+		return { success: true };
+	});
+
 	ipcMain.handle("countdown-overlay-show", async (_, value: number, runId: number) => {
 		const overlayWindow = getCountdownOverlayWindow?.() ?? createCountdownOverlayWindow();
 		if (overlayWindow.isDestroyed()) {
@@ -2231,6 +2338,19 @@ export function registerIpcHandlers(
 			return {
 				success: false,
 				message: "Failed to read binary file",
+				error: String(error),
+			};
+		}
+	});
+
+	ipcMain.handle("prepare-preview-audio-track", async (_, filePath: string) => {
+		try {
+			return await prepareSupplementalPreviewAudioTrack(filePath);
+		} catch (error) {
+			console.error("Failed to prepare preview audio track:", error);
+			return {
+				success: false,
+				message: "Failed to prepare preview audio track",
 				error: String(error),
 			};
 		}

@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -47,6 +48,7 @@ const RECORDING_FILE_PREFIX = "recording-";
 const RECORDING_SESSION_SUFFIX = ".session.json";
 const ALLOWED_IMPORT_VIDEO_EXTENSIONS = new Set([".webm", ".mp4", ".mov", ".avi", ".mkv"]);
 const PREVIEW_AUDIO_DIR = path.join(app.getPath("userData"), "preview-audio");
+const nativeMacCaptureEvents = new EventEmitter();
 
 /**
  * Paths explicitly approved by the user via file picker dialogs or project loads.
@@ -996,6 +998,43 @@ function tryParseNativeHelperEvent(line: string) {
 	}
 }
 
+function inspectNativeMacCaptureOutput() {
+	for (const line of nativeMacCaptureOutput.split(/\r?\n/)) {
+		const event = tryParseNativeHelperEvent(line.trim());
+		if (event) {
+			nativeMacCaptureEvents.emit("helper-event", event);
+		}
+	}
+}
+
+function attachNativeMacCaptureOutputDrain(proc: ChildProcessWithoutNullStreams) {
+	let lineBuffer = "";
+	const drain = (chunk: Buffer) => {
+		const text = chunk.toString();
+		nativeMacCaptureOutput += text;
+		lineBuffer += text;
+		const lines = lineBuffer.split(/\r?\n/);
+		lineBuffer = lines.pop() ?? "";
+		for (const line of lines) {
+			const event = tryParseNativeHelperEvent(line.trim());
+			if (event) {
+				nativeMacCaptureEvents.emit("helper-event", event);
+			}
+		}
+	};
+	const cleanup = () => {
+		proc.stdout.off("data", drain);
+		proc.stderr.off("data", drain);
+		proc.off("close", cleanup);
+		proc.off("error", cleanup);
+	};
+
+	proc.stdout.on("data", drain);
+	proc.stderr.on("data", drain);
+	proc.once("close", cleanup);
+	proc.once("error", cleanup);
+}
+
 function waitForNativeMacCaptureStart(proc: ChildProcessWithoutNullStreams) {
 	return new Promise<void>((resolve, reject) => {
 		const timer = setTimeout(() => {
@@ -1003,25 +1042,19 @@ function waitForNativeMacCaptureStart(proc: ChildProcessWithoutNullStreams) {
 			reject(new Error("Timed out waiting for native macOS capture to start"));
 		}, 10_000);
 
-		const inspect = (chunk: Buffer) => {
-			nativeMacCaptureOutput += chunk.toString();
-			for (const line of nativeMacCaptureOutput.split(/\r?\n/)) {
-				const event = tryParseNativeHelperEvent(line.trim());
-				if (!event) continue;
-				if (event.event === "recording-started") {
-					cleanup();
-					resolve();
-					return;
-				}
-				if (event.event === "error") {
-					cleanup();
-					reject(new Error(event.message ?? event.code ?? "Native macOS capture failed"));
-					return;
-				}
+		const inspect = (event: Record<string, unknown>) => {
+			if (event.event === "recording-started") {
+				cleanup();
+				resolve();
+				return;
+			}
+			if (event.event === "error") {
+				cleanup();
+				reject(new Error(String(event.message ?? event.code ?? "Native macOS capture failed")));
 			}
 		};
 
-		const onOutput = (chunk: Buffer) => inspect(chunk);
+		const onOutput = (event: Record<string, unknown>) => inspect(event);
 		const onClose = (code: number | null) => {
 			cleanup();
 			reject(
@@ -1037,16 +1070,15 @@ function waitForNativeMacCaptureStart(proc: ChildProcessWithoutNullStreams) {
 		};
 		const cleanup = () => {
 			clearTimeout(timer);
-			proc.stdout.off("data", onOutput);
-			proc.stderr.off("data", onOutput);
+			nativeMacCaptureEvents.off("helper-event", onOutput);
 			proc.off("close", onClose);
 			proc.off("error", onError);
 		};
 
-		proc.stdout.on("data", onOutput);
-		proc.stderr.on("data", onOutput);
+		nativeMacCaptureEvents.on("helper-event", onOutput);
 		proc.once("close", onClose);
 		proc.once("error", onError);
+		inspectNativeMacCaptureOutput();
 	});
 }
 
@@ -1063,25 +1095,19 @@ function waitForNativeMacCaptureStop(proc: ChildProcessWithoutNullStreams) {
 			);
 		}, 30_000);
 
-		const inspect = (chunk: Buffer) => {
-			nativeMacCaptureOutput += chunk.toString();
-			for (const line of nativeMacCaptureOutput.split(/\r?\n/)) {
-				const event = tryParseNativeHelperEvent(line.trim());
-				if (!event) continue;
-				if (event.event === "recording-stopped") {
-					cleanup();
-					resolve(event.screenPath ?? nativeMacCaptureTargetPath ?? "");
-					return;
-				}
-				if (event.event === "error") {
-					cleanup();
-					reject(new Error(event.message ?? event.code ?? "Native macOS capture failed"));
-					return;
-				}
+		const inspect = (event: Record<string, unknown>) => {
+			if (event.event === "recording-stopped") {
+				cleanup();
+				resolve(String(event.screenPath ?? nativeMacCaptureTargetPath ?? ""));
+				return;
+			}
+			if (event.event === "error") {
+				cleanup();
+				reject(new Error(String(event.message ?? event.code ?? "Native macOS capture failed")));
 			}
 		};
 
-		const onOutput = (chunk: Buffer) => inspect(chunk);
+		const onOutput = (event: Record<string, unknown>) => inspect(event);
 		const onClose = (code: number | null) => {
 			if (code === 0 && nativeMacCaptureTargetPath) {
 				cleanup();
@@ -1102,16 +1128,15 @@ function waitForNativeMacCaptureStop(proc: ChildProcessWithoutNullStreams) {
 		};
 		const cleanup = () => {
 			clearTimeout(timer);
-			proc.stdout.off("data", onOutput);
-			proc.stderr.off("data", onOutput);
+			nativeMacCaptureEvents.off("helper-event", onOutput);
 			proc.off("close", onClose);
 			proc.off("error", onError);
 		};
 
-		proc.stdout.on("data", onOutput);
-		proc.stderr.on("data", onOutput);
+		nativeMacCaptureEvents.on("helper-event", onOutput);
 		proc.once("close", onClose);
 		proc.once("error", onError);
+		inspectNativeMacCaptureOutput();
 	});
 }
 
@@ -1722,6 +1747,7 @@ export function registerIpcHandlers(
 				stdio: ["pipe", "pipe", "pipe"],
 			});
 			nativeMacCaptureProcess = proc;
+			attachNativeMacCaptureOutputDrain(proc);
 
 			await waitForNativeMacCaptureStart(proc);
 			const captureStartedAtMs = Date.now();

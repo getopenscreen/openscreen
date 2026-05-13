@@ -282,21 +282,24 @@ export function LaunchWindow() {
 		return () => cancelAnimationFrame(id);
 	}, [isLanguageMenuOpen]);
 
+	const hudMouseEventsEnabledRef = useRef<boolean | undefined>(undefined);
 	const setHudMouseEventsEnabled = useCallback((enabled: boolean) => {
+		if (hudMouseEventsEnabledRef.current === enabled) {
+			return;
+		}
+		hudMouseEventsEnabledRef.current = enabled;
 		window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(!enabled);
 	}, []);
 
 	useEffect(() => {
-		window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(true);
+		setHudMouseEventsEnabled(false);
 		return () => {
 			window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(false);
 		};
-	}, []);
+	}, [setHudMouseEventsEnabled]);
 
 	useEffect(() => {
-		if (isLanguageMenuOpen) {
-			setHudMouseEventsEnabled(true);
-		}
+		setHudMouseEventsEnabled(isLanguageMenuOpen);
 	}, [isLanguageMenuOpen, setHudMouseEventsEnabled]);
 
 	const [selectedSource, setSelectedSource] = useState("Screen");
@@ -389,7 +392,7 @@ export function LaunchWindow() {
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
-		setHudMouseEventsEnabled(true);
+		setHudMouseEventsEnabled(false);
 	};
 
 	return (

@@ -194,7 +194,5 @@
 	"language": {
 		"title": "Dil"
 	},
-	"audio": {
-		"nrLevel": {}
-	}
+	"audio": {}
 }

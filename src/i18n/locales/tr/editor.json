@@ -33,7 +33,8 @@
 		"cameraDenied": "Kamera erişimi reddedildi. Kayıt kamera olmadan devam edecek.",
 		"permissionDenied": "Kayıt izni reddedildi. Lütfen ekran kaydına izin verin.",
 		"cameraDisconnected": "Webcam bağlantısı kesildi.",
-		"cameraNotFound": "Kamera bulunamadı."
+		"cameraNotFound": "Kamera bulunamadı.",
+		"accessibilityAllowAndRetry": "OpenScreen için Erişilebilirlik erişimine izin verin, ardından geri sayımı başlatmak için tekrar kayda basın."
 	},
 	"loadingVideo": "Video yükleniyor...",
 	"newRecording": {

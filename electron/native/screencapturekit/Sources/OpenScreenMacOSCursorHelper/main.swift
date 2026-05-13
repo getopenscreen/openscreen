@@ -101,6 +101,10 @@ func parentElement(_ element: AXUIElement) -> AXUIElement? {
 		return nil
 	}
 
+	guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
+		return nil
+	}
+
 	return (value as! AXUIElement)
 }
 

@@ -70,6 +70,12 @@ if (result.status !== 0) {
 
 fs.mkdirSync(buildDir, { recursive: true });
 fs.mkdirSync(distributableDir, { recursive: true });
+for (const artifactPath of [builtHelperPath, builtCursorHelperPath]) {
+	if (!fs.existsSync(artifactPath)) {
+		console.error(`Swift build completed but expected artifact was not found: ${artifactPath}`);
+		process.exit(1);
+	}
+}
 fs.copyFileSync(builtHelperPath, localHelperPath);
 fs.copyFileSync(builtHelperPath, distributablePath);
 fs.copyFileSync(builtCursorHelperPath, localCursorHelperPath);

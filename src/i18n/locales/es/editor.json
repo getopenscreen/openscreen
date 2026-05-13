@@ -33,7 +33,8 @@
 		"cameraDenied": "Acceso a la cámara denegado. La grabación continuará sin cámara web.",
 		"cameraDisconnected": "Cámara web desconectada.",
 		"cameraNotFound": "Cámara no encontrada.",
-		"permissionDenied": "Permiso de grabación denegado. Por favor permite la grabación de pantalla."
+		"permissionDenied": "Permiso de grabación denegado. Por favor permite la grabación de pantalla.",
+		"accessibilityAllowAndRetry": "Permite el acceso de accesibilidad para OpenScreen y luego pulsa grabar de nuevo para iniciar la cuenta atrás."
 	},
 	"loadingVideo": "Cargando video...",
 	"newRecording": {

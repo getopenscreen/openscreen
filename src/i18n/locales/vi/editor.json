@@ -40,6 +40,7 @@
 		"cameraDenied": "Quyền truy cập máy ảnh bị từ chối. Sẽ tiếp tục ghi hình không có webcam.",
 		"cameraDisconnected": "Webcam bị ngắt kết nối.",
 		"cameraNotFound": "Không tìm thấy máy ảnh.",
-		"permissionDenied": "Quyền ghi hình bị từ chối. Vui lòng cho phép ghi màn hình."
+		"permissionDenied": "Quyền ghi hình bị từ chối. Vui lòng cho phép ghi màn hình.",
+		"accessibilityAllowAndRetry": "Cho phép OpenScreen truy cập Trợ năng, sau đó nhấn ghi lại để bắt đầu đếm ngược."
 	}
 }

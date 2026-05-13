@@ -775,7 +775,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					},
 				},
 				webcam: {
-					enabled: false,
+					enabled: webcamEnabled,
 					deviceId: webcamDeviceId,
 					deviceName: webcamDeviceName,
 					width: WEBCAM_TARGET_WIDTH,
@@ -857,6 +857,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						}, 5000);
 					});
 				}
+				if (!isCountdownRunActive(countdownRunToken)) {
+					return true;
+				}
 				if (webcamStream.current) {
 					nativeWebcamRecorder = createRecorderHandle(webcamStream.current, {
 						mimeType: selectMimeType(),
@@ -866,6 +869,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					webcamAcquireId.current++;
 					setWebcamEnabledState(false);
 				}
+			}
+			if (!isCountdownRunActive(countdownRunToken)) {
+				if (nativeWebcamRecorder && nativeWebcamRecorder.recorder.state !== "inactive") {
+					nativeWebcamRecorder.recorder.stop();
+				}
+				return true;
 			}
 			const request: NativeMacRecordingRequest = {
 				schemaVersion: 1,
@@ -915,6 +924,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					nativeWebcamRecorder.recorder.stop();
 				}
 				throw new Error(result.error ?? "Native macOS capture failed.");
+			}
+			if (!isCountdownRunActive(countdownRunToken)) {
+				if (nativeWebcamRecorder && nativeWebcamRecorder.recorder.state !== "inactive") {
+					nativeWebcamRecorder.recorder.stop();
+				}
+				await window.electronAPI.stopNativeMacRecording(true);
+				return true;
 			}
 
 			recordingId.current = result.recordingId;
@@ -969,9 +985,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (platform === "darwin" && cursorCaptureMode === "editable-overlay") {
 				const access = await window.electronAPI.requestNativeMacCursorAccess();
 				if (!access.granted) {
-					toast.info(
-						"Allow Accessibility access for OpenScreen, then press record again to start the countdown.",
-					);
+					toast.info(t("recording.accessibilityAllowAndRetry"));
 					return;
 				}
 			}
@@ -1415,6 +1429,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			return;
 		}
+		if (nativeMacRecording.current) {
+			const activeRecordingId = recordingId.current;
+			restarting.current = true;
+			discardRecordingId.current = activeRecordingId;
+			try {
+				await finalizeNativeMacRecording(true);
+				await startRecording();
+			} finally {
+				restarting.current = false;
+			}
+			return;
+		}
 
 		const activeScreenRecorder = screenRecorder.current;
 		if (!activeScreenRecorder || activeScreenRecorder.recorder.state === "inactive") return;
@@ -1478,6 +1504,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			discardRecordingId.current = activeRecordingId;
 			allowAutoFinalize.current = false;
 			void finalizeNativeWindowsRecording(true);
+			return;
+		}
+		if (nativeMacRecording.current) {
+			const activeRecordingId = recordingId.current;
+			discardRecordingId.current = activeRecordingId;
+			allowAutoFinalize.current = false;
+			void finalizeNativeMacRecording(true);
 			return;
 		}
 

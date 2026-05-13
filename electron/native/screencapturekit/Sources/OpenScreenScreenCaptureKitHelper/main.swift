@@ -327,8 +327,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				AVCaptureDevice.requestAccess(for: .audio) { _ in
 					semaphore.signal()
 				}
-				semaphore.wait()
-				if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
+				let waitResult = semaphore.wait(timeout: .now() + 30)
+				if waitResult == .timedOut || AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
 					throw HelperError.permissionDenied("Microphone permission is required for native microphone capture.")
 				}
 			default:

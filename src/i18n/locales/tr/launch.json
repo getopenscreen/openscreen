@@ -14,8 +14,7 @@
 		"disableSystemAudio": "Sistem sesini devre dışı bırak",
 		"enableMicrophone": "Mikrofonu etkinleştir",
 		"disableMicrophone": "Mikrofonu devre dışı bırak",
-		"defaultMicrophone": "Varsayılan Mikrofon",
-		"nrLevel": {}
+		"defaultMicrophone": "Varsayılan Mikrofon"
 	},
 	"webcam": {
 		"enableWebcam": "Kamerayı etkinleştir",

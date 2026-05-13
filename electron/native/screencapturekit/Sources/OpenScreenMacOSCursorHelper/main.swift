@@ -66,10 +66,20 @@ final class MouseButtonTracker {
 	private func record(_ type: CGEventType) {
 		lock.lock()
 		defer { lock.unlock() }
+		if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+			reenableTap()
+			return
+		}
 		if type == .leftMouseDown {
 			leftDownCount += 1
 		} else if type == .leftMouseUp {
 			leftUpCount += 1
+		}
+	}
+
+	private func reenableTap() {
+		if let eventTap {
+			CGEvent.tapEnable(tap: eventTap, enable: true)
 		}
 	}
 }
@@ -181,8 +191,8 @@ func cursorTypeForElement(_ element: AXUIElement) -> String? {
 
 func accessibilityPointForMouse() -> CGPoint {
 	let mouse = NSEvent.mouseLocation
-	let maxY = NSScreen.screens.map { $0.frame.maxY }.max() ?? NSScreen.main?.frame.height ?? 0
-	return CGPoint(x: mouse.x, y: maxY - mouse.y)
+	let primaryHeight = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+	return CGPoint(x: mouse.x, y: primaryHeight - mouse.y)
 }
 
 func currentCursorType() -> String? {

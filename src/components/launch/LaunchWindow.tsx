@@ -404,7 +404,8 @@ export function LaunchWindow() {
 			className={`h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-hidden bg-transparent ${styles.electronDrag}`}
 			onPointerMove={(event) => {
 				const target = event.target as HTMLElement | null;
-				const shouldCapture = Boolean(target?.closest("[data-hud-interactive='true']"));
+				const shouldCapture =
+					isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']"));
 				setHudMouseEventsEnabled(shouldCapture);
 			}}
 			onPointerLeave={() => {

@@ -1759,6 +1759,10 @@ export function registerIpcHandlers(
 	});
 
 	ipcMain.handle("pause-native-mac-recording", async () => {
+		if (process.platform !== "darwin") {
+			return { success: false, error: "Native macOS capture requires macOS." };
+		}
+
 		const proc = nativeMacCaptureProcess;
 		if (!proc) {
 			return { success: false, error: "Native macOS capture is not running." };
@@ -1781,6 +1785,10 @@ export function registerIpcHandlers(
 	});
 
 	ipcMain.handle("resume-native-mac-recording", async () => {
+		if (process.platform !== "darwin") {
+			return { success: false, error: "Native macOS capture requires macOS." };
+		}
+
 		const proc = nativeMacCaptureProcess;
 		if (!proc) {
 			return { success: false, error: "Native macOS capture is not running." };
@@ -1887,6 +1895,10 @@ export function registerIpcHandlers(
 	});
 
 	ipcMain.handle("stop-native-mac-recording", async (_, discard?: boolean) => {
+		if (process.platform !== "darwin") {
+			return { success: false, error: "Native macOS capture requires macOS." };
+		}
+
 		const proc = nativeMacCaptureProcess;
 		const preferredPath = nativeMacCaptureTargetPath;
 		const recordingId = nativeMacCaptureRecordingId ?? Date.now();
@@ -1971,6 +1983,10 @@ export function registerIpcHandlers(
 		"attach-native-mac-webcam-recording",
 		async (_, payload: AttachNativeMacWebcamRecordingInput) => {
 			try {
+				if (process.platform !== "darwin") {
+					return { success: false, error: "Native macOS webcam attachment requires macOS." };
+				}
+
 				const screenVideoPath = normalizeVideoSourcePath(payload.screenVideoPath);
 				if (!screenVideoPath || !isPathWithinDir(screenVideoPath, RECORDINGS_DIR)) {
 					return {

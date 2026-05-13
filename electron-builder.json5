@@ -46,6 +46,13 @@
     ],
     "icon": "icons/icons/mac/icon.icns",
     "artifactName": "${productName}-Mac-${arch}-${version}-Installer.${ext}",
+    "extraResources": [
+      {
+        "from": "electron/native/bin",
+        "to": "electron/native/bin",
+        "filter": ["darwin-*/*"]
+      }
+    ],
     "extendInfo": {
       "NSAudioCaptureUsageDescription": "OpenScreen needs audio capture permission to record system audio.",
       "NSMicrophoneUsageDescription": "OpenScreen needs microphone access to record voice audio.",
@@ -73,7 +80,7 @@
       {
         "from": "electron/native/bin",
         "to": "electron/native/bin",
-        "filter": ["**/*"]
+        "filter": ["win32-*/*"]
       }
     ]
   },

@@ -9,13 +9,7 @@
 			"auto": "Auto",
 			"autoDescription": "La caméra suit la position du curseur enregistré"
 		},
-		"speed": {
-			"title": "Vitesse du zoom",
-			"instant": "Instantané",
-			"fast": "Rapide",
-			"smooth": "Fluide",
-			"lazy": "Lent"
-		},
+		"speed": {},
 		"threeD": {
 			"title": "Rotation 3D",
 			"preset": {
@@ -23,6 +17,13 @@
 				"left": "Gauche",
 				"right": "Droite"
 			}
+		},
+		"customScale": "Zoom personnalisé",
+		"position": {
+			"title": "Position du focus",
+			"x": "X (%)",
+			"y": "Y (%)",
+			"hint": "0 = tout à gauche / en haut, 100 = tout à droite / en bas"
 		}
 	},
 	"speed": {
@@ -43,7 +44,8 @@
 		"verticalStack": "Empilement vertical",
 		"dualFrame": "Double cadre",
 		"webcamShape": "Forme de la caméra",
-		"webcamSize": "Taille de la caméra"
+		"webcamSize": "Taille de la caméra",
+		"noWebcam": "Sans webcam"
 	},
 	"effects": {
 		"title": "Effets vidéo",
@@ -52,7 +54,8 @@
 		"off": "désactivé",
 		"shadow": "Ombre",
 		"roundness": "Arrondi",
-		"padding": "Marge"
+		"padding": "Marge",
+		"on": "activé"
 	},
 	"background": {
 		"title": "Arrière-plan",

@@ -16,6 +16,13 @@
 				"left": "Izquierda",
 				"right": "Derecha"
 			}
+		},
+		"customScale": "Zoom personalizado",
+		"position": {
+			"title": "Posición de enfoque",
+			"x": "X (%)",
+			"y": "Y (%)",
+			"hint": "0 = extremo izquierdo / superior, 100 = extremo derecho / inferior"
 		}
 	},
 	"speed": {
@@ -36,7 +43,8 @@
 		"verticalStack": "Apilado vertical",
 		"dualFrame": "Marco dual",
 		"webcamShape": "Forma de cámara",
-		"webcamSize": "Tamaño de cámara"
+		"webcamSize": "Tamaño de cámara",
+		"noWebcam": "Sin cámara"
 	},
 	"effects": {
 		"title": "Efectos de video",
@@ -45,7 +53,8 @@
 		"off": "desactivado",
 		"shadow": "Sombra",
 		"roundness": "Redondez",
-		"padding": "Relleno"
+		"padding": "Relleno",
+		"on": "activado"
 	},
 	"background": {
 		"title": "Fondo",

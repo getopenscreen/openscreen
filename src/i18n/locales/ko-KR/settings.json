@@ -16,6 +16,13 @@
 				"left": "왼쪽",
 				"right": "오른쪽"
 			}
+		},
+		"customScale": "사용자 지정 확대",
+		"position": {
+			"title": "초점 위치",
+			"x": "X (%)",
+			"y": "Y (%)",
+			"hint": "0 = 가장 왼쪽 / 위쪽, 100 = 가장 오른쪽 / 아래쪽"
 		}
 	},
 	"speed": {
@@ -36,7 +43,8 @@
 		"verticalStack": "세로 배치",
 		"webcamShape": "카메라 모양",
 		"webcamSize": "웹캠 크기",
-		"dualFrame": "듀얼 프레임"
+		"dualFrame": "듀얼 프레임",
+		"noWebcam": "웹캠 없음"
 	},
 	"effects": {
 		"title": "비디오 효과",
@@ -45,7 +53,8 @@
 		"off": "끄기",
 		"shadow": "그림자",
 		"roundness": "모서리 둥글기",
-		"padding": "여백"
+		"padding": "여백",
+		"on": "켜짐"
 	},
 	"background": {
 		"title": "배경",

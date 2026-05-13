@@ -16,6 +16,13 @@
 				"left": "左",
 				"right": "右"
 			}
+		},
+		"customScale": "カスタムズーム",
+		"position": {
+			"title": "フォーカス位置",
+			"x": "X (%)",
+			"y": "Y (%)",
+			"hint": "0 = 左端 / 上端、100 = 右端 / 下端"
 		}
 	},
 	"speed": {
@@ -36,7 +43,8 @@
 		"verticalStack": "縦並び",
 		"dualFrame": "デュアルフレーム",
 		"webcamShape": "カメラの形状",
-		"webcamSize": "カメラのサイズ"
+		"webcamSize": "カメラのサイズ",
+		"noWebcam": "Webカメラなし"
 	},
 	"effects": {
 		"title": "動画効果",
@@ -45,7 +53,8 @@
 		"off": "オフ",
 		"shadow": "影",
 		"roundness": "丸み",
-		"padding": "余白"
+		"padding": "余白",
+		"on": "オン"
 	},
 	"background": {
 		"title": "背景",

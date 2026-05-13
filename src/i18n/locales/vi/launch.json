@@ -39,5 +39,9 @@
 		"description": "Chúng tôi phát hiện {{language}} là ngôn ngữ hệ thống của bạn. Bạn có muốn chuyển OpenScreen sang {{language}} không?",
 		"switch": "Chuyển sang {{language}}",
 		"keepDefault": "Giữ ngôn ngữ hiện tại"
+	},
+	"cursor": {
+		"useEditableCursor": "Dùng con trỏ có thể chỉnh sửa",
+		"useSystemCursor": "Dùng con trỏ hệ thống"
 	}
 }

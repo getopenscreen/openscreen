@@ -16,6 +16,13 @@
 				"left": "左",
 				"right": "右"
 			}
+		},
+		"customScale": "自定义缩放",
+		"position": {
+			"title": "焦点位置",
+			"x": "X (%)",
+			"y": "Y (%)",
+			"hint": "0 = 最左 / 最上，100 = 最右 / 最下"
 		}
 	},
 	"speed": {
@@ -36,7 +43,8 @@
 		"verticalStack": "垂直堆叠",
 		"dualFrame": "双画框",
 		"webcamShape": "摄像头形状",
-		"webcamSize": "摄像头大小"
+		"webcamSize": "摄像头大小",
+		"noWebcam": "无摄像头"
 	},
 	"effects": {
 		"title": "视频效果",
@@ -45,7 +53,8 @@
 		"off": "关",
 		"shadow": "阴影",
 		"roundness": "圆角",
-		"padding": "内边距"
+		"padding": "内边距",
+		"on": "开"
 	},
 	"background": {
 		"title": "背景",

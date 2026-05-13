@@ -39,5 +39,9 @@
 		"description": "Мы обнаружили {{language}} как системный язык. Хотите переключить OpenScreen на {{language}}?",
 		"switch": "Переключить на {{language}}",
 		"keepDefault": "Оставить текущий язык"
+	},
+	"cursor": {
+		"useEditableCursor": "Использовать редактируемый курсор",
+		"useSystemCursor": "Использовать системный курсор"
 	}
 }

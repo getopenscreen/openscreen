@@ -9,13 +9,7 @@
 			"auto": "自動",
 			"autoDescription": "攝影機跟隨錄製時的游標位置"
 		},
-		"speed": {
-			"title": "縮放速度",
-			"instant": "即時",
-			"fast": "快速",
-			"smooth": "平滑",
-			"lazy": "緩慢"
-		},
+		"speed": {},
 		"threeD": {
 			"title": "3D 旋轉",
 			"preset": {
@@ -23,6 +17,13 @@
 				"left": "左",
 				"right": "右"
 			}
+		},
+		"customScale": "自訂縮放",
+		"position": {
+			"title": "焦點位置",
+			"x": "X (%)",
+			"y": "Y (%)",
+			"hint": "0 = 最左 / 最上，100 = 最右 / 最下"
 		}
 	},
 	"speed": {
@@ -43,7 +44,8 @@
 		"verticalStack": "垂直堆疊",
 		"dualFrame": "雙畫框",
 		"webcamShape": "攝影機形狀",
-		"webcamSize": "攝影機大小"
+		"webcamSize": "攝影機大小",
+		"noWebcam": "無網路攝影機"
 	},
 	"effects": {
 		"title": "影片效果",
@@ -52,7 +54,8 @@
 		"off": "關",
 		"shadow": "陰影",
 		"roundness": "圓角",
-		"padding": "內邊距"
+		"padding": "內邊距",
+		"on": "開"
 	},
 	"background": {
 		"title": "背景",

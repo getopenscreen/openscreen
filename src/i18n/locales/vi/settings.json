@@ -8,6 +8,21 @@
 			"manual": "Thủ công",
 			"auto": "Tự động",
 			"autoDescription": "Máy ảnh đi theo vị trí con trỏ đã ghi"
+		},
+		"customScale": "Thu phóng tùy chỉnh",
+		"position": {
+			"title": "Vị trí tiêu điểm",
+			"x": "X (%)",
+			"y": "Y (%)",
+			"hint": "0 = ngoài cùng trái / trên, 100 = ngoài cùng phải / dưới"
+		},
+		"threeD": {
+			"title": "Xoay 3D",
+			"preset": {
+				"iso": "Đẳng phối",
+				"left": "Trái",
+				"right": "Phải"
+			}
 		}
 	},
 	"speed": {
@@ -28,7 +43,8 @@
 		"verticalStack": "Xếp chồng dọc",
 		"dualFrame": "Khung kép",
 		"webcamShape": "Hình dạng máy ảnh",
-		"webcamSize": "Kích thước Webcam"
+		"webcamSize": "Kích thước Webcam",
+		"noWebcam": "Không có webcam"
 	},
 	"effects": {
 		"title": "Hiệu ứng video",
@@ -37,7 +53,8 @@
 		"off": "tắt",
 		"shadow": "Bóng đổ",
 		"roundness": "Độ bo tròn",
-		"padding": "Phần đệm"
+		"padding": "Phần đệm",
+		"on": "bật"
 	},
 	"background": {
 		"title": "Nền",
@@ -45,7 +62,9 @@
 		"color": "Màu sắc",
 		"gradient": "Dải màu",
 		"uploadCustom": "Tải lên tùy chỉnh",
-		"gradientLabel": "Dải màu {{index}}"
+		"gradientLabel": "Dải màu {{index}}",
+		"colorPalette": "Bảng màu",
+		"colorWheel": "Vòng màu"
 	},
 	"crop": {
 		"title": "Cắt xén",
@@ -139,7 +158,9 @@
 		"invalidImageType": "Loại tệp không hợp lệ",
 		"imageFormatsOnly": "Vui lòng tải lên tệp hình ảnh JPG, PNG, GIF hoặc WebP.",
 		"imageUploadSuccess": "Tải lên hình ảnh thành công!",
-		"failedImageUpload": "Tải lên hình ảnh thất bại"
+		"failedImageUpload": "Tải lên hình ảnh thất bại",
+		"colorPalette": "Bảng màu",
+		"colorWheel": "Vòng màu"
 	},
 	"fontStyles": {
 		"classic": "Cổ điển",

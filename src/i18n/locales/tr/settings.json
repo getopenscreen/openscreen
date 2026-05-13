@@ -16,6 +16,13 @@
 				"left": "Sol",
 				"right": "Sağ"
 			}
+		},
+		"customScale": "Özel Yakınlaştırma",
+		"position": {
+			"title": "Odak Konumu",
+			"x": "X (%)",
+			"y": "Y (%)",
+			"hint": "0 = en sol / en üst, 100 = en sağ / en alt"
 		}
 	},
 	"speed": {
@@ -36,7 +43,8 @@
 		"verticalStack": "Dikey Yığın",
 		"webcamShape": "Kamera Şekli",
 		"dualFrame": "Çift Kare",
-		"webcamSize": "Webcam Boyutu"
+		"webcamSize": "Webcam Boyutu",
+		"noWebcam": "Web kamerası yok"
 	},
 	"effects": {
 		"title": "Video Efektleri",
@@ -45,7 +53,8 @@
 		"off": "kapalı",
 		"shadow": "Gölge",
 		"roundness": "Yuvarlaklık",
-		"padding": "Dolgu"
+		"padding": "Dolgu",
+		"on": "açık"
 	},
 	"background": {
 		"title": "Arka Plan",
@@ -186,14 +195,6 @@
 		"title": "Dil"
 	},
 	"audio": {
-		"title": "Ses",
-		"noiseReduction": "Gürültü Azaltma",
-		"level": "Seviye",
-		"nrLevel": {
-			"light": "Hafif",
-			"moderate": "Orta",
-			"aggressive": "Güçlü"
-		},
-		"nrDescription": "Yapay zeka destekli gürültü azaltma arka plan gürültüsünü temizler. Daha yüksek seviyeler daha agresiftir ancak ses kalitesini etkileyebilir."
+		"nrLevel": {}
 	}
 }

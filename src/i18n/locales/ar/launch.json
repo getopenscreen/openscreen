@@ -39,5 +39,9 @@
 		"description": "اكتشفنا أن {{language}} هي لغة نظامك. هل تريد تبديل OpenScreen إلى {{language}}؟",
 		"switch": "التبديل إلى {{language}}",
 		"keepDefault": "الاحتفاظ باللغة الحالية"
+	},
+	"cursor": {
+		"useEditableCursor": "استخدام مؤشر قابل للتحرير",
+		"useSystemCursor": "استخدام مؤشر النظام"
 	}
 }

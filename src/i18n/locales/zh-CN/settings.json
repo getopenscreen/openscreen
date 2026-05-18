@@ -191,6 +191,14 @@
 		"errorTimeout": "字体加载时间过长。请检查 URL 并重试。",
 		"errorLoadFailed": "无法加载该字体。请确认 Google Fonts URL 是否正确。"
 	},
+	"cursor": {
+		"show": "显示光标",
+		"size": "大小",
+		"smoothing": "平滑",
+		"motionBlur": "运动模糊",
+		"clickBounce": "点击弹跳",
+		"clipToBounds": "裁剪到画布"
+	},
 	"language": {
 		"title": "语言"
 	}

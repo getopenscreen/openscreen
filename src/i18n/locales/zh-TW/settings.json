@@ -192,6 +192,14 @@
 		"errorTimeout": "字體載入時間過長。請檢查 URL 並重試。",
 		"errorLoadFailed": "無法載入該字體。請確認 Google Fonts URL 是否正確。"
 	},
+	"cursor": {
+		"show": "顯示游標",
+		"size": "大小",
+		"smoothing": "平滑",
+		"motionBlur": "運動模糊",
+		"clickBounce": "點擊彈跳",
+		"clipToBounds": "裁切至畫布"
+	},
 	"language": {
 		"title": "語言"
 	}

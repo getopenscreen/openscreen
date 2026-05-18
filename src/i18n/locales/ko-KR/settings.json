@@ -191,6 +191,14 @@
 		"errorTimeout": "폰트 로딩 시간이 초과되었습니다. URL을 확인하고 다시 시도해 주세요.",
 		"errorLoadFailed": "폰트를 불러올 수 없습니다. Google Fonts URL이 올바른지 확인해 주세요."
 	},
+	"cursor": {
+		"show": "커서 표시",
+		"size": "크기",
+		"smoothing": "부드러움",
+		"motionBlur": "모션 블러",
+		"clickBounce": "클릭 바운스",
+		"clipToBounds": "캔버스에 맞춰 자르기"
+	},
 	"language": {
 		"title": "언어"
 	}

@@ -191,6 +191,14 @@
 		"errorTimeout": "Yazı tipinin yüklenmesi çok uzun sürdü. Lütfen URL'yi kontrol edip tekrar deneyin.",
 		"errorLoadFailed": "Yazı tipi yüklenemedi. Lütfen Google Fonts URL'sinin doğruluğunu kontrol edin."
 	},
+	"cursor": {
+		"show": "İmleci Göster",
+		"size": "Boyut",
+		"smoothing": "Yumuşatma",
+		"motionBlur": "Hareket Bulanıklığı",
+		"clickBounce": "Tıklama Sıçraması",
+		"clipToBounds": "Tuvale Kırp"
+	},
 	"language": {
 		"title": "Dil"
 	}

@@ -191,6 +191,14 @@
 		"errorTimeout": "フォントの読み込みに時間がかかりすぎました。URLを確認して再試行してください。",
 		"errorLoadFailed": "フォントを読み込めませんでした。GoogleフォントのURLが正しいことを確認してください。"
 	},
+	"cursor": {
+		"show": "カーソルを表示",
+		"size": "サイズ",
+		"smoothing": "スムージング",
+		"motionBlur": "モーションブラー",
+		"clickBounce": "クリックバウンス",
+		"clipToBounds": "キャンバスにクリップ"
+	},
 	"language": {
 		"title": "言語"
 	}

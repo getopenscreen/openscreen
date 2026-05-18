@@ -192,6 +192,14 @@
 		"errorTimeout": "La police a mis trop de temps à charger. Vérifiez l'URL et réessayez.",
 		"errorLoadFailed": "La police n'a pas pu être chargée. Vérifiez que l'URL Google Fonts est correcte."
 	},
+	"cursor": {
+		"show": "Afficher le curseur",
+		"size": "Taille",
+		"smoothing": "Lissage",
+		"motionBlur": "Flou de mouvement",
+		"clickBounce": "Rebond au clic",
+		"clipToBounds": "Rogner au canevas"
+	},
 	"language": {
 		"title": "Langue"
 	}

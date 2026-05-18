@@ -191,6 +191,14 @@
 		"errorTimeout": "Tải phông chữ mất quá nhiều thời gian. Vui lòng kiểm tra URL và thử lại.",
 		"errorLoadFailed": "Không thể tải phông chữ. Vui lòng xác minh URL Google Fonts là chính xác."
 	},
+	"cursor": {
+		"show": "Hiện con trỏ",
+		"size": "Kích thước",
+		"smoothing": "Làm mượt",
+		"motionBlur": "Mờ chuyển động",
+		"clickBounce": "Nảy khi nhấp",
+		"clipToBounds": "Cắt theo khung"
+	},
 	"language": {
 		"title": "Ngôn ngữ"
 	}

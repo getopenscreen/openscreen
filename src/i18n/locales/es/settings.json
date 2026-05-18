@@ -191,6 +191,14 @@
 		"errorTimeout": "La fuente tardó demasiado en cargarse. Por favor verifica la URL e intenta de nuevo.",
 		"errorLoadFailed": "No se pudo cargar la fuente. Por favor verifica que la URL de Google Fonts sea correcta."
 	},
+	"cursor": {
+		"show": "Mostrar cursor",
+		"size": "Tamaño",
+		"smoothing": "Suavizado",
+		"motionBlur": "Desenfoque de movimiento",
+		"clickBounce": "Rebote al clic",
+		"clipToBounds": "Recortar al lienzo"
+	},
 	"language": {
 		"title": "Idioma"
 	}

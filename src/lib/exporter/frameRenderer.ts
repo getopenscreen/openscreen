@@ -92,6 +92,7 @@ interface FrameRenderConfig {
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
+	cursorClipToBounds?: boolean;
 	videoWidth: number;
 	videoHeight: number;
 	webcamSize?: Size | null;
@@ -124,6 +125,7 @@ interface LayoutCache {
 	baseScale: number;
 	baseOffset: { x: number; y: number };
 	maskRect: { x: number; y: number; width: number; height: number };
+	maskBorderRadius: number;
 	webcamRect: StyledRenderRect | null;
 }
 
@@ -520,6 +522,28 @@ export class FrameRenderer {
 		}
 	}
 
+	// The video's actual on-screen boundary, accounting for the zoom camera
+	// transform. The PIXI mask lives inside cameraContainer, so during zoom the
+	// visible video extends beyond the static maskRect — a static clip would crop
+	// it. Mirrors the preview, which clips via the same camera-scaled bounds.
+	private cameraAwareMaskRect() {
+		if (!this.layoutCache) return null;
+		const { x: maskX, y: maskY, width: maskW, height: maskH } = this.layoutCache.maskRect;
+		const camS = this.animationState.appliedScale;
+		const camX = this.animationState.x;
+		const camY = this.animationState.y;
+		// No stage clamping: canvas naturally clips to its bounds, matching CSS inset() behavior.
+		// Clamping x/y would shift rounded corners to the stage edge rather than the true mask
+		// boundary, causing preview/export mismatch when zoom/pan pushes the mask off-stage.
+		return {
+			x: camX + camS * maskX,
+			y: camY + camS * maskY,
+			width: camS * maskW,
+			height: camS * maskH,
+			br: this.layoutCache.maskBorderRadius * camS,
+		};
+	}
+
 	private async drawNativeCursor(timeMs: number) {
 		if (!this.foregroundCtx || !this.layoutCache) {
 			return;
@@ -573,6 +597,12 @@ export class FrameRenderer {
 				getNativeCursorClickBounceProgress(this.config.cursorRecordingData, timeMs),
 			);
 		const appliedScale = this.animationState.appliedScale;
+		// Normalize cursor size so it appears at the same fraction of the video width
+		// as in the preview — both paths now use maskRect.width / croppedVideoWidth.
+		const sizeNorm =
+			this.layoutCache.videoSize.width > 0
+				? this.layoutCache.maskRect.width / this.layoutCache.videoSize.width
+				: 1;
 		const canvasX = projectedPoint.x * appliedScale + this.animationState.x;
 		const canvasY = projectedPoint.y * appliedScale + this.animationState.y;
 		const blurPx = getNativeCursorMotionBlurPx({
@@ -581,18 +611,34 @@ export class FrameRenderer {
 			state: this.nativeCursorMotionBlurState,
 			timeMs,
 		});
+		// Clip cursor to the actual visible video boundary, accounting for zoom.
+		// Skip when cursorClipToBounds is off so the cursor can overflow the canvas.
+		const cursorClip = this.config.cursorClipToBounds === false ? null : this.cameraAwareMaskRect();
+		this.foregroundCtx.save();
+		this.foregroundCtx.beginPath();
+		if (cursorClip) {
+			this.foregroundCtx.roundRect(
+				cursorClip.x,
+				cursorClip.y,
+				cursorClip.width,
+				cursorClip.height,
+				cursorClip.br,
+			);
+			this.foregroundCtx.clip();
+		}
 		const previousFilter = this.foregroundCtx.filter;
 		if (blurPx > 0) {
 			this.foregroundCtx.filter = `blur(${blurPx.toFixed(2)}px)`;
 		}
 		this.foregroundCtx.drawImage(
 			image,
-			canvasX - renderAsset.hotspotX * scale * appliedScale,
-			canvasY - renderAsset.hotspotY * scale * appliedScale,
-			renderAsset.width * scale * appliedScale,
-			renderAsset.height * scale * appliedScale,
+			canvasX - renderAsset.hotspotX * scale * appliedScale * sizeNorm,
+			canvasY - renderAsset.hotspotY * scale * appliedScale * sizeNorm,
+			renderAsset.width * scale * appliedScale * sizeNorm,
+			renderAsset.height * scale * appliedScale * sizeNorm,
 		);
 		this.foregroundCtx.filter = previousFilter;
+		this.foregroundCtx.restore();
 	}
 
 	private async getCursorImage(asset: { id: string; imageDataUrl: string }) {
@@ -717,6 +763,7 @@ export class FrameRenderer {
 				y: compositeLayout.screenRect.y + coverOffsetY - cropPixelY,
 			},
 			maskRect: compositeLayout.screenRect,
+			maskBorderRadius: scaledBorderRadius,
 			webcamRect: compositeLayout.webcamRect,
 		};
 	}
@@ -980,8 +1027,48 @@ export class FrameRenderer {
 			shadowCtx.drawImage(videoCanvas, 0, 0, w, h);
 			shadowCtx.restore();
 			fgCtx.drawImage(this.shadowCanvas, 0, 0, w, h);
+			// Erase square corners left by PIXI WebGL alpha, then redraw video with explicit
+			// 2D clip so shadow extends beyond the rounded area but video is precisely clipped.
+			// The clip is camera-aware so zoom doesn't crop the magnified video.
+			const shadowClip =
+				(this.layoutCache?.maskBorderRadius ?? 0) > 0 ? this.cameraAwareMaskRect() : null;
+			if (shadowClip) {
+				const { x: smx, y: smy, width: smw, height: smh, br: sbr } = shadowClip;
+				fgCtx.save();
+				fgCtx.globalCompositeOperation = "destination-out";
+				fgCtx.beginPath();
+				fgCtx.rect(smx, smy, smw, smh);
+				fgCtx.roundRect(smx, smy, smw, smh, sbr);
+				fgCtx.fill("evenodd");
+				fgCtx.restore();
+				fgCtx.save();
+				fgCtx.beginPath();
+				fgCtx.roundRect(smx, smy, smw, smh, sbr);
+				fgCtx.clip();
+				fgCtx.drawImage(videoCanvas, 0, 0, w, h);
+				fgCtx.restore();
+			}
 		} else {
-			fgCtx.drawImage(videoCanvas, 0, 0, w, h);
+			// Direct path: explicit 2D clip guarantees rounded corners regardless of PIXI
+			// WebGL alpha. Camera-aware so zoom doesn't crop the magnified video.
+			const directClip =
+				(this.layoutCache?.maskBorderRadius ?? 0) > 0 ? this.cameraAwareMaskRect() : null;
+			if (directClip) {
+				fgCtx.save();
+				fgCtx.beginPath();
+				fgCtx.roundRect(
+					directClip.x,
+					directClip.y,
+					directClip.width,
+					directClip.height,
+					directClip.br,
+				);
+				fgCtx.clip();
+				fgCtx.drawImage(videoCanvas, 0, 0, w, h);
+				fgCtx.restore();
+			} else {
+				fgCtx.drawImage(videoCanvas, 0, 0, w, h);
+			}
 		}
 
 		const webcamRect = this.layoutCache?.webcamRect ?? null;

@@ -178,6 +178,10 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 	private readyReject: ((error: Error) => void) | null = null;
 	private readyTimer: NodeJS.Timeout | null = null;
 	private previousLeftButtonDown = false;
+	private consecutiveOutsideSamples = 0;
+	// Only hide after this many consecutive out-of-bounds samples (≈100ms at 33ms interval).
+	// Fast swipes that briefly exit the display are clipped by clip-path instead of disappearing.
+	private static readonly OUTSIDE_HIDE_THRESHOLD = 3;
 
 	constructor(private readonly options: MacNativeCursorRecordingSessionOptions) {}
 
@@ -186,6 +190,7 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 		this.lineBuffer = "";
 		this.startTimeMs = this.options.startTimeMs ?? Date.now();
 		this.previousLeftButtonDown = false;
+		this.consecutiveOutsideSamples = 0;
 
 		try {
 			systemPreferences.isTrustedAccessibilityClient(true);
@@ -325,6 +330,19 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 		const height = Math.max(1, bounds.height);
 		const normalizedX = (cursor.x - bounds.x) / width;
 		const normalizedY = (cursor.y - bounds.y) / height;
+		const isOutsideDisplay =
+			normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1;
+		// Fast swipes that briefly exit the display (<THRESHOLD samples) are handled by
+		// clip-path — the cursor clips to the canvas edge instead of snapping invisible.
+		// Sustained exits (≥THRESHOLD samples, ≈100ms) mark visible=false to prevent
+		// ghost cursors and motion trails from multi-display movement.
+		if (isOutsideDisplay) {
+			this.consecutiveOutsideSamples++;
+		} else {
+			this.consecutiveOutsideSamples = 0;
+		}
+		const visible =
+			this.consecutiveOutsideSamples < MacNativeCursorRecordingSession.OUTSIDE_HIDE_THRESHOLD;
 		const interactionType =
 			leftButtonPressed || (leftButtonDown && !this.previousLeftButtonDown)
 				? "click"
@@ -337,7 +355,7 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 			timeMs: Math.max(0, timestampMs - this.startTimeMs),
 			cx: clamp(normalizedX, 0, 1),
 			cy: clamp(normalizedY, 0, 1),
-			visible: true,
+			visible,
 			interactionType,
 			...(cursorType ? { cursorType } : {}),
 		});

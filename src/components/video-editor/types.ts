@@ -194,6 +194,9 @@ export const DEFAULT_CURSOR_SIZE = 3.0;
 export const DEFAULT_CURSOR_SMOOTHING = 0.67;
 export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
 export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
+// true = clip the native cursor to the video canvas bounds (current behavior);
+// false = allow the cursor to overflow into the background.
+export const DEFAULT_CURSOR_CLIP_TO_BOUNDS = true;
 export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
 
 export interface TrimRegion {

@@ -32,6 +32,7 @@ interface LayoutResult {
 	baseScale: number;
 	baseOffset: { x: number; y: number };
 	maskRect: RenderRect;
+	maskBorderRadius: number;
 	webcamRect: StyledRenderRect | null;
 	cropBounds: { startX: number; endX: number; startY: number; endY: number };
 }
@@ -150,6 +151,8 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
 		baseScale: scale,
 		baseOffset: { x: spriteX, y: spriteY },
 		maskRect: compositeLayout.screenRect,
+		maskBorderRadius:
+			compositeLayout.screenBorderRadius ?? (compositeLayout.screenCover ? 0 : borderRadius),
 		webcamRect: compositeLayout.webcamRect,
 		cropBounds: { startX: cropStartX, endX: cropEndX, startY: cropStartY, endY: cropEndY },
 	};

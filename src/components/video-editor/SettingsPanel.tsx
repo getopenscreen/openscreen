@@ -311,6 +311,8 @@ interface SettingsPanelProps {
 	onCursorMotionBlurChange?: (blur: number) => void;
 	cursorClickBounce?: number;
 	onCursorClickBounceChange?: (bounce: number) => void;
+	cursorClipToBounds?: boolean;
+	onCursorClipToBoundsChange?: (clip: boolean) => void;
 	hasCursorData?: boolean;
 	showCursorSettings?: boolean;
 }
@@ -416,6 +418,8 @@ export function SettingsPanel({
 	onCursorMotionBlurChange,
 	cursorClickBounce = 2.5,
 	onCursorClickBounceChange,
+	cursorClipToBounds = true,
+	onCursorClipToBoundsChange,
 	hasCursorData = false,
 	showCursorSettings = true,
 }: SettingsPanelProps) {
@@ -1381,7 +1385,9 @@ export function SettingsPanel({
 										{activePanelMode === "cursor" && showCursorSettings && hasCursorData && (
 											<div className="p-2 rounded-lg editor-control-surface mt-2 space-y-3">
 												<div className="flex items-center justify-between">
-													<div className="text-[10px] font-medium text-slate-300">Show Cursor</div>
+													<div className="text-[10px] font-medium text-slate-300">
+														{t("cursor.show")}
+													</div>
 													<Switch
 														checked={showCursor}
 														onCheckedChange={onShowCursorChange}
@@ -1389,78 +1395,92 @@ export function SettingsPanel({
 													/>
 												</div>
 												{showCursor && (
-													<div className="grid grid-cols-2 gap-2">
-														<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-															<div className="flex items-center justify-between mb-1">
-																<div className="text-[10px] font-medium text-slate-300">Size</div>
-																<span className="text-[10px] text-slate-500 font-mono">
-																	{cursorSize.toFixed(1)}
-																</span>
+													<>
+														<div className="flex items-center justify-between">
+															<div className="text-[10px] font-medium text-slate-300">
+																{t("cursor.clipToBounds")}
 															</div>
-															<Slider
-																value={[cursorSize]}
-																onValueChange={(values) => onCursorSizeChange?.(values[0])}
-																min={0.5}
-																max={10}
-																step={0.1}
-																className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+															<Switch
+																checked={cursorClipToBounds}
+																onCheckedChange={onCursorClipToBoundsChange}
+																className="data-[state=checked]:bg-[#34B27B] scale-90"
 															/>
 														</div>
-														<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-															<div className="flex items-center justify-between mb-1">
-																<div className="text-[10px] font-medium text-slate-300">
-																	Smoothing
+														<div className="grid grid-cols-2 gap-2">
+															<div className="p-2 rounded-lg bg-white/5 border border-white/5">
+																<div className="flex items-center justify-between mb-1">
+																	<div className="text-[10px] font-medium text-slate-300">
+																		{t("cursor.size")}
+																	</div>
+																	<span className="text-[10px] text-slate-500 font-mono">
+																		{cursorSize.toFixed(1)}
+																	</span>
 																</div>
-																<span className="text-[10px] text-slate-500 font-mono">
-																	{Math.round(cursorSmoothing * 100)}%
-																</span>
+																<Slider
+																	value={[cursorSize]}
+																	onValueChange={(values) => onCursorSizeChange?.(values[0])}
+																	min={0.5}
+																	max={10}
+																	step={0.1}
+																	className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+																/>
 															</div>
-															<Slider
-																value={[cursorSmoothing]}
-																onValueChange={(values) => onCursorSmoothingChange?.(values[0])}
-																min={0}
-																max={1}
-																step={0.01}
-																className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-															/>
-														</div>
-														<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-															<div className="flex items-center justify-between mb-1">
-																<div className="text-[10px] font-medium text-slate-300">
-																	Motion Blur
+															<div className="p-2 rounded-lg bg-white/5 border border-white/5">
+																<div className="flex items-center justify-between mb-1">
+																	<div className="text-[10px] font-medium text-slate-300">
+																		{t("cursor.smoothing")}
+																	</div>
+																	<span className="text-[10px] text-slate-500 font-mono">
+																		{Math.round(cursorSmoothing * 100)}%
+																	</span>
 																</div>
-																<span className="text-[10px] text-slate-500 font-mono">
-																	{Math.round(cursorMotionBlur * 100)}%
-																</span>
+																<Slider
+																	value={[cursorSmoothing]}
+																	onValueChange={(values) => onCursorSmoothingChange?.(values[0])}
+																	min={0}
+																	max={1}
+																	step={0.01}
+																	className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+																/>
 															</div>
-															<Slider
-																value={[cursorMotionBlur]}
-																onValueChange={(values) => onCursorMotionBlurChange?.(values[0])}
-																min={0}
-																max={1}
-																step={0.01}
-																className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-															/>
-														</div>
-														<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-															<div className="flex items-center justify-between mb-1">
-																<div className="text-[10px] font-medium text-slate-300">
-																	Click Bounce
+															<div className="p-2 rounded-lg bg-white/5 border border-white/5">
+																<div className="flex items-center justify-between mb-1">
+																	<div className="text-[10px] font-medium text-slate-300">
+																		{t("cursor.motionBlur")}
+																	</div>
+																	<span className="text-[10px] text-slate-500 font-mono">
+																		{Math.round(cursorMotionBlur * 100)}%
+																	</span>
 																</div>
-																<span className="text-[10px] text-slate-500 font-mono">
-																	{cursorClickBounce.toFixed(1)}
-																</span>
+																<Slider
+																	value={[cursorMotionBlur]}
+																	onValueChange={(values) => onCursorMotionBlurChange?.(values[0])}
+																	min={0}
+																	max={1}
+																	step={0.01}
+																	className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+																/>
 															</div>
-															<Slider
-																value={[cursorClickBounce]}
-																onValueChange={(values) => onCursorClickBounceChange?.(values[0])}
-																min={0}
-																max={5}
-																step={0.1}
-																className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-															/>
+															<div className="p-2 rounded-lg bg-white/5 border border-white/5">
+																<div className="flex items-center justify-between mb-1">
+																	<div className="text-[10px] font-medium text-slate-300">
+																		{t("cursor.clickBounce")}
+																	</div>
+																	<span className="text-[10px] text-slate-500 font-mono">
+																		{cursorClickBounce.toFixed(1)}
+																	</span>
+																</div>
+																<Slider
+																	value={[cursorClickBounce]}
+																	onValueChange={(values) => onCursorClickBounceChange?.(values[0])}
+																	min={0}
+																	max={5}
+																	step={0.1}
+																	className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+																/>
+															</div>
 														</div>
-													</div>
+													</>
 												)}
 											</div>
 										)}

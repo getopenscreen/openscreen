@@ -196,7 +196,7 @@
 		"show": "顯示游標",
 		"size": "大小",
 		"smoothing": "平滑",
-		"motionBlur": "運動模糊",
+		"motionBlur": "動態模糊",
 		"clickBounce": "點擊彈跳",
 		"clipToBounds": "裁切至畫布"
 	},

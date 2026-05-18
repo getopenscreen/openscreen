@@ -1634,6 +1634,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							composite3D.style.willChange = "auto";
 							lastTransformIsIdentity = true;
 						}
+						if (nativeCursorClipRef.current) {
+							nativeCursorClipRef.current.style.transform = "";
+						}
 						if (lastPerspectiveValue !== 0) {
 							outerWrapper.style.perspective = "";
 							lastPerspectiveValue = 0;
@@ -1650,6 +1653,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						);
 						composite3D.style.transform = `scale(${containScale}) rotateX(${effectiveRotation.rotationX}deg) rotateY(${effectiveRotation.rotationY}deg) rotateZ(${effectiveRotation.rotationZ}deg)`;
 						composite3D.style.willChange = "transform";
+						if (nativeCursorClipRef.current) {
+							nativeCursorClipRef.current.style.transform = composite3D.style.transform;
+						}
 						lastTransformIsIdentity = false;
 						if (persp !== lastPerspectiveValue) {
 							outerWrapper.style.perspective = `${persp}px`;

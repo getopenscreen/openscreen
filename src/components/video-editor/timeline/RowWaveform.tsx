@@ -2,99 +2,24 @@ import { useTimelineContext } from "dnd-timeline";
 import { useEffect, useRef, useState } from "react";
 
 export interface RowWaveformProps {
-	videoUrl?: string;
+	/** Pre-computed peaks array: pairs of [min, max] per block (length = 2 * N). */
+	peaks: Float32Array | null;
 	videoDurationMs: number;
-}
-
-// Module-level cache keyed by URL — survives re-mounts within the same page session.
-const peaksCache = new Map<string, Float32Array>();
-let _audioCtx: AudioContext | null = null;
-
-function getAudioCtx(): AudioContext {
-	if (!_audioCtx) _audioCtx = new AudioContext();
-	return _audioCtx;
-}
-
-function computePeaks(audioBuffer: AudioBuffer): Float32Array {
-	const N = Math.min(24000, Math.ceil(audioBuffer.duration * 200));
-	const nCh = audioBuffer.numberOfChannels;
-	const totalSamples = audioBuffer.length;
-	const blockSize = totalSamples / N;
-	const peaks = new Float32Array(N * 2); // [min0, max0, min1, max1, …]
-
-	const channels: Float32Array[] = [];
-	for (let c = 0; c < nCh; c++) channels.push(audioBuffer.getChannelData(c));
-
-	for (let i = 0; i < N; i++) {
-		const start = Math.floor(i * blockSize);
-		const end = Math.floor((i + 1) * blockSize);
-		let minVal = 0;
-		let maxVal = 0;
-		for (let j = start; j < end; j++) {
-			let sample = 0;
-			for (let c = 0; c < nCh; c++) sample += channels[c][j];
-			sample /= nCh;
-			if (sample < minVal) minVal = sample;
-			if (sample > maxVal) maxVal = sample;
-		}
-		peaks[i * 2] = minVal;
-		peaks[i * 2 + 1] = maxVal;
-	}
-
-	return peaks;
 }
 
 /**
  * Renders a faint audio waveform on a `<canvas>` element that fills its
  * containing row. Designed to be passed as the `background` prop of `<Row>`.
  *
- * - Decodes audio from `videoUrl` once per URL (module-level cache).
+ * - Accepts pre-computed `peaks` from the caller (see `useAudioPeaks`).
  * - Redraws whenever the timeline zoom/pan range changes.
  * - `pointer-events: none` throughout — never blocks drag-to-create interactions.
- * - Silent fallback when the file has no audio track.
  */
-export default function RowWaveform({ videoUrl, videoDurationMs }: RowWaveformProps) {
+export default function RowWaveform({ peaks, videoDurationMs }: RowWaveformProps) {
 	const { range } = useTimelineContext();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const wrapperRef = useRef<HTMLDivElement>(null);
-	const [peaks, setPeaks] = useState<Float32Array | null>(null);
 	const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
-
-	// Decode audio once per videoUrl, store peaks in module-level cache.
-	useEffect(() => {
-		if (!videoUrl) {
-			setPeaks(null);
-			return;
-		}
-
-		const cached = peaksCache.get(videoUrl);
-		if (cached) {
-			setPeaks(cached);
-			return;
-		}
-
-		let cancelled = false;
-
-		(async () => {
-			try {
-				const response = await fetch(videoUrl);
-				if (cancelled) return;
-				const arrayBuffer = await response.arrayBuffer();
-				if (cancelled) return;
-				const audioBuffer = await getAudioCtx().decodeAudioData(arrayBuffer);
-				if (cancelled) return;
-				const p = computePeaks(audioBuffer);
-				peaksCache.set(videoUrl, p);
-				setPeaks(p);
-			} catch {
-				// No audio track or unsupported format — silent degradation.
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [videoUrl]);
 
 	// Track container dimensions via ResizeObserver.
 	useEffect(() => {

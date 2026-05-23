@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
+import { useAudioPeaks } from "@/hooks/useAudioPeaks";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/aspectRatioUtils";
@@ -597,6 +598,7 @@ function Timeline({
 	const localTimelineRef = useRef<HTMLDivElement | null>(null);
 	const isScrubbingTimelineRef = useRef(false);
 	const scrubPointerIdRef = useRef<number | null>(null);
+	const peaks = useAudioPeaks(showTrimWaveform ? videoUrl : undefined);
 
 	const setRefs = useCallback(
 		(node: HTMLDivElement | null) => {
@@ -801,7 +803,7 @@ function Timeline({
 				hint={t("hints.pressTrim")}
 				background={
 					showTrimWaveform ? (
-						<RowWaveform videoUrl={videoUrl} videoDurationMs={videoDurationMs} />
+						<RowWaveform peaks={peaks} videoDurationMs={videoDurationMs} />
 					) : undefined
 				}
 			>

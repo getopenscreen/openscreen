@@ -1,8 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { loadFileAsArrayBuffer } from "@/lib/exporter/streamingDecoder";
-
-// Module-level cache keyed by URL — survives re-mounts within the same page session.
-const peaksCache = new Map<string, Float32Array>();
 
 let _audioCtx: AudioContext | null = null;
 function getAudioCtx(): AudioContext {
@@ -10,33 +7,38 @@ function getAudioCtx(): AudioContext {
 	return _audioCtx;
 }
 
-function computePeaks(audioBuffer: AudioBuffer): Float32Array {
-	const N = Math.min(24000, Math.ceil(audioBuffer.duration * 200));
-	const nCh = audioBuffer.numberOfChannels;
-	const totalSamples = audioBuffer.length;
-	const blockSize = totalSamples / N;
-	const peaks = new Float32Array(N * 2); // [min0, max0, min1, max1, …]
+/**
+ * Offloads peak computation to a Web Worker (zero-copy via Transferable).
+ * Returns a Promise that resolves with the peaks Float32Array.
+ */
+function computePeaksInWorker(audioBuffer: AudioBuffer): Promise<Float32Array> {
+	return new Promise((resolve, reject) => {
+		const worker = new Worker(new URL("./audioPeaksWorker.ts", import.meta.url), {
+			type: "module",
+		});
 
-	const channels: Float32Array[] = [];
-	for (let c = 0; c < nCh; c++) channels.push(audioBuffer.getChannelData(c));
-
-	for (let i = 0; i < N; i++) {
-		const start = Math.floor(i * blockSize);
-		const end = Math.floor((i + 1) * blockSize);
-		let minVal = 0;
-		let maxVal = 0;
-		for (let j = start; j < end; j++) {
-			let sample = 0;
-			for (let c = 0; c < nCh; c++) sample += channels[c][j];
-			sample /= nCh;
-			if (sample < minVal) minVal = sample;
-			if (sample > maxVal) maxVal = sample;
+		// slice() creates an owned copy so the transfer is safe and the
+		// AudioBuffer remains valid if anything else holds a reference.
+		const channels: Float32Array[] = [];
+		for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+			channels.push(audioBuffer.getChannelData(c).slice());
 		}
-		peaks[i * 2] = minVal;
-		peaks[i * 2 + 1] = maxVal;
-	}
 
-	return peaks;
+		worker.onmessage = (e: MessageEvent<Float32Array>) => {
+			worker.terminate();
+			resolve(e.data);
+		};
+
+		worker.onerror = (e) => {
+			worker.terminate();
+			reject(e);
+		};
+
+		worker.postMessage(
+			{ channels, duration: audioBuffer.duration },
+			channels.map((ch) => ch.buffer),
+		);
+	});
 }
 
 /**
@@ -45,11 +47,15 @@ function computePeaks(audioBuffer: AudioBuffer): Float32Array {
  * decoding is in progress, and stays `null` when the file has no audio
  * track or decoding fails (silent degradation).
  *
- * Results are cached at module scope by URL so re-mounts are free.
+ * - File loading uses the Electron IPC bridge for local paths (same as the exporter).
+ * - Peak computation runs in a Web Worker to avoid blocking the main thread.
+ * - Results are cached in a ref scoped to the hook instance (survives re-renders
+ *   and waveform toggle off/on, but not component unmount).
  */
 export function useAudioPeaks(videoUrl?: string): Float32Array | null {
+	const cacheRef = useRef<Map<string, Float32Array>>(new Map());
 	const [peaks, setPeaks] = useState<Float32Array | null>(() =>
-		videoUrl ? (peaksCache.get(videoUrl) ?? null) : null,
+		videoUrl ? (cacheRef.current.get(videoUrl) ?? null) : null,
 	);
 
 	useEffect(() => {
@@ -58,7 +64,7 @@ export function useAudioPeaks(videoUrl?: string): Float32Array | null {
 			return;
 		}
 
-		const cached = peaksCache.get(videoUrl);
+		const cached = cacheRef.current.get(videoUrl);
 		if (cached) {
 			setPeaks(cached);
 			return;
@@ -72,8 +78,9 @@ export function useAudioPeaks(videoUrl?: string): Float32Array | null {
 				if (cancelled) return;
 				const audioBuffer = await getAudioCtx().decodeAudioData(arrayBuffer);
 				if (cancelled) return;
-				const p = computePeaks(audioBuffer);
-				peaksCache.set(videoUrl, p);
+				const p = await computePeaksInWorker(audioBuffer);
+				if (cancelled) return;
+				cacheRef.current.set(videoUrl, p);
 				setPeaks(p);
 			} catch {
 				// No audio track or unsupported format — silent degradation.

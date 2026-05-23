@@ -70,6 +70,7 @@ export function useAudioPeaks(videoUrl?: string): Float32Array | null {
 			return;
 		}
 
+		setPeaks(null);
 		let cancelled = false;
 
 		(async () => {
@@ -83,7 +84,8 @@ export function useAudioPeaks(videoUrl?: string): Float32Array | null {
 				cacheRef.current.set(videoUrl, p);
 				setPeaks(p);
 			} catch {
-				// No audio track or unsupported format — silent degradation.
+				// No audio track or unsupported format — clear stale data silently.
+				if (!cancelled) setPeaks(null);
 			}
 		})();
 

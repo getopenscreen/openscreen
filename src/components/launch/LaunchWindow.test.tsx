@@ -268,6 +268,50 @@ describe("LaunchWindow record button", () => {
 		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
 	});
 
+	it("clears record-after-selection intent when opening the source picker fails", async () => {
+		window.electronAPI.openSourceSelector = vi.fn(async () => {
+			throw new Error("source selector failed");
+		});
+
+		renderLaunchWindow();
+		await waitForSourceSelectionSubscription();
+
+		fireEvent.click(await screen.findByTestId("launch-record-button"));
+
+		await waitFor(() => {
+			expect(window.electronAPI.openSourceSelector).toHaveBeenCalledTimes(1);
+		});
+
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		emitSelectedSourceChanged(displayOneSource);
+
+		await waitFor(() => {
+			expect(screen.getByTestId("launch-record-button")).toHaveAttribute("title", "Display 1");
+		});
+		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
+	});
+
+	it("handles selected source polling failures", async () => {
+		const error = new Error("selected source unavailable");
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		stubElectronAPI(
+			vi.fn(async () => {
+				throw error;
+			}),
+		);
+
+		renderLaunchWindow();
+
+		await waitFor(() => {
+			expect(warnSpy).toHaveBeenCalledWith("Failed to refresh selected source:", error);
+		});
+
+		warnSpy.mockRestore();
+	});
+
 	it("starts recording when a source is already selected", async () => {
 		stubElectronAPI(vi.fn(async () => displayOneSource));
 

@@ -210,15 +210,10 @@ jobs:
               }
 
               if (!webhookUrl) {
-                const strictEvents = new Set(["pull_request_target", "workflow_dispatch"]);
                 const msg =
                   `Discord sync skipped: webhook secret unavailable for event '${context.eventName}'. ` +
                   "Set either DISCORD_WEBHOOK_URL or DISCORD_PR_FORUM_WEBHOOK in repository secrets.";
-                if (strictEvents.has(context.eventName)) {
-                  core.setFailed(msg);
-                } else {
-                  core.warning(msg);
-                }
+                core.warning(msg);
                 return;
               }
 

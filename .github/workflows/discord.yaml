@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Sync PR activity to Discord forum thread
         id: sync
+        # Discord sync is helpful automation, but it should not block PR validation.
+        continue-on-error: true
         uses: actions/github-script@v7
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

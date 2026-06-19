@@ -411,6 +411,9 @@ function createSourceSelectorWindowWrapper() {
 	sourceSelectorWindow = createSourceSelectorWindow();
 	sourceSelectorWindow.on("closed", () => {
 		sourceSelectorWindow = null;
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			mainWindow.webContents.send("source-selector-closed");
+		}
 	});
 	return sourceSelectorWindow;
 }

@@ -420,21 +420,31 @@ export function LaunchWindow() {
 		setHudMouseEventsEnabled(isLanguageMenuOpen);
 	}, [isLanguageMenuOpen, setHudMouseEventsEnabled]);
 
-	const [selectedSource, setSelectedSource] = useState("Screen");
+	const defaultSourceName = t("sourceSelector.defaultSourceName");
+	const [selectedSource, setSelectedSource] = useState(defaultSourceName);
 	const [hasSelectedSource, setHasSelectedSource] = useState(false);
 	const [, setRecordPointerDownCount] = useState(0);
+	const recordAfterSourceSelectionRef = useRef(false);
+
+	const applySelectedSource = useCallback(
+		(source: ProcessedDesktopSource | null) => {
+			if (source) {
+				setSelectedSource(source.name);
+				setHasSelectedSource(true);
+				return;
+			}
+
+			setSelectedSource(defaultSourceName);
+			setHasSelectedSource(false);
+		},
+		[defaultSourceName],
+	);
 
 	useEffect(() => {
 		const checkSelectedSource = async () => {
 			if (window.electronAPI) {
 				const source = await window.electronAPI.getSelectedSource();
-				if (source) {
-					setSelectedSource(source.name);
-					setHasSelectedSource(true);
-				} else {
-					setSelectedSource("Screen");
-					setHasSelectedSource(false);
-				}
+				applySelectedSource(source);
 			}
 		};
 
@@ -442,15 +452,51 @@ export function LaunchWindow() {
 
 		const interval = setInterval(checkSelectedSource, 500);
 		return () => clearInterval(interval);
-	}, []);
+	}, [applySelectedSource]);
+
+	useEffect(() => {
+		const cleanupSourceChanged = window.electronAPI?.onSelectedSourceChanged?.((source) => {
+			applySelectedSource(source);
+			if (!recordAfterSourceSelectionRef.current || recording) {
+				return;
+			}
+
+			recordAfterSourceSelectionRef.current = false;
+			toggleRecording();
+		});
+		const cleanupSelectorClosed = window.electronAPI?.onSourceSelectorClosed?.(() => {
+			recordAfterSourceSelectionRef.current = false;
+		});
+
+		return () => {
+			cleanupSourceChanged?.();
+			cleanupSelectorClosed?.();
+		};
+	}, [applySelectedSource, recording, toggleRecording]);
 
 	const openSourceSelector = async () => {
 		if (window.electronAPI) {
-			await openSourceSelectorWithPermissionRetry({
+			return await openSourceSelectorWithPermissionRetry({
 				openSourceSelector: () => window.electronAPI.openSourceSelector(),
 				requestScreenAccess: () => window.electronAPI.requestScreenAccess(),
 			});
 		}
+
+		return { opened: false, reason: "electron-api-unavailable" };
+	};
+
+	const handleRecordButtonClick = () => {
+		if (!hasSelectedSource && !recording) {
+			recordAfterSourceSelectionRef.current = true;
+			void openSourceSelector().then((result) => {
+				if (!result.opened) {
+					recordAfterSourceSelectionRef.current = false;
+				}
+			});
+			return;
+		}
+
+		toggleRecording();
 	};
 
 	const sendHudOverlayHide = () => {
@@ -844,32 +890,41 @@ export function LaunchWindow() {
 				</div>
 
 				{/* Record/Stop group */}
-				<button
-					data-testid="launch-record-button"
-					className={`flex items-center justify-center rounded-full p-2 transition-[min-width,background-color] duration-150 ${recording ? "min-w-[78px]" : "min-w-[36px]"} ${trayLayout === "vertical" ? "min-h-9" : ""} ${styles.electronNoDrag} ${
-						recording
-							? paused
-								? "bg-amber-500/10 hover:bg-amber-500/15"
-								: "bg-red-500/12 hover:bg-red-500/16"
-							: "bg-white/[0.06] hover:bg-white/[0.10]"
-					}`}
-					onClick={toggleRecording}
-					disabled={!hasSelectedSource && !recording}
-					style={{ flex: "0 0 auto" }}
+				<Tooltip
+					content={hasSelectedSource || recording ? selectedSource : t("recording.selectSource")}
 				>
-					<div className={`flex items-center justify-center ${recording ? "gap-1.5" : ""}`}>
-						{recording
-							? getIcon("stop", paused ? "text-amber-400" : "text-red-400")
-							: getIcon("record", hasSelectedSource ? "text-white/80" : "text-white/30")}
-						{recording && (
-							<span
-								className={`${paused ? "text-amber-400" : "text-red-400"} inline-block w-[34px] text-left text-xs font-semibold tabular-nums`}
-							>
-								{formatTimePadded(elapsedSeconds)}
-							</span>
-						)}
-					</div>
-				</button>
+					<button
+						data-testid="launch-record-button"
+						className={`flex items-center justify-center rounded-full p-2 transition-[min-width,background-color] duration-150 ${recording ? "min-w-[78px]" : "min-w-[36px]"} ${trayLayout === "vertical" ? "min-h-9" : ""} ${styles.electronNoDrag} ${
+							recording
+								? paused
+									? "bg-amber-500/10 hover:bg-amber-500/15"
+									: "bg-red-500/12 hover:bg-red-500/16"
+								: hasSelectedSource
+									? "bg-white/[0.06] hover:bg-white/[0.10]"
+									: "bg-white/[0.035] hover:bg-white/[0.08]"
+						}`}
+						onClick={handleRecordButtonClick}
+						title={hasSelectedSource || recording ? selectedSource : t("recording.selectSource")}
+						aria-label={
+							hasSelectedSource || recording ? selectedSource : t("recording.selectSource")
+						}
+						style={{ flex: "0 0 auto" }}
+					>
+						<div className={`flex items-center justify-center ${recording ? "gap-1.5" : ""}`}>
+							{recording
+								? getIcon("stop", paused ? "text-amber-400" : "text-red-400")
+								: getIcon("record", hasSelectedSource ? "text-white/80" : "text-white/45")}
+							{recording && (
+								<span
+									className={`${paused ? "text-amber-400" : "text-red-400"} inline-block w-[34px] text-left text-xs font-semibold tabular-nums`}
+								>
+									{formatTimePadded(elapsedSeconds)}
+								</span>
+							)}
+						</div>
+					</button>
+				</Tooltip>
 
 				{recording && (
 					<div

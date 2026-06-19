@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	getSourceCopyFastPathBlockers,
 	isSourceCopyFastPathEligible,
 	type VideoExporterConfig,
+	waitForEncoderQueueSpace,
 } from "./videoExporter";
 
 function createConfig(overrides: Partial<VideoExporterConfig> = {}): VideoExporterConfig {
@@ -117,5 +118,131 @@ describe("getSourceCopyFastPathBlockers", () => {
 				height: 1032,
 			}),
 		).toContain("output-size 1920x1080 differs from source 1920x1032");
+	});
+});
+
+describe("waitForEncoderQueueSpace", () => {
+	function fakeClock(start = 0) {
+		let elapsedMs = start;
+		return {
+			now: () => elapsedMs,
+			sleep: async (ms: number) => {
+				elapsedMs += ms;
+			},
+		};
+	}
+
+	it("resolves immediately when the queue already has space", async () => {
+		const clock = fakeClock();
+		const sleep = vi.fn(clock.sleep);
+
+		await waitForEncoderQueueSpace({
+			getQueueSize: () => 0,
+			maxEncodeQueue: 8,
+			isCancelled: () => false,
+			encoderPreference: "prefer-hardware",
+			now: clock.now,
+			sleep,
+		});
+
+		expect(sleep).not.toHaveBeenCalled();
+	});
+
+	it("waits for the queue to drain and then resolves", async () => {
+		const clock = fakeClock();
+		let queueSize = 8;
+		// Queue drains well within the timeout.
+		const sleep = vi.fn(async (ms: number) => {
+			await clock.sleep(ms);
+			queueSize = 0;
+		});
+
+		await waitForEncoderQueueSpace({
+			getQueueSize: () => queueSize,
+			maxEncodeQueue: 8,
+			isCancelled: () => false,
+			encoderPreference: "prefer-hardware",
+			now: clock.now,
+			sleep,
+		});
+
+		expect(sleep).toHaveBeenCalledTimes(1);
+	});
+
+	it("throws a hardware-specific error once the queue stays full past the timeout", async () => {
+		const clock = fakeClock();
+
+		await expect(
+			waitForEncoderQueueSpace({
+				getQueueSize: () => 8,
+				maxEncodeQueue: 8,
+				isCancelled: () => false,
+				encoderPreference: "prefer-hardware",
+				now: clock.now,
+				sleep: clock.sleep,
+			}),
+		).rejects.toThrow(
+			"The hardware video encoder stopped responding. Retrying with a safer encoder.",
+		);
+	});
+
+	it("throws a generic error for the software encoder once the queue stays full past the timeout", async () => {
+		const clock = fakeClock();
+
+		await expect(
+			waitForEncoderQueueSpace({
+				getQueueSize: () => 8,
+				maxEncodeQueue: 8,
+				isCancelled: () => false,
+				encoderPreference: "prefer-software",
+				now: clock.now,
+				sleep: clock.sleep,
+			}),
+		).rejects.toThrow("The video encoder stopped responding during export.");
+	});
+
+	// Regression test for the false-positive stall: a long gap *before* this call
+	// (e.g. the decoder discarding frames inside a trim region) must not count
+	// against the timeout. Only time spent waiting *inside* this call should.
+	it("does not throw merely because a long time has already passed before this call", async () => {
+		// Simulate this call starting two minutes after some unrelated earlier event,
+		// then having the queue drain almost immediately once we're inside the wait.
+		const clock = fakeClock(2 * 60 * 1000);
+		let queueSize = 8;
+		const sleep = vi.fn(async (ms: number) => {
+			await clock.sleep(ms);
+			queueSize = 0;
+		});
+
+		await expect(
+			waitForEncoderQueueSpace({
+				getQueueSize: () => queueSize,
+				maxEncodeQueue: 8,
+				isCancelled: () => false,
+				encoderPreference: "prefer-hardware",
+				now: clock.now,
+				sleep,
+			}),
+		).resolves.toBeUndefined();
+	});
+
+	it("stops waiting without throwing once cancelled", async () => {
+		const clock = fakeClock();
+		let cancelled = false;
+		const sleep = vi.fn(async (ms: number) => {
+			await clock.sleep(ms);
+			cancelled = true;
+		});
+
+		await expect(
+			waitForEncoderQueueSpace({
+				getQueueSize: () => 8,
+				maxEncodeQueue: 8,
+				isCancelled: () => cancelled,
+				encoderPreference: "prefer-hardware",
+				now: clock.now,
+				sleep,
+			}),
+		).resolves.toBeUndefined();
 	});
 });

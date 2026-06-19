@@ -20,6 +20,37 @@ import type { ExportConfig, ExportProgress, ExportResult } from "./types";
 const ENCODER_STALL_TIMEOUT_MS = 15_000;
 const ENCODER_FLUSH_TIMEOUT_MS = 20_000;
 
+/**
+ * Waits for the encoder's queue to drain below maxEncodeQueue before returning.
+ *
+ * The stall timer starts fresh on each call (not from the encoder's last output), so a
+ * long gap before this call — e.g. the decoder discarding frames inside a trim region —
+ * doesn't get blamed on the encoder once real frames resume.
+ */
+export async function waitForEncoderQueueSpace(params: {
+	getQueueSize: () => number;
+	maxEncodeQueue: number;
+	isCancelled: () => boolean;
+	encoderPreference: HardwareAcceleration;
+	now?: () => number;
+	sleep?: (ms: number) => Promise<void>;
+}): Promise<void> {
+	const now = params.now ?? Date.now;
+	const sleep = params.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+
+	const stallWaitStartAt = now();
+	while (params.getQueueSize() >= params.maxEncodeQueue && !params.isCancelled()) {
+		if (now() - stallWaitStartAt > ENCODER_STALL_TIMEOUT_MS) {
+			throw new Error(
+				params.encoderPreference === "prefer-hardware"
+					? "The hardware video encoder stopped responding. Retrying with a safer encoder."
+					: "The video encoder stopped responding during export.",
+			);
+		}
+		await sleep(5);
+	}
+}
+
 export interface VideoExporterConfig extends ExportConfig {
 	videoUrl: string;
 	webcamVideoUrl?: string;
@@ -383,24 +414,16 @@ export class VideoExporter {
 							exportFrame = new VideoFrame(canvas, { timestamp, duration: frameDuration });
 						}
 
-						// Timer resets each time we enter the queue-full wait, so a long
-						// trimmed-region decode (decoder busy discarding frames) doesn't
-						// make the stall check fire spuriously.
-						const stallWaitStartAt = Date.now();
-						while (
-							this.encoder &&
-							this.encoder.encodeQueueSize >= maxEncodeQueue &&
-							!this.cancelled
-						) {
-							if (Date.now() - stallWaitStartAt > ENCODER_STALL_TIMEOUT_MS) {
-								exportFrame.close();
-								throw new Error(
-									encoderPreference === "prefer-hardware"
-										? "The hardware video encoder stopped responding. Retrying with a safer encoder."
-										: "The video encoder stopped responding during export.",
-								);
-							}
-							await new Promise((resolve) => setTimeout(resolve, 5));
+						try {
+							await waitForEncoderQueueSpace({
+								getQueueSize: () => this.encoder?.encodeQueueSize ?? 0,
+								maxEncodeQueue,
+								isCancelled: () => this.cancelled,
+								encoderPreference,
+							});
+						} catch (error) {
+							exportFrame.close();
+							throw error;
 						}
 
 						if (this.encoder && this.encoder.state === "configured") {

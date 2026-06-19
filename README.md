@@ -8,7 +8,6 @@
 > [!WARNING]
 > OpenScreen is not production-grade software. You should expect bugs, rough edges, and occasional breaking changes.
 
-
 <p align="center">
   <img src="public/openscreen.png" alt="OpenScreen Logo" width="64" />
 </p>
@@ -141,6 +140,17 @@ Everything in the editor and export is the same on macOS, Windows, and Linux: zo
   - **macOS**: requires macOS 13+. On macOS 14.2+ you'll be prompted to grant audio capture permission. macOS 12 and below can't capture system audio (mic still works).
   - **Windows**: works out of the box.
   - **Linux**: needs PipeWire (default on Ubuntu 22.04+, Fedora 34+). Older PulseAudio-only setups may not capture system audio (mic should still work).
+
+## Official links
+
+This repository is the community-maintained continuation of OpenScreen.
+
+Official / trusted links:
+
+* Original archived repository: https://github.com/siddharthvaddem/openscreen
+* Community continuation: https://github.com/EtienneLescot/openscreen
+
+For safety, download OpenScreen only from the official GitHub Releases linked from this repository. Third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here.
 
 ---
 

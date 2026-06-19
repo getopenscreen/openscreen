@@ -532,6 +532,45 @@ export function LaunchWindow() {
 		}
 	};
 	const dragLastPositionRef = useRef<{ x: number; y: number } | null>(null);
+	const dragAnimationFrameRef = useRef<number | null>(null);
+	const pendingDragDeltaRef = useRef({ x: 0, y: 0 });
+	const flushHudDragMove = useCallback(() => {
+		dragAnimationFrameRef.current = null;
+		const { x, y } = pendingDragDeltaRef.current;
+		pendingDragDeltaRef.current = { x: 0, y: 0 };
+		if (x === 0 && y === 0) return;
+		window.electronAPI?.moveHudOverlayBy?.(x, y);
+	}, []);
+	const scheduleHudDragMove = useCallback(
+		(deltaX: number, deltaY: number) => {
+			pendingDragDeltaRef.current = {
+				x: pendingDragDeltaRef.current.x + deltaX,
+				y: pendingDragDeltaRef.current.y + deltaY,
+			};
+
+			if (dragAnimationFrameRef.current === null) {
+				dragAnimationFrameRef.current = window.requestAnimationFrame(flushHudDragMove);
+			}
+		},
+		[flushHudDragMove],
+	);
+	const flushPendingHudDragMove = useCallback(() => {
+		if (dragAnimationFrameRef.current !== null) {
+			window.cancelAnimationFrame(dragAnimationFrameRef.current);
+			dragAnimationFrameRef.current = null;
+		}
+		const { x, y } = pendingDragDeltaRef.current;
+		pendingDragDeltaRef.current = { x: 0, y: 0 };
+		if (x === 0 && y === 0) return;
+		window.electronAPI?.moveHudOverlayBy?.(x, y);
+	}, []);
+	useEffect(() => {
+		return () => {
+			if (dragAnimationFrameRef.current !== null) {
+				window.cancelAnimationFrame(dragAnimationFrameRef.current);
+			}
+		};
+	}, []);
 	const handleHudDragPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
 		event.preventDefault();
 		event.stopPropagation();
@@ -545,10 +584,11 @@ export function LaunchWindow() {
 		const deltaX = event.screenX - lastPosition.x;
 		const deltaY = event.screenY - lastPosition.y;
 		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
-		window.electronAPI?.moveHudOverlayBy?.(deltaX, deltaY);
+		scheduleHudDragMove(deltaX, deltaY);
 	};
 	const handleHudDragPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
 		dragLastPositionRef.current = null;
+		flushPendingHudDragMove();
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}

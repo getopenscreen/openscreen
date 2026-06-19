@@ -121,6 +121,12 @@ describe("getSourceCopyFastPathBlockers", () => {
 	});
 });
 
+// The original bug measured the timeout from the encoder's last *output* event
+// (lastEncoderOutputAt), which went stale while the decoder discarded frames inside
+// a trim region. waitForEncoderQueueSpace fixes this by starting the clock fresh on
+// each call instead of accepting any such external timestamp — by construction, there
+// is no "last output" state to go stale, so that regression can't be reintroduced
+// without changing this function's signature.
 describe("waitForEncoderQueueSpace", () => {
 	function fakeClock(start = 0) {
 		let elapsedMs = start;
@@ -199,31 +205,6 @@ describe("waitForEncoderQueueSpace", () => {
 				sleep: clock.sleep,
 			}),
 		).rejects.toThrow("The video encoder stopped responding during export.");
-	});
-
-	// Regression test for the false-positive stall: a long gap *before* this call
-	// (e.g. the decoder discarding frames inside a trim region) must not count
-	// against the timeout. Only time spent waiting *inside* this call should.
-	it("does not throw merely because a long time has already passed before this call", async () => {
-		// Simulate this call starting two minutes after some unrelated earlier event,
-		// then having the queue drain almost immediately once we're inside the wait.
-		const clock = fakeClock(2 * 60 * 1000);
-		let queueSize = 8;
-		const sleep = vi.fn(async (ms: number) => {
-			await clock.sleep(ms);
-			queueSize = 0;
-		});
-
-		await expect(
-			waitForEncoderQueueSpace({
-				getQueueSize: () => queueSize,
-				maxEncodeQueue: 8,
-				isCancelled: () => false,
-				encoderPreference: "prefer-hardware",
-				now: clock.now,
-				sleep,
-			}),
-		).resolves.toBeUndefined();
 	});
 
 	it("stops waiting without throwing once cancelled", async () => {

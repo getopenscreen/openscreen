@@ -108,6 +108,16 @@ function showMainWindow() {
 	createWindow();
 }
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (hasSingleInstanceLock) {
+	app.on("second-instance", () => {
+		showMainWindow();
+	});
+} else {
+	app.quit();
+}
+
 function isEditorWindow(window: BrowserWindow) {
 	return window.webContents.getURL().includes("windowType=editor");
 }
@@ -453,7 +463,9 @@ app.on("will-quit", () => {
 	unregisterAllGlobalShortcuts();
 });
 
-app.whenReady().then(async () => {
+const appReady = hasSingleInstanceLock ? app.whenReady() : null;
+
+appReady?.then(async () => {
 	// Force "regular" activation policy so the Dock icon appears. The HUD overlay
 	// (transparent, frameless, skipTaskbar) is the first window, and AppKit would
 	// otherwise classify us as an accessory app.

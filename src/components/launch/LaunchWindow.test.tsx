@@ -282,6 +282,10 @@ describe("LaunchWindow record button", () => {
 			expect(window.electronAPI.openSourceSelector).toHaveBeenCalledTimes(1);
 		});
 
+		await act(async () => {
+			await Promise.resolve();
+		});
+
 		emitSelectedSourceChanged(displayOneSource);
 
 		await waitFor(() => {

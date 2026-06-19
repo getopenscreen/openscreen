@@ -8,6 +8,16 @@
 > [!WARNING]
 > OpenScreen is not production-grade software. You should expect bugs, rough edges, and occasional breaking changes.
 
+## Official links
+
+This repository is the community-maintained continuation of OpenScreen.
+
+Official / trusted links:
+
+* Original archived repository: https://github.com/siddharthvaddem/openscreen
+* Community continuation: https://github.com/EtienneLescot/openscreen
+
+Third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here. For safety, download OpenScreen only from GitHub Releases linked from the repositories above.
 
 <p align="center">
   <img src="public/openscreen.png" alt="OpenScreen Logo" width="64" />

@@ -19,6 +19,7 @@ import {
 } from "./globalShortcut";
 import { mainT, setMainLocale } from "./i18n";
 import { getSelectedDesktopSource, registerIpcHandlers } from "./ipc/handlers";
+import { acquireStableInstanceLock } from "./singleInstanceLock";
 import {
 	createCountdownOverlayWindow,
 	createEditorWindow,
@@ -112,13 +113,16 @@ function showMainWindow() {
 	createWindow();
 }
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const stableInstanceLock = acquireStableInstanceLock();
+const hasElectronSingleInstanceLock = app.requestSingleInstanceLock();
+const hasSingleInstanceLock = Boolean(stableInstanceLock && hasElectronSingleInstanceLock);
 
 if (hasSingleInstanceLock) {
 	app.on("second-instance", () => {
 		showMainWindow();
 	});
 } else {
+	stableInstanceLock?.release();
 	app.quit();
 }
 
@@ -468,6 +472,7 @@ app.on("activate", () => {
 
 app.on("will-quit", () => {
 	unregisterAllGlobalShortcuts();
+	stableInstanceLock?.release();
 });
 
 const appReady = hasSingleInstanceLock ? app.whenReady() : null;

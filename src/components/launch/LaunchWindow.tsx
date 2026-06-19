@@ -442,9 +442,15 @@ export function LaunchWindow() {
 
 	useEffect(() => {
 		const checkSelectedSource = async () => {
-			if (window.electronAPI) {
+			if (!window.electronAPI) {
+				return;
+			}
+
+			try {
 				const source = await window.electronAPI.getSelectedSource();
 				applySelectedSource(source);
+			} catch (error) {
+				console.warn("Failed to refresh selected source:", error);
 			}
 		};
 
@@ -488,11 +494,15 @@ export function LaunchWindow() {
 	const handleRecordButtonClick = () => {
 		if (!hasSelectedSource && !recording) {
 			recordAfterSourceSelectionRef.current = true;
-			void openSourceSelector().then((result) => {
-				if (!result.opened) {
+			void openSourceSelector()
+				.then((result) => {
+					if (!result.opened) {
+						recordAfterSourceSelectionRef.current = false;
+					}
+				})
+				.catch(() => {
 					recordAfterSourceSelectionRef.current = false;
-				}
-			});
+				});
 			return;
 		}
 

@@ -43,6 +43,8 @@ interface Window {
 		}>;
 		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource | null>;
 		getSelectedSource: () => Promise<ProcessedDesktopSource | null>;
+		onSelectedSourceChanged: (callback: (source: ProcessedDesktopSource) => void) => () => void;
+		onSourceSelectorClosed: (callback: () => void) => () => void;
 		requestCameraAccess: () => Promise<{
 			success: boolean;
 			granted: boolean;

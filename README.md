@@ -17,7 +17,7 @@ Official / trusted links:
 * Original archived repository: https://github.com/siddharthvaddem/openscreen
 * Community continuation: https://github.com/EtienneLescot/openscreen
 
-Third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here. For safety, download OpenScreen only from GitHub Releases linked from the repositories above.
+For safety, download OpenScreen only from the official GitHub Releases linked from this repository. Third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here.
 
 <p align="center">
   <img src="public/openscreen.png" alt="OpenScreen Logo" width="64" />

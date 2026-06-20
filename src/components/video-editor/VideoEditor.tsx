@@ -174,6 +174,31 @@ function buildSaveDiagnosticMessage(formatLabel: "GIF" | "Video", reason?: strin
 	return `${formatLabel} export save failed${reason ? `\nReason: ${reason}` : ""}`;
 }
 
+function getPreviewVideoDiagnostics(video: HTMLVideoElement | null) {
+	if (!video) {
+		return { present: false };
+	}
+
+	return {
+		present: true,
+		src: video.currentSrc || video.src,
+		readyState: video.readyState,
+		networkState: video.networkState,
+		error: video.error
+			? {
+					code: video.error.code,
+					message: video.error.message,
+				}
+			: null,
+		currentTime: Number.isFinite(video.currentTime) ? video.currentTime : null,
+		duration: Number.isFinite(video.duration) ? video.duration : null,
+		paused: video.paused,
+		ended: video.ended,
+		videoWidth: video.videoWidth,
+		videoHeight: video.videoHeight,
+	};
+}
+
 const CAPTION_WORD_CHOICES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
 export default function VideoEditor() {
@@ -1855,6 +1880,31 @@ export default function VideoEditor() {
 			setExportError(null);
 			setExportedFilePath(null);
 
+			const previewBeforeExport = getPreviewVideoDiagnostics(video);
+			console.info("[VideoEditor] export started", {
+				format: settings.format,
+				sourcePath: videoSourcePath ?? videoPath,
+				videoPath,
+				webcamVideoPath,
+				preview: previewBeforeExport,
+				settings: {
+					exportQuality: settings.quality || exportQuality,
+					aspectRatio,
+					padding,
+					borderRadius,
+					shadowIntensity,
+					showBlur,
+					motionBlurAmount,
+					cropRegion,
+					zoomRegions: zoomRegions.length,
+					trimRegions: trimRegions.length,
+					speedRegions: speedRegions.length,
+					annotations: annotationRegions.length,
+					effectiveShowCursor,
+					cursorSize,
+				},
+			});
+
 			try {
 				const wasPlaying = isPlaying;
 				if (wasPlaying) {
@@ -2080,6 +2130,12 @@ export default function VideoEditor() {
 					toast.error(t("errors.exportFailedWithError", { error: message }));
 				}
 			} finally {
+				console.info("[VideoEditor] export finished", {
+					sourcePath: videoSourcePath ?? videoPath,
+					videoPath,
+					previewBefore: previewBeforeExport,
+					previewAfter: getPreviewVideoDiagnostics(videoPlaybackRef.current?.video ?? null),
+				});
 				setIsExporting(false);
 				exporterRef.current = null;
 				// Reset so the next export can reopen the dialog (second export

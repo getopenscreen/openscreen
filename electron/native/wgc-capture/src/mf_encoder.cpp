@@ -22,6 +22,99 @@ bool succeeded(HRESULT hr, const char* label) {
     return false;
 }
 
+// Count how many Media Foundation Transforms are registered for a given
+// (category, output subtype) pair. Caller does not need the activations
+// themselves; we just want to know whether at least one is registered so we
+// can diagnose "no encoder registered" vs "encoder registered but sink can't
+// wire it".
+//
+// `outputSubtype` is the encoder's output media subtype (e.g. H264 for video
+// encoders, AAC for audio encoders). `inputMajorType` is the encoder's input
+// major type (e.g. video for video encoders, audio for audio encoders). We do
+// not constrain the input subtype because encoders typically accept many
+// input subtypes and constraining here would under-count.
+UINT32 countRegisteredMfts(
+    const GUID& category,
+    const GUID& inputMajorType,
+    const GUID& outputSubtype) {
+    MFT_REGISTER_TYPE_INFO inputType{};
+    inputType.guidMajorType = inputMajorType;
+    inputType.guidSubtype = GUID_NULL;
+
+    MFT_REGISTER_TYPE_INFO outputType{};
+    outputType.guidMajorType = inputMajorType;
+    outputType.guidSubtype = outputSubtype;
+
+    // MFT_ENUM_FLAG_ALL is the documented flag set for "synchronous, async,
+    // hardware, software" — there is no separate SOFTWARE flag. Using a
+    // narrower flag set can omit legitimate encoders (e.g. the AMD AMF H.264
+    // encoder is async hardware).
+    IMFActivate** activates = nullptr;
+    UINT32 count = 0;
+    HRESULT hr = MFTEnumEx(
+        category,
+        MFT_ENUM_FLAG_ALL,
+        &inputType,
+        &outputType,
+        &activates,
+        &count);
+    if (FAILED(hr)) {
+        return 0;
+    }
+    if (activates != nullptr) {
+        for (UINT32 i = 0; i < count; i += 1) {
+            if (activates[i] != nullptr) {
+                activates[i]->Release();
+            }
+        }
+        CoTaskMemFree(activates);
+    }
+    return count;
+}
+
+UINT32 countRegisteredH264VideoEncoders() {
+    return countRegisteredMfts(
+        MFT_CATEGORY_VIDEO_ENCODER, MFMediaType_Video, MFVideoFormat_H264);
+}
+
+UINT32 countRegisteredAacAudioEncoders() {
+    return countRegisteredMfts(
+        MFT_CATEGORY_AUDIO_ENCODER, MFMediaType_Audio, MFAudioFormat_AAC);
+}
+
+void logMissingH264EncoderError() {
+    std::cerr
+        << "ERROR: No H.264 video encoder MFT is registered on this system."
+        << std::endl;
+    std::cerr
+        << "  Windows could not find any Media Foundation Transform that "
+        << "outputs MFVideoFormat_H264." << std::endl;
+    std::cerr
+        << "  MP4 recording requires an H.264 encoder. Without one, "
+        << "MFCreateSinkWriterFromURL fails (hr=0x80070003)."
+        << std::endl;
+    std::cerr
+        << "  Try the following fixes in order:" << std::endl;
+    std::cerr
+        << "    1. Install the Media Feature Pack via Optional Features "
+        << "(Settings > Apps > Optional features > Add > Media Feature Pack), "
+        << "or run: Dism /online /add-capability /capabilityname:Media.MediaFeaturePack~~~~0.0.1.0"
+        << std::endl;
+    std::cerr
+        << "    2. Update your GPU drivers so the hardware H.264 encoder MFT "
+        << "(AMD AMF, NVIDIA NVENC, Intel Quick Sync) re-registers itself."
+        << std::endl;
+    std::cerr
+        << "    3. Inspect the registered transforms under"
+        << " HKLM:\\SOFTWARE\\Microsoft\\Windows Media Foundation\\Transforms"
+        << " and HKLM:\\SOFTWARE\\Classes\\MediaFoundation\\Transforms."
+        << std::endl;
+    std::cerr
+        << "    4. Reboot after driver or Media Feature Pack changes; "
+        << "MFT registration is cached at boot."
+        << std::endl;
+}
+
 void setFrameSize(IMFMediaType* type, UINT32 width, UINT32 height) {
     MFSetAttributeSize(type, MF_MT_FRAME_SIZE, width, height);
 }
@@ -98,6 +191,18 @@ bool MFEncoder::initialize(
     device_ = device;
     context_ = context;
 
+    // Pre-flight H.264 encoder check (issue #15): the MP4 sink writer fails
+    // with hr=0x80070003 (ERROR_PATH_NOT_FOUND) when no H.264 encoder MFT is
+    // registered on the system. Fail fast with an actionable message instead
+    // of letting the sink writer crash with HRESULT noise. This must run
+    // before MFStartup so that a missing Media Feature Pack is reported with
+    // a clear error rather than a confusing MFStartup failure.
+    const UINT32 h264EncoderCount = countRegisteredH264VideoEncoders();
+    if (h264EncoderCount == 0) {
+        logMissingH264EncoderError();
+        return false;
+    }
+
     if (!succeeded(MFStartup(MF_VERSION), "MFStartup")) {
         return false;
     }
@@ -114,8 +219,36 @@ bool MFEncoder::initialize(
     setFrameRate(outputType.Get(), static_cast<UINT32>(fps_));
     setPixelAspectRatio(outputType.Get());
 
-    if (!succeeded(MFCreateSinkWriterFromURL(outputPath.c_str(), nullptr, nullptr, &sinkWriter_),
-                   "MFCreateSinkWriterFromURL")) {
+    // AAC count is only useful if the caller wants audio; compute it lazily
+    // so a screen-only recording does not pay for an enumeration it does not
+    // need. Used purely for diagnostics on the sink-writer failure path.
+    const UINT32 aacEncoderCount = (audioFormat != nullptr)
+        ? countRegisteredAacAudioEncoders()
+        : 0;
+
+    HRESULT sinkWriterHr = MFCreateSinkWriterFromURL(
+        outputPath.c_str(), nullptr, nullptr, &sinkWriter_);
+    if (FAILED(sinkWriterHr)) {
+        // The HRESULT alone is not actionable. Tell the user whether an H.264
+        // encoder is registered at all (no H.264 == the MFP missing-MFT path),
+        // whether AAC is registered (only when audio is requested), and the
+        // hex HRESULT so the exact failure is greppable.
+        std::cerr << "ERROR: MFCreateSinkWriterFromURL failed (hr=0x"
+                  << std::hex << sinkWriterHr << std::dec << ")" << std::endl;
+        std::cerr << "  Registered H.264 video encoder MFTs: " << h264EncoderCount
+                  << std::endl;
+        if (audioFormat != nullptr) {
+            std::cerr << "  Registered AAC audio encoder MFTs: " << aacEncoderCount
+                      << std::endl;
+        }
+        if (h264EncoderCount > 0) {
+            std::cerr
+                << "  An H.264 encoder MFT is registered but the sink writer "
+                << "still failed. Possible causes: invalid output path or "
+                << "permissions, no MP4 mux configured, or GPU driver "
+                << "incompatibility with this Media Foundation build."
+                << std::endl;
+        }
         return false;
     }
     if (!succeeded(sinkWriter_->AddStream(outputType.Get(), &videoStreamIndex_), "AddStream")) {

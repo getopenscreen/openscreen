@@ -83,6 +83,8 @@ Current V2 JSON shape:
 
 The current helper implementation supports display/window video capture, system audio loopback, selected-microphone capture, Media Foundation webcam capture, and a DirectShow webcam fallback for virtual cameras that are not exposed through Media Foundation. Webcam frames are currently composed into the primary MP4 as a bottom-right picture-in-picture overlay. Browser `deviceId` values do not always map to Media Foundation symbolic links or WASAPI endpoint IDs, so the renderer passes both browser IDs and user-visible device names. For microphones, the helper tries the requested WASAPI endpoint ID first, then resolves an active capture endpoint by `microphoneDeviceName`, then falls back to the default endpoint. For webcams, Electron resolves a matching DirectShow filter CLSID for the selected label; the helper uses Media Foundation first, then that exact DirectShow filter when the requested camera is absent from Media Foundation.
 
+Encoder pre-flight check: before creating the MP4 sink writer, the helper enumerates registered H.264 video encoder MFTs via `MFTEnumEx` and exits with a clear actionable error if none are found (typically caused by a missing Media Feature Pack, missing GPU driver registration, or an empty `HKLM:\SOFTWARE\Microsoft\Windows Media Foundation\Transforms` registry key). If the sink writer itself fails, the helper also logs the registered H.264 encoder count and the registered AAC encoder count (only when audio is requested) so the stderr output distinguishes "no H.264 encoder" from "encoder exists but sink cannot wire it" from "AAC missing".
+
 Smoke-test the helper with:
 
 ```powershell

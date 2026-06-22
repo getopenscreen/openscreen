@@ -63,7 +63,3 @@ OpenScreen is a free, open-source screen recorder and video editor (Electron + R
 - **i18n**: 13 locales in `src/i18n/locales/<locale>/` (e.g. `src/i18n/locales/en/settings.json`). The `i18n:check` script validates them — run it after touching translation files.
 - **Build pipeline**: `npm run build` is full electron-builder. For iterating on renderer only, use `npm run build-vite` (Vite + tsc, no packaging).
 - **README tone**: the project is explicitly "not production-grade" and free forever — don't add paywalls, premium tiers, or upsell language to UI/copy.
-
-## Agent team
-
-This repo has a Mavis multi-agent team configured in `.harness/`. See `.harness/agent.md` for the orchestrator and `.harness/reins/` for specialists. AGENTS.md is consumed by every agent; the team config is Mavis-specific.

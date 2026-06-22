@@ -28,21 +28,23 @@ bool succeeded(HRESULT hr, const char* label) {
 // can diagnose "no encoder registered" vs "encoder registered but sink can't
 // wire it".
 //
-// `outputSubtype` is the encoder's output media subtype (e.g. H264 for video
-// encoders, AAC for audio encoders). `inputMajorType` is the encoder's input
-// major type (e.g. video for video encoders, audio for audio encoders). We do
+// `mediaType` is the encoder's major media type (e.g. video for video
+// encoders, audio for audio encoders). It is used as both the input and
+// output major type because an encoder's input and output streams share the
+// same major type by definition. `outputSubtype` is the encoder's output
+// media subtype (e.g. H264 for video encoders, AAC for audio encoders). We do
 // not constrain the input subtype because encoders typically accept many
 // input subtypes and constraining here would under-count.
 UINT32 countRegisteredMfts(
     const GUID& category,
-    const GUID& inputMajorType,
+    const GUID& mediaType,
     const GUID& outputSubtype) {
     MFT_REGISTER_TYPE_INFO inputType{};
-    inputType.guidMajorType = inputMajorType;
+    inputType.guidMajorType = mediaType;
     inputType.guidSubtype = GUID_NULL;
 
     MFT_REGISTER_TYPE_INFO outputType{};
-    outputType.guidMajorType = inputMajorType;
+    outputType.guidMajorType = mediaType;
     outputType.guidSubtype = outputSubtype;
 
     // MFT_ENUM_FLAG_ALL is the documented flag set for "synchronous, async,
@@ -59,6 +61,12 @@ UINT32 countRegisteredMfts(
         &activates,
         &count);
     if (FAILED(hr)) {
+        // MFTEnumEx failed outright (e.g. COM not initialized, invalid
+        // category). Surface the HRESULT so future bug reports can
+        // distinguish this from "zero encoders registered" (which returns
+        // SUCCEEDED(hr) with count == 0).
+        std::cerr << "ERROR: MFTEnumEx failed (hr=0x" << std::hex << hr
+                  << std::dec << ")" << std::endl;
         return 0;
     }
     if (activates != nullptr) {

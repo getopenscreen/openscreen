@@ -1,43 +1,36 @@
-# Pull Request Template
+## Summary
+<!-- Briefly describe the change. -->
 
-## Description
-<!-- Briefly describe the purpose of this PR. -->
+## Related issue
+<!-- Use "Fixes #123", "Closes #123", or "Resolves #123" only when this PR fully resolves the issue. -->
+<!-- Use "Refs #123", "Related to #123", or "Part of #123" when this PR is partial and should not close the issue. -->
 
-## Motivation
-<!-- Explain why this change is needed. What problem does it solve? -->
+Fixes #
 
-## Type of Change
-- [ ] New Feature
-- [ ] Bug Fix
-- [ ] Refactor / Code Cleanup
-- [ ] Documentation Update
-- [ ] Other (please specify)
+## Type of change
+- [ ] Bug fix
+- [ ] Feature
+- [ ] Enhancement
+- [ ] Documentation
+- [ ] Refactor / maintenance
+- [ ] Performance
+- [ ] Security
 
-## Related Issue(s)
-<!-- Link to any related issue(s) (e.g., #123) -->
+## Release impact
+- [ ] Patch
+- [ ] Minor
+- [ ] Major / breaking change
+- [ ] No release note needed
 
-## Screenshots / Video
-<!-- Include screenshots or a short video demonstrating the change. If the change adds a new UI feature, attach an image. If it adds functionality best shown via video, embed a video. -->
+## Desktop impact
+- [ ] Windows
+- [ ] macOS
+- [ ] Linux
+- [ ] Installer / packaging
+- [ ] Not platform-specific
 
-**Screenshot** (if applicable):
-
-```markdown
-![Screenshot Description](path/to/screenshot.png)
-```
-
-**Video** (if applicable):
-
-```html
-<video src="path/to/video.mp4" controls width="600"></video>
-```
+## Screenshots / video
+<!-- Include screenshots or a short video for UI or visual changes. -->
 
 ## Testing
-<!-- Describe how reviewers can test the changes. Include steps, commands, or environment setup. -->
-
-## Checklist
-- [ ] I have performed a self-review of my code.
-- [ ] I have added any necessary screenshots or videos.
-- [ ] I have linked related issue(s) and updated the changelog if applicable.
-
----
-*Thank you for contributing!*
+<!-- Describe how this was tested. Include commands, steps, or environment setup. -->

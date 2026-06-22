@@ -1,0 +1,252 @@
+name: Merged PR issue bookkeeping
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  mark-linked-issues-fixed:
+    name: Mark linked issues fixed in main
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update closing issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullRequest = context.payload.pull_request;
+            const pullNumber = pullRequest.number;
+
+            const fixedInMainLabel = {
+              name: "status: fixed in main",
+              color: "0E8A16",
+              description: "Work is merged into main but may not be in a downloadable release yet.",
+            };
+            const pendingReleaseLabel = {
+              name: "status: pending release",
+              color: "FBCA04",
+              description: "Merged change is waiting for a packaged desktop release.",
+            };
+            const labelsToRemove = ["status: in progress", "status: needs triage"];
+            const nextReleaseMilestoneTitle = "Next Release";
+
+            async function ensureLabel(label) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner,
+                  repo,
+                  name: label.name,
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                try {
+                  await github.rest.issues.createLabel({
+                    owner,
+                    repo,
+                    name: label.name,
+                    color: label.color,
+                    description: label.description,
+                  });
+                  core.info(`Created label '${label.name}'.`);
+                } catch (createError) {
+                  if (createError.status !== 422) throw createError;
+                  core.info(`Label '${label.name}' already exists.`);
+                }
+              }
+            }
+
+            async function ensureMilestone(title) {
+              const milestones = await github.paginate(github.rest.issues.listMilestones, {
+                owner,
+                repo,
+                state: "all",
+                per_page: 100,
+              });
+              const existing = milestones.find((milestone) => milestone.title === title);
+              if (existing?.state === "open") return existing;
+              if (existing) {
+                const reopened = await github.rest.issues.updateMilestone({
+                  owner,
+                  repo,
+                  milestone_number: existing.number,
+                  state: "open",
+                });
+                core.info(`Reopened milestone '${title}'.`);
+                return reopened.data;
+              }
+
+              try {
+                const created = await github.rest.issues.createMilestone({
+                  owner,
+                  repo,
+                  title,
+                  description: "Merged changes queued for the next packaged desktop release.",
+                });
+                core.info(`Created milestone '${title}'.`);
+                return created.data;
+              } catch (error) {
+                if (error.status !== 422) throw error;
+                const refreshed = await github.paginate(github.rest.issues.listMilestones, {
+                  owner,
+                  repo,
+                  state: "all",
+                  per_page: 100,
+                });
+                const milestone = refreshed.find((item) => item.title === title);
+                if (!milestone) throw error;
+                return milestone;
+              }
+            }
+
+            async function getClosingIssueRefs() {
+              const query = `
+                query($owner: String!, $repo: String!, $pullNumber: Int!, $cursor: String) {
+                  repository(owner: $owner, name: $repo) {
+                    pullRequest(number: $pullNumber) {
+                      closingIssuesReferences(first: 100, after: $cursor) {
+                        nodes {
+                          number
+                          repository {
+                            name
+                            owner {
+                              login
+                            }
+                          }
+                        }
+                        pageInfo {
+                          hasNextPage
+                          endCursor
+                        }
+                      }
+                    }
+                  }
+                }
+              `;
+
+              const issueRefs = new Map();
+              let cursor = null;
+              let hasNextPage = true;
+
+              while (hasNextPage) {
+                const result = await github.graphql(query, {
+                  owner,
+                  repo,
+                  pullNumber,
+                  cursor,
+                });
+                const refs = result.repository.pullRequest.closingIssuesReferences;
+                for (const issue of refs.nodes) {
+                  const issueOwner = issue.repository.owner.login;
+                  const issueRepo = issue.repository.name;
+                  issueRefs.set(`${issueOwner}/${issueRepo}#${issue.number}`, {
+                    owner: issueOwner,
+                    repo: issueRepo,
+                    number: issue.number,
+                  });
+                }
+                hasNextPage = refs.pageInfo.hasNextPage;
+                cursor = refs.pageInfo.endCursor;
+              }
+
+              return [...issueRefs.values()];
+            }
+
+            async function hasBookkeepingComment(issueNumber, marker) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: issueNumber,
+                per_page: 100,
+              });
+              return comments.some((comment) => comment.body && comment.body.includes(marker));
+            }
+
+            await ensureLabel(fixedInMainLabel);
+            await ensureLabel(pendingReleaseLabel);
+            const fallbackMilestone = pullRequest.milestone || await ensureMilestone(nextReleaseMilestoneTitle);
+
+            const issueRefs = await getClosingIssueRefs();
+            if (issueRefs.length === 0) {
+              core.info(`PR #${pullNumber} did not declare closing issue references. Nothing to update.`);
+              return;
+            }
+
+            for (const issueRef of issueRefs) {
+              if (
+                issueRef.owner.toLowerCase() !== owner.toLowerCase() ||
+                issueRef.repo.toLowerCase() !== repo.toLowerCase()
+              ) {
+                core.warning(
+                  `Skipping cross-repository closing reference ${issueRef.owner}/${issueRef.repo}#${issueRef.number}; ` +
+                    `this workflow only updates issues in ${owner}/${repo}.`,
+                );
+                continue;
+              }
+
+              const issueNumber = issueRef.number;
+              const issueResponse = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: issueNumber,
+              });
+              const issue = issueResponse.data;
+              const existingLabels = issue.labels.map((label) =>
+                typeof label === "string" ? label : label.name,
+              );
+              const milestoneTitle = issue.milestone?.title || fallbackMilestone.title;
+              const milestoneNumber = issue.milestone?.number || fallbackMilestone.number;
+
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                labels: [fixedInMainLabel.name, pendingReleaseLabel.name],
+              });
+
+              for (const label of labelsToRemove) {
+                if (!existingLabels.includes(label)) continue;
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    name: label,
+                  });
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+              }
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                milestone: milestoneNumber,
+                state: "closed",
+                state_reason: "completed",
+              });
+
+              const marker = `<!-- openscreen-merged-pr-bookkeeping:${pullNumber} -->`;
+              if (!(await hasBookkeepingComment(issueNumber, marker))) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: [
+                    marker,
+                    `Fixed by #${pullNumber} and merged into \`main\`.`,
+                    "",
+                    `This change is assigned to the \`${milestoneTitle}\` release milestone and is not necessarily available in the latest downloadable desktop release yet. It is currently marked as \`${pendingReleaseLabel.name}\` until a packaged release containing it is published.`,
+                  ].join("\n"),
+                });
+              }
+
+              core.info(`Updated issue #${issueNumber} for merged PR #${pullNumber}.`);
+            }

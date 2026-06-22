@@ -112,7 +112,7 @@ test.describe("Windows native checklist smoke tests", () => {
 			await hudWindow.waitForLoadState("domcontentloaded");
 			await dismissLanguagePrompt(hudWindow);
 
-			await expect(hudWindow.getByTestId("launch-record-button")).toBeDisabled();
+			await expect(hudWindow.getByTestId("launch-record-button")).toBeEnabled();
 			await expect(hudWindow.getByTestId("launch-source-selector-button")).toBeVisible();
 			await expect(hudWindow.getByTestId("launch-system-audio-button")).toBeEnabled();
 			await expect(hudWindow.getByTestId("launch-microphone-button")).toBeEnabled();

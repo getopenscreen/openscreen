@@ -1336,6 +1336,10 @@ export function registerIpcHandlers(
 				selectedDesktopSource = null;
 			}
 		}
+		const mainWin = getMainWindow();
+		if (mainWin && !mainWin.isDestroyed()) {
+			mainWin.webContents.send("selected-source-changed", selectedSource);
+		}
 		const sourceSelectorWin = getSourceSelectorWindow();
 		if (sourceSelectorWin) {
 			sourceSelectorWin.close();

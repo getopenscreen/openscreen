@@ -126,6 +126,30 @@ if (hasSingleInstanceLock) {
 	app.quit();
 }
 
+// Forward renderer console output to the main process so it appears in the
+// terminal where `npm run dev` is running. Without this, `console.info` /
+// `console.warn` / `console.error` calls in the renderer only show up in
+// DevTools, which is invisible when the user is following terminal
+// instructions (see issue #8 and PR #11).
+app.on("browser-window-created", (_event, window) => {
+	window.webContents.on("console-message", (details) => {
+		// New API: details.level is "info" | "warning" | "error" | "debug".
+		// Skip debug to keep the terminal readable; the user can still inspect
+		// DevTools for that.
+		const { level, message } = details;
+		if (level === "debug") return;
+		const tag = level.toUpperCase();
+		const line = `[renderer ${tag}] ${message}`;
+		if (level === "error") {
+			console.error(line);
+		} else if (level === "warning") {
+			console.warn(line);
+		} else {
+			console.log(line);
+		}
+	});
+});
+
 function isEditorWindow(window: BrowserWindow) {
 	return window.webContents.getURL().includes("windowType=editor");
 }

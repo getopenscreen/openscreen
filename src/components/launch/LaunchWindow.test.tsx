@@ -8,6 +8,8 @@ type SelectedSourceChangedListener = Parameters<
 	Window["electronAPI"]["onSelectedSourceChanged"]
 >[0];
 
+const platformState = vi.hoisted(() => ({ value: "darwin" }));
+
 const recorderState = vi.hoisted(() => ({
 	value: {
 		recording: false,
@@ -71,7 +73,7 @@ vi.mock("../../lib/requestCameraAccess", () => ({
 vi.mock("@/native", () => ({
 	nativeBridgeClient: {
 		system: {
-			getPlatform: vi.fn(async () => "darwin"),
+			getPlatform: vi.fn(async () => platformState.value),
 		},
 	},
 }));
@@ -190,6 +192,7 @@ function emitSourceSelectorClosed() {
 
 describe("LaunchWindow record button", () => {
 	beforeEach(() => {
+		platformState.value = "darwin";
 		class ResizeObserver {
 			observe() {
 				return undefined;
@@ -326,5 +329,15 @@ describe("LaunchWindow record button", () => {
 
 		expect(recorderState.value.toggleRecording).toHaveBeenCalledTimes(1);
 		expect(window.electronAPI.openSourceSelector).not.toHaveBeenCalled();
+	});
+
+	it("keeps the HUD interactive on Linux so the drag handle can receive pointer events", async () => {
+		platformState.value = "linux";
+
+		renderLaunchWindow();
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+		});
 	});
 });

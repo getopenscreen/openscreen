@@ -143,6 +143,7 @@ export function LaunchWindow() {
 		() => loadUserPreferences().trayLayout,
 	);
 	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
+	const [isLinuxHud, setIsLinuxHud] = useState(false);
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageMenuPanelRef = useRef<HTMLDivElement | null>(null);
 	const hudBarRef = useRef<HTMLDivElement | null>(null);
@@ -212,11 +213,13 @@ export function LaunchWindow() {
 			.then((platform) => {
 				if (!cancelled) {
 					setSupportsCursorModeToggle(platform === "win32" || platform === "darwin");
+					setIsLinuxHud(platform === "linux");
 				}
 			})
 			.catch(() => {
 				if (!cancelled) {
 					setSupportsCursorModeToggle(false);
+					setIsLinuxHud(false);
 				}
 			});
 
@@ -400,14 +403,18 @@ export function LaunchWindow() {
 		[observeHudElement],
 	);
 
-	const hudMouseEventsEnabledRef = useRef<boolean | undefined>(undefined);
-	const setHudMouseEventsEnabled = useCallback((enabled: boolean) => {
-		if (hudMouseEventsEnabledRef.current === enabled) {
-			return;
-		}
-		hudMouseEventsEnabledRef.current = enabled;
-		window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(!enabled);
-	}, []);
+	const hudIgnoreMouseEventsRef = useRef<boolean | undefined>(undefined);
+	const setHudMouseEventsEnabled = useCallback(
+		(enabled: boolean) => {
+			const shouldIgnoreMouseEvents = !enabled && !isLinuxHud;
+			if (hudIgnoreMouseEventsRef.current === shouldIgnoreMouseEvents) {
+				return;
+			}
+			hudIgnoreMouseEventsRef.current = shouldIgnoreMouseEvents;
+			window.electronAPI?.setHudOverlayIgnoreMouseEvents?.(shouldIgnoreMouseEvents);
+		},
+		[isLinuxHud],
+	);
 
 	useEffect(() => {
 		setHudMouseEventsEnabled(false);

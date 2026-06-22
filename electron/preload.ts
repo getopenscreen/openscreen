@@ -53,6 +53,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getSelectedSource: () => {
 		return ipcRenderer.invoke("get-selected-source");
 	},
+	onSelectedSourceChanged: (callback: (source: ProcessedDesktopSource) => void) => {
+		const listener = (_event: unknown, source: ProcessedDesktopSource) => callback(source);
+		ipcRenderer.on("selected-source-changed", listener);
+		return () => ipcRenderer.removeListener("selected-source-changed", listener);
+	},
+	onSourceSelectorClosed: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("source-selector-closed", listener);
+		return () => ipcRenderer.removeListener("source-selector-closed", listener);
+	},
 	requestCameraAccess: () => {
 		return ipcRenderer.invoke("request-camera-access");
 	},

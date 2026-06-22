@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Sync PR activity to Discord forum thread
         id: sync
+        # Discord sync is helpful automation, but it should not block PR validation.
+        continue-on-error: true
         uses: actions/github-script@v7
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
@@ -210,15 +212,10 @@ jobs:
               }
 
               if (!webhookUrl) {
-                const strictEvents = new Set(["pull_request_target", "workflow_dispatch"]);
                 const msg =
                   `Discord sync skipped: webhook secret unavailable for event '${context.eventName}'. ` +
                   "Set either DISCORD_WEBHOOK_URL or DISCORD_PR_FORUM_WEBHOOK in repository secrets.";
-                if (strictEvents.has(context.eventName)) {
-                  core.setFailed(msg);
-                } else {
-                  core.warning(msg);
-                }
+                core.warning(msg);
                 return;
               }
 
@@ -421,7 +418,7 @@ jobs:
               core.info(`Posted update to Discord thread ${threadId}.`);
             } catch (err) {
               const msg = err && err.message ? err.message : String(err);
-              core.setFailed(msg);
+              core.warning(`Discord sync failed, but this optional automation will not block PR validation: ${msg}`);
 
               const alertWebhook = process.env.DISCORD_ALERT_WEBHOOK_URL;
               if (alertWebhook) {

@@ -19,7 +19,7 @@ OpenScreen is a free, open-source screen recorder and video editor (Electron + R
 
 - `src/` — React app: UI, editor components, timeline, i18n, captioning/cursor/exporter libs
 - `electron/` — main process, IPC, recording orchestration
-- `electron/<platform>-helper/` — **native** capture helpers: Swift (macOS ScreenCaptureKit), C++/Win32 (Windows Graphics Capture). These are built and shipped with the app, not loaded from npm
+- `electron/native/` — **native** capture helpers: `screencapturekit/` (Swift, macOS) and `wgc-capture/` (C++/Win32, Windows). These are built and shipped with the app, not loaded from npm
 - `docs/` — architecture, engineering roadmaps, testing guides
 - `tests/` — Playwright e2e specs + fixtures
 - `scripts/` — native build scripts, diagnostic tools
@@ -60,7 +60,7 @@ OpenScreen is a free, open-source screen recorder and video editor (Electron + R
 
 - **Native capture is platform-fragile**: macOS uses ScreenCaptureKit (Swift), Windows uses WGC (C++/Win32). CI runs on Linux only — manual smoke test on real macOS/Windows is required for native changes.
 - **Pixi.js v8** is the rendering engine. Filters come from `pixi-filters` and `@pixi/filter-drop-shadow`. GSAP + `motion` for animation.
-- **i18n**: 13 locales in `src/locales/`. The `i18n:check` script validates them — run it after touching translation files.
+- **i18n**: 13 locales in `src/i18n/locales/<locale>/` (e.g. `src/i18n/locales/en/settings.json`). The `i18n:check` script validates them — run it after touching translation files.
 - **Build pipeline**: `npm run build` is full electron-builder. For iterating on renderer only, use `npm run build-vite` (Vite + tsc, no packaging).
 - **README tone**: the project is explicitly "not production-grade" and free forever — don't add paywalls, premium tiers, or upsell language to UI/copy.
 

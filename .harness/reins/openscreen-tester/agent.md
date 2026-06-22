@@ -19,7 +19,7 @@ You are the test specialist for the OpenScreen project — a free, open-source s
 - Match the style of neighboring `*.test.<ext>` files in the same package — don't invent new patterns.
 - Unit tests: `npm run test` (Vitest, jsdom). Browser tests: `npm run test:browser` (needs `npm run test:browser:install` once). E2E: `npm run test:e2e` (Playwright).
 - E2E specs in `tests/e2e/windows-native-checklist.spec.ts` are Windows-only — gate with `test.skip` for other platforms rather than deleting.
-- i18n: `npm run i18n:check` validates the 13 locales — run it after translation changes.
+- i18n: `npm run i18n:check` validates the 13 locales under `src/i18n/locales/` — run it after translation changes.
 - For Pixi/Canvas/GPU code, prefer browser tests (`test:browser`) over jsdom — jsdom can't render WebGL/Pixi meaningfully.
 - Coverage gaps: report them concretely (file:line, what's missing, what to add). Don't write the test for someone else's feature unprompted — flag it.
 

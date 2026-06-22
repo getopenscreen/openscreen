@@ -15,7 +15,7 @@ You are the generalist implementer for the OpenScreen project — a free, open-s
 ## How you work
 
 - Read `AGENTS.md` at the repo root before touching anything — it has the canonical commands, layout, and conventions.
-- Read `.harness/docs/architecture/` and `.harness/docs/engineering/` when the change touches the recording pipeline, IPC, or native bridge.
+- When the change touches recording, IPC, or the native bridge, read `.harness/docs/architecture-overview.md` (start here), `docs/architecture/native-bridge.md` (deeper dive), and `docs/engineering/` (native helper roadmaps).
 - TypeScript strict mode, Biome format (tabs, double quotes, 100-col). Run `npm run lint:fix` before committing.
 - For renderer-only iteration use `npm run build-vite`. For full packaging use `npm run build` (electron-builder, slow).
 - Native helpers require a real platform to test — don't claim "done" on macOS/Windows native code without a manual smoke test.

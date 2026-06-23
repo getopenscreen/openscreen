@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { DesktopCapturerSource } from "electron";
+import type { DesktopCapturerSource, Rectangle } from "electron";
 import {
 	app,
 	BrowserWindow,
@@ -423,6 +423,33 @@ let nativeMacCursorRecordingStartMs = 0;
 let nativeMacPauseStartedAtMs: number | null = null;
 let nativeMacPauseRanges: Array<{ startMs: number; endMs: number }> = [];
 let nativeMacIsPaused = false;
+// Global frame (DIP, top-left origin) of the region captured by the SCK helper. For
+// window captures this is the window's bounds, which differ from the display bounds;
+// the cursor sampler must normalize against it to avoid a fixed offset in the export.
+let activeMacCaptureBounds: Rectangle | null = null;
+
+function parseCaptureBounds(value: unknown): Rectangle | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+	const candidate = value as Partial<Rectangle>;
+	if (
+		typeof candidate.x === "number" &&
+		typeof candidate.y === "number" &&
+		typeof candidate.width === "number" &&
+		typeof candidate.height === "number" &&
+		candidate.width > 0 &&
+		candidate.height > 0
+	) {
+		return {
+			x: candidate.x,
+			y: candidate.y,
+			width: candidate.width,
+			height: candidate.height,
+		};
+	}
+	return null;
+}
 
 function normalizeCursorSample(sample: unknown): CursorRecordingSample | null {
 	if (!sample || typeof sample !== "object") {
@@ -572,6 +599,14 @@ function resolveAssetBasePath() {
 }
 
 function getSelectedSourceBounds() {
+	// Single-window capture records only the window's region, not the whole display.
+	// Normalizing the cursor against display bounds leaves a fixed offset in the export,
+	// so prefer the helper-reported window frame when capturing a window.
+	const isWindowSource = selectedSource?.id?.startsWith("window:") === true;
+	if (isWindowSource && activeMacCaptureBounds) {
+		return activeMacCaptureBounds;
+	}
+
 	const cursor = screen.getCursorScreenPoint();
 	const sourceDisplayId = Number(selectedSource?.display_id);
 	const sourceDisplay = Number.isFinite(sourceDisplayId)
@@ -1038,11 +1073,21 @@ function tryParseNativeHelperEvent(line: string) {
 	}
 }
 
+function dispatchNativeMacHelperEvent(event: Record<string, unknown>) {
+	// The helper reports the captured region's global frame; window captures use it to
+	// normalize cursor positions instead of the full display bounds.
+	const bounds = parseCaptureBounds(event.captureBounds);
+	if (bounds) {
+		activeMacCaptureBounds = bounds;
+	}
+	nativeMacCaptureEvents.emit("helper-event", event);
+}
+
 function inspectNativeMacCaptureOutput() {
 	for (const line of nativeMacCaptureOutput.split(/\r?\n/)) {
 		const event = tryParseNativeHelperEvent(line.trim());
 		if (event) {
-			nativeMacCaptureEvents.emit("helper-event", event);
+			dispatchNativeMacHelperEvent(event);
 		}
 	}
 }
@@ -1058,7 +1103,7 @@ function attachNativeMacCaptureOutputDrain(proc: ChildProcessWithoutNullStreams)
 		for (const line of lines) {
 			const event = tryParseNativeHelperEvent(line.trim());
 			if (event) {
-				nativeMacCaptureEvents.emit("helper-event", event);
+				dispatchNativeMacHelperEvent(event);
 			}
 		}
 	};
@@ -1816,6 +1861,9 @@ export function registerIpcHandlers(
 			nativeMacPauseStartedAtMs = null;
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
+			// Clear any stale frame from a previous recording; the helper reports the exact
+			// captured window frame in its first event, which the cursor sampler then uses.
+			activeMacCaptureBounds = null;
 
 			const cursorStartTimeMs = Date.now();
 			if (cursorCaptureMode === "editable-overlay") {
@@ -2131,6 +2179,7 @@ export function registerIpcHandlers(
 			nativeMacPauseStartedAtMs = null;
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
+			activeMacCaptureBounds = null;
 			const source = selectedSource || { name: "Screen" };
 			if (onRecordingStateChange) {
 				onRecordingStateChange(false, source.name);

@@ -51,11 +51,13 @@ export type NativeMacRecordingRequest = {
 export type NativeMacHelperReadyEvent = {
 	event: "ready";
 	schemaVersion: 1;
+	captureBounds?: Rectangle;
 };
 
 export type NativeMacHelperRecordingStartedEvent = {
 	event: "recording-started";
 	timestampMs: number;
+	captureBounds?: Rectangle;
 };
 
 export type NativeMacHelperRecordingStoppedEvent = {

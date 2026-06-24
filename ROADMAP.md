@@ -55,3 +55,4 @@ Anything not on this list yet? Open an issue and tag it `roadmap` — we'll tria
 - **2026-06-24** — second smoke test after fixing embed truncation math.
 - **2026-06-24** — third smoke test: verify PATCH path (not POST) now that the message id is tracked.
 - **2026-06-24** — fourth smoke test: pin-as-state refactor (variable no longer required).
+- **2026-06-24** — fifth smoke test: pin permission granted, verify self-healing pin works.

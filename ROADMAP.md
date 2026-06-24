@@ -41,7 +41,7 @@ Pulled from real user bug reports on getopenscreen/openscreen. This is the queue
 - [ ] **Feature:** copy / paste attributes & effects in the timeline — [#24](../../issues/24). Right-click menu + standard Ctrl/Cmd+C / Ctrl/Cmd+V shortcuts.
 
 ## 📬 How to influence this roadmap
-- **Discord** — join the OpenScreen Discord and post in [#🗺️・roadmap](). The fastest way to get a thumbs-up or thumbs-down on a feature.
+- **Discord** — join the OpenScreen Discord and post in [#🗺️・roadmap](https://discord.com/channels/1489517664467681310/1493586210675884265). The fastest way to get a thumbs-up or thumbs-down on a feature.
 - **GitHub** — open an issue with the `enhancement` label, or react with 👍 / 👎 on existing items.
 - **PRs** — if you want to ship one of these, open a PR and link the relevant issue. We review fast and help with native-bridge / i18n questions.
 

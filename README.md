@@ -157,3 +157,5 @@ For safety, download OpenScreen only from the official GitHub Releases linked fr
 ## License
 
 This project is licensed under the [MIT License](./LICENSE). By using this software, you agree that the authors are not liable for any issues, damages, or claims arising from its use.
+
+<!-- discord-ci-smoke-test:2026-06-24T11:33:45.8020724+02:00 -->

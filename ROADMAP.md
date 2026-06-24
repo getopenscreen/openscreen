@@ -51,3 +51,4 @@ Anything not on this list yet? Open an issue and tag it `roadmap` — we'll tria
 
 ## Changelog
 - **2026-06-24** — initial draft. Stability items pulled from open issues / PRs on getopenscreen/openscreen. AI section presented as opt-in / off by default. Whisper entry updated to reflect existing caption feature.
+- **2026-06-24** — roadmap sync smoke test: discord-pinned-message mechanism goes live.

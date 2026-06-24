@@ -666,7 +666,6 @@ jobs:
 
             // 5. PATCH the existing message, or POST a new one.
             let messageId = existingMessageId;
-            let didPost = false;
             try {
               if (messageId) {
                 const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`, {
@@ -705,7 +704,6 @@ jobs:
                 }
                 const data = await res.json();
                 messageId = data.id;
-                didPost = true;
                 core.info(`🆕 New roadmap message created with id ${messageId}.`);
                 core.info(`👉 Set DISCORD_ROADMAP_MESSAGE_ID=${messageId} as a repo variable to update this message on future changes.`);
                 core.info(`   gh variable set DISCORD_ROADMAP_MESSAGE_ID ${messageId} --repo ${context.repo.owner}/${context.repo.repo}`);

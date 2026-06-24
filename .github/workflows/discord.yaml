@@ -520,10 +520,18 @@ jobs:
   # `notify` job above syncs PR activity to the 🔎・pr-reviews channel —
   # the user-facing community gets pinged in Discord when the roadmap moves.
   #
-  # Required secret:
-  #   DISCORD_ROADMAP_WEBHOOK_URL — webhook URL of the #🗺️・roadmap channel
-  # Optional (re-used from the existing notify job):
-  #   DISCORD_WEBHOOK_USERNAME, DISCORD_WEBHOOK_AVATAR_URL
+  # Posts via the openscreen_etienne bot (same one as the notify job) rather
+  # than a channel-scoped webhook, so the bot's identity is preserved and we
+  # don't accumulate one webhook per channel.
+  #
+  # Required:
+  #   DISCORD_BOT_TOKEN — bot token of the openscreen_etienne app (secret)
+  #   DISCORD_ROADMAP_CHANNEL_ID — channel id of #🗺️・roadmap
+  #     (GitHub Actions var, not secret — channel ids are public info)
+  #
+  # Per-channel permission required on the Discord side:
+  #   The bot's role must have "Send Messages" allowed on #🗺️・roadmap
+  #   (set as a channel-level permission override; do not grant globally).
   roadmap-notify:
     if: github.event_name == 'pull_request_target'
     concurrency:
@@ -535,9 +543,8 @@ jobs:
         continue-on-error: true
         uses: actions/github-script@v7
         env:
-          DISCORD_ROADMAP_WEBHOOK_URL: ${{ secrets.DISCORD_ROADMAP_WEBHOOK_URL }}
-          DISCORD_WEBHOOK_USERNAME: ${{ secrets.DISCORD_WEBHOOK_USERNAME }}
-          DISCORD_WEBHOOK_AVATAR_URL: ${{ secrets.DISCORD_WEBHOOK_AVATAR_URL }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_ROADMAP_CHANNEL_ID: ${{ vars.DISCORD_ROADMAP_CHANNEL_ID }}
         with:
           script: |
             const ROADMAP_PATTERN = /(^|\/)ROADMAP\.md$|(^|\/)docs\/roadmap\.md$/i;
@@ -575,14 +582,15 @@ jobs:
               return;
             }
 
-            const webhookUrl = (process.env.DISCORD_ROADMAP_WEBHOOK_URL || "").trim();
-            if (!webhookUrl) {
-              core.info("DISCORD_ROADMAP_WEBHOOK_URL not set; skipping roadmap notify. Add it as a repo secret to enable #🗺️・roadmap auto-posts.");
+            const botToken = (process.env.DISCORD_BOT_TOKEN || "").trim();
+            const channelId = (process.env.DISCORD_ROADMAP_CHANNEL_ID || "").trim();
+            if (!botToken || !channelId) {
+              core.info(
+                "DISCORD_BOT_TOKEN or DISCORD_ROADMAP_CHANNEL_ID not set; skipping roadmap notify. " +
+                "Configure DISCORD_BOT_TOKEN as a repo secret and DISCORD_ROADMAP_CHANNEL_ID as a repo variable to enable #🗺️・roadmap auto-posts."
+              );
               return;
             }
-
-            const webhookUsername = (process.env.DISCORD_WEBHOOK_USERNAME || "OpenScreen").trim();
-            const webhookAvatar = (process.env.DISCORD_WEBHOOK_AVATAR_URL || "").trim();
 
             const fileList = roadmapFiles.map(f => {
               const icon = f.status === "added" ? "🆕" : f.status === "removed" ? "🗑️" : "✏️";
@@ -596,9 +604,11 @@ jobs:
 
             const description = (pr.body || "No description provided.").trim() || "No description provided.";
 
+            // Posted via bot token: username / avatar overrides are not
+            // supported on POST /channels/{id}/messages, so the bot's
+            // configured identity (set in the Discord Developer Portal)
+            // is what shows up in #🗺️・roadmap.
             const payload = {
-              username: webhookUsername,
-              ...(webhookAvatar ? { avatar_url: webhookAvatar } : {}),
               content: `${titlePrefix} via PR #${pr.number}`,
               embeds: [
                 {
@@ -619,9 +629,12 @@ jobs:
             };
 
             try {
-              const res = await fetch(`${webhookUrl}?wait=true`, {
+              const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Authorization": `Bot ${botToken}`,
+                  "Content-Type": "application/json",
+                },
                 body: JSON.stringify(payload),
               });
               if (!res.ok) {
@@ -629,7 +642,7 @@ jobs:
                 core.warning(`Roadmap Discord notify failed ${res.status}: ${txt}`);
                 return;
               }
-              core.info(`Roadmap Discord notify posted for PR #${pr.number} (${roadmapFiles.length} file(s)).`);
+              core.info(`Roadmap Discord notify posted for PR #${pr.number} (${roadmapFiles.length} file(s)) to channel ${channelId}.`);
             } catch (err) {
               core.warning(`Roadmap Discord notify threw: ${err && err.message ? err.message : err}`);
             }

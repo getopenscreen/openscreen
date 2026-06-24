@@ -514,3 +514,122 @@ jobs:
               const txt = await res.text();
               core.setFailed(`Leaderboard post failed ${res.status}: ${txt}`);
             }
+
+  # Posts a notification to the #🗺️・roadmap Discord channel whenever a PR
+  # changes ROADMAP.md (the public roadmap file). This mirrors the way the
+  # `notify` job above syncs PR activity to the 🔎・pr-reviews channel —
+  # the user-facing community gets pinged in Discord when the roadmap moves.
+  #
+  # Required secret:
+  #   DISCORD_ROADMAP_WEBHOOK_URL — webhook URL of the #🗺️・roadmap channel
+  # Optional (re-used from the existing notify job):
+  #   DISCORD_WEBHOOK_USERNAME, DISCORD_WEBHOOK_AVATAR_URL
+  roadmap-notify:
+    if: github.event_name == 'pull_request_target'
+    concurrency:
+      group: discord-roadmap-sync-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post roadmap change to #🗺️・roadmap Discord channel
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          DISCORD_ROADMAP_WEBHOOK_URL: ${{ secrets.DISCORD_ROADMAP_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_USERNAME: ${{ secrets.DISCORD_WEBHOOK_USERNAME }}
+          DISCORD_WEBHOOK_AVATAR_URL: ${{ secrets.DISCORD_WEBHOOK_AVATAR_URL }}
+        with:
+          script: |
+            const ROADMAP_PATTERN = /(^|\/)ROADMAP\.md$|(^|\/)docs\/roadmap\.md$/i;
+            const VALID_ACTIONS = ["opened", "reopened", "synchronize", "closed"];
+
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.info("No PR context; skipping roadmap notify.");
+              return;
+            }
+
+            const action = context.payload.action || "";
+            if (!VALID_ACTIONS.includes(action)) {
+              core.info(`Skipping roadmap notify for action '${action}'.`);
+              return;
+            }
+
+            let files;
+            try {
+              const res = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+              files = res.data;
+            } catch (err) {
+              core.warning(`Failed to list PR files: ${err && err.message ? err.message : err}`);
+              return;
+            }
+
+            const roadmapFiles = files.filter(f => ROADMAP_PATTERN.test(f.filename));
+            if (roadmapFiles.length === 0) {
+              core.info("No roadmap files in PR; skipping roadmap notify.");
+              return;
+            }
+
+            const webhookUrl = (process.env.DISCORD_ROADMAP_WEBHOOK_URL || "").trim();
+            if (!webhookUrl) {
+              core.info("DISCORD_ROADMAP_WEBHOOK_URL not set; skipping roadmap notify. Add it as a repo secret to enable #🗺️・roadmap auto-posts.");
+              return;
+            }
+
+            const webhookUsername = (process.env.DISCORD_WEBHOOK_USERNAME || "OpenScreen").trim();
+            const webhookAvatar = (process.env.DISCORD_WEBHOOK_AVATAR_URL || "").trim();
+
+            const fileList = roadmapFiles.map(f => {
+              const icon = f.status === "added" ? "🆕" : f.status === "removed" ? "🗑️" : "✏️";
+              return `${icon} \`${f.filename}\` (+${f.additions}/-${f.deletions})`;
+            }).join("\n");
+
+            const isMerged = action === "closed" && !!pr.merged;
+            const titlePrefix = isMerged ? "✅ Roadmap merged" : "🗺️ Roadmap updated";
+            const color = isMerged ? 5763719 : 1998671;
+            const status = pr.draft ? "Draft" : (isMerged ? "Merged" : (action === "closed" ? "Closed (not merged)" : "Open"));
+
+            const description = (pr.body || "No description provided.").trim() || "No description provided.";
+
+            const payload = {
+              username: webhookUsername,
+              ...(webhookAvatar ? { avatar_url: webhookAvatar } : {}),
+              content: `${titlePrefix} via PR #${pr.number}`,
+              embeds: [
+                {
+                  title: `${pr.title} • #${pr.number}`,
+                  url: pr.html_url,
+                  description: description.length > 1800 ? description.slice(0, 1799) + "…" : description,
+                  color,
+                  fields: [
+                    { name: "Roadmap files", value: fileList, inline: false },
+                    { name: "Author", value: `[${pr.user?.login || "unknown"}](${pr.user?.html_url || pr.html_url})`, inline: true },
+                    { name: "Status", value: status, inline: true },
+                  ],
+                  footer: { text: `${context.repo.owner}/${context.repo.repo}` },
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+              allowed_mentions: { parse: [] },
+            };
+
+            try {
+              const res = await fetch(`${webhookUrl}?wait=true`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              if (!res.ok) {
+                const txt = await res.text();
+                core.warning(`Roadmap Discord notify failed ${res.status}: ${txt}`);
+                return;
+              }
+              core.info(`Roadmap Discord notify posted for PR #${pr.number} (${roadmapFiles.length} file(s)).`);
+            } catch (err) {
+              core.warning(`Roadmap Discord notify threw: ${err && err.message ? err.message : err}`);
+            }

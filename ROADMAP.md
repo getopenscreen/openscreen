@@ -40,6 +40,14 @@ Pulled from real user bug reports on getopenscreen/openscreen. This is the queue
 - [ ] **Feature:** software H.264 fallback when no GPU encoder MFT is available — [#18](../../issues/18). Critical for VMs, broken-driver machines, and headless environments.
 - [ ] **Feature:** copy / paste attributes & effects in the timeline — [#24](../../issues/24). Right-click menu + standard Ctrl/Cmd+C / Ctrl/Cmd+V shortcuts.
 
+## 📚 Site & documentation
+- [ ] **Feature:** Docusaurus site — landing + docs, deployed to GitHub Pages via CI.
+  - Monorepo at `website/`. Versioning off until v2.
+  - Landing (pitch, demo, quick start, downloads) + migrate `docs/` → `website/docs/`.
+  - Bespoke theme (TBD).
+  - CI: build on PR (artifact preview), deploy to Pages on `main`. Custom domain as follow-up.
+  - MIT, no tracking, no paywall — same posture as the app.
+
 ## 📬 How to influence this roadmap
 - **Discord** — join the OpenScreen Discord and post in [#🗺️・roadmap](https://discord.com/channels/1489517664467681310/1493586210675884265). The fastest way to get a thumbs-up or thumbs-down on a feature.
 - **GitHub** — open an issue with the `enhancement` label, or react with 👍 / 👎 on existing items.
@@ -51,10 +59,4 @@ Anything not on this list yet? Open an issue and tag it `roadmap` — we'll tria
 
 ## Changelog
 - **2026-06-24** — initial draft. Stability items pulled from open issues / PRs on getopenscreen/openscreen. AI section presented as opt-in / off by default. Whisper entry updated to reflect existing caption feature.
-- **2026-06-24** — roadmap sync smoke test: discord-pinned-message mechanism goes live.
-- **2026-06-24** — second smoke test after fixing embed truncation math.
-- **2026-06-24** — third smoke test: verify PATCH path (not POST) now that the message id is tracked.
-- **2026-06-24** — fourth smoke test: pin-as-state refactor (variable no longer required).
-- **2026-06-24** — fifth smoke test: pin permission granted, verify self-healing pin works.
-- **2026-06-24** — sixth smoke test: DISCORD_ROADMAP_MESSAGE_ID variable removed; verify the bot finds the message via pin lookup alone.
-- **2026-06-24** — seventh smoke test: PR-merge trigger (validate the `pull_request_target` `closed`+`merged` path).
+- **2026-06-25** — added "Site & documentation" tier: Docusaurus + GitHub Pages. Cleaned smoke-test noise from the changelog (internal CI sync validation, not user-facing).

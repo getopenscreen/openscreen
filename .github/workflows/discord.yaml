@@ -7,6 +7,8 @@ on:
     types: [submitted]
   issue_comment:
     types: [created]
+  push:
+    branches: [main]
   schedule:
     - cron: "0 12 * * 1"
   workflow_dispatch:
@@ -18,7 +20,11 @@ permissions:
 
 jobs:
   notify:
-    if: github.event_name != 'schedule' && github.actor != 'github-actions[bot]'
+    if: |
+      (github.event_name == 'pull_request_target' ||
+       github.event_name == 'pull_request_review' ||
+       github.event_name == 'issue_comment') &&
+      github.actor != 'github-actions[bot]'
     concurrency:
       group: discord-pr-sync-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
       cancel-in-progress: false
@@ -513,4 +519,251 @@ jobs:
             if (!res.ok) {
               const txt = await res.text();
               core.setFailed(`Leaderboard post failed ${res.status}: ${txt}`);
+            }
+
+  # Keeps the #🗺️・roadmap Discord channel in sync with ./ROADMAP.md.
+  # On every push to main (direct or via PR merge) that touches ROADMAP.md,
+  # the bot updates a single pinned message in the channel to mirror the
+  # file's current content. The Discord channel is a read-only mirror of
+  # the file; the file is the source of truth.
+  #
+  # The bot uses the channel's pin as the persistent state: it lists the
+  # pinned messages, finds the one whose embed title matches
+  # "🗺️ OpenScreen Roadmap", and PATCHes it. If none is found, it POSTs a
+  # new message and pins it. No external variable is required — the pin
+  # IS the state. Self-healing: if a moderator unpins, the next sync
+  # re-pins automatically.
+  #
+  # Required:
+  #   DISCORD_BOT_TOKEN — bot token of the openscreen_etienne app (secret)
+  #   DISCORD_ROADMAP_CHANNEL_ID — channel id of #🗺️・roadmap (var)
+  #
+  # Optional escape hatch:
+  #   DISCORD_ROADMAP_MESSAGE_ID — force a specific message id instead of
+  #     looking it up via pins (e.g. after a manual unpin recovery).
+  #
+  # Per-channel permissions required on the Discord side:
+  #   The bot's role must have "Send Messages", "Embed Links", and
+  #   "Manage Messages" allowed on #🗺️・roadmap (channel-level overrides).
+  roadmap-notify:
+    if: |
+      (github.event_name == 'pull_request_target' &&
+       github.event.action == 'closed' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == 'main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    concurrency:
+      group: discord-roadmap-sync-${{ github.repository }}-${{ github.event.pull_request.number || github.sha }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync ROADMAP.md to pinned Discord message
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_ROADMAP_CHANNEL_ID: ${{ vars.DISCORD_ROADMAP_CHANNEL_ID }}
+          DISCORD_ROADMAP_MESSAGE_ID: ${{ vars.DISCORD_ROADMAP_MESSAGE_ID }}
+        with:
+          script: |
+            const ROADMAP_PATTERN = /(^|\/)ROADMAP\.md$|(^|\/)docs\/roadmap\.md$/i;
+            const ROADMAP_EMBED_TITLE = "🗺️ OpenScreen Roadmap";
+
+            const botToken = (process.env.DISCORD_BOT_TOKEN || "").trim();
+            const channelId = (process.env.DISCORD_ROADMAP_CHANNEL_ID || "").trim();
+            const overrideMessageId = (process.env.DISCORD_ROADMAP_MESSAGE_ID || "").trim();
+
+            if (!botToken || !channelId) {
+              core.info(
+                "DISCORD_BOT_TOKEN or DISCORD_ROADMAP_CHANNEL_ID not set; skipping. " +
+                "Configure both as repo secret / variable to enable #🗺️・roadmap auto-sync."
+              );
+              return;
+            }
+
+            // 0. Resolve the message id to update. The pin is the persistent
+            //    state: list the channel's pinned messages and find the one
+            //    whose embed title matches. The DISCORD_ROADMAP_MESSAGE_ID
+            //    var is an escape hatch (overrides the pin lookup).
+            let existingMessageId = overrideMessageId;
+            if (!existingMessageId) {
+              try {
+                const pinRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/pins`, {
+                  headers: { "Authorization": `Bot ${botToken}` },
+                });
+                if (pinRes.ok) {
+                  const pins = await pinRes.json();
+                  const existing = pins.find(m => m.embeds?.[0]?.title === ROADMAP_EMBED_TITLE);
+                  if (existing) {
+                    existingMessageId = existing.id;
+                    core.info(`Found existing pinned roadmap message ${existingMessageId}.`);
+                  } else {
+                    core.info("No existing pinned roadmap message found; will create one.");
+                  }
+                } else {
+                  const txt = await pinRes.text();
+                  core.warning(`Failed to fetch pins (${pinRes.status}): ${txt}; falling back to POST.`);
+                }
+              } catch (err) {
+                core.warning(`Pin lookup threw: ${err && err.message ? err.message : err}; falling back to POST.`);
+              }
+            }
+
+            // 1. Detect which files changed in this event.
+            let changedFiles = [];
+            try {
+              if (context.eventName === "pull_request_target") {
+                const pr = context.payload.pull_request;
+                if (!pr) {
+                  core.info("No PR context; skipping.");
+                  return;
+                }
+                const res = await github.rest.pulls.listFiles({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  per_page: 100,
+                });
+                changedFiles = res.data;
+              } else if (context.eventName === "push") {
+                const sha = context.payload.after || context.payload.head_commit?.id || context.sha;
+                const res = await github.rest.repos.getCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: sha,
+                });
+                changedFiles = res.data.files || [];
+              }
+            } catch (err) {
+              core.warning(`Failed to list changed files: ${err && err.message ? err.message : err}`);
+              return;
+            }
+
+            const roadmapFiles = changedFiles.filter(f => ROADMAP_PATTERN.test(f.filename));
+            if (roadmapFiles.length === 0) {
+              core.info("No roadmap files in event; skipping.");
+              return;
+            }
+
+            // 2. Fetch the current ROADMAP.md content from main.
+            let content;
+            try {
+              const res = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: "ROADMAP.md",
+                ref: "main",
+              });
+              if (Array.isArray(res.data) || res.data.type !== "file" || !res.data.content) {
+                core.warning("ROADMAP.md is not a readable file; skipping.");
+                return;
+              }
+              content = Buffer.from(res.data.content, "base64").toString("utf-8");
+            } catch (err) {
+              core.warning(`Failed to fetch ROADMAP.md: ${err && err.message ? err.message : err}`);
+              return;
+            }
+
+            // 3. Truncate if it exceeds Discord's embed description limit.
+            const rawUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/blob/main/ROADMAP.md`;
+            const truncationNote = `\n\n… *(truncated, see [full file on GitHub](${rawUrl}))*`;
+            // The truncation note itself consumes characters, so slice content to leave room.
+            const maxContentLength = 4096 - truncationNote.length;
+            let description = content;
+            let truncated = false;
+            if (content.length > maxContentLength) {
+              description = content.slice(0, maxContentLength) + truncationNote;
+              truncated = true;
+            }
+
+            // 4. Build the embed payload.
+            const syncedAt = new Date().toISOString().split("T")[0];
+            const payload = {
+              embeds: [
+                {
+                  title: ROADMAP_EMBED_TITLE,
+                  url: rawUrl,
+                  description,
+                  color: 1998671,
+                  footer: {
+                    text: `${context.repo.owner}/${context.repo.repo} • Last synced ${syncedAt}`,
+                  },
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+              allowed_mentions: { parse: [] },
+            };
+            if (truncated) {
+              payload.content = `⚠️ Roadmap exceeds Discord embed limit; truncated. See the [full file on GitHub](${rawUrl}) for the complete version.`;
+            }
+
+            // 5. PATCH the existing message, or POST a new one.
+            let messageId = existingMessageId;
+            try {
+              if (messageId) {
+                const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`, {
+                  method: "PATCH",
+                  headers: {
+                    "Authorization": `Bot ${botToken}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(payload),
+                });
+                if (res.status === 404) {
+                  core.warning(`Existing message ${messageId} not found in Discord (was it deleted?). Falling back to POST.`);
+                  messageId = "";
+                } else if (!res.ok) {
+                  const txt = await res.text();
+                  core.warning(`Roadmap Discord PATCH failed ${res.status}: ${txt}`);
+                  return;
+                } else {
+                  core.info(`Roadmap Discord message ${messageId} updated.`);
+                }
+              }
+
+              if (!messageId) {
+                const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bot ${botToken}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(payload),
+                });
+                if (!res.ok) {
+                  const txt = await res.text();
+                  core.warning(`Roadmap Discord POST failed ${res.status}: ${txt}`);
+                  return;
+                }
+                const data = await res.json();
+                messageId = data.id;
+                core.info(`🆕 New roadmap message created with id ${messageId}.`);
+                core.info(`👉 Set DISCORD_ROADMAP_MESSAGE_ID=${messageId} as a repo variable to update this message on future changes.`);
+                core.info(`   gh variable set DISCORD_ROADMAP_MESSAGE_ID ${messageId} --repo ${context.repo.owner}/${context.repo.repo}`);
+              }
+            } catch (err) {
+              core.warning(`Roadmap Discord sync threw: ${err && err.message ? err.message : err}`);
+              return;
+            }
+
+            // 6. Pin the message (idempotent: PUT on an already-pinned message returns 204).
+            // Self-healing: always attempt, so a transient 403 or a manual unpin by a
+            // moderator will get fixed on the next sync without manual intervention.
+            try {
+              const pinRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/pins/${messageId}`, {
+                method: "PUT",
+                headers: {
+                  "Authorization": `Bot ${botToken}`,
+                },
+              });
+              if (pinRes.status === 204 || pinRes.ok) {
+                core.info(`Message ${messageId} pinned.`);
+              } else if (pinRes.status === 403) {
+                core.warning(`Cannot pin message: bot lacks 'Manage Messages' on the channel. Add it via Discord channel permissions.`);
+              } else {
+                const txt = await pinRes.text();
+                core.warning(`Pin failed ${pinRes.status}: ${txt}`);
+              }
+            } catch (err) {
+              core.warning(`Pin threw: ${err && err.message ? err.message : err}`);
             }

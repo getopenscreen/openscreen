@@ -60,5 +60,17 @@
 		"noAudio": "Este vídeo não tem áudio utilizável para transcrição.",
 		"failed": "Não foi possível gerar as legendas.",
 		"truncated": "Apenas os primeiros {{minutes}} minutos foram transcritos."
+	},
+	"regionClipboard": {
+		"copied": "Atributos de {{region}} copiados",
+		"pasted": "Atributos de {{region}} colados",
+		"nothingToCopy": "Selecione uma região para copiar seus atributos",
+		"nothingToPaste": "Nenhum atributo copiado ainda",
+		"cannotPlace": "Não é possível colocar a região aqui: ela se sobreporia a outra",
+		"kinds": {
+			"zoom": "Zoom",
+			"speed": "Velocidade",
+			"annotation": "Texto"
+		}
 	}
 }

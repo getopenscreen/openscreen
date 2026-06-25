@@ -21,7 +21,9 @@
 		"addBlur": "Adicionar Desfoque",
 		"addKeyframe": "Adicionar Quadro-chave",
 		"deleteSelected": "Excluir Selecionado",
-		"playPause": "Reproduzir / Pausar"
+		"playPause": "Reproduzir / Pausar",
+		"copySelected": "Copiar seleção",
+		"paste": "Colar"
 	},
 	"fixedActions": {
 		"undo": "Desfazer",

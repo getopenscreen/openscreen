@@ -87,6 +87,16 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
+import {
+	applyAnnotationAttributes,
+	applySpeedAttributes,
+	applyZoomAttributes,
+	buildPastedAnnotation,
+	type CopiedRegion,
+	extractAnnotationAttributes,
+	extractSpeedAttributes,
+	extractZoomAttributes,
+} from "./regionClipboard";
 import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import { buildAutoZoomSuggestions } from "./timeline/zoomSuggestionUtils";
@@ -299,6 +309,9 @@ export default function VideoEditor() {
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
+
+	// Session clipboard for "copy/paste region attributes" (not undoable, not persisted).
+	const regionClipboardRef = useRef<CopiedRegion | null>(null);
 
 	const { shortcuts, isMac } = useShortcuts();
 	// Windows recordings include captured cursor assets. macOS hides the system
@@ -1640,6 +1653,174 @@ export default function VideoEditor() {
 		[pushState],
 	);
 
+	const handleCopySelected = useCallback(() => {
+		if (selectedZoomId) {
+			const region = zoomRegions.find((r) => r.id === selectedZoomId);
+			if (region) {
+				regionClipboardRef.current = extractZoomAttributes(region);
+				toast.success(t("regionClipboard.copied", { region: t("regionClipboard.kinds.zoom") }));
+			}
+			return;
+		}
+		if (selectedSpeedId) {
+			const region = speedRegions.find((r) => r.id === selectedSpeedId);
+			if (region) {
+				regionClipboardRef.current = extractSpeedAttributes(region);
+				toast.success(t("regionClipboard.copied", { region: t("regionClipboard.kinds.speed") }));
+			}
+			return;
+		}
+		if (selectedAnnotationId) {
+			const region = annotationRegions.find((r) => r.id === selectedAnnotationId);
+			if (region) {
+				regionClipboardRef.current = extractAnnotationAttributes(region);
+				toast.success(
+					t("regionClipboard.copied", { region: t("regionClipboard.kinds.annotation") }),
+				);
+			}
+			return;
+		}
+		toast.info(t("regionClipboard.nothingToCopy"));
+	}, [
+		selectedZoomId,
+		selectedSpeedId,
+		selectedAnnotationId,
+		zoomRegions,
+		speedRegions,
+		annotationRegions,
+		t,
+	]);
+
+	const handlePaste = useCallback(() => {
+		const copied = regionClipboardRef.current;
+		// If there's nothing in the clipboard, show a message and return early.
+		if (!copied) {
+			toast.info(t("regionClipboard.nothingToPaste"));
+			return;
+		}
+
+		const regionLabel = t(`regionClipboard.kinds.${copied.kind}`);
+		const pastedToast = () => toast.success(t("regionClipboard.pasted", { region: regionLabel }));
+
+		// Apply onto the selected region of the same kind, keeping its timing.
+		if (copied.kind === "zoom" && selectedZoomId) {
+			pushState((prev) => ({
+				zoomRegions: prev.zoomRegions.map((r) =>
+					r.id === selectedZoomId ? applyZoomAttributes(r, copied) : r,
+				),
+			}));
+			pastedToast();
+			return;
+		}
+		if (copied.kind === "speed" && selectedSpeedId) {
+			pushState((prev) => ({
+				speedRegions: prev.speedRegions.map((r) =>
+					r.id === selectedSpeedId ? applySpeedAttributes(r, copied) : r,
+				),
+			}));
+			pastedToast();
+			return;
+		}
+		if (copied.kind === "annotation" && selectedAnnotationId) {
+			pushState((prev) => ({
+				annotationRegions: prev.annotationRegions.map((r) =>
+					r.id === selectedAnnotationId ? applyAnnotationAttributes(r, copied) : r,
+				),
+			}));
+			pastedToast();
+			return;
+		}
+
+		// Nothing matching selected → create a new region at the playhead.
+		const totalMs = Math.round(duration * 1000);
+		if (totalMs <= 0) return;
+		const defaultDuration = Math.min(Math.max(1000, Math.round(totalMs * 0.05)), totalMs);
+		const startPos = Math.max(0, Math.min(Math.round(currentTime * 1000), totalMs));
+
+		if (copied.kind === "zoom") {
+			const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
+			const nextRegion = sorted.find((r) => r.startMs > startPos);
+			const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
+			const overlapping = sorted.some((r) => startPos >= r.startMs && startPos < r.endMs);
+
+			if (overlapping || gapToNext <= 0) {
+				toast.error(t("regionClipboard.cannotPlace"));
+				return;
+			}
+			const id = `zoom-${nextZoomIdRef.current++}`;
+			const region = applyZoomAttributes(
+				{
+					id,
+					startMs: startPos,
+					endMs: startPos + Math.min(defaultDuration, gapToNext),
+					depth: DEFAULT_ZOOM_DEPTH,
+					focus: { cx: 0.5, cy: 0.5 },
+					source: "manual",
+				},
+				copied,
+			);
+			pushState((prev) => ({ zoomRegions: [...prev.zoomRegions, region] }));
+			handleSelectZoom(id);
+			pastedToast();
+			return;
+		}
+
+		if (copied.kind === "speed") {
+			const sorted = [...speedRegions].sort((a, b) => a.startMs - b.startMs);
+			const nextRegion = sorted.find((r) => r.startMs > startPos);
+			const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
+			const overlapping = sorted.some((r) => startPos >= r.startMs && startPos < r.endMs);
+
+			if (overlapping || gapToNext <= 0) {
+				toast.error(t("regionClipboard.cannotPlace"));
+				return;
+			}
+			const id = `speed-${nextSpeedIdRef.current++}`;
+			const region = applySpeedAttributes(
+				{
+					id,
+					startMs: startPos,
+					endMs: startPos + Math.min(defaultDuration, gapToNext),
+					speed: DEFAULT_PLAYBACK_SPEED,
+				},
+				copied,
+			);
+			pushState((prev) => ({ speedRegions: [...prev.speedRegions, region] }));
+			handleSelectSpeed(id);
+			pastedToast();
+			return;
+		}
+
+		// Annotation — overlaps are allowed. A brand-new region clones the full copy
+		// (type, content, styling, position), unlike the styling-only overwrite above.
+		const id = `annotation-${nextAnnotationIdRef.current++}`;
+		const region = buildPastedAnnotation(
+			{
+				id,
+				startMs: startPos,
+				endMs: Math.min(startPos + defaultDuration, totalMs),
+				zIndex: nextAnnotationZIndexRef.current++,
+			},
+			copied,
+		);
+		pushState((prev) => ({ annotationRegions: [...prev.annotationRegions, region] }));
+		handleSelectAnnotation(id);
+		pastedToast();
+	}, [
+		selectedZoomId,
+		selectedSpeedId,
+		selectedAnnotationId,
+		zoomRegions,
+		speedRegions,
+		duration,
+		currentTime,
+		pushState,
+		handleSelectZoom,
+		handleSelectSpeed,
+		handleSelectAnnotation,
+		t,
+	]);
+
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			const mod = e.ctrlKey || e.metaKey;
@@ -1656,6 +1837,25 @@ export default function VideoEditor() {
 				e.stopPropagation();
 				redo();
 				return;
+			}
+
+			// Copy/paste region attributes. Skipped while typing in a field so native
+			// text copy/paste keeps working.
+			const editingText =
+				e.target instanceof HTMLInputElement ||
+				e.target instanceof HTMLTextAreaElement ||
+				(e.target instanceof HTMLElement && e.target.isContentEditable);
+			if (!editingText) {
+				if (matchesShortcut(e, shortcuts.copySelected, isMac)) {
+					e.preventDefault();
+					handleCopySelected();
+					return;
+				}
+				if (matchesShortcut(e, shortcuts.paste, isMac)) {
+					e.preventDefault();
+					handlePaste();
+					return;
+				}
 			}
 
 			// Frame-step navigation (arrow keys, no modifiers)
@@ -1714,7 +1914,7 @@ export default function VideoEditor() {
 
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [undo, redo, shortcuts, isMac]);
+	}, [undo, redo, shortcuts, isMac, handleCopySelected, handlePaste]);
 
 	useEffect(() => {
 		if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {

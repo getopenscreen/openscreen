@@ -61,5 +61,17 @@
 		"noAudio": "Questo video non contiene audio utilizzabile per la trascrizione.",
 		"failed": "Impossibile generare i sottotitoli.",
 		"truncated": "Sono stati trascritti solo i primi {{minutes}} minuti."
+	},
+	"regionClipboard": {
+		"copied": "Attributi di {{region}} copiati",
+		"pasted": "Attributi di {{region}} incollati",
+		"nothingToCopy": "Seleziona una regione per copiarne gli attributi",
+		"nothingToPaste": "Nessun attributo copiato",
+		"cannotPlace": "Impossibile posizionare la regione qui: si sovrapporrebbe a un'altra",
+		"kinds": {
+			"zoom": "Zoom",
+			"speed": "Velocità",
+			"annotation": "Testo"
+		}
 	}
 }

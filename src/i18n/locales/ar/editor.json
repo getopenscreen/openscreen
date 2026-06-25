@@ -77,5 +77,17 @@
 			"couldNotOpenTitle": "تعذّر فتح الملف",
 			"couldNotOpenMessage": "تعذّر فتح ملف المشروع. ربما تم نقل الفيديو المرجعي أو حذفه."
 		}
+	},
+	"regionClipboard": {
+		"copied": "تم نسخ سمات {{region}}",
+		"pasted": "تم لصق سمات {{region}}",
+		"nothingToCopy": "حدد منطقة لنسخ سماتها",
+		"nothingToPaste": "لم يتم نسخ أي سمات بعد",
+		"cannotPlace": "لا يمكن وضع المنطقة هنا: ستتداخل مع منطقة أخرى",
+		"kinds": {
+			"zoom": "تكبير",
+			"speed": "سرعة",
+			"annotation": "نص"
+		}
 	}
 }

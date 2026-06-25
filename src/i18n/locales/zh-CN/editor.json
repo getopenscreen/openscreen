@@ -77,5 +77,17 @@
 			"couldNotOpenTitle": "无法打开文件",
 			"couldNotOpenMessage": "无法打开项目文件。它引用的视频可能已被移动或删除。"
 		}
+	},
+	"regionClipboard": {
+		"copied": "已复制{{region}}属性",
+		"pasted": "已粘贴{{region}}属性",
+		"nothingToCopy": "选择一个区域以复制其属性",
+		"nothingToPaste": "尚未复制任何属性",
+		"cannotPlace": "无法在此放置区域：会与其他区域重叠",
+		"kinds": {
+			"zoom": "缩放",
+			"speed": "速度",
+			"annotation": "文本"
+		}
 	}
 }

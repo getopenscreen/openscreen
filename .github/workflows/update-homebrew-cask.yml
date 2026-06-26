@@ -38,6 +38,29 @@ jobs:
           echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Wait for release DMG assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TIMEOUT_MINUTES=12
+          POLL_INTERVAL=30
+          MAX_ATTEMPTS=$(( (TIMEOUT_MINUTES * 60) / POLL_INTERVAL ))
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            ASSETS=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)
+            COUNT=$(echo "$ASSETS" | grep -ciE '\.dmg$' || true)
+            if [[ "$COUNT" -ge 2 ]]; then
+              echo "Both DMG assets present (found ${COUNT} .dmg files)"
+              exit 0
+            fi
+            echo "Waiting for DMG assets... (attempt $i/$MAX_ATTEMPTS, found ${COUNT:-0} so far)"
+            sleep $POLL_INTERVAL
+          done
+          echo "::warning::Timeout after ${TIMEOUT_MINUTES}min waiting for DMG assets. Proceeding anyway."
+
       - name: Find macOS DMG assets
         id: assets
         env:

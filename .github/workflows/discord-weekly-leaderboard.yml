@@ -1,0 +1,28 @@
+name: Discord Weekly Leaderboard
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  leaderboard:
+    name: Post weekly contributor leaderboard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup
+
+      - name: Post weekly leaderboard to Discord
+        env:
+          DISCORD_SPOTLIGHT_WEBHOOK_URL: ${{ secrets.DISCORD_SPOTLIGHT_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_USERNAME: ${{ secrets.DISCORD_WEBHOOK_USERNAME }}
+          DISCORD_WEBHOOK_AVATAR_URL: ${{ secrets.DISCORD_WEBHOOK_AVATAR_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/discord-weekly-leaderboard.mjs

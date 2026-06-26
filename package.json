@@ -97,6 +97,8 @@
 		"web-demuxer": "^4.0.0"
 	},
 	"devDependencies": {
+		"@actions/core": "^3.0.1",
+		"@actions/github": "^9.1.1",
 		"@biomejs/biome": "^2.4.12",
 		"@electron/rebuild": "^4.0.4",
 		"@playwright/test": "^1.59.1",

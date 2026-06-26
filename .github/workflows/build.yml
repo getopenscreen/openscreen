@@ -36,19 +36,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
+        uses: ./.github/actions/setup
 
       - name: Cache caption assets
         uses: actions/cache@v4
         with:
           path: caption-assets
-          key: caption-assets-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
+          key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
 
       - name: Build Windows app
         run: npm run build:win -- --publish never
@@ -73,18 +67,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+        uses: ./.github/actions/setup
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Ensure sharp prebuilt
         run: npm rebuild sharp
@@ -95,7 +83,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: caption-assets
-          key: caption-assets-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
+          key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
 
       - name: Resolve macOS signing
         id: signing
@@ -249,13 +237,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
+        uses: ./.github/actions/setup
 
       - name: Install pacman build dependencies
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
@@ -264,7 +246,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: caption-assets
-          key: caption-assets-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
+          key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
 
       - name: Build Linux app
         run: npm run build:linux -- --publish never
@@ -319,10 +301,29 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Download installers
+      - name: Download Windows installer
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: openscreen-windows
+          path: artifacts/windows
+
+      - name: Download macOS arm64 DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: openscreen-mac-arm64
+          path: artifacts/mac-arm64
+
+      - name: Download macOS x64 DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: openscreen-mac-x64
+          path: artifacts/mac-x64
+
+      - name: Download Linux packages
+        uses: actions/download-artifact@v4
+        with:
+          name: openscreen-linux
+          path: artifacts/linux
 
       - name: Publish release assets
         env:

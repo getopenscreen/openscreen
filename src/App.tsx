@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { CountdownOverlay } from "./components/launch/CountdownOverlay.tsx";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
+import { NotesWindow } from "./components/launch/NotesWindow.tsx";
 import { SourceSelector } from "./components/launch/SourceSelector";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -57,6 +58,8 @@ export default function App() {
 
 	const content = (() => {
 		switch (windowType) {
+			case "notes":
+				return <NotesWindow />;
 			case "hud-overlay":
 				return <LaunchWindow />;
 			case "source-selector":

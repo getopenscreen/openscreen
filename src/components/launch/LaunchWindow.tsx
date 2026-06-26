@@ -1046,7 +1046,10 @@ export function LaunchWindow() {
 				)}
 
 				<Tooltip content={t("tooltips.openNotes")}>
-					<button className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}>
+					<button
+						className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
+						onClick={() => window.electronAPI.openNotes()}
+					>
 						<NotepadText size={ICON_SIZE} className="text-white/60" />
 					</button>
 				</Tooltip>

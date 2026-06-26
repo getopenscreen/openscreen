@@ -387,6 +387,11 @@ export function LaunchWindow() {
 		hudResizeObserverRef.current = observer;
 		if (hudBarRef.current) observer.observe(hudBarRef.current);
 		if (deviceSelectorRef.current) observer.observe(deviceSelectorRef.current);
+		// Backfill refs that may have been set during the commit phase, before this
+		// effect created the observer (e.g. the system-language prompt or the language
+		// menu). Without this, their reflows wouldn't trigger another resize.
+		if (systemLocalePromptRef.current) observer.observe(systemLocalePromptRef.current);
+		if (languageMenuPanelRef.current) observer.observe(languageMenuPanelRef.current);
 		measureHudSize();
 		return () => {
 			observer.disconnect();

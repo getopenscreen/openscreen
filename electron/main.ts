@@ -12,6 +12,7 @@ import {
 	Tray,
 } from "electron";
 import { ShortcutBinding } from "../src/lib/shortcuts";
+import { isDiagnosticModeEnabled, mainLogBuffer } from "./diagnostics/main-log-buffer";
 import {
 	loadAndRegisterGlobalShortcut,
 	registerOpenAppShortcut,
@@ -478,6 +479,11 @@ app.on("will-quit", () => {
 const appReady = hasSingleInstanceLock ? app.whenReady() : null;
 
 appReady?.then(async () => {
+	if (isDiagnosticModeEnabled()) {
+		mainLogBuffer.install();
+		console.info("[diagnostic] OPENSCREEN_DIAGNOSTIC=1, capturing console.* into ring buffer");
+	}
+
 	// Force "regular" activation policy so the Dock icon appears. The HUD overlay
 	// (transparent, frameless, skipTaskbar) is the first window, and AppKit would
 	// otherwise classify us as an accessory app.

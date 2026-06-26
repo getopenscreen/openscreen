@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-	applyAnnotationAttributes,
-	applySpeedAttributes,
-	applyZoomAttributes,
 	buildPastedAnnotation,
+	buildSpeedRegion,
+	buildZoomRegion,
 	extractAnnotationAttributes,
 	extractSpeedAttributes,
 	extractZoomAttributes,
+	replaceAnnotationAttributes,
 } from "./regionClipboard";
 import {
 	type AnnotationRegion,
@@ -56,7 +56,7 @@ describe("zoom attribute copy/paste", () => {
 			focus: { cx: 0.5, cy: 0.5 },
 			source: "manual",
 		};
-		const result = applyZoomAttributes(target, attrs);
+		const result = buildZoomRegion(target, attrs);
 
 		expect(result.id).toBe("zoom-2");
 		expect(result.startMs).toBe(9000);
@@ -70,7 +70,7 @@ describe("zoom attribute copy/paste", () => {
 
 	it("deep-copies focus so the source and target are decoupled", () => {
 		const attrs = extractZoomAttributes(zoom);
-		const result = applyZoomAttributes({ ...zoom, id: "zoom-2" }, attrs);
+		const result = buildZoomRegion({ ...zoom, id: "zoom-2" }, attrs);
 		result.focus.cx = 0.99;
 		expect(zoom.focus.cx).toBe(0.2);
 	});
@@ -80,7 +80,7 @@ describe("speed attribute copy/paste", () => {
 	it("copies only the speed value", () => {
 		const attrs = extractSpeedAttributes(speed);
 		const target: SpeedRegion = { id: "speed-2", startMs: 4000, endMs: 5000, speed: 1 };
-		const result = applySpeedAttributes(target, attrs);
+		const result = buildSpeedRegion(target, attrs);
 		expect(result).toEqual({ id: "speed-2", startMs: 4000, endMs: 5000, speed: 2 });
 	});
 });
@@ -110,7 +110,7 @@ describe("paste onto an existing annotation applies styling only", () => {
 			style: { ...DEFAULT_ANNOTATION_STYLE },
 			zIndex: 9,
 		};
-		const result = applyAnnotationAttributes(target, attrs);
+		const result = replaceAnnotationAttributes(target, attrs);
 
 		expect(result.content).toBe("world");
 		expect(result.position).toEqual(DEFAULT_ANNOTATION_POSITION);
@@ -119,13 +119,14 @@ describe("paste onto an existing annotation applies styling only", () => {
 		expect(result.style.color).toBe("#ff0000");
 		expect(result.style.textAnimation).toBe("pop");
 		expect(result.size).toEqual({ width: 40, height: 25 });
-		expect(result.figureData?.color).toBe("#123456");
+		// Target is text, so the copied figure's figureData must NOT attach (F5 guard).
+		expect(result.figureData).toBeUndefined();
 	});
 
 	it("keeps the target's own figure data when the copied region has none", () => {
 		const textAttrs = extractAnnotationAttributes({ ...annotation, figureData: undefined });
 		const figureTarget: AnnotationRegion = { ...annotation, id: "annotation-3" };
-		const result = applyAnnotationAttributes(figureTarget, textAttrs);
+		const result = replaceAnnotationAttributes(figureTarget, textAttrs);
 		expect(result.figureData?.color).toBe("#123456");
 	});
 });
@@ -157,5 +158,46 @@ describe("paste as a new annotation clones the full copy", () => {
 		);
 		result.position.x = 99;
 		expect(annotation.position.x).toBe(10);
+	});
+});
+
+describe("zoom paste replaces customScale destructively (F4)", () => {
+	it("clears the target's customScale when the copied zoom is preset-only", () => {
+		const presetOnly = extractZoomAttributes({ ...zoom, customScale: undefined });
+		const target: ZoomRegion = { ...zoom, id: "zoom-3", customScale: 1.5 };
+		const result = buildZoomRegion(target, presetOnly);
+		expect(result.customScale).toBeUndefined();
+	});
+});
+
+describe("figureData guard on paste-onto-existing (F5)", () => {
+	it("does not attach figureData onto a non-figure target", () => {
+		const figureAttrs = extractAnnotationAttributes(annotation);
+		const textTarget: AnnotationRegion = {
+			id: "annotation-6",
+			startMs: 0,
+			endMs: 1000,
+			type: "text",
+			content: "hi",
+			position: { ...DEFAULT_ANNOTATION_POSITION },
+			size: { ...DEFAULT_ANNOTATION_SIZE },
+			style: { ...DEFAULT_ANNOTATION_STYLE },
+			zIndex: 1,
+		};
+		const result = replaceAnnotationAttributes(textTarget, figureAttrs);
+		expect(result.figureData).toBeUndefined();
+		// Styling still applies regardless of type.
+		expect(result.style.color).toBe("#ff0000");
+	});
+
+	it("applies figureData when the target is itself a figure", () => {
+		const figureAttrs = extractAnnotationAttributes(annotation);
+		const figureTarget: AnnotationRegion = {
+			...annotation,
+			id: "annotation-7",
+			figureData: { ...DEFAULT_FIGURE_DATA, color: "#000000" },
+		};
+		const result = replaceAnnotationAttributes(figureTarget, figureAttrs);
+		expect(result.figureData?.color).toBe("#123456");
 	});
 });

@@ -14,28 +14,22 @@ import type {
 	ZoomRegion,
 } from "./types";
 
-/** Timeline Region kinds whose attributes can be copied. Trim has no attributes */
-export type RegionKind = "zoom" | "speed" | "annotation";
-
-/** ZoomRegion attributes that can be copied */
-export interface ZoomAttributes {
+/** The copyable attributes of each region, tagged with its `kind` so paste can discriminate.
+ * Trim has no attributes, so it isn't copyable. */
+export type CopiedZoom = {
 	kind: "zoom";
 	depth: ZoomDepth;
 	customScale?: number;
 	focus: ZoomFocus;
 	focusMode?: ZoomFocusMode;
 	rotationPreset?: Rotation3DPreset;
-}
+};
 
-/** SpeedRegion attributes that can be copied */
-export interface SpeedAttributes {
-	kind: "speed";
-	speed: PlaybackSpeed;
-}
+export type CopiedSpeed = { kind: "speed"; speed: PlaybackSpeed };
 
-/** AnnotationRegion attributes that can be copied. Copy captures everything; paste then
- * uses only the styling for an existing region, or the full set for a brand-new one. */
-export interface AnnotationAttributes {
+/** Annotation copy captures everything; paste then uses only the styling for an existing
+ * region, or the full set for a brand-new one. */
+export type CopiedAnnotation = {
 	kind: "annotation";
 	// Styling — applied both when pasting onto an existing region and onto a new one.
 	style: AnnotationTextStyle;
@@ -47,11 +41,23 @@ export interface AnnotationAttributes {
 	textContent?: string;
 	imageContent?: string;
 	position: AnnotationPosition;
+};
+
+export type CopiedRegion = CopiedZoom | CopiedSpeed | CopiedAnnotation;
+
+/** Session clipboard for "copy/paste region attributes" (not undoable, not persisted).
+ * Module-level so it's shared regardless of which editor instance copied. */
+let clipboard: CopiedRegion | null = null;
+
+export function getCopiedRegion(): CopiedRegion | null {
+	return clipboard;
 }
 
-export type CopiedRegion = ZoomAttributes | SpeedAttributes | AnnotationAttributes;
+export function setCopiedRegion(region: CopiedRegion): void {
+	clipboard = region;
+}
 
-export function extractZoomAttributes(region: ZoomRegion): ZoomAttributes {
+export function extractZoomAttributes(region: ZoomRegion): CopiedZoom {
 	return {
 		kind: "zoom",
 		depth: region.depth,
@@ -62,11 +68,11 @@ export function extractZoomAttributes(region: ZoomRegion): ZoomAttributes {
 	};
 }
 
-export function extractSpeedAttributes(region: SpeedRegion): SpeedAttributes {
+export function extractSpeedAttributes(region: SpeedRegion): CopiedSpeed {
 	return { kind: "speed", speed: region.speed };
 }
 
-export function extractAnnotationAttributes(region: AnnotationRegion): AnnotationAttributes {
+export function extractAnnotationAttributes(region: AnnotationRegion): CopiedAnnotation {
 	return {
 		kind: "annotation",
 		style: { ...region.style },
@@ -80,35 +86,39 @@ export function extractAnnotationAttributes(region: AnnotationRegion): Annotatio
 	};
 }
 
-/** Returns a new region with the copied attributes overwriting its own. Identity and
- * timing (id, startMs, endMs) are preserved; nested objects are deep-copied. */
-export function applyZoomAttributes(region: ZoomRegion, attrs: ZoomAttributes): ZoomRegion {
-	return {
-		...region,
-		depth: attrs.depth,
-		customScale: attrs.customScale,
-		focus: { ...attrs.focus },
-		focusMode: attrs.focusMode,
-		rotationPreset: attrs.rotationPreset,
-	};
+/** Returns a region carrying the copied attributes. Identity, timing, and source come from
+ * `base` (so a full region keeps its own); every attribute comes from the copy, with nested
+ * objects deep-copied. Passing a stub `base` builds a brand-new region; passing an existing
+ * region overwrites ALL its attributes (e.g. a preset-only copy clears the target's customScale). */
+export function buildZoomRegion(
+	base: Pick<ZoomRegion, "id" | "startMs" | "endMs" | "source">,
+	attrs: CopiedZoom,
+): ZoomRegion {
+	const { kind: _kind, ...zoomAttrs } = attrs;
+	return { ...base, ...zoomAttrs, focus: { ...zoomAttrs.focus } };
 }
 
-export function applySpeedAttributes(region: SpeedRegion, attrs: SpeedAttributes): SpeedRegion {
-	return { ...region, speed: attrs.speed };
+export function buildSpeedRegion(
+	base: Pick<SpeedRegion, "id" | "startMs" | "endMs">,
+	attrs: CopiedSpeed,
+): SpeedRegion {
+	return { ...base, speed: attrs.speed };
 }
 
 /** Pastes onto an EXISTING annotation: only the styling is overwritten — the target keeps
  * its own type, text/image content, position, timing, and stacking order. */
-export function applyAnnotationAttributes(
+export function replaceAnnotationAttributes(
 	region: AnnotationRegion,
-	attrs: AnnotationAttributes,
+	attrs: CopiedAnnotation,
 ): AnnotationRegion {
 	return {
 		...region,
 		style: { ...attrs.style },
 		size: { ...attrs.size },
-		// Keep the target's own figure data when the copied region has none (e.g. text → figure).
-		figureData: attrs.figureData ? { ...attrs.figureData } : region.figureData,
+		// Only carry figure data onto a figure target; never attach it to a non-figure
+		// (e.g. pasting a figure's attributes onto a text annotation keeps the text figure-less).
+		figureData:
+			region.type === "figure" && attrs.figureData ? { ...attrs.figureData } : region.figureData,
 	};
 }
 
@@ -116,7 +126,7 @@ export function applyAnnotationAttributes(
  * figure data, and position. Identity, timing, and stacking order come from `base`. */
 export function buildPastedAnnotation(
 	base: Pick<AnnotationRegion, "id" | "startMs" | "endMs" | "zIndex">,
-	attrs: AnnotationAttributes,
+	attrs: CopiedAnnotation,
 ): AnnotationRegion {
 	return {
 		...base,

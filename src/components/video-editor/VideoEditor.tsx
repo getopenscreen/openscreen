@@ -51,7 +51,7 @@ import {
 } from "@/lib/exporter";
 import { computeFrameStepTime } from "@/lib/frameStep";
 import type { CursorCaptureMode, ProjectMedia } from "@/lib/recordingSession";
-import { matchesShortcut } from "@/lib/shortcuts";
+import { isTextEditingTarget, matchesShortcut } from "@/lib/shortcuts";
 import {
 	getExportFolder,
 	getProjectFolder,
@@ -88,15 +88,18 @@ import {
 	validateProjectData,
 } from "./projectPersistence";
 import {
-	applyAnnotationAttributes,
-	applySpeedAttributes,
-	applyZoomAttributes,
 	buildPastedAnnotation,
+	buildSpeedRegion,
+	buildZoomRegion,
 	type CopiedRegion,
 	extractAnnotationAttributes,
 	extractSpeedAttributes,
 	extractZoomAttributes,
+	getCopiedRegion,
+	replaceAnnotationAttributes,
+	setCopiedRegion,
 } from "./regionClipboard";
+import { findFreeGapAt } from "./regionPlacement";
 import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import { buildAutoZoomSuggestions } from "./timeline/zoomSuggestionUtils";
@@ -310,9 +313,6 @@ export default function VideoEditor() {
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
 
-	// Session clipboard for "copy/paste region attributes" (not undoable, not persisted).
-	const regionClipboardRef = useRef<CopiedRegion | null>(null);
-
 	const { shortcuts, isMac } = useShortcuts();
 	// Windows recordings include captured cursor assets. macOS hides the system
 	// cursor in ScreenCaptureKit and renders telemetry samples with OpenScreen's
@@ -326,6 +326,7 @@ export default function VideoEditor() {
 	const { locale, setLocale, t: rawT } = useI18n();
 	const t = useScopedT("editor");
 	const ts = useScopedT("settings");
+	const tt = useScopedT("timeline");
 	const availableLocales = getAvailableLocales();
 
 	const nextAnnotationIdRef = useRef(1);
@@ -1654,29 +1655,28 @@ export default function VideoEditor() {
 	);
 
 	const handleCopySelected = useCallback(() => {
-		if (selectedZoomId) {
-			const region = zoomRegions.find((r) => r.id === selectedZoomId);
+		// Copy the selected region of any kind into the clipboard. A selected blur is an
+		// annotation (type "blur" lives in annotationRegions), so it copies via that row.
+		const copyTargets = [
+			[selectedZoomId, zoomRegions, extractZoomAttributes, "zoom"],
+			[selectedSpeedId, speedRegions, extractSpeedAttributes, "speed"],
+			[
+				selectedAnnotationId ?? selectedBlurId,
+				annotationRegions,
+				extractAnnotationAttributes,
+				"annotation",
+			],
+		] as const;
+
+		for (const [id, regions, extract, kind] of copyTargets) {
+			if (!id) continue;
+			const region = (regions as readonly { id: string }[]).find((r) => r.id === id);
 			if (region) {
-				regionClipboardRef.current = extractZoomAttributes(region);
-				toast.success(t("regionClipboard.copied", { region: t("regionClipboard.kinds.zoom") }));
-			}
-			return;
-		}
-		if (selectedSpeedId) {
-			const region = speedRegions.find((r) => r.id === selectedSpeedId);
-			if (region) {
-				regionClipboardRef.current = extractSpeedAttributes(region);
-				toast.success(t("regionClipboard.copied", { region: t("regionClipboard.kinds.speed") }));
-			}
-			return;
-		}
-		if (selectedAnnotationId) {
-			const region = annotationRegions.find((r) => r.id === selectedAnnotationId);
-			if (region) {
-				regionClipboardRef.current = extractAnnotationAttributes(region);
-				toast.success(
-					t("regionClipboard.copied", { region: t("regionClipboard.kinds.annotation") }),
-				);
+				// Each row pairs a region list with its matching extractor, so the cast is sound.
+				setCopiedRegion((extract as (r: never) => CopiedRegion)(region as never));
+				toast.success(t("regionClipboard.copied", { region: t(`regionClipboard.kinds.${kind}`) }), {
+					id: "regionClipboard.copied",
+				});
 			}
 			return;
 		}
@@ -1685,6 +1685,7 @@ export default function VideoEditor() {
 		selectedZoomId,
 		selectedSpeedId,
 		selectedAnnotationId,
+		selectedBlurId,
 		zoomRegions,
 		speedRegions,
 		annotationRegions,
@@ -1692,42 +1693,56 @@ export default function VideoEditor() {
 	]);
 
 	const handlePaste = useCallback(() => {
-		const copied = regionClipboardRef.current;
+		const copied = getCopiedRegion();
 		// If there's nothing in the clipboard, show a message and return early.
 		if (!copied) {
 			toast.info(t("regionClipboard.nothingToPaste"));
 			return;
 		}
 
-		const regionLabel = t(`regionClipboard.kinds.${copied.kind}`);
-		const pastedToast = () => toast.success(t("regionClipboard.pasted", { region: regionLabel }));
-
 		// Apply onto the selected region of the same kind, keeping its timing.
 		if (copied.kind === "zoom" && selectedZoomId) {
 			pushState((prev) => ({
 				zoomRegions: prev.zoomRegions.map((r) =>
-					r.id === selectedZoomId ? applyZoomAttributes(r, copied) : r,
+					r.id === selectedZoomId ? buildZoomRegion(r, copied) : r,
 				),
 			}));
-			pastedToast();
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
 			return;
 		}
 		if (copied.kind === "speed" && selectedSpeedId) {
 			pushState((prev) => ({
 				speedRegions: prev.speedRegions.map((r) =>
-					r.id === selectedSpeedId ? applySpeedAttributes(r, copied) : r,
+					r.id === selectedSpeedId ? buildSpeedRegion(r, copied) : r,
 				),
 			}));
-			pastedToast();
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
 			return;
 		}
-		if (copied.kind === "annotation" && selectedAnnotationId) {
+		// Blurs live in annotationRegions (type "blur"), so a selected blur is a valid target too.
+		if (copied.kind === "annotation" && (selectedAnnotationId || selectedBlurId)) {
+			const targetId = selectedAnnotationId ?? selectedBlurId;
 			pushState((prev) => ({
 				annotationRegions: prev.annotationRegions.map((r) =>
-					r.id === selectedAnnotationId ? applyAnnotationAttributes(r, copied) : r,
+					r.id === targetId ? replaceAnnotationAttributes(r, copied) : r,
 				),
 			}));
-			pastedToast();
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
 			return;
 		}
 
@@ -1738,56 +1753,59 @@ export default function VideoEditor() {
 		const startPos = Math.max(0, Math.min(Math.round(currentTime * 1000), totalMs));
 
 		if (copied.kind === "zoom") {
-			const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
-			const nextRegion = sorted.find((r) => r.startMs > startPos);
-			const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-			const overlapping = sorted.some((r) => startPos >= r.startMs && startPos < r.endMs);
-
-			if (overlapping || gapToNext <= 0) {
-				toast.error(t("regionClipboard.cannotPlace"));
+			const { ok, gapMs } = findFreeGapAt(zoomRegions, startPos, totalMs);
+			if (!ok) {
+				toast.error(tt("errors.cannotPlaceZoom"), {
+					description: tt("errors.zoomExistsAtLocation"),
+				});
 				return;
 			}
 			const id = `zoom-${nextZoomIdRef.current++}`;
-			const region = applyZoomAttributes(
+			const region = buildZoomRegion(
 				{
 					id,
 					startMs: startPos,
-					endMs: startPos + Math.min(defaultDuration, gapToNext),
-					depth: DEFAULT_ZOOM_DEPTH,
-					focus: { cx: 0.5, cy: 0.5 },
+					endMs: startPos + Math.min(defaultDuration, gapMs),
 					source: "manual",
 				},
 				copied,
 			);
 			pushState((prev) => ({ zoomRegions: [...prev.zoomRegions, region] }));
 			handleSelectZoom(id);
-			pastedToast();
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
 			return;
 		}
 
 		if (copied.kind === "speed") {
-			const sorted = [...speedRegions].sort((a, b) => a.startMs - b.startMs);
-			const nextRegion = sorted.find((r) => r.startMs > startPos);
-			const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-			const overlapping = sorted.some((r) => startPos >= r.startMs && startPos < r.endMs);
-
-			if (overlapping || gapToNext <= 0) {
-				toast.error(t("regionClipboard.cannotPlace"));
+			const { ok, gapMs } = findFreeGapAt(speedRegions, startPos, totalMs);
+			if (!ok) {
+				toast.error(tt("errors.cannotPlaceSpeed"), {
+					description: tt("errors.speedExistsAtLocation"),
+				});
 				return;
 			}
 			const id = `speed-${nextSpeedIdRef.current++}`;
-			const region = applySpeedAttributes(
+			const region = buildSpeedRegion(
 				{
 					id,
 					startMs: startPos,
-					endMs: startPos + Math.min(defaultDuration, gapToNext),
-					speed: DEFAULT_PLAYBACK_SPEED,
+					endMs: startPos + Math.min(defaultDuration, gapMs),
 				},
 				copied,
 			);
 			pushState((prev) => ({ speedRegions: [...prev.speedRegions, region] }));
 			handleSelectSpeed(id);
-			pastedToast();
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
 			return;
 		}
 
@@ -1805,11 +1823,17 @@ export default function VideoEditor() {
 		);
 		pushState((prev) => ({ annotationRegions: [...prev.annotationRegions, region] }));
 		handleSelectAnnotation(id);
-		pastedToast();
+		toast.success(
+			t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+			{
+				id: "regionClipboard.pasted",
+			},
+		);
 	}, [
 		selectedZoomId,
 		selectedSpeedId,
 		selectedAnnotationId,
+		selectedBlurId,
 		zoomRegions,
 		speedRegions,
 		duration,
@@ -1819,6 +1843,7 @@ export default function VideoEditor() {
 		handleSelectSpeed,
 		handleSelectAnnotation,
 		t,
+		tt,
 	]);
 
 	useEffect(() => {
@@ -1841,10 +1866,7 @@ export default function VideoEditor() {
 
 			// Copy/paste region attributes. Skipped while typing in a field so native
 			// text copy/paste keeps working.
-			const editingText =
-				e.target instanceof HTMLInputElement ||
-				e.target instanceof HTMLTextAreaElement ||
-				(e.target instanceof HTMLElement && e.target.isContentEditable);
+			const editingText = isTextEditingTarget(e.target);
 			if (!editingText) {
 				if (matchesShortcut(e, shortcuts.copySelected, isMac)) {
 					e.preventDefault();

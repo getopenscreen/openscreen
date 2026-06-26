@@ -151,6 +151,15 @@ export function matchesShortcut(
 	return true;
 }
 
+/** True when the event target is a text-editing surface where shortcuts should not fire. */
+export function isTextEditingTarget(target: EventTarget | null): boolean {
+	return (
+		target instanceof HTMLInputElement ||
+		target instanceof HTMLTextAreaElement ||
+		(target instanceof HTMLElement && target.isContentEditable)
+	);
+}
+
 const KEY_LABELS: Record<string, string> = {
 	" ": "Space",
 	delete: "Del",

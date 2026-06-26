@@ -83,7 +83,6 @@
 		"pasted": "{{region}} attributes pasted",
 		"nothingToCopy": "Select a region to copy its attributes",
 		"nothingToPaste": "No attributes copied yet",
-		"cannotPlace": "Can't place the region here — it would overlap another",
 		"kinds": {
 			"zoom": "Zoom",
 			"speed": "Speed",

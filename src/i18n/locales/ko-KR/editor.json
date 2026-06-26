@@ -83,7 +83,6 @@
 		"pasted": "{{region}} 속성을 붙여넣었습니다",
 		"nothingToCopy": "속성을 복사할 영역을 선택하세요",
 		"nothingToPaste": "복사된 속성이 없습니다",
-		"cannotPlace": "여기에는 영역을 배치할 수 없습니다. 다른 영역과 겹칩니다",
 		"kinds": {
 			"zoom": "줌",
 			"speed": "속도",

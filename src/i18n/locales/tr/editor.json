@@ -83,7 +83,6 @@
 		"pasted": "{{region}} öznitelikleri yapıştırıldı",
 		"nothingToCopy": "Özniteliklerini kopyalamak için bir bölge seçin",
 		"nothingToPaste": "Henüz öznitelik kopyalanmadı",
-		"cannotPlace": "Bölge buraya yerleştirilemiyor: başka bir bölgeyle çakışır",
 		"kinds": {
 			"zoom": "Yakınlaştırma",
 			"speed": "Hız",

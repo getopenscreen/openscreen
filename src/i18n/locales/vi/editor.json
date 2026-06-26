@@ -83,7 +83,6 @@
 		"pasted": "Đã dán thuộc tính {{region}}",
 		"nothingToCopy": "Chọn một vùng để sao chép thuộc tính của nó",
 		"nothingToPaste": "Chưa sao chép thuộc tính nào",
-		"cannotPlace": "Không thể đặt vùng ở đây: nó sẽ chồng lên vùng khác",
 		"kinds": {
 			"zoom": "Thu phóng",
 			"speed": "Tốc độ",

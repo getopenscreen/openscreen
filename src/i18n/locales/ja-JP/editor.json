@@ -83,7 +83,6 @@
 		"pasted": "{{region}}の属性を貼り付けました",
 		"nothingToCopy": "属性をコピーする領域を選択してください",
 		"nothingToPaste": "コピーされた属性がありません",
-		"cannotPlace": "ここには領域を配置できません（他の領域と重なります）",
 		"kinds": {
 			"zoom": "ズーム",
 			"speed": "速度",

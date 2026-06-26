@@ -67,7 +67,6 @@
 		"pasted": "Attributi di {{region}} incollati",
 		"nothingToCopy": "Seleziona una regione per copiarne gli attributi",
 		"nothingToPaste": "Nessun attributo copiato",
-		"cannotPlace": "Impossibile posizionare la regione qui: si sovrapporrebbe a un'altra",
 		"kinds": {
 			"zoom": "Zoom",
 			"speed": "Velocità",

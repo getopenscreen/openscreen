@@ -9,6 +9,7 @@ type SelectedSourceChangedListener = Parameters<
 >[0];
 
 const platformState = vi.hoisted(() => ({ value: "darwin" }));
+const resizeCallbacks = vi.hoisted(() => [] as Array<ResizeObserverCallback>);
 
 const recorderState = vi.hoisted(() => ({
 	value: {
@@ -358,7 +359,11 @@ describe("LaunchWindow record button", () => {
 describe("LaunchWindow system language prompt", () => {
 	beforeEach(() => {
 		platformState.value = "darwin";
+		resizeCallbacks.length = 0;
 		class ResizeObserver {
+			constructor(callback: ResizeObserverCallback) {
+				resizeCallbacks.push(callback);
+			}
 			observe() {
 				return undefined;
 			}
@@ -393,11 +398,36 @@ describe("LaunchWindow system language prompt", () => {
 		const prompt = await screen.findByText("Use your system language?");
 		expect(prompt).toBeInTheDocument();
 
-		// jsdom reports zero layout, so stub the prompt's box: 32px top offset
-		// (the panel's `top-8`) plus a realistic height forces the resize path
-		// to compute a window that contains the prompt's full extent.
+		// jsdom reports zero layout, so stub both the bar and the prompt to mimic a
+		// real HUD: a 56px bar near the bottom of an 800px viewport, and a 130px prompt
+		// at top-8. Without the prompt-sizing path, the height collapses to the bar
+		// (~80px) and this assertion would fail.
+		const viewportHeight = 800;
+		const barHeight = 56;
+		const bottomMargin = 20;
+		const barBottom = viewportHeight - bottomMargin;
+		const bar = prompt.parentElement?.parentElement?.querySelector(
+			"[data-tray-layout]",
+		) as HTMLElement | null;
+		if (bar) {
+			vi.spyOn(bar, "getBoundingClientRect").mockReturnValue({
+				top: barBottom - barHeight,
+				left: 200,
+				right: 600,
+				bottom: barBottom,
+				width: 400,
+				height: barHeight,
+				x: 200,
+				y: barBottom - barHeight,
+				toJSON: () => ({}),
+			});
+			Object.defineProperty(bar, "scrollHeight", { value: barHeight, configurable: true });
+			Object.defineProperty(bar, "scrollWidth", { value: 400, configurable: true });
+		}
+
 		const promptBox = { width: 480, height: 130 };
-		vi.spyOn(prompt.parentElement as HTMLElement, "getBoundingClientRect").mockReturnValue({
+		const promptPanel = prompt.parentElement as HTMLElement;
+		vi.spyOn(promptPanel, "getBoundingClientRect").mockReturnValue({
 			top: 32,
 			left: 60,
 			right: 60 + promptBox.width,
@@ -407,6 +437,14 @@ describe("LaunchWindow system language prompt", () => {
 			x: 60,
 			y: 32,
 			toJSON: () => ({}),
+		});
+
+		// Fire any observers attached during render so the spied rect is actually
+		// consumed by measureHudSize; the mount-time call had rect.height === 0.
+		await act(async () => {
+			for (const callback of resizeCallbacks) {
+				callback([], {} as ResizeObserver);
+			}
 		});
 
 		await waitFor(() => {
@@ -419,6 +457,10 @@ describe("LaunchWindow system language prompt", () => {
 		const [, height] = sizeMock.mock.calls[sizeMock.mock.calls.length - 1];
 		// Must at least cover the prompt (32 + 130) plus the TOP_MARGIN slack (24).
 		expect(height).toBeGreaterThanOrEqual(32 + promptBox.height + 24);
+		// And must be less than the full viewport (the bar is the lower bound, not
+		// the viewport) — guards against regressions that always grow to the full
+		// viewport because of a missed bottom anchor.
+		expect(height).toBeLessThan(viewportHeight + 24);
 	});
 
 	it("routes the switch and keep-default buttons to the i18n context", async () => {

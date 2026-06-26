@@ -1,6 +1,6 @@
-import type * as Preset from "@docusaurus/preset-classic";
-import type { Config } from "@docusaurus/types";
 import { themes as prismThemes } from "prism-react-renderer";
+import type { Config } from "@docusaurus/types";
+import type * as Preset from "@docusaurus/preset-classic";
 
 const config: Config = {
 	title: "OpenScreen",
@@ -27,7 +27,8 @@ const config: Config = {
 			{
 				docs: {
 					sidebarPath: "./sidebars.ts",
-					editUrl: "https://github.com/getopenscreen/openscreen/tree/main/website/",
+					editUrl:
+						"https://github.com/getopenscreen/openscreen/tree/main/website/",
 				},
 				blog: false,
 			} satisfies Preset.Options,

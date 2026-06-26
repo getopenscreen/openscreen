@@ -8,7 +8,7 @@ export function NotesWindow() {
 	};
 
 	return (
-		<div className="bg-red-900 h-100 w-100 ">
+		<div className="bg-red-900 h-screen w-screen ">
 			<textarea
 				className="w-full h-full bg-transparent outline-none resize-none"
 				placeholder="Take notes here..."

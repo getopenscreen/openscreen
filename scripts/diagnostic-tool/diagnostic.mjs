@@ -45,14 +45,27 @@ function parseArgs(argv) {
 		source: "display",
 		help: false,
 	};
+	const requireNumber = (raw, flag) => {
+		const n = Number(raw);
+		if (!Number.isFinite(n) || n <= 0) {
+			throw new Error(`${flag} requires a positive number, got: ${raw}`);
+		}
+		return n;
+	};
 	for (let i = 0; i < argv.length; i += 1) {
 		const arg = argv[i];
 		if (arg === "--duration" || arg === "-d") {
-			opts.duration = Number(argv[++i]) * 1000;
+			const value = argv[++i];
+			if (value === undefined) throw new Error(`${arg} requires a value`);
+			opts.duration = requireNumber(value, arg) * 1000;
 		} else if (arg === "--output" || arg === "-o") {
-			opts.output = argv[++i];
+			const value = argv[++i];
+			if (value === undefined) throw new Error(`${arg} requires a value`);
+			opts.output = value;
 		} else if (arg === "--source") {
-			opts.source = argv[++i];
+			const value = argv[++i];
+			if (value === undefined) throw new Error(`${arg} requires a value`);
+			opts.source = value;
 		} else if (arg === "--window") {
 			opts.source = "window";
 		} else if (arg === "--help" || arg === "-h") {

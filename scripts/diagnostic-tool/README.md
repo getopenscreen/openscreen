@@ -20,7 +20,7 @@ Linux is not currently supported — OpenScreen has no Linux native helper.
 
 ## Usage
 
-```
+```text
 node diagnostic.mjs --duration 10 --output ./diag.json
 ```
 
@@ -49,7 +49,7 @@ stop cleanup is slow.
 
 ## Layout
 
-```
+```text
 scripts/diagnostic-tool/
   README.md
   diagnostic.mjs        # the tool

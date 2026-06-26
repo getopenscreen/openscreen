@@ -7,9 +7,9 @@
  *
  * Placement is valid as long as `startPos` does not fall inside an
  * existing region and there is some room before the next one. Landing
- * exactly on the start of an existing region is fine (adjacency is
- * allowed); landing strictly between a region's start and end, or
- * having zero space left before the next region, is not.
+ * exactly on the end of an existing region is fine (adjacency is
+ * allowed); landing on a region's start or strictly between its start
+ * and end, or having zero space left before the next region, is not.
  */
 export function findFreeGapAt(
 	regions: ReadonlyArray<{ startMs: number; endMs: number }>,

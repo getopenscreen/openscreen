@@ -1865,18 +1865,25 @@ export default function VideoEditor() {
 			}
 
 			// Copy/paste region attributes. Skipped while typing in a field so native
-			// text copy/paste keeps working.
+			// text copy/paste keeps working. Also only intercepted when there's an
+			// actual region selected (copy) or something on the clipboard (paste);
+			// otherwise the browser handles native copy/paste of any page selection.
 			const editingText = isTextEditingTarget(e.target);
 			if (!editingText) {
 				if (matchesShortcut(e, shortcuts.copySelected, isMac)) {
-					e.preventDefault();
-					handleCopySelected();
-					return;
-				}
-				if (matchesShortcut(e, shortcuts.paste, isMac)) {
-					e.preventDefault();
-					handlePaste();
-					return;
+					const hasRegionSelected =
+						selectedZoomId || selectedSpeedId || selectedAnnotationId || selectedBlurId;
+					if (hasRegionSelected) {
+						e.preventDefault();
+						handleCopySelected();
+						return;
+					}
+				} else if (matchesShortcut(e, shortcuts.paste, isMac)) {
+					if (getCopiedRegion()) {
+						e.preventDefault();
+						handlePaste();
+						return;
+					}
 				}
 			}
 
@@ -1936,7 +1943,18 @@ export default function VideoEditor() {
 
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [undo, redo, shortcuts, isMac, handleCopySelected, handlePaste]);
+	}, [
+		undo,
+		redo,
+		shortcuts,
+		isMac,
+		handleCopySelected,
+		handlePaste,
+		selectedZoomId,
+		selectedSpeedId,
+		selectedAnnotationId,
+		selectedBlurId,
+	]);
 
 	useEffect(() => {
 		if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {

@@ -4,6 +4,7 @@ import type {
 	AnnotationSize,
 	AnnotationTextStyle,
 	AnnotationType,
+	BlurData,
 	FigureData,
 	PlaybackSpeed,
 	Rotation3DPreset,
@@ -35,6 +36,7 @@ export type CopiedAnnotation = {
 	style: AnnotationTextStyle;
 	size: AnnotationSize;
 	figureData?: FigureData;
+	blurData?: BlurData;
 	// Content & placement — used only when pasting as a brand-new region.
 	type: AnnotationType;
 	content: string;
@@ -72,12 +74,22 @@ export function extractSpeedAttributes(region: SpeedRegion): CopiedSpeed {
 	return { kind: "speed", speed: region.speed };
 }
 
+/** Deep-clones blur data, including its nested freehand points array. */
+function cloneBlurData(blurData?: BlurData): BlurData | undefined {
+	if (!blurData) return undefined;
+	return {
+		...blurData,
+		freehandPoints: blurData.freehandPoints ? [...blurData.freehandPoints] : undefined,
+	};
+}
+
 export function extractAnnotationAttributes(region: AnnotationRegion): CopiedAnnotation {
 	return {
 		kind: "annotation",
 		style: { ...region.style },
 		size: { ...region.size },
 		figureData: region.figureData ? { ...region.figureData } : undefined,
+		blurData: cloneBlurData(region.blurData),
 		type: region.type,
 		content: region.content,
 		textContent: region.textContent,
@@ -119,6 +131,9 @@ export function replaceAnnotationAttributes(
 		// (e.g. pasting a figure's attributes onto a text annotation keeps the text figure-less).
 		figureData:
 			region.type === "figure" && attrs.figureData ? { ...attrs.figureData } : region.figureData,
+		// Likewise, only carry blur settings onto a blur target.
+		blurData:
+			region.type === "blur" && attrs.blurData ? cloneBlurData(attrs.blurData) : region.blurData,
 	};
 }
 
@@ -138,5 +153,6 @@ export function buildPastedAnnotation(
 		size: { ...attrs.size },
 		style: { ...attrs.style },
 		figureData: attrs.figureData ? { ...attrs.figureData } : undefined,
+		blurData: cloneBlurData(attrs.blurData),
 	};
 }

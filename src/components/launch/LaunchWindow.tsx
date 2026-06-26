@@ -1,4 +1,12 @@
-import { Check, ChevronDown, Clapperboard, Columns3, Languages, Rows3 } from "lucide-react";
+import {
+	Check,
+	ChevronDown,
+	Clapperboard,
+	Columns3,
+	Languages,
+	NotepadText,
+	Rows3,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BsPauseCircle, BsPlayCircle, BsRecordCircle } from "react-icons/bs";
@@ -697,7 +705,10 @@ export function LaunchWindow() {
 							onMouseLeave={() => setIsMicHovered(false)}
 							onFocus={() => setIsMicFocused(true)}
 							onBlur={() => setIsMicFocused(false)}
-							style={{ width: micExpanded ? "240px" : "140px", transition: "width 300ms ease" }}
+							style={{
+								width: micExpanded ? "240px" : "140px",
+								transition: "width 300ms ease",
+							}}
 						>
 							<div className="relative flex-1 min-w-0">
 								{!micExpanded && (
@@ -743,7 +754,10 @@ export function LaunchWindow() {
 							onMouseLeave={() => setIsWebcamHovered(false)}
 							onFocus={() => setIsWebcamFocused(true)}
 							onBlur={() => setIsWebcamFocused(false)}
-							style={{ width: webcamExpanded ? "240px" : "140px", transition: "width 300ms ease" }}
+							style={{
+								width: webcamExpanded ? "240px" : "140px",
+								transition: "width 300ms ease",
+							}}
 						>
 							<div className="relative flex-1 min-w-0">
 								{!webcamExpanded && (
@@ -1030,6 +1044,12 @@ export function LaunchWindow() {
 						</Tooltip>
 					</div>
 				)}
+
+				<Tooltip content={t("tooltips.openNotes")}>
+					<button className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}>
+						<NotepadText size={ICON_SIZE} className="text-white/60" />
+					</button>
+				</Tooltip>
 
 				{!recording && (
 					<Tooltip content={t("tooltips.openStudio")}>

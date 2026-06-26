@@ -20,6 +20,8 @@ export default function App() {
 	const [windowType, setWindowType] = useState(
 		() => new URLSearchParams(window.location.search).get("windowType") || "",
 	);
+	const showNotes = new URLSearchParams(window.location.search).get("showNotes") === "true";
+
 	const tEditor = useScopedT("editor");
 
 	useEffect(() => {
@@ -105,8 +107,10 @@ export default function App() {
 				);
 			default:
 				return (
-					<div className="w-full h-full bg-background text-foreground">
+					<div>
+						{/* <div className="w-full h-full bg-background text-foreground">
 						<h1>Openscreen</h1>
+					</div> */}
 					</div>
 				);
 		}
@@ -114,6 +118,7 @@ export default function App() {
 
 	return (
 		<TooltipProvider>
+			{showNotes && <NotesWindow />}
 			{content}
 			<Toaster theme="dark" />
 		</TooltipProvider>

@@ -351,10 +351,10 @@ export function createNotesWindow(): BrowserWindow {
 	});
 
 	if (VITE_DEV_SERVER_URL) {
-		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=notes");
+		win.loadURL(VITE_DEV_SERVER_URL + "?showNotes=true");
 	} else {
 		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
-			query: { windowType: "notes" },
+			query: { showNotes: "true" },
 		});
 	}
 

@@ -1,6 +1,6 @@
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
-import Layout from "@theme/Layout";
 import Heading from "@theme/Heading";
+import Layout from "@theme/Layout";
 
 import styles from "./index.module.css";
 
@@ -35,9 +35,8 @@ export default function Home() {
 						</a>
 					</div>
 					<p className={styles.note}>
-						OpenScreen is{" "}
-						<strong>not production-grade</strong>. Expect rough edges while we
-						build in the open.
+						OpenScreen is <strong>not production-grade</strong>. Expect rough edges while we build
+						in the open.
 					</p>
 				</div>
 			</header>
@@ -47,22 +46,22 @@ export default function Home() {
 					<article className={styles.feature}>
 						<h3>Native capture</h3>
 						<p>
-							ScreenCaptureKit on macOS, Windows Graphics Capture on Windows.
-							No Electron hacks, no ffmpeg screen grab.
+							ScreenCaptureKit on macOS, Windows Graphics Capture on Windows. No Electron hacks, no
+							ffmpeg screen grab.
 						</p>
 					</article>
 					<article className={styles.feature}>
 						<h3>Real editor</h3>
 						<p>
-							Multi-track timeline, captions, cursor smoothing, webcam
-							compositing — built on Pixi.js.
+							Multi-track timeline, captions, cursor smoothing, webcam compositing — built on
+							Pixi.js.
 						</p>
 					</article>
 					<article className={styles.feature}>
 						<h3>AI opt-in</h3>
 						<p>
-							Whisper runs locally for transcription. Bring your own LLM key
-							if you want captions or summaries.
+							Whisper runs locally for transcription. Bring your own LLM key if you want captions or
+							summaries.
 						</p>
 					</article>
 				</div>

@@ -1,0 +1,118 @@
+name: Diagnostic artifact
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Windows x64 diagnostic bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build native helper
+        run: npm run build:native:win
+
+      - name: Bundle diagnostic tool
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bundle = "openscreen-diagnostic-windows-x64"
+          $staging = New-Item -ItemType Directory -Path "$bundle"
+          Copy-Item scripts/diagnostic-tool/diagnostic.mjs -Destination $staging
+          Copy-Item scripts/diagnostic-tool/diagnostic.bat -Destination $staging
+          Copy-Item scripts/diagnostic-tool/README.md -Destination $staging
+          New-Item -ItemType Directory -Path "$staging/helpers/win32-x64" | Out-Null
+          Copy-Item electron/native/bin/win32-x64/wgc-capture.exe -Destination "$staging/helpers/win32-x64/"
+          Compress-Archive -Path "$staging" -DestinationPath "$bundle.zip"
+
+      - name: Smoke-test the bundle
+        shell: pwsh
+        # The actual capture path is exercised by users with a real desktop
+        # session. A non-interactive runner has no display, so WGC cannot
+        # capture frames and the helper exits before emitting [stop-timing].
+        # Validate bundle structure + CLI parser instead of running capture.
+        run: |
+          $ErrorActionPreference = "Stop"
+          Expand-Archive -Path openscreen-diagnostic-windows-x64.zip -DestinationPath smoke
+          $smoke = Resolve-Path "smoke/openscreen-diagnostic-windows-x64"
+          foreach ($rel in @(
+            "diagnostic.mjs",
+            "diagnostic.bat",
+            "README.md",
+            "helpers/win32-x64/wgc-capture.exe"
+          )) {
+            $p = Join-Path $smoke $rel
+            if (-not (Test-Path $p)) { throw "Smoke test: missing $rel" }
+          }
+          & "$smoke/diagnostic.bat" --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "diagnostic.bat --help exited $LASTEXITCODE" }
+
+      - name: Upload Windows diagnostic bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: openscreen-diagnostic-windows-x64
+          path: openscreen-diagnostic-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  build-macos:
+    name: macOS ${{ matrix.arch }} diagnostic bundle
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build native helper
+        run: npm run build:native:mac
+        env:
+          OPENSCREEN_MAC_HELPER_ARCHS: ${{ matrix.arch }}
+
+      - name: Bundle diagnostic tool
+        run: |
+          set -euo pipefail
+          arch="${{ matrix.arch }}"
+          arch_tag="darwin-$([ "$arch" = "x64" ] && echo x64 || echo arm64)"
+          bundle="openscreen-diagnostic-macos-$arch"
+          rm -rf "$bundle" "$bundle.tar.gz"
+          mkdir -p "$bundle/helpers/$arch_tag"
+          cp scripts/diagnostic-tool/diagnostic.mjs "$bundle/"
+          cp scripts/diagnostic-tool/diagnostic.sh "$bundle/"
+          cp scripts/diagnostic-tool/README.md "$bundle/"
+          cp "electron/native/bin/$arch_tag/openscreen-screencapturekit-helper" "$bundle/helpers/$arch_tag/"
+          chmod +x "$bundle/diagnostic.sh" "$bundle/helpers/$arch_tag/openscreen-screencapturekit-helper"
+          tar -czf "$bundle.tar.gz" "$bundle"
+
+      - name: Upload macOS diagnostic bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: openscreen-diagnostic-macos-${{ matrix.arch }}
+          path: openscreen-diagnostic-macos-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          retention-days: 14

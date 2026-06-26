@@ -78,20 +78,24 @@ vi.mock("@/native", () => ({
 	},
 }));
 
+const i18nState = vi.hoisted(() => ({
+	value: {
+		locale: "en",
+		setLocale: vi.fn(),
+		systemLocaleSuggestion: null as string | null,
+		acceptSystemLocaleSuggestion: vi.fn(),
+		dismissSystemLocaleSuggestion: vi.fn(),
+		resolveSystemLocaleSuggestion: vi.fn(),
+	},
+}));
+
 vi.mock("@/i18n/loader", () => ({
 	getAvailableLocales: () => ["en"],
 	getLocaleName: () => "English",
 }));
 
 vi.mock("@/contexts/I18nContext", () => ({
-	useI18n: () => ({
-		locale: "en",
-		setLocale: vi.fn(),
-		systemLocaleSuggestion: null,
-		acceptSystemLocaleSuggestion: vi.fn(),
-		dismissSystemLocaleSuggestion: vi.fn(),
-		resolveSystemLocaleSuggestion: vi.fn(),
-	}),
+	useI18n: () => i18nState.value,
 	useScopedT: () => (key: string) => {
 		const translations: Record<string, string> = {
 			"sourceSelector.defaultSourceName": "Screen",
@@ -115,6 +119,11 @@ vi.mock("@/contexts/I18nContext", () => ({
 			"tooltips.hideHUD": "Hide HUD",
 			"tooltips.closeApp": "Close App",
 			language: "Language",
+			"systemLanguagePrompt.title": "Use your system language?",
+			"systemLanguagePrompt.description":
+				"We detected English as your system language. Do you want to switch OpenScreen to English?",
+			"systemLanguagePrompt.keepDefault": "Keep current language",
+			"systemLanguagePrompt.switch": "Switch to English",
 		};
 		return translations[key] ?? key;
 	},
@@ -208,6 +217,10 @@ describe("LaunchWindow record button", () => {
 		recorderState.value.toggleRecording.mockClear();
 		selectedSourceChangedListeners = [];
 		sourceSelectorClosedListeners = [];
+		i18nState.value.systemLocaleSuggestion = null;
+		i18nState.value.acceptSystemLocaleSuggestion.mockClear();
+		i18nState.value.dismissSystemLocaleSuggestion.mockClear();
+		i18nState.value.resolveSystemLocaleSuggestion.mockClear();
 		stubElectronAPI(vi.fn(async () => null));
 	});
 
@@ -339,5 +352,86 @@ describe("LaunchWindow record button", () => {
 		await waitFor(() => {
 			expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
 		});
+	});
+});
+
+describe("LaunchWindow system language prompt", () => {
+	beforeEach(() => {
+		platformState.value = "darwin";
+		class ResizeObserver {
+			observe() {
+				return undefined;
+			}
+			unobserve() {
+				return undefined;
+			}
+			disconnect() {
+				return undefined;
+			}
+		}
+		vi.stubGlobal("ResizeObserver", ResizeObserver);
+		recorderState.value.toggleRecording.mockClear();
+		selectedSourceChangedListeners = [];
+		sourceSelectorClosedListeners = [];
+		i18nState.value.systemLocaleSuggestion = null;
+		i18nState.value.acceptSystemLocaleSuggestion.mockClear();
+		i18nState.value.dismissSystemLocaleSuggestion.mockClear();
+		i18nState.value.resolveSystemLocaleSuggestion.mockClear();
+		stubElectronAPI(vi.fn(async () => null));
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.unstubAllGlobals();
+	});
+
+	it("grows the HUD overlay tall enough to fit the prompt so its buttons stay clickable", async () => {
+		i18nState.value.systemLocaleSuggestion = "zh-CN";
+
+		renderLaunchWindow();
+
+		const prompt = await screen.findByText("Use your system language?");
+		expect(prompt).toBeInTheDocument();
+
+		// jsdom reports zero layout, so stub the prompt's box: 32px top offset
+		// (the panel's `top-8`) plus a realistic height forces the resize path
+		// to compute a window that contains the prompt's full extent.
+		const promptBox = { width: 480, height: 130 };
+		vi.spyOn(prompt.parentElement as HTMLElement, "getBoundingClientRect").mockReturnValue({
+			top: 32,
+			left: 60,
+			right: 60 + promptBox.width,
+			bottom: 32 + promptBox.height,
+			width: promptBox.width,
+			height: promptBox.height,
+			x: 60,
+			y: 32,
+			toJSON: () => ({}),
+		});
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlaySize).toHaveBeenCalled();
+		});
+
+		const sizeMock = window.electronAPI.setHudOverlaySize as unknown as {
+			mock: { calls: Array<[number, number]> };
+		};
+		const [, height] = sizeMock.mock.calls[sizeMock.mock.calls.length - 1];
+		// Must at least cover the prompt (32 + 130) plus the TOP_MARGIN slack (24).
+		expect(height).toBeGreaterThanOrEqual(32 + promptBox.height + 24);
+	});
+
+	it("routes the switch and keep-default buttons to the i18n context", async () => {
+		i18nState.value.systemLocaleSuggestion = "zh-CN";
+
+		renderLaunchWindow();
+
+		await screen.findByText("Use your system language?");
+
+		fireEvent.click(screen.getByRole("button", { name: "Switch to English" }));
+		expect(i18nState.value.acceptSystemLocaleSuggestion).toHaveBeenCalledTimes(1);
+
+		fireEvent.click(screen.getByRole("button", { name: "Keep current language" }));
+		expect(i18nState.value.dismissSystemLocaleSuggestion).toHaveBeenCalledTimes(1);
 	});
 });

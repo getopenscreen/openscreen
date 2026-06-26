@@ -148,6 +148,7 @@ export function LaunchWindow() {
 	const languageMenuPanelRef = useRef<HTMLDivElement | null>(null);
 	const hudBarRef = useRef<HTMLDivElement | null>(null);
 	const deviceSelectorRef = useRef<HTMLDivElement | null>(null);
+	const systemLocalePromptRef = useRef<HTMLDivElement | null>(null);
 	// Measured bar height, anchors the popups above the tall vertical tray so they don't overlap it.
 	const [hudBarHeight, setHudBarHeight] = useState(0);
 	const [languageMenuStyle, setLanguageMenuStyle] = useState<{
@@ -351,6 +352,19 @@ export function LaunchWindow() {
 			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
 		}
 
+		// The system-language prompt is anchored at `top-8` (32px) of the renderer; the
+		// bottom-anchored overlay only reserves enough room for the bar, so without this
+		// the prompt's buttons get clipped above the OS window's visible area (issue #30).
+		if (systemLocalePromptRef.current) {
+			const rect = systemLocalePromptRef.current.getBoundingClientRect();
+			// scrollHeight covers the un-clipped box if the viewport is currently too short.
+			const promptHeight = rect.height || systemLocalePromptRef.current.scrollHeight;
+			if (promptHeight > 0) {
+				topFromBottom = Math.max(topFromBottom, 32 + promptHeight);
+			}
+			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
+		}
+
 		setHudBarHeight((prev) => {
 			const next = Math.round(barEl.scrollHeight);
 			return Math.abs(prev - next) > 1 ? next : prev;
@@ -400,6 +414,10 @@ export function LaunchWindow() {
 	);
 	const setLanguageMenuPanelEl = useCallback(
 		(el: HTMLDivElement | null) => observeHudElement(el, languageMenuPanelRef),
+		[observeHudElement],
+	);
+	const setSystemLocalePromptEl = useCallback(
+		(el: HTMLDivElement | null) => observeHudElement(el, systemLocalePromptRef),
 		[observeHudElement],
 	);
 
@@ -621,6 +639,7 @@ export function LaunchWindow() {
 		>
 			{systemLocaleSuggestion && (
 				<div
+					ref={setSystemLocalePromptEl}
 					data-hud-interactive="true"
 					className={`fixed top-8 left-1/2 z-30 w-[calc(100vw-1rem)] max-w-[520px] -translate-x-1/2 rounded-xl border border-white/15 bg-[rgba(20,20,28,0.95)] p-3 shadow-2xl backdrop-blur-xl text-white animate-in fade-in-0 zoom-in-95 duration-200 ${styles.electronNoDrag}`}
 				>

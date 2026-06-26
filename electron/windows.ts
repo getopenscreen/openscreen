@@ -324,10 +324,12 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 // Frameless Notes Window for taking notes during a recording.
 export function createNotesWindow(): BrowserWindow {
 	const win = new BrowserWindow({
-		width: 480,
-		height: 640,
+		width: 400,
+		height: 540,
 		minWidth: 320,
 		minHeight: 400,
+		maxWidth: 640,
+		maxHeight: 720,
 		title: "Notes",
 		backgroundColor: "#09090b",
 		resizable: true,

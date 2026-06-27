@@ -423,33 +423,8 @@ let nativeMacCursorRecordingStartMs = 0;
 let nativeMacPauseStartedAtMs: number | null = null;
 let nativeMacPauseRanges: Array<{ startMs: number; endMs: number }> = [];
 let nativeMacIsPaused = false;
-// Global frame (DIP, top-left origin) of the region captured by the SCK helper. For
-// window captures this is the window's bounds, which differ from the display bounds;
-// the cursor sampler must normalize against it to avoid a fixed offset in the export.
+// Global frame of the region captured by the SCK helper (see getSelectedSourceBounds).
 let activeMacCaptureBounds: Rectangle | null = null;
-
-function parseCaptureBounds(value: unknown): Rectangle | null {
-	if (!value || typeof value !== "object") {
-		return null;
-	}
-	const candidate = value as Partial<Rectangle>;
-	if (
-		typeof candidate.x === "number" &&
-		typeof candidate.y === "number" &&
-		typeof candidate.width === "number" &&
-		typeof candidate.height === "number" &&
-		candidate.width > 0 &&
-		candidate.height > 0
-	) {
-		return {
-			x: candidate.x,
-			y: candidate.y,
-			width: candidate.width,
-			height: candidate.height,
-		};
-	}
-	return null;
-}
 
 function normalizeCursorSample(sample: unknown): CursorRecordingSample | null {
 	if (!sample || typeof sample !== "object") {
@@ -1074,10 +1049,8 @@ function tryParseNativeHelperEvent(line: string) {
 }
 
 function dispatchNativeMacHelperEvent(event: Record<string, unknown>) {
-	// The helper reports the captured region's global frame; window captures use it to
-	// normalize cursor positions instead of the full display bounds.
-	const bounds = parseCaptureBounds(event.captureBounds);
-	if (bounds) {
+	const bounds = event.captureBounds as Rectangle | undefined;
+	if (bounds && bounds.width > 0 && bounds.height > 0) {
 		activeMacCaptureBounds = bounds;
 	}
 	nativeMacCaptureEvents.emit("helper-event", event);
@@ -1861,8 +1834,6 @@ export function registerIpcHandlers(
 			nativeMacPauseStartedAtMs = null;
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
-			// Clear any stale frame from a previous recording; the helper reports the exact
-			// captured window frame in its first event, which the cursor sampler then uses.
 			activeMacCaptureBounds = null;
 
 			const cursorStartTimeMs = Date.now();

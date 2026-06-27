@@ -186,7 +186,6 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		emit([
 			"event": "ready",
 			"schemaVersion": 1,
-			"captureBounds": captureBoundsPayload(),
 		])
 		try await stream.startCapture()
 	}

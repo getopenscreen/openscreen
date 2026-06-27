@@ -1,4 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { installBrowserShims } from "./native/browserShim";
+
+installBrowserShims();
+
 import { CountdownOverlay } from "./components/launch/CountdownOverlay.tsx";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { SourceSelector } from "./components/launch/SourceSelector";
@@ -8,7 +12,11 @@ import { useScopedT } from "./contexts/I18nContext";
 import { ShortcutsProvider } from "./contexts/ShortcutsContext";
 import { loadAllCustomFonts } from "./lib/customFonts";
 
-const VideoEditor = lazy(() => import("./components/video-editor/VideoEditor"));
+const VideoEditorEntry = lazy(() =>
+	import("./components/ai-edition/AiEditionShell").then((module) => ({
+		default: module.default,
+	})),
+);
 const ShortcutsConfigDialog = lazy(() =>
 	import("./components/video-editor/ShortcutsConfigDialog").then((module) => ({
 		default: module.ShortcutsConfigDialog,
@@ -95,7 +103,7 @@ export default function App() {
 								</div>
 							}
 						>
-							<VideoEditor />
+							<VideoEditorEntry />
 							<ShortcutsConfigDialog />
 						</Suspense>
 					</ShortcutsProvider>

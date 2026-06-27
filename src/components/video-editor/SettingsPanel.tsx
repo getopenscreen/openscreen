@@ -20,7 +20,7 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
-import { type ComponentType, useCallback, useMemo, useRef, useState } from "react";
+import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
 import {
@@ -348,6 +348,8 @@ interface SettingsPanelProps {
 	onCursorThemeChange?: (theme: string) => void;
 	hasCursorData?: boolean;
 	showCursorSettings?: boolean;
+	hideInternalRail?: boolean;
+	initialMode?: SettingsPanelMode;
 }
 
 export default SettingsPanel;
@@ -484,9 +486,19 @@ export function SettingsPanel({
 	onCursorThemeChange,
 	hasCursorData = false,
 	showCursorSettings = true,
+	hideInternalRail = false,
+	initialMode,
 }: SettingsPanelProps) {
 	const t = useScopedT("settings");
-	const [activePanelMode, setActivePanelMode] = useState<SettingsPanelMode>("background");
+	const [activePanelMode, setActivePanelMode] = useState<SettingsPanelMode>(
+		initialMode ?? "background",
+	);
+
+	useEffect(() => {
+		if (initialMode) {
+			setActivePanelMode(initialMode);
+		}
+	}, [initialMode]);
 	const sourceDimensions = formatSourceDimensions(videoElement, cropRegion);
 	// Resolved URLs are for DOM rendering only. We persist the canonical
 	// `/wallpapers/wallpaperN.jpg` form from WALLPAPER_PATHS, never the file:// URL.
@@ -832,7 +844,9 @@ export function SettingsPanel({
 	return (
 		<div className="editor-inspector-shell flex min-w-0 flex-col h-full overflow-hidden">
 			<div className="flex min-h-0 flex-1">
-				<div className="settings-mode-rail flex w-11 shrink-0 flex-col items-center gap-1 border-r border-white/[0.07] bg-black/20 px-1 py-2.5">
+				<div
+					className={`settings-mode-rail flex w-11 shrink-0 flex-col items-center gap-1 border-r border-white/[0.07] bg-black/20 px-1 py-2.5 ${hideInternalRail ? "hidden" : ""}`}
+				>
 					{panelModes.map((mode) => {
 						const Icon = mode.icon;
 						const isActive = activePanelMode === mode.id && !hasTimelineSelection;

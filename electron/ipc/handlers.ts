@@ -35,6 +35,9 @@ import type {
 	ProjectFileResult,
 	ProjectPathResult,
 } from "../../src/native/contracts";
+import { getChatHistory, runChat } from "../ai-edition/chat-service";
+import { DocumentService } from "../ai-edition/document-service";
+import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
 import { RECORDINGS_DIR } from "../main";
@@ -2945,5 +2948,11 @@ export function registerIpcHandlers(
 			normalizeVideoSourcePath(videoPath ?? currentVideoPath),
 		loadCursorRecordingData: readCursorRecordingFile,
 		loadCursorTelemetry: readCursorTelemetryFile,
+		getAiEditionDocuments: () =>
+			new DocumentService(path.join(app.getPath("userData"), "projects")),
+		getAiEditionLlmConfig: () => new LlmConfigStore(app.getPath("userData")),
+		runAiEditionChat: (projectId, message) =>
+			runChat(projectId, message, new LlmConfigStore(app.getPath("userData"))),
+		getAiEditionChatHistory: (projectId) => getChatHistory(projectId),
 	});
 }

@@ -24,11 +24,13 @@ async function main() {
 		let existingMessageId = overrideMessageId;
 		if (!existingMessageId) {
 			try {
-				const pinRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/pins`, {
-					headers: { Authorization: `Bot ${botToken}` },
-				});
+				const pinRes = await fetch(
+					`https://discord.com/api/v10/channels/${channelId}/messages/pins`,
+					{ headers: { Authorization: `Bot ${botToken}` } },
+				);
 				if (pinRes.ok) {
-					const pins = await pinRes.json();
+					const data = await pinRes.json();
+					const pins = (data.items || []).map((item) => item.message).filter(Boolean);
 					const existing = pins.find((m) => m.embeds?.[0]?.title === ROADMAP_EMBED_TITLE);
 					if (existing) {
 						existingMessageId = existing.id;
@@ -195,13 +197,8 @@ async function main() {
 		// 6. Pin the message
 		try {
 			const pinRes = await fetch(
-				`https://discord.com/api/v10/channels/${channelId}/pins/${messageId}`,
-				{
-					method: "PUT",
-					headers: {
-						Authorization: `Bot ${botToken}`,
-					},
-				},
+				`https://discord.com/api/v10/channels/${channelId}/messages/pins/${messageId}`,
+				{ method: "PUT", headers: { Authorization: `Bot ${botToken}` } },
 			);
 			if (pinRes.status === 204 || pinRes.ok) {
 				info(`Message ${messageId} pinned.`);

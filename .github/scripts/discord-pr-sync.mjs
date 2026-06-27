@@ -13,6 +13,7 @@ const webhookUrl = (
 const botToken = (process.env.DISCORD_BOT_TOKEN || "").trim();
 const reviewerRoleId = (process.env.DISCORD_REVIEWER_ROLE_ID || "").trim();
 const alertWebhookUrl = (process.env.DISCORD_ALERT_WEBHOOK_URL || "").trim();
+const forumChannelId = (process.env.DISCORD_PR_FORUM_CHANNEL_ID || "").trim();
 
 const TAGS = {
 	open: "1493976692967080096",
@@ -48,6 +49,30 @@ function extractThreadId(body) {
 	if (!body) return null;
 	const match = body.match(THREAD_MARKER_REGEX);
 	return match ? match[1] : null;
+}
+
+async function validateThreadChannel(threadId) {
+	if (!botToken || !forumChannelId) return true;
+	try {
+		const res = await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
+			headers: { Authorization: `Bot ${botToken}` },
+		});
+		if (!res.ok) {
+			warning(`Thread validation failed: channel ${threadId} returned ${res.status}`);
+			return false;
+		}
+		const channel = await res.json();
+		if (channel.parent_id !== forumChannelId) {
+			warning(
+				`Thread ${threadId} parent_id=${channel.parent_id} does not match expected forum ${forumChannelId}; treating marker as untrusted.`,
+			);
+			return false;
+		}
+		return true;
+	} catch (err) {
+		warning(`Thread validation threw: ${err && err.message ? err.message : err}`);
+		return false;
+	}
 }
 
 function upsertThreadMarker(body, threadId) {
@@ -223,7 +248,7 @@ async function main() {
 				closed: false,
 			});
 			const mappedLabelTags = tagIdsFromLabels(labels);
-			const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))];
+			const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))].slice(0, 5);
 
 			const createPayload = {
 				content:
@@ -267,6 +292,11 @@ async function main() {
 			return;
 		}
 
+		if (!(await validateThreadChannel(threadId))) {
+			info("Thread ID in PR body failed channel validation; ignoring marker.");
+			return;
+		}
+
 		if (
 			context.eventName === "pull_request_target" &&
 			["edited", "labeled", "unlabeled", "ready_for_review", "converted_to_draft"].includes(action)
@@ -278,7 +308,7 @@ async function main() {
 				closed: false,
 			});
 			const mappedLabelTags = tagIdsFromLabels(labels);
-			const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))];
+			const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))].slice(0, 5);
 			await patchDiscordThread(threadId, {
 				name: trimThreadName(`PR #${number} - ${title}`),
 				...(appliedTags.length ? { applied_tags: appliedTags } : {}),
@@ -327,7 +357,10 @@ async function main() {
 					closed: true,
 				});
 				const mappedLabelTags = tagIdsFromLabels(labels);
-				const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))];
+				const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))].slice(
+					0,
+					5,
+				);
 				await patchDiscordThread(threadId, {
 					...(appliedTags.length ? { applied_tags: appliedTags } : {}),
 					...(isMerged ? { archived: true, locked: true } : {}),
@@ -376,7 +409,10 @@ async function main() {
 						closed: false,
 					});
 					const mappedLabelTags = tagIdsFromLabels(labels);
-					const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))];
+					const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))].slice(
+						0,
+						5,
+					);
 					await patchDiscordThread(threadId, {
 						...(appliedTags.length ? { applied_tags: appliedTags } : {}),
 					});

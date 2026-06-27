@@ -1,4 +1,4 @@
-import { info, setFailed } from "@actions/core";
+import { info, setFailed, warning } from "@actions/core";
 import { context, getOctokit } from "@actions/github";
 
 const spotlightWebhook = (process.env.DISCORD_SPOTLIGHT_WEBHOOK_URL || "").trim();
@@ -17,13 +17,19 @@ async function main() {
 	const repo = context.repo.repo;
 
 	const q = `repo:${owner}/${repo} is:pr is:merged merged:>=${since.substring(0, 10)}`;
-	const search = await octokit.rest.search.issuesAndPullRequests({
-		q,
-		per_page: 100,
-	});
 
+	let allItems = [];
+	try {
+		allItems = await octokit.paginate(octokit.rest.search.issuesAndPullRequests, {
+			q,
+			per_page: 100,
+		});
+	} catch (err) {
+		warning(`Search API failed: ${err && err.message ? err.message : err}`);
+		return;
+	}
 	const counter = new Map();
-	for (const item of search.data.items) {
+	for (const item of allItems) {
 		const login = item.user?.login;
 		if (!login) continue;
 		counter.set(login, (counter.get(login) || 0) + 1);
@@ -31,7 +37,7 @@ async function main() {
 
 	const ranked = [...counter.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
 
-	const totalMerged = search.data.items.length;
+	const totalMerged = allItems.length;
 	const lines = ranked.length
 		? ranked
 				.map(([user, count], idx) => `${idx + 1}. **${user}** - ${count} merged PR(s)`)

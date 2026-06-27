@@ -35,15 +35,19 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check AUR secrets
+        id: aur_secret
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
           if [[ -z "$AUR_SSH_PRIVATE_KEY" ]]; then
             echo "AUR_SSH_PRIVATE_KEY secret not set; skipping."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Find .pacman asset
+        if: steps.aur_secret.outputs.configured == 'true'
         id: asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,6 +67,7 @@ jobs:
           echo "Found pacman asset: $PACMAN_NAME"
 
       - name: Download and compute sha256
+        if: steps.aur_secret.outputs.configured == 'true'
         id: sha
         env:
           REPO: ${{ github.repository }}
@@ -76,13 +81,20 @@ jobs:
           echo "sha256=$PKG_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Setup SSH for AUR
+        if: steps.aur_secret.outputs.configured == 'true'
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          AUR_KNOWN_HOSTS: ${{ vars.AUR_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
+          if [[ -z "$AUR_KNOWN_HOSTS" ]]; then
+            echo "::error::AUR_KNOWN_HOSTS variable is required for secure AUR SSH"
+            exit 1
+          fi
           mkdir -p ~/.ssh
           echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur_key
           chmod 600 ~/.ssh/aur_key
+          printf '%s\n' "$AUR_KNOWN_HOSTS" > ~/.ssh/aur_known_hosts
           cat >> ~/.ssh/config <<'SSHCONF'
           Host aur.archlinux.org
             HostName aur.archlinux.org
@@ -91,16 +103,28 @@ jobs:
             StrictHostKeyChecking yes
             UserKnownHostsFile ~/.ssh/aur_known_hosts
           SSHCONF
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/aur_known_hosts 2>/dev/null
 
       - name: Clone AUR repository
+        if: steps.aur_secret.outputs.configured == 'true'
         env:
           PACKAGE: ${{ vars.AUR_PACKAGE_NAME }}
         run: |
           set -euo pipefail
           git clone "ssh://aur@aur.archlinux.org/${PACKAGE}.git" aur-repo
 
+      - name: Install makepkg
+        if: steps.aur_secret.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pacman-package-manager 2>/dev/null || \
+            sudo apt-get install -y -qq arch-install-scripts 2>/dev/null || {
+              echo "::error::Unable to install makepkg. Install arch-install-scripts or pacman-package-manager."
+              exit 1
+            }
+
       - name: Update PKGBUILD and .SRCINFO
+        if: steps.aur_secret.outputs.configured == 'true'
         working-directory: aur-repo
         env:
           VERSION: ${{ steps.meta.outputs.version }}
@@ -113,14 +137,11 @@ jobs:
           sed -i -E "s|^pkgver=.*|pkgver=${VERSION}|" PKGBUILD
           sed -i -E "s|^pkgrel=.*|pkgrel=1|" PKGBUILD
           sed -i -E "s|^sha256sums=\('[^']*'|sha256sums=('${SHA256}'|" PKGBUILD
-
-          if makepkg --printsrcinfo > .SRCINFO 2>/dev/null; then
-            echo "Updated .SRCINFO"
-          else
-            echo "::warning::makepkg not available; .SRCINFO left as-is"
-          fi
+          makepkg --printsrcinfo > .SRCINFO
+          echo "Updated .SRCINFO"
 
       - name: Commit and push
+        if: steps.aur_secret.outputs.configured == 'true'
         working-directory: aur-repo
         env:
           VERSION: ${{ steps.meta.outputs.version }}

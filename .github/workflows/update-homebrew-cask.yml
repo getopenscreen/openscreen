@@ -48,15 +48,18 @@ jobs:
           TIMEOUT_MINUTES=12
           POLL_INTERVAL=30
           MAX_ATTEMPTS=$(( (TIMEOUT_MINUTES * 60) / POLL_INTERVAL ))
+          VERSION="${TAG#v}"
+          ARM_DMG="Openscreen-Mac-arm64-${VERSION}.dmg"
+          X64_DMG="Openscreen-Mac-x64-${VERSION}.dmg"
 
           for i in $(seq 1 $MAX_ATTEMPTS); do
-            ASSETS=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)
-            COUNT=$(echo "$ASSETS" | grep -ciE '\.dmg$' || true)
-            if [[ "$COUNT" -ge 2 ]]; then
-              echo "Both DMG assets present (found ${COUNT} .dmg files)"
+            if gh release view "$TAG" --repo "$REPO" --json assets --jq \
+              --arg arm "$ARM_DMG" --arg x64 "$X64_DMG" \
+              '[.assets[] | select(.name == $arm or .name == $x64)] | length' 2>/dev/null | grep -q '^2$'; then
+              echo "Both DMG assets present: $ARM_DMG and $X64_DMG"
               exit 0
             fi
-            echo "Waiting for DMG assets... (attempt $i/$MAX_ATTEMPTS, found ${COUNT:-0} so far)"
+            echo "Waiting for DMG assets... (attempt $i/$MAX_ATTEMPTS)"
             sleep $POLL_INTERVAL
           done
           echo "::warning::Timeout after ${TIMEOUT_MINUTES}min waiting for DMG assets. Proceeding anyway."

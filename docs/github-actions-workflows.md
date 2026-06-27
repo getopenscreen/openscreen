@@ -2,7 +2,7 @@
 
 ## Overview
 
-The repository uses 13 workflow files across four functional tiers. This document describes the triggers, job dependencies, and artifact flow for each tier.
+The repository uses 12 workflow files across four functional tiers. This document describes the triggers, job dependencies, and artifact flow for each tier.
 
 ## Workflow dependency graph
 

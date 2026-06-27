@@ -35,6 +35,7 @@ import type {
 	ProjectFileResult,
 	ProjectPathResult,
 } from "../../src/native/contracts";
+import { mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
 import { RECORDINGS_DIR } from "../main";
 import { createCursorRecordingSession } from "../native-bridge/cursor/recording/factory";
@@ -412,7 +413,7 @@ let nativeWindowsCursorRecordingStartMs = 0;
 let nativeWindowsPauseStartedAtMs: number | null = null;
 let nativeWindowsPauseRanges: Array<{ startMs: number; endMs: number }> = [];
 let nativeWindowsIsPaused = false;
-const NATIVE_WINDOWS_CAPTURE_STOP_TIMEOUT_MS = 15_000;
+const NATIVE_WINDOWS_CAPTURE_STOP_TIMEOUT_MS = 60_000;
 let nativeMacCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeMacCaptureOutput = "";
 let nativeMacCaptureTargetPath: string | null = null;
@@ -2893,6 +2894,9 @@ export function registerIpcHandlers(
 
 			if (canceled || !filePath) return { success: false, canceled: true };
 
+			const HELPER_OUTPUT_MAX_BYTES = 64 * 1024;
+			const tail = (s: string, max: number) => (s.length <= max ? s : s.slice(s.length - max));
+
 			const diagnostic = {
 				timestamp: new Date().toISOString(),
 				appVersion: app.getVersion(),
@@ -2908,6 +2912,11 @@ export function registerIpcHandlers(
 				stack: payload.stack,
 				projectState: payload.projectState,
 				recentLogs: payload.logs,
+				helperOutput: {
+					windows: tail(nativeWindowsCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
+					mac: tail(nativeMacCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
+				},
+				mainProcessLogs: mainLogBuffer.snapshot(),
 			};
 
 			try {

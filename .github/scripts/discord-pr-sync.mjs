@@ -51,8 +51,13 @@ function extractThreadId(body) {
 	return match ? match[1] : null;
 }
 
-async function validateThreadChannel(threadId) {
-	if (!botToken || !forumChannelId) return true;
+async function validateThreadChannel(threadId, prNumber) {
+	if (!botToken) {
+		warning(
+			"DISCORD_BOT_TOKEN not set; cannot validate thread channel ownership. Rejecting marker.",
+		);
+		return false;
+	}
 	try {
 		const res = await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
 			headers: { Authorization: `Bot ${botToken}` },
@@ -62,9 +67,16 @@ async function validateThreadChannel(threadId) {
 			return false;
 		}
 		const channel = await res.json();
-		if (channel.parent_id !== forumChannelId) {
+		if (forumChannelId && channel.parent_id !== forumChannelId) {
 			warning(
 				`Thread ${threadId} parent_id=${channel.parent_id} does not match expected forum ${forumChannelId}; treating marker as untrusted.`,
+			);
+			return false;
+		}
+		const expectedPrefix = `PR #${prNumber} -`;
+		if (!channel.name || !channel.name.startsWith(expectedPrefix)) {
+			warning(
+				`Thread ${threadId} name "${channel.name}" does not match expected prefix "${expectedPrefix}"; treating marker as untrusted.`,
 			);
 			return false;
 		}
@@ -292,7 +304,7 @@ async function main() {
 			return;
 		}
 
-		if (!(await validateThreadChannel(threadId))) {
+		if (!(await validateThreadChannel(threadId, number))) {
 			info("Thread ID in PR body failed channel validation; ignoring marker.");
 			return;
 		}

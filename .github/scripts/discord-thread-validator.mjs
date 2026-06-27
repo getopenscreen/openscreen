@@ -7,10 +7,15 @@ export async function validateThreadChannel(threadId, prNumber, { botToken, foru
 		);
 		return false;
 	}
+	const VALIDATION_TIMEOUT_MS = 5_000;
 	try {
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), VALIDATION_TIMEOUT_MS);
 		const res = await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
 			headers: { Authorization: `Bot ${botToken}` },
+			signal: controller.signal,
 		});
+		clearTimeout(timeout);
 		if (!res.ok) {
 			warning(`Thread validation failed: channel ${threadId} returned ${res.status}`);
 			return false;

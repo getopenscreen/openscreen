@@ -83,6 +83,25 @@ describe("validateThreadChannel", () => {
 		expect(result).toBe(false);
 	});
 
+	it("passes an AbortSignal with timeout to fetch", async () => {
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				id: "777",
+				parent_id: "888888888888888888",
+				name: `PR #${number} - gated`,
+			}),
+		});
+
+		await validateThreadChannel("777", number, {
+			botToken,
+			forumChannelId: "888888888888888888",
+		});
+
+		const call = vi.mocked(fetch).mock.calls[0];
+		expect(call[1].signal).toBeInstanceOf(AbortSignal);
+	});
+
 	it("returns false when fetch throws", async () => {
 		vi.mocked(fetch).mockRejectedValue(new Error("network error"));
 

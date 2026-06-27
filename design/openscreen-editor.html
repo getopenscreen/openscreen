@@ -1,0 +1,1116 @@
+
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1024" />
+  <title>OpenScreen — Éditeur</title>
+  <style>
+    :root {
+      --bg:           #0c0e12;
+      --surface-1:    #13161c;
+      --surface-2:    #181c23;
+      --surface-3:    #1f242d;
+      --surface-hi:   #262c36;
+      --border:       #232831;
+      --border-soft:  #1c2027;
+      --border-hi:    #353c47;
+      --fg:           #e8eaed;
+      --fg-2:         #c5c9d1;
+      --muted:        #8a909a;
+      --meta:         #5c6370;
+      --dim:          #3a414c;
+      --accent:        #2dd4bf;
+      --accent-hi:     #5eead4;
+      --accent-lo:     #14b8a6;
+      --accent-on:     #07120f;
+      --accent-soft:   color-mix(in oklch, var(--accent) 14%, transparent);
+      --accent-glow:   color-mix(in oklch, var(--accent) 35%, transparent);
+      --warn:          #f59e0b;
+      --warn-soft:     color-mix(in oklch, var(--warn) 14%, transparent);
+      --danger:        #ef4444;
+      --danger-soft:   color-mix(in oklch, var(--danger) 12%, transparent);
+      --light-red:     #ff5f57;
+      --light-yellow:  #febc2e;
+      --light-green:   #28c840;
+      --pal-ink:       #0c0e12;
+      --pal-charcoal:  #18181b;
+      --pal-slate:     #45515e;
+      --pal-stone:     #e5e7eb;
+      --pal-blue:      #1456f0;
+      --pal-mint:      #2dd4bf;
+      --pal-forest:    #16a34a;
+      --pal-amber:     #f59e0b;
+      --pal-pink:      #ea5ec1;
+      --pal-wine:      #c8324e;
+      --pal-paper:     #ffffff;
+      --pal-iris:      #8b5cf6;
+      --bg-grad-1: linear-gradient(180deg, #c8324e 0%, #8a1d36 100%);
+      --bg-grad-2: linear-gradient(180deg, #2563eb 0%, #1456f0 100%);
+      --bg-grad-3: linear-gradient(180deg, #ea5ec1 0%, #c2185b 100%);
+      --bg-grad-4: linear-gradient(180deg, #f97316 0%, #b91c1c 100%);
+      --bg-grad-5: linear-gradient(180deg, #16a34a 0%, #065f46 100%);
+      --bg-grad-6: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%);
+      --bg-grad-7: linear-gradient(180deg, #0ea5e9 0%, #1e40af 100%);
+      --bg-grad-8: linear-gradient(180deg, #f59e0b 0%, #b45309 100%);
+      --bg-grad-9: linear-gradient(180deg, #475569 0%, #1e293b 100%);
+      --bg-grad-10: linear-gradient(180deg, #ec4899 0%, #831843 100%);
+      --font-display: "Outfit", "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-body:    "DM Sans", "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+      --fs-app:       13px;
+      --fs-app-sm:    12px;
+      --fs-app-lg:    14px;
+      --fs-title:     18px;
+      --fs-section:   11px;
+      --fs-modal:     22px;
+      --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+      --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-pill: 9999px;
+      --elev-card: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px -12px rgba(0,0,0,0.6);
+      --elev-pop:  0 12px 32px -8px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.04) inset;
+      --elev-tool: 0 0 0 1px var(--border-hi), 0 4px 12px -4px rgba(0,0,0,0.5);
+      --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-soft);
+      --motion-fast: 120ms;
+      --motion-base: 180ms;
+      --ease:        cubic-bezier(0.2, 0, 0, 1);
+      --titlebar-h:  36px;
+      --menubar-h:   28px;
+      --toolbar-h:   48px;
+      --statusbar-h: 26px;
+      --siderail-w:  60px;
+      --sidepanel-w: 288px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: var(--font-body); font-size: var(--fs-app); line-height: 1.45;
+      -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+      overflow: hidden; user-select: none;
+    }
+    img, svg { display: block; max-width: 100%; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+    input, select, textarea { font: inherit; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+    kbd {
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+      padding: 1px 6px; border-radius: var(--r-xs);
+      background: var(--surface-3); color: var(--fg-2);
+      border: 1px solid var(--border); box-shadow: 0 1px 0 var(--dim);
+      min-width: 18px; text-align: center; display: inline-block;
+    }
+    .app {
+      display: grid;
+      grid-template-rows: var(--titlebar-h) var(--menubar-h) var(--toolbar-h) 1fr var(--statusbar-h);
+      height: 100vh; min-width: 1024px;
+    }
+    .titlebar {
+      display: flex; align-items: center; gap: var(--sp-3);
+      padding-inline: var(--sp-4);
+      background: var(--surface-1);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .titlebar .lights { display: inline-flex; gap: 8px; }
+    .titlebar .lights span { width: 12px; height: 12px; border-radius: 50%; background: var(--dim); border: 1px solid rgba(0,0,0,0.4); }
+    .titlebar .lights span.r { background: var(--light-red); }
+    .titlebar .lights span.y { background: var(--light-yellow); }
+    .titlebar .lights span.g { background: var(--light-green); }
+    .titlebar .brand {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: var(--font-display);
+      font-size: var(--fs-title); font-weight: 500;
+      letter-spacing: -0.005em; color: var(--fg);
+    }
+    .titlebar .brand-mark {
+      width: 18px; height: 18px; border-radius: 5px;
+      background: radial-gradient(circle at 30% 30%, var(--accent-hi), var(--accent-lo) 80%);
+      box-shadow: 0 0 12px var(--accent-soft);
+    }
+    .titlebar .sep { width: 1px; height: 16px; background: var(--border); }
+    .titlebar .project { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-app); color: var(--fg-2); }
+    .titlebar .project-name { font-family: var(--font-body); color: var(--fg); font-weight: 500; }
+    .titlebar .saved {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+      color: var(--muted); padding: 2px 8px;
+      border-radius: var(--r-pill); background: var(--surface-2);
+    }
+    .titlebar .saved .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-soft); }
+    .titlebar .right { margin-left: auto; display: inline-flex; align-items: center; gap: var(--sp-2); }
+    .titlebar .icon-btn {
+      width: 28px; height: 28px;
+      display: grid; place-items: center;
+      border-radius: var(--r-sm); color: var(--muted);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .titlebar .icon-btn:hover { background: var(--surface-3); color: var(--fg); }
+    .menubar {
+      display: flex; align-items: center; gap: 2px;
+      padding-inline: var(--sp-3);
+      background: var(--surface-1);
+      border-bottom: 1px solid var(--border-soft);
+      font-size: var(--fs-app);
+    }
+    .menubar button {
+      padding: 4px 10px; border-radius: var(--r-sm);
+      color: var(--fg-2); font-size: var(--fs-app); font-weight: 400;
+    }
+    .menubar button:hover { background: var(--surface-3); color: var(--fg); }
+    .menubar .spacer { flex: 1; }
+    .menubar .lang-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: var(--r-pill);
+      background: var(--surface-2); color: var(--muted);
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+    }
+    .toolbar {
+      display: flex; align-items: center; gap: var(--sp-3);
+      padding-inline: var(--sp-4);
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .toolbar .rec-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 14px 7px 12px; border-radius: var(--r-pill);
+      background: var(--danger-soft); color: var(--fg);
+      font-weight: 500; font-size: var(--fs-app);
+      border: 1px solid color-mix(in oklch, var(--danger) 35%, transparent);
+      transition: background var(--motion-fast) var(--ease);
+    }
+    .toolbar .rec-btn:hover { background: color-mix(in oklch, var(--danger) 22%, transparent); }
+    .toolbar .rec-btn .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 8px color-mix(in oklch, var(--danger) 60%, transparent);
+    }
+    .toolbar .rec-btn[aria-pressed="true"] {
+      background: var(--danger); color: white; border-color: var(--danger);
+    }
+    .toolbar .rec-btn[aria-pressed="true"] .dot {
+      background: white; box-shadow: none;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .toolbar .tbtn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 12px; border-radius: var(--r-sm);
+      background: transparent; color: var(--fg-2);
+      font-size: var(--fs-app); font-weight: 500;
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .toolbar .tbtn:hover { background: var(--surface-3); color: var(--fg); }
+    .toolbar .tbtn svg { width: 15px; height: 15px; opacity: 0.85; }
+    .toolbar .tbtn .kbd { font-size: 10px; padding: 0 5px; min-width: auto; }
+    .toolbar .divider { width: 1px; height: 22px; background: var(--border); margin-inline: var(--sp-1); }
+    .toolbar .spacer { flex: 1; }
+    .toolbar .zoom-group {
+      display: inline-flex; align-items: center;
+      background: var(--surface-1); border: 1px solid var(--border);
+      border-radius: var(--r-md); overflow: hidden;
+    }
+    .toolbar .zoom-group button {
+      padding: 6px 10px; color: var(--muted);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .toolbar .zoom-group button:hover { background: var(--surface-3); color: var(--fg); }
+    .toolbar .zoom-group .zoom-readout {
+      padding: 6px 12px; font-family: var(--font-mono);
+      font-size: var(--fs-app-sm); color: var(--fg-2);
+      border-inline: 1px solid var(--border); min-width: 60px; text-align: center;
+    }
+    .workspace {
+      display: grid; grid-template-columns: var(--siderail-w) 1fr var(--sidepanel-w);
+      min-height: 0;
+    }
+    .siderail {
+      background: var(--surface-1);
+      border-right: 1px solid var(--border-soft);
+      padding: var(--sp-3) 0;
+      display: flex; flex-direction: column; gap: 2px; align-items: center;
+    }
+    .siderail .tool {
+      width: 44px; height: 40px;
+      display: grid; place-items: center;
+      border-radius: var(--r-sm); color: var(--muted);
+      position: relative;
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .siderail .tool:hover { background: var(--surface-3); color: var(--fg); }
+    .siderail .tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-hi); }
+    .siderail .tool[aria-pressed="true"]::before {
+      content: ""; position: absolute; left: -10px; top: 8px; bottom: 8px;
+      width: 2px; border-radius: 0 2px 2px 0;
+      background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .siderail .tool svg { width: 18px; height: 18px; }
+    .siderail .spacer { flex: 1; }
+    .main { display: grid; grid-template-rows: 1fr auto; min-height: 0; min-width: 0; }
+    .preview { background: var(--bg); display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
+    .preview-head {
+      display: flex; align-items: center; gap: var(--sp-3);
+      padding: var(--sp-3) var(--sp-4);
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--surface-1);
+    }
+    .preview-head .crumb {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font-mono); font-size: var(--fs-app-sm); color: var(--muted);
+    }
+    .preview-head .crumb .sep { color: var(--dim); }
+    .preview-head .crumb .name { color: var(--fg); }
+    .preview-head .right { margin-left: auto; display: inline-flex; gap: 6px; }
+    .preview-head .seg {
+      display: inline-flex; gap: 0;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--r-md); padding: 2px;
+    }
+    .preview-head .seg button {
+      padding: 4px 10px; border-radius: var(--r-sm);
+      font-family: var(--font-mono); font-size: var(--fs-app-sm); color: var(--muted);
+    }
+    .preview-head .seg button[aria-pressed="true"] {
+      background: var(--surface-hi); color: var(--fg);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
+    }
+    .preview-stage {
+      position: relative; display: grid; place-items: center;
+      padding: var(--sp-6); min-height: 0;
+      background: radial-gradient(ellipse at 50% 50%, var(--surface-1) 0%, var(--bg) 80%);
+    }
+    .preview-frame {
+      position: relative; max-width: 92%; max-height: 92%;
+      aspect-ratio: 16 / 9; border-radius: var(--r-md);
+      background: var(--bg-grad-3); background-size: cover;
+      box-shadow: 0 24px 60px -20px rgba(0,0,0,0.7);
+      overflow: hidden;
+      transition: background var(--motion-base) var(--ease), aspect-ratio var(--motion-base) var(--ease);
+    }
+    .preview-frame[data-fmt="9x16"] { aspect-ratio: 9 / 16; max-width: 360px; }
+    .preview-frame[data-fmt="1x1"] { aspect-ratio: 1 / 1; }
+    .preview-frame .veil {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.45) 100%);
+    }
+    .preview-frame .play-glyph {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      opacity: 0; transition: opacity var(--motion-base) var(--ease);
+    }
+    .preview-frame:hover .play-glyph { opacity: 1; }
+    .preview-frame .play-glyph span {
+      width: 56px; height: 56px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: rgba(0,0,0,0.45); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .preview-frame .play-glyph span::after {
+      content: ""; width: 0; height: 0;
+      border-left: 16px solid white;
+      border-top: 9px solid transparent; border-bottom: 9px solid transparent;
+      margin-left: 4px;
+    }
+    .preview-frame .timecode {
+      position: absolute; left: 12px; bottom: 12px;
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+      color: white; background: rgba(0,0,0,0.55);
+      padding: 4px 8px; border-radius: var(--r-xs); letter-spacing: 0.02em;
+    }
+    .preview-frame .resolution {
+      position: absolute; right: 12px; bottom: 12px;
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+      color: rgba(255,255,255,0.7); background: rgba(0,0,0,0.45);
+      padding: 4px 8px; border-radius: var(--r-xs);
+    }
+    .preview-frame .grid-overlay {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 25% 25%;
+      opacity: 0; transition: opacity var(--motion-base) var(--ease);
+      pointer-events: none;
+    }
+    .preview-frame.is-grid .grid-overlay { opacity: 1; }
+    .preview-foot {
+      display: flex; align-items: center; gap: var(--sp-4);
+      padding: var(--sp-3) var(--sp-4);
+      background: var(--surface-1);
+      border-top: 1px solid var(--border-soft);
+    }
+    .preview-foot .play-btn {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: var(--accent); color: var(--accent-on);
+      transition: background var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease);
+    }
+    .preview-foot .play-btn:hover { background: var(--accent-hi); }
+    .preview-foot .play-btn:active { transform: scale(0.96); }
+    .preview-foot .play-btn svg { width: 14px; height: 14px; }
+    .preview-foot .scrubber {
+      flex: 1; height: 4px;
+      background: var(--surface-3); border-radius: var(--r-pill);
+      position: relative; cursor: pointer;
+    }
+    .preview-foot .scrubber .fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 22%; background: var(--accent); border-radius: var(--r-pill);
+    }
+    .preview-foot .scrubber .knob {
+      position: absolute; top: 50%; left: 22%;
+      transform: translate(-50%, -50%);
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+    .preview-foot .time {
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+      color: var(--fg-2); letter-spacing: 0.02em;
+      min-width: 110px; text-align: right;
+    }
+    .preview-foot .time .total { color: var(--muted); }
+    .timeline-wrap {
+      background: var(--surface-1);
+      border-top: 1px solid var(--border);
+      display: grid; grid-template-rows: auto auto 1fr;
+    }
+    .timeline-toolbar {
+      display: flex; align-items: center; gap: var(--sp-3);
+      padding: var(--sp-2) var(--sp-4);
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--surface-1);
+    }
+    .timeline-toolbar .hint {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: var(--font-mono); font-size: var(--fs-app-sm); color: var(--muted);
+    }
+    .timeline-toolbar .hint .kbd { font-size: 10px; padding: 0 5px; }
+    .timeline-toolbar .right { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+    .timeline-toolbar .zoom-pill {
+      display: inline-flex; align-items: center; gap: 0;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--r-md);
+    }
+    .timeline-toolbar .zoom-pill button {
+      padding: 4px 8px; color: var(--muted);
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+    }
+    .timeline-toolbar .zoom-pill button[aria-pressed="true"] {
+      background: var(--accent-soft); color: var(--accent-hi);
+    }
+    .timeline-toolbar .zoom-pill .zoom-label {
+      padding: 4px 10px; color: var(--fg-2);
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+      border-inline: 1px solid var(--border);
+    }
+    .timeline-ruler {
+      display: grid; grid-template-columns: 120px 1fr;
+      border-bottom: 1px solid var(--border-soft);
+      font-family: var(--font-mono); font-size: var(--fs-app-sm); color: var(--meta);
+    }
+    .timeline-ruler .corner {
+      padding: 6px var(--sp-3);
+      background: var(--surface-1); border-right: 1px solid var(--border-soft);
+      display: flex; align-items: center; gap: 6px;
+      color: var(--muted); font-family: var(--font-body); font-size: var(--fs-app-sm);
+    }
+    .timeline-ruler .marks { position: relative; height: 24px; background: var(--surface-1); }
+    .timeline-ruler .marks .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border-soft); }
+    .timeline-ruler .marks .tick.major { background: var(--border); }
+    .timeline-ruler .marks .tick-label { position: absolute; top: 4px; transform: translateX(-50%); color: var(--muted); }
+    .timeline-body { position: relative; min-height: 180px; background: var(--surface-1); }
+    .track {
+      display: grid; grid-template-columns: 120px 1fr;
+      height: 44px; border-bottom: 1px solid var(--border-soft);
+    }
+    .track:last-child { border-bottom: 0; }
+    .track-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 var(--sp-3);
+      border-right: 1px solid var(--border-soft);
+      background: var(--surface-1);
+      font-size: var(--fs-app-sm); color: var(--fg-2);
+    }
+    .track-head .icon { width: 18px; height: 18px; display: grid; place-items: center; color: var(--muted); }
+    .track-head .icon svg { width: 14px; height: 14px; }
+    .track-head .name { font-weight: 500; color: var(--fg-2); }
+    .track-head .count {
+      margin-left: auto; font-family: var(--font-mono); font-size: 10px;
+      color: var(--meta); background: var(--surface-2);
+      padding: 1px 6px; border-radius: var(--r-pill);
+    }
+    .track-lane {
+      position: relative;
+      background:
+        repeating-linear-gradient(90deg, transparent 0 calc(100% / 8 - 1px), var(--border-soft) calc(100% / 8 - 1px) calc(100% / 8));
+      background-size: calc(100% / 8 * 1) 100%;
+    }
+    .clip {
+      position: absolute; top: 6px; bottom: 6px;
+      border-radius: var(--r-sm);
+      display: flex; align-items: center; gap: 6px;
+      padding: 0 10px;
+      font-size: var(--fs-app-sm); color: var(--fg); cursor: pointer;
+      transition: box-shadow var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
+    }
+    .clip .icon { width: 14px; height: 14px; display: grid; place-items: center; color: rgba(255,255,255,0.7); flex: none; }
+    .clip .icon svg { width: 12px; height: 12px; }
+    .clip .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .clip .handle { position: absolute; top: 0; bottom: 0; width: 4px; background: rgba(255,255,255,0.18); cursor: ew-resize; }
+    .clip .handle.l { left: 0; border-radius: var(--r-sm) 0 0 var(--r-sm); }
+    .clip .handle.r { right: 0; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+    .clip.video {
+      background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 35%, var(--surface-3)) 0%, color-mix(in oklch, var(--accent) 22%, var(--surface-3)) 100%);
+      border: 1px solid color-mix(in oklch, var(--accent) 50%, transparent);
+    }
+    .clip.video .icon { color: var(--accent-hi); }
+    .clip.trim {
+      background: repeating-linear-gradient(45deg,
+        color-mix(in oklch, var(--warn) 18%, var(--surface-3)) 0 6px,
+        color-mix(in oklch, var(--warn) 10%, var(--surface-3)) 6px 12px);
+      border: 1px dashed color-mix(in oklch, var(--warn) 55%, transparent);
+      color: var(--fg-2);
+    }
+    .clip.annotation {
+      background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 28%, var(--surface-3)) 0%, color-mix(in oklch, var(--accent) 16%, var(--surface-3)) 100%);
+      border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+    }
+    .clip.speed {
+      background: var(--surface-3); border: 1px solid var(--border-hi);
+      color: var(--fg-2); font-family: var(--font-mono); justify-content: center;
+    }
+    .clip.speed .icon { color: var(--accent-hi); }
+    .clip.is-selected {
+      border-color: var(--accent) !important;
+      box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-soft);
+      z-index: 2;
+    }
+    .playhead {
+      position: absolute; top: 0; bottom: 0;
+      width: 2px; background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      pointer-events: none; z-index: 5;
+      transform: translateX(calc(var(--ph, 0) * 1%));
+    }
+    .playhead::before {
+      content: ""; position: absolute;
+      top: -6px; left: 50%; transform: translateX(-50%);
+      width: 12px; height: 12px; background: var(--accent);
+      clip-path: polygon(50% 100%, 0 0, 100% 0);
+    }
+    .sidepanel {
+      background: var(--surface-1);
+      border-left: 1px solid var(--border-soft);
+      display: grid; grid-template-rows: auto 1fr; min-height: 0;
+    }
+    .sidepanel-head {
+      display: flex; align-items: center; gap: var(--sp-2);
+      padding: var(--sp-4);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .sidepanel-head h2 {
+      font-family: var(--font-display);
+      font-size: var(--fs-app-lg); font-weight: 500;
+      letter-spacing: -0.005em; color: var(--fg); margin: 0;
+    }
+    .sidepanel-head .help {
+      margin-left: auto; width: 22px; height: 22px;
+      display: grid; place-items: center; border-radius: 50%;
+      background: var(--surface-2); color: var(--muted);
+      font-family: var(--font-mono); font-size: 10px;
+    }
+    .sidepanel-body { overflow-y: auto; padding: var(--sp-4); }
+    .sidepanel-body::-webkit-scrollbar { width: 8px; }
+    .sidepanel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--r-pill); }
+    .sidepanel-body::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+    .seg-tabs {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--r-md); padding: 3px; gap: 2px;
+    }
+    .seg-tabs button {
+      padding: 6px 0; font-size: var(--fs-app); font-weight: 500;
+      color: var(--muted); border-radius: var(--r-sm);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .seg-tabs button[aria-pressed="true"] {
+      background: var(--surface-hi); color: var(--fg);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.3);
+    }
+    .seg-tabs button:hover:not([aria-pressed="true"]) { color: var(--fg-2); }
+    .section-label {
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: var(--font-body);
+      font-size: var(--fs-section); font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--muted); margin: 0;
+    }
+    .section-label .meta {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--meta); text-transform: none;
+      letter-spacing: 0.02em; font-weight: 400;
+    }
+    .upload-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 10px; margin-top: var(--sp-3);
+      border: 1px dashed var(--border-hi); border-radius: var(--r-md);
+      color: var(--fg-2); font-size: var(--fs-app); font-weight: 500;
+      background: transparent;
+      transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .upload-btn:hover { border-color: var(--accent); color: var(--accent-hi); background: var(--accent-soft); }
+    .upload-btn svg { width: 14px; height: 14px; }
+    .thumb-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: var(--sp-2); margin-top: var(--sp-3);
+    }
+    .thumb {
+      position: relative; aspect-ratio: 4 / 3;
+      border-radius: var(--r-sm); cursor: pointer; overflow: hidden;
+      border: 1px solid transparent;
+      transition: border-color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease);
+    }
+    .thumb:hover { transform: translateY(-1px); }
+    .thumb.is-active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 12px var(--accent-soft); }
+    .thumb.is-active::after {
+      content: ""; position: absolute; top: 6px; right: 6px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); display: grid; place-items: center;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .thumb[data-g="1"] { background: var(--bg-grad-1); }
+    .thumb[data-g="2"] { background: var(--bg-grad-2); }
+    .thumb[data-g="3"] { background: var(--bg-grad-3); }
+    .thumb[data-g="4"] { background: var(--bg-grad-4); }
+    .thumb[data-g="5"] { background: var(--bg-grad-5); }
+    .thumb[data-g="6"] { background: var(--bg-grad-6); }
+    .thumb[data-g="7"] { background: var(--bg-grad-7); }
+    .thumb[data-g="8"] { background: var(--bg-grad-8); }
+    .thumb[data-g="9"] { background: var(--bg-grad-9); }
+    .thumb[data-g="10"] { background: var(--bg-grad-10); }
+    .color-grid {
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      gap: var(--sp-2); margin-top: var(--sp-3);
+    }
+    .swatch {
+      aspect-ratio: 1 / 1; border-radius: var(--r-sm);
+      cursor: pointer; border: 1px solid transparent;
+      transition: border-color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease);
+    }
+    .swatch:hover { transform: translateY(-1px); }
+    .swatch.is-active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 10px var(--accent-soft); }
+    .gradient-custom {
+      display: grid; gap: var(--sp-2); margin-top: var(--sp-3);
+      padding: var(--sp-3);
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--r-md);
+    }
+    .gradient-custom .row { display: flex; align-items: center; gap: var(--sp-2); }
+    .gradient-custom label {
+      font-family: var(--font-mono); font-size: var(--fs-app-sm);
+      color: var(--muted); min-width: 56px;
+    }
+    .gradient-custom input[type="color"] {
+      width: 28px; height: 28px;
+      border: 1px solid var(--border); border-radius: var(--r-xs);
+      background: var(--surface-1); cursor: pointer;
+    }
+    .gradient-custom input[type="range"] { flex: 1; accent-color: var(--accent); }
+    .gradient-preview {
+      height: 56px; border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+      background: linear-gradient(135deg, var(--pal-blue) 0%, var(--pal-pink) 100%);
+    }
+    .format-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: var(--sp-2); margin-top: var(--sp-3);
+    }
+    .format-tile {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      padding: 10px 6px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      color: var(--muted); font-size: var(--fs-app-sm); font-weight: 500;
+      transition: border-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
+    }
+    .format-tile:hover { color: var(--fg-2); border-color: var(--border-hi); }
+    .format-tile[aria-pressed="true"] {
+      border-color: var(--accent); background: var(--accent-soft); color: var(--accent-hi);
+    }
+    .format-tile .icon { width: 28px; height: 20px; border: 1.5px solid currentColor; border-radius: 3px; }
+    .format-tile[data-fmt="16x9"] .icon { width: 28px; }
+    .format-tile[data-fmt="9x16"] .icon { width: 14px; height: 24px; }
+    .format-tile[data-fmt="1x1"] .icon { width: 20px; height: 20px; }
+    .field {
+      display: flex; align-items: center; gap: var(--sp-2);
+      padding: 8px 10px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      font-size: var(--fs-app-sm);
+    }
+    .field input[type="range"] { flex: 1; accent-color: var(--accent); }
+    .field .num { font-family: var(--font-mono); color: var(--fg-2); min-width: 36px; text-align: right; }
+    .statusbar {
+      display: flex; align-items: center; gap: var(--sp-3);
+      padding: 0 var(--sp-4);
+      background: var(--surface-1);
+      border-top: 1px solid var(--border-soft);
+      font-family: var(--font-mono); font-size: var(--fs-app-sm); color: var(--muted);
+    }
+    .statusbar .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 1px 8px; border-radius: var(--r-pill);
+      background: var(--surface-2); color: var(--muted);
+    }
+    .statusbar .pill .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); box-shadow: 0 0 6px var(--accent-soft);
+    }
+    .statusbar .spacer { flex: 1; }
+    .statusbar a:hover { color: var(--fg-2); }
+    .pane { display: none; }
+    .pane.is-active { display: block; }
+    .is-hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="titlebar" data-od-id="titlebar">
+      <span class="lights" aria-hidden="true"><span class="r"></span><span class="y"></span><span class="g"></span></span>
+      <span class="brand"><span class="brand-mark" aria-hidden="true"></span>OpenScreen</span>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="project">
+        <span class="project-name">demo-produit.osc</span>
+        <span class="saved" aria-label="Sauvegardé il y a 2 secondes"><span class="dot" aria-hidden="true"></span>enregistré · 14:02</span>
+      </span>
+      <span class="right">
+        <button class="icon-btn" aria-label="Rechercher"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+        <button class="icon-btn" aria-label="Notifications"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+        <button class="icon-btn" aria-label="Partager"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></svg></button>
+      </span>
+    </header>
+
+    <nav class="menubar" data-od-id="menubar" aria-label="Menu principal">
+      <button>Fichier</button><button>Édition</button><button>Affichage</button><button>Fenêtre</button><button>Aide</button>
+      <span class="spacer"></span>
+      <span class="lang-pill">⌘ Return → Recorder</span>
+    </nav>
+
+    <div class="toolbar" data-od-id="toolbar" role="toolbar" aria-label="Actions principales">
+      <button class="rec-btn" id="rec-btn" aria-pressed="false" aria-label="Démarrer l'enregistrement">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="rec-label">Enregistrer</span>
+      </button>
+      <span class="divider" aria-hidden="true"></span>
+      <button class="tbtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Charger
+      </button>
+      <button class="tbtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        Sauvegarder<span class="kbd">⌘S</span>
+      </button>
+      <button class="tbtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        Exporter<span class="kbd">⌘E</span>
+      </button>
+      <span class="spacer"></span>
+      <div class="zoom-group" role="group" aria-label="Zoom de la timeline">
+        <button id="zoom-out" aria-label="Dézoomer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <span class="zoom-readout" id="zoom-readout">1.25×</span>
+        <button id="zoom-in" aria-label="Zoomer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="5" y1="12" x2="19" y2="12"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <main class="workspace" data-od-id="workspace">
+      <aside class="siderail" aria-label="Outils">
+        <button class="tool" aria-pressed="true" aria-label="Sélectionner" title="Sélectionner (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 7 18 2-8 8-2z"/></svg></button>
+        <button class="tool" aria-pressed="false" aria-label="Cutter" title="Couper (C)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></button>
+        <button class="tool" aria-pressed="false" aria-label="Annotation" title="Annotation (A)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+        <button class="tool" aria-pressed="false" aria-label="Vitesse" title="Vitesse (S)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></button>
+        <button class="tool" aria-pressed="false" aria-label="Rogner" title="Rogner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.13 1L6 16a2 2 0 0 0 2 2h15"/><path d="M1 6.13L16 6a2 2 0 0 1 2 2v15"/></svg></button>
+        <button class="tool" aria-pressed="false" aria-label="Audio" title="Audio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="3" y2="12"/><line x1="7" y1="9" x2="7" y2="15"/><line x1="10" y1="6" x2="10" y2="18"/><line x1="13" y1="9" x2="13" y2="15"/><line x1="16" y1="7" x2="16" y2="17"/><line x1="19" y1="11" x2="19" y2="13"/></svg></button>
+        <button class="tool" aria-pressed="false" aria-label="Transformation" title="Transformation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+        <span class="spacer"></span>
+        <button class="tool" aria-pressed="false" aria-label="Grille" title="Afficher la grille (G)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg></button>
+        <button class="tool" aria-pressed="false" aria-label="Réglages" title="Réglages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      </aside>
+
+      <section class="main">
+        <div class="preview" data-od-id="preview">
+          <div class="preview-head">
+            <span class="crumb"><span>Projets</span><span class="sep">/</span><span>2026-Q2</span><span class="sep">/</span><span class="name">demo-produit.osc</span></span>
+            <div class="right">
+              <div class="seg" role="tablist" aria-label="Affichage">
+                <button aria-pressed="true" title="Ajuster à la fenêtre"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 7V3h4M21 7V3h-4M3 17v4h4M21 17v4h-4"/></svg></button>
+                <button aria-pressed="false" title="Taille réelle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg></button>
+                <button aria-pressed="false" title="Plein écran"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+              </div>
+            </div>
+          </div>
+          <div class="preview-stage">
+            <div class="preview-frame is-grid" id="preview-frame" data-fmt="16x9">
+              <div class="veil"></div>
+              <div class="grid-overlay"></div>
+              <div class="play-glyph" aria-hidden="true"><span></span></div>
+              <span class="timecode" id="timecode">00:01:38</span>
+              <span class="resolution" id="resolution">3840 × 2160 · 60 fps</span>
+            </div>
+          </div>
+          <div class="preview-foot">
+            <button class="play-btn" id="play-btn" aria-label="Lire / Pause">
+              <svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <div class="scrubber" id="scrubber" aria-label="Position de lecture">
+              <span class="fill" id="scrub-fill" style="width: 22%;"></span>
+              <span class="knob" id="scrub-knob" style="left: 22%;"></span>
+            </div>
+            <span class="time"><span id="t-current">00:01:38</span><span class="total"> / 00:07:45</span></span>
+          </div>
+        </div>
+
+        <div class="timeline-wrap" data-od-id="timeline">
+          <div class="timeline-toolbar">
+            <span class="hint"><kbd>A</kbd> annotation · <kbd>S</kbd> vitesse · <kbd>⌘K</kbd> couper · <kbd>Espace</kbd> lecture</span>
+            <div class="right">
+              <div class="zoom-pill" role="group" aria-label="Mode zoom">
+                <button aria-pressed="true">Scroll</button>
+                <button aria-pressed="false">Pan</button>
+              </div>
+              <div class="zoom-pill"><span class="zoom-label">1.25×</span></div>
+            </div>
+          </div>
+          <div class="timeline-ruler">
+            <div class="corner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M3 12h18M3 6h18M3 18h18"/></svg>Pistes</div>
+            <div class="marks" id="ruler-marks"></div>
+          </div>
+          <div class="timeline-body" id="timeline-body">
+            <div class="track">
+              <div class="track-head"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span><span class="name">Vidéo</span><span class="count">3</span></div>
+              <div class="track-lane">
+                <span class="clip video is-selected" style="left: 0%;   width: 28%;" data-clip="v1"><span class="handle l" aria-hidden="true"></span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg></span><span class="label">Capt. principale</span><span class="handle r" aria-hidden="true"></span></span>
+                <span class="clip trim" style="left: 28%; width: 6%;" data-clip="t1"><span class="handle l" aria-hidden="true"></span><span class="label">coupé</span><span class="handle r" aria-hidden="true"></span></span>
+                <span class="clip video" style="left: 34%; width: 32%;" data-clip="v2"><span class="handle l" aria-hidden="true"></span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg></span><span class="label">Démo produit</span><span class="handle r" aria-hidden="true"></span></span>
+                <span class="clip trim" style="left: 66%; width: 4%;" data-clip="t2"><span class="handle l" aria-hidden="true"></span><span class="label">coupé</span><span class="handle r" aria-hidden="true"></span></span>
+                <span class="clip video" style="left: 70%; width: 26%;" data-clip="v3"><span class="handle l" aria-hidden="true"></span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg></span><span class="label">Slide finale</span><span class="handle r" aria-hidden="true"></span></span>
+              </div>
+            </div>
+            <div class="track">
+              <div class="track-head"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span class="name">Annotations</span><span class="count">3</span></div>
+              <div class="track-lane">
+                <span class="clip annotation" style="left: 12%; width: 9%;" data-clip="a1"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></span><span class="label">Curseur</span></span>
+                <span class="clip annotation" style="left: 42%; width: 12%;" data-clip="a2"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></span><span class="label">Titre</span></span>
+                <span class="clip annotation" style="left: 78%; width: 8%;" data-clip="a3"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg></span><span class="label">Cercle</span></span>
+              </div>
+            </div>
+            <div class="track">
+              <div class="track-head"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span><span class="name">Vitesse</span><span class="count">2</span></div>
+              <div class="track-lane">
+                <span class="clip speed" style="left: 18%; width: 14%;" data-clip="sp1"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span>0.5×</span>
+                <span class="clip speed" style="left: 60%; width: 12%;" data-clip="sp2"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span>2.0×</span>
+              </div>
+            </div>
+            <div class="playhead" id="playhead" style="--ph: 22;"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidepanel" aria-label="Propriétés">
+        <div class="sidepanel-head"><h2>Arrière-plan</h2><span class="help" aria-label="Aide">?</span></div>
+        <div class="sidepanel-body">
+          <div class="seg-tabs" role="tablist" aria-label="Type d'arrière-plan" id="bg-tabs">
+            <button role="tab" aria-pressed="true"  data-pane="image">Image</button>
+            <button role="tab" aria-pressed="false" data-pane="color">Couleur</button>
+            <button role="tab" aria-pressed="false" data-pane="gradient">Dégradé</button>
+          </div>
+          <div class="pane is-active" data-pane="image">
+            <div class="section-label" style="margin-top: var(--sp-5);"><span>Bibliothèque</span><span class="meta">10 fonds</span></div>
+            <div class="thumb-grid" id="bg-thumbs">
+              <button class="thumb" data-g="1" aria-label="Fond rouge"></button>
+              <button class="thumb" data-g="2" aria-label="Fond bleu"></button>
+              <button class="thumb is-active" data-g="3" aria-label="Fond rose"></button>
+              <button class="thumb" data-g="4" aria-label="Fond orange"></button>
+              <button class="thumb" data-g="5" aria-label="Fond vert"></button>
+              <button class="thumb" data-g="6" aria-label="Fond violet"></button>
+              <button class="thumb" data-g="7" aria-label="Fond cyan"></button>
+              <button class="thumb" data-g="8" aria-label="Fond ambre"></button>
+              <button class="thumb" data-g="9" aria-label="Fond ardoise"></button>
+              <button class="thumb" data-g="10" aria-label="Fond magenta"></button>
+            </div>
+            <button class="upload-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Charger une image…</button>
+          </div>
+          <div class="pane" data-pane="color">
+            <div class="section-label" style="margin-top: var(--sp-5);"><span>Palette</span><span class="meta">12 nuances</span></div>
+            <div class="color-grid" id="color-grid">
+              <button class="swatch is-active" data-pal="ink"      style="background: var(--pal-ink);"      aria-label="Encre"></button>
+              <button class="swatch"           data-pal="charcoal" style="background: var(--pal-charcoal);" aria-label="Charbon"></button>
+              <button class="swatch"           data-pal="slate"    style="background: var(--pal-slate);"    aria-label="Ardoise"></button>
+              <button class="swatch"           data-pal="stone"    style="background: var(--pal-stone);"    aria-label="Pierre"></button>
+              <button class="swatch"           data-pal="blue"     style="background: var(--pal-blue);"     aria-label="MiniMax"></button>
+              <button class="swatch"           data-pal="mint"     style="background: var(--pal-mint);"     aria-label="Menthe"></button>
+              <button class="swatch"           data-pal="forest"   style="background: var(--pal-forest);"   aria-label="Forêt"></button>
+              <button class="swatch"           data-pal="amber"    style="background: var(--pal-amber);"    aria-label="Ambre"></button>
+              <button class="swatch"           data-pal="pink"     style="background: var(--pal-pink);"     aria-label="Rose"></button>
+              <button class="swatch"           data-pal="wine"     style="background: var(--pal-wine);"     aria-label="Vin"></button>
+              <button class="swatch"           data-pal="paper"    style="background: var(--pal-paper);"    aria-label="Papier"></button>
+              <button class="swatch"           data-pal="iris"     style="background: var(--pal-iris);"     aria-label="Iris"></button>
+            </div>
+          </div>
+          <div class="pane" data-pane="gradient">
+            <div class="section-label" style="margin-top: var(--sp-5);"><span>Dégradé personnalisé</span></div>
+            <div class="gradient-custom">
+              <div class="gradient-preview" id="gradient-preview"></div>
+              <div class="row"><label for="g-from">De</label><input type="color" id="g-from" value="#1456f0" /><input type="range" id="g-angle" min="0" max="360" value="135" /><span class="num" id="g-angle-val">135°</span></div>
+              <div class="row"><label for="g-to">Vers</label><input type="color" id="g-to" value="#ea5ec1" /><input type="range" id="g-spread" min="0" max="100" value="100" /><span class="num" id="g-spread-val">100%</span></div>
+            </div>
+          </div>
+          <div class="section-label" style="margin-top: var(--sp-6);"><span>Format</span></div>
+          <div class="format-grid" id="format-grid">
+            <button class="format-tile" data-fmt="16x9" aria-pressed="true"><span class="icon"></span>16:9</button>
+            <button class="format-tile" data-fmt="9x16" aria-pressed="false"><span class="icon"></span>9:16</button>
+            <button class="format-tile" data-fmt="1x1" aria-pressed="false"><span class="icon"></span>1:1</button>
+          </div>
+          <div class="section-label" style="margin-top: var(--sp-6);"><span>Marge intérieure</span><span class="meta" id="padding-val">48 px</span></div>
+          <div class="field" style="margin-top: var(--sp-3);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" style="color: var(--muted);"><path d="M3 8h18M3 16h18"/></svg>
+            <input type="range" id="padding" min="0" max="200" value="48" />
+            <span class="num" id="padding-num">48</span>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar" data-od-id="statusbar">
+      <span class="pill"><span class="dot" aria-hidden="true"></span>Lecture · 22 %</span>
+      <span>3 pistes · 8 clips · 7:45</span>
+      <span>v0.0.3 · alpha</span>
+      <span class="spacer"></span>
+      <a href="#">Signaler un bug</a><span style="color: var(--dim);">·</span>
+      <a href="#">Exporter le diagnostic</a><span style="color: var(--dim);">·</span>
+      <a href="#">Étoile sur GitHub</a>
+    </footer>
+  </div>
+
+  <script>
+    (function ruler() {
+      var marks = document.getElementById('ruler-marks');
+      if (!marks) return;
+      var total = 7 * 60 + 45;
+      var stepSec = 60;
+      var steps = Math.ceil(total / stepSec) + 1;
+      for (var i = 0; i <= steps; i++) {
+        var pct = (i * stepSec / total) * 100;
+        if (pct > 100) break;
+        var tick = document.createElement('span');
+        tick.className = 'tick' + (i % 2 === 0 ? ' major' : '');
+        tick.style.left = pct + '%';
+        marks.appendChild(tick);
+        var lab = document.createElement('span');
+        lab.className = 'tick-label';
+        lab.style.left = pct + '%';
+        lab.textContent = i + ':00';
+        marks.appendChild(lab);
+      }
+    })();
+
+    (function tools() {
+      var rail = document.querySelector('.siderail');
+      if (!rail) return;
+      rail.addEventListener('click', function (e) {
+        var btn = e.target.closest('.tool');
+        if (!btn) return;
+        rail.querySelectorAll('.tool').forEach(function (t) { t.setAttribute('aria-pressed', 'false'); });
+        btn.setAttribute('aria-pressed', 'true');
+      });
+    })();
+
+    (function tabs() {
+      var bar = document.getElementById('bg-tabs');
+      if (!bar) return;
+      bar.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-pane]');
+        if (!btn) return;
+        var target = btn.getAttribute('data-pane');
+        bar.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+        document.querySelectorAll('.pane[data-pane]').forEach(function (p) {
+          p.classList.toggle('is-active', p.getAttribute('data-pane') === target);
+        });
+      });
+    })();
+
+    (function thumbs() {
+      var grid = document.getElementById('bg-thumbs');
+      var frame = document.getElementById('preview-frame');
+      if (!grid || !frame) return;
+      grid.addEventListener('click', function (e) {
+        var t = e.target.closest('.thumb');
+        if (!t) return;
+        var g = t.getAttribute('data-g');
+        grid.querySelectorAll('.thumb').forEach(function (b) { b.classList.remove('is-active'); });
+        t.classList.add('is-active');
+        var grad = getComputedStyle(t).background;
+        frame.style.background = grad;
+      });
+    })();
+
+    (function swatches() {
+      var grid = document.getElementById('color-grid');
+      var frame = document.getElementById('preview-frame');
+      if (!grid || !frame) return;
+      grid.addEventListener('click', function (e) {
+        var s = e.target.closest('.swatch');
+        if (!s) return;
+        grid.querySelectorAll('.swatch').forEach(function (b) { b.classList.remove('is-active'); });
+        s.classList.add('is-active');
+        var c = getComputedStyle(s).backgroundColor;
+        frame.style.background = c;
+      });
+    })();
+
+    (function gradient() {
+      var from = document.getElementById('g-from');
+      var to = document.getElementById('g-to');
+      var angle = document.getElementById('g-angle');
+      var spread = document.getElementById('g-spread');
+      var preview = document.getElementById('gradient-preview');
+      var frame = document.getElementById('preview-frame');
+      var angleVal = document.getElementById('g-angle-val');
+      var spreadVal = document.getElementById('g-spread-val');
+      if (!from || !to || !angle || !preview) return;
+      var build = function () {
+        var a = parseInt(angle.value, 10);
+        var s = parseInt(spread.value, 10);
+        angleVal.textContent = a + '°';
+        spreadVal.textContent = s + '%';
+        var css = 'linear-gradient(' + a + 'deg, ' + from.value + ' 0%, ' + to.value + ' ' + s + '%)';
+        preview.style.background = css;
+        frame.style.background = css;
+      };
+      [from, to, angle, spread].forEach(function (el) { el.addEventListener('input', build); });
+      build();
+    })();
+
+    (function formats() {
+      var grid = document.getElementById('format-grid');
+      var frame = document.getElementById('preview-frame');
+      if (!grid || !frame) return;
+      grid.addEventListener('click', function (e) {
+        var t = e.target.closest('.format-tile');
+        if (!t) return;
+        grid.querySelectorAll('.format-tile').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+        t.setAttribute('aria-pressed', 'true');
+        frame.setAttribute('data-fmt', t.getAttribute('data-fmt'));
+      });
+    })();
+
+    (function padding() {
+      var range = document.getElementById('padding');
+      var num = document.getElementById('padding-num');
+      var val = document.getElementById('padding-val');
+      if (!range) return;
+      range.addEventListener('input', function () {
+        var v = parseInt(range.value, 10);
+        if (num) num.textContent = v;
+        if (val) val.textContent = v + ' px';
+      });
+    })();
+
+    (function rec() {
+      var btn = document.getElementById('rec-btn');
+      var label = btn && btn.querySelector('.rec-label');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var on = btn.getAttribute('aria-pressed') === 'true';
+        btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+        if (label) label.textContent = on ? 'Enregistrer' : 'Arrêter · 00:12';
+      });
+    })();
+
+    (function play() {
+      var btn = document.getElementById('play-btn');
+      var icon = document.getElementById('play-icon');
+      if (!btn || !icon) return;
+      btn.addEventListener('click', function () {
+        var playing = btn.getAttribute('data-playing') === 'true';
+        btn.setAttribute('data-playing', playing ? 'false' : 'true');
+        icon.innerHTML = playing
+          ? '<path d="M8 5v14l11-7z"/>'
+          : '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>';
+      });
+    })();
+
+    (function scrub() {
+      var sb = document.getElementById('scrubber');
+      var fill = document.getElementById('scrub-fill');
+      var knob = document.getElementById('scrub-knob');
+      var ph = document.getElementById('playhead');
+      if (!sb || !fill || !knob || !ph) return;
+      var set = function (pct) {
+        var p = Math.max(0, Math.min(100, pct));
+        fill.style.width = p + '%';
+        knob.style.left = p + '%';
+        ph.style.setProperty('--ph', p);
+      };
+      sb.addEventListener('click', function (e) {
+        var r = sb.getBoundingClientRect();
+        set(((e.clientX - r.left) / r.width) * 100);
+      });
+      var drag = false;
+      knob.addEventListener('mousedown', function () { drag = true; });
+      window.addEventListener('mousemove', function (e) {
+        if (!drag) return;
+        var r = sb.getBoundingClientRect();
+        set(((e.clientX - r.left) / r.width) * 100);
+      });
+      window.addEventListener('mouseup', function () { drag = false; });
+    })();
+
+    (function clips() {
+      document.querySelectorAll('.clip').forEach(function (c) {
+        c.addEventListener('click', function () {
+          document.querySelectorAll('.clip').forEach(function (x) { x.classList.remove('is-selected'); });
+          c.classList.add('is-selected');
+        });
+      });
+    })();
+
+    (function zoom() {
+      var z = 1.25;
+      var readouts = [document.getElementById('zoom-readout'), document.querySelector('.timeline-toolbar .zoom-pill .zoom-label')].filter(Boolean);
+      var update = function () {
+        var txt = z.toFixed(2) + '×';
+        readouts.forEach(function (r) { r.textContent = txt; });
+      };
+      document.getElementById('zoom-in').addEventListener('click', function () { z = Math.min(4, +(z + 0.25).toFixed(2)); update(); });
+      document.getElementById('zoom-out').addEventListener('click', function () { z = Math.max(0.25, +(z - 0.25).toFixed(2)); update(); });
+    })();
+
+    (function scrollPan() {
+      var pills = document.querySelectorAll('.timeline-toolbar .zoom-pill')[0];
+      if (!pills) return;
+      pills.querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          pills.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+          b.setAttribute('aria-pressed', 'true');
+        });
+      });
+    })();
+
+    (function viewMode() {
+      var seg = document.querySelector('.preview-head .right .seg');
+      if (!seg) return;
+      seg.querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          seg.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+          b.setAttribute('aria-pressed', 'true');
+          var frame = document.getElementById('preview-frame');
+          if (frame && b.title === 'Plein écran') {
+            frame.classList.toggle('is-grid');
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

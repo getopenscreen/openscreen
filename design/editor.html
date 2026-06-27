@@ -1,0 +1,1619 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1024" />
+  <title>OpenScreen — Éditeur</title>
+  <style>
+    /* ─────────────────────────────────────────────────────────────────
+     * OpenScreen — Éditeur (adaptation wireframe + live capture).
+     * Light theme, single red accent. Layout = 5-col workbench
+     * (rail · chat · preview · transcript · rail) + 2-col bottom
+     * (timeline · properties). One accent (#ef4444) used for REC,
+     * skip regions, transcript highlights, and trim overlays only.
+     * Everything else is a neutral ramp on white.
+     * ──────────────────────────────────────────────────────────────── */
+    :root {
+      /* surface — light, airy. Never tinted */
+      --bg:           #ffffff;
+      --surface-1:    #fafafa;
+      --surface-2:    #f5f5f7;
+      --surface-3:    #f0f1f3;
+      --surface-hi:   #eceef2;
+
+      /* lines */
+      --border:       #e5e7eb;
+      --border-soft:  #f2f3f5;
+      --border-hi:    #d1d5db;
+
+      /* foreground — high contrast on white, never pure black */
+      --fg:           #111827;
+      --fg-2:         #374151;
+      --muted:        #6b7280;
+      --meta:         #9ca3af;
+      --dim:          #d1d5db;
+
+      /* ONE accent — red/coral. Used for REC pill, skip regions,
+         transcript filler-word highlights, trim overlay. No second
+         brand hue; success and warn are functional, not decorative. */
+      --accent:        #ef4444;
+      --accent-hi:     #f87171;
+      --accent-lo:     #dc2626;
+      --accent-on:     #ffffff;
+      --accent-soft:   rgba(239, 68, 68, 0.10);
+      --accent-wash:   #fff1ee;
+      --accent-hatch:  rgba(239, 68, 68, 0.42);
+
+      /* semantic — status pills only */
+      --success:      #16a34a;
+      --success-soft: rgba(22, 163, 74, 0.10);
+      --warn:         #f59e0b;
+      --warn-soft:    rgba(245, 158, 11, 0.12);
+
+      /* mint — OpenScreen brand mark only (square logo dot), not used
+         as a competing accent */
+      --brand:        #2dd4bf;
+      --brand-lo:     #14b8a6;
+      --brand-glow:   rgba(45, 212, 191, 0.35);
+
+      /* macOS window traffic lights */
+      --light-red:    #ff5f57;
+      --light-yellow: #febc2e;
+      --light-green:  #28c840;
+
+      /* preview scene illustration — placeholder for the puffin shot.
+         Soft sky → foliage ramp, single-use, not promoted to design tokens. */
+      --scene-sky-hi:    #f4d8a8;
+      --scene-sky-mid:   #c8a878;
+      --scene-foliage:   #5a7a4a;
+      --scene-foliage-d: #2a3a2a;
+      --scene-overlay:   rgba(0, 0, 0, 0.18);
+
+      /* webcam PIP — placeholder head + room backdrop */
+      --pip-bg-1:    #1a1a2e;
+      --pip-bg-2:    #2d2d44;
+      --pip-bg-3:    #0f3460;
+      --pip-skin-hi: #d4a574;
+      --pip-skin-lo: #8b6f47;
+      --pip-hair:    #1a1a1a;
+      --pip-shadow:  rgba(0, 0, 0, 0.3);
+
+      /* on-preview overlays — timecode pill, badge, scene label */
+      --overlay-dark:  rgba(0, 0, 0, 0.45);
+      --overlay-light: rgba(255, 255, 255, 0.85);
+      --overlay-text:  rgba(255, 255, 255, 0.60);
+      --overlay-text-2: rgba(255, 255, 255, 0.55);
+      --overlay-border: rgba(0, 0, 0, 0.06);
+
+      /* type — Outfit display, DM Sans body, mono for timecodes */
+      --font-display: "Outfit", "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-body:    "DM Sans", "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+      /* size — desktop scale, base 13px, nothing below 11px */
+      --fs-app:       13px;
+      --fs-app-sm:    12px;
+      --fs-app-lg:    14px;
+      --fs-title:     16px;
+      --fs-section:   11px;
+      --fs-display:   24px;
+
+      /* spacing — 4px grid */
+      --sp-1: 4px;
+      --sp-2: 8px;
+      --sp-3: 12px;
+      --sp-4: 16px;
+      --sp-5: 20px;
+      --sp-6: 24px;
+
+      /* radius — 6-8 standard, pill on inputs + transport */
+      --r-xs: 4px;
+      --r-sm: 6px;
+      --r-md: 8px;
+      --r-lg: 12px;
+      --r-pill: 9999px;
+
+      /* layout — wireframe proportions */
+      --titlebar-h:  34px;
+      --rail-w:      48px;
+      --panel-w:     340px;
+      --props-w:     280px;
+      --bottom-h:    224px;
+
+      /* elevation — restrained, light UI looks cheap with big shadows */
+      --elev-card:      0 1px 2px rgba(17, 24, 39, 0.04), 0 4px 12px -4px rgba(17, 24, 39, 0.08);
+      --elev-card-soft: 0 1px 2px rgba(17, 24, 39, 0.06);
+      --elev-pop:       0 8px 24px -8px rgba(17, 24, 39, 0.16);
+
+      --focus-ring:  0 0 0 3px rgba(239, 68, 68, 0.20);
+
+      --motion-fast: 120ms;
+      --motion-base: 180ms;
+      --ease:        cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    /* ─── reset ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: var(--fs-app);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      overflow: hidden;
+      user-select: none;
+    }
+    img, svg { display: block; max-width: 100%; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+    input, select, textarea { font: inherit; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+    kbd {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: var(--r-xs);
+      background: var(--surface-2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      min-width: 18px; text-align: center;
+      display: inline-block;
+    }
+
+    /* ─── app shell — 3 rows: titlebar, workbench (5-col), bottom (2-col) */
+    .app {
+      display: grid;
+      grid-template-rows: var(--titlebar-h) 1fr var(--bottom-h);
+      height: 100vh;
+      min-width: 1024px;
+      background: var(--bg);
+    }
+
+    /* ─── titlebar — project name left, window controls + actions right ─ */
+    .titlebar {
+      display: flex; align-items: center; gap: var(--sp-3);
+      padding-inline: var(--sp-4);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .titlebar .brand {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: var(--font-display);
+      font-size: var(--fs-title);
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      color: var(--fg);
+    }
+    .titlebar .brand-mark {
+      width: 18px; height: 18px; border-radius: 5px;
+      background: radial-gradient(circle at 30% 30%, var(--brand), var(--brand-lo) 80%);
+      box-shadow: 0 0 8px var(--brand-glow);
+    }
+    .titlebar .sep {
+      width: 1px; height: 16px; background: var(--border);
+    }
+    .titlebar .project {
+      display: inline-flex; align-items: center; gap: var(--sp-2);
+      font-size: var(--fs-app);
+      color: var(--muted);
+    }
+    .titlebar .project-name {
+      color: var(--fg-2);
+      font-weight: 500;
+    }
+    .titlebar .saved {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font-mono);
+      font-size: var(--fs-app-sm);
+      color: var(--muted);
+    }
+    .titlebar .saved .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--success);
+    }
+    .titlebar .right {
+      margin-left: auto;
+      display: inline-flex; align-items: center; gap: var(--sp-1);
+    }
+    .titlebar .icon-btn {
+      width: 28px; height: 28px;
+      display: grid; place-items: center;
+      border-radius: var(--r-sm);
+      color: var(--muted);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .titlebar .icon-btn:hover { background: var(--surface-3); color: var(--fg); }
+    .titlebar .lights {
+      display: inline-flex; gap: 6px; margin-right: var(--sp-3);
+    }
+    .titlebar .lights span {
+      width: 11px; height: 11px; border-radius: 50%;
+      border: 1px solid var(--overlay-border);
+    }
+    .titlebar .lights span.r { background: var(--light-red); }
+    .titlebar .lights span.y { background: var(--light-yellow); }
+    .titlebar .lights span.g { background: var(--light-green); }
+
+    /* ─── workbench — 5-col grid (matches wireframe exactly) ──────── */
+    .workbench {
+      display: grid;
+      grid-template-columns: var(--rail-w) var(--panel-w) 1fr var(--panel-w) var(--rail-w);
+      min-height: 0;
+      background: var(--bg);
+    }
+
+    /* icon rails — narrow, vertical, single column of stacked buttons */
+    .rail {
+      display: flex; flex-direction: column;
+      align-items: center; gap: var(--sp-1);
+      padding: var(--sp-2) 0;
+      background: var(--bg);
+    }
+    .rail-left { border-right: 1px solid var(--border-soft); }
+    .rail-right { border-left: 1px solid var(--border-soft); }
+    .rail button {
+      width: 36px; height: 36px;
+      display: grid; place-items: center;
+      border-radius: var(--r-md);
+      color: var(--muted);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+      position: relative;
+    }
+    .rail button:hover { background: var(--surface-3); color: var(--fg); }
+    .rail button[aria-pressed="true"] {
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .rail button[aria-pressed="true"]::before {
+      content: "";
+      position: absolute; left: -8px; top: 8px; bottom: 8px;
+      width: 3px; border-radius: 2px;
+      background: var(--accent);
+    }
+    .rail .sep-h {
+      width: 24px; height: 1px;
+      background: var(--border);
+      margin: var(--sp-1) 0;
+    }
+
+    /* ─── panel base (chat + transcript share this shell) ─────────── */
+    .panel {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      min-width: 0;
+      background: var(--bg);
+    }
+    .panel + .panel, .rail + .panel, .panel + .rail, .rail + .rail { border-left: 1px solid var(--border-soft); }
+    .panel-head {
+      display: flex; align-items: center; gap: var(--sp-2);
+      padding: var(--sp-3) var(--sp-4);
+      border-bottom: 1px solid var(--border-soft);
+      min-height: 44px;
+    }
+    .panel-head h2 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      color: var(--fg);
+    }
+    .panel-head .right { margin-left: auto; display: inline-flex; gap: var(--sp-1); }
+    .panel-head .icon-btn {
+      width: 24px; height: 24px;
+      display: grid; place-items: center;
+      border-radius: var(--r-sm);
+      color: var(--meta);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .panel-head .icon-btn:hover { background: var(--surface-3); color: var(--fg-2); }
+
+    .panel-body {
+      overflow-y: auto;
+      padding: var(--sp-3) var(--sp-4);
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .panel-body::-webkit-scrollbar { width: 8px; height: 8px; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .panel-body::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+    /* ─── chat panel — Project header, model card, YOU bubbles ─────── */
+    .model-card {
+      display: flex; align-items: center; gap: var(--sp-2);
+      padding: var(--sp-2) var(--sp-3);
+      margin-bottom: var(--sp-4);
+      border-radius: var(--r-md);
+      background: var(--surface-1);
+      border: 1px solid var(--border-soft);
+    }
+    .model-card .logo {
+      width: 28px; height: 28px;
+      border-radius: var(--r-sm);
+      background: radial-gradient(circle at 30% 30%, var(--brand), var(--brand-lo) 80%);
+      display: grid; place-items: center;
+      color: var(--bg);
+      font-family: var(--font-display);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      flex-shrink: 0;
+    }
+    .model-card .meta {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .model-card .name {
+      font-size: var(--fs-app);
+      font-weight: 500;
+      color: var(--fg);
+      letter-spacing: -0.005em;
+    }
+    .model-card .sub {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      letter-spacing: 0.02em;
+    }
+    .model-card .chev { color: var(--meta); flex-shrink: 0; }
+
+    .msg {
+      margin-bottom: var(--sp-3);
+    }
+    .msg-head {
+      display: flex; align-items: center; gap: var(--sp-2);
+      padding: 0 var(--sp-1);
+      margin-bottom: var(--sp-1);
+    }
+    .msg-author {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--meta);
+      text-transform: uppercase;
+    }
+    .msg-head .right { margin-left: auto; display: inline-flex; gap: 2px; }
+    .msg-head .icon-btn {
+      width: 22px; height: 22px;
+      display: grid; place-items: center;
+      border-radius: var(--r-xs);
+      color: var(--meta);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .msg-head .icon-btn:hover { background: var(--surface-3); color: var(--fg-2); }
+    .msg-bubble {
+      padding: var(--sp-3) var(--sp-4);
+      border-radius: var(--r-md);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      font-size: var(--fs-app);
+      color: var(--fg-2);
+      line-height: 1.5;
+    }
+    .msg-bubble strong { color: var(--fg); font-weight: 500; }
+    .msg-bubble .t { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-2); }
+
+    /* chat input area — fixed at bottom of panel */
+    .chat-input {
+      padding: var(--sp-3) var(--sp-4);
+      border-top: 1px solid var(--border-soft);
+      background: var(--bg);
+    }
+    .chat-input textarea {
+      width: 100%;
+      min-height: 64px;
+      resize: none;
+      padding: var(--sp-3);
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      font-family: var(--font-body);
+      font-size: var(--fs-app);
+      line-height: 1.5;
+      color: var(--fg);
+      outline: none;
+      transition: border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
+    }
+    .chat-input textarea::placeholder { color: var(--meta); }
+    .chat-input textarea:focus {
+      border-color: var(--accent);
+      box-shadow: var(--focus-ring);
+    }
+    .chat-input .actions {
+      display: flex; align-items: center; gap: var(--sp-2);
+      margin-top: var(--sp-2);
+    }
+    .model-picker {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 4px 5px 10px;
+      border-radius: var(--r-pill);
+      background: var(--surface-2);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--fg-2);
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: background var(--motion-fast) var(--ease);
+    }
+    .model-picker:hover { background: var(--surface-3); }
+    .model-picker .icon-btn {
+      width: 22px; height: 22px;
+      display: grid; place-items: center;
+      border-radius: 50%;
+      color: var(--muted);
+    }
+    .model-picker .chip {
+      padding: 3px 8px;
+      border-radius: var(--r-pill);
+      background: var(--success-soft);
+      color: var(--success);
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .model-picker .chip .d {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--success);
+    }
+    .send-btn {
+      margin-left: auto;
+      width: 32px; height: 32px;
+      display: grid; place-items: center;
+      border-radius: 50%;
+      background: var(--fg);
+      color: var(--bg);
+      transition: background var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease);
+    }
+    .send-btn:hover { background: var(--fg-2); transform: scale(1.05); }
+
+    /* ─── preview — main canvas, transport bar at bottom ─────────── */
+    .preview-wrap {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      background: var(--surface-1);
+      min-width: 0;
+      position: relative;
+    }
+    .preview-canvas {
+      position: relative;
+      display: grid; place-items: center;
+      overflow: hidden;
+      padding: var(--sp-5);
+    }
+    .preview-canvas::before {
+      content: "";
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse at 50% 30%, var(--brand-glow), transparent 60%),
+        var(--surface-1);
+    }
+    .preview-frame {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      max-width: 100%;
+      max-height: 100%;
+      width: 720px;
+      background:
+        radial-gradient(ellipse at 50% 35%,
+          var(--scene-sky-hi) 0%,
+          var(--scene-sky-mid) 35%,
+          var(--scene-foliage) 70%,
+          var(--scene-foliage-d) 100%);
+      border-radius: var(--r-md);
+      box-shadow: var(--elev-card);
+      overflow: hidden;
+    }
+    /* landscape illustration — placeholder for the puffin shot */
+    .preview-frame .scene {
+      position: absolute; inset: 0;
+      display: grid; place-items: center;
+      color: var(--overlay-text-2);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .preview-frame .scene::before {
+      content: "";
+      position: absolute;
+      left: 8%; right: 8%; bottom: 22%;
+      height: 18%;
+      background: linear-gradient(180deg, transparent, var(--scene-overlay));
+      border-radius: 50%;
+      filter: blur(6px);
+    }
+    .preview-frame .pip {
+      position: absolute;
+      right: var(--sp-3); bottom: var(--sp-3);
+      width: 120px; aspect-ratio: 16 / 9;
+      border-radius: var(--r-sm);
+      background:
+        linear-gradient(135deg, var(--pip-bg-1) 0%, var(--pip-bg-2) 50%, var(--pip-bg-3) 100%);
+      border: 2px solid var(--bg);
+      box-shadow: var(--elev-card);
+      overflow: hidden;
+      display: grid; place-items: center;
+      color: var(--overlay-text);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .preview-frame .pip .face {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, var(--pip-skin-hi) 0%, var(--pip-skin-lo) 100%);
+      box-shadow: inset 0 -3px 6px var(--pip-shadow);
+      position: relative;
+    }
+    .preview-frame .pip .face::after {
+      content: "";
+      position: absolute; left: 50%; top: -2px;
+      transform: translateX(-50%);
+      width: 22px; height: 10px;
+      border-radius: 50% 50% 30% 30%;
+      background: var(--pip-hair);
+    }
+    .preview-frame .timestamp {
+      position: absolute;
+      top: var(--sp-3); left: var(--sp-3);
+      padding: 4px 8px;
+      border-radius: var(--r-xs);
+      background: var(--overlay-dark);
+      color: var(--bg);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+    .preview-frame .badge {
+      position: absolute;
+      top: var(--sp-3); right: var(--sp-3);
+      padding: 4px 8px;
+      border-radius: var(--r-xs);
+      background: var(--overlay-light);
+      color: var(--fg);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      font-weight: 500;
+      backdrop-filter: blur(8px);
+    }
+    /* third-of-frame rule — composition guides overlay */
+    .preview-frame .guides {
+      position: absolute; inset: 0;
+      pointer-events: none;
+      opacity: 0.18;
+    }
+    .preview-frame .guides::before,
+    .preview-frame .guides::after {
+      content: "";
+      position: absolute;
+      background: var(--overlay-text);
+    }
+    .preview-frame .guides::before {
+      left: 33.33%; top: 0; bottom: 0;
+      width: 1px;
+    }
+    .preview-frame .guides::after {
+      left: 66.66%; top: 0; bottom: 0;
+      width: 1px;
+    }
+
+    /* transport bar — sits below preview frame */
+    .transport {
+      display: flex; align-items: center; gap: var(--sp-2);
+      padding: var(--sp-2) var(--sp-4);
+      background: var(--bg);
+      border-top: 1px solid var(--border-soft);
+    }
+    .transport .tbtn {
+      width: 32px; height: 32px;
+      display: grid; place-items: center;
+      border-radius: var(--r-sm);
+      color: var(--fg-2);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .transport .tbtn:hover { background: var(--surface-3); color: var(--fg); }
+    .transport .tbtn.play {
+      width: 36px; height: 36px;
+      background: var(--fg);
+      color: var(--bg);
+      border-radius: 50%;
+    }
+    .transport .tbtn.play:hover { background: var(--fg-2); }
+    .transport .time {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg);
+      letter-spacing: 0.02em;
+      min-width: 96px;
+      text-align: center;
+    }
+    .transport .time .sep { color: var(--meta); margin-inline: 4px; }
+    .transport .time .total { color: var(--muted); }
+    .transport .spacer { flex: 1; }
+    .transport .seg {
+      display: inline-flex;
+      padding: 2px;
+      background: var(--surface-2);
+      border-radius: var(--r-pill);
+      gap: 2px;
+    }
+    .transport .seg button {
+      padding: 4px 10px;
+      border-radius: var(--r-pill);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .transport .seg button[aria-pressed="true"] {
+      background: var(--bg);
+      color: var(--fg);
+      box-shadow: var(--elev-card-soft);
+    }
+    .transport .rec {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px;
+      border-radius: var(--r-pill);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      transition: background var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .transport .rec .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .transport .rec[aria-pressed="true"] {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--accent-on);
+    }
+    .transport .rec[aria-pressed="true"] .dot {
+      background: var(--accent-on);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.35; }
+    }
+
+    /* ─── transcript panel — numbered clip header + transcript text */
+    .transcript-head {
+      padding: var(--sp-3) var(--sp-4);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .clip-badge {
+      display: flex; align-items: center; gap: var(--sp-2);
+      margin-bottom: 2px;
+    }
+    .clip-badge .num {
+      width: 20px; height: 20px;
+      display: grid; place-items: center;
+      border-radius: var(--r-xs);
+      background: var(--accent);
+      color: var(--accent-on);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .clip-badge .fname {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg);
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      word-break: break-all;
+    }
+    .clip-range {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      padding-left: 28px;
+    }
+    .transcript-text {
+      padding: var(--sp-3) var(--sp-4);
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: var(--fg-2);
+    }
+    .transcript-text p { margin: 0 0 var(--sp-3); }
+    .filler {
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: var(--accent-wash);
+      color: var(--accent-lo);
+      font-weight: 500;
+    }
+    .skip-mark {
+      display: inline-block;
+      margin: 0 2px;
+      padding: 1px 5px;
+      border-radius: var(--r-xs);
+      background: var(--accent-soft);
+      color: var(--accent-lo);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.02em;
+      font-weight: 500;
+      vertical-align: 1px;
+    }
+
+    /* ─── bottombar — timeline (1fr) + properties (props-w) ──────── */
+    .bottombar {
+      display: grid;
+      grid-template-columns: 1fr var(--props-w);
+      min-height: 0;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+    .timeline-wrap { min-width: 0; display: grid; grid-template-rows: auto 1fr; }
+    .properties-wrap {
+      min-width: 0;
+      display: grid; grid-template-rows: auto 1fr;
+      border-left: 1px solid var(--border-soft);
+      background: var(--bg);
+    }
+
+    /* ─── timeline — header, ruler, skip strip, clip blocks ───────── */
+    .timeline-head {
+      display: flex; align-items: center; gap: var(--sp-3);
+      padding: var(--sp-2) var(--sp-4);
+      border-bottom: 1px solid var(--border-soft);
+      min-height: 40px;
+    }
+    .timeline-head h2 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--fg);
+      letter-spacing: -0.005em;
+    }
+    .timeline-head .stats {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    .timeline-head .stats .sep { margin: 0 6px; color: var(--dim); }
+    .timeline-head .stats strong { color: var(--fg-2); font-weight: 500; }
+    .timeline-head .right { margin-left: auto; display: inline-flex; gap: var(--sp-3); align-items: center; }
+    .timeline-head .stamp {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    .timeline-head .stamp strong { color: var(--fg); font-weight: 500; }
+    .timeline-head .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 8px;
+      border-radius: var(--r-pill);
+      background: var(--surface-2);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.02em;
+    }
+    .timeline-head .pill .d { width: 5px; height: 5px; border-radius: 50%; background: var(--success); }
+
+    .timeline-body {
+      position: relative;
+      padding: var(--sp-2) var(--sp-4) var(--sp-3);
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .timeline-body::-webkit-scrollbar { height: 8px; }
+    .timeline-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .ruler {
+      position: relative;
+      height: 24px;
+      margin-bottom: 6px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    .ruler .tick {
+      position: absolute; top: 0; bottom: 0;
+      border-left: 1px solid var(--border-soft);
+    }
+    .ruler .tick.major { border-left-color: var(--border-hi); }
+    .ruler .tick .label {
+      position: absolute; top: 4px;
+      transform: translateX(2px);
+    }
+
+    .skip-strip {
+      position: relative;
+      height: 14px;
+      margin-bottom: var(--sp-2);
+      border-radius: var(--r-xs);
+      background: var(--surface-1);
+      border: 1px solid var(--border-soft);
+      overflow: hidden;
+    }
+    /* hatching — repeated red diagonal stripes mark auto-detected
+       filler/silence regions to be cut */
+    .skip {
+      position: absolute; top: 0; bottom: 0;
+      background-color: var(--accent-wash);
+      background-image: repeating-linear-gradient(
+        -45deg,
+        var(--accent-hatch) 0,
+        var(--accent-hatch) 3px,
+        transparent 3px,
+        transparent 7px
+      );
+    }
+
+    .tracks {
+      display: flex; flex-direction: column; gap: 6px;
+      position: relative;
+    }
+    .track-row {
+      display: flex; align-items: stretch; gap: 6px;
+    }
+    .track-head {
+      flex-shrink: 0;
+      width: 72px;
+      display: flex; align-items: center; gap: 6px;
+      padding-left: 4px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      letter-spacing: 0.02em;
+    }
+    .track-head svg { color: var(--meta); }
+    .track-body {
+      flex: 1;
+      position: relative;
+      min-height: 56px;
+    }
+    .clip {
+      position: absolute;
+      top: 0; bottom: 0;
+      border-radius: var(--r-sm);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 6px 10px 6px 28px;
+      display: flex; flex-direction: column;
+      justify-content: center;
+      gap: 2px;
+      cursor: pointer;
+      transition: border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
+      overflow: hidden;
+    }
+    .clip:hover { border-color: var(--border-hi); }
+    .clip.is-selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 4px 12px -4px var(--accent-soft);
+    }
+    .clip .attach {
+      position: absolute;
+      left: 8px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--meta);
+    }
+    .clip .name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--fg);
+      letter-spacing: -0.005em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .clip .meta {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* handles — small grip squares on each clip edge for trim */
+    .clip .handle {
+      position: absolute; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--border-hi);
+      opacity: 0;
+      transition: opacity var(--motion-fast) var(--ease);
+    }
+    .clip .handle.l { left: 0; border-radius: var(--r-sm) 0 0 var(--r-sm); }
+    .clip .handle.r { right: 0; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+    .clip:hover .handle { opacity: 1; }
+
+    /* playhead — vertical line spanning skip-strip + tracks */
+    .playhead {
+      position: absolute;
+      top: 24px; bottom: 0;
+      left: 72px;  /* align with track bodies, past the track-head col */
+      width: 1px;
+      background: var(--accent);
+      pointer-events: none;
+      z-index: 4;
+    }
+    .playhead::before {
+      content: "";
+      position: absolute;
+      top: -3px; left: -4px;
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-hatch);
+    }
+    .playhead::after {
+      content: "";
+      position: absolute;
+      bottom: -3px; left: -4px;
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-hatch);
+    }
+
+    /* ─── properties — selected clip detail panel ───────────────── */
+    .properties-head {
+      display: flex; align-items: center; gap: var(--sp-2);
+      padding: var(--sp-3) var(--sp-4);
+      border-bottom: 1px solid var(--border-soft);
+      min-height: 40px;
+    }
+    .properties-head h2 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--fg);
+      letter-spacing: -0.005em;
+    }
+    .properties-head .right { margin-left: auto; }
+    .properties-body {
+      padding: var(--sp-3) var(--sp-4);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .properties-body::-webkit-scrollbar { width: 8px; }
+    .properties-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .prop-row {
+      display: grid;
+      grid-template-columns: 84px 1fr;
+      align-items: center;
+      gap: var(--sp-2);
+      padding: var(--sp-2) 0;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .prop-row:last-child { border-bottom: 0; }
+    .prop-row .k {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      letter-spacing: 0.02em;
+    }
+    .prop-row .v {
+      font-size: 12.5px;
+      color: var(--fg-2);
+      font-family: var(--font-mono);
+      letter-spacing: 0.01em;
+      word-break: break-all;
+    }
+    .prop-row .v strong { color: var(--fg); font-weight: 500; }
+    .prop-actions {
+      display: flex; gap: var(--sp-2);
+      margin-top: var(--sp-4);
+    }
+    .prop-btn {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: var(--r-md);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--fg-2);
+      font-size: 12px;
+      font-weight: 500;
+      transition: background var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
+    }
+    .prop-btn:hover { background: var(--surface-2); border-color: var(--border-hi); color: var(--fg); }
+    .prop-btn.primary { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+    .prop-btn.primary:hover { background: var(--fg-2); }
+
+    /* ─── focus ───────────────────────────────────────────────────── */
+    button:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ─── titlebar ────────────────────────────────────────────── -->
+    <header class="titlebar">
+      <span class="lights" aria-hidden="true">
+        <span class="r"></span><span class="y"></span><span class="g"></span>
+      </span>
+      <span class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        OpenScreen
+      </span>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="project">
+        <span class="project-name">demo2</span>
+      </span>
+      <span class="saved">
+        <span class="dot" aria-hidden="true"></span>
+        Enregistré · il y a 2 s
+      </span>
+      <span class="right">
+        <button class="icon-btn" title="Importer un média" aria-label="Importer un média">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button class="icon-btn" title="Exporter" aria-label="Exporter">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        </button>
+        <button class="icon-btn" title="Basculer le panneau" aria-label="Basculer le panneau" aria-pressed="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+        </button>
+        <button class="icon-btn" title="Paramètres" aria-label="Paramètres">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="icon-btn" title="Plein écran" aria-label="Plein écran">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+      </span>
+    </header>
+
+    <!-- ─── workbench — 5 columns: rail · chat · preview · transcript · rail -->
+    <main class="workbench">
+
+      <!-- LEFT RAIL -->
+      <aside class="rail rail-left" aria-label="Outils principaux">
+        <button title="Projet" aria-label="Projet" aria-pressed="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        </button>
+        <button title="Médias" aria-label="Médias">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+        <button title="Notes" aria-label="Notes">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+        </button>
+        <span class="sep-h" aria-hidden="true"></span>
+        <button title="Historique" aria-label="Historique">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7 12 12 16 14"/></svg>
+        </button>
+      </aside>
+
+      <!-- CHAT PANEL -->
+      <aside class="panel chat" aria-label="Édition par instructions">
+        <header class="panel-head">
+          <h2>Projet</h2>
+          <span class="right">
+            <button class="icon-btn" title="Nouvelle conversation" aria-label="Nouvelle conversation">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button class="icon-btn" title="Réduire" aria-label="Réduire le panneau">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+          </span>
+        </header>
+
+        <div class="panel-body">
+          <div class="model-card">
+            <span class="logo" aria-hidden="true">OS</span>
+            <span class="meta">
+              <span class="name">OpenScreen AI</span>
+              <span class="sub">v0.0.3 · contexte 86%</span>
+            </span>
+            <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+
+          <div class="msg">
+            <div class="msg-head">
+              <span class="msg-author">Vous</span>
+              <span class="right">
+                <button class="icon-btn" title="Annuler" aria-label="Annuler">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                </button>
+                <button class="icon-btn" title="Copier" aria-label="Copier">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </span>
+            </div>
+            <div class="msg-bubble">
+              Coupe toutes les silences de plus de <strong>0,5 s</strong> et supprime les tics de langage <span class="t">« euh », « hum »</span>.
+            </div>
+          </div>
+
+          <div class="msg">
+            <div class="msg-head">
+              <span class="msg-author">Vous</span>
+              <span class="right">
+                <button class="icon-btn" title="Annuler" aria-label="Annuler">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                </button>
+                <button class="icon-btn" title="Copier" aria-label="Copier">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </span>
+            </div>
+            <div class="msg-bubble">
+              Édite la timeline : sauts redimensionnés <span class="t">0:00.0–0:15.4</span>.
+            </div>
+          </div>
+
+          <div class="msg">
+            <div class="msg-head">
+              <span class="msg-author">Vous</span>
+              <span class="right">
+                <button class="icon-btn" title="Annuler" aria-label="Annuler">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                </button>
+                <button class="icon-btn" title="Copier" aria-label="Copier">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </span>
+            </div>
+            <div class="msg-bubble">
+              Édite la timeline : sauts redimensionnés <span class="t">0:00.0–0:15.8</span>.
+            </div>
+          </div>
+
+          <div class="msg">
+            <div class="msg-head">
+              <span class="msg-author">Vous</span>
+              <span class="right">
+                <button class="icon-btn" title="Annuler" aria-label="Annuler">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                </button>
+                <button class="icon-btn" title="Copier" aria-label="Copier">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </span>
+            </div>
+            <div class="msg-bubble">
+              Édite la timeline : sauts redimensionnés <span class="t">0:04.6–0:17.4</span>.
+            </div>
+          </div>
+
+          <div class="msg">
+            <div class="msg-head">
+              <span class="msg-author">Vous</span>
+              <span class="right">
+                <button class="icon-btn" title="Annuler" aria-label="Annuler">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                </button>
+                <button class="icon-btn" title="Copier" aria-label="Copier">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </span>
+            </div>
+            <div class="msg-bubble">
+              Édite la timeline : sauts redimensionnés <span class="t">0:06.6–0:17.4</span>.
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input">
+          <textarea placeholder="Décrivez la modification souhaitée…"></textarea>
+          <div class="actions">
+            <button class="model-picker" id="model-picker" aria-label="Choisir le modèle">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              <span id="model-name">openai-oauth · gpt-5</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              <span class="chip"><span class="d"></span> Raisonnement élevé</span>
+            </button>
+            <button class="send-btn" id="send-btn" title="Envoyer (Entrée)" aria-label="Envoyer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- PREVIEW -->
+      <section class="preview-wrap" aria-label="Aperçu vidéo">
+        <div class="preview-canvas">
+          <div class="preview-frame">
+            <div class="guides" aria-hidden="true"></div>
+            <span class="timestamp" id="preview-timecode">00:00:12.4</span>
+            <span class="badge">1920 × 1080 · 60 fps</span>
+            <div class="scene">Aperçu · 16:9</div>
+            <div class="pip" aria-label="Webcam">
+              <span class="face" aria-hidden="true"></span>
+            </div>
+          </div>
+        </div>
+        <div class="transport" role="toolbar" aria-label="Contrôles de lecture">
+          <button class="tbtn play" id="play-btn" title="Lecture / Pause (Espace)" aria-label="Lecture / Pause" data-playing="false">
+            <svg id="play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button class="tbtn" id="prev-btn" title="Clip précédent" aria-label="Clip précédent">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+          </button>
+          <button class="tbtn" id="next-btn" title="Clip suivant" aria-label="Clip suivant">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+          </button>
+          <button class="tbtn" id="loop-btn" title="Boucle" aria-label="Boucle" aria-pressed="false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </button>
+          <button class="tbtn" id="expand-btn" title="Plein écran" aria-label="Plein écran">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          </button>
+          <span class="time" id="transport-time">
+            <span id="t-cur">0:00.0</span><span class="sep">/</span><span class="total" id="t-tot">7:03.6</span>
+          </span>
+          <span class="spacer"></span>
+          <span class="seg" aria-label="Zoom">
+            <button data-z="0.5">.5×</button>
+            <button data-z="1" aria-pressed="true">1×</button>
+            <button data-z="2">2×</button>
+          </span>
+          <button class="rec" id="rec-btn" title="Enregistrer (R)" aria-label="Enregistrer" aria-pressed="false">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="rec-label">REC</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- TRANSCRIPT PANEL -->
+      <aside class="panel transcript" aria-label="Transcription">
+        <header class="panel-head">
+          <h2>Transcription actuelle</h2>
+          <span class="right">
+            <button class="icon-btn" title="Rechercher" aria-label="Rechercher">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+            <button class="icon-btn" title="Exporter la transcription" aria-label="Exporter">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+            </button>
+          </span>
+        </header>
+
+        <div class="transcript-head">
+          <div class="clip-badge">
+            <span class="num" aria-hidden="true">1</span>
+            <span class="fname">demo-n8n-as-code-1.mp4</span>
+          </div>
+          <div class="clip-range">Clip 1 · 0:00.0–2:34.7 · 12 segments détectés</div>
+        </div>
+
+        <div class="panel-body" style="padding: 0;">
+          <div class="transcript-text">
+            <p>
+              <span class="filler">ok</span> donc on va voir comment installer et lancer n'importe quel projet <span class="t">10 s</span> depuis zéro donc il vous faudra vs code que vous pouvez télécharger ici <span class="filler">très facilement ok</span> une fois téléchargé vous pouvez simplement l'installer vous n'aurez besoin que de docker <span class="filler">en fait</span> et vous téléchargez le bureau docker donc à nouveau une fois téléchargé <span class="skip-mark" title="Silence · 2.3s">2.3s</span> vous pouvez l'installer sur mon ordinateur les deux logiciels sont déjà installés donc je vais lancer docker et maintenant ouvrir vs code alors lançons <span class="filler">ok</span> un nouvel espace de travail <span class="skip-mark" title="Filler">4.3s</span>
+            </p>
+            <p>
+              et puis vous irez dans les extensions et chercherez <span class="t">na 10</span> comme code <span class="skip-mark" title="Filler">2.4s</span> très bien et puis vous cliquez simplement sur le bouton d'installation et vous aurez cette petite icône sur le côté gauche qui est <span class="t">na 10</span> comme icône d'extension de code alors vous cliquez dessus puis vous cliquez sur configurer et vous <span class="filler">ok</span> ajouterez simplement une instance locale nous demanderons au gestionnaire na 10 de créer une instance pour moi <span class="filler">ok</span> et une url publique <span class="filler">ok</span> donc maintenant le gestionnaire installe <span class="t">self hosted local na 10</span> instance c'est en cours de création pour moi les informations d'identification plus anciennes <span class="filler">en fait</span> la clé et les identifiants donc je n'aurai pas à m'embêter avec ce sera plug and play <span class="skip-mark" title="Filler">7.1s</span> maintenant j'ai ma belle instance avec un lien de connexion automatique et nous pouvons voir qu'elle a démarré donc il vous suffit de cliquer sur enregistrer les paramètres
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- RIGHT RAIL -->
+      <aside class="rail rail-right" aria-label="Outils secondaires">
+        <button title="Sous-titres" aria-label="Sous-titres" aria-pressed="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="6" y1="11" x2="10" y2="11"/><line x1="14" y1="11" x2="18" y2="11"/><line x1="7" y1="15" x2="17" y2="15"/></svg>
+        </button>
+        <button title="Marqueurs" aria-label="Marqueurs">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button title="Audio" aria-label="Audio">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        </button>
+        <button title="Exporter" aria-label="Exporter">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>
+        </button>
+        <span class="sep-h" aria-hidden="true"></span>
+        <button title="Aide" aria-label="Aide">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </button>
+      </aside>
+
+    </main>
+
+    <!-- ─── bottombar — timeline (left) + properties (right) ────── -->
+    <footer class="bottombar" aria-label="Timeline et propriétés">
+
+      <!-- TIMELINE -->
+      <section class="timeline-wrap">
+        <header class="timeline-head">
+          <h2>Timeline</h2>
+          <span class="stats">
+            <strong>2 clips</strong><span class="sep">·</span><strong>24 sauts</strong><span class="sep">·</span><strong>7:03.6</strong> total
+          </span>
+          <span class="right">
+            <span class="pill"><span class="d" aria-hidden="true"></span> Auto-sauvegardé</span>
+            <span class="stamp"><strong>0:00.0</strong> · Clip <strong>1</strong>/2</span>
+          </span>
+        </header>
+
+        <div class="timeline-body" id="timeline-body">
+          <!-- ruler — major ticks every 60s, minor every 30s -->
+          <div class="ruler" id="ruler" style="padding-left: 72px;"></div>
+
+          <!-- skip strip — hatched red regions mark auto-detected cuts -->
+          <div class="skip-strip" id="skip-strip" style="margin-left: 72px;">
+            <span class="skip" style="left: 2%; width: 1.6%;"></span>
+            <span class="skip" style="left: 5%; width: 1.2%;"></span>
+            <span class="skip" style="left: 8%; width: 2.0%;"></span>
+            <span class="skip" style="left: 12%; width: 0.8%;"></span>
+            <span class="skip" style="left: 18%; width: 1.4%;"></span>
+            <span class="skip" style="left: 22%; width: 1.0%;"></span>
+            <span class="skip" style="left: 27%; width: 1.8%;"></span>
+            <span class="skip" style="left: 31%; width: 1.2%;"></span>
+            <span class="skip" style="left: 36%; width: 1.6%;"></span>
+            <span class="skip" style="left: 40%; width: 0.9%;"></span>
+            <span class="skip" style="left: 45%; width: 1.5%;"></span>
+            <span class="skip" style="left: 50%; width: 1.1%;"></span>
+            <span class="skip" style="left: 55%; width: 1.7%;"></span>
+            <span class="skip" style="left: 59%; width: 0.8%;"></span>
+            <span class="skip" style="left: 63%; width: 1.3%;"></span>
+            <span class="skip" style="left: 68%; width: 1.0%;"></span>
+            <span class="skip" style="left: 72%; width: 1.8%;"></span>
+            <span class="skip" style="left: 77%; width: 1.2%;"></span>
+            <span class="skip" style="left: 81%; width: 0.9%;"></span>
+            <span class="skip" style="left: 85%; width: 1.5%;"></span>
+            <span class="skip" style="left: 89%; width: 1.1%;"></span>
+            <span class="skip" style="left: 92%; width: 1.4%;"></span>
+            <span class="skip" style="left: 95%; width: 1.0%;"></span>
+            <span class="skip" style="left: 97%; width: 1.6%;"></span>
+          </div>
+
+          <div class="tracks">
+            <div class="track-row">
+              <span class="track-head">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                V1
+              </span>
+              <div class="track-body" id="track-v1">
+                <div class="clip is-selected" data-clip="1" style="left: 0%; width: 36.5%;">
+                  <span class="attach" aria-hidden="true">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  </span>
+                  <span class="name">demo-n8n-as-code-1.mp4</span>
+                  <span class="meta">0:00.0 → 2:34.7 · source 0:00.0–2:34.7</span>
+                  <span class="handle l" aria-hidden="true"></span>
+                  <span class="handle r" aria-hidden="true"></span>
+                </div>
+                <div class="clip" data-clip="2" style="left: 36.5%; width: 63.5%;">
+                  <span class="attach" aria-hidden="true">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  </span>
+                  <span class="name">2026-03-10 09-10-39.mp4</span>
+                  <span class="meta">2:34.7 → 7:03.6 · source 0:00.0–4:28.9</span>
+                  <span class="handle l" aria-hidden="true"></span>
+                  <span class="handle r" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
+            <div class="track-row">
+              <span class="track-head">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                A1
+              </span>
+              <div class="track-body">
+                <div class="clip" data-clip="3" style="left: 0%; width: 36.5%;">
+                  <span class="attach" aria-hidden="true">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  </span>
+                  <span class="name">voix · microphone principal</span>
+                  <span class="meta">0:00.0 → 2:34.7 · -16 LUFS</span>
+                </div>
+                <div class="clip" data-clip="4" style="left: 36.5%; width: 63.5%;">
+                  <span class="attach" aria-hidden="true">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  </span>
+                  <span class="name">voix · microphone principal</span>
+                  <span class="meta">2:34.7 → 7:03.6 · -14 LUFS</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PROPERTIES -->
+      <aside class="properties-wrap" aria-label="Propriétés du clip">
+        <header class="properties-head">
+          <h2>Propriétés du clip</h2>
+          <span class="right">
+            <button class="icon-btn" title="Fermer" aria-label="Fermer" style="width:24px;height:24px;display:grid;place-items:center;border-radius:6px;color:var(--meta)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </span>
+        </header>
+        <div class="properties-body">
+          <div class="prop-row"><span class="k">Nom</span><span class="v">demo-n8n-as-code-1.mp4</span></div>
+          <div class="prop-row"><span class="k">Format</span><span class="v">mp4 · H.264 · AAC</span></div>
+          <div class="prop-row"><span class="k">Taille</span><span class="v">142 Mo</span></div>
+          <div class="prop-row"><span class="k">Résolution</span><span class="v"><strong>1920 × 1080</strong> · 60 fps</span></div>
+          <div class="prop-row"><span class="k">Source</span><span class="v">0:00.0 → 2:34.7</span></div>
+          <div class="prop-row"><span class="k">Timeline</span><span class="v">0:00.0 → 2:34.7</span></div>
+          <div class="prop-row"><span class="k">Sauts</span><span class="v"><strong>11</strong> détectés · supprimés</span></div>
+          <div class="prop-row"><span class="k">Transcription</span><span class="v">fr-FR · Whisper large-v3</span></div>
+          <div class="prop-row"><span class="k">Modifié le</span><span class="v">27 juin 2026 · 10:39</span></div>
+
+          <div class="prop-actions">
+            <button class="prop-btn">Ouvrir le fichier</button>
+            <button class="prop-btn primary">Remplacer</button>
+          </div>
+        </div>
+      </aside>
+
+    </footer>
+  </div>
+
+  <script>
+    /* ─── ruler — generate ticks from 0 to 7:00 every 30s ───────── */
+    (function ruler() {
+      const r = document.getElementById('ruler');
+      if (!r) return;
+      const totalSec = 7 * 60 + 3.6; // 7:03.6
+      const step = 30;               // 30s minor, 60s major
+      const fmt = function (sec) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return (s === 0 ? m + ':00' : m + ':' + (s < 10 ? '0' + s : s) + '.0');
+      };
+      for (let s = 0; s <= totalSec; s += step) {
+        const pct = (s / totalSec) * 100;
+        const major = (s % 60) === 0;
+        const t = document.createElement('span');
+        t.className = 'tick' + (major ? ' major' : '');
+        t.style.left = 'calc(' + pct + '% - 0px)';
+        if (major) {
+          const lbl = document.createElement('span');
+          lbl.className = 'label';
+          lbl.textContent = fmt(s);
+          t.appendChild(lbl);
+        }
+        r.appendChild(t);
+      }
+    })();
+
+    /* ─── clip selection ─────────────────────────────────────────── */
+    (function clips() {
+      document.querySelectorAll('.clip').forEach(function (c) {
+        c.addEventListener('click', function () {
+          document.querySelectorAll('.clip').forEach(function (x) { x.classList.remove('is-selected'); });
+          c.classList.add('is-selected');
+        });
+      });
+    })();
+
+    /* ─── rail buttons — toggle aria-pressed ─────────────────────── */
+    (function rails() {
+      document.querySelectorAll('.rail button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          const group = b.parentElement;
+          group.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+          b.setAttribute('aria-pressed', 'true');
+        });
+      });
+    })();
+
+    /* ─── play / pause toggle ───────────────────────────────────── */
+    (function play() {
+      const btn = document.getElementById('play-btn');
+      const icon = document.getElementById('play-icon');
+      if (!btn || !icon) return;
+      btn.addEventListener('click', function () {
+        const playing = btn.getAttribute('data-playing') === 'true';
+        btn.setAttribute('data-playing', playing ? 'false' : 'true');
+        icon.innerHTML = playing
+          ? '<path d="M8 5v14l11-7z"/>'
+          : '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>';
+      });
+      window.addEventListener('keydown', function (e) {
+        if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+        if (e.code === 'Space') { e.preventDefault(); btn.click(); }
+      });
+    })();
+
+    /* ─── rec toggle ─────────────────────────────────────────────── */
+    (function rec() {
+      const btn = document.getElementById('rec-btn');
+      const label = document.getElementById('rec-label');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        const on = btn.getAttribute('aria-pressed') === 'true';
+        btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+        label.textContent = on ? 'REC' : 'STOP · 00:12';
+      });
+    })();
+
+    /* ─── transport zoom segmented control ───────────────────────── */
+    (function seg() {
+      document.querySelectorAll('.transport .seg').forEach(function (s) {
+        s.querySelectorAll('button').forEach(function (b) {
+          b.addEventListener('click', function () {
+            s.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+            b.setAttribute('aria-pressed', 'true');
+          });
+        });
+      });
+    })();
+
+    /* ─── loop button toggle ─────────────────────────────────────── */
+    (function loop() {
+      const b = document.getElementById('loop-btn');
+      if (!b) return;
+      b.addEventListener('click', function () {
+        const on = b.getAttribute('aria-pressed') === 'true';
+        b.setAttribute('aria-pressed', on ? 'false' : 'true');
+      });
+    })();
+
+    /* ─── model picker — cycle through 3 models on click ─────────── */
+    (function model() {
+      const name = document.getElementById('model-name');
+      const picker = document.getElementById('model-picker');
+      if (!name || !picker) return;
+      const models = [
+        'openai-oauth · gpt-5',
+        'anthropic · claude-sonnet-4.5',
+        'local · qwen2.5-7b'
+      ];
+      let i = 0;
+      picker.addEventListener('click', function (e) {
+        if (e.target.closest('.chip')) return; // don't cycle on chip click
+        i = (i + 1) % models.length;
+        name.textContent = models[i];
+      });
+    })();
+
+    /* ─── send button — append bubble to chat ────────────────────── */
+    (function send() {
+      const btn = document.getElementById('send-btn');
+      const ta = document.querySelector('.chat-input textarea');
+      const body = document.querySelector('.chat .panel-body');
+      if (!btn || !ta || !body) return;
+      const post = function () {
+        const v = ta.value.trim();
+        if (!v) return;
+        const msg = document.createElement('div');
+        msg.className = 'msg';
+        msg.innerHTML = '<div class="msg-head"><span class="msg-author">Vous</span><span class="right"><button class="icon-btn" title="Annuler" aria-label="Annuler"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button><button class="icon-btn" title="Copier" aria-label="Copier"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></span></div><div class="msg-bubble"></div>';
+        msg.querySelector('.msg-bubble').textContent = v;
+        body.appendChild(msg);
+        ta.value = '';
+        body.scrollTop = body.scrollHeight;
+      };
+      btn.addEventListener('click', post);
+      ta.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); post(); }
+      });
+    })();
+
+    /* ─── panel-head collapse chevron (visual toggle only) ───────── */
+    (function chev() {
+      document.querySelectorAll('.panel-head .icon-btn[aria-label="Réduire le panneau"]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          const panel = b.closest('.panel');
+          const body = panel.querySelector('.panel-body');
+          const input = panel.querySelector('.chat-input');
+          const head = panel.querySelector('.transcript-head');
+          [body, input, head].forEach(function (el) {
+            if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

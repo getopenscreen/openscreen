@@ -1,4 +1,4 @@
-import { info, setFailed, warning } from "@actions/core";
+import { info, warning } from "@actions/core";
 import { context, getOctokit } from "@actions/github";
 
 const spotlightWebhook = (process.env.DISCORD_SPOTLIGHT_WEBHOOK_URL || "").trim();
@@ -71,7 +71,7 @@ async function main() {
 
 	if (!res.ok) {
 		const txt = await res.text();
-		setFailed(`Leaderboard post failed ${res.status}: ${txt}`);
+		warning(`Leaderboard post failed ${res.status}: ${txt}`);
 	}
 }
 

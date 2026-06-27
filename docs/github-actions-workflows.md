@@ -21,7 +21,6 @@ graph TD
     end
 
     subgraph Tier 2 - Release build
-        build_native_mac[build-native-mac.yml<br/>workflow_call]
         build[build.yml<br/>tag v* / dispatch]
         build_win[build-windows]
         build_mac[build-macos<br/>matrix arm64 x64]
@@ -30,7 +29,6 @@ graph TD
         build --> build_win
         build --> build_mac
         build --> build_linux
-        build_mac -.->|reusable| build_native_mac
         build_win --> build_release
         build_mac --> build_release
         build_linux --> build_release
@@ -53,7 +51,6 @@ graph TD
         diag_mac[build-macos<br/>matrix arm64 x64]
         diag --> diag_win
         diag --> diag_mac
-        diag_mac -.->|reusable| build_native_mac
     end
 
     build_release -->|gh release create| homebrew
@@ -78,10 +75,6 @@ Triggered on every push to `main` and every pull request targeting `main`. Four 
 All jobs use the shared composite action `.github/actions/setup` for Node.js installation and `npm ci`. Failure of one job does not cancel the others.
 
 ## Tier 2: Release build and publish
-
-### build-native-mac.yml
-
-Reusable workflow triggered via `workflow_call`. Accepts an `arch` input (`arm64` or `x64`) and produces native ScreenCaptureKit helpers. Called by both `build.yml` (release packaging) and `diagnostic-artifact.yml` (diagnostic bundle). This workflow is not triggered by repository events directly.
 
 ### build.yml
 

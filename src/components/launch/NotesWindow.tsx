@@ -1,6 +1,8 @@
 import React, { useLayoutEffect, useState } from "react";
+import { useScopedT } from "@/contexts/I18nContext";
 
 export function NotesWindow() {
+	const t = useScopedT("launch");
 	const [notes, setNotes] = useState("");
 
 	const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -16,7 +18,7 @@ export function NotesWindow() {
 		<div className="bg-white h-screen w-screen px-6 py-4">
 			<textarea
 				className="w-full h-full bg-transparent outline-none resize-none caret-black text-black"
-				placeholder="Take notes here..."
+				placeholder={t("tooltips.openNotesPlaceholder")}
 				value={notes}
 				onChange={handleNotesChange}
 			/>

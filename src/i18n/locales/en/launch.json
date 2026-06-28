@@ -11,7 +11,8 @@
 		"useVerticalTray": "Use vertical tray",
 		"useHorizontalTray": "Use horizontal tray",
 		"openStudio": "Open Studio",
-		"openNotes": "Open Notes"
+		"openNotes": "Open Notes",
+		"openNotesPlaceholder": "Take notes here..."
 	},
 	"audio": {
 		"enableSystemAudio": "Enable system audio",

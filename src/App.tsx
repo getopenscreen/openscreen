@@ -60,8 +60,6 @@ export default function App() {
 
 	const content = (() => {
 		switch (windowType) {
-			case "notes":
-				return <NotesWindow />;
 			case "hud-overlay":
 				return <LaunchWindow />;
 			case "source-selector":
@@ -116,9 +114,17 @@ export default function App() {
 		}
 	})();
 
+	if (showNotes) {
+		return (
+			<TooltipProvider>
+				<NotesWindow />
+				<Toaster theme="dark" />
+			</TooltipProvider>
+		);
+	}
+
 	return (
 		<TooltipProvider>
-			{showNotes && <NotesWindow />}
 			{content}
 			<Toaster theme="dark" />
 		</TooltipProvider>

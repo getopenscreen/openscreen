@@ -1047,6 +1047,8 @@ export function LaunchWindow() {
 
 				<Tooltip content={t("tooltips.openNotes")}>
 					<button
+						type="button"
+						aria-label={t("tooltips.openNotes")}
 						className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
 						onClick={() => window.electronAPI.openNotes()}
 					>

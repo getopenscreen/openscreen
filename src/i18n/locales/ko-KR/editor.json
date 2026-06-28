@@ -86,7 +86,8 @@
 		"kinds": {
 			"zoom": "줌",
 			"speed": "속도",
-			"annotation": "텍스트"
+			"annotation": "주석",
+			"blur": "블러"
 		}
 	}
 }

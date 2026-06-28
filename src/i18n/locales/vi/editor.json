@@ -86,7 +86,8 @@
 		"kinds": {
 			"zoom": "Thu phóng",
 			"speed": "Tốc độ",
-			"annotation": "Văn bản"
+			"annotation": "Văn bản",
+			"blur": "Làm mờ"
 		}
 	}
 }

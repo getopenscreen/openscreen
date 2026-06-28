@@ -1671,13 +1671,17 @@ export default function VideoEditor() {
 		for (const [id, regions, extract, kind] of copyTargets) {
 			if (!id) continue;
 			const region = (regions as readonly { id: string }[]).find((r) => r.id === id);
-			if (region) {
-				// Each row pairs a region list with its matching extractor, so the cast is sound.
-				setCopiedRegion((extract as (r: never) => CopiedRegion)(region as never));
-				toast.success(t("regionClipboard.copied", { region: t(`regionClipboard.kinds.${kind}`) }), {
+			if (!region) continue; // Stale id — try the next target so the fallback toast stays reachable.
+			// Each row pairs a region list with its matching extractor, so the cast is sound.
+			setCopiedRegion((extract as (r: never) => CopiedRegion)(region as never));
+			// Blur lives in annotationRegions (type "blur") but its toast must label as "blur", not "text".
+			const labelKind = (region as { type?: string }).type === "blur" ? "blur" : kind;
+			toast.success(
+				t("regionClipboard.copied", { region: t(`regionClipboard.kinds.${labelKind}`) }),
+				{
 					id: "regionClipboard.copied",
-				});
-			}
+				},
+			);
 			return;
 		}
 		toast.info(t("regionClipboard.nothingToCopy"));

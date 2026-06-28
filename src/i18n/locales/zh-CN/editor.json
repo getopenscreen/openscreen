@@ -86,7 +86,8 @@
 		"kinds": {
 			"zoom": "缩放",
 			"speed": "速度",
-			"annotation": "文本"
+			"annotation": "标注",
+			"blur": "模糊"
 		}
 	}
 }

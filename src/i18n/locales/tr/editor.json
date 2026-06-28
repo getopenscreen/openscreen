@@ -86,7 +86,8 @@
 		"kinds": {
 			"zoom": "Yakınlaştırma",
 			"speed": "Hız",
-			"annotation": "Metin"
+			"annotation": "Açıklama",
+			"blur": "Bulanıklık"
 		}
 	}
 }

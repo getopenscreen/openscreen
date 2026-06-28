@@ -86,7 +86,8 @@
 		"kinds": {
 			"zoom": "تكبير",
 			"speed": "سرعة",
-			"annotation": "نص"
+			"annotation": "نص",
+			"blur": "تمويه"
 		}
 	}
 }

@@ -29,6 +29,12 @@ describe("findFreeGapAt", () => {
 		expect(gapMs).toBe(0);
 	});
 
+	it("rejects placement that lands exactly on a region's startMs", () => {
+		const regions = [{ startMs: 5000, endMs: 7000 }];
+		const { ok } = findFreeGapAt(regions, 5000, totalMs);
+		expect(ok).toBe(false);
+	});
+
 	it("allows placement adjacent to (exactly at the end of) an existing region", () => {
 		const regions = [{ startMs: 0, endMs: 2000 }];
 		const { ok, gapMs } = findFreeGapAt(regions, 2000, totalMs);

@@ -86,7 +86,8 @@
 		"kinds": {
 			"zoom": "ズーム",
 			"speed": "速度",
-			"annotation": "テキスト"
+			"annotation": "注釈",
+			"blur": "ぼかし"
 		}
 	}
 }

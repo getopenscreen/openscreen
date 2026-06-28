@@ -69,7 +69,8 @@
 		"kinds": {
 			"zoom": "Zoom",
 			"speed": "Velocidade",
-			"annotation": "Texto"
+			"annotation": "Anotação",
+			"blur": "Desfoque"
 		}
 	}
 }

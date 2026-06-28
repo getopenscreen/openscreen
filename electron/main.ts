@@ -593,8 +593,8 @@ appReady?.then(async () => {
 		createNotesWindowWrapper,
 		() => mainWindow,
 		() => sourceSelectorWindow,
-		() => countdownOverlayWindow,
 		() => notesWindow,
+		() => countdownOverlayWindow,
 		(recording: boolean, sourceName: string) => {
 			selectedSourceName = sourceName;
 			if (!tray) createTray();

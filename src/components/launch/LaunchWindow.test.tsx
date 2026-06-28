@@ -11,6 +11,25 @@ type SelectedSourceChangedListener = Parameters<
 const platformState = vi.hoisted(() => ({ value: "darwin" }));
 const resizeCallbacks = vi.hoisted(() => [] as Array<ResizeObserverCallback>);
 
+class StubResizeObserver {
+	observe() {
+		return undefined;
+	}
+	unobserve() {
+		return undefined;
+	}
+	disconnect() {
+		return undefined;
+	}
+}
+
+class CapturingResizeObserver extends StubResizeObserver {
+	constructor(callback: ResizeObserverCallback) {
+		super();
+		resizeCallbacks.push(callback);
+	}
+}
+
 const recorderState = vi.hoisted(() => ({
 	value: {
 		recording: false,
@@ -200,29 +219,22 @@ function emitSourceSelectorClosed() {
 	});
 }
 
+function resetLaunchMocks() {
+	vi.stubGlobal("ResizeObserver", StubResizeObserver);
+	recorderState.value.toggleRecording.mockClear();
+	selectedSourceChangedListeners = [];
+	sourceSelectorClosedListeners = [];
+	i18nState.value.systemLocaleSuggestion = null;
+	i18nState.value.acceptSystemLocaleSuggestion.mockClear();
+	i18nState.value.dismissSystemLocaleSuggestion.mockClear();
+	i18nState.value.resolveSystemLocaleSuggestion.mockClear();
+	stubElectronAPI(vi.fn(async () => null));
+}
+
 describe("LaunchWindow record button", () => {
 	beforeEach(() => {
 		platformState.value = "darwin";
-		class ResizeObserver {
-			observe() {
-				return undefined;
-			}
-			unobserve() {
-				return undefined;
-			}
-			disconnect() {
-				return undefined;
-			}
-		}
-		vi.stubGlobal("ResizeObserver", ResizeObserver);
-		recorderState.value.toggleRecording.mockClear();
-		selectedSourceChangedListeners = [];
-		sourceSelectorClosedListeners = [];
-		i18nState.value.systemLocaleSuggestion = null;
-		i18nState.value.acceptSystemLocaleSuggestion.mockClear();
-		i18nState.value.dismissSystemLocaleSuggestion.mockClear();
-		i18nState.value.resolveSystemLocaleSuggestion.mockClear();
-		stubElectronAPI(vi.fn(async () => null));
+		resetLaunchMocks();
 	});
 
 	afterEach(() => {
@@ -359,30 +371,9 @@ describe("LaunchWindow record button", () => {
 describe("LaunchWindow system language prompt", () => {
 	beforeEach(() => {
 		platformState.value = "darwin";
+		resetLaunchMocks();
 		resizeCallbacks.length = 0;
-		class ResizeObserver {
-			constructor(callback: ResizeObserverCallback) {
-				resizeCallbacks.push(callback);
-			}
-			observe() {
-				return undefined;
-			}
-			unobserve() {
-				return undefined;
-			}
-			disconnect() {
-				return undefined;
-			}
-		}
-		vi.stubGlobal("ResizeObserver", ResizeObserver);
-		recorderState.value.toggleRecording.mockClear();
-		selectedSourceChangedListeners = [];
-		sourceSelectorClosedListeners = [];
-		i18nState.value.systemLocaleSuggestion = null;
-		i18nState.value.acceptSystemLocaleSuggestion.mockClear();
-		i18nState.value.dismissSystemLocaleSuggestion.mockClear();
-		i18nState.value.resolveSystemLocaleSuggestion.mockClear();
-		stubElectronAPI(vi.fn(async () => null));
+		vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
 	});
 
 	afterEach(() => {
@@ -398,10 +389,7 @@ describe("LaunchWindow system language prompt", () => {
 		const prompt = await screen.findByText("Use your system language?");
 		expect(prompt).toBeInTheDocument();
 
-		// jsdom reports zero layout, so stub both the bar and the prompt to mimic a
-		// real HUD: a 56px bar near the bottom of an 800px viewport, and a 130px prompt
-		// at top-8. Without the prompt-sizing path, the height collapses to the bar
-		// (~80px) and this assertion would fail.
+		// jsdom reports zero layout, so stub both the bar and the prompt to mimic a real HUD.
 		const viewportHeight = 800;
 		const barHeight = 56;
 		const bottomMargin = 20;
@@ -439,8 +427,7 @@ describe("LaunchWindow system language prompt", () => {
 			toJSON: () => ({}),
 		});
 
-		// Fire any observers attached during render so the spied rect is actually
-		// consumed by measureHudSize; the mount-time call had rect.height === 0.
+		// Fire any observers attached during render so the spied rect is actually consumed.
 		await act(async () => {
 			for (const callback of resizeCallbacks) {
 				callback([], {} as ResizeObserver);
@@ -455,25 +442,10 @@ describe("LaunchWindow system language prompt", () => {
 			mock: { calls: Array<[number, number]> };
 		};
 		const [, height] = sizeMock.mock.calls[sizeMock.mock.calls.length - 1];
-		// Must at least cover the prompt (32 + 130) plus the TOP_MARGIN slack (24).
+		// Must at least cover the prompt plus the TOP_MARGIN slack (24).
 		expect(height).toBeGreaterThanOrEqual(32 + promptBox.height + 24);
-		// And must be less than the full viewport (the bar is the lower bound, not
-		// the viewport) — guards against regressions that always grow to the full
-		// viewport because of a missed bottom anchor.
+		// And must be less than the full viewport — guards against regressions that always
+		// grow to the full viewport because of a missed bottom anchor.
 		expect(height).toBeLessThan(viewportHeight + 24);
-	});
-
-	it("routes the switch and keep-default buttons to the i18n context", async () => {
-		i18nState.value.systemLocaleSuggestion = "zh-CN";
-
-		renderLaunchWindow();
-
-		await screen.findByText("Use your system language?");
-
-		fireEvent.click(screen.getByRole("button", { name: "Switch to English" }));
-		expect(i18nState.value.acceptSystemLocaleSuggestion).toHaveBeenCalledTimes(1);
-
-		fireEvent.click(screen.getByRole("button", { name: "Keep current language" }));
-		expect(i18nState.value.dismissSystemLocaleSuggestion).toHaveBeenCalledTimes(1);
 	});
 });

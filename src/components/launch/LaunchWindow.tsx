@@ -352,15 +352,12 @@ export function LaunchWindow() {
 			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
 		}
 
-		// The system-language prompt is anchored at `top-8` (32px) of the renderer; the
-		// bottom-anchored overlay only reserves enough room for the bar, so without this
-		// the prompt's buttons get clipped above the OS window's visible area (issue #30).
+		// Prompt sits at `fixed top-8`; grow the window to fit it so its buttons don't clip (issue #30).
 		if (systemLocalePromptRef.current) {
 			const rect = systemLocalePromptRef.current.getBoundingClientRect();
-			// scrollHeight covers the un-clipped box if the viewport is currently too short.
 			const promptHeight = rect.height || systemLocalePromptRef.current.scrollHeight;
 			if (promptHeight > 0) {
-				topFromBottom = Math.max(topFromBottom, 32 + promptHeight);
+				topFromBottom = Math.max(topFromBottom, rect.top + promptHeight);
 			}
 			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
 		}
@@ -387,9 +384,7 @@ export function LaunchWindow() {
 		hudResizeObserverRef.current = observer;
 		if (hudBarRef.current) observer.observe(hudBarRef.current);
 		if (deviceSelectorRef.current) observer.observe(deviceSelectorRef.current);
-		// Backfill refs that may have been set during the commit phase, before this
-		// effect created the observer (e.g. the system-language prompt or the language
-		// menu). Without this, their reflows wouldn't trigger another resize.
+		// Backfill refs set before the observer existed (e.g. the prompt or language menu).
 		if (systemLocalePromptRef.current) observer.observe(systemLocalePromptRef.current);
 		if (languageMenuPanelRef.current) observer.observe(languageMenuPanelRef.current);
 		measureHudSize();

@@ -298,8 +298,7 @@
     }
     .titlebar .brand-mark {
       width: 18px; height: 18px; border-radius: 5px;
-      background: radial-gradient(circle at 30% 30%, var(--brand), var(--brand-lo) 80%);
-      box-shadow: 0 0 8px var(--brand-glow);
+      display: block;
     }
     .titlebar .sep {
       width: 1px; height: 16px; background: var(--border);
@@ -2480,16 +2479,8 @@
       <span class="lights" aria-hidden="true">
         <span class="r"></span><span class="y"></span><span class="g"></span>
       </span>
-      <span class="proj-actions">
-        <button class="icon-btn" data-action="open-modal" data-modal="open-project" title="Ouvrir un projet" aria-label="Ouvrir un projet">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>
-        </button>
-        <button class="icon-btn" data-action="open-modal" data-modal="new-project" title="Nouveau projet" aria-label="Nouveau projet">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
-        </button>
-      </span>
       <span class="brand">
-        <img class="brand-mark" src="mqwrseqp-1024x1024.png" alt="" aria-hidden="true" style="object-fit: cover;">
+        <img class="brand-mark" src="mqy0l73e-ChatGPT-Image-28-juin-2026_-18_02_26.png" alt="" aria-hidden="true" style="display:block;width:18px;height:18px;border-radius:5px;object-fit:cover;mask-image:radial-gradient(circle,#000 38%,transparent 78%);-webkit-mask-image:radial-gradient(circle,#000 38%,transparent 78%);">
         OpenScreen
       </span>
       <span class="sep" aria-hidden="true"></span>
@@ -2500,12 +2491,17 @@
         <span class="dot" aria-hidden="true"></span>
         Enregistré · il y a 2 s
       </span>
-      <span class="right">
-        <button class="icon-btn" title="Importer un média" aria-label="Importer un média">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span class="proj-actions">
+        <button class="icon-btn" data-action="open-modal" data-modal="open-project" title="Ouvrir un projet" aria-label="Ouvrir un projet">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>
         </button>
+        <button class="icon-btn" data-action="open-modal" data-modal="new-project" title="Nouveau projet" aria-label="Nouveau projet">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+        </button>
+      </span>
+      <span class="right">
         <button class="icon-btn" title="Exporter" aria-label="Exporter">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 12 12 16 8 12"/><line x1="12" y1="3" x2="12" y2="16"/></svg>
         </button>
         <button class="icon-btn" data-panel-toggle="left" title="Basculer le panneau gauche" aria-label="Basculer le panneau gauche" aria-pressed="false">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
@@ -2540,7 +2536,7 @@
         </aside>
 
 <!-- CHAT PANEL -->
-      <aside class="panel chat left-panel is-active" data-left-panel="chat" aria-label="Édition par instructions">
+      <aside class="panel chat left-panel is-active" data-left-panel="chat" aria-label="Édition par instructions" data-od-id="path-0-1-1">
         <header class="chat-strip">
           <div class="chat-strip-row">
             <span class="ctx-pill">
@@ -2568,7 +2564,7 @@
           <div class="chat-strip-hint">Remove blanks, silences and hesitations and v…</div>
         </header>
 
-        <div class="panel-body">
+        <div class="panel-body" style="overflow-y: scroll; scrollbar-gutter: stable; scrollbar-color: var(--border-hi) transparent;">
           <div class="msg">
             <div class="msg-bubble">
               <div class="msg-card-top">
@@ -2636,6 +2632,112 @@
               <div class="msg-body">Timeline edit: Resized skip 0:06.6-0:17.4.</div>
             </div>
           </div>
+
+          <div class="msg system">
+            <div class="msg-bubble">
+              <div class="msg-card-top">
+                <span class="msg-author">OpenScreen</span>
+                <span class="msg-time" style="margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.04em;">10:42</span>
+              </div>
+              <div class="msg-body" style="font-family:var(--font-mono);font-size:11.5px;color:var(--muted);">4 silences removed · 3.2s saved · applied to track 1</div>
+            </div>
+          </div>
+
+          <div class="msg user">
+            <div class="msg-bubble">
+              <div class="msg-card-top">
+                <span class="msg-author">YOU</span>
+                <span class="msg-actions">
+                  <button class="icon-btn" title="Répondre" aria-label="Répondre">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                  </button>
+                  <button class="icon-btn" title="Copier" aria-label="Copier">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  </button>
+                </span>
+              </div>
+              <div class="msg-body">Also tighten pauses longer than 0.6s in the intro.</div>
+            </div>
+          </div>
+
+          <div class="msg assistant">
+            <div class="msg-bubble">
+              <div class="msg-card-top">
+                <span class="msg-author">OpenScreen</span>
+                <span class="msg-time" style="margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.04em;">10:43</span>
+              </div>
+              <div class="msg-body">Detected 3 pauses over 600ms between 0:08 and 0:31.<br>Proposed cuts: <strong>0:08.2–0:09.1</strong>, <strong>0:18.5–0:19.4</strong>, <strong>0:31.0–0:32.2</strong>.<br>Apply all three?</div>
+              <div class="msg-card-actions" style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+                <button class="msg-btn primary" type="button" style="padding:5px 10px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-on);font-size:11.5px;font-weight:500;cursor:pointer;font-family:inherit;">Apply all</button>
+                <button class="msg-btn" type="button" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--fg-2);font-size:11.5px;cursor:pointer;font-family:inherit;">Review one by one</button>
+                <button class="msg-btn ghost" type="button" style="padding:5px 10px;border-radius:6px;border:0;background:transparent;color:var(--muted);font-size:11.5px;cursor:pointer;font-family:inherit;">Skip</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="msg user">
+            <div class="msg-bubble">
+              <div class="msg-card-top">
+                <span class="msg-author">YOU</span>
+                <span class="msg-actions">
+                  <button class="icon-btn" title="Répondre" aria-label="Répondre">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                  </button>
+                  <button class="icon-btn" title="Copier" aria-label="Copier">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  </button>
+                </span>
+              </div>
+              <div class="msg-body">Apply all.</div>
+            </div>
+          </div>
+
+          <div class="msg system">
+            <div class="msg-bubble">
+              <div class="msg-card-top">
+                <span class="msg-author">OpenScreen</span>
+                <span class="msg-time" style="margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.04em;">10:43</span>
+              </div>
+              <div class="msg-body" style="font-family:var(--font-mono);font-size:11.5px;color:var(--muted);">Removed 2.0s · output ready · undo available for 10 min</div>
+            </div>
+          </div>
+
+          <div class="msg user">
+            <div class="msg-bubble">
+              <div class="msg-card-top">
+                <span class="msg-author">YOU</span>
+                <span class="msg-actions">
+                  <button class="icon-btn" title="Répondre" aria-label="Répondre">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                  </button>
+                  <button class="icon-btn" title="Copier" aria-label="Copier">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  </button>
+                </span>
+              </div>
+              <div class="msg-body">Add subtle background music at 18% volume.</div>
+            </div>
+          </div>
+
+          <div class="msg assistant">
+            <div class="msg-bubble">
+              <div class="msg-card-top">
+                <span class="msg-author">OpenScreen</span>
+                <span class="msg-time" style="margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.04em;">10:44</span>
+              </div>
+              <div class="msg-body" style="color:var(--fg);">Picked <strong style="color:var(--accent);font-weight:500;">Soft Pad A</strong> from the project library. Inserting on track 2, fading in at 0:00.0 and fading out at the end. Ducking to 12% under speech where overlap detected.</div>
+            </div>
+          </div>
+
+          <div class="msg system">
+            <div class="msg-bubble">
+              <div class="msg-card-top">
+                <span class="msg-author">OpenScreen</span>
+                <span class="msg-time" style="margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.04em;">10:44</span>
+              </div>
+              <div class="msg-body" style="font-family:var(--font-mono);font-size:11.5px;color:var(--muted);">Music track added · 3 duck points set · review in timeline</div>
+            </div>
+          </div>
         </div>
 
         <div class="chat-input">
@@ -2679,47 +2781,47 @@
               <div class="thumb thumb-red" aria-hidden="true">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
               </div>
-              <div class="media-meta">
-                <div class="name">demo-alfa-no-code-1.mp4</div>
+              <div class="media-meta" style="background: var(--surface); color: var(--fg);">
+                <div class="name" style="color: var(--fg);">demo-alfa-no-code-1.mp4</div>
                 <div class="row">
-                  <span class="timecode">0:00:32.0·1·A</span>
-                  <span class="size">124 MB</span>
+                  <span class="timecode" style="color: var(--muted);">0:00:32.0·1·A</span>
+                  <span class="size" style="color: var(--muted);">124 MB</span>
                 </div>
               </div>
             </li>
-            <li class="media-card">
+            <li class="media-card" data-action="open-modal" data-modal="transcript" role="button" tabindex="0" title="Open source transcript" aria-label="Open source transcript">
               <div class="thumb thumb-green" aria-hidden="true">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
               </div>
-              <div class="media-meta">
-                <div class="name">demo-alfa-no-code-1.mp4</div>
+              <div class="media-meta" style="background: var(--surface); color: var(--fg);">
+                <div class="name" style="color: var(--fg);">demo-alfa-no-code-1.mp4</div>
                 <div class="row">
-                  <span class="timecode">0:00:32.0·1·A</span>
-                  <span class="size">98 MB</span>
+                  <span class="timecode" style="color: var(--muted);">0:00:32.0·1·A</span>
+                  <span class="size" style="color: var(--muted);">98 MB</span>
                 </div>
               </div>
             </li>
-            <li class="media-card">
+            <li class="media-card" data-action="open-modal" data-modal="transcript" role="button" tabindex="0" title="Open source transcript" aria-label="Open source transcript">
               <div class="thumb thumb-amber" aria-hidden="true">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
               </div>
-              <div class="media-meta">
-                <div class="name">demo-alfa-no-code-1.mp4</div>
+              <div class="media-meta" style="background: var(--surface); color: var(--fg);">
+                <div class="name" style="color: var(--fg);">demo-alfa-no-code-1.mp4</div>
                 <div class="row">
-                  <span class="timecode">0:00:32.0·1·A</span>
-                  <span class="size">156 MB</span>
+                  <span class="timecode" style="color: var(--muted);">0:00:32.0·1·A</span>
+                  <span class="size" style="color: var(--muted);">156 MB</span>
                 </div>
               </div>
             </li>
-            <li class="media-card">
+            <li class="media-card" data-action="open-modal" data-modal="transcript" role="button" tabindex="0" title="Open source transcript" aria-label="Open source transcript">
               <div class="thumb thumb-cyan" aria-hidden="true">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
               </div>
-              <div class="media-meta">
-                <div class="name">demo-alfa-no-code-1.mp4</div>
+              <div class="media-meta" style="background: var(--surface); color: var(--fg);">
+                <div class="name" style="color: var(--fg);">demo-alfa-no-code-1.mp4</div>
                 <div class="row">
-                  <span class="timecode">0:00:32.0·1·A</span>
-                  <span class="size">87 MB</span>
+                  <span class="timecode" style="color: var(--muted);">0:00:32.0·1·A</span>
+                  <span class="size" style="color: var(--muted);">87 MB</span>
                 </div>
               </div>
             </li>
@@ -2768,11 +2870,7 @@
             <span id="t-cur">0:00.0</span><span class="sep">/</span><span class="total" id="t-tot">7:03.6</span>
           </span>
           <span class="spacer"></span>
-          <span class="seg" aria-label="Zoom">
-            <button data-z="0.5">.5×</button>
-            <button data-z="1" aria-pressed="true">1×</button>
-            <button data-z="2">2×</button>
-          </span>
+          
           <button class="rec" id="rec-btn" title="Enregistrer (R)" aria-label="Enregistrer" aria-pressed="false">
             <span class="dot" aria-hidden="true"></span>
             <span id="rec-label">REC</span>
@@ -3066,7 +3164,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 6.4 16.2 2.3-6.5 6.5-2.3z"/></svg>
         </button>
         <button data-pane="timeline" title="Timeline" aria-label="Timeline">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.1 12 6"/><path d="m5.1 8-2.9-.8"/><path d="m6 12-1.9 2"/><path d="M7.2 2.2 8 5.1"/><path d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 H6 V20 H9"/><path d="M15 4 H18 V20 H15"/></svg>
         </button>
         <button data-pane="transcript" title="Transcription" aria-label="Transcription">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>

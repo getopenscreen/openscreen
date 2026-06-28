@@ -1,20 +1,12 @@
 import { info, warning } from "@actions/core";
 import { context, getOctokit } from "@actions/github";
+import { createForumThread, patchChannel, postChannelMessage } from "./discord-bot-api.mjs";
 import { validateThreadChannel } from "./discord-thread-validator.mjs";
 
-const WEBHOOK_USERNAME = (process.env.DISCORD_WEBHOOK_USERNAME || "OpenScreen").trim();
-const WEBHOOK_AVATAR = (process.env.DISCORD_WEBHOOK_AVATAR_URL || "").trim();
-
-const THREAD_MARKER_REGEX = /<!--\s*discord-thread-id:(\d+)\s*-->/i;
-const webhookUrl = (
-	process.env.DISCORD_WEBHOOK_URL ||
-	process.env.DISCORD_PR_FORUM_WEBHOOK ||
-	""
-).trim();
 const botToken = (process.env.DISCORD_BOT_TOKEN || "").trim();
 const reviewerRoleId = (process.env.DISCORD_REVIEWER_ROLE_ID || "").trim();
-const alertWebhookUrl = (process.env.DISCORD_ALERT_WEBHOOK_URL || "").trim();
 const forumChannelId = (process.env.DISCORD_PR_FORUM_CHANNEL_ID || "").trim();
+const alertChannelId = (process.env.DISCORD_ALERT_CHANNEL_ID || "").trim();
 
 const TAGS = {
 	open: "1493976692967080096",
@@ -52,57 +44,11 @@ function extractThreadId(body) {
 	return match ? match[1] : null;
 }
 
+const THREAD_MARKER_REGEX = /<!--\s*discord-thread-id:(\d+)\s*-->/i;
+
 function upsertThreadMarker(body, threadId) {
 	const cleaned = (body || "").replace(THREAD_MARKER_REGEX, "").trim();
 	return `${cleaned}\n\n<!-- discord-thread-id:${threadId} -->`.trim();
-}
-
-async function discordPost(payload, options = {}) {
-	const endpoint = new URL(webhookUrl);
-	endpoint.searchParams.set("wait", "true");
-	if (options.threadId) endpoint.searchParams.set("thread_id", String(options.threadId));
-
-	const response = await fetch(endpoint.toString(), {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			username: WEBHOOK_USERNAME,
-			avatar_url: WEBHOOK_AVATAR,
-			allowed_mentions: { parse: [] },
-			...payload,
-		}),
-	});
-
-	const contentType = (response.headers.get("content-type") || "").toLowerCase();
-	const text = await response.text();
-
-	if (!response.ok) {
-		throw new Error(`Discord API error ${response.status}: ${text}`);
-	}
-
-	if (!text) return {};
-	if (contentType.includes("application/json")) return JSON.parse(text);
-
-	warning(
-		`Discord webhook returned non-JSON response (content-type: ${contentType || "unknown"}).`,
-	);
-	return {};
-}
-
-async function patchDiscordThread(threadId, patchBody) {
-	if (!botToken || !threadId) return;
-	const response = await fetch(`https://discord.com/api/v10/channels/${threadId}`, {
-		method: "PATCH",
-		headers: {
-			Authorization: `Bot ${botToken}`,
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify(patchBody),
-	});
-	if (!response.ok) {
-		const text = await response.text();
-		warning(`Discord thread patch failed (${response.status}): ${text}`);
-	}
 }
 
 function desiredStatusTag(prState) {
@@ -170,10 +116,10 @@ async function main() {
 			return;
 		}
 
-		if (!webhookUrl) {
+		if (!botToken || !forumChannelId) {
 			warning(
-				`Discord sync skipped: webhook secret unavailable for event '${context.eventName}'. ` +
-					"Set either DISCORD_WEBHOOK_URL or DISCORD_PR_FORUM_WEBHOOK in repository secrets.",
+				`Discord sync skipped: bot token or forum channel id unavailable for event '${context.eventName}'. ` +
+					"Set DISCORD_BOT_TOKEN (secret) and DISCORD_PR_FORUM_CHANNEL_ID (variable).",
 			);
 			return;
 		}
@@ -228,38 +174,50 @@ async function main() {
 			const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))].slice(0, 5);
 
 			const createPayload = {
-				content:
-					action === "ready_for_review"
-						? "🔔 PR is now ready for review"
-						: "🔔 New pull request opened",
-				thread_name: trimThreadName(`PR #${number} - ${title}`),
+				name: trimThreadName(`PR #${number} - ${title}`),
+				auto_archive_duration: 4320,
 				applied_tags: appliedTags,
-				embeds: [
-					{
-						title: `PR #${number}: ${title}`,
-						url,
-						description: cleanDescription(body),
-						color: pr.draft ? 15105570 : 1998671,
-						author: {
-							name: author,
-							url: authorUrl || undefined,
-							icon_url: authorAvatar || undefined,
+				message: {
+					content:
+						action === "ready_for_review"
+							? "🔔 PR is now ready for review"
+							: "🔔 New pull request opened",
+					embeds: [
+						{
+							title: `PR #${number}: ${title}`,
+							url,
+							description: cleanDescription(body),
+							color: pr.draft ? 15105570 : 1998671,
+							author: {
+								name: author,
+								url: authorUrl || undefined,
+								icon_url: authorAvatar || undefined,
+							},
+							fields,
+							footer: { text: repoFullName },
+							timestamp: new Date().toISOString(),
 						},
-						fields,
-						footer: { text: repoFullName },
-						timestamp: new Date().toISOString(),
-					},
-				],
+					],
+				},
 			};
 
-			const result = await discordPost(createPayload);
-			const createdThreadId = result.channel_id || null;
+			const thread = await createForumThread({
+				botToken,
+				forumChannelId,
+				payload: createPayload,
+			});
+			const createdThreadId = thread?.id || null;
 			if (createdThreadId) {
 				const updatedBody = upsertThreadMarker(body, createdThreadId);
-				await octokit.rest.pulls.update({ owner, repo, pull_number: number, body: updatedBody });
+				await octokit.rest.pulls.update({
+					owner,
+					repo,
+					pull_number: number,
+					body: updatedBody,
+				});
 				info(`Created Discord thread ${createdThreadId} and stored mapping.`);
 			} else {
-				warning("Discord thread created but channel_id missing in response.");
+				warning("Discord thread created but id missing in response.");
 			}
 			return;
 		}
@@ -286,9 +244,13 @@ async function main() {
 			});
 			const mappedLabelTags = tagIdsFromLabels(labels);
 			const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))].slice(0, 5);
-			await patchDiscordThread(threadId, {
-				name: trimThreadName(`PR #${number} - ${title}`),
-				...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+			await patchChannel({
+				botToken,
+				channelId: threadId,
+				payload: {
+					name: trimThreadName(`PR #${number} - ${title}`),
+					...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+				},
 			});
 		}
 
@@ -338,9 +300,13 @@ async function main() {
 					0,
 					5,
 				);
-				await patchDiscordThread(threadId, {
-					...(appliedTags.length ? { applied_tags: appliedTags } : {}),
-					...(isMerged ? { archived: true, locked: true } : {}),
+				await patchChannel({
+					botToken,
+					channelId: threadId,
+					payload: {
+						...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+						...(isMerged ? { archived: true, locked: true } : {}),
+					},
 				});
 
 				updateMessage = isMerged
@@ -390,8 +356,12 @@ async function main() {
 						0,
 						5,
 					);
-					await patchDiscordThread(threadId, {
-						...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+					await patchChannel({
+						botToken,
+						channelId: threadId,
+						payload: {
+							...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+						},
 					});
 				}
 			}
@@ -417,7 +387,7 @@ async function main() {
 
 		const payload = { content: updateMessage || "" };
 		if (updateEmbed) payload.embeds = [updateEmbed];
-		await discordPost(payload, { threadId });
+		await postChannelMessage({ botToken, channelId: threadId, payload });
 		info(`Posted update to Discord thread ${threadId}.`);
 	} catch (err) {
 		const msg = err && err.message ? err.message : String(err);
@@ -425,20 +395,20 @@ async function main() {
 			`Discord sync failed, but this optional automation will not block PR validation: ${msg}`,
 		);
 
-		if (alertWebhookUrl) {
+		if (alertChannelId) {
 			try {
-				await fetch(alertWebhookUrl, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						username: "OpenScreen",
-						avatar_url: WEBHOOK_AVATAR,
+				await postChannelMessage({
+					botToken,
+					channelId: alertChannelId,
+					payload: {
 						content: `⚠️ PR->Discord sync failed\n${msg}\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
 						allowed_mentions: { parse: [] },
-					}),
+					},
 				});
-			} catch {
-				warning("Failed to send alert webhook.");
+			} catch (alertErr) {
+				warning(
+					`Failed to send alert message: ${alertErr && alertErr.message ? alertErr.message : alertErr}`,
+				);
 			}
 		}
 	}

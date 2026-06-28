@@ -21,8 +21,7 @@ jobs:
 
       - name: Post weekly leaderboard to Discord
         env:
-          DISCORD_SPOTLIGHT_WEBHOOK_URL: ${{ secrets.DISCORD_SPOTLIGHT_WEBHOOK_URL }}
-          DISCORD_WEBHOOK_USERNAME: ${{ secrets.DISCORD_WEBHOOK_USERNAME }}
-          DISCORD_WEBHOOK_AVATAR_URL: ${{ secrets.DISCORD_WEBHOOK_AVATAR_URL }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_SPOTLIGHT_CHANNEL_ID: ${{ vars.DISCORD_SPOTLIGHT_CHANNEL_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/discord-weekly-leaderboard.mjs

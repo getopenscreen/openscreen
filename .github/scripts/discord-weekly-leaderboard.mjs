@@ -1,13 +1,13 @@
 import { info, warning } from "@actions/core";
 import { context, getOctokit } from "@actions/github";
+import { postChannelMessage } from "./discord-bot-api.mjs";
 
-const spotlightWebhook = (process.env.DISCORD_SPOTLIGHT_WEBHOOK_URL || "").trim();
-const webhookUsername = (process.env.DISCORD_WEBHOOK_USERNAME || "OpenScreen").trim();
-const webhookAvatar = (process.env.DISCORD_WEBHOOK_AVATAR_URL || "").trim();
+const botToken = (process.env.DISCORD_BOT_TOKEN || "").trim();
+const spotlightChannelId = (process.env.DISCORD_SPOTLIGHT_CHANNEL_ID || "").trim();
 
 async function main() {
-	if (!spotlightWebhook) {
-		info("DISCORD_SPOTLIGHT_WEBHOOK_URL missing. Skipping leaderboard post.");
+	if (!botToken || !spotlightChannelId) {
+		info("DISCORD_BOT_TOKEN or DISCORD_SPOTLIGHT_CHANNEL_ID missing. Skipping leaderboard post.");
 		return;
 	}
 
@@ -45,8 +45,6 @@ async function main() {
 		: "No merged PRs this week.";
 
 	const payload = {
-		username: webhookUsername,
-		...(webhookAvatar ? { avatar_url: webhookAvatar } : {}),
 		embeds: [
 			{
 				title: "🌟 Weekly Contributor Leaderboard",
@@ -63,15 +61,14 @@ async function main() {
 		allowed_mentions: { parse: [] },
 	};
 
-	const res = await fetch(`${spotlightWebhook}?wait=true`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(payload),
-	});
-
-	if (!res.ok) {
-		const txt = await res.text();
-		warning(`Leaderboard post failed ${res.status}: ${txt}`);
+	try {
+		await postChannelMessage({
+			botToken,
+			channelId: spotlightChannelId,
+			payload,
+		});
+	} catch (err) {
+		warning(`Leaderboard post failed: ${err && err.message ? err.message : err}`);
 	}
 }
 

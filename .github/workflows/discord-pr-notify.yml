@@ -32,13 +32,9 @@ jobs:
       - name: Sync PR activity to Discord forum thread
         continue-on-error: true
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          DISCORD_PR_FORUM_WEBHOOK: ${{ secrets.DISCORD_PR_FORUM_WEBHOOK }}
-          DISCORD_WEBHOOK_USERNAME: ${{ secrets.DISCORD_WEBHOOK_USERNAME }}
-          DISCORD_WEBHOOK_AVATAR_URL: ${{ secrets.DISCORD_WEBHOOK_AVATAR_URL }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_REVIEWER_ROLE_ID: ${{ secrets.DISCORD_REVIEWER_ROLE_ID }}
-          DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
           DISCORD_PR_FORUM_CHANNEL_ID: ${{ vars.DISCORD_PR_FORUM_CHANNEL_ID }}
+          DISCORD_ALERT_CHANNEL_ID: ${{ vars.DISCORD_ALERT_CHANNEL_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/discord-pr-sync.mjs

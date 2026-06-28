@@ -8,6 +8,8 @@ export const SHORTCUT_ACTIONS = [
 	"addKeyframe",
 	"deleteSelected",
 	"playPause",
+	"copySelected",
+	"paste",
 ] as const;
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
@@ -115,6 +117,8 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 	addKeyframe: { key: "f" },
 	deleteSelected: { key: "d", ctrl: true },
 	playPause: { key: " " },
+	copySelected: { key: "c", ctrl: true },
+	paste: { key: "v", ctrl: true },
 };
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
@@ -127,6 +131,8 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 	addKeyframe: "Add Keyframe",
 	deleteSelected: "Delete Selected",
 	playPause: "Play / Pause",
+	copySelected: "Copy Selected",
+	paste: "Paste",
 };
 
 export function matchesShortcut(
@@ -143,6 +149,15 @@ export function matchesShortcut(
 	if (e.altKey !== !!binding.alt) return false;
 
 	return true;
+}
+
+/** True when the event target is a text-editing surface where shortcuts should not fire. */
+export function isTextEditingTarget(target: EventTarget | null): boolean {
+	return (
+		target instanceof HTMLInputElement ||
+		target instanceof HTMLTextAreaElement ||
+		(target instanceof HTMLElement && target.isContentEditable)
+	);
 }
 
 const KEY_LABELS: Record<string, string> = {

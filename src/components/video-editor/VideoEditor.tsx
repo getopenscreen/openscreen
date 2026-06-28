@@ -51,7 +51,7 @@ import {
 } from "@/lib/exporter";
 import { computeFrameStepTime } from "@/lib/frameStep";
 import type { CursorCaptureMode, ProjectMedia } from "@/lib/recordingSession";
-import { matchesShortcut } from "@/lib/shortcuts";
+import { isTextEditingTarget, matchesShortcut } from "@/lib/shortcuts";
 import {
 	getExportFolder,
 	getProjectFolder,
@@ -87,6 +87,19 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
+import {
+	buildPastedAnnotation,
+	buildSpeedRegion,
+	buildZoomRegion,
+	type CopiedRegion,
+	extractAnnotationAttributes,
+	extractSpeedAttributes,
+	extractZoomAttributes,
+	getCopiedRegion,
+	replaceAnnotationAttributes,
+	setCopiedRegion,
+} from "./regionClipboard";
+import { findFreeGapAt } from "./regionPlacement";
 import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import { buildAutoZoomSuggestions } from "./timeline/zoomSuggestionUtils";
@@ -313,6 +326,7 @@ export default function VideoEditor() {
 	const { locale, setLocale, t: rawT } = useI18n();
 	const t = useScopedT("editor");
 	const ts = useScopedT("settings");
+	const tt = useScopedT("timeline");
 	const availableLocales = getAvailableLocales();
 
 	const nextAnnotationIdRef = useRef(1);
@@ -1640,6 +1654,202 @@ export default function VideoEditor() {
 		[pushState],
 	);
 
+	const handleCopySelected = useCallback(() => {
+		// Copy the selected region of any kind into the clipboard. A selected blur is an
+		// annotation (type "blur" lives in annotationRegions), so it copies via that row.
+		const copyTargets = [
+			[selectedZoomId, zoomRegions, extractZoomAttributes, "zoom"],
+			[selectedSpeedId, speedRegions, extractSpeedAttributes, "speed"],
+			[
+				selectedAnnotationId ?? selectedBlurId,
+				annotationRegions,
+				extractAnnotationAttributes,
+				"annotation",
+			],
+		] as const;
+
+		for (const [id, regions, extract, kind] of copyTargets) {
+			if (!id) continue;
+			const region = (regions as readonly { id: string }[]).find((r) => r.id === id);
+			if (!region) continue; // Stale id — try the next target so the fallback toast stays reachable.
+			// Each row pairs a region list with its matching extractor, so the cast is sound.
+			setCopiedRegion((extract as (r: never) => CopiedRegion)(region as never));
+			// Blur lives in annotationRegions (type "blur") but its toast must label as "blur", not "text".
+			const labelKind = (region as { type?: string }).type === "blur" ? "blur" : kind;
+			toast.success(
+				t("regionClipboard.copied", { region: t(`regionClipboard.kinds.${labelKind}`) }),
+				{
+					id: "regionClipboard.copied",
+				},
+			);
+			return;
+		}
+		toast.info(t("regionClipboard.nothingToCopy"));
+	}, [
+		selectedZoomId,
+		selectedSpeedId,
+		selectedAnnotationId,
+		selectedBlurId,
+		zoomRegions,
+		speedRegions,
+		annotationRegions,
+		t,
+	]);
+
+	const handlePaste = useCallback(() => {
+		const copied = getCopiedRegion();
+		// If there's nothing in the clipboard, show a message and return early.
+		if (!copied) {
+			toast.info(t("regionClipboard.nothingToPaste"));
+			return;
+		}
+
+		// Apply onto the selected region of the same kind, keeping its timing.
+		if (copied.kind === "zoom" && selectedZoomId) {
+			pushState((prev) => ({
+				zoomRegions: prev.zoomRegions.map((r) =>
+					r.id === selectedZoomId ? buildZoomRegion(r, copied) : r,
+				),
+			}));
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
+			return;
+		}
+		if (copied.kind === "speed" && selectedSpeedId) {
+			pushState((prev) => ({
+				speedRegions: prev.speedRegions.map((r) =>
+					r.id === selectedSpeedId ? buildSpeedRegion(r, copied) : r,
+				),
+			}));
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
+			return;
+		}
+		// Blurs live in annotationRegions (type "blur"), so a selected blur is a valid target too.
+		if (copied.kind === "annotation" && (selectedAnnotationId || selectedBlurId)) {
+			const targetId = selectedAnnotationId ?? selectedBlurId;
+			pushState((prev) => ({
+				annotationRegions: prev.annotationRegions.map((r) =>
+					r.id === targetId ? replaceAnnotationAttributes(r, copied) : r,
+				),
+			}));
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
+			return;
+		}
+
+		// Nothing matching selected → create a new region at the playhead.
+		const totalMs = Math.round(duration * 1000);
+		if (totalMs <= 0) return;
+		const defaultDuration = Math.min(Math.max(1000, Math.round(totalMs * 0.05)), totalMs);
+		const startPos = Math.max(0, Math.min(Math.round(currentTime * 1000), totalMs));
+
+		if (copied.kind === "zoom") {
+			const { ok, gapMs } = findFreeGapAt(zoomRegions, startPos, totalMs);
+			if (!ok) {
+				toast.error(tt("errors.cannotPlaceZoom"), {
+					description: tt("errors.zoomExistsAtLocation"),
+				});
+				return;
+			}
+			const id = `zoom-${nextZoomIdRef.current++}`;
+			const region = buildZoomRegion(
+				{
+					id,
+					startMs: startPos,
+					endMs: startPos + Math.min(defaultDuration, gapMs),
+					source: "manual",
+				},
+				copied,
+			);
+			pushState((prev) => ({ zoomRegions: [...prev.zoomRegions, region] }));
+			handleSelectZoom(id);
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
+			return;
+		}
+
+		if (copied.kind === "speed") {
+			const { ok, gapMs } = findFreeGapAt(speedRegions, startPos, totalMs);
+			if (!ok) {
+				toast.error(tt("errors.cannotPlaceSpeed"), {
+					description: tt("errors.speedExistsAtLocation"),
+				});
+				return;
+			}
+			const id = `speed-${nextSpeedIdRef.current++}`;
+			const region = buildSpeedRegion(
+				{
+					id,
+					startMs: startPos,
+					endMs: startPos + Math.min(defaultDuration, gapMs),
+				},
+				copied,
+			);
+			pushState((prev) => ({ speedRegions: [...prev.speedRegions, region] }));
+			handleSelectSpeed(id);
+			toast.success(
+				t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+				{
+					id: "regionClipboard.pasted",
+				},
+			);
+			return;
+		}
+
+		// Annotation — overlaps are allowed. A brand-new region clones the full copy
+		// (type, content, styling, position), unlike the styling-only overwrite above.
+		const id = `annotation-${nextAnnotationIdRef.current++}`;
+		const region = buildPastedAnnotation(
+			{
+				id,
+				startMs: startPos,
+				endMs: Math.min(startPos + defaultDuration, totalMs),
+				zIndex: nextAnnotationZIndexRef.current++,
+			},
+			copied,
+		);
+		pushState((prev) => ({ annotationRegions: [...prev.annotationRegions, region] }));
+		handleSelectAnnotation(id);
+		toast.success(
+			t("regionClipboard.pasted", { region: t(`regionClipboard.kinds.${copied.kind}`) }),
+			{
+				id: "regionClipboard.pasted",
+			},
+		);
+	}, [
+		selectedZoomId,
+		selectedSpeedId,
+		selectedAnnotationId,
+		selectedBlurId,
+		zoomRegions,
+		speedRegions,
+		duration,
+		currentTime,
+		pushState,
+		handleSelectZoom,
+		handleSelectSpeed,
+		handleSelectAnnotation,
+		t,
+		tt,
+	]);
+
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			const mod = e.ctrlKey || e.metaKey;
@@ -1656,6 +1866,29 @@ export default function VideoEditor() {
 				e.stopPropagation();
 				redo();
 				return;
+			}
+
+			// Copy/paste region attributes. Skipped while typing in a field so native
+			// text copy/paste keeps working. Also only intercepted when there's an
+			// actual region selected (copy) or something on the clipboard (paste);
+			// otherwise the browser handles native copy/paste of any page selection.
+			const editingText = isTextEditingTarget(e.target);
+			if (!editingText) {
+				if (matchesShortcut(e, shortcuts.copySelected, isMac)) {
+					const hasRegionSelected =
+						selectedZoomId || selectedSpeedId || selectedAnnotationId || selectedBlurId;
+					if (hasRegionSelected) {
+						e.preventDefault();
+						handleCopySelected();
+						return;
+					}
+				} else if (matchesShortcut(e, shortcuts.paste, isMac)) {
+					if (getCopiedRegion()) {
+						e.preventDefault();
+						handlePaste();
+						return;
+					}
+				}
 			}
 
 			// Frame-step navigation (arrow keys, no modifiers)
@@ -1714,7 +1947,18 @@ export default function VideoEditor() {
 
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [undo, redo, shortcuts, isMac]);
+	}, [
+		undo,
+		redo,
+		shortcuts,
+		isMac,
+		handleCopySelected,
+		handlePaste,
+		selectedZoomId,
+		selectedSpeedId,
+		selectedAnnotationId,
+		selectedBlurId,
+	]);
 
 	useEffect(() => {
 		if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {

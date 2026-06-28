@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { DesktopCapturerSource } from "electron";
+import type { DesktopCapturerSource, Rectangle } from "electron";
 import {
 	app,
 	BrowserWindow,
@@ -424,6 +424,8 @@ let nativeMacCursorRecordingStartMs = 0;
 let nativeMacPauseStartedAtMs: number | null = null;
 let nativeMacPauseRanges: Array<{ startMs: number; endMs: number }> = [];
 let nativeMacIsPaused = false;
+// Global frame of the region captured by the SCK helper (see getSelectedSourceBounds).
+let activeMacCaptureBounds: Rectangle | null = null;
 
 function normalizeCursorSample(sample: unknown): CursorRecordingSample | null {
 	if (!sample || typeof sample !== "object") {
@@ -573,6 +575,14 @@ function resolveAssetBasePath() {
 }
 
 function getSelectedSourceBounds() {
+	// Single-window capture records only the window's region, not the whole display.
+	// Normalizing the cursor against display bounds leaves a fixed offset in the export,
+	// so prefer the helper-reported window frame when capturing a window.
+	const isWindowSource = selectedSource?.id?.startsWith("window:") === true;
+	if (isWindowSource && activeMacCaptureBounds) {
+		return activeMacCaptureBounds;
+	}
+
 	const cursor = screen.getCursorScreenPoint();
 	const sourceDisplayId = Number(selectedSource?.display_id);
 	const sourceDisplay = Number.isFinite(sourceDisplayId)
@@ -1039,11 +1049,19 @@ function tryParseNativeHelperEvent(line: string) {
 	}
 }
 
+function dispatchNativeMacHelperEvent(event: Record<string, unknown>) {
+	const bounds = event.captureBounds as Rectangle | undefined;
+	if (bounds && bounds.width > 0 && bounds.height > 0) {
+		activeMacCaptureBounds = bounds;
+	}
+	nativeMacCaptureEvents.emit("helper-event", event);
+}
+
 function inspectNativeMacCaptureOutput() {
 	for (const line of nativeMacCaptureOutput.split(/\r?\n/)) {
 		const event = tryParseNativeHelperEvent(line.trim());
 		if (event) {
-			nativeMacCaptureEvents.emit("helper-event", event);
+			dispatchNativeMacHelperEvent(event);
 		}
 	}
 }
@@ -1059,7 +1077,7 @@ function attachNativeMacCaptureOutputDrain(proc: ChildProcessWithoutNullStreams)
 		for (const line of lines) {
 			const event = tryParseNativeHelperEvent(line.trim());
 			if (event) {
-				nativeMacCaptureEvents.emit("helper-event", event);
+				dispatchNativeMacHelperEvent(event);
 			}
 		}
 	};
@@ -1817,6 +1835,7 @@ export function registerIpcHandlers(
 			nativeMacPauseStartedAtMs = null;
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
+			activeMacCaptureBounds = null;
 
 			const cursorStartTimeMs = Date.now();
 			if (cursorCaptureMode === "editable-overlay") {
@@ -2132,6 +2151,7 @@ export function registerIpcHandlers(
 			nativeMacPauseStartedAtMs = null;
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
+			activeMacCaptureBounds = null;
 			const source = selectedSource || { name: "Screen" };
 			if (onRecordingStateChange) {
 				onRecordingStateChange(false, source.name);

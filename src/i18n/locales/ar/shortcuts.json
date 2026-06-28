@@ -23,7 +23,9 @@
 		"addBlur": "إضافة تمويه",
 		"addKeyframe": "إضافة إطار رئيسي",
 		"deleteSelected": "حذف المحدد",
-		"playPause": "تشغيل / إيقاف مؤقت"
+		"playPause": "تشغيل / إيقاف مؤقت",
+		"copySelected": "نسخ المحدد",
+		"paste": "لصق"
 	},
 	"fixedActions": {
 		"undo": "تراجع",

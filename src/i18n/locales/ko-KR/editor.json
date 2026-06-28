@@ -77,5 +77,17 @@
 			"couldNotOpenTitle": "파일을 열 수 없음",
 			"couldNotOpenMessage": "프로젝트 파일을 열 수 없습니다. 참조된 동영상이 이동되었거나 삭제되었을 수 있습니다."
 		}
+	},
+	"regionClipboard": {
+		"copied": "{{region}} 속성을 복사했습니다",
+		"pasted": "{{region}} 속성을 붙여넣었습니다",
+		"nothingToCopy": "속성을 복사할 영역을 선택하세요",
+		"nothingToPaste": "복사된 속성이 없습니다",
+		"kinds": {
+			"zoom": "줌",
+			"speed": "속도",
+			"annotation": "주석",
+			"blur": "블러"
+		}
 	}
 }

@@ -23,7 +23,9 @@
 		"addBlur": "Thêm Làm mờ",
 		"addKeyframe": "Thêm Khung hình chính",
 		"deleteSelected": "Xóa mục đã chọn",
-		"playPause": "Phát / Tạm dừng"
+		"playPause": "Phát / Tạm dừng",
+		"copySelected": "Sao chép mục đã chọn",
+		"paste": "Dán"
 	},
 	"fixedActions": {
 		"undo": "Hoàn tác",

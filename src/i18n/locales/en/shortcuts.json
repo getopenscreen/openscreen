@@ -23,7 +23,9 @@
 		"addBlur": "Add Blur",
 		"addKeyframe": "Add Keyframe",
 		"deleteSelected": "Delete Selected",
-		"playPause": "Play / Pause"
+		"playPause": "Play / Pause",
+		"copySelected": "Copy Selected",
+		"paste": "Paste"
 	},
 	"fixedActions": {
 		"undo": "Undo",

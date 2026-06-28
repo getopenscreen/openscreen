@@ -56,6 +56,7 @@ export type NativeMacHelperReadyEvent = {
 export type NativeMacHelperRecordingStartedEvent = {
 	event: "recording-started";
 	timestampMs: number;
+	captureBounds?: Rectangle;
 };
 
 export type NativeMacHelperRecordingStoppedEvent = {

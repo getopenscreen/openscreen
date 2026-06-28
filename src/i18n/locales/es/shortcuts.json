@@ -23,7 +23,9 @@
 		"addBlur": "Agregar desenfoque",
 		"addKeyframe": "Agregar fotograma clave",
 		"deleteSelected": "Eliminar seleccionado",
-		"playPause": "Reproducir / Pausar"
+		"playPause": "Reproducir / Pausar",
+		"copySelected": "Copiar selección",
+		"paste": "Pegar"
 	},
 	"fixedActions": {
 		"undo": "Deshacer",

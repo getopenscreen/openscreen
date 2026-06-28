@@ -25,11 +25,12 @@ import {
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { useAudioPeaks } from "@/hooks/useAudioPeaks";
-import { matchesShortcut } from "@/lib/shortcuts";
+import { isTextEditingTarget, matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { BLUR_REGIONS_ENABLED } from "../featureFlags";
+import { findFreeGapAt } from "../regionPlacement";
 import type { AnnotationRegion, SpeedRegion, TrimRegion, ZoomRegion } from "../types";
 import BackgroundWaveform from "./BackgroundWaveform";
 import Item from "./Item";
@@ -1120,21 +1121,15 @@ export default function TimelineEditor({
 		}
 
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-		const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
-		const nextRegion = sorted.find((region) => region.startMs > startPos);
-		const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-
-		const isOverlapping = sorted.some(
-			(region) => startPos >= region.startMs && startPos < region.endMs,
-		);
-		if (isOverlapping || gapToNext <= 0) {
+		const { ok, gapMs } = findFreeGapAt(zoomRegions, startPos, totalMs);
+		if (!ok) {
 			toast.error(t("errors.cannotPlaceZoom"), {
 				description: t("errors.zoomExistsAtLocation"),
 			});
 			return;
 		}
 
-		const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
+		const actualDuration = Math.min(defaultRegionDurationMs, gapMs);
 		onZoomAdded({ start: startPos, end: startPos + actualDuration });
 	}, [videoDuration, totalMs, currentTimeMs, zoomRegions, onZoomAdded, defaultRegionDurationMs, t]);
 
@@ -1149,21 +1144,15 @@ export default function TimelineEditor({
 		}
 
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-		const sorted = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
-		const nextRegion = sorted.find((region) => region.startMs > startPos);
-		const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-
-		const isOverlapping = sorted.some(
-			(region) => startPos >= region.startMs && startPos < region.endMs,
-		);
-		if (isOverlapping || gapToNext <= 0) {
+		const { ok, gapMs } = findFreeGapAt(trimRegions, startPos, totalMs);
+		if (!ok) {
 			toast.error(t("errors.cannotPlaceTrim"), {
 				description: t("errors.trimExistsAtLocation"),
 			});
 			return;
 		}
 
-		const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
+		const actualDuration = Math.min(defaultRegionDurationMs, gapMs);
 		onTrimAdded({ start: startPos, end: startPos + actualDuration });
 	}, [videoDuration, totalMs, currentTimeMs, trimRegions, onTrimAdded, defaultRegionDurationMs, t]);
 
@@ -1178,21 +1167,15 @@ export default function TimelineEditor({
 		}
 
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-		const sorted = [...speedRegions].sort((a, b) => a.startMs - b.startMs);
-		const nextRegion = sorted.find((region) => region.startMs > startPos);
-		const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-
-		const isOverlapping = sorted.some(
-			(region) => startPos >= region.startMs && startPos < region.endMs,
-		);
-		if (isOverlapping || gapToNext <= 0) {
+		const { ok, gapMs } = findFreeGapAt(speedRegions, startPos, totalMs);
+		if (!ok) {
 			toast.error(t("errors.cannotPlaceSpeed"), {
 				description: t("errors.speedExistsAtLocation"),
 			});
 			return;
 		}
 
-		const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
+		const actualDuration = Math.min(defaultRegionDurationMs, gapMs);
 		onSpeedAdded({ start: startPos, end: startPos + actualDuration });
 	}, [
 		videoDuration,
@@ -1238,7 +1221,7 @@ export default function TimelineEditor({
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+			if (isTextEditingTarget(e.target)) {
 				return;
 			}
 

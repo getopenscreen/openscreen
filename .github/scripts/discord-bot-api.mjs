@@ -15,9 +15,7 @@ async function callDiscord(botToken, method, path, body) {
 	if (res.status === 429) {
 		const txt = await res.text();
 		warning(`Discord rate-limited (429) on ${method} ${path}: ${txt}`);
-		const err = new Error(`Discord rate-limited (429)`);
-		err.rateLimited = true;
-		throw err;
+		throw new Error(`Discord rate-limited (429) on ${method} ${path}`);
 	}
 
 	if (!res.ok) {

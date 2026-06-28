@@ -8,6 +8,8 @@ const reviewerRoleId = (process.env.DISCORD_REVIEWER_ROLE_ID || "").trim();
 const forumChannelId = (process.env.DISCORD_PR_FORUM_CHANNEL_ID || "").trim();
 const alertChannelId = (process.env.DISCORD_ALERT_CHANNEL_ID || "").trim();
 
+const THREAD_MARKER_REGEX = /<!--\s*discord-thread-id:(\d+)\s*-->/i;
+
 const TAGS = {
 	open: "1493976692967080096",
 	draft: "1493976782028935279",
@@ -44,11 +46,21 @@ function extractThreadId(body) {
 	return match ? match[1] : null;
 }
 
-const THREAD_MARKER_REGEX = /<!--\s*discord-thread-id:(\d+)\s*-->/i;
-
 function upsertThreadMarker(body, threadId) {
 	const cleaned = (body || "").replace(THREAD_MARKER_REGEX, "").trim();
 	return `${cleaned}\n\n<!-- discord-thread-id:${threadId} -->`.trim();
+}
+
+const NO_MENTIONS = { allowed_mentions: { parse: [] } };
+
+async function safePatchChannel(args, contextLabel) {
+	try {
+		await patchChannel(args);
+	} catch (err) {
+		warning(
+			`Discord thread patch failed for ${contextLabel} (continuing): ${err && err.message ? err.message : err}`,
+		);
+	}
 }
 
 function desiredStatusTag(prState) {
@@ -198,6 +210,7 @@ async function main() {
 							timestamp: new Date().toISOString(),
 						},
 					],
+					allowed_mentions: { parse: [] },
 				},
 			};
 
@@ -244,14 +257,17 @@ async function main() {
 			});
 			const mappedLabelTags = tagIdsFromLabels(labels);
 			const appliedTags = [...new Set([statusTag, ...mappedLabelTags].filter(Boolean))].slice(0, 5);
-			await patchChannel({
-				botToken,
-				channelId: threadId,
-				payload: {
-					name: trimThreadName(`PR #${number} - ${title}`),
-					...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+			await safePatchChannel(
+				{
+					botToken,
+					channelId: threadId,
+					payload: {
+						name: trimThreadName(`PR #${number} - ${title}`),
+						...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+					},
 				},
-			});
+				`tag refresh on ${action}`,
+			);
 		}
 
 		let updateMessage = null;
@@ -300,14 +316,17 @@ async function main() {
 					0,
 					5,
 				);
-				await patchChannel({
-					botToken,
-					channelId: threadId,
-					payload: {
-						...(appliedTags.length ? { applied_tags: appliedTags } : {}),
-						...(isMerged ? { archived: true, locked: true } : {}),
+				await safePatchChannel(
+					{
+						botToken,
+						channelId: threadId,
+						payload: {
+							...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+							...(isMerged ? { archived: true, locked: true } : {}),
+						},
 					},
-				});
+					`close (${isMerged ? "merged" : "closed without merge"})`,
+				);
 
 				updateMessage = isMerged
 					? `✅ PR #${number} was merged`
@@ -356,13 +375,16 @@ async function main() {
 						0,
 						5,
 					);
-					await patchChannel({
-						botToken,
-						channelId: threadId,
-						payload: {
-							...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+					await safePatchChannel(
+						{
+							botToken,
+							channelId: threadId,
+							payload: {
+								...(appliedTags.length ? { applied_tags: appliedTags } : {}),
+							},
 						},
-					});
+						`review ${state}`,
+					);
 				}
 			}
 		} else if (context.eventName === "issue_comment") {
@@ -385,7 +407,7 @@ async function main() {
 			return;
 		}
 
-		const payload = { content: updateMessage || "" };
+		const payload = { content: updateMessage || "", ...NO_MENTIONS };
 		if (updateEmbed) payload.embeds = [updateEmbed];
 		await postChannelMessage({ botToken, channelId: threadId, payload });
 		info(`Posted update to Discord thread ${threadId}.`);
@@ -402,7 +424,7 @@ async function main() {
 					channelId: alertChannelId,
 					payload: {
 						content: `⚠️ PR->Discord sync failed\n${msg}\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-						allowed_mentions: { parse: [] },
+						...NO_MENTIONS,
 					},
 				});
 			} catch (alertErr) {

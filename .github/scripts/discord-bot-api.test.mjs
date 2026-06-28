@@ -44,12 +44,12 @@ describe("discord-bot-api", () => {
 			});
 		});
 
-		it("throws with rateLimited flag on 429", async () => {
+		it("throws a rate-limited error on 429", async () => {
 			mockDiscordResponse({ status: 429, body: { retry_after: 1 } });
 
 			await expect(
 				createForumThread({ botToken, forumChannelId: "f", payload: { name: "x" } }),
-			).rejects.toMatchObject({ rateLimited: true });
+			).rejects.toThrow(/rate-limited \(429\)/);
 		});
 
 		it("throws on non-ok responses with status in message", async () => {

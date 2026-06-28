@@ -118,10 +118,14 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq pacman-package-manager 2>/dev/null || \
-            sudo apt-get install -y -qq arch-install-scripts 2>/dev/null || {
-              echo "::error::Unable to install makepkg. Install arch-install-scripts or pacman-package-manager."
+            sudo apt-get install -y -qq makepkg 2>/dev/null || {
+              echo "::error::Unable to install makepkg. Install pacman-package-manager or makepkg."
               exit 1
             }
+          command -v makepkg >/dev/null || {
+            echo "::error::makepkg still missing after install."
+            exit 1
+          }
 
       - name: Update PKGBUILD and .SRCINFO
         if: steps.aur_secret.outputs.configured == 'true'

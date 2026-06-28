@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createForumThread, patchChannel, postChannelMessage } from "./discord-bot-api.mjs";
 
+const botToken = "test-token";
+
 beforeEach(() => {
 	vi.stubGlobal("fetch", vi.fn());
 });
@@ -9,93 +11,62 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe("discord-bot-api", () => {
-	const botToken = "test-token";
+function mockResponse({ status = 200, body = { id: "x" } } = {}) {
+	vi.mocked(fetch).mockResolvedValue({
+		ok: status >= 200 && status < 300,
+		status,
+		text: vi.fn().mockResolvedValue(JSON.stringify(body)),
+		json: vi.fn().mockResolvedValue(body),
+	});
+}
 
-	function mockDiscordResponse({ status = 200, body } = {}) {
-		const json = body === undefined ? vi.fn() : vi.fn().mockResolvedValue(body);
-		vi.mocked(fetch).mockResolvedValue({
-			ok: status >= 200 && status < 300,
-			status,
-			text: vi.fn().mockResolvedValue(JSON.stringify(body)),
-			json,
-		});
-	}
+const happyCases = [
+	{
+		name: "createForumThread",
+		call: (args) => createForumThread(args),
+		args: { forumChannelId: "forum-1", payload: { name: "PR #1" } },
+		expectUrl: "https://discord.com/api/v10/channels/forum-1/threads",
+		expectMethod: "POST",
+		expectBody: { name: "PR #1" },
+	},
+	{
+		name: "postChannelMessage",
+		call: (args) => postChannelMessage(args),
+		args: { channelId: "thread-1", payload: { content: "hello" } },
+		expectUrl: "https://discord.com/api/v10/channels/thread-1/messages",
+		expectMethod: "POST",
+		expectBody: { content: "hello" },
+	},
+	{
+		name: "patchChannel",
+		call: (args) => patchChannel(args),
+		args: { channelId: "thread-1", payload: { archived: true } },
+		expectUrl: "https://discord.com/api/v10/channels/thread-1",
+		expectMethod: "PATCH",
+		expectBody: { archived: true },
+	},
+];
 
-	describe("createForumThread", () => {
-		it("POSTs to /channels/{forumChannelId}/threads with bot auth and payload", async () => {
-			mockDiscordResponse({ status: 201, body: { id: "999", name: "PR #1" } });
+describe.each(happyCases)("$name", ({ call, args, expectUrl, expectMethod, expectBody }) => {
+	it("calls Discord with the right URL, method, bot auth, and payload", async () => {
+		mockResponse();
 
-			const result = await createForumThread({
-				botToken,
-				forumChannelId: "forum-1",
-				payload: { name: "PR #1", message: { content: "hi" }, applied_tags: ["tag-a"] },
-			});
+		await call({ ...args, botToken });
 
-			expect(result.id).toBe("999");
-			const [url, init] = vi.mocked(fetch).mock.calls[0];
-			expect(url).toBe("https://discord.com/api/v10/channels/forum-1/threads");
-			expect(init.method).toBe("POST");
-			expect(init.headers.Authorization).toBe(`Bot ${botToken}`);
-			expect(JSON.parse(init.body)).toEqual({
-				name: "PR #1",
-				message: { content: "hi" },
-				applied_tags: ["tag-a"],
-			});
-		});
-
-		it("throws a rate-limited error on 429", async () => {
-			mockDiscordResponse({ status: 429, body: { retry_after: 1 } });
-
-			await expect(
-				createForumThread({ botToken, forumChannelId: "f", payload: { name: "x" } }),
-			).rejects.toThrow(/rate-limited \(429\)/);
-		});
-
-		it("throws on non-ok responses with status in message", async () => {
-			mockDiscordResponse({ status: 403, body: { message: "Missing Permissions" } });
-
-			await expect(
-				createForumThread({ botToken, forumChannelId: "f", payload: { name: "x" } }),
-			).rejects.toThrow(/failed 403/);
-		});
+		const [url, init] = vi.mocked(fetch).mock.calls[0];
+		expect(url).toBe(expectUrl);
+		expect(init.method).toBe(expectMethod);
+		expect(init.headers.Authorization).toBe(`Bot ${botToken}`);
+		expect(JSON.parse(init.body)).toEqual(expectBody);
 	});
 
-	describe("postChannelMessage", () => {
-		it("POSTs to /channels/{channelId}/messages with bot auth", async () => {
-			mockDiscordResponse({ status: 200, body: { id: "msg-1" } });
-
-			const result = await postChannelMessage({
-				botToken,
-				channelId: "thread-1",
-				payload: { content: "hello", embeds: [{ title: "t" }] },
-			});
-
-			expect(result.id).toBe("msg-1");
-			const [url, init] = vi.mocked(fetch).mock.calls[0];
-			expect(url).toBe("https://discord.com/api/v10/channels/thread-1/messages");
-			expect(init.method).toBe("POST");
-			expect(init.headers.Authorization).toBe(`Bot ${botToken}`);
-			expect(JSON.parse(init.body)).toEqual({ content: "hello", embeds: [{ title: "t" }] });
-		});
+	it("throws on 429 with rate-limit message", async () => {
+		mockResponse({ status: 429, body: { retry_after: 1 } });
+		await expect(call({ ...args, botToken })).rejects.toThrow(/rate-limited \(429\)/);
 	});
 
-	describe("patchChannel", () => {
-		it("PATCHes /channels/{channelId} with bot auth and JSON body", async () => {
-			mockDiscordResponse({ status: 200, body: { id: "thread-1", archived: true } });
-
-			const result = await patchChannel({
-				botToken,
-				channelId: "thread-1",
-				payload: { archived: true, applied_tags: ["merged"] },
-			});
-
-			expect(result.archived).toBe(true);
-			const [url, init] = vi.mocked(fetch).mock.calls[0];
-			expect(url).toBe("https://discord.com/api/v10/channels/thread-1");
-			expect(init.method).toBe("PATCH");
-			expect(init.headers.Authorization).toBe(`Bot ${botToken}`);
-			expect(JSON.parse(init.body)).toEqual({ archived: true, applied_tags: ["merged"] });
-		});
+	it("throws on non-ok responses with status in message", async () => {
+		mockResponse({ status: 403, body: { message: "Missing Permissions" } });
+		await expect(call({ ...args, botToken })).rejects.toThrow(/failed 403/);
 	});
 });

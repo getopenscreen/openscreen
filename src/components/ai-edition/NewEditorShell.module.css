@@ -1346,3 +1346,55 @@
 	cursor: pointer;
 }
 .importBtn:hover { background: var(--surface-warm); color: var(--fg); border-color: var(--accent); }
+
+/* Custom range slider / progress bar */
+.scrubBar {
+	flex: 1;
+	max-width: 400px;
+	position: relative;
+	height: 24px;
+	display: flex;
+	align-items: center;
+	cursor: pointer;
+}
+.scrubTrack {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 4px;
+	background: var(--border);
+	border-radius: 9999px;
+	overflow: hidden;
+}
+.scrubProgress {
+	height: 100%;
+	background: var(--accent);
+	border-radius: 9999px;
+}
+.scrubInput {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	cursor: pointer;
+	z-index: 10;
+	margin: 0;
+}
+.scrubThumb {
+	position: absolute;
+	width: 10px;
+	height: 10px;
+	background: #ffffff;
+	border-radius: 50%;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	pointer-events: none;
+	transform: translate(-50%, -50%);
+	top: 50%;
+	opacity: 0;
+	transition: transform 100ms ease, opacity 100ms ease;
+}
+.scrubBar:hover .scrubThumb {
+	opacity: 1;
+	transform: translate(-50%, -50%) scale(1.2);
+}

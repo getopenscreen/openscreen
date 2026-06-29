@@ -54,10 +54,12 @@ function MediaList({
 	assets,
 	onOpenTranscript,
 	transcriptReadyIds,
+	assetStatuses,
 }: {
 	assets: AxcutAsset[];
 	onOpenTranscript?: (asset: AxcutAsset) => void;
 	transcriptReadyIds?: Set<string>;
+	assetStatuses?: Record<string, "pending" | "running" | "failed">;
 }) {
 	if (assets.length === 0) {
 		return (
@@ -81,6 +83,9 @@ function MediaList({
 				const tc = formatTimecode(asset.durationSec);
 				const size = formatSize(undefined);
 				const palette = THUMB_PALETTE[i % THUMB_PALETTE.length];
+				const isReady = transcriptReadyIds?.has(asset.id);
+				const status = isReady ? "complete" : (assetStatuses?.[asset.id] ?? "idle");
+
 				return (
 					<li
 						className={styles.mediaCard}
@@ -118,16 +123,38 @@ function MediaList({
 											width: 8,
 											height: 8,
 											borderRadius: "50%",
-											background: transcriptReadyIds?.has(asset.id)
-												? "var(--success)"
-												: "var(--dim)",
-											boxShadow: transcriptReadyIds?.has(asset.id)
-												? "0 0 0 3px var(--success-soft)"
-												: "none",
+											background:
+												status === "complete"
+													? "var(--success)"
+													: status === "running"
+														? "var(--accent)"
+														: status === "pending"
+															? "#f59e0b"
+															: status === "failed"
+																? "var(--danger)"
+																: "var(--dim)",
+											boxShadow:
+												status === "complete"
+													? "0 0 0 3px var(--success-soft)"
+													: status === "running"
+														? "0 0 0 3px rgba(16, 185, 129, 0.2)"
+														: status === "pending"
+															? "0 0 0 3px rgba(245, 158, 11, 0.2)"
+															: status === "failed"
+																? "0 0 0 3px rgba(239, 68, 68, 0.2)"
+																: "none",
 											flexShrink: 0,
 										}}
 										aria-label={
-											transcriptReadyIds?.has(asset.id) ? "Transcript ready" : "No transcript"
+											status === "complete"
+												? "Transcript ready"
+												: status === "running"
+													? "Transcribing"
+													: status === "pending"
+														? "Pending transcription"
+														: status === "failed"
+															? "Transcription failed"
+															: "No transcript"
 										}
 									/>
 									<span className={styles.timecode}>{tc}</span>
@@ -142,7 +169,11 @@ function MediaList({
 	);
 }
 
-export function MediaPane() {
+export function MediaPane({
+	assetStatuses,
+}: {
+	assetStatuses?: Record<string, "pending" | "running" | "failed">;
+}) {
 	const projectId = useProjectStore((s) => s.projectId);
 	const document = useProjectStore((s) => s.document);
 	const addAsset = useProjectStore((s) => s.addAsset);
@@ -254,6 +285,7 @@ export function MediaPane() {
 					assets={filtered}
 					onOpenTranscript={setSrcTranscriptAsset}
 					transcriptReadyIds={new Set(document?.transcripts?.map((t) => t.assetId) ?? [])}
+					assetStatuses={assetStatuses}
 				/>
 			</div>
 			<button
@@ -298,8 +330,11 @@ export function MediaPane() {
 				assetPath={srcTranscriptAsset?.originalPath ?? ""}
 				tcFormatted={formatTimecode(srcTranscriptAsset?.durationSec)}
 				transcriptText={
-					srcTranscriptAsset && document?.transcript
-						? formatTranscriptText(document.transcript)
+					srcTranscriptAsset && document?.transcripts
+						? (() => {
+								const t = document.transcripts.find((t) => t.assetId === srcTranscriptAsset.id);
+								return t ? formatTranscriptText(t) : null;
+							})()
 						: null
 				}
 			/>
@@ -307,8 +342,18 @@ export function MediaPane() {
 	);
 }
 
-export function LeftPanel({ active }: { active: LeftTab }) {
-	return active === "chat" && AI_FEATURES_ENABLED ? <ChatStripPanel /> : <MediaPane />;
+export function LeftPanel({
+	active,
+	assetStatuses,
+}: {
+	active: LeftTab;
+	assetStatuses?: Record<string, "pending" | "running" | "failed">;
+}) {
+	return active === "chat" && AI_FEATURES_ENABLED ? (
+		<ChatStripPanel />
+	) : (
+		<MediaPane assetStatuses={assetStatuses} />
+	);
 }
 
 function ChatStripPanel() {

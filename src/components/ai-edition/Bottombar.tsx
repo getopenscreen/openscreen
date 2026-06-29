@@ -26,7 +26,6 @@ interface BottombarProps {
 	clips: AxcutClip[];
 	currentTimeSec: number;
 	sourceDurationSec: number;
-	onSeek: (sec: number) => void;
 	onPreviewSource: (sec: number) => void;
 	onReplaceTimeline: (
 		intervals: Array<{ startSec: number; endSec: number }>,
@@ -70,7 +69,6 @@ export function Bottombar({
 	clips,
 	currentTimeSec,
 	sourceDurationSec,
-	onSeek,
 	onPreviewSource,
 	onReplaceTimeline,
 	zoomRegions,
@@ -272,7 +270,6 @@ export function Bottombar({
 							clips={clips}
 							currentTimeSec={currentTimeSec}
 							sourceDurationSec={sourceDurationSec}
-							onSeek={onSeek}
 							onPreviewSource={onPreviewSource}
 							onReplaceTimeline={onReplaceTimeline}
 						/>

@@ -33,6 +33,7 @@ import { Titlebar } from "./Titlebar";
 
 interface SeekTarget {
 	timeSec: number;
+	isSource?: boolean;
 	requestId: number;
 }
 
@@ -61,6 +62,9 @@ export function NewEditorShell() {
 
 	const [seekTarget, setSeekTarget] = useState<SeekTarget | null>(null);
 	const [isTranscribing, setIsTranscribing] = useState(false);
+	const [assetStatuses, setAssetStatuses] = useState<
+		Record<string, "pending" | "running" | "failed">
+	>({});
 	const [, setVideoElement] = useState<HTMLVideoElement | null>(null);
 	const [leftTab, setLeftTab] = useState<LeftTab>("media");
 	const [rightPane, setRightPane] = useState<RightPaneId>("background");
@@ -87,6 +91,16 @@ export function NewEditorShell() {
 	const [projectSummaries, setProjectSummaries] = useState<AiEditionProjectSummary[]>([]);
 	const seekSeqRef = useRef(0);
 	const initRef = useRef(false);
+
+	const promptUnsaved = useCallback(
+		(action: "new" | "open" | "record"): Promise<UnsavedChoice> => {
+			if (!dirty) return Promise.resolve("discard");
+			return new Promise<UnsavedChoice>((resolve) => {
+				setUnsavedPrompt({ action, resolve });
+			});
+		},
+		[dirty],
+	);
 
 	const primaryAssetPath =
 		document?.assets.find((a) => a.id === document.project.primaryAssetId)?.originalPath ?? null;
@@ -115,12 +129,12 @@ export function NewEditorShell() {
 		})();
 	}, [openProjectOpen]);
 
-	// initialise from pending recording (parity with previous shell)
+	// Auto-load project recording session on mount
 	useEffect(() => {
 		if (initRef.current) return;
 		initRef.current = true;
 		void (async () => {
-			if (!window.electronAPI?.getCurrentRecordingSession) return;
+			if (!window.electronAPI) return;
 			try {
 				const result = await window.electronAPI.getCurrentRecordingSession();
 				if (!result.success || !result.session?.screenVideoPath) return;
@@ -148,6 +162,52 @@ export function NewEditorShell() {
 		window.addEventListener("beforeunload", onBeforeUnload);
 		return () => window.removeEventListener("beforeunload", onBeforeUnload);
 	}, []);
+
+	// Electron close interception
+	useEffect(() => {
+		if (!window.electronAPI) return;
+
+		// 1. Sync dirty state to Electron main process
+		window.electronAPI.setHasUnsavedChanges(dirty);
+	}, [dirty]);
+
+	useEffect(() => {
+		if (!window.electronAPI) return;
+
+		// 2. Handle request-close-confirm from Electron
+		const unsubCloseConfirm = window.electronAPI.onRequestCloseConfirm(() => {
+			void (async () => {
+				const choice = await promptUnsaved("new"); // Use "new" as a generic action for close
+				if (choice === "discard") {
+					window.electronAPI.sendCloseConfirmResponse("discard");
+				} else if (choice === "save") {
+					window.electronAPI.sendCloseConfirmResponse("save");
+				} else {
+					window.electronAPI.sendCloseConfirmResponse("cancel");
+				}
+			})();
+		});
+
+		// 3. Handle request-save-before-close from Electron
+		const unsubSaveBeforeClose = window.electronAPI.onRequestSaveBeforeClose(async () => {
+			const doc = useProjectStore.getState().document;
+			if (doc) {
+				try {
+					await saveDocument(doc);
+					return true;
+				} catch {
+					toast.error("Failed to save before closing");
+					return false;
+				}
+			}
+			return true;
+		});
+
+		return () => {
+			unsubCloseConfirm?.();
+			unsubSaveBeforeClose?.();
+		};
+	}, [promptUnsaved, saveDocument]);
 
 	const videoSources = useMemo(() => {
 		if (!document) return [];
@@ -178,7 +238,7 @@ export function NewEditorShell() {
 	const handleSeek = useCallback(
 		(timeSec: number) => {
 			setCurrentTime(timeSec);
-			setSeekTarget({ timeSec, requestId: ++seekSeqRef.current });
+			setSeekTarget({ timeSec, isSource: false, requestId: ++seekSeqRef.current });
 		},
 		[setCurrentTime],
 	);
@@ -199,20 +259,28 @@ export function NewEditorShell() {
 
 	const handleTranscribe = useCallback(async () => {
 		if (!document || !document.project.primaryAssetId) return;
+		const assetId = document.project.primaryAssetId;
 		setIsTranscribing(true);
+		setAssetStatuses((prev) => ({ ...prev, [assetId]: "running" }));
 		try {
-			const transcript = await transcribeAsset(document, document.project.primaryAssetId, {
+			const transcript = await transcribeAsset(document, assetId, {
 				onStatus: (s) => toast.loading(`Transcribing: ${s}`, { id: "transcribe" }),
 			});
 			toast.dismiss("transcribe");
 			await setTranscript(transcript);
 			setRightPane("transcript");
 			toast.success("Transcript ready");
+			setAssetStatuses((prev) => {
+				const next = { ...prev };
+				delete next[assetId];
+				return next;
+			});
 		} catch (err) {
 			toast.dismiss("transcribe");
 			toast.error("Transcription failed", {
 				description: err instanceof Error ? err.message : String(err),
 			});
+			setAssetStatuses((prev) => ({ ...prev, [assetId]: "failed" }));
 		} finally {
 			setIsTranscribing(false);
 		}
@@ -333,16 +401,6 @@ export function NewEditorShell() {
 		[saveDocument],
 	);
 
-	const promptUnsaved = useCallback(
-		(action: "new" | "open" | "record"): Promise<UnsavedChoice> => {
-			if (!dirty) return Promise.resolve("discard");
-			return new Promise<UnsavedChoice>((resolve) => {
-				setUnsavedPrompt({ action, resolve });
-			});
-		},
-		[dirty],
-	);
-
 	const handleConfirmUnsaved = useCallback(
 		(choice: UnsavedChoice) => {
 			if (!unsavedPrompt) return;
@@ -379,12 +437,9 @@ export function NewEditorShell() {
 
 	const handleNewRecording = useCallback(async () => {
 		const choice = await promptUnsaved("record");
-		if (choice === "cancel") return;
-		if (choice === "discard") {
+		if (choice !== "cancel") {
 			void window.electronAPI?.startNewRecording?.();
 		}
-		// "save" path: the dialog has already saved and invoked startNewRecording
-		// inside handleConfirmUnsaved.
 	}, [promptUnsaved]);
 
 	const handleReturnToRecorder = useCallback(() => {
@@ -399,9 +454,8 @@ export function NewEditorShell() {
 		setExportOpen(true);
 	}, [hasAsset]);
 
-	const handlePreviewSource = useCallback((_sec: number) => {
-		// ponytail: source-preview is a no-op until the bottombar wires the
-		// double-click scrub-to-source interaction.
+	const handlePreviewSource = useCallback((sec: number) => {
+		setSeekTarget({ timeSec: sec, isSource: true, requestId: ++seekSeqRef.current });
 	}, []);
 
 	const handleOpenSettings = useCallback(() => {
@@ -418,25 +472,34 @@ export function NewEditorShell() {
 		if (!clip) return;
 		const timeMs = Math.round(currentTimeSec * 1000);
 		const region = { ...clip.region, id: crypto.randomUUID() };
-		const withTime = { ...region, startMs: timeMs, endMs: timeMs + 2000 };
 		if (clip.kind === "zoom") {
-			await saveDocument({
-				...doc,
-				zoomRanges: [...doc.zoomRanges, withTime] as never,
-			});
+			const zoom = region as unknown as (typeof doc.zoomRanges)[number];
+			const duration = zoom.endMs - zoom.startMs;
+			zoom.startMs = timeMs;
+			zoom.endMs = timeMs + duration;
+			await saveDocument({ ...doc, zoomRanges: [...doc.zoomRanges, zoom] });
 		} else if (clip.kind === "annotation") {
-			await saveDocument({
-				...doc,
-				annotations: [...doc.annotations, withTime] as never,
-			});
+			const annotation = region as unknown as (typeof doc.annotations)[number];
+			const duration = annotation.endMs - annotation.startMs;
+			annotation.startMs = timeMs;
+			annotation.endMs = timeMs + duration;
+			await saveDocument({ ...doc, annotations: [...doc.annotations, annotation] });
 		} else if (clip.kind === "speed") {
-			const legacy = (doc.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = (legacy.speedRegions as unknown[]) ?? [];
+			const speedRegions =
+				(doc.legacyEditor as { speedRegions?: Array<Record<string, unknown>> })?.speedRegions ?? [];
+			const speed = region as unknown as (typeof speedRegions)[number];
+			const duration = Number(speed.endMs) - Number(speed.startMs);
+			speed.startMs = timeMs;
+			speed.endMs = timeMs + duration;
 			await saveDocument({
 				...doc,
-				legacyEditor: { ...legacy, speedRegions: [...prev, withTime] },
+				legacyEditor: {
+					...doc.legacyEditor,
+					speedRegions: [...speedRegions, speed],
+				},
 			});
 		}
+		toast.success("Region pasted");
 	}, [currentTimeSec, saveDocument]);
 
 	const handleCopyRegion = useCallback(async () => {
@@ -491,41 +554,47 @@ export function NewEditorShell() {
 			toast.info("Add a video to the project before generating captions.");
 			return;
 		}
-		const assetId = document.project.primaryAssetId;
-		if (!document?.transcript) {
-			toast.info("Transcribing first…", { id: "captions-prep" });
-			void (async () => {
-				try {
-					const transcript = await transcribeAsset(document, assetId, {
-						onStatus: (s) => toast.loading(`Transcribing: ${s}`, { id: "captions-prep" }),
-					});
-					toast.dismiss("captions-prep");
-					await setTranscript(transcript);
-					setCaptionsOpen(true);
-				} catch (err) {
-					toast.dismiss("captions-prep");
-					toast.error("Transcription failed", {
-						description: err instanceof Error ? err.message : String(err),
-					});
-				}
-			})();
-			return;
-		}
 		setCaptionsOpen(true);
-	}, [document, setTranscript]);
+	}, [document]);
 
 	const handleGenerateCaptions = useCallback(async () => {
 		const doc = useProjectStore.getState().document;
-		if (!doc?.transcript) return;
+		if (!doc) return;
+		const assetId = doc.project.primaryAssetId;
+		if (!assetId) {
+			toast.error("Add a video to the project before generating captions.");
+			return;
+		}
+
 		setCaptionsOpen(false);
 		try {
+			let transcript = doc.transcript;
+			if (!transcript) {
+				toast.loading("Transcribing first…", { id: "captions-gen" });
+				setAssetStatuses((prev) => ({ ...prev, [assetId]: "running" }));
+				try {
+					transcript = await transcribeAsset(doc, assetId, {
+						onStatus: (s) => toast.loading(`Transcribing: ${s}`, { id: "captions-gen" }),
+					});
+					toast.dismiss("captions-gen");
+					await setTranscript(transcript);
+					setAssetStatuses((prev) => {
+						const next = { ...prev };
+						delete next[assetId];
+						return next;
+					});
+				} catch (err) {
+					setAssetStatuses((prev) => ({ ...prev, [assetId]: "failed" }));
+					throw err;
+				}
+			}
+
 			const { captionSegmentsToAnnotationRegions } = await import(
 				"@/lib/captioning/annotationsFromCaptions"
 			);
 			toast.loading("Generating captions…", { id: "captions-gen" });
 			const segments =
-				((doc.transcript as Record<string, unknown>).segments as Array<Record<string, unknown>>) ??
-				[];
+				((transcript as Record<string, unknown>).segments as Array<Record<string, unknown>>) ?? [];
 			const { regions } = captionSegmentsToAnnotationRegions(
 				segments as never,
 				doc.annotations.length + 1,
@@ -536,9 +605,10 @@ export function NewEditorShell() {
 					timestampGranularity: "word",
 				},
 			);
+			const latestDoc = useProjectStore.getState().document ?? doc;
 			const next = {
-				...doc,
-				annotations: [...doc.annotations, ...(regions as never)],
+				...latestDoc,
+				annotations: [...latestDoc.annotations, ...(regions as never)],
 			};
 			await saveDocument(next);
 			toast.dismiss("captions-gen");
@@ -549,7 +619,7 @@ export function NewEditorShell() {
 				description: err instanceof Error ? err.message : String(err),
 			});
 		}
-	}, [captionsMinW, captionsMaxW, saveDocument]);
+	}, [captionsMinW, captionsMaxW, saveDocument, setTranscript]);
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
@@ -708,7 +778,7 @@ export function NewEditorShell() {
 				{/* Left content panel */}
 				{!leftCollapsed ? (
 					<div className={styles.leftPanel}>
-						<LeftPanel active={leftTab} />
+						<LeftPanel active={leftTab} assetStatuses={assetStatuses} />
 					</div>
 				) : null}
 
@@ -727,10 +797,10 @@ export function NewEditorShell() {
 					clips={clips}
 					seekTarget={seekTarget}
 					onTimeChange={handleTimeChange}
+					onSeek={handleSeek}
 					onLoadedMetadata={handleLoadedMetadata}
 					onVideoElement={setVideoElement}
 					currentTimeSec={currentTimeSec}
-					sourceDurationSec={sourceDurationSec}
 				/>
 
 				{/* Resize handle: right */}
@@ -778,7 +848,6 @@ export function NewEditorShell() {
 					clips={clips}
 					currentTimeSec={currentTimeSec}
 					sourceDurationSec={sourceDurationSec}
-					onSeek={handleSeek}
 					onPreviewSource={handlePreviewSource}
 					onReplaceTimeline={handleReplaceTimeline}
 					zoomRegions={tl.zoomRegions}

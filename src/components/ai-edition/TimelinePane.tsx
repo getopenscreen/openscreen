@@ -27,7 +27,6 @@ interface TimelinePaneProps {
 	currentTimeSec: number;
 	sourceDurationSec: number;
 	busy?: boolean;
-	onSeek: (timeSec: number) => void;
 	onPreviewSource: (sourceTimeSec: number) => void;
 	onReplaceTimeline: (intervals: Interval[], reason: string) => void;
 }
@@ -171,25 +170,11 @@ function chooseTickStep(minStepSec: number): number {
 	return steps.find((step) => step >= minStepSec) ?? steps.at(-1) ?? 600;
 }
 
-function sourceToVirtualTime(
-	intervals: Array<{ startSec: number; endSec: number }>,
-	sourceSec: number,
-): number {
-	let cursor = 0;
-	for (const interval of intervals) {
-		if (sourceSec <= interval.startSec) return cursor;
-		if (sourceSec <= interval.endSec) return cursor + Math.max(0, sourceSec - interval.startSec);
-		cursor += interval.endSec - interval.startSec;
-	}
-	return cursor;
-}
-
 export function TimelinePane({
 	clips,
 	currentTimeSec,
 	sourceDurationSec,
 	busy = false,
-	onSeek,
 	onPreviewSource,
 	onReplaceTimeline,
 }: TimelinePaneProps) {
@@ -300,12 +285,11 @@ export function TimelinePane({
 	);
 
 	const seekSource = useCallback(
-		(sourceSec: number, intervals = visibleKeptIntervals) => {
+		(sourceSec: number) => {
 			const bounded = clamp(sourceSec, 0, sourceDuration);
 			onPreviewSource(bounded);
-			onSeek(sourceToVirtualTime(intervals, bounded));
 		},
-		[onPreviewSource, onSeek, sourceDuration, visibleKeptIntervals],
+		[onPreviewSource, sourceDuration],
 	);
 
 	const seekClientX = useCallback(
@@ -459,15 +443,7 @@ export function TimelinePane({
 				const updated = { ...current, currentStartSec: nextStartSec, currentEndSec: nextEndSec };
 				resizeRef.current = updated;
 				setResizeState(updated);
-				const nextCuts = current.baseCuts.map((item) =>
-					item.id === current.cutId
-						? { ...item, startSec: nextStartSec, endSec: nextEndSec }
-						: item,
-				);
-				seekSource(
-					current.edge === "start" ? nextStartSec : nextEndSec,
-					invertCutRanges(nextCuts, sourceDuration),
-				);
+				seekSource(current.edge === "start" ? nextStartSec : nextEndSec);
 			};
 
 			const end = () => {

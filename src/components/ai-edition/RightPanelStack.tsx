@@ -284,16 +284,11 @@ function RegionInspector({
 												? { ...a, style: { ...a.style, color: e.target.value } }
 												: a,
 										);
-										useProjectStore.getState().setDocument({
+										void useProjectStore.getState().saveDocument({
 											...document,
 											annotations: next as never,
 										});
 									}}
-									onBlur={() =>
-										void useProjectStore
-											.getState()
-											.saveDocument(useProjectStore.getState().document!)
-									}
 									style={{
 										width: "100%",
 										height: 32,
@@ -312,16 +307,11 @@ function RegionInspector({
 												? { ...a, style: { ...a.style, fontSize: Number(e.target.value) } }
 												: a,
 										);
-										useProjectStore.getState().setDocument({
+										void useProjectStore.getState().saveDocument({
 											...document,
 											annotations: next as never,
 										});
 									}}
-									onBlur={() =>
-										void useProjectStore
-											.getState()
-											.saveDocument(useProjectStore.getState().document!)
-									}
 									style={selectStyle()}
 								>
 									{[12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 128].map(
@@ -342,16 +332,11 @@ function RegionInspector({
 												? { ...a, style: { ...a.style, textAnimation: e.target.value as never } }
 												: a,
 										);
-										useProjectStore.getState().setDocument({
+										void useProjectStore.getState().saveDocument({
 											...document,
 											annotations: next as never,
 										});
 									}}
-									onBlur={() =>
-										void useProjectStore
-											.getState()
-											.saveDocument(useProjectStore.getState().document!)
-									}
 									style={selectStyle()}
 								>
 									{["none", "fade", "rise", "pop", "slide-left", "typewriter", "pulse"].map((a) => (

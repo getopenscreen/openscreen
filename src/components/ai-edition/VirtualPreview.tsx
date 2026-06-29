@@ -1,9 +1,7 @@
-import { Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import {
 	clampVirtualTime,
-	formatSeconds,
 	locateSourcePosition,
 	locateVirtualPosition,
 	totalVirtualDuration,
@@ -18,7 +16,7 @@ export interface VideoSource {
 interface VirtualPreviewProps {
 	videoSources: VideoSource[];
 	clips: AxcutClip[];
-	seekTarget?: { timeSec: number; requestId: number } | null;
+	seekTarget?: { timeSec: number; isSource?: boolean; requestId: number } | null;
 	onTimeChange?: (timeSec: number) => void;
 	onLoadedMetadata?: (durationSec: number) => void;
 	onVideoElement?: (element: HTMLVideoElement | null) => void;
@@ -42,7 +40,7 @@ export function VirtualPreview({
 	}
 	const isProgrammaticSeekRef = useRef(false);
 	const [virtualTimeSec, setVirtualTimeSec] = useState(0);
-	const [isPlaying, setIsPlaying] = useState(false);
+	const [, setIsPlaying] = useState(false);
 	const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
 	const [sourceIndex, setSourceIndex] = useState(0);
 
@@ -79,33 +77,25 @@ export function VirtualPreview({
 		[clips, updateVirtualTime],
 	);
 
-	const handlePlayPause = useCallback(() => {
+	const seekToSourceTime = useCallback((sourceTimeSec: number) => {
 		const video = videoRef.current;
-		if (!video || clips.length === 0) return;
-		if (!video.paused) {
-			video.pause();
-			setIsPlaying(false);
-			return;
-		}
-		const position =
-			locateVirtualPosition(clips, virtualTimeSec) ?? locateVirtualPosition(clips, 0);
-		if (!position) return;
+		if (!video) return;
 		isProgrammaticSeekRef.current = true;
-		updateVirtualTime(position.virtualTimeSec);
-		if (Math.abs(video.currentTime - position.sourceTimeSec) > 0.01) {
-			video.currentTime = position.sourceTimeSec;
+		if (Math.abs(video.currentTime - sourceTimeSec) > 0.01) {
+			video.currentTime = sourceTimeSec;
 		}
-		void video
-			.play()
-			.then(() => setIsPlaying(true))
-			.catch(() => setIsPlaying(false));
-	}, [clips, updateVirtualTime, virtualTimeSec]);
+	}, []);
 
 	const handleTimeUpdate = useCallback(() => {
 		const video = videoRef.current;
 		if (!video || clips.length === 0) return;
 		if (isProgrammaticSeekRef.current) {
 			isProgrammaticSeekRef.current = false;
+			const position = locateSourcePosition(clips, video.currentTime);
+			if (position) {
+				updateVirtualTime(clampVirtualTime(clips, position.virtualTimeSec));
+			}
+			return;
 		}
 		const position = locateSourcePosition(clips, video.currentTime);
 		if (!position) {
@@ -145,86 +135,54 @@ export function VirtualPreview({
 
 	useEffect(() => {
 		if (!seekTarget) return;
-		seekToVirtualTime(seekTarget.timeSec);
-	}, [seekTarget, seekToVirtualTime]);
+		if (seekTarget.isSource) {
+			seekToSourceTime(seekTarget.timeSec);
+		} else {
+			seekToVirtualTime(seekTarget.timeSec);
+		}
+	}, [seekTarget, seekToVirtualTime, seekToSourceTime]);
 
 	return (
 		<div className={styles.container}>
 			{activeSource ? (
-				<>
-					<div className={styles.videoFrame}>
-						<video
-							key={activeSource.src}
-							ref={videoRef}
-							src={activeSource.src}
-							className={styles.video}
-							preload="metadata"
-							playsInline
-							onLoadedMetadata={(e) => {
-								setLoadState("ready");
-								const duration = e.currentTarget.duration;
-								if (Number.isFinite(duration) && duration > 0) {
-									onLoadedMetadata?.(duration);
-								}
-								if (clips.length > 0) seekToVirtualTime(virtualTimeSec);
-							}}
-							onWaiting={() => setLoadState("loading")}
-							onCanPlay={() => setLoadState("ready")}
-							onError={() => {
-								if (sourceIndex + 1 < videoSources.length) {
-									setSourceIndex((c) => c + 1);
-									setLoadState("loading");
-									return;
-								}
-								setLoadState("error");
-								setIsPlaying(false);
-							}}
-							onPause={() => setIsPlaying(false)}
-							onPlay={() => setIsPlaying(true)}
-							onEnded={() => setIsPlaying(false)}
-							onTimeUpdate={handleTimeUpdate}
-						/>
-						{loadState !== "ready" && (
-							<div className={styles.overlay}>
-								{loadState === "error" ? "Video preview could not be loaded." : "Loading preview…"}
-							</div>
-						)}
-					</div>
-					<div className={styles.controls}>
-						<button
-							type="button"
-							className={styles.iconButton}
-							onClick={handlePlayPause}
-							disabled={clips.length === 0 || loadState !== "ready"}
-							aria-label={isPlaying ? "Pause" : "Play"}
-						>
-							{isPlaying ? <Pause size={16} /> : <Play size={16} />}
-						</button>
-						<button
-							type="button"
-							className={styles.iconButton}
-							onClick={() => seekToVirtualTime(0)}
-							disabled={clips.length === 0 || loadState !== "ready"}
-							aria-label="Restart"
-						>
-							<RotateCcw size={16} />
-						</button>
-						<div className={styles.readout}>
-							<strong>{formatSeconds(virtualTimeSec)}</strong>
-							<span className={styles.muted}>/ {formatSeconds(virtualDurationSec)}</span>
+				<div className={styles.videoFrame}>
+					<video
+						key={activeSource.src}
+						ref={videoRef}
+						src={activeSource.src}
+						className={styles.video}
+						preload="metadata"
+						playsInline
+						onLoadedMetadata={(e) => {
+							setLoadState("ready");
+							const duration = e.currentTarget.duration;
+							if (Number.isFinite(duration) && duration > 0) {
+								onLoadedMetadata?.(duration);
+							}
+							if (clips.length > 0) seekToVirtualTime(virtualTimeSec);
+						}}
+						onWaiting={() => setLoadState("loading")}
+						onCanPlay={() => setLoadState("ready")}
+						onError={() => {
+							if (sourceIndex + 1 < videoSources.length) {
+								setSourceIndex((c) => c + 1);
+								setLoadState("loading");
+								return;
+							}
+							setLoadState("error");
+							setIsPlaying(false);
+						}}
+						onPause={() => setIsPlaying(false)}
+						onPlay={() => setIsPlaying(true)}
+						onEnded={() => setIsPlaying(false)}
+						onTimeUpdate={handleTimeUpdate}
+					/>
+					{loadState !== "ready" && (
+						<div className={styles.overlay}>
+							{loadState === "error" ? "Video preview could not be loaded." : "Loading preview…"}
 						</div>
-						<input
-							className={styles.slider}
-							type="range"
-							min={0}
-							max={Math.max(virtualDurationSec, 0.001)}
-							step={0.01}
-							value={Math.min(virtualTimeSec, Math.max(virtualDurationSec, 0.001))}
-							onChange={(e) => seekToVirtualTime(Number.parseFloat(e.target.value))}
-							disabled={clips.length === 0 || loadState !== "ready"}
-						/>
-					</div>
-				</>
+					)}
+				</div>
 			) : (
 				<div className={styles.placeholder}>Attach a video to start previewing.</div>
 			)}

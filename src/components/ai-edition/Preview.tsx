@@ -11,10 +11,10 @@ interface PreviewProps {
 	clips: AxcutClip[];
 	seekTarget: { timeSec: number; requestId: number } | null;
 	onTimeChange: (sec: number) => void;
+	onSeek: (sec: number) => void;
 	onLoadedMetadata: (sec: number) => void;
 	onVideoElement: (el: HTMLVideoElement | null) => void;
 	currentTimeSec: number;
-	sourceDurationSec: number;
 }
 
 function formatTC(sec: number): string {
@@ -31,10 +31,10 @@ export function Preview({
 	clips,
 	seekTarget,
 	onTimeChange,
+	onSeek,
 	onLoadedMetadata,
 	onVideoElement,
 	currentTimeSec,
-	sourceDurationSec,
 }: PreviewProps) {
 	const [playing, setPlaying] = useState(false);
 	const [loop, setLoop] = useState(false);
@@ -203,30 +203,45 @@ export function Preview({
 				>
 					<Maximize2 size={14} />
 				</button>
-				<span className={styles.time}>
-					<span>{formatTC(currentTimeSec)}</span>
-					<span className={styles.sep}>/</span>
-					<span className={styles.total}>{formatTC(sourceDurationSec)}</span>
-				</span>
-				<input
-					type="range"
-					min={0}
-					max={sourceDurationSec || 1}
-					step={0.1}
-					value={Math.min(currentTimeSec, sourceDurationSec || 1)}
-					onChange={(e) => {
-						const t = Number(e.target.value);
-						if (videoEl) videoEl.currentTime = t;
-						onTimeChange(t);
-					}}
-					style={{
-						flex: 1,
-						maxWidth: 400,
-						height: 4,
-						accentColor: "var(--accent)",
-						cursor: "pointer",
-					}}
-				/>
+				{(() => {
+					const virtualDurationSec = clips.reduce(
+						(acc, c) => acc + (c.timelineEndSec - c.timelineStartSec),
+						0,
+					);
+					const progress = virtualDurationSec ? (currentTimeSec / virtualDurationSec) * 100 : 0;
+					return (
+						<>
+							<span className={styles.time}>
+								<span>{formatTC(currentTimeSec)}</span>
+								<span className={styles.sep}>/</span>
+								<span className={styles.total}>{formatTC(virtualDurationSec)}</span>
+							</span>
+							<div className={styles.scrubBar}>
+								<div className={styles.scrubTrack}>
+									<div className={styles.scrubProgress} style={{ width: `${progress}%` }} />
+								</div>
+								<input
+									type="range"
+									min={0}
+									max={virtualDurationSec || 1}
+									step={0.01}
+									value={Math.min(currentTimeSec, virtualDurationSec || 1)}
+									onChange={(e) => {
+										onSeek(Number(e.target.value));
+									}}
+									className={styles.scrubInput}
+									aria-label="Seek video"
+								/>
+								<div
+									className={styles.scrubThumb}
+									style={{
+										left: `${progress}%`,
+									}}
+								/>
+							</div>
+						</>
+					);
+				})()}
 				<span className={styles.spacer} />
 				<button
 					type="button"

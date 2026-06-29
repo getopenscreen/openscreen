@@ -79,6 +79,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				dirty: false,
 				lastSavedAt: new Date(),
 			});
+			void import("./undo").then(({ clearHistory }) => clearHistory());
 		} catch (error) {
 			set({
 				status: "error",
@@ -104,6 +105,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				dirty: false,
 				lastSavedAt: new Date(),
 			});
+			void import("./undo").then(({ clearHistory }) => clearHistory());
 			return document;
 		} catch (error) {
 			set({

@@ -365,7 +365,6 @@ function ChatStripPanel() {
 	const [busy, setBusy] = useState(false);
 	const [llmConfig, setLlmConfig] = useState<AiEditionLlmConfig | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [cycleIndex, setCycleIndex] = useState(0);
 	const [chatsOpen, setChatsOpen] = useState(false);
 	const [sessionNum, setSessionNum] = useState(1);
 	const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -432,12 +431,9 @@ function ChatStripPanel() {
 		}
 	};
 
-	const modelAlternatives = [
-		llmConfig?.model ?? "openai / gpt-4o",
-		"anthropic / claude-sonnet-4.5",
-		"local / qwen2.5-7b",
-	];
-	const modelLabel = modelAlternatives[cycleIndex % modelAlternatives.length];
+	const modelLabel = llmConfig
+		? `${llmConfig.provider} / ${llmConfig.model}`
+		: "Configure AI Model";
 	const reasoningLabel =
 		llmConfig?.reasoningEffort && llmConfig.reasoningEffort !== "none"
 			? `Reasoning ${llmConfig.reasoningEffort}`
@@ -613,8 +609,8 @@ function ChatStripPanel() {
 					<button
 						type="button"
 						className={styles.modelPicker}
-						aria-label="Choose model"
-						onClick={() => setCycleIndex((i) => i + 1)}
+						aria-label="AI settings"
+						onClick={() => setSettingsOpen(true)}
 					>
 						<svg
 							width={12}

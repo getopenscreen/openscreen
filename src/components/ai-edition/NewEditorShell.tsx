@@ -1,138 +1,121 @@
-import {
-	Brackets,
-	Download,
-	EyeOff,
-	Film,
-	FolderOpen,
-	LayoutPanelTop,
-	Loader2,
-	MessageSquare,
-	MousePointerClick,
-	Palette,
-	PanelLeft,
-	PanelRight,
-	SlidersHorizontal,
-	Sparkles,
-} from "lucide-react";
+import { EyeOff, Film, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-// import { ExportDialog } from "@/components/video-editor/ExportDialog";
-import { AI_FEATURES_ENABLED } from "@/components/video-editor/featureFlags";
 import type { EditorProjectData } from "@/components/video-editor/projectPersistence";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
+import type { CropRegion } from "@/components/video-editor/types";
 import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
 import { transcribeAsset } from "@/lib/ai-edition/document/transcribe";
+import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
-import { nativeBridgeClient, useCursorRecordingData, useCursorTelemetry } from "@/native";
-import { ChatPanel } from "./ChatPanel";
-import { EditorSettingsBridge } from "./EditorSettings";
-import { IconRail, type LeftTab, type RightTab, usePanelTabs } from "./IconRail";
-import { ProjectPanel } from "./ProjectPanel";
-import { TimelinePane } from "./TimelinePane";
-import { TranscriptEditor } from "./TranscriptEditor";
-import { type VideoSource, VirtualPreview } from "./VirtualPreview";
+import { useUndoRedoShortcuts } from "@/lib/ai-edition/store/undo";
+import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import { useTimeline } from "@/lib/ai-edition/store/useTimeline";
+import { nativeBridgeClient } from "@/native";
+import type { AiEditionProjectSummary } from "@/native/contracts";
+import { Bottombar } from "./Bottombar";
+import { ExportDialog } from "./ExportDialog";
+import { LeftPanel, LeftRail, type LeftTab } from "./LeftPanel";
+import {
+	AutoCaptionsModal,
+	CropModal,
+	InsertSourceModal,
+	NewProjectModal,
+	OpenProjectModal,
+	UnsavedChangesModal,
+	type UnsavedChoice,
+} from "./Modals";
+import styles from "./NewEditorShell.module.css";
+import { Preview } from "./Preview";
+import { RightPanelStack } from "./RightPanelStack";
+import type { RightPaneId } from "./RightPanes";
+import { Titlebar } from "./Titlebar";
 
 interface SeekTarget {
 	timeSec: number;
 	requestId: number;
 }
 
-const LEFT_TABS: Array<{ id: LeftTab; label: string; icon: React.ElementType }> = [
-	{ id: "project", label: "Project", icon: Film },
-	...(AI_FEATURES_ENABLED ? [{ id: "chat" as LeftTab, label: "Chat", icon: MessageSquare }] : []),
-];
-
-const RIGHT_TABS: Array<{ id: RightTab; label: string; icon: React.ElementType }> = [
-	{ id: "transcript", label: "Transcript", icon: Sparkles },
-	{ id: "background", label: "Background", icon: Palette },
-	{ id: "effects", label: "Video effects", icon: SlidersHorizontal },
-	{ id: "camera", label: "Camera", icon: LayoutPanelTop },
-	{ id: "cursor", label: "Cursor", icon: MousePointerClick },
-	{ id: "crop", label: "Crop", icon: Brackets },
-	{ id: "export", label: "Export", icon: Download },
-];
+const COLLAPSE_INITIAL = {
+	left: false,
+	right: true,
+	bottom: false,
+};
 
 export function NewEditorShell() {
 	const document = useProjectStore((s) => s.document);
 	const projectId = useProjectStore((s) => s.projectId);
 	const sourceDurationSec = useProjectStore((s) => s.sourceDurationSec);
 	const currentTimeSec = useProjectStore((s) => s.currentTimeSec);
+	const dirty = useProjectStore((s) => s.dirty);
+	const lastSavedAt = useProjectStore((s) => s.lastSavedAt);
 	const createProject = useProjectStore((s) => s.createProject);
 	const addAsset = useProjectStore((s) => s.addAsset);
 	const replaceTimeline = useProjectStore((s) => s.replaceTimeline);
-	const restoreFullTimeline = useProjectStore((s) => s.restoreFullTimeline);
 	const setTranscript = useProjectStore((s) => s.setTranscript);
 	const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
 	const setSourceDuration = useProjectStore((s) => s.setSourceDuration);
 	const loadProject = useProjectStore((s) => s.loadProject);
+	const saveDocument = useProjectStore((s) => s.saveDocument);
+	const markClean = useProjectStore((s) => s.markClean);
 
 	const [seekTarget, setSeekTarget] = useState<SeekTarget | null>(null);
 	const [isTranscribing, setIsTranscribing] = useState(false);
-	const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+	const [, setVideoElement] = useState<HTMLVideoElement | null>(null);
+	const [leftTab, setLeftTab] = useState<LeftTab>("media");
+	const [rightPane, setRightPane] = useState<RightPaneId>("background");
+	const [leftCollapsed, setLeftCollapsed] = useState(COLLAPSE_INITIAL.left);
+	const [rightCollapsed, setRightCollapsed] = useState(COLLAPSE_INITIAL.right);
+	const [bottomCollapsed, setBottomCollapsed] = useState(COLLAPSE_INITIAL.bottom);
+	const [openProjectOpen, setOpenProjectOpen] = useState(false);
+	const [newProjectOpen, setNewProjectOpen] = useState(false);
+	const [cropOpen, setCropOpen] = useState(false);
+	const [exportOpen, setExportOpen] = useState(false);
+	const [unsavedPrompt, setUnsavedPrompt] = useState<{
+		action: "new" | "open" | "record";
+		resolve: (choice: UnsavedChoice) => void;
+	} | null>(null);
+	const { settings: editorSettings, set: setEditorSettings } = useEditorSettings();
+	const tl = useTimeline();
+	useUndoRedoShortcuts(() => {
+		// ponytail: placeholder, wire when undo stack merges with history
+	});
+	const [captionsOpen, setCaptionsOpen] = useState(false);
+	const [captionsMinW, setCaptionsMinW] = useState(2);
+	const [captionsMaxW, setCaptionsMaxW] = useState(7);
+	const [insertAssetId, setInsertAssetId] = useState<string | null>(null);
+	const [projectSummaries, setProjectSummaries] = useState<AiEditionProjectSummary[]>([]);
 	const seekSeqRef = useRef(0);
 	const initRef = useRef(false);
 
-	const {
-		leftTab,
-		setLeftTab,
-		rightTab,
-		setRightTab,
-		leftCollapsed,
-		setLeftCollapsed,
-		rightCollapsed,
-		setRightCollapsed,
-	} = usePanelTabs();
-
-	const handleLeftTabChange = useCallback(
-		(tab: LeftTab) => {
-			if (leftTab === tab) {
-				setLeftCollapsed((prev) => !prev);
-			} else {
-				setLeftTab(tab);
-				setLeftCollapsed(false);
-			}
-		},
-		[leftTab, setLeftTab, setLeftCollapsed],
-	);
-
-	const handleRightTabChange = useCallback(
-		(tab: RightTab) => {
-			if (rightTab === tab) {
-				setRightCollapsed((prev) => !prev);
-			} else {
-				setRightTab(tab);
-				setRightCollapsed(false);
-			}
-		},
-		[rightTab, setRightTab, setRightCollapsed],
-	);
-
 	const primaryAssetPath =
 		document?.assets.find((a) => a.id === document.project.primaryAssetId)?.originalPath ?? null;
-
-	const cursorRecordingDataResult = useCursorRecordingData(primaryAssetPath);
-	const cursorTelemetryResult = useCursorTelemetry(primaryAssetPath);
-	const cursorRecordingData = cursorRecordingDataResult.data;
-	const cursorTelemetry = cursorTelemetryResult.samples;
-	void cursorRecordingData;
-	void cursorTelemetry;
-	// suppress unused: cursorClickTimestamps is wired to the exporter in a follow-up
-	const cursorClickTimestamps = useMemo(
-		() =>
-			cursorTelemetry
-				?.filter(
-					(t: { interactionType?: string; timeMs: number }) =>
-						t.interactionType === "click" || t.interactionType === "double-click",
-				)
-				.map((t: { timeMs: number }) => t.timeMs) ?? [],
-		[cursorTelemetry],
-	);
-	void cursorClickTimestamps;
-
-	const hasTranscript = Boolean(document?.transcript);
+	void primaryAssetPath;
+	const clips: AxcutClip[] = document?.timeline.clips ?? [];
 	const hasProject = Boolean(document);
 	const hasAsset = projectId !== null && (document?.assets.length ?? 0) > 0;
+	const project = document?.project
+		? {
+				id: document.project.id,
+				title: document.project.title,
+				updatedAt: new Date().toISOString(),
+			}
+		: null;
 
+	// refresh project list when the Open Project modal is open
+	useEffect(() => {
+		if (!openProjectOpen) return;
+		void (async () => {
+			try {
+				const next = await nativeBridgeClient.aiEdition.listProjects();
+				setProjectSummaries(next);
+			} catch {
+				// ponytail: silent
+			}
+		})();
+	}, [openProjectOpen]);
+
+	// initialise from pending recording (parity with previous shell)
 	useEffect(() => {
 		if (initRef.current) return;
 		initRef.current = true;
@@ -154,15 +137,25 @@ export function NewEditorShell() {
 		})();
 	}, [addAsset, createProject]);
 
-	const videoSources: VideoSource[] = useMemo(() => {
+	// Warn on close when dirty
+	useEffect(() => {
+		const onBeforeUnload = (e: BeforeUnloadEvent) => {
+			if (useProjectStore.getState().dirty) {
+				e.preventDefault();
+				e.returnValue = "";
+			}
+		};
+		window.addEventListener("beforeunload", onBeforeUnload);
+		return () => window.removeEventListener("beforeunload", onBeforeUnload);
+	}, []);
+
+	const videoSources = useMemo(() => {
 		if (!document) return [];
 		return document.assets.map((asset) => ({
 			src: toFileUrl(asset.originalPath),
 			label: asset.label,
 		}));
 	}, [document]);
-
-	const clips = document?.timeline.clips ?? [];
 
 	const handleLoadedMetadata = useCallback(
 		(durationSec: number) => {
@@ -190,18 +183,18 @@ export function NewEditorShell() {
 		[setCurrentTime],
 	);
 
-	const handleReplaceTimeline = useCallback(
-		(intervals: Array<{ startSec: number; endSec: number }>, reason: string) => {
-			void replaceTimeline(intervals, reason);
-		},
-		[replaceTimeline],
-	);
-
 	const handleTimeChange = useCallback(
 		(timeSec: number) => {
 			setCurrentTime(timeSec);
 		},
 		[setCurrentTime],
+	);
+
+	const handleReplaceTimeline = useCallback(
+		(intervals: Array<{ startSec: number; endSec: number }>, reason: string) => {
+			void replaceTimeline(intervals, reason);
+		},
+		[replaceTimeline],
 	);
 
 	const handleTranscribe = useCallback(async () => {
@@ -213,7 +206,7 @@ export function NewEditorShell() {
 			});
 			toast.dismiss("transcribe");
 			await setTranscript(transcript);
-			setRightTab("transcript");
+			setRightPane("transcript");
 			toast.success("Transcript ready");
 		} catch (err) {
 			toast.dismiss("transcribe");
@@ -223,7 +216,7 @@ export function NewEditorShell() {
 		} finally {
 			setIsTranscribing(false);
 		}
-	}, [document, setTranscript, setRightTab]);
+	}, [document, setTranscript]);
 
 	const handleLoadLegacyProject = useCallback(async () => {
 		try {
@@ -245,8 +238,6 @@ export function NewEditorShell() {
 		}
 	}, [loadProject]);
 
-	const handlePreviewSource = useCallback((_sourceTimeSec: number) => {}, []);
-
 	const handleDropWordRange = useCallback(
 		async (startSec: number, endSec: number) => {
 			if (!document) return;
@@ -263,264 +254,667 @@ export function NewEditorShell() {
 		[document, replaceTimeline],
 	);
 
-	// --- Right panel content based on selected right tab ---
-	const rightContent = (() => {
-		if (rightTab === "transcript") {
-			if (!hasTranscript) {
-				return (
-					<div className="flex-1 flex flex-col items-center justify-center p-6 gap-3">
-						<Sparkles className="h-8 w-8 text-white/20" />
-						<div className="text-center max-w-[260px]">
-							<p className="text-[12.5px] text-white/50 leading-relaxed">
-								Click <strong className="text-white/80">Transcribe</strong> in the Project panel to
-								generate a transcript with local Whisper.
-							</p>
-						</div>
-						<button
-							type="button"
-							className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#34B27B] hover:bg-[#2d9e6c] text-white text-[11.5px] font-medium disabled:opacity-40"
-							onClick={handleTranscribe}
-							disabled={!hasAsset || isTranscribing}
-						>
-							{isTranscribing ? (
-								<Loader2 size={12} className="animate-spin" />
-							) : (
-								<Sparkles size={12} />
-							)}
-							{isTranscribing ? "Transcribing…" : "Transcribe now"}
-						</button>
-					</div>
-				);
+	const handleSelectProject = useCallback(
+		async (id: string) => {
+			try {
+				await loadProject(id);
+			} catch (err) {
+				toast.error("Could not open project", {
+					description: err instanceof Error ? err.message : String(err),
+				});
 			}
-			return document?.transcript ? (
-				<TranscriptEditor
-					transcript={document.transcript}
-					clips={clips}
-					currentTimeSec={currentTimeSec}
-					onSeek={handleSeek}
-					onDropWordRange={handleDropWordRange}
-				/>
-			) : null;
+		},
+		[loadProject],
+	);
+
+	const handleCreateProject = useCallback(
+		async (title: string) => {
+			try {
+				await createProject(title);
+			} catch (err) {
+				toast.error("Could not create project", {
+					description: err instanceof Error ? err.message : String(err),
+				});
+			}
+		},
+		[createProject],
+	);
+
+	const handleSave = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		try {
+			await saveDocument(doc);
+			toast.success("Project saved");
+		} catch (err) {
+			toast.error("Save failed", {
+				description: err instanceof Error ? err.message : String(err),
+			});
 		}
-		if (rightTab === "export") {
-			return (
-				<div className="flex-1 overflow-y-auto p-4">
-					<h2 className="text-[11px] font-semibold tracking-[0.1em] uppercase text-white/40 mb-3">
-						Export
-					</h2>
-					<button
-						type="button"
-						className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#34B27B] hover:bg-[#2d9e6c] text-white font-medium text-sm disabled:opacity-40"
-						onClick={() => {
-							toast.info("Export via the ExportDialog (see legacy VideoEditor)");
-						}}
-						disabled={!hasAsset}
-					>
-						<Download size={14} />
-						Export MP4
-					</button>
-					<p className="mt-3 text-[11px] text-white/40 text-center leading-relaxed">
-						Exports use your project's appearance, zoom, annotations, and cursor settings.
-					</p>
-				</div>
-			);
+	}, [saveDocument]);
+
+	const handleSaveAs = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		try {
+			const result = await nativeBridgeClient.aiEdition.save(doc);
+			if (!result.success || !result.document) {
+				throw new Error(result.error ?? "Failed to save project");
+			}
+			const title = window.prompt("Save project as", doc.project.title);
+			if (!title || title === doc.project.title) {
+				markClean();
+				toast.success("Project saved");
+				return;
+			}
+			const renamed = { ...doc, project: { ...doc.project, title } };
+			await saveDocument(renamed);
+			toast.success(`Saved as "${title}"`);
+		} catch (err) {
+			toast.error("Save failed", {
+				description: err instanceof Error ? err.message : String(err),
+			});
 		}
-		// All other right tabs use the SettingsPanel bridge (filtered to the relevant section)
-		return hasProject ? (
-			<EditorSettingsBridge videoElement={videoElement} activeTab={rightTab} />
-		) : (
-			<div className="flex-1 flex flex-col items-center justify-center p-6 gap-3">
-				<Palette className="h-8 w-8 text-white/20" />
-				<p className="text-[12px] text-white/45 text-center max-w-[240px] leading-relaxed">
-					Open a project to edit {rightTab} settings.
-				</p>
-			</div>
+	}, [markClean, saveDocument]);
+
+	const handleRenameProject = useCallback(
+		async (title: string) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return;
+			if (title === doc.project.title) return;
+			try {
+				await saveDocument({ ...doc, project: { ...doc.project, title } });
+			} catch (err) {
+				toast.error("Rename failed", {
+					description: err instanceof Error ? err.message : String(err),
+				});
+			}
+		},
+		[saveDocument],
+	);
+
+	const promptUnsaved = useCallback(
+		(action: "new" | "open" | "record"): Promise<UnsavedChoice> => {
+			if (!dirty) return Promise.resolve("discard");
+			return new Promise<UnsavedChoice>((resolve) => {
+				setUnsavedPrompt({ action, resolve });
+			});
+		},
+		[dirty],
+	);
+
+	const handleConfirmUnsaved = useCallback(
+		(choice: UnsavedChoice) => {
+			if (!unsavedPrompt) return;
+			const { action, resolve } = unsavedPrompt;
+			setUnsavedPrompt(null);
+			// ponytail: resolve the action when the user picks save / discard.
+			// The "continue with action" path is handled below in handleNewRecording /
+			// the open-project branch. We resolve the promise once the work is done
+			// (or cancelled).
+			void (async () => {
+				if (choice === "cancel") {
+					resolve("cancel");
+					return;
+				}
+				if (choice === "save") {
+					const doc = useProjectStore.getState().document;
+					if (doc) {
+						try {
+							await saveDocument(doc);
+						} catch {
+							resolve("cancel");
+							return;
+						}
+					}
+				}
+				if (action === "record") {
+					void window.electronAPI?.startNewRecording?.();
+				}
+				resolve(choice);
+			})();
+		},
+		[saveDocument, unsavedPrompt],
+	);
+
+	const handleNewRecording = useCallback(async () => {
+		const choice = await promptUnsaved("record");
+		if (choice === "cancel") return;
+		if (choice === "discard") {
+			void window.electronAPI?.startNewRecording?.();
+		}
+		// "save" path: the dialog has already saved and invoked startNewRecording
+		// inside handleConfirmUnsaved.
+	}, [promptUnsaved]);
+
+	const handleReturnToRecorder = useCallback(() => {
+		void window.electronAPI?.switchToHud?.();
+	}, []);
+
+	const handleExport = useCallback(() => {
+		if (!hasAsset) {
+			toast.info("Add a video to the project before exporting.");
+			return;
+		}
+		setExportOpen(true);
+	}, [hasAsset]);
+
+	const handlePreviewSource = useCallback((_sec: number) => {
+		// ponytail: source-preview is a no-op until the bottombar wires the
+		// double-click scrub-to-source interaction.
+	}, []);
+
+	const handleOpenSettings = useCallback(() => {
+		toast.info(
+			"Open the right rail to access Background, Effects, Layout, Cursor, and Timeline settings.",
 		);
-	})();
+	}, []);
 
-	// --- Left panel content ---
-	const leftContent = leftTab === "chat" && AI_FEATURES_ENABLED ? <ChatPanel /> : <ProjectPanel />;
+	const pasteRegion = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		const { pasteClipboard } = await import("@/lib/ai-edition/store/regionClipboard");
+		const clip = pasteClipboard();
+		if (!clip) return;
+		const timeMs = Math.round(currentTimeSec * 1000);
+		const region = { ...clip.region, id: crypto.randomUUID() };
+		const withTime = { ...region, startMs: timeMs, endMs: timeMs + 2000 };
+		if (clip.kind === "zoom") {
+			await saveDocument({
+				...doc,
+				zoomRanges: [...doc.zoomRanges, withTime] as never,
+			});
+		} else if (clip.kind === "annotation") {
+			await saveDocument({
+				...doc,
+				annotations: [...doc.annotations, withTime] as never,
+			});
+		} else if (clip.kind === "speed") {
+			const legacy = (doc.legacyEditor as Record<string, unknown>) ?? {};
+			const prev = (legacy.speedRegions as unknown[]) ?? [];
+			await saveDocument({
+				...doc,
+				legacyEditor: { ...legacy, speedRegions: [...prev, withTime] },
+			});
+		}
+	}, [currentTimeSec, saveDocument]);
 
-	// --- Toolbar buttons in left panel (Open + Remove cuts) ---
-	const leftPanelFooter = hasProject ? (
-		<div className="border-t border-white/[0.06] px-3 py-2 flex items-center gap-1">
-			<button
-				type="button"
-				className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-colors text-[11px] font-medium disabled:opacity-40"
-				onClick={handleLoadLegacyProject}
-				title="Open a .openscreen project"
-			>
-				<FolderOpen size={12} />
-				Open .openscreen
-			</button>
-			{clips.length > 0 && (
-				<button
-					type="button"
-					className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-colors text-[11px] font-medium"
-					onClick={() => void restoreFullTimeline()}
-					title="Remove all cuts"
-				>
-					<EyeOff size={12} />
-					Remove cuts
-				</button>
-			)}
-		</div>
-	) : null;
+	const handleCopyRegion = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc || !tl.selection) return;
+		const { copyRegion } = await import("@/lib/ai-edition/store/regionClipboard");
+		const region =
+			tl.selection.kind === "zoom"
+				? doc.zoomRanges.find((z) => z.id === tl.selection?.id)
+				: tl.selection.kind === "annotation"
+					? (doc.annotations as unknown[]).find(
+							(a) => (a as { id: string }).id === tl.selection?.id,
+						)
+					: ((doc.legacyEditor as { speedRegions?: unknown[] } | null)?.speedRegions ?? []).find(
+							(s) => (s as { id: string }).id === tl.selection?.id,
+						);
+		if (region) {
+			copyRegion({
+				kind: tl.selection.kind === "skip" ? "zoom" : tl.selection.kind,
+				region: region as Record<string, unknown>,
+			});
+			toast.success("Region copied");
+		}
+	}, [tl]);
+
+	const handleDropOnTimeline = useCallback((e: React.DragEvent) => {
+		e.preventDefault();
+		const assetId = e.dataTransfer.getData("application/x-axcut-asset");
+		if (assetId) setInsertAssetId(assetId);
+	}, []);
+
+	const handleInsertBefore = useCallback(async () => {
+		if (!insertAssetId) return;
+		setInsertAssetId(null);
+		await tl.addClipBefore(insertAssetId);
+	}, [insertAssetId, tl]);
+
+	const handleInsertAfter = useCallback(async () => {
+		if (!insertAssetId) return;
+		setInsertAssetId(null);
+		await tl.addClipAfter(insertAssetId);
+	}, [insertAssetId, tl]);
+
+	const handleInsertSplit = useCallback(async () => {
+		if (!insertAssetId) return;
+		setInsertAssetId(null);
+		await tl.splitAndInsert(insertAssetId, currentTimeSec);
+	}, [insertAssetId, currentTimeSec, tl]);
+
+	const handleCaptions = useCallback(() => {
+		if (!document?.project.primaryAssetId) {
+			toast.info("Add a video to the project before generating captions.");
+			return;
+		}
+		const assetId = document.project.primaryAssetId;
+		if (!document?.transcript) {
+			toast.info("Transcribing first…", { id: "captions-prep" });
+			void (async () => {
+				try {
+					const transcript = await transcribeAsset(document, assetId, {
+						onStatus: (s) => toast.loading(`Transcribing: ${s}`, { id: "captions-prep" }),
+					});
+					toast.dismiss("captions-prep");
+					await setTranscript(transcript);
+					setCaptionsOpen(true);
+				} catch (err) {
+					toast.dismiss("captions-prep");
+					toast.error("Transcription failed", {
+						description: err instanceof Error ? err.message : String(err),
+					});
+				}
+			})();
+			return;
+		}
+		setCaptionsOpen(true);
+	}, [document, setTranscript]);
+
+	const handleGenerateCaptions = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc?.transcript) return;
+		setCaptionsOpen(false);
+		try {
+			const { captionSegmentsToAnnotationRegions } = await import(
+				"@/lib/captioning/annotationsFromCaptions"
+			);
+			toast.loading("Generating captions…", { id: "captions-gen" });
+			const segments =
+				((doc.transcript as Record<string, unknown>).segments as Array<Record<string, unknown>>) ??
+				[];
+			const { regions } = captionSegmentsToAnnotationRegions(
+				segments as never,
+				doc.annotations.length + 1,
+				doc.annotations.length + 1,
+				{
+					minWordsPerCaption: captionsMinW,
+					maxWordsPerCaption: captionsMaxW,
+					timestampGranularity: "word",
+				},
+			);
+			const next = {
+				...doc,
+				annotations: [...doc.annotations, ...(regions as never)],
+			};
+			await saveDocument(next);
+			toast.dismiss("captions-gen");
+			toast.success(`Added ${regions.length} captions`);
+		} catch (err) {
+			toast.dismiss("captions-gen");
+			toast.error("Caption generation failed", {
+				description: err instanceof Error ? err.message : String(err),
+			});
+		}
+	}, [captionsMinW, captionsMaxW, saveDocument]);
+
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+			if (e.target instanceof HTMLElement && e.target.isContentEditable) return;
+			const ctrl = e.ctrlKey || e.metaKey;
+			if (ctrl && e.key === "s") {
+				e.preventDefault();
+				void handleSave();
+				return;
+			}
+			if (ctrl && e.key === "n") {
+				e.preventDefault();
+				void (async () => {
+					const choice = await promptUnsaved("new");
+					if (choice === "cancel") return;
+					if (choice === "save") {
+						const doc = useProjectStore.getState().document;
+						if (doc) {
+							try {
+								await saveDocument(doc);
+							} catch {
+								return;
+							}
+						}
+					}
+					setNewProjectOpen(true);
+				})();
+				return;
+			}
+			if (ctrl && e.key === "o") {
+				e.preventDefault();
+				void (async () => {
+					const choice = await promptUnsaved("open");
+					if (choice === "cancel") return;
+					if (choice === "save") {
+						const doc = useProjectStore.getState().document;
+						if (doc) {
+							try {
+								await saveDocument(doc);
+							} catch {
+								return;
+							}
+						}
+					}
+					setOpenProjectOpen(true);
+				})();
+				return;
+			}
+			if (!hasProject && e.key !== "?") return;
+			if (ctrl && e.key === "z") return;
+			if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+				e.preventDefault();
+				window.dispatchEvent(new CustomEvent("openscreen:open-shortcuts"));
+				return;
+			}
+			if (ctrl && e.key.toLowerCase() === "c" && tl.selection) {
+				e.preventDefault();
+				void handleCopyRegion();
+				return;
+			}
+			if (ctrl && e.key.toLowerCase() === "v") {
+				e.preventDefault();
+				void pasteRegion();
+				return;
+			}
+			if (e.key === " ") {
+				const v = window.document.querySelector("video");
+				if (v) {
+					e.preventDefault();
+					if (v.paused) {
+						void v.play();
+					} else {
+						v.pause();
+					}
+				}
+				return;
+			}
+			if (e.key === "Delete" || e.key === "Backspace") {
+				if (tl.selection) {
+					e.preventDefault();
+					void tl.removeRegion(tl.selection.kind, tl.selection.id);
+				}
+				return;
+			}
+			switch (e.key.toLowerCase()) {
+				case "z":
+					if (!ctrl) {
+						e.preventDefault();
+						void tl.addZoom();
+					}
+					break;
+				case "t":
+					e.preventDefault();
+					void tl.addSkip();
+					break;
+				case "a":
+					e.preventDefault();
+					void tl.addAnnotation();
+					break;
+				case "s":
+					e.preventDefault();
+					void tl.addSpeed();
+					break;
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [hasProject, handleCopyRegion, handleSave, pasteRegion, tl, promptUnsaved, saveDocument]);
+
+	const collapseAttr = useMemo(() => {
+		const list: string[] = [];
+		if (leftCollapsed) list.push("left");
+		if (rightCollapsed) list.push("right");
+		if (bottomCollapsed) list.push("bottom");
+		return list.join(" ");
+	}, [leftCollapsed, rightCollapsed, bottomCollapsed]);
 
 	return (
-		<div className="flex flex-col h-full w-full bg-[#09090b] text-white/85 overflow-hidden">
-			{/* Top header: project title + panel toggle buttons */}
-			<header
-				className="h-10 shrink-0 flex items-center justify-between px-4 border-b border-white/[0.07] bg-[#070809]/60"
-				style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+		<div className={styles.app} data-collapse={collapseAttr || undefined}>
+			<Titlebar
+				project={project}
+				dirty={dirty}
+				lastSavedAt={lastSavedAt}
+				canExport={hasAsset}
+				leftCollapsed={leftCollapsed}
+				rightCollapsed={rightCollapsed}
+				bottomCollapsed={bottomCollapsed}
+				actions={{
+					openProject: () => setOpenProjectOpen(true),
+					newProject: () => setNewProjectOpen(true),
+					save: () => void handleSave(),
+					saveAs: () => void handleSaveAs(),
+					newRecording: () => void handleNewRecording(),
+					recorder: handleReturnToRecorder,
+					export: handleExport,
+					toggleLeft: () => setLeftCollapsed((v) => !v),
+					toggleRight: () => setRightCollapsed((v) => !v),
+					toggleBottom: () => setBottomCollapsed((v) => !v),
+					openSettings: handleOpenSettings,
+					renameProject: handleRenameProject,
+				}}
+			/>
+
+			<main
+				className={styles.workbench}
+				onDragOver={(e) => {
+					e.preventDefault();
+					e.dataTransfer.dropEffect = "copy";
+				}}
+				onDrop={handleDropOnTimeline}
 			>
-				<div
-					className="flex items-center gap-3 min-w-0"
-					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-				>
-					<h1 className="text-[13px] font-bold text-white truncate">
-						{document?.project.title ?? "OpenScreen"}
-					</h1>
-					{document && (
-						<span className="text-[10px] text-white/35 font-mono">
-							{clips.length} clip{clips.length === 1 ? "" : "s"} · {document.assets.length} asset
-							{document.assets.length === 1 ? "" : "s"}
-						</span>
-					)}
-				</div>
-				<div
-					className="flex items-center gap-1"
-					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-				>
-					<button
-						type="button"
-						className="flex items-center justify-center w-7 h-7 rounded text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-colors"
-						onClick={() => setLeftCollapsed(!leftCollapsed)}
-						title={leftCollapsed ? "Show left panel" : "Hide left panel"}
-						aria-label={leftCollapsed ? "Show left panel" : "Hide left panel"}
-					>
-						<PanelLeft size={14} />
-					</button>
-					<button
-						type="button"
-						className="flex items-center justify-center w-7 h-7 rounded text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-colors"
-						onClick={() => setRightCollapsed(!rightCollapsed)}
-						title={rightCollapsed ? "Show right panel" : "Hide right panel"}
-						aria-label={rightCollapsed ? "Show right panel" : "Hide right panel"}
-					>
-						<PanelRight size={14} />
-					</button>
-					<button
-						type="button"
-						className="flex items-center justify-center w-7 h-7 rounded text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-colors"
-						onClick={() => toast.info("Export via the Export panel")}
-						title="Export"
-						aria-label="Export"
-					>
-						<Download size={14} />
-					</button>
-				</div>
-			</header>
+				{/* Left rail */}
+				<LeftRail active={leftTab} onChange={setLeftTab} />
 
-			<div className="flex flex-1 min-h-0">
-				{/* Left icon rail */}
-				<IconRail
-					side="left"
-					tabs={LEFT_TABS}
-					active={leftTab}
-					onChange={(id) => handleLeftTabChange(id as LeftTab)}
-					collapsed={leftCollapsed}
-					onToggleCollapse={() => setLeftCollapsed(!leftCollapsed)}
+				{/* Left content panel */}
+				{!leftCollapsed ? (
+					<div className={styles.leftPanel}>
+						<LeftPanel active={leftTab} />
+					</div>
+				) : null}
+
+				{/* Resize handle: left */}
+				<div
+					className={`${styles.handle} ${styles.handleCol} ${styles.handleLeft}`}
+					aria-label="Resize left panel"
+					onPointerDown={(e) => startResize(e, "left")}
 				/>
 
-				{/* Left content panel: Project | Chat */}
-				{!leftCollapsed && (
-					<div className="w-72 min-w-72 shrink-0 h-full flex flex-col border-r border-white/[0.07] bg-[#0a0b0e]">
-						<div className="flex-1 min-h-0 flex flex-col overflow-hidden">{leftContent}</div>
-						{leftPanelFooter}
-					</div>
-				)}
-
-				{/* Center: video + timeline, full height */}
-				<div className="flex-1 min-w-0 flex flex-col bg-[#09090b] p-3.5 gap-3">
-					{/* Video — fills remaining space above the timeline */}
-					<div className="flex-1 min-h-0 flex">
-						<div className="flex-1 min-w-0 flex flex-col editor-preview-zone">
-							{hasProject && hasAsset ? (
-								<div className="flex-1 flex flex-col editor-preview-panel">
-									<VirtualPreview
-										videoSources={videoSources}
-										clips={clips}
-										seekTarget={seekTarget}
-										onTimeChange={handleTimeChange}
-										onLoadedMetadata={handleLoadedMetadata}
-										onVideoElement={setVideoElement}
-									/>
-								</div>
-							) : hasProject ? (
-								<div className="flex-1 flex flex-col items-center justify-center editor-preview-panel">
-									<div className="flex flex-col items-center gap-3 text-center max-w-sm">
-										<Film className="h-8 w-8 text-white/30" />
-										<h2 className="text-base font-semibold text-slate-200">
-											Add a video to get started
-										</h2>
-										<p className="text-sm text-slate-500">
-											Click <strong className="text-white/70">Add</strong> in the Project panel.
-										</p>
-									</div>
-								</div>
-							) : (
-								<div className="flex-1 flex flex-col items-center justify-center editor-preview-panel">
-									<div className="flex flex-col items-center gap-3 text-center max-w-sm">
-										<FolderOpen className="h-8 w-8 text-white/30" />
-										<h2 className="text-base font-semibold text-slate-200">No project open</h2>
-										<p className="text-sm text-slate-500">
-											Create a project in the left panel, or{" "}
-											<button
-												type="button"
-												className="text-[#34B27B] hover:text-[#2d9e6c] font-medium"
-												onClick={handleLoadLegacyProject}
-											>
-												open a .openscreen file
-											</button>
-											.
-										</p>
-									</div>
-								</div>
-							)}
-						</div>
-					</div>
-
-					{/* Timeline — always visible, full width, fixed height at the bottom */}
-					<div className="shrink-0 h-[180px] editor-timeline-panel">
-						<TimelinePane
-							clips={clips}
-							currentTimeSec={currentTimeSec}
-							sourceDurationSec={sourceDurationSec}
-							onSeek={handleSeek}
-							onPreviewSource={handlePreviewSource}
-							onReplaceTimeline={handleReplaceTimeline}
-						/>
-					</div>
-				</div>
-
-				{/* Right content panel */}
-				{!rightCollapsed && (
-					<div className="w-80 min-w-72 shrink-0 h-full flex flex-col border-l border-white/[0.07] bg-[#0a0b0e]">
-						<div className="flex-1 min-h-0 flex flex-col overflow-hidden">{rightContent}</div>
-					</div>
-				)}
-
-				{/* Right icon rail */}
-				<IconRail
-					side="right"
-					tabs={RIGHT_TABS}
-					active={rightTab}
-					onChange={(id) => handleRightTabChange(id as RightTab)}
-					collapsed={rightCollapsed}
-					onToggleCollapse={() => setRightCollapsed(!rightCollapsed)}
+				{/* Preview center */}
+				<Preview
+					hasProject={hasProject}
+					hasAsset={hasAsset}
+					videoSources={videoSources}
+					clips={clips}
+					seekTarget={seekTarget}
+					onTimeChange={handleTimeChange}
+					onLoadedMetadata={handleLoadedMetadata}
+					onVideoElement={setVideoElement}
+					currentTimeSec={currentTimeSec}
+					sourceDurationSec={sourceDurationSec}
 				/>
-			</div>
+
+				{/* Resize handle: right */}
+				<div
+					className={`${styles.handle} ${styles.handleCol} ${styles.handleRight}`}
+					aria-label="Resize right panel"
+					onPointerDown={(e) => startResize(e, "right")}
+				/>
+
+				{/* Right panel stack + rail */}
+				{!rightCollapsed ? (
+					<RightPanelStack
+						active={rightPane}
+						onChange={setRightPane}
+						onCrop={() => setCropOpen(true)}
+						transcript={document?.transcript ?? null}
+						clips={clips}
+						currentTimeSec={currentTimeSec}
+						onSeek={handleSeek}
+						onDropWordRange={handleDropWordRange}
+						onTranscribe={handleTranscribe}
+						canTranscribe={hasAsset}
+						isTranscribing={isTranscribing}
+						selection={tl.selection}
+						onClearSelection={tl.clearSelection}
+						onRemoveSelection={(kind, id) => void tl.removeRegion(kind, id)}
+					/>
+				) : (
+					<aside className={`${styles.rail} ${styles.rightRail}`} aria-label="Right tools">
+						<RightRailCompact onChange={setRightPane} onCrop={() => setCropOpen(true)} />
+					</aside>
+				)}
+			</main>
+
+			{/* Resize handle: bottom */}
+			<div
+				className={`${styles.handle} ${styles.handleRow} ${styles.handleBottom}`}
+				aria-label="Resize timeline"
+				onPointerDown={(e) => startResize(e, "bottom")}
+			/>
+
+			{/* Bottom timeline */}
+			{!bottomCollapsed ? (
+				<Bottombar
+					clips={clips}
+					currentTimeSec={currentTimeSec}
+					sourceDurationSec={sourceDurationSec}
+					onSeek={handleSeek}
+					onPreviewSource={handlePreviewSource}
+					onReplaceTimeline={handleReplaceTimeline}
+					zoomRegions={tl.zoomRegions}
+					skipRanges={tl.skipRanges}
+					annotationRegions={tl.annotationRegions}
+					speedRegions={tl.speedRegions}
+					selection={tl.selection}
+					hasDoc={tl.hasDoc}
+					onAddZoom={() => void tl.addZoom()}
+					onAddSkip={() => void tl.addSkip()}
+					onAddAnnotation={() => void tl.addAnnotation()}
+					onAddSpeed={() => void tl.addSpeed()}
+					onSelectRegion={(kind, id) => tl.selectRegion(kind, id)}
+					onRemoveRegion={(kind, id) => void tl.removeRegion(kind, id)}
+					onCaptions={handleCaptions}
+				/>
+			) : null}
+
+			{/* Modals */}
+			<OpenProjectModal
+				open={openProjectOpen}
+				onClose={() => setOpenProjectOpen(false)}
+				projects={projectSummaries}
+				activeProjectId={projectId}
+				onSelect={handleSelectProject}
+				onBrowse={handleLoadLegacyProject}
+			/>
+			<NewProjectModal
+				open={newProjectOpen}
+				onClose={() => setNewProjectOpen(false)}
+				onCreate={handleCreateProject}
+			/>
+			<CropModal
+				open={cropOpen}
+				onClose={() => setCropOpen(false)}
+				initialRegion={editorSettings.cropRegion}
+				onApply={(region: CropRegion) => void setEditorSettings({ cropRegion: region })}
+			/>
+			<UnsavedChangesModal
+				open={unsavedPrompt !== null}
+				onClose={() => {
+					unsavedPrompt?.resolve("cancel");
+					setUnsavedPrompt(null);
+				}}
+				action={unsavedPrompt?.action ?? "new"}
+				onChoose={handleConfirmUnsaved}
+			/>
+			<ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} document={document} />
+			<AutoCaptionsModal
+				open={captionsOpen}
+				onClose={() => setCaptionsOpen(false)}
+				minWords={captionsMinW}
+				maxWords={captionsMaxW}
+				onMinWords={setCaptionsMinW}
+				onMaxWords={setCaptionsMaxW}
+				onGenerate={handleGenerateCaptions}
+			/>
+			<InsertSourceModal
+				open={insertAssetId !== null}
+				onClose={() => setInsertAssetId(null)}
+				assetLabel={document?.assets.find((a) => a.id === insertAssetId)?.label ?? ""}
+				canAddBefore
+				canAddAfter
+				canSplit={document !== null}
+				onAddBefore={() => void handleInsertBefore()}
+				onAddAfter={() => void handleInsertAfter()}
+				onSplit={() => void handleInsertSplit()}
+			/>
 		</div>
 	);
+}
+
+function RightRailCompact({
+	onChange,
+	onCrop,
+}: {
+	onChange: (id: RightPaneId) => void;
+	onCrop: () => void;
+}) {
+	const buttons: Array<{ id: RightPaneId; label: string; icon: React.ElementType }> = [
+		{ id: "background", label: "Background", icon: Sparkles },
+		{ id: "effects", label: "Video effects", icon: Film },
+	];
+	return (
+		<>
+			{buttons.map(({ id, label, icon: Icon }) => (
+				<button
+					type="button"
+					key={id}
+					title={label}
+					aria-label={label}
+					onClick={() => onChange(id)}
+				>
+					<Icon size={18} />
+				</button>
+			))}
+			<button type="button" title="Crop" aria-label="Crop" onClick={onCrop}>
+				<EyeOff size={18} />
+			</button>
+		</>
+	);
+}
+
+function startResize(e: React.PointerEvent<HTMLDivElement>, axis: "left" | "right" | "bottom") {
+	e.preventDefault();
+	const target = e.currentTarget;
+	target.setPointerCapture(e.pointerId);
+	target.classList.add(styles.isDragging);
+	document.body.style.cursor = axis === "bottom" ? "row-resize" : "col-resize";
+
+	const root = document.documentElement;
+	const varName =
+		axis === "left" ? "--panel-w-left" : axis === "right" ? "--panel-w-right" : "--bottom-h";
+	const min = axis === "bottom" ? 140 : 200;
+	const cap = axis === "bottom" ? 0.65 : 0.55;
+	const max = axis === "bottom" ? window.innerHeight * cap : window.innerWidth * cap;
+	const startVal = parseFloat(getComputedStyle(root).getPropertyValue(varName)) || 0;
+	const startX = e.clientX;
+	const startY = e.clientY;
+
+	const onMove = (ev: PointerEvent) => {
+		let next: number;
+		if (axis === "left") next = startVal + (ev.clientX - startX);
+		else if (axis === "right") next = startVal - (ev.clientX - startX);
+		else next = startVal + (startY - ev.clientY);
+		next = Math.max(min, Math.min(next, max));
+		root.style.setProperty(varName, `${next}px`);
+	};
+	const onUp = () => {
+		target.classList.remove(styles.isDragging);
+		document.body.style.cursor = "";
+		target.removeEventListener("pointermove", onMove);
+		target.removeEventListener("pointerup", onUp);
+		target.removeEventListener("pointercancel", onUp);
+	};
+	target.addEventListener("pointermove", onMove);
+	target.addEventListener("pointerup", onUp);
+	target.addEventListener("pointercancel", onUp);
 }

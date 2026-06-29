@@ -30,10 +30,15 @@ export function clearHistory() {
 export function undo(): boolean {
 	const prev = past.pop();
 	if (!prev) return false;
-	const doc = useProjectStore.getState().document;
+	const state = useProjectStore.getState();
+	if (!state.projectId || state.projectId !== prev.projectId) {
+		clearHistory();
+		return false;
+	}
+	const doc = state.document;
 	if (doc) future.push({ projectId: prev.projectId, doc: structuredClone(doc) });
 	enabled = false;
-	useProjectStore.getState().setDocument(prev.doc as never);
+	state.setDocument(prev.doc as never);
 	enabled = true;
 	return true;
 }
@@ -41,10 +46,15 @@ export function undo(): boolean {
 export function redo(): boolean {
 	const next = future.pop();
 	if (!next) return false;
-	const doc = useProjectStore.getState().document;
+	const state = useProjectStore.getState();
+	if (!state.projectId || state.projectId !== next.projectId) {
+		clearHistory();
+		return false;
+	}
+	const doc = state.document;
 	if (doc) past.push({ projectId: doc.project.id, doc: structuredClone(doc) });
 	enabled = false;
-	useProjectStore.getState().setDocument(next.doc as never);
+	state.setDocument(next.doc as never);
 	enabled = true;
 	return true;
 }

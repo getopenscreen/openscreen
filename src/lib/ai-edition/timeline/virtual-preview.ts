@@ -44,9 +44,11 @@ export function locateVirtualPosition(
 export function locateSourcePosition(
 	clips: AxcutClip[],
 	sourceTimeSec: number,
+	assetId?: string,
 	epsilon = 0.05,
 ): VirtualPosition | null {
 	const clipIndex = clips.findIndex((clip, index) => {
+		if (assetId && clip.assetId !== assetId) return false;
 		const lowerBound = clip.sourceStartSec - epsilon;
 		const upperBound =
 			index === clips.length - 1

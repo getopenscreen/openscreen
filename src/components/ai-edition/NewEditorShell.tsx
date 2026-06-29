@@ -212,6 +212,7 @@ export function NewEditorShell() {
 	const videoSources = useMemo(() => {
 		if (!document) return [];
 		return document.assets.map((asset) => ({
+			id: asset.id,
 			src: toFileUrl(asset.originalPath),
 			label: asset.label,
 		}));

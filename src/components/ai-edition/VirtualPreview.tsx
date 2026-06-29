@@ -9,6 +9,7 @@ import {
 import styles from "./VirtualPreview.module.css";
 
 export interface VideoSource {
+	id: string;
 	src: string;
 	label: string;
 }
@@ -32,15 +33,15 @@ export function VirtualPreview({
 }: VirtualPreviewProps) {
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 
-	// ponytail: report the video element up so the parent can read videoWidth/
-	// videoHeight for export sizing. Re-fires on every render — the callback
-	// in the parent is stable (useState setter), so this is a no-op cost.
-	if (onVideoElement) {
-		onVideoElement(videoRef.current);
-	}
+	// report the video element up
+	useEffect(() => {
+		onVideoElement?.(videoRef.current);
+	}, [onVideoElement]);
+
 	const isProgrammaticSeekRef = useRef(false);
+	const pendingSeekRef = useRef<{ sourceTimeSec: number; play: boolean } | null>(null);
 	const [virtualTimeSec, setVirtualTimeSec] = useState(0);
-	const [, setIsPlaying] = useState(false);
+	const [isPlaying, setIsPlaying] = useState(false);
 	const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
 	const [sourceIndex, setSourceIndex] = useState(0);
 
@@ -57,14 +58,31 @@ export function VirtualPreview({
 
 	const seekToVirtualTime = useCallback(
 		(nextVirtualTimeSec: number, preservePlayback = false) => {
-			const video = videoRef.current;
 			const position = locateVirtualPosition(clips, nextVirtualTimeSec);
-			if (!video || !position) {
+			if (!position) {
 				updateVirtualTime(0);
 				setIsPlaying(false);
 				return;
 			}
-			const shouldContinuePlayback = preservePlayback && !video.paused;
+
+			const targetIndex = videoSources.findIndex((vs) => vs.id === position.clip.assetId);
+			const isAssetSwitch = targetIndex >= 0 && targetIndex !== sourceIndex;
+			const shouldContinuePlayback = preservePlayback && isPlaying;
+
+			if (isAssetSwitch) {
+				setSourceIndex(targetIndex);
+				setLoadState("loading");
+				updateVirtualTime(position.virtualTimeSec);
+				pendingSeekRef.current = {
+					sourceTimeSec: position.sourceTimeSec,
+					play: shouldContinuePlayback,
+				};
+				return;
+			}
+
+			const video = videoRef.current;
+			if (!video) return;
+
 			isProgrammaticSeekRef.current = true;
 			updateVirtualTime(position.virtualTimeSec);
 			if (Math.abs(video.currentTime - position.sourceTimeSec) > 0.01) {
@@ -74,7 +92,7 @@ export function VirtualPreview({
 				void video.play().catch(() => setIsPlaying(false));
 			}
 		},
-		[clips, updateVirtualTime],
+		[clips, videoSources, sourceIndex, isPlaying, updateVirtualTime],
 	);
 
 	const seekToSourceTime = useCallback((sourceTimeSec: number) => {
@@ -89,17 +107,20 @@ export function VirtualPreview({
 	const handleTimeUpdate = useCallback(() => {
 		const video = videoRef.current;
 		if (!video || clips.length === 0) return;
+		const activeSourceId = videoSources[sourceIndex]?.id;
 		if (isProgrammaticSeekRef.current) {
 			isProgrammaticSeekRef.current = false;
-			const position = locateSourcePosition(clips, video.currentTime);
+			const position = locateSourcePosition(clips, video.currentTime, activeSourceId);
 			if (position) {
 				updateVirtualTime(clampVirtualTime(clips, position.virtualTimeSec));
 			}
 			return;
 		}
-		const position = locateSourcePosition(clips, video.currentTime);
+		const position = locateSourcePosition(clips, video.currentTime, activeSourceId);
 		if (!position) {
-			const nextClip = clips.find((clip) => clip.sourceStartSec > video.currentTime);
+			const nextClip = clips.find(
+				(clip) => clip.assetId === activeSourceId && clip.sourceStartSec > video.currentTime,
+			);
 			if (nextClip) seekToVirtualTime(nextClip.timelineStartSec, true);
 			return;
 		}
@@ -117,7 +138,7 @@ export function VirtualPreview({
 			return;
 		}
 		updateVirtualTime(clampVirtualTime(clips, position.virtualTimeSec));
-	}, [clips, seekToVirtualTime, updateVirtualTime, virtualDurationSec]);
+	}, [clips, seekToVirtualTime, updateVirtualTime, virtualDurationSec, videoSources, sourceIndex]);
 
 	useEffect(() => {
 		const video = videoRef.current;
@@ -159,7 +180,16 @@ export function VirtualPreview({
 							if (Number.isFinite(duration) && duration > 0) {
 								onLoadedMetadata?.(duration);
 							}
-							if (clips.length > 0) seekToVirtualTime(virtualTimeSec);
+							if (pendingSeekRef.current) {
+								const { sourceTimeSec, play } = pendingSeekRef.current;
+								pendingSeekRef.current = null;
+								e.currentTarget.currentTime = sourceTimeSec;
+								if (play) {
+									void e.currentTarget.play().catch(() => setIsPlaying(false));
+								}
+							} else if (clips.length > 0) {
+								seekToVirtualTime(virtualTimeSec);
+							}
 						}}
 						onWaiting={() => setLoadState("loading")}
 						onCanPlay={() => setLoadState("ready")}

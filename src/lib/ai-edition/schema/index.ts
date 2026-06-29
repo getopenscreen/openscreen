@@ -16,22 +16,32 @@ export const axcutSchemaVersion = 3;
 
 export const isoDateSchema = z.string().datetime({ offset: true });
 
-export const wordSchema = z.object({
-	id: z.string().min(1),
-	segmentId: z.string().min(1),
-	startSec: z.number().nonnegative(),
-	endSec: z.number().nonnegative(),
-	text: z.string(),
-});
+export const wordSchema = z
+	.object({
+		id: z.string().min(1),
+		segmentId: z.string().min(1),
+		startSec: z.number().nonnegative(),
+		endSec: z.number().nonnegative(),
+		text: z.string(),
+	})
+	.refine((data) => data.endSec >= data.startSec, {
+		message: "endSec must be greater than or equal to startSec",
+		path: ["endSec"],
+	});
 
-export const transcriptSegmentSchema = z.object({
-	id: z.string().min(1),
-	kind: z.enum(["speech", "silence"]),
-	startSec: z.number().nonnegative(),
-	endSec: z.number().nonnegative(),
-	text: z.string(),
-	wordIds: z.array(z.string().min(1)).default([]),
-});
+export const transcriptSegmentSchema = z
+	.object({
+		id: z.string().min(1),
+		kind: z.enum(["speech", "silence"]),
+		startSec: z.number().nonnegative(),
+		endSec: z.number().nonnegative(),
+		text: z.string(),
+		wordIds: z.array(z.string().min(1)).default([]),
+	})
+	.refine((data) => data.endSec >= data.startSec, {
+		message: "endSec must be greater than or equal to startSec",
+		path: ["endSec"],
+	});
 
 export const transcriptSchema = z.object({
 	assetId: z.string().min(1),
@@ -67,44 +77,68 @@ export const assetSchema = z.object({
 	audio: assetAudioSchema.optional(),
 });
 
-export const clipSchema = z.object({
-	id: z.string().min(1),
-	assetId: z.string().min(1),
-	sourceStartSec: z.number().nonnegative(),
-	// ponytail: optional because v2 migrations have unknown asset duration at
-	// migration time. The renderer fills this in once StreamingVideoDecoder probes
-	// the file (Phase 1+).
-	sourceEndSec: z.number().nonnegative().optional(),
-	timelineStartSec: z.number().nonnegative(),
-	timelineEndSec: z.number().nonnegative(),
-	wordRefs: z.array(z.string().min(1)).default([]),
-	origin: z.enum(["system", "agent", "user"]),
-	reason: z.string().default(""),
-});
+export const clipSchema = z
+	.object({
+		id: z.string().min(1),
+		assetId: z.string().min(1),
+		sourceStartSec: z.number().nonnegative(),
+		// ponytail: optional because v2 migrations have unknown asset duration at
+		// migration time. The renderer fills this in once StreamingVideoDecoder probes
+		// the file (Phase 1+).
+		sourceEndSec: z.number().nonnegative().optional(),
+		timelineStartSec: z.number().nonnegative(),
+		timelineEndSec: z.number().nonnegative(),
+		wordRefs: z.array(z.string().min(1)).default([]),
+		origin: z.enum(["system", "agent", "user"]),
+		reason: z.string().default(""),
+	})
+	.refine((data) => data.timelineEndSec >= data.timelineStartSec, {
+		message: "timelineEndSec must be greater than or equal to timelineStartSec",
+		path: ["timelineEndSec"],
+	})
+	.refine((data) => data.sourceEndSec === undefined || data.sourceEndSec >= data.sourceStartSec, {
+		message: "sourceEndSec must be greater than or equal to sourceStartSec",
+		path: ["sourceEndSec"],
+	});
 
-export const gapSchema = z.object({
-	id: z.string().min(1),
-	timelineStartSec: z.number().nonnegative(),
-	timelineEndSec: z.number().nonnegative(),
-	reason: z.string().default(""),
-});
+export const gapSchema = z
+	.object({
+		id: z.string().min(1),
+		timelineStartSec: z.number().nonnegative(),
+		timelineEndSec: z.number().nonnegative(),
+		reason: z.string().default(""),
+	})
+	.refine((data) => data.timelineEndSec >= data.timelineStartSec, {
+		message: "timelineEndSec must be greater than or equal to timelineStartSec",
+		path: ["timelineEndSec"],
+	});
 
-export const rangeSchema = z.object({
-	startSec: z.number().nonnegative(),
-	endSec: z.number().nonnegative(),
-	reason: z.string().default(""),
-});
+export const rangeSchema = z
+	.object({
+		startSec: z.number().nonnegative(),
+		endSec: z.number().nonnegative(),
+		reason: z.string().default(""),
+	})
+	.refine((data) => data.endSec >= data.startSec, {
+		message: "endSec must be greater than or equal to startSec",
+		path: ["endSec"],
+	});
 
 // ponytail: skipRanges reference asset source-time (not timeline). trimRegions
 // in v2 are the inverse — a skip = the region inside the source we DON'T keep.
-export const skipRangeSchema = z.object({
-	id: z.string().min(1),
-	assetId: z.string().min(1),
-	startSec: z.number().nonnegative(),
-	endSec: z.number().nonnegative(),
-	reason: z.string().default(""),
-	origin: z.enum(["system", "agent", "user"]),
-});
+export const skipRangeSchema = z
+	.object({
+		id: z.string().min(1),
+		assetId: z.string().min(1),
+		startSec: z.number().nonnegative(),
+		endSec: z.number().nonnegative(),
+		reason: z.string().default(""),
+		origin: z.enum(["system", "agent", "user"]),
+	})
+	.refine((data) => data.endSec >= data.startSec, {
+		message: "endSec must be greater than or equal to startSec",
+		path: ["endSec"],
+	});
 
 export const timelineSchema = z.object({
 	clips: z.array(clipSchema).default([]),
@@ -291,50 +325,60 @@ const annotationStyleSchema = z.object({
 		.optional(),
 });
 
-export const annotationRegionSchema = z.object({
-	id: z.string().min(1),
-	startMs: z.number().nonnegative(),
-	endMs: z.number().nonnegative(),
-	type: z.enum(["text", "image", "figure", "blur"]),
-	content: z.string().default(""),
-	textContent: z.string().optional(),
-	imageContent: z.string().optional(),
-	position: z.object({
-		x: z.number().min(0).max(100),
-		y: z.number().min(0).max(100),
-	}),
-	size: z.object({
-		width: z.number().positive(),
-		height: z.number().positive(),
-	}),
-	style: annotationStyleSchema,
-	zIndex: z.number().int().nonnegative(),
-	annotationSource: z.literal("auto-caption").optional(),
-	figureData: figureDataSchema,
-	blurData: blurDataSchema,
-});
+export const annotationRegionSchema = z
+	.object({
+		id: z.string().min(1),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		type: z.enum(["text", "image", "figure", "blur"]),
+		content: z.string().default(""),
+		textContent: z.string().optional(),
+		imageContent: z.string().optional(),
+		position: z.object({
+			x: z.number().min(0).max(100),
+			y: z.number().min(0).max(100),
+		}),
+		size: z.object({
+			width: z.number().positive(),
+			height: z.number().positive(),
+		}),
+		style: annotationStyleSchema,
+		zIndex: z.number().int().nonnegative(),
+		annotationSource: z.literal("auto-caption").optional(),
+		figureData: figureDataSchema,
+		blurData: blurDataSchema,
+	})
+	.refine((data) => data.endMs >= data.startMs, {
+		message: "endMs must be greater than or equal to startMs",
+		path: ["endMs"],
+	});
 
-export const zoomRegionSchema = z.object({
-	id: z.string().min(1),
-	startMs: z.number().nonnegative(),
-	endMs: z.number().nonnegative(),
-	depth: z.union([
-		z.literal(1),
-		z.literal(2),
-		z.literal(3),
-		z.literal(4),
-		z.literal(5),
-		z.literal(6),
-	]),
-	focus: z.object({
-		cx: z.number().min(0).max(1),
-		cy: z.number().min(0).max(1),
-	}),
-	focusMode: z.enum(["manual", "auto"]).optional(),
-	rotationPreset: z.enum(["iso", "left", "right"]).optional(),
-	customScale: z.number().positive().optional(),
-	source: z.enum(["auto", "manual"]).optional(),
-});
+export const zoomRegionSchema = z
+	.object({
+		id: z.string().min(1),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		depth: z.union([
+			z.literal(1),
+			z.literal(2),
+			z.literal(3),
+			z.literal(4),
+			z.literal(5),
+			z.literal(6),
+		]),
+		focus: z.object({
+			cx: z.number().min(0).max(1),
+			cy: z.number().min(0).max(1),
+		}),
+		focusMode: z.enum(["manual", "auto"]).optional(),
+		rotationPreset: z.enum(["iso", "left", "right"]).optional(),
+		customScale: z.number().positive().optional(),
+		source: z.enum(["auto", "manual"]).optional(),
+	})
+	.refine((data) => data.endMs >= data.startMs, {
+		message: "endMs must be greater than or equal to startMs",
+		path: ["endMs"],
+	});
 
 // Legacy OpenScreen appearance / export settings that the v3 schema doesn't
 // normalize into the timeline / assets model. They are applied at export time

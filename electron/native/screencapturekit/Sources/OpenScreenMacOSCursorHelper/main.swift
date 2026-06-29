@@ -5,6 +5,31 @@ import Foundation
 
 struct CursorHelperRequest: Decodable {
 	let sampleIntervalMs: Int?
+	// When capturing a single window, the CGWindowID of that window. Cursor
+	// positions are then normalized against the window's on-screen frame instead
+	// of the whole display, so the editable cursor overlay lines up with the
+	// window-only recording.
+	let windowId: UInt32?
+}
+
+/// Current on-screen frame of a window in global display points (top-left origin,
+/// y increasing downward) — the same coordinate space as Electron's
+/// `screen.getCursorScreenPoint()`. Re-read every sample so a window that is moved
+/// mid-recording stays aligned. Returns nil if the window can't be found.
+func windowBounds(for windowId: UInt32) -> CGRect? {
+	guard
+		let infoList = CGWindowListCopyWindowInfo([.optionIncludingWindow], windowId)
+			as? [[String: Any]],
+		let info = infoList.first,
+		let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
+		let rect = CGRect(dictionaryRepresentation: boundsDict as CFDictionary),
+		rect.width > 0,
+		rect.height > 0
+	else {
+		return nil
+	}
+
+	return rect
 }
 
 struct CapturedCursorAsset {
@@ -300,7 +325,7 @@ if CommandLine.arguments.count >= 2,
 {
 	request = decoded
 } else {
-	request = CursorHelperRequest(sampleIntervalMs: nil)
+	request = CursorHelperRequest(sampleIntervalMs: nil, windowId: nil)
 }
 
 let intervalMs = max(8, request.sampleIntervalMs ?? 33)
@@ -337,12 +362,22 @@ while true {
 				"scaleFactor": asset.scaleFactor,
 			]
 		}
+		var boundsPayload: [String: Double]?
+		if let windowId = request.windowId, let frame = windowBounds(for: windowId) {
+			boundsPayload = [
+				"x": Double(frame.origin.x),
+				"y": Double(frame.origin.y),
+				"width": Double(frame.size.width),
+				"height": Double(frame.size.height),
+			]
+		}
 		emit([
 			"type": "sample",
 			"timestampMs": timestampMs(),
 			"cursorType": currentCursorType(),
 			"assetId": asset?.id,
 			"asset": assetPayload,
+			"bounds": boundsPayload,
 			"leftButtonDown": leftButtonDown(),
 			"leftButtonPressed": mouseEvents.leftDownCount > 0,
 			"leftButtonReleased": mouseEvents.leftUpCount > 0,

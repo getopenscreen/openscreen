@@ -31,6 +31,7 @@ export function createCursorRecordingSession(
 			getDisplayBounds: options.getDisplayBounds,
 			maxSamples: options.maxSamples,
 			sampleIntervalMs: options.sampleIntervalMs,
+			sourceId: options.sourceId,
 			startTimeMs: options.startTimeMs,
 		});
 	}

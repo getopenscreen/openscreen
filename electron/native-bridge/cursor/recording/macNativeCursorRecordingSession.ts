@@ -3,6 +3,7 @@ import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import type { Readable } from "node:stream";
 import { type Rectangle, screen, systemPreferences } from "electron";
+import { parseMacWindowIdFromSourceId } from "../../../../src/lib/nativeMacRecording";
 import type {
 	CursorRecordingData,
 	CursorRecordingSample,
@@ -10,6 +11,13 @@ import type {
 	NativeCursorType,
 } from "../../../../src/native/contracts";
 import type { CursorRecordingSession } from "./session";
+
+interface MacCursorBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
 
 interface MacCursorAssetPayload {
 	id: string;
@@ -26,6 +34,8 @@ interface MacNativeCursorRecordingSessionOptions {
 	maxSamples: number;
 	sampleIntervalMs: number;
 	startTimeMs?: number;
+	/** Source id of the recording target; used to detect window capture. */
+	sourceId?: string | null;
 }
 
 type MacCursorEvent =
@@ -41,6 +51,8 @@ type MacCursorEvent =
 			cursorType?: NativeCursorType | null;
 			assetId?: string | null;
 			asset?: MacCursorAssetPayload | null;
+			/** On-screen frame of the captured window, when recording a single window. */
+			bounds?: MacCursorBounds | null;
 			leftButtonDown?: boolean;
 			leftButtonPressed?: boolean;
 			leftButtonReleased?: boolean;
@@ -181,6 +193,24 @@ function normalizeCursorType(value: unknown): NativeCursorType | null {
 	return value === "arrow" || value === "pointer" || value === "text" ? value : null;
 }
 
+/**
+ * Normalize an absolute screen cursor point to [0,1] within a captured region's
+ * bounds. For window capture the region is the window's frame; for full-screen
+ * it's the display. Returned values may fall outside [0,1] when the cursor is
+ * outside the region, which the caller uses for visibility/clipping decisions.
+ */
+export function normalizeCursorToBounds(
+	cursor: { x: number; y: number },
+	bounds: { x: number; y: number; width: number; height: number },
+): { normalizedX: number; normalizedY: number; isOutsideBounds: boolean } {
+	const width = Math.max(1, bounds.width);
+	const height = Math.max(1, bounds.height);
+	const normalizedX = (cursor.x - bounds.x) / width;
+	const normalizedY = (cursor.y - bounds.y) / height;
+	const isOutsideBounds = normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1;
+	return { normalizedX, normalizedY, isOutsideBounds };
+}
+
 export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 	private samples: CursorRecordingSample[] = [];
 	private assets = new Map<string, NativeCursorAsset>();
@@ -220,11 +250,13 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 			return;
 		}
 
+		const windowId = parseMacWindowIdFromSourceId(this.options.sourceId);
 		const child = spawn(
 			helperPath,
 			[
 				JSON.stringify({
 					sampleIntervalMs: this.options.sampleIntervalMs,
+					...(windowId != null ? { windowId } : {}),
 				}),
 			],
 			{
@@ -286,9 +318,9 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 	}
 
 	private startPositionOnlyFallback() {
-		this.captureSample(Date.now(), null, null, false, false, false);
+		this.captureSample(Date.now(), null, null, false, false, false, null);
 		this.fallbackInterval = setInterval(() => {
-			this.captureSample(Date.now(), null, null, false, false, false);
+			this.captureSample(Date.now(), null, null, false, false, false, null);
 		}, this.options.sampleIntervalMs);
 	}
 
@@ -350,6 +382,7 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 				payload.leftButtonDown === true,
 				payload.leftButtonPressed === true,
 				payload.leftButtonReleased === true,
+				payload.bounds ?? null,
 			);
 		}
 	}
@@ -361,15 +394,21 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 		leftButtonDown: boolean,
 		leftButtonPressed: boolean,
 		leftButtonReleased: boolean,
+		windowBounds: MacCursorBounds | null,
 	) {
 		const cursor = screen.getCursorScreenPoint();
-		const bounds = this.options.getDisplayBounds() ?? screen.getDisplayNearestPoint(cursor).bounds;
-		const width = Math.max(1, bounds.width);
-		const height = Math.max(1, bounds.height);
-		const normalizedX = (cursor.x - bounds.x) / width;
-		const normalizedY = (cursor.y - bounds.y) / height;
-		const isOutsideDisplay =
-			normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1;
+		// For window capture, the helper reports the window's on-screen frame so we
+		// normalize against the window (the recorded video is just that window).
+		// Otherwise fall back to the captured display's bounds.
+		const bounds =
+			windowBounds ??
+			this.options.getDisplayBounds() ??
+			screen.getDisplayNearestPoint(cursor).bounds;
+		const {
+			normalizedX,
+			normalizedY,
+			isOutsideBounds: isOutsideDisplay,
+		} = normalizeCursorToBounds(cursor, bounds);
 		// Brief exits (under THRESHOLD samples) clip to the canvas edge via clip-path instead
 		// of snapping invisible. Sustained exits (>=THRESHOLD, ~100ms) mark visible=false to
 		// avoid ghost cursors and motion trails from multi-display movement.

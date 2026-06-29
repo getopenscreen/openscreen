@@ -1,17 +1,22 @@
 // In-memory chat service. ponytail: no SQLite, no LangGraph, no checkpoints
 // for Phase 6 scaffolding. Stores messages per project in a Map. The actual
-// LLM call needs @langchain/* deps + API keys — the runChat function is a
-// stub that returns "AI features require LLM dependencies" until the deps
-// are installed and a provider is configured.
+// LLM call goes through `llm-call.ts` (no LangChain dep — direct fetch to
+// the provider's /chat/completions endpoint).
 //
 // Phase 8 upgrades this to SQLite-backed sessions with checkpoint restore.
 
 import { v4 as uuidv4 } from "uuid";
 import type { AiEditionChatMessage, AiEditionChatResult } from "../../src/native/contracts";
+import { type ChatMessage, callLlm } from "./llm-call";
 import type { LlmConfigStore } from "./llm-config-store";
 import { PROVIDER_DEFINITIONS } from "./provider-registry";
 
 const messagesByProject = new Map<string, AiEditionChatMessage[]>();
+
+const SYSTEM_PROMPT =
+	"You are an AI video editor. The user is editing a recording in OpenScreen. " +
+	"Help them cut silences, tighten pacing, add captions, and rewrite titles. " +
+	"Be concise, action-oriented, and reference the timeline or transcript by time when relevant.";
 
 export async function runChat(
 	projectId: string,
@@ -39,27 +44,42 @@ export async function runChat(
 		};
 	}
 
-	const messages = messagesByProject.get(projectId) ?? [];
+	const history = messagesByProject.get(projectId) ?? [];
 	const userMessage: AiEditionChatMessage = {
 		id: uuidv4(),
 		role: "user",
 		content: message,
 		createdAt: new Date().toISOString(),
 	};
-	messages.push(userMessage);
+	history.push(userMessage);
+	messagesByProject.set(projectId, history);
 
-	// ponytail: stub response. The actual LLM call needs @langchain/openai,
-	// @langchain/anthropic, etc. installed + imported. This scaffolding lets
-	// the UI work end-to-end (message appears, history persists) without the
-	// heavy deps. Replace with create-chat-model.ts port when deps land.
+	const llmMessages: ChatMessage[] = [
+		{ role: "system", content: SYSTEM_PROMPT },
+		...history.slice(-20).map((m) => ({ role: m.role, content: m.content })),
+	];
+
+	const result = await callLlm({
+		provider: config.provider,
+		model: config.model,
+		apiKey: apiKey ?? "",
+		baseUrl: config.baseUrl,
+		reasoningEffort: config.reasoningEffort,
+		messages: llmMessages,
+	});
+
+	if (!result.success || !result.content) {
+		return { success: false, error: result.error ?? "Empty response from model." };
+	}
+
 	const assistantMessage: AiEditionChatMessage = {
 		id: uuidv4(),
 		role: "assistant",
-		content: `AI features are scaffolding-ready but need @langchain/* dependencies to make real LLM calls. Configure your provider in Settings, then install the deps to enable chat. Your message was: "${message}"`,
+		content: result.content,
 		createdAt: new Date().toISOString(),
 	};
-	messages.push(assistantMessage);
-	messagesByProject.set(projectId, messages);
+	history.push(assistantMessage);
+	messagesByProject.set(projectId, history);
 
 	return {
 		success: true,

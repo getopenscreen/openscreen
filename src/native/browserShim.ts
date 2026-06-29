@@ -24,6 +24,10 @@ function createShimElectronAPI() {
 		pickExportSavePath: () => Promise.resolve({ success: false, canceled: true }),
 		writeExportToPath: () => Promise.resolve({ success: false }),
 		getCurrentRecordingSession: () => Promise.resolve({ success: false, session: null }),
+		switchToHud: () => Promise.resolve({ success: true }),
+		switchToEditor: () => Promise.resolve({ success: true }),
+		startNewRecording: () => Promise.resolve({ success: true }),
+		openSourceSelector: () => Promise.resolve({ success: true }),
 		invokeNativeBridge: (req: { domain: string; action: string; payload?: unknown }) => {
 			console.info("[browser-shim] invokeNativeBridge", req.domain, req.action, req.payload);
 			return Promise.resolve({

@@ -26,6 +26,10 @@ export interface ProjectState {
 	error: string | null;
 	sourceDurationSec: number;
 	currentTimeSec: number;
+	/** True when the in-memory document has local changes that haven't been written to disk yet. */
+	dirty: boolean;
+	/** Timestamp of the most recent successful save (used by the titlebar indicator). */
+	lastSavedAt: Date | null;
 
 	loadProject: (projectId: string) => Promise<void>;
 	createProject: (title: string) => Promise<AxcutDocument>;
@@ -39,6 +43,7 @@ export interface ProjectState {
 	setTranscript: (transcript: AxcutTranscript) => Promise<void>;
 	setSourceDuration: (sec: number) => void;
 	setCurrentTime: (sec: number) => void;
+	markClean: () => void;
 	clear: () => void;
 }
 
@@ -54,6 +59,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 	error: null,
 	sourceDurationSec: 0,
 	currentTimeSec: 0,
+	dirty: false,
+	lastSavedAt: null,
 
 	async loadProject(projectId) {
 		set({ status: "loading", error: null });
@@ -69,6 +76,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				revision: get().revision + 1,
 				status: "ready",
 				error: null,
+				dirty: false,
+				lastSavedAt: new Date(),
 			});
 		} catch (error) {
 			set({
@@ -92,6 +101,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				revision: get().revision + 1,
 				status: "ready",
 				error: null,
+				dirty: false,
+				lastSavedAt: new Date(),
 			});
 			return document;
 		} catch (error) {
@@ -121,6 +132,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 		set({
 			document,
 			revision: get().revision + 1,
+			dirty: false,
+			lastSavedAt: new Date(),
 		});
 		return addedAsset;
 	},
@@ -133,6 +146,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 		set({
 			document,
 			revision: get().revision + 1,
+			dirty: false,
+			lastSavedAt: new Date(),
 		});
 	},
 
@@ -145,11 +160,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 		set({
 			document: parsed,
 			revision: get().revision + 1,
+			dirty: false,
+			lastSavedAt: new Date(),
 		});
 	},
 
 	setDocument(document) {
-		set({ document, revision: get().revision + 1 });
+		const prev = get().document;
+		if (prev && prev !== document) {
+			// ponytail: push snapshot to undo history. Defer import to avoid
+			// pulling the undo module into the store at module-load time.
+			void import("./undo").then(({ pushHistory }) => {
+				pushHistory({ projectId: prev.project.id, doc: structuredClone(prev) });
+			});
+		}
+		set({
+			document,
+			revision: get().revision + 1,
+			dirty: true,
+		});
 	},
 
 	async replaceTimeline(intervals, reason) {
@@ -199,6 +228,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			error: null,
 			sourceDurationSec: 0,
 			currentTimeSec: 0,
+			dirty: false,
+			lastSavedAt: null,
 		});
+	},
+
+	markClean() {
+		set({ dirty: false, lastSavedAt: new Date() });
 	},
 }));

@@ -187,4 +187,78 @@ describe("axcut-schema v3", () => {
 			}),
 		).not.toThrow();
 	});
+
+	describe("range ordering validation", () => {
+		it("rangeSchema rejects endSec < startSec", () => {
+			expect(() => rangeSchema.parse({ startSec: 10, endSec: 5 })).toThrow();
+			expect(rangeSchema.parse({ startSec: 5, endSec: 10 })).toBeTruthy();
+			expect(rangeSchema.parse({ startSec: 5, endSec: 5 })).toBeTruthy();
+		});
+
+		it("skipRangeSchema rejects endSec < startSec", () => {
+			expect(() =>
+				skipRangeSchema.parse({
+					id: "s1",
+					assetId: "a1",
+					startSec: 10,
+					endSec: 5,
+					origin: "user",
+				}),
+			).toThrow();
+		});
+
+		it("clipSchema rejects timelineEndSec < timelineStartSec or sourceEndSec < sourceStartSec", () => {
+			const validBase = {
+				id: "c1",
+				assetId: "a1",
+				sourceStartSec: 0,
+				sourceEndSec: 10,
+				timelineStartSec: 0,
+				timelineEndSec: 10,
+				origin: "user" as const,
+			};
+			expect(() => clipSchema.parse({ ...validBase, timelineEndSec: -1 })).toThrow();
+			expect(() => clipSchema.parse({ ...validBase, sourceEndSec: -1 })).toThrow();
+			expect(() =>
+				clipSchema.parse({ ...validBase, sourceStartSec: 10, sourceEndSec: 5 }),
+			).toThrow();
+			expect(() =>
+				clipSchema.parse({ ...validBase, timelineStartSec: 10, timelineEndSec: 5 }),
+			).toThrow();
+		});
+
+		it("zoomRegionSchema rejects endMs < startMs", () => {
+			expect(() =>
+				zoomRegionSchema.parse({
+					id: "z1",
+					startMs: 100,
+					endMs: 50,
+					depth: 1,
+					focus: { cx: 0.5, cy: 0.5 },
+				}),
+			).toThrow();
+		});
+
+		it("annotationRegionSchema rejects endMs < startMs", () => {
+			expect(() =>
+				annotationRegionSchema.parse({
+					id: "a1",
+					startMs: 100,
+					endMs: 50,
+					type: "text",
+					position: { x: 10, y: 10 },
+					size: { width: 100, height: 100 },
+					style: {
+						fontFamily: "Inter",
+						fontSize: 14,
+						color: "#ffffff",
+						backgroundColor: "#000000",
+					},
+					zIndex: 1,
+					figureData: {},
+					blurData: {},
+				}),
+			).toThrow();
+		});
+	});
 });

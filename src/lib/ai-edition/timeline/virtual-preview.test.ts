@@ -76,4 +76,39 @@ describe("virtual-preview pure functions", () => {
 		expect(formatSeconds(65.4)).toBe("1:05.4");
 		expect(formatSeconds(3661.5)).toBe("1:01:01.5");
 	});
+
+	it("locateSourcePosition filters by assetId when provided", () => {
+		const multiClips: AxcutClip[] = [
+			{
+				id: "clip_1",
+				assetId: "a1",
+				sourceStartSec: 0,
+				sourceEndSec: 10,
+				timelineStartSec: 0,
+				timelineEndSec: 10,
+				wordRefs: [],
+				origin: "system",
+				reason: "",
+			},
+			{
+				id: "clip_2",
+				assetId: "a2",
+				sourceStartSec: 0,
+				sourceEndSec: 10,
+				timelineStartSec: 10,
+				timelineEndSec: 20,
+				wordRefs: [],
+				origin: "system",
+				reason: "",
+			},
+		];
+		const pos1 = locateSourcePosition(multiClips, 5, "a1");
+		expect(pos1?.clip.id).toBe("clip_1");
+
+		const pos2 = locateSourcePosition(multiClips, 5, "a2");
+		expect(pos2?.clip.id).toBe("clip_2");
+
+		const posNone = locateSourcePosition(multiClips, 5, "a3");
+		expect(posNone).toBeNull();
+	});
 });

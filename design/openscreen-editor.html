@@ -328,6 +328,53 @@
       display: inline-flex; align-items: center; gap: var(--sp-1);
       margin-right: var(--sp-1);
     }
+    .titlebar .lang-sel {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 26px;
+      padding: 0 6px 0 6px;
+      background: transparent;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-md);
+      color: var(--fg-2);
+      font-family: var(--font-display);
+      font-size: var(--fs-app);
+      font-weight: 500;
+      cursor: pointer;
+      transition: background var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    }
+    .titlebar .lang-sel:hover {
+      background: var(--surface-3);
+      border-color: var(--border);
+      color: var(--fg);
+    }
+    .titlebar .lang-sel .lang-glyph {
+      flex-shrink: 0;
+      color: var(--fg);
+    }
+    .titlebar .lang-sel .lang-label {
+      font-size: var(--fs-app);
+      font-weight: 500;
+      color: inherit;
+      line-height: 1;
+    }
+    .titlebar .lang-sel .lang-caret {
+      width: 10px; height: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .titlebar .recorder-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 26px; padding: 0 10px 0 8px;
+      border-radius: var(--r-md);
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid color-mix(in oklch, var(--accent) 22%, transparent);
+      transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+      font: 500 12px/1 var(--font-display);
+      letter-spacing: 0.01em;
+    }
+    .titlebar .recorder-btn:hover { background: color-mix(in oklch, var(--accent) 18%, var(--surface-3)); }
+    .titlebar .recorder-btn svg { display: block; }
     .titlebar .right {
       margin-left: auto;
       display: inline-flex; align-items: center; gap: var(--sp-1);
@@ -813,9 +860,7 @@
     .preview-canvas::before {
       content: "";
       position: absolute; inset: 0;
-      background:
-        radial-gradient(ellipse at 50% 30%, var(--brand-glow), transparent 60%),
-        var(--surface-1);
+      background: var(--surface-1);
     }
     .preview-frame {
       position: relative;
@@ -1510,56 +1555,96 @@
       grid-template-rows: auto 1fr auto;
     }
 
-    /* ─── timeline head ───────────────────────────────────────────── */
+    /* ─── timeline head — view tools (left) + shortcut hints (right) ─── */
     .timeline-head {
-      display: flex; align-items: center; gap: var(--sp-3);
+      display: flex; align-items: center; gap: var(--sp-2);
       padding: var(--sp-2) var(--sp-4);
       border-bottom: 1px solid var(--border-soft);
       min-height: 40px;
     }
-    .timeline-head h2 {
-      margin: 0;
-      font-family: var(--font-display);
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--fg);
-      letter-spacing: -0.005em;
+    .timeline-head .view-tools {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px;
+      background: var(--surface-2);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-sm);
     }
-    .timeline-head .stats {
-      font-family: var(--font-mono);
-      font-size: 11px;
+    .timeline-head .vt-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px;
+      padding: 0;
+      border: 0; background: transparent;
       color: var(--muted);
-      letter-spacing: 0.02em;
+      border-radius: var(--r-xs);
+      cursor: pointer;
+      transition: color .12s ease, background .12s ease;
     }
-    .timeline-head .stats strong { color: var(--fg); font-weight: 500; }
-    .timeline-head .stats .sep { margin: 0 6px; color: var(--dim); }
-    .timeline-head .right { margin-left: auto; }
-    .timeline-head .stamp {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 0.02em;
-    }
-    .timeline-head .stamp strong { color: var(--fg); font-weight: 500; }
+    .timeline-head .vt-btn:hover { color: var(--fg); background: var(--surface); }
+    .timeline-head .vt-btn.is-on { color: var(--accent); background: var(--accent-wash); }
+    .timeline-head .vt-btn svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.6; }
 
-    /* ─── timeline body — ruler + skip-strip + clips-row + playhead ── */
+    .timeline-head .ratio {
+      display: inline-flex; align-items: center; gap: 5px;
+      height: 30px;
+      padding: 0 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      background: transparent;
+      border: 0;
+      border-left: 1px solid var(--border-soft);
+      margin-left: 4px;
+      cursor: pointer;
+      border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    }
+    .timeline-head .ratio:hover { color: var(--fg); }
+    .timeline-head .ratio .caret { width: 9px; height: 9px; opacity: .7; }
+
+    .timeline-head .hint-row {
+      margin-left: auto;
+      display: flex; align-items: center; gap: var(--sp-4);
+    }
+    .timeline-head .hint {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font-display);
+      font-size: 11.5px;
+      color: var(--muted);
+      letter-spacing: 0.005em;
+    }
+    .timeline-head .hint .kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 20px;
+      padding: 0 7px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid color-mix(in oklch, var(--accent) 24%, transparent);
+      border-radius: var(--r-xs);
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .timeline-head .hint .kbd + .kbd { margin-left: 3px; }
+    .timeline-head .hint .arrow { color: var(--dim); font-size: 10px; margin: 0 2px; }
+    .timeline-head .hint .act { color: var(--fg); }
+
+    /* ─── timeline body — 3 rows: ruler (fixed) + tracks-scroll (1fr) + zoombar (fixed) ── */
     .timeline-body {
       position: relative;
       padding: var(--sp-3) var(--sp-4) 0;
-      overflow-x: auto;
-      overflow-y: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1;
+      overflow: hidden;
     }
-    .timeline-body::-webkit-scrollbar { height: 8px; }
-    .timeline-body::-webkit-scrollbar-track { background: transparent; }
-    .timeline-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-    .timeline-body { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 
-    /* timeline container — ruler + tracks-wrapper + bottom bar, reference layout */
-    .timeline-container {
+    /* TOP — ruler (fixed height) */
+    .timeline-ruler {
+      flex: 0 0 auto;
       position: relative;
-      min-width: 1200px;
-      user-select: none;
-      padding: 0 var(--sp-4);
     }
 
     /* ruler — major ticks every 30s, half-ticks at midpoints, labels above */
@@ -1571,6 +1656,7 @@
       padding-left: 5px;
       padding-right: 5px;
       margin-bottom: 5px;
+      user-select: none;
     }
     .ruler-tick {
       position: relative;
@@ -1600,15 +1686,16 @@
       background: var(--border);
     }
 
-    /* playhead — vertical mint line with single diamond on top, spans ruler + tracks */
-.playhead {
+    /* playhead — absolute, spans ruler + tracks-scroll, stops above zoombar */
+    .playhead {
       position: absolute;
       top: 0;
       left: 120px;
       width: 2px;
-      bottom: 24px;
+      bottom: 0;
       background-color: var(--accent);
       z-index: 10;
+      pointer-events: none;
     }
     .playhead::before {
       content: "";
@@ -1631,7 +1718,7 @@
       background: var(--surface-2);
       border: 1px solid var(--border);
       border-radius: var(--r-md);
-      overflow: hidden;
+      overflow: visible;
       display: flex;
       flex-direction: column;
       cursor: pointer;
@@ -1651,6 +1738,8 @@
     .track-visual-timeline {
       height: 28px;
       border-bottom: 1px solid var(--border);
+      border-radius: var(--r-md) var(--r-md) 0 0;
+      overflow: hidden;
       display: flex;
       background: var(--surface);
     }
@@ -1669,11 +1758,51 @@
         transparent 8px,
         transparent 16px
       );
+      position: relative;
     }
+
+    /* trim controls — appear above each cut region on hover */
+    .cut-controls {
+      position: absolute;
+      display: none;
+      align-items: center;
+      gap: 2px;
+      padding: 3px;
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-sm);
+      box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.45);
+      z-index: 20;
+      white-space: nowrap;
+      pointer-events: auto;
+    }
+    .cut-controls.is-on { display: inline-flex; }
+    .cc-btn {
+      width: 20px;
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 0;
+      border-radius: var(--r-xs);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      padding: 0;
+      transition: background var(--motion-fast) var(--ease),
+                  color var(--motion-fast) var(--ease);
+    }
+    .cc-btn:hover { background: var(--surface-3); color: var(--fg); }
+    .cc-btn.cc-mid:hover { background: var(--accent-wash); color: var(--accent); }
+    .cc-btn svg { width: 12px; height: 12px; display: block; }
 
     /* track info — icon + title + meta */
     .track-info-content {
       padding: 14px 16px;
+      border-radius: 0 0 var(--r-md) var(--r-md);
+      overflow: hidden;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -1727,8 +1856,10 @@
 
     /* ─── zoom handling bar (full-width mint, replaces red progress bar) */
     .zoombar {
-      padding: 4px 0 0;
+      padding: 4px var(--sp-4) 8px;
       background: var(--bg);
+      flex-shrink: 0;
+      border-top: 1px solid var(--border-soft);
       position: sticky;
       bottom: 0;
       z-index: 5;
@@ -1769,10 +1900,10 @@
     .zoombar .zoom-handle-l { left: 0; }
     .zoombar .zoom-handle-r { left: calc(100% - 14px); }
 
-    /* tracks scroll — vertical scroll for the zoom-track-row + track-blocks.
-       ruler above and zoombar below stay fixed; only the middle scrolls. */
+    /* MIDDLE — tracks-scroll fills remaining height, content has no limit, scrolls vertically */
     .tracks-scroll {
-      max-height: 224px;
+      flex: 1 1 0;
+      min-height: 0;
       overflow-y: auto;
       overflow-x: hidden;
       padding-right: 6px;
@@ -1789,19 +1920,20 @@
     .tracks-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent); }
     .tracks-wrapper + .tracks-wrapper { margin-top: 4px; }
 
-    /* zoom track row — sits above the video tracks, holds mint zoom pills */
+    /* zoom track row — sits above the video tracks, holds mint zoom pills.
+       row height matches pill height (24px + 2px slack) so the 1px margin-bottom
+       produces a ~1px visible gap between stacked pills. */
     .zoom-track-row {
       position: relative;
-      height: 36px;
-      margin-bottom: 4px;
+      height: 26px;
+      margin-bottom: 10px;
     }
     .zoom-pill {
       position: absolute;
       top: 50%;
       transform: translateY(-50%);
-      height: 24px;
       min-width: 96px;
-      padding: 0 10px;
+      padding: 5px 10px 6px;
       background: var(--accent);
       color: var(--bg);
       border-radius: var(--r-md);
@@ -1820,102 +1952,83 @@
     .zoom-pill svg { width: 12px; height: 12px; opacity: 0.95; }
 
     /* speeds track row — sits above the zoom track, holds mint speed pills.
-       Each pill: speedometer icon + speed value + time range. */
+       row height matches pill height (24px + 2px slack) so the 1px margin-bottom
+       produces a ~1px visible gap between stacked pills. */
     .speed-track-row {
       position: relative;
-      height: 48px;
-      margin-bottom: 4px;
+      height: 26px;
+      margin-bottom: 10px;
     }
     .speed-pill {
       position: absolute;
       top: 50%;
       transform: translateY(-50%);
-      min-width: 138px;
-      padding: 5px 12px 6px;
+      min-width: 60px;
+      padding: 5px 10px 6px;
       background: var(--accent);
       color: var(--bg);
       border-radius: var(--r-md);
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       font-family: var(--font-display);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
       white-space: nowrap;
       pointer-events: none;
       box-shadow: 0 0 0 1px var(--accent-soft), 0 4px 12px -4px var(--accent-soft);
     }
     .speed-pill-icon {
       flex-shrink: 0;
-      width: 16px;
-      height: 16px;
+      width: 12px;
+      height: 12px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
     }
-    .speed-pill-icon svg { width: 16px; height: 16px; }
-    .speed-pill-text {
-      display: inline-flex;
-      flex-direction: column;
-      gap: 0;
-      line-height: 1.05;
-    }
+    .speed-pill-icon svg { width: 12px; height: 12px; }
     .speed-pill-value {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.005em;
       font-variant-numeric: tabular-nums;
     }
-    .speed-pill-range {
-      font-size: 10.5px;
-      font-weight: 500;
-      letter-spacing: 0.01em;
-      opacity: 0.78;
-      font-family: var(--font-mono);
-    }
 
-    /* annotations track row — sits above the zoom track, holds pinned annotations.
-       Each pin: short label above + small mint flag pointing down to its timestamp. */
+    /* annotations track row — sits above the speed track, holds mint annotation pills.
+       Same row height as .speed-track-row / .zoom-track-row; tight gap keeps pills grouped */
     .annotation-track-row {
       position: relative;
-      height: 32px;
-      margin-bottom: 4px;
+      height: 26px;
+      margin-bottom: 10px;
     }
     .annotation-pin {
       position: absolute;
-      bottom: 0;
+      top: 50%;
+      transform: translateY(-50%);
       display: inline-flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 2px;
-      padding: 0;
-      background: transparent;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-width: 96px;
+      padding: 5px 10px 6px;
+      background: var(--accent);
+      color: var(--bg);
       border: 0;
+      border-radius: var(--r-md);
       cursor: pointer;
       font-family: var(--font-display);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
       white-space: nowrap;
+      box-shadow: 0 0 0 1px var(--accent-soft), 0 4px 12px -4px var(--accent-soft);
+    }
+    .annotation-pin:hover {
+      filter: brightness(1.04);
     }
     .annotation-label {
-      font-size: 10.5px;
-      font-weight: 500;
-      color: var(--fg-2);
-      padding: 1px 6px;
-      border-radius: var(--r-xs);
-      background: var(--accent-soft);
-      line-height: 1.3;
-      letter-spacing: 0.005em;
+      font-variant-numeric: tabular-nums;
     }
-    .annotation-pin:hover .annotation-label {
-      color: var(--fg-emphasis);
-      background: color-mix(in oklch, var(--accent) 22%, transparent);
-    }
-    .annotation-flag {
-      display: inline-block;
-      width: 10px;
-      height: 14px;
-      background: var(--accent);
-      clip-path: polygon(0 0, 100% 0, 100% 65%, 50% 100%, 0 65%);
-      flex-shrink: 0;
-    }
-    .annotation-pin:hover .annotation-flag { filter: brightness(1.05); }
+    .annotation-pin svg { width: 12px; height: 12px; opacity: 0.95; flex-shrink: 0; }
+    .annotation-flag { display: none; }
 
     /* full-width track variants (audio, fx) — single block per row */
     .track-block.track-audio,
@@ -2844,6 +2957,15 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
         </button>
       </span>
+      <button class="lang-sel" type="button" title="Changer de langue" aria-label="Changer de langue">
+        <svg class="lang-glyph" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="m476-80 182-480h84L924-80h-84l-43-122H603L560-80h-84ZM160-200l-56-56 202-202q-35-35-63.5-80T190-640h84q20 39 40 68t48 58q33-33 68.5-92.5T484-720H40v-80h280v-80h80v80h280v80H564q-21 72-63 148t-83 116l96 98-30 82-122-125-202 201Zm468-72h144l-72-204-72 204Z"/></svg>
+        <span class="lang-label">English</span>
+        <svg class="lang-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <button class="recorder-btn" type="button" title="Return to Recorder" aria-label="Return to Recorder">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m22 8-6 4 6 4z"/></svg>
+        <span>Return to Recorder</span>
+      </button>
       <span class="right">
         <button class="icon-btn" title="Exporter" aria-label="Exporter">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 12 12 16 8 12"/><line x1="12" y1="3" x2="12" y2="16"/></svg>
@@ -3531,20 +3653,51 @@
       <!-- TIMELINE -->
       <section class="timeline-wrap">
         <header class="timeline-head">
-          <h2>Timeline</h2>
-          <span class="stats">
-            <strong>2 clips</strong><span class="sep">·</span><strong>7:03.6</strong> total
-          </span>
-          <span class="right">
-            <span class="stamp"><strong>0:00.0</strong> · Clip <strong>1</strong>/2</span>
-          </span>
+
+          <div class="view-tools" role="toolbar" aria-label="Outils de vue">
+            <button class="vt-btn" type="button" aria-label="Zoom">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
+            </button>
+            <button class="vt-btn is-on" type="button" aria-label="Auto focus on for all zoom" title="Auto focus on for all zoom" aria-pressed="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M4 16v4h4"/><path d="M16 20h4v-4"/><path d="M6 12c1.5-2.2 3.6-3.4 6-3.4s4.5 1.2 6 3.4c-1.5 2.2-3.6 3.4-6 3.4S7.5 14.2 6 12z"/><circle cx="12" cy="12" r="1.6"/></svg>
+            </button>
+            <button class="vt-btn" type="button" aria-label="Ciseaux">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12"/></svg>
+            </button>
+            <button class="vt-btn" type="button" aria-label="Annotation">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button class="vt-btn" type="button" aria-label="Chronomètre">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6M12 13"/></svg>
+            </button>
+            <button class="vt-btn" type="button" aria-label="Fichier de sous-titres" title="Fichier de sous-titres">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h6"/></svg>
+            </button>
+            <button class="ratio" type="button" aria-label="Format d'image 16:9">
+              <span>16:9</span>
+              <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+          </div>
+
+          <div class="hint-row">
+            <span class="hint">
+              <span class="kbd">Scroll</span>
+              <span class="act">Pan</span>
+            </span>
+            <span class="hint">
+              <span class="kbd">Ctrl</span><span class="kbd">+ Scroll</span>
+              <span class="act">Zoom</span>
+            </span>
+          </div>
+
         </header>
 
         <div class="timeline-body" id="timeline-body">
-          <div class="timeline-container">
 
-            <div class="playhead" aria-hidden="true"></div>
+          <div class="playhead" aria-hidden="true"></div>
 
+          <!-- TOP: ruler (fixed height) -->
+          <div class="timeline-ruler">
             <div class="ruler">
               <div class="ruler-tick">0:00.0</div>
               <div class="ruler-tick">0:30.0</div>
@@ -3562,46 +3715,42 @@
               <div class="ruler-tick">6:30.0</div>
               <div class="ruler-tick" style="flex: 0;">7:00.0</div>
             </div>
+          </div>
 
-            <div class="tracks-scroll">
+          <!-- MIDDLE: scrollable tracks (fills remaining height) -->
+          <div class="tracks-scroll">
 
               <div class="annotation-track-row" aria-label="Annotations">
                 <button class="annotation-pin" type="button" style="left: 5%;" aria-label="Annotation: Fix intro hook">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                   <span class="annotation-label">Fix intro hook</span>
-                  <span class="annotation-flag" aria-hidden="true"></span>
                 </button>
                 <button class="annotation-pin" type="button" style="left: 27%;" aria-label="Annotation: B-roll gap">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                   <span class="annotation-label">B-roll gap</span>
-                  <span class="annotation-flag" aria-hidden="true"></span>
                 </button>
                 <button class="annotation-pin" type="button" style="left: 50%;" aria-label="Annotation: Lower BGM">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                   <span class="annotation-label">Lower BGM</span>
-                  <span class="annotation-flag" aria-hidden="true"></span>
                 </button>
                 <button class="annotation-pin" type="button" style="left: 74%;" aria-label="Annotation: CTA moment">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                   <span class="annotation-label">CTA moment</span>
-                  <span class="annotation-flag" aria-hidden="true"></span>
                 </button>
               </div>
 
               <div class="speed-track-row" aria-hidden="true">
                 <span class="speed-pill" style="left: 12%;">
                   <span class="speed-pill-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 14a8.5 8.5 0 0 1 17 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 14a8.5 8.5 0 0 1 17 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>
                   </span>
-                  <span class="speed-pill-text">
-                    <span class="speed-pill-value">1.5×</span>
-                    <span class="speed-pill-range">3.2s – 6.8s</span>
-                  </span>
+                  <span class="speed-pill-value">1.5×</span>
                 </span>
                 <span class="speed-pill" style="left: 72%;">
                   <span class="speed-pill-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 14a8.5 8.5 0 0 1 17 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 14a8.5 8.5 0 0 1 17 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>
                   </span>
-                  <span class="speed-pill-text">
-                    <span class="speed-pill-value">0.6×</span>
-                    <span class="speed-pill-range">5.4s – 7.0s</span>
-                  </span>
+                  <span class="speed-pill-value">0.6×</span>
                 </span>
               </div>
 
@@ -3676,57 +3825,23 @@
               </div>
 
               <div class="tracks-wrapper">
-                <div class="track-block track-audio" data-clip="3">
-                  <div class="track-visual-timeline">
-                    <div class="segment keep" style="flex: 28;"></div>
-                    <div class="segment cut"  style="flex: 2;"></div>
-                    <div class="segment keep" style="flex: 35;"></div>
-                    <div class="segment cut"  style="flex: 3;"></div>
-                    <div class="segment keep" style="flex: 32;"></div>
-                  </div>
-                  <div class="track-info-content">
-                    <div class="edit-icon-wrapper" data-action="open-modal" data-modal="edit-clip" aria-label="Edit clip">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                    </div>
-                    <div class="track-text">
-                      <h3 class="track-title">voice-over-take-3.wav</h3>
-                      <p class="track-subtitle">0:00.0 — 1:45.2 <span>•</span> source 0:00.0–1:45.2</p>
-                    </div>
-                  </div>
-                </div>
               </div>
 
-              <div class="tracks-wrapper">
-                <div class="track-block track-fx" data-clip="4">
-                  <div class="track-visual-timeline">
-                    <div class="segment keep" style="flex: 2;"></div>
-                    <div class="segment cut"  style="flex: 98;"></div>
-                  </div>
-                  <div class="track-info-content">
-                    <div class="edit-icon-wrapper" data-action="open-modal" data-modal="edit-clip" aria-label="Edit clip">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                    </div>
-                    <div class="track-text">
-                      <h3 class="track-title">intro-animation.mp4</h3>
-                      <p class="track-subtitle">0:00.0 — 0:08.5 <span>•</span> source 0:00.0–0:08.5</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              
 
-            </div>
-
-            
-
-            <div class="zoombar" role="group" aria-label="Zoom range">
-              <div class="zoom-track">
-                <div class="zoom-fill" aria-hidden="true"></div>
-                <button class="zoom-handle zoom-handle-l" type="button" aria-label="Zoom out"></button>
-                <button class="zoom-handle zoom-handle-r" type="button" aria-label="Zoom in"></button>
-              </div>
             </div>
 
           </div>
+
+          <!-- BOTTOM: zoom handling bar (fixed height) -->
+          <div class="zoombar" role="group" aria-label="Zoom range">
+            <div class="zoom-track">
+              <div class="zoom-fill" aria-hidden="true"></div>
+              <button class="zoom-handle zoom-handle-l" type="button" aria-label="Zoom out"></button>
+              <button class="zoom-handle zoom-handle-r" type="button" aria-label="Zoom in"></button>
+            </div>
+          </div>
+
         </div>
 
         </section>
@@ -4118,6 +4233,40 @@ SEGMENT</pre>
           document.querySelectorAll('.track-block').forEach(function (x) { x.classList.remove('is-selected'); });
           c.classList.add('is-selected');
         });
+      });
+    })();
+
+    /* ─── trim controls — float above each .segment.cut on hover ─ */
+    (function cutControls() {
+      var TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
+
+      document.querySelectorAll('.track-block').forEach(function (block) {
+        var ctl = document.createElement('div');
+        ctl.className = 'cut-controls';
+        ctl.setAttribute('role', 'toolbar');
+        ctl.innerHTML =
+          '<button type="button" class="cc-btn cc-left" aria-label="Extend trim left">‹</button>' +
+          '<button type="button" class="cc-btn cc-mid" aria-label="Restore section">' + TRASH_SVG + '</button>' +
+          '<button type="button" class="cc-btn cc-right" aria-label="Extend trim right">›</button>';
+        block.appendChild(ctl);
+
+        function hide() { ctl.classList.remove('is-on'); }
+
+        block.querySelectorAll('.segment.cut').forEach(function (seg) {
+          seg.addEventListener('mouseenter', function () {
+            var sr = seg.getBoundingClientRect();
+            var br = block.getBoundingClientRect();
+            var left = sr.left - br.left + sr.width / 2;
+            var top = sr.top - br.top;
+            ctl.style.left = left + 'px';
+            ctl.style.top = (top - 26) + 'px';
+            ctl.style.transform = 'translateX(-50%)';
+            ctl.classList.add('is-on');
+          });
+        });
+
+        ctl.addEventListener('mouseleave', hide);
+        block.addEventListener('mouseleave', hide);
       });
     })();
 

@@ -48,7 +48,15 @@ export class ProjectFileError extends Error {
 	}
 }
 
-const SUPPORTED_VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".webm", ".mkv", ".mp4"]);
+const SUPPORTED_VIDEO_EXTENSIONS = new Set([
+	".mp4",
+	".mov",
+	".m4v",
+	".webm",
+	".mkv",
+	".avi",
+	".wmv",
+]);
 
 function isSupportedVideoPath(filePath: string): boolean {
 	const ext = path.extname(filePath).toLowerCase();
@@ -204,7 +212,7 @@ export class DocumentService {
 			},
 			project: {
 				...doc.project,
-				...(primaryAssetId ? { primaryAssetId } : {}),
+				primaryAssetId,
 				updatedAt: new Date().toISOString(),
 			},
 		};

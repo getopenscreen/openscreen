@@ -29,21 +29,19 @@ export class LlmConfigStore {
 	constructor(userDataPath: string) {
 		this.configPath = path.join(userDataPath, "llm-config.json");
 		this.credentialsPath = path.join(userDataPath, "llm-credentials.enc");
+		this.loadSync();
 	}
 
-	async load(): Promise<void> {
+	private loadSync(): void {
+		const fsSync = require("node:fs");
 		try {
-			const raw = await fs.readFile(this.configPath, "utf8");
+			const raw = fsSync.readFileSync(this.configPath, "utf8");
 			this.config = JSON.parse(raw);
 		} catch {
 			this.config = null;
 		}
-		await this.loadCredentials();
-	}
-
-	private async loadCredentials(): Promise<void> {
 		try {
-			const encrypted = await fs.readFile(this.credentialsPath);
+			const encrypted = fsSync.readFileSync(this.credentialsPath);
 			if (safeStorage.isEncryptionAvailable()) {
 				const decrypted = safeStorage.decryptString(encrypted);
 				this.credentials = JSON.parse(decrypted);
@@ -51,6 +49,10 @@ export class LlmConfigStore {
 		} catch {
 			this.credentials = {};
 		}
+	}
+
+	async load(): Promise<void> {
+		this.loadSync();
 	}
 
 	getConfig(): LlmConfig | null {

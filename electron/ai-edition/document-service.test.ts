@@ -157,6 +157,7 @@ describe("DocumentService", () => {
 			expect(after.assets).toHaveLength(0);
 			expect(after.timeline.clips).toHaveLength(0);
 			expect(after.timeline.skipRanges).toHaveLength(0);
+			expect(after.project.primaryAssetId).toBeUndefined();
 		});
 
 		it("reassigns primaryAssetId when removing the primary", async () => {

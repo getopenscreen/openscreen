@@ -86,7 +86,6 @@ export function Bottombar({
 }: BottombarProps) {
 	const { settings, set } = useEditorSettings();
 	const [ratioOpen, setRatioOpen] = useState(false);
-	const [autoFocus, setAutoFocus] = useState(() => settings.autoFocusAll);
 	return (
 		<footer className={styles.bottombar} aria-label="Timeline and properties">
 			<section
@@ -100,11 +99,9 @@ export function Bottombar({
 						<VtBtn
 							label="Auto focus"
 							title="Auto focus on for all zoom"
-							on={autoFocus}
+							on={settings.autoFocusAll}
 							onClick={() => {
-								const next = !autoFocus;
-								setAutoFocus(next);
-								void set({ autoFocusAll: next });
+								void set({ autoFocusAll: !settings.autoFocusAll });
 							}}
 						>
 							<svg

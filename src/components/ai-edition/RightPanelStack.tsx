@@ -8,8 +8,12 @@ import {
 	Sparkles,
 	Trash2,
 } from "lucide-react";
-import type { AnnotationRegion } from "@/components/video-editor/types";
-import type { AxcutClip, AxcutDocument, AxcutTranscript } from "@/lib/ai-edition/schema";
+import type {
+	AxcutAnnotationRegion,
+	AxcutClip,
+	AxcutDocument,
+	AxcutTranscript,
+} from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import styles from "./NewEditorShell.module.css";
 import {
@@ -147,7 +151,7 @@ function RegionInspector({
 		selection.kind === "zoom"
 			? document.zoomRanges.find((z) => z.id === selection.id)
 			: selection.kind === "annotation"
-				? (document.annotations as unknown as AnnotationRegion[]).find((a) => a.id === selection.id)
+				? document.annotations.find((a) => a.id === selection.id)
 				: selection.kind === "speed"
 					? (
 							(document.legacyEditor as { speedRegions?: Array<{ id: string; speed: number }> })
@@ -228,125 +232,130 @@ function RegionInspector({
 					</>
 				) : selection.kind === "annotation" ? (
 					region ? (
-						<>
-							<textarea
-								value={
-									(region as AnnotationRegion).textContent ||
-									(region as AnnotationRegion).content ||
-									""
-								}
-								onChange={(e) => {
-									const next = (document.annotations as unknown as AnnotationRegion[]).map((a) =>
-										a.id === selection.id
-											? { ...a, textContent: e.target.value, content: e.target.value }
-											: a,
-									);
-									useProjectStore.getState().setDocument({
-										...document,
-										annotations: next as never,
-									});
-								}}
-								onBlur={() =>
-									void useProjectStore.getState().saveDocument(useProjectStore.getState().document!)
-								}
-								style={{
-									width: "100%",
-									minHeight: 80,
-									padding: "8px 10px",
-									border: "1px solid var(--border)",
-									borderRadius: 8,
-									background: "var(--bg)",
-									color: "var(--fg-2)",
-									font: "400 13px/1.5 var(--font-body)",
-									resize: "vertical",
-									marginBottom: 8,
-								}}
-							/>
-							<div
-								style={{
-									font: "500 11px/1.4 var(--font-mono)",
-									color: "var(--muted)",
-									padding: "0 4px",
-									marginBottom: 12,
-								}}
-							>
-								{(region as AnnotationRegion).type} ·{" "}
-								{Math.round((region as AnnotationRegion).startMs)}ms—
-								{(region as AnnotationRegion).endMs}ms
-							</div>
-							<Field label="Text color">
-								<input
-									type="color"
-									value={(region as AnnotationRegion).style?.color ?? "#ffffff"}
-									onChange={(e) => {
-										const next = (document.annotations as unknown as AnnotationRegion[]).map((a) =>
-											a.id === selection.id
-												? { ...a, style: { ...a.style, color: e.target.value } }
-												: a,
-										);
-										void useProjectStore.getState().saveDocument({
-											...document,
-											annotations: next as never,
-										});
-									}}
-									style={{
-										width: "100%",
-										height: 32,
-										border: "1px solid var(--border)",
-										borderRadius: 6,
-										background: "var(--bg)",
-									}}
-								/>
-							</Field>
-							<Field label="Font size">
-								<select
-									value={String((region as AnnotationRegion).style?.fontSize ?? 32)}
-									onChange={(e) => {
-										const next = (document.annotations as unknown as AnnotationRegion[]).map((a) =>
-											a.id === selection.id
-												? { ...a, style: { ...a.style, fontSize: Number(e.target.value) } }
-												: a,
-										);
-										void useProjectStore.getState().saveDocument({
-											...document,
-											annotations: next as never,
-										});
-									}}
-									style={selectStyle()}
-								>
-									{[12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 128].map(
-										(n) => (
-											<option key={n} value={n}>
-												{n} px
-											</option>
-										),
-									)}
-								</select>
-							</Field>
-							<Field label="Animation">
-								<select
-									value={(region as AnnotationRegion).style?.textAnimation ?? "none"}
-									onChange={(e) => {
-										const next = (document.annotations as unknown as AnnotationRegion[]).map((a) =>
-											a.id === selection.id
-												? { ...a, style: { ...a.style, textAnimation: e.target.value as never } }
-												: a,
-										);
-										void useProjectStore.getState().saveDocument({
-											...document,
-											annotations: next as never,
-										});
-									}}
-									style={selectStyle()}
-								>
-									{["none", "fade", "rise", "pop", "slide-left", "typewriter", "pulse"].map((a) => (
-										<option key={a} value={a}>
-											{a}
-										</option>
-									))}
-								</select>
-							</Field>
-						</>
+						(() => {
+							const annot = region as AxcutAnnotationRegion;
+							return (
+								<>
+									<textarea
+										value={annot.textContent || annot.content || ""}
+										onChange={(e) => {
+											const next = document.annotations.map((a) =>
+												a.id === selection.id
+													? { ...a, textContent: e.target.value, content: e.target.value }
+													: a,
+											);
+											void useProjectStore.getState().saveDocument({
+												...document,
+												annotations: next,
+											});
+										}}
+										style={{
+											width: "100%",
+											minHeight: 80,
+											padding: "8px 10px",
+											border: "1px solid var(--border)",
+											borderRadius: 8,
+											background: "var(--bg)",
+											color: "var(--fg-2)",
+											font: "400 13px/1.5 var(--font-body)",
+											outline: "none",
+											resize: "vertical",
+										}}
+									/>
+									<div
+										style={{
+											display: "flex",
+											justifyContent: "space-between",
+											alignItems: "center",
+											marginTop: 4,
+											marginBottom: 12,
+										}}
+									>
+										<span>{annot.type}</span>
+										<span style={{ font: "500 10px/1 var(--font-mono)", color: "var(--muted)" }}>
+											{Math.round(annot.startMs)}ms — {Math.round(annot.endMs)}ms
+										</span>
+									</div>
+									<Field label="Text color">
+										<input
+											type="color"
+											value={annot.style?.color ?? "#ffffff"}
+											onChange={(e) => {
+												const next = document.annotations.map((a) =>
+													a.id === selection.id
+														? { ...a, style: { ...a.style, color: e.target.value } }
+														: a,
+												);
+												void useProjectStore.getState().saveDocument({
+													...document,
+													annotations: next,
+												});
+											}}
+											style={{
+												width: "100%",
+												height: 32,
+												border: "1px solid var(--border)",
+												borderRadius: 6,
+												background: "var(--bg)",
+											}}
+										/>
+									</Field>
+									<Field label="Font size">
+										<select
+											value={String(annot.style?.fontSize ?? 32)}
+											onChange={(e) => {
+												const next = document.annotations.map((a) =>
+													a.id === selection.id
+														? { ...a, style: { ...a.style, fontSize: Number(e.target.value) } }
+														: a,
+												);
+												void useProjectStore.getState().saveDocument({
+													...document,
+													annotations: next,
+												});
+											}}
+											style={selectStyle()}
+										>
+											{[12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 128].map(
+												(n) => (
+													<option key={n} value={n}>
+														{n} px
+													</option>
+												),
+											)}
+										</select>
+									</Field>
+									<Field label="Animation">
+										<select
+											value={annot.style?.textAnimation ?? "none"}
+											onChange={(e) => {
+												const next = document.annotations.map((a) =>
+													a.id === selection.id
+														? {
+																...a,
+																style: { ...a.style, textAnimation: e.target.value as never },
+															}
+														: a,
+												);
+												void useProjectStore.getState().saveDocument({
+													...document,
+													annotations: next,
+												});
+											}}
+											style={selectStyle()}
+										>
+											{["none", "fade", "rise", "pop", "slide-left", "typewriter", "pulse"].map(
+												(a) => (
+													<option key={a} value={a}>
+														{a}
+													</option>
+												),
+											)}
+										</select>
+									</Field>
+								</>
+							);
+						})()
 					) : null
 				) : selection.kind === "skip" ? (
 					<div

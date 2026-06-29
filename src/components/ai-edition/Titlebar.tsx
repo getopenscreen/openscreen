@@ -73,6 +73,15 @@ export function Titlebar({
 	actions,
 }: TitlebarProps) {
 	const { theme, toggle: toggleTheme } = useTheme();
+	const [, setTick] = useState(0);
+
+	useEffect(() => {
+		if (dirty || !lastSavedAt) return;
+		const timer = setInterval(() => {
+			setTick((t) => t + 1);
+		}, 10_000);
+		return () => clearInterval(timer);
+	}, [dirty, lastSavedAt]);
 
 	const openShortcuts = () => window.dispatchEvent(new CustomEvent("openscreen:open-shortcuts"));
 	return (

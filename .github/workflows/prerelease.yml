@@ -90,6 +90,10 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Push via the PAT so the repo ruleset bypass (set for EtienneLescot) applies.
+          # actions/checkout@v4 defaults to GITHUB_TOKEN which uses github-actions[bot],
+          # a different actor that is NOT in the bypass list.
+          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git add package.json
           git commit -m "chore(release): bump to ${{ steps.version.outputs.prerelease }} [skip ci]"
           git push

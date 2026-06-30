@@ -139,43 +139,6 @@ export function createRecorderHandle(
 	}
 
 	recorder.start(RECORDER_TIMESLICE_MS);
-	// ponytail: poll MediaRecorder.statistics (Chrome 130+) every second and
-	// log whether the encoder is hardware-accelerated plus dropped-frame
-	// counts. If `hardwareAccelerated: false` and `droppedFrames > 0` the
-	// H.264 software encoder can't keep up at the current resolution +
-	// bitrate — that's the root cause of the 0-byte webm symptom on
-	// machines where the GPU encoder (NVENC on NVIDIA, AMF on AMD,
-	// QuickSync on Intel) is unavailable. The fix lives in the GPU
-	// driver, not in the code. The log here just confirms it.
-	if (
-		typeof (recorder as MediaRecorder & { statistics?: unknown }).statistics === "function" ||
-		typeof (recorder as MediaRecorder & { statistics?: unknown }).statistics === "object"
-	) {
-		const statsTimer = window.setInterval(() => {
-			try {
-				// biome-ignore lint/suspicious/noExplicitAny: Chrome 130+ exposes `statistics` without a stable TS type.
-				const s = (recorder as any).statistics as {
-					hardwareAccelerated?: boolean;
-					droppedFrames?: number;
-					encodedFrames?: number;
-				} | null;
-				if (s) {
-					console.warn(
-						`[recorder:diagnostics] hwAccel=${s.hardwareAccelerated ?? "?"} ` +
-							`droppedFrames=${s.droppedFrames ?? 0} ` +
-							`encodedFrames=${s.encodedFrames ?? 0}`,
-					);
-				}
-			} catch {
-				// statistics API not available
-			}
-		}, 1000);
-		const origStop = recorder.onstop;
-		recorder.onstop = (event: Event) => {
-			window.clearInterval(statsTimer);
-			if (origStop) (origStop as (e: Event) => void)(event);
-		};
-	}
 	return {
 		recorder,
 		recordedBlobPromise,

@@ -14,10 +14,11 @@ import {
 	Palette,
 	Sliders,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ChangeEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import type { AxcutClip, AxcutTranscript } from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import { CURSOR_THEMES } from "@/lib/cursor/cursorThemes";
+import { resolveImageWallpaperUrl, WALLPAPER_PATHS } from "@/lib/wallpaper";
 import styles from "./NewEditorShell.module.css";
 import { TranscriptEditor } from "./TranscriptEditor";
 
@@ -60,128 +61,168 @@ function Pane({ title, icon, helpLabel, children }: PaneProps) {
 
 // ─── Background ────────────────────────────────────────────────────
 
-const BG_PRESETS: readonly string[] = [
-	"linear-gradient(135deg, #16171d, #10b981)",
-	"linear-gradient(135deg, #bcc0c6, #6b7280)",
-	"linear-gradient(135deg, #6b7280, #16171d)",
-	"linear-gradient(135deg, #10b981, #6b7280)",
-	"linear-gradient(135deg, #bcc0c6, #10b981)",
-	"linear-gradient(135deg, #eaebed, #6b7280)",
-	"linear-gradient(135deg, #6b7280, #bcc0c6)",
-	"linear-gradient(135deg, #10b981, #eaebed)",
-	"linear-gradient(135deg, #16171d, #6b7280)",
-	"linear-gradient(135deg, #eaebed, #bcc0c6)",
-	"linear-gradient(135deg, #eaebed, #bcc0c6)",
-	"linear-gradient(135deg, #10b981, #eaebed)",
-	"linear-gradient(135deg, #eaebed, #ffffff)",
-	"linear-gradient(135deg, #6b7280, #16171d)",
-	"linear-gradient(135deg, #eaebed, #bcc0c6)",
-	"linear-gradient(135deg, #16171d, #6b7280)",
-];
-
+// ponytail: keep the gradient palette small and curated — every block renders
+// in the picker and gets serialized to legacyEditor on save.
 const GRAD_PRESETS: readonly string[] = [
 	"linear-gradient(135deg, #eaebed, #bcc0c6)",
 	"linear-gradient(135deg, #10b981, #eaebed)",
 	"linear-gradient(135deg, #6b7280, #bcc0c6)",
 	"linear-gradient(135deg, #eaebed, #10b981)",
-	"linear-gradient(135deg, #eaebed, #10b981)",
+	"linear-gradient(135deg, #16171d, #6b7280)",
 	"linear-gradient(135deg, #bcc0c6, #16171d)",
-	"linear-gradient(135deg, #16171d, #6b7280)",
-	"linear-gradient(135deg, #6b7280, #10b981)",
-	"linear-gradient(135deg, #eaebed, #bcc0c6)",
-	"linear-gradient(135deg, #6b7280, #eaebed)",
-	"linear-gradient(135deg, #eaebed, #10b981)",
-	"linear-gradient(135deg, #bcc0c6, #10b981)",
-	"linear-gradient(135deg, #eaebed, #bcc0c6)",
-	"linear-gradient(135deg, #eaebed, #10b981)",
-	"linear-gradient(135deg, #eaebed, #bcc0c6)",
-	"linear-gradient(135deg, #bcc0c6, #10b981)",
-	"linear-gradient(135deg, #16171d, #6b7280)",
-	"linear-gradient(135deg, #eaebed, #bcc0c6)",
-	"linear-gradient(135deg, #eaebed, #bcc0c6)",
-	"linear-gradient(135deg, #6b7280, #16171d)",
-	"linear-gradient(135deg, #bcc0c6, #eaebed)",
-	"linear-gradient(135deg, #10b981, #bcc0c6)",
-	"linear-gradient(135deg, #10b981, #bcc0c6)",
-	"linear-gradient(135deg, #bcc0c6, #10b981)",
 	"linear-gradient(135deg, #10b981, #6b7280)",
+	"linear-gradient(135deg, #eaebed, #10b981)",
+	"linear-gradient(135deg, #6b7280, #16171d)",
+	"linear-gradient(135deg, #bcc0c6, #10b981)",
+	"linear-gradient(135deg, #16171d, #6b7280)",
+	"linear-gradient(135deg, #eaebed, #bcc0c6)",
+	"linear-gradient(135deg, #10b981, #bcc0c6)",
+	"linear-gradient(135deg, #eaebed, #16171d)",
+	"linear-gradient(135deg, #6b7280, #10b981)",
+	"linear-gradient(135deg, #bcc0c6, #eaebed)",
 ];
 
+const COLOR_PALETTE: readonly string[] = [
+	"#16171d",
+	"#6b7280",
+	"#bcc0c6",
+	"#eaebed",
+	"#ffffff",
+	"#10b981",
+	"#0ea371",
+	"#34d399",
+	"#f59e0b",
+	"#ef4444",
+	"#3b82f6",
+	"#8b5cf6",
+	"#ec4899",
+	"#f97316",
+	"#22c55e",
+	"#1e293b",
+];
+
+const IMAGE_ACCEPT = ".jpg,.jpeg,.png,image/jpeg,image/png";
+
+// Wallpaper picker — image / solid color / gradient tabs.
+//
+// Wallpapers round-trip through the legacyEditor envelope exactly as they did
+// in the v2 editor: gradient strings stay as-is, colors as `#hex`, and image
+// paths are restricted to `/wallpapers/...` or the user's own data: URLs from
+// the upload custom flow.
 export function BackgroundPane() {
 	const { settings, set, hasDocument } = useEditorSettings();
 	const [tab, setTab] = useState<"image" | "color" | "gradient">("image");
+	const fileInputRef = useRef<HTMLInputElement | null>(null);
+	const customUrls = useMemoCustomWallpapers(settings.wallpaper);
+
 	const isSelected = (value: string) => settings.wallpaper === value;
+
+	const handleTabChange = (next: "image" | "color" | "gradient") => {
+		setTab(next);
+	};
+
+	const handlePickFile = () => {
+		if (!hasDocument) return;
+		fileInputRef.current?.click();
+	};
+
+	const handleFileSelected = (e: ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		e.target.value = "";
+		if (!file) return;
+		if (!file.type.startsWith("image/")) return;
+		const reader = new FileReader();
+		reader.onload = () => {
+			const dataUrl = typeof reader.result === "string" ? reader.result : "";
+			if (!dataUrl) return;
+			void set({ wallpaper: dataUrl });
+		};
+		reader.readAsDataURL(file);
+	};
+
 	return (
 		<Pane title="Background" icon={<Palette size={14} />}>
 			<div className={styles.paneTabs} role="tablist">
 				<button
 					type="button"
 					className={tab === "image" ? styles.isActive : ""}
-					onClick={() => setTab("image")}
+					onClick={() => handleTabChange("image")}
 				>
 					Image
 				</button>
 				<button
 					type="button"
 					className={tab === "color" ? styles.isActive : ""}
-					onClick={() => setTab("color")}
+					onClick={() => handleTabChange("color")}
 				>
 					Color
 				</button>
 				<button
 					type="button"
 					className={tab === "gradient" ? styles.isActive : ""}
-					onClick={() => setTab("gradient")}
+					onClick={() => handleTabChange("gradient")}
 				>
 					Gradient
 				</button>
 			</div>
 			{tab === "image" ? (
 				<>
-					<button type="button" className={styles.uploadBtn} disabled={!hasDocument}>
+					<button
+						type="button"
+						className={styles.uploadBtn}
+						disabled={!hasDocument}
+						onClick={handlePickFile}
+					>
 						Upload custom
 					</button>
+					<input
+						ref={fileInputRef}
+						type="file"
+						accept={IMAGE_ACCEPT}
+						style={{ display: "none" }}
+						onChange={handleFileSelected}
+					/>
 					<div className={styles.bgGrid}>
-						{BG_PRESETS.map((bg, i) => (
+						{customUrls.map((url) => (
 							<button
 								type="button"
-								key={i}
-								className={`${styles.bgThumb} ${isSelected(bg) ? styles.isActive : ""}`}
-								style={{ background: bg }}
-								aria-label={`Background ${i + 1}`}
+								key={`custom-${url.slice(-32)}`}
+								className={`${styles.bgThumb} ${isSelected(url) ? styles.isActive : ""}`}
+								style={{ background: `center/cover no-repeat url(${url})` }}
+								aria-label="Custom wallpaper"
 								disabled={!hasDocument}
-								onClick={() => void set({ wallpaper: bg })}
+								onClick={() => void set({ wallpaper: url })}
 							/>
 						))}
+						{WALLPAPER_PATHS.map((path, i) => {
+							const previewUrl = resolveImageWallpaperUrl(path);
+							return (
+								<button
+									type="button"
+									key={path}
+									className={`${styles.bgThumb} ${isSelected(path) ? styles.isActive : ""}`}
+									style={{ background: `center/cover no-repeat url(${previewUrl})` }}
+									aria-label={`Background ${i + 1}`}
+									disabled={!hasDocument}
+									onClick={() => void set({ wallpaper: path })}
+								/>
+							);
+						})}
 					</div>
 				</>
 			) : tab === "color" ? (
-				<>
-					<div style={subTabRow()}>
-						<button type="button" style={subTabStyle(true)}>
-							Color wheel
-						</button>
-						<button type="button" style={subTabStyle(false)}>
-							Palette
-						</button>
-					</div>
-					<div style={colorPreviewStyle()}>
-						{settings.wallpaper.startsWith("linear-") ||
-						settings.wallpaper.startsWith("radial-") ||
-						settings.wallpaper.startsWith("conic-")
-							? "Gradient"
-							: (settings.wallpaper || "—").slice(0, 16)}
-					</div>
-					<div style={colorWheelStyle(settings.wallpaper)} />
-					<div style={hueTrackStyle()} />
-					<div style={hexInputStyle()}>{settings.wallpaper.slice(0, 32)}</div>
-				</>
+				<BackgroundColorTab
+					value={settings.wallpaper}
+					hasDocument={hasDocument}
+					isSelected={isSelected}
+					onPick={(color) => void set({ wallpaper: color })}
+				/>
 			) : (
 				<div className={styles.bgGrid}>
 					{GRAD_PRESETS.map((bg, i) => (
 						<button
 							type="button"
-							key={i}
+							key={bg}
 							className={`${styles.bgThumb} ${isSelected(bg) ? styles.isActive : ""}`}
 							style={{ background: bg }}
 							aria-label={`Gradient ${i + 1}`}
@@ -193,6 +234,113 @@ export function BackgroundPane() {
 			)}
 		</Pane>
 	);
+}
+
+// ponytail: keep the user's last data: URL after they switch tabs so the Image
+// tab can keep showing it without immediately pushing it back through `set`.
+function useMemoCustomWallpapers(current: string): string[] {
+	const [cached, setCached] = useState<string[]>([]);
+	const lastValue = useRef(current);
+	useEffect(() => {
+		if (current.startsWith("data:")) {
+			setCached((prev) => {
+				if (prev[0] === current) return prev;
+				return [current, ...prev.filter((u) => u !== current)].slice(0, 6);
+			});
+		}
+		lastValue.current = current;
+	}, [current]);
+	return cached;
+}
+
+function BackgroundColorTab({
+	value,
+	hasDocument,
+	isSelected,
+	onPick,
+}: {
+	value: string;
+	hasDocument: boolean;
+	isSelected: (v: string) => boolean;
+	onPick: (next: string) => void;
+}) {
+	const [hexDraft, setHexDraft] = useState(value.startsWith("#") ? value : "#000000");
+	useEffect(() => {
+		if (value.startsWith("#")) setHexDraft(value);
+	}, [value]);
+	const commitHex = () => {
+		const next = normaliseHex(hexDraft);
+		if (next) onPick(next);
+	};
+	return (
+		<>
+			<div className={styles.bgGrid} style={{ margin: "0 var(--sp-4) 12px" }}>
+				{COLOR_PALETTE.map((c) => (
+					<button
+						type="button"
+						key={c}
+						className={`${styles.bgThumb} ${isSelected(c) ? styles.isActive : ""}`}
+						style={{ background: c }}
+						aria-label={`Color ${c}`}
+						disabled={!hasDocument}
+						onClick={() => onPick(c)}
+					/>
+				))}
+			</div>
+			<div
+				style={{
+					margin: "0 var(--sp-4) 12px",
+					display: "flex",
+					alignItems: "center",
+					gap: 8,
+				}}
+			>
+				<input
+					type="color"
+					value={hexDraft}
+					disabled={!hasDocument}
+					onChange={(e) => setHexDraft(e.target.value)}
+					onBlur={commitHex}
+					style={{
+						width: 48,
+						height: 36,
+						border: "1px solid var(--border)",
+						borderRadius: 8,
+						background: "var(--surface)",
+						padding: 0,
+					}}
+				/>
+				<input
+					type="text"
+					value={hexDraft}
+					disabled={!hasDocument}
+					onChange={(e) => setHexDraft(e.target.value)}
+					onBlur={commitHex}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") commitHex();
+					}}
+					style={{
+						flex: 1,
+						height: 36,
+						border: "1px solid var(--border)",
+						borderRadius: 8,
+						background: "var(--surface)",
+						padding: "0 12px",
+						color: "var(--fg-2)",
+						font: "500 13px var(--font-mono)",
+					}}
+				/>
+			</div>
+		</>
+	);
+}
+
+function normaliseHex(raw: string): string | null {
+	const trimmed = raw.trim();
+	if (!trimmed) return null;
+	const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+	if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(withHash)) return null;
+	return withHash.toLowerCase();
 }
 
 // ─── Transcript ────────────────────────────────────────────────────
@@ -333,7 +481,7 @@ export function VideoEffectsPane() {
 
 const WEBCAM_PRESETS = [
 	{ value: "picture-in-picture", label: "Picture in picture" },
-	{ value: "side-by-side", label: "Side by side" },
+	{ value: "dual-frame", label: "Side by side" },
 	{ value: "vertical-stack", label: "Top / bottom" },
 	{ value: "no-webcam", label: "Screen only" },
 ] as const;
@@ -351,6 +499,11 @@ const CAMERA_SHAPES: Array<{
 
 export function LayoutPane() {
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	// ponytail: the mask shape picker only makes sense for Picture-in-Picture.
+	// Dual-frame (side-by-side) and vertical-stack (top/bottom) hardcode a
+	// rectangle in the legacy layout math, so we hide those controls when the
+	// preset isn't PiP.
+	const isPip = settings.webcamLayoutPreset === "picture-in-picture";
 	return (
 		<Pane title="Layout" icon={<LayoutIcon size={14} />}>
 			<div className={styles.sectionLabel}>Preset</div>
@@ -386,67 +539,73 @@ export function LayoutPane() {
 					onChange={(v) => void set({ webcamReactiveZoom: v })}
 				/>
 			</div>
-			<div className={styles.sectionLabel}>Camera shape</div>
-			<div
-				style={{
-					display: "grid",
-					gridTemplateColumns: "repeat(4, 1fr)",
-					gap: 8,
-					padding: "0 var(--sp-4) 12px",
-				}}
-			>
-				{CAMERA_SHAPES.map((shape) => {
-					const isActive = settings.webcamMaskShape === shape.value;
-					return (
-						<button
-							type="button"
-							key={shape.value}
-							className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
-							style={{
-								flexDirection: "column",
-								gap: 4,
-								padding: 8,
-								display: "flex",
-								alignItems: "center",
-							}}
-							disabled={!hasDocument}
-							onClick={() => void set({ webcamMaskShape: shape.value })}
-						>
-							<svg
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								width={22}
-								height={22}
-							>
-								{shape.icon}
-							</svg>
-							<span style={{ font: "500 11px/1 var(--font-body)" }}>{shape.label}</span>
-						</button>
-					);
-				})}
-			</div>
-			<div className={styles.sliderGrid}>
-				<div className={`${styles.sliderCell} ${styles.full}`}>
-					<div className="head">
-						<span className="label">Webcam size</span>
-						<span className="val">{Math.round(settings.webcamSizePreset)}%</span>
+			{isPip ? (
+				<>
+					<div className={styles.sectionLabel}>Camera shape</div>
+					<div
+						style={{
+							display: "grid",
+							gridTemplateColumns: "repeat(4, 1fr)",
+							gap: 8,
+							padding: "0 var(--sp-4) 12px",
+						}}
+					>
+						{CAMERA_SHAPES.map((shape) => {
+							const isActive = settings.webcamMaskShape === shape.value;
+							return (
+								<button
+									type="button"
+									key={shape.value}
+									className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
+									style={{
+										flexDirection: "column",
+										gap: 4,
+										padding: 8,
+										display: "flex",
+										alignItems: "center",
+									}}
+									disabled={!hasDocument}
+									onClick={() => void set({ webcamMaskShape: shape.value })}
+								>
+									<svg
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										strokeWidth="2"
+										width={22}
+										height={22}
+									>
+										{shape.icon}
+									</svg>
+									<span style={{ font: "500 11px/1 var(--font-body)" }}>{shape.label}</span>
+								</button>
+							);
+						})}
 					</div>
-					<input
-						type="range"
-						min={10}
-						max={50}
-						step={1}
-						defaultValue={settings.webcamSizePreset}
-						disabled={!hasDocument}
-						onChange={(e) => setLive({ webcamSizePreset: Number(e.target.value) })}
-						onMouseUp={() => void commit()}
-						onTouchEnd={() => void commit()}
-						onKeyUp={() => void commit()}
-					/>
+				</>
+			) : null}
+			{isPip ? (
+				<div className={styles.sliderGrid}>
+					<div className={`${styles.sliderCell} ${styles.full}`}>
+						<div className="head">
+							<span className="label">Webcam size</span>
+							<span className="val">{Math.round(settings.webcamSizePreset)}%</span>
+						</div>
+						<input
+							type="range"
+							min={10}
+							max={50}
+							step={1}
+							defaultValue={settings.webcamSizePreset}
+							disabled={!hasDocument}
+							onChange={(e) => setLive({ webcamSizePreset: Number(e.target.value) })}
+							onMouseUp={() => void commit()}
+							onTouchEnd={() => void commit()}
+							onKeyUp={() => void commit()}
+						/>
+					</div>
 				</div>
-			</div>
+			) : null}
 		</Pane>
 	);
 }
@@ -646,68 +805,6 @@ function SliderCell({
 	);
 }
 
-function subTabRow(): React.CSSProperties {
-	return { display: "flex", gap: 6, padding: "0 var(--sp-4) 12px" };
-}
-function subTabStyle(active: boolean): React.CSSProperties {
-	return {
-		flex: 1,
-		padding: "8px 10px",
-		border: "1px solid var(--border)",
-		borderRadius: 8,
-		background: active ? "var(--brand)" : "var(--bg)",
-		color: active ? "var(--accent-on)" : "var(--fg-2)",
-		font: "500 12px/1 var(--font-body)",
-		cursor: "pointer",
-	};
-}
-function colorPreviewStyle(): React.CSSProperties {
-	return {
-		margin: "0 var(--sp-4) 12px",
-		height: 64,
-		borderRadius: 10,
-		display: "grid",
-		placeItems: "center",
-		background: "var(--surface-2)",
-		color: "var(--fg-2)",
-		font: "500 14px var(--font-mono)",
-		border: "1px solid var(--border)",
-	};
-}
-function colorWheelStyle(value: string): React.CSSProperties {
-	return {
-		margin: "0 var(--sp-4) 12px",
-		height: 180,
-		borderRadius: 12,
-		border: "1px solid var(--border)",
-		background:
-			value.startsWith("linear-") || value.startsWith("radial-")
-				? value
-				: `linear-gradient(0deg, var(--fg), transparent),
-				linear-gradient(90deg, var(--bg), #bcc0c6 50%, var(--fg)),
-				linear-gradient(45deg, #bcc0c6, var(--fg))`,
-	};
-}
-function hueTrackStyle(): React.CSSProperties {
-	return {
-		margin: "0 var(--sp-4) 12px",
-		height: 14,
-		borderRadius: 7,
-		background:
-			"linear-gradient(90deg, #16171d, #6b7280, #bcc0c6, #eaebed, #ffffff, #eaebed, #bcc0c6, #6b7280, #16171d)",
-	};
-}
-function hexInputStyle(): React.CSSProperties {
-	return {
-		margin: "0 var(--sp-4) var(--sp-4)",
-		height: 36,
-		border: "1px solid var(--border)",
-		borderRadius: 8,
-		background: "var(--surface)",
-		padding: "0 12px",
-		display: "flex",
-		alignItems: "center",
-		font: "500 13px var(--font-mono)",
-		color: "var(--fg-2)",
-	};
-}
+// ponytail: legacy color wheel / hue track styling was a cosmetic placeholder —
+// the active BackgroundColorTab uses real pickers (color input + hex text) so
+// the static style helpers are no longer needed.

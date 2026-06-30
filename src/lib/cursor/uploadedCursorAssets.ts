@@ -1,12 +1,12 @@
-import crosshairUrl from "../../../assets/cursors/Cursor=Cross.svg";
-import arrowUrl from "../../../assets/cursors/Cursor=Default.svg";
-import closedHandUrl from "../../../assets/cursors/Cursor=Hand-(Grabbing).svg";
-import openHandUrl from "../../../assets/cursors/Cursor=Hand-(Open).svg";
-import pointerUrl from "../../../assets/cursors/Cursor=Hand-(Pointing).svg";
-import resizeNsUrl from "../../../assets/cursors/Cursor=Resize-North-South.svg";
-import resizeEwUrl from "../../../assets/cursors/Cursor=Resize-West-East.svg";
-import textUrl from "../../../assets/cursors/Cursor=Text-Cursor.svg";
-import type { CursorTelemetryPoint } from "../types";
+import crosshairUrl from "@/assets/cursors/Cursor=Cross.svg";
+import arrowUrl from "@/assets/cursors/Cursor=Default.svg";
+import closedHandUrl from "@/assets/cursors/Cursor=Hand-(Grabbing).svg";
+import openHandUrl from "@/assets/cursors/Cursor=Hand-(Open).svg";
+import pointerUrl from "@/assets/cursors/Cursor=Hand-(Pointing).svg";
+import resizeNsUrl from "@/assets/cursors/Cursor=Resize-North-South.svg";
+import resizeEwUrl from "@/assets/cursors/Cursor=Resize-West-East.svg";
+import textUrl from "@/assets/cursors/Cursor=Text-Cursor.svg";
+import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 
 type CursorAssetKey = NonNullable<CursorTelemetryPoint["cursorType"]>;
 

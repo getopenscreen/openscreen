@@ -1,12 +1,12 @@
 import { Assets, BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
-import type { CursorTelemetryPoint } from "../types";
+import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import {
 	createSpringState,
 	getCursorSpringConfig,
 	resetSpringState,
 	stepSpringValue,
-} from "./motionSmoothing";
+} from "@/components/video-editor/videoPlayback/motionSmoothing";
 import { UPLOADED_CURSOR_SAMPLE_SIZE, uploadedCursorAssets } from "./uploadedCursorAssets";
 
 type CursorAssetKey = NonNullable<CursorTelemetryPoint["cursorType"]>;

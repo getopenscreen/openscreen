@@ -390,6 +390,21 @@ export const zoomRegionSchema = z
 // Round-trip through the migration must be lossless for now.
 export const legacyEditorSchema = z.object({}).passthrough().nullable().default(null);
 
+// ponytail: the webcam is a derived stream — it is NOT edited. Cut / zoom /
+// speed live on the main timeline and apply to the camera as a render of the
+// same source-time progression. Source path comes from the recording
+// session sidecar (auto-linked when an asset is imported from a recording).
+// `offsetMs` accounts for the camera starting before/after the screen.
+export const cameraTrackSchema = z
+	.object({
+		sourcePath: z.string().min(1),
+		startMs: z.number().nonnegative().default(0),
+		offsetMs: z.number().int().default(0),
+		visible: z.boolean().default(true),
+	})
+	.nullable()
+	.default(null);
+
 export const documentSchema = z.object({
 	schemaVersion: z.literal(axcutSchemaVersion),
 	project: z.object({
@@ -400,6 +415,7 @@ export const documentSchema = z.object({
 		primaryAssetId: z.string().optional(),
 	}),
 	assets: z.array(assetSchema).default([]),
+	cameraTrack: cameraTrackSchema,
 	transcript: transcriptSchema.nullable().default(null),
 	transcripts: z.array(transcriptSchema).default([]),
 	timeline: timelineSchema.default({
@@ -485,6 +501,7 @@ export type AxcutOperation = z.infer<typeof operationSchema>;
 export type AxcutRevision = z.infer<typeof revisionSchema>;
 export type AxcutAnnotationRegion = z.infer<typeof annotationRegionSchema>;
 export type AxcutZoomRegion = z.infer<typeof zoomRegionSchema>;
+export type AxcutCameraTrack = z.infer<typeof cameraTrackSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;
@@ -508,6 +525,7 @@ export function createEmptyDocument(
 			updatedAt: createdAt,
 		},
 		assets: [],
+		cameraTrack: null,
 		transcript: null,
 		transcripts: [],
 		timeline: {

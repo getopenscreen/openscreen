@@ -5,6 +5,7 @@
 // a plain JSON file; the API keys live in safeStorage-encrypted bytes. Env
 // vars override stored keys (same precedence as axcut).
 
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { safeStorage } from "electron";
@@ -33,15 +34,14 @@ export class LlmConfigStore {
 	}
 
 	private loadSync(): void {
-		const fsSync = require("node:fs");
 		try {
-			const raw = fsSync.readFileSync(this.configPath, "utf8");
+			const raw = readFileSync(this.configPath, "utf8");
 			this.config = JSON.parse(raw);
 		} catch {
 			this.config = null;
 		}
 		try {
-			const encrypted = fsSync.readFileSync(this.credentialsPath);
+			const encrypted = readFileSync(this.credentialsPath);
 			if (safeStorage.isEncryptionAvailable()) {
 				const decrypted = safeStorage.decryptString(encrypted);
 				this.credentials = JSON.parse(decrypted);

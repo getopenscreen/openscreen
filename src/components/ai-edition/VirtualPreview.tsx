@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fromFileUrl } from "@/components/video-editor/projectPersistence";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import {
 	clampVirtualTime,
@@ -6,6 +7,7 @@ import {
 	locateVirtualPosition,
 	totalVirtualDuration,
 } from "@/lib/ai-edition/timeline/virtual-preview";
+import { CursorPreviewLayer } from "./CursorPreviewLayer";
 import styles from "./VirtualPreview.module.css";
 
 export interface VideoSource {
@@ -21,6 +23,8 @@ interface VirtualPreviewProps {
 	onTimeChange?: (timeSec: number) => void;
 	onLoadedMetadata?: (durationSec: number) => void;
 	onVideoElement?: (element: HTMLVideoElement | null) => void;
+	videoStyle?: React.CSSProperties;
+	onVideoError?: () => void;
 }
 
 export function VirtualPreview({
@@ -30,6 +34,8 @@ export function VirtualPreview({
 	onTimeChange,
 	onLoadedMetadata,
 	onVideoElement,
+	videoStyle,
+	onVideoError,
 }: VirtualPreviewProps) {
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -42,6 +48,25 @@ export function VirtualPreview({
 
 	const virtualDurationSec = useMemo(() => totalVirtualDuration(clips), [clips]);
 	const activeSource = videoSources[sourceIndex] ?? null;
+
+	// ponytail: the cursor overlay wants source-media time (the recorded
+	// cursor samples live on the original mp4 timeline, not the edited
+	// virtual timeline). Read `video.currentTime` every animation frame so
+	// the cursor follows the playhead even when the user scrubs.
+	const [sourceTimeSec, setSourceTimeSec] = useState(0);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run when the active source swaps so the rAF reads from the new <video>.
+	useEffect(() => {
+		let raf = 0;
+		const tick = () => {
+			const v = videoRef.current;
+			if (v && Number.isFinite(v.currentTime)) {
+				setSourceTimeSec(v.currentTime);
+			}
+			raf = window.requestAnimationFrame(tick);
+		};
+		raf = window.requestAnimationFrame(tick);
+		return () => window.cancelAnimationFrame(raf);
+	}, [activeSource?.src]);
 
 	// report the video element up; re-notify (and clear) whenever the active
 	// source changes so the parent doesn't keep a stale node after the keyed
@@ -191,6 +216,7 @@ export function VirtualPreview({
 						ref={videoRef}
 						src={activeSource.src}
 						className={styles.video}
+						style={videoStyle}
 						preload="metadata"
 						playsInline
 						onLoadedMetadata={(e) => {
@@ -220,6 +246,7 @@ export function VirtualPreview({
 							pendingSeekRef.current = null;
 							setLoadState("error");
 							setIsPlaying(false);
+							onVideoError?.();
 						}}
 						onPause={() => setIsPlaying(false)}
 						onPlay={() => setIsPlaying(true)}
@@ -231,6 +258,11 @@ export function VirtualPreview({
 							{loadState === "error" ? "Video preview could not be loaded." : "Loading preview…"}
 						</div>
 					)}
+					<CursorPreviewLayer
+						videoPath={activeSource ? fromFileUrl(activeSource.src) : null}
+						currentTimeSec={sourceTimeSec}
+						isPlaying={isPlaying}
+					/>
 				</div>
 			) : (
 				<div className={styles.placeholder}>Attach a video to start previewing.</div>

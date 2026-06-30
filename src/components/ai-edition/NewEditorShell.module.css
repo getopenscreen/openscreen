@@ -443,16 +443,43 @@
 	aspect-ratio: 16 / 9;
 	max-width: 100%;
 	max-height: 100%;
-	width: min(720px, 100%);
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
 	background:
 		radial-gradient(ellipse at 50% 35%,
 			var(--scene-sky-hi) 0%,
 			var(--scene-sky-mid) 35%,
 			var(--scene-foliage) 70%,
 			var(--scene-foliage-d) 100%);
-	border-radius: var(--r-md);
-	box-shadow: var(--elev-card);
+	/* ponytail: don't make the canvas itself a rounded card — the video /
+	   camera apply their own border-radius for content clipping. A square
+	   canvas blends into the editor chrome; the wallpaper is the visible
+	   area, but no "frame around the canvas" effect. */
+	border-radius: 0;
 	overflow: hidden;
+	display: grid;
+	place-items: center;
+}
+.videoStage {
+	position: relative;
+	display: grid;
+	place-items: center;
+	min-width: 0;
+	min-height: 0;
+	overflow: visible;
+	z-index: 1;
+}
+.screenStage {
+	position: absolute;
+	overflow: hidden;
+	z-index: 1;
+	display: flex;
+}
+.screenStage > .container,
+.screenStage > div > .container {
+	width: 100%;
+	height: 100%;
 }
 .previewEmpty {
 	display: flex;
@@ -464,6 +491,210 @@
 	font-size: var(--fs-app);
 }
 .previewEmpty strong { color: var(--fg-2); }
+
+/* ─── preview empty state (no project / no asset) ───────────────── */
+.previewEmptyDrop {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.previewEmptyDropOverlay {
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-2);
+	border: 2px dashed var(--primary, #34B27B);
+	background: color-mix(in srgb, var(--primary, #34B27B) 10%, transparent);
+	border-radius: var(--r-sm);
+	pointer-events: none;
+}
+.previewEmptyDropIcon {
+	width: 40px;
+	height: 40px;
+	color: var(--primary, #34B27B);
+}
+.previewEmptyDropLabel {
+	font-size: var(--fs-app);
+	font-weight: 600;
+	color: var(--primary, #34B27B);
+}
+.previewEmptyInner {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--sp-4);
+	padding: var(--sp-5);
+	text-align: center;
+	max-width: 28rem;
+}
+.previewEmptyLogo {
+	width: 64px;
+	height: 64px;
+	border-radius: var(--r-md);
+	opacity: 0.9;
+}
+.previewEmptyHeading {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+}
+.previewEmptyTitle {
+	margin: 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: var(--fg-2);
+}
+.previewEmptyDescription {
+	margin: 0;
+	font-size: 0.875rem;
+	color: var(--muted);
+	line-height: 1.5;
+}
+.previewEmptyActions {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-2);
+	width: 100%;
+	max-width: 18rem;
+}
+.previewEmptyPrimaryButton {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-2);
+	padding: var(--sp-3) var(--sp-4);
+	border-radius: var(--r-sm);
+	background: var(--primary, #34B27B);
+	color: #fff;
+	border: none;
+	font-weight: 500;
+	font-size: 0.875rem;
+	cursor: pointer;
+	transition: background-color 120ms ease;
+}
+.previewEmptyPrimaryButton:hover {
+	filter: brightness(0.95);
+}
+.previewEmptySecondaryButton {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-2);
+	padding: var(--sp-3) var(--sp-4);
+	border-radius: var(--r-sm);
+	background: var(--card);
+	color: var(--fg-2);
+	border: 1px solid var(--border);
+	font-weight: 500;
+	font-size: 0.875rem;
+	cursor: pointer;
+	transition: background-color 120ms ease;
+}
+.previewEmptySecondaryButton:hover {
+	background: var(--accent, rgba(255, 255, 255, 0.06));
+}
+.previewEmptyButtonIcon {
+	width: 16px;
+	height: 16px;
+}
+.previewEmptyHint {
+	margin: 0;
+	font-size: 0.75rem;
+	color: var(--muted-foreground, rgba(255, 255, 255, 0.5));
+}
+.previewEmptyDragHint {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-1);
+	margin: 0;
+	font-size: 0.75rem;
+	color: var(--muted-foreground, rgba(255, 255, 255, 0.4));
+}
+.previewEmptyDragHintIcon {
+	width: 12px;
+	height: 12px;
+}
+.previewEmptyDialog {
+	max-width: 24rem;
+	padding: var(--sp-5);
+	background: var(--bg);
+	border: 1px solid var(--border);
+}
+.previewEmptyDialogHeader {
+	margin-bottom: var(--sp-3);
+}
+.previewEmptyDialogHeaderInner {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+}
+.previewEmptyDialogLogo {
+	width: 36px;
+	height: 36px;
+	border-radius: var(--r-sm);
+	flex-shrink: 0;
+}
+.previewEmptyDialogTitle {
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--fg-2);
+	line-height: 1.2;
+}
+.previewEmptyDialogBody {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--sp-2);
+	margin-bottom: var(--sp-4);
+	text-align: center;
+}
+.previewEmptyDialogIcon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 9999px;
+	background: var(--card);
+	border: 1px solid var(--border);
+}
+.previewEmptyDialogAlertIcon {
+	width: 20px;
+	height: 20px;
+	color: var(--muted);
+}
+.previewEmptyDialogMessage {
+	margin: 0;
+	font-size: 0.875rem;
+	color: var(--muted);
+	line-height: 1.5;
+}
+.previewEmptyDialogClose {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-1);
+	width: 100%;
+	padding: var(--sp-2) var(--sp-3);
+	border-radius: var(--r-sm);
+	background: var(--card);
+	color: var(--fg-2);
+	border: 1px solid var(--border);
+	font-size: 0.875rem;
+	font-weight: 500;
+	cursor: pointer;
+}
+.previewEmptyDialogCloseIcon {
+	width: 14px;
+	height: 14px;
+}
 .previewPip {
 	position: absolute;
 	right: var(--sp-3);
@@ -496,6 +727,43 @@
 	letter-spacing: 0.02em;
 	font-weight: 500;
 	backdrop-filter: blur(8px);
+}
+.bgBlur {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 0;
+	transform: scale(1.06);
+}
+.previewFrame > .screenStage > video,
+.previewFrame > .screenStage > div > video {
+	position: relative;
+	z-index: 1;
+}
+.pipCircle {
+	border-radius: 9999px !important;
+}
+.pipSquare {
+	border-radius: 0 !important;
+}
+.pipRounded {
+	border-radius: 18px !important;
+}
+
+/* Webcam overlay: real <video> driven by the cameraTrack. The slot is
+   transparent so clip-path / border-radius carve the camera without leaving
+   a rectangular placeholder peeking through. */
+.webcamSlot {
+	background: transparent;
+	overflow: hidden;
+	z-index: 2;
+	display: flex;
+}
+.webcamSlot .webcamVideo {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
 }
 .previewTimecode {
 	position: absolute;

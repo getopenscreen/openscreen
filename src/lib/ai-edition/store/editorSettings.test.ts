@@ -105,4 +105,21 @@ describe("patchEditorSettings", () => {
 		const after = getEditorSettings(baseDoc);
 		expect(after).toEqual(before);
 	});
+
+	it("round-trips webcamPosition through legacyEditor", () => {
+		const dragged = patchEditorSettings(baseDoc, {
+			webcamPosition: { cx: 0.32, cy: 0.71 },
+		});
+		const snap = getEditorSettings(dragged);
+		expect(snap.webcamPosition).toEqual({ cx: 0.32, cy: 0.71 });
+	});
+
+	it("clamps out-of-range webcamPosition when reading", () => {
+		const doc: AxcutDocument = {
+			...baseDoc,
+			legacyEditor: { webcamPosition: { cx: 1.7, cy: -0.4 } },
+		};
+		const snap = getEditorSettings(doc);
+		expect(snap.webcamPosition).toEqual({ cx: 1, cy: 0 });
+	});
 });

@@ -126,11 +126,35 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 		const { projectId } = get();
 		if (!projectId) throw new Error("No project loaded");
 		const result = await nativeBridgeClient.aiEdition.addAsset(projectId, path, label);
-		const document = parseDocument(result.document);
+		let document = parseDocument(result.document);
 		const addedAsset =
 			document.assets.find((a) => a.originalPath === path && (label ? a.label === label : true)) ??
 			document.assets.at(-1) ??
 			null;
+
+		// ponytail: auto-link the camera track from the recording session
+		// sidecar when the imported path is a recording's screen file. The
+		// camera DSL is read-only — cuts/zoom/speed live on the main timeline
+		// and apply to the camera via the shared source-time progression.
+		if (addedAsset && document.cameraTrack === null && window.electronAPI?.findRecordingCamera) {
+			try {
+				const camera = await window.electronAPI.findRecordingCamera(addedAsset.originalPath);
+				if (camera.success && camera.webcamVideoPath) {
+					const linked = {
+						sourcePath: camera.webcamVideoPath,
+						startMs: 0,
+						offsetMs: camera.offsetMs ?? 0,
+						visible: true,
+					};
+					const next = { ...document, cameraTrack: linked };
+					await get().saveDocument(next);
+					document = parseDocument(next);
+				}
+			} catch {
+				// ponytail: silent — no camera, no problem.
+			}
+		}
+
 		set({
 			document,
 			revision: get().revision + 1,

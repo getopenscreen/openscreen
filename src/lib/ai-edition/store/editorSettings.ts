@@ -20,10 +20,12 @@ import {
 	DEFAULT_WEBCAM_LAYOUT_PRESET,
 	DEFAULT_WEBCAM_MASK_SHAPE,
 	DEFAULT_WEBCAM_MIRRORED,
+	DEFAULT_WEBCAM_POSITION,
 	DEFAULT_WEBCAM_REACTIVE_ZOOM,
 	DEFAULT_WEBCAM_SIZE_PRESET,
 	type WebcamLayoutPreset,
 	type WebcamMaskShape,
+	type WebcamPosition,
 	type WebcamSizePreset,
 } from "@/components/video-editor/types";
 import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
@@ -51,6 +53,7 @@ export interface EditorSettingsSnapshot {
 	webcamMirrored: boolean;
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: WebcamSizePreset;
+	webcamPosition: WebcamPosition | null;
 	cursor: CursorVisualSettings;
 	cursorShow: boolean;
 	cursorTheme: string;
@@ -72,6 +75,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	webcamMirrored: DEFAULT_WEBCAM_MIRRORED,
 	webcamReactiveZoom: DEFAULT_WEBCAM_REACTIVE_ZOOM,
 	webcamSizePreset: DEFAULT_WEBCAM_SIZE_PRESET,
+	webcamPosition: DEFAULT_WEBCAM_POSITION,
 	cursor: {
 		size: DEFAULT_CURSOR_SIZE,
 		smoothing: DEFAULT_CURSOR_SMOOTHING,
@@ -99,6 +103,7 @@ interface LegacyShape {
 	webcamMirrored?: boolean;
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
+	webcamPosition?: WebcamPosition | null;
 	cursorSize?: number;
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
@@ -153,6 +158,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			DEFAULT_EDITOR_SETTINGS.webcamReactiveZoom,
 		),
 		webcamSizePreset: num(legacy?.webcamSizePreset, DEFAULT_EDITOR_SETTINGS.webcamSizePreset),
+		webcamPosition: normaliseWebcamPosition(legacy?.webcamPosition),
 		cursor,
 		cursorShow: bool(legacy?.cursorShow, DEFAULT_EDITOR_SETTINGS.cursorShow),
 		cursorTheme: str(legacy?.cursorTheme, DEFAULT_EDITOR_SETTINGS.cursorTheme),
@@ -174,6 +180,7 @@ export interface EditorSettingsPatch {
 	webcamMirrored?: boolean;
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
+	webcamPosition?: WebcamPosition | null;
 	cursor?: Partial<CursorVisualSettings> & { theme?: string; show?: boolean };
 	autoFocusAll?: boolean;
 }
@@ -195,6 +202,7 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 	if (patch.webcamMirrored !== undefined) next.webcamMirrored = patch.webcamMirrored;
 	if (patch.webcamReactiveZoom !== undefined) next.webcamReactiveZoom = patch.webcamReactiveZoom;
 	if (patch.webcamSizePreset !== undefined) next.webcamSizePreset = patch.webcamSizePreset;
+	if (patch.webcamPosition !== undefined) next.webcamPosition = patch.webcamPosition;
 	if (patch.autoFocusAll !== undefined) next.autoFocusAll = patch.autoFocusAll;
 	if (patch.cursor) {
 		const c = patch.cursor;
@@ -214,5 +222,19 @@ export function patchEditorSettings(doc: AxcutDocument, patch: EditorSettingsPat
 	return {
 		...doc,
 		legacyEditor: nextLegacy(current, patch) as Record<string, unknown>,
+	};
+}
+
+// Normalise a webcam position from legacy storage. Anything outside 0-1 is
+// clamped so a malformed `legacyEditor` doesn't seed the drag with bad coords.
+function normaliseWebcamPosition(value: unknown): WebcamPosition | null {
+	if (!value || typeof value !== "object") return DEFAULT_WEBCAM_POSITION;
+	const candidate = value as Record<string, unknown>;
+	const cxRaw = candidate.cx;
+	const cyRaw = candidate.cy;
+	if (typeof cxRaw !== "number" || typeof cyRaw !== "number") return DEFAULT_WEBCAM_POSITION;
+	return {
+		cx: Math.min(1, Math.max(0, cxRaw)),
+		cy: Math.min(1, Math.max(0, cyRaw)),
 	};
 }

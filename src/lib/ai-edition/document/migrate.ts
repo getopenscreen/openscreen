@@ -199,6 +199,7 @@ export function migrateProjectDataToAxcutDocument(
 			...(primaryAssetId ? { primaryAssetId } : {}),
 		},
 		assets,
+		cameraTrack: null,
 		transcript: null,
 		transcripts: [],
 		timeline: {
@@ -238,8 +239,15 @@ export function migrateAxcutDocumentToProjectData(input: AxcutDocument): EditorP
 	const primary = document.project?.primaryAssetId
 		? assets.find((a) => a.id === document.project.primaryAssetId)
 		: assets[0];
+	// ponytail: surface the camera track back to v2 so the legacy VideoEditor
+	// can still find the webcam path through `media.webcamVideoPath`.
 	const media: ProjectMedia | null = primary
-		? toLegacyMedia({ screenVideoPath: primary.originalPath })
+		? toLegacyMedia({
+				screenVideoPath: primary.originalPath,
+				...(document.cameraTrack?.sourcePath
+					? { webcamVideoPath: document.cameraTrack.sourcePath }
+					: {}),
+			})
 		: null;
 
 	const trimRegions: TrimRegion[] = (document.timeline?.skipRanges ?? []).map((region, index) => ({

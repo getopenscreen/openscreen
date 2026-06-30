@@ -1,13 +1,15 @@
 import { Maximize2, Pause, Play, Repeat, SkipBack, SkipForward } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
+import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import { EditorEmptyState } from "./EditorEmptyState";
 import styles from "./NewEditorShell.module.css";
-import { type VideoSource, VirtualPreview } from "./VirtualPreview";
+import { PreviewCanvas } from "./PreviewCanvas";
 
 interface PreviewProps {
 	hasProject: boolean;
 	hasAsset: boolean;
-	videoSources: VideoSource[];
+	videoSources: import("./VirtualPreview").VideoSource[];
 	clips: AxcutClip[];
 	seekTarget: { timeSec: number; requestId: number } | null;
 	onTimeChange: (sec: number) => void;
@@ -39,6 +41,19 @@ export function Preview({
 	const [playing, setPlaying] = useState(false);
 	const [loop, setLoop] = useState(false);
 	const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+	// ponytail: when the <video> fails to load (e.g. truncated recording
+	// from a bad MediaRecorder capture), swap to the empty state so the
+	// user can import a different file instead of staring at a broken
+	// preview. Resets when the active source changes (asset path).
+	const [videoError, setVideoError] = useState(false);
+	const activeSourceKey = videoSources[0]?.src ?? null;
+	const previousSourceKeyRef = useRef<string | null>(null);
+	useEffect(() => {
+		if (previousSourceKeyRef.current !== activeSourceKey) {
+			previousSourceKeyRef.current = activeSourceKey;
+			setVideoError(false);
+		}
+	}, [activeSourceKey]);
 
 	const handleVideoElement = useCallback(
 		(el: HTMLVideoElement | null) => {
@@ -118,40 +133,35 @@ export function Preview({
 		}
 	}, [videoEl]);
 
+	const { settings: editorSettings } = useEditorSettings();
+	const aspectRatioLabel = editorSettings.aspectRatio;
+
 	return (
 		<section className={styles.previewWrap} aria-label="Video preview">
 			<div className={styles.previewCanvas}>
-				{hasProject && hasAsset ? (
-					<>
-						<div className={styles.previewFrame}>
-							<VirtualPreview
-								videoSources={videoSources}
-								clips={clips}
-								seekTarget={seekTarget}
-								onTimeChange={onTimeChange}
-								onLoadedMetadata={onLoadedMetadata}
-								onVideoElement={handleVideoElement}
-							/>
-							<span className={styles.previewTimecode}>{formatTC(currentTimeSec)}</span>
-							<span className={styles.previewBadge}>1920 × 1080 · 60 fps</span>
-							<div className={styles.previewPip} aria-label="Webcam">
-								<span style={{ font: "500 9px/1 var(--font-mono)", letterSpacing: "0.06em" }}>
-									Webcam
-								</span>
-							</div>
-						</div>
-					</>
-				) : hasProject ? (
-					<div className={styles.previewEmpty}>
-						<strong>Add a video to get started</strong>
-						<p>Use the Media panel on the left to import one.</p>
-					</div>
+				{hasProject && hasAsset && !videoError ? (
+					<PreviewCanvas
+						videoSources={videoSources}
+						clips={clips}
+						seekTarget={seekTarget}
+						onTimeChange={onTimeChange}
+						onSeek={onSeek}
+						onLoadedMetadata={onLoadedMetadata}
+						onVideoElement={handleVideoElement}
+						currentTimeSec={currentTimeSec}
+						onVideoError={() => setVideoError(true)}
+					/>
 				) : (
-					<div className={styles.previewEmpty}>
-						<strong>No project open</strong>
-						<p>Open or create a project from the title bar to start editing.</p>
-					</div>
+					<EditorEmptyState hasProject={hasProject} />
 				)}
+				{hasProject && hasAsset ? (
+					<span className={styles.previewTimecode}>{formatTC(currentTimeSec)}</span>
+				) : null}
+				{hasProject && hasAsset ? (
+					<span className={styles.previewBadge}>
+						{editorSettings.cursorShow ? "Cursor on" : "Cursor off"} · {aspectRatioLabel} · 60 fps
+					</span>
+				) : null}
 			</div>
 			<div className={styles.transport} role="toolbar" aria-label="Playback controls">
 				<button

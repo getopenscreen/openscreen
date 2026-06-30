@@ -6,7 +6,9 @@
 // ponytail: the existing exporter already accepts trimRegions (gaps in source
 // time). Clips define what to KEEP. The inverse of clips = trimRegions. We
 // also pull zoom/annotations from the document (ms units, same as legacy) and
-// appearance/cursor/webcam from legacyEditor (passthrough blob).
+// appearance/cursor/webcam from legacyEditor (passthrough blob). The webcam
+// file path lives on the document's cameraTrack (auto-linked from the
+// recording session.json when an asset is imported).
 
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import {
@@ -155,7 +157,12 @@ export async function exportAxcutDocument(
 
 	const commonConfig = {
 		videoUrl,
-		webcamVideoUrl: options.webcamVideoUrl,
+		// ponytail: the camera is a derived stream from cameraTrack; the legacy
+		// exporter accepts webcamVideoUrl as a visual-only second source.
+		webcamVideoUrl:
+			document.cameraTrack && document.cameraTrack.visible && document.cameraTrack.sourcePath
+				? toFileUrl(document.cameraTrack.sourcePath)
+				: options.webcamVideoUrl,
 		wallpaper,
 		zoomRegions,
 		trimRegions,

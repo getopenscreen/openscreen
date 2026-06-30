@@ -118,7 +118,7 @@ jobs:
             --body "Automated version bump from the prerelease workflow. Rebase-merged via PAT; bypass applies because EtienneLescot is a ruleset bypass actor." \
             --repo "$GITHUB_REPOSITORY"
           PR_NUMBER=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' --repo "$GITHUB_REPOSITORY")
-          gh pr merge "$PR_NUMBER" --rebase --delete-branch \
+          gh pr merge "$PR_NUMBER" --rebase --delete-branch --admin \
             --repo "$GITHUB_REPOSITORY"
 
       - name: Push RC tag

@@ -51,22 +51,9 @@ export function VirtualPreview({
 
 	// ponytail: the cursor overlay wants source-media time (the recorded
 	// cursor samples live on the original mp4 timeline, not the edited
-	// virtual timeline). Read `video.currentTime` every animation frame so
-	// the cursor follows the playhead even when the user scrubs.
+	// virtual timeline). `setSourceTimeSec` is called from the 60 Hz rAF
+	// below so the cursor follows the playhead even when the user scrubs.
 	const [sourceTimeSec, setSourceTimeSec] = useState(0);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run when the active source swaps so the rAF reads from the new <video>.
-	useEffect(() => {
-		let raf = 0;
-		const tick = () => {
-			const v = videoRef.current;
-			if (v && Number.isFinite(v.currentTime)) {
-				setSourceTimeSec(v.currentTime);
-			}
-			raf = window.requestAnimationFrame(tick);
-		};
-		raf = window.requestAnimationFrame(tick);
-		return () => window.cancelAnimationFrame(raf);
-	}, [activeSource?.src]);
 
 	// Drive the virtual-time preview clock at 60 Hz (the <video> timeupdate
 	// event only fires ~4×/s, which is too slow to keep the webcam <video>
@@ -79,48 +66,83 @@ export function VirtualPreview({
 	// without a separate <video onTimeUpdate> event firing at ~4 Hz.
 	const sourceTimeSecRef = useRef(0);
 	sourceTimeSecRef.current = sourceTimeSec;
+	// ponytail: the rAF closure captured the props at mount time. The
+	// auto-created clip arrives a tick after the source swaps, so reads
+	// from the closure would forever see `clips: []` and the rAF would
+	// bail at the `clips.length === 0` guard — leaving the scrub thumb
+	// stuck at 0% and the drag range at `max=1`. The refs let the rAF
+	// always see the latest values without re-creating on every clip
+	// mutation.
+	const clipsRef = useRef(clips);
+	clipsRef.current = clips;
+	const videoSourcesRef = useRef(videoSources);
+	videoSourcesRef.current = videoSources;
+	const sourceIndexRef = useRef(sourceIndex);
+	sourceIndexRef.current = sourceIndex;
+	const virtualTimeSecRef = useRef(virtualTimeSec);
+	virtualTimeSecRef.current = virtualTimeSec;
+	const virtualDurationSecRef = useRef(virtualDurationSec);
+	virtualDurationSecRef.current = virtualDurationSec;
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-create the rAF when the active source swaps.
 	useEffect(() => {
 		let raf = 0;
 		const tick = () => {
 			raf = window.requestAnimationFrame(tick);
 			const v = videoRef.current;
-			if (!v || clips.length === 0 || !Number.isFinite(v.currentTime)) {
+			if (!v || !Number.isFinite(v.currentTime)) {
 				return;
 			}
-			const activeSourceId = videoSources[sourceIndex]?.id;
+			const activeSourceId = videoSourcesRef.current[sourceIndexRef.current]?.id;
+			// ponytail: also push setSourceTimeSec every frame (was previously
+			// in a separate rAF effect). Cheap; <video>.readyState >= 2 guards
+			// against drawing a black frame into the cursor overlay.
+			if (v.readyState >= 2) {
+				setSourceTimeSec(v.currentTime);
+			}
+			if (clipsRef.current.length === 0) {
+				// ponytail: no clip yet (auto-create runs from
+				// handleLoadedMetadata on the next tick). Push the raw
+				// source time as the virtual time so the scrub thumb
+				// advances and the timecode shows real progress during
+				// playback. The proper timeline-aware mapping kicks in
+				// when the auto-created clip arrives.
+				updateVirtualTime(v.currentTime);
+				return;
+			}
 			if (isProgrammaticSeekRef.current) {
 				isProgrammaticSeekRef.current = false;
-				const pos = locateSourcePosition(clips, v.currentTime, activeSourceId);
-				if (pos) updateVirtualTime(clampVirtualTime(clips, pos.virtualTimeSec));
+				const pos = locateSourcePosition(clipsRef.current, v.currentTime, activeSourceId);
+				if (pos) updateVirtualTime(clampVirtualTime(clipsRef.current, pos.virtualTimeSec));
 				return;
 			}
-			const position = locateSourcePosition(clips, v.currentTime, activeSourceId);
+			const position = locateSourcePosition(clipsRef.current, v.currentTime, activeSourceId);
 			if (!position) {
 				// ponytail: fall back to timeline order so cross-asset / reordered
 				// clips don't keep playing unmapped media.
-				const nextClip = clips.find((clip) => clip.timelineStartSec > virtualTimeSec + 0.001);
+				const nextClip = clipsRef.current.find(
+					(clip) => clip.timelineStartSec > virtualTimeSecRef.current + 0.001,
+				);
 				if (nextClip) seekToVirtualTime(nextClip.timelineStartSec, true);
 				else {
 					v.pause();
-					updateVirtualTime(virtualDurationSec);
+					updateVirtualTime(virtualDurationSecRef.current);
 					setIsPlaying(false);
 				}
 				return;
 			}
 			const reachedClipEnd = v.currentTime >= (position.clip.sourceEndSec ?? Infinity) - 0.04;
 			if (reachedClipEnd) {
-				const nextClip = clips[position.clipIndex + 1];
+				const nextClip = clipsRef.current[position.clipIndex + 1];
 				if (!nextClip) {
 					v.pause();
-					updateVirtualTime(virtualDurationSec);
+					updateVirtualTime(virtualDurationSecRef.current);
 					setIsPlaying(false);
 					return;
 				}
 				seekToVirtualTime(nextClip.timelineStartSec, true);
 				return;
 			}
-			updateVirtualTime(clampVirtualTime(clips, position.virtualTimeSec));
+			updateVirtualTime(clampVirtualTime(clipsRef.current, position.virtualTimeSec));
 		};
 		raf = window.requestAnimationFrame(tick);
 		return () => window.cancelAnimationFrame(raf);

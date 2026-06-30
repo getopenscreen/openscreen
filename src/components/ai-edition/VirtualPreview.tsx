@@ -33,11 +33,6 @@ export function VirtualPreview({
 }: VirtualPreviewProps) {
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 
-	// report the video element up
-	useEffect(() => {
-		onVideoElement?.(videoRef.current);
-	}, [onVideoElement]);
-
 	const isProgrammaticSeekRef = useRef(false);
 	const pendingSeekRef = useRef<{ sourceTimeSec: number; play: boolean } | null>(null);
 	const [virtualTimeSec, setVirtualTimeSec] = useState(0);
@@ -47,6 +42,16 @@ export function VirtualPreview({
 
 	const virtualDurationSec = useMemo(() => totalVirtualDuration(clips), [clips]);
 	const activeSource = videoSources[sourceIndex] ?? null;
+
+	// report the video element up; re-notify (and clear) whenever the active
+	// source changes so the parent doesn't keep a stale node after the keyed
+	// <video> is swapped for a new asset.
+	const activeSourceKey = activeSource?.src ?? null;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run on source swap
+	useEffect(() => {
+		onVideoElement?.(videoRef.current);
+		return () => onVideoElement?.(null);
+	}, [onVideoElement, activeSourceKey]);
 
 	const updateVirtualTime = useCallback(
 		(nextTimeSec: number) => {
@@ -118,10 +123,16 @@ export function VirtualPreview({
 		}
 		const position = locateSourcePosition(clips, video.currentTime, activeSourceId);
 		if (!position) {
-			const nextClip = clips.find(
-				(clip) => clip.assetId === activeSourceId && clip.sourceStartSec > video.currentTime,
-			);
-			if (nextClip) seekToVirtualTime(nextClip.timelineStartSec, true);
+			// ponytail: fall back to timeline order, not same-asset order, so
+			// cross-asset / reordered clips don't keep playing unmapped media.
+			const nextClip = clips.find((clip) => clip.timelineStartSec > virtualTimeSec + 0.001);
+			if (nextClip) {
+				seekToVirtualTime(nextClip.timelineStartSec, true);
+			} else {
+				video.pause();
+				updateVirtualTime(virtualDurationSec);
+				setIsPlaying(false);
+			}
 			return;
 		}
 		const currentClip = position.clip;
@@ -138,7 +149,15 @@ export function VirtualPreview({
 			return;
 		}
 		updateVirtualTime(clampVirtualTime(clips, position.virtualTimeSec));
-	}, [clips, seekToVirtualTime, updateVirtualTime, virtualDurationSec, videoSources, sourceIndex]);
+	}, [
+		clips,
+		seekToVirtualTime,
+		updateVirtualTime,
+		virtualDurationSec,
+		videoSources,
+		sourceIndex,
+		virtualTimeSec,
+	]);
 
 	useEffect(() => {
 		const video = videoRef.current;
@@ -194,11 +213,11 @@ export function VirtualPreview({
 						onWaiting={() => setLoadState("loading")}
 						onCanPlay={() => setLoadState("ready")}
 						onError={() => {
-							if (sourceIndex + 1 < videoSources.length) {
-								setSourceIndex((c) => c + 1);
-								setLoadState("loading");
-								return;
-							}
+							// ponytail: don't blindly advance to the next source — if
+							// the failed source owns the current virtual clip, the
+							// next sourceIndex will seekToVirtualTime right back into
+							// the same failed asset, looping. Fail the preview.
+							pendingSeekRef.current = null;
 							setLoadState("error");
 							setIsPlaying(false);
 						}}

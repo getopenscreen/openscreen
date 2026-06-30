@@ -6,7 +6,7 @@ Single-page dark web app at `http://127.0.0.1:5173`. Five-zone resizable grid, n
 
 CSS grid, full viewport, drag-to-resize on every gutter. Open/closed state for each side panel is persisted in `localStorage`.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │                        scene-header (56 px)                          │
 ├──────────┬───┬─────────────────────────┬───┬─────────────────────────┤

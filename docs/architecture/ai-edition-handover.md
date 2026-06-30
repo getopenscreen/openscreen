@@ -39,7 +39,7 @@ npm run test                          # 353 tests, 44 test files
 
 ## 3. Architecture map
 
-```
+```text
 src/
 ├── styles/
 │   └── design-tokens.css              # light + dark CSS vars (:root / :root[data-theme="dark"])
@@ -123,6 +123,7 @@ design/
 ## 5. Features fully wired (click → data → persisted)
 
 ### 5.1 Titlebar
+
 | Control | Action | File |
 |---|---|---|
 | Project name | Click → inline edit → Enter/Esc/Blur → `saveDocument` with renamed title | `Titlebar.tsx:423` |
@@ -138,6 +139,7 @@ design/
 | WebkitAppRegion | `drag` on titlebar, `no-drag` on buttons | `NewEditorShell.module.css:39` |
 
 ### 5.2 Bottombar (view-tools + lanes)
+
 | Button | Action | File |
 |---|---|---|
 | Zoom (+) | `addZoom()` → 2s region at playhead in `document.zoomRanges[]` | `Bottombar.tsx`, `useTimeline.ts` |
@@ -151,6 +153,7 @@ design/
 | **Region inspector** | When selected → right panel shows depth buttons (zoom), text area (annotation), speed label, delete | `RightPanelStack.tsx:118` |
 
 ### 5.3 Right panes (Background/Effects/Layout/Cursor/Timeline)
+
 All writable via `useEditorSettings` → `editorSettings.ts` pure functions → `legacyEditor` envelope:
 
 | Pane | Control | Field |
@@ -162,6 +165,7 @@ All writable via `useEditorSettings` → `editorSettings.ts` pure functions → 
 | Timeline | Toggle waveform | `showTrimWaveform` |
 
 ### 5.4 Preview + playback
+
 | Control | Action | File |
 |---|---|---|
 | Play/pause | Toggle `video.play()`/`pause()` (also `Space` global) | `Preview.tsx` |
@@ -172,6 +176,7 @@ All writable via `useEditorSettings` → `editorSettings.ts` pure functions → 
 | REC button | Toggle play (placeholder for real recording) | `Preview.tsx` |
 
 ### 5.5 Chat (left rail, gated by `AI_FEATURES_ENABLED`)
+
 | Feature | Status | File |
 |---|---|---|
 | Send message | `chatRun(projectId, text)` → real fetch LLM call (OpenAI compat + Anthropic) | `LeftPanel.tsx:288` |
@@ -184,6 +189,7 @@ All writable via `useEditorSettings` → `editorSettings.ts` pure functions → 
 | Context pill | "0% context" (static, no real token tracking) | `LeftPanel.tsx:353` |
 
 ### 5.6 Multi-clip + Insert Source
+
 | Feature | Action | File |
 |---|---|---|
 | Drag media card | `dragstart` sets `dataTransfer` with `assetId` | `LeftPanel.tsx:70` |
@@ -193,6 +199,7 @@ All writable via `useEditorSettings` → `editorSettings.ts` pure functions → 
 | Split and insert | `splitAndInsert(assetId, splitTime)` → splits target clip, inserts between halves | `useTimeline.ts:219` |
 
 ### 5.7 Keyboard shortcuts
+
 | Key | Action | File |
 |---|---|---|
 | `Cmd+S` | Save document | `NewEditorShell.tsx:446` |
@@ -206,6 +213,7 @@ All writable via `useEditorSettings` → `editorSettings.ts` pure functions → 
 | `Del / Backspace` | Remove selected region | `NewEditorShell.tsx:488` |
 
 ### 5.8 Backend (Electron main process)
+
 | Feature | Status | File |
 |---|---|---|
 | 8 provider definitions | Static, fully defined | `electron/ai-edition/provider-registry.ts` |
@@ -305,7 +313,7 @@ All writable via `useEditorSettings` → `editorSettings.ts` pure functions → 
 
 ## 8. Data flow — how a click hits the document
 
-```
+```text
 User clicks "Add zoom" in Bottombar
   → Bottombar calls tl.addZoom()                 [useTimeline.ts]
     → useTimeline reads currentTimeSec from store [projectStore.ts]

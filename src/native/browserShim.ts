@@ -147,6 +147,7 @@ function createShimBridgeClient() {
 					},
 				}),
 			chatHistory: () => Promise.resolve([]),
+			chatClear: () => Promise.resolve({ success: true }),
 		},
 		project: {
 			getCurrentContext: () =>

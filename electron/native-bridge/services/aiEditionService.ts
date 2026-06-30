@@ -17,6 +17,7 @@ export interface AiEditionServiceOptions {
 	llmConfig: LlmConfigStore;
 	runChat: (projectId: string, message: string) => Promise<AiEditionChatResult>;
 	getChatHistory: (projectId: string) => Promise<AiEditionChatMessage[]>;
+	clearChatHistory: (projectId: string) => void;
 }
 
 export class AiEditionService {
@@ -137,5 +138,10 @@ export class AiEditionService {
 
 	async chatHistory(projectId: string): Promise<AiEditionChatMessage[]> {
 		return this.options.getChatHistory(projectId);
+	}
+
+	async chatClear(projectId: string): Promise<{ success: boolean }> {
+		this.options.clearChatHistory(projectId);
+		return { success: true };
 	}
 }

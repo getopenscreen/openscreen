@@ -352,6 +352,12 @@ export type NativeBridgeRequest =
 			action: "chat.history";
 			payload: { projectId: string };
 			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.clear";
+			payload: { projectId: string };
+			requestId?: string;
 	  };
 
 export type NativeBridgeEventName =

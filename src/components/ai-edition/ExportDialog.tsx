@@ -95,9 +95,16 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		setProgress(null);
 		setSavedPath(null);
 
-		const picker = await window.electronAPI?.pickExportSavePath?.(suggested);
-		const pickedPath = picker && "path" in picker ? picker.path : undefined;
-		if (!picker || !pickedPath) {
+		let pickedPath: string | undefined;
+		try {
+			const picker = await window.electronAPI?.pickExportSavePath?.(suggested);
+			pickedPath = picker && "path" in picker ? picker.path : undefined;
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+			setPhase("error");
+			return;
+		}
+		if (!pickedPath) {
 			setPhase("idle");
 			return;
 		}
@@ -132,7 +139,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				action: {
 					label: "Show in folder",
 					onClick: () => {
-						void window.electronAPI?.openExternalUrl?.(`file://${pickedPath}`);
+						void window.electronAPI?.revealInFolder?.(pickedPath);
 					},
 				},
 			});

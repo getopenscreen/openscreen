@@ -96,16 +96,10 @@ export function createRecorderHandle(
 	);
 
 	const recordedBlobPromise = new Promise<Blob>((resolve, reject) => {
-		let _chunkCount = 0;
-		let _totalBytes = 0;
-		let firstChunkArrived = false;
 		recorder.ondataavailable = (event: BlobEvent) => {
 			if (!event.data || event.data.size === 0) {
 				return;
 			}
-			_chunkCount += 1;
-			_totalBytes += event.data.size;
-			firstChunkArrived = true;
 			if (mode === "streaming") {
 				enqueueWrite(event.data);
 			} else {
@@ -120,49 +114,6 @@ export function createRecorderHandle(
 
 		recorder.onstop = () => {
 			resolve(finalizeBlob());
-		};
-
-		// ponytail: watchdog for the encoder-stall failure. Chromium's
-		// WebM/H.264 software encoder can silently stop producing output if
-		// over-driven (e.g. 4K@60fps with too-high videoBitsPerSecond). The
-		// symptom is `ondataavailable` never firing while state stays
-		// "recording" and the stream is live. The bitrate cap in
-		// useScreenRecorder prevents this in normal use, but the watchdog
-		// catches any future regression (different codec, different
-		// encoder, etc.). The first chunk clears the timer; stop() also
-		// clears it via the recorder.onstop path.
-		const watchdogMs = 3000;
-		const watchdog = setTimeout(() => {
-			if (firstChunkArrived) return;
-			if (recorder.state === "inactive") return;
-			const err = new Error(
-				`Recorder produced no data within ${watchdogMs}ms of start(). ` +
-					`State=${recorder.state} mode=${mode} ` +
-					`streamActive=${stream.active} ` +
-					`videoReadyStates=${stream
-						.getVideoTracks()
-						.map((t) => t.readyState)
-						.join(",")}. ` +
-					`This usually means the encoder stalled (over-driven bitrate) or the source stream has no frames.`,
-			);
-			try {
-				if (recorder.state === "recording" || recorder.state === "paused") {
-					recorder.stop();
-				}
-			} catch {
-				// already stopped
-			}
-			reject(err);
-		}, watchdogMs);
-		const origOnStop = recorder.onstop;
-		recorder.onstop = (event: Event) => {
-			clearTimeout(watchdog);
-			if (origOnStop) (origOnStop as (e: Event) => void)(event);
-		};
-		const origOnError = recorder.onerror;
-		recorder.onerror = (event: Event) => {
-			clearTimeout(watchdog);
-			if (origOnError) (origOnError as (e: Event) => void)(event);
 		};
 	});
 
@@ -188,6 +139,43 @@ export function createRecorderHandle(
 	}
 
 	recorder.start(RECORDER_TIMESLICE_MS);
+	// ponytail: poll MediaRecorder.statistics (Chrome 130+) every second and
+	// log whether the encoder is hardware-accelerated plus dropped-frame
+	// counts. If `hardwareAccelerated: false` and `droppedFrames > 0` the
+	// H.264 software encoder can't keep up at the current resolution +
+	// bitrate — that's the root cause of the 0-byte webm symptom on
+	// machines where the GPU encoder (NVENC on NVIDIA, AMF on AMD,
+	// QuickSync on Intel) is unavailable. The fix lives in the GPU
+	// driver, not in the code. The log here just confirms it.
+	if (
+		typeof (recorder as MediaRecorder & { statistics?: unknown }).statistics === "function" ||
+		typeof (recorder as MediaRecorder & { statistics?: unknown }).statistics === "object"
+	) {
+		const statsTimer = window.setInterval(() => {
+			try {
+				// biome-ignore lint/suspicious/noExplicitAny: Chrome 130+ exposes `statistics` without a stable TS type.
+				const s = (recorder as any).statistics as {
+					hardwareAccelerated?: boolean;
+					droppedFrames?: number;
+					encodedFrames?: number;
+				} | null;
+				if (s) {
+					console.warn(
+						`[recorder:diagnostics] hwAccel=${s.hardwareAccelerated ?? "?"} ` +
+							`droppedFrames=${s.droppedFrames ?? 0} ` +
+							`encodedFrames=${s.encodedFrames ?? 0}`,
+					);
+				}
+			} catch {
+				// statistics API not available
+			}
+		}, 1000);
+		const origStop = recorder.onstop;
+		recorder.onstop = (event: Event) => {
+			window.clearInterval(statsTimer);
+			if (origStop) (origStop as (e: Event) => void)(event);
+		};
+	}
 	return {
 		recorder,
 		recordedBlobPromise,

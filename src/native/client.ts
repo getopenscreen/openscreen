@@ -221,5 +221,11 @@ export const nativeBridgeClient = {
 				action: "chat.history",
 				payload: { projectId },
 			}),
+		chatClear: (projectId: string) =>
+			requireNativeBridgeData<{ success: boolean }>({
+				domain: "aiEdition",
+				action: "chat.clear",
+				payload: { projectId },
+			}),
 	},
 };

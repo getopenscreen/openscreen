@@ -1,5 +1,5 @@
 import { Maximize2, Pause, Play, Repeat, SkipBack, SkipForward } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import styles from "./NewEditorShell.module.css";
 import { type VideoSource, VirtualPreview } from "./VirtualPreview";
@@ -52,39 +52,53 @@ export function Preview({
 		if (!videoEl) return;
 		if (videoEl.paused) {
 			void videoEl.play();
-			setPlaying(true);
 		} else {
 			videoEl.pause();
-			setPlaying(false);
 		}
 	}, [videoEl]);
 
+	// ponytail: mirror the real video element's play state instead of
+	// maintaining an optimistic local flag that drifts after play() rejects
+	// or when VirtualPreview pauses/ends.
+	useEffect(() => {
+		const el = videoEl;
+		if (!el) return;
+		const onPlay = () => setPlaying(true);
+		const onPause = () => setPlaying(false);
+		const onEnded = () => setPlaying(false);
+		el.addEventListener("play", onPlay);
+		el.addEventListener("pause", onPause);
+		el.addEventListener("ended", onEnded);
+		setPlaying(!el.paused);
+		return () => {
+			el.removeEventListener("play", onPlay);
+			el.removeEventListener("pause", onPause);
+			el.removeEventListener("ended", onEnded);
+		};
+	}, [videoEl]);
+
 	const handlePrevClip = useCallback(() => {
-		if (!videoEl || clips.length === 0) return;
-		const now = videoEl.currentTime;
-		let prevEnd = 0;
+		if (clips.length === 0) return;
+		// ponytail: navigate in virtual timeline space, not source-media time.
+		let prevStart = 0;
 		for (let i = clips.length - 1; i >= 0; i--) {
 			const c = clips[i];
-			if (c.timelineEndSec <= now - 0.1) {
-				prevEnd = c.timelineStartSec;
+			if (c.timelineEndSec <= currentTimeSec - 0.1) {
+				prevStart = c.timelineStartSec;
 				break;
 			}
 		}
-		videoEl.currentTime = prevEnd;
-		onTimeChange(prevEnd);
-	}, [videoEl, clips, onTimeChange]);
+		onSeek(prevStart);
+		onTimeChange(prevStart);
+	}, [clips, currentTimeSec, onSeek, onTimeChange]);
 
 	const handleNextClip = useCallback(() => {
-		if (!videoEl || clips.length === 0) return;
-		const now = videoEl.currentTime;
-		for (const c of clips) {
-			if (c.timelineStartSec > now + 0.1) {
-				videoEl.currentTime = c.timelineStartSec;
-				onTimeChange(c.timelineStartSec);
-				return;
-			}
-		}
-	}, [videoEl, clips, onTimeChange]);
+		if (clips.length === 0) return;
+		const next = clips.find((c) => c.timelineStartSec > currentTimeSec + 0.1);
+		if (!next) return;
+		onSeek(next.timelineStartSec);
+		onTimeChange(next.timelineStartSec);
+	}, [clips, currentTimeSec, onSeek, onTimeChange]);
 
 	const handleLoop = useCallback(() => {
 		setLoop((v) => {
@@ -93,13 +107,6 @@ export function Preview({
 			return next;
 		});
 	}, [videoEl]);
-
-	const restart = useCallback(() => {
-		if (!videoEl) return;
-		videoEl.currentTime = 0;
-		onTimeChange(0);
-	}, [videoEl, onTimeChange]);
-	void restart;
 
 	const expand = useCallback(() => {
 		const el = videoEl?.parentElement;
@@ -110,11 +117,6 @@ export function Preview({
 			void el.requestFullscreen?.();
 		}
 	}, [videoEl]);
-
-	const rec = useCallback(() => {
-		// ponytail: REC button toggles play (placeholder until the recorder is wired)
-		togglePlay();
-	}, [togglePlay]);
 
 	return (
 		<section className={styles.previewWrap} aria-label="Video preview">
@@ -242,35 +244,6 @@ export function Preview({
 						</>
 					);
 				})()}
-				<span className={styles.spacer} />
-				<button
-					type="button"
-					className={styles.tbtn}
-					title="Record"
-					aria-label="Record"
-					aria-pressed={playing}
-					style={{
-						border: "1px solid var(--border)",
-						color: playing ? "#fff" : "var(--muted)",
-						background: playing ? "var(--danger)" : "transparent",
-						padding: "0 10px",
-						width: "auto",
-						gap: 6,
-						font: "500 11px/1 var(--font-mono)",
-						letterSpacing: "0.02em",
-					}}
-					onClick={rec}
-				>
-					<span
-						style={{
-							width: 7,
-							height: 7,
-							borderRadius: "50%",
-							background: playing ? "#fff" : "var(--danger)",
-						}}
-					/>
-					{playing ? "STOP" : "REC"}
-				</button>
 			</div>
 		</section>
 	);

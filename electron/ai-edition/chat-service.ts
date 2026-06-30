@@ -90,3 +90,7 @@ export async function runChat(
 export async function getChatHistory(projectId: string): Promise<AiEditionChatMessage[]> {
 	return messagesByProject.get(projectId) ?? [];
 }
+
+export function clearChatHistory(projectId: string): void {
+	messagesByProject.delete(projectId);
+}

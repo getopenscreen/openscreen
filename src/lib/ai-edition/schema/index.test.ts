@@ -167,7 +167,7 @@ describe("axcut-schema v3", () => {
 		expect(legacy?.someFutureField).toBe("preserved");
 	});
 
-	it("documentSchema rejects v2 doc without v3 envelopes", () => {
+	it("documentSchema defaults missing v3 envelopes on a v3 document", () => {
 		expect(() =>
 			documentSchema.parse({
 				schemaVersion: 3,

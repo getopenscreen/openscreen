@@ -35,7 +35,7 @@ import type {
 	ProjectFileResult,
 	ProjectPathResult,
 } from "../../src/native/contracts";
-import { getChatHistory, runChat } from "../ai-edition/chat-service";
+import { clearChatHistory, getChatHistory, runChat } from "../ai-edition/chat-service";
 import { DocumentService } from "../ai-edition/document-service";
 import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { mainLogBuffer } from "../diagnostics/main-log-buffer";
@@ -2954,5 +2954,6 @@ export function registerIpcHandlers(
 		runAiEditionChat: (projectId, message) =>
 			runChat(projectId, message, new LlmConfigStore(app.getPath("userData"))),
 		getAiEditionChatHistory: (projectId) => getChatHistory(projectId),
+		clearAiEditionChatHistory: (projectId: string) => clearChatHistory(projectId),
 	});
 }

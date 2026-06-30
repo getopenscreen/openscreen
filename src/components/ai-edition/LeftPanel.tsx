@@ -1,4 +1,4 @@
-import { Film, LayoutGrid, List, Loader2, MessageSquare, Plus, Search, X } from "lucide-react";
+import { Film, Loader2, MessageSquare, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AI_FEATURES_ENABLED } from "@/components/video-editor/featureFlags";
@@ -177,7 +177,6 @@ export function MediaPane({
 	const projectId = useProjectStore((s) => s.projectId);
 	const document = useProjectStore((s) => s.document);
 	const addAsset = useProjectStore((s) => s.addAsset);
-	const [view, setView] = useState<"list" | "grid">("list");
 	const [query, setQuery] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [srcTranscriptAsset, setSrcTranscriptAsset] = useState<AxcutAsset | null>(null);
@@ -212,28 +211,6 @@ export function MediaPane({
 		<aside className={styles.panel}>
 			<header className={styles.panelHead}>
 				<h2>Media</h2>
-				<span className="right">
-					<button
-						type="button"
-						className={styles.iconBtn}
-						title="List view"
-						aria-label="List view"
-						aria-pressed={view === "list"}
-						onClick={() => setView("list")}
-					>
-						<List size={14} />
-					</button>
-					<button
-						type="button"
-						className={styles.iconBtn}
-						title="Grid view"
-						aria-label="Grid view"
-						aria-pressed={view === "grid"}
-						onClick={() => setView("grid")}
-					>
-						<LayoutGrid size={14} />
-					</button>
-				</span>
 			</header>
 			<div style={{ padding: "10px var(--sp-3) 8px" }}>
 				<div
@@ -439,10 +416,17 @@ function ChatStripPanel() {
 			? `Reasoning ${llmConfig.reasoningEffort}`
 			: null;
 
-	const newChat = useCallback(() => {
+	const newChat = useCallback(async () => {
 		setMessages([]);
 		setSessionNum((n) => n + 1);
-	}, []);
+		if (projectId) {
+			try {
+				await nativeBridgeClient.aiEdition.chatClear(projectId);
+			} catch {
+				// ponytail: silent — shim mode or no-op
+			}
+		}
+	}, [projectId]);
 
 	return (
 		<aside className={styles.panel}>

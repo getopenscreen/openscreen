@@ -48,6 +48,7 @@ export interface NativeBridgeContext {
 	getAiEditionChatHistory: (
 		projectId: string,
 	) => Promise<import("../../src/native/contracts").AiEditionChatMessage[]>;
+	clearAiEditionChatHistory: (projectId: string) => void;
 }
 
 function normalizePlatform(platform: NodeJS.Platform): NativePlatform {
@@ -136,6 +137,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		llmConfig: context.getAiEditionLlmConfig(),
 		runChat: context.runAiEditionChat,
 		getChatHistory: context.getAiEditionChatHistory,
+		clearChatHistory: context.clearAiEditionChatHistory,
 	});
 
 	ipcMain.handle(NATIVE_BRIDGE_CHANNEL, async (_, request: unknown) => {
@@ -308,6 +310,11 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							return createSuccessResponse(
 								requestId,
 								await aiEditionService.chatHistory(request.payload.projectId),
+							);
+						case "chat.clear":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.chatClear(request.payload.projectId),
 							);
 						default:
 							return createErrorResponse(

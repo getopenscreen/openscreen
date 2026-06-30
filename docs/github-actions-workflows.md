@@ -2,7 +2,7 @@
 
 ## Overview
 
-The repository uses 12 workflow files across four functional tiers. This document describes the triggers, job dependencies, and artifact flow for each tier.
+The repository uses 14 workflow files across five functional tiers. This document describes the triggers, job dependencies, and artifact flow for each tier.
 
 ## Workflow dependency graph
 
@@ -14,10 +14,12 @@ graph TD
         ci_typecheck[typecheck]
         ci_test[test]
         ci_build[build]
+        ci_semantic[semantic-pr]
         ci --> ci_lint
         ci --> ci_typecheck
         ci --> ci_test
         ci --> ci_build
+        ci --> ci_semantic
     end
 
     subgraph Tier 2 - Release build
@@ -32,6 +34,13 @@ graph TD
         build_win --> build_release
         build_mac --> build_release
         build_linux --> build_release
+    end
+
+    subgraph Tier 2.5 - Release management
+        prerelease[prerelease.yml<br/>dispatch]
+        promote[promote.yml<br/>dispatch]
+        prerelease -->|push tag vX.Y.Z-rc.N| build
+        promote -->|push tag vX.Y.Z| build
     end
 
     subgraph Tier 3 - Package registries
@@ -53,11 +62,15 @@ graph TD
         diag --> diag_mac
     end
 
-    build_release -->|gh release create| homebrew
-    build_release -->|gh release create| winget
-    build_release -->|gh release create| nix
-    build_release -->|gh release create| aur
+    build_release -->|PAT: gh release create| homebrew
+    build_release -->|PAT: gh release create| winget
+    build_release -->|PAT: gh release create| nix
+    build_release -->|PAT: gh release create| aur
+    promote -->|if: success| discord_announce_rc[discord-release-announce.mjs<br/>#rc-testing]
+    prerelease -->|if: success| discord_announce_stable[discord-release-announce.mjs<br/>#announcements]
 ```
+
+> Note: the announce-edge arrows above are inverted for readability — `prerelease.yml` posts to `#rc-testing`, and `promote.yml` posts to `#announcements`.
 
 ## Tier 1: CI checks
 
@@ -91,6 +104,55 @@ Triggered by version tags (`v*`) or manual `workflow_dispatch` (with optional ma
 4. **`publish-release`** (ubuntu-latest, needs all three build jobs): Downloads all four artifacts by explicit name, validates that `package.json` version matches the tag, and publishes them to a GitHub Release via `gh release create` or `gh release upload --clobber`. The download step uses explicit `name:` parameters to fail fast on missing artifacts rather than silently skipping them.
 
 All three build jobs use a shared caption-assets cache keyed by `runner.os` and the hash of `scripts/fetch-caption-model.mjs` to avoid cross-platform cache collisions.
+
+## Tier 2.5: Release management
+
+Two `workflow_dispatch` workflows manage the release cycle. Both run on `main` and require the `OPENSCREEN_RELEASE_TOKEN` secret.
+
+### prerelease.yml
+
+Triggered manually to cut a release candidate.
+
+**Inputs:** `bump` (`patch|minor|major`, default `minor`), `rc_number` (default `1`), `target_version` (optional override).
+
+**Steps:**
+1. Checkout, setup Node.
+2. Compute next SemVer from `package.json` + `bump`, derive `vX.Y.Z-rc.N` tag.
+3. **Migrate** all items from the rolling `Next Release` milestone into a fresh `vX.Y.Z` milestone (idempotent — each migrated item gets an HTML marker comment).
+4. Bump `package.json` to `X.Y.Z-rc.N` and commit on `main`.
+5. Push the `vX.Y.Z-rc.N` tag → triggers `build.yml`.
+6. Announce in `#rc-testing` on Discord via `discord-release-announce.mjs`.
+
+### promote.yml
+
+Triggered manually to promote an RC to a stable release.
+
+**Inputs:** `rc_tag` (e.g. `v1.5.0-rc.2`), `release_notes_extra` (optional).
+
+**Steps:**
+1. Validate the tag matches `^vX.Y.Z-(rc|beta|alpha)\.N$`; derive `X.Y.Z`.
+2. Close the `vX.Y.Z` milestone (snapshots the closed-issue list for release notes).
+3. Strip `-rc.N` from `package.json` and commit on `main`.
+4. Push the `vX.Y.Z` tag → triggers `build.yml` → publishes a stable release.
+5. Tier 3 fires automatically because the release was created with `OPENSCREEN_RELEASE_TOKEN` (which propagates the `release: published` event).
+6. Announce in `#announcements` on Discord with the release notes + closed-issue list.
+
+### Manual fallback
+
+```bash
+git tag v1.5.0-rc.1 <sha>
+git push origin v1.5.0-rc.1
+
+# later
+git tag v1.5.0 <sha>
+git push origin v1.5.0
+```
+
+This works because `build.yml` is triggered by any tag matching `v*`. It skips milestone migration and Discord announcements — useful for emergency cuts when the dispatch UI is unavailable.
+
+### Why a fine-grained PAT (`OPENSCREEN_RELEASE_TOKEN`)?
+
+`GITHUB_TOKEN` cannot trigger downstream workflows from the actions it performs. Specifically, `gh release create` using `GITHUB_TOKEN` does **not** fire the `release: published` event, so homebrew/winget/nix/aur would silently skip every release. The fine-grained PAT (scoped to `getopenscreen/openscreen` with `contents: write` + `issues: write`) is the standard fix. See `docs/secrets.md` for creation and rotation instructions.
 
 ## Tier 3: Package registries
 

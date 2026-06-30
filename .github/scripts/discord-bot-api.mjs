@@ -1,4 +1,4 @@
-import { warning } from "@actions/core";
+﻿import { warning } from "@actions/core";
 
 const API_BASE = "https://discord.com/api/v10";
 

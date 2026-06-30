@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createForumThread, patchChannel, postChannelMessage } from "./discord-bot-api.mjs";
 
 const botToken = "test-token";

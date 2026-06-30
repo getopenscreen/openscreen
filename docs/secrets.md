@@ -1,6 +1,6 @@
 # Secrets and tokens
 
-OpenScreen uses a small set of GitHub Actions secrets and repository variables. This file documents what each one does and how to create or rotate it.
+OpenScreen uses a small set of GitHub Actions secrets and repository variables. This file documents what each one does and how to create or rotate them.
 
 ## Required for releases
 

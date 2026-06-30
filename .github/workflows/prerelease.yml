@@ -94,6 +94,8 @@ jobs:
           # The main-protection ruleset forbids direct pushes to main from workflow tokens.
           # Push to a release branch and merge via PR instead (merge via PAT bypasses as EtienneLescot).
           BRANCH="release/v${PRERELEASE}"
+          # Delete remote branch first so the push below is always fast-forward (idempotent on rerun).
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ":${BRANCH}" 2>/dev/null || true
           git checkout -b "$BRANCH"
           git add package.json
           git commit -m "chore(release): bump to ${PRERELEASE} [skip ci]"

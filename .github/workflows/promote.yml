@@ -77,6 +77,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Push to a release branch and merge via PR (rebase) so the ruleset PR review rule is respected.
           BRANCH="release/v${STABLE_VERSION}"
+          # Delete remote branch first so the push below is always fast-forward (idempotent on rerun).
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ":${BRANCH}" 2>/dev/null || true
           git checkout -b "$BRANCH"
           git add package.json
           git commit -m "chore(release): bump to ${STABLE_VERSION} [skip ci]"

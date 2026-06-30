@@ -186,7 +186,7 @@ async function main() {
 					`👉 Set DISCORD_ROADMAP_MESSAGE_ID=${messageId} as a repo variable to update this message on future changes.`,
 				);
 				info(
-					`   gh variable set DISCORD_ROADMAP_MESSAGE_ID ${messageId} --repo ${context.repo.owner}/${context.repo.repo}`,
+					`   gh variable set DISCORD_ROADMAP_MESSAGE_ID --body "${messageId}" --repo ${context.repo.owner}/${context.repo.repo}`,
 				);
 			}
 		} catch (err) {

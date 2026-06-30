@@ -1,0 +1,107 @@
+name: Promote RC to stable release
+
+on:
+  workflow_dispatch:
+    inputs:
+      rc_tag:
+        description: "RC tag to promote (e.g. v1.5.0-rc.2)"
+        required: true
+        type: string
+      release_notes_extra:
+        description: "Optional message to prepend to auto-generated release notes"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: promote-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote RC to stable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup
+
+      - name: Validate RC tag and compute stable version
+        id: version
+        env:
+          RC_TAG: ${{ inputs.rc_tag }}
+        run: |
+          set -euo pipefail
+          TAG="${RC_TAG}"
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-(rc|beta|alpha)\.[0-9]+$ ]]; then
+            echo "::error::Tag must look like v1.5.0-rc.1; got '${TAG}'"
+            exit 1
+          fi
+          STABLE_VERSION="${BASH_REMATCH[1]}"
+          STABLE_TAG="v${STABLE_VERSION}"
+          echo "rc_tag=$TAG"                  >> "$GITHUB_OUTPUT"
+          echo "stable_version=$STABLE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "stable_tag=$STABLE_TAG"       >> "$GITHUB_OUTPUT"
+          echo "Promoting ${TAG} -> ${STABLE_TAG}"
+
+      - name: Close versioned milestone
+        env:
+          TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+          STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
+        run: node .github/scripts/release-milestone-close.mjs
+
+      - name: Bump package.json to stable version
+        env:
+          STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s|(\"version\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")|\1${STABLE_VERSION}\2|" package.json
+          echo "package.json version:"
+          grep '"version"' package.json
+
+      - name: Commit package.json bump
+        env:
+          TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): bump to ${{ steps.version.outputs.stable_version }} [skip ci]"
+          git push
+
+      - name: Push stable tag
+        env:
+          TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+          STABLE_TAG: ${{ steps.version.outputs.stable_tag }}
+        run: git push origin "$STABLE_TAG"
+
+      - name: Announce stable on Discord
+        if: success()
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_RELEASE_CHANNEL_ID: ${{ vars.DISCORD_RELEASE_CHANNEL_ID }}
+          GITHUB_TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+          STABLE_TAG: ${{ steps.version.outputs.stable_tag }}
+          RC_TAG: ${{ steps.version.outputs.rc_tag }}
+          EXTRA: ${{ inputs.release_notes_extra }}
+          KIND: stable
+        run: node .github/scripts/discord-release-announce.mjs
+
+      - name: Workflow summary
+        run: |
+          {
+            echo "## Release promoted"
+            echo ""
+            echo "- Stable tag: \`${{ steps.version.outputs.stable_tag }}\`"
+            echo "- Promoted from: \`${{ steps.version.outputs.rc_tag }}\`"
+            echo "- Tier 3 (homebrew/winget/nix/aur) will fire on the published release via OPENSCREEN_RELEASE_TOKEN."
+          } >> "$GITHUB_STEP_SUMMARY"

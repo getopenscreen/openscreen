@@ -1,8 +1,9 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import {
 	type DragEvent as ReactDragEvent,
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
+	useEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -10,6 +11,8 @@ import {
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { formatSeconds } from "@/lib/ai-edition/timeline/virtual-preview";
 import styles from "./TimelinePane.module.css";
+
+const SKIP_CONTROLS_HIDE_DELAY_MS = 220;
 
 // Multi-clip track view — matches design/openscreen-editor.html .tracks-wrapper:
 // each clip is a .trackBlock flexed by its timeline duration, side by side, with
@@ -45,27 +48,49 @@ interface TimelinePaneProps {
 	onMoveClip: (clipId: string, toIndex: number) => void;
 	onEditClip: (clip: AxcutClip) => void;
 	onRemoveClip: (clipId: string) => void;
+	onUpdateSkipRange: (skipId: string, startSec: number, endSec: number) => void;
+	onRemoveSkipRange: (skipId: string) => void;
 }
 
-type Segment = { kind: "keep" | "cut"; len: number };
+type KeepSegment = { kind: "keep"; len: number };
+type CutSegment = {
+	kind: "cut";
+	len: number;
+	skipId: string;
+	startSec: number;
+	endSec: number;
+	minStartSec: number;
+	maxEndSec: number;
+};
+type Segment = KeepSegment | CutSegment;
 
 // Split a clip's source span into keep/cut segments using the asset's skip
-// ranges. Purely visual — flexes each segment by its second-length.
+// ranges. Cut segments carry the skip id + local drag bounds (clamped to the
+// clip's own source span and the neighboring skip) so they can be resized or
+// deleted in place — mirrors Axcut's per-clip skip strips.
 function clipSegments(clip: AxcutClip, skips: SkipRange[]): Segment[] {
 	const s0 = clip.sourceStartSec;
 	const s1 = clip.sourceEndSec ?? s0;
 	const span = Math.max(0.001, s1 - s0);
 	const cuts = skips
 		.filter((k) => k.assetId === clip.assetId && k.endSec > s0 && k.startSec < s1)
-		.map((k) => ({ start: Math.max(s0, k.startSec), end: Math.min(s1, k.endSec) }))
+		.map((k) => ({ skipId: k.id, start: Math.max(s0, k.startSec), end: Math.min(s1, k.endSec) }))
 		.sort((a, b) => a.start - b.start);
 	const segs: Segment[] = [];
 	let cur = s0;
-	for (const c of cuts) {
+	cuts.forEach((c, i) => {
 		if (c.start > cur) segs.push({ kind: "keep", len: c.start - cur });
-		segs.push({ kind: "cut", len: c.end - c.start });
+		segs.push({
+			kind: "cut",
+			len: c.end - c.start,
+			skipId: c.skipId,
+			startSec: c.start,
+			endSec: c.end,
+			minStartSec: i > 0 ? cuts[i - 1].end : s0,
+			maxEndSec: i < cuts.length - 1 ? cuts[i + 1].start : s1,
+		});
 		cur = Math.max(cur, c.end);
-	}
+	});
 	if (cur < s1) segs.push({ kind: "keep", len: s1 - cur });
 	if (segs.length === 0) segs.push({ kind: "keep", len: span });
 	return segs;
@@ -92,9 +117,26 @@ export function TimelinePane({
 	onMoveClip,
 	onEditClip,
 	onRemoveClip,
+	onUpdateSkipRange,
+	onRemoveSkipRange,
 }: TimelinePaneProps) {
 	const wrapRef = useRef<HTMLDivElement | null>(null);
+	const visualRefs = useRef(new Map<string, HTMLDivElement>());
 	const [dropIndex, setDropIndex] = useState<number | null>(null);
+	const [hoveredCutId, setHoveredCutId] = useState<string | null>(null);
+	const [dragPreview, setDragPreview] = useState<{
+		skipId: string;
+		startSec: number;
+		endSec: number;
+	} | null>(null);
+	const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	useEffect(
+		() => () => {
+			if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+		},
+		[],
+	);
 
 	const totalDuration = useMemo(
 		() => clips.reduce((m, c) => Math.max(m, c.timelineEndSec), 0.001),
@@ -106,6 +148,69 @@ export function TimelinePane({
 		[assets],
 	);
 	const playheadPct = Math.max(0, Math.min(100, (currentTimeSec / totalDuration) * 100));
+
+	const showCutControls = useCallback((cutId: string) => {
+		if (hideControlsTimerRef.current) {
+			clearTimeout(hideControlsTimerRef.current);
+			hideControlsTimerRef.current = null;
+		}
+		setHoveredCutId(cutId);
+	}, []);
+
+	const scheduleHideCutControls = useCallback((cutId: string) => {
+		if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+		hideControlsTimerRef.current = setTimeout(() => {
+			setHoveredCutId((current) => (current === cutId ? null : current));
+			hideControlsTimerRef.current = null;
+		}, SKIP_CONTROLS_HIDE_DELAY_MS);
+	}, []);
+
+	// Drag a skip's start/end chevron. pxPerSec is derived locally from the
+	// clip's own trackVisual width (measured via a ref) so this works without
+	// any global timeline zoom/pan state — each clip block is its own
+	// coordinate space.
+	const startResizeSkip = useCallback(
+		(clipId: string, seg: CutSegment, edge: "start" | "end", event: ReactPointerEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			const visual = visualRefs.current.get(clipId);
+			const clip = clips.find((c) => c.id === clipId);
+			if (!visual || !clip) return;
+			const clipSpanSec = Math.max(0.001, (clip.sourceEndSec ?? 0) - clip.sourceStartSec);
+			const pxPerSec = visual.clientWidth / clipSpanSec;
+			const startClientX = event.clientX;
+			const initialStart = seg.startSec;
+			const initialEnd = seg.endSec;
+
+			let liveStart = initialStart;
+			let liveEnd = initialEnd;
+			setDragPreview({ skipId: seg.skipId, startSec: liveStart, endSec: liveEnd });
+
+			const move = (moveEvent: PointerEvent) => {
+				const deltaSec = (moveEvent.clientX - startClientX) / pxPerSec;
+				if (edge === "start") {
+					liveStart = Math.min(
+						Math.max(initialStart + deltaSec, seg.minStartSec),
+						initialEnd - 0.05,
+					);
+				} else {
+					liveEnd = Math.max(Math.min(initialEnd + deltaSec, seg.maxEndSec), initialStart + 0.05);
+				}
+				setDragPreview({ skipId: seg.skipId, startSec: liveStart, endSec: liveEnd });
+			};
+			const end = () => {
+				window.removeEventListener("pointermove", move);
+				window.removeEventListener("pointerup", end);
+				setDragPreview(null);
+				if (Math.abs(liveStart - initialStart) > 0.001 || Math.abs(liveEnd - initialEnd) > 0.001) {
+					onUpdateSkipRange(seg.skipId, liveStart, liveEnd);
+				}
+			};
+			window.addEventListener("pointermove", move);
+			window.addEventListener("pointerup", end, { once: true });
+		},
+		[clips, onUpdateSkipRange],
+	);
 
 	// Compute the clip index a drop at clientX should land at, by comparing
 	// against each block's horizontal midpoint.
@@ -210,7 +315,6 @@ export function TimelinePane({
 					Drag a video from the media panel here to start your timeline.
 				</div>
 			) : (
-				// biome-ignore lint/a11y/noStaticElementInteractions: tracks area is a drop target + scrub surface
 				<div
 					ref={wrapRef}
 					className={styles.tracksWrapper}
@@ -228,7 +332,19 @@ export function TimelinePane({
 
 					{clips.map((clip, i) => {
 						const durationSec = Math.max(0.001, clip.timelineEndSec - clip.timelineStartSec);
-						const segs = clipSegments(clip, skipRanges);
+						const rawSegs = clipSegments(clip, skipRanges);
+						// Apply the live drag preview (if this clip owns the skip being
+						// dragged) so the segment visibly resizes before the store commit
+						// on pointerup.
+						const segs = rawSegs.map((s) => {
+							if (s.kind !== "cut" || s.skipId !== dragPreview?.skipId) return s;
+							return {
+								...s,
+								startSec: dragPreview.startSec,
+								endSec: dragPreview.endSec,
+								len: dragPreview.endSec - dragPreview.startSec,
+							};
+						});
 						const segTotal = segs.reduce((m, s) => m + s.len, 0) || 1;
 						const selected = clip.id === selectedClipId;
 						return (
@@ -249,24 +365,78 @@ export function TimelinePane({
 										onSelectClip(clip.id);
 									}
 								}}
-								// biome-ignore lint/a11y/useSemanticElements: draggable block can't be a <button> (nested interactive controls)
 								role="button"
 								tabIndex={0}
 								aria-pressed={selected}
 								title={`${assetLabel(clip.assetId)} · ${formatSeconds(clip.timelineStartSec)}–${formatSeconds(clip.timelineEndSec)}`}
 							>
-								<div className={styles.trackVisual} aria-hidden="true">
-									{segs.map((s, si) => (
-										<div
-											key={si}
-											className={
-												s.kind === "cut"
-													? `${styles.segment} ${styles.cut}`
-													: `${styles.segment} ${styles.keep}`
-											}
-											style={{ flexGrow: (s.len / segTotal) * 100 }}
-										/>
-									))}
+								<div
+									className={styles.trackVisual}
+									ref={(el) => {
+										if (el) visualRefs.current.set(clip.id, el);
+										else visualRefs.current.delete(clip.id);
+									}}
+								>
+									{segs.map((s, si) =>
+										s.kind === "keep" ? (
+											<div
+												key={si}
+												className={`${styles.segment} ${styles.keep}`}
+												aria-hidden="true"
+												style={{ flexGrow: (s.len / segTotal) * 100 }}
+											/>
+										) : (
+											<div
+												key={s.skipId}
+												className={`${styles.segment} ${styles.cut}`}
+												style={{ flexGrow: (s.len / segTotal) * 100 }}
+												onPointerEnter={() => showCutControls(s.skipId)}
+												onPointerLeave={() => scheduleHideCutControls(s.skipId)}
+												title={`Skip ${formatSeconds(s.startSec)}–${formatSeconds(s.endSec)}`}
+											>
+												{hoveredCutId === s.skipId || dragPreview?.skipId === s.skipId ? (
+													<div
+														className={styles.skipControls}
+														onPointerEnter={() => showCutControls(s.skipId)}
+														onPointerLeave={() => scheduleHideCutControls(s.skipId)}
+													>
+														<button
+															type="button"
+															className={styles.skipControlBtn}
+															aria-label={`Adjust skip start at ${formatSeconds(s.startSec)}`}
+															title="Adjust skip start"
+															onPointerDown={(e) => startResizeSkip(clip.id, s, "start", e)}
+															onClick={(e) => e.stopPropagation()}
+														>
+															<ChevronLeft size={13} />
+														</button>
+														<button
+															type="button"
+															className={`${styles.skipControlBtn} ${styles.skipControlDelete}`}
+															aria-label={`Remove skip ${formatSeconds(s.startSec)}–${formatSeconds(s.endSec)}`}
+															title="Remove skip"
+															onClick={(e) => {
+																e.stopPropagation();
+																onRemoveSkipRange(s.skipId);
+															}}
+														>
+															<Trash2 size={12} />
+														</button>
+														<button
+															type="button"
+															className={styles.skipControlBtn}
+															aria-label={`Adjust skip end at ${formatSeconds(s.endSec)}`}
+															title="Adjust skip end"
+															onPointerDown={(e) => startResizeSkip(clip.id, s, "end", e)}
+															onClick={(e) => e.stopPropagation()}
+														>
+															<ChevronRight size={13} />
+														</button>
+													</div>
+												) : null}
+											</div>
+										),
+									)}
 								</div>
 								<div className={styles.trackInfo}>
 									<button

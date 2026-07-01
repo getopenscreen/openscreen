@@ -1,8 +1,16 @@
 import { AlertTriangle, Crop, FolderOpen, FolderPlus, Pencil, Plus, X } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import {
+	type ReactNode,
+	type PointerEvent as ReactPointerEvent,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import type { CropRegion } from "@/components/video-editor/types";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
+import { formatSeconds } from "@/lib/ai-edition/timeline/virtual-preview";
 import styles from "./NewEditorShell.module.css";
+import { type VideoSource, VirtualPreview } from "./VirtualPreview";
 
 interface BaseModalProps {
 	open: boolean;
@@ -595,44 +603,92 @@ export interface AssetMeta {
 	durationSec?: number;
 }
 
-export interface EditClipPatch {
-	sourceStartSec: number;
-	sourceEndSec?: number;
-	timelineStartSec: number;
-	timelineEndSec: number;
-}
-
 interface EditClipModalProps extends BaseModalProps {
 	clip: AxcutClip | null;
 	assetMeta: AssetMeta | null;
-	onSave: (patch: EditClipPatch) => void;
+	videoSources: VideoSource[];
+	onApply: (sourceStartSec: number, sourceEndSec: number) => void;
 }
 
-export function EditClipModal({ open, onClose, clip, assetMeta, onSave }: EditClipModalProps) {
-	const [sourceStart, setSourceStart] = useState(0);
-	const [sourceEnd, setSourceEnd] = useState(0);
-	const [timelineStart, setTimelineStart] = useState(0);
-	const [timelineEnd, setTimelineEnd] = useState(0);
+// Mirrors Axcut's ClipEditDialog: an embedded preview of just this clip plus
+// a draggable dual-handle range over the asset's full source duration —
+// replaces the old numeric-input-only form. Only the source range is
+// editable here; the clip's timeline position is derived from resequencing
+// (see useTimeline.updateClipSourceRange), same as every other clip op.
+export function EditClipModal({
+	open,
+	onClose,
+	clip,
+	assetMeta,
+	videoSources,
+	onApply,
+}: EditClipModalProps) {
+	const trackRef = useRef<HTMLDivElement | null>(null);
+	const [draftStart, setDraftStart] = useState(0);
+	const [draftEnd, setDraftEnd] = useState(0);
+	const [activeEdge, setActiveEdge] = useState<"start" | "end" | null>(null);
 
-	// ponytail: sync local form state to the clip every time the modal opens.
+	// ponytail: sync local drag state to the clip every time the modal opens.
 	// `open` is the trigger so external clip changes don't fight the user mid-edit.
 	useEffect(() => {
 		if (!open || !clip) return;
-		setSourceStart(clip.sourceStartSec);
-		setSourceEnd(clip.sourceEndSec ?? 0);
-		setTimelineStart(clip.timelineStartSec);
-		setTimelineEnd(clip.timelineEndSec);
+		setDraftStart(clip.sourceStartSec);
+		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
+		setActiveEdge(null);
 	}, [open, clip]);
 
 	if (!clip) return null;
 
-	const handleSave = () => {
-		onSave({
-			sourceStartSec: sourceStart,
-			sourceEndSec: sourceEnd,
-			timelineStartSec: timelineStart,
-			timelineEndSec: timelineEnd,
-		});
+	const sourceDurationSec = Math.max(assetMeta?.durationSec ?? 0, clip.sourceEndSec ?? 0, 0.001);
+	const durationSec = Math.max(0.001, draftEnd - draftStart);
+	const hasChanges =
+		Math.abs(draftStart - clip.sourceStartSec) > 0.001 ||
+		Math.abs(draftEnd - (clip.sourceEndSec ?? 0)) > 0.001;
+	const previewClip: AxcutClip = {
+		...clip,
+		id: `${clip.id}:edit-preview`,
+		sourceStartSec: draftStart,
+		sourceEndSec: draftEnd,
+		timelineStartSec: 0,
+		timelineEndSec: durationSec,
+	};
+	const clipSources = videoSources.filter((s) => s.id === clip.assetId);
+
+	const startDrag = (edge: "start" | "end", event: ReactPointerEvent<HTMLButtonElement>) => {
+		const track = trackRef.current;
+		if (!track) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const widthPx = Math.max(1, track.clientWidth);
+		const startClientX = event.clientX;
+		const startDraftStart = draftStart;
+		const startDraftEnd = draftEnd;
+		setActiveEdge(edge);
+		const move = (moveEvent: PointerEvent) => {
+			const deltaSec = ((moveEvent.clientX - startClientX) / widthPx) * sourceDurationSec;
+			if (edge === "start") {
+				setDraftStart(Math.min(Math.max(startDraftStart + deltaSec, 0), startDraftEnd - 0.05));
+			} else {
+				setDraftEnd(
+					Math.max(Math.min(startDraftEnd + deltaSec, sourceDurationSec), startDraftStart + 0.05),
+				);
+			}
+		};
+		const end = () => {
+			window.removeEventListener("pointermove", move);
+			window.removeEventListener("pointerup", end);
+			setActiveEdge(null);
+		};
+		window.addEventListener("pointermove", move);
+		window.addEventListener("pointerup", end, { once: true });
+	};
+
+	const handleReset = () => {
+		setDraftStart(clip.sourceStartSec);
+		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
+	};
+	const handleApply = () => {
+		onApply(draftStart, draftEnd);
 		onClose();
 	};
 
@@ -642,48 +698,150 @@ export function EditClipModal({ open, onClose, clip, assetMeta, onSave }: EditCl
 			onClose={onClose}
 			title="Edit clip"
 			subtitle={assetMeta?.label ?? undefined}
+			wide
 		>
 			<div
 				style={{
-					display: "grid",
-					gridTemplateColumns: "1fr 1fr",
-					gap: 12,
+					height: 220,
+					marginBottom: 16,
+					borderRadius: "var(--r-md)",
+					overflow: "hidden",
+					background: "var(--surface-2)",
 				}}
 			>
-				<EditField
-					label="Source start (s)"
-					value={sourceStart}
-					max={assetMeta?.durationSec}
-					onChange={setSourceStart}
-				/>
-				<EditField
-					label="Source end (s)"
-					value={sourceEnd}
-					max={assetMeta?.durationSec}
-					onChange={setSourceEnd}
-				/>
-				<EditField label="Timeline start (s)" value={timelineStart} onChange={setTimelineStart} />
-				<EditField label="Timeline end (s)" value={timelineEnd} onChange={setTimelineEnd} />
+				<VirtualPreview videoSources={clipSources} clips={[previewClip]} />
 			</div>
+
+			<div style={{ display: "flex", gap: 24, marginBottom: 16 }}>
+				<RangeStat label="Start" value={formatSeconds(draftStart)} />
+				<RangeStat label="End" value={formatSeconds(draftEnd)} />
+				<RangeStat label="Duration" value={formatSeconds(durationSec)} />
+			</div>
+
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					font: "500 10px/1.4 var(--font-mono)",
+					color: "var(--muted)",
+					marginBottom: 4,
+				}}
+			>
+				<span>0:00.0</span>
+				<span>{formatSeconds(sourceDurationSec)}</span>
+			</div>
+			<div
+				ref={trackRef}
+				style={{
+					position: "relative",
+					height: 32,
+					background: "var(--surface-2)",
+					borderRadius: "var(--r-sm)",
+				}}
+			>
+				<div
+					style={{
+						position: "absolute",
+						inset: 0,
+						width: `${(draftStart / sourceDurationSec) * 100}%`,
+						background: "var(--overlay-dark)",
+						borderRadius: "var(--r-sm) 0 0 var(--r-sm)",
+					}}
+				/>
+				<div
+					className={activeEdge ? styles.editClipRangeDragging : undefined}
+					style={{
+						position: "absolute",
+						top: 0,
+						bottom: 0,
+						left: `${(draftStart / sourceDurationSec) * 100}%`,
+						width: `${Math.max(0.5, (durationSec / sourceDurationSec) * 100)}%`,
+						background: "var(--accent-wash)",
+						border: "1px solid var(--accent)",
+						borderRadius: "var(--r-sm)",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+					}}
+				>
+					<button
+						type="button"
+						onPointerDown={(e) => startDrag("start", e)}
+						aria-label="Adjust clip start"
+						title="Adjust clip start"
+						style={{
+							position: "absolute",
+							left: -6,
+							top: 0,
+							bottom: 0,
+							width: 12,
+							cursor: "ew-resize",
+							background: "var(--accent)",
+							border: 0,
+							borderRadius: 3,
+							padding: 0,
+						}}
+					/>
+					<span
+						style={{
+							font: "500 11px/1.4 var(--font-mono)",
+							color: "var(--accent-on)",
+							pointerEvents: "none",
+							whiteSpace: "nowrap",
+						}}
+					>
+						{formatSeconds(draftStart)}–{formatSeconds(draftEnd)}
+					</span>
+					<button
+						type="button"
+						onPointerDown={(e) => startDrag("end", e)}
+						aria-label="Adjust clip end"
+						title="Adjust clip end"
+						style={{
+							position: "absolute",
+							right: -6,
+							top: 0,
+							bottom: 0,
+							width: 12,
+							cursor: "ew-resize",
+							background: "var(--accent)",
+							border: 0,
+							borderRadius: 3,
+							padding: 0,
+						}}
+					/>
+				</div>
+				<div
+					style={{
+						position: "absolute",
+						top: 0,
+						bottom: 0,
+						right: 0,
+						width: `${Math.max(0, ((sourceDurationSec - draftEnd) / sourceDurationSec) * 100)}%`,
+						background: "var(--overlay-dark)",
+						borderRadius: "0 var(--r-sm) var(--r-sm) 0",
+					}}
+				/>
+			</div>
+
 			<div
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
 					alignItems: "center",
-					paddingTop: 12,
-					marginTop: 4,
+					paddingTop: 16,
+					marginTop: 16,
 					borderTop: "1px solid var(--border-soft)",
 				}}
 			>
-				<span
-					style={{
-						font: "500 11px/1.4 var(--font-mono)",
-						color: "var(--muted)",
-					}}
+				<button
+					type="button"
+					className={`${styles.btn} ${styles.btnSecondary}`}
+					onClick={handleReset}
+					disabled={!hasChanges}
 				>
-					source {sourceStart.toFixed(2)}–{sourceEnd.toFixed(2)}s · timeline{" "}
-					{timelineStart.toFixed(2)}–{timelineEnd.toFixed(2)}s
-				</span>
+					Reset
+				</button>
 				<div style={{ display: "flex", gap: 8 }}>
 					<button
 						type="button"
@@ -695,10 +853,11 @@ export function EditClipModal({ open, onClose, clip, assetMeta, onSave }: EditCl
 					<button
 						type="button"
 						className={`${styles.btn} ${styles.btnPrimary}`}
-						onClick={handleSave}
+						onClick={handleApply}
+						disabled={!hasChanges}
 					>
 						<Pencil size={14} />
-						Save
+						Apply
 					</button>
 				</div>
 			</div>
@@ -706,28 +865,13 @@ export function EditClipModal({ open, onClose, clip, assetMeta, onSave }: EditCl
 	);
 }
 
-function EditField({
-	label,
-	value,
-	onChange,
-	max,
-}: {
-	label: string;
-	value: number;
-	onChange: (n: number) => void;
-	max?: number;
-}) {
+function RangeStat({ label, value }: { label: string; value: string }) {
 	return (
-		<div className={styles.field}>
-			<label>{label}</label>
-			<input
-				type="number"
-				step="0.01"
-				min={0}
-				max={max}
-				value={Number.isFinite(value) ? value : 0}
-				onChange={(e) => onChange(Number(e.target.value))}
-			/>
+		<div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+			<strong style={{ font: "600 15px/1.2 var(--font-mono)", color: "var(--fg)" }}>{value}</strong>
+			<small style={{ font: "500 10px/1.4 var(--font-body)", color: "var(--muted)" }}>
+				{label}
+			</small>
 		</div>
 	);
 }

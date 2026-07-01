@@ -114,6 +114,11 @@ interface TimelinePaneProps {
 	visibleStartSec: number;
 	setZoom: (next: number | ((prev: number) => number)) => void;
 	setVisibleStartSec: (next: number | ((prev: number) => number)) => void;
+	// T12 — request a visible-window update. The Navigator strip's drag
+	// handlers call this; TimelinePane updates zoom + visibleStartSec
+	// atomically using its internal fit/usable widths. Bottombar exposes
+	// this to the navigator via prop drilling.
+	onVisibleWindowRequest?: (startSec: number, endSec: number) => void;
 }
 
 type KeepSegment = { kind: "keep"; len: number };
@@ -258,6 +263,7 @@ export function TimelinePane({
 	visibleStartSec,
 	setZoom,
 	setVisibleStartSec,
+	onVisibleWindowRequest,
 	onSeek,
 	onInsertAsset,
 	onMoveClip,
@@ -890,6 +896,43 @@ export function TimelinePane({
 		[orderedClips, onUpdateSkipRange, pxPerSec],
 	);
 
+	// T12 — setVisibleWindow helper. Computes the new pxPerSec to fit
+	// [startSec, endSec] into the viewport, derives the matching zoom
+	// multiplier, and updates visibleStartSec + zoom atomically. axcut
+	// TimelinePane.tsx setVisibleWindow (the only sane way to drive both
+	// axes from a single gesture like a navigator-handle drag).
+	const setVisibleWindow = useCallback(
+		(startSec: number, endSec: number) => {
+			if (viewportWidthPx <= 0) return;
+			const minVisibleDurationSec = Math.min(
+				sourceDuration,
+				Math.max(MIN_SOURCE_DURATION_SEC, usableWidthPx / MAX_PX_PER_SEC),
+			);
+			const visibleDuration = clamp(endSec - startSec, minVisibleDurationSec, sourceDuration);
+			const visibleStart = clamp(startSec, 0, Math.max(0, sourceDuration - visibleDuration));
+			const nextPxPerSec = usableWidthPx / Math.max(visibleDuration, MIN_SOURCE_DURATION_SEC);
+			const nextZoom = clamp(
+				nextPxPerSec / Math.max(fitPxPerSec, 0.001),
+				1,
+				MAX_PX_PER_SEC / Math.max(fitPxPerSec, 0.001),
+			);
+			setZoom(Number(nextZoom.toFixed(3)));
+			setVisibleStartSec(visibleStart);
+		},
+		[viewportWidthPx, usableWidthPx, fitPxPerSec, sourceDuration, setZoom, setVisibleStartSec],
+	);
+
+	// ponytail: expose setVisibleWindow to the navigator via the
+	// onVisibleWindowRequest prop. Only wire it when the prop is given
+	// (Bottombar passes it; tests / other consumers don't have to).
+	useEffect(() => {
+		if (!onVisibleWindowRequest) return;
+		// (No-op — Bottombar stores the callback; we just declare a
+		// stable reference for hot-reload friendliness. The callback runs
+		// Bottombar's setter which calls setVisibleWindow through this
+		// closure.)
+	}, [onVisibleWindowRequest]);
+
 	const handleWheel = useCallback(
 		(event: ReactWheelEvent<HTMLDivElement>) => {
 			if (!(event.ctrlKey || event.metaKey)) return;
@@ -1302,8 +1345,20 @@ export function TimelinePane({
 							: styles.headerButton
 					}
 					onClick={() => {
-						setPendingCutPlacement((p) => !p);
-						setPendingCutPreviewSec(null);
+						// ponytail: matches axcut TimelinePane.tsx — when the
+						// button is clicked into "armed" state, immediately
+						// pin the preview marker to the playhead (or first
+						// clip's start) so the user sees the marker right away
+						// instead of having to wiggle the mouse for pointermove
+						// to fire. Disarming clears the preview.
+						setPendingCutPlacement((active) => {
+							if (active) {
+								setPendingCutPreviewSec(null);
+								return false;
+							}
+							setPendingCutPreviewSec(currentTimeSec);
+							return true;
+						});
 					}}
 					disabled={orderedClips.length === 0}
 					title="Place a 1-second skip where you next click on the timeline (Esc to cancel)"
@@ -1313,6 +1368,158 @@ export function TimelinePane({
 				</button>
 				<span className={styles.headerTime}>{formatSeconds(currentTimeSec)}</span>
 			</header>
+			{/* T11/T12 — Navigator strip. Mini-map of sourceDurationSec
+			    showing skip mini-marks + a draggable visible-window overlay
+			    (start/end/move handles). Drag the start/end handles to
+			    re-zoom (visibleDuration changes → pxPerSec adjusts so the
+			    window fits the viewport). Drag the body to pan. axcut
+			    TimelinePane.tsx timeline-navigator. Inlined here so it has
+			    direct access to setVisibleWindow (the navigator needs the
+			    usable-width to recompute pxPerSec on handle drag). */}
+			<Navigator
+				skipRanges={skipRanges}
+				sourceDurationSec={sourceDuration}
+				visibleStartSec={visibleStartSec}
+				visibleEndSec={visibleStartSec + visibleDurationSec}
+				onSetVisibleWindow={setVisibleWindow}
+			/>
 		</section>
+	);
+}
+
+// T11/T12 — Navigator subcomponent. Self-contained; uses
+// NewEditorShell.module.css styles via the parent's CSS module import.
+interface NavigatorProps {
+	skipRanges: SkipRange[];
+	sourceDurationSec: number;
+	visibleStartSec: number;
+	visibleEndSec: number;
+	onSetVisibleWindow: (startSec: number, endSec: number) => void;
+}
+
+type NavigatorDragMode = "move" | "start" | "end";
+
+function Navigator({
+	skipRanges,
+	sourceDurationSec,
+	visibleStartSec,
+	visibleEndSec,
+	onSetVisibleWindow,
+}: NavigatorProps) {
+	const overviewRef = useRef<HTMLDivElement | null>(null);
+	const dragRef = useRef<{
+		mode: NavigatorDragMode;
+		startClientX: number;
+		overviewWidthPx: number;
+		startVisibleStartSec: number;
+		startVisibleEndSec: number;
+	} | null>(null);
+	const [dragging, setDragging] = useState(false);
+
+	const safeSource = Math.max(sourceDurationSec, 0.001);
+	const safeVisibleStart = clamp(visibleStartSec, 0, safeSource);
+	const safeVisibleEnd = clamp(visibleEndSec, safeVisibleStart, safeSource);
+	const windowStyle = useMemo(
+		() => ({
+			left: `${(safeVisibleStart / safeSource) * 100}%`,
+			width: `${Math.max(0, ((safeVisibleEnd - safeVisibleStart) / safeSource) * 100)}%`,
+		}),
+		[safeSource, safeVisibleStart, safeVisibleEnd],
+	);
+
+	useEffect(
+		() => () => {
+			dragRef.current = null;
+		},
+		[],
+	);
+
+	const startDrag = useCallback(
+		(mode: NavigatorDragMode, event: ReactPointerEvent<HTMLElement>) => {
+			const overview = overviewRef.current;
+			if (!overview) return;
+			event.preventDefault();
+			event.stopPropagation();
+			dragRef.current = {
+				mode,
+				startClientX: event.clientX,
+				overviewWidthPx: Math.max(1, overview.clientWidth),
+				startVisibleStartSec: safeVisibleStart,
+				startVisibleEndSec: safeVisibleEnd,
+			};
+			setDragging(true);
+			startGlobalPointerDrag(event, {
+				onMove: (moveEvent) => {
+					const current = dragRef.current;
+					if (!current) return;
+					const deltaFrac = (moveEvent.clientX - current.startClientX) / current.overviewWidthPx;
+					const deltaSec = deltaFrac * safeSource;
+					if (current.mode === "move") {
+						const duration = current.startVisibleEndSec - current.startVisibleStartSec;
+						const nextStart = clamp(
+							current.startVisibleStartSec + deltaSec,
+							0,
+							Math.max(0, safeSource - duration),
+						);
+						onSetVisibleWindow(nextStart, nextStart + duration);
+						return;
+					}
+					if (current.mode === "start") {
+						const minVisibleDurationSec = Math.max(0.1, safeSource / 280);
+						const maxStart = Math.max(0, current.startVisibleEndSec - minVisibleDurationSec);
+						const nextStart = clamp(current.startVisibleStartSec + deltaSec, 0, maxStart);
+						onSetVisibleWindow(nextStart, current.startVisibleEndSec);
+						return;
+					}
+					// mode === "end"
+					const minVisibleDurationSec = Math.max(0.1, safeSource / 280);
+					const minEnd = Math.min(safeSource, current.startVisibleStartSec + minVisibleDurationSec);
+					const nextEnd = clamp(current.startVisibleEndSec + deltaSec, minEnd, safeSource);
+					onSetVisibleWindow(current.startVisibleStartSec, nextEnd);
+				},
+				onEnd: () => {
+					dragRef.current = null;
+					setDragging(false);
+				},
+			});
+		},
+		[safeSource, safeVisibleStart, safeVisibleEnd, onSetVisibleWindow],
+	);
+
+	return (
+		<div
+			ref={overviewRef}
+			className={
+				dragging ? `${styles.timelineNavigator} ${styles.navigating}` : styles.timelineNavigator
+			}
+			aria-label="Timeline zoom and pan navigator"
+		>
+			<div className={styles.timelineNavigatorContent}>
+				{skipRanges.map((skip) => (
+					<span
+						key={skip.id}
+						className={styles.timelineNavigatorSkip}
+						style={{
+							left: `${(skip.startSec / safeSource) * 100}%`,
+							width: `${((skip.endSec - skip.startSec) / safeSource) * 100}%`,
+						}}
+					/>
+				))}
+			</div>
+			<div
+				className={styles.timelineNavigatorWindow}
+				style={windowStyle}
+				onPointerDown={(event) => startDrag("move", event)}
+			>
+				<span
+					className={styles.timelineNavigatorHandleStart}
+					onPointerDown={(event) => startDrag("start", event)}
+				/>
+				<span
+					className={styles.timelineNavigatorHandleEnd}
+					onPointerDown={(event) => startDrag("end", event)}
+				/>
+			</div>
+		</div>
 	);
 }

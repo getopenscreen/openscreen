@@ -17,6 +17,7 @@ import { ASPECT_RATIOS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import { EditClipModal } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 import { type Span } from "./RegionTimeline";
+import { TimelineNavigator } from "./TimelineNavigator";
 import { TimelinePane } from "./TimelinePane";
 import type { VideoSource } from "./VirtualPreview";
 
@@ -80,6 +81,17 @@ export function Bottombar({
 	const [ratioOpen, setRatioOpen] = useState(false);
 	const [editClipTarget, setEditClipTarget] = useState<AxcutClip | null>(null);
 	const firstClip = clips[0] ?? null;
+	// T11 — viewport state lifted from TimelinePane so the navigator strip
+	// can drive the same window. pxPerSec stays inside TimelinePane (it
+	// depends on the viewport's measured width); Bottombar only owns the
+	// logical window + zoom multiplier.
+	const [zoom, setZoom] = useState(1);
+	const [visibleStartSec, setVisibleStartSec] = useState(0);
+	const sourceDurationSec = Math.max(0.001, ...clips.map((c) => c.timelineEndSec));
+	const visibleEndSec = Math.min(visibleStartSec + sourceDurationSec, sourceDurationSec);
+	// ponytail: setVisibleWindow is wired in C4 (T12) when the navigator
+	// handles adjust pxPerSec too. For C3 the navigator's "move" handle
+	// uses onMoveWindow directly, which is just visibleStartSec.
 	const handleRegionSpanChange = (id: string, span: Span) => {
 		if (zoomRegions.some((z) => z.id === id)) void tl.updateZoomSpan(id, span.start, span.end);
 		else if (speedRegions.some((s) => s.id === id))
@@ -255,10 +267,22 @@ export function Bottombar({
 							onUpdateSkipRange={(skipId, s, e) => void tl.updateSkipRange(skipId, s, e)}
 							onRemoveSkipRange={(skipId) => void tl.removeRegion("skip", skipId)}
 							onRegionSpanChange={(id, span) => handleRegionSpanChange(id, span)}
+							zoom={zoom}
+							visibleStartSec={visibleStartSec}
+							setZoom={setZoom}
+							setVisibleStartSec={setVisibleStartSec}
 						/>
 					</div>
 				</div>
-				{/* T11 — navigator strip will replace the previous zoombar slider. */}
+				<div className={styles.zoombar} role="group" aria-label="Zoom range">
+					<TimelineNavigator
+						skipRanges={skipRanges}
+						sourceDurationSec={sourceDurationSec}
+						visibleStartSec={visibleStartSec}
+						visibleEndSec={visibleEndSec}
+						onMoveWindow={setVisibleStartSec}
+					/>
+				</div>
 			</section>
 			<EditClipModal
 				open={editClipTarget !== null}

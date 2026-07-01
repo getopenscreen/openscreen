@@ -1610,6 +1610,69 @@
 	flex-shrink: 0;
 	border-top: 1px solid var(--border-soft);
 }
+
+/* T11 — Navigator strip. Mini-map of the full source duration with skip
+   mini-marks + a draggable visible-window overlay (start/end handles +
+   move handle). All sizes are percentages of sourceDurationSec, so the
+   navigator's own pixel width doesn't matter. Modeled after axcut's
+   .timeline-navigator / .timeline-navigator-window. */
+.timelineNavigator {
+	position: relative;
+	height: 1.15rem;
+	border: 1px solid var(--border-soft);
+	border-radius: 6px;
+	background: color-mix(in oklch, var(--surface-2) 60%, transparent);
+	overflow: hidden;
+}
+.timelineNavigator.navigating {
+	border-color: var(--accent);
+}
+.timelineNavigatorContent {
+	position: absolute;
+	inset: 0;
+	background: transparent;
+	pointer-events: none;
+}
+.timelineNavigatorSkip {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	min-width: 1px;
+	background: color-mix(in oklch, var(--accent) 50%, transparent);
+	border-left: 1px solid var(--accent);
+	border-right: 1px solid var(--accent);
+	pointer-events: none;
+}
+.timelineNavigatorWindow {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	min-width: 1.8rem;
+	border: 2px solid color-mix(in oklch, var(--accent) 92%, transparent);
+	border-radius: 6px;
+	background: color-mix(in oklch, var(--accent) 16%, transparent);
+	box-shadow:
+		0 0 0 1px rgba(0, 0, 0, 0.45),
+		inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+	cursor: grab;
+}
+.timelineNavigator.navigating .timelineNavigatorWindow {
+	cursor: grabbing;
+}
+.timelineNavigatorHandleStart,
+.timelineNavigatorHandleEnd {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 6px;
+	cursor: ew-resize;
+}
+.timelineNavigatorHandleStart {
+	left: 0;
+}
+.timelineNavigatorHandleEnd {
+	right: 0;
+}
 .zoombar .zoomTrack {
 	position: relative;
 	height: 18px;

@@ -103,6 +103,12 @@ interface TimelinePaneProps {
 	// T10 — dnd-timeline drag/resize dispatch. Bottombar wires this to the
 	// per-kind updaters (updateZoomSpan / updateAnnotationSpan / etc).
 	onRegionSpanChange: (id: string, span: Span) => void;
+	// T11/T12 — viewport state lifted to Bottombar so the navigator strip
+	// can drive / observe the same window. TimelinePane stays controlled.
+	zoom: number;
+	visibleStartSec: number;
+	setZoom: (next: number | ((prev: number) => number)) => void;
+	setVisibleStartSec: (next: number | ((prev: number) => number)) => void;
 }
 
 type KeepSegment = { kind: "keep"; len: number };
@@ -243,6 +249,10 @@ export function TimelinePane({
 	selectedClipId,
 	onSelectClip,
 	onSelectRegion,
+	zoom,
+	visibleStartSec,
+	setZoom,
+	setVisibleStartSec,
 	onSeek,
 	onInsertAsset,
 	onMoveClip,
@@ -257,8 +267,7 @@ export function TimelinePane({
 	const panRef = useRef<PanState | null>(null);
 	const clipReorderRef = useRef<ClipReorderState | null>(null);
 	const [viewportWidthPx, setViewportWidthPx] = useState(0);
-	const [zoom, setZoom] = useState(1);
-	const [visibleStartSec, setVisibleStartSec] = useState(0);
+	// viewport state is owned by Bottombar (T11). We only mirror it here.
 	const [panning, setPanning] = useState(false);
 	const [clipReorderState, setClipReorderState] = useState<ClipReorderState | null>(null);
 	const [hoveredCutId, setHoveredCutId] = useState<string | null>(null);
@@ -328,10 +337,13 @@ export function TimelinePane({
 		};
 	}, []);
 
+	// Clamp visibleStartSec into the legal range when sourceDuration or
+	// pxPerSec changes (clips arrive, viewport resizes). Bottombar owns
+	// the setter; we just invoke it.
 	useEffect(() => {
 		const maxVisibleStartSec = Math.max(0, sourceDuration - visibleDurationSec);
-		setVisibleStartSec((current) => clamp(current, 0, maxVisibleStartSec));
-	}, [sourceDuration, visibleDurationSec]);
+		setVisibleStartSec((current: number) => clamp(current, 0, maxVisibleStartSec));
+	}, [sourceDuration, visibleDurationSec, setVisibleStartSec]);
 
 	useEffect(() => {
 		if (!panning) {
@@ -577,7 +589,7 @@ export function TimelinePane({
 				},
 			});
 		},
-		[pxPerSec, sourceDuration, visibleDurationSec, visibleStartSec],
+		[pxPerSec, sourceDuration, visibleDurationSec, visibleStartSec, setVisibleStartSec],
 	);
 
 	// Scrub via plain click+drag. Uses startGlobalPointerDrag so the drag
@@ -785,7 +797,15 @@ export function TimelinePane({
 				return Number(next.toFixed(3));
 			});
 		},
-		[fitPxPerSec, pxPerSec, sourceDuration, usableWidthPx, visibleStartSec],
+		[
+			fitPxPerSec,
+			pxPerSec,
+			sourceDuration,
+			usableWidthPx,
+			visibleStartSec,
+			setZoom,
+			setVisibleStartSec,
+		],
 	);
 
 	return (

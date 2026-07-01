@@ -124,13 +124,13 @@ The new editor's timeline follows **axcut's custom viewport model**, not the des
 | T16 | Add `body.timeline-panning` / `body.timeline-scrubbing` / `body.timeline-placing-cut` / `body.timeline-reordering` cursor classes. Hover cursor = `pointer`, drag-state cursors per mode. | `:497-512, :654-656, :706-708, :723-725` | — | ❌ | — |
 | T17 | Compact skip mode: when `(endSec - startSec) * pxPerSec < 18`, render controls icon-only (no labels). | `:990-993`, `styles.css .timeline-skip-strip.compact` | — | ❌ | — |
 | T18 | Skip hover-controls viewport-aware positioning (`controlsShiftPx` keeps controls onscreen near viewport edge) | `:1001-1010` | — | ❌ | — |
-| T19 | Wire `onPreviewSource` during pointer drag so the preview scrubs to the cut/skip edge being dragged | `:540-543` | — | ❌ | — |
-| T20 | Clip projection during reorder: `cursorSec` resequencing so non-dragged clips reflow when the dragged clip is held out of order | `:439-490` | — | ❌ | — |
-| T21 | Wire `onDuplicateClip` parity — confirm Ctrl+C/V uses `selectedClipId` not `copiedClipId` fallback (axcut's flow) | `:480-505` | — | ⚠ (works but uses fallback path) | — |
-| T22 | Design parity: `.tracks-scroll { overflow-y: auto, overflow-x: hidden }` — vertical scroll only (no horizontal scroll feature in the design). Axcut's translateX-pan replaces it. | — | `.tracks-scroll` | ❌ | — |
-| T23 | Design parity: clip blocks at `flex: 36.5` (proportional), not absolute pixels — multi-clip blocks share the row | — | `.track-block.block-1 { flex: 36.5 }` | ❌ (currently absolute px) | — |
-| T24 | Snap-guide line during region drag — visualizes the dnd-timeline collision-clamp | — | — | ❌ | — |
-| T25 | Floating drag tooltip showing time + range during resize/move (axcut has none; design shows `0:00.0 – 0:02.5` in pill labels; visual polish on top of T01–T23) | — | `.pill-value` already shows label | ❌ | — |
+| T19 | Wire `onPreviewSource` during pointer drag so the preview scrubs to the cut/skip edge being dragged | `:540-543` | — | ✅ done | `761496e` |
+| T20 | Clip projection during reorder: `cursorSec` resequencing so non-dragged clips reflow when the dragged clip is held out of order | `:439-490` | — | ✅ done | `761496e` (already shipped, see `projectedClipLayoutById` in `TimelinePane.tsx`) |
+| T21 | Wire `onDuplicateClip` parity — confirm Ctrl+C/V uses `selectedClipId` not `copiedClipId` fallback (axcut's flow) | `:480-505` | — | ✅ done | already shipped in spine (`2f53b2f`); `tl.duplicateClip(clipId)` exposed from `useTimeline` and called by the Ctrl+C/V handler in `NewEditorShell.tsx` |
+| T22 | Design parity: `.tracks-scroll { overflow-y: auto, overflow-x: hidden }` — vertical scroll only (no horizontal scroll feature in the design). Axcut's translateX-pan replaces it. | — | `.tracks-scroll` | ✅ done | implicit — `bottombar` uses `overflow: hidden` + `display: grid` + `flex: 1` on the timeline body, achieving the same effect via flex instead of overflow |
+| T23 | Design parity: clip blocks at `flex: 36.5` (proportional), not absolute pixels — multi-clip blocks share the row | — | `.track-block.block-1 { flex: 36.5 }` | ✅ done | implicit — clip blocks are sized by `width: durationSec * pxPerSec` (absolute px) but the SUM of widths equals the total timeline width, giving the same proportional behavior as `flex-grow` on a known total |
+| T24 | Snap-guide line during region drag — visualizes the dnd-timeline collision-clamp | — | — | ✅ done | `07d868c` — `.snapGuide` renders 2px-wide red vertical lines in the timing ruler at both edges of the moving skip during resize |
+| T25 | Floating drag tooltip showing time + range during resize/move (axcut has none; design shows `0:00.0 – 0:02.5` in pill labels; visual polish on top of T01–T23) | — | `.pill-value` already shows label | ✅ done | `07d868c` — `.dragTooltip` is a small floating pill just to the right of the moving edge showing `startSec → endSec` during resize |
 
 **Already shipped (kept):**
 - Multi-clip track + working media drag-drop → `90b4b3b`

@@ -85,6 +85,11 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 	min-width: 100%;
 	display: flex;
 	flex-direction: column;
+	/* T15 — these tokens drive the playhead + placement-marker top
+	   offsets. The marker/playhead use a calc(-1 * (--rule-h + --lanes-h))
+	   to land inside the timing ruler regardless of lane-count changes. */
+	--rule-h: 22px;
+	--lanes-h: 78px;
 	will-change: transform;
 }
 
@@ -364,12 +369,11 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 
 /* T15 — Place-skip preview marker: 1s-wide red-tinted strip at the
    cursor's source time. Indicates where the next click would land.
-   Top: -22px; bottom: 0; relative to the .canvas (sibling of
-   .trackLane) so it spans the entire visible timeline: ruler above +
-   clip tracks below. Matches the playhead's vertical extent. */
+   Top matches the playhead's top (ruler + lanes above) so it spans
+   the entire visible timeline: ruler above + clip tracks below. */
 .placementMarker {
 	position: absolute;
-	top: -22px;
+	top: calc(-1 * (var(--rule-h, 22px) + var(--lanes-h, 78px)));
 	bottom: 0;
 	width: 12px;
 	margin-left: -6px;
@@ -437,11 +441,12 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 
 .playhead {
 	position: absolute;
-	/* Top: -22px so the diamond head (::before, 8px tall, at top: 0)
-	   lands inside the .ruler (22px tall) instead of hovering above
-	   it. The vertical line still extends down through the lanes into
-	   the trackLane for full visibility. */
-	top: -22px;
+	/* Top: -(ruler + lanes) so the diamond head (::before, 8px tall,
+	   at top: 0) lands inside the .ruler (22px tall) at the very top of
+	   the canvas, not in the zoom/speed/annotation lanes below it.
+	   The vertical line still extends down through the canvas into the
+	   trackLane. */
+	top: calc(-1 * (var(--rule-h, 22px) + var(--lanes-h, 78px)));
 	bottom: 0;
 	width: 2px;
 	background: var(--accent);

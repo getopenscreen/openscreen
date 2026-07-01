@@ -1332,20 +1332,29 @@
 }
 
 /* Region lanes (annotations / speed / zoom) inside the timeline body. */
+/* Lanes: fixed-width label column + one shared dnd-timeline surface column.
+   Both columns lay out 3 rows independently but with identical height (22px)
+   + gap (2px), so they line up without needing CSS grid row-spanning. */
 .lanes {
 	display: flex;
-	flex-direction: column;
-	gap: 2px;
+	gap: 8px;
 	padding: 4px var(--sp-4) 2px;
 	flex-shrink: 0;
 	border-bottom: 1px solid var(--border-soft);
 }
-.laneRow {
-	display: grid;
-	grid-template-columns: 64px 1fr auto auto;
-	align-items: center;
-	gap: 8px;
+.laneLabelCol {
+	width: 64px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.laneLabelCell {
 	height: 22px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 4px;
 }
 .laneLabel {
 	font: 600 10px/1 var(--font-mono);
@@ -1353,34 +1362,15 @@
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
 }
-.laneEmpty {
-	font: 500 11px/1 var(--font-body);
-	color: var(--muted);
-	opacity: 0.6;
-}
-.laneTrack {
-	position: relative;
-	height: 22px;
-	background: var(--surface-2);
-	border: 1px dashed var(--border-soft);
-	border-radius: var(--r-sm);
-	overflow: hidden;
-}
 .laneMeta {
 	font: 500 10.5px/1 var(--font-mono);
 	color: var(--muted);
-	min-width: 16px;
+	min-width: 12px;
 	text-align: right;
 }
-.laneActions {
-	display: flex;
-	align-items: center;
-	min-width: 20px;
-	justify-content: flex-end;
-}
 .laneDelete {
-	width: 20px;
-	height: 20px;
+	width: 18px;
+	height: 18px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -1388,12 +1378,39 @@
 	border-radius: var(--r-xs);
 	background: var(--danger-soft);
 	color: var(--danger);
-	font-size: 14px;
+	font-size: 13px;
 	line-height: 1;
 	cursor: pointer;
 }
 .laneDelete:hover {
 	filter: brightness(0.95);
+}
+.laneSurface {
+	flex: 1;
+	min-width: 0;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.laneTrackRow {
+	position: relative;
+	height: 22px;
+	background: var(--surface-2);
+	border: 1px dashed var(--border-soft);
+	border-radius: var(--r-sm);
+	overflow: hidden;
+}
+.laneEmpty {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font: 500 11px/1 var(--font-body);
+	color: var(--muted);
+	opacity: 0.6;
+	pointer-events: none;
 }
 
 /* Lane pills: zoom / speed / annotation. Visuals match the design — tab caps
@@ -1745,6 +1762,11 @@
 	border-color: var(--border);
 	color: var(--muted);
 	cursor: not-allowed;
+}
+
+/* ─── Edit Clip modal — draggable source-range track ────────────── */
+.editClipRangeDragging {
+	box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 /* ─── media card (left panel media list) ───────────────────────── */

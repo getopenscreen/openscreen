@@ -11,7 +11,7 @@ import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useUndoRedoShortcuts } from "@/lib/ai-edition/store/undo";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
-import { useTimeline } from "@/lib/ai-edition/store/useTimeline";
+import { PLACEHOLDER_DURATION_SEC, useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { nativeBridgeClient } from "@/native";
 import type { AiEditionProjectSummary } from "@/native/contracts";
 import { Bottombar } from "./Bottombar";
@@ -46,7 +46,6 @@ const COLLAPSE_INITIAL = {
 export function NewEditorShell() {
 	const document = useProjectStore((s) => s.document);
 	const projectId = useProjectStore((s) => s.projectId);
-	const sourceDurationSec = useProjectStore((s) => s.sourceDurationSec);
 	const currentTimeSec = useProjectStore((s) => s.currentTimeSec);
 	const dirty = useProjectStore((s) => s.dirty);
 	const lastSavedAt = useProjectStore((s) => s.lastSavedAt);
@@ -88,6 +87,7 @@ export function NewEditorShell() {
 	const [captionsOpen, setCaptionsOpen] = useState(false);
 	const [captionsMinW, setCaptionsMinW] = useState(2);
 	const [captionsMaxW, setCaptionsMaxW] = useState(7);
+	const [copiedClipId, setCopiedClipId] = useState<string | null>(null);
 	const [projectSummaries, setProjectSummaries] = useState<AiEditionProjectSummary[]>([]);
 	const seekSeqRef = useRef(0);
 	const initRef = useRef(false);
@@ -255,12 +255,11 @@ export function NewEditorShell() {
 			// array index (the previous behavior) clobbered clip[0]'s duration
 			// whenever a *different* asset's video element loaded, e.g. right
 			// after dropping a second clip onto the timeline.
-			const PLACEHOLDER_END_SEC = 60;
 			const isPlaceholder = (c: (typeof doc.timeline.clips)[number]) =>
 				c.assetId === assetId &&
 				c.sourceStartSec === 0 &&
-				Math.abs((c.sourceEndSec ?? 0) - PLACEHOLDER_END_SEC) < 0.01;
-			if (Math.abs(known - PLACEHOLDER_END_SEC) < 0.01) return;
+				Math.abs((c.sourceEndSec ?? 0) - PLACEHOLDER_DURATION_SEC) < 0.01;
+			if (Math.abs(known - PLACEHOLDER_DURATION_SEC) < 0.01) return;
 			if (!doc.timeline.clips.some(isPlaceholder)) return;
 
 			let shiftSec = 0;
@@ -270,7 +269,7 @@ export function NewEditorShell() {
 					shifted.timelineEndSec = c.timelineEndSec + shiftSec;
 					return shifted;
 				}
-				const delta = known - PLACEHOLDER_END_SEC;
+				const delta = known - PLACEHOLDER_DURATION_SEC;
 				shifted.sourceEndSec = known;
 				shifted.timelineEndSec = shifted.timelineStartSec + known;
 				shiftSec += delta;
@@ -688,13 +687,28 @@ export function NewEditorShell() {
 				window.dispatchEvent(new CustomEvent("openscreen:open-shortcuts"));
 				return;
 			}
-			if (ctrl && e.key.toLowerCase() === "c" && tl.selection) {
-				e.preventDefault();
-				void handleCopyRegion();
-				return;
+			if (ctrl && e.key.toLowerCase() === "c") {
+				if (tl.clipSelection) {
+					e.preventDefault();
+					setCopiedClipId(tl.clipSelection);
+					return;
+				}
+				if (tl.selection) {
+					e.preventDefault();
+					void handleCopyRegion();
+					return;
+				}
 			}
 			if (ctrl && e.key.toLowerCase() === "v") {
 				e.preventDefault();
+				// A selected/copied clip takes priority — pasting with a clip in
+				// hand is unambiguously "duplicate this clip", even if a region
+				// was copied earlier in the session.
+				const clipToDuplicate = copiedClipId ?? tl.clipSelection;
+				if (clipToDuplicate) {
+					void tl.duplicateClip(clipToDuplicate);
+					return;
+				}
 				void pasteRegion();
 				return;
 			}
@@ -740,7 +754,16 @@ export function NewEditorShell() {
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [hasProject, handleCopyRegion, handleSave, pasteRegion, tl, promptUnsaved, saveDocument]);
+	}, [
+		hasProject,
+		handleCopyRegion,
+		handleSave,
+		pasteRegion,
+		tl,
+		promptUnsaved,
+		saveDocument,
+		copiedClipId,
+	]);
 
 	const collapseAttr = useMemo(() => {
 		const list: string[] = [];
@@ -851,8 +874,8 @@ export function NewEditorShell() {
 			{!bottomCollapsed ? (
 				<Bottombar
 					clips={clips}
+					videoSources={videoSources}
 					currentTimeSec={currentTimeSec}
-					sourceDurationSec={sourceDurationSec}
 					onSeek={handleSeek}
 					zoomRegions={tl.zoomRegions}
 					skipRanges={tl.skipRanges}
@@ -865,7 +888,6 @@ export function NewEditorShell() {
 					onAddAnnotation={() => void tl.addAnnotation()}
 					onAddSpeed={() => void tl.addSpeed()}
 					onSelectRegion={(kind, id) => tl.selectRegion(kind, id)}
-					onRemoveRegion={(kind, id) => void tl.removeRegion(kind, id)}
 					onCaptions={handleCaptions}
 				/>
 			) : null}

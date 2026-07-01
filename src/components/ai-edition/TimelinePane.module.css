@@ -93,6 +93,7 @@
 	background: transparent;
 }
 .segment.cut {
+	position: relative;
 	background-color: var(--accent-wash);
 	background-image: repeating-linear-gradient(
 		45deg,
@@ -101,6 +102,47 @@
 		transparent 8px,
 		transparent 16px
 	);
+}
+
+.skipControls {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 2px;
+	background: var(--surface);
+	border: 1px solid var(--border-soft);
+	border-radius: var(--r-sm);
+	box-shadow: var(--elev-card-soft);
+	z-index: 20;
+	white-space: nowrap;
+}
+.skipControlBtn {
+	width: 20px;
+	height: 20px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	border: 0;
+	border-radius: var(--r-xs);
+	color: var(--muted);
+	cursor: pointer;
+	padding: 0;
+	transition:
+		background var(--motion-fast) var(--ease),
+		color var(--motion-fast) var(--ease);
+}
+.skipControlBtn:hover {
+	background: var(--surface-3);
+	color: var(--fg);
+}
+.skipControlDelete:hover {
+	background: var(--danger-soft);
+	color: var(--danger);
 }
 
 .trackInfo {

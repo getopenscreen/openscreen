@@ -97,15 +97,15 @@ The new editor's timeline follows **axcut's custom viewport model**, not the des
 
 | # | Task | Axcut ref | Design ref | Status | Commit |
 |---|------|-----------|------------|--------|--------|
-| T01 | Port `startGlobalPointerDrag` helper | `lib/pointer-drag.ts` | — | ❌ | — |
-| T02 | Port `ResizeState` / `PanState` / `NavigatorDragState` / `ClipReorderState` types + refs | `TimelinePane.tsx:54-87` | — | ❌ | — |
-| T03 | Compute `pxPerSec = fitPxPerSec * zoom` with `MAX_PX_PER_SEC = 280` | `:88, :163-169` | — | ❌ | — |
-| T04 | Replace `overflow-x: auto` with `transform: translateX(-visibleStartSec * pxPerSec)` on inner `.timeline-canvas`; viewport itself stays `overflow: hidden` | `:170, :907-908` | — | ❌ | — |
-| T05 | Adaptive ruler ticks (`chooseTickStep(90 / pxPerSec)` major + minor/4) | `:1529-1542`, `:917-925` | `.timeline-ruler` | ❌ (existing fixed-step list) | — |
-| T06 | Ctrl+wheel = `zoomAt(zoom * ±1.18, clientX)` — zooms **around the cursor** | `:752-756`, `:370-388` | — | ❌ | — |
-| T07 | Alt+drag AND middle-click-drag = `startPan` → updates `visibleStartSec` | `:693-726`, `:735-740` | — | ❌ | — |
-| T08 | Clip body pointerdown = `startClipReorder` with `CLIP_REORDER_THRESHOLD_PX = 6` → live insert marker + `onMoveClip(clipId, insertIndex)` on release | `:618-689`, `:445-490` | — | ❌ (HTML5 `dataTransfer` only) | — |
-| T09 | Clip join borders (`hasJoinedPrev/Next` within 1.5px) — extend left by 1px, width by 1px | `:962-991` | — | ❌ | — |
+| T01 | Port `startGlobalPointerDrag` helper | `lib/pointer-drag.ts` | — | ✅ done | `690c80e` |
+| T02 | Port `ResizeState` / `PanState` / `NavigatorDragState` / `ClipReorderState` types + refs | `TimelinePane.tsx:54-87` | — | ✅ done (Pan + ClipReorder; NavigatorDrag lands with T11) | `8be3dda` |
+| T03 | Compute `pxPerSec = fitPxPerSec * zoom` with `MAX_PX_PER_SEC = 280` | `:88, :163-169` | — | ✅ done | `8be3dda` |
+| T04 | Replace `overflow-x: auto` with `transform: translateX(-visibleStartSec * pxPerSec)` on inner `.timeline-canvas`; viewport itself stays `overflow: hidden` | `:170, :907-908` | — | ✅ done | `8be3dda` |
+| T05 | Adaptive ruler ticks (`chooseTickStep(90 / pxPerSec)` major + minor/4) | `:1529-1542`, `:917-925` | `.timeline-ruler` | ✅ done | `8be3dda` |
+| T06 | Ctrl+wheel = `zoomAt(zoom * ±1.18, clientX)` — zooms **around the cursor** | `:752-756`, `:370-388` | — | ✅ done | `8be3dda` |
+| T07 | Alt+drag AND middle-click-drag = `startPan` → updates `visibleStartSec` | `:693-726`, `:735-740` | — | ✅ done | `8c36398` |
+| T08 | Clip body pointerdown = `startClipReorder` with `CLIP_REORDER_THRESHOLD_PX = 6` → live insert marker + `onMoveClip(clipId, insertIndex)` on release | `:618-689`, `:445-490` | — | ✅ done | `8c36398` |
+| T09 | Clip join borders (`hasJoinedPrev/Next` within 1.5px) — extend left by 1px, width by 1px | `:962-991` | — | ✅ done | `8c36398` |
 | T10 | Move `.lanes` (annotation/speed/zoom pills) **into the same `.timeline-canvas`** as the clip track, scaled by the same `pxPerSec`, transformed by the same `translateX` | — | `.annotation-track-row`, `.speed-track-row`, `.zoom-track-row` (lanes share container) | ❌ (lanes in separate `.lanes` container, desyncs at zoom > 1×) | — |
 | T11 | Build the navigator strip (`<div class="timeline-navigator">`) below the viewport: full-width row with `.timeline-navigator-skip` mini-marks at percentage positions + `.timeline-navigator-window` overlay (start/end handles + move handle) | `:1036-1066` | — (not in design) | ❌ | — |
 | T12 | Wire navigator window drag → `setVisibleWindow(start, end)`; navigator handles → zoom on either side | `:821-842` | — | ❌ | — |

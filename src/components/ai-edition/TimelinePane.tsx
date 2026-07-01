@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import {
 	type DragEvent as ReactDragEvent,
 	type PointerEvent as ReactPointerEvent,
+	type WheelEvent as ReactWheelEvent,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -9,19 +10,21 @@ import {
 	useState,
 } from "react";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
+import { startGlobalPointerDrag } from "@/lib/ai-edition/timeline/pointer-drag";
 import { formatSeconds } from "@/lib/ai-edition/timeline/virtual-preview";
 import styles from "./TimelinePane.module.css";
 
+// pxPerSec limits — at zoom=1 the timeline fits the viewport (pxPerSec =
+// fitPxPerSec); MAX_PX_PER_SEC caps how dense the clips can get when zoomed
+// in. Mirrors axcut TimelinePane.tsx MAX_PX_PER_SEC.
+const MAX_PX_PER_SEC = 280;
+const MIN_SOURCE_DURATION_SEC = 0.001;
+const TIMELINE_START_GUTTER_PX = 6;
+const TIMELINE_END_GUTTER_PX = 6;
 const SKIP_CONTROLS_HIDE_DELAY_MS = 220;
-
-// Multi-clip track view — matches design/openscreen-editor.html .tracks-wrapper:
-// each clip is a .trackBlock flexed by its timeline duration, side by side, with
-// keep/cut sub-segments, filename + range, a pencil (Edit Clip) and a delete
-// button. Media assets dragged from the left panel drop here to insert a clip
-// at the drop position; clip blocks drag to reorder.
+const CLIP_REORDER_THRESHOLD_PX = 6;
 
 const ASSET_MIME = "application/x-axcut-asset";
-const CLIP_MIME = "application/x-axcut-clip-index";
 
 interface AssetMeta {
 	id: string;
@@ -64,6 +67,54 @@ type CutSegment = {
 };
 type Segment = KeepSegment | CutSegment;
 
+// Live state of an in-flight skip-edge resize. Refs are used as a hot-path
+// mirror so move handlers read fresh values without re-creating callbacks.
+type ResizeState = {
+	id: number;
+	itemId: string;
+	edge: "start" | "end";
+	startClientX: number;
+	startSec: number;
+	endSec: number;
+	currentStartSec: number;
+	currentEndSec: number;
+	minStartSec: number;
+	maxEndSec: number;
+};
+
+// T07 — Pan via Alt+drag or middle-click-drag. Refs only; no state needed
+// because the visible window updates frequently and the only side-effect is
+// the cursor class.
+type PanState = {
+	startClientX: number;
+	startVisibleStartSec: number;
+};
+
+// T08 — Pointer reorder. dragging flips on once the cursor has moved past
+// CLIP_REORDER_THRESHOLD_PX (a small click vs drag distinction); insertIndex
+// is recomputed every move so the live marker tracks the cursor.
+type ClipReorderState = {
+	clipId: string;
+	startClientX: number;
+	startClientY: number;
+	currentClientX: number;
+	currentClientY: number;
+	startLeftPx: number;
+	widthPx: number;
+	insertIndex: number;
+	dragging: boolean;
+};
+
+interface ProjectedClipLayout {
+	leftPx: number;
+	widthPx: number;
+	dragging: boolean;
+}
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(max, Math.max(min, value));
+}
+
 // Split a clip's source span into keep/cut segments using the asset's skip
 // ranges. Cut segments carry the skip id + local drag bounds (clamped to the
 // clip's own source span and the neighboring skip) so they can be resized or
@@ -96,12 +147,28 @@ function clipSegments(clip: AxcutClip, skips: SkipRange[]): Segment[] {
 	return segs;
 }
 
-function rulerTicks(total: number): number[] {
-	const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
-	const target = total / 8;
-	const step = steps.find((s) => s >= target) ?? 600;
-	const ticks: number[] = [];
-	for (let t = 0; t <= total + 0.001; t += step) ticks.push(Number(t.toFixed(3)));
+// Adaptive ruler: major step is the smallest entry in the standard
+// [0.1..600s] ladder whose px-size ≥ 90. Minor ticks fall at major/4. As
+// you zoom in the step shrinks; zoom out, it grows.
+function chooseTickStep(minStepSec: number): number {
+	const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+	return steps.find((step) => step >= minStepSec) ?? steps.at(-1)!;
+}
+
+interface RulerTick {
+	timeSec: number;
+	major: boolean;
+}
+
+function buildRulerTicks(durationSec: number, pxPerSec: number): RulerTick[] {
+	const majorStepSec = chooseTickStep(90 / Math.max(pxPerSec, 0.001));
+	const minorStepSec = majorStepSec / 4;
+	const ticks: RulerTick[] = [];
+	for (let t = 0; t <= durationSec + minorStepSec / 2; t += minorStepSec) {
+		const rounded = Number(t.toFixed(4));
+		const major = Math.abs(rounded / majorStepSec - Math.round(rounded / majorStepSec)) < 0.001;
+		ticks.push({ timeSec: Math.min(durationSec, rounded), major });
+	}
 	return ticks;
 }
 
@@ -120,34 +187,114 @@ export function TimelinePane({
 	onUpdateSkipRange,
 	onRemoveSkipRange,
 }: TimelinePaneProps) {
-	const wrapRef = useRef<HTMLDivElement | null>(null);
-	const visualRefs = useRef(new Map<string, HTMLDivElement>());
-	const [dropIndex, setDropIndex] = useState<number | null>(null);
+	const viewportRef = useRef<HTMLDivElement | null>(null);
+	const resizeRef = useRef<ResizeState | null>(null);
+	const panRef = useRef<PanState | null>(null);
+	const clipReorderRef = useRef<ClipReorderState | null>(null);
+	const [viewportWidthPx, setViewportWidthPx] = useState(0);
+	const [zoom, setZoom] = useState(1);
+	const [visibleStartSec, setVisibleStartSec] = useState(0);
+	const [panning, setPanning] = useState(false);
+	const [clipReorderState, setClipReorderState] = useState<ClipReorderState | null>(null);
 	const [hoveredCutId, setHoveredCutId] = useState<string | null>(null);
 	const [dragPreview, setDragPreview] = useState<{
 		skipId: string;
 		startSec: number;
 		endSec: number;
 	} | null>(null);
+	const [dropIndex, setDropIndex] = useState<number | null>(null);
 	const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const resizeSequenceRef = useRef(0);
 
-	useEffect(
-		() => () => {
-			if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-		},
-		[],
-	);
-
-	const totalDuration = useMemo(
-		() => clips.reduce((m, c) => Math.max(m, c.timelineEndSec), 0.001),
+	const sourceDuration = useMemo(
+		() =>
+			Math.max(
+				MIN_SOURCE_DURATION_SEC,
+				clips.reduce((m, c) => Math.max(m, c.timelineEndSec), 0),
+			),
 		[clips],
 	);
-	const ticks = useMemo(() => rulerTicks(totalDuration), [totalDuration]);
+	const virtualDurationSec = useMemo(
+		() => clips.reduce((m, c) => Math.max(m, c.timelineEndSec), 0),
+		[clips],
+	);
+	const usableWidthPx = Math.max(
+		1,
+		viewportWidthPx - TIMELINE_START_GUTTER_PX - TIMELINE_END_GUTTER_PX,
+	);
+	const fitPxPerSec = usableWidthPx / Math.max(sourceDuration, MIN_SOURCE_DURATION_SEC);
+	const pxPerSec = clamp(fitPxPerSec * zoom, fitPxPerSec, MAX_PX_PER_SEC);
+	const contentWidthPx = Math.max(
+		viewportWidthPx,
+		sourceDuration * pxPerSec + TIMELINE_START_GUTTER_PX + TIMELINE_END_GUTTER_PX,
+	);
+	const visibleDurationSec = clamp(usableWidthPx / Math.max(pxPerSec, 0.001), 0, sourceDuration);
+	const canvasOffsetPx = visibleStartSec * pxPerSec;
+	const ticks = useMemo(
+		() => buildRulerTicks(sourceDuration, pxPerSec),
+		[sourceDuration, pxPerSec],
+	);
+
+	const orderedClips = useMemo(
+		() => [...clips].sort((a, b) => a.timelineStartSec - b.timelineStartSec),
+		[clips],
+	);
 	const assetLabel = useCallback(
 		(assetId: string) => assets.find((a) => a.id === assetId)?.label ?? "Untitled source",
 		[assets],
 	);
-	const playheadPct = Math.max(0, Math.min(100, (currentTimeSec / totalDuration) * 100));
+
+	useEffect(() => {
+		const el = viewportRef.current;
+		if (!el) return;
+		const updateMetrics = () => {
+			setViewportWidthPx(el.clientWidth);
+		};
+		updateMetrics();
+		const observer = new ResizeObserver(updateMetrics);
+		observer.observe(el);
+		window.addEventListener("resize", updateMetrics);
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", updateMetrics);
+		};
+	}, []);
+
+	useEffect(() => {
+		const maxVisibleStartSec = Math.max(0, sourceDuration - visibleDurationSec);
+		setVisibleStartSec((current) => clamp(current, 0, maxVisibleStartSec));
+	}, [sourceDuration, visibleDurationSec]);
+
+	useEffect(() => {
+		if (!panning) {
+			document.body.classList.remove("timeline-panning");
+		} else {
+			document.body.classList.add("timeline-panning");
+		}
+		return () => {
+			document.body.classList.remove("timeline-panning");
+		};
+	}, [panning]);
+
+	useEffect(() => {
+		if (!clipReorderState?.dragging) {
+			document.body.classList.remove("timeline-reordering");
+		} else {
+			document.body.classList.add("timeline-reordering");
+		}
+		return () => {
+			document.body.classList.remove("timeline-reordering");
+		};
+	}, [clipReorderState?.dragging]);
+
+	useEffect(
+		() => () => {
+			if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+			document.body.classList.remove("timeline-panning");
+			document.body.classList.remove("timeline-reordering");
+		},
+		[],
+	);
 
 	const showCutControls = useCallback((cutId: string) => {
 		if (hideControlsTimerRef.current) {
@@ -165,74 +312,161 @@ export function TimelinePane({
 		}, SKIP_CONTROLS_HIDE_DELAY_MS);
 	}, []);
 
-	// Drag a skip's start/end chevron. pxPerSec is derived locally from the
-	// clip's own trackVisual width (measured via a ref) so this works without
-	// any global timeline zoom/pan state — each clip block is its own
-	// coordinate space.
-	const startResizeSkip = useCallback(
-		(clipId: string, seg: CutSegment, edge: "start" | "end", event: ReactPointerEvent) => {
-			event.preventDefault();
-			event.stopPropagation();
-			const visual = visualRefs.current.get(clipId);
-			const clip = clips.find((c) => c.id === clipId);
-			if (!visual || !clip) return;
-			const clipSpanSec = Math.max(0.001, (clip.sourceEndSec ?? 0) - clip.sourceStartSec);
-			const pxPerSec = visual.clientWidth / clipSpanSec;
-			const startClientX = event.clientX;
-			const initialStart = seg.startSec;
-			const initialEnd = seg.endSec;
-
-			let liveStart = initialStart;
-			let liveEnd = initialEnd;
-			setDragPreview({ skipId: seg.skipId, startSec: liveStart, endSec: liveEnd });
-
-			const move = (moveEvent: PointerEvent) => {
-				const deltaSec = (moveEvent.clientX - startClientX) / pxPerSec;
-				if (edge === "start") {
-					liveStart = Math.min(
-						Math.max(initialStart + deltaSec, seg.minStartSec),
-						initialEnd - 0.05,
-					);
-				} else {
-					liveEnd = Math.max(Math.min(initialEnd + deltaSec, seg.maxEndSec), initialStart + 0.05);
-				}
-				setDragPreview({ skipId: seg.skipId, startSec: liveStart, endSec: liveEnd });
-			};
-			const end = () => {
-				window.removeEventListener("pointermove", move);
-				window.removeEventListener("pointerup", end);
-				setDragPreview(null);
-				if (Math.abs(liveStart - initialStart) > 0.001 || Math.abs(liveEnd - initialEnd) > 0.001) {
-					onUpdateSkipRange(seg.skipId, liveStart, liveEnd);
-				}
-			};
-			window.addEventListener("pointermove", move);
-			window.addEventListener("pointerup", end, { once: true });
+	// Convert screen-x (PointerEvent.clientX) to source-time, accounting for
+	// the canvas's translateX pan offset.
+	const sourceSecFromClientX = useCallback(
+		(clientX: number): number => {
+			const viewport = viewportRef.current;
+			if (!viewport) return 0;
+			const rect = viewport.getBoundingClientRect();
+			const canvasX = clientX - rect.left + canvasOffsetPx;
+			return clamp(
+				(canvasX - TIMELINE_START_GUTTER_PX) / Math.max(pxPerSec, 0.001),
+				0,
+				sourceDuration,
+			);
 		},
-		[clips, onUpdateSkipRange],
+		[canvasOffsetPx, pxPerSec, sourceDuration],
 	);
 
-	// Compute the clip index a drop at clientX should land at, by comparing
-	// against each block's horizontal midpoint.
-	const indexFromClientX = useCallback((clientX: number): number => {
-		const blocks = Array.from(
-			wrapRef.current?.querySelectorAll<HTMLElement>("[data-clip-idx]") ?? [],
-		);
-		for (let i = 0; i < blocks.length; i++) {
-			const r = blocks[i].getBoundingClientRect();
-			if (clientX < r.left + r.width / 2) return i;
+	// T08 — Given a clip center in canvas-x coords, find the insertion index
+	// where the moving clip would land. axcut TimelinePane.tsx
+	// insertionIndexFromClipCenter.
+	const insertionIndexFromClipCenter = useCallback(
+		(clipId: string, clipCenterPx: number): number => {
+			const timelineSec = clamp(
+				(clipCenterPx - TIMELINE_START_GUTTER_PX) / Math.max(pxPerSec, 0.001),
+				0,
+				sourceDuration,
+			);
+			const remainingClips = orderedClips.filter((clip) => clip.id !== clipId);
+			for (let i = 0; i < remainingClips.length; i += 1) {
+				const c = remainingClips[i];
+				const midpointSec = (c.timelineStartSec + c.timelineEndSec) / 2;
+				if (timelineSec < midpointSec) return i;
+			}
+			return remainingClips.length;
+		},
+		[orderedClips, pxPerSec, sourceDuration],
+	);
+
+	const isReorderNoop = useCallback(
+		(clipId: string, insertIndex: number): boolean => {
+			const currentIds = orderedClips.map((clip) => clip.id);
+			const movingClip = orderedClips.find((clip) => clip.id === clipId);
+			if (!movingClip) return true;
+			const remainingIds = currentIds.filter((id) => id !== clipId);
+			const nextIds = [
+				...remainingIds.slice(0, insertIndex),
+				clipId,
+				...remainingIds.slice(insertIndex),
+			];
+			return (
+				nextIds.length === currentIds.length &&
+				nextIds.every((id, index) => id === currentIds[index])
+			);
+		},
+		[orderedClips],
+	);
+
+	const indexFromClientX = useCallback(
+		(clientX: number): number => {
+			const timelineSec = sourceSecFromClientX(clientX);
+			for (let i = 0; i < orderedClips.length; i += 1) {
+				const c = orderedClips[i];
+				const midpointSec = (c.timelineStartSec + c.timelineEndSec) / 2;
+				if (timelineSec < midpointSec) return i;
+			}
+			return orderedClips.length;
+		},
+		[orderedClips, sourceSecFromClientX],
+	);
+
+	const dropMarkerLeftPx = useMemo(() => {
+		if (dropIndex === null) return null;
+		const boundarySec =
+			dropIndex <= 0
+				? 0
+				: dropIndex >= orderedClips.length
+					? (orderedClips[orderedClips.length - 1]?.timelineEndSec ?? 0)
+					: (orderedClips[dropIndex]?.timelineStartSec ?? 0);
+		return TIMELINE_START_GUTTER_PX + boundarySec * pxPerSec;
+	}, [dropIndex, orderedClips, pxPerSec]);
+
+	// T08 — Reorder marker lives at the boundary the moving clip would land
+	// on, i.e. the timeline position where its START will be after the move.
+	// In our model clips are contiguous (resequenceClips packs them back-to-
+	// back), so when the moving clip lands at slot k the boundary equals the
+	// END of the clip currently in slot k-1 (= the START of the slot where
+	// the clip will go).
+	//
+	// ponytail: axcut's marker uses `remainingClips[insertIndex].timelineStartSec`,
+	// which works in axcut's pre-resequence render but reads the WRONG boundary
+	// in ours — it points to the next non-moving clip's start (e.g. sec 30),
+	// not the contiguous boundary (e.g. sec 10). Fix: end of the preceding clip.
+	const reorderMarkerLeftPx = useMemo(() => {
+		if (!clipReorderState) return null;
+		const remainingClips = orderedClips.filter((clip) => clip.id !== clipReorderState.clipId);
+		const boundarySec =
+			clipReorderState.insertIndex <= 0
+				? 0
+				: (remainingClips[clipReorderState.insertIndex - 1]?.timelineEndSec ?? virtualDurationSec);
+		return TIMELINE_START_GUTTER_PX + boundarySec * pxPerSec;
+	}, [clipReorderState, orderedClips, pxPerSec, virtualDurationSec]);
+
+	// T08 — Each clip's effective leftPx/widthPx during a reorder drag.
+	// Outside of drag: matches the clip's natural timeline position.
+	// During drag: moving clip follows cursor, remaining clips resequence
+	// from 0 to fill the gap. axcut TimelinePane.tsx projectedClipLayoutById.
+	const projectedClipLayoutById = useMemo(() => {
+		const layout = new Map<string, ProjectedClipLayout>();
+		if (!clipReorderState?.dragging) {
+			for (const clip of orderedClips) {
+				layout.set(clip.id, {
+					leftPx: TIMELINE_START_GUTTER_PX + clip.timelineStartSec * pxPerSec,
+					widthPx: Math.max(1, (clip.timelineEndSec - clip.timelineStartSec) * pxPerSec),
+					dragging: false,
+				});
+			}
+			return layout;
 		}
-		return blocks.length;
-	}, []);
+		const movingClip = orderedClips.find((clip) => clip.id === clipReorderState.clipId);
+		if (!movingClip) return layout;
+		const remainingClips = orderedClips.filter((clip) => clip.id !== clipReorderState.clipId);
+		const projectedOrder = [
+			...remainingClips.slice(0, clipReorderState.insertIndex),
+			movingClip,
+			...remainingClips.slice(clipReorderState.insertIndex),
+		];
+		let cursorSec = 0;
+		for (const clip of projectedOrder) {
+			const durationSec = Math.max(0, clip.timelineEndSec - clip.timelineStartSec);
+			const isDragging = clip.id === clipReorderState.clipId;
+			const widthPx = Math.max(1, durationSec * pxPerSec);
+			const dragLeftPx = clamp(
+				clipReorderState.startLeftPx +
+					clipReorderState.currentClientX -
+					clipReorderState.startClientX,
+				TIMELINE_START_GUTTER_PX,
+				Math.max(TIMELINE_START_GUTTER_PX, contentWidthPx - TIMELINE_END_GUTTER_PX - widthPx),
+			);
+			layout.set(clip.id, {
+				leftPx: isDragging ? dragLeftPx : TIMELINE_START_GUTTER_PX + cursorSec * pxPerSec,
+				widthPx,
+				dragging: isDragging,
+			});
+			cursorSec += durationSec;
+		}
+		return layout;
+	}, [clipReorderState, contentWidthPx, orderedClips, pxPerSec]);
 
 	const handleDragOver = useCallback(
 		(e: ReactDragEvent<HTMLDivElement>) => {
 			const dt = e.dataTransfer;
 			const isAsset = dt.types.includes(ASSET_MIME);
-			const isClip = dt.types.includes(CLIP_MIME);
-			if (!isAsset && !isClip) return;
+			if (!isAsset) return;
 			e.preventDefault();
-			dt.dropEffect = isClip ? "move" : "copy";
+			dt.dropEffect = "copy";
 			setDropIndex(indexFromClientX(e.clientX));
 		},
 		[indexFromClientX],
@@ -242,242 +476,485 @@ export function TimelinePane({
 		(e: ReactDragEvent<HTMLDivElement>) => {
 			const index = indexFromClientX(e.clientX);
 			const assetId = e.dataTransfer.getData(ASSET_MIME);
-			const clipIdxRaw = e.dataTransfer.getData(CLIP_MIME);
 			setDropIndex(null);
-			if (assetId) {
-				e.preventDefault();
-				onInsertAsset(assetId, index);
+			if (!assetId) return;
+			e.preventDefault();
+			onInsertAsset(assetId, index);
+		},
+		[indexFromClientX, onInsertAsset],
+	);
+
+	// T07 — Pan via Alt+drag or middle-click-drag. Skips if everything fits
+	// the viewport (no pan needed). Mirrors axcut startPan.
+	const startPan = useCallback(
+		(event: ReactPointerEvent<HTMLDivElement>) => {
+			if (visibleDurationSec >= sourceDuration) return;
+			event.preventDefault();
+			panRef.current = {
+				startClientX: event.clientX,
+				startVisibleStartSec: visibleStartSec,
+			};
+			setPanning(true);
+			startGlobalPointerDrag(event, {
+				onMove: (moveEvent) => {
+					const pan = panRef.current;
+					if (!pan) return;
+					const maxVisibleStartSec = Math.max(0, sourceDuration - visibleDurationSec);
+					const deltaSec = (moveEvent.clientX - pan.startClientX) / Math.max(pxPerSec, 0.001);
+					setVisibleStartSec(clamp(pan.startVisibleStartSec - deltaSec, 0, maxVisibleStartSec));
+				},
+				onEnd: () => {
+					panRef.current = null;
+					setPanning(false);
+				},
+			});
+		},
+		[pxPerSec, sourceDuration, visibleDurationSec, visibleStartSec],
+	);
+
+	// Scrub via plain click+drag. Uses startGlobalPointerDrag so the drag
+	// survives the pointer leaving the viewport.
+	const startScrub = useCallback(
+		(event: ReactPointerEvent<HTMLDivElement>) => {
+			const target = event.target as Element | null;
+			if (target?.closest("button, [data-clip-idx]")) return;
+			if (event.button !== 0 || orderedClips.length === 0) return;
+			event.preventDefault();
+			onSeek(sourceSecFromClientX(event.clientX));
+			startGlobalPointerDrag(event, {
+				onMove: (moveEvent) => onSeek(sourceSecFromClientX(moveEvent.clientX)),
+				onEnd: () => undefined,
+			});
+		},
+		[onSeek, orderedClips.length, sourceSecFromClientX],
+	);
+
+	// Dispatch from the viewport's pointerdown. Order:
+	//   Alt/middle-click → pan; default click+drag → scrub.
+	// Clip blocks and skip chevrons handle their own pointerdown and call
+	// event.stopPropagation() to prevent this from firing.
+	const handleTimelinePointerDown = useCallback(
+		(event: ReactPointerEvent<HTMLDivElement>) => {
+			if (event.altKey || event.button === 1) {
+				startPan(event);
 				return;
 			}
-			if (clipIdxRaw !== "") {
-				e.preventDefault();
-				const from = Number(clipIdxRaw);
-				const clip = clips[from];
-				if (!clip) return;
-				// Dropping after its own slot is a no-op; account for the removal shift.
-				const to = index > from ? index - 1 : index;
-				if (to !== from) onMoveClip(clip.id, to);
-			}
+			startScrub(event);
 		},
-		[clips, indexFromClientX, onInsertAsset, onMoveClip],
+		[startPan, startScrub],
 	);
 
-	const seekFromClientX = useCallback(
-		(clientX: number) => {
-			const el = wrapRef.current;
-			if (!el) return;
-			const r = el.getBoundingClientRect();
-			const pct = Math.max(0, Math.min(1, (clientX - r.left) / Math.max(1, r.width)));
-			onSeek(pct * totalDuration);
-		},
-		[onSeek, totalDuration],
-	);
-
-	const handleRulerPointerDown = useCallback(
-		(e: ReactPointerEvent<HTMLDivElement>) => {
-			if (e.button !== 0) return;
-			e.preventDefault();
-			seekFromClientX(e.clientX);
-			const move = (ev: PointerEvent) => seekFromClientX(ev.clientX);
-			const end = () => {
-				window.removeEventListener("pointermove", move);
-				window.removeEventListener("pointerup", end);
+	// T08 — Clip body pointerdown → reorder. 6px move threshold before the
+	// gesture is treated as a drag (vs. a click that selects). Mirrors axcut
+	// startClipReorder.
+	const startClipReorder = useCallback(
+		(clipId: string, event: ReactPointerEvent<HTMLElement>) => {
+			if (event.button !== 0) return;
+			event.preventDefault();
+			event.stopPropagation();
+			const movingClip = orderedClips.find((clip) => clip.id === clipId);
+			if (!movingClip) return;
+			onSelectClip(clipId);
+			const movingClipLeftPx = TIMELINE_START_GUTTER_PX + movingClip.timelineStartSec * pxPerSec;
+			const movingClipWidthPx = Math.max(
+				1,
+				(movingClip.timelineEndSec - movingClip.timelineStartSec) * pxPerSec,
+			);
+			const initial: ClipReorderState = {
+				clipId,
+				startClientX: event.clientX,
+				startClientY: event.clientY,
+				currentClientX: event.clientX,
+				currentClientY: event.clientY,
+				startLeftPx: movingClipLeftPx,
+				widthPx: movingClipWidthPx,
+				insertIndex: insertionIndexFromClipCenter(clipId, movingClipLeftPx + movingClipWidthPx / 2),
+				dragging: false,
 			};
-			window.addEventListener("pointermove", move);
-			window.addEventListener("pointerup", end, { once: true });
+			clipReorderRef.current = initial;
+			setClipReorderState(initial);
+
+			startGlobalPointerDrag(event, {
+				onMove: (moveEvent) => {
+					const current = clipReorderRef.current;
+					if (!current) return;
+					const deltaX = moveEvent.clientX - current.startClientX;
+					const deltaY = moveEvent.clientY - current.startClientY;
+					const dragging =
+						current.dragging || Math.hypot(deltaX, deltaY) >= CLIP_REORDER_THRESHOLD_PX;
+					const clipCenterPx = current.startLeftPx + deltaX + current.widthPx / 2;
+					const next: ClipReorderState = {
+						...current,
+						currentClientX: moveEvent.clientX,
+						currentClientY: moveEvent.clientY,
+						insertIndex: insertionIndexFromClipCenter(current.clipId, clipCenterPx),
+						dragging,
+					};
+					clipReorderRef.current = next;
+					setClipReorderState(next);
+				},
+				onEnd: () => {
+					const current = clipReorderRef.current;
+					const shouldMove = Boolean(
+						current?.dragging && current && !isReorderNoop(current.clipId, current.insertIndex),
+					);
+					if (shouldMove && current) {
+						onMoveClip(current.clipId, current.insertIndex);
+					}
+					clipReorderRef.current = null;
+					setClipReorderState(null);
+				},
+			});
 		},
-		[seekFromClientX],
+		[insertionIndexFromClipCenter, isReorderNoop, onMoveClip, onSelectClip, orderedClips, pxPerSec],
+	);
+
+	// Skip chevron pointerdown → resize the cut's start or end.
+	const startResizeSkip = useCallback(
+		(
+			clipId: string,
+			seg: CutSegment,
+			edge: "start" | "end",
+			event: ReactPointerEvent<HTMLElement>,
+		) => {
+			event.preventDefault();
+			event.stopPropagation();
+			const clip = orderedClips.find((c) => c.id === clipId);
+			if (!clip) return;
+			const id = resizeSequenceRef.current + 1;
+			resizeSequenceRef.current = id;
+			const initial: ResizeState = {
+				id,
+				itemId: seg.skipId,
+				edge,
+				startClientX: event.clientX,
+				startSec: seg.startSec,
+				endSec: seg.endSec,
+				currentStartSec: seg.startSec,
+				currentEndSec: seg.endSec,
+				minStartSec: seg.minStartSec,
+				maxEndSec: seg.maxEndSec,
+			};
+			resizeRef.current = initial;
+			setDragPreview({ skipId: seg.skipId, startSec: seg.startSec, endSec: seg.endSec });
+
+			startGlobalPointerDrag(event, {
+				onMove: (moveEvent) => {
+					const current = resizeRef.current;
+					if (!current || current.id !== id) return;
+					const deltaSec = (moveEvent.clientX - current.startClientX) / Math.max(pxPerSec, 0.001);
+					const nextStartSec =
+						current.edge === "start"
+							? clamp(
+									current.startSec + deltaSec,
+									current.minStartSec,
+									current.currentEndSec - 0.05,
+								)
+							: current.currentStartSec;
+					const nextEndSec =
+						current.edge === "end"
+							? clamp(current.endSec + deltaSec, nextStartSec + 0.05, current.maxEndSec)
+							: current.currentEndSec;
+					const next = {
+						...current,
+						currentStartSec: nextStartSec,
+						currentEndSec: nextEndSec,
+					};
+					resizeRef.current = next;
+					setDragPreview({ skipId: seg.skipId, startSec: nextStartSec, endSec: nextEndSec });
+				},
+				onEnd: () => {
+					const current = resizeRef.current;
+					if (!current || current.id !== id) {
+						resizeRef.current = null;
+						setDragPreview(null);
+						return;
+					}
+					const changed =
+						Math.abs(current.currentStartSec - current.startSec) > 0.001 ||
+						Math.abs(current.currentEndSec - current.endSec) > 0.001;
+					resizeRef.current = null;
+					if (changed) {
+						onUpdateSkipRange(seg.skipId, current.currentStartSec, current.currentEndSec);
+					}
+					requestAnimationFrame(() => {
+						setDragPreview(null);
+					});
+				},
+			});
+		},
+		[orderedClips, onUpdateSkipRange, pxPerSec],
+	);
+
+	const handleWheel = useCallback(
+		(event: ReactWheelEvent<HTMLDivElement>) => {
+			if (!(event.ctrlKey || event.metaKey)) return;
+			event.preventDefault();
+			const direction = event.deltaY > 0 ? -1 : 1;
+			const factor = direction > 0 ? 1.18 : 1 / 1.18;
+			setZoom((z) => {
+				const maxZoom = MAX_PX_PER_SEC / Math.max(fitPxPerSec, 0.001);
+				const next = clamp(z * factor, 1, maxZoom);
+				const rect = viewportRef.current?.getBoundingClientRect();
+				if (!rect) return next;
+				const anchorOffsetPx = clamp(event.clientX - rect.left, 0, rect.width);
+				const sourceAtAnchor =
+					visibleStartSec + (anchorOffsetPx - TIMELINE_START_GUTTER_PX) / Math.max(pxPerSec, 0.001);
+				const nextPxPerSec = clamp(fitPxPerSec * next, fitPxPerSec, MAX_PX_PER_SEC);
+				const nextVisibleDurationSec = clamp(
+					usableWidthPx / Math.max(nextPxPerSec, 0.001),
+					0,
+					sourceDuration,
+				);
+				const maxVisibleStartSec = Math.max(0, sourceDuration - nextVisibleDurationSec);
+				setVisibleStartSec(
+					clamp(
+						sourceAtAnchor - (anchorOffsetPx - TIMELINE_START_GUTTER_PX) / nextPxPerSec,
+						0,
+						maxVisibleStartSec,
+					),
+				);
+				return Number(next.toFixed(3));
+			});
+		},
+		[fitPxPerSec, pxPerSec, sourceDuration, usableWidthPx, visibleStartSec],
 	);
 
 	return (
 		<section className={styles.pane}>
-			{/* biome-ignore lint/a11y/noStaticElementInteractions: ruler is a scrub affordance, keyboard seek is handled by transport controls */}
-			<div className={styles.ruler} onPointerDown={handleRulerPointerDown}>
-				{ticks.map((t) => (
-					<span
-						key={t}
-						className={styles.rulerTick}
-						style={{ left: `${(t / totalDuration) * 100}%` }}
+			<div
+				ref={viewportRef}
+				className={
+					panning
+						? `${styles.viewport} ${styles.panning}`
+						: clipReorderState?.dragging
+							? `${styles.viewport} ${styles.reordering}`
+							: styles.viewport
+				}
+				onPointerDown={handleTimelinePointerDown}
+				onDragOver={handleDragOver}
+				onDragLeave={() => setDropIndex(null)}
+				onDrop={handleDrop}
+				onWheel={handleWheel}
+				aria-label="Source timeline. Click and drag to scrub, Alt+drag to pan, Ctrl+wheel to zoom."
+			>
+				{clips.length === 0 ? (
+					<div className={styles.empty} data-drop-active={dropIndex !== null}>
+						Drag a video from the media panel here to start your timeline.
+					</div>
+				) : (
+					<div
+						className={styles.canvas}
+						style={{
+							width: contentWidthPx,
+							transform: `translateX(${-canvasOffsetPx}px)`,
+						}}
 					>
-						{formatSeconds(t)}
-					</span>
-				))}
-			</div>
-
-			{clips.length === 0 ? (
-				// biome-ignore lint/a11y/noStaticElementInteractions: drop target for media assets; primary insert path is the Insert-source controls
-				<div
-					className={styles.empty}
-					onDragOver={handleDragOver}
-					onDrop={handleDrop}
-					data-drop-active={dropIndex !== null}
-				>
-					Drag a video from the media panel here to start your timeline.
-				</div>
-			) : (
-				<div
-					ref={wrapRef}
-					className={styles.tracksWrapper}
-					onDragOver={handleDragOver}
-					onDragLeave={() => setDropIndex(null)}
-					onDrop={handleDrop}
-				>
-					{dropIndex !== null ? (
-						<div
-							className={styles.dropMarker}
-							style={{ order: dropIndex * 2 }}
-							aria-hidden="true"
-						/>
-					) : null}
-
-					{clips.map((clip, i) => {
-						const durationSec = Math.max(0.001, clip.timelineEndSec - clip.timelineStartSec);
-						const rawSegs = clipSegments(clip, skipRanges);
-						// Apply the live drag preview (if this clip owns the skip being
-						// dragged) so the segment visibly resizes before the store commit
-						// on pointerup.
-						const segs = rawSegs.map((s) => {
-							if (s.kind !== "cut" || s.skipId !== dragPreview?.skipId) return s;
-							return {
-								...s,
-								startSec: dragPreview.startSec,
-								endSec: dragPreview.endSec,
-								len: dragPreview.endSec - dragPreview.startSec,
-							};
-						});
-						const segTotal = segs.reduce((m, s) => m + s.len, 0) || 1;
-						const selected = clip.id === selectedClipId;
-						return (
-							<div
-								key={clip.id}
-								data-clip-idx={i}
-								className={selected ? `${styles.trackBlock} ${styles.selected}` : styles.trackBlock}
-								style={{ flexGrow: durationSec, order: i * 2 + 1 }}
-								draggable
-								onDragStart={(e) => {
-									e.dataTransfer.setData(CLIP_MIME, String(i));
-									e.dataTransfer.effectAllowed = "move";
-								}}
-								onClick={() => onSelectClip(clip.id)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.preventDefault();
-										onSelectClip(clip.id);
-									}
-								}}
-								role="button"
-								tabIndex={0}
-								aria-pressed={selected}
-								title={`${assetLabel(clip.assetId)} · ${formatSeconds(clip.timelineStartSec)}–${formatSeconds(clip.timelineEndSec)}`}
-							>
+						<div className={styles.ruler}>
+							{ticks.map((tick) => (
 								<div
-									className={styles.trackVisual}
-									ref={(el) => {
-										if (el) visualRefs.current.set(clip.id, el);
-										else visualRefs.current.delete(clip.id);
+									key={`${tick.timeSec}-${tick.major ? "m" : "n"}`}
+									className={tick.major ? `${styles.tick} ${styles.major}` : styles.tick}
+									style={{
+										left: TIMELINE_START_GUTTER_PX + tick.timeSec * pxPerSec,
 									}}
 								>
-									{segs.map((s, si) =>
-										s.kind === "keep" ? (
-											<div
-												key={si}
-												className={`${styles.segment} ${styles.keep}`}
-												aria-hidden="true"
-												style={{ flexGrow: (s.len / segTotal) * 100 }}
-											/>
-										) : (
-											<div
-												key={s.skipId}
-												className={`${styles.segment} ${styles.cut}`}
-												style={{ flexGrow: (s.len / segTotal) * 100 }}
-												onPointerEnter={() => showCutControls(s.skipId)}
-												onPointerLeave={() => scheduleHideCutControls(s.skipId)}
-												title={`Skip ${formatSeconds(s.startSec)}–${formatSeconds(s.endSec)}`}
-											>
-												{hoveredCutId === s.skipId || dragPreview?.skipId === s.skipId ? (
+									{tick.major ? <span>{formatSeconds(tick.timeSec)}</span> : null}
+								</div>
+							))}
+						</div>
+						<div className={styles.trackLane}>
+							{orderedClips.map((clip, i) => {
+								const layout = projectedClipLayoutById.get(clip.id);
+								const baseLeftPx =
+									layout?.leftPx ?? TIMELINE_START_GUTTER_PX + clip.timelineStartSec * pxPerSec;
+								const baseWidthPx =
+									layout?.widthPx ??
+									Math.max(1, (clip.timelineEndSec - clip.timelineStartSec) * pxPerSec);
+
+								// ponytail: per user feedback (round 2), clip blocks NEVER merge visually
+								// even when adjacent. The .joinedPrev / .joinedNext classes are removed
+								// from the rendered classList, and the CSS for them is dropped too.
+								// Adjacent clips keep their own border + border-radius on every side.
+								const previewedSkips = dragPreview
+									? skipRanges.map((k) =>
+											k.id === dragPreview.skipId
+												? { ...k, startSec: dragPreview.startSec, endSec: dragPreview.endSec }
+												: k,
+										)
+									: skipRanges;
+								const segs = clipSegments(clip, previewedSkips);
+								const segTotal = segs.reduce((m, s) => m + s.len, 0) || 1;
+								const selected = clip.id === selectedClipId;
+								const classes = [styles.trackBlock];
+								if (selected) classes.push(styles.selected);
+								if (layout?.dragging) classes.push(styles.reordering);
+								return (
+									<div
+										key={clip.id}
+										data-clip-idx={i}
+										className={classes.join(" ")}
+										style={{
+											left: baseLeftPx,
+											width: baseWidthPx,
+										}}
+										onPointerDown={(e) => startClipReorder(clip.id, e)}
+										onClick={(e) => {
+											// If the gesture upgraded to a reorder drag, suppress
+											// the synthetic click. startClipReorder sets
+											// clipReorderState.dragging only after the threshold.
+											if (clipReorderState?.clipId === clip.id && clipReorderState.dragging) {
+												e.stopPropagation();
+												return;
+											}
+											e.stopPropagation();
+											onSelectClip(clip.id);
+										}}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" || e.key === " ") {
+												e.preventDefault();
+												onSelectClip(clip.id);
+											}
+										}}
+										role="button"
+										tabIndex={0}
+										aria-pressed={selected}
+										title={`${assetLabel(clip.assetId)} · ${formatSeconds(clip.timelineStartSec)}–${formatSeconds(clip.timelineEndSec)}`}
+									>
+										<div className={styles.trackVisual}>
+											{segs.map((s, si) =>
+												s.kind === "keep" ? (
 													<div
-														className={styles.skipControls}
+														key={si}
+														className={`${styles.segment} ${styles.keep}`}
+														aria-hidden="true"
+														style={{ flexGrow: (s.len / segTotal) * 100 }}
+													/>
+												) : (
+													<div
+														key={s.skipId}
+														className={`${styles.segment} ${styles.cut}`}
+														style={{ flexGrow: (s.len / segTotal) * 100 }}
 														onPointerEnter={() => showCutControls(s.skipId)}
 														onPointerLeave={() => scheduleHideCutControls(s.skipId)}
+														title={`Skip ${formatSeconds(s.startSec)}–${formatSeconds(s.endSec)}`}
 													>
-														<button
-															type="button"
-															className={styles.skipControlBtn}
-															aria-label={`Adjust skip start at ${formatSeconds(s.startSec)}`}
-															title="Adjust skip start"
-															onPointerDown={(e) => startResizeSkip(clip.id, s, "start", e)}
-															onClick={(e) => e.stopPropagation()}
-														>
-															<ChevronLeft size={13} />
-														</button>
-														<button
-															type="button"
-															className={`${styles.skipControlBtn} ${styles.skipControlDelete}`}
-															aria-label={`Remove skip ${formatSeconds(s.startSec)}–${formatSeconds(s.endSec)}`}
-															title="Remove skip"
-															onClick={(e) => {
-																e.stopPropagation();
-																onRemoveSkipRange(s.skipId);
-															}}
-														>
-															<Trash2 size={12} />
-														</button>
-														<button
-															type="button"
-															className={styles.skipControlBtn}
-															aria-label={`Adjust skip end at ${formatSeconds(s.endSec)}`}
-															title="Adjust skip end"
-															onPointerDown={(e) => startResizeSkip(clip.id, s, "end", e)}
-															onClick={(e) => e.stopPropagation()}
-														>
-															<ChevronRight size={13} />
-														</button>
+														{hoveredCutId === s.skipId || dragPreview?.skipId === s.skipId ? (
+															<div
+																className={styles.skipControls}
+																onPointerEnter={() => showCutControls(s.skipId)}
+																onPointerLeave={() => scheduleHideCutControls(s.skipId)}
+															>
+																<button
+																	type="button"
+																	className={styles.skipControlBtn}
+																	aria-label={`Adjust skip start at ${formatSeconds(s.startSec)}`}
+																	title="Adjust skip start"
+																	onPointerDown={(e) => startResizeSkip(clip.id, s, "start", e)}
+																	onClick={(e) => e.stopPropagation()}
+																>
+																	<ChevronLeft size={13} />
+																</button>
+																<button
+																	type="button"
+																	className={`${styles.skipControlBtn} ${styles.skipControlDelete}`}
+																	aria-label={`Remove skip ${formatSeconds(s.startSec)}–${formatSeconds(s.endSec)}`}
+																	title="Remove skip"
+																	onPointerDown={(e) => {
+																		// ponytail: stop the clip block's
+																		// startClipReorder from grabbing
+																		// pointer capture and rerouting the
+																		// click up to the block (then
+																		// nowhere). Without this, the trash
+																		// button's onClick never fires.
+																		e.stopPropagation();
+																	}}
+																	onClick={(e) => {
+																		e.stopPropagation();
+																		onRemoveSkipRange(s.skipId);
+																	}}
+																>
+																	<Trash2 size={12} />
+																</button>
+																<button
+																	type="button"
+																	className={styles.skipControlBtn}
+																	aria-label={`Adjust skip end at ${formatSeconds(s.endSec)}`}
+																	title="Adjust skip end"
+																	onPointerDown={(e) => startResizeSkip(clip.id, s, "end", e)}
+																	onClick={(e) => e.stopPropagation()}
+																>
+																	<ChevronRight size={13} />
+																</button>
+															</div>
+														) : null}
 													</div>
-												) : null}
+												),
+											)}
+										</div>
+										<div className={styles.trackInfo}>
+											<button
+												type="button"
+												className={styles.editIcon}
+												aria-label="Edit clip"
+												title="Edit clip in/out points"
+												onPointerDown={(e) => e.stopPropagation()}
+												onClick={(e) => {
+													e.stopPropagation();
+													onEditClip(clip);
+												}}
+											>
+												<Pencil size={13} />
+											</button>
+											<div className={styles.trackText}>
+												<h3 className={styles.trackTitle}>{assetLabel(clip.assetId)}</h3>
+												<p className={styles.trackSubtitle}>
+													{formatSeconds(clip.timelineStartSec)} —{" "}
+													{formatSeconds(clip.timelineEndSec)} <span>•</span> source{" "}
+													{formatSeconds(clip.sourceStartSec)}–
+													{formatSeconds(clip.sourceEndSec ?? clip.sourceStartSec)}
+												</p>
 											</div>
-										),
-									)}
-								</div>
-								<div className={styles.trackInfo}>
-									<button
-										type="button"
-										className={styles.editIcon}
-										aria-label="Edit clip"
-										title="Edit clip in/out points"
-										onClick={(e) => {
-											e.stopPropagation();
-											onEditClip(clip);
-										}}
-									>
-										<Pencil size={13} />
-									</button>
-									<div className={styles.trackText}>
-										<h3 className={styles.trackTitle}>{assetLabel(clip.assetId)}</h3>
-										<p className={styles.trackSubtitle}>
-											{formatSeconds(clip.timelineStartSec)} — {formatSeconds(clip.timelineEndSec)}{" "}
-											<span>•</span> source {formatSeconds(clip.sourceStartSec)}–
-											{formatSeconds(clip.sourceEndSec ?? clip.sourceStartSec)}
-										</p>
+											<button
+												type="button"
+												className={styles.clipDelete}
+												aria-label="Remove clip"
+												title="Remove clip from timeline"
+												onPointerDown={(e) => e.stopPropagation()}
+												onClick={(e) => {
+													e.stopPropagation();
+													onRemoveClip(clip.id);
+												}}
+											>
+												<Trash2 size={13} />
+											</button>
+										</div>
 									</div>
-									<button
-										type="button"
-										className={styles.clipDelete}
-										aria-label="Remove clip"
-										title="Remove clip from timeline"
-										onClick={(e) => {
-											e.stopPropagation();
-											onRemoveClip(clip.id);
-										}}
-									>
-										<Trash2 size={13} />
-									</button>
-								</div>
-							</div>
-						);
-					})}
-					<div className={styles.playhead} style={{ left: `${playheadPct}%` }} aria-hidden="true" />
-				</div>
-			)}
+								);
+							})}
+							<div
+								className={styles.playhead}
+								style={{ left: TIMELINE_START_GUTTER_PX + currentTimeSec * pxPerSec }}
+								aria-hidden="true"
+							/>
+							{dropMarkerLeftPx !== null ? (
+								<div
+									className={styles.dropMarker}
+									style={{ left: dropMarkerLeftPx }}
+									aria-hidden="true"
+								/>
+							) : null}
+							{clipReorderState?.dragging && reorderMarkerLeftPx !== null ? (
+								<div
+									className={styles.reorderMarker}
+									style={{ left: reorderMarkerLeftPx }}
+									aria-hidden="true"
+								/>
+							) : null}
+						</div>
+					</div>
+				)}
+			</div>
 		</section>
 	);
 }

@@ -4,9 +4,11 @@
 // (a reasonable default for the user to then resize).
 
 import { useCallback, useState } from "react";
+import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type { AnnotationRegion, AnnotationType } from "@/components/video-editor/types";
 import { createId } from "../document/ids";
 import type { AxcutDocument } from "../schema";
+import { probeVideoDuration } from "../timeline/duration";
 import { useProjectStore } from "./projectStore";
 
 type RegionKind = "zoom" | "skip" | "annotation" | "speed";
@@ -476,34 +478,101 @@ export function useTimeline() {
 
 	// Insert a new full-duration clip for `assetId` at position `index`
 	// (0 = before all, clips.length = after all), then resequence.
+	//
+	// ponytail: probe the file's actual duration via a throwaway <video> in
+	// the BACKGROUND so the drop event stays responsive. Earlier this awaited
+	// probeVideoDuration synchronously, which could take up to 5s on a slow
+	// disk or broken file path — the user saw the UI freeze for the whole
+	// probe window with no feedback. Now: insert the clip immediately at the
+	// placeholder (60s), then update its sourceEndSec / timelineEndSec when
+	// the probe resolves. If the user has since trimmed the clip, we leave it
+	// alone (same guard handleLoadedMetadata uses).
 	const insertClipAt = useCallback(
 		async (assetId: string, index: number) => {
-			if (!document) return;
-			const asset = document.assets.find((a) => a.id === assetId);
+			const currentDoc = useProjectStore.getState().document;
+			if (!currentDoc) return;
+			const asset = currentDoc.assets.find((a) => a.id === assetId);
 			if (!asset) return;
-			const duration = asset.durationSec ?? PLACEHOLDER_DURATION_SEC;
+			// Insert immediately at whatever we know. If the asset has a cached
+			// durationSec we use it; otherwise we fall back to the placeholder
+			// and let the background probe correct it.
+			const knownDuration = asset.durationSec ?? PLACEHOLDER_DURATION_SEC;
 			const newClip: Clip = {
 				id: createId("clip"),
 				assetId,
 				sourceStartSec: 0,
-				sourceEndSec: duration,
+				sourceEndSec: knownDuration,
 				timelineStartSec: 0,
-				timelineEndSec: duration,
+				timelineEndSec: knownDuration,
 				wordRefs: [],
 				origin: "user",
 				reason: "Inserted from media panel",
 			};
-			const arr = [...document.timeline.clips];
+			const arr = [...currentDoc.timeline.clips];
 			const at = Math.max(0, Math.min(arr.length, index));
 			arr.splice(at, 0, newClip);
 			const next: AxcutDocument = {
-				...document,
-				timeline: { ...document.timeline, clips: resequenceClips(arr) },
+				...currentDoc,
+				timeline: { ...currentDoc.timeline, clips: resequenceClips(arr) },
 			};
 			await saveDocument(next);
 			setClipSelection(newClip.id);
+
+			// If we used the placeholder, kick off the probe in the background.
+			// Don't await — the drop is already responsive; the probe will
+			// correct the clip when it lands.
+			if (asset.durationSec == null) {
+				void probeAndCorrectClip(assetId, newClip.id, asset.originalPath);
+			}
 		},
-		[document, saveDocument],
+		[saveDocument],
+	);
+
+	// Background probe: read the asset's actual duration and patch the
+	// freshly-inserted clip to use it. Skips if the clip has already been
+	// trimmed (sourceEndSec != PLACEHOLDER_DURATION_SEC) so we never stomp
+	// on user edits. Also persists the duration back onto the asset so
+	// subsequent inserts use the cached value without re-probing.
+	const probeAndCorrectClip = useCallback(
+		async (assetId: string, clipId: string, originalPath: string) => {
+			const probed = await probeVideoDuration(toFileUrl(originalPath));
+			if (probed == null) return;
+			const state = useProjectStore.getState();
+			const doc = state.document;
+			if (!doc) return;
+			const clip = doc.timeline.clips.find((c) => c.id === clipId);
+			if (!clip) return;
+			// Guard: only correct clips still sitting at the 0..60s placeholder.
+			// If the user has since trimmed the clip or moved on, leave it alone.
+			const stillPlaceholder =
+				clip.sourceStartSec === 0 &&
+				Math.abs((clip.sourceEndSec ?? 0) - PLACEHOLDER_DURATION_SEC) < 0.01;
+			if (!stillPlaceholder) return;
+			const shiftSec = probed - (clip.sourceEndSec ?? PLACEHOLDER_DURATION_SEC);
+			const nextClips = doc.timeline.clips.map((c) => {
+				if (c.id !== clipId) {
+					return {
+						...c,
+						timelineStartSec: c.timelineStartSec + shiftSec,
+						timelineEndSec: c.timelineEndSec + shiftSec,
+					};
+				}
+				return {
+					...c,
+					sourceEndSec: probed,
+					timelineEndSec: c.timelineStartSec + probed,
+				};
+			});
+			const nextAssets = doc.assets.map((a) =>
+				a.id === assetId ? { ...a, durationSec: probed } : a,
+			);
+			await state.saveDocument({
+				...doc,
+				assets: nextAssets,
+				timeline: { ...doc.timeline, clips: nextClips },
+			});
+		},
+		[],
 	);
 
 	// Reorder a clip to a new index, then resequence timeline positions.

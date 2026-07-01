@@ -1,4 +1,3 @@
-import * as Slider from "@radix-ui/react-slider";
 import {
 	ChevronDown,
 	FileText,
@@ -94,7 +93,6 @@ export function Bottombar({
 	const { settings, set } = useEditorSettings();
 	const tl = useTimeline();
 	const [ratioOpen, setRatioOpen] = useState(false);
-	const [zoomRange, setZoomRange] = useState<[number, number]>([0, 100]);
 	const [editClipTarget, setEditClipTarget] = useState<AxcutClip | null>(null);
 	const firstClip = clips[0] ?? null;
 	const totalMs = useMemo(
@@ -344,24 +342,7 @@ export function Bottombar({
 						/>
 					</div>
 				</div>
-				<div className={styles.zoombar} role="group" aria-label="Zoom range">
-					<Slider.Root
-						className={styles.sliderRoot}
-						value={zoomRange}
-						min={0}
-						max={100}
-						step={1}
-						minStepsBetweenThumbs={1}
-						onValueChange={(v) => setZoomRange([v[0] ?? 0, v[1] ?? 100])}
-						aria-label="Timeline visible range"
-					>
-						<Slider.Track className={styles.sliderTrack}>
-							<Slider.Range className={styles.sliderRange} />
-						</Slider.Track>
-						<Slider.Thumb className={styles.sliderThumb} aria-label="Zoom in start" />
-						<Slider.Thumb className={styles.sliderThumb} aria-label="Zoom in end" />
-					</Slider.Root>
-				</div>
+				{/* T11 — navigator strip will replace the previous zoombar slider. */}
 			</section>
 			<EditClipModal
 				open={editClipTarget !== null}

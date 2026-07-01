@@ -1,5 +1,9 @@
-/* Multi-clip track view — mirrors design/openscreen-editor.html .tracks-wrapper.
-   Each clip is a flex-grown block sized by its timeline duration. */
+/* Timeline viewport — custom scroll/pan model (NOT native overflow). The
+   outer viewport is overflow: hidden; the inner .canvas uses
+   transform: translateX(...) to pan, and its width is totalDuration *
+   pxPerSec. This lets the lanes (T10) share the same coordinate space
+   when they move into the canvas. Mirrors axcut TimelinePane.tsx's
+   .timeline-viewport / .timeline-canvas. */
 
 .pane {
 	position: relative;
@@ -7,29 +11,52 @@
 	flex-direction: column;
 	min-height: 0;
 	height: 100%;
-	gap: 6px;
 }
 
-/* ── ruler ─────────────────────────────────────────────────────────── */
+.viewport {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+	cursor: pointer;
+	/* ponytail: scrollbar hidden — the navigator strip (T11) is the
+	   scroll/zoom UI; we don't want native scroll chrome leaking in. */
+	scrollbar-width: none;
+}
+.viewport::-webkit-scrollbar {
+	display: none;
+}
+.viewport.panning {
+	cursor: grabbing;
+}
+.viewport.reordering {
+	cursor: grabbing;
+}
+
+.canvas {
+	position: relative;
+	height: 100%;
+	min-width: 100%;
+	display: flex;
+	flex-direction: column;
+	will-change: transform;
+}
+
 .ruler {
 	position: relative;
-	flex: 0 0 auto;
 	height: 22px;
+	border-bottom: 1px solid var(--border-soft);
 	user-select: none;
 	cursor: text;
 }
-.rulerTick {
+.tick {
 	position: absolute;
 	top: 0;
-	transform: translateX(-1px);
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 500;
-	letter-spacing: 0.02em;
-	color: var(--muted);
-	white-space: nowrap;
+	bottom: 0;
+	width: 1px;
+	background: var(--border-hi);
 }
-.rulerTick::before {
+.tick.major::before {
 	content: "";
 	position: absolute;
 	left: 0;
@@ -38,21 +65,33 @@
 	height: 4px;
 	background: var(--border-hi);
 }
+.tick span {
+	position: absolute;
+	left: 2px;
+	top: 0;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.02em;
+	color: var(--muted);
+	white-space: nowrap;
+	pointer-events: none;
+}
 
-/* ── tracks ────────────────────────────────────────────────────────── */
-.tracksWrapper {
+.trackLane {
 	position: relative;
 	display: flex;
+	flex-direction: column;
 	gap: 4px;
-	flex: 1;
+	padding: 4px 0;
 	min-height: 0;
-	align-items: stretch;
+	flex: 1 1 auto;
 }
 
 .trackBlock {
-	position: relative;
-	flex-basis: 0;
-	flex-shrink: 1;
+	position: absolute;
+	top: 4px;
+	height: calc(100% - 8px);
 	min-width: 68px;
 	display: flex;
 	flex-direction: column;
@@ -75,6 +114,11 @@
 .trackBlock.selected {
 	border-color: var(--accent);
 	box-shadow: 0 0 0 1px var(--accent), 0 4px 12px -4px var(--accent-soft);
+}
+.trackBlock.reordering {
+	opacity: 0.85;
+	box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.45);
+	z-index: 20;
 }
 
 .trackVisual {
@@ -235,11 +279,28 @@
 
 /* ── drop marker + playhead ────────────────────────────────────────── */
 .dropMarker {
-	flex: 0 0 2px;
-	align-self: stretch;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 2px;
 	background: var(--accent);
 	border-radius: 2px;
 	box-shadow: 0 0 6px var(--accent-soft);
+	pointer-events: none;
+	z-index: 9;
+}
+
+/* T08 — live marker shown between clips while a reorder drag is active. */
+.reorderMarker {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	background: var(--accent);
+	border-radius: 2px;
+	box-shadow: 0 0 12px var(--accent-soft), 0 0 4px var(--accent);
+	pointer-events: none;
+	z-index: 30;
 }
 
 .playhead {

@@ -706,5 +706,7 @@ export function useTimeline() {
 		updateZoomSpan,
 		updateAnnotationSpan,
 		updateSpeedSpan,
+		// T19 — drives the preview video during skip-edge resize.
+		setCurrentTime: useProjectStore((s) => s.setCurrentTime),
 	};
 }

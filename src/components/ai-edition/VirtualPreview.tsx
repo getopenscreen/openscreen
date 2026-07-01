@@ -21,7 +21,7 @@ interface VirtualPreviewProps {
 	clips: AxcutClip[];
 	seekTarget?: { timeSec: number; isSource?: boolean; requestId: number } | null;
 	onTimeChange?: (timeSec: number) => void;
-	onLoadedMetadata?: (durationSec: number) => void;
+	onLoadedMetadata?: (durationSec: number, assetId: string) => void;
 	onVideoElement?: (element: HTMLVideoElement | null) => void;
 	videoStyle?: React.CSSProperties;
 	onVideoError?: () => void;
@@ -244,8 +244,13 @@ export function VirtualPreview({
 							// timeline gets a populated clip even before the EBML fix
 							// lands. Previously this gate skipped the callback for
 							// non-finite durations and stranded the editor on
-							// "No clips yet" until manual intervention.
-							onLoadedMetadata?.(e.currentTarget.duration);
+							// "No clips yet" until manual intervention. The assetId is
+							// forwarded so the parent only ever corrects clips that
+							// belong to the asset which actually fired this event —
+							// without it, switching between clips of different assets
+							// during multi-clip playback clobbered clip[0]'s duration
+							// with whichever asset's video happened to load last.
+							onLoadedMetadata?.(e.currentTarget.duration, activeSource.id);
 							if (pendingSeekRef.current) {
 								const { sourceTimeSec, play } = pendingSeekRef.current;
 								pendingSeekRef.current = null;

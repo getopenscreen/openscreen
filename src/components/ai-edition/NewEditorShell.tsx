@@ -231,45 +231,55 @@ export function NewEditorShell() {
 	}, [document]);
 
 	const handleLoadedMetadata = useCallback(
-		(durationSec: number) => {
+		(durationSec: number, assetId: string) => {
 			// ponytail: WebM recordings from MediaRecorder report NaN/Infinity
-			// until the main-process EBML fix lands. Fall back to the existing
-			// 60s seed if duration is unknown so the timeline never gets stuck
-			// on an empty placeholder. All store reads go through getState() to
-			// avoid stale-closure bugs that hit the previous dependency on
-			// `document`.
+			// until the main-process EBML fix lands. Fall back to a 60s seed if
+			// duration is unknown so the timeline never gets stuck on an empty
+			// placeholder. All store reads go through getState() to avoid
+			// stale-closure bugs.
 			const known = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 60;
 			const state = useProjectStore.getState();
 			setSourceDuration(known);
 			const doc = state.document;
-			console.log(
-				`[handleLoadedMetadata] durationSec=${durationSec} → known=${known} ` +
-					`document=${doc ? "set" : "null"} ` +
-					`assets=${doc?.assets.length ?? 0} ` +
-					`clips=${doc?.timeline.clips.length ?? 0} ` +
-					`primaryAssetId=${doc?.project.primaryAssetId ?? "none"}`,
-			);
 			if (!doc || doc.assets.length === 0) return;
 			if (doc.timeline.clips.length === 0) {
-				console.log(`[handleLoadedMetadata] creating clip endSec=${known}`);
 				void state.replaceTimeline(
 					[{ startSec: 0, endSec: known }],
 					"Auto-created full-duration clip",
 				);
 				return;
 			}
-			const primary = doc.timeline.clips[0];
-			if (!primary || primary.sourceEndSec === known) return;
-			const next = {
+			// Only correct clips belonging to the asset that actually fired this
+			// event, and only while they still sit at the pre-probe 0..60s
+			// placeholder — never a clip the user has since trimmed. Patching by
+			// array index (the previous behavior) clobbered clip[0]'s duration
+			// whenever a *different* asset's video element loaded, e.g. right
+			// after dropping a second clip onto the timeline.
+			const PLACEHOLDER_END_SEC = 60;
+			const isPlaceholder = (c: (typeof doc.timeline.clips)[number]) =>
+				c.assetId === assetId &&
+				c.sourceStartSec === 0 &&
+				Math.abs((c.sourceEndSec ?? 0) - PLACEHOLDER_END_SEC) < 0.01;
+			if (Math.abs(known - PLACEHOLDER_END_SEC) < 0.01) return;
+			if (!doc.timeline.clips.some(isPlaceholder)) return;
+
+			let shiftSec = 0;
+			const nextClips = doc.timeline.clips.map((c) => {
+				const shifted = { ...c, timelineStartSec: c.timelineStartSec + shiftSec };
+				if (!isPlaceholder(c)) {
+					shifted.timelineEndSec = c.timelineEndSec + shiftSec;
+					return shifted;
+				}
+				const delta = known - PLACEHOLDER_END_SEC;
+				shifted.sourceEndSec = known;
+				shifted.timelineEndSec = shifted.timelineStartSec + known;
+				shiftSec += delta;
+				return shifted;
+			});
+			void state.saveDocument({
 				...doc,
-				timeline: {
-					...doc.timeline,
-					clips: doc.timeline.clips.map((c, i) =>
-						i === 0 ? { ...c, sourceEndSec: known, timelineEndSec: known } : c,
-					),
-				},
-			};
-			void state.saveDocument(next);
+				timeline: { ...doc.timeline, clips: nextClips },
+			});
 		},
 		[setSourceDuration],
 	);

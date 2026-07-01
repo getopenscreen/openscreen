@@ -215,6 +215,33 @@ function enableAllPreviewAudioTracks(video: HTMLVideoElement) {
 	}
 }
 
+/**
+ * Builds a `webglcontextlost` handler for the preview Pixi canvas.
+ *
+ * On Linux/Wayland the preview can lose its WebGL context during heavy GPU
+ * usage from the exporter (e.g. the VideoEncoder's hardware path on
+ * Mesa/EGL, or the Linux-specific CPU readback in `frameRenderer.ts`).
+ * Without recovery the video sprite never reappears — only the wallpaper
+ * (rendered to a 2D canvas) stays visible. See issue #8.
+ *
+ * `preventDefault()` opts in to the restoration attempt so Chromium can
+ * fire `webglcontextrestored`. The caller is expected to bump `regenerate`
+ * so React tears the broken app down and rebuilds from scratch on the
+ * next mount.
+ */
+export function createWebGLContextLostHandler(params: {
+	generation: number;
+	regenerate: () => void;
+}): (event: Event) => void {
+	return (event: Event) => {
+		event.preventDefault();
+		console.warn("[VideoPlayback] WebGL context lost, recreating Pixi app", {
+			generation: params.generation,
+		});
+		params.regenerate();
+	};
+}
+
 const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 	(
 		{
@@ -290,6 +317,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const cameraContainerRef = useRef<Container | null>(null);
 		const timeUpdateAnimationRef = useRef<number | null>(null);
 		const [pixiReady, setPixiReady] = useState(false);
+		const [pixiGeneration, setPixiGeneration] = useState(0);
 		const [videoReady, setVideoReady] = useState(false);
 		const [supplementalAudioPath, setSupplementalAudioPath] = useState<string | null>(null);
 		const [overlaySize, setOverlaySize] = useState({ width: 800, height: 600 });
@@ -992,6 +1020,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 			let mounted = true;
 			let app: Application | null = null;
+			// Declared outside the async IIFE so the cleanup function can
+			// detach them after Pixi tears the canvas down.
+			let handleContextLost: ((event: Event) => void) | null = null;
+			let handleContextRestored: (() => void) | null = null;
 
 			(async () => {
 				let cursorOverlayEnabled = true;
@@ -1003,14 +1035,19 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 				app = new Application();
 
-				await app.init({
-					width: container.clientWidth,
-					height: container.clientHeight,
-					backgroundAlpha: 0,
-					antialias: true,
-					resolution: window.devicePixelRatio || 1,
-					autoDensity: true,
-				});
+				try {
+					await app.init({
+						width: container.clientWidth,
+						height: container.clientHeight,
+						backgroundAlpha: 0,
+						antialias: true,
+						resolution: window.devicePixelRatio || 1,
+						autoDensity: true,
+					});
+				} catch (error) {
+					console.error("[VideoPlayback] Pixi init failed:", error);
+					return;
+				}
 
 				app.ticker.maxFPS = 60;
 
@@ -1025,6 +1062,24 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 				appRef.current = app;
 				container.appendChild(app.canvas);
+
+				// Recover from WebGL context loss. On Linux/Wayland the preview
+				// Pixi app can lose its context during heavy GPU usage from the
+				// exporter (e.g. the VideoEncoder's hardware path on Mesa/EGL).
+				// Without recovery the video sprite never reappears — only the
+				// wallpaper (rendered to a 2D canvas) stays visible. See issue
+				// #8. preventDefault() opts in to the restoration attempt so
+				// Chromium can fire webglcontextrestored, then we tear the
+				// broken app down and rebuild from scratch on the next mount.
+				handleContextLost = createWebGLContextLostHandler({
+					generation: pixiGeneration,
+					regenerate: () => setPixiGeneration((g) => g + 1),
+				});
+				handleContextRestored = () => {
+					console.info("[VideoPlayback] WebGL context restored", { generation: pixiGeneration });
+				};
+				app.canvas.addEventListener("webglcontextlost", handleContextLost);
+				app.canvas.addEventListener("webglcontextrestored", handleContextRestored);
 
 				// Camera container - this will be scaled/positioned for zoom
 				const cameraContainer = new Container();
@@ -1061,6 +1116,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				nativeCursorTextureIdRef.current = null;
 				nativeCursorImageIdRef.current = null;
 				if (app && app.renderer) {
+					// Detach the recovery listeners from the canvas before the
+					// app tears it down so we don't leak handlers on a detached
+					// element.
+					if (handleContextLost) {
+						app.canvas.removeEventListener("webglcontextlost", handleContextLost);
+					}
+					if (handleContextRestored) {
+						app.canvas.removeEventListener("webglcontextrestored", handleContextRestored);
+					}
 					app.destroy(true, {
 						children: true,
 						texture: true,
@@ -1072,7 +1136,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				videoContainerRef.current = null;
 				videoSpriteRef.current = null;
 			};
-		}, []);
+		}, [pixiGeneration]);
 
 		useEffect(() => {
 			if (!videoPath) {

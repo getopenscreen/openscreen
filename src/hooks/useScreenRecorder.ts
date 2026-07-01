@@ -1421,6 +1421,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						if (!result.success) {
 							throw new Error(result.error ?? "Failed to resume native Windows recording");
 						}
+						if (activeNativeWindowsRecording.webcamRecorder?.recorder.state === "paused") {
+							activeNativeWindowsRecording.webcamRecorder.recorder.resume();
+						}
 						activeNativeWindowsRecording.paused = false;
 						segmentStartedAt.current = Date.now();
 						setPaused(false);
@@ -1431,6 +1434,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					const result = await window.electronAPI.pauseNativeWindowsRecording();
 					if (!result.success) {
 						throw new Error(result.error ?? "Failed to pause native Windows recording");
+					}
+					if (activeNativeWindowsRecording.webcamRecorder?.recorder.state === "recording") {
+						activeNativeWindowsRecording.webcamRecorder.recorder.pause();
 					}
 					activeNativeWindowsRecording.paused = true;
 					accumulatedDurationMs.current = pausedAtMs;

@@ -164,6 +164,67 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
+	const updateZoomSpan = useCallback(
+		async (id: string, startMs: number, endMs: number) => {
+			if (!document) return;
+			const clampMs = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
+			const s = clampMs(startMs);
+			const e = clampMs(endMs);
+			const next: AxcutDocument = {
+				...document,
+				zoomRanges: document.zoomRanges.map((z) =>
+					z.id === id ? { ...z, startMs: Math.min(s, e), endMs: Math.max(s, e) } : z,
+				) as AxcutDocument["zoomRanges"],
+			};
+			await saveDocument(next);
+		},
+		[document, saveDocument],
+	);
+
+	const updateAnnotationSpan = useCallback(
+		async (id: string, startMs: number, endMs: number) => {
+			if (!document) return;
+			const clampMs = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
+			const s = clampMs(startMs);
+			const e = clampMs(endMs);
+			const next: AxcutDocument = {
+				...document,
+				annotations: document.annotations.map((a) =>
+					a.id === id ? { ...a, startMs: Math.min(s, e), endMs: Math.max(s, e) } : a,
+				),
+			};
+			await saveDocument(next);
+		},
+		[document, saveDocument],
+	);
+
+	const updateSpeedSpan = useCallback(
+		async (id: string, startMs: number, endMs: number) => {
+			if (!document) return;
+			const clampMs = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
+			const s = clampMs(startMs);
+			const e = clampMs(endMs);
+			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
+			const prev = ((legacy.speedRegions as unknown[]) ?? []) as Array<{
+				id: string;
+				startMs: number;
+				endMs: number;
+				speed: number;
+			}>;
+			const next: AxcutDocument = {
+				...document,
+				legacyEditor: {
+					...legacy,
+					speedRegions: prev.map((r) =>
+						r.id === id ? { ...r, startMs: Math.min(s, e), endMs: Math.max(s, e) } : r,
+					),
+				},
+			};
+			await saveDocument(next);
+		},
+		[document, saveDocument],
+	);
+
 	const removeRegion = useCallback(
 		async (kind: RegionKind, id: string) => {
 			if (!document) return;
@@ -536,5 +597,8 @@ export function useTimeline() {
 		selectClip,
 		clearClipSelection,
 		updateSkipRange,
+		updateZoomSpan,
+		updateAnnotationSpan,
+		updateSpeedSpan,
 	};
 }

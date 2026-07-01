@@ -46,7 +46,6 @@ const COLLAPSE_INITIAL = {
 export function NewEditorShell() {
 	const document = useProjectStore((s) => s.document);
 	const projectId = useProjectStore((s) => s.projectId);
-	const sourceDurationSec = useProjectStore((s) => s.sourceDurationSec);
 	const currentTimeSec = useProjectStore((s) => s.currentTimeSec);
 	const dirty = useProjectStore((s) => s.dirty);
 	const lastSavedAt = useProjectStore((s) => s.lastSavedAt);
@@ -878,7 +877,6 @@ export function NewEditorShell() {
 					clips={clips}
 					videoSources={videoSources}
 					currentTimeSec={currentTimeSec}
-					sourceDurationSec={sourceDurationSec}
 					onSeek={handleSeek}
 					zoomRegions={tl.zoomRegions}
 					skipRanges={tl.skipRanges}
@@ -891,7 +889,6 @@ export function NewEditorShell() {
 					onAddAnnotation={() => void tl.addAnnotation()}
 					onAddSpeed={() => void tl.addSpeed()}
 					onSelectRegion={(kind, id) => tl.selectRegion(kind, id)}
-					onRemoveRegion={(kind, id) => void tl.removeRegion(kind, id)}
 					onCaptions={handleCaptions}
 				/>
 			) : null}

@@ -215,6 +215,26 @@ function enableAllPreviewAudioTracks(video: HTMLVideoElement) {
 	}
 }
 
+function getVideoElementDiagnostics(video: HTMLVideoElement) {
+	return {
+		src: video.currentSrc || video.src,
+		readyState: video.readyState,
+		networkState: video.networkState,
+		error: video.error
+			? {
+					code: video.error.code,
+					message: video.error.message,
+				}
+			: null,
+		currentTime: Number.isFinite(video.currentTime) ? video.currentTime : null,
+		duration: Number.isFinite(video.duration) ? video.duration : null,
+		paused: video.paused,
+		ended: video.ended,
+		videoWidth: video.videoWidth,
+		videoHeight: video.videoHeight,
+	};
+}
+
 const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 	(
 		{
@@ -345,6 +365,18 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const speedRegionsRef = useRef<SpeedRegion[]>([]);
 		const motionBlurAmountRef = useRef(motionBlurAmount);
 		const cursorOverlayRef = useRef<PixiCursorOverlay | null>(null);
+
+		const logPreviewVideoEvent = useCallback(
+			(event: React.SyntheticEvent<HTMLVideoElement>) => {
+				console.info(
+					`[VideoPlayback] preview video ${event.type} ${JSON.stringify({
+						videoPath,
+						diagnostics: getVideoElementDiagnostics(event.currentTarget),
+					})}`,
+				);
+			},
+			[videoPath],
+		);
 		const showCursorRef = useRef(showCursor);
 		const cursorSizeRef = useRef(cursorSize);
 		const cursorSmoothingRef = useRef(cursorSmoothing);
@@ -2152,7 +2184,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							forceResolveDuration(e.currentTarget);
 						}
 					}}
-					onError={() => onError("Failed to load video")}
+					onEmptied={logPreviewVideoEvent}
+					onStalled={logPreviewVideoEvent}
+					onSuspend={logPreviewVideoEvent}
+					onAbort={logPreviewVideoEvent}
+					onError={(event) => {
+						logPreviewVideoEvent(event);
+						onError("Failed to load video");
+					}}
 				/>
 				{supplementalAudioPath && (
 					<audio ref={supplementalAudioRef} src={supplementalAudioPath} preload="auto" />

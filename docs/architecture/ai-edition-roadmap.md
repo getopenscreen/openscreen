@@ -74,13 +74,67 @@ Build health: **`tsc --noEmit` clean · 402 tests pass (50 files)** · lint clea
 | **Phase 8** multi-session chat history (create/list/select/rename/delete) | ✅ done in-memory (`9203c34`), tested |
 | **Phase 9** i18n (`useScopedT` across components, 13 locales), undo/redo (Cmd+Z/⇧Z, works), region clipboard, EmptyState, keyboard shortcuts | ✅ largely done |
 
-**Recently fixed on this branch:** design-token aliases (`--primary/--card/--card-foreground/--muted-foreground/--primary-foreground` were referenced but undefined → broke light theme; now mapped in `design-tokens.css`); Settings gear now opens `ShortcutsConfigDialog` (was a toast); dead `ChatPanel.tsx`/`ProjectPanel.tsx` removed.
+**Recently fixed on this branch:** design-token aliases (`--primary/--card/--card-foreground/--muted-foreground/--primary-foreground` were referenced but undefined → broke light theme; now mapped in `design-tokens.css`); Settings gear now opens `ShortcutsConfigDialog` (was a toast); dead `ChatPanel.tsx`/`ProjectPanel.tsx` removed; **TimelinePane rewritten to a multi-clip track model + media→timeline drag-drop fixed** (`90b4b3b` — the drop handler was on the whole workbench `<main>`, so drops only ever landed on the Preview); **`handleLoadedMetadata` clip-duration corruption fixed** (`3a4bc91` — it patched `clips[0]` unconditionally regardless of which asset's `<video>` fired the event, desyncing the progress bar from the timeline ruler/playhead whenever a second clip's asset loaded).
 
 **Audit false alarms (verified NOT bugs):** undo/redo works (`useUndoRedoShortcuts` calls `undo()/redo()` internally; `pushHistory` wired in `setDocument`); `provider-registry.ts` exists.
 
 ---
 
 ## 5. Remaining work (prioritized)
+
+### P0 — timeline viewport, pan, zoom, reorder (axcut port — granular plan, 2026-07-01)
+
+**Reference sources (read in full this round):**
+- **Axcut, local WSL clone** — `\\wsl.localhost\Ubuntu\home\etienne\repos\axcut\apps\web\src\components\TimelinePane.tsx` (1537 lines). **Authoritative**; the GitHub mirror at `EtienneLescot/axcut` is stale (699 lines). Always read from the WSL path until both reconcile.
+- **Axcut helper:** `\\wsl.localhost\Ubuntu\home\etienne\repos\axcut\apps\web\src\lib\pointer-drag.ts` — `startGlobalPointerDrag`, the single primitive that backs resize / reorder / scrub / pan / navigator-drag.
+- **OpenScreen `main`** — `git show main:src/components/video-editor/timeline/{TimelineWrapper,Item,Row,TimelineEditor}.tsx` for the dnd-timeline region model (already used here).
+- **Design:** `design/openscreen-editor.html` — `.tracks-scroll` is `overflow-y: auto, overflow-x: hidden` (vertical-only). Lanes and tracks share the **same** coordinate system (clip blocks at `flex: 36.5`/`flex: 63.5`, pills at `left: 5%`/`left: 27%`/etc.). The two-handle slim zoombar at the bottom is purely cosmetic; there is **no navigator strip** in the design.
+
+**Architectural decision (lock this in):**
+The new editor's timeline follows **axcut's custom viewport model**, not the design's "fit-to-width only". A single `.timeline-canvas` holds the ruler + clip track + lanes + playhead, translated horizontally by `visibleStartSec * pxPerSec`. The viewport is `overflow: hidden`; native horizontal scroll is not used. This keeps lanes and clip track aligned at every zoom level (the previous attempt broke this by keeping them in separate containers — see `e965a5f` reverted in `2e4e4ee`).
+
+**Granular task table:**
+
+| # | Task | Axcut ref | Design ref | Status | Commit |
+|---|------|-----------|------------|--------|--------|
+| T01 | Port `startGlobalPointerDrag` helper | `lib/pointer-drag.ts` | — | ❌ | — |
+| T02 | Port `ResizeState` / `PanState` / `NavigatorDragState` / `ClipReorderState` types + refs | `TimelinePane.tsx:54-87` | — | ❌ | — |
+| T03 | Compute `pxPerSec = fitPxPerSec * zoom` with `MAX_PX_PER_SEC = 280` | `:88, :163-169` | — | ❌ | — |
+| T04 | Replace `overflow-x: auto` with `transform: translateX(-visibleStartSec * pxPerSec)` on inner `.timeline-canvas`; viewport itself stays `overflow: hidden` | `:170, :907-908` | — | ❌ | — |
+| T05 | Adaptive ruler ticks (`chooseTickStep(90 / pxPerSec)` major + minor/4) | `:1529-1542`, `:917-925` | `.timeline-ruler` | ❌ (existing fixed-step list) | — |
+| T06 | Ctrl+wheel = `zoomAt(zoom * ±1.18, clientX)` — zooms **around the cursor** | `:752-756`, `:370-388` | — | ❌ | — |
+| T07 | Alt+drag AND middle-click-drag = `startPan` → updates `visibleStartSec` | `:693-726`, `:735-740` | — | ❌ | — |
+| T08 | Clip body pointerdown = `startClipReorder` with `CLIP_REORDER_THRESHOLD_PX = 6` → live insert marker + `onMoveClip(clipId, insertIndex)` on release | `:618-689`, `:445-490` | — | ❌ (HTML5 `dataTransfer` only) | — |
+| T09 | Clip join borders (`hasJoinedPrev/Next` within 1.5px) — extend left by 1px, width by 1px | `:962-991` | — | ❌ | — |
+| T10 | Move `.lanes` (annotation/speed/zoom pills) **into the same `.timeline-canvas`** as the clip track, scaled by the same `pxPerSec`, transformed by the same `translateX` | — | `.annotation-track-row`, `.speed-track-row`, `.zoom-track-row` (lanes share container) | ❌ (lanes in separate `.lanes` container, desyncs at zoom > 1×) | — |
+| T11 | Build the navigator strip (`<div class="timeline-navigator">`) below the viewport: full-width row with `.timeline-navigator-skip` mini-marks at percentage positions + `.timeline-navigator-window` overlay (start/end handles + move handle) | `:1036-1066` | — (not in design) | ❌ | — |
+| T12 | Wire navigator window drag → `setVisibleWindow(start, end)`; navigator handles → zoom on either side | `:821-842` | — | ❌ | — |
+| T13 | Remove the bottom zoombar slider (now redundant — the navigator IS the zoom UI). Keep the hint row only. | — | `.zoombar` is just two buttons, no slider | ❌ | — |
+| T14 | Header row inside TimelinePane: "N clips · M skips · X:XX total" + clip N/M indicator + current time + "Place skip" button | `:849-895` | — | ❌ | — |
+| T15 | "Place skip" toggle → `pendingCutPlacement` mode → next click adds a 1s skip via `onAddSkipRange`. Live `pendingCutPreviewSec` marker while armed. Esc cancels. | `:438-475, :495-518` | — | ❌ | — |
+| T16 | Add `body.timeline-panning` / `body.timeline-scrubbing` / `body.timeline-placing-cut` / `body.timeline-reordering` cursor classes. Hover cursor = `pointer`, drag-state cursors per mode. | `:497-512, :654-656, :706-708, :723-725` | — | ❌ | — |
+| T17 | Compact skip mode: when `(endSec - startSec) * pxPerSec < 18`, render controls icon-only (no labels). | `:990-993`, `styles.css .timeline-skip-strip.compact` | — | ❌ | — |
+| T18 | Skip hover-controls viewport-aware positioning (`controlsShiftPx` keeps controls onscreen near viewport edge) | `:1001-1010` | — | ❌ | — |
+| T19 | Wire `onPreviewSource` during pointer drag so the preview scrubs to the cut/skip edge being dragged | `:540-543` | — | ❌ | — |
+| T20 | Clip projection during reorder: `cursorSec` resequencing so non-dragged clips reflow when the dragged clip is held out of order | `:439-490` | — | ❌ | — |
+| T21 | Wire `onDuplicateClip` parity — confirm Ctrl+C/V uses `selectedClipId` not `copiedClipId` fallback (axcut's flow) | `:480-505` | — | ⚠ (works but uses fallback path) | — |
+| T22 | Design parity: `.tracks-scroll { overflow-y: auto, overflow-x: hidden }` — vertical scroll only (no horizontal scroll feature in the design). Axcut's translateX-pan replaces it. | — | `.tracks-scroll` | ❌ | — |
+| T23 | Design parity: clip blocks at `flex: 36.5` (proportional), not absolute pixels — multi-clip blocks share the row | — | `.track-block.block-1 { flex: 36.5 }` | ❌ (currently absolute px) | — |
+| T24 | Snap-guide line during region drag — visualizes the dnd-timeline collision-clamp | — | — | ❌ | — |
+| T25 | Floating drag tooltip showing time + range during resize/move (axcut has none; design shows `0:00.0 – 0:02.5` in pill labels; visual polish on top of T01–T23) | — | `.pill-value` already shows label | ❌ | — |
+
+**Already shipped (kept):**
+- Multi-clip track + working media drag-drop → `90b4b3b`
+- Skip (trim) resize + delete inside clip block → `7edfe49`
+- Real Edit Clip dialog with embedded preview + draggable range → `96787e1`
+- Ctrl+C/V clip duplicate → `2f53b2f`
+- Region drag/resize for zoom/speed/annotation via dnd-timeline → `f70b7c4`
+- Placeholder duration unification (60s) → `9837481`
+
+**Sequencing for the spine PR (T01–T09):** T01 helper → T02 types → T03 pxPerSec → T04 viewport translateX → T05 adaptive ruler → T06 Ctrl+wheel-zoom-at-cursor → T07 Alt+drag-pan → T08 pointer-reorder → T09 join borders. Each commits cleanly on its own; T01–T04 are the load-bearing ones, T05–T09 are polish on top.
+
+**Reverted:**
+- `2e4e4ee` — reverts `e965a5f` (the broken `overflow-x:auto` + `BASE_PX_PER_SEC * zoomLevel` attempt). Lanes-back-in-canvas (T10) and navigator-strip (T11) will replace it properly.
 
 ### P1 — functional plumbing still to plug
 - **Agent runtime (Phase 6.3/6.4)** — no real tool-calling agent yet. Chat calls the LLM directly (`llm-call.ts`) but the model can't apply timeline ops. Port Axcut's DeepAgentJS tool set → `electron/ai-edition/agent-runtime.ts`, expose `replace_timeline` / cut ops, save a checkpoint before/after. *Files:* `electron/ai-edition/`, `chat-service.ts`.
@@ -90,7 +144,6 @@ Build health: **`tsc --noEmit` clean · 402 tests pass (50 files)** · lint clea
 ### P2 — feature completeness vs old editor / design
 - **Auto-zoom "wand" suggestions** — old editor generated zoom regions automatically; wand not ported. *File:* `RightPanes.tsx` (effects), new suggestion helper.
 - **Region inspector advanced options** — arrow direction, figure/blur color, mosaic size, annotation font-family/animation not in inspector. *File:* `RightPanelStack.tsx`.
-- **Edit Clip modal** — `useTimeline.editClip` exists (added `9203c34`) but no modal drives it; TimelinePane pencil handle → modal for `sourceStart/EndSec`. *Files:* `Modals.tsx`, `TimelinePane.tsx`.
 - **Advanced export options** — MP4 fps/codec not exposed (only quality presets). *File:* `ExportDialog.tsx`.
 - **Round-trip export test** — render 3-clip + 1-skip project → ffprobe duration/frames. Needs Electron/CI harness.
 
@@ -100,6 +153,7 @@ Build health: **`tsc --noEmit` clean · 402 tests pass (50 files)** · lint clea
 - **RightPanes header Help buttons** are no-ops (`RightPanes.tsx:48-54`).
 - **Pixel nits:** annotation color default `#ffffff` → `var(--annotation)` (`RightPanelStack.tsx:296`); `.transport .rec[aria-pressed]` hardcoded `#ffffff`; modal backdrop hardcoded `rgba(22,23,29,.55)` → `var(--overlay-dark)`.
 - **i18n:** finish replacing any remaining hardcoded English in `ai-edition/*` with locale keys.
+- **Region drag visual polish:** snap-guide line + floating time tooltip during drag/resize (visual companion to the clamp logic already in `RegionTimeline.tsx`).
 
 ### Deferred / known limitations
 - **Long-recording scrub lag (>30 min)** — proxy MP4 dropped by decision 6; revival = per-asset "Generate proxy" button.

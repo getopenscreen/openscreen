@@ -120,16 +120,6 @@
 	box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.45);
 	z-index: 20;
 }
-.trackBlock.joinedPrev {
-	border-top-left-radius: 0;
-	border-bottom-left-radius: 0;
-	border-left-width: 0;
-}
-.trackBlock.joinedNext {
-	border-top-right-radius: 0;
-	border-bottom-right-radius: 0;
-	border-right-width: 0;
-}
 
 .trackVisual {
 	flex: 0 0 auto;

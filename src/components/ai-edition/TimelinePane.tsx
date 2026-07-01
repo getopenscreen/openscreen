@@ -23,7 +23,6 @@ const TIMELINE_START_GUTTER_PX = 6;
 const TIMELINE_END_GUTTER_PX = 6;
 const SKIP_CONTROLS_HIDE_DELAY_MS = 220;
 const CLIP_REORDER_THRESHOLD_PX = 6;
-const CLIP_JOIN_THRESHOLD_PX = 1.5;
 
 const ASSET_MIME = "application/x-axcut-asset";
 
@@ -395,16 +394,23 @@ export function TimelinePane({
 	}, [dropIndex, orderedClips, pxPerSec]);
 
 	// T08 — Reorder marker lives at the boundary the moving clip would land
-	// on. axcut TimelinePane.tsx reorderMarkerLeftPx.
+	// on, i.e. the timeline position where its START will be after the move.
+	// In our model clips are contiguous (resequenceClips packs them back-to-
+	// back), so when the moving clip lands at slot k the boundary equals the
+	// END of the clip currently in slot k-1 (= the START of the slot where
+	// the clip will go).
+	//
+	// ponytail: axcut's marker uses `remainingClips[insertIndex].timelineStartSec`,
+	// which works in axcut's pre-resequence render but reads the WRONG boundary
+	// in ours — it points to the next non-moving clip's start (e.g. sec 30),
+	// not the contiguous boundary (e.g. sec 10). Fix: end of the preceding clip.
 	const reorderMarkerLeftPx = useMemo(() => {
 		if (!clipReorderState) return null;
 		const remainingClips = orderedClips.filter((clip) => clip.id !== clipReorderState.clipId);
 		const boundarySec =
 			clipReorderState.insertIndex <= 0
 				? 0
-				: clipReorderState.insertIndex >= remainingClips.length
-					? virtualDurationSec
-					: (remainingClips[clipReorderState.insertIndex]?.timelineStartSec ?? 0);
+				: (remainingClips[clipReorderState.insertIndex - 1]?.timelineEndSec ?? virtualDurationSec);
 		return TIMELINE_START_GUTTER_PX + boundarySec * pxPerSec;
 	}, [clipReorderState, orderedClips, pxPerSec, virtualDurationSec]);
 
@@ -766,29 +772,10 @@ export function TimelinePane({
 									layout?.widthPx ??
 									Math.max(1, (clip.timelineEndSec - clip.timelineStartSec) * pxPerSec);
 
-								// T09 — Clip join borders. If another clip's edge is within
-								// CLIP_JOIN_THRESHOLD_PX of this clip's edge, the seams
-								// overlap by 1px so the border doesn't double up.
-								const hasJoinedPrev = orderedClips.some((candidate) => {
-									if (candidate.id === clip.id) return false;
-									const candidateRightPx =
-										TIMELINE_START_GUTTER_PX + candidate.timelineEndSec * pxPerSec;
-									return Math.abs(candidateRightPx - baseLeftPx) <= CLIP_JOIN_THRESHOLD_PX;
-								});
-								const hasJoinedNext = orderedClips.some((candidate) => {
-									if (candidate.id === clip.id) return false;
-									const candidateLeftPx =
-										TIMELINE_START_GUTTER_PX + candidate.timelineStartSec * pxPerSec;
-									return (
-										Math.abs(candidateLeftPx - (baseLeftPx + baseWidthPx)) <= CLIP_JOIN_THRESHOLD_PX
-									);
-								});
-								// ponytail: clips sit flush with their neighbors; the 1px overlap I shipped
-								// in T09 was the wrong default — user feedback: only SKIPS (cut strips
-								// inside a clip) should overlap, not whole clips. CSS still zeroes the
-								// border-radius/border on the joined sides so adjacent corners blend.
-								const joinedLeftPx = baseLeftPx;
-								const joinedWidthPx = baseWidthPx;
+								// ponytail: per user feedback (round 2), clip blocks NEVER merge visually
+								// even when adjacent. The .joinedPrev / .joinedNext classes are removed
+								// from the rendered classList, and the CSS for them is dropped too.
+								// Adjacent clips keep their own border + border-radius on every side.
 								const previewedSkips = dragPreview
 									? skipRanges.map((k) =>
 											k.id === dragPreview.skipId
@@ -802,16 +789,14 @@ export function TimelinePane({
 								const classes = [styles.trackBlock];
 								if (selected) classes.push(styles.selected);
 								if (layout?.dragging) classes.push(styles.reordering);
-								if (hasJoinedPrev) classes.push(styles.joinedPrev);
-								if (hasJoinedNext) classes.push(styles.joinedNext);
 								return (
 									<div
 										key={clip.id}
 										data-clip-idx={i}
 										className={classes.join(" ")}
 										style={{
-											left: joinedLeftPx,
-											width: joinedWidthPx,
+											left: baseLeftPx,
+											width: baseWidthPx,
 										}}
 										onPointerDown={(e) => startClipReorder(clip.id, e)}
 										onClick={(e) => {

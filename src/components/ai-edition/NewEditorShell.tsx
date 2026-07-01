@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { EditorProjectData } from "@/components/video-editor/projectPersistence";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type { CropRegion } from "@/components/video-editor/types";
+import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
 import { transcribeAsset } from "@/lib/ai-edition/document/transcribe";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
@@ -19,7 +20,6 @@ import { LeftPanel, LeftRail, type LeftTab } from "./LeftPanel";
 import {
 	AutoCaptionsModal,
 	CropModal,
-	InsertSourceModal,
 	NewProjectModal,
 	OpenProjectModal,
 	UnsavedChangesModal,
@@ -76,10 +76,11 @@ export function NewEditorShell() {
 	const [cropOpen, setCropOpen] = useState(false);
 	const [exportOpen, setExportOpen] = useState(false);
 	const [unsavedPrompt, setUnsavedPrompt] = useState<{
-		action: "new" | "open" | "record";
+		action: "close" | "new" | "open" | "record";
 		resolve: (choice: UnsavedChoice) => void;
 	} | null>(null);
 	const { settings: editorSettings, set: setEditorSettings } = useEditorSettings();
+	const { openConfig: openShortcutsConfig } = useShortcuts();
 	const tl = useTimeline();
 	useUndoRedoShortcuts(() => {
 		// ponytail: placeholder, wire when undo stack merges with history
@@ -87,13 +88,12 @@ export function NewEditorShell() {
 	const [captionsOpen, setCaptionsOpen] = useState(false);
 	const [captionsMinW, setCaptionsMinW] = useState(2);
 	const [captionsMaxW, setCaptionsMaxW] = useState(7);
-	const [insertAssetId, setInsertAssetId] = useState<string | null>(null);
 	const [projectSummaries, setProjectSummaries] = useState<AiEditionProjectSummary[]>([]);
 	const seekSeqRef = useRef(0);
 	const initRef = useRef(false);
 
 	const promptUnsaved = useCallback(
-		(action: "new" | "open" | "record"): Promise<UnsavedChoice> => {
+		(action: "close" | "new" | "open" | "record"): Promise<UnsavedChoice> => {
 			if (!dirty) return Promise.resolve("discard");
 			return new Promise<UnsavedChoice>((resolve) => {
 				setUnsavedPrompt({ action, resolve });
@@ -142,6 +142,18 @@ export function NewEditorShell() {
 				const label = screenPath.split(/[\\/]/).pop() || "Recording";
 				await createProject(`Recording ${new Date().toLocaleString()}`);
 				await addAsset(screenPath, label);
+				// ponytail: MediaRecorder WebMs ship with duration = NaN until
+				// fix-webm-duration patches the EBML header; until that flows
+				// through the asset, drop a default 60s clip into the timeline
+				// so the editor isn't stuck on "No clips yet" the moment the
+				// user lands in the project. Real duration overwrites this
+				// when handleLoadedMetadata fires with a finite value.
+				const doc = useProjectStore.getState().document;
+				if (doc && doc.timeline.clips.length === 0 && doc.assets.length > 0) {
+					await useProjectStore
+						.getState()
+						.replaceTimeline([{ startSec: 0, endSec: 60 }], "Auto-imported recording");
+				}
 				toast.success("Recording added to a new project");
 			} catch (err) {
 				toast.error("Could not auto-create project from recording", {
@@ -177,7 +189,7 @@ export function NewEditorShell() {
 		// 2. Handle request-close-confirm from Electron
 		const unsubCloseConfirm = window.electronAPI.onRequestCloseConfirm(() => {
 			void (async () => {
-				const choice = await promptUnsaved("new"); // Use "new" as a generic action for close
+				const choice = await promptUnsaved("close");
 				if (choice === "discard") {
 					window.electronAPI.sendCloseConfirmResponse("discard");
 				} else if (choice === "save") {
@@ -219,21 +231,57 @@ export function NewEditorShell() {
 	}, [document]);
 
 	const handleLoadedMetadata = useCallback(
-		(durationSec: number) => {
-			setSourceDuration(durationSec);
-			if (document && document.assets.length > 0 && document.timeline.clips.length === 0) {
-				const asset =
-					document.assets.find((a) => a.id === document.project.primaryAssetId) ??
-					document.assets[0];
-				if (asset) {
-					void replaceTimeline(
-						[{ startSec: 0, endSec: durationSec }],
-						"Auto-created full-duration clip",
-					);
-				}
+		(durationSec: number, assetId: string) => {
+			// ponytail: WebM recordings from MediaRecorder report NaN/Infinity
+			// until the main-process EBML fix lands. Fall back to a 60s seed if
+			// duration is unknown so the timeline never gets stuck on an empty
+			// placeholder. All store reads go through getState() to avoid
+			// stale-closure bugs.
+			const known = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 60;
+			const state = useProjectStore.getState();
+			setSourceDuration(known);
+			const doc = state.document;
+			if (!doc || doc.assets.length === 0) return;
+			if (doc.timeline.clips.length === 0) {
+				void state.replaceTimeline(
+					[{ startSec: 0, endSec: known }],
+					"Auto-created full-duration clip",
+				);
+				return;
 			}
+			// Only correct clips belonging to the asset that actually fired this
+			// event, and only while they still sit at the pre-probe 0..60s
+			// placeholder — never a clip the user has since trimmed. Patching by
+			// array index (the previous behavior) clobbered clip[0]'s duration
+			// whenever a *different* asset's video element loaded, e.g. right
+			// after dropping a second clip onto the timeline.
+			const PLACEHOLDER_END_SEC = 60;
+			const isPlaceholder = (c: (typeof doc.timeline.clips)[number]) =>
+				c.assetId === assetId &&
+				c.sourceStartSec === 0 &&
+				Math.abs((c.sourceEndSec ?? 0) - PLACEHOLDER_END_SEC) < 0.01;
+			if (Math.abs(known - PLACEHOLDER_END_SEC) < 0.01) return;
+			if (!doc.timeline.clips.some(isPlaceholder)) return;
+
+			let shiftSec = 0;
+			const nextClips = doc.timeline.clips.map((c) => {
+				const shifted = { ...c, timelineStartSec: c.timelineStartSec + shiftSec };
+				if (!isPlaceholder(c)) {
+					shifted.timelineEndSec = c.timelineEndSec + shiftSec;
+					return shifted;
+				}
+				const delta = known - PLACEHOLDER_END_SEC;
+				shifted.sourceEndSec = known;
+				shifted.timelineEndSec = shifted.timelineStartSec + known;
+				shiftSec += delta;
+				return shifted;
+			});
+			void state.saveDocument({
+				...doc,
+				timeline: { ...doc.timeline, clips: nextClips },
+			});
 		},
-		[document, replaceTimeline, setSourceDuration],
+		[setSourceDuration],
 	);
 
 	const handleSeek = useCallback(
@@ -249,13 +297,6 @@ export function NewEditorShell() {
 			setCurrentTime(timeSec);
 		},
 		[setCurrentTime],
-	);
-
-	const handleReplaceTimeline = useCallback(
-		(intervals: Array<{ startSec: number; endSec: number }>, reason: string) => {
-			void replaceTimeline(intervals, reason);
-		},
-		[replaceTimeline],
 	);
 
 	const handleTranscribe = useCallback(async () => {
@@ -455,15 +496,9 @@ export function NewEditorShell() {
 		setExportOpen(true);
 	}, [hasAsset]);
 
-	const handlePreviewSource = useCallback((sec: number) => {
-		setSeekTarget({ timeSec: sec, isSource: true, requestId: ++seekSeqRef.current });
-	}, []);
-
 	const handleOpenSettings = useCallback(() => {
-		toast.info(
-			"Open the right rail to access Background, Effects, Layout, Cursor, and Timeline settings.",
-		);
-	}, []);
+		openShortcutsConfig();
+	}, [openShortcutsConfig]);
 
 	const pasteRegion = useCallback(async () => {
 		const doc = useProjectStore.getState().document;
@@ -525,30 +560,6 @@ export function NewEditorShell() {
 			toast.success("Region copied");
 		}
 	}, [tl]);
-
-	const handleDropOnTimeline = useCallback((e: React.DragEvent) => {
-		e.preventDefault();
-		const assetId = e.dataTransfer.getData("application/x-axcut-asset");
-		if (assetId) setInsertAssetId(assetId);
-	}, []);
-
-	const handleInsertBefore = useCallback(async () => {
-		if (!insertAssetId) return;
-		setInsertAssetId(null);
-		await tl.addClipBefore(insertAssetId);
-	}, [insertAssetId, tl]);
-
-	const handleInsertAfter = useCallback(async () => {
-		if (!insertAssetId) return;
-		setInsertAssetId(null);
-		await tl.addClipAfter(insertAssetId);
-	}, [insertAssetId, tl]);
-
-	const handleInsertSplit = useCallback(async () => {
-		if (!insertAssetId) return;
-		setInsertAssetId(null);
-		await tl.splitAndInsert(insertAssetId, currentTimeSec);
-	}, [insertAssetId, currentTimeSec, tl]);
 
 	const handleCaptions = useCallback(() => {
 		if (!document?.project.primaryAssetId) {
@@ -765,14 +776,7 @@ export function NewEditorShell() {
 				}}
 			/>
 
-			<main
-				className={styles.workbench}
-				onDragOver={(e) => {
-					e.preventDefault();
-					e.dataTransfer.dropEffect = "copy";
-				}}
-				onDrop={handleDropOnTimeline}
-			>
+			<main className={styles.workbench}>
 				{/* Left rail */}
 				<LeftRail active={leftTab} onChange={setLeftTab} />
 
@@ -849,8 +853,7 @@ export function NewEditorShell() {
 					clips={clips}
 					currentTimeSec={currentTimeSec}
 					sourceDurationSec={sourceDurationSec}
-					onPreviewSource={handlePreviewSource}
-					onReplaceTimeline={handleReplaceTimeline}
+					onSeek={handleSeek}
 					zoomRegions={tl.zoomRegions}
 					skipRanges={tl.skipRanges}
 					annotationRegions={tl.annotationRegions}
@@ -905,17 +908,6 @@ export function NewEditorShell() {
 				onMinWords={setCaptionsMinW}
 				onMaxWords={setCaptionsMaxW}
 				onGenerate={handleGenerateCaptions}
-			/>
-			<InsertSourceModal
-				open={insertAssetId !== null}
-				onClose={() => setInsertAssetId(null)}
-				assetLabel={document?.assets.find((a) => a.id === insertAssetId)?.label ?? ""}
-				canAddBefore
-				canAddAfter
-				canSplit={document !== null}
-				onAddBefore={() => void handleInsertBefore()}
-				onAddAfter={() => void handleInsertAfter()}
-				onSplit={() => void handleInsertSplit()}
 			/>
 		</div>
 	);

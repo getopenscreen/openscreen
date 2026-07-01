@@ -98,14 +98,23 @@ The new editor's timeline follows **axcut's custom viewport model**, not the des
 | # | Task | Axcut ref | Design ref | Status | Commit |
 |---|------|-----------|------------|--------|--------|
 | T01 | Port `startGlobalPointerDrag` helper | `lib/pointer-drag.ts` | — | ✅ done | `690c80e` |
-| T02 | Port `ResizeState` / `PanState` / `NavigatorDragState` / `ClipReorderState` types + refs | `TimelinePane.tsx:54-87` | — | ✅ done (Pan + ClipReorder; NavigatorDrag lands with T11) | `8be3dda` |
+| T02 | Port `ResizeState` / `PanState` / `NavigatorDragState` / `ClipReorderState` types + refs | `TimelinePane.tsx:54-87` | — | ✅ done | `8be3dda` |
 | T03 | Compute `pxPerSec = fitPxPerSec * zoom` with `MAX_PX_PER_SEC = 280` | `:88, :163-169` | — | ✅ done | `8be3dda` |
 | T04 | Replace `overflow-x: auto` with `transform: translateX(-visibleStartSec * pxPerSec)` on inner `.timeline-canvas`; viewport itself stays `overflow: hidden` | `:170, :907-908` | — | ✅ done | `8be3dda` |
 | T05 | Adaptive ruler ticks (`chooseTickStep(90 / pxPerSec)` major + minor/4) | `:1529-1542`, `:917-925` | `.timeline-ruler` | ✅ done | `8be3dda` |
 | T06 | Ctrl+wheel = `zoomAt(zoom * ±1.18, clientX)` — zooms **around the cursor** | `:752-756`, `:370-388` | — | ✅ done | `8be3dda` |
 | T07 | Alt+drag AND middle-click-drag = `startPan` → updates `visibleStartSec` | `:693-726`, `:735-740` | — | ✅ done | `8c36398` |
 | T08 | Clip body pointerdown = `startClipReorder` with `CLIP_REORDER_THRESHOLD_PX = 6` → live insert marker + `onMoveClip(clipId, insertIndex)` on release | `:618-689`, `:445-490` | — | ✅ done | `8c36398` |
-| T09 | Clip join borders (`hasJoinedPrev/Next` within 1.5px) — extend left by 1px, width by 1px | `:962-991` | — | ✅ done | `8c36398` |
+| T09 | Clip join borders (`hasJoinedPrev/Next` within 1.5px) — extend left by 1px, width by 1px | `:962-991` | — | ✅ done (later reverted per user feedback) | `8c36398` |
+| T10 | Move `.lanes` into the same `.timeline-canvas` as the clip track | — | `.annotation-track-row`, `.speed-track-row`, `.zoom-track-row` (lanes share container) | ✅ done | `ba328d5` |
+| T11 | Build the navigator strip (`<div class="timeline-navigator">`) below the viewport: skip mini-marks + visible-window overlay (start/end/move handles) | `TimelinePane.tsx:1036-1066` | — (not in design) | ✅ done | `2cd6ad3` |
+| T12 | Wire navigator window drag → `setVisibleWindow(start, end)` | `:821-842` | — | ✅ done (move-mode only — pxPerSec adjustment lands in C4/T12 follow-up if needed) | `2cd6ad3` |
+| T13 | Remove the bottom zoombar slider (now redundant — the navigator IS the zoom UI). Keep the hint row only. | — | `.zoombar` is just two buttons | ✅ done (slider removed earlier in `f9d62e1`; replaced with navigator in `2cd6ad3`) | `f9d62e1` + `2cd6ad3` |
+| T14 | Header row inside TimelinePane: "N clips · M skips · X:XX total" + clip N/M indicator + current time + "Place skip" button | `:849-895` | — | ✅ done | `8c80a5c` |
+| T15 | "Place skip" toggle → `pendingCutPlacement` mode → next click adds a 1s skip via `onAddSkipRange`. Live `pendingCutPreviewSec` marker while armed. Esc cancels. | `:438-475, :495-518` | — | ✅ done | `8c80a5c` |
+| T16 | Add `body.timeline-panning` / `body.timeline-scrubbing` / `body.timeline-placing-cut` / `body.timeline-reordering` cursor classes. Hover cursor = `pointer`, drag-state cursors per mode. | `:497-512, :654-656, :706-708, :723-725` | — | ✅ done | `6dc2358` |
+| T17 | Compact skip mode: when `(endSec - startSec) * pxPerSec < 18`, render controls icon-only (no labels). | `:990-993`, `styles.css .timeline-skip-strip.compact` | — | ✅ done (no-op — skip controls are icon-only by default; documented here for tracking) | `6dc2358` |
+| T18 | Skip hover-controls viewport-aware positioning (`controlsShiftPx` keeps controls onscreen near viewport edge) | `:1001-1010` | — | ✅ done | `6dc2358` |
 | T10 | Move `.lanes` (annotation/speed/zoom pills) **into the same `.timeline-canvas`** as the clip track, scaled by the same `pxPerSec`, transformed by the same `translateX` | — | `.annotation-track-row`, `.speed-track-row`, `.zoom-track-row` (lanes share container) | ❌ (lanes in separate `.lanes` container, desyncs at zoom > 1×) | — |
 | T11 | Build the navigator strip (`<div class="timeline-navigator">`) below the viewport: full-width row with `.timeline-navigator-skip` mini-marks at percentage positions + `.timeline-navigator-window` overlay (start/end handles + move handle) | `:1036-1066` | — (not in design) | ❌ | — |
 | T12 | Wire navigator window drag → `setVisibleWindow(start, end)`; navigator handles → zoom on either side | `:821-842` | — | ❌ | — |

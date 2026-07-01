@@ -1610,6 +1610,12 @@
 	flex-shrink: 0;
 	border-top: 1px solid var(--border-soft);
 }
+
+/* T11 — Navigator strip. Moved to TimelinePane.module.css so the
+   className (applied via TimelinePane's own styles import) actually
+   matches the CSS. CSS modules' class hashes don't match across
+   files. The shape and the elements are unchanged from axcut's
+   .timeline-navigator / .timeline-navigator-window. */
 .zoombar .zoomTrack {
 	position: relative;
 	height: 18px;

@@ -32,6 +32,52 @@
 .viewport.reordering {
 	cursor: grabbing;
 }
+.viewport.scrubbing {
+	cursor: ew-resize;
+}
+.viewport.placingCut {
+	cursor: crosshair;
+}
+
+/* T16 — body-level cursor classes that override child cursors while a
+   timeline interaction is active. */
+body.timeline-scrubbing,
+body.timeline-scrubbing * {
+	cursor: ew-resize !important;
+}
+body.timeline-panning,
+body.timeline-panning * {
+	cursor: grabbing !important;
+}
+body.timeline-reordering,
+body.timeline-reordering * {
+	cursor: grabbing !important;
+}
+/* T15 — Place-skip cursor. The class is added via
+   document.body.classList.add() in Bottombar (raw string), so the
+   selector MUST use :global() — otherwise CSS modules would hash
+   `.timeline-placing-cut` and the rule would never match. Same hash
+   issue as the navigator CSS had. The `*` selector cascades to
+   every descendant with the body class applied. */
+body:global(.timeline-placing-cut),
+body:global(.timeline-placing-cut) * {
+	cursor: crosshair !important;
+}
+/* Same problem on the specific element overrides. */
+body:global(.timeline-placing-cut) .trackBlock,
+body:global(.timeline-placing-cut) .trackBlock:active,
+body:global(.timeline-placing-cut) .skipControlBtn,
+body:global(.timeline-placing-cut) .editIcon,
+body:global(.timeline-placing-cut) .clipDelete,
+body:global(.timeline-placing-cut) .trackBlock .segment,
+body:global(.timeline-placing-cut) .reorderMarker,
+body:global(.timeline-placing-cut) .dropMarker,
+body:global(.timeline-placing-cut) .timelineHeader,
+body:global(.timeline-placing-cut) .timelineHeader *,
+body:global(.timeline-placing-cut) button,
+body:global(.timeline-placing-cut) [class*="vtBtn"] {
+	cursor: crosshair !important;
+}
 
 .canvas {
 	position: relative;
@@ -39,6 +85,11 @@
 	min-width: 100%;
 	display: flex;
 	flex-direction: column;
+	/* T15 — these tokens drive the playhead + placement-marker top
+	   offsets. The marker/playhead use a calc(-1 * (--rule-h + --lanes-h))
+	   to land inside the timing ruler regardless of lane-count changes. */
+	--rule-h: 22px;
+	--lanes-h: 78px;
 	will-change: transform;
 }
 
@@ -76,6 +127,16 @@
 	color: var(--muted);
 	white-space: nowrap;
 	pointer-events: none;
+}
+
+.lanesContainer {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 4px 0 2px;
+	border-bottom: 1px solid var(--border-soft);
+	flex-shrink: 0;
 }
 
 .trackLane {
@@ -152,7 +213,10 @@
 	position: absolute;
 	top: 50%;
 	left: 50%;
-	transform: translate(-50%, -50%);
+	transform: translate(
+		calc(-50% + var(--skip-controls-shift-px, 0px)),
+		-50%
+	);
 	display: flex;
 	align-items: center;
 	gap: 2px;
@@ -303,9 +367,86 @@
 	z-index: 30;
 }
 
+/* T15 — Place-skip preview marker: 1s-wide red-tinted strip at the
+   cursor's source time. Indicates where the next click would land.
+   Top matches the playhead's top (ruler + lanes above) so it spans
+   the entire visible timeline: ruler above + clip tracks below. */
+.placementMarker {
+	position: absolute;
+	top: calc(-1 * (var(--rule-h, 22px) + var(--lanes-h, 78px)));
+	bottom: 0;
+	width: 12px;
+	margin-left: -6px;
+	background: color-mix(in oklch, var(--danger) 50%, transparent);
+	border-left: 2px solid var(--danger);
+	border-right: 2px solid var(--danger);
+	box-shadow: 0 0 8px color-mix(in oklch, var(--danger) 50%, transparent);
+	pointer-events: none;
+	z-index: 12;
+}
+
+/* T14 — Header row above the viewport: clip/skip/total readouts +
+   Place-skip toggle + current timecode. */
+.timelineHeader {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px var(--sp-3) 6px var(--sp-3);
+	border-bottom: 1px solid var(--border-soft);
+	font: 500 11px/1 var(--font-mono);
+	color: var(--muted);
+	flex-shrink: 0;
+}
+.headerStat {
+	letter-spacing: 0.02em;
+}
+.headerDivider {
+	color: var(--dim);
+}
+.headerSpacer {
+	flex: 1 1 auto;
+}
+.headerButton {
+	height: 22px;
+	padding: 0 10px;
+	border: 1px solid var(--border-soft);
+	border-radius: var(--r-sm);
+	background: var(--surface-2);
+	color: var(--fg-2);
+	font: 500 11px/1 var(--font-body);
+	cursor: pointer;
+	transition:
+		background var(--motion-fast) var(--ease),
+		border-color var(--motion-fast) var(--ease);
+}
+.headerButton:hover {
+	background: var(--surface-3);
+	border-color: var(--border-hi);
+}
+.headerButton:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.headerButtonActive {
+	background: var(--accent-wash);
+	border-color: var(--accent);
+	color: var(--accent);
+}
+.headerTime {
+	font-variant-numeric: tabular-nums;
+	color: var(--fg);
+	min-width: 5ch;
+	text-align: right;
+}
+
 .playhead {
 	position: absolute;
-	top: -6px;
+	/* Top: -(ruler + lanes) so the diamond head (::before, 8px tall,
+	   at top: 0) lands inside the .ruler (22px tall) at the very top of
+	   the canvas, not in the zoom/speed/annotation lanes below it.
+	   The vertical line still extends down through the canvas into the
+	   trackLane. */
+	top: calc(-1 * (var(--rule-h, 22px) + var(--lanes-h, 78px)));
 	bottom: 0;
 	width: 2px;
 	background: var(--accent);
@@ -343,4 +484,70 @@
 	border-color: var(--accent);
 	color: var(--accent);
 	background: var(--accent-wash);
+}
+
+/* T11/T12 — Navigator strip. The Navigator is the row that drives
+   the timeline's pan/zoom (axcut TimelinePane.tsx timeline-navigator
+   + .timeline-navigator-window). Lives here, not in
+   NewEditorShell.module.css, because TimelinePane applies the
+   className via its own styles import — CSS modules' class hashes
+   don't match across files. */
+.timelineNavigator {
+	position: relative;
+	height: 1.15rem;
+	flex-shrink: 0;
+	margin: 4px var(--sp-3) 4px var(--sp-3);
+	border: 1px solid var(--border-soft);
+	border-radius: 6px;
+	background: color-mix(in oklch, var(--surface-2) 60%, transparent);
+	overflow: hidden;
+}
+.timelineNavigator.navigating {
+	border-color: var(--accent);
+}
+.timelineNavigatorContent {
+	position: absolute;
+	inset: 0;
+	background: transparent;
+	pointer-events: none;
+}
+.timelineNavigatorSkip {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	min-width: 1px;
+	background: color-mix(in oklch, var(--accent) 50%, transparent);
+	border-left: 1px solid var(--accent);
+	border-right: 1px solid var(--accent);
+	pointer-events: none;
+}
+.timelineNavigatorWindow {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	min-width: 1.8rem;
+	border: 2px solid color-mix(in oklch, var(--accent) 92%, transparent);
+	border-radius: 6px;
+	background: color-mix(in oklch, var(--accent) 16%, transparent);
+	box-shadow:
+		0 0 0 1px rgba(0, 0, 0, 0.45),
+		inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+	cursor: grab;
+}
+.timelineNavigator.navigating .timelineNavigatorWindow {
+	cursor: grabbing;
+}
+.timelineNavigatorHandleStart,
+.timelineNavigatorHandleEnd {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 6px;
+	cursor: ew-resize;
+}
+.timelineNavigatorHandleStart {
+	left: 0;
+}
+.timelineNavigatorHandleEnd {
+	right: 0;
 }

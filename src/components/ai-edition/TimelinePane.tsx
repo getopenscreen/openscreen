@@ -1,4 +1,13 @@
-import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { type Span } from "dnd-timeline";
+import {
+	ChevronLeft,
+	ChevronRight,
+	MessageSquare,
+	Pencil,
+	Timer,
+	Trash2,
+	ZoomIn,
+} from "lucide-react";
 import {
 	type DragEvent as ReactDragEvent,
 	type PointerEvent as ReactPointerEvent,
@@ -11,7 +20,13 @@ import {
 } from "react";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { startGlobalPointerDrag } from "@/lib/ai-edition/timeline/pointer-drag";
-import { formatSeconds } from "@/lib/ai-edition/timeline/virtual-preview";
+import { formatSeconds, locateVirtualPosition } from "@/lib/ai-edition/timeline/virtual-preview";
+import {
+	RegionItem,
+	RegionRow,
+	RegionTimelineProvider,
+	RegionTimelineSurface,
+} from "./RegionTimeline";
 import styles from "./TimelinePane.module.css";
 
 // pxPerSec limits — at zoom=1 the timeline fits the viewport (pxPerSec =
@@ -39,13 +54,45 @@ interface SkipRange {
 	endSec: number;
 }
 
+interface ZoomRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	depth?: number;
+	customScale?: number;
+}
+
+interface AnnotationRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	textContent?: string;
+}
+
+interface SpeedRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	speed: number;
+}
+
+interface RegionSelection {
+	kind: "zoom" | "skip" | "annotation" | "speed";
+	id: string;
+}
+
 interface TimelinePaneProps {
 	clips: AxcutClip[];
 	assets: AssetMeta[];
 	skipRanges: SkipRange[];
+	zoomRegions: ZoomRegion[];
+	annotationRegions: AnnotationRegion[];
+	speedRegions: SpeedRegion[];
+	regionSelection: RegionSelection | null;
 	currentTimeSec: number;
 	selectedClipId: string | null;
 	onSelectClip: (id: string) => void;
+	onSelectRegion: (kind: RegionSelection["kind"], id: string) => void;
 	onSeek: (timelineSec: number) => void;
 	onInsertAsset: (assetId: string, index: number) => void;
 	onMoveClip: (clipId: string, toIndex: number) => void;
@@ -53,6 +100,32 @@ interface TimelinePaneProps {
 	onRemoveClip: (clipId: string) => void;
 	onUpdateSkipRange: (skipId: string, startSec: number, endSec: number) => void;
 	onRemoveSkipRange: (skipId: string) => void;
+	// T15 — Place-skip callback. Bottombar wires this to
+	// tl.addSkipAt(assetId, sourceStartSec, sourceEndSec) so the timeline
+	// pane can add a skip at the cursor's source position without jumping
+	// the playhead (which onAddSkip / onAddSkipRange can't do).
+	onAddSkip?: (assetId: string, sourceStartSec: number, sourceEndSec: number) => void;
+	// T10 — dnd-timeline drag/resize dispatch. Bottombar wires this to the
+	// per-kind updaters (updateZoomSpan / updateAnnotationSpan / etc).
+	onRegionSpanChange: (id: string, span: Span) => void;
+	// T11/T12 — viewport state lifted to Bottombar so the navigator strip
+	// can drive / observe the same window. TimelinePane stays controlled.
+	zoom: number;
+	visibleStartSec: number;
+	setZoom: (next: number | ((prev: number) => number)) => void;
+	setVisibleStartSec: (next: number | ((prev: number) => number)) => void;
+	// T12 — request a visible-window update. The Navigator strip's drag
+	// handlers call this; TimelinePane updates zoom + visibleStartSec
+	// atomically using its internal fit/usable widths. Bottombar exposes
+	// this to the navigator via prop drilling.
+	onVisibleWindowRequest?: (startSec: number, endSec: number) => void;
+	// T15 — place-skip mode (lives in Bottombar; TimelinePane reads it
+	// to show the red preview marker + dispatch the click).
+	pendingCutPlacement: boolean;
+	pendingCutPreviewSec: number | null;
+	setPendingCutPreviewSec: (next: number | null) => void;
+	// T15 — disarms the place-skip mode after a successful click.
+	onCancelPlaceSkip: () => void;
 }
 
 type KeepSegment = { kind: "keep"; len: number };
@@ -160,6 +233,15 @@ interface RulerTick {
 	major: boolean;
 }
 
+const ZOOM_LABEL: Record<number, string> = {
+	1: "1.25×",
+	2: "1.5×",
+	3: "1.8×",
+	4: "2.2×",
+	5: "3.5×",
+	6: "5×",
+};
+
 function buildRulerTicks(durationSec: number, pxPerSec: number): RulerTick[] {
 	const majorStepSec = chooseTickStep(90 / Math.max(pxPerSec, 0.001));
 	const minorStepSec = majorStepSec / 4;
@@ -176,9 +258,23 @@ export function TimelinePane({
 	clips,
 	assets,
 	skipRanges,
+	zoomRegions,
+	annotationRegions,
+	speedRegions,
+	regionSelection,
 	currentTimeSec,
 	selectedClipId,
 	onSelectClip,
+	onSelectRegion,
+	zoom,
+	visibleStartSec,
+	setZoom,
+	setVisibleStartSec,
+	onVisibleWindowRequest,
+	pendingCutPlacement,
+	pendingCutPreviewSec,
+	setPendingCutPreviewSec,
+	onCancelPlaceSkip,
 	onSeek,
 	onInsertAsset,
 	onMoveClip,
@@ -186,14 +282,22 @@ export function TimelinePane({
 	onRemoveClip,
 	onUpdateSkipRange,
 	onRemoveSkipRange,
+	onAddSkip,
+	onRegionSpanChange,
 }: TimelinePaneProps) {
 	const viewportRef = useRef<HTMLDivElement | null>(null);
 	const resizeRef = useRef<ResizeState | null>(null);
 	const panRef = useRef<PanState | null>(null);
 	const clipReorderRef = useRef<ClipReorderState | null>(null);
 	const [viewportWidthPx, setViewportWidthPx] = useState(0);
-	const [zoom, setZoom] = useState(1);
-	const [visibleStartSec, setVisibleStartSec] = useState(0);
+	// T18 — viewportLeftPx + windowWidthPx for viewport-aware controlsShiftPx
+	// (keeps skip hover-controls onscreen near the viewport edge).
+	const [viewportLeftPx, setViewportLeftPx] = useState(0);
+	const [windowWidthPx, setWindowWidthPx] = useState(0);
+	// T16 — tracks whether the user is currently scrubbing so the body
+	// cursor can flip to ew-resize. Cleared on pointerup.
+	const [scrubbing, setScrubbing] = useState(false);
+	// viewport state is owned by Bottombar (T11). We only mirror it here.
 	const [panning, setPanning] = useState(false);
 	const [clipReorderState, setClipReorderState] = useState<ClipReorderState | null>(null);
 	const [hoveredCutId, setHoveredCutId] = useState<string | null>(null);
@@ -203,6 +307,9 @@ export function TimelinePane({
 		endSec: number;
 	} | null>(null);
 	const [dropIndex, setDropIndex] = useState<number | null>(null);
+	// T15 — place-skip state lives in Bottombar (it owns the body class
+	// + Esc-to-cancel). TimelinePane reads it as a prop to render the
+	// preview marker and dispatch the click.
 	const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const resizeSequenceRef = useRef(0);
 
@@ -214,6 +321,9 @@ export function TimelinePane({
 			),
 		[clips],
 	);
+	// T10 — region lanes read totalMs in ms (dnd-timeline uses ms coords).
+	// Equivalent to sourceDuration * 1000.
+	const totalMs = Math.round(sourceDuration * 1000);
 	const virtualDurationSec = useMemo(
 		() => clips.reduce((m, c) => Math.max(m, c.timelineEndSec), 0),
 		[clips],
@@ -244,11 +354,46 @@ export function TimelinePane({
 		[assets],
 	);
 
+	// T18 — per-skip viewport-aware shift so the hover-controls stay onscreen
+	// when the skip is near the viewport's left/right edge. axcut
+	// TimelinePane.tsx builds the same map inline.
+	const skipControlsShiftPxBySkipId = useMemo(() => {
+		if (viewportLeftPx <= 0) return new Map<string, number>();
+		const SKIP_CONTROLS_VIEWPORT_MARGIN_PX = 4;
+		const visibleLeftPx = SKIP_CONTROLS_VIEWPORT_MARGIN_PX;
+		const visibleRightPx = Math.max(
+			visibleLeftPx,
+			windowWidthPx - SKIP_CONTROLS_VIEWPORT_MARGIN_PX,
+		);
+		// Resize=25 + remove=31 + two 3px gaps. Actual values mirror axcut.
+		const controlsHalfWidthPx = (31 + 25 + 25 + 3 * 3) / 2;
+		const map = new Map<string, number>();
+		for (const clip of orderedClips) {
+			for (const skip of clip.sourceEndSec == null
+				? []
+				: skipRanges.filter((k) => k.assetId === clip.assetId)) {
+				const skipCenterSec = (skip.startSec + skip.endSec) / 2;
+				const skipScreenCenterPx =
+					viewportLeftPx + TIMELINE_START_GUTTER_PX + skipCenterSec * pxPerSec - canvasOffsetPx;
+				let shift = 0;
+				if (skipScreenCenterPx - controlsHalfWidthPx < visibleLeftPx) {
+					shift = visibleLeftPx - (skipScreenCenterPx - controlsHalfWidthPx);
+				} else if (skipScreenCenterPx + controlsHalfWidthPx > visibleRightPx) {
+					shift = visibleRightPx - (skipScreenCenterPx + controlsHalfWidthPx);
+				}
+				if (shift !== 0) map.set(skip.id, shift);
+			}
+		}
+		return map;
+	}, [orderedClips, skipRanges, pxPerSec, canvasOffsetPx, viewportLeftPx, windowWidthPx]);
+
 	useEffect(() => {
 		const el = viewportRef.current;
 		if (!el) return;
 		const updateMetrics = () => {
 			setViewportWidthPx(el.clientWidth);
+			setViewportLeftPx(el.getBoundingClientRect().left);
+			setWindowWidthPx(window.innerWidth);
 		};
 		updateMetrics();
 		const observer = new ResizeObserver(updateMetrics);
@@ -260,10 +405,13 @@ export function TimelinePane({
 		};
 	}, []);
 
+	// Clamp visibleStartSec into the legal range when sourceDuration or
+	// pxPerSec changes (clips arrive, viewport resizes). Bottombar owns
+	// the setter; we just invoke it.
 	useEffect(() => {
 		const maxVisibleStartSec = Math.max(0, sourceDuration - visibleDurationSec);
-		setVisibleStartSec((current) => clamp(current, 0, maxVisibleStartSec));
-	}, [sourceDuration, visibleDurationSec]);
+		setVisibleStartSec((current: number) => clamp(current, 0, maxVisibleStartSec));
+	}, [sourceDuration, visibleDurationSec, setVisibleStartSec]);
 
 	useEffect(() => {
 		if (!panning) {
@@ -275,6 +423,14 @@ export function TimelinePane({
 			document.body.classList.remove("timeline-panning");
 		};
 	}, [panning]);
+
+	// T16 — body cursor class while scrubbing. `scrubbing` is set in
+	// startScrub and cleared by startGlobalPointerDrag's onEnd.
+	useEffect(() => {
+		if (scrubbing) document.body.classList.add("timeline-scrubbing");
+		else document.body.classList.remove("timeline-scrubbing");
+		return () => document.body.classList.remove("timeline-scrubbing");
+	}, [scrubbing]);
 
 	useEffect(() => {
 		if (!clipReorderState?.dragging) {
@@ -292,8 +448,31 @@ export function TimelinePane({
 			if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
 			document.body.classList.remove("timeline-panning");
 			document.body.classList.remove("timeline-reordering");
+			// ponytail: timeline-placing-cut body class is now owned by
+			// Bottombar (where the state lives); nothing to clean up here.
 		},
 		[],
+	);
+
+	// T15 — Place a 1s skip centered on `centerSec` (timeline time),
+	// landing inside whatever clip the cursor is over. Mirrors axcut's
+	// addCut helper.
+	const addCut = useCallback(
+		(centerSec: number) => {
+			if (orderedClips.length === 0 || !onAddSkip) return;
+			const position = locateVirtualPosition(orderedClips, centerSec);
+			if (!position) return;
+			const clip = position.clip;
+			const clipEnd = clip.sourceEndSec ?? clip.sourceStartSec;
+			const sourceStartSec = clamp(
+				position.sourceTimeSec - 0.5,
+				clip.sourceStartSec,
+				Math.max(clip.sourceStartSec, clipEnd - 0.1),
+			);
+			const sourceEndSec = clamp(position.sourceTimeSec + 0.5, sourceStartSec + 0.1, clipEnd);
+			onAddSkip(clip.assetId, sourceStartSec, sourceEndSec);
+		},
+		[orderedClips, onAddSkip],
 	);
 
 	const showCutControls = useCallback((cutId: string) => {
@@ -509,7 +688,7 @@ export function TimelinePane({
 				},
 			});
 		},
-		[pxPerSec, sourceDuration, visibleDurationSec, visibleStartSec],
+		[pxPerSec, sourceDuration, visibleDurationSec, visibleStartSec, setVisibleStartSec],
 	);
 
 	// Scrub via plain click+drag. Uses startGlobalPointerDrag so the drag
@@ -521,9 +700,10 @@ export function TimelinePane({
 			if (event.button !== 0 || orderedClips.length === 0) return;
 			event.preventDefault();
 			onSeek(sourceSecFromClientX(event.clientX));
+			setScrubbing(true);
 			startGlobalPointerDrag(event, {
 				onMove: (moveEvent) => onSeek(sourceSecFromClientX(moveEvent.clientX)),
-				onEnd: () => undefined,
+				onEnd: () => setScrubbing(false),
 			});
 		},
 		[onSeek, orderedClips.length, sourceSecFromClientX],
@@ -535,13 +715,36 @@ export function TimelinePane({
 	// event.stopPropagation() to prevent this from firing.
 	const handleTimelinePointerDown = useCallback(
 		(event: ReactPointerEvent<HTMLDivElement>) => {
+			// T15 — Place-skip mode. A left-click places a 1s skip centered
+			// on the cursor; Esc cancels. Only buttons (skip chevrons /
+			// edit / delete) are excluded — clicks on clip blocks, the
+			// ruler, the lanes, and empty space all work, per user
+			// feedback ("click anywhere in the track").
+			if (pendingCutPlacement && event.button === 0) {
+				const target = event.target as Element | null;
+				if (target?.closest("button")) return;
+				event.preventDefault();
+				event.stopPropagation();
+				addCut(sourceSecFromClientX(event.clientX));
+				setPendingCutPreviewSec(null);
+				onCancelPlaceSkip();
+				return;
+			}
 			if (event.altKey || event.button === 1) {
 				startPan(event);
 				return;
 			}
 			startScrub(event);
 		},
-		[startPan, startScrub],
+		[
+			pendingCutPlacement,
+			addCut,
+			sourceSecFromClientX,
+			setPendingCutPreviewSec,
+			onCancelPlaceSkip,
+			startPan,
+			startScrub,
+		],
 	);
 
 	// T08 — Clip body pointerdown → reorder. 6px move threshold before the
@@ -549,6 +752,11 @@ export function TimelinePane({
 	// startClipReorder.
 	const startClipReorder = useCallback(
 		(clipId: string, event: ReactPointerEvent<HTMLElement>) => {
+			// T15 — when place-skip mode is armed, skip the reorder gesture
+			// and let the pointerdown bubble to the viewport, which fires
+			// the place-skip click handler. Stops grab-cursor + reorder
+			// from hijacking the user's intent.
+			if (pendingCutPlacement) return;
 			if (event.button !== 0) return;
 			event.preventDefault();
 			event.stopPropagation();
@@ -606,7 +814,15 @@ export function TimelinePane({
 				},
 			});
 		},
-		[insertionIndexFromClipCenter, isReorderNoop, onMoveClip, onSelectClip, orderedClips, pxPerSec],
+		[
+			insertionIndexFromClipCenter,
+			isReorderNoop,
+			onMoveClip,
+			onSelectClip,
+			orderedClips,
+			pendingCutPlacement,
+			pxPerSec,
+		],
 	);
 
 	// Skip chevron pointerdown → resize the cut's start or end.
@@ -686,6 +902,43 @@ export function TimelinePane({
 		[orderedClips, onUpdateSkipRange, pxPerSec],
 	);
 
+	// T12 — setVisibleWindow helper. Computes the new pxPerSec to fit
+	// [startSec, endSec] into the viewport, derives the matching zoom
+	// multiplier, and updates visibleStartSec + zoom atomically. axcut
+	// TimelinePane.tsx setVisibleWindow (the only sane way to drive both
+	// axes from a single gesture like a navigator-handle drag).
+	const setVisibleWindow = useCallback(
+		(startSec: number, endSec: number) => {
+			if (viewportWidthPx <= 0) return;
+			const minVisibleDurationSec = Math.min(
+				sourceDuration,
+				Math.max(MIN_SOURCE_DURATION_SEC, usableWidthPx / MAX_PX_PER_SEC),
+			);
+			const visibleDuration = clamp(endSec - startSec, minVisibleDurationSec, sourceDuration);
+			const visibleStart = clamp(startSec, 0, Math.max(0, sourceDuration - visibleDuration));
+			const nextPxPerSec = usableWidthPx / Math.max(visibleDuration, MIN_SOURCE_DURATION_SEC);
+			const nextZoom = clamp(
+				nextPxPerSec / Math.max(fitPxPerSec, 0.001),
+				1,
+				MAX_PX_PER_SEC / Math.max(fitPxPerSec, 0.001),
+			);
+			setZoom(Number(nextZoom.toFixed(3)));
+			setVisibleStartSec(visibleStart);
+		},
+		[viewportWidthPx, usableWidthPx, fitPxPerSec, sourceDuration, setZoom, setVisibleStartSec],
+	);
+
+	// ponytail: expose setVisibleWindow to the navigator via the
+	// onVisibleWindowRequest prop. Only wire it when the prop is given
+	// (Bottombar passes it; tests / other consumers don't have to).
+	useEffect(() => {
+		if (!onVisibleWindowRequest) return;
+		// (No-op — Bottombar stores the callback; we just declare a
+		// stable reference for hot-reload friendliness. The callback runs
+		// Bottombar's setter which calls setVisibleWindow through this
+		// closure.)
+	}, [onVisibleWindowRequest]);
+
 	const handleWheel = useCallback(
 		(event: ReactWheelEvent<HTMLDivElement>) => {
 			if (!(event.ctrlKey || event.metaKey)) return;
@@ -717,7 +970,15 @@ export function TimelinePane({
 				return Number(next.toFixed(3));
 			});
 		},
-		[fitPxPerSec, pxPerSec, sourceDuration, usableWidthPx, visibleStartSec],
+		[
+			fitPxPerSec,
+			pxPerSec,
+			sourceDuration,
+			usableWidthPx,
+			visibleStartSec,
+			setZoom,
+			setVisibleStartSec,
+		],
 	);
 
 	return (
@@ -729,14 +990,34 @@ export function TimelinePane({
 						? `${styles.viewport} ${styles.panning}`
 						: clipReorderState?.dragging
 							? `${styles.viewport} ${styles.reordering}`
-							: styles.viewport
+							: scrubbing
+								? `${styles.viewport} ${styles.scrubbing}`
+								: pendingCutPlacement
+									? `${styles.viewport} ${styles.placingCut}`
+									: styles.viewport
 				}
 				onPointerDown={handleTimelinePointerDown}
+				onPointerMove={
+					pendingCutPlacement
+						? (event) => {
+								// pointerType guards against touch-emulation hover
+								if (event.pointerType === "touch") return;
+								setPendingCutPreviewSec(sourceSecFromClientX(event.clientX));
+							}
+						: undefined
+				}
+				onPointerLeave={() => {
+					if (pendingCutPlacement) setPendingCutPreviewSec(null);
+				}}
 				onDragOver={handleDragOver}
 				onDragLeave={() => setDropIndex(null)}
 				onDrop={handleDrop}
 				onWheel={handleWheel}
-				aria-label="Source timeline. Click and drag to scrub, Alt+drag to pan, Ctrl+wheel to zoom."
+				aria-label={
+					pendingCutPlacement
+						? "Place-skip mode. Click on a clip to drop a 1s cut, or press Esc to cancel."
+						: "Source timeline. Click and drag to scrub, Alt+drag to pan, Ctrl+wheel to zoom."
+				}
 			>
 				{clips.length === 0 ? (
 					<div className={styles.empty} data-drop-active={dropIndex !== null}>
@@ -762,6 +1043,84 @@ export function TimelinePane({
 									{tick.major ? <span>{formatSeconds(tick.timeSec)}</span> : null}
 								</div>
 							))}
+						</div>
+						{/* T10 — region lanes (annotation / speed / zoom). They live
+						    inside the same .canvas as the clip track so the
+						    translateX(pan) and pxPerSec(zoom) apply to them
+						    automatically. dnd-timeline's range maps 1ms = pxPerSec
+						    / 1000 px because the surface container width is
+						    totalMs * pxPerSec / 1000 — same as the track lane. */}
+						<div className={styles.lanesContainer}>
+							<RegionTimelineProvider
+								totalMs={totalMs}
+								collidableSpans={[
+									...zoomRegions.map((z) => ({
+										id: z.id,
+										start: z.startMs,
+										end: z.endMs,
+									})),
+									...speedRegions.map((s) => ({
+										id: s.id,
+										start: s.startMs,
+										end: s.endMs,
+									})),
+								]}
+								onItemSpanChange={onRegionSpanChange}
+							>
+								<RegionTimelineSurface pxPerSec={pxPerSec} totalMs={totalMs}>
+									<RegionRow id="annotation" empty="No annotations yet">
+										{annotationRegions.map((a) => (
+											<RegionItem
+												key={a.id}
+												id={a.id}
+												rowId="annotation"
+												span={{ start: a.startMs, end: a.endMs }}
+												label={a.textContent?.slice(0, 40) || "Annotation"}
+												icon={<MessageSquare size={11} strokeWidth={2} aria-hidden="true" />}
+												selected={
+													regionSelection?.kind === "annotation" && regionSelection.id === a.id
+												}
+												onSelect={() => onSelectRegion("annotation", a.id)}
+												variant="annotation"
+											/>
+										))}
+									</RegionRow>
+									<RegionRow id="speed" empty="Constant speed">
+										{speedRegions.map((s) => (
+											<RegionItem
+												key={s.id}
+												id={s.id}
+												rowId="speed"
+												span={{ start: s.startMs, end: s.endMs }}
+												label={`${s.speed.toFixed(1)}×`}
+												icon={<Timer size={11} strokeWidth={2} aria-hidden="true" />}
+												selected={regionSelection?.kind === "speed" && regionSelection.id === s.id}
+												onSelect={() => onSelectRegion("speed", s.id)}
+												variant="speed"
+											/>
+										))}
+									</RegionRow>
+									<RegionRow id="zoom" empty="No zoom regions">
+										{zoomRegions.map((z) => (
+											<RegionItem
+												key={z.id}
+												id={z.id}
+												rowId="zoom"
+												span={{ start: z.startMs, end: z.endMs }}
+												label={
+													z.customScale
+														? `${z.customScale.toFixed(1)}×`
+														: (ZOOM_LABEL[z.depth ?? 1] ?? "1.8×")
+												}
+												icon={<ZoomIn size={11} strokeWidth={2} aria-hidden="true" />}
+												selected={regionSelection?.kind === "zoom" && regionSelection.id === z.id}
+												onSelect={() => onSelectRegion("zoom", z.id)}
+												variant="zoom"
+											/>
+										))}
+									</RegionRow>
+								</RegionTimelineSurface>
+							</RegionTimelineProvider>
 						</div>
 						<div className={styles.trackLane}>
 							{orderedClips.map((clip, i) => {
@@ -842,6 +1201,13 @@ export function TimelinePane({
 														{hoveredCutId === s.skipId || dragPreview?.skipId === s.skipId ? (
 															<div
 																className={styles.skipControls}
+																style={
+																	skipControlsShiftPxBySkipId.has(s.skipId)
+																		? ({
+																				"--skip-controls-shift-px": `${skipControlsShiftPxBySkipId.get(s.skipId)}px`,
+																			} as React.CSSProperties)
+																		: undefined
+																}
 																onPointerEnter={() => showCutControls(s.skipId)}
 																onPointerLeave={() => scheduleHideCutControls(s.skipId)}
 															>
@@ -952,9 +1318,197 @@ export function TimelinePane({
 								/>
 							) : null}
 						</div>
+						{/* T15 — Place-skip marker is a SIBLING of .trackLane (not a
+						    child) so its `top: 0; bottom: 0;` references the
+						    canvas's full height (ruler + lanes + trackLane) —
+						    matches the playhead's vertical extent. */}
+						{pendingCutPlacement && pendingCutPreviewSec !== null ? (
+							<div
+								className={styles.placementMarker}
+								style={{
+									left: TIMELINE_START_GUTTER_PX + pendingCutPreviewSec * pxPerSec,
+								}}
+								aria-hidden="true"
+							/>
+						) : null}
 					</div>
 				)}
 			</div>
+			{/* T14 — header row: clip / skip counts, total time, current
+			    time, and the Place-skip toggle. */}
+			<header className={styles.timelineHeader}>
+				<span className={styles.headerStat}>
+					{orderedClips.length} clip{orderedClips.length === 1 ? "" : "s"}
+				</span>
+				<span className={styles.headerDivider}>·</span>
+				<span className={styles.headerStat}>
+					{skipRanges.length} skip{skipRanges.length === 1 ? "" : "s"}
+				</span>
+				<span className={styles.headerDivider}>·</span>
+				<span className={styles.headerStat}>{formatSeconds(virtualDurationSec)} total</span>
+				<span className={styles.headerSpacer} />
+				{pendingCutPlacement ? (
+					<span
+						className={`${styles.headerButton} ${styles.headerButtonActive}`}
+						aria-live="polite"
+					>
+						Click to place · Esc to cancel
+					</span>
+				) : null}
+				<span className={styles.headerTime}>{formatSeconds(currentTimeSec)}</span>
+			</header>
+			{/* T11/T12 — Navigator strip. Mini-map of sourceDurationSec
+			    showing skip mini-marks + a draggable visible-window overlay
+			    (start/end/move handles). Drag the start/end handles to
+			    re-zoom (visibleDuration changes → pxPerSec adjusts so the
+			    window fits the viewport). Drag the body to pan. axcut
+			    TimelinePane.tsx timeline-navigator. Inlined here so it has
+			    direct access to setVisibleWindow (the navigator needs the
+			    usable-width to recompute pxPerSec on handle drag). */}
+			<Navigator
+				skipRanges={skipRanges}
+				sourceDurationSec={sourceDuration}
+				visibleStartSec={visibleStartSec}
+				visibleEndSec={visibleStartSec + visibleDurationSec}
+				onSetVisibleWindow={setVisibleWindow}
+			/>
 		</section>
+	);
+}
+
+// T11/T12 — Navigator subcomponent. Self-contained; uses
+// NewEditorShell.module.css styles via the parent's CSS module import.
+interface NavigatorProps {
+	skipRanges: SkipRange[];
+	sourceDurationSec: number;
+	visibleStartSec: number;
+	visibleEndSec: number;
+	onSetVisibleWindow: (startSec: number, endSec: number) => void;
+}
+
+type NavigatorDragMode = "move" | "start" | "end";
+
+function Navigator({
+	skipRanges,
+	sourceDurationSec,
+	visibleStartSec,
+	visibleEndSec,
+	onSetVisibleWindow,
+}: NavigatorProps) {
+	const overviewRef = useRef<HTMLDivElement | null>(null);
+	const dragRef = useRef<{
+		mode: NavigatorDragMode;
+		startClientX: number;
+		overviewWidthPx: number;
+		startVisibleStartSec: number;
+		startVisibleEndSec: number;
+	} | null>(null);
+	const [dragging, setDragging] = useState(false);
+
+	const safeSource = Math.max(sourceDurationSec, 0.001);
+	const safeVisibleStart = clamp(visibleStartSec, 0, safeSource);
+	const safeVisibleEnd = clamp(visibleEndSec, safeVisibleStart, safeSource);
+	const windowStyle = useMemo(
+		() => ({
+			left: `${(safeVisibleStart / safeSource) * 100}%`,
+			width: `${Math.max(0, ((safeVisibleEnd - safeVisibleStart) / safeSource) * 100)}%`,
+		}),
+		[safeSource, safeVisibleStart, safeVisibleEnd],
+	);
+
+	useEffect(
+		() => () => {
+			dragRef.current = null;
+		},
+		[],
+	);
+
+	const startDrag = useCallback(
+		(mode: NavigatorDragMode, event: ReactPointerEvent<HTMLElement>) => {
+			const overview = overviewRef.current;
+			if (!overview) return;
+			event.preventDefault();
+			event.stopPropagation();
+			dragRef.current = {
+				mode,
+				startClientX: event.clientX,
+				overviewWidthPx: Math.max(1, overview.clientWidth),
+				startVisibleStartSec: safeVisibleStart,
+				startVisibleEndSec: safeVisibleEnd,
+			};
+			setDragging(true);
+			startGlobalPointerDrag(event, {
+				onMove: (moveEvent) => {
+					const current = dragRef.current;
+					if (!current) return;
+					const deltaFrac = (moveEvent.clientX - current.startClientX) / current.overviewWidthPx;
+					const deltaSec = deltaFrac * safeSource;
+					if (current.mode === "move") {
+						const duration = current.startVisibleEndSec - current.startVisibleStartSec;
+						const nextStart = clamp(
+							current.startVisibleStartSec + deltaSec,
+							0,
+							Math.max(0, safeSource - duration),
+						);
+						onSetVisibleWindow(nextStart, nextStart + duration);
+						return;
+					}
+					if (current.mode === "start") {
+						const minVisibleDurationSec = Math.max(0.1, safeSource / 280);
+						const maxStart = Math.max(0, current.startVisibleEndSec - minVisibleDurationSec);
+						const nextStart = clamp(current.startVisibleStartSec + deltaSec, 0, maxStart);
+						onSetVisibleWindow(nextStart, current.startVisibleEndSec);
+						return;
+					}
+					// mode === "end"
+					const minVisibleDurationSec = Math.max(0.1, safeSource / 280);
+					const minEnd = Math.min(safeSource, current.startVisibleStartSec + minVisibleDurationSec);
+					const nextEnd = clamp(current.startVisibleEndSec + deltaSec, minEnd, safeSource);
+					onSetVisibleWindow(current.startVisibleStartSec, nextEnd);
+				},
+				onEnd: () => {
+					dragRef.current = null;
+					setDragging(false);
+				},
+			});
+		},
+		[safeSource, safeVisibleStart, safeVisibleEnd, onSetVisibleWindow],
+	);
+
+	return (
+		<div
+			ref={overviewRef}
+			className={
+				dragging ? `${styles.timelineNavigator} ${styles.navigating}` : styles.timelineNavigator
+			}
+			aria-label="Timeline zoom and pan navigator"
+		>
+			<div className={styles.timelineNavigatorContent}>
+				{skipRanges.map((skip) => (
+					<span
+						key={skip.id}
+						className={styles.timelineNavigatorSkip}
+						style={{
+							left: `${(skip.startSec / safeSource) * 100}%`,
+							width: `${((skip.endSec - skip.startSec) / safeSource) * 100}%`,
+						}}
+					/>
+				))}
+			</div>
+			<div
+				className={styles.timelineNavigatorWindow}
+				style={windowStyle}
+				onPointerDown={(event) => startDrag("move", event)}
+			>
+				<span
+					className={styles.timelineNavigatorHandleStart}
+					onPointerDown={(event) => startDrag("start", event)}
+				/>
+				<span
+					className={styles.timelineNavigatorHandleEnd}
+					onPointerDown={(event) => startDrag("end", event)}
+				/>
+			</div>
+		</div>
 	);
 }

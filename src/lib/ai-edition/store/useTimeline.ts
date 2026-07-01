@@ -99,6 +99,34 @@ export function useTimeline() {
 		await saveDocument(next);
 	}, [document, currentTimeSec, saveDocument]);
 
+	// T15 — add a skip at a specific (assetId, sourceStartSec, sourceEndSec).
+	// Used by the place-skip mode in TimelinePane where the cursor lands
+	// inside a specific clip's source range, not just at currentTimeSec.
+	const addSkipAt = useCallback(
+		async (assetId: string, sourceStartSec: number, sourceEndSec: number) => {
+			if (!document) return;
+			const next: AxcutDocument = {
+				...document,
+				timeline: {
+					...document.timeline,
+					skipRanges: [
+						...document.timeline.skipRanges,
+						{
+							id: createId("skip"),
+							assetId,
+							startSec: sourceStartSec,
+							endSec: sourceEndSec,
+							reason: "manual",
+							origin: "user" as const,
+						},
+					],
+				},
+			};
+			await saveDocument(next);
+		},
+		[document, saveDocument],
+	);
+
 	const addAnnotation = useCallback(async () => {
 		if (!document) return;
 		const timeMs = Math.round(currentTimeSec * 1000);
@@ -657,6 +685,7 @@ export function useTimeline() {
 		clipSelection,
 		addZoom,
 		addSkip,
+		addSkipAt,
 		addAnnotation,
 		addSpeed,
 		removeRegion,

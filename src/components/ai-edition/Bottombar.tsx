@@ -1,7 +1,9 @@
+import * as Slider from "@radix-ui/react-slider";
 import {
 	ChevronDown,
 	FileText,
 	MessageSquare,
+	Pencil,
 	Scissors,
 	Timer,
 	WandSparkles,
@@ -11,7 +13,10 @@ import { useState } from "react";
 import type { AnnotationRegion } from "@/components/video-editor/types";
 import type { AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import { useTimeline } from "@/lib/ai-edition/store/useTimeline";
+import { formatMs } from "@/lib/ai-edition/timeline/format";
 import { ASPECT_RATIOS, type AspectRatio } from "@/utils/aspectRatioUtils";
+import { EditClipModal, type EditClipPatch } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 import { TimelinePane } from "./TimelinePane";
 
@@ -26,12 +31,7 @@ interface BottombarProps {
 	clips: AxcutClip[];
 	currentTimeSec: number;
 	sourceDurationSec: number;
-	onPreviewSource: (sec: number) => void;
-	onReplaceTimeline: (
-		intervals: Array<{ startSec: number; endSec: number }>,
-		reason: string,
-	) => void;
-	// Region operations (from useTimeline)
+	onSeek: (timelineSec: number) => void;
 	zoomRegions: AxcutDocument["zoomRanges"];
 	skipRanges: AxcutDocument["timeline"]["skipRanges"];
 	annotationRegions: AnnotationRegion[];
@@ -58,20 +58,22 @@ const RATIO_LABELS: Record<AspectRatio, string> = {
 	native: "Original",
 };
 
-function formatMs(ms: number): string {
-	const sec = ms / 1000;
-	const m = Math.floor(sec / 60);
-	const s = (sec % 60).toFixed(1);
-	return `${m}:${s.padStart(4, "0")}`;
-}
+const ZOOM_LABEL: Record<number, string> = {
+	1: "1.25×",
+	2: "1.5×",
+	3: "1.8×",
+	4: "2.2×",
+	5: "3.5×",
+	6: "5×",
+};
 
 export function Bottombar({
 	clips,
 	currentTimeSec,
 	sourceDurationSec,
-	onPreviewSource,
-	onReplaceTimeline,
+	onSeek,
 	zoomRegions,
+	skipRanges,
 	annotationRegions,
 	speedRegions,
 	selection,
@@ -85,7 +87,15 @@ export function Bottombar({
 	onCaptions,
 }: BottombarProps) {
 	const { settings, set } = useEditorSettings();
+	const tl = useTimeline();
 	const [ratioOpen, setRatioOpen] = useState(false);
+	const [zoomRange, setZoomRange] = useState<[number, number]>([0, 100]);
+	const [editClipTarget, setEditClipTarget] = useState<AxcutClip | null>(null);
+	const safeDuration = Math.max(sourceDurationSec, 0.001);
+	const firstClip = clips[0] ?? null;
+	const editClipAsset = editClipTarget
+		? (tl.assets.find((a) => a.id === editClipTarget.assetId) ?? null)
+		: null;
 	return (
 		<footer className={styles.bottombar} aria-label="Timeline and properties">
 			<section
@@ -203,81 +213,126 @@ export function Bottombar({
 							<span className={styles.kbd}>+ Scroll</span>
 							<span>Zoom</span>
 						</span>
+						<button
+							type="button"
+							className={styles.vtBtn}
+							style={{
+								marginLeft: 8,
+								height: 28,
+								width: "auto",
+								padding: "0 10px",
+								gap: 6,
+								borderRadius: "var(--r-sm)",
+							}}
+							onClick={() => firstClip && setEditClipTarget(firstClip)}
+							disabled={!firstClip}
+							title={firstClip ? "Edit the first clip's in/out points" : "Add a clip first"}
+							aria-label="Edit clip"
+						>
+							<Pencil size={14} />
+							Edit clip…
+						</button>
 					</div>
 				</header>
 				<div className={styles.timelineBody}>
-					{/* Region lane rows */}
-					<div
-						style={{
-							padding: "4px var(--sp-4) 0",
-							display: "flex",
-							flexDirection: "column",
-							gap: 4,
-							flexShrink: 0,
-						}}
-					>
-						{zoomRegions.length > 0 ? (
-							<LaneRow
-								label="Zoom"
-								kind="zoom"
-								items={zoomRegions.map((z) => ({
-									id: z.id,
-									startMs: z.startMs,
-									endMs: z.endMs,
-									label: `${getZoomLabel(z)}`,
-								}))}
-								selection={selection}
-								onSelect={onSelectRegion}
-								onRemove={onRemoveRegion}
-							/>
-						) : null}
-						{annotationRegions.length > 0 ? (
-							<LaneRow
-								label="Annotations"
-								kind="annotation"
-								items={annotationRegions.map((a) => ({
-									id: a.id,
-									startMs: a.startMs,
-									endMs: a.endMs,
-									label: a.content?.slice(0, 30) || "Annotation",
-								}))}
-								selection={selection}
-								onSelect={onSelectRegion}
-								onRemove={onRemoveRegion}
-							/>
-						) : null}
-						{speedRegions.length > 0 ? (
-							<LaneRow
-								label="Speed"
-								kind="speed"
-								items={speedRegions.map((s) => ({
-									id: s.id,
-									startMs: s.startMs,
-									endMs: s.endMs,
-									label: `${s.speed}×`,
-								}))}
-								selection={selection}
-								onSelect={onSelectRegion}
-								onRemove={onRemoveRegion}
-							/>
-						) : null}
+					{/* Region lanes: annotation / speed / zoom — visible always, design style */}
+					<div className={styles.lanes}>
+						<LaneRow
+							label="Annotations"
+							kind="annotation"
+							empty="No annotations yet"
+							items={annotationRegions.map((a) => ({
+								id: a.id,
+								startMs: a.startMs,
+								endMs: a.endMs,
+								label: a.textContent?.slice(0, 40) || "Annotation",
+							}))}
+							totalMs={Math.round(safeDuration * 1000)}
+							selection={selection}
+							onSelect={onSelectRegion}
+							onRemove={onRemoveRegion}
+						/>
+						<LaneRow
+							label="Speed"
+							kind="speed"
+							empty="Constant speed"
+							items={speedRegions.map((s) => ({
+								id: s.id,
+								startMs: s.startMs,
+								endMs: s.endMs,
+								label: `${s.speed.toFixed(1)}×`,
+							}))}
+							totalMs={Math.round(safeDuration * 1000)}
+							selection={selection}
+							onSelect={onSelectRegion}
+							onRemove={onRemoveRegion}
+						/>
+						<LaneRow
+							label="Zoom"
+							kind="zoom"
+							empty="No zoom regions"
+							items={zoomRegions.map((z) => ({
+								id: z.id,
+								startMs: z.startMs,
+								endMs: z.endMs,
+								label: z.customScale
+									? `${z.customScale.toFixed(1)}×`
+									: (ZOOM_LABEL[z.depth] ?? "1.8×"),
+							}))}
+							totalMs={Math.round(safeDuration * 1000)}
+							selection={selection}
+							onSelect={onSelectRegion}
+							onRemove={onRemoveRegion}
+						/>
 					</div>
 					<div className="timelinePaneWrap" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
 						<TimelinePane
 							clips={clips}
+							assets={tl.assets}
+							skipRanges={skipRanges}
 							currentTimeSec={currentTimeSec}
-							sourceDurationSec={sourceDurationSec}
-							onPreviewSource={onPreviewSource}
-							onReplaceTimeline={onReplaceTimeline}
+							selectedClipId={tl.clipSelection}
+							onSelectClip={tl.selectClip}
+							onSeek={onSeek}
+							onInsertAsset={(assetId, index) => void tl.insertClipAt(assetId, index)}
+							onMoveClip={(clipId, toIndex) => void tl.moveClip(clipId, toIndex)}
+							onEditClip={(clip) => setEditClipTarget(clip)}
+							onRemoveClip={(clipId) => void tl.removeClip(clipId)}
 						/>
 					</div>
 				</div>
 				<div className={styles.zoombar} role="group" aria-label="Zoom range">
-					<div className={styles.zoomTrack}>
-						<div className={styles.zoomFill} aria-hidden />
-					</div>
+					<Slider.Root
+						className={styles.sliderRoot}
+						value={zoomRange}
+						min={0}
+						max={100}
+						step={1}
+						minStepsBetweenThumbs={1}
+						onValueChange={(v) => setZoomRange([v[0] ?? 0, v[1] ?? 100])}
+						aria-label="Timeline visible range"
+					>
+						<Slider.Track className={styles.sliderTrack}>
+							<Slider.Range className={styles.sliderRange} />
+						</Slider.Track>
+						<Slider.Thumb className={styles.sliderThumb} aria-label="Zoom in start" />
+						<Slider.Thumb className={styles.sliderThumb} aria-label="Zoom in end" />
+					</Slider.Root>
 				</div>
 			</section>
+			<EditClipModal
+				open={editClipTarget !== null}
+				onClose={() => setEditClipTarget(null)}
+				clip={editClipTarget}
+				assetMeta={
+					editClipAsset
+						? { label: editClipAsset.label, durationSec: editClipAsset.durationSec }
+						: null
+				}
+				onSave={(patch: EditClipPatch) => {
+					if (editClipTarget) void tl.editClip(editClipTarget.id, patch);
+				}}
+			/>
 		</footer>
 	);
 }
@@ -312,113 +367,109 @@ function VtBtn({
 	);
 }
 
+interface LaneItem {
+	id: string;
+	startMs: number;
+	endMs: number;
+	label: string;
+}
+
 function LaneRow({
 	label,
 	kind,
+	empty,
 	items,
+	totalMs,
 	selection,
 	onSelect,
 	onRemove,
 }: {
 	label: string;
 	kind: RegionKind;
-	items: Array<{ id: string; startMs: number; endMs: number; label: string }>;
+	empty: string;
+	items: LaneItem[];
+	totalMs: number;
 	selection: RegionHandle | null;
 	onSelect: (kind: RegionKind, id: string) => void;
 	onRemove: (kind: RegionKind, id: string) => void;
 }) {
+	const safeMax = Math.max(totalMs, 1);
 	return (
-		<div
-			style={{
-				display: "flex",
-				alignItems: "center",
-				gap: 8,
-				height: 30,
-			}}
-		>
-			<span
-				style={{
-					font: "600 10px/1 var(--font-mono)",
-					color: "var(--meta)",
-					letterSpacing: "0.04em",
-					textTransform: "uppercase",
-					minWidth: 48,
-					flexShrink: 0,
-				}}
-			>
-				{label}
-			</span>
-			{items.map((item) => {
-				const isSel = selection?.kind === kind && selection?.id === item.id;
-				return (
-					<button
-						type="button"
-						key={item.id}
-						onClick={() => onSelect(kind, item.id)}
-						title={`${formatMs(item.startMs)}–${formatMs(item.endMs)}`}
-						style={{
-							display: "inline-flex",
-							alignItems: "center",
-							gap: 6,
-							padding: "3px 8px",
-							borderRadius: "var(--r-md)",
-							border: `1px solid ${isSel ? "var(--accent)" : "var(--border-soft)"}`,
-							background: isSel ? "var(--accent-soft)" : "var(--surface-2)",
-							color: isSel ? "var(--accent)" : "var(--fg-2)",
-							font: "500 11px/1 var(--font-mono)",
-							letterSpacing: "0.02em",
-							cursor: "pointer",
-							whiteSpace: "nowrap",
-						}}
-					>
-						<span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>
-							{item.label}
-						</span>
-						<span style={{ color: "var(--meta)", fontSize: 10 }}>{formatMs(item.startMs)}</span>
+		<div className={styles.laneRow}>
+			<span className={styles.laneLabel}>{label}</span>
+			{items.length === 0 ? (
+				<span className={styles.laneEmpty}>{empty}</span>
+			) : (
+				<div className={styles.laneTrack} aria-label={`${label} lane`}>
+					{items.map((item) => {
+						const left = Math.max(0, Math.min(100, (item.startMs / safeMax) * 100));
+						const width = Math.max(
+							2,
+							Math.min(100 - left, ((item.endMs - item.startMs) / safeMax) * 100),
+						);
+						const isSel = selection?.kind === kind && selection?.id === item.id;
+						return (
+							<button
+								type="button"
+								key={item.id}
+								onClick={() => onSelect(kind, item.id)}
+								className={`${styles[`${kind}Pill`]} ${isSel ? styles.lanePillSelected : ""}`}
+								style={{
+									left: `${left}%`,
+									width: `${Math.max(60, width * 4)}px`,
+								}}
+								title={`${formatMs(item.startMs)}–${formatMs(item.endMs)} · ${item.label}`}
+							>
+								<svg
+									className={styles.pillIcon}
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									strokeWidth="2"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+									aria-hidden="true"
+								>
+									{kind === "annotation" ? (
+										<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+									) : kind === "speed" ? (
+										<>
+											<path d="M3.5 14a8.5 8.5 0 0 1 17 0" />
+											<path d="M12 14l4-3.5" />
+											<circle cx="12" cy="14" r="1.1" fill="currentColor" stroke="none" />
+										</>
+									) : (
+										<>
+											<circle cx="11" cy="11" r="7" />
+											<line x1="21" y1="21" x2="16.5" y2="16.5" />
+											<line x1="11" y1="8" x2="11" y2="14" />
+											<line x1="8" y1="11" x2="14" y2="11" />
+										</>
+									)}
+								</svg>
+								<span className={styles.pillValue}>{item.label}</span>
+							</button>
+						);
+					})}
+				</div>
+			)}
+			{items.length > 0 ? <span className={styles.laneMeta}>{items.length}</span> : null}
+			{items.length > 0 ? (
+				<span className={styles.laneActions}>
+					{selection?.kind === kind && selection ? (
 						<button
 							type="button"
-							aria-label="Delete"
-							title="Delete (Del)"
-							onClick={(e) => {
-								e.stopPropagation();
-								onRemove(kind, item.id);
-							}}
-							style={{
-								display: "inline-flex",
-								alignItems: "center",
-								justifyContent: "center",
-								width: 16,
-								height: 16,
-								borderRadius: "var(--r-xs)",
-								border: 0,
-								background: "var(--danger-soft)",
-								color: "var(--danger)",
-								fontSize: 10,
-								fontWeight: 600,
-								cursor: "pointer",
-								opacity: isSel ? 1 : 0,
-							}}
+							title="Delete selected (Del)"
+							className={styles.laneDelete}
+							onClick={() => onRemove(selection.kind, selection.id)}
 						>
 							×
 						</button>
-					</button>
-				);
-			})}
+					) : null}
+				</span>
+			) : null}
 		</div>
 	);
-}
-
-function getZoomLabel(z: { depth: number; customScale?: number }): string {
-	if (z.customScale) return `${z.customScale.toFixed(1)}×`;
-	const scales: Record<number, string> = {
-		1: "1.25×",
-		2: "1.5×",
-		3: "1.8×",
-		4: "2.2×",
-		5: "3.5×",
-		6: "5×",
-	};
-	return scales[z.depth] ?? "1.8×";
 }
 
 function menuItemStyle(active: boolean): React.CSSProperties {

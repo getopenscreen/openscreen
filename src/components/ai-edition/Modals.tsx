@@ -1,6 +1,7 @@
-import { AlertTriangle, Crop, FolderOpen, FolderPlus, Plus, X } from "lucide-react";
+import { AlertTriangle, Crop, FolderOpen, FolderPlus, Pencil, Plus, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import type { CropRegion } from "@/components/video-editor/types";
+import type { AxcutClip } from "@/lib/ai-edition/schema";
 import styles from "./NewEditorShell.module.css";
 
 interface BaseModalProps {
@@ -583,6 +584,148 @@ function CropField({
 				value={value}
 				min={0}
 				max={100}
+				onChange={(e) => onChange(Number(e.target.value))}
+			/>
+		</div>
+	);
+}
+
+export interface AssetMeta {
+	label: string;
+	durationSec?: number;
+}
+
+export interface EditClipPatch {
+	sourceStartSec: number;
+	sourceEndSec?: number;
+	timelineStartSec: number;
+	timelineEndSec: number;
+}
+
+interface EditClipModalProps extends BaseModalProps {
+	clip: AxcutClip | null;
+	assetMeta: AssetMeta | null;
+	onSave: (patch: EditClipPatch) => void;
+}
+
+export function EditClipModal({ open, onClose, clip, assetMeta, onSave }: EditClipModalProps) {
+	const [sourceStart, setSourceStart] = useState(0);
+	const [sourceEnd, setSourceEnd] = useState(0);
+	const [timelineStart, setTimelineStart] = useState(0);
+	const [timelineEnd, setTimelineEnd] = useState(0);
+
+	// ponytail: sync local form state to the clip every time the modal opens.
+	// `open` is the trigger so external clip changes don't fight the user mid-edit.
+	useEffect(() => {
+		if (!open || !clip) return;
+		setSourceStart(clip.sourceStartSec);
+		setSourceEnd(clip.sourceEndSec ?? 0);
+		setTimelineStart(clip.timelineStartSec);
+		setTimelineEnd(clip.timelineEndSec);
+	}, [open, clip]);
+
+	if (!clip) return null;
+
+	const handleSave = () => {
+		onSave({
+			sourceStartSec: sourceStart,
+			sourceEndSec: sourceEnd,
+			timelineStartSec: timelineStart,
+			timelineEndSec: timelineEnd,
+		});
+		onClose();
+	};
+
+	return (
+		<ModalShell
+			open={open}
+			onClose={onClose}
+			title="Edit clip"
+			subtitle={assetMeta?.label ?? undefined}
+		>
+			<div
+				style={{
+					display: "grid",
+					gridTemplateColumns: "1fr 1fr",
+					gap: 12,
+				}}
+			>
+				<EditField
+					label="Source start (s)"
+					value={sourceStart}
+					max={assetMeta?.durationSec}
+					onChange={setSourceStart}
+				/>
+				<EditField
+					label="Source end (s)"
+					value={sourceEnd}
+					max={assetMeta?.durationSec}
+					onChange={setSourceEnd}
+				/>
+				<EditField label="Timeline start (s)" value={timelineStart} onChange={setTimelineStart} />
+				<EditField label="Timeline end (s)" value={timelineEnd} onChange={setTimelineEnd} />
+			</div>
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "center",
+					paddingTop: 12,
+					marginTop: 4,
+					borderTop: "1px solid var(--border-soft)",
+				}}
+			>
+				<span
+					style={{
+						font: "500 11px/1.4 var(--font-mono)",
+						color: "var(--muted)",
+					}}
+				>
+					source {sourceStart.toFixed(2)}–{sourceEnd.toFixed(2)}s · timeline{" "}
+					{timelineStart.toFixed(2)}–{timelineEnd.toFixed(2)}s
+				</span>
+				<div style={{ display: "flex", gap: 8 }}>
+					<button
+						type="button"
+						className={`${styles.btn} ${styles.btnSecondary}`}
+						onClick={onClose}
+					>
+						Cancel
+					</button>
+					<button
+						type="button"
+						className={`${styles.btn} ${styles.btnPrimary}`}
+						onClick={handleSave}
+					>
+						<Pencil size={14} />
+						Save
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function EditField({
+	label,
+	value,
+	onChange,
+	max,
+}: {
+	label: string;
+	value: number;
+	onChange: (n: number) => void;
+	max?: number;
+}) {
+	return (
+		<div className={styles.field}>
+			<label>{label}</label>
+			<input
+				type="number"
+				step="0.01"
+				min={0}
+				max={max}
+				value={Number.isFinite(value) ? value : 0}
 				onChange={(e) => onChange(Number(e.target.value))}
 			/>
 		</div>

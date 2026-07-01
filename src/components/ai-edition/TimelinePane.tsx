@@ -99,6 +99,10 @@ interface TimelinePaneProps {
 	onEditClip: (clip: AxcutClip) => void;
 	onRemoveClip: (clipId: string) => void;
 	onUpdateSkipRange: (skipId: string, startSec: number, endSec: number) => void;
+	// T19 — called during skip-edge resize so the preview video can
+	// scrub to the edge being dragged. Wire from Bottombar →
+	// tl.previewSource(timeSec, assetId) (no-op if undefined).
+	onPreviewSource?: (sourceTimeSec: number, assetId: string) => void;
 	onRemoveSkipRange: (skipId: string) => void;
 	// T15 — Place-skip callback. Bottombar wires this to
 	// tl.addSkipAt(assetId, sourceStartSec, sourceEndSec) so the timeline
@@ -281,6 +285,7 @@ export function TimelinePane({
 	onEditClip,
 	onRemoveClip,
 	onUpdateSkipRange,
+	onPreviewSource,
 	onRemoveSkipRange,
 	onAddSkip,
 	onRegionSpanChange,
@@ -878,6 +883,10 @@ export function TimelinePane({
 					};
 					resizeRef.current = next;
 					setDragPreview({ skipId: seg.skipId, startSec: nextStartSec, endSec: nextEndSec });
+					// T19 — scrub the preview video to the edge being
+					// dragged so the user sees exactly which frame is the
+					// cut boundary. axcut TimelinePane.tsx startResizeSkip.
+					onPreviewSource?.(current.edge === "start" ? nextStartSec : nextEndSec, clip.assetId);
 				},
 				onEnd: () => {
 					const current = resizeRef.current;
@@ -899,7 +908,7 @@ export function TimelinePane({
 				},
 			});
 		},
-		[orderedClips, onUpdateSkipRange, pxPerSec],
+		[orderedClips, onUpdateSkipRange, onPreviewSource, pxPerSec],
 	);
 
 	// T12 — setVisibleWindow helper. Computes the new pxPerSec to fit
@@ -1330,6 +1339,35 @@ export function TimelinePane({
 								}}
 								aria-hidden="true"
 							/>
+						) : null}
+						{/* T24 + T25 — snap-guide lines + floating drag tooltip for
+						    skip-edge resize. Two thin vertical lines in the
+						    ruler (one per edge being dragged) plus a small
+						    pill near the cursor showing the new time range.
+						    Matches axcut TimelinePane.tsx dragPreview styling
+						    and controlsVisible. */}
+						{dragPreview ? (
+							<>
+								<div
+									className={styles.snapGuide}
+									style={{ left: TIMELINE_START_GUTTER_PX + dragPreview.startSec * pxPerSec }}
+									aria-hidden="true"
+								/>
+								<div
+									className={styles.snapGuide}
+									style={{ left: TIMELINE_START_GUTTER_PX + dragPreview.endSec * pxPerSec }}
+									aria-hidden="true"
+								/>
+								<div
+									className={styles.dragTooltip}
+									style={{
+										left: TIMELINE_START_GUTTER_PX + (dragPreview.endSec * pxPerSec + 6),
+									}}
+									aria-hidden="true"
+								>
+									{formatSeconds(dragPreview.startSec)} → {formatSeconds(dragPreview.endSec)}
+								</div>
+							</>
 						) : null}
 					</div>
 				)}

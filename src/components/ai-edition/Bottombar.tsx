@@ -324,6 +324,14 @@ export function Bottombar({
 							onEditClip={(clip) => setEditClipTarget(clip)}
 							onRemoveClip={(clipId) => void tl.removeClip(clipId)}
 							onUpdateSkipRange={(skipId, s, e) => void tl.updateSkipRange(skipId, s, e)}
+							onPreviewSource={(timeSec, _assetId) => {
+								// T19 — drive the source-time clock so the preview
+								// video scrubs to the edge being dragged. We don't
+								// rebind the preview's activeSource because that
+								// resets playback; the existing Preview's
+								// seekToSourceTime handles the same-source case.
+								tl.setCurrentTime(timeSec);
+							}}
 							onRemoveSkipRange={(skipId) => void tl.removeRegion("skip", skipId)}
 							onAddSkip={(assetId, s, e) => void tl.addSkipAt(assetId, s, e)}
 							onRegionSpanChange={(id, span) => handleRegionSpanChange(id, span)}

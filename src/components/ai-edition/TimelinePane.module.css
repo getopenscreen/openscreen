@@ -367,6 +367,41 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 	z-index: 30;
 }
 
+/* T24 — thin vertical snap-guide lines at the resize edges during
+   skip-edge drag. Shown in the ruler area (top: 0; height: 22px).
+   Two of them, one per edge being dragged (axcut TimelinePane.tsx). */
+.snapGuide {
+	position: absolute;
+	top: 0;
+	height: var(--rule-h, 22px);
+	width: 2px;
+	background: var(--danger);
+	box-shadow: 0 0 6px color-mix(in oklch, var(--danger) 60%, transparent);
+	pointer-events: none;
+	z-index: 14;
+}
+
+/* T25 — floating drag tooltip showing the new time range during skip
+   resize. Sits just to the right of the moving edge so it doesn't
+   overlap the snap guide. Pill style matches the chip typography
+   used elsewhere in the ruler / header. */
+.dragTooltip {
+	position: absolute;
+	top: 2px;
+	height: 18px;
+	padding: 0 8px;
+	background: var(--surface);
+	border: 1px solid var(--border-soft);
+	border-radius: 9px;
+	color: var(--fg-2);
+	font: 500 10.5px/18px var(--font-mono);
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+	pointer-events: none;
+	z-index: 15;
+	box-shadow: var(--elev-card-soft);
+}
+
 /* T15 — Place-skip preview marker: 1s-wide red-tinted strip at the
    cursor's source time. Indicates where the next click would land.
    Top matches the playhead's top (ruler + lanes above) so it spans

@@ -139,12 +139,31 @@ export function RegionTimelineProvider({
 	);
 }
 
-export function RegionTimelineSurface({ children }: { children: React.ReactNode }) {
+export function RegionTimelineSurface({
+	pxPerSec,
+	totalMs,
+	children,
+}: {
+	// Lane pill positions come from dnd-timeline in ms, and the library maps
+	// 1 px = range / timelineWidth. We set the surface width to totalMs*pxPerSec
+	// so dnd-timeline naturally maps 1 ms = pxPerSec/1000 px — same as the
+	// timeline ruler ticks — keeping pills aligned with the clip track at any
+	// zoom. Lanes do not share the clip track's horizontal-scroll container;
+	// at very long timelines (>30s) they sit fully visible while the clip
+	// track scrolls. See roadmap P3 for the full shared-scroll follow-up.
+	pxPerSec: number;
+	totalMs: number;
+	children: React.ReactNode;
+}) {
 	const { setTimelineRef, style } = useTimelineContext();
 	return (
 		<div
 			ref={setTimelineRef}
-			style={{ ...style, position: "relative" }}
+			style={{
+				...style,
+				position: "relative",
+				width: (Math.max(totalMs, 1) * pxPerSec) / 1000,
+			}}
 			className={styles.laneSurface}
 		>
 			{children}

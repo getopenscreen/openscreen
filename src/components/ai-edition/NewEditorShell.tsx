@@ -89,6 +89,15 @@ export function NewEditorShell() {
 	const [captionsMaxW, setCaptionsMaxW] = useState(7);
 	const [copiedClipId, setCopiedClipId] = useState<string | null>(null);
 	const [projectSummaries, setProjectSummaries] = useState<AiEditionProjectSummary[]>([]);
+	// T15 — Place-skip mode is owned by Bottombar (it owns the
+	// body-class effect, the Esc-to-cancel, the preview-pin). The
+	// keyboard shortcut ("T") here needs to toggle the same state, so
+	// we expose it as a ref. Refs are used (not state) so the keyboard
+	// handler doesn't need to re-bind on every change.
+	const togglePlaceSkipRef = useRef<() => void>(() => undefined);
+	const setTogglePlaceSkip = useCallback((fn: () => void) => {
+		togglePlaceSkipRef.current = fn;
+	}, []);
 	const seekSeqRef = useRef(0);
 	const initRef = useRef(false);
 
@@ -740,7 +749,7 @@ export function NewEditorShell() {
 					break;
 				case "t":
 					e.preventDefault();
-					void tl.addSkip();
+					togglePlaceSkipRef.current();
 					break;
 				case "a":
 					e.preventDefault();
@@ -884,9 +893,9 @@ export function NewEditorShell() {
 					selection={tl.selection}
 					hasDoc={tl.hasDoc}
 					onAddZoom={() => void tl.addZoom()}
-					onAddSkip={() => void tl.addSkip()}
 					onAddAnnotation={() => void tl.addAnnotation()}
 					onAddSpeed={() => void tl.addSpeed()}
+					setTogglePlaceSkip={setTogglePlaceSkip}
 					onSelectRegion={(kind, id) => tl.selectRegion(kind, id)}
 					onCaptions={handleCaptions}
 				/>

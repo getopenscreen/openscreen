@@ -61,6 +61,17 @@ jobs:
             Write-Host "MSVC ARM64 build tools already present."
           }
 
+      - name: Ensure win32-arm64 sharp binary
+        # sharp (transitive via @xenova/transformers) only fetches a host-arch
+        # prebuilt at install time, so on the x64 runner the packaged arm64 app
+        # would otherwise ship an x64 sharp.node. Best-effort fetch of the
+        # win32-arm64 prebuilt; non-fatal so it never blocks the build. Verify
+        # the first arm64 release loads sharp if auto-captions use it.
+        if: matrix.arch == 'arm64'
+        continue-on-error: true
+        shell: bash
+        run: npm_config_platform=win32 npm_config_arch=arm64 npm rebuild sharp
+
       - name: Cache caption assets
         uses: actions/cache@v4
         with:

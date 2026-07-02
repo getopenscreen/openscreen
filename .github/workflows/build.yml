@@ -42,14 +42,37 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Windows installer
+    name: Windows ${{ matrix.arch }} installer
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: ./.github/actions/setup
+
+      - name: Ensure MSVC ARM64 build tools
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -latest -products * -property installationPath
+          $hasArm64 = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 `
+            -property installationPath
+          if (-not $hasArm64) {
+            Write-Host "Installing MSVC ARM64 build tools component..."
+            $installer = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe"
+            & $installer modify --installPath "$installPath" `
+              --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 `
+              --quiet --norestart --wait
+          } else {
+            Write-Host "MSVC ARM64 build tools already present."
+          }
 
       # STT is the bundled whisper-stt-server (whisper.cpp with native DTW token
       # timestamps); no model is fetched here. The binary is built by
@@ -62,15 +85,20 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/stage-whisper-stt.sh win32-x64
+        run: bash scripts/stage-whisper-stt.sh win32-${{ matrix.arch }}
 
-      - name: Build Windows app
+      - name: Build Windows app (x64)
+        if: matrix.arch == 'x64'
         run: npm run build:win -- --publish never
+
+      - name: Build Windows app (arm64)
+        if: matrix.arch == 'arm64'
+        run: npm run build:win:arm64 -- --publish never
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
-          name: openscreen-windows
+          name: openscreen-windows-${{ matrix.arch }}
           # latest.yml is the update feed electron-updater reads; the .blockmap is what lets it
           # download a delta instead of the full ~243 MB installer. Both were already produced
           # by every build and thrown away here, because this glob only matched the .exe.
@@ -870,7 +898,8 @@ jobs:
       - name: Download Windows installer
         uses: actions/download-artifact@v8
         with:
-          name: openscreen-windows
+          pattern: openscreen-windows-*
+          merge-multiple: true
           path: artifacts/windows
 
       - name: Download macOS arm64 DMG

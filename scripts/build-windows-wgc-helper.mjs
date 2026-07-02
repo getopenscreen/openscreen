@@ -165,7 +165,21 @@ if (process.platform !== "win32") {
 
 console.log(`Building Windows WGC helper for target arch: ${TARGET_ARCH} (vcvars: ${VCVARS_ARCH})`);
 
+// CMake caches the detected compiler in the build directory. Reusing a build
+// dir that was configured for a different target arch silently produces
+// wrong-arch binaries (the cached compiler wins over the new vcvars env). Wipe
+// the build dir when the target arch changes; same-arch reruns stay incremental.
+const ARCH_STAMP = path.join(BUILD_DIR, ".target-arch");
+if (fs.existsSync(BUILD_DIR)) {
+	const previousArch = fs.existsSync(ARCH_STAMP)
+		? fs.readFileSync(ARCH_STAMP, "utf8").trim()
+		: "";
+	if (previousArch !== TARGET_ARCH) {
+		fs.rmSync(BUILD_DIR, { recursive: true, force: true });
+	}
+}
 fs.mkdirSync(BUILD_DIR, { recursive: true });
+fs.writeFileSync(ARCH_STAMP, TARGET_ARCH);
 
 await runInVsEnv(
 	`"${CMAKE}" -S "${SOURCE_DIR}" -B "${BUILD_DIR}" -G Ninja -DCMAKE_BUILD_TYPE=Release`,

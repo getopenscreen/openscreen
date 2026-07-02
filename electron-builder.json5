@@ -90,7 +90,7 @@
       "nsis"
     ],
     "icon": "icons/icons/win/icon.ico",
-    "artifactName": "${productName}.Setup.${version}.${ext}",
+    "artifactName": "${productName}.Setup.${version}-${arch}.${ext}",
     "extraResources": [
       {
         "from": "electron/native/bin",

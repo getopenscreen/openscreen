@@ -53,16 +53,24 @@ function toLegacyZoomRegion(region: AxcutZoomRegion): LegacyZoomRegion {
  * the virtual (edited) timeline. `virtualTimeMs` must be in the same
  * coordinate space as `zoomRegion.startMs`/`endMs` (the timeline shown in
  * the ruler, not raw source-media time).
+ *
+ * `playbackRate` scales the zoom-in/out transition windows in source-time
+ * so the transition keeps its authored wall-clock duration inside speed
+ * regions. Defaults to 1 (no scaling).
  */
 export function computeZoomPreviewTransform(
 	zoomRegions: AxcutZoomRegion[],
 	virtualTimeMs: number,
 	cursorTelemetry?: CursorTelemetryPoint[],
+	playbackRate = 1,
 ): ZoomPreviewTransform {
 	if (zoomRegions.length === 0) return IDENTITY_ZOOM_TRANSFORM;
 
 	const legacyRegions = zoomRegions.map(toLegacyZoomRegion);
-	const dominant = findDominantRegion(legacyRegions, virtualTimeMs, { cursorTelemetry });
+	const dominant = findDominantRegion(legacyRegions, virtualTimeMs, {
+		cursorTelemetry,
+		playbackRate,
+	});
 	if (!dominant.region || dominant.strength <= 0) return IDENTITY_ZOOM_TRANSFORM;
 
 	const zoomScale = dominant.blendedScale ?? getZoomScale(dominant.region);

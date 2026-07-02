@@ -877,6 +877,7 @@ export function NewEditorShell() {
 					clips={clips}
 					zoomRegions={tl.zoomRegions}
 					speedRegions={tl.speedRegions}
+					skipRanges={tl.skipRanges}
 					selectedZoomRegionId={tl.selection?.kind === "zoom" ? tl.selection.id : null}
 					onZoomFocusChange={tl.updateZoomFocusLive}
 					onZoomFocusCommit={() => void tl.commitZoomFocus()}

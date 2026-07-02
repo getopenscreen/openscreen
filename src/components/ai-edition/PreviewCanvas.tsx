@@ -29,7 +29,12 @@ import type {
 	WebcamMaskShape,
 	ZoomFocus,
 } from "@/components/video-editor/types";
-import type { AxcutAnnotationRegion, AxcutClip, AxcutZoomRegion } from "@/lib/ai-edition/schema";
+import type {
+	AxcutAnnotationRegion,
+	AxcutClip,
+	AxcutSkipRange,
+	AxcutZoomRegion,
+} from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import {
@@ -38,6 +43,7 @@ import {
 	type WebcamCompositeLayout,
 } from "@/lib/compositeLayout";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
+import { getAspectRatioValue } from "@/utils/aspectRatioUtils";
 import { AnnotationLayer } from "./AnnotationLayer";
 import styles from "./NewEditorShell.module.css";
 import { type VideoSource, VirtualPreview } from "./VirtualPreview";
@@ -51,6 +57,7 @@ interface PreviewCanvasProps {
 	clips: AxcutClip[];
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
+	skipRanges?: AxcutSkipRange[];
 	selectedZoomRegionId?: string | null;
 	onZoomFocusChange?: (id: string, focus: ZoomFocus) => void;
 	onZoomFocusCommit?: () => void;
@@ -82,6 +89,28 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 	const frameRef = useRef<HTMLDivElement | null>(null);
 	const webcamSlotRef = useRef<HTMLDivElement | null>(null);
 	const [canvasSize, setCanvasSize] = useState({ width: 1280, height: 720 });
+	// ponytail: contain-fit the frame within its wrapper ourselves. CSS
+	// `aspect-ratio` + `width: 100%` + `max-height: 100%` only clamps height —
+	// it never shrinks width back down to match, so portrait ratios (9:16 etc)
+	// silently overflowed/stretched instead of fitting. Measuring the parent
+	// (not the frame, which we're about to size) lets us compute an explicit
+	// pixel box that actually respects the ratio on both axes.
+	const [containerSize, setContainerSize] = useState({ width: 1280, height: 720 });
+
+	useEffect(() => {
+		const el = frameRef.current?.parentElement;
+		if (!el) return;
+		const update = () =>
+			setContainerSize({
+				width: el.clientWidth || 1280,
+				height: el.clientHeight || 720,
+			});
+		update();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(update);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, []);
 
 	useEffect(() => {
 		const el = frameRef.current;
@@ -97,6 +126,18 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		observer.observe(el);
 		return () => observer.disconnect();
 	}, []);
+
+	const frameSize = useMemo(() => {
+		const ratio = getAspectRatioValue(settings.aspectRatio);
+		const { width: containerWidth, height: containerHeight } = containerSize;
+		if (containerWidth <= 0 || containerHeight <= 0) return { width: containerWidth, height: containerHeight };
+		if (containerWidth / containerHeight > ratio) {
+			const height = containerHeight;
+			return { width: Math.round(height * ratio), height: Math.round(height) };
+		}
+		const width = containerWidth;
+		return { width: Math.round(width), height: Math.round(width / ratio) };
+	}, [containerSize, settings.aspectRatio]);
 
 	const layout = useMemo(() => {
 		const preset = settings.webcamLayoutPreset as WebcamLayoutPreset;
@@ -198,7 +239,11 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		: null;
 
 	return (
-		<div ref={frameRef} className={styles.previewFrame} style={frameStyle}>
+		<div
+			ref={frameRef}
+			className={styles.previewFrame}
+			style={{ ...frameStyle, width: frameSize.width, height: frameSize.height }}
+		>
 			<div className={styles.bgBlur} style={blurStyle} aria-hidden />
 			{layout?.screenRect ? (
 				<div className={styles.screenStage} style={screenStyle}>

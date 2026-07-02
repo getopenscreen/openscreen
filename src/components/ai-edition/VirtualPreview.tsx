@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromFileUrl } from "@/components/video-editor/projectPersistence";
-import type { AxcutClip, AxcutZoomRegion } from "@/lib/ai-edition/schema";
+import type { AxcutClip, AxcutSkipRange, AxcutZoomRegion } from "@/lib/ai-edition/schema";
 import { findActiveSpeedRegion, type SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import {
 	clampVirtualTime,
@@ -26,6 +26,7 @@ interface VirtualPreviewProps {
 	clips: AxcutClip[];
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
+	skipRanges?: AxcutSkipRange[];
 	seekTarget?: { timeSec: number; isSource?: boolean; requestId: number } | null;
 	onTimeChange?: (timeSec: number) => void;
 	onLoadedMetadata?: (durationSec: number, assetId: string) => void;
@@ -39,6 +40,7 @@ export function VirtualPreview({
 	clips,
 	zoomRegions = [],
 	speedRegions = [],
+	skipRanges = [],
 	seekTarget,
 	onTimeChange,
 	onLoadedMetadata,
@@ -95,6 +97,8 @@ export function VirtualPreview({
 	virtualDurationSecRef.current = virtualDurationSec;
 	const speedRegionsRef = useRef(speedRegions);
 	speedRegionsRef.current = speedRegions;
+	const skipRangesRef = useRef(skipRanges);
+	skipRangesRef.current = skipRanges;
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-create the rAF when the active source swaps.
 	useEffect(() => {
 		let raf = 0;
@@ -105,6 +109,34 @@ export function VirtualPreview({
 				return;
 			}
 			const activeSourceId = videoSourcesRef.current[sourceIndexRef.current]?.id;
+			// Skip regions only skip ahead during actual playback — mirrors
+			// main's videoEventHandlers.ts (findActiveTrimRegion + jump to
+			// endMs, gated on `!video.paused`). Scrubbing/paused seeks are
+			// intentionally NOT clamped: the user can navigate freely inside
+			// a skip while editing; only Play/export treats it as a cut.
+			if (!v.paused) {
+				const activeSkip = skipRangesRef.current.find(
+					(skip) =>
+						skip.assetId === activeSourceId &&
+						v.currentTime >= skip.startSec &&
+						v.currentTime < skip.endSec,
+				);
+				if (activeSkip) {
+					if (activeSkip.endSec >= (v.duration || Infinity)) {
+						v.pause();
+					} else {
+						// ponytail: seeking to exactly `endSec` can land the decoder a
+						// hair before it (frame/sample quantization), which still
+						// satisfies `currentTime < skip.endSec` — the next tick
+						// re-seeks to the same spot, forever, so playback never
+						// actually progresses past the skip (looked like a hard
+						// stop instead of an invisible cut). A small epsilon past
+						// the boundary guarantees each re-check reads past it.
+						v.currentTime = activeSkip.endSec + 0.05;
+					}
+					return;
+				}
+			}
 			// ponytail: also push setSourceTimeSec every frame (was previously
 			// in a separate rAF effect). Cheap; <video>.readyState >= 2 guards
 			// against drawing a black frame into the cursor overlay.
@@ -199,10 +231,19 @@ export function VirtualPreview({
 	useEffect(() => {
 		const frame = videoFrameRef.current;
 		if (!frame) return;
+		// ponytail: scale the zoom-in/out transition windows by the current
+		// playback rate so the transition stays wall-clock constant inside
+		// speed regions. The cursor still flies through (ruler + playhead
+		// read source-time), only the easing duration is decoupled.
+		const activeSpeedRegion = findActiveSpeedRegion(
+			speedRegionsRef.current,
+			Math.round(virtualTimeSec * 1000),
+		);
+		const playbackRate = activeSpeedRegion?.speed ?? 1;
 		const transform =
 			zoomRegions.length === 0
 				? IDENTITY_ZOOM_TRANSFORM
-				: computeZoomPreviewTransform(zoomRegions, virtualTimeSec * 1000);
+				: computeZoomPreviewTransform(zoomRegions, virtualTimeSec * 1000, undefined, playbackRate);
 		frame.style.transform = `translate(${transform.translateXPercent}%, ${transform.translateYPercent}%) scale(${transform.scale})`;
 	}, [zoomRegions, virtualTimeSec]);
 

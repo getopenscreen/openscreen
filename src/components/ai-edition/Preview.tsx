@@ -1,7 +1,12 @@
 import { Maximize2, Pause, Play, Repeat, SkipBack, SkipForward } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ZoomFocus } from "@/components/video-editor/types";
-import type { AxcutAnnotationRegion, AxcutClip, AxcutZoomRegion } from "@/lib/ai-edition/schema";
+import type {
+	AxcutAnnotationRegion,
+	AxcutClip,
+	AxcutSkipRange,
+	AxcutZoomRegion,
+} from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import { EditorEmptyState } from "./EditorEmptyState";
@@ -17,6 +22,7 @@ interface PreviewProps {
 	clips: AxcutClip[];
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
+	skipRanges?: AxcutSkipRange[];
 	selectedZoomRegionId?: string | null;
 	onZoomFocusChange?: (id: string, focus: ZoomFocus) => void;
 	onZoomFocusCommit?: () => void;
@@ -49,6 +55,7 @@ export function Preview({
 	clips,
 	zoomRegions,
 	speedRegions,
+	skipRanges,
 	selectedZoomRegionId,
 	onZoomFocusChange,
 	onZoomFocusCommit,
@@ -179,6 +186,7 @@ export function Preview({
 						clips={clips}
 						zoomRegions={zoomRegions}
 						speedRegions={speedRegions}
+						skipRanges={skipRanges}
 						selectedZoomRegionId={selectedZoomRegionId}
 						onZoomFocusChange={onZoomFocusChange}
 						onZoomFocusCommit={onZoomFocusCommit}

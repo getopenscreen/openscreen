@@ -1111,11 +1111,13 @@ export function TimelinePane({
 								collidableSpans={[
 									...zoomRegions.map((z) => ({
 										id: z.id,
+										rowId: "zoom",
 										start: z.startMs,
 										end: z.endMs,
 									})),
 									...speedRegions.map((s) => ({
 										id: s.id,
+										rowId: "speed",
 										start: s.startMs,
 										end: s.endMs,
 									})),

@@ -29,8 +29,12 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Windows installer
+    name: Windows ${{ matrix.arch }} installer
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,20 +42,44 @@ jobs:
       - name: Setup Node.js
         uses: ./.github/actions/setup
 
+      - name: Ensure MSVC ARM64 build tools
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -latest -products * -property installationPath
+          $hasArm64 = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 `
+            -property installationPath
+          if (-not $hasArm64) {
+            Write-Host "Installing MSVC ARM64 build tools component..."
+            $installer = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe"
+            & $installer modify --installPath "$installPath" `
+              --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 `
+              --quiet --norestart --wait
+          } else {
+            Write-Host "MSVC ARM64 build tools already present."
+          }
+
       - name: Cache caption assets
         uses: actions/cache@v4
         with:
           path: caption-assets
           key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
 
-      - name: Build Windows app
+      - name: Build Windows app (x64)
+        if: matrix.arch == 'x64'
         run: npm run build:win -- --publish never
+
+      - name: Build Windows app (arm64)
+        if: matrix.arch == 'arm64'
+        run: npm run build:win:arm64 -- --publish never
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: openscreen-windows
-          path: release/**/Openscreen.Setup.*.exe
+          name: openscreen-windows-${{ matrix.arch }}
+          path: release/**/Openscreen.Setup.*-${{ matrix.arch }}.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -330,10 +358,11 @@ jobs:
           echo "prerelease_flag=$PRERELEASE_FLAG" >> "$GITHUB_OUTPUT"
           echo "notes_start_tag=$NOTES_START_TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Download Windows installer
+      - name: Download Windows installers
         uses: actions/download-artifact@v4
         with:
-          name: openscreen-windows
+          pattern: openscreen-windows-*
+          merge-multiple: true
           path: artifacts/windows
 
       - name: Download macOS arm64 DMG

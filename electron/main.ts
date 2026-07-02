@@ -20,6 +20,7 @@ import {
 } from "./globalShortcut";
 import { mainT, setMainLocale } from "./i18n";
 import { getSelectedDesktopSource, registerIpcHandlers } from "./ipc/handlers";
+import { installMainProcessErrorGuards } from "./main-process-errors";
 import { acquireStableInstanceLock } from "./singleInstanceLock";
 import {
 	createCountdownOverlayWindow,
@@ -47,6 +48,8 @@ if (process.platform === "linux") {
 		app.commandLine.appendSwitch("enable-features", "WaylandWindowDrag,WebRTCPipeWireCapturer");
 	}
 }
+
+installMainProcessErrorGuards();
 
 export const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
 
@@ -520,6 +523,14 @@ appReady?.then(async () => {
 	session.defaultSession.setDisplayMediaRequestHandler(
 		(request, callback) => {
 			const source = getSelectedDesktopSource();
+			// ponytail: diagnostic for the 0-byte screen-recording bug. Log what
+			// we're handing to the renderer so we can see if the source is stale
+			// or the handler is returning an empty payload.
+			console.info(
+				`[display-media] videoRequested=${request.videoRequested} ` +
+					`audioRequested=${request.audioRequested} ` +
+					`source=${source ? `${source.id} (${source.name})` : "(none)"}`,
+			);
 			if (!request.videoRequested || !source) {
 				callback({});
 				return;
@@ -532,6 +543,22 @@ appReady?.then(async () => {
 		},
 		{ useSystemPicker: false },
 	);
+
+	// ponytail: forward renderer console.warn/error to main-process stdout so
+	// recorder diagnostics (which fire in the renderer) show up next to the
+	// main-process logs in `npm run dev` output. Without this, the
+	// `[recorder:...]` lines from recorderHandle.ts are only visible in
+	// DevTools. One-time wire; no per-message cost beyond a single IPC hop.
+	const logChannels = ["log", "warn", "error"] as const;
+	for (const channel of logChannels) {
+		ipcMain.on(`renderer-console-${channel}`, (_event, ...args) => {
+			const text = args
+				.map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+				.join(" ");
+			const stream = channel === "error" ? process.stderr : process.stdout;
+			stream.write(`[renderer:${channel}] ${text}\n`);
+		});
+	}
 
 	// Request mic permission now. Screen Recording is requested lazily from the
 	// source-picker action so its prompt isn't hidden behind the selector window.

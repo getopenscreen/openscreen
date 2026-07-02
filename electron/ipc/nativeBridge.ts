@@ -9,8 +9,10 @@ import {
 	type ProjectFileResult,
 	type ProjectPathResult,
 } from "../../src/native/contracts";
+import type { DocumentService } from "../ai-edition/document-service";
 import type { CursorTelemetryLoadResult } from "../native-bridge/cursor/adapter";
 import { TelemetryCursorAdapter } from "../native-bridge/cursor/telemetryCursorAdapter";
+import { AiEditionService } from "../native-bridge/services/aiEditionService";
 import { CursorService } from "../native-bridge/services/cursorService";
 import { ProjectService } from "../native-bridge/services/projectService";
 import { SystemService } from "../native-bridge/services/systemService";
@@ -37,6 +39,43 @@ export interface NativeBridgeContext {
 		videoPath: string,
 	) => Promise<import("../../src/native/contracts").CursorRecordingData>;
 	loadCursorTelemetry: (videoPath: string) => Promise<CursorTelemetryLoadResult>;
+	getAiEditionDocuments: () => DocumentService;
+	getAiEditionLlmConfig: () => import("../ai-edition/llm-config-store").LlmConfigStore;
+	runAiEditionChat: (
+		projectId: string,
+		sessionId: string,
+		message: string,
+		document?: unknown,
+	) => Promise<import("../../src/native/contracts").AiEditionChatResult>;
+	undoAiEditionToolBatch: (
+		projectId: string,
+		sessionId: string,
+	) => import("../../src/native/contracts").AiEditionChatResult;
+	runAiEditionChatDefault: (
+		projectId: string,
+		message: string,
+	) => Promise<import("../../src/native/contracts").AiEditionChatResult>;
+	getAiEditionChatHistoryDefault: (
+		projectId: string,
+	) => import("../../src/native/contracts").AiEditionChatMessage[];
+	clearAiEditionChatHistoryDefault: (projectId: string) => void;
+	listAiEditionChatSessions: (
+		projectId: string,
+	) => import("../../src/native/contracts").AiEditionChatSessionSummary[];
+	createAiEditionChatSession: (
+		projectId: string,
+		title?: string,
+	) => import("../../src/native/contracts").AiEditionChatSessionSummary;
+	selectAiEditionChatSession: (
+		projectId: string,
+		sessionId: string,
+	) => import("../../src/native/contracts").AiEditionChatSession | null;
+	renameAiEditionChatSession: (
+		projectId: string,
+		sessionId: string,
+		title: string,
+	) => import("../../src/native/contracts").AiEditionChatSessionSummary | null;
+	deleteAiEditionChatSession: (projectId: string, sessionId: string) => boolean;
 }
 
 function normalizePlatform(platform: NodeJS.Platform): NativePlatform {
@@ -119,6 +158,20 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		getPlatform: () => platform,
 		getAssetBasePath: context.resolveAssetBasePath,
 		getCursorCapabilities: () => cursorService.getCapabilities(),
+	});
+	const aiEditionService = new AiEditionService({
+		documents: context.getAiEditionDocuments(),
+		llmConfig: context.getAiEditionLlmConfig(),
+		runChat: context.runAiEditionChat,
+		runChatDefault: context.runAiEditionChatDefault,
+		undoLastToolBatch: context.undoAiEditionToolBatch,
+		getDefaultChatHistory: context.getAiEditionChatHistoryDefault,
+		clearDefaultChatHistory: context.clearAiEditionChatHistoryDefault,
+		listSessions: context.listAiEditionChatSessions,
+		createSession: context.createAiEditionChatSession,
+		selectSession: context.selectAiEditionChatSession,
+		renameSession: context.renameAiEditionChatSession,
+		deleteSession: context.deleteAiEditionChatSession,
 	});
 
 	ipcMain.handle(NATIVE_BRIDGE_CHANNEL, async (_, request: unknown) => {
@@ -216,6 +269,191 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								requestId,
 								"UNSUPPORTED_ACTION",
 								`Unsupported cursor action: ${action}`,
+							);
+					}
+				}
+
+				case "aiEdition": {
+					const action = request.action as string;
+					switch (request.action) {
+						case "document.listProjects":
+							return createSuccessResponse(requestId, await aiEditionService.listProjects());
+						case "document.get":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.get(request.payload.projectId),
+							);
+						case "document.create":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.create(request.payload?.title),
+							);
+						case "document.save":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.save(request.payload.document),
+							);
+						case "document.delete":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.deleteProject(request.payload.projectId),
+							);
+						case "document.addAsset":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.addAsset(
+									request.payload.projectId,
+									request.payload.path,
+									request.payload.label,
+								),
+							);
+						case "document.removeAsset":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.removeAsset(
+									request.payload.projectId,
+									request.payload.assetId,
+								),
+							);
+						case "llm.getSnapshot":
+							return createSuccessResponse(requestId, await aiEditionService.llmGetSnapshot());
+						case "llm.setConfig":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.llmSetConfig(request.payload.config),
+							);
+						case "llm.setApiKey":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.llmSetApiKey(
+									request.payload.providerId,
+									request.payload.apiKey,
+								),
+							);
+						case "llm.removeApiKey":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.llmRemoveApiKey(request.payload.providerId),
+							);
+						case "llm.beginDeviceAuth":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.llmBeginDeviceAuth(
+									request.payload.providerId,
+									request.payload.model,
+								),
+							);
+						case "llm.completeDeviceAuth":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.llmCompleteDeviceAuth(
+									request.payload.providerId,
+									request.payload.challenge,
+									request.payload.model,
+								),
+							);
+						case "llm.disconnect":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.llmDisconnect(request.payload.providerId),
+							);
+						case "llm.listProviderModels":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.llmListProviderModels(request.payload.providerId),
+							);
+						case "chat.run":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.chatRun(
+									request.payload.projectId,
+									request.payload.sessionId,
+									request.payload.message,
+									request.payload.document,
+								),
+							);
+						case "chat.undoLastBatch":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatUndoLastBatch(
+									request.payload.projectId,
+									request.payload.sessionId,
+								),
+							);
+						case "chat.runDefault":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.chatRunDefault(
+									request.payload.projectId,
+									request.payload.message,
+								),
+							);
+						case "chat.history":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatHistoryDefault(request.payload.projectId),
+							);
+						case "chat.clear":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatClearDefault(request.payload.projectId),
+							);
+						case "chat.listSessions":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatListSessions(request.payload.projectId),
+							);
+						case "chat.createSession":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatCreateSession(
+									request.payload.projectId,
+									request.payload.title,
+								),
+							);
+						case "chat.selectSession":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatSelectSession(
+									request.payload.projectId,
+									request.payload.sessionId,
+								),
+							);
+						case "chat.renameSession":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatRenameSession(
+									request.payload.projectId,
+									request.payload.sessionId,
+									request.payload.title,
+								),
+							);
+						case "chat.deleteSession":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatDeleteSession(
+									request.payload.projectId,
+									request.payload.sessionId,
+								),
+							);
+						case "chat.budget":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatBudget(request.payload.projectId, request.payload.sessionId),
+							);
+						case "chat.compact":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.chatCompact(
+									request.payload.projectId,
+									request.payload.sessionId,
+								),
+							);
+						default:
+							return createErrorResponse(
+								requestId,
+								"UNSUPPORTED_ACTION",
+								`Unsupported aiEdition action: ${action}`,
 							);
 					}
 				}

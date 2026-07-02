@@ -90,6 +90,131 @@ export interface ProjectFileResult {
 	error?: string;
 }
 
+// ---- AI Edition domain (Phase 1+) -----------------------------------------
+// v3 AxcutDocument projects live under userData/projects/<id>.axcut. Project
+// ids are uuid-prefixed strings (e.g. "proj_<uuid>"). Asset ids likewise.
+
+export interface AiEditionProjectSummary {
+	id: string;
+	title: string;
+	updatedAt: string;
+	assetCount: number;
+}
+
+export interface AiEditionAssetResult {
+	assetId: string;
+	document: unknown;
+}
+
+export interface AiEditionDocumentResult {
+	success: boolean;
+	document?: unknown;
+	error?: string;
+}
+
+export interface AiEditionLlmConfig {
+	provider: string;
+	model: string;
+	baseUrl?: string;
+	reasoningEffort?: string;
+	/** P2.5 — when false, the agent must ask before running write tools.
+	 * Undefined means enabled (edits allowed, protected by checkpoints). */
+	allowAgentEdits?: boolean;
+}
+
+export type AiEditionLlmCredentialKind = "api-key" | "codex" | "github-device" | "github-pat";
+
+export interface AiEditionLlmSnapshot {
+	config: AiEditionLlmConfig | null;
+	connectedProviders: string[];
+	availableProviders: Array<{ id: string; label: string; authKind: string }>;
+	/** Per-provider credential metadata so the UI can show `Connect via OAuth` vs `Connect via API key`. */
+	credentialSummary: Array<{
+		providerId: string;
+		connected: boolean;
+		authKind: string;
+		credentialKind: AiEditionLlmCredentialKind | null;
+	}>;
+}
+
+export interface AiEditionDeviceChallenge {
+	verificationUri: string;
+	verificationUriComplete?: string;
+	userCode: string;
+	deviceCode?: string;
+	deviceAuthId?: string;
+	intervalMs: number;
+	expiresAt: number;
+}
+
+export interface AiEditionDeviceCompletionResult {
+	success: boolean;
+	snapshot?: AiEditionLlmSnapshot;
+	error?: string;
+}
+
+export interface AiEditionLlmDisconnectResult {
+	success: boolean;
+	snapshot: AiEditionLlmSnapshot;
+}
+
+export interface AiEditionLlmProviderModelsResult {
+	models: string[];
+	error?: string;
+}
+
+/** One executed agent tool call, rendered as a compact "applied: …" line in
+ * the chat panel (P1.7). */
+export interface AiEditionToolCallSummary {
+	name: string;
+	summary: string;
+}
+
+export interface AiEditionChatMessage {
+	id: string;
+	role: "user" | "assistant";
+	content: string;
+	createdAt: string;
+	toolCalls?: AiEditionToolCallSummary[];
+}
+
+export interface AiEditionChatResult {
+	success: boolean;
+	assistantMessage?: AiEditionChatMessage;
+	/** Updated document when the agent ran write tools during this turn. */
+	document?: unknown;
+	toolCalls?: AiEditionToolCallSummary[];
+	error?: string;
+}
+
+export interface AiEditionChatSessionSummary {
+	id: string;
+	projectId: string;
+	title: string;
+	createdAt: string;
+	messageCount: number;
+}
+
+export interface AiEditionChatSession {
+	id: string;
+	projectId: string;
+	title: string;
+	createdAt: string;
+	messages: AiEditionChatMessage[];
+}
+
+export interface AiEditionChatBudget {
+	usedTokens: number;
+	budgetTokens: number;
+	ratio: number;
+}
+
+export interface AiEditionChatCompactResult {
+	session: AiEditionChatSession;
+	summaryMessageId: string | null;
+	summary: string;
+}
+
 export type NativeBridgeErrorCode =
 	| "INVALID_REQUEST"
 	| "UNSUPPORTED_ACTION"
@@ -224,6 +349,183 @@ export type NativeBridgeRequest =
 			payload?: {
 				videoPath?: string;
 			};
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "document.listProjects";
+			payload?: EmptyPayload;
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "document.get";
+			payload: { projectId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "document.create";
+			payload: { title?: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "document.save";
+			payload: { document: unknown };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "document.delete";
+			payload: { projectId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "document.addAsset";
+			payload: { projectId: string; path: string; label?: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "document.removeAsset";
+			payload: { projectId: string; assetId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "llm.getSnapshot";
+			payload?: EmptyPayload;
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "llm.setConfig";
+			payload: { config: AiEditionLlmConfig };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "llm.setApiKey";
+			payload: { providerId: string; apiKey: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "llm.removeApiKey";
+			payload: { providerId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "llm.beginDeviceAuth";
+			payload: {
+				providerId: "openai-oauth" | "copilot-proxy";
+				/** Optional model — recorded into the config when the device flow completes. */
+				model?: string;
+			};
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "llm.completeDeviceAuth";
+			payload: {
+				providerId: "openai-oauth" | "copilot-proxy";
+				challenge: AiEditionDeviceChallenge;
+				model?: string;
+			};
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "llm.disconnect";
+			payload: { providerId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "llm.listProviderModels";
+			payload: { providerId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.run";
+			payload: {
+				projectId: string;
+				sessionId: string;
+				message: string;
+				/** Current AxcutDocument snapshot — enables the agent tool loop.
+				 * When omitted the chat runs text-only (no tools). */
+				document?: unknown;
+			};
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.undoLastBatch";
+			payload: { projectId: string; sessionId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.runDefault";
+			payload: { projectId: string; message: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.history";
+			payload: { projectId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.clear";
+			payload: { projectId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.listSessions";
+			payload: { projectId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.createSession";
+			payload: { projectId: string; title?: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.selectSession";
+			payload: { projectId: string; sessionId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.renameSession";
+			payload: { projectId: string; sessionId: string; title: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.deleteSession";
+			payload: { projectId: string; sessionId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.budget";
+			payload: { projectId: string; sessionId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.compact";
+			payload: { projectId: string; sessionId: string };
 			requestId?: string;
 	  };
 

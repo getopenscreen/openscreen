@@ -24,22 +24,43 @@
 
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { WebcamLayoutPreset, WebcamMaskShape } from "@/components/video-editor/types";
-import type { AxcutClip } from "@/lib/ai-edition/schema";
+import type {
+	WebcamLayoutPreset,
+	WebcamMaskShape,
+	ZoomFocus,
+} from "@/components/video-editor/types";
+import type { AxcutAnnotationRegion, AxcutClip, AxcutZoomRegion } from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import type { SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import {
 	computeCompositeLayout,
 	getWebcamLayoutCssBoxShadow,
 	type WebcamCompositeLayout,
 } from "@/lib/compositeLayout";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
+import { AnnotationLayer } from "./AnnotationLayer";
 import styles from "./NewEditorShell.module.css";
 import { type VideoSource, VirtualPreview } from "./VirtualPreview";
 import { WebcamOverlay } from "./WebcamOverlay";
+import { ZoomFocusOverlay } from "./ZoomFocusOverlay";
+
+type BlurData = NonNullable<AxcutAnnotationRegion["blurData"]>;
 
 interface PreviewCanvasProps {
 	videoSources: VideoSource[];
 	clips: AxcutClip[];
+	zoomRegions?: AxcutZoomRegion[];
+	speedRegions?: SpeedRegion[];
+	selectedZoomRegionId?: string | null;
+	onZoomFocusChange?: (id: string, focus: ZoomFocus) => void;
+	onZoomFocusCommit?: () => void;
+	annotationRegions?: AxcutAnnotationRegion[];
+	selectedAnnotationId?: string | null;
+	onSelectAnnotation?: (id: string) => void;
+	onAnnotationPositionChange?: (id: string, position: { x: number; y: number }) => void;
+	onAnnotationSizeChange?: (id: string, size: { width: number; height: number }) => void;
+	onAnnotationBlurDataChange?: (id: string, blurData: BlurData) => void;
+	onAnnotationCommit?: () => void;
 	seekTarget: { timeSec: number; requestId: number } | null;
 	onTimeChange: (sec: number) => void;
 	onSeek: (sec: number) => void;
@@ -124,10 +145,12 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		[layout, settings, canvasSize],
 	);
 	const [isPlaying, setIsPlaying] = useState(false);
+	const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 	const handleVideoElement = useMemo(() => props.onVideoElement, [props.onVideoElement]);
 	const relayIsPlaying = (el: HTMLVideoElement | null) => {
 		handleVideoElement(el);
 		setIsPlaying(!el?.paused);
+		setVideoEl(el);
 	};
 	const relayProps = { ...props, onVideoElement: relayIsPlaying };
 
@@ -170,12 +193,44 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 
 	const isPipGrab = settings.webcamLayoutPreset === "picture-in-picture";
 
+	const selectedZoomRegion = props.selectedZoomRegionId
+		? (props.zoomRegions?.find((z) => z.id === props.selectedZoomRegionId) ?? null)
+		: null;
+
 	return (
 		<div ref={frameRef} className={styles.previewFrame} style={frameStyle}>
 			<div className={styles.bgBlur} style={blurStyle} aria-hidden />
 			{layout?.screenRect ? (
 				<div className={styles.screenStage} style={screenStyle}>
 					<VirtualPreview {...relayProps} videoStyle={videoBorderRadiusStyle(settings)} />
+					{selectedZoomRegion && props.onZoomFocusChange ? (
+						<ZoomFocusOverlay
+							region={selectedZoomRegion}
+							isPlaying={isPlaying}
+							onFocusChange={props.onZoomFocusChange}
+							onFocusCommit={props.onZoomFocusCommit}
+						/>
+					) : null}
+					{props.annotationRegions &&
+					props.onSelectAnnotation &&
+					props.onAnnotationPositionChange &&
+					props.onAnnotationSizeChange &&
+					props.onAnnotationBlurDataChange &&
+					props.onAnnotationCommit ? (
+						<AnnotationLayer
+							annotations={props.annotationRegions}
+							selectedAnnotationId={props.selectedAnnotationId ?? null}
+							currentTimeSec={props.currentTimeSec}
+							containerWidth={layout.screenRect.width}
+							containerHeight={layout.screenRect.height}
+							videoElement={videoEl}
+							onSelectAnnotation={props.onSelectAnnotation}
+							onPositionChange={props.onAnnotationPositionChange}
+							onSizeChange={props.onAnnotationSizeChange}
+							onBlurDataChange={props.onAnnotationBlurDataChange}
+							onCommit={props.onAnnotationCommit}
+						/>
+					) : null}
 				</div>
 			) : null}
 			{layout?.webcamRect ? (

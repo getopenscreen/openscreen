@@ -1,8 +1,5 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { ChevronDown } from "lucide-react";
-import { useState } from "react";
-import { cn } from "@/lib/utils";
 import { NotesToolbar } from "./NotesToolbar";
 import "./NotesWindow.module.css";
 

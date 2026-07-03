@@ -1,6 +1,10 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import styles from "./NotesWindow.module.css";
+import { ChevronDown } from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { NotesToolbar } from "./NotesToolbar";
+import "./NotesWindow.module.css";
 
 function getInitialNotesContent(): string {
 	const stored = localStorage.getItem("notes");
@@ -33,8 +37,12 @@ export function NotesWindow() {
 	});
 
 	return (
-		<div className={styles.notesWindow}>
-			<EditorContent editor={editor} className={styles.notesEditor} />
+		<div className="flex h-screen w-screen flex-col overflow-hidden bg-white px-6 pb-4 pt-3 gap-4">
+			<div className="shrink-0 flex justify-center">
+				<NotesToolbar editor={editor} />
+			</div>
+
+			<EditorContent editor={editor} className="min-h-0 flex-1" />
 		</div>
 	);
 }

@@ -13,24 +13,37 @@ import {
 	MousePointerClick,
 	Palette,
 	Sliders,
+	Trash2,
 } from "lucide-react";
 import {
 	type ChangeEvent,
+	type FormEvent,
+	type ClipboardEvent as ReactClipboardEvent,
+	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
+	type PointerEvent as ReactPointerEvent,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
 } from "react";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
-import type { AxcutAsset, AxcutClip, AxcutTranscript } from "@/lib/ai-edition/schema";
+import type {
+	AxcutAsset,
+	AxcutClip,
+	AxcutSkipRange,
+	AxcutTranscript,
+	AxcutWord,
+} from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import {
 	buildAggregatedSections,
 	type ClipSection,
+	type ClipWord,
+	type SkipRun,
 } from "@/lib/ai-edition/timeline/aggregated-transcript";
-import { transcriptToPlainText } from "@/lib/ai-edition/timeline/editable-transcript";
 import { formatMs } from "@/lib/ai-edition/timeline/format";
 import { getAssetPath } from "@/lib/assetPath";
 import { CURSOR_THEMES, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
@@ -390,16 +403,29 @@ function normaliseHex(raw: string): string | null {
 }
 
 // ─── Transcript ────────────────────────────────────────────────────
-// Aggregated transcript view: one section per clip on the timeline, in
-// timeline order. Each section shows the kept / removed words for that
-// clip's source range, inline trim-duration pills, and filler chips.
-// Mirrors the `Current Transcription` pane in axcut's reference design.
+// Aggregated transcript view: one contentEditable region per clip on the
+// timeline, in timeline order. Each word is rendered as a `<span
+// data-word-id>` inside the editable div. Words inside any `skipRange`
+// for the clip's asset are styled red+strikethrough and show a bin icon
+// on hover (removing the skip restores them). User actions:
+//
+//   - Click on a word    → seek (timeline.playhead)
+//   - Backspace / Delete → convert selection (or caret-adjacent word)
+//                          into a new skipRange (the document's
+//                          `timeline.skipRanges[]`, NOT the transcript
+//                          text). The deleted word stays in the DOM as
+//                          red text — nothing destructive.
+//
+// Mirrors axcut's apps/web/src/components/CurrentTranscriptView.tsx.
 export function TranscriptPane({
 	clips,
 	transcripts,
 	assets,
+	skipRanges,
+	busy,
 	onSeek,
-	onEditTranscript,
+	onAddSkipRange,
+	onRemoveSkipRange,
 	onTranscribe,
 	canTranscribe,
 	isTranscribing,
@@ -407,15 +433,18 @@ export function TranscriptPane({
 	clips: AxcutClip[];
 	transcripts: AxcutTranscript[];
 	assets: AxcutAsset[];
+	skipRanges: AxcutSkipRange[];
+	busy: boolean;
 	onSeek: (sec: number) => void;
-	onEditTranscript: (assetId: string, editedText: string) => void;
+	onAddSkipRange: (assetId: string, startSec: number, endSec: number, reason: string) => void;
+	onRemoveSkipRange: (skipId: string) => void;
 	onTranscribe: () => void;
 	canTranscribe: boolean;
 	isTranscribing: boolean;
 }) {
 	const sections = useMemo(
-		() => buildAggregatedSections(clips, transcripts, assets),
-		[clips, transcripts, assets],
+		() => buildAggregatedSections(clips, transcripts, assets, skipRanges),
+		[clips, transcripts, assets, skipRanges],
 	);
 	const hasAnyTranscript = transcripts.length > 0;
 
@@ -424,7 +453,7 @@ export function TranscriptPane({
 			<Pane
 				title="Current transcription"
 				icon={<FileText size={14} />}
-				helpText="Aggregated transcript of every clip on the timeline, in order. Click a word to seek; select a range to cut it."
+				helpText="Aggregated transcript of every clip on the timeline. Backspace / Delete a word or selection to mark it as skipped (red). Hover a red span to restore it."
 			>
 				<div
 					style={{
@@ -465,12 +494,14 @@ export function TranscriptPane({
 			</header>
 			<div className={styles.paneBody}>
 				{sections.map((section, idx) => (
-					<ClipTranscriptSection
+					<TranscriptClipBlock
 						key={section.clip.id}
 						index={idx}
 						section={section}
+						busy={busy}
 						onSeek={onSeek}
-						onEditTranscript={onEditTranscript}
+						onAddSkipRange={onAddSkipRange}
+						onRemoveSkipRange={onRemoveSkipRange}
 					/>
 				))}
 			</div>
@@ -478,24 +509,26 @@ export function TranscriptPane({
 	);
 }
 
-// Per-clip transcript section: head with badge + filename + source range,
-// and a flowing text body. The body itself is a TranscriptFlowEditor —
-// an editable <p contentEditable> that lets the user correct Whisper's
-// output directly (matching axcut's `lib/editable-transcript.ts`).
-
-interface ClipTranscriptSectionProps {
-	index: number;
-	section: ClipSection;
-	onSeek: (sec: number) => void;
-	onEditTranscript: (assetId: string, editedText: string) => void;
-}
-
-function ClipTranscriptSection({
+// One contentEditable block per clip — header (vignette + filename +
+// range) and a flowing word stream. The stream contains every transcript
+// word inside the clip's source range, color-coded by whether the word
+// is inside any skipRange. Backspace/Delete adds a new skipRange via
+// onAddSkipRange; hover-bin on a skip run removes it via onRemoveSkipRange.
+function TranscriptClipBlock({
 	index,
 	section,
+	busy,
 	onSeek,
-	onEditTranscript,
-}: ClipTranscriptSectionProps) {
+	onAddSkipRange,
+	onRemoveSkipRange,
+}: {
+	index: number;
+	section: ClipSection;
+	busy: boolean;
+	onSeek: (sec: number) => void;
+	onAddSkipRange: (assetId: string, startSec: number, endSec: number, reason: string) => void;
+	onRemoveSkipRange: (skipId: string) => void;
+}) {
 	const { clip, asset, words } = section;
 	const filename = asset?.label ?? clip.assetId;
 	const sourceRangeLabel =
@@ -503,9 +536,140 @@ function ClipTranscriptSection({
 			? `${formatMs(clip.sourceStartSec * 1000)}—${formatMs(clip.sourceEndSec * 1000)}`
 			: `${formatMs(clip.sourceStartSec * 1000)}—`;
 
+	const editorRef = useRef<HTMLDivElement | null>(null);
+	const pendingCaretWordIdRef = useRef<string | null>(null);
+
+	// ponytail: keep the caret anchored to the next kept word after a
+	// skipRange is added (so the user can keep deleting without the caret
+	// jumping to the start of the block).
+	useLayoutEffect(() => {
+		const wordId = pendingCaretWordIdRef.current;
+		if (!wordId) return;
+		pendingCaretWordIdRef.current = null;
+		restoreCaretBeforeWord(editorRef.current, wordId);
+	});
+
+	const skipWordRange = useCallback(
+		(rangeWords: ClipWord[]) => {
+			if (busy || rangeWords.length === 0) return;
+			// Only skip words that are currently kept (don't double-skip).
+			const keptRange = rangeWords.filter((w) => w.kept);
+			if (keptRange.length === 0) return;
+			pendingCaretWordIdRef.current = keptRange[0].word.id;
+			const startSec = Math.min(...keptRange.map((w) => w.word.startSec));
+			const endSec = Math.max(...keptRange.map((w) => w.word.endSec));
+			onAddSkipRange(
+				clip.assetId,
+				startSec,
+				endSec,
+				`Skip ${formatMs(startSec * 1000)}-${formatMs(endSec * 1000)} from ${clip.assetId}.`,
+			);
+		},
+		[busy, clip.assetId, onAddSkipRange],
+	);
+
+	const removeSkipRun = useCallback(
+		(run: SkipRun) => {
+			if (busy || !run.skipId) return;
+			onRemoveSkipRange(run.skipId);
+		},
+		[busy, onRemoveSkipRange],
+	);
+
+	const cutNativeSelection = useCallback(
+		(direction: "backward" | "forward") => {
+			const editor = editorRef.current;
+			const selection = globalThis.getSelection();
+			if (!selection || !editor) return false;
+			if (!editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) {
+				return false;
+			}
+			if (selection.isCollapsed) {
+				const wordId = findCollapsedDeletionWordId(
+					editor,
+					selection.anchorNode,
+					selection.anchorOffset,
+					direction,
+				);
+				if (!wordId) return false;
+				const cw = words.find((w) => w.word.id === wordId);
+				if (!cw) return false;
+				skipWordRange([cw]);
+				return true;
+			}
+			const anchorId =
+				findSelectionWordId(editor, selection.anchorNode, selection.anchorOffset, "forward") ??
+				findSelectionWordId(editor, selection.anchorNode, selection.anchorOffset, "backward");
+			const focusId =
+				findSelectionWordId(editor, selection.focusNode, selection.focusOffset, "backward") ??
+				findSelectionWordId(editor, selection.focusNode, selection.focusOffset, "forward");
+			if (!anchorId || !focusId) return false;
+			const fromIdx = words.findIndex((w) => w.word.id === anchorId);
+			const toIdx = words.findIndex((w) => w.word.id === focusId);
+			if (fromIdx < 0 || toIdx < 0) return false;
+			const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+			skipWordRange(words.slice(lo, hi + 1));
+			return true;
+		},
+		[skipWordRange, words],
+	);
+
+	const handleKeyDown = useCallback(
+		(event: ReactKeyboardEvent<HTMLDivElement>) => {
+			if (event.key !== "Backspace" && event.key !== "Delete") return;
+			event.preventDefault();
+			cutNativeSelection(event.key === "Backspace" ? "backward" : "forward");
+		},
+		[cutNativeSelection],
+	);
+
+	const handleBeforeInput = useCallback(
+		(event: FormEvent<HTMLDivElement>) => {
+			const inputEvent = event.nativeEvent as InputEvent;
+			if (inputEvent.inputType.startsWith("delete")) {
+				event.preventDefault();
+				cutNativeSelection(
+					inputEvent.inputType === "deleteContentForward" ? "forward" : "backward",
+				);
+				return;
+			}
+			// ponytail: typing/pasting free text is non-destructive by design
+			// (the user's transcript edits come via the Source Transcript
+			// modal, not here). Block inserts to keep the projection stable.
+			if (inputEvent.inputType === "insertText" || inputEvent.inputType === "insertFromPaste") {
+				event.preventDefault();
+			}
+		},
+		[cutNativeSelection],
+	);
+
+	const handlePaste = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
+		event.preventDefault();
+	}, []);
+
+	const handlePointerUp = useCallback(
+		(event: ReactPointerEvent<HTMLDivElement>) => {
+			if (event.button !== 0) return;
+			if (event.target instanceof Element && event.target.closest("button")) return;
+			const editor = editorRef.current;
+			if (!editor) return;
+			const selection = globalThis.getSelection();
+			if (selection && !selection.isCollapsed) return; // user is selecting text — let them
+			const wordEl =
+				event.target instanceof Element
+					? event.target.closest<HTMLElement>("[data-word-id]")
+					: null;
+			if (!wordEl?.dataset.wordId) return;
+			const cw = words.find((w) => w.word.id === wordEl.dataset.wordId);
+			if (!cw) return;
+			onSeek(cw.word.startSec);
+		},
+		[onSeek, words],
+	);
+
 	return (
-		<section style={{ marginBottom: 16 }}>
-			<header
+		<span style={{ display: "block", marginBottom: 16 }}>
+			<span
 				style={{
 					display: "flex",
 					alignItems: "center",
@@ -531,9 +695,10 @@ function ClipTranscriptSection({
 				>
 					{index + 1}
 				</span>
-				<div style={{ minWidth: 0, flex: 1 }}>
-					<div
+				<span style={{ minWidth: 0, flex: 1 }}>
+					<span
 						style={{
+							display: "block",
 							font: "600 13px/1.2 var(--font-body)",
 							color: "var(--fg)",
 							overflow: "hidden",
@@ -542,18 +707,19 @@ function ClipTranscriptSection({
 						}}
 					>
 						{filename}
-					</div>
-					<div
+					</span>
+					<span
 						style={{
+							display: "block",
 							font: "400 11px/1.3 var(--font-mono)",
 							color: "var(--muted)",
 							marginTop: 2,
 						}}
 					>
 						Clip {index + 1} · {sourceRangeLabel}
-					</div>
-				</div>
-			</header>
+					</span>
+				</span>
+			</span>
 			{words.length === 0 ? (
 				<p
 					style={{
@@ -567,128 +733,224 @@ function ClipTranscriptSection({
 					No transcript for this clip — open the asset card and regenerate.
 				</p>
 			) : (
-				<TranscriptFlowEditor
-					section={section}
-					onSeek={onSeek}
-					onEditTranscript={onEditTranscript}
-				/>
+				<div
+					ref={editorRef}
+					role="textbox"
+					tabIndex={0}
+					contentEditable={!busy}
+					suppressContentEditableWarning
+					spellCheck={false}
+					aria-label={`Transcript for ${filename}`}
+					aria-multiline="true"
+					onBeforeInput={handleBeforeInput}
+					onKeyDown={handleKeyDown}
+					onPaste={handlePaste}
+					onPointerUp={handlePointerUp}
+					style={{
+						padding: "4px 4px",
+						font: "400 13px/1.65 var(--font-body)",
+						color: "var(--fg)",
+						textWrap: "pretty",
+						cursor: "text",
+						outline: "none",
+					}}
+				>
+					{words.map((cw) => (
+						<TranscriptWord key={cw.word.id} cw={cw} onRestore={removeSkipRun} />
+					))}
+				</div>
 			)}
-		</section>
+		</span>
 	);
 }
 
-// Ponytail port of axcut's TranscriptEditor editable flow (cf.
-// docs/architecture/axcut-inventory.md §6). The transcript text lives
-// inside a contentEditable <p>; the user can delete or correct Whisper's
-// output directly. On blur, the parent's onEditTranscript callback runs
-// LCS against the original transcript to figure out which words were
-// deleted and updates the timeline.
-//
-// Removed words are wrapped in <span class="hl"> with strikethrough +
-// red color so the visual state survives edits — the user has to actively
-// delete the text from the editable area to remove the trim.
-function TranscriptFlowEditor({
-	section,
-	onSeek,
-	onEditTranscript,
-}: {
-	section: ClipSection;
-	onSeek: (sec: number) => void;
-	onEditTranscript: (assetId: string, editedText: string) => void;
-}) {
-	const { clip, transcript, words } = section;
-	const [isEditing, setIsEditing] = useState(false);
-	const flowRef = useRef<HTMLParagraphElement | null>(null);
+// One word inside the editable block. Kept words render plain; removed
+// words (inside a skip range) render red+strikethrough with a hover bin.
+function TranscriptWord({ cw, onRestore }: { cw: ClipWord; onRestore: (run: SkipRun) => void }) {
+	const [hover, setHover] = useState(false);
+	const removed = !cw.kept;
+	return (
+		<span
+			data-word-id={cw.word.id}
+			data-start-sec={cw.word.startSec}
+			data-end-sec={cw.word.endSec}
+			data-skip-id={cw.skipId ?? undefined}
+			style={{
+				display: "inline",
+				color: removed ? "var(--danger)" : "var(--fg)",
+				fontWeight: removed ? 600 : 400,
+				textDecoration: removed ? "line-through" : "none",
+				textDecorationColor: removed ? "var(--danger)" : undefined,
+				opacity: removed ? 0.9 : 1,
+			}}
+			onMouseEnter={() => setHover(true)}
+			onMouseLeave={() => setHover(false)}
+		>
+			{cw.filler ? (
+				<span
+					style={{
+						display: "inline-block",
+						padding: "1px 6px",
+						margin: "0 1px",
+						background: "var(--danger-soft)",
+						color: "var(--danger)",
+						borderRadius: "var(--r-sm)",
+						fontWeight: 500,
+						textDecoration: "none",
+					}}
+				>
+					{cw.word.text}
+				</span>
+			) : (
+				<>{cw.word.text} </>
+			)}
+			{removed && hover && cw.skipId ? (
+				<button
+					type="button"
+					contentEditable={false}
+					title={`Restore "${cw.word.text}"`}
+					aria-label={`Restore "${cw.word.text}"`}
+					onClick={(e) => {
+						e.stopPropagation();
+						// ponytail: build a minimal SkipRun stub — only skipId is
+						// read by onRestore.
+						onRestore({
+							skipId: cw.skipId ?? "",
+							assetId: "",
+							startWordIndex: 0,
+							endWordIndex: 0,
+							durationSec: 0,
+						});
+					}}
+					style={{
+						display: "inline-flex",
+						alignItems: "center",
+						justifyContent: "center",
+						width: 18,
+						height: 18,
+						marginLeft: 4,
+						padding: 0,
+						border: 0,
+						borderRadius: 4,
+						background: "var(--danger)",
+						color: "white",
+						cursor: "pointer",
+						verticalAlign: "middle",
+					}}
+				>
+					<Trash2 size={12} strokeWidth={1.9} aria-hidden="true" />
+				</button>
+			) : null}
+		</span>
+	);
+}
 
-	const rendered = useMemo(() => {
-		const parts: ReactNode[] = [];
-		for (let i = 0; i < words.length; i++) {
-			const cw = words[i];
-			const word = cw.word;
-			if (i > 0) parts.push(" ");
-			if (cw.kept) {
-				parts.push(word.text);
-			} else {
-				parts.push(
-					<span
-						key={word.id}
-						className="hl"
-						data-word-id={word.id}
-						style={{
-							color: "var(--danger)",
-							fontWeight: 600,
-							textDecoration: "line-through",
-							opacity: 0.85,
-						}}
-					>
-						{word.text}
-					</span>,
-				);
+// ─── Caret / selection helpers ────────────────────────────────────
+// Ponytail port of axcut's findCollapsedDeletionWordId /
+// findSelectionWordId. Both walk the DOM around the current selection
+// to resolve which transcript word the user is targeting.
+
+function findWordId(node: Node | null): string | null {
+	const element = node instanceof Element ? node : node?.parentElement;
+	return element?.closest<HTMLElement>("[data-word-id]")?.dataset.wordId ?? null;
+}
+
+function findSelectionWordId(
+	editor: HTMLElement,
+	node: Node | null,
+	offset: number,
+	direction: "backward" | "forward",
+): string | null {
+	return findWordId(node) ?? findCollapsedDeletionWordId(editor, node, offset, direction);
+}
+
+function findCollapsedDeletionWordId(
+	editor: HTMLElement,
+	node: Node | null,
+	offset: number,
+	direction: "backward" | "forward",
+): string | null {
+	const direct = closestWordElement(node);
+	if (direct) {
+		const textLength = node?.textContent?.length ?? 0;
+		if (node?.nodeType === Node.TEXT_NODE) {
+			if (direction === "backward" && offset <= 0) {
+				return adjacentWordId(editor, direct, "backward") ?? direct.dataset.wordId ?? null;
+			}
+			if (direction === "forward" && offset >= textLength) {
+				return adjacentWordId(editor, direct, "forward") ?? direct.dataset.wordId ?? null;
 			}
 		}
-		return parts;
-	}, [words]);
-
-	// ponytail: re-seed the editable area when the underlying section
-	// changes (clips re-flowed, transcript regenerated, etc.) so the
-	// visible text matches the current document state.
-	useEffect(() => {
-		const el = flowRef.current;
-		if (!el) return;
-		el.textContent = transcript ? transcriptToPlainText(transcript) : "";
-	}, [transcript]);
-
-	const handleBlur = useCallback(() => {
-		const el = flowRef.current;
-		if (!el) return;
-		const text = el.textContent ?? "";
-		setIsEditing(false);
-		onEditTranscript(clip.assetId, text);
-	}, [clip.assetId, onEditTranscript]);
-
-	const handleFocus = useCallback(() => {
-		setIsEditing(true);
-	}, []);
-
-	return (
-		<p
-			ref={flowRef}
-			suppressContentEditableWarning
-			contentEditable
-			spellCheck={false}
-			data-clip-id={clip.id}
-			data-asset-id={clip.assetId}
-			onBlur={handleBlur}
-			onFocus={handleFocus}
-			onClick={(e) => {
-				// ponytail: click-to-seek is gated on !isEditing so we don't
-				// steal the click from the caret placement when the user is
-				// actively editing. Clicks on removed words (span.hl) seek
-				// to that word's source time.
-				if (isEditing) return;
-				const target = e.target as HTMLElement;
-				const spanEl = target.closest("span.hl") as HTMLElement | null;
-				const wordId = spanEl?.dataset.wordId;
-				if (!wordId) return;
-				const word = words.find((cw) => cw.word.id === wordId)?.word;
-				if (word) onSeek(word.startSec);
-			}}
-			style={{
-				margin: 0,
-				padding: "4px 4px",
-				font: "400 13px/1.65 var(--font-body)",
-				color: "var(--fg)",
-				textWrap: "pretty",
-				outline: isEditing ? "1px solid var(--accent-soft)" : "none",
-				borderRadius: 4,
-				cursor: isEditing ? "text" : "pointer",
-				userSelect: isEditing ? "text" : "none",
-			}}
-		>
-			{rendered}
-		</p>
-	);
+		return direct.dataset.wordId ?? null;
+	}
+	if (!node) return null;
+	const wordNodes = Array.from(editor.querySelectorAll<HTMLElement>("[data-word-id]"));
+	if (wordNodes.length === 0) return null;
+	const boundaryNode = node instanceof Element ? node : node.parentElement;
+	if (!boundaryNode) return null;
+	const childNodes = Array.from(boundaryNode.childNodes);
+	const candidates =
+		direction === "backward" ? childNodes.slice(0, offset).reverse() : childNodes.slice(offset);
+	for (const candidate of candidates) {
+		const wordId = findWordId(candidate) ?? findDescendantWordId(candidate);
+		if (wordId) return wordId;
+	}
+	const range = globalThis.document.createRange();
+	range.setStart(editor, 0);
+	range.setEnd(node, clampRangeOffset(node, offset));
+	const wordsBefore = wordNodes.filter((wordNode) => range.comparePoint(wordNode, 0) <= 0);
+	return direction === "backward"
+		? (wordsBefore.at(-1)?.dataset.wordId ?? null)
+		: (wordNodes.find((wordNode) => !wordsBefore.includes(wordNode))?.dataset.wordId ?? null);
 }
+
+function findDescendantWordId(node: Node): string | null {
+	if (node instanceof HTMLElement && node.dataset.wordId) {
+		return node.dataset.wordId;
+	}
+	return node instanceof Element
+		? (node.querySelector<HTMLElement>("[data-word-id]")?.dataset.wordId ?? null)
+		: null;
+}
+
+function closestWordElement(node: Node | null): HTMLElement | null {
+	const element = node instanceof Element ? node : node?.parentElement;
+	return element?.closest<HTMLElement>("[data-word-id]") ?? null;
+}
+
+function adjacentWordId(
+	editor: HTMLElement,
+	wordElement: HTMLElement,
+	direction: "backward" | "forward",
+): string | null {
+	const wordNodes = Array.from(editor.querySelectorAll<HTMLElement>("[data-word-id]"));
+	const index = wordNodes.indexOf(wordElement);
+	if (index < 0) return null;
+	return wordNodes[index + (direction === "backward" ? -1 : 1)]?.dataset.wordId ?? null;
+}
+
+function clampRangeOffset(node: Node, offset: number): number {
+	if (node.nodeType === Node.TEXT_NODE) {
+		return Math.max(0, Math.min(offset, node.textContent?.length ?? 0));
+	}
+	return Math.max(0, Math.min(offset, node.childNodes.length));
+}
+
+function restoreCaretBeforeWord(editor: HTMLElement | null, wordId: string): void {
+	const wordElement = editor?.querySelector<HTMLElement>(`[data-word-id="${wordId}"]`);
+	if (!editor || !wordElement) return;
+	editor.focus();
+	const range = globalThis.document.createRange();
+	range.setStartBefore(wordElement);
+	range.collapse(true);
+	const selection = globalThis.getSelection();
+	selection?.removeAllRanges();
+	selection?.addRange(range);
+}
+
+// Re-export AxcutWord type so the helpers above can be typed without
+// pulling the schema into the helpers block.
+export type { AxcutWord };
 
 // ─── Video Effects ─────────────────────────────────────────────────
 

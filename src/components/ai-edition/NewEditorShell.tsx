@@ -51,7 +51,6 @@ export function NewEditorShell() {
 	const lastSavedAt = useProjectStore((s) => s.lastSavedAt);
 	const createProject = useProjectStore((s) => s.createProject);
 	const addAsset = useProjectStore((s) => s.addAsset);
-	const replaceTimeline = useProjectStore((s) => s.replaceTimeline);
 	const setTranscript = useProjectStore((s) => s.setTranscript);
 	const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
 	const setSourceDuration = useProjectStore((s) => s.setSourceDuration);
@@ -417,34 +416,40 @@ export function NewEditorShell() {
 		}
 	}, [loadProject]);
 
-	// ponytail: editable transcript → timeline update. Runs LCS against
-	// the per-asset transcript to figure out which words the user just
-	// deleted from the editable text, then subtracts those source-time
-	// ranges from the kept timeline intervals. Mirrors axcut's
-	// `lib/editable-transcript.ts` + `deriveEditableTranscriptUpdate`.
-	const handleEditTranscript = useCallback(
-		async (assetId: string, editedText: string) => {
+	// ponytail: transcript-pane → timeline skip ranges. The right pane's
+	// contentEditable region converts user Backspace/Delete into a new
+	// skipRange (NOT a destructive word removal — the source text stays
+	// intact, the word is just hidden by the skip overlay). Mirrors
+	// axcut's `queueAddSkipRange` / `queueRemoveSkipRange` callbacks in
+	// apps/web/src/App.tsx.
+	const handleAddSkipRange = useCallback(
+		async (assetId: string, startSec: number, endSec: number, reason: string) => {
 			if (!document) return;
-			const transcript = document.transcripts.find((t) => t.assetId === assetId);
-			if (!transcript) return;
-			const { deriveEditableTranscriptUpdate } = await import(
-				"@/lib/ai-edition/timeline/editable-transcript"
-			);
-			const { ranges, deletedWordIds } = deriveEditableTranscriptUpdate(transcript, editedText);
-			if (deletedWordIds.length === 0) return;
-			const { timelineIntervals: getIntervals, subtractInterval } = await import(
-				"@/lib/ai-edition/document/timeline"
-			);
-			let intervals = getIntervals(document);
-			for (const range of ranges) {
-				intervals = subtractInterval(intervals, { startSec: range.startSec, endSec: range.endSec });
-			}
-			await replaceTimeline(
-				intervals,
-				`Edited transcript — deleted ${deletedWordIds.length} word${deletedWordIds.length === 1 ? "" : "s"}`,
-			);
+			const { applyTimelineOperation } = await import("@/lib/ai-edition/document/operations");
+			const next = applyTimelineOperation(document, {
+				type: "add_skip_range",
+				assetId,
+				startSec,
+				endSec,
+				reason,
+			});
+			await saveDocument(next.document);
 		},
-		[document, replaceTimeline],
+		[document, saveDocument],
+	);
+
+	const handleRemoveSkipRange = useCallback(
+		async (skipId: string) => {
+			if (!document) return;
+			const { applyTimelineOperation } = await import("@/lib/ai-edition/document/operations");
+			const next = applyTimelineOperation(document, {
+				type: "remove_skip_range",
+				skipId,
+				reason: "Restored from transcript pane.",
+			});
+			await saveDocument(next.document);
+		},
+		[document, saveDocument],
 	);
 
 	const handleSelectProject = useCallback(
@@ -974,8 +979,11 @@ export function NewEditorShell() {
 						transcripts={document?.transcripts ?? []}
 						assets={document?.assets ?? []}
 						clips={clips}
+						skipRanges={document?.timeline?.skipRanges ?? []}
+						busy={isTranscribing}
 						onSeek={handleSeek}
-						onEditTranscript={handleEditTranscript}
+						onAddSkipRange={handleAddSkipRange}
+						onRemoveSkipRange={handleRemoveSkipRange}
 						onTranscribe={handleTranscribe}
 						canTranscribe={hasAsset}
 						isTranscribing={isTranscribing}

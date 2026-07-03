@@ -1,15 +1,3 @@
-.notesWindow {
-	background: #ffffff;
-	height: 100vh;
-	width: 100vw;
-	padding: 1rem 1.5rem;
-	overflow: hidden;
-}
-
-.notesEditor {
-	height: 100%;
-}
-
 /* Tiptap sets class="tiptap" on the ProseMirror root — must be :global to escape CSS modules. */
 :global(.tiptap) {
 	height: 100%;

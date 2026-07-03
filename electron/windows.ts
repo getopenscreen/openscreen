@@ -326,7 +326,7 @@ export function createNotesWindow(): BrowserWindow {
 	const win = new BrowserWindow({
 		width: 400,
 		height: 540,
-		minWidth: 320,
+		minWidth: 360,
 		minHeight: 400,
 		maxWidth: 640,
 		maxHeight: 720,

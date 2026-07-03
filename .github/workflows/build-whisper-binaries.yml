@@ -1,0 +1,108 @@
+name: Build whisper-server binaries
+
+# Builds the bundled `whisper-server` variants — Metal+Core ML (Apple
+# Silicon), CUDA (NVIDIA), Vulkan (AMD/Intel), and a portable CPU fallback —
+# then uploads them as GitHub artifacts so `build.yml` can attach them to
+# installer builds.
+#
+# Triggered:
+#   * manually via workflow_dispatch (release-blocking binary refresh)
+#   * automatically when `scripts/build-whisper-binaries.sh` changes
+#
+# ponytail: single-host CPU builds are cheap; GPU variants require a self-hosted runner
+# with the matching SDK. Linux + Windows matrix entries exit with a hint when the
+# toolchain is missing rather than failing the run — useful smoke-test signal.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "whisper.cpp ref to checkout (default v1.9.1 — pinned in spec)"
+        required: false
+        default: "v1.9.1"
+        type: string
+  push:
+    paths:
+      - "scripts/build-whisper-binaries.sh"
+      - ".github/workflows/build-whisper-binaries.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+            label: macOS arm64 (Metal + Core ML + CPU fallback)
+            cmake_args: "-DWHISPER_METAL=ON -DWHISPER_COREML=ON"
+            variants: "metal cpu"
+          - os: ubuntu-latest
+            arch: x64
+            label: Linux x64 (CUDA + Vulkan + CPU fallback)
+            cmake_args: ""
+            variants: "cuda vulkan cpu"
+          - os: windows-latest
+            arch: x64
+            label: Windows x64 (CPU fallback only — CUDA/Vulkan on self-hosted GPU runners)
+            cmake_args: ""
+            variants: "cpu"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup
+
+      - name: Setup Ninja / Python
+        if: matrix.os != 'windows-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build build-essential libvulkan1 vulkan-tools
+      - name: Setup Ninja / Python (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-cmake-build@v1
+        with:
+          cmake-path: "C:\\Program Files\\CMake\\bin"
+
+      - name: Run whisper-server build script
+        env:
+          WHISPER_CPP_REF: ${{ github.event.inputs.ref || 'v1.9.1' }}
+        run: bash scripts/build-whisper-binaries.sh
+
+      - name: Stage binaries for upload
+        run: |
+          set -euo pipefail
+          BAG="whisper-server-${{ matrix.os }}-${{ matrix.arch }}"
+          mkdir -p "$BAG"
+          # Ship every variant that resolved, even when the host could only
+          # build CPU — `gpuDetector` will fall back to CPU when no better
+          # match is present.
+          find electron/native/bin -type f -name 'whisper-server-*' \
+            -exec cp -v {} "$BAG/" \;
+          tar -czf "${BAG}.tar.gz" "$BAG"
+          echo "Staged ${BAG}.tar.gz"
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-server-${{ matrix.os }}-${{ matrix.arch }}
+          path: whisper-server-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          {
+            echo "## whisper-server build"
+            echo ""
+            echo "- Matrix: \`${{ matrix.label }}\`"
+            echo "- Ref: \`${{ github.event.inputs.ref || 'v1.9.1' }}\`"
+            echo "- Result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"

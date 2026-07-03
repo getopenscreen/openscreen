@@ -31,6 +31,9 @@
 		"build:native:win": "node scripts/build-windows-wgc-helper.mjs",
 		"build:win": "npm run build:native:win && tsc && vite build && electron-builder --win --config.npmRebuild=false",
 		"build:linux": "tsc && vite build && electron-builder --linux AppImage deb pacman --config.npmRebuild=false",
+		"build:whisper-binaries": "bash scripts/build-whisper-binaries.sh",
+		"setup:vad:sh": "bash scripts/fetch-vad-model.sh",
+		"setup:vad:ps1": "powershell -ExecutionPolicy Bypass -File scripts/fetch-vad-model.ps1",
 		"test": "vitest --run",
 		"test:watch": "vitest",
 		"test:cursor-native:win": "node scripts/test-windows-native-cursor.mjs",
@@ -80,7 +83,6 @@
 		"@uiw/color-convert": "^2.10.1",
 		"@uiw/react-color-block": "^2.10.1",
 		"@uiw/react-color-colorful": "^2.9.2",
-		"@xenova/transformers": "^2.17.2",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"deepagents": "^1.10.5",
@@ -142,7 +144,7 @@
 		"vite-plugin-electron-renderer": "^0.14.6",
 		"vitest": "^4.1.4"
 	},
-	"main": "dist-electron/main.js",
+	"main": "dist-electron/main.cjs",
 	"lint-staged": {
 		"*.{ts,tsx,js,jsx,mts,cts,json}": "biome check --no-errors-on-unmatched"
 	}

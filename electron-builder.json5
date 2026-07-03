@@ -4,12 +4,12 @@
   "appId": "com.etiennelescot.openscreen",
   "asar": true,
   // .node binaries can't be dlopen'd from inside an asar — must live unpacked.
+  // onnxruntime-node distributes as a `.node` shared object that whisper.cpp
+  // helpers run from process spawn, so they all unpack via the same glob.
   "asarUnpack": [
     "**/*.node"
   ],
   "productName": "Openscreen",
-  // Fetch the auto-caption model + ORT wasm into caption-assets/ before packaging (idempotent).
-  "beforePack": "scripts/before-pack.cjs",
   "npmRebuild": true,
   // sharp ships ABI-stable (napi) prebuilt binaries with bundled libvips. Building it from source
   // needs a system libvips we don't provide and breaks on CI/local ("vips-cpp.42 not found"), so we
@@ -31,6 +31,9 @@
   ],
   // Asset layout contract: "wallpapers/" and "cursors/" under resourcesPath must
   // align with assetBaseDir in electron/preload.ts (packaged branch).
+  // Native capture helpers + whisper-server binaries live under
+  // `electron/native/bin/<platform>-<arch>/` and the per-platform sections
+  // below limit them to the matching arch in each installer.
   "extraResources": [
     {
       "from": "public/wallpapers",
@@ -41,8 +44,8 @@
       "to": "cursors"
     },
     {
-      "from": "caption-assets",
-      "to": "caption-assets"
+      "from": "electron/native/models",
+      "to": "models"
     }
   ],
 

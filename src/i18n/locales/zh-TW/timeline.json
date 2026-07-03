@@ -5,14 +5,16 @@
 		"addTrim": "新增剪輯 (T)",
 		"addAnnotation": "新增標註 (A)",
 		"addSpeed": "新增速度 (S)",
-		"addBlur": "新增模糊 (B)"
+		"addBlur": "新增模糊 (B)",
+		"addCameraFullscreen": "新增全螢幕攝影機 (C)"
 	},
 	"hints": {
 		"pressZoom": "按 Z 新增縮放",
 		"pressTrim": "按 T 新增剪輯",
 		"pressAnnotation": "按 A 新增標註",
 		"pressSpeed": "按 S 新增速度",
-		"pressBlur": "按 B 新增模糊區域"
+		"pressBlur": "按 B 新增模糊區域",
+		"pressCameraFullscreen": "按 C 新增一個全螢幕攝影機片段"
 	},
 	"labels": {
 		"pan": "平移",
@@ -25,6 +27,8 @@
 		"annotationItem": "標註",
 		"imageItem": "圖片",
 		"emptyText": "空文字",
+		"cameraFullscreen": "全螢幕攝影機",
+		"cameraFullscreenItem": "全螢幕攝影機 {{index}}",
 		"blurItem": "模糊 {{index}}"
 	},
 	"emptyState": {
@@ -46,7 +50,9 @@
 		"cannotPlaceTrim": "無法在此處放置剪輯",
 		"trimExistsAtLocation": "此位置已存在剪輯或沒有足夠的空間。",
 		"cannotPlaceSpeed": "無法在此處放置速度",
-		"speedExistsAtLocation": "此位置已存在速度區域或沒有足夠的空間。"
+		"speedExistsAtLocation": "此位置已存在速度區域或沒有足夠的空間。",
+		"cannotPlaceCameraFullscreen": "無法在此處放置全螢幕攝影機",
+		"cameraFullscreenExistsAtLocation": "此位置已存在全螢幕攝影機片段或沒有足夠的空間。"
 	},
 	"success": {
 		"addedZoomSuggestions": "已新增 {{count}} 個基於游標的縮放建議",

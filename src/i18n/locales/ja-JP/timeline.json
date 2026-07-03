@@ -5,14 +5,16 @@
 		"addTrim": "トリムを追加 (T)",
 		"addAnnotation": "注釈を追加 (A)",
 		"addBlur": "ぼかしを追加 (B)",
-		"addSpeed": "再生速度を追加 (S)"
+		"addSpeed": "再生速度を追加 (S)",
+		"addCameraFullscreen": "フルスクリーンカメラを追加 (C)"
 	},
 	"hints": {
 		"pressZoom": "Zキーを押してズームを追加",
 		"pressTrim": "Tキーを押してトリムを追加",
 		"pressAnnotation": "Aキーを押して注釈を追加",
 		"pressBlur": "Bキーを押してぼかしを追加",
-		"pressSpeed": "Sキーを押して再生速度を追加"
+		"pressSpeed": "Sキーを押して再生速度を追加",
+		"pressCameraFullscreen": "Cキーを押してフルスクリーンカメラのセグメントを追加"
 	},
 	"labels": {
 		"pan": "移動",
@@ -25,7 +27,9 @@
 		"annotationItem": "注釈",
 		"blurItem": "ぼかし {{index}}",
 		"imageItem": "画像",
-		"emptyText": "空のテキスト"
+		"emptyText": "空のテキスト",
+		"cameraFullscreen": "フルスクリーンカメラ",
+		"cameraFullscreenItem": "フルスクリーンカメラ {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "ビデオが読み込まれていません",
@@ -46,7 +50,9 @@
 		"cannotPlaceTrim": "ここにトリムを配置できません",
 		"trimExistsAtLocation": "この場所にはすでにトリムが存在するか、十分なスペースがありません。",
 		"cannotPlaceSpeed": "ここに再生速度を配置できません",
-		"speedExistsAtLocation": "この場所にはすでに再生速度の範囲が存在するか、十分なスペースがありません。"
+		"speedExistsAtLocation": "この場所にはすでに再生速度の範囲が存在するか、十分なスペースがありません。",
+		"cannotPlaceCameraFullscreen": "ここにフルスクリーンカメラを配置できません",
+		"cameraFullscreenExistsAtLocation": "この場所にはすでにフルスクリーンカメラのセグメントが存在するか、十分なスペースがありません。"
 	},
 	"success": {
 		"addedZoomSuggestions": "カーソルに基づくズーム提案を {{count}} 件追加しました",

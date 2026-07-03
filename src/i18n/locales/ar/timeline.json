@@ -5,14 +5,16 @@
 		"addTrim": "إضافة قص (T)",
 		"addAnnotation": "إضافة شرح (A)",
 		"addBlur": "إضافة تمويه (B)",
-		"addSpeed": "إضافة سرعة (S)"
+		"addSpeed": "إضافة سرعة (S)",
+		"addCameraFullscreen": "إضافة كاميرا كاملة الشاشة (C)"
 	},
 	"hints": {
 		"pressZoom": "اضغط Z لإضافة تكبير",
 		"pressTrim": "اضغط T لإضافة قص",
 		"pressAnnotation": "اضغط A لإضافة شرح",
 		"pressBlur": "اضغط B لإضافة منطقة تمويه",
-		"pressSpeed": "اضغط S لإضافة سرعة"
+		"pressSpeed": "اضغط S لإضافة سرعة",
+		"pressCameraFullscreen": "اضغط C لإضافة مقطع كاميرا كاملة الشاشة"
 	},
 	"labels": {
 		"pan": "تحريك",
@@ -25,7 +27,9 @@
 		"annotationItem": "شرح",
 		"blurItem": "تمويه {{index}}",
 		"imageItem": "صورة",
-		"emptyText": "نص فارغ"
+		"emptyText": "نص فارغ",
+		"cameraFullscreen": "كاميرا كاملة الشاشة",
+		"cameraFullscreenItem": "كاميرا كاملة الشاشة {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "لم يتم تحميل أي فيديو",
@@ -46,7 +50,9 @@
 		"cannotPlaceTrim": "لا يمكن وضع القص هنا",
 		"trimExistsAtLocation": "يوجد قص بالفعل في هذا الموقع أو لا توجد مساحة كافية متاحة.",
 		"cannotPlaceSpeed": "لا يمكن وضع السرعة هنا",
-		"speedExistsAtLocation": "توجد منطقة سرعة بالفعل في هذا الموقع أو لا توجد مساحة كافية متاحة."
+		"speedExistsAtLocation": "توجد منطقة سرعة بالفعل في هذا الموقع أو لا توجد مساحة كافية متاحة.",
+		"cannotPlaceCameraFullscreen": "لا يمكن وضع الكاميرا الكاملة هنا",
+		"cameraFullscreenExistsAtLocation": "يوجد بالفعل مقطع كاميرا كاملة الشاشة في هذا الموقع أو لا توجد مساحة كافية متاحة."
 	},
 	"success": {
 		"addedZoomSuggestions": "تمت إضافة {{count}} اقتراح تكبير بناءً على المؤشر",

@@ -5,14 +5,16 @@
 		"addTrim": "Adicionar Recorte (T)",
 		"addAnnotation": "Adicionar Anotação (A)",
 		"addBlur": "Adicionar Desfoque (B)",
-		"addSpeed": "Adicionar Velocidade (S)"
+		"addSpeed": "Adicionar Velocidade (S)",
+		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia (C)"
 	},
 	"hints": {
 		"pressZoom": "Pressione Z para adicionar zoom",
 		"pressTrim": "Pressione T para adicionar recorte",
 		"pressAnnotation": "Pressione A para adicionar anotação",
 		"pressBlur": "Pressione B para adicionar região de desfoque",
-		"pressSpeed": "Pressione S para adicionar velocidade"
+		"pressSpeed": "Pressione S para adicionar velocidade",
+		"pressCameraFullscreen": "Pressione C para adicionar um segmento de Câmera em Tela Cheia"
 	},
 	"labels": {
 		"pan": "Mover",
@@ -25,7 +27,9 @@
 		"annotationItem": "Anotação",
 		"blurItem": "Desfoque {{index}}",
 		"imageItem": "Imagem",
-		"emptyText": "Texto vazio"
+		"emptyText": "Texto vazio",
+		"cameraFullscreen": "Câmera em Tela Cheia",
+		"cameraFullscreenItem": "Câmera em Tela Cheia {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "Nenhum Vídeo Carregado",
@@ -46,7 +50,9 @@
 		"cannotPlaceTrim": "Não é possível colocar recorte aqui",
 		"trimExistsAtLocation": "Já existe um recorte neste local ou não há espaço suficiente disponível.",
 		"cannotPlaceSpeed": "Não é possível colocar velocidade aqui",
-		"speedExistsAtLocation": "Já existe uma região de velocidade neste local ou não há espaço suficiente disponível."
+		"speedExistsAtLocation": "Já existe uma região de velocidade neste local ou não há espaço suficiente disponível.",
+		"cannotPlaceCameraFullscreen": "Não é possível colocar Câmera em Tela Cheia aqui",
+		"cameraFullscreenExistsAtLocation": "Já existe um segmento de Câmera em Tela Cheia neste local ou não há espaço suficiente disponível."
 	},
 	"success": {
 		"addedZoomSuggestions": "Adicionada {{count}} sugestão de zoom baseada no cursor",

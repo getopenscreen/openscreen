@@ -5,14 +5,16 @@
 		"addTrim": "Aggiungi taglio (T)",
 		"addAnnotation": "Aggiungi annotazione (A)",
 		"addBlur": "Aggiungi sfocatura (B)",
-		"addSpeed": "Aggiungi velocità (S)"
+		"addSpeed": "Aggiungi velocità (S)",
+		"addCameraFullscreen": "Aggiungi Camera a schermo intero (C)"
 	},
 	"hints": {
 		"pressZoom": "Premi Z per aggiungere zoom",
 		"pressTrim": "Premi T per aggiungere taglio",
 		"pressAnnotation": "Premi A per aggiungere annotazione",
 		"pressBlur": "Premi B per aggiungere regione sfocatura",
-		"pressSpeed": "Premi S per aggiungere velocità"
+		"pressSpeed": "Premi S per aggiungere velocità",
+		"pressCameraFullscreen": "Premi C per aggiungere un segmento Camera a schermo intero"
 	},
 	"labels": {
 		"pan": "Panoramica",
@@ -25,7 +27,9 @@
 		"annotationItem": "Annotazione",
 		"blurItem": "Sfocatura {{index}}",
 		"imageItem": "Immagine",
-		"emptyText": "Testo vuoto"
+		"emptyText": "Testo vuoto",
+		"cameraFullscreen": "Camera a schermo intero",
+		"cameraFullscreenItem": "Camera a schermo intero {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "Nessun video caricato",
@@ -46,7 +50,9 @@
 		"cannotPlaceTrim": "Impossibile posizionare il taglio qui",
 		"trimExistsAtLocation": "Il taglio esiste già in questa posizione o non c'è spazio sufficiente.",
 		"cannotPlaceSpeed": "Impossibile posizionare la velocità qui",
-		"speedExistsAtLocation": "La regione velocità esiste già in questa posizione o non c'è spazio sufficiente."
+		"speedExistsAtLocation": "La regione velocità esiste già in questa posizione o non c'è spazio sufficiente.",
+		"cannotPlaceCameraFullscreen": "Impossibile posizionare la Camera a schermo intero qui",
+		"cameraFullscreenExistsAtLocation": "Un segmento Camera a schermo intero esiste già in questa posizione o non c'è spazio sufficiente."
 	},
 	"success": {
 		"addedZoomSuggestions": "Aggiunto {{count}} suggerimento zoom basato sul cursore",

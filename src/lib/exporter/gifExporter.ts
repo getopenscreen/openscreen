@@ -1,6 +1,7 @@
 import GIF from "gif.js";
 import type {
 	AnnotationRegion,
+	CameraFullscreenRegion,
 	CropRegion,
 	SpeedRegion,
 	TrimRegion,
@@ -34,6 +35,7 @@ interface GifExporterConfig {
 	sizePreset: GifSizePreset;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
 	showShadow: boolean;
@@ -151,6 +153,7 @@ export class GifExporter {
 				height: this.config.height,
 				wallpaper: this.config.wallpaper,
 				zoomRegions: this.config.zoomRegions,
+				cameraFullscreenRegions: this.config.cameraFullscreenRegions,
 				showShadow: this.config.showShadow,
 				shadowIntensity: this.config.shadowIntensity,
 				showBlur: this.config.showBlur,

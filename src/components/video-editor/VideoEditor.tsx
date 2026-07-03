@@ -107,6 +107,7 @@ import { buildAutoZoomSuggestions } from "./timeline/zoomSuggestionUtils";
 import {
 	type AnnotationRegion,
 	type BlurData,
+	type CameraFullscreenRegion,
 	clampFocusToDepth,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
@@ -205,6 +206,7 @@ export default function VideoEditor() {
 
 	const {
 		zoomRegions,
+		cameraFullscreenRegions,
 		autoZoomEnabled,
 		autoFocusAll,
 		trimRegions,
@@ -243,6 +245,7 @@ export default function VideoEditor() {
 	const durationRef = useRef(duration);
 	durationRef.current = duration;
 	const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
+	const [selectedCameraFullscreenId, setSelectedCameraFullscreenId] = useState<string | null>(null);
 	const [isPreviewingZoom, setIsPreviewingZoom] = useState(false);
 	const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
 	const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
@@ -313,6 +316,7 @@ export default function VideoEditor() {
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 
 	const nextZoomIdRef = useRef(1);
+	const nextCameraFullscreenIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
 
@@ -389,6 +393,7 @@ export default function VideoEditor() {
 			const inferredDurationMs = Math.max(
 				0,
 				...normalizedEditor.zoomRegions.map((region) => region.endMs),
+				...normalizedEditor.cameraFullscreenRegions.map((region) => region.endMs),
 				...normalizedEditor.trimRegions.map((region) => region.endMs),
 				...normalizedEditor.speedRegions.map((region) => region.endMs),
 				...normalizedEditor.annotationRegions.map((region) => region.endMs),
@@ -425,6 +430,7 @@ export default function VideoEditor() {
 				padding: normalizedEditor.padding,
 				cropRegion: normalizedEditor.cropRegion,
 				zoomRegions: normalizedEditor.zoomRegions,
+				cameraFullscreenRegions: normalizedEditor.cameraFullscreenRegions,
 				autoZoomEnabled: normalizedEditor.autoZoomEnabled,
 				autoFocusAll: normalizedEditor.autoFocusAll,
 				trimRegions: normalizedEditor.trimRegions,
@@ -446,6 +452,7 @@ export default function VideoEditor() {
 			setCursorTheme(normalizedEditor.cursorTheme);
 
 			setSelectedZoomId(null);
+			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
@@ -454,6 +461,10 @@ export default function VideoEditor() {
 			nextZoomIdRef.current = deriveNextId(
 				"zoom",
 				normalizedEditor.zoomRegions.map((region) => region.id),
+			);
+			nextCameraFullscreenIdRef.current = deriveNextId(
+				"camera-fullscreen",
+				normalizedEditor.cameraFullscreenRegions.map((region) => region.id),
 			);
 			nextTrimIdRef.current = deriveNextId(
 				"trim",
@@ -502,6 +513,7 @@ export default function VideoEditor() {
 			padding,
 			cropRegion,
 			zoomRegions,
+			cameraFullscreenRegions,
 			autoZoomEnabled,
 			autoFocusAll,
 			trimRegions,
@@ -533,6 +545,7 @@ export default function VideoEditor() {
 		padding,
 		cropRegion,
 		zoomRegions,
+		cameraFullscreenRegions,
 		autoZoomEnabled,
 		autoFocusAll,
 		trimRegions,
@@ -661,6 +674,7 @@ export default function VideoEditor() {
 				padding,
 				cropRegion,
 				zoomRegions,
+				cameraFullscreenRegions,
 				autoZoomEnabled,
 				autoFocusAll,
 				trimRegions,
@@ -726,6 +740,7 @@ export default function VideoEditor() {
 			padding,
 			cropRegion,
 			zoomRegions,
+			cameraFullscreenRegions,
 			autoZoomEnabled,
 			autoFocusAll,
 			trimRegions,
@@ -990,6 +1005,18 @@ export default function VideoEditor() {
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
 		if (id) {
+			setSelectedCameraFullscreenId(null);
+			setSelectedTrimId(null);
+			setSelectedSpeedId(null);
+			setSelectedAnnotationId(null);
+			setSelectedBlurId(null);
+		}
+	}, []);
+
+	const handleSelectCameraFullscreen = useCallback((id: string | null) => {
+		setSelectedCameraFullscreenId(id);
+		if (id) {
+			setSelectedZoomId(null);
 			setSelectedTrimId(null);
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
@@ -1001,6 +1028,7 @@ export default function VideoEditor() {
 		setSelectedTrimId(id);
 		if (id) {
 			setSelectedZoomId(null);
+			setSelectedCameraFullscreenId(null);
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
@@ -1011,6 +1039,7 @@ export default function VideoEditor() {
 		setSelectedAnnotationId(id);
 		if (id) {
 			setSelectedZoomId(null);
+			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
 			setSelectedSpeedId(null);
 			setSelectedBlurId(null);
@@ -1021,6 +1050,7 @@ export default function VideoEditor() {
 		setSelectedBlurId(id);
 		if (id) {
 			setSelectedZoomId(null);
+			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedSpeedId(null);
@@ -1043,12 +1073,63 @@ export default function VideoEditor() {
 			};
 			pushState((prev) => ({ zoomRegions: [...prev.zoomRegions, newRegion] }));
 			setSelectedZoomId(id);
+			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
 		},
 		[pushState, autoFocusAll],
+	);
+
+	const handleCameraFullscreenAdded = useCallback(
+		(span: Span) => {
+			const id = `camera-fullscreen-${nextCameraFullscreenIdRef.current++}`;
+			const newRegion: CameraFullscreenRegion = {
+				id,
+				startMs: Math.round(span.start),
+				endMs: Math.round(span.end),
+			};
+			pushState((prev) => ({
+				cameraFullscreenRegions: [...prev.cameraFullscreenRegions, newRegion],
+			}));
+			setSelectedCameraFullscreenId(id);
+			setSelectedZoomId(null);
+			setSelectedTrimId(null);
+			setSelectedSpeedId(null);
+			setSelectedAnnotationId(null);
+			setSelectedBlurId(null);
+		},
+		[pushState],
+	);
+
+	const handleCameraFullscreenSpanChange = useCallback(
+		(id: string, span: Span) => {
+			pushState((prev) => ({
+				cameraFullscreenRegions: prev.cameraFullscreenRegions.map((region) =>
+					region.id === id
+						? {
+								...region,
+								startMs: Math.round(span.start),
+								endMs: Math.round(span.end),
+							}
+						: region,
+				),
+			}));
+		},
+		[pushState],
+	);
+
+	const handleCameraFullscreenDelete = useCallback(
+		(id: string) => {
+			pushState((prev) => ({
+				cameraFullscreenRegions: prev.cameraFullscreenRegions.filter((r) => r.id !== id),
+			}));
+			if (selectedCameraFullscreenId === id) {
+				setSelectedCameraFullscreenId(null);
+			}
+		},
+		[selectedCameraFullscreenId, pushState],
 	);
 
 	// Builds fresh "auto" zoom regions from cursor telemetry without overlapping
@@ -1301,6 +1382,7 @@ export default function VideoEditor() {
 		setSelectedSpeedId(id);
 		if (id) {
 			setSelectedZoomId(null);
+			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedBlurId(null);
@@ -1970,6 +2052,15 @@ export default function VideoEditor() {
 	}, [selectedZoomId, zoomRegions]);
 
 	useEffect(() => {
+		if (
+			selectedCameraFullscreenId &&
+			!cameraFullscreenRegions.some((region) => region.id === selectedCameraFullscreenId)
+		) {
+			setSelectedCameraFullscreenId(null);
+		}
+	}, [selectedCameraFullscreenId, cameraFullscreenRegions]);
+
+	useEffect(() => {
 		if (selectedTrimId && !trimRegions.some((region) => region.id === selectedTrimId)) {
 			setSelectedTrimId(null);
 		}
@@ -2138,6 +2229,7 @@ export default function VideoEditor() {
 						sizePreset: settings.gifConfig.sizePreset,
 						wallpaper,
 						zoomRegions,
+						cameraFullscreenRegions,
 						trimRegions,
 						speedRegions,
 						showShadow: shadowIntensity > 0,
@@ -2233,6 +2325,7 @@ export default function VideoEditor() {
 						codec: "avc1.640033",
 						wallpaper,
 						zoomRegions,
+						cameraFullscreenRegions,
 						trimRegions,
 						speedRegions,
 						showShadow: shadowIntensity > 0,
@@ -2341,6 +2434,7 @@ export default function VideoEditor() {
 			webcamVideoPath,
 			wallpaper,
 			zoomRegions,
+			cameraFullscreenRegions,
 			trimRegions,
 			speedRegions,
 			shadowIntensity,
@@ -2871,6 +2965,7 @@ export default function VideoEditor() {
 													onError={setError}
 													wallpaper={wallpaper}
 													zoomRegions={zoomRegions}
+													cameraFullscreenRegions={cameraFullscreenRegions}
 													selectedZoomId={selectedZoomId}
 													onSelectZoom={handleSelectZoom}
 													onZoomFocusChange={handleZoomFocusChange}
@@ -3127,6 +3222,12 @@ export default function VideoEditor() {
 									onZoomDelete={handleZoomDelete}
 									selectedZoomId={selectedZoomId}
 									onSelectZoom={handleSelectZoom}
+									cameraFullscreenRegions={cameraFullscreenRegions}
+									onCameraFullscreenAdded={handleCameraFullscreenAdded}
+									onCameraFullscreenSpanChange={handleCameraFullscreenSpanChange}
+									onCameraFullscreenDelete={handleCameraFullscreenDelete}
+									selectedCameraFullscreenId={selectedCameraFullscreenId}
+									onSelectCameraFullscreen={handleSelectCameraFullscreen}
 									trimRegions={trimRegions}
 									onTrimAdded={handleTrimAdded}
 									onTrimSpanChange={handleTrimSpanChange}

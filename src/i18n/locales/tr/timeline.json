@@ -5,14 +5,16 @@
 		"addTrim": "Kırpma Ekle (T)",
 		"addAnnotation": "Açıklama Ekle (A)",
 		"addSpeed": "Hız Ekle (S)",
-		"addBlur": "Bulanık ekle (B)"
+		"addBlur": "Bulanık ekle (B)",
+		"addCameraFullscreen": "Tam Ekran Kamera Ekle (C)"
 	},
 	"hints": {
 		"pressZoom": "Yakınlaştırma eklemek için Z tuşuna basın",
 		"pressTrim": "Kırpma eklemek için T tuşuna basın",
 		"pressAnnotation": "Açıklama eklemek için A tuşuna basın",
 		"pressSpeed": "Hız eklemek için S tuşuna basın",
-		"pressBlur": "Bulanık bölge eklemek için B tuşuna basın"
+		"pressBlur": "Bulanık bölge eklemek için B tuşuna basın",
+		"pressCameraFullscreen": "Tam Ekran Kamera bölümü eklemek için C tuşuna basın"
 	},
 	"labels": {
 		"pan": "Kaydır",
@@ -25,6 +27,8 @@
 		"annotationItem": "Açıklama",
 		"imageItem": "Görüntü",
 		"emptyText": "Boş metin",
+		"cameraFullscreen": "Tam Ekran Kamera",
+		"cameraFullscreenItem": "Tam Ekran Kamera {{index}}",
 		"blurItem": "Bulanık {{index}}"
 	},
 	"emptyState": {
@@ -46,7 +50,9 @@
 		"cannotPlaceTrim": "Buraya kırpma yerleştirilemiyor",
 		"trimExistsAtLocation": "Bu konumda zaten bir kırpma var veya yeterli alan yok.",
 		"cannotPlaceSpeed": "Buraya hız yerleştirilemiyor",
-		"speedExistsAtLocation": "Bu konumda zaten bir hız bölgesi var veya yeterli alan yok."
+		"speedExistsAtLocation": "Bu konumda zaten bir hız bölgesi var veya yeterli alan yok.",
+		"cannotPlaceCameraFullscreen": "Buraya Tam Ekran Kamera yerleştirilemiyor",
+		"cameraFullscreenExistsAtLocation": "Bu konumda zaten bir Tam Ekran Kamera bölümü var veya yeterli alan yok."
 	},
 	"success": {
 		"addedZoomSuggestions": "{{count}} imleç tabanlı yakınlaştırma önerisi eklendi",

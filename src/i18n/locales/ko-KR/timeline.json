@@ -5,14 +5,16 @@
 		"addTrim": "트림 추가 (T)",
 		"addAnnotation": "주석 추가 (A)",
 		"addSpeed": "속도 추가 (S)",
-		"addBlur": "블러 추가 (B)"
+		"addBlur": "블러 추가 (B)",
+		"addCameraFullscreen": "전체 화면 카메라 추가 (C)"
 	},
 	"hints": {
 		"pressZoom": "Z를 눌러 줌 추가",
 		"pressTrim": "T를 눌러 트림 추가",
 		"pressAnnotation": "A를 눌러 주석 추가",
 		"pressSpeed": "S를 눌러 속도 추가",
-		"pressBlur": "B 키를 눌러 블러 영역을 추가하세요"
+		"pressBlur": "B 키를 눌러 블러 영역을 추가하세요",
+		"pressCameraFullscreen": "C를 눌러 전체 화면 카메라 구간을 추가하세요"
 	},
 	"labels": {
 		"pan": "이동",
@@ -25,6 +27,8 @@
 		"annotationItem": "주석",
 		"imageItem": "이미지",
 		"emptyText": "빈 텍스트",
+		"cameraFullscreen": "전체 화면 카메라",
+		"cameraFullscreenItem": "전체 화면 카메라 {{index}}",
 		"blurItem": "블러 {{index}}"
 	},
 	"emptyState": {
@@ -46,7 +50,9 @@
 		"cannotPlaceTrim": "이 위치에 트림을 추가할 수 없습니다",
 		"trimExistsAtLocation": "이 위치에 이미 트림이 있거나 공간이 부족합니다.",
 		"cannotPlaceSpeed": "이 위치에 속도를 추가할 수 없습니다",
-		"speedExistsAtLocation": "이 위치에 이미 속도 구간이 있거나 공간이 부족합니다."
+		"speedExistsAtLocation": "이 위치에 이미 속도 구간이 있거나 공간이 부족합니다.",
+		"cannotPlaceCameraFullscreen": "이 위치에 전체 화면 카메라를 추가할 수 없습니다",
+		"cameraFullscreenExistsAtLocation": "이 위치에 이미 전체 화면 카메라 구간이 있거나 공간이 부족합니다."
 	},
 	"success": {
 		"addedZoomSuggestions": "커서 기반 줌 제안 {{count}}개가 추가되었습니다",

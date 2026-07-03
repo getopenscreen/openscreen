@@ -1,6 +1,6 @@
 import { Assets, BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
-import type { CursorTelemetryPoint } from "../types";
+import type { CropRegion, CursorTelemetryPoint } from "../types";
 import {
 	createSpringState,
 	getCursorSpringConfig,
@@ -389,6 +389,40 @@ function getCursorViewportScale(viewport: CursorViewportRect) {
 	return Math.max(MIN_CURSOR_VIEWPORT_SCALE, viewport.width / REFERENCE_WIDTH);
 }
 
+/**
+ * Maps a cursor position normalized to the full (uncropped) video into pixel
+ * coordinates inside the cropped viewport. Cursor telemetry is always stored
+ * relative to the full frame, so after a crop the normalized position must be
+ * re-normalized against the crop rect before it is projected onto the viewport
+ * (which already represents just the cropped area). Returns `null` when the
+ * position falls outside the visible crop, so callers can hide the cursor.
+ *
+ * Mirrors getCroppedCursorPosition / projectNativeCursorToLocal in the native
+ * cursor path (src/lib/cursor/nativeCursor.ts).
+ */
+export function mapCursorToCroppedViewport(
+	normX: number,
+	normY: number,
+	viewport: CursorViewportRect,
+	cropRegion: CropRegion,
+): { px: number; py: number } | null {
+	if (cropRegion.width <= 0 || cropRegion.height <= 0) {
+		return null;
+	}
+
+	const croppedX = (normX - cropRegion.x) / cropRegion.width;
+	const croppedY = (normY - cropRegion.y) / cropRegion.height;
+
+	if (croppedX < 0 || croppedX > 1 || croppedY < 0 || croppedY > 1) {
+		return null;
+	}
+
+	return {
+		px: viewport.x + croppedX * viewport.width,
+		py: viewport.y + croppedY * viewport.height,
+	};
+}
+
 function getCursorVisualState(samples: CursorTelemetryPoint[], timeMs: number) {
 	const latestClick = findLatestInteractionSample(samples, timeMs);
 	const interactionType = latestClick?.interactionType;
@@ -583,6 +617,7 @@ export class PixiCursorOverlay {
 		viewport: CursorViewportRect,
 		visible: boolean,
 		freeze = false,
+		cropRegion?: CropRegion,
 	): void {
 		if (!visible || samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) {
 			this.container.visible = false;
@@ -591,6 +626,8 @@ export class PixiCursorOverlay {
 			this.cursorMotionBlurFilter.velocity = { x: 0, y: 0 };
 			return;
 		}
+
+		const crop = cropRegion ?? { x: 0, y: 0, width: 1, height: 1 };
 
 		const target = interpolateCursorPosition(samples, timeMs);
 		if (!target) {
@@ -611,10 +648,21 @@ export class PixiCursorOverlay {
 		} else {
 			this.state.update(target.cx, target.cy, timeMs);
 		}
+		// Telemetry positions are normalized to the full (uncropped) video. Remap them
+		// into the cropped viewport so the cursor stays aligned after a crop, and hide
+		// the cursor when it moves outside the visible crop (matching the native path).
+		const mapped = mapCursorToCroppedViewport(this.state.x, this.state.y, viewport, crop);
+		if (!mapped) {
+			this.container.visible = false;
+			this.lastRenderedPoint = null;
+			this.lastRenderedTimeMs = null;
+			this.cursorMotionBlurFilter.velocity = { x: 0, y: 0 };
+			return;
+		}
+
 		this.container.visible = true;
 
-		const px = viewport.x + this.state.x * viewport.width;
-		const py = viewport.y + this.state.y * viewport.height;
+		const { px, py } = mapped;
 		const h = this.config.dotRadius * getCursorViewportScale(viewport);
 		const { cursorType, clickBounceProgress, clickProgress } = getCursorVisualState(
 			samples,

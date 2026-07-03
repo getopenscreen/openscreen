@@ -1541,6 +1541,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						baseMaskRef.current,
 						showCursorRef.current && !hasNativeCursorRecordingRef.current,
 						!isPlayingRef.current || isSeekingRef.current,
+						cropRegionRef.current ?? { x: 0, y: 0, width: 1, height: 1 },
 					);
 				}
 

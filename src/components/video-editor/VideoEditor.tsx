@@ -878,6 +878,7 @@ export default function VideoEditor() {
 		resetState();
 		// Reset non-undoable selection state.
 		setSelectedZoomId(null);
+		setSelectedCameraFullscreenId(null);
 		setSelectedTrimId(null);
 		setSelectedSpeedId(null);
 		setSelectedAnnotationId(null);
@@ -895,6 +896,7 @@ export default function VideoEditor() {
 		setCursorTheme(DEFAULT_CURSOR_SETTINGS.theme);
 		// Reset region ID counters.
 		nextZoomIdRef.current = 1;
+		nextCameraFullscreenIdRef.current = 1;
 		nextTrimIdRef.current = 1;
 		nextSpeedIdRef.current = 1;
 		nextAnnotationIdRef.current = 1;

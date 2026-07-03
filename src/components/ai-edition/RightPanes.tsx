@@ -42,9 +42,11 @@ import {
 	buildAggregatedSections,
 	type ClipSection,
 	type ClipWord,
+	findCueWordId,
 	type SkipRun,
 } from "@/lib/ai-edition/timeline/aggregated-transcript";
 import { formatMs } from "@/lib/ai-edition/timeline/format";
+import { locateVirtualPosition } from "@/lib/ai-edition/timeline/virtual-preview";
 import { getAssetPath } from "@/lib/assetPath";
 import { CURSOR_THEMES, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { resolveImageWallpaperUrl, WALLPAPER_PATHS } from "@/lib/wallpaper";
@@ -423,6 +425,7 @@ export function TranscriptPane({
 	assets,
 	skipRanges,
 	busy,
+	currentTimeSec,
 	onSeek,
 	onAddSkipRange,
 	onRemoveSkipRange,
@@ -435,6 +438,7 @@ export function TranscriptPane({
 	assets: AxcutAsset[];
 	skipRanges: AxcutSkipRange[];
 	busy: boolean;
+	currentTimeSec: number;
 	onSeek: (sec: number) => void;
 	onAddSkipRange: (assetId: string, startSec: number, endSec: number, reason: string) => void;
 	onRemoveSkipRange: (skipId: string) => void;
@@ -446,6 +450,24 @@ export function TranscriptPane({
 		() => buildAggregatedSections(clips, transcripts, assets, skipRanges),
 		[clips, transcripts, assets, skipRanges],
 	);
+
+	// ponytail: the cue position is the playback head's location in the
+	// current clip's source time. `locateVirtualPosition` already accounts
+	// for skip ranges and clipped durations — the cue word naturally
+	// jumps over gaps the user has trimmed.
+	const cue = useMemo(() => {
+		if (clips.length === 0) return null;
+		const position = locateVirtualPosition(clips, currentTimeSec);
+		if (!position) return null;
+		return {
+			assetId: position.clip.assetId,
+			clipId: position.clip.id,
+			sourceTimeSec: position.sourceTimeSec,
+		};
+	}, [clips, currentTimeSec]);
+
+	const cueWordId = useMemo(() => findCueWordId(sections, cue), [sections, cue]);
+
 	const hasAnyTranscript = transcripts.length > 0;
 
 	if (clips.length === 0 || !hasAnyTranscript) {
@@ -499,6 +521,7 @@ export function TranscriptPane({
 						index={idx}
 						section={section}
 						busy={busy}
+						cueWordId={cueWordId}
 						onSeek={onSeek}
 						onAddSkipRange={onAddSkipRange}
 						onRemoveSkipRange={onRemoveSkipRange}
@@ -518,6 +541,7 @@ function TranscriptClipBlock({
 	index,
 	section,
 	busy,
+	cueWordId,
 	onSeek,
 	onAddSkipRange,
 	onRemoveSkipRange,
@@ -525,6 +549,7 @@ function TranscriptClipBlock({
 	index: number;
 	section: ClipSection;
 	busy: boolean;
+	cueWordId: string | null;
 	onSeek: (sec: number) => void;
 	onAddSkipRange: (assetId: string, startSec: number, endSec: number, reason: string) => void;
 	onRemoveSkipRange: (skipId: string) => void;
@@ -538,6 +563,27 @@ function TranscriptClipBlock({
 
 	const editorRef = useRef<HTMLDivElement | null>(null);
 	const pendingCaretWordIdRef = useRef<string | null>(null);
+
+	// ponytail: auto-scroll the cue word into view as the playback head
+	// moves. Mirrors axcut's `scrollCueWordIntoView` in CurrentTranscriptView
+	// (margins keep the highlighted word clear of the editor's edges).
+	const SCROLL_MARGIN_PX = 56;
+	useLayoutEffect(() => {
+		const editor = editorRef.current;
+		if (!editor || !cueWordId) return;
+		const wordElement = editor.querySelector<HTMLElement>(`[data-word-id="${cueWordId}"]`);
+		if (!wordElement) return;
+		const editorRect = editor.getBoundingClientRect();
+		const wordRect = wordElement.getBoundingClientRect();
+		const visibleTop = editorRect.top + SCROLL_MARGIN_PX;
+		const visibleBottom = editorRect.bottom - SCROLL_MARGIN_PX;
+		if (wordRect.top >= visibleTop && wordRect.bottom <= visibleBottom) return;
+		if (wordRect.top < visibleTop) {
+			editor.scrollTop -= visibleTop - wordRect.top;
+		} else {
+			editor.scrollTop += wordRect.bottom - visibleBottom;
+		}
+	}, [cueWordId]);
 
 	// ponytail: keep the caret anchored to the next kept word after a
 	// skipRange is added (so the user can keep deleting without the caret
@@ -756,7 +802,12 @@ function TranscriptClipBlock({
 					}}
 				>
 					{words.map((cw) => (
-						<TranscriptWord key={cw.word.id} cw={cw} onRestore={removeSkipRun} />
+						<TranscriptWord
+							key={cw.word.id}
+							cw={cw}
+							isCue={cw.word.id === cueWordId}
+							onRestore={removeSkipRun}
+						/>
 					))}
 				</div>
 			)}
@@ -766,7 +817,17 @@ function TranscriptClipBlock({
 
 // One word inside the editable block. Kept words render plain; removed
 // words (inside a skip range) render red+strikethrough with a hover bin.
-function TranscriptWord({ cw, onRestore }: { cw: ClipWord; onRestore: (run: SkipRun) => void }) {
+// `isCue` highlights the word the playback head is currently inside with
+// an accent underline (matches axcut's `word.transcript-word.cue` rule).
+function TranscriptWord({
+	cw,
+	isCue,
+	onRestore,
+}: {
+	cw: ClipWord;
+	isCue: boolean;
+	onRestore: (run: SkipRun) => void;
+}) {
 	const [hover, setHover] = useState(false);
 	const removed = !cw.kept;
 	return (
@@ -775,6 +836,7 @@ function TranscriptWord({ cw, onRestore }: { cw: ClipWord; onRestore: (run: Skip
 			data-start-sec={cw.word.startSec}
 			data-end-sec={cw.word.endSec}
 			data-skip-id={cw.skipId ?? undefined}
+			data-cue={isCue ? "true" : undefined}
 			style={{
 				display: "inline",
 				color: removed ? "var(--danger)" : "var(--fg)",
@@ -782,6 +844,8 @@ function TranscriptWord({ cw, onRestore }: { cw: ClipWord; onRestore: (run: Skip
 				textDecoration: removed ? "line-through" : "none",
 				textDecorationColor: removed ? "var(--danger)" : undefined,
 				opacity: removed ? 0.9 : 1,
+				borderBottom: isCue ? "2px solid var(--accent)" : "none",
+				paddingBottom: isCue ? 1 : 0,
 			}}
 			onMouseEnter={() => setHover(true)}
 			onMouseLeave={() => setHover(false)}

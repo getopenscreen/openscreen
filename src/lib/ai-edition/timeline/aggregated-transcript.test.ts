@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AxcutAsset, AxcutClip, AxcutSkipRange, AxcutTranscript } from "../schema";
-import { buildAggregatedSections, buildClipSection } from "./aggregated-transcript";
+import { buildAggregatedSections, buildClipSection, findCueWordId } from "./aggregated-transcript";
 
 function makeClip(overrides: Partial<AxcutClip> = {}): AxcutClip {
 	return {
@@ -212,5 +212,70 @@ describe("buildAggregatedSections", () => {
 		expect(sections[0]?.transcript).toBeTruthy();
 		expect(sections[1]?.transcript).toBeNull();
 		expect(sections[1]?.words).toEqual([]);
+	});
+});
+
+describe("findCueWordId", () => {
+	function makeSection(
+		clipId: string,
+		assetId: string,
+		wordTimes: Array<[string, number, number]>,
+	) {
+		return {
+			clip: makeClip({ id: clipId, assetId, sourceStartSec: 0, sourceEndSec: 100 }),
+			asset: makeAsset({ id: assetId }),
+			transcript: null,
+			words: wordTimes.map(([id, start, end]) => ({
+				word: { id, segmentId: "s1", startSec: start, endSec: end, text: id },
+				kept: true,
+				skipId: null,
+				filler: false,
+			})),
+			skipRuns: [],
+		};
+	}
+
+	it("returns null when cue is null", () => {
+		const section = makeSection("c1", "asset_1", [["w1", 0, 1]]);
+		expect(findCueWordId([section], null)).toBeNull();
+	});
+
+	it("returns null when no section matches the cue asset", () => {
+		const section = makeSection("c1", "asset_1", [["w1", 0, 1]]);
+		const cue = { assetId: "asset_2", sourceTimeSec: 0.5 };
+		expect(findCueWordId([section], cue)).toBeNull();
+	});
+
+	it("returns the word containing the cue time", () => {
+		const section = makeSection("c1", "asset_1", [
+			["w1", 0, 1],
+			["w2", 1, 2],
+			["w3", 2, 3],
+		]);
+		expect(findCueWordId([section], { assetId: "asset_1", sourceTimeSec: 1.5 })).toBe("w2");
+	});
+
+	it("returns the previous word when the cue is between two words", () => {
+		const section = makeSection("c1", "asset_1", [
+			["w1", 0, 1],
+			["w2", 2, 3],
+		]);
+		expect(findCueWordId([section], { assetId: "asset_1", sourceTimeSec: 1.5 })).toBe("w1");
+	});
+
+	it("returns the previous word when the cue is before the first word", () => {
+		const section = makeSection("c1", "asset_1", [
+			["w1", 5, 6],
+			["w2", 7, 8],
+		]);
+		expect(findCueWordId([section], { assetId: "asset_1", sourceTimeSec: 0.5 })).toBeNull();
+	});
+
+	it("returns the last word when the cue is after the last word", () => {
+		const section = makeSection("c1", "asset_1", [
+			["w1", 0, 1],
+			["w2", 1, 2],
+		]);
+		expect(findCueWordId([section], { assetId: "asset_1", sourceTimeSec: 99 })).toBe("w2");
 	});
 });

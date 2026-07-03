@@ -178,3 +178,45 @@ export function buildAggregatedSections(
 		),
 	);
 }
+
+/** Where the playback head currently is, in source time. */
+export interface CuePosition {
+	assetId: string;
+	/** Optional clip id filter (lets the caller restrict to a single clip). */
+	clipId?: string;
+	sourceTimeSec: number;
+}
+
+/**
+ * Find the word in `sections` that the playback head is currently inside.
+ * Used to highlight the active word and auto-scroll the transcript. Mirrors
+ * axcut's `findCueWordId` in CurrentTranscriptView.
+ *
+ *   - If the head is before the first word → null.
+ *   - If the head is between two words        → the previous word (so the
+ *     highlight "sticks" until the next word starts).
+ *   - Silence tokens (id starts with `silence_`) are skipped over so a
+ *     long pause doesn't surface a fake cue word.
+ */
+export function findCueWordId(sections: ClipSection[], cue: CuePosition | null): string | null {
+	if (!cue) return null;
+	const assetMatch = sections
+		.filter((s) => s.words.length > 0)
+		.find((s) => s.clip.assetId === cue.assetId);
+	if (!assetMatch) return null;
+	// ponytail: clipId is part of the cue position for future use, but the
+	// word-id projection already encodes clipId in the prefix; the
+	// current iteration just walks every word in the asset. If we need
+	// clip-scoped lookup later, store the clip id on each ClipWord.
+	const pool = assetMatch.words;
+
+	const t = cue.sourceTimeSec;
+	let previous: string | null = null;
+	for (const cw of pool) {
+		if (cw.word.id.startsWith("silence_")) continue;
+		if (t < cw.word.startSec) return previous;
+		if (t >= cw.word.startSec && t <= cw.word.endSec) return cw.word.id;
+		previous = cw.word.id;
+	}
+	return previous;
+}

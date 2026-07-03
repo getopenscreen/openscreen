@@ -981,6 +981,7 @@ export function NewEditorShell() {
 						clips={clips}
 						skipRanges={document?.timeline?.skipRanges ?? []}
 						busy={isTranscribing}
+						currentTimeSec={currentTimeSec}
 						onSeek={handleSeek}
 						onAddSkipRange={handleAddSkipRange}
 						onRemoveSkipRange={handleRemoveSkipRange}

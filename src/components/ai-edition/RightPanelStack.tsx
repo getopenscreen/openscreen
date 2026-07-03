@@ -54,6 +54,7 @@ interface RightPanelStackProps {
 	clips: AxcutClip[];
 	skipRanges: AxcutSkipRange[];
 	busy: boolean;
+	currentTimeSec: number;
 	onSeek: (sec: number) => void;
 	onAddSkipRange: (assetId: string, startSec: number, endSec: number, reason: string) => void;
 	onRemoveSkipRange: (skipId: string) => void;
@@ -87,6 +88,7 @@ export function RightPanelStack({
 	clips,
 	skipRanges,
 	busy,
+	currentTimeSec,
 	onSeek,
 	onAddSkipRange,
 	onRemoveSkipRange,
@@ -122,6 +124,7 @@ export function RightPanelStack({
 						clips={clips}
 						skipRanges={skipRanges}
 						busy={busy}
+						currentTimeSec={currentTimeSec}
 						onSeek={onSeek}
 						onAddSkipRange={onAddSkipRange}
 						onRemoveSkipRange={onRemoveSkipRange}

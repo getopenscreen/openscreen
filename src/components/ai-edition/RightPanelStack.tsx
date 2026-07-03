@@ -20,6 +20,7 @@ import {
 } from "@/components/video-editor/types";
 import type {
 	AxcutAnnotationRegion,
+	AxcutAsset,
 	AxcutClip,
 	AxcutDocument,
 	AxcutTranscript,
@@ -47,11 +48,13 @@ interface RightPanelStackProps {
 	active: RightPaneId;
 	onChange: (id: RightPaneId) => void;
 	onCrop: () => void;
-	transcript: AxcutTranscript | null;
+	transcripts: AxcutTranscript[];
+	assets: AxcutAsset[];
 	clips: AxcutClip[];
 	currentTimeSec: number;
 	onSeek: (sec: number) => void;
 	onDropWordRange: (start: number, end: number) => void;
+	onRestoreWordRange: (start: number, end: number) => void;
 	onTranscribe: () => void;
 	canTranscribe: boolean;
 	isTranscribing: boolean;
@@ -77,11 +80,13 @@ export function RightPanelStack({
 	active,
 	onChange,
 	onCrop,
-	transcript,
+	transcripts,
+	assets,
 	clips,
 	currentTimeSec,
 	onSeek,
 	onDropWordRange,
+	onRestoreWordRange,
 	onTranscribe,
 	canTranscribe,
 	isTranscribing,
@@ -109,11 +114,13 @@ export function RightPanelStack({
 				{active === "background" ? <BackgroundPane /> : null}
 				{active === "transcript" ? (
 					<TranscriptPane
-						transcript={transcript}
+						transcripts={transcripts}
+						assets={assets}
 						clips={clips}
 						currentTimeSec={currentTimeSec}
 						onSeek={onSeek}
 						onDropWordRange={onDropWordRange}
+						onRestoreWordRange={onRestoreWordRange}
 						onTranscribe={onTranscribe}
 						canTranscribe={canTranscribe}
 						isTranscribing={isTranscribing}

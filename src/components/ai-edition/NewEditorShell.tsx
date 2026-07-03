@@ -433,6 +433,23 @@ export function NewEditorShell() {
 		[document, replaceTimeline],
 	);
 
+	const handleRestoreWordRange = useCallback(
+		async (startSec: number, endSec: number) => {
+			if (!document) return;
+			const { timelineIntervals: getIntervals } = await import(
+				"@/lib/ai-edition/document/timeline"
+			);
+			const intervals = getIntervals(document);
+			// merge the restored range back — replaceTimeline normalizes
+			// overlapped intervals internally via normalizeIntervals.
+			await replaceTimeline(
+				[...intervals, { startSec, endSec }],
+				`Restored word range ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s`,
+			);
+		},
+		[document, replaceTimeline],
+	);
+
 	const handleSelectProject = useCallback(
 		async (id: string) => {
 			try {
@@ -957,11 +974,13 @@ export function NewEditorShell() {
 						active={rightPane}
 						onChange={setRightPane}
 						onCrop={() => setCropOpen(true)}
-						transcript={document?.transcript ?? null}
+						transcripts={document?.transcripts ?? []}
+						assets={document?.assets ?? []}
 						clips={clips}
 						currentTimeSec={currentTimeSec}
 						onSeek={handleSeek}
 						onDropWordRange={handleDropWordRange}
+						onRestoreWordRange={handleRestoreWordRange}
 						onTranscribe={handleTranscribe}
 						canTranscribe={hasAsset}
 						isTranscribing={isTranscribing}

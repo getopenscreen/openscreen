@@ -11,7 +11,6 @@
 
 import type { AxcutDocument } from "../schema";
 import {
-	byStart,
 	normalizeIntervals,
 	primaryAssetDuration,
 	replaceTimeline,

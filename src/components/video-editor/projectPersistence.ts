@@ -15,6 +15,7 @@ import {
 } from "./editorDefaults";
 import {
 	type AnnotationRegion,
+	type CameraFullscreenRegion,
 	type CropRegion,
 	clampPlaybackSpeed,
 	DEFAULT_ANNOTATION_POSITION,
@@ -74,6 +75,7 @@ export interface ProjectEditorState {
 	padding: number;
 	cropRegion: CropRegion;
 	zoomRegions: ZoomRegion[];
+	cameraFullscreenRegions: CameraFullscreenRegion[];
 	autoZoomEnabled: boolean;
 	autoFocusAll: boolean;
 	trimRegions: TrimRegion[];
@@ -267,6 +269,26 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						focusMode: region.focusMode === "auto" ? "auto" : "manual",
 						source: region.source === "auto" ? "auto" : "manual",
 						...(validPreset ? { rotationPreset: validPreset } : {}),
+					};
+				})
+		: [];
+
+	const normalizedCameraFullscreenRegions: CameraFullscreenRegion[] = Array.isArray(
+		editor.cameraFullscreenRegions,
+	)
+		? editor.cameraFullscreenRegions
+				.filter((region): region is CameraFullscreenRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
+				.map((region) => {
+					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
+					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, rawEnd);
+					return {
+						id: region.id,
+						startMs,
+						endMs,
 					};
 				})
 		: [];
@@ -484,6 +506,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			height: cropHeight,
 		},
 		zoomRegions: normalizedZoomRegions,
+		cameraFullscreenRegions: normalizedCameraFullscreenRegions,
 		// Default on for legacy projects so re-opens match the new default. The
 		// on-load auto-suggest pass is gated separately, so this won't add zooms.
 		autoZoomEnabled: typeof editor.autoZoomEnabled === "boolean" ? editor.autoZoomEnabled : true,

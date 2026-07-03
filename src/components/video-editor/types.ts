@@ -214,6 +214,19 @@ export interface TrimRegion {
 	endMs: number;
 }
 
+/**
+ * "Full Camera" / "Cut to camera" timeline region. During this span, the webcam overlay
+ * animates its size/position until it covers the entire canvas, visually hiding the
+ * desktop behind it (the desktop keeps recording underneath, it's just covered).
+ * No focus/depth/rotation needed: unlike ZoomRegion, the destination is always "fill the
+ * canvas", so the shape stays intentionally simpler.
+ */
+export interface CameraFullscreenRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+}
+
 export type AnnotationType = "text" | "image" | "figure" | "blur";
 
 export type ArrowDirection =

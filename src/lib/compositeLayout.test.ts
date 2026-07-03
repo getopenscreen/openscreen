@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeCompositeLayout } from "./compositeLayout";
+import {
+	CAMERA_FULLSCREEN_MARGIN_FRACTION,
+	computeCameraFullscreenTargetRect,
+	computeCompositeLayout,
+} from "./compositeLayout";
 
 describe("computeCompositeLayout", () => {
 	it("anchors the overlay in the lower-right corner", () => {
@@ -262,5 +266,55 @@ describe("computeCompositeLayout", () => {
 			rectangleLayout?.webcamRect?.borderRadius ?? 0,
 		);
 		expect(roundedLayout?.webcamRect?.maskShape).toBe("rounded");
+	});
+});
+
+describe("computeCameraFullscreenTargetRect", () => {
+	it("insets the target rect by the margin fraction of the canvas' shorter dimension", () => {
+		const canvasSize = { width: 1920, height: 1080 };
+		const margin = Math.round(
+			Math.min(canvasSize.width, canvasSize.height) * CAMERA_FULLSCREEN_MARGIN_FRACTION,
+		);
+		// Square aspect source so width is the constrained dimension in a landscape canvas.
+		const rect = computeCameraFullscreenTargetRect(canvasSize, { width: 1080, height: 1080 });
+
+		expect(rect.height).toBeCloseTo(canvasSize.height - margin * 2, 0);
+		expect(rect.y).toBeCloseTo(margin, 0);
+	});
+
+	it("preserves the source aspect ratio (contain-fit) instead of stretching to the canvas", () => {
+		const canvasSize = { width: 1920, height: 1080 };
+		const source = { width: 1280, height: 720 }; // 16:9, same as canvas
+		const rect = computeCameraFullscreenTargetRect(canvasSize, source);
+
+		expect(rect.width / rect.height).toBeCloseTo(source.width / source.height, 3);
+	});
+
+	it("fits a portrait source by constraining width, centering vertically and horizontally", () => {
+		const canvasSize = { width: 1920, height: 1080 };
+		const source = { width: 9, height: 16 }; // portrait webcam frame
+		const rect = computeCameraFullscreenTargetRect(canvasSize, source);
+
+		expect(rect.width / rect.height).toBeCloseTo(source.width / source.height, 3);
+		expect(rect.height).toBeLessThanOrEqual(canvasSize.height);
+		expect(rect.width).toBeLessThanOrEqual(canvasSize.width);
+		// Centered: equal leftover space on both sides horizontally.
+		expect(rect.x).toBeCloseTo(canvasSize.width - rect.x - rect.width, 0);
+	});
+
+	it("fits a landscape source by constraining height when it would overflow", () => {
+		const canvasSize = { width: 1080, height: 1920 }; // portrait canvas
+		const source = { width: 16, height: 9 }; // landscape webcam frame
+		const rect = computeCameraFullscreenTargetRect(canvasSize, source);
+
+		expect(rect.width / rect.height).toBeCloseTo(source.width / source.height, 3);
+		expect(rect.y).toBeCloseTo(canvasSize.height - rect.y - rect.height, 0);
+	});
+
+	it("falls back to a 1:1 aspect ratio for degenerate (zero-size) source rects", () => {
+		const canvasSize = { width: 1920, height: 1080 };
+		const rect = computeCameraFullscreenTargetRect(canvasSize, { width: 0, height: 0 });
+
+		expect(rect.width).toBeCloseTo(rect.height, 0);
 	});
 });

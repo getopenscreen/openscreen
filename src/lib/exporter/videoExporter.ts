@@ -1,5 +1,6 @@
 import type {
 	AnnotationRegion,
+	CameraFullscreenRegion,
 	CropRegion,
 	SpeedRegion,
 	TrimRegion,
@@ -57,6 +58,7 @@ export interface VideoExporterConfig extends ExportConfig {
 	webcamVideoUrl?: string;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
 	showShadow: boolean;
@@ -139,6 +141,8 @@ export function getSourceCopyFastPathBlockers(
 	if (hasActiveTimeRegions(config.trimRegions)) blockers.push("trim regions are present");
 	if (hasActiveSpeedRegions(config.speedRegions)) blockers.push("speed regions are present");
 	if (hasActiveTimeRegions(config.zoomRegions)) blockers.push("zoom regions are present");
+	if (hasActiveTimeRegions(config.cameraFullscreenRegions))
+		blockers.push("camera fullscreen regions are present");
 	if (hasActiveTimeRegions(config.annotationRegions))
 		blockers.push("annotation regions are present");
 	if (hasNativeCursorOverlay(config)) blockers.push("editable cursor overlay is enabled");
@@ -277,6 +281,7 @@ export class VideoExporter {
 				height: this.config.height,
 				wallpaper: this.config.wallpaper,
 				zoomRegions: this.config.zoomRegions,
+				cameraFullscreenRegions: this.config.cameraFullscreenRegions,
 				showShadow: this.config.showShadow,
 				shadowIntensity: this.config.shadowIntensity,
 				showBlur: this.config.showBlur,

@@ -5,14 +5,16 @@
 		"addTrim": "Thêm Cắt (T)",
 		"addAnnotation": "Thêm Chú thích (A)",
 		"addBlur": "Thêm Làm mờ (B)",
-		"addSpeed": "Thêm Tốc độ (S)"
+		"addSpeed": "Thêm Tốc độ (S)",
+		"addCameraFullscreen": "Thêm Camera Toàn màn hình (C)"
 	},
 	"hints": {
 		"pressZoom": "Nhấn Z để thêm thu phóng",
 		"pressTrim": "Nhấn T để thêm cắt",
 		"pressAnnotation": "Nhấn A để thêm chú thích",
 		"pressBlur": "Nhấn B để thêm vùng làm mờ",
-		"pressSpeed": "Nhấn S để thêm tốc độ"
+		"pressSpeed": "Nhấn S để thêm tốc độ",
+		"pressCameraFullscreen": "Nhấn C để thêm một đoạn Camera Toàn màn hình"
 	},
 	"labels": {
 		"pan": "Xoay",
@@ -25,7 +27,9 @@
 		"annotationItem": "Chú thích",
 		"blurItem": "Làm mờ {{index}}",
 		"imageItem": "Hình ảnh",
-		"emptyText": "Văn bản trống"
+		"emptyText": "Văn bản trống",
+		"cameraFullscreen": "Camera Toàn màn hình",
+		"cameraFullscreenItem": "Camera Toàn màn hình {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "Chưa tải video",
@@ -46,7 +50,9 @@
 		"cannotPlaceTrim": "Không thể đặt cắt ở đây",
 		"trimExistsAtLocation": "Cắt đã tồn tại ở vị trí này hoặc không có đủ không gian.",
 		"cannotPlaceSpeed": "Không thể đặt tốc độ ở đây",
-		"speedExistsAtLocation": "Vùng tốc độ đã tồn tại ở vị trí này hoặc không có đủ không gian."
+		"speedExistsAtLocation": "Vùng tốc độ đã tồn tại ở vị trí này hoặc không có đủ không gian.",
+		"cannotPlaceCameraFullscreen": "Không thể đặt Camera Toàn màn hình ở đây",
+		"cameraFullscreenExistsAtLocation": "Đoạn Camera Toàn màn hình đã tồn tại ở vị trí này hoặc không có đủ không gian."
 	},
 	"success": {
 		"addedZoomSuggestions": "Đã thêm {{count}} đề xuất thu phóng dựa trên con trỏ",

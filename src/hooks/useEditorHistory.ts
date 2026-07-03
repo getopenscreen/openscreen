@@ -6,6 +6,7 @@ import {
 } from "@/components/video-editor/editorDefaults";
 import type {
 	AnnotationRegion,
+	CameraFullscreenRegion,
 	CropRegion,
 	SpeedRegion,
 	TrimRegion,
@@ -26,6 +27,7 @@ import type { AspectRatio } from "@/utils/aspectRatioUtils";
 // would feel surprising.
 export interface EditorState {
 	zoomRegions: ZoomRegion[];
+	cameraFullscreenRegions: CameraFullscreenRegion[];
 	/** Magic-wand auto-zoom toggle. When on, fresh recordings get suggested zooms. */
 	autoZoomEnabled: boolean;
 	/** Global Auto-Focus toggle: when on, all zooms follow the cursor and the
@@ -53,6 +55,7 @@ export interface EditorState {
 
 export const INITIAL_EDITOR_STATE: EditorState = {
 	zoomRegions: [],
+	cameraFullscreenRegions: [],
 	autoZoomEnabled: true,
 	autoFocusAll: false,
 	trimRegions: [],

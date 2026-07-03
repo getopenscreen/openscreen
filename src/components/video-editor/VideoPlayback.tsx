@@ -19,7 +19,9 @@ import {
 	useState,
 } from "react";
 import {
+	computeCameraFullscreenTargetRect,
 	getWebcamLayoutCssBoxShadow,
+	lerpRect,
 	reactiveWebcamScale,
 	type Size,
 	type StyledRenderRect,
@@ -56,6 +58,7 @@ import {
 import {
 	type AnnotationRegion,
 	type BlurData,
+	type CameraFullscreenRegion,
 	type CursorTelemetryPoint,
 	computeRotation3DContainScale,
 	DEFAULT_CROP_REGION,
@@ -70,6 +73,7 @@ import {
 	type ZoomFocus,
 	type ZoomRegion,
 } from "./types";
+import { computeCameraFullscreenProgress } from "./videoPlayback/cameraFullscreenUtils";
 import { AUTO_FOLLOW_PARAMS, DEFAULT_FOCUS } from "./videoPlayback/constants";
 import { advanceFollowFocus } from "./videoPlayback/cursorFollowUtils";
 import {
@@ -110,6 +114,7 @@ interface VideoPlaybackProps {
 	onError: (error: string) => void;
 	wallpaper?: string;
 	zoomRegions: ZoomRegion[];
+	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	selectedZoomId: string | null;
 	onSelectZoom: (id: string | null) => void;
 	onZoomFocusChange: (id: string, focus: ZoomFocus) => void;
@@ -264,6 +269,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			onError,
 			wallpaper,
 			zoomRegions,
+			cameraFullscreenRegions = [],
 			selectedZoomId,
 			onSelectZoom,
 			onZoomFocusChange,
@@ -330,9 +336,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const composite3DRef = useRef<HTMLDivElement | null>(null);
 		const outerWrapperRef = useRef<HTMLDivElement | null>(null);
 		const [webcamLayout, setWebcamLayout] = useState<StyledRenderRect | null>(null);
+		const webcamLayoutRef = useRef<StyledRenderRect | null>(null);
 		const [webcamDimensions, setWebcamDimensions] = useState<Size | null>(null);
 		const currentTimeRef = useRef(0);
 		const zoomRegionsRef = useRef<ZoomRegion[]>([]);
+		const cameraFullscreenRegionsRef = useRef<CameraFullscreenRegion[]>([]);
 		const cursorTelemetryRef = useRef<CursorTelemetryPoint[]>([]);
 		const cursorClickTimestampsRef = useRef<number[]>([]);
 		const selectedZoomIdRef = useRef<string | null>(null);
@@ -607,6 +615,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				baseMaskRef.current = result.maskRect;
 				borderRadiusRef.current = result.maskBorderRadius;
 				cropBoundsRef.current = result.cropBounds;
+				webcamLayoutRef.current = result.webcamRect;
 				setWebcamLayout(result.webcamRect);
 
 				// Reset camera container to identity
@@ -810,6 +819,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		useEffect(() => {
 			zoomRegionsRef.current = zoomRegions;
 		}, [zoomRegions]);
+
+		useEffect(() => {
+			cameraFullscreenRegionsRef.current = cameraFullscreenRegions;
+		}, [cameraFullscreenRegions]);
 
 		useEffect(() => {
 			cursorTelemetryRef.current = cursorTelemetry;
@@ -1411,17 +1424,51 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				// corner (bottom-right by default) so it stays flush instead of drifting to center.
 				const webcamWrapper = webcamWrapperRef.current;
 				if (webcamWrapper) {
-					const reactive =
-						webcamReactiveZoomRef.current && webcamLayoutPresetRef.current === "picture-in-picture";
-					const factor = reactive ? reactiveWebcamScale(state.appliedScale) : 1;
-					if (factor < 1) {
-						const pos = webcamPositionRef.current;
-						const originX = (pos ? pos.cx >= 0.5 : true) ? "100%" : "0%";
-						const originY = (pos ? pos.cy >= 0.5 : true) ? "100%" : "0%";
-						webcamWrapper.style.transformOrigin = `${originX} ${originY}`;
-						webcamWrapper.style.transform = `scale(${factor})`;
+					const cameraFullProgress = computeCameraFullscreenProgress(
+						cameraFullscreenRegionsRef.current,
+						currentTimeRef.current,
+					);
+					const baseRect = webcamLayoutRef.current;
+
+					if (cameraFullProgress > 0 && baseRect && baseRect.width > 0 && baseRect.height > 0) {
+						// Full Camera takes over the webcam's size/position entirely: it grows to
+						// cover the whole stage. Like the reactive-zoom branch below, this only ever
+						// touches `transform` (never left/top/width/height, which stay driven by the
+						// `webcamLayout` React state in the JSX style prop) so it can't race React's
+						// re-render on every currentTime update. The base rect is lerped toward a
+						// full-stage rect and expressed as a translate+scale from the base rect's own
+						// box, matching the CSS transform box (border-box, top-left origin).
+						const stage = stageSizeRef.current;
+						const targetRect = computeCameraFullscreenTargetRect(stage, baseRect);
+						const fullRect: StyledRenderRect = {
+							x: targetRect.x,
+							y: targetRect.y,
+							width: targetRect.width,
+							height: targetRect.height,
+							borderRadius: 0,
+							maskShape: baseRect.maskShape,
+						};
+						const drawRect = lerpRect(baseRect, fullRect, cameraFullProgress);
+						const scaleX = drawRect.width / baseRect.width;
+						const scaleY = drawRect.height / baseRect.height;
+						const translateX = drawRect.x - baseRect.x;
+						const translateY = drawRect.y - baseRect.y;
+						webcamWrapper.style.transformOrigin = "0% 0%";
+						webcamWrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`;
 					} else {
-						webcamWrapper.style.transform = "";
+						const reactive =
+							webcamReactiveZoomRef.current &&
+							webcamLayoutPresetRef.current === "picture-in-picture";
+						const factor = reactive ? reactiveWebcamScale(state.appliedScale) : 1;
+						if (factor < 1) {
+							const pos = webcamPositionRef.current;
+							const originX = (pos ? pos.cx >= 0.5 : true) ? "100%" : "0%";
+							const originY = (pos ? pos.cy >= 0.5 : true) ? "100%" : "0%";
+							webcamWrapper.style.transformOrigin = `${originX} ${originY}`;
+							webcamWrapper.style.transform = `scale(${factor})`;
+						} else {
+							webcamWrapper.style.transform = "";
+						}
 					}
 				}
 			};

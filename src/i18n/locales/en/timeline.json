@@ -9,14 +9,16 @@
 		"addTrim": "Add Trim (T)",
 		"addAnnotation": "Add Annotation (A)",
 		"addBlur": "Add Blur (B)",
-		"addSpeed": "Add Speed (S)"
+		"addSpeed": "Add Speed (S)",
+		"addCameraFullscreen": "Add Full Camera (C)"
 	},
 	"hints": {
 		"pressZoom": "Press Z to add zoom",
 		"pressTrim": "Press T to add trim",
 		"pressAnnotation": "Press A to add annotation",
 		"pressBlur": "Press B to add blur region",
-		"pressSpeed": "Press S to add speed"
+		"pressSpeed": "Press S to add speed",
+		"pressCameraFullscreen": "Press C to add a Full Camera segment"
 	},
 	"labels": {
 		"pan": "Pan",
@@ -29,7 +31,9 @@
 		"annotationItem": "Annotation",
 		"blurItem": "Blur {{index}}",
 		"imageItem": "Image",
-		"emptyText": "Empty text"
+		"emptyText": "Empty text",
+		"cameraFullscreen": "Full Camera",
+		"cameraFullscreenItem": "Full Camera {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "No Video Loaded",
@@ -50,7 +54,9 @@
 		"cannotPlaceTrim": "Cannot place trim here",
 		"trimExistsAtLocation": "Trim already exists at this location or not enough space available.",
 		"cannotPlaceSpeed": "Cannot place speed here",
-		"speedExistsAtLocation": "Speed region already exists at this location or not enough space available."
+		"speedExistsAtLocation": "Speed region already exists at this location or not enough space available.",
+		"cannotPlaceCameraFullscreen": "Cannot place Full Camera here",
+		"cameraFullscreenExistsAtLocation": "A Full Camera segment already exists at this location or not enough space available."
 	},
 	"success": {
 		"addedZoomSuggestions": "Added {{count}} cursor-based zoom suggestion",

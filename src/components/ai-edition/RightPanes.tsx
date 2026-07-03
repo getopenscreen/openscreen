@@ -713,15 +713,28 @@ function TranscriptClipBlock({
 	const handlePointerUp = useCallback(
 		(event: ReactPointerEvent<HTMLDivElement>) => {
 			if (event.button !== 0) return;
+			// ponytail: a click on the trim-pill button (bin) bubbles up here
+			// before the button's onClick fires. Skip those — the bin's own
+			// handler is responsible for restoring the skip range.
 			if (event.target instanceof Element && event.target.closest("button")) return;
 			const editor = editorRef.current;
 			if (!editor) return;
 			const selection = globalThis.getSelection();
 			if (selection && !selection.isCollapsed) return; // user is selecting text — let them
-			const wordEl =
+
+			// ponytail: clicks land on the deepest element under the cursor,
+			// which is usually the text node inside a word span. Text nodes
+			// don't have `closest`, and a non-filler word's text is rendered
+			// as a bare text node (no inner span). Walk up to an Element
+			// first, then look for the enclosing word span.
+			const targetEl =
 				event.target instanceof Element
-					? event.target.closest<HTMLElement>("[data-word-id]")
-					: null;
+					? event.target
+					: event.target instanceof Text
+						? (event.target.parentElement ?? null)
+						: null;
+			if (!targetEl) return;
+			const wordEl = targetEl.closest<HTMLElement>("[data-word-id]");
 			if (!wordEl?.dataset.wordId) return;
 			const cw = words.find((w) => w.word.id === wordEl.dataset.wordId);
 			if (!cw) return;
@@ -966,10 +979,22 @@ function findCollapsedDeletionWordId(
 		const textLength = node?.textContent?.length ?? 0;
 		if (node?.nodeType === Node.TEXT_NODE) {
 			if (direction === "backward" && offset <= 0) {
-				return adjacentWordId(editor, direct, "backward") ?? direct.dataset.wordId ?? null;
+				// ponytail: clicking at the start of a word normally deletes
+				// the previous word, but when the previous word is already
+				// trimmed, that would be a no-op. Fall back to the current
+				// word so Backspace always does something.
+				const prev = adjacentWordId(editor, direct, "backward");
+				if (prev && !isWordSkipped(prev)) {
+					return prev;
+				}
+				return direct.dataset.wordId ?? null;
 			}
 			if (direction === "forward" && offset >= textLength) {
-				return adjacentWordId(editor, direct, "forward") ?? direct.dataset.wordId ?? null;
+				const next = adjacentWordId(editor, direct, "forward");
+				if (next && !isWordSkipped(next)) {
+					return next;
+				}
+				return direct.dataset.wordId ?? null;
 			}
 		}
 		return direct.dataset.wordId ?? null;
@@ -1023,6 +1048,12 @@ function findDescendantWordId(node: Node): string | null {
 function closestWordElement(node: Node | null): HTMLElement | null {
 	const element = node instanceof Element ? node : node?.parentElement;
 	return element?.closest<HTMLElement>("[data-word-id]") ?? null;
+}
+
+/** ponytail: skip status is encoded as `data-skip-id` on the word span. */
+function isWordSkipped(wordId: string): boolean {
+	const el = document.querySelector<HTMLElement>(`[data-word-id="${wordId}"]`);
+	return Boolean(el?.dataset.skipId);
 }
 
 function adjacentWordId(

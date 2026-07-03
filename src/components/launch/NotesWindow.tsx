@@ -1,27 +1,40 @@
-import React, { useLayoutEffect, useState } from "react";
-import { useScopedT } from "@/contexts/I18nContext";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import styles from "./NotesWindow.module.css";
+
+function getInitialNotesContent(): string {
+	const stored = localStorage.getItem("notes");
+	if (!stored) {
+		return "";
+	}
+
+	// Notes saved before Tiptap were plain text; wrap so StarterKit can parse them.
+	if (!stored.trim().startsWith("<")) {
+		const escaped = stored.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		return `<p>${escaped.replace(/\n/g, "</p><p>")}</p>`;
+	}
+
+	return stored;
+}
 
 export function NotesWindow() {
-	const t = useScopedT("launch");
-	const [notes, setNotes] = useState("");
-
-	const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-		localStorage.setItem("notes", e.target.value);
-		setNotes(e.target.value);
-	};
-
-	useLayoutEffect(() => {
-		setNotes(localStorage.getItem("notes") ?? "");
-	}, []);
+	const editor = useEditor({
+		extensions: [StarterKit],
+		content: getInitialNotesContent(),
+		autofocus: "end",
+		editorProps: {
+			attributes: {
+				class: "tiptap",
+			},
+		},
+		onUpdate: ({ editor: nextEditor }) => {
+			localStorage.setItem("notes", nextEditor.getHTML());
+		},
+	});
 
 	return (
-		<div className="bg-white h-screen w-screen px-6 py-4">
-			<textarea
-				className="w-full h-full bg-transparent outline-none resize-none caret-black text-black"
-				placeholder={t("tooltips.openNotesPlaceholder")}
-				value={notes}
-				onChange={handleNotesChange}
-			/>
+		<div className={styles.notesWindow}>
+			<EditorContent editor={editor} className={styles.notesEditor} />
 		</div>
 	);
 }

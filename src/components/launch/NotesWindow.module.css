@@ -1,0 +1,132 @@
+.notesWindow {
+	background: #ffffff;
+	height: 100vh;
+	width: 100vw;
+	padding: 1rem 1.5rem;
+	overflow: hidden;
+}
+
+.notesEditor {
+	height: 100%;
+}
+
+/* Tiptap sets class="tiptap" on the ProseMirror root — must be :global to escape CSS modules. */
+:global(.tiptap) {
+	height: 100%;
+	width: 100%;
+	outline: none;
+	overflow-y: auto;
+	color: #111827;
+	caret-color: #111827;
+}
+
+:global(.tiptap) :first-child {
+	margin-top: 0;
+}
+
+:global(.tiptap) p {
+	min-height: 1.5rem;
+	line-height: 1.5;
+	margin-top: 0.75rem;
+	margin-bottom: 0.75rem;
+}
+
+:global(.tiptap) p:first-child {
+	margin-top: 0;
+}
+
+/* Tailwind preflight strips list markers — restore them for markdown-style input rules. */
+:global(.tiptap) ul,
+:global(.tiptap) ol {
+	padding-left: 1.5rem;
+	margin: 1rem 0;
+}
+
+:global(.tiptap) ul {
+	list-style-type: disc;
+}
+
+:global(.tiptap) ol {
+	list-style-type: decimal;
+}
+
+:global(.tiptap) li {
+	display: list-item;
+}
+
+:global(.tiptap) ul li p,
+:global(.tiptap) ol li p {
+	margin-top: 0.25em;
+	margin-bottom: 0.25em;
+}
+
+:global(.tiptap) h1,
+:global(.tiptap) h2,
+:global(.tiptap) h3,
+:global(.tiptap) h4,
+:global(.tiptap) h5,
+:global(.tiptap) h6 {
+	line-height: 1.1;
+	margin-top: 2.5rem;
+	text-wrap: pretty;
+}
+
+:global(.tiptap) h1,
+:global(.tiptap) h2 {
+	margin-top: 3.5rem;
+	margin-bottom: 1.5rem;
+}
+
+:global(.tiptap) h1 {
+	font-size: 1.4rem;
+}
+
+:global(.tiptap) h2 {
+	font-size: 1.2rem;
+}
+
+:global(.tiptap) h3 {
+	font-size: 1.1rem;
+}
+
+:global(.tiptap) h4,
+:global(.tiptap) h5,
+:global(.tiptap) h6 {
+	font-size: 1rem;
+}
+
+:global(.tiptap) code {
+	background-color: #ede9fe;
+	border-radius: 0.4rem;
+	color: #111827;
+	font-size: 0.85rem;
+	padding: 0.25em 0.3em;
+}
+
+:global(.tiptap) pre {
+	background: #111827;
+	border-radius: 0.5rem;
+	color: #ffffff;
+	font-family: "JetBrainsMono", monospace;
+	margin: 1.5rem 0;
+	padding: 0.75rem 1rem;
+}
+
+:global(.tiptap) pre code {
+	background: none;
+	color: inherit;
+	font-size: 0.8rem;
+	padding: 0;
+}
+
+:global(.tiptap) blockquote {
+	border-left: 3px solid #d1d5db;
+	margin: 1.5rem 0;
+	padding-left: 1rem;
+}
+
+:global(.tiptap) hr {
+	border: none;
+	border-top: 1px solid #e5e7eb;
+	margin: 2rem 0;
+}

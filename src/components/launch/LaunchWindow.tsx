@@ -1045,16 +1045,18 @@ export function LaunchWindow() {
 					</div>
 				)}
 
-				<Tooltip content={t("tooltips.openNotes")}>
-					<button
-						type="button"
-						aria-label={t("tooltips.openNotes")}
-						className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
-						onClick={() => window.electronAPI.openNotes()}
-					>
-						<NotepadText size={ICON_SIZE} className="text-white/60" />
-					</button>
-				</Tooltip>
+				{!isLinuxHud && (
+					<Tooltip content={t("tooltips.openNotes")}>
+						<button
+							type="button"
+							aria-label={t("tooltips.openNotes")}
+							className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
+							onClick={() => window.electronAPI.openNotes()}
+						>
+							<NotepadText size={ICON_SIZE} className="text-white/60" />
+						</button>
+					</Tooltip>
+				)}
 
 				{!recording && (
 					<Tooltip content={t("tooltips.openStudio")}>

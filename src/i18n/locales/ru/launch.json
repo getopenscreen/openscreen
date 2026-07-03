@@ -9,7 +9,18 @@
 		"openVideoFile": "Открыть видеофайл",
 		"openProject": "Открыть проект",
 		"useVerticalTray": "Использовать вертикальную панель",
-		"useHorizontalTray": "Использовать горизонтальную панель"
+		"useHorizontalTray": "Использовать горизонтальную панель",
+		"openNotes": "Открыть заметки",
+		"openNotesPlaceholder": "Пишите заметки здесь...",
+		"notesToolbar": {
+			"bold": "Жирный",
+			"italic": "Курсив",
+			"strikethrough": "Зачеркнутый",
+			"bulletList": "Маркированный список",
+			"numberedList": "Нумерованный список",
+			"blockquote": "Цитата",
+			"codeBlock": "Блок кода"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Включить системное аудио",

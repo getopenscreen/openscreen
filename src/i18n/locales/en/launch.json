@@ -12,7 +12,16 @@
 		"useHorizontalTray": "Use horizontal tray",
 		"openStudio": "Open Studio",
 		"openNotes": "Open Notes",
-		"openNotesPlaceholder": "Take notes here..."
+		"openNotesPlaceholder": "Take notes here...",
+		"notesToolbar": {
+			"bold": "Bold",
+			"italic": "Italic",
+			"strikethrough": "Strikethrough",
+			"bulletList": "Bullet list",
+			"numberedList": "Numbered list",
+			"blockquote": "Blockquote",
+			"codeBlock": "Code block"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Enable system audio",

@@ -7,6 +7,12 @@
 // falls inside one of the document's `timeline.skipRanges` for the same
 // asset — not by `clip.wordRefs` (which is now only used by the timeline
 // retime math, not by the right pane).
+//
+// ponytail: no "filler" concept here. axcut does not classify words as
+// filler in the right-pane renderer — the LLM (via the deep-agent's
+// fillerLexicon + fillerOrHesitation reason) is the only place that
+// names a word a filler. The transcript view shows plain text for every
+// kept word; the user or the LLM decides what to mark as skipped.
 
 import type { AxcutAsset, AxcutClip, AxcutSkipRange, AxcutTranscript, AxcutWord } from "../schema";
 
@@ -24,15 +30,13 @@ export interface SkipRun {
 	durationSec: number;
 }
 
-/** One word in the clip's source range, tagged kept / removed + filler. */
+/** One word in the clip's source range, tagged kept / removed. */
 export interface ClipWord {
 	word: AxcutWord;
 	/** Whether the word is inside a skipRange for this clip's asset. */
 	kept: boolean;
 	/** Id of the skip range that removed this word, if any. */
 	skipId: string | null;
-	/** Heuristic filler — "okay", "um", etc. — rendered as a soft-red pill. */
-	filler: boolean;
 }
 
 /** One clip's contribution to the aggregated flow. */
@@ -42,29 +46,6 @@ export interface ClipSection {
 	transcript: AxcutTranscript | null;
 	words: ClipWord[];
 	skipRuns: SkipRun[];
-}
-
-const FILLER_WORDS = new Set([
-	"um",
-	"uh",
-	"er",
-	"ah",
-	"hm",
-	"hmm",
-	"okay",
-	"ok",
-	"so",
-	"well",
-	"like",
-	"right",
-	"yeah",
-	"yep",
-	"kinda",
-]);
-
-function isFiller(text: string): boolean {
-	const cleaned = text.toLowerCase().replace(/[.,!?;:'"]/g, "");
-	return FILLER_WORDS.has(cleaned);
 }
 
 function wordsInRange(transcript: AxcutTranscript, startSec: number, endSec: number): AxcutWord[] {
@@ -108,7 +89,6 @@ export function buildClipSection(
 			word,
 			kept: covering === null,
 			skipId: covering?.id ?? null,
-			filler: isFiller(word.text),
 		};
 	});
 

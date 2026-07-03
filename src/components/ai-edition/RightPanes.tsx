@@ -890,24 +890,10 @@ function TranscriptWord({
 			onMouseEnter={() => setHover(true)}
 			onMouseLeave={() => setHover(false)}
 		>
-			{cw.filler ? (
-				<span
-					style={{
-						display: "inline-block",
-						padding: "1px 6px",
-						margin: "0 1px",
-						background: "var(--danger-soft)",
-						color: "var(--danger)",
-						borderRadius: "var(--r-sm)",
-						fontWeight: 500,
-						textDecoration: "none",
-					}}
-				>
-					{cw.word.text}
-				</span>
-			) : (
-				<>{cw.word.text} </>
-			)}
+			{/* ponytail: no filler chip. axcut renders every word the same way;
+			    the LLM is the only place that names a word a filler (via the
+			    filler_or_hesitation reason when generating suggestions). */}
+			{cw.word.text}{" "}
 			{removed && hover && cw.skipId ? (
 				<button
 					type="button"

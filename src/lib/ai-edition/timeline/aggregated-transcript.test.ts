@@ -127,7 +127,7 @@ describe("buildClipSection", () => {
 		expect(section.words.map((cw) => cw.kept)).toEqual([true, true]);
 	});
 
-	it("flags English filler words regardless of keep state", () => {
+	it("treats every word the same (no filler concept)", () => {
 		const clip = makeClip({ sourceStartSec: 0, sourceEndSec: 3 });
 		const transcript = makeTranscript([
 			{ id: "w1", segmentId: "s1", startSec: 0, endSec: 1, text: "okay" },
@@ -136,7 +136,10 @@ describe("buildClipSection", () => {
 		]);
 
 		const section = buildClipSection(clip, transcript, makeAsset(), []);
-		expect(section.words.map((cw) => cw.filler)).toEqual([true, false, true]);
+		// ponytail: the LLM (not the renderer) decides what is a filler. Every
+		// word renders as plain text in the right pane.
+		expect(section.words.map((cw) => cw.kept)).toEqual([true, true, true]);
+		expect(section.words.map((cw) => cw.skipId)).toEqual([null, null, null]);
 	});
 
 	it("returns an empty words list when the clip has no matching transcript", () => {
@@ -229,7 +232,6 @@ describe("findCueWordId", () => {
 				word: { id, segmentId: "s1", startSec: start, endSec: end, text: id },
 				kept: true,
 				skipId: null,
-				filler: false,
 			})),
 			skipRuns: [],
 		};

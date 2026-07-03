@@ -23,6 +23,7 @@ import type {
 	AxcutAsset,
 	AxcutClip,
 	AxcutDocument,
+	AxcutSkipRange,
 	AxcutTranscript,
 } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -51,10 +52,12 @@ interface RightPanelStackProps {
 	transcripts: AxcutTranscript[];
 	assets: AxcutAsset[];
 	clips: AxcutClip[];
+	skipRanges: AxcutSkipRange[];
+	busy: boolean;
 	currentTimeSec: number;
 	onSeek: (sec: number) => void;
-	onDropWordRange: (start: number, end: number) => void;
-	onRestoreWordRange: (start: number, end: number) => void;
+	onAddSkipRange: (assetId: string, startSec: number, endSec: number, reason: string) => void;
+	onRemoveSkipRange: (skipId: string) => void;
 	onTranscribe: () => void;
 	canTranscribe: boolean;
 	isTranscribing: boolean;
@@ -83,10 +86,12 @@ export function RightPanelStack({
 	transcripts,
 	assets,
 	clips,
+	skipRanges,
+	busy,
 	currentTimeSec,
 	onSeek,
-	onDropWordRange,
-	onRestoreWordRange,
+	onAddSkipRange,
+	onRemoveSkipRange,
 	onTranscribe,
 	canTranscribe,
 	isTranscribing,
@@ -117,10 +122,12 @@ export function RightPanelStack({
 						transcripts={transcripts}
 						assets={assets}
 						clips={clips}
+						skipRanges={skipRanges}
+						busy={busy}
 						currentTimeSec={currentTimeSec}
 						onSeek={onSeek}
-						onDropWordRange={onDropWordRange}
-						onRestoreWordRange={onRestoreWordRange}
+						onAddSkipRange={onAddSkipRange}
+						onRemoveSkipRange={onRemoveSkipRange}
 						onTranscribe={onTranscribe}
 						canTranscribe={canTranscribe}
 						isTranscribing={isTranscribing}

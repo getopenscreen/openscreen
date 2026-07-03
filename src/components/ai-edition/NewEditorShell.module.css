@@ -1333,15 +1333,7 @@
 	vertical-align: middle;
 	white-space: nowrap;
 }
-.transcriptFlow .filler {
-	display: inline-block;
-	padding: 1px 6px;
-	margin: 0 1px;
-	background: var(--danger-soft);
-	color: var(--danger);
-	border-radius: var(--r-sm);
-	font-weight: 500;
-}
+
 
 /* ─── bottombar / timeline ─────────────────────────────────────── */
 .bottombar {

@@ -22,6 +22,7 @@ import { mainT, setMainLocale } from "./i18n";
 import { getSelectedDesktopSource, registerIpcHandlers } from "./ipc/handlers";
 import { installMainProcessErrorGuards } from "./main-process-errors";
 import { acquireStableInstanceLock } from "./singleInstanceLock";
+import { registerSttIpc } from "./stt";
 import {
 	createCountdownOverlayWindow,
 	createEditorWindow,
@@ -632,6 +633,9 @@ appReady?.then(async () => {
 		},
 		switchToHudWrapper,
 	);
+
+	// Native STT (whisper.cpp + forced alignment) — single instance per app.
+	registerSttIpc(ipcMain);
 
 	await loadAndRegisterGlobalShortcut(showMainWindow);
 

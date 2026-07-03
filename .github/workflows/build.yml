@@ -44,6 +44,17 @@ jobs:
           path: caption-assets
           key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
 
+      # ponytail: bundled Silero VAD model is required at runtime — whisper.cpp
+      # is started with `--vad --vad-model <path>`, no fallback. The file must
+      # be on disk *before* electron-builder packages the installer (extraResources
+      # copies `electron/native/models/` wholesale). Skipping this step makes the
+      # installer ship without the model and the app fails to transcribe at
+      # first use with a loud error. The script is idempotent (skips when
+      # already present) so re-running on cache hits is free.
+      - name: Fetch Silero VAD model
+        shell: bash
+        run: bash scripts/fetch-vad-model.sh
+
       - name: Build Windows app
         run: npm run build:win -- --publish never
 
@@ -84,6 +95,13 @@ jobs:
         with:
           path: caption-assets
           key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
+
+      # ponytail: bundled Silero VAD model — required at runtime for accurate
+      # word-level timestamps (see build-windows comment). extraResources in
+      # electron-builder.json5 copies `electron/native/models/` wholesale, so
+      # this fetch must complete before the package step.
+      - name: Fetch Silero VAD model
+        run: bash scripts/fetch-vad-model.sh
 
       - name: Resolve macOS signing
         id: signing
@@ -247,6 +265,13 @@ jobs:
         with:
           path: caption-assets
           key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
+
+      # ponytail: bundled Silero VAD model — required at runtime for accurate
+      # word-level timestamps (see build-windows comment). extraResources in
+      # electron-builder.json5 copies `electron/native/models/` wholesale, so
+      # this fetch must complete before the package step.
+      - name: Fetch Silero VAD model
+        run: bash scripts/fetch-vad-model.sh
 
       - name: Build Linux app
         run: npm run build:linux -- --publish never

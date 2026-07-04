@@ -9,7 +9,18 @@
 		"openVideoFile": "Mở tệp video",
 		"openProject": "Mở dự án",
 		"useVerticalTray": "Dùng khay dọc",
-		"useHorizontalTray": "Dùng khay ngang"
+		"useHorizontalTray": "Dùng khay ngang",
+		"openNotes": "Mở ghi chú",
+		"openNotesPlaceholder": "Ghi chú của bạn tại đây...",
+		"notesToolbar": {
+			"bold": "In đậm",
+			"italic": "In nghiêng",
+			"strikethrough": "Gạch ngang",
+			"bulletList": "Danh sách dấu đầu dòng",
+			"numberedList": "Danh sách đánh số",
+			"blockquote": "Trích dẫn",
+			"codeBlock": "Khối mã"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Bật âm thanh hệ thống",

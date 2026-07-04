@@ -9,7 +9,18 @@
 		"openVideoFile": "Abrir archivo de video",
 		"openProject": "Abrir proyecto",
 		"useVerticalTray": "Usar bandeja vertical",
-		"useHorizontalTray": "Usar bandeja horizontal"
+		"useHorizontalTray": "Usar bandeja horizontal",
+		"openNotes": "Abrir notas",
+		"openNotesPlaceholder": "Escribe tus notas aquí...",
+		"notesToolbar": {
+			"bold": "Negrita",
+			"italic": "Cursiva",
+			"strikethrough": "Tachado",
+			"bulletList": "Lista con viñetas",
+			"numberedList": "Lista numerada",
+			"blockquote": "Cita",
+			"codeBlock": "Bloque de código"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Activar audio del sistema",

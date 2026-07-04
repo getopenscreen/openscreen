@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { CountdownOverlay } from "./components/launch/CountdownOverlay.tsx";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
+import { NotesWindow } from "./components/launch/NotesWindow.tsx";
 import { SourceSelector } from "./components/launch/SourceSelector";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -19,6 +20,8 @@ export default function App() {
 	const [windowType, setWindowType] = useState(
 		() => new URLSearchParams(window.location.search).get("windowType") || "",
 	);
+	const showNotes = new URLSearchParams(window.location.search).get("showNotes") === "true";
+
 	const tEditor = useScopedT("editor");
 
 	useEffect(() => {
@@ -102,8 +105,10 @@ export default function App() {
 				);
 			default:
 				return (
-					<div className="w-full h-full bg-background text-foreground">
-						<h1>Openscreen</h1>
+					<div>
+						<div className="w-full h-full bg-background text-foreground">
+							<h1>Openscreen</h1>
+						</div>
 					</div>
 				);
 		}
@@ -111,7 +116,7 @@ export default function App() {
 
 	return (
 		<TooltipProvider>
-			{content}
+			{showNotes ? <NotesWindow /> : content}
 			<Toaster theme="dark" />
 		</TooltipProvider>
 	);

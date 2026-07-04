@@ -9,7 +9,18 @@
 		"openVideoFile": "動画ファイルを開く",
 		"openProject": "プロジェクトを開く",
 		"useVerticalTray": "縦型トレイを使用",
-		"useHorizontalTray": "横型トレイを使用"
+		"useHorizontalTray": "横型トレイを使用",
+		"openNotes": "ノートを開く",
+		"openNotesPlaceholder": "ここにメモを入力...",
+		"notesToolbar": {
+			"bold": "太字",
+			"italic": "斜体",
+			"strikethrough": "取り消し線",
+			"bulletList": "箇条書きリスト",
+			"numberedList": "番号付きリスト",
+			"blockquote": "引用",
+			"codeBlock": "コードブロック"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "システム音声を有効にする",

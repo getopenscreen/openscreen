@@ -9,7 +9,18 @@
 		"openVideoFile": "打开视频文件",
 		"openProject": "打开项目",
 		"useVerticalTray": "使用竖向托盘",
-		"useHorizontalTray": "使用横向托盘"
+		"useHorizontalTray": "使用横向托盘",
+		"openNotes": "打开笔记",
+		"openNotesPlaceholder": "在此输入笔记...",
+		"notesToolbar": {
+			"bold": "加粗",
+			"italic": "斜体",
+			"strikethrough": "删除线",
+			"bulletList": "无序列表",
+			"numberedList": "有序列表",
+			"blockquote": "引用",
+			"codeBlock": "代码块"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "启用系统音频",

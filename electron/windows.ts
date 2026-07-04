@@ -320,3 +320,44 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 
 	return win;
 }
+
+// Frameless Notes Window for taking notes during a recording.
+export function createNotesWindow(): BrowserWindow {
+	const win = new BrowserWindow({
+		width: 400,
+		height: 540,
+		minWidth: 360,
+		minHeight: 400,
+		maxWidth: 640,
+		maxHeight: 720,
+		title: "OpenScreen - Notes",
+		backgroundColor: "#09090b",
+		resizable: true,
+		alwaysOnTop: true,
+		skipTaskbar: false,
+		show: false,
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			additionalArguments: [ASSET_BASE_URL_ARG],
+			nodeIntegration: false,
+			contextIsolation: true,
+			backgroundThrottling: false,
+		},
+	});
+
+	win.setContentProtection(true);
+	win.once("ready-to-show", () => {
+		win.setContentProtection(true);
+		win.show();
+	});
+
+	if (VITE_DEV_SERVER_URL) {
+		win.loadURL(VITE_DEV_SERVER_URL + "?showNotes=true");
+	} else {
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: { showNotes: "true" },
+		});
+	}
+
+	return win;
+}

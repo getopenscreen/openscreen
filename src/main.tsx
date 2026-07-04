@@ -5,7 +5,9 @@ import { I18nProvider } from "./contexts/I18nContext";
 import "./index.css";
 
 const windowType = new URLSearchParams(window.location.search).get("windowType") || "";
+const showNotes = new URLSearchParams(window.location.search).get("showNotes") === "true";
 if (
+	showNotes ||
 	windowType === "hud-overlay" ||
 	windowType === "source-selector" ||
 	windowType === "countdown-overlay"

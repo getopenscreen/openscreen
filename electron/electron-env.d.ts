@@ -41,6 +41,10 @@ interface Window {
 				error?: string;
 			};
 		}>;
+		openNotes: () => Promise<{
+			opened: boolean;
+			reason?: string;
+		}>;
 		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource | null>;
 		getSelectedSource: () => Promise<ProcessedDesktopSource | null>;
 		onSelectedSourceChanged: (callback: (source: ProcessedDesktopSource) => void) => () => void;

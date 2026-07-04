@@ -161,7 +161,6 @@
 		"invalidImageType": "Geçersiz dosya türü",
 		"imageFormatsOnly": "Lütfen bir JPG, PNG, GIF veya WebP görüntü dosyası yükleyin.",
 		"imageUploadSuccess": "Görüntü başarıyla yüklendi!",
-		"failedImageUpload": "Görüntü yüklenemedi",
 		"blurColor": "Bulanıklık Rengi",
 		"blurColorBlack": "Siyah",
 		"blurColorWhite": "Beyaz",

@@ -166,8 +166,7 @@
 		"tipShiftTabCycle": "Use Shift+Tab to cycle backwards.",
 		"invalidImageType": "Invalid file type",
 		"imageFormatsOnly": "Please upload a JPG, PNG, GIF, or WebP image file.",
-		"imageUploadSuccess": "Image uploaded successfully!",
-		"failedImageUpload": "Failed to upload image"
+		"imageUploadSuccess": "Image uploaded successfully!"
 	},
 	"fontStyles": {
 		"classic": "Classic",

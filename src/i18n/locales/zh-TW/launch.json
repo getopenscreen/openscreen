@@ -9,7 +9,18 @@
 		"openVideoFile": "開啟影片檔案",
 		"openProject": "開啟專案",
 		"useVerticalTray": "使用直向托盤",
-		"useHorizontalTray": "使用橫向托盤"
+		"useHorizontalTray": "使用橫向托盤",
+		"openNotes": "開啟筆記",
+		"openNotesPlaceholder": "在此輸入筆記...",
+		"notesToolbar": {
+			"bold": "粗體",
+			"italic": "斜體",
+			"strikethrough": "刪除線",
+			"bulletList": "項目符號清單",
+			"numberedList": "編號清單",
+			"blockquote": "引言",
+			"codeBlock": "程式碼區塊"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "啟用系統音訊",

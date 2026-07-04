@@ -9,7 +9,18 @@
 		"openVideoFile": "فتح ملف فيديو",
 		"openProject": "فتح مشروع",
 		"useVerticalTray": "استخدام الشريط العمودي",
-		"useHorizontalTray": "استخدام الشريط الأفقي"
+		"useHorizontalTray": "استخدام الشريط الأفقي",
+		"openNotes": "فتح الملاحظات",
+		"openNotesPlaceholder": "اكتب ملاحظاتك هنا...",
+		"notesToolbar": {
+			"bold": "غامق",
+			"italic": "مائل",
+			"strikethrough": "يتوسطه خط",
+			"bulletList": "قائمة نقطية",
+			"numberedList": "قائمة مرقمة",
+			"blockquote": "اقتباس",
+			"codeBlock": "كتلة تعليمات برمجية"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "تفعيل صوت النظام",

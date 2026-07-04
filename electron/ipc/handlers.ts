@@ -1280,8 +1280,10 @@ export function registerIpcHandlers(
 	createEditorWindow: () => void,
 	createSourceSelectorWindow: () => BrowserWindow,
 	createCountdownOverlayWindow: () => BrowserWindow,
+	createNotesWindowWrapper: () => BrowserWindow,
 	getMainWindow: () => BrowserWindow | null,
 	getSourceSelectorWindow: () => BrowserWindow | null,
+	getNotesWindow: () => BrowserWindow | null,
 	getCountdownOverlayWindow?: () => BrowserWindow | null,
 	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
 	_switchToHud?: () => void,
@@ -1476,6 +1478,17 @@ export function registerIpcHandlers(
 			return { opened: true };
 		}
 		createSourceSelectorWindow();
+		return { opened: true };
+	});
+
+	ipcMain.handle("open-notes", async () => {
+		const notesSelectorWin = getNotesWindow();
+		if (notesSelectorWin) {
+			notesSelectorWin.focus();
+			return { opened: true };
+		}
+
+		createNotesWindowWrapper();
 		return { opened: true };
 	});
 

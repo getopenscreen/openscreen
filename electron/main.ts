@@ -25,6 +25,7 @@ import {
 	createCountdownOverlayWindow,
 	createEditorWindow,
 	createHudOverlayWindow,
+	createNotesWindow,
 	createSourceSelectorWindow,
 } from "./windows";
 
@@ -84,6 +85,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 let mainWindow: BrowserWindow | null = null;
 let sourceSelectorWindow: BrowserWindow | null = null;
 let countdownOverlayWindow: BrowserWindow | null = null;
+let notesWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let selectedSourceName = "";
 const isMac = process.platform === "darwin";
@@ -437,6 +439,19 @@ function createSourceSelectorWindowWrapper() {
 	return sourceSelectorWindow;
 }
 
+function createNotesWindowWrapper() {
+	{
+		notesWindow = createNotesWindow();
+		notesWindow.on("closed", () => {
+			notesWindow = null;
+			if (mainWindow && !mainWindow.isDestroyed()) {
+				mainWindow.webContents.send("notes-window-closed");
+			}
+		});
+		return notesWindow;
+	}
+}
+
 function createCountdownOverlayWindowWrapper() {
 	if (countdownOverlayWindow && !countdownOverlayWindow.isDestroyed()) {
 		return countdownOverlayWindow;
@@ -575,8 +590,10 @@ appReady?.then(async () => {
 		createEditorWindowWrapper,
 		createSourceSelectorWindowWrapper,
 		createCountdownOverlayWindowWrapper,
+		createNotesWindowWrapper,
 		() => mainWindow,
 		() => sourceSelectorWindow,
+		() => notesWindow,
 		() => countdownOverlayWindow,
 		(recording: boolean, sourceName: string) => {
 			selectedSourceName = sourceName;

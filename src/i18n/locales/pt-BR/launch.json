@@ -7,7 +7,18 @@
 		"pauseRecording": "Pausar gravação",
 		"resumeRecording": "Retomar gravação",
 		"openVideoFile": "Abrir arquivo de vídeo",
-		"openProject": "Abrir projeto"
+		"openProject": "Abrir projeto",
+		"openNotes": "Abrir notas",
+		"openNotesPlaceholder": "Escreva suas notas aqui...",
+		"notesToolbar": {
+			"bold": "Negrito",
+			"italic": "Itálico",
+			"strikethrough": "Tachado",
+			"bulletList": "Lista com marcadores",
+			"numberedList": "Lista numerada",
+			"blockquote": "Citação",
+			"codeBlock": "Bloco de código"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Ativar áudio do sistema",

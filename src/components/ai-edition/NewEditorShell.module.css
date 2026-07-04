@@ -969,6 +969,8 @@
 }
 .field select:focus,
 .field input:focus { border-color: var(--brand); }
+.field select:disabled,
+.field input:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─── bg thumb grid ────────────────────────────────────────────── */
 .bgGrid {
@@ -1018,6 +1020,7 @@
 }
 .toggle.isOn { background: var(--brand); }
 .toggle.isOn::after { transform: translateX(16px); }
+.toggle:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─── slider cell (effect) ─────────────────────────────────────── */
 .sliderGrid {
@@ -1066,6 +1069,7 @@
 	cursor: pointer;
 }
 .sliderCell.full { grid-column: 1 / -1; }
+.sliderCell input[type=range]:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─── cursor style grid ────────────────────────────────────────── */
 .cursorGrid {
@@ -1086,6 +1090,8 @@
 	color: var(--muted);
 }
 .cursorCell:hover { border-color: var(--border-hi); color: var(--fg-2); }
+.cursorCell:disabled { opacity: 0.5; cursor: not-allowed; }
+.cursorCell:disabled:hover { border-color: var(--border); color: var(--muted); }
 .cursorCell.isActive {
 	border-color: var(--brand);
 	box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand), transparent 75%);

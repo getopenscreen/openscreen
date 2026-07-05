@@ -1,24 +1,25 @@
 import path from "node:path";
 import { app, type IpcMain } from "electron";
 
+import { CTranslate2ServerManager } from "./ctranslate2Server";
 import { ensureModels, modelPaths } from "./modelManager";
 import type {
 	SttStatusEvent,
 	SttTranscribeRequest,
 	SttTranscribeResponse,
 } from "./transcriptionContract";
-import { resolveVadModelPath } from "./vadModel";
-import { WhisperServerManager } from "./whisperServer";
 
 /**
  * Owner of the long-lived STT pipeline. One instance per Electron app.
  *
  * Workflow:
- *   1. `init()` spawns `whisper-server` (or queues the call if it's busy).
+ *   1. `init()` spawns `ctranslate2-server` (or queues the call if it's busy).
  *   2. `transcribe()` proxies the renderer's `Float32Array` through
- *      whisper-server's HTTP `/inference`, which returns both phrase- and
- *      word-level segments in one pass (see whisperServer.ts) — no separate
- *      forced-alignment step.
+ *      ctranslate2-server's HTTP `/inference`, which returns both phrase- and
+ *      word-level segments in one pass (see ctranslate2Server.ts). Word
+ *      timestamps come out absolute already — CTranslate2's `.align()`
+ *      computes DTW directly over the Whisper model's cross-attention
+ *      weights, see docs/engineering/stt-ctranslate2-migration.md § Decision.
  *   3. `shutdown()` tears down on app quit.
  *
  * Status events fan out via `statusSink` so the renderer can drive its
@@ -32,7 +33,7 @@ export interface SttManagerInitOptions {
 }
 
 export class SttManager {
-	private readonly server = new WhisperServerManager();
+	private readonly server = new CTranslate2ServerManager();
 	private modelsBaseDir: string | null = null;
 	private statusSink: ((event: SttStatusEvent) => void) | null = null;
 	private initPromise: Promise<void> | null = null;
@@ -86,22 +87,11 @@ export class SttManager {
 		});
 
 		const paths = modelPaths(modelsDir);
-		// ponytail: VAD is a bundled, install-time artifact — never downloaded,
-		// never lazily fetched. If resolveVadModelPath returns null here, the
-		// build pipeline missed a step (the model isn't under `electron/native/models/silero/`
-		// in the checkout, or `extraResources` didn't ship it in the installer).
-		// Fail loud — transcription refuses to start. See `electron/stt/vadModel.ts`.
-		const vadModelPath = resolveVadModelPath();
-		if (!vadModelPath) {
-			throw new Error(
-				"Silero VAD model not found in the install tree; reinstall the application or run scripts/fetch-vad-model.sh",
-			);
-		}
-		await this.server.start({ modelPath: paths.whisper, vadModelPath });
+		await this.server.start({ modelPath: paths.whisper, useInt8: true });
 		this.emit({ phase: "transcribe" });
 	}
 
-	/** Run one transcription request through whisper-server. */
+	/** Run one transcription request through ctranslate2-server. */
 	async transcribe(req: SttTranscribeRequest): Promise<SttTranscribeResponse> {
 		await this.init();
 		this.emit({ phase: "transcribe" });
@@ -109,7 +99,7 @@ export class SttManager {
 			samples: req.samples,
 			language: req.language,
 		});
-		const backend = this.server.status.backend ?? "whisper-cpu";
+		const backend = this.server.status.backend ?? "ctranslate2-cpu";
 		return {
 			segments: phrase.segments,
 			wordSegments: phrase.wordSegments,

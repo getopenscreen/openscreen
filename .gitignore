@@ -68,11 +68,12 @@ result-*
 # Auto-caption model + ORT wasm — regenerated at build by scripts/fetch-caption-model.mjs
 /caption-assets/
 
-# Native STT artifacts — whisper-server is built locally per-platform-arch and
-# committed per CI matrix run; wav2vec2 ONNX is too large for git (360 MB) and
-# is hosted on a GitHub release. Both download at first run or pre-populate the
-# userData cache.
+# Native STT artifacts — ctranslate2-server binary and model artifacts.
 /electron/native/bin/
 /electron/native/models/
+
+# Build cache for the native STT server (FetchContent clones + CMake build).
+/.cache/
+
 opencode.json
 opencode.json

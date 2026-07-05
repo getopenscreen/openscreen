@@ -3,9 +3,17 @@
  * the main process through these types; the main-process STT modules talk to
  * each other through them. No runtime imports — keeps the contract folder
  * cheap to share with renderer + main + test code.
+ *
+ * ponytail: the renderer doesn't import the `SttBackend` union (only the
+ * `Stt*Segment` shapes), so renaming the literals is safe — the wire types
+ * other than `SttBackend` are unchanged from the previous whisper.cpp-based
+ * contract and don't need to move.
  */
 
-/** A word-level segment with timestamps from whisper.cpp's own per-word output. */
+/** A word-level segment with timestamps from CTranslate2's `.align()` (DTW over
+ *  the Whisper model's cross-attention weights — see
+ *  docs/engineering/stt-ctranslate2-migration.md § Decision). Absolute seconds
+ *  in the source recording. */
 export interface SttWordSegment {
 	word: string;
 	startSec: number;
@@ -22,11 +30,7 @@ export interface SttPhraseSegment {
 }
 
 /** GPU/backend tag picked by `gpuDetector`. Mirrors the bundled binary variant. */
-export type SttBackend =
-	| "whisper-metal" // Apple Silicon (Core ML + Metal)
-	| "whisper-cuda" // NVIDIA
-	| "whisper-vulkan" // AMD / Intel
-	| "whisper-cpu"; // portable fallback
+export type SttBackend = "ctranslate2-cuda" | "ctranslate2-cpu";
 
 /** Status phase the renderer surfaces over `onStatus("model" | "transcribe")`. */
 export type SttStatusPhase = "model" | "transcribe";

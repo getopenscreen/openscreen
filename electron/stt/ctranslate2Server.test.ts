@@ -2,19 +2,20 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WhisperServerManager, writeSamplesAsWav } from "./whisperServer";
+import { CTranslate2ServerManager } from "./ctranslate2Server";
+import { writeSamplesAsWav } from "./wav";
 
 vi.mock("node:child_process", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:child_process")>();
 	// ponytail: vi.mock factory has to preserve the module's full surface
 	// (named + default + namespace). Replacing only `spawn` would otherwise
 	// drop the `default` export and break the `import("node:child_process")`
-	// cycle whisperServer.ts relies on for `ChildProcessByStdio`.
+	// cycle ctranslate2Server.ts relies on for `ChildProcessByStdio`.
 	const spawn = vi.fn();
 	return { ...actual, spawn, default: { ...(actual.default ?? {}), spawn } };
 });
 
-describe("whisperServer.writeSamplesAsWav", () => {
+describe("wav.writeSamplesAsWav", () => {
 	let dir: string;
 	beforeEach(async () => {
 		dir = await mkdtemp(path.join(tmpdir(), "stt-wav-"));
@@ -66,9 +67,17 @@ describe("whisperServer.writeSamplesAsWav", () => {
 	});
 });
 
-describe("WhisperServerManager", () => {
+describe("CTranslate2ServerManager", () => {
+	beforeEach(async () => {
+		// ponytail: each spawn-arg test reads the *first* call off the mocked
+		// spawn; previous tests' calls would otherwise leak through. Cheap
+		// to reset, saves a 30-second debug.
+		const { spawn } = await import("node:child_process");
+		vi.mocked(spawn).mockClear();
+	});
+
 	it("reports a clean status when not started", () => {
-		const mgr = new WhisperServerManager();
+		const mgr = new CTranslate2ServerManager();
 		const status = mgr.status;
 		expect(status.running).toBe(false);
 		expect(status.pid).toBeNull();
@@ -78,17 +87,13 @@ describe("WhisperServerManager", () => {
 	});
 
 	it("clears lastError between runs", () => {
-		const mgr = new WhisperServerManager();
+		const mgr = new CTranslate2ServerManager();
 		// Private mutator just to check that calling status gives a fresh shape.
 		mgr.stop(); // should be a no-op
 		expect(mgr.status.running).toBe(false);
 	});
 
 	it("extracts phrase and word segments from a verbose_json response", async () => {
-		// ponytail: regression coverage for the parsing bug where `response_format`
-		// was "json" (no segments at all) and the code read `json.transcription`
-		// (a shape whisper-server never actually emits) — segments and words were
-		// always empty, but nothing failed loudly to surface it.
 		const fakeJson = {
 			task: "transcribe",
 			language: "english",
@@ -112,7 +117,7 @@ describe("WhisperServerManager", () => {
 			vi.fn(async () => new Response(JSON.stringify(fakeJson), { status: 200 })),
 		);
 		try {
-			const mgr = new WhisperServerManager();
+			const mgr = new CTranslate2ServerManager();
 			// Bypass the real spawn/poll — `transcribe()` only needs `process`+`port` set
 			// for `ensureReady()` to pass; the HTTP call itself is the fake fetch above.
 			(mgr as unknown as { process: unknown; port: number }).process = {};
@@ -130,14 +135,13 @@ describe("WhisperServerManager", () => {
 		}
 	});
 
-	describe("WhisperServerManager language normalization", () => {
-		// ponytail: regression for the silent-English-bug. whisper-server's built-in
-		// language default is `en`, NOT auto-detect — leaving the form field out
-		// makes every audio decode as English, which on French audio looks like
-		// (very confident) English hallucination. Our IPC contract documents
-		// "Omit / `auto` → Whisper detects"; honour that by sending the explicit
-		// `auto` keyword in both no-language and "auto"-string cases, and pass
-		// through any forced code unchanged.
+	describe("CTranslate2ServerManager language normalization", () => {
+		// ponytail: regression for the silent-English-bug carried over from the
+		// whisper-server wrapper. The CTranslate2 runtime defaults to `"auto"`
+		// out of the box, but the IPC contract promises "Omit / `auto` →
+		// Whisper detects" (see transcriptionContract.ts:48-52) — keep the
+		// explicit `auto` form for both the undefined and the literal-string
+		// cases so swapping the runtime default later doesn't silently regress.
 
 		function captureFormField(language: string | undefined): Promise<string | null> {
 			return new Promise((resolve, reject) => {
@@ -149,9 +153,6 @@ describe("WhisperServerManager", () => {
 				vi.stubGlobal(
 					"fetch",
 					vi.fn(async (_url: string, init: RequestInit) => {
-						// Strip the multipart boundary from the body and pull the
-						// `language` field; good enough for assertion, doesn't try
-						// to be a full multipart parser.
 						const body = init?.body as FormData | undefined;
 						if (body && typeof (body as FormData).get === "function") {
 							resolvedText = (body as FormData).get("language") as string | null;
@@ -161,7 +162,7 @@ describe("WhisperServerManager", () => {
 				);
 				(async () => {
 					try {
-						const mgr = new WhisperServerManager();
+						const mgr = new CTranslate2ServerManager();
 						(mgr as unknown as { process: unknown; port: number }).process = {};
 						(mgr as unknown as { process: unknown; port: number }).port = 9999;
 						await mgr.transcribe({
@@ -176,7 +177,7 @@ describe("WhisperServerManager", () => {
 			});
 		}
 
-		it("sends 'auto' when language is undefined (lets whisper-server detect)", async () => {
+		it("sends 'auto' when language is undefined (lets the runtime detect)", async () => {
 			const sent = await captureFormField(undefined);
 			expect(sent).toBe("auto");
 		});
@@ -196,29 +197,27 @@ describe("WhisperServerManager", () => {
 		});
 	});
 
-	it("composes word timestamps relative to their parent segment (VAD-only contract)", async () => {
-		// ponytail: regression coverage for the VAD-relative word timestamp
-		// contract discovered against the real whisper-server + Silero VAD pair.
-		// With `--vad`, whisper.cpp transcribes each speech region in isolation
-		// and emits per-word times relative to the cropped audio. The parent
-		// segment's `start` is still absolute. Without `word.start + seg.start`,
-		// the first words after a leading silent stretch land at t=0 instead
-		// of t=~5s (verified against a 5s-silence test clip: raw "Hello" start
-		// = 0.03s, parent seg start = 5.51s, composed absolute = 5.54s).
+	// ponytail: the 5-second-leading-silence regression that motivated the
+	// migration in the first place. CTranslate2's `.align()` emits *absolute*
+	// word timestamps already, so unlike whisper-server-with-VAD we don't
+	// compose word.start + parent_seg.start. If a future change reintroduces
+	// that offset arithmetic (e.g. for a hypothetical region-level crop),
+	// this test is the one that has to keep passing.
+	it("returns word timestamps absolute (no parent-segment offset composition)", async () => {
 		const fakeJson = {
 			task: "transcribe",
 			language: "english",
-			text: " Hello world.",
+			text: " Thank you",
 			segments: [
 				{
 					id: 0,
-					text: " Hello world.",
+					text: " Thank you",
 					start: 5.51,
 					end: 8.98,
-					// raw starts are within the cropped region (0.03s = vad-time).
+					// Absolute starts; no composition required.
 					words: [
-						{ word: " Hello", start: 0.03, end: 0.38 },
-						{ word: " world.", start: 0.38, end: 0.65 },
+						{ word: " Thank", start: 5.51, end: 6.85 },
+						{ word: " you", start: 6.85, end: 8.98 },
 					],
 				},
 			],
@@ -229,35 +228,32 @@ describe("WhisperServerManager", () => {
 			vi.fn(async () => new Response(JSON.stringify(fakeJson), { status: 200 })),
 		);
 		try {
-			const mgr = new WhisperServerManager();
+			const mgr = new CTranslate2ServerManager();
 			(mgr as unknown as { process: unknown; port: number }).process = {};
 			(mgr as unknown as { process: unknown; port: number }).port = 9999;
 			const result = await mgr.transcribe({ samples: new Float32Array(1600) });
-			expect(result.segments).toEqual([{ text: "Hello world.", startSec: 5.51, endSec: 8.98 }]);
-			// Composed: 5.51 + 0.03 = 5.54, 5.51 + 0.38 = 5.89, ...
+			expect(result.segments).toEqual([{ text: "Thank you", startSec: 5.51, endSec: 8.98 }]);
 			expect(result.wordSegments).toEqual([
-				{ word: "Hello", startSec: 5.54, endSec: 5.89 },
-				{ word: "world.", startSec: 5.89, endSec: expect.closeTo(6.16, 2) },
+				{ word: "Thank", startSec: 5.51, endSec: 6.85 },
+				{ word: "you", startSec: 6.85, endSec: 8.98 },
 			]);
 		} finally {
 			vi.unstubAllGlobals();
 		}
 	});
 
-	it("spawns whisper-server with --vad and --vad-model <vadModelPath>", async () => {
-		// ponytail: VAD is required for accurate word timestamps after leading
-		// silence. The flag pair is the *contract* — if anyone removes either
-		// argument or hands back the wrong path, this test fails loudly before
-		// we ship code that quietly regresses back to the pre-VAD behavior.
+	it("spawns ctranslate2-server with --model and (for cuda) --cuda", async () => {
 		const fs = await import("node:fs/promises");
 		const { spawn } = await import("node:child_process");
-		const dir = await mkdtemp(path.join(tmpdir(), "stt-spawn-"));
+		const dir = await mkdtemp(path.join(tmpdir(), "ct2-spawn-"));
 		try {
-			const modelPath = path.join(dir, "model.bin");
-			const vadPath = path.join(dir, "vad.bin");
-			const fakeBinaryPath = path.join(dir, "whisper-server.exe");
-			await fs.writeFile(modelPath, "x");
-			await fs.writeFile(vadPath, "y");
+			const modelPath = path.join(dir, "model-ct2");
+			await fs.mkdir(modelPath, { recursive: true });
+			await fs.writeFile(path.join(modelPath, "config.json"), "{}");
+			const fakeBinaryPath = path.join(
+				dir,
+				process.platform === "win32" ? "ctranslate2-server.exe" : "ctranslate2-server",
+			);
 			await fs.writeFile(fakeBinaryPath, "x");
 			const fakeChild = {
 				stdout: { on: vi.fn() },
@@ -274,18 +270,18 @@ describe("WhisperServerManager", () => {
 				vi.fn(async () => new Response("ok", { status: 200 })),
 			);
 			try {
-				const mgr = new WhisperServerManager();
+				const mgr = new CTranslate2ServerManager();
 				await mgr.start({
 					modelPath,
-					vadModelPath: vadPath,
 					binaryPath: fakeBinaryPath,
-					backend: "whisper-cpu",
+					backend: "ctranslate2-cpu",
 				});
 				const args = vi.mocked(spawn).mock.calls[0]?.[1] as string[];
-				expect(args).toContain("--vad");
-				const vadModelIdx = args.indexOf("--vad-model");
-				expect(vadModelIdx).toBeGreaterThan(-1);
-				expect(args[vadModelIdx + 1]).toBe(vadPath);
+				const modelIdx = args.indexOf("--model");
+				expect(modelIdx).toBeGreaterThan(-1);
+				expect(args[modelIdx + 1]).toBe(modelPath);
+				expect(args).not.toContain("--cuda");
+				expect(args).not.toContain("--vad");
 			} finally {
 				vi.unstubAllGlobals();
 			}
@@ -294,26 +290,66 @@ describe("WhisperServerManager", () => {
 		}
 	});
 
-	it("refuses to start when the VAD model file is missing", async () => {
+	it("adds --cuda when the resolved backend is ctranslate2-cuda", async () => {
 		const fs = await import("node:fs/promises");
-		const dir = await mkdtemp(path.join(tmpdir(), "stt-no-vad-"));
+		const { spawn } = await import("node:child_process");
+		const dir = await mkdtemp(path.join(tmpdir(), "ct2-spawn-cuda-"));
 		try {
-			const modelPath = path.join(dir, "model.bin");
+			const modelPath = path.join(dir, "model-ct2");
+			await fs.mkdir(modelPath, { recursive: true });
+			await fs.writeFile(path.join(modelPath, "config.json"), "{}");
 			const fakeBinaryPath = path.join(
 				dir,
-				process.platform === "win32" ? "whisper-server.exe" : "whisper-server",
+				process.platform === "win32" ? "ctranslate2-server.exe" : "ctranslate2-server",
 			);
-			await fs.writeFile(modelPath, "x");
 			await fs.writeFile(fakeBinaryPath, "x");
-			const mgr = new WhisperServerManager();
+			const fakeChild = {
+				stdout: { on: vi.fn() },
+				stderr: { on: vi.fn() },
+				pid: 5678,
+				once: vi.fn(),
+				on: vi.fn(),
+				kill: vi.fn(),
+			};
+			vi.mocked(spawn).mockReturnValue(fakeChild as never);
+			vi.stubGlobal(
+				"fetch",
+				vi.fn(async () => new Response("ok", { status: 200 })),
+			);
+			try {
+				const mgr = new CTranslate2ServerManager();
+				await mgr.start({
+					modelPath,
+					binaryPath: fakeBinaryPath,
+					backend: "ctranslate2-cuda",
+				});
+				const args = vi.mocked(spawn).mock.calls[0]?.[1] as string[];
+				expect(args).toContain("--cuda");
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("refuses to start when the model directory is missing", async () => {
+		const fs = await import("node:fs/promises");
+		const dir = await mkdtemp(path.join(tmpdir(), "ct2-no-model-"));
+		try {
+			const fakeBinaryPath = path.join(
+				dir,
+				process.platform === "win32" ? "ctranslate2-server.exe" : "ctranslate2-server",
+			);
+			await fs.writeFile(fakeBinaryPath, "x");
+			const mgr = new CTranslate2ServerManager();
 			await expect(
 				mgr.start({
-					modelPath,
-					vadModelPath: path.join(dir, "missing-vad.bin"),
+					modelPath: path.join(dir, "missing-model"),
 					binaryPath: fakeBinaryPath,
-					backend: "whisper-cpu",
+					backend: "ctranslate2-cpu",
 				}),
-			).rejects.toThrow(/Silero VAD model not found/);
+			).rejects.toThrow(/CTranslate2 model not found/);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

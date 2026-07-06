@@ -34,6 +34,7 @@ const recorderState = vi.hoisted(() => ({
 	value: {
 		recording: false,
 		paused: false,
+		saving: false,
 		elapsedSeconds: 0,
 		toggleRecording: vi.fn(),
 		togglePaused: vi.fn(),

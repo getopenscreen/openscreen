@@ -21,7 +21,7 @@ namespace openscreen::ct2 {
 
 // Locally-loaded tokenizer + decoder. Cheap to construct (one JSON parse).
 class WhisperTokenizer {
-public:
+ public:
   // Load from the JSON produced by HuggingFace fast-tokenizer export.
   // Throws on malformed JSON / wrong schema; the caller is expected to
   // surface the error over HTTP. We deliberately don't pull in nlohmann/json
@@ -44,6 +44,56 @@ public:
       id_to_str_[kv.first] = kv.second;
     }
     build_added_inv();
+  }
+
+  // Validate/repair a raw byte string so it is well-formed UTF-8. The GPT-2
+  // byte decoder emits raw octets; model hallucinations or truncated sequences
+  // can leave isolated continuation bytes that nlohmann/json later refuses to
+  // serialize. We drop malformed bytes here, at the token boundary.
+  static std::string sanitize_utf8(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size();) {
+      unsigned char c = static_cast<unsigned char>(in[i]);
+      size_t len = 0;
+      unsigned int cp = 0;
+      if ((c & 0x80) == 0) {
+        len = 1;
+        cp = c;
+      } else if ((c & 0xE0) == 0xC0) {
+        len = 2;
+        cp = c & 0x1F;
+      } else if ((c & 0xF0) == 0xE0) {
+        len = 3;
+        cp = c & 0x0F;
+      } else if ((c & 0xF8) == 0xF0) {
+        len = 4;
+        cp = c & 0x07;
+      } else {
+        ++i; // invalid leading byte
+        continue;
+      }
+
+      bool valid = true;
+      for (size_t k = 1; k < len && i + k < in.size(); ++k) {
+        unsigned char ck = static_cast<unsigned char>(in[i + k]);
+        if ((ck & 0xC0) != 0x80) {
+          valid = false;
+          break;
+        }
+        cp = (cp << 6) | (ck & 0x3F);
+      }
+      if (!valid ||
+          (len == 2 && cp < 0x80) ||
+          (len == 3 && cp < 0x800) ||
+          (len == 4 && (cp < 0x10000 || cp > 0x10FFFF))) {
+        ++i;
+        continue;
+      }
+      out.append(in.data() + i, len);
+      i += len;
+    }
+    return out;
   }
 
   // GPT-2 byte decoder: each codepoint that appears in our vocab maps back
@@ -95,13 +145,13 @@ public:
   std::string render(int id) const {
     auto it = id_to_str_.find(id);
     if (it == id_to_str_.end()) return "";
-    return decode_bytes(it->second);
+    return sanitize_utf8(decode_bytes(it->second));
   }
 
   bool try_render(int id, std::string* out) const {
     auto it = id_to_str_.find(id);
     if (it == id_to_str_.end()) return false;
-    *out = decode_bytes(it->second);
+    *out = sanitize_utf8(decode_bytes(it->second));
     return true;
   }
 

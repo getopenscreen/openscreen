@@ -47,15 +47,18 @@ export interface SttModelDescriptor {
 }
 
 const MODEL_BASE = "https://huggingface.co";
-// ponytail: SYSTRAN/faster-whisper-small was fp16 (~470 MB on disk,
-// CTranslate2 dequantizes to fp32 at load + runs Ruy/fp32 in our previous
-// build → ~0.15× RTF, i.e. 3 min for a 30 s clip on the dev's Ryzen).
-// The matching `.int8` variant ships weights already quantized to int8
-// (~150 MB) and CTranslate2's INT8 compute path produces equivalent WER
-// at ~5–10× the throughput on a real GEMM backend (oneDNN / OpenBLAS).
-// File layout (model.bin + config.json + tokenizer.json + vocabulary.txt)
-// matches the fp16 release.
-const MODEL_REPO = "SYSTRAN/faster-whisper-small.int8";
+// ponytail: the legacy `SYSTRAN/faster-whisper-*.int8` HuggingFace
+// repos (pre-quantized int8 weights, ~150 MB) were taken private in
+// 2024 and now return HTTP 401 to anonymous downloads. The current
+// canonical CTranslate2 release is the unquantized fp16 export at
+// `Systran/faster-whisper-{tiny,base,small,medium,large-v3}` (~483 MB
+// for `small`). INT8 compute still happens at load time via the
+// `useInt8` flag on CTranslate2ServerManager → ctranslate2-server's
+// `--int8` (ComputeType::INT8), so on-disk size is the only thing
+// that grew; per-token throughput is unchanged. File layout
+// (model.bin + config.json + tokenizer.json + vocabulary.txt) is
+// identical to the legacy .int8 release — drop-in replacement.
+const MODEL_REPO = "Systran/faster-whisper-small";
 
 export const STT_MODELS: Record<SttModelId, SttModelDescriptor> = {
 	whisper: {
@@ -65,12 +68,12 @@ export const STT_MODELS: Record<SttModelId, SttModelDescriptor> = {
 			{
 				name: "model.bin",
 				url: `${MODEL_BASE}/${MODEL_REPO}/resolve/main/model.bin`,
-				// ponytail: SHA-256 of the model.bin file from the SYSTRAN
-				// faster-whisper-small int8 release on HuggingFace. Verify
+				// ponytail: SHA-256 of model.bin from the Systran/
+				// faster-whisper-small fp16 release on HuggingFace. Verify
 				// against your own download before shipping a release, then
 				// pin the actual digest here and remove the null.
 				expectedSha256: null,
-				approximateBytes: 150_000_000,
+				approximateBytes: 483_000_000,
 			},
 			{
 				name: "config.json",

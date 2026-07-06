@@ -6,6 +6,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# ponytail: CTranslate2 sets CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+# (i.e. /MT, static CRT) when BUILD_SHARED_LIBS=OFF, but the variable
+# set inside its add_subdirectory() does NOT propagate back to our
+# scope — so ctranslate2-server.exe and ctranslate2.lib would end up
+# on different runtimes (/MD vs /MT) and LNK2038 at link time. Re-set
+# it here at the directory level, BEFORE any add_executable, so all
+# our targets match CTranslate2's static-CRT choice.
+# MultiThreaded$<$<CONFIG:Debug>:Debug> = Release=/MT, Debug=/MTd.
+if(WIN32)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # -----------------------------------------------------------------------
 # Backend matrix (one per target platform)
 # -----------------------------------------------------------------------
@@ -78,6 +90,16 @@ else()
     set(DNNL_INCLUDE_DIR "${onednn_SOURCE_DIR}/include" CACHE PATH "" FORCE)
     set(DNNL_LIBRARY    "${onednn_BINARY_DIR}/src/libdnnl.a" CACHE FILEPATH "" FORCE)
   endif()
+  # ponytail: the source include dir ships a `.h.in` template at
+  # `oneapi/dnnl/dnnl_config.h.in`; the generated header lands in the
+  # build dir (`<onednn_BINARY_DIR>/include/oneapi/dnnl/dnnl_config.h`)
+  # at oneDNN configure time. CTranslate2 only sees DNNL_INCLUDE_DIR
+  # (one path) via find_path, so the generated header is unreachable
+  # for `#include <oneapi/dnnl/dnnl_config.h>`. Add the build include
+  # to the ctranslate2 library target as a second PRIVATE include so
+  # primitives.cc / conv1d_cpu.cc find the generated config. Applied
+  # after FetchContent_MakeAvailable(ctranslate2 ...) below via a
+  # target-level include_directories call (no upstream patching).
 endif()
 
 # Ponytail: vendor the small deps up front so the rest of the script
@@ -115,6 +137,57 @@ set(WITH_CUDA OFF CACHE BOOL "" FORCE)
 set(WITH_TENSOR_PARALLEL OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(ctranslate2 httplib json)
+
+# ponytail: extend ctranslate2's include path with oneDNN's build include
+# so the generated `oneapi/dnnl/dnnl_config.h` is reachable. See the note
+# above the FetchContent_Declare(onednn) block. Guarded on TARGET so it
+# is a no-op on Apple (Accelerate path, no oneDNN).
+if(TARGET ctranslate2 AND DEFINED onednn_BINARY_DIR)
+  target_include_directories(ctranslate2 PRIVATE "${onednn_BINARY_DIR}/include")
+endif()
+
+if(MSVC)
+  # ponytail: MSVC C++20 has a template-arg-deduction bug with the pattern
+  #   StorageView({shape}, std::vector<int32_t>(iter, iter), device)
+  # (decoding.cc:1140, also whisper.cc:511 in v4.4.0). The compiler tries
+  # to instantiate std::vector<int32_t>::vector<size_t*, size_t*> and
+  # explodes, even though the type T of the vector is fully determined
+  # from the explicit `<int32_t>`. Empirically fails on MSVC 19.40+ (VS
+  # 2022 17.10 / VS 2026 Insiders 18.0). GCC and clang are fine.
+  #
+  # Workaround: rewrite the call to first materialize the std::vector in
+  # a local — that gives MSVC a fully-typed rvalue to match against the
+  # template ctor `StorageView(Shape, const std::vector<T>&, Device)`
+  # without going through the (iter, iter) path. Patch is applied
+  # post-FetchContent (after ctranslate2-src/*.cc is on disk but before
+  # CTranslate2's add_subdirectory compiles it). See storage_view.h:62-74
+  # for the overload set.
+  set(_ct2_decoding_src "${ctranslate2_SOURCE_DIR}/src/decoding.cc")
+  if(EXISTS "${_ct2_decoding_src}")
+    file(READ "${_ct2_decoding_src}" _ct2_decoding_content)
+    string(REPLACE
+      "      StorageView input_ids({1, prefix_length},\n                            std::vector<int32_t>(start_tokens.begin(),\n                                                 start_tokens.begin() + prefix_length),\n                            device);"
+      "      auto _ct2_prefix_ids = std::vector<int32_t>(start_tokens.begin(), start_tokens.begin() + prefix_length);\n      StorageView input_ids({1, prefix_length}, _ct2_prefix_ids, device);"
+      _ct2_decoding_content_patched "${_ct2_decoding_content}")
+    if(NOT _ct2_decoding_content STREQUAL _ct2_decoding_content_patched)
+      file(WRITE "${_ct2_decoding_src}" "${_ct2_decoding_content_patched}")
+      message(STATUS "Patched CTranslate2 decoding.cc for MSVC vector ctor bug (storage_view.h:1140)")
+    endif()
+  endif()
+
+  set(_ct2_whisper_src "${ctranslate2_SOURCE_DIR}/src/models/whisper.cc")
+  if(EXISTS "${_ct2_whisper_src}")
+    file(READ "${_ct2_whisper_src}" _ct2_whisper_content)
+    string(REPLACE
+      "        const StorageView frame_sizes({batch_size},\n                                      std::vector<int32_t>(num_frames.begin(), num_frames.end()),\n                                      device);"
+      "        auto _ct2_frame_sizes = std::vector<int32_t>(num_frames.begin(), num_frames.end());\n        const StorageView frame_sizes({batch_size}, _ct2_frame_sizes, device);"
+      _ct2_whisper_content_patched "${_ct2_whisper_content}")
+    if(NOT _ct2_whisper_content STREQUAL _ct2_whisper_content_patched)
+      file(WRITE "${_ct2_whisper_src}" "${_ct2_whisper_content_patched}")
+      message(STATUS "Patched CTranslate2 whisper.cc for MSVC vector ctor bug (storage_view.h:1140)")
+    endif()
+  endif()
+endif()
 
 add_executable(ctranslate2-server
   src/main.cpp

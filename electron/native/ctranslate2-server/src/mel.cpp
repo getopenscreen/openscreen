@@ -68,11 +68,14 @@ MelFilterbank build_mel_filterbank(const FeatureConfig& cfg) {
   for (int m = 0; m < cfg.n_mels; ++m) {
     const float enorm = 2.0f / (freqs[size_t(m + 2)] - freqs[size_t(m)]);
     for (int k = 0; k < fb.n_bins; ++k) {
+      // Match faster-whisper::FeatureExtractor.get_mel_filters exactly:
+      // lower = (fft_freq - mel_freq[m]) / fdiff[m]
+      // upper = (mel_freq[m+2] - fft_freq) / fdiff[m+1]
       const float lower =
-          (freqs[size_t(m)] - fftfreqs[size_t(k)]) / fdiff[size_t(m)];
+          (fftfreqs[size_t(k)] - freqs[size_t(m)]) / fdiff[size_t(m)];
       const float upper =
-          (fftfreqs[size_t(k)] - freqs[size_t(m + 2)]) / fdiff[size_t(m + 1)];
-      float w = std::max(0.0f, std::min(-lower, upper));
+          (freqs[size_t(m + 2)] - fftfreqs[size_t(k)]) / fdiff[size_t(m + 1)];
+      float w = std::max(0.0f, std::min(lower, upper));
       w *= enorm;
       fb.weights[size_t(m) * size_t(fb.n_bins) + size_t(k)] = w;
     }
@@ -84,12 +87,15 @@ std::vector<float> reflect_pad(const std::vector<float>& x, int pad) {
   if (pad <= 0) return x;
   std::vector<float> out;
   out.reserve(x.size() + size_t(2 * pad));
+  // Left reflection: x[pad], x[pad-1], ..., x[1]
   for (int i = pad; i > 0; --i) {
     out.push_back(x[size_t(i)]);
   }
   out.insert(out.end(), x.begin(), x.end());
+  // Right reflection: x[L-2], x[L-3], ..., x[L-pad-1]
+  // (mirrors np.pad(..., mode='reflect') which does NOT repeat edge samples).
   for (size_t i = 1; i <= size_t(pad); ++i) {
-    size_t idx = (i > x.size()) ? x.size() : (x.size() - i);
+    size_t idx = (i + 1 >= x.size()) ? 0 : (x.size() - 1 - i);
     out.push_back(x[idx]);
   }
   return out;
@@ -105,12 +111,16 @@ MelFeatures compute_log_mel(const std::vector<float>& mono_16k,
   std::vector<float> padded = reflect_pad(mono_16k, pad_each);
   padded.push_back(0.0f);
   const int n_padded = int(padded.size());
-  const int nb_max_frames =
-      cfg.chunk_length * cfg.sample_rate / cfg.hop_length;
+  // Expected frame count for the WHOLE recording (not just one chunk_length
+  // window) — used only to size the initial reserve() below so long
+  // recordings don't repeatedly reallocate; main.cpp's own chunking slices
+  // this full feature buffer into chunk_length windows afterwards.
+  const int expected_frames =
+      std::max(1, (n_padded - cfg.n_fft) / cfg.hop_length + 1);
 
   MelFeatures out;
   out.n_mels = cfg.n_mels;
-  out.data.reserve(size_t(nb_max_frames) * size_t(cfg.n_mels));
+  out.data.reserve(size_t(expected_frames) * size_t(cfg.n_mels));
 
   const int kept_bins = cfg.n_fft / 2;
   std::vector<float> magnitudes{std::vector<float>(size_t(kept_bins))};
@@ -151,36 +161,53 @@ MelFeatures compute_log_mel(const std::vector<float>& mono_16k,
                               im_fft[size_t(k)] * im_fft[size_t(k)];
     }
 
+    // Mel filterbank: produce linear mel energies for this frame.
     std::vector<float> mel_out{std::vector<float>(size_t(cfg.n_mels), 0.0f)};
     for (int m = 0; m < cfg.n_mels; ++m) {
       float acc = 0.0f;
-      const float* row =
-          fb.weights.data() + size_t(m) * size_t(fb.n_bins);
+      const float* row = fb.weights.data() + size_t(m) * size_t(fb.n_bins);
       for (int k = 0; k < kept_bins; ++k) {
         acc += row[size_t(k)] * magnitudes[size_t(k)];
       }
       mel_out[size_t(m)] = acc;
     }
 
-    float max_val = -1e30f;
+    // Store log10(clipped) in a temporary frame-major buffer. We delay
+    // normalization until we know the global max across the whole utterance,
+    // matching faster-whisper/whisper exactly (floor = max - 8, then /4 - 1).
     for (int m = 0; m < cfg.n_mels; ++m) {
       const float clipped = std::max(1e-10f, mel_out[size_t(m)]);
-      const float log_val = std::log10(clipped);
-      mel_out[size_t(m)] = log_val;
-      if (log_val > max_val) max_val = log_val;
-    }
-    const float floor_at = max_val - 8.0f;
-    for (int m = 0; m < cfg.n_mels; ++m) {
-      const float x = std::max(mel_out[size_t(m)], floor_at);
-      mel_out[size_t(m)] = (x + 4.0f) / 4.0f;
-    }
-
-    for (int m = 0; m < cfg.n_mels; ++m) {
-      out.data.push_back(mel_out[size_t(m)]);
+      out.data.push_back(std::log10(clipped));
     }
     out.n_frames += 1;
-    if (out.n_frames >= nb_max_frames) break;
+    // No cap here: this computes features for the FULL recording. main.cpp
+    // slices the result into chunk_length windows afterwards (see the
+    // "compute_log_mel hard-caps at 30s" bug this replaced — capping here
+    // silently truncated every recording longer than one chunk before
+    // chunking logic ever ran).
   }
+
+  // -------------------------------------------------------------------------
+  // Global normalization + transpose to mel-major [n_mels, n_frames].
+  // -------------------------------------------------------------------------
+  float max_val = -1e30f;
+  for (float v : out.data) {
+    if (v > max_val) max_val = v;
+  }
+  const float floor_at = max_val - 8.0f;
+
+  std::vector<float> mel_major;
+  mel_major.reserve(out.data.size());
+  const int n_frames = out.n_frames;
+  const int n_mels = out.n_mels;
+  for (int m = 0; m < n_mels; ++m) {
+    for (int f = 0; f < n_frames; ++f) {
+      const float x = out.data[size_t(f) * size_t(n_mels) + size_t(m)];
+      const float clamped = std::max(x, floor_at);
+      mel_major.push_back((clamped + 4.0f) / 4.0f);
+    }
+  }
+  out.data = std::move(mel_major);
 
   kiss_fft_free(fft_cfg);
   return out;

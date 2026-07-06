@@ -15,7 +15,7 @@ describe("modelManager", () => {
 
 	it("exposes the whisper model descriptor with HF files", () => {
 		expect(STT_MODELS.whisper.cacheDir).toBe("whisper-ct2");
-		expect(STT_MODELS.whisper.repoId).toBe("SYSTRAN/faster-whisper-small.int8");
+		expect(STT_MODELS.whisper.repoId).toBe("Systran/faster-whisper-small");
 		expect(STT_MODELS.whisper.files.length).toBeGreaterThanOrEqual(4);
 		const names = STT_MODELS.whisper.files.map((f) => f.name);
 		expect(names).toContain("model.bin");

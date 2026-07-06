@@ -185,9 +185,10 @@ export class StreamingVideoDecoder {
 	private decoder: VideoDecoder | null = null;
 	private cancelled = false;
 	private metadata: DecodedVideoInfo | null = null;
-	// Local source URL streamed into OPFS, released on destroy() so its cache
-	// copy can be pruned once no demuxer is reading it.
-	private localSourceUrl: string | null = null;
+	// Name of the OPFS cache entry backing a large local source (equals the
+	// File's .name), released on destroy() so the copy can be pruned once no
+	// demuxer is reading it. Null for small/remote sources (never retained).
+	private sourceCacheName: string | null = null;
 
 	/** Routes to the appropriate loader based on whether the source is local or remote. */
 	private async loadSourceFile(
@@ -196,7 +197,6 @@ export class StreamingVideoDecoder {
 	): Promise<File> {
 		const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 		if (!isRemoteUrl && window.electronAPI) {
-			this.localSourceUrl = videoUrl;
 			return this.withTimeout(
 				StreamingVideoDecoder.loadLocalSourceFile(videoUrl, onProgress),
 				LOCAL_SOURCE_LOAD_TIMEOUT_MS,
@@ -239,6 +239,9 @@ export class StreamingVideoDecoder {
 		onSourceProgress?: (progress: MaterializeProgress) => void,
 	): Promise<DecodedVideoInfo> {
 		const file = await this.loadSourceFile(videoUrl, onSourceProgress);
+		// For OPFS-streamed sources the File name is the cache-entry key; retained
+		// by materialize and released in destroy(). No-op key for small/remote.
+		this.sourceCacheName = file.name;
 
 		// Relative URL so it resolves in both dev (http) and packaged (file://) builds
 		const wasmUrl = new URL("./wasm/web-demuxer.wasm", window.location.href).href;
@@ -779,9 +782,9 @@ export class StreamingVideoDecoder {
 			this.demuxer = null;
 		}
 
-		if (this.localSourceUrl) {
-			releaseLocalSourceFile(this.localSourceUrl);
-			this.localSourceUrl = null;
+		if (this.sourceCacheName) {
+			releaseLocalSourceFile(this.sourceCacheName);
+			this.sourceCacheName = null;
 		}
 	}
 

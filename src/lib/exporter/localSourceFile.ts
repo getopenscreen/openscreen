@@ -41,38 +41,33 @@ export interface MaterializeOptions {
 }
 
 /**
- * Cache entries currently referenced by a live demuxer, keyed by source URL.
- * Pruning never removes a name that is still in use, so a concurrent export or
- * caption pass reading a different recording cannot have its copy deleted.
- * Callers must {@link releaseLocalSourceFile} when the demuxer is destroyed.
+ * Reference counts of OPFS cache entries currently read by a live demuxer, keyed
+ * by cache-entry name (which equals the returned File's `.name`). Pruning never
+ * removes a name with a live reference, so a concurrent export or caption pass
+ * reading a different recording — or a different revision of the same one —
+ * cannot have its copy deleted. Keying by cache name (not source URL) keeps
+ * revisions independent: releasing one never touches another's count.
  */
-const activeSources = new Map<string, { cacheName: string; refs: number }>();
+const activeCacheRefs = new Map<string, number>();
 
-function retainSource(videoUrl: string, cacheName: string): void {
-	const entry = activeSources.get(videoUrl);
-	if (entry && entry.cacheName === cacheName) {
-		entry.refs += 1;
-	} else {
-		// A new file revision (size/mtime change) supersedes any prior entry.
-		activeSources.set(videoUrl, { cacheName, refs: 1 });
-	}
+function retainCache(cacheName: string): void {
+	activeCacheRefs.set(cacheName, (activeCacheRefs.get(cacheName) ?? 0) + 1);
 }
 
 /**
- * Releases a reference taken by {@link materializeLocalSourceFile} for a large
- * (OPFS-streamed) source. No-op for small sources and for URLs never streamed.
+ * Releases a reference taken by {@link materializeLocalSourceFile}. Pass the
+ * returned File's `.name`. No-op for small/remote sources, whose names were
+ * never retained.
  */
-export function releaseLocalSourceFile(videoUrl: string): void {
-	const entry = activeSources.get(videoUrl);
-	if (!entry) return;
-	entry.refs -= 1;
-	if (entry.refs <= 0) activeSources.delete(videoUrl);
+export function releaseLocalSourceFile(cacheName: string): void {
+	const refs = activeCacheRefs.get(cacheName);
+	if (refs === undefined) return;
+	if (refs <= 1) activeCacheRefs.delete(cacheName);
+	else activeCacheRefs.set(cacheName, refs - 1);
 }
 
 function activeCacheNames(): Set<string> {
-	const names = new Set<string>();
-	for (const entry of activeSources.values()) names.add(entry.cacheName);
-	return names;
+	return new Set(activeCacheRefs.keys());
 }
 
 /** Stable non-cryptographic hash for building a cache key from a path. */
@@ -157,7 +152,7 @@ async function copyToOpfsFile(
 	const existing = await handle.getFile();
 	if (existing.size === size) {
 		options?.onProgress?.({ copiedBytes: size, totalBytes: size });
-		retainSource(videoUrl, cacheName);
+		retainCache(cacheName);
 		return existing;
 	}
 
@@ -201,7 +196,7 @@ async function copyToOpfsFile(
 			`Streamed copy is incomplete (${file.size} of ${size} bytes); the source video may still be in use.`,
 		);
 	}
-	retainSource(videoUrl, cacheName);
+	retainCache(cacheName);
 	return file;
 }
 

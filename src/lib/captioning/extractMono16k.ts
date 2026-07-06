@@ -161,6 +161,7 @@ export async function extractMono16kFromVideoUrl(
 		return truncateAndResampleTo16k(pcm.mono, pcm.sampleRate, pcm.durationSec, options?.signal);
 	} finally {
 		// Release the OPFS cache reference taken when streaming a large source.
-		releaseLocalSourceFile(videoUrl);
+		// The File name is the cache-entry key (no-op for small/remote sources).
+		releaseLocalSourceFile(file.name);
 	}
 }

@@ -184,7 +184,7 @@ describe("materializeLocalSourceFile (large file OPFS path)", () => {
 		expect(api.readFileChunk).toHaveBeenCalledTimes(3);
 		expect(api.readBinaryFile).not.toHaveBeenCalled();
 
-		releaseLocalSourceFile("/rec/a.mp4");
+		releaseLocalSourceFile(file.name);
 	});
 
 	it("reuses the cached copy on a second call without re-streaming", async () => {
@@ -193,14 +193,15 @@ describe("materializeLocalSourceFile (large file OPFS path)", () => {
 		stubElectronAPI(api);
 		stubOpfs(new FakeDir());
 
-		await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS);
+		const first = await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS);
 		const firstReads = api.readFileChunk.mock.calls.length;
-		await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS);
+		const second = await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS);
 
 		expect(api.readFileChunk.mock.calls.length).toBe(firstReads); // no new reads
+		expect(second.name).toBe(first.name);
 
-		releaseLocalSourceFile("/rec/b.mp4");
-		releaseLocalSourceFile("/rec/b.mp4");
+		releaseLocalSourceFile(first.name);
+		releaseLocalSourceFile(second.name);
 	});
 
 	it("keeps a cache entry that is still referenced by another active source", async () => {
@@ -208,16 +209,16 @@ describe("materializeLocalSourceFile (large file OPFS path)", () => {
 		stubOpfs(root);
 
 		stubElectronAPI(largeSourceApi("/rec/a.mp4", new Uint8Array([1, 2, 3, 4, 5])));
-		await materializeLocalSourceFile("/rec/a.mp4", "a.mp4", OPTS); // A retained
+		const a = await materializeLocalSourceFile("/rec/a.mp4", "a.mp4", OPTS); // A retained
 
 		stubElectronAPI(largeSourceApi("/rec/b.mp4", new Uint8Array([6, 7, 8, 9, 10])));
-		await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS); // prunes, but A is active
+		const b = await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS); // prunes, A active
 
 		// A must NOT have been pruned while still in use.
 		expect(cacheDir(root)?.files.size).toBe(2);
 
-		releaseLocalSourceFile("/rec/a.mp4");
-		releaseLocalSourceFile("/rec/b.mp4");
+		releaseLocalSourceFile(a.name);
+		releaseLocalSourceFile(b.name);
 	});
 
 	it("prunes a cache entry once it has been released", async () => {
@@ -225,20 +226,46 @@ describe("materializeLocalSourceFile (large file OPFS path)", () => {
 		stubOpfs(root);
 
 		stubElectronAPI(largeSourceApi("/rec/a.mp4", new Uint8Array([1, 2, 3, 4, 5])));
-		await materializeLocalSourceFile("/rec/a.mp4", "a.mp4", OPTS); // A retained
+		const a = await materializeLocalSourceFile("/rec/a.mp4", "a.mp4", OPTS); // A retained
 
 		stubElectronAPI(largeSourceApi("/rec/b.mp4", new Uint8Array([6, 7, 8, 9, 10])));
-		await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS); // B retained
+		const b = await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS); // B retained
 
-		releaseLocalSourceFile("/rec/a.mp4"); // A no longer in use
+		releaseLocalSourceFile(a.name); // A no longer in use
 
 		stubElectronAPI(largeSourceApi("/rec/c.mp4", new Uint8Array([11, 12, 13, 14, 15])));
-		await materializeLocalSourceFile("/rec/c.mp4", "c.mp4", OPTS); // prunes A, keeps B, adds C
+		const c = await materializeLocalSourceFile("/rec/c.mp4", "c.mp4", OPTS); // prunes A, keeps B+C
 
 		// A pruned; B (still active) and C remain.
 		expect(cacheDir(root)?.files.size).toBe(2);
 
-		releaseLocalSourceFile("/rec/b.mp4");
-		releaseLocalSourceFile("/rec/c.mp4");
+		releaseLocalSourceFile(b.name);
+		releaseLocalSourceFile(c.name);
+	});
+
+	it("removes the partial cache entry when a chunk read fails mid-copy", async () => {
+		const root = new FakeDir();
+		stubOpfs(root);
+
+		const source = new Uint8Array([1, 2, 3, 4, 5, 6, 7]);
+		const api = largeSourceApi("/rec/err.mp4", source);
+		let reads = 0;
+		api.readFileChunk = vi.fn(async (_url: string, offset: number, length: number) => {
+			reads += 1;
+			if (reads === 2) return { success: false, message: "disk read failed" };
+			return {
+				success: true,
+				data: source.slice(offset, offset + length).buffer,
+				bytesRead: Math.min(length, source.byteLength - offset),
+			};
+		});
+		stubElectronAPI(api);
+
+		await expect(materializeLocalSourceFile("/rec/err.mp4", "err.mp4", OPTS)).rejects.toThrow(
+			/disk read failed/,
+		);
+
+		// The partial copy is cleaned up and holds no live reference.
+		expect(cacheDir(root)?.files.size ?? 0).toBe(0);
 	});
 });

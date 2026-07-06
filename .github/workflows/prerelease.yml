@@ -92,8 +92,10 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # The main-protection ruleset forbids direct pushes to main from workflow tokens.
-          # Push to a release branch and merge via PR instead (merge via PAT bypasses as EtienneLescot).
+          # The release branch is FROZEN between RC cut and stable promotion. The bump
+          # commit lives on release/v${PRERELEASE} only; nothing is merged into main
+          # until promote.yml publishes the stable tag, so any features merged into
+          # main after this step are NOT in the RC build.
           BRANCH="release/v${PRERELEASE}"
           # Delete remote branch first so the push below is always fast-forward (idempotent on rerun).
           git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ":${BRANCH}" 2>/dev/null || true
@@ -102,39 +104,20 @@ jobs:
           git commit -m "chore(release): bump to ${PRERELEASE} [skip ci]"
           git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
 
-      - name: Open PR and rebase-merge into main
-        env:
-          # Org policy blocks GITHUB_TOKEN write, so we use the PAT for both PR create and merge.
-          # PAT (EtienneLescot) is a ruleset bypass actor -> the merge doesn't need approval.
-          GH_TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
-          PRERELEASE: ${{ steps.version.outputs.prerelease }}
-        run: |
-          set -euo pipefail
-          BRANCH="release/v${PRERELEASE}"
-          gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "chore(release): bump to ${PRERELEASE}" \
-            --body "Automated version bump from the prerelease workflow. Rebase-merged via PAT; bypass applies because EtienneLescot is a ruleset bypass actor." \
-            --repo "$GITHUB_REPOSITORY"
-          PR_NUMBER=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' --repo "$GITHUB_REPOSITORY")
-          gh pr merge "$PR_NUMBER" --rebase --delete-branch --admin \
-            --repo "$GITHUB_REPOSITORY"
-
-      - name: Push RC tag
+      - name: Push RC tag on the release branch
         env:
           # Use GITHUB_TOKEN for the tag push: a tag is a ref, not a file change, so
           # the workflows:write permission isn't needed.
           # Note: GITHUB_TOKEN tag pushes do NOT trigger build.yml in this org's setup,
           # so we explicitly trigger it via gh workflow run right after.
           RC_TAG: ${{ steps.version.outputs.rc_tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
           set -euo pipefail
-          # After gh pr merge --rebase, the bump commit is on origin/main. Refresh the
-          # local main and tag the resulting HEAD so the tag points at the merged commit.
-          git fetch origin main
-          git checkout main
-          git reset --hard origin/main
+          BRANCH="release/v${PRERELEASE}"
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git reset --hard "origin/${BRANCH}"
           # Delete remote tag first (idempotent on rerun) and any local tag.
           git push origin ":${RC_TAG}" 2>/dev/null || true
           git tag -d "$RC_TAG" 2>/dev/null || true

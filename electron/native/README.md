@@ -64,6 +64,7 @@ Current V2 JSON shape:
   "videoWidth": 1920,
   "videoHeight": 1080,
   "fps": 60,
+  "preferSoftwareEncoder": false,
   "captureSystemAudio": false,
   "captureMic": false,
   "microphoneDeviceId": "default",
@@ -83,12 +84,15 @@ Current V2 JSON shape:
 
 The current helper implementation supports display/window video capture, system audio loopback, selected-microphone capture, Media Foundation webcam capture, and a DirectShow webcam fallback for virtual cameras that are not exposed through Media Foundation. Webcam frames are currently composed into the primary MP4 as a bottom-right picture-in-picture overlay. Browser `deviceId` values do not always map to Media Foundation symbolic links or WASAPI endpoint IDs, so the renderer passes both browser IDs and user-visible device names. For microphones, the helper tries the requested WASAPI endpoint ID first, then resolves an active capture endpoint by `microphoneDeviceName`, then falls back to the default endpoint. For webcams, Electron resolves a matching DirectShow filter CLSID for the selected label; the helper uses Media Foundation first, then that exact DirectShow filter when the requested camera is absent from Media Foundation.
 
-Encoder diagnostic on sink-writer failure: when `MFCreateSinkWriterFromURL` fails, the helper logs the registered H.264 video encoder MFT count (via `MFTEnumEx`), the registered AAC encoder count when audio was requested, and the hex HRESULT. If no H.264 encoder is registered, it additionally emits the four-bullet actionable error (missing Media Feature Pack / GPU driver registration / empty `HKLM:\SOFTWARE\Microsoft\Windows Media Foundation\Transforms` / reboot). If an H.264 encoder IS registered but the sink writer still failed, it logs a hint pointing at invalid output path, missing MP4 mux, or GPU driver incompatibility. The diagnostic runs only on the failure path — there is no pre-flight gating check, because `MFTEnumEx` and `MFCreateSinkWriterFromURL` can disagree about which H.264 encoders are "available" in non-interactive / Session 0 contexts, and a pre-flight zero-count would block a recording the sink writer can otherwise complete.
+Encoder selection: by default the helper keeps the existing sink-writer path first. If that path fails while setting up H.264, it retries with the Microsoft software H.264 encoder (`mfh264enc.dll`) registered locally in the helper process and hardware transforms disabled for that retry. Set `preferSoftwareEncoder: true` in the helper JSON, or set `OPENSCREEN_WGC_PREFER_SOFTWARE_ENCODER=true` before launching Electron, to force the software path from the first attempt.
+
+Encoder diagnostic on final sink-writer failure: when the final `MFCreateSinkWriterFromURL` attempt fails, the helper logs the registered H.264 video encoder MFT count (via `MFTEnumEx`), the registered AAC encoder count when audio was requested, and the hex HRESULT. If no H.264 encoder is registered, it additionally emits the four-bullet actionable error (missing Media Feature Pack / GPU driver registration / empty `HKLM:\SOFTWARE\Microsoft\Windows Media Foundation\Transforms` / reboot). If an H.264 encoder IS registered but the sink writer still failed, it logs a hint pointing at invalid output path, missing MP4 mux, or GPU driver incompatibility. There is still no fail-fast pre-flight gate because `MFTEnumEx` and `MFCreateSinkWriterFromURL` can disagree about which H.264 encoders are available in non-interactive / Session 0 contexts.
 
 Smoke-test the helper with:
 
 ```powershell
 npm run test:wgc-helper:win
+npm run test:wgc-helper:win -- --software-encoder
 npm run test:wgc-window:win
 npm run test:wgc-audio:win
 npm run test:wgc-mic:win

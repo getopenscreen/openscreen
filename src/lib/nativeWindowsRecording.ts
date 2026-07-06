@@ -2,6 +2,7 @@ export type NativeWindowsSourceType = "display" | "window";
 
 export type NativeWindowsRecordingRequest = {
 	recordingId?: number;
+	preferSoftwareEncoder?: boolean;
 	source: {
 		type: NativeWindowsSourceType;
 		sourceId: string;

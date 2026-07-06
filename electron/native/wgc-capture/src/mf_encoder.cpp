@@ -123,6 +123,99 @@ void logMissingH264EncoderError() {
         << std::endl;
 }
 
+constexpr const char* kVideoEncoderSelectionDefault = "default";
+constexpr const char* kVideoEncoderSelectionSoftwarePreferred = "software-preferred";
+constexpr const char* kVideoEncoderSelectionSoftwareFallback = "software-fallback";
+
+HRESULT ensureSoftwareH264EncoderRegisteredForProcess() {
+    static std::mutex registrationMutex;
+    static bool attempted = false;
+    static HRESULT result = E_FAIL;
+
+    std::scoped_lock lock(registrationMutex);
+    if (attempted) {
+        return result;
+    }
+    attempted = true;
+
+    MFT_REGISTER_TYPE_INFO inputType{};
+    inputType.guidMajorType = MFMediaType_Video;
+    inputType.guidSubtype = GUID_NULL;
+
+    MFT_REGISTER_TYPE_INFO outputType{};
+    outputType.guidMajorType = MFMediaType_Video;
+    outputType.guidSubtype = MFVideoFormat_H264;
+
+    result = MFTRegisterLocalByCLSID(
+        CLSID_MSH264EncoderMFT,
+        MFT_CATEGORY_VIDEO_ENCODER,
+        L"Microsoft H.264 Encoder MFT (software)",
+        MFT_ENUM_FLAG_SYNCMFT,
+        1,
+        &inputType,
+        1,
+        &outputType);
+    if (FAILED(result)) {
+        std::cerr << "ERROR: MFTRegisterLocalByCLSID(CLSID_MSH264EncoderMFT) failed (hr=0x"
+                  << std::hex << result << std::dec << ")" << std::endl;
+    }
+    return result;
+}
+
+HRESULT createSinkWriterFromUrl(
+    const std::wstring& outputPath,
+    bool forceSoftwareEncoder,
+    Microsoft::WRL::ComPtr<IMFSinkWriter>& sinkWriter) {
+    Microsoft::WRL::ComPtr<IMFAttributes> attributes;
+    if (forceSoftwareEncoder) {
+        const HRESULT registerHr = ensureSoftwareH264EncoderRegisteredForProcess();
+        if (FAILED(registerHr)) {
+            return registerHr;
+        }
+
+        HRESULT hr = MFCreateAttributes(&attributes, 1);
+        if (FAILED(hr)) {
+            std::cerr << "ERROR: MFCreateAttributes(sink writer) failed (hr=0x"
+                      << std::hex << hr << std::dec << ")" << std::endl;
+            return hr;
+        }
+        hr = attributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, FALSE);
+        if (FAILED(hr)) {
+            std::cerr << "ERROR: Set MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS failed (hr=0x"
+                      << std::hex << hr << std::dec << ")" << std::endl;
+            return hr;
+        }
+    }
+
+    return MFCreateSinkWriterFromURL(
+        outputPath.c_str(), nullptr, attributes.Get(), &sinkWriter);
+}
+
+void logSinkWriterCreateFailure(HRESULT sinkWriterHr, const AudioInputFormat* audioFormat) {
+    const UINT32 h264EncoderCount = countRegisteredH264VideoEncoders();
+    const UINT32 aacEncoderCount = (audioFormat != nullptr)
+        ? countRegisteredAacAudioEncoders()
+        : 0;
+    std::cerr << "ERROR: MFCreateSinkWriterFromURL failed (hr=0x"
+              << std::hex << sinkWriterHr << std::dec << ")" << std::endl;
+    std::cerr << "  Registered H.264 video encoder MFTs: " << h264EncoderCount
+              << std::endl;
+    if (audioFormat != nullptr) {
+        std::cerr << "  Registered AAC audio encoder MFTs: " << aacEncoderCount
+                  << std::endl;
+    }
+    if (h264EncoderCount == 0) {
+        logMissingH264EncoderError();
+    } else {
+        std::cerr
+            << "  An H.264 encoder MFT is registered but the sink writer "
+            << "still failed. Possible causes: invalid output path or "
+            << "permissions, no MP4 mux configured, or GPU driver "
+            << "incompatibility with this Media Foundation build."
+            << std::endl;
+    }
+}
+
 void setFrameSize(IMFMediaType* type, UINT32 width, UINT32 height) {
     MFSetAttributeSize(type, MF_MT_FRAME_SIZE, width, height);
 }
@@ -184,6 +277,10 @@ MFEncoder::~MFEncoder() {
     finalize();
 }
 
+const char* MFEncoder::videoEncoderSelection() const {
+    return videoEncoderSelection_;
+}
+
 bool MFEncoder::initialize(
     const std::wstring& outputPath,
     int width,
@@ -192,21 +289,14 @@ bool MFEncoder::initialize(
     int bitrate,
     ID3D11Device* device,
     ID3D11DeviceContext* context,
-    const AudioInputFormat* audioFormat) {
+    const AudioInputFormat* audioFormat,
+    MFEncoderOptions options) {
     width_ = (std::max(2, width) / 2) * 2;
     height_ = (std::max(2, height) / 2) * 2;
     fps_ = std::max(1, fps);
     device_ = device;
     context_ = context;
-
-    // No H.264 encoder pre-flight check here. MFTEnumEx and
-    // MFCreateSinkWriterFromURL can disagree about which H.264 encoders are
-    // "available" in non-interactive / Session 0 contexts (NVENC et al. are
-    // registered but their COM server may not fully activate from a service
-    // session). A pre-flight that fails fast on a zero MFTEnumEx count would
-    // therefore break a recording that the sink writer can complete
-    // successfully. The diagnostic dump below runs only on the failure path,
-    // so a healthy MFTEnumEx result never blocks a working recording.
+    videoEncoderSelection_ = kVideoEncoderSelectionDefault;
 
     if (!succeeded(MFStartup(MF_VERSION), "MFStartup")) {
         return false;
@@ -224,47 +314,6 @@ bool MFEncoder::initialize(
     setFrameRate(outputType.Get(), static_cast<UINT32>(fps_));
     setPixelAspectRatio(outputType.Get());
 
-    HRESULT sinkWriterHr = MFCreateSinkWriterFromURL(
-        outputPath.c_str(), nullptr, nullptr, &sinkWriter_);
-    if (FAILED(sinkWriterHr)) {
-        // The HRESULT alone is not actionable. Tell the user whether an H.264
-        // encoder is registered at all (no H.264 == the MFP missing-MFT path),
-        // whether AAC is registered (only when audio is requested), and the
-        // hex HRESULT so the exact failure is greppable. Encoder counts are
-        // computed lazily here, only on the failure path, so a healthy
-        // recording does not pay for an MFTEnumEx call.
-        const UINT32 h264EncoderCount = countRegisteredH264VideoEncoders();
-        const UINT32 aacEncoderCount = (audioFormat != nullptr)
-            ? countRegisteredAacAudioEncoders()
-            : 0;
-        std::cerr << "ERROR: MFCreateSinkWriterFromURL failed (hr=0x"
-                  << std::hex << sinkWriterHr << std::dec << ")" << std::endl;
-        std::cerr << "  Registered H.264 video encoder MFTs: " << h264EncoderCount
-                  << std::endl;
-        if (audioFormat != nullptr) {
-            std::cerr << "  Registered AAC audio encoder MFTs: " << aacEncoderCount
-                      << std::endl;
-        }
-        if (h264EncoderCount == 0) {
-            logMissingH264EncoderError();
-        } else {
-            std::cerr
-                << "  An H.264 encoder MFT is registered but the sink writer "
-                << "still failed. Possible causes: invalid output path or "
-                << "permissions, no MP4 mux configured, or GPU driver "
-                << "incompatibility with this Media Foundation build."
-                << std::endl;
-        }
-        return false;
-    }
-    if (!succeeded(sinkWriter_->AddStream(outputType.Get(), &videoStreamIndex_), "AddStream")) {
-        return false;
-    }
-
-    if (audioFormat && !configureAudioStream(*audioFormat)) {
-        return false;
-    }
-
     Microsoft::WRL::ComPtr<IMFMediaType> inputType;
     if (!succeeded(MFCreateMediaType(&inputType), "MFCreateMediaType(input)")) {
         return false;
@@ -277,15 +326,72 @@ bool MFEncoder::initialize(
     setFrameRate(inputType.Get(), static_cast<UINT32>(fps_));
     setPixelAspectRatio(inputType.Get());
 
-    if (!succeeded(sinkWriter_->SetInputMediaType(videoStreamIndex_, inputType.Get(), nullptr),
-                   "SetInputMediaType")) {
-        return false;
-    }
-    if (!succeeded(sinkWriter_->BeginWriting(), "BeginWriting")) {
-        return false;
+    auto resetSinkWriterAttempt = [&]() {
+        sinkWriter_.Reset();
+        videoStreamIndex_ = 0;
+        audioStreamIndex_ = 0;
+        hasAudioStream_ = false;
+        videoEncoderSelection_ = kVideoEncoderSelectionDefault;
+    };
+
+    auto configureSinkWriterAttempt = [&, audioFormat](
+        bool forceSoftwareEncoder,
+        const char* selection,
+        bool logCreateFailure) {
+        resetSinkWriterAttempt();
+
+        const HRESULT sinkWriterHr = createSinkWriterFromUrl(
+            outputPath,
+            forceSoftwareEncoder,
+            sinkWriter_);
+        if (FAILED(sinkWriterHr)) {
+            if (logCreateFailure) {
+                logSinkWriterCreateFailure(sinkWriterHr, audioFormat);
+            } else {
+                std::cerr << "WARNING: Default MFCreateSinkWriterFromURL failed (hr=0x"
+                          << std::hex << sinkWriterHr << std::dec << ")" << std::endl;
+            }
+            return false;
+        }
+        if (!succeeded(sinkWriter_->AddStream(outputType.Get(), &videoStreamIndex_), "AddStream")) {
+            return false;
+        }
+
+        if (audioFormat && !configureAudioStream(*audioFormat)) {
+            return false;
+        }
+
+        if (!succeeded(sinkWriter_->SetInputMediaType(videoStreamIndex_, inputType.Get(), nullptr),
+                       "SetInputMediaType")) {
+            return false;
+        }
+        if (!succeeded(sinkWriter_->BeginWriting(), "BeginWriting")) {
+            return false;
+        }
+
+        videoEncoderSelection_ = selection;
+        return true;
+    };
+
+    if (options.preferSoftwareEncoder) {
+        return configureSinkWriterAttempt(
+            true,
+            kVideoEncoderSelectionSoftwarePreferred,
+            true);
     }
 
-    return true;
+    if (configureSinkWriterAttempt(false, kVideoEncoderSelectionDefault, false)) {
+        return true;
+    }
+
+    std::cerr
+        << "WARNING: Default Media Foundation H.264 encoder setup failed; "
+        << "retrying with the Microsoft software H.264 encoder."
+        << std::endl;
+    return configureSinkWriterAttempt(
+        true,
+        kVideoEncoderSelectionSoftwareFallback,
+        true);
 }
 
 bool MFEncoder::configureAudioStream(const AudioInputFormat& audioFormat) {

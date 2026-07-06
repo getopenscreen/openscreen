@@ -26,6 +26,9 @@ const WITH_WEBCAM =
 const CAPTURE_CURSOR =
 	process.env.OPENSCREEN_WGC_TEST_CAPTURE_CURSOR === "true" ||
 	process.argv.includes("--capture-cursor");
+const WITH_SOFTWARE_ENCODER =
+	process.env.OPENSCREEN_WGC_TEST_SOFTWARE_ENCODER === "true" ||
+	process.argv.includes("--software-encoder");
 
 function runHelper(config) {
 	return new Promise((resolve, reject) => {
@@ -237,6 +240,7 @@ const fixtureWindow = WITH_WINDOW ? await startFixtureWindow() : null;
 const config = {
 	schemaVersion: 2,
 	recordingId: Date.now(),
+	preferSoftwareEncoder: WITH_SOFTWARE_ENCODER,
 	outputPath,
 	sourceType: fixtureWindow ? "window" : "display",
 	sourceId: fixtureWindow ? fixtureWindow.sourceId : "screen:0:0",
@@ -314,6 +318,10 @@ const cursorCaptureLine = result.stdout
 	.split(/\r?\n/)
 	.find((line) => line.includes('"event":"cursor-capture"'));
 const cursorCapture = cursorCaptureLine ? JSON.parse(cursorCaptureLine) : null;
+const encoderSelectionLine = result.stdout
+	.split(/\r?\n/)
+	.find((line) => line.includes('"event":"encoder-selection"'));
+const encoderSelection = encoderSelectionLine ? JSON.parse(encoderSelectionLine) : null;
 const nativeWebcamDiagnostics = result.stderr
 	.split(/\r?\n/)
 	.filter((line) => line.includes("Native webcam candidate"));
@@ -338,6 +346,14 @@ if (
 	throw new Error(
 		`WGC helper did not apply requested cursor capture mode (${CAPTURE_CURSOR}): ${result.stdout}`,
 	);
+}
+if (
+	WITH_SOFTWARE_ENCODER &&
+	(!encoderSelection ||
+		typeof encoderSelection.video !== "string" ||
+		!encoderSelection.video.startsWith("software"))
+) {
+	throw new Error(`WGC helper did not use the requested software encoder path: ${result.stdout}`);
 }
 if ((WITH_SYSTEM_AUDIO || WITH_MICROPHONE) && !hasAudio) {
 	throw new Error(`WGC helper output has no audio stream: ${outputPath}`);
@@ -375,6 +391,7 @@ console.log(
 				duration: stream.duration,
 			})),
 			cursorCapture,
+			encoderSelection,
 			selectedMicrophoneDeviceName: audioFormat?.microphoneDeviceName,
 			selectedWebcamDeviceName: webcamFormat?.deviceName,
 			nativeMicrophoneDiagnostics,

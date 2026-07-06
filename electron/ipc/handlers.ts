@@ -1621,9 +1621,17 @@ export function registerIpcHandlers(
 					: null;
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
+				const envPreferSoftwareEncoder = (
+					process.env.OPENSCREEN_WGC_PREFER_SOFTWARE_ENCODER ?? ""
+				).toLowerCase();
+				const preferSoftwareEncoder =
+					request.preferSoftwareEncoder === true ||
+					envPreferSoftwareEncoder === "true" ||
+					envPreferSoftwareEncoder === "1";
 				const config = {
 					schemaVersion: 2,
 					recordingId,
+					preferSoftwareEncoder,
 					outputPath,
 					sourceType: request.source.type,
 					sourceId: request.source.sourceId,
@@ -1665,6 +1673,9 @@ export function registerIpcHandlers(
 					video: request.video,
 					audio: request.audio,
 					webcam: request.webcam,
+					encoder: {
+						preferSoftwareEncoder,
+					},
 					cursor: {
 						mode: cursorCaptureMode,
 					},
@@ -1675,6 +1686,7 @@ export function registerIpcHandlers(
 					source: request.source,
 					audio: request.audio,
 					webcam: request.webcam,
+					encoder: { preferSoftwareEncoder },
 					cursor: { mode: cursorCaptureMode },
 					bounds,
 					sourceId: selectedSource?.id ?? null,

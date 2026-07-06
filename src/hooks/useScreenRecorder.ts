@@ -13,6 +13,7 @@ import {
 } from "@/lib/nativeWindowsRecording";
 import type { CursorCaptureMode, RecordedVideoAssetInput } from "@/lib/recordingSession";
 import { requestCameraAccess } from "@/lib/requestCameraAccess";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { createRecorderHandle, type RecorderHandle } from "./recorderHandle";
 
 const TARGET_FRAME_RATE = 60;
@@ -844,6 +845,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			const request: NativeWindowsRecordingRequest = {
 				recordingId: activeRecordingId,
+				preferSoftwareEncoder: loadUserPreferences().preferSoftwareEncoder,
 				source: {
 					type: sourceType,
 					sourceId: selectedSource.id,

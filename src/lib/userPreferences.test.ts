@@ -103,4 +103,19 @@ describe("user preferences", () => {
 
 		expect(loadUserPreferences().trayLayout).toBe("horizontal");
 	});
+
+	it("persists the software encoder preference", () => {
+		saveUserPreferences({ preferSoftwareEncoder: true });
+
+		expect(loadUserPreferences().preferSoftwareEncoder).toBe(true);
+	});
+
+	it("falls back to the default software encoder preference for invalid stored values", () => {
+		localStorage.setItem(
+			"openscreen_user_preferences",
+			JSON.stringify({ preferSoftwareEncoder: "yes" }),
+		);
+
+		expect(loadUserPreferences().preferSoftwareEncoder).toBe(false);
+	});
 });

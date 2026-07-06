@@ -26,6 +26,10 @@ struct AudioInputFormat {
     UINT32 avgBytesPerSec = 0;
 };
 
+struct MFEncoderOptions {
+    bool preferSoftwareEncoder = false;
+};
+
 class MFEncoder {
 public:
     MFEncoder() = default;
@@ -42,11 +46,13 @@ public:
         int bitrate,
         ID3D11Device* device,
         ID3D11DeviceContext* context,
-        const AudioInputFormat* audioFormat = nullptr);
+        const AudioInputFormat* audioFormat = nullptr,
+        MFEncoderOptions options = {});
     bool writeFrame(ID3D11Texture2D* texture, int64_t timestampHns, const BgraFrameView* webcamFrame = nullptr);
     bool writeBgraFrame(const BgraFrameView& frame, int64_t timestampHns);
     bool writeAudio(const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns);
     bool finalize();
+    const char* videoEncoderSelection() const;
 
 private:
     bool ensureStagingTexture(ID3D11Texture2D* texture);
@@ -72,4 +78,5 @@ private:
     int64_t firstTimestampHns_ = -1;
     int64_t lastTimestampHns_ = -1;
     bool finalized_ = false;
+    const char* videoEncoderSelection_ = "default";
 };

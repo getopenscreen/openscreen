@@ -40,6 +40,7 @@ struct CaptureConfig {
     bool captureMic = false;
     bool captureCursor = false;
     bool webcamEnabled = false;
+    bool preferSoftwareEncoder = false;
     std::string microphoneDeviceId;
     std::string microphoneDeviceName;
     double microphoneGain = 1.0;
@@ -338,6 +339,7 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.captureMic = findBool(json, "captureMic", false);
     config.captureCursor = findBool(json, "captureCursor", false);
     config.webcamEnabled = findBool(json, "webcamEnabled", false);
+    config.preferSoftwareEncoder = findBool(json, "preferSoftwareEncoder", false);
     config.microphoneDeviceId = findString(json, "microphoneDeviceId");
     config.microphoneDeviceName = findString(json, "microphoneDeviceName");
     config.microphoneGain = findDouble(json, "microphoneGain", 1.0);
@@ -502,6 +504,9 @@ int main(int argc, char* argv[]) {
                   << "}" << std::endl;
     }
 
+    MFEncoderOptions encoderOptions{};
+    encoderOptions.preferSoftwareEncoder = config.preferSoftwareEncoder;
+
     MFEncoder encoder;
     if (!encoder.initialize(
             utf8ToWide(config.outputPath),
@@ -511,11 +516,16 @@ int main(int argc, char* argv[]) {
             bitrate,
             session.device(),
             session.context(),
-            audioFormat ? &encoderAudioFormat : nullptr)) {
+            audioFormat ? &encoderAudioFormat : nullptr,
+            encoderOptions)) {
         std::cerr << "ERROR: Failed to initialize Media Foundation encoder" << std::endl;
         return 1;
     }
-
+    std::cout << "{\"event\":\"encoder-selection\",\"schemaVersion\":2,\"video\":\""
+              << encoder.videoEncoderSelection()
+              << "\",\"preferSoftwareEncoder\":"
+              << (config.preferSoftwareEncoder ? "true" : "false")
+              << "}" << std::endl;
     MFEncoder webcamEncoder;
     if (writeSeparateWebcam) {
         const int webcamPixels = std::max(1, webcamCapture.width()) * std::max(1, webcamCapture.height());
@@ -528,7 +538,8 @@ int main(int argc, char* argv[]) {
                 webcamBitrate,
                 session.device(),
                 session.context(),
-                nullptr)) {
+                nullptr,
+                encoderOptions)) {
             std::cerr << "ERROR: Failed to initialize native webcam encoder" << std::endl;
             return 1;
         }

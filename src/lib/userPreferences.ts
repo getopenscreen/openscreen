@@ -33,6 +33,8 @@ export interface UserPreferences {
 	projectFolder: string | null;
 	/** Recording HUD control layout */
 	trayLayout: "horizontal" | "vertical";
+	/** Force the Windows native recorder to use the software H.264 encoder */
+	preferSoftwareEncoder: boolean;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -43,6 +45,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	exportFolder: null,
 	projectFolder: null,
 	trayLayout: "horizontal",
+	preferSoftwareEncoder: false,
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -99,6 +102,10 @@ export function loadUserPreferences(): UserPreferences {
 			raw.trayLayout === "horizontal" || raw.trayLayout === "vertical"
 				? raw.trayLayout
 				: DEFAULT_PREFS.trayLayout,
+		preferSoftwareEncoder:
+			typeof raw.preferSoftwareEncoder === "boolean"
+				? raw.preferSoftwareEncoder
+				: DEFAULT_PREFS.preferSoftwareEncoder,
 	};
 }
 

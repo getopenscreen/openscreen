@@ -70,6 +70,23 @@ function activeCacheNames(): Set<string> {
 	return new Set(activeCacheRefs.keys());
 }
 
+const MIME_BY_EXTENSION: Record<string, string> = {
+	mp4: "video/mp4",
+	m4v: "video/mp4",
+	mov: "video/quicktime",
+	webm: "video/webm",
+	mkv: "video/x-matroska",
+	avi: "video/x-msvideo",
+};
+
+/** Infers a video MIME type from the file extension (recordings can be mp4 or webm). */
+function mimeTypeForPath(p: string): string {
+	const clean = p.toLowerCase().split(/[?#]/, 1)[0];
+	const dot = clean.lastIndexOf(".");
+	const ext = dot >= 0 ? clean.slice(dot + 1) : "";
+	return MIME_BY_EXTENSION[ext] ?? "application/octet-stream";
+}
+
 /** Stable non-cryptographic hash for building a cache key from a path. */
 function hashString(input: string): string {
 	let hash = 5381;
@@ -111,7 +128,7 @@ export async function materializeLocalSourceFile(
 			throw new Error(result.message || result.error || "Failed to read source video");
 		}
 		const name = (result.path || filename).split(/[\\/]/).pop() || filename;
-		return new File([result.data], name, { type: "video/mp4" });
+		return new File([result.data], name, { type: mimeTypeForPath(name) });
 	}
 
 	// Large recording: stream into OPFS and hand back a disk-backed File.
@@ -141,63 +158,72 @@ async function copyToOpfsFile(
 	// the same recording reuse the cached copy instead of re-streaming gigabytes.
 	const cacheName = `${hashString(videoUrl)}-${size}-${Math.round(mtimeMs)}.bin`;
 
-	// Keep the entry we are about to use plus anything a live demuxer still reads.
-	const keep = activeCacheNames();
-	keep.add(cacheName);
-	await pruneStaleEntries(dir, keep);
-
-	const handle = await dir.getFileHandle(cacheName, { create: true });
-
-	// Reuse a complete prior copy.
-	const existing = await handle.getFile();
-	if (existing.size === size) {
-		options?.onProgress?.({ copiedBytes: size, totalBytes: size });
-		retainCache(cacheName);
-		return existing;
-	}
-
-	const chunkBytes = options?.chunkBytes ?? COPY_CHUNK_BYTES;
-	const writable = await handle.createWritable();
+	// Retain BEFORE pruning/writing: a concurrent materialization builds its keep
+	// set from the refcounts, so retaining only after the copy finished would let
+	// it prune this entry mid-write and fail the copy. Released in the catch
+	// below on failure; on success the caller releases once the demuxer is done.
+	retainCache(cacheName);
 	try {
-		let offset = 0;
-		while (offset < size) {
-			const length = Math.min(chunkBytes, size - offset);
-			const chunk = await window.electronAPI.readFileChunk(videoUrl, offset, length);
-			if (!chunk.success || !chunk.data) {
-				throw new Error(chunk.message || chunk.error || "Failed to read source video chunk");
-			}
-			// Guard against a short read that would otherwise loop forever.
-			if (chunk.data.byteLength === 0) {
-				throw new Error("Source video read returned no data before reaching the end.");
-			}
-			await writable.write(chunk.data);
-			offset += chunk.data.byteLength;
-			options?.onProgress?.({ copiedBytes: offset, totalBytes: size });
+		await pruneStaleEntries(dir, activeCacheNames());
+
+		const handle = await dir.getFileHandle(cacheName, { create: true });
+
+		// Reuse a complete prior copy.
+		const existing = await handle.getFile();
+		if (existing.size === size) {
+			options?.onProgress?.({ copiedBytes: size, totalBytes: size });
+			return existing;
 		}
-		await writable.close();
+
+		const chunkBytes = options?.chunkBytes ?? COPY_CHUNK_BYTES;
+		const writable = await handle.createWritable();
+		try {
+			let offset = 0;
+			while (offset < size) {
+				const length = Math.min(chunkBytes, size - offset);
+				const chunk = await window.electronAPI.readFileChunk(videoUrl, offset, length);
+				if (!chunk.success || !chunk.data) {
+					throw new Error(chunk.message || chunk.error || "Failed to read source video chunk");
+				}
+				// Guard against a short read that would otherwise loop forever.
+				if (chunk.data.byteLength === 0) {
+					throw new Error("Source video read returned no data before reaching the end.");
+				}
+				await writable.write(chunk.data);
+				offset += chunk.data.byteLength;
+				options?.onProgress?.({ copiedBytes: offset, totalBytes: size });
+			}
+			await writable.close();
+		} catch (error) {
+			try {
+				await writable.abort();
+			} catch {
+				// ignore abort failure; surface the original error
+			}
+			throw error;
+		}
+
+		const file = await handle.getFile();
+		if (file.size !== size) {
+			throw new Error(
+				`Streamed copy is incomplete (${file.size} of ${size} bytes); the source video may still be in use.`,
+			);
+		}
+		return file;
 	} catch (error) {
-		try {
-			await writable.abort();
-		} catch {
-			// ignore abort failure; surface the original error
-		}
-		// Drop the partial copy so a retry does not resume from a corrupt file.
-		try {
-			await dir.removeEntry(cacheName);
-		} catch {
-			// ignore cleanup failure
+		// Drop this operation's reference, then drop the (possibly partial) copy
+		// so a retry does not resume from a corrupt file — unless another
+		// in-flight operation still references the same entry.
+		releaseLocalSourceFile(cacheName);
+		if (!activeCacheRefs.has(cacheName)) {
+			try {
+				await dir.removeEntry(cacheName);
+			} catch {
+				// ignore cleanup failure
+			}
 		}
 		throw error;
 	}
-
-	const file = await handle.getFile();
-	if (file.size !== size) {
-		throw new Error(
-			`Streamed copy is incomplete (${file.size} of ${size} bytes); the source video may still be in use.`,
-		);
-	}
-	retainCache(cacheName);
-	return file;
 }
 
 /** Removes cached copies in the directory whose names are not in `keep`. */

@@ -10,7 +10,8 @@ function webDemuxerWasmUrl(): string {
 	return new URL("../exporter/wasm/web-demuxer.wasm", window.location.href).href;
 }
 
-function audioDataFrameToMono(frame: AudioData): Float32Array {
+/** Mixes one WebCodecs AudioData frame down to mono (averaged across channels). */
+export function audioDataFrameToMono(frame: AudioData): Float32Array {
 	const frames = frame.numberOfFrames;
 	const ch = frame.numberOfChannels;
 	const out = new Float32Array(frames);

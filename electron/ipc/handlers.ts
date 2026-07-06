@@ -2611,6 +2611,10 @@ export function registerIpcHandlers(
 		}
 	});
 
+	// Cap renderer-requested chunk sizes so a buggy or compromised renderer
+	// cannot make the main process allocate an arbitrarily large buffer.
+	const MAX_IPC_CHUNK_BYTES = 64 * 1024 * 1024;
+
 	// Read a byte range [offset, offset+length) from an approved video file.
 	// Lets the renderer stream a >2 GiB recording into OPFS one chunk at a time
 	// instead of materialising the whole file in memory, which fs.readFile cannot
@@ -2626,6 +2630,9 @@ export function registerIpcHandlers(
 			}
 			if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(length) || length <= 0) {
 				return { success: false, message: "Invalid chunk range" };
+			}
+			if (length > MAX_IPC_CHUNK_BYTES) {
+				return { success: false, message: "Requested chunk size exceeds limit" };
 			}
 
 			const handle = await fs.open(normalizedPath, "r");

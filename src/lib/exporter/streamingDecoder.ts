@@ -151,13 +151,12 @@ export async function loadFileAsArrayBuffer(
 	const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 
 	if (!isRemoteUrl && window.electronAPI) {
-		// This path loads the entire file into an ArrayBuffer (it feeds the trim
-		// waveform) and cannot stream, since decodeAudioData needs the whole file.
-		// readBinaryFile also copies the bytes in the main process during IPC, so a
-		// large recording would exhaust memory and crash. The waveform is cosmetic,
-		// so skip it above the in-memory limit; useAudioPeaks (the only caller)
-		// catches the throw and degrades to no waveform. The export path streams
-		// instead and does not rely on this function.
+		// This path loads the entire file into an ArrayBuffer for decodeAudioData,
+		// and readBinaryFile also copies the bytes in the main process during IPC,
+		// so a large recording would exhaust memory and crash. Callers must route
+		// oversized files elsewhere (useAudioPeaks streams peaks via
+		// computePeaksFromFileStreaming); this guard is a safety net for any
+		// caller that does not.
 		const info = await window.electronAPI.getReadableFileInfo?.(videoUrl);
 		if (info?.success && typeof info.size === "number" && info.size > MAX_IN_MEMORY_SOURCE_BYTES) {
 			throw new Error("Recording is too large to load into memory for waveform rendering.");

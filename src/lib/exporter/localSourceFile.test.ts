@@ -268,4 +268,78 @@ describe("materializeLocalSourceFile (large file OPFS path)", () => {
 		// The partial copy is cleaned up and holds no live reference.
 		expect(cacheDir(root)?.files.size ?? 0).toBe(0);
 	});
+
+	it("does not prune an entry that is still being written by a concurrent copy", async () => {
+		const root = new FakeDir();
+		stubOpfs(root);
+
+		const sourceA = new Uint8Array([1, 2, 3, 4, 5, 6]);
+		const sourceB = new Uint8Array([7, 8, 9, 10, 11]);
+		let releaseFirstChunk!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			releaseFirstChunk = resolve;
+		});
+		const sources: Record<string, Uint8Array> = {
+			"/rec/a.mp4": sourceA,
+			"/rec/b.mp4": sourceB,
+		};
+		// One shared API serving both URLs; A's first chunk read blocks on the gate
+		// so A sits mid-copy while B runs to completion (including B's prune pass).
+		const api = {
+			getReadableFileInfo: vi.fn(async (url: string) => ({
+				success: true,
+				size: sources[url].byteLength,
+				mtimeMs: 1,
+				path: url,
+			})),
+			readBinaryFile: vi.fn(),
+			readFileChunk: vi.fn(async (url: string, offset: number, length: number) => {
+				if (url === "/rec/a.mp4" && offset === 0) await gate;
+				const bytes = sources[url];
+				return {
+					success: true,
+					data: bytes.slice(offset, offset + length).buffer,
+					bytesRead: Math.min(length, bytes.byteLength - offset),
+				};
+			}),
+		};
+		stubElectronAPI(api);
+
+		const aPromise = materializeLocalSourceFile("/rec/a.mp4", "a.mp4", OPTS);
+		// Wait until A is inside its gated first chunk read (past retain + prune).
+		while (!api.readFileChunk.mock.calls.some(([url]) => url === "/rec/a.mp4")) {
+			await new Promise((r) => setTimeout(r, 0));
+		}
+
+		const b = await materializeLocalSourceFile("/rec/b.mp4", "b.mp4", OPTS);
+		// B's prune must have kept A's in-progress entry alive.
+		expect(cacheDir(root)?.files.size).toBe(2);
+
+		releaseFirstChunk();
+		const a = await aPromise;
+		expect(new Uint8Array(await a.arrayBuffer())).toEqual(sourceA);
+
+		releaseLocalSourceFile(a.name);
+		releaseLocalSourceFile(b.name);
+	});
+});
+
+describe("materializeLocalSourceFile (MIME inference)", () => {
+	it.each([
+		["/tmp/clip.webm", "video/webm"],
+		["/tmp/clip.mp4", "video/mp4"],
+		["/tmp/clip.mov", "video/quicktime"],
+		["/tmp/clip.bin", "application/octet-stream"],
+	])("infers the MIME type of %s as %s", async (path, expected) => {
+		stubElectronAPI({
+			getReadableFileInfo: vi.fn().mockResolvedValue({ success: true, size: 4, mtimeMs: 1, path }),
+			readBinaryFile: vi
+				.fn()
+				.mockResolvedValue({ success: true, data: new Uint8Array(4).buffer, path }),
+		});
+
+		const file = await materializeLocalSourceFile(path, "clip");
+
+		expect(file.type).toBe(expected);
+	});
 });

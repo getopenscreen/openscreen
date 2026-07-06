@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { materializeLocalSourceFile, releaseLocalSourceFile } from "@/lib/exporter/localSourceFile";
+import { MAX_IN_MEMORY_SOURCE_BYTES } from "@/lib/exporter/sourceFileLimits";
 import { loadFileAsArrayBuffer } from "@/lib/exporter/streamingDecoder";
+import { computePeaksFromFileStreaming } from "./streamingAudioPeaks";
 
 let _audioCtx: AudioContext | null = null;
 /** Returns the shared AudioContext, creating it lazily on first call. */
@@ -59,6 +62,33 @@ function computePeaksInWorker(
 }
 
 /**
+ * Routes to the right peaks pipeline for the source size. Small/remote files
+ * use the original decodeAudioData → worker path. Local recordings above the
+ * in-memory limit stream instead: the file is materialized into OPFS (reused by
+ * the export afterwards) and its audio is decoded chunk-by-chunk into peaks, so
+ * the whole recording is never held in memory.
+ */
+async function computePeaksForUrl(videoUrl: string, signal?: AbortSignal): Promise<Float32Array> {
+	const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
+	if (!isRemoteUrl && window.electronAPI?.getReadableFileInfo) {
+		const info = await window.electronAPI.getReadableFileInfo(videoUrl);
+		if (info.success && typeof info.size === "number" && info.size > MAX_IN_MEMORY_SOURCE_BYTES) {
+			const filename = (videoUrl.split(/[\\/]/).pop() || "video").replace(/^file:/, "");
+			const file = await materializeLocalSourceFile(videoUrl, filename);
+			try {
+				return await computePeaksFromFileStreaming(file, signal);
+			} finally {
+				releaseLocalSourceFile(file.name);
+			}
+		}
+	}
+
+	const { data: arrayBuffer } = await loadFileAsArrayBuffer(videoUrl);
+	const audioBuffer = await getAudioCtx().decodeAudioData(arrayBuffer);
+	return computePeaksInWorker(audioBuffer, signal);
+}
+
+/**
  * Decodes audio from `videoUrl` into paired [min, max] peaks (length = 2 * N
  * blocks). Returns `null` while decoding, and stays `null` on no audio track or
  * decode failure (silent degradation). Results are cached in a ref scoped to the
@@ -88,11 +118,7 @@ export function useAudioPeaks(videoUrl?: string): Float32Array | null {
 
 		(async () => {
 			try {
-				const { data: arrayBuffer } = await loadFileAsArrayBuffer(videoUrl);
-				if (cancelled) return;
-				const audioBuffer = await getAudioCtx().decodeAudioData(arrayBuffer);
-				if (cancelled) return;
-				const p = await computePeaksInWorker(audioBuffer, controller.signal);
+				const p = await computePeaksForUrl(videoUrl, controller.signal);
 				if (cancelled) return;
 				cacheRef.current.set(videoUrl, p);
 				setPeaks(p);

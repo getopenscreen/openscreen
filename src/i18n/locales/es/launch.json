@@ -48,7 +48,8 @@
 		"defaultSourceName": "Pantalla"
 	},
 	"recording": {
-		"selectSource": "Por favor selecciona una fuente para grabar"
+		"selectSource": "Por favor selecciona una fuente para grabar",
+		"saving": "Guardando..."
 	},
 	"language": "Idioma",
 	"systemLanguagePrompt": {

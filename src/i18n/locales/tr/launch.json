@@ -48,7 +48,8 @@
 		"defaultSourceName": "Ekran"
 	},
 	"recording": {
-		"selectSource": "Lütfen kayıt için bir kaynak seçin"
+		"selectSource": "Lütfen kayıt için bir kaynak seçin",
+		"saving": "Kaydediliyor..."
 	},
 	"language": "Dil",
 	"systemLanguagePrompt": {

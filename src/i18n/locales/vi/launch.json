@@ -44,7 +44,8 @@
 		"defaultSourceName": "Màn hình"
 	},
 	"recording": {
-		"selectSource": "Vui lòng chọn một nguồn để ghi"
+		"selectSource": "Vui lòng chọn một nguồn để ghi",
+		"saving": "Đang lưu..."
 	},
 	"language": "Ngôn ngữ",
 	"systemLanguagePrompt": {

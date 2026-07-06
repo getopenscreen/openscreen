@@ -1,14 +1,11 @@
-import { materializeLocalSourceFile } from "@/lib/exporter/localSourceFile";
+import { materializeLocalSourceFile, releaseLocalSourceFile } from "@/lib/exporter/localSourceFile";
+import { MAX_IN_MEMORY_SOURCE_BYTES } from "@/lib/exporter/sourceFileLimits";
 import { MAX_CAPTION_AUDIO_SEC } from "./captionConstants";
 import { extractMonoPcmViaWebDemuxer } from "./extractMono16kWebDemuxer";
 
 export { MAX_CAPTION_AUDIO_SEC };
 
 const FETCH_TIMEOUT_MS = 120_000;
-// Above this size, `file.arrayBuffer()` for the decodeAudioData path would try to
-// hold the whole recording in memory. Skip straight to the streaming web-demuxer
-// path instead (it reads audio packets on demand).
-const MAX_DECODE_AUDIO_DATA_BYTES = 1.5 * 1024 * 1024 * 1024;
 
 async function fetchWithTimeout(url: string, signal?: AbortSignal): Promise<Response> {
 	const ctrl = new AbortController();
@@ -152,13 +149,18 @@ export async function extractMono16kFromVideoUrl(
 		}
 	};
 
-	// Large recordings skip the in-memory decodeAudioData path (it would load the
-	// whole file) and go straight to the streaming web-demuxer path below.
-	const primary = file.size > MAX_DECODE_AUDIO_DATA_BYTES ? null : await tryDecodeAudioDataPath();
-	if (primary) {
-		return primary;
-	}
+	try {
+		// Large recordings skip the in-memory decodeAudioData path (it would load
+		// the whole file) and go straight to the streaming web-demuxer path below.
+		const primary = file.size > MAX_IN_MEMORY_SOURCE_BYTES ? null : await tryDecodeAudioDataPath();
+		if (primary) {
+			return primary;
+		}
 
-	const pcm = await extractMonoPcmViaWebDemuxer(file, options?.signal);
-	return truncateAndResampleTo16k(pcm.mono, pcm.sampleRate, pcm.durationSec, options?.signal);
+		const pcm = await extractMonoPcmViaWebDemuxer(file, options?.signal);
+		return truncateAndResampleTo16k(pcm.mono, pcm.sampleRate, pcm.durationSec, options?.signal);
+	} finally {
+		// Release the OPFS cache reference taken when streaming a large source.
+		releaseLocalSourceFile(videoUrl);
+	}
 }

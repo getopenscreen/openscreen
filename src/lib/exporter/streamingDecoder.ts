@@ -1,6 +1,10 @@
 import { WebDemuxer } from "web-demuxer";
 import type { SpeedRegion, TrimRegion } from "@/components/video-editor/types";
-import { materializeLocalSourceFile } from "./localSourceFile";
+import {
+	type MaterializeProgress,
+	materializeLocalSourceFile,
+	releaseLocalSourceFile,
+} from "./localSourceFile";
 
 const SOURCE_LOAD_TIMEOUT_MS = 60_000;
 // Large local recordings are streamed into OPFS before demuxing, which is
@@ -181,13 +185,20 @@ export class StreamingVideoDecoder {
 	private decoder: VideoDecoder | null = null;
 	private cancelled = false;
 	private metadata: DecodedVideoInfo | null = null;
+	// Local source URL streamed into OPFS, released on destroy() so its cache
+	// copy can be pruned once no demuxer is reading it.
+	private localSourceUrl: string | null = null;
 
 	/** Routes to the appropriate loader based on whether the source is local or remote. */
-	private async loadSourceFile(videoUrl: string): Promise<File> {
+	private async loadSourceFile(
+		videoUrl: string,
+		onProgress?: (progress: MaterializeProgress) => void,
+	): Promise<File> {
 		const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 		if (!isRemoteUrl && window.electronAPI) {
+			this.localSourceUrl = videoUrl;
 			return this.withTimeout(
-				StreamingVideoDecoder.loadLocalSourceFile(videoUrl),
+				StreamingVideoDecoder.loadLocalSourceFile(videoUrl, onProgress),
 				LOCAL_SOURCE_LOAD_TIMEOUT_MS,
 				"Timed out while loading the source video.",
 			);
@@ -204,9 +215,12 @@ export class StreamingVideoDecoder {
 	 * an OPFS-backed File so nothing multi-GB is held in memory; web-demuxer reads
 	 * the File on demand. See {@link materializeLocalSourceFile}.
 	 */
-	static async loadLocalSourceFile(videoUrl: string): Promise<File> {
+	static async loadLocalSourceFile(
+		videoUrl: string,
+		onProgress?: (progress: MaterializeProgress) => void,
+	): Promise<File> {
 		const filename = (videoUrl.split(/[\\/]/).pop() || "video").replace(/^file:/, "");
-		return materializeLocalSourceFile(videoUrl, filename);
+		return materializeLocalSourceFile(videoUrl, filename, { onProgress });
 	}
 
 	/** Loads a remote or blob video URL via fetch. */
@@ -220,8 +234,11 @@ export class StreamingVideoDecoder {
 		return new File([blob], filename, { type: blob.type });
 	}
 
-	async loadMetadata(videoUrl: string): Promise<DecodedVideoInfo> {
-		const file = await this.loadSourceFile(videoUrl);
+	async loadMetadata(
+		videoUrl: string,
+		onSourceProgress?: (progress: MaterializeProgress) => void,
+	): Promise<DecodedVideoInfo> {
+		const file = await this.loadSourceFile(videoUrl, onSourceProgress);
 
 		// Relative URL so it resolves in both dev (http) and packaged (file://) builds
 		const wasmUrl = new URL("./wasm/web-demuxer.wasm", window.location.href).href;
@@ -760,6 +777,11 @@ export class StreamingVideoDecoder {
 				/* ignore */
 			}
 			this.demuxer = null;
+		}
+
+		if (this.localSourceUrl) {
+			releaseLocalSourceFile(this.localSourceUrl);
+			this.localSourceUrl = null;
 		}
 	}
 

@@ -1,3 +1,5 @@
+import { MAX_IN_MEMORY_SOURCE_BYTES } from "./sourceFileLimits";
+
 /**
  * Loads a local recording as a `File` suitable for `web-demuxer`, without ever
  * holding the whole recording in memory.
@@ -19,10 +21,6 @@
  * an extra on-disk copy for the common case.
  */
 
-// Stay comfortably under Node's 2 GiB single-read cap so read-binary-file never
-// throws ERR_FS_FILE_TOO_LARGE. Anything larger is streamed via OPFS instead.
-const LARGE_FILE_THRESHOLD_BYTES = 1.5 * 1024 * 1024 * 1024;
-
 // Chunk size for streaming a large file into OPFS. Large enough to keep IPC
 // overhead low, small enough that peak memory stays bounded.
 const COPY_CHUNK_BYTES = 32 * 1024 * 1024;
@@ -32,6 +30,49 @@ const OPFS_CACHE_DIR = "openscreen-source-cache";
 export interface MaterializeProgress {
 	copiedBytes: number;
 	totalBytes: number;
+}
+
+export interface MaterializeOptions {
+	onProgress?: (progress: MaterializeProgress) => void;
+	/** Override the in-memory threshold (testing only). */
+	thresholdBytes?: number;
+	/** Override the OPFS copy chunk size (testing only). */
+	chunkBytes?: number;
+}
+
+/**
+ * Cache entries currently referenced by a live demuxer, keyed by source URL.
+ * Pruning never removes a name that is still in use, so a concurrent export or
+ * caption pass reading a different recording cannot have its copy deleted.
+ * Callers must {@link releaseLocalSourceFile} when the demuxer is destroyed.
+ */
+const activeSources = new Map<string, { cacheName: string; refs: number }>();
+
+function retainSource(videoUrl: string, cacheName: string): void {
+	const entry = activeSources.get(videoUrl);
+	if (entry && entry.cacheName === cacheName) {
+		entry.refs += 1;
+	} else {
+		// A new file revision (size/mtime change) supersedes any prior entry.
+		activeSources.set(videoUrl, { cacheName, refs: 1 });
+	}
+}
+
+/**
+ * Releases a reference taken by {@link materializeLocalSourceFile} for a large
+ * (OPFS-streamed) source. No-op for small sources and for URLs never streamed.
+ */
+export function releaseLocalSourceFile(videoUrl: string): void {
+	const entry = activeSources.get(videoUrl);
+	if (!entry) return;
+	entry.refs -= 1;
+	if (entry.refs <= 0) activeSources.delete(videoUrl);
+}
+
+function activeCacheNames(): Set<string> {
+	const names = new Set<string>();
+	for (const entry of activeSources.values()) names.add(entry.cacheName);
+	return names;
 }
 
 /** Stable non-cryptographic hash for building a cache key from a path. */
@@ -49,17 +90,19 @@ function hashString(input: string): string {
  *
  * @param videoUrl  Local file path or `file://` URL of the recording.
  * @param filename  Preferred file name for the returned `File`.
- * @param onProgress  Optional progress callback for the large-file copy.
+ * @param options   Progress callback and (testing) threshold/chunk overrides.
  */
 export async function materializeLocalSourceFile(
 	videoUrl: string,
 	filename: string,
-	onProgress?: (progress: MaterializeProgress) => void,
+	options?: MaterializeOptions,
 ): Promise<File> {
 	const api = window.electronAPI;
 	if (!api) {
 		throw new Error("Local source loading is only available in the desktop app.");
 	}
+
+	const threshold = options?.thresholdBytes ?? MAX_IN_MEMORY_SOURCE_BYTES;
 
 	const info = await api.getReadableFileInfo(videoUrl);
 	if (!info.success || typeof info.size !== "number") {
@@ -67,7 +110,7 @@ export async function materializeLocalSourceFile(
 	}
 
 	// Common case: small enough to read in one shot.
-	if (info.size <= LARGE_FILE_THRESHOLD_BYTES) {
+	if (info.size <= threshold) {
 		const result = await api.readBinaryFile(videoUrl);
 		if (!result.success || !result.data) {
 			throw new Error(result.message || result.error || "Failed to read source video");
@@ -79,14 +122,14 @@ export async function materializeLocalSourceFile(
 	// Large recording: stream into OPFS and hand back a disk-backed File.
 	// web-demuxer detects the container from content, so the File name is
 	// irrelevant here — the OPFS entry keeps its cache-key name.
-	return copyToOpfsFile(videoUrl, info.size, info.mtimeMs ?? 0, onProgress);
+	return copyToOpfsFile(videoUrl, info.size, info.mtimeMs ?? 0, options);
 }
 
 async function copyToOpfsFile(
 	videoUrl: string,
 	size: number,
 	mtimeMs: number,
-	onProgress?: (progress: MaterializeProgress) => void,
+	options?: MaterializeOptions,
 ): Promise<File> {
 	const getDirectory = navigator.storage?.getDirectory?.bind(navigator.storage);
 	if (!getDirectory) {
@@ -103,33 +146,38 @@ async function copyToOpfsFile(
 	// the same recording reuse the cached copy instead of re-streaming gigabytes.
 	const cacheName = `${hashString(videoUrl)}-${size}-${Math.round(mtimeMs)}.bin`;
 
-	await pruneStaleEntries(dir, cacheName);
+	// Keep the entry we are about to use plus anything a live demuxer still reads.
+	const keep = activeCacheNames();
+	keep.add(cacheName);
+	await pruneStaleEntries(dir, keep);
 
 	const handle = await dir.getFileHandle(cacheName, { create: true });
 
 	// Reuse a complete prior copy.
 	const existing = await handle.getFile();
 	if (existing.size === size) {
-		onProgress?.({ copiedBytes: size, totalBytes: size });
+		options?.onProgress?.({ copiedBytes: size, totalBytes: size });
+		retainSource(videoUrl, cacheName);
 		return existing;
 	}
 
+	const chunkBytes = options?.chunkBytes ?? COPY_CHUNK_BYTES;
 	const writable = await handle.createWritable();
 	try {
 		let offset = 0;
 		while (offset < size) {
-			const length = Math.min(COPY_CHUNK_BYTES, size - offset);
+			const length = Math.min(chunkBytes, size - offset);
 			const chunk = await window.electronAPI.readFileChunk(videoUrl, offset, length);
 			if (!chunk.success || !chunk.data) {
 				throw new Error(chunk.message || chunk.error || "Failed to read source video chunk");
 			}
-			await writable.write(chunk.data);
-			offset += chunk.data.byteLength;
-			onProgress?.({ copiedBytes: offset, totalBytes: size });
 			// Guard against a short read that would otherwise loop forever.
 			if (chunk.data.byteLength === 0) {
 				throw new Error("Source video read returned no data before reaching the end.");
 			}
+			await writable.write(chunk.data);
+			offset += chunk.data.byteLength;
+			options?.onProgress?.({ copiedBytes: offset, totalBytes: size });
 		}
 		await writable.close();
 	} catch (error) {
@@ -153,11 +201,12 @@ async function copyToOpfsFile(
 			`Streamed copy is incomplete (${file.size} of ${size} bytes); the source video may still be in use.`,
 		);
 	}
+	retainSource(videoUrl, cacheName);
 	return file;
 }
 
-/** Removes any cached copies in the directory other than the current key. */
-async function pruneStaleEntries(dir: FileSystemDirectoryHandle, keepName: string): Promise<void> {
+/** Removes cached copies in the directory whose names are not in `keep`. */
+async function pruneStaleEntries(dir: FileSystemDirectoryHandle, keep: Set<string>): Promise<void> {
 	// FileSystemDirectoryHandle async iteration is available in Chromium/Electron.
 	const entries = (
 		dir as unknown as {
@@ -167,7 +216,7 @@ async function pruneStaleEntries(dir: FileSystemDirectoryHandle, keepName: strin
 	if (!entries) return;
 	const toRemove: string[] = [];
 	for await (const name of entries) {
-		if (name !== keepName) toRemove.push(name);
+		if (!keep.has(name)) toRemove.push(name);
 	}
 	await Promise.all(toRemove.map((name) => dir.removeEntry(name).catch(() => undefined)));
 }

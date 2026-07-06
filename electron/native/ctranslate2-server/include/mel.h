@@ -33,7 +33,10 @@ std::vector<float> hann_window(int n_fft);
 std::vector<float> reflect_pad(const std::vector<float>& x, int pad);
 
 struct MelFeatures {
-  std::vector<float> data; // row-major: [time, n_mels]
+  // CTranslate2 Whisper expects a StorageView of shape {1, n_mels, n_frames}
+  // with the last dimension contiguous, i.e. data[mel * n_frames + frame].
+  // We store exactly that layout here (mel-major) so no transpose is needed.
+  std::vector<float> data; // mel-major: [n_mels, n_frames]
   int n_frames = 0;
   int n_mels = 0;
 };

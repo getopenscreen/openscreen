@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -238,6 +239,10 @@ struct AlignedWord {
   float start_sec = 0;
   float end_sec = 0;
   float probability = 0;
+  // Number of input text tokens this word consumed. Lets a flat word list
+  // built from a chunk-wide combined token sequence be split back into the
+  // original phrase segments (see the alignment call site in main()).
+  size_t num_tokens = 0;
 };
 
 // Build word-level timestamps from a WhisperAlignmentResult for one segment.
@@ -323,6 +328,7 @@ std::vector<AlignedWord> build_word_timestamps(
       words.push_back(std::move(current));
       current = WordBuilder{};
       current.first_token_idx = static_cast<int>(i);
+      current.first_frame = token_start_frame[i];
     }
 
     if (current.first_token_idx < 0) {
@@ -368,6 +374,7 @@ std::vector<AlignedWord> build_word_timestamps(
     aw.probability = wb.prob_count > 0
         ? wb.prob_sum / static_cast<float>(wb.prob_count)
         : 0.0f;
+    aw.num_tokens = static_cast<size_t>(wb.last_token_idx - wb.first_token_idx + 1);
     result.push_back(std::move(aw));
   }
 
@@ -594,42 +601,59 @@ int main(int argc, char** argv) {
       std::vector<DecodedSegment> segments;
       std::vector<std::vector<AlignedWord>> words;
       std::string language;
+      // How many seconds this chunk actually advanced the seek position by
+      // (see the "variable seek advance" comment below). The merge step adds
+      // this, not a fixed chunk_length, to every subsequent chunk's offset.
+      float advance_sec = 0.0f;
     };
 
     std::vector<ChunkResult> chunk_results;
     std::string chosen_language = language;
 
-    // Determine number of chunks
-    const int n_chunks =
-        (total_feature_frames + max_frames_per_chunk - 1) / max_frames_per_chunk;
-
     try {
       std::lock_guard<std::mutex> lk(model_mu);
 
-      for (int chunk_idx = 0; chunk_idx < n_chunks; ++chunk_idx) {
+      // Variable-length seek advance (the standard Whisper long-form
+      // decoding algorithm, matching openai-whisper/faster-whisper): fixed
+      // chunk_length-sized hops cut straight through the audio regardless of
+      // where speech actually is, silently dropping any word whose audio
+      // straddles the cut (measured: exactly this, on real speech, at every
+      // 30s boundary — see stt-ctranslate2-implementation-status.md §13).
+      // Instead, each window still *decodes* up to a full chunk_length of
+      // audio, but the NEXT window's start is advanced only to the END of
+      // the LAST segment this window actually decoded — which is where the
+      // model itself heard a pause, since that's what causes it to emit a
+      // segment boundary in the first place. The trailing tail of the
+      // window (from that pause to the window's own end) gets re-decoded as
+      // the next window's leading context, which is cheap and correct,
+      // instead of being a cut point that severs a word in half.
+      int chunk_start_frame = 0;
+      int chunk_idx = 0;
+
+      while (chunk_start_frame < total_feature_frames) {
         // ------------------------------------------------------------------
         // 4a. Extract sub-features for this chunk
         // ------------------------------------------------------------------
-        const int chunk_start_frame = chunk_idx * max_frames_per_chunk;
         const int chunk_frames =
             std::min(max_frames_per_chunk, total_feature_frames - chunk_start_frame);
-        const size_t feat_offset =
-            static_cast<size_t>(chunk_start_frame) *
-            static_cast<size_t>(fcfg.n_mels);
-        const size_t feat_count =
-            static_cast<size_t>(chunk_frames) *
-            static_cast<size_t>(fcfg.n_mels);
-
-        // Pad sub-features to max_frames_per_chunk (Whisper expects fixed-size input)
+        // full_features.data is mel-major [n_mels, total_feature_frames].
+        // Copy chunk_frames from each mel band into a fixed-size buffer, then
+        // pad the remaining frames with -1.5 (Whisper's silence value after
+        // global normalization), not 0.0.
         std::vector<float> padded(
             static_cast<size_t>(max_frames_per_chunk) *
                 static_cast<size_t>(fcfg.n_mels),
-            0.0f);
-        std::copy(full_features.data.begin() +
-                      static_cast<ptrdiff_t>(feat_offset),
-                  full_features.data.begin() +
-                      static_cast<ptrdiff_t>(feat_offset + feat_count),
-                  padded.begin());
+            -1.5f);
+        for (int m = 0; m < fcfg.n_mels; ++m) {
+          const float* src = full_features.data.data() +
+                             static_cast<size_t>(m) *
+                                 static_cast<size_t>(total_feature_frames) +
+                             static_cast<size_t>(chunk_start_frame);
+          float* dst = padded.data() +
+                       static_cast<size_t>(m) *
+                           static_cast<size_t>(max_frames_per_chunk);
+          std::copy(src, src + chunk_frames, dst);
+        }
 
         auto sv_chunk = make_feature_view(
             padded, fcfg.n_mels, max_frames_per_chunk);
@@ -665,21 +689,27 @@ int main(int argc, char** argv) {
         opts.patience = 1.0f;
         opts.length_penalty = 1.0f;
         opts.sampling_temperature = 0.0f;
-        opts.max_initial_timestamp_index = 0;
+        // max_initial_timestamp_index intentionally left at the CTranslate2
+        // default (50 for 30s). Forcing it to 0 was making the model collapse
+        // to near-immediate timestamps and generic hallucinations.
         opts.max_length = 448;
 
+        // Note: no early `continue` below on empty results — this loop must
+        // always reach the seek-advance step at the bottom, or a chunk with
+        // no decodable output would spin forever at the same start_frame.
+        // An empty `emitted_ids` flows harmlessly through split_segments()
+        // (yields empty chunk_segments) down to the default full-window
+        // advance.
+        std::vector<int> emitted_ids;
         auto gen_futures =
             model->generate(*sv_chunk, std::move(prompts), opts);
-        if (gen_futures.empty())
-          continue;
-
-        auto gen_result = gen_futures[0].get();
-        if (gen_result.sequences_ids.empty())
-          continue;
-
-        std::vector<int> emitted_ids(
-            gen_result.sequences_ids[0].begin(),
-            gen_result.sequences_ids[0].end());
+        if (!gen_futures.empty()) {
+          auto gen_result = gen_futures[0].get();
+          if (!gen_result.sequences_ids.empty()) {
+            emitted_ids.assign(gen_result.sequences_ids[0].begin(),
+                                gen_result.sequences_ids[0].end());
+          }
+        }
 
         // ------------------------------------------------------------------
         // 4e. Split into phrase segments
@@ -687,8 +717,21 @@ int main(int argc, char** argv) {
         auto chunk_segments =
             split_segments(emitted_ids, ts_begin, TIME_PRECISION);
 
-        if (chunk_segments.empty())
-          continue;
+        // Compute the seek advance now, from the segments as decoded
+        // (before they're moved into chunk_results below): advance to the
+        // last segment's own end time, since that's where the model heard a
+        // pause; fall back to a full window when nothing was decoded (pure
+        // silence/no-speech chunk) so we still make guaranteed progress.
+        float advance_sec = static_cast<float>(cfg.chunk_length);
+        if (!chunk_segments.empty()) {
+          const float last_end = chunk_segments.back().end;
+          // Ignore degenerate near-zero ends (e.g. a stray token right at
+          // the start) rather than advancing by almost nothing.
+          if (last_end > 1.0f) advance_sec = last_end;
+        }
+        const int advance_frames = std::max(
+            1, static_cast<int>(std::lround(
+                   advance_sec * fcfg.sample_rate / fcfg.hop_length)));
 
         // ------------------------------------------------------------------
         // 4f. Word-level alignment via CTranslate2 WhisperReplica::align()
@@ -713,29 +756,58 @@ int main(int argc, char** argv) {
           for (int t : start_vec)
             start_sequence.push_back(static_cast<size_t>(t));
 
-          std::vector<size_t> num_frames_vec(
-              text_tokens.size(),
-              static_cast<size_t>(chunk_frames));
+          // Align all of this chunk's phrase segments in ONE combined
+          // sequence, matching faster-whisper's add_word_timestamps /
+          // find_alignment (transcribe.py): it concatenates every
+          // sub-segment's tokens into one flat list per chunk before calling
+          // align(), rather than aligning each phrase in isolation.
+          // Aligning phrases in isolation (each with its own fresh
+          // [SOT][lang][transcribe] prefix and no knowledge of earlier
+          // phrases) was tried and measured to be wrong: the decoder has no
+          // causal context that speech already happened earlier in the
+          // chunk, so its cross-attention collapses back near frame 0 for
+          // every phrase after the first, corrupting every word timestamp in
+          // segments 2+. Concatenating also sidesteps the earlier bug where
+          // CTranslate2's ReplicaPool-level Whisper::align() sizes its result
+          // futures by features.dim(0) (always 1 for our single-audio
+          // sv_chunk) rather than by text_tokens.size(): with one combined
+          // sequence, text_tokens.size() is 1 too, so the batch sizes match.
+          std::vector<size_t> combined_tokens;
+          for (const auto& seg_tokens : text_tokens)
+            combined_tokens.insert(combined_tokens.end(), seg_tokens.begin(), seg_tokens.end());
 
           try {
             auto align_futures = model->align(
                 *sv_chunk,
                 start_sequence,
-                text_tokens,
-                num_frames_vec,
+                std::vector<std::vector<size_t>>{combined_tokens},
+                std::vector<size_t>{static_cast<size_t>(chunk_frames)},
                 MEDIAN_FILTER_WIDTH);
+            if (!align_futures.empty()) {
+              auto align_result = align_futures[0].get();
+              // DTW frame indices are absolute within the whole chunk's
+              // encoder output, so no per-segment offset is added here; the
+              // chunk-level offset is applied once, for every segment, in
+              // the merge step below.
+              auto all_words = build_word_timestamps(
+                  combined_tokens, tok, align_result, TIME_PRECISION,
+                  /*segment_start_offset=*/0.0f);
 
-            for (size_t ai = 0;
-                 ai < align_futures.size() && ai < segment_indices.size();
-                 ++ai) {
-              auto align_result = align_futures[ai].get();
-              size_t seg_idx = segment_indices[ai];
-              chunk_words[seg_idx] = build_word_timestamps(
-                  text_tokens[ai],
-                  tok,
-                  align_result,
-                  TIME_PRECISION,
-                  chunk_segments[seg_idx].start);
+              // Split the flat word list back into per-segment buckets by
+              // walking each word's token count against each segment's own
+              // token count (same walk as faster-whisper's word_index /
+              // saved_tokens loop over text_tokens_per_segment).
+              size_t word_i = 0;
+              for (size_t ai = 0; ai < text_tokens.size(); ++ai) {
+                size_t seg_idx = segment_indices[ai];
+                size_t tokens_remaining = text_tokens[ai].size();
+                while (word_i < all_words.size() && tokens_remaining > 0) {
+                  size_t consumed = std::min(tokens_remaining, all_words[word_i].num_tokens);
+                  tokens_remaining -= consumed;
+                  chunk_words[seg_idx].push_back(all_words[word_i]);
+                  ++word_i;
+                }
+              }
             }
           } catch (const std::exception& e) {
             log("align warning (chunk " + std::to_string(chunk_idx) +
@@ -747,7 +819,11 @@ int main(int argc, char** argv) {
             std::move(chunk_segments),
             std::move(chunk_words),
             chosen_language,
+            advance_sec,
         });
+
+        chunk_start_frame += advance_frames;
+        ++chunk_idx;
       }
     } catch (const std::exception& e) {
       res.status = 500;
@@ -790,10 +866,11 @@ int main(int argc, char** argv) {
           merged_words.emplace_back();
         }
       }
-      // Each chunk is `chunk_length` seconds long. The running offset advances
-      // by the chunk length (not the actual audio length, since Whisper consumes
-      // fixed-size input windows).
-      running_offset_sec += static_cast<float>(cfg.chunk_length);
+      // The running offset advances by this chunk's own variable seek
+      // advance (see the while-loop above), not a fixed chunk_length — each
+      // window's next start is wherever this window's last segment actually
+      // ended, so the offset must match that, not the window size.
+      running_offset_sec += cr.advance_sec;
     }
 
     // --------------------------------------------------------------------

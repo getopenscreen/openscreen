@@ -4,6 +4,7 @@ import {
 	getNativeCursorClickBounceProgress,
 	getNativeCursorClickBounceScale,
 	hasNativeCursorRecordingData,
+	projectNativeCursorToLocal,
 	resolveInterpolatedNativeCursorFrame,
 	resolveNativeCursorRenderAsset,
 } from "./nativeCursor";
@@ -215,5 +216,70 @@ describe("custom cursor themes", () => {
 		);
 
 		expect(rendered.id).toBe("pretty:text");
+	});
+});
+
+describe("projectNativeCursorToLocal", () => {
+	const identityCrop = { x: 0, y: 0, width: 1, height: 1 };
+
+	it("maps a sample onto the supplied painted rectangle 1:1 with no crop", () => {
+		const point = projectNativeCursorToLocal({
+			cropRegion: identityCrop,
+			maskRect: { x: 100, y: 200, width: 1280, height: 720 },
+			sample: { timeMs: 0, cx: 0.25, cy: 0.5, visible: true },
+		});
+
+		expect(point?.x).toBeCloseTo(100 + 0.25 * 1280);
+		expect(point?.y).toBeCloseTo(200 + 0.5 * 720);
+	});
+
+	it("maps a sample into the cropped region of the painted rectangle", () => {
+		const point = projectNativeCursorToLocal({
+			cropRegion: { x: 0.25, y: 0.0, width: 0.5, height: 1.0 },
+			maskRect: { x: 0, y: 0, width: 1920, height: 1080 },
+			sample: { timeMs: 0, cx: 0.5, cy: 0.5, visible: true },
+		});
+
+		expect(point?.x).toBeCloseTo(0 + ((0.5 - 0.25) / 0.5) * 1920);
+		expect(point?.y).toBeCloseTo(0 + (0.5 / 1.0) * 1080);
+	});
+
+	it("projects onto the cropped (cover-letterboxed) painted rect, not the mask rect", () => {
+		const screenRect = { x: 0, y: 0, width: 1920, height: 1080 };
+		const croppedRect = { x: 0, y: -540, width: 1920, height: 2160 };
+
+		const point = projectNativeCursorToLocal({
+			cropRegion: { x: 0.0, y: 0.0, width: 0.5, height: 1.0 },
+			maskRect: croppedRect,
+			sample: { timeMs: 0, cx: 0.25, cy: 0.25, visible: true },
+		});
+
+		const wrong = screenRect.y + 0.25 * screenRect.height;
+		expect(wrong).toBe(270);
+
+		expect(point?.x).toBeCloseTo(croppedRect.x + ((0.25 - 0) / 0.5) * croppedRect.width);
+		expect(point?.y).toBeCloseTo(croppedRect.y + (0.25 / 1.0) * croppedRect.height);
+		expect(point?.y).toBe(0);
+		expect(point?.y).not.toBe(wrong);
+	});
+
+	it("returns null for a sample outside the cropped region", () => {
+		const point = projectNativeCursorToLocal({
+			cropRegion: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+			maskRect: { x: 0, y: 0, width: 1920, height: 1080 },
+			sample: { timeMs: 0, cx: 0.1, cy: 0.5, visible: true },
+		});
+
+		expect(point).toBeNull();
+	});
+
+	it("returns null for a degenerate (zero-size) crop region", () => {
+		const point = projectNativeCursorToLocal({
+			cropRegion: { x: 0, y: 0, width: 0, height: 1 },
+			maskRect: { x: 0, y: 0, width: 1920, height: 1080 },
+			sample: { timeMs: 0, cx: 0.5, cy: 0.5, visible: true },
+		});
+
+		expect(point).toBeNull();
 	});
 });

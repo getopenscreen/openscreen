@@ -126,6 +126,7 @@ interface LayoutCache {
 	baseScale: number;
 	baseOffset: { x: number; y: number };
 	maskRect: { x: number; y: number; width: number; height: number };
+	croppedRect: { x: number; y: number; width: number; height: number };
 	maskBorderRadius: number;
 	webcamRect: StyledRenderRect | null;
 }
@@ -573,7 +574,7 @@ export class FrameRenderer {
 
 		const projectedPoint = projectNativeCursorToLocal({
 			cropRegion: this.config.cropRegion,
-			maskRect: this.layoutCache.maskRect,
+			maskRect: this.layoutCache.croppedRect,
 			sample: displaySample,
 		});
 		if (!projectedPoint) {
@@ -761,6 +762,12 @@ export class FrameRenderer {
 				y: compositeLayout.screenRect.y + coverOffsetY - cropPixelY,
 			},
 			maskRect: compositeLayout.screenRect,
+			croppedRect: {
+				x: compositeLayout.screenRect.x + coverOffsetX,
+				y: compositeLayout.screenRect.y + coverOffsetY,
+				width: croppedDisplayWidth,
+				height: croppedDisplayHeight,
+			},
 			maskBorderRadius: scaledBorderRadius,
 			webcamRect: compositeLayout.webcamRect,
 		};

@@ -217,6 +217,25 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		getReadableFileInfo: (filePath: string) => Promise<{
+			success: boolean;
+			size?: number;
+			mtimeMs?: number;
+			path?: string;
+			message?: string;
+			error?: string;
+		}>;
+		readFileChunk: (
+			filePath: string,
+			offset: number,
+			length: number,
+		) => Promise<{
+			success: boolean;
+			data?: ArrayBuffer;
+			bytesRead?: number;
+			message?: string;
+			error?: string;
+		}>;
 		preparePreviewAudioTrack: (filePath: string) => Promise<{
 			success: boolean;
 			path?: string | null;

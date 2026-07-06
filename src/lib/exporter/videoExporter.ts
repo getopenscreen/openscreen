@@ -13,6 +13,7 @@ import { getPlatform } from "@/utils/platformUtils";
 import { AudioProcessor } from "./audioEncoder";
 import { FrameRenderer } from "./frameRenderer";
 import { VideoMuxer } from "./muxer";
+import { MAX_IN_MEMORY_SOURCE_BYTES } from "./sourceFileLimits";
 import { StreamingVideoDecoder } from "./streamingDecoder";
 import { TimestampedVideoFrameQueue } from "./timestampedVideoFrameQueue";
 import type { ExportConfig, ExportProgress, ExportResult } from "./types";
@@ -245,7 +246,20 @@ export class VideoExporter {
 
 			const streamingDecoder = new StreamingVideoDecoder();
 			this.streamingDecoder = streamingDecoder;
-			const videoInfo = await streamingDecoder.loadMetadata(this.config.videoUrl);
+			const videoInfo = await streamingDecoder.loadMetadata(
+				this.config.videoUrl,
+				({ copiedBytes, totalBytes }) => {
+					// Large recordings are streamed into OPFS before demuxing; surface
+					// that copy as a "preparing" phase so the dialog is not stuck at 0%.
+					this.reportProgress({
+						currentFrame: 0,
+						totalFrames: 0,
+						percentage: totalBytes > 0 ? (copiedBytes / totalBytes) * 100 : 0,
+						estimatedTimeRemaining: 0,
+						phase: "preparing",
+					});
+				},
+			);
 			const sourceCopyResult = await this.trySourceCopyFastPath(videoInfo);
 			if (sourceCopyResult) {
 				return sourceCopyResult;
@@ -728,6 +742,20 @@ export class VideoExporter {
 		const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 
 		if (!isRemoteUrl && window.electronAPI?.readBinaryFile) {
+			// The source-copy fast path reads the whole file into a Blob. That is
+			// impossible for recordings above Node's 2 GiB single-read cap, so bail
+			// out and let the (streaming) re-encode path handle them instead.
+			if (window.electronAPI.getReadableFileInfo) {
+				const info = await window.electronAPI.getReadableFileInfo(videoUrl);
+				if (
+					info.success &&
+					typeof info.size === "number" &&
+					info.size > MAX_IN_MEMORY_SOURCE_BYTES
+				) {
+					return null;
+				}
+			}
+
 			const result = await window.electronAPI.readBinaryFile(videoUrl);
 			if (!result.success || !result.data) {
 				return null;

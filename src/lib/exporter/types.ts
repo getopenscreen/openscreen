@@ -11,7 +11,7 @@ export interface ExportProgress {
 	totalFrames: number;
 	percentage: number;
 	estimatedTimeRemaining: number; // seconds
-	phase?: "extracting" | "finalizing";
+	phase?: "preparing" | "extracting" | "finalizing";
 	renderProgress?: number; // 0-100, GIF render phase
 }
 

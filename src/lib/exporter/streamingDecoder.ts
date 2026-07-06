@@ -1,7 +1,12 @@
 import { WebDemuxer } from "web-demuxer";
 import type { SpeedRegion, TrimRegion } from "@/components/video-editor/types";
+import { materializeLocalSourceFile } from "./localSourceFile";
 
 const SOURCE_LOAD_TIMEOUT_MS = 60_000;
+// Large local recordings are streamed into OPFS before demuxing, which is
+// bounded by disk/IPC throughput rather than a network round-trip. Allow far
+// more time than a remote fetch so a multi-GB copy is not cut off mid-way.
+const LOCAL_SOURCE_LOAD_TIMEOUT_MS = 15 * 60_000;
 const EPSILON_SEC = 0.001;
 /**
  * Build a full WebCodecs-compatible AV1 codec string from the AV1CodecConfigurationRecord.
@@ -141,12 +146,20 @@ export async function loadFileAsArrayBuffer(
 	const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 
 	if (!isRemoteUrl && window.electronAPI) {
-		const { blob } = await StreamingVideoDecoder.loadLocalSourceFile(videoUrl);
-		return { data: await blob.arrayBuffer(), contentType: "" };
+		// This path loads the entire file into an ArrayBuffer (it feeds the trim
+		// waveform), so it deliberately uses the single-shot read rather than the
+		// OPFS streaming loader. Recordings above ~2 GiB fail here and the caller
+		// (useAudioPeaks) degrades to no waveform — the export path does not rely
+		// on this function.
+		const result = await window.electronAPI.readBinaryFile(videoUrl);
+		if (!result.success || !result.data) {
+			throw new Error(result.message || result.error || "Failed to read source video");
+		}
+		return { data: result.data, contentType: "" };
 	}
 
-	const { blob } = await StreamingVideoDecoder.loadRemoteSourceFile(videoUrl);
-	return { data: await blob.arrayBuffer(), contentType: blob.type };
+	const file = await StreamingVideoDecoder.loadRemoteSourceFile(videoUrl);
+	return { data: await file.arrayBuffer(), contentType: file.type };
 }
 
 /** Caller must close the VideoFrame after use. */
@@ -170,12 +183,12 @@ export class StreamingVideoDecoder {
 	private metadata: DecodedVideoInfo | null = null;
 
 	/** Routes to the appropriate loader based on whether the source is local or remote. */
-	private async loadSourceFile(videoUrl: string): Promise<{ file: File; blob: Blob }> {
+	private async loadSourceFile(videoUrl: string): Promise<File> {
 		const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 		if (!isRemoteUrl && window.electronAPI) {
 			return this.withTimeout(
 				StreamingVideoDecoder.loadLocalSourceFile(videoUrl),
-				SOURCE_LOAD_TIMEOUT_MS,
+				LOCAL_SOURCE_LOAD_TIMEOUT_MS,
 				"Timed out while loading the source video.",
 			);
 		}
@@ -186,39 +199,29 @@ export class StreamingVideoDecoder {
 		);
 	}
 
-	/** Loads a local video file via the Electron IPC bridge. */
-	static async loadLocalSourceFile(videoUrl: string): Promise<{ file: File; blob: Blob }> {
-		const result = await window.electronAPI.readBinaryFile(videoUrl);
-		if (!result.success || !result.data) {
-			throw new Error(result.message || result.error || "Failed to read source video");
-		}
-
-		const filename = (result.path || videoUrl).split(/[\\/]/).pop() || "video";
-		const blob = new Blob([result.data]);
-		return {
-			blob,
-			file: new File([blob], filename, {
-				type: blob.type || "application/octet-stream",
-			}),
-		};
+	/**
+	 * Loads a local video file for demuxing. Large recordings are streamed into
+	 * an OPFS-backed File so nothing multi-GB is held in memory; web-demuxer reads
+	 * the File on demand. See {@link materializeLocalSourceFile}.
+	 */
+	static async loadLocalSourceFile(videoUrl: string): Promise<File> {
+		const filename = (videoUrl.split(/[\\/]/).pop() || "video").replace(/^file:/, "");
+		return materializeLocalSourceFile(videoUrl, filename);
 	}
 
 	/** Loads a remote or blob video URL via fetch. */
-	static async loadRemoteSourceFile(videoUrl: string): Promise<{ file: File; blob: Blob }> {
+	static async loadRemoteSourceFile(videoUrl: string): Promise<File> {
 		const response = await fetch(videoUrl);
 		if (!response.ok) {
 			throw new Error(`Failed to fetch source video: ${response.status} ${response.statusText}`);
 		}
 		const blob = await response.blob();
 		const filename = videoUrl.split("/").pop() || "video";
-		return {
-			blob,
-			file: new File([blob], filename, { type: blob.type }),
-		};
+		return new File([blob], filename, { type: blob.type });
 	}
 
 	async loadMetadata(videoUrl: string): Promise<DecodedVideoInfo> {
-		const { file } = await this.loadSourceFile(videoUrl);
+		const file = await this.loadSourceFile(videoUrl);
 
 		// Relative URL so it resolves in both dev (http) and packaged (file://) builds
 		const wasmUrl = new URL("./wasm/web-demuxer.wasm", window.location.href).href;

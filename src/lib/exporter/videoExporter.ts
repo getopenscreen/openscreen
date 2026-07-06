@@ -19,6 +19,9 @@ import type { ExportConfig, ExportProgress, ExportResult } from "./types";
 
 const ENCODER_STALL_TIMEOUT_MS = 15_000;
 const ENCODER_FLUSH_TIMEOUT_MS = 20_000;
+// The source-copy fast path reads the whole file into memory; stay under Node's
+// 2 GiB single-read cap so larger recordings fall back to the streaming path.
+const SOURCE_COPY_MAX_BYTES = 1.5 * 1024 * 1024 * 1024;
 
 /**
  * Waits for the encoder's queue to drain below maxEncodeQueue before returning.
@@ -728,6 +731,16 @@ export class VideoExporter {
 		const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 
 		if (!isRemoteUrl && window.electronAPI?.readBinaryFile) {
+			// The source-copy fast path reads the whole file into a Blob. That is
+			// impossible for recordings above Node's 2 GiB single-read cap, so bail
+			// out and let the (streaming) re-encode path handle them instead.
+			if (window.electronAPI.getReadableFileInfo) {
+				const info = await window.electronAPI.getReadableFileInfo(videoUrl);
+				if (info.success && typeof info.size === "number" && info.size > SOURCE_COPY_MAX_BYTES) {
+					return null;
+				}
+			}
+
 			const result = await window.electronAPI.readBinaryFile(videoUrl);
 			if (!result.success || !result.data) {
 				return null;

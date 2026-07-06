@@ -1,9 +1,14 @@
+import { materializeLocalSourceFile } from "@/lib/exporter/localSourceFile";
 import { MAX_CAPTION_AUDIO_SEC } from "./captionConstants";
 import { extractMonoPcmViaWebDemuxer } from "./extractMono16kWebDemuxer";
 
 export { MAX_CAPTION_AUDIO_SEC };
 
 const FETCH_TIMEOUT_MS = 120_000;
+// Above this size, `file.arrayBuffer()` for the decodeAudioData path would try to
+// hold the whole recording in memory. Skip straight to the streaming web-demuxer
+// path instead (it reads audio packets on demand).
+const MAX_DECODE_AUDIO_DATA_BYTES = 1.5 * 1024 * 1024 * 1024;
 
 async function fetchWithTimeout(url: string, signal?: AbortSignal): Promise<Response> {
 	const ctrl = new AbortController();
@@ -29,13 +34,11 @@ async function fetchWithTimeout(url: string, signal?: AbortSignal): Promise<Resp
 async function loadSourceVideoFile(videoUrl: string, signal?: AbortSignal): Promise<File> {
 	const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 
-	if (!isRemoteUrl && window.electronAPI?.readBinaryFile) {
-		const result = await window.electronAPI.readBinaryFile(videoUrl);
-		if (!result.success || !result.data) {
-			throw new Error(result.message || result.error || "Failed to read source video");
-		}
-		const filename = (result.path || videoUrl).split(/[\\/]/).pop() || "video";
-		return new File([result.data], filename, { type: "video/webm" });
+	if (!isRemoteUrl && window.electronAPI) {
+		// Streams large recordings through OPFS instead of reading them whole, so
+		// captions work for multi-GB files just like export does.
+		const filename = (videoUrl.split(/[\\/]/).pop() || "video").replace(/^file:/, "");
+		return materializeLocalSourceFile(videoUrl, filename);
 	}
 
 	const response = await fetchWithTimeout(videoUrl, signal);
@@ -149,7 +152,9 @@ export async function extractMono16kFromVideoUrl(
 		}
 	};
 
-	const primary = await tryDecodeAudioDataPath();
+	// Large recordings skip the in-memory decodeAudioData path (it would load the
+	// whole file) and go straight to the streaming web-demuxer path below.
+	const primary = file.size > MAX_DECODE_AUDIO_DATA_BYTES ? null : await tryDecodeAudioDataPath();
 	if (primary) {
 		return primary;
 	}

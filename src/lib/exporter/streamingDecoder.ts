@@ -5,6 +5,7 @@ import {
 	materializeLocalSourceFile,
 	releaseLocalSourceFile,
 } from "./localSourceFile";
+import { MAX_IN_MEMORY_SOURCE_BYTES } from "./sourceFileLimits";
 
 const SOURCE_LOAD_TIMEOUT_MS = 60_000;
 // Large local recordings are streamed into OPFS before demuxing, which is
@@ -151,10 +152,16 @@ export async function loadFileAsArrayBuffer(
 
 	if (!isRemoteUrl && window.electronAPI) {
 		// This path loads the entire file into an ArrayBuffer (it feeds the trim
-		// waveform), so it deliberately uses the single-shot read rather than the
-		// OPFS streaming loader. Recordings above ~2 GiB fail here and the caller
-		// (useAudioPeaks) degrades to no waveform — the export path does not rely
-		// on this function.
+		// waveform) and cannot stream, since decodeAudioData needs the whole file.
+		// readBinaryFile also copies the bytes in the main process during IPC, so a
+		// large recording would exhaust memory and crash. The waveform is cosmetic,
+		// so skip it above the in-memory limit; useAudioPeaks (the only caller)
+		// catches the throw and degrades to no waveform. The export path streams
+		// instead and does not rely on this function.
+		const info = await window.electronAPI.getReadableFileInfo?.(videoUrl);
+		if (info?.success && typeof info.size === "number" && info.size > MAX_IN_MEMORY_SOURCE_BYTES) {
+			throw new Error("Recording is too large to load into memory for waveform rendering.");
+		}
 		const result = await window.electronAPI.readBinaryFile(videoUrl);
 		if (!result.success || !result.data) {
 			throw new Error(result.message || result.error || "Failed to read source video");

@@ -1,12 +1,16 @@
 /**
- * Largest source file we are willing to read fully into memory in one shot.
+ * Largest source file we are willing to read whole via the `read-binary-file`
+ * IPC and hand around as a single in-memory `ArrayBuffer`/`Blob`.
  *
- * Node's `fs.readFile` (behind the `read-binary-file` IPC) throws
- * `ERR_FS_FILE_TOO_LARGE` above 2 GiB, and a multi-GB `ArrayBuffer`/`Blob` would
- * exhaust memory on typical machines anyway. Recordings above this threshold are
- * streamed on demand instead (into OPFS for demuxing; skipped for the in-memory
- * source-copy and waveform/decodeAudioData paths).
+ * `read-binary-file` reads the file with Node's `fs.readFile` (which itself
+ * throws above 2 GiB) and returns the bytes over IPC, where Electron
+ * structured-clones them — copying the whole buffer in the main process. For a
+ * large recording this transiently needs ~2× the file size in the main process
+ * and crashes it on a memory-constrained machine (observed: a ~1 GB recording
+ * hard-crashes a 16 GB Mac). So the safe cutoff is far below the 2 GiB read cap.
  *
- * Kept comfortably below the 2 GiB cap to leave headroom.
+ * Above this size, recordings are streamed on demand instead — into OPFS in
+ * fixed-size chunks for demuxing (export/captions), and the in-memory
+ * source-copy and waveform paths are skipped.
  */
-export const MAX_IN_MEMORY_SOURCE_BYTES = 1.5 * 1024 * 1024 * 1024;
+export const MAX_IN_MEMORY_SOURCE_BYTES = 256 * 1024 * 1024;

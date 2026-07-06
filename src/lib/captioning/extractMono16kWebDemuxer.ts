@@ -92,11 +92,17 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 /**
  * Demux + WebCodecs audio decode (same stack as export). Use when `decodeAudioData`
  * can't handle the container (e.g. WebM with video).
+ *
+ * @param maxReadSec  Optional cap on how much audio to demux/decode. The decoded
+ *   frames and merge buffers are held in memory, so very long recordings must be
+ *   capped below MAX_CAPTION_AUDIO_SEC to avoid exhausting the renderer heap.
+ *   `capped` reports whether the cap actually cut the track short.
  */
 export async function extractMonoPcmViaWebDemuxer(
 	file: File,
 	signal?: AbortSignal,
-): Promise<{ mono: Float32Array; sampleRate: number; durationSec: number }> {
+	maxReadSec?: number,
+): Promise<{ mono: Float32Array; sampleRate: number; durationSec: number; capped: boolean }> {
 	const demuxer = new WebDemuxer({ wasmFilePath: webDemuxerWasmUrl() });
 	await withTimeout(
 		demuxer.load(file),
@@ -132,7 +138,8 @@ export async function extractMonoPcmViaWebDemuxer(
 	// Many WebM/Matroska files report a too-short duration, so capping read at reported time stops
 	// demux early and clips everything past that. Read to the caption-decode ceiling instead; the
 	// demuxer stops when the track ends.
-	const readEndSec = MAX_CAPTION_AUDIO_SEC + READ_END_PADDING_SEC;
+	const readCapSec = Math.min(maxReadSec ?? MAX_CAPTION_AUDIO_SEC, MAX_CAPTION_AUDIO_SEC);
+	const readEndSec = readCapSec + READ_END_PADDING_SEC;
 	const decodedFrames: AudioData[] = [];
 
 	const decoder = new AudioDecoder({
@@ -183,6 +190,9 @@ export async function extractMonoPcmViaWebDemuxer(
 	// metadata when frames lack duration.
 	const durationSec = inferredDurationSec > 0.02 ? inferredDurationSec : reportedDurationSec;
 
+	// The cap cut the track short when the reported extent exceeds what we read.
+	const capped = reportedDurationSec > readCapSec + READ_END_PADDING_SEC;
+
 	const mono = mergeAndConsumeDecodedAudioToMonoLinear(decodedFrames, sampleRate, durationSec);
-	return { mono, sampleRate, durationSec };
+	return { mono, sampleRate, durationSec, capped };
 }

@@ -6,6 +6,12 @@ import { extractMonoPcmViaWebDemuxer } from "./extractMono16kWebDemuxer";
 export { MAX_CAPTION_AUDIO_SEC };
 
 const FETCH_TIMEOUT_MS = 120_000;
+// The demuxer caption path holds every decoded AudioData frame plus full-rate
+// merge buffers in memory (~50 MB per minute of 48 kHz audio all-in), so very
+// long recordings would exhaust the renderer heap well before the 4 h caption
+// ceiling. For sources too large to load in memory anyway, cap the decoded
+// audio; captions come back truncated instead of crashing the renderer.
+const LARGE_FILE_CAPTION_SEC = 30 * 60;
 
 async function fetchWithTimeout(url: string, signal?: AbortSignal): Promise<Response> {
 	const ctrl = new AbortController();
@@ -33,9 +39,10 @@ async function loadSourceVideoFile(videoUrl: string, signal?: AbortSignal): Prom
 
 	if (!isRemoteUrl && window.electronAPI) {
 		// Streams large recordings through OPFS instead of reading them whole, so
-		// captions work for multi-GB files just like export does.
+		// captions work for multi-GB files just like export does. The signal also
+		// aborts the copy itself when the caption pass is cancelled.
 		const filename = (videoUrl.split(/[\\/]/).pop() || "video").replace(/^file:/, "");
-		return materializeLocalSourceFile(videoUrl, filename);
+		return materializeLocalSourceFile(videoUrl, filename, { signal });
 	}
 
 	const response = await fetchWithTimeout(videoUrl, signal);
@@ -152,13 +159,26 @@ export async function extractMono16kFromVideoUrl(
 	try {
 		// Large recordings skip the in-memory decodeAudioData path (it would load
 		// the whole file) and go straight to the streaming web-demuxer path below.
-		const primary = file.size > MAX_IN_MEMORY_SOURCE_BYTES ? null : await tryDecodeAudioDataPath();
+		const isLargeFile = file.size > MAX_IN_MEMORY_SOURCE_BYTES;
+		const primary = isLargeFile ? null : await tryDecodeAudioDataPath();
 		if (primary) {
 			return primary;
 		}
 
-		const pcm = await extractMonoPcmViaWebDemuxer(file, options?.signal);
-		return truncateAndResampleTo16k(pcm.mono, pcm.sampleRate, pcm.durationSec, options?.signal);
+		// For oversized sources, also cap how much audio the demuxer path decodes
+		// — its frame/merge buffers are in-memory and scale with duration.
+		const pcm = await extractMonoPcmViaWebDemuxer(
+			file,
+			options?.signal,
+			isLargeFile ? LARGE_FILE_CAPTION_SEC : undefined,
+		);
+		const out = await truncateAndResampleTo16k(
+			pcm.mono,
+			pcm.sampleRate,
+			pcm.durationSec,
+			options?.signal,
+		);
+		return { ...out, truncated: out.truncated || pcm.capped };
 	} finally {
 		// Release the OPFS cache reference taken when streaming a large source.
 		// The File name is the cache-entry key (no-op for small/remote sources).

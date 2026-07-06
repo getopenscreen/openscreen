@@ -74,7 +74,8 @@ async function computePeaksForUrl(videoUrl: string, signal?: AbortSignal): Promi
 		const info = await window.electronAPI.getReadableFileInfo(videoUrl);
 		if (info.success && typeof info.size === "number" && info.size > MAX_IN_MEMORY_SOURCE_BYTES) {
 			const filename = (videoUrl.split(/[\\/]/).pop() || "video").replace(/^file:/, "");
-			const file = await materializeLocalSourceFile(videoUrl, filename);
+			// signal also aborts the OPFS copy (unless the export shares it).
+			const file = await materializeLocalSourceFile(videoUrl, filename, { signal });
 			try {
 				return await computePeaksFromFileStreaming(file, signal);
 			} finally {

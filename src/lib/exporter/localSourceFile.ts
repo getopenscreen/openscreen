@@ -17,6 +17,13 @@ import { MAX_IN_MEMORY_SOURCE_BYTES } from "./sourceFileLimits";
  * we stream the file into an OPFS-backed file in fixed-size chunks and hand back
  * the disk-backed `File` from `getFile()`. Memory stays flat regardless of size.
  *
+ * Concurrency: copies are deduplicated per cache entry — concurrent callers of
+ * the same recording (e.g. the trim waveform and an export) share one in-flight
+ * copy instead of racing two writables on the same OPFS handle. Each caller can
+ * pass an `AbortSignal`; the underlying copy is aborted only once every joined
+ * caller has aborted. Successful callers take one cache reference each and must
+ * call {@link releaseLocalSourceFile} with the returned File's `.name`.
+ *
  * Small recordings keep the original in-memory path — it is simpler and avoids
  * an extra on-disk copy for the common case.
  */
@@ -34,6 +41,8 @@ export interface MaterializeProgress {
 
 export interface MaterializeOptions {
 	onProgress?: (progress: MaterializeProgress) => void;
+	/** Aborts the wait; the shared copy stops once every joined caller aborts. */
+	signal?: AbortSignal;
 	/** Override the in-memory threshold (testing only). */
 	thresholdBytes?: number;
 	/** Override the OPFS copy chunk size (testing only). */
@@ -49,6 +58,17 @@ export interface MaterializeOptions {
  * revisions independent: releasing one never touches another's count.
  */
 const activeCacheRefs = new Map<string, number>();
+
+/** One shared in-flight copy per cache entry; concurrent callers join it. */
+interface InflightCopy {
+	promise: Promise<void>;
+	controller: AbortController;
+	consumers: number;
+	progressListeners: Set<(progress: MaterializeProgress) => void>;
+	lastProgress?: MaterializeProgress;
+}
+
+const inflightCopies = new Map<string, InflightCopy>();
 
 function retainCache(cacheName: string): void {
 	activeCacheRefs.set(cacheName, (activeCacheRefs.get(cacheName) ?? 0) + 1);
@@ -66,8 +86,28 @@ export function releaseLocalSourceFile(cacheName: string): void {
 	else activeCacheRefs.set(cacheName, refs - 1);
 }
 
-function activeCacheNames(): Set<string> {
-	return new Set(activeCacheRefs.keys());
+/** Names that must survive pruning: referenced by a demuxer or mid-copy. */
+function keepSet(): Set<string> {
+	const keep = new Set(activeCacheRefs.keys());
+	for (const name of inflightCopies.keys()) keep.add(name);
+	return keep;
+}
+
+/**
+ * Removes cache entries left behind by a previous session (or by exports whose
+ * source was never materialized again). Call once at app startup: nothing is
+ * referenced or mid-copy at that point, so everything stale is reclaimed.
+ */
+export async function clearStaleSourceCache(): Promise<void> {
+	const getDirectory = navigator.storage?.getDirectory?.bind(navigator.storage);
+	if (!getDirectory) return;
+	try {
+		const root = await getDirectory();
+		const dir = await root.getDirectoryHandle(OPFS_CACHE_DIR);
+		await pruneStaleEntries(dir, keepSet());
+	} catch {
+		// No cache directory yet — nothing to clean.
+	}
 }
 
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -96,13 +136,17 @@ function hashString(input: string): string {
 	return (hash >>> 0).toString(36);
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+	if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+}
+
 /**
  * Returns a `File` for a local recording path/URL, streaming large files through
  * OPFS so nothing multi-GB is ever held in memory.
  *
  * @param videoUrl  Local file path or `file://` URL of the recording.
  * @param filename  Preferred file name for the returned `File`.
- * @param options   Progress callback and (testing) threshold/chunk overrides.
+ * @param options   Progress callback, abort signal, (testing) size overrides.
  */
 export async function materializeLocalSourceFile(
 	videoUrl: string,
@@ -114,12 +158,14 @@ export async function materializeLocalSourceFile(
 		throw new Error("Local source loading is only available in the desktop app.");
 	}
 
+	throwIfAborted(options?.signal);
 	const threshold = options?.thresholdBytes ?? MAX_IN_MEMORY_SOURCE_BYTES;
 
 	const info = await api.getReadableFileInfo(videoUrl);
 	if (!info.success || typeof info.size !== "number") {
 		throw new Error(info.message || info.error || "Failed to read source video");
 	}
+	throwIfAborted(options?.signal);
 
 	// Common case: small enough to read in one shot.
 	if (info.size <= threshold) {
@@ -127,6 +173,7 @@ export async function materializeLocalSourceFile(
 		if (!result.success || !result.data) {
 			throw new Error(result.message || result.error || "Failed to read source video");
 		}
+		throwIfAborted(options?.signal);
 		const name = (result.path || filename).split(/[\\/]/).pop() || filename;
 		return new File([result.data], name, { type: mimeTypeForPath(name) });
 	}
@@ -157,29 +204,102 @@ async function copyToOpfsFile(
 	// Cache key ties the copy to this exact file revision so repeated exports of
 	// the same recording reuse the cached copy instead of re-streaming gigabytes.
 	const cacheName = `${hashString(videoUrl)}-${size}-${Math.round(mtimeMs)}.bin`;
+	const signal = options?.signal;
 
-	// Retain BEFORE pruning/writing: a concurrent materialization builds its keep
-	// set from the refcounts, so retaining only after the copy finished would let
-	// it prune this entry mid-write and fail the copy. Released in the catch
-	// below on failure; on success the caller releases once the demuxer is done.
-	retainCache(cacheName);
+	// Join (or start) the shared in-flight copy for this entry. Loop so a caller
+	// that races a flight aborted by its last consumer can start a fresh one.
+	for (;;) {
+		throwIfAborted(signal);
+
+		let flight = inflightCopies.get(cacheName);
+		if (flight?.controller.signal.aborted) {
+			await flight.promise.catch(() => undefined);
+			continue;
+		}
+		if (!flight) {
+			const controller = new AbortController();
+			const fresh: InflightCopy = {
+				controller,
+				consumers: 0,
+				progressListeners: new Set(),
+				promise: Promise.resolve(),
+			};
+			// Register BEFORE starting the copy so its own name is in keepSet()
+			// when the copy prunes, and so concurrent prunes keep mid-write entries.
+			inflightCopies.set(cacheName, fresh);
+			fresh.promise = runCopy(
+				dir,
+				cacheName,
+				videoUrl,
+				size,
+				controller.signal,
+				options?.chunkBytes ?? COPY_CHUNK_BYTES,
+				(p) => {
+					fresh.lastProgress = p;
+					for (const listener of fresh.progressListeners) listener(p);
+				},
+			).finally(() => {
+				if (inflightCopies.get(cacheName) === fresh) inflightCopies.delete(cacheName);
+			});
+			// A flight abandoned by every consumer would otherwise be an unhandled rejection.
+			fresh.promise.catch(() => undefined);
+			flight = fresh;
+		}
+
+		flight.consumers += 1;
+		if (options?.onProgress) {
+			flight.progressListeners.add(options.onProgress);
+			if (flight.lastProgress) options.onProgress(flight.lastProgress);
+		}
+		const joined = flight;
+		const onAbort = () => {
+			joined.consumers -= 1;
+			// Last interested caller gone: stop the underlying copy.
+			if (joined.consumers <= 0) joined.controller.abort();
+		};
+		signal?.addEventListener("abort", onAbort, { once: true });
+		try {
+			await joined.promise;
+			throwIfAborted(signal);
+			const handle = await dir.getFileHandle(cacheName);
+			const file = await handle.getFile();
+			retainCache(cacheName);
+			return file;
+		} finally {
+			signal?.removeEventListener("abort", onAbort);
+			if (options?.onProgress) joined.progressListeners.delete(options.onProgress);
+			if (!signal?.aborted) joined.consumers -= 1;
+		}
+	}
+}
+
+/** Streams the source into the cache entry; resolves once it is complete on disk. */
+async function runCopy(
+	dir: FileSystemDirectoryHandle,
+	cacheName: string,
+	videoUrl: string,
+	size: number,
+	signal: AbortSignal,
+	chunkBytes: number,
+	emitProgress: (progress: MaterializeProgress) => void,
+): Promise<void> {
 	try {
-		await pruneStaleEntries(dir, activeCacheNames());
+		await pruneStaleEntries(dir, keepSet());
 
 		const handle = await dir.getFileHandle(cacheName, { create: true });
 
 		// Reuse a complete prior copy.
 		const existing = await handle.getFile();
 		if (existing.size === size) {
-			options?.onProgress?.({ copiedBytes: size, totalBytes: size });
-			return existing;
+			emitProgress({ copiedBytes: size, totalBytes: size });
+			return;
 		}
 
-		const chunkBytes = options?.chunkBytes ?? COPY_CHUNK_BYTES;
 		const writable = await handle.createWritable();
 		try {
 			let offset = 0;
 			while (offset < size) {
+				throwIfAborted(signal);
 				const length = Math.min(chunkBytes, size - offset);
 				const chunk = await window.electronAPI.readFileChunk(videoUrl, offset, length);
 				if (!chunk.success || !chunk.data) {
@@ -191,7 +311,7 @@ async function copyToOpfsFile(
 				}
 				await writable.write(chunk.data);
 				offset += chunk.data.byteLength;
-				options?.onProgress?.({ copiedBytes: offset, totalBytes: size });
+				emitProgress({ copiedBytes: offset, totalBytes: size });
 			}
 			await writable.close();
 		} catch (error) {
@@ -209,12 +329,11 @@ async function copyToOpfsFile(
 				`Streamed copy is incomplete (${file.size} of ${size} bytes); the source video may still be in use.`,
 			);
 		}
-		return file;
 	} catch (error) {
-		// Drop this operation's reference, then drop the (possibly partial) copy
-		// so a retry does not resume from a corrupt file — unless another
-		// in-flight operation still references the same entry.
-		releaseLocalSourceFile(cacheName);
+		// Drop the partial copy so a retry does not resume from a corrupt file.
+		// (No caller has retained this entry — retains happen only after success —
+		// but keep the guard in case a prior complete copy of the same name is
+		// still being read.)
 		if (!activeCacheRefs.has(cacheName)) {
 			try {
 				await dir.removeEntry(cacheName);

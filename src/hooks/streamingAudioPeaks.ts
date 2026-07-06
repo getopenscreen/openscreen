@@ -23,6 +23,36 @@ const READ_END_PADDING_SEC = 0.5;
 // Keep in sync with audioPeaksWorker.ts so both paths render identically.
 const MAX_PEAK_BLOCKS = 24_000;
 const PEAK_BLOCKS_PER_SEC = 200;
+// Upper bound for the duration fallback scan when container metadata is
+// unreliable (MediaRecorder WebM often reports 0/Infinity — see
+// streamingDecoder's validateDuration). Same ceiling as the export scan.
+const SCAN_UNBOUNDED_FALLBACK_SEC = 24 * 60 * 60;
+
+/**
+ * Ground-truth duration from audio packet timestamps, for containers whose
+ * metadata duration is missing or bogus. Demux-only (no decode), so it is a
+ * fast forward pass even for multi-GB files.
+ */
+async function scanAudioDurationSec(demuxer: WebDemuxer, signal?: AbortSignal): Promise<number> {
+	const reader = demuxer.read("audio", 0, SCAN_UNBOUNDED_FALLBACK_SEC).getReader();
+	let maxEndUs = 0;
+	try {
+		while (!signal?.aborted) {
+			const { done, value: chunk } = await reader.read();
+			if (done || !chunk) break;
+			const endUs = chunk.timestamp + (chunk.duration ?? 0);
+			if (endUs > maxEndUs) maxEndUs = endUs;
+		}
+	} finally {
+		try {
+			await reader.cancel();
+		} catch {
+			/* already closed */
+		}
+	}
+	if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+	return maxEndUs / 1e6;
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
@@ -63,11 +93,6 @@ export async function computePeaksFromFileStreaming(
 			LOAD_TIMEOUT_MS,
 			"Timed out while reading media info for the waveform.",
 		);
-		const durationSec =
-			Number.isFinite(mediaInfo.duration) && mediaInfo.duration > 0 ? mediaInfo.duration : 0;
-		if (durationSec <= 0) {
-			throw new Error("Unknown duration; cannot bucket waveform peaks.");
-		}
 
 		let audioConfig: AudioDecoderConfig;
 		try {
@@ -80,6 +105,18 @@ export async function computePeaksFromFileStreaming(
 			throw new Error(`Audio codec not supported for waveform: ${audioConfig.codec}`);
 		}
 		const sampleRate = audioConfig.sampleRate || 48_000;
+
+		// MediaRecorder WebM often reports a missing/bogus container duration
+		// (see streamingDecoder's validateDuration); fall back to a demux-only
+		// packet-timestamp scan so those recordings still get a waveform.
+		let durationSec =
+			Number.isFinite(mediaInfo.duration) && mediaInfo.duration > 0 ? mediaInfo.duration : 0;
+		if (durationSec <= 0) {
+			durationSec = await scanAudioDurationSec(demuxer, signal);
+		}
+		if (durationSec <= 0) {
+			throw new Error("Unknown duration; cannot bucket waveform peaks.");
+		}
 
 		const blocks = Math.min(MAX_PEAK_BLOCKS, Math.ceil(durationSec * PEAK_BLOCKS_PER_SEC));
 		const totalSamples = Math.max(1, Math.ceil(durationSec * sampleRate));
@@ -113,27 +150,40 @@ export async function computePeaksFromFileStreaming(
 		});
 		decoder.configure(audioConfig);
 
-		const reader = demuxer.read("audio", 0, durationSec + READ_END_PADDING_SEC).getReader();
 		try {
-			while (!signal?.aborted && !decodeError) {
-				const { done, value: chunk } = await reader.read();
-				if (done || !chunk) break;
-				decoder.decode(chunk);
-				while (decoder.decodeQueueSize > DECODE_QUEUE_BACKPRESSURE && !signal?.aborted) {
-					await new Promise((r) => setTimeout(r, 1));
+			const reader = demuxer.read("audio", 0, durationSec + READ_END_PADDING_SEC).getReader();
+			try {
+				while (!signal?.aborted && !decodeError) {
+					const { done, value: chunk } = await reader.read();
+					if (done || !chunk) break;
+					decoder.decode(chunk);
+					while (decoder.decodeQueueSize > DECODE_QUEUE_BACKPRESSURE && !signal?.aborted) {
+						await new Promise((r) => setTimeout(r, 1));
+					}
+				}
+			} finally {
+				try {
+					await reader.cancel();
+				} catch {
+					/* already closed */
 				}
 			}
-		} finally {
-			try {
-				await reader.cancel();
-			} catch {
-				/* already closed */
-			}
-		}
 
-		if (decoder.state === "configured") {
-			await decoder.flush();
-			decoder.close();
+			// Flush only on the clean path; an aborted or errored decode should
+			// not wait for the full pipeline to drain.
+			if (!signal?.aborted && !decodeError && decoder.state === "configured") {
+				await decoder.flush();
+			}
+		} finally {
+			// Always release the decoder — a throw in the demux loop must not
+			// leak a configured AudioDecoder (they hold codec-native memory).
+			if (decoder.state !== "closed") {
+				try {
+					decoder.close();
+				} catch {
+					/* already closed */
+				}
+			}
 		}
 		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 		if (decodeError) throw decodeError;

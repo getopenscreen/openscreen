@@ -195,6 +195,10 @@ export class StreamingVideoDecoder {
 	// File's .name), released on destroy() so the copy can be pruned once no
 	// demuxer is reading it. Null for small/remote sources (never retained).
 	private sourceCacheName: string | null = null;
+	// Aborts an in-flight OPFS materialization when the decoder is cancelled,
+	// destroyed, or the load times out — otherwise a cancelled export would keep
+	// streaming gigabytes in the background and leak the cache reference.
+	private readonly loadAbort = new AbortController();
 
 	/** Routes to the appropriate loader based on whether the source is local or remote. */
 	private async loadSourceFile(
@@ -204,9 +208,11 @@ export class StreamingVideoDecoder {
 		const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 		if (!isRemoteUrl && window.electronAPI) {
 			return this.withTimeout(
-				StreamingVideoDecoder.loadLocalSourceFile(videoUrl, onProgress),
+				StreamingVideoDecoder.loadLocalSourceFile(videoUrl, onProgress, this.loadAbort.signal),
 				LOCAL_SOURCE_LOAD_TIMEOUT_MS,
 				"Timed out while loading the source video.",
+				// Stop the underlying copy too; a bare reject would leave it running.
+				() => this.loadAbort.abort(),
 			);
 		}
 		return this.withTimeout(
@@ -224,9 +230,10 @@ export class StreamingVideoDecoder {
 	static async loadLocalSourceFile(
 		videoUrl: string,
 		onProgress?: (progress: MaterializeProgress) => void,
+		signal?: AbortSignal,
 	): Promise<File> {
 		const filename = (videoUrl.split(/[\\/]/).pop() || "video").replace(/^file:/, "");
-		return materializeLocalSourceFile(videoUrl, filename, { onProgress });
+		return materializeLocalSourceFile(videoUrl, filename, { onProgress, signal });
 	}
 
 	/** Loads a remote or blob video URL via fetch. */
@@ -764,11 +771,13 @@ export class StreamingVideoDecoder {
 	/** Signals the decoder to stop processing at the next cancellation checkpoint. */
 	cancel(): void {
 		this.cancelled = true;
+		this.loadAbort.abort();
 	}
 
 	/** Cancels decoding and releases the VideoDecoder and WebDemuxer resources. */
 	destroy(): void {
 		this.cancelled = true;
+		this.loadAbort.abort();
 
 		if (this.decoder) {
 			try {
@@ -795,9 +804,17 @@ export class StreamingVideoDecoder {
 	}
 
 	/** Wraps a promise with a hard timeout, rejecting with `message` if it exceeds `timeoutMs`. */
-	private withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+	private withTimeout<T>(
+		promise: Promise<T>,
+		timeoutMs: number,
+		message: string,
+		onTimeout?: () => void,
+	): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
-			const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+			const timer = window.setTimeout(() => {
+				onTimeout?.();
+				reject(new Error(message));
+			}, timeoutMs);
 			promise.then(
 				(value) => {
 					window.clearTimeout(timer);

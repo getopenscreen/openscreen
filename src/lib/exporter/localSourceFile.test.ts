@@ -324,6 +324,118 @@ describe("materializeLocalSourceFile (large file OPFS path)", () => {
 	});
 });
 
+describe("materializeLocalSourceFile (in-flight dedup & abort)", () => {
+	const OPTS = { thresholdBytes: 4, chunkBytes: 3 };
+
+	it("deduplicates concurrent copies of the same entry into one stream", async () => {
+		const root = new FakeDir();
+		stubOpfs(root);
+		const source = new Uint8Array([1, 2, 3, 4, 5, 6, 7]);
+		const api = largeSourceApi("/rec/dup.mp4", source);
+		stubElectronAPI(api);
+
+		const [a, b] = await Promise.all([
+			materializeLocalSourceFile("/rec/dup.mp4", "dup.mp4", OPTS),
+			materializeLocalSourceFile("/rec/dup.mp4", "dup.mp4", OPTS),
+		]);
+
+		// One shared copy: 7 bytes / 3-byte chunks => exactly 3 reads, not 6.
+		expect(api.readFileChunk).toHaveBeenCalledTimes(3);
+		expect(new Uint8Array(await a.arrayBuffer())).toEqual(source);
+		expect(new Uint8Array(await b.arrayBuffer())).toEqual(source);
+		expect(a.name).toBe(b.name);
+
+		// Each caller took one reference; after both release, a later
+		// materialization of another entry prunes it.
+		releaseLocalSourceFile(a.name);
+		releaseLocalSourceFile(b.name);
+		stubElectronAPI(largeSourceApi("/rec/other.mp4", new Uint8Array([9, 9, 9, 9, 9])));
+		const other = await materializeLocalSourceFile("/rec/other.mp4", "other.mp4", OPTS);
+		expect(cacheDir(root)?.files.size).toBe(1);
+		releaseLocalSourceFile(other.name);
+	});
+
+	it("aborts the copy via the AbortSignal and cleans up the partial entry", async () => {
+		const root = new FakeDir();
+		stubOpfs(root);
+		const source = new Uint8Array([1, 2, 3, 4, 5, 6, 7]);
+		const api = largeSourceApi("/rec/ab.mp4", source);
+		let releaseFirstChunk!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			releaseFirstChunk = resolve;
+		});
+		api.readFileChunk = vi.fn(async (_url: string, offset: number, length: number) => {
+			if (offset === 0) await gate;
+			return {
+				success: true,
+				data: source.slice(offset, offset + length).buffer,
+				bytesRead: Math.min(length, source.byteLength - offset),
+			};
+		});
+		stubElectronAPI(api);
+
+		const controller = new AbortController();
+		const promise = materializeLocalSourceFile("/rec/ab.mp4", "ab.mp4", {
+			...OPTS,
+			signal: controller.signal,
+		});
+		// Let the copy enter its gated first chunk, then abort mid-copy.
+		while (api.readFileChunk.mock.calls.length === 0) {
+			await new Promise((r) => setTimeout(r, 0));
+		}
+		controller.abort();
+		releaseFirstChunk();
+
+		await expect(promise).rejects.toThrow(/abort/i);
+		// Give the shared flight's cleanup a tick to settle.
+		await new Promise((r) => setTimeout(r, 0));
+		expect(cacheDir(root)?.files.size ?? 0).toBe(0);
+
+		// A retry after abort works from scratch.
+		const retry = await materializeLocalSourceFile("/rec/ab.mp4", "ab.mp4", OPTS);
+		expect(new Uint8Array(await retry.arrayBuffer())).toEqual(source);
+		releaseLocalSourceFile(retry.name);
+	});
+
+	it("keeps the shared copy alive while another joined caller is still interested", async () => {
+		const root = new FakeDir();
+		stubOpfs(root);
+		const source = new Uint8Array([1, 2, 3, 4, 5, 6]);
+		const api = largeSourceApi("/rec/share.mp4", source);
+		let releaseFirstChunk!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			releaseFirstChunk = resolve;
+		});
+		api.readFileChunk = vi.fn(async (_url: string, offset: number, length: number) => {
+			if (offset === 0) await gate;
+			return {
+				success: true,
+				data: source.slice(offset, offset + length).buffer,
+				bytesRead: Math.min(length, source.byteLength - offset),
+			};
+		});
+		stubElectronAPI(api);
+
+		const controller = new AbortController();
+		const abortable = materializeLocalSourceFile("/rec/share.mp4", "share.mp4", {
+			...OPTS,
+			signal: controller.signal,
+		});
+		const steady = materializeLocalSourceFile("/rec/share.mp4", "share.mp4", OPTS);
+		while (api.readFileChunk.mock.calls.length === 0) {
+			await new Promise((r) => setTimeout(r, 0));
+		}
+		// One of two joined callers aborts: the shared copy must keep going.
+		controller.abort();
+		releaseFirstChunk();
+
+		await expect(abortable).rejects.toThrow(/abort/i);
+		const file = await steady;
+		expect(new Uint8Array(await file.arrayBuffer())).toEqual(source);
+		releaseLocalSourceFile(file.name);
+	});
+});
+
 describe("materializeLocalSourceFile (MIME inference)", () => {
 	it.each([
 		["/tmp/clip.webm", "video/webm"],

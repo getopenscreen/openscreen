@@ -82,17 +82,16 @@ function getIcon(name: IconName, className?: string) {
 	return <Icon size={size} className={className} />;
 }
 
-const hudGroupClasses =
-	"flex items-center gap-0.5 rounded-xl border border-white/[0.07] bg-white/[0.045] transition-colors duration-150 hover:bg-white/[0.075] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none";
+const hudDisabledClasses =
+	"disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none";
 
-const hudIconBtnClasses =
-	"flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer text-white hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none";
+const hudGroupClasses = `flex items-center gap-0.5 rounded-xl border border-white/[0.07] bg-white/[0.045] transition-colors duration-150 hover:bg-white/[0.075] ${hudDisabledClasses}`;
 
-const hudAuxIconBtnClasses =
-	"flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 text-white/55 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none";
+const hudIconBtnClasses = `flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer text-white hover:bg-white/10 active:scale-95 ${hudDisabledClasses}`;
 
-const windowBtnClasses =
-	"flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer opacity-50 hover:opacity-90 hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none";
+const hudAuxIconBtnClasses = `flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 text-white/55 hover:bg-white/10 ${hudDisabledClasses}`;
+
+const windowBtnClasses = `flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer opacity-50 hover:opacity-90 hover:bg-white/[0.08] ${hudDisabledClasses}`;
 
 const hudSidebarClasses = "ml-0.5 pl-1.5 border-l border-white/10 flex items-center gap-0.5";
 const hudSidebarVerticalClasses =
@@ -1062,7 +1061,11 @@ export function LaunchWindow() {
 							<Tooltip
 								content={paused ? t("tooltips.resumeRecording") : t("tooltips.pauseRecording")}
 							>
-								<button className={hudAuxIconBtnClasses} onClick={togglePaused}>
+								<button
+									className={hudAuxIconBtnClasses}
+									onClick={() => !saving && togglePaused()}
+									disabled={saving}
+								>
 									{getIcon(
 										paused ? "resume" : "pause",
 										paused ? "text-amber-400" : "text-white/60",
@@ -1071,12 +1074,20 @@ export function LaunchWindow() {
 							</Tooltip>
 						)}
 						<Tooltip content={t("tooltips.restartRecording")}>
-							<button className={hudAuxIconBtnClasses} onClick={restartRecording}>
+							<button
+								className={hudAuxIconBtnClasses}
+								onClick={() => !saving && restartRecording()}
+								disabled={saving}
+							>
 								{getIcon("restart", "text-white/60")}
 							</button>
 						</Tooltip>
 						<Tooltip content={t("tooltips.cancelRecording")}>
-							<button className={hudAuxIconBtnClasses} onClick={cancelRecording}>
+							<button
+								className={hudAuxIconBtnClasses}
+								onClick={() => !saving && cancelRecording()}
+								disabled={saving}
+							>
 								{getIcon("cancel", "text-white/60")}
 							</button>
 						</Tooltip>

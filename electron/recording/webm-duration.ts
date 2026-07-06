@@ -130,14 +130,13 @@ export async function patchWebmDurationOnDisk(
 		const ws = createWriteStream(tmpPath);
 		const rs = createReadStream(filePath, { start: clusterOffset });
 
-		await new Promise<void>((resolve, reject) => {
-			ws.write(patchedBytes, (err) => {
-				if (err) reject(err);
-				else resolve();
-			});
-		});
-
 		try {
+			await new Promise<void>((resolve, reject) => {
+				ws.write(patchedBytes, (err) => {
+					if (err) reject(err);
+					else resolve();
+				});
+			});
 			await pipeline(rs, ws);
 		} finally {
 			rs.destroy();

@@ -312,7 +312,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 			finalizingRecordingId.current = activeRecordingId;
-			setSaving(true);
+			// Only show the "Saving…" spinner for genuine saves — not for cancel/restart
+			// flows where discardRecordingId has already been set.
+			const isDiscarded = discardRecordingId.current === activeRecordingId;
+			if (!isDiscarded) {
+				setSaving(true);
+			}
 
 			if (screenRecorder.current === activeScreenRecorder) {
 				screenRecorder.current = null;

@@ -5,6 +5,11 @@ import { WebmBase, WebmContainer, WebmFile, WebmString, WebmUint } from "@fix-we
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { patchWebmDurationOnDisk } from "./webm-duration";
 
+interface WebmElementMock {
+	getSectionById: (id: number) => WebmElementMock;
+	getValue: () => number;
+}
+
 describe("webm-duration patching", () => {
 	let dir: string;
 	const pathFor = (name: string) => path.join(dir, name);
@@ -70,10 +75,6 @@ describe("webm-duration patching", () => {
 
 		const patchedBytes = await readFile(filePath);
 		const webm = new WebmFile(new Uint8Array(patchedBytes));
-		interface WebmElementMock {
-			getSectionById: (id: number) => WebmElementMock;
-			getValue: () => number;
-		}
 
 		const segment = webm.getSectionById(0x8538067) as unknown as WebmElementMock;
 		const info = segment.getSectionById(0x549a966);

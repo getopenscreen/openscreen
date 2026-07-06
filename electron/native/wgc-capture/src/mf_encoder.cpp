@@ -127,6 +127,20 @@ constexpr const char* kVideoEncoderSelectionDefault = "default";
 constexpr const char* kVideoEncoderSelectionSoftwarePreferred = "software-preferred";
 constexpr const char* kVideoEncoderSelectionSoftwareFallback = "software-fallback";
 
+// Which step of createSinkWriterFromUrl produced a failing HRESULT. Only a
+// CreateSinkWriter failure means MFCreateSinkWriterFromURL itself failed and
+// warrants the encoder-enumeration diagnostics in logSinkWriterCreateFailure.
+// The earlier software-path setup steps each log their own specific error, so
+// routing them through the sink-writer diagnostics would misattribute the
+// failure (e.g. reporting a local MFT registration failure as a sink-writer
+// failure on the VM / headless / broken-driver systems this path targets).
+enum class SinkWriterCreateStage {
+    SoftwareEncoderRegistration,
+    CreateAttributes,
+    DisableHardwareTransforms,
+    CreateSinkWriter,
+};
+
 HRESULT ensureSoftwareH264EncoderRegisteredForProcess() {
     static std::mutex registrationMutex;
     static bool attempted = false;
@@ -165,11 +179,26 @@ HRESULT ensureSoftwareH264EncoderRegisteredForProcess() {
 HRESULT createSinkWriterFromUrl(
     const std::wstring& outputPath,
     bool forceSoftwareEncoder,
-    Microsoft::WRL::ComPtr<IMFSinkWriter>& sinkWriter) {
+    Microsoft::WRL::ComPtr<IMFSinkWriter>& sinkWriter,
+    SinkWriterCreateStage& failedStage) {
+    // Default to the sink-writer creation step; the software-path steps below
+    // overwrite this only when one of them returns early with a failure.
+    failedStage = SinkWriterCreateStage::CreateSinkWriter;
+
     Microsoft::WRL::ComPtr<IMFAttributes> attributes;
     if (forceSoftwareEncoder) {
+        // The software fallback works by registering the Microsoft software
+        // H.264 encoder MFT *in this helper process* via MFTRegisterLocalByCLSID
+        // (see ensureSoftwareH264EncoderRegisteredForProcess). That in-process
+        // registration is the key mechanism: it makes a software H.264 encoder
+        // available even when the machine's registered hardware encoders are
+        // missing or broken. Clearing MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS is
+        // only a secondary guard so the sink writer prefers the locally
+        // registered software encoder over a hardware transform; it is not
+        // itself the fallback mechanism.
         const HRESULT registerHr = ensureSoftwareH264EncoderRegisteredForProcess();
         if (FAILED(registerHr)) {
+            failedStage = SinkWriterCreateStage::SoftwareEncoderRegistration;
             return registerHr;
         }
 
@@ -177,16 +206,19 @@ HRESULT createSinkWriterFromUrl(
         if (FAILED(hr)) {
             std::cerr << "ERROR: MFCreateAttributes(sink writer) failed (hr=0x"
                       << std::hex << hr << std::dec << ")" << std::endl;
+            failedStage = SinkWriterCreateStage::CreateAttributes;
             return hr;
         }
         hr = attributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, FALSE);
         if (FAILED(hr)) {
             std::cerr << "ERROR: Set MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS failed (hr=0x"
                       << std::hex << hr << std::dec << ")" << std::endl;
+            failedStage = SinkWriterCreateStage::DisableHardwareTransforms;
             return hr;
         }
     }
 
+    failedStage = SinkWriterCreateStage::CreateSinkWriter;
     return MFCreateSinkWriterFromURL(
         outputPath.c_str(), nullptr, attributes.Get(), &sinkWriter);
 }
@@ -340,16 +372,26 @@ bool MFEncoder::initialize(
         bool logCreateFailure) {
         resetSinkWriterAttempt();
 
+        SinkWriterCreateStage failedStage = SinkWriterCreateStage::CreateSinkWriter;
         const HRESULT sinkWriterHr = createSinkWriterFromUrl(
             outputPath,
             forceSoftwareEncoder,
-            sinkWriter_);
+            sinkWriter_,
+            failedStage);
         if (FAILED(sinkWriterHr)) {
-            if (logCreateFailure) {
-                logSinkWriterCreateFailure(sinkWriterHr, audioFormat);
-            } else {
-                std::cerr << "WARNING: Default MFCreateSinkWriterFromURL failed (hr=0x"
-                          << std::hex << sinkWriterHr << std::dec << ")" << std::endl;
+            // Only a genuine MFCreateSinkWriterFromURL failure gets the
+            // sink-writer / encoder-enumeration diagnostics. The earlier
+            // software-path steps (local MFT registration, attribute creation,
+            // hardware-transform flag) already logged their own specific error
+            // inside createSinkWriterFromUrl, so logging here as well would
+            // misattribute those failures to MFCreateSinkWriterFromURL.
+            if (failedStage == SinkWriterCreateStage::CreateSinkWriter) {
+                if (logCreateFailure) {
+                    logSinkWriterCreateFailure(sinkWriterHr, audioFormat);
+                } else {
+                    std::cerr << "WARNING: Default MFCreateSinkWriterFromURL failed (hr=0x"
+                              << std::hex << sinkWriterHr << std::dec << ")" << std::endl;
+                }
             }
             return false;
         }

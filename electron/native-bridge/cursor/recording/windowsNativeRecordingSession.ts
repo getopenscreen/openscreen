@@ -226,10 +226,20 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 	): NormalizedSample {
 		const bounds =
 			payload.bounds ?? this.options.getDisplayBounds() ?? screen.getPrimaryDisplay().bounds;
-		const width = Math.max(1, bounds.width);
-		const height = Math.max(1, bounds.height);
-		const normalizedX = (payload.x - bounds.x) / width;
-		const normalizedY = (payload.y - bounds.y) / height;
+		// The cursor-sampler reports raw x/y in physical screen pixels (Win32
+		// GetCursorInfo). `payload.bounds` from the sampler's GetWindowRect is also
+		// physical, so use it as-is. Bounds from Electron's `screen` API (or the
+		// fallback for display captures) are logical pixels (DIP) â€” convert to
+		// physical via the display's scaleFactor so the normalized position matches
+		// the WGC video, which is captured in physical pixels.
+		const isPhysicalBounds = payload.bounds != null;
+		const scaleFactor = isPhysicalBounds ? 1 : (screen.getDisplayMatching(bounds).scaleFactor ?? 1);
+		const physicalX = bounds.x * scaleFactor;
+		const physicalY = bounds.y * scaleFactor;
+		const width = Math.max(1, bounds.width * scaleFactor);
+		const height = Math.max(1, bounds.height * scaleFactor);
+		const normalizedX = (payload.x - physicalX) / width;
+		const normalizedY = (payload.y - physicalY) / height;
 		const withinBounds =
 			normalizedX >= 0 && normalizedX <= 1 && normalizedY >= 0 && normalizedY <= 1;
 		const leftButtonDown = payload.leftButtonDown === true;

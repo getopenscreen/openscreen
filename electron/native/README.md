@@ -111,3 +111,9 @@ $env:OPENSCREEN_WGC_TEST_MICROPHONE_DEVICE_NAME = "Microphone (NVIDIA Broadcast)
 npm run test:wgc-mic:win
 Remove-Item Env:OPENSCREEN_WGC_TEST_MICROPHONE_DEVICE_NAME
 ```
+
+## STT helper
+
+The speech-to-text helper (`whisper-stt-server`) is built separately from the
+capture helpers. See `docs/engineering/stt-spec.md` for the architecture and
+`scripts/build-whisper-stt.sh` for the build command.

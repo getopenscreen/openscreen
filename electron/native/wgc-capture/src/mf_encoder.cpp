@@ -123,10 +123,6 @@ void logMissingH264EncoderError() {
         << std::endl;
 }
 
-constexpr const char* kVideoEncoderSelectionDefault = "default";
-constexpr const char* kVideoEncoderSelectionSoftwarePreferred = "software-preferred";
-constexpr const char* kVideoEncoderSelectionSoftwareFallback = "software-fallback";
-
 // Which step of createSinkWriterFromUrl produced a failing HRESULT. Only a
 // CreateSinkWriter failure means MFCreateSinkWriterFromURL itself failed and
 // warrants the encoder-enumeration diagnostics in logSinkWriterCreateFailure.
@@ -164,7 +160,7 @@ HRESULT ensureSoftwareH264EncoderRegisteredForProcess() {
         CLSID_MSH264EncoderMFT,
         MFT_CATEGORY_VIDEO_ENCODER,
         L"Microsoft H.264 Encoder MFT (software)",
-        MFT_ENUM_FLAG_SYNCMFT,
+        MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_ASYNCMFT,
         1,
         &inputType,
         1,

@@ -118,4 +118,19 @@ describe("user preferences", () => {
 
 		expect(loadUserPreferences().preferSoftwareEncoder).toBe(false);
 	});
+
+	it("persists the software encoder fallback notice suppression", () => {
+		saveUserPreferences({ hideSoftwareEncoderFallbackNotice: true });
+
+		expect(loadUserPreferences().hideSoftwareEncoderFallbackNotice).toBe(true);
+	});
+
+	it("falls back to showing the software encoder fallback notice for invalid stored values", () => {
+		localStorage.setItem(
+			"openscreen_user_preferences",
+			JSON.stringify({ hideSoftwareEncoderFallbackNotice: "yes" }),
+		);
+
+		expect(loadUserPreferences().hideSoftwareEncoderFallbackNotice).toBe(false);
+	});
 });

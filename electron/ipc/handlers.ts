@@ -1040,6 +1040,25 @@ function readNativeWindowsWebcamFormat(output: string) {
 	}
 }
 
+function readNativeWindowsEncoderSelection(output: string) {
+	const lines = output
+		.split(/\r?\n/)
+		.filter((line) => line.includes('"event":"encoder-selection"'));
+	const lastLine = lines.at(-1);
+	if (!lastLine) {
+		return null;
+	}
+
+	try {
+		return JSON.parse(lastLine) as {
+			video?: string;
+			preferSoftwareEncoder?: boolean;
+		};
+	} catch {
+		return null;
+	}
+}
+
 function tryParseNativeHelperEvent(line: string) {
 	try {
 		const parsed = JSON.parse(line);
@@ -1729,10 +1748,12 @@ export function registerIpcHandlers(
 						? Math.max(0, captureStartedAtMs - cursorStartTimeMs)
 						: 0;
 				const webcamFormat = readNativeWindowsWebcamFormat(nativeWindowsCaptureOutput);
+				const encoderSelection = readNativeWindowsEncoderSelection(nativeWindowsCaptureOutput);
 				console.info("[native-wgc] capture started", {
 					captureStartedAtMs,
 					cursorOffsetMs: nativeWindowsCursorOffsetMs,
 					webcamFormat,
+					encoderSelection,
 				});
 
 				const source = selectedSource || { name: "Screen" };
@@ -1745,6 +1766,7 @@ export function registerIpcHandlers(
 					recordingId,
 					path: outputPath,
 					helperPath,
+					videoEncoderSelection: encoderSelection?.video ?? null,
 				};
 			} catch (error) {
 				console.error("Failed to start native Windows recording:", error);

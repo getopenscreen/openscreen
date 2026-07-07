@@ -57,5 +57,11 @@
 	"cursor": {
 		"useEditableCursor": "استخدام مؤشر قابل للتحرير",
 		"useSystemCursor": "استخدام مؤشر النظام"
+	},
+	"softwareEncoderFallback": {
+		"title": "تم التبديل إلى الترميز البرمجي",
+		"description": "تعذّر تشغيل مرمّز GPU الافتراضي، لذا تحوّل OpenScreen إلى ترميز H.264 البرمجي. سيستمر التسجيل كالمعتاد، لكن استخدام المعالج قد يكون أعلى.",
+		"dismiss": "حسنًا",
+		"dontShowAgain": "عدم الإظهار مرة أخرى"
 	}
 }

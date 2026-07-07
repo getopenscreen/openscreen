@@ -602,8 +602,10 @@ export class FrameRenderer {
 				getNativeCursorClickBounceProgress(this.config.cursorRecordingData, timeMs),
 			);
 		const appliedScale = this.animationState.appliedScale;
-		// Normalize cursor size to the same fraction of video width as the preview;
-		// both paths use maskRect.width / croppedVideoWidth.
+		// Normalize cursor size to croppedRect.width (the painted video width).
+		// The preview path still uses screenRect.width; they agree in cover mode but
+		// differ in fit-to-height letterbox — known asymmetry pending the preview-path
+		// follow-up to project the cursor onto the cropped sub-rect as well.
 		const sizeNorm =
 			this.layoutCache.videoSize.width > 0
 				? this.layoutCache.maskRect.width / this.layoutCache.videoSize.width

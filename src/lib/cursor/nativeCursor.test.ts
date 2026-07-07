@@ -244,7 +244,7 @@ describe("projectNativeCursorToLocal", () => {
 		expect(point?.y).toBeCloseTo(0 + (0.5 / 1.0) * 1080);
 	});
 
-	it("projects onto the cropped (cover-letterboxed) painted rect, not the mask rect", () => {
+	it("projects onto the cropped (cover-overflowing) painted rect, not the mask rect", () => {
 		const screenRect = { x: 0, y: 0, width: 1920, height: 1080 };
 		const croppedRect = { x: 0, y: -540, width: 1920, height: 2160 };
 

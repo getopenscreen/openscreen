@@ -1673,9 +1673,6 @@ export function registerIpcHandlers(
 					video: request.video,
 					audio: request.audio,
 					webcam: request.webcam,
-					encoder: {
-						preferSoftwareEncoder,
-					},
 					cursor: {
 						mode: cursorCaptureMode,
 					},

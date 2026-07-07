@@ -30,6 +30,10 @@ struct MFEncoderOptions {
     bool preferSoftwareEncoder = false;
 };
 
+constexpr const char* kVideoEncoderSelectionDefault = "default";
+constexpr const char* kVideoEncoderSelectionSoftwarePreferred = "software-preferred";
+constexpr const char* kVideoEncoderSelectionSoftwareFallback = "software-fallback";
+
 class MFEncoder {
 public:
     MFEncoder() = default;
@@ -78,5 +82,5 @@ private:
     int64_t firstTimestampHns_ = -1;
     int64_t lastTimestampHns_ = -1;
     bool finalized_ = false;
-    const char* videoEncoderSelection_ = "default";
+    const char* videoEncoderSelection_ = kVideoEncoderSelectionDefault;
 };

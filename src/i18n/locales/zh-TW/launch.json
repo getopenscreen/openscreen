@@ -48,7 +48,8 @@
 		"defaultSourceName": "螢幕"
 	},
 	"recording": {
-		"selectSource": "請選擇要錄製的來源"
+		"selectSource": "請選擇要錄製的來源",
+		"saving": "正在儲存..."
 	},
 	"language": "語言",
 	"systemLanguagePrompt": {

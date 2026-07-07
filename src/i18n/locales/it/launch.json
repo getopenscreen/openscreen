@@ -48,7 +48,8 @@
 		"defaultSourceName": "Schermo"
 	},
 	"recording": {
-		"selectSource": "Seleziona una sorgente da registrare"
+		"selectSource": "Seleziona una sorgente da registrare",
+		"saving": "Salvataggio..."
 	},
 	"language": "Lingua",
 	"systemLanguagePrompt": {

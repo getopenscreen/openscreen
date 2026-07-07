@@ -4,6 +4,7 @@ import {
 	Clapperboard,
 	Columns3,
 	Languages,
+	Loader2,
 	NotepadText,
 	Rows3,
 } from "lucide-react";
@@ -70,6 +71,7 @@ const ICON_CONFIG = {
 	folder: { icon: FaFolderOpen, size: ICON_SIZE },
 	minimize: { icon: FiMinus, size: ICON_SIZE },
 	close: { icon: FiX, size: ICON_SIZE },
+	spinner: { icon: Loader2, size: ICON_SIZE },
 } as const;
 
 type IconName = keyof typeof ICON_CONFIG;
@@ -80,17 +82,16 @@ function getIcon(name: IconName, className?: string) {
 	return <Icon size={size} className={className} />;
 }
 
-const hudGroupClasses =
-	"flex items-center gap-0.5 rounded-xl border border-white/[0.07] bg-white/[0.045] transition-colors duration-150 hover:bg-white/[0.075]";
+const hudDisabledClasses =
+	"disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none";
 
-const hudIconBtnClasses =
-	"flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer text-white hover:bg-white/10 active:scale-95";
+const hudGroupClasses = `flex items-center gap-0.5 rounded-xl border border-white/[0.07] bg-white/[0.045] transition-colors duration-150 hover:bg-white/[0.075] ${hudDisabledClasses}`;
 
-const hudAuxIconBtnClasses =
-	"flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 text-white/55 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed";
+const hudIconBtnClasses = `flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer text-white hover:bg-white/10 active:scale-95 ${hudDisabledClasses}`;
 
-const windowBtnClasses =
-	"flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer opacity-50 hover:opacity-90 hover:bg-white/[0.08]";
+const hudAuxIconBtnClasses = `flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 text-white/55 hover:bg-white/10 ${hudDisabledClasses}`;
+
+const windowBtnClasses = `flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer opacity-50 hover:opacity-90 hover:bg-white/[0.08] ${hudDisabledClasses}`;
 
 const hudSidebarClasses = "ml-0.5 pl-1.5 border-l border-white/10 flex items-center gap-0.5";
 const hudSidebarVerticalClasses =
@@ -114,6 +115,7 @@ export function LaunchWindow() {
 	const {
 		recording,
 		paused,
+		saving,
 		elapsedSeconds,
 		toggleRecording,
 		togglePaused,
@@ -525,6 +527,9 @@ export function LaunchWindow() {
 	};
 
 	const handleRecordButtonClick = () => {
+		if (saving) {
+			return;
+		}
 		if (!hasSelectedSource && !recording) {
 			recordAfterSourceSelectionRef.current = true;
 			void openSourceSelector()
@@ -560,7 +565,7 @@ export function LaunchWindow() {
 	};
 
 	const toggleMicrophone = () => {
-		if (!recording) {
+		if (!recording && !saving) {
 			setMicrophoneEnabled(!microphoneEnabled);
 		}
 	};
@@ -894,7 +899,7 @@ export function LaunchWindow() {
 					data-testid="launch-source-selector-button"
 					className={`${hudGroupClasses} h-8 ${trayLayout === "vertical" ? "w-8 justify-center px-0" : "px-2.5"} ${styles.electronNoDrag}`}
 					onClick={openSourceSelector}
-					disabled={recording}
+					disabled={recording || saving}
 					title={selectedSource}
 					aria-label={selectedSource}
 				>
@@ -913,8 +918,8 @@ export function LaunchWindow() {
 					<button
 						data-testid="launch-system-audio-button"
 						className={`${hudIconBtnClasses} ${systemAudioEnabled ? "drop-shadow-[0_0_4px_rgba(74,222,128,0.4)]" : ""}`}
-						onClick={() => !recording && setSystemAudioEnabled(!systemAudioEnabled)}
-						disabled={recording}
+						onClick={() => !(recording || saving) && setSystemAudioEnabled(!systemAudioEnabled)}
+						disabled={recording || saving}
 						title={
 							systemAudioEnabled ? t("audio.disableSystemAudio") : t("audio.enableSystemAudio")
 						}
@@ -927,7 +932,7 @@ export function LaunchWindow() {
 						data-testid="launch-microphone-button"
 						className={`${hudIconBtnClasses} ${microphoneEnabled ? "drop-shadow-[0_0_4px_rgba(74,222,128,0.4)]" : ""}`}
 						onClick={toggleMicrophone}
-						disabled={recording}
+						disabled={recording || saving}
 						title={microphoneEnabled ? t("audio.disableMicrophone") : t("audio.enableMicrophone")}
 						onPointerDown={() => {
 							setRecordPointerDownCount((count) => count + 1);
@@ -943,7 +948,7 @@ export function LaunchWindow() {
 						onClick={async () => {
 							await setWebcamEnabled(!webcamEnabled);
 						}}
-						disabled={recording}
+						disabled={recording || saving}
 						title={webcamEnabled ? t("webcam.disableWebcam") : t("webcam.enableWebcam")}
 					>
 						{webcamEnabled
@@ -959,12 +964,12 @@ export function LaunchWindow() {
 									: ""
 							}`}
 							onClick={() =>
-								!recording &&
+								!(recording || saving) &&
 								setCursorCaptureMode(
 									cursorCaptureMode === "editable-overlay" ? "system" : "editable-overlay",
 								)
 							}
-							disabled={recording}
+							disabled={recording || saving}
 							title={
 								cursorCaptureMode === "editable-overlay"
 									? t("cursor.useSystemCursor")
@@ -981,30 +986,62 @@ export function LaunchWindow() {
 
 				{/* Record/Stop group */}
 				<Tooltip
-					content={hasSelectedSource || recording ? selectedSource : t("recording.selectSource")}
+					content={
+						saving
+							? t("recording.saving")
+							: hasSelectedSource || recording
+								? selectedSource
+								: t("recording.selectSource")
+					}
 				>
 					<button
 						data-testid="launch-record-button"
-						className={`flex items-center justify-center rounded-full p-2 transition-[min-width,background-color] duration-150 ${recording ? "min-w-[78px]" : "min-w-[36px]"} ${trayLayout === "vertical" ? "min-h-9" : ""} ${styles.electronNoDrag} ${
-							recording
-								? paused
-									? "bg-amber-500/10 hover:bg-amber-500/15"
-									: "bg-red-500/12 hover:bg-red-500/16"
-								: hasSelectedSource
-									? "bg-white/[0.06] hover:bg-white/[0.10]"
-									: "bg-white/[0.035] hover:bg-white/[0.08]"
+						disabled={saving}
+						className={`flex items-center justify-center rounded-full p-2 transition-[min-width,background-color] duration-150 ${recording || saving ? "min-w-[78px]" : "min-w-[36px]"} ${trayLayout === "vertical" ? "min-h-9" : ""} ${styles.electronNoDrag} ${
+							saving
+								? "bg-white/[0.06] opacity-60 cursor-not-allowed"
+								: recording
+									? paused
+										? "bg-amber-500/10 hover:bg-amber-500/15"
+										: "bg-red-500/12 hover:bg-red-500/16"
+									: hasSelectedSource
+										? "bg-white/[0.06] hover:bg-white/[0.10]"
+										: "bg-white/[0.035] hover:bg-white/[0.08]"
 						}`}
 						onClick={handleRecordButtonClick}
-						title={hasSelectedSource || recording ? selectedSource : t("recording.selectSource")}
+						title={
+							saving
+								? t("recording.saving")
+								: hasSelectedSource || recording
+									? selectedSource
+									: t("recording.selectSource")
+						}
 						aria-label={
-							hasSelectedSource || recording ? selectedSource : t("recording.selectSource")
+							saving
+								? t("recording.saving")
+								: hasSelectedSource || recording
+									? selectedSource
+									: t("recording.selectSource")
 						}
 						style={{ flex: "0 0 auto" }}
 					>
-						<div className={`flex items-center justify-center ${recording ? "gap-1.5" : ""}`}>
-							{recording
-								? getIcon("stop", paused ? "text-amber-400" : "text-red-400")
-								: getIcon("record", hasSelectedSource ? "text-white/80" : "text-white/45")}
+						<div
+							className={`flex items-center justify-center ${recording || saving ? "gap-1.5" : ""}`}
+						>
+							{saving ? (
+								<div className="animate-spin flex items-center justify-center">
+									{getIcon("spinner", "text-white/80")}
+								</div>
+							) : recording ? (
+								getIcon("stop", paused ? "text-amber-400" : "text-red-400")
+							) : (
+								getIcon("record", hasSelectedSource ? "text-white/80" : "text-white/45")
+							)}
+							{saving && (
+								<span className="text-white/80 text-xs font-semibold select-none">
+									{t("recording.saving")}
+								</span>
+							)}
 							{recording && (
 								<span
 									className={`${paused ? "text-amber-400" : "text-red-400"} inline-block w-[34px] text-left text-xs font-semibold tabular-nums`}
@@ -1024,7 +1061,11 @@ export function LaunchWindow() {
 							<Tooltip
 								content={paused ? t("tooltips.resumeRecording") : t("tooltips.pauseRecording")}
 							>
-								<button className={hudAuxIconBtnClasses} onClick={togglePaused}>
+								<button
+									className={hudAuxIconBtnClasses}
+									onClick={() => !saving && togglePaused()}
+									disabled={saving}
+								>
 									{getIcon(
 										paused ? "resume" : "pause",
 										paused ? "text-amber-400" : "text-white/60",
@@ -1033,12 +1074,20 @@ export function LaunchWindow() {
 							</Tooltip>
 						)}
 						<Tooltip content={t("tooltips.restartRecording")}>
-							<button className={hudAuxIconBtnClasses} onClick={restartRecording}>
+							<button
+								className={hudAuxIconBtnClasses}
+								onClick={() => !saving && restartRecording()}
+								disabled={saving}
+							>
 								{getIcon("restart", "text-white/60")}
 							</button>
 						</Tooltip>
 						<Tooltip content={t("tooltips.cancelRecording")}>
-							<button className={hudAuxIconBtnClasses} onClick={cancelRecording}>
+							<button
+								className={hudAuxIconBtnClasses}
+								onClick={() => !saving && cancelRecording()}
+								disabled={saving}
+							>
 								{getIcon("cancel", "text-white/60")}
 							</button>
 						</Tooltip>
@@ -1050,8 +1099,9 @@ export function LaunchWindow() {
 						<button
 							type="button"
 							aria-label={t("tooltips.openNotes")}
-							className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
-							onClick={() => window.electronAPI.openNotes()}
+							disabled={saving}
+							className={`${hudIconBtnClasses} ${styles.electronNoDrag} ${saving ? "opacity-30 cursor-not-allowed pointer-events-none" : ""}`}
+							onClick={() => !saving && window.electronAPI.openNotes()}
 						>
 							<NotepadText size={ICON_SIZE} className="text-white/60" />
 						</button>
@@ -1062,8 +1112,9 @@ export function LaunchWindow() {
 					<Tooltip content={t("tooltips.openStudio")}>
 						<button
 							data-testid="launch-open-studio-button"
-							className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
-							onClick={() => window.electronAPI.switchToEditor()}
+							disabled={saving}
+							className={`${hudIconBtnClasses} ${styles.electronNoDrag} ${saving ? "opacity-30 cursor-not-allowed pointer-events-none" : ""}`}
+							onClick={() => !saving && window.electronAPI.switchToEditor()}
 						>
 							<Clapperboard size={ICON_SIZE} className="text-white/60" />
 						</button>
@@ -1081,11 +1132,12 @@ export function LaunchWindow() {
 							aria-label={t("language")}
 							aria-expanded={isLanguageMenuOpen}
 							aria-haspopup="menu"
-							onClick={() => setIsLanguageMenuOpen((open) => !open)}
+							disabled={saving}
+							onClick={() => !saving && setIsLanguageMenuOpen((open) => !open)}
 							title={activeLanguageLabel}
 							className={`flex h-8 items-center rounded-lg border border-white/10 bg-white/[0.045] text-white/85 shadow-none transition-colors hover:bg-white/10 ${
 								trayLayout === "vertical" ? "w-8 justify-center px-0" : "gap-1.5 px-2"
-							} ${styles.electronNoDrag}`}
+							} ${styles.electronNoDrag} ${saving ? "opacity-30 cursor-not-allowed pointer-events-none" : ""}`}
 						>
 							<Languages size={13} className="text-white/70" />
 							<span
@@ -1150,6 +1202,7 @@ export function LaunchWindow() {
 							className={windowBtnClasses}
 							title={t("tooltips.hideHUD")}
 							onClick={sendHudOverlayHide}
+							disabled={saving}
 						>
 							{getIcon("minimize", "text-white")}
 						</button>
@@ -1157,6 +1210,7 @@ export function LaunchWindow() {
 							className={windowBtnClasses}
 							title={t("tooltips.closeApp")}
 							onClick={sendHudOverlayClose}
+							disabled={saving}
 						>
 							{getIcon("close", "text-white")}
 						</button>

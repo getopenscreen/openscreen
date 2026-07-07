@@ -44,7 +44,8 @@
 		"defaultSourceName": "الشاشة"
 	},
 	"recording": {
-		"selectSource": "يرجى تحديد مصدر للتسجيل"
+		"selectSource": "يرجى تحديد مصدر للتسجيل",
+		"saving": "جاري الحفظ..."
 	},
 	"language": "اللغة",
 	"systemLanguagePrompt": {

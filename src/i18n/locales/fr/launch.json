@@ -48,7 +48,8 @@
 		"defaultSourceName": "Écran"
 	},
 	"recording": {
-		"selectSource": "Veuillez sélectionner une source à enregistrer"
+		"selectSource": "Veuillez sélectionner une source à enregistrer",
+		"saving": "Sauvegarde..."
 	},
 	"language": "Langue",
 	"systemLanguagePrompt": {

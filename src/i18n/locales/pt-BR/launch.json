@@ -46,7 +46,8 @@
 		"defaultSourceName": "Tela"
 	},
 	"recording": {
-		"selectSource": "Por favor, selecione uma fonte para gravar"
+		"selectSource": "Por favor, selecione uma fonte para gravar",
+		"saving": "Salvando..."
 	},
 	"language": "Idioma",
 	"systemLanguagePrompt": {

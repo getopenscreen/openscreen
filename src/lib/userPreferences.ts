@@ -35,6 +35,8 @@ export interface UserPreferences {
 	trayLayout: "horizontal" | "vertical";
 	/** Force the Windows native recorder to use the software H.264 encoder */
 	preferSoftwareEncoder: boolean;
+	/** Stop showing the notice that recording fell back to software encoding */
+	hideSoftwareEncoderFallbackNotice: boolean;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -46,6 +48,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	projectFolder: null,
 	trayLayout: "horizontal",
 	preferSoftwareEncoder: false,
+	hideSoftwareEncoderFallbackNotice: false,
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -106,6 +109,10 @@ export function loadUserPreferences(): UserPreferences {
 			typeof raw.preferSoftwareEncoder === "boolean"
 				? raw.preferSoftwareEncoder
 				: DEFAULT_PREFS.preferSoftwareEncoder,
+		hideSoftwareEncoderFallbackNotice:
+			typeof raw.hideSoftwareEncoderFallbackNotice === "boolean"
+				? raw.hideSoftwareEncoderFallbackNotice
+				: DEFAULT_PREFS.hideSoftwareEncoderFallbackNotice,
 	};
 }
 

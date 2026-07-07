@@ -136,6 +136,8 @@ export function LaunchWindow() {
 		setWebcamDeviceName,
 		cursorCaptureMode,
 		setCursorCaptureMode,
+		softwareEncoderFallbackNoticeVisible,
+		dismissSoftwareEncoderFallbackNotice,
 	} = useScreenRecorder();
 
 	const showMicControls = microphoneEnabled && !recording;
@@ -159,6 +161,7 @@ export function LaunchWindow() {
 	const hudBarRef = useRef<HTMLDivElement | null>(null);
 	const deviceSelectorRef = useRef<HTMLDivElement | null>(null);
 	const systemLocalePromptRef = useRef<HTMLDivElement | null>(null);
+	const softwareFallbackNoticeRef = useRef<HTMLDivElement | null>(null);
 	// Measured bar height, anchors the popups above the tall vertical tray so they don't overlap it.
 	const [hudBarHeight, setHudBarHeight] = useState(0);
 	const [languageMenuStyle, setLanguageMenuStyle] = useState<{
@@ -372,6 +375,17 @@ export function LaunchWindow() {
 			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
 		}
 
+		// The software-encoder fallback notice shares the prompt's fixed top-8 slot and needs
+		// the same treatment so its buttons stay clickable.
+		if (softwareFallbackNoticeRef.current) {
+			const rect = softwareFallbackNoticeRef.current.getBoundingClientRect();
+			const noticeHeight = rect.height || softwareFallbackNoticeRef.current.scrollHeight;
+			if (noticeHeight > 0) {
+				topFromBottom = Math.max(topFromBottom, rect.top + noticeHeight);
+			}
+			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
+		}
+
 		setHudBarHeight((prev) => {
 			const next = Math.round(barEl.scrollHeight);
 			return Math.abs(prev - next) > 1 ? next : prev;
@@ -396,6 +410,7 @@ export function LaunchWindow() {
 		if (deviceSelectorRef.current) observer.observe(deviceSelectorRef.current);
 		// Backfill refs set before the observer existed (e.g. the prompt or language menu).
 		if (systemLocalePromptRef.current) observer.observe(systemLocalePromptRef.current);
+		if (softwareFallbackNoticeRef.current) observer.observe(softwareFallbackNoticeRef.current);
 		if (languageMenuPanelRef.current) observer.observe(languageMenuPanelRef.current);
 		measureHudSize();
 		return () => {
@@ -428,6 +443,10 @@ export function LaunchWindow() {
 	);
 	const setSystemLocalePromptEl = useCallback(
 		(el: HTMLDivElement | null) => observeHudElement(el, systemLocalePromptRef),
+		[observeHudElement],
+	);
+	const setSoftwareFallbackNoticeEl = useCallback(
+		(el: HTMLDivElement | null) => observeHudElement(el, softwareFallbackNoticeRef),
 		[observeHudElement],
 	);
 
@@ -683,6 +702,40 @@ export function LaunchWindow() {
 							{t("systemLanguagePrompt.switch", {
 								language: suggestedLanguageName,
 							})}
+						</Button>
+					</div>
+				</div>
+			)}
+
+			{softwareEncoderFallbackNoticeVisible && (
+				<div
+					ref={setSoftwareFallbackNoticeEl}
+					data-hud-interactive="true"
+					className={`fixed top-8 left-1/2 z-30 w-[calc(100vw-1rem)] max-w-[520px] -translate-x-1/2 rounded-xl border border-white/15 bg-[rgba(20,20,28,0.95)] p-3 shadow-2xl backdrop-blur-xl text-white animate-in fade-in-0 zoom-in-95 duration-200 ${styles.electronNoDrag}`}
+				>
+					<div className="text-[13px] font-semibold text-white">
+						{t("softwareEncoderFallback.title")}
+					</div>
+					<div className="mt-1 text-[11px] leading-relaxed text-white/75">
+						{t("softwareEncoderFallback.description")}
+					</div>
+					<div className="mt-3 flex items-center justify-end gap-2">
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={() => dismissSoftwareEncoderFallbackNotice(true)}
+							className="h-7 text-xs text-white/80 hover:bg-white/10 hover:text-white"
+						>
+							{t("softwareEncoderFallback.dontShowAgain")}
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							onClick={() => dismissSoftwareEncoderFallbackNotice()}
+							className="h-7 text-xs bg-white text-[#10121b] hover:bg-white/90"
+						>
+							{t("softwareEncoderFallback.dismiss")}
 						</Button>
 					</div>
 				</div>

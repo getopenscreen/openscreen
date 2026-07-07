@@ -13,7 +13,7 @@ import {
 } from "@/lib/nativeWindowsRecording";
 import type { CursorCaptureMode, RecordedVideoAssetInput } from "@/lib/recordingSession";
 import { requestCameraAccess } from "@/lib/requestCameraAccess";
-import { loadUserPreferences } from "@/lib/userPreferences";
+import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { createRecorderHandle, type RecorderHandle } from "./recorderHandle";
 
 const TARGET_FRAME_RATE = 60;
@@ -74,6 +74,8 @@ type UseScreenRecorderReturn = {
 	setWebcamEnabled: (enabled: boolean) => Promise<boolean>;
 	cursorCaptureMode: CursorCaptureMode;
 	setCursorCaptureMode: (mode: CursorCaptureMode) => void;
+	softwareEncoderFallbackNoticeVisible: boolean;
+	dismissSoftwareEncoderFallbackNotice: (dontShowAgain?: boolean) => void;
 };
 
 type NativeWindowsRecordingHandle = {
@@ -103,6 +105,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
 	const [webcamEnabled, setWebcamEnabledState] = useState(false);
 	const [cursorCaptureMode, setCursorCaptureMode] = useState<CursorCaptureMode>("editable-overlay");
+	const [softwareEncoderFallbackNoticeVisible, setSoftwareEncoderFallbackNoticeVisible] =
+		useState(false);
 	const screenRecorder = useRef<RecorderHandle | null>(null);
 	const webcamRecorder = useRef<RecorderHandle | null>(null);
 	const nativeWindowsRecording = useRef<NativeWindowsRecordingHandle | null>(null);
@@ -890,6 +894,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 				throw new Error(result.error ?? "Native Windows capture failed.");
 			}
+
+			// Tell the user when the helper silently switched away from the default
+			// GPU encoder; an explicit software-preferred selection needs no notice.
+			setSoftwareEncoderFallbackNoticeVisible(
+				result.videoEncoderSelection === "software-fallback" &&
+					!loadUserPreferences().hideSoftwareEncoderFallbackNotice,
+			);
 
 			recordingId.current = result.recordingId;
 			nativeWindowsRecording.current = {
@@ -1682,6 +1693,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 	};
 
+	const dismissSoftwareEncoderFallbackNotice = (dontShowAgain = false) => {
+		if (dontShowAgain) {
+			saveUserPreferences({ hideSoftwareEncoderFallbackNotice: true });
+		}
+		setSoftwareEncoderFallbackNoticeVisible(false);
+	};
+
 	return {
 		recording,
 		paused,
@@ -1708,5 +1726,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setWebcamEnabled,
 		cursorCaptureMode,
 		setCursorCaptureMode,
+		softwareEncoderFallbackNoticeVisible,
+		dismissSoftwareEncoderFallbackNotice,
 	};
 }

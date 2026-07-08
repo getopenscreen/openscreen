@@ -48,7 +48,8 @@
 		"defaultSourceName": "画面"
 	},
 	"recording": {
-		"selectSource": "録画するソースを選択してください"
+		"selectSource": "録画するソースを選択してください",
+		"saving": "保存中..."
 	},
 	"language": "言語",
 	"systemLanguagePrompt": {

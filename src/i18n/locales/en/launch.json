@@ -52,7 +52,8 @@
 		"defaultSourceName": "Screen"
 	},
 	"recording": {
-		"selectSource": "Please select a source to record"
+		"selectSource": "Please select a source to record",
+		"saving": "Saving..."
 	},
 	"language": "Language",
 	"systemLanguagePrompt": {

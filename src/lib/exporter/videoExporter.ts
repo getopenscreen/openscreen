@@ -516,6 +516,7 @@ export class VideoExporter {
 						this.config.speedRegions,
 						videoInfo.duration,
 						audioExportCodec,
+						this.config.frameRate,
 					);
 				}
 			}

@@ -54,10 +54,17 @@ electron/stt/index.ts (SttManager) — IPC handler, renderer contract
 
 ### Model
 
-**`ggml-small-q8_0.bin`** from `ggml-org/whisper.cpp` (Whisper `small`,
+**`ggml-small-q8_0.bin`** from `ggerganov/whisper.cpp` (Whisper `small`,
 multilingual, q8_0 quantized, ~264 MB). Precision is baked into the GGML file;
 there is no runtime `--int8` flag. The file is downloaded once into the user
 app-data cache and SHA-256 verified.
+
+> Repo note: this is `ggerganov/whisper.cpp`, **not** `ggml-org/whisper.cpp`.
+> The GitHub *engine* repo moved to the `ggml-org` org, but the HuggingFace
+> *model-file* repo never moved — `ggml-org/whisper.cpp` on HuggingFace is a
+> different, access-gated repo that 401s on every file (confirmed via curl,
+> 2026-07-08). whisper.cpp's own `models/download-ggml-model.sh` pulls from
+> `ggerganov/whisper.cpp` — that's the one to match.
 
 ### Native C++ server (`electron/native/whisper-stt/`)
 

@@ -15,7 +15,7 @@ describe("modelManager", () => {
 
 	it("exposes the whisper model descriptor with a single GGML file", () => {
 		expect(STT_MODELS.whisper.cacheDir).toBe("whisper-ggml");
-		expect(STT_MODELS.whisper.repoId).toBe("ggml-org/whisper.cpp");
+		expect(STT_MODELS.whisper.repoId).toBe("ggerganov/whisper.cpp");
 		expect(STT_MODELS.whisper.files.length).toBe(1);
 		expect(STT_MODELS.whisper.files[0].name).toBe("ggml-small-q8_0.bin");
 		expect(STT_MODELS.whisper.files[0].expectedSha256).not.toBeNull();

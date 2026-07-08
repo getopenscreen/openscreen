@@ -296,7 +296,7 @@ async function streamAnthropic(
 	cb: LlmStreamCallbacks,
 ): Promise<CallLlmResult> {
 	const def = getProviderDefinition(opts.provider) ?? getProviderDefinition("anthropic");
-	const baseUrl = (opts.baseUrl || def?.baseUrl || "https://api.anthropic.com/v1").replace(
+	const baseUrl = (opts.baseUrl || def?.baseUrl || "https://api.anthropic.com").replace(
 		/\/+$/,
 		"",
 	);
@@ -329,11 +329,9 @@ async function streamAnthropic(
 			body.output_config = reasoning.requestBodyPatch.outputConfig;
 		}
 	}
-	// MiniMax rides this same Anthropic-shaped wire path but takes its
-	// reasoning knob as a plain extraBody field (see agent-provider-capabilities.ts).
 	if (reasoning.extraBody) Object.assign(body, reasoning.extraBody);
 
-	const res = await fetch(`${baseUrl}/messages`, {
+	const res = await fetch(`${baseUrl}/v1/messages`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",

@@ -1640,9 +1640,9 @@ export function registerIpcHandlers(
 					: null;
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
-				const envPreferSoftwareEncoder = (
-					process.env.OPENSCREEN_WGC_PREFER_SOFTWARE_ENCODER ?? ""
-				).toLowerCase();
+				const envPreferSoftwareEncoder = (process.env.OPENSCREEN_WGC_PREFER_SOFTWARE_ENCODER ?? "")
+					.trim()
+					.toLowerCase();
 				const preferSoftwareEncoder =
 					request.preferSoftwareEncoder === true ||
 					envPreferSoftwareEncoder === "true" ||

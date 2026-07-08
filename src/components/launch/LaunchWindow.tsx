@@ -669,75 +669,80 @@ export function LaunchWindow() {
 				}
 			}}
 		>
-			{systemLocaleSuggestion && (
-				<div
-					ref={setSystemLocalePromptEl}
-					data-hud-interactive="true"
-					className={`fixed top-8 left-1/2 z-30 w-[calc(100vw-1rem)] max-w-[520px] -translate-x-1/2 rounded-xl border border-white/15 bg-[rgba(20,20,28,0.95)] p-3 shadow-2xl backdrop-blur-xl text-white animate-in fade-in-0 zoom-in-95 duration-200 ${styles.electronNoDrag}`}
-				>
-					<div className="text-[13px] font-semibold text-white">
-						{t("systemLanguagePrompt.title")}
-					</div>
-					<div className="mt-1 text-[11px] leading-relaxed text-white/75">
-						{t("systemLanguagePrompt.description", {
-							language: suggestedLanguageName,
-						})}
-					</div>
-					<div className="mt-3 flex items-center justify-end gap-2">
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onClick={dismissSystemLocaleSuggestion}
-							className="h-7 text-xs text-white/80 hover:bg-white/10 hover:text-white"
+			{/* Top-center notices share one fixed column so they stack instead of overlapping */}
+			{(systemLocaleSuggestion || softwareEncoderFallbackNoticeVisible) && (
+				<div className="fixed top-8 left-1/2 z-30 flex w-[calc(100vw-1rem)] max-w-[520px] -translate-x-1/2 flex-col gap-2">
+					{systemLocaleSuggestion && (
+						<div
+							ref={setSystemLocalePromptEl}
+							data-hud-interactive="true"
+							className={`w-full rounded-xl border border-white/15 bg-[rgba(20,20,28,0.95)] p-3 shadow-2xl backdrop-blur-xl text-white animate-in fade-in-0 zoom-in-95 duration-200 ${styles.electronNoDrag}`}
 						>
-							{t("systemLanguagePrompt.keepDefault")}
-						</Button>
-						<Button
-							type="button"
-							size="sm"
-							onClick={acceptSystemLocaleSuggestion}
-							className="h-7 text-xs bg-white text-[#10121b] hover:bg-white/90"
-						>
-							{t("systemLanguagePrompt.switch", {
-								language: suggestedLanguageName,
-							})}
-						</Button>
-					</div>
-				</div>
-			)}
+							<div className="text-[13px] font-semibold text-white">
+								{t("systemLanguagePrompt.title")}
+							</div>
+							<div className="mt-1 text-[11px] leading-relaxed text-white/75">
+								{t("systemLanguagePrompt.description", {
+									language: suggestedLanguageName,
+								})}
+							</div>
+							<div className="mt-3 flex items-center justify-end gap-2">
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onClick={dismissSystemLocaleSuggestion}
+									className="h-7 text-xs text-white/80 hover:bg-white/10 hover:text-white"
+								>
+									{t("systemLanguagePrompt.keepDefault")}
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									onClick={acceptSystemLocaleSuggestion}
+									className="h-7 text-xs bg-white text-[#10121b] hover:bg-white/90"
+								>
+									{t("systemLanguagePrompt.switch", {
+										language: suggestedLanguageName,
+									})}
+								</Button>
+							</div>
+						</div>
+					)}
 
-			{softwareEncoderFallbackNoticeVisible && (
-				<div
-					ref={setSoftwareFallbackNoticeEl}
-					data-hud-interactive="true"
-					className={`fixed top-8 left-1/2 z-30 w-[calc(100vw-1rem)] max-w-[520px] -translate-x-1/2 rounded-xl border border-white/15 bg-[rgba(20,20,28,0.95)] p-3 shadow-2xl backdrop-blur-xl text-white animate-in fade-in-0 zoom-in-95 duration-200 ${styles.electronNoDrag}`}
-				>
-					<div className="text-[13px] font-semibold text-white">
-						{t("softwareEncoderFallback.title")}
-					</div>
-					<div className="mt-1 text-[11px] leading-relaxed text-white/75">
-						{t("softwareEncoderFallback.description")}
-					</div>
-					<div className="mt-3 flex items-center justify-end gap-2">
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onClick={() => dismissSoftwareEncoderFallbackNotice(true)}
-							className="h-7 text-xs text-white/80 hover:bg-white/10 hover:text-white"
+					{softwareEncoderFallbackNoticeVisible && (
+						<div
+							ref={setSoftwareFallbackNoticeEl}
+							data-hud-interactive="true"
+							className={`w-full rounded-xl border border-white/15 bg-[rgba(20,20,28,0.95)] p-3 shadow-2xl backdrop-blur-xl text-white animate-in fade-in-0 zoom-in-95 duration-200 ${styles.electronNoDrag}`}
 						>
-							{t("softwareEncoderFallback.dontShowAgain")}
-						</Button>
-						<Button
-							type="button"
-							size="sm"
-							onClick={() => dismissSoftwareEncoderFallbackNotice()}
-							className="h-7 text-xs bg-white text-[#10121b] hover:bg-white/90"
-						>
-							{t("softwareEncoderFallback.dismiss")}
-						</Button>
-					</div>
+							<div className="text-[13px] font-semibold text-white">
+								{t("softwareEncoderFallback.title")}
+							</div>
+							<div className="mt-1 text-[11px] leading-relaxed text-white/75">
+								{t("softwareEncoderFallback.description")}
+							</div>
+							<div className="mt-3 flex items-center justify-end gap-2">
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onClick={() => dismissSoftwareEncoderFallbackNotice(true)}
+									className="h-7 text-xs text-white/80 hover:bg-white/10 hover:text-white"
+								>
+									{t("softwareEncoderFallback.dontShowAgain")}
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									onClick={() => dismissSoftwareEncoderFallbackNotice()}
+									className="h-7 text-xs bg-white text-[#10121b] hover:bg-white/90"
+								>
+									{t("softwareEncoderFallback.dismiss")}
+								</Button>
+							</div>
+						</div>
+					)}
 				</div>
 			)}
 

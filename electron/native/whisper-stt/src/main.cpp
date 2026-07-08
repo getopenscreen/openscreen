@@ -279,9 +279,15 @@ int main(int argc, char** argv) {
 		// whisper.cpp needs float PCM in memory; parsing the multipart bytes
 		// directly would just duplicate the WAV reader. tmpfile() is fine —
 		// /inference is single-flight, so concurrent temp files aren't a risk.
+		// Portable unique-ish name: no PID API (GetCurrentProcessId is
+		// Windows-only) — a monotonic counter plus a high-res clock reading
+		// is enough to avoid collisions on one host.
+		static std::atomic<uint64_t> tmp_wav_counter{0};
+		const auto tmp_wav_id = tmp_wav_counter.fetch_add(1, std::memory_order_relaxed);
+		const auto tmp_wav_ts = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 		const std::string tmp_wav = (std::filesystem::temp_directory_path() /
-		                             ("openscreen-stt-" + std::to_string(::GetCurrentProcessId()) +
-		                              "-" + std::to_string(std::rand()) + ".wav")).string();
+		                             ("openscreen-stt-" + std::to_string(tmp_wav_ts) +
+		                              "-" + std::to_string(tmp_wav_id) + ".wav")).string();
 		{
 			std::ofstream out(tmp_wav, std::ios::binary);
 			out.write(file_entry.content.data(),

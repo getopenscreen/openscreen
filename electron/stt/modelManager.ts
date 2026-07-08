@@ -9,7 +9,11 @@ import { pipeline } from "node:stream/promises";
  * Manages the lifetime of the on-disk model artifact used by the STT stack.
  *
  * The model is a single GGML file downloaded from HuggingFace
- * (`ggml-org/whisper.cpp`). whisper.cpp bakes precision into the file, so
+ * (`ggerganov/whisper.cpp` — the model-file repo predates and is separate
+ * from the `ggml-org` GitHub org the engine itself now lives under;
+ * `ggml-org/whisper.cpp` on HuggingFace is a different, access-gated repo
+ * and returns 401 on every file including README.md — confirmed by curl).
+ * whisper.cpp bakes precision into the file, so
  * there is no runtime `--int8` flag; OpenScreen ships the q8_0 quantized
  * `small` multilingual model by default.
  *
@@ -36,14 +40,20 @@ export interface SttModelFile {
 export interface SttModelDescriptor {
 	/** Display + cache directory name. */
 	cacheDir: string;
-	/** HuggingFace repo identifier (e.g. "ggml-org/whisper.cpp"). */
+	/** HuggingFace repo identifier (e.g. "ggerganov/whisper.cpp"). */
 	repoId: string;
 	/** List of model files to download (currently a single GGML file). */
 	files: SttModelFile[];
 }
 
 const MODEL_BASE = "https://huggingface.co";
-const MODEL_REPO = "ggml-org/whisper.cpp";
+// ponytail: this is deliberately NOT "ggml-org/whisper.cpp" — that HF repo
+// (matching the GitHub org the engine now lives under) is access-gated and
+// returns 401 Unauthorized on every file, confirmed by curl. whisper.cpp's
+// own models/download-ggml-model.sh pulls from ggerganov/whisper.cpp, the
+// long-standing public model-file repo that never moved when the engine's
+// GitHub org was renamed.
+const MODEL_REPO = "ggerganov/whisper.cpp";
 const MODEL_FILE = "ggml-small-q8_0.bin";
 
 export const STT_MODELS: Record<SttModelId, SttModelDescriptor> = {

@@ -99,9 +99,14 @@ build_variant() {
   mkdir -p "${build_dir}" "${OUT_DIR}"
 
   echo "[whisper-stt] configuring ${variant_name} in ${build_dir}"
+  # ponytail: macOS's default /bin/bash is 3.2 (last GPLv2 release Apple ships),
+  # where `"${arr[@]}"` on a genuinely empty array trips `set -u` ("unbound
+  # variable") even though bash 4+ treats it as zero words. The
+  # `${arr[@]+"${arr[@]}"}` idiom expands to nothing when the array is empty
+  # and to the normal quoted expansion otherwise, on both bash versions.
   cmake -S "${SRC_DIR}" -B "${build_dir}" \
     -DCMAKE_BUILD_TYPE=Release \
-    "${extra_cmake_flags[@]}"
+    ${extra_cmake_flags[@]+"${extra_cmake_flags[@]}"}
 
   echo "[whisper-stt] building ${variant_name}"
   cmake --build "${build_dir}" --config Release -j "$(nproc 2>/dev/null || echo 4)"
@@ -175,7 +180,9 @@ BUILD_FLAGS=()
 if [[ -n "${DEFAULT_FLAG}" ]]; then
   BUILD_FLAGS+=("${DEFAULT_FLAG}")
 fi
-build_variant "default" "${BUILD_FLAGS[@]}"
+# See the comment in build_variant() re: bash 3.2 + `set -u` + empty arrays
+# (macOS x64/CPU has no DEFAULT_FLAG, so BUILD_FLAGS is genuinely empty here).
+build_variant "default" ${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"}
 
 # ---------------------------------------------------------------------------
 # Optional CUDA variant. Kept as a side-by-side binary for hosts that want

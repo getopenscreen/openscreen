@@ -39,7 +39,10 @@ export function computeKeepSegments(
 		if (cursor < trimStart) {
 			segments.push({ startSec: cursor, endSec: trimStart });
 		}
-		cursor = trimEnd;
+		// Keep the cursor monotonic: a nested/overlapping trim (sorted only by start)
+		// whose end is before the cursor must not move it backward and re-emit source
+		// that an earlier trim already removed.
+		cursor = Math.max(cursor, trimEnd);
 	}
 
 	if (cursor < totalDuration) {

@@ -43,6 +43,22 @@ describe("computeKeepSegments", () => {
 			{ startSec: 7, endSec: 10 },
 		]);
 	});
+
+	it("does not re-emit source for a nested trim (cursor stays monotonic)", () => {
+		// [4s,5s] is fully inside [2s,8s]; the inner trim must not drag the cursor back
+		// to 5 and resurrect the already-trimmed [5s,8s] span.
+		expect(computeKeepSegments(10, [trim(2000, 8000), trim(4000, 5000)])).toEqual([
+			{ startSec: 0, endSec: 2 },
+			{ startSec: 8, endSec: 10 },
+		]);
+	});
+
+	it("collapses overlapping trims into their union", () => {
+		expect(computeKeepSegments(10, [trim(2000, 5000), trim(4000, 7000)])).toEqual([
+			{ startSec: 0, endSec: 2 },
+			{ startSec: 7, endSec: 10 },
+		]);
+	});
 });
 
 describe("splitBySpeed", () => {

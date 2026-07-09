@@ -1088,6 +1088,7 @@ export function NewEditorShell() {
 						}}
 						variant={mode === "media" ? "media" : "edit"}
 						onDropAsset={(assetId) => void tl.insertClipAt(assetId, clips.length)}
+						videoSources={videoSources}
 					/>
 				</div>
 			) : null}

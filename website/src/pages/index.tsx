@@ -1,9 +1,10 @@
+import Link from "@docusaurus/Link";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Heading from "@theme/Heading";
 import Layout from "@theme/Layout";
 import {
-	AppWindow,
 	Apple,
+	AppWindow,
 	Captions,
 	Cpu,
 	Download,
@@ -52,9 +53,9 @@ export default function Home() {
 							<Download size={16} />
 							Download
 						</a>
-						<a className={styles.secondaryCta} href="/openscreen/docs/intro">
+						<Link className={styles.secondaryCta} to="/docs/intro">
 							Read the docs
-						</a>
+						</Link>
 					</div>
 					<p className={styles.note}>
 						OpenScreen is <strong>not production-grade</strong>. Expect rough edges while we build
@@ -126,7 +127,10 @@ export default function Home() {
 									<span>2:00</span>
 								</div>
 								<div className={styles.timelineTrack}>
-									<span className={`${styles.pill} ${styles.pillAccent}`} style={{ left: "12%", width: "9%" }}>
+									<span
+										className={`${styles.pill} ${styles.pillAccent}`}
+										style={{ left: "12%", width: "9%" }}
+									>
 										1.8×
 									</span>
 									<span
@@ -137,7 +141,10 @@ export default function Home() {
 									</span>
 								</div>
 								<div className={styles.timelineTrack}>
-									<span className={`${styles.pill} ${styles.pillDanger}`} style={{ left: "30%", width: "14%" }}>
+									<span
+										className={`${styles.pill} ${styles.pillDanger}`}
+										style={{ left: "30%", width: "14%" }}
+									>
 										0:12.0
 									</span>
 								</div>
@@ -252,8 +259,8 @@ export default function Home() {
 								<h3>Captions in 13 languages, on-device</h3>
 								<p>
 									Automatic transcription with local Whisper — no upload, works offline. Arabic,
-									English, Spanish, French, Italian, Japanese, Korean, Portuguese, Russian,
-									Turkish, Vietnamese, and both Chinese scripts.
+									English, Spanish, French, Italian, Japanese, Korean, Portuguese, Russian, Turkish,
+									Vietnamese, and both Chinese scripts.
 								</p>
 							</div>
 						</article>
@@ -276,7 +283,8 @@ export default function Home() {
 						<pre className={styles.terminalBody}>
 							<span className={styles.meta}># download the .deb from Releases, then</span>
 							{"\n"}
-							<span className={styles.accentText}>sudo</span> apt install ./Openscreen-Linux-latest.deb
+							<span className={styles.accentText}>sudo</span> apt install
+							./Openscreen-Linux-latest.deb
 						</pre>
 					</div>
 
@@ -308,11 +316,13 @@ export default function Home() {
 							<TerminalSquare size={16} />
 							<span>Linux</span>
 						</div>
-						<p>.deb, .pacman, AppImage, and Nix. Browser-pipeline capture; needs PipeWire for system audio.</p>
+						<p>
+							.deb, .pacman, AppImage, and Nix. Browser-pipeline capture; needs PipeWire for system
+							audio.
+						</p>
 					</div>
 				</div>
 			</section>
-
 		</Layout>
 	);
 }

@@ -401,13 +401,13 @@
 }
 
 .pillDanger {
-	background: rgba(248, 113, 113, 0.14);
+	background: var(--os-danger-soft);
 	color: var(--os-danger);
 	border: 1px solid rgba(248, 113, 113, 0.3);
 }
 
 .pillSpeed {
-	background: rgba(251, 146, 60, 0.14);
+	background: var(--os-speed-wash);
 	color: var(--os-speed);
 	border: 1px solid rgba(251, 146, 60, 0.3);
 }

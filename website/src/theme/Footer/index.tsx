@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
 import Link from "@docusaurus/Link";
 import useBaseUrl from "@docusaurus/useBaseUrl";
+import type { ReactNode } from "react";
 
 import styles from "./styles.module.css";
 
@@ -23,8 +23,8 @@ export default function Footer(): ReactNode {
 							<span className={styles.brandName}>OpenScreen</span>
 						</div>
 						<p className={styles.brandDescription}>
-							A free, open-source screen recorder and editor. Community-maintained
-							continuation, MIT licensed.
+							A free, open-source screen recorder and editor. Community-maintained continuation, MIT
+							licensed.
 						</p>
 					</div>
 
@@ -51,8 +51,7 @@ export default function Footer(): ReactNode {
 				</div>
 
 				<div className={styles.bottomBar}>
-					OpenScreen is released under the MIT license. Built by the community — free,
-					forever.
+					OpenScreen is released under the MIT license. Built by the community — free, forever.
 				</div>
 			</div>
 		</footer>

@@ -121,10 +121,11 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 	left: 2px;
 	top: 0;
 	font-family: var(--font-mono);
-	font-size: 11px;
+	font-size: 10px;
 	font-weight: 500;
 	letter-spacing: 0.02em;
-	color: var(--muted);
+	/* v4 design ruler labels read in --meta. */
+	color: var(--meta);
 	white-space: nowrap;
 	pointer-events: none;
 }
@@ -156,9 +157,10 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 	min-width: 68px;
 	display: flex;
 	flex-direction: column;
-	background: var(--surface-2);
-	border: 1px solid var(--border);
-	border-radius: var(--r-md);
+	/* v4 design clip card: --surface-1 fill, 1.5px frame, 11px radius. */
+	background: var(--surface-1);
+	border: 1.5px solid var(--border);
+	border-radius: 11px;
 	box-shadow: var(--elev-card-soft);
 	cursor: grab;
 	overflow: hidden;

@@ -185,12 +185,13 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 }
 
 .trackVisual {
-	flex: 0 0 auto;
-	height: 26px;
+	/* v4 design: the waveform fills the whole clip card; the label + delete
+	   float over it as blur chips (see .trackInfo / .clipDelete). */
+	position: absolute;
+	inset: 0;
 	display: flex;
 	overflow: hidden;
 	background: var(--surface);
-	border-bottom: 1px solid var(--border);
 }
 .segment {
 	height: 100%;
@@ -256,26 +257,35 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 }
 
 .trackInfo {
-	flex: 1;
-	min-height: 0;
-	display: flex;
+	/* Floating label chip, top-left over the waveform (v4 design). */
+	position: absolute;
+	top: 8px;
+	left: 10px;
+	right: 40px;
+	z-index: 2;
+	display: inline-flex;
 	align-items: center;
-	gap: 10px;
-	padding: 10px 12px;
+	gap: 8px;
+	width: max-content;
+	max-width: calc(100% - 50px);
+	padding: 3px 9px 3px 6px;
+	border-radius: 8px;
+	background: color-mix(in srgb, #080a0d 55%, transparent);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
 	overflow: hidden;
 }
 .editIcon {
 	flex: 0 0 auto;
-	width: 30px;
-	height: 30px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	width: 16px;
+	height: 16px;
+	display: grid;
+	place-items: center;
 	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--r-sm);
+	border: 0;
+	border-radius: 5px;
 	color: var(--fg);
-	box-shadow: var(--elev-card-soft);
 	cursor: pointer;
 	transition:
 		border-color var(--motion-fast) var(--ease),
@@ -288,44 +298,41 @@ body:global(.timeline-placing-cut) [class*="vtBtn"] {
 .trackText {
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
 	min-width: 0;
 	flex: 1;
 }
 .trackTitle {
 	margin: 0;
-	font-size: 13px;
+	font-size: 11px;
 	font-weight: 500;
 	letter-spacing: -0.005em;
-	color: var(--fg);
+	color: #fff;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+/* v4 design: the clip chip shows only the filename — the range/source
+   readout is not part of the floating label. */
 .trackSubtitle {
-	margin: 0;
-	font-family: var(--font-mono);
-	font-size: 10.5px;
-	letter-spacing: 0.02em;
-	color: var(--muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.trackSubtitle span {
-	margin: 0 4px;
-	color: var(--dim);
+	display: none;
 }
 .clipDelete {
-	flex: 0 0 auto;
+	/* Floating delete, top-right over the waveform (v4 design), shown on
+	   hover / selection. */
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 2;
 	width: 26px;
 	height: 26px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: transparent;
-	border: 0;
-	border-radius: var(--r-sm);
+	background: color-mix(in srgb, #080a0d 55%, transparent);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+	border-radius: 7px;
 	color: var(--muted);
 	cursor: pointer;
 	opacity: 0;

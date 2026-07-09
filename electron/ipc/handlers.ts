@@ -897,7 +897,11 @@ async function writePendingCursorTelemetry(videoPath: string) {
 // Best-effort: a registry write hiccup must never fail the recording flow.
 async function registerRecordingMediaLinks(
 	screenVideoPath: string,
-	options: { webcamVideoPath?: string; cursorCaptureMode?: CursorCaptureMode },
+	options: {
+		webcamVideoPath?: string;
+		webcamOffsetMs?: number;
+		cursorCaptureMode?: CursorCaptureMode;
+	},
 ) {
 	try {
 		const cursorTelemetryPath = `${screenVideoPath}.cursor.json`;
@@ -907,6 +911,9 @@ async function registerRecordingMediaLinks(
 			.catch(() => false);
 		await registerMediaLinks(RECORDINGS_DIR, screenVideoPath, {
 			...(options.webcamVideoPath ? { webcamVideoPath: options.webcamVideoPath } : {}),
+			...(options.webcamVideoPath && Number.isFinite(options.webcamOffsetMs)
+				? { webcamOffsetMs: options.webcamOffsetMs }
+				: {}),
 			...(hasCursorTelemetry ? { cursorTelemetryPath } : {}),
 			...(options.cursorCaptureMode ? { cursorCaptureMode: options.cursorCaptureMode } : {}),
 		});
@@ -1375,12 +1382,18 @@ async function resolveMediaLinksForVideo(videoPath: string): Promise<{
 		// recording predates the registry, or if its sidecar doesn't travel with it.
 		await registerMediaLinks(RECORDINGS_DIR, videoPath, {
 			...(session?.webcamVideoPath ? { webcamVideoPath: session.webcamVideoPath } : {}),
+			...(session?.webcamVideoPath && Number.isFinite(session.webcamOffsetMs)
+				? { webcamOffsetMs: session.webcamOffsetMs }
+				: {}),
 			...(hasCursorTelemetry ? { cursorTelemetryPath } : {}),
 		}).catch((error) => console.warn("[media-links] backfill failed:", error));
 
 		return {
 			...(session?.webcamVideoPath
-				? { webcamVideoPath: session.webcamVideoPath, webcamOffsetMs: 0 }
+				? {
+						webcamVideoPath: session.webcamVideoPath,
+						webcamOffsetMs: session.webcamOffsetMs ?? 0,
+					}
 				: {}),
 			...(hasCursorTelemetry ? { cursorTelemetryPath } : {}),
 			resolvedVia: "sidecar",
@@ -2456,11 +2469,16 @@ export function registerIpcHandlers(
 			await Promise.all(patches);
 		}
 
+		const webcamOffsetMs =
+			webcamVideoPath && Number.isFinite(payload.webcamOffsetMs)
+				? payload.webcamOffsetMs
+				: undefined;
 		const session: RecordingSession = webcamVideoPath
 			? {
 					screenVideoPath,
 					webcamVideoPath,
 					createdAt,
+					...(webcamOffsetMs !== undefined ? { webcamOffsetMs } : {}),
 					...(cursorCaptureMode ? { cursorCaptureMode } : {}),
 				}
 			: { screenVideoPath, createdAt, ...(cursorCaptureMode ? { cursorCaptureMode } : {}) };
@@ -2474,7 +2492,11 @@ export function registerIpcHandlers(
 			`${path.parse(payload.screen.fileName).name}${RECORDING_SESSION_SUFFIX}`,
 		);
 		await fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8");
-		await registerRecordingMediaLinks(screenVideoPath, { webcamVideoPath, cursorCaptureMode });
+		await registerRecordingMediaLinks(screenVideoPath, {
+			webcamVideoPath,
+			webcamOffsetMs,
+			cursorCaptureMode,
+		});
 
 		return {
 			success: true,

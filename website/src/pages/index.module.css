@@ -530,6 +530,64 @@
 	max-width: 480px;
 }
 
+.miniTimeline {
+	flex: 1;
+	min-height: 64px;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 10px;
+}
+
+.miniClipsRow {
+	display: flex;
+	gap: 3px;
+	height: 40px;
+}
+
+.miniClip {
+	position: relative;
+	min-width: 0;
+	border-radius: 10px;
+	border: 1.5px solid var(--os-border);
+	background: var(--os-surface-1);
+	overflow: hidden;
+	box-shadow: inset 0 1px 6px rgba(255, 255, 255, 0.06);
+}
+
+.miniWaveform {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1.5px;
+	padding: 0 7px;
+}
+
+.miniWaveform span {
+	flex: 1 1 0;
+	min-width: 1px;
+	max-width: 2.5px;
+	background: var(--os-accent);
+	opacity: 0.7;
+	border-radius: 2px;
+}
+
+.miniTrack {
+	position: relative;
+	height: 22px;
+	border-radius: 7px;
+	background: var(--os-surface-2);
+}
+
+.miniRegion {
+	position: absolute;
+	top: 3px;
+	bottom: 3px;
+	border-radius: 4px;
+}
+
 .cardHeader {
 	display: flex;
 	align-items: center;

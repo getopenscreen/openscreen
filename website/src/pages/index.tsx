@@ -19,6 +19,12 @@ import {
 
 import styles from "./index.module.css";
 
+// Static decorative waveform bars for the "multi-track editor" bento card —
+// mirrors the real editor's per-clip waveform rendering (thin accent bars
+// of varying height inside a rounded, bordered clip block).
+const MINI_WAVEFORM_A = [30, 55, 80, 45, 65, 90, 50, 35, 70, 60, 40, 75, 55, 30];
+const MINI_WAVEFORM_B = [45, 65, 35, 85, 55, 40, 70, 90, 50, 30, 60, 75, 45, 65, 35, 55];
+
 export default function Home() {
 	const { siteConfig } = useDocusaurusContext();
 
@@ -162,8 +168,42 @@ export default function Home() {
 							</div>
 							<p>
 								Trim, split, and layer clips on a proper timeline. Captions, cursor smoothing,
-								zooms, and webcam picture-in-picture, all built on Pixi.js.
+								zooms, and webcam picture-in-picture.
 							</p>
+							<div className={styles.miniTimeline}>
+								<div className={styles.miniClipsRow}>
+									<div className={styles.miniClip} style={{ flex: 5 }}>
+										<div className={styles.miniWaveform}>
+											{MINI_WAVEFORM_A.map((h, i) => (
+												// biome-ignore lint/suspicious/noArrayIndexKey: static decorative bars
+												<span key={i} style={{ height: `${h}%` }} />
+											))}
+										</div>
+									</div>
+									<div className={styles.miniClip} style={{ flex: 6 }}>
+										<div className={styles.miniWaveform}>
+											{MINI_WAVEFORM_B.map((h, i) => (
+												// biome-ignore lint/suspicious/noArrayIndexKey: static decorative bars
+												<span key={i} style={{ height: `${h}%` }} />
+											))}
+										</div>
+									</div>
+								</div>
+								<div className={styles.miniTrack}>
+									<span
+										className={`${styles.miniRegion} ${styles.pillAccent}`}
+										style={{ left: "10%", width: "16%" }}
+									/>
+									<span
+										className={`${styles.miniRegion} ${styles.pillSpeed}`}
+										style={{ left: "32%", width: "12%" }}
+									/>
+									<span
+										className={`${styles.miniRegion} ${styles.pillAnnotation}`}
+										style={{ left: "58%", width: "20%" }}
+									/>
+								</div>
+							</div>
 							<div className={styles.cardPills}>
 								<span className={`${styles.pillStatic} ${styles.pillAccent}`}>Zoom</span>
 								<span className={`${styles.pillStatic} ${styles.pillSpeed}`}>1.5×</span>
@@ -177,8 +217,8 @@ export default function Home() {
 							</span>
 							<h3>AI, opt-in</h3>
 							<p>
-								Whisper runs locally for captions. Bring your own LLM key for chat-based edits —
-								off by default, never required.
+								Whisper runs locally for captions — no upload, no cloud. Chat-based editing with
+								your own LLM key is there if you want it, off unless you connect a provider.
 							</p>
 						</article>
 

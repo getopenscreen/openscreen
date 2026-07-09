@@ -96,6 +96,13 @@ export function NewEditorShell() {
 	const seekSeqRef = useRef(0);
 	const initRef = useRef(false);
 
+	// Dev-only: expose the project store so the browser preview harness can
+	// seed a populated document for design QA. Tree-shaken out of prod builds.
+	if (import.meta.env.DEV) {
+		(window as unknown as { __osProjectStore?: typeof useProjectStore }).__osProjectStore =
+			useProjectStore;
+	}
+
 	// ponytail: serialise timeline-edit saves so two rapid Backspaces
 	// don't race each other's IPC save and overwrite one another in the
 	// store. Each new save chains off the previous one, so the store is

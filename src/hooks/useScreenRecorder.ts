@@ -85,6 +85,15 @@ type NativeMacRecordingHandle = {
 	recordingId: number;
 	finalizing: boolean;
 	paused: boolean;
+	/**
+	 * Milliseconds the browser-recorded webcam clip started before the native
+	 * macOS helper confirmed its screen recording actually began (negative --
+	 * the webcam MediaRecorder starts immediately in the renderer, but the
+	 * ScreenCaptureKit helper needs to spawn a process and start capturing
+	 * before its own recording truly starts). `null` if webcam wasn't
+	 * recorded via the browser sidecar for this session.
+	 */
+	webcamOffsetMs: number | null;
 };
 
 export function useScreenRecorder(): UseScreenRecorderReturn {
@@ -512,7 +521,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					if (!webcamBlob || webcamBlob.size === 0) {
 						return undefined;
 					}
-					const fixedWebcamBlob = await fixWebmDuration(webcamBlob, duration);
+					// The webcam MediaRecorder started before the native recording did (see
+					// webcamOffsetMs on NativeMacRecordingHandle), so its real content is
+					// longer than the screen's active `duration` by that same head start.
+					// Patching the WebM's declared duration to the screen's shorter duration
+					// would make that extra leading footage unseekable in a standard <video>
+					// element (which trusts the container's declared duration/seek range) --
+					// exactly the footage the editor needs to skip into to compensate for
+					// webcamOffsetMs, so it must stay reachable.
+					const webcamHeadStartMs = Math.max(0, -(activeNativeRecording.webcamOffsetMs ?? 0));
+					const fixedWebcamBlob = await fixWebmDuration(webcamBlob, duration + webcamHeadStartMs);
 					return {
 						videoData: await fixedWebcamBlob.arrayBuffer(),
 						fileName: `${RECORDING_FILE_PREFIX}${activeNativeRecording.recordingId}${WEBCAM_FILE_SUFFIX}${VIDEO_FILE_EXTENSION}`,
@@ -552,6 +570,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						recordingId: activeNativeRecording.recordingId,
 						webcam: webcamAsset,
 						cursorCaptureMode,
+						...(typeof activeNativeRecording.webcamOffsetMs === "number"
+							? { webcamOffsetMs: activeNativeRecording.webcamOffsetMs }
+							: {}),
 					});
 					if (attachResult.success) {
 						result.session = attachResult.session;
@@ -884,6 +905,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				Number(selectedSource.display_id) || parseMacDisplayIdFromSourceId(selectedSource.id);
 			const windowId = parseMacWindowIdFromSourceId(selectedSource.id);
 			let nativeWebcamRecorder: RecorderHandle | null = null;
+			// createRecorderHandle() calls MediaRecorder.start() synchronously, so the
+			// webcam clip's first frame is captured right now -- before the native
+			// ScreenCaptureKit helper below has even been spawned. Stamp that instant
+			// so the gap to the helper's confirmed start can be trimmed from the
+			// webcam asset later instead of leaving the camera looking like it lags
+			// behind screen/audio (see webcamOffsetMs on NativeMacRecordingHandle).
+			let nativeWebcamRecorderStartedAtMs: number | null = null;
 			if (webcamEnabled) {
 				if (!webcamReady.current) {
 					await new Promise<void>((resolve) => {
@@ -903,6 +931,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					return true;
 				}
 				if (webcamStream.current) {
+					nativeWebcamRecorderStartedAtMs = performance.now();
 					nativeWebcamRecorder = createRecorderHandle(webcamStream.current, {
 						mimeType: selectMimeType(),
 						videoBitsPerSecond: BITRATE_BASE,
@@ -975,11 +1004,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return true;
 			}
 
+			// The IPC call above only resolves once the helper's stdout confirms its
+			// screen capture has truly started (see waitForNativeMacCaptureStart in
+			// electron/ipc/handlers.ts), so this is a reliable proxy for the native
+			// recording's real t=0 in the same clock the webcam timestamp used above.
+			const nativeRecordingConfirmedStartedAtMs = performance.now();
 			recordingId.current = result.recordingId;
 			nativeMacRecording.current = {
 				recordingId: result.recordingId,
 				finalizing: false,
 				paused: false,
+				webcamOffsetMs:
+					nativeWebcamRecorder && nativeWebcamRecorderStartedAtMs !== null
+						? -(nativeRecordingConfirmedStartedAtMs - nativeWebcamRecorderStartedAtMs)
+						: null,
 			};
 			webcamRecorder.current = nativeWebcamRecorder;
 			accumulatedDurationMs.current = 0;

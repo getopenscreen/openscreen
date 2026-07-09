@@ -368,6 +368,8 @@ type AttachNativeMacWebcamRecordingInput = {
 	recordingId?: number;
 	webcam?: RecordedVideoAssetInput;
 	cursorCaptureMode?: CursorCaptureMode;
+	/** See {@link ProjectMedia.webcamOffsetMs}. */
+	webcamOffsetMs?: number;
 };
 
 let selectedSource: SelectedSource | null = null;
@@ -2349,10 +2351,14 @@ export function registerIpcHandlers(
 						? payload.recordingId
 						: Date.now();
 				const cursorCaptureMode = normalizeCursorCaptureMode(payload.cursorCaptureMode);
+				const webcamOffsetMs = Number.isFinite(payload.webcamOffsetMs)
+					? payload.webcamOffsetMs
+					: undefined;
 				const session: RecordingSession = {
 					screenVideoPath,
 					webcamVideoPath,
 					createdAt,
+					...(webcamOffsetMs !== undefined ? { webcamOffsetMs } : {}),
 					...(cursorCaptureMode ? { cursorCaptureMode } : {}),
 				};
 				setCurrentRecordingSessionState(session);
@@ -2363,7 +2369,11 @@ export function registerIpcHandlers(
 					`${path.parse(screenVideoPath).name}${RECORDING_SESSION_SUFFIX}`,
 				);
 				await fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8");
-				await registerRecordingMediaLinks(screenVideoPath, { webcamVideoPath, cursorCaptureMode });
+				await registerRecordingMediaLinks(screenVideoPath, {
+					webcamVideoPath,
+					webcamOffsetMs,
+					cursorCaptureMode,
+				});
 
 				return {
 					success: true,

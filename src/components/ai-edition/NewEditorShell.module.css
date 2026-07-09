@@ -1457,9 +1457,9 @@
 }
 .laneTrackRow {
 	position: relative;
-	height: 22px;
-	background: var(--surface-2);
-	border: 1px dashed var(--border-soft);
+	height: 24px;
+	background: var(--surface-1);
+	border: 1px solid var(--border-soft);
 	border-radius: var(--r-sm);
 	overflow: hidden;
 }

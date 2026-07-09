@@ -746,6 +746,19 @@ export class AudioProcessor {
 			segEmittedOut += take;
 		};
 
+		// Feed `count` source-domain silence samples into the current segment's
+		// stretcher (compressed by its speed, then clamped/encoded like real audio).
+		const feedSilence = (count: number) => {
+			if (!stretcher) return;
+			let remaining = count;
+			while (remaining > 0) {
+				const n = Math.min(8192, remaining);
+				const silence = Array.from({ length: outputChannels }, () => new Float32Array(n));
+				emitStretched(stretcher.push(silence));
+				remaining -= n;
+			}
+		};
+
 		const finalizeSegment = () => {
 			if (!stretcher) return;
 			emitStretched(stretcher.flush());
@@ -782,7 +795,16 @@ export class AudioProcessor {
 					segIdx += 1;
 					continue;
 				}
-				if (!stretcher) startSegment(seg);
+				if (!stretcher) {
+					startSegment(seg);
+					// If the very first source sample lands after the timeline origin (codec
+					// priming, or an audio track that starts after the video), fill the head
+					// with leading silence so real audio keeps its true source-time position.
+					// The video path holds its first frame over the same head, so this keeps
+					// A/V aligned; it is a no-op when the first sample is at 0, and negative
+					// preroll was already discarded by the `currentAbs < segStart` branch above.
+					if (segIdx === 0 && currentAbs > segStart) feedSilence(currentAbs - segStart);
+				}
 				const take = Math.min(segEnd, frameStartSample + frameCount) - currentAbs;
 				const slice = planes.map((p) => p.subarray(local, local + take));
 				emitStretched((stretcher as WsolaTimeStretcher).push(slice));

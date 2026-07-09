@@ -8,7 +8,9 @@ sidebar_position: 1
 
 OpenScreen is a **free, open-source screen recorder and editor** built on Electron, React, and Pixi.js. It uses native capture APIs (ScreenCaptureKit on macOS, Windows Graphics Capture on Windows) for low-overhead recording, and ships with a real multi-track editor.
 
-> OpenScreen is **not production-grade**. The project is in active development and rough edges are expected.
+:::warning
+OpenScreen is **not production-grade**. The project is in active development and rough edges are expected.
+:::
 
 ## What you can do
 
@@ -19,9 +21,11 @@ OpenScreen is a **free, open-source screen recorder and editor** built on Electr
 
 ## Project facts
 
-- License: MIT. Free forever.
-- Platforms: Windows, macOS, Linux (packaging status varies — see the [project roadmap](https://github.com/getopenscreen/openscreen/blob/main/ROADMAP.md)).
-- Repo: [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen)
+| | |
+|---|---|
+| **License** | MIT — free forever |
+| **Platforms** | Windows, macOS, Linux ([see the roadmap](https://github.com/getopenscreen/openscreen/blob/main/ROADMAP.md) for packaging status) |
+| **Repo** | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
 
 ## Status of this site
 

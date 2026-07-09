@@ -1058,3 +1058,40 @@
 	background: var(--fg-2);
 	box-shadow: 0 0 0 2px var(--surface);
 }
+
+/* V4Timeline — region resize handles, toolbar aspect control */
+.lanePillHandle {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 6px;
+	cursor: ew-resize;
+	z-index: 3;
+}
+.tlToolSep {
+	width: 1px;
+	height: 20px;
+	background: var(--border);
+	margin: 0 4px;
+}
+.tlAspect {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 9px;
+	border: 0;
+	background: transparent;
+	color: var(--fg-2);
+	font-size: 11.5px;
+	font-weight: 500;
+	border-radius: 7px;
+	cursor: pointer;
+	transition: background var(--motion-fast) var(--ease);
+}
+.tlAspect:hover {
+	background: var(--surface-3);
+}
+.tlAspect svg {
+	color: var(--muted);
+}

@@ -1,4 +1,5 @@
 import {
+	ChevronDown,
 	Clock,
 	MessageSquare,
 	MousePointer2,
@@ -16,7 +17,9 @@ import {
 	useState,
 } from "react";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
+import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
+import { ASPECT_RATIOS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import styles from "./EditorShellV4.module.css";
 
 type TimelineApi = ReturnType<typeof useTimeline>;
@@ -93,6 +96,11 @@ export function V4Timeline({
 	const navRef = useRef<HTMLDivElement | null>(null);
 	const [nav, setNav] = useState({ start: 0, end: 1 });
 	const [dragOver, setDragOver] = useState(false);
+	const { settings, set: setSettings } = useEditorSettings();
+	const cycleAspect = () => {
+		const i = ASPECT_RATIOS.indexOf(settings.aspectRatio as AspectRatio);
+		void setSettings({ aspectRatio: ASPECT_RATIOS[(i + 1) % ASPECT_RATIOS.length] });
+	};
 
 	const clips = tl.clips;
 	const total = useMemo(
@@ -160,38 +168,47 @@ export function V4Timeline({
 		[setCurrentTime, total],
 	);
 
-	// Drag a lane pill to move it (keeps duration). Zoom/speed/annotation are
-	// timeline-ms; skips map back to source-seconds through their clip.
+	// Drag a lane pill to move it (mode "move", keeps duration) or resize one
+	// edge (mode "l"/"r"). Zoom/speed/annotation are timeline-ms; skips map
+	// back to source-seconds through their carrying clip.
 	const startPillDrag = useCallback(
-		(e: ReactPointerEvent, pill: LanePill) => {
+		(e: ReactPointerEvent, pill: LanePill, dragMode: "move" | "l" | "r") => {
 			e.preventDefault();
 			e.stopPropagation();
-			tl.selectRegion(pill.kind, pill.id);
+			tl.selectRegion(pill.kind, pill.id, { additive: e.shiftKey });
 			const el = tracksRef.current;
 			if (!el) return;
 			const r = el.getBoundingClientRect();
 			const startX = e.clientX;
 			const dur = pill.end - pill.start;
-			const move = (ev: PointerEvent) => {
-				const dxSec = ((ev.clientX - startX) / r.width) * total;
-				let ns = Math.max(0, Math.min(total - dur, pill.start + dxSec));
-				const ne = ns + dur;
-				if (pill.kind === "zoom") void tl.updateZoomSpan(pill.id, ns * 1000, ne * 1000);
-				else if (pill.kind === "speed") void tl.updateSpeedSpan(pill.id, ns * 1000, ne * 1000);
+			const apply = (start: number, end: number) => {
+				const s = Math.max(0, Math.min(end - 0.2, start));
+				const en = Math.min(total, Math.max(s + 0.2, end));
+				if (pill.kind === "zoom") void tl.updateZoomSpan(pill.id, s * 1000, en * 1000);
+				else if (pill.kind === "speed") void tl.updateSpeedSpan(pill.id, s * 1000, en * 1000);
 				else if (pill.kind === "annotation")
-					void tl.updateAnnotationSpan(pill.id, ns * 1000, ne * 1000);
+					void tl.updateAnnotationSpan(pill.id, s * 1000, en * 1000);
 				else {
-					// skip: map timeline seconds back onto the carrying clip's source
 					const clip = clips.find((c) => {
 						const se = c.sourceEndSec ?? c.sourceStartSec;
-						return ns >= c.timelineStartSec && ns <= c.timelineStartSec + (se - c.sourceStartSec);
+						return s >= c.timelineStartSec && s <= c.timelineStartSec + (se - c.sourceStartSec);
 					});
 					if (clip) {
-						const toSrc = (s: number) => clip.sourceStartSec + (s - clip.timelineStartSec);
-						void tl.updateSkipRange(pill.id, toSrc(ns), toSrc(ne));
+						const toSrc = (t: number) => clip.sourceStartSec + (t - clip.timelineStartSec);
+						void tl.updateSkipRange(pill.id, toSrc(s), toSrc(en));
 					}
 				}
-				ns = ne; // no-op guard for lint
+			};
+			const move = (ev: PointerEvent) => {
+				const dxSec = ((ev.clientX - startX) / r.width) * total;
+				if (dragMode === "move") {
+					const ns = Math.max(0, Math.min(total - dur, pill.start + dxSec));
+					apply(ns, ns + dur);
+				} else if (dragMode === "l") {
+					apply(pill.start + dxSec, pill.end);
+				} else {
+					apply(pill.start, pill.end + dxSec);
+				}
 			};
 			const up = () => {
 				window.removeEventListener("pointermove", move);
@@ -269,23 +286,38 @@ export function V4Timeline({
 		{ id: "enhance", label: "Auto-enhance", icon: <Sparkles size={15} /> },
 	];
 
+	const isPillSelected = (id: string) =>
+		tl.selection?.id === id || tl.multiSelection.some((m) => m.id === id);
 	const renderPills = (pills: LanePill[], emptyLabel: string) => (
 		<>
 			{pills.length === 0 ? <span className={styles.laneEmpty}>{emptyLabel}</span> : null}
 			{pills.map((p) => (
-				<button
-					type="button"
+				<div
+					// biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven region drag/resize
+					// biome-ignore lint/a11y/noStaticElementInteractions: lane pill is a draggable region control
 					key={p.id}
+					role="button"
+					tabIndex={0}
 					className={`${styles.lanePill} ${laneOf(p.kind)}${
-						tl.selection?.id === p.id ? ` ${styles.lanePillSel}` : ""
+						isPillSelected(p.id) ? ` ${styles.lanePillSel}` : ""
 					}`}
 					style={{ left: `${pctOf(p.start)}%`, width: `${Math.max(1.5, pctOf(p.end - p.start))}%` }}
-					onPointerDown={(e) => startPillDrag(e, p)}
+					onPointerDown={(e) => startPillDrag(e, p, "move")}
 					title={p.label}
 				>
+					<span
+						className={styles.lanePillHandle}
+						style={{ left: 0 }}
+						onPointerDown={(e) => startPillDrag(e, p, "l")}
+					/>
 					{pillIcon(p.kind)}
 					<span className={styles.lanePillLabel}>{p.label}</span>
-				</button>
+					<span
+						className={styles.lanePillHandle}
+						style={{ right: 0 }}
+						onPointerDown={(e) => startPillDrag(e, p, "r")}
+					/>
+				</div>
 			))}
 		</>
 	);
@@ -318,6 +350,17 @@ export function V4Timeline({
 							onClick={() => void tl.addZoom()}
 						>
 							<ZoomIn size={15} />
+						</button>
+						<span className={styles.tlToolSep} aria-hidden />
+						<button
+							type="button"
+							className={styles.tlAspect}
+							title="Cycle aspect ratio"
+							aria-label="Cycle aspect ratio"
+							onClick={cycleAspect}
+						>
+							{settings.aspectRatio}
+							<ChevronDown size={10} />
 						</button>
 					</div>
 				) : (

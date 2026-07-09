@@ -12,6 +12,7 @@ import {
 import {
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
+	useEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -20,6 +21,8 @@ import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { ASPECT_RATIOS, type AspectRatio } from "@/utils/aspectRatioUtils";
+import { EditClipModal } from "../Modals";
+import type { VideoSource } from "../VirtualPreview";
 import styles from "./EditorShellV4.module.css";
 
 type TimelineApi = ReturnType<typeof useTimeline>;
@@ -85,18 +88,33 @@ export function V4Timeline({
 	setCurrentTime,
 	variant = "edit",
 	onDropAsset,
+	videoSources = [],
 }: {
 	tl: TimelineApi;
 	currentTimeSec: number;
 	setCurrentTime: (sec: number) => void;
 	variant?: "edit" | "media";
 	onDropAsset?: (assetId: string) => void;
+	videoSources?: VideoSource[];
 }) {
 	const tracksRef = useRef<HTMLDivElement | null>(null);
 	const navRef = useRef<HTMLDivElement | null>(null);
 	const [nav, setNav] = useState({ start: 0, end: 1 });
 	const [dragOver, setDragOver] = useState(false);
+	const [placingSkip, setPlacingSkip] = useState(false);
+	const [snapPct, setSnapPct] = useState<number | null>(null);
+	const [editClipTarget, setEditClipTarget] = useState<AxcutClip | null>(null);
 	const { settings, set: setSettings } = useEditorSettings();
+
+	// Esc cancels the arm-place-skip tool (parity with the old Bottombar).
+	useEffect(() => {
+		if (!placingSkip) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") setPlacingSkip(false);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [placingSkip]);
 	const cycleAspect = () => {
 		const i = ASPECT_RATIOS.indexOf(settings.aspectRatio as AspectRatio);
 		void setSettings({ aspectRatio: ASPECT_RATIOS[(i + 1) % ASPECT_RATIOS.length] });
@@ -181,6 +199,28 @@ export function V4Timeline({
 			const r = el.getBoundingClientRect();
 			const startX = e.clientX;
 			const dur = pill.end - pill.start;
+			// Snap targets: clip boundaries + timeline ends. Within ~1% of total,
+			// an edge snaps and a vertical guide is shown (Bottombar parity).
+			const snapTargets = [
+				0,
+				total,
+				...clips.map((c) => c.timelineStartSec),
+				...clips.map((c) => c.timelineEndSec),
+			];
+			const snapThresh = total * 0.012;
+			const snap = (v: number): number => {
+				let best = v;
+				let bestD = snapThresh;
+				for (const t of snapTargets) {
+					const d = Math.abs(t - v);
+					if (d < bestD) {
+						bestD = d;
+						best = t;
+					}
+				}
+				setSnapPct(best === v ? null : (best / total) * 100);
+				return best;
+			};
 			const apply = (start: number, end: number) => {
 				const s = Math.max(0, Math.min(end - 0.2, start));
 				const en = Math.min(total, Math.max(s + 0.2, end));
@@ -202,15 +242,16 @@ export function V4Timeline({
 			const move = (ev: PointerEvent) => {
 				const dxSec = ((ev.clientX - startX) / r.width) * total;
 				if (dragMode === "move") {
-					const ns = Math.max(0, Math.min(total - dur, pill.start + dxSec));
+					const ns = Math.max(0, Math.min(total - dur, snap(pill.start + dxSec)));
 					apply(ns, ns + dur);
 				} else if (dragMode === "l") {
-					apply(pill.start + dxSec, pill.end);
+					apply(snap(pill.start + dxSec), pill.end);
 				} else {
-					apply(pill.start, pill.end + dxSec);
+					apply(pill.start, snap(pill.end + dxSec));
 				}
 			};
 			const up = () => {
+				setSnapPct(null);
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", up);
 			};
@@ -278,9 +319,32 @@ export function V4Timeline({
 			<ZoomIn size={11} />
 		);
 
+	// Place a 1s skip at the clicked timeline position, mapped to its clip's
+	// source-time (Bottombar's arm-place-skip tool).
+	const placeSkipAtClientX = useCallback(
+		(clientX: number) => {
+			const el = tracksRef.current;
+			if (!el) return;
+			const r = el.getBoundingClientRect();
+			const t = Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * total;
+			const clip = clips.find((c) => t >= c.timelineStartSec && t <= c.timelineEndSec);
+			if (!clip) return;
+			const src = clip.sourceStartSec + (t - clip.timelineStartSec);
+			const srcEnd = clip.sourceEndSec ?? clip.sourceStartSec;
+			void tl.addSkipAt(clip.assetId, src, Math.min(srcEnd, src + 1));
+			setPlacingSkip(false);
+		},
+		[tl, total, clips],
+	);
+
 	const tools: Array<{ id: ToolId; label: string; icon: React.ReactNode; on?: boolean }> = [
-		{ id: "select", label: "Select", icon: <MousePointer2 size={15} />, on: true },
-		{ id: "cut", label: "Split", icon: <SplitSquareHorizontal size={15} /> },
+		{ id: "select", label: "Select", icon: <MousePointer2 size={15} />, on: !placingSkip },
+		{
+			id: "cut",
+			label: "Place skip (click the timeline)",
+			icon: <SplitSquareHorizontal size={15} />,
+			on: placingSkip,
+		},
 		{ id: "comment", label: "Comment", icon: <MessageSquare size={15} /> },
 		{ id: "speed", label: "Speed", icon: <Clock size={15} /> },
 		{ id: "enhance", label: "Auto-enhance", icon: <Sparkles size={15} /> },
@@ -337,6 +401,7 @@ export function V4Timeline({
 								onClick={() => {
 									if (t.id === "speed") void tl.addSpeed();
 									if (t.id === "comment") void tl.addAnnotation();
+									if (t.id === "cut") setPlacingSkip((v) => !v);
 								}}
 							>
 								{t.icon}
@@ -386,8 +451,12 @@ export function V4Timeline({
 			<div
 				ref={tracksRef}
 				className={styles.tlTracks}
+				style={placingSkip ? { cursor: "crosshair" } : undefined}
 				// biome-ignore lint/a11y/useKeyWithClickEvents: ruler scrubbing is pointer-only
-				onClick={(e) => seekToClientX(e.clientX)}
+				onClick={(e) => {
+					if (placingSkip) placeSkipAtClientX(e.clientX);
+					else seekToClientX(e.clientX);
+				}}
 			>
 				<div className={styles.tlCanvas} style={canvasStyle}>
 					<div
@@ -397,6 +466,9 @@ export function V4Timeline({
 					>
 						<span className={styles.tlPlayheadDiamond} />
 					</div>
+					{snapPct !== null ? (
+						<div aria-hidden className={styles.tlSnapGuide} style={{ left: `${snapPct}%` }} />
+					) : null}
 
 					<div className={styles.tlRuler}>
 						{rulerTicks.map((t, i) => (
@@ -442,6 +514,11 @@ export function V4Timeline({
 										e.stopPropagation();
 										tl.selectClip(c.id);
 									}}
+									onDoubleClick={(e) => {
+										e.stopPropagation();
+										setEditClipTarget(c);
+									}}
+									title="Double-click to edit in/out points"
 								>
 									<div aria-hidden className={styles.tlWave}>
 										{bars.map((h, bi) => (
@@ -513,6 +590,27 @@ export function V4Timeline({
 					<span />
 				</div>
 			</div>
+
+			<EditClipModal
+				open={editClipTarget !== null}
+				onClose={() => setEditClipTarget(null)}
+				clip={editClipTarget}
+				assetMeta={
+					editClipTarget
+						? {
+								label:
+									tl.assets.find((a) => a.id === editClipTarget.assetId)?.label ??
+									editClipTarget.assetId,
+								durationSec: tl.assets.find((a) => a.id === editClipTarget.assetId)?.durationSec,
+							}
+						: null
+				}
+				videoSources={videoSources}
+				onApply={(sStart, sEnd) => {
+					if (editClipTarget) void tl.updateClipSourceRange(editClipTarget.id, sStart, sEnd);
+					setEditClipTarget(null);
+				}}
+			/>
 		</div>
 	);
 }

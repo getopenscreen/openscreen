@@ -1095,3 +1095,15 @@
 .tlAspect svg {
 	color: var(--muted);
 }
+
+/* V4Timeline — snap guide during region drag/resize */
+.tlSnapGuide {
+	position: absolute;
+	top: 0;
+	bottom: 66px;
+	width: 2px;
+	background: var(--danger);
+	box-shadow: 0 0 6px color-mix(in oklch, var(--danger) 60%, transparent);
+	pointer-events: none;
+	z-index: 14;
+}

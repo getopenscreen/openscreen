@@ -6,6 +6,7 @@ import {
 } from "@/components/video-editor/types";
 import { WsolaTimeStretcher } from "./audioTimeStretch";
 import type { ExportAudioMuxerCodec, VideoMuxer } from "./muxer";
+import { PlanarChunkQueue } from "./planarChunkQueue";
 import {
 	buildSpeedSegments,
 	maxTimelineSpeed,
@@ -684,43 +685,30 @@ export class AudioProcessor {
 		});
 		encoder.configure(encodeConfig);
 
-		// Output-side accumulator: buffered stretched PCM flushed as fixed-size
-		// AudioData slices with running (monotonic) output timestamps.
-		const outAcc: Float32Array[] = Array.from(
-			{ length: outputChannels },
-			() => new Float32Array(0),
-		);
+		// Output-side accumulator: a chunk queue (O(1) append, front-drained) coalesced
+		// into fixed-size AudioData slices with running (monotonic) output timestamps.
+		const outQueue = new PlanarChunkQueue(outputChannels);
 		let outTimestampSamples = 0;
 
+		const appendOutput = (planes: Float32Array[], count: number) => {
+			outQueue.push(planes, count);
+		};
+
 		const flushOutput = (drainAll: boolean) => {
-			while (outAcc[0].length >= OFFLINE_OUTPUT_FRAMES || (drainAll && outAcc[0].length > 0)) {
-				const take = Math.min(OFFLINE_OUTPUT_FRAMES, outAcc[0].length);
-				const data = new Float32Array(take * outputChannels);
-				for (let c = 0; c < outputChannels; c++) {
-					data.set(outAcc[c].subarray(0, take), c * take);
-					outAcc[c] = outAcc[c].slice(take);
-				}
+			while (outQueue.length >= OFFLINE_OUTPUT_FRAMES || (drainAll && outQueue.length > 0)) {
+				const take = Math.min(OFFLINE_OUTPUT_FRAMES, outQueue.length);
+				const data = outQueue.take(take);
 				const audioData = new AudioData({
 					format: "f32-planar",
 					sampleRate: outputSampleRate,
 					numberOfFrames: take,
 					numberOfChannels: outputChannels,
 					timestamp: Math.round((outTimestampSamples / outputSampleRate) * 1_000_000),
-					data: data.buffer,
+					data: data.buffer as ArrayBuffer,
 				});
 				outTimestampSamples += take;
 				encoder.encode(audioData);
 				audioData.close();
-			}
-		};
-
-		const appendOutput = (planes: Float32Array[], count: number) => {
-			if (count <= 0) return;
-			for (let c = 0; c < outputChannels; c++) {
-				const merged = new Float32Array(outAcc[c].length + count);
-				merged.set(outAcc[c], 0);
-				merged.set(planes[c].subarray(0, count), outAcc[c].length);
-				outAcc[c] = merged;
 			}
 		};
 
@@ -761,6 +749,9 @@ export class AudioProcessor {
 		const finalizeSegment = () => {
 			if (!stretcher) return;
 			emitStretched(stretcher.flush());
+			// Intentional: pad the deficit with silence when WSOLA under-fills a short
+			// high-speed segment, so the segment keeps its exact A/V-locked length. Do
+			// not "fix" this by removing the pad.
 			if (segEmittedOut < segExpectedOut) {
 				const pad = segExpectedOut - segEmittedOut;
 				const silence = Array.from({ length: outputChannels }, () => new Float32Array(pad));
@@ -824,6 +815,10 @@ export class AudioProcessor {
 					data.copyTo(plane, { format: "f32-planar", planeIndex: c });
 					srcPlanes.push(plane);
 				}
+				// Raw source timestamps — the same origin the video decoder uses
+				// (streamingDecoder), so audio and video stay in one coordinate system.
+				// Frames before the first segment start (e.g. negative-timestamp codec
+				// preroll, or a leading trim) are correctly discarded by routeFrame.
 				const frameStartSample = Math.round((data.timestamp / 1_000_000) * sampleRate);
 				data.close();
 

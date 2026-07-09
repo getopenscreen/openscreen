@@ -1847,9 +1847,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				speedRegions.find(
 					(region) => currentTime * 1000 >= region.startMs && currentTime * 1000 < region.endMs,
 				) ?? null;
-			// Cap the (silent) webcam element at the native rate so playbackRate never
-			// throws; the per-frame currentTime resync below keeps it aligned with the
-			// stepped playhead in >16× regions.
+			// Cap the (silent) webcam element at the native rate so playbackRate never throws.
 			webcamVideo.playbackRate = Math.min(
 				activeSpeedRegion ? activeSpeedRegion.speed : 1,
 				MAX_NATIVE_PLAYBACK_RATE,
@@ -1863,7 +1861,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				return;
 			}
 
-			if (Math.abs(webcamVideo.currentTime - currentTime) > 0.15) {
+			// While the main video is seek-stepping (>16×), the playhead advances far
+			// faster than this 16×-capped element can seek; resyncing every frame would
+			// keep its decoder perpetually mid-seek and freeze it — the same failure the
+			// main video's throttle fixes. Let the muted webcam play best-effort at the
+			// clamped rate instead (a small lag is fine).
+			if (!seekSteppingRef.current && Math.abs(webcamVideo.currentTime - currentTime) > 0.15) {
 				webcamVideo.currentTime = currentTime;
 			}
 

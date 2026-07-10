@@ -65,10 +65,12 @@
 		"image": "صورة",
 		"color": "لون",
 		"gradient": "تدرج لوني",
+		"custom": "مخصص",
 		"uploadCustom": "رفع صورة مخصصة",
 		"gradientLabel": "تدرج لوني {{index}}",
 		"colorWheel": "عجلة الألوان",
-		"colorPalette": "لوحة الألوان"
+		"colorPalette": "لوحة الألوان",
+		"presets": "إعدادات مسبقة"
 	},
 	"crop": {
 		"title": "اقتصاص",

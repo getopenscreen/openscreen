@@ -65,10 +65,12 @@
 		"image": "Hình ảnh",
 		"color": "Màu sắc",
 		"gradient": "Dải màu",
+		"custom": "Tùy chỉnh",
 		"uploadCustom": "Tải lên tùy chỉnh",
 		"gradientLabel": "Dải màu {{index}}",
 		"colorPalette": "Bảng màu",
-		"colorWheel": "Vòng màu"
+		"colorWheel": "Vòng màu",
+		"presets": "Có sẵn"
 	},
 	"crop": {
 		"title": "Cắt xén",

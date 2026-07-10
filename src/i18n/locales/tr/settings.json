@@ -65,10 +65,12 @@
 		"image": "Görüntü",
 		"color": "Renk",
 		"gradient": "Gradyan",
+		"custom": "Özel",
 		"uploadCustom": "Özel Yükle",
 		"gradientLabel": "Gradyan {{index}}",
 		"colorWheel": "Renk çarkı",
-		"colorPalette": "Renk paleti"
+		"colorPalette": "Renk paleti",
+		"presets": "Ön ayarlar"
 	},
 	"crop": {
 		"title": "Kırpma",

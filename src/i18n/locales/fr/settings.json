@@ -65,10 +65,12 @@
 		"image": "Image",
 		"color": "Couleur",
 		"gradient": "Dégradé",
+		"custom": "Personnalisé",
 		"uploadCustom": "Téléverser une image",
 		"gradientLabel": "Dégradé {{index}}",
 		"colorWheel": "Roue chromatique",
-		"colorPalette": "Palette de couleurs"
+		"colorPalette": "Palette de couleurs",
+		"presets": "Préréglages"
 	},
 	"crop": {
 		"title": "Recadrage",

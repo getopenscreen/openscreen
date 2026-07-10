@@ -65,10 +65,12 @@
 		"image": "Imagen",
 		"color": "Color",
 		"gradient": "Degradado",
+		"custom": "Personalizado",
 		"uploadCustom": "Subir personalizado",
 		"gradientLabel": "Degradado {{index}}",
 		"colorWheel": "Rueda de colores",
-		"colorPalette": "Paleta de colores"
+		"colorPalette": "Paleta de colores",
+		"presets": "Ajustes preestablecidos"
 	},
 	"crop": {
 		"title": "Recortar",

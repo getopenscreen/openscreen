@@ -65,10 +65,12 @@
 		"image": "Immagine",
 		"color": "Colore",
 		"gradient": "Sfumatura",
+		"custom": "Personalizzato",
 		"uploadCustom": "Carica personalizzato",
 		"gradientLabel": "Sfumatura {{index}}",
 		"colorWheel": "Ruota dei colori",
-		"colorPalette": "Tavolozza dei colori"
+		"colorPalette": "Tavolozza dei colori",
+		"presets": "Predefiniti"
 	},
 	"crop": {
 		"title": "Ritaglia",

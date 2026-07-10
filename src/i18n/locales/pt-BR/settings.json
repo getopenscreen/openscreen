@@ -63,10 +63,12 @@
 		"image": "Imagem",
 		"color": "Cor",
 		"gradient": "Gradiente",
+		"custom": "Personalizado",
 		"uploadCustom": "Enviar Personalizada",
 		"gradientLabel": "Gradiente {{index}}",
 		"colorWheel": "Roda de Cores",
-		"colorPalette": "Paleta de Cores"
+		"colorPalette": "Paleta de Cores",
+		"presets": "Predefinições"
 	},
 	"crop": {
 		"title": "Cortar",

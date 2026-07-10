@@ -65,10 +65,12 @@
 		"image": "이미지",
 		"color": "색상",
 		"gradient": "그라디언트",
+		"custom": "사용자 지정",
 		"uploadCustom": "직접 업로드",
 		"gradientLabel": "그라디언트 {{index}}",
 		"colorWheel": "색상 휠",
-		"colorPalette": "색상 팔레트"
+		"colorPalette": "색상 팔레트",
+		"presets": "프리셋"
 	},
 	"crop": {
 		"title": "자르기",

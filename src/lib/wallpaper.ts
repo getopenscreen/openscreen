@@ -45,7 +45,14 @@ export function classifyWallpaper(value: string): WallpaperClassification {
 
 function extractTrailingGradient(value: string): string | null {
 	const matches: number[] = [];
-	for (const type of ["linear", "radial", "conic"]) {
+	for (const type of [
+		"linear",
+		"radial",
+		"conic",
+		"repeating-linear",
+		"repeating-radial",
+		"repeating-conic",
+	]) {
 		const idx = value.lastIndexOf(`, ${type}-gradient(`);
 		if (idx >= 0) matches.push(idx);
 	}

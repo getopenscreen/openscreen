@@ -130,6 +130,15 @@ describe("classifyWallpaper", () => {
 			value: "linear-gradient(135deg, rgb(255,0,0) 0%, rgb(0,0,255) 100%)",
 		});
 	});
+
+	it("handles repeating-gradient variants in composite backgrounds", () => {
+		const composite =
+			'url("data:image/svg+xml;utf8,<svg/>") repeat, repeating-linear-gradient(45deg, red, blue)';
+		expect(classifyWallpaper(composite)).toEqual({
+			kind: "gradient",
+			value: "repeating-linear-gradient(45deg, red, blue)",
+		});
+	});
 });
 
 describe("resolveImageWallpaperUrl", () => {

@@ -66,10 +66,12 @@
 		"image": "Изображение",
 		"color": "Цвет",
 		"gradient": "Градиент",
+		"custom": "Свой",
 		"uploadCustom": "Загрузить свой",
 		"gradientLabel": "Градиент {{index}}",
 		"colorWheel": "Цветовой круг",
-		"colorPalette": "Палитра цветов"
+		"colorPalette": "Палитра цветов",
+		"presets": "Пресеты"
 	},
 	"crop": {
 		"title": "Обрезка",

@@ -67,10 +67,12 @@
 		"image": "圖片",
 		"color": "顏色",
 		"gradient": "漸層",
+		"custom": "自訂",
 		"uploadCustom": "上傳自訂",
 		"gradientLabel": "漸層 {{index}}",
 		"colorWheel": "色輪",
-		"colorPalette": "調色盤"
+		"colorPalette": "調色盤",
+		"presets": "預設"
 	},
 	"crop": {
 		"title": "裁剪",

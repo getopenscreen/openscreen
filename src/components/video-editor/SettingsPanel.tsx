@@ -51,11 +51,13 @@ import {
 	GIF_FRAME_RATES,
 	GIF_SIZE_PRESETS,
 } from "@/lib/exporter";
+import { buildGradientFromEditor } from "@/lib/gradientBuilder";
 import { cn } from "@/lib/utils";
 import { resolveImageWallpaperUrl, WALLPAPER_PATHS } from "@/lib/wallpaper";
 import { type AspectRatio, isPortraitAspectRatio } from "@/utils/aspectRatioUtils";
 import { getTestId } from "@/utils/getTestId";
 import ColorPicker from "../ui/color-picker";
+import GradientEditor from "../ui/gradient-editor";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { BlurSettingsPanel } from "./BlurSettingsPanel";
 import { BACKGROUND_IMAGE_ACCEPT, isSupportedBackgroundImageType } from "./backgroundImageUpload";
@@ -1825,28 +1827,45 @@ export function SettingsPanel({
 													/>
 												</TabsContent>
 
-												<TabsContent value="gradient" className="mt-0">
-													<div className="grid grid-cols-6 gap-2">
-														{GRADIENTS.map((g, idx) => (
-															<div
-																key={g}
-																className={cn(
-																	"aspect-square w-8 h-8 rounded-lg border overflow-hidden cursor-pointer transition-all duration-150 shadow-sm",
-																	gradient === g
-																		? "border-[#34B27B] ring-1 ring-[#34B27B]/30"
-																		: "border-white/10 hover:border-[#34B27B]/40 opacity-80 hover:opacity-100 bg-white/5",
-																)}
-																style={{ background: g }}
-																aria-label={t("background.gradientLabel", {
-																	index: idx + 1,
-																})}
-																onClick={() => {
-																	setGradient(g);
-																	onWallpaperChange(g);
-																}}
-																role="button"
-															/>
-														))}
+												<TabsContent value="gradient" className="mt-0 space-y-3">
+													<div className="space-y-1">
+														<div className="text-[10px] font-medium uppercase tracking-wider text-slate-400 px-1">
+															{t("background.presets")}
+														</div>
+														<div className="grid grid-cols-6 gap-2">
+															{GRADIENTS.map((g, idx) => (
+																<div
+																	key={g}
+																	className={cn(
+																		"aspect-square w-8 h-8 rounded-lg border overflow-hidden cursor-pointer transition-all duration-150 shadow-sm",
+																		gradient === g
+																			? "border-[#34B27B] ring-1 ring-[#34B27B]/30"
+																			: "border-white/10 hover:border-[#34B27B]/40 opacity-80 hover:opacity-100 bg-white/5",
+																	)}
+																	style={{ background: g }}
+																	aria-label={t("background.gradientLabel", {
+																		index: idx + 1,
+																	})}
+																	onClick={() => {
+																		setGradient(g);
+																		onWallpaperChange(g);
+																	}}
+																	role="button"
+																/>
+															))}
+														</div>
+													</div>
+													<div className="space-y-1">
+														<div className="text-[10px] font-medium uppercase tracking-wider text-slate-400 px-1">
+															{t("background.custom")}
+														</div>
+														<GradientEditor
+															onChange={(state) => {
+																const css = buildGradientFromEditor(state);
+																setGradient(css);
+																onWallpaperChange(css);
+															}}
+														/>
 													</div>
 												</TabsContent>
 											</div>

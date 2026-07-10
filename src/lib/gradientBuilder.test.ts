@@ -8,6 +8,7 @@ const baseState = (overrides: Partial<GradientEditorState> = {}): GradientEditor
 	mainY: 40,
 	mainColor: "rgb(255, 0, 0)",
 	brightness: 100,
+	angle: 135,
 	harmonyType: "splitComplementary",
 	...overrides,
 });

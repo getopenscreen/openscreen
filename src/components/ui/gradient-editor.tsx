@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /* ---------- icons ---------- */
 const PlusIcon = () => (
@@ -203,6 +204,14 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 	const draggingMain = useRef(false);
 	const movedRef = useRef(false);
 	const mountedRef = useRef(false);
+	const dragCleanup = useRef<(() => void) | null>(null);
+
+	useEffect(() => {
+		return () => {
+			dragCleanup.current?.();
+			dragCleanup.current = null;
+		};
+	}, []);
 
 	const totalColors = 1 + orbitPoints.length;
 
@@ -263,12 +272,22 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 		setMainRadius(radius);
 	}, []);
 
-	const onMainPointerDown = (e: React.PointerEvent) => {
+	const onMainPointerDown = (e: ReactPointerEvent) => {
 		e.stopPropagation();
 		draggingMain.current = true;
 		movedRef.current = false;
+		dragCleanup.current?.();
+		const onUp = () => {
+			draggingMain.current = false;
+			window.removeEventListener("pointermove", onMainPointerMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
+			dragCleanup.current = null;
+		};
+		dragCleanup.current = onUp;
 		window.addEventListener("pointermove", onMainPointerMove);
-		window.addEventListener("pointerup", onMainPointerUp);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
 	};
 
 	const onMainPointerMove = useCallback(
@@ -279,12 +298,6 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 		},
 		[updateMainFromPointer],
 	);
-
-	const onMainPointerUp = useCallback(() => {
-		draggingMain.current = false;
-		window.removeEventListener("pointermove", onMainPointerMove);
-		window.removeEventListener("pointerup", onMainPointerUp);
-	}, [onMainPointerMove]);
 
 	/* ---------- add / remove / harmony ---------- */
 	const addPoint = () => {
@@ -321,15 +334,20 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 	const WAVE_END_PCT = (367.037 / 420) * 100;
 	const clampedBrightness = clamp(brightness, WAVE_START_PCT, WAVE_END_PCT);
 
-	const onSliderPointerDown = (e: React.PointerEvent) => {
+	const onSliderPointerDown = (e: ReactPointerEvent) => {
 		setBrightnessFromClientX(e.clientX);
+		dragCleanup.current?.();
 		const move = (ev: PointerEvent) => setBrightnessFromClientX(ev.clientX);
-		const up = () => {
+		const onUp = () => {
 			window.removeEventListener("pointermove", move);
-			window.removeEventListener("pointerup", up);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
+			dragCleanup.current = null;
 		};
+		dragCleanup.current = onUp;
 		window.addEventListener("pointermove", move);
-		window.addEventListener("pointerup", up);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
 	};
 
 	/* ---------- angle knob ---------- */
@@ -346,22 +364,61 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 		if (a < 0) a += 360;
 		setAngle(Math.round(a));
 	};
-	const onAngleKnobPointerDown = (e: React.PointerEvent) => {
+	const onAngleKnobPointerDown = (e: ReactPointerEvent) => {
 		e.stopPropagation();
 		setAngleFromClientPos(e.clientX, e.clientY);
+		dragCleanup.current?.();
 		const move = (ev: PointerEvent) => setAngleFromClientPos(ev.clientX, ev.clientY);
-		const up = () => {
+		const onUp = () => {
 			window.removeEventListener("pointermove", move);
-			window.removeEventListener("pointerup", up);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
+			dragCleanup.current = null;
 		};
+		dragCleanup.current = onUp;
 		window.addEventListener("pointermove", move);
-		window.addEventListener("pointerup", up);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
 	};
 
 	// Brightness filter (dark theme only)
 	const brightnessFilter = `brightness(${0.62 * (0.55 + (brightness / 100) * 0.9)}) saturate(0.95)`;
 
 	const wavePath = useMemo(() => getInterpolatedWavePath(brightness / 100), [brightness]);
+
+	/* ---------- keyboard handlers ---------- */
+	const onMainKeyDown = useCallback((e: React.KeyboardEvent) => {
+		const step = e.shiftKey ? 10 : 5;
+		if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+			e.preventDefault();
+			setMainAngle((a) => a - step);
+		} else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+			e.preventDefault();
+			setMainAngle((a) => a + step);
+		}
+	}, []);
+
+	const onSliderKeyDown = useCallback((e: React.KeyboardEvent) => {
+		const step = e.shiftKey ? 10 : 2;
+		if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+			e.preventDefault();
+			setBrightness((b) => clamp(b - step, 0, 100));
+		} else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+			e.preventDefault();
+			setBrightness((b) => clamp(b + step, 0, 100));
+		}
+	}, []);
+
+	const onAngleKeyDown = useCallback((e: React.KeyboardEvent) => {
+		const step = e.shiftKey ? 15 : 5;
+		if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+			e.preventDefault();
+			setAngle((a) => (a - step + 360) % 360);
+		} else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+			e.preventDefault();
+			setAngle((a) => (a + step) % 360);
+		}
+	}, []);
 
 	return (
 		<div className="w-[240px] max-w-full mx-auto rounded-[18px] p-[10px] box-border font-sans text-[#f2f2f2] select-none">
@@ -398,7 +455,14 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 					{/* Main draggable point */}
 					<div
 						onPointerDown={onMainPointerDown}
-						className="absolute w-11 h-11 rounded-full cursor-grab shadow-[0_0_0_4px_#f5f5f5,0_4px_14px_rgba(0,0,0,0.35)] transition-shadow z-10 active:cursor-grabbing"
+						onKeyDown={onMainKeyDown}
+						tabIndex={0}
+						role="slider"
+						aria-label="Color hue"
+						aria-valuemin={0}
+						aria-valuemax={360}
+						aria-valuenow={Math.round(((mainAngle % 360) + 360) % 360)}
+						className="absolute w-11 h-11 rounded-full cursor-grab shadow-[0_0_0_4px_#f5f5f5,0_4px_14px_rgba(0,0,0,0.35)] transition-shadow z-10 active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-[#34B27B]"
 						style={{
 							left: `${mainX}%`,
 							top: `${mainY}%`,
@@ -457,7 +521,14 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 				<div
 					ref={trackRef}
 					onPointerDown={onSliderPointerDown}
-					className="relative flex-1 h-10 flex items-center cursor-pointer"
+					onKeyDown={onSliderKeyDown}
+					tabIndex={0}
+					role="slider"
+					aria-label="Brightness"
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={Math.round(brightness)}
+					className="relative flex-1 h-10 flex items-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#34B27B] rounded"
 				>
 					<svg
 						width="100%"
@@ -490,7 +561,14 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 				<div
 					ref={angleKnobRef}
 					onPointerDown={onAngleKnobPointerDown}
-					className="relative w-[42px] h-[42px] rounded-full bg-[radial-gradient(circle_at_35%_30%,#2b2b2b,#0c0c0c)] shadow-[0_3px_10px_rgba(0,0,0,0.4)] cursor-grab flex-shrink-0 active:cursor-grabbing"
+					onKeyDown={onAngleKeyDown}
+					tabIndex={0}
+					role="slider"
+					aria-label="Gradient angle"
+					aria-valuemin={0}
+					aria-valuemax={360}
+					aria-valuenow={angle}
+					className="relative w-[42px] h-[42px] rounded-full bg-[radial-gradient(circle_at_35%_30%,#2b2b2b,#0c0c0c)] shadow-[0_3px_10px_rgba(0,0,0,0.4)] cursor-grab flex-shrink-0 active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-[#34B27B]"
 					title="Gradient angle"
 				>
 					<div className="absolute inset-0" style={{ transform: `rotate(${angleKnobAngle}deg)` }}>

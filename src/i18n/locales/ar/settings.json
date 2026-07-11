@@ -31,7 +31,8 @@
 		"selectRegion": "حدد منطقة السرعة للتعديل",
 		"deleteRegion": "حذف منطقة السرعة",
 		"customPlaybackSpeed": "سرعة تشغيل مخصصة",
-		"maxSpeedError": "لا يمكن للسرعة أن تتجاوز 16×"
+		"maxSpeedError": "لا يمكن للسرعة أن تتجاوز {{max}}×",
+		"previewFrameSteppingHint": "فوق {{native}}×، تعرض المعاينة إطارًا تلو الآخر وبدون صوت. لا يتأثر التصدير."
 	},
 	"trim": {
 		"deleteRegion": "حذف منطقة القص"

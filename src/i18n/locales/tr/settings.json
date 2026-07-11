@@ -31,7 +31,8 @@
 		"selectRegion": "Ayarlamak için bir hız bölgesi seçin",
 		"deleteRegion": "Hız Bölgesini Sil",
 		"customPlaybackSpeed": "Özel Oynatma Hızı",
-		"maxSpeedError": "Hız 16× değerinden yüksek olamaz"
+		"maxSpeedError": "Hız {{max}}× değerinden yüksek olamaz",
+		"previewFrameSteppingHint": "{{native}}× üzerinde önizleme kare kare ilerler ve sessizdir. Dışa aktarma etkilenmez."
 	},
 	"trim": {
 		"deleteRegion": "Kırpma Bölgesini Sil"

@@ -31,7 +31,8 @@
 		"selectRegion": "Seleziona una regione velocità da regolare",
 		"deleteRegion": "Elimina regione velocità",
 		"customPlaybackSpeed": "Velocità di riproduzione personalizzata",
-		"maxSpeedError": "La velocità non può superare 16×"
+		"maxSpeedError": "La velocità non può superare {{max}}×",
+		"previewFrameSteppingHint": "Oltre {{native}}×, l'anteprima procede fotogramma per fotogramma e senza audio. L'esportazione non è influenzata."
 	},
 	"trim": {
 		"deleteRegion": "Elimina regione taglio"

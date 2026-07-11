@@ -30,7 +30,8 @@
 		"selectRegion": "Selecione uma região de velocidade para ajustar",
 		"deleteRegion": "Excluir Região de Velocidade",
 		"customPlaybackSpeed": "Velocidade Personalizada",
-		"maxSpeedError": "A velocidade não pode ser superior a 16×"
+		"maxSpeedError": "A velocidade não pode ser superior a {{max}}×",
+		"previewFrameSteppingHint": "Acima de {{native}}×, a prévia avança quadro a quadro e sem som. A exportação não é afetada."
 	},
 	"trim": {
 		"deleteRegion": "Excluir Região de Recorte"

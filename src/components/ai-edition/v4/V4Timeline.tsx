@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { fromFileUrl } from "@/components/video-editor/projectPersistence";
+import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
+import { useScopedT } from "@/contexts/I18nContext";
 import { createId } from "@/lib/ai-edition/document/ids";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
@@ -36,7 +38,7 @@ import {
 import { buildAutoZoomSuggestions } from "@/lib/ai-edition/timeline/zoom-suggestions";
 import { nativeBridgeClient } from "@/native/client";
 import { ASPECT_RATIOS } from "@/utils/aspectRatioUtils";
-import { EditClipModal } from "../Modals";
+import { TransportBar } from "../TransportBar";
 import type { VideoSource } from "../VirtualPreview";
 import styles from "./EditorShellV4.module.css";
 
@@ -92,6 +94,14 @@ export function V4Timeline({
 	variant = "edit",
 	onDropAsset,
 	videoSources = [],
+	playing,
+	loop,
+	onTogglePlay,
+	onPrevClip,
+	onNextClip,
+	onToggleLoop,
+	onExpand,
+	onEditClip,
 }: {
 	tl: TimelineApi;
 	currentTimeSec: number;
@@ -99,7 +109,18 @@ export function V4Timeline({
 	variant?: "edit" | "media";
 	onDropAsset?: (assetId: string) => void;
 	videoSources?: VideoSource[];
+	playing: boolean;
+	loop: boolean;
+	onTogglePlay: () => void;
+	onPrevClip: () => void;
+	onNextClip: () => void;
+	onToggleLoop: () => void;
+	onExpand: () => void;
+	/** Opens the (now single, shell-level) EditClipModal for this clip —
+	 * trim in/out and crop both live there per-clip. */
+	onEditClip: (clip: AxcutClip) => void;
 }) {
+	const t = useScopedT("timeline");
 	const tracksRef = useRef<HTMLDivElement | null>(null);
 	const navRef = useRef<HTMLDivElement | null>(null);
 	const clipsRef = useRef<HTMLDivElement | null>(null);
@@ -122,7 +143,6 @@ export function V4Timeline({
 		pointerDeltaX: number;
 		shiftPx: number;
 	} | null>(null);
-	const [editClipTarget, setEditClipTarget] = useState<AxcutClip | null>(null);
 	const { settings, set: setSettings } = useEditorSettings();
 
 	const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
@@ -150,7 +170,7 @@ export function V4Timeline({
 		kind: "annotation",
 		start: a.startMs / 1000,
 		end: a.endMs / 1000,
-		label: "New annotation",
+		label: t("toolbar.newAnnotation"),
 		sourceIds: [a.id],
 	}));
 	const speedPills: LanePill[] = tl.speedRegions.map((s) => ({
@@ -166,7 +186,10 @@ export function V4Timeline({
 		kind: "zoom",
 		start: z.startMs / 1000,
 		end: z.endMs / 1000,
-		label: `${(((z as { depth?: number }).depth ?? 3) / 2 + 0.5).toFixed(1)}×`,
+		// Matches RightPanelStack's effectiveZoomScale: a custom scale (from the
+		// slider) overrides the depth preset; otherwise show the depth's actual
+		// preset value, not a fabricated linear approximation of it.
+		label: `${(z.customScale ?? ZOOM_DEPTH_SCALES[z.depth]).toFixed(2)}×`,
 		sourceIds: [z.id],
 	}));
 	// trims: content-free (no per-instance text/settings), so touching rows —
@@ -508,9 +531,9 @@ export function V4Timeline({
 	);
 
 	const tools: Array<{ id: ToolId; label: string; icon: React.ReactNode }> = [
-		{ id: "cut", label: "Add trim at playhead", icon: <SplitSquareHorizontal size={15} /> },
-		{ id: "comment", label: "Comment", icon: <MessageSquare size={15} /> },
-		{ id: "speed", label: "Speed", icon: <Clock size={15} /> },
+		{ id: "cut", label: t("buttons.addTrim"), icon: <SplitSquareHorizontal size={15} /> },
+		{ id: "comment", label: t("toolbar.comment"), icon: <MessageSquare size={15} /> },
+		{ id: "speed", label: t("buttons.addSpeed"), icon: <Clock size={15} /> },
 	];
 
 	// Auto-enhance option 1 — the deterministic cursor-telemetry auto-zoom
@@ -521,7 +544,7 @@ export function V4Timeline({
 		const source = videoSources[0];
 		const asset = tl.assets.find((a) => a.id === source?.id) ?? tl.assets[0];
 		if (!source || !asset) {
-			toast.error("Import a recording first");
+			toast.error(t("toolbar.importRecordingFirst"));
 			return;
 		}
 		setAutoBusy(true);
@@ -535,30 +558,31 @@ export function V4Timeline({
 				defaultDurationMs: 2000,
 			});
 			if (suggestions.length === 0) {
-				toast.info("No auto-zoom moments found", {
-					description:
-						"This recording has no cursor movement data, or existing zooms already cover the busy moments.",
+				toast.info(t("toolbar.noAutoZoomMoments"), {
+					description: t("toolbar.noAutoZoomMomentsDescription"),
 				});
 				return;
 			}
 			const added = await tl.addZoomsBulk(suggestions);
-			toast.success(`Added ${added} automatic zoom${added === 1 ? "" : "s"}`);
+			toast.success(
+				t(added === 1 ? "toolbar.addedAutoZoom" : "toolbar.addedAutoZoomPlural", { count: added }),
+			);
 		} catch (err) {
-			toast.error("Auto-zoom failed", {
+			toast.error(t("toolbar.autoZoomFailed"), {
 				description: err instanceof Error ? err.message : String(err),
 			});
 		} finally {
 			setAutoBusy(false);
 		}
-	}, [videoSources, tl]);
+	}, [videoSources, tl, t]);
 
 	// Auto-enhance option 2 — hand a generic prompt to the AI agent (smart
 	// zooms + cuts) via the chat prompt-bus.
 	const runAiEnhance = useCallback(() => {
 		setAutoEnhanceOpen(false);
 		useChatPromptBus.getState().submit(AI_ENHANCE_PROMPT);
-		toast.success("Asked the AI agent to enhance this recording");
-	}, []);
+		toast.success(t("toolbar.aiEnhanceRequested"));
+	}, [t]);
 
 	const isPillSelected = (id: string) =>
 		tl.selection?.id === id || tl.multiSelection.some((m) => m.id === id);
@@ -717,14 +741,14 @@ export function V4Timeline({
 		<div className={styles.tl}>
 			<div className={styles.tlToolbar}>
 				{showLanes ? (
-					<div className={styles.tlTools} role="toolbar" aria-label="Timeline tools">
+					<div className={styles.tlTools} role="toolbar" aria-label={t("toolbar.timelineTools")}>
 						<Popover open={autoEnhanceOpen} onOpenChange={setAutoEnhanceOpen}>
 							<PopoverTrigger asChild>
 								<button
 									type="button"
 									className={styles.tlToolBtn}
-									title="Auto-enhance"
-									aria-label="Auto-enhance"
+									title={t("toolbar.autoEnhance")}
+									aria-label={t("toolbar.autoEnhance")}
 									disabled={autoBusy}
 								>
 									{autoBusy ? <Loader2 className="animate-spin" size={15} /> : <Wand2 size={15} />}
@@ -747,44 +771,46 @@ export function V4Timeline({
 									>
 										<ZoomIn size={15} style={{ flexShrink: 0 }} />
 										<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-											<span style={{ fontWeight: 600 }}>Automatic zooms</span>
+											<span style={{ fontWeight: 600 }}>{t("toolbar.automaticZooms")}</span>
 											<span style={{ fontSize: 11, color: "var(--muted)" }}>
-												From recorded cursor movement
+												{t("toolbar.automaticZoomsHint")}
 											</span>
 										</span>
 									</button>
 									<button type="button" className={styles.recMenuRow} onClick={runAiEnhance}>
 										<Sparkles size={15} style={{ flexShrink: 0 }} />
 										<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-											<span style={{ fontWeight: 600 }}>Smart zooms + cuts</span>
-											<span style={{ fontSize: 11, color: "var(--muted)" }}>With AI</span>
+											<span style={{ fontWeight: 600 }}>{t("toolbar.smartZoomsAndCuts")}</span>
+											<span style={{ fontSize: 11, color: "var(--muted)" }}>
+												{t("toolbar.smartZoomsAndCutsHint")}
+											</span>
 										</span>
 									</button>
 								</div>
 							</PopoverContent>
 						</Popover>
 						<span className={styles.tlToolSep} aria-hidden />
-						{tools.map((t) => (
+						{tools.map((tool) => (
 							<button
 								type="button"
-								key={t.id}
+								key={tool.id}
 								className={styles.tlToolBtn}
-								title={t.label}
-								aria-label={t.label}
+								title={tool.label}
+								aria-label={tool.label}
 								onClick={() => {
-									if (t.id === "speed") void tl.addSpeed();
-									if (t.id === "comment") void tl.addAnnotation();
-									if (t.id === "cut") void tl.addTrim();
+									if (tool.id === "speed") void tl.addSpeed();
+									if (tool.id === "comment") void tl.addAnnotation();
+									if (tool.id === "cut") void tl.addTrim();
 								}}
 							>
-								{t.icon}
+								{tool.icon}
 							</button>
 						))}
 						<button
 							type="button"
 							className={styles.tlToolBtn}
-							title="Add zoom"
-							aria-label="Add zoom"
+							title={t("buttons.addZoom")}
+							aria-label={t("buttons.addZoom")}
 							onClick={() => void tl.addZoom()}
 						>
 							<ZoomIn size={15} />
@@ -795,8 +821,8 @@ export function V4Timeline({
 								<button
 									type="button"
 									className={styles.tlAspect}
-									title="Aspect ratio"
-									aria-label="Aspect ratio"
+									title={t("toolbar.aspectRatio")}
+									aria-label={t("toolbar.aspectRatio")}
 								>
 									{settings.aspectRatio}
 									<ChevronDown size={10} />
@@ -834,19 +860,31 @@ export function V4Timeline({
 				) : (
 					<div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
 						<span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fg-2)" }}>
-							Arrange clips
+							{t("toolbar.arrangeClips")}
 						</span>
 						<span style={{ fontSize: 11.5, color: "var(--meta)" }}>
-							Drag clips below to reorder or drop new ones in
+							{t("toolbar.arrangeClipsHint")}
 						</span>
 					</div>
 				)}
+				<TransportBar
+					playing={playing}
+					loop={loop}
+					currentTimeSec={currentTimeSec}
+					clips={clips}
+					onTogglePlay={onTogglePlay}
+					onPrevClip={onPrevClip}
+					onNextClip={onNextClip}
+					onToggleLoop={onToggleLoop}
+					onExpand={onExpand}
+					onSeek={setCurrentTime}
+				/>
 				<div className={styles.tlHints}>
 					<span className={styles.tlHint}>
-						<span className={styles.tlKbd}>Scroll</span> Pan
+						<span className={styles.tlKbd}>Scroll</span> {t("labels.pan")}
 					</span>
 					<span className={styles.tlHint}>
-						<span className={styles.tlKbd}>Ctrl+Scroll</span> Zoom
+						<span className={styles.tlKbd}>Ctrl+Scroll</span> {t("labels.zoom")}
 					</span>
 				</div>
 			</div>
@@ -879,9 +917,13 @@ export function V4Timeline({
 
 					{showLanes ? (
 						<>
-							<div className={styles.tlLane}>{renderPills(annPills, "No annotations yet")}</div>
-							<div className={styles.tlLane}>{renderPills(speedPills, "Constant speed")}</div>
-							<div className={styles.tlLane}>{renderPills(trimPills, "No trims")}</div>
+							<div className={styles.tlLane}>
+								{renderPills(annPills, t("toolbar.noAnnotationsYet"))}
+							</div>
+							<div className={styles.tlLane}>
+								{renderPills(speedPills, t("toolbar.constantSpeed"))}
+							</div>
+							<div className={styles.tlLane}>{renderPills(trimPills, t("toolbar.noTrims"))}</div>
 							<div className={styles.tlLane}>{renderPills(zoomPills, "")}</div>
 						</>
 					) : null}
@@ -943,9 +985,9 @@ export function V4Timeline({
 									}}
 									onDoubleClick={(e) => {
 										e.stopPropagation();
-										setEditClipTarget(c);
+										onEditClip(c);
 									}}
-									title="Drag to reorder · double-click to edit in/out points"
+									title={t("toolbar.dragToReorderHint")}
 								>
 									<div aria-hidden className={styles.tlWave}>
 										{bars.map((h, bi) => (
@@ -962,10 +1004,10 @@ export function V4Timeline({
 										<span
 											className={styles.tlClipIcon}
 											data-no-clip-drag
-											title="Edit in/out points"
+											title={t("toolbar.editInOutPoints")}
 											onClick={(e) => {
 												e.stopPropagation();
-												setEditClipTarget(c);
+												onEditClip(c);
 											}}
 										>
 											<Pencil size={9} />
@@ -979,8 +1021,8 @@ export function V4Timeline({
 											type="button"
 											data-no-clip-drag
 											className={styles.tlClipDelete}
-											title="Delete clip"
-											aria-label="Delete clip"
+											title={t("toolbar.deleteClip")}
+											aria-label={t("toolbar.deleteClip")}
 											onClick={(e) => {
 												e.stopPropagation();
 												void tl.removeClip(c.id);
@@ -994,7 +1036,7 @@ export function V4Timeline({
 						})}
 						{dragOver ? (
 							<div aria-hidden className={styles.tlDropHint}>
-								Drop to add to timeline
+								{t("toolbar.dropToAdd")}
 							</div>
 						) : null}
 					</div>
@@ -1026,27 +1068,6 @@ export function V4Timeline({
 					<span />
 				</div>
 			</div>
-
-			<EditClipModal
-				open={editClipTarget !== null}
-				onClose={() => setEditClipTarget(null)}
-				clip={editClipTarget}
-				assetMeta={
-					editClipTarget
-						? {
-								label:
-									tl.assets.find((a) => a.id === editClipTarget.assetId)?.label ??
-									editClipTarget.assetId,
-								durationSec: tl.assets.find((a) => a.id === editClipTarget.assetId)?.durationSec,
-							}
-						: null
-				}
-				videoSources={videoSources}
-				onApply={(sStart, sEnd) => {
-					if (editClipTarget) void tl.updateClipSourceRange(editClipTarget.id, sStart, sEnd);
-					setEditClipTarget(null);
-				}}
-			/>
 		</div>
 	);
 }

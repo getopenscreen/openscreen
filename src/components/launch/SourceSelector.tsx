@@ -142,11 +142,11 @@ export function SourceSelector() {
 	};
 
 	return (
-		<div className={`min-h-screen flex flex-col ${styles.glassContainer}`}>
-			<div className="flex-1 flex flex-col w-full px-3.5 pt-3.5">
+		<div className={`h-screen flex flex-col ${styles.glassContainer}`}>
+			<div className="flex-1 flex flex-col w-full min-h-0 px-3.5 pt-3.5">
 				<Tabs
 					defaultValue={screenSources.length === 0 ? "windows" : "screens"}
-					className="flex-1 flex flex-col"
+					className="flex-1 flex flex-col min-h-0"
 				>
 					<TabsList className="mb-3 grid h-8 grid-cols-2 rounded-xl border border-white/[0.06] bg-white/[0.04] p-0.5">
 						<TabsTrigger
@@ -165,14 +165,14 @@ export function SourceSelector() {
 					<div className="flex-1 min-h-0">
 						<TabsContent value="screens" className="h-full mt-0">
 							<div
-								className={`grid h-[282px] auto-rows-min grid-cols-2 gap-2.5 overflow-y-auto pr-1.5 pt-1 ${styles.sourceGridScroll}`}
+								className={`grid h-full auto-rows-min grid-cols-2 gap-2.5 overflow-y-auto pr-1.5 pt-1 ${styles.sourceGridScroll}`}
 							>
 								{screenSources.map(renderSourceCard)}
 							</div>
 						</TabsContent>
 						<TabsContent value="windows" className="h-full mt-0">
 							<div
-								className={`grid h-[282px] auto-rows-min grid-cols-2 gap-2.5 overflow-y-auto pr-1.5 pt-1 ${styles.sourceGridScroll}`}
+								className={`grid h-full auto-rows-min grid-cols-2 gap-2.5 overflow-y-auto pr-1.5 pt-1 ${styles.sourceGridScroll}`}
 							>
 								{windowSources.map(renderSourceCard)}
 							</div>

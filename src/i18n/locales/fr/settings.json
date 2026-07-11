@@ -165,8 +165,7 @@
 		"tipShiftTabCycle": "Utilisez Shift+Tab pour cycler en sens inverse.",
 		"invalidImageType": "Type de fichier invalide",
 		"imageFormatsOnly": "Veuillez téléverser un fichier image JPG, PNG, GIF ou WebP.",
-		"imageUploadSuccess": "Image téléversée avec succès !",
-		"failedImageUpload": "Échec du téléversement de l'image"
+		"imageUploadSuccess": "Image téléversée avec succès !"
 	},
 	"fontStyles": {
 		"classic": "Classique",

@@ -59,68 +59,81 @@ jobs:
           STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
         run: node .github/scripts/release-milestone-close.mjs
 
-      - name: Bump package.json to stable version
-        env:
-          STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
-        run: |
-          set -euo pipefail
-          sed -i -E "s|(\"version\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")|\1${STABLE_VERSION}\2|" package.json
-          echo "package.json version:"
-          grep '"version"' package.json
-
-      - name: Commit package.json bump on a release branch
+      - name: Bump package.json to stable version on the release branch
         env:
           TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
           STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
         run: |
           set -euo pipefail
+          # Promote checks out the FROZEN release branch (created by prerelease.yml) and
+          # rewrites package.json there. This guarantees the stable tag points at the
+          # same code that was tested as the RC plus any cherry-picked bugfixes.
+          BRANCH="release/v${STABLE_VERSION}"
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git reset --hard "origin/${BRANCH}"
+          sed -i -E "s|(\"version\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")|\1${STABLE_VERSION}\2|" package.json
+          echo "package.json version:"
+          grep '"version"' package.json
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Push to a release branch and merge via PR (rebase) so the ruleset PR review rule is respected.
-          BRANCH="release/v${STABLE_VERSION}"
-          # Delete remote branch first so the push below is always fast-forward (idempotent on rerun).
-          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ":${BRANCH}" 2>/dev/null || true
-          git checkout -b "$BRANCH"
           git add package.json
-          git commit -m "chore(release): bump to ${STABLE_VERSION} [skip ci]"
+          git commit --allow-empty -m "chore(release): bump to ${STABLE_VERSION} [skip ci]" || true
           git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
 
-      - name: Open PR and rebase-merge into main
-        env:
-          # Org policy blocks GITHUB_TOKEN write, so we use the PAT for both PR create and merge.
-          # PAT (EtienneLescot) is a ruleset bypass actor -> the merge doesn't need approval.
-          GH_TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
-          STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
-        run: |
-          set -euo pipefail
-          BRANCH="release/v${STABLE_VERSION}"
-          gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "chore(release): bump to ${STABLE_VERSION}" \
-            --body "Automated version bump from the promote workflow. Rebase-merged via PAT; bypass applies because EtienneLescot is a ruleset bypass actor." \
-            --repo "$GITHUB_REPOSITORY"
-          PR_NUMBER=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' --repo "$GITHUB_REPOSITORY")
-          gh pr merge "$PR_NUMBER" --rebase --delete-branch --admin \
-            --repo "$GITHUB_REPOSITORY"
-
-      - name: Push stable tag
+      - name: Push stable tag on the release branch tip
         env:
           # Use GITHUB_TOKEN for the tag push: a tag is a ref, not a file change, so
           # the workflows:write permission isn't needed.
           # Note: GITHUB_TOKEN tag pushes do NOT trigger build.yml in this org's setup,
           # so we explicitly trigger it via gh workflow run right after.
           STABLE_TAG: ${{ steps.version.outputs.stable_tag }}
+          STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
         run: |
           set -euo pipefail
-          git fetch origin main
-          git checkout main
-          git reset --hard origin/main
+          BRANCH="release/v${STABLE_VERSION}"
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git reset --hard "origin/${BRANCH}"
           # Delete remote tag first (idempotent on rerun) and any local tag.
           git push origin ":${STABLE_TAG}" 2>/dev/null || true
           git tag -d "$STABLE_TAG" 2>/dev/null || true
           git tag "$STABLE_TAG"
           git push origin "$STABLE_TAG"
+
+      - name: Merge release branch into main
+        env:
+          GH_TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+          STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
+        run: |
+          set -euo pipefail
+          # After the stable tag is published, sync main with the released snapshot via
+          # a rebase PR (PAT is a ruleset bypass actor so no approval is needed).
+          BRANCH="release/v${STABLE_VERSION}"
+          # If main already contains the release branch (clean fast-forward), there's
+          # nothing to merge — just make sure the branch is tracked locally.
+          git fetch origin main "$BRANCH"
+          if git merge-base --is-ancestor "origin/${BRANCH}" origin/main; then
+            echo "origin/${BRANCH} is already an ancestor of origin/main — nothing to merge."
+            exit 0
+          fi
+          # Push the release branch's commits onto main as a fresh branch and PR it.
+          git checkout -b "${BRANCH}-sync" "origin/${BRANCH}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BRANCH}-sync"
+          gh pr create \
+            --base main \
+            --head "${BRANCH}-sync" \
+            --title "chore(release): release v${STABLE_VERSION} into main" \
+            --body "Sync main with the released snapshot (RC + cherry-picked bugfixes + version bump). Rebase-merged via PAT; bypass applies because EtienneLescot is a ruleset bypass actor." \
+            --repo "$GITHUB_REPOSITORY" || echo "(PR already exists — skipping)"
+          PR_NUMBER=$(gh pr list --head "${BRANCH}-sync" --state open --json number -q '.[0].number' --repo "$GITHUB_REPOSITORY")
+          if [[ -n "$PR_NUMBER" ]]; then
+            gh pr merge "$PR_NUMBER" --rebase --delete-branch --admin \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+          # The release branch itself was already used to publish and contains frozen
+          # history — leave it in place for forensics. A v1.6.0 release branch should
+          # never be deleted until the next major cuts over.
 
       - name: Trigger build workflow
         env:

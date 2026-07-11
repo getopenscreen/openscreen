@@ -10,7 +10,18 @@
 		"openProject": "Open project",
 		"useVerticalTray": "Use vertical tray",
 		"useHorizontalTray": "Use horizontal tray",
-		"openStudio": "Open Studio"
+		"openStudio": "Open Studio",
+		"openNotes": "Open Notes",
+		"openNotesPlaceholder": "Take notes here...",
+		"notesToolbar": {
+			"bold": "Bold",
+			"italic": "Italic",
+			"strikethrough": "Strikethrough",
+			"bulletList": "Bullet list",
+			"numberedList": "Numbered list",
+			"blockquote": "Blockquote",
+			"codeBlock": "Code block"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Enable system audio",
@@ -41,7 +52,8 @@
 		"defaultSourceName": "Screen"
 	},
 	"recording": {
-		"selectSource": "Please select a source to record"
+		"selectSource": "Please select a source to record",
+		"saving": "Saving..."
 	},
 	"language": "Language",
 	"systemLanguagePrompt": {

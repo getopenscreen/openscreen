@@ -9,7 +9,18 @@
 		"openVideoFile": "Video dosyası aç",
 		"openProject": "Proje aç",
 		"useVerticalTray": "Dikey araç çubuğunu kullan",
-		"useHorizontalTray": "Yatay araç çubuğunu kullan"
+		"useHorizontalTray": "Yatay araç çubuğunu kullan",
+		"openNotes": "Notları aç",
+		"openNotesPlaceholder": "Notlarınızı buraya yazın...",
+		"notesToolbar": {
+			"bold": "Kalın",
+			"italic": "İtalik",
+			"strikethrough": "Üstü çizili",
+			"bulletList": "Madde işaretli liste",
+			"numberedList": "Numaralı liste",
+			"blockquote": "Alıntı",
+			"codeBlock": "Kod bloğu"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Sistem sesini etkinleştir",
@@ -37,7 +48,8 @@
 		"defaultSourceName": "Ekran"
 	},
 	"recording": {
-		"selectSource": "Lütfen kayıt için bir kaynak seçin"
+		"selectSource": "Lütfen kayıt için bir kaynak seçin",
+		"saving": "Kaydediliyor..."
 	},
 	"language": "Dil",
 	"systemLanguagePrompt": {

@@ -1280,8 +1280,10 @@ export function registerIpcHandlers(
 	createEditorWindow: () => void,
 	createSourceSelectorWindow: () => BrowserWindow,
 	createCountdownOverlayWindow: () => BrowserWindow,
+	createNotesWindowWrapper: () => BrowserWindow,
 	getMainWindow: () => BrowserWindow | null,
 	getSourceSelectorWindow: () => BrowserWindow | null,
+	getNotesWindow: () => BrowserWindow | null,
 	getCountdownOverlayWindow?: () => BrowserWindow | null,
 	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
 	_switchToHud?: () => void,
@@ -1476,6 +1478,17 @@ export function registerIpcHandlers(
 			return { opened: true };
 		}
 		createSourceSelectorWindow();
+		return { opened: true };
+	});
+
+	ipcMain.handle("open-notes", async () => {
+		const notesSelectorWin = getNotesWindow();
+		if (notesSelectorWin) {
+			notesSelectorWin.focus();
+			return { opened: true };
+		}
+
+		createNotesWindowWrapper();
 		return { opened: true };
 	});
 
@@ -2562,6 +2575,83 @@ export function registerIpcHandlers(
 			return {
 				success: false,
 				message: "Failed to read binary file",
+				error: String(error),
+			};
+		}
+	});
+
+	// Stat an approved video file. Used to decide whether a recording is small
+	// enough to slurp via read-binary-file, or large enough that it must be
+	// streamed in chunks (Node's fs.readFile caps a single read at 2 GiB, so any
+	// recording above that can never be loaded whole — see read-file-chunk).
+	ipcMain.handle("get-readable-file-info", async (_, filePath: string) => {
+		try {
+			const normalizedPath = await approveReadableVideoPath(filePath);
+			if (!normalizedPath) {
+				return {
+					success: false,
+					message: "File path is not approved or is not a supported video file",
+				};
+			}
+
+			const stat = await fs.stat(normalizedPath);
+			return {
+				success: true,
+				size: stat.size,
+				mtimeMs: stat.mtimeMs,
+				path: normalizedPath,
+			};
+		} catch (error) {
+			console.error("Failed to stat file:", error);
+			return {
+				success: false,
+				message: "Failed to stat file",
+				error: String(error),
+			};
+		}
+	});
+
+	// Cap renderer-requested chunk sizes so a buggy or compromised renderer
+	// cannot make the main process allocate an arbitrarily large buffer.
+	const MAX_IPC_CHUNK_BYTES = 64 * 1024 * 1024;
+
+	// Read a byte range [offset, offset+length) from an approved video file.
+	// Lets the renderer stream a >2 GiB recording into OPFS one chunk at a time
+	// instead of materialising the whole file in memory, which fs.readFile cannot
+	// do (2 GiB cap) and a 16 GB machine cannot hold for multi-GB recordings.
+	ipcMain.handle("read-file-chunk", async (_, filePath: string, offset: number, length: number) => {
+		try {
+			const normalizedPath = await approveReadableVideoPath(filePath);
+			if (!normalizedPath) {
+				return {
+					success: false,
+					message: "File path is not approved or is not a supported video file",
+				};
+			}
+			if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(length) || length <= 0) {
+				return { success: false, message: "Invalid chunk range" };
+			}
+			if (length > MAX_IPC_CHUNK_BYTES) {
+				return { success: false, message: "Requested chunk size exceeds limit" };
+			}
+
+			const handle = await fs.open(normalizedPath, "r");
+			try {
+				const buffer = Buffer.allocUnsafe(length);
+				const { bytesRead } = await handle.read(buffer, 0, length, offset);
+				return {
+					success: true,
+					data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + bytesRead),
+					bytesRead,
+				};
+			} finally {
+				await handle.close();
+			}
+		} catch (error) {
+			console.error("Failed to read file chunk:", error);
+			return {
+				success: false,
+				message: "Failed to read file chunk",
 				error: String(error),
 			};
 		}

@@ -58,6 +58,7 @@ import {
 	type BlurData,
 	type CursorTelemetryPoint,
 	computeRotation3DContainScale,
+	DEFAULT_CROP_REGION,
 	DEFAULT_ROTATION_3D,
 	getZoomScale,
 	isRotation3DIdentity,
@@ -1562,7 +1563,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						baseMaskRef.current,
 						showCursorRef.current && !hasNativeCursorRecordingRef.current,
 						!isPlayingRef.current || isSeekingRef.current,
-						cropRegionRef.current ?? { x: 0, y: 0, width: 1, height: 1 },
+						cropRegionRef.current,
 					);
 				}
 
@@ -1601,7 +1602,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								: frame.sample;
 							const cameraContainer = cameraContainerRef.current;
 							const videoContainer = videoContainerRef.current;
-							const cropRegionValue = cropRegionRef.current ?? { x: 0, y: 0, width: 1, height: 1 };
+							const cropRegionValue = cropRegionRef.current ?? DEFAULT_CROP_REGION;
 							const projectedLocalPoint = projectNativeCursorToLocal({
 								cropRegion: cropRegionValue,
 								maskRect: baseMaskRef.current,
@@ -1638,7 +1639,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 									getNativeCursorClickBounceScale(cursorClickBounceRef.current, bounceProgress);
 								// Normalize cursor size to the displayed video width so the cursor
 								// appears at the same fraction of the video in both preview and export.
-								const crop = cropRegionRef.current ?? { x: 0, y: 0, width: 1, height: 1 };
+								const crop = cropRegionRef.current ?? DEFAULT_CROP_REGION;
 								const croppedVideoWidth = (videoRef.current?.videoWidth ?? 0) * crop.width;
 								const sizeNorm =
 									croppedVideoWidth > 0 ? baseMaskRef.current.width / croppedVideoWidth : 1;

@@ -1,6 +1,6 @@
 import { Assets, BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
-import type { CropRegion, CursorTelemetryPoint } from "../types";
+import { type CropRegion, type CursorTelemetryPoint, DEFAULT_CROP_REGION } from "../types";
 import {
 	createSpringState,
 	getCursorSpringConfig,
@@ -627,7 +627,7 @@ export class PixiCursorOverlay {
 			return;
 		}
 
-		const crop = cropRegion ?? { x: 0, y: 0, width: 1, height: 1 };
+		const crop = cropRegion ?? DEFAULT_CROP_REGION;
 
 		const target = interpolateCursorPosition(samples, timeMs);
 		if (!target) {

@@ -52,6 +52,16 @@ describe("isSourceCopyFastPathEligible", () => {
 				videoInfo,
 			),
 		).toBe(false);
+		// A 100× region must also block the copy path (any non-1× speed does), so its
+		// audio is re-rendered (offline time-stretch) rather than passed through untouched.
+		expect(
+			isSourceCopyFastPathEligible(
+				createConfig({
+					speedRegions: [{ id: "speed", startMs: 100, endMs: 200, speed: 100 }],
+				}),
+				videoInfo,
+			),
+		).toBe(false);
 		expect(
 			isSourceCopyFastPathEligible(
 				createConfig({

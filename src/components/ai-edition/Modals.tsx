@@ -26,7 +26,7 @@ import { toAxcutTranscriptDsl } from "@/lib/ai-edition/document/transcribe";
 import type { AxcutClip, AxcutTranscript } from "@/lib/ai-edition/schema";
 import { formatSeconds } from "@/lib/ai-edition/timeline/virtual-preview";
 import styles from "./NewEditorShell.module.css";
-import { type VideoSource, VirtualPreview } from "./VirtualPreview";
+import type { VideoSource } from "./VirtualPreview";
 
 // ponytail: keep the UI's language list literal in one place. Mirrors
 // `transcriptLanguageSchema` in schema/index.ts; if the schema gains a
@@ -509,12 +509,19 @@ const CROP_RATIOS: Array<{ value: string; label: string; ratio: number | null }>
 	{ value: "21:9", label: "21:9", ratio: 21 / 9 },
 ];
 
-function detectRatio(r: CropRegion): string {
+// `region.width`/`region.height` are fractions of the source frame, not a
+// visual aspect ratio — a region that's 100% wide and 56.25% tall on a 16:9
+// source renders as a 16:9 rectangle on screen, not a "1 : 0.5625" one. The
+// actual on-screen ratio is the fraction ratio scaled by the source video's
+// own pixel aspect ratio, so detecting/applying a preset must go through
+// `videoAspectRatio` (source width/height in pixels) in both directions.
+function detectRatio(r: CropRegion, videoAspectRatio: number): string {
 	const candidates = CROP_RATIOS.filter((c) => c.ratio !== null);
-	const whRatio = r.height === 0 ? 0 : r.width / r.height;
+	if (r.height === 0) return "free";
+	const visualRatio = (r.width / r.height) * videoAspectRatio;
 	for (const c of candidates) {
 		if (c.ratio === null) continue;
-		if (Math.abs(whRatio - c.ratio) < 0.01) return c.value;
+		if (Math.abs(visualRatio - c.ratio) / c.ratio < 0.02) return c.value;
 	}
 	return "free";
 }
@@ -534,14 +541,33 @@ function CropField({
 	onChange: (n: number) => void;
 }) {
 	return (
-		<div className={styles.field}>
-			<label>{label}</label>
+		<div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+			<label
+				style={{
+					font: "600 10px/1 var(--font-mono)",
+					letterSpacing: "0.04em",
+					textTransform: "uppercase",
+					color: "var(--muted)",
+				}}
+			>
+				{label}
+			</label>
 			<input
 				type="number"
 				value={value}
 				min={0}
 				max={100}
 				onChange={(e) => onChange(Number(e.target.value))}
+				style={{
+					width: "100%",
+					padding: "8px 10px",
+					font: "500 14px/1 var(--font-mono)",
+					color: "var(--fg-2)",
+					background: "var(--surface)",
+					border: "1px solid var(--border)",
+					borderRadius: 6,
+					outline: "none",
+				}}
 			/>
 		</div>
 	);
@@ -595,6 +621,11 @@ export function EditClipModal({
 	const [cropHPct, setCropHPct] = useState(100);
 	const [cropRatio, setCropRatio] = useState("free");
 	const [cropTouched, setCropTouched] = useState(false);
+	// Source video's real pixel aspect ratio (width/height) — needed to convert
+	// between a preset's visual ratio (e.g. 16/9) and the crop region's
+	// fraction-of-frame width/height. 16/9 is just a placeholder until the
+	// crop <video>'s real metadata loads (see the effect below).
+	const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
 	const cropFrameRef = useRef<HTMLDivElement | null>(null);
 	const cropVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -610,9 +641,20 @@ export function EditClipModal({
 		setCropYPct(Math.round(region.y * 100));
 		setCropWPct(Math.round(region.width * 100));
 		setCropHPct(Math.round(region.height * 100));
-		setCropRatio(detectRatio(region));
 		setCropTouched(false);
 	}, [open, clip]);
+
+	// Re-detect the active ratio preset whenever the stored region or the
+	// video's real aspect ratio changes — the latter only becomes accurate
+	// once the crop <video>'s metadata loads (see the effect below), so this
+	// re-runs a beat after the sync-on-open effect above with the real value.
+	// Skipped once the user starts touching the crop so it doesn't fight
+	// their own free-form edits.
+	useEffect(() => {
+		if (!open || !clip || cropTouched) return;
+		const region = clip.cropRegion ?? IDENTITY_CROP;
+		setCropRatio(detectRatio(region, videoAspectRatio));
+	}, [open, clip, videoAspectRatio, cropTouched]);
 
 	// Crop preview: a paused still frame is enough to judge a crop (mirrors
 	// the standalone CropModal this replaced) — seek once per open to the
@@ -624,6 +666,9 @@ export function EditClipModal({
 		const seek = () => {
 			v.pause();
 			if (Number.isFinite(clip.sourceStartSec)) v.currentTime = clip.sourceStartSec;
+			if (v.videoWidth > 0 && v.videoHeight > 0) {
+				setVideoAspectRatio(v.videoWidth / v.videoHeight);
+			}
 		};
 		if (v.readyState >= 1) seek();
 		else v.addEventListener("loadedmetadata", seek, { once: true });
@@ -638,14 +683,6 @@ export function EditClipModal({
 		Math.abs(draftStart - clip.sourceStartSec) > 0.001 ||
 		Math.abs(draftEnd - (clip.sourceEndSec ?? 0)) > 0.001;
 	const hasChanges = hasTrimChanges || cropTouched;
-	const previewClip: AxcutClip = {
-		...clip,
-		id: `${clip.id}:edit-preview`,
-		sourceStartSec: draftStart,
-		sourceEndSec: draftEnd,
-		timelineStartSec: 0,
-		timelineEndSec: durationSec,
-	};
 	const clipSources = videoSources.filter((s) => s.id === clip.assetId);
 	const cropPreviewSource = clipSources[0] ?? null;
 
@@ -683,7 +720,10 @@ export function EditClipModal({
 		setCropRatio(next);
 		const candidate = CROP_RATIOS.find((c) => c.value === next);
 		if (candidate?.ratio && cropWPct > 0) {
-			const newH = Math.round(cropWPct / candidate.ratio);
+			// Convert the preset's visual ratio into the fraction-space ratio
+			// this crop's width/height percentages actually live in.
+			const fractionRatio = candidate.ratio / videoAspectRatio;
+			const newH = Math.round(cropWPct / fractionRatio);
 			setCropHPct(clampPct(newH, MIN_PCT, 100));
 		}
 	};
@@ -725,6 +765,9 @@ export function EditClipModal({
 		const startY = e.clientY;
 		const start = { x: cropXPct, y: cropYPct, w: cropWPct, h: cropHPct };
 		const activeRatio = CROP_RATIOS.find((c) => c.value === cropRatio)?.ratio ?? null;
+		// Same fraction-space conversion as handleCropRatioChange — locking to
+		// the raw visual ratio here would fight the source's own aspect ratio.
+		const activeFractionRatio = activeRatio ? activeRatio / videoAspectRatio : null;
 		setCropTouched(true);
 		const move = (ev: PointerEvent) => {
 			const dxPct = ((ev.clientX - startX) / r.width) * 100;
@@ -746,9 +789,9 @@ export function EditClipModal({
 			if (edges.bottom) {
 				h = clampPct(start.h + dyPct, MIN_PCT, 100 - start.y);
 			}
-			if (activeRatio) {
-				if (edges.left || edges.right) h = clampPct(w / activeRatio, MIN_PCT, 100 - y);
-				else if (edges.top || edges.bottom) w = clampPct(h * activeRatio, MIN_PCT, 100 - x);
+			if (activeFractionRatio) {
+				if (edges.left || edges.right) h = clampPct(w / activeFractionRatio, MIN_PCT, 100 - y);
+				else if (edges.top || edges.bottom) w = clampPct(h * activeFractionRatio, MIN_PCT, 100 - x);
 			}
 			setCropXPct(Math.round(x));
 			setCropYPct(Math.round(y));
@@ -781,7 +824,7 @@ export function EditClipModal({
 		setCropYPct(Math.round(region.y * 100));
 		setCropWPct(Math.round(region.width * 100));
 		setCropHPct(Math.round(region.height * 100));
-		setCropRatio(detectRatio(region));
+		setCropRatio(detectRatio(region, videoAspectRatio));
 		setCropTouched(false);
 	};
 	const handleApply = () => {
@@ -806,238 +849,222 @@ export function EditClipModal({
 			wide
 		>
 			<div
-				style={{
-					height: 220,
-					marginBottom: 16,
-					borderRadius: "var(--r-md)",
-					overflow: "hidden",
-					background: "var(--surface-2)",
-				}}
-			>
-				<VirtualPreview videoSources={clipSources} clips={[previewClip]} />
-			</div>
-
-			<div style={{ display: "flex", gap: 24, marginBottom: 16 }}>
-				<RangeStat label={t("editClipDialog.start")} value={formatSeconds(draftStart)} />
-				<RangeStat label={t("editClipDialog.end")} value={formatSeconds(draftEnd)} />
-				<RangeStat label={t("editClipDialog.duration")} value={formatSeconds(durationSec)} />
-			</div>
-
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					font: "500 10px/1.4 var(--font-mono)",
-					color: "var(--muted)",
-					marginBottom: 4,
-				}}
-			>
-				<span>0:00.0</span>
-				<span>{formatSeconds(sourceDurationSec)}</span>
-			</div>
-			<div
-				ref={trackRef}
+				ref={cropFrameRef}
 				style={{
 					position: "relative",
-					height: 32,
-					background: "var(--surface-2)",
-					borderRadius: "var(--r-sm)",
+					width: "100%",
+					height: 230,
+					maxWidth: 409,
+					margin: "0 auto 14px",
+					flexShrink: 0,
+					background: "#0a0b0e",
+					borderRadius: "var(--r-md)",
+					border: "1px solid var(--border)",
+					overflow: "hidden",
 				}}
 			>
-				<div
-					style={{
-						position: "absolute",
-						inset: 0,
-						width: `${(draftStart / sourceDurationSec) * 100}%`,
-						background: "var(--overlay-dark)",
-						borderRadius: "var(--r-sm) 0 0 var(--r-sm)",
-					}}
-				/>
-				<div
-					className={activeEdge ? styles.editClipRangeDragging : undefined}
-					style={{
-						position: "absolute",
-						top: 0,
-						bottom: 0,
-						left: `${(draftStart / sourceDurationSec) * 100}%`,
-						width: `${Math.max(0.5, (durationSec / sourceDurationSec) * 100)}%`,
-						background: "var(--accent-wash)",
-						border: "1px solid var(--accent)",
-						borderRadius: "var(--r-sm)",
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-					}}
-				>
-					<button
-						type="button"
-						onPointerDown={(e) => startDrag("start", e)}
-						aria-label={t("editClipDialog.adjustStart")}
-						title={t("editClipDialog.adjustStart")}
+				{cropPreviewSource ? (
+					<video
+						ref={cropVideoRef}
+						src={cropPreviewSource.src}
+						muted
+						playsInline
 						style={{
 							position: "absolute",
-							left: -6,
-							top: 0,
-							bottom: 0,
-							width: 12,
-							cursor: "ew-resize",
-							background: "var(--accent)",
-							border: 0,
-							borderRadius: 3,
-							padding: 0,
+							inset: 0,
+							width: "100%",
+							height: "100%",
+							objectFit: "contain",
+							background: "#000",
 						}}
 					/>
-					<span
-						style={{
-							font: "500 11px/1.4 var(--font-mono)",
-							color: "var(--accent-on)",
-							pointerEvents: "none",
-							whiteSpace: "nowrap",
-						}}
-					>
-						{formatSeconds(draftStart)}–{formatSeconds(draftEnd)}
-					</span>
-					<button
-						type="button"
-						onPointerDown={(e) => startDrag("end", e)}
-						aria-label={t("editClipDialog.adjustEnd")}
-						title={t("editClipDialog.adjustEnd")}
-						style={{
-							position: "absolute",
-							right: -6,
-							top: 0,
-							bottom: 0,
-							width: 12,
+				) : null}
+				<div
+					style={{
+						position: "absolute",
+						left: `${cropXPct}%`,
+						top: `${cropYPct}%`,
+						width: `${cropWPct}%`,
+						height: `${cropHPct}%`,
+						border: "1.5px solid var(--fg)",
+						borderRadius: 4,
+						boxShadow: "0 0 0 9999px var(--overlay-dark)",
+						cursor: "move",
+					}}
+					onPointerDown={startCropMove}
+				>
+					<div
+						onPointerDown={startCropResize({ left: true, top: true })}
+						style={cropHandleStyle({ left: -5, top: -5, cursor: "nwse-resize" })}
+					/>
+					<div
+						onPointerDown={startCropResize({ right: true, top: true })}
+						style={cropHandleStyle({ right: -5, top: -5, cursor: "nesw-resize" })}
+					/>
+					<div
+						onPointerDown={startCropResize({ left: true, bottom: true })}
+						style={cropHandleStyle({ left: -5, bottom: -5, cursor: "nesw-resize" })}
+					/>
+					<div
+						onPointerDown={startCropResize({ right: true, bottom: true })}
+						style={cropHandleStyle({ right: -5, bottom: -5, cursor: "nwse-resize" })}
+					/>
+					<div
+						onPointerDown={startCropResize({ top: true })}
+						style={cropHandleStyle({ left: "50%", top: -5, marginLeft: -5, cursor: "ns-resize" })}
+					/>
+					<div
+						onPointerDown={startCropResize({ bottom: true })}
+						style={cropHandleStyle({
+							left: "50%",
+							bottom: -5,
+							marginLeft: -5,
+							cursor: "ns-resize",
+						})}
+					/>
+					<div
+						onPointerDown={startCropResize({ left: true })}
+						style={cropHandleStyle({ top: "50%", left: -5, marginTop: -5, cursor: "ew-resize" })}
+					/>
+					<div
+						onPointerDown={startCropResize({ right: true })}
+						style={cropHandleStyle({
+							top: "50%",
+							right: -5,
+							marginTop: -5,
 							cursor: "ew-resize",
-							background: "var(--accent)",
-							border: 0,
-							borderRadius: 3,
-							padding: 0,
-						}}
+						})}
 					/>
 				</div>
-				<div
-					style={{
-						position: "absolute",
-						top: 0,
-						bottom: 0,
-						right: 0,
-						width: `${Math.max(0, ((sourceDurationSec - draftEnd) / sourceDurationSec) * 100)}%`,
-						background: "var(--overlay-dark)",
-						borderRadius: "0 var(--r-sm) var(--r-sm) 0",
-					}}
-				/>
 			</div>
 
-			<div
-				style={{
-					paddingTop: 16,
-					marginTop: 16,
-					borderTop: "1px solid var(--border-soft)",
-				}}
-			>
-				<h3
+			<div style={{ flexShrink: 0 }}>
+				<div style={{ display: "flex", gap: 24, marginBottom: 10 }}>
+					<RangeStat label={t("editClipDialog.start")} value={formatSeconds(draftStart)} />
+					<RangeStat label={t("editClipDialog.end")} value={formatSeconds(draftEnd)} />
+					<RangeStat label={t("editClipDialog.duration")} value={formatSeconds(durationSec)} />
+				</div>
+
+				<div
 					style={{
-						margin: "0 0 10px",
-						fontSize: 11,
-						fontWeight: 600,
-						textTransform: "uppercase",
-						letterSpacing: "0.04em",
+						display: "flex",
+						justifyContent: "space-between",
+						font: "500 10px/1.4 var(--font-mono)",
 						color: "var(--muted)",
+						marginBottom: 4,
 					}}
 				>
-					{ts("crop.title")}
-				</h3>
+					<span>0:00.0</span>
+					<span>{formatSeconds(sourceDurationSec)}</span>
+				</div>
 				<div
-					ref={cropFrameRef}
+					ref={trackRef}
 					style={{
 						position: "relative",
-						aspectRatio: "16 / 9",
-						background: "#0a0b0e",
-						borderRadius: "var(--r-md)",
-						border: "1px solid var(--border)",
-						overflow: "hidden",
-						marginBottom: 10,
+						height: 32,
+						flexShrink: 0,
+						background: "var(--surface-2)",
+						borderRadius: "var(--r-sm)",
 					}}
 				>
-					{cropPreviewSource ? (
-						<video
-							ref={cropVideoRef}
-							src={cropPreviewSource.src}
-							muted
-							playsInline
-							style={{
-								position: "absolute",
-								inset: 0,
-								width: "100%",
-								height: "100%",
-								objectFit: "contain",
-								background: "#000",
-							}}
-						/>
-					) : null}
 					<div
 						style={{
 							position: "absolute",
-							left: `${cropXPct}%`,
-							top: `${cropYPct}%`,
-							width: `${cropWPct}%`,
-							height: `${cropHPct}%`,
-							border: "1.5px solid var(--fg)",
-							borderRadius: 4,
-							boxShadow: "0 0 0 9999px var(--overlay-dark)",
-							cursor: "move",
+							inset: 0,
+							width: `${(draftStart / sourceDurationSec) * 100}%`,
+							background: "var(--overlay-dark)",
+							borderRadius: "var(--r-sm) 0 0 var(--r-sm)",
 						}}
-						onPointerDown={startCropMove}
+					/>
+					<div
+						className={activeEdge ? styles.editClipRangeDragging : undefined}
+						style={{
+							position: "absolute",
+							top: 0,
+							bottom: 0,
+							left: `${(draftStart / sourceDurationSec) * 100}%`,
+							width: `${Math.max(0.5, (durationSec / sourceDurationSec) * 100)}%`,
+							background: "var(--accent-wash)",
+							border: "1px solid var(--accent)",
+							borderRadius: "var(--r-sm)",
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+						}}
 					>
-						<div
-							onPointerDown={startCropResize({ left: true, top: true })}
-							style={cropHandleStyle({ left: -5, top: -5, cursor: "nwse-resize" })}
-						/>
-						<div
-							onPointerDown={startCropResize({ right: true, top: true })}
-							style={cropHandleStyle({ right: -5, top: -5, cursor: "nesw-resize" })}
-						/>
-						<div
-							onPointerDown={startCropResize({ left: true, bottom: true })}
-							style={cropHandleStyle({ left: -5, bottom: -5, cursor: "nesw-resize" })}
-						/>
-						<div
-							onPointerDown={startCropResize({ right: true, bottom: true })}
-							style={cropHandleStyle({ right: -5, bottom: -5, cursor: "nwse-resize" })}
-						/>
-						<div
-							onPointerDown={startCropResize({ top: true })}
-							style={cropHandleStyle({ left: "50%", top: -5, marginLeft: -5, cursor: "ns-resize" })}
-						/>
-						<div
-							onPointerDown={startCropResize({ bottom: true })}
-							style={cropHandleStyle({
-								left: "50%",
-								bottom: -5,
-								marginLeft: -5,
-								cursor: "ns-resize",
-							})}
-						/>
-						<div
-							onPointerDown={startCropResize({ left: true })}
-							style={cropHandleStyle({ top: "50%", left: -5, marginTop: -5, cursor: "ew-resize" })}
-						/>
-						<div
-							onPointerDown={startCropResize({ right: true })}
-							style={cropHandleStyle({
-								top: "50%",
-								right: -5,
-								marginTop: -5,
+						<button
+							type="button"
+							onPointerDown={(e) => startDrag("start", e)}
+							aria-label={t("editClipDialog.adjustStart")}
+							title={t("editClipDialog.adjustStart")}
+							style={{
+								position: "absolute",
+								left: -6,
+								top: 0,
+								bottom: 0,
+								width: 12,
 								cursor: "ew-resize",
-							})}
+								background: "var(--accent)",
+								border: 0,
+								borderRadius: 3,
+								padding: 0,
+							}}
+						/>
+						<span
+							style={{
+								font: "500 11px/1.4 var(--font-mono)",
+								color: "var(--accent-on)",
+								pointerEvents: "none",
+								whiteSpace: "nowrap",
+							}}
+						>
+							{formatSeconds(draftStart)}–{formatSeconds(draftEnd)}
+						</span>
+						<button
+							type="button"
+							onPointerDown={(e) => startDrag("end", e)}
+							aria-label={t("editClipDialog.adjustEnd")}
+							title={t("editClipDialog.adjustEnd")}
+							style={{
+								position: "absolute",
+								right: -6,
+								top: 0,
+								bottom: 0,
+								width: 12,
+								cursor: "ew-resize",
+								background: "var(--accent)",
+								border: 0,
+								borderRadius: 3,
+								padding: 0,
+							}}
 						/>
 					</div>
+					<div
+						style={{
+							position: "absolute",
+							top: 0,
+							bottom: 0,
+							right: 0,
+							width: `${Math.max(0, ((sourceDurationSec - draftEnd) / sourceDurationSec) * 100)}%`,
+							background: "var(--overlay-dark)",
+							borderRadius: "0 var(--r-sm) var(--r-sm) 0",
+						}}
+					/>
 				</div>
+			</div>
+
+			<div
+				style={{
+					paddingTop: 8,
+					marginTop: 8,
+					flexShrink: 0,
+					borderTop: "1px solid var(--border-soft)",
+				}}
+			>
 				<div
 					style={{
 						display: "grid",
-						gridTemplateColumns: "repeat(4, auto) 1fr auto",
+						gridTemplateColumns: "repeat(4, 1fr) 1.2fr auto",
 						gap: 10,
 						alignItems: "end",
 					}}
@@ -1074,9 +1101,31 @@ export function EditClipModal({
 							setCropHPct(v);
 						}}
 					/>
-					<div className={styles.field} style={{ minWidth: 96 }}>
-						<label>{ts("crop.ratio")}</label>
-						<select value={cropRatio} onChange={(e) => handleCropRatioChange(e.target.value)}>
+					<div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 110 }}>
+						<label
+							style={{
+								font: "600 10px/1 var(--font-mono)",
+								letterSpacing: "0.04em",
+								textTransform: "uppercase",
+								color: "var(--muted)",
+							}}
+						>
+							{ts("crop.ratio")}
+						</label>
+						<select
+							value={cropRatio}
+							onChange={(e) => handleCropRatioChange(e.target.value)}
+							style={{
+								width: "100%",
+								padding: "8px 10px",
+								font: "500 13px/1 var(--font-body)",
+								color: "var(--fg-2)",
+								background: "var(--surface)",
+								border: "1px solid var(--border)",
+								borderRadius: 6,
+								outline: "none",
+							}}
+						>
 							{CROP_RATIOS.map((r) => (
 								<option key={r.value} value={r.value}>
 									{r.value === "free" ? ts("crop.free") : r.label}
@@ -1089,6 +1138,7 @@ export function EditClipModal({
 							font: "500 11px/1 var(--font-mono)",
 							color: "var(--muted)",
 							alignSelf: "center",
+							whiteSpace: "nowrap",
 						}}
 					>
 						{cropWPct}% × {cropHPct}%
@@ -1101,8 +1151,9 @@ export function EditClipModal({
 					display: "flex",
 					justifyContent: "space-between",
 					alignItems: "center",
-					paddingTop: 16,
-					marginTop: 16,
+					paddingTop: 10,
+					marginTop: 10,
+					flexShrink: 0,
 					borderTop: "1px solid var(--border-soft)",
 				}}
 			>

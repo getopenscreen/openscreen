@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { fromFileUrl } from "@/components/video-editor/projectPersistence";
 import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import { useAudioPeaks } from "@/hooks/useAudioPeaks";
 import { createId } from "@/lib/ai-edition/document/ids";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
@@ -60,21 +61,67 @@ function fmt(sec: number): string {
 	return `${m}:${s.padStart(4, "0")}`;
 }
 
-// Deterministic pseudo-random waveform bar heights (0..1), seeded per clip —
-// ported verbatim from the v4 design's `waveformFor`.
-function waveformFor(seed: number, count: number): number[] {
-	let x = seed * 9301 + 49297;
-	const rand = () => {
-		x = (x * 9301 + 49297) % 233280;
-		return x / 233280;
-	};
-	const bars: number[] = [];
-	let v = 0.55;
-	for (let i = 0; i < count; i++) {
-		v = v * 0.6 + rand() * 0.4;
-		bars.push(0.3 + v * 0.7);
-	}
-	return bars;
+// Real per-clip audio waveform, sliced from the underlying asset's decoded
+// peaks (useAudioPeaks) down to this clip's [sourceStartSec, sourceEndSec]
+// range. A separate component (not inline in the clips .map) so each clip
+// gets its own hook call — useAudioPeaks caches by URL, so clips sharing an
+// asset only decode once. Renders nothing while decoding or if the source has
+// no audio track, so the clip pill just shows its label until peaks arrive.
+function ClipWaveform({
+	videoUrl,
+	assetDurationSec,
+	sourceStartSec,
+	sourceEndSec,
+}: {
+	videoUrl: string | undefined;
+	assetDurationSec: number | undefined;
+	sourceStartSec: number;
+	sourceEndSec: number;
+}) {
+	const peaks = useAudioPeaks(videoUrl);
+	const bars = useMemo(() => {
+		if (!peaks || peaks.length === 0 || !assetDurationSec) return null;
+		const totalBlocks = Math.floor(peaks.length / 2);
+		if (totalBlocks === 0) return null;
+		const blocksPerSec = totalBlocks / assetDurationSec;
+		const startBlock = Math.max(0, Math.floor(sourceStartSec * blocksPerSec));
+		const endBlock = Math.min(totalBlocks, Math.ceil(sourceEndSec * blocksPerSec));
+		const rangeBlocks = Math.max(1, endBlock - startBlock);
+		// One bar per ~120ms of clip duration — dense enough to read as a
+		// continuous waveform rather than a handful of scattered ticks.
+		const barCount = Math.max(20, Math.round((sourceEndSec - sourceStartSec) * 8));
+		const result: number[] = [];
+		for (let i = 0; i < barCount; i++) {
+			const blockStart = startBlock + Math.floor((i / barCount) * rangeBlocks);
+			const blockEnd = Math.max(
+				blockStart + 1,
+				startBlock + Math.floor(((i + 1) / barCount) * rangeBlocks),
+			);
+			let amp = 0;
+			for (let b = blockStart; b < blockEnd && b < totalBlocks; b++) {
+				const lo = Math.abs(peaks[b * 2] ?? 0);
+				const hi = Math.abs(peaks[b * 2 + 1] ?? 0);
+				amp = Math.max(amp, lo, hi);
+			}
+			result.push(amp);
+		}
+		return result;
+	}, [peaks, assetDurationSec, sourceStartSec, sourceEndSec]);
+
+	if (!bars) return null;
+	return (
+		<div aria-hidden className={styles.tlWave}>
+			{bars.map((h, bi) => (
+				<span
+					key={bi}
+					style={{
+						height: `${Math.max(8, Math.round(h * 100))}%`,
+						opacity: (0.5 + h * 0.5).toFixed(2),
+					}}
+				/>
+			))}
+		</div>
+	);
 }
 
 interface LanePill {
@@ -946,7 +993,8 @@ export function V4Timeline({
 					>
 						{clips.map((c, i) => {
 							const dur = c.timelineEndSec - c.timelineStartSec;
-							const bars = waveformFor(i + 1, Math.max(12, Math.round(dur * 0.6)));
+							const asset = tl.assets.find((a) => a.id === c.assetId);
+							const clipVideoUrl = videoSources.find((v) => v.id === c.assetId)?.src;
 							const selected = tl.clipSelection === c.id;
 							const dragging = clipDrag?.id === c.id;
 							// Siblings between the dragged clip's origin and its live
@@ -989,17 +1037,12 @@ export function V4Timeline({
 									}}
 									title={t("toolbar.dragToReorderHint")}
 								>
-									<div aria-hidden className={styles.tlWave}>
-										{bars.map((h, bi) => (
-											<span
-												key={bi}
-												style={{
-													height: `${Math.round(h * 100)}%`,
-													opacity: (0.5 + h * 0.5).toFixed(2),
-												}}
-											/>
-										))}
-									</div>
+									<ClipWaveform
+										videoUrl={clipVideoUrl}
+										assetDurationSec={asset?.durationSec}
+										sourceStartSec={c.sourceStartSec}
+										sourceEndSec={c.sourceEndSec ?? c.sourceStartSec + dur}
+									/>
 									<div className={styles.tlClipLabel}>
 										<span
 											className={styles.tlClipIcon}

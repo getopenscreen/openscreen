@@ -978,7 +978,7 @@
 	height: 20px;
 	border: 0;
 	padding: 0;
-	background: var(--border);
+	background: var(--border-hi);
 	border-radius: 9999px;
 	position: relative;
 	cursor: pointer;
@@ -1866,7 +1866,7 @@
 	left: 0;
 	right: 0;
 	height: 4px;
-	background: var(--border);
+	background: var(--border-hi);
 	border-radius: 9999px;
 	overflow: hidden;
 }

@@ -29,10 +29,26 @@ const CAPTURE_CURSOR =
 const WITH_SOFTWARE_ENCODER =
 	process.env.OPENSCREEN_WGC_TEST_SOFTWARE_ENCODER === "true" ||
 	process.argv.includes("--software-encoder");
+const WITH_SOFTWARE_FALLBACK =
+	process.env.OPENSCREEN_WGC_TEST_SOFTWARE_FALLBACK === "true" ||
+	process.argv.includes("--software-fallback");
+const INJECT_DEFAULT_SINK_WRITER_FAILURE_ENV =
+	"OPENSCREEN_WGC_TEST_INJECT_DEFAULT_SINK_WRITER_FAILURE_ONCE";
+const INJECTION_MARKER = "TEST-ONLY: Injected default MFCreateSinkWriterFromURL failure";
 
-function runHelper(config) {
+if (WITH_SOFTWARE_ENCODER && WITH_SOFTWARE_FALLBACK) {
+	throw new Error("--software-encoder and --software-fallback are mutually exclusive");
+}
+
+function runHelper(config, { injectDefaultSinkWriterFailure = false } = {}) {
 	return new Promise((resolve, reject) => {
+		const env = { ...process.env };
+		delete env[INJECT_DEFAULT_SINK_WRITER_FAILURE_ENV];
+		if (injectDefaultSinkWriterFailure) {
+			env[INJECT_DEFAULT_SINK_WRITER_FAILURE_ENV] = "1";
+		}
 		const child = spawn(HELPER_PATH, [JSON.stringify(config)], {
+			env,
 			stdio: ["pipe", "pipe", "pipe"],
 			windowsHide: true,
 		});
@@ -276,7 +292,9 @@ const config = {
 
 let result;
 try {
-	result = await runHelper(config);
+	result = await runHelper(config, {
+		injectDefaultSinkWriterFailure: WITH_SOFTWARE_FALLBACK,
+	});
 } finally {
 	if (fixtureWindow) {
 		fixtureWindow.child.kill();
@@ -306,6 +324,7 @@ const webcamStreams =
 	webcamOutputPath && fs.existsSync(webcamOutputPath) ? probeStreams(webcamOutputPath) : [];
 const hasVideo = streams.some((stream) => stream.codec_type === "video");
 const hasAudio = streams.some((stream) => stream.codec_type === "audio");
+const videoStream = streams.find((stream) => stream.codec_type === "video");
 const webcamFormatLine = result.stdout
 	.split(/\r?\n/)
 	.find((line) => line.includes('"event":"webcam-format"'));
@@ -335,6 +354,26 @@ const nativeMicrophoneDiagnostics = result.stderr
 if (!hasVideo) {
 	throw new Error(`WGC helper output has no video stream: ${outputPath}`);
 }
+if (videoStream.codec_name !== "h264") {
+	throw new Error(
+		`WGC helper output video codec is ${videoStream.codec_name ?? "unknown"}, expected h264: ${outputPath}`,
+	);
+}
+const videoDurationSeconds = Number(videoStream.duration);
+const minimumPlausibleDurationSeconds = Math.max(0.5, (DURATION_MS / 1000) * 0.5);
+const maximumPlausibleDurationSeconds = Math.max(
+	minimumPlausibleDurationSeconds,
+	(DURATION_MS / 1000) * 2 + 2,
+);
+if (
+	!Number.isFinite(videoDurationSeconds) ||
+	videoDurationSeconds < minimumPlausibleDurationSeconds ||
+	videoDurationSeconds > maximumPlausibleDurationSeconds
+) {
+	throw new Error(
+		`WGC helper output duration ${videoStream.duration ?? "unknown"}s is not plausible for a ${DURATION_MS}ms recording: ${outputPath}`,
+	);
+}
 if (WITH_WEBCAM && !webcamStreams.some((stream) => stream.codec_type === "video")) {
 	throw new Error(`WGC helper webcam output has no video stream: ${webcamOutputPath}`);
 }
@@ -347,13 +386,56 @@ if (
 		`WGC helper did not apply requested cursor capture mode (${CAPTURE_CURSOR}): ${result.stdout}`,
 	);
 }
+const expectedEncoderSelection = WITH_SOFTWARE_FALLBACK
+	? "software-fallback"
+	: WITH_SOFTWARE_ENCODER
+		? "software-preferred"
+		: "default";
 if (
-	WITH_SOFTWARE_ENCODER &&
-	(!encoderSelection ||
-		typeof encoderSelection.video !== "string" ||
-		!encoderSelection.video.startsWith("software"))
+	encoderSelection?.video !== expectedEncoderSelection ||
+	encoderSelection.preferSoftwareEncoder !== WITH_SOFTWARE_ENCODER
 ) {
-	throw new Error(`WGC helper did not use the requested software encoder path: ${result.stdout}`);
+	throw new Error(
+		`WGC helper encoder selection was ${JSON.stringify(encoderSelection)}, expected ${expectedEncoderSelection} with preferSoftwareEncoder=${WITH_SOFTWARE_ENCODER}: ${result.stdout}`,
+	);
+}
+
+const combinedHelperOutput = `${result.stdout}\n${result.stderr}`;
+const helperDiagnosticLines = combinedHelperOutput.split(/\r?\n/).filter(Boolean);
+const injectionLines = helperDiagnosticLines.filter((line) => line.includes(INJECTION_MARKER));
+const fallbackDiagnosticPatterns = [
+	INJECTION_MARKER,
+	"WARNING: Default MFCreateSinkWriterFromURL failed (hr=0x80070003)",
+	"retrying with the Microsoft software H.264 encoder.",
+	"INFO: Registered the Microsoft software H.264 MFT locally for this helper process.",
+	"INFO: Created the real software H.264 sink writer successfully.",
+];
+const fallbackDiagnostics = WITH_SOFTWARE_FALLBACK
+	? helperDiagnosticLines.filter((line) =>
+			fallbackDiagnosticPatterns.some((pattern) => line.includes(pattern)),
+		)
+	: [];
+if (WITH_SOFTWARE_FALLBACK) {
+	if (
+		injectionLines.length !== 1 ||
+		!injectionLines[0].includes("hr=0x80070003") ||
+		!injectionLines[0].includes("consumed exactly once")
+	) {
+		throw new Error(
+			`Expected exactly one consumed 0x80070003 test-only injection, found ${injectionLines.length}: ${combinedHelperOutput}`,
+		);
+	}
+	for (const pattern of fallbackDiagnosticPatterns.slice(1)) {
+		if (!helperDiagnosticLines.some((line) => line.includes(pattern))) {
+			throw new Error(
+				`WGC helper fallback diagnostics are missing ${JSON.stringify(pattern)}: ${combinedHelperOutput}`,
+			);
+		}
+	}
+} else if (injectionLines.length !== 0) {
+	throw new Error(
+		`WGC helper unexpectedly injected a default sink-writer failure: ${combinedHelperOutput}`,
+	);
 }
 if ((WITH_SYSTEM_AUDIO || WITH_MICROPHONE) && !hasAudio) {
 	throw new Error(`WGC helper output has no audio stream: ${outputPath}`);
@@ -396,6 +478,7 @@ console.log(
 			selectedWebcamDeviceName: webcamFormat?.deviceName,
 			nativeMicrophoneDiagnostics,
 			nativeWebcamDiagnostics,
+			fallbackDiagnostics,
 			firstFrameLuma: frameLuma,
 		},
 		null,

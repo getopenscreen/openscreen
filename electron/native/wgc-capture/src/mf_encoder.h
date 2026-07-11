@@ -28,6 +28,7 @@ struct AudioInputFormat {
 
 struct MFEncoderOptions {
     bool preferSoftwareEncoder = false;
+    bool injectDefaultSinkWriterFailureOnce = false;
 };
 
 constexpr const char* kVideoEncoderSelectionDefault = "default";

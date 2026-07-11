@@ -168,6 +168,10 @@ HRESULT ensureSoftwareH264EncoderRegisteredForProcess() {
     if (FAILED(result)) {
         std::cerr << "ERROR: MFTRegisterLocalByCLSID(CLSID_MSH264EncoderMFT) failed (hr=0x"
                   << std::hex << result << std::dec << ")" << std::endl;
+    } else {
+        std::cerr
+            << "INFO: Registered the Microsoft software H.264 MFT locally for this helper process."
+            << std::endl;
     }
     return result;
 }
@@ -175,6 +179,8 @@ HRESULT ensureSoftwareH264EncoderRegisteredForProcess() {
 HRESULT createSinkWriterFromUrl(
     const std::wstring& outputPath,
     bool forceSoftwareEncoder,
+    bool injectDefaultSinkWriterFailureOnce,
+    bool& injectedDefaultSinkWriterFailure,
     Microsoft::WRL::ComPtr<IMFSinkWriter>& sinkWriter,
     SinkWriterCreateStage& failedStage) {
     // Default to the sink-writer creation step; the software-path steps below
@@ -215,8 +221,25 @@ HRESULT createSinkWriterFromUrl(
     }
 
     failedStage = SinkWriterCreateStage::CreateSinkWriter;
-    return MFCreateSinkWriterFromURL(
+    if (
+        !forceSoftwareEncoder &&
+        injectDefaultSinkWriterFailureOnce &&
+        !injectedDefaultSinkWriterFailure) {
+        injectedDefaultSinkWriterFailure = true;
+        std::cerr
+            << "TEST-ONLY: Injected default MFCreateSinkWriterFromURL failure "
+            << "(hr=0x80070003); injection consumed exactly once."
+            << std::endl;
+        return HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND);
+    }
+
+    const HRESULT sinkWriterHr = MFCreateSinkWriterFromURL(
         outputPath.c_str(), nullptr, attributes.Get(), &sinkWriter);
+    if (SUCCEEDED(sinkWriterHr) && forceSoftwareEncoder) {
+        std::cerr << "INFO: Created the real software H.264 sink writer successfully."
+                  << std::endl;
+    }
+    return sinkWriterHr;
 }
 
 void logSinkWriterCreateFailure(HRESULT sinkWriterHr, const AudioInputFormat* audioFormat) {
@@ -354,6 +377,8 @@ bool MFEncoder::initialize(
     setFrameRate(inputType.Get(), static_cast<UINT32>(fps_));
     setPixelAspectRatio(inputType.Get());
 
+    bool injectedDefaultSinkWriterFailure = false;
+
     auto resetSinkWriterAttempt = [&]() {
         sinkWriter_.Reset();
         videoStreamIndex_ = 0;
@@ -372,6 +397,8 @@ bool MFEncoder::initialize(
         const HRESULT sinkWriterHr = createSinkWriterFromUrl(
             outputPath,
             forceSoftwareEncoder,
+            options.injectDefaultSinkWriterFailureOnce,
+            injectedDefaultSinkWriterFailure,
             sinkWriter_,
             failedStage);
         if (FAILED(sinkWriterHr)) {

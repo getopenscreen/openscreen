@@ -987,13 +987,27 @@
 	position: relative;
 	flex: 1;
 	min-height: 0;
-	padding: 8px 20px 0;
-	overflow: hidden;
+	padding: 8px 20px;
+	/* Horizontal zoom/pan is done by transforming .tlCanvas, so x stays clipped;
+	   y scrolls when the panel is too short to show every lane + the main track. */
+	overflow-x: hidden;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--border-hi) transparent;
+	/* Bottom-anchor the content: the main clip track sits at the bottom edge and
+	   stays visible as the panel shrinks; the edit lanes above scroll off the top
+	   and are reached by scrolling up (rather than the track vanishing off-screen). */
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
 	cursor: text;
 }
 .tlCanvas {
 	position: relative;
 	min-width: 100%;
+	/* Keep natural height so .tlTracks (not the canvas) is what scrolls; without
+	   this the flex column would shrink the canvas and clip its own content. */
+	flex-shrink: 0;
 	will-change: transform, width;
 }
 .tlPlayhead {

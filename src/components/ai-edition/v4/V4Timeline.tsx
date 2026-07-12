@@ -422,7 +422,9 @@ export function V4Timeline({
 		[nav],
 	);
 
-	// Scroll = pan, Ctrl+scroll = zoom around the cursor's timeline position.
+	// Plain scroll = vertical scroll (the panel can be too short to show every
+	// lane + the main track). Shift+scroll = horizontal pan. Ctrl+scroll = zoom
+	// around the cursor's timeline position.
 	// Attached as a native (non-passive) listener rather than React's onWheel:
 	// React marks wheel handlers passive by default, so e.preventDefault()
 	// there silently no-ops and the browser/OS still intercepts Ctrl+wheel as
@@ -431,10 +433,10 @@ export function V4Timeline({
 		const el = tracksRef.current;
 		if (!el) return;
 		const onWheelNative = (e: WheelEvent) => {
-			e.preventDefault();
 			const r = el.getBoundingClientRect();
 			const viewportPct = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
 			if (e.ctrlKey) {
+				e.preventDefault();
 				setNav((prev) => {
 					const width = prev.end - prev.start;
 					const cursorFrac = prev.start + viewportPct * width;
@@ -443,14 +445,18 @@ export function V4Timeline({
 					const start = Math.max(0, Math.min(1 - nextWidth, cursorFrac - viewportPct * nextWidth));
 					return { start, end: start + nextWidth };
 				});
-			} else {
+			} else if (e.shiftKey) {
+				e.preventDefault();
 				setNav((prev) => {
 					const width = prev.end - prev.start;
-					const delta = (e.deltaY / r.width) * width;
+					// Shift often routes the wheel onto deltaX; accept whichever axis moved.
+					const wheelDelta = e.deltaX !== 0 ? e.deltaX : e.deltaY;
+					const delta = (wheelDelta / r.width) * width;
 					const start = Math.max(0, Math.min(1 - width, prev.start + delta));
 					return { start, end: start + width };
 				});
 			}
+			// Otherwise let the native vertical scroll of .tlTracks run (no preventDefault).
 		};
 		el.addEventListener("wheel", onWheelNative, { passive: false });
 		return () => el.removeEventListener("wheel", onWheelNative);
@@ -928,7 +934,7 @@ export function V4Timeline({
 				/>
 				<div className={styles.tlHints}>
 					<span className={styles.tlHint}>
-						<span className={styles.tlKbd}>Scroll</span> {t("labels.pan")}
+						<span className={styles.tlKbd}>Shift+Scroll</span> {t("labels.pan")}
 					</span>
 					<span className={styles.tlHint}>
 						<span className={styles.tlKbd}>Ctrl+Scroll</span> {t("labels.zoom")}

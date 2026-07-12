@@ -182,7 +182,21 @@ export function OpenProjectModal({
 					}}
 				/>
 			</div>
-			<div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 12 }}>
+			<div
+				style={{
+					display: "flex",
+					flexDirection: "column",
+					gap: 2,
+					marginBottom: 12,
+					// Cap the list so the footer's "Browse files" button stays visible
+					// instead of being pushed below the fold when there are many projects;
+					// the list scrolls internally.
+					maxHeight: "48vh",
+					overflowY: "auto",
+					scrollbarWidth: "thin",
+					scrollbarColor: "var(--border-hi) transparent",
+				}}
+			>
 				{filtered.length === 0 ? (
 					<p style={{ color: "var(--muted)", fontSize: 12, padding: 16, textAlign: "center" }}>
 						{t("openProjectDialog.noMatches", { query })}

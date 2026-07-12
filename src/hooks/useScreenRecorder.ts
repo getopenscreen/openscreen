@@ -974,20 +974,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (!isCountdownRunActive(countdownRunToken)) {
 					return true;
 				}
-				if (webcamStream.current) {
-					nativeWebcamRecorder = createRecorderHandle(webcamStream.current, {
-						mimeType: selectMimeType(),
-						videoBitsPerSecond: BITRATE_BASE,
-					});
-				} else {
+				if (!webcamStream.current) {
 					webcamAcquireId.current++;
 					setWebcamEnabledState(false);
 				}
 			}
 			if (!isCountdownRunActive(countdownRunToken)) {
-				if (nativeWebcamRecorder && nativeWebcamRecorder.recorder.state !== "inactive") {
-					nativeWebcamRecorder.recorder.stop();
-				}
 				return true;
 			}
 			const request: NativeMacRecordingRequest = {
@@ -1034,17 +1026,23 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			};
 			const result = await window.electronAPI.startNativeMacRecording(request);
 			if (!result.success || !result.recordingId) {
-				if (nativeWebcamRecorder && nativeWebcamRecorder.recorder.state !== "inactive") {
-					nativeWebcamRecorder.recorder.stop();
-				}
 				throw new Error(result.error ?? "Native macOS capture failed.");
 			}
 			if (!isCountdownRunActive(countdownRunToken)) {
-				if (nativeWebcamRecorder && nativeWebcamRecorder.recorder.state !== "inactive") {
-					nativeWebcamRecorder.recorder.stop();
-				}
 				await window.electronAPI.stopNativeMacRecording(true);
 				return true;
+			}
+
+			// Start the webcam recorder only after the helper has emitted
+			// recording-started (startNativeMacRecording resolves on that event).
+			// Starting it earlier bakes the helper's capture startup latency
+			// (~1s of pre-roll) into the webcam file, desyncing it from the
+			// screen/mic recording that the editor and exporter align at t=0.
+			if (webcamEnabled && webcamStream.current) {
+				nativeWebcamRecorder = createRecorderHandle(webcamStream.current, {
+					mimeType: selectMimeType(),
+					videoBitsPerSecond: BITRATE_BASE,
+				});
 			}
 
 			recordingId.current = result.recordingId;

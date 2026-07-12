@@ -1,4 +1,4 @@
-import { WebDemuxer } from "web-demuxer";
+import { AVMediaType, type WebAVStream, WebDemuxer } from "web-demuxer";
 import {
 	MAX_NATIVE_PLAYBACK_RATE,
 	type SpeedRegion,
@@ -20,6 +20,10 @@ const SEEK_TIMEOUT_MS = 5_000;
 // AudioData slice size fed to the encoder from the offline time-stretch path.
 const OFFLINE_OUTPUT_FRAMES = 4096;
 const ENCODE_BACKPRESSURE_LIMIT = 20;
+// Mixed multi-track audio is re-chunked into slices of this many frames
+// (~21ms at 48kHz), matching the granularity at which the single-track path
+// drops whole source chunks inside trim regions.
+const MIX_SLICE_FRAMES = 1024;
 // Must match streamingDecoder's EPSILON_SEC so the offline audio segment lengths
 // use the same per-frame quantization as the video output.
 const VIDEO_EPSILON_SEC = 0.001;
@@ -38,6 +42,26 @@ const EXPORT_AUDIO_CODECS: ExportAudioCodecCandidate[] = [
 	{ encoderCodec: "mp4a.40.2", muxerCodec: "aac", label: "AAC" },
 	{ encoderCodec: "opus", muxerCodec: "opus", label: "Opus" },
 ];
+
+type MediaElementWithAudioTracks = HTMLMediaElement & {
+	audioTracks?: {
+		length: number;
+		[index: number]: { enabled: boolean };
+	};
+};
+
+// A multi-track source (e.g. system audio + microphone) plays only its default
+// audio track; enable every track so the rendered timeline audio contains all
+// of them. No-op when the audioTracks API is unavailable.
+function enableAllMediaAudioTracks(media: HTMLMediaElement) {
+	const audioTracks = (media as MediaElementWithAudioTracks).audioTracks;
+	if (!audioTracks || audioTracks.length <= 1) {
+		return;
+	}
+	for (let index = 0; index < audioTracks.length; index += 1) {
+		audioTracks[index].enabled = true;
+	}
+}
 
 function averageChannels(sourcePlanes: Float32Array[], frame: number) {
 	let mixed = 0;
@@ -293,64 +317,67 @@ export class AudioProcessor {
 		readEndSec?: number,
 		exportCodec?: ExportAudioCodec,
 	): Promise<void> {
-		let audioConfig: AudioDecoderConfig;
-		try {
-			audioConfig = await demuxer.getDecoderConfig("audio");
-		} catch {
-			console.warn("[AudioProcessor] No audio track found, skipping");
-			return;
-		}
-
-		const codecCheck = await AudioDecoder.isConfigSupported(audioConfig);
-		if (!codecCheck.supported) {
-			console.warn("[AudioProcessor] Audio codec not supported:", audioConfig.codec);
-			return;
-		}
-
-		// Phase 1: decode, skipping trimmed regions.
-		const decodedFrames: AudioData[] = [];
-
-		const decoder = new AudioDecoder({
-			output: (data: AudioData) => decodedFrames.push(data),
-			error: (e: DOMException) => console.error("[AudioProcessor] Decode error:", e),
-		});
-		decoder.configure(audioConfig);
-
 		const safeReadEndSec =
 			typeof readEndSec === "number" && Number.isFinite(readEndSec)
 				? Math.max(0, readEndSec)
 				: undefined;
-		const audioStream =
-			safeReadEndSec !== undefined
-				? demuxer.read("audio", 0, safeReadEndSec)
-				: demuxer.read("audio");
-		const reader = audioStream.getReader();
 
+		// A recording can carry several audio tracks (the native capture helpers
+		// write system audio and the microphone as separate streams). The
+		// demuxer's default "audio" selection reads only the first track, which
+		// silently drops the rest — a mic-only recording would export just the
+		// silent system-audio track. Mix every decodable track instead.
+		let audioStreams: WebAVStream[] = [];
 		try {
-			while (!this.cancelled) {
-				const { done, value: chunk } = await reader.read();
-				if (done || !chunk) break;
-
-				const timestampMs = chunk.timestamp / 1000;
-				if (this.isInTrimRegion(timestampMs, sortedTrims)) continue;
-
-				decoder.decode(chunk);
-
-				while (decoder.decodeQueueSize > DECODE_BACKPRESSURE_LIMIT && !this.cancelled) {
-					await new Promise((resolve) => setTimeout(resolve, 1));
-				}
-			}
-		} finally {
-			try {
-				await reader.cancel();
-			} catch {
-				/* reader already closed */
-			}
+			const allStreams = await demuxer.getAVStreams();
+			audioStreams = allStreams.filter(
+				(stream) => stream.codec_type === AVMediaType.AVMEDIA_TYPE_AUDIO,
+			);
+		} catch {
+			// Stream enumeration failed; fall back to the default-track path below.
 		}
 
-		if (decoder.state === "configured") {
-			await decoder.flush();
-			decoder.close();
+		let decodedFrames: AudioData[];
+		let sampleRate: number;
+		let channels: number;
+
+		if (audioStreams.length > 1) {
+			const mixed = await this.decodeAndMixAudioStreams(
+				demuxer,
+				audioStreams,
+				sortedTrims,
+				safeReadEndSec,
+			);
+			if (!mixed) {
+				console.warn("[AudioProcessor] No decodable audio streams, skipping");
+				return;
+			}
+			decodedFrames = mixed.frames;
+			sampleRate = mixed.sampleRate;
+			channels = mixed.numberOfChannels;
+		} else {
+			let audioConfig: AudioDecoderConfig;
+			try {
+				audioConfig = await demuxer.getDecoderConfig("audio");
+			} catch {
+				console.warn("[AudioProcessor] No audio track found, skipping");
+				return;
+			}
+
+			const codecCheck = await AudioDecoder.isConfigSupported(audioConfig);
+			if (!codecCheck.supported) {
+				console.warn("[AudioProcessor] Audio codec not supported:", audioConfig.codec);
+				return;
+			}
+
+			decodedFrames = await this.decodeDefaultAudioTrack(
+				demuxer,
+				audioConfig,
+				sortedTrims,
+				safeReadEndSec,
+			);
+			sampleRate = audioConfig.sampleRate || 48000;
+			channels = audioConfig.numberOfChannels || 2;
 		}
 
 		if (this.cancelled || decodedFrames.length === 0) {
@@ -368,8 +395,6 @@ export class AudioProcessor {
 			error: (e: DOMException) => console.error("[AudioProcessor] Encode error:", e),
 		});
 
-		const sampleRate = audioConfig.sampleRate || 48000;
-		const channels = audioConfig.numberOfChannels || 2;
 		const selectedCodec =
 			exportCodec ?? (await AudioProcessor.selectSupportedExportCodec(sampleRate, channels));
 		if (!selectedCodec) {
@@ -435,6 +460,256 @@ export class AudioProcessor {
 		);
 	}
 
+	// Phase 1 of the trim-only path for single-track sources: decode the default
+	// audio track, skipping chunks inside trimmed regions.
+	private async decodeDefaultAudioTrack(
+		demuxer: WebDemuxer,
+		audioConfig: AudioDecoderConfig,
+		sortedTrims: TrimRegion[],
+		safeReadEndSec?: number,
+	): Promise<AudioData[]> {
+		const decodedFrames: AudioData[] = [];
+
+		const decoder = new AudioDecoder({
+			output: (data: AudioData) => decodedFrames.push(data),
+			error: (e: DOMException) => console.error("[AudioProcessor] Decode error:", e),
+		});
+		decoder.configure(audioConfig);
+
+		const audioStream =
+			safeReadEndSec !== undefined
+				? demuxer.read("audio", 0, safeReadEndSec)
+				: demuxer.read("audio");
+		const reader = audioStream.getReader();
+
+		try {
+			while (!this.cancelled) {
+				const { done, value: chunk } = await reader.read();
+				if (done || !chunk) break;
+
+				const timestampMs = chunk.timestamp / 1000;
+				if (this.isInTrimRegion(timestampMs, sortedTrims)) continue;
+
+				decoder.decode(chunk);
+
+				while (decoder.decodeQueueSize > DECODE_BACKPRESSURE_LIMIT && !this.cancelled) {
+					await new Promise((resolve) => setTimeout(resolve, 1));
+				}
+			}
+		} finally {
+			try {
+				await reader.cancel();
+			} catch {
+				/* reader already closed */
+			}
+		}
+
+		if (decoder.state === "configured") {
+			await decoder.flush();
+			decoder.close();
+		}
+
+		return decodedFrames;
+	}
+
+	/**
+	 * Decode every audio stream in the source and sum them into one timeline.
+	 * Returns the mix re-chunked into AudioData slices whose timestamps are
+	 * source time (trim-region slices already dropped), so the caller's
+	 * trim-offset/encode phase treats them exactly like single-track output.
+	 */
+	private async decodeAndMixAudioStreams(
+		demuxer: WebDemuxer,
+		streams: WebAVStream[],
+		sortedTrims: TrimRegion[],
+		safeReadEndSec?: number,
+	): Promise<{ frames: AudioData[]; sampleRate: number; numberOfChannels: number } | null> {
+		const sampleRate = streams[0].sample_rate || 48000;
+		const numberOfChannels = Math.min(
+			2,
+			Math.max(1, ...streams.map((stream) => stream.channels || 1)),
+		);
+
+		// Growable planar mix buffer in source time, one plane per channel.
+		let capacity = Math.max(sampleRate, Math.ceil((safeReadEndSec ?? 60) * sampleRate));
+		let mixPlanes = Array.from({ length: numberOfChannels }, () => new Float32Array(capacity));
+		let mixLength = 0;
+		let mixedStreams = 0;
+
+		const ensureCapacity = (samples: number) => {
+			if (samples <= capacity) return;
+			while (capacity < samples) capacity *= 2;
+			mixPlanes = mixPlanes.map((plane) => {
+				const grown = new Float32Array(capacity);
+				grown.set(plane);
+				return grown;
+			});
+		};
+
+		for (const stream of streams) {
+			if (this.cancelled) break;
+
+			const config: AudioDecoderConfig = {
+				codec: stream.codec_string,
+				sampleRate: stream.sample_rate,
+				numberOfChannels: stream.channels,
+				...(stream.extradata && stream.extradata.length > 0
+					? { description: stream.extradata }
+					: {}),
+			};
+			let supported = false;
+			try {
+				supported = (await AudioDecoder.isConfigSupported(config)).supported ?? false;
+			} catch {
+				supported = false;
+			}
+			if (!supported) {
+				console.warn("[AudioProcessor] Skipping undecodable audio stream:", stream.codec_string);
+				continue;
+			}
+
+			const pending: AudioData[] = [];
+			const decoder = new AudioDecoder({
+				output: (data: AudioData) => pending.push(data),
+				error: (e: DOMException) => console.error("[AudioProcessor] Decode error:", e),
+			});
+			decoder.configure(config);
+
+			const drainPending = () => {
+				for (const data of pending) {
+					const frameCount = data.numberOfFrames;
+					const srcRate = data.sampleRate || stream.sample_rate || sampleRate;
+					const srcPlanes: Float32Array[] = [];
+					for (let c = 0; c < data.numberOfChannels; c++) {
+						const plane = new Float32Array(frameCount);
+						data.copyTo(plane, { format: "f32-planar", planeIndex: c });
+						srcPlanes.push(plane);
+					}
+					const startSample = Math.round((data.timestamp / 1_000_000) * sampleRate);
+					data.close();
+					if (startSample < 0 || frameCount === 0) {
+						// Negative-timestamp codec preroll carries priming samples, not
+						// timeline audio; the single-track path never plays it either.
+						continue;
+					}
+
+					// Map source channels onto the mix's channel count.
+					let planes: Float32Array[];
+					if (srcPlanes.length === numberOfChannels) {
+						planes = srcPlanes;
+					} else if (srcPlanes.length === 1) {
+						planes = Array.from({ length: numberOfChannels }, () => srcPlanes[0]);
+					} else {
+						const downmixed = downmixPlanarChannelsForExport(srcPlanes, numberOfChannels);
+						planes = [];
+						for (let c = 0; c < numberOfChannels; c++) {
+							planes.push(downmixed.subarray(c * frameCount, (c + 1) * frameCount));
+						}
+					}
+
+					const outCount =
+						srcRate === sampleRate ? frameCount : Math.floor((frameCount * sampleRate) / srcRate);
+					ensureCapacity(startSample + outCount);
+					for (let c = 0; c < numberOfChannels; c++) {
+						const mix = mixPlanes[c];
+						const src = planes[c];
+						if (srcRate === sampleRate) {
+							for (let i = 0; i < frameCount; i++) mix[startSample + i] += src[i];
+						} else {
+							// Linear resample onto the mix's sample grid.
+							for (let i = 0; i < outCount; i++) {
+								const pos = (i * srcRate) / sampleRate;
+								const lo = Math.floor(pos);
+								const hi = Math.min(frameCount - 1, lo + 1);
+								const frac = pos - lo;
+								mix[startSample + i] += src[lo] * (1 - frac) + src[hi] * frac;
+							}
+						}
+					}
+					mixLength = Math.max(mixLength, startSample + outCount);
+				}
+				pending.length = 0;
+			};
+
+			const packetStream = demuxer.readAVPacket(
+				0,
+				safeReadEndSec ?? 0,
+				AVMediaType.AVMEDIA_TYPE_AUDIO,
+				stream.index,
+			);
+			const reader = packetStream.getReader();
+			try {
+				while (!this.cancelled) {
+					const { done, value: packet } = await reader.read();
+					if (done || !packet) break;
+					decoder.decode(
+						new EncodedAudioChunk({
+							type: packet.keyframe === 1 ? "key" : "delta",
+							timestamp: Math.round(packet.timestamp * 1_000_000),
+							duration: Math.round(packet.duration * 1_000_000),
+							data: packet.data,
+						}),
+					);
+					while (decoder.decodeQueueSize > DECODE_BACKPRESSURE_LIMIT && !this.cancelled) {
+						await new Promise((resolve) => setTimeout(resolve, 1));
+					}
+					drainPending();
+				}
+			} finally {
+				try {
+					await reader.cancel();
+				} catch {
+					/* reader already closed */
+				}
+			}
+
+			if (decoder.state === "configured") {
+				if (!this.cancelled) {
+					await decoder.flush();
+				}
+				decoder.close();
+			}
+			drainPending();
+			mixedStreams += 1;
+		}
+
+		if (this.cancelled || mixedStreams === 0 || mixLength === 0) {
+			return null;
+		}
+
+		// Summing can clip where tracks overlap; hard-clamp to [-1, 1].
+		for (const plane of mixPlanes) {
+			for (let i = 0; i < mixLength; i++) {
+				if (plane[i] > 1) plane[i] = 1;
+				else if (plane[i] < -1) plane[i] = -1;
+			}
+		}
+
+		// Re-chunk the mix, dropping slices that start inside a trim region — the
+		// same chunk-level granularity the single-track decode applies.
+		const frames: AudioData[] = [];
+		for (let start = 0; start < mixLength; start += MIX_SLICE_FRAMES) {
+			const take = Math.min(MIX_SLICE_FRAMES, mixLength - start);
+			const timestampUs = Math.round((start / sampleRate) * 1_000_000);
+			if (this.isInTrimRegion(timestampUs / 1000, sortedTrims)) continue;
+			const data = new Float32Array(take * numberOfChannels);
+			for (let c = 0; c < numberOfChannels; c++) {
+				data.set(mixPlanes[c].subarray(start, start + take), c * take);
+			}
+			frames.push(
+				new AudioData({
+					format: "f32-planar",
+					sampleRate,
+					numberOfFrames: take,
+					numberOfChannels,
+					timestamp: timestampUs,
+					data: data.buffer as ArrayBuffer,
+				}),
+			);
+		}
+		return { frames, sampleRate, numberOfChannels };
+	}
+
 	// Speed-aware path mirroring preview semantics (trim skipping + playbackRate). Relies on
 	// browser media playback to preserve pitch and avoid the chipmunk effect.
 	private async renderPitchPreservedTimelineAudio(
@@ -460,6 +735,7 @@ export class AudioProcessor {
 		if (this.cancelled) {
 			throw new Error("Export cancelled");
 		}
+		enableAllMediaAudioTracks(media);
 
 		const audioContext = new AudioContext();
 		const sourceNode = audioContext.createMediaElementSource(media);

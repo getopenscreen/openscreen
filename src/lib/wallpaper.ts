@@ -44,21 +44,8 @@ export function classifyWallpaper(value: string): WallpaperClassification {
 }
 
 function extractTrailingGradient(value: string): string | null {
-	const matches: number[] = [];
-	for (const type of [
-		"linear",
-		"radial",
-		"conic",
-		"repeating-linear",
-		"repeating-radial",
-		"repeating-conic",
-	]) {
-		const idx = value.lastIndexOf(`, ${type}-gradient(`);
-		if (idx >= 0) matches.push(idx);
-	}
-	if (matches.length === 0) return null;
-	const start = Math.max(...matches) + 2;
-	return value.slice(start);
+	const match = value.match(/,\s*((?:repeating-)?(?:linear|radial|conic)-gradient\(.*\))\s*$/);
+	return match?.[1] ?? null;
 }
 
 const ALLOWED_IMAGE_PREFIX = "/wallpapers/";

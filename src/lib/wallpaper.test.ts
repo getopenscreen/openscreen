@@ -139,6 +139,22 @@ describe("classifyWallpaper", () => {
 			value: "repeating-linear-gradient(45deg, red, blue)",
 		});
 	});
+
+	it("tolerates missing or extra whitespace around the comma in composite backgrounds", () => {
+		const noSpace =
+			'url("data:image/svg+xml;utf8,<svg/>") repeat,linear-gradient(135deg, red, blue)';
+		expect(classifyWallpaper(noSpace)).toEqual({
+			kind: "gradient",
+			value: "linear-gradient(135deg, red, blue)",
+		});
+
+		const extraSpace =
+			'url("data:image/svg+xml;utf8,<svg/>") repeat,   linear-gradient(135deg, red, blue)';
+		expect(classifyWallpaper(extraSpace)).toEqual({
+			kind: "gradient",
+			value: "linear-gradient(135deg, red, blue)",
+		});
+	});
 });
 
 describe("resolveImageWallpaperUrl", () => {

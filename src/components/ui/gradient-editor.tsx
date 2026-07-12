@@ -27,7 +27,6 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 const MAX_COLORS = 3;
 const MAIN_ID = "main";
 const MAIN_MAX_RADIUS = 40;
-let idCounter = 1;
 
 /* ---------- color-wheel harmony math ---------- */
 type ColorHarmony = {
@@ -194,7 +193,11 @@ type GradientEditorProps = {
 export default function GradientEditor({ onChange }: GradientEditorProps) {
 	const [mainAngle, setMainAngle] = useState(-35);
 	const [mainRadius, setMainRadius] = useState(20);
-	const [orbitPoints, setOrbitPoints] = useState<{ id: string }[]>([{ id: "o1" }, { id: "o2" }]);
+	const idCounter = useRef(1);
+	const [orbitPoints, setOrbitPoints] = useState<{ id: string }[]>(() => [
+		{ id: `o${idCounter.current++}` },
+		{ id: `o${idCounter.current++}` },
+	]);
 	const [harmonyType, setHarmonyType] = useState<HarmonyType>("splitComplementary");
 	const [brightness, setBrightness] = useState(55);
 	const [angle, setAngle] = useState(135);
@@ -202,7 +205,6 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const trackRef = useRef<HTMLDivElement>(null);
 	const draggingMain = useRef(false);
-	const movedRef = useRef(false);
 	const mountedRef = useRef(false);
 	const dragCleanup = useRef<(() => void) | null>(null);
 
@@ -275,7 +277,6 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 	const onMainPointerDown = (e: ReactPointerEvent) => {
 		e.stopPropagation();
 		draggingMain.current = true;
-		movedRef.current = false;
 		dragCleanup.current?.();
 		const onUp = () => {
 			draggingMain.current = false;
@@ -293,7 +294,6 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 	const onMainPointerMove = useCallback(
 		(e: PointerEvent) => {
 			if (!draggingMain.current) return;
-			movedRef.current = true;
 			updateMainFromPointer(e.clientX, e.clientY);
 		},
 		[updateMainFromPointer],
@@ -302,7 +302,7 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 	/* ---------- add / remove / harmony ---------- */
 	const addPoint = () => {
 		if (totalColors >= MAX_COLORS) return;
-		const id = `o${idCounter++}`;
+		const id = `o${idCounter.current++}`;
 		setOrbitPoints((prev) => [...prev, { id }]);
 	};
 
@@ -381,8 +381,9 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 		window.addEventListener("pointercancel", onUp);
 	};
 
-	// Brightness filter (dark theme only)
-	const brightnessFilter = `brightness(${0.62 * (0.55 + (brightness / 100) * 0.9)}) saturate(0.95)`;
+	// Preview brightness must match the per-channel multiplier in
+	// applyBrightness so the wheel is WYSIWYG.
+	const brightnessFilter = `brightness(${brightness / 100})`;
 
 	const wavePath = useMemo(() => getInterpolatedWavePath(brightness / 100), [brightness]);
 
@@ -475,6 +476,7 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 				{/* Controls on canvas */}
 				<div className="absolute left-3.5 bottom-3 flex gap-3">
 					<button
+						type="button"
 						onClick={addPoint}
 						disabled={totalColors >= MAX_COLORS}
 						className={`w-6 h-6 rounded-full flex items-center justify-center border-none bg-transparent transition-all text-white/60 hover:text-white ${
@@ -488,6 +490,7 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 					</button>
 
 					<button
+						type="button"
 						onClick={removePoint}
 						disabled={totalColors <= 1}
 						className={`w-6 h-6 rounded-full flex items-center justify-center border-none bg-transparent transition-all text-white/60 hover:text-white ${
@@ -501,6 +504,7 @@ export default function GradientEditor({ onChange }: GradientEditorProps) {
 					</button>
 
 					<button
+						type="button"
 						onClick={cycleHarmony}
 						disabled={eligibleHarmonies.length <= 1}
 						className={`w-6 h-6 rounded-full flex items-center justify-center border-none bg-transparent transition-all text-white/60 hover:text-white ${

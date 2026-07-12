@@ -89,6 +89,8 @@ import type {
 import {
 	DEFAULT_WEBCAM_MIRRORED,
 	DEFAULT_WEBCAM_REACTIVE_ZOOM,
+	MAX_NATIVE_PLAYBACK_RATE,
+	MAX_PLAYBACK_SPEED,
 	MAX_ZOOM_SCALE,
 	MIN_ZOOM_SCALE,
 	ROTATION_3D_PRESET_ORDER,
@@ -1214,7 +1216,9 @@ export function SettingsPanel({
 									<CustomSpeedInput
 										value={selectedSpeedValue ?? 1}
 										onChange={(val) => onSpeedChange?.(val)}
-										onError={() => toast.error(t("speed.maxSpeedError"))}
+										onError={() =>
+											toast.error(t("speed.maxSpeedError", { max: MAX_PLAYBACK_SPEED }))
+										}
 									/>
 								) : (
 									<div className="flex items-center gap-1 opacity-40">
@@ -1225,6 +1229,13 @@ export function SettingsPanel({
 									</div>
 								)}
 							</div>
+							{selectedSpeedId &&
+								selectedSpeedValue != null &&
+								selectedSpeedValue > MAX_NATIVE_PLAYBACK_RATE && (
+									<p className="px-1 text-[10px] leading-snug text-slate-500">
+										{t("speed.previewFrameSteppingHint", { native: MAX_NATIVE_PLAYBACK_RATE })}
+									</p>
+								)}
 							{selectedSpeedId && (
 								<Button
 									onClick={() => selectedSpeedId && onSpeedDelete?.(selectedSpeedId)}

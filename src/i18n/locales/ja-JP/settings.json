@@ -31,7 +31,8 @@
 		"selectRegion": "再生速度の範囲を選択して調整",
 		"deleteRegion": "再生速度の範囲を削除",
 		"customPlaybackSpeed": "カスタム再生速度",
-		"maxSpeedError": "速度は16×を超えることはできません"
+		"maxSpeedError": "速度は{{max}}×を超えることはできません",
+		"previewFrameSteppingHint": "{{native}}×を超えるとプレビューはフレーム送りかつ無音になります。書き出しには影響しません。"
 	},
 	"trim": {
 		"deleteRegion": "トリム範囲を削除"

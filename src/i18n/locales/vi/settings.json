@@ -31,7 +31,8 @@
 		"selectRegion": "Chọn vùng tốc độ để điều chỉnh",
 		"deleteRegion": "Xóa vùng tốc độ",
 		"customPlaybackSpeed": "Tốc độ phát tùy chỉnh",
-		"maxSpeedError": "Tốc độ không thể cao hơn 16×"
+		"maxSpeedError": "Tốc độ không thể cao hơn {{max}}×",
+		"previewFrameSteppingHint": "Trên {{native}}×, bản xem trước tua từng khung hình và tắt tiếng. Xuất video không bị ảnh hưởng."
 	},
 	"trim": {
 		"deleteRegion": "Xóa vùng cắt"

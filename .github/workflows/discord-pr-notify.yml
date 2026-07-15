@@ -1,0 +1,40 @@
+name: PR to Discord Forum
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, edited, labeled, unlabeled, closed]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+jobs:
+  notify:
+    name: Sync PR activity to Discord
+    if: |
+      github.actor != 'github-actions[bot]'
+    concurrency:
+      group: discord-pr-sync-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup
+
+      - name: Sync PR activity to Discord forum thread
+        continue-on-error: true
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_REVIEWER_ROLE_ID: ${{ secrets.DISCORD_REVIEWER_ROLE_ID }}
+          DISCORD_PR_FORUM_CHANNEL_ID: ${{ vars.DISCORD_PR_FORUM_CHANNEL_ID }}
+          DISCORD_ALERT_CHANNEL_ID: ${{ vars.DISCORD_ALERT_CHANNEL_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/discord-pr-sync.mjs

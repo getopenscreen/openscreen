@@ -16,6 +16,15 @@
 
 <p align="center"><strong>OpenScreen is a free, open-source tool for creating polished screen recordings, product demos, and walkthroughs.</strong></p>
 
+<p align="center">
+  <a href="https://github.com/EtienneLescot/openscreen/blob/main/LICENSE"><img src="https://img.shields.io/github/license/EtienneLescot/openscreen?style=for-the-badge&label=License" alt="License" /></a>
+  <a href="https://github.com/EtienneLescot/openscreen/releases/latest"><img src="https://img.shields.io/github/v/release/EtienneLescot/openscreen?style=for-the-badge&label=Release" alt="Latest Release" /></a>
+  <a href="https://github.com/EtienneLescot/openscreen/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/EtienneLescot/openscreen/ci.yml?style=for-the-badge&label=CI" alt="CI Status" /></a>
+  <a href="https://discord.gg/VvT6Vtnyh"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=for-the-badge" alt="Platform" />
+</p>
+
+
 OpenScreen was originally positioned as a free, open-source alternative to Screen Studio: something you can use to create quick, polished product demos and walkthroughs for X, Reddit, YouTube, documentation, landing pages, or internal demos.
 
 It is not a 1:1 clone of Screen Studio. Screen Studio is an excellent commercial product. OpenScreen focuses on covering the core open-source workflow: recording, zooms, cursor effects, webcam overlay, captions, editing, annotations, and export.
@@ -28,8 +37,8 @@ The goal of this continuation is to keep OpenScreen alive as a fully open-source
 > Software should be accessible. OpenScreen has no paid tiers, premium features, upsells, or functionality locked behind a paywall.
 
 <p align="center">
-	<img src="public/demo.png" alt="" style="height: 0.2467; margin-right: 12px;" />
-  <img src="public/sample.png" alt="" style="height: 0.2467; margin-right: 12px;" />
+	<img src="public/demo.png" alt="" style="height: 320px; margin-right: 12px;" />
+  <img src="public/sample.png" alt="" style="height: 320px; margin-right: 12px;" />
 </p>
 
 ## Core Features
@@ -63,7 +72,7 @@ xattr -rd com.apple.quarantine /Applications/Openscreen.app
 
 Note: Give your terminal Full Disk Access in **System Settings > Privacy & Security** to grant you access and then run the above command.
 
-After running this command, proceed to **System Preferences > Security & Privacy** to grant the necessary permissions for "screen recording" and "accessibility". Once permissions are granted, you can launch the app.
+After running this command, proceed to **System Settings > Privacy & Security** to grant the necessary permissions for "screen recording" and "accessibility". Once permissions are granted, you can launch the app.
 
 > [!NOTE]
 > **Upgrading from an older version and hitting permission issues?** If you already had OpenScreen installed and the new version won't record (Screen Recording or Accessibility keep failing even after you grant them), uninstall the old version, remove OpenScreen's existing entries under **System Settings > Privacy & Security** (both Screen Recording and Accessibility), then do a fresh install and grant the permissions again when prompted.
@@ -151,6 +160,14 @@ Official / trusted links:
 * Community continuation: https://github.com/EtienneLescot/openscreen
 
 For safety, download OpenScreen only from the official GitHub Releases linked from this repository. Third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here.
+
+## Community
+
+OpenScreen is community-driven. If you need help, want to report a bug, or just want to chat with other users and contributors:
+
+- 💬 **Discord** — [Join the OpenScreen Discord](https://discord.gg/VvT6Vtnyh) for real-time help, showcase, and discussion
+- 🐞 **[GitHub Issues](https://github.com/EtienneLescot/openscreen/issues)** — bug reports and feature requests
+- 🗺️ **[Roadmap](./ROADMAP.md)** — see what we're building next
 
 ---
 

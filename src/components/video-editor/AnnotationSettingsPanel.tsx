@@ -157,8 +157,8 @@ export function AnnotationSettingsPanel({
 		};
 
 		reader.onerror = () => {
-			toast.error(t("annotation.failedImageUpload"), {
-				description: "There was an error reading the file.",
+			toast.error(t("imageUpload.failedToUpload"), {
+				description: t("imageUpload.errorReading"),
 			});
 		};
 

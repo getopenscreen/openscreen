@@ -121,6 +121,40 @@ describe("classifyWallpaper", () => {
 			path: DEFAULT_WALLPAPER,
 		});
 	});
+
+	it("strips a leading url() overlay layer and returns the trailing gradient", () => {
+		const composite =
+			'url("data:image/svg+xml;utf8,<svg/>") repeat, linear-gradient(135deg, rgb(255,0,0) 0%, rgb(0,0,255) 100%)';
+		expect(classifyWallpaper(composite)).toEqual({
+			kind: "gradient",
+			value: "linear-gradient(135deg, rgb(255,0,0) 0%, rgb(0,0,255) 100%)",
+		});
+	});
+
+	it("handles repeating-gradient variants in composite backgrounds", () => {
+		const composite =
+			'url("data:image/svg+xml;utf8,<svg/>") repeat, repeating-linear-gradient(45deg, red, blue)';
+		expect(classifyWallpaper(composite)).toEqual({
+			kind: "gradient",
+			value: "repeating-linear-gradient(45deg, red, blue)",
+		});
+	});
+
+	it("tolerates missing or extra whitespace around the comma in composite backgrounds", () => {
+		const noSpace =
+			'url("data:image/svg+xml;utf8,<svg/>") repeat,linear-gradient(135deg, red, blue)';
+		expect(classifyWallpaper(noSpace)).toEqual({
+			kind: "gradient",
+			value: "linear-gradient(135deg, red, blue)",
+		});
+
+		const extraSpace =
+			'url("data:image/svg+xml;utf8,<svg/>") repeat,   linear-gradient(135deg, red, blue)';
+		expect(classifyWallpaper(extraSpace)).toEqual({
+			kind: "gradient",
+			value: "linear-gradient(135deg, red, blue)",
+		});
+	});
 });
 
 describe("resolveImageWallpaperUrl", () => {

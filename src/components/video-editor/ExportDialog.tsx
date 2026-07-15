@@ -62,6 +62,8 @@ export function ExportDialog({
 	const isCompiling =
 		isExporting && progress && progress.percentage >= 100 && exportFormat === "gif";
 	const isFinalizing = progress?.phase === "finalizing";
+	// Streaming a large recording into OPFS before frames start rendering.
+	const isPreparing = progress?.phase === "preparing";
 	const renderProgress = progress?.renderProgress;
 
 	const getStatusMessage = () => {
@@ -172,7 +174,9 @@ export function ExportDialog({
 								<span>
 									{isCompiling || isFinalizing
 										? t("export.compiling")
-										: t("export.renderingFrames")}
+										: isPreparing
+											? t("export.processing")
+											: t("export.renderingFrames")}
 								</span>
 								<span className="font-mono text-slate-200">
 									{isCompiling || isFinalizing ? (
@@ -240,7 +244,14 @@ export function ExportDialog({
 									{t("export.frames")}
 								</div>
 								<div className="text-slate-200 font-medium text-sm">
-									{progress.currentFrame} / {progress.totalFrames}
+									{isPreparing ? (
+										<span className="flex items-center gap-2">
+											<Loader2 className="w-3 h-3 animate-spin" />
+											{t("export.processing")}
+										</span>
+									) : (
+										`${progress.currentFrame} / ${progress.totalFrames}`
+									)}
 								</div>
 							</div>
 						</div>

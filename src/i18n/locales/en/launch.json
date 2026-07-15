@@ -10,7 +10,18 @@
 		"openProject": "Open project",
 		"useVerticalTray": "Use vertical tray",
 		"useHorizontalTray": "Use horizontal tray",
-		"openStudio": "Open Studio"
+		"openStudio": "Open Studio",
+		"openNotes": "Open Notes",
+		"openNotesPlaceholder": "Take notes here...",
+		"notesToolbar": {
+			"bold": "Bold",
+			"italic": "Italic",
+			"strikethrough": "Strikethrough",
+			"bulletList": "Bullet list",
+			"numberedList": "Numbered list",
+			"blockquote": "Blockquote",
+			"codeBlock": "Code block"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Enable system audio",
@@ -41,7 +52,8 @@
 		"defaultSourceName": "Screen"
 	},
 	"recording": {
-		"selectSource": "Please select a source to record"
+		"selectSource": "Please select a source to record",
+		"saving": "Saving..."
 	},
 	"language": "Language",
 	"systemLanguagePrompt": {
@@ -49,5 +61,11 @@
 		"description": "We detected {{language}} as your system language. Do you want to switch OpenScreen to {{language}}?",
 		"switch": "Switch to {{language}}",
 		"keepDefault": "Keep current language"
+	},
+	"softwareEncoderFallback": {
+		"title": "Switched to software encoding",
+		"description": "The default GPU encoder failed to start, so OpenScreen fell back to software H.264 encoding. Recording should continue as normal, but CPU usage may be higher.",
+		"dismiss": "Got it",
+		"dontShowAgain": "Don't show again"
 	}
 }

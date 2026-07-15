@@ -23,7 +23,9 @@
 		"addBlur": "Aggiungi sfocatura",
 		"addKeyframe": "Aggiungi fotogramma chiave",
 		"deleteSelected": "Elimina selezionato",
-		"playPause": "Riproduci / Pausa"
+		"playPause": "Riproduci / Pausa",
+		"copySelected": "Copia selezione",
+		"paste": "Incolla"
 	},
 	"fixedActions": {
 		"undo": "Annulla",

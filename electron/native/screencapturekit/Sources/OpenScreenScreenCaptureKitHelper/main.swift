@@ -124,6 +124,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let filter: SCContentFilter
 		let width: Int
 		let height: Int
+		// Global frame (points, top-left origin) of the captured region. Used by the
+		// renderer to normalize cursor positions into the captured window's space.
+		let captureFrame: CGRect
 	}
 
 	private let request: RecordingRequest
@@ -143,6 +146,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var nativeMicrophoneEnabled = false
 	private var outputWidth = 1920
 	private var outputHeight = 1080
+	private var captureFrame = CGRect.zero
 	private let microphoneOutputTypeRawValue = 2
 	private let hostClock = CMClockGetHostTimeClock()
 
@@ -160,6 +164,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let target = try makeCaptureTarget(from: content)
 		outputWidth = target.width
 		outputHeight = target.height
+		captureFrame = target.captureFrame
 		let configuration = makeStreamConfiguration()
 		let stream = SCStream(filter: target.filter, configuration: configuration, delegate: self)
 
@@ -178,7 +183,10 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		try setupWriter()
 
 		self.stream = stream
-		emit(["event": "ready", "schemaVersion": 1])
+		emit([
+			"event": "ready",
+			"schemaVersion": 1,
+		])
 		try await stream.startCapture()
 	}
 
@@ -305,6 +313,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 					"timestampMs": Int(Date().timeIntervalSince1970 * 1000),
 					"width": outputWidth,
 					"height": outputHeight,
+					"captureBounds": captureBoundsPayload(),
 				])
 			}
 		}
@@ -337,6 +346,15 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		}
 	}
 
+	private func captureBoundsPayload() -> [String: Double] {
+		return [
+			"x": captureFrame.origin.x,
+			"y": captureFrame.origin.y,
+			"width": captureFrame.size.width,
+			"height": captureFrame.size.height,
+		]
+	}
+
 	private func makeCaptureTarget(from content: SCShareableContent) throws -> CaptureTarget {
 		switch request.source.type {
 		case "display":
@@ -351,7 +369,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			return CaptureTarget(
 				filter: SCContentFilter(display: display, excludingWindows: []),
 				width: clampCaptureDimension(width, fallback: request.video.width),
-				height: clampCaptureDimension(height, fallback: request.video.height)
+				height: clampCaptureDimension(height, fallback: request.video.height),
+				captureFrame: display.frame
 			)
 		case "window":
 			guard let windowId = request.source.windowId else {
@@ -369,7 +388,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			return CaptureTarget(
 				filter: SCContentFilter(desktopIndependentWindow: window),
 				width: clampCaptureDimension(width, fallback: request.video.width),
-				height: clampCaptureDimension(height, fallback: request.video.height)
+				height: clampCaptureDimension(height, fallback: request.video.height),
+				captureFrame: window.frame
 			)
 		default:
 			throw HelperError.invalidSourceType(request.source.type)

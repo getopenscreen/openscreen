@@ -1,0 +1,160 @@
+name: Cut a release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semver bump type from current package.json version"
+        required: true
+        type: choice
+        options: [patch, minor, major]
+        default: minor
+      rc_number:
+        description: "Pre-release counter (rc.1, rc.2, ...)"
+        required: true
+        type: number
+        default: 1
+      target_version:
+        description: "Override the auto-bumped next version (e.g. 2.0.0). Leave empty to bump from package.json."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: prerelease-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prerelease:
+    name: Cut pre-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup
+
+      - name: Calculate next version and RC tag
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          RC_NUMBER: ${{ inputs.rc_number }}
+          TARGET_VERSION: ${{ inputs.target_version }}
+        run: |
+          set -euo pipefail
+          CURRENT=$(node -p "require('./package.json').version")
+          if [[ -n "$TARGET_VERSION" ]]; then
+            NEXT="$TARGET_VERSION"
+          else
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            case "$BUMP" in
+              patch) PATCH=$((PATCH + 1)) ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            esac
+            NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          PRERELEASE_VERSION="${NEXT}-rc.${RC_NUMBER}"
+          RC_TAG="v${PRERELEASE_VERSION}"
+          echo "current=$CURRENT"             >> "$GITHUB_OUTPUT"
+          echo "next=$NEXT"                   >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "rc_tag=$RC_TAG"               >> "$GITHUB_OUTPUT"
+          echo "Will cut ${RC_TAG} from ${CURRENT}"
+
+      - name: Migrate issues from "Next Release" to versioned milestone
+        env:
+          TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+          NEXT: ${{ steps.version.outputs.next }}
+        run: node .github/scripts/release-milestone-migrate.mjs
+
+      - name: Bump package.json to pre-release version
+        env:
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s|(\"version\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")|\1${PRERELEASE}\2|" package.json
+          echo "package.json version:"
+          grep '"version"' package.json
+
+      - name: Commit package.json bump on a release branch
+        env:
+          TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The release branch is FROZEN between RC cut and stable promotion. The bump
+          # commit lives on release/v${PRERELEASE} only; nothing is merged into main
+          # until promote.yml publishes the stable tag, so any features merged into
+          # main after this step are NOT in the RC build.
+          BRANCH="release/v${PRERELEASE}"
+          # Delete remote branch first so the push below is always fast-forward (idempotent on rerun).
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ":${BRANCH}" 2>/dev/null || true
+          git checkout -b "$BRANCH"
+          git add package.json
+          git commit -m "chore(release): bump to ${PRERELEASE} [skip ci]"
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+
+      - name: Push RC tag on the release branch
+        env:
+          # Use GITHUB_TOKEN for the tag push: a tag is a ref, not a file change, so
+          # the workflows:write permission isn't needed.
+          # Note: GITHUB_TOKEN tag pushes do NOT trigger build.yml in this org's setup,
+          # so we explicitly trigger it via gh workflow run right after.
+          RC_TAG: ${{ steps.version.outputs.rc_tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          BRANCH="release/v${PRERELEASE}"
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git reset --hard "origin/${BRANCH}"
+          # Delete remote tag first (idempotent on rerun) and any local tag.
+          git push origin ":${RC_TAG}" 2>/dev/null || true
+          git tag -d "$RC_TAG" 2>/dev/null || true
+          git tag "$RC_TAG"
+          git push origin "$RC_TAG"
+
+      - name: Trigger build workflow
+        env:
+          GH_TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+          RC_TAG: ${{ steps.version.outputs.rc_tag }}
+        run: |
+          set -euo pipefail
+          # GITHUB_TOKEN tag pushes don't fire the build.yml trigger in this setup,
+          # so dispatch it explicitly. The PAT ensures the build's release creation
+          # propagates to Tier 3 (homebrew/winget/nix/aur) via release: published.
+          gh workflow run build.yml \
+            -f release_tag="${RC_TAG}" \
+            -f arch=both \
+            --repo "$GITHUB_REPOSITORY"
+
+      - name: Announce RC on Discord (#rc-testing)
+        if: success()
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_RC_TESTING_CHANNEL_ID: ${{ vars.DISCORD_RC_TESTING_CHANNEL_ID }}
+          GITHUB_TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
+          STABLE_TAG: ${{ steps.version.outputs.rc_tag }}
+          KIND: rc
+        run: node .github/scripts/discord-release-announce.mjs
+
+      - name: Workflow summary
+        run: |
+          {
+            echo "## Pre-release cut"
+            echo ""
+            echo "- RC tag: \`${{ steps.version.outputs.rc_tag }}\`"
+            echo "- Stable target: \`v${{ steps.version.outputs.next }}\`"
+            echo "- Build workflow triggered by the tag push will publish the GitHub pre-release."
+            echo "- Announce in #rc-testing on Discord, then run \`Promote RC to stable\` when QA is green."
+          } >> "$GITHUB_STEP_SUMMARY"

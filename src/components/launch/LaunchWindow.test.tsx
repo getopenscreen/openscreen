@@ -9,11 +9,32 @@ type SelectedSourceChangedListener = Parameters<
 >[0];
 
 const platformState = vi.hoisted(() => ({ value: "darwin" }));
+const resizeCallbacks = vi.hoisted(() => [] as Array<ResizeObserverCallback>);
+
+class StubResizeObserver {
+	observe() {
+		return undefined;
+	}
+	unobserve() {
+		return undefined;
+	}
+	disconnect() {
+		return undefined;
+	}
+}
+
+class CapturingResizeObserver extends StubResizeObserver {
+	constructor(callback: ResizeObserverCallback) {
+		super();
+		resizeCallbacks.push(callback);
+	}
+}
 
 const recorderState = vi.hoisted(() => ({
 	value: {
 		recording: false,
 		paused: false,
+		saving: false,
 		elapsedSeconds: 0,
 		toggleRecording: vi.fn(),
 		togglePaused: vi.fn(),
@@ -34,6 +55,8 @@ const recorderState = vi.hoisted(() => ({
 		setSystemAudioEnabled: vi.fn(),
 		cursorCaptureMode: "editable-overlay",
 		setCursorCaptureMode: vi.fn(),
+		softwareEncoderFallbackNoticeVisible: false,
+		dismissSoftwareEncoderFallbackNotice: vi.fn(),
 	},
 }));
 
@@ -78,20 +101,24 @@ vi.mock("@/native", () => ({
 	},
 }));
 
+const i18nState = vi.hoisted(() => ({
+	value: {
+		locale: "en",
+		setLocale: vi.fn(),
+		systemLocaleSuggestion: null as string | null,
+		acceptSystemLocaleSuggestion: vi.fn(),
+		dismissSystemLocaleSuggestion: vi.fn(),
+		resolveSystemLocaleSuggestion: vi.fn(),
+	},
+}));
+
 vi.mock("@/i18n/loader", () => ({
 	getAvailableLocales: () => ["en"],
 	getLocaleName: () => "English",
 }));
 
 vi.mock("@/contexts/I18nContext", () => ({
-	useI18n: () => ({
-		locale: "en",
-		setLocale: vi.fn(),
-		systemLocaleSuggestion: null,
-		acceptSystemLocaleSuggestion: vi.fn(),
-		dismissSystemLocaleSuggestion: vi.fn(),
-		resolveSystemLocaleSuggestion: vi.fn(),
-	}),
+	useI18n: () => i18nState.value,
 	useScopedT: () => (key: string) => {
 		const translations: Record<string, string> = {
 			"sourceSelector.defaultSourceName": "Screen",
@@ -115,6 +142,16 @@ vi.mock("@/contexts/I18nContext", () => ({
 			"tooltips.hideHUD": "Hide HUD",
 			"tooltips.closeApp": "Close App",
 			language: "Language",
+			"systemLanguagePrompt.title": "Use your system language?",
+			"systemLanguagePrompt.description":
+				"We detected English as your system language. Do you want to switch OpenScreen to English?",
+			"systemLanguagePrompt.keepDefault": "Keep current language",
+			"systemLanguagePrompt.switch": "Switch to English",
+			"softwareEncoderFallback.title": "Switched to software encoding",
+			"softwareEncoderFallback.description":
+				"The default GPU encoder failed to start, so OpenScreen fell back to software H.264 encoding. Recording should continue as normal, but CPU usage may be higher.",
+			"softwareEncoderFallback.dismiss": "Got it",
+			"softwareEncoderFallback.dontShowAgain": "Don't show again",
 		};
 		return translations[key] ?? key;
 	},
@@ -190,25 +227,24 @@ function emitSourceSelectorClosed() {
 	});
 }
 
+function resetLaunchMocks() {
+	vi.stubGlobal("ResizeObserver", StubResizeObserver);
+	recorderState.value.toggleRecording.mockClear();
+	recorderState.value.softwareEncoderFallbackNoticeVisible = false;
+	recorderState.value.dismissSoftwareEncoderFallbackNotice.mockClear();
+	selectedSourceChangedListeners = [];
+	sourceSelectorClosedListeners = [];
+	i18nState.value.systemLocaleSuggestion = null;
+	i18nState.value.acceptSystemLocaleSuggestion.mockClear();
+	i18nState.value.dismissSystemLocaleSuggestion.mockClear();
+	i18nState.value.resolveSystemLocaleSuggestion.mockClear();
+	stubElectronAPI(vi.fn(async () => null));
+}
+
 describe("LaunchWindow record button", () => {
 	beforeEach(() => {
 		platformState.value = "darwin";
-		class ResizeObserver {
-			observe() {
-				return undefined;
-			}
-			unobserve() {
-				return undefined;
-			}
-			disconnect() {
-				return undefined;
-			}
-		}
-		vi.stubGlobal("ResizeObserver", ResizeObserver);
-		recorderState.value.toggleRecording.mockClear();
-		selectedSourceChangedListeners = [];
-		sourceSelectorClosedListeners = [];
-		stubElectronAPI(vi.fn(async () => null));
+		resetLaunchMocks();
 	});
 
 	afterEach(() => {
@@ -339,5 +375,136 @@ describe("LaunchWindow record button", () => {
 		await waitFor(() => {
 			expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
 		});
+	});
+});
+
+describe("LaunchWindow system language prompt", () => {
+	beforeEach(() => {
+		platformState.value = "darwin";
+		resetLaunchMocks();
+		resizeCallbacks.length = 0;
+		vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.unstubAllGlobals();
+	});
+
+	it("grows the HUD overlay tall enough to fit the prompt so its buttons stay clickable", async () => {
+		i18nState.value.systemLocaleSuggestion = "zh-CN";
+
+		renderLaunchWindow();
+
+		const prompt = await screen.findByText("Use your system language?");
+		expect(prompt).toBeInTheDocument();
+
+		// jsdom reports zero layout, so stub both the bar and the prompt to mimic a real HUD.
+		const viewportHeight = 800;
+		const barHeight = 56;
+		const bottomMargin = 20;
+		const barBottom = viewportHeight - bottomMargin;
+		const bar = prompt.parentElement?.parentElement?.querySelector(
+			"[data-tray-layout]",
+		) as HTMLElement | null;
+		if (bar) {
+			vi.spyOn(bar, "getBoundingClientRect").mockReturnValue({
+				top: barBottom - barHeight,
+				left: 200,
+				right: 600,
+				bottom: barBottom,
+				width: 400,
+				height: barHeight,
+				x: 200,
+				y: barBottom - barHeight,
+				toJSON: () => ({}),
+			});
+			Object.defineProperty(bar, "scrollHeight", { value: barHeight, configurable: true });
+			Object.defineProperty(bar, "scrollWidth", { value: 400, configurable: true });
+		}
+
+		const promptBox = { width: 480, height: 130 };
+		const promptPanel = prompt.parentElement as HTMLElement;
+		vi.spyOn(promptPanel, "getBoundingClientRect").mockReturnValue({
+			top: 32,
+			left: 60,
+			right: 60 + promptBox.width,
+			bottom: 32 + promptBox.height,
+			width: promptBox.width,
+			height: promptBox.height,
+			x: 60,
+			y: 32,
+			toJSON: () => ({}),
+		});
+
+		// Fire any observers attached during render so the spied rect is actually consumed.
+		await act(async () => {
+			for (const callback of resizeCallbacks) {
+				callback([], {} as ResizeObserver);
+			}
+		});
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlaySize).toHaveBeenCalled();
+		});
+
+		const sizeMock = window.electronAPI.setHudOverlaySize as unknown as {
+			mock: { calls: Array<[number, number]> };
+		};
+		const [, height] = sizeMock.mock.calls[sizeMock.mock.calls.length - 1];
+		// Must at least cover the prompt plus the TOP_MARGIN slack (24).
+		expect(height).toBeGreaterThanOrEqual(32 + promptBox.height + 24);
+		// And must be less than the full viewport — guards against regressions that always
+		// grow to the full viewport because of a missed bottom anchor.
+		expect(height).toBeLessThan(viewportHeight + 24);
+	});
+});
+
+describe("LaunchWindow software encoder fallback notice", () => {
+	beforeEach(() => {
+		platformState.value = "darwin";
+		resetLaunchMocks();
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.unstubAllGlobals();
+	});
+
+	it("stays hidden while the recorder reports no fallback", () => {
+		renderLaunchWindow();
+
+		expect(screen.queryByText("Switched to software encoding")).not.toBeInTheDocument();
+	});
+
+	it("shows the notice when the recorder reports a software fallback", async () => {
+		recorderState.value.softwareEncoderFallbackNoticeVisible = true;
+
+		renderLaunchWindow();
+
+		expect(await screen.findByText("Switched to software encoding")).toBeInTheDocument();
+		expect(screen.getByText(/fell back to software H\.264 encoding/)).toBeInTheDocument();
+	});
+
+	it("dismisses the notice without persisting when Got it is clicked", async () => {
+		recorderState.value.softwareEncoderFallbackNoticeVisible = true;
+
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByRole("button", { name: "Got it" }));
+
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledTimes(1);
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledWith();
+	});
+
+	it("persists the suppression when Don't show again is clicked", async () => {
+		recorderState.value.softwareEncoderFallbackNoticeVisible = true;
+
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByRole("button", { name: "Don't show again" }));
+
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledTimes(1);
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledWith(true);
 	});
 });

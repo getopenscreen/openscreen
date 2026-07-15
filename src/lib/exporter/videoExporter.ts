@@ -8,7 +8,7 @@ import type {
 	WebcamSizePreset,
 	ZoomRegion,
 } from "@/components/video-editor/types";
-import type { RenderPlan } from "@/lib/ai-edition/exporter/renderPlan";
+import type { RenderPlan, RenderSegment } from "@/lib/ai-edition/exporter/renderPlan";
 import { BackgroundLoadError } from "@/lib/wallpaper";
 import type { CursorRecordingData } from "@/native/contracts";
 import { getPlatform } from "@/utils/platformUtils";
@@ -223,6 +223,28 @@ export function getSourceCopyFastPathBlockers(
 	return blockers;
 }
 
+/** Source-time spans to CUT for one segment so its decoder emits exactly
+ * [sourceStart, sourceEnd) minus the clip's intra-trims: the complement of the
+ * kept window over [0, sourceDuration] plus the intra-trims (v2 segment loop). */
+function buildSegmentRenderTrims(segment: RenderSegment, sourceDurationSec: number): TrimRegion[] {
+	const cuts: Array<{ startSec: number; endSec: number }> = [];
+	if (segment.sourceStartSec > 0) {
+		cuts.push({ startSec: 0, endSec: segment.sourceStartSec });
+	}
+	const keptEnd = Math.min(segment.sourceEndSec, sourceDurationSec);
+	if (keptEnd < sourceDurationSec) {
+		cuts.push({ startSec: keptEnd, endSec: sourceDurationSec });
+	}
+	for (const trim of segment.intraTrims) {
+		cuts.push({ startSec: trim.startSec, endSec: trim.endSec });
+	}
+	return cuts.map((cut, i) => ({
+		id: `seg_trim_${i + 1}`,
+		startMs: Math.round(cut.startSec * 1000),
+		endMs: Math.round(cut.endSec * 1000),
+	}));
+}
+
 function isMp4Source(videoUrl: string, blob: Blob) {
 	if (blob.type.toLowerCase().includes("mp4")) {
 		return true;
@@ -310,6 +332,14 @@ export class VideoExporter {
 		this.fatalEncoderError = null;
 
 		try {
+			// v2 multi-asset path: a plan with >1 segment can't be rendered by the
+			// single-stream pipeline below (it would drop every non-primary clip —
+			// the P1 bug). Single-segment exports stay on the proven legacy path.
+			const segmentPlan = this.config.renderPlan;
+			if (segmentPlan && segmentPlan.segments.length > 1) {
+				return await this.runSegmentLoop(encoderPreference, segmentPlan);
+			}
+
 			const platform = await getPlatform();
 
 			const streamingDecoder = new StreamingVideoDecoder();
@@ -610,6 +640,204 @@ export class VideoExporter {
 				await webcamDecodePromise.catch(() => undefined);
 			}
 		}
+	}
+
+	/**
+	 * v2 multi-asset segment loop. Walks the RenderPlan's ordered segments,
+	 * decoding each from its OWN source asset into ONE renderer + encoder + muxer,
+	 * advancing a single continuous virtual-time frame clock across segment
+	 * boundaries so the joins are seamless. Fixes P1 (non-primary clips dropped).
+	 *
+	 * First increment: VIDEO ONLY. Webcam overlay, per-segment cursor, per-segment
+	 * audio concat (see audioConcatPlan) and virtual-time speed mapping are the
+	 * next increments — deliberately left out here so the multi-asset video join
+	 * can be verified in isolation. The caller has already run cleanup()/reset.
+	 */
+	private async runSegmentLoop(
+		encoderPreference: HardwareAcceleration,
+		plan: RenderPlan,
+	): Promise<ExportResult> {
+		const warnings: string[] = [];
+		const onWarning = (message: string) => warnings.push(message);
+		const platform = await getPlatform();
+		const segments = plan.segments;
+		const firstSegment = segments[0];
+
+		// One renderer for the whole export — output size is fixed; only the
+		// source-dependent fields change per segment via renderer.setSource().
+		const renderer = new FrameRenderer({
+			width: this.config.width,
+			height: this.config.height,
+			wallpaper: plan.appearance.wallpaper,
+			zoomRegions: plan.zoomRegions,
+			annotationRegions: plan.annotationRegions,
+			speedRegions: plan.speedRegions,
+			showShadow: plan.appearance.shadowIntensity > 0,
+			shadowIntensity: plan.appearance.shadowIntensity,
+			showBlur: plan.appearance.showBlur,
+			motionBlurAmount: plan.appearance.motionBlurAmount,
+			borderRadius: plan.appearance.borderRadius,
+			padding: plan.appearance.padding,
+			cropRegion: firstSegment.cropRegion,
+			videoWidth: firstSegment.sourceWidth,
+			videoHeight: firstSegment.sourceHeight,
+			webcamSize: null,
+			cursorScale: 0,
+			platform,
+		});
+		this.renderer = renderer;
+		await renderer.initialize();
+
+		await this.initializeEncoder(encoderPreference);
+
+		// Video-only for this increment (per-segment audio concat is next), so the
+		// muxer carries no audio track.
+		const muxer = new VideoMuxer(this.config, false);
+		this.muxer = muxer;
+		await muxer.initialize();
+
+		const frameDuration = 1_000_000 / this.config.frameRate;
+		const maxEncodeQueue =
+			encoderPreference === "prefer-software"
+				? Math.min(this.MAX_ENCODE_QUEUE, 32)
+				: this.MAX_ENCODE_QUEUE;
+
+		// Progress estimate from the plan (no decoder metadata needed): kept
+		// virtual duration of every segment × fps.
+		const estTotalFrames = Math.max(
+			1,
+			Math.round(
+				segments.reduce((acc, s) => {
+					const intra = s.intraTrims.reduce((a, iv) => a + (iv.endSec - iv.startSec), 0);
+					const kept = Math.max(0, s.sourceEndSec - s.sourceStartSec - intra);
+					return acc + kept * this.config.frameRate;
+				}, 0),
+			),
+		);
+
+		let frameIndex = 0;
+
+		for (const segment of segments) {
+			if (this.cancelled) break;
+			if (this.fatalEncoderError) throw this.fatalEncoderError;
+
+			const decoder = new StreamingVideoDecoder();
+			this.streamingDecoder = decoder;
+			try {
+				const info = await decoder.loadMetadata(segment.videoUrl);
+				renderer.setSource({
+					videoWidth: segment.sourceWidth,
+					videoHeight: segment.sourceHeight,
+					webcamSize: null,
+					cursorScale: 0,
+				});
+				renderer.setCropRegion(segment.cropRegion);
+
+				const segmentTrims = buildSegmentRenderTrims(segment, info.duration);
+
+				await decoder.decodeAll(
+					this.config.frameRate,
+					segmentTrims,
+					undefined,
+					async (videoFrame) => {
+						try {
+							if (this.cancelled) return;
+							if (this.fatalEncoderError) throw this.fatalEncoderError;
+
+							// Continuous virtual-time clock across segments → seamless joins.
+							const timestamp = frameIndex * frameDuration;
+							await renderer.renderFrame(videoFrame, timestamp, null);
+
+							const canvas = renderer.getCanvas();
+							let exportFrame: VideoFrame;
+							if (platform === "linux") {
+								const canvasCtx = canvas.getContext("2d")!;
+								const imageData = canvasCtx.getImageData(0, 0, canvas.width, canvas.height);
+								exportFrame = new VideoFrame(imageData.data.buffer, {
+									format: "RGBA",
+									codedWidth: canvas.width,
+									codedHeight: canvas.height,
+									timestamp,
+									duration: frameDuration,
+									colorSpace: {
+										primaries: "bt709",
+										transfer: "iec61966-2-1",
+										matrix: "rgb",
+										fullRange: true,
+									},
+								});
+							} else {
+								exportFrame = new VideoFrame(canvas, { timestamp, duration: frameDuration });
+							}
+
+							try {
+								await waitForEncoderQueueSpace({
+									getQueueSize: () => this.encoder?.encodeQueueSize ?? 0,
+									maxEncodeQueue,
+									isCancelled: () => this.cancelled,
+									encoderPreference,
+								});
+							} catch (error) {
+								exportFrame.close();
+								throw error;
+							}
+
+							if (this.encoder && this.encoder.state === "configured") {
+								this.encodeQueue++;
+								this.encoder.encode(exportFrame, { keyFrame: frameIndex % 150 === 0 });
+							}
+
+							exportFrame.close();
+							frameIndex++;
+							this.reportProgress({
+								currentFrame: frameIndex,
+								totalFrames: estTotalFrames,
+								percentage: Math.min(100, (frameIndex / estTotalFrames) * 100),
+								estimatedTimeRemaining: 0,
+							});
+						} finally {
+							videoFrame.close();
+						}
+					},
+					onWarning,
+				);
+			} finally {
+				decoder.destroy();
+				if (this.streamingDecoder === decoder) this.streamingDecoder = null;
+			}
+		}
+
+		if (this.cancelled) {
+			return { success: false, error: "Export cancelled" };
+		}
+		if (this.fatalEncoderError) {
+			throw this.fatalEncoderError;
+		}
+
+		if (this.encoder && this.encoder.state === "configured") {
+			await this.withTimeout(
+				this.encoder.flush(),
+				ENCODER_FLUSH_TIMEOUT_MS,
+				encoderPreference === "prefer-hardware"
+					? "The hardware video encoder stopped responding while finalizing the export."
+					: "The video encoder stopped responding while finalizing the export.",
+			);
+		}
+		if (this.fatalEncoderError) {
+			throw this.fatalEncoderError;
+		}
+
+		await Promise.all(this.muxingPromises);
+		this.reportProgress({
+			currentFrame: estTotalFrames,
+			totalFrames: estTotalFrames,
+			percentage: 100,
+			estimatedTimeRemaining: 0,
+			phase: "finalizing",
+		});
+
+		const blob = await muxer.finalize();
+		return { success: true, blob, warnings: warnings.length > 0 ? warnings : undefined };
 	}
 
 	private async initializeEncoder(hardwareAcceleration: HardwareAcceleration): Promise<void> {

@@ -370,6 +370,12 @@ ipcMain.on("set-has-unsaved-changes", (_, hasChanges: boolean) => {
 	editorHasUnsavedChanges = hasChanges;
 });
 
+// Quit requested from the editor's in-app File menu. Mirrors the native
+// menu's role:"quit" so the unsaved-changes close flow still runs.
+ipcMain.on("app-quit", () => {
+	app.quit();
+});
+
 function forceCloseEditorWindow(windowToClose: BrowserWindow | null) {
 	if (!windowToClose || windowToClose.isDestroyed()) return;
 

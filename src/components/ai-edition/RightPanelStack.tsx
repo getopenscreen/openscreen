@@ -40,7 +40,7 @@ import {
 	VideoEffectsPane,
 } from "./RightPanes";
 
-type RegionKind = "zoom" | "trim" | "annotation" | "speed";
+type RegionKind = "zoom" | "trim" | "annotation" | "speed" | "cameraFullscreen";
 
 interface RegionHandle {
 	kind: RegionKind;
@@ -699,6 +699,19 @@ function RegionInspector({
 						</Field>
 					</>
 				) : null}
+				{selection.kind === "cameraFullscreen" ? (
+					<p
+						style={{
+							margin: "0 0 4px",
+							font: "400 12px/1.5 var(--font-sans)",
+							color: "var(--fg-2)",
+						}}
+					>
+						While this region plays, the webcam grows to (almost) fill the frame and eases back at
+						the end. Drag the region's edges on the timeline to change when it starts and how long
+						it lasts.
+					</p>
+				) : null}
 				<button
 					type="button"
 					onClick={() => onRemove(selection.kind, selection.id)}
@@ -736,6 +749,8 @@ function kindLabel(kind: RegionKind): string {
 			return "Annotation";
 		case "speed":
 			return "Speed region";
+		case "cameraFullscreen":
+			return "Full Camera";
 	}
 }
 

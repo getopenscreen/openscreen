@@ -992,6 +992,11 @@ export function NewEditorShell() {
 				void tl.addSpeed();
 				return;
 			}
+			if (matchesShortcut(e, shortcuts.addCameraFullscreen, isMac)) {
+				e.preventDefault();
+				void tl.addCameraFullscreen();
+				return;
+			}
 
 			// Fixed (non-configurable) shortcuts advertised in the shortcuts dialog.
 			if (e.key === "Tab") {
@@ -1178,6 +1183,7 @@ export function NewEditorShell() {
 									clips={clips}
 									zoomRegions={tl.zoomRegions}
 									speedRegions={tl.speedRegions}
+									cameraFullscreenRegions={tl.cameraFullscreenRegions}
 									trimRanges={tl.trimRanges}
 									selectedZoomRegionId={tl.selection?.kind === "zoom" ? tl.selection.id : null}
 									onZoomFocusChange={tl.updateZoomFocusLive}

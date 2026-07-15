@@ -1267,13 +1267,24 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					})()
 				: Promise.resolve(null);
 
-			const [screenMediaStream, micMediaStream] = await Promise.all([screenCapture, micCapture]);
-
-			if (!isCountdownRunActive(countdownRunToken)) {
-				teardownMedia();
-				return;
+			// Await both in-flight captures. If the screen capture rejects it would
+			// otherwise orphan a mic stream that resolved in parallel (leaving the
+			// screen/mic indicator on), so stop that stream before rethrowing.
+			let screenMediaStream: MediaStream;
+			try {
+				screenMediaStream = await screenCapture;
+			} catch (error) {
+				void micCapture
+					.then((micStream) => micStream?.getTracks().forEach((track) => track.stop()))
+					.catch(() => {
+						// Mic capture itself failed too; nothing left to stop.
+					});
+				throw error;
 			}
+			const micMediaStream = await micCapture;
 
+			// Assign the refs before the cancellation check below so teardownMedia() can
+			// stop the freshly acquired streams if the countdown was cancelled mid-capture.
 			screenStream.current = screenMediaStream;
 			microphoneStream.current = micMediaStream;
 

@@ -27,30 +27,36 @@ export type MixAudioTracksResult = {
 /**
  * Combine system audio and the microphone into a single audio track for the recorder.
  *
- * - Both tracks present: builds an AudioContext + GainNode + MediaStreamDestination
- *   that mixes them, applying a short fade-in on the mic gain so the very first packet
- *   doesn't click. Caller owns the returned `context` and must `.close()` it on teardown.
- * - Exactly one track present: returns it verbatim, no AudioContext created.
+ * Whenever a mic track is present it is routed through an AudioContext + GainNode with
+ * a short fade-in so its first packet doesn't click — mic-only recordings (a common
+ * mode) get the same anti-click treatment as mixed ones, so `context` is non-null
+ * whenever a mic track is present. The mic is boosted above unity only when it has to
+ * sit over system audio; on its own it rides at unity so mic-only loudness is unchanged.
+ * Caller owns the returned `context` and must `.close()` it on teardown.
+ *
+ * - System audio only: returned verbatim, no AudioContext created (no warm-up click).
  * - Neither present: returns `{ context: null, track: null }`.
  */
 export function mixAudioTracks({
 	systemAudioTrack,
 	micAudioTrack,
 }: MixAudioTracksInput): MixAudioTracksResult {
-	if (systemAudioTrack && micAudioTrack) {
-		const context = new AudioContext();
-		const systemSource = context.createMediaStreamSource(new MediaStream([systemAudioTrack]));
-		const micSource = context.createMediaStreamSource(new MediaStream([micAudioTrack]));
-		const micGain = context.createGain();
-		micGain.gain.setValueAtTime(0, context.currentTime);
-		micGain.gain.linearRampToValueAtTime(MIC_GAIN_BOOST, context.currentTime + MIC_FADE_IN_S);
-		const destination = context.createMediaStreamDestination();
-		systemSource.connect(destination);
-		micSource.connect(micGain).connect(destination);
-		return { context, track: destination.stream.getAudioTracks()[0] };
+	if (!micAudioTrack) {
+		return { context: null, track: systemAudioTrack ?? null };
 	}
-	return {
-		context: null,
-		track: systemAudioTrack ?? micAudioTrack ?? null,
-	};
+
+	const context = new AudioContext();
+	const destination = context.createMediaStreamDestination();
+	if (systemAudioTrack) {
+		const systemSource = context.createMediaStreamSource(new MediaStream([systemAudioTrack]));
+		systemSource.connect(destination);
+	}
+	// Unity when the mic is on its own; boosted only when competing with system audio.
+	const micTargetGain = systemAudioTrack ? MIC_GAIN_BOOST : 1;
+	const micSource = context.createMediaStreamSource(new MediaStream([micAudioTrack]));
+	const micGain = context.createGain();
+	micGain.gain.setValueAtTime(0, context.currentTime);
+	micGain.gain.linearRampToValueAtTime(micTargetGain, context.currentTime + MIC_FADE_IN_S);
+	micSource.connect(micGain).connect(destination);
+	return { context, track: destination.stream.getAudioTracks()[0] };
 }

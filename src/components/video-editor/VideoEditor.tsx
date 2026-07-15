@@ -2757,6 +2757,7 @@ export default function VideoEditor() {
 					<div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.08] transition-all duration-150 ml-1">
 						<Languages size={15} />
 						<select
+							aria-label={ts("language.title")}
 							value={locale}
 							onChange={(e) => setLocale(e.target.value as Locale)}
 							className="bg-transparent text-[13px] font-semibold outline-none cursor-pointer appearance-none pr-1"

@@ -245,6 +245,21 @@ function buildSegmentRenderTrims(segment: RenderSegment, sourceDurationSec: numb
 	}));
 }
 
+/** Per-segment cursor recording for the renderer: the plan's shared cursor
+ * atlas/style + THIS segment's asset samples (empty → no overlay). */
+function segmentCursorRecording(
+	plan: RenderPlan,
+	segment: RenderSegment,
+): CursorRecordingData | null {
+	if (!plan.cursor) return null;
+	return {
+		version: plan.cursor.version,
+		provider: plan.cursor.provider,
+		assets: plan.cursor.assets,
+		samples: segment.cursorSamples,
+	};
+}
+
 function isMp4Source(videoUrl: string, blob: Blob) {
 	if (blob.type.toLowerCase().includes("mp4")) {
 		return true;
@@ -648,10 +663,11 @@ export class VideoExporter {
 	 * advancing a single continuous virtual-time frame clock across segment
 	 * boundaries so the joins are seamless. Fixes P1 (non-primary clips dropped).
 	 *
-	 * First increment: VIDEO ONLY. Webcam overlay, per-segment cursor, per-segment
-	 * audio concat (see audioConcatPlan) and virtual-time speed mapping are the
-	 * next increments — deliberately left out here so the multi-asset video join
-	 * can be verified in isolation. The caller has already run cleanup()/reset.
+	 * Renders per-segment video + webcam overlay + cursor, each drawn from its
+	 * OWN asset (webcam source + cursor samples switch at every segment boundary).
+	 * Per-segment audio concat (see audioConcatPlan) and virtual-time speed
+	 * mapping are the remaining increments. The caller has already run
+	 * cleanup()/reset.
 	 */
 	private async runSegmentLoop(
 		encoderPreference: HardwareAcceleration,
@@ -681,8 +697,21 @@ export class VideoExporter {
 			cropRegion: firstSegment.cropRegion,
 			videoWidth: firstSegment.sourceWidth,
 			videoHeight: firstSegment.sourceHeight,
+			// Source-dependent fields (webcamSize, cursor samples/scale) are set per
+			// segment via setSource; webcam layout + cursor style are global.
 			webcamSize: null,
-			cursorScale: 0,
+			webcamLayoutPreset: plan.webcam.layoutPreset,
+			webcamMaskShape: plan.webcam.maskShape,
+			webcamMirrored: plan.webcam.mirrored,
+			webcamReactiveZoom: plan.webcam.reactiveZoom,
+			webcamSizePreset: plan.webcam.sizePreset,
+			webcamPosition: plan.webcam.position,
+			cursorScale: plan.cursor?.scale ?? 0,
+			cursorSmoothing: plan.cursor?.smoothing,
+			cursorMotionBlur: plan.cursor?.motionBlur,
+			cursorClickBounce: plan.cursor?.clickBounce,
+			cursorClipToBounds: plan.cursor?.clipToBounds,
+			cursorTheme: plan.cursor?.theme,
 			platform,
 		});
 		this.renderer = renderer;
@@ -723,30 +752,81 @@ export class VideoExporter {
 
 			const decoder = new StreamingVideoDecoder();
 			this.streamingDecoder = decoder;
+
+			// Per-segment webcam overlay (this asset's camera track), decoded
+			// concurrently and matched to each screen frame by source time —
+			// mirrors the legacy single-asset webcam path.
+			let webcamDecoder: StreamingVideoDecoder | null = null;
+			let webcamFrameQueue: TimestampedVideoFrameQueue | null = null;
+			let webcamDecodePromise: Promise<void> | null = null;
+			let stopWebcamDecode = false;
+
 			try {
 				const info = await decoder.loadMetadata(segment.videoUrl);
+				const segmentTrims = buildSegmentRenderTrims(segment, info.duration);
+
+				let webcamSize: { width: number; height: number } | null = null;
+				if (segment.camera) {
+					webcamDecoder = new StreamingVideoDecoder();
+					this.webcamDecoder = webcamDecoder;
+					const webcamInfo = await webcamDecoder.loadMetadata(segment.camera.videoUrl);
+					webcamSize = { width: webcamInfo.width, height: webcamInfo.height };
+					webcamFrameQueue = new TimestampedVideoFrameQueue();
+					const queue = webcamFrameQueue;
+					webcamDecodePromise = webcamDecoder
+						.decodeAll(
+							this.config.frameRate,
+							segmentTrims,
+							undefined,
+							async (webcamFrame, _exportTs, webcamSourceMs) => {
+								while (queue.length >= 12 && !this.cancelled && !stopWebcamDecode) {
+									await new Promise((resolve) => setTimeout(resolve, 2));
+								}
+								if (this.cancelled || stopWebcamDecode) {
+									webcamFrame.close();
+									return;
+								}
+								queue.enqueue(webcamFrame, webcamSourceMs);
+							},
+							onWarning,
+						)
+						.catch((error) => {
+							const err = error instanceof Error ? error : new Error(String(error));
+							this.fatalEncoderError ??= err;
+							queue.fail(err);
+						})
+						.finally(() => {
+							if (!this.cancelled) queue.close();
+						});
+				}
+
 				renderer.setSource({
 					videoWidth: segment.sourceWidth,
 					videoHeight: segment.sourceHeight,
-					webcamSize: null,
-					cursorScale: 0,
+					webcamSize,
+					cursorRecordingData: segmentCursorRecording(plan, segment),
+					cursorScale: plan.cursor?.scale ?? 0,
 				});
 				renderer.setCropRegion(segment.cropRegion);
-
-				const segmentTrims = buildSegmentRenderTrims(segment, info.duration);
 
 				await decoder.decodeAll(
 					this.config.frameRate,
 					segmentTrims,
 					undefined,
-					async (videoFrame) => {
+					async (videoFrame, _exportTs, sourceTimestampMs) => {
+						let webcamFrame: VideoFrame | null = null;
 						try {
 							if (this.cancelled) return;
 							if (this.fatalEncoderError) throw this.fatalEncoderError;
 
+							webcamFrame = webcamFrameQueue
+								? await webcamFrameQueue.frameAt(sourceTimestampMs)
+								: null;
+							if (this.cancelled) return;
+
 							// Continuous virtual-time clock across segments → seamless joins.
 							const timestamp = frameIndex * frameDuration;
-							await renderer.renderFrame(videoFrame, timestamp, null);
+							await renderer.renderFrame(videoFrame, timestamp, webcamFrame);
 
 							const canvas = renderer.getCanvas();
 							let exportFrame: VideoFrame;
@@ -797,11 +877,19 @@ export class VideoExporter {
 							});
 						} finally {
 							videoFrame.close();
+							webcamFrame?.close();
 						}
 					},
 					onWarning,
 				);
 			} finally {
+				stopWebcamDecode = true;
+				webcamFrameQueue?.destroy();
+				webcamDecoder?.cancel();
+				if (webcamDecodePromise) {
+					await webcamDecodePromise.catch(() => undefined);
+				}
+				if (this.webcamDecoder === webcamDecoder) this.webcamDecoder = null;
 				decoder.destroy();
 				if (this.streamingDecoder === decoder) this.streamingDecoder = null;
 			}

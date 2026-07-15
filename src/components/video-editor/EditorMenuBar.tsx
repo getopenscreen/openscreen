@@ -175,12 +175,12 @@ export function EditorMenuBar(props: EditorMenuBarProps) {
 							<Fragment key={item.id}>
 								{item.separatorBefore && <DropdownMenuSeparator className="bg-white/[0.08]" />}
 								<DropdownMenuItem
-									onClick={item.onSelect}
+									onSelect={() => item.onSelect()}
 									disabled={item.disabled}
 									className={
 										item.danger
 											? "hover:bg-red-500/20 focus:bg-red-500/20 focus:text-red-400 text-red-400 cursor-pointer justify-between"
-											: "hover:bg-white/[0.08] focus:bg-white/[0.08] focus:text-white cursor-pointer justify-between disabled:opacity-40 disabled:pointer-events-none"
+											: "hover:bg-white/[0.08] focus:bg-white/[0.08] focus:text-white cursor-pointer justify-between"
 									}
 								>
 									<span>{item.label}</span>

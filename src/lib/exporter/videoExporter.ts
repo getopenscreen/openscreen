@@ -21,6 +21,7 @@ import { materializeLocalSourceFile, releaseLocalSourceFile } from "./localSourc
 import { VideoMuxer, videoCodecFamily } from "./muxer";
 import { MAX_IN_MEMORY_SOURCE_BYTES } from "./sourceFileLimits";
 import { StreamingVideoDecoder } from "./streamingDecoder";
+import { computeKeepSegments, splitBySpeed } from "./timelineSegments";
 import { TimestampedVideoFrameQueue } from "./timestampedVideoFrameQueue";
 import type { ExportConfig, ExportProgress, ExportResult } from "./types";
 
@@ -432,6 +433,73 @@ function timeStretchPcmToLength(
 		result.push(out);
 	}
 	return result;
+}
+
+/** Concatenate planar PCM chunks (one array-of-channels per chunk) per channel. */
+function concatPlanarChunks(chunks: Float32Array[][], channels: number): Float32Array[] {
+	const result: Float32Array[] = [];
+	for (let c = 0; c < channels; c++) {
+		let total = 0;
+		for (const chunk of chunks) total += chunk[c]?.length ?? 0;
+		const out = new Float32Array(total);
+		let w = 0;
+		for (const chunk of chunks) {
+			const src = chunk[c];
+			if (!src) continue;
+			out.set(src, w);
+			w += src.length;
+		}
+		result.push(out);
+	}
+	return result;
+}
+
+/** Time-stretch a segment's kept audio PER speed sub-segment (not uniformly), so
+ * a partial speed region inside a clip retimes only its own span — matching how
+ * the video decoder applies speed. The sub-segments and their output frame counts
+ * are computed EXACTLY as the decoder does (splitBySpeed of the kept intervals,
+ * then ceil((dur-ε)/speed·fps) frames each), so audio stays frame-locked to the
+ * video. The kept PCM (decodeSegmentAudioPcm) is the concatenation of those same
+ * kept intervals, so a running cursor slices it in order. */
+function stretchSegmentAudioBySpeed(
+	pcm: Float32Array[],
+	segment: RenderSegment,
+	speedRegions: SpeedRegion[],
+	sampleRate: number,
+	channels: number,
+	frameRate: number,
+): Float32Array[] {
+	const segmentTrims = buildSegmentRenderTrims(segment, segment.sourceEndSec);
+	const speedSegs = splitBySpeed(
+		computeKeepSegments(segment.sourceEndSec, segmentTrims),
+		speedRegions,
+	);
+	if (speedSegs.length === 0) return pcm;
+
+	const VIDEO_EPSILON_SEC = 0.001; // must match streamingDecoder's per-segment quantization
+	const totalKept = pcm[0]?.length ?? 0;
+	const chunks: Float32Array[][] = [];
+	let keptCursor = 0;
+	for (const seg of speedSegs) {
+		const inSamples = Math.round((seg.endSec - seg.startSec) * sampleRate);
+		const inStart = keptCursor;
+		const inEnd = Math.min(inStart + inSamples, totalKept);
+		keptCursor = inStart + inSamples;
+
+		const frameCount = Math.ceil(
+			((seg.endSec - seg.startSec - VIDEO_EPSILON_SEC) / seg.speed) * frameRate,
+		);
+		const outSamples = Math.max(0, Math.round((frameCount / frameRate) * sampleRate));
+
+		if (inEnd <= inStart) {
+			// No source audio for this span (past the buffer) → silence of its length.
+			chunks.push(Array.from({ length: channels }, () => new Float32Array(outSamples)));
+			continue;
+		}
+		const slice = pcm.map((ch) => ch.subarray(inStart, inEnd));
+		chunks.push(timeStretchPcmToLength(slice, sampleRate, channels, outSamples));
+	}
+	return concatPlanarChunks(chunks, channels);
 }
 
 function isMp4Source(videoUrl: string, blob: Blob) {
@@ -1153,15 +1221,17 @@ export class VideoExporter {
 					channels: AUDIO_OUTPUT_CHANNELS,
 				},
 			);
-			// Retime each segment's audio to its speed-adjusted length (pitch
-			// preserved) so it stays locked to the video before concatenation.
+			// Retime each segment's audio PER speed sub-segment (pitch preserved) so
+			// a partial speed region only speeds up its own span, matching the video.
 			const stretchedPcm = segmentAudioPcm.map((pcm, i) =>
 				pcm
-					? timeStretchPcmToLength(
+					? stretchSegmentAudioBySpeed(
 							pcm,
+							segments[i],
+							projectRegionsToSegmentSource(plan.speedRegions, segments[i]),
 							AUDIO_OUTPUT_SAMPLE_RATE,
 							AUDIO_OUTPUT_CHANNELS,
-							audioPlan.segments[i]?.sampleCount ?? pcm[0]?.length ?? 0,
+							this.config.frameRate,
 						)
 					: null,
 			);

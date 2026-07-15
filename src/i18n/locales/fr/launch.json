@@ -57,5 +57,11 @@
 		"description": "Nous avons détecté {{language}} comme langue système. Voulez-vous passer OpenScreen en {{language}} ?",
 		"switch": "Passer en {{language}}",
 		"keepDefault": "Conserver la langue actuelle"
+	},
+	"softwareEncoderFallback": {
+		"title": "Passage à l'encodage logiciel",
+		"description": "L'encodeur GPU par défaut n'a pas pu démarrer, OpenScreen est donc passé à l'encodage H.264 logiciel. L'enregistrement devrait continuer normalement, mais l'utilisation du processeur peut être plus élevée.",
+		"dismiss": "Compris",
+		"dontShowAgain": "Ne plus afficher"
 	}
 }

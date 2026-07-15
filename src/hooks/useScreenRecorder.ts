@@ -1026,10 +1026,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// (~1s of pre-roll) into the webcam file, desyncing it from the
 			// screen/mic recording that the editor and exporter align at t=0.
 			if (webcamEnabled && webcamStream.current) {
-				nativeWebcamRecorder = createRecorderHandle(webcamStream.current, {
-					mimeType: selectMimeType(),
-					videoBitsPerSecond: BITRATE_BASE,
-				});
+				try {
+					nativeWebcamRecorder = createRecorderHandle(webcamStream.current, {
+						mimeType: selectMimeType(),
+						videoBitsPerSecond: BITRATE_BASE,
+					});
+				} catch (webcamError) {
+					// The native helper is already recording at this point; stop it before
+					// surfacing the error so we don't leave it running with no handle to
+					// finalize it (this creation moved after startNativeMacRecording).
+					await window.electronAPI.stopNativeMacRecording(true);
+					throw webcamError;
+				}
 			}
 
 			recordingId.current = result.recordingId;

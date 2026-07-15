@@ -43,6 +43,38 @@ OpenScreen is a free, open-source screen recorder and video editor (Electron + R
 - Add a test for every new behavior in the same package as the code under test.
 - All tests must pass before opening a PR. CI runs `npm run test` and `npm run test:browser` on every PR.
 
+## Desktop E2E testing with computer-use
+
+Unit/browser tests can't exercise real capture (native screen recording, a physical webcam, the tray). To verify a recording/editor feature end to end, drive the actual Electron app with the **computer-use** MCP (screenshot + click/type on the desktop). This is the required "manual smoke test on real Windows/macOS" for native changes.
+
+**Launch the app**
+
+- Normal: `npm run dev` — Vite serves the renderer and `vite-plugin-electron` opens the Electron window. The main process logs `Global shortcut registered: CommandOrControl+Shift+O` when ready (Ctrl/Cmd+Shift+O toggles the HUD).
+- The app is single-instance: a lock dir at `%TEMP%/openscreen-single-instance-<user>.lock` (macOS: `$TMPDIR`). If a stale Electron process holds it, a new launch quits silently (exit 0, no window). Kill leftover `electron` processes and delete that lock dir before relaunching.
+- **From a git worktree** (no `node_modules`/native binaries): junction/symlink `node_modules` from the main checkout (deps are usually identical — check `package-lock.json`), and copy the prebuilt native capture binaries from `electron/native/bin/<platform>/` (gitignored — rebuilding needs the full VS/Xcode toolchain). Then `npm run dev` works normally.
+
+**Granting access**
+
+- `request_access` resolves names against installed apps. A **dev build runs as `electron.exe`** (or `Electron.app`), *not* the installed `Openscreen` — grant **`electron.exe`** or the dev window stays masked in screenshots. Non-allowlisted windows are masked (solid rectangles); the screenshot note lists their process names to add.
+
+**The HUD widget** (recording controller)
+
+- Frameless, transparent, always-on-top, `skipTaskbar`, centered at the **bottom of the primary display** (`createHudOverlayWindow`, 600×160). It is **click-through** (`setIgnoreMouseEvents(true, { forward: true })`): moving the real cursor over an interactive control makes that region clickable and shows its tooltip, so `mouse_move` → screenshot → `left_click` works; a blind click on empty HUD area passes through to the desktop.
+- Control row (left→right): layout preset, **source** button (`Screen`/`Window` → label becomes the picked source), system-audio toggle, mic toggle, **webcam toggle** (shows the detected camera name), cursor-highlight toggle, **record**, notes, open-editor, language, minimize, close. The record button is disabled until a source is chosen (tooltip: "Please select a source to record").
+
+**The tray icon** (bottom-right notification area)
+
+- Because the HUD skips the taskbar and can be minimized/hidden, the **system-tray icon is the reliable way to refocus the app**: **left-click or double-click reopens/focuses the HUD** (`showMainWindow`). Its icon swaps to a red dot while recording.
+- **Right-click → context menu**: *Open* / *Quit* when idle, or ***Stop Recording*** while recording (mirrors the HUD's stop). Tooltip shows `OpenScreen` or `Recording: <source>`. Use this to stop a recording if the HUD isn't reachable.
+
+**End-to-end flow (record → edit)**
+
+1. On the HUD: click the **webcam** toggle to enable the camera, then the **source** button → pick the *Screens*/*Windows* tab → select a thumbnail → **Share**.
+2. Click **record**; the HUD switches to a red stop button with a running timer (a countdown overlay may show first).
+3. Stop via the HUD's red button (or tray → *Stop Recording*). The **editor window opens** with the screen recording and the webcam PiP.
+4. Exercise the feature in the editor (e.g. Full Camera: press **C** to add a segment on the timeline, scrub to see the webcam grow to fullscreen and ease back; **Ctrl+Z** / **Ctrl+Shift+Z** undo/redo).
+5. Capture a screenshot as proof. Clean up: stop `npm run dev`, remove temporary worktree junctions/lock.
+
 ## PR & commit conventions
 
 - Branch from `main`; never push to it directly.

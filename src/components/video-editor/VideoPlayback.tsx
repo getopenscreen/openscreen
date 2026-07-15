@@ -58,10 +58,12 @@ import {
 	type BlurData,
 	type CursorTelemetryPoint,
 	computeRotation3DContainScale,
+	DEFAULT_CROP_REGION,
 	DEFAULT_ROTATION_3D,
 	getZoomScale,
 	isRotation3DIdentity,
 	lerpRotation3D,
+	MAX_NATIVE_PLAYBACK_RATE,
 	rotation3DPerspective,
 	type SpeedRegion,
 	type TrimRegion,
@@ -336,6 +338,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const scrubEndTimerRef = useRef<number | null>(null);
 		const [isScrubbing, setIsScrubbing] = useState(false);
 		const allowPlaybackRef = useRef(false);
+		// Seek-stepping state for speed regions above the native playbackRate cap (16×).
+		const seekSteppingRef = useRef(false);
+		const stepVirtualSecRef = useRef(0);
+		const stepLastTsRef = useRef(0);
+		const stepPrevMutedRef = useRef(false);
 		const lockedVideoDimensionsRef = useRef<{
 			width: number;
 			height: number;
@@ -630,7 +637,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					const supplementalAudio = supplementalAudioRef.current;
 					if (supplementalAudio) {
 						supplementalAudio.currentTime = vid.currentTime;
-						supplementalAudio.playbackRate = vid.playbackRate;
+						// vid.playbackRate is already capped at the native ceiling; clamp
+						// defensively so the supplemental track never throws either.
+						supplementalAudio.playbackRate = Math.min(vid.playbackRate, MAX_NATIVE_PLAYBACK_RATE);
 						await supplementalAudio.play().catch(() => {
 							// The main video remains the source of truth for playback state.
 						});
@@ -1136,7 +1145,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				speedRegions.find(
 					(region) => currentTime * 1000 >= region.startMs && currentTime * 1000 < region.endMs,
 				) ?? null;
-			supplementalAudio.playbackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+			const activeSpeed = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+
+			// Above the native rate the main preview frame-steps silently; a media
+			// element can't play that fast (setting playbackRate > 16 throws), so mute
+			// the supplemental track by pausing it for the duration of the region.
+			if (activeSpeed > MAX_NATIVE_PLAYBACK_RATE) {
+				supplementalAudio.pause();
+				return;
+			}
+			supplementalAudio.playbackRate = activeSpeed;
 
 			if (!isPlaying) {
 				supplementalAudio.pause();
@@ -1227,6 +1245,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				isScrubbingRef,
 				scrubEndTimerRef,
 				onScrubChange: (scrubbing) => setIsScrubbing(scrubbing),
+				seekSteppingRef,
+				stepVirtualSecRef,
+				stepLastTsRef,
+				stepPrevMutedRef,
 			});
 
 			video.addEventListener("play", handlePlay);
@@ -1541,6 +1563,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						baseMaskRef.current,
 						showCursorRef.current && !hasNativeCursorRecordingRef.current,
 						!isPlayingRef.current || isSeekingRef.current,
+						cropRegionRef.current,
 					);
 				}
 
@@ -1579,7 +1602,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								: frame.sample;
 							const cameraContainer = cameraContainerRef.current;
 							const videoContainer = videoContainerRef.current;
-							const cropRegionValue = cropRegionRef.current ?? { x: 0, y: 0, width: 1, height: 1 };
+							const cropRegionValue = cropRegionRef.current ?? DEFAULT_CROP_REGION;
 							const projectedLocalPoint = projectNativeCursorToLocal({
 								cropRegion: cropRegionValue,
 								maskRect: baseMaskRef.current,
@@ -1616,7 +1639,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 									getNativeCursorClickBounceScale(cursorClickBounceRef.current, bounceProgress);
 								// Normalize cursor size to the displayed video width so the cursor
 								// appears at the same fraction of the video in both preview and export.
-								const crop = cropRegionRef.current ?? { x: 0, y: 0, width: 1, height: 1 };
+								const crop = cropRegionRef.current ?? DEFAULT_CROP_REGION;
 								const croppedVideoWidth = (videoRef.current?.videoWidth ?? 0) * crop.width;
 								const sizeNorm =
 									croppedVideoWidth > 0 ? baseMaskRef.current.width / croppedVideoWidth : 1;
@@ -1826,7 +1849,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				speedRegions.find(
 					(region) => currentTime * 1000 >= region.startMs && currentTime * 1000 < region.endMs,
 				) ?? null;
-			webcamVideo.playbackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+			// Cap the (silent) webcam element at the native rate so playbackRate never throws.
+			webcamVideo.playbackRate = Math.min(
+				activeSpeedRegion ? activeSpeedRegion.speed : 1,
+				MAX_NATIVE_PLAYBACK_RATE,
+			);
 
 			if (!isPlaying) {
 				webcamVideo.pause();
@@ -1836,7 +1863,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				return;
 			}
 
-			if (Math.abs(webcamVideo.currentTime - currentTime) > 0.15) {
+			// While the main video is seek-stepping (>16×), the playhead advances far
+			// faster than this 16×-capped element can seek; resyncing every frame would
+			// keep its decoder perpetually mid-seek and freeze it — the same failure the
+			// main video's throttle fixes. Let the muted webcam play best-effort at the
+			// clamped rate instead (a small lag is fine).
+			if (!seekSteppingRef.current && Math.abs(webcamVideo.currentTime - currentTime) > 0.15) {
 				webcamVideo.currentTime = currentTime;
 			}
 

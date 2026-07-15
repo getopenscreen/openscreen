@@ -1,7 +1,18 @@
 import { WebDemuxer } from "web-demuxer";
 import type { SpeedRegion, TrimRegion } from "@/components/video-editor/types";
+import {
+	type MaterializeProgress,
+	materializeLocalSourceFile,
+	releaseLocalSourceFile,
+} from "./localSourceFile";
+import { MAX_IN_MEMORY_SOURCE_BYTES } from "./sourceFileLimits";
+import { computeKeepSegments, splitBySpeed } from "./timelineSegments";
 
 const SOURCE_LOAD_TIMEOUT_MS = 60_000;
+// Large local recordings are streamed into OPFS before demuxing, which is
+// bounded by disk/IPC throughput rather than a network round-trip. Allow far
+// more time than a remote fetch so a multi-GB copy is not cut off mid-way.
+const LOCAL_SOURCE_LOAD_TIMEOUT_MS = 15 * 60_000;
 const EPSILON_SEC = 0.001;
 /**
  * Build a full WebCodecs-compatible AV1 codec string from the AV1CodecConfigurationRecord.
@@ -141,12 +152,25 @@ export async function loadFileAsArrayBuffer(
 	const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 
 	if (!isRemoteUrl && window.electronAPI) {
-		const { blob } = await StreamingVideoDecoder.loadLocalSourceFile(videoUrl);
-		return { data: await blob.arrayBuffer(), contentType: "" };
+		// This path loads the entire file into an ArrayBuffer for decodeAudioData,
+		// and readBinaryFile also copies the bytes in the main process during IPC,
+		// so a large recording would exhaust memory and crash. Callers must route
+		// oversized files elsewhere (useAudioPeaks streams peaks via
+		// computePeaksFromFileStreaming); this guard is a safety net for any
+		// caller that does not.
+		const info = await window.electronAPI.getReadableFileInfo?.(videoUrl);
+		if (info?.success && typeof info.size === "number" && info.size > MAX_IN_MEMORY_SOURCE_BYTES) {
+			throw new Error("Recording is too large to load into memory for waveform rendering.");
+		}
+		const result = await window.electronAPI.readBinaryFile(videoUrl);
+		if (!result.success || !result.data) {
+			throw new Error(result.message || result.error || "Failed to read source video");
+		}
+		return { data: result.data, contentType: "" };
 	}
 
-	const { blob } = await StreamingVideoDecoder.loadRemoteSourceFile(videoUrl);
-	return { data: await blob.arrayBuffer(), contentType: blob.type };
+	const file = await StreamingVideoDecoder.loadRemoteSourceFile(videoUrl);
+	return { data: await file.arrayBuffer(), contentType: file.type };
 }
 
 /** Caller must close the VideoFrame after use. */
@@ -168,15 +192,28 @@ export class StreamingVideoDecoder {
 	private decoder: VideoDecoder | null = null;
 	private cancelled = false;
 	private metadata: DecodedVideoInfo | null = null;
+	// Name of the OPFS cache entry backing a large local source (equals the
+	// File's .name), released on destroy() so the copy can be pruned once no
+	// demuxer is reading it. Null for small/remote sources (never retained).
+	private sourceCacheName: string | null = null;
+	// Aborts an in-flight OPFS materialization when the decoder is cancelled,
+	// destroyed, or the load times out — otherwise a cancelled export would keep
+	// streaming gigabytes in the background and leak the cache reference.
+	private readonly loadAbort = new AbortController();
 
 	/** Routes to the appropriate loader based on whether the source is local or remote. */
-	private async loadSourceFile(videoUrl: string): Promise<{ file: File; blob: Blob }> {
+	private async loadSourceFile(
+		videoUrl: string,
+		onProgress?: (progress: MaterializeProgress) => void,
+	): Promise<File> {
 		const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 		if (!isRemoteUrl && window.electronAPI) {
 			return this.withTimeout(
-				StreamingVideoDecoder.loadLocalSourceFile(videoUrl),
-				SOURCE_LOAD_TIMEOUT_MS,
+				StreamingVideoDecoder.loadLocalSourceFile(videoUrl, onProgress, this.loadAbort.signal),
+				LOCAL_SOURCE_LOAD_TIMEOUT_MS,
 				"Timed out while loading the source video.",
+				// Stop the underlying copy too; a bare reject would leave it running.
+				() => this.loadAbort.abort(),
 			);
 		}
 		return this.withTimeout(
@@ -186,39 +223,39 @@ export class StreamingVideoDecoder {
 		);
 	}
 
-	/** Loads a local video file via the Electron IPC bridge. */
-	static async loadLocalSourceFile(videoUrl: string): Promise<{ file: File; blob: Blob }> {
-		const result = await window.electronAPI.readBinaryFile(videoUrl);
-		if (!result.success || !result.data) {
-			throw new Error(result.message || result.error || "Failed to read source video");
-		}
-
-		const filename = (result.path || videoUrl).split(/[\\/]/).pop() || "video";
-		const blob = new Blob([result.data]);
-		return {
-			blob,
-			file: new File([blob], filename, {
-				type: blob.type || "application/octet-stream",
-			}),
-		};
+	/**
+	 * Loads a local video file for demuxing. Large recordings are streamed into
+	 * an OPFS-backed File so nothing multi-GB is held in memory; web-demuxer reads
+	 * the File on demand. See {@link materializeLocalSourceFile}.
+	 */
+	static async loadLocalSourceFile(
+		videoUrl: string,
+		onProgress?: (progress: MaterializeProgress) => void,
+		signal?: AbortSignal,
+	): Promise<File> {
+		const filename = (videoUrl.split(/[\\/]/).pop() || "video").replace(/^file:/, "");
+		return materializeLocalSourceFile(videoUrl, filename, { onProgress, signal });
 	}
 
 	/** Loads a remote or blob video URL via fetch. */
-	static async loadRemoteSourceFile(videoUrl: string): Promise<{ file: File; blob: Blob }> {
+	static async loadRemoteSourceFile(videoUrl: string): Promise<File> {
 		const response = await fetch(videoUrl);
 		if (!response.ok) {
 			throw new Error(`Failed to fetch source video: ${response.status} ${response.statusText}`);
 		}
 		const blob = await response.blob();
 		const filename = videoUrl.split("/").pop() || "video";
-		return {
-			blob,
-			file: new File([blob], filename, { type: blob.type }),
-		};
+		return new File([blob], filename, { type: blob.type });
 	}
 
-	async loadMetadata(videoUrl: string): Promise<DecodedVideoInfo> {
-		const { file } = await this.loadSourceFile(videoUrl);
+	async loadMetadata(
+		videoUrl: string,
+		onSourceProgress?: (progress: MaterializeProgress) => void,
+	): Promise<DecodedVideoInfo> {
+		const file = await this.loadSourceFile(videoUrl, onSourceProgress);
+		// For OPFS-streamed sources the File name is the cache-entry key; retained
+		// by materialize and released in destroy(). No-op key for small/remote.
+		this.sourceCacheName = file.name;
 
 		// Relative URL so it resolves in both dev (http) and packaged (file://) builds
 		const wasmUrl = new URL("./wasm/web-demuxer.wasm", window.location.href).href;
@@ -347,8 +384,8 @@ export class StreamingVideoDecoder {
 			codec.includes("av1") ||
 			codec.includes("vp09") ||
 			codec.includes("vp9");
-		const segments = this.splitBySpeed(
-			this.computeSegments(this.metadata.duration, trimRegions),
+		const segments = splitBySpeed(
+			computeKeepSegments(this.metadata.duration, trimRegions),
 			speedRegions,
 		);
 		const requiredEndSec = segments[segments.length - 1]?.endSec ?? 0;
@@ -636,38 +673,6 @@ export class StreamingVideoDecoder {
 	}
 
 	/**
-	 * Converts trim regions into the segments that should be kept.
-	 * Returns a single full-duration segment when no trim regions are present.
-	 */
-	private computeSegments(
-		totalDuration: number,
-		trimRegions?: TrimRegion[],
-	): Array<{ startSec: number; endSec: number }> {
-		if (!trimRegions || trimRegions.length === 0) {
-			return [{ startSec: 0, endSec: totalDuration }];
-		}
-
-		const sorted = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
-		const segments: Array<{ startSec: number; endSec: number }> = [];
-		let cursor = 0;
-
-		for (const trim of sorted) {
-			const trimStart = trim.startMs / 1000;
-			const trimEnd = trim.endMs / 1000;
-			if (cursor < trimStart) {
-				segments.push({ startSec: cursor, endSec: trimStart });
-			}
-			cursor = trimEnd;
-		}
-
-		if (cursor < totalDuration) {
-			segments.push({ startSec: cursor, endSec: totalDuration });
-		}
-
-		return segments;
-	}
-
-	/**
 	 * Effective output duration (seconds) and total frame count for the given trim/speed
 	 * regions at the target frame rate. Requires loadMetadata() first.
 	 */
@@ -677,8 +682,8 @@ export class StreamingVideoDecoder {
 		speedRegions?: SpeedRegion[],
 	): { effectiveDuration: number; totalFrames: number } {
 		if (!this.metadata) throw new Error("Must call loadMetadata() first");
-		const trimSegments = this.computeSegments(this.metadata.duration, trimRegions);
-		const segments = this.splitBySpeed(trimSegments, speedRegions);
+		const trimSegments = computeKeepSegments(this.metadata.duration, trimRegions);
+		const segments = splitBySpeed(trimSegments, speedRegions);
 		return {
 			effectiveDuration: segments.reduce(
 				(sum, seg) => sum + (seg.endSec - seg.startSec) / seg.speed,
@@ -691,42 +696,6 @@ export class StreamingVideoDecoder {
 		};
 	}
 
-	/**
-	 * Splits keep-segments by overlapping speed regions, annotating each
-	 * sub-segment with its playback speed multiplier (defaults to 1×).
-	 */
-	private splitBySpeed(
-		segments: Array<{ startSec: number; endSec: number }>,
-		speedRegions?: SpeedRegion[],
-	): Array<{ startSec: number; endSec: number; speed: number }> {
-		if (!speedRegions || speedRegions.length === 0)
-			return segments.map((s) => ({ ...s, speed: 1 }));
-
-		const result: Array<{ startSec: number; endSec: number; speed: number }> = [];
-		for (const segment of segments) {
-			const overlapping = speedRegions
-				.filter((sr) => sr.startMs / 1000 < segment.endSec && sr.endMs / 1000 > segment.startSec)
-				.sort((a, b) => a.startMs - b.startMs);
-
-			if (overlapping.length === 0) {
-				result.push({ ...segment, speed: 1 });
-				continue;
-			}
-
-			let cursor = segment.startSec;
-			for (const sr of overlapping) {
-				const srStart = Math.max(sr.startMs / 1000, segment.startSec);
-				const srEnd = Math.min(sr.endMs / 1000, segment.endSec);
-				if (cursor < srStart) result.push({ startSec: cursor, endSec: srStart, speed: 1 });
-				result.push({ startSec: srStart, endSec: srEnd, speed: sr.speed });
-				cursor = srEnd;
-			}
-			if (cursor < segment.endSec)
-				result.push({ startSec: cursor, endSec: segment.endSec, speed: 1 });
-		}
-		return result.filter((s) => s.endSec - s.startSec > 0.0001);
-	}
-
 	/** Returns the underlying WebDemuxer instance, or null if not yet loaded. */
 	getDemuxer(): WebDemuxer | null {
 		return this.demuxer;
@@ -735,11 +704,13 @@ export class StreamingVideoDecoder {
 	/** Signals the decoder to stop processing at the next cancellation checkpoint. */
 	cancel(): void {
 		this.cancelled = true;
+		this.loadAbort.abort();
 	}
 
 	/** Cancels decoding and releases the VideoDecoder and WebDemuxer resources. */
 	destroy(): void {
 		this.cancelled = true;
+		this.loadAbort.abort();
 
 		if (this.decoder) {
 			try {
@@ -758,12 +729,25 @@ export class StreamingVideoDecoder {
 			}
 			this.demuxer = null;
 		}
+
+		if (this.sourceCacheName) {
+			releaseLocalSourceFile(this.sourceCacheName);
+			this.sourceCacheName = null;
+		}
 	}
 
 	/** Wraps a promise with a hard timeout, rejecting with `message` if it exceeds `timeoutMs`. */
-	private withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+	private withTimeout<T>(
+		promise: Promise<T>,
+		timeoutMs: number,
+		message: string,
+		onTimeout?: () => void,
+	): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
-			const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+			const timer = window.setTimeout(() => {
+				onTimeout?.();
+				reject(new Error(message));
+			}, timeoutMs);
 			promise.then(
 				(value) => {
 					window.clearTimeout(timer);

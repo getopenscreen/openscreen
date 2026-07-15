@@ -32,7 +32,8 @@
 		"selectRegion": "選擇要調整的速度區域",
 		"deleteRegion": "刪除速度區域",
 		"customPlaybackSpeed": "自訂播放速度",
-		"maxSpeedError": "速度不能超過 16×"
+		"maxSpeedError": "速度不能超過 {{max}}×",
+		"previewFrameSteppingHint": "超過 {{native}}× 時，預覽為逐幀跳轉且靜音，匯出不受影響。"
 	},
 	"trim": {
 		"deleteRegion": "刪除剪輯區域"
@@ -66,10 +67,12 @@
 		"image": "圖片",
 		"color": "顏色",
 		"gradient": "漸層",
+		"custom": "自訂",
 		"uploadCustom": "上傳自訂",
 		"gradientLabel": "漸層 {{index}}",
 		"colorWheel": "色輪",
-		"colorPalette": "調色盤"
+		"colorPalette": "調色盤",
+		"presets": "預設"
 	},
 	"crop": {
 		"title": "裁剪",
@@ -162,7 +165,6 @@
 		"invalidImageType": "無效的檔案類型",
 		"imageFormatsOnly": "請上傳 JPG、PNG、GIF 或 WebP 格式的圖片檔案。",
 		"imageUploadSuccess": "圖片上傳成功！",
-		"failedImageUpload": "上傳圖片失敗",
 		"blurColor": "模糊顏色",
 		"blurColorBlack": "黑色",
 		"blurColorWhite": "白色",

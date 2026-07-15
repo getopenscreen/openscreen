@@ -80,7 +80,11 @@
 		flex-direction: column;
 		padding: 14px;
 		background:
-			radial-gradient(circle at 18% 0%, rgba(52, 178, 123, 0.08), transparent 30%),
+			radial-gradient(
+				circle at 18% 0%,
+				rgba(52, 178, 123, 0.08),
+				transparent 30%
+			),
 			linear-gradient(180deg, #08090b 0%, #050606 100%);
 	}
 
@@ -101,7 +105,11 @@
 	.editor-timeline-panel,
 	.editor-inspector-shell {
 		background:
-			linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+			linear-gradient(
+				180deg,
+				rgba(255, 255, 255, 0.035),
+				rgba(255, 255, 255, 0.012)
+			),
 			#090a0c;
 		border: 1px solid rgba(255, 255, 255, 0.075);
 		border-radius: 18px;
@@ -304,5 +312,20 @@
 
 	input[type="range"]::-moz-range-thumb:active {
 		transform: scale(1.25);
+	}
+
+	/* Hide scrollbar in Chrome, Safari, and Opera */
+	.no-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+
+	/* Hide scrollbar in Firefox */
+	.no-scrollbar {
+		scrollbar-width: none;
+	}
+
+	/* Hide scrollbar in IE and Edge */
+	.no-scrollbar {
+		-ms-overflow-style: none;
 	}
 }

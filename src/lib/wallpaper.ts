@@ -23,6 +23,14 @@ export function classifyWallpaper(value: string): WallpaperClassification {
 	if (trimmed === "") {
 		return { kind: "color", value: "#000000" };
 	}
+	// Multi-background (e.g. "url(noise), linear-gradient(...)") - peel
+	// the gradient layer off so the existing parser can still handle it.
+	// Noise/url overlays are lost on export, but the live preview paints
+	// the full string via CSS so the overlay shows up there.
+	if (trimmed.startsWith("url(")) {
+		const gradient = extractTrailingGradient(trimmed);
+		if (gradient) return { kind: "gradient", value: gradient };
+	}
 	if (trimmed.startsWith("#") || COLOR_FUNC_RE.test(trimmed)) {
 		return { kind: "color", value: trimmed };
 	}
@@ -33,6 +41,11 @@ export function classifyWallpaper(value: string): WallpaperClassification {
 		return { kind: "image", path: trimmed };
 	}
 	return { kind: "color", value: trimmed };
+}
+
+function extractTrailingGradient(value: string): string | null {
+	const match = value.match(/,\s*((?:repeating-)?(?:linear|radial|conic)-gradient\(.*\))\s*$/);
+	return match?.[1] ?? null;
 }
 
 const ALLOWED_IMAGE_PREFIX = "/wallpapers/";

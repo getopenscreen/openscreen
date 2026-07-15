@@ -7,7 +7,18 @@
 		"pauseRecording": "Pausar gravação",
 		"resumeRecording": "Retomar gravação",
 		"openVideoFile": "Abrir arquivo de vídeo",
-		"openProject": "Abrir projeto"
+		"openProject": "Abrir projeto",
+		"openNotes": "Abrir notas",
+		"openNotesPlaceholder": "Escreva suas notas aqui...",
+		"notesToolbar": {
+			"bold": "Negrito",
+			"italic": "Itálico",
+			"strikethrough": "Tachado",
+			"bulletList": "Lista com marcadores",
+			"numberedList": "Lista numerada",
+			"blockquote": "Citação",
+			"codeBlock": "Bloco de código"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Ativar áudio do sistema",
@@ -35,7 +46,8 @@
 		"defaultSourceName": "Tela"
 	},
 	"recording": {
-		"selectSource": "Por favor, selecione uma fonte para gravar"
+		"selectSource": "Por favor, selecione uma fonte para gravar",
+		"saving": "Salvando..."
 	},
 	"language": "Idioma",
 	"systemLanguagePrompt": {
@@ -43,5 +55,11 @@
 		"description": "Detectamos {{language}} como o idioma do seu sistema. Deseja mudar o OpenScreen para {{language}}?",
 		"switch": "Mudar para {{language}}",
 		"keepDefault": "Manter idioma atual"
+	},
+	"softwareEncoderFallback": {
+		"title": "Mudou para codificação por software",
+		"description": "O codificador de GPU padrão não pôde ser iniciado, então o OpenScreen passou a usar a codificação H.264 por software. A gravação deve continuar normalmente, mas o uso da CPU pode ser maior.",
+		"dismiss": "Entendi",
+		"dontShowAgain": "Não mostrar novamente"
 	}
 }

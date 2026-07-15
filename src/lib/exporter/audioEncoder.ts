@@ -1,11 +1,28 @@
 import { WebDemuxer } from "web-demuxer";
-import type { SpeedRegion, TrimRegion } from "@/components/video-editor/types";
+import {
+	MAX_NATIVE_PLAYBACK_RATE,
+	type SpeedRegion,
+	type TrimRegion,
+} from "@/components/video-editor/types";
+import { WsolaTimeStretcher } from "./audioTimeStretch";
 import type { ExportAudioMuxerCodec, VideoMuxer } from "./muxer";
+import { PlanarChunkQueue } from "./planarChunkQueue";
+import {
+	buildSpeedSegments,
+	maxTimelineSpeed,
+	type SpeedTimelineSegment,
+} from "./timelineSegments";
 
 const AUDIO_BITRATE = 128_000;
 const DECODE_BACKPRESSURE_LIMIT = 20;
 const MIN_SPEED_REGION_DELTA_MS = 0.0001;
 const SEEK_TIMEOUT_MS = 5_000;
+// AudioData slice size fed to the encoder from the offline time-stretch path.
+const OFFLINE_OUTPUT_FRAMES = 4096;
+const ENCODE_BACKPRESSURE_LIMIT = 20;
+// Must match streamingDecoder's EPSILON_SEC so the offline audio segment lengths
+// use the same per-frame quantization as the video output.
+const VIDEO_EPSILON_SEC = 0.001;
 
 export interface ExportAudioCodec {
 	encoderCodec: string;
@@ -221,6 +238,7 @@ export class AudioProcessor {
 		speedRegions: SpeedRegion[] | undefined,
 		validatedDurationSec: number,
 		exportCodec: ExportAudioCodec,
+		targetFrameRate: number,
 	): Promise<void> {
 		const sortedTrims = trimRegions ? [...trimRegions].sort((a, b) => a.startMs - b.startMs) : [];
 		const sortedSpeedRegions = speedRegions
@@ -229,8 +247,24 @@ export class AudioProcessor {
 					.sort((a, b) => a.startMs - b.startMs)
 			: [];
 
-		// Speed edits need timeline playback to preserve pitch.
+		// Speed edits need pitch preservation. Segments at or below the native
+		// playbackRate cap use the real-time <audio> capture (proven, sounds best);
+		// anything faster can't be played in real time, so the whole timeline is
+		// rendered offline with a WSOLA time-stretch instead.
 		if (sortedSpeedRegions.length > 0) {
+			const segments = buildSpeedSegments(validatedDurationSec, sortedTrims, sortedSpeedRegions);
+
+			if (maxTimelineSpeed(segments) > MAX_NATIVE_PLAYBACK_RATE) {
+				await this.renderOfflineTimelineAudio(
+					demuxer,
+					muxer,
+					segments,
+					exportCodec,
+					targetFrameRate,
+				);
+				return;
+			}
+
 			const renderedAudioBlob = await this.renderPitchPreservedTimelineAudio(
 				videoUrl,
 				sortedTrims,
@@ -597,6 +631,302 @@ export class AudioProcessor {
 			throw new Error("Export cancelled");
 		}
 		return recordedBlob;
+	}
+
+	/**
+	 * Offline pitch-preserved timeline audio for projects that contain a segment
+	 * faster than the native playbackRate cap (which the real-time capture path
+	 * can't reach). Streams the source once, routes each frame's PCM into the
+	 * active timeline segment, applies a WSOLA time-stretch per segment, and
+	 * encodes the result — clamping each segment to its exact expected length so
+	 * the audio stays locked to the (independently retimed) video.
+	 */
+	private async renderOfflineTimelineAudio(
+		demuxer: WebDemuxer,
+		muxer: VideoMuxer,
+		segments: SpeedTimelineSegment[],
+		exportCodec: ExportAudioCodec,
+		targetFrameRate: number,
+	): Promise<void> {
+		let audioConfig: AudioDecoderConfig;
+		try {
+			audioConfig = await demuxer.getDecoderConfig("audio");
+		} catch {
+			console.warn("[AudioProcessor] No audio track found, skipping");
+			return;
+		}
+
+		const codecCheck = await AudioDecoder.isConfigSupported(audioConfig);
+		if (!codecCheck.supported) {
+			console.warn("[AudioProcessor] Audio codec not supported:", audioConfig.codec);
+			return;
+		}
+
+		const sampleRate = audioConfig.sampleRate || 48000;
+		const outputChannels = exportCodec.numberOfChannels || audioConfig.numberOfChannels || 2;
+		const outputSampleRate = exportCodec.sampleRate || sampleRate;
+
+		const encodeConfig: AudioEncoderConfig = {
+			codec: exportCodec.encoderCodec,
+			sampleRate: outputSampleRate,
+			numberOfChannels: outputChannels,
+			bitrate: AUDIO_BITRATE,
+		};
+		const encodeSupport = await AudioEncoder.isConfigSupported(encodeConfig);
+		if (!encodeSupport.supported) {
+			console.warn(`[AudioProcessor] ${exportCodec.label} encoding not supported, skipping audio`);
+			return;
+		}
+
+		const encodedChunks: { chunk: EncodedAudioChunk; meta?: EncodedAudioChunkMetadata }[] = [];
+		const encoder = new AudioEncoder({
+			output: (chunk, meta) => encodedChunks.push({ chunk, meta }),
+			error: (e: DOMException) => console.error("[AudioProcessor] Encode error:", e),
+		});
+		encoder.configure(encodeConfig);
+
+		// Output-side accumulator: a chunk queue (O(1) append, front-drained) coalesced
+		// into fixed-size AudioData slices with running (monotonic) output timestamps.
+		const outQueue = new PlanarChunkQueue(outputChannels);
+		let outTimestampSamples = 0;
+
+		const appendOutput = (planes: Float32Array[], count: number) => {
+			outQueue.push(planes, count);
+		};
+
+		const flushOutput = (drainAll: boolean) => {
+			while (outQueue.length >= OFFLINE_OUTPUT_FRAMES || (drainAll && outQueue.length > 0)) {
+				const take = Math.min(OFFLINE_OUTPUT_FRAMES, outQueue.length);
+				const data = outQueue.take(take);
+				const audioData = new AudioData({
+					format: "f32-planar",
+					sampleRate: outputSampleRate,
+					numberOfFrames: take,
+					numberOfChannels: outputChannels,
+					timestamp: Math.round((outTimestampSamples / outputSampleRate) * 1_000_000),
+					data: data.buffer as ArrayBuffer,
+				});
+				outTimestampSamples += take;
+				encoder.encode(audioData);
+				audioData.close();
+			}
+		};
+
+		// Per-segment state.
+		let segIdx = 0;
+		let stretcher: WsolaTimeStretcher | null = null;
+		let segExpectedOut = 0;
+		let segEmittedOut = 0;
+
+		const startSegment = (seg: SpeedTimelineSegment) => {
+			// Match the video path's per-segment frame quantization exactly (streamingDecoder
+			// emits ceil((dur - EPSILON)/speed * fps) frames) so audio and video advance by
+			// the same amount each segment and never accumulate drift.
+			const frameCount = Math.ceil(
+				((seg.endSec - seg.startSec - VIDEO_EPSILON_SEC) / seg.speed) * targetFrameRate,
+			);
+			segExpectedOut = Math.max(0, Math.round((frameCount / targetFrameRate) * outputSampleRate));
+			segEmittedOut = 0;
+			stretcher = new WsolaTimeStretcher({
+				sampleRate,
+				channels: outputChannels,
+				speed: seg.speed,
+				expectedOutputSamples: segExpectedOut,
+			});
+		};
+
+		// Clamp each segment's emitted output to its expected length (drops the WSOLA
+		// tail overshoot; pads with silence on the rare underrun) so cumulative A/V
+		// timing matches the video the audio is retimed against.
+		const emitStretched = (planes: Float32Array[]) => {
+			const produced = planes[0]?.length ?? 0;
+			const allowed = Math.max(0, segExpectedOut - segEmittedOut);
+			const take = Math.min(produced, allowed);
+			appendOutput(planes, take);
+			segEmittedOut += take;
+		};
+
+		// Feed `count` source-domain silence samples into the current segment's
+		// stretcher (compressed by its speed, then clamped/encoded like real audio).
+		const feedSilence = (count: number) => {
+			if (!stretcher) return;
+			let remaining = count;
+			while (remaining > 0) {
+				const n = Math.min(8192, remaining);
+				const silence = Array.from({ length: outputChannels }, () => new Float32Array(n));
+				emitStretched(stretcher.push(silence));
+				remaining -= n;
+			}
+		};
+
+		const finalizeSegment = () => {
+			if (!stretcher) return;
+			emitStretched(stretcher.flush());
+			// Intentional: pad the deficit with silence when WSOLA under-fills a short
+			// high-speed segment, so the segment keeps its exact A/V-locked length. Do
+			// not "fix" this by removing the pad.
+			if (segEmittedOut < segExpectedOut) {
+				const pad = segExpectedOut - segEmittedOut;
+				const silence = Array.from({ length: outputChannels }, () => new Float32Array(pad));
+				appendOutput(silence, pad);
+				segEmittedOut += pad;
+			}
+			stretcher = null;
+		};
+
+		const segStartSample = (seg: SpeedTimelineSegment) => Math.round(seg.startSec * sampleRate);
+		const segEndSample = (seg: SpeedTimelineSegment) => Math.round(seg.endSec * sampleRate);
+
+		const routeFrame = (planes: Float32Array[], frameStartSample: number, frameCount: number) => {
+			let local = 0;
+			while (local < frameCount && segIdx < segments.length) {
+				const seg = segments[segIdx];
+				const segStart = segStartSample(seg);
+				const segEnd = segEndSample(seg);
+				const currentAbs = frameStartSample + local;
+
+				if (currentAbs < segStart) {
+					// In a trimmed gap (or before the first segment): discard.
+					local += Math.min(segStart - currentAbs, frameCount - local);
+					continue;
+				}
+				if (currentAbs >= segEnd) {
+					finalizeSegment();
+					segIdx += 1;
+					continue;
+				}
+				if (!stretcher) {
+					startSegment(seg);
+					// If the very first source sample lands after the timeline origin (codec
+					// priming, or an audio track that starts after the video), fill the head
+					// with leading silence so real audio keeps its true source-time position.
+					// The video path holds its first frame over the same head, so this keeps
+					// A/V aligned; it is a no-op when the first sample is at 0, and negative
+					// preroll was already discarded by the `currentAbs < segStart` branch above.
+					if (segIdx === 0 && currentAbs > segStart) feedSilence(currentAbs - segStart);
+				}
+				const take = Math.min(segEnd, frameStartSample + frameCount) - currentAbs;
+				const slice = planes.map((p) => p.subarray(local, local + take));
+				emitStretched((stretcher as WsolaTimeStretcher).push(slice));
+				local += take;
+			}
+		};
+
+		// Streaming decode: frames arrive in source order via the decoder callback.
+		const pending: AudioData[] = [];
+		const decoder = new AudioDecoder({
+			output: (data: AudioData) => pending.push(data),
+			error: (e: DOMException) => console.error("[AudioProcessor] Decode error:", e),
+		});
+		decoder.configure(audioConfig);
+
+		const drainPending = async () => {
+			while (pending.length > 0) {
+				if (this.cancelled) {
+					for (const d of pending) d.close();
+					pending.length = 0;
+					return;
+				}
+				const data = pending.shift();
+				if (!data) continue;
+				const frameCount = data.numberOfFrames;
+				const sourceChannels = data.numberOfChannels;
+				const srcPlanes: Float32Array[] = [];
+				for (let c = 0; c < sourceChannels; c++) {
+					const plane = new Float32Array(frameCount);
+					data.copyTo(plane, { format: "f32-planar", planeIndex: c });
+					srcPlanes.push(plane);
+				}
+				// Raw source timestamps — the same origin the video decoder uses
+				// (streamingDecoder), so audio and video stay in one coordinate system.
+				// Frames before the first segment start (e.g. negative-timestamp codec
+				// preroll, or a leading trim) are correctly discarded by routeFrame.
+				const frameStartSample = Math.round((data.timestamp / 1_000_000) * sampleRate);
+				data.close();
+
+				// Match source channels through untouched; otherwise downmix (to 1 or 2).
+				let planes: Float32Array[];
+				if (outputChannels === sourceChannels) {
+					planes = srcPlanes;
+				} else {
+					const downmixed = downmixPlanarChannelsForExport(srcPlanes, outputChannels);
+					planes = [];
+					for (let c = 0; c < outputChannels; c++) {
+						planes.push(downmixed.subarray(c * frameCount, (c + 1) * frameCount));
+					}
+				}
+
+				routeFrame(planes, frameStartSample, frameCount);
+				flushOutput(false);
+
+				while (encoder.encodeQueueSize > ENCODE_BACKPRESSURE_LIMIT && !this.cancelled) {
+					await new Promise((resolve) => setTimeout(resolve, 1));
+				}
+			}
+		};
+
+		// Read past the last segment's source end (mirrors streamingDecoder's +0.5s
+		// window so both paths read the same distance past the boundary).
+		const lastSegmentEndSec = segments.length > 0 ? segments[segments.length - 1].endSec : 0;
+		const readEndSec = lastSegmentEndSec + 0.5;
+		const reader = demuxer.read("audio", 0, readEndSec).getReader();
+		try {
+			while (!this.cancelled) {
+				const { done, value: chunk } = await reader.read();
+				if (done || !chunk) break;
+				decoder.decode(chunk);
+				while (decoder.decodeQueueSize > DECODE_BACKPRESSURE_LIMIT && !this.cancelled) {
+					await new Promise((resolve) => setTimeout(resolve, 1));
+				}
+				await drainPending();
+			}
+		} finally {
+			try {
+				await reader.cancel();
+			} catch {
+				/* reader already closed */
+			}
+		}
+
+		if (decoder.state === "configured") {
+			if (!this.cancelled) {
+				await decoder.flush();
+			}
+			decoder.close();
+		}
+		await drainPending();
+
+		if (this.cancelled) {
+			if (encoder.state === "configured") encoder.close();
+			return;
+		}
+
+		// Finalize the segment still open at end-of-stream, then pad any segments that
+		// never received audio (source shorter than the timeline) with silence.
+		if (stretcher) {
+			finalizeSegment();
+			segIdx += 1;
+		}
+		for (; segIdx < segments.length; segIdx++) {
+			startSegment(segments[segIdx]);
+			finalizeSegment();
+		}
+
+		flushOutput(true);
+
+		if (encoder.state === "configured") {
+			await encoder.flush();
+			encoder.close();
+		}
+
+		for (const { chunk, meta } of encodedChunks) {
+			if (this.cancelled) break;
+			await muxer.addAudioChunk(chunk, meta);
+		}
+
+		console.log(
+			`[AudioProcessor] Offline timeline audio: ${segments.length} segments, ${encodedChunks.length} chunks`,
+		);
 	}
 
 	// Demux the rendered speed-adjusted blob and feed its chunks into the MP4 muxer.

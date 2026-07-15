@@ -37,8 +37,8 @@ The goal of this continuation is to keep OpenScreen alive as a fully open-source
 > Software should be accessible. OpenScreen has no paid tiers, premium features, upsells, or functionality locked behind a paywall.
 
 <p align="center">
-	<img src="public/demo.png" alt="" style="height: 0.2467; margin-right: 12px;" />
-  <img src="public/sample.png" alt="" style="height: 0.2467; margin-right: 12px;" />
+	<img src="public/demo.png" alt="" style="height: 320px; margin-right: 12px;" />
+  <img src="public/sample.png" alt="" style="height: 320px; margin-right: 12px;" />
 </p>
 
 ## Core Features
@@ -72,7 +72,7 @@ xattr -rd com.apple.quarantine /Applications/Openscreen.app
 
 Note: Give your terminal Full Disk Access in **System Settings > Privacy & Security** to grant you access and then run the above command.
 
-After running this command, proceed to **System Preferences > Security & Privacy** to grant the necessary permissions for "screen recording" and "accessibility". Once permissions are granted, you can launch the app.
+After running this command, proceed to **System Settings > Privacy & Security** to grant the necessary permissions for "screen recording" and "accessibility". Once permissions are granted, you can launch the app.
 
 > [!NOTE]
 > **Upgrading from an older version and hitting permission issues?** If you already had OpenScreen installed and the new version won't record (Screen Recording or Accessibility keep failing even after you grant them), uninstall the old version, remove OpenScreen's existing entries under **System Settings > Privacy & Security** (both Screen Recording and Accessibility), then do a fresh install and grant the permissions again when prompted.

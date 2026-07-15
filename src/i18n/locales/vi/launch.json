@@ -9,7 +9,18 @@
 		"openVideoFile": "Mở tệp video",
 		"openProject": "Mở dự án",
 		"useVerticalTray": "Dùng khay dọc",
-		"useHorizontalTray": "Dùng khay ngang"
+		"useHorizontalTray": "Dùng khay ngang",
+		"openNotes": "Mở ghi chú",
+		"openNotesPlaceholder": "Ghi chú của bạn tại đây...",
+		"notesToolbar": {
+			"bold": "In đậm",
+			"italic": "In nghiêng",
+			"strikethrough": "Gạch ngang",
+			"bulletList": "Danh sách dấu đầu dòng",
+			"numberedList": "Danh sách đánh số",
+			"blockquote": "Trích dẫn",
+			"codeBlock": "Khối mã"
+		}
 	},
 	"audio": {
 		"enableSystemAudio": "Bật âm thanh hệ thống",
@@ -33,7 +44,8 @@
 		"defaultSourceName": "Màn hình"
 	},
 	"recording": {
-		"selectSource": "Vui lòng chọn một nguồn để ghi"
+		"selectSource": "Vui lòng chọn một nguồn để ghi",
+		"saving": "Đang lưu..."
 	},
 	"language": "Ngôn ngữ",
 	"systemLanguagePrompt": {
@@ -45,5 +57,11 @@
 	"cursor": {
 		"useEditableCursor": "Dùng con trỏ có thể chỉnh sửa",
 		"useSystemCursor": "Dùng con trỏ hệ thống"
+	},
+	"softwareEncoderFallback": {
+		"title": "Đã chuyển sang mã hóa bằng phần mềm",
+		"description": "Bộ mã hóa GPU mặc định không khởi động được, nên OpenScreen đã chuyển sang mã hóa H.264 bằng phần mềm. Quá trình ghi vẫn tiếp tục bình thường, nhưng mức sử dụng CPU có thể cao hơn.",
+		"dismiss": "Đã hiểu",
+		"dontShowAgain": "Không hiển thị lại"
 	}
 }

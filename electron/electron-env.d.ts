@@ -41,6 +41,10 @@ interface Window {
 				error?: string;
 			};
 		}>;
+		openNotes: () => Promise<{
+			opened: boolean;
+			reason?: string;
+		}>;
 		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource | null>;
 		getSelectedSource: () => Promise<ProcessedDesktopSource | null>;
 		onSelectedSourceChanged: (callback: (source: ProcessedDesktopSource) => void) => () => void;
@@ -210,6 +214,25 @@ interface Window {
 			success: boolean;
 			data?: ArrayBuffer;
 			path?: string;
+			message?: string;
+			error?: string;
+		}>;
+		getReadableFileInfo: (filePath: string) => Promise<{
+			success: boolean;
+			size?: number;
+			mtimeMs?: number;
+			path?: string;
+			message?: string;
+			error?: string;
+		}>;
+		readFileChunk: (
+			filePath: string,
+			offset: number,
+			length: number,
+		) => Promise<{
+			success: boolean;
+			data?: ArrayBuffer;
+			bytesRead?: number;
 			message?: string;
 			error?: string;
 		}>;

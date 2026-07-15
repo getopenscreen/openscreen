@@ -80,11 +80,33 @@ describe("mixAudioTracks", () => {
 		expect(result.track).toBe(system);
 	});
 
-	it("returns the mic track verbatim and no context when only mic is present", () => {
+	it("fades a mic-only recording in from 0 to unity gain through its own AudioContext, with no system source", () => {
+		const fakeCtx = stubAudioContext(0.5);
+
 		const mic = track("mic");
 		const result = mixAudioTracks({ systemAudioTrack: null, micAudioTrack: mic });
-		expect(result.context).toBeNull();
-		expect(result.track).toBe(mic);
+
+		expect(result.context).toBe(fakeCtx);
+		expect(fakeCtx.createGain).toHaveBeenCalledTimes(1);
+		// Only the mic is routed through a source node; there is no system audio.
+		expect(fakeCtx.createMediaStreamSource).toHaveBeenCalledTimes(1);
+		expect(fakeCtx.createMediaStreamDestination).toHaveBeenCalledTimes(1);
+
+		const [gain] = fakeCtx.createGain.mock.results.map((r) => r.value) as FakeGainNode[];
+		// Ramps to unity (1), not MIC_GAIN_BOOST, so mic-only loudness is unchanged.
+		expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0, 0.5);
+		expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(1, 0.5 + MIC_FADE_IN_S);
+
+		const [micSource] = fakeCtx.createMediaStreamSource.mock.results.map(
+			(r) => r.value,
+		) as FakeMediaStreamAudioSourceNode[];
+		const [destination] = fakeCtx.createMediaStreamDestination.mock.results.map(
+			(r) => r.value,
+		) as FakeMediaStreamDestination[];
+		expect(micSource.connect).toHaveBeenCalledWith(gain);
+		expect(gain.connect).toHaveBeenCalledWith(destination);
+
+		expect(result.track).toEqual({ kind: "audio", id: "dest-track" });
 	});
 
 	it("returns null track and no context when neither track is present", () => {

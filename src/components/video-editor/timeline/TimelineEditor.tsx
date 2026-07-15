@@ -1083,10 +1083,14 @@ export default function TimelineEditor({
 	const cameraFullscreenRegionsRef = useRef(cameraFullscreenRegions);
 	const trimRegionsRef = useRef(trimRegions);
 	const speedRegionsRef = useRef(speedRegions);
-	zoomRegionsRef.current = zoomRegions;
-	cameraFullscreenRegionsRef.current = cameraFullscreenRegions;
-	trimRegionsRef.current = trimRegions;
-	speedRegionsRef.current = speedRegions;
+	// Sync refs in an effect (not during render) so render stays pure; defined before
+	// the normalization effect below so that effect reads the freshest region values.
+	useEffect(() => {
+		zoomRegionsRef.current = zoomRegions;
+		cameraFullscreenRegionsRef.current = cameraFullscreenRegions;
+		trimRegionsRef.current = trimRegions;
+		speedRegionsRef.current = speedRegions;
+	}, [zoomRegions, cameraFullscreenRegions, trimRegions, speedRegions]);
 
 	useEffect(() => {
 		if (totalMs === 0 || safeMinDurationMs <= 0) {

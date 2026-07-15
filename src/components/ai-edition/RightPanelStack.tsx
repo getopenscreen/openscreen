@@ -12,6 +12,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { parseCustomPlaybackSpeedInput } from "@/components/video-editor/customPlaybackSpeed";
 import {
+	MAX_NATIVE_PLAYBACK_RATE,
+	MAX_PLAYBACK_SPEED,
 	MAX_ZOOM_SCALE,
 	MIN_ZOOM_SCALE,
 	SPEED_OPTIONS,
@@ -666,7 +668,8 @@ function RegionInspector({
 									const result = parseCustomPlaybackSpeedInput(speedDraft);
 									if (result.status === "valid") patchSpeed(result.speed);
 									else {
-										if (result.status === "too-fast") toast.error("Speed can't exceed 16×.");
+										if (result.status === "too-fast")
+											toast.error(`Speed can't exceed ${MAX_PLAYBACK_SPEED}×.`);
 										setSpeedDraft(
 											SPEED_OPTIONS.some((o) => o.speed === speedValue) ? "" : String(speedValue),
 										);
@@ -676,11 +679,23 @@ function RegionInspector({
 									if (e.key !== "Enter") return;
 									const result = parseCustomPlaybackSpeedInput(speedDraft);
 									if (result.status === "valid") patchSpeed(result.speed);
-									else if (result.status === "too-fast") toast.error("Speed can't exceed 16×.");
+									else if (result.status === "too-fast")
+										toast.error(`Speed can't exceed ${MAX_PLAYBACK_SPEED}×.`);
 									e.currentTarget.blur();
 								}}
 								style={{ width: "100%" }}
 							/>
+							{speedValue > MAX_NATIVE_PLAYBACK_RATE ? (
+								<p
+									style={{
+										margin: "6px 0 0",
+										font: "400 10px/1.4 var(--font-sans)",
+										color: "var(--fg-2)",
+									}}
+								>
+									{`Above ${MAX_NATIVE_PLAYBACK_RATE}× the preview plays at ${MAX_NATIVE_PLAYBACK_RATE}×; the export renders the true speed.`}
+								</p>
+							) : null}
 						</Field>
 					</>
 				) : null}

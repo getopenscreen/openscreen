@@ -8,12 +8,15 @@ import type {
 	WebcamSizePreset,
 	ZoomRegion,
 } from "@/components/video-editor/types";
+import { assembleConcatenatedPcm } from "@/lib/ai-edition/exporter/audioConcatAssembler";
+import { buildAudioConcatPlan } from "@/lib/ai-edition/exporter/audioConcatPlan";
 import type { RenderPlan, RenderSegment } from "@/lib/ai-edition/exporter/renderPlan";
 import { BackgroundLoadError } from "@/lib/wallpaper";
 import type { CursorRecordingData } from "@/native/contracts";
 import { getPlatform } from "@/utils/platformUtils";
-import { AudioProcessor } from "./audioEncoder";
+import { AudioProcessor, downmixPlanarChannelsForExport } from "./audioEncoder";
 import { FrameRenderer } from "./frameRenderer";
+import { materializeLocalSourceFile, releaseLocalSourceFile } from "./localSourceFile";
 import { VideoMuxer, videoCodecFamily } from "./muxer";
 import { MAX_IN_MEMORY_SOURCE_BYTES } from "./sourceFileLimits";
 import { StreamingVideoDecoder } from "./streamingDecoder";
@@ -258,6 +261,103 @@ function segmentCursorRecording(
 		assets: plan.cursor.assets,
 		samples: segment.cursorSamples,
 	};
+}
+
+// v2 multi-asset audio output layout. Both recording formats are 48 kHz, so
+// decodeAudioData is an identity resample; only channel counts get normalized.
+const AUDIO_OUTPUT_SAMPLE_RATE = 48_000;
+const AUDIO_OUTPUT_CHANNELS = 2;
+// Short equal-power fade applied at each segment audio join (seamless audio).
+const AUDIO_BOUNDARY_FADE_SEC = 0.005;
+
+/** Source-time sub-intervals of a segment that are KEPT — its window minus
+ * intra-trims (the complement of buildSegmentRenderTrims within the clip) — so
+ * the segment's audio removes exactly the same cuts as its video. */
+function keptSourceIntervals(segment: RenderSegment): Array<{ startSec: number; endSec: number }> {
+	const kept: Array<{ startSec: number; endSec: number }> = [];
+	let cursor = segment.sourceStartSec;
+	const trims = [...segment.intraTrims].sort((a, b) => a.startSec - b.startSec);
+	for (const trim of trims) {
+		const trimStart = Math.max(trim.startSec, segment.sourceStartSec);
+		const trimEnd = Math.min(trim.endSec, segment.sourceEndSec);
+		if (trimEnd <= cursor) continue;
+		if (trimStart > cursor) {
+			kept.push({ startSec: cursor, endSec: Math.min(trimStart, segment.sourceEndSec) });
+		}
+		cursor = Math.max(cursor, trimEnd);
+	}
+	if (cursor < segment.sourceEndSec) {
+		kept.push({ startSec: cursor, endSec: segment.sourceEndSec });
+	}
+	return kept;
+}
+
+/** Decodes ONE segment's audio to planar PCM at the common export layout
+ * (sampleRate/channels), keeping only the clip's source window minus its
+ * intra-trims. Channel counts are normalized via the shared downmix. Returns
+ * null when the source has no decodable audio track. */
+async function decodeSegmentAudioPcm(
+	segment: RenderSegment,
+	sampleRate: number,
+	channels: number,
+): Promise<Float32Array[] | null> {
+	let file: File | null = null;
+	try {
+		file = await materializeLocalSourceFile(segment.videoUrl, `seg-${segment.clipId}-audio`);
+		const bytes = await file.arrayBuffer();
+		const ctx = new OfflineAudioContext(Math.max(1, channels), 1, sampleRate);
+		let audioBuffer: AudioBuffer;
+		try {
+			audioBuffer = await ctx.decodeAudioData(bytes);
+		} catch {
+			return null; // no decodable audio track
+		}
+		const sourceChannels = audioBuffer.numberOfChannels;
+		if (sourceChannels === 0) return null;
+
+		const sourcePlanes: Float32Array[] = [];
+		for (let c = 0; c < sourceChannels; c++) sourcePlanes.push(audioBuffer.getChannelData(c));
+
+		// Concatenate the kept source sub-intervals (intra-trims removed), per channel.
+		const kept = keptSourceIntervals(segment);
+		const keptChannels: Float32Array[] = [];
+		for (let c = 0; c < sourceChannels; c++) {
+			const total = kept.reduce((acc, iv) => {
+				const s0 = Math.max(0, Math.round(iv.startSec * sampleRate));
+				const s1 = Math.min(sourcePlanes[c].length, Math.round(iv.endSec * sampleRate));
+				return acc + Math.max(0, s1 - s0);
+			}, 0);
+			const out = new Float32Array(total);
+			let w = 0;
+			for (const iv of kept) {
+				const s0 = Math.max(0, Math.round(iv.startSec * sampleRate));
+				const s1 = Math.min(sourcePlanes[c].length, Math.round(iv.endSec * sampleRate));
+				if (s1 > s0) {
+					out.set(sourcePlanes[c].subarray(s0, s1), w);
+					w += s1 - s0;
+				}
+			}
+			keptChannels.push(out);
+		}
+
+		if (sourceChannels === channels) return keptChannels;
+
+		// Normalize channel count (e.g. mono → stereo) with the shared downmix,
+		// which returns one planar Float32Array (ch0 samples, then ch1, …).
+		const frameCount = keptChannels[0]?.length ?? 0;
+		if (frameCount === 0) return [];
+		const downmixed = downmixPlanarChannelsForExport(keptChannels, channels);
+		const result: Float32Array[] = [];
+		for (let c = 0; c < channels; c++) {
+			result.push(downmixed.subarray(c * frameCount, (c + 1) * frameCount));
+		}
+		return result;
+	} catch (error) {
+		console.warn("[VideoExporter] segment audio decode failed:", error);
+		return null;
+	} finally {
+		if (file) releaseLocalSourceFile(file.name);
+	}
 }
 
 function isMp4Source(videoUrl: string, blob: Blob) {
@@ -719,9 +819,31 @@ export class VideoExporter {
 
 		await this.initializeEncoder(encoderPreference);
 
-		// Video-only for this increment (per-segment audio concat is next), so the
-		// muxer carries no audio track.
-		const muxer = new VideoMuxer(this.config, false);
+		// Audio pre-pass: decode each segment's audio to the common export layout
+		// up-front, so we know whether to declare an audio track on the muxer (mp4
+		// needs that at construction). The concatenation TIMING is applied later,
+		// once the video loop has produced each segment's real frame count.
+		const segmentAudioPcm: (Float32Array[] | null)[] = [];
+		let anySegmentAudio = false;
+		for (const segment of segments) {
+			if (this.cancelled) break;
+			const pcm = await decodeSegmentAudioPcm(
+				segment,
+				AUDIO_OUTPUT_SAMPLE_RATE,
+				AUDIO_OUTPUT_CHANNELS,
+			);
+			if (pcm && pcm.length > 0 && (pcm[0]?.length ?? 0) > 0) anySegmentAudio = true;
+			segmentAudioPcm.push(pcm);
+		}
+		const audioExportCodec = anySegmentAudio
+			? await AudioProcessor.selectSupportedExportCodec(
+					AUDIO_OUTPUT_SAMPLE_RATE,
+					AUDIO_OUTPUT_CHANNELS,
+				)
+			: null;
+		const hasAudio = Boolean(audioExportCodec);
+
+		const muxer = new VideoMuxer(this.config, hasAudio, audioExportCodec?.muxerCodec);
 		this.muxer = muxer;
 		await muxer.initialize();
 
@@ -745,11 +867,15 @@ export class VideoExporter {
 		);
 
 		let frameIndex = 0;
+		// Real per-segment video frame count — audio is sized from this so the
+		// concatenated audio stays locked to the (independently retimed) video.
+		const segmentFrameCounts: number[] = [];
 
 		for (const segment of segments) {
 			if (this.cancelled) break;
 			if (this.fatalEncoderError) throw this.fatalEncoderError;
 
+			const framesBeforeSegment = frameIndex;
 			const decoder = new StreamingVideoDecoder();
 			this.streamingDecoder = decoder;
 
@@ -893,6 +1019,7 @@ export class VideoExporter {
 				decoder.destroy();
 				if (this.streamingDecoder === decoder) this.streamingDecoder = null;
 			}
+			segmentFrameCounts.push(frameIndex - framesBeforeSegment);
 		}
 
 		if (this.cancelled) {
@@ -923,6 +1050,37 @@ export class VideoExporter {
 			estimatedTimeRemaining: 0,
 			phase: "finalizing",
 		});
+
+		// --- Audio: concatenate every segment's decoded PCM at the plan's offsets
+		// (sized from the REAL per-segment video frame counts so A/V stays locked),
+		// apply an equal-power fade at each join, then encode once and mux. ---
+		if (hasAudio && audioExportCodec && !this.cancelled) {
+			const audioPlan = buildAudioConcatPlan(
+				segments.map((s, i) => ({
+					clipId: s.clipId,
+					outputFrameCount: segmentFrameCounts[i] ?? 0,
+					hasAudio:
+						(segmentAudioPcm[i]?.length ?? 0) > 0 && (segmentAudioPcm[i]?.[0]?.length ?? 0) > 0,
+				})),
+				{
+					frameRate: this.config.frameRate,
+					sampleRate: AUDIO_OUTPUT_SAMPLE_RATE,
+					channels: AUDIO_OUTPUT_CHANNELS,
+				},
+			);
+			const assembled = assembleConcatenatedPcm(
+				segmentAudioPcm.map((pcm) => ({ pcm })),
+				audioPlan,
+				{ boundaryFadeSamples: Math.round(AUDIO_OUTPUT_SAMPLE_RATE * AUDIO_BOUNDARY_FADE_SEC) },
+			);
+			this.audioProcessor = new AudioProcessor();
+			await this.audioProcessor.encodePcmToMuxer(
+				assembled,
+				AUDIO_OUTPUT_SAMPLE_RATE,
+				muxer,
+				audioExportCodec,
+			);
+		}
 
 		const blob = await muxer.finalize();
 		return { success: true, blob, warnings: warnings.length > 0 ? warnings : undefined };

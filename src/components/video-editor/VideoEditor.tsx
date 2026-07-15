@@ -1,5 +1,5 @@
 import type { Span } from "dnd-timeline";
-import { FolderOpen, Languages, Save, Video } from "lucide-react";
+import { ChevronDown, FolderOpen, Languages, Save, Video } from "lucide-react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
@@ -68,6 +68,7 @@ import {
 	isPortraitAspectRatio,
 } from "@/utils/aspectRatioUtils";
 import { EditorEmptyState } from "./EditorEmptyState";
+import { EditorMenuBar } from "./EditorMenuBar";
 import { ExportDialog } from "./ExportDialog";
 import {
 	DEFAULT_CURSOR_SETTINGS,
@@ -198,6 +199,8 @@ export default function VideoEditor() {
 		undo,
 		redo,
 		resetState,
+		canUndo,
+		canRedo,
 	} = useEditorHistory(INITIAL_EDITOR_STATE);
 
 	const {
@@ -2731,17 +2734,33 @@ export default function VideoEditor() {
 				style={{ WebkitAppRegion: "drag" } as CSSProperties}
 			>
 				<div
-					className="flex-1 flex items-center gap-1"
+					className="flex-1 flex items-center gap-1.5"
 					style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
 				>
-					<div
-						className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-all duration-150 ${isMac ? "ml-14" : "ml-2"}`}
-					>
-						<Languages size={14} />
+					{/* Custom in-app menu bar. Replaces the native OS menu bar that is
+					    auto-hidden on Windows/Linux (see electron/windows.ts). */}
+					<EditorMenuBar
+						isMac={isMac}
+						t={rawT}
+						onNewProject={handleNewProject}
+						onLoadProject={handleLoadProject}
+						onSaveProject={handleSaveProject}
+						onSaveProjectAs={handleSaveProjectAs}
+						onQuit={() => window.electronAPI.quitApp()}
+						onUndo={undo}
+						onRedo={redo}
+						onReload={() => window.location.reload()}
+						canUndo={canUndo}
+						canRedo={canRedo}
+					/>
+
+					<div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.08] transition-all duration-150 ml-1">
+						<Languages size={15} />
 						<select
+							aria-label={ts("language.title")}
 							value={locale}
 							onChange={(e) => setLocale(e.target.value as Locale)}
-							className="bg-transparent text-[11px] font-medium outline-none cursor-pointer appearance-none pr-1"
+							className="bg-transparent text-[13px] font-semibold outline-none cursor-pointer appearance-none pr-1"
 							style={{ color: "inherit" }}
 						>
 							{availableLocales.map((loc) => (
@@ -2750,29 +2769,30 @@ export default function VideoEditor() {
 								</option>
 							))}
 						</select>
+						<ChevronDown size={12} className="opacity-70 ml-0.5 flex-shrink-0" />
 					</div>
 					<button
 						type="button"
 						onClick={() => setShowNewRecordingDialog(true)}
-						className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-all duration-150 text-[11px] font-medium"
+						className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.08] transition-all duration-150 text-[13px] font-medium"
 					>
-						<Video size={14} />
+						<Video size={15} />
 						{t("newRecording.title")}
 					</button>
 					<button
 						type="button"
 						onClick={handleLoadProject}
-						className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-all duration-150 text-[11px] font-medium"
+						className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.08] transition-all duration-150 text-[13px] font-medium"
 					>
-						<FolderOpen size={14} />
+						<FolderOpen size={15} />
 						{ts("project.load")}
 					</button>
 					<button
 						type="button"
 						onClick={handleSaveProject}
-						className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-all duration-150 text-[11px] font-medium"
+						className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.08] transition-all duration-150 text-[13px] font-medium"
 					>
-						<Save size={14} />
+						<Save size={15} />
 						{ts("project.save")}
 					</button>
 				</div>

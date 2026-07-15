@@ -1040,6 +1040,25 @@ function readNativeWindowsWebcamFormat(output: string) {
 	}
 }
 
+function readNativeWindowsEncoderSelection(output: string) {
+	const lines = output
+		.split(/\r?\n/)
+		.filter((line) => line.includes('"event":"encoder-selection"'));
+	const lastLine = lines.at(-1);
+	if (!lastLine) {
+		return null;
+	}
+
+	try {
+		return JSON.parse(lastLine) as {
+			video?: string;
+			preferSoftwareEncoder?: boolean;
+		};
+	} catch {
+		return null;
+	}
+}
+
 function tryParseNativeHelperEvent(line: string) {
 	try {
 		const parsed = JSON.parse(line);
@@ -1621,9 +1640,17 @@ export function registerIpcHandlers(
 					: null;
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
+				const envPreferSoftwareEncoder = (process.env.OPENSCREEN_WGC_PREFER_SOFTWARE_ENCODER ?? "")
+					.trim()
+					.toLowerCase();
+				const preferSoftwareEncoder =
+					request.preferSoftwareEncoder === true ||
+					envPreferSoftwareEncoder === "true" ||
+					envPreferSoftwareEncoder === "1";
 				const config = {
 					schemaVersion: 2,
 					recordingId,
+					preferSoftwareEncoder,
 					outputPath,
 					sourceType: request.source.type,
 					sourceId: request.source.sourceId,
@@ -1675,6 +1702,7 @@ export function registerIpcHandlers(
 					source: request.source,
 					audio: request.audio,
 					webcam: request.webcam,
+					encoder: { preferSoftwareEncoder },
 					cursor: { mode: cursorCaptureMode },
 					bounds,
 					sourceId: selectedSource?.id ?? null,
@@ -1720,10 +1748,12 @@ export function registerIpcHandlers(
 						? Math.max(0, captureStartedAtMs - cursorStartTimeMs)
 						: 0;
 				const webcamFormat = readNativeWindowsWebcamFormat(nativeWindowsCaptureOutput);
+				const encoderSelection = readNativeWindowsEncoderSelection(nativeWindowsCaptureOutput);
 				console.info("[native-wgc] capture started", {
 					captureStartedAtMs,
 					cursorOffsetMs: nativeWindowsCursorOffsetMs,
 					webcamFormat,
+					encoderSelection,
 				});
 
 				const source = selectedSource || { name: "Screen" };
@@ -1736,6 +1766,7 @@ export function registerIpcHandlers(
 					recordingId,
 					path: outputPath,
 					helperPath,
+					videoEncoderSelection: encoderSelection?.video ?? null,
 				};
 			} catch (error) {
 				console.error("Failed to start native Windows recording:", error);
@@ -2575,6 +2606,83 @@ export function registerIpcHandlers(
 			return {
 				success: false,
 				message: "Failed to read binary file",
+				error: String(error),
+			};
+		}
+	});
+
+	// Stat an approved video file. Used to decide whether a recording is small
+	// enough to slurp via read-binary-file, or large enough that it must be
+	// streamed in chunks (Node's fs.readFile caps a single read at 2 GiB, so any
+	// recording above that can never be loaded whole — see read-file-chunk).
+	ipcMain.handle("get-readable-file-info", async (_, filePath: string) => {
+		try {
+			const normalizedPath = await approveReadableVideoPath(filePath);
+			if (!normalizedPath) {
+				return {
+					success: false,
+					message: "File path is not approved or is not a supported video file",
+				};
+			}
+
+			const stat = await fs.stat(normalizedPath);
+			return {
+				success: true,
+				size: stat.size,
+				mtimeMs: stat.mtimeMs,
+				path: normalizedPath,
+			};
+		} catch (error) {
+			console.error("Failed to stat file:", error);
+			return {
+				success: false,
+				message: "Failed to stat file",
+				error: String(error),
+			};
+		}
+	});
+
+	// Cap renderer-requested chunk sizes so a buggy or compromised renderer
+	// cannot make the main process allocate an arbitrarily large buffer.
+	const MAX_IPC_CHUNK_BYTES = 64 * 1024 * 1024;
+
+	// Read a byte range [offset, offset+length) from an approved video file.
+	// Lets the renderer stream a >2 GiB recording into OPFS one chunk at a time
+	// instead of materialising the whole file in memory, which fs.readFile cannot
+	// do (2 GiB cap) and a 16 GB machine cannot hold for multi-GB recordings.
+	ipcMain.handle("read-file-chunk", async (_, filePath: string, offset: number, length: number) => {
+		try {
+			const normalizedPath = await approveReadableVideoPath(filePath);
+			if (!normalizedPath) {
+				return {
+					success: false,
+					message: "File path is not approved or is not a supported video file",
+				};
+			}
+			if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(length) || length <= 0) {
+				return { success: false, message: "Invalid chunk range" };
+			}
+			if (length > MAX_IPC_CHUNK_BYTES) {
+				return { success: false, message: "Requested chunk size exceeds limit" };
+			}
+
+			const handle = await fs.open(normalizedPath, "r");
+			try {
+				const buffer = Buffer.allocUnsafe(length);
+				const { bytesRead } = await handle.read(buffer, 0, length, offset);
+				return {
+					success: true,
+					data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + bytesRead),
+					bytesRead,
+				};
+			} finally {
+				await handle.close();
+			}
+		} catch (error) {
+			console.error("Failed to read file chunk:", error);
+			return {
+				success: false,
+				message: "Failed to read file chunk",
 				error: String(error),
 			};
 		}

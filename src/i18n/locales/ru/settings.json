@@ -31,7 +31,8 @@
 		"selectRegion": "Выберите область скорости для настройки",
 		"deleteRegion": "Удалить область скорости",
 		"customPlaybackSpeed": "Пользовательская скорость воспроизведения",
-		"maxSpeedError": "Скорость не может быть выше 16×"
+		"maxSpeedError": "Скорость не может быть выше {{max}}×",
+		"previewFrameSteppingHint": "Выше {{native}}× предпросмотр идёт покадрово и без звука. На экспорт это не влияет."
 	},
 	"trim": {
 		"deleteRegion": "Удалить область обрезки"
@@ -65,10 +66,12 @@
 		"image": "Изображение",
 		"color": "Цвет",
 		"gradient": "Градиент",
+		"custom": "Свой",
 		"uploadCustom": "Загрузить свой",
 		"gradientLabel": "Градиент {{index}}",
 		"colorWheel": "Цветовой круг",
-		"colorPalette": "Палитра цветов"
+		"colorPalette": "Палитра цветов",
+		"presets": "Пресеты"
 	},
 	"crop": {
 		"title": "Обрезка",

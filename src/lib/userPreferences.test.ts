@@ -103,4 +103,34 @@ describe("user preferences", () => {
 
 		expect(loadUserPreferences().trayLayout).toBe("horizontal");
 	});
+
+	it("persists the software encoder preference", () => {
+		saveUserPreferences({ preferSoftwareEncoder: true });
+
+		expect(loadUserPreferences().preferSoftwareEncoder).toBe(true);
+	});
+
+	it("falls back to the default software encoder preference for invalid stored values", () => {
+		localStorage.setItem(
+			"openscreen_user_preferences",
+			JSON.stringify({ preferSoftwareEncoder: "yes" }),
+		);
+
+		expect(loadUserPreferences().preferSoftwareEncoder).toBe(false);
+	});
+
+	it("persists the software encoder fallback notice suppression", () => {
+		saveUserPreferences({ hideSoftwareEncoderFallbackNotice: true });
+
+		expect(loadUserPreferences().hideSoftwareEncoderFallbackNotice).toBe(true);
+	});
+
+	it("falls back to showing the software encoder fallback notice for invalid stored values", () => {
+		localStorage.setItem(
+			"openscreen_user_preferences",
+			JSON.stringify({ hideSoftwareEncoderFallbackNotice: "yes" }),
+		);
+
+		expect(loadUserPreferences().hideSoftwareEncoderFallbackNotice).toBe(false);
+	});
 });

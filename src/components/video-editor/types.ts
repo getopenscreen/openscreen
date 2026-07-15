@@ -368,8 +368,11 @@ export const DEFAULT_CROP_REGION: CropRegion = {
 export type PlaybackSpeed = number;
 
 export const MIN_PLAYBACK_SPEED = 0.1;
-// Above 16x the decoder can't keep up and the playhead stalls during preview.
-export const MAX_PLAYBACK_SPEED = 16;
+export const MAX_PLAYBACK_SPEED = 100;
+// Chromium hard-caps HTMLMediaElement.playbackRate at 16 (setting more throws
+// NotSupportedError). At or below this, preview plays natively; above it, preview
+// frame-steps by seeking and audio export uses an offline pitch-preserved stretch.
+export const MAX_NATIVE_PLAYBACK_RATE = 16;
 
 export function clampPlaybackSpeed(speed: number): PlaybackSpeed {
 	return Math.round(Math.min(MAX_PLAYBACK_SPEED, Math.max(MIN_PLAYBACK_SPEED, speed)) * 100) / 100;

@@ -34,6 +34,7 @@ const recorderState = vi.hoisted(() => ({
 	value: {
 		recording: false,
 		paused: false,
+		saving: false,
 		elapsedSeconds: 0,
 		toggleRecording: vi.fn(),
 		togglePaused: vi.fn(),
@@ -54,6 +55,8 @@ const recorderState = vi.hoisted(() => ({
 		setSystemAudioEnabled: vi.fn(),
 		cursorCaptureMode: "editable-overlay",
 		setCursorCaptureMode: vi.fn(),
+		softwareEncoderFallbackNoticeVisible: false,
+		dismissSoftwareEncoderFallbackNotice: vi.fn(),
 	},
 }));
 
@@ -144,6 +147,11 @@ vi.mock("@/contexts/I18nContext", () => ({
 				"We detected English as your system language. Do you want to switch OpenScreen to English?",
 			"systemLanguagePrompt.keepDefault": "Keep current language",
 			"systemLanguagePrompt.switch": "Switch to English",
+			"softwareEncoderFallback.title": "Switched to software encoding",
+			"softwareEncoderFallback.description":
+				"The default GPU encoder failed to start, so OpenScreen fell back to software H.264 encoding. Recording should continue as normal, but CPU usage may be higher.",
+			"softwareEncoderFallback.dismiss": "Got it",
+			"softwareEncoderFallback.dontShowAgain": "Don't show again",
 		};
 		return translations[key] ?? key;
 	},
@@ -222,6 +230,8 @@ function emitSourceSelectorClosed() {
 function resetLaunchMocks() {
 	vi.stubGlobal("ResizeObserver", StubResizeObserver);
 	recorderState.value.toggleRecording.mockClear();
+	recorderState.value.softwareEncoderFallbackNoticeVisible = false;
+	recorderState.value.dismissSoftwareEncoderFallbackNotice.mockClear();
 	selectedSourceChangedListeners = [];
 	sourceSelectorClosedListeners = [];
 	i18nState.value.systemLocaleSuggestion = null;
@@ -447,5 +457,54 @@ describe("LaunchWindow system language prompt", () => {
 		// And must be less than the full viewport — guards against regressions that always
 		// grow to the full viewport because of a missed bottom anchor.
 		expect(height).toBeLessThan(viewportHeight + 24);
+	});
+});
+
+describe("LaunchWindow software encoder fallback notice", () => {
+	beforeEach(() => {
+		platformState.value = "darwin";
+		resetLaunchMocks();
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.unstubAllGlobals();
+	});
+
+	it("stays hidden while the recorder reports no fallback", () => {
+		renderLaunchWindow();
+
+		expect(screen.queryByText("Switched to software encoding")).not.toBeInTheDocument();
+	});
+
+	it("shows the notice when the recorder reports a software fallback", async () => {
+		recorderState.value.softwareEncoderFallbackNoticeVisible = true;
+
+		renderLaunchWindow();
+
+		expect(await screen.findByText("Switched to software encoding")).toBeInTheDocument();
+		expect(screen.getByText(/fell back to software H\.264 encoding/)).toBeInTheDocument();
+	});
+
+	it("dismisses the notice without persisting when Got it is clicked", async () => {
+		recorderState.value.softwareEncoderFallbackNoticeVisible = true;
+
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByRole("button", { name: "Got it" }));
+
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledTimes(1);
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledWith();
+	});
+
+	it("persists the suppression when Don't show again is clicked", async () => {
+		recorderState.value.softwareEncoderFallbackNoticeVisible = true;
+
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByRole("button", { name: "Don't show again" }));
+
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledTimes(1);
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledWith(true);
 	});
 });

@@ -48,7 +48,8 @@
 		"defaultSourceName": "Schermo"
 	},
 	"recording": {
-		"selectSource": "Seleziona una sorgente da registrare"
+		"selectSource": "Seleziona una sorgente da registrare",
+		"saving": "Salvataggio..."
 	},
 	"language": "Lingua",
 	"systemLanguagePrompt": {
@@ -56,5 +57,11 @@
 		"description": "Abbiamo rilevato {{language}} come lingua del sistema. Vuoi passare OpenScreen a {{language}}?",
 		"switch": "Passa a {{language}}",
 		"keepDefault": "Mantieni la lingua corrente"
+	},
+	"softwareEncoderFallback": {
+		"title": "Passaggio alla codifica software",
+		"description": "L'encoder GPU predefinito non si è avviato, quindi OpenScreen è passato alla codifica H.264 software. La registrazione dovrebbe continuare normalmente, ma l'uso della CPU potrebbe essere più alto.",
+		"dismiss": "Ho capito",
+		"dontShowAgain": "Non mostrare più"
 	}
 }

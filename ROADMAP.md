@@ -39,6 +39,7 @@ Pulled from real user bug reports on getopenscreen/openscreen. This is the queue
 - [ ] **Fix:** recover preview from WebGL context loss on Linux / Wayland — [#19](../../issues/19).
 - [ ] **Feature:** software H.264 fallback when no GPU encoder MFT is available — [#18](../../issues/18). Critical for VMs, broken-driver machines, and headless environments.
 - [ ] **Feature:** copy / paste attributes & effects in the timeline — [#24](../../issues/24). Right-click menu + standard Ctrl/Cmd+C / Ctrl/Cmd+V shortcuts.
+- [ ] **Feature:** restore blur regions (rectangle / oval / freehand, mosaic + CSS) — [#76](../../issues/76). Upstream v1.5.0 dropped the feature in the final release before archiving. The renderer pipeline (`BlurSettingsPanel`, `blurEffects`, `annotationRenderer`) is already present in this fork; the export guard in `src/lib/exporter/videoExporter.ts:151-152` (refuses export while `showBlur` or `motionBlurAmount` is set) is what needs to be unblocked, plus a regression test in the timeline.
 
 ## 📚 Site & documentation
 - [ ] **Feature:** Docusaurus site — landing + docs, deployed to GitHub Pages via CI.
@@ -60,3 +61,4 @@ Anything not on this list yet? Open an issue and tag it `roadmap` — we'll tria
 ## Changelog
 - **2026-06-24** — initial draft. Stability items pulled from open issues / PRs on getopenscreen/openscreen. AI section presented as opt-in / off by default. Whisper entry updated to reflect existing caption feature.
 - **2026-06-25** — added "Site & documentation" tier: Docusaurus + GitHub Pages. Cleaned smoke-test noise from the changelog (internal CI sync validation, not user-facing).
+- **2026-07-06** — added blur regions to the stability & quality tier. Confirmed upstream deprecated the feature in v1.5.0 without an explicit reason; the renderer code carried over to the fork, so the work is unblocking the export guard + adding coverage. Tracked via #76.

@@ -31,7 +31,8 @@
 		"selectRegion": "Selecciona una región de velocidad para ajustar",
 		"deleteRegion": "Eliminar región de velocidad",
 		"customPlaybackSpeed": "Velocidad personalizada",
-		"maxSpeedError": "La velocidad no puede superar 16×"
+		"maxSpeedError": "La velocidad no puede superar {{max}}×",
+		"previewFrameSteppingHint": "Por encima de {{native}}×, la vista previa avanza fotograma a fotograma y sin sonido. La exportación no se ve afectada."
 	},
 	"trim": {
 		"deleteRegion": "Eliminar región de recorte"
@@ -65,10 +66,12 @@
 		"image": "Imagen",
 		"color": "Color",
 		"gradient": "Degradado",
+		"custom": "Personalizado",
 		"uploadCustom": "Subir personalizado",
 		"gradientLabel": "Degradado {{index}}",
 		"colorWheel": "Rueda de colores",
-		"colorPalette": "Paleta de colores"
+		"colorPalette": "Paleta de colores",
+		"presets": "Ajustes preestablecidos"
 	},
 	"crop": {
 		"title": "Recortar",

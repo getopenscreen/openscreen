@@ -57,5 +57,11 @@
 		"description": "システム言語として{{language}}が検出されました。OpenScreenを{{language}}に切り替えますか？",
 		"switch": "{{language}}に切り替え",
 		"keepDefault": "現在の言語を保持"
+	},
+	"softwareEncoderFallback": {
+		"title": "ソフトウェアエンコードに切り替えました",
+		"description": "既定のGPUエンコーダーを開始できなかったため、OpenScreenはソフトウェアH.264エンコードに切り替えました。録画はそのまま続行されますが、CPU使用率が高くなる場合があります。",
+		"dismiss": "OK",
+		"dontShowAgain": "今後表示しない"
 	}
 }

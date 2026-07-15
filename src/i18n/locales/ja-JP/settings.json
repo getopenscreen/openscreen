@@ -66,10 +66,12 @@
 		"image": "画像",
 		"color": "色",
 		"gradient": "グラデーション",
+		"custom": "カスタム",
 		"uploadCustom": "カスタム画像を読み込む",
 		"gradientLabel": "グラデーション {{index}}",
 		"colorWheel": "カラーホイール",
-		"colorPalette": "カラーパレット"
+		"colorPalette": "カラーパレット",
+		"presets": "プリセット"
 	},
 	"crop": {
 		"title": "クロップ",

@@ -57,5 +57,11 @@
 		"description": "我们检测到你的系统语言是{{language}}。是否将 OpenScreen 切换为{{language}}？",
 		"switch": "切换到{{language}}",
 		"keepDefault": "保持当前语言"
+	},
+	"softwareEncoderFallback": {
+		"title": "已切换到软件编码",
+		"description": "默认 GPU 编码器启动失败，OpenScreen 已改用软件 H.264 编码。录制会正常继续，但 CPU 占用可能更高。",
+		"dismiss": "知道了",
+		"dontShowAgain": "不再提示"
 	}
 }

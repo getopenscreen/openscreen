@@ -67,10 +67,12 @@
 		"image": "Image",
 		"color": "Color",
 		"gradient": "Gradient",
+		"custom": "Custom",
 		"uploadCustom": "Upload Custom",
 		"gradientLabel": "Gradient {{index}}",
 		"colorWheel": "Color Wheel",
-		"colorPalette": "Color Palette"
+		"colorPalette": "Color Palette",
+		"presets": "Presets"
 	},
 	"crop": {
 		"title": "Crop",

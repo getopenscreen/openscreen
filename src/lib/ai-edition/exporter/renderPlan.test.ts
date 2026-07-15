@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AnnotationRegion, SpeedRegion, ZoomRegion } from "@/components/video-editor/types";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
+import type { CursorRecordingData, CursorRecordingSample } from "@/native/contracts";
 import type { AxcutAsset, AxcutClip, AxcutTrimRange } from "../schema";
 import { buildRenderPlan, isIdentityFastPathEligible } from "./renderPlan";
 
@@ -71,8 +72,18 @@ function speed(p: Partial<SpeedRegion> & Pick<SpeedRegion, "id">): SpeedRegion {
 	return { startMs: 0, endMs: 1000, speed: 1, ...p };
 }
 
-// Minimal valid document for the builder — the builder only reads assets,
-// timeline.{clips, trimRanges}, zoomRanges, annotations, legacyEditor.
+function cursorSample(
+	p: Partial<CursorRecordingSample> & Pick<CursorRecordingSample, "timeMs">,
+): CursorRecordingSample {
+	return { cx: 0.5, cy: 0.5, ...p };
+}
+
+function cursorRecording(p: Partial<CursorRecordingData> = {}): CursorRecordingData {
+	return { version: 1, provider: "native", samples: [], assets: [], ...p };
+}
+
+// Minimal valid document for the builder — the builder only reads project,
+// assets, timeline.{clips, trimRanges}, zoomRanges, annotations, legacyEditor.
 //
 // ponytail: `zoomRegions` (with `s`) is the spec-facing key on RenderPlan and
 // what tests pass in; `zoomRanges` (without) is the schema field on the
@@ -85,9 +96,11 @@ function doc(
 		zoomRegions: ZoomRegion[];
 		annotations: AnnotationRegion[];
 		legacyEditor: Record<string, unknown> | null;
+		primaryAssetId: string;
 	}> = {},
 ) {
 	return {
+		project: { primaryAssetId: p.primaryAssetId },
 		assets: p.assets ?? [],
 		timeline: {
 			clips: p.clips ?? [],
@@ -126,7 +139,9 @@ describe("buildRenderPlan — segments", () => {
 			sourceWidth: 1920,
 			sourceHeight: 1080,
 			camera: null,
+			cursorSamples: [],
 		});
+		expect(plan.cursor).toBeNull();
 		// Output = source for a 1920x1080 ref at 16:9 source quality → same dims.
 		expect(plan.output.width).toBe(1920);
 		expect(plan.output.height).toBe(1080);
@@ -552,6 +567,154 @@ describe("buildRenderPlan — effects pass-through", () => {
 	});
 });
 
+// --- buildRenderPlan: cursor (per-segment, decision D1) ----------------------
+
+describe("buildRenderPlan — cursor", () => {
+	const twoAssets = [
+		asset({
+			id: "a1",
+			originalPath: "/tmp/a1.mp4",
+			durationSec: 30,
+			video: { codec: "h264", width: 1920, height: 1080, fps: 30 },
+		}),
+		asset({
+			id: "a2",
+			originalPath: "/tmp/a2.mp4",
+			durationSec: 30,
+			video: { codec: "h264", width: 1920, height: 1080, fps: 30 },
+		}),
+	];
+	const twoClips = [
+		clip({
+			id: "c1",
+			assetId: "a1",
+			sourceStartSec: 0,
+			sourceEndSec: 5,
+			timelineStartSec: 0,
+			timelineEndSec: 5,
+		}),
+		clip({
+			id: "c2",
+			assetId: "a2",
+			sourceStartSec: 5,
+			sourceEndSec: 10,
+			timelineStartSec: 5,
+			timelineEndSec: 10,
+		}),
+	];
+
+	it("partitions samples per segment by assetId — each segment gets only its asset's samples", () => {
+		const recordingData = cursorRecording({
+			samples: [
+				cursorSample({ timeMs: 100, assetId: "a1" }),
+				cursorSample({ timeMs: 200, assetId: "a2" }),
+				cursorSample({ timeMs: 300, assetId: "a1" }),
+			],
+		});
+		const plan = buildRenderPlan(doc({ assets: twoAssets, clips: twoClips }), {
+			quality: "source",
+			cursor: { recordingData, scale: 1 },
+		});
+		expect(plan.segments[0].cursorSamples.map((s) => s.timeMs)).toEqual([100, 300]);
+		expect(plan.segments[1].cursorSamples.map((s) => s.timeMs)).toEqual([200]);
+	});
+
+	it("attributes untagged samples (no assetId) to the primary asset", () => {
+		const recordingData = cursorRecording({
+			samples: [cursorSample({ timeMs: 100 }), cursorSample({ timeMs: 200, assetId: "a2" })],
+		});
+		const plan = buildRenderPlan(
+			doc({ assets: twoAssets, clips: twoClips, primaryAssetId: "a1" }),
+			{ quality: "source", cursor: { recordingData, scale: 1 } },
+		);
+		expect(plan.segments[0].cursorSamples.map((s) => s.timeMs)).toEqual([100]);
+		expect(plan.segments[1].cursorSamples.map((s) => s.timeMs)).toEqual([200]);
+	});
+
+	it("falls back to the first asset for untagged samples when primaryAssetId is unset", () => {
+		const recordingData = cursorRecording({ samples: [cursorSample({ timeMs: 100 })] });
+		const plan = buildRenderPlan(doc({ assets: twoAssets, clips: twoClips }), {
+			quality: "source",
+			cursor: { recordingData, scale: 1 },
+		});
+		expect(plan.segments[0].cursorSamples.map((s) => s.timeMs)).toEqual([100]);
+		expect(plan.segments[1].cursorSamples).toEqual([]);
+	});
+
+	it("gives a segment whose asset has no cursor data an empty samples array (no overlay)", () => {
+		const recordingData = cursorRecording({
+			samples: [cursorSample({ timeMs: 100, assetId: "a1" })],
+		});
+		const plan = buildRenderPlan(doc({ assets: twoAssets, clips: twoClips }), {
+			quality: "source",
+			cursor: { recordingData, scale: 1 },
+		});
+		expect(plan.segments[1].cursorSamples).toEqual([]);
+	});
+
+	it("builds plan.cursor (shared atlas + style) when scale > 0 and a recording is present", () => {
+		const spriteAsset = {
+			id: "cur1",
+			platform: "windows",
+			imageDataUrl: "data:,",
+			width: 16,
+			height: 16,
+			hotspotX: 0,
+			hotspotY: 0,
+		} as CursorRecordingData["assets"][number];
+		const recordingData = cursorRecording({
+			version: 2,
+			provider: "native",
+			assets: [spriteAsset],
+			samples: [cursorSample({ timeMs: 0, assetId: "a1" })],
+		});
+		const plan = buildRenderPlan(doc({ assets: twoAssets, clips: twoClips }), {
+			quality: "source",
+			cursor: {
+				recordingData,
+				scale: 1.5,
+				smoothing: 0.3,
+				motionBlur: 0.2,
+				clickBounce: 0.5,
+				clipToBounds: true,
+				theme: "dark",
+			},
+		});
+		expect(plan.cursor).toEqual({
+			version: 2,
+			provider: "native",
+			assets: [spriteAsset],
+			scale: 1.5,
+			smoothing: 0.3,
+			motionBlur: 0.2,
+			clickBounce: 0.5,
+			clipToBounds: true,
+			theme: "dark",
+		});
+	});
+
+	it("leaves plan.cursor null and carries no samples when scale is 0 (cursor disabled)", () => {
+		const recordingData = cursorRecording({
+			samples: [cursorSample({ timeMs: 0, assetId: "a1" })],
+		});
+		const plan = buildRenderPlan(doc({ assets: twoAssets, clips: twoClips }), {
+			quality: "source",
+			cursor: { recordingData, scale: 0 },
+		});
+		expect(plan.cursor).toBeNull();
+		expect(plan.segments.every((s) => s.cursorSamples.length === 0)).toBe(true);
+	});
+
+	it("leaves plan.cursor null when no recording is supplied", () => {
+		const plan = buildRenderPlan(doc({ assets: twoAssets, clips: twoClips }), {
+			quality: "source",
+			cursor: { scale: 1 },
+		});
+		expect(plan.cursor).toBeNull();
+		expect(plan.segments.every((s) => s.cursorSamples.length === 0)).toBe(true);
+	});
+});
+
 // --- isIdentityFastPathEligible -----------------------------------------------
 
 describe("isIdentityFastPathEligible", () => {
@@ -694,5 +857,32 @@ describe("isIdentityFastPathEligible", () => {
 		// quality: "good" → output short-side 1080 at 16:9 → 1920x1080, smaller than 3840x2160.
 		const plan = buildRenderPlan(doc({ assets, clips }), { quality: "good" });
 		expect(isIdentityFastPathEligible(plan)).toBe(false);
+	});
+
+	it("returns false when an active cursor overlay covers the single segment", () => {
+		const assets = [singleUntouchedAsset()];
+		const clips = [singleClipOn("a")];
+		const recordingData = cursorRecording({
+			samples: [cursorSample({ timeMs: 0, assetId: "a" })],
+		});
+		const plan = buildRenderPlan(doc({ assets, clips }), {
+			quality: "source",
+			cursor: { recordingData, scale: 1 },
+		});
+		expect(plan.segments[0].cursorSamples.length).toBeGreaterThan(0);
+		expect(isIdentityFastPathEligible(plan)).toBe(false);
+	});
+
+	it("stays eligible when a cursor recording exists but cursor is disabled (scale 0)", () => {
+		const assets = [singleUntouchedAsset()];
+		const clips = [singleClipOn("a")];
+		const recordingData = cursorRecording({
+			samples: [cursorSample({ timeMs: 0, assetId: "a" })],
+		});
+		const plan = buildRenderPlan(doc({ assets, clips }), {
+			quality: "source",
+			cursor: { recordingData, scale: 0 },
+		});
+		expect(isIdentityFastPathEligible(plan)).toBe(true);
 	});
 });

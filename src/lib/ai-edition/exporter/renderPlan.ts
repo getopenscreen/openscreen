@@ -22,6 +22,12 @@ import type {
 } from "@/components/video-editor/types";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import type { ExportQuality } from "@/lib/exporter/types";
+import type {
+	CursorProviderKind,
+	CursorRecordingData,
+	CursorRecordingSample,
+	NativeCursorAsset,
+} from "@/native/contracts";
 import {
 	type AspectRatio,
 	getAspectRatioValue,
@@ -69,6 +75,15 @@ export interface RenderSegment {
 	// exporter does — no per-clip stitching beyond what `cameraTrack.offsetMs`
 	// already encodes.
 	camera: { videoUrl: string; offsetMs: number } | null;
+	// Native-cursor telemetry for THIS segment's asset only (decision D1 —
+	// per-segment cursor). `CursorRecordingSample.assetId` already tags each
+	// sample with its recording, so the plan partitions the shared recording by
+	// `assetId`; samples with no tag fall back to the primary asset (older
+	// single-asset recordings). `timeMs` stays in the asset's own source time —
+	// the renderer matches it against each frame's source time inside this
+	// segment's window. Empty when the asset has no cursor data (§6.4 / risk R3):
+	// that segment renders with no cursor overlay, which is correct, not a gap.
+	cursorSamples: CursorRecordingSample[];
 }
 
 export interface RenderPlanOutput {
@@ -88,6 +103,23 @@ export interface RenderPlanAppearance {
 	motionBlurAmount: number;
 }
 
+// Plan-level cursor: the SHARED parts of a native-cursor render — the sprite
+// atlas (`assets`) and the style knobs — held once for the whole export. The
+// time-varying samples live per segment on `RenderSegment.cursorSamples`
+// (partitioned by asset). `null` when the export has no cursor recording, or
+// cursor rendering is disabled (`scale <= 0`).
+export interface RenderPlanCursor {
+	version: number;
+	provider: CursorProviderKind;
+	assets: NativeCursorAsset[];
+	scale: number;
+	smoothing?: number;
+	motionBlur?: number;
+	clickBounce?: number;
+	clipToBounds?: boolean;
+	theme?: string;
+}
+
 export interface RenderPlan {
 	output: RenderPlanOutput;
 	aspectRatioValue: number;
@@ -102,6 +134,19 @@ export interface RenderPlan {
 	annotationRegions: AnnotationRegion[];
 	speedRegions: SpeedRegion[];
 	appearance: RenderPlanAppearance;
+	// Shared cursor style + sprite atlas (per-segment samples live on each
+	// segment). `null` when there is no recording or cursor is disabled.
+	cursor: RenderPlanCursor | null;
+}
+
+export interface BuildRenderPlanCursorOptions {
+	recordingData?: CursorRecordingData | null;
+	scale?: number;
+	smoothing?: number;
+	motionBlur?: number;
+	clickBounce?: number;
+	clipToBounds?: boolean;
+	theme?: string;
 }
 
 export interface BuildRenderPlanOptions {
@@ -110,6 +155,9 @@ export interface BuildRenderPlanOptions {
 	codec?: ExportVideoCodec;
 	fallbackSourceWidth?: number;
 	fallbackSourceHeight?: number;
+	// Cursor recording + style, supplied by the caller (ExportDialog) — the
+	// document/asset schema does not persist cursor telemetry. Omit for no cursor.
+	cursor?: BuildRenderPlanCursorOptions;
 }
 
 function extractLegacyField<T>(
@@ -147,6 +195,19 @@ function buildIntraTrims(
 	return normalizeIntervals(sourceEndSec, intersected);
 }
 
+// Native-cursor samples belonging to one asset (decision D1 — per-segment
+// cursor). A sample with no `assetId` predates multi-asset cursor tagging, so it
+// belongs to the primary asset — attributing it there keeps single-asset
+// projects rendering their cursor exactly as before.
+function cursorSamplesForAsset(
+	recordingData: CursorRecordingData | null | undefined,
+	assetId: string,
+	primaryAssetId: string | undefined,
+): CursorRecordingSample[] {
+	if (!recordingData) return [];
+	return recordingData.samples.filter((s) => (s.assetId ?? primaryAssetId) === assetId);
+}
+
 function pickReferenceDimensions(
 	segments: RenderSegment[],
 	fallbackWidth: number,
@@ -176,6 +237,14 @@ export function buildRenderPlan(
 	const codec: ExportVideoCodec = options.codec ?? "h264";
 	const frameRate = options.frameRate ?? DEFAULT_FRAME_RATE;
 
+	// Primary asset id anchors untagged cursor samples (see cursorSamplesForAsset).
+	const primaryAssetId = document.project.primaryAssetId ?? document.assets[0]?.id;
+	// Cursor is only rendered when scaled up (matches the existing exporter's
+	// `hasNativeCursorOverlay = cursorScale > 0`). When disabled, carry no samples
+	// and leave `plan.cursor` null so the identity fast path stays available.
+	const cursorScale = options.cursor?.scale ?? 0;
+	const cursorRecording = cursorScale > 0 ? (options.cursor?.recordingData ?? null) : null;
+
 	// --- Segments ---
 	const sortedClips = sortClipsByTimelineStart(document.timeline.clips);
 	const segments: RenderSegment[] = [];
@@ -204,6 +273,7 @@ export function buildRenderPlan(
 			sourceWidth,
 			sourceHeight,
 			camera,
+			cursorSamples: cursorSamplesForAsset(cursorRecording, asset.id, primaryAssetId),
 		});
 	}
 
@@ -237,6 +307,21 @@ export function buildRenderPlan(
 		motionBlurAmount: extractLegacyField(legacy, "motionBlurAmount", 0),
 	};
 
+	// --- Cursor (shared atlas + style; per-segment samples set above) ---
+	const cursor: RenderPlanCursor | null = cursorRecording
+		? {
+				version: cursorRecording.version,
+				provider: cursorRecording.provider,
+				assets: cursorRecording.assets,
+				scale: cursorScale,
+				smoothing: options.cursor?.smoothing,
+				motionBlur: options.cursor?.motionBlur,
+				clickBounce: options.cursor?.clickBounce,
+				clipToBounds: options.cursor?.clipToBounds,
+				theme: options.cursor?.theme,
+			}
+		: null;
+
 	return {
 		output: {
 			width: settings.width,
@@ -251,6 +336,7 @@ export function buildRenderPlan(
 		annotationRegions,
 		speedRegions,
 		appearance,
+		cursor,
 	};
 }
 
@@ -269,6 +355,8 @@ export function isIdentityFastPathEligible(plan: RenderPlan): boolean {
 	if (!isIdentityCrop(segment.cropRegion)) return false;
 	if (plan.zoomRegions.length !== 0) return false;
 	if (plan.annotationRegions.length !== 0) return false;
+	// An active cursor overlay composites pixels → no stream-copy.
+	if (plan.cursor && segment.cursorSamples.length > 0) return false;
 
 	for (const region of plan.speedRegions) {
 		const duration = region.endMs - region.startMs;

@@ -275,7 +275,7 @@ describe("computeCameraFullscreenTargetRect", () => {
 		const margin = Math.round(
 			Math.min(canvasSize.width, canvasSize.height) * CAMERA_FULLSCREEN_MARGIN_FRACTION,
 		);
-		// Square aspect source so width is the constrained dimension in a landscape canvas.
+		// Square aspect source so height is the constrained dimension in a landscape canvas.
 		const rect = computeCameraFullscreenTargetRect(canvasSize, { width: 1080, height: 1080 });
 
 		expect(rect.height).toBeCloseTo(canvasSize.height - margin * 2, 0);
@@ -290,7 +290,7 @@ describe("computeCameraFullscreenTargetRect", () => {
 		expect(rect.width / rect.height).toBeCloseTo(source.width / source.height, 3);
 	});
 
-	it("fits a portrait source by constraining width, centering vertically and horizontally", () => {
+	it("fits a portrait source by constraining height, centering vertically and horizontally", () => {
 		const canvasSize = { width: 1920, height: 1080 };
 		const source = { width: 9, height: 16 }; // portrait webcam frame
 		const rect = computeCameraFullscreenTargetRect(canvasSize, source);
@@ -302,7 +302,7 @@ describe("computeCameraFullscreenTargetRect", () => {
 		expect(rect.x).toBeCloseTo(canvasSize.width - rect.x - rect.width, 0);
 	});
 
-	it("fits a landscape source by constraining height when it would overflow", () => {
+	it("fits a landscape source by constraining width when it would overflow", () => {
 		const canvasSize = { width: 1080, height: 1920 }; // portrait canvas
 		const source = { width: 16, height: 9 }; // landscape webcam frame
 		const rect = computeCameraFullscreenTargetRect(canvasSize, source);

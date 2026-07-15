@@ -589,11 +589,12 @@ export class VideoExporter {
 		this.fatalEncoderError = null;
 
 		try {
-			// v2 multi-asset path: a plan with >1 segment can't be rendered by the
-			// single-stream pipeline below (it would drop every non-primary clip —
-			// the P1 bug). Single-segment exports stay on the proven legacy path.
+			// v2 path: ALL AI-edition exports (single- or multi-clip) render through
+			// the segment loop — one unified path, no mono-asset special-casing. The
+			// single-stream pipeline below survives only for legacy callers that pass
+			// no renderPlan (the out-of-scope components/video-editor exporter).
 			const segmentPlan = this.config.renderPlan;
-			if (segmentPlan && segmentPlan.segments.length > 1) {
+			if (segmentPlan && segmentPlan.segments.length > 0) {
 				return await this.runSegmentLoop(encoderPreference, segmentPlan);
 			}
 

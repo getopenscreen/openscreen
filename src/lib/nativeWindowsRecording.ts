@@ -2,6 +2,7 @@ export type NativeWindowsSourceType = "display" | "window";
 
 export type NativeWindowsRecordingRequest = {
 	recordingId?: number;
+	preferSoftwareEncoder?: boolean;
 	source: {
 		type: NativeWindowsSourceType;
 		sourceId: string;
@@ -44,6 +45,8 @@ export type NativeWindowsRecordingStartResult = {
 	path?: string;
 	helperPath?: string;
 	error?: string;
+	/** Helper-reported encoder selection: "default", "software-preferred", or "software-fallback". */
+	videoEncoderSelection?: string | null;
 };
 
 export function parseWindowHandleFromSourceId(sourceId?: string | null) {

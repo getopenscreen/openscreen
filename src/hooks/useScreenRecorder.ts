@@ -13,6 +13,7 @@ import {
 } from "@/lib/nativeWindowsRecording";
 import type { CursorCaptureMode, RecordedVideoAssetInput } from "@/lib/recordingSession";
 import { requestCameraAccess } from "@/lib/requestCameraAccess";
+import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { createRecorderHandle, type RecorderHandle } from "./recorderHandle";
 
 const TARGET_FRAME_RATE = 60;
@@ -50,6 +51,7 @@ const WEBCAM_TARGET_FRAME_RATE = 30;
 type UseScreenRecorderReturn = {
 	recording: boolean;
 	paused: boolean;
+	saving: boolean;
 	elapsedSeconds: number;
 	toggleRecording: () => void;
 	togglePaused: () => void;
@@ -72,6 +74,8 @@ type UseScreenRecorderReturn = {
 	setWebcamEnabled: (enabled: boolean) => Promise<boolean>;
 	cursorCaptureMode: CursorCaptureMode;
 	setCursorCaptureMode: (mode: CursorCaptureMode) => void;
+	softwareEncoderFallbackNoticeVisible: boolean;
+	dismissSoftwareEncoderFallbackNotice: (dontShowAgain?: boolean) => void;
 };
 
 type NativeWindowsRecordingHandle = {
@@ -91,6 +95,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const t = useScopedT("editor");
 	const [recording, setRecording] = useState(false);
 	const [paused, setPaused] = useState(false);
+	const [saving, setSaving] = useState(false);
 	const [elapsedSeconds, setElapsedSeconds] = useState(0);
 	const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
@@ -100,6 +105,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
 	const [webcamEnabled, setWebcamEnabledState] = useState(false);
 	const [cursorCaptureMode, setCursorCaptureMode] = useState<CursorCaptureMode>("editable-overlay");
+	const [softwareEncoderFallbackNoticeVisible, setSoftwareEncoderFallbackNoticeVisible] =
+		useState(false);
 	const screenRecorder = useRef<RecorderHandle | null>(null);
 	const webcamRecorder = useRef<RecorderHandle | null>(null);
 	const nativeWindowsRecording = useRef<NativeWindowsRecordingHandle | null>(null);
@@ -310,6 +317,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 			finalizingRecordingId.current = activeRecordingId;
+			// Only show the "Saving…" spinner for genuine saves — not for cancel/restart
+			// flows where discardRecordingId has already been set.
+			const isDiscarded = discardRecordingId.current === activeRecordingId;
+			if (!isDiscarded) {
+				setSaving(true);
+			}
 
 			if (screenRecorder.current === activeScreenRecorder) {
 				screenRecorder.current = null;
@@ -412,6 +425,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					if (discardRecordingId.current === activeRecordingId) {
 						discardRecordingId.current = null;
 					}
+					setSaving(false);
 				}
 			})();
 		},
@@ -426,6 +440,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			activeNativeRecording.finalizing = true;
+			if (!discard) {
+				setSaving(true);
+			}
 			const activeWebcamRecorder = activeNativeRecording.webcamRecorder;
 			const duration = Math.max(0, getRecordingDurationMs());
 			if (
@@ -513,6 +530,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (discardRecordingId.current === activeNativeRecording.recordingId) {
 					discardRecordingId.current = null;
 				}
+				setSaving(false);
 			}
 		},
 		[cursorCaptureMode, getRecordingDurationMs],
@@ -526,6 +544,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			activeNativeRecording.finalizing = true;
+			if (!discard) {
+				setSaving(true);
+			}
 			const duration = Math.max(0, getRecordingDurationMs());
 			const activeWebcamRecorder = webcamRecorder.current;
 			if (activeWebcamRecorder && webcamRecorder.current === activeWebcamRecorder) {
@@ -613,6 +634,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (discardRecordingId.current === activeNativeRecording.recordingId) {
 					discardRecordingId.current = null;
 				}
+				setSaving(false);
 			}
 		},
 		[cursorCaptureMode, getRecordingDurationMs],
@@ -827,6 +849,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			const request: NativeWindowsRecordingRequest = {
 				recordingId: activeRecordingId,
+				preferSoftwareEncoder: loadUserPreferences().preferSoftwareEncoder,
 				source: {
 					type: sourceType,
 					sourceId: selectedSource.id,
@@ -871,6 +894,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 				throw new Error(result.error ?? "Native Windows capture failed.");
 			}
+
+			// Tell the user when the helper silently switched away from the default
+			// GPU encoder; an explicit software-preferred selection needs no notice.
+			setSoftwareEncoderFallbackNoticeVisible(
+				result.videoEncoderSelection === "software-fallback" &&
+					!loadUserPreferences().hideSoftwareEncoderFallbackNotice,
+			);
 
 			recordingId.current = result.recordingId;
 			nativeWindowsRecording.current = {
@@ -1421,6 +1451,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						if (!result.success) {
 							throw new Error(result.error ?? "Failed to resume native Windows recording");
 						}
+						if (activeNativeWindowsRecording.webcamRecorder?.recorder.state === "paused") {
+							activeNativeWindowsRecording.webcamRecorder.recorder.resume();
+						}
 						activeNativeWindowsRecording.paused = false;
 						segmentStartedAt.current = Date.now();
 						setPaused(false);
@@ -1431,6 +1464,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					const result = await window.electronAPI.pauseNativeWindowsRecording();
 					if (!result.success) {
 						throw new Error(result.error ?? "Failed to pause native Windows recording");
+					}
+					if (activeNativeWindowsRecording.webcamRecorder?.recorder.state === "recording") {
+						activeNativeWindowsRecording.webcamRecorder.recorder.pause();
 					}
 					activeNativeWindowsRecording.paused = true;
 					accumulatedDurationMs.current = pausedAtMs;
@@ -1657,9 +1693,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 	};
 
+	const dismissSoftwareEncoderFallbackNotice = (dontShowAgain = false) => {
+		if (dontShowAgain) {
+			saveUserPreferences({ hideSoftwareEncoderFallbackNotice: true });
+		}
+		setSoftwareEncoderFallbackNoticeVisible(false);
+	};
+
 	return {
 		recording,
 		paused,
+		saving,
 		elapsedSeconds,
 		toggleRecording,
 		togglePaused,
@@ -1682,5 +1726,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setWebcamEnabled,
 		cursorCaptureMode,
 		setCursorCaptureMode,
+		softwareEncoderFallbackNoticeVisible,
+		dismissSoftwareEncoderFallbackNotice,
 	};
 }

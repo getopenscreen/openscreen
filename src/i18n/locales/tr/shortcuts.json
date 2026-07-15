@@ -23,7 +23,9 @@
 		"addBlur": "Bulanik Ekle",
 		"addKeyframe": "Anahtar Kare Ekle",
 		"deleteSelected": "Seçileni Sil",
-		"playPause": "Oynat / Duraklat"
+		"playPause": "Oynat / Duraklat",
+		"copySelected": "Seçileni Kopyala",
+		"paste": "Yapıştır"
 	},
 	"fixedActions": {
 		"undo": "Geri Al",

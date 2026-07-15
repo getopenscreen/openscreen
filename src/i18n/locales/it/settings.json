@@ -31,7 +31,8 @@
 		"selectRegion": "Seleziona una regione velocità da regolare",
 		"deleteRegion": "Elimina regione velocità",
 		"customPlaybackSpeed": "Velocità di riproduzione personalizzata",
-		"maxSpeedError": "La velocità non può superare 16×"
+		"maxSpeedError": "La velocità non può superare {{max}}×",
+		"previewFrameSteppingHint": "Oltre {{native}}×, l'anteprima procede fotogramma per fotogramma e senza audio. L'esportazione non è influenzata."
 	},
 	"trim": {
 		"deleteRegion": "Elimina regione taglio"
@@ -65,10 +66,12 @@
 		"image": "Immagine",
 		"color": "Colore",
 		"gradient": "Sfumatura",
+		"custom": "Personalizzato",
 		"uploadCustom": "Carica personalizzato",
 		"gradientLabel": "Sfumatura {{index}}",
 		"colorWheel": "Ruota dei colori",
-		"colorPalette": "Tavolozza dei colori"
+		"colorPalette": "Tavolozza dei colori",
+		"presets": "Predefiniti"
 	},
 	"crop": {
 		"title": "Ritaglia",
@@ -164,8 +167,7 @@
 		"tipShiftTabCycle": "Usa Maiusc+Tab per scorrere all'indietro.",
 		"invalidImageType": "Tipo di file non valido",
 		"imageFormatsOnly": "Carica un file immagine JPG, PNG, GIF o WebP.",
-		"imageUploadSuccess": "Immagine caricata con successo!",
-		"failedImageUpload": "Impossibile caricare l'immagine"
+		"imageUploadSuccess": "Immagine caricata con successo!"
 	},
 	"fontStyles": {
 		"classic": "Classico",

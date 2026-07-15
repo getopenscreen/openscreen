@@ -126,6 +126,7 @@ interface LayoutCache {
 	baseScale: number;
 	baseOffset: { x: number; y: number };
 	maskRect: { x: number; y: number; width: number; height: number };
+	croppedRect: { x: number; y: number; width: number; height: number };
 	maskBorderRadius: number;
 	webcamRect: StyledRenderRect | null;
 }
@@ -573,7 +574,7 @@ export class FrameRenderer {
 
 		const projectedPoint = projectNativeCursorToLocal({
 			cropRegion: this.config.cropRegion,
-			maskRect: this.layoutCache.maskRect,
+			maskRect: this.layoutCache.croppedRect,
 			sample: displaySample,
 		});
 		if (!projectedPoint) {
@@ -601,8 +602,10 @@ export class FrameRenderer {
 				getNativeCursorClickBounceProgress(this.config.cursorRecordingData, timeMs),
 			);
 		const appliedScale = this.animationState.appliedScale;
-		// Normalize cursor size to the same fraction of video width as the preview;
-		// both paths use maskRect.width / croppedVideoWidth.
+		// Normalize cursor size to croppedRect.width (the painted video width).
+		// The preview path still uses screenRect.width; they agree in cover mode but
+		// differ in fit-to-height letterbox — known asymmetry pending the preview-path
+		// follow-up to project the cursor onto the cropped sub-rect as well.
 		const sizeNorm =
 			this.layoutCache.videoSize.width > 0
 				? this.layoutCache.maskRect.width / this.layoutCache.videoSize.width
@@ -761,6 +764,12 @@ export class FrameRenderer {
 				y: compositeLayout.screenRect.y + coverOffsetY - cropPixelY,
 			},
 			maskRect: compositeLayout.screenRect,
+			croppedRect: {
+				x: compositeLayout.screenRect.x + coverOffsetX,
+				y: compositeLayout.screenRect.y + coverOffsetY,
+				width: croppedDisplayWidth,
+				height: croppedDisplayHeight,
+			},
 			maskBorderRadius: scaledBorderRadius,
 			webcamRect: compositeLayout.webcamRect,
 		};

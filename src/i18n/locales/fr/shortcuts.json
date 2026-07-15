@@ -23,7 +23,9 @@
 		"addBlur": "Ajouter un flou",
 		"addKeyframe": "Ajouter une image-clé",
 		"deleteSelected": "Supprimer la sélection",
-		"playPause": "Lecture / Pause"
+		"playPause": "Lecture / Pause",
+		"copySelected": "Copier la sélection",
+		"paste": "Coller"
 	},
 	"fixedActions": {
 		"undo": "Annuler",

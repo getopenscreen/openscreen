@@ -1,0 +1,40 @@
+name: Discord Roadmap Sync
+
+on:
+  pull_request_target:
+    types: [closed]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  roadmap-sync:
+    name: Sync ROADMAP.md to Discord
+    if: |
+      (github.event_name == 'pull_request_target' &&
+       github.event.action == 'closed' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == 'main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    concurrency:
+      group: discord-roadmap-sync-${{ github.repository }}-${{ github.event.pull_request.number || github.sha }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup
+
+      - name: Sync ROADMAP.md to pinned Discord message
+        continue-on-error: true
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_ROADMAP_CHANNEL_ID: ${{ vars.DISCORD_ROADMAP_CHANNEL_ID }}
+          DISCORD_ROADMAP_MESSAGE_ID: ${{ vars.DISCORD_ROADMAP_MESSAGE_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/discord-roadmap-sync.mjs

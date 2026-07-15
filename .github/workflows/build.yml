@@ -36,19 +36,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
+        uses: ./.github/actions/setup
 
       - name: Cache caption assets
         uses: actions/cache@v4
         with:
           path: caption-assets
-          key: caption-assets-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
+          key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
 
       - name: Build Windows app
         run: npm run build:win -- --publish never
@@ -73,18 +67,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+        uses: ./.github/actions/setup
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Ensure sharp prebuilt
         run: npm rebuild sharp
@@ -95,7 +83,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: caption-assets
-          key: caption-assets-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
+          key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
 
       - name: Resolve macOS signing
         id: signing
@@ -202,7 +190,7 @@ jobs:
           echo "dmg_path=$DMG_OUTPUT" >> "$GITHUB_OUTPUT"
 
       - name: Sign DMG
-        if: steps.signing.outputs.enabled == 'true'
+        if: steps.signing.outputs.enabled == 'true' && !contains(github.ref_name, '-')
         run: |
           codesign --force \
             --sign "${{ secrets.MAC_CSC_NAME }}" \
@@ -210,7 +198,7 @@ jobs:
             "${{ steps.dmg.outputs.dmg_path }}"
 
       - name: Notarize DMG
-        if: steps.signing.outputs.enabled == 'true'
+        if: steps.signing.outputs.enabled == 'true' && !contains(github.ref_name, '-')
         run: |
           xcrun notarytool submit "${{ steps.dmg.outputs.dmg_path }}" \
             --apple-id "${{ secrets.APPLE_ID }}" \
@@ -220,11 +208,11 @@ jobs:
         timeout-minutes: 15
 
       - name: Staple notarization ticket
-        if: steps.signing.outputs.enabled == 'true'
+        if: steps.signing.outputs.enabled == 'true' && !contains(github.ref_name, '-')
         run: xcrun stapler staple "${{ steps.dmg.outputs.dmg_path }}"
 
       - name: Validate stapled DMG
-        if: steps.signing.outputs.enabled == 'true'
+        if: steps.signing.outputs.enabled == 'true' && !contains(github.ref_name, '-')
         run: |
           xcrun stapler validate "${{ steps.dmg.outputs.dmg_path }}"
           spctl -a -vv -t install "${{ steps.dmg.outputs.dmg_path }}"
@@ -249,13 +237,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
+        uses: ./.github/actions/setup
 
       - name: Install pacman build dependencies
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
@@ -264,7 +246,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: caption-assets
-          key: caption-assets-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
+          key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
 
       - name: Build Linux app
         run: npm run build:linux -- --publish never
@@ -304,30 +286,82 @@ jobs:
             TAG="${INPUT_TAG}"
           fi
 
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Release tag must look like v1.5.0; got '${TAG}'"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta|alpha)\.[0-9]+)?$ ]]; then
+            echo "::error::Release tag must look like v1.5.0 or v1.5.0-rc.1; got '${TAG}'"
             exit 1
           fi
 
           VERSION="${TAG#v}"
+          # For an RC tag (e.g. v1.5.0-rc.1) package.json is at the pre-release version
+          # (1.5.0-rc.1), not the stable version (1.5.0). Compare against the full tag version.
           PACKAGE_VERSION="$(node -p 'require("./package.json").version')"
           if [[ "$PACKAGE_VERSION" != "$VERSION" ]]; then
-            echo "::error::package.json version ${PACKAGE_VERSION} does not match release tag ${TAG}"
+            echo "::error::package.json version ${PACKAGE_VERSION} does not match ${VERSION} from tag ${TAG}"
             exit 1
           fi
 
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(rc|beta|alpha)\.[0-9]+$ ]]; then
+            PRERELEASE_FLAG="--prerelease"
+            IS_PRERELEASE="true"
+          else
+            PRERELEASE_FLAG=""
+            IS_PRERELEASE="false"
+          fi
+
+          # Compute the previous stable tag for auto-generated release notes. We don't use
+          # GitHub's "most recent prior release by date" because the fork carries re-published
+          # upstream releases whose published_at is more recent than the fork's own first release.
+          # For SemVer X.Y.Z: previous is vX.Y.(Z-1) if Z>0, else vX.(Y-1).0, else v(X-1).0.0.
+          STABLE_VERSION="${VERSION%%-*}"
+          IFS='.' read -r PX PY PZ <<< "$STABLE_VERSION"
+          if (( PZ > 0 )); then
+            NOTES_START_TAG="v${PX}.${PY}.$((PZ - 1))"
+          elif (( PY > 0 )); then
+            NOTES_START_TAG="v${PX}.$((PY - 1)).0"
+          else
+            NOTES_START_TAG="v$((PX - 1)).0.0"
+          fi
+          echo "Computed notes_start_tag=${NOTES_START_TAG} for tag=${TAG}"
+
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "stable_version=$STABLE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "prerelease_flag=$PRERELEASE_FLAG" >> "$GITHUB_OUTPUT"
+          echo "notes_start_tag=$NOTES_START_TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Download installers
+      - name: Download Windows installer
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: openscreen-windows
+          path: artifacts/windows
+
+      - name: Download macOS arm64 DMG
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: openscreen-mac-arm64
+          path: artifacts/mac-arm64
+
+      - name: Download macOS x64 DMG
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: openscreen-mac-x64
+          path: artifacts/mac-x64
+
+      - name: Download Linux packages
+        uses: actions/download-artifact@v4
+        with:
+          name: openscreen-linux
+          path: artifacts/linux
 
       - name: Publish release assets
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
           TAG: ${{ steps.release.outputs.tag }}
+          PRERELEASE_FLAG: ${{ steps.release.outputs.prerelease_flag }}
+          NOTES_START_TAG: ${{ steps.release.outputs.notes_start_tag }}
         run: |
           mapfile -t FILES < <(find artifacts -type f | sort)
           if [[ "${#FILES[@]}" -eq 0 ]]; then
@@ -338,13 +372,28 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${FILES[@]}" --clobber
           else
+            # --notes-start-tag controls which previous tag GitHub compares against
+            # when auto-generating the release notes. Default behaviour (most recent
+            # prior release by date) doesn't work for this fork because the v1.4.0
+            # release in the fork was re-published after v1.5.0, which makes GitHub
+            # pick v1.4.0 as the "previous" for any v1.5.x release.
+            # shellcheck disable=SC2086
             gh release create "$TAG" "${FILES[@]}" \
               --target "$GITHUB_SHA" \
               --title "$TAG" \
-              --generate-notes
+              --generate-notes \
+              --notes-start-tag "$NOTES_START_TAG" \
+              $PRERELEASE_FLAG
           fi
 
-          gh release edit "$TAG" \
-            --draft=false \
-            --latest \
-            --title "$TAG"
+          if [[ -n "$PRERELEASE_FLAG" ]]; then
+            gh release edit "$TAG" \
+              --draft=false \
+              --latest=false \
+              --title "$TAG"
+          else
+            gh release edit "$TAG" \
+              --draft=false \
+              --latest \
+              --title "$TAG"
+          fi

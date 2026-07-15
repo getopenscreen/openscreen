@@ -77,5 +77,17 @@
 			"couldNotOpenTitle": "無法開啟檔案",
 			"couldNotOpenMessage": "無法開啟專案檔案。它所參照的影片可能已被移動或刪除。"
 		}
+	},
+	"regionClipboard": {
+		"copied": "已複製{{region}}屬性",
+		"pasted": "已貼上{{region}}屬性",
+		"nothingToCopy": "選擇一個區域以複製其屬性",
+		"nothingToPaste": "尚未複製任何屬性",
+		"kinds": {
+			"zoom": "縮放",
+			"speed": "速度",
+			"annotation": "文字",
+			"blur": "模糊"
+		}
 	}
 }

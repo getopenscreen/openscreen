@@ -1,7 +1,7 @@
 {
 	"name": "openscreen",
 	"private": true,
-	"version": "1.5.0",
+	"version": "1.6.0",
 	"type": "module",
 	"packageManager": "npm@10.9.4",
 	"engines": {
@@ -43,6 +43,8 @@
 		"test:wgc-full:win": "node scripts/test-windows-wgc-helper.mjs --webcam --system-audio --microphone",
 		"capture:openscreen-preview": "node scripts/capture-openscreen-preview.mjs",
 		"inspect:cursor-click-bounce": "node scripts/inspect-native-cursor-click-bounce.mjs",
+		"diagnostic:run": "node scripts/diagnostic-tool/diagnostic.mjs",
+		"diagnostic:smoke:win": "node scripts/diagnostic-tool/diagnostic.mjs --duration 3",
 		"build-vite": "tsc && vite build",
 		"test:browser": "vitest --config vitest.browser.config.ts --run",
 		"test:browser:install": "playwright install --with-deps chromium-headless-shell",
@@ -65,6 +67,9 @@
 		"@radix-ui/react-toggle": "^1.1.10",
 		"@radix-ui/react-toggle-group": "^1.1.11",
 		"@radix-ui/react-tooltip": "^1.2.8",
+		"@tiptap/extension-text-style": "^3.27.1",
+		"@tiptap/react": "^3.27.1",
+		"@tiptap/starter-kit": "^3.27.1",
 		"@types/gif.js": "^0.2.5",
 		"@uiw/color-convert": "^2.10.1",
 		"@uiw/react-color-block": "^2.10.1",
@@ -95,6 +100,8 @@
 		"web-demuxer": "^4.0.0"
 	},
 	"devDependencies": {
+		"@actions/core": "^3.0.1",
+		"@actions/github": "^9.1.1",
 		"@biomejs/biome": "^2.4.12",
 		"@electron/rebuild": "^4.0.4",
 		"@playwright/test": "^1.59.1",

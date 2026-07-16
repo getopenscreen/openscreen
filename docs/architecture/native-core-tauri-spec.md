@@ -48,11 +48,40 @@ The real question is not *Electron vs Tauri*. It is:
 
 We are **not** taking it. The app deliberately runs `nodeIntegration:false` + `contextIsolation:true` with the sandbox on by default, and the editor already spends its security budget on `webSecurity:false`. Turning the sandbox off on the window that handles user-supplied media trades a layer of defence-in-depth for 2×. (The threat model is narrower than it first looks — demuxing is WASM, decoding runs in the GPU process, and ffmpeg only ever sees rawvideo we produced — but an exploit in the WASM demuxer or the WebGL path would land on full Node instead of having to escape a sandbox first. That is a real loss.)
 
-**What A′ does to the case for C:** they buy the *same thing* — removing the crossing, ~165 fps. A′ costs the sandbox; C costs months plus a wgpu compositor. So C is not "the only way to 20×" — it is "the way to 20× that keeps the sandbox". That is a narrower claim than this document originally made, and it should be judged as such.
+**What A′ does to the case for C:** they buy the *same thing* — removing the crossing, ~165 fps. A′ costs the sandbox; C costs months plus a wgpu compositor. So C is not "the only way to 20×" — it is "the way to 20× that lets us *design* the isolation instead of deleting it" (§3.2 — and only if we actually budget for that design).
 
 **On C's parity column — read it honestly.** It is marked ⚠️, not ✅, on purpose. One compositor gives parity *by construction* only **after** the shadow, webcam mask, cursor and zoom easing are re‑implemented identically in wgpu — which is precisely where parity breaks in practice. Until then the ✅ is a promise, not a state. B is worse still: two compositors permanently, on a product whose entire value is that the export looks like the preview.
 
 D is a trap: pushing preview frames back to the webview reintroduces the exact bottleneck, reversed.
+
+### 3.1 A′′ — sandboxed demux, unsandboxed composite (unverified)
+
+[electron#34905](https://github.com/electron/electron/issues/34905) notes the zero‑copy transfer that fails renderer→main **works renderer→renderer**. That suggests a narrower A′: keep demux/decode in the sandboxed editor renderer, transfer the *decoded* frames zero‑copy to a second, `sandbox:false` window that only ever sees **our own pixels**, and let that window spawn ffmpeg. The lock stays where the hostile input actually arrives.
+
+**This is speculation.** Not measured, not validated. Two things would have to hold: that renderer→renderer transfer really is zero‑copy in our Electron version, and that a renderer holding no untrusted input is meaningfully safer — which is arguable, since it still runs Blink/V8. Worth an hour before anyone spends a month on C; not worth more than that until someone measures it.
+
+### 3.2 Security: "going native" relocates the problem, it does not solve it
+
+An earlier draft justified C partly as *"the way to 20× that keeps the sandbox"*. **That is wrong, and it is the most important correction in this document.**
+
+| | who parses hostile input | is one bug enough? |
+|---|---|---|
+| **A + Phase 4** | `web-demuxer` in **WASM** (confined linear memory) + decode in the **GPU process** (separately sandboxed) | no — needs a parser bug *chained with* a sandbox escape |
+| **A′** | unchanged — still WASM + GPU process | **yes** — *any* renderer bug reaches `require('child_process')` |
+| **C** | **native ffmpeg (C), in‑process, no sandbox at all** | **yes** — any ffmpeg demuxer CVE lands on the machine |
+
+Read the media column again: today the riskiest parser runs in **WASM**. A native core would replace it with **unsandboxed C parsing untrusted containers** — on the media path specifically, **C is a regression against both A and A′**. Media demuxers are among the most CVE‑dense code in existence, which is exactly why browsers confine them.
+
+So the security objection to A′ does **not** convert into an argument for C. The honest distinction is narrower:
+
+- **A′ removes a layer wholesale, with no recourse.** `nodeIntegration` is all‑or‑nothing for that renderer.
+- **C hands us the isolation design.** We *can* run demux/decode in a sandboxed child process (what Chromium does), keep our own logic in memory‑safe Rust, and ship a webview with **no Node** at all (Tauri's IPC is a command allowlist, far narrower than `nodeIntegration`).
+
+That is a **capability, not a property**. If C is built without that isolation, we will have spent months to end up **less safe than today**. Therefore:
+
+> **Requirement (blocking) for C:** demux and decode of user‑supplied media MUST run in a sandboxed child process, not in the core. Any C proposal that does not budget for this is not a C proposal — it is a regression with better fps.
+
+**For the record — this app is a screen recorder.** It legitimately holds screen contents, microphone, camera and the filesystem. An RCE here is worth more to an attacker than in almost any other desktop app. That asymmetry, not the raw CVE odds, is why the 2× does not buy the sandbox.
 
 C is achievable in **either** shell — Electron with a napi‑rs addon plus a native child window, or Tauri natively. Tauri is the natural home (the backend already *is* Rust, and `wry` + a wgpu surface is a known pattern); Electron would be swimming against the process model. **This is what Cap (cap.so) does** — and why its native encoder crates make sense for it: Tauri/Rust, capture + composite + preview all native, no sandboxed renderer in the frame path.
 
@@ -112,8 +141,9 @@ One Rust codebase targeting Vulkan/Metal/D3D12 natively — and WebGPU in a brow
 1. **Do Phase 4 first, now** (§4.4.1 of the export spec): NV12 packing + move the ffmpeg stdin write off the IPC‑receiving thread. Target ~81–100 fps (**10×**), no architecture change, one compositor, no security trade. It is *not* wasted if we later go native — the encoder selection, the LGPL ffmpeg bundling and the capability probe all survive into the Rust core.
 2. **Exhaust the free levers before paying for anything.** They can close the question outright: **N parallel MessagePorts** (untested — if the crossing goes 387 → ~600 MB/s, Phase 4 becomes encoder‑bound and C loses its entire reason to exist), and moving the stdin write to a `worker_thread` so the IPC‑receiving thread stops serialising with it (that serialisation costs a measured 40 %). A bigger credit window is **already ruled out** — measured 131 fps at window=32 vs 130 at window=8, saturated.
 3. **Then decide C on evidence**, judged against A′ rather than against A: C's actual offer is *"the 2× that A′ gives for free, but without giving up the sandbox"*. That is worth something — it is not worth what this document originally implied.
-4. If we go: **spike first** — a wgpu compositor rendering *one* clip with zoom + shadow + webcam, frame‑diffed against the current export. That subset is where the ⚠️ in §3's parity column lives. If parity is achievable there at reasonable cost, the rest is grind. If not, we learn cheaply.
+4. **Spend an hour on A′′ (§3.1) before spending a month on C.** If renderer→renderer zero‑copy holds up, the crossing may be removable without touching the lock that guards the hostile input.
+5. If we go C: **spike first** — a wgpu compositor rendering *one* clip with zoom + shadow + webcam, frame‑diffed against the current export. That subset is where the ⚠️ in §3's parity column lives. If parity is achievable there at reasonable cost, the rest is grind. If not, we learn cheaply. **Budget the sandboxed demux/decode child process from day one** (§3.2) — it is blocking, not a nice‑to‑have.
 
-**Bottom line:** Phase 4 buys **10×** for weeks, safely. C buys the last **2×** (81 → 165 fps: 6.7 s → 3.3 s on os_parity, ~7.4 → ~3.6 min on a 10‑minute recording) for months, a Rust compositor, a shell migration, and a parity risk that is real. A′ buys that same 2× for a boolean — and we are refusing it on security. Consistency does not *force* refusing C, since C keeps the sandbox — but the prize is the same 2× either way, and it should be priced as such.
+**Bottom line:** Phase 4 buys **10×** for weeks, safely. C buys the last **2×** (81 → 165 fps: 6.7 s → 3.3 s on os_parity, ~7.4 → ~3.6 min on a 10‑minute recording) for months, a Rust compositor, a shell migration, and a parity risk that is real. A′ buys that same 2× for a boolean — and we are refusing it on security. Consistency does not *force* refusing C, but not for the reason first written here: C does **not** "keep the sandbox" (§3.2). It relocates the exposure into native code and hands us the isolation design — which is a capability we then have to pay for. Same 2× prize either way; price it as such.
 
 **Retracted:** an earlier draft argued *"measure 4K, the crossing scales with pixels while the encoder degrades more gently, so 4K makes this case much stronger."* That was itself an unmeasured extrapolation — the encoder slows at 4K too (h264_amf drops to roughly 40–50 fps), so the gap narrows rather than widens. 4K does not rescue this case.

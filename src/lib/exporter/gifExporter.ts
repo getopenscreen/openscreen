@@ -152,8 +152,6 @@ export class GifExporter {
 			}
 
 			this.renderer = new FrameRenderer({
-				// gif.js reads pixels back anyway; keep the proven 2D composite.
-				disableGpuComposite: true,
 				width: this.config.width,
 				height: this.config.height,
 				wallpaper: this.config.wallpaper,

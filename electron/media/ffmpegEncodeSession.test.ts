@@ -53,11 +53,41 @@ describe("buildFfmpegArgs", () => {
 		}
 	});
 
-	it("selects the encoder and bitrate, and disables audio", () => {
+	it("selects the encoder and bitrate, and disables audio when there is none", () => {
 		const a = buildFfmpegArgs(fakeOpts({ encoder: "h264_videotoolbox", bitrate: 12_000_000 }));
 		expect(a[a.indexOf("-c:v") + 1]).toBe("h264_videotoolbox");
 		expect(a[a.indexOf("-b:v") + 1]).toBe("12000000");
 		expect(a).toContain("-an");
+	});
+
+	it("declares the PCM as a second raw input and lets ffmpeg encode AAC", () => {
+		const a = buildFfmpegArgs(
+			fakeOpts({
+				audio: { path: "/tmp/a.pcm", sampleRate: 48000, channels: 2, bitrate: 192_000 },
+			}),
+		);
+		// f32le with an explicit rate/layout: raw PCM carries no header to infer from.
+		expect(a[a.indexOf("-f", a.indexOf("-i")) + 1]).toBe("f32le");
+		expect(a[a.indexOf("-ar") + 1]).toBe("48000");
+		expect(a[a.indexOf("-ac") + 1]).toBe("2");
+		expect(a).toContain("/tmp/a.pcm");
+		expect(a[a.indexOf("-c:a") + 1]).toBe("aac");
+		expect(a[a.indexOf("-b:a") + 1]).toBe("192000");
+		expect(a).not.toContain("-an");
+	});
+
+	it("declares both inputs before any codec option, as ffmpeg requires", () => {
+		const a = buildFfmpegArgs(
+			fakeOpts({
+				audio: { path: "/tmp/a.pcm", sampleRate: 48000, channels: 2, bitrate: 192_000 },
+			}),
+		);
+		const lastInput = a.lastIndexOf("-i");
+		expect(lastInput).toBeLessThan(a.indexOf("-c:v"));
+		expect(lastInput).toBeLessThan(a.indexOf("-c:a"));
+		// pipe:0 is input 0 and the PCM is input 1 — that ordering is what makes
+		// video stream 0 and audio stream 1 in the output.
+		expect(a.indexOf("pipe:0")).toBeLessThan(a.indexOf("/tmp/a.pcm"));
 	});
 
 	it("asks for machine-readable progress on stderr", () => {

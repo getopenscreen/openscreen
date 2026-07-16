@@ -39,6 +39,23 @@ export interface FfmpegEncodeOptions {
 	 */
 	pixelFormat: "nv12" | "bgra" | "rgba";
 	extraEncoderArgs?: string[];
+	/**
+	 * Optional second input: the export's assembled PCM, already laid out at the
+	 * concat plan's offsets. Given this, ffmpeg encodes AAC and muxes the final
+	 * file itself — which is the whole point of routing audio through here rather
+	 * than muxing in JS.
+	 *
+	 * Raw f32le rather than WAV: it is what we already hold in memory, it needs no
+	 * header, and it skips the int16 round-trip a WAV would impose.
+	 */
+	audio?: {
+		/** Path to raw interleaved float32 PCM. */
+		path: string;
+		sampleRate: number;
+		channels: number;
+		/** bits per second */
+		bitrate: number;
+	};
 }
 
 export interface FfmpegEncodeSession {
@@ -60,8 +77,10 @@ const STDERR_TAIL_BYTES = 4096;
  *
  * `-progress pipe:2` asks for machine-readable `key=value` progress on stderr,
  * which is what {@link parseProgress} reads; `-nostats` silences the human
- * progress line that would otherwise interleave with it. Video only (`-an`) —
- * audio is encoded and muxed separately today.
+ * progress line that would otherwise interleave with it.
+ *
+ * All inputs must precede the output options, so audio (input 1) is declared
+ * right after the video pipe (input 0) and its codec is chosen further down.
  */
 export function buildFfmpegArgs(opts: FfmpegEncodeOptions): string[] {
 	return [
@@ -69,6 +88,8 @@ export function buildFfmpegArgs(opts: FfmpegEncodeOptions): string[] {
 		"-hide_banner",
 		"-v",
 		"error",
+		// input 0: raw frames on stdin. rawvideo carries no geometry, so ffmpeg
+		// cannot infer any of this — it must be told.
 		"-f",
 		"rawvideo",
 		"-pix_fmt",
@@ -79,12 +100,28 @@ export function buildFfmpegArgs(opts: FfmpegEncodeOptions): string[] {
 		String(opts.frameRate),
 		"-i",
 		"pipe:0",
-		"-an",
+		// input 1: the assembled PCM, when there is audio.
+		...(opts.audio
+			? [
+					"-f",
+					"f32le",
+					"-ar",
+					String(opts.audio.sampleRate),
+					"-ac",
+					String(opts.audio.channels),
+					"-i",
+					opts.audio.path,
+				]
+			: []),
 		"-c:v",
 		opts.encoder,
 		"-b:v",
 		String(opts.bitrate),
 		...(opts.extraEncoderArgs ?? []),
+		...(opts.audio ? ["-c:a", "aac", "-b:a", String(opts.audio.bitrate)] : ["-an"]),
+		// Video is exactly as long as the frames we push; audio is sized from the
+		// same per-segment frame counts, so a mismatch means an upstream bug we
+		// want to see rather than have ffmpeg quietly pad or truncate.
 		"-progress",
 		"pipe:2",
 		"-nostats",

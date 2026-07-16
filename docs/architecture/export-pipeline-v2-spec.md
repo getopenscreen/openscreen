@@ -211,7 +211,48 @@ native ffmpeg subprocess  -c:v h264_nvenc | h264_qsv | h264_amf | h264_videotool
 
 This also deletes three things we currently pay for: the WebCodecs encoder, the JS muxer (`mediabunny`), and the whole in‑memory `Blob` + final save IPC — ffmpeg muxes and writes the file itself.
 
-**Prefer NV12 over RGBA** on the pipe: 3.0 MB/frame vs 8.3 MB, and the encoder wants NV12 anyway (RGBA would force a conversion). Measured: 165 fps at 489 MB/s with NV12.
+### 4.4.1 The upstream chain, measured (2026‑07‑16)
+
+The 165 fps figure is `node → ffmpeg` **in one process**. The real path adds a renderer→main process crossing per frame, so the whole chain was measured end‑to‑end. **The encoder is no longer the bottleneck — the IPC crossing is.**
+
+**Stage 1 — canvas → bytes (mandatory: the renderer is sandboxed, so bytes must cross a process boundary):**
+
+| method | ms/frame | ceiling |
+|--------|---------:|--------:|
+| **`new VideoFrame(canvas2D).copyTo(buf)`** | **1.43** | **698 fps** ← use this |
+| `getImageData` → RGBA | 7.00 | 143 fps |
+| `gl.readPixels` → RGBA | 8.18 | 122 fps |
+| `new VideoFrame(**GL** canvas).copyTo(buf)` | 11.23 | 89 fps |
+
+Two consequences. First, `copyTo` on a **2D** canvas is 5× cheaper than `getImageData` — it is the extraction method, and it takes extraction off the critical path. Second, reading back a **WebGL** canvas is **8× slower than a 2D one** — which is the retroactive explanation for why the GPU‑resident composite (§4.4) never paid off. That revert was right for a reason we only learned here.
+
+**Format constraint:** `VideoFrame(canvas).format` is **BGRA**, and `copyTo({format:"NV12"})` / `{format:"I420"}` throw `NotSupportedError` — Chromium will not convert. Only RGBA/BGRA come out. So we ship **BGRA at 7.9 MB/frame** and let ffmpeg's swscale convert. We cannot get the 3.0 MB NV12 frame from the renderer.
+
+**Stage 2 — renderer → main (the new bottleneck):**
+
+| transport | fps | throughput |
+|-----------|----:|-----------:|
+| `ipcRenderer.send`, window=1 (stop‑and‑wait) | 84 | 249 MB/s |
+| **`ipcRenderer.send`, credit window=8** | **130** | **387 MB/s** |
+| `ipcRenderer.send`, credit window=32 | 131 | 389 MB/s |
+| MessagePort zero‑copy transfer | ❌ **impossible** | — |
+
+A **credit window** (N frames in flight) is worth **+56 %** over stop‑and‑wait; window=8 already saturates it, 32 adds nothing. Use 8.
+
+**Zero‑copy to main does not exist in Electron.** `MessagePortMain.postMessage(message, [transfer])` accepts `MessagePortMain[]` **only**; transferring an ArrayBuffer from renderer to main silently loses the entire message (measured: `ev.data === null`; known bug [electron#34905](https://github.com/electron/electron/issues/34905) — it works renderer→renderer, not renderer→main). Every frame is structured‑cloned, i.e. copied. That caps the crossing at ~390 MB/s, which at 7.9 MB/frame is **≈49 fps**.
+
+**The chain, and what to expect:**
+
+| stage | ceiling |
+|-------|--------:|
+| extract (`VideoFrame(2D).copyTo`) | 698 fps |
+| **renderer → main (BGRA, 7.9 MB, window=8)** | **≈49 fps** ← bottleneck |
+| main → ffmpeg stdin | 489–589 MB/s |
+| ffmpeg `h264_amf` | 165 fps |
+
+**Realistic target: ~49 fps ⇒ os_parity ~95 s → ~16 s (≈6×)**, not the 20× the encoder alone suggested. Ship that first: it is most of the win at low risk.
+
+**The one lever left is halving the bytes.** A GPU shader packing BGRA→NV12 before extraction would cut the crossing to 3.0 MB/frame ⇒ ~131 fps ⇒ ~7 s (≈13×). It is measure‑gated and non‑obvious: GL‑canvas readback is the slow path (11.23 ms above), so the packing must not reintroduce it. Phase 4.
 
 ---
 
@@ -235,14 +276,18 @@ Replace the WebCodecs encoder + JS muxer with a bundled LGPL ffmpeg subprocess (
 
 1. **Build & bundle.** ffmpeg per platform, built **without** `--enable-gpl` and without `--enable-nonfree` — that is what makes it LGPL, and it is the *only* control that matters (those flags are what pull x264/x265; absent them ffmpeg simply won't build a GPL component, whatever else is enabled). **Binary size is not a constraint** (~200 MB/platform is fine), so do **not** strip for size — enable the codecs we may want next (HEVC, AV1, VP9, ProRes) so a future format doesn't need a rebuild + re‑qualification. Ship next to the existing native binaries in `electron/native/bin/<platform>/`. Add the LGPL notice + source offer.
 2. **Capability probe** (§7.1), cached per machine.
-3. **Encode service** (main process): spawn ffmpeg, stream NV12 frames to stdin, parse progress from stderr, handle cancel (kill the tree) and non‑zero exit.
-4. **Renderer side:** after `renderFrame`, read the canvas to NV12 and hand the frame to the service. Keep the WebCodecs path behind the capability probe as the fallback.
+3. **Encode service** (main process): spawn ffmpeg, stream **BGRA** frames to stdin **honouring `drain`** (the measured 489–589 MB/s depends on it), parse progress from stderr, handle cancel (kill the tree) and non‑zero exit.
+4. **Renderer side:** after `renderFrame`, extract with `new VideoFrame(canvas).copyTo(buf)` (**not** `getImageData` — 1.43 ms vs 7.00, §4.4.1) and ship the frame to the service over a **credit window of 8**. Keep the WebCodecs path behind the capability probe as the fallback.
 5. **Delete on success:** the `mediabunny` video muxing path and the in‑memory `Blob` → ffmpeg writes the file.
 
-- **Exit criteria:** os_parity exports **≥5× faster** (target ~95 s → ~10–15 s) with frame‑diff parity vs the current output and A/V still locked; WebCodecs fallback still produces a correct file when no hardware encoder is present; cancel leaves no orphan process.
+- **Exit criteria:** os_parity exports **≥4× faster** (target ~95 s → ~16 s, IPC‑bound per §4.4.1) with frame‑diff parity vs the current output and A/V still locked; WebCodecs fallback still produces a correct file when no hardware encoder is present; cancel leaves no orphan process.
 
-### Phase 4 — Parallel segments (M, measure‑gated)
-- Only if Phase 3 leaves us encoder‑bound. Consumer NVENC/AMF expose 3–8 sessions; needs DTS‑ordered stitching. Measure, then decide.
+### Phase 4 — Halve the crossing: GPU BGRA→NV12 packing (M, measure‑gated)
+- The renderer→main crossing is the bottleneck at ~49 fps, purely because Chromium only hands us **7.9 MB BGRA** (it refuses NV12, §4.4.1) and Electron cannot transfer buffers zero‑copy. Packing to NV12 on the GPU before extraction cuts it to 3.0 MB ⇒ ~131 fps ⇒ ~7 s (≈13×).
+- **Gate:** GL‑canvas readback measured 8× slower than 2D (11.23 vs 1.43 ms) — the packing must not reintroduce that. Prototype and measure the packing + readback together before committing.
+
+### Phase 5 — Parallel segments (M, measure‑gated)
+- Only if the above leaves us *encoder*‑bound (it currently does not — the encoder has 3× headroom over the crossing). Consumer NVENC/AMF expose 3–8 sessions; needs DTS‑ordered stitching.
 
 ### Phase 5 — Worker + OffscreenCanvas (M, optional)
 - UI responsiveness during export. Independent of throughput; do it when it's worth it, not before.
@@ -349,7 +394,12 @@ ffmpeg -f rawvideo -pix_fmt nv12 -s 1920x1080 -r 60 -i raw.nv12 -c:v h264_amf -b
 # the real architecture: Node streams NV12 into ffmpeg's stdin (respect `drain`)
 node pipebench.cjs     # measured 165 fps @ 489 MB/s
 ```
-Do **not** benchmark pipes with `cat |` under Git Bash (MSYS emulation caps ~70 MB/s and fabricates an 8× penalty), and do **not** read `getGPUFeatureStatus()` from a windowless Electron script (reports `disabled_software` for everything).
+**Measurement traps this spec was burned by — all three produced false conclusions:**
+1. `cat | ffmpeg` under **Git Bash** caps at ~70 MB/s (MSYS emulated pipe) and fabricates an 8× penalty. Use Node → stdin (489–589 MB/s).
+2. `app.getGPUFeatureStatus()` from a **windowless** Electron script reports everything `disabled_software`. Meaningless — always probe with a real `BrowserWindow` (then: all `enabled`).
+3. **`new VideoFrame(canvas)` is lazy.** Timing it measures ~0.2 ms and tells you nothing; the GPU→CPU descent only happens at `copyTo()`/`getImageData()` (1.43–11.23 ms, §4.4.1). The old "readback is 0.1 % of wall" line came from exactly this mistake.
+
+**General rule this spec keeps re‑learning: benchmark the stage you are about to optimise, in the process topology it will really run in.** Every wrong turn here came from measuring a stage in isolation and assuming the surrounding chain was free.
 
 ---
 

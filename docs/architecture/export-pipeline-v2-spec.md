@@ -1,6 +1,6 @@
 # Export Pipeline v2 — Multi‑Asset Rendering + Performance
 
-Status: **Draft / for review**
+Status: **Revised 2026‑07‑16** — multi‑asset shipped; the **perf half was rewritten after measurement disproved its central premise**. Read §3.1 first: the bottleneck is the WebCodecs API (~90 % of wall), not the readback (0.1 %). The plan is now native ffmpeg encode (§7), not GPU‑resident compositing (§4.4, cancelled).
 Owners: ai-edition editor team
 Scope: the `.axcut` (AI‑edition) export path only. The legacy `components/video-editor` exporter is out of scope.
 
@@ -10,13 +10,15 @@ Scope: the `.axcut` (AI‑edition) export path only. The legacy `components/vide
 
 ### Goals
 1. **Multi‑asset export.** Render every clip on the timeline from *its own* source asset, in timeline order — matching what the preview already plays. Today only the primary asset is rendered; clips pointing at other assets are silently dropped.
-2. **Performance.** Cut export time by removing the per‑frame GPU→CPU→GPU round‑trips, moving the pipeline off the renderer main thread, and properly pipelining decode/render/encode. Target: **≥2× faster** on 1080p/4K, UI stays responsive during export.
+2. **Performance.** ~~Cut export time by removing the per‑frame GPU→CPU→GPU round‑trips, moving the pipeline off the renderer main thread, and properly pipelining decode/render/encode. Target: ≥2× faster.~~ **Rewritten 2026‑07‑16 after measurement (§3.1):** those targets are ≤2.3 % of wall. Cut export time by **replacing the WebCodecs encoder — ~90 % of wall — with a bundled native LGPL ffmpeg** using the platform's hardware encoder. Target: **≥5×** at 1080p (measured ceiling: 20×).
 3. **Correct framing.** Output honors the timeline’s selected aspect ratio and is sized to the largest clip. *(Already shipped — see §9.)*
 
 ### Non‑goals (this spec)
 - Overlapping/mixed audio tracks (we assume **sequential** per‑clip audio).
 - Compositing multiple assets **simultaneously** (picture‑in‑picture of two screen recordings). The webcam overlay is the only simultaneous second source and stays as‑is.
-- Replacing WebCodecs with a native ffmpeg binary as the primary encoder (see §7 — WebCodecs already *is* the hardware path; native ffmpeg is only a fallback).
+- ~~Replacing WebCodecs with a native ffmpeg binary as the primary encoder (WebCodecs already *is* the hardware path; native ffmpeg is only a fallback).~~ **Inverted — this is now Goal 2.** WebCodecs reaches the same silicon but at **8 fps vs 165 fps** for native ffmpeg (§3.1). It becomes the *fallback*; native ffmpeg is the primary encoder (§7).
+- Shipping a **GPL** ffmpeg build (x264/x265). We build LGPL only, so the app stays MIT (§7.2).
+- Rewriting the compositor. The Canvas2D composite stays; only the encoder changes (§4.4).
 - GIF export changes beyond what falls out of the shared render plan.
 
 ---
@@ -59,21 +61,58 @@ ExportDialog.handleStart()                         (renderer MAIN thread)
 - **Runs on the renderer main thread.** `exportAxcutDocument` is `await`‑ed directly from the dialog; it yields between frames but competes with the UI for the thread and the GPU.
 - **Per‑frame readback.** WebGL render → `getCanvas()` (Canvas2D) → `new VideoFrame(canvas)`. On Linux there is an *explicit* `getImageData()` CPU readback (EGL/Ozone workaround). A 4K RGBA frame is ~33 MB; at 60 fps this is ~2 GB/s of avoidable copying.
 - **Serial pipeline.** Only encoder‑queue backpressure (`waitForEncoderQueueSpace`, `encodeQueueSize`) exists; decode/render/encode are not otherwise decoupled.
-- **Encoder is already hardware.** `VideoEncoder` with `hardwareAcceleration: "prefer-hardware"`, falling back to software. This is the OS hardware codec (Media Foundation / VideoToolbox / VA‑API) — the same path native ffmpeg uses.
+- **Encoder is WebCodecs, and that is the bottleneck.** `VideoEncoder` with `hardwareAcceleration: "prefer-hardware"`. ~~This is the OS hardware codec — the same path native ffmpeg uses.~~ **Wrong:** it reaches the same silicon but through Chromium's wrapper, and measures **~8 fps @1080p vs 165 fps** for native ffmpeg on the same GPU (§3.1). Hardware encode *is* enabled (`video_encode=enabled`, no blocklist) — the loss is Chromium's per‑frame overhead.
 
 ---
 
 ## 3. Problem statement
 
-| # | Problem | Impact |
-|---|---------|--------|
-| P1 | Only the primary asset is rendered | Multi‑recording timelines export wrong/partial video (**correctness bug**) |
-| P2 | Per‑frame GPU↔CPU readback + re‑upload | Dominant time sink; scales badly with resolution |
-| P3 | Whole export on the renderer main thread | UI stutters; no parallelism headroom |
-| P4 | Serial decode→render→encode | Under‑utilizes decoder/encoder overlap |
-| P5 | Aspect ratio hardcoded 16:9 | Wrong framing for non‑16:9 timelines — **fixed, see §9** |
+| # | Problem | Impact | Status |
+|---|---------|--------|--------|
+| P1 | Only the primary asset is rendered | Multi‑recording timelines export wrong/partial video (**correctness bug**) | **fixed** (segment loop) |
+| P2 | ~~Per‑frame GPU↔CPU readback + re‑upload — dominant time sink~~ | **DISPROVEN.** Measured 0.2 ms/frame = **0.1 %** of wall. | closed, see §3.1 |
+| P3 | Whole export on the renderer main thread | UI stutters. Real, but a **responsiveness** issue, not throughput | deferred |
+| P4 | Serial decode→render→encode | Real but small: the audio half is fixed; the rest is masked by P6 | partly fixed |
+| P5 | Aspect ratio hardcoded 16:9 | Wrong framing for non‑16:9 timelines | **fixed, see §9** |
+| **P6** | **WebCodecs caps the encoder at ~8 fps @1080p** | **~90 % of export wall time.** The actual bottleneck. | **open — §7** |
 
-Research backing the perf direction (WebCodecs already ≈ native; the wins are readback + threading; ~2–3× reported by Descript from removing the copies): see the linked sources in the PR/discussion.
+### 3.1 What Phase‑0 measurement actually found (2026‑07‑16)
+
+The original perf direction here ("WebCodecs already ≈ native; the wins are readback + threading; ~2–3× reported by Descript from removing the copies") **did not survive measurement.** Instrumenting `runSegmentLoop` (`StageTimings`) on **os_parity** (2 assets, 2×3× speed, 1.80× zoom, webcam; MP4/1080p/60/H.264; 546 output frames):
+
+| stage | software | hardware | GPU‑resident composite |
+|-------|---------:|---------:|-----------------------:|
+| **encodeWait** | **75.5 s (89 %)** | **52.8 s (92 %)** | **55.1 s (90.6 %)** |
+| audioEncode | 6.9 s | 3.2 s | 4.1 s |
+| render | 1.9 s (2.2 %) | 1.2 s | 1.3 s |
+| **readback** | **0.12 s (0.1 %)** | 0.07 s | **0.10 s** |
+| **wall** | **94.6 s** | **72.7 s** | **97.9 s** |
+
+Then an **isolated encoder probe** (120 synthetic frames — no decode, no render, no composite) settled the cause:
+
+```
+gl: ANGLE (AMD, AMD Radeon(TM) Graphics, Direct3D11)   ← real GPU, not SwiftShader
+video_encode = enabled                                  ← no blocklist, HW encode available
+hw/canvas-frame     22.8 fps      hw/cpu-rgba-frame   35.6 fps
+sw/canvas-frame     31.4 fps      hw/canvas@720p      48.4 fps
+```
+
+versus **native ffmpeg on the same machine, same 546 real frames**:
+
+```
+h264_amf (AMD hardware)   165 fps      ← 20× WebCodecs
+libx264 -preset ultrafast 198 fps      ← 25× WebCodecs
+node -> ffmpeg stdin pipe: 489-589 MB/s, costs ~3%
+```
+
+Conclusions that redirect this spec:
+
+- **The encoder is the wall, and the wall is the API.** Hardware encode is enabled and reachable; Chromium's WebCodecs pipeline still yields 8–36 fps where the same silicon does 165. The loss is Chromium's per‑frame overhead (renderer↔GPU‑process IPC, format conversion), not our feeding of it.
+- **GPU‑backed frames are *slower* into the encoder than CPU ones** (22.8 vs 35.6 fps). The premise behind §4.4 was false. The GPU‑resident composite was implemented, measured (no gain), and **reverted** (`e6cbb45`).
+- **The "CPU bridge" is a non‑issue** — 3 %. (An earlier 8× penalty was an artefact of MSYS's emulated pipe, not a real Windows pipe.)
+- Everything except the encoder — readback, `latencyMode`, Worker/OffscreenCanvas, compositing — is **≤2.3 % combined**. Optimising any of it is noise.
+
+**Beware two measurement traps** we fell into: `app.getGPUFeatureStatus()` from a **windowless** Electron script reports everything `disabled_software` (meaningless — always probe with a real window), and piping via `cat` under Git Bash caps at ~70 MB/s (MSYS emulation, not Windows).
 
 ---
 
@@ -141,16 +180,32 @@ interface RenderPlan {
    e. Dispose the decoder before the next segment (bounded memory: one active decoder at a time in Phase 2; see §6.6 for prefetch).
 4. Audio (§6.3), finalize muxer, return buffer.
 
-### 4.3 Worker + OffscreenCanvas
+### 4.3 Worker + OffscreenCanvas — *deferred to Phase 5 (2026‑07‑16)*
+
+> Kept for reference. Measurement (§3.1) showed the main thread is **not** the throughput limit — it sits idle in `encodeWait` ~90 % of the time. This buys **UI responsiveness**, not speed, so it is no longer part of the perf programme and waits behind Phase 3.
 
 - New `src/lib/ai-edition/exporter/exportWorker.ts` (module worker). It owns the `FrameRenderer` (constructed on an `OffscreenCanvas`), the decoders, the encoder, and the muxer.
 - The dialog posts `{ plan }` and a `MessagePort`; the worker streams `{ type: "progress", … }` and finally `{ type: "done", buffer }` (transferred).
 - `FrameRenderer` must accept an `OffscreenCanvas`; PixiJS supports WebGL on `OffscreenCanvas` in a worker. The Canvas2D composite canvases become `OffscreenCanvas` too. (This is the main portability task — see Risk R2.)
 
-### 4.4 Keep frames on the GPU (kill the readback)
+### 4.4 ~~Keep frames on the GPU (kill the readback)~~ → **Native encode** *(rewritten 2026‑07‑16)*
 
-- Do the **final composite in WebGL/WebGPU**, not Canvas2D. Today the video is WebGL (Pixi) but background/shadow/foreground are Canvas2D with a `drawImage(webglCanvas)`/`getImageData` bridge. Move background + shadow + foreground into the GPU stage (Pixi sprites/filters, or a WebGPU pass) so the output surface is already a GPU texture.
-- Feed `new VideoFrame(gpuOutputCanvas, { timestamp, duration })` straight to the encoder. Chromium keeps this GPU‑resident for the hardware encoder (zero‑copy). **Remove `getImageData` on non‑Linux.** Keep the Linux `getImageData` branch only, gated behind the existing platform check.
+> **Abandoned.** This section proposed moving the whole composite onto the GPU so `new VideoFrame(gpuCanvas)` would reach the hardware encoder zero‑copy. It was **implemented, measured, and reverted** (`a31cf49` → `e6cbb45`): the readback it removed was 0.1 % of wall, and GPU‑backed frames turned out to be **slower** into the encoder than CPU ones (22.8 vs 35.6 fps). Keep the proven Canvas2D composite. See §3.1.
+
+The frame path stays as it is (Pixi/WebGL for the video, Canvas2D composite, `getCanvas()`). Only the **encoder** changes:
+
+```
+FrameRenderer.getCanvas()  →  read pixels (~0.2 ms, measured, negligible)
+      │
+      ▼  NV12/RGBA frame  (renderer → main; 489–589 MB/s over a real pipe, ~3 % cost)
+native ffmpeg subprocess  -c:v h264_nvenc | h264_qsv | h264_amf | h264_videotoolbox | h264_vaapi
+      │
+      ▼  writes the .mp4 directly to disk
+```
+
+This also deletes three things we currently pay for: the WebCodecs encoder, the JS muxer (`mediabunny`), and the whole in‑memory `Blob` + final save IPC — ffmpeg muxes and writes the file itself.
+
+**Prefer NV12 over RGBA** on the pipe: 3.0 MB/frame vs 8.3 MB, and the encoder wants NV12 anyway (RGBA would force a conversion). Measured: 165 fps at 489 MB/s with NV12.
 
 ---
 
@@ -158,22 +213,33 @@ interface RenderPlan {
 
 Each phase is independently shippable and independently verifiable.
 
-### Phase 0 — Measure & de‑risk (S)
-- Add a dev‑only timing harness around **decode / render / readback / encode** and log per‑stage ms + fps on a real export; log `hardwareAcceleration` actually granted.
-- **Exit criteria:** we can state, with numbers, that readback and/or main‑thread contention dominate (validates P2/P3 before the big refactor). No user‑visible change.
+### Phase 0 — Measure & de‑risk (S) — ✅ **DONE**
+- `StageTimings` harness + isolated encoder probe in `videoExporter.ts`.
+- **Outcome:** it did its job — it *invalidated* the plan it was meant to validate. Readback is 0.1 %, not dominant; the encoder API is 90 %. See §3.1. This is why Phase 0 exists.
 
-### Phase 1 — Off the main thread (M)
-- Move the *existing* single‑asset pipeline into the Worker + OffscreenCanvas unchanged in behavior.
-- **Exit criteria:** identical output bytes (or visually identical) vs current; UI no longer stutters during export; progress still reported.
+### Phase 1 — Multi‑asset correctness (L) — ✅ **DONE**
+- `RenderPlan`, segment loop, per‑segment audio/cursor/webcam/speed, seamless junctions. Shipped and verified in the dev app.
 
-### Phase 2 — Segment sequence + GPU‑resident compositing (L) — *the big one*
-- Introduce `RenderPlan`; rewrite `documentExporter` to emit segments; rewrite `VideoExporter.export()` as the segment loop; virtual‑time effects; per‑segment audio concat; per‑segment cursor (§6.4).
-- Remove the non‑Linux readback; composite on the GPU.
-- **Exit criteria:** a 2+asset timeline exports all clips in order, audio in sync; single‑asset output unchanged; measured render throughput ≥2× Phase 0 baseline at 1080p.
+### Phase 2 — ~~Worker + GPU‑resident compositing~~ — ❌ **CANCELLED**
+- GPU‑resident composite: built, measured, **reverted** (§4.4) — target was 2.3 % of wall.
+- Worker + OffscreenCanvas: **demoted to Phase 5**. It buys UI responsiveness, not throughput, and is not worth its portability risk (R2) until the encoder is fixed.
 
-### Phase 3 — Parallel segments (M, optional, measure‑gated)
-- Encode independent segments on multiple workers; concatenate at the container level (GOP‑aligned) in the muxer.
-- **Gate:** only if Phase 0/2 numbers show spare hardware‑encode capacity. Hardware encoders often expose 1–2 sessions and don’t scale linearly; document the measured speedup or shelve.
+### Phase 3 — **Native ffmpeg encode (L) — the actual win** ← *next*
+Replace the WebCodecs encoder + JS muxer with a bundled LGPL ffmpeg subprocess (§7).
+
+1. **Build & bundle.** LGPL ffmpeg per platform (`--disable-gpl`, hardware encoders + AAC + mp4 muxer only; strip everything else to keep it ~30 MB). Ship next to the existing native binaries in `electron/native/bin/<platform>/`. Add the LGPL notice + source offer.
+2. **Capability probe** (§7.1), cached per machine.
+3. **Encode service** (main process): spawn ffmpeg, stream NV12 frames to stdin, parse progress from stderr, handle cancel (kill the tree) and non‑zero exit.
+4. **Renderer side:** after `renderFrame`, read the canvas to NV12 and hand the frame to the service. Keep the WebCodecs path behind the capability probe as the fallback.
+5. **Delete on success:** the `mediabunny` video muxing path and the in‑memory `Blob` → ffmpeg writes the file.
+
+- **Exit criteria:** os_parity exports **≥5× faster** (target ~95 s → ~10–15 s) with frame‑diff parity vs the current output and A/V still locked; WebCodecs fallback still produces a correct file when no hardware encoder is present; cancel leaves no orphan process.
+
+### Phase 4 — Parallel segments (M, measure‑gated)
+- Only if Phase 3 leaves us encoder‑bound. Consumer NVENC/AMF expose 3–8 sessions; needs DTS‑ordered stitching. Measure, then decide.
+
+### Phase 5 — Worker + OffscreenCanvas (M, optional)
+- UI responsiveness during export. Independent of throughput; do it when it's worth it, not before.
 
 ---
 
@@ -208,10 +274,46 @@ Each phase is independently shippable and independently verifiable.
 
 ---
 
-## 7. Encoder strategy / native fallback
+## 7. Encoder strategy — native ffmpeg primary, WebCodecs fallback
 
-- **Primary: WebCodecs**, `prefer-hardware`, software fallback (unchanged). This already hits the OS hardware encoder; a native ffmpeg swap would not beat it and adds a binary + IPC surface.
-- **Native ffmpeg fallback (main process), only for gaps:** codecs/containers WebCodecs can’t do on a given OS (e.g. some HEVC/AV1), or systems where `VideoEncoder.isConfigSupported` reports no support. Route: renderer produces raw frames → main‑process ffmpeg with `-c:v h264_nvenc/hevc_qsv/h264_videotoolbox`. Treat as a **safety net**, behind capability detection, not the perf lever.
+> **This section was inverted on 2026‑07‑16.** It used to read *"a native ffmpeg swap would not beat it"*. Measured on the same machine, same GPU, same 546 frames: **WebCodecs ≈ 8 fps, native ffmpeg `h264_amf` = 165 fps.** The claim was wrong by ~20×. See §3.
+
+- **Primary: native ffmpeg subprocess** (main process), hardware encoder selected per platform. This is what After Effects / CapCut / Resolve do, and it is the only lever that touches the 90 %.
+- **Fallback: WebCodecs** (`prefer-hardware`, software fallback) — today's path, kept verbatim for machines with no usable hardware encoder. No regression, no extra work.
+
+### 7.1 Encoder selection (runtime probe, first that works wins)
+
+| OS | Order | ffmpeg encoder |
+|----|-------|----------------|
+| Windows | NVIDIA › Intel › AMD | `h264_nvenc` › `h264_qsv` › `h264_amf` |
+| macOS | Apple Media Engine (every Apple Silicon) | `h264_videotoolbox` |
+| Linux | NVIDIA › Intel/AMD | `h264_nvenc` › `h264_vaapi` |
+| any | *(none of the above)* | fall back to WebCodecs |
+
+Probe once per machine (`ffmpeg -encoders` + a 1‑frame smoke encode), cache the result, re‑probe on driver/version change.
+
+### 7.2 Licensing — LGPL build, no compromise (why this is safe for an MIT app)
+
+Three layers people conflate:
+
+1. **ffmpeg's own licence.** LGPL 2.1+ **by default**. It only becomes GPL if built with `--enable-gpl` (which pulls x264/x265) — and it is all‑or‑nothing: one GPL component makes the whole binary GPL.
+2. **What binds us.** We build ffmpeg **ourselves, LGPL** (no `--enable-gpl`, no `--enable-nonfree`). Obligations: dynamic linking **or a separate executable** (a subprocess trivially satisfies this), ship ffmpeg's source for the exact version (or a written offer), include the LGPL text + attribution, don't forbid reverse‑engineering for debugging. **Our code stays MIT. Zero contamination.**
+3. **Patents ≠ copyright.** An LGPL/GPL licence grants **no** patent rights; H.264 sits in a patent pool (Via LA). Hardware encoders inherit the vendor/OS licence. Not a *new* exposure: the app already ships H.264 export via WebCodecs today. *(Not legal advice — worth a real review before commercialising.)*
+
+**What we give up: x264 only.** Measured cost of that: `libx264 -preset ultrafast` 201 fps vs `h264_amf` 165 fps — and x264's number is misleading, because it saturates every CPU core and would then contend with the renderer, while a hardware encoder runs on dedicated silicon and leaves the CPU free. In the real pipeline hardware is likely *ahead*. Giving up x264 costs us ~nothing.
+
+**Rejected alternatives** (all evaluated 2026‑07‑16):
+
+| Option | Why not |
+|--------|---------|
+| `@napi-rs/webcodecs` | MIT wrapper, zero‑copy, same API (near‑zero migration) — but **no AMF**: AMD‑on‑Windows falls back to software. Its docs also reference `libx265` ⇒ likely a GPL build. The wrapper's MIT does **not** cover the bundled binary. |
+| `node-av` | MIT wrapper but exposes `FF_ENCODER_LIBX264` ⇒ ships a GPL ffmpeg build. |
+| `beamcoder` | GPL v3. |
+| GStreamer | No official Node binding; heavier; no perf edge over ffmpeg. |
+| Own N‑API addon on OS APIs (Media Foundation / VideoToolbox / VAAPI) | Ships nothing extra and is the theoretical max — but buys **+3 %** (the measured pipe cost) for three native codebases and three toolchains. |
+| Chromium GPU flags / blocklist | Dead end: `video_encode=enabled` already, with a real window. No blocklist to lift. |
+
+Building ffmpeg ourselves is the **only** path that simultaneously guarantees LGPL, covers AMD/AMF, and stays one integration for three OSes.
 
 ---
 
@@ -229,7 +331,19 @@ Each phase is independently shippable and independently verifiable.
 - Cancel mid‑export releases decoders/encoder/frames (no leak; watch `VideoFrame` count).
 
 **Perf harness (Phase 0, kept):**
-- Fixed 1080p and 4K fixtures; assert render fps and total wall‑time; record before/after each phase in the PR.
+- `StageTimings` in `runSegmentLoop` logs `[export perf]` per‑stage ms + fps (via `console.warn`, so the app's `rendererConsoleForwarder` forwards it to the Electron stdout — **`console.log` is not forwarded**). `ENCODER_PROBE` in `videoExporter.ts` benchmarks the encoder in isolation.
+- Record before/after each phase in the PR. Reference fixture: **os_parity**, MP4/1080p/60/H.264, 546 output frames.
+- **Baselines to beat (same machine, 2026‑07‑16):** WebCodecs software 94.6 s · WebCodecs hardware **72.7 s** · native `h264_amf` ceiling **~10 s**.
+
+**Benchmarking natives without the app** (how §3.1's numbers were produced — reuse this before implementing):
+```bash
+# encode-only: materialise real frames once, then time the encoder alone
+ffmpeg -i export.mp4 -an -f rawvideo -pix_fmt nv12 raw.nv12
+ffmpeg -f rawvideo -pix_fmt nv12 -s 1920x1080 -r 60 -i raw.nv12 -c:v h264_amf -b:v 8000k out.mp4
+# the real architecture: Node streams NV12 into ffmpeg's stdin (respect `drain`)
+node pipebench.cjs     # measured 165 fps @ 489 MB/s
+```
+Do **not** benchmark pipes with `cat |` under Git Bash (MSYS emulation caps ~70 MB/s and fabricates an 8× penalty), and do **not** read `getGPUFeatureStatus()` from a windowless Electron script (reports `disabled_software` for everything).
 
 ---
 
@@ -243,17 +357,29 @@ Each phase is independently shippable and independently verifiable.
 
 | ID | Risk | Mitigation |
 |----|------|-----------|
-| R1 | GPU‑resident composite is a large rewrite of `FrameRenderer`’s Canvas2D stages | Do it *inside* Phase 2, behind the same renderer API; keep Canvas2D path available under a flag until parity is proven |
-| R2 | PixiJS on OffscreenCanvas in a worker has platform quirks (esp. Linux EGL/Ozone) | Phase 1 validates worker rendering on all 3 OSes first; retain the Linux `getImageData` fallback |
+| ~~R1~~ | ~~GPU‑resident composite is a large rewrite~~ | **Moot** — cancelled and reverted (§4.4) |
+| R2 | PixiJS on OffscreenCanvas in a worker has platform quirks (esp. Linux EGL/Ozone) | Deferred with Phase 5; not on the critical path |
 | R3 | Per‑segment cursor data may not exist for imported (non‑OpenScreen) media | Render no cursor for such segments (§6.4); acceptable and correct |
-| R4 | Parallel HW encode doesn’t scale | Phase 3 is measure‑gated; ship serial if numbers are flat |
+| R4 | Parallel HW encode doesn’t scale | Phase 4 is measure‑gated; ship serial if numbers are flat |
 | R5 | Audio resample drift across many segments | Single common rate chosen up‑front; accumulate sample counts as integers |
+| **R6** | **Bundling ffmpeg: +~30 MB per platform, 3 build matrices, signing/notarisation (macOS)** | Strip the build to what we use (hw encoders + AAC + mp4). Precedent exists: the app already ships `wgc-capture.exe`, `cursor-sampler.exe`, `whisper.dll`, `ggml-*.dll` |
+| **R7** | **LGPL compliance slips** (someone rebuilds with `--enable-gpl` for "just x264")| Pin the configure flags in the build script + CI assertion that `ffmpeg -L` reports no GPL component. One GPL component relicenses the whole binary (§7.2) |
+| **R8** | **Hardware encoder quality/compat varies by vendor** (AMF historically the weakest; driver bugs) | Frame‑diff parity gate per encoder in Phase 3; WebCodecs fallback always available; allow forcing the fallback via a setting |
+| **R9** | **ffmpeg subprocess lifecycle** (orphans on crash/cancel, stdin backpressure deadlock) | Kill the process tree on cancel/quit; respect `stdin.write()` backpressure (the measured 489–589 MB/s assumes honouring `drain`) |
 
 ---
 
 ## 11. Open decisions (need product/eng sign‑off)
 
-- **D1 — Cursor across recordings:** per‑segment cursor from each clip’s own recording (proposed), vs. primary‑only (today). *Recommend per‑segment.*
-- **D2 — Audio model:** sequential concat only (proposed) vs. future overlapping/mixed tracks. *Recommend sequential for v2.*
-- **D3 — Gaps between clips:** skip (tight concat, proposed) vs. insert black/silence for the gap duration. *Recommend skip.*
-- **D4 — Phase 3 parallelism:** attempt after Phase 0/2 measurements, or shelve. *Recommend measure‑gated.*
+- ~~**D1 — Cursor across recordings**~~ — **signed off 2026‑07‑15:** per‑segment cursor, from each clip's own recording. Shipped.
+- ~~**D2 — Audio model**~~ — **signed off:** sequential concat only.
+- ~~**D3 — Gaps between clips**~~ — **signed off:** clips are always contiguous (the timeline reposes them); cuts are trims laid on top. No gaps to fill.
+- ~~**D4 — Phase 3 parallelism / perf programme**~~ — **RESOLVED 2026‑07‑16, and not as written.**
+
+  D4 originally read *"do everything: kill the readback, Worker + OffscreenCanvas, pipeline, parallel encode"*. Phase‑0 measurement killed that framing: those targets are **≤2.3 %** of wall combined, while **WebCodecs alone is ~90 %** (§3.1). The GPU‑resident composite was built, measured at ~0 gain, and reverted.
+
+  **D4 is now: replace the WebCodecs encoder with a bundled LGPL native ffmpeg (§7), Phase 3.** Measured ceiling on the reference machine: **8 fps → 165 fps (20×)**, export ~95 s → ~10–15 s, with **no licensing compromise** (LGPL build, we control the flags; we give up only x264, worth ~0 in‑pipeline).
+
+  Parallel encode survives as **Phase 4, still measure‑gated** — but now it is gated on whether *native* encode leaves us encoder‑bound, which is a very different question.
+
+  **Shipped from the old D4** (kept, they're real): hardware‑first encoder selection (`a31cf49`, ~23 % on the fallback path) and overlapping the WSOLA audio stretch with the video loop (`09db50f`, ~4 s, free — the loop is idle in `encodeWait`).

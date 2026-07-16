@@ -30,6 +30,8 @@ Feeding the bundled native ffmpeg from the renderer — **option A**, the path t
 
 The encoder win is real and it is dwarfed by the **price of admission**: getting the pixels to the CPU at all.
 
+And that price is disqualifying on its own. With the crossing set to **exactly zero** — frames descended to RAM and then discarded, no IPC, no ffmpeg, no muxer, no audio — the pipeline still runs at **40.5 fps against WebCodecs' 44.0**, and WebCodecs is *also writing the file* (§5). So no amount of engineering on the crossing can save this shape: not option A′ (`sandbox: false`), not shared memory, not zero‑copy transfer. **The descent itself is the disqualification.**
+
 ---
 
 ## 2. Why
@@ -104,7 +106,33 @@ Even the optimistic projection only reaches **parity**, after building GPU shade
 
 ---
 
-## 5. What this means
+## 5. What about option A′ — dropping the sandbox to remove the crossing?
+
+The obvious rescue: if the crossing is what costs, remove it. **A′** (`sandbox: false`, renderer spawns ffmpeg and writes its stdin directly) skips the IPC structured clone; other variants propose shared memory or a zero‑copy transfer.
+
+None of them can be rescued, and none had to be built to find out. They all keep `copyTo()` — ffmpeg needs the pixels in RAM whoever spawns it — so a single arm bounds every one of them at once: **descend every frame, then discard it.** The crossing costs exactly zero, there is no encoder, no muxer, no audio.
+
+| arm | wall | fps | readback | encodeWait | writes a file? |
+|-----|-----:|----:|---------:|-----------:|:--------------:|
+| `webcodecs` | 32.2 s | **44.0** | 170 ms | 20 997 ms | **yes** |
+| `readback-ceiling` | 35.0 s | **40.5** | 29 210 ms | **2 ms** | no |
+| `native` | 69.1 s | 20.5 | 34 389 ms | 26 787 ms | yes |
+
+*Same project and settings as §1; 2 runs per arm, spread 1–2 %. Absolute numbers differ from §1 — a later session, a warmer/steadier machine — which is exactly why arms are only ever compared within a run.*
+
+`encodeWait: 2 ms` across 1418 frames confirms the arm does what it claims: the crossing really is zero.
+
+**And it still loses: 40.5 fps against WebCodecs' 44.0 — while WebCodecs also muxes and writes the file** (its `flush` 1222 ms + `audioEncode` 397 ms are included in that 44.0). The descent *alone*, with nothing behind it, is slower than WebCodecs doing the entire job.
+
+So the ceiling for every "remove the crossing" design sits **below** the path we already ship. A′ is in fact strictly worse than this ceiling: it does not eliminate the crossing, it swaps a structured clone (~390 MB/s) for a pipe write (~500 MB/s, §3.1 of the v2 spec) — a ~1.2× improvement on one leg, bought by giving up the renderer sandbox that [`native-core-tauri-spec.md`](./native-core-tauri-spec.md) §3.2 identifies as protecting the demux/decode of untrusted user media.
+
+Combining A′ with Phase 4 does not save it either: NV12 projects the ceiling to ~20.4 ms/frame (≈49 fps), but A′'s pipe write of 3.110 MB at ~500 MB/s adds ~6.2 ms/frame back, landing ≈37.6 fps — still under 44.0, now having paid both the sandbox *and* GPU shader packing.
+
+**Conclusion: descending the frame is disqualifying, independently of what happens afterwards.** The only remaining move is not to descend — §6.
+
+---
+
+## 6. What this means
 
 ### For the spec
 
@@ -115,15 +143,17 @@ Even the optimistic projection only reaches **parity**, after building GPU shade
 | §4.4 / §7 / Phase 3 — native ffmpeg as primary encoder, fed from the renderer | **refuted on this machine.** 2.1× regression |
 | Phase 4 — GPU BGRA→NV12 packing | **cannot save Phase 3.** Best case is parity |
 | §7 — "WebCodecs demoted then removed" | **must not proceed.** WebCodecs is currently the fastest path we have |
+| A′ (`sandbox: false`) and other "remove the crossing" variants | **excluded by the ceiling** (§5), without being built |
 
 ### For the roadmap
 
 The agreed plan was **A** (ship ai‑edition at ~×10 via bundled ffmpeg) then **C** (Tauri/Rust for the last ×2). The measurement inverts it:
 
 - **A is not ×10. It is ×0.48.** The bundled LGPL ffmpeg, the encoder probe, the IPC and the credit window all work correctly — and the architecture still loses, because a sandboxed renderer cannot hand a GPU texture to a native process.
-- **C is where the win is, and for a new reason.** Not "the last ×2", but the *only* way to make native encode pay: if compositing and encoding live on one device in one process, the composited surface feeds the encoder (D3D11VA / VideoToolbox) **without ever descending**. The crossing does not get cheaper — it stops existing.
+- **A′ is not a rescue.** It buys ~1.2× on one leg (structured clone → pipe write) at the cost of the sandbox, and the ceiling with that leg at *zero* already loses (§5).
+- **C is where the win is, and for a new reason.** Not "the last ×2", but the *only* way to make native encode pay: if compositing and encoding live on one device in one process, the composited surface feeds the encoder (D3D11VA / VideoToolbox) **without ever descending**. The descent does not get cheaper — it stops existing.
 
-The ×10 was never in front of us. The wall is the crossing itself.
+The ×10 was never in front of us. And the wall is not the crossing — the ceiling arm set the crossing to zero and the shape still lost. **The wall is the descent**: any design in which a composited frame reaches system RAM has already paid more than WebCodecs pays for the whole export.
 
 ### What survives from the native work
 
@@ -131,7 +161,7 @@ Nothing here invalidates the parts, only their arrangement. `ffmpegCapabilities`
 
 ---
 
-## 6. Method
+## 7. Method
 
 ```bash
 npm run bench:export -- --project=proj_a7468696 --arms=webcodecs,native,native-cpu,webcodecs-cpu --runs=2
@@ -154,7 +184,7 @@ Without `webcodecs-cpu`, a `native-cpu` result could be attributed to the canvas
 
 ---
 
-## 7. Two runs discarded, and why they are in this report
+## 8. Two runs discarded, and why they are in this report
 
 **Run 1 (UI, ~5 % battery, unplugged).** Baseline 84.6 s → native 54.1 s, "1.56× faster". Discarded: the SoC (15 W class, shared CPU/iGPU budget) was power‑squeezed and the budget **drifted upward while charging, between the arms**. Also self‑inflicted: DevTools were open for the native arm only, streaming hundreds of console lines — a handicap applied to one arm.
 
@@ -178,7 +208,7 @@ Everything the bench guards against is something that already produced a confide
 
 ---
 
-## 8. Caveats
+## 9. Caveats
 
 - **One machine.** Ryzen 5 7520U, integrated Radeon, `h264_amf`. The descent is a Chromium GPU→CPU transfer and is likely universal, but a discrete GPU (PCIe) or Intel QSV could produce different constants. `npm run bench:export` makes that a one‑command check — this should be re‑run before the conclusion is generalised beyond iGPU laptops.
 - **The linear fit is two points**, not a proof. It is directionally clear (readback scales with bytes, ~257 MB/s marginal, ~6.7 ms fixed), but the NV12 projection is an extrapolation, not a measurement.
@@ -187,7 +217,7 @@ Everything the bench guards against is something that already produced a confide
 
 ---
 
-## 9. Unrelated finding: `os_parity` is corrupt (data‑loss bug)
+## 10. Unrelated finding: `os_parity` is corrupt (data‑loss bug)
 
 While resolving the bench's target project, `listProjects` was silently skipping `proj_de6ffaaa` (`os_parity`). The file is 4006 bytes: **3485 bytes of valid, complete JSON followed by the tail of a longer version of the same document.**
 
@@ -199,7 +229,7 @@ Consequence: the project is unopenable in the editor today.
 
 ---
 
-## 10. Open questions
+## 11. Open questions
 
 1. **Does the descent behave differently on a discrete GPU, or on Intel QSV?** One bench run per machine.
 2. **Can option C actually keep the frame on‑device end to end?** That is the load‑bearing assumption of the whole native‑core case, and it is currently unmeasured. It should be prototyped and benched *before* committing to a Tauri migration — this report exists because the last "obvious" architectural win was 2.1× backwards.

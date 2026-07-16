@@ -10,10 +10,18 @@ Prerequisite reading: [`export-pipeline-v2-spec.md`](./export-pipeline-v2-spec.m
 > RAM (38.9 ms/frame) where WebCodecs never descends at all. See
 > [`export-native-encode-measurement.md`](./export-native-encode-measurement.md).
 >
+> **Option A′ (`sandbox: false`) is excluded — measured, not argued.** With the crossing set to
+> *exactly zero* (frames descended to RAM then discarded: no IPC, no ffmpeg, no muxer) the pipeline
+> still runs 40.5 fps against WebCodecs' 44.0, and WebCodecs is also writing the file. That ceiling
+> bounds every "remove the crossing" variant at once — A′, shared memory, zero‑copy transfer — since
+> none of them can skip `copyTo()`. A′ is strictly worse than that ceiling anyway: it swaps a
+> structured clone (~390 MB/s) for a pipe write (~500 MB/s), i.e. ~1.2× on one leg, bought by giving
+> up the sandbox that §3.2 identifies as protecting demux/decode of untrusted media.
+>
 > This does not make C a bigger win by default — it makes C the **only** arrangement in which native
-> encode can pay, and for a different reason than this doc argues: not "fewer copies", but *the
-> crossing stops existing*. That is now the load‑bearing assumption of this entire proposal, and it
-> is **unmeasured**. Prototype and bench "composite and encode on one device, frame never descends"
+> encode can pay, and for a different reason than this doc argues: not "fewer copies", but *the frame
+> never descends*. That is now the load‑bearing assumption of this entire proposal, and it is
+> **unmeasured**. Prototype and bench "composite and encode on one device, frame never descends"
 > **before** committing to a migration. The last architectural certainty was 2.1× backwards.
 
 ---

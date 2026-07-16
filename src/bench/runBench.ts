@@ -26,6 +26,8 @@ export interface BenchArm {
 	/** localStorage flags applied before the run — the levers under test. */
 	nativeEncode: boolean;
 	readFrequently: boolean;
+	/** Extract every frame and discard it. Diagnostic only — writes no file. */
+	dropFrames?: boolean;
 }
 
 export interface BenchRunResult {
@@ -72,11 +74,17 @@ const ARMS: Record<string, BenchArm> = {
 	// Control: isolates the canvas change from the encoder change. Without this
 	// arm a native-cpu win could be the canvas, the encoder, or neither.
 	"webcodecs-cpu": { nativeEncode: false, readFrequently: true },
+	// Ceiling, not a candidate: descend every frame to RAM, then discard it —
+	// the crossing costs exactly zero. Bounds EVERY "remove the crossing"
+	// proposal at once (option A' sandbox:false, shared memory, zero-copy
+	// transfer), because none of them can skip the readback. Writes no file.
+	"readback-ceiling": { nativeEncode: true, readFrequently: false, dropFrames: true },
 };
 
 function applyArm(arm: BenchArm): void {
 	localStorage.setItem("openscreen.nativeEncode", arm.nativeEncode ? "1" : "0");
 	localStorage.setItem("openscreen.readFrequently", arm.readFrequently ? "1" : "0");
+	localStorage.setItem("openscreen.dropFrames", arm.dropFrames ? "1" : "0");
 }
 
 /**

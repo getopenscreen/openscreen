@@ -87,6 +87,30 @@ function nativeEncodeEnabled(): boolean {
 	}
 }
 
+/**
+ * Diagnostic: extract every frame to RAM, then throw it away.
+ *
+ * Produces no video — it measures the CEILING of any architecture that gets
+ * pixels to the CPU, by pricing the descent with the crossing set to exactly
+ * zero. That bounds every "remove the crossing" proposal at once — option A'
+ * (sandbox:false, spawning ffmpeg from the renderer), shared memory, a
+ * transferable that Electron won't transfer — without building any of them,
+ * because none of them can avoid the readback: ffmpeg needs the pixels in RAM
+ * whoever spawns it.
+ *
+ * If this ceiling sits below the WebCodecs arm, every such proposal is dead and
+ * the only way out is not descending at all (native-core-tauri-spec.md).
+ *
+ *   localStorage.setItem("openscreen.dropFrames", "1")
+ */
+function dropFramesEnabled(): boolean {
+	try {
+		return localStorage.getItem("openscreen.dropFrames") === "1";
+	} catch {
+		return false;
+	}
+}
+
 async function probeOneEncoder(opts: {
 	label: string;
 	width: number;
@@ -1149,26 +1173,33 @@ export class VideoExporter {
 		// --- Frame sink: native ffmpeg, or the WebCodecs path it is replacing ---
 		const api = window.electronAPI as unknown as NativeSinkApi | undefined;
 		const useNative = nativeEncodeEnabled() && typeof api?.exportStart === "function";
+		// Ceiling diagnostic: extract but never ship, and start no ffmpeg. The
+		// export produces NO FILE — it exists to price the descent alone.
+		const dropFrames = useNative && dropFramesEnabled();
 		let sink: NativeFrameSink | null = null;
 		let extractor: CanvasFrameExtractor | null = null;
 		if (useNative && api) {
 			extractor = new CanvasFrameExtractor(this.config.width, this.config.height);
-			sink = await NativeFrameSink.start(
-				{
-					width: this.config.width,
-					height: this.config.height,
-					frameRate: this.config.frameRate,
-					// Same field the WebCodecs encoder is configured from, so the A/B
-					// compares two runs at one bitrate.
-					bitrate: this.config.bitrate,
-					// BGRA is all Chromium will copy out of a canvas; NV12 packing is
-					// the next step (see frameExtract.ts).
-					pixelFormat: extractor.pixelFormat,
-				},
-				api,
-			);
-			this.nativeSink = sink;
-			console.warn(`[export perf] native encode via ${sink.encoder} -> ${sink.outputPath}`);
+			if (dropFrames) {
+				console.warn("[export perf] readback ceiling: extract and discard, NO FILE WRITTEN");
+			} else {
+				sink = await NativeFrameSink.start(
+					{
+						width: this.config.width,
+						height: this.config.height,
+						frameRate: this.config.frameRate,
+						// Same field the WebCodecs encoder is configured from, so the A/B
+						// compares two runs at one bitrate.
+						bitrate: this.config.bitrate,
+						// BGRA is all Chromium will copy out of a canvas; NV12 packing is
+						// the next step (see frameExtract.ts).
+						pixelFormat: extractor.pixelFormat,
+					},
+					api,
+				);
+				this.nativeSink = sink;
+				console.warn(`[export perf] native encode via ${sink.encoder} -> ${sink.outputPath}`);
+			}
 		} else {
 			await this.initializeEncoder(encoderPreference);
 		}
@@ -1375,7 +1406,7 @@ export class VideoExporter {
 							// Both paths report the same two stages so the A/B diffs stage by
 							// stage: "readback" is getting pixels off the canvas, "encodeWait" is
 							// blocking on the consumer — the encoder queue, or the credit window.
-							if (sink && extractor) {
+							if (extractor) {
 								const stopExtract = timings.start("readback");
 								// The GPU->CPU descent happens here, inside copyTo — not in the
 								// VideoFrame constructor, which is lazy.
@@ -1384,8 +1415,9 @@ export class VideoExporter {
 
 								const stopShip = timings.start("encodeWait");
 								// IPC copies the buffer during send(), so the extractor is free to
-								// refill it as soon as this resolves.
-								await sink.write(bytes);
+								// refill it as soon as this resolves. With no sink, the frame is
+								// discarded here: that IS the ceiling arm — the crossing costs zero.
+								if (sink) await sink.write(bytes);
 								stopShip();
 							} else {
 								const stopReadback = timings.start("readback");
@@ -1555,6 +1587,10 @@ export class VideoExporter {
 				timings.formatSummary({ frames: frameIndex, hardwareAcceleration: encoderPreference }),
 		);
 
+		if (dropFrames) {
+			warnings.push("Readback ceiling diagnostic: frames were discarded, no file was written.");
+			return { success: true, warnings };
+		}
 		if (nativeOutput) {
 			// Scaffold: ffmpeg already wrote the file, so there is no blob to hand
 			// back and the save flow does not yet know about it. The measurement is

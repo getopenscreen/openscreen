@@ -9,6 +9,11 @@ Status: **Revised 2026‑07‑16** — multi‑asset shipped; the **perf half wa
 > 38.9 ms/frame that WebCodecs never pays because it encodes straight off the GPU texture. §3.1's
 > "readback is 0.1 %" holds **only while nothing forces the descent**, and feeding a native encoder
 > is exactly what forces it. Phase 4 (NV12) cannot rescue it either — best case is parity.
+>
+> **The wall is the descent, not the crossing.** With the crossing at *exactly zero* (frames
+> descended then discarded: no IPC, no ffmpeg, no muxer) the pipeline still runs 40.5 fps vs
+> WebCodecs' 44.0 — and WebCodecs is also writing the file. That ceiling excludes option A′
+> (`sandbox: false`), shared memory and zero‑copy transfer **without building any of them**.
 > **Full evidence, method and consequences: [`export-native-encode-measurement.md`](./export-native-encode-measurement.md) (2026‑07‑16).**
 Owners: ai-edition editor team
 Scope: the `.axcut` (AI‑edition) export path only. The legacy `components/video-editor` exporter is out of scope.

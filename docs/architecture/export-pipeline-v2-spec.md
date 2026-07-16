@@ -13,6 +13,12 @@ Scope: the `.axcut` (AI‑edition) export path only. The legacy `components/vide
 2. **Performance.** ~~Cut export time by removing the per‑frame GPU→CPU→GPU round‑trips, moving the pipeline off the renderer main thread, and properly pipelining decode/render/encode. Target: ≥2× faster.~~ **Rewritten 2026‑07‑16 after measurement (§3.1):** those targets are ≤2.3 % of wall. Cut export time by **replacing the WebCodecs encoder — ~90 % of wall — with a bundled native LGPL ffmpeg** using the platform's hardware encoder. Target: **≥5×** at 1080p (measured ceiling: 20×).
 3. **Correct framing.** Output honors the timeline’s selected aspect ratio and is sized to the largest clip. *(Already shipped — see §9.)*
 
+### Constraints
+- **The app is MIT and must stay MIT.** No GPL component may end up in what we ship (§7.2).
+- **Windows + macOS + Linux**, x64 and arm64 (Apple Silicon). No platform gets a degraded export.
+- Must degrade gracefully where no hardware encoder exists (→ WebCodecs fallback).
+- **Bundle size is not a constraint** *(Etienne, 2026‑07‑16)*: ~200 MB per platform is acceptable. Do not trade features, codec coverage or simplicity for bytes. Precedent: the app already ships native binaries (`wgc-capture.exe`, `cursor-sampler.exe`, `whisper.dll`, `ggml-*.dll`).
+
 ### Non‑goals (this spec)
 - Overlapping/mixed audio tracks (we assume **sequential** per‑clip audio).
 - Compositing multiple assets **simultaneously** (picture‑in‑picture of two screen recordings). The webcam overlay is the only simultaneous second source and stays as‑is.
@@ -227,7 +233,7 @@ Each phase is independently shippable and independently verifiable.
 ### Phase 3 — **Native ffmpeg encode (L) — the actual win** ← *next*
 Replace the WebCodecs encoder + JS muxer with a bundled LGPL ffmpeg subprocess (§7).
 
-1. **Build & bundle.** LGPL ffmpeg per platform (`--disable-gpl`, hardware encoders + AAC + mp4 muxer only; strip everything else to keep it ~30 MB). Ship next to the existing native binaries in `electron/native/bin/<platform>/`. Add the LGPL notice + source offer.
+1. **Build & bundle.** ffmpeg per platform, built **without** `--enable-gpl` and without `--enable-nonfree` — that is what makes it LGPL, and it is the *only* control that matters (those flags are what pull x264/x265; absent them ffmpeg simply won't build a GPL component, whatever else is enabled). **Binary size is not a constraint** (~200 MB/platform is fine), so do **not** strip for size — enable the codecs we may want next (HEVC, AV1, VP9, ProRes) so a future format doesn't need a rebuild + re‑qualification. Ship next to the existing native binaries in `electron/native/bin/<platform>/`. Add the LGPL notice + source offer.
 2. **Capability probe** (§7.1), cached per machine.
 3. **Encode service** (main process): spawn ffmpeg, stream NV12 frames to stdin, parse progress from stderr, handle cancel (kill the tree) and non‑zero exit.
 4. **Renderer side:** after `renderFrame`, read the canvas to NV12 and hand the frame to the service. Keep the WebCodecs path behind the capability probe as the fallback.
@@ -309,8 +315,8 @@ Three layers people conflate:
 | `@napi-rs/webcodecs` | MIT wrapper, zero‑copy, same API (near‑zero migration) — but **no AMF**: AMD‑on‑Windows falls back to software. Its docs also reference `libx265` ⇒ likely a GPL build. The wrapper's MIT does **not** cover the bundled binary. |
 | `node-av` | MIT wrapper but exposes `FF_ENCODER_LIBX264` ⇒ ships a GPL ffmpeg build. |
 | `beamcoder` | GPL v3. |
-| GStreamer | No official Node binding; heavier; no perf edge over ffmpeg. |
-| Own N‑API addon on OS APIs (Media Foundation / VideoToolbox / VAAPI) | Ships nothing extra and is the theoretical max — but buys **+3 %** (the measured pipe cost) for three native codebases and three toolchains. |
+| GStreamer | No official Node binding; no perf edge over ffmpeg. *(We also called it "heavier" — that no longer counts against it, since size is not a constraint. It still loses on the binding.)* |
+| Own N‑API addon on OS APIs (Media Foundation / VideoToolbox / VAAPI) | Theoretical max — buys **+3 %** (the measured pipe cost) for three native codebases and three toolchains. *(Its "ships nothing extra" upside is moot: size is not a constraint, so it has no advantage left.)* |
 | Chromium GPU flags / blocklist | Dead end: `video_encode=enabled` already, with a real window. No blocklist to lift. |
 
 Building ffmpeg ourselves is the **only** path that simultaneously guarantees LGPL, covers AMD/AMF, and stays one integration for three OSes.
@@ -362,7 +368,7 @@ Do **not** benchmark pipes with `cat |` under Git Bash (MSYS emulation caps ~70 
 | R3 | Per‑segment cursor data may not exist for imported (non‑OpenScreen) media | Render no cursor for such segments (§6.4); acceptable and correct |
 | R4 | Parallel HW encode doesn’t scale | Phase 4 is measure‑gated; ship serial if numbers are flat |
 | R5 | Audio resample drift across many segments | Single common rate chosen up‑front; accumulate sample counts as integers |
-| **R6** | **Bundling ffmpeg: +~30 MB per platform, 3 build matrices, signing/notarisation (macOS)** | Strip the build to what we use (hw encoders + AAC + mp4). Precedent exists: the app already ships `wgc-capture.exe`, `cursor-sampler.exe`, `whisper.dll`, `ggml-*.dll` |
+| **R6** | **Bundling ffmpeg: 3 build matrices + macOS signing/notarisation of a shipped binary** | Precedent exists: the app already ships `wgc-capture.exe`, `cursor-sampler.exe`, `whisper.dll`, `ggml-*.dll` — the packaging/signing path is solved. **Size is explicitly not a risk** (~200 MB/platform accepted), so no stripping and no size/feature trade‑off |
 | **R7** | **LGPL compliance slips** (someone rebuilds with `--enable-gpl` for "just x264")| Pin the configure flags in the build script + CI assertion that `ffmpeg -L` reports no GPL component. One GPL component relicenses the whole binary (§7.2) |
 | **R8** | **Hardware encoder quality/compat varies by vendor** (AMF historically the weakest; driver bugs) | Frame‑diff parity gate per encoder in Phase 3; WebCodecs fallback always available; allow forcing the fallback via a setting |
 | **R9** | **ffmpeg subprocess lifecycle** (orphans on crash/cancel, stdin backpressure deadlock) | Kill the process tree on cancel/quit; respect `stdin.write()` backpressure (the measured 489–589 MB/s assumes honouring `drain`) |

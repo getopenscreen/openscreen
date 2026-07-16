@@ -36,14 +36,23 @@ The real question is not *Electron vs Tauri*. It is:
 
 > **Where does the compositor live, and how does the preview display its output?**
 
-| option | compositor | preview display | crossing? | parity risk |
-|---|---|---|---|---|
-| **A. status quo + Phase 4** | Pixi/WebGL in renderer | canvas in the webview | yes (3.0 MB/frame) | none — one compositor |
-| **B. Rust compositor, export only** | Rust/wgpu in native | Pixi (unchanged) | export: no | **two compositors — rejected** |
-| **C. Rust compositor + native preview surface** | Rust/wgpu | native surface layered in the window | no | none — one compositor |
-| **D. Rust compositor, preview via webview** | Rust/wgpu | frames pushed to the webview | **yes, reversed** | none, but the crossing returns |
+| option | compositor | preview display | crossing? | parity | other cost |
+|---|---|---|---|---|---|
+| **A. status quo + Phase 4** | Pixi/WebGL in renderer | canvas in the webview | yes (3.0 MB/frame) | ✅ one compositor | — |
+| **A′. Electron, export window with `sandbox:false`** | Pixi/WebGL in renderer | canvas in the webview | **no** | ✅ one compositor | **the sandbox** |
+| **B. Rust compositor, export only** | Rust/wgpu | Pixi (unchanged) | export: no | ❌ **two compositors** | months |
+| **C. Rust compositor + native preview surface** | Rust/wgpu | native surface in the window | no | ⚠️ *promised*, not given (see below) | months + shell migration |
+| **D. Rust compositor, preview via webview** | Rust/wgpu | frames pushed to the webview | **yes, reversed** | ✅ one compositor | months, for nothing |
 
-**Only C removes the crossing while keeping one compositor.** D is a trap: sending preview frames back to the webview reintroduces the exact bottleneck, just in the other direction. B is the parity trap of §2.
+**A′ is the option this document originally missed, and it matters.** The crossing is not purely architectural — it is partly *configuration*. With `sandbox:false` + `nodeIntegration:true`, the renderer **is** a Node process: it can `spawn('ffmpeg')` and write frames straight to `stdin`. V8 heap → pipe, no Mojo, no structured clone. (That is literally what our 165 fps `pipebench.cjs` measured.) **A′ reaches the same ~165 fps as C, for a boolean.**
+
+We are **not** taking it. The app deliberately runs `nodeIntegration:false` + `contextIsolation:true` with the sandbox on by default, and the editor already spends its security budget on `webSecurity:false`. Turning the sandbox off on the window that handles user-supplied media trades a layer of defence-in-depth for 2×. (The threat model is narrower than it first looks — demuxing is WASM, decoding runs in the GPU process, and ffmpeg only ever sees rawvideo we produced — but an exploit in the WASM demuxer or the WebGL path would land on full Node instead of having to escape a sandbox first. That is a real loss.)
+
+**What A′ does to the case for C:** they buy the *same thing* — removing the crossing, ~165 fps. A′ costs the sandbox; C costs months plus a wgpu compositor. So C is not "the only way to 20×" — it is "the way to 20× that keeps the sandbox". That is a narrower claim than this document originally made, and it should be judged as such.
+
+**On C's parity column — read it honestly.** It is marked ⚠️, not ✅, on purpose. One compositor gives parity *by construction* only **after** the shadow, webcam mask, cursor and zoom easing are re‑implemented identically in wgpu — which is precisely where parity breaks in practice. Until then the ✅ is a promise, not a state. B is worse still: two compositors permanently, on a product whose entire value is that the export looks like the preview.
+
+D is a trap: pushing preview frames back to the webview reintroduces the exact bottleneck, reversed.
 
 C is achievable in **either** shell — Electron with a napi‑rs addon plus a native child window, or Tauri natively. Tauri is the natural home (the backend already *is* Rust, and `wry` + a wgpu surface is a known pattern); Electron would be swimming against the process model. **This is what Cap (cap.so) does** — and why its native encoder crates make sense for it: Tauri/Rust, capture + composite + preview all native, no sandboxed renderer in the frame path.
 
@@ -100,9 +109,11 @@ One Rust codebase targeting Vulkan/Metal/D3D12 natively — and WebGPU in a brow
 
 ## 6. Recommendation & sequencing
 
-1. **Do Phase 4 first, now** (§4.4.1 of the export spec): GPU NV12 packing + move the ffmpeg stdin write off the IPC‑receiving thread. Target ~81–100 fps (**10×**), no architecture change, one compositor. This is real, cheap, and it is *not* wasted if we later go native — the encoder selection, the LGPL ffmpeg bundling and the capability probe all survive into the Rust core.
-2. **Measure 4K before deciding.** All numbers here are 1080p. A 4K BGRA frame is 33 MB (NV12: 12.4 MB) — the crossing scales linearly with pixels while the encoder degrades more gently, so at 4K the native gain could be well above 2×. **If most exports are 4K, this document gets much stronger.** 20‑minute measurement, not yet done.
-3. **Then decide C vs status‑quo** on evidence: the 4K number, the share of long/4K exports in real usage, and appetite for a Rust core.
-4. If we go: **spike first** — a wgpu compositor rendering *one* clip with zoom + shadow + webcam, frame‑diffed against the current export. If parity on that subset is achievable at reasonable cost, the rest is grind. If it is not, we learn cheaply.
+1. **Do Phase 4 first, now** (§4.4.1 of the export spec): NV12 packing + move the ffmpeg stdin write off the IPC‑receiving thread. Target ~81–100 fps (**10×**), no architecture change, one compositor, no security trade. It is *not* wasted if we later go native — the encoder selection, the LGPL ffmpeg bundling and the capability probe all survive into the Rust core.
+2. **Exhaust the free levers before paying for anything.** They can close the question outright: **N parallel MessagePorts** (untested — if the crossing goes 387 → ~600 MB/s, Phase 4 becomes encoder‑bound and C loses its entire reason to exist), and moving the stdin write to a `worker_thread` so the IPC‑receiving thread stops serialising with it (that serialisation costs a measured 40 %). A bigger credit window is **already ruled out** — measured 131 fps at window=32 vs 130 at window=8, saturated.
+3. **Then decide C on evidence**, judged against A′ rather than against A: C's actual offer is *"the 2× that A′ gives for free, but without giving up the sandbox"*. That is worth something — it is not worth what this document originally implied.
+4. If we go: **spike first** — a wgpu compositor rendering *one* clip with zoom + shadow + webcam, frame‑diffed against the current export. That subset is where the ⚠️ in §3's parity column lives. If parity is achievable there at reasonable cost, the rest is grind. If not, we learn cheaply.
 
-**Bottom line:** Phase 4 buys 10× for weeks of work. This buys 20× for months and a different product architecture. The 4K measurement is what should decide it, and it has not been taken.
+**Bottom line:** Phase 4 buys **10×** for weeks, safely. C buys the last **2×** (81 → 165 fps: 6.7 s → 3.3 s on os_parity, ~7.4 → ~3.6 min on a 10‑minute recording) for months, a Rust compositor, a shell migration, and a parity risk that is real. A′ buys that same 2× for a boolean — and we are refusing it on security. Consistency does not *force* refusing C, since C keeps the sandbox — but the prize is the same 2× either way, and it should be priced as such.
+
+**Retracted:** an earlier draft argued *"measure 4K, the crossing scales with pixels while the encoder degrades more gently, so 4K makes this case much stronger."* That was itself an unmeasured extrapolation — the encoder slows at 4K too (h264_amf drops to roughly 40–50 fps), so the gap narrows rather than widens. 4K does not rescue this case.

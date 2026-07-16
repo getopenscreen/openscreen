@@ -10,7 +10,7 @@ Scope: the `.axcut` (AI‑edition) export path only. The legacy `components/vide
 
 ### Goals
 1. **Multi‑asset export.** Render every clip on the timeline from *its own* source asset, in timeline order — matching what the preview already plays. Today only the primary asset is rendered; clips pointing at other assets are silently dropped.
-2. **Performance.** ~~Cut export time by removing the per‑frame GPU→CPU→GPU round‑trips, moving the pipeline off the renderer main thread, and properly pipelining decode/render/encode. Target: ≥2× faster.~~ **Rewritten 2026‑07‑16 after measurement (§3.1):** those targets are ≤2.3 % of wall. Cut export time by **replacing the WebCodecs encoder — ~90 % of wall — with a bundled native LGPL ffmpeg** using the platform's hardware encoder. Target: **≥5×** at 1080p (measured ceiling: 20×).
+2. **Performance.** ~~Cut export time by removing the per‑frame GPU→CPU→GPU round‑trips, moving the pipeline off the renderer main thread, and properly pipelining decode/render/encode. Target: ≥2× faster.~~ **Rewritten 2026‑07‑16 after measurement (§3.1):** those targets are ≤2.3 % of wall. Cut export time by **replacing the WebCodecs encoder — ~90 % of wall — with a bundled native LGPL ffmpeg** using the platform's hardware encoder. Target: **≥4×** on the frame pipeline at 1080p (measured end‑to‑end: 8 → **34 fps** BGRA, → **81 fps** with NV12 packing). The encoder alone does 165 fps, but the renderer→main crossing — not the encoder — is what we end up bound by (§4.4.1).
 3. **Correct framing.** Output honors the timeline’s selected aspect ratio and is sized to the largest clip. *(Already shipped — see §9.)*
 
 ### Constraints
@@ -239,20 +239,35 @@ Two consequences. First, `copyTo` on a **2D** canvas is 5× cheaper than `getIma
 
 A **credit window** (N frames in flight) is worth **+56 %** over stop‑and‑wait; window=8 already saturates it, 32 adds nothing. Use 8.
 
-**Zero‑copy to main does not exist in Electron.** `MessagePortMain.postMessage(message, [transfer])` accepts `MessagePortMain[]` **only**; transferring an ArrayBuffer from renderer to main silently loses the entire message (measured: `ev.data === null`; known bug [electron#34905](https://github.com/electron/electron/issues/34905) — it works renderer→renderer, not renderer→main). Every frame is structured‑cloned, i.e. copied. That caps the crossing at ~390 MB/s, which at 7.9 MB/frame is **≈49 fps**.
+**Zero‑copy to main does not exist in Electron.** `MessagePortMain.postMessage(message, [transfer])` accepts `MessagePortMain[]` **only**; transferring an ArrayBuffer from renderer to main silently loses the entire message (measured: `ev.data === null`; known bug [electron#34905](https://github.com/electron/electron/issues/34905) — it works renderer→renderer, not renderer→main). Every frame is structured‑cloned, i.e. copied. That caps the crossing at ~390–420 MB/s, which at 7.9 MB/frame is **53 fps** for the crossing alone (measured).
+
+**Stage 3 — end‑to‑end, measured (not extrapolated):**
+
+| pipeline | fps | throughput |
+|----------|----:|-----------:|
+| IPC alone · NV12 3.0 MB | 130 | 387 MB/s |
+| IPC alone · BGRA 7.9 MB | 53 | 418 MB/s |
+| **IPC + ffmpeg · NV12 3.0 MB** | **81** | 240 MB/s |
+| **IPC + ffmpeg · BGRA 7.9 MB** | **34** | 268 MB/s |
+
+Two facts fall out, and both matter:
+
+1. **The crossing is bandwidth‑bound, not per‑message‑bound** (387 vs 418 MB/s at wildly different frame sizes). So halving the bytes really does double the fps — Phase 4 is worth it, and this is what justifies it.
+2. **Main is a serialisation point.** Attaching ffmpeg costs ~40 % of the crossing throughput (418 → 268 MB/s) because the same process both receives the IPC message and writes stdin. Moving ffmpeg to a `utilityProcess` does **not** fix this — the receiving process still does both halves; it only moves which process pays.
+
+Also: `Buffer.from(typedArray)` **copies**. In the main‑process sink, wrap instead — `Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength)`. Measured worth **+31 %** (26 → 34 fps BGRA); at 7.9 MB × 546 frames a stray copy is 4.3 GB of pure waste.
 
 **The chain, and what to expect:**
 
 | stage | ceiling |
 |-------|--------:|
+| composite (Pixi) | 377 fps |
 | extract (`VideoFrame(2D).copyTo`) | 698 fps |
-| **renderer → main (BGRA, 7.9 MB, window=8)** | **≈49 fps** ← bottleneck |
-| main → ffmpeg stdin | 489–589 MB/s |
-| ffmpeg `h264_amf` | 165 fps |
+| **renderer → main → ffmpeg stdin (BGRA)** | **34 fps** ← bottleneck |
+| ffmpeg `h264_amf` | 165 fps (3× headroom) |
 
-**Realistic target: ~49 fps ⇒ os_parity ~95 s → ~16 s (≈6×)**, not the 20× the encoder alone suggested. Ship that first: it is most of the win at low risk.
-
-**The one lever left is halving the bytes.** A GPU shader packing BGRA→NV12 before extraction would cut the crossing to 3.0 MB/frame ⇒ ~131 fps ⇒ ~7 s (≈13×). It is measure‑gated and non‑obvious: GL‑canvas readback is the slow path (11.23 ms above), so the packing must not reintroduce it. Phase 4.
+**Phase 3 target: 8 → 34 fps (≈4.3× on the frame pipeline).** Ship it first: most of the win, low risk.
+**Phase 4 (GPU NV12 packing): 34 → 81 fps (≈10× vs today).** Now clearly justified by fact 1 above — but still gated on the packing not reintroducing the slow GL readback (11.23 ms).
 
 ---
 
@@ -280,10 +295,10 @@ Replace the WebCodecs encoder + JS muxer with a bundled LGPL ffmpeg subprocess (
 4. **Renderer side:** after `renderFrame`, extract with `new VideoFrame(canvas).copyTo(buf)` (**not** `getImageData` — 1.43 ms vs 7.00, §4.4.1) and ship the frame to the service over a **credit window of 8**. Keep the WebCodecs path behind the capability probe as the fallback.
 5. **Delete on success:** the `mediabunny` video muxing path and the in‑memory `Blob` → ffmpeg writes the file.
 
-- **Exit criteria:** os_parity exports **≥4× faster** (target ~95 s → ~16 s, IPC‑bound per §4.4.1) with frame‑diff parity vs the current output and A/V still locked; WebCodecs fallback still produces a correct file when no hardware encoder is present; cancel leaves no orphan process.
+- **Exit criteria:** the frame pipeline reaches **≥30 fps** (measured ceiling 34, §4.4.1) vs 8 today with frame‑diff parity vs the current output and A/V still locked; WebCodecs fallback still produces a correct file when no hardware encoder is present; cancel leaves no orphan process.
 
 ### Phase 4 — Halve the crossing: GPU BGRA→NV12 packing (M, measure‑gated)
-- The renderer→main crossing is the bottleneck at ~49 fps, purely because Chromium only hands us **7.9 MB BGRA** (it refuses NV12, §4.4.1) and Electron cannot transfer buffers zero‑copy. Packing to NV12 on the GPU before extraction cuts it to 3.0 MB ⇒ ~131 fps ⇒ ~7 s (≈13×).
+- The renderer→main crossing is the bottleneck at **34 fps**, purely because Chromium only hands us **7.9 MB BGRA** (it refuses NV12, §4.4.1) and Electron cannot transfer buffers zero‑copy. The crossing is **bandwidth‑bound** — measured 387 MB/s at 3.0 MB/frame vs 418 MB/s at 7.9 MB/frame — so halving the bytes really does double the rate: NV12 measures **81 fps** end‑to‑end (≈10× vs today).
 - **Gate:** GL‑canvas readback measured 8× slower than 2D (11.23 vs 1.43 ms) — the packing must not reintroduce that. Prototype and measure the packing + readback together before committing.
 
 ### Phase 5 — Parallel segments (M, measure‑gated)
@@ -434,7 +449,7 @@ node pipebench.cjs     # measured 165 fps @ 489 MB/s
 
   D4 originally read *"do everything: kill the readback, Worker + OffscreenCanvas, pipeline, parallel encode"*. Phase‑0 measurement killed that framing: those targets are **≤2.3 %** of wall combined, while **WebCodecs alone is ~90 %** (§3.1). The GPU‑resident composite was built, measured at ~0 gain, and reverted.
 
-  **D4 is now: replace the WebCodecs encoder with a bundled LGPL native ffmpeg (§7), Phase 3.** Measured ceiling on the reference machine: **8 fps → 165 fps (20×)**, export ~95 s → ~10–15 s, with **no licensing compromise** (LGPL build, we control the flags; we give up only x264, worth ~0 in‑pipeline).
+  **D4 is now: replace the WebCodecs encoder with a bundled LGPL native ffmpeg (§7), Phase 3.** The encoder alone goes 8 → 165 fps (20×), but end‑to‑end we land at **34 fps (≈4.3×)** because the renderer→main crossing becomes the new bottleneck; **81 fps (≈10×)** once Phase 4 halves the bytes (§4.4.1 — all measured). **No licensing compromise** (LGPL build, we control the flags; we give up only x264, worth ~0 in‑pipeline).
 
   Parallel encode survives as **Phase 4, still measure‑gated** — but now it is gated on whether *native* encode leaves us encoder‑bound, which is a very different question.
 

@@ -19,6 +19,7 @@ import { WsolaTimeStretcher } from "./audioTimeStretch";
 import { FrameRenderer } from "./frameRenderer";
 import { materializeLocalSourceFile, releaseLocalSourceFile } from "./localSourceFile";
 import { VideoMuxer, videoCodecFamily } from "./muxer";
+import { StageTimings } from "./perfTimings";
 import { MAX_IN_MEMORY_SOURCE_BYTES } from "./sourceFileLimits";
 import { StreamingVideoDecoder } from "./streamingDecoder";
 import { computeKeepSegments, splitBySpeed } from "./timelineSegments";
@@ -57,6 +58,132 @@ export async function waitForEncoderQueueSpace(params: {
 		}
 		await sleep(5);
 	}
+}
+
+// D4 diagnostic: measure the ENCODER ALONE (synthetic frames, no decode/render)
+// to separate platform encoder throughput from our pipeline's feeding path.
+// Temporary — flip off/remove once the bottleneck is identified.
+const ENCODER_PROBE = true;
+
+async function probeOneEncoder(opts: {
+	label: string;
+	width: number;
+	height: number;
+	codec: string;
+	bitrate: number;
+	framerate: number;
+	hardwareAcceleration: HardwareAcceleration;
+	frameSource: "canvas" | "cpu";
+}): Promise<string> {
+	const { width, height } = opts;
+	const canvas = new OffscreenCanvas(width, height);
+	const ctx = canvas.getContext("2d");
+	if (!ctx) return `${opts.label}: no 2d ctx`;
+	let chunks = 0;
+	const encoder = new VideoEncoder({
+		output: (chunk) => {
+			chunks++;
+			void chunk;
+		},
+		error: (e) => console.warn(`[encoder probe] ${opts.label} error:`, e),
+	});
+	const config: VideoEncoderConfig = {
+		codec: opts.codec,
+		width,
+		height,
+		bitrate: opts.bitrate,
+		framerate: opts.framerate,
+		latencyMode: "quality",
+		bitrateMode: "variable",
+		hardwareAcceleration: opts.hardwareAcceleration,
+	};
+	const support = await VideoEncoder.isConfigSupported(config);
+	if (!support.supported) return `${opts.label}: unsupported`;
+	encoder.configure(config);
+	const frameCount = 120;
+	const frameDurationUs = Math.round(1_000_000 / opts.framerate);
+	const start = performance.now();
+	for (let i = 0; i < frameCount; i++) {
+		ctx.fillStyle = i % 2 ? "#1c3d5a" : "#5a1c3d";
+		ctx.fillRect(0, 0, width, height);
+		ctx.fillStyle = "#ffffff";
+		ctx.fillRect((i * 37) % width, (i * 23) % height, 80, 80);
+		let frame: VideoFrame;
+		if (opts.frameSource === "canvas") {
+			frame = new VideoFrame(canvas, { timestamp: i * frameDurationUs, duration: frameDurationUs });
+		} else {
+			const pixels = ctx.getImageData(0, 0, width, height);
+			frame = new VideoFrame(pixels.data.buffer, {
+				format: "RGBA",
+				codedWidth: width,
+				codedHeight: height,
+				timestamp: i * frameDurationUs,
+				duration: frameDurationUs,
+			});
+		}
+		while (encoder.encodeQueueSize > 8) {
+			await new Promise((resolve) => setTimeout(resolve, 2));
+		}
+		encoder.encode(frame, { keyFrame: i % 60 === 0 });
+		frame.close();
+	}
+	await encoder.flush();
+	const elapsedMs = performance.now() - start;
+	encoder.close();
+	return `${opts.label}: ${frameCount} frames in ${elapsedMs.toFixed(0)}ms = ${((frameCount / elapsedMs) * 1000).toFixed(1)} fps (${chunks} chunks)`;
+}
+
+async function runEncoderThroughputProbe(config: {
+	width: number;
+	height: number;
+	codec?: string;
+	bitrate: number;
+	frameRate: number;
+}): Promise<string> {
+	const codec = config.codec || "avc1.640033";
+	const base = {
+		width: config.width,
+		height: config.height,
+		codec,
+		bitrate: config.bitrate,
+		framerate: config.frameRate,
+	};
+	const lines: string[] = ["[encoder probe]"];
+	lines.push(
+		await probeOneEncoder({
+			...base,
+			label: "hw/canvas-frame",
+			hardwareAcceleration: "prefer-hardware",
+			frameSource: "canvas",
+		}),
+	);
+	lines.push(
+		await probeOneEncoder({
+			...base,
+			label: "hw/cpu-rgba-frame",
+			hardwareAcceleration: "prefer-hardware",
+			frameSource: "cpu",
+		}),
+	);
+	lines.push(
+		await probeOneEncoder({
+			...base,
+			label: "sw/canvas-frame",
+			hardwareAcceleration: "prefer-software",
+			frameSource: "canvas",
+		}),
+	);
+	lines.push(
+		await probeOneEncoder({
+			...base,
+			label: "hw/canvas-frame@720p",
+			hardwareAcceleration: "prefer-hardware",
+			frameSource: "canvas",
+			width: 1280,
+			height: 720,
+		}),
+	);
+	return lines.join("\n");
 }
 
 /** One clip's crop, in SOURCE-media time — the export renderer switches to
@@ -922,6 +1049,18 @@ export class VideoExporter {
 		const segments = plan.segments;
 		const firstSegment = segments[0];
 
+		// Phase-0 perf harness: accumulate per-stage time to find the bottleneck.
+		const timings = new StageTimings();
+		const wallStart = performance.now();
+
+		if (ENCODER_PROBE) {
+			try {
+				console.warn(await runEncoderThroughputProbe(this.config));
+			} catch (error) {
+				console.warn("[encoder probe] failed:", error);
+			}
+		}
+
 		// One renderer for the whole export — output size is fixed; only the
 		// source-dependent fields change per segment via renderer.setSource().
 		const renderer = new FrameRenderer({
@@ -966,6 +1105,7 @@ export class VideoExporter {
 		// up-front, so we know whether to declare an audio track on the muxer (mp4
 		// needs that at construction). The concatenation TIMING is applied later,
 		// once the video loop has produced each segment's real frame count.
+		const stopAudioDecode = timings.start("audioDecode");
 		const segmentAudioPcm: (Float32Array[] | null)[] = [];
 		let anySegmentAudio = false;
 		for (const segment of segments) {
@@ -978,6 +1118,7 @@ export class VideoExporter {
 			if (pcm && pcm.length > 0 && (pcm[0]?.length ?? 0) > 0) anySegmentAudio = true;
 			segmentAudioPcm.push(pcm);
 		}
+		stopAudioDecode();
 		const audioExportCodec = anySegmentAudio
 			? await AudioProcessor.selectSupportedExportCodec(
 					AUDIO_OUTPUT_SAMPLE_RATE,
@@ -1097,17 +1238,22 @@ export class VideoExporter {
 							if (this.cancelled) return;
 							if (this.fatalEncoderError) throw this.fatalEncoderError;
 
+							const stopWebcam = timings.start("webcam");
 							webcamFrame = webcamFrameQueue
 								? await webcamFrameQueue.frameAt(sourceTimestampMs)
 								: null;
+							stopWebcam();
 							if (this.cancelled) return;
 
 							// Encoder timestamp = contiguous OUTPUT time (seamless joins);
 							// renderFrame gets SOURCE time so zoom/annotation/cursor match
 							// the frame's content even when speed retimes the segment.
 							const timestamp = frameIndex * frameDuration;
+							const stopRender = timings.start("render");
 							await renderer.renderFrame(videoFrame, sourceTimestampMs * 1000, webcamFrame);
+							stopRender();
 
+							const stopReadback = timings.start("readback");
 							const canvas = renderer.getCanvas();
 							let exportFrame: VideoFrame;
 							if (platform === "linux") {
@@ -1129,7 +1275,9 @@ export class VideoExporter {
 							} else {
 								exportFrame = new VideoFrame(canvas, { timestamp, duration: frameDuration });
 							}
+							stopReadback();
 
+							const stopEncodeWait = timings.start("encodeWait");
 							try {
 								await waitForEncoderQueueSpace({
 									getQueueSize: () => this.encoder?.encodeQueueSize ?? 0,
@@ -1141,10 +1289,13 @@ export class VideoExporter {
 								exportFrame.close();
 								throw error;
 							}
+							stopEncodeWait();
 
 							if (this.encoder && this.encoder.state === "configured") {
 								this.encodeQueue++;
+								const stopEncode = timings.start("encode");
 								this.encoder.encode(exportFrame, { keyFrame: frameIndex % 150 === 0 });
+								stopEncode();
 							}
 
 							exportFrame.close();
@@ -1208,6 +1359,7 @@ export class VideoExporter {
 		// --- Audio: concatenate every segment's decoded PCM at the plan's offsets
 		// (sized from the REAL per-segment video frame counts so A/V stays locked),
 		// apply an equal-power fade at each join, then encode once and mux. ---
+		const stopAudioEncode = timings.start("audioEncode");
 		if (hasAudio && audioExportCodec && !this.cancelled) {
 			const audioPlan = buildAudioConcatPlan(
 				segments.map((s, i) => ({
@@ -1249,6 +1401,14 @@ export class VideoExporter {
 				audioExportCodec,
 			);
 		}
+
+		stopAudioEncode();
+
+		const wallMs = performance.now() - wallStart;
+		console.warn(
+			`[export perf] wall ${wallMs.toFixed(0)}ms · ${frameIndex} frames · ${(frameIndex / (wallMs / 1000)).toFixed(1)} fps\n` +
+				timings.formatSummary({ frames: frameIndex, hardwareAcceleration: encoderPreference }),
+		);
 
 		const blob = await muxer.finalize();
 		return { success: true, blob, warnings: warnings.length > 0 ? warnings : undefined };
@@ -1411,9 +1571,10 @@ export class VideoExporter {
 	}
 
 	private getEncoderPreferences(): HardwareAcceleration[] {
-		if (typeof navigator !== "undefined" && /\bWindows\b/i.test(navigator.userAgent)) {
-			return ["prefer-software", "prefer-hardware"];
-		}
+		// Hardware-first everywhere: the per-frame encode dominates export wall-time
+		// (Phase-0: encodeWait ≈ 90%), and hardware H.264 cuts it substantially. The
+		// export() retry loop falls back to prefer-software if the hardware attempt
+		// throws, so this only trades up when the hardware encoder actually works.
 		return ["prefer-hardware", "prefer-software"];
 	}
 

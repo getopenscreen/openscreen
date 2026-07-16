@@ -1,12 +1,15 @@
 import {
 	Application,
 	BlurFilter,
+	Color,
 	Container,
 	Graphics,
+	Rectangle,
 	Sprite,
 	Texture,
 	type TextureSourceLike,
 } from "pixi.js";
+import { DropShadowFilter } from "pixi-filters/drop-shadow";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
 import type {
 	AnnotationRegion,
@@ -113,6 +116,8 @@ interface FrameRenderConfig {
 	cursorTelemetry?: import("@/components/video-editor/types").CursorTelemetryPoint[];
 	cursorClickTimestamps?: number[];
 	platform: string;
+	/** Force the legacy 2D-canvas composite path (GIF export, debugging). */
+	disableGpuComposite?: boolean;
 }
 
 interface AnimationState {
@@ -171,6 +176,25 @@ export class FrameRenderer {
 	private zoomSpringState = createZoomSpringState();
 	private prevTargetProgress = 0;
 	private isLinux = false;
+	// GPU-resident composite scene (initializeGpuScene): when a frame renders
+	// through it, the finished image lives on the Pixi/WebGL canvas and
+	// getCanvas() returns that canvas directly — no 2D flatten, no CPU
+	// readback between the compositor and the encoder.
+	private gpuComposite = false;
+	private lastFrameGpu = false;
+	private shadowFiltersOn = false;
+	private bgSprite: Sprite | null = null;
+	private shadowFilters: DropShadowFilter[] = [];
+	private webcamContainer: Container | null = null;
+	private webcamSprite: Sprite | null = null;
+	private webcamMaskGraphics: Graphics | null = null;
+	private cursorSprite: Sprite | null = null;
+	private cursorBlurFilter: BlurFilter | null = null;
+	private cursorClipGraphics: Graphics | null = null;
+	private cursorTextureCache = new Map<string, Texture>();
+	private annotationCanvas: HTMLCanvasElement | null = null;
+	private annotationCtx: CanvasRenderingContext2D | null = null;
+	private annotationSprite: Sprite | null = null;
 
 	constructor(config: FrameRenderConfig) {
 		this.config = config;
@@ -258,6 +282,9 @@ export class FrameRenderer {
 			height: this.config.height,
 			backgroundAlpha: 0,
 			antialias: true,
+			// getCanvas() is consumed after renderFrame's async boundaries; keep
+			// the drawing buffer alive so new VideoFrame(canvas) sees the frame.
+			preserveDrawingBuffer: true,
 			resolution: 1,
 			autoDensity: true,
 		});
@@ -333,6 +360,15 @@ export class FrameRenderer {
 		} catch (error) {
 			console.warn("[FrameRenderer] 3D pass unavailable, rotation fields will be ignored:", error);
 			this.threeDPass = null;
+		}
+
+		if (!this.isLinux && !this.config.disableGpuComposite) {
+			try {
+				this.initializeGpuScene();
+			} catch (error) {
+				console.warn("[FrameRenderer] GPU composite unavailable, using 2D composite path:", error);
+				this.gpuComposite = false;
+			}
 		}
 	}
 
@@ -495,12 +531,23 @@ export class FrameRenderer {
 			},
 		});
 
+		const willRotate = !isRotation3DIdentity(this.currentRotation3D);
+
+		// GPU-resident path: the whole frame (wallpaper, shadowed recording,
+		// webcam, cursor, annotations) is one Pixi scene rendered in a single
+		// pass, and getCanvas() hands the WebGL canvas to the encoder. The 2D
+		// flatten below remains the fallback (Linux, 3D-rotation frames).
+		if (this.gpuComposite && !willRotate) {
+			await this.renderGpuFrame(webcamFrame, timeMs);
+			return;
+		}
+		this.leaveGpuFrame();
+
 		// Render the PixiJS stage (video only, transparent background)
 		this.app.renderer.render(this.app.stage);
 
 		// Skip baking the shadow when the rotation pass will run; bilinear sampling would
 		// alias it to a hard edge. Re-applied fresh after rotation.
-		const willRotate = !isRotation3DIdentity(this.currentRotation3D);
 		this.compositeWithShadows(webcamFrame, !willRotate);
 
 		await this.drawNativeCursor(timeMs);
@@ -602,13 +649,52 @@ export class FrameRenderer {
 	}
 
 	private async drawNativeCursor(timeMs: number) {
-		if (!this.foregroundCtx || !this.layoutCache) {
+		if (!this.foregroundCtx) {
 			return;
+		}
+		const draw = await this.computeNativeCursorDraw(timeMs);
+		if (!draw) {
+			return;
+		}
+		const ctx = this.foregroundCtx;
+		ctx.save();
+		ctx.beginPath();
+		if (draw.clip) {
+			ctx.roundRect(draw.clip.x, draw.clip.y, draw.clip.width, draw.clip.height, draw.clip.br);
+			ctx.clip();
+		}
+		const previousFilter = ctx.filter;
+		if (draw.blurPx > 0) {
+			ctx.filter = `blur(${draw.blurPx.toFixed(2)}px)`;
+		}
+		ctx.drawImage(draw.image, draw.x, draw.y, draw.w, draw.h);
+		ctx.filter = previousFilter;
+		ctx.restore();
+	}
+
+	/**
+	 * Everything drawNativeCursor needs to know, path-independently: the
+	 * resolved cursor image and its stage-space rect, motion-blur radius, and
+	 * optional clip rect. Shared by the 2D path (canvas draw) and the GPU
+	 * path (sprite update) so the cursor math has a single source of truth.
+	 */
+	private async computeNativeCursorDraw(timeMs: number): Promise<{
+		assetId: string;
+		image: HTMLImageElement;
+		x: number;
+		y: number;
+		w: number;
+		h: number;
+		blurPx: number;
+		clip: { x: number; y: number; width: number; height: number; br: number } | null;
+	} | null> {
+		if (!this.layoutCache) {
+			return null;
 		}
 
 		if ((this.config.cursorScale ?? 1) <= 0) {
 			resetNativeCursorMotionBlurState(this.nativeCursorMotionBlurState);
-			return;
+			return null;
 		}
 
 		const activeNativeCursor = resolveInterpolatedNativeCursorFrame(
@@ -617,7 +703,7 @@ export class FrameRenderer {
 		);
 		if (!activeNativeCursor) {
 			resetNativeCursorMotionBlurState(this.nativeCursorMotionBlurState);
-			return;
+			return null;
 		}
 		// Position comes from the precomputed smoothed path (deterministic, matches preview);
 		// the frame still supplies the cursor image, type, and click timing.
@@ -636,7 +722,7 @@ export class FrameRenderer {
 		});
 		if (!projectedPoint) {
 			resetNativeCursorMotionBlurState(this.nativeCursorMotionBlurState);
-			return;
+			return null;
 		}
 
 		const renderAsset = resolveNativeCursorRenderAsset(
@@ -650,7 +736,7 @@ export class FrameRenderer {
 			image = await this.getCursorImage(renderAsset);
 		} catch (error) {
 			this.warnOnce("native-cursor-image-load", "Failed to load native cursor asset", error);
-			return;
+			return null;
 		}
 		const scale =
 			Math.max(0, this.config.cursorScale ?? 1) *
@@ -676,32 +762,17 @@ export class FrameRenderer {
 			timeMs,
 		});
 		// Clip only when explicitly enabled; by default the cursor may overflow the canvas
-		const cursorClip = this.config.cursorClipToBounds === true ? this.cameraAwareMaskRect() : null;
-		this.foregroundCtx.save();
-		this.foregroundCtx.beginPath();
-		if (cursorClip) {
-			this.foregroundCtx.roundRect(
-				cursorClip.x,
-				cursorClip.y,
-				cursorClip.width,
-				cursorClip.height,
-				cursorClip.br,
-			);
-			this.foregroundCtx.clip();
-		}
-		const previousFilter = this.foregroundCtx.filter;
-		if (blurPx > 0) {
-			this.foregroundCtx.filter = `blur(${blurPx.toFixed(2)}px)`;
-		}
-		this.foregroundCtx.drawImage(
+		const clip = this.config.cursorClipToBounds === true ? this.cameraAwareMaskRect() : null;
+		return {
+			assetId: renderAsset.id,
 			image,
-			canvasX - renderAsset.hotspotX * scale * appliedScale * sizeNorm,
-			canvasY - renderAsset.hotspotY * scale * appliedScale * sizeNorm,
-			renderAsset.width * scale * appliedScale * sizeNorm,
-			renderAsset.height * scale * appliedScale * sizeNorm,
-		);
-		this.foregroundCtx.filter = previousFilter;
-		this.foregroundCtx.restore();
+			x: canvasX - renderAsset.hotspotX * scale * appliedScale * sizeNorm,
+			y: canvasY - renderAsset.hotspotY * scale * appliedScale * sizeNorm,
+			w: renderAsset.width * scale * appliedScale * sizeNorm,
+			h: renderAsset.height * scale * appliedScale * sizeNorm,
+			blurPx,
+			clip,
+		};
 	}
 
 	private async getCursorImage(asset: { id: string; imageDataUrl: string }) {
@@ -1088,69 +1159,10 @@ export class FrameRenderer {
 			fgCtx.drawImage(videoCanvas, 0, 0, w, h);
 		}
 
-		const webcamRect = this.layoutCache?.webcamRect ?? null;
-		if (webcamFrame && webcamRect) {
+		const webcamDraw = webcamFrame ? this.computeWebcamDraw(webcamFrame) : null;
+		if (webcamFrame && webcamDraw) {
 			const preset = getWebcamLayoutPresetDefinition(this.config.webcamLayoutPreset);
-			const shape = webcamRect.maskShape ?? this.config.webcamMaskShape ?? "rectangle";
-			const cameraFullProgress = this.animationState.cameraFullscreenProgress;
-			let drawRect: StyledRenderRect;
-			if (cameraFullProgress > 0) {
-				// Full Camera takes over the webcam's size/position entirely, growing it to cover
-				// the whole stage (inset by a margin, aspect-preserving — see
-				// computeCameraFullscreenTargetRect). Reactive zoom is ignored for this frame (see
-				// design notes 6.4): mixing "shrink for zoom" and "grow to full" in the same frame
-				// doesn't make sense.
-				const targetRect = computeCameraFullscreenTargetRect(
-					{ width: this.config.width, height: this.config.height },
-					webcamRect,
-				);
-				const fullRect: StyledRenderRect = {
-					x: targetRect.x,
-					y: targetRect.y,
-					width: targetRect.width,
-					height: targetRect.height,
-					borderRadius: 0,
-					maskShape: webcamRect.maskShape,
-				};
-				drawRect = lerpRect(webcamRect, fullRect, cameraFullProgress);
-			} else {
-				// Scale the PiP webcam inversely with the eased zoom, anchoring the shrink to the
-				// docked corner (bottom-right by default) like the preview, so it stays flush to the
-				// edges instead of drifting toward center.
-				const reactiveFactor =
-					this.config.webcamReactiveZoom && this.config.webcamLayoutPreset === "picture-in-picture"
-						? reactiveWebcamScale(this.animationState.appliedScale)
-						: 1;
-				const camPos = this.config.webcamPosition;
-				const biasX = (camPos ? camPos.cx >= 0.5 : true) ? 1 : 0;
-				const biasY = (camPos ? camPos.cy >= 0.5 : true) ? 1 : 0;
-				drawRect =
-					reactiveFactor < 1
-						? {
-								width: webcamRect.width * reactiveFactor,
-								height: webcamRect.height * reactiveFactor,
-								x: webcamRect.x + webcamRect.width * (1 - reactiveFactor) * biasX,
-								y: webcamRect.y + webcamRect.height * (1 - reactiveFactor) * biasY,
-								borderRadius: webcamRect.borderRadius * reactiveFactor,
-							}
-						: webcamRect;
-			}
-			const sourceWidth =
-				("displayWidth" in webcamFrame && webcamFrame.displayWidth > 0
-					? webcamFrame.displayWidth
-					: webcamFrame.codedWidth) || webcamRect.width;
-			const sourceHeight =
-				("displayHeight" in webcamFrame && webcamFrame.displayHeight > 0
-					? webcamFrame.displayHeight
-					: webcamFrame.codedHeight) || webcamRect.height;
-			const sourceAspect = sourceWidth / sourceHeight;
-			const targetAspect = webcamRect.width / webcamRect.height;
-			const sourceCropWidth =
-				sourceAspect > targetAspect ? Math.round(sourceHeight * targetAspect) : sourceWidth;
-			const sourceCropHeight =
-				sourceAspect > targetAspect ? sourceHeight : Math.round(sourceWidth / targetAspect);
-			const sourceCropX = Math.max(0, Math.round((sourceWidth - sourceCropWidth) / 2));
-			const sourceCropY = Math.max(0, Math.round((sourceHeight - sourceCropHeight) / 2));
+			const { drawRect, shape } = webcamDraw;
 			fgCtx.save();
 			drawCanvasClipPath(
 				fgCtx,
@@ -1174,10 +1186,10 @@ export class FrameRenderer {
 				fgCtx,
 				webcamFrame as unknown as CanvasImageSource,
 				{
-					x: sourceCropX,
-					y: sourceCropY,
-					width: sourceCropWidth,
-					height: sourceCropHeight,
+					x: webcamDraw.srcX,
+					y: webcamDraw.srcY,
+					width: webcamDraw.srcW,
+					height: webcamDraw.srcH,
 				},
 				{
 					x: drawRect.x,
@@ -1191,7 +1203,353 @@ export class FrameRenderer {
 		}
 	}
 
+	/**
+	 * The webcam PiP's target rect (with Full-Camera takeover and reactive
+	 * zoom shrink), mask shape, and source center-crop — path-independently.
+	 * Shared by the 2D path (canvas clip+draw) and the GPU path (sprite +
+	 * mask update) so the webcam layout math has a single source of truth.
+	 */
+	private computeWebcamDraw(webcamFrame: VideoFrame): {
+		drawRect: StyledRenderRect;
+		shape: import("@/components/video-editor/types").WebcamMaskShape;
+		srcX: number;
+		srcY: number;
+		srcW: number;
+		srcH: number;
+	} | null {
+		const webcamRect = this.layoutCache?.webcamRect ?? null;
+		if (!webcamRect) {
+			return null;
+		}
+		const shape = webcamRect.maskShape ?? this.config.webcamMaskShape ?? "rectangle";
+		const cameraFullProgress = this.animationState.cameraFullscreenProgress;
+		let drawRect: StyledRenderRect;
+		if (cameraFullProgress > 0) {
+			// Full Camera takes over the webcam's size/position entirely, growing it to cover
+			// the whole stage (inset by a margin, aspect-preserving — see
+			// computeCameraFullscreenTargetRect). Reactive zoom is ignored for this frame (see
+			// design notes 6.4): mixing "shrink for zoom" and "grow to full" in the same frame
+			// doesn't make sense.
+			const targetRect = computeCameraFullscreenTargetRect(
+				{ width: this.config.width, height: this.config.height },
+				webcamRect,
+			);
+			const fullRect: StyledRenderRect = {
+				x: targetRect.x,
+				y: targetRect.y,
+				width: targetRect.width,
+				height: targetRect.height,
+				borderRadius: 0,
+				maskShape: webcamRect.maskShape,
+			};
+			drawRect = lerpRect(webcamRect, fullRect, cameraFullProgress);
+		} else {
+			// Scale the PiP webcam inversely with the eased zoom, anchoring the shrink to the
+			// docked corner (bottom-right by default) like the preview, so it stays flush to the
+			// edges instead of drifting toward center.
+			const reactiveFactor =
+				this.config.webcamReactiveZoom && this.config.webcamLayoutPreset === "picture-in-picture"
+					? reactiveWebcamScale(this.animationState.appliedScale)
+					: 1;
+			const camPos = this.config.webcamPosition;
+			const biasX = (camPos ? camPos.cx >= 0.5 : true) ? 1 : 0;
+			const biasY = (camPos ? camPos.cy >= 0.5 : true) ? 1 : 0;
+			drawRect =
+				reactiveFactor < 1
+					? {
+							width: webcamRect.width * reactiveFactor,
+							height: webcamRect.height * reactiveFactor,
+							x: webcamRect.x + webcamRect.width * (1 - reactiveFactor) * biasX,
+							y: webcamRect.y + webcamRect.height * (1 - reactiveFactor) * biasY,
+							borderRadius: webcamRect.borderRadius * reactiveFactor,
+						}
+					: webcamRect;
+		}
+		const sourceWidth =
+			("displayWidth" in webcamFrame && webcamFrame.displayWidth > 0
+				? webcamFrame.displayWidth
+				: webcamFrame.codedWidth) || webcamRect.width;
+		const sourceHeight =
+			("displayHeight" in webcamFrame && webcamFrame.displayHeight > 0
+				? webcamFrame.displayHeight
+				: webcamFrame.codedHeight) || webcamRect.height;
+		const sourceAspect = sourceWidth / sourceHeight;
+		const targetAspect = webcamRect.width / webcamRect.height;
+		const sourceCropWidth =
+			sourceAspect > targetAspect ? Math.round(sourceHeight * targetAspect) : sourceWidth;
+		const sourceCropHeight =
+			sourceAspect > targetAspect ? sourceHeight : Math.round(sourceWidth / targetAspect);
+		const sourceCropX = Math.max(0, Math.round((sourceWidth - sourceCropWidth) / 2));
+		const sourceCropY = Math.max(0, Math.round((sourceHeight - sourceCropHeight) / 2));
+		return {
+			drawRect,
+			shape,
+			srcX: sourceCropX,
+			srcY: sourceCropY,
+			srcW: sourceCropWidth,
+			srcH: sourceCropHeight,
+		};
+	}
+
+	/**
+	 * Builds the GPU-resident composite scene: every layer the 2D fallback
+	 * flattens onto compositeCanvas exists as a Pixi node instead, so a frame
+	 * rendered through renderGpuFrame never leaves the GPU. Nodes start
+	 * hidden; renderGpuFrame toggles them per frame, and leaveGpuFrame hides
+	 * them again before a 2D-path frame reuses the Pixi canvas.
+	 */
+	private initializeGpuScene(): void {
+		if (!this.app || !this.cameraContainer || !this.backgroundSprite) {
+			return;
+		}
+
+		// Wallpaper: static texture uploaded once. Bake the blur with the same
+		// 2D filter the fallback uses so both paths stay visually identical.
+		let bgCanvas = this.backgroundSprite;
+		if (this.config.showBlur) {
+			const blurred = document.createElement("canvas");
+			blurred.width = this.config.width;
+			blurred.height = this.config.height;
+			const blurredCtx = blurred.getContext("2d");
+			if (blurredCtx) {
+				blurredCtx.filter = "blur(6px)"; // Canvas blur is weaker than CSS
+				blurredCtx.drawImage(bgCanvas, 0, 0);
+				bgCanvas = blurred;
+			}
+		}
+		this.bgSprite = new Sprite(Texture.from(bgCanvas));
+		this.bgSprite.visible = false;
+		this.app.stage.addChildAt(this.bgSprite, 0);
+
+		// Recording shadow: the same three stacked drop-shadows as the 2D
+		// path's CSS filter chain (each pass shadows the previous pass's
+		// output, matching CSS drop-shadow composition). CSS blur-radius is
+		// roughly 2× the Gaussian sigma the filter's blur strength maps to.
+		if (this.config.showShadow && this.config.shadowIntensity > 0) {
+			const intensity = this.config.shadowIntensity;
+			const layers: [number, number, number][] = [
+				[48, 0.7, 12],
+				[16, 0.5, 12 / 3],
+				[8, 0.3, 12 / 6],
+			];
+			this.shadowFilters = layers.map(
+				([blur, alpha, offsetY]) =>
+					new DropShadowFilter({
+						blur: (blur * intensity) / 2,
+						alpha: alpha * intensity,
+						color: 0x000000,
+						offset: { x: 0, y: offsetY * intensity },
+						quality: 6,
+					}),
+			);
+		}
+
+		// Webcam PiP above the recording, masked to its shape.
+		this.webcamContainer = new Container();
+		this.webcamContainer.visible = false;
+		this.webcamMaskGraphics = new Graphics();
+		this.webcamSprite = new Sprite();
+		this.webcamContainer.addChild(this.webcamMaskGraphics);
+		this.webcamContainer.addChild(this.webcamSprite);
+		this.webcamSprite.mask = this.webcamMaskGraphics;
+		const preset = getWebcamLayoutPresetDefinition(this.config.webcamLayoutPreset);
+		if (preset.shadow) {
+			const shadowColor = new Color(preset.shadow.color);
+			this.webcamContainer.filters = [
+				new DropShadowFilter({
+					blur: preset.shadow.blur / 2,
+					alpha: shadowColor.alpha,
+					color: shadowColor.toNumber(),
+					offset: { x: preset.shadow.offsetX, y: preset.shadow.offsetY },
+					quality: 4,
+				}),
+			];
+		}
+		this.app.stage.addChild(this.webcamContainer);
+
+		// Cursor above the webcam; optional roundRect clip + motion blur.
+		this.cursorBlurFilter = new BlurFilter();
+		this.cursorClipGraphics = new Graphics();
+		this.cursorSprite = new Sprite();
+		this.cursorSprite.visible = false;
+		this.app.stage.addChild(this.cursorClipGraphics);
+		this.app.stage.addChild(this.cursorSprite);
+
+		// Annotations: the shared 2D annotationRenderer draws into a scratch
+		// canvas that uploads as one texture, only on frames with a live region.
+		this.annotationCanvas = document.createElement("canvas");
+		this.annotationCanvas.width = this.config.width;
+		this.annotationCanvas.height = this.config.height;
+		this.annotationCtx = this.annotationCanvas.getContext("2d");
+		this.annotationSprite = new Sprite(Texture.from(this.annotationCanvas));
+		this.annotationSprite.visible = false;
+		this.app.stage.addChild(this.annotationSprite);
+
+		this.gpuComposite = true;
+	}
+
+	/** One Pixi render = the finished frame: update the per-frame GPU nodes
+	 * (webcam texture, cursor sprite, annotation overlay), render once. */
+	private async renderGpuFrame(
+		webcamFrame: VideoFrame | null | undefined,
+		timeMs: number,
+	): Promise<void> {
+		if (!this.app || !this.cameraContainer) {
+			return;
+		}
+
+		if (this.bgSprite) {
+			this.bgSprite.visible = true;
+		}
+		if (this.shadowFilters.length > 0 && !this.shadowFiltersOn) {
+			this.cameraContainer.filters = this.shadowFilters;
+			this.shadowFiltersOn = true;
+		}
+
+		const webcamDraw = webcamFrame ? this.computeWebcamDraw(webcamFrame) : null;
+		if (this.webcamContainer && this.webcamSprite && this.webcamMaskGraphics) {
+			if (webcamFrame && webcamDraw) {
+				this.webcamContainer.visible = true;
+				const oldTexture = this.webcamSprite.texture;
+				const fullTexture = Texture.from(webcamFrame as unknown as TextureSourceLike);
+				this.webcamSprite.texture = new Texture({
+					source: fullTexture.source,
+					frame: new Rectangle(webcamDraw.srcX, webcamDraw.srcY, webcamDraw.srcW, webcamDraw.srcH),
+				});
+				if (oldTexture !== Texture.EMPTY) {
+					oldTexture.destroy(true);
+				}
+				const { drawRect } = webcamDraw;
+				const mirrored = this.config.webcamMirrored === true;
+				this.webcamSprite.position.set(
+					mirrored ? drawRect.x + drawRect.width : drawRect.x,
+					drawRect.y,
+				);
+				this.webcamSprite.width = mirrored ? -drawRect.width : drawRect.width;
+				this.webcamSprite.height = drawRect.height;
+				const mask = this.webcamMaskGraphics;
+				mask.clear();
+				if (webcamDraw.shape === "circle") {
+					mask.circle(
+						drawRect.x + drawRect.width / 2,
+						drawRect.y + drawRect.height / 2,
+						Math.min(drawRect.width, drawRect.height) / 2,
+					);
+				} else {
+					mask.roundRect(
+						drawRect.x,
+						drawRect.y,
+						drawRect.width,
+						drawRect.height,
+						drawRect.borderRadius,
+					);
+				}
+				mask.fill({ color: 0xffffff });
+			} else {
+				this.webcamContainer.visible = false;
+			}
+		}
+
+		const cursorDraw = await this.computeNativeCursorDraw(timeMs);
+		if (this.cursorSprite) {
+			if (cursorDraw) {
+				let texture = this.cursorTextureCache.get(cursorDraw.assetId);
+				if (!texture) {
+					texture = Texture.from(cursorDraw.image);
+					this.cursorTextureCache.set(cursorDraw.assetId, texture);
+				}
+				if (this.cursorSprite.texture !== texture) {
+					this.cursorSprite.texture = texture;
+				}
+				this.cursorSprite.position.set(cursorDraw.x, cursorDraw.y);
+				this.cursorSprite.width = cursorDraw.w;
+				this.cursorSprite.height = cursorDraw.h;
+				if (this.cursorBlurFilter) {
+					if (cursorDraw.blurPx > 0) {
+						this.cursorBlurFilter.blur = cursorDraw.blurPx;
+						if (!this.cursorSprite.filters) {
+							this.cursorSprite.filters = [this.cursorBlurFilter];
+						}
+					} else if (this.cursorSprite.filters) {
+						this.cursorSprite.filters = null;
+					}
+				}
+				if (cursorDraw.clip && this.cursorClipGraphics) {
+					const clip = cursorDraw.clip;
+					this.cursorClipGraphics.clear();
+					this.cursorClipGraphics.roundRect(clip.x, clip.y, clip.width, clip.height, clip.br);
+					this.cursorClipGraphics.fill({ color: 0xffffff });
+					this.cursorSprite.mask = this.cursorClipGraphics;
+				} else if (this.cursorSprite.mask) {
+					this.cursorSprite.mask = null;
+					this.cursorClipGraphics?.clear();
+				}
+				this.cursorSprite.visible = true;
+			} else {
+				this.cursorSprite.visible = false;
+			}
+		}
+
+		const annotationRegions = this.config.annotationRegions ?? [];
+		const annotationsActive = annotationRegions.some(
+			(region) => timeMs >= region.startMs && timeMs < region.endMs,
+		);
+		if (this.annotationSprite && this.annotationCtx && this.annotationCanvas) {
+			if (annotationsActive) {
+				const annotationCtx = this.annotationCtx;
+				annotationCtx.clearRect(0, 0, this.annotationCanvas.width, this.annotationCanvas.height);
+				const previewWidth = this.config.previewWidth ?? this.config.width;
+				const previewHeight = this.config.previewHeight ?? this.config.height;
+				const scaleFactor =
+					(this.config.width / previewWidth + this.config.height / previewHeight) / 2;
+				await renderAnnotations(
+					annotationCtx,
+					annotationRegions,
+					this.config.width,
+					this.config.height,
+					timeMs,
+					scaleFactor,
+				);
+				this.annotationSprite.texture.source.update();
+				this.annotationSprite.visible = true;
+			} else {
+				this.annotationSprite.visible = false;
+			}
+		}
+
+		this.app.renderer.render(this.app.stage);
+		this.lastFrameGpu = true;
+	}
+
+	/** Hide the GPU-scene nodes before a 2D-path frame so the Pixi canvas
+	 * contains only the masked recording the 2D flatten expects. */
+	private leaveGpuFrame(): void {
+		if (!this.lastFrameGpu) {
+			return;
+		}
+		this.lastFrameGpu = false;
+		if (this.bgSprite) {
+			this.bgSprite.visible = false;
+		}
+		if (this.webcamContainer) {
+			this.webcamContainer.visible = false;
+		}
+		if (this.cursorSprite) {
+			this.cursorSprite.visible = false;
+		}
+		if (this.annotationSprite) {
+			this.annotationSprite.visible = false;
+		}
+		if (this.shadowFiltersOn && this.cameraContainer) {
+			this.cameraContainer.filters = [];
+			this.shadowFiltersOn = false;
+		}
+	}
+
 	getCanvas(): HTMLCanvasElement {
+		if (this.lastFrameGpu && this.app) {
+			return this.app.canvas as HTMLCanvasElement;
+		}
 		if (!this.compositeCanvas) {
 			throw new Error("Renderer not initialized");
 		}
@@ -1229,6 +1587,18 @@ export class FrameRenderer {
 			this.threeDPass.destroy();
 			this.threeDPass = null;
 		}
+		this.bgSprite = null;
+		this.shadowFilters = [];
+		this.webcamContainer = null;
+		this.webcamSprite = null;
+		this.webcamMaskGraphics = null;
+		this.cursorSprite = null;
+		this.cursorBlurFilter = null;
+		this.cursorClipGraphics = null;
+		this.annotationCanvas = null;
+		this.annotationCtx = null;
+		this.annotationSprite = null;
+		this.cursorTextureCache.clear();
 		this.cursorImageCache.clear();
 	}
 }

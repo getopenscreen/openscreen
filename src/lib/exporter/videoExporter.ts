@@ -1179,6 +1179,48 @@ export class VideoExporter {
 		// concatenated audio stays locked to the (independently retimed) video.
 		const segmentFrameCounts: number[] = [];
 
+		// The video loop spends ~90% of its wall time blocked in encodeWait, so
+		// the CPU is mostly idle while frames sit in the encoder queue. The
+		// per-segment WSOLA stretch is pure CPU work and depends ONLY on
+		// segmentAudioPcm + the plan's speed regions + audio/frame-rate
+		// constants — nothing that needs segmentFrameCounts. Kick it off here
+		// so it overlaps the video loop, then await the result in the audio
+		// phase instead of paying for it serially after.
+		const stretchedPcmPromise: Promise<(Float32Array[] | null)[] | null> =
+			hasAudio && audioExportCodec && !this.cancelled
+				? (async () => {
+						const out: (Float32Array[] | null)[] = new Array(segmentAudioPcm.length).fill(null);
+						for (let i = 0; i < segmentAudioPcm.length; i++) {
+							if (this.cancelled) break;
+							// stretchSegmentAudioBySpeed is synchronous — wrapping it in an
+							// async IIFE doesn't yield by itself. Drop back to the event loop
+							// between segments so the video loop's encodeWait can actually
+							// interleave with our CPU work.
+							await new Promise((r) => setTimeout(r, 0));
+							// Retime each segment's audio PER speed sub-segment (pitch
+							// preserved) so a partial speed region only speeds up its own
+							// span, matching the video.
+							const pcm = segmentAudioPcm[i];
+							out[i] = pcm
+								? stretchSegmentAudioBySpeed(
+										pcm,
+										segments[i],
+										projectRegionsToSegmentSource(plan.speedRegions, segments[i]),
+										AUDIO_OUTPUT_SAMPLE_RATE,
+										AUDIO_OUTPUT_CHANNELS,
+										this.config.frameRate,
+									)
+								: null;
+						}
+						return out;
+					})()
+				: Promise.resolve(null);
+		// Never let a rejection go unhandled if the export throws/cancels before the
+		// await below reaches it; the await is the one that surfaces the failure.
+		stretchedPcmPromise.catch(() => {
+			// Swallowed here on purpose — see above.
+		});
+
 		for (const segment of segments) {
 			if (this.cancelled) break;
 			if (this.fatalEncoderError) throw this.fatalEncoderError;
@@ -1382,7 +1424,16 @@ export class VideoExporter {
 
 		// --- Audio: concatenate every segment's decoded PCM at the plan's offsets
 		// (sized from the REAL per-segment video frame counts so A/V stays locked),
-		// apply an equal-power fade at each join, then encode once and mux. ---
+		// apply an equal-power fade at each join, then encode once and mux. The
+		// stretch was kicked off before the video loop so it overlapped the
+		// encodeWait idle time; the await below only measures the leftover
+		// (typically ~0ms on a successful overlap). ---
+		const stopAudioStretch = timings.start("audioStretch");
+		// Non-null: same gate condition (hasAudio && audioExportCodec && !cancelled)
+		// that produced a non-null promise also gates the if-block below.
+		const stretchedPcm = (await stretchedPcmPromise)!;
+		stopAudioStretch();
+
 		const stopAudioEncode = timings.start("audioEncode");
 		if (hasAudio && audioExportCodec && !this.cancelled) {
 			const audioPlan = buildAudioConcatPlan(
@@ -1397,20 +1448,6 @@ export class VideoExporter {
 					sampleRate: AUDIO_OUTPUT_SAMPLE_RATE,
 					channels: AUDIO_OUTPUT_CHANNELS,
 				},
-			);
-			// Retime each segment's audio PER speed sub-segment (pitch preserved) so
-			// a partial speed region only speeds up its own span, matching the video.
-			const stretchedPcm = segmentAudioPcm.map((pcm, i) =>
-				pcm
-					? stretchSegmentAudioBySpeed(
-							pcm,
-							segments[i],
-							projectRegionsToSegmentSource(plan.speedRegions, segments[i]),
-							AUDIO_OUTPUT_SAMPLE_RATE,
-							AUDIO_OUTPUT_CHANNELS,
-							this.config.frameRate,
-						)
-					: null,
 			);
 			const assembled = assembleConcatenatedPcm(
 				stretchedPcm.map((pcm) => ({ pcm })),

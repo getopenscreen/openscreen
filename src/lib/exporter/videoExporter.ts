@@ -149,6 +149,30 @@ async function runEncoderThroughputProbe(config: {
 		framerate: config.frameRate,
 	};
 	const lines: string[] = ["[encoder probe]"];
+
+	// If Chromium fell back to SwiftShader, WebGL is CPU-rasterized and the
+	// "hardware" encoder is unavailable — that alone would explain hw==sw
+	// throughput and the GPU composite showing no gain.
+	try {
+		const probeCanvas = document.createElement("canvas");
+		const gl =
+			(probeCanvas.getContext("webgl2") as WebGL2RenderingContext | null) ??
+			(probeCanvas.getContext("webgl") as WebGLRenderingContext | null);
+		if (gl) {
+			const info = gl.getExtension("WEBGL_debug_renderer_info");
+			const renderer = info
+				? gl.getParameter(info.UNMASKED_RENDERER_WEBGL)
+				: gl.getParameter(gl.RENDERER);
+			const vendor = info
+				? gl.getParameter(info.UNMASKED_VENDOR_WEBGL)
+				: gl.getParameter(gl.VENDOR);
+			lines.push(`gl: ${vendor} | ${renderer}`);
+		} else {
+			lines.push("gl: NO WEBGL CONTEXT");
+		}
+	} catch (error) {
+		lines.push(`gl: probe failed ${String(error)}`);
+	}
 	lines.push(
 		await probeOneEncoder({
 			...base,

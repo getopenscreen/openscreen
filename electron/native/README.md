@@ -43,10 +43,14 @@ Windows native recording is resolved from one of these locations:
 Build the Windows helper with:
 
 ```powershell
+# Builds for the host architecture by default (x64 on x64 hosts, arm64 on arm64 hosts).
 npm run build:native:win
+
+# Explicit target architecture (native on a matching host, or cross-compiled otherwise):
+node scripts/build-windows-wgc-helper.mjs --arch arm64
 ```
 
-The build writes the CMake output to `electron/native/wgc-capture/build/wgc-capture.exe` and copies the redistributable binary to `electron/native/bin/win32-x64/wgc-capture.exe`.
+The target architecture is resolved from `--arch` (or the `OPENSCREEN_WIN_HELPER_ARCH` env var), falling back to the host arch. Cross-compiling requires the matching MSVC component — "VS C++ ARM64/ARM64EC build tools" for `arm64`. The build writes the CMake output to `electron/native/wgc-capture/build/wgc-capture.exe` and copies the redistributable binary to `electron/native/bin/win32-<arch>/wgc-capture.exe` (e.g. `win32-arm64`).
 
 The helper contract is process-based: the app starts the process with one JSON argument and sends commands on stdin. `stop\n` finalizes the recording. During migration the helper prints both newline-delimited JSON events and the legacy text messages `Recording started` / `Recording stopped. Output path: <path>`.
 

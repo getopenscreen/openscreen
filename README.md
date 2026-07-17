@@ -79,7 +79,7 @@ After running this command, proceed to **System Settings > Privacy & Security** 
 
 ### Windows
 
-Download the `.exe` installer directly from the [Releases page](https://github.com/EtienneLescot/openscreen/releases).
+Download the `.exe` installer directly from the [Releases page](https://github.com/EtienneLescot/openscreen/releases). Windows builds are provided for both x64 (`Openscreen.Setup.<version>-x64.exe`) and ARM64 (`Openscreen.Setup.<version>-arm64.exe`).
 
 ### Linux
 

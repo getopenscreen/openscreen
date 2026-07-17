@@ -4,12 +4,37 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+	resolveTargetArch,
+	resolveVcvarsArch,
+	winBinDirName,
+} from "./windows-helper-arch.mjs";
+
+function parseArchFlag(argv) {
+	const eq = argv.find((a) => a.startsWith("--arch="));
+	if (eq) {
+		return eq.slice("--arch=".length);
+	}
+	const idx = argv.indexOf("--arch");
+	if (idx !== -1) {
+		return argv[idx + 1];
+	}
+	return undefined;
+}
+
+const TARGET_ARCH = resolveTargetArch({
+	cliArch: parseArchFlag(process.argv.slice(2)),
+	envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH,
+	hostArch: process.arch,
+});
+const VCVARS_ARCH = resolveVcvarsArch(process.arch, TARGET_ARCH);
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const SOURCE_DIR = path.join(ROOT, "electron", "native", "wgc-capture");
 const BUILD_DIR = path.join(SOURCE_DIR, "build");
 const COMPAT_LIB_DIR = path.join(BUILD_DIR, "compat-libs");
-const BIN_DIR = path.join(ROOT, "electron", "native", "bin", "win32-x64");
+const BIN_DIR = path.join(ROOT, "electron", "native", "bin", winBinDirName(TARGET_ARCH));
 const CMAKE = process.env.CMAKE_EXE ?? "cmake";
 
 function findVcVarsAll() {
@@ -75,7 +100,7 @@ function findWindowsSdkUmLibDir() {
 	return fs
 		.readdirSync(sdkLibRoot, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory())
-		.map((entry) => path.join(sdkLibRoot, entry.name, "um", "x64"))
+		.map((entry) => path.join(sdkLibRoot, entry.name, "um", TARGET_ARCH))
 		.filter((candidate) => fs.existsSync(path.join(candidate, "kernel32.lib")))
 		.sort()
 		.at(-1);
@@ -115,10 +140,10 @@ async function runInVsEnv(command) {
 		cmdPath,
 		[
 			"@echo off",
-			`call "${vcvarsAll}" x64`,
+			`call "${vcvarsAll}" ${VCVARS_ARCH}`,
 			"if errorlevel 1 exit /b %errorlevel%",
 			`if not exist "${COMPAT_LIB_DIR}" mkdir "${COMPAT_LIB_DIR}"`,
-			`for %%L in (gdi32.lib gdiplus.lib winspool.lib shell32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib) do if not exist "%WindowsSdkDir%Lib\\%WindowsSDKLibVersion%um\\x64\\%%L" copy /Y "%WindowsSdkDir%Lib\\%WindowsSDKLibVersion%um\\x64\\kernel32.Lib" "${COMPAT_LIB_DIR}\\%%L" >nul`,
+			`for %%L in (gdi32.lib gdiplus.lib winspool.lib shell32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib) do if not exist "%WindowsSdkDir%Lib\\%WindowsSDKLibVersion%um\\${TARGET_ARCH}\\%%L" copy /Y "%WindowsSdkDir%Lib\\%WindowsSDKLibVersion%um\\${TARGET_ARCH}\\kernel32.Lib" "${COMPAT_LIB_DIR}\\%%L" >nul`,
 			"if errorlevel 1 exit /b %errorlevel%",
 			`set "LIB=${sdkUmLibDir ? `${sdkUmLibDir};` : ""}%LIB%;${COMPAT_LIB_DIR}"`,
 			command,
@@ -138,7 +163,23 @@ if (process.platform !== "win32") {
 	process.exit(0);
 }
 
+console.log(`Building Windows WGC helper for target arch: ${TARGET_ARCH} (vcvars: ${VCVARS_ARCH})`);
+
+// CMake caches the detected compiler in the build directory. Reusing a build
+// dir that was configured for a different target arch silently produces
+// wrong-arch binaries (the cached compiler wins over the new vcvars env). Wipe
+// the build dir when the target arch changes; same-arch reruns stay incremental.
+const ARCH_STAMP = path.join(BUILD_DIR, ".target-arch");
+if (fs.existsSync(BUILD_DIR)) {
+	const previousArch = fs.existsSync(ARCH_STAMP)
+		? fs.readFileSync(ARCH_STAMP, "utf8").trim()
+		: "";
+	if (previousArch !== TARGET_ARCH) {
+		fs.rmSync(BUILD_DIR, { recursive: true, force: true });
+	}
+}
 fs.mkdirSync(BUILD_DIR, { recursive: true });
+fs.writeFileSync(ARCH_STAMP, TARGET_ARCH);
 
 await runInVsEnv(
 	`"${CMAKE}" -S "${SOURCE_DIR}" -B "${BUILD_DIR}" -G Ninja -DCMAKE_BUILD_TYPE=Release`,

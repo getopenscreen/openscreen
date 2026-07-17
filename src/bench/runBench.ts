@@ -68,6 +68,11 @@ const BENCH_PARAMS = {
 	// "good" is the dialog's own default, i.e. what the UI A/B measured.
 	quality: QUALITY[params.get("quality") ?? "1080p"] ?? "good",
 	effects: (params.get("effects") ?? "").split(",").filter(Boolean),
+	// Cap the timeline to its first N seconds (in memory). Iteration speed:
+	// per-frame stage attribution is a steady-state metric, so ~180 frames say
+	// what 820 say, at a quarter of the wait. Wall/fps from a capped run are NOT
+	// comparable with full-length runs — compare per-frame, or same-cap runs.
+	clip: params.get("clip") ? Number(params.get("clip")) : null,
 };
 
 /**
@@ -111,6 +116,49 @@ function zoomRanges(doc: AxcutDocument): unknown[] {
 			focus: { cx: 0.5, cy: 0.5 },
 		},
 	];
+}
+
+/**
+ * Truncate the timeline to its first N seconds, on the in-memory copy only.
+ *
+ * Clips are 1:1 with source time in the v4 model (speed is applied later, from
+ * legacyEditor.speedRegions, by the export segment loop), so capping timeline
+ * and source together keeps the document coherent. Regions past the cap simply
+ * never fire, like on any short project. Nothing here reaches disk.
+ */
+function withClipCap(doc: AxcutDocument, seconds: number | null): AxcutDocument {
+	if (!seconds || !(seconds > 0)) return doc;
+	const timeline = (
+		doc as {
+			timeline?: {
+				clips?: {
+					sourceStartSec: number;
+					sourceEndSec: number;
+					timelineStartSec: number;
+					timelineEndSec: number;
+				}[];
+			};
+		}
+	).timeline;
+	if (!timeline?.clips?.length) return doc;
+	const clips = [];
+	for (const clip of timeline.clips) {
+		if (clip.timelineStartSec >= seconds) continue;
+		if (clip.timelineEndSec <= seconds) {
+			clips.push(clip);
+			continue;
+		}
+		const keep = seconds - clip.timelineStartSec;
+		clips.push({
+			...clip,
+			timelineEndSec: seconds,
+			sourceEndSec: clip.sourceStartSec + keep,
+		});
+	}
+	if (clips.length === 0) {
+		throw new Error(`--clip=${seconds} leaves no timeline at all`);
+	}
+	return { ...doc, timeline: { ...timeline, clips } } as AxcutDocument;
 }
 
 function withEffects(doc: AxcutDocument, effects: string[]): AxcutDocument {
@@ -387,12 +435,17 @@ export async function runBench(): Promise<void> {
 		}
 		// Loaded once and shared by every run: each arm must see byte-identical
 		// input, and the title fallback can open every project on disk.
-		const doc = withEffects(await resolveDocument(BENCH_PARAMS.project), BENCH_PARAMS.effects);
+		// Cap BEFORE effects, so the injected zoom fits inside the capped window.
+		const doc = withEffects(
+			withClipCap(await resolveDocument(BENCH_PARAMS.project), BENCH_PARAMS.clip),
+			BENCH_PARAMS.effects,
+		);
 		emit("start", {
 			arms: BENCH_PARAMS.arms,
 			runs: BENCH_PARAMS.runs,
 			project: doc.project?.title ?? "(untitled)",
 			effects: BENCH_PARAMS.effects.length ? BENCH_PARAMS.effects.join("+") : "(project default)",
+			clip: BENCH_PARAMS.clip,
 		});
 		for (let run = 1; run <= BENCH_PARAMS.runs; run++) {
 			for (const armName of BENCH_PARAMS.arms) {

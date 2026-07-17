@@ -763,6 +763,41 @@ either place unchanged. So ship on the web platform, keep WGSL + evaluate portab
 (done), and open the native core only if a §12 gate fires, now with the spike's two
 concrete steps named above.
 
+### D.6 — The route was wrong, the principle was right: D3D11 delivers it driver-free (product owner, 2026-07-17)
+
+D.5 concluded the GPU-resident native path was blocked on a driver update, because
+the Vulkan route (`gpu-video`) requires `VK_KHR_video_maintenance1`, which this AMD
+iGPU's driver (24.10.38) predates. **That was true of the Vulkan route only.** The
+product owner built the same idea on **D3D11** instead and reports **110 fps —
+above the browser's 79, on the current driver, no update.**
+
+Architecture (their POC, a from-scratch native Windows app, not a fork): **one
+shared `ID3D11Device`, no CPU readback between any stage** — D3D11VA hardware decode
+(×2, NV12 GPU textures) → **HLSL** compositor (the same effect set: layout, zoom,
+shadows, masks, background blur, motion blur, cursor; NV12→RGB, separable Gaussian,
+SDF corners+shadows, per-velocity blur) → RGB→NV12 (two RTV passes) → `h264_amf`
+encode (GPU→GPU) → MP4 mux. Stack: Rust + `windows-rs`, ffmpeg `libav*` (LGPL) as
+demux/decode/encode/mux plumbing, HLSL compiled at runtime. The measured window
+(§10) is one `Instant::now()` before and one after the WHOLE run — decode, encode
+and mux included — so nothing inside can falsify the clock; benchmark configs run
+cumulatively C0→C8.
+
+The correction that matters: **GPU-residency was always the win** (D.5's diagnosis
+holds — the browser beats the CPU path because WebCodecs keeps frames on-GPU). The
+only error was the *route*: `D3D11VA` decode + `AMF` encode are AMD's D3D-native
+paths and need none of the Vulkan Video extensions the driver lacks, so they reach
+full residency on the shipped driver where Vulkan could not. Native is not
+fundamentally slower than the browser — it is faster (110 > 79) — once both seams
+stay on one device, and D3D11 is how you get there here without touching drivers.
+
+**Verification owed:** the 110 fps is the product owner's reported figure; it has
+not yet been run through this document's interleaved-A/B, discarded-warm-up,
+VOID-on-spread gate (§C.2), and a `--profile detail` mode (decode/composite/encode
+share, serial vs parallel) is still to be built — as a SEPARATE pass, never
+instrumenting the §10 headline clock. The `poc-native/` Vulkan+wgpu work stands as
+the portability proof (the WGSL compositor runs native unchanged) and the cost map;
+the D3D11 POC is the throughput winner.
+
 ---
 
 **Step-0 note (data loss, §13).** The record's reference project `os_parity`

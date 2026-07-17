@@ -233,21 +233,58 @@ async function run(override = {}) {
 	const code = await (await fetch("composite.wgsl")).text();
 	const module = device.createShaderModule({ code });
 	device.pushErrorScope("validation");
-	const pipeline = device.createRenderPipeline({
-		layout: "auto",
-		vertex: { module, entryPoint: "vs" },
-		fragment: { module, entryPoint: "fs", targets: [{ format }] },
-		primitive: { topology: "triangle-list" },
-	});
-	const shaderError = await device.popErrorScope();
-	if (shaderError) throw new Error(`shader: ${shaderError.message}`);
 
-	// The background, baked once. Same module, its own entry point and its own
-	// auto layout (it binds nothing but the uniforms).
+	// One explicit layout for every pass, so a shader that happens not to sample
+	// bgTex does not silently get a different bind group. `auto` derives the
+	// layout from what the entry point USES, which makes the layout an accident of
+	// dead-code elimination.
+	const bindGroupLayout = device.createBindGroupLayout({
+		entries: [
+			{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: {} },
+			{ binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+			{ binding: 2, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+			{ binding: 3, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+			{ binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+		],
+	});
+	const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+	// Straight-alpha "over": the compositor's only blend.
+	const OVER = {
+		color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+		alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
+	};
+	const makePass = (vs, fs, blend) =>
+		device.createRenderPipeline({
+			label: fs,
+			layout: pipelineLayout,
+			vertex: { module, entryPoint: vs },
+			fragment: { module, entryPoint: fs, targets: [{ format, ...(blend ? { blend } : {}) }] },
+			primitive: { topology: "triangle-list" },
+		});
+
+	// Five passes, each a quad sized to its element. The rasterizer clips whatever
+	// leaves the stage — which, during a zoom, is most of the recording.
+	const passes = {
+		background: makePass("vsFull", "fsBackground", null),
+		screenShadow: makePass("vsScreenShadow", "fsScreenShadow", OVER),
+		screen: makePass("vsScreen", "fsScreen", OVER),
+		webcamShadow: makePass("vsWebcamShadow", "fsWebcamShadow", OVER),
+		webcam: makePass("vsWebcam", "fsWebcam", OVER),
+	};
+
+	// The bake runs before any video exists, so it gets a layout of its own: the
+	// uniforms and nothing else.
+	const bakeLayout = device.createBindGroupLayout({
+		entries: [
+			{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: {} },
+		],
+	});
 	const bgPipeline = device.createRenderPipeline({
-		layout: "auto",
-		vertex: { module, entryPoint: "vs" },
-		fragment: { module, entryPoint: "fsBackground", targets: [{ format: "rgba8unorm" }] },
+		label: "bake",
+		layout: device.createPipelineLayout({ bindGroupLayouts: [bakeLayout] }),
+		vertex: { module, entryPoint: "vsFull" },
+		fragment: { module, entryPoint: "fsBake", targets: [{ format: "rgba8unorm" }] },
 		primitive: { topology: "triangle-list" },
 	});
 	const bgTexture = device.createTexture({
@@ -255,6 +292,8 @@ async function run(override = {}) {
 		format: "rgba8unorm",
 		usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
 	});
+	const shaderError = await device.popErrorScope();
+	if (shaderError) throw new Error(`shader: ${shaderError.message}`);
 
 	const sampler = device.createSampler({ magFilter: "linear", minFilter: "linear" });
 	// 5 vec4 = 80 bytes. All-vec4 on purpose: WGSL pads mixed structs and the CPU
@@ -300,7 +339,7 @@ async function run(override = {}) {
 		pass.setBindGroup(
 			0,
 			device.createBindGroup({
-				layout: bgPipeline.getBindGroupLayout(0),
+				layout: bakeLayout,
 				entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
 			}),
 		);
@@ -388,7 +427,7 @@ async function run(override = {}) {
 		uniforms.set([f.webcamRadius, f.motionBlurPx, camAspect, optimised ? 1 : 0], 16);
 		device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 		const bind = device.createBindGroup({
-			layout: pipeline.getBindGroupLayout(0),
+			layout: bindGroupLayout,
 			entries: [
 				{ binding: 0, resource: { buffer: uniformBuffer } },
 				{ binding: 1, resource: sampler },
@@ -414,9 +453,42 @@ async function run(override = {}) {
 				? { timestampWrites: { querySet, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } }
 				: {}),
 		});
-		pass.setPipeline(pipeline);
+		// CULLING, on the CPU, before anything is submitted.
+		//
+		// The cheapest fragment is the one never dispatched. Two tests, both from
+		// the rects evaluate() already produced:
+		//  - the recording covers the stage (every zoom does): nothing underneath
+		//    can show, so the background and its shadow are not drawn at all. The
+		//    test insets by the corner radius, because a rounded corner is where
+		//    the background WOULD peek through.
+		//  - the webcam is entirely off-stage: it and its shadow are not drawn.
+		const r = f.screen;
+		const rad = 28;
+		const screenCoversStage =
+			optimised &&
+			r.x + rad <= 0 &&
+			r.y + rad <= 0 &&
+			r.x + r.w - rad >= OUT.width &&
+			r.y + r.h - rad >= OUT.height;
+		const w = f.webcam;
+		const webcamVisible =
+			!optimised || (w.x < OUT.width && w.y < OUT.height && w.x + w.w > 0 && w.y + w.h > 0);
+
 		pass.setBindGroup(0, bind);
-		pass.draw(3);
+		if (!screenCoversStage) {
+			pass.setPipeline(passes.background);
+			pass.draw(6);
+			pass.setPipeline(passes.screenShadow);
+			pass.draw(6);
+		}
+		pass.setPipeline(passes.screen);
+		pass.draw(6);
+		if (webcamVisible) {
+			pass.setPipeline(passes.webcamShadow);
+			pass.draw(6);
+			pass.setPipeline(passes.webcam);
+			pass.draw(6);
+		}
 		pass.end();
 		if (useQueries) {
 			encoder.resolveQuerySet(querySet, 0, 2, resolveBuffer, 0);
@@ -498,9 +570,12 @@ async function run(override = {}) {
 	setStat("fps", cruiseFps.toFixed(1));
 	setStat("progress", `${rendered}/${totalFrames}`);
 	setStat("perframe", `${cruiseMs.toFixed(1)} ms`);
-	setStat("render", `${median(warm.map((f) => f.fence)).toFixed(1)} ms`);
-	setStat("decode", `${median(warm.map((f) => f.decode)).toFixed(1)} ms`);
-	setStat("encode", `${median(warm.map((f) => f.encode)).toFixed(1)} ms`);
+	// `?? 0`: the clean pass has no phase timers by construction — that is what
+	// makes it clean. Reading them back as undefined is not an error, it is the
+	// point.
+	setStat("render", instrumented ? `${median(warm.map((f) => f.fence ?? 0)).toFixed(1)} ms` : "—");
+	setStat("decode", instrumented ? `${median(warm.map((f) => f.decode ?? 0)).toFixed(1)} ms` : "—");
+	setStat("encode", instrumented ? `${median(warm.map((f) => f.encode ?? 0)).toFixed(1)} ms` : "—");
 
 	log(
 		`\n=== [${instrumented ? "INSTRUMENTED" : "CLEAN"}] cruise ${cruiseFps.toFixed(1)} fps — ${cruiseMs.toFixed(1)} ms/frame (median of the last ${warm.length}) ===`,

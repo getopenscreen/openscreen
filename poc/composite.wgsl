@@ -1,10 +1,20 @@
 // The compositor. Two sources, one layout, three effects — written from zero.
 //
+// Drawn the way a game draws: one quad per element, sized to the element. The
+// rasterizer then runs the fragment shader ONLY on the pixels that element
+// covers, and clips whatever falls outside the frame — for free, in fixed
+// function, with no branch. A zoomed recording is 2.7x the stage: two thirds of
+// it is off-screen and costs nothing.
+//
+// The alternative — one fullscreen triangle with `if`s — pays for every pixel of
+// every effect and then throws most of it away. That is what the first version of
+// this file did.
+//
 // Everything is a pure function of the uniforms. No cache: a shader recomputes
 // every pixel every frame, which is the point of the paradigm.
 
 struct U {
-  // stage.xy | time (s) | screenRadius
+  // stage.xy | unused | screenRadius
   a : vec4f,
   // screenRect: x, y, w, h — already carries the zoom (scale + pan)
   screen : vec4f,
@@ -24,18 +34,54 @@ struct U {
 
 struct VsOut {
   @builtin(position) pos : vec4f,
+  // Stage-space uv (0..1 across the OUTPUT), not the quad's own uv: the fragment
+  // shaders all reason in stage pixels, and the quad is only there to bound them.
   @location(0) uv : vec2f,
 };
 
-// Full-screen triangle: three vertices, no vertex buffer.
-@vertex
-fn vs(@builtin(vertex_index) i : u32) -> VsOut {
+// ---- vertex: one quad per element ------------------------------------------
+
+/**
+ * Emit `rect` as two triangles in stage space.
+ *
+ * Clipping is the rasterizer's job: a rect that runs off the stage — every zoomed
+ * recording — is cut by fixed-function hardware before a single fragment is
+ * dispatched.
+ */
+fn quad(vi : u32, rect : vec4f) -> VsOut {
+  var corners = array<vec2f, 6>(
+    vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0),
+    vec2f(0.0, 1.0), vec2f(1.0, 0.0), vec2f(1.0, 1.0),
+  );
+  let c = corners[vi];
+  let px = rect.xy + c * rect.zw;
   var out : VsOut;
-  let x = f32((i << 1u) & 2u);
-  let y = f32(i & 2u);
-  out.uv = vec2f(x, y);
-  out.pos = vec4f(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
+  out.pos = vec4f(px.x / u.a.x * 2.0 - 1.0, 1.0 - px.y / u.a.y * 2.0, 0.0, 1.0);
+  out.uv = px / u.a.xy;
   return out;
+}
+
+@vertex fn vsFull(@builtin(vertex_index) i : u32) -> VsOut {
+  return quad(i, vec4f(0.0, 0.0, u.a.x, u.a.y));
+}
+
+@vertex fn vsScreen(@builtin(vertex_index) i : u32) -> VsOut {
+  return quad(i, u.screen);
+}
+
+/** The shadow's quad: the rect, grown by the spread — its exact reach. */
+@vertex fn vsScreenShadow(@builtin(vertex_index) i : u32) -> VsOut {
+  let s = u.fx.w + 1.0;
+  return quad(i, vec4f(u.screen.xy - vec2f(s), u.screen.zw + vec2f(s * 2.0)) + vec4f(0.0, u.fx.z, 0.0, 0.0));
+}
+
+@vertex fn vsWebcam(@builtin(vertex_index) i : u32) -> VsOut {
+  return quad(i, u.webcam);
+}
+
+@vertex fn vsWebcamShadow(@builtin(vertex_index) i : u32) -> VsOut {
+  let s = u.fx.w + 1.0;
+  return quad(i, vec4f(u.webcam.xy - vec2f(s), u.webcam.zw + vec2f(s * 2.0)) + vec4f(0.0, u.fx.z, 0.0, 0.0));
 }
 
 // ---- geometry ---------------------------------------------------------------
@@ -54,21 +100,15 @@ fn cover(d : f32) -> f32 {
 
 // ---- effect 1: the background ----------------------------------------------
 //
-// A blurred gradient — baked into a texture ONCE, at init, by fsBackground below.
-// The per-frame shader reads one texel.
+// A blurred gradient, baked into a texture ONCE by fsBake. The frame reads one
+// texel — and only where the recording does not already cover it.
 //
-// It was 16 gradient evaluations per pixel per frame, and every one of them
-// recomputed a CONSTANT: the background does not depend on t, on the video, or on
-// the camera. 2 Mpx x 16 taps x 30 fps of arithmetic to reproduce the same image
-// 210 times.
-//
-// This is not the shadow cache in disguise, and the difference is the whole
-// argument: a cache guesses that its input has not changed and needs a key to
-// find out. This has no key, because there is no input — the background is a
-// constant, and a constant is computed once by definition. The shadow follows the
-// camera, so it has no such luxury and is recomputed every frame, on purpose.
+// It was 16 gradient evaluations per pixel per frame, every one recomputing a
+// CONSTANT. This is not the shadow cache in disguise, and the difference is the
+// whole argument: a cache guesses that its input has not changed and needs a key
+// to find out. This has no key because it has no input — the background IS a
+// constant. The shadow follows the camera, so it gets no such luxury.
 
-/** The background, evaluated at init only. Blurred with 16 Fibonacci taps. */
 fn gradient(uv : vec2f) -> vec3f {
   let a = vec3f(0.06, 0.11, 0.24);
   let b = vec3f(0.35, 0.12, 0.42);
@@ -95,29 +135,33 @@ fn blurredGradient(uv : vec2f) -> vec3f {
   return acc / f32(taps);
 }
 
-@fragment
-fn fsBackground(in : VsOut) -> @location(0) vec4f {
+/** Init only. */
+@fragment fn fsBake(in : VsOut) -> @location(0) vec4f {
+  return vec4f(blurredGradient(in.uv), 1.0);
+}
+
+/** Per frame: one texel — or the naive 16 taps, for the A/B. */
+@fragment fn fsBackground(in : VsOut) -> @location(0) vec4f {
+  if (u.b.w > 0.5) {
+    return vec4f(textureSampleLevel(bgTex, samp, in.uv, 0.0).rgb, 1.0);
+  }
   return vec4f(blurredGradient(in.uv), 1.0);
 }
 
 // ---- effect 2: the drop shadow ----------------------------------------------
-// The shape is known analytically — a rounded rect — so its shadow does not need
-// a blur pass at all: the coverage of a rounded box, evaluated at a few offsets,
-// IS the shadow. No silhouette texture, no ping-pong, no 18 passes.
 //
-// 12 taps on a disc of radius `spread`. It is a soft shape under an opaque
-// rectangle; the eye reads its falloff, not its exact profile.
+// The shape is known analytically — a rounded rect — so the shadow needs no blur
+// pass: the coverage of that box, sampled at a few offsets, IS the shadow. No
+// silhouette texture, no ping-pong, no 18 passes.
 //
-// The taps only run in the BAND where the answer is in doubt. Every tap lands
-// within `spread` of the pixel, so:
-//   - grow the box by spread: outside it, every tap misses  → exactly 0
-//   - shrink the box by spread: inside it, every tap hits    → exactly intensity
-// Both are the box's Minkowski sum/difference with the tap disc, so this is not
-// an approximation — it is the same number, arrived at by arithmetic instead of
-// by twelve samples. It leaves a band ~2*spread wide around the edge paying full
-// price, which on this layout is ~20% of the frame. Pure ALU, so branching costs
-// nothing and no texture sampling is involved.
-fn shadow(px : vec2f, rect : vec4f, radius : f32, intensity : f32) -> f32 {
+// The quad already bounds it to the rect + spread, so the "outside" case never
+// reaches a fragment. What is left is the inside: every tap lands within `spread`
+// of the pixel, so within the box SHRUNK by spread they all hit, and the answer
+// is `intensity` with no taps at all. That is the box's Minkowski difference with
+// the tap disc — the same number by arithmetic, not an approximation. Only the
+// band around the edge pays the twelve samples.
+
+fn shadowAt(px : vec2f, rect : vec4f, radius : f32, intensity : f32) -> f32 {
   if (intensity <= 0.0) {
     return 0.0;
   }
@@ -126,13 +170,7 @@ fn shadow(px : vec2f, rect : vec4f, radius : f32, intensity : f32) -> f32 {
   let spread = u.fx.w;
   let p = px - centre;
 
-  // Both variants live here, chosen by a uniform, so old and new can be
-  // interleaved in ONE session. Attributing a change across two sessions is what
-  // this machine punishes: two identical runs measured 23% apart.
   if (u.b.w > 0.5) {
-    if (sdRoundBox(p, half + vec2f(spread), radius + spread) > 0.5) {
-      return 0.0;
-    }
     if (sdRoundBox(p, max(half - vec2f(spread), vec2f(0.0)), max(radius - spread, 0.0)) < -0.5) {
       return intensity;
     }
@@ -151,29 +189,19 @@ fn shadow(px : vec2f, rect : vec4f, radius : f32, intensity : f32) -> f32 {
   return (acc / f32(taps)) * intensity;
 }
 
-// ---- effect 3: the masks ----------------------------------------------------
-// Rounded rect for the recording, circle for the webcam. Both are the same SDF
-// with different parameters — which is the whole argument for computing shapes
-// instead of tessellating them.
-
-/**
- * The webcam's mask, morphing with the layout animation.
- *
- * radius drives the shape: a circle when radius == min(half), a rounded rect as
- * it drops. The animation is a single number, and the SDF interpolates the SHAPE
- * for free — this is the thing a tessellated 2D mask cannot do without rebuilding
- * geometry every frame.
- */
-fn webcamCover(px : vec2f, rect : vec4f, radius : f32) -> f32 {
-  let centre = rect.xy + rect.zw * 0.5;
-  let half = rect.zw * 0.5;
-  return cover(sdRoundBox(px - centre, half, radius));
+@fragment fn fsScreenShadow(in : VsOut) -> @location(0) vec4f {
+  return vec4f(0.0, 0.0, 0.0, shadowAt(in.uv * u.a.xy, u.screen, u.a.w, u.fx.x));
 }
 
+@fragment fn fsWebcamShadow(in : VsOut) -> @location(0) vec4f {
+  return vec4f(0.0, 0.0, 0.0, shadowAt(in.uv * u.a.xy, u.webcam, u.b.x, u.fx.x * 0.8));
+}
+
+// ---- effect 3: the masks + the sources --------------------------------------
+
 /**
- * Directional motion blur, applied while the camera moves.
- *
- * Skipped entirely at rest: a branch is free next to nine texture fetches.
+ * Directional motion blur while the camera moves. Skipped at rest: a branch is
+ * free next to seven texture fetches, and it is uniform across the frame.
  */
 fn sampleScreen(px : vec2f, blurPx : f32) -> vec3f {
   let uv0 = (px - u.screen.xy) / max(u.screen.zw, vec2f(1.0));
@@ -184,68 +212,37 @@ fn sampleScreen(px : vec2f, blurPx : f32) -> vec3f {
   let taps = 7;
   for (var i = 0; i < taps; i = i + 1) {
     let t = (f32(i) / f32(taps - 1)) - 0.5;
-    let p = px + vec2f(blurPx * t, 0.0);
-    let uv = (p - u.screen.xy) / max(u.screen.zw, vec2f(1.0));
+    let uv = ((px + vec2f(blurPx * t, 0.0)) - u.screen.xy) / max(u.screen.zw, vec2f(1.0));
     acc = acc + textureSampleBaseClampToEdge(screenTex, samp, clamp(uv, vec2f(0.0), vec2f(1.0))).rgb;
   }
   return acc / f32(taps);
 }
 
-fn over(dst : vec3f, src : vec3f, a : f32) -> vec3f {
-  return mix(dst, src, clamp(a, 0.0, 1.0));
+@fragment fn fsScreen(in : VsOut) -> @location(0) vec4f {
+  let px = in.uv * u.a.xy;
+  let c = cover(sdRoundBox(px - (u.screen.xy + u.screen.zw * 0.5), u.screen.zw * 0.5, u.a.w));
+  if (c <= 0.0) {
+    discard;
+  }
+  return vec4f(sampleScreen(px, u.b.y), c);
 }
 
-@fragment
-fn fs(in : VsOut) -> @location(0) vec4f {
+/**
+ * The webcam's mask, morphing with the layout animation: radius drives the shape,
+ * circle when docked and rounded rect when grown. The SDF interpolates the SHAPE
+ * for free — a tessellated 2D mask would rebuild geometry every frame for this.
+ */
+@fragment fn fsWebcam(in : VsOut) -> @location(0) vec4f {
   let px = in.uv * u.a.xy;
-
-  // The recording's coverage decides how much of the frame even has to be built:
-  // where it is fully opaque — most of the picture, and all of it during a zoom —
-  // nothing underneath can show, so the background read and the shadow's taps are
-  // work with no output. Computing coverage first and branching on it is exact:
-  // over(dst, src, 1.0) returns src, whatever dst was.
-  let sc = cover(sdRoundBox(px - (u.screen.xy + u.screen.zw * 0.5), u.screen.zw * 0.5, u.a.w));
-  let opt = u.b.w > 0.5;
-
-  var colour : vec3f;
-  if (opt && sc >= 1.0) {
-    colour = sampleScreen(px, u.b.y);
-  } else {
-    // 1. Background. Optimised: one texel of a texture baked at init.
-    //    Naive: 16 gradient evaluations, per pixel, per frame — recomputing a
-    //    constant 210 times.
-    //    textureSampleLevel, not textureSample: the latter needs derivatives and
-    //    is illegal in non-uniform control flow, which is exactly where we are.
-    if (opt) {
-      colour = textureSampleLevel(bgTex, samp, in.uv, 0.0).rgb;
-    } else {
-      colour = blurredGradient(in.uv);
-    }
-
-    // 2. Shadow under the recording.
-    colour = over(colour, vec3f(0.0), shadow(px, u.screen, u.a.w, u.fx.x));
-
-    // 3. The recording: zoomed (the rect already carries scale + pan), masked to
-    //    a rounded rect, motion-blurred while the camera travels.
-    if (sc > 0.0) {
-      colour = over(colour, sampleScreen(px, u.b.y), sc);
-    }
+  let centre = u.webcam.xy + u.webcam.zw * 0.5;
+  let c = cover(sdRoundBox(px - centre, u.webcam.zw * 0.5, u.b.x));
+  if (c <= 0.0) {
+    discard;
   }
-
-  // 4. The webcam, its shape morphing with the layout animation, with its own
-  //    shadow.
-  let ws = shadow(px, u.webcam, u.b.x, u.fx.x * 0.8);
-  colour = over(colour, vec3f(0.0), ws);
-  let wc = webcamCover(px, u.webcam, u.b.x);
-  if (wc > 0.0) {
-    // Cover-fit: a 4:3 source in a square hole would squash without this. Sample
-    // the middle and let the mask crop, which is what the eye expects.
-    let centre = u.webcam.xy + u.webcam.zw * 0.5;
-    var uv = (px - centre) / max(u.webcam.zw, vec2f(1.0));
-    uv = uv * vec2f(u.b.z, 1.0) + vec2f(0.5);
-    let cam = textureSampleBaseClampToEdge(webcamTex, samp, clamp(uv, vec2f(0.0), vec2f(1.0)));
-    colour = over(colour, cam.rgb, wc);
-  }
-
-  return vec4f(colour, 1.0);
+  // Cover-fit: a 4:3 source in a square hole would squash without this. Sample
+  // the middle and let the mask crop, which is what the eye expects.
+  var uv = (px - centre) / max(u.webcam.zw, vec2f(1.0));
+  uv = uv * vec2f(u.b.z, 1.0) + vec2f(0.5);
+  let cam = textureSampleBaseClampToEdge(webcamTex, samp, clamp(uv, vec2f(0.0), vec2f(1.0)));
+  return vec4f(cam.rgb, c);
 }

@@ -281,37 +281,40 @@ fn sdCursor(p : vec2f) -> f32 {
   return s * sqrt(d);
 }
 
-/** Coverage of the arrow at a stage pixel, with the click bounce applied. */
-fn cursorCover(px : vec2f) -> f32 {
+/** Signed distance to the arrow at a stage pixel, in px, with the click bounce. */
+fn cursorSD(px : vec2f) -> f32 {
   // Scale about the tip (local origin) so a click bounce pulls toward the
   // hotspot, not the centre. 1.2 fits the 0..1.14 arrow inside the quad.
-  let local = (px - u.cursor.xy) / max(u.cursor.z, 1.0) / u.cursorFx.z * 1.2;
-  return cover(sdCursor(local) * u.cursor.z / 1.2);
+  let s = u.cursor.z / 1.2;
+  let local = (px - u.cursor.xy) / max(s, 1.0) / u.cursorFx.z;
+  return sdCursor(local) * s * u.cursorFx.z;
 }
 
 @fragment fn fsCursor(in : VsOut) -> @location(0) vec4f {
   let px = in.uv * u.a.xy;
-
-  // The arrow, smeared along its travel when it moves fast.
   let blur = u.cursorFx.xy;
-  var body = 0.0;
-  if (length(blur) < 0.5) {
-    body = cursorCover(px);
-  } else {
-    let taps = 5;
-    for (var i = 0; i < taps; i = i + 1) {
-      let t = (f32(i) / f32(taps - 1)) - 0.5;
-      body = body + cursorCover(px + blur * t);
-    }
-    body = body / f32(taps);
+  let outline = max(u.cursor.z * 0.05, 1.5); // the arrow's own black rim, in px
+
+  // Fill (white interior) and outline (interior + rim) coverage, both smeared
+  // along the travel when the cursor moves fast. No drop shadow — the contrast on
+  // a light page is the rim, which is part of the pointer, not a cast shadow.
+  var fill = 0.0;
+  var edge = 0.0;
+  let moving = length(blur) >= 0.5;
+  let taps = select(1, 5, moving);
+  for (var i = 0; i < taps; i = i + 1) {
+    let t = select(0.0, (f32(i) / f32(taps - 1)) - 0.5, moving);
+    let d = cursorSD(px + blur * t);
+    fill = fill + cover(d);
+    edge = edge + cover(d - outline);
   }
+  fill = fill / f32(taps);
+  edge = edge / f32(taps);
 
-  // Shadow: two offset samples of the same arrow, only where the body is not.
-  let shadow = max(cursorCover(px - vec2f(2.0)), cursorCover(px - vec2f(3.0, 4.0)));
-  let shadowA = shadow * (u.cursor.w * 0.35) * (1.0 - body);
-
-  // Black shadow under a white arrow. Alpha carries both.
-  return vec4f(vec3f(1.0) * body, max(shadowA, body * u.cursor.w));
+  // White inside, fading to a black rim; `edge` carries the opacity so the rim is
+  // solid. The click bounce is already baked into cursorSD.
+  let rgb = vec3f(fill / max(edge, 1e-4));
+  return vec4f(rgb, edge * u.cursor.w);
 }
 
 /**

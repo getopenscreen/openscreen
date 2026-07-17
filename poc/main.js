@@ -381,8 +381,11 @@ async function run(override = {}) {
 	await output.start();
 
 	const sc = scene(OUT, Number(document.querySelector("#padding").value));
-	const shadowIntensity = Number(document.querySelector("#shadow").value);
-	const bgBlur = Number(document.querySelector("#blur").value);
+	// effectsOn === false forces the effects OFF (not just absent) so the "effects
+	// on vs off" comparison isolates their cost against the same everything-else.
+	const effectsOn = override.effectsOn ?? true;
+	const shadowIntensity = effectsOn ? Number(document.querySelector("#shadow").value) : 0;
+	const bgBlur = effectsOn ? Number(document.querySelector("#blur").value) : 0;
 	const camAspect = webcam.track.displayWidth / webcam.track.displayHeight;
 	let memo = null;
 	let curMemo = null;
@@ -764,49 +767,86 @@ async function run(override = {}) {
  * arms differ by that uniform and nothing else — no reload, no recompile, no
  * second session.
  */
+// Every A/B this POC can run, each naming EXACTLY the two things it compares and
+// what one run() override turns one arm into the other. Each holds everything
+// else fixed, so the difference is the named lever and nothing else.
+const COMPARISONS = {
+	perf: {
+		title: "Perf : optimisé vs naïf",
+		a: { label: "optimisé", over: { optimised: true, instrumented: false } },
+		b: { label: "naïf", over: { optimised: false, instrumented: false } },
+		note: "fond cuit + culling, vs fond recalculé + tout dessiné. Même image.",
+	},
+	effects: {
+		title: "Effets : activés vs coupés",
+		a: { label: "effets ON", over: { effectsOn: true, optimised: true, instrumented: false } },
+		b: { label: "effets OFF", over: { effectsOn: false, optimised: true, instrumented: false } },
+		note: "ombre + flou de fond présents, vs à zéro. Le prix des effets eux-mêmes.",
+	},
+	instruments: {
+		title: "Mesure : instrumenté vs propre",
+		a: { label: "instrumenté", over: { instrumented: true, optimised: true } },
+		b: { label: "propre", over: { instrumented: false, optimised: true } },
+		note: "fence + lecture des timestamps par image, vs rien. Le coût de la mesure.",
+	},
+};
+
+/**
+ * Interleaved A/B/A/B, because an effect can only be told apart from drift.
+ *
+ * Two identical runs measured 34.8 and 28.3 fps on this machine — 23% apart,
+ * which is the size of the effects under test. Sequential arms therefore prove
+ * nothing: they alternate so drift shows up as a run disagreeing with its OWN
+ * repeat instead of masquerading as the change. Same rule, and same reason, as
+ * the app's export bench. The shader variants all live in one module, chosen by a
+ * uniform, so an arm differs from its pair by that uniform and nothing else.
+ */
 async function compare(rounds = 3) {
+	const spec = COMPARISONS[document.querySelector("#compareMode").value] ?? COMPARISONS.perf;
 	const median = (xs) => {
 		const s = [...xs].sort((a, b) => a - b);
 		return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
 	};
 	const spread = (xs) => (Math.max(...xs) - Math.min(...xs)) / median(xs);
-	const arms = { OPTIMISED: [], NAIVE: [] };
+	const arms = [
+		{ ...spec.a, runs: [] },
+		{ ...spec.b, runs: [] },
+	];
 
 	// Round 0 is thrown away. Both arms climb monotonically across the first
-	// rounds — 15.0 → 28.4 → 33.3 and 27.9 → 37.2 → 42.0 — which is the browser
-	// and the GPU waking up, not the arms differing. Keeping it put a 64% spread
-	// on a 23% effect and voided the comparison by itself.
+	// rounds — 15.0 → 28.4 → 33.3 — which is the browser and the GPU waking up,
+	// not the arms differing. Keeping it put a 64% spread on a 23% effect and
+	// voided the comparison by itself.
 	for (let r = 0; r <= rounds; r++) {
-		for (const [name, optimised] of [
-			["OPTIMISED", true],
-			["NAIVE", false],
-		]) {
-			// Clean on both sides: the instruments cost 17%, and they are not what
-			// is being compared here.
-			const res = await run({ optimised, instrumented: false });
-			if (r > 0) arms[name].push(res.cruiseFps);
+		for (const arm of arms) {
+			const res = await run(arm.over);
+			if (r > 0) arm.runs.push(res.cruiseFps);
 		}
 	}
 
 	document.querySelector("#log").textContent = "";
-	log("=== baked background + shadow early-out, vs neither (interleaved A/B) ===\n");
-	for (const [name, xs] of Object.entries(arms)) {
+	log(`=== ${spec.title} — A/B interleavé, ${rounds} tours + 1 chauffe ===`);
+	log(`${spec.note}\n`);
+	for (const arm of arms) {
 		log(
-			`${name.padEnd(13)} cruise ${median(xs).toFixed(1).padStart(5)} fps   spread ${(spread(xs) * 100).toFixed(0)}%   runs: ${xs.map((x) => x.toFixed(1)).join(" / ")}`,
+			`${arm.label.padEnd(13)} croisière ${median(arm.runs).toFixed(1).padStart(5)} fps   spread ${(spread(arm.runs) * 100).toFixed(0)}%   ${arm.runs.map((x) => x.toFixed(1)).join(" / ")}`,
 		);
 	}
-	const gain = median(arms.OPTIMISED) - median(arms.NAIVE);
-	const gainPct = (gain / median(arms.NAIVE)) * 100;
-	const worst = Math.max(spread(arms.OPTIMISED), spread(arms.NAIVE)) * 100;
-	log(`\ngain: ${gain > 0 ? "+" : ""}${gain.toFixed(1)} fps (${gainPct.toFixed(0)}%)`);
+	const [A, B] = arms;
+	const gain = median(A.runs) - median(B.runs);
+	const gainPct = (gain / median(B.runs)) * 100;
+	const worst = Math.max(spread(A.runs), spread(B.runs)) * 100;
+	log(
+		`\n${A.label} vs ${B.label}: ${gain > 0 ? "+" : ""}${gain.toFixed(1)} fps (${gainPct.toFixed(0)}%)`,
+	);
 	if (worst >= Math.abs(gainPct)) {
 		log(
-			`\n!! VOID: same-arm spread reaches ${worst.toFixed(0)}%, as large as the effect.\n   This run says nothing. Repeat on a steadier machine.`,
+			`\n!! VOID : spread intra-bras ${worst.toFixed(0)}%, aussi grand que l'effet.\n   Ce run ne dit rien — refaire sur une machine calme.`,
 		);
 	} else {
-		log(`\nsame-arm spread ${worst.toFixed(0)}% — smaller than the effect, so the effect is real.`);
+		log(`\nspread intra-bras ${worst.toFixed(0)}% < l'effet — le résultat tient.`);
 	}
-	setStat("fps", median(arms.OPTIMISED).toFixed(1));
+	setStat("fps", median(A.runs).toFixed(1));
 }
 
 document.querySelector("#run").addEventListener("click", () => {
@@ -819,10 +859,18 @@ document.querySelector("#run").addEventListener("click", () => {
 });
 
 document.querySelector("#compare").addEventListener("click", () => {
-	document.querySelector("#log").textContent = "comparing, please wait…\n";
+	document.querySelector("#log").textContent = "comparaison en cours, patientez…\n";
 	compare().catch((error) => {
 		log(`\nFAILED: ${error.message}`);
 		console.error(error);
 		document.querySelector("#run").disabled = false;
 	});
 });
+
+// Show the selected comparison's plain-language note next to the dropdown.
+const modeSelect = document.querySelector("#compareMode");
+const updateNote = () => {
+	document.querySelector("#compareNote").textContent = COMPARISONS[modeSelect.value]?.note ?? "";
+};
+modeSelect.addEventListener("change", updateNote);
+updateNote();

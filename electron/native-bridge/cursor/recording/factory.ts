@@ -5,6 +5,7 @@ import { TelemetryRecordingSession } from "./telemetryRecordingSession";
 import { WindowsNativeRecordingSession } from "./windowsNativeRecordingSession";
 
 interface CreateCursorRecordingSessionOptions {
+	displayId?: number | null;
 	getDisplayBounds: () => Rectangle | null;
 	maxSamples: number;
 	platform: NodeJS.Platform;
@@ -18,6 +19,7 @@ export function createCursorRecordingSession(
 ): CursorRecordingSession {
 	if (options.platform === "win32") {
 		return new WindowsNativeRecordingSession({
+			displayId: options.displayId,
 			getDisplayBounds: options.getDisplayBounds,
 			maxSamples: options.maxSamples,
 			sampleIntervalMs: options.sampleIntervalMs,

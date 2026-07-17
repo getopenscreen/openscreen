@@ -1,7 +1,6 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, ipcMain, screen } from "electron";
-import { clampHudOverlayPosition, resolveHudOverlayDragPosition } from "./hudOverlayDrag";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,33 +17,9 @@ const ASSET_BASE_DIR = process.defaultApp
 const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}${path.sep}`).toString()}`;
 
 let hudOverlayWindow: BrowserWindow | null = null;
-let hudOverlayDragState: {
-	startBounds: Electron.Rectangle;
-	startCursor: Electron.Point;
-} | null = null;
-
-function moveHudOverlayToCurrentCursor(clampToDisplay: boolean) {
-	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed() || !hudOverlayDragState) {
-		return;
-	}
-
-	const currentCursor = screen.getCursorScreenPoint();
-	let position = resolveHudOverlayDragPosition(
-		hudOverlayDragState.startBounds,
-		hudOverlayDragState.startCursor,
-		currentCursor,
-	);
-	if (clampToDisplay) {
-		const { workArea } = screen.getDisplayNearestPoint(currentCursor);
-		position = clampHudOverlayPosition(position, hudOverlayDragState.startBounds, workArea);
-	}
-
-	hudOverlayWindow.setPosition(position.x, position.y, false);
-}
 
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
-		hudOverlayDragState = null;
 		hudOverlayWindow.minimize();
 	}
 });
@@ -53,28 +28,6 @@ ipcMain.on("hud-overlay-ignore-mouse-events", (_event, ignore: boolean) => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
 		hudOverlayWindow.setIgnoreMouseEvents(ignore, { forward: true });
 	}
-});
-
-ipcMain.on("hud-overlay-drag-start", () => {
-	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) {
-		return;
-	}
-
-	hudOverlayDragState = {
-		startBounds: hudOverlayWindow.getBounds(),
-		startCursor: screen.getCursorScreenPoint(),
-	};
-});
-
-ipcMain.on("hud-overlay-drag-move", () => {
-	// Do not clamp mid-drag: that would make the HUD jump at mixed-DPI monitor boundaries.
-	moveHudOverlayToCurrentCursor(false);
-});
-
-ipcMain.on("hud-overlay-drag-end", () => {
-	// Capture the release point and keep the HUD inside the target monitor's work area.
-	moveHudOverlayToCurrentCursor(true);
-	hudOverlayDragState = null;
 });
 
 // Resize the HUD to fit its rendered content. Anchored by its bottom-centre so it
@@ -180,7 +133,6 @@ export function createHudOverlayWindow(): BrowserWindow {
 	win.on("closed", () => {
 		if (hudOverlayWindow === win) {
 			hudOverlayWindow = null;
-			hudOverlayDragState = null;
 		}
 	});
 

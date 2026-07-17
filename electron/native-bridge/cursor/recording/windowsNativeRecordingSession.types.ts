@@ -48,6 +48,7 @@ export type WindowsCursorEvent =
 	| WindowsCursorErrorEvent;
 
 export interface WindowsNativeRecordingSessionOptions {
+	displayId?: number | null;
 	getDisplayBounds: () => Rectangle | null;
 	maxSamples: number;
 	sampleIntervalMs: number;

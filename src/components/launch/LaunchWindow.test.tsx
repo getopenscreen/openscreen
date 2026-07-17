@@ -62,7 +62,6 @@ const recorderState = vi.hoisted(() => ({
 
 let selectedSourceChangedListeners: SelectedSourceChangedListener[] = [];
 let sourceSelectorClosedListeners: Array<() => void> = [];
-let dragFrameCallbacks: FrameRequestCallback[] = [];
 
 vi.mock("../../hooks/useScreenRecorder", () => ({
 	useScreenRecorder: () => recorderState.value,
@@ -179,9 +178,6 @@ function stubElectronAPI(getSelectedSource: Window["electronAPI"]["getSelectedSo
 		getPlatform: vi.fn(async () => "darwin"),
 		setHudOverlaySize: vi.fn(),
 		setHudOverlayIgnoreMouseEvents: vi.fn(),
-		startHudOverlayDrag: vi.fn(),
-		moveHudOverlayDrag: vi.fn(),
-		endHudOverlayDrag: vi.fn(),
 		hudOverlayHide: vi.fn(),
 		hudOverlayClose: vi.fn(),
 		switchToEditor: vi.fn(async () => undefined),
@@ -385,12 +381,6 @@ describe("LaunchWindow HUD dragging", () => {
 	beforeEach(() => {
 		platformState.value = "win32";
 		resetLaunchMocks();
-		dragFrameCallbacks = [];
-		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-			dragFrameCallbacks.push(callback);
-			return dragFrameCallbacks.length;
-		});
-		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
 	});
 
 	afterEach(() => {
@@ -399,42 +389,12 @@ describe("LaunchWindow HUD dragging", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it("delegates drag coordinates to Electron instead of accumulating renderer deltas", () => {
-		renderLaunchWindow();
-
-		const handle = screen.getByTestId("launch-drag-handle");
-		Object.assign(handle, {
-			setPointerCapture: vi.fn(),
-			hasPointerCapture: vi.fn(() => true),
-			releasePointerCapture: vi.fn(),
-		});
-
-		fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 14, clientY: 16 });
-		fireEvent.pointerMove(handle, { pointerId: 1, screenX: 1000, screenY: 1000 });
-		fireEvent.pointerMove(handle, { pointerId: 1, screenX: 1000, screenY: 1400 });
-		act(() => dragFrameCallbacks.shift()?.(0));
-		fireEvent.pointerUp(handle, { pointerId: 1, clientX: 14, clientY: 16 });
-
-		expect(window.electronAPI.startHudOverlayDrag).toHaveBeenCalledTimes(1);
-		expect(window.electronAPI.moveHudOverlayDrag).toHaveBeenCalledTimes(1);
-		expect(window.electronAPI.moveHudOverlayDrag).toHaveBeenCalledWith();
-		expect(window.electronAPI.endHudOverlayDrag).toHaveBeenCalledTimes(1);
-	});
-
-	it("does not make the HUD click-through while a drag is active", () => {
+	it("uses Electron's native OS drag region only on the HUD handle", () => {
 		const { container } = renderLaunchWindow();
 
 		const handle = screen.getByTestId("launch-drag-handle");
-		Object.assign(handle, {
-			setPointerCapture: vi.fn(),
-			hasPointerCapture: vi.fn(() => false),
-		});
-
-		fireEvent.pointerDown(handle, { button: 0, pointerId: 1 });
-		vi.mocked(window.electronAPI.setHudOverlayIgnoreMouseEvents).mockClear();
-		fireEvent.pointerLeave(container.firstElementChild as Element);
-
-		expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).not.toHaveBeenCalledWith(true);
+		expect(handle.className).toMatch(/electronDrag/);
+		expect((container.firstElementChild as HTMLElement).className).not.toMatch(/electronDrag/);
 	});
 });
 

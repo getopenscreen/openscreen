@@ -800,6 +800,7 @@ async function startCursorRecording(recordingId?: number) {
 
 	pendingCursorRecordingData = null;
 	cursorRecordingSession = createCursorRecordingSession({
+		displayId: getSelectedDisplay()?.id ?? null,
 		getDisplayBounds: getSelectedSourceBounds,
 		maxSamples: MAX_CURSOR_SAMPLES,
 		platform: process.platform,
@@ -1631,6 +1632,12 @@ export function registerIpcHandlers(
 							null)
 						: getSelectedDisplay();
 				const bounds = sourceDisplay?.bounds ?? getSelectedSourceBounds();
+				// Electron display bounds are DIPs. The native WGC helper is
+				// Per-Monitor-V2 aware and enumerates physical monitor rectangles, so
+				// give both native helpers the same physical selection hint. Each then
+				// resolves the exact Win32 monitor rectangle independently.
+				const physicalDisplayBounds =
+					request.source.type === "display" ? screen.dipToScreenRect(null, bounds) : bounds;
 				const displayId =
 					typeof request.source.displayId === "number" && Number.isFinite(request.source.displayId)
 						? request.source.displayId
@@ -1659,10 +1666,10 @@ export function registerIpcHandlers(
 					fps: request.video.fps,
 					videoWidth: request.video.width,
 					videoHeight: request.video.height,
-					displayX: bounds.x,
-					displayY: bounds.y,
-					displayW: bounds.width,
-					displayH: bounds.height,
+					displayX: physicalDisplayBounds.x,
+					displayY: physicalDisplayBounds.y,
+					displayW: physicalDisplayBounds.width,
+					displayH: physicalDisplayBounds.height,
 					hasDisplayBounds: true,
 					captureSystemAudio: request.audio.system.enabled,
 					captureMic: request.audio.microphone.enabled,
@@ -1705,6 +1712,7 @@ export function registerIpcHandlers(
 					encoder: { preferSoftwareEncoder },
 					cursor: { mode: cursorCaptureMode },
 					bounds,
+					physicalDisplayBounds,
 					sourceId: selectedSource?.id ?? null,
 					usedDisplayMatch: Boolean(sourceDisplay),
 					outputPath,

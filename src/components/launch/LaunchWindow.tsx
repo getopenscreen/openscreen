@@ -588,84 +588,19 @@ export function LaunchWindow() {
 			setMicrophoneEnabled(!microphoneEnabled);
 		}
 	};
-	const hudDraggingRef = useRef(false);
-	const dragAnimationFrameRef = useRef<number | null>(null);
-	const flushHudDragMove = useCallback(() => {
-		dragAnimationFrameRef.current = null;
-		if (!hudDraggingRef.current) return;
-		window.electronAPI?.moveHudOverlayDrag?.();
-	}, []);
-	const scheduleHudDragMove = useCallback(() => {
-		if (dragAnimationFrameRef.current === null) {
-			dragAnimationFrameRef.current = window.requestAnimationFrame(flushHudDragMove);
-		}
-	}, [flushHudDragMove]);
-	const cancelPendingHudDragMove = useCallback(() => {
-		if (dragAnimationFrameRef.current !== null) {
-			window.cancelAnimationFrame(dragAnimationFrameRef.current);
-			dragAnimationFrameRef.current = null;
-		}
-	}, []);
-	useEffect(() => {
-		return () => {
-			cancelPendingHudDragMove();
-			if (hudDraggingRef.current) {
-				window.electronAPI?.endHudOverlayDrag?.();
-				hudDraggingRef.current = false;
-			}
-		};
-	}, [cancelPendingHudDragMove]);
-	const handleHudDragPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-		if (event.button !== 0) return;
-		event.preventDefault();
-		event.stopPropagation();
-		hudDraggingRef.current = true;
-		setHudMouseEventsEnabled(true);
-		event.currentTarget.setPointerCapture(event.pointerId);
-		window.electronAPI?.startHudOverlayDrag?.();
-	};
-	const handleHudDragPointerMove = () => {
-		if (!hudDraggingRef.current) return;
-		setHudMouseEventsEnabled(true);
-		scheduleHudDragMove();
-	};
-	const handleHudDragPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-		if (!hudDraggingRef.current) return;
-		cancelPendingHudDragMove();
-		window.electronAPI?.endHudOverlayDrag?.();
-		hudDraggingRef.current = false;
-		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-			event.currentTarget.releasePointerCapture(event.pointerId);
-		}
-
-		const hudBounds = hudBarRef.current?.getBoundingClientRect();
-		const isPointerOverHud = Boolean(
-			hudBounds &&
-				event.clientX >= hudBounds.left &&
-				event.clientX <= hudBounds.right &&
-				event.clientY >= hudBounds.top &&
-				event.clientY <= hudBounds.bottom,
-		);
-		setHudMouseEventsEnabled(isPointerOverHud || isLanguageMenuOpen);
-	};
-
 	return (
 		// Avoid w-screen/h-screen: 100vw can exceed the inner layout width when scrollbars
 		// affect the viewport (Windows), causing a horizontal scrollbar (issue #305).
 		<div
-			className={`h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-hidden bg-transparent ${styles.electronDrag}`}
+			className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-hidden bg-transparent"
 			onPointerMove={(event) => {
-				if (hudDraggingRef.current) {
-					setHudMouseEventsEnabled(true);
-					return;
-				}
 				const target = event.target as HTMLElement | null;
 				const shouldCapture =
 					isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']"));
 				setHudMouseEventsEnabled(shouldCapture);
 			}}
 			onPointerLeave={() => {
-				if (!isLanguageMenuOpen && !hudDraggingRef.current) {
+				if (!isLanguageMenuOpen) {
 					setHudMouseEventsEnabled(false);
 				}
 			}}
@@ -910,7 +845,7 @@ export function LaunchWindow() {
 				onPointerDown={() => setHudMouseEventsEnabled(true)}
 				onMouseEnter={() => setHudMouseEventsEnabled(true)}
 				onMouseLeave={() => {
-					if (!isLanguageMenuOpen && !hudDraggingRef.current) {
+					if (!isLanguageMenuOpen) {
 						setHudMouseEventsEnabled(false);
 					}
 				}}
@@ -918,11 +853,7 @@ export function LaunchWindow() {
 				{/* Drag handle */}
 				<div
 					data-testid="launch-drag-handle"
-					className={`flex ${trayLayout === "vertical" ? "h-6 w-8" : "h-8 w-7"} cursor-grab items-center justify-center active:cursor-grabbing ${styles.electronNoDrag}`}
-					onPointerDown={handleHudDragPointerDown}
-					onPointerMove={handleHudDragPointerMove}
-					onPointerUp={handleHudDragPointerEnd}
-					onPointerCancel={handleHudDragPointerEnd}
+					className={`flex ${trayLayout === "vertical" ? "h-6 w-8" : "h-8 w-7"} cursor-grab items-center justify-center active:cursor-grabbing ${styles.electronDrag}`}
 				>
 					{getIcon("drag", "text-white/30")}
 				</div>

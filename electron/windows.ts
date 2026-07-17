@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, ipcMain, screen } from "electron";
+import { shouldIgnoreHudOverlayMouseEvents } from "./hudOverlayMousePolicy";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -17,6 +18,56 @@ const ASSET_BASE_DIR = process.defaultApp
 const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}${path.sep}`).toString()}`;
 
 let hudOverlayWindow: BrowserWindow | null = null;
+let hudOverlayRendererRequestedMouseIgnore = true;
+let hudOverlayMouseEventsIgnored: boolean | undefined;
+let hudOverlayMousePoll: NodeJS.Timeout | null = null;
+
+function setHudOverlayMouseEventsIgnored(ignore: boolean): void {
+	if (
+		!hudOverlayWindow ||
+		hudOverlayWindow.isDestroyed() ||
+		hudOverlayMouseEventsIgnored === ignore
+	) {
+		return;
+	}
+
+	hudOverlayMouseEventsIgnored = ignore;
+	hudOverlayWindow.setIgnoreMouseEvents(ignore, ignore ? { forward: true } : undefined);
+}
+
+function applyHudOverlayMousePolicy(): void {
+	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) {
+		return;
+	}
+
+	if (!hudOverlayWindow.isVisible()) {
+		setHudOverlayMouseEventsIgnored(true);
+		return;
+	}
+
+	setHudOverlayMouseEventsIgnored(
+		shouldIgnoreHudOverlayMouseEvents(
+			hudOverlayRendererRequestedMouseIgnore,
+			screen.getCursorScreenPoint(),
+			hudOverlayWindow.getBounds(),
+		),
+	);
+}
+
+function stopHudOverlayMousePoll(): void {
+	if (hudOverlayMousePoll) {
+		clearInterval(hudOverlayMousePoll);
+		hudOverlayMousePoll = null;
+	}
+}
+
+function startHudOverlayMousePoll(): void {
+	stopHudOverlayMousePoll();
+	// Forwarded renderer hover is unreliable over `app-region: drag` because the
+	// OS consumes pointer events there. Polling at display cadence closes that gap.
+	hudOverlayMousePoll = setInterval(applyHudOverlayMousePolicy, 16);
+	hudOverlayMousePoll.unref();
+}
 
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
@@ -25,9 +76,8 @@ ipcMain.on("hud-overlay-hide", () => {
 });
 
 ipcMain.on("hud-overlay-ignore-mouse-events", (_event, ignore: boolean) => {
-	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
-		hudOverlayWindow.setIgnoreMouseEvents(ignore, { forward: true });
-	}
+	hudOverlayRendererRequestedMouseIgnore = ignore === true;
+	applyHudOverlayMousePolicy();
 });
 
 // Resize the HUD to fit its rendered content. Anchored by its bottom-centre so it
@@ -98,6 +148,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		// its own rounding and the window itself must be invisible.
 		roundedCorners: false,
 		resizable: false,
+		movable: true,
 		alwaysOnTop: true,
 		skipTaskbar: true,
 		hasShadow: false,
@@ -110,7 +161,6 @@ export function createHudOverlayWindow(): BrowserWindow {
 			backgroundThrottling: false,
 		},
 	});
-	win.setIgnoreMouseEvents(true, { forward: true });
 
 	// Follow the user across macOS Spaces, else the HUD stays pinned to the Space
 	// it was first opened on.
@@ -128,11 +178,18 @@ export function createHudOverlayWindow(): BrowserWindow {
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
 	});
 
+	stopHudOverlayMousePoll();
 	hudOverlayWindow = win;
+	hudOverlayRendererRequestedMouseIgnore = true;
+	hudOverlayMouseEventsIgnored = undefined;
+	setHudOverlayMouseEventsIgnored(true);
+	startHudOverlayMousePoll();
 
 	win.on("closed", () => {
 		if (hudOverlayWindow === win) {
+			stopHudOverlayMousePoll();
 			hudOverlayWindow = null;
+			hudOverlayMouseEventsIgnored = undefined;
 		}
 	});
 

@@ -462,6 +462,12 @@ async function run(override = {}) {
 	// only exists while being measured.
 	const instrumented = override.instrumented ?? document.querySelector("#instrument").checked;
 	const optimised = override.optimised ?? document.querySelector("#optimise").checked;
+	const encodeOn = override.encode ?? true;
+	// How many encodes may be in flight before composite blocks. Instrumented mode
+	// fences every frame, so it is forced serial (depth 1) — you cannot pipeline
+	// and time each stage at once. Clean mode defaults to a small pipeline.
+	const queueDepth = instrumented ? 1 : (override.queueDepth ?? 4);
+	const inflight = [];
 	const frames = [];
 	const t0 = performance.now();
 	let rendered = 0;
@@ -614,12 +620,32 @@ async function run(override = {}) {
 			}
 		}
 
+		// ENCODE — pipelined, not awaited per frame.
+		//
+		// source.add snapshots the canvas synchronously (new VideoSample(canvas)),
+		// and everything rides one GPU queue, so submission order already guarantees
+		// each encoded frame reflects its own composite — no fence needed for
+		// correctness. Awaiting add() every frame only enforces BACKPRESSURE, and
+		// doing it per frame is what serialised the loop: composite waited on the
+		// encoder accepting the previous frame. Keep `queueDepth` frames in flight
+		// instead, so the hardware encoder runs concurrently with the next
+		// composite. This is §11 — pipeline, don't await.
 		m = mark();
-		await source.add(t, 1 / OUT.fps);
+		if (encodeOn) {
+			const addP = source.add(t, 1 / OUT.fps);
+			if (queueDepth <= 1) {
+				await addP;
+			} else {
+				inflight.push(addP);
+				if (inflight.length >= queueDepth) await inflight.shift();
+			}
+		}
 		p.encode = mark() - m;
 
-		// The VideoFrames are ours; the samples belong to the streams, which close
-		// them when they advance.
+		// The decode VideoFrames are ours; the samples belong to the streams, which
+		// close them when they advance. Safe to close after submit: Chromium holds
+		// its own reference to an imported external texture until the submit that
+		// used it completes.
 		screenFrame.close();
 		webcamFrame?.close();
 
@@ -642,6 +668,9 @@ async function run(override = {}) {
 		}
 	}
 
+	// Drain the encoder pipeline before stopping the clock: those frames are still
+	// real work, and finalize() would wait on them anyway.
+	if (inflight.length) await Promise.all(inflight);
 	const wallMs = performance.now() - t0;
 	await output.finalize();
 
@@ -782,6 +811,18 @@ const COMPARISONS = {
 		a: { label: "effets ON", over: { effectsOn: true, optimised: true, instrumented: false } },
 		b: { label: "effets OFF", over: { effectsOn: false, optimised: true, instrumented: false } },
 		note: "ombre + flou de fond présents, vs à zéro. Le prix des effets eux-mêmes.",
+	},
+	pipeline: {
+		title: "Pipeline : bufférisé vs sérialisé",
+		a: { label: "bufférisé", over: { queueDepth: 4, instrumented: false, optimised: true } },
+		b: { label: "sérialisé", over: { queueDepth: 1, instrumented: false, optimised: true } },
+		note: "encodage recouvert (4 en vol) vs attendu à chaque image. Le levier §11.",
+	},
+	encode: {
+		title: "Encodage : avec vs sans",
+		a: { label: "avec encodage", over: { encode: true, instrumented: false, optimised: true } },
+		b: { label: "sans encodage", over: { encode: false, instrumented: false, optimised: true } },
+		note: "compose + encode vs compose seul. Ce que coûte l'encodeur matériel.",
 	},
 	instruments: {
 		title: "Mesure : instrumenté vs propre",

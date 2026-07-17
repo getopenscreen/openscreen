@@ -159,7 +159,7 @@ async function openVideo(url) {
 
 // ---- run -------------------------------------------------------------------
 
-async function run() {
+async function run(override = {}) {
 	const started = performance.now();
 	document.querySelector("#run").disabled = true;
 	log("opening sources…");
@@ -287,6 +287,17 @@ async function run() {
 	// Every phase is timed on its own, and the whole frame is recorded, because
 	// two questions need different data: "what does a frame cost once warm" is a
 	// distribution, not a mean, and "where does the frame go" is a breakdown.
+	//
+	// INSTRUMENTED vs CLEAN, because the instruments are not free and two of them
+	// change the very thing they measure:
+	//   - onSubmittedWorkDone() per frame is a FENCE. It is the only way to bill
+	//     the GPU honestly, and it also forbids decode/composite/encode from ever
+	//     overlapping — a cost the real loop would not pay.
+	//   - mapAsync() to read the timestamps is a GPU→CPU sync, per frame.
+	// So the clean pass keeps the same work and drops both, and fps is compared
+	// across the two. If they disagree, the breakdown describes a program that
+	// only exists while being measured.
+	const instrumented = override.instrumented ?? document.querySelector("#instrument").checked;
 	const frames = [];
 	const t0 = performance.now();
 	let rendered = 0;
@@ -295,23 +306,24 @@ async function run() {
 		const t = i / OUT.fps;
 		const fStart = performance.now();
 		const p = {};
+		const mark = () => (instrumented ? performance.now() : 0);
 
-		let m = performance.now();
+		let m = mark();
 		const screenSample = await nextFrom(screenStream, screenHolder, t);
 		const webcamSample = await nextFrom(webcamStream, webcamHolder, t);
-		p.decode = performance.now() - m;
+		p.decode = mark() - m;
 		if (!screenSample) break;
 
 		// toVideoFrame + importExternalTexture: the decode→GPU seam. Timed apart
 		// because "zero copy" is a claim, and this is where it would fail.
-		m = performance.now();
+		m = mark();
 		const screenFrame = screenSample.toVideoFrame();
 		const webcamFrame = webcamSample ? webcamSample.toVideoFrame() : null;
 		const screenTex = device.importExternalTexture({ source: screenFrame });
 		const webcamTex = device.importExternalTexture({ source: webcamFrame ?? screenFrame });
-		p.import = performance.now() - m;
+		p.import = mark() - m;
 
-		m = performance.now();
+		m = mark();
 		const f = evaluate(sc, t, memo);
 		memo = f.memo;
 		// Field n at float 4n — the struct is all-vec4 so this stays true.
@@ -330,19 +342,20 @@ async function run() {
 				{ binding: 3, resource: webcamTex },
 			],
 		});
-		p.evaluate = performance.now() - m;
+		p.evaluate = mark() - m;
 
-		m = performance.now();
+		m = mark();
 		const encoder = device.createCommandEncoder();
 		const view = ctx.getCurrentTexture().createView();
-		p.acquire = performance.now() - m;
+		p.acquire = mark() - m;
 
-		m = performance.now();
+		m = mark();
+		const useQueries = instrumented && querySet;
 		const pass = encoder.beginRenderPass({
 			colorAttachments: [
 				{ view, clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: "store" },
 			],
-			...(querySet
+			...(useQueries
 				? { timestampWrites: { querySet, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } }
 				: {}),
 		});
@@ -350,31 +363,36 @@ async function run() {
 		pass.setBindGroup(0, bind);
 		pass.draw(3);
 		pass.end();
-		if (querySet) {
+		if (useQueries) {
 			encoder.resolveQuerySet(querySet, 0, 2, resolveBuffer, 0);
 			if (readBuffer.mapState === "unmapped")
 				encoder.copyBufferToBuffer(resolveBuffer, 0, readBuffer, 0, 16);
 		}
 		device.queue.submit([encoder.finish()]);
-		p.submit = performance.now() - m;
+		p.submit = mark() - m;
 
-		// The fence. Everything above only QUEUED work; this is where it executes.
-		m = performance.now();
-		await device.queue.onSubmittedWorkDone();
-		p.fence = performance.now() - m;
+		// The fence: everything above only QUEUED work, this is where it executes.
+		// Instrumented only — it is what makes the breakdown honest, and it is also
+		// what stops the pipeline from overlapping anything.
+		if (instrumented) {
+			m = performance.now();
+			await device.queue.onSubmittedWorkDone();
+			p.fence = performance.now() - m;
 
-		// What the GPU says about itself: the pass's real duration, in ns, written
-		// by the GPU around the pass. The one number no CPU timer can produce.
-		if (querySet && readBuffer.mapState === "unmapped") {
-			await readBuffer.mapAsync(GPUMapMode.READ);
-			const ts = new BigUint64Array(readBuffer.getMappedRange().slice(0));
-			readBuffer.unmap();
-			p.gpuPass = Number(ts[1] - ts[0]) / 1e6;
+			// What the GPU says about itself: the pass's duration in ns, written by
+			// the GPU around the pass. mapAsync is a GPU→CPU sync, so this too only
+			// exists while measuring.
+			if (querySet && readBuffer.mapState === "unmapped") {
+				await readBuffer.mapAsync(GPUMapMode.READ);
+				const ts = new BigUint64Array(readBuffer.getMappedRange().slice(0));
+				readBuffer.unmap();
+				p.gpuPass = Number(ts[1] - ts[0]) / 1e6;
+			}
 		}
 
-		m = performance.now();
+		m = mark();
 		await source.add(t, 1 / OUT.fps);
-		p.encode = performance.now() - m;
+		p.encode = mark() - m;
 
 		// The VideoFrames are ours; the samples belong to the streams, which close
 		// them when they advance.
@@ -423,7 +441,7 @@ async function run() {
 	setStat("encode", `${median(warm.map((f) => f.encode)).toFixed(1)} ms`);
 
 	log(
-		`\n=== cruise ${cruiseFps.toFixed(1)} fps — ${cruiseMs.toFixed(1)} ms/frame (median of the last ${warm.length}) ===`,
+		`\n=== [${instrumented ? "INSTRUMENTED" : "CLEAN"}] cruise ${cruiseFps.toFixed(1)} fps — ${cruiseMs.toFixed(1)} ms/frame (median of the last ${warm.length}) ===`,
 	);
 	log(
 		`average ${avgFps.toFixed(1)} fps over all ${rendered} frames (${(wallMs / 1000).toFixed(2)}s wall)`,
@@ -442,20 +460,29 @@ async function run() {
 		`setup before the loop: ${((t0 - started) / 1000).toFixed(2)}s (open sources, decoder init, pipeline, encoder)`,
 	);
 
-	log("\n--- where a cruise frame goes (median ms) ---");
-	for (const k of ["decode", "import", "evaluate", "acquire", "submit", "fence", "encode"]) {
-		const v = median(warm.map((f) => f[k] ?? 0));
-		const pct = (v / cruiseMs) * 100;
-		log(
-			`${k.padEnd(9)}${v.toFixed(1).padStart(6)} ms  ${"█".repeat(Math.round(pct / 2)).padEnd(50)}${pct.toFixed(0)}%`,
-		);
-	}
-	if (frames[0]?.gpuPass !== undefined) {
-		const gpu = median(warm.map((f) => f.gpuPass ?? 0));
-		log(`\nGPU pass itself: ${gpu.toFixed(2)} ms — measured BY the GPU, around the pass.`);
-		log(
-			`${(cruiseMs - gpu).toFixed(1)} ms of the ${cruiseMs.toFixed(1)} ms frame is not the shader.`,
-		);
+	if (!instrumented) {
+		log("\n(clean pass: no fence, no timestamp readback, no phase timers.");
+		log(" fps is the only number this pass can honestly report — and it is the");
+		log(" one that says what the loop actually does when nobody is watching.)");
+	} else {
+		log("\n--- where a cruise frame goes (median ms) ---");
+		for (const k of ["decode", "import", "evaluate", "acquire", "submit", "fence", "encode"]) {
+			const v = median(warm.map((f) => f[k] ?? 0));
+			const pct = (v / cruiseMs) * 100;
+			log(
+				`${k.padEnd(9)}${v.toFixed(1).padStart(6)} ms  ${"█".repeat(Math.round(pct / 2)).padEnd(50)}${pct.toFixed(0)}%`,
+			);
+		}
+		if (frames[0]?.gpuPass !== undefined) {
+			const gpu = median(warm.map((f) => f.gpuPass ?? 0));
+			log(`\nGPU pass itself: ${gpu.toFixed(2)} ms — measured BY the GPU, around the pass.`);
+			log(
+				`${(cruiseMs - gpu).toFixed(1)} ms of the ${cruiseMs.toFixed(1)} ms frame is not the shader.`,
+			);
+		}
+		log("\nNOTE: this pass paid for its own instruments — a fence and a buffer map");
+		log("per frame. Re-run with `instrumenté` off: if the fps moves, the breakdown");
+		log("above describes a program that only exists while being measured.");
 	}
 
 	const blob = new Blob([output.target.buffer], { type: "video/mp4" });
@@ -475,12 +502,89 @@ async function run() {
 	);
 	log(`output: ${(blob.size / 1e6).toFixed(1)} MB → ${written}`);
 
+	// Give it ALL back. A run that leaks its device is a run that poisons the next
+	// one: six back-to-back runs kept six GPU devices, six decoder pipelines and
+	// six encoders alive, and the rate decayed 19.9 → 8.6 → 7.5 fps across an
+	// interleaved comparison. That decay is not the machine drifting, it is this
+	// function forgetting — and it invalidated the very A/B it was there to serve.
+	screenHolder.current?.close();
+	webcamHolder.current?.close();
+	await screenStream.return?.();
+	await webcamStream.return?.();
+	screen.input.dispose();
+	webcam.input.dispose();
+	device.destroy();
+
 	document.querySelector("#run").disabled = false;
+	return { cruiseMs, cruiseFps, avgFps, instrumented };
+}
+
+/**
+ * Do the instruments change the answer? Interleaved A/B/A/B, because they can
+ * only be compared against drift.
+ *
+ * Two identical instrumented runs measured 34.8 and 28.3 fps on this machine —
+ * 23% apart, which is the size of the effect under test. Back-to-back runs
+ * therefore prove nothing: the arms have to alternate so drift shows up as a run
+ * disagreeing with its OWN repeat, instead of masquerading as the instruments'
+ * cost. Same rule, and same reason, as the app's export bench.
+ */
+async function compare(rounds = 3) {
+	const median = (xs) => {
+		const s = [...xs].sort((a, b) => a - b);
+		return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+	};
+	const spread = (xs) => (Math.max(...xs) - Math.min(...xs)) / median(xs);
+	const arms = { INSTRUMENTED: [], CLEAN: [] };
+
+	// Round 0 is thrown away. Both arms climb monotonically across the first
+	// rounds — 15.0 → 28.4 → 33.3 and 27.9 → 37.2 → 42.0 — which is the browser
+	// and the GPU waking up, not the arms differing. Keeping it put a 64% spread
+	// on a 23% effect and voided the comparison by itself.
+	for (let r = 0; r <= rounds; r++) {
+		for (const [name, instrumented] of [
+			["INSTRUMENTED", true],
+			["CLEAN", false],
+		]) {
+			const res = await run({ instrumented });
+			if (r > 0) arms[name].push(res.cruiseFps);
+		}
+	}
+
+	document.querySelector("#log").textContent = "";
+	log("=== do the instruments change the answer? (interleaved A/B) ===\n");
+	for (const [name, xs] of Object.entries(arms)) {
+		log(
+			`${name.padEnd(13)} cruise ${median(xs).toFixed(1).padStart(5)} fps   spread ${(spread(xs) * 100).toFixed(0)}%   runs: ${xs.map((x) => x.toFixed(1)).join(" / ")}`,
+		);
+	}
+	const cost = median(arms.CLEAN) - median(arms.INSTRUMENTED);
+	const worst = Math.max(spread(arms.CLEAN), spread(arms.INSTRUMENTED)) * 100;
+	log(
+		`\ninstruments cost: ${cost.toFixed(1)} fps (${((cost / median(arms.CLEAN)) * 100).toFixed(0)}%)`,
+	);
+	if (worst >= Math.abs((cost / median(arms.CLEAN)) * 100)) {
+		log(
+			`\n!! VOID: same-arm spread reaches ${worst.toFixed(0)}%, as large as the effect.\n   This run says nothing. Repeat on a steadier machine.`,
+		);
+	} else {
+		log(`\nsame-arm spread ${worst.toFixed(0)}% — smaller than the effect, so the effect is real.`);
+	}
+	setStat("fps", median(arms.CLEAN).toFixed(1));
 }
 
 document.querySelector("#run").addEventListener("click", () => {
 	document.querySelector("#log").textContent = "";
 	run().catch((error) => {
+		log(`\nFAILED: ${error.message}`);
+		console.error(error);
+		document.querySelector("#run").disabled = false;
+	});
+});
+
+document.querySelector("#compare").addEventListener("click", () => {
+	document.querySelector("#log").textContent = "comparing, please wait…\n";
+	compare().catch((error) => {
 		log(`\nFAILED: ${error.message}`);
 		console.error(error);
 		document.querySelector("#run").disabled = false;

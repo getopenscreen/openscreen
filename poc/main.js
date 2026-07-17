@@ -161,6 +161,16 @@ async function openVideo(url) {
 
 async function run(override = {}) {
 	const started = performance.now();
+	// A hidden tab is a throttled tab. Chromium de-prioritises everything in one —
+	// the GPU work included — and clamps chained timers to a second. Measured
+	// here: the same code that cruises at 58 fps visible reports 6.0 fps hidden,
+	// on BOTH arms, with a 401% spread. Every number taken from a background tab
+	// is fiction, so this refuses rather than reports.
+	if (document.hidden) {
+		throw new Error(
+			"tab is hidden — Chromium throttles background tabs. Bring it to the front and re-run.",
+		);
+	}
 	document.querySelector("#run").disabled = true;
 	log("opening sources…");
 
@@ -232,6 +242,20 @@ async function run(override = {}) {
 	const shaderError = await device.popErrorScope();
 	if (shaderError) throw new Error(`shader: ${shaderError.message}`);
 
+	// The background, baked once. Same module, its own entry point and its own
+	// auto layout (it binds nothing but the uniforms).
+	const bgPipeline = device.createRenderPipeline({
+		layout: "auto",
+		vertex: { module, entryPoint: "vs" },
+		fragment: { module, entryPoint: "fsBackground", targets: [{ format: "rgba8unorm" }] },
+		primitive: { topology: "triangle-list" },
+	});
+	const bgTexture = device.createTexture({
+		size: [OUT.width, OUT.height],
+		format: "rgba8unorm",
+		usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+	});
+
 	const sampler = device.createSampler({ magFilter: "linear", minFilter: "linear" });
 	// 5 vec4 = 80 bytes. All-vec4 on purpose: WGSL pads mixed structs and the CPU
 	// packing has to reproduce the holes exactly — get one offset wrong and the
@@ -255,6 +279,35 @@ async function run(override = {}) {
 	const bgBlur = Number(document.querySelector("#blur").value);
 	const camAspect = webcam.track.displayWidth / webcam.track.displayHeight;
 	let memo = null;
+
+	// Bake the background. Once, here — not 210 times inside the loop.
+	uniforms.set([OUT.width, OUT.height, 0, 0], 0);
+	uniforms.set([shadowIntensity, bgBlur, 18, 42], 12);
+	device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+	{
+		const enc = device.createCommandEncoder();
+		const pass = enc.beginRenderPass({
+			colorAttachments: [
+				{
+					view: bgTexture.createView(),
+					clearValue: { r: 0, g: 0, b: 0, a: 1 },
+					loadOp: "clear",
+					storeOp: "store",
+				},
+			],
+		});
+		pass.setPipeline(bgPipeline);
+		pass.setBindGroup(
+			0,
+			device.createBindGroup({
+				layout: bgPipeline.getBindGroupLayout(0),
+				entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+			}),
+		);
+		pass.draw(3);
+		pass.end();
+		device.queue.submit([enc.finish()]);
+	}
 
 	// ---- decode: forward streams, not seeks ----
 	// getSample(t) per frame is a random-access SEEK per frame: on a long-GOP
@@ -298,6 +351,7 @@ async function run(override = {}) {
 	// across the two. If they disagree, the breakdown describes a program that
 	// only exists while being measured.
 	const instrumented = override.instrumented ?? document.querySelector("#instrument").checked;
+	const optimised = override.optimised ?? document.querySelector("#optimise").checked;
 	const frames = [];
 	const t0 = performance.now();
 	let rendered = 0;
@@ -331,7 +385,7 @@ async function run(override = {}) {
 		uniforms.set([f.screen.x, f.screen.y, f.screen.w, f.screen.h], 4);
 		uniforms.set([f.webcam.x, f.webcam.y, f.webcam.w, f.webcam.h], 8);
 		uniforms.set([shadowIntensity, bgBlur, 18, 42], 12); // intensity | bgBlur | offsetY | spread
-		uniforms.set([f.webcamRadius, f.motionBlurPx, camAspect, 0], 16);
+		uniforms.set([f.webcamRadius, f.motionBlurPx, camAspect, optimised ? 1 : 0], 16);
 		device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 		const bind = device.createBindGroup({
 			layout: pipeline.getBindGroupLayout(0),
@@ -340,6 +394,7 @@ async function run(override = {}) {
 				{ binding: 1, resource: sampler },
 				{ binding: 2, resource: screenTex },
 				{ binding: 3, resource: webcamTex },
+				{ binding: 4, resource: bgTexture.createView() },
 			],
 		});
 		p.evaluate = mark() - m;
@@ -404,10 +459,17 @@ async function run(override = {}) {
 		rendered++;
 		if (i % 15 === 0) {
 			setStat("progress", `${i}/${totalFrames}`);
-			// A 640px preview every 15 frames. It is OFF the clock — the frame's
-			// timer has already stopped — and it never touches the render path.
+			// A 640px preview every 15 frames. OFF the clock — the frame's timer has
+			// already stopped — and it never touches the render path.
 			preview.drawImage(canvas, 0, 0, previewCanvas.width, previewCanvas.height);
-			await new Promise((r) => setTimeout(r, 0));
+			// Yield through a MessageChannel, not setTimeout: a chained setTimeout is
+			// clamped to 1000 ms in a background tab, which would put eight seconds of
+			// pure waiting into a four-second export's wall.
+			await new Promise((r) => {
+				const ch = new MessageChannel();
+				ch.port1.onmessage = () => r();
+				ch.port2.postMessage(0);
+			});
 		}
 	}
 
@@ -513,6 +575,7 @@ async function run(override = {}) {
 	await webcamStream.return?.();
 	screen.input.dispose();
 	webcam.input.dispose();
+	bgTexture.destroy();
 	device.destroy();
 
 	document.querySelector("#run").disabled = false;
@@ -520,14 +583,17 @@ async function run(override = {}) {
 }
 
 /**
- * Do the instruments change the answer? Interleaved A/B/A/B, because they can
- * only be compared against drift.
+ * Interleaved A/B/A/B, because an effect can only be told apart from drift.
  *
- * Two identical instrumented runs measured 34.8 and 28.3 fps on this machine —
- * 23% apart, which is the size of the effect under test. Back-to-back runs
- * therefore prove nothing: the arms have to alternate so drift shows up as a run
- * disagreeing with its OWN repeat, instead of masquerading as the instruments'
- * cost. Same rule, and same reason, as the app's export bench.
+ * Two identical runs measured 34.8 and 28.3 fps on this machine — 23% apart,
+ * which is the size of the effects under test. Sequential arms therefore prove
+ * nothing: they alternate so drift shows up as a run disagreeing with its OWN
+ * repeat instead of masquerading as the change. Same rule, and same reason, as
+ * the app's export bench.
+ *
+ * Both shader variants live in the same module, chosen by a uniform, so the two
+ * arms differ by that uniform and nothing else — no reload, no recompile, no
+ * second session.
  */
 async function compare(rounds = 3) {
 	const median = (xs) => {
@@ -535,42 +601,43 @@ async function compare(rounds = 3) {
 		return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
 	};
 	const spread = (xs) => (Math.max(...xs) - Math.min(...xs)) / median(xs);
-	const arms = { INSTRUMENTED: [], CLEAN: [] };
+	const arms = { OPTIMISED: [], NAIVE: [] };
 
 	// Round 0 is thrown away. Both arms climb monotonically across the first
 	// rounds — 15.0 → 28.4 → 33.3 and 27.9 → 37.2 → 42.0 — which is the browser
 	// and the GPU waking up, not the arms differing. Keeping it put a 64% spread
 	// on a 23% effect and voided the comparison by itself.
 	for (let r = 0; r <= rounds; r++) {
-		for (const [name, instrumented] of [
-			["INSTRUMENTED", true],
-			["CLEAN", false],
+		for (const [name, optimised] of [
+			["OPTIMISED", true],
+			["NAIVE", false],
 		]) {
-			const res = await run({ instrumented });
+			// Clean on both sides: the instruments cost 17%, and they are not what
+			// is being compared here.
+			const res = await run({ optimised, instrumented: false });
 			if (r > 0) arms[name].push(res.cruiseFps);
 		}
 	}
 
 	document.querySelector("#log").textContent = "";
-	log("=== do the instruments change the answer? (interleaved A/B) ===\n");
+	log("=== baked background + shadow early-out, vs neither (interleaved A/B) ===\n");
 	for (const [name, xs] of Object.entries(arms)) {
 		log(
 			`${name.padEnd(13)} cruise ${median(xs).toFixed(1).padStart(5)} fps   spread ${(spread(xs) * 100).toFixed(0)}%   runs: ${xs.map((x) => x.toFixed(1)).join(" / ")}`,
 		);
 	}
-	const cost = median(arms.CLEAN) - median(arms.INSTRUMENTED);
-	const worst = Math.max(spread(arms.CLEAN), spread(arms.INSTRUMENTED)) * 100;
-	log(
-		`\ninstruments cost: ${cost.toFixed(1)} fps (${((cost / median(arms.CLEAN)) * 100).toFixed(0)}%)`,
-	);
-	if (worst >= Math.abs((cost / median(arms.CLEAN)) * 100)) {
+	const gain = median(arms.OPTIMISED) - median(arms.NAIVE);
+	const gainPct = (gain / median(arms.NAIVE)) * 100;
+	const worst = Math.max(spread(arms.OPTIMISED), spread(arms.NAIVE)) * 100;
+	log(`\ngain: ${gain > 0 ? "+" : ""}${gain.toFixed(1)} fps (${gainPct.toFixed(0)}%)`);
+	if (worst >= Math.abs(gainPct)) {
 		log(
 			`\n!! VOID: same-arm spread reaches ${worst.toFixed(0)}%, as large as the effect.\n   This run says nothing. Repeat on a steadier machine.`,
 		);
 	} else {
 		log(`\nsame-arm spread ${worst.toFixed(0)}% — smaller than the effect, so the effect is real.`);
 	}
-	setStat("fps", median(arms.CLEAN).toFixed(1));
+	setStat("fps", median(arms.OPTIMISED).toFixed(1));
 }
 
 document.querySelector("#run").addEventListener("click", () => {

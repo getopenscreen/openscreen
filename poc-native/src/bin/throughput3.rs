@@ -158,12 +158,18 @@ fn main() {
           p.set_pipeline(&pipe); p.set_bind_group(0, &bind, &[]); p.draw(0..3, 0..1); }
         e.copy_texture_to_buffer(wgpu::ImageCopyTexture { texture: &target, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::ImageCopyBuffer { buffer: &rbuf, layout: wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(bpr as u32), rows_per_image: Some(OUT_H) } }, wgpu::Extent3d { width: OUT_W, height: OUT_H, depth_or_array_layers: 1 });
         queue.submit([e.finish()]);
-        let slice = rbuf.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
-        device.poll(wgpu::Maintain::Wait);
-        { let m = slice.get_mapped_range(); for y in 0..OUT_H { let s = (y as u64 * bpr) as usize; let d = (y * OUT_W * 4) as usize; tight[d..d + (OUT_W * 4) as usize].copy_from_slice(&m[s..s + (OUT_W * 4) as usize]); } }
-        rbuf.unmap();
-        if let Some(tx) = &enc_tx { tx.send(tight.clone()).ok(); }
+        if std::env::args().any(|a| a == "no-readback") {
+            // Probe: isolate decode+composite from the descent. Still fence, so the
+            // composite actually completes (no empty-loop artifact).
+            device.poll(wgpu::Maintain::Wait);
+        } else {
+            let slice = rbuf.slice(..);
+            slice.map_async(wgpu::MapMode::Read, |_| {});
+            device.poll(wgpu::Maintain::Wait);
+            { let m = slice.get_mapped_range(); for y in 0..OUT_H { let s = (y as u64 * bpr) as usize; let d = (y * OUT_W * 4) as usize; tight[d..d + (OUT_W * 4) as usize].copy_from_slice(&m[s..s + (OUT_W * 4) as usize]); } }
+            rbuf.unmap();
+            if let Some(tx) = &enc_tx { tx.send(tight.clone()).ok(); }
+        }
         done = i + 1;
     }
 

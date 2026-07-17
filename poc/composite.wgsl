@@ -22,8 +22,17 @@ struct U {
   webcam : vec4f,
   // shadowIntensity | bgBlurPx | shadowOffsetY | shadowSpread
   fx : vec4f,
-  // webcamRadius | motionBlurPx | webcamCoverScale | optimised(0/1)
+  // webcamRadius | unused | webcamCoverScale | optimised(0/1)
   b : vec4f,
+  // Directional motion blur, in pixels: screenBlur.xy | webcamBlur.xy. A vector,
+  // not a scalar — the recording smears along the camera's real travel, which
+  // during a pan or a layout move is not horizontal.
+  mb : vec4f,
+  // The cursor, drawn synthetically from the recorded trace: x | y | size |
+  // opacity. Position is in stage pixels, already carried through the zoom.
+  cursor : vec4f,
+  // cursorBlur.xy | clickScale | unused. clickScale pulses on a real click.
+  cursorFx : vec4f,
 };
 
 @group(0) @binding(0) var<uniform> u : U;
@@ -82,6 +91,14 @@ fn quad(vi : u32, rect : vec4f) -> VsOut {
 @vertex fn vsWebcamShadow(@builtin(vertex_index) i : u32) -> VsOut {
   let s = u.fx.w + 1.0;
   return quad(i, vec4f(u.webcam.xy - vec2f(s), u.webcam.zw + vec2f(s * 2.0)) + vec4f(0.0, u.fx.z, 0.0, 0.0));
+}
+
+/** The cursor's quad: its box, grown for the shadow, the click bounce and the smear. */
+@vertex fn vsCursor(@builtin(vertex_index) i : u32) -> VsOut {
+  let size = u.cursor.z;
+  let pad = 6.0 + length(u.cursorFx.xy);
+  let rect = vec4f(u.cursor.xy - vec2f(pad), vec2f(size * 1.5 + pad * 2.0));
+  return quad(i, rect);
 }
 
 // ---- geometry ---------------------------------------------------------------
@@ -200,19 +217,23 @@ fn shadowAt(px : vec2f, rect : vec4f, radius : f32, intensity : f32) -> f32 {
 // ---- effect 3: the masks + the sources --------------------------------------
 
 /**
- * Directional motion blur while the camera moves. Skipped at rest: a branch is
- * free next to seven texture fetches, and it is uniform across the frame.
+ * The recording, smeared along the camera's travel while it moves.
+ *
+ * The blur is a VECTOR now (u.mb.xy): a pan or a layout move sends the camera
+ * diagonally, and a horizontal-only smear would be wrong for exactly the motion a
+ * screen demo has most of. Skipped at rest — a branch is free next to seven
+ * fetches, and it is uniform across the frame.
  */
-fn sampleScreen(px : vec2f, blurPx : f32) -> vec3f {
+fn sampleScreen(px : vec2f, blur : vec2f) -> vec3f {
   let uv0 = (px - u.screen.xy) / max(u.screen.zw, vec2f(1.0));
-  if (blurPx < 0.5) {
+  if (length(blur) < 0.5) {
     return textureSampleBaseClampToEdge(screenTex, samp, clamp(uv0, vec2f(0.0), vec2f(1.0))).rgb;
   }
   var acc = vec3f(0.0);
   let taps = 7;
   for (var i = 0; i < taps; i = i + 1) {
     let t = (f32(i) / f32(taps - 1)) - 0.5;
-    let uv = ((px + vec2f(blurPx * t, 0.0)) - u.screen.xy) / max(u.screen.zw, vec2f(1.0));
+    let uv = ((px + blur * t) - u.screen.xy) / max(u.screen.zw, vec2f(1.0));
     acc = acc + textureSampleBaseClampToEdge(screenTex, samp, clamp(uv, vec2f(0.0), vec2f(1.0))).rgb;
   }
   return acc / f32(taps);
@@ -224,7 +245,73 @@ fn sampleScreen(px : vec2f, blurPx : f32) -> vec3f {
   if (c <= 0.0) {
     discard;
   }
-  return vec4f(sampleScreen(px, u.b.y), c);
+  return vec4f(sampleScreen(px, u.mb.xy), c);
+}
+
+// ---- the cursor -------------------------------------------------------------
+//
+// Drawn from the recorded trace, per frame — never baked into the video. A
+// polygon SDF, so it is a shape the shader computes, not a sprite it samples; the
+// real app swaps theme PNGs in here, which is a texture read in the same quad,
+// not a different pipeline. The hard parts a POC has to prove are all here: it
+// follows the zoom (its position rides the screen rect), it bounces on a real
+// click (clickScale), it casts a shadow, and it smears when it moves fast.
+
+/** Signed distance to the classic arrow pointer, tip at local (0,0). Neg inside. */
+fn sdCursor(p : vec2f) -> f32 {
+  var v = array<vec2f, 7>(
+    vec2f(0.00, 0.00), vec2f(0.00, 1.00), vec2f(0.24, 0.76),
+    vec2f(0.40, 1.14), vec2f(0.56, 1.07), vec2f(0.39, 0.69), vec2f(0.70, 0.69),
+  );
+  var d = dot(p - v[0], p - v[0]);
+  var s = 1.0;
+  for (var i = 0; i < 7; i = i + 1) {
+    let j = (i + 6) % 7;
+    let e = v[j] - v[i];
+    let w = p - v[i];
+    let b = w - e * clamp(dot(w, e) / dot(e, e), 0.0, 1.0);
+    d = min(d, dot(b, b));
+    // Winding test. The three conditions are kept as scalars, not packed into a
+    // vec3<bool>: the `>` inside that constructor is parsed as a template close.
+    let c0 = p.y >= v[i].y;
+    let c1 = p.y < v[j].y;
+    let c2 = e.x * w.y > e.y * w.x;
+    if ((c0 && c1 && c2) || (!c0 && !c1 && !c2)) { s = -s; }
+  }
+  return s * sqrt(d);
+}
+
+/** Coverage of the arrow at a stage pixel, with the click bounce applied. */
+fn cursorCover(px : vec2f) -> f32 {
+  // Scale about the tip (local origin) so a click bounce pulls toward the
+  // hotspot, not the centre. 1.2 fits the 0..1.14 arrow inside the quad.
+  let local = (px - u.cursor.xy) / max(u.cursor.z, 1.0) / u.cursorFx.z * 1.2;
+  return cover(sdCursor(local) * u.cursor.z / 1.2);
+}
+
+@fragment fn fsCursor(in : VsOut) -> @location(0) vec4f {
+  let px = in.uv * u.a.xy;
+
+  // The arrow, smeared along its travel when it moves fast.
+  let blur = u.cursorFx.xy;
+  var body = 0.0;
+  if (length(blur) < 0.5) {
+    body = cursorCover(px);
+  } else {
+    let taps = 5;
+    for (var i = 0; i < taps; i = i + 1) {
+      let t = (f32(i) / f32(taps - 1)) - 0.5;
+      body = body + cursorCover(px + blur * t);
+    }
+    body = body / f32(taps);
+  }
+
+  // Shadow: two offset samples of the same arrow, only where the body is not.
+  let shadow = max(cursorCover(px - vec2f(2.0)), cursorCover(px - vec2f(3.0, 4.0)));
+  let shadowA = shadow * (u.cursor.w * 0.35) * (1.0 - body);
+
+  // Black shadow under a white arrow. Alpha carries both.
+  return vec4f(vec3f(1.0) * body, max(shadowA, body * u.cursor.w));
 }
 
 /**
@@ -232,6 +319,13 @@ fn sampleScreen(px : vec2f, blurPx : f32) -> vec3f {
  * circle when docked and rounded rect when grown. The SDF interpolates the SHAPE
  * for free — a tessellated 2D mask would rebuild geometry every frame for this.
  */
+fn sampleWebcam(px : vec2f, centre : vec2f) -> vec3f {
+  var uv = (px - centre) / max(u.webcam.zw, vec2f(1.0));
+  // Cover-fit: a 4:3 source in a square hole would squash without this.
+  uv = uv * vec2f(u.b.z, 1.0) + vec2f(0.5);
+  return textureSampleBaseClampToEdge(webcamTex, samp, clamp(uv, vec2f(0.0), vec2f(1.0))).rgb;
+}
+
 @fragment fn fsWebcam(in : VsOut) -> @location(0) vec4f {
   let px = in.uv * u.a.xy;
   let centre = u.webcam.xy + u.webcam.zw * 0.5;
@@ -239,10 +333,16 @@ fn sampleScreen(px : vec2f, blurPx : f32) -> vec3f {
   if (c <= 0.0) {
     discard;
   }
-  // Cover-fit: a 4:3 source in a square hole would squash without this. Sample
-  // the middle and let the mask crop, which is what the eye expects.
-  var uv = (px - centre) / max(u.webcam.zw, vec2f(1.0));
-  uv = uv * vec2f(u.b.z, 1.0) + vec2f(0.5);
-  let cam = textureSampleBaseClampToEdge(webcamTex, samp, clamp(uv, vec2f(0.0), vec2f(1.0)));
-  return vec4f(cam.rgb, c);
+  // Smear along its travel during a layout move, exactly like the recording.
+  let blur = u.mb.zw;
+  if (length(blur) < 0.5) {
+    return vec4f(sampleWebcam(px, centre), c);
+  }
+  var acc = vec3f(0.0);
+  let taps = 5;
+  for (var i = 0; i < taps; i = i + 1) {
+    let t = (f32(i) / f32(taps - 1)) - 0.5;
+    acc = acc + sampleWebcam(px + blur * t, centre);
+  }
+  return vec4f(acc / f32(taps), c);
 }

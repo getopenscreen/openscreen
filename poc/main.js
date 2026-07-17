@@ -41,6 +41,7 @@ function regionStrength(t, start, end, ramp) {
 }
 
 const lerp = (a, b, t) => a + (b - a) * t;
+const clampAbs = (x, m) => Math.max(-m, Math.min(m, x));
 const lerpRect = (a, b, t) => ({
 	x: lerp(a.x, b.x, t),
 	y: lerp(a.y, b.y, t),
@@ -129,12 +130,26 @@ function evaluate(sc, t, prev) {
 	// Circle when docked (radius = half the bubble), rounded rect when grown.
 	const webcamRadius = lerp(Math.min(base.webcam.w, base.webcam.h) / 2, 26, move);
 
-	// --- velocity: what the motion blur is for ---
+	// --- motion blur: a VECTOR, along the camera's real travel ---
+	// The recording smears along how its centre moved since last frame, plus a
+	// term for the zoom scaling the content outward. A pan is diagonal; a
+	// horizontal-only smear would be wrong for most of what a screen demo does.
 	const cx = screen.x + screen.w / 2;
 	const cy = screen.y + screen.h / 2;
-	let velocity = 0;
+	const wcx = webcam.x + webcam.w / 2;
+	const wcy = webcam.y + webcam.h / 2;
+	let screenBlur = { x: 0, y: 0 };
+	let webcamBlur = { x: 0, y: 0 };
 	if (prev) {
-		velocity = Math.hypot(cx - prev.cx, cy - prev.cy) + Math.abs(screen.w - prev.w) * 0.5;
+		const k = 0.9;
+		screenBlur = {
+			x: clampAbs((cx - prev.cx) * k, 22),
+			y: clampAbs((cy - prev.cy) * k, 22),
+		};
+		webcamBlur = {
+			x: clampAbs((wcx - prev.wcx) * k, 18),
+			y: clampAbs((wcy - prev.wcy) * k, 18),
+		};
 	}
 
 	return {
@@ -142,8 +157,57 @@ function evaluate(sc, t, prev) {
 		webcam,
 		webcamRadius,
 		zoomScale,
-		motionBlurPx: Math.min(velocity * 0.35, 24),
-		memo: { cx, cy, w: screen.w },
+		screenBlur,
+		webcamBlur,
+		memo: { cx, cy, wcx, wcy },
+	};
+}
+
+// ---- the cursor: from the recorded trace, drawn synthetically ---------------
+//
+// The real product records positions + clicks and draws the cursor each frame
+// from that data — never baked into the video. This loads a REAL trace (the one
+// shipped with the screen recording) so the POC exercises the actual shape of the
+// data: normalised positions at irregular timestamps, and click/mouseup events.
+
+async function loadCursor(url) {
+	const doc = await (await fetch(url)).json();
+	// Dedup by timestamp (the trace repeats samples) and sort.
+	const byTime = new Map();
+	for (const s of doc.samples) byTime.set(s.timeMs, s);
+	const samples = [...byTime.values()].sort((a, b) => a.timeMs - b.timeMs);
+	const clicks = doc.samples.filter((s) => s.interactionType === "click").map((s) => s.timeMs);
+	return { samples, clicks };
+}
+
+/** Position (normalised to the recording) and click bounce at time t. */
+function cursorAt(trace, timeMs) {
+	const s = trace.samples;
+	if (s.length === 0) return null;
+	// Linear scan is fine at ~290 samples; a binary search is the same code later.
+	let i = 0;
+	while (i < s.length - 1 && s[i + 1].timeMs <= timeMs) i++;
+	const a = s[i];
+	const b = s[Math.min(i + 1, s.length - 1)];
+	const span = b.timeMs - a.timeMs;
+	const f = span > 0 ? Math.max(0, Math.min(1, (timeMs - a.timeMs) / span)) : 0;
+
+	// Click bounce: the pointer dips to 0.82 and springs back over ~140 ms after a
+	// real click — the same cue the app gives, driven by the recorded event.
+	let clickScale = 1;
+	for (const c of trace.clicks) {
+		const dt = timeMs - c;
+		if (dt >= 0 && dt < 140) {
+			const p = dt / 140;
+			clickScale = 1 - 0.18 * Math.sin(p * Math.PI);
+		}
+	}
+
+	return {
+		cx: lerp(a.cx, b.cx, f),
+		cy: lerp(a.cy, b.cy, f),
+		visible: a.visible !== false,
+		clickScale,
 	};
 }
 
@@ -174,10 +238,12 @@ async function run(override = {}) {
 	document.querySelector("#run").disabled = true;
 	log("opening sources…");
 
-	const [screen, webcam] = await Promise.all([
+	const [screen, webcam, cursor] = await Promise.all([
 		openVideo("media/screen.mp4"),
 		openVideo("media/webcam.mp4"),
+		loadCursor("media/cursor.json"),
 	]);
+	log(`cursor: ${cursor.samples.length} samples, ${cursor.clicks.length} clicks`);
 	const seconds = Number(document.querySelector("#seconds").value);
 	const screenDuration = await screen.track.computeDuration();
 	const duration = Math.min(seconds, screenDuration);
@@ -271,6 +337,7 @@ async function run(override = {}) {
 		screen: makePass("vsScreen", "fsScreen", OVER),
 		webcamShadow: makePass("vsWebcamShadow", "fsWebcamShadow", OVER),
 		webcam: makePass("vsWebcam", "fsWebcam", OVER),
+		cursor: makePass("vsCursor", "fsCursor", OVER),
 	};
 
 	// The bake runs before any video exists, so it gets a layout of its own: the
@@ -300,7 +367,7 @@ async function run(override = {}) {
 	// packing has to reproduce the holes exactly — get one offset wrong and the
 	// shader reads a radius where a rect belongs, draws nothing, and reports no
 	// error at all.
-	const uniforms = new Float32Array(20);
+	const uniforms = new Float32Array(32);
 	const uniformBuffer = device.createBuffer({
 		size: uniforms.byteLength,
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -318,6 +385,7 @@ async function run(override = {}) {
 	const bgBlur = Number(document.querySelector("#blur").value);
 	const camAspect = webcam.track.displayWidth / webcam.track.displayHeight;
 	let memo = null;
+	let curMemo = null;
 
 	// Bake the background. Once, here — not 210 times inside the loop.
 	uniforms.set([OUT.width, OUT.height, 0, 0], 0);
@@ -419,12 +487,32 @@ async function run(override = {}) {
 		m = mark();
 		const f = evaluate(sc, t, memo);
 		memo = f.memo;
+
+		// The cursor: interpolate the recorded trace, then place it in the SCREEN's
+		// coordinate space, so it rides the zoom for free — its position is carried
+		// through the same rect the recording is.
+		const cur = cursorAt(cursor, t * 1000);
+		const curX = f.screen.x + (cur?.cx ?? 0) * f.screen.w;
+		const curY = f.screen.y + (cur?.cy ?? 0) * f.screen.h;
+		const curSize = OUT.height * 0.05;
+		let curBlurX = 0;
+		let curBlurY = 0;
+		if (cur && curMemo) {
+			curBlurX = clampAbs((curX - curMemo.x) * 0.8, 30);
+			curBlurY = clampAbs((curY - curMemo.y) * 0.8, 30);
+		}
+		curMemo = cur ? { x: curX, y: curY } : null;
+		const curVisible = !!cur && cur.visible;
+
 		// Field n at float 4n — the struct is all-vec4 so this stays true.
 		uniforms.set([OUT.width, OUT.height, t, 28], 0); // stage | time | radius
 		uniforms.set([f.screen.x, f.screen.y, f.screen.w, f.screen.h], 4);
 		uniforms.set([f.webcam.x, f.webcam.y, f.webcam.w, f.webcam.h], 8);
 		uniforms.set([shadowIntensity, bgBlur, 18, 42], 12); // intensity | bgBlur | offsetY | spread
-		uniforms.set([f.webcamRadius, f.motionBlurPx, camAspect, optimised ? 1 : 0], 16);
+		uniforms.set([f.webcamRadius, 0, camAspect, optimised ? 1 : 0], 16); // radius | - | coverScale | opt
+		uniforms.set([f.screenBlur.x, f.screenBlur.y, f.webcamBlur.x, f.webcamBlur.y], 20); // mb
+		uniforms.set([curX, curY, curSize, curVisible ? 1 : 0], 24); // cursor
+		uniforms.set([curBlurX, curBlurY, cur?.clickScale ?? 1, 0], 28); // cursorFx
 		device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 		const bind = device.createBindGroup({
 			layout: bindGroupLayout,
@@ -487,6 +575,12 @@ async function run(override = {}) {
 			pass.setPipeline(passes.webcamShadow);
 			pass.draw(6);
 			pass.setPipeline(passes.webcam);
+			pass.draw(6);
+		}
+		// The cursor, on top of everything — drawn each frame from the trace, culled
+		// when the recorded position is off-stage.
+		if (curVisible && curX > -curSize && curY > -curSize && curX < OUT.width && curY < OUT.height) {
+			pass.setPipeline(passes.cursor);
 			pass.draw(6);
 		}
 		pass.end();

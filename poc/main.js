@@ -181,9 +181,26 @@ async function run() {
 	// ---- GPU ----
 	if (!navigator.gpu) throw new Error("WebGPU unavailable");
 	const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
-	const device = await adapter.requestDevice();
+	// timestamp-query is the only honest way to price the shader: a CPU timer
+	// around submit() measures SUBMISSION, and the work lands on whoever syncs
+	// next. These are counters the GPU writes itself, around the pass.
+	const canTimestamp = adapter.features.has("timestamp-query");
+	const device = await adapter.requestDevice({
+		requiredFeatures: canTimestamp ? ["timestamp-query"] : [],
+	});
 	const info = adapter.info ?? {};
-	log(`gpu: ${info.vendor ?? "?"} ${info.architecture ?? ""}`);
+	log(`gpu: ${info.vendor ?? "?"} ${info.architecture ?? ""} · timestamps: ${canTimestamp}`);
+
+	const querySet = canTimestamp ? device.createQuerySet({ type: "timestamp", count: 2 }) : null;
+	const resolveBuffer = canTimestamp
+		? device.createBuffer({
+				size: 16,
+				usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+			})
+		: null;
+	const readBuffer = canTimestamp
+		? device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ })
+		: null;
 
 	// OffscreenCanvas: no document, no presentation, no compositor.
 	//
@@ -267,25 +284,34 @@ async function run() {
 	const webcamHolder = { current: null, done: false };
 
 	// ---- the loop ----
+	// Every phase is timed on its own, and the whole frame is recorded, because
+	// two questions need different data: "what does a frame cost once warm" is a
+	// distribution, not a mean, and "where does the frame go" is a breakdown.
+	const frames = [];
 	const t0 = performance.now();
-	let decodeMs = 0;
-	let renderMs = 0;
-	let encodeMs = 0;
 	let rendered = 0;
 
 	for (let i = 0; i < totalFrames; i++) {
 		const t = i / OUT.fps;
+		const fStart = performance.now();
+		const p = {};
 
-		const d0 = performance.now();
+		let m = performance.now();
 		const screenSample = await nextFrom(screenStream, screenHolder, t);
 		const webcamSample = await nextFrom(webcamStream, webcamHolder, t);
-		decodeMs += performance.now() - d0;
+		p.decode = performance.now() - m;
 		if (!screenSample) break;
 
-		const r0 = performance.now();
+		// toVideoFrame + importExternalTexture: the decode→GPU seam. Timed apart
+		// because "zero copy" is a claim, and this is where it would fail.
+		m = performance.now();
 		const screenFrame = screenSample.toVideoFrame();
 		const webcamFrame = webcamSample ? webcamSample.toVideoFrame() : null;
+		const screenTex = device.importExternalTexture({ source: screenFrame });
+		const webcamTex = device.importExternalTexture({ source: webcamFrame ?? screenFrame });
+		p.import = performance.now() - m;
 
+		m = performance.now();
 		const f = evaluate(sc, t, memo);
 		memo = f.memo;
 		// Field n at float 4n — the struct is all-vec4 so this stays true.
@@ -295,55 +321,73 @@ async function run() {
 		uniforms.set([shadowIntensity, bgBlur, 18, 42], 12); // intensity | bgBlur | offsetY | spread
 		uniforms.set([f.webcamRadius, f.motionBlurPx, camAspect, 0], 16);
 		device.queue.writeBuffer(uniformBuffer, 0, uniforms);
-
 		const bind = device.createBindGroup({
 			layout: pipeline.getBindGroupLayout(0),
 			entries: [
 				{ binding: 0, resource: { buffer: uniformBuffer } },
 				{ binding: 1, resource: sampler },
-				{ binding: 2, resource: device.importExternalTexture({ source: screenFrame }) },
-				{
-					binding: 3,
-					resource: device.importExternalTexture({ source: webcamFrame ?? screenFrame }),
-				},
+				{ binding: 2, resource: screenTex },
+				{ binding: 3, resource: webcamTex },
 			],
 		});
+		p.evaluate = performance.now() - m;
 
+		m = performance.now();
 		const encoder = device.createCommandEncoder();
+		const view = ctx.getCurrentTexture().createView();
+		p.acquire = performance.now() - m;
+
+		m = performance.now();
 		const pass = encoder.beginRenderPass({
 			colorAttachments: [
-				{
-					view: ctx.getCurrentTexture().createView(),
-					clearValue: { r: 0, g: 0, b: 0, a: 1 },
-					loadOp: "clear",
-					storeOp: "store",
-				},
+				{ view, clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: "store" },
 			],
+			...(querySet
+				? { timestampWrites: { querySet, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } }
+				: {}),
 		});
 		pass.setPipeline(pipeline);
 		pass.setBindGroup(0, bind);
 		pass.draw(3);
 		pass.end();
+		if (querySet) {
+			encoder.resolveQuerySet(querySet, 0, 2, resolveBuffer, 0);
+			if (readBuffer.mapState === "unmapped")
+				encoder.copyBufferToBuffer(resolveBuffer, 0, readBuffer, 0, 16);
+		}
 		device.queue.submit([encoder.finish()]);
-		// Force the GPU to FINISH before the timer stops. Without it this measures
-		// submission, and the cost lands on whoever syncs next — the encoder.
-		await device.queue.onSubmittedWorkDone();
-		renderMs += performance.now() - r0;
+		p.submit = performance.now() - m;
 
-		const e0 = performance.now();
+		// The fence. Everything above only QUEUED work; this is where it executes.
+		m = performance.now();
+		await device.queue.onSubmittedWorkDone();
+		p.fence = performance.now() - m;
+
+		// What the GPU says about itself: the pass's real duration, in ns, written
+		// by the GPU around the pass. The one number no CPU timer can produce.
+		if (querySet && readBuffer.mapState === "unmapped") {
+			await readBuffer.mapAsync(GPUMapMode.READ);
+			const ts = new BigUint64Array(readBuffer.getMappedRange().slice(0));
+			readBuffer.unmap();
+			p.gpuPass = Number(ts[1] - ts[0]) / 1e6;
+		}
+
+		m = performance.now();
 		await source.add(t, 1 / OUT.fps);
-		encodeMs += performance.now() - e0;
+		p.encode = performance.now() - m;
 
 		// The VideoFrames are ours; the samples belong to the streams, which close
 		// them when they advance.
 		screenFrame.close();
 		webcamFrame?.close();
 
+		p.total = performance.now() - fStart;
+		frames.push(p);
 		rendered++;
 		if (i % 15 === 0) {
 			setStat("progress", `${i}/${totalFrames}`);
-			// A 640px preview every 15 frames. It is OFF the clock — the timers above
-			// have already stopped — and it never touches the render path.
+			// A 640px preview every 15 frames. It is OFF the clock — the frame's
+			// timer has already stopped — and it never touches the render path.
 			preview.drawImage(canvas, 0, 0, previewCanvas.width, previewCanvas.height);
 			await new Promise((r) => setTimeout(r, 0));
 		}
@@ -352,19 +396,67 @@ async function run() {
 	const wallMs = performance.now() - t0;
 	await output.finalize();
 
-	// ---- report: one number that compares ----
-	const fps = rendered / (wallMs / 1000);
-	setStat("fps", fps.toFixed(1));
+	// ---- report ----
+	//
+	// Average fps answers "how long did THIS export take". Cruise fps answers "how
+	// fast does it run" — the number that compares across exports. A short export
+	// amortises the first frames' one-off costs (pipeline warm-up, first
+	// allocations, JIT) over few frames, so the mean drags. Both are reported, and
+	// the gap between them IS the startup cost.
+	const median = (xs) => {
+		const s = [...xs].sort((a, b) => a - b);
+		return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+	};
+	const totals = frames.map((f) => f.total);
+	// Cruise = the steady state: drop the first quarter, then take the MEDIAN, so
+	// one scheduler hiccup cannot move the number.
+	const warm = frames.slice(Math.ceil(frames.length / 4));
+	const cruiseMs = median(warm.map((f) => f.total));
+	const cruiseFps = 1000 / cruiseMs;
+	const avgFps = rendered / (wallMs / 1000);
+
+	setStat("fps", cruiseFps.toFixed(1));
 	setStat("progress", `${rendered}/${totalFrames}`);
-	setStat("render", `${(renderMs / rendered).toFixed(1)} ms`);
-	setStat("decode", `${(decodeMs / rendered).toFixed(1)} ms`);
-	setStat("encode", `${(encodeMs / rendered).toFixed(1)} ms`);
-	setStat("perframe", `${(wallMs / rendered).toFixed(1)} ms`);
-	log(`\n=== ${rendered} frames in ${(wallMs / 1000).toFixed(2)}s → ${fps.toFixed(1)} fps ===`);
+	setStat("perframe", `${cruiseMs.toFixed(1)} ms`);
+	setStat("render", `${median(warm.map((f) => f.fence)).toFixed(1)} ms`);
+	setStat("decode", `${median(warm.map((f) => f.decode)).toFixed(1)} ms`);
+	setStat("encode", `${median(warm.map((f) => f.encode)).toFixed(1)} ms`);
+
 	log(
-		`composite ${(renderMs / rendered).toFixed(1)} ms · decode ${(decodeMs / rendered).toFixed(1)} ms · encode ${(encodeMs / rendered).toFixed(1)} ms  (per frame)`,
+		`\n=== cruise ${cruiseFps.toFixed(1)} fps — ${cruiseMs.toFixed(1)} ms/frame (median of the last ${warm.length}) ===`,
 	);
-	log(`setup ${((t0 - started) / 1000).toFixed(1)}s`);
+	log(
+		`average ${avgFps.toFixed(1)} fps over all ${rendered} frames (${(wallMs / 1000).toFixed(2)}s wall)`,
+	);
+	log(
+		`first frames: ${totals
+			.slice(0, 4)
+			.map((x) => `${x.toFixed(0)}ms`)
+			.join(" · ")}`,
+	);
+	const drag = totals.reduce((a, b) => a + b, 0) - cruiseMs * totals.length;
+	log(
+		`one-off cost inside the loop: ${drag.toFixed(0)} ms total → ${(drag / rendered).toFixed(1)} ms/frame of drag on this export`,
+	);
+	log(
+		`setup before the loop: ${((t0 - started) / 1000).toFixed(2)}s (open sources, decoder init, pipeline, encoder)`,
+	);
+
+	log("\n--- where a cruise frame goes (median ms) ---");
+	for (const k of ["decode", "import", "evaluate", "acquire", "submit", "fence", "encode"]) {
+		const v = median(warm.map((f) => f[k] ?? 0));
+		const pct = (v / cruiseMs) * 100;
+		log(
+			`${k.padEnd(9)}${v.toFixed(1).padStart(6)} ms  ${"█".repeat(Math.round(pct / 2)).padEnd(50)}${pct.toFixed(0)}%`,
+		);
+	}
+	if (frames[0]?.gpuPass !== undefined) {
+		const gpu = median(warm.map((f) => f.gpuPass ?? 0));
+		log(`\nGPU pass itself: ${gpu.toFixed(2)} ms — measured BY the GPU, around the pass.`);
+		log(
+			`${(cruiseMs - gpu).toFixed(1)} ms of the ${cruiseMs.toFixed(1)} ms frame is not the shader.`,
+		);
+	}
 
 	const blob = new Blob([output.target.buffer], { type: "video/mp4" });
 	const url = URL.createObjectURL(blob);

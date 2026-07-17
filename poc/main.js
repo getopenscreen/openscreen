@@ -880,12 +880,25 @@ async function compare(rounds = 3) {
 	log(
 		`\n${A.label} vs ${B.label}: ${gain > 0 ? "+" : ""}${gain.toFixed(1)} fps (${gainPct.toFixed(0)}%)`,
 	);
-	if (worst >= Math.abs(gainPct)) {
+	// Two gates, not one. The old gate only checked spread against the EFFECT, so a
+	// big effect waved through big noise — a 66% spread "held" against a 205% gain
+	// while the tab was throttled and the arm swung 117→235 fps. An ABSOLUTE
+	// threshold catches that: above ~15% same-arm spread the machine is not steady
+	// enough to trust the magnitude, whatever the effect size. (The app's export
+	// bench uses 10%; this browser setup is noisier, so 15%.)
+	const SPREAD_LIMIT = 15;
+	if (worst >= SPREAD_LIMIT) {
 		log(
-			`\n!! VOID : spread intra-bras ${worst.toFixed(0)}%, aussi grand que l'effet.\n   Ce run ne dit rien — refaire sur une machine calme.`,
+			`\n!! VOID : spread intra-bras ${worst.toFixed(0)}% > ${SPREAD_LIMIT}% — la machine dérive.` +
+				`\n   La DIRECTION peut tenir (regarde si un bras gagne à chaque tour), mais` +
+				`\n   le CHIFFRE ne vaut rien. Ferme les autres apps GPU, secteur branché, refais.`,
 		);
+	} else if (worst >= Math.abs(gainPct)) {
+		log(`\n!! VOID : spread intra-bras ${worst.toFixed(0)}%, aussi grand que l'effet — run muet.`);
 	} else {
-		log(`\nspread intra-bras ${worst.toFixed(0)}% < l'effet — le résultat tient.`);
+		log(
+			`\nspread intra-bras ${worst.toFixed(0)}% < ${SPREAD_LIMIT}% et < l'effet — le résultat tient.`,
+		);
 	}
 	setStat("fps", median(A.runs).toFixed(1));
 }

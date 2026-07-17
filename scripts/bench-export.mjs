@@ -38,14 +38,20 @@ function parseArgs(argv) {
  */
 function checkSingleInstance() {
 	const lock = path.join(os.tmpdir(), `openscreen-single-instance-${os.userInfo().username}.lock`);
-	const running = spawnSync("tasklist", ["/FI", "IMAGENAME eq electron.exe", "/NH"], {
-		encoding: "utf8",
-	});
-	if (running.stdout?.includes("electron.exe")) {
-		throw new Error(
-			"An Electron instance is already running and holds the single-instance lock;\n" +
-				"the bench would launch, exit 0 and report nothing. Close the app first.",
-		);
+	// Both names matter: the dev build runs as electron.exe, the INSTALLED app as
+	// openscreen.exe, and they share one userData — so one lock. Checking only
+	// electron.exe let the installed app hold it while the bench launched, exited
+	// 0 and reported nothing, with no log line to say why.
+	for (const image of ["electron.exe", "openscreen.exe"]) {
+		const running = spawnSync("tasklist", ["/FI", `IMAGENAME eq ${image}`, "/NH"], {
+			encoding: "utf8",
+		});
+		if (running.stdout?.includes(image)) {
+			throw new Error(
+				`${image} is already running and holds the single-instance lock;\n` +
+					"the bench would launch, exit 0 and report nothing. Close the app first.",
+			);
+		}
 	}
 	if (existsSync(lock)) rmSync(lock, { recursive: true, force: true });
 }

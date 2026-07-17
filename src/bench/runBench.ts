@@ -28,6 +28,10 @@ export interface BenchArm {
 	readFrequently: boolean;
 	/** Extract every frame and discard it. Diagnostic only — writes no file. */
 	dropFrames?: boolean;
+	/** Composite every frame and stop there. Diagnostic only — writes no file. */
+	compositeOnly?: boolean;
+	/** Undo the 2026-07-17 compositor fixes, to attribute them. */
+	legacyCompositor?: boolean;
 }
 
 export interface BenchRunResult {
@@ -79,12 +83,34 @@ const ARMS: Record<string, BenchArm> = {
 	// proposal at once (option A' sandbox:false, shared memory, zero-copy
 	// transfer), because none of them can skip the readback. Writes no file.
 	"readback-ceiling": { nativeEncode: true, readFrequently: false, dropFrames: true },
+	// Prices the GPU compositing of the real effect set, with nothing downstream
+	// to absorb it. This is the number the native-core case rests on: a pipeline
+	// that composites on-device cannot beat decode + this + encode. Writes no file.
+	"composite-ceiling": { nativeEncode: true, readFrequently: false, compositeOnly: true },
+	// The same ceiling with the compositor fixes undone. Pairing these two in one
+	// interleaved run is the only honest way to price the fixes: across sessions
+	// this machine drifts further than they are worth.
+	"composite-ceiling-legacy": {
+		nativeEncode: true,
+		readFrequently: false,
+		compositeOnly: true,
+		legacyCompositor: true,
+	},
+	/** Today's shipping path, with the compositor fixes undone. */
+	"webcodecs-legacy": { nativeEncode: false, readFrequently: false, legacyCompositor: true },
+	// These two WRITE FILES, which is what makes them the parity gate: encode the
+	// same timeline with the old and new compositor through the same encoder at
+	// the same bitrate, then diff the results (SSIM). Unit tests never look at a
+	// pixel, and "obviously equivalent" is what this investigation keeps punishing.
+	"native-legacy": { nativeEncode: true, readFrequently: false, legacyCompositor: true },
 };
 
 function applyArm(arm: BenchArm): void {
 	localStorage.setItem("openscreen.nativeEncode", arm.nativeEncode ? "1" : "0");
 	localStorage.setItem("openscreen.readFrequently", arm.readFrequently ? "1" : "0");
 	localStorage.setItem("openscreen.dropFrames", arm.dropFrames ? "1" : "0");
+	localStorage.setItem("openscreen.compositeOnly", arm.compositeOnly ? "1" : "0");
+	localStorage.setItem("openscreen.legacyCompositor", arm.legacyCompositor ? "1" : "0");
 }
 
 /**

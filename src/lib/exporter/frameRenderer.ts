@@ -100,6 +100,26 @@ function cpuCanvasRequested(): boolean {
 	}
 }
 
+/**
+ * Restore the pre-2026-07-17 compositor: a fresh GPU texture per frame, the mask
+ * retessellated per frame, and clearRect before every full-frame draw.
+ *
+ * Exists so the three fixes can be ATTRIBUTED. Comparing across bench sessions
+ * would not do: this machine drifts more between sessions than the fixes are
+ * worth, which is the failure mode this whole investigation keeps tripping over.
+ * With the flag, one interleaved run measures old against new on one thermal
+ * state, and the repeat proves it.
+ *
+ *   localStorage.setItem("openscreen.legacyCompositor", "1")
+ */
+function legacyCompositorRequested(): boolean {
+	try {
+		return localStorage.getItem("openscreen.legacyCompositor") === "1";
+	} catch {
+		return false;
+	}
+}
+
 interface FrameRenderConfig {
 	width: number;
 	height: number;
@@ -167,6 +187,12 @@ export class FrameRenderer {
 	private cameraContainer: Container | null = null;
 	private videoContainer: Container | null = null;
 	private videoSprite: Sprite | null = null;
+	/** Source geometry behind videoSprite's texture — see renderFrame's reuse. */
+	private videoFrameSize: { width: number; height: number } | null = null;
+	/** Shape currently tessellated into maskGraphics, so it is rebuilt only on change. */
+	private maskShape: { width: number; height: number; radius: number } | null = null;
+	/** Bench-only: undo the compositor fixes so they can be measured. */
+	private legacyCompositor = legacyCompositorRequested();
 	private backgroundSprite: HTMLCanvasElement | null = null;
 	private maskGraphics: Graphics | null = null;
 	private blurFilter: BlurFilter | null = null;
@@ -479,16 +505,37 @@ export class FrameRenderer {
 
 		this.currentVideoTime = timestamp / 1000000;
 
+		// Reuse the GPU texture across frames. Texture.from() allocates a new
+		// TextureSource per call (every VideoFrame is a distinct object, so nothing
+		// caches), and destroy(true) frees the GL texture behind it — an allocate +
+		// upload + free of a 1080p texture on every single frame. Swapping the
+		// resource re-uploads the pixels into the texture we already have.
+		//
+		// Only valid while the geometry is unchanged: segments can carry different
+		// source sizes, so a size change still rebuilds (and frees) the source.
+		const frameWidth = videoFrame.displayWidth;
+		const frameHeight = videoFrame.displayHeight;
+		const sizeUnchanged =
+			!this.legacyCompositor &&
+			this.videoFrameSize?.width === frameWidth &&
+			this.videoFrameSize?.height === frameHeight;
+
 		if (!this.videoSprite) {
 			const texture = Texture.from(videoFrame as unknown as TextureSourceLike);
 			this.videoSprite = new Sprite(texture);
 			this.videoContainer.addChild(this.videoSprite);
+			this.videoFrameSize = { width: frameWidth, height: frameHeight };
+		} else if (sizeUnchanged) {
+			const source = this.videoSprite.texture.source;
+			source.resource = videoFrame;
+			source.update();
 		} else {
 			// Destroy old texture before swapping to avoid a leak
 			const oldTexture = this.videoSprite.texture;
 			const newTexture = Texture.from(videoFrame as unknown as TextureSourceLike);
 			this.videoSprite.texture = newTexture;
 			oldTexture.destroy(true);
+			this.videoFrameSize = { width: frameWidth, height: frameHeight };
 		}
 
 		this.updateLayout(webcamFrame);
@@ -843,9 +890,25 @@ export class FrameRenderer {
 					? 0
 					: borderRadius * canvasScaleFactor;
 
-		this.maskGraphics.clear();
-		this.maskGraphics.roundRect(0, 0, screenRect.width, screenRect.height, scaledBorderRadius);
-		this.maskGraphics.fill({ color: 0xffffff });
+		// Retessellate only when the shape actually changes. The mask is a rounded
+		// rect: while nothing zooms or resizes it is byte-identical from frame to
+		// frame, and clear()/roundRect()/fill() rebuilds its geometry every time.
+		// A zoom easing does change it per frame — that is the case this cannot help.
+		if (
+			this.legacyCompositor ||
+			this.maskShape?.width !== screenRect.width ||
+			this.maskShape?.height !== screenRect.height ||
+			this.maskShape?.radius !== scaledBorderRadius
+		) {
+			this.maskGraphics.clear();
+			this.maskGraphics.roundRect(0, 0, screenRect.width, screenRect.height, scaledBorderRadius);
+			this.maskGraphics.fill({ color: 0xffffff });
+			this.maskShape = {
+				width: screenRect.width,
+				height: screenRect.height,
+				radius: scaledBorderRadius,
+			};
+		}
 
 		// baseOffset is the stage position of the full (uncropped) sprite's top-left, matching
 		// preview semantics, so consumers (e.g. cursor highlight) can map normalized
@@ -1081,24 +1144,36 @@ export class FrameRenderer {
 
 		// Background (compositeCanvas): wallpaper only. Stays flat, never touched by the
 		// 3D rotation pass, matching the preview.
-		bgCtx.clearRect(0, 0, w, h);
+		//
+		// "copy" replaces the whole destination, so the clearRect that used to
+		// precede it is redundant: the draw below covers all w*h. Two full-frame
+		// passes become one. It is only safe BECAUSE the draw covers everything —
+		// hence the else branch below still clears explicitly.
+		if (this.legacyCompositor) bgCtx.clearRect(0, 0, w, h);
 		if (this.backgroundSprite) {
 			const bgCanvas = this.backgroundSprite;
+			bgCtx.save();
+			if (!this.legacyCompositor) bgCtx.globalCompositeOperation = "copy";
 			if (this.config.showBlur) {
-				bgCtx.save();
 				bgCtx.filter = "blur(6px)"; // Canvas blur is weaker than CSS
-				bgCtx.drawImage(bgCanvas, 0, 0, w, h);
-				bgCtx.restore();
-			} else {
-				bgCtx.drawImage(bgCanvas, 0, 0, w, h);
 			}
+			bgCtx.drawImage(bgCanvas, 0, 0, w, h);
+			bgCtx.restore();
 		} else {
+			// Nothing is drawn, so this is the only thing dropping the previous frame.
+			bgCtx.clearRect(0, 0, w, h);
 			console.warn("[FrameRenderer] No background sprite found during compositing!");
 		}
 
 		// Foreground (transparent): recording + webcam. Shadow baked here only on the
 		// flat path; the 3D path applies it after rotation (see renderFrame).
-		fgCtx.clearRect(0, 0, w, h);
+		//
+		// Same trick as the background: both branches below draw a full w*h image,
+		// so "copy" subsumes the clear. restore() puts source-over back before the
+		// webcam is drawn on top — with "copy" still set, it would wipe the frame.
+		if (this.legacyCompositor) fgCtx.clearRect(0, 0, w, h);
+		fgCtx.save();
+		if (!this.legacyCompositor) fgCtx.globalCompositeOperation = "copy";
 		if (
 			applyShadowToRecording &&
 			this.config.showShadow &&
@@ -1126,6 +1201,7 @@ export class FrameRenderer {
 		} else {
 			fgCtx.drawImage(videoCanvas, 0, 0, w, h);
 		}
+		fgCtx.restore();
 
 		const webcamRect = this.layoutCache?.webcamRect ?? null;
 		if (webcamFrame && webcamRect) {

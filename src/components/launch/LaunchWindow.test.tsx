@@ -396,6 +396,63 @@ describe("LaunchWindow HUD dragging", () => {
 		expect(handle.className).toMatch(/electronDrag/);
 		expect((container.firstElementChild as HTMLElement).className).not.toMatch(/electronDrag/);
 	});
+
+	it("enables mouse input from forwarded root movement over the native drag handle", async () => {
+		const { container } = renderLaunchWindow();
+		const root = container.firstElementChild as HTMLElement;
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+
+		vi.spyOn(hudBar, "getBoundingClientRect").mockReturnValue({
+			left: 100,
+			right: 300,
+			top: 700,
+			bottom: 760,
+			width: 200,
+			height: 60,
+			x: 100,
+			y: 700,
+			toJSON: () => ({}),
+		});
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenCalledWith(true);
+		});
+		vi.mocked(window.electronAPI.setHudOverlayIgnoreMouseEvents).mockClear();
+
+		// Electron's click-through forwarding can target the transparent root even
+		// though the pointer is visually over a -webkit-app-region: drag element.
+		fireEvent.pointerMove(root, { clientX: 110, clientY: 730 });
+
+		expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenCalledWith(false);
+	});
+
+	it("returns the transparent overlay to click-through outside the HUD bounds", async () => {
+		const { container } = renderLaunchWindow();
+		const root = container.firstElementChild as HTMLElement;
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+
+		vi.spyOn(hudBar, "getBoundingClientRect").mockReturnValue({
+			left: 100,
+			right: 300,
+			top: 700,
+			bottom: 760,
+			width: 200,
+			height: 60,
+			x: 100,
+			y: 700,
+			toJSON: () => ({}),
+		});
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenCalledWith(true);
+		});
+		fireEvent.pointerMove(root, { clientX: 110, clientY: 730 });
+		vi.mocked(window.electronAPI.setHudOverlayIgnoreMouseEvents).mockClear();
+
+		fireEvent.pointerMove(root, { clientX: 50, clientY: 500 });
+
+		expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenCalledWith(true);
+	});
 });
 
 describe("LaunchWindow system language prompt", () => {

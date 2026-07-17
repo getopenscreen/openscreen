@@ -595,8 +595,24 @@ export function LaunchWindow() {
 			className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-hidden bg-transparent"
 			onPointerMove={(event) => {
 				const target = event.target as HTMLElement | null;
+				const hudBarBounds = hudBarRef.current?.getBoundingClientRect();
+				// While the overlay is click-through, Electron forwards mouse movement but
+				// Chromium may target the transparent root instead of a native drag region.
+				// Compare client coordinates with the HUD bounds so the drag handle can turn
+				// mouse input back on before Windows starts the native window drag.
+				const isInsideHudBar = Boolean(
+					hudBarBounds &&
+						hudBarBounds.right > hudBarBounds.left &&
+						hudBarBounds.bottom > hudBarBounds.top &&
+						event.clientX >= hudBarBounds.left &&
+						event.clientX <= hudBarBounds.right &&
+						event.clientY >= hudBarBounds.top &&
+						event.clientY <= hudBarBounds.bottom,
+				);
 				const shouldCapture =
-					isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']"));
+					isLanguageMenuOpen ||
+					isInsideHudBar ||
+					Boolean(target?.closest("[data-hud-interactive='true']"));
 				setHudMouseEventsEnabled(shouldCapture);
 			}}
 			onPointerLeave={() => {

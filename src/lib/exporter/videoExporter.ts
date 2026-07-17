@@ -121,14 +121,14 @@ function isDefaultCrop(cropRegion: CropRegion) {
 
 export function isSourceCopyFastPathEligible(
 	config: VideoExporterConfig,
-	videoInfo: { width: number; height: number },
+	videoInfo: { width: number; height: number; audioStreamCount?: number },
 ) {
 	return getSourceCopyFastPathBlockers(config, videoInfo).length === 0;
 }
 
 export function getSourceCopyFastPathBlockers(
 	config: VideoExporterConfig,
-	videoInfo: { width: number; height: number },
+	videoInfo: { width: number; height: number; audioStreamCount?: number },
 ) {
 	const blockers: string[] = [];
 
@@ -136,6 +136,13 @@ export function getSourceCopyFastPathBlockers(
 		blockers.push(
 			`output-size ${config.width}x${config.height} differs from source ${videoInfo.width}x${videoInfo.height}`,
 		);
+	}
+	// Copying the source verbatim would carry over its multiple audio tracks (native
+	// macOS writes system audio + mic separately). Most players play only the first,
+	// which is often the silent system track — so multi-track sources must go through
+	// the full pipeline, which mixes every track into one (issue #108).
+	if ((videoInfo.audioStreamCount ?? 0) > 1) {
+		blockers.push("source has multiple audio tracks (must be mixed)");
 	}
 	if (config.webcamVideoUrl) blockers.push("webcam overlay is enabled");
 	if (hasActiveTimeRegions(config.trimRegions)) blockers.push("trim regions are present");

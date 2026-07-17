@@ -3,7 +3,15 @@ import { normalizePhysicalPoint } from "./windowsCursorCoordinates";
 
 describe("normalizePhysicalPoint", () => {
 	it.each([
-		1, 1.25, 1.5, 1.75, 2,
+		1,
+		1.1,
+		1.25,
+		4 / 3,
+		1.5,
+		1.75,
+		2,
+		2.25,
+		3,
 	])("normalizes the same position at a %sx Windows scale", (scaleFactor) => {
 		const dipBounds = { x: -1536, y: 864, width: 1536, height: 864 };
 		const physicalBounds = {
@@ -17,11 +25,10 @@ describe("normalizePhysicalPoint", () => {
 			y: physicalBounds.y + physicalBounds.height * 0.625,
 		};
 
-		expect(normalizePhysicalPoint(point, physicalBounds)).toEqual({
-			x: 0.375,
-			y: 0.625,
-			withinBounds: true,
-		});
+		const normalized = normalizePhysicalPoint(point, physicalBounds);
+		expect(normalized.x).toBeCloseTo(0.375, 12);
+		expect(normalized.y).toBeCloseTo(0.625, 12);
+		expect(normalized.withinBounds).toBe(true);
 	});
 
 	it("supports rotated monitors with a negative virtual-screen origin", () => {

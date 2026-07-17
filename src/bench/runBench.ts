@@ -32,6 +32,8 @@ export interface BenchArm {
 	compositeOnly?: boolean;
 	/** Undo the 2026-07-17 compositor fixes, to attribute them. */
 	legacyCompositor?: boolean;
+	/** Gate G0: sync the GPU after compositing, in a `fence` stage of its own. */
+	gpuFence?: boolean;
 }
 
 export interface BenchRunResult {
@@ -167,6 +169,23 @@ const ARMS: Record<string, BenchArm> = {
 	},
 	/** Today's shipping path, with the compositor fixes undone. */
 	"webcodecs-legacy": { nativeEncode: false, readFrequently: false, legacyCompositor: true },
+	// Gate G0 (rendering-architecture.md §7.1): the shipping path, but the GPU is
+	// forced to FINISH compositing before the encode timers start. The claim under
+	// test is pure attribution — encodeWait has been billing the compositor's
+	// execution. If §7.1 holds, encodeWait collapses to the encoder's own time and
+	// the difference reappears under `fence`; the wall itself may even worsen
+	// (the fence removes compositor/encoder overlap), which is fine — G0 is about
+	// where the time GOES, not how much there is. Run interleaved with its
+	// unfenced twin.
+	"webcodecs-fence": { nativeEncode: false, readFrequently: false, gpuFence: true },
+	// Same gate against the PRE-fix compositor — the arm the spec's numbers
+	// (encodeWait ~18.9 → ~6 ms) are actually quoted for.
+	"webcodecs-legacy-fence": {
+		nativeEncode: false,
+		readFrequently: false,
+		legacyCompositor: true,
+		gpuFence: true,
+	},
 	// These two WRITE FILES, which is what makes them the parity gate: encode the
 	// same timeline with the old and new compositor through the same encoder at
 	// the same bitrate, then diff the results (SSIM). Unit tests never look at a
@@ -180,6 +199,7 @@ function applyArm(arm: BenchArm): void {
 	localStorage.setItem("openscreen.dropFrames", arm.dropFrames ? "1" : "0");
 	localStorage.setItem("openscreen.compositeOnly", arm.compositeOnly ? "1" : "0");
 	localStorage.setItem("openscreen.legacyCompositor", arm.legacyCompositor ? "1" : "0");
+	localStorage.setItem("openscreen.gpuFence", arm.gpuFence ? "1" : "0");
 }
 
 /**

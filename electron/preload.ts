@@ -13,6 +13,7 @@ const assetBaseUrlArg = process.argv.find((arg) => arg.startsWith(ASSET_BASE_URL
 const assetBaseUrl = assetBaseUrlArg ? assetBaseUrlArg.slice(ASSET_BASE_URL_ARG_PREFIX.length) : "";
 
 contextBridge.exposeInMainWorld("electronAPI", {
+	platform: process.platform,
 	assetBaseUrl,
 	invokeNativeBridge: <TData>(request: NativeBridgeRequest) => {
 		return ipcRenderer.invoke(NATIVE_BRIDGE_CHANNEL, request) as Promise<TData>;
@@ -28,6 +29,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	setHudOverlaySize: (width: number, height: number) => {
 		ipcRenderer.send("hud-overlay-set-size", width, height);
+	},
+	beginHudOverlayDrag: (screenX: number, screenY: number) => {
+		ipcRenderer.send("hud-overlay-drag-start", screenX, screenY);
+	},
+	updateHudOverlayDrag: (screenX: number, screenY: number) => {
+		ipcRenderer.send("hud-overlay-drag-move", screenX, screenY);
+	},
+	endHudOverlayDrag: (screenX?: number, screenY?: number) => {
+		ipcRenderer.send("hud-overlay-drag-end", screenX, screenY);
 	},
 	getSources: async (opts: Electron.SourcesOptions) => {
 		return await ipcRenderer.invoke("get-sources", opts);

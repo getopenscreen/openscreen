@@ -8,6 +8,17 @@ export type HudOverlayBounds = HudOverlayPoint & {
 	height: number;
 };
 
+/**
+ * Windows native drag regions only become draggable when the BrowserWindow is
+ * already accepting mouse input before the initial button-down. Toggling a
+ * whole-window click-through flag on hover therefore has an unavoidable race
+ * at the first contact with the HUD. The Windows HUD is content-sized, so keep
+ * it interactive and reserve hover-based click-through for other platforms.
+ */
+export function supportsHudOverlayHoverClickThrough(platform: string): boolean {
+	return platform !== "win32";
+}
+
 export function isPointInsideHudOverlayBounds(
 	point: HudOverlayPoint,
 	bounds: HudOverlayBounds,

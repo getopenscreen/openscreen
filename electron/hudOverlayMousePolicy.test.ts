@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	isPointInsideHudOverlayBounds,
 	shouldIgnoreHudOverlayMouseEvents,
+	supportsHudOverlayHoverClickThrough,
 } from "./hudOverlayMousePolicy";
 
 describe("HUD overlay mouse policy", () => {
@@ -35,5 +36,11 @@ describe("HUD overlay mouse policy", () => {
 		expect(
 			isPointInsideHudOverlayBounds({ x: 0, y: 0 }, { x: 0, y: 0, width: 0, height: 92 }),
 		).toBe(false);
+	});
+
+	it("keeps the Windows HUD interactive before the first mouse-down", () => {
+		expect(supportsHudOverlayHoverClickThrough("win32")).toBe(false);
+		expect(supportsHudOverlayHoverClickThrough("darwin")).toBe(true);
+		expect(supportsHudOverlayHoverClickThrough("linux")).toBe(true);
 	});
 });

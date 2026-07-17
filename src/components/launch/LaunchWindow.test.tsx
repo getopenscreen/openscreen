@@ -168,6 +168,7 @@ function renderLaunchWindow() {
 function stubElectronAPI(getSelectedSource: Window["electronAPI"]["getSelectedSource"]) {
 	window.electronAPI = {
 		...window.electronAPI,
+		platform: platformState.value,
 		getSelectedSource,
 		openSourceSelector: vi.fn(async () => ({ opened: true })),
 		requestScreenAccess: vi.fn(async () => ({
@@ -178,6 +179,9 @@ function stubElectronAPI(getSelectedSource: Window["electronAPI"]["getSelectedSo
 		getPlatform: vi.fn(async () => "darwin"),
 		setHudOverlaySize: vi.fn(),
 		setHudOverlayIgnoreMouseEvents: vi.fn(),
+		beginHudOverlayDrag: vi.fn(),
+		updateHudOverlayDrag: vi.fn(),
+		endHudOverlayDrag: vi.fn(),
 		hudOverlayHide: vi.fn(),
 		hudOverlayClose: vi.fn(),
 		switchToEditor: vi.fn(async () => undefined),
@@ -389,12 +393,70 @@ describe("LaunchWindow HUD dragging", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it("uses Electron's native OS drag region only on the HUD handle", () => {
+	it("uses anchored pointer dragging on the Windows HUD handle", async () => {
 		const { container } = renderLaunchWindow();
 
 		const handle = screen.getByTestId("launch-drag-handle");
-		expect(handle.className).toMatch(/electronDrag/);
+		await waitFor(() => expect(handle.className).toMatch(/electronNoDrag/));
 		expect((container.firstElementChild as HTMLElement).className).not.toMatch(/electronDrag/);
+
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 7, screenX: 100, screenY: 200 });
+		fireEvent.pointerMove(handle, { pointerId: 7, screenX: 110, screenY: 210 });
+		fireEvent.pointerUp(handle, { button: 0, pointerId: 7, screenX: 120, screenY: 220 });
+
+		expect(window.electronAPI.beginHudOverlayDrag).toHaveBeenCalledWith(100, 200);
+		expect(window.electronAPI.updateHudOverlayDrag).toHaveBeenCalledWith(110, 210);
+		expect(window.electronAPI.endHudOverlayDrag).toHaveBeenCalledWith(120, 220);
+	});
+
+	it("keeps the visible HUD anchored when Windows enlarges its viewport at 125%", async () => {
+		let innerWidth = 588;
+		let innerHeight = 95;
+		vi.spyOn(window, "innerWidth", "get").mockImplementation(() => innerWidth);
+		vi.spyOn(window, "innerHeight", "get").mockImplementation(() => innerHeight);
+		const { container } = renderLaunchWindow();
+		const handle = screen.getByTestId("launch-drag-handle");
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 7, screenX: 100, screenY: 200 });
+		innerWidth = 594;
+		innerHeight = 99;
+		fireEvent.resize(window);
+
+		await waitFor(() => {
+			expect(hudBar.style.left).toBe("calc(50% - 3px)");
+			expect(hudBar.style.bottom).toBe("24px");
+		});
+
+		fireEvent.pointerUp(handle, { button: 0, pointerId: 7, screenX: 110, screenY: 210 });
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 8, screenX: 110, screenY: 210 });
+		innerWidth = 596;
+		innerHeight = 100;
+		fireEvent.pointerMove(handle, { pointerId: 8, screenX: 120, screenY: 220 });
+
+		await waitFor(() => {
+			expect(hudBar.style.left).toBe("calc(50% - 4px)");
+			expect(hudBar.style.bottom).toBe("25px");
+		});
+	});
+
+	it("keeps Electron's native drag region on non-Windows platforms", async () => {
+		window.electronAPI.platform = "darwin";
+		renderLaunchWindow();
+
+		const handle = screen.getByTestId("launch-drag-handle");
+		await waitFor(() => expect(handle.className).toMatch(/electronDrag/));
 	});
 
 	it("enables mouse input from forwarded root movement over the native drag handle", async () => {
@@ -453,6 +515,42 @@ describe("LaunchWindow HUD dragging", () => {
 
 		expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenCalledWith(true);
 	});
+
+	it("does not grow the HUD when 125% rounding changes only its viewport position", async () => {
+		resizeCallbacks.length = 0;
+		vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+		const { container } = renderLaunchWindow();
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+		let roundedTop = 22.4;
+		vi.spyOn(hudBar, "getBoundingClientRect").mockImplementation(() => ({
+			left: 11.9,
+			right: 576.1,
+			top: roundedTop,
+			bottom: roundedTop + 49.6,
+			width: 564.2,
+			height: 49.6,
+			x: 11.9,
+			y: roundedTop,
+			toJSON: () => ({}),
+		}));
+		Object.defineProperty(hudBar, "scrollHeight", { value: 48, configurable: true });
+		Object.defineProperty(hudBar, "scrollWidth", { value: 564, configurable: true });
+		vi.mocked(window.electronAPI.setHudOverlaySize).mockClear();
+
+		await act(async () => {
+			for (const callback of resizeCallbacks) callback([], {} as ResizeObserver);
+		});
+		expect(window.electronAPI.setHudOverlaySize).toHaveBeenCalledTimes(1);
+		expect(window.electronAPI.setHudOverlaySize).toHaveBeenLastCalledWith(588, 92);
+
+		// Moving the physical window can change fractional viewport top/bottom values,
+		// but must not feed those values back into the requested window height.
+		roundedTop = 25.6;
+		await act(async () => {
+			for (const callback of resizeCallbacks) callback([], {} as ResizeObserver);
+		});
+		expect(window.electronAPI.setHudOverlaySize).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe("LaunchWindow system language prompt", () => {
@@ -502,6 +600,14 @@ describe("LaunchWindow system language prompt", () => {
 
 		const promptBox = { width: 480, height: 130 };
 		const promptPanel = prompt.parentElement as HTMLElement;
+		Object.defineProperty(promptPanel, "scrollHeight", {
+			value: promptBox.height,
+			configurable: true,
+		});
+		Object.defineProperty(promptPanel, "offsetHeight", {
+			value: promptBox.height,
+			configurable: true,
+		});
 		vi.spyOn(promptPanel, "getBoundingClientRect").mockReturnValue({
 			top: 32,
 			left: 60,

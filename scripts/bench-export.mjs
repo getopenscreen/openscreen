@@ -186,6 +186,7 @@ async function main() {
 	const args = parseArgs(process.argv.slice(2));
 	const query = new URLSearchParams({
 		...(args.project ? { project: args.project } : {}),
+		...(args.effects ? { effects: args.effects } : {}),
 		arms: args.arms ?? "webcodecs,native",
 		runs: args.runs ?? "2",
 		fps: args.fps ?? "60",
@@ -226,7 +227,7 @@ async function main() {
 				// Configuration the exporter reports about itself (which encoder, what
 				// the canvas actually granted). Always shown: an arm that silently
 				// no-ops must not be mistaken for an arm that was tested and lost.
-				const note = /\[export perf\] (canvas .*|native encode .*)$/.exec(line);
+				const note = /\[export perf\] (canvas .*|native encode .*|shadow .*)$/.exec(line);
 				if (note) console.log(`    · ${note[1]}`);
 				continue;
 			}
@@ -246,6 +247,7 @@ async function main() {
 				fatal = event.error;
 			} else if (event.event === "start") {
 				console.log(`  project: ${event.project}`);
+				console.log(`  effects: ${event.effects}`);
 				console.log(`  arms: ${event.arms.join(", ")} x${event.runs}\n`);
 			}
 		}

@@ -120,6 +120,24 @@ function legacyCompositorRequested(): boolean {
 	}
 }
 
+/**
+ * The recording's drop shadow, as a CSS filter chain.
+ *
+ * Three chained shadows, each blurring the alpha of the PREVIOUS stage's output
+ * (its own shadow included) — that cascade is what gives the falloff, and it is
+ * why this cannot be swapped for an SDF without changing the picture.
+ *
+ * Was duplicated verbatim on the flat and the 3D path; they must not drift.
+ */
+function shadowFilterChain(intensity: number): string {
+	const offset = 12 * intensity;
+	return (
+		`drop-shadow(0 ${offset}px ${48 * intensity}px rgba(0,0,0,${0.7 * intensity})) ` +
+		`drop-shadow(0 ${offset / 3}px ${16 * intensity}px rgba(0,0,0,${0.5 * intensity})) ` +
+		`drop-shadow(0 ${offset / 6}px ${8 * intensity}px rgba(0,0,0,${0.3 * intensity}))`
+	);
+}
+
 interface FrameRenderConfig {
 	width: number;
 	height: number;
@@ -193,6 +211,10 @@ export class FrameRenderer {
 	private maskShape: { width: number; height: number; radius: number } | null = null;
 	/** Bench-only: undo the compositor fixes so they can be measured. */
 	private legacyCompositor = legacyCompositorRequested();
+	/** Shadow filter output, keyed by the geometry it was computed for. */
+	private shadowCache: { key: string; canvas: HTMLCanvasElement } | null = null;
+	/** Scratch holding videoCanvas's alpha as an opaque black shape. */
+	private shadowSilhouetteCanvas: HTMLCanvasElement | null = null;
 	private backgroundSprite: HTMLCanvasElement | null = null;
 	private maskGraphics: Graphics | null = null;
 	private blurFilter: BlurFilter | null = null;
@@ -646,15 +668,11 @@ export class FrameRenderer {
 			const h = this.foregroundCanvas.height;
 			shadowCtx.clearRect(0, 0, w, h);
 			shadowCtx.save();
-			const intensity = this.config.shadowIntensity;
-			const baseBlur1 = 48 * intensity;
-			const baseBlur2 = 16 * intensity;
-			const baseBlur3 = 8 * intensity;
-			const baseAlpha1 = 0.7 * intensity;
-			const baseAlpha2 = 0.5 * intensity;
-			const baseAlpha3 = 0.3 * intensity;
-			const baseOffset = 12 * intensity;
-			shadowCtx.filter = `drop-shadow(0 ${baseOffset}px ${baseBlur1}px rgba(0,0,0,${baseAlpha1})) drop-shadow(0 ${baseOffset / 3}px ${baseBlur2}px rgba(0,0,0,${baseAlpha2})) drop-shadow(0 ${baseOffset / 6}px ${baseBlur3}px rgba(0,0,0,${baseAlpha3}))`;
+			// NOT cacheable, unlike the flat path: this blurs foregroundCanvas, whose
+			// alpha carries the webcam, the cursor and the annotations — it changes
+			// every frame, so there is no geometry to key on. The 3D path stays at
+			// full price until it is restructured.
+			shadowCtx.filter = shadowFilterChain(this.config.shadowIntensity);
 			shadowCtx.drawImage(this.foregroundCanvas, 0, 0, w, h);
 			shadowCtx.restore();
 			if (this.compositeCtx) {
@@ -1120,6 +1138,83 @@ export class FrameRenderer {
 
 	// applyShadowToRecording is false when the 3D pass will rotate this canvas next;
 	// the shadow is re-applied after rotation to avoid aliasing.
+	/**
+	 * Everything the shadow's shape depends on. If two frames agree here, the
+	 * filter output is identical and re-running it is pure waste.
+	 *
+	 * Taken from the world transforms rather than from the layout inputs, so a
+	 * new way to move the recording cannot silently bypass the cache and serve a
+	 * stale shadow. A zoom easing changes this every frame — by design: that case
+	 * MUST miss.
+	 */
+	private shadowGeometryKey(): string {
+		const v = this.videoContainer?.worldTransform;
+		const s = this.app?.stage?.worldTransform;
+		const m = this.maskShape;
+		return [
+			v ? `${v.a},${v.b},${v.c},${v.d},${v.tx},${v.ty}` : "-",
+			s ? `${s.a},${s.b},${s.c},${s.d},${s.tx},${s.ty}` : "-",
+			m ? `${m.width},${m.height},${m.radius}` : "-",
+			this.config.shadowIntensity,
+		].join("|");
+	}
+
+	/**
+	 * The shadow layer, rebuilt only when the geometry moves.
+	 *
+	 * drop-shadow reads SourceAlpha only, and videoCanvas's alpha is just the
+	 * masked rounded rect — so the filter blurs 2M pixels of VIDEO to compute
+	 * something that depends on nothing but the silhouette. Measured: ~30 ms per
+	 * frame, twice the cost of the entire rest of the compositor.
+	 *
+	 * So it runs against the silhouette instead, and the silhouette is taken from
+	 * videoCanvas's own alpha (source-in over black) rather than re-derived from
+	 * the layout — same pixels, same anti-aliasing, nothing to keep in sync.
+	 *
+	 * Returns the filter output, which is `silhouette OVER shadow`: the caller
+	 * draws videoCanvas on top, and it covers the silhouette exactly.
+	 */
+	private cachedShadowLayer(
+		videoCanvas: HTMLCanvasElement,
+		w: number,
+		h: number,
+	): HTMLCanvasElement | null {
+		const key = this.shadowGeometryKey();
+		if (this.shadowCache?.key === key) return this.shadowCache.canvas;
+
+		if (!this.shadowSilhouetteCanvas) {
+			this.shadowSilhouetteCanvas = document.createElement("canvas");
+			this.shadowSilhouetteCanvas.width = w;
+			this.shadowSilhouetteCanvas.height = h;
+		}
+		if (!this.shadowCache) {
+			const canvas = document.createElement("canvas");
+			canvas.width = w;
+			canvas.height = h;
+			this.shadowCache = { key: "", canvas };
+		}
+		const silCtx = this.shadowSilhouetteCanvas.getContext("2d");
+		const outCtx = this.shadowCache.canvas.getContext("2d");
+		if (!silCtx || !outCtx) return null;
+
+		// Silhouette: videoCanvas's exact alpha, filled black.
+		silCtx.globalCompositeOperation = "copy";
+		silCtx.drawImage(videoCanvas, 0, 0, w, h);
+		silCtx.globalCompositeOperation = "source-in";
+		silCtx.fillStyle = "#000";
+		silCtx.fillRect(0, 0, w, h);
+		silCtx.globalCompositeOperation = "source-over";
+
+		outCtx.globalCompositeOperation = "copy";
+		outCtx.filter = shadowFilterChain(this.config.shadowIntensity);
+		outCtx.drawImage(this.shadowSilhouetteCanvas, 0, 0, w, h);
+		outCtx.filter = "none";
+		outCtx.globalCompositeOperation = "source-over";
+
+		this.shadowCache.key = key;
+		return this.shadowCache.canvas;
+	}
+
 	private compositeWithShadows(
 		webcamFrame: VideoFrame | null | undefined,
 		applyShadowToRecording: boolean,
@@ -1181,23 +1276,21 @@ export class FrameRenderer {
 			this.shadowCanvas &&
 			this.shadowCtx
 		) {
-			const shadowCtx = this.shadowCtx;
-			shadowCtx.clearRect(0, 0, w, h);
-			shadowCtx.save();
-
-			const intensity = this.config.shadowIntensity;
-			const baseBlur1 = 48 * intensity;
-			const baseBlur2 = 16 * intensity;
-			const baseBlur3 = 8 * intensity;
-			const baseAlpha1 = 0.7 * intensity;
-			const baseAlpha2 = 0.5 * intensity;
-			const baseAlpha3 = 0.3 * intensity;
-			const baseOffset = 12 * intensity;
-
-			shadowCtx.filter = `drop-shadow(0 ${baseOffset}px ${baseBlur1}px rgba(0,0,0,${baseAlpha1})) drop-shadow(0 ${baseOffset / 3}px ${baseBlur2}px rgba(0,0,0,${baseAlpha2})) drop-shadow(0 ${baseOffset / 6}px ${baseBlur3}px rgba(0,0,0,${baseAlpha3}))`;
-			shadowCtx.drawImage(videoCanvas, 0, 0, w, h);
-			shadowCtx.restore();
-			fgCtx.drawImage(this.shadowCanvas, 0, 0, w, h);
+			const cached = this.legacyCompositor ? null : this.cachedShadowLayer(videoCanvas, w, h);
+			if (cached) {
+				// The filter ran once for this geometry; per frame this is one blit.
+				fgCtx.drawImage(cached, 0, 0, w, h);
+				fgCtx.globalCompositeOperation = "source-over";
+				fgCtx.drawImage(videoCanvas, 0, 0, w, h);
+			} else {
+				const shadowCtx = this.shadowCtx;
+				shadowCtx.clearRect(0, 0, w, h);
+				shadowCtx.save();
+				shadowCtx.filter = shadowFilterChain(this.config.shadowIntensity);
+				shadowCtx.drawImage(videoCanvas, 0, 0, w, h);
+				shadowCtx.restore();
+				fgCtx.drawImage(this.shadowCanvas, 0, 0, w, h);
+			}
 		} else {
 			fgCtx.drawImage(videoCanvas, 0, 0, w, h);
 		}

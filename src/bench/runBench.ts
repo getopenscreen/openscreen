@@ -65,7 +65,76 @@ const BENCH_PARAMS = {
 	fps: Number(params.get("fps") ?? "60"),
 	// "good" is the dialog's own default, i.e. what the UI A/B measured.
 	quality: QUALITY[params.get("quality") ?? "1080p"] ?? "good",
+	effects: (params.get("effects") ?? "").split(",").filter(Boolean),
 };
+
+/**
+ * Appearance the exporter reads out of `legacyEditor`, patched onto an in-memory
+ * COPY of the document.
+ *
+ * Most saved projects carry no appearance at all, so the defaults apply:
+ * shadowIntensity 0, showBlur false, borderRadius 0, wallpaper "". Whole effects
+ * therefore never execute, and "fixing" them would have measured exactly zero on
+ * a project that never ran them. This turns them on without writing to the
+ * user's project store — nothing here reaches disk.
+ *
+ *   --effects=shadow,blur,radius
+ */
+const EFFECT_PATCHES: Record<string, Record<string, unknown>> = {
+	// Three chained drop-shadows over the full frame, every frame.
+	shadow: { shadowIntensity: 1 },
+	// A static wallpaper, re-blurred every frame.
+	blur: { showBlur: true },
+	radius: { borderRadius: 24 },
+	motionBlur: { motionBlurAmount: 1 },
+};
+
+/**
+ * A zoom region, injected the same way: the saved projects have `zoomRanges: []`.
+ *
+ * It is not decoration. Zoom is the one effect that changes the composited
+ * GEOMETRY every frame, so it is what invalidates any geometry-keyed cache. A
+ * parity test on a project without zoom would happily pass with a broken cache
+ * key, because nothing would ever ask it to invalidate.
+ */
+function zoomRanges(doc: AxcutDocument): unknown[] {
+	const clips = (doc as { timeline?: { clips?: { timelineEndSec?: number }[] } }).timeline?.clips;
+	const endSec = clips?.[0]?.timelineEndSec ?? 5;
+	return [
+		{
+			id: "bench-zoom",
+			startMs: 500,
+			endMs: Math.max(1500, Math.round(endSec * 1000) - 500),
+			depth: "medium",
+			focus: { cx: 0.5, cy: 0.5 },
+		},
+	];
+}
+
+function withEffects(doc: AxcutDocument, effects: string[]): AxcutDocument {
+	if (effects.length === 0) return doc;
+	const legacy: Record<string, unknown> = {
+		...((doc as { legacyEditor?: Record<string, unknown> }).legacyEditor ?? {}),
+	};
+	let patched = doc;
+	for (const name of effects) {
+		if (name === "zoom") {
+			patched = { ...patched, zoomRanges: zoomRanges(doc) } as AxcutDocument;
+			continue;
+		}
+		const patch = EFFECT_PATCHES[name];
+		if (!patch) {
+			throw new Error(`Unknown effect "${name}". Known: ${Object.keys(EFFECT_PATCHES)}, zoom`);
+		}
+		Object.assign(legacy, patch);
+	}
+	// `blur` only does anything against a real wallpaper; a project with none
+	// would silently skip the very pass being measured.
+	if (effects.includes("blur") && !legacy.wallpaper) {
+		legacy.wallpaper = "wallpaper13.jpg";
+	}
+	return { ...patched, legacyEditor: legacy } as AxcutDocument;
+}
 
 const ARMS: Record<string, BenchArm> = {
 	// The path we ship today: WebCodecs encodes straight off the GPU texture.
@@ -298,11 +367,12 @@ export async function runBench(): Promise<void> {
 		}
 		// Loaded once and shared by every run: each arm must see byte-identical
 		// input, and the title fallback can open every project on disk.
-		const doc = await resolveDocument(BENCH_PARAMS.project);
+		const doc = withEffects(await resolveDocument(BENCH_PARAMS.project), BENCH_PARAMS.effects);
 		emit("start", {
 			arms: BENCH_PARAMS.arms,
 			runs: BENCH_PARAMS.runs,
 			project: doc.project?.title ?? "(untitled)",
+			effects: BENCH_PARAMS.effects.length ? BENCH_PARAMS.effects.join("+") : "(project default)",
 		});
 		for (let run = 1; run <= BENCH_PARAMS.runs; run++) {
 			for (const armName of BENCH_PARAMS.arms) {

@@ -463,10 +463,17 @@ async function run(override = {}) {
 	const instrumented = override.instrumented ?? document.querySelector("#instrument").checked;
 	const optimised = override.optimised ?? document.querySelector("#optimise").checked;
 	const encodeOn = override.encode ?? true;
-	// How many encodes may be in flight before composite blocks. Instrumented mode
-	// fences every frame, so it is forced serial (depth 1) — you cannot pipeline
-	// and time each stage at once. Clean mode defaults to a small pipeline.
-	const queueDepth = instrumented ? 1 : (override.queueDepth ?? 4);
+	// How many encodes may be in flight before composite blocks.
+	//
+	// Default 1 (serialised) BECAUSE IT IS FASTER HERE, measured: buffered depth-4
+	// throughput 49 fps vs serialised 79 fps on this iGPU (spread 7-11%, so real).
+	// §11's "pipeline, don't await" assumed overlap helps; on an integrated GPU the
+	// compositor and the hardware H.264 encoder share one memory bus, so running
+	// them at once makes them contend rather than parallelise — serialising lets
+	// each have the full bandwidth in turn. The pipeline stays reachable
+	// (queueDepth override) because a DISCRETE GPU, with its own VRAM and separate
+	// encoder silicon, may flip the result — untested (that is bench G3).
+	const queueDepth = instrumented ? 1 : (override.queueDepth ?? 1);
 	const inflight = [];
 	const frames = [];
 	const t0 = performance.now();

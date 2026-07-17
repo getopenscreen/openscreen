@@ -588,68 +588,65 @@ export function LaunchWindow() {
 			setMicrophoneEnabled(!microphoneEnabled);
 		}
 	};
-	const dragLastPositionRef = useRef<{ x: number; y: number } | null>(null);
+	const hudDraggingRef = useRef(false);
 	const dragAnimationFrameRef = useRef<number | null>(null);
-	const pendingDragDeltaRef = useRef({ x: 0, y: 0 });
 	const flushHudDragMove = useCallback(() => {
 		dragAnimationFrameRef.current = null;
-		const { x, y } = pendingDragDeltaRef.current;
-		pendingDragDeltaRef.current = { x: 0, y: 0 };
-		if (x === 0 && y === 0) return;
-		window.electronAPI?.moveHudOverlayBy?.(x, y);
+		if (!hudDraggingRef.current) return;
+		window.electronAPI?.moveHudOverlayDrag?.();
 	}, []);
-	const scheduleHudDragMove = useCallback(
-		(deltaX: number, deltaY: number) => {
-			pendingDragDeltaRef.current = {
-				x: pendingDragDeltaRef.current.x + deltaX,
-				y: pendingDragDeltaRef.current.y + deltaY,
-			};
-
-			if (dragAnimationFrameRef.current === null) {
-				dragAnimationFrameRef.current = window.requestAnimationFrame(flushHudDragMove);
-			}
-		},
-		[flushHudDragMove],
-	);
-	const flushPendingHudDragMove = useCallback(() => {
+	const scheduleHudDragMove = useCallback(() => {
+		if (dragAnimationFrameRef.current === null) {
+			dragAnimationFrameRef.current = window.requestAnimationFrame(flushHudDragMove);
+		}
+	}, [flushHudDragMove]);
+	const cancelPendingHudDragMove = useCallback(() => {
 		if (dragAnimationFrameRef.current !== null) {
 			window.cancelAnimationFrame(dragAnimationFrameRef.current);
 			dragAnimationFrameRef.current = null;
 		}
-		const { x, y } = pendingDragDeltaRef.current;
-		pendingDragDeltaRef.current = { x: 0, y: 0 };
-		if (x === 0 && y === 0) return;
-		window.electronAPI?.moveHudOverlayBy?.(x, y);
 	}, []);
 	useEffect(() => {
 		return () => {
-			if (dragAnimationFrameRef.current !== null) {
-				window.cancelAnimationFrame(dragAnimationFrameRef.current);
+			cancelPendingHudDragMove();
+			if (hudDraggingRef.current) {
+				window.electronAPI?.endHudOverlayDrag?.();
+				hudDraggingRef.current = false;
 			}
 		};
-	}, []);
+	}, [cancelPendingHudDragMove]);
 	const handleHudDragPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+		if (event.button !== 0) return;
 		event.preventDefault();
 		event.stopPropagation();
+		hudDraggingRef.current = true;
 		setHudMouseEventsEnabled(true);
 		event.currentTarget.setPointerCapture(event.pointerId);
-		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
+		window.electronAPI?.startHudOverlayDrag?.();
 	};
-	const handleHudDragPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-		const lastPosition = dragLastPositionRef.current;
-		if (!lastPosition) return;
-		const deltaX = event.screenX - lastPosition.x;
-		const deltaY = event.screenY - lastPosition.y;
-		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
-		scheduleHudDragMove(deltaX, deltaY);
+	const handleHudDragPointerMove = () => {
+		if (!hudDraggingRef.current) return;
+		setHudMouseEventsEnabled(true);
+		scheduleHudDragMove();
 	};
 	const handleHudDragPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-		dragLastPositionRef.current = null;
-		flushPendingHudDragMove();
+		if (!hudDraggingRef.current) return;
+		cancelPendingHudDragMove();
+		window.electronAPI?.endHudOverlayDrag?.();
+		hudDraggingRef.current = false;
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
-		setHudMouseEventsEnabled(false);
+
+		const hudBounds = hudBarRef.current?.getBoundingClientRect();
+		const isPointerOverHud = Boolean(
+			hudBounds &&
+				event.clientX >= hudBounds.left &&
+				event.clientX <= hudBounds.right &&
+				event.clientY >= hudBounds.top &&
+				event.clientY <= hudBounds.bottom,
+		);
+		setHudMouseEventsEnabled(isPointerOverHud || isLanguageMenuOpen);
 	};
 
 	return (
@@ -658,13 +655,17 @@ export function LaunchWindow() {
 		<div
 			className={`h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-hidden bg-transparent ${styles.electronDrag}`}
 			onPointerMove={(event) => {
+				if (hudDraggingRef.current) {
+					setHudMouseEventsEnabled(true);
+					return;
+				}
 				const target = event.target as HTMLElement | null;
 				const shouldCapture =
 					isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']"));
 				setHudMouseEventsEnabled(shouldCapture);
 			}}
 			onPointerLeave={() => {
-				if (!isLanguageMenuOpen) {
+				if (!isLanguageMenuOpen && !hudDraggingRef.current) {
 					setHudMouseEventsEnabled(false);
 				}
 			}}
@@ -909,13 +910,14 @@ export function LaunchWindow() {
 				onPointerDown={() => setHudMouseEventsEnabled(true)}
 				onMouseEnter={() => setHudMouseEventsEnabled(true)}
 				onMouseLeave={() => {
-					if (!isLanguageMenuOpen) {
+					if (!isLanguageMenuOpen && !hudDraggingRef.current) {
 						setHudMouseEventsEnabled(false);
 					}
 				}}
 			>
 				{/* Drag handle */}
 				<div
+					data-testid="launch-drag-handle"
 					className={`flex ${trayLayout === "vertical" ? "h-6 w-8" : "h-8 w-7"} cursor-grab items-center justify-center active:cursor-grabbing ${styles.electronNoDrag}`}
 					onPointerDown={handleHudDragPointerDown}
 					onPointerMove={handleHudDragPointerMove}

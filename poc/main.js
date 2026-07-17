@@ -470,9 +470,20 @@ async function run(override = {}) {
 	const inflight = [];
 	const frames = [];
 	const t0 = performance.now();
+	// The steady-state window starts after the first quarter (warm-up). We time it
+	// on the WALL, from here to after the final drain+flush — not per loop
+	// iteration — because with the pipeline the loop does not wait for the work:
+	// submit() is non-blocking and encode is only awaited on backpressure. A
+	// per-frame timer then measures an empty loop distributing orders (naive
+	// composite is slower, so it feeds the encoder slower, so the loop blocks LESS
+	// and reads FASTER — 588 fps of nothing). True throughput is frames ÷ the wall
+	// until they have actually completed, which finalize() forces.
+	const warmStart = Math.ceil(totalFrames / 4);
+	let warmWall = 0;
 	let rendered = 0;
 
 	for (let i = 0; i < totalFrames; i++) {
+		if (i === warmStart) warmWall = performance.now();
 		const t = i / OUT.fps;
 		const fStart = performance.now();
 		const p = {};
@@ -668,11 +679,19 @@ async function run(override = {}) {
 		}
 	}
 
-	// Drain the encoder pipeline before stopping the clock: those frames are still
-	// real work, and finalize() would wait on them anyway.
+	// Drain the encoder pipeline, then flush+mux: only after finalize() has all
+	// frames actually completed. The throughput window closes HERE, not at the end
+	// of the loop, because the loop returns before the GPU and the encoder are
+	// done.
 	if (inflight.length) await Promise.all(inflight);
-	const wallMs = performance.now() - t0;
 	await output.finalize();
+	const endWall = performance.now();
+	const wallMs = endWall - t0;
+	// The honest steady-state throughput: frames rendered after warm-up, over the
+	// wall time until they are fully composited, encoded and muxed.
+	const warmFrames = rendered - warmStart;
+	const throughputFps =
+		warmWall > 0 ? warmFrames / ((endWall - warmWall) / 1000) : rendered / (wallMs / 1000);
 
 	// ---- report ----
 	//
@@ -688,14 +707,17 @@ async function run(override = {}) {
 	const totals = frames.map((f) => f.total);
 	// Cruise = the steady state: drop the first quarter, then take the MEDIAN, so
 	// one scheduler hiccup cannot move the number.
-	const warm = frames.slice(Math.ceil(frames.length / 4));
+	const warm = frames.slice(warmStart);
 	const cruiseMs = median(warm.map((f) => f.total));
 	const cruiseFps = 1000 / cruiseMs;
 	const avgFps = rendered / (wallMs / 1000);
 
-	setStat("fps", cruiseFps.toFixed(1));
+	// Throughput is the headline. Cruise (per-frame loop time) is kept for the
+	// instrumented breakdown, where the fence makes each iteration wait for its own
+	// work — there it equals throughput; under the pipeline it does not.
+	setStat("fps", throughputFps.toFixed(1));
 	setStat("progress", `${rendered}/${totalFrames}`);
-	setStat("perframe", `${cruiseMs.toFixed(1)} ms`);
+	setStat("perframe", `${(1000 / throughputFps).toFixed(1)} ms`);
 	// `?? 0`: the clean pass has no phase timers by construction — that is what
 	// makes it clean. Reading them back as undefined is not an error, it is the
 	// point.
@@ -704,7 +726,10 @@ async function run(override = {}) {
 	setStat("encode", instrumented ? `${median(warm.map((f) => f.encode ?? 0)).toFixed(1)} ms` : "—");
 
 	log(
-		`\n=== [${instrumented ? "INSTRUMENTED" : "CLEAN"}] cruise ${cruiseFps.toFixed(1)} fps — ${cruiseMs.toFixed(1)} ms/frame (median of the last ${warm.length}) ===`,
+		`\n=== [${instrumented ? "INSTRUMENTED" : "CLEAN"}] throughput ${throughputFps.toFixed(1)} fps — ${warmFrames} frames in ${((endWall - warmWall) / 1000).toFixed(2)}s (wall, incl. drain+mux) ===`,
+	);
+	log(
+		`per-loop cruise ${cruiseFps.toFixed(1)} fps (${cruiseMs.toFixed(1)} ms) — under the pipeline this measures the LOOP, not completion; throughput above is the honest number.`,
 	);
 	log(
 		`average ${avgFps.toFixed(1)} fps over all ${rendered} frames (${(wallMs / 1000).toFixed(2)}s wall)`,
@@ -780,7 +805,7 @@ async function run(override = {}) {
 	device.destroy();
 
 	document.querySelector("#run").disabled = false;
-	return { cruiseMs, cruiseFps, avgFps, instrumented };
+	return { cruiseMs, cruiseFps, avgFps, throughputFps, instrumented };
 }
 
 /**
@@ -861,7 +886,7 @@ async function compare(rounds = 3) {
 	for (let r = 0; r <= rounds; r++) {
 		for (const arm of arms) {
 			const res = await run(arm.over);
-			if (r > 0) arm.runs.push(res.cruiseFps);
+			if (r > 0) arm.runs.push(res.throughputFps);
 		}
 	}
 
@@ -870,7 +895,7 @@ async function compare(rounds = 3) {
 	log(`${spec.note}\n`);
 	for (const arm of arms) {
 		log(
-			`${arm.label.padEnd(13)} croisière ${median(arm.runs).toFixed(1).padStart(5)} fps   spread ${(spread(arm.runs) * 100).toFixed(0)}%   ${arm.runs.map((x) => x.toFixed(1)).join(" / ")}`,
+			`${arm.label.padEnd(13)} débit ${median(arm.runs).toFixed(1).padStart(5)} fps   spread ${(spread(arm.runs) * 100).toFixed(0)}%   ${arm.runs.map((x) => x.toFixed(1)).join(" / ")}`,
 		);
 	}
 	const [A, B] = arms;

@@ -213,6 +213,15 @@ export class FrameRenderer {
 	private legacyCompositor = legacyCompositorRequested();
 	/** Shadow filter output, keyed by the geometry it was computed for. */
 	private shadowCache: { key: string; canvas: HTMLCanvasElement } | null = null;
+	/**
+	 * How often the geometry key held, and how often it paid for the filter chain.
+	 *
+	 * The miss rate IS the Step-3 decision input (see rendering-architecture.md
+	 * §13): the cache captures the shadow's cost on still frames, and a moving
+	 * camera must miss by design. Only a count says which case a real timeline is.
+	 */
+	private shadowCacheHits = 0;
+	private shadowCacheMisses = 0;
 	/** Scratch holding videoCanvas's alpha as an opaque black shape. */
 	private shadowSilhouetteCanvas: HTMLCanvasElement | null = null;
 	/** The wallpaper, blurred once. It is a still image — see blurredBackgroundLayer. */
@@ -1223,7 +1232,11 @@ export class FrameRenderer {
 		h: number,
 	): HTMLCanvasElement | null {
 		const key = this.shadowGeometryKey();
-		if (this.shadowCache?.key === key) return this.shadowCache.canvas;
+		if (this.shadowCache?.key === key) {
+			this.shadowCacheHits++;
+			return this.shadowCache.canvas;
+		}
+		this.shadowCacheMisses++;
 
 		if (!this.shadowSilhouetteCanvas) {
 			this.shadowSilhouetteCanvas = document.createElement("canvas");
@@ -1448,6 +1461,11 @@ export class FrameRenderer {
 			throw new Error("Renderer not initialized");
 		}
 		return this.compositeCanvas;
+	}
+
+	/** Shadow cache hits/misses for the frames rendered so far — see the fields. */
+	shadowCacheStats(): { hits: number; misses: number } {
+		return { hits: this.shadowCacheHits, misses: this.shadowCacheMisses };
 	}
 
 	/**

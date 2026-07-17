@@ -412,6 +412,84 @@ Two additional findings the gate did not ask for:
 2. **The Step-2 fixes are confirmed in-run**: legacy 9.8 → shipping 14.6 fps
    (+49 %) on a project whose per-frame webcam compositing they never touched.
 
+---
+
+## Annex B — Step 3: the L7 row, and what it decides (measured 2026-07-17)
+
+Same machine, same harness, `--clip=4` (122 frames), 4 runs per arm plus one
+discarded warm-up, four arms interleaved. **Spread 2–4 %** — the run is valid.
+All arms fenced (Annex A), so the compositor's cost is billed to `fence` and not
+to the encoder. Shadow is isolated by *pairs*: an arm's twin sets
+`shadowIntensity: 0`, because omitting the effect still renders the project's own.
+
+| arm | camera | shadow | wall | ms/frame |
+|---|---|---|---:|---:|
+| webcodecs-fence | still | on | 4144 ms | 34.0 |
+| webcodecs-fence-noshadow | still | off | 3990 ms | 32.7 |
+| webcodecs-fence-zoom | moving | on | 5835 ms | 47.8 |
+| webcodecs-fence-zoom-noshadow | moving | off | 4659 ms | 38.2 |
+
+Shadow cache: **0.8 % miss** with a still camera (121 hits / 1 miss), **54.1 %
+miss** during the zoom (56 / 66) — byte-identical across all four runs, so the
+miss rate is a property of the timeline, not of the machine.
+
+**The arithmetic, per frame:**
+
+| item | cost |
+|---|---:|
+| shadow, cache HOLDING (still camera) | **1.3 ms** |
+| shadow, cache MISSING (moving camera) | **16.7 ms** |
+| everything else the zoom adds (motion-blur filter, transform) | ~10.1 ms |
+| a still frame, all in | 34.0 ms |
+| a moving frame, all in | ~59 ms |
+
+So the Step-2 cache is doing exactly what it was built for — it takes the shadow
+to ~0 on still frames — and it cannot help on a moving one, by construction. On a
+moving frame the shadow alone costs half again as much as the *entire rest* of the
+compositor (16.7 vs 32.7 ms). It is the single largest per-frame item there.
+
+**Two findings the ship order did not anticipate:**
+
+1. **§13's decision rule cannot be answered by fps.** It asks for the share of
+   *zoom* frames; the cost tracks the share of **moving** frames — the eased
+   in/out, not the plateau. A settled zoom holds the cache (that is why 56 of the
+   zoom arm's frames still hit). The expensive case is therefore not "a timeline
+   with zooms" but auto-focus, which pans with the cursor and moves *every* frame
+   of its region. The product question to answer is "how much of a typical
+   timeline has a MOVING camera", and it is the user's to answer, not the bench's.
+2. **Step 4 as specified does not fix this.** §8b lists the compositor's caches as
+   "wallpaper 1× · **shadow per-geometry** · masks per-shape · …" — the same
+   geometry key, hence the same 54 % miss during motion. The unified WGSL
+   compositor only removes this cost if the shadow is *computed* per frame in the
+   shader rather than cached — and §13 explicitly forbids the SDF/`smoothstep`
+   approximation that would make that cheap, because the cascaded falloff has
+   burned this codebase twice. **Unresolved: a shader that reproduces the exact
+   3-pass cascade at 1080p, and its cost.** That, not the fps, is Step 4's real
+   gate.
+
+**Bench corrections this measurement forced** (each was silently wrong before):
+
+- The `zoom` effect injected `depth: "medium"`; `ZOOM_DEPTH_SCALES` keys on 1–6,
+  so the lookup returned `undefined` and **the zoom never ran**. Every previous
+  zoom arm reported a clean number for an effect that did nothing. The injected
+  region is now parsed through `zoomRegionSchema` — the pipeline's own contract.
+- The session's **first export** pays for shader compilation, decoder setup and
+  JIT (9.3 s vs 5.6/6.6/5.8 s for its own repeats) and lands on whichever arm ran
+  first: a 60 % same-arm spread that voided two runs by itself. One discarded
+  warm-up per arm brings the spread to 2–4 %.
+- Effects are now per-arm (`addEffects`), so an effect is A/B'd inside ONE
+  interleaved run. `--effects` alone is one value per session, which turns any
+  effect comparison into a cross-session one — the mistake this bench exists to
+  prevent.
+
+**Reference-project caveat.** `proj_5b3ac6bc`'s first clip declares
+`durationSec: 4.03` but holds ~2.03 s of decodable video (its own zooms, authored
+at 3163 ms, are past the end and never fire — which is why the still arms sit at
+0.8 % miss). The measurement stands on the injected zoom; the stale duration is
+its own bug, unrelated to rendering.
+
+---
+
 **Step-0 note (data loss, §13).** The record's reference project `os_parity`
 (`proj_de6ffaaa…openscreen`) was found corrupted with exactly the §13 signature:
 a complete, valid save (updatedAt 2026-07-16T18:00:26Z) followed by the tail of a

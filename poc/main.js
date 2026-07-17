@@ -389,7 +389,7 @@ async function run(override = {}) {
 
 	// Bake the background. Once, here — not 210 times inside the loop.
 	uniforms.set([OUT.width, OUT.height, 0, 0], 0);
-	uniforms.set([shadowIntensity, bgBlur, 18, 42], 12);
+	uniforms.set([shadowIntensity, bgBlur, 16, 22], 12);
 	device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 	{
 		const enc = device.createCommandEncoder();
@@ -508,7 +508,7 @@ async function run(override = {}) {
 		uniforms.set([OUT.width, OUT.height, t, 28], 0); // stage | time | radius
 		uniforms.set([f.screen.x, f.screen.y, f.screen.w, f.screen.h], 4);
 		uniforms.set([f.webcam.x, f.webcam.y, f.webcam.w, f.webcam.h], 8);
-		uniforms.set([shadowIntensity, bgBlur, 18, 42], 12); // intensity | bgBlur | offsetY | spread
+		uniforms.set([shadowIntensity, bgBlur, 16, 22], 12); // intensity | bgBlur | shadowOffsetY | sigma
 		uniforms.set([f.webcamRadius, 0, camAspect, optimised ? 1 : 0], 16); // radius | - | coverScale | opt
 		uniforms.set([f.screenBlur.x, f.screenBlur.y, f.webcamBlur.x, f.webcamBlur.y], 20); // mb
 		uniforms.set([curX, curY, curSize, curVisible ? 1 : 0], 24); // cursor

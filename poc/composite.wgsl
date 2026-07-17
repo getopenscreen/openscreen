@@ -78,9 +78,9 @@ fn quad(vi : u32, rect : vec4f) -> VsOut {
   return quad(i, u.screen);
 }
 
-/** The shadow's quad: the rect, grown by the spread — its exact reach. */
+/** The shadow's quad: the rect grown by 3σ, the Gaussian's reach. */
 @vertex fn vsScreenShadow(@builtin(vertex_index) i : u32) -> VsOut {
-  let s = u.fx.w + 1.0;
+  let s = u.fx.w * 3.0 + 1.0;
   return quad(i, vec4f(u.screen.xy - vec2f(s), u.screen.zw + vec2f(s * 2.0)) + vec4f(0.0, u.fx.z, 0.0, 0.0));
 }
 
@@ -89,7 +89,7 @@ fn quad(vi : u32, rect : vec4f) -> VsOut {
 }
 
 @vertex fn vsWebcamShadow(@builtin(vertex_index) i : u32) -> VsOut {
-  let s = u.fx.w + 1.0;
+  let s = u.fx.w * 3.0 + 1.0;
   return quad(i, vec4f(u.webcam.xy - vec2f(s), u.webcam.zw + vec2f(s * 2.0)) + vec4f(0.0, u.fx.z, 0.0, 0.0));
 }
 
@@ -167,43 +167,70 @@ fn blurredGradient(uv : vec2f) -> vec3f {
 
 // ---- effect 2: the drop shadow ----------------------------------------------
 //
-// The shape is known analytically — a rounded rect — so the shadow needs no blur
-// pass: the coverage of that box, sampled at a few offsets, IS the shadow. No
-// silhouette texture, no ping-pong, no 18 passes.
+// A REAL Gaussian, computed analytically — not sampled.
 //
-// The quad already bounds it to the rect + spread, so the "outside" case never
-// reaches a fragment. What is left is the inside: every tap lands within `spread`
-// of the pixel, so within the box SHRUNK by spread they all hit, and the answer
-// is `intensity` with no taps at all. That is the box's Minkowski difference with
-// the tap disc — the same number by arithmetic, not an approximation. Only the
-// band around the edge pays the twelve samples.
+// The wrong way (what this replaced): sample the rounded-box SDF at a ring of
+// offsets and average. Few taps band into visible rings, many taps are slow, and
+// neither is a Gaussian — it is a box blur of a hard mask. It looked like stacked
+// translucent rectangles because that is exactly what it was.
+//
+// The right way (Evan Wallace, "Fast Rounded Rectangle Shadows"): the convolution
+// of a 2D Gaussian with a box is separable and each axis is an integral of the
+// Gaussian — which is the error function, erf. So a plain box shadow is a closed
+// form, no samples at all: `(erf(right) - erf(left)) * (erf(top) - erf(bottom))`.
+// Rounded corners break separability only near the corner, so the x extent is
+// integrated against the Gaussian in y over a handful of steps — the exact
+// profile, smoothly weighted, no banding. O(1) per pixel and beautiful.
+
+const SQRT_2PI = 2.5066282746310002;
+const INV_SQRT_2 = 0.7071067811865476;
+
+fn gauss1(x : f32, sigma : f32) -> f32 {
+  return exp(-(x * x) / (2.0 * sigma * sigma)) / (SQRT_2PI * sigma);
+}
+
+/** erf, componentwise (Abramowitz & Stegun 7.1.27). Max error ~5e-4. */
+fn erf2(x : vec2f) -> vec2f {
+  let s = sign(x);
+  let a = abs(x);
+  var r = 1.0 + (0.278393 + (0.230389 + 0.078108 * (a * a)) * a) * a;
+  r = r * r;
+  return s - s / (r * r);
+}
+
+/** Fraction of a Gaussian-blurred box covering x, at height y, with rounded corners. */
+fn shadowRowX(x : f32, y : f32, sigma : f32, corner : f32, half : vec2f) -> f32 {
+  // How far the rounded corner pulls the edge in at this height.
+  let d = min(half.y - corner - abs(y), 0.0);
+  let curved = half.x - corner + sqrt(max(0.0, corner * corner - d * d));
+  let integral = 0.5 + 0.5 * erf2((x + vec2f(-curved, curved)) * (INV_SQRT_2 / sigma));
+  return integral.y - integral.x;
+}
 
 fn shadowAt(px : vec2f, rect : vec4f, radius : f32, intensity : f32) -> f32 {
   if (intensity <= 0.0) {
     return 0.0;
   }
-  let centre = rect.xy + rect.zw * 0.5 + vec2f(0.0, u.fx.z);
+  let sigma = max(u.fx.w, 0.5);
   let half = rect.zw * 0.5;
-  let spread = u.fx.w;
-  let p = px - centre;
+  let corner = min(radius, min(half.x, half.y));
+  // Offset the shadow down by u.fx.z, like a light from above.
+  let p = px - (rect.xy + half + vec2f(0.0, u.fx.z));
 
-  if (u.b.w > 0.5) {
-    if (sdRoundBox(p, max(half - vec2f(spread), vec2f(0.0)), max(radius - spread, 0.0)) < -0.5) {
-      return intensity;
-    }
+  // Integrate the x-profile against the Gaussian in y, over ±3σ clamped to the
+  // box — four steps is plenty because each is analytic in x.
+  let low = p.y - half.y;
+  let high = p.y + half.y;
+  let start = clamp(-3.0 * sigma, low, high);
+  let end = clamp(3.0 * sigma, low, high);
+  let step = (end - start) / 4.0;
+  var y = start + step * 0.5;
+  var value = 0.0;
+  for (var i = 0; i < 4; i = i + 1) {
+    value = value + shadowRowX(p.x, p.y - y, sigma, corner, half) * gauss1(y, sigma) * step;
+    y = y + step;
   }
-
-  var acc = 0.0;
-  let taps = 12;
-  let golden = 2.39996;
-  for (var i = 0; i < taps; i = i + 1) {
-    let fi = f32(i);
-    let r = sqrt((fi + 0.5) / f32(taps)) * spread;
-    let a = fi * golden;
-    let o = vec2f(cos(a), sin(a)) * r;
-    acc = acc + cover(sdRoundBox(p + o, half, radius));
-  }
-  return (acc / f32(taps)) * intensity;
+  return clamp(value, 0.0, 1.0) * intensity;
 }
 
 @fragment fn fsScreenShadow(in : VsOut) -> @location(0) vec4f {

@@ -121,6 +121,32 @@ function legacyCompositorRequested(): boolean {
 }
 
 /**
+ * Diagnostic: run the shadow's cache-miss path but SKIP the filter chain.
+ *
+ * A cache miss costs 16.7 ms/frame (Annex B), and that number is two different
+ * things stacked: three chained gaussians, and the full-frame Canvas2D plumbing
+ * that feeds them (a silhouette copy, a source-in fill, a filtered blit — 2 Mpx
+ * each). They do not have the same fix. A shader only helps if the gaussians are
+ * the cost; if it is the plumbing, the fix is to stop touching the whole frame.
+ *
+ * Timing the ops individually would answer nothing — Canvas2D is as lazy as the
+ * GPU, so a timer around a drawImage measures submission and bills the work to
+ * whatever syncs next (§7.4). Hence a flag and an arm PAIR instead: same path,
+ * one filter, one none, both fenced.
+ *
+ * The output is wrong on purpose (no shadow is drawn). Diagnostic only.
+ *
+ *   localStorage.setItem("openscreen.shadowNoFilter", "1")
+ */
+function shadowFilterDisabled(): boolean {
+	try {
+		return localStorage.getItem("openscreen.shadowNoFilter") === "1";
+	} catch {
+		return false;
+	}
+}
+
+/**
  * The recording's drop shadow, as a CSS filter chain.
  *
  * Three chained shadows, each blurring the alpha of the PREVIOUS stage's output
@@ -211,6 +237,8 @@ export class FrameRenderer {
 	private maskShape: { width: number; height: number; radius: number } | null = null;
 	/** Bench-only: undo the compositor fixes so they can be measured. */
 	private legacyCompositor = legacyCompositorRequested();
+	/** Bench-only: price the filter chain apart from the plumbing feeding it. */
+	private shadowNoFilter = shadowFilterDisabled();
 	/** Shadow filter output, keyed by the geometry it was computed for. */
 	private shadowCache: { key: string; canvas: HTMLCanvasElement } | null = null;
 	/**
@@ -1262,7 +1290,8 @@ export class FrameRenderer {
 		silCtx.globalCompositeOperation = "source-over";
 
 		outCtx.globalCompositeOperation = "copy";
-		outCtx.filter = shadowFilterChain(this.config.shadowIntensity);
+		// Diagnostic arm: everything but the gaussians, so the pair prices them.
+		if (!this.shadowNoFilter) outCtx.filter = shadowFilterChain(this.config.shadowIntensity);
 		outCtx.drawImage(this.shadowSilhouetteCanvas, 0, 0, w, h);
 		outCtx.filter = "none";
 		outCtx.globalCompositeOperation = "source-over";

@@ -34,6 +34,8 @@ export interface BenchArm {
 	legacyCompositor?: boolean;
 	/** Gate G0: sync the GPU after compositing, in a `fence` stage of its own. */
 	gpuFence?: boolean;
+	/** Diagnostic: shadow path minus the gaussians. Renders no shadow. */
+	shadowNoFilter?: boolean;
 	/**
 	 * Effects this arm adds to --effects, so an effect can be A/B'd INSIDE one
 	 * interleaved run.
@@ -297,6 +299,18 @@ const ARMS: Record<string, BenchArm> = {
 		gpuFence: true,
 		addEffects: ["zoom", "noShadow"],
 	},
+	// Splits the 16.7 ms cache miss in two, which is what decides the SHAPE of the
+	// fix. Against `webcodecs-fence-zoom` it prices the three gaussians; against
+	// `webcodecs-fence-zoom-noshadow` it prices the full-frame plumbing that feeds
+	// them. A shader is the answer to the first; touching less of the frame is the
+	// answer to the second. Renders no shadow — measurement only, never shipped.
+	"webcodecs-fence-zoom-nofilter": {
+		nativeEncode: false,
+		readFrequently: false,
+		gpuFence: true,
+		shadowNoFilter: true,
+		addEffects: ["zoom"],
+	},
 	// These two WRITE FILES, which is what makes them the parity gate: encode the
 	// same timeline with the old and new compositor through the same encoder at
 	// the same bitrate, then diff the results (SSIM). Unit tests never look at a
@@ -311,6 +325,7 @@ function applyArm(arm: BenchArm): void {
 	localStorage.setItem("openscreen.compositeOnly", arm.compositeOnly ? "1" : "0");
 	localStorage.setItem("openscreen.legacyCompositor", arm.legacyCompositor ? "1" : "0");
 	localStorage.setItem("openscreen.gpuFence", arm.gpuFence ? "1" : "0");
+	localStorage.setItem("openscreen.shadowNoFilter", arm.shadowNoFilter ? "1" : "0");
 }
 
 /**

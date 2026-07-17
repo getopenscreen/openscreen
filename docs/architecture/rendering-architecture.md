@@ -455,8 +455,13 @@ compositor (16.7 vs 32.7 ms). It is the single largest per-frame item there.
    in/out, not the plateau. A settled zoom holds the cache (that is why 56 of the
    zoom arm's frames still hit). The expensive case is therefore not "a timeline
    with zooms" but auto-focus, which pans with the cursor and moves *every* frame
-   of its region. The product question to answer is "how much of a typical
-   timeline has a MOVING camera", and it is the user's to answer, not the bench's.
+   of its region. The product question — "how much of a typical timeline has a
+   MOVING camera" — is the user's, not the bench's.
+   **Answered, 2026-07-17 (product owner): a moving camera is the norm.** Screen
+   presentations carry zooms by nature; the webcam is commonly set to resize
+   reactively *during* those zooms; and Full Camera animates the webcam across the
+   whole stage. That is §13's "≳ 50 %" branch — **Step 4 is warranted**, subject
+   to B.1 below.
 2. **Step 4 as specified does not fix this.** §8b lists the compositor's caches as
    "wallpaper 1× · **shadow per-geometry** · masks per-shape · …" — the same
    geometry key, hence the same 54 % miss during motion. The unified WGSL
@@ -466,6 +471,56 @@ compositor (16.7 vs 32.7 ms). It is the single largest per-frame item there.
    burned this codebase twice. **Unresolved: a shader that reproduces the exact
    3-pass cascade at 1080p, and its cost.** That, not the fps, is Step 4's real
    gate.
+
+### B.1 — What the 16.7 ms actually is, and therefore what fixes it
+
+A cache miss is two stacked things: the three chained gaussians, and the
+full-frame Canvas2D plumbing feeding them (silhouette copy, `source-in` fill,
+filtered blit — 2 Mpx each). They have different fixes, so they were priced apart
+with a third arm that runs the whole miss path with the filter chain switched off
+(`openscreen.shadowNoFilter` — renders no shadow; diagnostic only). Timing the
+ops individually would have answered nothing: Canvas2D is as lazy as the GPU, so
+a timer around a `drawImage` measures submission and bills the work to whatever
+syncs next (§7.4). Hence an arm pair, both fenced.
+
+`fence` totals, 122 frames, 66 of them missing the cache — two independent runs:
+
+| arm | run A | run B |
+|---|---:|---:|
+| zoom + shadow | 3668 ms | 4086 ms |
+| zoom + shadow, no gaussians | 2734 ms | 2964 ms |
+| zoom, no shadow at all | 2513 ms | 2730 ms |
+| **⇒ gaussians** | **934 ms** | **1122 ms** |
+| **⇒ plumbing** | **221 ms** | **234 ms** |
+
+**The gaussian chain is ~81 % of the miss** (~14.2 ms per moving frame, against
+~3.3 ms of plumbing). Run B is VOID on its own spread gate (31 %; the machine had
+been benching continuously for ten minutes and was drifting) — but it is reported
+because the two runs agree on the *ratio* (4.2 : 1 and 4.8 : 1) while disagreeing
+on the absolute, which is exactly what interleaved arms under drift should do.
+A 4 : 1 ratio does not turn over inside that noise.
+
+**So: touching less of the frame recovers ~3 ms; the fix has to be the filter.**
+Which is where §13's prohibition needs a distinction it does not currently make:
+
+> **The ban is on a different falloff, not on a different implementation.** §13
+> forbids replacing the shadow with an SDF/`smoothstep` — rightly: that is an
+> *approximation of a different shape*, and it has burned this codebase twice.
+> But CSS `drop-shadow` is not a black box. It is `feGaussianBlur` on SourceAlpha,
+> and the SVG filter spec **defines** that blur, for our radii, as three
+> successive box blurs of a specified width. Reimplementing that cascade in a
+> shader is the same algorithm on a different device — not an approximation.
+> Box blurs are separable and O(1) per pixel; this is the cheap case on a GPU.
+>
+> That claim is falsifiable and must be falsified before it is built: the spike is
+> a GPU pass rendering the same silhouette, pixel-diffed against the Canvas2D
+> output. If they do not match, this paragraph is wrong. Skia's real path may not
+> follow the spec's letter.
+
+**Consequence for the ship order.** The spike stands alone — it replaces
+`cachedShadowLayer`'s filter with a GPU pass and needs no architecture change, so
+it pays off inside Electron today *and* is exactly the shadow §8b's compositor
+needs. It should be measured before Step 4 is committed to, not during it.
 
 **Bench corrections this measurement forced** (each was silently wrong before):
 

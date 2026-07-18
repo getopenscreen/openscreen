@@ -1214,7 +1214,9 @@ export function VideoEffectsPane() {
 	const ROUNDNESS_MAX = 64;
 	useEffect(() => {
 		const syncToNative = () => {
-			if (!isNativeCompositorActive()) return;
+			// pas de garde `isNativeCompositorActive` : setNativeParam mémorise les valeurs
+			// même sans vue active, et le store les rejoue quand une vue s'active (fix du
+			// démarrage sur les défauts, indépendant de l'ordre de montage).
 			setNativeParam("backgroundBlur", settings.showBlur);
 			setNativeParam("motionBlur", settings.motionBlurAmount);
 			setNativeParam("shadow", settings.shadowIntensity);

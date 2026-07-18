@@ -524,36 +524,64 @@ export function LaunchWindow() {
 		setHudViewportCompensation(next);
 	}, []);
 
+	const hudDragPointerIdRef = useRef<number | null>(null);
+	const hudDragViewportSettleTimerRef = useRef<number | undefined>(undefined);
+	const cancelHudDragViewportSettle = useCallback(() => {
+		if (hudDragViewportSettleTimerRef.current !== undefined) {
+			window.clearTimeout(hudDragViewportSettleTimerRef.current);
+			hudDragViewportSettleTimerRef.current = undefined;
+		}
+	}, []);
+	const scheduleHudDragViewportSettle = useCallback(() => {
+		cancelHudDragViewportSettle();
+		// Transparent HWND resize notifications may arrive on the next task after
+		// pointer-up. Keep the immutable drag anchor briefly so that final rounding
+		// can still be compensated, then release it before unrelated content resizes.
+		hudDragViewportSettleTimerRef.current = window.setTimeout(() => {
+			updateHudDragViewportCompensation();
+			hudDragViewportAnchorRef.current = undefined;
+			hudDragViewportSettleTimerRef.current = undefined;
+		}, 250);
+	}, [cancelHudDragViewportSettle, updateHudDragViewportCompensation]);
+	const handleWindowsHudViewportResize = useCallback(() => {
+		updateHudDragViewportCompensation();
+		if (hudDragPointerIdRef.current === null && hudDragViewportAnchorRef.current) {
+			// Release only after a quiet period. Windows can publish several rounded
+			// viewport sizes while a mixed-DPI move settles.
+			scheduleHudDragViewportSettle();
+		}
+	}, [scheduleHudDragViewportSettle, updateHudDragViewportCompensation]);
+
 	useEffect(() => {
 		if (!isWindowsHud) return;
-		window.addEventListener("resize", updateHudDragViewportCompensation);
-		return () => window.removeEventListener("resize", updateHudDragViewportCompensation);
-	}, [isWindowsHud, updateHudDragViewportCompensation]);
+		window.addEventListener("resize", handleWindowsHudViewportResize);
+		return () => window.removeEventListener("resize", handleWindowsHudViewportResize);
+	}, [handleWindowsHudViewportResize, isWindowsHud]);
 
-	const hudDragPointerIdRef = useRef<number | null>(null);
 	const endWindowsHudDrag = useCallback(
 		(pointerId: number, target?: HTMLDivElement, screenX?: number, screenY?: number) => {
 			if (hudDragPointerIdRef.current !== pointerId) return;
 			updateHudDragViewportCompensation();
 			hudDragPointerIdRef.current = null;
-			hudDragViewportAnchorRef.current = undefined;
 			if (target?.hasPointerCapture?.(pointerId)) {
 				target.releasePointerCapture(pointerId);
 			}
 			window.electronAPI?.endHudOverlayDrag?.(screenX, screenY);
+			scheduleHudDragViewportSettle();
 		},
-		[updateHudDragViewportCompensation],
+		[scheduleHudDragViewportSettle, updateHudDragViewportCompensation],
 	);
 
 	useEffect(
 		() => () => {
+			cancelHudDragViewportSettle();
 			if (hudDragPointerIdRef.current !== null) {
-				hudDragPointerIdRef.current = null;
-				hudDragViewportAnchorRef.current = undefined;
 				window.electronAPI?.endHudOverlayDrag?.();
 			}
+			hudDragPointerIdRef.current = null;
+			hudDragViewportAnchorRef.current = undefined;
 		},
-		[],
+		[cancelHudDragViewportSettle],
 	);
 
 	const defaultSourceName = t("sourceSelector.defaultSourceName");
@@ -966,6 +994,8 @@ export function LaunchWindow() {
 					onPointerDown={(event) => {
 						if (!isWindowsHud || event.button !== 0) return;
 						event.preventDefault();
+						updateHudDragViewportCompensation();
+						cancelHudDragViewportSettle();
 						hudDragPointerIdRef.current = event.pointerId;
 						hudDragViewportAnchorRef.current = {
 							viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -983,12 +1013,8 @@ export function LaunchWindow() {
 					onPointerUp={(event) =>
 						endWindowsHudDrag(event.pointerId, event.currentTarget, event.screenX, event.screenY)
 					}
-					onPointerCancel={(event) =>
-						endWindowsHudDrag(event.pointerId, event.currentTarget, event.screenX, event.screenY)
-					}
-					onLostPointerCapture={(event) =>
-						endWindowsHudDrag(event.pointerId, undefined, event.screenX, event.screenY)
-					}
+					onPointerCancel={(event) => endWindowsHudDrag(event.pointerId, event.currentTarget)}
+					onLostPointerCapture={(event) => endWindowsHudDrag(event.pointerId)}
 				>
 					{getIcon("drag", "text-white/30")}
 				</div>

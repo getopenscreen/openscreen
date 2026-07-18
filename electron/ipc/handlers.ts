@@ -38,6 +38,10 @@ import type {
 import { mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
 import { RECORDINGS_DIR } from "../main";
+import {
+	type CursorRecordingTarget,
+	resolveCursorRecordingTarget,
+} from "../native-bridge/cursor/recording/cursorRecordingTarget";
 import { createCursorRecordingSession } from "../native-bridge/cursor/recording/factory";
 import { requestMacCursorAccessibilityAccess } from "../native-bridge/cursor/recording/macNativeCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
@@ -792,20 +796,25 @@ async function resolveDirectShowWebcamClsid(deviceName?: string) {
 	return best.clsid;
 }
 
-async function startCursorRecording(recordingId?: number) {
+async function startCursorRecording(recordingId?: number, explicitTarget?: CursorRecordingTarget) {
 	if (cursorRecordingSession) {
 		pendingCursorRecordingData = await cursorRecordingSession.stop();
 		cursorRecordingSession = null;
 	}
 
 	pendingCursorRecordingData = null;
-	cursorRecordingSession = createCursorRecordingSession({
+	const target = resolveCursorRecordingTarget(explicitTarget, {
 		displayId: getSelectedDisplay()?.id ?? null,
 		getDisplayBounds: getSelectedSourceBounds,
+		sourceId: getSelectedSourceId(),
+	});
+	cursorRecordingSession = createCursorRecordingSession({
+		displayId: target.displayId,
+		getDisplayBounds: target.getDisplayBounds,
 		maxSamples: MAX_CURSOR_SAMPLES,
 		platform: process.platform,
 		sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
-		sourceId: getSelectedSourceId(),
+		sourceId: target.sourceId,
 		startTimeMs:
 			typeof recordingId === "number" && Number.isFinite(recordingId) ? recordingId : undefined,
 	});
@@ -1733,7 +1742,11 @@ export function registerIpcHandlers(
 				const cursorStartTimeMs = Date.now();
 				if (cursorCaptureMode === "editable-overlay") {
 					nativeWindowsCursorRecordingStartMs = cursorStartTimeMs;
-					await startCursorRecording(cursorStartTimeMs);
+					await startCursorRecording(cursorStartTimeMs, {
+						displayId: Number.isFinite(displayId) ? displayId : null,
+						getDisplayBounds: () => bounds,
+						sourceId: request.source.sourceId,
+					});
 					console.info("[native-wgc] cursor sampler ready", {
 						cursorStartTimeMs,
 						warmupMs: Date.now() - cursorStartTimeMs,

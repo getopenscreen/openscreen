@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, ipcMain, screen } from "electron";
+import { getHudOverlayResizedBounds } from "./hudOverlayBounds";
 import {
 	getHudOverlayDragPosition,
 	type HudOverlayDragPoint,
@@ -30,11 +31,11 @@ let hudOverlayRendererRequestedMouseIgnore = true;
 let hudOverlayMouseEventsIgnored: boolean | undefined;
 let hudOverlayMousePoll: NodeJS.Timeout | null = null;
 let hudOverlayDragTimeout: NodeJS.Timeout | null = null;
+const HUD_OVERLAY_DRAG_INACTIVITY_TIMEOUT_MS = 30_000;
 let hudOverlayDrag:
 	| {
 			windowId: number;
 			webContentsId: number;
-			moved: boolean;
 			startWindow: HudOverlayDragPoint;
 			startCursor: HudOverlayDragPoint;
 	  }
@@ -105,6 +106,14 @@ function stopHudOverlayDrag(): void {
 	hudOverlayDrag = undefined;
 }
 
+function armHudOverlayDragTimeout(): void {
+	if (hudOverlayDragTimeout) {
+		clearTimeout(hudOverlayDragTimeout);
+	}
+	hudOverlayDragTimeout = setTimeout(stopHudOverlayDrag, HUD_OVERLAY_DRAG_INACTIVITY_TIMEOUT_MS);
+	hudOverlayDragTimeout.unref();
+}
+
 function updateHudOverlayDragPosition(currentCursor: HudOverlayDragPoint): void {
 	if (
 		!hudOverlayDrag ||
@@ -151,13 +160,11 @@ ipcMain.on("hud-overlay-drag-start", (event, screenX: unknown, screenY: unknown)
 	hudOverlayDrag = {
 		windowId: hudOverlayWindow.id,
 		webContentsId: event.sender.id,
-		moved: false,
 		startWindow: { x: bounds.x, y: bounds.y },
 		startCursor: parseHudOverlayDragPoint(screenX, screenY) ?? screen.getCursorScreenPoint(),
 	};
-	// A lost pointer-up must not leave a drag session active indefinitely.
-	hudOverlayDragTimeout = setTimeout(stopHudOverlayDrag, 30_000);
-	hudOverlayDragTimeout.unref();
+	// A lost pointer-up must not leave an inactive drag session alive indefinitely.
+	armHudOverlayDragTimeout();
 });
 
 ipcMain.on("hud-overlay-drag-move", (event, screenX: unknown, screenY: unknown) => {
@@ -174,16 +181,17 @@ ipcMain.on("hud-overlay-drag-move", (event, screenX: unknown, screenY: unknown) 
 
 	const currentCursor = parseHudOverlayDragPoint(screenX, screenY);
 	if (!currentCursor) return;
-	hudOverlayDrag.moved = true;
 	updateHudOverlayDragPosition(currentCursor);
+	armHudOverlayDragTimeout();
 });
 
 ipcMain.on("hud-overlay-drag-end", (event, screenX: unknown, screenY: unknown) => {
 	if (hudOverlayDrag?.webContentsId === event.sender.id) {
-		if (!hudOverlayDrag.moved) {
-			const finalCursor = parseHudOverlayDragPoint(screenX, screenY);
-			if (finalCursor) updateHudOverlayDragPosition(finalCursor);
-		}
+		// Pointer-up may be the only event containing the final few pixels. For
+		// cancel/lost-capture paths the renderer omits coordinates, so use the
+		// authoritative Electron cursor point instead of accepting a synthetic 0,0.
+		const finalCursor = parseHudOverlayDragPoint(screenX, screenY) ?? screen.getCursorScreenPoint();
+		updateHudOverlayDragPosition(finalCursor);
 		stopHudOverlayDrag();
 	}
 });
@@ -206,22 +214,18 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number) => {
 	// Clamp to the work area of the display the HUD sits on; on a short screen the
 	// vertical layout can exceed the display, where the bar's own overflow scroll takes over.
 	const { workArea } = screen.getDisplayMatching(bounds);
-	const nextWidth = Math.min(workArea.width, Math.max(1, Math.round(width)));
-	const nextHeight = Math.min(workArea.height, Math.max(1, Math.round(height)));
+	const nextBounds = getHudOverlayResizedBounds(bounds, workArea, width, height);
 
-	if (bounds.width === nextWidth && bounds.height === nextHeight) {
+	if (
+		bounds.x === nextBounds.x &&
+		bounds.y === nextBounds.y &&
+		bounds.width === nextBounds.width &&
+		bounds.height === nextBounds.height
+	) {
 		return;
 	}
 
-	const centerX = bounds.x + bounds.width / 2;
-	const bottomY = bounds.y + bounds.height;
-
-	hudOverlayWindow.setBounds({
-		x: Math.round(centerX - nextWidth / 2),
-		y: Math.round(bottomY - nextHeight),
-		width: nextWidth,
-		height: nextHeight,
-	});
+	hudOverlayWindow.setBounds(nextBounds);
 });
 
 /**

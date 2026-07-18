@@ -389,6 +389,7 @@ describe("LaunchWindow HUD dragging", () => {
 
 	afterEach(() => {
 		cleanup();
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
 	});
@@ -412,6 +413,22 @@ describe("LaunchWindow HUD dragging", () => {
 		expect(window.electronAPI.beginHudOverlayDrag).toHaveBeenCalledWith(100, 200);
 		expect(window.electronAPI.updateHudOverlayDrag).toHaveBeenCalledWith(110, 210);
 		expect(window.electronAPI.endHudOverlayDrag).toHaveBeenCalledWith(120, 220);
+	});
+
+	it("lets the main process resolve the OS cursor point after pointer cancellation", () => {
+		renderLaunchWindow();
+		const handle = screen.getByTestId("launch-drag-handle");
+
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 11, screenX: 100, screenY: 200 });
+		fireEvent.pointerCancel(handle, { pointerId: 11, screenX: 0, screenY: 0 });
+
+		expect(window.electronAPI.endHudOverlayDrag).toHaveBeenCalledWith(undefined, undefined);
 	});
 
 	it("keeps the visible HUD anchored when Windows enlarges its viewport at 125%", async () => {
@@ -449,6 +466,77 @@ describe("LaunchWindow HUD dragging", () => {
 			expect(hudBar.style.left).toBe("calc(50% - 4px)");
 			expect(hudBar.style.bottom).toBe("25px");
 		});
+	});
+
+	it("applies a fractional-DPI viewport resize delivered after pointer-up", async () => {
+		let innerWidth = 588;
+		let innerHeight = 95;
+		vi.spyOn(window, "innerWidth", "get").mockImplementation(() => innerWidth);
+		vi.spyOn(window, "innerHeight", "get").mockImplementation(() => innerHeight);
+		const { container } = renderLaunchWindow();
+		const handle = screen.getByTestId("launch-drag-handle");
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 9, screenX: 100, screenY: 200 });
+		fireEvent.pointerUp(handle, { button: 0, pointerId: 9, screenX: 120, screenY: 220 });
+
+		// Chromium can publish the transparent-HWND size change on the next task,
+		// after pointer-up has already completed.
+		innerWidth = 594;
+		innerHeight = 99;
+		fireEvent.resize(window);
+
+		await waitFor(() => {
+			expect(hudBar.style.left).toBe("calc(50% - 3px)");
+			expect(hudBar.style.bottom).toBe("24px");
+		});
+	});
+
+	it("waits for successive mixed-DPI viewport resizes to settle", () => {
+		vi.useFakeTimers();
+		let innerWidth = 588;
+		let innerHeight = 95;
+		vi.spyOn(window, "innerWidth", "get").mockImplementation(() => innerWidth);
+		vi.spyOn(window, "innerHeight", "get").mockImplementation(() => innerHeight);
+		const { container } = renderLaunchWindow();
+		const handle = screen.getByTestId("launch-drag-handle");
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 12, screenX: 100, screenY: 200 });
+		fireEvent.pointerUp(handle, { button: 0, pointerId: 12, screenX: 120, screenY: 220 });
+
+		innerWidth = 594;
+		innerHeight = 99;
+		fireEvent.resize(window);
+		expect(hudBar.style.left).toBe("calc(50% - 3px)");
+		expect(hudBar.style.bottom).toBe("24px");
+
+		act(() => vi.advanceTimersByTime(200));
+		innerWidth = 596;
+		innerHeight = 100;
+		fireEvent.resize(window);
+		expect(hudBar.style.left).toBe("calc(50% - 4px)");
+		expect(hudBar.style.bottom).toBe("25px");
+
+		act(() => vi.advanceTimersByTime(251));
+		innerWidth = 600;
+		innerHeight = 104;
+		fireEvent.resize(window);
+		// The quiet period expired, so an unrelated later content resize is ignored.
+		expect(hudBar.style.left).toBe("calc(50% - 4px)");
+		expect(hudBar.style.bottom).toBe("25px");
 	});
 
 	it("keeps Electron's native drag region on non-Windows platforms", async () => {

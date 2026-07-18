@@ -45,6 +45,27 @@ describe("CursorMotionEditorOverlay", () => {
 		expect(screen.getAllByLabelText("Cursor stop anchor")).toHaveLength(2);
 	});
 
+	it("shows the recorded path without an editable curve handle", () => {
+		render(
+			<CursorMotionEditorOverlay
+				width={800}
+				height={450}
+				trajectory={[
+					{ x: 80, y: 225 },
+					{ x: 400, y: 160 },
+					{ x: 720, y: 225 },
+				]}
+				controlPoint={{ x: 400, y: 80 }}
+				editable={false}
+				onControlPointChange={vi.fn()}
+				onControlPointCommit={vi.fn()}
+			/>,
+		);
+
+		expect(screen.queryByLabelText("Motion curve handle")).toBeNull();
+		expect(screen.getByLabelText("Cursor motion path editor")).not.toBeNull();
+	});
+
 	it("previews pointer movement and commits once when released", () => {
 		const onChange = vi.fn();
 		const onCommit = vi.fn();

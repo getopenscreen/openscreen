@@ -1,4 +1,11 @@
-export const CURSOR_MOTION_PRESETS = ["straight", "arc", "wave", "loop", "overshoot"] as const;
+export const CURSOR_MOTION_PRESETS = [
+	"recorded",
+	"straight",
+	"arc",
+	"wave",
+	"loop",
+	"overshoot",
+] as const;
 
 export type CursorMotionPreset = (typeof CURSOR_MOTION_PRESETS)[number];
 
@@ -59,7 +66,7 @@ const MIN_CYCLES = 1;
 const MAX_CYCLES = 6;
 export const CURSOR_MOTION_SPEED_MIN = 1;
 export const CURSOR_MOTION_SPEED_MAX = 4;
-export const DEFAULT_CURSOR_MOTION_SPEED = 2;
+export const DEFAULT_CURSOR_MOTION_SPEED = 1;
 export const CURSOR_MOTION_SPEED_PRESETS = [1, 1.5, 2, 3, 4] as const;
 const REST_MIN_DURATION_MS = 300;
 const REST_MAX_DIAMETER = 0.009;
@@ -97,8 +104,10 @@ export function clampCursorMotionSpeed(speed: number | null | undefined) {
 export function applyCursorMotionSpeed(progress: number, speed: number | null | undefined) {
 	const t = clamp(progress, 0, 1);
 	const multiplier = clampCursorMotionSpeed(speed);
-	const motionStart = 1 - 1 / multiplier;
-	return clamp((t - motionStart) * multiplier, 0, 1);
+	// Higher speeds advance immediately and settle near the destination sooner.
+	// Do not create a leading frozen span: it made the cursor look broken and
+	// hid most short moves at the default 2x setting.
+	return clamp(1 - (1 - t) ** multiplier, 0, 1);
 }
 
 export function isCursorMotionPreset(value: unknown): value is CursorMotionPreset {
@@ -535,6 +544,7 @@ export function sampleCursorMotionPath(
 
 	const region = findCursorMotionRegionAtTime(regions, timeMs);
 	if (!region) return current;
+	if (region.preset === "recorded") return current;
 
 	const start = region.startPoint ?? path?.sampleAt(region.startMs) ?? null;
 	const end = region.endPoint ?? path?.sampleAt(region.endMs) ?? null;
@@ -553,6 +563,12 @@ export function buildCursorMotionTrajectory(
 	if (!start || !end) return [];
 
 	const count = clamp(Math.round(sampleCount), 2, 240);
+	if (region.preset === "recorded") {
+		return Array.from({ length: count }, (_, index) => {
+			const progress = index / (count - 1);
+			return path?.sampleAt(region.startMs + (region.endMs - region.startMs) * progress) ?? null;
+		}).filter((point): point is CursorMotionPoint => point !== null);
+	}
 	return Array.from({ length: count }, (_, index) => {
 		const progress = index / (count - 1);
 		return sampleCursorMotionRegion(

@@ -401,6 +401,7 @@ const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
 ];
 
 const CURSOR_MOTION_PREVIEW_PATHS: Record<CursorMotionPreset, string> = {
+	recorded: "M4 18 C12 8 18 21 27 11 S38 4 44 9",
 	straight: "M4 18 L44 6",
 	arc: "M4 18 Q24 1 44 18",
 	wave: "M4 13 C10 2 16 2 22 13 S34 24 44 13",
@@ -422,7 +423,7 @@ function CursorMotionPresetPreview({ preset }: { preset: CursorMotionPreset }) {
 			<circle cx="4" cy="18" r="2.4" fill="currentColor" />
 			<circle
 				cx="44"
-				cy={preset === "straight" ? 6 : preset === "wave" ? 13 : 18}
+				cy={preset === "straight" ? 6 : preset === "wave" ? 13 : preset === "recorded" ? 9 : 18}
 				r="2.4"
 				fill="currentColor"
 			/>
@@ -1338,51 +1339,53 @@ export function SettingsPanel({
 								</div>
 							</div>
 
-							<div className="space-y-2">
-								<div className="flex items-center justify-between text-[11px]">
-									<span className="flex items-center gap-1.5 font-medium text-slate-400">
-										<Gauge className="h-3.5 w-3.5 text-[#a78bfa]" />
-										{t("cursorMotion.speed")}
-									</span>
-									<span className="font-semibold tabular-nums text-[#a78bfa]">
-										{selectedCursorMotionRegion.speed.toFixed(1)}×
-									</span>
+							{selectedCursorMotionRegion.preset !== "recorded" && (
+								<div className="space-y-2">
+									<div className="flex items-center justify-between text-[11px]">
+										<span className="flex items-center gap-1.5 font-medium text-slate-400">
+											<Gauge className="h-3.5 w-3.5 text-[#a78bfa]" />
+											{t("cursorMotion.speed")}
+										</span>
+										<span className="font-semibold tabular-nums text-[#a78bfa]">
+											{selectedCursorMotionRegion.speed.toFixed(1)}×
+										</span>
+									</div>
+									<div className="grid grid-cols-5 gap-1">
+										{CURSOR_MOTION_SPEED_PRESETS.map((speed) => (
+											<Button
+												key={speed}
+												type="button"
+												onClick={() => onCursorMotionSpeedChange?.(speed, true)}
+												className={cn(
+													"h-7 rounded-md border px-0 text-[10px] font-semibold tabular-nums transition-all",
+													selectedCursorMotionRegion.speed === speed
+														? "border-[#a78bfa]/70 bg-[#8b5cf6]/25 text-[#ddd6fe]"
+														: "border-white/[0.06] bg-white/[0.035] text-slate-500 hover:border-white/15 hover:text-slate-200",
+												)}
+											>
+												{speed}×
+											</Button>
+										))}
+									</div>
+									<SliderPrimitive.Root
+										min={CURSOR_MOTION_SPEED_MIN}
+										max={CURSOR_MOTION_SPEED_MAX}
+										step={0.1}
+										value={[selectedCursorMotionRegion.speed]}
+										onValueChange={(values) => onCursorMotionSpeedChange?.(values[0], false)}
+										onValueCommit={(values) => onCursorMotionSpeedChange?.(values[0], true)}
+										className="relative flex w-full touch-none select-none items-center py-1"
+									>
+										<SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full border border-white/10 bg-white/5">
+											<SliderPrimitive.Range className="absolute h-full bg-[#8b5cf6]" />
+										</SliderPrimitive.Track>
+										<SliderPrimitive.Thumb className="block h-3.5 w-3.5 cursor-grab rounded-full border-2 border-[#a78bfa] bg-[#8b5cf6] shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/50 active:cursor-grabbing" />
+									</SliderPrimitive.Root>
+									<p className="text-[10px] leading-snug text-slate-500">
+										{t("cursorMotion.speedHint")}
+									</p>
 								</div>
-								<div className="grid grid-cols-5 gap-1">
-									{CURSOR_MOTION_SPEED_PRESETS.map((speed) => (
-										<Button
-											key={speed}
-											type="button"
-											onClick={() => onCursorMotionSpeedChange?.(speed, true)}
-											className={cn(
-												"h-7 rounded-md border px-0 text-[10px] font-semibold tabular-nums transition-all",
-												selectedCursorMotionRegion.speed === speed
-													? "border-[#a78bfa]/70 bg-[#8b5cf6]/25 text-[#ddd6fe]"
-													: "border-white/[0.06] bg-white/[0.035] text-slate-500 hover:border-white/15 hover:text-slate-200",
-											)}
-										>
-											{speed}×
-										</Button>
-									))}
-								</div>
-								<SliderPrimitive.Root
-									min={CURSOR_MOTION_SPEED_MIN}
-									max={CURSOR_MOTION_SPEED_MAX}
-									step={0.1}
-									value={[selectedCursorMotionRegion.speed]}
-									onValueChange={(values) => onCursorMotionSpeedChange?.(values[0], false)}
-									onValueCommit={(values) => onCursorMotionSpeedChange?.(values[0], true)}
-									className="relative flex w-full touch-none select-none items-center py-1"
-								>
-									<SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full border border-white/10 bg-white/5">
-										<SliderPrimitive.Range className="absolute h-full bg-[#8b5cf6]" />
-									</SliderPrimitive.Track>
-									<SliderPrimitive.Thumb className="block h-3.5 w-3.5 cursor-grab rounded-full border-2 border-[#a78bfa] bg-[#8b5cf6] shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/50 active:cursor-grabbing" />
-								</SliderPrimitive.Root>
-								<p className="text-[10px] leading-snug text-slate-500">
-									{t("cursorMotion.speedHint")}
-								</p>
-							</div>
+							)}
 
 							{(selectedCursorMotionRegion.preset === "wave" ||
 								selectedCursorMotionRegion.preset === "loop") && (

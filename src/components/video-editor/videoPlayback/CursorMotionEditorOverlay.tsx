@@ -14,6 +14,7 @@ interface CursorMotionEditorOverlayProps {
 	controlPoint: CursorMotionEditorPoint;
 	startAnchorKind?: CursorMotionAnchorKind;
 	endAnchorKind?: CursorMotionAnchorKind;
+	editable?: boolean;
 	onControlPointChange: (clientX: number, clientY: number) => void;
 	onControlPointCommit: () => void;
 }
@@ -75,6 +76,7 @@ export function CursorMotionEditorOverlay({
 	controlPoint,
 	startAnchorKind = "manual",
 	endAnchorKind = "click",
+	editable = true,
 	onControlPointChange,
 	onControlPointCommit,
 }: CursorMotionEditorOverlayProps) {
@@ -137,50 +139,54 @@ export function CursorMotionEditorOverlay({
 				strokeLinecap="round"
 				vectorEffect="non-scaling-stroke"
 			/>
-			<line
-				x1={controlPoint.x}
-				y1={controlPoint.y}
-				x2={(start.x + end.x) / 2}
-				y2={(start.y + end.y) / 2}
-				stroke="rgba(196,181,253,0.8)"
-				strokeWidth={1.5}
-				strokeDasharray="3 4"
-				vectorEffect="non-scaling-stroke"
-			/>
+			{editable && (
+				<line
+					x1={controlPoint.x}
+					y1={controlPoint.y}
+					x2={(start.x + end.x) / 2}
+					y2={(start.y + end.y) / 2}
+					stroke="rgba(196,181,253,0.8)"
+					strokeWidth={1.5}
+					strokeDasharray="3 4"
+					vectorEffect="non-scaling-stroke"
+				/>
+			)}
 			<CursorMotionAnchorMarker point={start} kind={startAnchorKind} />
 			<CursorMotionAnchorMarker point={end} kind={endAnchorKind} />
-			<circle
-				cx={controlPoint.x}
-				cy={controlPoint.y}
-				r={12}
-				fill="rgba(167,139,250,0.18)"
-				stroke="rgba(255,255,255,0.95)"
-				strokeWidth={2}
-				vectorEffect="non-scaling-stroke"
-				style={{ pointerEvents: "auto", cursor: "grab", touchAction: "none" }}
-				aria-label="Motion curve handle"
-				onPointerDown={(event) => {
-					if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
-					activePointerIdRef.current = event.pointerId;
-					event.currentTarget.setPointerCapture(event.pointerId);
-					onControlPointChange(event.clientX, event.clientY);
-					event.preventDefault();
-					event.stopPropagation();
-				}}
-				onPointerMove={(event) => {
-					if (activePointerIdRef.current !== event.pointerId) return;
-					onControlPointChange(event.clientX, event.clientY);
-					event.preventDefault();
-					event.stopPropagation();
-				}}
-				onPointerUp={stopDrag}
-				onPointerCancel={stopDrag}
-				onLostPointerCapture={(event) => {
-					if (activePointerIdRef.current !== event.pointerId) return;
-					activePointerIdRef.current = null;
-					onControlPointCommit();
-				}}
-			/>
+			{editable && (
+				<circle
+					cx={controlPoint.x}
+					cy={controlPoint.y}
+					r={12}
+					fill="rgba(167,139,250,0.18)"
+					stroke="rgba(255,255,255,0.95)"
+					strokeWidth={2}
+					vectorEffect="non-scaling-stroke"
+					style={{ pointerEvents: "auto", cursor: "grab", touchAction: "none" }}
+					aria-label="Motion curve handle"
+					onPointerDown={(event) => {
+						if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+						activePointerIdRef.current = event.pointerId;
+						event.currentTarget.setPointerCapture(event.pointerId);
+						onControlPointChange(event.clientX, event.clientY);
+						event.preventDefault();
+						event.stopPropagation();
+					}}
+					onPointerMove={(event) => {
+						if (activePointerIdRef.current !== event.pointerId) return;
+						onControlPointChange(event.clientX, event.clientY);
+						event.preventDefault();
+						event.stopPropagation();
+					}}
+					onPointerUp={stopDrag}
+					onPointerCancel={stopDrag}
+					onLostPointerCapture={(event) => {
+						if (activePointerIdRef.current !== event.pointerId) return;
+						activePointerIdRef.current = null;
+						onControlPointCommit();
+					}}
+				/>
+			)}
 		</svg>
 	);
 }

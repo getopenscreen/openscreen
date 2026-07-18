@@ -1989,14 +1989,17 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				y: paintedRect.y + ((point.cy - crop.y) / crop.height) * paintedRect.height,
 			});
 			const trajectory = buildCursorMotionTrajectory(cursorMotionBasePath, region, 96).map(project);
-			const recordedTrajectory = Array.from({ length: 64 }, (_, index) => {
-				const progress = index / 63;
-				return cursorMotionBasePath.sampleAt(
-					region.startMs + (region.endMs - region.startMs) * progress,
-				);
-			})
-				.filter((point): point is CursorMotionPoint => point !== null)
-				.map(project);
+			const recordedTrajectory =
+				region.preset === "recorded"
+					? []
+					: Array.from({ length: 64 }, (_, index) => {
+							const progress = index / 63;
+							return cursorMotionBasePath.sampleAt(
+								region.startMs + (region.endMs - region.startMs) * progress,
+							);
+						})
+							.filter((point): point is CursorMotionPoint => point !== null)
+							.map(project);
 
 			return {
 				trajectory,
@@ -2378,6 +2381,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								controlPoint={cursorMotionEditorGeometry.controlPoint}
 								startAnchorKind={selectedCursorMotionRegion.startAnchorKind}
 								endAnchorKind={selectedCursorMotionRegion.endAnchorKind}
+								editable={selectedCursorMotionRegion.preset !== "recorded"}
 								onControlPointChange={handleCursorMotionClientPoint}
 								onControlPointCommit={() => onCursorMotionControlPointCommit?.()}
 							/>

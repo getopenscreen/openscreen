@@ -28,6 +28,7 @@
 			"hold": "Hold"
 		},
 		"presets": {
+			"recorded": "Recorded",
 			"straight": "Straight",
 			"arc": "Arc",
 			"wave": "Wave",

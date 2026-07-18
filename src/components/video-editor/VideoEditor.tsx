@@ -1208,7 +1208,7 @@ export default function VideoEditor() {
 			const newRegions: CursorMotionRegion[] = segments.map((segment) => ({
 				id: `cursor-motion-${nextCursorMotionIdRef.current++}`,
 				...segment,
-				preset: segment.segmentKind === "hold" ? "straight" : "wave",
+				preset: "recorded",
 				controlPoint: createDefaultCursorMotionControlPoint(segment.startPoint, segment.endPoint),
 				cycles: 2,
 				speed: DEFAULT_CURSOR_MOTION_SPEED,
@@ -1308,7 +1308,7 @@ export default function VideoEditor() {
 					index === segments.length - 1
 						? (region.endAnchorKind ?? segment.endAnchorKind)
 						: segment.endAnchorKind,
-				preset: segment.segmentKind === "hold" ? ("straight" as const) : region.preset,
+				preset: segment.segmentKind === "hold" ? ("recorded" as const) : region.preset,
 				controlPoint: createDefaultCursorMotionControlPoint(startPoint, endPoint),
 			};
 		});

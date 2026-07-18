@@ -1608,7 +1608,9 @@ export default function TimelineEditor({
 			label:
 				region.segmentKind === "hold"
 					? `${t("cursorMotion.segmentKinds.hold")} ${index + 1}`
-					: `${t(`cursorMotion.presets.${region.preset}`)} ${region.speed ?? DEFAULT_CURSOR_MOTION_SPEED}× ${index + 1}`,
+					: region.preset === "recorded"
+						? `${t("cursorMotion.presets.recorded")} ${index + 1}`
+						: `${t(`cursorMotion.presets.${region.preset}`)} ${region.speed ?? DEFAULT_CURSOR_MOTION_SPEED}× ${index + 1}`,
 			variant: "cursor-motion",
 		}));
 

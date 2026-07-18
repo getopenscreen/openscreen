@@ -24,6 +24,7 @@
 			"hold": "停止"
 		},
 		"presets": {
+			"recorded": "録画どおり",
 			"straight": "直線",
 			"arc": "弧",
 			"wave": "波",

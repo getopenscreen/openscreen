@@ -52,16 +52,16 @@ describe("cursor motion choreography", () => {
 		expect(sampleCursorMotionRegion(motion, start, end, motion.endMs)).toEqual(end);
 	});
 
-	it("speeds up the move near the click without changing the click time", () => {
+	it("speeds up immediately without freezing the start of the move", () => {
 		const fast = region({ preset: "straight", speed: 2 });
-		expect(sampleCursorMotionRegion(fast, start, end, 350)).toEqual(start);
-		expect(sampleCursorMotionRegion(fast, start, end, 600)).toEqual(start);
-		expect(sampleCursorMotionRegion(fast, start, end, 850).cx).toBeCloseTo(0.5, 6);
+		expect(sampleCursorMotionRegion(fast, start, end, 350).cx).toBeCloseTo(0.45, 6);
+		expect(sampleCursorMotionRegion(fast, start, end, 600).cx).toBeCloseTo(0.7, 6);
+		expect(sampleCursorMotionRegion(fast, start, end, 850).cx).toBeCloseTo(0.85, 6);
 		expect(sampleCursorMotionRegion(fast, start, end, fast.endMs)).toEqual(end);
 	});
 
 	it("clamps cursor motion speed to the supported range", () => {
-		expect(clampCursorMotionSpeed(Number.NaN)).toBe(2);
+		expect(clampCursorMotionSpeed(Number.NaN)).toBe(1);
 		expect(clampCursorMotionSpeed(0.2)).toBe(1);
 		expect(clampCursorMotionSpeed(2.26)).toBe(2.3);
 		expect(clampCursorMotionSpeed(99)).toBe(4);
@@ -99,6 +99,26 @@ describe("cursor motion choreography", () => {
 		);
 		expect(sampleCursorMotionPath(linearPath(), [anchored], anchored.endMs)).toEqual(
 			anchored.endPoint,
+		);
+	});
+
+	it("keeps the recorded cursor path untouched until a creative preset is selected", () => {
+		const recordedPath: CursorMotionPath = {
+			sampleAt(timeMs) {
+				const progress = Math.max(0, Math.min(1, (timeMs - 100) / 1000));
+				return {
+					cx: start.cx + (end.cx - start.cx) * progress,
+					cy: 0.5 + Math.sin(progress * Math.PI * 2) * 0.2,
+				};
+			},
+		};
+		const original = region({ preset: "recorded", speed: 4 });
+
+		expect(sampleCursorMotionPath(recordedPath, [original], 350)).toEqual(
+			recordedPath.sampleAt(350),
+		);
+		expect(buildCursorMotionTrajectory(recordedPath, original, 5)).toEqual(
+			[100, 350, 600, 850, 1100].map((timeMs) => recordedPath.sampleAt(timeMs)),
 		);
 	});
 

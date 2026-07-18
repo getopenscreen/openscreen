@@ -319,7 +319,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						segmentKind: isCursorMotionSegmentKind(region.segmentKind)
 							? region.segmentKind
 							: "move",
-						preset: isCursorMotionPreset(region.preset) ? region.preset : "arc",
+						preset: isCursorMotionPreset(region.preset) ? region.preset : "recorded",
 						controlPoint: clampCursorMotionPoint(
 							region.controlPoint && typeof region.controlPoint === "object"
 								? region.controlPoint

@@ -115,10 +115,10 @@ describe("projectPersistence media compatibility", () => {
 			startAnchorKind: "manual",
 			endAnchorKind: "click",
 			segmentKind: "move",
-			preset: "arc",
+			preset: "recorded",
 			controlPoint: { cx: 0.5, cy: 0.25 },
 			cycles: 1,
-			speed: 2,
+			speed: 1,
 			easing: "ease-in-out",
 		});
 	});

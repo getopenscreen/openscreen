@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "Thu phóng tự động",
+		"autoFocusShort": "Tự động lấy nét",
 		"addZoom": "Thêm Thu phóng (Z)",
 		"suggestZooms": "Đề xuất Thu phóng từ Con trỏ",
 		"autoZoomOn": "Đề xuất thu phóng tự động đang bật — nhấp để loại bỏ các thu phóng được đề xuất",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "Đã thêm {{count}} đề xuất thu phóng dựa trên con trỏ",
 		"addedZoomSuggestionsPlural": "Đã thêm {{count}} đề xuất thu phóng dựa trên con trỏ"
+	},
+	"cursorMotion": {
+		"title": "Đường đi con trỏ",
+		"create": "Tạo đường đi con trỏ đến lần nhấp tiếp theo",
+		"empty": "Chưa có đường đi con trỏ — hãy đặt đầu phát, rồi dùng công cụ đường đi con trỏ",
+		"placePlayhead": "Trước tiên, hãy đặt đầu phát bên trong một clip.",
+		"dataUnavailable": "Không có dữ liệu con trỏ cho clip này.",
+		"noNextClick": "Không tìm thấy lần nhấp con trỏ nào tiếp theo trong clip này.",
+		"created": "Đã tạo {{count}} đoạn con trỏ theo bản ghi.",
+		"createdPlural": "Đã tạo {{count}} đoạn con trỏ theo bản ghi.",
+		"createFailed": "Không thể tạo các đoạn chuyển động con trỏ."
 	},
 	"toolbar": {
 		"autoEnhance": "Tự động nâng cao",

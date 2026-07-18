@@ -112,7 +112,10 @@ describe("DocumentService", () => {
 			expect(asset?.kind).toBe("video");
 			expect(asset?.originalPath).toBe("/tmp/screen.mp4");
 			expect(asset?.label).toBe("Screen");
+			expect(asset?.autoZoomState).toBe("pending");
 			expect(updated.project.primaryAssetId).toBe(asset?.id);
+			const persisted = await service.getProject(doc.project.id);
+			expect(persisted.assets[0]?.autoZoomState).toBe("pending");
 		});
 
 		it("resolves relative paths against the cwd", async () => {

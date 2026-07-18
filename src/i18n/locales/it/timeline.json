@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "Zoom automatico",
+		"autoFocusShort": "Messa a fuoco automatica",
 		"addZoom": "Aggiungi zoom (Z)",
 		"suggestZooms": "Suggerisci zoom dal cursore",
 		"autoZoomOn": "Suggerimenti di zoom automatico attivi — clicca per rimuovere gli zoom suggeriti",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "Aggiunto {{count}} suggerimento zoom basato sul cursore",
 		"addedZoomSuggestionsPlural": "Aggiunti {{count}} suggerimenti zoom basati sul cursore"
+	},
+	"cursorMotion": {
+		"title": "Percorso del cursore",
+		"create": "Crea il percorso del cursore fino al clic successivo",
+		"empty": "Nessun percorso del cursore — posiziona l’indicatore di riproduzione, quindi usa lo strumento percorso del cursore",
+		"placePlayhead": "Posiziona prima l’indicatore di riproduzione all’interno di una clip.",
+		"dataUnavailable": "I dati del cursore non sono disponibili per questa clip.",
+		"noNextClick": "Non è stato trovato alcun clic successivo del cursore in questa clip.",
+		"created": "Creato {{count}} segmento del cursore registrato.",
+		"createdPlural": "Creati {{count}} segmenti del cursore registrati.",
+		"createFailed": "Impossibile creare i segmenti di movimento del cursore."
 	},
 	"toolbar": {
 		"autoEnhance": "Miglioramento automatico",

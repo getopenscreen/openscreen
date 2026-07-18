@@ -66,7 +66,7 @@ export interface DocumentExportOptions {
 	sourceWidth?: number;
 	sourceHeight?: number;
 	webcamVideoUrl?: string;
-	cursorRecordingData?: CursorRecordingData | null;
+	recordingDataByAssetId?: ReadonlyMap<string, CursorRecordingData>;
 	cursorTelemetry?: CursorTelemetryPoint[];
 	cursorClickTimestamps?: number[];
 	cursorScale?: number;
@@ -177,7 +177,7 @@ export function buildDocumentRenderPlan(
 		fallbackSourceWidth: options.sourceWidth,
 		fallbackSourceHeight: options.sourceHeight,
 		cursor: {
-			recordingData: options.cursorRecordingData ?? null,
+			recordingDataByAssetId: options.recordingDataByAssetId,
 			scale: options.cursorScale ?? 0,
 			smoothing: options.cursorSmoothing,
 			motionBlur: options.cursorMotionBlur,
@@ -303,7 +303,7 @@ export async function exportAxcutDocument(
 		webcamReactiveZoom,
 		webcamSizePreset,
 		webcamPosition,
-		cursorRecordingData: options.cursorRecordingData ?? null,
+		cursorRecordingData: options.recordingDataByAssetId?.get(asset.id) ?? null,
 		cursorScale: options.cursorScale ?? 0,
 		cursorSmoothing: options.cursorSmoothing,
 		cursorMotionBlur: options.cursorMotionBlur,

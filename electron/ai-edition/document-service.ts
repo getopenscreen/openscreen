@@ -252,6 +252,7 @@ export class DocumentService {
 			originalPath: absolutePath,
 			sizeBytes,
 			cameraTrack: null,
+			autoZoomState: "pending",
 		};
 		const next: AxcutDocument = {
 			...doc,

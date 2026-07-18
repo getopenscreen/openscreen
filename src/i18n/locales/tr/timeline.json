@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "Otomatik yakınlaştırma",
+		"autoFocusShort": "Otomatik odak",
 		"addZoom": "Yakınlaştırma Ekle (Z)",
 		"suggestZooms": "İmleçten Yakınlaştırma Öner",
 		"autoZoomOn": "Otomatik yakınlaştırma önerileri açık — önerilen yakınlaştırmaları kaldırmak için tıklayın",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "{{count}} imleç tabanlı yakınlaştırma önerisi eklendi",
 		"addedZoomSuggestionsPlural": "{{count}} imleç tabanlı yakınlaştırma önerisi eklendi"
+	},
+	"cursorMotion": {
+		"title": "İmleç yolu",
+		"create": "Sonraki tıklamaya kadar imleç yolu oluştur",
+		"empty": "İmleç yolu yok — oynatma kafasını yerleştirin, ardından imleç yolu aracını kullanın",
+		"placePlayhead": "Önce oynatma kafasını bir klibin içine yerleştirin.",
+		"dataUnavailable": "Bu klibin imleç verileri kullanılamıyor.",
+		"noNextClick": "Bu klipte daha sonraki bir imleç tıklaması bulunamadı.",
+		"created": "{{count}} kayıtlı imleç segmenti oluşturuldu.",
+		"createdPlural": "{{count}} kayıtlı imleç segmenti oluşturuldu.",
+		"createFailed": "İmleç hareketi segmentleri oluşturulamadı."
 	},
 	"toolbar": {
 		"autoEnhance": "Otomatik iyileştirme",

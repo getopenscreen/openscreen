@@ -2,10 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromFileUrl } from "@/components/video-editor/projectPersistence";
 import {
 	type CropRegion,
+	type CursorTelemetryPoint,
 	DEFAULT_CROP_REGION,
 	MAX_NATIVE_PLAYBACK_RATE,
 } from "@/components/video-editor/types";
-import type { AxcutClip, AxcutTrimRange, AxcutZoomRegion } from "@/lib/ai-edition/schema";
+import type {
+	AxcutClip,
+	AxcutCursorMotionRegion,
+	AxcutTrimRange,
+	AxcutZoomRegion,
+} from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { PlaybackClockRef } from "@/lib/ai-edition/timeline/playback-clock";
 import { findActiveSpeedRegion, type SpeedRegion } from "@/lib/ai-edition/timeline/speed";
@@ -19,8 +25,45 @@ import {
 	computeZoomPreviewTransform,
 	IDENTITY_ZOOM_TRANSFORM,
 } from "@/lib/ai-edition/timeline/zoom-preview";
-import { CursorPreviewLayer } from "./CursorPreviewLayer";
+import { useCursorRecordingData } from "@/native/hooks/useCursorRecordingData";
+import { useCursorTelemetry } from "@/native/hooks/useCursorTelemetry";
+import { CursorPreviewLayer, type CursorPreviewLayerProps } from "./CursorPreviewLayer";
 import styles from "./VirtualPreview.module.css";
+
+const EMPTY_CURSOR_TELEMETRY: CursorTelemetryPoint[] = [];
+
+interface ActiveCursorLayerProps
+	extends Omit<CursorPreviewLayerProps, "cursorRecordingData" | "cursorTelemetry"> {
+	onFocusTelemetryChange: (videoPath: string | null, samples: CursorTelemetryPoint[]) => void;
+}
+
+function ActiveCursorLayer({ onFocusTelemetryChange, ...props }: ActiveCursorLayerProps) {
+	const { data: cursorRecordingData } = useCursorRecordingData(props.videoPath);
+	const { samples: cursorTelemetry } = useCursorTelemetry(props.videoPath);
+	const focusTelemetry = useMemo<CursorTelemetryPoint[]>(() => {
+		const samples =
+			cursorRecordingData && cursorRecordingData.samples.length > 0
+				? cursorRecordingData.samples
+				: cursorTelemetry;
+		return samples.map((sample) => ({
+			timeMs: sample.timeMs,
+			cx: sample.cx,
+			cy: sample.cy,
+		}));
+	}, [cursorRecordingData, cursorTelemetry]);
+
+	useEffect(() => {
+		onFocusTelemetryChange(props.videoPath, focusTelemetry);
+	}, [focusTelemetry, onFocusTelemetryChange, props.videoPath]);
+
+	return (
+		<CursorPreviewLayer
+			{...props}
+			cursorRecordingData={cursorRecordingData}
+			cursorTelemetry={cursorTelemetry}
+		/>
+	);
+}
 
 export interface VideoSource {
 	id: string;
@@ -34,6 +77,14 @@ interface VirtualPreviewProps {
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	trimRanges?: AxcutTrimRange[];
+	cursorMotionRegions?: AxcutCursorMotionRegion[];
+	selectedCursorMotionRegionId?: string | null;
+	onCursorMotionControlPointChange?: (
+		id: string,
+		index: number,
+		point: { cx: number; cy: number },
+	) => void;
+	onCursorMotionControlPointCommit?: () => void;
 	seekTarget?: { timeSec: number; isSource?: boolean; requestId: number } | null;
 	onTimeChange?: (timeSec: number) => void;
 	onLoadedMetadata?: (
@@ -63,6 +114,10 @@ export function VirtualPreview({
 	zoomRegions = [],
 	speedRegions = [],
 	trimRanges = [],
+	cursorMotionRegions = [],
+	selectedCursorMotionRegionId,
+	onCursorMotionControlPointChange,
+	onCursorMotionControlPointCommit,
 	seekTarget,
 	onTimeChange,
 	onLoadedMetadata,
@@ -113,12 +168,31 @@ export function VirtualPreview({
 
 	const virtualDurationSec = useMemo(() => totalVirtualDuration(clips), [clips]);
 	const activeSource = videoSources[sourceIndex] ?? null;
+	const activeVideoPath = activeSource ? fromFileUrl(activeSource.src) : null;
+	const activeClip = useMemo(
+		() => locateVirtualPosition(clips, virtualTimeSec)?.clip ?? null,
+		[clips, virtualTimeSec],
+	);
 
 	// ponytail: the cursor overlay wants source-media time (the recorded
 	// cursor samples live on the original mp4 timeline, not the edited
 	// virtual timeline). `setSourceTimeSec` is called from the 60 Hz rAF
 	// below so the cursor follows the playhead even when the user scrubs.
 	const [sourceTimeSec, setSourceTimeSec] = useState(0);
+	const [cursorFocusData, setCursorFocusData] = useState<{
+		videoPath: string | null;
+		samples: CursorTelemetryPoint[];
+	}>({ videoPath: null, samples: EMPTY_CURSOR_TELEMETRY });
+	const handleFocusTelemetryChange = useCallback(
+		(videoPath: string | null, samples: CursorTelemetryPoint[]) => {
+			setCursorFocusData({ videoPath, samples });
+		},
+		[],
+	);
+	const activeCursorTelemetry =
+		cursorFocusData.videoPath === activeVideoPath
+			? cursorFocusData.samples
+			: EMPTY_CURSOR_TELEMETRY;
 
 	// Drive the virtual-time preview clock at 60 Hz (the <video> timeupdate
 	// event only fires ~4×/s, which is too slow to keep the webcam <video>
@@ -324,9 +398,15 @@ export function VirtualPreview({
 		const transform =
 			zoomRegions.length === 0
 				? IDENTITY_ZOOM_TRANSFORM
-				: computeZoomPreviewTransform(zoomRegions, virtualTimeSec * 1000, undefined, playbackRate);
+				: computeZoomPreviewTransform(
+						zoomRegions,
+						virtualTimeSec * 1000,
+						activeCursorTelemetry,
+						playbackRate,
+						sourceTimeSec * 1000,
+					);
 		frame.style.transform = `translate(${transform.translateXPercent}%, ${transform.translateYPercent}%) scale(${transform.scale})`;
-	}, [zoomRegions, virtualTimeSec]);
+	}, [activeCursorTelemetry, sourceTimeSec, zoomRegions, virtualTimeSec]);
 
 	const seekToVirtualTime = useCallback(
 		(nextVirtualTimeSec: number, preservePlayback = false) => {
@@ -470,10 +550,19 @@ export function VirtualPreview({
 							{loadState === "error" ? "Video preview could not be loaded." : "Loading preview…"}
 						</div>
 					)}
-					<CursorPreviewLayer
-						videoPath={activeSource ? fromFileUrl(activeSource.src) : null}
+					<ActiveCursorLayer
+						key={activeVideoPath}
+						videoPath={activeVideoPath}
 						currentTimeSec={sourceTimeSec}
 						isPlaying={isPlaying}
+						cropRegion={region}
+						assetId={activeSource.id}
+						clipId={activeClip?.id ?? activeClipIdRef.current}
+						cursorMotionRegions={cursorMotionRegions}
+						selectedCursorMotionRegionId={selectedCursorMotionRegionId}
+						onControlPointChange={onCursorMotionControlPointChange}
+						onControlPointCommit={onCursorMotionControlPointCommit}
+						onFocusTelemetryChange={handleFocusTelemetryChange}
 					/>
 				</div>
 			) : (

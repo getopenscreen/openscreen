@@ -32,3 +32,50 @@
 	-webkit-user-drag: none;
 	display: none;
 }
+
+.motionEditor {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.motionRecordedPath,
+.motionEditedPath {
+	fill: none;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.motionRecordedPath {
+	stroke: rgba(34, 211, 238, 0.9);
+	stroke-width: 2;
+	stroke-dasharray: 5 5;
+}
+
+.motionEditedPath {
+	stroke: #8b5cf6;
+	stroke-width: 3;
+}
+
+.motionAnchor {
+	fill: #fff;
+	stroke: #8b5cf6;
+	stroke-width: 2;
+}
+
+.motionControl {
+	fill: #8b5cf6;
+	stroke: #fff;
+	stroke-width: 2;
+	pointer-events: auto;
+	cursor: grab;
+	touch-action: none;
+}
+
+.motionControl:active {
+	cursor: grabbing;
+}

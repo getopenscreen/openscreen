@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "자동 줌",
+		"autoFocusShort": "자동 초점",
 		"addZoom": "줌 추가 (Z)",
 		"suggestZooms": "커서 기반 줌 제안",
 		"autoZoomOn": "자동 줌 제안 켜짐 — 클릭하면 제안된 줌을 제거합니다",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "커서 기반 줌 제안 {{count}}개가 추가되었습니다",
 		"addedZoomSuggestionsPlural": "커서 기반 줌 제안 {{count}}개가 추가되었습니다"
+	},
+	"cursorMotion": {
+		"title": "커서 경로",
+		"create": "다음 클릭까지 커서 경로 만들기",
+		"empty": "커서 경로 없음 — 재생 헤드를 놓은 다음 커서 경로 도구를 사용하세요",
+		"placePlayhead": "먼저 클립 안에 재생 헤드를 놓으세요.",
+		"dataUnavailable": "이 클립의 커서 데이터를 사용할 수 없습니다.",
+		"noNextClick": "이 클립에서 이후 커서 클릭을 찾지 못했습니다.",
+		"created": "기록된 커서 구간 {{count}}개를 만들었습니다.",
+		"createdPlural": "기록된 커서 구간 {{count}}개를 만들었습니다.",
+		"createFailed": "커서 모션 구간을 만들 수 없습니다."
 	},
 	"toolbar": {
 		"autoEnhance": "자동 향상",

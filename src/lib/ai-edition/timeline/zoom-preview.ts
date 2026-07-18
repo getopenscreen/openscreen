@@ -63,12 +63,14 @@ export function computeZoomPreviewTransform(
 	virtualTimeMs: number,
 	cursorTelemetry?: CursorTelemetryPoint[],
 	playbackRate = 1,
+	cursorTimeMs = virtualTimeMs,
 ): ZoomPreviewTransform {
 	if (zoomRegions.length === 0) return IDENTITY_ZOOM_TRANSFORM;
 
 	const legacyRegions = zoomRegions.map(toLegacyZoomRegion);
 	const dominant = findDominantRegion(legacyRegions, virtualTimeMs, {
 		cursorTelemetry,
+		cursorTimeMs,
 		playbackRate,
 	});
 	if (!dominant.region || dominant.strength <= 0) return IDENTITY_ZOOM_TRANSFORM;

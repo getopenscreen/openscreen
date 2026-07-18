@@ -163,15 +163,18 @@ describe("buildDocumentRenderPlan", () => {
 		expect(plan.segments[0].sourceHeight).toBe(720);
 	});
 
-	it("threads cursor recording + scale + theme into plan.cursor and partitions samples per segment", () => {
-		const recordingData: CursorRecordingData = {
+	it("threads per-media recordings and cursor style into the render plan", () => {
+		const recordingA: CursorRecordingData = {
 			version: 1,
 			provider: "native",
 			assets: [],
-			samples: [
-				{ timeMs: 100, cx: 0.5, cy: 0.5, assetId: "a" },
-				{ timeMs: 200, cx: 0.4, cy: 0.4, assetId: "b" },
-			],
+			samples: [{ timeMs: 100, cx: 0.5, cy: 0.5, assetId: "sprite-a" }],
+		};
+		const recordingB: CursorRecordingData = {
+			version: 1,
+			provider: "native",
+			assets: [],
+			samples: [{ timeMs: 200, cx: 0.4, cy: 0.4, assetId: "sprite-b" }],
 		};
 		const doc = docOf({
 			assets: [
@@ -208,13 +211,16 @@ describe("buildDocumentRenderPlan", () => {
 		});
 		const plan = buildDocumentRenderPlan(doc, {
 			...baseOptions,
-			cursorRecordingData: recordingData,
+			recordingDataByAssetId: new Map([
+				["a", recordingA],
+				["b", recordingB],
+			]),
 			cursorScale: 1.2,
 			cursorSmoothing: 0.4,
 		});
 		expect(plan.cursor).toMatchObject({ scale: 1.2, smoothing: 0.4, theme: "dark" });
-		expect(plan.segments[0].cursorSamples.map((s) => s.timeMs)).toEqual([100]);
-		expect(plan.segments[1].cursorSamples.map((s) => s.timeMs)).toEqual([200]);
+		expect(plan.segments[0].cursorRecordingData).toBe(recordingA);
+		expect(plan.segments[1].cursorRecordingData).toBe(recordingB);
 	});
 
 	it("leaves plan.cursor null when cursor scale is unset (0)", () => {
@@ -236,7 +242,7 @@ describe("buildDocumentRenderPlan", () => {
 		});
 		const plan = buildDocumentRenderPlan(doc, {
 			...baseOptions,
-			cursorRecordingData: recordingData,
+			recordingDataByAssetId: new Map([["a", recordingData]]),
 		});
 		expect(plan.cursor).toBeNull();
 	});

@@ -57,6 +57,7 @@ export interface EditorSettingsSnapshot {
 	cursor: CursorVisualSettings;
 	cursorShow: boolean;
 	cursorTheme: string;
+	autoZoomEnabled: boolean;
 	autoFocusAll: boolean;
 }
 
@@ -85,6 +86,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	},
 	cursorShow: true,
 	cursorTheme: DEFAULT_CURSOR_THEME_ID,
+	autoZoomEnabled: true,
 	autoFocusAll: false,
 };
 
@@ -111,6 +113,7 @@ interface LegacyShape {
 	cursorClipToBounds?: boolean;
 	cursorShow?: boolean;
 	cursorTheme?: string;
+	autoZoomEnabled?: boolean;
 	autoFocusAll?: boolean;
 }
 function isShape(value: unknown): value is LegacyShape {
@@ -162,6 +165,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		cursor,
 		cursorShow: bool(legacy?.cursorShow, DEFAULT_EDITOR_SETTINGS.cursorShow),
 		cursorTheme: str(legacy?.cursorTheme, DEFAULT_EDITOR_SETTINGS.cursorTheme),
+		autoZoomEnabled: bool(legacy?.autoZoomEnabled, DEFAULT_EDITOR_SETTINGS.autoZoomEnabled),
 		autoFocusAll: bool(legacy?.autoFocusAll, DEFAULT_EDITOR_SETTINGS.autoFocusAll),
 	};
 }
@@ -182,6 +186,7 @@ export interface EditorSettingsPatch {
 	webcamSizePreset?: WebcamSizePreset;
 	webcamPosition?: WebcamPosition | null;
 	cursor?: Partial<CursorVisualSettings> & { theme?: string; show?: boolean };
+	autoZoomEnabled?: boolean;
 	autoFocusAll?: boolean;
 }
 
@@ -203,6 +208,7 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 	if (patch.webcamReactiveZoom !== undefined) next.webcamReactiveZoom = patch.webcamReactiveZoom;
 	if (patch.webcamSizePreset !== undefined) next.webcamSizePreset = patch.webcamSizePreset;
 	if (patch.webcamPosition !== undefined) next.webcamPosition = patch.webcamPosition;
+	if (patch.autoZoomEnabled !== undefined) next.autoZoomEnabled = patch.autoZoomEnabled;
 	if (patch.autoFocusAll !== undefined) next.autoFocusAll = patch.autoFocusAll;
 	if (patch.cursor) {
 		const c = patch.cursor;

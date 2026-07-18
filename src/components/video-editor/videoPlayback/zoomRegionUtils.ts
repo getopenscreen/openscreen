@@ -12,6 +12,7 @@ const ZOOM_IN_OVERLAP_MS = 500;
 type DominantRegionOptions = {
 	connectZooms?: boolean;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	cursorTimeMs?: number;
 	viewportRatio?: ViewportRatio;
 	playbackRate?: number;
 };
@@ -141,6 +142,7 @@ function getActiveRegion(
 	cursorTelemetry?: CursorTelemetryPoint[],
 	viewportRatio?: ViewportRatio,
 	playbackRate = 1,
+	cursorTimeMs = timeMs,
 ) {
 	const activeRegions = regions
 		.map((region) => {
@@ -175,7 +177,13 @@ function getActiveRegion(
 	return {
 		region: {
 			...activeRegion,
-			focus: getResolvedFocus(activeRegion, activeScale, timeMs, cursorTelemetry, viewportRatio),
+			focus: getResolvedFocus(
+				activeRegion,
+				activeScale,
+				cursorTimeMs,
+				cursorTelemetry,
+				viewportRatio,
+			),
 		},
 		strength: activeRegions[0].strength,
 		blendedScale: null,
@@ -188,6 +196,7 @@ function getConnectedRegionHold(
 	connectedPairs: ConnectedRegionPair[],
 	cursorTelemetry?: CursorTelemetryPoint[],
 	viewportRatio?: ViewportRatio,
+	cursorTimeMs = timeMs,
 ) {
 	for (const pair of connectedPairs) {
 		if (timeMs > pair.transitionEnd && timeMs < pair.nextRegion.startMs) {
@@ -198,7 +207,7 @@ function getConnectedRegionHold(
 					focus: getResolvedFocus(
 						pair.nextRegion,
 						nextScale,
-						timeMs,
+						cursorTimeMs,
 						cursorTelemetry,
 						viewportRatio,
 					),
@@ -218,6 +227,7 @@ function getConnectedRegionTransition(
 	timeMs: number,
 	cursorTelemetry?: CursorTelemetryPoint[],
 	viewportRatio?: ViewportRatio,
+	cursorTimeMs = timeMs,
 ) {
 	for (const pair of connectedPairs) {
 		const { currentRegion, nextRegion, transitionStart, transitionEnd } = pair;
@@ -232,10 +242,10 @@ function getConnectedRegionTransition(
 		const currentScale = getZoomScale(currentRegion);
 		const nextScale = getZoomScale(nextRegion);
 		const transitionScale = lerp(currentScale, nextScale, transitionProgress);
-		// Both regions share the same timeMs, so interpolate cursor once and reuse.
+		// Both regions share one source-time cursor sample, so interpolate once and reuse.
 		const sharedCursorFocus =
 			cursorTelemetry && cursorTelemetry.length > 0
-				? interpolateCursorAt(cursorTelemetry, timeMs)
+				? interpolateCursorAt(cursorTelemetry, cursorTimeMs)
 				: null;
 		const currentFocus = clampFocusToScale(
 			currentRegion.focusMode === "auto" && sharedCursorFocus
@@ -291,6 +301,7 @@ type DominantRegionResult = {
 let dominantRegionCache: {
 	regions: ZoomRegion[];
 	timeMsKey: number;
+	cursorTimeMsKey: number;
 	playbackRateKey: number;
 	telemetry: CursorTelemetryPoint[] | undefined;
 	connectZooms: boolean;
@@ -307,13 +318,16 @@ export function findDominantRegion(
 	const telemetry = options.cursorTelemetry;
 	const vr = options.viewportRatio;
 	const playbackRate = options.playbackRate ?? 1;
+	const cursorTimeMs = options.cursorTimeMs ?? timeMs;
 	const timeMsKey = Math.round(timeMs);
+	const cursorTimeMsKey = Math.round(cursorTimeMs);
 	const playbackRateKey = Math.round(playbackRate * 1000);
 
 	if (
 		dominantRegionCache &&
 		dominantRegionCache.regions === regions &&
 		dominantRegionCache.timeMsKey === timeMsKey &&
+		dominantRegionCache.cursorTimeMsKey === cursorTimeMsKey &&
 		dominantRegionCache.telemetry === telemetry &&
 		dominantRegionCache.connectZooms === connectZooms &&
 		dominantRegionCache.viewportRatio === vr &&
@@ -326,11 +340,23 @@ export function findDominantRegion(
 
 	let result: DominantRegionResult;
 	if (connectZooms) {
-		const connectedTransition = getConnectedRegionTransition(connectedPairs, timeMs, telemetry, vr);
+		const connectedTransition = getConnectedRegionTransition(
+			connectedPairs,
+			timeMs,
+			telemetry,
+			vr,
+			cursorTimeMs,
+		);
 		if (connectedTransition) {
 			result = connectedTransition;
 		} else {
-			const connectedHold = getConnectedRegionHold(timeMs, connectedPairs, telemetry, vr);
+			const connectedHold = getConnectedRegionHold(
+				timeMs,
+				connectedPairs,
+				telemetry,
+				vr,
+				cursorTimeMs,
+			);
 			if (connectedHold) {
 				result = { ...connectedHold, transition: null };
 			} else {
@@ -341,6 +367,7 @@ export function findDominantRegion(
 					telemetry,
 					vr,
 					playbackRate,
+					cursorTimeMs,
 				);
 				result = activeRegion
 					? { ...activeRegion, transition: null }
@@ -361,6 +388,7 @@ export function findDominantRegion(
 			telemetry,
 			vr,
 			playbackRate,
+			cursorTimeMs,
 		);
 		result = activeRegion
 			? { ...activeRegion, transition: null }
@@ -376,6 +404,7 @@ export function findDominantRegion(
 	dominantRegionCache = {
 		regions,
 		timeMsKey,
+		cursorTimeMsKey,
 		playbackRateKey,
 		telemetry,
 		connectZooms,

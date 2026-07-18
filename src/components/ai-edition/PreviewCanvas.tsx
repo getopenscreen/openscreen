@@ -36,6 +36,7 @@ import { computeCameraFullscreenProgress } from "@/components/video-editor/video
 import type {
 	AxcutAnnotationRegion,
 	AxcutClip,
+	AxcutCursorMotionRegion,
 	AxcutTrimRange,
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
@@ -70,6 +71,14 @@ interface PreviewCanvasProps {
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	trimRanges?: AxcutTrimRange[];
+	cursorMotionRegions?: AxcutCursorMotionRegion[];
+	selectedCursorMotionRegionId?: string | null;
+	onCursorMotionControlPointChange?: (
+		id: string,
+		index: number,
+		point: { cx: number; cy: number },
+	) => void;
+	onCursorMotionControlPointCommit?: () => void;
 	selectedZoomRegionId?: string | null;
 	onZoomFocusChange?: (id: string, focus: ZoomFocus) => void;
 	onZoomFocusCommit?: () => void;

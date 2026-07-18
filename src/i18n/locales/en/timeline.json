@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "Auto Zoom",
+		"autoFocusShort": "Auto-Focus",
 		"addZoom": "Add Zoom (Z)",
 		"suggestZooms": "Suggest Zooms from Cursor",
 		"autoZoomOn": "Auto zoom suggestions on — click to remove suggested zooms",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "Added {{count}} cursor-based zoom suggestion",
 		"addedZoomSuggestionsPlural": "Added {{count}} cursor-based zoom suggestions"
+	},
+	"cursorMotion": {
+		"title": "Cursor path",
+		"create": "Create cursor path to next click",
+		"empty": "No cursor paths — place the playhead, then use the cursor path tool",
+		"placePlayhead": "Place the playhead inside a clip first.",
+		"dataUnavailable": "Cursor data is unavailable for this clip.",
+		"noNextClick": "No later cursor click was found in this clip.",
+		"created": "Created {{count}} recorded cursor segment.",
+		"createdPlural": "Created {{count}} recorded cursor segments.",
+		"createFailed": "Could not create cursor motion segments."
 	},
 	"toolbar": {
 		"autoEnhance": "Auto-enhance",

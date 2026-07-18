@@ -504,21 +504,6 @@ function buildSegmentRenderTrims(segment: RenderSegment, sourceDurationSec: numb
 	}));
 }
 
-/** Per-segment cursor recording for the renderer: the plan's shared cursor
- * atlas/style + THIS segment's asset samples (empty → no overlay). */
-function segmentCursorRecording(
-	plan: RenderPlan,
-	segment: RenderSegment,
-): CursorRecordingData | null {
-	if (!plan.cursor) return null;
-	return {
-		version: plan.cursor.version,
-		provider: plan.cursor.provider,
-		assets: plan.cursor.assets,
-		samples: segment.cursorSamples,
-	};
-}
-
 // v2 multi-asset audio output layout. Both recording formats are 48 kHz, so
 // decodeAudioData is an identity resample; only channel counts get normalized.
 const AUDIO_OUTPUT_SAMPLE_RATE = 48_000;
@@ -1399,7 +1384,9 @@ export class VideoExporter {
 					videoWidth: segment.sourceWidth,
 					videoHeight: segment.sourceHeight,
 					webcamSize,
-					cursorRecordingData: segmentCursorRecording(plan, segment),
+					cursorRecordingData: segment.cursorRecordingData,
+					cursorMotionRegions: segment.cursorMotionRegions,
+					cursorMotionOwner: { clipId: segment.clipId, assetId: segment.assetId },
 					cursorScale: plan.cursor?.scale ?? 0,
 					zoomRegions: segmentZoom,
 					annotationRegions: segmentAnnotations,

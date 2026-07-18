@@ -760,6 +760,7 @@ export function NewEditorShell() {
 	const handleCopyRegion = useCallback(async () => {
 		const doc = useProjectStore.getState().document;
 		if (!doc || !tl.selection) return;
+		if (tl.selection.kind === "cursorMotion") return;
 		const { copyRegion } = await import("@/lib/ai-edition/store/regionClipboard");
 		const region =
 			tl.selection.kind === "zoom"
@@ -1185,6 +1186,12 @@ export function NewEditorShell() {
 									speedRegions={tl.speedRegions}
 									cameraFullscreenRegions={tl.cameraFullscreenRegions}
 									trimRanges={tl.trimRanges}
+									cursorMotionRegions={tl.cursorMotionRegions}
+									selectedCursorMotionRegionId={
+										tl.selection?.kind === "cursorMotion" ? tl.selection.id : null
+									}
+									onCursorMotionControlPointChange={tl.updateCursorMotionControlPointLive}
+									onCursorMotionControlPointCommit={() => void tl.commitCursorMotionChange()}
 									selectedZoomRegionId={tl.selection?.kind === "zoom" ? tl.selection.id : null}
 									onZoomFocusChange={tl.updateZoomFocusLive}
 									onZoomFocusCommit={() => void tl.commitZoomFocus()}

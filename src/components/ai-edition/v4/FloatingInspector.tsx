@@ -17,6 +17,7 @@ import type { ComponentProps } from "react";
 import { useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
+import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
 import { formatSeconds } from "@/lib/ai-edition/timeline/virtual-preview";
@@ -273,12 +274,16 @@ function paneRow(label: string, control: React.ReactNode) {
 
 const ZOOM_DEPTHS = [1, 2, 3, 4, 5, 6] as const;
 const SPEED_VALUES = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+const CURSOR_SPEED_VALUES = [1, 1.5, 2, 2.5, 3, 3.5, 4];
+const CURSOR_PRESETS = ["recorded", "straight", "arc", "wave", "loop", "overshoot"] as const;
+const CURSOR_EASINGS = ["linear", "ease-in", "ease-out", "ease-in-out"] as const;
 
 function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }) {
 	const ts = useScopedT("settings");
 	const tt = useScopedT("timeline");
 	const tc = useScopedT("common");
 	const te = useScopedT("editor");
+	const { settings } = useEditorSettings();
 	const selection = tl.selection;
 	if (!selection) return null;
 
@@ -315,6 +320,31 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 				{paneHeader(<ZoomIn size={15} />, tt("labels.zoom"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
 					{paneRow(
+						ts("zoom.focusMode.title"),
+						<select
+							aria-label={ts("zoom.focusMode.title")}
+							value={region.focusMode ?? "manual"}
+							disabled={settings.autoFocusAll}
+							onChange={(event) =>
+								void tl.updateZoomFocusMode(region.id, event.target.value as "manual" | "auto")
+							}
+							style={selectStyle}
+						>
+							<option value="manual">{ts("zoom.focusMode.manual")}</option>
+							<option value="auto">{ts("zoom.focusMode.auto")}</option>
+						</select>,
+					)}
+					{region.focusMode === "auto" ? (
+						<p style={{ margin: 0, fontSize: 11.5, color: "var(--muted)" }}>
+							{ts("zoom.focusMode.autoDescription")}
+						</p>
+					) : null}
+					{settings.autoFocusAll ? (
+						<p style={{ margin: 0, fontSize: 11.5, color: "var(--muted)" }}>
+							{ts("zoom.focusMode.lockedDisclaimer")}
+						</p>
+					) : null}
+					{paneRow(
 						ts("zoom.level"),
 						<select
 							value={region.depth}
@@ -332,6 +362,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					)}
 					<button
 						type="button"
+						disabled={region.focusMode === "auto"}
 						onClick={() => {
 							tl.updateZoomFocusLive(region.id, { cx: 0.5, cy: 0.5 });
 							void tl.commitZoomFocus();
@@ -446,6 +477,120 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					<button type="button" onClick={deleteAndClose} style={deleteBtnStyle}>
 						<Trash2 size={14} />
 						{ts("annotation.deleteAnnotation")}
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	if (selection.kind === "cursorMotion") {
+		const region = tl.cursorMotionRegions.find((candidate) => candidate.id === selection.id);
+		if (!region) return null;
+		return (
+			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+				{paneHeader(
+					<MousePointer2 size={15} />,
+					tt("cursorMotion.title"),
+					onClose,
+					tc("actions.close"),
+				)}
+				<div style={bodyStyle}>
+					{paneRow(
+						"Motion",
+						<select
+							value={region.preset}
+							onChange={(event) =>
+								void tl.updateCursorMotionSettings(region.id, {
+									preset: event.target.value as (typeof CURSOR_PRESETS)[number],
+								})
+							}
+							style={selectStyle}
+						>
+							{CURSOR_PRESETS.map((preset) => (
+								<option key={preset} value={preset}>
+									{preset[0].toUpperCase() + preset.slice(1)}
+								</option>
+							))}
+						</select>,
+					)}
+					{paneRow(
+						ts("speed.playbackSpeed"),
+						<select
+							value={region.speed}
+							onChange={(event) =>
+								void tl.updateCursorMotionSettings(region.id, {
+									speed: Number(event.target.value),
+								})
+							}
+							style={selectStyle}
+						>
+							{CURSOR_SPEED_VALUES.map((speed) => (
+								<option key={speed} value={speed}>
+									{speed}×
+								</option>
+							))}
+						</select>,
+					)}
+					{paneRow(
+						"Easing",
+						<select
+							value={region.easing}
+							onChange={(event) =>
+								void tl.updateCursorMotionSettings(region.id, {
+									easing: event.target.value as (typeof CURSOR_EASINGS)[number],
+								})
+							}
+							style={selectStyle}
+						>
+							{CURSOR_EASINGS.map((easing) => (
+								<option key={easing} value={easing}>
+									{easing}
+								</option>
+							))}
+						</select>,
+					)}
+					{region.preset === "wave" || region.preset === "loop"
+						? paneRow(
+								"Cycles",
+								<select
+									value={region.cycles}
+									onChange={(event) =>
+										void tl.updateCursorMotionSettings(region.id, {
+											cycles: Number(event.target.value),
+										})
+									}
+									style={selectStyle}
+								>
+									{[1, 2, 3, 4, 5, 6].map((cycles) => (
+										<option key={cycles} value={cycles}>
+											{cycles}
+										</option>
+									))}
+								</select>,
+							)
+						: null}
+					<p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--muted)" }}>
+						{region.preset === "recorded"
+							? "Recorded keeps the captured cursor unchanged. Choose another motion to edit this segment."
+							: "Drag the purple control point in the preview to reshape this segment."}
+					</p>
+					<button
+						type="button"
+						onClick={() =>
+							void tl.updateCursorMotionSettings(region.id, {
+								preset: "recorded",
+								speed: 1,
+								easing: "ease-in-out",
+								cycles: 1,
+							})
+						}
+						style={secondaryBtnStyle}
+					>
+						Reset to recorded
+					</button>
+					<button type="button" onClick={deleteAndClose} style={deleteBtnStyle}>
+						<Trash2 size={14} />
+						Delete cursor segment
 					</button>
 				</div>
 			</div>

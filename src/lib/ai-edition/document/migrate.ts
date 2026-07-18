@@ -94,6 +94,7 @@ export function migrateProjectDataToAxcutDocument(
 					kind: "video" as const,
 					label: screenPath.split(/[\\/]/).pop() || "Recording",
 					originalPath: screenPath,
+					autoZoomState: "processed" as const,
 					cameraTrack: webcamVideoPath
 						? { sourcePath: webcamVideoPath, startMs: 0, offsetMs: webcamOffsetMs, visible: true }
 						: null,
@@ -221,6 +222,7 @@ export function migrateProjectDataToAxcutDocument(
 		},
 		annotations: migratedAnnotations,
 		zoomRanges: migratedZoomRanges,
+		cursorMotionRegions: [],
 		legacyEditor,
 		agent: {
 			pendingQuestions: [],

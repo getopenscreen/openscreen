@@ -4,7 +4,9 @@ import {
 	Loader2,
 	Maximize2,
 	MessageSquare,
+	MousePointer2,
 	Pencil,
+	ScanEye,
 	Scissors,
 	Sparkles,
 	SplitSquareHorizontal,
@@ -27,7 +29,7 @@ import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useAudioPeaks } from "@/hooks/useAudioPeaks";
 import { createId } from "@/lib/ai-edition/document/ids";
-import type { AxcutClip } from "@/lib/ai-edition/schema";
+import type { AxcutClip, AxcutCursorMotionRegion } from "@/lib/ai-edition/schema";
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
@@ -37,7 +39,10 @@ import {
 	resolveTimelineSpanToTrim,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
-import { buildAutoZoomSuggestions } from "@/lib/ai-edition/timeline/zoom-suggestions";
+import { locateVirtualPosition } from "@/lib/ai-edition/timeline/virtual-preview";
+import { buildAutoZoomSuggestionsForClips } from "@/lib/ai-edition/timeline/zoom-suggestions";
+import { buildCursorMotionRegionDrafts } from "@/lib/cursor/cursorMotion";
+import { getSmoothedCursorPath } from "@/lib/cursor/cursorPathSmoothing";
 import { nativeBridgeClient } from "@/native/client";
 import { ASPECT_RATIOS } from "@/utils/aspectRatioUtils";
 import { TransportBar } from "../TransportBar";
@@ -48,6 +53,8 @@ import styles from "./EditorShellV4.module.css";
 // straight to the chat agent via the prompt-bus.
 const AI_ENHANCE_PROMPT =
 	"Automatically enhance this recording: (1) add smart zoom-ins on the moments where the cursor dwells or interacts with the UI, each focused on the cursor's location; and (2) cut the dead time — long pauses, silences, and idle stretches where nothing happens — to keep the pacing tight and natural. Apply the edits directly to the timeline.";
+
+const AUTO_ZOOM_IN_FLIGHT_ASSET_IDS = new Set<string>();
 
 type TimelineApi = ReturnType<typeof useTimeline>;
 
@@ -140,7 +147,7 @@ function ClipWaveform({
 
 interface LanePill {
 	id: string;
-	kind: "annotation" | "speed" | "trim" | "zoom" | "cameraFullscreen";
+	kind: "annotation" | "speed" | "trim" | "zoom" | "cameraFullscreen" | "cursorMotion";
 	start: number;
 	end: number;
 	label: string;
@@ -214,6 +221,7 @@ export function V4Timeline({
 	const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
 	const [autoEnhanceOpen, setAutoEnhanceOpen] = useState(false);
 	const [autoBusy, setAutoBusy] = useState(false);
+	const [cursorMotionBusy, setCursorMotionBusy] = useState(false);
 
 	const clips = tl.clips;
 	const total = useMemo(
@@ -226,6 +234,55 @@ export function V4Timeline({
 	);
 	const pctOf = useCallback((sec: number) => (sec / total) * 100, [total]);
 	const showLanes = variant === "edit";
+
+	useEffect(() => {
+		if (!settings.autoZoomEnabled) return;
+		for (const asset of tl.assets) {
+			if (asset.autoZoomState !== "pending" || !asset.durationSec || asset.durationSec <= 0) {
+				continue;
+			}
+			const assetDurationSec = asset.durationSec;
+			const source = videoSources.find((candidate) => candidate.id === asset.id);
+			const assetClips = clips.filter(
+				(clip) => clip.assetId === asset.id && clip.sourceEndSec !== undefined,
+			);
+			if (!source || assetClips.length === 0 || AUTO_ZOOM_IN_FLIGHT_ASSET_IDS.has(asset.id)) {
+				continue;
+			}
+
+			AUTO_ZOOM_IN_FLIGHT_ASSET_IDS.add(asset.id);
+			void (async () => {
+				try {
+					const telemetry =
+						(await nativeBridgeClient.cursor.getTelemetry(fromFileUrl(source.src))) ?? [];
+					const suggestions = buildAutoZoomSuggestionsForClips({
+						cursorTelemetry: telemetry,
+						clips: assetClips,
+						existingRegions: tl.zoomRegions.map((region) => ({
+							startMs: region.startMs,
+							endMs: region.endMs,
+						})),
+						defaultDurationMs: Math.max(1000, Math.round(assetDurationSec * 50)),
+					});
+					await tl.completePendingAutoZoom(asset.id, suggestions);
+				} catch (error) {
+					toast.error(t("toolbar.autoZoomFailed"), {
+						description: error instanceof Error ? error.message : String(error),
+					});
+				} finally {
+					AUTO_ZOOM_IN_FLIGHT_ASSET_IDS.delete(asset.id);
+				}
+			})();
+		}
+	}, [
+		settings.autoZoomEnabled,
+		tl.assets,
+		tl.zoomRegions,
+		tl.completePendingAutoZoom,
+		clips,
+		videoSources,
+		t,
+	]);
 
 	// ── region lanes ────────────────────────────────────────────────
 	// zoom/speed/annotation: one pill per row, never coalesced — each carries
@@ -265,6 +322,17 @@ export function V4Timeline({
 		// preset value, not a fabricated linear approximation of it.
 		label: `${(z.customScale ?? ZOOM_DEPTH_SCALES[z.depth]).toFixed(2)}×`,
 		sourceIds: [z.id],
+	}));
+	const cursorMotionPills: LanePill[] = tl.cursorMotionRegions.map((region) => ({
+		id: region.id,
+		kind: "cursorMotion",
+		start: region.startMs / 1000,
+		end: region.endMs / 1000,
+		label:
+			region.preset === "wave" || region.preset === "loop"
+				? `${region.preset} ×${region.cycles}`
+				: region.preset,
+		sourceIds: [region.id],
 	}));
 	// trims: content-free (no per-instance text/settings), so touching rows —
 	// inevitable once a trim is ventilated across a clip boundary — are
@@ -339,6 +407,10 @@ export function V4Timeline({
 			e.preventDefault();
 			e.stopPropagation();
 			tl.selectRegion(pill.kind, pill.id, { additive: e.shiftKey });
+			if (pill.kind === "cursorMotion") {
+				setCurrentTime(pill.start + Math.min(0.001, (pill.end - pill.start) / 2));
+				return;
+			}
 			// Scale drag deltas against the canvas (full zoomed timeline) width, so a
 			// drag tracks the cursor exactly regardless of padding, scrollbar or zoom.
 			const el = canvasRef.current;
@@ -425,7 +497,7 @@ export function V4Timeline({
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[tl, total, clips],
+		[tl, total, clips, setCurrentTime],
 	);
 
 	const startNavDrag = useCallback(
@@ -514,9 +586,11 @@ export function V4Timeline({
 				? styles.laneSpeed
 				: kind === "trim"
 					? styles.laneTrim
-					: kind === "cameraFullscreen"
-						? styles.laneCameraFullscreen
-						: styles.laneZoom;
+					: kind === "cursorMotion"
+						? styles.laneCursorMotion
+						: kind === "cameraFullscreen"
+							? styles.laneCameraFullscreen
+							: styles.laneZoom;
 	const pillIcon = (kind: LanePill["kind"]) =>
 		kind === "annotation" ? (
 			<MessageSquare size={11} />
@@ -526,6 +600,8 @@ export function V4Timeline({
 			<Scissors size={11} />
 		) : kind === "cameraFullscreen" ? (
 			<Maximize2 size={11} />
+		) : kind === "cursorMotion" ? (
+			<MousePointer2 size={11} />
 		) : (
 			<ZoomIn size={11} />
 		);
@@ -632,23 +708,25 @@ export function V4Timeline({
 	];
 
 	// Auto-enhance option 1 — the deterministic cursor-telemetry auto-zoom
-	// (ported from main; NOT AI). Reads the recorded cursor movement for the
-	// primary asset and drops zoom-ins on the dwell moments.
+	// The active clip supplies the asset source-time window; generated regions
+	// are projected back to the virtual timeline.
 	const runAutoZooms = useCallback(async () => {
 		setAutoEnhanceOpen(false);
-		const source = videoSources[0];
-		const asset = tl.assets.find((a) => a.id === source?.id) ?? tl.assets[0];
-		if (!source || !asset) {
+		const position = locateVirtualPosition(clips, currentTimeSec);
+		const source = videoSources.find((candidate) => candidate.id === position?.clip.assetId);
+		const asset = tl.assets.find((candidate) => candidate.id === position?.clip.assetId);
+		if (!position || !source || !asset) {
 			toast.error(t("toolbar.importRecordingFirst"));
 			return;
 		}
 		setAutoBusy(true);
 		try {
+			if (!settings.autoZoomEnabled) await tl.setAutoZoomEnabled(true);
 			const telemetry =
 				(await nativeBridgeClient.cursor.getTelemetry(fromFileUrl(source.src))) ?? [];
-			const suggestions = buildAutoZoomSuggestions({
+			const suggestions = buildAutoZoomSuggestionsForClips({
 				cursorTelemetry: telemetry,
-				totalMs: (asset.durationSec ?? 0) * 1000,
+				clips: [position.clip],
 				existingRegions: tl.zoomRegions.map((z) => ({ startMs: z.startMs, endMs: z.endMs })),
 				defaultDurationMs: 2000,
 			});
@@ -669,7 +747,77 @@ export function V4Timeline({
 		} finally {
 			setAutoBusy(false);
 		}
-	}, [videoSources, tl, t]);
+	}, [clips, currentTimeSec, settings.autoZoomEnabled, videoSources, tl, t]);
+
+	const toggleAutoZoom = useCallback(() => {
+		if (settings.autoZoomEnabled) {
+			void tl.setAutoZoomEnabled(false);
+			return;
+		}
+		void runAutoZooms();
+	}, [settings.autoZoomEnabled, runAutoZooms, tl]);
+
+	const createCursorMotionToNextClick = useCallback(async () => {
+		const position = locateVirtualPosition(clips, currentTimeSec);
+		if (!position) {
+			toast.error(t("cursorMotion.placePlayhead"));
+			return;
+		}
+		const clip = position.clip;
+		const source = videoSources.find((candidate) => candidate.id === clip.assetId);
+		const asset = tl.assets.find((candidate) => candidate.id === clip.assetId);
+		if (!source || !asset) {
+			toast.error(t("cursorMotion.dataUnavailable"));
+			return;
+		}
+
+		setCursorMotionBusy(true);
+		try {
+			const videoPath = fromFileUrl(source.src);
+			const recordingData = await nativeBridgeClient.cursor
+				.getRecordingData(videoPath)
+				.catch(() => null);
+			const telemetry =
+				recordingData && recordingData.samples.length > 0
+					? recordingData.samples
+					: ((await nativeBridgeClient.cursor.getTelemetry(videoPath)) ?? []);
+			const smoothedPath = recordingData
+				? getSmoothedCursorPath(recordingData, settings.cursor.smoothing)
+				: null;
+			const clipSourceEndMs =
+				(clip.sourceEndSec ?? asset.durationSec ?? clip.sourceStartSec) * 1000;
+			const drafts = buildCursorMotionRegionDrafts({
+				owner: { clipId: clip.id, assetId: clip.assetId },
+				currentSourceTimeMs: position.sourceTimeSec * 1000,
+				currentVirtualTimeMs: position.virtualTimeSec * 1000,
+				clipSourceEndMs,
+				samples: telemetry,
+				path: smoothedPath
+					? { sampleAtSourceTime: (sourceTimeMs) => smoothedPath.sampleAt(sourceTimeMs) }
+					: null,
+			});
+			if (drafts.length === 0) {
+				toast.info(t("cursorMotion.noNextClick"));
+				return;
+			}
+			const regions = drafts.map((draft) => ({
+				...draft,
+				id: createId("cursor-motion"),
+			})) as AxcutCursorMotionRegion[];
+			const added = await tl.addCursorMotionRegions(regions);
+			toast.success(
+				t(added === 1 ? "cursorMotion.created" : "cursorMotion.createdPlural", {
+					count: added,
+				}),
+			);
+		} catch (error) {
+			toast.error(t("cursorMotion.createFailed"), {
+				description: error instanceof Error ? error.message : String(error),
+			});
+		} finally {
+			setCursorMotionBusy(false);
+		}
+	}, [clips, currentTimeSec, settings.cursor.smoothing, videoSources, tl, t]);
 
 	// Auto-enhance option 2 — hand a generic prompt to the AI agent (smart
 	// zooms + cuts) via the chat prompt-bus.
@@ -745,7 +893,7 @@ export function V4Timeline({
 				onPointerDown={seg.interactive ? (e) => startPillDrag(e, p, "move") : undefined}
 				title={p.label}
 			>
-				{seg.interactive ? (
+				{seg.interactive && p.kind !== "cursorMotion" ? (
 					<span
 						className={styles.lanePillHandle}
 						style={{ left: 0 }}
@@ -758,7 +906,7 @@ export function V4Timeline({
 						<span className={styles.lanePillLabel}>{p.label}</span>
 					</>
 				) : null}
-				{seg.interactive ? (
+				{seg.interactive && p.kind !== "cursorMotion" ? (
 					<span
 						className={styles.lanePillHandle}
 						style={{ right: 0 }}
@@ -903,12 +1051,56 @@ export function V4Timeline({
 						))}
 						<button
 							type="button"
-							className={styles.tlToolBtn}
+							className={`${styles.tlToolBtn} ${styles.tlToolBtnLabeled}`}
 							title={t("buttons.addZoom")}
 							aria-label={t("buttons.addZoom")}
 							onClick={() => void tl.addZoom()}
 						>
 							<ZoomIn size={15} />
+						</button>
+						<button
+							type="button"
+							className={styles.tlToolBtn}
+							title={settings.autoZoomEnabled ? t("buttons.autoZoomOn") : t("buttons.autoZoomOff")}
+							aria-label={
+								settings.autoZoomEnabled ? t("buttons.autoZoomOn") : t("buttons.autoZoomOff")
+							}
+							aria-pressed={settings.autoZoomEnabled}
+							onClick={toggleAutoZoom}
+						>
+							<Wand2 size={15} />
+							<span className={styles.tlToolBtnText}>{t("buttons.autoZoomShort")}</span>
+						</button>
+						<button
+							type="button"
+							className={`${styles.tlToolBtn} ${styles.tlToolBtnLabeled}`}
+							title={
+								settings.autoFocusAll ? t("buttons.autoFocusAllOn") : t("buttons.autoFocusAllOff")
+							}
+							aria-label={
+								settings.autoFocusAll ? t("buttons.autoFocusAllOn") : t("buttons.autoFocusAllOff")
+							}
+							aria-pressed={settings.autoFocusAll}
+							onClick={() => void tl.setAutoFocusAll(!settings.autoFocusAll)}
+						>
+							<ScanEye size={15} />
+							<span className={styles.tlToolBtnText}>{t("buttons.autoFocusShort")}</span>
+						</button>
+						<button
+							type="button"
+							className={`${styles.tlToolBtn} ${styles.tlToolBtnLabeled}`}
+							title={t("cursorMotion.create")}
+							aria-label={t("cursorMotion.create")}
+							aria-busy={cursorMotionBusy}
+							disabled={cursorMotionBusy}
+							onClick={() => void createCursorMotionToNextClick()}
+						>
+							{cursorMotionBusy ? (
+								<Loader2 className="animate-spin" size={15} />
+							) : (
+								<MousePointer2 size={15} />
+							)}
+							<span className={styles.tlToolBtnText}>{t("cursorMotion.title")}</span>
 						</button>
 						<button
 							type="button"
@@ -1027,6 +1219,9 @@ export function V4Timeline({
 								</div>
 								<div className={styles.tlLane}>{renderPills(trimPills, t("toolbar.noTrims"))}</div>
 								<div className={styles.tlLane}>{renderPills(zoomPills, "")}</div>
+								<div className={styles.tlLane}>
+									{renderPills(cursorMotionPills, t("cursorMotion.empty"))}
+								</div>
 								<div className={styles.tlLane}>{renderPills(cameraFullscreenPills, "")}</div>
 							</>
 						) : null}

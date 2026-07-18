@@ -7,6 +7,7 @@
 // zoom-in candidates, focused on the average cursor position during the dwell.
 
 import type { CursorTelemetryPoint, ZoomFocus } from "@/components/video-editor/types";
+import type { AxcutClip } from "@/lib/ai-edition/schema";
 
 export const MIN_DWELL_DURATION_MS = 450;
 export const MAX_DWELL_DURATION_MS = 2600;
@@ -158,6 +159,62 @@ export function buildAutoZoomSuggestions(options: {
 			span: { start: candidateStart, end: candidateEnd },
 			focus: candidate.focus,
 		});
+	}
+
+	return suggestions;
+}
+
+export function buildAutoZoomSuggestionsForClips(options: {
+	cursorTelemetry: CursorTelemetryPoint[];
+	clips: AxcutClip[];
+	existingRegions: { startMs: number; endMs: number }[];
+	defaultDurationMs: number;
+}): AutoZoomSuggestion[] {
+	const { cursorTelemetry, clips, existingRegions, defaultDurationMs } = options;
+	const reservedRegions = existingRegions.map((region) => ({ ...region }));
+	const suggestions: AutoZoomSuggestion[] = [];
+	const orderedClips = [...clips].sort(
+		(a, b) => a.timelineStartSec - b.timelineStartSec || a.id.localeCompare(b.id),
+	);
+
+	for (const clip of orderedClips) {
+		if (clip.sourceEndSec === undefined) continue;
+		const sourceStartMs = clip.sourceStartSec * 1000;
+		const sourceDurationMs = (clip.sourceEndSec - clip.sourceStartSec) * 1000;
+		const virtualStartMs = clip.timelineStartSec * 1000;
+		const virtualDurationMs = (clip.timelineEndSec - clip.timelineStartSec) * 1000;
+		const durationMs = Math.min(sourceDurationMs, virtualDurationMs);
+		if (!Number.isFinite(durationMs) || durationMs <= 0) continue;
+
+		const sourceEndMs = sourceStartMs + durationMs;
+		const virtualEndMs = virtualStartMs + durationMs;
+		const clipTelemetry = cursorTelemetry
+			.filter((sample) => sample.timeMs >= sourceStartMs && sample.timeMs < sourceEndMs)
+			.map((sample) => ({ ...sample, timeMs: sample.timeMs - sourceStartMs }));
+		const clipExistingRegions = reservedRegions
+			.filter((region) => region.endMs > virtualStartMs && region.startMs < virtualEndMs)
+			.map((region) => ({
+				startMs: Math.max(0, region.startMs - virtualStartMs),
+				endMs: Math.min(durationMs, region.endMs - virtualStartMs),
+			}));
+		const clipSuggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: clipTelemetry,
+			totalMs: durationMs,
+			existingRegions: clipExistingRegions,
+			defaultDurationMs,
+		});
+
+		for (const suggestion of clipSuggestions) {
+			const projected = {
+				span: {
+					start: virtualStartMs + suggestion.span.start,
+					end: virtualStartMs + suggestion.span.end,
+				},
+				focus: suggestion.focus,
+			};
+			suggestions.push(projected);
+			reservedRegions.push({ startMs: projected.span.start, endMs: projected.span.end });
+		}
 	}
 
 	return suggestions;

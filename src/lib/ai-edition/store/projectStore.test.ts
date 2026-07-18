@@ -99,6 +99,19 @@ describe("useProjectStore", () => {
 		expect(state.error).toBe("not found");
 	});
 
+	it("loads an older v4 document without cursor motion regions", async () => {
+		bridgeMocks.get.mockResolvedValue({
+			success: true,
+			document: { ...sampleDoc, schemaVersion: 4 },
+		});
+
+		await useProjectStore.getState().loadProject("proj_test");
+
+		const state = useProjectStore.getState();
+		expect(state.status).toBe("ready");
+		expect(state.document?.cursorMotionRegions).toEqual([]);
+	});
+
 	it("addAsset replaces the document and bumps revision", async () => {
 		useProjectStore.setState({
 			projectId: "proj_test",

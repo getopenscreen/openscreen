@@ -1,5 +1,12 @@
 import { normalizeTextAnimation } from "@/lib/annotationTextAnimation";
 import { normalizeBlurColor, normalizeBlurType } from "@/lib/blurEffects";
+import {
+	type CursorMotionRegion,
+	clampCursorMotionCycles,
+	clampCursorMotionPoint,
+	isCursorMotionEasing,
+	isCursorMotionPreset,
+} from "@/lib/cursor/cursorMotion";
 import { normalizeCursorThemeId } from "@/lib/cursor/cursorThemes";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import type { ProjectMedia } from "@/lib/recordingSession";
@@ -63,7 +70,7 @@ function normalizeWallpaperValue(value: string): string {
 	return CANONICAL_WALLPAPERS.has(canonical) ? canonical : DEFAULT_WALLPAPER;
 }
 
-export const PROJECT_VERSION = 2;
+export const PROJECT_VERSION = 3;
 
 export interface ProjectEditorState {
 	wallpaper: string;
@@ -75,6 +82,7 @@ export interface ProjectEditorState {
 	padding: number;
 	cropRegion: CropRegion;
 	zoomRegions: ZoomRegion[];
+	cursorMotionRegions: CursorMotionRegion[];
 	cameraFullscreenRegions: CameraFullscreenRegion[];
 	autoZoomEnabled: boolean;
 	autoFocusAll: boolean;
@@ -269,6 +277,44 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						focusMode: region.focusMode === "auto" ? "auto" : "manual",
 						source: region.source === "auto" ? "auto" : "manual",
 						...(validPreset ? { rotationPreset: validPreset } : {}),
+					};
+				})
+		: [];
+
+	const normalizedCursorMotionRegions: CursorMotionRegion[] = Array.isArray(
+		editor.cursorMotionRegions,
+	)
+		? editor.cursorMotionRegions
+				.filter((region): region is CursorMotionRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
+				.map((region) => {
+					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
+					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, Math.max(rawStart, rawEnd));
+					const startPoint =
+						region.startPoint && typeof region.startPoint === "object"
+							? clampCursorMotionPoint(region.startPoint)
+							: undefined;
+					const endPoint =
+						region.endPoint && typeof region.endPoint === "object"
+							? clampCursorMotionPoint(region.endPoint)
+							: undefined;
+					return {
+						id: region.id,
+						startMs,
+						endMs,
+						...(startPoint ? { startPoint } : {}),
+						...(endPoint ? { endPoint } : {}),
+						preset: isCursorMotionPreset(region.preset) ? region.preset : "arc",
+						controlPoint: clampCursorMotionPoint(
+							region.controlPoint && typeof region.controlPoint === "object"
+								? region.controlPoint
+								: { cx: 0.5, cy: 0.35 },
+						),
+						cycles: clampCursorMotionCycles(region.cycles),
+						easing: isCursorMotionEasing(region.easing) ? region.easing : "ease-in-out",
 					};
 				})
 		: [];
@@ -506,6 +552,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			height: cropHeight,
 		},
 		zoomRegions: normalizedZoomRegions,
+		cursorMotionRegions: normalizedCursorMotionRegions,
 		cameraFullscreenRegions: normalizedCameraFullscreenRegions,
 		// Default on for legacy projects so re-opens match the new default. The
 		// on-load auto-suggest pass is gated separately, so this won't add zooms.

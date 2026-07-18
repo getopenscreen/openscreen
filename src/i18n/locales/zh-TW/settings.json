@@ -202,6 +202,32 @@
 		"errorTimeout": "字體載入時間過長。請檢查 URL 並重試。",
 		"errorLoadFailed": "無法載入該字體。請確認 Google Fonts URL 是否正確。"
 	},
+	"cursorMotion": {
+		"title": "Cursor Motion",
+		"description": "Choose a path, then drag the handle directly on the preview.",
+		"preset": "Path preset",
+		"editPath": "Edit path",
+		"hidePath": "Hide path",
+		"cycles": "Turns",
+		"easing": "Timing",
+		"anchorHint": "The start follows the playhead and the end is locked to the next recorded click. Drag the white-ring handle to shape the path.",
+		"delete": "Delete Cursor Motion",
+		"noCursorData": "No editable cursor data is available at this point.",
+		"noFollowingClick": "There is no recorded click after the playhead.",
+		"presets": {
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		},
+		"easings": {
+			"linear": "Linear",
+			"ease-in-out": "Smooth",
+			"ease-in": "Accelerate",
+			"ease-out": "Decelerate"
+		}
+	},
 	"cursor": {
 		"theme": "游標樣式",
 		"themeDefault": "預設",

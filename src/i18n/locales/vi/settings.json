@@ -201,6 +201,32 @@
 		"errorTimeout": "Tải phông chữ mất quá nhiều thời gian. Vui lòng kiểm tra URL và thử lại.",
 		"errorLoadFailed": "Không thể tải phông chữ. Vui lòng xác minh URL Google Fonts là chính xác."
 	},
+	"cursorMotion": {
+		"title": "Cursor Motion",
+		"description": "Choose a path, then drag the handle directly on the preview.",
+		"preset": "Path preset",
+		"editPath": "Edit path",
+		"hidePath": "Hide path",
+		"cycles": "Turns",
+		"easing": "Timing",
+		"anchorHint": "The start follows the playhead and the end is locked to the next recorded click. Drag the white-ring handle to shape the path.",
+		"delete": "Delete Cursor Motion",
+		"noCursorData": "No editable cursor data is available at this point.",
+		"noFollowingClick": "There is no recorded click after the playhead.",
+		"presets": {
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		},
+		"easings": {
+			"linear": "Linear",
+			"ease-in-out": "Smooth",
+			"ease-in": "Accelerate",
+			"ease-out": "Decelerate"
+		}
+	},
 	"cursor": {
 		"theme": "Kiểu con trỏ",
 		"themeDefault": "Mặc định",

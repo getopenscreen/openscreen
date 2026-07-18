@@ -1,5 +1,6 @@
 {
 	"buttons": {
+		"addCursorMotion": "Add cursor motion to the next click",
 		"addZoom": "Adicionar Zoom (Z)",
 		"suggestZooms": "Sugerir Zooms a partir do Cursor",
 		"addTrim": "Adicionar Recorte (T)",
@@ -9,12 +10,22 @@
 		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia (C)"
 	},
 	"hints": {
+		"pressCursorMotion": "Move the playhead, then add a cursor path to the next recorded click",
 		"pressZoom": "Pressione Z para adicionar zoom",
 		"pressTrim": "Pressione T para adicionar recorte",
 		"pressAnnotation": "Pressione A para adicionar anotação",
 		"pressBlur": "Pressione B para adicionar região de desfoque",
 		"pressSpeed": "Pressione S para adicionar velocidade",
 		"pressCameraFullscreen": "Pressione C para adicionar um segmento de Câmera em Tela Cheia"
+	},
+	"cursorMotion": {
+		"presets": {
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		}
 	},
 	"labels": {
 		"pan": "Mover",

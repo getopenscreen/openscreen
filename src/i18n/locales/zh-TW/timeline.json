@@ -1,5 +1,6 @@
 {
 	"buttons": {
+		"addCursorMotion": "Add cursor motion to the next click",
 		"addZoom": "新增縮放 (Z)",
 		"suggestZooms": "根據游標建議縮放",
 		"addTrim": "新增剪輯 (T)",
@@ -9,12 +10,22 @@
 		"addCameraFullscreen": "新增全螢幕攝影機 (C)"
 	},
 	"hints": {
+		"pressCursorMotion": "Move the playhead, then add a cursor path to the next recorded click",
 		"pressZoom": "按 Z 新增縮放",
 		"pressTrim": "按 T 新增剪輯",
 		"pressAnnotation": "按 A 新增標註",
 		"pressSpeed": "按 S 新增速度",
 		"pressBlur": "按 B 新增模糊區域",
 		"pressCameraFullscreen": "按 C 新增一個全螢幕攝影機片段"
+	},
+	"cursorMotion": {
+		"presets": {
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		}
 	},
 	"labels": {
 		"pan": "平移",

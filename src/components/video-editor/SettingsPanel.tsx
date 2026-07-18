@@ -14,6 +14,7 @@ import {
 	Palette,
 	SlidersHorizontal,
 	Sparkles,
+	Spline,
 	Star,
 	Trash2,
 	Unlock,
@@ -44,6 +45,13 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useScopedT } from "@/contexts/I18nContext";
 import { getAssetPath } from "@/lib/assetPath";
 import { WEBCAM_LAYOUT_PRESETS } from "@/lib/compositeLayout";
+import {
+	CURSOR_MOTION_EASINGS,
+	CURSOR_MOTION_PRESETS,
+	type CursorMotionEasing,
+	type CursorMotionPreset,
+	type CursorMotionRegion,
+} from "@/lib/cursor/cursorMotion";
 import { CURSOR_THEMES, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import {
@@ -323,6 +331,14 @@ interface SettingsPanelProps {
 	selectedSpeedValue?: PlaybackSpeed | null;
 	onSpeedChange?: (speed: PlaybackSpeed) => void;
 	onSpeedDelete?: (id: string) => void;
+	selectedCursorMotionRegion?: CursorMotionRegion | null;
+	isEditingCursorMotion?: boolean;
+	onCursorMotionEditingChange?: (editing: boolean) => void;
+	onCursorMotionPresetChange?: (preset: CursorMotionPreset) => void;
+	onCursorMotionEasingChange?: (easing: CursorMotionEasing) => void;
+	onCursorMotionCyclesChange?: (cycles: number) => void;
+	onCursorMotionCommit?: () => void;
+	onCursorMotionDelete?: (id: string) => void;
 	hasWebcam?: boolean;
 	webcamLayoutPreset?: WebcamLayoutPreset;
 	onWebcamLayoutPresetChange?: (preset: WebcamLayoutPreset) => void;
@@ -364,6 +380,36 @@ const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
 	{ depth: 5, label: "3.5×" },
 	{ depth: 6, label: "5×" },
 ];
+
+const CURSOR_MOTION_PREVIEW_PATHS: Record<CursorMotionPreset, string> = {
+	straight: "M4 18 L44 6",
+	arc: "M4 18 Q24 1 44 18",
+	wave: "M4 13 C10 2 16 2 22 13 S34 24 44 13",
+	loop: "M4 16 C14 2 34 2 32 15 C30 25 14 23 18 13 C22 5 36 8 44 16",
+	overshoot: "M4 18 C24 18 37 5 46 8 C42 8 40 10 44 14",
+};
+
+function CursorMotionPresetPreview({ preset }: { preset: CursorMotionPreset }) {
+	return (
+		<svg viewBox="0 0 48 26" className="h-7 w-full" aria-hidden="true">
+			<path
+				d={CURSOR_MOTION_PREVIEW_PATHS[preset]}
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2.4"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<circle cx="4" cy="18" r="2.4" fill="currentColor" />
+			<circle
+				cx="44"
+				cy={preset === "straight" ? 6 : preset === "wave" ? 13 : 18}
+				r="2.4"
+				fill="currentColor"
+			/>
+		</svg>
+	);
+}
 
 type SettingsPanelMode = "background" | "effects" | "layout" | "cursor" | "export" | "timeline";
 
@@ -459,6 +505,14 @@ export function SettingsPanel({
 	selectedSpeedValue,
 	onSpeedChange,
 	onSpeedDelete,
+	selectedCursorMotionRegion,
+	isEditingCursorMotion = false,
+	onCursorMotionEditingChange,
+	onCursorMotionPresetChange,
+	onCursorMotionEasingChange,
+	onCursorMotionCyclesChange,
+	onCursorMotionCommit,
+	onCursorMotionDelete,
 	hasWebcam = false,
 	webcamLayoutPreset = DEFAULT_WEBCAM_SETTINGS.layoutPreset,
 	onWebcamLayoutPresetChange,
@@ -643,7 +697,9 @@ export function SettingsPanel({
 
 	const zoomEnabled = Boolean(selectedZoomDepth);
 	const trimEnabled = Boolean(selectedTrimId);
-	const hasTimelineSelection = Boolean(selectedZoomId || selectedTrimId || selectedSpeedId);
+	const hasTimelineSelection = Boolean(
+		selectedZoomId || selectedTrimId || selectedSpeedId || selectedCursorMotionRegion,
+	);
 	const hasCursorPanel = showCursorSettings && hasCursorData;
 	const panelModes: Array<{
 		id: SettingsPanelMode;
@@ -675,7 +731,9 @@ export function SettingsPanel({
 			? t("zoom.level")
 			: selectedSpeedId
 				? t("speed.playbackSpeed")
-				: t("trim.deleteRegion")
+				: selectedCursorMotionRegion
+					? t("cursorMotion.title")
+					: t("trim.deleteRegion")
 		: activePanelMode === "timeline"
 			? t("timeline.title")
 			: ([...panelModes, exportPanelMode].find((mode) => mode.id === activePanelMode)?.label ??
@@ -1164,6 +1222,123 @@ export function SettingsPanel({
 							>
 								<Trash2 className="w-3 h-3" />
 								{t("trim.deleteRegion")}
+							</Button>
+						</div>
+					)}
+
+					{selectedCursorMotionRegion && (
+						<div className="editor-panel-section mb-3 space-y-3 px-1">
+							<div className="flex items-start justify-between gap-3">
+								<div>
+									<div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+										<Spline className="h-3.5 w-3.5 text-[#a78bfa]" />
+										{t("cursorMotion.title")}
+									</div>
+									<p className="mt-1 text-[10px] leading-snug text-slate-500">
+										{t("cursorMotion.description")}
+									</p>
+								</div>
+								<Button
+									type="button"
+									onClick={() => onCursorMotionEditingChange?.(!isEditingCursorMotion)}
+									className={cn(
+										"h-7 shrink-0 rounded-lg border px-2 text-[10px] font-semibold transition-all",
+										isEditingCursorMotion
+											? "border-[#a78bfa]/70 bg-[#8b5cf6] text-white"
+											: "border-white/[0.08] bg-white/[0.04] text-slate-400 hover:bg-white/[0.08]",
+									)}
+								>
+									{isEditingCursorMotion ? t("cursorMotion.hidePath") : t("cursorMotion.editPath")}
+								</Button>
+							</div>
+
+							<div>
+								<span className="mb-1.5 block text-[11px] font-medium text-slate-400">
+									{t("cursorMotion.preset")}
+								</span>
+								<div className="grid grid-cols-2 gap-1.5">
+									{CURSOR_MOTION_PRESETS.map((preset) => {
+										const isActive = selectedCursorMotionRegion.preset === preset;
+										return (
+											<Button
+												key={preset}
+												type="button"
+												onClick={() => onCursorMotionPresetChange?.(preset)}
+												className={cn(
+													"h-auto min-h-12 flex-col gap-0 rounded-lg border px-2 py-1 text-center transition-all",
+													isActive
+														? "border-[#a78bfa]/70 bg-[#8b5cf6]/25 text-[#ddd6fe] shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
+														: "border-white/[0.06] bg-white/[0.035] text-slate-500 hover:border-white/15 hover:bg-white/[0.075] hover:text-slate-200",
+												)}
+											>
+												<CursorMotionPresetPreview preset={preset} />
+												<span className="text-[10px] font-semibold">
+													{t(`cursorMotion.presets.${preset}`)}
+												</span>
+											</Button>
+										);
+									})}
+								</div>
+							</div>
+
+							{(selectedCursorMotionRegion.preset === "wave" ||
+								selectedCursorMotionRegion.preset === "loop") && (
+								<div>
+									<div className="mb-1.5 flex items-center justify-between text-[11px]">
+										<span className="font-medium text-slate-400">{t("cursorMotion.cycles")}</span>
+										<span className="font-semibold tabular-nums text-[#a78bfa]">
+											{selectedCursorMotionRegion.cycles}
+										</span>
+									</div>
+									<SliderPrimitive.Root
+										min={1}
+										max={6}
+										step={1}
+										value={[selectedCursorMotionRegion.cycles]}
+										onValueChange={(values) => onCursorMotionCyclesChange?.(values[0])}
+										onValueCommit={() => onCursorMotionCommit?.()}
+										className="relative flex w-full touch-none select-none items-center py-1"
+									>
+										<SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full border border-white/10 bg-white/5">
+											<SliderPrimitive.Range className="absolute h-full bg-[#8b5cf6]" />
+										</SliderPrimitive.Track>
+										<SliderPrimitive.Thumb className="block h-3.5 w-3.5 cursor-grab rounded-full border-2 border-[#a78bfa] bg-[#8b5cf6] shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/50 active:cursor-grabbing" />
+									</SliderPrimitive.Root>
+								</div>
+							)}
+
+							<div className="space-y-1.5">
+								<span className="block text-[11px] font-medium text-slate-400">
+									{t("cursorMotion.easing")}
+								</span>
+								<Select
+									value={selectedCursorMotionRegion.easing}
+									onValueChange={(value: CursorMotionEasing) => onCursorMotionEasingChange?.(value)}
+								>
+									<SelectTrigger className="h-8 border-white/10 bg-black/20 text-xs">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{CURSOR_MOTION_EASINGS.map((easing) => (
+											<SelectItem key={easing} value={easing} className="text-xs">
+												{t(`cursorMotion.easings.${easing}`)}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+
+							<div className="rounded-lg border border-[#a78bfa]/15 bg-[#8b5cf6]/[0.06] px-2.5 py-2 text-[10px] leading-snug text-slate-400">
+								{t("cursorMotion.anchorHint")}
+							</div>
+							<Button
+								onClick={() => onCursorMotionDelete?.(selectedCursorMotionRegion.id)}
+								variant="destructive"
+								size="sm"
+								className="h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+							>
+								<Trash2 className="h-3 w-3" />
+								{t("cursorMotion.delete")}
 							</Button>
 						</div>
 					)}

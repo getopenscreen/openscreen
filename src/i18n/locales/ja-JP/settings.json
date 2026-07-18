@@ -210,6 +210,32 @@
 		"errorTimeout": "フォントの読み込みに時間がかかりすぎました。URLを確認して再試行してください。",
 		"errorLoadFailed": "フォントを読み込めませんでした。GoogleフォントのURLが正しいことを確認してください。"
 	},
+	"cursorMotion": {
+		"title": "カーソル軌跡",
+		"description": "動きのプリセットを選び、プレビュー上のハンドルで軌道を直接調整します。",
+		"preset": "軌道プリセット",
+		"editPath": "軌道を編集",
+		"hidePath": "軌道を隠す",
+		"cycles": "うねり・回転数",
+		"easing": "動きの緩急",
+		"anchorHint": "始点は再生位置、終点は次の実クリックに固定されます。白い輪のハンドルをドラッグして軌道を変形できます。",
+		"delete": "カーソル軌跡を削除",
+		"noCursorData": "この位置には編集可能なカーソルデータがありません。",
+		"noFollowingClick": "再生位置より後に記録されたクリックがありません。",
+		"presets": {
+			"straight": "直線",
+			"arc": "弧",
+			"wave": "波",
+			"loop": "ループ",
+			"overshoot": "行き過ぎ"
+		},
+		"easings": {
+			"linear": "一定",
+			"ease-in-out": "なめらか",
+			"ease-in": "加速",
+			"ease-out": "減速"
+		}
+	},
 	"cursor": {
 		"theme": "カーソルのスタイル",
 		"themeDefault": "デフォルト",

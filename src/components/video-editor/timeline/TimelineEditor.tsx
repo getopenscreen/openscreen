@@ -7,6 +7,7 @@ import {
 	Gauge,
 	Maximize,
 	MessageSquare,
+	MousePointer2,
 	Plus,
 	ScanEye,
 	Scissors,
@@ -26,6 +27,7 @@ import {
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { useAudioPeaks } from "@/hooks/useAudioPeaks";
+import type { CursorMotionRegion } from "@/lib/cursor/cursorMotion";
 import { isTextEditingTarget, matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/aspectRatioUtils";
@@ -51,6 +53,7 @@ const TRIM_ROW_ID = "row-trim";
 const ANNOTATION_ROW_ID = "row-annotation";
 const BLUR_ROW_ID = "row-blur";
 const SPEED_ROW_ID = "row-speed";
+const CURSOR_MOTION_ROW_ID = "row-cursor-motion";
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
 
@@ -101,6 +104,11 @@ interface TimelineEditorProps {
 	onSpeedDelete?: (id: string) => void;
 	selectedSpeedId?: string | null;
 	onSelectSpeed?: (id: string | null) => void;
+	cursorMotionRegions?: CursorMotionRegion[];
+	onCursorMotionAdded?: (span: Span) => void;
+	onCursorMotionDelete?: (id: string) => void;
+	selectedCursorMotionId?: string | null;
+	onSelectCursorMotion?: (id: string | null) => void;
 	aspectRatio: AspectRatio;
 	onAspectRatioChange: (aspectRatio: AspectRatio) => void;
 	videoUrl?: string;
@@ -127,7 +135,14 @@ interface TimelineRenderItem {
 	zoomCustomScale?: number;
 	speedValue?: number;
 	isAutoFocus?: boolean;
-	variant: "zoom" | "camera-fullscreen" | "trim" | "annotation" | "speed" | "blur";
+	variant:
+		| "zoom"
+		| "camera-fullscreen"
+		| "trim"
+		| "annotation"
+		| "speed"
+		| "blur"
+		| "cursor-motion";
 }
 
 const SCALE_CANDIDATES = [
@@ -579,12 +594,14 @@ function Timeline({
 	onSelectAnnotation,
 	onSelectBlur,
 	onSelectSpeed,
+	onSelectCursorMotion,
 	selectedZoomId,
 	selectedCameraFullscreenId,
 	selectedTrimId,
 	selectedAnnotationId,
 	selectedBlurId,
 	selectedSpeedId,
+	selectedCursorMotionId,
 	keyframes = [],
 	videoUrl,
 	showTrimWaveform = false,
@@ -600,12 +617,14 @@ function Timeline({
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectBlur?: (id: string | null) => void;
 	onSelectSpeed?: (id: string | null) => void;
+	onSelectCursorMotion?: (id: string | null) => void;
 	selectedZoomId: string | null;
 	selectedCameraFullscreenId?: string | null;
 	selectedTrimId?: string | null;
 	selectedAnnotationId?: string | null;
 	selectedBlurId?: string | null;
 	selectedSpeedId?: string | null;
+	selectedCursorMotionId?: string | null;
 	keyframes?: { id: string; time: number }[];
 	videoUrl?: string;
 	showTrimWaveform?: boolean;
@@ -650,6 +669,7 @@ function Timeline({
 		onSelectAnnotation?.(null);
 		onSelectBlur?.(null);
 		onSelectSpeed?.(null);
+		onSelectCursorMotion?.(null);
 	}, [
 		onSelectZoom,
 		onSelectCameraFullscreen,
@@ -657,6 +677,7 @@ function Timeline({
 		onSelectAnnotation,
 		onSelectBlur,
 		onSelectSpeed,
+		onSelectCursorMotion,
 	]);
 
 	const handleTimelineClick = useCallback(
@@ -777,6 +798,7 @@ function Timeline({
 	const annotationItems = items.filter((item) => item.rowId === ANNOTATION_ROW_ID);
 	const blurItems = items.filter((item) => item.rowId === BLUR_ROW_ID);
 	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
+	const cursorMotionItems = items.filter((item) => item.rowId === CURSOR_MOTION_ROW_ID);
 
 	return (
 		<div
@@ -926,6 +948,27 @@ function Timeline({
 					</Item>
 				))}
 			</Row>
+
+			<Row
+				id={CURSOR_MOTION_ROW_ID}
+				isEmpty={cursorMotionItems.length === 0}
+				hint={t("hints.pressCursorMotion")}
+			>
+				{cursorMotionItems.map((item) => (
+					<Item
+						id={item.id}
+						key={item.id}
+						rowId={item.rowId}
+						span={item.span}
+						isSelected={item.id === selectedCursorMotionId}
+						onSelect={() => onSelectCursorMotion?.(item.id)}
+						variant="cursor-motion"
+						disabled
+					>
+						{item.label}
+					</Item>
+				))}
+			</Row>
 		</div>
 	);
 }
@@ -975,6 +1018,11 @@ export default function TimelineEditor({
 	onSpeedDelete,
 	selectedSpeedId,
 	onSelectSpeed,
+	cursorMotionRegions = [],
+	onCursorMotionAdded,
+	onCursorMotionDelete,
+	selectedCursorMotionId,
+	onSelectCursorMotion,
 	aspectRatio,
 	onAspectRatioChange,
 	videoUrl,
@@ -1072,6 +1120,12 @@ export default function TimelineEditor({
 		onSpeedDelete(selectedSpeedId);
 		onSelectSpeed(null);
 	}, [selectedSpeedId, onSpeedDelete, onSelectSpeed]);
+
+	const deleteSelectedCursorMotion = useCallback(() => {
+		if (!selectedCursorMotionId || !onCursorMotionDelete || !onSelectCursorMotion) return;
+		onCursorMotionDelete(selectedCursorMotionId);
+		onSelectCursorMotion(null);
+	}, [selectedCursorMotionId, onCursorMotionDelete, onSelectCursorMotion]);
 
 	useEffect(() => {
 		setRange(createInitialRange(totalMs));
@@ -1318,6 +1372,18 @@ export default function TimelineEditor({
 		t,
 	]);
 
+	const handleAddCursorMotion = useCallback(() => {
+		if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onCursorMotionAdded) {
+			return;
+		}
+
+		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
+		onCursorMotionAdded({
+			start: startPos,
+			end: Math.min(totalMs, startPos + defaultRegionDurationMs),
+		});
+	}, [currentTimeMs, defaultRegionDurationMs, onCursorMotionAdded, totalMs, videoDuration]);
+
 	const handleAddAnnotation = useCallback(() => {
 		if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onAnnotationAdded) {
 			return;
@@ -1419,6 +1485,8 @@ export default function TimelineEditor({
 					deleteSelectedBlur();
 				} else if (selectedSpeedId) {
 					deleteSelectedSpeed();
+				} else if (selectedCursorMotionId) {
+					deleteSelectedCursorMotion();
 				}
 			}
 		};
@@ -1439,6 +1507,7 @@ export default function TimelineEditor({
 		deleteSelectedAnnotation,
 		deleteSelectedBlur,
 		deleteSelectedSpeed,
+		deleteSelectedCursorMotion,
 		selectedKeyframeId,
 		selectedZoomId,
 		selectedCameraFullscreenId,
@@ -1446,6 +1515,7 @@ export default function TimelineEditor({
 		selectedAnnotationId,
 		selectedBlurId,
 		selectedSpeedId,
+		selectedCursorMotionId,
 		annotationRegions,
 		currentTime,
 		onSelectAnnotation,
@@ -1532,7 +1602,23 @@ export default function TimelineEditor({
 			variant: "speed",
 		}));
 
-		return [...zooms, ...cameraFullscreens, ...trims, ...annotations, ...blurs, ...speeds];
+		const cursorMotions: TimelineRenderItem[] = cursorMotionRegions.map((region, index) => ({
+			id: region.id,
+			rowId: CURSOR_MOTION_ROW_ID,
+			span: { start: region.startMs, end: region.endMs },
+			label: `${t(`cursorMotion.presets.${region.preset}`)} ${index + 1}`,
+			variant: "cursor-motion",
+		}));
+
+		return [
+			...zooms,
+			...cameraFullscreens,
+			...trims,
+			...annotations,
+			...blurs,
+			...speeds,
+			...cursorMotions,
+		];
 	}, [
 		zoomRegions,
 		cameraFullscreenRegions,
@@ -1540,6 +1626,7 @@ export default function TimelineEditor({
 		annotationRegions,
 		blurRegions,
 		speedRegions,
+		cursorMotionRegions,
 		t,
 	]);
 
@@ -1718,6 +1805,17 @@ export default function TimelineEditor({
 					>
 						<Gauge className="w-4 h-4" />
 					</Button>
+					{onCursorMotionAdded && (
+						<Button
+							onClick={handleAddCursorMotion}
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 rounded-lg text-slate-400 hover:text-[#a78bfa] hover:bg-[#8b5cf6]/10 transition-all"
+							title={t("buttons.addCursorMotion")}
+						>
+							<MousePointer2 className="w-4 h-4" />
+						</Button>
+					)}
 					{onGenerateCaptions && (
 						<Button
 							onClick={onGenerateCaptions}
@@ -1811,12 +1909,14 @@ export default function TimelineEditor({
 						onSelectAnnotation={onSelectAnnotation}
 						onSelectBlur={onSelectBlur}
 						onSelectSpeed={onSelectSpeed}
+						onSelectCursorMotion={onSelectCursorMotion}
 						selectedZoomId={selectedZoomId}
 						selectedCameraFullscreenId={selectedCameraFullscreenId}
 						selectedTrimId={selectedTrimId}
 						selectedAnnotationId={selectedAnnotationId}
 						selectedBlurId={selectedBlurId}
 						selectedSpeedId={selectedSpeedId}
+						selectedCursorMotionId={selectedCursorMotionId}
 						keyframes={keyframes}
 						videoUrl={videoUrl}
 						showTrimWaveform={showTrimWaveform}

@@ -4,6 +4,10 @@ version = "0.0.0"
 edition = "2021"
 description = "POC OpenScreen : compositeur natif D3D11 zéro-copie, effets HLSL, mesuré en fps (fast-path natif)."
 
+[lib]
+name = "poc_d3d"
+path = "src/lib.rs"
+
 [[bin]]
 name = "poc-d3d"
 path = "src/main.rs"

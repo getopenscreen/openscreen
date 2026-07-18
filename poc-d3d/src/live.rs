@@ -16,11 +16,12 @@ use crate::pipeline::Decoder;
 use anyhow::Result;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Once};
+use std::sync::{Arc, Mutex, Once};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use windows::core::{Interface, PCWSTR};
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11RenderTargetView, ID3D11Texture2D};
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_ALPHA_MODE_IGNORE, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC,
@@ -90,6 +91,9 @@ impl Player {
 
 /// État partagé thread appelant → thread de rendu (commandes sans blocage).
 struct Shared {
+    /// rect viewport en px device [x, y, w, h], relatif au client de la fenêtre parente.
+    /// Le thread de rendu le mappe en coords écran (le parent peut bouger) et repositionne.
+    rect: Mutex<[i32; 4]>,
     bg_blur: AtomicBool,
     playing: AtomicBool,
     stop: AtomicBool,
@@ -120,33 +124,41 @@ impl LiveView {
     ) -> Result<LiveView> {
         unsafe {
             let hinst = HINSTANCE(GetModuleHandleW(None)?.0);
-            register_child_class(hinst);
-            let cls = wide("PocD3DLiveChild");
+            register_overlay_class(hinst);
+            let cls = wide("PocD3DOverlay");
+            // position écran initiale = origine client du parent + (x, y)
+            let mut pt = POINT { x, y };
+            let _ = ClientToScreen(parent, &mut pt);
+            // Fenêtre top-level "overlay" OWNED par le parent (WS_POPUP), sans activation.
+            // Une fenêtre SŒUR (pas enfant) n'est pas dans la surface de Chromium → elle
+            // n'est PAS occultée par son compositeur GPU (contrairement à WS_CHILD).
             let hwnd = CreateWindowExW(
-                WINDOW_EX_STYLE(0),
+                WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
                 PCWSTR(cls.as_ptr()),
                 PCWSTR::null(),
-                WS_CHILD | WS_VISIBLE,
-                x,
-                y,
+                WS_POPUP | WS_VISIBLE,
+                pt.x,
+                pt.y,
                 w.max(1),
                 h.max(1),
-                parent,
+                parent, // owner
                 HMENU::default(),
                 hinst,
                 None,
             )?;
 
             let shared = Arc::new(Shared {
+                rect: Mutex::new([x, y, w, h]),
                 bg_blur: AtomicBool::new(false),
                 playing: AtomicBool::new(true),
                 stop: AtomicBool::new(false),
             });
-            let hwnd_val = hwnd.0 as isize;
+            let overlay_val = hwnd.0 as isize;
+            let parent_val = parent.0 as isize;
             let sh = shared.clone();
             let (s, wc, cj) = (screen.to_string(), webcam.to_string(), cursor_json.to_string());
             let thread = std::thread::spawn(move || {
-                if let Err(e) = render_thread(hwnd_val, sh, &s, &wc, &cj) {
+                if let Err(e) = render_thread(overlay_val, parent_val, sh, &s, &wc, &cj) {
                     eprintln!("[live] render thread error: {e:#}");
                 }
             });
@@ -155,10 +167,11 @@ impl LiveView {
         }
     }
 
-    /// Repositionne/redimensionne la fenêtre enfant (sync du rect DOM en Electron).
+    /// Met à jour le rect viewport (sync du rect DOM en Electron). Le thread de rendu le
+    /// mappe en coords écran et repositionne l'overlay (suit aussi le déplacement du parent).
     pub fn set_rect(&self, x: i32, y: i32, w: i32, h: i32) {
-        unsafe {
-            let _ = MoveWindow(self.hwnd, x, y, w.max(1), h.max(1), true);
+        if let Ok(mut r) = self.shared.rect.lock() {
+            *r = [x, y, w.max(1), h.max(1)];
         }
     }
 
@@ -240,13 +253,15 @@ unsafe fn create_swapchain(
 /// Boucle de rendu (thread dédié) : décode → compose → blit letterboxé → Present.
 /// Suit la taille client de la fenêtre enfant (ResizeBuffers) et le param live.
 unsafe fn render_thread(
-    hwnd_val: isize,
+    overlay_val: isize,
+    parent_val: isize,
     shared: Arc<Shared>,
     screen: &str,
     webcam: &str,
     cursor_json: &str,
 ) -> Result<()> {
-    let hwnd = HWND(hwnd_val as *mut c_void);
+    let overlay = HWND(overlay_val as *mut c_void);
+    let parent = HWND(parent_val as *mut c_void);
     let gpu = Gpu::create(false)?;
     let mut comp = Compositor::new(&gpu)?;
     if let Ok(track) = CursorTrack::load(cursor_json, 100_000.0, 6.0) {
@@ -257,25 +272,47 @@ unsafe fn render_thread(
     // config de base = C8 (tous effets) ; le fond flouté est piloté par le param live.
     let mut cfg = config::all().pop().expect("au moins une config");
 
-    let (mut w, mut h) = client_size(hwnd);
-    let (swap, mut bb_rtv) = create_swapchain(&gpu.device, hwnd, w, h)?;
+    let (mut w, mut h) = {
+        let r = *shared.rect.lock().unwrap();
+        (r[2].max(1) as u32, r[3].max(1) as u32)
+    };
+    let (swap, mut bb_rtv) = create_swapchain(&gpu.device, overlay, w, h)?;
 
     let mut last = Instant::now();
     let mut acc = 0.0f64;
     let mut first = true;
+    let mut last_screen = [i32::MIN; 4];
 
     while !shared.stop.load(Ordering::SeqCst) {
         cfg.bg_blur = shared.bg_blur.load(Ordering::Relaxed);
 
-        // suivi de taille (set_rect a bougé la fenêtre) → ResizeBuffers
-        let (cw, ch) = client_size(hwnd);
+        // rect viewport → coords écran : suit le rect DOM (set_rect) ET le déplacement du parent
+        let [vx, vy, vw, vh] = *shared.rect.lock().unwrap();
+        let mut pt = POINT { x: vx, y: vy };
+        let _ = ClientToScreen(parent, &mut pt);
+        let screen_rect = [pt.x, pt.y, vw, vh];
+        if screen_rect != last_screen {
+            let _ = SetWindowPos(
+                overlay,
+                HWND::default(),
+                pt.x,
+                pt.y,
+                vw.max(1),
+                vh.max(1),
+                SWP_NOACTIVATE | SWP_NOZORDER,
+            );
+            last_screen = screen_rect;
+        }
+
+        // suivi de taille → ResizeBuffers
+        let (nw, nh) = (vw.max(1) as u32, vh.max(1) as u32);
         let mut resized = false;
-        if (cw, ch) != (w, h) && cw > 0 && ch > 0 {
+        if (nw, nh) != (w, h) {
             drop(bb_rtv);
-            swap.ResizeBuffers(0, cw, ch, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG(0))?;
+            swap.ResizeBuffers(0, nw, nh, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG(0))?;
             bb_rtv = make_bb_rtv(&swap, &gpu.device)?;
-            w = cw;
-            h = ch;
+            w = nw;
+            h = nh;
             resized = true;
         }
 
@@ -325,10 +362,10 @@ extern "system" fn child_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> L
     unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
 }
 
-fn register_child_class(hinst: HINSTANCE) {
+fn register_overlay_class(hinst: HINSTANCE) {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| unsafe {
-        let cls = wide("PocD3DLiveChild");
+        let cls = wide("PocD3DOverlay");
         let wc = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(child_proc),
@@ -389,6 +426,20 @@ pub fn run_standalone(screen: &str, webcam: &str, cursor_json: &str) -> Result<(
         let view = LiveView::create(host, 0, 0, cw as i32, ch as i32, screen, webcam, cursor_json)?;
         let _ = ShowWindow(host, SW_SHOW);
         println!("live embed: fenêtre enfant D3D créée, thread de rendu démarré");
+        println!("  touches : [B] flou de fond (param → D3D)   [Espace] pause/lecture");
+
+        // état des paramètres pilotés au clavier (le MÊME set_param que l'addon napi appelle)
+        let mut blur = false;
+        let mut playing = true;
+        let set_title = |b: bool, p: bool| unsafe {
+            let t = wide(&format!(
+                "poc-d3d — live embed  ·  flou: {}  ·  {}   (B / Espace)",
+                if b { "ON" } else { "off" },
+                if p { "lecture" } else { "PAUSE" }
+            ));
+            let _ = SetWindowTextW(host, PCWSTR(t.as_ptr()));
+        };
+        set_title(blur, playing);
 
         let mut msg = MSG::default();
         let mut running = true;
@@ -397,6 +448,23 @@ pub fn run_standalone(screen: &str, webcam: &str, cursor_json: &str) -> Result<(
                 if msg.message == WM_QUIT {
                     running = false;
                     break;
+                }
+                if msg.message == WM_KEYDOWN {
+                    match msg.wParam.0 as u32 {
+                        0x42 => {
+                            // 'B' : bascule le fond flouté via set_param — chemin param → D3D
+                            blur = !blur;
+                            view.set_param("backgroundBlur", blur);
+                            set_title(blur, playing);
+                        }
+                        0x20 => {
+                            // Espace : pause/lecture
+                            playing = !playing;
+                            view.set_playing(playing);
+                            set_title(blur, playing);
+                        }
+                        _ => {}
+                    }
                 }
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);

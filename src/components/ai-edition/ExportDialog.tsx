@@ -18,6 +18,7 @@ import {
 	exportAxcutDocument,
 } from "@/lib/ai-edition/exporter/documentExporter";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
+import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import {
 	type ExportFormat,
 	type ExportProgress,
@@ -182,23 +183,44 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			return;
 		}
 
-		setPhase("rendering");
-		const options: DocumentExportOptions = {
-			format,
-			quality,
-			frameRate: fps,
-			codec,
-			gifFrameRate,
-			gifLoop,
-			gifSizePreset: gifSize,
-			// Size the output to the largest clip on the timeline (see referenceSource),
-			// not just the primary asset, so "Source" matches the shown size.
-			sourceWidth: referenceSource?.width ?? asset.video?.width,
-			sourceHeight: referenceSource?.height ?? asset.video?.height,
-			onProgress: (p) => setProgress(p),
-		};
-
 		try {
+			setPhase("rendering");
+			const usedAssetIds = new Set(document.timeline.clips.map((clip) => clip.assetId));
+			const exportAssets = document.assets.filter(
+				(candidate) => usedAssetIds.size === 0 || usedAssetIds.has(candidate.id),
+			);
+			const recordingDataByAssetId = new Map(
+				await Promise.all(
+					exportAssets.map(
+						async (candidate) =>
+							[
+								candidate.id,
+								await nativeBridgeClient.cursor.getRecordingData(candidate.originalPath),
+							] as const,
+					),
+				),
+			);
+			const editorSettings = getEditorSettings(document);
+			const options: DocumentExportOptions = {
+				format,
+				quality,
+				frameRate: fps,
+				codec,
+				gifFrameRate,
+				gifLoop,
+				gifSizePreset: gifSize,
+				// Size the output to the largest clip on the timeline (see referenceSource),
+				// not just the primary asset, so "Source" matches the shown size.
+				sourceWidth: referenceSource?.width ?? asset.video?.width,
+				sourceHeight: referenceSource?.height ?? asset.video?.height,
+				recordingDataByAssetId,
+				cursorScale: editorSettings.cursorShow ? editorSettings.cursor.size : 0,
+				cursorSmoothing: editorSettings.cursor.smoothing,
+				cursorMotionBlur: editorSettings.cursor.motionBlur,
+				cursorClickBounce: editorSettings.cursor.clickBounce,
+				cursorClipToBounds: editorSettings.cursor.clipToBounds,
+				onProgress: (p) => setProgress(p),
+			};
 			const result = await exportAxcutDocument(document, options);
 			if (!result.success || !result.blob) {
 				throw new Error(result.error ?? t("exportDialog.exportFailed"));
@@ -223,9 +245,6 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					},
 				},
 			);
-			// Touch the bridge so it stays referenced even when export
-			// is invoked from a non-Electron shim.
-			void nativeBridgeClient.aiEdition.llmGetSnapshot;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 			setPhase("error");

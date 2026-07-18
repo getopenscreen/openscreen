@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "Zoom auto",
+		"autoFocusShort": "Mise au point auto",
 		"addZoom": "Ajouter un zoom (Z)",
 		"suggestZooms": "Suggérer des zooms depuis le curseur",
 		"autoZoomOn": "Suggestions de zoom automatique activées — cliquez pour retirer les zooms suggérés",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "{{count}} suggestion de zoom basée sur le curseur ajoutée",
 		"addedZoomSuggestionsPlural": "{{count}} suggestions de zoom basées sur le curseur ajoutées"
+	},
+	"cursorMotion": {
+		"title": "Trajectoire du curseur",
+		"create": "Créer une trajectoire jusqu’au prochain clic",
+		"empty": "Aucune trajectoire du curseur — placez la tête de lecture, puis utilisez l’outil de trajectoire du curseur",
+		"placePlayhead": "Placez d’abord la tête de lecture dans un clip.",
+		"dataUnavailable": "Les données du curseur ne sont pas disponibles pour ce clip.",
+		"noNextClick": "Aucun clic ultérieur du curseur n’a été trouvé dans ce clip.",
+		"created": "{{count}} segment de curseur enregistré créé.",
+		"createdPlural": "{{count}} segments de curseur enregistrés créés.",
+		"createFailed": "Impossible de créer les segments de mouvement du curseur."
 	},
 	"toolbar": {
 		"autoEnhance": "Amélioration auto",

@@ -12,6 +12,7 @@ import type {
 	AnnotationRegion,
 	CameraFullscreenRegion,
 	CropRegion,
+	CursorTelemetryPoint,
 	Rotation3D,
 	SpeedRegion,
 	WebcamLayoutPreset,
@@ -44,6 +45,7 @@ import {
 	createMotionBlurState,
 	type MotionBlurState,
 } from "@/components/video-editor/videoPlayback/zoomTransform";
+import type { AxcutCursorMotionRegion } from "@/lib/ai-edition/schema";
 import {
 	computeCameraFullscreenTargetRect,
 	computeCompositeLayout,
@@ -53,13 +55,17 @@ import {
 	type Size,
 	type StyledRenderRect,
 } from "@/lib/compositeLayout";
+import {
+	type CursorMotionPath,
+	projectCursorMotionPointToCrop,
+	sampleCursorMotion,
+} from "@/lib/cursor/cursorMotion";
 import { getSmoothedCursorPath } from "@/lib/cursor/cursorPathSmoothing";
 import {
 	createNativeCursorMotionBlurState,
 	getNativeCursorClickBounceProgress,
 	getNativeCursorClickBounceScale,
 	getNativeCursorMotionBlurPx,
-	projectNativeCursorToLocal,
 	resetNativeCursorMotionBlurState,
 	resolveInterpolatedNativeCursorFrame,
 	resolveNativeCursorRenderAsset,
@@ -152,6 +158,8 @@ interface FrameRenderConfig {
 	padding?: number;
 	cropRegion: CropRegion;
 	cursorRecordingData?: CursorRecordingData | null;
+	cursorMotionRegions?: AxcutCursorMotionRegion[];
+	cursorMotionOwner?: { clipId: string; assetId: string } | null;
 	cursorScale?: number;
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
@@ -198,6 +206,17 @@ interface LayoutCache {
 	webcamRect: StyledRenderRect | null;
 }
 
+function cursorTelemetryFromRecordingData(
+	recordingData: CursorRecordingData | null | undefined,
+): CursorTelemetryPoint[] {
+	return (recordingData?.samples ?? []).map(({ timeMs, cx, cy, interactionType }) => ({
+		timeMs,
+		cx,
+		cy,
+		...(interactionType ? { interactionType } : {}),
+	}));
+}
+
 // Renders video frames with all effects (background, zoom, crop, blur, shadow) to an offscreen canvas for export.
 
 export class FrameRenderer {
@@ -234,6 +253,7 @@ export class FrameRenderer {
 	private threeDPass: ThreeDPass | null = null;
 	private currentRotation3D: Rotation3D = { ...DEFAULT_ROTATION_3D };
 	private cursorImageCache = new Map<string, HTMLImageElement>();
+	private cursorMotionPath: CursorMotionPath | null = null;
 	private warnedKeys = new Set<string>();
 	private config: FrameRenderConfig;
 	private animationState: AnimationState;
@@ -250,7 +270,12 @@ export class FrameRenderer {
 	private cpuCanvas = false;
 
 	constructor(config: FrameRenderConfig) {
-		this.config = config;
+		this.config = {
+			...config,
+			cursorTelemetry:
+				config.cursorTelemetry ?? cursorTelemetryFromRecordingData(config.cursorRecordingData),
+		};
+		this.updateCursorMotionPath();
 		this.isLinux = config.platform === "linux";
 		this.cpuCanvas = this.isLinux || cpuCanvasRequested();
 		this.animationState = {
@@ -292,6 +317,8 @@ export class FrameRenderer {
 		videoHeight: number;
 		webcamSize?: Size | null;
 		cursorRecordingData?: CursorRecordingData | null;
+		cursorMotionRegions?: AxcutCursorMotionRegion[];
+		cursorMotionOwner?: { clipId: string; assetId: string } | null;
 		cursorScale?: number;
 		// Timeline-authored effects PROJECTED to this segment's SOURCE time — the
 		// export loop passes each frame its source timestamp, so zoom/annotation
@@ -304,7 +331,11 @@ export class FrameRenderer {
 		this.config.videoHeight = source.videoHeight;
 		this.config.webcamSize = source.webcamSize ?? null;
 		this.config.cursorRecordingData = source.cursorRecordingData ?? null;
+		this.config.cursorTelemetry = cursorTelemetryFromRecordingData(source.cursorRecordingData);
+		this.config.cursorMotionRegions = source.cursorMotionRegions ?? [];
+		this.config.cursorMotionOwner = source.cursorMotionOwner ?? null;
 		this.config.cursorScale = source.cursorScale ?? 0;
+		this.updateCursorMotionPath();
 		if (source.zoomRegions) this.config.zoomRegions = source.zoomRegions;
 		if (source.annotationRegions) this.config.annotationRegions = source.annotationRegions;
 		if (source.speedRegions) this.config.speedRegions = source.speedRegions;
@@ -313,6 +344,22 @@ export class FrameRenderer {
 		this.zoomSpringState = createZoomSpringState();
 		this.prevAnimationTimeMs = null;
 		resetNativeCursorMotionBlurState(this.nativeCursorMotionBlurState);
+	}
+
+	private updateCursorMotionPath() {
+		const recordingData = this.config.cursorRecordingData;
+		if (!recordingData) {
+			this.cursorMotionPath = null;
+			return;
+		}
+
+		const smoothedPath = getSmoothedCursorPath(recordingData, this.config.cursorSmoothing ?? 0);
+		this.cursorMotionPath = {
+			sampleAtSourceTime: (sourceTimeMs) =>
+				smoothedPath?.sampleAt(sourceTimeMs) ??
+				resolveInterpolatedNativeCursorFrame(recordingData, sourceTimeMs)?.sample ??
+				null,
+		};
 	}
 
 	async initialize(): Promise<void> {
@@ -709,7 +756,7 @@ export class FrameRenderer {
 		};
 	}
 
-	private async drawNativeCursor(timeMs: number) {
+	private async drawNativeCursor(sourceTimeMs: number) {
 		if (!this.foregroundCtx || !this.layoutCache) {
 			return;
 		}
@@ -721,31 +768,34 @@ export class FrameRenderer {
 
 		const activeNativeCursor = resolveInterpolatedNativeCursorFrame(
 			this.config.cursorRecordingData,
-			timeMs,
+			sourceTimeMs,
 		);
 		if (!activeNativeCursor) {
 			resetNativeCursorMotionBlurState(this.nativeCursorMotionBlurState);
 			return;
 		}
-		// Position comes from the precomputed smoothed path (deterministic, matches preview);
-		// the frame still supplies the cursor image, type, and click timing.
-		const smoothedPos = getSmoothedCursorPath(
-			this.config.cursorRecordingData,
-			this.config.cursorSmoothing ?? 0,
-		)?.sampleAt(timeMs);
-		const displaySample = smoothedPos
-			? { ...activeNativeCursor.sample, cx: smoothedPos.cx, cy: smoothedPos.cy }
+		const motionPosition =
+			this.cursorMotionPath && this.config.cursorMotionOwner
+				? sampleCursorMotion({
+						path: this.cursorMotionPath,
+						regions: this.config.cursorMotionRegions ?? [],
+						owner: this.config.cursorMotionOwner,
+						sourceTimeMs,
+					})
+				: (this.cursorMotionPath?.sampleAtSourceTime(sourceTimeMs) ?? null);
+		const displaySample = motionPosition
+			? { ...activeNativeCursor.sample, cx: motionPosition.cx, cy: motionPosition.cy }
 			: activeNativeCursor.sample;
 
-		const projectedPoint = projectNativeCursorToLocal({
-			cropRegion: this.config.cropRegion,
-			maskRect: this.layoutCache.croppedRect,
-			sample: displaySample,
-		});
-		if (!projectedPoint) {
+		const cropPoint = projectCursorMotionPointToCrop(displaySample, this.config.cropRegion);
+		if (!cropPoint) {
 			resetNativeCursorMotionBlurState(this.nativeCursorMotionBlurState);
 			return;
 		}
+		const projectedPoint = {
+			x: this.layoutCache.croppedRect.x + cropPoint.cx * this.layoutCache.croppedRect.width,
+			y: this.layoutCache.croppedRect.y + cropPoint.cy * this.layoutCache.croppedRect.height,
+		};
 
 		const renderAsset = resolveNativeCursorRenderAsset(
 			activeNativeCursor.asset,
@@ -764,13 +814,10 @@ export class FrameRenderer {
 			Math.max(0, this.config.cursorScale ?? 1) *
 			getNativeCursorClickBounceScale(
 				this.config.cursorClickBounce ?? 0,
-				getNativeCursorClickBounceProgress(this.config.cursorRecordingData, timeMs),
+				getNativeCursorClickBounceProgress(this.config.cursorRecordingData, sourceTimeMs),
 			);
 		const appliedScale = this.animationState.appliedScale;
-		// Normalize cursor size to croppedRect.width (the painted video width).
-		// The preview path still uses screenRect.width; they agree in cover mode but
-		// differ in fit-to-height letterbox — known asymmetry pending the preview-path
-		// follow-up to project the cursor onto the cropped sub-rect as well.
+		// Normalize cursor size to the painted video width.
 		const sizeNorm =
 			this.layoutCache.videoSize.width > 0
 				? this.layoutCache.maskRect.width / this.layoutCache.videoSize.width
@@ -781,7 +828,7 @@ export class FrameRenderer {
 			motionBlur: this.config.cursorMotionBlur ?? 0,
 			point: { x: canvasX, y: canvasY },
 			state: this.nativeCursorMotionBlurState,
-			timeMs,
+			timeMs: sourceTimeMs,
 		});
 		// Clip only when explicitly enabled; by default the cursor may overflow the canvas
 		const cursorClip = this.config.cursorClipToBounds === true ? this.cameraAwareMaskRect() : null;

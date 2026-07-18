@@ -5,6 +5,7 @@ import {
 	axcutSchemaVersion,
 	clipSchema,
 	createEmptyDocument,
+	cursorMotionRegionSchema,
 	documentSchema,
 	ensureDocument,
 	legacyEditorSchema,
@@ -39,6 +40,7 @@ describe("axcut-schema v4", () => {
 		expect(doc.timeline.captionRanges).toEqual([]);
 		expect(doc.annotations).toEqual([]);
 		expect(doc.zoomRanges).toEqual([]);
+		expect(doc.cursorMotionRegions).toEqual([]);
 		expect(doc.transcripts).toEqual([]);
 		expect(doc.legacyEditor).toBeNull();
 		expect(doc.history.revisions).toEqual([]);
@@ -180,27 +182,122 @@ describe("axcut-schema v4", () => {
 	});
 
 	it("documentSchema defaults missing v3 envelopes on a v3 document", () => {
-		expect(() =>
-			documentSchema.parse({
-				schemaVersion: 3,
-				project: {
-					id: "p",
-					title: "t",
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
-				},
-				assets: [],
-				transcript: null,
-				timeline: {},
-				agent: {},
-				preview: {},
-				export: {},
-				history: {},
-			}),
-		).not.toThrow();
+		const document = documentSchema.parse({
+			schemaVersion: 3,
+			project: {
+				id: "p",
+				title: "t",
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+			},
+			assets: [],
+			transcript: null,
+			timeline: {},
+			agent: {},
+			preview: {},
+			export: {},
+			history: {},
+		});
+		expect(document.cursorMotionRegions).toEqual([]);
 	});
 
-	it("assetSchema defaults cameraTrack to null", () => {
+	it("documentSchema defaults cursorMotionRegions for an older v4 document", () => {
+		const { cursorMotionRegions: _cursorMotionRegions, ...olderDocument } = createEmptyDocument({
+			projectId: "p",
+			title: "t",
+		});
+		expect(documentSchema.parse(olderDocument).cursorMotionRegions).toEqual([]);
+	});
+
+	describe("cursorMotionRegionSchema", () => {
+		const validRegion = {
+			id: "motion_1",
+			clipId: "clip_1",
+			assetId: "asset_1",
+			startMs: 100,
+			endMs: 500,
+			sourceStartMs: 1100,
+			sourceEndMs: 1500,
+			startPoint: { cx: 0.1, cy: 0.2 },
+			endPoint: { cx: 0.8, cy: 0.9 },
+			startAnchor: "rest" as const,
+			endAnchor: "click" as const,
+			segmentKind: "move" as const,
+		};
+
+		it("applies recorded motion defaults", () => {
+			const region = cursorMotionRegionSchema.parse(validRegion);
+			expect(region).toMatchObject({
+				preset: "recorded",
+				speed: 1,
+				easing: "ease-in-out",
+				cycles: 1,
+				controlPoints: [],
+			});
+		});
+
+		it("accepts normalized points and bounded motion settings", () => {
+			const region = cursorMotionRegionSchema.parse({
+				...validRegion,
+				preset: "loop",
+				speed: 4,
+				easing: "linear",
+				cycles: 6,
+				controlPoints: [
+					{ cx: 0, cy: 1 },
+					{ cx: 1, cy: 0 },
+				],
+			});
+			expect(region.controlPoints).toHaveLength(2);
+			expect(region.speed).toBe(4);
+			expect(region.cycles).toBe(6);
+		});
+
+		it("rejects out-of-range points, speed, cycles, and extra control points", () => {
+			expect(() =>
+				cursorMotionRegionSchema.parse({
+					...validRegion,
+					startPoint: { cx: -0.01, cy: 0.5 },
+				}),
+			).toThrow();
+			expect(() => cursorMotionRegionSchema.parse({ ...validRegion, speed: 4.01 })).toThrow();
+			expect(() => cursorMotionRegionSchema.parse({ ...validRegion, cycles: 0 })).toThrow();
+			expect(() =>
+				cursorMotionRegionSchema.parse({
+					...validRegion,
+					controlPoints: [
+						{ cx: 0.1, cy: 0.1 },
+						{ cx: 0.2, cy: 0.2 },
+						{ cx: 0.3, cy: 0.3 },
+					],
+				}),
+			).toThrow();
+		});
+
+		it("validates virtual and source range ordering", () => {
+			expect(() =>
+				cursorMotionRegionSchema.parse({ ...validRegion, startMs: 501, endMs: 500 }),
+			).toThrow();
+			expect(() =>
+				cursorMotionRegionSchema.parse({
+					...validRegion,
+					sourceStartMs: 1501,
+					sourceEndMs: 1500,
+				}),
+			).toThrow();
+			expect(() =>
+				cursorMotionRegionSchema.parse({
+					...validRegion,
+					startMs: 500,
+					endMs: 500,
+					sourceStartMs: 1500,
+					sourceEndMs: 1500,
+				}),
+			).toThrow();
+		});
+	});
+
+	it("assetSchema defaults legacy assets to processed auto zoom state", () => {
 		const asset = assetSchema.parse({
 			id: "asset_1",
 			kind: "video",
@@ -208,6 +305,18 @@ describe("axcut-schema v4", () => {
 			originalPath: "/x.mp4",
 		});
 		expect(asset.cameraTrack).toBeNull();
+		expect(asset.autoZoomState).toBe("processed");
+	});
+
+	it("assetSchema preserves an explicit pending auto zoom state", () => {
+		const asset = assetSchema.parse({
+			id: "asset_1",
+			kind: "video",
+			label: "x",
+			originalPath: "/x.mp4",
+			autoZoomState: "pending",
+		});
+		expect(asset.autoZoomState).toBe("pending");
 	});
 
 	describe("v3 -> v4 cameraTrack migration", () => {

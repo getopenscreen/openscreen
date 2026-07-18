@@ -25,19 +25,14 @@ import type {
 } from "@/components/video-editor/types";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import type { ExportQuality } from "@/lib/exporter/types";
-import type {
-	CursorProviderKind,
-	CursorRecordingData,
-	CursorRecordingSample,
-	NativeCursorAsset,
-} from "@/native/contracts";
+import type { CursorRecordingData } from "@/native/contracts";
 import {
 	type AspectRatio,
 	getAspectRatioValue,
 	getNativeAspectRatioValue,
 } from "@/utils/aspectRatioUtils";
 import { type Interval, normalizeIntervals } from "../document/timeline";
-import type { AxcutDocument } from "../schema";
+import type { AxcutCursorMotionRegion, AxcutDocument } from "../schema";
 
 export type ExportVideoCodec = "h264" | "h265" | "vp9";
 
@@ -83,15 +78,10 @@ export interface RenderSegment {
 	// exporter does — no per-clip stitching beyond what `cameraTrack.offsetMs`
 	// already encodes.
 	camera: { videoUrl: string; offsetMs: number } | null;
-	// Native-cursor telemetry for THIS segment's asset only (decision D1 —
-	// per-segment cursor). `CursorRecordingSample.assetId` already tags each
-	// sample with its recording, so the plan partitions the shared recording by
-	// `assetId`; samples with no tag fall back to the primary asset (older
-	// single-asset recordings). `timeMs` stays in the asset's own source time —
-	// the renderer matches it against each frame's source time inside this
-	// segment's window. Empty when the asset has no cursor data (§6.4 / risk R3):
-	// that segment renders with no cursor overlay, which is correct, not a gap.
-	cursorSamples: CursorRecordingSample[];
+	// CursorRecordingSample.assetId identifies a sprite, not a media asset.
+	cursorRecordingData: CursorRecordingData | null;
+	// Regions retain virtual and source time after owner/time validation.
+	cursorMotionRegions: AxcutCursorMotionRegion[];
 }
 
 export interface RenderPlanOutput {
@@ -111,15 +101,9 @@ export interface RenderPlanAppearance {
 	motionBlurAmount: number;
 }
 
-// Plan-level cursor: the SHARED parts of a native-cursor render — the sprite
-// atlas (`assets`) and the style knobs — held once for the whole export. The
-// time-varying samples live per segment on `RenderSegment.cursorSamples`
-// (partitioned by asset). `null` when the export has no cursor recording, or
-// cursor rendering is disabled (`scale <= 0`).
+// Cursor style is shared by the export. Recording samples and sprite atlases
+// stay on their owning media asset's segment.
 export interface RenderPlanCursor {
-	version: number;
-	provider: CursorProviderKind;
-	assets: NativeCursorAsset[];
 	scale: number;
 	smoothing?: number;
 	motionBlur?: number;
@@ -154,15 +138,14 @@ export interface RenderPlan {
 	annotationRegions: AnnotationRegion[];
 	speedRegions: SpeedRegion[];
 	appearance: RenderPlanAppearance;
-	// Shared cursor style + sprite atlas (per-segment samples live on each
-	// segment). `null` when there is no recording or cursor is disabled.
+	// Shared cursor style. `null` when there is no recording or cursor is disabled.
 	cursor: RenderPlanCursor | null;
 	// Shared webcam layout/style (per-segment webcam source is on the segment).
 	webcam: RenderPlanWebcam;
 }
 
 export interface BuildRenderPlanCursorOptions {
-	recordingData?: CursorRecordingData | null;
+	recordingDataByAssetId?: ReadonlyMap<string, CursorRecordingData>;
 	scale?: number;
 	smoothing?: number;
 	motionBlur?: number;
@@ -217,17 +200,39 @@ function buildIntraTrims(
 	return normalizeIntervals(sourceEndSec, intersected);
 }
 
-// Native-cursor samples belonging to one asset (decision D1 — per-segment
-// cursor). A sample with no `assetId` predates multi-asset cursor tagging, so it
-// belongs to the primary asset — attributing it there keeps single-asset
-// projects rendering their cursor exactly as before.
-function cursorSamplesForAsset(
-	recordingData: CursorRecordingData | null | undefined,
-	assetId: string,
-	primaryAssetId: string | undefined,
-): CursorRecordingSample[] {
-	if (!recordingData) return [];
-	return recordingData.samples.filter((s) => (s.assetId ?? primaryAssetId) === assetId);
+const CURSOR_TIME_EPSILON_MS = 1;
+
+function cursorMotionRegionsForSegment(
+	regions: AxcutCursorMotionRegion[],
+	segment: Pick<
+		RenderSegment,
+		"clipId" | "assetId" | "sourceStartSec" | "sourceEndSec" | "timelineStartSec" | "timelineEndSec"
+	>,
+): AxcutCursorMotionRegion[] {
+	const virtualStartMs = segment.timelineStartSec * 1000;
+	const virtualEndMs = segment.timelineEndSec * 1000;
+	const sourceStartMs = segment.sourceStartSec * 1000;
+	const sourceEndMs = segment.sourceEndSec * 1000;
+
+	return regions.filter((region) => {
+		if (region.clipId !== segment.clipId || region.assetId !== segment.assetId) return false;
+		if (region.endMs <= region.startMs || region.sourceEndMs <= region.sourceStartMs) return false;
+		if (
+			region.startMs < virtualStartMs - CURSOR_TIME_EPSILON_MS ||
+			region.endMs > virtualEndMs + CURSOR_TIME_EPSILON_MS ||
+			region.sourceStartMs < sourceStartMs - CURSOR_TIME_EPSILON_MS ||
+			region.sourceEndMs > sourceEndMs + CURSOR_TIME_EPSILON_MS
+		) {
+			return false;
+		}
+
+		const projectedStartMs = sourceStartMs + (region.startMs - virtualStartMs);
+		const projectedEndMs = sourceStartMs + (region.endMs - virtualStartMs);
+		return (
+			Math.abs(projectedStartMs - region.sourceStartMs) <= CURSOR_TIME_EPSILON_MS &&
+			Math.abs(projectedEndMs - region.sourceEndMs) <= CURSOR_TIME_EPSILON_MS
+		);
+	});
 }
 
 function pickReferenceDimensions(
@@ -259,13 +264,8 @@ export function buildRenderPlan(
 	const codec: ExportVideoCodec = options.codec ?? "h264";
 	const frameRate = options.frameRate ?? DEFAULT_FRAME_RATE;
 
-	// Primary asset id anchors untagged cursor samples (see cursorSamplesForAsset).
-	const primaryAssetId = document.project.primaryAssetId ?? document.assets[0]?.id;
-	// Cursor is only rendered when scaled up (matches the existing exporter's
-	// `hasNativeCursorOverlay = cursorScale > 0`). When disabled, carry no samples
-	// and leave `plan.cursor` null so the identity fast path stays available.
+	const recordingDataByAssetId = options.cursor?.recordingDataByAssetId;
 	const cursorScale = options.cursor?.scale ?? 0;
-	const cursorRecording = cursorScale > 0 ? (options.cursor?.recordingData ?? null) : null;
 
 	// --- Segments ---
 	const sortedClips = sortClipsByTimelineStart(document.timeline.clips);
@@ -284,7 +284,7 @@ export function buildRenderPlan(
 				? { videoUrl: toFileUrl(cameraTrack.sourcePath), offsetMs: cameraTrack.offsetMs }
 				: null;
 
-		segments.push({
+		const segment: RenderSegment = {
 			clipId: clip.id,
 			assetId: asset.id,
 			videoUrl: toFileUrl(asset.originalPath),
@@ -297,8 +297,14 @@ export function buildRenderPlan(
 			sourceWidth,
 			sourceHeight,
 			camera,
-			cursorSamples: cursorSamplesForAsset(cursorRecording, asset.id, primaryAssetId),
-		});
+			cursorRecordingData: recordingDataByAssetId?.get(asset.id) ?? null,
+			cursorMotionRegions: [],
+		};
+		segment.cursorMotionRegions = cursorMotionRegionsForSegment(
+			document.cursorMotionRegions ?? [],
+			segment,
+		);
+		segments.push(segment);
 	}
 
 	// --- Output sizing ---
@@ -331,20 +337,18 @@ export function buildRenderPlan(
 		motionBlurAmount: extractLegacyField(legacy, "motionBlurAmount", 0),
 	};
 
-	// --- Cursor (shared atlas + style; per-segment samples set above) ---
-	const cursor: RenderPlanCursor | null = cursorRecording
-		? {
-				version: cursorRecording.version,
-				provider: cursorRecording.provider,
-				assets: cursorRecording.assets,
-				scale: cursorScale,
-				smoothing: options.cursor?.smoothing,
-				motionBlur: options.cursor?.motionBlur,
-				clickBounce: options.cursor?.clickBounce,
-				clipToBounds: options.cursor?.clipToBounds,
-				theme: options.cursor?.theme,
-			}
-		: null;
+	// --- Cursor (shared style; recording data is per segment) ---
+	const cursor: RenderPlanCursor | null =
+		cursorScale > 0 && segments.some((segment) => segment.cursorRecordingData)
+			? {
+					scale: cursorScale,
+					smoothing: options.cursor?.smoothing,
+					motionBlur: options.cursor?.motionBlur,
+					clickBounce: options.cursor?.clickBounce,
+					clipToBounds: options.cursor?.clipToBounds,
+					theme: options.cursor?.theme,
+				}
+			: null;
 
 	// --- Webcam (global layout/style, read from legacyEditor exactly as the
 	// legacy exporter does; per-segment source lives on segment.camera) ---
@@ -399,8 +403,11 @@ export function isIdentityFastPathEligible(plan: RenderPlan): boolean {
 	if (!isIdentityCrop(segment.cropRegion)) return false;
 	if (plan.zoomRegions.length !== 0) return false;
 	if (plan.annotationRegions.length !== 0) return false;
-	// An active cursor overlay composites pixels → no stream-copy.
-	if (plan.cursor && segment.cursorSamples.length > 0) return false;
+	// An active cursor overlay composites pixels, including edited motion.
+	if (plan.cursor && segment.cursorRecordingData?.samples.length) return false;
+	if (plan.cursor && segment.cursorMotionRegions.some((region) => region.preset !== "recorded")) {
+		return false;
+	}
 
 	for (const region of plan.speedRegions) {
 		const duration = region.endMs - region.startMs;

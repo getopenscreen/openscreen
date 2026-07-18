@@ -3,22 +3,24 @@
 // speed regions. Each add creates a 2-second region at the current playhead
 // (a reasonable default for the user to then resize).
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type { AnnotationRegion, AnnotationType } from "@/components/video-editor/types";
 import { createId } from "../document/ids";
 import {
 	duplicateClip as duplicateClipInDocument,
 	moveClip as moveClipInDocument,
+	reconcileCursorMotionRegions,
 	resequenceClips,
 } from "../document/timeline";
-import type { AxcutClipCropRegion, AxcutDocument } from "../schema";
+import type { AxcutClipCropRegion, AxcutCursorMotionRegion, AxcutDocument } from "../schema";
 import { probeVideoDuration } from "../timeline/duration";
 import { resolveTimelineSpanToTrim } from "../timeline/trim-mapping";
 import type { AutoZoomSuggestion } from "../timeline/zoom-suggestions";
+import { getEditorSettings, patchEditorSettings } from "./editorSettings";
 import { useProjectStore } from "./projectStore";
 
-type RegionKind = "zoom" | "trim" | "annotation" | "speed" | "cameraFullscreen";
+type RegionKind = "zoom" | "trim" | "annotation" | "speed" | "cameraFullscreen" | "cursorMotion";
 
 // Placeholder duration applied to a freshly-inserted clip whose source asset
 // hasn't reported its real duration yet (media drag → drop before the preview
@@ -35,12 +37,38 @@ interface RegionHandle {
 
 type Clip = AxcutDocument["timeline"]["clips"][number];
 
+function withClips(
+	document: AxcutDocument,
+	clips: AxcutDocument["timeline"]["clips"],
+	assets: AxcutDocument["assets"] = document.assets,
+): AxcutDocument {
+	const next = {
+		...document,
+		assets,
+		timeline: { ...document.timeline, clips },
+	};
+	return {
+		...next,
+		cursorMotionRegions: reconcileCursorMotionRegions(next, clips),
+	};
+}
+
+function withResequencedClips(
+	document: AxcutDocument,
+	clips: AxcutDocument["timeline"]["clips"],
+	assets: AxcutDocument["assets"] = document.assets,
+): AxcutDocument {
+	return withClips(document, resequenceClips(clips), assets);
+}
+
 export function useTimeline() {
 	const document = useProjectStore((s) => s.document);
 	const projectId = useProjectStore((s) => s.projectId);
 	const currentTimeSec = useProjectStore((s) => s.currentTimeSec);
 	const saveDocument = useProjectStore((s) => s.saveDocument);
 	const setDocument = useProjectStore((s) => s.setDocument);
+	const setDocumentLive = useProjectStore((s) => s.setDocumentLive);
+	const cursorMotionDragActiveRef = useRef(false);
 	const [selection, setSelection] = useState<RegionHandle | null>(null);
 	// F2.7 — shift-click multi-selection. `selection` stays the inspector's
 	// focused region (the last one clicked); `multiSelection` is the full set
@@ -53,6 +81,7 @@ export function useTimeline() {
 	const addZoom = useCallback(async () => {
 		if (!document) return;
 		const timeMs = Math.round(currentTimeSec * 1000);
+		const autoFocusAll = getEditorSettings(document).autoFocusAll;
 		const next: AxcutDocument = {
 			...document,
 			zoomRanges: [
@@ -63,38 +92,99 @@ export function useTimeline() {
 					endMs: timeMs + 2000,
 					depth: 3,
 					focus: { cx: 0.5, cy: 0.5 },
-					focusMode: "manual" as const,
+					focusMode: autoFocusAll ? ("auto" as const) : ("manual" as const),
+					source: "manual" as const,
 				},
 			] as AxcutDocument["zoomRanges"],
 		};
 		await saveDocument(next);
 	}, [document, currentTimeSec, saveDocument]);
 
-	// Append several auto-generated zoom regions in one save (auto-enhance).
-	// Suggestions come from buildAutoZoomSuggestions, which already reserves
-	// existing zoom spans, so no extra overlap filtering is needed here.
-	// Returns the count actually added (0 when there's no doc/suggestions).
+	// Append non-overlapping auto-generated zoom regions in one save.
 	const addZoomsBulk = useCallback(
 		async (suggestions: AutoZoomSuggestion[]) => {
-			if (!document || suggestions.length === 0) return 0;
+			const doc = useProjectStore.getState().document ?? document;
+			if (!doc || suggestions.length === 0) return 0;
+			const reserved = doc.zoomRanges.map((region) => ({
+				startMs: region.startMs,
+				endMs: region.endMs,
+			}));
+			const accepted = suggestions.filter((suggestion) => {
+				const startMs = Math.round(suggestion.span.start);
+				const endMs = Math.round(suggestion.span.end);
+				if (reserved.some((region) => endMs > region.startMs && startMs < region.endMs)) {
+					return false;
+				}
+				reserved.push({ startMs, endMs });
+				return true;
+			});
+			if (accepted.length === 0) return 0;
+			const autoFocusAll = getEditorSettings(doc).autoFocusAll;
 			const next: AxcutDocument = {
-				...document,
+				...doc,
 				zoomRanges: [
-					...document.zoomRanges,
-					...suggestions.map((s) => ({
+					...doc.zoomRanges,
+					...accepted.map((s) => ({
 						id: createId("zoom"),
 						startMs: Math.round(s.span.start),
 						endMs: Math.round(s.span.end),
 						depth: 3 as const,
 						focus: { cx: s.focus.cx, cy: s.focus.cy },
-						focusMode: "auto" as const,
+						focusMode: autoFocusAll ? ("auto" as const) : ("manual" as const),
+						source: "auto" as const,
 					})),
 				] as AxcutDocument["zoomRanges"],
 			};
 			await saveDocument(next);
-			return suggestions.length;
+			return accepted.length;
 		},
 		[document, saveDocument],
+	);
+
+	const completePendingAutoZoom = useCallback(
+		async (assetId: string, suggestions: AutoZoomSuggestion[]) => {
+			const doc = useProjectStore.getState().document;
+			const asset = doc?.assets.find((candidate) => candidate.id === assetId);
+			if (!doc || !asset || asset.autoZoomState !== "pending") return 0;
+
+			const reserved = doc.zoomRanges.map((region) => ({
+				startMs: region.startMs,
+				endMs: region.endMs,
+			}));
+			const accepted = suggestions.filter((suggestion) => {
+				const startMs = Math.round(suggestion.span.start);
+				const endMs = Math.round(suggestion.span.end);
+				if (reserved.some((region) => endMs > region.startMs && startMs < region.endMs)) {
+					return false;
+				}
+				reserved.push({ startMs, endMs });
+				return true;
+			});
+			const autoFocusAll = getEditorSettings(doc).autoFocusAll;
+			const next: AxcutDocument = {
+				...doc,
+				assets: doc.assets.map((candidate) =>
+					candidate.id === assetId
+						? { ...candidate, autoZoomState: "processed" as const }
+						: candidate,
+				),
+				zoomRanges: [
+					...doc.zoomRanges,
+					...accepted.map((suggestion) => ({
+						id: createId("zoom"),
+						startMs: Math.round(suggestion.span.start),
+						endMs: Math.round(suggestion.span.end),
+						depth: 3 as const,
+						focus: { ...suggestion.focus },
+						focusMode: autoFocusAll ? ("auto" as const) : ("manual" as const),
+						source: "auto" as const,
+					})),
+				] as AxcutDocument["zoomRanges"],
+			};
+			await saveDocument(next);
+			return accepted.length;
+		},
+		[saveDocument],
 	);
 
 	const addTrim = useCallback(async () => {
@@ -239,6 +329,45 @@ export function useTimeline() {
 		await saveDocument(next);
 	}, [document, currentTimeSec, saveDocument]);
 
+	const addCursorMotionRegions = useCallback(
+		async (regions: AxcutCursorMotionRegion[]) => {
+			if (!document || regions.length === 0) return 0;
+			const valid = regions.filter((region) => {
+				const clip = document.timeline.clips.find(
+					(candidate) => candidate.id === region.clipId && candidate.assetId === region.assetId,
+				);
+				if (!clip) return false;
+				const clipVirtualStartMs = clip.timelineStartSec * 1000;
+				const clipVirtualEndMs = clip.timelineEndSec * 1000;
+				const clipSourceStartMs = clip.sourceStartSec * 1000;
+				const clipSourceEndMs =
+					(clip.sourceEndSec ??
+						document.assets.find((asset) => asset.id === clip.assetId)?.durationSec ??
+						clip.sourceStartSec) * 1000;
+				return (
+					region.endMs > region.startMs &&
+					region.sourceEndMs > region.sourceStartMs &&
+					region.startMs >= clipVirtualStartMs &&
+					region.endMs <= clipVirtualEndMs &&
+					region.sourceStartMs >= clipSourceStartMs &&
+					region.sourceEndMs <= clipSourceEndMs
+				);
+			});
+			if (valid.length === 0) return 0;
+			const next: AxcutDocument = {
+				...document,
+				cursorMotionRegions: [...document.cursorMotionRegions, ...valid],
+			};
+			await saveDocument(next);
+			const first = valid[0];
+			const handle = { kind: "cursorMotion" as const, id: first.id };
+			setSelection(handle);
+			setMultiSelection([handle]);
+			return valid.length;
+		},
+		[document, saveDocument],
+	);
+
 	const updateTrimRange = useCallback(
 		async (trimId: string, startSec: number, endSec: number) => {
 			if (!document) return;
@@ -336,7 +465,9 @@ export function useTimeline() {
 			const next: AxcutDocument = {
 				...document,
 				zoomRanges: document.zoomRanges.map((z) =>
-					z.id === id ? { ...z, startMs: Math.min(s, e), endMs: Math.max(s, e) } : z,
+					z.id === id
+						? { ...z, startMs: Math.min(s, e), endMs: Math.max(s, e), source: "manual" as const }
+						: z,
 				) as AxcutDocument["zoomRanges"],
 			};
 			await saveDocument(next);
@@ -357,7 +488,13 @@ export function useTimeline() {
 			const next: AxcutDocument = {
 				...doc,
 				zoomRanges: doc.zoomRanges.map((z) =>
-					z.id === id ? { ...z, focus: { cx: clamp01(focus.cx), cy: clamp01(focus.cy) } } : z,
+					z.id === id
+						? {
+								...z,
+								focus: { cx: clamp01(focus.cx), cy: clamp01(focus.cy) },
+								source: "manual" as const,
+							}
+						: z,
 				) as AxcutDocument["zoomRanges"],
 			};
 			setDocument(next);
@@ -371,6 +508,52 @@ export function useTimeline() {
 		await saveDocument(doc);
 	}, [saveDocument]);
 
+	const updateZoomFocusMode = useCallback(
+		async (id: string, focusMode: "manual" | "auto") => {
+			const doc = useProjectStore.getState().document;
+			if (!doc || !doc.zoomRanges.some((region) => region.id === id)) return;
+			const next: AxcutDocument = {
+				...doc,
+				zoomRanges: doc.zoomRanges.map((region) =>
+					region.id === id ? { ...region, focusMode, source: "manual" as const } : region,
+				) as AxcutDocument["zoomRanges"],
+			};
+			await saveDocument(next);
+		},
+		[saveDocument],
+	);
+
+	const setAutoFocusAll = useCallback(
+		async (enabled: boolean) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return;
+			const withModes: AxcutDocument = {
+				...doc,
+				zoomRanges: doc.zoomRanges.map((region) => ({
+					...region,
+					focusMode: enabled ? ("auto" as const) : ("manual" as const),
+				})) as AxcutDocument["zoomRanges"],
+			};
+			await saveDocument(patchEditorSettings(withModes, { autoFocusAll: enabled }));
+		},
+		[saveDocument],
+	);
+
+	const setAutoZoomEnabled = useCallback(
+		async (enabled: boolean) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return;
+			const withZooms: AxcutDocument = enabled
+				? doc
+				: {
+						...doc,
+						zoomRanges: doc.zoomRanges.filter((region) => region.source !== "auto"),
+					};
+			await saveDocument(patchEditorSettings(withZooms, { autoZoomEnabled: enabled }));
+		},
+		[saveDocument],
+	);
+
 	// Zoom-level control for the region-settings panel (1-6, matches
 	// zoomRegionSchema's depth literal union — 1.0x..3.5x in 0.5x steps per
 	// the `depth/2 + 0.5` label formula used throughout the timeline UI).
@@ -380,7 +563,7 @@ export function useTimeline() {
 			const next: AxcutDocument = {
 				...document,
 				zoomRanges: document.zoomRanges.map((z) =>
-					z.id === id ? { ...z, depth } : z,
+					z.id === id ? { ...z, depth, source: "manual" as const } : z,
 				) as AxcutDocument["zoomRanges"],
 			};
 			await saveDocument(next);
@@ -423,6 +606,77 @@ export function useTimeline() {
 
 	const commitAnnotationChange = useCallback(async () => {
 		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		await saveDocument(doc);
+	}, [saveDocument]);
+
+	const updateCursorMotionSettings = useCallback(
+		async (
+			id: string,
+			patch: Partial<Pick<AxcutCursorMotionRegion, "preset" | "speed" | "easing" | "cycles">>,
+		) => {
+			if (!document) return;
+			const speed =
+				patch.speed === undefined
+					? undefined
+					: Number.isFinite(patch.speed)
+						? Math.min(4, Math.max(1, Math.round(patch.speed * 10) / 10))
+						: 1;
+			const cycles =
+				patch.cycles === undefined ? undefined : Math.min(6, Math.max(1, Math.round(patch.cycles)));
+			const next: AxcutDocument = {
+				...document,
+				cursorMotionRegions: document.cursorMotionRegions.map((region) =>
+					region.id === id
+						? {
+								...region,
+								...patch,
+								...(speed === undefined ? {} : { speed }),
+								...(cycles === undefined ? {} : { cycles }),
+							}
+						: region,
+				),
+			};
+			await saveDocument(next);
+		},
+		[document, saveDocument],
+	);
+
+	const updateCursorMotionControlPointLive = useCallback(
+		(id: string, index: number, point: { cx: number; cy: number }) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc || index < 0 || index > 1) return;
+			const clamp01 = (value: number) =>
+				Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.5;
+			const next: AxcutDocument = {
+				...doc,
+				cursorMotionRegions: doc.cursorMotionRegions.map((region) => {
+					if (region.id !== id) return region;
+					const controlPoints = [...region.controlPoints];
+					while (controlPoints.length <= index) {
+						controlPoints.push({
+							cx: (region.startPoint.cx + region.endPoint.cx) / 2,
+							cy: (region.startPoint.cy + region.endPoint.cy) / 2,
+						});
+					}
+					controlPoints[index] = { cx: clamp01(point.cx), cy: clamp01(point.cy) };
+					return { ...region, controlPoints };
+				}),
+			};
+			if (cursorMotionDragActiveRef.current) {
+				setDocumentLive(next);
+			} else {
+				cursorMotionDragActiveRef.current = true;
+				setDocument(next);
+			}
+		},
+		[setDocument, setDocumentLive],
+	);
+
+	const commitCursorMotionChange = useCallback(async () => {
+		if (!cursorMotionDragActiveRef.current) return;
+		const doc = useProjectStore.getState().document;
+		cursorMotionDragActiveRef.current = false;
 		if (!doc) return;
 		await saveDocument(doc);
 	}, [saveDocument]);
@@ -533,7 +787,7 @@ export function useTimeline() {
 					...document,
 					legacyEditor: { ...legacy, speedRegions: prev },
 				};
-			} else {
+			} else if (kind === "cameraFullscreen") {
 				const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 				const prev = ((legacy.cameraFullscreenRegions as unknown[]) ?? []).filter(
 					(s) => (s as { id: string }).id !== id,
@@ -541,6 +795,11 @@ export function useTimeline() {
 				next = {
 					...document,
 					legacyEditor: { ...legacy, cameraFullscreenRegions: prev },
+				};
+			} else {
+				next = {
+					...document,
+					cursorMotionRegions: document.cursorMotionRegions.filter((region) => region.id !== id),
 				};
 			}
 			await saveDocument(next);
@@ -564,6 +823,9 @@ export function useTimeline() {
 			const cameraFullscreenIds = new Set(
 				handles.filter((h) => h.kind === "cameraFullscreen").map((h) => h.id),
 			);
+			const cursorMotionIds = new Set(
+				handles.filter((h) => h.kind === "cursorMotion").map((h) => h.id),
+			);
 			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 			const prevSpeed = ((legacy.speedRegions as unknown[]) ?? []).filter(
 				(s) => !speedIds.has((s as { id: string }).id),
@@ -577,6 +839,9 @@ export function useTimeline() {
 					(z) => !zoomIds.has(z.id),
 				) as AxcutDocument["zoomRanges"],
 				annotations: document.annotations.filter((a) => !annotationIds.has(a.id)),
+				cursorMotionRegions: document.cursorMotionRegions.filter(
+					(region) => !cursorMotionIds.has(region.id),
+				),
 				timeline: {
 					...document.timeline,
 					trimRanges: document.timeline.trimRanges.filter((s) => !trimIds.has(s.id)),
@@ -633,18 +898,7 @@ export function useTimeline() {
 				origin: "user",
 				reason: "Inserted before all clips",
 			};
-			const shifted = document.timeline.clips.map((c) => ({
-				...c,
-				timelineStartSec: c.timelineStartSec + duration,
-				timelineEndSec: c.timelineEndSec + duration,
-			}));
-			const next: AxcutDocument = {
-				...document,
-				timeline: {
-					...document.timeline,
-					clips: [newClip, ...shifted],
-				},
-			};
+			const next = withResequencedClips(document, [newClip, ...document.timeline.clips]);
 			await saveDocument(next);
 		},
 		[document, saveDocument],
@@ -668,13 +922,7 @@ export function useTimeline() {
 				origin: "user",
 				reason: "Inserted after all clips",
 			};
-			const next: AxcutDocument = {
-				...document,
-				timeline: {
-					...document.timeline,
-					clips: [...document.timeline.clips, newClip],
-				},
-			};
+			const next = withResequencedClips(document, [...document.timeline.clips, newClip]);
 			await saveDocument(next);
 		},
 		[document, saveDocument],
@@ -713,13 +961,10 @@ export function useTimeline() {
 				timelineStartSec: Math.min(tStart, tEnd),
 				timelineEndSec: Math.max(tStart, tEnd),
 			};
-			const nextDoc: AxcutDocument = {
-				...document,
-				timeline: {
-					...document.timeline,
-					clips: document.timeline.clips.map((c) => (c.id === clipId ? updated : c)),
-				},
-			};
+			const nextDoc = withClips(
+				document,
+				document.timeline.clips.map((c) => (c.id === clipId ? updated : c)),
+			);
 			await saveDocument(nextDoc);
 		},
 		[document, saveDocument],
@@ -736,15 +981,18 @@ export function useTimeline() {
 			const clamp = (n: number) => (Number.isFinite(n) ? Math.max(0, n) : 0);
 			const s = clamp(sourceStartSec);
 			const e = clamp(sourceEndSec);
-			const arr = document.timeline.clips.map((c) =>
-				c.id === clipId
-					? { ...c, sourceStartSec: Math.min(s, e), sourceEndSec: Math.max(s, e) }
-					: c,
-			);
-			const next: AxcutDocument = {
-				...document,
-				timeline: { ...document.timeline, clips: resequenceClips(arr) },
-			};
+			const arr = document.timeline.clips.map((c) => {
+				if (c.id !== clipId) return c;
+				const nextSourceStart = Math.min(s, e);
+				const nextSourceEnd = Math.max(s, e);
+				return {
+					...c,
+					sourceStartSec: nextSourceStart,
+					sourceEndSec: nextSourceEnd,
+					timelineEndSec: c.timelineStartSec + nextSourceEnd - nextSourceStart,
+				};
+			});
+			const next = withResequencedClips(document, arr);
 			await saveDocument(next);
 		},
 		[document, saveDocument],
@@ -823,10 +1071,7 @@ export function useTimeline() {
 				right as (typeof document.timeline.clips)[number],
 				...document.timeline.clips.slice(targetIdx + 1),
 			];
-			const next: AxcutDocument = {
-				...document,
-				timeline: { ...document.timeline, clips: nextClips },
-			};
+			const next = withResequencedClips(document, nextClips);
 			await saveDocument(next);
 		},
 		[document, saveDocument, addClipAfter],
@@ -863,15 +1108,10 @@ export function useTimeline() {
 					? { ...c, sourceEndSec: probed, timelineEndSec: c.timelineStartSec + probed }
 					: c,
 			);
-			const nextClips = resequenceClips(correctedClips);
 			const nextAssets = doc.assets.map((a) =>
 				a.id === assetId ? { ...a, durationSec: probed } : a,
 			);
-			await state.saveDocument({
-				...doc,
-				assets: nextAssets,
-				timeline: { ...doc.timeline, clips: nextClips },
-			});
+			await state.saveDocument(withResequencedClips(doc, correctedClips, nextAssets));
 		},
 		[],
 	);
@@ -911,10 +1151,7 @@ export function useTimeline() {
 			const arr = [...currentDoc.timeline.clips];
 			const at = Math.max(0, Math.min(arr.length, index));
 			arr.splice(at, 0, newClip);
-			const next: AxcutDocument = {
-				...currentDoc,
-				timeline: { ...currentDoc.timeline, clips: resequenceClips(arr) },
-			};
+			const next = withResequencedClips(currentDoc, arr);
 			await saveDocument(next);
 			setClipSelection(newClip.id);
 
@@ -963,10 +1200,7 @@ export function useTimeline() {
 		async (clipId: string) => {
 			if (!document) return;
 			const arr = document.timeline.clips.filter((c) => c.id !== clipId);
-			const next: AxcutDocument = {
-				...document,
-				timeline: { ...document.timeline, clips: resequenceClips(arr) },
-			};
+			const next = withResequencedClips(document, arr);
 			await saveDocument(next);
 			if (clipSelection === clipId) setClipSelection(null);
 		},
@@ -996,6 +1230,7 @@ export function useTimeline() {
 
 	return {
 		zoomRegions: document?.zoomRanges ?? [],
+		cursorMotionRegions: document?.cursorMotionRegions ?? [],
 		trimRanges: document?.timeline.trimRanges ?? [],
 		annotationRegions: (document?.annotations ?? []) as unknown as AnnotationRegion[],
 		speedRegions,
@@ -1008,11 +1243,13 @@ export function useTimeline() {
 		clipSelection,
 		addZoom,
 		addZoomsBulk,
+		completePendingAutoZoom,
 		addTrim,
 		addTrimAt,
 		addAnnotation,
 		addSpeed,
 		addCameraFullscreen,
+		addCursorMotionRegions,
 		removeRegion,
 		removeRegions,
 		selectRegion,
@@ -1035,10 +1272,16 @@ export function useTimeline() {
 		updateZoomSpan,
 		updateZoomFocusLive,
 		commitZoomFocus,
+		updateZoomFocusMode,
+		setAutoFocusAll,
+		setAutoZoomEnabled,
 		updateZoomDepth,
 		updateAnnotationSpan,
 		updateAnnotationLive,
 		commitAnnotationChange,
+		updateCursorMotionSettings,
+		updateCursorMotionControlPointLive,
+		commitCursorMotionChange,
 		updateSpeedSpan,
 		updateSpeedValue,
 		updateCameraFullscreenSpan,

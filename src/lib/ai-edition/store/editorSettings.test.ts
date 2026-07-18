@@ -32,6 +32,8 @@ describe("getEditorSettings", () => {
 		expect(snap.webcamLayoutPreset).toBe(DEFAULT_WEBCAM_LAYOUT_PRESET);
 		expect(snap.webcamMaskShape).toBe(DEFAULT_WEBCAM_MASK_SHAPE);
 		expect(snap.cursor.size).toBe(DEFAULT_CURSOR_SIZE);
+		expect(snap.autoZoomEnabled).toBe(true);
+		expect(snap.autoFocusAll).toBe(false);
 	});
 
 	it("returns the defaults when the document is null", () => {
@@ -51,6 +53,8 @@ describe("getEditorSettings", () => {
 				webcamMaskShape: "circle",
 				cursorSize: 5,
 				cursorSmoothing: 0.8,
+				autoZoomEnabled: false,
+				autoFocusAll: true,
 			},
 		};
 		const snap = getEditorSettings(doc);
@@ -62,6 +66,8 @@ describe("getEditorSettings", () => {
 		expect(snap.webcamMaskShape).toBe("circle");
 		expect(snap.cursor.size).toBe(5);
 		expect(snap.cursor.smoothing).toBe(0.8);
+		expect(snap.autoZoomEnabled).toBe(false);
+		expect(snap.autoFocusAll).toBe(true);
 	});
 
 	it("falls back to defaults for unknown or wrong-type values", () => {
@@ -97,6 +103,16 @@ describe("patchEditorSettings", () => {
 		const snap = getEditorSettings(next);
 		expect(snap.cursor.size).toBe(4);
 		expect(snap.cursor.smoothing).toBe(0.9);
+	});
+
+	it("round-trips the automatic zoom and global auto-focus toggles", () => {
+		const next = patchEditorSettings(baseDoc, {
+			autoZoomEnabled: false,
+			autoFocusAll: true,
+		});
+		const snap = getEditorSettings(next);
+		expect(snap.autoZoomEnabled).toBe(false);
+		expect(snap.autoFocusAll).toBe(true);
 	});
 
 	it("does not mutate the source document", () => {

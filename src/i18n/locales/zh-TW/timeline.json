@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "自動縮放",
+		"autoFocusShort": "自動跟隨",
 		"addZoom": "新增縮放 (Z)",
 		"suggestZooms": "根據游標建議縮放",
 		"autoZoomOn": "自動縮放建議已開啟 — 點擊可移除建議的縮放",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "已新增 {{count}} 個基於游標的縮放建議",
 		"addedZoomSuggestionsPlural": "已新增 {{count}} 個基於游標的縮放建議"
+	},
+	"cursorMotion": {
+		"title": "游標軌跡",
+		"create": "建立到下一次點擊的游標軌跡",
+		"empty": "尚無游標軌跡 — 請先放置播放磁頭，然後使用游標軌跡工具",
+		"placePlayhead": "請先將播放磁頭置於剪輯內。",
+		"dataUnavailable": "此剪輯的游標資料無法使用。",
+		"noNextClick": "在此剪輯中找不到後續的游標點擊。",
+		"created": "已建立 {{count}} 個依原始記錄的游標區段。",
+		"createdPlural": "已建立 {{count}} 個依原始記錄的游標區段。",
+		"createFailed": "無法建立游標移動區段。"
 	},
 	"toolbar": {
 		"autoEnhance": "自動加強",

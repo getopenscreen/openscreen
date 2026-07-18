@@ -38,6 +38,7 @@ export interface ProjectState {
 	removeAsset: (assetId: string) => Promise<void>;
 	saveDocument: (document: AxcutDocument) => Promise<void>;
 	setDocument: (document: AxcutDocument) => void;
+	setDocumentLive: (document: AxcutDocument) => void;
 	replaceTimeline: (intervals: Interval[], reason: string) => Promise<void>;
 	restoreFullTimeline: () => Promise<void>;
 	setTranscript: (transcript: AxcutTranscript) => Promise<void>;
@@ -222,6 +223,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			revision: get().revision + 1,
 			dirty: true,
 		});
+	},
+
+	setDocumentLive(document) {
+		set({ document, dirty: true });
 	},
 
 	async replaceTimeline(intervals, reason) {

@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "自動ズーム",
+		"autoFocusShort": "オートフォーカス",
 		"addZoom": "ズームを追加 (Z)",
 		"suggestZooms": "カーソル位置からズームを提案",
 		"autoZoomOn": "自動ズーム提案がオン — クリックすると提案されたズームを削除します",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "カーソルに基づくズーム提案を {{count}} 件追加しました",
 		"addedZoomSuggestionsPlural": "カーソルに基づくズーム提案を {{count}} 件追加しました"
+	},
+	"cursorMotion": {
+		"title": "カーソル軌道",
+		"create": "次のクリックまでカーソル軌道を作成",
+		"empty": "カーソル軌道なし — 再生位置を置き、カーソル軌道ボタンを押してください",
+		"placePlayhead": "先にクリップ内へ再生位置を移動してください。",
+		"dataUnavailable": "このクリップのカーソルデータを読み込めません。",
+		"noNextClick": "このクリップ内に後続のカーソルクリックがありません。",
+		"created": "記録どおりのカーソル区間を{{count}}件作成しました。",
+		"createdPlural": "記録どおりのカーソル区間を{{count}}件作成しました。",
+		"createFailed": "カーソル軌道区間を作成できませんでした。"
 	},
 	"toolbar": {
 		"autoEnhance": "自動強化",

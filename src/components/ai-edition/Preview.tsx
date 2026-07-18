@@ -3,6 +3,7 @@ import type { CameraFullscreenRegion, ZoomFocus } from "@/components/video-edito
 import type {
 	AxcutAnnotationRegion,
 	AxcutClip,
+	AxcutCursorMotionRegion,
 	AxcutTrimRange,
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
@@ -22,6 +23,14 @@ interface PreviewProps {
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	trimRanges?: AxcutTrimRange[];
+	cursorMotionRegions?: AxcutCursorMotionRegion[];
+	selectedCursorMotionRegionId?: string | null;
+	onCursorMotionControlPointChange?: (
+		id: string,
+		index: number,
+		point: { cx: number; cy: number },
+	) => void;
+	onCursorMotionControlPointCommit?: () => void;
 	selectedZoomRegionId?: string | null;
 	onZoomFocusChange?: (id: string, focus: ZoomFocus) => void;
 	onZoomFocusCommit?: () => void;
@@ -54,6 +63,10 @@ export function Preview({
 	speedRegions,
 	cameraFullscreenRegions,
 	trimRanges,
+	cursorMotionRegions,
+	selectedCursorMotionRegionId,
+	onCursorMotionControlPointChange,
+	onCursorMotionControlPointCommit,
 	selectedZoomRegionId,
 	onZoomFocusChange,
 	onZoomFocusCommit,
@@ -102,6 +115,10 @@ export function Preview({
 					speedRegions={speedRegions}
 					cameraFullscreenRegions={cameraFullscreenRegions}
 					trimRanges={trimRanges}
+					cursorMotionRegions={cursorMotionRegions}
+					selectedCursorMotionRegionId={selectedCursorMotionRegionId}
+					onCursorMotionControlPointChange={onCursorMotionControlPointChange}
+					onCursorMotionControlPointCommit={onCursorMotionControlPointCommit}
 					selectedZoomRegionId={selectedZoomRegionId}
 					onZoomFocusChange={onZoomFocusChange}
 					onZoomFocusCommit={onZoomFocusCommit}

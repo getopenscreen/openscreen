@@ -97,6 +97,7 @@ export const assetSchema = z.object({
 	video: assetVideoSchema.optional(),
 	audio: assetAudioSchema.optional(),
 	cameraTrack: cameraTrackSchema,
+	autoZoomState: z.enum(["pending", "processed"]).default("processed"),
 });
 
 // A crop is a sub-rectangle of the source video, expressed as fractions
@@ -434,6 +435,42 @@ export const zoomRegionSchema = z
 		path: ["endMs"],
 	});
 
+export const cursorMotionPointSchema = z.object({
+	cx: z.number().min(0).max(1),
+	cy: z.number().min(0).max(1),
+});
+
+export const cursorMotionRegionSchema = z
+	.object({
+		id: z.string().min(1),
+		clipId: z.string().min(1),
+		assetId: z.string().min(1),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		sourceStartMs: z.number().nonnegative(),
+		sourceEndMs: z.number().nonnegative(),
+		preset: z
+			.enum(["recorded", "straight", "arc", "wave", "loop", "overshoot"])
+			.default("recorded"),
+		speed: z.number().min(1).max(4).default(1),
+		easing: z.enum(["linear", "ease-in", "ease-out", "ease-in-out"]).default("ease-in-out"),
+		cycles: z.number().int().min(1).max(6).default(1),
+		startPoint: cursorMotionPointSchema,
+		endPoint: cursorMotionPointSchema,
+		controlPoints: z.array(cursorMotionPointSchema).max(2).default([]),
+		startAnchor: z.enum(["manual", "rest", "click"]),
+		endAnchor: z.enum(["manual", "rest", "click"]),
+		segmentKind: z.enum(["move", "hold"]),
+	})
+	.refine((data) => data.endMs > data.startMs, {
+		message: "endMs must be greater than startMs",
+		path: ["endMs"],
+	})
+	.refine((data) => data.sourceEndMs > data.sourceStartMs, {
+		message: "sourceEndMs must be greater than sourceStartMs",
+		path: ["sourceEndMs"],
+	});
+
 // Legacy OpenScreen appearance / export settings that the v3 schema doesn't
 // normalize into the timeline / assets model. They are applied at export time
 // by the existing pipeline (see docs/architecture/ai-edition-roadmap.md §2).
@@ -466,6 +503,7 @@ const documentSchemaShape = z.object({
 	}),
 	annotations: z.array(annotationRegionSchema).default([]),
 	zoomRanges: z.array(zoomRegionSchema).default([]),
+	cursorMotionRegions: z.array(cursorMotionRegionSchema).default([]),
 	legacyEditor: legacyEditorSchema.nullable().default(null),
 	agent: agentStateSchema.default({
 		pendingQuestions: [],
@@ -573,6 +611,7 @@ export type AxcutOperation = z.infer<typeof operationSchema>;
 export type AxcutRevision = z.infer<typeof revisionSchema>;
 export type AxcutAnnotationRegion = z.infer<typeof annotationRegionSchema>;
 export type AxcutZoomRegion = z.infer<typeof zoomRegionSchema>;
+export type AxcutCursorMotionRegion = z.infer<typeof cursorMotionRegionSchema>;
 export type AxcutCameraTrack = z.infer<typeof cameraTrackSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
@@ -609,6 +648,7 @@ export function createEmptyDocument(
 		},
 		annotations: [],
 		zoomRanges: [],
+		cursorMotionRegions: [],
 		legacyEditor: null,
 		agent: { pendingQuestions: [], suggestions: [], lastAppliedOperations: [] },
 		preview: { strategy: "seek", revision: 0 },

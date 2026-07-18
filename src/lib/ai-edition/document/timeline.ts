@@ -7,6 +7,49 @@ import type { AxcutClip, AxcutDocument, AxcutTranscript } from "../schema";
 import { reprojectRegionsForReorder } from "../timeline/region-ventilation";
 import { createId } from "./ids";
 
+export function reconcileCursorMotionRegions(
+	document: Pick<AxcutDocument, "assets" | "cursorMotionRegions">,
+	clips: readonly AxcutClip[],
+): AxcutDocument["cursorMotionRegions"] {
+	const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
+	const assetDurationById = new Map(
+		document.assets.flatMap((asset) =>
+			asset.durationSec === undefined ? [] : [[asset.id, asset.durationSec * 1000] as const],
+		),
+	);
+
+	return (document.cursorMotionRegions ?? []).flatMap((region) => {
+		const clip = clipsById.get(region.clipId);
+		if (!clip || clip.assetId !== region.assetId) return [];
+
+		const clipSourceStartMs = clip.sourceStartSec * 1000;
+		const clipSourceEndMs =
+			clip.sourceEndSec !== undefined
+				? clip.sourceEndSec * 1000
+				: (assetDurationById.get(clip.assetId) ??
+					clipSourceStartMs + (clip.timelineEndSec - clip.timelineStartSec) * 1000);
+		if (
+			!Number.isFinite(region.sourceStartMs) ||
+			!Number.isFinite(region.sourceEndMs) ||
+			region.sourceEndMs <= region.sourceStartMs ||
+			region.sourceStartMs < clipSourceStartMs ||
+			region.sourceEndMs > clipSourceEndMs
+		) {
+			return [];
+		}
+
+		const clipTimelineStartMs = clip.timelineStartSec * 1000;
+		const startMs = clipTimelineStartMs + region.sourceStartMs - clipSourceStartMs;
+		const endMs = clipTimelineStartMs + region.sourceEndMs - clipSourceStartMs;
+		const clipTimelineEndMs = clip.timelineEndSec * 1000;
+		if (endMs <= startMs || startMs < clipTimelineStartMs || endMs > clipTimelineEndMs) {
+			return [];
+		}
+
+		return [{ ...region, startMs: Math.round(startMs), endMs: Math.round(endMs) }];
+	});
+}
+
 export function byStart(a: { startSec: number }, b: { startSec: number }): number {
 	return a.startSec - b.startSec;
 }
@@ -229,6 +272,7 @@ export function moveClip(
 		annotations: reprojectRegionsForReorder(document.annotations, oldClips, newClips, () =>
 			createId("ann"),
 		) as AxcutDocument["annotations"],
+		cursorMotionRegions: reconcileCursorMotionRegions(document, newClips),
 		legacyEditor:
 			legacy && (speedRegions || cameraFullscreenRegions)
 				? {
@@ -288,11 +332,13 @@ export function duplicateClip(
 		copy,
 		...document.timeline.clips.slice(index + 1),
 	];
+	const clips = resequenceClips(next);
 	return {
 		...document,
+		cursorMotionRegions: reconcileCursorMotionRegions(document, clips),
 		timeline: {
 			...document.timeline,
-			clips: resequenceClips(next),
+			clips,
 		},
 		preview: {
 			...document.preview,

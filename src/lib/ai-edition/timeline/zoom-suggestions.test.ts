@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
-import { buildAutoZoomSuggestions, detectZoomDwellCandidates } from "./zoom-suggestions";
+import type { AxcutClip } from "@/lib/ai-edition/schema";
+import {
+	buildAutoZoomSuggestions,
+	buildAutoZoomSuggestionsForClips,
+	detectZoomDwellCandidates,
+} from "./zoom-suggestions";
 
 // A dwell = many samples clustered in time at (nearly) the same position.
 function dwell(
@@ -82,5 +87,131 @@ describe("buildAutoZoomSuggestions", () => {
 				defaultDurationMs: 2000,
 			}),
 		).toEqual([]);
+	});
+});
+
+function clip(overrides: Partial<AxcutClip> & Pick<AxcutClip, "id">): AxcutClip {
+	return {
+		id: overrides.id,
+		assetId: "asset_1",
+		sourceStartSec: 0,
+		sourceEndSec: 5,
+		timelineStartSec: 0,
+		timelineEndSec: 5,
+		wordRefs: [],
+		origin: "user",
+		...overrides,
+	};
+}
+
+describe("buildAutoZoomSuggestionsForClips", () => {
+	it("projects source telemetry into a clip's virtual timeline", () => {
+		const suggestions = buildAutoZoomSuggestionsForClips({
+			cursorTelemetry: dwell(2000, 0.3, 0.7),
+			clips: [
+				clip({
+					id: "clip_1",
+					sourceStartSec: 1,
+					sourceEndSec: 4,
+					timelineStartSec: 10,
+					timelineEndSec: 13,
+				}),
+			],
+			existingRegions: [],
+			defaultDurationMs: 1000,
+		});
+
+		expect(suggestions).toHaveLength(1);
+		expect(suggestions[0].span).toEqual({ start: 10500, end: 11500 });
+		expect(suggestions[0].focus.cx).toBeCloseTo(0.3, 5);
+		expect(suggestions[0].focus.cy).toBeCloseTo(0.7, 5);
+	});
+
+	it("projects each clip independently and skips clips with unknown source ends", () => {
+		const suggestions = buildAutoZoomSuggestionsForClips({
+			cursorTelemetry: [...dwell(1000, 0.2, 0.2), ...dwell(6000, 0.8, 0.8)],
+			clips: [
+				clip({
+					id: "clip_2",
+					sourceStartSec: 5,
+					sourceEndSec: 8,
+					timelineStartSec: 10,
+					timelineEndSec: 13,
+				}),
+				clip({
+					id: "unknown",
+					sourceStartSec: 8,
+					sourceEndSec: undefined,
+					timelineStartSec: 20,
+					timelineEndSec: 25,
+				}),
+				clip({
+					id: "clip_1",
+					sourceStartSec: 0,
+					sourceEndSec: 3,
+					timelineStartSec: 0,
+					timelineEndSec: 3,
+				}),
+			],
+			existingRegions: [],
+			defaultDurationMs: 1000,
+		});
+
+		expect(suggestions.map((suggestion) => suggestion.span)).toEqual([
+			{ start: 500, end: 1500 },
+			{ start: 10500, end: 11500 },
+		]);
+	});
+
+	it("keeps suggestions inside half-open clip source boundaries", () => {
+		const suggestions = buildAutoZoomSuggestionsForClips({
+			cursorTelemetry: [
+				{ timeMs: 500, cx: 0.4, cy: 0.4 },
+				{ timeMs: 1000, cx: 0.4, cy: 0.4 },
+			],
+			clips: [clip({ id: "clip_1", sourceEndSec: 1, timelineEndSec: 1 })],
+			existingRegions: [],
+			defaultDurationMs: 500,
+		});
+
+		expect(suggestions).toEqual([]);
+	});
+
+	it("drops a projected suggestion that overlaps an existing virtual zoom", () => {
+		const suggestions = buildAutoZoomSuggestionsForClips({
+			cursorTelemetry: dwell(2000, 0.3, 0.7),
+			clips: [
+				clip({
+					id: "clip_1",
+					sourceStartSec: 1,
+					sourceEndSec: 4,
+					timelineStartSec: 10,
+					timelineEndSec: 13,
+				}),
+			],
+			existingRegions: [{ startMs: 10900, endMs: 11100 }],
+			defaultDurationMs: 1000,
+		});
+
+		expect(suggestions).toEqual([]);
+	});
+
+	it("clamps processing to the shorter source or virtual clip duration", () => {
+		const suggestions = buildAutoZoomSuggestionsForClips({
+			cursorTelemetry: dwell(2800, 0.5, 0.5),
+			clips: [
+				clip({
+					id: "clip_1",
+					sourceStartSec: 0,
+					sourceEndSec: 4,
+					timelineStartSec: 5,
+					timelineEndSec: 7,
+				}),
+			],
+			existingRegions: [],
+			defaultDurationMs: 1000,
+		});
+
+		expect(suggestions).toEqual([]);
 	});
 });

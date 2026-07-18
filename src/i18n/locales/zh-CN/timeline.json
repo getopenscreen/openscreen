@@ -1,5 +1,7 @@
 {
 	"buttons": {
+		"autoZoomShort": "自动缩放",
+		"autoFocusShort": "自动跟随",
 		"addZoom": "添加缩放 (Z)",
 		"suggestZooms": "根据光标建议缩放",
 		"autoZoomOn": "自动缩放建议已开启 — 点击可移除建议的缩放",
@@ -61,6 +63,17 @@
 	"success": {
 		"addedZoomSuggestions": "已添加 {{count}} 个基于光标的缩放建议",
 		"addedZoomSuggestionsPlural": "已添加 {{count}} 个基于光标的缩放建议"
+	},
+	"cursorMotion": {
+		"title": "光标轨迹",
+		"create": "创建到下一次点击的光标轨迹",
+		"empty": "暂无光标轨迹 — 请先放置播放头，然后使用光标轨迹工具",
+		"placePlayhead": "请先将播放头置于剪辑内。",
+		"dataUnavailable": "此剪辑的光标数据不可用。",
+		"noNextClick": "未在此剪辑中找到后续光标点击。",
+		"created": "已创建 {{count}} 个按原始记录的光标区段。",
+		"createdPlural": "已创建 {{count}} 个按原始记录的光标区段。",
+		"createFailed": "无法创建光标运动区段。"
 	},
 	"toolbar": {
 		"autoEnhance": "自动增强",

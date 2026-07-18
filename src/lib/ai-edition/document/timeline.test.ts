@@ -7,6 +7,7 @@ import {
 	moveClip,
 	normalizeIntervals,
 	primaryAssetDuration,
+	reconcileCursorMotionRegions,
 	replaceTimeline,
 	restoreFullTimeline,
 	subtractInterval,
@@ -245,6 +246,47 @@ function makeClip(overrides: Partial<AxcutClip> = {}): AxcutClip {
 		...overrides,
 	};
 }
+
+describe("reconcileCursorMotionRegions", () => {
+	it("keeps exact source boundaries and rejects a one-millisecond overrun", () => {
+		const clip = makeClip({
+			sourceStartSec: 2,
+			sourceEndSec: 5,
+			timelineStartSec: 7,
+			timelineEndSec: 10,
+		});
+		const exact = {
+			id: "motion_exact",
+			clipId: "clip_a",
+			assetId: "asset_1",
+			startMs: 0,
+			endMs: 1,
+			sourceStartMs: 2000,
+			sourceEndMs: 5000,
+			startPoint: { cx: 0.1, cy: 0.2 },
+			endPoint: { cx: 0.8, cy: 0.9 },
+			controlPoints: [],
+			startAnchor: "rest" as const,
+			endAnchor: "click" as const,
+			segmentKind: "move" as const,
+			preset: "recorded" as const,
+			speed: 1,
+			cycles: 1,
+			easing: "linear" as const,
+		};
+		const outside = {
+			...exact,
+			id: "motion_outside",
+			sourceStartMs: 1999,
+			sourceEndMs: 3000,
+		};
+		const document = makeDoc({ cursorMotionRegions: [exact, outside] });
+
+		expect(reconcileCursorMotionRegions(document, [clip])).toEqual([
+			{ ...exact, startMs: 7000, endMs: 10000 },
+		]);
+	});
+});
 
 describe("duplicateClip / moveClip", () => {
 	it("duplicateClip gives the copy a fresh, collision-free id even when called repeatedly", () => {

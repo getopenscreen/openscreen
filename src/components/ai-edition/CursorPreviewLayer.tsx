@@ -12,8 +12,24 @@
 // (which carries the additional zoom / crop / 3D transform math).
 
 import { Application, Container } from "pixi.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	type PointerEvent as ReactPointerEvent,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import type { CropRegion, CursorTelemetryPoint } from "@/components/video-editor/types";
+import type { AxcutCursorMotionRegion } from "@/lib/ai-edition/schema";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import {
+	type CursorMotionOwner,
+	type CursorMotionPath,
+	findCursorMotionRegionAtSourceTime,
+	projectCursorMotionPointToCrop,
+	sampleCursorMotion,
+	unprojectCursorMotionPointFromCrop,
+} from "@/lib/cursor/cursorMotion";
 import { getSmoothedCursorPath } from "@/lib/cursor/cursorPathSmoothing";
 import {
 	createNativeCursorMotionBlurState,
@@ -29,28 +45,73 @@ import {
 	PixiCursorOverlay,
 	preloadCursorAssets,
 } from "@/lib/cursor/pixiCursorRenderer";
-import { useCursorRecordingData } from "@/native/hooks/useCursorRecordingData";
-import { useCursorTelemetry } from "@/native/hooks/useCursorTelemetry";
+import type { CursorRecordingData } from "@/native/contracts";
 import styles from "./CursorPreviewLayer.module.css";
 
-interface CursorPreviewLayerProps {
+const IDENTITY_CURSOR_CROP: CropRegion = { x: 0, y: 0, width: 1, height: 1 };
+
+export interface CursorPreviewLayerProps {
 	videoPath: string | null;
 	currentTimeSec: number;
 	isPlaying: boolean;
+	cursorRecordingData?: CursorRecordingData | null;
+	cursorTelemetry?: CursorTelemetryPoint[];
+	cropRegion?: CropRegion;
+	assetId?: string | null;
+	clipId?: string | null;
+	cursorMotionRegions?: AxcutCursorMotionRegion[];
+	selectedCursorMotionRegionId?: string | null;
+	onControlPointChange?: (id: string, index: number, point: { cx: number; cy: number }) => void;
+	onControlPointCommit?: () => void;
 }
 
 export function CursorPreviewLayer({
 	videoPath,
 	currentTimeSec,
 	isPlaying,
+	cursorRecordingData = null,
+	cursorTelemetry = [],
+	cropRegion = IDENTITY_CURSOR_CROP,
+	assetId = null,
+	clipId = null,
+	cursorMotionRegions = [],
+	selectedCursorMotionRegionId = null,
+	onControlPointChange,
+	onControlPointCommit,
 }: CursorPreviewLayerProps) {
 	const { settings } = useEditorSettings();
-	const { data: cursorRecordingData } = useCursorRecordingData(videoPath);
-	const { samples: cursorTelemetry } = useCursorTelemetry(videoPath);
 
 	const hasNativeCursor = useMemo(
 		() => hasNativeCursorRecordingData(cursorRecordingData),
 		[cursorRecordingData],
+	);
+	const recordedMotionPath = useMemo<CursorMotionPath | null>(() => {
+		const data = hasNativeCursor
+			? cursorRecordingData
+			: cursorTelemetry.length > 0
+				? {
+						version: 1,
+						provider: "none" as const,
+						samples: cursorTelemetry as never,
+						assets: [],
+					}
+				: null;
+		const path = getSmoothedCursorPath(data, settings.cursor.smoothing);
+		return path ? { sampleAtSourceTime: (timeMs) => path.sampleAt(timeMs) } : null;
+	}, [cursorRecordingData, cursorTelemetry, hasNativeCursor, settings.cursor.smoothing]);
+	const owner = useMemo<CursorMotionOwner | null>(
+		() => (assetId && clipId ? { assetId, clipId } : null),
+		[assetId, clipId],
+	);
+	const selectedMotionRegion = useMemo(
+		() =>
+			cursorMotionRegions.find(
+				(region) =>
+					region.id === selectedCursorMotionRegionId &&
+					region.assetId === assetId &&
+					region.clipId === clipId,
+			) ?? null,
+		[cursorMotionRegions, selectedCursorMotionRegionId, assetId, clipId],
 	);
 
 	// Layer ref — the DOM <div> that hosts the Pixi canvas + native-cursor
@@ -59,19 +120,17 @@ export function CursorPreviewLayer({
 	const layerRef = useRef<HTMLDivElement | null>(null);
 	const [size, setSize] = useState({ width: 0, height: 0 });
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run when videoPath changes so the observer re-attaches to the new <video>.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run when videoPath changes so the observer re-attaches to the active preview.
 	useEffect(() => {
 		const layer = layerRef.current;
 		if (!layer) return;
-		const video = layer.parentElement?.querySelector("video");
-		if (!video) return;
 		const update = () => {
-			const rect = video.getBoundingClientRect();
+			const rect = layer.getBoundingClientRect();
 			setSize({ width: rect.width, height: rect.height });
 		};
 		update();
 		const ro = new ResizeObserver(update);
-		ro.observe(video);
+		ro.observe(layer);
 		window.addEventListener("resize", update);
 		return () => {
 			ro.disconnect();
@@ -195,7 +254,10 @@ export function CursorPreviewLayer({
 	const hasNativeRef = useRef(hasNativeCursor);
 	const recordingDataRef = useRef(cursorRecordingData);
 	const telemetryRef = useRef(cursorTelemetry);
-	const smoothingRef = useRef(settings.cursor.smoothing);
+	const recordedMotionPathRef = useRef(recordedMotionPath);
+	const cursorMotionRegionsRef = useRef(cursorMotionRegions);
+	const ownerRef = useRef(owner);
+	const cropRegionRef = useRef(cropRegion);
 	const clickBounceRef = useRef(settings.cursor.clickBounce);
 	const cursorSizeRef = useRef(settings.cursor.size);
 	const cursorMotionBlurRef = useRef(settings.cursor.motionBlur);
@@ -226,8 +288,17 @@ export function CursorPreviewLayer({
 		telemetryRef.current = cursorTelemetry;
 	}, [cursorTelemetry]);
 	useEffect(() => {
-		smoothingRef.current = settings.cursor.smoothing;
-	}, [settings.cursor.smoothing]);
+		recordedMotionPathRef.current = recordedMotionPath;
+	}, [recordedMotionPath]);
+	useEffect(() => {
+		cursorMotionRegionsRef.current = cursorMotionRegions;
+	}, [cursorMotionRegions]);
+	useEffect(() => {
+		ownerRef.current = owner;
+	}, [owner]);
+	useEffect(() => {
+		cropRegionRef.current = cropRegion;
+	}, [cropRegion]);
 	useEffect(() => {
 		clickBounceRef.current = settings.cursor.clickBounce;
 	}, [settings.cursor.clickBounce]);
@@ -251,7 +322,22 @@ export function CursorPreviewLayer({
 			if (!overlay) return;
 			const timeMs = timeRef.current * 1000;
 			const viewport = { x: 0, y: 0, ...sizeRef.current };
-			const samples = hasNativeRef.current ? [] : telemetryRef.current;
+			const activeMotion = ownerRef.current
+				? findCursorMotionRegionAtSourceTime(
+						cursorMotionRegionsRef.current,
+						ownerRef.current,
+						timeMs,
+					)
+				: null;
+			const samples =
+				hasNativeRef.current ||
+				(activeMotion && activeMotion.preset !== "recorded") ||
+				cropRegionRef.current.x !== 0 ||
+				cropRegionRef.current.y !== 0 ||
+				cropRegionRef.current.width !== 1 ||
+				cropRegionRef.current.height !== 1
+					? []
+					: telemetryRef.current;
 			overlay.update(samples, timeMs, viewport, showCursorRef.current, !playingRef.current);
 		};
 		raf = window.requestAnimationFrame(tick);
@@ -273,12 +359,15 @@ export function CursorPreviewLayer({
 				isPlaying: playingRef.current,
 				size: sizeRef.current,
 				cursorSize: cursorSizeRef.current,
-				cursorSmoothing: smoothingRef.current,
 				cursorClickBounce: clickBounceRef.current,
 				cursorMotionBlur: cursorMotionBlurRef.current,
 				cursorTheme: cursorThemeRef.current,
 				cursorClipToBounds: cursorClipToBoundsRef.current,
 				showCursor: showCursorRef.current,
+				cropRegion: cropRegionRef.current,
+				motionPath: recordedMotionPathRef.current,
+				cursorMotionRegions: cursorMotionRegionsRef.current,
+				owner: ownerRef.current,
 				imageRef,
 				clipRef,
 				lastImageIdRef,
@@ -300,24 +389,193 @@ export function CursorPreviewLayer({
 			<div ref={clipRef} className={styles.nativeCursorClip}>
 				<img ref={imageRef} alt="" className={styles.nativeCursor} draggable={false} />
 			</div>
+			{selectedMotionRegion && owner && recordedMotionPath ? (
+				<CursorMotionEditorOverlay
+					region={selectedMotionRegion}
+					owner={owner}
+					path={recordedMotionPath}
+					cropRegion={cropRegion}
+					isPlaying={isPlaying}
+					onControlPointChange={onControlPointChange}
+					onControlPointCommit={onControlPointCommit}
+				/>
+			) : null}
 		</div>
+	);
+}
+
+function CursorMotionEditorOverlay({
+	region,
+	owner,
+	path,
+	cropRegion,
+	isPlaying,
+	onControlPointChange,
+	onControlPointCommit,
+}: {
+	region: AxcutCursorMotionRegion;
+	owner: CursorMotionOwner;
+	path: CursorMotionPath;
+	cropRegion: CropRegion;
+	isPlaying: boolean;
+	onControlPointChange?: (id: string, index: number, point: { cx: number; cy: number }) => void;
+	onControlPointCommit?: () => void;
+}) {
+	const draggingIndexRef = useRef<number | null>(null);
+	const trajectories = useMemo(() => {
+		const recorded: Array<{ cx: number; cy: number }> = [];
+		const edited: Array<{ cx: number; cy: number }> = [];
+		const steps = 48;
+		for (let index = 0; index <= steps; index += 1) {
+			const timeMs =
+				region.sourceStartMs + ((region.sourceEndMs - region.sourceStartMs) * index) / steps;
+			const recordedPoint = path.sampleAtSourceTime(timeMs);
+			const projectedRecorded = recordedPoint
+				? projectCursorMotionPointToCrop(recordedPoint, cropRegion)
+				: null;
+			if (projectedRecorded) recorded.push(projectedRecorded);
+			const editedPoint = sampleCursorMotion({
+				path,
+				regions: [region],
+				owner,
+				sourceTimeMs: timeMs,
+			});
+			const projectedEdited = editedPoint
+				? projectCursorMotionPointToCrop(editedPoint, cropRegion)
+				: null;
+			if (projectedEdited) edited.push(projectedEdited);
+		}
+		return { recorded, edited };
+	}, [cropRegion, owner, path, region]);
+	const points = (values: Array<{ cx: number; cy: number }>) =>
+		values.map((point) => `${point.cx.toFixed(4)},${point.cy.toFixed(4)}`).join(" ");
+	const sourceControls =
+		region.controlPoints.length > 0
+			? region.controlPoints
+			: [
+					{
+						cx: (region.startPoint.cx + region.endPoint.cx) / 2,
+						cy: (region.startPoint.cy + region.endPoint.cy) / 2,
+					},
+				];
+	const controls = sourceControls
+		.map((point, index) => ({
+			index,
+			point: projectCursorMotionPointToCrop(point, cropRegion),
+		}))
+		.filter(
+			(control): control is { index: number; point: { cx: number; cy: number } } =>
+				control.point !== null,
+		);
+	const projectedStart = projectCursorMotionPointToCrop(region.startPoint, cropRegion);
+	const projectedEnd = projectCursorMotionPointToCrop(region.endPoint, cropRegion);
+
+	const updateControlPoint = (event: ReactPointerEvent<SVGCircleElement>, index: number) => {
+		const svg = event.currentTarget.ownerSVGElement;
+		if (!svg) return;
+		const bounds = svg.getBoundingClientRect();
+		if (bounds.width <= 0 || bounds.height <= 0) return;
+		const sourcePoint = unprojectCursorMotionPointFromCrop(
+			{
+				cx: Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)),
+				cy: Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height)),
+			},
+			cropRegion,
+		);
+		if (sourcePoint) onControlPointChange?.(region.id, index, sourcePoint);
+	};
+	const finishDrag = (event: ReactPointerEvent<SVGCircleElement>) => {
+		if (draggingIndexRef.current === null) return;
+		draggingIndexRef.current = null;
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+		onControlPointCommit?.();
+	};
+
+	return (
+		<svg
+			className={styles.motionEditor}
+			viewBox="0 0 1 1"
+			preserveAspectRatio="none"
+			aria-label="Selected cursor path"
+		>
+			<polyline
+				className={styles.motionRecordedPath}
+				points={points(trajectories.recorded)}
+				vectorEffect="non-scaling-stroke"
+			/>
+			<polyline
+				className={styles.motionEditedPath}
+				points={points(trajectories.edited)}
+				vectorEffect="non-scaling-stroke"
+			/>
+			{projectedStart ? (
+				<circle
+					className={styles.motionAnchor}
+					cx={projectedStart.cx}
+					cy={projectedStart.cy}
+					r={0.009}
+					vectorEffect="non-scaling-stroke"
+				/>
+			) : null}
+			{projectedEnd ? (
+				<circle
+					className={styles.motionAnchor}
+					cx={projectedEnd.cx}
+					cy={projectedEnd.cy}
+					r={0.009}
+					vectorEffect="non-scaling-stroke"
+				/>
+			) : null}
+			{region.preset !== "recorded" && !isPlaying
+				? controls.map((control) => (
+						<circle
+							key={`${region.id}-control-${control.index}`}
+							className={styles.motionControl}
+							cx={control.point.cx}
+							cy={control.point.cy}
+							r={0.014}
+							vectorEffect="non-scaling-stroke"
+							onPointerDown={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								draggingIndexRef.current = control.index;
+								event.currentTarget.setPointerCapture(event.pointerId);
+								updateControlPoint(event, control.index);
+							}}
+							onPointerMove={(event) => {
+								if (draggingIndexRef.current === control.index) {
+									updateControlPoint(event, control.index);
+								}
+							}}
+							onPointerUp={finishDrag}
+							onPointerCancel={finishDrag}
+							onLostPointerCapture={finishDrag}
+						/>
+					))
+				: null}
+		</svg>
 	);
 }
 
 interface NativeCursorFrameInputs {
 	hasNativeCursor: boolean;
-	recordingData: ReturnType<typeof useCursorRecordingData>["data"];
-	telemetry: ReturnType<typeof useCursorTelemetry>["samples"];
+	recordingData: CursorRecordingData | null;
+	telemetry: CursorTelemetryPoint[];
 	timeMs: number;
 	isPlaying: boolean;
 	size: { width: number; height: number };
 	cursorSize: number;
-	cursorSmoothing: number;
 	cursorClickBounce: number;
 	cursorMotionBlur: number;
 	cursorTheme: string;
 	cursorClipToBounds: boolean;
 	showCursor: boolean;
+	cropRegion: CropRegion;
+	motionPath: CursorMotionPath | null;
+	cursorMotionRegions: AxcutCursorMotionRegion[];
+	owner: CursorMotionOwner | null;
 	imageRef: React.MutableRefObject<HTMLImageElement | null>;
 	clipRef: React.MutableRefObject<HTMLDivElement | null>;
 	lastImageIdRef: React.MutableRefObject<string | null>;
@@ -333,12 +591,15 @@ function renderNativeCursorFrame(inputs: NativeCursorFrameInputs) {
 		isPlaying,
 		size,
 		cursorSize,
-		cursorSmoothing,
 		cursorClickBounce,
 		cursorMotionBlur,
 		cursorTheme,
 		cursorClipToBounds,
 		showCursor,
+		cropRegion,
+		motionPath,
+		cursorMotionRegions,
+		owner,
 		imageRef,
 		clipRef,
 		lastImageIdRef,
@@ -367,18 +628,27 @@ function renderNativeCursorFrame(inputs: NativeCursorFrameInputs) {
 			hide();
 			return;
 		}
-		const path = getSmoothedCursorPath(
-			{ version: 1, provider: "none", samples: samples as never, assets: [] },
-			cursorSmoothing,
-		);
-		const pos = path?.sampleAt(timeMs);
+		const pos =
+			owner && motionPath
+				? sampleCursorMotion({
+						path: motionPath,
+						regions: cursorMotionRegions,
+						owner,
+						sourceTimeMs: timeMs,
+					})
+				: motionPath?.sampleAtSourceTime(timeMs);
 		if (!pos || !imageEl) {
 			hide();
 			return;
 		}
+		const projectedPosition = projectCursorMotionPointToCrop(pos, cropRegion);
+		if (!projectedPosition) {
+			hide();
+			return;
+		}
 		const radius = Math.max(4, 28 * Math.max(0, cursorSize));
-		const x = pos.cx * size.width;
-		const y = pos.cy * size.height;
+		const x = projectedPosition.cx * size.width;
+		const y = projectedPosition.cy * size.height;
 		if (lastImageIdRef.current !== "fallback-dot") {
 			imageEl.src =
 				"data:image/svg+xml;utf8," +
@@ -400,14 +670,27 @@ function renderNativeCursorFrame(inputs: NativeCursorFrameInputs) {
 		hide();
 		return;
 	}
-	const pos = getSmoothedCursorPath(recordingData, cursorSmoothing)?.sampleAt(timeMs);
+	const pos =
+		owner && motionPath
+			? sampleCursorMotion({
+					path: motionPath,
+					regions: cursorMotionRegions,
+					owner,
+					sourceTimeMs: timeMs,
+				})
+			: motionPath?.sampleAtSourceTime(timeMs);
 	const displaySample = pos ? { ...frame.sample, cx: pos.cx, cy: pos.cy } : frame.sample;
+	const projectedPosition = projectCursorMotionPointToCrop(displaySample, cropRegion);
+	if (!projectedPosition) {
+		hide();
+		return;
+	}
 	const renderAsset = resolveNativeCursorRenderAsset(frame.asset, 1, displaySample, cursorTheme);
 	const bounceProgress = getNativeCursorClickBounceProgress(recordingData, timeMs);
 	const scale =
 		Math.max(0, cursorSize) * getNativeCursorClickBounceScale(cursorClickBounce, bounceProgress);
-	const x = displaySample.cx * size.width;
-	const y = displaySample.cy * size.height;
+	const x = projectedPosition.cx * size.width;
+	const y = projectedPosition.cy * size.height;
 	const motionBlurPx = isPlaying
 		? getNativeCursorMotionBlurPx({
 				motionBlur: cursorMotionBlur,

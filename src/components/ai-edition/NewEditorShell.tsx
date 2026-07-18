@@ -13,6 +13,7 @@ import { PLACEHOLDER_DURATION_SEC, useTimeline } from "@/lib/ai-edition/store/us
 import { matchesShortcut } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native";
 import type { AiEditionProjectSummary } from "@/native/contracts";
+import { useNativePlaybackSync } from "@/native/useNativePlaybackSync";
 import { ExportDialog } from "./ExportDialog";
 import { LeftPanel } from "./LeftPanel";
 import {
@@ -58,6 +59,8 @@ export function NewEditorShell() {
 	const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
 	const [playing, setPlaying] = useState(false);
 	const [loop, setLoop] = useState(false);
+	// Mirror transport/playhead onto the native compositor view (no-op if inactive).
+	useNativePlaybackSync(playing, currentTimeSec);
 	// v4 shell: three modes (Media / Edit / Rec), a collapsible agent (chat)
 	// column, and a floating facet inspector over the stage.
 	const [mode, setMode] = useState<EditorMode>("edit");

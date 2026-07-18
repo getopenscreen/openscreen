@@ -4,6 +4,7 @@ import {
 	type CursorMotionRegion,
 	clampCursorMotionCycles,
 	clampCursorMotionPoint,
+	clampCursorMotionSpeed,
 	isCursorMotionAnchorKind,
 	isCursorMotionEasing,
 	isCursorMotionPreset,
@@ -72,7 +73,7 @@ function normalizeWallpaperValue(value: string): string {
 	return CANONICAL_WALLPAPERS.has(canonical) ? canonical : DEFAULT_WALLPAPER;
 }
 
-export const PROJECT_VERSION = 4;
+export const PROJECT_VERSION = 5;
 
 export interface ProjectEditorState {
 	wallpaper: string;
@@ -325,6 +326,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 								: { cx: 0.5, cy: 0.35 },
 						),
 						cycles: clampCursorMotionCycles(region.cycles),
+						speed: clampCursorMotionSpeed(region.speed),
 						easing: isCursorMotionEasing(region.easing) ? region.easing : "ease-in-out",
 					};
 				})

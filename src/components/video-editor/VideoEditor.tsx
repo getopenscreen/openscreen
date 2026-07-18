@@ -35,6 +35,7 @@ import {
 	trimLeadingSilenceMono16k,
 } from "@/lib/captioning";
 import {
+	applyCursorMotionSettingsToMoveRegions,
 	buildCursorMotionSegments,
 	type CursorMotionEasing,
 	type CursorMotionPoint,
@@ -42,7 +43,9 @@ import {
 	type CursorMotionRegion,
 	clampCursorMotionCycles,
 	clampCursorMotionPoint,
+	clampCursorMotionSpeed,
 	createDefaultCursorMotionControlPoint,
+	DEFAULT_CURSOR_MOTION_SPEED,
 	resolveCursorMotionClickAnchoredRange,
 	sampleCursorMotionPath,
 	splitCursorMotionRegionAtTime,
@@ -362,6 +365,17 @@ export default function VideoEditor() {
 				? (cursorMotionRegions.find((region) => region.id === selectedCursorMotionId) ?? null)
 				: null,
 		[cursorMotionRegions, selectedCursorMotionId],
+	);
+	const orderedCursorMotionRegions = useMemo(
+		() =>
+			[...cursorMotionRegions].sort(
+				(a, b) => a.startMs - b.startMs || a.endMs - b.endMs || a.id.localeCompare(b.id),
+			),
+		[cursorMotionRegions],
+	);
+	const selectedCursorMotionIndex = useMemo(
+		() => orderedCursorMotionRegions.findIndex((region) => region.id === selectedCursorMotionId),
+		[orderedCursorMotionRegions, selectedCursorMotionId],
 	);
 	useEffect(() => {
 		if (selectedCursorMotionId && !selectedCursorMotionRegion) {
@@ -1197,6 +1211,7 @@ export default function VideoEditor() {
 				preset: segment.segmentKind === "hold" ? "straight" : "wave",
 				controlPoint: createDefaultCursorMotionControlPoint(segment.startPoint, segment.endPoint),
 				cycles: 2,
+				speed: DEFAULT_CURSOR_MOTION_SPEED,
 				easing: "ease-in-out",
 			}));
 			pushState((prev) => ({
@@ -1348,6 +1363,36 @@ export default function VideoEditor() {
 			);
 		},
 		[updateSelectedCursorMotion],
+	);
+
+	const handleCursorMotionSpeedChange = useCallback(
+		(speed: number, checkpoint = false) => {
+			updateSelectedCursorMotion(
+				(region) => ({ ...region, speed: clampCursorMotionSpeed(speed) }),
+				checkpoint,
+			);
+		},
+		[updateSelectedCursorMotion],
+	);
+
+	const handleCursorMotionApplyToAllMoves = useCallback(() => {
+		const source = selectedCursorMotionRegion;
+		if (!source) return;
+		pushState((prev) => ({
+			cursorMotionRegions: applyCursorMotionSettingsToMoveRegions(prev.cursorMotionRegions, source),
+		}));
+		toast.success(ts("cursorMotion.appliedToAllMoves"));
+	}, [pushState, selectedCursorMotionRegion, ts]);
+
+	const handleCursorMotionNavigate = useCallback(
+		(direction: -1 | 1) => {
+			if (selectedCursorMotionIndex < 0) return;
+			const target = orderedCursorMotionRegions[selectedCursorMotionIndex + direction];
+			if (!target) return;
+			setCurrentTime(target.startMs / 1000);
+			handleSelectCursorMotion(target.id);
+		},
+		[handleSelectCursorMotion, orderedCursorMotionRegions, selectedCursorMotionIndex],
 	);
 
 	const handleCursorMotionControlPointChange = useCallback(
@@ -3498,7 +3543,18 @@ export default function VideoEditor() {
 										onCursorMotionPresetChange={handleCursorMotionPresetChange}
 										onCursorMotionEasingChange={handleCursorMotionEasingChange}
 										onCursorMotionCyclesChange={handleCursorMotionCyclesChange}
+										onCursorMotionSpeedChange={handleCursorMotionSpeedChange}
 										onCursorMotionCommit={handleCursorMotionCommit}
+										cursorMotionSectionIndex={selectedCursorMotionIndex + 1}
+										cursorMotionSectionCount={orderedCursorMotionRegions.length}
+										canSelectPreviousCursorMotion={selectedCursorMotionIndex > 0}
+										canSelectNextCursorMotion={
+											selectedCursorMotionIndex >= 0 &&
+											selectedCursorMotionIndex < orderedCursorMotionRegions.length - 1
+										}
+										onSelectPreviousCursorMotion={() => handleCursorMotionNavigate(-1)}
+										onSelectNextCursorMotion={() => handleCursorMotionNavigate(1)}
+										onCursorMotionApplyToAllMoves={handleCursorMotionApplyToAllMoves}
 										canSplitCursorMotion={Boolean(
 											selectedCursorMotionRegion &&
 												Math.round(currentTime * 1000) > selectedCursorMotionRegion.startMs + 1 &&

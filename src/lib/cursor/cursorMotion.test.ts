@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+	applyCursorMotionSettingsToMoveRegions,
 	buildCursorMotionSegments,
 	buildCursorMotionTrajectory,
 	type CursorMotionPath,
 	type CursorMotionRegion,
+	clampCursorMotionSpeed,
 	createDefaultCursorMotionControlPoint,
 	findCursorMotionRegionAtTime,
 	resolveCursorMotionClickAnchoredRange,
@@ -24,6 +26,7 @@ function region(overrides: Partial<CursorMotionRegion> = {}): CursorMotionRegion
 		preset: "arc",
 		controlPoint: { cx: 0.5, cy: 0.2 },
 		cycles: 2,
+		speed: 1,
 		easing: "linear",
 		...overrides,
 	};
@@ -47,6 +50,43 @@ describe("cursor motion choreography", () => {
 		const motion = region({ preset: "wave", cycles: 3 });
 		expect(sampleCursorMotionRegion(motion, start, end, motion.startMs)).toEqual(start);
 		expect(sampleCursorMotionRegion(motion, start, end, motion.endMs)).toEqual(end);
+	});
+
+	it("speeds up the move near the click without changing the click time", () => {
+		const fast = region({ preset: "straight", speed: 2 });
+		expect(sampleCursorMotionRegion(fast, start, end, 350)).toEqual(start);
+		expect(sampleCursorMotionRegion(fast, start, end, 600)).toEqual(start);
+		expect(sampleCursorMotionRegion(fast, start, end, 850).cx).toBeCloseTo(0.5, 6);
+		expect(sampleCursorMotionRegion(fast, start, end, fast.endMs)).toEqual(end);
+	});
+
+	it("clamps cursor motion speed to the supported range", () => {
+		expect(clampCursorMotionSpeed(Number.NaN)).toBe(2);
+		expect(clampCursorMotionSpeed(0.2)).toBe(1);
+		expect(clampCursorMotionSpeed(2.26)).toBe(2.3);
+		expect(clampCursorMotionSpeed(99)).toBe(4);
+	});
+
+	it("applies one section's timing to moves without changing holds or path handles", () => {
+		const source = region({
+			id: "source",
+			preset: "loop",
+			cycles: 4,
+			speed: 3,
+			easing: "ease-out",
+		});
+		const move = region({
+			id: "move",
+			preset: "arc",
+			controlPoint: { cx: 0.2, cy: 0.8 },
+			segmentKind: "move",
+		});
+		const hold = region({ id: "hold", preset: "straight", segmentKind: "hold" });
+		const result = applyCursorMotionSettingsToMoveRegions([move, hold], source);
+
+		expect(result[0]).toMatchObject({ preset: "loop", cycles: 4, speed: 3, easing: "ease-out" });
+		expect(result[0].controlPoint).toEqual(move.controlPoint);
+		expect(result[1]).toBe(hold);
 	});
 
 	it("uses persisted anchors instead of moving them when smoothing changes", () => {

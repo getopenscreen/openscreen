@@ -78,6 +78,7 @@ describe("projectPersistence media compatibility", () => {
 					preset: "wave",
 					controlPoint: { cx: 2, cy: -1 },
 					cycles: 99,
+					speed: 99,
 					easing: "ease-in-out",
 				},
 				{
@@ -90,6 +91,7 @@ describe("projectPersistence media compatibility", () => {
 					preset: "invalid" as never,
 					controlPoint: { cx: Number.NaN, cy: 0.25 },
 					cycles: Number.NaN,
+					speed: Number.NaN,
 					easing: "invalid" as never,
 				},
 			],
@@ -106,6 +108,7 @@ describe("projectPersistence media compatibility", () => {
 			preset: "wave",
 			controlPoint: { cx: 1, cy: 0 },
 			cycles: 6,
+			speed: 4,
 			easing: "ease-in-out",
 		});
 		expect(editor.cursorMotionRegions[1]).toMatchObject({
@@ -115,6 +118,7 @@ describe("projectPersistence media compatibility", () => {
 			preset: "arc",
 			controlPoint: { cx: 0.5, cy: 0.25 },
 			cycles: 1,
+			speed: 2,
 			easing: "ease-in-out",
 		});
 	});

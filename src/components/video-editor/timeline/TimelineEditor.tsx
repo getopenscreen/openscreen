@@ -26,7 +26,7 @@ import {
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { useAudioPeaks } from "@/hooks/useAudioPeaks";
-import type { CursorMotionRegion } from "@/lib/cursor/cursorMotion";
+import { type CursorMotionRegion, DEFAULT_CURSOR_MOTION_SPEED } from "@/lib/cursor/cursorMotion";
 import { isTextEditingTarget, matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/aspectRatioUtils";
@@ -1605,11 +1605,10 @@ export default function TimelineEditor({
 			id: region.id,
 			rowId: CURSOR_MOTION_ROW_ID,
 			span: { start: region.startMs, end: region.endMs },
-			label: `${
+			label:
 				region.segmentKind === "hold"
-					? t("cursorMotion.segmentKinds.hold")
-					: t(`cursorMotion.presets.${region.preset}`)
-			} ${index + 1}`,
+					? `${t("cursorMotion.segmentKinds.hold")} ${index + 1}`
+					: `${t(`cursorMotion.presets.${region.preset}`)} ${region.speed ?? DEFAULT_CURSOR_MOTION_SPEED}× ${index + 1}`,
 			variant: "cursor-motion",
 		}));
 

@@ -245,7 +245,14 @@
 			"ease-in-out": "なめらか",
 			"ease-in": "加速",
 			"ease-out": "減速"
-		}
+		},
+		"speed": "移動速度",
+		"speedHint": "速くしてもクリック時刻は変わりません。開始前の待機を増やし、直前の移動だけを高速化します。",
+		"applyToAllMoves": "全移動区間に設定を適用",
+		"appliedToAllMoves": "プリセット・速度・回転数・タイミングを全移動区間へ適用しました。",
+		"previousSection": "前のカーソル区間",
+		"nextSection": "次のカーソル区間",
+		"sectionCounter": "区間 {{current}} / {{total}}"
 	},
 	"cursor": {
 		"theme": "カーソルのスタイル",

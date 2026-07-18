@@ -47,6 +47,7 @@ export interface CursorMotionRegion {
 	preset: CursorMotionPreset;
 	controlPoint: CursorMotionPoint;
 	cycles: number;
+	speed: number;
 	easing: CursorMotionEasing;
 }
 
@@ -56,6 +57,10 @@ export interface CursorMotionPath {
 
 const MIN_CYCLES = 1;
 const MAX_CYCLES = 6;
+export const CURSOR_MOTION_SPEED_MIN = 1;
+export const CURSOR_MOTION_SPEED_MAX = 4;
+export const DEFAULT_CURSOR_MOTION_SPEED = 2;
+export const CURSOR_MOTION_SPEED_PRESETS = [1, 1.5, 2, 3, 4] as const;
 const REST_MIN_DURATION_MS = 300;
 const REST_MAX_DIAMETER = 0.009;
 const REST_MAX_SAMPLE_GAP_MS = 150;
@@ -82,6 +87,18 @@ export function getCursorMotionSegmentKind(
 
 export function clampCursorMotionCycles(cycles: number) {
 	return clamp(Math.round(Number.isFinite(cycles) ? cycles : 1), MIN_CYCLES, MAX_CYCLES);
+}
+
+export function clampCursorMotionSpeed(speed: number | null | undefined) {
+	const value = Number.isFinite(speed) ? Number(speed) : DEFAULT_CURSOR_MOTION_SPEED;
+	return Math.round(clamp(value, CURSOR_MOTION_SPEED_MIN, CURSOR_MOTION_SPEED_MAX) * 10) / 10;
+}
+
+export function applyCursorMotionSpeed(progress: number, speed: number | null | undefined) {
+	const t = clamp(progress, 0, 1);
+	const multiplier = clampCursorMotionSpeed(speed);
+	const motionStart = 1 - 1 / multiplier;
+	return clamp((t - motionStart) * multiplier, 0, 1);
 }
 
 export function isCursorMotionPreset(value: unknown): value is CursorMotionPreset {
@@ -413,6 +430,23 @@ export function splitCursorMotionRegionAtTime(options: {
 	return [left, right];
 }
 
+export function applyCursorMotionSettingsToMoveRegions(
+	regions: readonly CursorMotionRegion[],
+	source: CursorMotionRegion,
+): CursorMotionRegion[] {
+	return regions.map((region) =>
+		region.segmentKind === "hold"
+			? region
+			: {
+					...region,
+					preset: source.preset,
+					cycles: source.cycles,
+					speed: source.speed,
+					easing: source.easing,
+				},
+	);
+}
+
 export function sampleCursorMotionRegion(
 	region: CursorMotionRegion,
 	start: CursorMotionPoint,
@@ -423,7 +457,9 @@ export function sampleCursorMotionRegion(
 	const rawProgress = clamp((timeMs - region.startMs) / duration, 0, 1);
 	if (rawProgress === 0) return start;
 	if (rawProgress === 1) return end;
-	const progress = easeProgress(rawProgress, region.easing);
+	const motionProgress = applyCursorMotionSpeed(rawProgress, region.speed);
+	if (motionProgress === 0) return start;
+	const progress = easeProgress(motionProgress, region.easing);
 	const midpoint = {
 		cx: (start.cx + end.cx) / 2,
 		cy: (start.cy + end.cy) / 2,
@@ -435,7 +471,7 @@ export function sampleCursorMotionRegion(
 
 	if (region.preset === "overshoot") {
 		const overshootProgress = easeOutBack(progress);
-		const envelope = Math.sin(Math.PI * rawProgress);
+		const envelope = Math.sin(Math.PI * motionProgress);
 		return {
 			cx: lerp(start.cx, end.cx, overshootProgress) + offset.cx * envelope * 0.35,
 			cy: lerp(start.cy, end.cy, overshootProgress) + offset.cy * envelope * 0.35,
@@ -446,7 +482,7 @@ export function sampleCursorMotionRegion(
 		cx: lerp(start.cx, end.cx, progress),
 		cy: lerp(start.cy, end.cy, progress),
 	};
-	const envelope = Math.sin(Math.PI * rawProgress);
+	const envelope = Math.sin(Math.PI * motionProgress);
 	const cycles = clampCursorMotionCycles(region.cycles);
 
 	switch (region.preset) {
@@ -456,14 +492,14 @@ export function sampleCursorMotionRegion(
 				cy: base.cy + offset.cy * envelope,
 			};
 		case "wave": {
-			const wave = Math.sin(Math.PI * 2 * cycles * rawProgress) * envelope;
+			const wave = Math.sin(Math.PI * 2 * cycles * motionProgress) * envelope;
 			return {
 				cx: base.cx + offset.cx * wave,
 				cy: base.cy + offset.cy * wave,
 			};
 		}
 		case "loop": {
-			const phase = Math.PI * 2 * cycles * rawProgress;
+			const phase = Math.PI * 2 * cycles * motionProgress;
 			const tangentOffset = Math.sin(phase) * envelope;
 			const normalOffset = (1 - Math.cos(phase)) * 0.5 * envelope;
 			return {

@@ -2,10 +2,14 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
 	Brackets,
 	Bug,
+	ChevronLeft,
+	ChevronRight,
+	Copy,
 	Crop,
 	Download,
 	FileDown,
 	Film,
+	Gauge,
 	Image,
 	Info,
 	LayoutPanelTop,
@@ -49,6 +53,9 @@ import { WEBCAM_LAYOUT_PRESETS } from "@/lib/compositeLayout";
 import {
 	CURSOR_MOTION_EASINGS,
 	CURSOR_MOTION_PRESETS,
+	CURSOR_MOTION_SPEED_MAX,
+	CURSOR_MOTION_SPEED_MIN,
+	CURSOR_MOTION_SPEED_PRESETS,
 	type CursorMotionEasing,
 	type CursorMotionPreset,
 	type CursorMotionRegion,
@@ -338,7 +345,15 @@ interface SettingsPanelProps {
 	onCursorMotionPresetChange?: (preset: CursorMotionPreset) => void;
 	onCursorMotionEasingChange?: (easing: CursorMotionEasing) => void;
 	onCursorMotionCyclesChange?: (cycles: number) => void;
+	onCursorMotionSpeedChange?: (speed: number, checkpoint?: boolean) => void;
 	onCursorMotionCommit?: () => void;
+	cursorMotionSectionIndex?: number;
+	cursorMotionSectionCount?: number;
+	canSelectPreviousCursorMotion?: boolean;
+	canSelectNextCursorMotion?: boolean;
+	onSelectPreviousCursorMotion?: () => void;
+	onSelectNextCursorMotion?: () => void;
+	onCursorMotionApplyToAllMoves?: () => void;
 	canSplitCursorMotion?: boolean;
 	onCursorMotionSplit?: () => void;
 	onCursorMotionAutoSplit?: () => void;
@@ -515,7 +530,15 @@ export function SettingsPanel({
 	onCursorMotionPresetChange,
 	onCursorMotionEasingChange,
 	onCursorMotionCyclesChange,
+	onCursorMotionSpeedChange,
 	onCursorMotionCommit,
+	cursorMotionSectionIndex = 0,
+	cursorMotionSectionCount = 0,
+	canSelectPreviousCursorMotion = false,
+	canSelectNextCursorMotion = false,
+	onSelectPreviousCursorMotion,
+	onSelectNextCursorMotion,
+	onCursorMotionApplyToAllMoves,
 	canSplitCursorMotion = false,
 	onCursorMotionSplit,
 	onCursorMotionAutoSplit,
@@ -1259,6 +1282,33 @@ export function SettingsPanel({
 								</Button>
 							</div>
 
+							<div className="grid grid-cols-[32px_1fr_32px] items-center gap-1.5">
+								<Button
+									type="button"
+									onClick={() => onSelectPreviousCursorMotion?.()}
+									disabled={!canSelectPreviousCursorMotion}
+									title={t("cursorMotion.previousSection")}
+									className="h-8 w-8 border border-white/[0.07] bg-white/[0.035] p-0 text-slate-400 hover:bg-white/[0.08] disabled:opacity-30"
+								>
+									<ChevronLeft className="h-3.5 w-3.5" />
+								</Button>
+								<div className="text-center text-[10px] font-semibold tabular-nums text-slate-400">
+									{t("cursorMotion.sectionCounter", {
+										current: String(cursorMotionSectionIndex),
+										total: String(cursorMotionSectionCount),
+									})}
+								</div>
+								<Button
+									type="button"
+									onClick={() => onSelectNextCursorMotion?.()}
+									disabled={!canSelectNextCursorMotion}
+									title={t("cursorMotion.nextSection")}
+									className="h-8 w-8 border border-white/[0.07] bg-white/[0.035] p-0 text-slate-400 hover:bg-white/[0.08] disabled:opacity-30"
+								>
+									<ChevronRight className="h-3.5 w-3.5" />
+								</Button>
+							</div>
+
 							<div>
 								<span className="mb-1.5 block text-[11px] font-medium text-slate-400">
 									{t("cursorMotion.preset")}
@@ -1286,6 +1336,52 @@ export function SettingsPanel({
 										);
 									})}
 								</div>
+							</div>
+
+							<div className="space-y-2">
+								<div className="flex items-center justify-between text-[11px]">
+									<span className="flex items-center gap-1.5 font-medium text-slate-400">
+										<Gauge className="h-3.5 w-3.5 text-[#a78bfa]" />
+										{t("cursorMotion.speed")}
+									</span>
+									<span className="font-semibold tabular-nums text-[#a78bfa]">
+										{selectedCursorMotionRegion.speed.toFixed(1)}×
+									</span>
+								</div>
+								<div className="grid grid-cols-5 gap-1">
+									{CURSOR_MOTION_SPEED_PRESETS.map((speed) => (
+										<Button
+											key={speed}
+											type="button"
+											onClick={() => onCursorMotionSpeedChange?.(speed, true)}
+											className={cn(
+												"h-7 rounded-md border px-0 text-[10px] font-semibold tabular-nums transition-all",
+												selectedCursorMotionRegion.speed === speed
+													? "border-[#a78bfa]/70 bg-[#8b5cf6]/25 text-[#ddd6fe]"
+													: "border-white/[0.06] bg-white/[0.035] text-slate-500 hover:border-white/15 hover:text-slate-200",
+											)}
+										>
+											{speed}×
+										</Button>
+									))}
+								</div>
+								<SliderPrimitive.Root
+									min={CURSOR_MOTION_SPEED_MIN}
+									max={CURSOR_MOTION_SPEED_MAX}
+									step={0.1}
+									value={[selectedCursorMotionRegion.speed]}
+									onValueChange={(values) => onCursorMotionSpeedChange?.(values[0], false)}
+									onValueCommit={(values) => onCursorMotionSpeedChange?.(values[0], true)}
+									className="relative flex w-full touch-none select-none items-center py-1"
+								>
+									<SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full border border-white/10 bg-white/5">
+										<SliderPrimitive.Range className="absolute h-full bg-[#8b5cf6]" />
+									</SliderPrimitive.Track>
+									<SliderPrimitive.Thumb className="block h-3.5 w-3.5 cursor-grab rounded-full border-2 border-[#a78bfa] bg-[#8b5cf6] shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/50 active:cursor-grabbing" />
+								</SliderPrimitive.Root>
+								<p className="text-[10px] leading-snug text-slate-500">
+									{t("cursorMotion.speedHint")}
+								</p>
 							</div>
 
 							{(selectedCursorMotionRegion.preset === "wave" ||
@@ -1338,6 +1434,14 @@ export function SettingsPanel({
 							<div className="rounded-lg border border-[#a78bfa]/15 bg-[#8b5cf6]/[0.06] px-2.5 py-2 text-[10px] leading-snug text-slate-400">
 								{t("cursorMotion.anchorHint")}
 							</div>
+							<Button
+								type="button"
+								onClick={() => onCursorMotionApplyToAllMoves?.()}
+								className="h-8 w-full gap-2 border border-cyan-400/20 bg-cyan-400/10 text-xs text-cyan-200 transition-all hover:border-cyan-300/40 hover:bg-cyan-400/20"
+							>
+								<Copy className="h-3 w-3" />
+								{t("cursorMotion.applyToAllMoves")}
+							</Button>
 							<div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 rounded-lg border border-white/[0.06] bg-black/15 px-2.5 py-2 text-[10px]">
 								<span className="truncate text-center font-semibold text-slate-300">
 									{t(

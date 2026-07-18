@@ -236,7 +236,14 @@
 			"ease-in-out": "Smooth",
 			"ease-in": "Accelerate",
 			"ease-out": "Decelerate"
-		}
+		},
+		"speed": "Movement speed",
+		"speedHint": "Faster motion waits longer, then still lands on the recorded click at the original time.",
+		"applyToAllMoves": "Apply path settings to all move sections",
+		"appliedToAllMoves": "Applied the preset, speed, turns, and timing to every move section.",
+		"previousSection": "Previous cursor section",
+		"nextSection": "Next cursor section",
+		"sectionCounter": "Section {{current}} / {{total}}"
 	},
 	"cursor": {
 		"theme": "İmleç Stili",

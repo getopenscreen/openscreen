@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { normalizePhysicalPoint } from "./windowsCursorCoordinates";
+import { describe, expect, it, vi } from "vitest";
+import {
+	normalizePhysicalPoint,
+	resolveWindowsCursorPhysicalBounds,
+} from "./windowsCursorCoordinates";
 
 describe("normalizePhysicalPoint", () => {
 	it.each([
@@ -44,5 +47,32 @@ describe("normalizePhysicalPoint", () => {
 		expect(
 			normalizePhysicalPoint({ x: -1, y: 400 }, { x: 0, y: 0, width: 3840, height: 2160 }),
 		).toMatchObject({ withinBounds: false });
+	});
+
+	it("reuses display bounds reported once in the ready event", () => {
+		const readyBounds = { x: -2400, y: 0, width: 2400, height: 1350 };
+		const convertDipToPhysical = vi.fn();
+
+		expect(
+			resolveWindowsCursorPhysicalBounds(
+				undefined,
+				readyBounds,
+				{ x: -1920, y: 0, width: 1920, height: 1080 },
+				convertDipToPhysical,
+			),
+		).toBe(readyBounds);
+		expect(convertDipToPhysical).not.toHaveBeenCalled();
+	});
+
+	it("lets a moving window sample override the ready bounds", () => {
+		const sampleBounds = { x: 150, y: 200, width: 1200, height: 800 };
+		expect(
+			resolveWindowsCursorPhysicalBounds(
+				sampleBounds,
+				{ x: 0, y: 0, width: 1920, height: 1080 },
+				{ x: 0, y: 0, width: 1920, height: 1080 },
+				() => ({ x: 0, y: 0, width: 3840, height: 2160 }),
+			),
+		).toBe(sampleBounds);
 	});
 });

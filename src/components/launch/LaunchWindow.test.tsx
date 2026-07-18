@@ -645,6 +645,61 @@ describe("LaunchWindow HUD dragging", () => {
 		expect(window.electronAPI.setHudOverlaySize).toHaveBeenLastCalledWith(220, 524);
 	});
 
+	it("measures a shifted notice from the compensated center after drag", async () => {
+		resizeCallbacks.length = 0;
+		vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+		i18nState.value.systemLocaleSuggestion = "zh-CN";
+		let innerWidth = 588;
+		let innerHeight = 95;
+		vi.spyOn(window, "innerWidth", "get").mockImplementation(() => innerWidth);
+		vi.spyOn(window, "innerHeight", "get").mockImplementation(() => innerHeight);
+		const { container } = renderLaunchWindow();
+		const prompt = await screen.findByText("Use your system language?");
+		const promptPanel = prompt.parentElement as HTMLElement;
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+		const handle = screen.getByTestId("launch-drag-handle");
+
+		Object.defineProperties(hudBar, {
+			scrollWidth: { value: 400, configurable: true },
+			scrollHeight: { value: 56, configurable: true },
+		});
+		Object.defineProperties(promptPanel, {
+			scrollHeight: { value: 130, configurable: true },
+			offsetHeight: { value: 130, configurable: true },
+		});
+		vi.spyOn(promptPanel, "getBoundingClientRect").mockReturnValue({
+			left: 54,
+			right: 534,
+			top: 32,
+			bottom: 162,
+			width: 480,
+			height: 130,
+			x: 54,
+			y: 32,
+			toJSON: () => ({}),
+		});
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+
+		act(() => {
+			for (const callback of resizeCallbacks) callback([], {} as ResizeObserver);
+		});
+		expect(window.electronAPI.setHudOverlaySize).toHaveBeenLastCalledWith(504, 186);
+		vi.mocked(window.electronAPI.setHudOverlaySize).mockClear();
+
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 16, screenX: 100, screenY: 200 });
+		innerWidth = 594;
+		innerHeight = 99;
+		fireEvent.resize(window);
+		await waitFor(() => expect(hudBar.style.left).toBe("calc(50% - 3px)"));
+		fireEvent.pointerUp(handle, { button: 0, pointerId: 16, screenX: 110, screenY: 210 });
+
+		expect(window.electronAPI.setHudOverlaySize).not.toHaveBeenCalled();
+	});
+
 	it("keeps Electron's native drag region on non-Windows platforms", async () => {
 		window.electronAPI.platform = "darwin";
 		renderLaunchWindow();
@@ -682,7 +737,7 @@ describe("LaunchWindow HUD dragging", () => {
 		expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenCalledWith(false);
 	});
 
-	it("returns the transparent overlay to click-through outside the HUD bounds", async () => {
+	it("returns the transparent overlay to click-through at the exclusive HUD edges", async () => {
 		const { container } = renderLaunchWindow();
 		const root = container.firstElementChild as HTMLElement;
 		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
@@ -705,7 +760,13 @@ describe("LaunchWindow HUD dragging", () => {
 		fireEvent.pointerMove(root, { clientX: 110, clientY: 730 });
 		vi.mocked(window.electronAPI.setHudOverlayIgnoreMouseEvents).mockClear();
 
-		fireEvent.pointerMove(root, { clientX: 50, clientY: 500 });
+		fireEvent.pointerMove(root, { clientX: 300, clientY: 730 });
+
+		expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenCalledWith(true);
+
+		fireEvent.pointerMove(root, { clientX: 110, clientY: 730 });
+		vi.mocked(window.electronAPI.setHudOverlayIgnoreMouseEvents).mockClear();
+		fireEvent.pointerMove(root, { clientX: 110, clientY: 760 });
 
 		expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenCalledWith(true);
 	});

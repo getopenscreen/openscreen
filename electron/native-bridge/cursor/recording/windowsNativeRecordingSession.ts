@@ -10,7 +10,11 @@ import type {
 	NativeCursorAsset,
 } from "../../../../src/native/contracts";
 import type { CursorRecordingSession } from "./session";
-import { normalizePhysicalPoint } from "./windowsCursorCoordinates";
+import {
+	normalizePhysicalPoint,
+	resolveWindowsCursorPhysicalBounds,
+} from "./windowsCursorCoordinates";
+import { buildWindowsCursorSamplerArgs } from "./windowsCursorSamplerArgs";
 import type {
 	WindowsCursorEvent,
 	WindowsNativeRecordingSessionOptions,
@@ -60,6 +64,7 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 	private sampleCount = 0;
 	private outOfBoundsSampleCount = 0;
 	private previousLeftButtonDown = false;
+	private helperBounds: Electron.Rectangle | null = null;
 
 	constructor(private readonly options: WindowsNativeRecordingSessionOptions) {}
 
@@ -71,6 +76,7 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		this.sampleCount = 0;
 		this.outOfBoundsSampleCount = 0;
 		this.previousLeftButtonDown = false;
+		this.helperBounds = null;
 
 		const helperPath = findCursorSamplerPath();
 		if (!helperPath) {
@@ -78,16 +84,12 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		}
 
 		const windowHandle = parseWindowHandleFromSourceId(this.options.sourceId);
-		const args = [String(this.options.sampleIntervalMs)];
 		const dipBounds = this.options.getDisplayBounds() ?? screen.getPrimaryDisplay().bounds;
 		const physicalDisplayBounds = screen.dipToScreenRect(null, dipBounds);
-		args.push(
-			windowHandle ?? "null",
-			String(this.options.displayId ?? 0),
-			String(physicalDisplayBounds.x),
-			String(physicalDisplayBounds.y),
-			String(physicalDisplayBounds.width),
-			String(physicalDisplayBounds.height),
+		const args = buildWindowsCursorSamplerArgs(
+			this.options.sampleIntervalMs,
+			windowHandle,
+			physicalDisplayBounds,
 		);
 
 		const child = spawn(helperPath, args, {
@@ -190,7 +192,11 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		}
 
 		if (payload.type === "ready") {
-			this.logDiagnostic("ready", { timestampMs: payload.timestampMs });
+			this.helperBounds = payload.bounds ?? null;
+			this.logDiagnostic("ready", {
+				timestampMs: payload.timestampMs,
+				bounds: this.helperBounds,
+			});
 			this.resolveReady();
 			return;
 		}
@@ -237,17 +243,13 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 	private normalizeSample(
 		payload: Extract<WindowsCursorEvent, { type: "sample" }>,
 	): NormalizedSample {
-		const bounds =
-			payload.bounds ?? this.options.getDisplayBounds() ?? screen.getPrimaryDisplay().bounds;
-		// The cursor-sampler reports x/y in physical screen pixels via Win32's
-		// GetPhysicalCursorPos. `payload.bounds` from the native sampler is in the
-		// same physical space, so use it as-is. Bounds from Electron's `screen` API
-		// (the fallback path only) are in DIPs, so convert them to physical screen
-		// coordinates via `dipToScreenRect`, which correctly handles the virtual-screen
-		// origin across multi-monitor and mixed-DPI setups (a naive
-		// `bounds.x * scaleFactor` would misplace the origin on non-primary
-		// displays).
-		const physicalBounds = payload.bounds != null ? bounds : screen.dipToScreenRect(null, bounds);
+		const fallbackDipBounds = this.options.getDisplayBounds() ?? screen.getPrimaryDisplay().bounds;
+		const physicalBounds = resolveWindowsCursorPhysicalBounds(
+			payload.bounds,
+			this.helperBounds,
+			fallbackDipBounds,
+			(bounds) => screen.dipToScreenRect(null, bounds),
+		);
 		const normalized = normalizePhysicalPoint(payload, physicalBounds);
 		const normalizedX = normalized.x;
 		const normalizedY = normalized.y;
@@ -271,7 +273,7 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 				normalizedY,
 				visible: payload.visible,
 				withinBounds,
-				bounds,
+				bounds: physicalBounds,
 				handle: payload.handle,
 			});
 		}

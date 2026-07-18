@@ -376,6 +376,7 @@ export function LaunchWindow() {
 		const MIN_WIDTH = 220;
 
 		const centerX = window.innerWidth / 2;
+		const compensatedCenterX = centerX - hudViewportCompensationRef.current.x;
 
 		// Use the natural size, not viewport-relative top/bottom coordinates. At fractional
 		// Windows scaling those coordinates can round differently after every move, causing
@@ -409,7 +410,11 @@ export function LaunchWindow() {
 		// Its presence in the DOM means it's open.
 		if (languageMenuPanelRef.current) {
 			const rect = languageMenuPanelRef.current.getBoundingClientRect();
-			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
+			halfWidth = Math.max(
+				halfWidth,
+				compensatedCenterX - rect.left,
+				rect.right - compensatedCenterX,
+			);
 		}
 
 		// Prompts sit at fixed `top-8`; use that CSS constant rather than their rounded
@@ -423,7 +428,11 @@ export function LaunchWindow() {
 			if (promptHeight > 0) {
 				contentHeight = Math.max(contentHeight, FIXED_NOTICE_TOP + promptHeight);
 			}
-			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
+			halfWidth = Math.max(
+				halfWidth,
+				compensatedCenterX - rect.left,
+				rect.right - compensatedCenterX,
+			);
 		}
 
 		// The software-encoder fallback notice shares the prompt's fixed top-8 slot and needs
@@ -437,7 +446,11 @@ export function LaunchWindow() {
 			if (noticeHeight > 0) {
 				contentHeight = Math.max(contentHeight, FIXED_NOTICE_TOP + noticeHeight);
 			}
-			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
+			halfWidth = Math.max(
+				halfWidth,
+				compensatedCenterX - rect.left,
+				rect.right - compensatedCenterX,
+			);
 		}
 
 		setHudBarHeight((prev) => {
@@ -733,9 +746,9 @@ export function LaunchWindow() {
 						hudBarBounds.right > hudBarBounds.left &&
 						hudBarBounds.bottom > hudBarBounds.top &&
 						event.clientX >= hudBarBounds.left &&
-						event.clientX <= hudBarBounds.right &&
+						event.clientX < hudBarBounds.right &&
 						event.clientY >= hudBarBounds.top &&
-						event.clientY <= hudBarBounds.bottom,
+						event.clientY < hudBarBounds.bottom,
 				);
 				const shouldCapture =
 					isLanguageMenuOpen ||

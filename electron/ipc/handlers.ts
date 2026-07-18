@@ -804,12 +804,10 @@ async function startCursorRecording(recordingId?: number, explicitTarget?: Curso
 
 	pendingCursorRecordingData = null;
 	const target = resolveCursorRecordingTarget(explicitTarget, {
-		displayId: getSelectedDisplay()?.id ?? null,
 		getDisplayBounds: getSelectedSourceBounds,
 		sourceId: getSelectedSourceId(),
 	});
 	cursorRecordingSession = createCursorRecordingSession({
-		displayId: target.displayId,
 		getDisplayBounds: target.getDisplayBounds,
 		maxSamples: MAX_CURSOR_SAMPLES,
 		platform: process.platform,
@@ -1743,7 +1741,6 @@ export function registerIpcHandlers(
 				if (cursorCaptureMode === "editable-overlay") {
 					nativeWindowsCursorRecordingStartMs = cursorStartTimeMs;
 					await startCursorRecording(cursorStartTimeMs, {
-						displayId: Number.isFinite(displayId) ? displayId : null,
 						getDisplayBounds: () => bounds,
 						sourceId: request.source.sourceId,
 					});

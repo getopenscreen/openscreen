@@ -14,6 +14,15 @@ export interface NormalizedPhysicalPoint {
 	withinBounds: boolean;
 }
 
+export function resolveWindowsCursorPhysicalBounds(
+	sampleBounds: PhysicalBounds | null | undefined,
+	readyBounds: PhysicalBounds | null | undefined,
+	fallbackDipBounds: PhysicalBounds,
+	convertDipToPhysical: (bounds: PhysicalBounds) => PhysicalBounds,
+): PhysicalBounds {
+	return sampleBounds ?? readyBounds ?? convertDipToPhysical(fallbackDipBounds);
+}
+
 /**
  * Normalizes one physical screen-pixel point against a physical capture rect.
  *

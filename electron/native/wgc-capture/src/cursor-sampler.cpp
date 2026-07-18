@@ -333,10 +333,24 @@ static bool getPhysicalWindowBounds(HWND window, RECT& bounds) {
            bounds.right > bounds.left && bounds.bottom > bounds.top;
 }
 
+static std::string boundsToJson(const RECT& bounds) {
+    const int width = bounds.right - bounds.left;
+    const int height = bounds.bottom - bounds.top;
+    char buffer[128];
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "{\"x\":%ld,\"y\":%ld,\"width\":%d,\"height\":%d}",
+        bounds.left,
+        bounds.top,
+        width,
+        height);
+    return buffer;
+}
+
 static void runSamplingLoop(
     int intervalMs,
     HWND targetWindow,
-    const std::optional<RECT>& targetDisplayBounds,
     const CLSID& pngClsid)
 {
     HCURSOR lastCursor = nullptr;
@@ -397,7 +411,6 @@ static void runSamplingLoop(
             lastCursor = hc;
         }
 
-        // Window bounds
         std::string boundsJson = "null";
         if (targetWindow && IsWindow(targetWindow)) {
             RECT r{};
@@ -405,22 +418,9 @@ static void runSamplingLoop(
                 const int bw = r.right  - r.left;
                 const int bh = r.bottom - r.top;
                 if (bw > 0 && bh > 0) {
-                    char buf[128];
-                    std::snprintf(buf, sizeof(buf),
-                        "{\"x\":%ld,\"y\":%ld,\"width\":%d,\"height\":%d}",
-                        r.left, r.top, bw, bh);
-                    boundsJson = buf;
+                    boundsJson = boundsToJson(r);
                 }
             }
-        } else if (targetDisplayBounds.has_value()) {
-            const RECT& r = *targetDisplayBounds;
-            const int bw = r.right - r.left;
-            const int bh = r.bottom - r.top;
-            char buf[128];
-            std::snprintf(buf, sizeof(buf),
-                "{\"x\":%ld,\"y\":%ld,\"width\":%d,\"height\":%d}",
-                r.left, r.top, bw, bh);
-            boundsJson = buf;
         }
 
         // Emit sample JSON
@@ -436,7 +436,9 @@ static void runSamplingLoop(
         out += ",\"leftButtonDown\":";     out += leftDown     ? "true" : "false";
         out += ",\"leftButtonPressed\":";  out += leftPressed  ? "true" : "false";
         out += ",\"leftButtonReleased\":"; out += leftReleased ? "true" : "false";
-        out += ",\"bounds\":";             out += boundsJson;
+        if (targetWindow) {
+            out += ",\"bounds\":";         out += boundsJson;
+        }
         out += ",\"asset\":";              out += assetJson.empty() ? "null" : assetJson;
         out += "}";
 
@@ -462,7 +464,7 @@ int main(int argc, char* argv[]) {
 	}
 
     if (argc < 2) {
-        std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle] [displayId displayX displayY displayW displayH]" << std::endl;
+        std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle] [displayX displayY displayW displayH]" << std::endl;
         return 1;
     }
 
@@ -481,15 +483,14 @@ int main(int argc, char* argv[]) {
     }
 
     std::optional<RECT> targetDisplayBounds;
-    if (!targetWindow && argc >= 8) {
+    if (!targetWindow && argc >= 7) {
         try {
-            const int64_t displayId = std::stoll(argv[3]);
             MonitorBounds bounds{};
-            bounds.x = std::stoi(argv[4]);
-            bounds.y = std::stoi(argv[5]);
-            bounds.width = std::stoi(argv[6]);
-            bounds.height = std::stoi(argv[7]);
-            const HMONITOR monitor = findMonitorForCapture(displayId, &bounds);
+            bounds.x = std::stoi(argv[3]);
+            bounds.y = std::stoi(argv[4]);
+            bounds.width = std::stoi(argv[5]);
+            bounds.height = std::stoi(argv[6]);
+            const HMONITOR monitor = findMonitorForCapture(0, &bounds);
             MONITORINFO info{};
             info.cbSize = sizeof(info);
             if (monitor && GetMonitorInfo(monitor, &info)) {
@@ -531,19 +532,20 @@ int main(int argc, char* argv[]) {
 
     // Signal readiness
     g_mainThreadId = GetCurrentThreadId();
-    {
-        char buf[80];
-        std::snprintf(buf, sizeof(buf),
-            "{\"type\":\"ready\",\"timestampMs\":%" PRId64 "}", nowMs());
-        writeJsonLine(buf);
+    std::string readyEvent = "{\"type\":\"ready\",\"timestampMs\":";
+    readyEvent += std::to_string(nowMs());
+    if (targetDisplayBounds.has_value()) {
+        readyEvent += ",\"bounds\":";
+        readyEvent += boundsToJson(*targetDisplayBounds);
     }
+    readyEvent += "}";
+    writeJsonLine(readyEvent);
 
     // Start sampling on a background thread
     std::thread sampler(
         runSamplingLoop,
         intervalMs,
         targetWindow,
-        std::cref(targetDisplayBounds),
         std::cref(pngClsid));
 
     // Run the message pump on the main thread — required for WH_MOUSE_LL callbacks

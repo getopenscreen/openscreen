@@ -1,7 +1,6 @@
 import type { Rectangle } from "electron";
 
 export interface CursorRecordingTarget {
-	displayId: number | null;
 	getDisplayBounds: () => Rectangle | null;
 	sourceId: string | null;
 }

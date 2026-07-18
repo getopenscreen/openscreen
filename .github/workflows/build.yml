@@ -260,6 +260,7 @@ jobs:
             release/**/*.zsync
             release/**/*.deb
             release/**/*.pacman
+            release/**/*.rpm
           if-no-files-found: error
           retention-days: 30
 

@@ -83,11 +83,16 @@ Download the `.exe` installer directly from the [Releases page](https://github.c
 
 ### Linux
 
-Three packages are published to the [Releases page](https://github.com/EtienneLescot/openscreen/releases) for each version. Pick the one that matches your distro:
+Packages are published to the [Releases page](https://github.com/EtienneLescot/openscreen/releases) for each version. Pick the one that matches your distro:
 
 **Debian / Ubuntu / Pop!_OS (`.deb`)**
 ```bash
 sudo apt install ./Openscreen-Linux-latest.deb
+```
+
+**Fedora / RHEL / CentOS (`.rpm`)**
+```bash
+sudo dnf install ./Openscreen-Linux-latest.rpm
 ```
 
 **Arch / Manjaro (`.pacman`)**
@@ -99,6 +104,19 @@ sudo pacman -U Openscreen-Linux-latest.pacman
 ```bash
 chmod +x Openscreen-Linux-*.AppImage
 ./Openscreen-Linux-*.AppImage
+```
+
+**Building from Source (Local Compilation)**
+If you want to build and install the application locally on Fedora/RPM systems:
+```bash
+# Clone the repository and install dependencies
+npm install
+
+# Compile and package only the RPM target
+npm run build:rpm
+
+# Install the generated RPM locally
+sudo dnf install ./release/1.6.0/Openscreen-Linux-*.rpm
 ```
 
 **NixOS / Nix (flake)**

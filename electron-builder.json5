@@ -78,7 +78,8 @@
     "target": [
       "AppImage",
       "deb",
-      "pacman"
+      "pacman",
+      "rpm"
     ],
     "icon": "icons/icons/png",
     "artifactName": "${productName}-Linux-${version}.${ext}",

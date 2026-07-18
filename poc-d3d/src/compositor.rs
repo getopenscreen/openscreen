@@ -221,7 +221,8 @@ fn timeline(frame: f32, cfg: &Cfg) -> FrameParams {
 /// remplace le planning A↔B fixture de `timeline()`. Zoom = 1 (les zoom regions viennent ensuite).
 /// La taille/forme/miroir webcam restent appliqués par-dessus via `LiveParams`.
 fn preset_placements(preset: &str) -> FrameParams {
-    let full_screen = Placement { dst: [0.05, 0.05, 0.90, 0.90], radius: 24.0 };
+    // plein cadre : le padding l'insère ensuite (padding 0 → bord à bord).
+    let full_screen = Placement { dst: [0.0, 0.0, 1.0, 1.0], radius: 24.0 };
     // PiP bas-droite (≈ layout A fixture).
     let a_side = 320.0_f32;
     let pip_webcam = Placement {
@@ -807,40 +808,47 @@ impl Compositor {
         let u_max = scw / stw as f32;
         let v_max = sch / sth as f32;
 
-        // Scène de l'app (contrat) présente → placements pilotés par le layout preset ; sinon
-        // planning fixture (harnais/bench). Layout statique → pas d'animation → vélocité nulle.
-        let (p, pp) = match self.scene.borrow().as_ref() {
-            Some(s) => {
-                let fp = preset_placements(&s.layout.preset);
-                (fp, fp)
+        // Scène de l'app présente → placements du layout preset ; sinon planning fixture (bench).
+        let scene_preset: Option<String> =
+            self.scene.borrow().as_ref().map(|s| s.layout.preset.clone());
+        let (p, pp) = match &scene_preset {
+            Some(preset) => {
+                let fp = preset_placements(preset);
+                (fp, fp) // layout statique → vélocité nulle
             }
             None => (timeline(frame, cfg), timeline(frame - 1.0, cfg)),
         };
+        let is_vstack = scene_preset.as_deref() == Some("vertical-stack");
         let lp = *self.live_params.borrow();
         let mb_taps = cfg.mblur_n as f32;
 
-        // Scale un rect dst normalisé autour de son centre — sert padding (screen) et
-        // taille (webcam). Appliqué aussi à la frame précédente → vecteurs de motion blur
-        // cohérents. Défauts (padding 0, size 1) reproduisent la fixture au pixel près.
-        let scale_about = |dst: [f32; 4], s: f32| -> [f32; 4] {
-            let cx = dst[0] + dst[2] * 0.5;
-            let cy = dst[1] + dst[3] * 0.5;
-            [cx - dst[2] * s * 0.5, cy - dst[3] * s * 0.5, dst[2] * s, dst[3] * s]
+        // padding : échelle globale du layout autour du centre du cadre (parité web frameRenderer :
+        // paddingScale = 1 - padding*0.4 → padding 0 = plein cadre). Vertical-stack l'ignore.
+        let padding_scale = if is_vstack { 1.0 } else { 1.0 - lp.padding * 0.4 };
+        let scale_frame = |dst: [f32; 4], s: f32| -> [f32; 4] {
+            [0.5 + (dst[0] - 0.5) * s, 0.5 + (dst[1] - 0.5) * s, dst[2] * s, dst[3] * s]
         };
-        let pad_s = (1.0 - lp.padding).max(0.05);
-        let s_dst = scale_about(p.screen.dst, pad_s);
-        let s_dst_prev = scale_about(pp.screen.dst, pad_s);
-        let w_dst = scale_about(p.webcam.dst, lp.webcam_size_scale);
-        let w_dst_prev = scale_about(pp.webcam.dst, lp.webcam_size_scale);
+        // webcam : ancrée à son coin bas-droite (grandit vers le haut-gauche, pas depuis le centre).
+        let scale_corner_br = |dst: [f32; 4], s: f32| -> [f32; 4] {
+            let (brx, bry) = (dst[0] + dst[2], dst[1] + dst[3]);
+            let (nw, nh) = (dst[2] * s, dst[3] * s);
+            [brx - nw, bry - nh, nw, nh]
+        };
+        let s_dst = scale_frame(p.screen.dst, padding_scale);
+        let s_dst_prev = scale_frame(pp.screen.dst, padding_scale);
+        let w_dst = scale_corner_br(scale_frame(p.webcam.dst, padding_scale), lp.webcam_size_scale);
+        let w_dst_prev =
+            scale_corner_br(scale_frame(pp.webcam.dst, padding_scale), lp.webcam_size_scale);
 
         let s_radius = if cfg.rounded { p.screen.radius * lp.radius_scale } else { 0.0 };
         let w_px = [w_dst[2] * OUT_W as f32, w_dst[3] * OUT_H as f32];
-        // forme webcam : rayon SDF dérivé de la forme choisie (le rond = rayon = demi-côté).
+        // forme webcam : rayon SDF dérivé de la SEULE forme choisie. Le slider Roundness ne
+        // s'applique qu'à l'ÉCRAN, jamais à la caméra. circle = demi-côté ; rounded = arrondi
+        // fixe ; rectangle/square = coins nets.
         let w_radius = match lp.webcam_shape {
-            1 => w_px[0].min(w_px[1]) * 0.5,                                  // circle
-            0 | 2 => 0.0,                                                     // rectangle / square
-            _ if cfg.rounded => p.webcam.radius * lp.radius_scale,           // rounded (défaut)
-            _ => 0.0,
+            1 => w_px[0].min(w_px[1]) * 0.5,  // circle
+            3 => w_px[0].min(w_px[1]) * 0.14, // rounded (arrondi fixe, indépendant du slider)
+            _ => 0.0,                         // rectangle / square → coins nets
         };
 
         self.begin([0.0, 0.0, 0.0, 1.0]);

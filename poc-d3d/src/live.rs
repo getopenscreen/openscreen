@@ -145,6 +145,13 @@ struct InspectorParams {
     shadow_scale: f32,
     radius_scale: f32,
     mblur_taps: u32,
+    padding: f32,
+    webcam_size_scale: f32,
+    webcam_mirror: bool,
+    webcam_shape: u32,
+    cursor_show: bool,
+    cursor_size_scale: f32,
+    cursor_bounce_scale: f32,
 }
 
 impl Default for InspectorParams {
@@ -155,6 +162,13 @@ impl Default for InspectorParams {
             shadow_scale: 1.0,
             radius_scale: 1.0,
             mblur_taps: 8,
+            padding: 0.0,
+            webcam_size_scale: 1.0,
+            webcam_mirror: false,
+            webcam_shape: 3,
+            cursor_show: true,
+            cursor_size_scale: 1.0,
+            cursor_bounce_scale: 1.0,
         }
     }
 }
@@ -251,13 +265,17 @@ impl LiveView {
     /// Switch inspector (booléen).
     pub fn set_param_bool(&self, key: &str, value: bool) {
         if let Ok(mut p) = self.shared.inspector.lock() {
-            if key == "backgroundBlur" {
-                p.bg_blur = value;
+            match key {
+                "backgroundBlur" => p.bg_blur = value,
+                "webcamMirror" => p.webcam_mirror = value,
+                "cursorShow" => p.cursor_show = value,
+                _ => {}
             }
         }
     }
 
-    /// Slider inspector (numérique). Conventions : `shadow`/`roundness` = échelle (1 = défaut),
+    /// Slider inspector (numérique). Conventions : `shadow`/`roundness`/`webcamSize`/
+    /// `cursorSize`/`cursorClickBounce` = échelle (1 = défaut) ; `padding` = 0..1 ;
     /// `motionBlur` = 0..1 mappé sur 1..16 taps.
     pub fn set_param_num(&self, key: &str, value: f64) {
         if let Ok(mut p) = self.shared.inspector.lock() {
@@ -266,18 +284,33 @@ impl LiveView {
                 "shadow" => p.shadow_scale = v.max(0.0),
                 "roundness" => p.radius_scale = v.max(0.0),
                 "motionBlur" => p.mblur_taps = (1.0 + value.clamp(0.0, 1.0) * 15.0).round() as u32,
+                "padding" => p.padding = v.clamp(0.0, 1.0),
+                "webcamSize" => p.webcam_size_scale = v.max(0.05),
+                "cursorSize" => p.cursor_size_scale = v.max(0.0),
+                "cursorClickBounce" => p.cursor_bounce_scale = v.max(0.0),
                 _ => {}
             }
         }
     }
 
-    /// Sélection de fond (couleur "#rrggbb").
+    /// Sélection de chaîne : couleur de fond "#rrggbb" ou forme webcam.
     pub fn set_param_str(&self, key: &str, value: &str) {
-        if key == "backgroundColor" {
-            if let Some(c) = parse_hex_color(value) {
-                if let Ok(mut p) = self.shared.inspector.lock() {
-                    p.bg_color = c;
+        if let Ok(mut p) = self.shared.inspector.lock() {
+            match key {
+                "backgroundColor" => {
+                    if let Some(c) = parse_hex_color(value) {
+                        p.bg_color = c;
+                    }
                 }
+                "webcamShape" => {
+                    p.webcam_shape = match value {
+                        "rectangle" => 0,
+                        "circle" => 1,
+                        "square" => 2,
+                        _ => 3, // rounded (défaut)
+                    };
+                }
+                _ => {}
             }
         }
     }
@@ -399,10 +432,17 @@ unsafe fn render_thread(
             let ip = *shared.inspector.lock().unwrap();
             cfg.bg_blur = ip.bg_blur;
             cfg.mblur_n = ip.mblur_taps;
+            cfg.cursor = ip.cursor_show;
             comp.set_live_params(LiveParams {
                 bg_color: ip.bg_color,
                 shadow_scale: ip.shadow_scale,
                 radius_scale: ip.radius_scale,
+                padding: ip.padding,
+                webcam_size_scale: ip.webcam_size_scale,
+                webcam_mirror: ip.webcam_mirror,
+                webcam_shape: ip.webcam_shape,
+                cursor_size_scale: ip.cursor_size_scale,
+                cursor_bounce_scale: ip.cursor_bounce_scale,
             });
         }
 

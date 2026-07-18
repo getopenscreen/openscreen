@@ -95,6 +95,39 @@ impl Default for LiveParams {
     }
 }
 
+/// "rectangle"|"circle"|"square"|"rounded" -> code webcam_shape (0/1/2/3). Partagé entre le
+/// live (`live.rs::set_param_str`) et l'export (construit `LiveParams` depuis la scène) — une
+/// seule table de vérité pour ce mapping.
+pub fn webcam_shape_code(shape: &str) -> u32 {
+    match shape {
+        "rectangle" => 0,
+        "circle" => 1,
+        "square" => 2,
+        _ => 3, // "rounded" (défaut)
+    }
+}
+
+/// Construit les `LiveParams` équivalents à ce que l'inspector pousse en live, mais depuis la
+/// scène de l'app — l'export est un rendu one-shot sans historique de sliders, donc il doit lire
+/// directement la config déjà posée dans la scène plutôt que dupliquer un mécanisme d'inspector.
+/// Unités identiques à `RightPanes.tsx` (mêmes conversions, pas de re-normalisation) : voir
+/// `sceneDescription.ts` pour la correspondance settings -> champs de scène.
+pub fn live_params_from_scene(s: &crate::scene::Scene) -> LiveParams {
+    const NATIVE_SCREEN_BASE_RADIUS_PX: f32 = 24.0;
+    LiveParams {
+        shadow_scale: s.effects.shadow,
+        radius_scale: s.effects.roundness_px / NATIVE_SCREEN_BASE_RADIUS_PX,
+        padding: s.effects.padding,
+        webcam_size_scale: s.layout.webcam_size,
+        webcam_mirror: s.layout.webcam_mirror,
+        webcam_shape: webcam_shape_code(&s.layout.webcam_shape),
+        cursor_size_scale: s.cursor.size,
+        cursor_bounce_scale: s.cursor.click_bounce,
+        cursor_motion_blur: s.cursor.motion_blur,
+        ..LiveParams::default()
+    }
+}
+
 pub struct Compositor {
     dev: ID3D11Device,
     ctx: ID3D11DeviceContext,
@@ -133,7 +166,16 @@ pub struct Compositor {
     accum_rtv: ID3D11RenderTargetView,
     accum_srv: ID3D11ShaderResourceView,
     blend_add: ID3D11BlendState,
-    cursor: Option<CursorTrack>,
+    /// RefCell (pas un simple champ) pour que `set_cursor` reste `&self`, comme `set_scene` /
+    /// `set_live_params` — nécessaire pour le rebrancher par clip dans l'export multiclip, qui
+    /// n'a qu'une référence partagée au `Compositor`.
+    cursor: RefCell<Option<CursorTrack>>,
+    /// Override du temps d'échantillonnage curseur (secondes) — `None` = comportement live
+    /// (`frame / FPS`, valable car `Player::step` avance à 60Hz réel). L'export multiclip le
+    /// positionne à `sdec.cur_time_sec()` (temps source ABSOLU dans la piste curseur, rebasée à
+    /// t=0 sur tout l'enregistrement) car son compteur `frames` global ne correspond à AUCUNE
+    /// notion de temps source une fois plusieurs clips/fichiers enchaînés.
+    cursor_t_override: RefCell<Option<f32>>,
     // cache des SRV décodeur par (texture array, slice) : le pool réutilise ~32 textures,
     // donc après warmup plus aucune création de SRV par frame (overhead CPU supprimé).
     srv_cache: RefCell<HashMap<(usize, u32), (ID3D11ShaderResourceView, ID3D11ShaderResourceView)>>,
@@ -144,6 +186,24 @@ pub struct Compositor {
     /// Cache des textures wallpaper image (clé = chemin absolu) : décodage/upload une seule
     /// fois, puis réutilisées par frame. (SRV, largeur, hauteur).
     img_cache: RefCell<HashMap<String, (ID3D11ShaderResourceView, u32, u32)>>,
+    /// Ressources de resize export (allouées paresseusement à la 1re taille de sortie ≠
+    /// OUT_W×OUT_H — le live et les exports "Source"/1080p restent sur `rgb_to_nv12` inchangé,
+    /// zéro coût). Voir `rgb_to_nv12_scaled`.
+    resize_target: RefCell<Option<ResizeTarget>>,
+}
+
+/// Ressources d'un resize export à une taille cible : RGBA intermédiaire (résultat du
+/// redimensionnement bilinéaire du RT composé, toujours rendu en interne à OUT_W×OUT_H) +
+/// sa propre texture NV12 à cette même taille cible (le NV12 principal du `Compositor` reste
+/// fixé à OUT_W×OUT_H, partagé par le live).
+struct ResizeTarget {
+    w: u32,
+    h: u32,
+    rgba_rtv: ID3D11RenderTargetView,
+    rgba_srv: ID3D11ShaderResourceView,
+    nv12: ID3D11Texture2D,
+    nv12_rtv_y: ID3D11RenderTargetView,
+    nv12_rtv_uv: ID3D11RenderTargetView,
 }
 
 pub const HALF_W: u32 = OUT_W / 2;
@@ -608,11 +668,13 @@ impl Compositor {
             accum_rtv: accum_rtv.unwrap(),
             accum_srv: accum_srv.unwrap(),
             blend_add: blend_add.unwrap(),
-            cursor: None,
+            cursor: RefCell::new(None),
+            cursor_t_override: RefCell::new(None),
             srv_cache: RefCell::new(HashMap::new()),
             live_params: RefCell::new(LiveParams::default()),
             scene: RefCell::new(None),
             img_cache: RefCell::new(HashMap::new()),
+            resize_target: RefCell::new(None),
         })
     }
 
@@ -842,8 +904,19 @@ impl Compositor {
         Ok((srv.unwrap(), w, h))
     }
 
-    pub fn set_cursor(&mut self, track: CursorTrack) {
-        self.cursor = Some(track);
+    pub fn set_cursor(&self, track: CursorTrack) {
+        *self.cursor.borrow_mut() = Some(track);
+    }
+
+    /// Voir `cursor_t_override`. `None` restaure le comportement live (`frame / FPS`).
+    pub fn set_cursor_time(&self, t: Option<f32>) {
+        *self.cursor_t_override.borrow_mut() = t;
+    }
+
+    /// Copie de la scène courante (si présente) — utilisé par l'export multiclip pour lire les
+    /// réglages curseur (thème/lissage/show) sans dupliquer le contrat de scène côté pipeline.
+    pub fn scene_snapshot(&self) -> Option<Scene> {
+        self.scene.borrow().clone()
     }
 
     /// Curseur custom (dot+ring) centré en `center` (0..1 sortie), taille `size_px`, opacité `a`.
@@ -1156,8 +1229,9 @@ impl Compositor {
             _ => [-1.0, -1.0, 3.0, 3.0],
         };
         if cfg.cursor {
-            if let Some(track) = &self.cursor {
-                let t = frame / FPS;
+            let cursor_ref = self.cursor.borrow();
+            if let Some(track) = cursor_ref.as_ref() {
+                let t = self.cursor_t_override.borrow().unwrap_or(frame / FPS);
                 // position sortie à un temps donné via un mapping screen (src rect + dst)
                 let map = |cxy: Option<(f32, f32)>, s0: [f32; 2], h: [f32; 2], dst: [f32; 4]| {
                     cxy.and_then(|(cx2, cy2)| {
@@ -1200,7 +1274,7 @@ impl Compositor {
                     if taps <= 1 {
                         self.draw_cur_themed(&cursor_sprite, cur, sz, 1.0, cursor_clip_rect);
                     } else {
-                        let tp = (frame - trail_frames) / FPS;
+                        let tp = t - trail_frames / FPS;
                         let prev = map(track.at(tp), [su0_p, sv0_p], [hu_p, hv_p], s_dst_prev)
                             .unwrap_or(cur);
                         // Flou RÉEL, pas des copies discrètes : accumule les N échantillons dans un
@@ -1325,6 +1399,147 @@ impl Compositor {
     pub unsafe fn rgb_to_nv12(&self, out_tex: *mut c_void, slice: u32) -> Result<()> {
         self.render_nv12();
         let src: ID3D11Resource = self.nv12.cast()?;
+        let dst_tex = ID3D11Texture2D::from_raw_borrowed(&out_tex).unwrap().clone();
+        let dst: ID3D11Resource = dst_tex.cast()?;
+        self.ctx.CopySubresourceRegion(&dst, slice, 0, 0, 0, &src, 0, None);
+        Ok(())
+    }
+
+    /// Alloue (une fois par taille) les ressources du resize export : RGBA intermédiaire +
+    /// sa propre texture NV12 à `w`×`h`. `w`/`h` doivent être pairs (exigé par NV12 4:2:0,
+    /// le plan UV fait exactement la moitié) — l'appelant (export_multi côté napi) arrondit.
+    unsafe fn ensure_resize_target(&self, w: u32, h: u32) -> Result<()> {
+        if let Some(t) = self.resize_target.borrow().as_ref() {
+            if t.w == w && t.h == h {
+                return Ok(());
+            }
+        }
+        let rd = D3D11_TEXTURE2D_DESC {
+            Width: w,
+            Height: h,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+        let mut rgba: Option<ID3D11Texture2D> = None;
+        self.dev.CreateTexture2D(&rd, None, Some(&mut rgba))?;
+        let rgba = rgba.unwrap();
+        let mut rgba_rtv: Option<ID3D11RenderTargetView> = None;
+        self.dev.CreateRenderTargetView(&rgba, None, Some(&mut rgba_rtv))?;
+        let mut rgba_srv: Option<ID3D11ShaderResourceView> = None;
+        self.dev.CreateShaderResourceView(&rgba, None, Some(&mut rgba_srv))?;
+
+        // NV12 non-array à la taille cible (même contrainte que le NV12 principal).
+        let nvd = D3D11_TEXTURE2D_DESC {
+            Width: w,
+            Height: h,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_NV12,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+        let mut nv12: Option<ID3D11Texture2D> = None;
+        self.dev.CreateTexture2D(&nvd, None, Some(&mut nv12))?;
+        let nv12 = nv12.unwrap();
+        let mk_rtv = |fmt: DXGI_FORMAT| -> Result<ID3D11RenderTargetView> {
+            let d = D3D11_RENDER_TARGET_VIEW_DESC {
+                Format: fmt,
+                ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
+                Anonymous: D3D11_RENDER_TARGET_VIEW_DESC_0 { Texture2D: D3D11_TEX2D_RTV { MipSlice: 0 } },
+            };
+            let mut rtv: Option<ID3D11RenderTargetView> = None;
+            self.dev.CreateRenderTargetView(&nv12, Some(&d), Some(&mut rtv))?;
+            Ok(rtv.unwrap())
+        };
+        let nv12_rtv_y = mk_rtv(DXGI_FORMAT_R8_UNORM)?;
+        let nv12_rtv_uv = mk_rtv(DXGI_FORMAT_R8G8_UNORM)?;
+
+        *self.resize_target.borrow_mut() = Some(ResizeTarget {
+            w,
+            h,
+            rgba_rtv: rgba_rtv.unwrap(),
+            rgba_srv: rgba_srv.unwrap(),
+            nv12,
+            nv12_rtv_y,
+            nv12_rtv_uv,
+        });
+        Ok(())
+    }
+
+    /// Redimensionne (bilinéaire) le RT composé (OUT_W×OUT_H) vers `resize_target.rgba`, avant
+    /// la conversion NV12 dans `rgb_to_nv12_scaled`.
+    unsafe fn blit_resized(&self, target_w: u32, target_h: u32) -> Result<()> {
+        self.ensure_resize_target(target_w, target_h)?;
+        let cache = self.resize_target.borrow();
+        let t = cache.as_ref().unwrap();
+        self.ctx.OMSetBlendState(&self.blend_none, None, 0xffffffff);
+        self.ctx.OMSetRenderTargets(Some(&[Some(t.rgba_rtv.clone())]), None);
+        self.ctx.PSSetShaderResources(0, Some(&[Some(self.rt_srv.clone())]));
+        self.ctx.VSSetShader(&self.vs_fs, None);
+        self.ctx.PSSetShader(&self.ps_tex, None);
+        self.ctx.PSSetSamplers(0, Some(&[Some(self.sampler.clone())]));
+        let vp = D3D11_VIEWPORT {
+            TopLeftX: 0.0, TopLeftY: 0.0,
+            Width: target_w as f32, Height: target_h as f32, MinDepth: 0.0, MaxDepth: 1.0,
+        };
+        self.ctx.RSSetViewports(Some(&[vp]));
+        self.ctx.Draw(3, 0);
+        self.ctx.PSSetShaderResources(0, Some(&[None]));
+        Ok(())
+    }
+
+    /// Comme `rgb_to_nv12`, mais redimensionne d'abord (bilinéaire, `ps_tex`/`sampler` déjà
+    /// utilisés partout ailleurs dans le fichier) le RT composé — toujours rendu en interne à
+    /// OUT_W×OUT_H, quelle que soit la taille de sortie demandée — vers `target_w`×`target_h`
+    /// avant la conversion NV12. Identique à `rgb_to_nv12` (donc coût inchangé) quand la cible
+    /// égale la résolution interne : le live et les exports "Source"/1080p ne paient rien pour
+    /// cette fonctionnalité.
+    pub unsafe fn rgb_to_nv12_scaled(
+        &self,
+        target_w: u32,
+        target_h: u32,
+        out_tex: *mut c_void,
+        slice: u32,
+    ) -> Result<()> {
+        if target_w == OUT_W && target_h == OUT_H {
+            return self.rgb_to_nv12(out_tex, slice);
+        }
+        self.blit_resized(target_w, target_h)?;
+        let cache = self.resize_target.borrow();
+        let t = cache.as_ref().unwrap();
+
+        // rgba (cible) -> NV12 (cible) : mêmes passes Y/UV que `render_nv12`, paramétrées.
+        self.ctx.OMSetRenderTargets(Some(&[Some(t.nv12_rtv_y.clone())]), None);
+        self.ctx.PSSetShaderResources(0, Some(&[Some(t.rgba_srv.clone())]));
+        let vp_y = D3D11_VIEWPORT {
+            TopLeftX: 0.0, TopLeftY: 0.0,
+            Width: target_w as f32, Height: target_h as f32, MinDepth: 0.0, MaxDepth: 1.0,
+        };
+        self.ctx.RSSetViewports(Some(&[vp_y]));
+        self.ctx.PSSetShader(&self.ps_y, None);
+        self.ctx.Draw(3, 0);
+
+        self.ctx.OMSetRenderTargets(Some(&[Some(t.nv12_rtv_uv.clone())]), None);
+        let vp_uv = D3D11_VIEWPORT {
+            TopLeftX: 0.0, TopLeftY: 0.0,
+            Width: (target_w / 2) as f32, Height: (target_h / 2) as f32, MinDepth: 0.0, MaxDepth: 1.0,
+        };
+        self.ctx.RSSetViewports(Some(&[vp_uv]));
+        self.ctx.PSSetShader(&self.ps_uv, None);
+        self.ctx.Draw(3, 0);
+        self.ctx.PSSetShaderResources(0, Some(&[None]));
+
+        // 3) copie GPU->GPU vers le pool encodeur (identique à rgb_to_nv12).
+        let src: ID3D11Resource = t.nv12.cast()?;
         let dst_tex = ID3D11Texture2D::from_raw_borrowed(&out_tex).unwrap().clone();
         let dst: ID3D11Resource = dst_tex.cast()?;
         self.ctx.CopySubresourceRegion(&dst, slice, 0, 0, 0, &src, 0, None);

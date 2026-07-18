@@ -276,6 +276,17 @@ impl LiveView {
         }
     }
 
+    /// Affiche/masque l'overlay. Nécessaire car c'est une fenêtre top-level OWNED
+    /// (WS_POPUP), donc HORS de la surface Chromium — le z-index CSS n'a AUCUN effet sur elle
+    /// (ex. une modale web dessinée "au-dessus" dans le DOM se retrouve quand même EN DESSOUS,
+    /// visuellement, de l'overlay natif). L'app doit la masquer explicitement quand une modale
+    /// doit passer devant (export, etc.) puis la réafficher à la fermeture.
+    pub fn set_visible(&self, visible: bool) {
+        unsafe {
+            let _ = ShowWindow(self.hwnd, if visible { SW_SHOW } else { SW_HIDE });
+        }
+    }
+
     /// Switch inspector (booléen).
     pub fn set_param_bool(&self, key: &str, value: bool) {
         if let Ok(mut p) = self.shared.inspector.lock() {
@@ -319,12 +330,7 @@ impl LiveView {
                     }
                 }
                 "webcamShape" => {
-                    p.webcam_shape = match value {
-                        "rectangle" => 0,
-                        "circle" => 1,
-                        "square" => 2,
-                        _ => 3, // rounded (défaut)
-                    };
+                    p.webcam_shape = crate::compositor::webcam_shape_code(value);
                 }
                 _ => {}
             }

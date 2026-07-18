@@ -28,9 +28,10 @@ import {
 	type GifSizePreset,
 } from "@/lib/exporter";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
-import { exportMultiNative, exportNative } from "@/native";
+import { exportMultiNative, exportNative, setNativeCompositorVisible } from "@/native";
 import { nativeBridgeClient } from "@/native/client";
 import type { CompositorClipInput } from "@/native/contracts";
+import { buildSceneDescription } from "@/native/sceneDescription";
 import {
 	type AspectRatio,
 	getAspectRatioValue,
@@ -41,6 +42,16 @@ import styles from "./NewEditorShell.module.css";
 import { NATIVE_COMPOSITOR_ENABLED } from "./Preview";
 
 type Phase = "idle" | "configuring" | "rendering" | "writing" | "done" | "error";
+
+/** hh:mm:ss (always shows hours, unlike the shared mm:ss `formatTimePadded`) — exports can run
+ *  past an hour on either axis (video duration or render wall-time). */
+function formatHms(totalSeconds: number): string {
+	const s = Math.max(0, Math.round(totalSeconds));
+	const h = Math.floor(s / 3600);
+	const m = Math.floor((s % 3600) / 60);
+	const sec = s % 60;
+	return [h, m, sec].map((v) => v.toString().padStart(2, "0")).join(":");
+}
 
 /** Maps the document's timeline to the native multiclip export contract: ordered clips, each
  *  with its asset's screen file + camera file (falls back to the screen when a clip has no
@@ -110,6 +121,16 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	const [savedPath, setSavedPath] = useState<string | null>(null);
 	const cancelRef = useRef<{ cancel: () => void } | null>(null);
 
+	// The native compositor overlay is a top-level OS window outside the Chromium surface — CSS
+	// z-index can't put this modal in front of it. Hide it explicitly while open, restore on close.
+	useEffect(() => {
+		if (!open) {
+			return;
+		}
+		setNativeCompositorVisible(false);
+		return () => setNativeCompositorVisible(true);
+	}, [open]);
+
 	const primaryAsset = useMemo(
 		() =>
 			document
@@ -143,6 +164,29 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	// than a wrong one.
 	const sourceShortSide = referenceSource
 		? Math.min(referenceSource.width, referenceSource.height)
+		: null;
+
+	// Smallest media on the timeline (by pixel count) — a multiclip timeline can mix
+	// resolutions, so the SAME chosen output size can be a downscale relative to the
+	// largest clip and an upscale relative to the smallest one at the same time. Both
+	// badges below need this in addition to `referenceSource` (the largest).
+	const smallestSource = useMemo<{ width: number; height: number } | null>(() => {
+		if (!document) return null;
+		const usedAssetIds = new Set(document.timeline.clips.map((c) => c.assetId));
+		let smallest: { width: number; height: number } | null = null;
+		const consider = (w: number, h: number) => {
+			if (w > 0 && h > 0 && (!smallest || w * h < smallest.width * smallest.height))
+				smallest = { width: w, height: h };
+		};
+		for (const a of document.assets) {
+			if (usedAssetIds.has(a.id)) consider(a.video?.width ?? 0, a.video?.height ?? 0);
+		}
+		if (!smallest)
+			for (const a of document.assets) consider(a.video?.width ?? 0, a.video?.height ?? 0);
+		return smallest;
+	}, [document]);
+	const smallestShortSide = smallestSource
+		? Math.min(smallestSource.width, smallestSource.height)
 		: null;
 
 	// Aspect the export normalizes to: the timeline's selected ratio (mirrors
@@ -214,24 +258,30 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			return;
 		}
 
-		// Native compositor POC: route the real export modal to the native D3D
-		// exporter. It renders the fixture (not yet the document) straight to the
-		// picked path and returns measured stats; the format/quality/codec options
-		// above don't feed the POC pipeline yet. Flag-gated so the web exporter is
-		// the default path and untouched when the flag is off.
+		// Native compositor POC: route the real export modal to the native D3D exporter.
+		// Background/layout/webcam/cursor/effects come from the same scene as the live
+		// preview; size/fps/codec below are now plugged in too. Flag-gated so the web
+		// exporter is the default path and untouched when the flag is off.
 		if (NATIVE_COMPOSITOR_ENABLED) {
 			setPhase("rendering");
 			try {
 				// Render the real timeline when there are clips; else fall back to the fixture.
 				const clips = buildNativeClipList(document);
+				const sceneJson = JSON.stringify(buildSceneDescription(document));
+				const outDims = tierOutputDims(quality);
 				const stats =
 					clips.length > 0
-						? await exportMultiNative(clips, pickedPath)
+						? await exportMultiNative(clips, pickedPath, sceneJson, {
+								width: outDims?.width,
+								height: outDims?.height,
+								fps,
+								codec,
+							})
 						: await exportNative(pickedPath);
 				setSavedPath(pickedPath);
 				setPhase("done");
 				toast.success(t("exportDialog.exportedVideo"), {
-					description: `${pickedPath} · ${stats.fps.toFixed(1)} fps · ${stats.frames} frames · ${stats.wallS.toFixed(2)}s`,
+					description: `${pickedPath} · ${formatHms(stats.videoDurationS)} ${t("exportDialog.exportedVideoOf")} ${formatHms(stats.wallS)}`,
 					action: {
 						label: t("exportDialog.showInFolder"),
 						onClick: () => {
@@ -374,20 +424,22 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 									{(() => {
 										const dims = tierOutputDims(q.value);
 										if (!dims) return null;
-										// A fixed tier upscales when its target short side exceeds the
-										// largest clip's short side (Source never does).
+										const outShortSide = Math.min(dims.width, dims.height);
+										// A multiclip timeline can mix resolutions — the chosen output size can
+										// be a downscale relative to the LARGEST clip and an upscale relative to
+										// the SMALLEST one at the same time, so both badges can show together.
+										const isDownscale = sourceShortSide !== null && outShortSide < sourceShortSide;
 										const isUpscale =
-											q.targetShortSide !== undefined &&
-											sourceShortSide !== null &&
-											q.targetShortSide > sourceShortSide;
+											smallestShortSide !== null && outShortSide > smallestShortSide;
 										return (
 											<span
 												style={{
 													font: "500 11px var(--font-body)",
-													color: isUpscale ? "var(--warn)" : "var(--muted)",
+													color: isDownscale || isUpscale ? "var(--warn)" : "var(--muted)",
 												}}
 											>
 												{dims.width} × {dims.height}
+												{isDownscale ? ` · ${t("exportDialog.qualityDownscaleWarning")}` : ""}
 												{isUpscale ? ` · ${t("exportDialog.qualityUpscaleWarning")}` : ""}
 											</span>
 										);

@@ -118,29 +118,47 @@ pub struct ExportTask {
     out_path: String,
 }
 
+/// Active/désactive la composition de toutes les previews vivantes (même process).
+/// Désactivées, leurs threads de rendu cessent de composer/présenter → GPU libéré.
+fn set_all_previews_playing(playing: bool) {
+    if let Ok(reg) = registry().lock() {
+        for v in reg.values() {
+            v.set_playing(playing);
+        }
+    }
+}
+
 impl Task for ExportTask {
     type Output = (u32, f64, f64);
     type JsValue = ExportStats;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        let dir = fixture_dir();
-        let gpu = Gpu::create(false).map_err(|e| Error::from_reason(format!("{e:#}")))?;
-        let mut comp = Compositor::new(&gpu).map_err(|e| Error::from_reason(format!("{e:#}")))?;
-        if let Ok(t) = CursorTrack::load(&format!("{dir}/screen.cursor.json"), 100_000.0, 6.0) {
-            comp.set_cursor(t);
-        }
-        let cfg = config::all().pop().expect("au moins une config"); // C8
-        let s = pipeline::run_composited(
-            &format!("{dir}/screen.mp4"),
-            &format!("{dir}/webcam.mp4"),
-            &self.out_path,
-            &gpu,
-            &comp,
-            &cfg,
-            &mut |_| {},
-        )
-        .map_err(|e| Error::from_reason(format!("{e:#}")))?;
-        Ok((s.frames as u32, s.wall_s, s.fps))
+        // Désactive les previews pendant le rendu pour libérer le moteur 3D du GPU
+        // (mesuré : preview active ~72 fps → preview off ~125 fps). Réactivées ensuite,
+        // même en cas d'erreur.
+        set_all_previews_playing(false);
+        let result = (|| {
+            let dir = fixture_dir();
+            let gpu = Gpu::create(false).map_err(|e| Error::from_reason(format!("{e:#}")))?;
+            let mut comp = Compositor::new(&gpu).map_err(|e| Error::from_reason(format!("{e:#}")))?;
+            if let Ok(t) = CursorTrack::load(&format!("{dir}/screen.cursor.json"), 100_000.0, 6.0) {
+                comp.set_cursor(t);
+            }
+            let cfg = config::all().pop().expect("au moins une config"); // C8
+            let s = pipeline::run_composited(
+                &format!("{dir}/screen.mp4"),
+                &format!("{dir}/webcam.mp4"),
+                &self.out_path,
+                &gpu,
+                &comp,
+                &cfg,
+                &mut |_| {},
+            )
+            .map_err(|e| Error::from_reason(format!("{e:#}")))?;
+            Ok((s.frames as u32, s.wall_s, s.fps))
+        })();
+        set_all_previews_playing(true);
+        result
     }
 
     fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {

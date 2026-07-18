@@ -1,6 +1,6 @@
 {
 	"buttons": {
-		"addCursorMotion": "Add cursor motion to the next click",
+		"addCursorMotion": "Auto-split cursor motion at stops and clicks",
 		"addZoom": "新增縮放 (Z)",
 		"suggestZooms": "根據游標建議縮放",
 		"addTrim": "新增剪輯 (T)",
@@ -10,7 +10,7 @@
 		"addCameraFullscreen": "新增全螢幕攝影機 (C)"
 	},
 	"hints": {
-		"pressCursorMotion": "Move the playhead, then add a cursor path to the next recorded click",
+		"pressCursorMotion": "Auto-split cursor motion after the playhead into editable stop/click sections",
 		"pressZoom": "按 Z 新增縮放",
 		"pressTrim": "按 T 新增剪輯",
 		"pressAnnotation": "按 A 新增標註",
@@ -19,6 +19,10 @@
 		"pressCameraFullscreen": "按 C 新增一個全螢幕攝影機片段"
 	},
 	"cursorMotion": {
+		"segmentKinds": {
+			"move": "Move",
+			"hold": "Hold"
+		},
 		"presets": {
 			"straight": "Straight",
 			"arc": "Arc",

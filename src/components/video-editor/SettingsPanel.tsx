@@ -12,6 +12,7 @@ import {
 	Lock,
 	MousePointerClick,
 	Palette,
+	Scissors,
 	SlidersHorizontal,
 	Sparkles,
 	Spline,
@@ -338,6 +339,9 @@ interface SettingsPanelProps {
 	onCursorMotionEasingChange?: (easing: CursorMotionEasing) => void;
 	onCursorMotionCyclesChange?: (cycles: number) => void;
 	onCursorMotionCommit?: () => void;
+	canSplitCursorMotion?: boolean;
+	onCursorMotionSplit?: () => void;
+	onCursorMotionAutoSplit?: () => void;
 	onCursorMotionDelete?: (id: string) => void;
 	hasWebcam?: boolean;
 	webcamLayoutPreset?: WebcamLayoutPreset;
@@ -512,6 +516,9 @@ export function SettingsPanel({
 	onCursorMotionEasingChange,
 	onCursorMotionCyclesChange,
 	onCursorMotionCommit,
+	canSplitCursorMotion = false,
+	onCursorMotionSplit,
+	onCursorMotionAutoSplit,
 	onCursorMotionDelete,
 	hasWebcam = false,
 	webcamLayoutPreset = DEFAULT_WEBCAM_SETTINGS.layoutPreset,
@@ -1331,6 +1338,36 @@ export function SettingsPanel({
 							<div className="rounded-lg border border-[#a78bfa]/15 bg-[#8b5cf6]/[0.06] px-2.5 py-2 text-[10px] leading-snug text-slate-400">
 								{t("cursorMotion.anchorHint")}
 							</div>
+							<div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 rounded-lg border border-white/[0.06] bg-black/15 px-2.5 py-2 text-[10px]">
+								<span className="truncate text-center font-semibold text-slate-300">
+									{t(
+										`cursorMotion.anchorKinds.${selectedCursorMotionRegion.startAnchorKind ?? "manual"}`,
+									)}
+								</span>
+								<span className="text-[#a78bfa]">→</span>
+								<span className="truncate text-center font-semibold text-slate-300">
+									{t(
+										`cursorMotion.anchorKinds.${selectedCursorMotionRegion.endAnchorKind ?? "click"}`,
+									)}
+								</span>
+							</div>
+							<Button
+								type="button"
+								onClick={() => onCursorMotionAutoSplit?.()}
+								className="h-8 w-full gap-2 border border-amber-400/20 bg-amber-400/10 text-xs text-amber-200 transition-all hover:border-amber-300/40 hover:bg-amber-400/20"
+							>
+								<Sparkles className="h-3 w-3" />
+								{t("cursorMotion.autoSplitSelected")}
+							</Button>
+							<Button
+								type="button"
+								onClick={() => onCursorMotionSplit?.()}
+								disabled={!canSplitCursorMotion}
+								className="h-8 w-full gap-2 border border-[#a78bfa]/20 bg-[#8b5cf6]/10 text-xs text-[#c4b5fd] transition-all hover:border-[#a78bfa]/40 hover:bg-[#8b5cf6]/20 disabled:cursor-not-allowed disabled:opacity-35"
+							>
+								<Scissors className="h-3 w-3" />
+								{t("cursorMotion.splitAtPlayhead")}
+							</Button>
 							<Button
 								onClick={() => onCursorMotionDelete?.(selectedCursorMotionRegion.id)}
 								variant="destructive"

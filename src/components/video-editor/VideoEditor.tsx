@@ -35,6 +35,7 @@ import {
 	trimLeadingSilenceMono16k,
 } from "@/lib/captioning";
 import {
+	buildCursorMotionSegments,
 	type CursorMotionEasing,
 	type CursorMotionPoint,
 	type CursorMotionPreset,
@@ -42,7 +43,9 @@ import {
 	clampCursorMotionCycles,
 	clampCursorMotionPoint,
 	createDefaultCursorMotionControlPoint,
-	resolveCursorMotionClickAnchoredSpan,
+	resolveCursorMotionClickAnchoredRange,
+	sampleCursorMotionPath,
+	splitCursorMotionRegionAtTime,
 } from "@/lib/cursor/cursorMotion";
 import { getSmoothedCursorPath } from "@/lib/cursor/cursorPathSmoothing";
 import { hasNativeCursorRecordingData } from "@/lib/cursor/nativeCursor";
@@ -312,6 +315,10 @@ export default function VideoEditor() {
 			.filter((sample) => isClickInteractionType(sample.interactionType))
 			.map((sample) => sample.timeMs);
 	}, [cursorRecordingData, cursorTelemetry]);
+	const cursorMotionSamples = useMemo(
+		() => (cursorRecordingData?.samples.length ? cursorRecordingData.samples : cursorTelemetry),
+		[cursorRecordingData, cursorTelemetry],
+	);
 
 	// Cursor & motion blur visual settings (non-undoable preferences)
 	const [showCursor, setShowCursor] = useState(DEFAULT_CURSOR_SETTINGS.show);
@@ -1157,52 +1164,154 @@ export default function VideoEditor() {
 
 	const handleCursorMotionAdded = useCallback(
 		(span: Span) => {
-			const anchoredSpan = resolveCursorMotionClickAnchoredSpan(span.start, cursorClickTimestamps);
-			if (!anchoredSpan) {
+			const anchoredRange = resolveCursorMotionClickAnchoredRange(
+				span.start,
+				cursorClickTimestamps,
+			);
+			if (!anchoredRange) {
 				toast.error(ts("cursorMotion.noFollowingClick"));
 				return;
 			}
-			const { startMs, endMs } = anchoredSpan;
-			const start = cursorMotionBasePath?.sampleAt(startMs) ?? null;
-			const clickSample = cursorRecordingData?.samples.find(
-				(sample) =>
-					isClickInteractionType(sample.interactionType) &&
-					Math.abs(Math.round(sample.timeMs) - endMs) <= 1,
+			const { startMs, endMs } = anchoredRange;
+			const overlapsExisting = cursorMotionRegions.some(
+				(region) => region.endMs > startMs && region.startMs < endMs,
 			);
-			const end = clickSample
-				? { cx: clickSample.cx, cy: clickSample.cy }
-				: (cursorMotionBasePath?.sampleAt(endMs) ?? null);
-			if (!start || !end) {
+			if (overlapsExisting) {
+				toast.error(ts("cursorMotion.overlapExisting"));
+				return;
+			}
+			const segments = buildCursorMotionSegments({
+				startMs,
+				endMs,
+				samples: cursorMotionSamples,
+				path: cursorMotionBasePath,
+			});
+			if (segments.length === 0) {
 				toast.error(ts("cursorMotion.noCursorData"));
 				return;
 			}
 
-			const id = `cursor-motion-${nextCursorMotionIdRef.current++}`;
-			const newRegion: CursorMotionRegion = {
-				id,
-				startMs,
-				endMs,
-				startPoint: start,
-				endPoint: end,
-				preset: "wave",
-				controlPoint: createDefaultCursorMotionControlPoint(start, end),
+			const newRegions: CursorMotionRegion[] = segments.map((segment) => ({
+				id: `cursor-motion-${nextCursorMotionIdRef.current++}`,
+				...segment,
+				preset: segment.segmentKind === "hold" ? "straight" : "wave",
+				controlPoint: createDefaultCursorMotionControlPoint(segment.startPoint, segment.endPoint),
 				cycles: 2,
 				easing: "ease-in-out",
-			};
-			pushState((prev) => ({
-				cursorMotionRegions: [...prev.cursorMotionRegions, newRegion],
 			}));
-			handleSelectCursorMotion(id);
+			pushState((prev) => ({
+				cursorMotionRegions: [...prev.cursorMotionRegions, ...newRegions],
+			}));
+			handleSelectCursorMotion(newRegions[0].id);
+			toast.success(ts("cursorMotion.createdSegments", { count: String(newRegions.length) }));
 		},
 		[
 			cursorClickTimestamps,
 			cursorMotionBasePath,
-			cursorRecordingData,
+			cursorMotionRegions,
+			cursorMotionSamples,
 			handleSelectCursorMotion,
 			pushState,
 			ts,
 		],
 	);
+
+	const handleCursorMotionSplitAtPlayhead = useCallback(() => {
+		const region = selectedCursorMotionRegion;
+		if (!region) return;
+		const splitMs = Math.round(currentTime * 1000);
+		if (splitMs <= region.startMs + 1 || splitMs >= region.endMs - 1) {
+			toast.error(ts("cursorMotion.splitOutsideRegion"));
+			return;
+		}
+		const splitPoint = sampleCursorMotionPath(cursorMotionBasePath, [region], splitMs);
+		const startPoint = region.startPoint ?? cursorMotionBasePath?.sampleAt(region.startMs) ?? null;
+		const endPoint = region.endPoint ?? cursorMotionBasePath?.sampleAt(region.endMs) ?? null;
+		if (!splitPoint || !startPoint || !endPoint) {
+			toast.error(ts("cursorMotion.noCursorData"));
+			return;
+		}
+
+		const rightId = `cursor-motion-${nextCursorMotionIdRef.current++}`;
+		const split = splitCursorMotionRegionAtTime({
+			region,
+			splitMs,
+			splitPoint,
+			startPoint,
+			endPoint,
+			rightId,
+		});
+		if (!split) return;
+		const [left, right] = split;
+		pushState((prev) => ({
+			cursorMotionRegions: prev.cursorMotionRegions.flatMap((candidate) =>
+				candidate.id === region.id ? [left, right] : [candidate],
+			),
+		}));
+		handleSelectCursorMotion(rightId);
+	}, [
+		currentTime,
+		cursorMotionBasePath,
+		handleSelectCursorMotion,
+		pushState,
+		selectedCursorMotionRegion,
+		ts,
+	]);
+
+	const handleCursorMotionAutoSplitSelected = useCallback(() => {
+		const region = selectedCursorMotionRegion;
+		if (!region) return;
+		const selectedPath = {
+			sampleAt: (timeMs: number) => sampleCursorMotionPath(cursorMotionBasePath, [region], timeMs),
+		};
+		const segments = buildCursorMotionSegments({
+			startMs: region.startMs,
+			endMs: region.endMs,
+			samples: cursorMotionSamples,
+			path: selectedPath,
+		});
+		if (segments.length <= 1) {
+			toast.error(ts("cursorMotion.noSplitPoints"));
+			return;
+		}
+		const splitRegions = segments.map((segment, index) => {
+			const startPoint =
+				index === 0 ? (region.startPoint ?? segment.startPoint) : segment.startPoint;
+			const endPoint =
+				index === segments.length - 1 ? (region.endPoint ?? segment.endPoint) : segment.endPoint;
+			return {
+				...region,
+				...segment,
+				id: index === 0 ? region.id : `cursor-motion-${nextCursorMotionIdRef.current++}`,
+				startPoint,
+				endPoint,
+				startAnchorKind:
+					index === 0
+						? (region.startAnchorKind ?? segment.startAnchorKind)
+						: segment.startAnchorKind,
+				endAnchorKind:
+					index === segments.length - 1
+						? (region.endAnchorKind ?? segment.endAnchorKind)
+						: segment.endAnchorKind,
+				preset: segment.segmentKind === "hold" ? ("straight" as const) : region.preset,
+				controlPoint: createDefaultCursorMotionControlPoint(startPoint, endPoint),
+			};
+		});
+		pushState((prev) => ({
+			cursorMotionRegions: prev.cursorMotionRegions.flatMap((candidate) =>
+				candidate.id === region.id ? splitRegions : [candidate],
+			),
+		}));
+		handleSelectCursorMotion(splitRegions[0].id);
+		toast.success(ts("cursorMotion.createdSegments", { count: String(splitRegions.length) }));
+	}, [
+		cursorMotionBasePath,
+		cursorMotionSamples,
+		handleSelectCursorMotion,
+		pushState,
+		selectedCursorMotionRegion,
+		ts,
+	]);
 
 	const updateSelectedCursorMotion = useCallback(
 		(update: (region: CursorMotionRegion) => CursorMotionRegion, checkpoint = true) => {
@@ -3390,6 +3499,13 @@ export default function VideoEditor() {
 										onCursorMotionEasingChange={handleCursorMotionEasingChange}
 										onCursorMotionCyclesChange={handleCursorMotionCyclesChange}
 										onCursorMotionCommit={handleCursorMotionCommit}
+										canSplitCursorMotion={Boolean(
+											selectedCursorMotionRegion &&
+												Math.round(currentTime * 1000) > selectedCursorMotionRegion.startMs + 1 &&
+												Math.round(currentTime * 1000) < selectedCursorMotionRegion.endMs - 1,
+										)}
+										onCursorMotionSplit={handleCursorMotionSplitAtPlayhead}
+										onCursorMotionAutoSplit={handleCursorMotionAutoSplitSelected}
 										onCursorMotionDelete={handleCursorMotionDelete}
 										unsavedExport={unsavedExport}
 										onSaveUnsavedExport={handleSaveUnsavedExport}

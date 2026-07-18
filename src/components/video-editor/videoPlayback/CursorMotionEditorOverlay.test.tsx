@@ -20,7 +20,29 @@ describe("CursorMotionEditorOverlay", () => {
 		);
 
 		expect(screen.getByLabelText("Cursor motion path editor")).not.toBeNull();
+		expect(screen.getByLabelText("Manual cursor anchor")).not.toBeNull();
+		expect(screen.getByLabelText("Recorded click anchor")).not.toBeNull();
 		expect(screen.getByLabelText("Motion curve handle").getAttribute("cx")).toBe("400");
+	});
+
+	it("shows cursor stops as distinct square anchors", () => {
+		render(
+			<CursorMotionEditorOverlay
+				width={800}
+				height={450}
+				trajectory={[
+					{ x: 80, y: 225 },
+					{ x: 720, y: 225 },
+				]}
+				startAnchorKind="rest"
+				endAnchorKind="rest"
+				controlPoint={{ x: 400, y: 80 }}
+				onControlPointChange={vi.fn()}
+				onControlPointCommit={vi.fn()}
+			/>,
+		);
+
+		expect(screen.getAllByLabelText("Cursor stop anchor")).toHaveLength(2);
 	});
 
 	it("previews pointer movement and commits once when released", () => {

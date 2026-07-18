@@ -2376,6 +2376,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								trajectory={cursorMotionEditorGeometry.trajectory}
 								recordedTrajectory={cursorMotionEditorGeometry.recordedTrajectory}
 								controlPoint={cursorMotionEditorGeometry.controlPoint}
+								startAnchorKind={selectedCursorMotionRegion.startAnchorKind}
+								endAnchorKind={selectedCursorMotionRegion.endAnchorKind}
 								onControlPointChange={handleCursorMotionClientPoint}
 								onControlPointCommit={() => onCursorMotionControlPointCommit?.()}
 							/>

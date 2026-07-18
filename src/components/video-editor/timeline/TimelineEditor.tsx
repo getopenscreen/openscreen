@@ -7,7 +7,6 @@ import {
 	Gauge,
 	Maximize,
 	MessageSquare,
-	MousePointer2,
 	Plus,
 	ScanEye,
 	Scissors,
@@ -1606,7 +1605,11 @@ export default function TimelineEditor({
 			id: region.id,
 			rowId: CURSOR_MOTION_ROW_ID,
 			span: { start: region.startMs, end: region.endMs },
-			label: `${t(`cursorMotion.presets.${region.preset}`)} ${index + 1}`,
+			label: `${
+				region.segmentKind === "hold"
+					? t("cursorMotion.segmentKinds.hold")
+					: t(`cursorMotion.presets.${region.preset}`)
+			} ${index + 1}`,
 			variant: "cursor-motion",
 		}));
 
@@ -1813,7 +1816,7 @@ export default function TimelineEditor({
 							className="h-7 w-7 rounded-lg text-slate-400 hover:text-[#a78bfa] hover:bg-[#8b5cf6]/10 transition-all"
 							title={t("buttons.addCursorMotion")}
 						>
-							<MousePointer2 className="w-4 h-4" />
+							<WandSparkles className="w-4 h-4" />
 						</Button>
 					)}
 					{onGenerateCaptions && (

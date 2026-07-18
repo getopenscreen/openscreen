@@ -1,4 +1,5 @@
 import { useMemo, useRef } from "react";
+import type { CursorMotionAnchorKind } from "@/lib/cursor/cursorMotion";
 
 export interface CursorMotionEditorPoint {
 	x: number;
@@ -11,6 +12,8 @@ interface CursorMotionEditorOverlayProps {
 	trajectory: readonly CursorMotionEditorPoint[];
 	recordedTrajectory?: readonly CursorMotionEditorPoint[];
 	controlPoint: CursorMotionEditorPoint;
+	startAnchorKind?: CursorMotionAnchorKind;
+	endAnchorKind?: CursorMotionAnchorKind;
 	onControlPointChange: (clientX: number, clientY: number) => void;
 	onControlPointCommit: () => void;
 }
@@ -19,12 +22,59 @@ function pointsAttribute(points: readonly CursorMotionEditorPoint[]) {
 	return points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ");
 }
 
+function CursorMotionAnchorMarker({
+	point,
+	kind,
+}: {
+	point: CursorMotionEditorPoint;
+	kind: CursorMotionAnchorKind;
+}) {
+	const label =
+		kind === "click"
+			? "Recorded click anchor"
+			: kind === "rest"
+				? "Cursor stop anchor"
+				: "Manual cursor anchor";
+	return (
+		<g aria-label={label}>
+			{kind === "rest" ? (
+				<rect
+					x={point.x - 6}
+					y={point.y - 6}
+					width={12}
+					height={12}
+					rx={3}
+					fill="#f59e0b"
+					stroke="#ffffff"
+					strokeWidth={2}
+					vectorEffect="non-scaling-stroke"
+				/>
+			) : (
+				<>
+					<circle
+						cx={point.x}
+						cy={point.y}
+						r={kind === "click" ? 7 : 5}
+						fill={kind === "click" ? "#a78bfa" : "#111827"}
+						stroke={kind === "click" ? "#ffffff" : "#c4b5fd"}
+						strokeWidth={2}
+						vectorEffect="non-scaling-stroke"
+					/>
+					{kind === "click" && <circle cx={point.x} cy={point.y} r={2.25} fill="#312e81" />}
+				</>
+			)}
+		</g>
+	);
+}
+
 export function CursorMotionEditorOverlay({
 	width,
 	height,
 	trajectory,
 	recordedTrajectory = [],
 	controlPoint,
+	startAnchorKind = "manual",
+	endAnchorKind = "click",
 	onControlPointChange,
 	onControlPointCommit,
 }: CursorMotionEditorOverlayProps) {
@@ -97,24 +147,8 @@ export function CursorMotionEditorOverlay({
 				strokeDasharray="3 4"
 				vectorEffect="non-scaling-stroke"
 			/>
-			<circle
-				cx={start.x}
-				cy={start.y}
-				r={5}
-				fill="#111827"
-				stroke="#c4b5fd"
-				strokeWidth={2}
-				vectorEffect="non-scaling-stroke"
-			/>
-			<circle
-				cx={end.x}
-				cy={end.y}
-				r={6}
-				fill="#a78bfa"
-				stroke="#ffffff"
-				strokeWidth={2}
-				vectorEffect="non-scaling-stroke"
-			/>
+			<CursorMotionAnchorMarker point={start} kind={startAnchorKind} />
+			<CursorMotionAnchorMarker point={end} kind={endAnchorKind} />
 			<circle
 				cx={controlPoint.x}
 				cy={controlPoint.y}

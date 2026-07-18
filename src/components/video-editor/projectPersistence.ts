@@ -4,8 +4,10 @@ import {
 	type CursorMotionRegion,
 	clampCursorMotionCycles,
 	clampCursorMotionPoint,
+	isCursorMotionAnchorKind,
 	isCursorMotionEasing,
 	isCursorMotionPreset,
+	isCursorMotionSegmentKind,
 } from "@/lib/cursor/cursorMotion";
 import { normalizeCursorThemeId } from "@/lib/cursor/cursorThemes";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
@@ -70,7 +72,7 @@ function normalizeWallpaperValue(value: string): string {
 	return CANONICAL_WALLPAPERS.has(canonical) ? canonical : DEFAULT_WALLPAPER;
 }
 
-export const PROJECT_VERSION = 3;
+export const PROJECT_VERSION = 4;
 
 export interface ProjectEditorState {
 	wallpaper: string;
@@ -307,6 +309,15 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						endMs,
 						...(startPoint ? { startPoint } : {}),
 						...(endPoint ? { endPoint } : {}),
+						startAnchorKind: isCursorMotionAnchorKind(region.startAnchorKind)
+							? region.startAnchorKind
+							: "manual",
+						endAnchorKind: isCursorMotionAnchorKind(region.endAnchorKind)
+							? region.endAnchorKind
+							: "click",
+						segmentKind: isCursorMotionSegmentKind(region.segmentKind)
+							? region.segmentKind
+							: "move",
 						preset: isCursorMotionPreset(region.preset) ? region.preset : "arc",
 						controlPoint: clampCursorMotionPoint(
 							region.controlPoint && typeof region.controlPoint === "object"

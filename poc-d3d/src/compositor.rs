@@ -845,8 +845,21 @@ impl Compositor {
 
         self.begin([0.0, 0.0, 0.0, 1.0]);
 
-        // --- fond : flouté (screen plein cadre + gaussien) ou couleur plate ---
-        if cfg.bg_blur {
+        // --- fond ---
+        // Parité web (frameRenderer.blurredBackgroundLayer) : le fond est le WALLPAPER sélectionné
+        // (image/couleur/gradient) et « Blur BG » floute CE wallpaper, PAS la vidéo. Le natif
+        // dupliquait la vidéo floutée → le « vieux flou ». Côté APP (scène présente) on dessine
+        // donc le wallpaper (couleur pour l'instant ; gradient/image rendus depuis la scène
+        // ensuite ; pour une couleur plate le flou est un no-op visuel). Côté fixture/bench
+        // (pas de scène) on garde le fond screen-flouté, dont le coût est mesuré (C4).
+        if self.scene.borrow().is_some() {
+            self.draw_solid(&LayerCB {
+                dst: [0.0, 0.0, 1.0, 1.0],
+                mode: 1.0,
+                color: lp.bg_color,
+                ..Default::default()
+            });
+        } else if cfg.bg_blur {
             let over = 0.06;
             self.draw_video(
                 &LayerCB {

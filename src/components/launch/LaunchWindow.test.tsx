@@ -539,6 +539,112 @@ describe("LaunchWindow HUD dragging", () => {
 		expect(hudBar.style.bottom).toBe("25px");
 	});
 
+	it("does not treat an intentional vertical tray resize as delayed DPI drag rounding", () => {
+		vi.useFakeTimers();
+		resizeCallbacks.length = 0;
+		vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+		let innerWidth = 588;
+		let innerHeight = 95;
+		vi.spyOn(window, "innerWidth", "get").mockImplementation(() => innerWidth);
+		vi.spyOn(window, "innerHeight", "get").mockImplementation(() => innerHeight);
+		const { container } = renderLaunchWindow();
+		const handle = screen.getByTestId("launch-drag-handle");
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 13, screenX: 100, screenY: 200 });
+		fireEvent.pointerUp(handle, { button: 0, pointerId: 13, screenX: 120, screenY: 220 });
+
+		fireEvent.click(screen.getByTestId("launch-tray-layout-button"));
+		expect(hudBar).toHaveAttribute("data-tray-layout", "vertical");
+
+		// The main process now resizes the intentionally tall/narrow content window.
+		// This is not the few-pixel Chromium rounding that the drag anchor compensates.
+		innerWidth = 220;
+		innerHeight = 526;
+		fireEvent.resize(window);
+
+		expect(hudBar.style.left).toBe("calc(50% - 0px)");
+		expect(hudBar.style.bottom).toBe("20px");
+	});
+
+	it("drops vertical drag compensation when switching back to the horizontal tray", () => {
+		vi.useFakeTimers();
+		localStorage.setItem(
+			"openscreen_user_preferences",
+			JSON.stringify({ trayLayout: "horizontal" }),
+		);
+		let innerWidth = 220;
+		let innerHeight = 526;
+		vi.spyOn(window, "innerWidth", "get").mockImplementation(() => innerWidth);
+		vi.spyOn(window, "innerHeight", "get").mockImplementation(() => innerHeight);
+		const { container } = renderLaunchWindow();
+		const handle = screen.getByTestId("launch-drag-handle");
+		const layoutButton = screen.getByTestId("launch-tray-layout-button");
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+
+		fireEvent.click(layoutButton);
+		expect(hudBar).toHaveAttribute("data-tray-layout", "vertical");
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 14, screenX: 100, screenY: 200 });
+		innerWidth = 218;
+		innerHeight = 524;
+		fireEvent.resize(window);
+		expect(hudBar.style.left).toBe("calc(50% + 1px)");
+		expect(hudBar.style.bottom).toBe("18px");
+		fireEvent.pointerUp(handle, { button: 0, pointerId: 14, screenX: 110, screenY: 210 });
+
+		fireEvent.click(layoutButton);
+		expect(hudBar).toHaveAttribute("data-tray-layout", "horizontal");
+		expect(hudBar.style.left).toBe("calc(50% - 0px)");
+		expect(hudBar.style.bottom).toBe("20px");
+	});
+
+	it("defers vertical content sizing until the active drag ends", () => {
+		resizeCallbacks.length = 0;
+		vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+		const { container } = renderLaunchWindow();
+		const handle = screen.getByTestId("launch-drag-handle");
+		const hudBar = container.querySelector("[data-tray-layout]") as HTMLElement;
+		let naturalWidth = 564;
+		let naturalHeight = 48;
+		Object.defineProperties(hudBar, {
+			scrollWidth: { get: () => naturalWidth, configurable: true },
+			scrollHeight: { get: () => naturalHeight, configurable: true },
+		});
+		Object.defineProperties(handle, {
+			setPointerCapture: { value: vi.fn(), configurable: true },
+			hasPointerCapture: { value: vi.fn(() => true), configurable: true },
+			releasePointerCapture: { value: vi.fn(), configurable: true },
+		});
+
+		act(() => {
+			for (const callback of resizeCallbacks) callback([], {} as ResizeObserver);
+		});
+		expect(window.electronAPI.setHudOverlaySize).toHaveBeenLastCalledWith(588, 92);
+		vi.mocked(window.electronAPI.setHudOverlaySize).mockClear();
+
+		fireEvent.pointerDown(handle, { button: 0, pointerId: 15, screenX: 100, screenY: 200 });
+		naturalWidth = 40;
+		naturalHeight = 480;
+		act(() => {
+			for (const callback of resizeCallbacks) callback([], {} as ResizeObserver);
+		});
+		expect(window.electronAPI.setHudOverlaySize).not.toHaveBeenCalled();
+
+		fireEvent.pointerUp(handle, { button: 0, pointerId: 15, screenX: 110, screenY: 210 });
+		expect(window.electronAPI.setHudOverlaySize).toHaveBeenLastCalledWith(220, 524);
+	});
+
 	it("keeps Electron's native drag region on non-Windows platforms", async () => {
 		window.electronAPI.platform = "darwin";
 		renderLaunchWindow();

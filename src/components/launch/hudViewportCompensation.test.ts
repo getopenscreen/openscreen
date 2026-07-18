@@ -31,4 +31,14 @@ describe("getHudViewportCompensation", () => {
 			),
 		).toEqual({ x: 0, y: 0 });
 	});
+
+	it("ignores a large intentional horizontal-to-vertical content resize", () => {
+		expect(
+			getHudViewportCompensation(
+				{ x: 0, y: 0 },
+				{ width: 588, height: 95 },
+				{ width: 220, height: 526 },
+			),
+		).toEqual({ x: 0, y: 0 });
+	});
 });

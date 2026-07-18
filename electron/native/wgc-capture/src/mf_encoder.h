@@ -32,6 +32,8 @@ struct MFEncoderOptions {
 };
 
 constexpr const char* kVideoEncoderSelectionDefault = "default";
+constexpr const char* kVideoEncoderSelectionHardware = "hardware";
+constexpr const char* kVideoEncoderSelectionSoftwareDefault = "software-default";
 constexpr const char* kVideoEncoderSelectionSoftwarePreferred = "software-preferred";
 constexpr const char* kVideoEncoderSelectionSoftwareFallback = "software-fallback";
 

@@ -323,6 +323,37 @@ export function LaunchWindow() {
 		return () => cancelAnimationFrame(id);
 	}, [isLanguageMenuOpen]);
 
+	const [hudViewportCompensation, setHudViewportCompensation] = useState<HudViewportCompensation>({
+		x: 0,
+		y: 0,
+	});
+	const hudViewportCompensationRef = useRef<HudViewportCompensation>({ x: 0, y: 0 });
+	const hudDragPointerIdRef = useRef<number | null>(null);
+	const hudDragViewportAnchorRef = useRef<
+		| {
+				viewport: HudViewportSize;
+				compensation: HudViewportCompensation;
+		  }
+		| undefined
+	>(undefined);
+	const hudDragViewportSettleTimerRef = useRef<number | undefined>(undefined);
+	const cancelHudDragViewportSettle = useCallback(() => {
+		if (hudDragViewportSettleTimerRef.current !== undefined) {
+			window.clearTimeout(hudDragViewportSettleTimerRef.current);
+			hudDragViewportSettleTimerRef.current = undefined;
+		}
+	}, []);
+	const resetDragViewportCompensationForContentResize = useCallback(() => {
+		if (hudDragPointerIdRef.current !== null) return;
+		cancelHudDragViewportSettle();
+		hudDragViewportAnchorRef.current = undefined;
+		const previous = hudViewportCompensationRef.current;
+		if (Math.abs(previous.x) < 0.01 && Math.abs(previous.y) < 0.01) return;
+		const reset = { x: 0, y: 0 };
+		hudViewportCompensationRef.current = reset;
+		setHudViewportCompensation(reset);
+	}, [cancelHudDragViewportSettle]);
+
 	// Resize the overlay window to fit content, else the taller vertical tray gets clipped
 	// and scrolls. Measure from the window's bottom-centre (the anchor the main process
 	// preserves) so fixed bottom/centre offsets keep this stable and it doesn't oscillate.
@@ -330,6 +361,9 @@ export function LaunchWindow() {
 	const measureHudSize = useCallback(() => {
 		const barEl = hudBarRef.current;
 		if (!barEl || !window.electronAPI?.setHudOverlaySize) return;
+		// Window movement must never feed viewport-constrained vertical layout back
+		// into BrowserWindow sizing. Flush any real content change once drag ends.
+		if (hudDragPointerIdRef.current !== null) return;
 
 		// Breathing room so the drop shadow isn't clipped. TOP_MARGIN must also exceed the
 		// slack in the bar's `max-h: calc(100vh - 2.5rem)` cap (40px reserved - 20px bottom
@@ -416,9 +450,12 @@ export function LaunchWindow() {
 		if (width === lastHudSizeRef.current.width && height === lastHudSizeRef.current.height) {
 			return;
 		}
+		// A large, intentional content resize (most visibly horizontal -> vertical)
+		// must not be interpreted as one of Chromium's few-pixel post-drag DPI resizes.
+		resetDragViewportCompensationForContentResize();
 		lastHudSizeRef.current = { width, height };
 		window.electronAPI.setHudOverlaySize(width, height);
-	}, [trayLayout]);
+	}, [resetDragViewportCompensationForContentResize, trayLayout]);
 
 	// One persistent observer; elements wire themselves up via callback refs as they
 	// mount/unmount so measurement re-runs without recreating it or threading mount state through deps.
@@ -494,19 +531,6 @@ export function LaunchWindow() {
 		setHudMouseEventsEnabled(isLanguageMenuOpen);
 	}, [isLanguageMenuOpen, setHudMouseEventsEnabled]);
 
-	const [hudViewportCompensation, setHudViewportCompensation] = useState<HudViewportCompensation>({
-		x: 0,
-		y: 0,
-	});
-	const hudViewportCompensationRef = useRef<HudViewportCompensation>({ x: 0, y: 0 });
-	const hudDragViewportAnchorRef = useRef<
-		| {
-				viewport: HudViewportSize;
-				compensation: HudViewportCompensation;
-		  }
-		| undefined
-	>(undefined);
-
 	const updateHudDragViewportCompensation = useCallback(() => {
 		const anchor = hudDragViewportAnchorRef.current;
 		if (!anchor) return;
@@ -524,14 +548,6 @@ export function LaunchWindow() {
 		setHudViewportCompensation(next);
 	}, []);
 
-	const hudDragPointerIdRef = useRef<number | null>(null);
-	const hudDragViewportSettleTimerRef = useRef<number | undefined>(undefined);
-	const cancelHudDragViewportSettle = useCallback(() => {
-		if (hudDragViewportSettleTimerRef.current !== undefined) {
-			window.clearTimeout(hudDragViewportSettleTimerRef.current);
-			hudDragViewportSettleTimerRef.current = undefined;
-		}
-	}, []);
 	const scheduleHudDragViewportSettle = useCallback(() => {
 		cancelHudDragViewportSettle();
 		// Transparent HWND resize notifications may arrive on the next task after
@@ -568,8 +584,9 @@ export function LaunchWindow() {
 			}
 			window.electronAPI?.endHudOverlayDrag?.(screenX, screenY);
 			scheduleHudDragViewportSettle();
+			measureHudSize();
 		},
-		[scheduleHudDragViewportSettle, updateHudDragViewportCompensation],
+		[measureHudSize, scheduleHudDragViewportSettle, updateHudDragViewportCompensation],
 	);
 
 	useEffect(
@@ -689,6 +706,7 @@ export function LaunchWindow() {
 	/** Switches the HUD between horizontal and vertical tray layouts. */
 	const toggleTrayLayout = () => {
 		const nextLayout = trayLayout === "horizontal" ? "vertical" : "horizontal";
+		resetDragViewportCompensationForContentResize();
 		setTrayLayout(nextLayout);
 		saveUserPreferences({ trayLayout: nextLayout });
 	};

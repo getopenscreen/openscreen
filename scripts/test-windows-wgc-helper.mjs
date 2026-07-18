@@ -386,17 +386,17 @@ if (
 		`WGC helper did not apply requested cursor capture mode (${CAPTURE_CURSOR}): ${result.stdout}`,
 	);
 }
-const expectedEncoderSelection = WITH_SOFTWARE_FALLBACK
-	? "software-fallback"
+const expectedEncoderSelections = WITH_SOFTWARE_FALLBACK
+	? ["software-fallback"]
 	: WITH_SOFTWARE_ENCODER
-		? "software-preferred"
-		: "default";
+		? ["software-preferred"]
+		: ["hardware", "software-default", "default"];
 if (
-	encoderSelection?.video !== expectedEncoderSelection ||
+	!expectedEncoderSelections.includes(encoderSelection?.video) ||
 	encoderSelection.preferSoftwareEncoder !== WITH_SOFTWARE_ENCODER
 ) {
 	throw new Error(
-		`WGC helper encoder selection was ${JSON.stringify(encoderSelection)}, expected ${expectedEncoderSelection} with preferSoftwareEncoder=${WITH_SOFTWARE_ENCODER}: ${result.stdout}`,
+		`WGC helper encoder selection was ${JSON.stringify(encoderSelection)}, expected one of ${expectedEncoderSelections.join(", ")} with preferSoftwareEncoder=${WITH_SOFTWARE_ENCODER}: ${result.stdout}`,
 	);
 }
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getHudOverlayDragPosition, parseHudOverlayDragPoint } from "./hudOverlayDrag";
+import {
+	getHudOverlayDragBounds,
+	getHudOverlayDragPosition,
+	parseHudOverlayDragPoint,
+} from "./hudOverlayDrag";
 
 describe("HUD overlay anchored dragging", () => {
 	it("moves by the OS cursor delta without a scale multiplier", () => {
@@ -31,6 +35,16 @@ describe("HUD overlay anchored dragging", () => {
 		expect(
 			getHudOverlayDragPosition({ x: 10.25, y: 20.25 }, { x: 5.5, y: 8.5 }, { x: 7, y: 10 }),
 		).toEqual({ x: 12, y: 22 });
+	});
+
+	it("keeps the full BrowserWindow size immutable while moving", () => {
+		expect(
+			getHudOverlayDragBounds(
+				{ x: 1244, y: 1202, width: 220, height: 526 },
+				{ x: 1272, y: 1220 },
+				{ x: 1372, y: 1320 },
+			),
+		).toEqual({ x: 1344, y: 1302, width: 220, height: 526 });
 	});
 
 	it("accepts only finite renderer screen coordinates", () => {

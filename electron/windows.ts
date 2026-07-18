@@ -3,7 +3,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, ipcMain, screen } from "electron";
 import { getHudOverlayResizedBounds } from "./hudOverlayBounds";
 import {
-	getHudOverlayDragPosition,
+	getHudOverlayDragBounds,
+	type HudOverlayDragBounds,
 	type HudOverlayDragPoint,
 	parseHudOverlayDragPoint,
 } from "./hudOverlayDrag";
@@ -36,7 +37,7 @@ let hudOverlayDrag:
 	| {
 			windowId: number;
 			webContentsId: number;
-			startWindow: HudOverlayDragPoint;
+			startWindow: HudOverlayDragBounds;
 			startCursor: HudOverlayDragPoint;
 	  }
 	| undefined;
@@ -125,12 +126,12 @@ function updateHudOverlayDragPosition(currentCursor: HudOverlayDragPoint): void 
 		return;
 	}
 
-	const nextPosition = getHudOverlayDragPosition(
+	const nextBounds = getHudOverlayDragBounds(
 		hudOverlayDrag.startWindow,
 		hudOverlayDrag.startCursor,
 		currentCursor,
 	);
-	hudOverlayWindow.setPosition(nextPosition.x, nextPosition.y);
+	hudOverlayWindow.setBounds(nextBounds);
 }
 
 ipcMain.on("hud-overlay-hide", () => {
@@ -160,7 +161,7 @@ ipcMain.on("hud-overlay-drag-start", (event, screenX: unknown, screenY: unknown)
 	hudOverlayDrag = {
 		windowId: hudOverlayWindow.id,
 		webContentsId: event.sender.id,
-		startWindow: { x: bounds.x, y: bounds.y },
+		startWindow: bounds,
 		startCursor: parseHudOverlayDragPoint(screenX, screenY) ?? screen.getCursorScreenPoint(),
 	};
 	// A lost pointer-up must not leave an inactive drag session alive indefinitely.

@@ -3,6 +3,11 @@ export type HudOverlayDragPoint = {
 	y: number;
 };
 
+export type HudOverlayDragBounds = HudOverlayDragPoint & {
+	width: number;
+	height: number;
+};
+
 export function parseHudOverlayDragPoint(x: unknown, y: unknown): HudOverlayDragPoint | null {
 	return typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)
 		? { x, y }
@@ -23,5 +28,22 @@ export function getHudOverlayDragPosition(
 	return {
 		x: Math.round(startWindow.x + currentCursor.x - startCursor.x),
 		y: Math.round(startWindow.y + currentCursor.y - startCursor.y),
+	};
+}
+
+/**
+ * Keep the BrowserWindow's logical size immutable for the complete drag. On
+ * fractional-DPI Windows displays, repeatedly moving only the HWND position can
+ * otherwise let Chromium publish slightly different viewport dimensions.
+ */
+export function getHudOverlayDragBounds(
+	startWindow: HudOverlayDragBounds,
+	startCursor: HudOverlayDragPoint,
+	currentCursor: HudOverlayDragPoint,
+): HudOverlayDragBounds {
+	return {
+		...getHudOverlayDragPosition(startWindow, startCursor, currentCursor),
+		width: startWindow.width,
+		height: startWindow.height,
 	};
 }

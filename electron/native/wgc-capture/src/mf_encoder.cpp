@@ -4,6 +4,7 @@
 
 #include <mfapi.h>
 #include <mferror.h>
+#include <mftransform.h>
 #include <propvarutil.h>
 
 #include <algorithm>
@@ -133,7 +134,7 @@ void logMissingH264EncoderError() {
 enum class SinkWriterCreateStage {
     SoftwareEncoderRegistration,
     CreateAttributes,
-    DisableHardwareTransforms,
+    ConfigureHardwareTransforms,
     CreateSinkWriter,
 };
 
@@ -204,20 +205,27 @@ HRESULT createSinkWriterFromUrl(
             return registerHr;
         }
 
-        HRESULT hr = MFCreateAttributes(&attributes, 1);
-        if (FAILED(hr)) {
-            std::cerr << "ERROR: MFCreateAttributes(sink writer) failed (hr=0x"
-                      << std::hex << hr << std::dec << ")" << std::endl;
-            failedStage = SinkWriterCreateStage::CreateAttributes;
-            return hr;
-        }
-        hr = attributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, FALSE);
-        if (FAILED(hr)) {
-            std::cerr << "ERROR: Set MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS failed (hr=0x"
-                      << std::hex << hr << std::dec << ")" << std::endl;
-            failedStage = SinkWriterCreateStage::DisableHardwareTransforms;
-            return hr;
-        }
+    }
+
+    HRESULT hr = MFCreateAttributes(&attributes, 1);
+    if (FAILED(hr)) {
+        std::cerr << "ERROR: MFCreateAttributes(sink writer) failed (hr=0x"
+                  << std::hex << hr << std::dec << ")" << std::endl;
+        failedStage = SinkWriterCreateStage::CreateAttributes;
+        return hr;
+    }
+
+    // Sink writers do not use hardware encoders by default. Make the normal
+    // path explicitly hardware-enabled and the software path explicitly
+    // hardware-disabled.
+    hr = attributes->SetUINT32(
+        MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
+        forceSoftwareEncoder ? FALSE : TRUE);
+    if (FAILED(hr)) {
+        std::cerr << "ERROR: Set MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS failed (hr=0x"
+                  << std::hex << hr << std::dec << ")" << std::endl;
+        failedStage = SinkWriterCreateStage::ConfigureHardwareTransforms;
+        return hr;
     }
 
     failedStage = SinkWriterCreateStage::CreateSinkWriter;
@@ -240,6 +248,63 @@ HRESULT createSinkWriterFromUrl(
                   << std::endl;
     }
     return sinkWriterHr;
+}
+
+const char* detectDefaultVideoEncoderSelection(
+    IMFSinkWriter* sinkWriter,
+    DWORD videoStreamIndex) {
+    if (sinkWriter == nullptr) {
+        return kVideoEncoderSelectionDefault;
+    }
+
+    Microsoft::WRL::ComPtr<IMFSinkWriterEx> sinkWriterEx;
+    const HRESULT queryHr = sinkWriter->QueryInterface(IID_PPV_ARGS(&sinkWriterEx));
+    if (FAILED(queryHr)) {
+        std::cerr
+            << "WARNING: IMFSinkWriterEx is unavailable; the active H.264 encoder type is unknown "
+            << "(hr=0x" << std::hex << queryHr << std::dec << ")."
+            << std::endl;
+        return kVideoEncoderSelectionDefault;
+    }
+
+    for (DWORD transformIndex = 0;; transformIndex += 1) {
+        GUID category = GUID_NULL;
+        Microsoft::WRL::ComPtr<IMFTransform> transform;
+        const HRESULT transformHr = sinkWriterEx->GetTransformForStream(
+            videoStreamIndex,
+            transformIndex,
+            &category,
+            &transform);
+        if (FAILED(transformHr)) {
+            break;
+        }
+        if (!IsEqualGUID(category, MFT_CATEGORY_VIDEO_ENCODER) || !transform) {
+            continue;
+        }
+
+        Microsoft::WRL::ComPtr<IMFAttributes> transformAttributes;
+        if (SUCCEEDED(transform->GetAttributes(&transformAttributes)) && transformAttributes) {
+            UINT32 hardwareUrlLength = 0;
+            if (SUCCEEDED(transformAttributes->GetStringLength(
+                    MFT_ENUM_HARDWARE_URL_Attribute,
+                    &hardwareUrlLength))) {
+                std::cerr << "INFO: Media Foundation selected a hardware H.264 encoder."
+                          << std::endl;
+                return kVideoEncoderSelectionHardware;
+            }
+        }
+
+        std::cerr << "WARNING: Media Foundation selected a software H.264 encoder "
+                  << "even though hardware transforms were enabled."
+                  << std::endl;
+        return kVideoEncoderSelectionSoftwareDefault;
+    }
+
+    std::cerr
+        << "WARNING: The sink writer did not expose its H.264 encoder transform; "
+        << "the active encoder type is unknown."
+        << std::endl;
+    return kVideoEncoderSelectionDefault;
 }
 
 void logSinkWriterCreateFailure(HRESULT sinkWriterHr, const AudioInputFormat* audioFormat) {
@@ -434,7 +499,9 @@ bool MFEncoder::initialize(
             return false;
         }
 
-        videoEncoderSelection_ = selection;
+        videoEncoderSelection_ = forceSoftwareEncoder
+            ? selection
+            : detectDefaultVideoEncoderSelection(sinkWriter_.Get(), videoStreamIndex_);
         return true;
     };
 

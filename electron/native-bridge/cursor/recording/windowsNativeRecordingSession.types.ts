@@ -24,6 +24,7 @@ export interface WindowsCursorSampleEvent {
 export interface WindowsCursorReadyEvent {
 	type: "ready";
 	timestampMs: number;
+	bounds?: WindowsCursorSampleEvent["bounds"];
 }
 
 export interface WindowsCursorErrorEvent {

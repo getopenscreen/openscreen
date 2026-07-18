@@ -1,4 +1,5 @@
 #include "audio_sample_utils.h"
+#include "dpi_awareness.h"
 #include "mf_encoder.h"
 #include "monitor_utils.h"
 #include "wasapi_loopback_capture.h"
@@ -383,6 +384,11 @@ void readCaptureCommands(CaptureControl& control, const std::function<void(bool)
 } // namespace
 
 int main(int argc, char* argv[]) {
+	if (!enablePerMonitorV2DpiAwareness()) {
+		std::cerr << "ERROR: Failed to enable Per-Monitor-V2 DPI awareness" << std::endl;
+		return 1;
+	}
+
     if (argc < 2) {
         std::cerr << "ERROR: Missing JSON config argument" << std::endl;
         return 1;

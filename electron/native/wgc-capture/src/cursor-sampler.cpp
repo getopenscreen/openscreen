@@ -1,4 +1,8 @@
+#include "dpi_awareness.h"
+#include "monitor_utils.h"
+
 #include <windows.h>
+#include <dwmapi.h>
 #include <gdiplus.h>
 #include <objbase.h>
 
@@ -11,6 +15,7 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -312,7 +317,42 @@ static std::string buildAssetJson(
 // ─────────────────────────────────────────────────────────────────────────────
 // Sampling loop (background thread)
 // ─────────────────────────────────────────────────────────────────────────────
-static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngClsid) {
+static bool getPhysicalWindowBounds(HWND window, RECT& bounds) {
+    if (SUCCEEDED(DwmGetWindowAttribute(
+            window,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &bounds,
+            sizeof(bounds))) &&
+        bounds.right > bounds.left && bounds.bottom > bounds.top) {
+        return true;
+    }
+
+    // PMv2 awareness keeps this fallback in physical pixels. DWM is preferred
+    // because GetWindowRect can include invisible resize borders.
+    return GetWindowRect(window, &bounds) &&
+           bounds.right > bounds.left && bounds.bottom > bounds.top;
+}
+
+static std::string boundsToJson(const RECT& bounds) {
+    const int width = bounds.right - bounds.left;
+    const int height = bounds.bottom - bounds.top;
+    char buffer[128];
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "{\"x\":%ld,\"y\":%ld,\"width\":%d,\"height\":%d}",
+        bounds.left,
+        bounds.top,
+        width,
+        height);
+    return buffer;
+}
+
+static void runSamplingLoop(
+    int intervalMs,
+    HWND targetWindow,
+    const CLSID& pngClsid)
+{
     HCURSOR lastCursor = nullptr;
 
     while (!g_stop.load(std::memory_order_relaxed)) {
@@ -325,6 +365,17 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
             char buf[160];
             std::snprintf(buf, sizeof(buf),
                 "{\"type\":\"error\",\"timestampMs\":%" PRId64 ",\"message\":\"GetCursorInfo failed\"}",
+                nowMs());
+            writeJsonLine(buf);
+            std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
+            continue;
+        }
+
+        POINT physicalCursor{};
+        if (!GetPhysicalCursorPos(&physicalCursor)) {
+            char buf[176];
+            std::snprintf(buf, sizeof(buf),
+                "{\"type\":\"error\",\"timestampMs\":%" PRId64 ",\"message\":\"GetPhysicalCursorPos failed\"}",
                 nowMs());
             writeJsonLine(buf);
             std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
@@ -360,19 +411,14 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
             lastCursor = hc;
         }
 
-        // Window bounds
         std::string boundsJson = "null";
         if (targetWindow && IsWindow(targetWindow)) {
             RECT r{};
-            if (GetWindowRect(targetWindow, &r)) {
+            if (getPhysicalWindowBounds(targetWindow, r)) {
                 const int bw = r.right  - r.left;
                 const int bh = r.bottom - r.top;
                 if (bw > 0 && bh > 0) {
-                    char buf[128];
-                    std::snprintf(buf, sizeof(buf),
-                        "{\"x\":%ld,\"y\":%ld,\"width\":%d,\"height\":%d}",
-                        r.left, r.top, bw, bh);
-                    boundsJson = buf;
+                    boundsJson = boundsToJson(r);
                 }
             }
         }
@@ -382,15 +428,17 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
         out.reserve(256);
         out += "{\"type\":\"sample\"";
         out += ",\"timestampMs\":";        out += std::to_string(nowMs());
-        out += ",\"x\":";                  out += std::to_string(ci.ptScreenPos.x);
-        out += ",\"y\":";                  out += std::to_string(ci.ptScreenPos.y);
+        out += ",\"x\":";                  out += std::to_string(physicalCursor.x);
+        out += ",\"y\":";                  out += std::to_string(physicalCursor.y);
         out += ",\"visible\":";            out += visible      ? "true" : "false";
         out += ",\"handle\":";             out += hc ? ("\"" + handleStr + "\"") : "null";
         out += ",\"cursorType\":";         out += cursorType   ? ("\"" + std::string(cursorType) + "\"") : "null";
         out += ",\"leftButtonDown\":";     out += leftDown     ? "true" : "false";
         out += ",\"leftButtonPressed\":";  out += leftPressed  ? "true" : "false";
         out += ",\"leftButtonReleased\":"; out += leftReleased ? "true" : "false";
-        out += ",\"bounds\":";             out += boundsJson;
+        if (targetWindow) {
+            out += ",\"bounds\":";         out += boundsJson;
+        }
         out += ",\"asset\":";              out += assetJson.empty() ? "null" : assetJson;
         out += "}";
 
@@ -410,8 +458,13 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
 // main
 // ─────────────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
+	if (!enablePerMonitorV2DpiAwareness()) {
+		std::cerr << "Failed to enable Per-Monitor-V2 DPI awareness" << std::endl;
+		return 1;
+	}
+
     if (argc < 2) {
-        std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle]" << std::endl;
+        std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle] [displayX displayY displayW displayH]" << std::endl;
         return 1;
     }
 
@@ -427,6 +480,28 @@ int main(int argc, char* argv[]) {
                 if (v) targetWindow = reinterpret_cast<HWND>(static_cast<uintptr_t>(v));
             } catch (...) {}
         }
+    }
+
+    std::optional<RECT> targetDisplayBounds;
+    if (!targetWindow && argc >= 7) {
+        try {
+            MonitorBounds bounds{};
+            bounds.x = std::stoi(argv[3]);
+            bounds.y = std::stoi(argv[4]);
+            bounds.width = std::stoi(argv[5]);
+            bounds.height = std::stoi(argv[6]);
+            const HMONITOR monitor = findMonitorForCapture(0, &bounds);
+            MONITORINFO info{};
+            info.cbSize = sizeof(info);
+            if (monitor && GetMonitorInfo(monitor, &info)) {
+                targetDisplayBounds = info.rcMonitor;
+            }
+        } catch (...) {}
+    }
+
+    if (!targetWindow && !targetDisplayBounds.has_value()) {
+        std::cerr << "Could not resolve physical display bounds" << std::endl;
+        return 1;
     }
 
     // Initialize GDI+
@@ -457,15 +532,21 @@ int main(int argc, char* argv[]) {
 
     // Signal readiness
     g_mainThreadId = GetCurrentThreadId();
-    {
-        char buf[80];
-        std::snprintf(buf, sizeof(buf),
-            "{\"type\":\"ready\",\"timestampMs\":%" PRId64 "}", nowMs());
-        writeJsonLine(buf);
+    std::string readyEvent = "{\"type\":\"ready\",\"timestampMs\":";
+    readyEvent += std::to_string(nowMs());
+    if (targetDisplayBounds.has_value()) {
+        readyEvent += ",\"bounds\":";
+        readyEvent += boundsToJson(*targetDisplayBounds);
     }
+    readyEvent += "}";
+    writeJsonLine(readyEvent);
 
     // Start sampling on a background thread
-    std::thread sampler(runSamplingLoop, intervalMs, targetWindow, std::cref(pngClsid));
+    std::thread sampler(
+        runSamplingLoop,
+        intervalMs,
+        targetWindow,
+        std::cref(pngClsid));
 
     // Run the message pump on the main thread — required for WH_MOUSE_LL callbacks
     MSG msg;

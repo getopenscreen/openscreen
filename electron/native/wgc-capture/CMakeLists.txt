@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(wgc-capture
   src/audio_sample_utils.cpp
   src/audio_sample_utils.h
+  src/dpi_awareness.h
   src/dshow_webcam_capture.cpp
   src/dshow_webcam_capture.h
   src/main.cpp
@@ -52,6 +53,9 @@ target_link_libraries(wgc-capture PRIVATE
 
 add_executable(cursor-sampler
   src/cursor-sampler.cpp
+  src/dpi_awareness.h
+  src/monitor_utils.cpp
+  src/monitor_utils.h
 )
 
 target_compile_definitions(cursor-sampler PRIVATE
@@ -62,6 +66,7 @@ target_compile_definitions(cursor-sampler PRIVATE
 target_compile_options(cursor-sampler PRIVATE /EHsc /W4 /utf-8)
 
 target_link_libraries(cursor-sampler PRIVATE
+  dwmapi
   gdi32
   gdiplus
 )

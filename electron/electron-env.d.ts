@@ -24,6 +24,7 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
 	electronAPI: {
+		platform: string;
 		invokeNativeBridge: <TData = unknown>(
 			request: import("../src/native/contracts").NativeBridgeRequest,
 		) => Promise<import("../src/native/contracts").NativeBridgeResponse<TData>>;
@@ -300,8 +301,10 @@ interface Window {
 		hudOverlayHide: () => void;
 		hudOverlayClose: () => void;
 		setHudOverlayIgnoreMouseEvents: (ignore: boolean) => void;
-		moveHudOverlayBy: (deltaX: number, deltaY: number) => void;
 		setHudOverlaySize: (width: number, height: number) => void;
+		beginHudOverlayDrag: (screenX: number, screenY: number) => void;
+		updateHudOverlayDrag: (screenX: number, screenY: number) => void;
+		endHudOverlayDrag: (screenX?: number, screenY?: number) => void;
 		showCountdownOverlay: (value: number, runId: number) => Promise<void>;
 		setCountdownOverlayValue: (value: number, runId: number) => Promise<void>;
 		hideCountdownOverlay: (runId: number) => Promise<void>;

@@ -895,10 +895,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				throw new Error(result.error ?? "Native Windows capture failed.");
 			}
 
-			// Tell the user when the helper silently switched away from the default
-			// GPU encoder; an explicit software-preferred selection needs no notice.
+			// Tell the user when the hardware-enabled path either selected software
+			// directly or had to retry it. An explicit software preference needs no notice.
 			setSoftwareEncoderFallbackNoticeVisible(
-				result.videoEncoderSelection === "software-fallback" &&
+				["software-default", "software-fallback"].includes(result.videoEncoderSelection ?? "") &&
 					!loadUserPreferences().hideSoftwareEncoderFallbackNotice,
 			);
 

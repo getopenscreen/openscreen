@@ -1,6 +1,17 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, ipcMain, screen } from "electron";
+import { getHudOverlayResizedBounds } from "./hudOverlayBounds";
+import {
+	getHudOverlayDragBounds,
+	type HudOverlayDragBounds,
+	type HudOverlayDragPoint,
+	parseHudOverlayDragPoint,
+} from "./hudOverlayDrag";
+import {
+	shouldIgnoreHudOverlayMouseEvents,
+	supportsHudOverlayHoverClickThrough,
+} from "./hudOverlayMousePolicy";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -17,6 +28,111 @@ const ASSET_BASE_DIR = process.defaultApp
 const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}${path.sep}`).toString()}`;
 
 let hudOverlayWindow: BrowserWindow | null = null;
+let hudOverlayRendererRequestedMouseIgnore = true;
+let hudOverlayMouseEventsIgnored: boolean | undefined;
+let hudOverlayMousePoll: NodeJS.Timeout | null = null;
+let hudOverlayDragTimeout: NodeJS.Timeout | null = null;
+const HUD_OVERLAY_DRAG_INACTIVITY_TIMEOUT_MS = 30_000;
+let hudOverlayDrag:
+	| {
+			windowId: number;
+			webContentsId: number;
+			startWindow: HudOverlayDragBounds;
+			startCursor: HudOverlayDragPoint;
+	  }
+	| undefined;
+
+function setHudOverlayMouseEventsIgnored(ignore: boolean): void {
+	// A Windows `app-region: drag` is handled by the OS before Chromium receives
+	// hover or pointer events. Keeping the content-sized HUD interactive removes
+	// the first-contact race that otherwise makes its drag handle ungrabbable.
+	const effectiveIgnore = supportsHudOverlayHoverClickThrough(process.platform) && ignore;
+	if (
+		!hudOverlayWindow ||
+		hudOverlayWindow.isDestroyed() ||
+		hudOverlayMouseEventsIgnored === effectiveIgnore
+	) {
+		return;
+	}
+
+	hudOverlayMouseEventsIgnored = effectiveIgnore;
+	hudOverlayWindow.setIgnoreMouseEvents(
+		effectiveIgnore,
+		effectiveIgnore ? { forward: true } : undefined,
+	);
+}
+
+function applyHudOverlayMousePolicy(): void {
+	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) {
+		return;
+	}
+
+	if (!hudOverlayWindow.isVisible()) {
+		setHudOverlayMouseEventsIgnored(true);
+		return;
+	}
+
+	setHudOverlayMouseEventsIgnored(
+		shouldIgnoreHudOverlayMouseEvents(
+			hudOverlayRendererRequestedMouseIgnore,
+			screen.getCursorScreenPoint(),
+			hudOverlayWindow.getBounds(),
+		),
+	);
+}
+
+function stopHudOverlayMousePoll(): void {
+	if (hudOverlayMousePoll) {
+		clearInterval(hudOverlayMousePoll);
+		hudOverlayMousePoll = null;
+	}
+}
+
+function startHudOverlayMousePoll(): void {
+	stopHudOverlayMousePoll();
+	if (!supportsHudOverlayHoverClickThrough(process.platform)) {
+		return;
+	}
+	// Forwarded renderer hover is unreliable over `app-region: drag` because the
+	// OS consumes pointer events there. Polling at display cadence closes that gap.
+	hudOverlayMousePoll = setInterval(applyHudOverlayMousePolicy, 16);
+	hudOverlayMousePoll.unref();
+}
+
+function stopHudOverlayDrag(): void {
+	if (hudOverlayDragTimeout) {
+		clearTimeout(hudOverlayDragTimeout);
+		hudOverlayDragTimeout = null;
+	}
+	hudOverlayDrag = undefined;
+}
+
+function armHudOverlayDragTimeout(): void {
+	if (hudOverlayDragTimeout) {
+		clearTimeout(hudOverlayDragTimeout);
+	}
+	hudOverlayDragTimeout = setTimeout(stopHudOverlayDrag, HUD_OVERLAY_DRAG_INACTIVITY_TIMEOUT_MS);
+	hudOverlayDragTimeout.unref();
+}
+
+function updateHudOverlayDragPosition(currentCursor: HudOverlayDragPoint): void {
+	if (
+		!hudOverlayDrag ||
+		!hudOverlayWindow ||
+		hudOverlayWindow.isDestroyed() ||
+		hudOverlayWindow.id !== hudOverlayDrag.windowId
+	) {
+		stopHudOverlayDrag();
+		return;
+	}
+
+	const nextBounds = getHudOverlayDragBounds(
+		hudOverlayDrag.startWindow,
+		hudOverlayDrag.startCursor,
+		currentCursor,
+	);
+	hudOverlayWindow.setBounds(nextBounds);
+}
 
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
@@ -25,23 +141,60 @@ ipcMain.on("hud-overlay-hide", () => {
 });
 
 ipcMain.on("hud-overlay-ignore-mouse-events", (_event, ignore: boolean) => {
-	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
-		hudOverlayWindow.setIgnoreMouseEvents(ignore, { forward: true });
-	}
+	hudOverlayRendererRequestedMouseIgnore = ignore === true;
+	applyHudOverlayMousePolicy();
 });
 
-ipcMain.on("hud-overlay-move-by", (_event, deltaX: number, deltaY: number) => {
+ipcMain.on("hud-overlay-drag-start", (event, screenX: unknown, screenY: unknown) => {
 	if (
+		process.platform !== "win32" ||
 		!hudOverlayWindow ||
 		hudOverlayWindow.isDestroyed() ||
-		!Number.isFinite(deltaX) ||
-		!Number.isFinite(deltaY)
+		event.sender.id !== hudOverlayWindow.webContents.id
 	) {
 		return;
 	}
 
-	const [x, y] = hudOverlayWindow.getPosition();
-	hudOverlayWindow.setPosition(Math.round(x + deltaX), Math.round(y + deltaY), false);
+	setHudOverlayMouseEventsIgnored(false);
+	stopHudOverlayDrag();
+	const bounds = hudOverlayWindow.getBounds();
+	hudOverlayDrag = {
+		windowId: hudOverlayWindow.id,
+		webContentsId: event.sender.id,
+		startWindow: bounds,
+		startCursor: parseHudOverlayDragPoint(screenX, screenY) ?? screen.getCursorScreenPoint(),
+	};
+	// A lost pointer-up must not leave an inactive drag session alive indefinitely.
+	armHudOverlayDragTimeout();
+});
+
+ipcMain.on("hud-overlay-drag-move", (event, screenX: unknown, screenY: unknown) => {
+	if (
+		process.platform !== "win32" ||
+		!hudOverlayDrag ||
+		!hudOverlayWindow ||
+		hudOverlayWindow.isDestroyed() ||
+		hudOverlayWindow.id !== hudOverlayDrag.windowId ||
+		event.sender.id !== hudOverlayDrag.webContentsId
+	) {
+		return;
+	}
+
+	const currentCursor = parseHudOverlayDragPoint(screenX, screenY);
+	if (!currentCursor) return;
+	updateHudOverlayDragPosition(currentCursor);
+	armHudOverlayDragTimeout();
+});
+
+ipcMain.on("hud-overlay-drag-end", (event, screenX: unknown, screenY: unknown) => {
+	if (hudOverlayDrag?.webContentsId === event.sender.id) {
+		// Pointer-up may be the only event containing the final few pixels. For
+		// cancel/lost-capture paths the renderer omits coordinates, so use the
+		// authoritative Electron cursor point instead of accepting a synthetic 0,0.
+		const finalCursor = parseHudOverlayDragPoint(screenX, screenY) ?? screen.getCursorScreenPoint();
+		updateHudOverlayDragPosition(finalCursor);
+		stopHudOverlayDrag();
+	}
 });
 
 // Resize the HUD to fit its rendered content. Anchored by its bottom-centre so it
@@ -62,22 +215,18 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number) => {
 	// Clamp to the work area of the display the HUD sits on; on a short screen the
 	// vertical layout can exceed the display, where the bar's own overflow scroll takes over.
 	const { workArea } = screen.getDisplayMatching(bounds);
-	const nextWidth = Math.min(workArea.width, Math.max(1, Math.round(width)));
-	const nextHeight = Math.min(workArea.height, Math.max(1, Math.round(height)));
+	const nextBounds = getHudOverlayResizedBounds(bounds, workArea, width, height);
 
-	if (bounds.width === nextWidth && bounds.height === nextHeight) {
+	if (
+		bounds.x === nextBounds.x &&
+		bounds.y === nextBounds.y &&
+		bounds.width === nextBounds.width &&
+		bounds.height === nextBounds.height
+	) {
 		return;
 	}
 
-	const centerX = bounds.x + bounds.width / 2;
-	const bottomY = bounds.y + bounds.height;
-
-	hudOverlayWindow.setBounds({
-		x: Math.round(centerX - nextWidth / 2),
-		y: Math.round(bottomY - nextHeight),
-		width: nextWidth,
-		height: nextHeight,
-	});
+	hudOverlayWindow.setBounds(nextBounds);
 });
 
 /**
@@ -112,6 +261,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		// its own rounding and the window itself must be invisible.
 		roundedCorners: false,
 		resizable: false,
+		movable: true,
 		alwaysOnTop: true,
 		skipTaskbar: true,
 		hasShadow: false,
@@ -124,7 +274,6 @@ export function createHudOverlayWindow(): BrowserWindow {
 			backgroundThrottling: false,
 		},
 	});
-	win.setIgnoreMouseEvents(true, { forward: true });
 
 	// Follow the user across macOS Spaces, else the HUD stays pinned to the Space
 	// it was first opened on.
@@ -142,11 +291,19 @@ export function createHudOverlayWindow(): BrowserWindow {
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
 	});
 
+	stopHudOverlayMousePoll();
 	hudOverlayWindow = win;
+	hudOverlayRendererRequestedMouseIgnore = true;
+	hudOverlayMouseEventsIgnored = undefined;
+	setHudOverlayMouseEventsIgnored(true);
+	startHudOverlayMousePoll();
 
 	win.on("closed", () => {
 		if (hudOverlayWindow === win) {
+			stopHudOverlayMousePoll();
+			stopHudOverlayDrag();
 			hudOverlayWindow = null;
+			hudOverlayMouseEventsIgnored = undefined;
 		}
 	});
 

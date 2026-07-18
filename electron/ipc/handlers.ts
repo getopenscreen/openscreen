@@ -38,6 +38,10 @@ import type {
 import { mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
 import { RECORDINGS_DIR } from "../main";
+import {
+	type CursorRecordingTarget,
+	resolveCursorRecordingTarget,
+} from "../native-bridge/cursor/recording/cursorRecordingTarget";
 import { createCursorRecordingSession } from "../native-bridge/cursor/recording/factory";
 import { requestMacCursorAccessibilityAccess } from "../native-bridge/cursor/recording/macNativeCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
@@ -792,19 +796,23 @@ async function resolveDirectShowWebcamClsid(deviceName?: string) {
 	return best.clsid;
 }
 
-async function startCursorRecording(recordingId?: number) {
+async function startCursorRecording(recordingId?: number, explicitTarget?: CursorRecordingTarget) {
 	if (cursorRecordingSession) {
 		pendingCursorRecordingData = await cursorRecordingSession.stop();
 		cursorRecordingSession = null;
 	}
 
 	pendingCursorRecordingData = null;
-	cursorRecordingSession = createCursorRecordingSession({
+	const target = resolveCursorRecordingTarget(explicitTarget, {
 		getDisplayBounds: getSelectedSourceBounds,
+		sourceId: getSelectedSourceId(),
+	});
+	cursorRecordingSession = createCursorRecordingSession({
+		getDisplayBounds: target.getDisplayBounds,
 		maxSamples: MAX_CURSOR_SAMPLES,
 		platform: process.platform,
 		sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
-		sourceId: getSelectedSourceId(),
+		sourceId: target.sourceId,
 		startTimeMs:
 			typeof recordingId === "number" && Number.isFinite(recordingId) ? recordingId : undefined,
 	});
@@ -1631,6 +1639,12 @@ export function registerIpcHandlers(
 							null)
 						: getSelectedDisplay();
 				const bounds = sourceDisplay?.bounds ?? getSelectedSourceBounds();
+				// Electron display bounds are DIPs. The native WGC helper is
+				// Per-Monitor-V2 aware and enumerates physical monitor rectangles, so
+				// give both native helpers the same physical selection hint. Each then
+				// resolves the exact Win32 monitor rectangle independently.
+				const physicalDisplayBounds =
+					request.source.type === "display" ? screen.dipToScreenRect(null, bounds) : bounds;
 				const displayId =
 					typeof request.source.displayId === "number" && Number.isFinite(request.source.displayId)
 						? request.source.displayId
@@ -1659,10 +1673,10 @@ export function registerIpcHandlers(
 					fps: request.video.fps,
 					videoWidth: request.video.width,
 					videoHeight: request.video.height,
-					displayX: bounds.x,
-					displayY: bounds.y,
-					displayW: bounds.width,
-					displayH: bounds.height,
+					displayX: physicalDisplayBounds.x,
+					displayY: physicalDisplayBounds.y,
+					displayW: physicalDisplayBounds.width,
+					displayH: physicalDisplayBounds.height,
 					hasDisplayBounds: true,
 					captureSystemAudio: request.audio.system.enabled,
 					captureMic: request.audio.microphone.enabled,
@@ -1705,6 +1719,7 @@ export function registerIpcHandlers(
 					encoder: { preferSoftwareEncoder },
 					cursor: { mode: cursorCaptureMode },
 					bounds,
+					physicalDisplayBounds,
 					sourceId: selectedSource?.id ?? null,
 					usedDisplayMatch: Boolean(sourceDisplay),
 					outputPath,
@@ -1725,7 +1740,10 @@ export function registerIpcHandlers(
 				const cursorStartTimeMs = Date.now();
 				if (cursorCaptureMode === "editable-overlay") {
 					nativeWindowsCursorRecordingStartMs = cursorStartTimeMs;
-					await startCursorRecording(cursorStartTimeMs);
+					await startCursorRecording(cursorStartTimeMs, {
+						getDisplayBounds: () => bounds,
+						sourceId: request.source.sourceId,
+					});
 					console.info("[native-wgc] cursor sampler ready", {
 						cursorStartTimeMs,
 						warmupMs: Date.now() - cursorStartTimeMs,

@@ -41,6 +41,11 @@ import { formatTimePadded } from "../../utils/timeUtils";
 import { AudioLevelMeter } from "../ui/audio-level-meter";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
+import {
+	getHudViewportCompensation,
+	type HudViewportCompensation,
+	type HudViewportSize,
+} from "./hudViewportCompensation";
 import styles from "./LaunchWindow.module.css";
 import { openSourceSelectorWithPermissionRetry } from "./openSourceSelectorFlow";
 
@@ -156,6 +161,7 @@ export function LaunchWindow() {
 	);
 	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
 	const [isLinuxHud, setIsLinuxHud] = useState(false);
+	const isWindowsHud = window.electronAPI?.platform === "win32";
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageMenuPanelRef = useRef<HTMLDivElement | null>(null);
 	const hudBarRef = useRef<HTMLDivElement | null>(null);
@@ -317,6 +323,37 @@ export function LaunchWindow() {
 		return () => cancelAnimationFrame(id);
 	}, [isLanguageMenuOpen]);
 
+	const [hudViewportCompensation, setHudViewportCompensation] = useState<HudViewportCompensation>({
+		x: 0,
+		y: 0,
+	});
+	const hudViewportCompensationRef = useRef<HudViewportCompensation>({ x: 0, y: 0 });
+	const hudDragPointerIdRef = useRef<number | null>(null);
+	const hudDragViewportAnchorRef = useRef<
+		| {
+				viewport: HudViewportSize;
+				compensation: HudViewportCompensation;
+		  }
+		| undefined
+	>(undefined);
+	const hudDragViewportSettleTimerRef = useRef<number | undefined>(undefined);
+	const cancelHudDragViewportSettle = useCallback(() => {
+		if (hudDragViewportSettleTimerRef.current !== undefined) {
+			window.clearTimeout(hudDragViewportSettleTimerRef.current);
+			hudDragViewportSettleTimerRef.current = undefined;
+		}
+	}, []);
+	const resetDragViewportCompensationForContentResize = useCallback(() => {
+		if (hudDragPointerIdRef.current !== null) return;
+		cancelHudDragViewportSettle();
+		hudDragViewportAnchorRef.current = undefined;
+		const previous = hudViewportCompensationRef.current;
+		if (Math.abs(previous.x) < 0.01 && Math.abs(previous.y) < 0.01) return;
+		const reset = { x: 0, y: 0 };
+		hudViewportCompensationRef.current = reset;
+		setHudViewportCompensation(reset);
+	}, [cancelHudDragViewportSettle]);
+
 	// Resize the overlay window to fit content, else the taller vertical tray gets clipped
 	// and scrolls. Measure from the window's bottom-centre (the anchor the main process
 	// preserves) so fixed bottom/centre offsets keep this stable and it doesn't oscillate.
@@ -324,23 +361,30 @@ export function LaunchWindow() {
 	const measureHudSize = useCallback(() => {
 		const barEl = hudBarRef.current;
 		if (!barEl || !window.electronAPI?.setHudOverlaySize) return;
+		// Window movement must never feed viewport-constrained vertical layout back
+		// into BrowserWindow sizing. Flush any real content change once drag ends.
+		if (hudDragPointerIdRef.current !== null) return;
 
 		// Breathing room so the drop shadow isn't clipped. TOP_MARGIN must also exceed the
 		// slack in the bar's `max-h: calc(100vh - 2.5rem)` cap (40px reserved - 20px bottom
 		// gap = 20px) so the window stays tall enough that the cap never engages and adds a scrollbar.
 		const SIDE_MARGIN = 24;
 		const TOP_MARGIN = 24;
+		const BOTTOM_MARGIN = 20; // matches the HUD bar's `bottom-5`
+		const FIXED_NOTICE_TOP = 32; // matches the notice column's `top-8`
 		// Wide enough that the language menu (11rem) never clips, even when the bar is narrow.
 		const MIN_WIDTH = 220;
 
-		const viewportHeight = window.innerHeight;
 		const centerX = window.innerWidth / 2;
+		const compensatedCenterX = centerX - hudViewportCompensationRef.current.x;
 
-		// Use natural (scroll) size, not the clipped box: vertical mode's max-h cap is a
-		// small-screen fallback, and reading clipped height would pin the window to it.
-		// scrollHeight gives full content height; the cap only engages when the main process clamps to screen.
-		let topFromBottom = viewportHeight - barEl.getBoundingClientRect().bottom + barEl.scrollHeight;
-		let halfWidth = barEl.scrollWidth / 2;
+		// Use the natural size, not viewport-relative top/bottom coordinates. At fractional
+		// Windows scaling those coordinates can round differently after every move, causing
+		// a resize feedback loop that walks the visible bar down the screen.
+		const naturalBarHeight = Math.max(barEl.scrollHeight, barEl.offsetHeight);
+		const naturalBarWidth = Math.max(barEl.scrollWidth, barEl.offsetWidth);
+		let contentHeight = BOTTOM_MARGIN + naturalBarHeight;
+		let halfWidth = naturalBarWidth / 2;
 
 		// Popups drive both dimensions too. Their vertical anchor depends on bar height,
 		// which is fed back through React state and lags by a frame, so derive their top
@@ -351,9 +395,13 @@ export function LaunchWindow() {
 			if (rect.width !== 0 || rect.height !== 0) {
 				const popupBottomOffset =
 					trayLayout === "vertical"
-						? barEl.scrollHeight + HUD_DEVICE_POPUP_GAP
+						? naturalBarHeight + HUD_DEVICE_POPUP_GAP
 						: HUD_DEVICE_POPUP_HORIZONTAL_BOTTOM;
-				topFromBottom = Math.max(topFromBottom, popupBottomOffset + rect.height);
+				const popupHeight = Math.max(
+					deviceSelectorRef.current.scrollHeight,
+					deviceSelectorRef.current.offsetHeight,
+				);
+				contentHeight = Math.max(contentHeight, popupBottomOffset + popupHeight);
 				halfWidth = Math.max(halfWidth, rect.width / 2);
 			}
 		}
@@ -362,43 +410,65 @@ export function LaunchWindow() {
 		// Its presence in the DOM means it's open.
 		if (languageMenuPanelRef.current) {
 			const rect = languageMenuPanelRef.current.getBoundingClientRect();
-			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
+			halfWidth = Math.max(
+				halfWidth,
+				compensatedCenterX - rect.left,
+				rect.right - compensatedCenterX,
+			);
 		}
 
-		// Prompt sits at `fixed top-8`; grow the window to fit it so its buttons don't clip (issue #30).
+		// Prompts sit at fixed `top-8`; use that CSS constant rather than their rounded
+		// viewport coordinate so repeated measurements remain invariant at custom scaling.
 		if (systemLocalePromptRef.current) {
 			const rect = systemLocalePromptRef.current.getBoundingClientRect();
-			const promptHeight = rect.height || systemLocalePromptRef.current.scrollHeight;
+			const promptHeight = Math.max(
+				systemLocalePromptRef.current.scrollHeight,
+				systemLocalePromptRef.current.offsetHeight,
+			);
 			if (promptHeight > 0) {
-				topFromBottom = Math.max(topFromBottom, rect.top + promptHeight);
+				contentHeight = Math.max(contentHeight, FIXED_NOTICE_TOP + promptHeight);
 			}
-			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
+			halfWidth = Math.max(
+				halfWidth,
+				compensatedCenterX - rect.left,
+				rect.right - compensatedCenterX,
+			);
 		}
 
 		// The software-encoder fallback notice shares the prompt's fixed top-8 slot and needs
 		// the same treatment so its buttons stay clickable.
 		if (softwareFallbackNoticeRef.current) {
 			const rect = softwareFallbackNoticeRef.current.getBoundingClientRect();
-			const noticeHeight = rect.height || softwareFallbackNoticeRef.current.scrollHeight;
+			const noticeHeight = Math.max(
+				softwareFallbackNoticeRef.current.scrollHeight,
+				softwareFallbackNoticeRef.current.offsetHeight,
+			);
 			if (noticeHeight > 0) {
-				topFromBottom = Math.max(topFromBottom, rect.top + noticeHeight);
+				contentHeight = Math.max(contentHeight, FIXED_NOTICE_TOP + noticeHeight);
 			}
-			halfWidth = Math.max(halfWidth, centerX - rect.left, rect.right - centerX);
+			halfWidth = Math.max(
+				halfWidth,
+				compensatedCenterX - rect.left,
+				rect.right - compensatedCenterX,
+			);
 		}
 
 		setHudBarHeight((prev) => {
-			const next = Math.round(barEl.scrollHeight);
+			const next = naturalBarHeight;
 			return Math.abs(prev - next) > 1 ? next : prev;
 		});
 
 		const width = Math.max(MIN_WIDTH, Math.ceil(halfWidth * 2) + SIDE_MARGIN);
-		const height = Math.ceil(topFromBottom) + TOP_MARGIN;
+		const height = Math.ceil(contentHeight) + TOP_MARGIN;
 		if (width === lastHudSizeRef.current.width && height === lastHudSizeRef.current.height) {
 			return;
 		}
+		// A large, intentional content resize (most visibly horizontal -> vertical)
+		// must not be interpreted as one of Chromium's few-pixel post-drag DPI resizes.
+		resetDragViewportCompensationForContentResize();
 		lastHudSizeRef.current = { width, height };
 		window.electronAPI.setHudOverlaySize(width, height);
-	}, [trayLayout]);
+	}, [resetDragViewportCompensationForContentResize, trayLayout]);
 
 	// One persistent observer; elements wire themselves up via callback refs as they
 	// mount/unmount so measurement re-runs without recreating it or threading mount state through deps.
@@ -473,6 +543,76 @@ export function LaunchWindow() {
 	useEffect(() => {
 		setHudMouseEventsEnabled(isLanguageMenuOpen);
 	}, [isLanguageMenuOpen, setHudMouseEventsEnabled]);
+
+	const updateHudDragViewportCompensation = useCallback(() => {
+		const anchor = hudDragViewportAnchorRef.current;
+		if (!anchor) return;
+
+		const next = getHudViewportCompensation(anchor.compensation, anchor.viewport, {
+			width: window.innerWidth,
+			height: window.innerHeight,
+		});
+		const previous = hudViewportCompensationRef.current;
+		if (Math.abs(previous.x - next.x) < 0.01 && Math.abs(previous.y - next.y) < 0.01) {
+			return;
+		}
+
+		hudViewportCompensationRef.current = next;
+		setHudViewportCompensation(next);
+	}, []);
+
+	const scheduleHudDragViewportSettle = useCallback(() => {
+		cancelHudDragViewportSettle();
+		// Transparent HWND resize notifications may arrive on the next task after
+		// pointer-up. Keep the immutable drag anchor briefly so that final rounding
+		// can still be compensated, then release it before unrelated content resizes.
+		hudDragViewportSettleTimerRef.current = window.setTimeout(() => {
+			updateHudDragViewportCompensation();
+			hudDragViewportAnchorRef.current = undefined;
+			hudDragViewportSettleTimerRef.current = undefined;
+		}, 250);
+	}, [cancelHudDragViewportSettle, updateHudDragViewportCompensation]);
+	const handleWindowsHudViewportResize = useCallback(() => {
+		updateHudDragViewportCompensation();
+		if (hudDragPointerIdRef.current === null && hudDragViewportAnchorRef.current) {
+			// Release only after a quiet period. Windows can publish several rounded
+			// viewport sizes while a mixed-DPI move settles.
+			scheduleHudDragViewportSettle();
+		}
+	}, [scheduleHudDragViewportSettle, updateHudDragViewportCompensation]);
+
+	useEffect(() => {
+		if (!isWindowsHud) return;
+		window.addEventListener("resize", handleWindowsHudViewportResize);
+		return () => window.removeEventListener("resize", handleWindowsHudViewportResize);
+	}, [handleWindowsHudViewportResize, isWindowsHud]);
+
+	const endWindowsHudDrag = useCallback(
+		(pointerId: number, target?: HTMLDivElement, screenX?: number, screenY?: number) => {
+			if (hudDragPointerIdRef.current !== pointerId) return;
+			updateHudDragViewportCompensation();
+			hudDragPointerIdRef.current = null;
+			if (target?.hasPointerCapture?.(pointerId)) {
+				target.releasePointerCapture(pointerId);
+			}
+			window.electronAPI?.endHudOverlayDrag?.(screenX, screenY);
+			scheduleHudDragViewportSettle();
+			measureHudSize();
+		},
+		[measureHudSize, scheduleHudDragViewportSettle, updateHudDragViewportCompensation],
+	);
+
+	useEffect(
+		() => () => {
+			cancelHudDragViewportSettle();
+			if (hudDragPointerIdRef.current !== null) {
+				window.electronAPI?.endHudOverlayDrag?.();
+			}
+			hudDragPointerIdRef.current = null;
+			hudDragViewportAnchorRef.current = undefined;
+		},
+		[cancelHudDragViewportSettle],
+	);
 
 	const defaultSourceName = t("sourceSelector.defaultSourceName");
 	const [selectedSource, setSelectedSource] = useState(defaultSourceName);
@@ -579,6 +719,7 @@ export function LaunchWindow() {
 	/** Switches the HUD between horizontal and vertical tray layouts. */
 	const toggleTrayLayout = () => {
 		const nextLayout = trayLayout === "horizontal" ? "vertical" : "horizontal";
+		resetDragViewportCompensationForContentResize();
 		setTrayLayout(nextLayout);
 		saveUserPreferences({ trayLayout: nextLayout });
 	};
@@ -588,79 +729,31 @@ export function LaunchWindow() {
 			setMicrophoneEnabled(!microphoneEnabled);
 		}
 	};
-	const dragLastPositionRef = useRef<{ x: number; y: number } | null>(null);
-	const dragAnimationFrameRef = useRef<number | null>(null);
-	const pendingDragDeltaRef = useRef({ x: 0, y: 0 });
-	const flushHudDragMove = useCallback(() => {
-		dragAnimationFrameRef.current = null;
-		const { x, y } = pendingDragDeltaRef.current;
-		pendingDragDeltaRef.current = { x: 0, y: 0 };
-		if (x === 0 && y === 0) return;
-		window.electronAPI?.moveHudOverlayBy?.(x, y);
-	}, []);
-	const scheduleHudDragMove = useCallback(
-		(deltaX: number, deltaY: number) => {
-			pendingDragDeltaRef.current = {
-				x: pendingDragDeltaRef.current.x + deltaX,
-				y: pendingDragDeltaRef.current.y + deltaY,
-			};
-
-			if (dragAnimationFrameRef.current === null) {
-				dragAnimationFrameRef.current = window.requestAnimationFrame(flushHudDragMove);
-			}
-		},
-		[flushHudDragMove],
-	);
-	const flushPendingHudDragMove = useCallback(() => {
-		if (dragAnimationFrameRef.current !== null) {
-			window.cancelAnimationFrame(dragAnimationFrameRef.current);
-			dragAnimationFrameRef.current = null;
-		}
-		const { x, y } = pendingDragDeltaRef.current;
-		pendingDragDeltaRef.current = { x: 0, y: 0 };
-		if (x === 0 && y === 0) return;
-		window.electronAPI?.moveHudOverlayBy?.(x, y);
-	}, []);
-	useEffect(() => {
-		return () => {
-			if (dragAnimationFrameRef.current !== null) {
-				window.cancelAnimationFrame(dragAnimationFrameRef.current);
-			}
-		};
-	}, []);
-	const handleHudDragPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-		event.preventDefault();
-		event.stopPropagation();
-		setHudMouseEventsEnabled(true);
-		event.currentTarget.setPointerCapture(event.pointerId);
-		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
-	};
-	const handleHudDragPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-		const lastPosition = dragLastPositionRef.current;
-		if (!lastPosition) return;
-		const deltaX = event.screenX - lastPosition.x;
-		const deltaY = event.screenY - lastPosition.y;
-		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
-		scheduleHudDragMove(deltaX, deltaY);
-	};
-	const handleHudDragPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-		dragLastPositionRef.current = null;
-		flushPendingHudDragMove();
-		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-			event.currentTarget.releasePointerCapture(event.pointerId);
-		}
-		setHudMouseEventsEnabled(false);
-	};
-
 	return (
 		// Avoid w-screen/h-screen: 100vw can exceed the inner layout width when scrollbars
 		// affect the viewport (Windows), causing a horizontal scrollbar (issue #305).
 		<div
-			className={`h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-hidden bg-transparent ${styles.electronDrag}`}
+			className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-hidden bg-transparent"
 			onPointerMove={(event) => {
 				const target = event.target as HTMLElement | null;
+				const hudBarBounds = hudBarRef.current?.getBoundingClientRect();
+				// While the overlay is click-through, Electron forwards mouse movement but
+				// Chromium may target the transparent root instead of a native drag region.
+				// Compare client coordinates with the HUD bounds so the drag handle can turn
+				// mouse input back on before Windows starts the native window drag.
+				const isInsideHudBar = Boolean(
+					hudBarBounds &&
+						hudBarBounds.right > hudBarBounds.left &&
+						hudBarBounds.bottom > hudBarBounds.top &&
+						event.clientX >= hudBarBounds.left &&
+						event.clientX < hudBarBounds.right &&
+						event.clientY >= hudBarBounds.top &&
+						event.clientY < hudBarBounds.bottom,
+				);
 				const shouldCapture =
-					isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']"));
+					isLanguageMenuOpen ||
+					isInsideHudBar ||
+					Boolean(target?.closest("[data-hud-interactive='true']"));
 				setHudMouseEventsEnabled(shouldCapture);
 			}}
 			onPointerLeave={() => {
@@ -671,7 +764,10 @@ export function LaunchWindow() {
 		>
 			{/* Top-center notices share one fixed column so they stack instead of overlapping */}
 			{(systemLocaleSuggestion || softwareEncoderFallbackNoticeVisible) && (
-				<div className="fixed top-8 left-1/2 z-30 flex w-[calc(100vw-1rem)] max-w-[520px] -translate-x-1/2 flex-col gap-2">
+				<div
+					className="fixed top-8 left-1/2 z-30 flex w-[calc(100vw-1rem)] max-w-[520px] -translate-x-1/2 flex-col gap-2"
+					style={{ left: `calc(50% - ${hudViewportCompensation.x}px)` }}
+				>
 					{systemLocaleSuggestion && (
 						<div
 							ref={setSystemLocalePromptEl}
@@ -752,13 +848,15 @@ export function LaunchWindow() {
 					ref={setDeviceSelectorEl}
 					data-hud-interactive="true"
 					className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-2 animate-mic-panel-in ${trayLayout === "vertical" ? "" : "bottom-[68px]"} ${styles.electronNoDrag}`}
-					style={
-						trayLayout === "vertical"
-							? // Sit above the tall vertical tray, anchored to the measured bar
-								// height. Matches the offset in measureHudSize.
-								{ bottom: hudBarHeight + HUD_DEVICE_POPUP_GAP }
-							: undefined
-					}
+					style={{
+						left: `calc(50% - ${hudViewportCompensation.x}px)`,
+						// Sit above the tray and cancel any outward HWND rounding accumulated
+						// while it was dragged between fractional-DPI coordinates.
+						bottom:
+							(trayLayout === "vertical"
+								? hudBarHeight + HUD_DEVICE_POPUP_GAP
+								: HUD_DEVICE_POPUP_HORIZONTAL_BOTTOM) + hudViewportCompensation.y,
+					}}
 				>
 					{/* Mic selector */}
 					{showMicControls && (
@@ -905,6 +1003,10 @@ export function LaunchWindow() {
 						? "max-h-[calc(100vh-2.5rem)] flex-col items-center gap-1 overflow-y-auto px-1 py-1.5"
 						: "items-center gap-1.5 px-2 py-1.5"
 				}`}
+				style={{
+					left: `calc(50% - ${hudViewportCompensation.x}px)`,
+					bottom: 20 + hudViewportCompensation.y,
+				}}
 				onPointerEnter={() => setHudMouseEventsEnabled(true)}
 				onPointerDown={() => setHudMouseEventsEnabled(true)}
 				onMouseEnter={() => setHudMouseEventsEnabled(true)}
@@ -914,13 +1016,36 @@ export function LaunchWindow() {
 					}
 				}}
 			>
-				{/* Drag handle */}
+				{/* Windows uses anchored OS-cursor dragging; other platforms use the native region. */}
 				<div
-					className={`flex ${trayLayout === "vertical" ? "h-6 w-8" : "h-8 w-7"} cursor-grab items-center justify-center active:cursor-grabbing ${styles.electronNoDrag}`}
-					onPointerDown={handleHudDragPointerDown}
-					onPointerMove={handleHudDragPointerMove}
-					onPointerUp={handleHudDragPointerEnd}
-					onPointerCancel={handleHudDragPointerEnd}
+					data-testid="launch-drag-handle"
+					className={`flex ${trayLayout === "vertical" ? "h-6 w-8" : "h-8 w-7"} cursor-grab items-center justify-center active:cursor-grabbing ${
+						isWindowsHud ? styles.electronNoDrag : styles.electronDrag
+					}`}
+					onPointerDown={(event) => {
+						if (!isWindowsHud || event.button !== 0) return;
+						event.preventDefault();
+						updateHudDragViewportCompensation();
+						cancelHudDragViewportSettle();
+						hudDragPointerIdRef.current = event.pointerId;
+						hudDragViewportAnchorRef.current = {
+							viewport: { width: window.innerWidth, height: window.innerHeight },
+							compensation: hudViewportCompensationRef.current,
+						};
+						event.currentTarget.setPointerCapture?.(event.pointerId);
+						window.electronAPI?.beginHudOverlayDrag?.(event.screenX, event.screenY);
+					}}
+					onPointerMove={(event) => {
+						if (!isWindowsHud || hudDragPointerIdRef.current !== event.pointerId) return;
+						event.preventDefault();
+						updateHudDragViewportCompensation();
+						window.electronAPI?.updateHudOverlayDrag?.(event.screenX, event.screenY);
+					}}
+					onPointerUp={(event) =>
+						endWindowsHudDrag(event.pointerId, event.currentTarget, event.screenX, event.screenY)
+					}
+					onPointerCancel={(event) => endWindowsHudDrag(event.pointerId, event.currentTarget)}
+					onLostPointerCapture={(event) => endWindowsHudDrag(event.pointerId)}
 				>
 					{getIcon("drag", "text-white/30")}
 				</div>

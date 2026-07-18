@@ -138,7 +138,7 @@ impl Player {
 
 /// Paramètres inspector pilotés depuis l'UI (setParam). Le thread de rendu les applique :
 /// booléens/taps → reconstruits dans le `Cfg` ; valeurs continues → `set_live_params`.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 struct InspectorParams {
     bg_blur: bool,
     bg_color: [f32; 4],
@@ -425,26 +425,29 @@ unsafe fn render_thread(
     let mut acc = 0.0f64;
     let mut first = true;
     let mut last_screen = [i32::MIN; 4];
+    let mut last_ip: Option<InspectorParams> = None;
 
     while !shared.stop.load(Ordering::SeqCst) {
         // params inspector : booléens/taps → cfg ; valeurs continues → live_params
-        {
-            let ip = *shared.inspector.lock().unwrap();
-            cfg.bg_blur = ip.bg_blur;
-            cfg.mblur_n = ip.mblur_taps;
-            cfg.cursor = ip.cursor_show;
-            comp.set_live_params(LiveParams {
-                bg_color: ip.bg_color,
-                shadow_scale: ip.shadow_scale,
-                radius_scale: ip.radius_scale,
-                padding: ip.padding,
-                webcam_size_scale: ip.webcam_size_scale,
-                webcam_mirror: ip.webcam_mirror,
-                webcam_shape: ip.webcam_shape,
-                cursor_size_scale: ip.cursor_size_scale,
-                cursor_bounce_scale: ip.cursor_bounce_scale,
-            });
-        }
+        let ip = *shared.inspector.lock().unwrap();
+        cfg.bg_blur = ip.bg_blur;
+        cfg.mblur_n = ip.mblur_taps;
+        cfg.cursor = ip.cursor_show;
+        comp.set_live_params(LiveParams {
+            bg_color: ip.bg_color,
+            shadow_scale: ip.shadow_scale,
+            radius_scale: ip.radius_scale,
+            padding: ip.padding,
+            webcam_size_scale: ip.webcam_size_scale,
+            webcam_mirror: ip.webcam_mirror,
+            webcam_shape: ip.webcam_shape,
+            cursor_size_scale: ip.cursor_size_scale,
+            cursor_bounce_scale: ip.cursor_bounce_scale,
+        });
+        // un changement de param doit se voir même en pause (édition live des sliders) :
+        // on recompose la frame courante dans la branche pause ci-dessous.
+        let ip_changed = last_ip != Some(ip);
+        last_ip = Some(ip);
 
         // rect viewport → coords écran : suit le rect DOM (set_rect) ET le déplacement du parent
         let [vx, vy, vw, vh] = *shared.rect.lock().unwrap();
@@ -501,8 +504,8 @@ unsafe fn render_thread(
             if acc > step {
                 acc = 0.0;
             }
-        } else if resized || first {
-            // pause : recompose la frame courante pour un present à la nouvelle taille
+        } else if resized || first || ip_changed {
+            // pause : recompose la frame courante (nouvelle taille OU édition live d'un param).
             let _ = player.recompose(&comp, &cfg);
             stepped = true;
         }

@@ -45,8 +45,10 @@ export type NativeWindowsRecordingStartResult = {
 	path?: string;
 	helperPath?: string;
 	error?: string;
-	/** Helper-reported encoder selection: "default", "software-preferred", or "software-fallback". */
+	/** Helper-reported encoder selection: hardware, software-default/preferred/fallback, or default when detection is unavailable. */
 	videoEncoderSelection?: string | null;
+	/** Helper-reported frame transport for Windows capture diagnostics. */
+	videoFrameTransport?: "gpu-zero-copy" | "cpu-readback" | null;
 };
 
 export function parseWindowHandleFromSourceId(sourceId?: string | null) {

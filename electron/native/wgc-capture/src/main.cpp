@@ -83,6 +83,29 @@ struct CaptureControl {
     }
 };
 
+uint64_t currentProcessCpuTimeHns() {
+    FILETIME creationTime{};
+    FILETIME exitTime{};
+    FILETIME kernelTime{};
+    FILETIME userTime{};
+    if (!GetProcessTimes(
+            GetCurrentProcess(),
+            &creationTime,
+            &exitTime,
+            &kernelTime,
+            &userTime)) {
+        return 0;
+    }
+
+    ULARGE_INTEGER kernel{};
+    kernel.LowPart = kernelTime.dwLowDateTime;
+    kernel.HighPart = kernelTime.dwHighDateTime;
+    ULARGE_INTEGER user{};
+    user.LowPart = userTime.dwLowDateTime;
+    user.HighPart = userTime.dwHighDateTime;
+    return kernel.QuadPart + user.QuadPart;
+}
+
 std::wstring utf8ToWide(const std::string& value) {
     if (value.empty()) {
         return {};
@@ -404,6 +427,14 @@ int main(int argc, char* argv[]) {
     const bool injectDefaultSinkWriterFailureOnce =
         injectDefaultSinkWriterFailureLength == 1 &&
         injectDefaultSinkWriterFailure[0] == '1';
+    char injectGpuFrameFailure[2]{};
+    const DWORD injectGpuFrameFailureLength = GetEnvironmentVariableA(
+        "OPENSCREEN_WGC_TEST_INJECT_GPU_FRAME_FAILURE_ONCE",
+        injectGpuFrameFailure,
+        static_cast<DWORD>(sizeof(injectGpuFrameFailure)));
+    const bool injectGpuFrameFailureOnce =
+        injectGpuFrameFailureLength == 1 &&
+        injectGpuFrameFailure[0] == '1';
 
     std::cout << "{\"event\":\"ready\",\"schemaVersion\":2}" << std::endl;
 
@@ -435,9 +466,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // WGC owns the captured texture size. Encoding must use that exact size
-    // until a dedicated GPU scaling pass is introduced; CopyResource requires
-    // matching resource dimensions.
+    // H.264 requires even dimensions. WGC window textures can be odd-sized, so
+    // keep the largest even rectangle and crop at most one pixel on the right
+    // or bottom during the GPU copy below.
     int width = session.captureWidth();
     int height = session.captureHeight();
     width = (std::max(2, width) / 2) * 2;
@@ -516,6 +547,8 @@ int main(int argc, char* argv[]) {
     MFEncoderOptions encoderOptions{};
     encoderOptions.preferSoftwareEncoder = config.preferSoftwareEncoder;
     encoderOptions.injectDefaultSinkWriterFailureOnce = injectDefaultSinkWriterFailureOnce;
+    encoderOptions.injectGpuFrameFailureOnce = injectGpuFrameFailureOnce;
+    encoderOptions.allowGpuFrameTransport = !config.webcamEnabled || writeSeparateWebcam;
 
     MFEncoder encoder;
     if (!encoder.initialize(
@@ -533,6 +566,8 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "{\"event\":\"encoder-selection\",\"schemaVersion\":2,\"video\":\""
               << encoder.videoEncoderSelection()
+              << "\",\"frameTransport\":\""
+              << encoder.videoFrameTransport()
               << "\",\"preferSoftwareEncoder\":"
               << (config.preferSoftwareEncoder ? "true" : "false")
               << "}" << std::endl;
@@ -540,6 +575,8 @@ int main(int argc, char* argv[]) {
     if (writeSeparateWebcam) {
         MFEncoderOptions webcamEncoderOptions = encoderOptions;
         webcamEncoderOptions.injectDefaultSinkWriterFailureOnce = false;
+        webcamEncoderOptions.injectGpuFrameFailureOnce = false;
+        webcamEncoderOptions.allowGpuFrameTransport = false;
         const int webcamPixels = std::max(1, webcamCapture.width()) * std::max(1, webcamCapture.height());
         const int webcamBitrate = webcamPixels >= 1280 * 720 ? 8'000'000 : 4'000'000;
         if (!webcamEncoder.initialize(
@@ -579,6 +616,8 @@ int main(int argc, char* argv[]) {
         if (!latestFrameTexture) {
             D3D11_TEXTURE2D_DESC desc{};
             texture->GetDesc(&desc);
+            desc.Width = static_cast<UINT>(width);
+            desc.Height = static_cast<UINT>(height);
             desc.BindFlags = 0;
             desc.CPUAccessFlags = 0;
             desc.MiscFlags = 0;
@@ -590,7 +629,23 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        session.context()->CopyResource(latestFrameTexture.Get(), texture);
+        const D3D11_BOX sourceBox{
+            0,
+            0,
+            0,
+            static_cast<UINT>(width),
+            static_cast<UINT>(height),
+            1,
+        };
+        session.context()->CopySubresourceRegion(
+            latestFrameTexture.Get(),
+            0,
+            0,
+            0,
+            0,
+            texture,
+            0,
+            &sourceBox);
         latestFrameTimestampHns = timestampHns;
         if (!firstFrameWritten.exchange(true)) {
             control.cv.notify_all();
@@ -834,6 +889,8 @@ int main(int argc, char* argv[]) {
     if (audioMixer) {
         audioMixer->beginTimeline();
     }
+    const auto recordingWallStart = std::chrono::steady_clock::now();
+    const uint64_t recordingCpuStartHns = currentProcessCpuTimeHns();
     startVideoWriter();
 
     std::cout << "{\"event\":\"recording-started\",\"schemaVersion\":2}" << std::endl;
@@ -869,10 +926,14 @@ int main(int argc, char* argv[]) {
     logStopStep("wgc-session-close");
     {
         std::scoped_lock lock(mutex);
-        encoder.finalize();
+        if (!encoder.finalize()) {
+            encodeFailed = true;
+        }
         logStopStep("encoder-finalize");
         if (writeSeparateWebcam) {
-            webcamEncoder.finalize();
+            if (!webcamEncoder.finalize()) {
+                encodeFailed = true;
+            }
             logStopStep("webcam-encoder-finalize");
         }
     }
@@ -885,6 +946,23 @@ int main(int argc, char* argv[]) {
         std::cerr << "ERROR: Failed to encode WGC frame" << std::endl;
         return 1;
     }
+
+    const auto recordingElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - recordingWallStart).count();
+    const uint64_t recordingCpuEndHns = currentProcessCpuTimeHns();
+    const uint64_t recordingCpuTimeMs = recordingCpuEndHns >= recordingCpuStartHns
+        ? (recordingCpuEndHns - recordingCpuStartHns) / 10'000ULL
+        : 0;
+
+    std::cout << "{\"event\":\"encoder-summary\",\"schemaVersion\":2,\"video\":\""
+              << encoder.videoEncoderSelection()
+              << "\",\"frameTransport\":\""
+              << encoder.videoFrameTransport()
+              << "\",\"gpuFrames\":" << encoder.gpuFramesWritten()
+              << ",\"cpuFrames\":" << encoder.cpuFramesWritten()
+              << ",\"elapsedMs\":" << recordingElapsedMs
+              << ",\"processCpuTimeMs\":" << recordingCpuTimeMs
+              << "}" << std::endl;
 
     std::cout << "{\"event\":\"recording-stopped\",\"schemaVersion\":2,\"screenPath\":\""
               << jsonEscape(config.outputPath) << "\"";

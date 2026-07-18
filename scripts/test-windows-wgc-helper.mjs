@@ -12,6 +12,12 @@ const HELPER_PATH =
 	path.join(ROOT, "electron", "native", "bin", "win32-x64", "wgc-capture.exe");
 
 const DURATION_MS = Number(process.env.OPENSCREEN_WGC_TEST_DURATION_MS ?? 5000);
+const CAPTURE_FPS = Number(process.env.OPENSCREEN_WGC_TEST_FPS ?? 30);
+const REQUIRE_GPU_ZERO_COPY = process.env.OPENSCREEN_WGC_TEST_REQUIRE_GPU_ZERO_COPY === "true";
+const DISPLAY_X = Number(process.env.OPENSCREEN_WGC_TEST_DISPLAY_X ?? 0);
+const DISPLAY_Y = Number(process.env.OPENSCREEN_WGC_TEST_DISPLAY_Y ?? 0);
+const DISPLAY_WIDTH = Number(process.env.OPENSCREEN_WGC_TEST_DISPLAY_WIDTH ?? 1920);
+const DISPLAY_HEIGHT = Number(process.env.OPENSCREEN_WGC_TEST_DISPLAY_HEIGHT ?? 1080);
 const WITH_SYSTEM_AUDIO =
 	process.env.OPENSCREEN_WGC_TEST_SYSTEM_AUDIO === "true" ||
 	process.argv.includes("--system-audio");
@@ -32,20 +38,51 @@ const WITH_SOFTWARE_ENCODER =
 const WITH_SOFTWARE_FALLBACK =
 	process.env.OPENSCREEN_WGC_TEST_SOFTWARE_FALLBACK === "true" ||
 	process.argv.includes("--software-fallback");
+const WITH_GPU_FRAME_FALLBACK =
+	process.env.OPENSCREEN_WGC_TEST_GPU_FRAME_FALLBACK === "true" ||
+	process.argv.includes("--gpu-frame-fallback");
 const INJECT_DEFAULT_SINK_WRITER_FAILURE_ENV =
 	"OPENSCREEN_WGC_TEST_INJECT_DEFAULT_SINK_WRITER_FAILURE_ONCE";
+const INJECT_GPU_FRAME_FAILURE_ENV = "OPENSCREEN_WGC_TEST_INJECT_GPU_FRAME_FAILURE_ONCE";
 const INJECTION_MARKER = "TEST-ONLY: Injected default MFCreateSinkWriterFromURL failure";
+const GPU_FRAME_INJECTION_MARKER = "TEST-ONLY: Injected GPU frame transport failure";
 
 if (WITH_SOFTWARE_ENCODER && WITH_SOFTWARE_FALLBACK) {
 	throw new Error("--software-encoder and --software-fallback are mutually exclusive");
 }
+if (WITH_GPU_FRAME_FALLBACK && (WITH_SOFTWARE_ENCODER || WITH_SOFTWARE_FALLBACK)) {
+	throw new Error("--gpu-frame-fallback cannot be combined with a software encoder test");
+}
+if (!Number.isInteger(CAPTURE_FPS) || CAPTURE_FPS < 1 || CAPTURE_FPS > 240) {
+	throw new Error(`OPENSCREEN_WGC_TEST_FPS must be an integer from 1 to 240, got ${CAPTURE_FPS}`);
+}
+if (
+	![DISPLAY_X, DISPLAY_Y, DISPLAY_WIDTH, DISPLAY_HEIGHT].every(Number.isInteger) ||
+	DISPLAY_WIDTH <= 0 ||
+	DISPLAY_HEIGHT <= 0
+) {
+	throw new Error("WGC test display bounds must be integers with a positive width and height");
+}
+if (REQUIRE_GPU_ZERO_COPY && (WITH_SOFTWARE_ENCODER || WITH_SOFTWARE_FALLBACK)) {
+	throw new Error("GPU zero-copy cannot be required with a software encoder test");
+}
+if (REQUIRE_GPU_ZERO_COPY && WITH_GPU_FRAME_FALLBACK) {
+	throw new Error("GPU zero-copy cannot be required while forcing a GPU frame fallback");
+}
 
-function runHelper(config, { injectDefaultSinkWriterFailure = false } = {}) {
+function runHelper(
+	config,
+	{ injectDefaultSinkWriterFailure = false, injectGpuFrameFailure = false } = {},
+) {
 	return new Promise((resolve, reject) => {
 		const env = { ...process.env };
 		delete env[INJECT_DEFAULT_SINK_WRITER_FAILURE_ENV];
+		delete env[INJECT_GPU_FRAME_FAILURE_ENV];
 		if (injectDefaultSinkWriterFailure) {
 			env[INJECT_DEFAULT_SINK_WRITER_FAILURE_ENV] = "1";
+		}
+		if (injectGpuFrameFailure) {
+			env[INJECT_GPU_FRAME_FAILURE_ENV] = "1";
 		}
 		const child = spawn(HELPER_PATH, [JSON.stringify(config)], {
 			env,
@@ -261,13 +298,13 @@ const config = {
 	sourceType: fixtureWindow ? "window" : "display",
 	sourceId: fixtureWindow ? fixtureWindow.sourceId : "screen:0:0",
 	displayId: 0,
-	fps: 30,
+	fps: CAPTURE_FPS,
 	videoWidth: 1280,
 	videoHeight: 720,
-	displayX: 0,
-	displayY: 0,
-	displayW: 1920,
-	displayH: 1080,
+	displayX: DISPLAY_X,
+	displayY: DISPLAY_Y,
+	displayW: DISPLAY_WIDTH,
+	displayH: DISPLAY_HEIGHT,
 	hasDisplayBounds: true,
 	captureSystemAudio: WITH_SYSTEM_AUDIO,
 	captureMic: WITH_MICROPHONE,
@@ -294,6 +331,7 @@ let result;
 try {
 	result = await runHelper(config, {
 		injectDefaultSinkWriterFailure: WITH_SOFTWARE_FALLBACK,
+		injectGpuFrameFailure: WITH_GPU_FRAME_FALLBACK,
 	});
 } finally {
 	if (fixtureWindow) {
@@ -341,6 +379,10 @@ const encoderSelectionLine = result.stdout
 	.split(/\r?\n/)
 	.find((line) => line.includes('"event":"encoder-selection"'));
 const encoderSelection = encoderSelectionLine ? JSON.parse(encoderSelectionLine) : null;
+const encoderSummaryLine = result.stdout
+	.split(/\r?\n/)
+	.find((line) => line.includes('"event":"encoder-summary"'));
+const encoderSummary = encoderSummaryLine ? JSON.parse(encoderSummaryLine) : null;
 const nativeWebcamDiagnostics = result.stderr
 	.split(/\r?\n/)
 	.filter((line) => line.includes("Native webcam candidate"));
@@ -386,23 +428,80 @@ if (
 		`WGC helper did not apply requested cursor capture mode (${CAPTURE_CURSOR}): ${result.stdout}`,
 	);
 }
-const expectedEncoderSelection = WITH_SOFTWARE_FALLBACK
-	? "software-fallback"
+const expectedEncoderSelections = WITH_SOFTWARE_FALLBACK
+	? ["software-fallback"]
 	: WITH_SOFTWARE_ENCODER
-		? "software-preferred"
-		: "default";
+		? ["software-preferred"]
+		: ["hardware", "software-default", "default"];
 if (
-	encoderSelection?.video !== expectedEncoderSelection ||
+	!expectedEncoderSelections.includes(encoderSelection?.video) ||
 	encoderSelection.preferSoftwareEncoder !== WITH_SOFTWARE_ENCODER
 ) {
 	throw new Error(
-		`WGC helper encoder selection was ${JSON.stringify(encoderSelection)}, expected ${expectedEncoderSelection} with preferSoftwareEncoder=${WITH_SOFTWARE_ENCODER}: ${result.stdout}`,
+		`WGC helper encoder selection was ${JSON.stringify(encoderSelection)}, expected one of ${expectedEncoderSelections.join(", ")} with preferSoftwareEncoder=${WITH_SOFTWARE_ENCODER}: ${result.stdout}`,
 	);
+}
+if (!["gpu-zero-copy", "cpu-readback"].includes(encoderSelection?.frameTransport)) {
+	throw new Error(
+		`WGC helper reported an invalid frame transport: ${JSON.stringify(encoderSelection)}`,
+	);
+}
+if (
+	!encoderSummary ||
+	!["gpu-zero-copy", "cpu-readback"].includes(encoderSummary.frameTransport) ||
+	!Number.isInteger(encoderSummary.gpuFrames) ||
+	!Number.isInteger(encoderSummary.cpuFrames) ||
+	!Number.isInteger(encoderSummary.elapsedMs) ||
+	!Number.isInteger(encoderSummary.processCpuTimeMs) ||
+	encoderSummary.elapsedMs <= 0 ||
+	encoderSummary.processCpuTimeMs < 0 ||
+	encoderSummary.gpuFrames + encoderSummary.cpuFrames <= 0
+) {
+	throw new Error(`WGC helper encoder summary is missing or invalid: ${result.stdout}`);
+}
+if (
+	(WITH_SOFTWARE_ENCODER || WITH_SOFTWARE_FALLBACK) &&
+	(encoderSelection.frameTransport !== "cpu-readback" ||
+		encoderSummary.frameTransport !== "cpu-readback" ||
+		encoderSummary.gpuFrames !== 0 ||
+		encoderSummary.cpuFrames <= 0)
+) {
+	throw new Error(
+		`Software encoder test unexpectedly used GPU frame transport: selection=${JSON.stringify(encoderSelection)} summary=${JSON.stringify(encoderSummary)}`,
+	);
+}
+if (
+	WITH_GPU_FRAME_FALLBACK &&
+	(encoderSelection.video !== "hardware" ||
+		encoderSelection.frameTransport !== "gpu-zero-copy" ||
+		encoderSummary.frameTransport !== "cpu-readback" ||
+		encoderSummary.gpuFrames !== 0 ||
+		encoderSummary.cpuFrames <= 0)
+) {
+	throw new Error(
+		`Forced GPU frame fallback did not switch cleanly to CPU transport: selection=${JSON.stringify(encoderSelection)} summary=${JSON.stringify(encoderSummary)}`,
+	);
+}
+if (REQUIRE_GPU_ZERO_COPY) {
+	if (
+		encoderSelection.video !== "hardware" ||
+		encoderSelection.frameTransport !== "gpu-zero-copy" ||
+		encoderSummary.frameTransport !== "gpu-zero-copy" ||
+		encoderSummary.gpuFrames <= 0 ||
+		encoderSummary.cpuFrames !== 0
+	) {
+		throw new Error(
+			`WGC helper did not remain on GPU zero-copy: selection=${JSON.stringify(encoderSelection)} summary=${JSON.stringify(encoderSummary)}\n${result.stdout}\n${result.stderr}`,
+		);
+	}
 }
 
 const combinedHelperOutput = `${result.stdout}\n${result.stderr}`;
 const helperDiagnosticLines = combinedHelperOutput.split(/\r?\n/).filter(Boolean);
 const injectionLines = helperDiagnosticLines.filter((line) => line.includes(INJECTION_MARKER));
+const gpuFrameInjectionLines = helperDiagnosticLines.filter((line) =>
+	line.includes(GPU_FRAME_INJECTION_MARKER),
+);
 const fallbackDiagnosticPatterns = [
 	INJECTION_MARKER,
 	"WARNING: Default MFCreateSinkWriterFromURL failed (hr=0x80070003)",
@@ -437,6 +536,26 @@ if (WITH_SOFTWARE_FALLBACK) {
 		`WGC helper unexpectedly injected a default sink-writer failure: ${combinedHelperOutput}`,
 	);
 }
+if (WITH_GPU_FRAME_FALLBACK) {
+	if (
+		gpuFrameInjectionLines.length !== 1 ||
+		!gpuFrameInjectionLines[0].includes("consumed exactly once") ||
+		!helperDiagnosticLines.some((line) =>
+			line.includes(
+				"frame-path-fallback from=gpu-zero-copy to=cpu-readback reason=test-injected-gpu-frame-failure",
+			),
+		)
+	) {
+		throw new Error(
+			`Expected one GPU frame transport injection and fallback diagnostic: ${combinedHelperOutput}`,
+		);
+	}
+} else if (gpuFrameInjectionLines.length !== 0) {
+	throw new Error(`WGC helper unexpectedly injected a GPU frame failure: ${combinedHelperOutput}`);
+}
+if (REQUIRE_GPU_ZERO_COPY && combinedHelperOutput.includes("frame-path-fallback")) {
+	throw new Error(`WGC helper fell back from GPU zero-copy: ${combinedHelperOutput}`);
+}
 if ((WITH_SYSTEM_AUDIO || WITH_MICROPHONE) && !hasAudio) {
 	throw new Error(`WGC helper output has no audio stream: ${outputPath}`);
 }
@@ -462,6 +581,9 @@ console.log(
 				index: stream.index,
 				codecType: stream.codec_type,
 				codecName: stream.codec_name,
+				width: stream.width,
+				height: stream.height,
+				averageFrameRate: stream.avg_frame_rate,
 				duration: stream.duration,
 			})),
 			webcamStreams: webcamStreams.map((stream) => ({
@@ -474,6 +596,7 @@ console.log(
 			})),
 			cursorCapture,
 			encoderSelection,
+			encoderSummary,
 			selectedMicrophoneDeviceName: audioFormat?.microphoneDeviceName,
 			selectedWebcamDeviceName: webcamFormat?.deviceName,
 			nativeMicrophoneDiagnostics,

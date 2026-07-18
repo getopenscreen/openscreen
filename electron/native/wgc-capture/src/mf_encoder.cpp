@@ -4,11 +4,17 @@
 
 #include <mfapi.h>
 #include <mferror.h>
+#include <mftransform.h>
 #include <propvarutil.h>
+#include <wrl/implements.h>
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <iostream>
+#include <memory>
+#include <vector>
 
 namespace {
 
@@ -21,6 +27,54 @@ bool succeeded(HRESULT hr, const char* label) {
               << std::endl;
     return false;
 }
+
+class SinkWriterCallback final : public Microsoft::WRL::RuntimeClass<
+    Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
+    IMFSinkWriterCallback> {
+public:
+    STDMETHODIMP OnFinalize(HRESULT status) override {
+        {
+            std::scoped_lock lock(mutex_);
+            finalizeStatus_ = status;
+            finalized_ = true;
+        }
+        condition_.notify_all();
+        return S_OK;
+    }
+
+    STDMETHODIMP OnMarker(DWORD, LPVOID context) override {
+        const auto marker = reinterpret_cast<uintptr_t>(context);
+        {
+            std::scoped_lock lock(mutex_);
+            completedMarker_ = std::max(completedMarker_, marker);
+        }
+        condition_.notify_all();
+        return S_OK;
+    }
+
+    bool waitForMarker(uintptr_t marker, std::chrono::milliseconds timeout) {
+        std::unique_lock lock(mutex_);
+        return condition_.wait_for(lock, timeout, [&] {
+            return completedMarker_ >= marker || finalized_;
+        }) && completedMarker_ >= marker;
+    }
+
+    bool waitForFinalize(std::chrono::milliseconds timeout, HRESULT& status) {
+        std::unique_lock lock(mutex_);
+        if (!condition_.wait_for(lock, timeout, [&] { return finalized_; })) {
+            return false;
+        }
+        status = finalizeStatus_;
+        return true;
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    uintptr_t completedMarker_ = 0;
+    bool finalized_ = false;
+    HRESULT finalizeStatus_ = E_PENDING;
+};
 
 // Count how many Media Foundation Transforms are registered for a given
 // (category, output subtype) pair. Caller does not need the activations
@@ -133,7 +187,9 @@ void logMissingH264EncoderError() {
 enum class SinkWriterCreateStage {
     SoftwareEncoderRegistration,
     CreateAttributes,
-    DisableHardwareTransforms,
+    ConfigureHardwareTransforms,
+    ConfigureD3DManager,
+    ConfigureAsyncCallback,
     CreateSinkWriter,
 };
 
@@ -181,6 +237,8 @@ HRESULT createSinkWriterFromUrl(
     bool forceSoftwareEncoder,
     bool injectDefaultSinkWriterFailureOnce,
     bool& injectedDefaultSinkWriterFailure,
+    IMFDXGIDeviceManager* d3dManager,
+    IMFSinkWriterCallback* asyncCallback,
     Microsoft::WRL::ComPtr<IMFSinkWriter>& sinkWriter,
     SinkWriterCreateStage& failedStage) {
     // Default to the sink-writer creation step; the software-path steps below
@@ -204,20 +262,47 @@ HRESULT createSinkWriterFromUrl(
             return registerHr;
         }
 
-        HRESULT hr = MFCreateAttributes(&attributes, 1);
+    }
+
+    HRESULT hr = MFCreateAttributes(&attributes, 3);
+    if (FAILED(hr)) {
+        std::cerr << "ERROR: MFCreateAttributes(sink writer) failed (hr=0x"
+                  << std::hex << hr << std::dec << ")" << std::endl;
+        failedStage = SinkWriterCreateStage::CreateAttributes;
+        return hr;
+    }
+
+    if (d3dManager != nullptr) {
+        hr = attributes->SetUnknown(MF_SINK_WRITER_D3D_MANAGER, d3dManager);
         if (FAILED(hr)) {
-            std::cerr << "ERROR: MFCreateAttributes(sink writer) failed (hr=0x"
+            std::cerr << "ERROR: Set MF_SINK_WRITER_D3D_MANAGER failed (hr=0x"
                       << std::hex << hr << std::dec << ")" << std::endl;
-            failedStage = SinkWriterCreateStage::CreateAttributes;
+            failedStage = SinkWriterCreateStage::ConfigureD3DManager;
             return hr;
         }
-        hr = attributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, FALSE);
+    }
+
+    if (asyncCallback != nullptr) {
+        hr = attributes->SetUnknown(MF_SINK_WRITER_ASYNC_CALLBACK, asyncCallback);
         if (FAILED(hr)) {
-            std::cerr << "ERROR: Set MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS failed (hr=0x"
+            std::cerr << "ERROR: Set MF_SINK_WRITER_ASYNC_CALLBACK failed (hr=0x"
                       << std::hex << hr << std::dec << ")" << std::endl;
-            failedStage = SinkWriterCreateStage::DisableHardwareTransforms;
+            failedStage = SinkWriterCreateStage::ConfigureAsyncCallback;
             return hr;
         }
+    }
+
+    // Sink writers do not use hardware encoders by default. Make the normal
+    // path explicitly hardware-enabled and the software path explicitly
+    // hardware-disabled.
+    hr = attributes->SetUINT32(
+        MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
+        forceSoftwareEncoder ? FALSE : TRUE);
+    if (FAILED(hr)) {
+        std::cerr << "ERROR: Set MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS failed (hr=0x"
+                  << std::hex << hr << std::dec << ")" << std::endl;
+        failedStage = SinkWriterCreateStage::ConfigureHardwareTransforms;
+        return hr;
     }
 
     failedStage = SinkWriterCreateStage::CreateSinkWriter;
@@ -240,6 +325,63 @@ HRESULT createSinkWriterFromUrl(
                   << std::endl;
     }
     return sinkWriterHr;
+}
+
+const char* detectDefaultVideoEncoderSelection(
+    IMFSinkWriter* sinkWriter,
+    DWORD videoStreamIndex) {
+    if (sinkWriter == nullptr) {
+        return kVideoEncoderSelectionDefault;
+    }
+
+    Microsoft::WRL::ComPtr<IMFSinkWriterEx> sinkWriterEx;
+    const HRESULT queryHr = sinkWriter->QueryInterface(IID_PPV_ARGS(&sinkWriterEx));
+    if (FAILED(queryHr)) {
+        std::cerr
+            << "WARNING: IMFSinkWriterEx is unavailable; the active H.264 encoder type is unknown "
+            << "(hr=0x" << std::hex << queryHr << std::dec << ")."
+            << std::endl;
+        return kVideoEncoderSelectionDefault;
+    }
+
+    for (DWORD transformIndex = 0;; transformIndex += 1) {
+        GUID category = GUID_NULL;
+        Microsoft::WRL::ComPtr<IMFTransform> transform;
+        const HRESULT transformHr = sinkWriterEx->GetTransformForStream(
+            videoStreamIndex,
+            transformIndex,
+            &category,
+            &transform);
+        if (FAILED(transformHr)) {
+            break;
+        }
+        if (!IsEqualGUID(category, MFT_CATEGORY_VIDEO_ENCODER) || !transform) {
+            continue;
+        }
+
+        Microsoft::WRL::ComPtr<IMFAttributes> transformAttributes;
+        if (SUCCEEDED(transform->GetAttributes(&transformAttributes)) && transformAttributes) {
+            UINT32 hardwareUrlLength = 0;
+            if (SUCCEEDED(transformAttributes->GetStringLength(
+                    MFT_ENUM_HARDWARE_URL_Attribute,
+                    &hardwareUrlLength))) {
+                std::cerr << "INFO: Media Foundation selected a hardware H.264 encoder."
+                          << std::endl;
+                return kVideoEncoderSelectionHardware;
+            }
+        }
+
+        std::cerr << "WARNING: Media Foundation selected a software H.264 encoder "
+                  << "even though hardware transforms were enabled."
+                  << std::endl;
+        return kVideoEncoderSelectionSoftwareDefault;
+    }
+
+    std::cerr
+        << "WARNING: The sink writer did not expose its H.264 encoder transform; "
+        << "the active encoder type is unknown."
+        << std::endl;
+    return kVideoEncoderSelectionDefault;
 }
 
 void logSinkWriterCreateFailure(HRESULT sinkWriterHr, const AudioInputFormat* audioFormat) {
@@ -324,12 +466,114 @@ void compositeWebcam(BYTE* destination, int width, int height, const BgraFrameVi
 
 } // namespace
 
+struct MFEncoder::GpuFramePipeline {
+    struct Slot {
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+        uintptr_t completionMarker = 0;
+    };
+
+    Microsoft::WRL::ComPtr<IMFDXGIDeviceManager> deviceManager;
+    Microsoft::WRL::ComPtr<SinkWriterCallback> callback;
+    std::vector<Slot> slots;
+    size_t nextSlot = 0;
+    uintptr_t nextMarker = 1;
+    bool enabled = false;
+    bool asyncWriter = false;
+};
+
+MFEncoder::MFEncoder() = default;
+
 MFEncoder::~MFEncoder() {
     finalize();
 }
 
 const char* MFEncoder::videoEncoderSelection() const {
     return videoEncoderSelection_;
+}
+
+const char* MFEncoder::videoFrameTransport() const {
+    return videoFrameTransport_;
+}
+
+uint64_t MFEncoder::gpuFramesWritten() const {
+    return gpuFramesWritten_;
+}
+
+uint64_t MFEncoder::cpuFramesWritten() const {
+    return cpuFramesWritten_;
+}
+
+bool MFEncoder::initializeGpuFramePipeline() {
+    constexpr size_t kTextureRingSize = 4;
+
+    if (!device_ || !context_) {
+        std::cerr << "WARNING: GPU frame transport is unavailable because the D3D11 device is missing."
+                  << std::endl;
+        return false;
+    }
+
+    auto pipeline = std::make_unique<GpuFramePipeline>();
+    pipeline->callback = Microsoft::WRL::Make<SinkWriterCallback>();
+    if (!pipeline->callback) {
+        std::cerr << "WARNING: Failed to allocate the asynchronous sink-writer callback."
+                  << std::endl;
+        return false;
+    }
+
+    UINT resetToken = 0;
+    HRESULT hr = MFCreateDXGIDeviceManager(&resetToken, &pipeline->deviceManager);
+    if (FAILED(hr)) {
+        std::cerr << "WARNING: MFCreateDXGIDeviceManager failed (hr=0x"
+                  << std::hex << hr << std::dec << ")." << std::endl;
+        return false;
+    }
+    hr = pipeline->deviceManager->ResetDevice(device_.Get(), resetToken);
+    if (FAILED(hr)) {
+        std::cerr << "WARNING: IMFDXGIDeviceManager::ResetDevice failed (hr=0x"
+                  << std::hex << hr << std::dec << ")." << std::endl;
+        return false;
+    }
+
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = static_cast<UINT>(width_);
+    desc.Height = static_cast<UINT>(height_);
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = 0;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+
+    pipeline->slots.resize(kTextureRingSize);
+    for (auto& slot : pipeline->slots) {
+        hr = device_->CreateTexture2D(&desc, nullptr, &slot.texture);
+        if (FAILED(hr)) {
+            std::cerr << "WARNING: CreateTexture2D(GPU encoder ring) failed (hr=0x"
+                      << std::hex << hr << std::dec << ")." << std::endl;
+            return false;
+        }
+    }
+
+    pipeline->enabled = true;
+    pipeline->asyncWriter = true;
+    gpuFramePipeline_ = std::move(pipeline);
+    videoFrameTransport_ = kVideoFrameTransportGpuZeroCopy;
+    return true;
+}
+
+void MFEncoder::disableGpuFrameTransport(const char* reason, HRESULT hr) {
+    if (!gpuFramePipeline_ || !gpuFramePipeline_->enabled) {
+        videoFrameTransport_ = kVideoFrameTransportCpuReadback;
+        return;
+    }
+
+    gpuFramePipeline_->enabled = false;
+    videoFrameTransport_ = kVideoFrameTransportCpuReadback;
+    std::cerr << "WARNING: frame-path-fallback from=gpu-zero-copy to=cpu-readback reason="
+              << (reason ? reason : "unknown") << " hr=0x"
+              << std::hex << hr << std::dec << std::endl;
 }
 
 bool MFEncoder::initialize(
@@ -347,7 +591,17 @@ bool MFEncoder::initialize(
     fps_ = std::max(1, fps);
     device_ = device;
     context_ = context;
+    stagingTexture_.Reset();
+    gpuFramePipeline_.reset();
+    firstTimestampHns_ = -1;
+    lastTimestampHns_ = -1;
+    finalized_ = false;
     videoEncoderSelection_ = kVideoEncoderSelectionDefault;
+    videoFrameTransport_ = kVideoFrameTransportCpuReadback;
+    gpuFramesWritten_ = 0;
+    cpuFramesWritten_ = 0;
+    injectGpuFrameFailureOnce_ = options.injectGpuFrameFailureOnce;
+    injectedGpuFrameFailure_ = false;
 
     if (!succeeded(MFStartup(MF_VERSION), "MFStartup")) {
         return false;
@@ -381,17 +635,24 @@ bool MFEncoder::initialize(
 
     auto resetSinkWriterAttempt = [&]() {
         sinkWriter_.Reset();
+        gpuFramePipeline_.reset();
         videoStreamIndex_ = 0;
         audioStreamIndex_ = 0;
         hasAudioStream_ = false;
         videoEncoderSelection_ = kVideoEncoderSelectionDefault;
+        videoFrameTransport_ = kVideoFrameTransportCpuReadback;
     };
 
     auto configureSinkWriterAttempt = [&, audioFormat](
         bool forceSoftwareEncoder,
         const char* selection,
-        bool logCreateFailure) {
+        bool logCreateFailure,
+        bool enableGpuFrameTransport) {
         resetSinkWriterAttempt();
+
+        if (enableGpuFrameTransport && !initializeGpuFramePipeline()) {
+            return false;
+        }
 
         SinkWriterCreateStage failedStage = SinkWriterCreateStage::CreateSinkWriter;
         const HRESULT sinkWriterHr = createSinkWriterFromUrl(
@@ -399,6 +660,8 @@ bool MFEncoder::initialize(
             forceSoftwareEncoder,
             options.injectDefaultSinkWriterFailureOnce,
             injectedDefaultSinkWriterFailure,
+            gpuFramePipeline_ ? gpuFramePipeline_->deviceManager.Get() : nullptr,
+            gpuFramePipeline_ ? gpuFramePipeline_->callback.Get() : nullptr,
             sinkWriter_,
             failedStage);
         if (FAILED(sinkWriterHr)) {
@@ -434,7 +697,14 @@ bool MFEncoder::initialize(
             return false;
         }
 
-        videoEncoderSelection_ = selection;
+        videoEncoderSelection_ = forceSoftwareEncoder
+            ? selection
+            : detectDefaultVideoEncoderSelection(sinkWriter_.Get(), videoStreamIndex_);
+        if (
+            enableGpuFrameTransport &&
+            videoEncoderSelection_ != kVideoEncoderSelectionHardware) {
+            disableGpuFrameTransport("non-hardware-encoder", S_OK);
+        }
         return true;
     };
 
@@ -442,10 +712,33 @@ bool MFEncoder::initialize(
         return configureSinkWriterAttempt(
             true,
             kVideoEncoderSelectionSoftwarePreferred,
-            true);
+            true,
+            false);
     }
 
-    if (configureSinkWriterAttempt(false, kVideoEncoderSelectionDefault, false)) {
+    if (
+        options.allowGpuFrameTransport &&
+        !options.injectDefaultSinkWriterFailureOnce &&
+        configureSinkWriterAttempt(
+            false,
+            kVideoEncoderSelectionDefault,
+            false,
+            true)) {
+        return true;
+    }
+
+    if (options.allowGpuFrameTransport && !options.injectDefaultSinkWriterFailureOnce) {
+        std::cerr
+            << "WARNING: GPU-backed Media Foundation setup failed; "
+            << "retrying the hardware encoder with CPU frame transport."
+            << std::endl;
+    }
+
+    if (configureSinkWriterAttempt(
+            false,
+            kVideoEncoderSelectionDefault,
+            false,
+            false)) {
         return true;
     }
 
@@ -456,7 +749,8 @@ bool MFEncoder::initialize(
     return configureSinkWriterAttempt(
         true,
         kVideoEncoderSelectionSoftwareFallback,
-        true);
+        true,
+        false);
 }
 
 bool MFEncoder::configureAudioStream(const AudioInputFormat& audioFormat) {
@@ -603,23 +897,141 @@ bool MFEncoder::copyBgraFrameToBuffer(const BgraFrameView& frame, BYTE* destinat
     return true;
 }
 
-bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns, const BgraFrameView* webcamFrame) {
-    std::scoped_lock writerLock(writerMutex_);
-    if (!sinkWriter_ || finalized_) {
+bool MFEncoder::writeGpuFrame(
+    ID3D11Texture2D* texture,
+    int64_t sampleTime,
+    int64_t sampleDuration,
+    bool& retryWithCpu) {
+    constexpr auto kSlotWaitTimeout = std::chrono::seconds(2);
+    retryWithCpu = false;
+
+    if (
+        texture == nullptr ||
+        !gpuFramePipeline_ ||
+        !gpuFramePipeline_->enabled ||
+        gpuFramePipeline_->slots.empty()) {
+        retryWithCpu = true;
         return false;
     }
 
-    if (firstTimestampHns_ < 0) {
-        firstTimestampHns_ = timestampHns;
+    auto& pipeline = *gpuFramePipeline_;
+    if (injectGpuFrameFailureOnce_ && !injectedGpuFrameFailure_) {
+        injectedGpuFrameFailure_ = true;
+        std::cerr
+            << "TEST-ONLY: Injected GPU frame transport failure; injection consumed exactly once."
+            << std::endl;
+        disableGpuFrameTransport("test-injected-gpu-frame-failure", E_FAIL);
+        retryWithCpu = true;
+        return false;
     }
 
-    int64_t sampleTime = timestampHns - firstTimestampHns_;
-    if (sampleTime <= lastTimestampHns_) {
-        sampleTime = lastTimestampHns_ + (10'000'000LL / fps_);
+    auto& slot = pipeline.slots[pipeline.nextSlot];
+    if (
+        slot.completionMarker != 0 &&
+        !pipeline.callback->waitForMarker(slot.completionMarker, kSlotWaitTimeout)) {
+        disableGpuFrameTransport("texture-ring-timeout", HRESULT_FROM_WIN32(WAIT_TIMEOUT));
+        retryWithCpu = true;
+        return false;
     }
-    const int64_t sampleDuration = 10'000'000LL / fps_;
-    lastTimestampHns_ = sampleTime;
 
+    D3D11_TEXTURE2D_DESC sourceDesc{};
+    texture->GetDesc(&sourceDesc);
+    if (
+        sourceDesc.Width != static_cast<UINT>(width_) ||
+        sourceDesc.Height != static_cast<UINT>(height_) ||
+        sourceDesc.Format != DXGI_FORMAT_B8G8R8A8_UNORM) {
+        disableGpuFrameTransport("unexpected-source-texture", E_INVALIDARG);
+        retryWithCpu = true;
+        return false;
+    }
+
+    context_->CopyResource(slot.texture.Get(), texture);
+
+    Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
+    HRESULT hr = MFCreateDXGISurfaceBuffer(
+        __uuidof(ID3D11Texture2D),
+        slot.texture.Get(),
+        0,
+        FALSE,
+        &buffer);
+    if (FAILED(hr)) {
+        disableGpuFrameTransport("MFCreateDXGISurfaceBuffer", hr);
+        retryWithCpu = true;
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IMF2DBuffer> buffer2d;
+    DWORD contiguousLength = 0;
+    hr = buffer.As(&buffer2d);
+    if (SUCCEEDED(hr)) {
+        hr = buffer2d->GetContiguousLength(&contiguousLength);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = buffer->SetCurrentLength(contiguousLength);
+    }
+    if (FAILED(hr) || contiguousLength == 0) {
+        disableGpuFrameTransport("IMF2DBuffer::GetContiguousLength", FAILED(hr) ? hr : E_UNEXPECTED);
+        retryWithCpu = true;
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IMFSample> sample;
+    hr = MFCreateSample(&sample);
+    if (FAILED(hr)) {
+        disableGpuFrameTransport("MFCreateSample", hr);
+        retryWithCpu = true;
+        return false;
+    }
+    hr = sample->AddBuffer(buffer.Get());
+    if (FAILED(hr)) {
+        disableGpuFrameTransport("IMFSample::AddBuffer", hr);
+        retryWithCpu = true;
+        return false;
+    }
+    hr = sample->SetSampleTime(sampleTime);
+    if (FAILED(hr)) {
+        disableGpuFrameTransport("IMFSample::SetSampleTime", hr);
+        retryWithCpu = true;
+        return false;
+    }
+    hr = sample->SetSampleDuration(sampleDuration);
+    if (FAILED(hr)) {
+        disableGpuFrameTransport("IMFSample::SetSampleDuration", hr);
+        retryWithCpu = true;
+        return false;
+    }
+
+    hr = sinkWriter_->WriteSample(videoStreamIndex_, sample.Get());
+    if (FAILED(hr)) {
+        std::cerr << "ERROR: WriteSample(DXGI) failed (hr=0x"
+                  << std::hex << hr << std::dec << ")" << std::endl;
+        return false;
+    }
+
+    const uintptr_t marker = pipeline.nextMarker++;
+    hr = sinkWriter_->PlaceMarker(
+        videoStreamIndex_,
+        reinterpret_cast<void*>(marker));
+    if (FAILED(hr)) {
+        // The frame was already accepted. Keep every ring texture alive until
+        // Finalize, but stop reusing them and send subsequent frames through
+        // the CPU path.
+        gpuFramesWritten_ += 1;
+        disableGpuFrameTransport("IMFSinkWriter::PlaceMarker", hr);
+        return true;
+    }
+
+    slot.completionMarker = marker;
+    pipeline.nextSlot = (pipeline.nextSlot + 1) % pipeline.slots.size();
+    gpuFramesWritten_ += 1;
+    return true;
+}
+
+bool MFEncoder::writeCpuFrame(
+    ID3D11Texture2D* texture,
+    int64_t sampleTime,
+    int64_t sampleDuration,
+    const BgraFrameView* webcamFrame) {
     Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
     const DWORD frameBytes = static_cast<DWORD>(width_ * height_ * 4);
     if (!succeeded(MFCreateMemoryBuffer(frameBytes, &buffer), "MFCreateMemoryBuffer")) {
@@ -648,7 +1060,41 @@ bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns, const
     sample->SetSampleTime(sampleTime);
     sample->SetSampleDuration(sampleDuration);
 
-    return succeeded(sinkWriter_->WriteSample(videoStreamIndex_, sample.Get()), "WriteSample");
+    if (!succeeded(sinkWriter_->WriteSample(videoStreamIndex_, sample.Get()), "WriteSample")) {
+        return false;
+    }
+    cpuFramesWritten_ += 1;
+    return true;
+}
+
+bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns, const BgraFrameView* webcamFrame) {
+    std::scoped_lock writerLock(writerMutex_);
+    if (!sinkWriter_ || finalized_ || texture == nullptr) {
+        return false;
+    }
+
+    if (firstTimestampHns_ < 0) {
+        firstTimestampHns_ = timestampHns;
+    }
+
+    int64_t sampleTime = timestampHns - firstTimestampHns_;
+    if (sampleTime <= lastTimestampHns_) {
+        sampleTime = lastTimestampHns_ + (10'000'000LL / fps_);
+    }
+    const int64_t sampleDuration = 10'000'000LL / fps_;
+    lastTimestampHns_ = sampleTime;
+
+    if (webcamFrame == nullptr && gpuFramePipeline_ && gpuFramePipeline_->enabled) {
+        bool retryWithCpu = false;
+        if (writeGpuFrame(texture, sampleTime, sampleDuration, retryWithCpu)) {
+            return true;
+        }
+        if (!retryWithCpu) {
+            return false;
+        }
+    }
+
+    return writeCpuFrame(texture, sampleTime, sampleDuration, webcamFrame);
 }
 
 bool MFEncoder::writeBgraFrame(const BgraFrameView& frame, int64_t timestampHns) {
@@ -696,7 +1142,11 @@ bool MFEncoder::writeBgraFrame(const BgraFrameView& frame, int64_t timestampHns)
     sample->SetSampleTime(sampleTime);
     sample->SetSampleDuration(sampleDuration);
 
-    return succeeded(sinkWriter_->WriteSample(videoStreamIndex_, sample.Get()), "WriteSample(webcam)");
+    if (!succeeded(sinkWriter_->WriteSample(videoStreamIndex_, sample.Get()), "WriteSample(webcam)")) {
+        return false;
+    }
+    cpuFramesWritten_ += 1;
+    return true;
 }
 
 bool MFEncoder::writeAudio(const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns) {
@@ -749,9 +1199,30 @@ bool MFEncoder::finalize() {
     finalized_ = true;
     bool ok = true;
     if (sinkWriter_) {
-        ok = succeeded(sinkWriter_->Finalize(), "SinkWriter::Finalize");
+        const HRESULT finalizeHr = sinkWriter_->Finalize();
+        ok = succeeded(finalizeHr, "SinkWriter::Finalize");
+        if (
+            SUCCEEDED(finalizeHr) &&
+            gpuFramePipeline_ &&
+            gpuFramePipeline_->asyncWriter &&
+            gpuFramePipeline_->callback) {
+            HRESULT callbackStatus = E_PENDING;
+            if (!gpuFramePipeline_->callback->waitForFinalize(
+                    std::chrono::seconds(30),
+                    callbackStatus)) {
+                std::cerr << "ERROR: Timed out waiting for asynchronous sink-writer finalization."
+                          << std::endl;
+                ok = false;
+            } else if (!succeeded(callbackStatus, "SinkWriter::OnFinalize")) {
+                ok = false;
+            }
+        }
         sinkWriter_.Reset();
     }
+    std::cerr << "INFO: frame-path-summary transport=" << videoFrameTransport_
+              << " gpuFrames=" << gpuFramesWritten_
+              << " cpuFrames=" << cpuFramesWritten_ << std::endl;
+    gpuFramePipeline_.reset();
     stagingTexture_.Reset();
     context_.Reset();
     device_.Reset();

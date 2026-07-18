@@ -1052,6 +1052,7 @@ function readNativeWindowsEncoderSelection(output: string) {
 	try {
 		return JSON.parse(lastLine) as {
 			video?: string;
+			frameTransport?: "gpu-zero-copy" | "cpu-readback";
 			preferSoftwareEncoder?: boolean;
 		};
 	} catch {
@@ -1767,6 +1768,7 @@ export function registerIpcHandlers(
 					path: outputPath,
 					helperPath,
 					videoEncoderSelection: encoderSelection?.video ?? null,
+					videoFrameTransport: encoderSelection?.frameTransport ?? null,
 				};
 			} catch (error) {
 				console.error("Failed to start native Windows recording:", error);

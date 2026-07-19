@@ -11,6 +11,7 @@
 import { Download, FileVideo, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
 	type DocumentExportOptions,
@@ -18,6 +19,7 @@ import {
 	exportAxcutDocument,
 } from "@/lib/ai-edition/exporter/documentExporter";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
+import { probeVideoDimensions } from "@/lib/ai-edition/timeline/duration";
 import {
 	type ExportFormat,
 	type ExportProgress,
@@ -131,6 +133,36 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		return () => setNativeCompositorVisible(true);
 	}, [open]);
 
+	// Fallback for assets whose `video` dims were never probed (nothing populated them for most
+	// existing recordings until this was fixed at the source — see `probeAndCorrectClip`).
+	// Without this, `referenceSource`/`smallestSource` below silently find nothing and the
+	// quality tiers show no size/badges at all rather than a wrong one.
+	const [probedAssetDims, setProbedAssetDims] = useState<
+		Record<string, { width: number; height: number }>
+	>({});
+	useEffect(() => {
+		if (!open || !document) return;
+		let cancelled = false;
+		const usedAssetIds = new Set(document.timeline.clips.map((c) => c.assetId));
+		const missing = document.assets.filter(
+			(a) =>
+				usedAssetIds.has(a.id) &&
+				(!a.video || a.video.width === 0 || a.video.height === 0) &&
+				a.originalPath &&
+				!probedAssetDims[a.id],
+		);
+		if (missing.length === 0) return;
+		(async () => {
+			for (const a of missing) {
+				const dims = await probeVideoDimensions(toFileUrl(a.originalPath));
+				if (cancelled) return;
+				if (dims) setProbedAssetDims((prev) => ({ ...prev, [a.id]: dims }));
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [open, document, probedAssetDims]);
 	const primaryAsset = useMemo(
 		() =>
 			document
@@ -154,11 +186,22 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				best = { width: w, height: h };
 		};
 		for (const a of document.assets) {
-			if (usedAssetIds.has(a.id)) consider(a.video?.width ?? 0, a.video?.height ?? 0);
+			if (usedAssetIds.has(a.id)) {
+				consider(
+					a.video?.width || probedAssetDims[a.id]?.width || 0,
+					a.video?.height || probedAssetDims[a.id]?.height || 0,
+				);
+			}
 		}
-		if (!best) for (const a of document.assets) consider(a.video?.width ?? 0, a.video?.height ?? 0);
+		if (!best)
+			for (const a of document.assets) {
+				consider(
+					a.video?.width || probedAssetDims[a.id]?.width || 0,
+					a.video?.height || probedAssetDims[a.id]?.height || 0,
+				);
+			}
 		return best;
-	}, [document]);
+	}, [document, probedAssetDims]);
 	// Short side of the reference — the axis the 720p/1080p tiers target — or null
 	// while dims are still unknown (0x0 default), so tiers show no label rather
 	// than a wrong one.
@@ -179,12 +222,22 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				smallest = { width: w, height: h };
 		};
 		for (const a of document.assets) {
-			if (usedAssetIds.has(a.id)) consider(a.video?.width ?? 0, a.video?.height ?? 0);
+			if (usedAssetIds.has(a.id)) {
+				consider(
+					a.video?.width || probedAssetDims[a.id]?.width || 0,
+					a.video?.height || probedAssetDims[a.id]?.height || 0,
+				);
+			}
 		}
 		if (!smallest)
-			for (const a of document.assets) consider(a.video?.width ?? 0, a.video?.height ?? 0);
+			for (const a of document.assets) {
+				consider(
+					a.video?.width || probedAssetDims[a.id]?.width || 0,
+					a.video?.height || probedAssetDims[a.id]?.height || 0,
+				);
+			}
 		return smallest;
-	}, [document]);
+	}, [document, probedAssetDims]);
 	const smallestShortSide = smallestSource
 		? Math.min(smallestSource.width, smallestSource.height)
 		: null;
@@ -493,12 +546,24 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								>
 									{t("exportDialog.codec")}
 								</div>
-								<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+								<div
+									style={{
+										display: "grid",
+										gridTemplateColumns: NATIVE_COMPOSITOR_ENABLED
+											? "repeat(2, 1fr)"
+											: "repeat(3, 1fr)",
+										gap: 6,
+									}}
+								>
 									{(
 										[
 											["h264", "H.264"],
 											["h265", "H.265"],
-											["vp9", "VP9"],
+											// VP9 has no AMF hardware encoder on this GPU — the native pipeline
+											// rejects it outright (tested: a software libvpx-vp9 fallback worked
+											// but was too slow to be worth shipping). Hidden here rather than
+											// left selectable-then-erroring, only while native export is active.
+											...(NATIVE_COMPOSITOR_ENABLED ? [] : [["vp9", "VP9"]]),
 										] as Array<[ExportVideoCodec, string]>
 									).map(([value, label]) => (
 										<button

@@ -176,6 +176,13 @@ pub struct Compositor {
     /// t=0 sur tout l'enregistrement) car son compteur `frames` global ne correspond à AUCUNE
     /// notion de temps source une fois plusieurs clips/fichiers enchaînés.
     cursor_t_override: RefCell<Option<f32>>,
+    /// Override du temps TIMELINE (secondes) — référentiel DIFFÉRENT de `cursor_t_override` :
+    /// les zoom regions / camera-fullscreen regions sont définies en temps de la TIMELINE
+    /// composée (peut couvrir plusieurs clips), pas en temps source d'un clip individuel.
+    /// `None` = comportement live (`frame / FPS`, un seul clip ouvert à la fois donc temps
+    /// source ≈ temps timeline). L'export multiclip le positionne au temps timeline cumulé
+    /// (durée des clips précédents + position dans le clip courant).
+    timeline_t_override: RefCell<Option<f32>>,
     // cache des SRV décodeur par (texture array, slice) : le pool réutilise ~32 textures,
     // donc après warmup plus aucune création de SRV par frame (overhead CPU supprimé).
     srv_cache: RefCell<HashMap<(usize, u32), (ID3D11ShaderResourceView, ID3D11ShaderResourceView)>>,
@@ -670,6 +677,7 @@ impl Compositor {
             blend_add: blend_add.unwrap(),
             cursor: RefCell::new(None),
             cursor_t_override: RefCell::new(None),
+            timeline_t_override: RefCell::new(None),
             srv_cache: RefCell::new(HashMap::new()),
             live_params: RefCell::new(LiveParams::default()),
             scene: RefCell::new(None),
@@ -913,6 +921,11 @@ impl Compositor {
         *self.cursor_t_override.borrow_mut() = t;
     }
 
+    /// Voir `timeline_t_override`. `None` restaure le comportement live (`frame / FPS`).
+    pub fn set_timeline_time(&self, t: Option<f32>) {
+        *self.timeline_t_override.borrow_mut() = t;
+    }
+
     /// Copie de la scène courante (si présente) — utilisé par l'export multiclip pour lire les
     /// réglages curseur (thème/lissage/show) sans dupliquer le contrat de scène côté pipeline.
     pub fn scene_snapshot(&self) -> Option<Scene> {
@@ -1037,7 +1050,7 @@ impl Compositor {
         // Scène de l'app présente → placements du layout preset ; sinon planning fixture (bench).
         let scene_preset: Option<String> =
             self.scene.borrow().as_ref().map(|s| s.layout.preset.clone());
-        let (p, pp) = match &scene_preset {
+        let (mut p, mut pp) = match &scene_preset {
             Some(preset) => {
                 let fp = preset_placements(preset);
                 (fp, fp) // layout statique → vélocité nulle
@@ -1047,6 +1060,51 @@ impl Compositor {
         let is_vstack = scene_preset.as_deref() == Some("vertical-stack");
         let lp = *self.live_params.borrow();
         let mb_taps = cfg.mblur_n as f32;
+
+        // Zoom regions + Full Camera : lus depuis la scène (référentiel TIMELINE, pas le temps
+        // source d'un clip individuel — cf. doc de `timeline_t_override`). Emprunt tenu pour
+        // toute la fonction (RefCell autorise plusieurs emprunts immuables simultanés).
+        let scene_ref = self.scene.borrow();
+        let empty_zoom: Vec<crate::scene::SceneZoomRegion> = Vec::new();
+        let empty_cam: Vec<crate::scene::SceneCameraFullscreenRegion> = Vec::new();
+        let zoom_regions = scene_ref.as_ref().map(|s| &s.zoom_regions).unwrap_or(&empty_zoom);
+        let cam_regions =
+            scene_ref.as_ref().map(|s| &s.camera_fullscreen_regions).unwrap_or(&empty_cam);
+        let webcam_reactive = scene_ref.as_ref().map(|s| s.layout.webcam_reactive_zoom).unwrap_or(false);
+        let timeline_t = self.timeline_t_override.borrow().unwrap_or(frame / FPS);
+        let timeline_t_prev = timeline_t - 1.0 / FPS;
+        // le focus "auto" (suivi curseur) réutilise la même piste que le rendu du curseur.
+        let cursor_ref = self.cursor.borrow();
+        let cursor_for_zoom = cursor_ref.as_ref();
+        // La rotation 3D (mode 8, pas de motion blur dans ce chemin — cf. le commentaire au
+        // point d'appel) n'est calculée QUE pour la frame courante ; `pp` ne sert qu'au zoom
+        // écran normal (vélocité pour le motion blur du chemin non-tilté).
+        let mut zoom_rotation = [0.0f32; 3];
+        if !zoom_regions.is_empty() {
+            let zs = crate::regions::zoom_state_at(zoom_regions, timeline_t, cursor_for_zoom);
+            p.zoom = zs.scale;
+            p.focus = zs.focus;
+            zoom_rotation = zs.rotation;
+            let zs_p = crate::regions::zoom_state_at(zoom_regions, timeline_t_prev, cursor_for_zoom);
+            pp.zoom = zs_p.scale;
+            pp.focus = zs_p.focus;
+        }
+        // Full Camera ignore le rétrécissement réactif de la webcam (design web : mélanger
+        // "rétrécit pour le zoom" et "grandit en plein cadre" dans la même frame n'a pas de sens).
+        let cam_progress = crate::regions::camera_fullscreen_progress_at(cam_regions, timeline_t);
+        let cam_progress_prev =
+            crate::regions::camera_fullscreen_progress_at(cam_regions, timeline_t_prev);
+        // rétrécissement réactif : la webcam rétrécit pendant un zoom actif (1/zoom, plancher
+        // 0.35 — parité `reactiveWebcamScale`, TS). Ignoré pendant Full Camera (voir ci-dessus).
+        let reactive_scale = |zoom: f32, progress: f32| -> f32 {
+            if webcam_reactive && progress <= 0.0 && zoom.is_finite() && zoom > 0.0 {
+                (1.0 / zoom).clamp(0.35, 1.0)
+            } else {
+                1.0
+            }
+        };
+        let webcam_size_scale = lp.webcam_size_scale * reactive_scale(p.zoom, cam_progress);
+        let webcam_size_scale_prev = lp.webcam_size_scale * reactive_scale(pp.zoom, cam_progress_prev);
 
         // padding : échelle globale du layout autour du centre du cadre (parité web frameRenderer :
         // paddingScale = 1 - padding*0.4 → padding 0 = plein cadre). Vertical-stack l'ignore.
@@ -1076,8 +1134,41 @@ impl Compositor {
         let s_dst_prev = scale_frame(pp.screen.dst, padding_scale);
         // le padding n'affecte QUE l'écran (la quantité de fond révélée). La webcam reste ancrée
         // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame).
-        let w_dst = fit_cam_aspect(scale_corner_br(p.webcam.dst, lp.webcam_size_scale));
-        let w_dst_prev = fit_cam_aspect(scale_corner_br(pp.webcam.dst, lp.webcam_size_scale));
+        let mut w_dst = fit_cam_aspect(scale_corner_br(p.webcam.dst, webcam_size_scale));
+        let mut w_dst_prev = fit_cam_aspect(scale_corner_br(pp.webcam.dst, webcam_size_scale_prev));
+
+        // Full Camera : la webcam grandit pour couvrir (presque) tout le cadre, en conservant
+        // SON ratio actuel (pas celui du cadre) — parité `computeCameraFullscreenTargetRect` (TS) :
+        // marge = 2.5% du plus petit côté du cadre, ajustée pour tenir dans les bornes.
+        let fullscreen_dst = |dst: [f32; 4], progress: f32| -> [f32; 4] {
+            if progress <= 0.0 {
+                return dst;
+            }
+            let margin_px = OUT_W.min(OUT_H) as f32 * 0.025;
+            let bounds_w = (OUT_W as f32 - margin_px * 2.0).max(0.0);
+            let bounds_h = (OUT_H as f32 - margin_px * 2.0).max(0.0);
+            let cur_w_px = dst[2] * OUT_W as f32;
+            let cur_h_px = dst[3] * OUT_H as f32;
+            let aspect = if cur_h_px > 0.0 { cur_w_px / cur_h_px } else { 1.0 };
+            let (mut full_w, mut full_h) = (bounds_w, bounds_w / aspect);
+            if full_h > bounds_h {
+                full_h = bounds_h;
+                full_w = full_h * aspect;
+            }
+            let full_x = margin_px + (bounds_w - full_w) * 0.5;
+            let full_y = margin_px + (bounds_h - full_h) * 0.5;
+            let cur_x_px = dst[0] * OUT_W as f32;
+            let cur_y_px = dst[1] * OUT_H as f32;
+            let lerp = |a: f32, b: f32| a + (b - a) * progress;
+            [
+                lerp(cur_x_px, full_x) / OUT_W as f32,
+                lerp(cur_y_px, full_y) / OUT_H as f32,
+                lerp(cur_w_px, full_w) / OUT_W as f32,
+                lerp(cur_h_px, full_h) / OUT_H as f32,
+            ]
+        };
+        w_dst = fullscreen_dst(w_dst, cam_progress);
+        w_dst_prev = fullscreen_dst(w_dst_prev, cam_progress_prev);
 
         let s_radius = if cfg.rounded { p.screen.radius * lp.radius_scale } else { 0.0 };
         let w_px = [w_dst[2] * OUT_W as f32, w_dst[3] * OUT_H as f32];
@@ -1198,22 +1289,64 @@ impl Compositor {
         if cfg.shadow {
             self.draw_shadow(s_dst, s_px, s_radius, 40.0, [0.0, 16.0], 0.45 * lp.shadow_scale);
         }
-        self.draw_video(
-            &LayerCB {
-                dst: s_dst,
-                src: [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
-                quad_px: s_px,
-                radius_px: s_radius,
-                mode: 0.0,
-                color: [0.0, 0.0, 0.0, 1.0],
-                src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
-                dst_prev: s_dst_prev,
-                mb: [mb_taps, 0.0, 0.0, 0.0],
-                ..Default::default()
-            },
-            &sy,
-            &suv,
-        );
+        if crate::regions::is_identity_rotation(zoom_rotation) {
+            self.draw_video(
+                &LayerCB {
+                    dst: s_dst,
+                    src: [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
+                    quad_px: s_px,
+                    radius_px: s_radius,
+                    mode: 0.0,
+                    color: [0.0, 0.0, 0.0, 1.0],
+                    src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
+                    dst_prev: s_dst_prev,
+                    mb: [mb_taps, 0.0, 0.0, 0.0],
+                    ..Default::default()
+                },
+                &sy,
+                &suv,
+            );
+        } else {
+            // Tilt 3D (zoom "rotation" iso/left/right) : warp bilinéaire inverse (mode 8, voir
+            // shaders.hlsl) — pas de motion blur ni de coins arrondis dans ce chemin (le tilt
+            // est un effet ponctuel bref, cette simplification ne se voit pas).
+            let corners = crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], zoom_rotation);
+            let (cx_px, cy_px) =
+                ((s_dst[0] + s_dst[2] * 0.5) * OUT_W as f32, (s_dst[1] + s_dst[3] * 0.5) * OUT_H as f32);
+            let (min_x, max_x) = corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| {
+                (mn.min(x), mx.max(x))
+            });
+            let (min_y, max_y) = corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| {
+                (mn.min(y), mx.max(y))
+            });
+            let bbox_w = (max_x - min_x).max(1.0);
+            let bbox_h = (max_y - min_y).max(1.0);
+            let bbox_dst = [
+                (cx_px + min_x) / OUT_W as f32,
+                (cy_px + min_y) / OUT_H as f32,
+                bbox_w / OUT_W as f32,
+                bbox_h / OUT_H as f32,
+            ];
+            // coins en px LOCAUX à la bbox (0..bbox_w/h), pour matcher `i.local` du shader.
+            let local = |(x, y): (f32, f32)| -> [f32; 2] { [x - min_x, y - min_y] };
+            let [tl0, tl1] = local(corners[0]);
+            let [tr0, tr1] = local(corners[1]);
+            let [br0, br1] = local(corners[2]);
+            let [bl0, bl1] = local(corners[3]);
+            self.draw_video(
+                &LayerCB {
+                    dst: bbox_dst,
+                    src: [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
+                    quad_px: [bbox_w, bbox_h],
+                    mode: 8.0,
+                    fx: [tl0, tl1, tr0, tr1],
+                    src_prev: [br0, br1, bl0, bl1],
+                    ..Default::default()
+                },
+                &sy,
+                &suv,
+            );
+        }
 
         // --- curseur custom : suit le mapping src/dst (zoom+layout), click bounce,
         // et flou de mouvement par fantômes le long de sa vélocité (frame-1 -> frame) ---

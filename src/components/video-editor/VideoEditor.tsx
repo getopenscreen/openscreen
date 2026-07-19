@@ -1004,6 +1004,16 @@ export default function VideoEditor() {
 		video.currentTime = time;
 	}
 
+	// Reads the live playhead position directly off the <video> element, bypassing
+	// `currentTime` React state entirely. The timeline's playhead subscribes to this
+	// via its own rAF loop so it stays in lockstep with actual playback regardless of
+	// how long this (large) component's own re-render takes — see issue #111.
+	const getPlaybackTimeMs = useCallback(() => {
+		const video = videoPlaybackRef.current?.video;
+		if (video) return video.currentTime * 1000;
+		return currentTimeRef.current * 1000;
+	}, []);
+
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
 		if (id) {
@@ -3218,6 +3228,7 @@ export default function VideoEditor() {
 								<TimelineEditor
 									videoDuration={duration}
 									currentTime={currentTime}
+									getPlaybackTimeMs={getPlaybackTimeMs}
 									onSeek={handleSeek}
 									zoomRegions={zoomRegions}
 									onZoomAdded={handleZoomAdded}

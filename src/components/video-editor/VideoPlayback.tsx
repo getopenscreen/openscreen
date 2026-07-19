@@ -705,6 +705,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			},
 			resetDurationResolution: () => {
 				lastResolvedDurationRef.current = null;
+				// If the video element is already loaded (e.g. reloading a project that
+				// references the same file, so its src never actually changes and
+				// `loadedmetadata` won't fire again), clearing the guard alone leaves
+				// nothing to trigger a re-sync. Resolve immediately in that case too.
+				const video = videoRef.current;
+				if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+					if (!syncResolvedDuration(video)) {
+						forceResolveDuration(video);
+					}
+				}
 			},
 		}));
 

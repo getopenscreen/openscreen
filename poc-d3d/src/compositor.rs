@@ -1661,13 +1661,18 @@ impl Compositor {
         // 1) Resize GPU exactement comme `rgb_to_nv12_scaled` : remplit le `resize_target`
         //    RGBA à `w`×`h`. On s'arrête avant la conversion NV12 — on copie le RGBA.
         self.blit_resized(w, h)?;
-        // On a besoin de l'`ID3D11Texture2D` réel sous le SRV du resize_target pour
-        // `CopyResource` (qui prend un `ID3D11Resource`). Le SRV partage la même
-        // ressource, donc `cast::<ID3D11Texture2D>()` est valide.
-        let rgba_tex: ID3D11Texture2D = {
+        // BUG corrigé : un SRV n'est PAS la ressource (`ID3D11ShaderResourceView` et
+        // `ID3D11Texture2D` sont des interfaces COM sans rapport de parenté) — un
+        // `.cast::<ID3D11Texture2D>()` direct sur le SRV échoue avec E_NOINTERFACE
+        // (0x80004002, confirmé à l'exécution). Il faut passer par `GetResource()`
+        // (méthode de `ID3D11View`, implémentée par tout SRV/RTV) pour récupérer la
+        // ressource sous-jacente, ici directement en `ID3D11Resource` — le type que
+        // `CopyResource` attend de toute façon, donc pas besoin d'aller jusqu'à
+        // `ID3D11Texture2D`.
+        let rgba_resource: ID3D11Resource = {
             let cache = self.resize_target.borrow();
             let t = cache.as_ref().unwrap();
-            t.rgba_srv.cast()?
+            t.rgba_srv.GetResource()?
         };
 
         // 2) Staging texture CPU-readable à la taille cible, recréée paresseusement
@@ -1703,9 +1708,10 @@ impl Compositor {
 
         // 3) GPU → CPU : `CopyResource` resize_target → staging, puis `Map` + copie
         //    ligne par ligne qui respecte `RowPitch` (cf. `dump_nv12`/`dump_raw`).
-        let src: ID3D11Resource = rgba_tex.cast()?;
+        // `ID3D11Texture2D` hérite réellement de `ID3D11Resource` (contrairement au
+        // SRV plus haut) donc ce `.cast()` est valide.
         let dst: ID3D11Resource = staging.cast()?;
-        self.ctx.CopyResource(&dst, &src);
+        self.ctx.CopyResource(&dst, &rgba_resource);
         let mut m = D3D11_MAPPED_SUBRESOURCE::default();
         self.ctx.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut m))?;
         let mut out: Vec<u8> = vec![0u8; (w * h * 4) as usize];

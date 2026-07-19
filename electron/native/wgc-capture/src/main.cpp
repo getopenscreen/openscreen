@@ -57,6 +57,19 @@ struct CaptureControl {
     std::atomic<bool> paused = false;
     std::mutex mutex;
     std::condition_variable cv;
+    // Dedicated mutex/cv pair used ONLY to signal "stop was requested" to the
+    // main thread. The frame-processing pipeline (writeVideoFrames) holds
+    // `mutex` for the full duration of each frame's GPU copy + encode call,
+    // which can stall for a long time on slow software encoders or flaky GPU
+    // drivers (e.g. hybrid-graphics laptops). If the final "wait for stop"
+    // below shared that same mutex, it would have to wait for the encode
+    // pipeline to release the lock before it could even check whether stop
+    // was requested — turning an encode stall into a silent, unbounded stop
+    // hang with no diagnostic output (see issue #115). Keeping stop signaling
+    // on its own uncontended mutex means the stop request is always observed
+    // promptly, regardless of what the frame pump is doing.
+    std::mutex stopMutex;
+    std::condition_variable stopCv;
     std::chrono::steady_clock::time_point pauseStartedAt;
     std::chrono::steady_clock::duration totalPausedDuration{};
 
@@ -359,6 +372,7 @@ void readCaptureCommands(CaptureControl& control, const std::function<void(bool)
         if (line == "stop" || line == "q" || line == "quit") {
             control.stopRequested = true;
             control.cv.notify_all();
+            control.stopCv.notify_all();
             return;
         }
         if (line == "pause") {
@@ -378,6 +392,7 @@ void readCaptureCommands(CaptureControl& control, const std::function<void(bool)
     }
     control.stopRequested = true;
     control.cv.notify_all();
+    control.stopCv.notify_all();
 }
 
 } // namespace
@@ -586,6 +601,7 @@ int main(int argc, char* argv[]) {
                 encodeFailed = true;
                 control.stopRequested = true;
                 control.cv.notify_all();
+                control.stopCv.notify_all();
                 return;
             }
         }
@@ -657,6 +673,7 @@ int main(int argc, char* argv[]) {
                         encodeFailed = true;
                         control.stopRequested = true;
                         control.cv.notify_all();
+                        control.stopCv.notify_all();
                         return;
                     }
                     lastWrittenWebcamSequence = latestWebcamSequence;
@@ -669,6 +686,7 @@ int main(int argc, char* argv[]) {
                     encodeFailed = true;
                     control.stopRequested = true;
                     control.cv.notify_all();
+                    control.stopCv.notify_all();
                     return;
                 }
                 if (latestFrameTexture) {
@@ -711,6 +729,7 @@ int main(int argc, char* argv[]) {
                     encodeFailed = true;
                     control.stopRequested = true;
                     control.cv.notify_all();
+                    control.stopCv.notify_all();
                     return false;
                 }
                 return true;
@@ -840,8 +859,12 @@ int main(int argc, char* argv[]) {
     std::cout << "Recording started" << std::endl;
 
     {
-        std::unique_lock lock(mutex);
-        control.cv.wait(lock, [&] {
+        // Wait on the dedicated stop mutex/cv (not the frame-processing
+        // `mutex`), so this check is never gated on the video writer thread
+        // releasing a lock it may be holding for a long time inside a slow
+        // or stalled encode call. See the CaptureControl::stopMutex comment.
+        std::unique_lock lock(control.stopMutex);
+        control.stopCv.wait(lock, [&] {
             return control.stopRequested.load();
         });
     }

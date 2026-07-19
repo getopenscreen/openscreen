@@ -17,7 +17,7 @@ build/commit tested and any findings (with a linked issue) at the bottom.
    `Openscreen.exe`/`Openscreen.app` for a packaged build).
 3. Work through the sections in order — later sections (Editor, Persistence) depend
    on having a real recording from the Capture section.
-4. A finding is a bug only if it reproduces twice. Note the repro steps.
+4. Crashes, hangs, data loss, and security issues are logged the first time they occur — note full repro details immediately, don't wait to reproduce twice. For anything else (a one-off visual glitch, a flaky-looking timing issue), reproduce it again before treating it as a real finding rather than noise.
 
 ---
 
@@ -28,7 +28,7 @@ build/commit tested and any findings (with a linked issue) at the bottom.
 - [x] Selecting a source works for **full screen**
 - [x] Selecting a source works for a **single app window** (not just full screen — regression check for #60: confirm the recorded video is NOT a black screen, including a window with an odd-pixel client size if you can arrange one)
 - [x] Record start/stop works from the HUD
-- [x] **Stop reliably completes** with system audio/mic/webcam/cursor all *disabled* (regression check for #115: this combination used to hang indefinitely on Windows) — confirm the editor opens within a few seconds of clicking stop
+- [x] **Windows only** — **Stop reliably completes** with system audio/mic/webcam/cursor all *disabled* (regression check for #115: this combination used to hang indefinitely on Windows) — confirm the editor opens within a few seconds of clicking stop. Must be run on real Windows; the native WGC stop path this guards isn't exercised on macOS/Linux
 - [x] Stop reliably completes with system audio + mic + webcam + cursor all *enabled* (no regression to the normal path)
 - [ ] Tray icon "Stop Recording" works while recording (right-click → Stop, or left/double-click to refocus the HUD if it's minimized) — not exercised in the 2026-07-19 pass, worth covering next run
 - [ ] Opening an existing video file works from the launch window — not exercised in the 2026-07-19 pass
@@ -40,7 +40,7 @@ build/commit tested and any findings (with a linked issue) at the bottom.
 
 - [x] Mic toggle on/off works before recording
 - [x] Mic device selection (if multiple mics available) works
-- [x] System audio toggle works — verify across **two separate recordings** (toggle state isn't sticky/stale between them)
+- [x] System audio toggle works — verify with **two separate recordings in opposite toggle states** (one with it enabled, one disabled), and confirm each recording's playback actually matches its state (audible system audio only in the enabled one) rather than just checking the toggle isn't sticky/stale
 - [ ] Mic-only recording produces audible mic audio on playback — only the combined mic+system-audio path was exercised this pass
 - [ ] System-audio-only recording produces audible system audio on playback — only the combined path was exercised this pass
 - [x] Mic + system audio together: both are audible and levels are reasonably balanced (not one drowning out the other)
@@ -95,6 +95,6 @@ build/commit tested and any findings (with a linked issue) at the bottom.
 
 ## Results log
 
-| Date | Build / commit tested | Tester | Findings |
-|------|------------------------|--------|----------|
-| 2026-07-19 | `release/v1.7.0` (post-#124 cherry-pick, pre-#125/#127) | Claude (computer-use) | 2 bugs found and fixed: (1) annotation placeholder text baked into content instead of being empty — PR #127; (2) post-reload duration capped at last element's end time — PR #127. Everything else checked above passed. Windows only; macOS section untestable without hardware. A few items (mic-only/system-audio-only isolation, webcam mirroring/reactive zoom, auto-zoom live re-verification, tray stop, countdown overlay, existing-video-file import) weren't exercised this pass and are called out inline above for next time. |
+| Date | Build / commit tested | Platform | Tester | Findings |
+|------|------------------------|----------|--------|----------|
+| 2026-07-19 | `release/v1.7.0` (post-#124 cherry-pick, pre-#125/#127) | Windows | Claude (computer-use) | 2 bugs found and fixed: (1) annotation placeholder text baked into content instead of being empty — PR #127; (2) post-reload duration capped at last element's end time — PR #127. Everything else checked above passed. macOS section untestable without hardware. A few items (mic-only/system-audio-only isolation, webcam mirroring/reactive zoom, auto-zoom live re-verification, tray stop, countdown overlay, existing-video-file import) weren't exercised this pass and are called out inline above for next time. |

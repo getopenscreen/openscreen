@@ -1687,8 +1687,22 @@ impl Compositor {
         target_w: u32,
         target_h: u32,
     ) -> Result<Vec<u8>> {
-        let w = target_w.max(1);
-        let h = target_h.max(1);
+        // `ensure_resize_target` (partagé avec l'export) crée INCONDITIONNELLEMENT une
+        // texture NV12 en plus de la RGBA, même si ce chemin RGBA-only ne s'en sert jamais —
+        // et NV12 (4:2:0, chroma sous-échantillonnée 2×2) exige des dimensions PAIRES.
+        // Le canvas Electron (taille device-pixel arbitraire, ex. 910×513) atterrit souvent
+        // sur une dimension impaire → `CreateTexture2D` de la texture NV12 échouait avec
+        // E_INVALIDARG (0x80070057), et donc TOUT le readback live (jamais une seule frame
+        // publiée). On arrondit au pair supérieur ici uniquement — l'export appelle
+        // `rgb_to_nv12_scaled`/`blit_resized` directement avec ses propres dimensions et
+        // n'est pas concerné par cet arrondi.
+        let w = (target_w.max(1) + 1) & !1;
+        let h = (target_h.max(1) + 1) & !1;
+        // Dims RÉELLEMENT demandées par l'appelant — le buffer retourné doit rester à cette
+        // taille exacte (le canvas JS attend `target_w*target_h*4` octets pile), même si le GPU
+        // travaille en interne à `w`×`h` (arrondi pair) pour satisfaire la contrainte NV12.
+        let out_w = target_w.max(1);
+        let out_h = target_h.max(1);
 
         // 1) Resize GPU exactement comme `rgb_to_nv12_scaled` : remplit le `resize_target`
         //    RGBA à `w`×`h`. On s'arrête avant la conversion NV12 — on copie le RGBA.
@@ -1746,9 +1760,11 @@ impl Compositor {
         self.ctx.CopyResource(&dst, &rgba_resource);
         let mut m = D3D11_MAPPED_SUBRESOURCE::default();
         self.ctx.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut m))?;
-        let mut out: Vec<u8> = vec![0u8; (w * h * 4) as usize];
-        let row_bytes = (w * 4) as usize;
-        for y in 0..h as usize {
+        // Crop implicite : on ne lit que les `out_w`×`out_h` premiers pixels de la texture
+        // (arrondie pair) — le reliquat éventuel (au plus 1px en largeur/hauteur) est ignoré.
+        let mut out: Vec<u8> = vec![0u8; (out_w * out_h * 4) as usize];
+        let row_bytes = (out_w * 4) as usize;
+        for y in 0..out_h as usize {
             let src_row = (m.pData as *const u8).add(y * m.RowPitch as usize);
             let dst_row = out.as_mut_ptr().add(y * row_bytes);
             std::ptr::copy_nonoverlapping(src_row, dst_row, row_bytes);

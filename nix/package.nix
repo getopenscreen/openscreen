@@ -11,7 +11,7 @@
 buildNpmPackage {
   nodejs = nodejs_22;
   pname = "openscreen";
-  version = "1.6.0";
+  version = "1.7.0";
 
   src =
     let
@@ -33,7 +33,7 @@ buildNpmPackage {
       );
     };
 
-  npmDepsHash = "sha256-IZypOLWlDShIjCKWxlJcrdtIkMu0P/DuXaq4c0HW3FY=";
+  npmDepsHash = "sha256-cb8loUzQs4fz3um0xbYgtjQdcRZh/Ptk2YPgv3FHP/s=";
 
   env.ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
 

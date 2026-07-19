@@ -1,5 +1,6 @@
 import type React from "react";
 import { MAX_NATIVE_PLAYBACK_RATE, type SpeedRegion, type TrimRegion } from "../types";
+import { createRafCoalescer } from "./rafCoalescer";
 
 // Keep "scrub mode" on for a brief tail after `seeked`: rapid drag-scrubbing fires
 // `seeking`/`seeked` dozens of times a second and toggling effects each time would flicker.
@@ -77,9 +78,16 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 		}
 	};
 
+	// currentTimeRef is updated synchronously on every call (cheap; other imperative
+	// consumers like the Pixi renderer read it directly). The React state commit
+	// (`onTimeUpdate`) is coalesced to at most once per animation frame so a burst of
+	// `seeking` events (fast timeline drag) or the per-frame rAF playback loop can't
+	// force more than one parent re-render per frame.
+	const timeUpdateCoalescer = createRafCoalescer<number>(onTimeUpdate);
+
 	const emitTime = (timeValue: number) => {
 		currentTimeRef.current = timeValue * 1000;
-		onTimeUpdate(timeValue);
+		timeUpdateCoalescer.schedule(timeValue);
 	};
 
 	const findActiveTrimRegion = (currentTimeMs: number): TrimRegion | null => {
@@ -331,5 +339,6 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 		handlePause,
 		handleSeeked,
 		handleSeeking,
+		dispose: () => timeUpdateCoalescer.cancel(),
 	};
 }

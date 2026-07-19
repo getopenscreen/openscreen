@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	setActiveClip,
@@ -7,6 +7,11 @@ import {
 	useNativeCompositorView,
 } from "@/native";
 import { buildSceneDescription } from "@/native/sceneDescription";
+import {
+	getWebcamNativeSize,
+	getWebcamNativeSizeRevision,
+	subscribeWebcamNativeSize,
+} from "@/native/webcamSizeCache";
 
 /**
  * POC Option A — preview rendue par le compositeur D3D11 natif (`compositor_view.node`),
@@ -36,6 +41,15 @@ export function NativeCompositorOverlay() {
 	const previousActiveClipIdRef = useRef<string | null>(null);
 	const document = useProjectStore((s) => s.document);
 	const currentTimeSec = useProjectStore((s) => s.currentTimeSec);
+	// ponytail: re-render whenever the webcam dim cache changes (the WebcamOverlay
+	// mounts AFTER the first scene push and only knows the real dims once the <video>
+	// fires loadedmetadata; subscribing here re-triggers the scene push so the native
+	// compositor stops sizing its box for a hardcoded 4:3 once the real aspect arrives).
+	const _webcamSizeRevision = useSyncExternalStore(
+		subscribeWebcamNativeSize,
+		getWebcamNativeSizeRevision,
+		() => 0,
+	);
 
 	const orderedClips = useMemo(
 		() =>
@@ -92,19 +106,28 @@ export function NativeCompositorOverlay() {
 		return () => setCurrentNativeViewId(null);
 	}, [viewId]);
 
-	// Pousse la scène (document → SceneDescription → JSON) au natif quand le document change ou
-	// la vue s'active : le layout preset et cie pilotent le rendu (remplace le layout fixture).
-	// Effet APRÈS celui du viewId ci-dessus → currentViewId est déjà publié quand on pousse.
+	// Pousse la scène (document → SceneDescription → JSON) au natif quand le document change,
+	// la vue s'active, OU que la taille réelle de la webcam active vient d'être sondée (voir
+	// `_webcamSizeRevision` ci-dessus) : le layout preset et cie pilotent le rendu (remplace le
+	// layout fixture). Effet APRÈS celui du viewId ci-dessus → currentViewId est déjà publié
+	// quand on pousse.
 	useEffect(() => {
 		if (viewId === null || !document) {
 			return;
 		}
 		try {
-			setNativeScene(JSON.stringify(buildSceneDescription(document)));
+			const activeWebcamPath = sources && "webcamPath" in sources ? sources.webcamPath : undefined;
+			const webcamSourceSize = activeWebcamPath ? getWebcamNativeSize(activeWebcamPath) : null;
+			setNativeScene(JSON.stringify(buildSceneDescription(document, webcamSourceSize)));
 		} catch (error) {
 			console.warn("[compositor-view] build/push scene failed:", error);
 		}
-	}, [viewId, document]);
+		// _webcamSizeRevision itself isn't read in the body — it's a dependency purely to
+		// re-trigger this effect when the probed-size cache mutates; the actual value is
+		// re-read fresh via getWebcamNativeSize() above on every run (biome flags this as
+		// an "unnecessary" dependency, but removing it would mean a probed webcam size
+		// arriving after mount never gets pushed to native).
+	}, [viewId, document, sources, _webcamSizeRevision]);
 
 	// Change les décodeurs screen/webcam uniquement quand le playhead entre dans un autre clip.
 	// `currentTimeSec` est déjà rafraîchi par la boucle de lecture existante ; aucun timer dédié.

@@ -316,7 +316,9 @@ function PlaybackCursor({
 	// ancestor's (much heavier) re-render is in flight — see issue #111.
 	const [liveTimeMs, setLiveTimeMs] = useState(currentTimeMs);
 	const getPlaybackTimeMsRef = useRef(getPlaybackTimeMs);
-	getPlaybackTimeMsRef.current = getPlaybackTimeMs;
+	useEffect(() => {
+		getPlaybackTimeMsRef.current = getPlaybackTimeMs;
+	}, [getPlaybackTimeMs]);
 
 	useEffect(() => {
 		if (!getPlaybackTimeMsRef.current) {

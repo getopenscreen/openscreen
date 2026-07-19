@@ -1052,23 +1052,45 @@ impl Compositor {
         let u_max = scw / stw as f32;
         let v_max = sch / sth as f32;
 
-        // Scène de l'app présente → placements du layout preset ; sinon planning fixture (bench).
+        // Scène de l'app présente → placements du layout preset (ou, mieux, le rect résolu par
+        // l'app dans `layout.webcam_rect`) ; sinon planning fixture (bench).
+        let scene_ref = self.scene.borrow();
         let scene_preset: Option<String> =
-            self.scene.borrow().as_ref().map(|s| s.layout.preset.clone());
-        let (mut p, mut pp) = match &scene_preset {
-            Some(preset) => {
-                let fp = preset_placements(preset);
+            scene_ref.as_ref().map(|s| s.layout.preset.clone());
+        // Webcam rect résolu par l'app (= `computeCompositeLayout`, source de vérité unique
+        // entre preview et natif) : quand il est présent ET que la scène est posée, on l'utilise
+        // COMME placement de base. Sinon, fallback sur `preset_placements` historique (PiP
+        // codé en dur à 320 px + 40 px de marge — l'arrangement qui dérivait de la preview).
+        let app_webcam_rect: Option<[f32; 4]> = scene_ref
+            .as_ref()
+            .and_then(|s| s.layout.webcam_rect)
+            .map(|r| [r.x, r.y, r.width, r.height]);
+        let (mut p, mut pp) = match (&scene_preset, app_webcam_rect) {
+            (Some(_preset), Some(wr)) => {
+                // webcam rect résolu côté app → on s'aligne strictement ; l'écran reste plein
+                // cadre (le padding slider l'insètera ensuite dans `scale_frame`).
+                let mut fp = preset_placements(_preset);
+                fp.webcam.dst = wr;
                 (fp, fp) // layout statique → vélocité nulle
             }
-            None => (timeline(frame, cfg), timeline(frame - 1.0, cfg)),
+            (Some(preset), None) => {
+                let fp = preset_placements(preset);
+                (fp, fp)
+            }
+            (None, _) => (timeline(frame, cfg), timeline(frame - 1.0, cfg)),
         };
         let is_vstack = scene_preset.as_deref() == Some("vertical-stack");
         let lp = *self.live_params.borrow();
-        let mb_taps = cfg.mblur_n as f32;
+        // Motion blur écran : quand la scène (contrat de l'app) est posée, c'est elle qui pilote
+        // (parité inspector : 1.0 + motion_blur*15 taps), sinon on retombe sur `cfg.mblur_n`
+        // (le bench fixture continue d'utiliser ses taps explicites).
+        let mb_taps = scene_ref
+            .as_ref()
+            .map(|s| 1.0 + s.effects.motion_blur.clamp(0.0, 1.0) * 15.0)
+            .unwrap_or(cfg.mblur_n as f32);
 
         // Zoom regions + Full Camera : filtrées en amont pour le clip actif et échantillonnées
         // dans le même référentiel source que le PTS du décodeur écran.
-        let scene_ref = self.scene.borrow();
         let empty_zoom: Vec<crate::scene::SceneZoomRegion> = Vec::new();
         let empty_cam: Vec<crate::scene::SceneCameraFullscreenRegion> = Vec::new();
         let zoom_regions = scene_ref.as_ref().map(|s| &s.zoom_regions).unwrap_or(&empty_zoom);
@@ -1365,7 +1387,13 @@ impl Compositor {
             Some(s) if s.cursor.clip_to_bounds => s_dst,
             _ => [-1.0, -1.0, 3.0, 3.0],
         };
-        if cfg.cursor {
+        // « Show cursor » : piloté par la scène (contrat de l'app) quand elle est posée ; sinon
+        // par `cfg.cursor` (inspector / bench fixture).
+        let cursor_show = scene_ref
+            .as_ref()
+            .map(|s| s.cursor.show)
+            .unwrap_or(cfg.cursor);
+        if cursor_show {
             let cursor_ref = self.cursor.borrow();
             if let Some(track) = cursor_ref.as_ref() {
                 let t = self.cursor_t_override.borrow().unwrap_or(frame / FPS);
@@ -1381,7 +1409,11 @@ impl Compositor {
                         }
                     })
                 };
-                if let Some(cur) = map(track.at(t), [su0, sv0], [hu, hv], s_dst) {
+                let raw_xy = track.at(t);
+                // Hors de [0,1] = pointeur hors du rect source actuel (zoom serré / hors écran) —
+                // état normal en cours de lecture, pas une erreur : rien à dessiner cette frame.
+                let mapped = map(raw_xy, [su0, sv0], [hu, hv], s_dst);
+                if let Some(cur) = mapped {
                     // taille + amplitude du bounce pilotées par l'inspector (défauts = fixture).
                     // `padding_scale` : le curseur est un recouvrement synthétique, pas cuit dans
                     // la vidéo — quand le padding rétrécit l'écran, le curseur doit rétrécir

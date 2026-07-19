@@ -624,7 +624,7 @@ int main(int argc, char* argv[]) {
         while (!control.stopRequested && !encodeFailed) {
             {
                 std::unique_lock lock(mutex);
-                control.cv.wait(lock, [&] {
+                control.cv.wait_for(lock, std::chrono::milliseconds(100), [&] {
                     return control.stopRequested.load() ||
                         encodeFailed.load() ||
                         (!control.paused.load() && latestFrameTexture);

@@ -1,0 +1,33 @@
+name: TEMP - Announce stable on Discord
+
+on:
+  workflow_dispatch:
+    inputs:
+      stable_tag:
+        description: "Stable tag to announce (e.g. v1.7.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  announce:
+    name: Announce stable on Discord
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup
+
+      - name: Announce stable on Discord
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_RELEASE_CHANNEL_ID: ${{ vars.DISCORD_RELEASE_CHANNEL_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STABLE_TAG: ${{ inputs.stable_tag }}
+          KIND: stable
+        run: node .github/scripts/discord-release-announce.mjs

@@ -109,6 +109,7 @@ import {
 	type BlurData,
 	type CameraFullscreenRegion,
 	clampFocusToDepth,
+	createTextAnnotationRegion,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
@@ -119,6 +120,7 @@ import {
 	type FigureData,
 	type PlaybackSpeed,
 	type Rotation3DPreset,
+	resolveTextAnnotationContent,
 	type SpeedRegion,
 	type TrimRegion,
 	ZOOM_DEPTH_SCALES,
@@ -406,6 +408,8 @@ export default function VideoEditor() {
 			}
 			setIsPlaying(false);
 			setCurrentTime(0);
+			// This inferred duration is only a placeholder until the video element's real
+			// metadata resolves (see VideoPlayback's syncResolvedDuration).
 			setDuration(inferredDurationMs > 0 ? inferredDurationMs / 1000 : 0);
 
 			setError(null);
@@ -415,6 +419,13 @@ export default function VideoEditor() {
 			setWebcamVideoPath(webcamSourcePath ? toFileUrl(webcamSourcePath) : null);
 			setRecordingCursorCaptureMode(projectCursorCaptureMode);
 			setCurrentProjectPath(path ?? null);
+			// Reset the memoized last-resolved-duration guard so resolution isn't skipped
+			// just because the real duration happens to match a value already seen from
+			// before this load (e.g. reloading a project referencing the same video file,
+			// whose src may not change and so never re-fires `loadedmetadata`). Must run
+			// after the setDuration placeholder above, or its correction gets clobbered by
+			// the same-tick placeholder assignment winning the state-batch race.
+			videoPlaybackRef.current?.resetDurationResolution();
 
 			// A loaded project keeps its zooms exactly as saved, so never auto-suggest
 			// over it (even if it has zero zooms because the user deleted them all).
@@ -1472,17 +1483,12 @@ export default function VideoEditor() {
 		(span: Span) => {
 			const id = `annotation-${nextAnnotationIdRef.current++}`;
 			const zIndex = nextAnnotationZIndexRef.current++;
-			const newRegion: AnnotationRegion = {
+			const newRegion = createTextAnnotationRegion({
 				id,
 				startMs: Math.round(span.start),
 				endMs: Math.round(span.end),
-				type: "text",
-				content: "Enter text...",
-				position: { ...DEFAULT_ANNOTATION_POSITION },
-				size: { ...DEFAULT_ANNOTATION_SIZE },
-				style: { ...DEFAULT_ANNOTATION_STYLE },
 				zIndex,
-			};
+			});
 			pushState((prev) => ({
 				annotationRegions: [...prev.annotationRegions, newRegion],
 			}));
@@ -1616,7 +1622,7 @@ export default function VideoEditor() {
 					if (region.id !== id) return region;
 					const updatedRegion = { ...region, type };
 					if (type === "text") {
-						updatedRegion.content = region.textContent || "Enter text...";
+						updatedRegion.content = resolveTextAnnotationContent(region.textContent);
 					} else if (type === "image") {
 						updatedRegion.content = region.imageContent || "";
 					} else if (type === "figure") {

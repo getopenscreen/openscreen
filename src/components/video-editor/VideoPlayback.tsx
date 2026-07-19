@@ -165,6 +165,14 @@ export interface VideoPlaybackRef {
 	containerRef: React.RefObject<HTMLDivElement>;
 	play: () => Promise<void>;
 	pause: () => void;
+	/**
+	 * Clears the memoized last-resolved-duration guard so the next metadata load
+	 * re-syncs `duration` even if the video's real (resolved) duration happens to
+	 * match a value already seen — needed when a caller (e.g. loading a saved
+	 * project) sets `duration` to something else in between, which the guard has
+	 * no other way to detect.
+	 */
+	resetDurationResolution: () => void;
 }
 
 function getResolvedVideoDuration(video: HTMLVideoElement): number | null {
@@ -694,6 +702,19 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				}
 				video.pause();
 				supplementalAudioRef.current?.pause();
+			},
+			resetDurationResolution: () => {
+				lastResolvedDurationRef.current = null;
+				// If the video element is already loaded (e.g. reloading a project that
+				// references the same file, so its src never actually changes and
+				// `loadedmetadata` won't fire again), clearing the guard alone leaves
+				// nothing to trigger a re-sync. Resolve immediately in that case too.
+				const video = videoRef.current;
+				if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+					if (!syncResolvedDuration(video)) {
+						forceResolveDuration(video);
+					}
+				}
 			},
 		}));
 

@@ -1136,6 +1136,11 @@ export default function VideoEditor() {
 
 	// Builds fresh "auto" zoom regions from cursor telemetry without overlapping
 	// existing ones. Used by both the on-load auto-suggest pass and the wand toggle.
+	// These regions always follow the cursor for their whole span (focusMode "auto") —
+	// that's the entire point of an auto-placed zoom: it should pan to track the cursor
+	// as it moves, not freeze at the dwell point that triggered the suggestion. This is
+	// independent of the global "Auto Focus All" toggle, which only affects the default
+	// for manually-drawn zoom regions.
 	const buildAutoZoomRegions = useCallback(
 		(existingRegions: ZoomRegion[]): ZoomRegion[] => {
 			const totalMs = Math.round(duration * 1000);
@@ -1152,11 +1157,11 @@ export default function VideoEditor() {
 				depth: DEFAULT_ZOOM_DEPTH,
 				customScale: ZOOM_DEPTH_SCALES[DEFAULT_ZOOM_DEPTH],
 				focus: clampFocusToDepth(suggestion.focus, DEFAULT_ZOOM_DEPTH),
-				focusMode: autoFocusAll ? ("auto" as const) : undefined,
+				focusMode: "auto" as const,
 				source: "auto" as const,
 			}));
 		},
-		[cursorTelemetry, duration, autoFocusAll],
+		[cursorTelemetry, duration],
 	);
 
 	// Auto-suggest zooms once per fresh recording (no existing zooms, telemetry

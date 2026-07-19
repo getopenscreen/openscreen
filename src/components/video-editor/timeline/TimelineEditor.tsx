@@ -58,6 +58,12 @@ interface TimelineEditorProps {
 	videoDuration: number;
 	hasVideoSource?: boolean;
 	currentTime: number;
+	/**
+	 * Reads the live playhead position (ms) directly, bypassing `currentTime` React
+	 * state. The playhead subscribes to this via its own rAF loop so it stays in sync
+	 * with actual playback regardless of how long an ancestor's re-render takes.
+	 */
+	getPlaybackTimeMs?: () => number;
 	onSeek?: (time: number) => void;
 	zoomRegions: ZoomRegion[];
 	onZoomAdded: (span: Span) => void;
@@ -284,6 +290,7 @@ function shouldStartTimelineScrub(target: EventTarget | null, timelineElement: H
 function PlaybackCursor({
 	currentTimeMs,
 	videoDurationMs,
+	getPlaybackTimeMs,
 	onSeek,
 	onRangeChange,
 	timelineRef,
@@ -291,6 +298,7 @@ function PlaybackCursor({
 }: {
 	currentTimeMs: number;
 	videoDurationMs: number;
+	getPlaybackTimeMs?: () => number;
 	onSeek?: (time: number) => void;
 	onRangeChange?: (updater: (previous: Range) => Range) => void;
 	timelineRef: React.RefObject<HTMLDivElement>;
@@ -300,6 +308,38 @@ function PlaybackCursor({
 	const sideProperty = direction === "rtl" ? "right" : "left";
 	const [isDragging, setIsDragging] = useState(false);
 	const [dragPreviewTimeMs, setDragPreviewTimeMs] = useState<number | null>(null);
+
+	// Drives the playhead position from the video element every animation frame,
+	// isolated from the rest of the tree: this component's own `useState` call only
+	// re-renders this small subtree, not TimelineEditor/VideoEditor above it. That
+	// decoupling is what keeps the playhead glued to actual playback even while an
+	// ancestor's (much heavier) re-render is in flight — see issue #111.
+	const [liveTimeMs, setLiveTimeMs] = useState(currentTimeMs);
+	const getPlaybackTimeMsRef = useRef(getPlaybackTimeMs);
+	useEffect(() => {
+		getPlaybackTimeMsRef.current = getPlaybackTimeMs;
+	}, [getPlaybackTimeMs]);
+
+	useEffect(() => {
+		if (!getPlaybackTimeMsRef.current) {
+			return;
+		}
+
+		let rafId: number;
+		const tick = () => {
+			const getter = getPlaybackTimeMsRef.current;
+			if (getter) {
+				const latest = getter();
+				setLiveTimeMs((previous) => (previous === latest ? previous : latest));
+			}
+			rafId = requestAnimationFrame(tick);
+		};
+		rafId = requestAnimationFrame(tick);
+
+		return () => cancelAnimationFrame(rafId);
+	}, []);
+
+	const resolvedTimeMs = getPlaybackTimeMs ? liveTimeMs : currentTimeMs;
 
 	useEffect(() => {
 		if (!isDragging) return;
@@ -399,7 +439,7 @@ function PlaybackCursor({
 	]);
 
 	const displayTimeMs =
-		isDragging && dragPreviewTimeMs !== null ? dragPreviewTimeMs : currentTimeMs;
+		isDragging && dragPreviewTimeMs !== null ? dragPreviewTimeMs : resolvedTimeMs;
 
 	if (videoDurationMs <= 0 || displayTimeMs < 0) {
 		return null;
@@ -428,7 +468,7 @@ function PlaybackCursor({
 				}}
 				onMouseDown={(e) => {
 					e.stopPropagation(); // Prevent timeline click
-					setDragPreviewTimeMs(currentTimeMs);
+					setDragPreviewTimeMs(resolvedTimeMs);
 					setIsDragging(true);
 				}}
 			>
@@ -571,6 +611,7 @@ function Timeline({
 	items,
 	videoDurationMs,
 	currentTimeMs,
+	getPlaybackTimeMs,
 	onSeek,
 	onRangeChange,
 	onSelectZoom,
@@ -592,6 +633,7 @@ function Timeline({
 	items: TimelineRenderItem[];
 	videoDurationMs: number;
 	currentTimeMs: number;
+	getPlaybackTimeMs?: () => number;
 	onSeek?: (time: number) => void;
 	onRangeChange?: (updater: (previous: Range) => Range) => void;
 	onSelectZoom?: (id: string | null) => void;
@@ -797,6 +839,7 @@ function Timeline({
 			<PlaybackCursor
 				currentTimeMs={currentTimeMs}
 				videoDurationMs={videoDurationMs}
+				getPlaybackTimeMs={getPlaybackTimeMs}
 				onSeek={onSeek}
 				onRangeChange={onRangeChange}
 				timelineRef={localTimelineRef}
@@ -934,6 +977,7 @@ export default function TimelineEditor({
 	videoDuration,
 	hasVideoSource = false,
 	currentTime,
+	getPlaybackTimeMs,
 	onSeek,
 	zoomRegions,
 	onZoomAdded,
@@ -1803,6 +1847,7 @@ export default function TimelineEditor({
 						items={timelineItems}
 						videoDurationMs={totalMs}
 						currentTimeMs={currentTimeMs}
+						getPlaybackTimeMs={getPlaybackTimeMs}
 						onSeek={onSeek}
 						onRangeChange={setRange}
 						onSelectZoom={onSelectZoom}

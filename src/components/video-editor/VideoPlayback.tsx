@@ -1308,25 +1308,26 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			layoutVideoContentRef.current?.();
 			video.pause();
 
-			const { handlePlay, handlePause, handleSeeked, handleSeeking } = createVideoEventHandlers({
-				video,
-				isSeekingRef,
-				isPlayingRef,
-				allowPlaybackRef,
-				currentTimeRef,
-				timeUpdateAnimationRef,
-				onPlayStateChange: (playing) => onPlayStateChangeRef.current(playing),
-				onTimeUpdate: (time) => onTimeUpdateRef.current(time),
-				trimRegionsRef,
-				speedRegionsRef,
-				isScrubbingRef,
-				scrubEndTimerRef,
-				onScrubChange: (scrubbing) => setIsScrubbing(scrubbing),
-				seekSteppingRef,
-				stepVirtualSecRef,
-				stepLastTsRef,
-				stepPrevMutedRef,
-			});
+			const { handlePlay, handlePause, handleSeeked, handleSeeking, dispose } =
+				createVideoEventHandlers({
+					video,
+					isSeekingRef,
+					isPlayingRef,
+					allowPlaybackRef,
+					currentTimeRef,
+					timeUpdateAnimationRef,
+					onPlayStateChange: (playing) => onPlayStateChangeRef.current(playing),
+					onTimeUpdate: (time) => onTimeUpdateRef.current(time),
+					trimRegionsRef,
+					speedRegionsRef,
+					isScrubbingRef,
+					scrubEndTimerRef,
+					onScrubChange: (scrubbing) => setIsScrubbing(scrubbing),
+					seekSteppingRef,
+					stepVirtualSecRef,
+					stepLastTsRef,
+					stepPrevMutedRef,
+				});
 
 			video.addEventListener("play", handlePlay);
 			video.addEventListener("pause", handlePause);
@@ -1344,6 +1345,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				if (timeUpdateAnimationRef.current) {
 					cancelAnimationFrame(timeUpdateAnimationRef.current);
 				}
+				dispose();
 
 				if (videoSprite) {
 					videoContainer.removeChild(videoSprite);

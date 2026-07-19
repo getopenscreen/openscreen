@@ -321,9 +321,16 @@ export function LaunchWindow() {
 	// and scrolls. Measure from the window's bottom-centre (the anchor the main process
 	// preserves) so fixed bottom/centre offsets keep this stable and it doesn't oscillate.
 	const lastHudSizeRef = useRef({ width: 0, height: 0 });
+	const isDraggingHudRef = useRef(false);
 	const measureHudSize = useCallback(() => {
 		const barEl = hudBarRef.current;
 		if (!barEl || !window.electronAPI?.setHudOverlaySize) return;
+		// While the user is dragging the HUD, ignore content-size measurements. A
+		// ResizeObserver-driven resize (hud-overlay-set-size) re-centres the window from
+		// its own bottom-centre anchor, which fights the position "hud-overlay-move-by" is
+		// actively applying frame-by-frame -- the two IPC channels racing is what produces
+		// the reported drift. Content size is re-measured once the drag ends instead.
+		if (isDraggingHudRef.current) return;
 
 		// Breathing room so the drop shadow isn't clipped. TOP_MARGIN must also exceed the
 		// slack in the bar's `max-h: calc(100vh - 2.5rem)` cap (40px reserved - 20px bottom
@@ -634,6 +641,7 @@ export function LaunchWindow() {
 		setHudMouseEventsEnabled(true);
 		event.currentTarget.setPointerCapture(event.pointerId);
 		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
+		isDraggingHudRef.current = true;
 	};
 	const handleHudDragPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
 		const lastPosition = dragLastPositionRef.current;
@@ -650,6 +658,8 @@ export function LaunchWindow() {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
 		setHudMouseEventsEnabled(false);
+		isDraggingHudRef.current = false;
+		measureHudSize();
 	};
 
 	return (

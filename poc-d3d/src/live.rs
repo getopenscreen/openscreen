@@ -596,6 +596,11 @@ unsafe fn render_thread(
         cfg.bg_blur = ip.bg_blur;
         cfg.mblur_n = ip.mblur_taps;
         cfg.cursor = ip.cursor_show;
+        // TS falls `webcamPath` back to the screen asset's own path when a clip has no real
+        // camera (so the decoder pipeline always has something valid to open) — if we drew the
+        // PiP box in that case it would just duplicate the screen video into its own corner.
+        // `same_source_path` already exists for exactly this comparison (scene/clip matching).
+        let has_real_webcam = !same_source_path(&active_webcam_path, &active_screen_path);
         comp.set_live_params(LiveParams {
             bg_color: ip.bg_color,
             shadow_scale: ip.shadow_scale,
@@ -607,6 +612,7 @@ unsafe fn render_thread(
             cursor_size_scale: ip.cursor_size_scale,
             cursor_bounce_scale: ip.cursor_bounce_scale,
             cursor_motion_blur: ip.cursor_motion_blur,
+            has_webcam: has_real_webcam,
         });
         // Lissage ressort-amortisseur : re-génère la piste (240 Hz) uniquement quand la valeur
         // change (pas à chaque frame — le resample+ressort parcourt tout l'enregistrement).

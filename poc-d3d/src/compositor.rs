@@ -76,6 +76,13 @@ pub struct LiveParams {
     /// vélocité), pas par un flou gaussien variable comme le canvas web — plus simple à
     /// réutiliser côté GPU, effet de streak équivalent.
     pub cursor_motion_blur: f32,
+    /// False when the "webcam" decoder is actually just the screen video again (the TS side
+    /// falls `webcamPath` back to the screen asset's own path when a clip has no real camera,
+    /// purely so the decoder pipeline has something valid to open) — drawing the PiP box in
+    /// that case duplicates the screen video into its own corner. Live-only: derived in
+    /// `live.rs` by comparing the active clip's screen/webcam paths; defaults `true` (draw)
+    /// so fixture/bench renders and any caller that never sets it keep their old behavior.
+    pub has_webcam: bool,
 }
 
 impl Default for LiveParams {
@@ -91,6 +98,7 @@ impl Default for LiveParams {
             cursor_size_scale: 1.0,
             cursor_bounce_scale: 1.0,
             cursor_motion_blur: 0.0,
+            has_webcam: true,
         }
     }
 }
@@ -1500,25 +1508,27 @@ impl Compositor {
         // miroir = échanger les bornes u du rect source (flip horizontal).
         let (u0, u1) = if lp.webcam_mirror { (su1, su0) } else { (su0, su1) };
         let wv = wch / wth as f32;
-        if cfg.shadow {
-            self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale);
+        if lp.has_webcam {
+            if cfg.shadow {
+                self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale);
+            }
+            self.draw_video(
+                &LayerCB {
+                    dst: w_dst,
+                    src: [u0, 0.0, u1, wv],
+                    quad_px: w_px,
+                    radius_px: w_radius,
+                    mode: 0.0,
+                    color: [0.0, 0.0, 0.0, 1.0],
+                    src_prev: [u0, 0.0, u1, wv], // src fixe (pas de zoom webcam)
+                    dst_prev: w_dst_prev,
+                    mb: [mb_taps, 0.0, 0.0, 0.0],
+                    ..Default::default()
+                },
+                &wy,
+                &wuv,
+            );
         }
-        self.draw_video(
-            &LayerCB {
-                dst: w_dst,
-                src: [u0, 0.0, u1, wv],
-                quad_px: w_px,
-                radius_px: w_radius,
-                mode: 0.0,
-                color: [0.0, 0.0, 0.0, 1.0],
-                src_prev: [u0, 0.0, u1, wv], // src fixe (pas de zoom webcam)
-                dst_prev: w_dst_prev,
-                mb: [mb_taps, 0.0, 0.0, 0.0],
-                ..Default::default()
-            },
-            &wy,
-            &wuv,
-        );
         Ok(())
     }
 

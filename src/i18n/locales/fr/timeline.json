@@ -2,6 +2,10 @@
 	"buttons": {
 		"addZoom": "Ajouter un zoom (Z)",
 		"suggestZooms": "Suggérer des zooms depuis le curseur",
+		"autoZoomOn": "Suggestions de zoom automatique activées — cliquez pour supprimer les zooms suggérés",
+		"autoZoomOff": "Suggestions de zoom automatique désactivées — cliquez pour suggérer des zooms depuis le curseur",
+		"autoFocusAllOn": "Mise au point auto activée pour tous les zooms — cliquez pour tout passer en manuel",
+		"autoFocusAllOff": "Mise au point auto pour tous les zooms (la caméra suit le curseur)",
 		"addTrim": "Ajouter une coupe (T)",
 		"addAnnotation": "Ajouter une annotation (A)",
 		"addSpeed": "Ajouter une vitesse (S)",

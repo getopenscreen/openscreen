@@ -10,6 +10,7 @@
 		"openProject": "프로젝트 열기",
 		"useVerticalTray": "세로 트레이 사용",
 		"useHorizontalTray": "가로 트레이 사용",
+		"openStudio": "스튜디오 열기",
 		"openNotes": "노트 열기",
 		"openNotesPlaceholder": "여기에 메모를 입력하세요...",
 		"notesToolbar": {
@@ -45,6 +46,9 @@
 		"loading": "소스 불러오는 중...",
 		"screens": "화면 ({{count}}개)",
 		"windows": "창 ({{count}}개)",
+		"emptyTitle": "화면 또는 창을 찾을 수 없습니다",
+		"emptyDescription": "화면 녹화 권한을 방금 부여했다면 이 선택기를 새로고침하세요. macOS에서는 OpenScreen을 다시 열어야 할 수도 있습니다.",
+		"loadFailedDescription": "OpenScreen이 캡처 소스를 불러오지 못했습니다. 이 선택기를 새로고침하고 다시 시도하세요.",
 		"defaultSourceName": "화면"
 	},
 	"recording": {

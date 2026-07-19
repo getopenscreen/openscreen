@@ -10,6 +10,7 @@
 		"openProject": "Proje aç",
 		"useVerticalTray": "Dikey araç çubuğunu kullan",
 		"useHorizontalTray": "Yatay araç çubuğunu kullan",
+		"openStudio": "Stüdyoyu Aç",
 		"openNotes": "Notları aç",
 		"openNotesPlaceholder": "Notlarınızı buraya yazın...",
 		"notesToolbar": {
@@ -45,6 +46,9 @@
 		"loading": "Kaynaklar yükleniyor...",
 		"screens": "Ekranlar ({{count}})",
 		"windows": "Pencereler ({{count}})",
+		"emptyTitle": "Ekran veya pencere bulunamadı",
+		"emptyDescription": "Ekran kaydı iznini az önce verdiyseniz, bu seçiciyi yeniden yükleyin. macOS'ta OpenScreen'i yeniden açmanız gerekebilir.",
+		"loadFailedDescription": "OpenScreen yakalama kaynaklarını yükleyemedi. Bu seçiciyi yeniden yükleyip tekrar deneyin.",
 		"defaultSourceName": "Ekran"
 	},
 	"recording": {

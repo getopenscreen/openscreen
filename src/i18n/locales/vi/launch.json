@@ -10,6 +10,7 @@
 		"openProject": "Mở dự án",
 		"useVerticalTray": "Dùng khay dọc",
 		"useHorizontalTray": "Dùng khay ngang",
+		"openStudio": "Mở Studio",
 		"openNotes": "Mở ghi chú",
 		"openNotesPlaceholder": "Ghi chú của bạn tại đây...",
 		"notesToolbar": {
@@ -41,6 +42,9 @@
 		"loading": "Đang tải nguồn...",
 		"screens": "Màn hình ({{count}})",
 		"windows": "Cửa sổ ({{count}})",
+		"emptyTitle": "Không tìm thấy màn hình hoặc cửa sổ nào",
+		"emptyDescription": "Nếu bạn vừa cấp quyền ghi màn hình, hãy tải lại bộ chọn này. Trên macOS, bạn có thể cần mở lại OpenScreen.",
+		"loadFailedDescription": "OpenScreen không thể tải nguồn ghi hình. Hãy tải lại bộ chọn này và thử lại.",
 		"defaultSourceName": "Màn hình"
 	},
 	"recording": {

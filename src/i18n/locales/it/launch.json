@@ -10,6 +10,7 @@
 		"openProject": "Apri progetto",
 		"useVerticalTray": "Usa barra verticale",
 		"useHorizontalTray": "Usa barra orizzontale",
+		"openStudio": "Apri Studio",
 		"openNotes": "Apri note",
 		"openNotesPlaceholder": "Scrivi le tue note qui...",
 		"notesToolbar": {
@@ -45,6 +46,9 @@
 		"loading": "Caricamento sorgenti...",
 		"screens": "Schermi ({{count}})",
 		"windows": "Finestre ({{count}})",
+		"emptyTitle": "Nessuno schermo o finestra trovati",
+		"emptyDescription": "Se hai appena concesso il permesso di registrazione dello schermo, ricarica questo selettore. Su macOS potrebbe essere necessario riaprire OpenScreen.",
+		"loadFailedDescription": "OpenScreen non è riuscito a caricare le sorgenti di acquisizione. Ricarica questo selettore e riprova.",
 		"defaultSourceName": "Schermo"
 	},
 	"recording": {

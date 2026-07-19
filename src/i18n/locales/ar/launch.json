@@ -10,6 +10,7 @@
 		"openProject": "فتح مشروع",
 		"useVerticalTray": "استخدام الشريط العمودي",
 		"useHorizontalTray": "استخدام الشريط الأفقي",
+		"openStudio": "فتح الاستوديو",
 		"openNotes": "فتح الملاحظات",
 		"openNotesPlaceholder": "اكتب ملاحظاتك هنا...",
 		"notesToolbar": {
@@ -41,6 +42,9 @@
 		"loading": "جاري تحميل المصادر...",
 		"screens": "الشاشات ({{count}})",
 		"windows": "النوافذ ({{count}})",
+		"emptyTitle": "لم يتم العثور على شاشات أو نوافذ",
+		"emptyDescription": "إذا كنت قد منحت للتو إذن تسجيل الشاشة، أعد تحميل هذا المحدد. قد تحتاج على macOS إلى إعادة فتح OpenScreen.",
+		"loadFailedDescription": "تعذّر على OpenScreen تحميل مصادر الالتقاط. أعد تحميل هذا المحدد وحاول مرة أخرى.",
 		"defaultSourceName": "الشاشة"
 	},
 	"recording": {

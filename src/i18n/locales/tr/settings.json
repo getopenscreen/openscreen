@@ -8,7 +8,8 @@
 			"title": "Odak Modu",
 			"manual": "Manuel",
 			"auto": "Otomatik",
-			"autoDescription": "Kamera kaydedilen imleç konumunu takip eder"
+			"autoDescription": "Kamera kaydedilen imleç konumunu takip eder",
+			"lockedDisclaimer": "Zaman çizelgesindeki genel Otomatik Odak anahtarı tarafından kontrol edilir. Her yakınlaştırma için odak modunu ayrı ayrı ayarlamak için kapatın."
 		},
 		"threeD": {
 			"title": "3D Döndürme",
@@ -135,8 +136,6 @@
 		"textPlaceholder": "Metninizi girin...",
 		"fontStyle": "Yazı Tipi Stili",
 		"selectStyle": "Stil seçin",
-		"textAnimation": "Metin Animasyonu",
-		"selectAnimation": "Animasyon seçin",
 		"size": "Boyut",
 		"customFonts": "Özel Yazı Tipleri",
 		"textColor": "Metin Rengi",
@@ -182,6 +181,17 @@
 		"modern": "Modern",
 		"clean": "Temiz"
 	},
+	"textAnimation": {
+		"title": "Metin Animasyonu",
+		"selectAnimation": "Animasyon seçin",
+		"none": "Yok",
+		"fade": "Solma",
+		"rise": "Yükselme",
+		"pop": "Patlama",
+		"slideLeft": "Sola Kaydırma",
+		"typewriter": "Daktilo",
+		"pulse": "Nabız"
+	},
 	"customFont": {
 		"dialogTitle": "Google Yazı Tipi Ekle",
 		"urlLabel": "Google Fonts İçe Aktarım URL'si",
@@ -209,7 +219,8 @@
 		"smoothing": "Yumuşatma",
 		"motionBlur": "Hareket Bulanıklığı",
 		"clickBounce": "Tıklama Sıçraması",
-		"clipToBounds": "Tuvale Kırp"
+		"clipToBounds": "Tuvale Kırp",
+		"clipToBoundsDescription": "İmleci video çerçevesi içinde tutar. Kapalıyken imlecin kenarların dışına taşmasına izin verir - yakınlaştırıldığında veya kaydırıldığında kullanışlıdır."
 	},
 	"language": {
 		"title": "Dil"

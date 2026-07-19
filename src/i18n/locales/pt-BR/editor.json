@@ -6,6 +6,7 @@
 		"confirm": "Confirmar"
 	},
 	"loadingVideo": "Carregando vídeo...",
+	"loadingEditor": "Carregando editor...",
 	"errors": {
 		"noVideoLoaded": "Nenhum vídeo carregado",
 		"videoNotReady": "Vídeo não está pronto",
@@ -40,7 +41,8 @@
 		"cameraDenied": "Acesso à câmera negado. A gravação continuará sem webcam.",
 		"cameraDisconnected": "Webcam desconectada.",
 		"cameraNotFound": "Câmera não encontrada.",
-		"permissionDenied": "Permissão de gravação negada. Por favor, permita a gravação de tela."
+		"permissionDenied": "Permissão de gravação negada. Por favor, permita a gravação de tela.",
+		"accessibilityAllowAndRetry": "Permita o acesso de Acessibilidade para o OpenScreen e pressione gravar novamente para iniciar a contagem regressiva."
 	},
 	"autoCaptions": {
 		"button": "Legendas automáticas",
@@ -60,6 +62,21 @@
 		"noAudio": "Este vídeo não tem áudio utilizável para transcrição.",
 		"failed": "Não foi possível gerar as legendas.",
 		"truncated": "Apenas os primeiros {{minutes}} minutos foram transcritos."
+	},
+	"emptyState": {
+		"title": "Nenhum projeto aberto",
+		"description": "Importe um vídeo para começar a editar, ou carregue um projeto OpenScreen existente.",
+		"importVideoButton": "Importar Arquivo de Vídeo…",
+		"loadProjectButton": "Carregar Projeto…",
+		"supportedFormats": "Formatos suportados: MP4, MOV, WebM, MKV, AVI, M4V, WMV",
+		"dragDropHint": "ou arraste e solte um arquivo de projeto .openscreen aqui",
+		"dropOverlay": "Solte o arquivo de projeto para abrir",
+		"dropErrors": {
+			"unsupportedFormatTitle": "Formato não suportado",
+			"unsupportedFormatMessage": "Apenas arquivos de projeto .openscreen podem ser soltos aqui. Para importar um arquivo de vídeo, use o botão \"Importar Arquivo de Vídeo…\" nesta tela.",
+			"couldNotOpenTitle": "Não foi possível abrir o arquivo",
+			"couldNotOpenMessage": "O arquivo de projeto não pôde ser aberto. O vídeo referenciado pode ter sido movido ou excluído."
+		}
 	},
 	"regionClipboard": {
 		"copied": "Atributos de {{region}} copiados",

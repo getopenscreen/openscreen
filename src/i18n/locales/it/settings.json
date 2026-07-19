@@ -9,7 +9,8 @@
 			"title": "Modalità messa a fuoco",
 			"manual": "Manuale",
 			"auto": "Automatico",
-			"autoDescription": "La fotocamera segue la posizione del cursore registrato"
+			"autoDescription": "La fotocamera segue la posizione del cursore registrato",
+			"lockedDisclaimer": "Controllato dall'interruttore globale Messa a fuoco automatica nella timeline. Disattivalo per impostare la modalità di messa a fuoco per ogni zoom."
 		},
 		"threeD": {
 			"title": "Rotazione 3D",
@@ -104,7 +105,8 @@
 	},
 	"project": {
 		"save": "Salva progetto",
-		"load": "Carica progetto"
+		"load": "Carica progetto",
+		"new": "Nuovo progetto"
 	},
 	"export": {
 		"videoButton": "Esporta video",
@@ -217,7 +219,8 @@
 		"smoothing": "Smussatura",
 		"motionBlur": "Sfocatura movimento",
 		"clickBounce": "Rimbalzo clic",
-		"clipToBounds": "Ritaglia al canvas"
+		"clipToBounds": "Ritaglia al canvas",
+		"clipToBoundsDescription": "Mantiene il cursore all'interno del fotogramma video. Disattiva per consentire al cursore di estendersi oltre i bordi - utile quando si esegue zoom o panoramica."
 	},
 	"language": {
 		"title": "Lingua"

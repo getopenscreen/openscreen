@@ -8,7 +8,8 @@
 			"title": "Mode focus",
 			"manual": "Manuel",
 			"auto": "Auto",
-			"autoDescription": "La caméra suit la position du curseur enregistré"
+			"autoDescription": "La caméra suit la position du curseur enregistré",
+			"lockedDisclaimer": "Contrôlé par l'interrupteur global Mise au point auto dans la timeline. Désactivez-le pour définir le mode de mise au point par zoom."
 		},
 		"threeD": {
 			"title": "Rotation 3D",
@@ -218,7 +219,8 @@
 		"smoothing": "Lissage",
 		"motionBlur": "Flou de mouvement",
 		"clickBounce": "Rebond au clic",
-		"clipToBounds": "Rogner au canevas"
+		"clipToBounds": "Rogner au canevas",
+		"clipToBoundsDescription": "Garde le curseur à l'intérieur du cadre vidéo. Désactivez pour permettre au curseur de dépasser les bords - utile en cas de zoom ou de panoramique."
 	},
 	"language": {
 		"title": "Langue"

@@ -103,6 +103,12 @@ impl Player {
         Ok(())
     }
 
+    /// Temps source courant du décodeur écran — utilisé par `render_thread` pour détecter le
+    /// franchissement de la fin de fenêtre du clip actif pendant la lecture libre.
+    pub(crate) unsafe fn screen_time_sec(&self) -> f64 {
+        self.sdec.cur_time_sec()
+    }
+
     /// Compose la frame suivante (→ `comp.rt`). Boucle sur EOF. `false` si fixture vide.
     ///
     /// L'écran pilote la cadence (1 frame/tick) ; la webcam suit son PROPRE temps source
@@ -597,6 +603,13 @@ unsafe fn render_thread(
     let mut active_webcam_path = webcam.to_string();
     let mut active_webcam_offset_sec = 0.0f64;
     let mut active_clip_index = 0usize;
+    // Copie de la Scene complète (tous les clips), tenue à jour à chaque push de l'app —
+    // permet à la boucle de lecture libre de connaître la fenêtre source
+    // [source_start_sec, source_end_sec) du clip actif et d'enchaîner elle-même sur le
+    // clip suivant (voir plus bas), sans dépendre d'un aller-retour JS par frontière de
+    // clip : la timeline est un niveau d'abstraction AU-DESSUS des clips, elle se lit
+    // dans son entièreté et l'utilisateur ne doit jamais remarquer la frontière.
+    let mut full_scene: Option<Scene> = None;
 
     // config de base = C8 (tous effets) ; le fond flouté est piloté par le param live.
     let mut cfg = config::all().pop().expect("au moins une config");
@@ -635,6 +648,7 @@ unsafe fn render_thread(
                     active_webcam_path = request.webcam_path;
                     active_webcam_offset_sec = request.webcam_offset_sec;
                     let scene = shared.scene.lock().unwrap().clone();
+                    full_scene = scene.clone();
                     if let Some(base_scene) = scene {
                         if let Some(index) = resolve_scene_clip_index(
                             &base_scene,
@@ -716,6 +730,7 @@ unsafe fn render_thread(
         let scene_changed = shared.scene_dirty.swap(false, Ordering::Relaxed);
         if scene_changed {
             let scene = shared.scene.lock().unwrap().clone();
+            full_scene = scene.clone();
             let scene = scene.map(|base_scene| {
                 scene_applied = true;
                 if let Some(index) = resolve_scene_clip_index(
@@ -767,6 +782,50 @@ unsafe fn render_thread(
             let step = 1.0 / 60.0;
             let mut n = 0;
             while acc >= step && n < 3 {
+                // Timeline = niveau d'abstraction AU-DESSUS des clips : dès que le décodeur
+                // écran atteint la fin de fenêtre du clip actif, on enchaîne nous-mêmes sur
+                // le clip suivant (ou on reboucle sur le premier après le dernier) — sans
+                // dépendre d'un `active_clip_request` poussé par le JS en réaction au
+                // franchissement. Ce round-trip arrivait toujours trop tard : le décodeur
+                // avait déjà dépassé la fin de la fenêtre, voire atteint l'EOF brut du
+                // fichier et rebouclé sur lui-même — d'où le "retour au 1er clip" observé.
+                if let Some(scene) = &full_scene {
+                    if !scene.clips.is_empty() {
+                        if let Some(clip) = scene.clips.get(active_clip_index) {
+                            if player.screen_time_sec() >= clip.source_end_sec {
+                                let next_index = if active_clip_index + 1 < scene.clips.len() {
+                                    active_clip_index + 1
+                                } else {
+                                    0
+                                };
+                                let next_clip = &scene.clips[next_index];
+                                match player.set_active_clip(
+                                    &next_clip.screen_path,
+                                    &next_clip.webcam_path,
+                                    next_clip.webcam_offset_sec,
+                                    next_clip.source_start_sec,
+                                ) {
+                                    Ok(()) => {
+                                        active_screen_path = next_clip.screen_path.clone();
+                                        active_webcam_path = next_clip.webcam_path.clone();
+                                        active_webcam_offset_sec = next_clip.webcam_offset_sec;
+                                        active_clip_index = next_index;
+                                        comp.set_scene(Some(scene_for_clip(scene, active_clip_index)));
+                                        let cursor_path = format!("{}.cursor.json", active_screen_path);
+                                        raw_cursor =
+                                            CursorTrack::load(&cursor_path, 0.0, 24.0 * 3600.0).ok();
+                                        match &raw_cursor {
+                                            Some(track) => comp.set_cursor(track.smoothed(0.0)),
+                                            None => comp.clear_cursor(),
+                                        }
+                                        last_smoothing = -1.0;
+                                    }
+                                    Err(e) => eprintln!("[live] auto-advance clip: {e:#}"),
+                                }
+                            }
+                        }
+                    }
+                }
                 if player.step(&comp, &cfg)? {
                     stepped = true;
                 }

@@ -252,7 +252,17 @@ export function VirtualPreview({
 			activeClipIdRef.current = position.clip.id;
 			const reachedClipEnd = v.currentTime >= (position.clip.sourceEndSec ?? Infinity) - 0.04;
 			if (reachedClipEnd) {
-				const nextClip = clipsRef.current[position.clipIndex + 1];
+				// BUG corrigé : `clipsRef.current[position.clipIndex + 1]` supposait que le
+				// tableau brut (`document.timeline.clips`, jamais trié) était déjà dans l'ordre
+				// temporel — s'il ne l'était pas (clip ajouté/splitté à un index qui ne reflète
+				// pas son `timelineStartSec`), ce lookup retournait `undefined` même quand un
+				// clip suivant existait bel et bien, ce qui déclenchait `setIsPlaying(false)` et
+				// stoppait TOUTE la lecture au lieu d'enchaîner — le "ça se stoppe en fin de
+				// clip" observé. Recherche par temps de timeline (comme le fallback juste
+				// au-dessus et `NativeCompositorOverlay`), indépendante de l'ordre du tableau.
+				const nextClip = clipsRef.current
+					.filter((clip) => clip.timelineStartSec > position.clip.timelineStartSec + 0.001)
+					.sort((a, b) => a.timelineStartSec - b.timelineStartSec)[0];
 				if (!nextClip) {
 					v.pause();
 					updateVirtualTime(virtualDurationSecRef.current);

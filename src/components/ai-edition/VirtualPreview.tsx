@@ -119,7 +119,6 @@ export function VirtualPreview({
 	// matching clip, even while a later one is the one actually playing.
 	const activeClipIdRef = useRef<string | null>(null);
 	const [virtualTimeSec, setVirtualTimeSec] = useState(0);
-	const [, setIsPlaying] = useState(false);
 	const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
 	const [sourceIndex, setSourceIndex] = useState(0);
 
@@ -257,7 +256,6 @@ export function VirtualPreview({
 				else {
 					v.pause();
 					updateVirtualTime(virtualDurationSecRef.current);
-					setIsPlaying(false);
 				}
 				return;
 			}
@@ -268,10 +266,10 @@ export function VirtualPreview({
 				// tableau brut (`document.timeline.clips`, jamais trié) était déjà dans l'ordre
 				// temporel — s'il ne l'était pas (clip ajouté/splitté à un index qui ne reflète
 				// pas son `timelineStartSec`), ce lookup retournait `undefined` même quand un
-				// clip suivant existait bel et bien, ce qui déclenchait `setIsPlaying(false)` et
-				// stoppait TOUTE la lecture au lieu d'enchaîner — le "ça se stoppe en fin de
-				// clip" observé. Recherche par temps de timeline (comme le fallback juste
-				// au-dessus et `NativeCompositorOverlay`), indépendante de l'ordre du tableau.
+				// clip suivant existait bel et bien, ce qui déclenchait un arrêt de la lecture
+				// au lieu d'enchaîner — le "ça se stoppe en fin de clip" observé. Recherche par
+				// temps de timeline (comme le fallback juste au-dessus et
+				// `NativeCompositorOverlay`), indépendante de l'ordre du tableau.
 				const nextClip = findNextClipByTimelineOrder(
 					clipsRef.current,
 					position.clip.timelineStartSec,
@@ -279,7 +277,6 @@ export function VirtualPreview({
 				if (!nextClip) {
 					v.pause();
 					updateVirtualTime(virtualDurationSecRef.current);
-					setIsPlaying(false);
 					return;
 				}
 				seekToVirtualTime(nextClip.timelineStartSec, true);
@@ -353,8 +350,8 @@ export function VirtualPreview({
 		(nextVirtualTimeSec: number, preservePlayback = false, forceResume = false) => {
 			const position = locateVirtualPosition(clips, nextVirtualTimeSec);
 			if (!position) {
+				videoRef.current?.pause();
 				updateVirtualTime(0);
-				setIsPlaying(false);
 				return;
 			}
 			activeClipIdRef.current = position.clip.id;
@@ -398,7 +395,12 @@ export function VirtualPreview({
 				video.currentTime = position.sourceTimeSec;
 			}
 			if (shouldContinuePlayback) {
-				void video.play().catch(() => setIsPlaying(false));
+				// A rejection here means playback never actually started, so the browser
+				// never fired 'play' — nothing to reconcile, just avoid an unhandled
+				// rejection warning.
+				void video.play().catch(() => {
+					// swallow: rejection just means playback never started
+				});
 			}
 		},
 		[clips, videoSources, sourceIndex, updateVirtualTime],
@@ -485,7 +487,11 @@ export function VirtualPreview({
 									pendingSeekRef.current = null;
 									e.currentTarget.currentTime = sourceTimeSec;
 									if (play) {
-										void e.currentTarget.play().catch(() => setIsPlaying(false));
+										// See the other video.play() catch above: a rejection means
+										// playback never started, so there's no state to reconcile.
+										void e.currentTarget.play().catch(() => {
+											// swallow: rejection just means playback never started
+										});
 									}
 								} else if (clips.length > 0) {
 									seekToVirtualTime(virtualTimeSec);
@@ -493,18 +499,19 @@ export function VirtualPreview({
 							}}
 							onWaiting={() => setLoadState("loading")}
 							onCanPlay={() => setLoadState("ready")}
-							onError={() => {
+							onError={(e) => {
 								// ponytail: don't blindly advance to the next source — if
 								// the failed source owns the current virtual clip, the
 								// next sourceIndex will seekToVirtualTime right back into
 								// the same failed asset, looping. Fail the preview.
 								pendingSeekRef.current = null;
 								setLoadState("error");
-								setIsPlaying(false);
+								// An 'error' doesn't itself fire 'pause', so make sure the shell's
+								// transport state (single source of truth, see NewEditorShell's
+								// own play/pause/ended listener) actually learns playback stopped.
+								e.currentTarget.pause();
 								onVideoError?.();
 							}}
-							onPause={() => setIsPlaying(false)}
-							onPlay={() => setIsPlaying(true)}
 							onEnded={() => {
 								// BUG corrigé : ce handler stoppait TOUJOURS la lecture dès que le
 								// <video> brut atteignait SA PROPRE fin de fichier — une course
@@ -513,13 +520,17 @@ export function VirtualPreview({
 								// du fichier coïncide avec la fin de sa fenêtre timeline, et
 								// l'événement navigateur 'ended' gagnait quasi systématiquement
 								// cette course (déclenché par le navigateur dès la dernière frame,
-								// avant le prochain tick rAF) : `setIsPlaying(false)` stoppait TOUTE
-								// la lecture au lieu d'enchaîner sur le clip suivant — le "ça
-								// s'arrête en fin de clip" qui persistait malgré les fixes de la
-								// boucle rAF elle-même. `forceResume` (voir seekToVirtualTime) est
-								// nécessaire ici : le navigateur a déjà mis `.paused = true` avant
-								// de déclencher 'ended', donc le check `!video.paused` habituel
-								// empêcherait toujours la reprise de la lecture sur le clip suivant.
+								// avant le prochain tick rAF) : la lecture s'arrêtait au lieu
+								// d'enchaîner sur le clip suivant — le "ça s'arrête en fin de clip"
+								// qui persistait malgré les fixes de la boucle rAF elle-même.
+								// `forceResume` (voir seekToVirtualTime) est nécessaire ici : le
+								// navigateur a déjà mis `.paused = true` avant de déclencher
+								// 'ended', donc le check `!video.paused` habituel empêcherait
+								// toujours la reprise de la lecture sur le clip suivant. Si aucun
+								// clip suivant n'existe, on ne fait rien de plus ici : le navigateur
+								// a déjà mis la vidéo en pause, et NewEditorShell (seule source de
+								// vérité pour l'état de lecture) l'apprend via son propre listener
+								// 'ended'/'pause' sur ce même élément.
 								const current = clipsRef.current.find(
 									(clip) => clip.id === activeClipIdRef.current,
 								);
@@ -528,9 +539,7 @@ export function VirtualPreview({
 									: undefined;
 								if (nextClip) {
 									seekToVirtualTime(nextClip.timelineStartSec, true, true);
-									return;
 								}
-								setIsPlaying(false);
 							}}
 							// ponytail: handleTimeUpdate is now driven by the rAF loop
 							// above (60 Hz) instead of the <video> onTimeUpdate event

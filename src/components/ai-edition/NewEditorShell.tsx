@@ -50,6 +50,12 @@ export function NewEditorShell() {
 	const setSourceDuration = useProjectStore((s) => s.setSourceDuration);
 	const loadProject = useProjectStore((s) => s.loadProject);
 	const saveDocument = useProjectStore((s) => s.saveDocument);
+	// Single source of truth for transport state (was local useState here AND, separately
+	// and unused, in VirtualPreview — two copies independently wired to the same <video>
+	// events could disagree, see the "stops at clip end" fix history). Anything that needs
+	// to know or drive playback reads/writes this store field now, not a component-local copy.
+	const playing = useProjectStore((s) => s.playing);
+	const setPlaying = useProjectStore((s) => s.setPlaying);
 
 	const [seekTarget, setSeekTarget] = useState<SeekTarget | null>(null);
 	const [isTranscribing, setIsTranscribing] = useState(false);
@@ -57,7 +63,6 @@ export function NewEditorShell() {
 		Record<string, "pending" | "running" | "failed">
 	>({});
 	const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
-	const [playing, setPlaying] = useState(false);
 	const [loop, setLoop] = useState(false);
 	// v4 shell: three modes (Media / Edit / Rec), a collapsible agent (chat)
 	// column, and a floating facet inspector over the stage.
@@ -407,7 +412,9 @@ export function NewEditorShell() {
 			el.removeEventListener("pause", onPause);
 			el.removeEventListener("ended", onEnded);
 		};
-	}, [videoElement]);
+		// setPlaying is a stable Zustand action reference (never recreated), so listing it
+		// here doesn't cause this effect to re-subscribe on every playhead tick.
+	}, [videoElement, setPlaying]);
 
 	const togglePlay = useCallback(() => {
 		if (!videoElement) return;

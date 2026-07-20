@@ -790,7 +790,7 @@ unsafe fn render_thread(
                 // avait déjà dépassé la fin de la fenêtre, voire atteint l'EOF brut du
                 // fichier et rebouclé sur lui-même — d'où le "retour au 1er clip" observé.
                 if let Some(scene) = &full_scene {
-                    if !scene.clips.is_empty() {
+                    if scene.clips.len() > 1 {
                         if let Some(clip) = scene.clips.get(active_clip_index) {
                             if player.screen_time_sec() >= clip.source_end_sec {
                                 let next_index = if active_clip_index + 1 < scene.clips.len() {

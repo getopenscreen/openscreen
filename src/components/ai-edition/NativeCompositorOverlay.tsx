@@ -6,6 +6,7 @@ import {
 	setNativeScene,
 	useNativeCompositorView,
 } from "@/native";
+import { resolveNativePlaybackPosition } from "@/native/nativePlaybackPosition";
 import { buildSceneDescription } from "@/native/sceneDescription";
 import {
 	getWebcamNativeSize,
@@ -51,25 +52,20 @@ export function NativeCompositorOverlay() {
 		() => 0,
 	);
 
-	const orderedClips = useMemo(
-		() =>
-			document
-				? [...document.timeline.clips].sort((a, b) => a.timelineStartSec - b.timelineStartSec)
-				: [],
-		[document],
+	// Match buildSceneDescription's sorted+visible clip stream exactly. The resulting index is
+	// sent to Rust because paths/offsets cannot distinguish multiple cuts of one source asset.
+	const nativeClips = useMemo(() => {
+		if (!document) return [];
+		const assetById = new Map(document.assets.map((asset) => [asset.id, asset]));
+		return [...document.timeline.clips]
+			.sort((a, b) => a.timelineStartSec - b.timelineStartSec)
+			.filter((clip) => assetById.get(clip.assetId)?.originalPath);
+	}, [document]);
+	const activePosition = useMemo(
+		() => resolveNativePlaybackPosition(nativeClips, currentTimeSec),
+		[nativeClips, currentTimeSec],
 	);
-	const activeClip = useMemo(() => {
-		return (
-			orderedClips.find((clip, index) => {
-				const isLast = index === orderedClips.length - 1;
-				return (
-					currentTimeSec >= clip.timelineStartSec &&
-					(currentTimeSec < clip.timelineEndSec ||
-						(isLast && currentTimeSec <= clip.timelineEndSec))
-				);
-			}) ?? null
-		);
-	}, [orderedClips, currentTimeSec]);
+	const activeClip = activePosition?.clip ?? null;
 
 	// `null` = document pas encore chargé (on attend) ; `{}` = chargé sans asset (→ fixture) ;
 	// `{screenPath,…}` = vraies sources de l'asset primaire.
@@ -135,7 +131,7 @@ export function NativeCompositorOverlay() {
 		if (viewId === null || !document) {
 			return;
 		}
-		if (!activeClip) {
+		if (!activeClip || !activePosition) {
 			previousActiveClipIdRef.current = null;
 			return;
 		}
@@ -152,11 +148,13 @@ export function NativeCompositorOverlay() {
 			asset.originalPath,
 			cam?.sourcePath ?? asset.originalPath,
 			cam ? (cam.startMs + cam.offsetMs) / 1000 : 0,
+			activePosition.clipIndex,
+			activePosition.sourceTimeSec,
 		).catch((error: unknown) => {
 			console.warn("[compositor-view] setActiveClip failed:", error);
 		});
 		previousActiveClipIdRef.current = activeClip.id;
-	}, [viewId, document, activeClip]);
+	}, [viewId, document, activeClip, activePosition]);
 
 	if (!ready) {
 		return null;

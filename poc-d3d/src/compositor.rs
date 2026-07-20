@@ -1205,6 +1205,21 @@ impl Compositor {
             let (brx, bry) = (dst[0] + dst[2], dst[1] + dst[3]);
             [brx - nw, bry - nh, nw, nh]
         };
+        // Le ratio de sortie réel (peut différer du canvas interne 16:9 fixe) et le facteur
+        // d'étirement non uniforme que `blit_resized` appliquera en fin de pipeline — nécessaires
+        // ici (avant `undistort`, plus bas) pour que le fit ci-dessous cible le ratio de boîte tel
+        // qu'il apparaîtra APRÈS cet étirement, pas tel qu'il est dans l'espace canvas pré-étirement
+        // (sinon le fit et l'undistort composent deux corrections indépendantes et sur-rétrécissent
+        // le contenu — cf. rapport utilisateur : crop 9:16 + sortie 9:16 + padding 0% laissait
+        // quand même une grosse marge, alors que le crop correspond déjà exactement au cadre).
+        let (final_out_w, final_out_h) = scene_ref
+            .as_ref()
+            .map(|s| (s.output.width.max(1) as f32, s.output.height.max(1) as f32))
+            .unwrap_or((OUT_W as f32, OUT_H as f32));
+        let stretch_x = final_out_w / OUT_W as f32;
+        let stretch_y = final_out_h / OUT_H as f32;
+        let uniform_stretch = stretch_x.min(stretch_y);
+
         // Le crop de l'utilisateur (dialogue "Edit clip") a son PROPRE ratio (ex. une bande
         // verticale 9:16 recadrée dans une source 16:9) — le zoom appliqué ensuite (§
         // `screen_source_rect`) le préserve (mêmes facteurs sur les deux axes), donc c'est bien
@@ -1223,17 +1238,24 @@ impl Compositor {
             _ => scw / sch.max(0.0001),
         };
         // Contain (parité `centerRectInBounds`) : rétrécit `dst` (centré) pour que son ratio
-        // devienne `aspect`, sans jamais dépasser sa boîte d'origine.
+        // devienne `aspect`, sans jamais dépasser sa boîte d'origine — mais la boîte de référence
+        // doit être mesurée telle qu'elle apparaîtra APRÈS l'étirement de sortie (`dst` * ratio de
+        // sortie), pas dans l'espace canvas 16:9 pré-étirement : sinon le fit cible le mauvais
+        // ratio de boîte dès que la sortie n'est pas 16:9. `undistort` (plus bas) annule ensuite
+        // exactement ce même facteur, donc convertir le résultat en fraction canvas se fait par
+        // `/ uniform_stretch` (propriété de `undistort` : le ratio final ne dépend que de la
+        // taille de `dst` en PIXELS CANVAS, jamais du ratio de sortie choisi).
         let fit_dst_to_aspect = |dst: [f32; 4], aspect: f32| -> [f32; 4] {
-            let box_w_px = dst[2] * OUT_W as f32;
-            let box_h_px = dst[3] * OUT_H as f32;
+            let box_w_px = dst[2] * final_out_w;
+            let box_h_px = dst[3] * final_out_h;
             let box_ar = box_w_px / box_h_px.max(0.0001);
             let (nw_px, nh_px) = if aspect > box_ar {
                 (box_w_px, box_w_px / aspect.max(0.0001))
             } else {
                 (box_h_px * aspect, box_h_px)
             };
-            let (nw, nh) = (nw_px / OUT_W as f32, nh_px / OUT_H as f32);
+            let u = uniform_stretch.max(0.0001);
+            let (nw, nh) = (nw_px / (OUT_W as f32 * u), nh_px / (OUT_H as f32 * u));
             let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
             [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
         };
@@ -1287,13 +1309,8 @@ impl Compositor {
         // reste préservé (letterboxé/pillarboxé sur le fond, qui lui reste plein cadre) — mode
         // "fit"/contain. Si l'utilisateur veut un rendu "fill" (remplir sans bandes), il ajuste
         // le crop lui-même ; le natif ne fait plus ce choix à sa place en étirant l'image.
-        let (final_out_w, final_out_h) = scene_ref
-            .as_ref()
-            .map(|s| (s.output.width.max(1) as f32, s.output.height.max(1) as f32))
-            .unwrap_or((OUT_W as f32, OUT_H as f32));
-        let stretch_x = final_out_w / OUT_W as f32;
-        let stretch_y = final_out_h / OUT_H as f32;
-        let uniform_stretch = stretch_x.min(stretch_y);
+        // (`final_out_w`/`final_out_h`/`stretch_x`/`stretch_y`/`uniform_stretch` déjà résolus plus
+        // haut, réutilisés par `fit_dst_to_aspect` — une seule source de vérité pour ce calcul.)
         let (undistort_x, undistort_y) = (uniform_stretch / stretch_x, uniform_stretch / stretch_y);
         let undistort = |dst: [f32; 4]| -> [f32; 4] {
             let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);

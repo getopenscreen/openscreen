@@ -7,7 +7,7 @@ use crate::scene::{Scene, SceneBackground, SceneCrop};
 use crate::d3d::Gpu;
 use crate::ffi::AVFrame;
 use anyhow::{bail, Result};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use windows::core::{Interface, PCSTR};
@@ -73,6 +73,22 @@ fn screen_source_rect(
     let su0 = (cu0 + fx * cw - hu).clamp(cu0, (cu1 - 2.0 * hu).max(cu0));
     let sv0 = (cv0 + fy * ch - hv).clamp(cv0, (cv1 - 2.0 * hv).max(cv0));
     [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv]
+}
+
+/// Rétrécit `dst` (centré, espace canvas 16:9 pré-étirement) par l'inverse du plus fort des deux
+/// facteurs d'étirement de sortie, pour qu'après l'étirement non uniforme de `blit_resized` en fin
+/// de pipeline, la forme de `dst` (en pixels canvas) reste préservée quel que soit le ratio de
+/// sortie choisi — mode "fit"/contain. Fonction libre (plutôt qu'une closure locale à
+/// `compose_frame`) pour que TOUT calque qui doit garder sa forme native (écran, webcam, mais
+/// aussi le curseur) passe par le même calcul au lieu de devoir s'en souvenir individuellement —
+/// voir `Compositor::frame_stretch`, qui porte `(stretch_x, stretch_y)` pour que les méthodes de
+/// dessin hors de `compose_frame` (ex. `draw_cursor_sprite`) puissent aussi l'appliquer.
+fn apply_undistort(dst: [f32; 4], stretch_x: f32, stretch_y: f32) -> [f32; 4] {
+    let uniform_stretch = stretch_x.min(stretch_y).max(0.0001);
+    let (undistort_x, undistort_y) = (uniform_stretch / stretch_x.max(0.0001), uniform_stretch / stretch_y.max(0.0001));
+    let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
+    let (nw, nh) = (dst[2] * undistort_x, dst[3] * undistort_y);
+    [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
 }
 
 /// Constant buffer d'un calque (doit matcher `cbuffer Layer` du HLSL, 64 octets).
@@ -232,6 +248,14 @@ pub struct Compositor {
     /// Cache des textures wallpaper image (clé = chemin absolu) : décodage/upload une seule
     /// fois, puis réutilisées par frame. (SRV, largeur, hauteur).
     img_cache: RefCell<HashMap<String, (ID3D11ShaderResourceView, u32, u32)>>,
+    /// (stretch_x, stretch_y) que `blit_resized` appliquera à CETTE frame — posé une fois en
+    /// tête de `compose_frame`, lu par tout calque qui doit annuler cet étirement pour garder sa
+    /// forme (curseur, coins arrondis...). Un état par-frame centralisé au lieu de faire porter
+    /// ce calcul à chaque appelant : un curseur thème (sprite) l'oubliait encore récemment (SDF
+    /// écran/webcam corrigée, curseur pas touché) — exactement le genre de bug qui se répète
+    /// quand chaque calque doit se souvenir individuellement d'appliquer la correction plutôt que
+    /// de la lire à une seule source de vérité.
+    frame_stretch: Cell<(f32, f32)>,
     /// Ressources de resize export (allouées paresseusement à la 1re taille de sortie ≠
     /// OUT_W×OUT_H — le live et les exports "Source"/1080p restent sur `rgb_to_nv12` inchangé,
     /// zéro coût). Voir `rgb_to_nv12_scaled`.
@@ -725,6 +749,7 @@ impl Compositor {
             live_params: RefCell::new(LiveParams::default()),
             scene: RefCell::new(None),
             img_cache: RefCell::new(HashMap::new()),
+            frame_stretch: Cell::new((1.0, 1.0)),
             resize_target: RefCell::new(None),
             live_readback_staging: RefCell::new(None),
         })
@@ -992,8 +1017,18 @@ impl Compositor {
     unsafe fn draw_cursor(&self, center: [f32; 2], size_px: f32, a: f32, clip: [f32; 4]) {
         let w = size_px / OUT_W as f32;
         let h = size_px / OUT_H as f32;
+        let dst = [center[0] - w * 0.5, center[1] - h * 0.5, w, h];
+        // Même correction que l'écran/la webcam (voir `apply_undistort`) : sans elle, ce quad
+        // (carré en pixels canvas) se retrouve étiré non uniformément par `blit_resized` en fin
+        // de pipeline dès que la sortie n'est pas 16:9 — le curseur rond devient elliptique. Le
+        // SDF (dot+ring, shaders.hlsl mode 4) reste isotrope dans `quad_px` (inchangé,
+        // volontairement PAS recalculé depuis `dst` après coup) : c'est la géométrie du quad qui
+        // absorbe la correction ici, pas le shader — mêmes maths que l'écran, exprimées à
+        // l'endroit le plus simple pour ce calque (pas de radius/SDF anisotrope à gérer).
+        let (stretch_x, stretch_y) = self.frame_stretch.get();
+        let dst = apply_undistort(dst, stretch_x, stretch_y);
         self.draw_solid(&LayerCB {
-            dst: [center[0] - w * 0.5, center[1] - h * 0.5, w, h],
+            dst,
             quad_px: [size_px, size_px],
             mode: 4.0,
             color: [1.0, 1.0, 1.0, a],
@@ -1026,8 +1061,16 @@ impl Compositor {
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
         let w = pw / OUT_W as f32;
         let h = ph / OUT_H as f32;
+        let dst = [center[0] - w * 0.5, center[1] - h * 0.5, w, h];
+        // Même correction que l'écran/la webcam/le curseur dot+ring (`apply_undistort`) : le
+        // sprite est échantillonné par UV directement sur ce quad (pas de SDF ici), donc sans
+        // cette correction, l'étirement non uniforme de `blit_resized` déforme littéralement
+        // l'image du curseur (le bug rapporté : sprite "pastèque" écrasé/étiré) dès que la
+        // sortie n'est pas 16:9.
+        let (stretch_x, stretch_y) = self.frame_stretch.get();
+        let dst = apply_undistort(dst, stretch_x, stretch_y);
         self.upload_cb(&LayerCB {
-            dst: [center[0] - w * 0.5, center[1] - h * 0.5, w, h],
+            dst,
             src: [0.0, 0.0, 1.0, 1.0],
             mode: 7.0,
             color: [1.0, 1.0, 1.0, a],
@@ -1219,6 +1262,10 @@ impl Compositor {
         let stretch_x = final_out_w / OUT_W as f32;
         let stretch_y = final_out_h / OUT_H as f32;
         let uniform_stretch = stretch_x.min(stretch_y);
+        // Publié pour tout calque dessiné hors de cette fonction (ex. le curseur, plus bas) qui a
+        // aussi besoin d'annuler l'étirement de sortie pour garder sa forme — une seule source de
+        // vérité au lieu d'un recalcul (ou d'un oubli) par méthode de dessin.
+        self.frame_stretch.set((stretch_x, stretch_y));
 
         // Le crop de l'utilisateur (dialogue "Edit clip") a son PROPRE ratio (ex. une bande
         // verticale 9:16 recadrée dans une source 16:9) — le zoom appliqué ensuite (§
@@ -1311,12 +1358,7 @@ impl Compositor {
         // le crop lui-même ; le natif ne fait plus ce choix à sa place en étirant l'image.
         // (`final_out_w`/`final_out_h`/`stretch_x`/`stretch_y`/`uniform_stretch` déjà résolus plus
         // haut, réutilisés par `fit_dst_to_aspect` — une seule source de vérité pour ce calcul.)
-        let (undistort_x, undistort_y) = (uniform_stretch / stretch_x, uniform_stretch / stretch_y);
-        let undistort = |dst: [f32; 4]| -> [f32; 4] {
-            let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
-            let (nw, nh) = (dst[2] * undistort_x, dst[3] * undistort_y);
-            [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
-        };
+        let undistort = |dst: [f32; 4]| -> [f32; 4] { apply_undistort(dst, stretch_x, stretch_y) };
         let s_dst = undistort(s_dst);
         let s_dst_prev = undistort(s_dst_prev);
         w_dst = undistort(w_dst);

@@ -104,22 +104,70 @@ impl Player {
     }
 
     /// Compose la frame suivante (→ `comp.rt`). Boucle sur EOF. `false` si fixture vide.
+    ///
+    /// L'écran pilote la cadence (1 frame/tick) ; la webcam suit son PROPRE temps source
+    /// (`screen_time - webcam_offset_sec`), pas un pas 1:1 avec l'écran — BUG corrigé : les
+    /// deux décodeurs avançaient d'exactement une frame par tick chacun, quelle que soit leur
+    /// cadence réelle. Écran et webcam sont capturés par des pipelines indépendants (souvent
+    /// à des fps différents), donc la webcam jouait 2× trop vite dès que sa cadence était
+    /// inférieure à celle de l'écran. Même logique que `advance_decoder_to` (pipeline.rs),
+    /// déjà correcte côté export — la preview live ne l'avait jamais reprise. La webcam boucle
+    /// aussi de façon INDÉPENDANTE à son propre EOF (un clip webcam plus court que l'écran ne
+    /// doit pas réinitialiser le décodeur écran).
     pub unsafe fn step(&mut self, comp: &Compositor, cfg: &Cfg) -> Result<bool> {
-        let (mut sf, mut wf) = if self.use_current_on_next_step {
-            self.use_current_on_next_step = false;
-            (self.sdec.cur_frame(), self.wdec.cur_frame())
+        let use_current = self.use_current_on_next_step;
+        self.use_current_on_next_step = false;
+
+        let mut sf = if use_current {
+            self.sdec.cur_frame()
         } else {
-            (self.sdec.next()?, self.wdec.next()?)
+            self.sdec.next()?
         };
-        if sf.is_null() || wf.is_null() {
+        if sf.is_null() {
             sf = self.sdec.seek_to(0.0)?;
-            wf = self.wdec.seek_to((0.0 - self.webcam_offset_sec).max(0.0))?;
             self.idx = 0;
         }
-        if sf.is_null() || wf.is_null() {
+        if sf.is_null() {
             self.has_current_frame = false;
             return Ok(false);
         }
+
+        let target_webcam_t = (self.sdec.cur_time_sec() - self.webcam_offset_sec).max(0.0);
+        let mut wf = if use_current {
+            self.wdec.cur_frame()
+        } else {
+            let cur = self.wdec.cur_frame();
+            if cur.is_null() {
+                // Jamais décodée (nouvelle ouverture) : on saute directement au temps synchronisé.
+                self.wdec.seek_to(target_webcam_t)?
+            } else {
+                // Rattrape la webcam vers `target_webcam_t`, au pire une poignée de frames par
+                // tick (fps proches) — le garde-fou n'existe que contre un cas pathologique.
+                let mut wf = cur;
+                let mut guard = 0u32;
+                while self.wdec.cur_time_sec() < target_webcam_t {
+                    match self.wdec.next()? {
+                        f if f.is_null() => {
+                            // Fin de la webcam avant l'écran : elle boucle SEULE — l'écran
+                            // garde sa propre position, inchangée.
+                            wf = self.wdec.seek_to(0.0)?;
+                            break;
+                        }
+                        f => wf = f,
+                    }
+                    guard += 1;
+                    if guard > 1000 {
+                        break;
+                    }
+                }
+                wf
+            }
+        };
+        if wf.is_null() {
+            self.has_current_frame = false;
+            return Ok(false);
+        }
+
         self.has_current_frame = true;
         self.sync_time(comp);
         comp.compose_frame(sf, wf, self.idx as f32, cfg)?;

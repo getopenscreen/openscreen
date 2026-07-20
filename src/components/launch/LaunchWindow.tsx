@@ -924,14 +924,22 @@ export function LaunchWindow() {
 					}
 				}}
 			>
-				{/* Drag handle */}
+				{/* Drag handle. On Linux (notably Wayland), BrowserWindow.setPosition() used by
+				the pointer-capture drag below is a platform no-op -- compositors don't let
+				clients reposition themselves outside an OS-initiated interactive move. Fall
+				back to native `-webkit-app-region: drag` there, same as the HUD bar's border,
+				which already goes through the OS's own move gesture and works. */}
 				<div
 					data-testid="hud-drag-handle"
-					className={`flex ${trayLayout === "vertical" ? "h-6 w-8" : "h-8 w-7"} cursor-grab items-center justify-center active:cursor-grabbing ${styles.electronNoDrag}`}
-					onPointerDown={handleHudDragPointerDown}
-					onPointerMove={handleHudDragPointerMove}
-					onPointerUp={handleHudDragPointerEnd}
-					onPointerCancel={handleHudDragPointerEnd}
+					className={`flex ${trayLayout === "vertical" ? "h-6 w-8" : "h-8 w-7"} cursor-grab items-center justify-center active:cursor-grabbing ${isLinuxHud ? styles.electronDrag : styles.electronNoDrag}`}
+					{...(isLinuxHud
+						? {}
+						: {
+								onPointerDown: handleHudDragPointerDown,
+								onPointerMove: handleHudDragPointerMove,
+								onPointerUp: handleHudDragPointerEnd,
+								onPointerCancel: handleHudDragPointerEnd,
+							})}
 				>
 					{getIcon("drag", "text-white/30")}
 				</div>

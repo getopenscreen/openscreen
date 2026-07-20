@@ -892,7 +892,7 @@ impl Compositor {
     /// Fond wallpaper image (cover-fit). `path` = chemin absolu (résolu côté app). Décodé et
     /// uploadé une fois (cache), puis échantillonné en mode 6. Err → l'appelant retombe sur une
     /// couleur plate. Le rect uv `src` recouvre toute la sortie en rognant le débordement.
-    unsafe fn draw_image_bg(&self, path: &str) -> Result<()> {
+    unsafe fn draw_image_bg(&self, path: &str, output_aspect: f32) -> Result<()> {
         // NB : la recherche est isolée dans un `let` pour que l'emprunt immuable soit relâché
         // AVANT le `borrow_mut()` (sinon double-emprunt RefCell → panic sur la 1re frame image).
         let cached = self.img_cache.borrow().get(path).cloned();
@@ -905,7 +905,13 @@ impl Compositor {
             }
         };
         let ai = iw as f32 / ih as f32;
-        let ao = OUT_W as f32 / OUT_H as f32;
+        // Le fond remplit TOUJOURS le cadre (dst=[0,0,1,1], jamais rétréci par `undistort`),
+        // mais le canvas interne est un 16:9 fixe étiré ensuite vers le VRAI ratio de sortie
+        // (`blit_resized`, non uniforme) : le crop "cover" doit donc être calculé contre ce vrai
+        // ratio de sortie (`output_aspect`, = final_out_w/final_out_h), pas contre le ratio fixe
+        // du canvas — sinon l'image, déjà cover-fittée pour du 16:9, se retrouve re-déformée par
+        // l'étirement final vers un ratio différent (ex. 9:16, cf. rapport utilisateur).
+        let ao = output_aspect;
         let (u0, v0, u1, v1) = if ai > ao {
             let vis = ao / ai; // rogne horizontalement
             ((1.0 - vis) * 0.5, 0.0, 1.0 - (1.0 - vis) * 0.5, 1.0)
@@ -1199,8 +1205,40 @@ impl Compositor {
             let (brx, bry) = (dst[0] + dst[2], dst[1] + dst[3]);
             [brx - nw, bry - nh, nw, nh]
         };
-        let s_dst = scale_frame(p.screen.dst, padding_scale);
-        let s_dst_prev = scale_frame(pp.screen.dst, padding_scale);
+        // Le crop de l'utilisateur (dialogue "Edit clip") a son PROPRE ratio (ex. une bande
+        // verticale 9:16 recadrée dans une source 16:9) — le zoom appliqué ensuite (§
+        // `screen_source_rect`) le préserve (mêmes facteurs sur les deux axes), donc c'est bien
+        // le ratio du CROP qui doit dimensionner le quad de destination, pas celui (fixe, issu
+        // du preset de layout) de `p.screen.dst`. Sans ça, le rect recadré (dont le ratio propre
+        // diffère de la boîte du preset) se retrouve étiré pour remplir cette boîte — parité web
+        // cassée : `computeCompositeLayout`/`centerRectInBounds` (TS) contiennent déjà le crop
+        // dans sa boîte en respectant son ratio, le natif ne le faisait pas (rapport utilisateur).
+        let active_crop = scene_ref.as_ref().and_then(|scene| {
+            scene.crop_by_clip.get(scene.active_clip_index).copied().flatten()
+        });
+        let crop_aspect = match active_crop {
+            Some(c) if c.width > 0.0001 && c.height > 0.0001 => {
+                (c.width * scw) / (c.height * sch).max(0.0001)
+            }
+            _ => scw / sch.max(0.0001),
+        };
+        // Contain (parité `centerRectInBounds`) : rétrécit `dst` (centré) pour que son ratio
+        // devienne `aspect`, sans jamais dépasser sa boîte d'origine.
+        let fit_dst_to_aspect = |dst: [f32; 4], aspect: f32| -> [f32; 4] {
+            let box_w_px = dst[2] * OUT_W as f32;
+            let box_h_px = dst[3] * OUT_H as f32;
+            let box_ar = box_w_px / box_h_px.max(0.0001);
+            let (nw_px, nh_px) = if aspect > box_ar {
+                (box_w_px, box_w_px / aspect.max(0.0001))
+            } else {
+                (box_h_px * aspect, box_h_px)
+            };
+            let (nw, nh) = (nw_px / OUT_W as f32, nh_px / OUT_H as f32);
+            let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
+            [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
+        };
+        let s_dst = fit_dst_to_aspect(scale_frame(p.screen.dst, padding_scale), crop_aspect);
+        let s_dst_prev = fit_dst_to_aspect(scale_frame(pp.screen.dst, padding_scale), crop_aspect);
         // le padding n'affecte QUE l'écran (la quantité de fond révélée). La webcam reste ancrée
         // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame).
         let mut w_dst = fit_cam_aspect(scale_corner_br(p.webcam.dst, webcam_size_scale));
@@ -1268,27 +1306,39 @@ impl Compositor {
         w_dst_prev = undistort(w_dst_prev);
 
         // `roundness_px` est un px ABSOLU de la résolution de SORTIE (comme un border-radius
-        // CSS) — mais il est appliqué ici dans l'espace PRÉ-étirement 16:9. Sans correction,
-        // le même rayon en px donnerait un résultat visuel différent selon le ratio choisi
-        // (le quad écran est rétréci par `undistort` ci-dessus, mais pas le rayon) : on divise
-        // par `uniform_stretch` pour que le rayon final, après l'étirement de `blit_resized`,
-        // corresponde bien au nombre de pixels demandé quel que soit le ratio/la résolution
-        // de sortie — mode "fit" cohérent, un rayon uniforme quel que soit le conteneur.
-        let s_radius = if cfg.rounded {
-            (p.screen.radius * lp.radius_scale) / uniform_stretch.max(0.0001)
-        } else {
-            0.0
-        };
+        // CSS). Le dessin du coin (SDF, shaders.hlsl) pré-déforme lui-même ses coordonnées par
+        // `stretch_x`/`stretch_y` (mb.yz) avant de comparer à ce rayon, donc `s_radius` reste
+        // ici une valeur BRUTE en px de sortie réelle — pas de correction scalaire à faire ici
+        // (une correction scalaire par `uniform_stretch` seul compenserait la MAGNITUDE mais pas
+        // l'ANISOTROPIE : elle laissait les coins elliptiques dès que stretch_x != stretch_y,
+        // càd dès que le ratio de sortie n'est pas 16:9 — cf. rapport utilisateur sur le 9:16).
+        let s_radius = if cfg.rounded { p.screen.radius * lp.radius_scale } else { 0.0 };
+        // L'ombre (SDF isotrope, floue — l'anisotropie n'y est pas perceptible) reste dessinée
+        // dans l'espace canvas PRÉ-étirement : elle a besoin du rayon corrigé en magnitude
+        // (l'ancien calcul), pas du rayon brut ci-dessus.
+        let s_radius_shadow = s_radius / uniform_stretch.max(0.0001);
         let w_px = [w_dst[2] * OUT_W as f32, w_dst[3] * OUT_H as f32];
         // forme webcam : rayon SDF dérivé de la SEULE forme choisie. Le slider Roundness ne
         // s'applique qu'à l'ÉCRAN, jamais à la caméra. Parité web (compositeLayout) : rectangle
         // ET square ont un léger arrondi (fraction 0.12) — ils ne diffèrent que par le ratio ;
         // rounded est nettement plus arrondi (0.3) ; circle = demi-côté.
-        let w_min = w_px[0].min(w_px[1]);
+        // Rayon "brut" (SDF anisotrope, cf. écran ci-dessus) dérivé de la taille FINALE (après
+        // étirement) du quad webcam, pour un rayon proportionnellement correct quel que soit le
+        // ratio de sortie.
+        let w_px_final = [w_px[0] * stretch_x, w_px[1] * stretch_y];
+        let w_min_final = w_px_final[0].min(w_px_final[1]);
         let w_radius = match lp.webcam_shape {
-            1 => w_min * 0.5,  // circle
-            3 => w_min * 0.3,  // rounded (nettement plus arrondi)
-            _ => w_min * 0.12, // rectangle / square → léger arrondi (identique)
+            1 => w_min_final * 0.5,  // circle
+            3 => w_min_final * 0.3,  // rounded (nettement plus arrondi)
+            _ => w_min_final * 0.12, // rectangle / square → léger arrondi (identique)
+        };
+        // Rayon d'ombre (isotrope, espace canvas pré-étirement) : comme avant, dérivé de la
+        // taille pré-étirement du quad.
+        let w_min = w_px[0].min(w_px[1]);
+        let w_radius_shadow = match lp.webcam_shape {
+            1 => w_min * 0.5,
+            3 => w_min * 0.3,
+            _ => w_min * 0.12,
         };
 
         self.begin([0.0, 0.0, 0.0, 1.0]);
@@ -1332,7 +1382,7 @@ impl Compositor {
                     // image bg (cover-fit, mise en cache) ; fallback couleur si chargement échoue
                     // (loggé — un fallback silencieux masquerait un chemin cassé, cf. le panic
                     // borrow qu'on a déjà eu : toute panne doit être visible/traçable).
-                    if let Err(e) = self.draw_image_bg(&path) {
+                    if let Err(e) = self.draw_image_bg(&path, final_out_w / final_out_h) {
                         eprintln!("[compositor] wallpaper image \"{}\" : {:#}", path, e);
                         self.draw_solid(&LayerCB {
                             dst: [0.0, 0.0, 1.0, 1.0],
@@ -1383,9 +1433,8 @@ impl Compositor {
 
         // --- screen : crop du clip actif, puis zoom appliqué dans ce rect source (§8) ---
         // `for_clip_window` conserve l'index pour distinguer plusieurs clips du même asset.
-        let active_crop = scene_ref.as_ref().and_then(|scene| {
-            scene.crop_by_clip.get(scene.active_clip_index).copied().flatten()
-        });
+        // `active_crop` déjà résolu plus haut (utilisé pour dimensionner `s_dst`) — une seule
+        // source de vérité pour ce lookup.
         let [su0, sv0, su1, sv1] = screen_source_rect(u_max, v_max, active_crop, p.zoom, p.focus);
         let (hu, hv) = ((su1 - su0) * 0.5, (sv1 - sv0) * 0.5);
         // Le focus courant reste volontairement utilisé pour la frame précédente, comme avant.
@@ -1394,7 +1443,7 @@ impl Compositor {
         let (hu_p, hv_p) = ((su1_p - su0_p) * 0.5, (sv1_p - sv0_p) * 0.5);
         let s_px = [s_dst[2] * OUT_W as f32, s_dst[3] * OUT_H as f32];
         if cfg.shadow {
-            self.draw_shadow(s_dst, s_px, s_radius, 40.0, [0.0, 16.0], 0.45 * lp.shadow_scale);
+            self.draw_shadow(s_dst, s_px, s_radius_shadow, 40.0, [0.0, 16.0], 0.45 * lp.shadow_scale);
         }
         if crate::regions::is_identity_rotation(zoom_rotation) {
             self.draw_video(
@@ -1407,7 +1456,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
                     dst_prev: s_dst_prev,
-                    mb: [mb_taps, 0.0, 0.0, 0.0],
+                    mb: [mb_taps, stretch_x, stretch_y, 0.0],
                     ..Default::default()
                 },
                 &sy,
@@ -1583,7 +1632,7 @@ impl Compositor {
         let wv = wch / wth as f32;
         if lp.has_webcam {
             if cfg.shadow {
-                self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale);
+                self.draw_shadow(w_dst, w_px, w_radius_shadow, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale);
             }
             self.draw_video(
                 &LayerCB {
@@ -1595,7 +1644,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [u0, 0.0, u1, wv], // src fixe (pas de zoom webcam)
                     dst_prev: w_dst_prev,
-                    mb: [mb_taps, 0.0, 0.0, 0.0],
+                    mb: [mb_taps, stretch_x, stretch_y, 0.0],
                     ..Default::default()
                 },
                 &wy,

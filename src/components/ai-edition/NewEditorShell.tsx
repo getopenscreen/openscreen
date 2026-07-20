@@ -366,6 +366,14 @@ export function NewEditorShell() {
 		[setCurrentTime],
 	);
 
+	// Refs so the 'ended' listener below always sees the latest clips/playhead without
+	// tearing down and re-registering the DOM listener on every rAF-driven currentTimeSec
+	// update (which would happen every tick during playback if they were plain deps).
+	const clipsForEndedRef = useRef(clips);
+	clipsForEndedRef.current = clips;
+	const currentTimeSecRef = useRef(currentTimeSec);
+	currentTimeSecRef.current = currentTimeSec;
+
 	// ponytail: the transport bar (play/pause, prev/next, loop, fullscreen)
 	// lives in the timeline header now, not under the preview canvas — it
 	// needs the video element, so this state/these handlers moved up here
@@ -375,7 +383,21 @@ export function NewEditorShell() {
 		if (!el) return;
 		const onPlay = () => setPlaying(true);
 		const onPause = () => setPlaying(false);
-		const onEnded = () => setPlaying(false);
+		// BUG corrigé : ce listener écoutait le même événement DOM natif 'ended' que le
+		// onEnded interne de VirtualPreview.tsx, sans la moindre logique multi-clip — il
+		// mettait TOUJOURS `playing` à false, y compris quand VirtualPreview venait
+		// juste d'enchaîner sur le clip suivant (les deux listeners réagissent au même
+		// événement, indépendamment). Deux endroits qui décident chacun de leur côté si
+		// la lecture doit s'arrêter = exactement le genre de duplication qui casse selon
+		// le chemin UX emprunté. On applique ici le même critère "y a-t-il un clip
+		// suivant ?" déjà utilisé par handleNextClip juste au-dessus — seul point de
+		// vérité pour "y a-t-il encore de la timeline à jouer".
+		const onEnded = () => {
+			const hasNextClip = clipsForEndedRef.current.some(
+				(c) => c.timelineStartSec > currentTimeSecRef.current + 0.1,
+			);
+			if (!hasNextClip) setPlaying(false);
+		};
 		el.addEventListener("play", onPlay);
 		el.addEventListener("pause", onPause);
 		el.addEventListener("ended", onEnded);

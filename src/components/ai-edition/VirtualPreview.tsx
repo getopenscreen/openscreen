@@ -413,14 +413,29 @@ export function VirtualPreview({
 		}
 	}, []);
 
+	// BUG corrigé : cet effet listait `seekToVirtualTime`/`seekToSourceTime` en dépendances
+	// — mais `seekToVirtualTime` change d'identité (nouveau `useCallback`) à chaque fois que
+	// `sourceIndex` change, y compris quand CE MÊME effet vient de le faire changer (switch
+	// d'asset lors d'un enchaînement de clip). Résultat : l'effet se redéclenchait alors
+	// qu'AUCUN nouveau seek n'avait été demandé, et réappliquait l'ANCIEN `seekTarget` (la
+	// position du dernier scrub manuel) — rebasculant sur le clip d'origine et figeant la
+	// lecture pile à cette position. D'où le "ça se fige à la fin du 1er clip, uniquement si
+	// la tête de lecture avait été déplacée avant" : sans scrub préalable, `seekTarget` reste
+	// `null` et l'effet est un no-op, masquant le bug. Seul `seekTarget` (son `requestId`)
+	// doit déclencher un nouveau seek ; les fonctions elles-mêmes sont lues via des refs
+	// tenues à jour à chaque rendu, pour ne jamais rejouer un ancien seek par accident.
+	const seekToVirtualTimeRef = useRef(seekToVirtualTime);
+	seekToVirtualTimeRef.current = seekToVirtualTime;
+	const seekToSourceTimeRef = useRef(seekToSourceTime);
+	seekToSourceTimeRef.current = seekToSourceTime;
 	useEffect(() => {
 		if (!seekTarget) return;
 		if (seekTarget.isSource) {
-			seekToSourceTime(seekTarget.timeSec);
+			seekToSourceTimeRef.current(seekTarget.timeSec);
 		} else {
-			seekToVirtualTime(seekTarget.timeSec);
+			seekToVirtualTimeRef.current(seekTarget.timeSec);
 		}
-	}, [seekTarget, seekToVirtualTime, seekToSourceTime]);
+	}, [seekTarget]);
 
 	return (
 		<div className={styles.container}>

@@ -474,8 +474,8 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		});
 		const { cameraFullscreenRegions } = buildSceneDescription(doc);
 		expect(cameraFullscreenRegions).toEqual([
-			{ startSec: 103, endSec: 105 },
-			{ startSec: 200, endSec: 202 },
+			{ startSec: 103, endSec: 105, clipIndex: 0 },
+			{ startSec: 200, endSec: 202, clipIndex: 1 },
 		]);
 	});
 });
@@ -506,7 +506,7 @@ describe("buildSceneDescription.speedRegions", () => {
 			},
 		});
 		const { speedRegions } = buildSceneDescription(doc);
-		expect(speedRegions).toEqual([{ startSec: 2, endSec: 5.5, speed: 2.5 }]);
+		expect(speedRegions).toEqual([{ startSec: 2, endSec: 5.5, speed: 2.5, clipIndex: 0 }]);
 	});
 
 	it("yields [] when legacyEditor.speedRegions is missing", () => {
@@ -544,8 +544,8 @@ describe("buildSceneDescription.speedRegions", () => {
 		});
 		const { speedRegions } = buildSceneDescription(doc);
 		expect(speedRegions).toEqual([
-			{ startSec: 103, endSec: 105, speed: 3.0 },
-			{ startSec: 200, endSec: 202, speed: 3.0 },
+			{ startSec: 103, endSec: 105, speed: 3.0, clipIndex: 0 },
+			{ startSec: 200, endSec: 202, speed: 3.0, clipIndex: 1 },
 		]);
 	});
 });

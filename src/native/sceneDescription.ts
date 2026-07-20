@@ -46,12 +46,19 @@ export interface SceneZoomRegion {
 	focusMode: "manual" | "auto" | null;
 	/** Optional rotation preset for the zoom. */
 	rotation: "iso" | "left" | "right" | null;
+	/** Index of the clip (within `SceneDescription.clips`) whose source time this region's
+	 *  `startSec`/`endSec` are expressed in — disambiguates clips whose source windows
+	 *  numerically overlap (same or different asset). Unset only for a region that
+	 *  `projectRegionsToSourceTime` couldn't place on any clip. */
+	clipIndex?: number;
 }
 
 /** A "Full Camera" timeline region (from `legacyEditor.cameraFullscreenRegions`). Times in seconds. */
 export interface SceneCameraFullscreenRegion {
 	startSec: number;
 	endSec: number;
+	/** See `SceneZoomRegion.clipIndex`. */
+	clipIndex?: number;
 }
 
 /** A speed region projected onto each clip's source time. The native compositor matches
@@ -65,6 +72,8 @@ export interface SceneSpeedRegion {
 	endSec: number;
 	/** Playback rate multiplier (1 = unchanged). */
 	speed: number;
+	/** See `SceneZoomRegion.clipIndex`. */
+	clipIndex?: number;
 }
 
 /** Normalized rect in 0..1 of the output frame (x, y top-left; width, height). */
@@ -303,15 +312,26 @@ export function buildSceneDescription(
 	// covered clips' source ranges (splitting any region that straddles a clip
 	// boundary) so the native side gets the same shape the export pipeline
 	// already proves correct.
-	const docClips = document.timeline.clips;
-	const projectedZoomRegions = projectRegionsToSourceTime(document.zoomRanges ?? [], docClips, () =>
-		createId("zoom"),
+	//
+	// BUG corrigé : ces trois projections utilisaient `document.timeline.clips` BRUT
+	// (ordre non trié, non filtré) au lieu de `visibleClips` (trié par timelineStartSec
+	// + filtré, = l'ordre EXACT de `clips[]` envoyé au natif). Le `clipIndex` projeté sur
+	// chaque région ne correspondait donc jamais à l'index réel dans `Scene.clips`, ET
+	// `clipIndex` n'était de toute façon jamais émis avant ce fix (voir `region-ventilation.ts`)
+	// — le natif retombait alors sur un simple recouvrement temporel (`belongs` dans
+	// `for_clip_window`, compositor.rs), qui laissait fuir un zoom d'un clip vers un autre
+	// dès que leurs fenêtres source se chevauchaient numériquement (typiquement deux clips
+	// qui démarrent tous les deux près du temps source 0 de leur propre fichier).
+	const projectedZoomRegions = projectRegionsToSourceTime(
+		document.zoomRanges ?? [],
+		visibleClips,
+		() => createId("zoom"),
 	);
 	const projectedCameraFullscreenRegions = projectRegionsToSourceTime(
 		((document.legacyEditor as Record<string, unknown> | null)?.cameraFullscreenRegions as
 			| CameraFullscreenRegion[]
 			| undefined) ?? [],
-		docClips,
+		visibleClips,
 		() => createId("camfull"),
 	);
 	// Speed regions carry an extra `speed` field the standard `rangeSchema` does not, so we
@@ -324,7 +344,7 @@ export function buildSceneDescription(
 		((document.legacyEditor as Record<string, unknown> | null)?.speedRegions as
 			| SpeedRegion[]
 			| undefined) ?? [],
-		docClips,
+		visibleClips,
 		() => createId("speed"),
 	);
 
@@ -405,15 +425,18 @@ export function buildSceneDescription(
 			focusY: region.focus.cy,
 			focusMode: region.focusMode ?? null,
 			rotation: region.rotationPreset ?? null,
+			clipIndex: region.clipIndex,
 		})),
 		cameraFullscreenRegions: projectedCameraFullscreenRegions.map((region) => ({
 			startSec: region.startMs / 1000,
 			endSec: region.endMs / 1000,
+			clipIndex: region.clipIndex,
 		})),
 		speedRegions: projectedSpeedRegions.map((region) => ({
 			startSec: region.startMs / 1000,
 			endSec: region.endMs / 1000,
 			speed: region.speed,
+			clipIndex: region.clipIndex,
 		})),
 		cropByClip,
 		output: { ...pickOutputDims(document), fps: null },

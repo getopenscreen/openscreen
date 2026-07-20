@@ -26,6 +26,20 @@ export interface VideoSource {
 	label: string;
 }
 
+/** First clip (by timeline order) starting strictly after `afterTimelineStartSec` —
+ *  independent of the `clips` array's own order, which is never guaranteed to match
+ *  timeline order (a clip can be inserted/reordered at any array index; only
+ *  `timelineStartSec` is authoritative). Shared by every clip-boundary-advance path
+ *  (rAF tick, the `<video>` `ended` event) so they all agree on "the next clip". */
+function findNextClipByTimelineOrder(
+	clips: AxcutClip[],
+	afterTimelineStartSec: number,
+): AxcutClip | undefined {
+	return clips
+		.filter((clip) => clip.timelineStartSec > afterTimelineStartSec + 0.001)
+		.sort((a, b) => a.timelineStartSec - b.timelineStartSec)[0];
+}
+
 interface VirtualPreviewProps {
 	videoSources: VideoSource[];
 	clips: AxcutClip[];
@@ -238,9 +252,7 @@ export function VirtualPreview({
 			if (!position) {
 				// ponytail: fall back to timeline order so cross-asset / reordered
 				// clips don't keep playing unmapped media.
-				const nextClip = clipsRef.current.find(
-					(clip) => clip.timelineStartSec > virtualTimeSecRef.current + 0.001,
-				);
+				const nextClip = findNextClipByTimelineOrder(clipsRef.current, virtualTimeSecRef.current);
 				if (nextClip) seekToVirtualTime(nextClip.timelineStartSec, true);
 				else {
 					v.pause();
@@ -260,9 +272,10 @@ export function VirtualPreview({
 				// stoppait TOUTE la lecture au lieu d'enchaîner — le "ça se stoppe en fin de
 				// clip" observé. Recherche par temps de timeline (comme le fallback juste
 				// au-dessus et `NativeCompositorOverlay`), indépendante de l'ordre du tableau.
-				const nextClip = clipsRef.current
-					.filter((clip) => clip.timelineStartSec > position.clip.timelineStartSec + 0.001)
-					.sort((a, b) => a.timelineStartSec - b.timelineStartSec)[0];
+				const nextClip = findNextClipByTimelineOrder(
+					clipsRef.current,
+					position.clip.timelineStartSec,
+				);
 				if (!nextClip) {
 					v.pause();
 					updateVirtualTime(virtualDurationSecRef.current);
@@ -337,7 +350,7 @@ export function VirtualPreview({
 	}, [zoomRegions, virtualTimeSec]);
 
 	const seekToVirtualTime = useCallback(
-		(nextVirtualTimeSec: number, preservePlayback = false) => {
+		(nextVirtualTimeSec: number, preservePlayback = false, forceResume = false) => {
 			const position = locateVirtualPosition(clips, nextVirtualTimeSec);
 			if (!position) {
 				updateVirtualTime(0);
@@ -352,7 +365,18 @@ export function VirtualPreview({
 			// clip-end auto-advance calls a `seekToVirtualTime` closure captured when
 			// the rAF was created (before playback started), so the captured
 			// `isPlaying` is stale-false and the cross-asset resume never fired.
-			const shouldContinuePlayback = preservePlayback && !videoRef.current?.paused;
+			//
+			// `forceResume` bypasses that live check for the ONE caller where it's
+			// actively wrong: the `<video>` `ended` handler. The browser sets
+			// `.paused = true` synchronously before firing `ended`, so by the time
+			// that handler runs and calls us, `!videoRef.current?.paused` is always
+			// false — even though playback was genuinely still going and should
+			// continue into the next clip. Without this, a non-trimmed clip (whose
+			// file's real end coincides with its timeline window's end) would win a
+			// race against the rAF tick's own boundary check: the native `ended`
+			// event fires first, stops playback outright, and the multi-clip
+			// timeline never advances — the "stops at clip end" bug.
+			const shouldContinuePlayback = preservePlayback && (forceResume || !videoRef.current?.paused);
 
 			if (isAssetSwitch) {
 				setSourceIndex(targetIndex);
@@ -466,7 +490,33 @@ export function VirtualPreview({
 							}}
 							onPause={() => setIsPlaying(false)}
 							onPlay={() => setIsPlaying(true)}
-							onEnded={() => setIsPlaying(false)}
+							onEnded={() => {
+								// BUG corrigé : ce handler stoppait TOUJOURS la lecture dès que le
+								// <video> brut atteignait SA PROPRE fin de fichier — une course
+								// avec la boucle rAF (reachedClipEnd, plus haut) qui gère
+								// l'enchaînement multi-clip. Pour un clip NON trimé, la fin réelle
+								// du fichier coïncide avec la fin de sa fenêtre timeline, et
+								// l'événement navigateur 'ended' gagnait quasi systématiquement
+								// cette course (déclenché par le navigateur dès la dernière frame,
+								// avant le prochain tick rAF) : `setIsPlaying(false)` stoppait TOUTE
+								// la lecture au lieu d'enchaîner sur le clip suivant — le "ça
+								// s'arrête en fin de clip" qui persistait malgré les fixes de la
+								// boucle rAF elle-même. `forceResume` (voir seekToVirtualTime) est
+								// nécessaire ici : le navigateur a déjà mis `.paused = true` avant
+								// de déclencher 'ended', donc le check `!video.paused` habituel
+								// empêcherait toujours la reprise de la lecture sur le clip suivant.
+								const current = clipsRef.current.find(
+									(clip) => clip.id === activeClipIdRef.current,
+								);
+								const nextClip = current
+									? findNextClipByTimelineOrder(clipsRef.current, current.timelineStartSec)
+									: undefined;
+								if (nextClip) {
+									seekToVirtualTime(nextClip.timelineStartSec, true, true);
+									return;
+								}
+								setIsPlaying(false);
+							}}
 							// ponytail: handleTimeUpdate is now driven by the rAF loop
 							// above (60 Hz) instead of the <video> onTimeUpdate event
 							// (~4 Hz) — the 4 Hz sync was too slow to keep the webcam

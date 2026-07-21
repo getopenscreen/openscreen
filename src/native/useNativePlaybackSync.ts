@@ -17,7 +17,7 @@
  * drift (independent tickers); acceptable for the fixture (~6 s loop). A pause
  * re-aligns them.
  */
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import {
 	getCurrentNativeViewId,
@@ -53,11 +53,34 @@ export function useNativePlaybackSync(
 		setNativePlaying(playing);
 	}, [active, playing]);
 
-	// Scrub/step while paused → discrete seek (see header for why not during play).
+	// Scrub/step while paused OR periodic resync during playback when drift > 100ms
+	const lastSyncedSourceTimeRef = useRef<number | null>(null);
+	const lastSyncedWallTimeRef = useRef<number>(0);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: ref values
 	useEffect(() => {
-		if (!active || playing || sourceTimeSec === null) {
+		if (!active || sourceTimeSec === null) {
 			return;
 		}
-		setNativeTime(sourceTimeSec);
+		const now = performance.now();
+		if (!playing) {
+			setNativeTime(sourceTimeSec);
+			lastSyncedSourceTimeRef.current = sourceTimeSec;
+			lastSyncedWallTimeRef.current = now;
+			return;
+		}
+		// While playing: periodically verify master clock alignment to prevent drift
+		if (lastSyncedSourceTimeRef.current === null || lastSyncedWallTimeRef.current === 0) {
+			lastSyncedSourceTimeRef.current = sourceTimeSec;
+			lastSyncedWallTimeRef.current = now;
+			return;
+		}
+		const wallElapsedSec = (now - lastSyncedWallTimeRef.current) / 1000;
+		const expectedSourceTimeSec = lastSyncedSourceTimeRef.current + wallElapsedSec;
+		if (Math.abs(sourceTimeSec - expectedSourceTimeSec) > 0.1) {
+			setNativeTime(sourceTimeSec);
+			lastSyncedSourceTimeRef.current = sourceTimeSec;
+			lastSyncedWallTimeRef.current = now;
+		}
 	}, [active, playing, sourceTimeSec]);
 }

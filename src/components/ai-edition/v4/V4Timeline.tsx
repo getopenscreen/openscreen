@@ -453,15 +453,15 @@ export function V4Timeline({
 				setSnapPct(best === v ? null : (best / total) * 100);
 				return best;
 			};
-			const apply = (start: number, end: number) => {
+			const apply = async (start: number, end: number): Promise<void> => {
 				const s = Math.max(0, Math.min(end - 0.2, start));
 				const en = Math.min(total, Math.max(s + 0.2, end));
-				if (pill.kind === "zoom") void tl.updateZoomSpan(pill.id, s * 1000, en * 1000);
-				else if (pill.kind === "speed") void tl.updateSpeedSpan(pill.id, s * 1000, en * 1000);
+				if (pill.kind === "zoom") await tl.updateZoomSpan(pill.id, s * 1000, en * 1000);
+				else if (pill.kind === "speed") await tl.updateSpeedSpan(pill.id, s * 1000, en * 1000);
 				else if (pill.kind === "annotation")
-					void tl.updateAnnotationSpan(pill.id, s * 1000, en * 1000);
+					await tl.updateAnnotationSpan(pill.id, s * 1000, en * 1000);
 				else if (pill.kind === "cameraFullscreen")
-					void tl.updateCameraFullscreenSpan(pill.id, s * 1000, en * 1000);
+					await tl.updateCameraFullscreenSpan(pill.id, s * 1000, en * 1000);
 				else {
 					// Trims are stored in source-time per asset but manipulated on the
 					// timeline like every other pill. Ventilate the new span across the
@@ -480,7 +480,7 @@ export function V4Timeline({
 					while (trimOwned.length < ranges.length) trimOwned.push(createId("trim"));
 					const entries = ranges.map((rng, i) => ({ id: trimOwned[i], ...rng }));
 					const dropIds = trimOwned.slice(ranges.length);
-					void tl.setTrimEntries(entries, dropIds);
+					await tl.setTrimEntries(entries, dropIds);
 				}
 			};
 			const move = (ev: PointerEvent) => {
@@ -505,11 +505,18 @@ export function V4Timeline({
 				setSnapPct(null);
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", up);
-				if (activePillDragRef.current) {
-					apply(activePillDragRef.current.start, activePillDragRef.current.end);
+				const finalDrag = activePillDragRef.current;
+				if (finalDrag) {
+					void apply(finalDrag.start, finalDrag.end).finally(() => {
+						if (activePillDragRef.current === finalDrag) {
+							activePillDragRef.current = null;
+							setActivePillDrag(null);
+						}
+					});
+				} else {
+					activePillDragRef.current = null;
+					setActivePillDrag(null);
 				}
-				activePillDragRef.current = null;
-				setActivePillDrag(null);
 			};
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);

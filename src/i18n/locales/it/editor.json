@@ -176,7 +176,6 @@
 		"subtitle": "Esegui il rendering della timeline in un file",
 		"addVideoBeforeExporting": "Aggiungi un video prima di esportare.",
 		"quality": "Qualità",
-		"qualityUpscaleWarning": "Upscaling",
 		"qualityMatchRecording": "Come la registrazione",
 		"frameRate": "Frame rate",
 		"codec": "Codec",

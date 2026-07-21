@@ -176,7 +176,6 @@
 		"subtitle": "Renderizar la línea de tiempo a un archivo",
 		"addVideoBeforeExporting": "Añade un vídeo antes de exportar.",
 		"quality": "Calidad",
-		"qualityUpscaleWarning": "Upscaling",
 		"qualityMatchRecording": "Igual que la grabación",
 		"frameRate": "Fotogramas por segundo",
 		"codec": "Códec",

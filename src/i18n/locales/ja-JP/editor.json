@@ -176,7 +176,6 @@
 		"subtitle": "タイムラインをファイルに書き出します",
 		"addVideoBeforeExporting": "エクスポートする前に動画を追加してください。",
 		"quality": "画質",
-		"qualityUpscaleWarning": "アップスケール",
 		"qualityMatchRecording": "録画と同じ",
 		"frameRate": "フレームレート",
 		"codec": "コーデック",

@@ -176,7 +176,6 @@
 		"subtitle": "Рендеринг таймлайна в файл",
 		"addVideoBeforeExporting": "Добавьте видео перед экспортом.",
 		"quality": "Качество",
-		"qualityUpscaleWarning": "Апскейл",
 		"qualityMatchRecording": "Как в записи",
 		"frameRate": "Частота кадров",
 		"codec": "Кодек",

@@ -78,17 +78,19 @@ interface PlayheadOverlayProps {
 	pct: number;
 	canvasStyle: React.CSSProperties;
 	onPointerDown: (e: ReactPointerEvent) => void;
+	playheadRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const PlayheadOverlay = memo(function PlayheadOverlay({
 	pct,
 	canvasStyle,
 	onPointerDown,
+	playheadRef,
 }: PlayheadOverlayProps) {
 	return (
 		<div className={styles.tlPlayheadLayer} aria-hidden>
 			<div className={styles.tlCanvas} style={canvasStyle}>
-				<div className={styles.tlPlayhead} style={{ left: `${pct}%` }}>
+				<div ref={playheadRef} className={styles.tlPlayhead} style={{ left: `${pct}%` }}>
 					<span
 						className={styles.tlPlayheadDiamond}
 						style={{ pointerEvents: "auto", cursor: "grab" }}
@@ -323,6 +325,9 @@ export function V4Timeline({
 	const pendingSeekTimeRef = useRef<number | null>(null);
 
 	// ── interactions ────────────────────────────────────────────────
+	const playheadElRef = useRef<HTMLDivElement | null>(null);
+
+	// Seek timeline position from a clientX pointer position.
 	const seekToClientX = useCallback(
 		(clientX: number, isImmediate = false) => {
 			// Measure the canvas (the zoomed timeline frame): (clientX - left)/width
@@ -334,7 +339,12 @@ export function V4Timeline({
 			const pct = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
 			const targetTime = pct * total;
 
-			// Optimistic local UI update (0ms latency for playhead line & readout)
+			// Direct DOM playhead update (0ms latency, zero React re-render overhead)
+			if (playheadElRef.current) {
+				playheadElRef.current.style.left = `${pct * 100}%`;
+			}
+
+			// Optimistic local UI state update
 			setScrubbingTimeSec(targetTime);
 			pendingSeekTimeRef.current = targetTime;
 
@@ -1258,6 +1268,7 @@ export function V4Timeline({
 					pct={pctOf(effectiveTimeSec)}
 					canvasStyle={canvasStyle}
 					onPointerDown={startScrub}
+					playheadRef={playheadElRef}
 				/>
 			</div>
 

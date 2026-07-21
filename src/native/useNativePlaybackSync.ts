@@ -32,12 +32,13 @@ export function useNativePlaybackSync(
 	currentTimeSec: number,
 	clips: readonly AxcutClip[],
 ): void {
-	// `currentTimeSec` is the app's absolute timeline clock. Rust's live player expects the
-	// active clip's source-media clock, including its source trim offset.
-	const sourceTimeSec = useMemo(
-		() => resolveNativePlaybackPosition(clips, currentTimeSec)?.sourceTimeSec ?? null,
+	const activePosition = useMemo(
+		() => resolveNativePlaybackPosition(clips, currentTimeSec),
 		[clips, currentTimeSec],
 	);
+	const activeClipId = activePosition?.clip.id ?? null;
+	const sourceTimeSec = activePosition?.sourceTimeSec ?? null;
+
 	// Reactive "is a native view active?" so activation mid-session re-pushes the
 	// current transport/playhead (time & playing aren't memoised in the store).
 	const active = useSyncExternalStore(
@@ -56,13 +57,23 @@ export function useNativePlaybackSync(
 	// Scrub/step while paused OR periodic resync during playback when drift > 100ms
 	const lastSyncedSourceTimeRef = useRef<number | null>(null);
 	const lastSyncedWallTimeRef = useRef<number>(0);
+	const lastActiveClipIdRef = useRef<string | null>(null);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: ref values
 	useEffect(() => {
-		if (!active || sourceTimeSec === null) {
+		if (!active || sourceTimeSec === null || !activeClipId) {
 			return;
 		}
 		const now = performance.now();
+
+		// When clip changes, let setActiveClip handle the atomic clip-switch-and-seek.
+		if (lastActiveClipIdRef.current !== activeClipId) {
+			lastActiveClipIdRef.current = activeClipId;
+			lastSyncedSourceTimeRef.current = sourceTimeSec;
+			lastSyncedWallTimeRef.current = now;
+			return;
+		}
+
 		if (!playing) {
 			setNativeTime(sourceTimeSec);
 			lastSyncedSourceTimeRef.current = sourceTimeSec;
@@ -82,5 +93,5 @@ export function useNativePlaybackSync(
 			lastSyncedSourceTimeRef.current = sourceTimeSec;
 			lastSyncedWallTimeRef.current = now;
 		}
-	}, [active, playing, sourceTimeSec]);
+	}, [active, playing, activeClipId, sourceTimeSec]);
 }

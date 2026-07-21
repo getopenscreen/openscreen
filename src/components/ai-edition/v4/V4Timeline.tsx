@@ -13,6 +13,7 @@ import {
 	ZoomIn,
 } from "lucide-react";
 import {
+	memo,
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
 	useEffect,
@@ -73,13 +74,39 @@ function fmtTick(sec: number): string {
 	return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
-// Real per-clip audio waveform, sliced from the underlying asset's decoded
-// peaks (useAudioPeaks) down to this clip's [sourceStartSec, sourceEndSec]
-// range. A separate component (not inline in the clips .map) so each clip
-// gets its own hook call — useAudioPeaks caches by URL, so clips sharing an
+interface PlayheadOverlayProps {
+	pct: number;
+	canvasStyle: React.CSSProperties;
+	onPointerDown: (e: ReactPointerEvent) => void;
+}
+
+const PlayheadOverlay = memo(function PlayheadOverlay({
+	pct,
+	canvasStyle,
+	onPointerDown,
+}: PlayheadOverlayProps) {
+	return (
+		<div className={styles.tlPlayheadLayer} aria-hidden>
+			<div className={styles.tlCanvas} style={canvasStyle}>
+				<div className={styles.tlPlayhead} style={{ left: `${pct}%` }}>
+					<span
+						className={styles.tlPlayheadDiamond}
+						style={{ pointerEvents: "auto", cursor: "grab" }}
+						onPointerDown={(e) => {
+							e.stopPropagation();
+							onPointerDown(e);
+						}}
+					/>
+				</div>
+			</div>
+		</div>
+	);
+});
+
+// Waveform preview bars inside a timeline clip. Derived from peaks data;
 // asset only decode once. Renders nothing while decoding or if the source has
 // no audio track, so the clip pill just shows its label until peaks arrive.
-function ClipWaveform({
+const ClipWaveform = memo(function ClipWaveform({
 	videoUrl,
 	assetDurationSec,
 	sourceStartSec,
@@ -136,7 +163,7 @@ function ClipWaveform({
 			))}
 		</div>
 	);
-}
+});
 
 interface LanePill {
 	id: string;
@@ -1183,20 +1210,11 @@ export function V4Timeline({
 			    (a cursor, so it doesn't scroll with the lanes) and sharing the exact
 			    same zoom/pan transform + width as the canvases, so its line stays
 			    continuous from the ruler down through the clips and its head aligns. */}
-				<div className={styles.tlPlayheadLayer} aria-hidden>
-					<div className={styles.tlCanvas} style={canvasStyle}>
-						<div className={styles.tlPlayhead} style={{ left: `${pctOf(effectiveTimeSec)}%` }}>
-							<span
-								className={styles.tlPlayheadDiamond}
-								style={{ pointerEvents: "auto", cursor: "grab" }}
-								onPointerDown={(e) => {
-									e.stopPropagation();
-									startScrub(e);
-								}}
-							/>
-						</div>
-					</div>
-				</div>
+				<PlayheadOverlay
+					pct={pctOf(effectiveTimeSec)}
+					canvasStyle={canvasStyle}
+					onPointerDown={startScrub}
+				/>
 			</div>
 
 			<div ref={navRef} className={styles.tlNav}>

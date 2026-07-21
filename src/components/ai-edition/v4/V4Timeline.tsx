@@ -395,6 +395,19 @@ export function V4Timeline({
 		[seekToClientX, tl, setCurrentTime],
 	);
 
+	const [activePillDrag, setActivePillDrag] = useState<{
+		id: string;
+		kind: LanePill["kind"];
+		start: number;
+		end: number;
+	} | null>(null);
+	const activePillDragRef = useRef<{
+		id: string;
+		kind: LanePill["kind"];
+		start: number;
+		end: number;
+	} | null>(null);
+
 	// Drag a lane pill to move it (mode "move", keeps duration) or resize one
 	// edge (mode "l"/"r"). Zoom/speed/annotation are timeline-ms; trims map
 	// back to source-seconds through their carrying clip.
@@ -472,19 +485,31 @@ export function V4Timeline({
 			};
 			const move = (ev: PointerEvent) => {
 				const dxSec = ((ev.clientX - startX) / r.width) * total;
+				let ns = pill.start;
+				let ne = pill.end;
 				if (dragMode === "move") {
-					const ns = Math.max(0, Math.min(total - dur, snap(pill.start + dxSec)));
-					apply(ns, ns + dur);
+					ns = Math.max(0, Math.min(total - dur, snap(pill.start + dxSec)));
+					ne = ns + dur;
 				} else if (dragMode === "l") {
-					apply(snap(pill.start + dxSec), pill.end);
+					ns = Math.max(0, Math.min(pill.end - 0.2, snap(pill.start + dxSec)));
+					ne = pill.end;
 				} else {
-					apply(pill.start, snap(pill.end + dxSec));
+					ns = pill.start;
+					ne = Math.min(total, Math.max(pill.start + 0.2, snap(pill.end + dxSec)));
 				}
+				const nextState = { id: pill.id, kind: pill.kind, start: ns, end: ne };
+				activePillDragRef.current = nextState;
+				setActivePillDrag(nextState);
 			};
 			const up = () => {
 				setSnapPct(null);
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", up);
+				if (activePillDragRef.current) {
+					apply(activePillDragRef.current.start, activePillDragRef.current.end);
+				}
+				activePillDragRef.current = null;
+				setActivePillDrag(null);
 			};
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
@@ -833,68 +858,80 @@ export function V4Timeline({
 		);
 	};
 
-	const renderPills = (pills: LanePill[], emptyLabel: string) => (
-		<>
-			{pills.length === 0 ? <span className={styles.laneEmpty}>{emptyLabel}</span> : null}
-			{pills.flatMap((p) => {
-				// Eager split preview: the instant a clip is grabbed, a pill that
-				// straddles the dragged clip's junction shows the same per-clip
-				// split it would resolve to on drop (via moveClip's reprojection),
-				// instead of moving as one block glued to whichever clip owns its
-				// start. Only fork into fragments when they'd actually move
-				// differently — a pill unaffected by this drag stays one DOM node.
-				if (clipDrag) {
-					const frags = ventilateSpanAcrossClips(p.start, p.end, clips);
-					if (frags.length >= 2) {
-						const clipById = new Map(clips.map((c) => [c.id, c]));
-						const shifts = frags.map((f) => {
-							const c = clipById.get(f.clipId);
-							return c
-								? regionPreviewShift(c.timelineStartSec + f.localStartSec)
-								: { px: 0, immediate: false };
-						});
-						const first = shifts[0];
-						const differ = shifts.some((s) => s.px !== first.px || s.immediate !== first.immediate);
-						if (differ) {
-							return frags.flatMap((f, i) => {
+	const renderPills = (pills: LanePill[], emptyLabel: string) => {
+		const effectivePills = pills.map((p) => {
+			if (activePillDrag && activePillDrag.id === p.id) {
+				return { ...p, start: activePillDrag.start, end: activePillDrag.end };
+			}
+			return p;
+		});
+		return (
+			<>
+				{effectivePills.length === 0 ? (
+					<span className={styles.laneEmpty}>{emptyLabel}</span>
+				) : null}
+				{effectivePills.flatMap((p) => {
+					// Eager split preview: the instant a clip is grabbed, a pill that
+					// straddles the dragged clip's junction shows the same per-clip
+					// split it would resolve to on drop (via moveClip's reprojection),
+					// instead of moving as one block glued to whichever clip owns its
+					// start. Only fork into fragments when they'd actually move
+					// differently — a pill unaffected by this drag stays one DOM node.
+					if (clipDrag) {
+						const frags = ventilateSpanAcrossClips(p.start, p.end, clips);
+						if (frags.length >= 2) {
+							const clipById = new Map(clips.map((c) => [c.id, c]));
+							const shifts = frags.map((f) => {
 								const c = clipById.get(f.clipId);
-								if (!c) return [];
-								return [
-									renderOnePill({
-										pill: p,
-										key: `${p.id}__f${i}`,
-										segStart: c.timelineStartSec + f.localStartSec,
-										segEnd: c.timelineStartSec + f.localEndSec,
-										shiftPx: shifts[i].px,
-										immediate: shifts[i].immediate,
-										showContent: i === 0,
-										interactive: false,
-										suppressLeftSeam: i > 0,
-										suppressRightSeam: i < frags.length - 1,
-									}),
-								];
+								return c
+									? regionPreviewShift(c.timelineStartSec + f.localStartSec)
+									: { px: 0, immediate: false };
 							});
+							const first = shifts[0];
+							const differ = shifts.some(
+								(s) => s.px !== first.px || s.immediate !== first.immediate,
+							);
+							if (differ) {
+								return frags.flatMap((f, i) => {
+									const c = clipById.get(f.clipId);
+									if (!c) return [];
+									return [
+										renderOnePill({
+											pill: p,
+											key: `${p.id}__f${i}`,
+											segStart: c.timelineStartSec + f.localStartSec,
+											segEnd: c.timelineStartSec + f.localEndSec,
+											shiftPx: shifts[i].px,
+											immediate: shifts[i].immediate,
+											showContent: i === 0,
+											interactive: false,
+											suppressLeftSeam: i > 0,
+											suppressRightSeam: i < frags.length - 1,
+										}),
+									];
+								});
+							}
 						}
 					}
-				}
-				const shift = regionPreviewShift(p.start);
-				return [
-					renderOnePill({
-						pill: p,
-						key: p.id,
-						segStart: p.start,
-						segEnd: p.end,
-						shiftPx: shift.px,
-						immediate: shift.immediate,
-						showContent: true,
-						interactive: true,
-						suppressLeftSeam: false,
-						suppressRightSeam: false,
-					}),
-				];
-			})}
-		</>
-	);
+					const shift = regionPreviewShift(p.start);
+					return [
+						renderOnePill({
+							pill: p,
+							key: p.id,
+							segStart: p.start,
+							segEnd: p.end,
+							shiftPx: shift.px,
+							immediate: shift.immediate,
+							showContent: true,
+							interactive: true,
+							suppressLeftSeam: false,
+							suppressRightSeam: false,
+						}),
+					];
+				})}
+			</>
+		);
+	};
 
 	return (
 		<div className={styles.tl}>

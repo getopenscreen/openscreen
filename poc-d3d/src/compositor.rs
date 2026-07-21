@@ -91,6 +91,23 @@ fn apply_undistort(dst: [f32; 4], stretch_x: f32, stretch_y: f32) -> [f32; 4] {
     [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
 }
 
+/// Inverse de `apply_undistort` : pré-compense un rect déjà exprimé en fraction du VRAI output
+/// (ex. `app_webcam_rect`, calculé côté web par `computeCompositeLayout` avec les vraies
+/// dimensions de sortie) pour qu'après le passage par `apply_undistort` PLUS TARD dans le même
+/// pipeline (partagé avec l'écran, appliqué sans distinction à tous les calques), le résultat
+/// final soit EXACTEMENT ce rect d'origine. Nécessaire parce que `dst` normalement (chemin
+/// preset par défaut) est en fraction du canvas fixe 16:9 (`OUT_W`×`OUT_H`) — un espace
+/// DIFFÉRENT de la fraction du vrai output dès que la sortie n'est pas 16:9 — donc appliquer
+/// `apply_undistort` (pensé pour convertir canvas→output) directement sur un rect déjà en
+/// espace output le déformerait deux fois.
+fn inverse_undistort(dst: [f32; 4], stretch_x: f32, stretch_y: f32) -> [f32; 4] {
+    let uniform_stretch = stretch_x.min(stretch_y).max(0.0001);
+    let (undistort_x, undistort_y) = (uniform_stretch / stretch_x.max(0.0001), uniform_stretch / stretch_y.max(0.0001));
+    let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
+    let (nw, nh) = (dst[2] / undistort_x.max(0.0001), dst[3] / undistort_y.max(0.0001));
+    [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
+}
+
 /// Constant buffer d'un calque (doit matcher `cbuffer Layer` du HLSL, 64 octets).
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -1221,8 +1238,17 @@ impl Compositor {
                 1.0
             }
         };
-        let webcam_size_scale = lp.webcam_size_scale * reactive_scale(p.zoom, cam_progress);
-        let webcam_size_scale_prev = lp.webcam_size_scale * reactive_scale(pp.zoom, cam_progress_prev);
+        // `lp.webcam_size_scale` vient de `scene.layout.webcamSize` (voir `live_params_from_scene`)
+        // — le MÊME nombre que le fraction webcamSizePreset déjà pris en compte côté app pour
+        // calculer `wr` (`computeCompositeLayout`, TS). Quand l'app fournit un `webcam_rect`
+        // explicite, la taille y est donc déjà cuite : réappliquer `lp.webcam_size_scale` ici
+        // double-échelonnerait la boîte (ex. un preset 34% → webcam rendue à ~34%×34% ≈ 12% au
+        // lieu de 34%, la webcam apparaissant bien plus petite que ce que montre l'aperçu web).
+        // Seul `reactive_scale` (rétrécissement pendant un zoom, une valeur ANIMÉE par frame que
+        // le rect statique de l'app ne capture pas) doit encore s'appliquer dans ce cas.
+        let base_size_scale = if app_webcam_rect.is_some() { 1.0 } else { lp.webcam_size_scale };
+        let webcam_size_scale = base_size_scale * reactive_scale(p.zoom, cam_progress);
+        let webcam_size_scale_prev = base_size_scale * reactive_scale(pp.zoom, cam_progress_prev);
 
         // padding : échelle globale du layout autour du centre du cadre (parité web frameRenderer :
         // paddingScale = 1 - padding*0.4 → padding 0 = plein cadre). Vertical-stack l'ignore.
@@ -1247,6 +1273,22 @@ impl Compositor {
             let (nw, nh) = (pw / OUT_W as f32, ph / OUT_H as f32);
             let (brx, bry) = (dst[0] + dst[2], dst[1] + dst[3]);
             [brx - nw, bry - nh, nw, nh]
+        };
+        // Variantes ancrées au CENTRE (au lieu du coin bas-droite) de `dst`, pour le cas où
+        // `dst` vient de `app_webcam_rect` : ce rect est déjà la position que l'utilisateur a
+        // choisie/déplacée (résolue côté app via `computeCompositeLayout`, même convention
+        // centre-fraction que `cx`/`cy` dans `compositeLayout.ts`) — l'ancrer au coin bas-droite
+        // comme le fait `fit_cam_aspect` (pensé pour le placement par DÉFAUT, ancré à ce coin
+        // avec une marge fixe) réancre silencieusement la webcam glissée n'importe où d'autre à
+        // ce coin, ignorant la position réelle choisie par l'utilisateur — le bug rapporté
+        // (webcam glissée au coin bas-gauche, DOM/JSON envoyé au natif confirmant une position
+        // flush, mais rendu natif visiblement décalé). Le centre est le point fixe qui a un sens
+        // pour un rect DÉJÀ positionné par l'app ; le coin bas-droite n'a de sens que pour le
+        // placement par défaut, qui grandit depuis ce coin faute de position explicite.
+        let scale_center = |dst: [f32; 4], s: f32| -> [f32; 4] {
+            let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
+            let (nw, nh) = (dst[2] * s, dst[3] * s);
+            [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
         };
         // Le ratio de sortie réel (peut différer du canvas interne 16:9 fixe) et le facteur
         // d'étirement non uniforme que `blit_resized` appliquera en fin de pipeline — nécessaires
@@ -1309,9 +1351,30 @@ impl Compositor {
         let s_dst = fit_dst_to_aspect(scale_frame(p.screen.dst, padding_scale), crop_aspect);
         let s_dst_prev = fit_dst_to_aspect(scale_frame(pp.screen.dst, padding_scale), crop_aspect);
         // le padding n'affecte QUE l'écran (la quantité de fond révélée). La webcam reste ancrée
-        // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame).
-        let mut w_dst = fit_cam_aspect(scale_corner_br(p.webcam.dst, webcam_size_scale));
-        let mut w_dst_prev = fit_cam_aspect(scale_corner_br(pp.webcam.dst, webcam_size_scale_prev));
+        // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame)
+        // — SAUF quand l'app a résolu un placement explicite (`app_webcam_rect`, drag-to-reposition
+        // compris). Ce rect est déjà exprimé en fraction du VRAI output (calculé côté web par
+        // `computeCompositeLayout` avec les vraies dimensions de sortie), position ET aspect déjà
+        // corrects — `fit_cam_aspect`/`scale_corner_br` (chemin preset par défaut) sont donc
+        // doublement inadaptés ici : ils réancrent au coin bas-droite (ignorant la position
+        // choisie par l'utilisateur) ET recalculent l'aspect en pixels du canvas fixe 16:9
+        // (`OUT_W`×`OUT_H`), une référence différente du vrai output dès que la sortie n'est pas
+        // 16:9 (rapport utilisateur : webcam glissée au coin bas-gauche en 9:16, JSON envoyé au
+        // natif confirmant une position flush, mais rendu native visiblement décalé ET trop
+        // petit). On garde seulement `scale_center` (zoom réactif, préserve position+aspect) puis
+        // on pré-compense par `inverse_undistort` pour annuler le `undistort()` générique
+        // appliqué plus bas à tous les calques (écran compris) — sans quoi ce rect déjà correct
+        // se ferait déformer une seconde fois par cet undistort partagé.
+        let mut w_dst = if app_webcam_rect.is_some() {
+            inverse_undistort(scale_center(p.webcam.dst, webcam_size_scale), stretch_x, stretch_y)
+        } else {
+            fit_cam_aspect(scale_corner_br(p.webcam.dst, webcam_size_scale))
+        };
+        let mut w_dst_prev = if app_webcam_rect.is_some() {
+            inverse_undistort(scale_center(pp.webcam.dst, webcam_size_scale_prev), stretch_x, stretch_y)
+        } else {
+            fit_cam_aspect(scale_corner_br(pp.webcam.dst, webcam_size_scale_prev))
+        };
 
         // Full Camera : la webcam grandit pour couvrir (presque) tout le cadre, en conservant
         // SON ratio actuel (pas celui du cadre) — parité `computeCameraFullscreenTargetRect` (TS) :

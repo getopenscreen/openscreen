@@ -1118,6 +1118,16 @@ impl Compositor {
 
     /// Ombre portée (§7 E4) sous un quad `dst` (normalisé) de taille `size_px`.
     /// Le quad d'ombre est élargi de `spread` px et décalé de `offset_px`.
+    /// `spread`/`offset_px` sont des px RÉELS de la sortie finale (même convention que
+    /// `radius_px` pour l'arrondi normal, cf. `compose_frame`) — PAS des px du canvas fixe
+    /// 16:9. Convertis ici en marge/décalage CANVAS (avant l'étirement final anisotrope de
+    /// `blit_resized`), par axe (`/stretch_x`, `/stretch_y`), pour que ce halo redevienne un
+    /// vrai halo isotrope une fois cet étirement appliqué — sans ça (ancien calcul : marge
+    /// identique en fraction canvas quel que soit l'axe) l'ombre ressort visiblement elliptique
+    /// dès que la sortie n'est pas 16:9 (rapport utilisateur, ex. export vertical 9:16).
+    /// `stretch_x`/`stretch_y` sont aussi transmis au shader (`mb.yz`) pour pré-déformer la SDF
+    /// elle-même — même technique que l'arrondi normal (mode 0) — sinon la COURBURE des coins
+    /// de l'ombre reste elliptique même une fois sa taille globale corrigée.
     pub unsafe fn draw_shadow(
         &self,
         dst: [f32; 4],
@@ -1126,18 +1136,23 @@ impl Compositor {
         spread: f32,
         offset_px: [f32; 2],
         opacity: f32,
+        stretch_x: f32,
+        stretch_y: f32,
     ) {
-        let sx = spread / OUT_W as f32;
-        let sy = spread / OUT_H as f32;
-        let ox = offset_px[0] / OUT_W as f32;
-        let oy = offset_px[1] / OUT_H as f32;
+        let margin_x = spread / stretch_x.max(0.0001);
+        let margin_y = spread / stretch_y.max(0.0001);
+        let sx = margin_x / OUT_W as f32;
+        let sy = margin_y / OUT_H as f32;
+        let ox = (offset_px[0] / stretch_x.max(0.0001)) / OUT_W as f32;
+        let oy = (offset_px[1] / stretch_y.max(0.0001)) / OUT_H as f32;
         let cb = LayerCB {
             dst: [dst[0] - sx + ox, dst[1] - sy + oy, dst[2] + 2.0 * sx, dst[3] + 2.0 * sy],
-            quad_px: [size_px[0] + 2.0 * spread, size_px[1] + 2.0 * spread],
+            quad_px: [size_px[0] + 2.0 * margin_x, size_px[1] + 2.0 * margin_y],
             radius_px: radius,
             mode: 2.0,
             color: [0.0, 0.0, 0.0, opacity],
             fx: [spread, 0.0, 0.0, 0.0],
+            mb: [0.0, stretch_x, stretch_y, 0.0],
             ..Default::default()
         };
         self.draw_solid(&cb);
@@ -1435,10 +1450,6 @@ impl Compositor {
         // l'ANISOTROPIE : elle laissait les coins elliptiques dès que stretch_x != stretch_y,
         // càd dès que le ratio de sortie n'est pas 16:9 — cf. rapport utilisateur sur le 9:16).
         let s_radius = if cfg.rounded { p.screen.radius * lp.radius_scale } else { 0.0 };
-        // L'ombre (SDF isotrope, floue — l'anisotropie n'y est pas perceptible) reste dessinée
-        // dans l'espace canvas PRÉ-étirement : elle a besoin du rayon corrigé en magnitude
-        // (l'ancien calcul), pas du rayon brut ci-dessus.
-        let s_radius_shadow = s_radius / uniform_stretch.max(0.0001);
         let w_px = [w_dst[2] * OUT_W as f32, w_dst[3] * OUT_H as f32];
         // forme webcam : rayon SDF dérivé de la SEULE forme choisie. Le slider Roundness ne
         // s'applique qu'à l'ÉCRAN, jamais à la caméra. Parité web (compositeLayout) : rectangle
@@ -1453,14 +1464,6 @@ impl Compositor {
             1 => w_min_final * 0.5,  // circle
             3 => w_min_final * 0.3,  // rounded (nettement plus arrondi)
             _ => w_min_final * 0.12, // rectangle / square → léger arrondi (identique)
-        };
-        // Rayon d'ombre (isotrope, espace canvas pré-étirement) : comme avant, dérivé de la
-        // taille pré-étirement du quad.
-        let w_min = w_px[0].min(w_px[1]);
-        let w_radius_shadow = match lp.webcam_shape {
-            1 => w_min * 0.5,
-            3 => w_min * 0.3,
-            _ => w_min * 0.12,
         };
 
         self.begin([0.0, 0.0, 0.0, 1.0]);
@@ -1565,7 +1568,7 @@ impl Compositor {
         let (hu_p, hv_p) = ((su1_p - su0_p) * 0.5, (sv1_p - sv0_p) * 0.5);
         let s_px = [s_dst[2] * OUT_W as f32, s_dst[3] * OUT_H as f32];
         if cfg.shadow {
-            self.draw_shadow(s_dst, s_px, s_radius_shadow, 40.0, [0.0, 16.0], 0.45 * lp.shadow_scale);
+            self.draw_shadow(s_dst, s_px, s_radius, 40.0, [0.0, 16.0], 0.45 * lp.shadow_scale, stretch_x, stretch_y);
         }
         if crate::regions::is_identity_rotation(zoom_rotation) {
             self.draw_video(
@@ -1754,7 +1757,7 @@ impl Compositor {
         let wv = wch / wth as f32;
         if lp.has_webcam {
             if cfg.shadow {
-                self.draw_shadow(w_dst, w_px, w_radius_shadow, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale);
+                self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale, stretch_x, stretch_y);
             }
             self.draw_video(
                 &LayerCB {

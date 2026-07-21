@@ -204,7 +204,8 @@
 		"exportedVideoOf": "of video exported in",
 		"showInFolder": "Show in folder",
 		"exportFailed": "Export failed",
-		"failedToWriteFile": "Failed to write file"
+		"failedToWriteFile": "Failed to write file",
+		"qualityUpscaleWarning": "Upscale"
 	},
 	"inspector": {
 		"resetFocusPoint": "Reset focus point",

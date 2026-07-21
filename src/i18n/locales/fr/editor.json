@@ -204,7 +204,8 @@
 		"exportedVideoOf": "de vidéo exportée en",
 		"showInFolder": "Afficher dans le dossier",
 		"exportFailed": "Échec de l'export",
-		"failedToWriteFile": "Échec de l'écriture du fichier"
+		"failedToWriteFile": "Échec de l'écriture du fichier",
+		"qualityUpscaleWarning": "Upscaling"
 	},
 	"inspector": {
 		"resetFocusPoint": "Réinitialiser le point de focus",

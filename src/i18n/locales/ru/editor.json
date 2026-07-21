@@ -203,7 +203,8 @@
 		"exportedVideo": "Видео экспортировано",
 		"showInFolder": "Показать в папке",
 		"exportFailed": "Ошибка экспорта",
-		"failedToWriteFile": "Не удалось записать файл"
+		"failedToWriteFile": "Не удалось записать файл",
+		"qualityUpscaleWarning": "Апскейл"
 	},
 	"inspector": {
 		"resetFocusPoint": "Сбросить точку фокуса",

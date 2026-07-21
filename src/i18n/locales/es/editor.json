@@ -203,7 +203,8 @@
 		"exportedVideo": "Vídeo exportado",
 		"showInFolder": "Mostrar en la carpeta",
 		"exportFailed": "Error al exportar",
-		"failedToWriteFile": "No se pudo escribir el archivo"
+		"failedToWriteFile": "No se pudo escribir el archivo",
+		"qualityUpscaleWarning": "Upscaling"
 	},
 	"inspector": {
 		"resetFocusPoint": "Restablecer punto de enfoque",

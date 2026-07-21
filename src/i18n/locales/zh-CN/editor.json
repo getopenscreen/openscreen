@@ -203,7 +203,8 @@
 		"exportedVideo": "视频已导出",
 		"showInFolder": "在文件夹中显示",
 		"exportFailed": "导出失败",
-		"failedToWriteFile": "写入文件失败"
+		"failedToWriteFile": "写入文件失败",
+		"qualityUpscaleWarning": "放大"
 	},
 	"inspector": {
 		"resetFocusPoint": "重置焦点",

@@ -259,15 +259,17 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	// Smallest clip's true (cropped) footprint on the timeline — a multiclip timeline can mix
 	// crops/resolutions, so this is what "Source" quality actually targets: sizing to the
 	// SMALLEST clip's own resolution means no clip on the timeline is ever upscaled past its
-	// true footprint (upscaling only ever happens if the user deliberately picks a larger
-	// fixed tier below it — 720p/1080p — which is their own choice, not an accident of
-	// multi-clip export). This is also why no upscale/downscale badge exists any more: with
-	// "Source" defined this way, an "upscale" warning on Source specifically no longer meant
-	// anything a user could act on.
+	// true footprint by picking Source, which is why Source shows no upscale/downscale badge
+	// at all any more (see the tier badges below) — it's upscale-proof by construction. The
+	// fixed 720p/1080p tiers don't have that property (they can still upscale a small clip),
+	// so `smallestShortSide` below still feeds their upscale badge.
 	const smallestSource = useMemo(
 		() => pickExtremeDims(effectiveClipDims, "smallest"),
 		[effectiveClipDims],
 	);
+	const smallestShortSide = smallestSource
+		? Math.min(smallestSource.width, smallestSource.height)
+		: null;
 
 	// Largest clip's RAW (uncropped) asset dims — deliberately separate from the crop-aware
 	// `referenceSource` above: this only feeds the "native" output-ASPECT-RATIO option (the
@@ -539,14 +541,26 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 									{(() => {
 										const dims = tierOutputDims(q.value);
 										if (!dims) return null;
-										// Plain size badge, no upscale/downscale wording: with "Source" now
-										// targeting the smallest clip's own footprint (see `smallestSource`),
-										// an upscale warning on Source never meant anything actionable, and a
-										// downscale warning on 720p/1080p was just restating the tier's own
-										// point. The size alone is what the user can act on.
+										// Downscale badge removed everywhere — restated what picking a lower
+										// tier already means, not actionable. Upscale badge removed only for
+										// "Source": it's upscale-proof by construction now (targets the
+										// smallest clip), so the warning never meant anything there. The fixed
+										// 720p/1080p tiers can still genuinely upscale a small clip, so that
+										// badge stays relevant for them.
+										const outShortSide = Math.min(dims.width, dims.height);
+										const isUpscale =
+											q.value !== "source" &&
+											smallestShortSide !== null &&
+											outShortSide > smallestShortSide;
 										return (
-											<span style={{ font: "500 11px var(--font-body)", color: "var(--muted)" }}>
+											<span
+												style={{
+													font: "500 11px var(--font-body)",
+													color: isUpscale ? "var(--warn)" : "var(--muted)",
+												}}
+											>
 												{dims.width} × {dims.height}
+												{isUpscale ? ` · ${t("exportDialog.qualityUpscaleWarning")}` : ""}
 											</span>
 										);
 									})()}

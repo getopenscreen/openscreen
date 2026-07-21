@@ -203,7 +203,8 @@
 		"exportedVideo": "Video dışa aktarıldı",
 		"showInFolder": "Klasörde göster",
 		"exportFailed": "Dışa aktarma başarısız oldu",
-		"failedToWriteFile": "Dosya yazılamadı"
+		"failedToWriteFile": "Dosya yazılamadı",
+		"qualityUpscaleWarning": "Upscale"
 	},
 	"inspector": {
 		"resetFocusPoint": "Odak noktasını sıfırla",

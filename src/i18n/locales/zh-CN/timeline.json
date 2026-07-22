@@ -2,6 +2,10 @@
 	"buttons": {
 		"addZoom": "添加缩放 (Z)",
 		"suggestZooms": "根据光标建议缩放",
+		"autoZoomOn": "自动缩放建议已开启 — 点击以移除建议的缩放",
+		"autoZoomOff": "自动缩放建议已关闭 — 点击以根据光标建议缩放",
+		"autoFocusAllOn": "所有缩放的自动对焦已开启 — 点击以全部切换为手动",
+		"autoFocusAllOff": "所有缩放的自动对焦（摄像头跟随光标）",
 		"addTrim": "添加剪辑 (T)",
 		"addAnnotation": "添加标注 (A)",
 		"addSpeed": "添加速度 (S)",

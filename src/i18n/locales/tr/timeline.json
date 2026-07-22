@@ -2,6 +2,10 @@
 	"buttons": {
 		"addZoom": "Yakınlaştırma Ekle (Z)",
 		"suggestZooms": "İmleçten Yakınlaştırma Öner",
+		"autoZoomOn": "Otomatik yakınlaştırma önerileri açık — önerilen yakınlaştırmaları kaldırmak için tıklayın",
+		"autoZoomOff": "Otomatik yakınlaştırma önerileri kapalı — imleçten yakınlaştırma önermek için tıklayın",
+		"autoFocusAllOn": "Tüm yakınlaştırmalar için Otomatik Odak açık — hepsini manuele geçirmek için tıklayın",
+		"autoFocusAllOff": "Tüm yakınlaştırmalar için Otomatik Odak (kamera imleci takip eder)",
 		"addTrim": "Kırpma Ekle (T)",
 		"addAnnotation": "Açıklama Ekle (A)",
 		"addSpeed": "Hız Ekle (S)",

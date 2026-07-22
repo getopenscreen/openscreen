@@ -2,6 +2,10 @@
 	"buttons": {
 		"addZoom": "줌 추가 (Z)",
 		"suggestZooms": "커서 기반 줌 제안",
+		"autoZoomOn": "자동 확대 제안 켜짐 — 클릭하여 제안된 확대 제거",
+		"autoZoomOff": "자동 확대 제안 꺼짐 — 클릭하여 커서 기반 확대 제안",
+		"autoFocusAllOn": "모든 확대에 자동 포커스 켜짐 — 클릭하여 모두 수동으로 전환",
+		"autoFocusAllOff": "모든 확대에 자동 포커스 (카메라가 커서를 따라감)",
 		"addTrim": "트림 추가 (T)",
 		"addAnnotation": "주석 추가 (A)",
 		"addSpeed": "속도 추가 (S)",

@@ -6,6 +6,7 @@
 		"confirm": "Conferma"
 	},
 	"loadingVideo": "Caricamento video...",
+	"loadingEditor": "Caricamento editor...",
 	"errors": {
 		"noVideoLoaded": "Nessun video caricato",
 		"videoNotReady": "Video non pronto",
@@ -61,6 +62,21 @@
 		"noAudio": "Questo video non contiene audio utilizzabile per la trascrizione.",
 		"failed": "Impossibile generare i sottotitoli.",
 		"truncated": "Sono stati trascritti solo i primi {{minutes}} minuti."
+	},
+	"emptyState": {
+		"title": "Nessun progetto aperto",
+		"description": "Importa un video per iniziare a modificare, oppure carica un progetto OpenScreen esistente.",
+		"importVideoButton": "Importa file video…",
+		"loadProjectButton": "Carica progetto…",
+		"supportedFormats": "Formati supportati: MP4, MOV, WebM, MKV, AVI, M4V, WMV",
+		"dragDropHint": "oppure trascina qui un file di progetto .openscreen",
+		"dropOverlay": "Rilascia il file di progetto per aprirlo",
+		"dropErrors": {
+			"unsupportedFormatTitle": "Formato non supportato",
+			"unsupportedFormatMessage": "Solo i file di progetto .openscreen possono essere rilasciati qui. Per importare un file video, usa il pulsante \"Importa file video…\" in questa schermata.",
+			"couldNotOpenTitle": "Impossibile aprire il file",
+			"couldNotOpenMessage": "Il file di progetto non può essere aperto. Il video a cui fa riferimento potrebbe essere stato spostato o eliminato."
+		}
 	},
 	"regionClipboard": {
 		"copied": "Attributi di {{region}} copiati",

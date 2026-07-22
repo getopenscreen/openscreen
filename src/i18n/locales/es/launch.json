@@ -10,6 +10,7 @@
 		"openProject": "Abrir proyecto",
 		"useVerticalTray": "Usar bandeja vertical",
 		"useHorizontalTray": "Usar bandeja horizontal",
+		"openStudio": "Abrir Estudio",
 		"openNotes": "Abrir notas",
 		"openNotesPlaceholder": "Escribe tus notas aquí...",
 		"notesToolbar": {
@@ -45,6 +46,9 @@
 		"loading": "Cargando fuentes...",
 		"screens": "Pantallas ({{count}})",
 		"windows": "Ventanas ({{count}})",
+		"emptyTitle": "No se encontraron pantallas ni ventanas",
+		"emptyDescription": "Si acabas de conceder el permiso de grabación de pantalla, recarga este selector. En macOS puede que debas reabrir OpenScreen.",
+		"loadFailedDescription": "OpenScreen no pudo cargar las fuentes de captura. Recarga este selector e inténtalo de nuevo.",
 		"defaultSourceName": "Pantalla"
 	},
 	"recording": {

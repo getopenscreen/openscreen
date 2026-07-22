@@ -10,6 +10,7 @@
 		"openProject": "Ouvrir un projet",
 		"useVerticalTray": "Utiliser la barre verticale",
 		"useHorizontalTray": "Utiliser la barre horizontale",
+		"openStudio": "Ouvrir Studio",
 		"openNotes": "Ouvrir les notes",
 		"openNotesPlaceholder": "Prenez des notes ici...",
 		"notesToolbar": {
@@ -45,6 +46,9 @@
 		"loading": "Chargement des sources...",
 		"screens": "Écrans ({{count}})",
 		"windows": "Fenêtres ({{count}})",
+		"emptyTitle": "Aucun écran ou fenêtre trouvé",
+		"emptyDescription": "Si vous venez d'accorder la permission d'enregistrement d'écran, rechargez ce sélecteur. Sur macOS, il peut être nécessaire de rouvrir OpenScreen.",
+		"loadFailedDescription": "OpenScreen n'a pas pu charger les sources de capture. Rechargez ce sélecteur et réessayez.",
 		"defaultSourceName": "Écran"
 	},
 	"recording": {

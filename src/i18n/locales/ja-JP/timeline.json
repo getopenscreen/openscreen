@@ -2,6 +2,10 @@
 	"buttons": {
 		"addZoom": "ズームを追加 (Z)",
 		"suggestZooms": "カーソル位置からズームを提案",
+		"autoZoomOn": "自動ズーム提案がオン — クリックで提案されたズームを削除",
+		"autoZoomOff": "自動ズーム提案がオフ — クリックでカーソルからズームを提案",
+		"autoFocusAllOn": "すべてのズームでオートフォーカスがオン — クリックですべて手動に切り替え",
+		"autoFocusAllOff": "すべてのズームでオートフォーカス（カメラがカーソルを追従）",
 		"addTrim": "トリムを追加 (T)",
 		"addAnnotation": "注釈を追加 (A)",
 		"addBlur": "ぼかしを追加 (B)",

@@ -2,6 +2,10 @@
 	"buttons": {
 		"addZoom": "Thêm Thu phóng (Z)",
 		"suggestZooms": "Đề xuất Thu phóng từ Con trỏ",
+		"autoZoomOn": "Đề xuất thu phóng tự động đang bật — nhấp để xóa các đề xuất thu phóng",
+		"autoZoomOff": "Đề xuất thu phóng tự động đang tắt — nhấp để đề xuất thu phóng từ con trỏ",
+		"autoFocusAllOn": "Tự động lấy nét đang bật cho tất cả các điểm thu phóng — nhấp để chuyển tất cả sang thủ công",
+		"autoFocusAllOff": "Tự động lấy nét cho tất cả các điểm thu phóng (camera theo dõi con trỏ)",
 		"addTrim": "Thêm Cắt (T)",
 		"addAnnotation": "Thêm Chú thích (A)",
 		"addBlur": "Thêm Làm mờ (B)",

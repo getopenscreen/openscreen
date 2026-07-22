@@ -10,6 +10,7 @@
 		"openProject": "Открыть проект",
 		"useVerticalTray": "Использовать вертикальную панель",
 		"useHorizontalTray": "Использовать горизонтальную панель",
+		"openStudio": "Открыть студию",
 		"openNotes": "Открыть заметки",
 		"openNotesPlaceholder": "Пишите заметки здесь...",
 		"notesToolbar": {
@@ -41,6 +42,9 @@
 		"loading": "Загрузка источников...",
 		"screens": "Экраны ({{count}})",
 		"windows": "Окна ({{count}})",
+		"emptyTitle": "Экраны или окна не найдены",
+		"emptyDescription": "Если вы только что предоставили разрешение на запись экрана, перезагрузите этот селектор. На macOS может потребоваться повторно открыть OpenScreen.",
+		"loadFailedDescription": "OpenScreen не удалось загрузить источники захвата. Перезагрузите этот селектор и попробуйте снова.",
 		"defaultSourceName": "Экран"
 	},
 	"recording": {

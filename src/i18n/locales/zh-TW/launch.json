@@ -10,6 +10,7 @@
 		"openProject": "開啟專案",
 		"useVerticalTray": "使用直向托盤",
 		"useHorizontalTray": "使用橫向托盤",
+		"openStudio": "開啟工作室",
 		"openNotes": "開啟筆記",
 		"openNotesPlaceholder": "在此輸入筆記...",
 		"notesToolbar": {
@@ -45,6 +46,9 @@
 		"loading": "正在載入來源...",
 		"screens": "螢幕 ({{count}})",
 		"windows": "視窗 ({{count}})",
+		"emptyTitle": "找不到螢幕或視窗",
+		"emptyDescription": "如果您剛授予螢幕錄製權限，請重新載入此選擇器。在 macOS 上，您可能需要重新開啟 OpenScreen。",
+		"loadFailedDescription": "OpenScreen 無法載入擷取來源。請重新載入此選擇器並重試。",
 		"defaultSourceName": "螢幕"
 	},
 	"recording": {

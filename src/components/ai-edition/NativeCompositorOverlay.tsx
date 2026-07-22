@@ -3,6 +3,7 @@ import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	setActiveClip,
 	setCurrentNativeViewId,
+	setNativePlaying,
 	setNativeScene,
 	useNativeCompositorView,
 } from "@/native";
@@ -138,6 +139,8 @@ export function NativeCompositorOverlay() {
 	const activeSourceTimeSec = activePosition?.sourceTimeSec ?? null;
 	const pendingTargetClipIdRef = useRef<string | null>(null);
 
+	const playing = useProjectStore((s) => s.playing);
+
 	// Change les décodeurs screen/webcam uniquement quand le playhead entre dans un autre clip.
 	useEffect(() => {
 		if (
@@ -163,6 +166,11 @@ export function NativeCompositorOverlay() {
 		pendingTargetClipIdRef.current = targetClipId;
 		previousActiveClipIdRef.current = targetClipId;
 
+		const isPlaying = playing;
+		if (isPlaying) {
+			setNativePlaying(false);
+		}
+
 		setActiveClip(
 			viewId,
 			asset.originalPath,
@@ -175,6 +183,9 @@ export function NativeCompositorOverlay() {
 				if (pendingTargetClipIdRef.current !== targetClipId) {
 					return;
 				}
+				if (isPlaying) {
+					setNativePlaying(true);
+				}
 			})
 			.catch((error: unknown) => {
 				console.warn("[compositor-view] setActiveClip failed:", error);
@@ -182,7 +193,7 @@ export function NativeCompositorOverlay() {
 					previousActiveClipIdRef.current = null;
 				}
 			});
-	}, [viewId, document, activeClipId, activeClip, activeClipIndex, activeSourceTimeSec]);
+	}, [viewId, document, activeClipId, activeClip, activeClipIndex, activeSourceTimeSec, playing]);
 
 	if (!ready) {
 		return null;

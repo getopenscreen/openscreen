@@ -807,6 +807,30 @@ unsafe fn advance_to_next_scene_clip(
     }
 }
 
+/// Taille à laquelle la preview doit rastériser : la **géométrie de sortie** (donc
+/// le ratio réel de l'export — la preview doit montrer ce qui sera rendu), ramenée
+/// à ce que le canvas affiche réellement.
+///
+/// Deux bornes, pour deux raisons distinctes :
+///   - jamais plus grand que le **panneau** : les pixels en trop seraient réduits
+///     dans la foulée par `readback_resized`, c'est du coût pur (sur un projet 4K
+///     ce serait 8 Mpx rastérisés pour un canvas qui en affiche moins d'un) ;
+///   - jamais plus grand que la **sortie** : au-delà, la preview serait plus
+///     détaillée que l'export, donc mensongère.
+///
+/// Sans scène, on ne connaît pas encore le ratio : on prend la taille du panneau
+/// telle quelle (aucune composition n'a lieu tant que la scène n'est pas posée).
+fn preview_render_size(scene: Option<&Scene>, pw: u32, ph: u32) -> (u32, u32) {
+    let (pw, ph) = (pw.max(2), ph.max(2));
+    let Some(scene) = scene else {
+        return (pw, ph);
+    };
+    let (ow, oh) = (scene.output.width.max(1) as f64, scene.output.height.max(1) as f64);
+    // "contain" : le plus grand cadre au ratio de sortie qui tienne dans le panneau.
+    let scale = (pw as f64 / ow).min(ph as f64 / oh).min(1.0);
+    (((ow * scale).round() as u32).max(2), ((oh * scale).round() as u32).max(2))
+}
+
 /// Boucle de rendu (thread dédié) : décode → compose → resize → readback → publie
 /// dans `Shared::latest_frame`.
 unsafe fn render_thread(
@@ -997,6 +1021,24 @@ unsafe fn render_thread(
         let (pw, ph) = *shared.preview_size.lock().unwrap();
         let resized = (pw, ph) != last_preview_size;
         last_preview_size = (pw, ph);
+
+        // Le compositeur rastérise à la géométrie de SORTIE (ramenée à la taille du
+        // canvas) et non plus dans un canvas 16:9 figé. Quand cette géométrie change
+        // — l'utilisateur change de ratio, ou redimensionne le panneau — on
+        // reconstruit le compositeur. Voir `Compositor::new_sized` pour le choix
+        // "reconstruire" plutôt que "redimensionner à chaud".
+        let want = preview_render_size(full_scene.as_ref(), pw, ph);
+        if want != comp.render_size() {
+            comp = Compositor::new_sized(&gpu, want.0, want.1)?;
+            // Le compositeur neuf est vierge : on repasse par les mécanismes
+            // d'invalidation existants plutôt que de recopier l'état à la main —
+            // une seule façon d'appliquer la scène, les params et le curseur.
+            shared.scene_dirty.store(true, Ordering::Relaxed);
+            last_ip = None;
+            last_smoothing = -1.0;
+            first = true;
+            continue;
+        }
 
         // Pas encore de scène → on ne compose RIEN (pas de fixture masquante). On attend
         // la scène. Un scene-push cassé reste ainsi visible (preview silencieuse — le

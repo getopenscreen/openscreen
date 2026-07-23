@@ -273,6 +273,23 @@ pub struct Compositor {
     /// quand chaque calque doit se souvenir individuellement d'appliquer la correction plutôt que
     /// de la lire à une seule source de vérité.
     frame_stretch: Cell<(f32, f32)>,
+    /// Dimensions du RENDER TARGET en pixels — la taille à laquelle `compose_frame`
+    /// rastérise réellement, et donc le dénominateur de TOUTE conversion
+    /// normalisé↔px de ce fichier.
+    ///
+    /// Historiquement c'était la constante `OUT_W`×`OUT_H` : un canvas 16:9 figé,
+    /// étiré en fin de pipeline vers la vraie sortie. Cette constante produisait
+    /// deux défauts distincts, tous deux issus d'elle seule :
+    ///   - une **forme** fausse dès que la sortie n'est pas 16:9 → rattrapée en
+    ///     aval par `apply_undistort` (9 correctifs successifs sur l'écran, la
+    ///     webcam, le curseur, les ombres, les coins, le crop, le fond) ;
+    ///   - une **résolution** plafonnée → jamais rattrapée, parce qu'aucun
+    ///     correctif au niveau du calque ne peut recréer des pixels qui n'ont pas
+    ///     été rastérisés (un export 4K était du 1080p agrandi).
+    ///
+    /// Rendre cette taille variable retire la cause commune. `OUT_W`/`OUT_H` ne
+    /// sont plus qu'une valeur par défaut, jamais une référence géométrique.
+    render_size: Cell<(u32, u32)>,
     /// Ressources de resize export (allouées paresseusement à la 1re taille de sortie ≠
     /// OUT_W×OUT_H — le live et les exports "Source"/1080p restent sur `rgb_to_nv12` inchangé,
     /// zéro coût). Voir `rgb_to_nv12_scaled`.
@@ -486,18 +503,39 @@ unsafe fn compile(src: &[u8], entry: &[u8], target: &[u8]) -> Result<ID3DBlob> {
 }
 
 impl Compositor {
+    /// Compositeur à la taille de rendu par défaut (`OUT_W`×`OUT_H`).
+    /// Préférer `new_sized` dès qu'on connaît la géométrie de sortie réelle.
     pub fn new(gpu: &Gpu) -> Result<Compositor> {
-        unsafe { Self::new_inner(gpu) }
+        Self::new_sized(gpu, OUT_W, OUT_H)
     }
 
-    unsafe fn new_inner(gpu: &Gpu) -> Result<Compositor> {
+    /// Compositeur rastérisant à `w`×`h`.
+    ///
+    /// La taille de rendu est fixée à la construction plutôt que mutable à chaud :
+    /// la rendre variable imposerait de passer le RT, la NV12, la staging et toute
+    /// la pyramide de flou en `RefCell`, donc d'ajouter de la mutabilité intérieure
+    /// sur le chemin GPU chaud — pour un événement qui n'arrive quasiment jamais
+    /// (l'utilisateur change de ratio, ou on bascule preview↔export). L'appelant
+    /// reconstruit le compositeur quand la sortie change ; c'est quelques dizaines
+    /// de ms, sur un changement rare.
+    ///
+    /// `w`/`h` sont arrondis au pair supérieur : la texture NV12 est en 4:2:0
+    /// (chroma sous-échantillonnée 2×2) et `CreateTexture2D` refuse une dimension
+    /// impaire — même contrainte que celle déjà gérée dans `readback_resized`.
+    pub fn new_sized(gpu: &Gpu, w: u32, h: u32) -> Result<Compositor> {
+        let w = (w.max(2) + 1) & !1;
+        let h = (h.max(2) + 1) & !1;
+        unsafe { Self::new_inner(gpu, w, h) }
+    }
+
+    unsafe fn new_inner(gpu: &Gpu, out_w: u32, out_h: u32) -> Result<Compositor> {
         let dev = gpu.device.clone();
         let ctx = gpu.context.clone();
 
         // --- render target RGBA8 (gamma natif de la vidéo ; voir note couleur docs) ---
         let mut td = D3D11_TEXTURE2D_DESC {
-            Width: OUT_W,
-            Height: OUT_H,
+            Width: out_w,
+            Height: out_h,
             MipLevels: 1,
             ArraySize: 1,
             Format: DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -600,8 +638,8 @@ impl Compositor {
         // notre texture NV12 simple (ArraySize=1) : NV12+RT n'est autorisé qu'en non-array
         // sur cet iGPU. On y rend la conversion, puis copie GPU->GPU vers le pool encodeur.
         let nvd = D3D11_TEXTURE2D_DESC {
-            Width: OUT_W,
-            Height: OUT_H,
+            Width: out_w,
+            Height: out_h,
             MipLevels: 1,
             ArraySize: 1,
             Format: DXGI_FORMAT_NV12,
@@ -684,15 +722,19 @@ impl Compositor {
             dev.CreateShaderResourceView(&t, None, Some(&mut srv))?;
             Ok((rtv.unwrap(), srv.unwrap()))
         };
-        let (half_a_rtv, half_a_srv) = mk_rgba(HALF_W, HALF_H)?;
-        let (half_b_rtv, half_b_srv) = mk_rgba(HALF_W, HALF_H)?;
-        let (q_rtv, q_srv) = mk_rgba(HALF_W / 2, HALF_H / 2)?; // 480x270
-        let (e_rtv, e_srv) = mk_rgba(HALF_W / 4, HALF_H / 4)?; // 240x135
+        // Pyramide dual-Kawase derivee de la taille de rendu (et non d'un demi de
+        // 1080 fige) : sinon le rayon effectif du flou de fond changerait d'un format
+        // a l'autre. `.max(1)` protege les tres petites tailles de preview.
+        let (half_w, half_h) = ((out_w / 2).max(1), (out_h / 2).max(1));
+        let (half_a_rtv, half_a_srv) = mk_rgba(half_w, half_h)?;
+        let (half_b_rtv, half_b_srv) = mk_rgba(half_w, half_h)?;
+        let (q_rtv, q_srv) = mk_rgba((half_w / 2).max(1), (half_h / 2).max(1))?;
+        let (e_rtv, e_srv) = mk_rgba((half_w / 4).max(1), (half_h / 4).max(1))?;
 
         // accumulateur pleine réso (RGBA) + blend additif pondéré (facteur = 1/N)
         let ad = D3D11_TEXTURE2D_DESC {
-            Width: OUT_W,
-            Height: OUT_H,
+            Width: out_w,
+            Height: out_h,
             MipLevels: 1,
             ArraySize: 1,
             Format: DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -767,9 +809,38 @@ impl Compositor {
             scene: RefCell::new(None),
             img_cache: RefCell::new(HashMap::new()),
             frame_stretch: Cell::new((1.0, 1.0)),
+            render_size: Cell::new((out_w, out_h)),
             resize_target: RefCell::new(None),
             live_readback_staging: RefCell::new(None),
         })
+    }
+
+    /// Largeur du render target en px. **Le** dénominateur de toute conversion
+    /// px→normalisé de ce fichier : à utiliser partout où `OUT_W` servait de
+    /// référence géométrique. Cf. `Compositor::render_size`.
+    #[inline]
+    fn rw(&self) -> f32 {
+        self.render_size.get().0 as f32
+    }
+
+    /// Hauteur du render target en px. Cf. `Compositor::rw`.
+    #[inline]
+    fn rh(&self) -> f32 {
+        self.render_size.get().1 as f32
+    }
+
+    /// Dimensions entières du render target — pour les viewports et les boucles
+    /// de readback, qui veulent des `u32` et non des `f32`.
+    #[inline]
+    fn render_dims(&self) -> (u32, u32) {
+        self.render_size.get()
+    }
+
+    /// Taille à laquelle ce compositeur rastérise, après l'arrondi au pair de
+    /// `new_sized`. L'appelant la compare à la géométrie qu'il veut produire pour
+    /// savoir s'il doit reconstruire le compositeur (cf. `new_sized`).
+    pub fn render_size(&self) -> (u32, u32) {
+        self.render_size.get()
     }
 
     /// Met à jour les paramètres continus pilotés par l'inspector (thread live uniquement).
@@ -836,7 +907,7 @@ impl Compositor {
         self.ctx.OMSetRenderTargets(Some(&[Some(self.rtv.clone())]), None);
         let vp = D3D11_VIEWPORT {
             TopLeftX: 0.0, TopLeftY: 0.0,
-            Width: OUT_W as f32, Height: OUT_H as f32, MinDepth: 0.0, MaxDepth: 1.0,
+            Width: self.rw(), Height: self.rh(), MinDepth: 0.0, MaxDepth: 1.0,
         };
         self.ctx.RSSetViewports(Some(&[vp]));
         self.ctx.VSSetShader(&self.vs, None);
@@ -883,21 +954,27 @@ impl Compositor {
     /// à résolution décroissante, vs 2 passes gaussiennes 49-tap. Le RT devient le fond.
     pub unsafe fn blur_bg(&self, _sigma: f32) {
         let off = 2.2; // spread par passe
-        let hw = HALF_W as f32;
-        let hh = HALF_H as f32;
+        // La pyramide se dérive de la taille de rendu, pas d'une constante : sinon
+        // le rayon effectif du flou changerait avec la résolution de sortie (un
+        // demi de 1080 n'est pas un demi de 2160), et le fond flouté ne serait plus
+        // le même effet d'un format à l'autre.
+        let (rw_i, rh_i) = self.render_dims();
+        let (half_w, half_h) = (rw_i / 2, rh_i / 2);
+        let hw = half_w as f32;
+        let hh = half_h as f32;
         // DOWN : texel = 1/(dims de la SOURCE échantillonnée)
-        self.fs_pass(&self.half_a_rtv, &self.rt_srv, &self.ps_kdown, HALF_W, HALF_H,
-            [1.0 / OUT_W as f32, 1.0 / OUT_H as f32, off, 0.0]);
-        self.fs_pass(&self.q_rtv, &self.half_a_srv, &self.ps_kdown, HALF_W / 2, HALF_H / 2,
+        self.fs_pass(&self.half_a_rtv, &self.rt_srv, &self.ps_kdown, half_w, half_h,
+            [1.0 / self.rw(), 1.0 / self.rh(), off, 0.0]);
+        self.fs_pass(&self.q_rtv, &self.half_a_srv, &self.ps_kdown, half_w / 2, half_h / 2,
             [1.0 / hw, 1.0 / hh, off, 0.0]);
-        self.fs_pass(&self.e_rtv, &self.q_srv, &self.ps_kdown, HALF_W / 4, HALF_H / 4,
+        self.fs_pass(&self.e_rtv, &self.q_srv, &self.ps_kdown, half_w / 4, half_h / 4,
             [2.0 / hw, 2.0 / hh, off, 0.0]);
         // UP
-        self.fs_pass(&self.q_rtv, &self.e_srv, &self.ps_kup, HALF_W / 2, HALF_H / 2,
+        self.fs_pass(&self.q_rtv, &self.e_srv, &self.ps_kup, half_w / 2, half_h / 2,
             [4.0 / hw, 4.0 / hh, off, 0.0]);
-        self.fs_pass(&self.half_a_rtv, &self.q_srv, &self.ps_kup, HALF_W, HALF_H,
+        self.fs_pass(&self.half_a_rtv, &self.q_srv, &self.ps_kup, half_w, half_h,
             [2.0 / hw, 2.0 / hh, off, 0.0]);
-        self.fs_pass(&self.rtv, &self.half_a_srv, &self.ps_kup, OUT_W, OUT_H,
+        self.fs_pass(&self.rtv, &self.half_a_srv, &self.ps_kup, rw_i, rh_i,
             [1.0 / hw, 1.0 / hh, off, 0.0]);
     }
 
@@ -1032,8 +1109,8 @@ impl Compositor {
     /// `clip` = rect "Clip to canvas" en espace sortie [x,y,w,h] ; passer un rect englobant tout
     /// (ex. [-1,-1,3,3]) pour désactiver l'effet.
     unsafe fn draw_cursor(&self, center: [f32; 2], size_px: f32, a: f32, clip: [f32; 4]) {
-        let w = size_px / OUT_W as f32;
-        let h = size_px / OUT_H as f32;
+        let w = size_px / self.rw();
+        let h = size_px / self.rh();
         let dst = [center[0] - w * 0.5, center[1] - h * 0.5, w, h];
         // Même correction que l'écran/la webcam (voir `apply_undistort`) : sans elle, ce quad
         // (carré en pixels canvas) se retrouve étiré non uniformément par `blit_resized` en fin
@@ -1076,8 +1153,8 @@ impl Compositor {
         };
         let ar = iw as f32 / ih as f32;
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
-        let w = pw / OUT_W as f32;
-        let h = ph / OUT_H as f32;
+        let w = pw / self.rw();
+        let h = ph / self.rh();
         let dst = [center[0] - w * 0.5, center[1] - h * 0.5, w, h];
         // Même correction que l'écran/la webcam/le curseur dot+ring (`apply_undistort`) : le
         // sprite est échantillonné par UV directement sur ce quad (pas de SDF ici), donc sans
@@ -1141,10 +1218,10 @@ impl Compositor {
     ) {
         let margin_x = spread / stretch_x.max(0.0001);
         let margin_y = spread / stretch_y.max(0.0001);
-        let sx = margin_x / OUT_W as f32;
-        let sy = margin_y / OUT_H as f32;
-        let ox = (offset_px[0] / stretch_x.max(0.0001)) / OUT_W as f32;
-        let oy = (offset_px[1] / stretch_y.max(0.0001)) / OUT_H as f32;
+        let sx = margin_x / self.rw();
+        let sy = margin_y / self.rh();
+        let ox = (offset_px[0] / stretch_x.max(0.0001)) / self.rw();
+        let oy = (offset_px[1] / stretch_y.max(0.0001)) / self.rh();
         let cb = LayerCB {
             dst: [dst[0] - sx + ox, dst[1] - sy + oy, dst[2] + 2.0 * sx, dst[3] + 2.0 * sy],
             quad_px: [size_px[0] + 2.0 * margin_x, size_px[1] + 2.0 * margin_y],
@@ -1283,9 +1360,9 @@ impl Compositor {
         let is_square_shape = matches!(lp.webcam_shape, 1 | 2); // circle | square
         let cam_ar = if is_square_shape { 1.0 } else { (wcw / wch).max(0.01) };
         let fit_cam_aspect = |dst: [f32; 4]| -> [f32; 4] {
-            let s = (dst[2] * OUT_W as f32).min(dst[3] * OUT_H as f32); // côté carré de base (px)
+            let s = (dst[2] * self.rw()).min(dst[3] * self.rh()); // côté carré de base (px)
             let (pw, ph) = if cam_ar >= 1.0 { (s, s / cam_ar) } else { (s * cam_ar, s) };
-            let (nw, nh) = (pw / OUT_W as f32, ph / OUT_H as f32);
+            let (nw, nh) = (pw / self.rw(), ph / self.rh());
             let (brx, bry) = (dst[0] + dst[2], dst[1] + dst[3]);
             [brx - nw, bry - nh, nw, nh]
         };
@@ -1315,9 +1392,9 @@ impl Compositor {
         let (final_out_w, final_out_h) = scene_ref
             .as_ref()
             .map(|s| (s.output.width.max(1) as f32, s.output.height.max(1) as f32))
-            .unwrap_or((OUT_W as f32, OUT_H as f32));
-        let stretch_x = final_out_w / OUT_W as f32;
-        let stretch_y = final_out_h / OUT_H as f32;
+            .unwrap_or((self.rw(), self.rh()));
+        let stretch_x = final_out_w / self.rw();
+        let stretch_y = final_out_h / self.rh();
         let uniform_stretch = stretch_x.min(stretch_y);
         // Publié pour tout calque dessiné hors de cette fonction (ex. le curseur, plus bas) qui a
         // aussi besoin d'annuler l'étirement de sortie pour garder sa forme — une seule source de
@@ -1359,7 +1436,7 @@ impl Compositor {
                 (box_h_px * aspect, box_h_px)
             };
             let u = uniform_stretch.max(0.0001);
-            let (nw, nh) = (nw_px / (OUT_W as f32 * u), nh_px / (OUT_H as f32 * u));
+            let (nw, nh) = (nw_px / (self.rw() * u), nh_px / (self.rh() * u));
             let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
             [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
         };
@@ -1398,11 +1475,11 @@ impl Compositor {
             if progress <= 0.0 {
                 return dst;
             }
-            let margin_px = OUT_W.min(OUT_H) as f32 * 0.025;
-            let bounds_w = (OUT_W as f32 - margin_px * 2.0).max(0.0);
-            let bounds_h = (OUT_H as f32 - margin_px * 2.0).max(0.0);
-            let cur_w_px = dst[2] * OUT_W as f32;
-            let cur_h_px = dst[3] * OUT_H as f32;
+            let margin_px = self.rw().min(self.rh()) * 0.025;
+            let bounds_w = (self.rw() - margin_px * 2.0).max(0.0);
+            let bounds_h = (self.rh() - margin_px * 2.0).max(0.0);
+            let cur_w_px = dst[2] * self.rw();
+            let cur_h_px = dst[3] * self.rh();
             let aspect = if cur_h_px > 0.0 { cur_w_px / cur_h_px } else { 1.0 };
             let (mut full_w, mut full_h) = (bounds_w, bounds_w / aspect);
             if full_h > bounds_h {
@@ -1411,14 +1488,14 @@ impl Compositor {
             }
             let full_x = margin_px + (bounds_w - full_w) * 0.5;
             let full_y = margin_px + (bounds_h - full_h) * 0.5;
-            let cur_x_px = dst[0] * OUT_W as f32;
-            let cur_y_px = dst[1] * OUT_H as f32;
+            let cur_x_px = dst[0] * self.rw();
+            let cur_y_px = dst[1] * self.rh();
             let lerp = |a: f32, b: f32| a + (b - a) * progress;
             [
-                lerp(cur_x_px, full_x) / OUT_W as f32,
-                lerp(cur_y_px, full_y) / OUT_H as f32,
-                lerp(cur_w_px, full_w) / OUT_W as f32,
-                lerp(cur_h_px, full_h) / OUT_H as f32,
+                lerp(cur_x_px, full_x) / self.rw(),
+                lerp(cur_y_px, full_y) / self.rh(),
+                lerp(cur_w_px, full_w) / self.rw(),
+                lerp(cur_h_px, full_h) / self.rh(),
             ]
         };
         w_dst = fullscreen_dst(w_dst, cam_progress);
@@ -1450,7 +1527,7 @@ impl Compositor {
         // l'ANISOTROPIE : elle laissait les coins elliptiques dès que stretch_x != stretch_y,
         // càd dès que le ratio de sortie n'est pas 16:9 — cf. rapport utilisateur sur le 9:16).
         let s_radius = if cfg.rounded { p.screen.radius * lp.radius_scale } else { 0.0 };
-        let w_px = [w_dst[2] * OUT_W as f32, w_dst[3] * OUT_H as f32];
+        let w_px = [w_dst[2] * self.rw(), w_dst[3] * self.rh()];
         // forme webcam : rayon SDF dérivé de la SEULE forme choisie. Le slider Roundness ne
         // s'applique qu'à l'ÉCRAN, jamais à la caméra. Parité web (compositeLayout) : rectangle
         // ET square ont un léger arrondi (fraction 0.12) — ils ne diffèrent que par le ratio ;
@@ -1531,7 +1608,7 @@ impl Compositor {
                 &LayerCB {
                     dst: [-over, -over, 1.0 + 2.0 * over, 1.0 + 2.0 * over],
                     src: [0.0, 0.0, u_max, v_max],
-                    quad_px: [OUT_W as f32, OUT_H as f32],
+                    quad_px: [self.rw(), self.rh()],
                     mode: 0.0,
                     color: [1.0, 1.0, 1.0, 1.0],
                     ..Default::default()
@@ -1566,7 +1643,7 @@ impl Compositor {
         let [su0_p, sv0_p, su1_p, sv1_p] =
             screen_source_rect(u_max, v_max, active_crop, pp.zoom, p.focus);
         let (hu_p, hv_p) = ((su1_p - su0_p) * 0.5, (sv1_p - sv0_p) * 0.5);
-        let s_px = [s_dst[2] * OUT_W as f32, s_dst[3] * OUT_H as f32];
+        let s_px = [s_dst[2] * self.rw(), s_dst[3] * self.rh()];
         if cfg.shadow {
             self.draw_shadow(s_dst, s_px, s_radius, 40.0, [0.0, 16.0], 0.45 * lp.shadow_scale, stretch_x, stretch_y);
         }
@@ -1593,7 +1670,7 @@ impl Compositor {
             // est un effet ponctuel bref, cette simplification ne se voit pas).
             let corners = crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], zoom_rotation);
             let (cx_px, cy_px) =
-                ((s_dst[0] + s_dst[2] * 0.5) * OUT_W as f32, (s_dst[1] + s_dst[3] * 0.5) * OUT_H as f32);
+                ((s_dst[0] + s_dst[2] * 0.5) * self.rw(), (s_dst[1] + s_dst[3] * 0.5) * self.rh());
             let (min_x, max_x) = corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| {
                 (mn.min(x), mx.max(x))
             });
@@ -1603,10 +1680,10 @@ impl Compositor {
             let bbox_w = (max_x - min_x).max(1.0);
             let bbox_h = (max_y - min_y).max(1.0);
             let bbox_dst = [
-                (cx_px + min_x) / OUT_W as f32,
-                (cy_px + min_y) / OUT_H as f32,
-                bbox_w / OUT_W as f32,
-                bbox_h / OUT_H as f32,
+                (cx_px + min_x) / self.rw(),
+                (cy_px + min_y) / self.rh(),
+                bbox_w / self.rw(),
+                bbox_h / self.rh(),
             ];
             // coins en px LOCAUX à la bbox (0..bbox_w/h), pour matcher `i.local` du shader.
             let local = |(x, y): (f32, f32)| -> [f32; 2] { [x - min_x, y - min_y] };
@@ -1728,7 +1805,7 @@ impl Compositor {
                         self.ctx.PSSetSamplers(0, Some(&[Some(self.sampler.clone())]));
                         let vp = D3D11_VIEWPORT {
                             TopLeftX: 0.0, TopLeftY: 0.0,
-                            Width: OUT_W as f32, Height: OUT_H as f32, MinDepth: 0.0, MaxDepth: 1.0,
+                            Width: self.rw(), Height: self.rh(), MinDepth: 0.0, MaxDepth: 1.0,
                         };
                         self.ctx.RSSetViewports(Some(&[vp]));
                         self.ctx.OMSetBlendState(&self.blend, None, 0xffffffff);
@@ -1806,7 +1883,7 @@ impl Compositor {
             self.ctx.PSSetSamplers(0, Some(&[Some(self.sampler.clone())]));
             let vp = D3D11_VIEWPORT {
                 TopLeftX: 0.0, TopLeftY: 0.0,
-                Width: OUT_W as f32, Height: OUT_H as f32, MinDepth: 0.0, MaxDepth: 1.0,
+                Width: self.rw(), Height: self.rh(), MinDepth: 0.0, MaxDepth: 1.0,
             };
             self.ctx.RSSetViewports(Some(&[vp]));
             self.ctx.OMSetBlendState(&self.blend_add, Some(&[w, w, w, w]), 0xffffffff);
@@ -2052,7 +2129,12 @@ impl Compositor {
         out_tex: *mut c_void,
         slice: u32,
     ) -> Result<()> {
-        if target_w == OUT_W && target_h == OUT_H {
+        // Raccourci : la cible est déjà la taille à laquelle on vient de rastériser
+        // → aucun resize à faire, on convertit le RT directement. Comparé à la
+        // taille de rendu COURANTE et non à une constante : une fois le RT aligné
+        // sur `output`, c'est justement le cas nominal.
+        let (rw_i, rh_i) = self.render_dims();
+        if target_w == rw_i && target_h == rh_i {
             return self.rgb_to_nv12(out_tex, slice);
         }
         self.blit_resized(target_w, target_h)?;
@@ -2100,7 +2182,7 @@ impl Compositor {
         self.ctx.PSSetShaderResources(0, Some(&[Some(self.rt_srv.clone())]));
         let vp_y = D3D11_VIEWPORT {
             TopLeftX: 0.0, TopLeftY: 0.0,
-            Width: OUT_W as f32, Height: OUT_H as f32, MinDepth: 0.0, MaxDepth: 1.0,
+            Width: self.rw(), Height: self.rh(), MinDepth: 0.0, MaxDepth: 1.0,
         };
         self.ctx.RSSetViewports(Some(&[vp_y]));
         self.ctx.PSSetShader(&self.ps_y, None);
@@ -2110,7 +2192,7 @@ impl Compositor {
         self.ctx.OMSetRenderTargets(Some(&[Some(self.rtv_uv.clone())]), None);
         let vp_uv = D3D11_VIEWPORT {
             TopLeftX: 0.0, TopLeftY: 0.0,
-            Width: (OUT_W / 2) as f32, Height: (OUT_H / 2) as f32, MinDepth: 0.0, MaxDepth: 1.0,
+            Width: self.rw() / 2.0, Height: self.rh() / 2.0, MinDepth: 0.0, MaxDepth: 1.0,
         };
         self.ctx.RSSetViewports(Some(&[vp_uv]));
         self.ctx.PSSetShader(&self.ps_uv, None);
@@ -2142,17 +2224,18 @@ impl Compositor {
         self.ctx.CopyResource(&dstr, &src);
         let mut m = D3D11_MAPPED_SUBRESOURCE::default();
         self.ctx.Map(&stg, 0, D3D11_MAP_READ, 0, Some(&mut m))?;
-        let mut out = Vec::with_capacity((OUT_W * OUT_H * 3 / 2) as usize);
+        let (rw_i, rh_i) = self.render_dims();
+        let mut out = Vec::with_capacity((rw_i * rh_i * 3 / 2) as usize);
         // plan Y
-        for y in 0..OUT_H as usize {
+        for y in 0..rh_i as usize {
             let row = (m.pData as *const u8).add(y * m.RowPitch as usize);
-            out.extend_from_slice(std::slice::from_raw_parts(row, OUT_W as usize));
+            out.extend_from_slice(std::slice::from_raw_parts(row, rw_i as usize));
         }
         // plan UV : commence à RowPitch*Height (offset donné par le pitch), demi-hauteur
-        let uv_off = m.RowPitch as usize * OUT_H as usize;
-        for y in 0..(OUT_H / 2) as usize {
+        let uv_off = m.RowPitch as usize * rh_i as usize;
+        for y in 0..(rh_i / 2) as usize {
             let row = (m.pData as *const u8).add(uv_off + y * m.RowPitch as usize);
-            out.extend_from_slice(std::slice::from_raw_parts(row, OUT_W as usize));
+            out.extend_from_slice(std::slice::from_raw_parts(row, rw_i as usize));
         }
         self.ctx.Unmap(&stg, 0);
         std::fs::write(path, &out)?;
@@ -2164,11 +2247,12 @@ impl Compositor {
         self.ctx.CopyResource(&self.staging, &self.rt);
         let mut m = D3D11_MAPPED_SUBRESOURCE::default();
         self.ctx.Map(&self.staging, 0, D3D11_MAP_READ, 0, Some(&mut m))?;
-        let mut out = vec![0u8; (OUT_W * OUT_H * 4) as usize];
-        for y in 0..OUT_H as usize {
+        let (rw_i, rh_i) = self.render_dims();
+        let mut out = vec![0u8; (rw_i * rh_i * 4) as usize];
+        for y in 0..rh_i as usize {
             let src = (m.pData as *const u8).add(y * m.RowPitch as usize);
-            let dst = out.as_mut_ptr().add(y * OUT_W as usize * 4);
-            std::ptr::copy_nonoverlapping(src, dst, OUT_W as usize * 4);
+            let dst = out.as_mut_ptr().add(y * rw_i as usize * 4);
+            std::ptr::copy_nonoverlapping(src, dst, rw_i as usize * 4);
         }
         self.ctx.Unmap(&self.staging, 0);
         std::fs::write(path, &out)?;
@@ -2225,5 +2309,147 @@ mod tests {
         let crop = SceneCrop { x: 0.25, y: 0.1, width: 0.5, height: 0.6 };
         assert_rect(screen_source_rect(0.8, 0.9, Some(crop), 2.0, [0.5, 0.5]), [0.3, 0.225, 0.5, 0.495]);
         assert_rect(screen_source_rect(0.8, 0.9, Some(crop), 2.0, [1.0, 1.0]), [0.4, 0.36, 0.6, 0.63]);
+    }
+
+    // -----------------------------------------------------------------------
+    // Filet de la refonte « le RT est le cadre de sortie » (phase 0).
+    //
+    // Ces tests décrivent la GÉOMÉTRIE DE SORTIE, pas l'implémentation : ils
+    // passent par `landed_output_px`, qui modélise ce que `blit_resized` met
+    // réellement à l'écran. Ils doivent rester VERTS avant ET après la refonte.
+    //
+    // Aujourd'hui le RT est figé à OUT_W×OUT_H et la forme est rattrapée en
+    // aval par `apply_undistort` (9 correctifs successifs, cf. git log des
+    // 20-21/07). Demain le RT prendra la géométrie de `output` et tout cet
+    // appareil deviendra l'identité. Ce qui atterrit à l'écran, lui, ne doit
+    // pas bouger — c'est ce que ces assertions verrouillent.
+    // -----------------------------------------------------------------------
+
+    /// Où un rect normalisé du canvas atterrit VRAIMENT, en pixels de sortie,
+    /// une fois `blit_resized` passé. Celui-ci dessine un triangle plein écran
+    /// (`Draw(3, 0)`) : tout le canvas est étiré sur le cadre de sortie, sans
+    /// letterbox — donc la fraction `f` devient `f * dimension_de_sortie`.
+    fn landed_output_px(dst: [f32; 4], out_w: f32, out_h: f32) -> [f32; 4] {
+        [dst[0] * out_w, dst[1] * out_h, dst[2] * out_w, dst[3] * out_h]
+    }
+
+    /// Rect normalisé décrivant un carré de `side` px DANS LE CANVAS, centré.
+    fn centred_square_in_canvas(side: f32) -> [f32; 4] {
+        let (nw, nh) = (side / OUT_W as f32, side / OUT_H as f32);
+        [0.5 - nw * 0.5, 0.5 - nh * 0.5, nw, nh]
+    }
+
+    fn stretches(out_w: f32, out_h: f32) -> (f32, f32) {
+        (out_w / OUT_W as f32, out_h / OUT_H as f32)
+    }
+
+    /// Tous les formats que l'UX peut produire — `native` inclus, qui n'est
+    /// borné par aucune liste : `pickOutputDims` (TS) dérive les dimensions du
+    /// plus grand côté de l'asset de référence et du ratio choisi, donc un
+    /// ultrawide ou un enregistrement téléphone sont des sorties légitimes.
+    const OUTPUT_FORMATS: &[(&str, f32, f32)] = &[
+        ("16:9", 1920.0, 1080.0),
+        ("9:16", 1080.0, 1920.0),
+        ("1:1", 1920.0, 1920.0),
+        ("4:3", 1920.0, 1440.0),
+        ("4:5", 1536.0, 1920.0),
+        ("16:10", 1920.0, 1200.0),
+        ("10:16", 1200.0, 1920.0),
+        ("native ultrawide", 3440.0, 1440.0),
+        ("native telephone", 1080.0, 2340.0),
+    ];
+
+    /// CONTRAT 1 — un calque carré atterrit carré, quel que soit le format.
+    /// C'est l'acquis des 9 correctifs : il doit survivre à la refonte.
+    #[test]
+    fn a_square_layer_lands_square_at_every_output_format() {
+        for &(name, w, h) in OUTPUT_FORMATS {
+            let (sx, sy) = stretches(w, h);
+            let landed = landed_output_px(apply_undistort(centred_square_in_canvas(400.0), sx, sy), w, h);
+            let (lw, lh) = (landed[2], landed[3]);
+            assert!(
+                (lw - lh).abs() <= 1.0,
+                "{name} ({w}x{h}) : le carre atterrit {lw:.1}x{lh:.1} px — deforme",
+            );
+        }
+    }
+
+    /// CONTRAT 2 — un calque centré reste centré. La compensation ne doit pas
+    /// seulement préserver la taille, mais aussi la position.
+    #[test]
+    fn a_centred_layer_lands_centred_at_every_output_format() {
+        for &(name, w, h) in OUTPUT_FORMATS {
+            let (sx, sy) = stretches(w, h);
+            let landed = landed_output_px(apply_undistort(centred_square_in_canvas(400.0), sx, sy), w, h);
+            let (cx, cy) = (landed[0] + landed[2] * 0.5, landed[1] + landed[3] * 0.5);
+            assert!(
+                (cx - w * 0.5).abs() <= 1.0 && (cy - h * 0.5).abs() <= 1.0,
+                "{name} ({w}x{h}) : centre a ({cx:.1}, {cy:.1}), attendu ({:.1}, {:.1})",
+                w * 0.5,
+                h * 0.5,
+            );
+        }
+    }
+
+    /// CONTRAT 3 — un rect déjà exprimé en espace de sortie (`app_webcam_rect`,
+    /// calculé côté web par `computeCompositeLayout`) traverse le pipeline sans
+    /// être déformé. C'est le rôle d'`inverse_undistort` ; après la refonte ce
+    /// sera vrai sans aucune pré-compensation, mais le contrat est le même.
+    #[test]
+    fn an_output_space_rect_round_trips_unchanged() {
+        for &(name, w, h) in OUTPUT_FORMATS {
+            let (sx, sy) = stretches(w, h);
+            let intent = [0.55, 0.60, 0.30, 0.30];
+            let out = apply_undistort(inverse_undistort(intent, sx, sy), sx, sy);
+            for (got, want) in out.into_iter().zip(intent) {
+                assert!((got - want).abs() < 1e-4, "{name} : {got} != {want}");
+            }
+        }
+    }
+
+    /// CONTRAT 4 — le rayon d'impact de la refonte.
+    ///
+    /// En 16:9, `stretch_x == stretch_y == 1`, donc toute la machinerie de
+    /// compensation est DÉJÀ l'identité. La refonte doit donc produire un 16:9
+    /// bit-à-bit identique : tout écart en 16:9 sera une régression, jamais un
+    /// changement voulu. Le risque est confiné aux ratios aujourd'hui cassés.
+    #[test]
+    fn the_16_9_path_is_already_an_identity_transform() {
+        let (sx, sy) = stretches(1920.0, 1080.0);
+        let dst = [0.13, 0.04, 0.74, 0.52];
+        assert_rect(apply_undistort(dst, sx, sy), dst);
+        assert_rect(inverse_undistort(dst, sx, sy), dst);
+    }
+
+    /// Fraction de la résolution de sortie qui est RÉELLEMENT rastérisée, par
+    /// axe. Le canvas étant figé à OUT_W×OUT_H, un calque est échantillonné
+    /// dans le canvas puis ré-étiré par `blit_resized` : sur chaque axe le
+    /// contenu ne porte que `OUT_dim / output_dim` de l'information finale.
+    /// `>= 1.0` = suréchantillonné (aucune perte). `< 1.0` = agrandissement.
+    fn rasterised_fraction(out_w: f32, out_h: f32) -> (f32, f32) {
+        (OUT_W as f32 / out_w, OUT_H as f32 / out_h)
+    }
+
+    /// MESURE DE L'AVANT — à supprimer en phase 2, quand elle vaudra 1.0
+    /// partout. Ce n'est pas un contrat : c'est la trace chiffrée du défaut que
+    /// la refonte corrige, pour que le gain soit mesuré et non affirmé.
+    ///
+    /// Le constat central : la perte ne vient PAS du ratio mais de la
+    /// résolution. Dès qu'un axe de sortie dépasse celui du canvas, il est
+    /// agrandi. Un export 4K ou 1440p en 16:9 — sans la moindre déformation —
+    /// est donc lui aussi du 1080p agrandi.
+    #[test]
+    fn documents_todays_resolution_loss_per_output_format() {
+        let pct = |f: f32| (f.min(1.0) * 100.0).round() as i32;
+        for &(name, w, h) in OUTPUT_FORMATS {
+            let (fx, fy) = rasterised_fraction(w, h);
+            println!("{name:18} {w:>6.0}x{h:<6.0} horizontal {:>3}%  vertical {:>3}%", pct(fx), pct(fy));
+        }
+        // 16:9 1080p est le SEUL format sans perte : c'est exactement le canvas.
+        assert_eq!(rasterised_fraction(1920.0, 1080.0), (1.0, 1.0));
+        // Tous les formats portrait plafonnent à 1080 lignes rastérisées.
+        assert_eq!(rasterised_fraction(1080.0, 1920.0).1, 1080.0 / 1920.0);
+        // Un 4K 16:9 n'est pas mieux loti qu'un 9:16 : moitie de l'information.
+        assert_eq!(rasterised_fraction(3840.0, 2160.0), (0.5, 0.5));
     }
 }

@@ -13,6 +13,7 @@ import {
 	ZoomIn,
 } from "lucide-react";
 import {
+	type CSSProperties,
 	memo,
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
@@ -28,7 +29,9 @@ import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useAudioPeaks } from "@/hooks/useAudioPeaks";
 import { createId } from "@/lib/ai-edition/document/ids";
+import { collectNativeFormats, referenceAssetDims } from "@/lib/ai-edition/document/outputFormat";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
@@ -41,7 +44,11 @@ import {
 } from "@/lib/ai-edition/timeline/trim-mapping";
 import { buildAutoZoomSuggestions } from "@/lib/ai-edition/timeline/zoom-suggestions";
 import { nativeBridgeClient } from "@/native/client";
-import { ASPECT_RATIOS } from "@/utils/aspectRatioUtils";
+import {
+	ASPECT_RATIO_PRESETS,
+	getAspectRatioLabel,
+	toAspectRatioToken,
+} from "@/utils/aspectRatioUtils";
 import { TransportBar } from "../TransportBar";
 import type { VideoSource } from "../VirtualPreview";
 import styles from "./EditorShellV4.module.css";
@@ -168,6 +175,28 @@ const ClipWaveform = memo(function ClipWaveform({
 	);
 });
 
+/** Right-aligned hint on a ratio row. Marks the shapes that are native to the timeline's own
+ *  clips, so "Original" annotates a concrete ratio the user can name instead of being a separate
+ *  menu entry that resolves to a different shape depending on which clips are loaded. */
+const nativeBadgeStyle: CSSProperties = {
+	marginLeft: "auto",
+	fontSize: 10.5,
+	fontWeight: 500,
+	color: "var(--muted)",
+	whiteSpace: "nowrap",
+};
+
+/** Header for native shapes that match no preset (an ultrawide, an odd capture size) and so
+ *  need a row of their own. */
+const aspectSectionLabelStyle: CSSProperties = {
+	padding: "8px 10px 4px",
+	fontSize: 10,
+	fontWeight: 600,
+	letterSpacing: "0.04em",
+	textTransform: "uppercase",
+	color: "var(--muted)",
+};
+
 interface LanePill {
 	id: string;
 	kind: "annotation" | "speed" | "trim" | "zoom" | "cameraFullscreen";
@@ -240,6 +269,36 @@ export function V4Timeline({
 		shiftPx: number;
 	} | null>(null);
 	const { settings, set: setSettings } = useEditorSettings();
+	const document = useProjectStore((s) => s.document);
+	// The distinct native shapes of the clips actually on the timeline. "Original" used to be a
+	// single menu entry that silently resolved to whichever clip had the most pixels — so adding
+	// a 4K portrait rush flipped the whole project to portrait with no UI feedback. Enumerating
+	// them instead means the user picks a shape explicitly, and what gets stored is a concrete
+	// "W:H" token that no longer moves when the clip list changes.
+	const nativeFormats = useMemo(() => (document ? collectNativeFormats(document) : []), [document]);
+	// Common case (every clip shares one format): no separate section, just a badge on the preset
+	// that already matches — no extra row, no extra decision. Only shapes with no preset
+	// equivalent (an ultrawide "64:27", an odd capture size) need a row of their own.
+	const nativeByToken = useMemo(
+		() => new Map(nativeFormats.map((f) => [f.token, f])),
+		[nativeFormats],
+	);
+	const unlistedNativeFormats = useMemo(
+		() =>
+			nativeFormats.filter((f) => !(ASPECT_RATIO_PRESETS as readonly string[]).includes(f.token)),
+		[nativeFormats],
+	);
+	const timelineIsMixed = nativeFormats.length > 1;
+	// A project saved before the shapes were enumerated still stores "native". Resolve it to the
+	// shape it currently means so the menu highlights a real row (and the button names a real
+	// ratio) instead of showing a selection that matches nothing. Picking that row rewrites the
+	// document to the concrete token — which is how those projects self-migrate off the value
+	// that silently moved with the clip list.
+	const activeToken = useMemo(() => {
+		if (settings.aspectRatio !== "native" || !document) return settings.aspectRatio;
+		const reference = referenceAssetDims(document);
+		return toAspectRatioToken(reference.width, reference.height) ?? settings.aspectRatio;
+	}, [settings.aspectRatio, document]);
 
 	const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
 	const [autoEnhanceOpen, setAutoEnhanceOpen] = useState(false);
@@ -1059,7 +1118,7 @@ export function V4Timeline({
 									title={t("toolbar.aspectRatio")}
 									aria-label={t("toolbar.aspectRatio")}
 								>
-									{settings.aspectRatio}
+									{getAspectRatioLabel(activeToken)}
 									<ChevronDown size={10} />
 								</button>
 							</PopoverTrigger>
@@ -1071,23 +1130,57 @@ export function V4Timeline({
 							>
 								<div
 									className={styles.recMenu}
-									style={{ position: "relative", bottom: "auto", width: 150 }}
+									style={{ position: "relative", bottom: "auto", width: 210 }}
 								>
-									{ASPECT_RATIOS.map((ratio) => (
-										<button
-											type="button"
-											key={ratio}
-											className={`${styles.recMenuRow}${
-												ratio === settings.aspectRatio ? ` ${styles.active}` : ""
-											}`}
-											onClick={() => {
-												void setSettings({ aspectRatio: ratio });
-												setAspectMenuOpen(false);
-											}}
-										>
-											{ratio}
-										</button>
-									))}
+									{ASPECT_RATIO_PRESETS.map((ratio) => {
+										const native = nativeByToken.get(ratio);
+										return (
+											<button
+												type="button"
+												key={ratio}
+												className={`${styles.recMenuRow}${
+													ratio === activeToken ? ` ${styles.active}` : ""
+												}`}
+												onClick={() => {
+													void setSettings({ aspectRatio: ratio });
+													setAspectMenuOpen(false);
+												}}
+											>
+												{ratio}
+												{native ? (
+													<span style={nativeBadgeStyle}>
+														{timelineIsMixed
+															? `${t("toolbar.original")} · ${native.clipCount}`
+															: t("toolbar.original")}
+													</span>
+												) : null}
+											</button>
+										);
+									})}
+									{unlistedNativeFormats.length > 0 ? (
+										<>
+											<div style={aspectSectionLabelStyle}>{t("toolbar.original")}</div>
+											{unlistedNativeFormats.map((format) => (
+												<button
+													type="button"
+													key={format.token}
+													className={`${styles.recMenuRow}${
+														format.token === activeToken ? ` ${styles.active}` : ""
+													}`}
+													onClick={() => {
+														void setSettings({ aspectRatio: format.token });
+														setAspectMenuOpen(false);
+													}}
+												>
+													{format.token}
+													<span style={nativeBadgeStyle}>
+														{`${format.width}×${format.height}`}
+														{timelineIsMixed ? ` · ${format.clipCount}` : ""}
+													</span>
+												</button>
+											))}
+										</>
+									) : null}
 								</div>
 							</PopoverContent>
 						</Popover>

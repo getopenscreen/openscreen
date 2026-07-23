@@ -142,10 +142,6 @@ export function useNativeCompositorView(
 			rectRafHandle = requestAnimationFrame(applyRectNow);
 		};
 
-		// Typed on `ArrayBuffer` (not the default `ArrayBufferLike`) so `ImageData`,
-		// which rejects `SharedArrayBuffer`-backed arrays, accepts it.
-		let reusablePixels: Uint8ClampedArray<ArrayBuffer> | null = null;
-		let reusableImageData: ImageData | null = null;
 		// Generation of the last frame we painted. The native side only publishes a
 		// NEW generation when it actually composed a new frame (it never republishes
 		// an identical one), so passing this back as `sinceGen` means an unchanged
@@ -202,34 +198,32 @@ export function useNativeCompositorView(
 					if (canvas.height !== height) {
 						canvas.height = height;
 					}
-					if (
-						!reusablePixels ||
-						reusablePixels.byteLength !== data.byteLength ||
-						reusableImageData?.width !== width ||
-						reusableImageData?.height !== height
-					) {
-						// Back the array with an explicit `ArrayBuffer` (not the default
-						// `ArrayBufferLike`, which the DOM lib widens to include
-						// `SharedArrayBuffer` and then rejects for `ImageData`).
-						reusablePixels = new Uint8ClampedArray(new ArrayBuffer(data.byteLength));
-						reusableImageData = new ImageData(reusablePixels, width, height);
-					}
-					reusablePixels.set(data);
-					if (reusableImageData) {
-						const image = reusableImageData;
-						createImageBitmap(image)
-							.then((bitmap) => {
-								if (!disposed && ctx) {
-									ctx.drawImage(bitmap, 0, 0);
-								}
-								bitmap.close();
-							})
-							.catch(() => {
-								if (!disposed && ctx) {
-									ctx.putImageData(image, 0, 0);
-								}
-							});
-					}
+					// Wrap the received buffer DIRECTLY — no intermediate copy. `data` is a
+					// fresh per-frame Buffer from IPC (never pooled or reused across frames),
+					// so a view over it is valid for the lifetime of this paint, and nothing
+					// mutates it. Cast to `ArrayBuffer` because `ImageData` rejects
+					// `SharedArrayBuffer`-backed arrays (IPC binary is never shared).
+					const pixels = new Uint8ClampedArray(
+						data.buffer as ArrayBuffer,
+						data.byteOffset,
+						data.byteLength,
+					);
+					const image = new ImageData(pixels, width, height);
+					// `createImageBitmap` decodes off the main thread (keeps UI at 60/120fps)
+					// and snapshots `image`, so the view can be released after; `putImageData`
+					// is the synchronous fallback if bitmap creation is unavailable.
+					createImageBitmap(image)
+						.then((bitmap) => {
+							if (!disposed && ctx) {
+								ctx.drawImage(bitmap, 0, 0);
+							}
+							bitmap.close();
+						})
+						.catch(() => {
+							if (!disposed && ctx) {
+								ctx.putImageData(image, 0, 0);
+							}
+						});
 					// Advance only after a successful, validated frame — so a dropped/
 					// malformed packet is retried rather than silently skipped.
 					lastGen = gen;

@@ -183,12 +183,13 @@ test.describe("Windows native checklist smoke tests", () => {
 				}));
 			}, testVideoInRecordings);
 
-			await hudWindow.getByTestId("launch-open-video-button").click();
+			await hudWindow.getByTestId("launch-open-studio-button").click();
 			const editorWindow = await app.waitForEvent("window", {
 				predicate: (w) => w.url().includes("windowType=editor"),
 				timeout: 15_000,
 			});
 			await editorWindow.waitForLoadState("domcontentloaded");
+			await editorWindow.getByTestId("editor-empty-import-video-button").click();
 			await expect(editorWindow.getByText("Loading video...")).not.toBeVisible({ timeout: 20_000 });
 
 			const playButton = editorWindow.locator(
@@ -208,8 +209,9 @@ test.describe("Windows native checklist smoke tests", () => {
 			await expect.poll(() => seekInput.inputValue(), { timeout: 10_000 }).not.toBe("0");
 
 			await expect(
-				editorWindow.getByText("Background").or(editorWindow.getByText("Arrière-plan")),
+				editorWindow.getByText("Background").or(editorWindow.getByText("Arrière-plan")).first(),
 			).toBeVisible();
+			await editorWindow.getByTestId("testId-export-panel-button").click();
 			await expect(editorWindow.getByTestId("testId-export-button")).toBeVisible();
 		} finally {
 			await closeApp(app);
@@ -262,7 +264,10 @@ test.describe("Windows native checklist smoke tests", () => {
 							return success({ success: false, canceled: true });
 						}
 						if (request.domain === "project" && request.action === "getCurrentVideoPath") {
-							return success({ success: true, path: payload.videoPath });
+							// No video set yet at editor mount time — the editor must show
+							// EditorEmptyState so the test can click "Load Project" itself,
+							// rather than short-circuiting straight into a "loaded" state.
+							return success({ success: false });
 						}
 						if (request.domain === "system" && request.action === "getPlatform") {
 							return success("win32");
@@ -301,13 +306,15 @@ test.describe("Windows native checklist smoke tests", () => {
 				},
 			);
 
-			await hudWindow.getByTestId("launch-open-project-button").click();
+			await hudWindow.getByTestId("launch-open-studio-button").click();
 			const editorWindow = await app.waitForEvent("window", {
 				predicate: (w) => w.url().includes("windowType=editor"),
 				timeout: 15_000,
 			});
 			await editorWindow.waitForLoadState("domcontentloaded");
+			await editorWindow.getByTestId("editor-empty-load-project-button").click();
 			await expect(editorWindow.getByText("Loading video...")).not.toBeVisible({ timeout: 20_000 });
+			await editorWindow.getByTestId("testId-export-panel-button").click();
 			await expect(editorWindow.getByTestId("testId-export-button")).toBeVisible();
 		} finally {
 			await closeApp(app);

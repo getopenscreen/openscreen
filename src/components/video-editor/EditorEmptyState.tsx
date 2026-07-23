@@ -180,6 +180,7 @@ export function EditorEmptyState({ onVideoImported, onProjectOpened }: EditorEmp
 				<div className="flex flex-col gap-3 w-full max-w-xs">
 					<button
 						type="button"
+						data-testid="editor-empty-import-video-button"
 						onClick={handleImportVideo}
 						className="flex items-center justify-center gap-2.5 w-full px-4 py-3 rounded-xl bg-[#34B27B] hover:bg-[#2d9e6c] active:bg-[#27885c] text-white font-medium text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#34B27B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090b]"
 					>
@@ -188,6 +189,7 @@ export function EditorEmptyState({ onVideoImported, onProjectOpened }: EditorEmp
 					</button>
 					<button
 						type="button"
+						data-testid="editor-empty-load-project-button"
 						onClick={handleLoadProject}
 						className="flex items-center justify-center gap-2.5 w-full px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-medium text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090b]"
 					>

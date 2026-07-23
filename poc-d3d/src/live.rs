@@ -411,11 +411,15 @@ fn scene_for_clip(scene: &Scene, clip_index: usize) -> Scene {
 
 /// Dernière frame readback vers CPU, prête pour le napi `read_frame`.
 ///
-/// `(w, h, vec)` où `vec.len() == w*h*4` octets RGBA8 tightly-packed (R, G, B, A en
-/// mémoire — cf. `Compositor::readback_resized`). `None` = "aucune frame composée
-/// pour l'instant" (toutes les lectures avant la 1re frame composée retournent
-/// `None` côté napi, jamais un buffer vide).
-type LatestFrame = (u32, u32, Vec<u8>);
+/// `(gen, w, h, vec)` où `vec.len() == w*h*4` octets RGBA8 tightly-packed (R, G, B, A
+/// en mémoire — cf. `Compositor::readback_resized`). `gen` est une génération monotone
+/// (≥ 1, `0` réservé à « le consommateur n'a encore rien vu ») incrémentée à CHAQUE
+/// publication, càd uniquement quand une nouvelle frame a réellement été composée (le
+/// thread de rendu ne republie pas une frame identique — cf. `stepped || first`). Elle
+/// est l'IDENTITÉ de la frame : le consommateur (`read_frame`) ne repaie le clone + l'IPC
+/// que lorsqu'elle change. `None` = "aucune frame composée pour l'instant" (toutes les
+/// lectures avant la 1re frame composée retournent `None` côté napi, jamais un buffer vide).
+type LatestFrame = (u64, u32, u32, Vec<u8>);
 
 /// État partagé thread appelant → thread de rendu (commandes sans blocage).
 struct Shared {
@@ -516,16 +520,34 @@ impl LiveView {
         }
     }
 
-    /// Récupère la dernière frame readback (taille + RGBA8 tightly-packed).
+    /// Récupère la dernière frame readback (gen + taille + RGBA8 tightly-packed).
     /// `None` si rien n'a encore été composé (jamais écrit). **Coût : O(w·h)**
     /// (copie du `Vec<u8>` — nécessaire pour traverser la frontière thread + le
     /// FFI vers le Buffer napi). Le `Vec<u8>` retourné a `len() == w*h*4`.
-    pub fn latest_frame(&self) -> Option<(u32, u32, Vec<u8>)> {
+    /// Préférer `latest_frame_since` sur le chemin chaud : il évite ce clone quand
+    /// le consommateur possède déjà la génération courante.
+    pub fn latest_frame(&self) -> Option<(u64, u32, u32, Vec<u8>)> {
         self.shared
             .latest_frame
             .lock()
             .ok()
             .and_then(|guard| guard.as_ref().cloned())
+    }
+
+    /// Récupère la dernière frame UNIQUEMENT si sa génération est postérieure à
+    /// `since_gen`. `None` couvre les DEUX cas où le consommateur n'a rien à peindre :
+    ///   - rien n'a encore été composé (aucune frame publiée), ou
+    ///   - il possède déjà la génération courante (`gen <= since_gen`).
+    /// Dans ce second cas — l'essentiel du temps d'édition, preview en pause sur une
+    /// frame figée — on n'exécute PAS le clone `O(w·h)` : c'est tout l'intérêt du
+    /// compteur. Le consommateur passe la dernière génération qu'il a peinte (`0` au
+    /// départ) ; `None` ⇒ il ne fait rien, `Some` ⇒ il peint et retient `gen`.
+    pub fn latest_frame_since(&self, since_gen: u64) -> Option<(u64, u32, u32, Vec<u8>)> {
+        let guard = self.shared.latest_frame.lock().ok()?;
+        match guard.as_ref() {
+            Some((gen, w, h, px)) if *gen > since_gen => Some((*gen, *w, *h, px.clone())),
+            _ => None,
+        }
     }
 
     /// Switch inspector (booléen).
@@ -1168,9 +1190,14 @@ unsafe fn render_thread(
                     Ok(rgba) => {
                         // Publie dans `latest_frame` : on remplace le buffer précédent
                         // (le canvas ne montre que la dernière frame, peu importe combien
-                        // le renderer en a raté entre deux lectures napi).
+                        // le renderer en a raté entre deux lectures napi). On incrémente
+                        // la génération sous le MÊME lock que l'écriture du buffer, pour
+                        // qu'un lecteur ne puisse jamais voir un `gen` neuf appairé à un
+                        // buffer périmé (ou l'inverse). `+ 1` depuis la précédente, `1` au
+                        // premier publish.
                         if let Ok(mut slot) = shared.latest_frame.lock() {
-                            *slot = Some((pw, ph, rgba));
+                            let next_gen = slot.as_ref().map(|(g, ..)| g + 1).unwrap_or(1);
+                            *slot = Some((next_gen, pw, ph, rgba));
                         }
                         first = false;
                     }
@@ -1302,7 +1329,7 @@ pub fn run_standalone(screen: &str, webcam: &str, cursor_json: &str) -> Result<(
             // standalone n'affiche pas réellement les pixels ici (l'embed Electron est
             // le consumer réel). On imprime juste une frame de temps en temps pour
             // confirmer que la chaîne fonctionne.
-            if let Some((fw, fh, _pixels)) = view.latest_frame() {
+            if let Some((_gen, fw, fh, _pixels)) = view.latest_frame() {
                 if (fw, fh) != (w, h) {
                     // garde-fou : la staging de readback suit `set_rect` côté thread
                     // de rendu, donc ce serait une désynchro transitoire — acceptable.

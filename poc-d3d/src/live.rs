@@ -4,20 +4,23 @@
 //! `WS_POPUP` + swapchain) supprimée : la glue TS n'a plus de surface native à
 //! embarquer, elle draw chaque frame reçue comme une image bitmap.
 //!
-//! Pipeline interne inchangé : `Player` (decodeur lockstep screen/webcam) +
-//! `Compositor::compose_frame` → RT RGBA OUT_W×OUT_H (1920×1080, partagé avec
-//! l'export). Le **post-traitement** seulement change :
+//! Pipeline interne : `Player` (decodeur lockstep screen/webcam) +
+//! `Compositor::compose_frame` → RT RGBA rastérisé à la GÉOMÉTRIE DE RENDU (depuis la
+//! refonte ratio : géométrie de sortie ramenée à la taille du panneau, plus le canvas
+//! 16:9 figé d'avant). Le **post-traitement** :
 //!   - avant : blit du RT vers le backbuffer du swapchain, `Present`.
-//!   - maintenant : `comp.readback_resized(w, h)` réutilise le même `blit_resized`
-//!     / `ensure_resize_target` que l'export, puis copie le resize-target vers une
-//!     staging texture `D3D11_USAGE_STAGING`, `Map`/`D3D11_MAP_READ`, copie ligne
-//!     par ligne qui respecte `RowPitch` (même idiome que `dump_nv12`/`dump_raw`)
-//!     et stocke le `Vec<u8>` dans `Shared::latest_frame` pour le `read_frame` napi.
+//!   - maintenant : `comp.readback_direct()` copie le RT directement vers la staging
+//!     `D3D11_USAGE_STAGING` (déjà dimensionnée à la résolution de rendu), `Map`/
+//!     `D3D11_MAP_READ`, copie ligne par ligne qui respecte `RowPitch` (même idiome que
+//!     `dump_nv12`/`dump_raw`), et stocke le `Vec<u8>` dans `Shared::latest_frame` pour
+//!     le `read_frame` napi. Plus de resize intermédiaire (`blit_resized`) : le RT est
+//!     déjà à la taille voulue, CSS met à l'échelle vers la boîte du panneau côté JS.
 //!
 //! Modèle de threads : la vue n'a plus de HWND/UI côté thread appelant. Le rendu vit
 //! sur un thread dédié — le thread JS/UI n'est jamais bloqué. Les objets COM et la
-//! staging restent sur ce thread de rendu ; la `Vec<u8>` est publiée via un
-//! `Mutex<Option<(u32, u32, Vec<u8>)>>` pour la traversée de threads vers le napi.
+//! staging restent sur ce thread de rendu ; la frame est publiée via un
+//! `Mutex<Option<(u64 gen, u32 w, u32 h, Vec<u8>)>>` pour la traversée de threads vers
+//! le napi — le `gen` est l'identité de la frame (cf. `LatestFrame`).
 
 use crate::compositor::{Compositor, LiveParams};
 use crate::regions::speed_at;
@@ -1184,25 +1187,29 @@ unsafe fn render_thread(
         if stepped || first {
             if pw > 0 && ph > 0 {
                 // Step complet : `compose_frame` (déjà appelé par `step`/`present_frame`/
-                // `recompose`) → resize vers `pw`×`ph` via `blit_resized` réutilisé par
-                // l'export → copy vers staging → Map/Unmap → `Vec<u8>` RGBA8.
-                match comp.readback_resized(pw, ph) {
-                    Ok(rgba) => {
+                // `recompose`) a rastérisé le RT à la géométrie de sortie ramenée au panneau.
+                // On lit ce RT DIRECTEMENT à sa résolution de rendu (`readback_direct` : copy
+                // rt → staging → Map/Unmap), sans le resize `blit_resized` qui, depuis la
+                // refonte ratio, n'était plus qu'une copie identité + une alloc NV12 inutile.
+                match comp.readback_direct() {
+                    Ok((rw, rh, rgba)) => {
                         // Publie dans `latest_frame` : on remplace le buffer précédent
                         // (le canvas ne montre que la dernière frame, peu importe combien
                         // le renderer en a raté entre deux lectures napi). On incrémente
                         // la génération sous le MÊME lock que l'écriture du buffer, pour
                         // qu'un lecteur ne puisse jamais voir un `gen` neuf appairé à un
                         // buffer périmé (ou l'inverse). `+ 1` depuis la précédente, `1` au
-                        // premier publish.
+                        // premier publish. Les dims publiées sont celles du RENDU (`rw`×`rh`) :
+                        // le canvas JS s'y dimensionne (packet auto-descriptif) puis CSS met à
+                        // l'échelle vers la boîte du panneau — plus de resize GPU intermédiaire.
                         if let Ok(mut slot) = shared.latest_frame.lock() {
                             let next_gen = slot.as_ref().map(|(g, ..)| g + 1).unwrap_or(1);
-                            *slot = Some((next_gen, pw, ph, rgba));
+                            *slot = Some((next_gen, rw, rh, rgba));
                         }
                         first = false;
                     }
                     Err(e) => {
-                        eprintln!("[live] readback_resized: {e:#}");
+                        eprintln!("[live] readback_direct: {e:#}");
                         std::thread::sleep(Duration::from_millis(8));
                     }
                 }

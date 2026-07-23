@@ -2047,6 +2047,39 @@ impl Compositor {
         Ok(out)
     }
 
+    /// Readback du RT composité vers CPU **à sa résolution de rendu**, sans aucun resize.
+    ///
+    /// Contrairement à `readback_resized` (qui passe par `blit_resized` → un `resize_target`
+    /// incluant une texture NV12 jamais lue par ce chemin RGBA-only, puis une staging séparée),
+    /// on copie directement `rt → staging` : la `staging` du compositeur est DÉJÀ dimensionnée
+    /// à la résolution de rendu (`new_inner`), exactement le patron de `dump_raw`. Depuis la
+    /// refonte ratio, le RT est rastérisé à la géométrie de sortie ramenée au panneau — soit
+    /// précisément la taille que la preview veut afficher —, donc le resize de `readback_resized`
+    /// était devenu une copie identité doublée d'une alloc NV12 inutile, du coût pur à chaque
+    /// frame. `readback_resized` reste pour le golden test (qui readback à une taille arbitraire).
+    ///
+    /// Retourne `(render_w, render_h, pixels)` avec `pixels.len() == render_w * render_h * 4`
+    /// octets RGBA8 tightly-packed. L'appelant (`live.rs`) publie ces dims dans le packet ; le
+    /// canvas côté JS se dimensionne dessus (frame auto-descriptive), donc aucun couplage de
+    /// taille à maintenir des deux côtés.
+    pub unsafe fn readback_direct(&self) -> Result<(u32, u32, Vec<u8>)> {
+        let (rw, rh) = self.render_dims();
+        self.ctx.CopyResource(&self.staging, &self.rt);
+        let mut m = D3D11_MAPPED_SUBRESOURCE::default();
+        self.ctx.Map(&self.staging, 0, D3D11_MAP_READ, 0, Some(&mut m))?;
+        // Copie ligne par ligne qui respecte `RowPitch` (la staging peut être paddée par le
+        // driver) — même idiome que `dump_raw`/`readback_resized`.
+        let row = (rw * 4) as usize;
+        let mut out = vec![0u8; row * rh as usize];
+        for y in 0..rh as usize {
+            let src = (m.pData as *const u8).add(y * m.RowPitch as usize);
+            let dst = out.as_mut_ptr().add(y * row);
+            std::ptr::copy_nonoverlapping(src, dst, row);
+        }
+        self.ctx.Unmap(&self.staging, 0);
+        Ok((rw, rh, out))
+    }
+
     /// Comme `rgb_to_nv12`, mais redimensionne d'abord (bilinéaire, `ps_tex`/`sampler` déjà
     /// utilisés partout ailleurs dans le fichier) le RT composé — toujours rendu en interne à
     /// OUT_W×OUT_H, quelle que soit la taille de sortie demandée — vers `target_w`×`target_h`

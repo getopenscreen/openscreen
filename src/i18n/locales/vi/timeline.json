@@ -1,5 +1,6 @@
 {
 	"buttons": {
+		"addCursorMotion": "Auto-split cursor motion at stops and clicks",
 		"addZoom": "Thêm Thu phóng (Z)",
 		"suggestZooms": "Đề xuất Thu phóng từ Con trỏ",
 		"addTrim": "Thêm Cắt (T)",
@@ -9,12 +10,27 @@
 		"addCameraFullscreen": "Thêm Camera Toàn màn hình (C)"
 	},
 	"hints": {
+		"pressCursorMotion": "Auto-split cursor motion after the playhead into editable stop/click sections",
 		"pressZoom": "Nhấn Z để thêm thu phóng",
 		"pressTrim": "Nhấn T để thêm cắt",
 		"pressAnnotation": "Nhấn A để thêm chú thích",
 		"pressBlur": "Nhấn B để thêm vùng làm mờ",
 		"pressSpeed": "Nhấn S để thêm tốc độ",
 		"pressCameraFullscreen": "Nhấn C để thêm một đoạn Camera Toàn màn hình"
+	},
+	"cursorMotion": {
+		"segmentKinds": {
+			"move": "Move",
+			"hold": "Hold"
+		},
+		"presets": {
+			"recorded": "Recorded",
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		}
 	},
 	"labels": {
 		"pan": "Xoay",

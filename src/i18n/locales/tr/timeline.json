@@ -1,5 +1,6 @@
 {
 	"buttons": {
+		"addCursorMotion": "Auto-split cursor motion at stops and clicks",
 		"addZoom": "Yakınlaştırma Ekle (Z)",
 		"suggestZooms": "İmleçten Yakınlaştırma Öner",
 		"addTrim": "Kırpma Ekle (T)",
@@ -9,12 +10,27 @@
 		"addCameraFullscreen": "Tam Ekran Kamera Ekle (C)"
 	},
 	"hints": {
+		"pressCursorMotion": "Auto-split cursor motion after the playhead into editable stop/click sections",
 		"pressZoom": "Yakınlaştırma eklemek için Z tuşuna basın",
 		"pressTrim": "Kırpma eklemek için T tuşuna basın",
 		"pressAnnotation": "Açıklama eklemek için A tuşuna basın",
 		"pressSpeed": "Hız eklemek için S tuşuna basın",
 		"pressBlur": "Bulanık bölge eklemek için B tuşuna basın",
 		"pressCameraFullscreen": "Tam Ekran Kamera bölümü eklemek için C tuşuna basın"
+	},
+	"cursorMotion": {
+		"segmentKinds": {
+			"move": "Move",
+			"hold": "Hold"
+		},
+		"presets": {
+			"recorded": "Recorded",
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		}
 	},
 	"labels": {
 		"pan": "Kaydır",

@@ -195,6 +195,50 @@
 		"errorTimeout": "A fonte demorou muito para carregar. Por favor, verifique a URL e tente novamente.",
 		"errorLoadFailed": "A fonte não pôde ser carregada. Por favor, verifique se a URL do Google Fonts está correta."
 	},
+	"cursorMotion": {
+		"title": "Cursor Motion",
+		"description": "Choose a path, then drag the handle directly on the preview.",
+		"preset": "Path preset",
+		"editPath": "Edit path",
+		"hidePath": "Hide path",
+		"cycles": "Turns",
+		"easing": "Timing",
+		"anchorHint": "Stops and clicks become separate locked sections. The white-ring handle shapes only the selected section.",
+		"delete": "Delete Cursor Motion",
+		"noCursorData": "No editable cursor data is available at this point.",
+		"noFollowingClick": "There is no recorded click after the playhead.",
+		"overlapExisting": "This range already contains cursor motion. Delete it or move the playhead later.",
+		"createdSegments": "Split the cursor motion into {{count}} stop/click sections.",
+		"splitOutsideRegion": "Move the playhead inside the selected cursor section.",
+		"splitAtPlayhead": "Split this section at playhead",
+		"autoSplitSelected": "Auto-split this section at stops and clicks",
+		"noSplitPoints": "No additional stop or click split points were found in this section.",
+		"anchorKinds": {
+			"manual": "Manual split",
+			"rest": "Cursor stop",
+			"click": "Recorded click"
+		},
+		"presets": {
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		},
+		"easings": {
+			"linear": "Linear",
+			"ease-in-out": "Smooth",
+			"ease-in": "Accelerate",
+			"ease-out": "Decelerate"
+		},
+		"speed": "Movement speed",
+		"speedHint": "Faster motion waits longer, then still lands on the recorded click at the original time.",
+		"applyToAllMoves": "Apply path settings to all move sections",
+		"appliedToAllMoves": "Applied the preset, speed, turns, and timing to every move section.",
+		"previousSection": "Previous cursor section",
+		"nextSection": "Next cursor section",
+		"sectionCounter": "Section {{current}} / {{total}}"
+	},
 	"cursor": {
 		"theme": "Estilo do cursor",
 		"themeDefault": "Padrão",

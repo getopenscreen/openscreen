@@ -28,6 +28,12 @@ import {
 	type WebcamLayoutPreset,
 	type WebcamSizePreset,
 } from "@/lib/compositeLayout";
+import {
+	buildCursorMotionTrajectory,
+	type CursorMotionPoint,
+	type CursorMotionRegion,
+	sampleCursorMotionPath,
+} from "@/lib/cursor/cursorMotion";
 import { getSmoothedCursorPath } from "@/lib/cursor/cursorPathSmoothing";
 import {
 	createNativeCursorMotionBlurState,
@@ -73,6 +79,7 @@ import {
 	type ZoomFocus,
 	type ZoomRegion,
 } from "./types";
+import { CursorMotionEditorOverlay } from "./videoPlayback/CursorMotionEditorOverlay";
 import { computeCameraFullscreenProgress } from "./videoPlayback/cameraFullscreenUtils";
 import { AUTO_FOLLOW_PARAMS, DEFAULT_FOCUS } from "./videoPlayback/constants";
 import { advanceFollowFocus } from "./videoPlayback/cursorFollowUtils";
@@ -148,6 +155,11 @@ interface VideoPlaybackProps {
 	showCursor?: boolean;
 	cursorSize?: number;
 	cursorSmoothing?: number;
+	cursorMotionRegions?: CursorMotionRegion[];
+	selectedCursorMotionId?: string | null;
+	isEditingCursorMotion?: boolean;
+	onCursorMotionControlPointChange?: (id: string, point: CursorMotionPoint) => void;
+	onCursorMotionControlPointCommit?: () => void;
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
 	cursorClipToBounds?: boolean;
@@ -311,6 +323,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			showCursor = false,
 			cursorSize = DEFAULT_CURSOR_SETTINGS.size,
 			cursorSmoothing = DEFAULT_CURSOR_SETTINGS.smoothing,
+			cursorMotionRegions = [],
+			selectedCursorMotionId = null,
+			isEditingCursorMotion = false,
+			onCursorMotionControlPointChange,
+			onCursorMotionControlPointCommit,
 			cursorMotionBlur = DEFAULT_CURSOR_SETTINGS.motionBlur,
 			cursorClickBounce = DEFAULT_CURSOR_SETTINGS.clickBounce,
 			cursorClipToBounds = DEFAULT_CURSOR_SETTINGS.clipToBounds,
@@ -337,6 +354,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const [videoReady, setVideoReady] = useState(false);
 		const [supplementalAudioPath, setSupplementalAudioPath] = useState<string | null>(null);
 		const [overlaySize, setOverlaySize] = useState({ width: 800, height: 600 });
+		const [paintedRect, setPaintedRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
 		const [overlayElement, setOverlayElement] = useState<HTMLDivElement | null>(null);
 		const overlayRef = useRef<HTMLDivElement | null>(null);
 
@@ -374,6 +392,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const baseScaleRef = useRef(1);
 		const baseOffsetRef = useRef({ x: 0, y: 0 });
 		const baseMaskRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+		const paintedRectRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
 		const cropBoundsRef = useRef({ startX: 0, endX: 0, startY: 0, endY: 0 });
 		const maskGraphicsRef = useRef<Graphics | null>(null);
 		const isPlayingRef = useRef(isPlaying);
@@ -399,6 +418,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const showCursorRef = useRef(showCursor);
 		const cursorSizeRef = useRef(cursorSize);
 		const cursorSmoothingRef = useRef(cursorSmoothing);
+		const cursorMotionRegionsRef = useRef(cursorMotionRegions);
+		const isEditingCursorMotionRef = useRef(isEditingCursorMotion);
 		const cursorMotionBlurRef = useRef(cursorMotionBlur);
 		const cursorClickBounceRef = useRef(cursorClickBounce);
 		const cursorClipToBoundsRef = useRef(cursorClipToBounds);
@@ -621,6 +642,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				baseScaleRef.current = result.baseScale;
 				baseOffsetRef.current = result.baseOffset;
 				baseMaskRef.current = result.maskRect;
+				paintedRectRef.current = result.paintedRect;
+				setPaintedRect(result.paintedRect);
 				borderRadiusRef.current = result.maskBorderRadius;
 				cropBoundsRef.current = result.cropBounds;
 				webcamLayoutRef.current = result.webcamRect;
@@ -848,6 +871,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		useEffect(() => {
 			cursorTelemetryRef.current = cursorTelemetry;
 		}, [cursorTelemetry]);
+
+		useEffect(() => {
+			cursorMotionRegionsRef.current = cursorMotionRegions;
+		}, [cursorMotionRegions]);
+
+		useEffect(() => {
+			isEditingCursorMotionRef.current = isEditingCursorMotion;
+		}, [isEditingCursorMotion]);
 
 		useEffect(() => {
 			cursorClickTimestampsRef.current = cursorClickTimestamps;
@@ -1518,7 +1549,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				const selectedId = selectedZoomIdRef.current;
 				const hasSelectedZoom = selectedId !== null;
 				const shouldShowUnzoomedView =
-					hasSelectedZoom && !isPlayingRef.current && !isPreviewingZoomRef.current;
+					isEditingCursorMotionRef.current ||
+					(hasSelectedZoom && !isPlayingRef.current && !isPreviewingZoomRef.current);
 
 				if (region && strength > 0 && !shouldShowUnzoomedView) {
 					// Use getZoomScale (customScale-aware) to match export and the magnification
@@ -1727,10 +1759,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						if (frame) {
 							// Position comes from the precomputed offline-smoothed path; the frame still
 							// supplies the cursor image, type, and click timing.
-							const smoothedPos = getSmoothedCursorPath(
-								cursorRecordingDataRef.current,
-								cursorSmoothingRef.current,
-							)?.sampleAt(timeMs);
+							const smoothedPos = sampleCursorMotionPath(
+								getSmoothedCursorPath(cursorRecordingDataRef.current, cursorSmoothingRef.current),
+								cursorMotionRegionsRef.current,
+								timeMs,
+							);
 							const displaySample = smoothedPos
 								? { ...frame.sample, cx: smoothedPos.cx, cy: smoothedPos.cy }
 								: frame.sample;
@@ -1739,7 +1772,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							const cropRegionValue = cropRegionRef.current ?? DEFAULT_CROP_REGION;
 							const projectedLocalPoint = projectNativeCursorToLocal({
 								cropRegion: cropRegionValue,
-								maskRect: baseMaskRef.current,
+								maskRect: paintedRectRef.current,
 								sample: displaySample,
 							});
 							const projectedStagePoint =
@@ -1747,7 +1780,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 									? projectNativeCursorToStage({
 											cameraContainer,
 											cropRegion: cropRegionValue,
-											maskRect: baseMaskRef.current,
+											maskRect: paintedRectRef.current,
 											videoContainerPosition: {
 												x: videoContainer.x,
 												y: videoContainer.y,
@@ -1776,7 +1809,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								const crop = cropRegionRef.current ?? DEFAULT_CROP_REGION;
 								const croppedVideoWidth = (videoRef.current?.videoWidth ?? 0) * crop.width;
 								const sizeNorm =
-									croppedVideoWidth > 0 ? baseMaskRef.current.width / croppedVideoWidth : 1;
+									croppedVideoWidth > 0 ? paintedRectRef.current.width / croppedVideoWidth : 1;
 								const transformedScale = scale * Math.abs(cameraContainer?.scale.x || 1) * sizeNorm;
 								const blurPx =
 									!isPlayingRef.current || isSeekingRef.current
@@ -1948,6 +1981,92 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const webcamCssBoxShadow = useMemo(
 			() => getWebcamLayoutCssBoxShadow(webcamLayoutPreset),
 			[webcamLayoutPreset],
+		);
+		const cursorMotionBasePath = useMemo(
+			() => getSmoothedCursorPath(cursorRecordingData, cursorSmoothing),
+			[cursorRecordingData, cursorSmoothing],
+		);
+		const selectedCursorMotionRegion = useMemo(
+			() =>
+				selectedCursorMotionId
+					? (cursorMotionRegions.find((region) => region.id === selectedCursorMotionId) ?? null)
+					: null,
+			[cursorMotionRegions, selectedCursorMotionId],
+		);
+		const cursorMotionEditorGeometry = useMemo(() => {
+			const region = selectedCursorMotionRegion;
+			const crop = cropRegion ?? DEFAULT_CROP_REGION;
+			if (
+				!region ||
+				!cursorMotionBasePath ||
+				paintedRect.width <= 0 ||
+				paintedRect.height <= 0 ||
+				crop.width <= 0 ||
+				crop.height <= 0
+			) {
+				return null;
+			}
+
+			const project = (point: CursorMotionPoint) => ({
+				x: paintedRect.x + ((point.cx - crop.x) / crop.width) * paintedRect.width,
+				y: paintedRect.y + ((point.cy - crop.y) / crop.height) * paintedRect.height,
+			});
+			const trajectory = buildCursorMotionTrajectory(cursorMotionBasePath, region, 96).map(project);
+			const recordedTrajectory =
+				region.preset === "recorded"
+					? []
+					: Array.from({ length: 64 }, (_, index) => {
+							const progress = index / 63;
+							return cursorMotionBasePath.sampleAt(
+								region.startMs + (region.endMs - region.startMs) * progress,
+							);
+						})
+							.filter((point): point is CursorMotionPoint => point !== null)
+							.map(project);
+
+			return {
+				trajectory,
+				recordedTrajectory,
+				controlPoint: project(region.controlPoint),
+			};
+		}, [cursorMotionBasePath, cropRegion, paintedRect, selectedCursorMotionRegion]);
+
+		const handleCursorMotionClientPoint = useCallback(
+			(clientX: number, clientY: number) => {
+				const region = selectedCursorMotionRegion;
+				const wrapper = outerWrapperRef.current;
+				const crop = cropRegion ?? DEFAULT_CROP_REGION;
+				if (
+					!region ||
+					!wrapper ||
+					!onCursorMotionControlPointChange ||
+					paintedRect.width <= 0 ||
+					paintedRect.height <= 0 ||
+					crop.width <= 0 ||
+					crop.height <= 0
+				) {
+					return;
+				}
+
+				const bounds = wrapper.getBoundingClientRect();
+				if (bounds.width <= 0 || bounds.height <= 0) return;
+				const stageWidth = stageSizeRef.current.width || overlaySize.width;
+				const stageHeight = stageSizeRef.current.height || overlaySize.height;
+				const stageX = ((clientX - bounds.left) / bounds.width) * stageWidth;
+				const stageY = ((clientY - bounds.top) / bounds.height) * stageHeight;
+				onCursorMotionControlPointChange(region.id, {
+					cx: crop.x + ((stageX - paintedRect.x) / paintedRect.width) * crop.width,
+					cy: crop.y + ((stageY - paintedRect.y) / paintedRect.height) * crop.height,
+				});
+			},
+			[
+				cropRegion,
+				onCursorMotionControlPointChange,
+				overlaySize.height,
+				overlaySize.width,
+				paintedRect,
+				selectedCursorMotionRegion,
+			],
 		);
 
 		useEffect(() => {
@@ -2273,6 +2392,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							})()}
 						</div>
 					)}
+					{isEditingCursorMotion &&
+						!isPlaying &&
+						cursorMotionEditorGeometry &&
+						selectedCursorMotionRegion && (
+							<CursorMotionEditorOverlay
+								width={overlaySize.width}
+								height={overlaySize.height}
+								trajectory={cursorMotionEditorGeometry.trajectory}
+								recordedTrajectory={cursorMotionEditorGeometry.recordedTrajectory}
+								controlPoint={cursorMotionEditorGeometry.controlPoint}
+								startAnchorKind={selectedCursorMotionRegion.startAnchorKind}
+								endAnchorKind={selectedCursorMotionRegion.endAnchorKind}
+								editable={selectedCursorMotionRegion.preset !== "recorded"}
+								onControlPointChange={handleCursorMotionClientPoint}
+								onControlPointCommit={() => onCursorMotionControlPointCommit?.()}
+							/>
+						)}
 				</div>
 				{/* Native cursor clip. Lives outside composite3DRef (preserve-3d) so clip-path
 				    keeps working during 3D zoom rotations; bounds are set dynamically. */}

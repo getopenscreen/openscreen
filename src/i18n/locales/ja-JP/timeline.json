@@ -1,5 +1,6 @@
 {
 	"buttons": {
+		"addCursorMotion": "停止・クリック地点でカーソル軌跡を自動分割",
 		"addZoom": "ズームを追加 (Z)",
 		"suggestZooms": "カーソル位置からズームを提案",
 		"addTrim": "トリムを追加 (T)",
@@ -9,12 +10,27 @@
 		"addCameraFullscreen": "フルスクリーンカメラを追加 (C)"
 	},
 	"hints": {
+		"pressCursorMotion": "再生位置以降を停止・クリック地点ごとの編集区間へ自動分割できます",
 		"pressZoom": "Zキーを押してズームを追加",
 		"pressTrim": "Tキーを押してトリムを追加",
 		"pressAnnotation": "Aキーを押して注釈を追加",
 		"pressBlur": "Bキーを押してぼかしを追加",
 		"pressSpeed": "Sキーを押して再生速度を追加",
 		"pressCameraFullscreen": "Cキーを押してフルスクリーンカメラのセグメントを追加"
+	},
+	"cursorMotion": {
+		"segmentKinds": {
+			"move": "移動",
+			"hold": "停止"
+		},
+		"presets": {
+			"recorded": "録画どおり",
+			"straight": "直線",
+			"arc": "弧",
+			"wave": "波",
+			"loop": "ループ",
+			"overshoot": "行き過ぎ"
+		}
 	},
 	"labels": {
 		"pan": "移動",

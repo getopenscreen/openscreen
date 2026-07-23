@@ -1,5 +1,6 @@
 {
 	"buttons": {
+		"addCursorMotion": "Auto-split cursor motion at stops and clicks",
 		"addZoom": "줌 추가 (Z)",
 		"suggestZooms": "커서 기반 줌 제안",
 		"addTrim": "트림 추가 (T)",
@@ -9,12 +10,27 @@
 		"addCameraFullscreen": "전체 화면 카메라 추가 (C)"
 	},
 	"hints": {
+		"pressCursorMotion": "Auto-split cursor motion after the playhead into editable stop/click sections",
 		"pressZoom": "Z를 눌러 줌 추가",
 		"pressTrim": "T를 눌러 트림 추가",
 		"pressAnnotation": "A를 눌러 주석 추가",
 		"pressSpeed": "S를 눌러 속도 추가",
 		"pressBlur": "B 키를 눌러 블러 영역을 추가하세요",
 		"pressCameraFullscreen": "C를 눌러 전체 화면 카메라 구간을 추가하세요"
+	},
+	"cursorMotion": {
+		"segmentKinds": {
+			"move": "Move",
+			"hold": "Hold"
+		},
+		"presets": {
+			"recorded": "Recorded",
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		}
 	},
 	"labels": {
 		"pan": "이동",

@@ -1,5 +1,6 @@
 {
 	"buttons": {
+		"addCursorMotion": "Auto-split cursor motion at stops and clicks",
 		"addZoom": "إضافة تكبير (Z)",
 		"suggestZooms": "اقتراح تكبير من المؤشر",
 		"addTrim": "إضافة قص (T)",
@@ -9,12 +10,27 @@
 		"addCameraFullscreen": "إضافة كاميرا كاملة الشاشة (C)"
 	},
 	"hints": {
+		"pressCursorMotion": "Auto-split cursor motion after the playhead into editable stop/click sections",
 		"pressZoom": "اضغط Z لإضافة تكبير",
 		"pressTrim": "اضغط T لإضافة قص",
 		"pressAnnotation": "اضغط A لإضافة شرح",
 		"pressBlur": "اضغط B لإضافة منطقة تمويه",
 		"pressSpeed": "اضغط S لإضافة سرعة",
 		"pressCameraFullscreen": "اضغط C لإضافة مقطع كاميرا كاملة الشاشة"
+	},
+	"cursorMotion": {
+		"segmentKinds": {
+			"move": "Move",
+			"hold": "Hold"
+		},
+		"presets": {
+			"recorded": "Recorded",
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		}
 	},
 	"labels": {
 		"pan": "تحريك",

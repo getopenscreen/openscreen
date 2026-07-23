@@ -1360,4 +1360,54 @@ mod tests {
         assert_eq!(webcam_seek_time(22.5, 1.25), 21.25);
         assert_eq!(webcam_seek_time(0.5, 1.25), 0.0);
     }
+
+    // --- taille de rastérisation de la preview ---------------------------
+    // Ces tests remplacent le filet géométrique qui verrouillait la
+    // compensation anisotrope : celle-ci n'existe plus (le RT porte la
+    // géométrie de sortie), donc la logique qui reste à couvrir est le choix
+    // de la taille. La non-régression pixel, elle, vit dans le golden
+    // (`tests/output_geometry_golden.rs`).
+
+    fn scene_with_output(w: u32, h: u32) -> Scene {
+        Scene::from_json(&format!(
+            r##"{{"clips":[],"layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false}},"effects":{{"padding":0,"blur":false,"shadow":0,"roundnessPx":0,"motionBlur":0}},"background":{{"kind":"color","color":"#000000"}},"zoomRegions":[],"cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"}},"cropByClip":[],"output":{{"width":{w},"height":{h},"fps":null}}}}"##
+        ))
+        .expect("scene valide")
+    }
+
+    /// Sans scène on ne connaît pas encore le ratio de sortie : on prend le
+    /// panneau tel quel (rien n'est composé tant que la scène n'est pas posée).
+    #[test]
+    fn preview_size_without_a_scene_is_the_panel() {
+        assert_eq!(preview_render_size(None, 800, 450), (800, 450));
+    }
+
+    /// Le ratio rendu est celui de la SORTIE, pas celui du panneau — sinon la
+    /// preview montrerait un cadrage que l'export ne produira pas.
+    #[test]
+    fn preview_size_follows_the_output_shape_not_the_panel_shape() {
+        let portrait = scene_with_output(1080, 1920);
+        let (w, h) = preview_render_size(Some(&portrait), 1600, 900);
+        assert!(h > w, "sortie portrait dans un panneau paysage → cadre portrait, obtenu {w}x{h}");
+        let got = w as f64 / h as f64;
+        assert!((got - 1080.0 / 1920.0).abs() < 0.01, "ratio {got}, attendu 0.5625");
+    }
+
+    /// Jamais plus grand que le panneau : les pixels en trop seraient réduits
+    /// dans la foulée par le readback — c'est du coût pur.
+    #[test]
+    fn preview_size_never_exceeds_the_panel() {
+        let uhd = scene_with_output(3840, 2160);
+        let (w, h) = preview_render_size(Some(&uhd), 960, 540);
+        assert!(w <= 960 && h <= 540, "{w}x{h} depasse le panneau 960x540");
+    }
+
+    /// Jamais plus grand que la sortie : au-delà, la preview serait plus nette
+    /// que l'export, donc mensongère.
+    #[test]
+    fn preview_size_never_exceeds_the_output() {
+        let small = scene_with_output(640, 360);
+        let (w, h) = preview_render_size(Some(&small), 3000, 2000);
+        assert_eq!((w, h), (640, 360));
+    }
 }

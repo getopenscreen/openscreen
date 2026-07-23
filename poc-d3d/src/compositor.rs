@@ -75,38 +75,6 @@ fn screen_source_rect(
     [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv]
 }
 
-/// Rétrécit `dst` (centré, espace canvas 16:9 pré-étirement) par l'inverse du plus fort des deux
-/// facteurs d'étirement de sortie, pour qu'après l'étirement non uniforme de `blit_resized` en fin
-/// de pipeline, la forme de `dst` (en pixels canvas) reste préservée quel que soit le ratio de
-/// sortie choisi — mode "fit"/contain. Fonction libre (plutôt qu'une closure locale à
-/// `compose_frame`) pour que TOUT calque qui doit garder sa forme native (écran, webcam, mais
-/// aussi le curseur) passe par le même calcul au lieu de devoir s'en souvenir individuellement —
-/// voir `Compositor::frame_stretch`, qui porte `(stretch_x, stretch_y)` pour que les méthodes de
-/// dessin hors de `compose_frame` (ex. `draw_cursor_sprite`) puissent aussi l'appliquer.
-fn apply_undistort(dst: [f32; 4], stretch_x: f32, stretch_y: f32) -> [f32; 4] {
-    let uniform_stretch = stretch_x.min(stretch_y).max(0.0001);
-    let (undistort_x, undistort_y) = (uniform_stretch / stretch_x.max(0.0001), uniform_stretch / stretch_y.max(0.0001));
-    let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
-    let (nw, nh) = (dst[2] * undistort_x, dst[3] * undistort_y);
-    [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
-}
-
-/// Inverse de `apply_undistort` : pré-compense un rect déjà exprimé en fraction du VRAI output
-/// (ex. `app_webcam_rect`, calculé côté web par `computeCompositeLayout` avec les vraies
-/// dimensions de sortie) pour qu'après le passage par `apply_undistort` PLUS TARD dans le même
-/// pipeline (partagé avec l'écran, appliqué sans distinction à tous les calques), le résultat
-/// final soit EXACTEMENT ce rect d'origine. Nécessaire parce que `dst` normalement (chemin
-/// preset par défaut) est en fraction du canvas fixe 16:9 (`OUT_W`×`OUT_H`) — un espace
-/// DIFFÉRENT de la fraction du vrai output dès que la sortie n'est pas 16:9 — donc appliquer
-/// `apply_undistort` (pensé pour convertir canvas→output) directement sur un rect déjà en
-/// espace output le déformerait deux fois.
-fn inverse_undistort(dst: [f32; 4], stretch_x: f32, stretch_y: f32) -> [f32; 4] {
-    let uniform_stretch = stretch_x.min(stretch_y).max(0.0001);
-    let (undistort_x, undistort_y) = (uniform_stretch / stretch_x.max(0.0001), uniform_stretch / stretch_y.max(0.0001));
-    let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
-    let (nw, nh) = (dst[2] / undistort_x.max(0.0001), dst[3] / undistort_y.max(0.0001));
-    [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
-}
 
 /// Constant buffer d'un calque (doit matcher `cbuffer Layer` du HLSL, 64 octets).
 #[repr(C)]
@@ -265,14 +233,6 @@ pub struct Compositor {
     /// Cache des textures wallpaper image (clé = chemin absolu) : décodage/upload une seule
     /// fois, puis réutilisées par frame. (SRV, largeur, hauteur).
     img_cache: RefCell<HashMap<String, (ID3D11ShaderResourceView, u32, u32)>>,
-    /// (stretch_x, stretch_y) que `blit_resized` appliquera à CETTE frame — posé une fois en
-    /// tête de `compose_frame`, lu par tout calque qui doit annuler cet étirement pour garder sa
-    /// forme (curseur, coins arrondis...). Un état par-frame centralisé au lieu de faire porter
-    /// ce calcul à chaque appelant : un curseur thème (sprite) l'oubliait encore récemment (SDF
-    /// écran/webcam corrigée, curseur pas touché) — exactement le genre de bug qui se répète
-    /// quand chaque calque doit se souvenir individuellement d'appliquer la correction plutôt que
-    /// de la lire à une seule source de vérité.
-    frame_stretch: Cell<(f32, f32)>,
     /// Dimensions du RENDER TARGET en pixels — la taille à laquelle `compose_frame`
     /// rastérise réellement, et donc le dénominateur de TOUTE conversion
     /// normalisé↔px de ce fichier.
@@ -808,7 +768,6 @@ impl Compositor {
             live_params: RefCell::new(LiveParams::default()),
             scene: RefCell::new(None),
             img_cache: RefCell::new(HashMap::new()),
-            frame_stretch: Cell::new((1.0, 1.0)),
             render_size: Cell::new((out_w, out_h)),
             resize_target: RefCell::new(None),
             live_readback_staging: RefCell::new(None),
@@ -1112,15 +1071,6 @@ impl Compositor {
         let w = size_px / self.rw();
         let h = size_px / self.rh();
         let dst = [center[0] - w * 0.5, center[1] - h * 0.5, w, h];
-        // Même correction que l'écran/la webcam (voir `apply_undistort`) : sans elle, ce quad
-        // (carré en pixels canvas) se retrouve étiré non uniformément par `blit_resized` en fin
-        // de pipeline dès que la sortie n'est pas 16:9 — le curseur rond devient elliptique. Le
-        // SDF (dot+ring, shaders.hlsl mode 4) reste isotrope dans `quad_px` (inchangé,
-        // volontairement PAS recalculé depuis `dst` après coup) : c'est la géométrie du quad qui
-        // absorbe la correction ici, pas le shader — mêmes maths que l'écran, exprimées à
-        // l'endroit le plus simple pour ce calque (pas de radius/SDF anisotrope à gérer).
-        let (stretch_x, stretch_y) = self.frame_stretch.get();
-        let dst = apply_undistort(dst, stretch_x, stretch_y);
         self.draw_solid(&LayerCB {
             dst,
             quad_px: [size_px, size_px],
@@ -1156,13 +1106,6 @@ impl Compositor {
         let w = pw / self.rw();
         let h = ph / self.rh();
         let dst = [center[0] - w * 0.5, center[1] - h * 0.5, w, h];
-        // Même correction que l'écran/la webcam/le curseur dot+ring (`apply_undistort`) : le
-        // sprite est échantillonné par UV directement sur ce quad (pas de SDF ici), donc sans
-        // cette correction, l'étirement non uniforme de `blit_resized` déforme littéralement
-        // l'image du curseur (le bug rapporté : sprite "pastèque" écrasé/étiré) dès que la
-        // sortie n'est pas 16:9.
-        let (stretch_x, stretch_y) = self.frame_stretch.get();
-        let dst = apply_undistort(dst, stretch_x, stretch_y);
         self.upload_cb(&LayerCB {
             dst,
             src: [0.0, 0.0, 1.0, 1.0],
@@ -1213,23 +1156,19 @@ impl Compositor {
         spread: f32,
         offset_px: [f32; 2],
         opacity: f32,
-        stretch_x: f32,
-        stretch_y: f32,
     ) {
-        let margin_x = spread / stretch_x.max(0.0001);
-        let margin_y = spread / stretch_y.max(0.0001);
-        let sx = margin_x / self.rw();
-        let sy = margin_y / self.rh();
-        let ox = (offset_px[0] / stretch_x.max(0.0001)) / self.rw();
-        let oy = (offset_px[1] / stretch_y.max(0.0001)) / self.rh();
+        let sx = spread / self.rw();
+        let sy = spread / self.rh();
+        let ox = offset_px[0] / self.rw();
+        let oy = offset_px[1] / self.rh();
         let cb = LayerCB {
             dst: [dst[0] - sx + ox, dst[1] - sy + oy, dst[2] + 2.0 * sx, dst[3] + 2.0 * sy],
-            quad_px: [size_px[0] + 2.0 * margin_x, size_px[1] + 2.0 * margin_y],
+            quad_px: [size_px[0] + 2.0 * spread, size_px[1] + 2.0 * spread],
             radius_px: radius,
             mode: 2.0,
             color: [0.0, 0.0, 0.0, opacity],
             fx: [spread, 0.0, 0.0, 0.0],
-            mb: [0.0, stretch_x, stretch_y, 0.0],
+            mb: [0.0, 1.0, 1.0, 0.0],
             ..Default::default()
         };
         self.draw_solid(&cb);
@@ -1389,18 +1328,6 @@ impl Compositor {
         // (sinon le fit et l'undistort composent deux corrections indépendantes et sur-rétrécissent
         // le contenu — cf. rapport utilisateur : crop 9:16 + sortie 9:16 + padding 0% laissait
         // quand même une grosse marge, alors que le crop correspond déjà exactement au cadre).
-        let (final_out_w, final_out_h) = scene_ref
-            .as_ref()
-            .map(|s| (s.output.width.max(1) as f32, s.output.height.max(1) as f32))
-            .unwrap_or((self.rw(), self.rh()));
-        let stretch_x = final_out_w / self.rw();
-        let stretch_y = final_out_h / self.rh();
-        let uniform_stretch = stretch_x.min(stretch_y);
-        // Publié pour tout calque dessiné hors de cette fonction (ex. le curseur, plus bas) qui a
-        // aussi besoin d'annuler l'étirement de sortie pour garder sa forme — une seule source de
-        // vérité au lieu d'un recalcul (ou d'un oubli) par méthode de dessin.
-        self.frame_stretch.set((stretch_x, stretch_y));
-
         // Le crop de l'utilisateur (dialogue "Edit clip") a son PROPRE ratio (ex. une bande
         // verticale 9:16 recadrée dans une source 16:9) — le zoom appliqué ensuite (§
         // `screen_source_rect`) le préserve (mêmes facteurs sur les deux axes), donc c'est bien
@@ -1427,16 +1354,15 @@ impl Compositor {
         // `/ uniform_stretch` (propriété de `undistort` : le ratio final ne dépend que de la
         // taille de `dst` en PIXELS CANVAS, jamais du ratio de sortie choisi).
         let fit_dst_to_aspect = |dst: [f32; 4], aspect: f32| -> [f32; 4] {
-            let box_w_px = dst[2] * final_out_w;
-            let box_h_px = dst[3] * final_out_h;
+            let box_w_px = dst[2] * self.rw();
+            let box_h_px = dst[3] * self.rh();
             let box_ar = box_w_px / box_h_px.max(0.0001);
             let (nw_px, nh_px) = if aspect > box_ar {
                 (box_w_px, box_w_px / aspect.max(0.0001))
             } else {
                 (box_h_px * aspect, box_h_px)
             };
-            let u = uniform_stretch.max(0.0001);
-            let (nw, nh) = (nw_px / (self.rw() * u), nh_px / (self.rh() * u));
+            let (nw, nh) = (nw_px / self.rw(), nh_px / self.rh());
             let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
             [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
         };
@@ -1458,12 +1384,12 @@ impl Compositor {
         // appliqué plus bas à tous les calques (écran compris) — sans quoi ce rect déjà correct
         // se ferait déformer une seconde fois par cet undistort partagé.
         let mut w_dst = if app_webcam_rect.is_some() {
-            inverse_undistort(scale_center(p.webcam.dst, webcam_size_scale), stretch_x, stretch_y)
+            scale_center(p.webcam.dst, webcam_size_scale)
         } else {
             fit_cam_aspect(scale_corner_br(p.webcam.dst, webcam_size_scale))
         };
         let mut w_dst_prev = if app_webcam_rect.is_some() {
-            inverse_undistort(scale_center(pp.webcam.dst, webcam_size_scale_prev), stretch_x, stretch_y)
+            scale_center(pp.webcam.dst, webcam_size_scale_prev)
         } else {
             fit_cam_aspect(scale_corner_br(pp.webcam.dst, webcam_size_scale_prev))
         };
@@ -1511,14 +1437,6 @@ impl Compositor {
         // reste préservé (letterboxé/pillarboxé sur le fond, qui lui reste plein cadre) — mode
         // "fit"/contain. Si l'utilisateur veut un rendu "fill" (remplir sans bandes), il ajuste
         // le crop lui-même ; le natif ne fait plus ce choix à sa place en étirant l'image.
-        // (`final_out_w`/`final_out_h`/`stretch_x`/`stretch_y`/`uniform_stretch` déjà résolus plus
-        // haut, réutilisés par `fit_dst_to_aspect` — une seule source de vérité pour ce calcul.)
-        let undistort = |dst: [f32; 4]| -> [f32; 4] { apply_undistort(dst, stretch_x, stretch_y) };
-        let s_dst = undistort(s_dst);
-        let s_dst_prev = undistort(s_dst_prev);
-        w_dst = undistort(w_dst);
-        w_dst_prev = undistort(w_dst_prev);
-
         // `roundness_px` est un px ABSOLU de la résolution de SORTIE (comme un border-radius
         // CSS). Le dessin du coin (SDF, shaders.hlsl) pré-déforme lui-même ses coordonnées par
         // `stretch_x`/`stretch_y` (mb.yz) avant de comparer à ce rayon, donc `s_radius` reste
@@ -1535,7 +1453,7 @@ impl Compositor {
         // Rayon "brut" (SDF anisotrope, cf. écran ci-dessus) dérivé de la taille FINALE (après
         // étirement) du quad webcam, pour un rayon proportionnellement correct quel que soit le
         // ratio de sortie.
-        let w_px_final = [w_px[0] * stretch_x, w_px[1] * stretch_y];
+        let w_px_final = w_px;
         let w_min_final = w_px_final[0].min(w_px_final[1]);
         let w_radius = match lp.webcam_shape {
             1 => w_min_final * 0.5,  // circle
@@ -1584,7 +1502,7 @@ impl Compositor {
                     // image bg (cover-fit, mise en cache) ; fallback couleur si chargement échoue
                     // (loggé — un fallback silencieux masquerait un chemin cassé, cf. le panic
                     // borrow qu'on a déjà eu : toute panne doit être visible/traçable).
-                    if let Err(e) = self.draw_image_bg(&path, final_out_w / final_out_h) {
+                    if let Err(e) = self.draw_image_bg(&path, self.rw() / self.rh()) {
                         eprintln!("[compositor] wallpaper image \"{}\" : {:#}", path, e);
                         self.draw_solid(&LayerCB {
                             dst: [0.0, 0.0, 1.0, 1.0],
@@ -1645,7 +1563,7 @@ impl Compositor {
         let (hu_p, hv_p) = ((su1_p - su0_p) * 0.5, (sv1_p - sv0_p) * 0.5);
         let s_px = [s_dst[2] * self.rw(), s_dst[3] * self.rh()];
         if cfg.shadow {
-            self.draw_shadow(s_dst, s_px, s_radius, 40.0, [0.0, 16.0], 0.45 * lp.shadow_scale, stretch_x, stretch_y);
+            self.draw_shadow(s_dst, s_px, s_radius, 40.0, [0.0, 16.0], 0.45 * lp.shadow_scale);
         }
         if crate::regions::is_identity_rotation(zoom_rotation) {
             self.draw_video(
@@ -1658,7 +1576,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
                     dst_prev: s_dst_prev,
-                    mb: [mb_taps, stretch_x, stretch_y, 0.0],
+                    mb: [mb_taps, 1.0, 1.0, 0.0],
                     ..Default::default()
                 },
                 &sy,
@@ -1834,7 +1752,7 @@ impl Compositor {
         let wv = wch / wth as f32;
         if lp.has_webcam {
             if cfg.shadow {
-                self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale, stretch_x, stretch_y);
+                self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale);
             }
             self.draw_video(
                 &LayerCB {
@@ -1846,7 +1764,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [u0, 0.0, u1, wv], // src fixe (pas de zoom webcam)
                     dst_prev: w_dst_prev,
-                    mb: [mb_taps, stretch_x, stretch_y, 0.0],
+                    mb: [mb_taps, 1.0, 1.0, 0.0],
                     ..Default::default()
                 },
                 &wy,
@@ -2311,145 +2229,4 @@ mod tests {
         assert_rect(screen_source_rect(0.8, 0.9, Some(crop), 2.0, [1.0, 1.0]), [0.4, 0.36, 0.6, 0.63]);
     }
 
-    // -----------------------------------------------------------------------
-    // Filet de la refonte « le RT est le cadre de sortie » (phase 0).
-    //
-    // Ces tests décrivent la GÉOMÉTRIE DE SORTIE, pas l'implémentation : ils
-    // passent par `landed_output_px`, qui modélise ce que `blit_resized` met
-    // réellement à l'écran. Ils doivent rester VERTS avant ET après la refonte.
-    //
-    // Aujourd'hui le RT est figé à OUT_W×OUT_H et la forme est rattrapée en
-    // aval par `apply_undistort` (9 correctifs successifs, cf. git log des
-    // 20-21/07). Demain le RT prendra la géométrie de `output` et tout cet
-    // appareil deviendra l'identité. Ce qui atterrit à l'écran, lui, ne doit
-    // pas bouger — c'est ce que ces assertions verrouillent.
-    // -----------------------------------------------------------------------
-
-    /// Où un rect normalisé du canvas atterrit VRAIMENT, en pixels de sortie,
-    /// une fois `blit_resized` passé. Celui-ci dessine un triangle plein écran
-    /// (`Draw(3, 0)`) : tout le canvas est étiré sur le cadre de sortie, sans
-    /// letterbox — donc la fraction `f` devient `f * dimension_de_sortie`.
-    fn landed_output_px(dst: [f32; 4], out_w: f32, out_h: f32) -> [f32; 4] {
-        [dst[0] * out_w, dst[1] * out_h, dst[2] * out_w, dst[3] * out_h]
-    }
-
-    /// Rect normalisé décrivant un carré de `side` px DANS LE CANVAS, centré.
-    fn centred_square_in_canvas(side: f32) -> [f32; 4] {
-        let (nw, nh) = (side / OUT_W as f32, side / OUT_H as f32);
-        [0.5 - nw * 0.5, 0.5 - nh * 0.5, nw, nh]
-    }
-
-    fn stretches(out_w: f32, out_h: f32) -> (f32, f32) {
-        (out_w / OUT_W as f32, out_h / OUT_H as f32)
-    }
-
-    /// Tous les formats que l'UX peut produire — `native` inclus, qui n'est
-    /// borné par aucune liste : `pickOutputDims` (TS) dérive les dimensions du
-    /// plus grand côté de l'asset de référence et du ratio choisi, donc un
-    /// ultrawide ou un enregistrement téléphone sont des sorties légitimes.
-    const OUTPUT_FORMATS: &[(&str, f32, f32)] = &[
-        ("16:9", 1920.0, 1080.0),
-        ("9:16", 1080.0, 1920.0),
-        ("1:1", 1920.0, 1920.0),
-        ("4:3", 1920.0, 1440.0),
-        ("4:5", 1536.0, 1920.0),
-        ("16:10", 1920.0, 1200.0),
-        ("10:16", 1200.0, 1920.0),
-        ("native ultrawide", 3440.0, 1440.0),
-        ("native telephone", 1080.0, 2340.0),
-    ];
-
-    /// CONTRAT 1 — un calque carré atterrit carré, quel que soit le format.
-    /// C'est l'acquis des 9 correctifs : il doit survivre à la refonte.
-    #[test]
-    fn a_square_layer_lands_square_at_every_output_format() {
-        for &(name, w, h) in OUTPUT_FORMATS {
-            let (sx, sy) = stretches(w, h);
-            let landed = landed_output_px(apply_undistort(centred_square_in_canvas(400.0), sx, sy), w, h);
-            let (lw, lh) = (landed[2], landed[3]);
-            assert!(
-                (lw - lh).abs() <= 1.0,
-                "{name} ({w}x{h}) : le carre atterrit {lw:.1}x{lh:.1} px — deforme",
-            );
-        }
-    }
-
-    /// CONTRAT 2 — un calque centré reste centré. La compensation ne doit pas
-    /// seulement préserver la taille, mais aussi la position.
-    #[test]
-    fn a_centred_layer_lands_centred_at_every_output_format() {
-        for &(name, w, h) in OUTPUT_FORMATS {
-            let (sx, sy) = stretches(w, h);
-            let landed = landed_output_px(apply_undistort(centred_square_in_canvas(400.0), sx, sy), w, h);
-            let (cx, cy) = (landed[0] + landed[2] * 0.5, landed[1] + landed[3] * 0.5);
-            assert!(
-                (cx - w * 0.5).abs() <= 1.0 && (cy - h * 0.5).abs() <= 1.0,
-                "{name} ({w}x{h}) : centre a ({cx:.1}, {cy:.1}), attendu ({:.1}, {:.1})",
-                w * 0.5,
-                h * 0.5,
-            );
-        }
-    }
-
-    /// CONTRAT 3 — un rect déjà exprimé en espace de sortie (`app_webcam_rect`,
-    /// calculé côté web par `computeCompositeLayout`) traverse le pipeline sans
-    /// être déformé. C'est le rôle d'`inverse_undistort` ; après la refonte ce
-    /// sera vrai sans aucune pré-compensation, mais le contrat est le même.
-    #[test]
-    fn an_output_space_rect_round_trips_unchanged() {
-        for &(name, w, h) in OUTPUT_FORMATS {
-            let (sx, sy) = stretches(w, h);
-            let intent = [0.55, 0.60, 0.30, 0.30];
-            let out = apply_undistort(inverse_undistort(intent, sx, sy), sx, sy);
-            for (got, want) in out.into_iter().zip(intent) {
-                assert!((got - want).abs() < 1e-4, "{name} : {got} != {want}");
-            }
-        }
-    }
-
-    /// CONTRAT 4 — le rayon d'impact de la refonte.
-    ///
-    /// En 16:9, `stretch_x == stretch_y == 1`, donc toute la machinerie de
-    /// compensation est DÉJÀ l'identité. La refonte doit donc produire un 16:9
-    /// bit-à-bit identique : tout écart en 16:9 sera une régression, jamais un
-    /// changement voulu. Le risque est confiné aux ratios aujourd'hui cassés.
-    #[test]
-    fn the_16_9_path_is_already_an_identity_transform() {
-        let (sx, sy) = stretches(1920.0, 1080.0);
-        let dst = [0.13, 0.04, 0.74, 0.52];
-        assert_rect(apply_undistort(dst, sx, sy), dst);
-        assert_rect(inverse_undistort(dst, sx, sy), dst);
-    }
-
-    /// Fraction de la résolution de sortie qui est RÉELLEMENT rastérisée, par
-    /// axe. Le canvas étant figé à OUT_W×OUT_H, un calque est échantillonné
-    /// dans le canvas puis ré-étiré par `blit_resized` : sur chaque axe le
-    /// contenu ne porte que `OUT_dim / output_dim` de l'information finale.
-    /// `>= 1.0` = suréchantillonné (aucune perte). `< 1.0` = agrandissement.
-    fn rasterised_fraction(out_w: f32, out_h: f32) -> (f32, f32) {
-        (OUT_W as f32 / out_w, OUT_H as f32 / out_h)
-    }
-
-    /// MESURE DE L'AVANT — à supprimer en phase 2, quand elle vaudra 1.0
-    /// partout. Ce n'est pas un contrat : c'est la trace chiffrée du défaut que
-    /// la refonte corrige, pour que le gain soit mesuré et non affirmé.
-    ///
-    /// Le constat central : la perte ne vient PAS du ratio mais de la
-    /// résolution. Dès qu'un axe de sortie dépasse celui du canvas, il est
-    /// agrandi. Un export 4K ou 1440p en 16:9 — sans la moindre déformation —
-    /// est donc lui aussi du 1080p agrandi.
-    #[test]
-    fn documents_todays_resolution_loss_per_output_format() {
-        let pct = |f: f32| (f.min(1.0) * 100.0).round() as i32;
-        for &(name, w, h) in OUTPUT_FORMATS {
-            let (fx, fy) = rasterised_fraction(w, h);
-            println!("{name:18} {w:>6.0}x{h:<6.0} horizontal {:>3}%  vertical {:>3}%", pct(fx), pct(fy));
-        }
-        // 16:9 1080p est le SEUL format sans perte : c'est exactement le canvas.
-        assert_eq!(rasterised_fraction(1920.0, 1080.0), (1.0, 1.0));
-        // Tous les formats portrait plafonnent à 1080 lignes rastérisées.
-        assert_eq!(rasterised_fraction(1080.0, 1920.0).1, 1080.0 / 1920.0);
-        // Un 4K 16:9 n'est pas mieux loti qu'un 9:16 : moitie de l'information.
-        assert_eq!(rasterised_fraction(3840.0, 2160.0), (0.5, 0.5));
-    }
 }

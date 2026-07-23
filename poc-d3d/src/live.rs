@@ -828,7 +828,11 @@ fn preview_render_size(scene: Option<&Scene>, pw: u32, ph: u32) -> (u32, u32) {
     let (ow, oh) = (scene.output.width.max(1) as f64, scene.output.height.max(1) as f64);
     // "contain" : le plus grand cadre au ratio de sortie qui tienne dans le panneau.
     let scale = (pw as f64 / ow).min(ph as f64 / oh).min(1.0);
-    (((ow * scale).round() as u32).max(2), ((oh * scale).round() as u32).max(2))
+    // Arrondi via la MÊME règle que `new_sized` : la boucle de rendu compare cette
+    // taille à `comp.render_size()` (qui renvoie la valeur arrondie) pour décider de
+    // reconstruire. Sans ce passage par `normalize_render_size`, une cible impaire
+    // ne serait jamais égalée → reconstruction du compositeur à chaque frame.
+    Compositor::normalize_render_size((ow * scale).round() as u32, (oh * scale).round() as u32)
 }
 
 /// Boucle de rendu (thread dédié) : décode → compose → resize → readback → publie
@@ -1409,5 +1413,24 @@ mod tests {
         let small = scene_with_output(640, 360);
         let (w, h) = preview_render_size(Some(&small), 3000, 2000);
         assert_eq!((w, h), (640, 360));
+    }
+
+    /// Anti-régression du bug de reconstruction en boucle : la taille produite
+    /// doit être un POINT FIXE de `normalize_render_size`. Si ce n'est pas le cas,
+    /// `want != comp.render_size()` reste vrai indéfiniment et le compositeur se
+    /// reconstruit à chaque frame (média qui disparaissent, VRAM qui sature).
+    /// On balaie beaucoup de tailles de panneau : une seule qui produit une
+    /// dimension impaire suffirait à faire boucler la preview en vrai.
+    #[test]
+    fn preview_size_is_always_a_fixed_point_of_the_render_size_rounding() {
+        let scene = scene_with_output(1920, 1080);
+        for pw in 200..1400 {
+            let (w, h) = preview_render_size(Some(&scene), pw, 900);
+            assert_eq!(
+                (w, h),
+                Compositor::normalize_render_size(w, h),
+                "panneau {pw}x900 → {w}x{h} n'est pas stable → reconstruction en boucle",
+            );
+        }
     }
 }

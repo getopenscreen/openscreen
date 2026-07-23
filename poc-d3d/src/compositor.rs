@@ -479,13 +479,26 @@ impl Compositor {
     /// reconstruit le compositeur quand la sortie change ; c'est quelques dizaines
     /// de ms, sur un changement rare.
     ///
-    /// `w`/`h` sont arrondis au pair supérieur : la texture NV12 est en 4:2:0
-    /// (chroma sous-échantillonnée 2×2) et `CreateTexture2D` refuse une dimension
-    /// impaire — même contrainte que celle déjà gérée dans `readback_resized`.
+    /// Les dimensions passées sont arrondies via `normalize_render_size` (pair,
+    /// ≥2 — contrainte NV12). L'appelant qui décide de reconstruire DOIT comparer
+    /// sa taille voulue à `normalize_render_size(...)` et non à la valeur brute :
+    /// sinon une cible impaire ne serait jamais atteinte par `render_size()` (qui
+    /// renvoie la valeur arrondie), et le compositeur se reconstruirait à chaque
+    /// frame. C'est justement pour rendre cette règle partageable qu'elle est une
+    /// fonction publique et non un calcul enfoui ici.
     pub fn new_sized(gpu: &Gpu, w: u32, h: u32) -> Result<Compositor> {
-        let w = (w.max(2) + 1) & !1;
-        let h = (h.max(2) + 1) & !1;
+        let (w, h) = Self::normalize_render_size(w, h);
         unsafe { Self::new_inner(gpu, w, h) }
+    }
+
+    /// Arrondit une taille de rendu voulue à ce qu'un render target peut réellement
+    /// être : au pair supérieur (la texture NV12 est en 4:2:0, chroma
+    /// sous-échantillonnée 2×2, et `CreateTexture2D` refuse une dimension impaire),
+    /// jamais sous 2. UNE seule définition de la règle, appelée par `new_sized`
+    /// (côté production de la taille) et par la boucle de preview (côté décision de
+    /// reconstruire) — les deux ne peuvent donc pas diverger.
+    pub fn normalize_render_size(w: u32, h: u32) -> (u32, u32) {
+        (((w.max(2) + 1) & !1), ((h.max(2) + 1) & !1))
     }
 
     unsafe fn new_inner(gpu: &Gpu, out_w: u32, out_h: u32) -> Result<Compositor> {

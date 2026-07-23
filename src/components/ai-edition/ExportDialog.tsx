@@ -14,11 +14,18 @@ import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
+	collectUsedAssetDims,
+	type Dims,
+	pickExtremeDims,
+	resolveAspectRatioValue,
+} from "@/lib/ai-edition/document/outputFormat";
+import {
 	type DocumentExportOptions,
 	type ExportVideoCodec,
 	exportAxcutDocument,
 } from "@/lib/ai-edition/exporter/documentExporter";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
+import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
 import { probeVideoDimensions } from "@/lib/ai-edition/timeline/duration";
 import {
@@ -38,11 +45,6 @@ import { exportMultiNative, exportNative } from "@/native";
 import { nativeBridgeClient } from "@/native/client";
 import type { CompositorClipInput } from "@/native/contracts";
 import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescription";
-import {
-	type AspectRatio,
-	getAspectRatioValue,
-	getNativeAspectRatioValue,
-} from "@/utils/aspectRatioUtils";
 import { ModalShell } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 
@@ -110,45 +112,6 @@ const QUALITY_OPTIONS: Array<{
 	{ value: "good", labelKey: "exportQuality.medium", targetShortSide: HIGH_SHORT_SIDE },
 	{ value: "source", labelKey: "exportQuality.high" },
 ];
-
-type Dims = { width: number; height: number };
-
-/** Single "pick the largest/smallest by pixel count" reducer, shared by every size
- *  comparison below instead of each one hand-rolling its own reduce + fallback.
- *  Exported for unit testing only — not part of the component's public surface. */
-export function pickExtremeDims(items: Dims[], direction: "largest" | "smallest"): Dims | null {
-	let best: Dims | null = null;
-	for (const d of items) {
-		if (d.width <= 0 || d.height <= 0) continue;
-		if (!best) {
-			best = d;
-			continue;
-		}
-		const area = d.width * d.height;
-		const bestArea = best.width * best.height;
-		if (direction === "largest" ? area > bestArea : area < bestArea) best = d;
-	}
-	return best;
-}
-
-/** Raw (uncropped) probed dims for every asset the timeline actually uses — falls back to
- *  ANY asset with known dims if none of the used ones have probed yet (still loading), so the
- *  dialog shows *something* rather than blank tiers. Two call sites used to hand-roll this same
- *  fallback independently; centralized here as the one place it's implemented.
- *  Exported for unit testing only — not part of the component's public surface. */
-export function collectUsedAssetDims(
-	document: AxcutDocument,
-	probedAssetDims: Record<string, Dims>,
-): Dims[] {
-	const usedAssetIds = new Set(document.timeline.clips.map((c) => c.assetId));
-	const dimsOf = (a: AxcutDocument["assets"][number]): Dims => ({
-		width: a.video?.width || probedAssetDims[a.id]?.width || 0,
-		height: a.video?.height || probedAssetDims[a.id]?.height || 0,
-	});
-	const used = document.assets.filter((a) => usedAssetIds.has(a.id)).map(dimsOf);
-	if (used.some((d) => d.width > 0 && d.height > 0)) return used;
-	return document.assets.map(dimsOf);
-}
 
 /** Per-CLIP effective (post-crop) pixel dims — crop is stored per-clip (`clip.cropRegion`), not
  *  per-asset, since the same recording can be framed differently across clips, so this is the
@@ -271,24 +234,16 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		? Math.min(smallestSource.width, smallestSource.height)
 		: null;
 
-	// Largest clip's RAW (uncropped) asset dims — deliberately separate from the crop-aware
-	// `referenceSource` above: this only feeds the "native" output-ASPECT-RATIO option (the
-	// scene's overall output shape), a different concern from a clip's own cropped pixel size,
-	// and changing its long-standing (uncropped) meaning isn't part of this fix.
-	const rawReferenceSource = useMemo(
+	// Aspect the export normalizes to: the timeline's selected ratio (mirrors documentExporter),
+	// so the sizes shown match what the export produces. Read through `getEditorSettings` — the
+	// same typed façade the ratio dropdown writes through and `buildSceneDescription` reads — so
+	// this dialog can't drift from the compositor if the storage ever moves. `resolveAspectRatioValue`
+	// owns the legacy "native" case (uncropped reference asset), previously hand-rolled here.
+	const EXPORT_ASPECT = useMemo(
 		() =>
-			document ? pickExtremeDims(collectUsedAssetDims(document, probedAssetDims), "largest") : null,
+			resolveAspectRatioValue(document, getEditorSettings(document).aspectRatio, probedAssetDims),
 		[document, probedAssetDims],
 	);
-
-	// Aspect the export normalizes to: the timeline's selected ratio (mirrors
-	// documentExporter), so the sizes shown match what the export produces.
-	const timelineAspect =
-		(document?.legacyEditor as { aspectRatio?: AspectRatio } | null)?.aspectRatio ?? "16:9";
-	const EXPORT_ASPECT =
-		timelineAspect === "native" && rawReferenceSource
-			? getNativeAspectRatioValue(rawReferenceSource.width, rawReferenceSource.height)
-			: getAspectRatioValue(timelineAspect);
 	// Output dimensions the export will produce for a given tier, from the (crop-aware)
 	// SMALLEST clip on the timeline — see `smallestSource` above for why. Only "Source"
 	// quality actually uses these as its target size; 720p/1080p target a fixed short side

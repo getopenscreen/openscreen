@@ -75,6 +75,36 @@ fn screen_source_rect(
     [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv]
 }
 
+/// Sous-rect SOURCE (en UV de texture) qui remplit une boîte de ratio `box_ar` **sans
+/// déformer** l'image : le plus grand rect centré ayant ce ratio, tiré de la frame
+/// visible — l'équivalent de `object-fit: cover` côté web.
+///
+/// C'est LA primitive qui garantit qu'une couche vidéo n'est jamais étirée. Le
+/// contrat est déplacé de l'appelant (« donne-moi un dst au ratio de la source »,
+/// hypothèse qu'un preset pouvait violer en silence) vers le calcul lui-même
+/// (« quel que soit le dst, je choisis la coupe qui l'habille »).
+///
+/// * `visible` : dimensions RÉELLES de l'image dans la texture (`AVFrame::width/height`) ;
+///   elles peuvent être plus petites que la texture, qui est allouée avec du padding
+///   décodeur — d'où la division finale par `tex`.
+/// * `tex` : dimensions de la texture, pour normaliser en UV.
+/// * `box_ar` : ratio largeur/hauteur de la boîte de destination, en pixels de rendu.
+///
+/// Retourne `(u0, v0, u1, v1)`. Quand la boîte a déjà le ratio de la source, la coupe
+/// est la frame entière — donc aucun changement de pixel sur les placements qui étaient
+/// déjà corrects.
+fn cover_crop_uv(visible: [f32; 2], tex: [f32; 2], box_ar: f32) -> (f32, f32, f32, f32) {
+    let (cam_w, cam_h) = (visible[0].max(1.0), visible[1].max(1.0));
+    let (tex_w, tex_h) = (tex[0].max(1.0), tex[1].max(1.0));
+    let box_ar = if box_ar.is_finite() && box_ar > 0.0 { box_ar } else { cam_w / cam_h };
+    let (crop_w, crop_h) = if box_ar >= cam_w / cam_h {
+        (cam_w, cam_w / box_ar) // boîte plus large que la source → pleine largeur, on rogne en hauteur
+    } else {
+        (cam_h * box_ar, cam_h) // boîte plus haute → pleine hauteur, on rogne en largeur
+    };
+    let (x0, y0) = ((cam_w - crop_w) * 0.5, (cam_h - crop_h) * 0.5);
+    (x0 / tex_w, y0 / tex_h, (x0 + crop_w) / tex_w, (y0 + crop_h) / tex_h)
+}
 
 /// Constant buffer d'un calque (doit matcher `cbuffer Layer` du HLSL, 64 octets).
 #[repr(C)]
@@ -1750,19 +1780,27 @@ impl Compositor {
             }
         }
 
-        // --- webcam : source selon la forme (miroir horizontal optionnel) ---
-        // rectangle/rounded → frame entière (ratio natif, dst déjà ajustée) ; square/circle →
-        // center-crop carré. Évite toute distorsion : le dst matche le ratio de la source.
-        let (su0, su1) = if is_square_shape {
-            let sq = wch.min(wcw);
-            let cu0 = (wcw - sq) * 0.5 / wtw as f32;
-            (cu0, cu0 + sq / wtw as f32)
-        } else {
-            (0.0, wcw / wtw as f32)
-        };
+        // --- webcam : sous-rect SOURCE couvrant la boîte de destination ---
+        // La coupe est dérivée du ratio RÉEL de la boîte (`cover_crop_uv`), donc la caméra
+        // n'est jamais étirée quel que soit le rect qu'on lui donne.
+        //
+        // Avant, la source était prise PLEIN CADRE pour rectangle/rounded, en supposant que
+        // « le dst matche le ratio de la source ». C'est vrai du placement par DÉFAUT
+        // (`fit_cam_aspect` façonne alors le dst), mais faux dès que l'app fournit le rect :
+        // le preset side-by-side donne à la caméra un slot de colonne au ratio arbitraire
+        // (cf. `computeCompositeLayout`, branche dual-frame — `webcamRect = webcamSlot`, sans
+        // aucun ajustement d'aspect), et la caméra y était étirée. L'hypothèse était donc
+        // portée par l'appelant ; la dériver ici la rend vraie par construction.
+        //
+        // Le center-crop carré de square/circle en est un cas particulier (boîte 1:1) — il n'a
+        // plus besoin d'être traité à part.
+        let (su0, sv0, su1, sv1) = cover_crop_uv(
+            [wcw, wch],
+            [wtw as f32, wth as f32],
+            w_px[0] / w_px[1].max(0.0001),
+        );
         // miroir = échanger les bornes u du rect source (flip horizontal).
         let (u0, u1) = if lp.webcam_mirror { (su1, su0) } else { (su0, su1) };
-        let wv = wch / wth as f32;
         if lp.has_webcam {
             if cfg.shadow {
                 self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale);
@@ -1770,12 +1808,12 @@ impl Compositor {
             self.draw_video(
                 &LayerCB {
                     dst: w_dst,
-                    src: [u0, 0.0, u1, wv],
+                    src: [u0, sv0, u1, sv1],
                     quad_px: w_px,
                     radius_px: w_radius,
                     mode: 0.0,
                     color: [0.0, 0.0, 0.0, 1.0],
-                    src_prev: [u0, 0.0, u1, wv], // src fixe (pas de zoom webcam)
+                    src_prev: [u0, sv0, u1, sv1], // src fixe (pas de zoom webcam)
                     dst_prev: w_dst_prev,
                     mb: [mb_taps, 1.0, 1.0, 0.0],
                     ..Default::default()
@@ -2275,4 +2313,63 @@ mod tests {
         assert_rect(screen_source_rect(0.8, 0.9, Some(crop), 2.0, [1.0, 1.0]), [0.4, 0.36, 0.6, 0.63]);
     }
 
+    // --- cover_crop_uv : la caméra n'est jamais étirée --------------------
+    // Le ratio de la coupe source, ramené en pixels d'image, doit TOUJOURS égaler
+    // celui de la boîte : c'est la définition de « pas de déformation ».
+
+    /// Ratio largeur/hauteur de la coupe, exprimé en pixels de l'image source.
+    fn crop_aspect(uv: (f32, f32, f32, f32), tex: [f32; 2]) -> f32 {
+        ((uv.2 - uv.0) * tex[0]) / ((uv.3 - uv.1) * tex[1])
+    }
+
+    /// L'invariant, balayé sur des boîtes très diverses — dont le slot en colonne
+    /// du preset side-by-side, qui est précisément le cas qui étirait la caméra.
+    #[test]
+    fn cover_crop_never_distorts_whatever_the_destination_box() {
+        let tex = [1024.0, 1024.0];
+        for &cam in &[[1280.0, 720.0], [960.0, 720.0], [640.0, 480.0]] {
+            for &box_ar in &[0.35, 0.5, 0.75, 1.0, 16.0 / 9.0, 2.4] {
+                let uv = cover_crop_uv(cam, tex, box_ar);
+                let got = crop_aspect(uv, tex);
+                assert!(
+                    (got - box_ar).abs() < 1e-3,
+                    "cam {cam:?} boite {box_ar} → coupe de ratio {got}, attendu {box_ar}",
+                );
+            }
+        }
+    }
+
+    /// La coupe reste DANS l'image visible et centrée — on ne va jamais chercher
+    /// le padding décodeur au-delà de `visible`, qui contient des pixels indéfinis.
+    #[test]
+    fn cover_crop_stays_inside_the_visible_frame_and_is_centred() {
+        let (cam, tex) = ([1280.0, 720.0], [2048.0, 1024.0]);
+        for &box_ar in &[0.35, 1.0, 2.4] {
+            let (u0, v0, u1, v1) = cover_crop_uv(cam, tex, box_ar);
+            assert!(u0 >= 0.0 && v0 >= 0.0, "coupe hors image: {u0},{v0}");
+            assert!(u1 <= cam[0] / tex[0] + 1e-6, "u1 {u1} deborde la largeur visible");
+            assert!(v1 <= cam[1] / tex[1] + 1e-6, "v1 {v1} deborde la hauteur visible");
+            let (mx, my) = (u0 + u1, v0 + v1);
+            assert!((mx - cam[0] / tex[0]).abs() < 1e-6, "pas centre en x");
+            assert!((my - cam[1] / tex[1]).abs() < 1e-6, "pas centre en y");
+        }
+    }
+
+    /// Propriété de sûreté : quand la boîte a DÉJÀ le ratio de la source (tous les
+    /// placements qui étaient corrects — PiP par défaut, vertical-stack, et le
+    /// center-crop carré de square/circle), la coupe est la frame entière. Le
+    /// correctif ne peut donc pas déplacer un pixel de ces cas-là.
+    #[test]
+    fn cover_crop_is_the_whole_frame_when_the_box_already_matches() {
+        let (cam, tex) = ([1280.0, 720.0], [2048.0, 1024.0]);
+        let uv = cover_crop_uv(cam, tex, cam[0] / cam[1]);
+        assert!((uv.0).abs() < 1e-6 && (uv.1).abs() < 1e-6);
+        assert!((uv.2 - cam[0] / tex[0]).abs() < 1e-6);
+        assert!((uv.3 - cam[1] / tex[1]).abs() < 1e-6);
+        // et une boîte carrée sur une source 4:3 redonne bien le center-crop carré
+        // que l'ancien branchement `is_square_shape` codait à la main.
+        let (su0, _, su1, _) = cover_crop_uv([960.0, 720.0], tex, 1.0);
+        assert!((su0 - (960.0 - 720.0) * 0.5 / tex[0]).abs() < 1e-6);
+        assert!((su1 - (960.0 + 720.0) * 0.5 / tex[0]).abs() < 1e-6);
+    }
 }

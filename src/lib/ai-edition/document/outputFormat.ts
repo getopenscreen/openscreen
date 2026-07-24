@@ -30,6 +30,20 @@ export interface Dims {
 /** Output frame used when a document has no usable asset dimensions at all. */
 const FALLBACK_OUTPUT_DIMS: Dims = { width: 1920, height: 1080 };
 
+/**
+ * Round to the nearest even pixel, never below 2. H.264's 4:2:0 chroma plane is half-resolution
+ * on both axes, so an odd width or height has no valid subsampling — the encoder rejects it or
+ * silently pads. `calculateSourceDimensions` (mp4ExportSettings.ts) enforces this for the legacy
+ * export path; `output` feeds the native compositor's `render_size` and needs the same guarantee.
+ *
+ * This only started to matter once the picker could store a non-preset shape: every fixed preset
+ * happens to divide a normal capture's long side evenly (3840 → 2160, 2880, 2400, …), so bare
+ * rounding was safe by accident. An "Original" token taken from one clip and applied to a
+ * differently-shaped reference is not — e.g. `"683:384"` (a 1366x768 capture) against a 4K
+ * reference gives 3840/(683/384) = 2158.946, which bare rounding turns into an odd 3840x2159.
+ */
+const toEvenPx = (value: number): number => Math.max(2, Math.round(value / 2) * 2);
+
 /** One distinct native shape present on the timeline — an entry in the "Original" section. */
 export interface NativeFormat {
 	/** Reduced `"W:H"` token. This is what gets persisted when the user picks this entry. */
@@ -179,7 +193,10 @@ export function resolveAspectRatioValue(
  * are gone. So this function is choosing real pixels, not a correction factor.
  *
  * Convention aligned on `calculateSourceDimensions` (mp4ExportSettings.ts): the reference asset's
- * longest side is the base, the other side is derived from the chosen ratio.
+ * longest side is the base, the other side is derived from the chosen ratio — and both axes are
+ * snapped to even pixels (see `toEvenPx`), which is the part of that convention that actually
+ * makes the result encodable. Snapping can move the realised ratio by well under a pixel's worth
+ * of shape; being encodable at all takes precedence.
  */
 export function pickOutputDims(
 	document: AxcutDocument,
@@ -188,9 +205,9 @@ export function pickOutputDims(
 ): Dims {
 	const reference = referenceAssetDims(document, probedAssetDims);
 	const ratio = resolveAspectRatioValue(document, aspectRatio, probedAssetDims);
-	const longSide = Math.max(reference.width, reference.height);
+	const longSide = toEvenPx(Math.max(reference.width, reference.height));
 	if (ratio >= 1) {
-		return { width: longSide, height: Math.round(longSide / ratio) };
+		return { width: longSide, height: toEvenPx(longSide / ratio) };
 	}
-	return { width: Math.round(longSide * ratio), height: longSide };
+	return { width: toEvenPx(longSide * ratio), height: longSide };
 }

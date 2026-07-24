@@ -29,7 +29,7 @@ import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useAudioPeaks } from "@/hooks/useAudioPeaks";
 import { createId } from "@/lib/ai-edition/document/ids";
-import { collectNativeFormats, referenceAssetDims } from "@/lib/ai-edition/document/outputFormat";
+import { collectNativeFormats, referenceClipDims } from "@/lib/ai-edition/document/outputFormat";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
@@ -296,7 +296,7 @@ export function V4Timeline({
 	// that silently moved with the clip list.
 	const activeToken = useMemo(() => {
 		if (settings.aspectRatio !== "native" || !document) return settings.aspectRatio;
-		const reference = referenceAssetDims(document);
+		const reference = referenceClipDims(document);
 		return toAspectRatioToken(reference.width, reference.height) ?? settings.aspectRatio;
 	}, [settings.aspectRatio, document]);
 

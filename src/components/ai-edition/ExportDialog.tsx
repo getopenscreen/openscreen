@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
-	collectUsedAssetDims,
+	collectEffectiveClipDims,
 	type Dims,
 	pickExtremeDims,
 	resolveAspectRatioValue,
@@ -37,10 +37,7 @@ import {
 	type GifFrameRate,
 	type GifSizePreset,
 } from "@/lib/exporter";
-import {
-	calculateEffectiveSourceDimensions,
-	calculateMp4ExportSettings,
-} from "@/lib/exporter/mp4ExportSettings";
+import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import { exportMultiNative, exportNative } from "@/native";
 import { nativeBridgeClient } from "@/native/client";
 import type { CompositorClipInput } from "@/native/contracts";
@@ -112,30 +109,6 @@ const QUALITY_OPTIONS: Array<{
 	{ value: "good", labelKey: "exportQuality.medium", targetShortSide: HIGH_SHORT_SIDE },
 	{ value: "source", labelKey: "exportQuality.high" },
 ];
-
-/** Per-CLIP effective (post-crop) pixel dims — crop is stored per-clip (`clip.cropRegion`), not
- *  per-asset, since the same recording can be framed differently across clips, so this is the
- *  true footprint each clip contributes to the timeline. Falls back to `collectUsedAssetDims`'s
- *  raw dims while nothing has probed yet (crop can't be attributed without a clip to read it from,
- *  same degraded-but-non-blank behavior as before crop was accounted for).
- *  Exported for unit testing only — not part of the component's public surface. */
-export function collectEffectiveClipDims(
-	document: AxcutDocument,
-	probedAssetDims: Record<string, Dims>,
-): Dims[] {
-	const assetById = new Map(document.assets.map((a) => [a.id, a]));
-	const dims: Dims[] = [];
-	for (const clip of document.timeline.clips) {
-		const asset = assetById.get(clip.assetId);
-		if (!asset) continue;
-		const rawWidth = asset.video?.width || probedAssetDims[asset.id]?.width || 0;
-		const rawHeight = asset.video?.height || probedAssetDims[asset.id]?.height || 0;
-		if (rawWidth <= 0 || rawHeight <= 0) continue;
-		dims.push(calculateEffectiveSourceDimensions(rawWidth, rawHeight, clip.cropRegion));
-	}
-	if (dims.length > 0) return dims;
-	return collectUsedAssetDims(document, probedAssetDims);
-}
 
 interface ExportDialogProps {
 	open: boolean;

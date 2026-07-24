@@ -1066,3 +1066,71 @@ describe("buildSceneDescription.layout.screenRect", () => {
 		expectAspect(cropped(crop), (1920 * 1) / (1080 * 0.4));
 	});
 });
+
+// --- layoutByClip : la forme de la source est PAR CLIP -----------------------
+
+describe("buildSceneDescription.layout.layoutByClip", () => {
+	// Un clip est un enregistrement d'ecran + camera/son optionnels : rien n'impose a deux
+	// clips la meme taille ni le meme ratio. Le crop n'est qu'une maniere de plus de faire
+	// varier cette forme. Un layout unique pour toute la scene ne peut donc pas etre juste —
+	// c'est ce qui etirait un clip croppe place apres un clip non croppe (cas rapporte).
+	const aspectOf = (r: { width: number; height: number }, out: { width: number; height: number }) =>
+		(r.width * out.width) / (r.height * out.height);
+
+	const twoClipDoc = () => {
+		const asset = makeAsset({
+			id: "a",
+			originalPath: "/screen.mp4",
+			video: { width: 1920, height: 1080 },
+		});
+		const plain = makeClip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 0,
+			sourceEndSec: 4,
+			timelineStartSec: 0,
+			timelineEndSec: 4,
+		});
+		const cropped = makeClip({
+			id: "c2",
+			assetId: "a",
+			sourceStartSec: 4,
+			sourceEndSec: 8,
+			timelineStartSec: 4,
+			timelineEndSec: 8,
+			cropRegion: { x: 0.45, y: 0.11, width: 0.31, height: 0.89 },
+		});
+		return makeDoc({ assets: [asset], clips: [plain, cropped] });
+	};
+
+	it("gives each clip a layout at ITS OWN source aspect", () => {
+		const scene = buildSceneDescription(twoClipDoc());
+		const byClip = scene.layout.layoutByClip;
+		if (!byClip) throw new Error("layoutByClip absent");
+		expect(byClip).toHaveLength(2);
+
+		const plain = byClip[0];
+		const cropped = byClip[1];
+		if (!plain || !cropped) throw new Error("entree manquante");
+
+		// clip 0 : pas de crop -> ratio de la source
+		expect(aspectOf(plain.screenRect, scene.output)).toBeCloseTo(1920 / 1080, 1);
+		// clip 1 : croppe -> ratio du crop, PAS celui du clip 0
+		const want = (1920 * 0.31) / (1080 * 0.89);
+		const got = aspectOf(cropped.screenRect, scene.output);
+		expect(Math.abs(got - want) / want).toBeLessThan(0.01);
+	});
+
+	it("is index-aligned with clips and cropByClip", () => {
+		const scene = buildSceneDescription(twoClipDoc());
+		expect(scene.layout.layoutByClip).toHaveLength(scene.clips.length);
+		expect(scene.cropByClip).toHaveLength(scene.clips.length);
+		expect(scene.cropByClip[0]).toBeNull();
+		expect(scene.cropByClip[1]).not.toBeNull();
+	});
+
+	it("keeps the scalar layout fields as the first clip's entry", () => {
+		const scene = buildSceneDescription(twoClipDoc());
+		expect(scene.layout.screenRect).toEqual(scene.layout.layoutByClip?.[0]?.screenRect);
+	});
+});

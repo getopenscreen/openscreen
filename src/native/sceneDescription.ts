@@ -146,6 +146,30 @@ export interface SceneLayout {
 	 */
 	screenRadius?: number | null;
 	/**
+	 * Should the screen FILL its box, cropping the overflow (`object-fit: cover`), rather
+	 * than fit inside it? True for the block layouts, whose screen box is an arbitrary-ratio
+	 * slot. This is `computeCompositeLayout(...).screenCover`, which `frameRenderer` already
+	 * honours on the web path; shipping it here is what lets the native compositor agree.
+	 * Without it native stretched the source to fill the slot — most visible on a cropped
+	 * clip, the crop pushing the source aspect further from the slot's.
+	 */
+	screenCover?: boolean;
+	/**
+	 * One resolved layout per visible clip, index-aligned with `SceneDescription.clips`
+	 * and `cropByClip`. The scalar fields above are the FIRST clip's entry (fallback for
+	 * older payloads and the value native uses before a clip is active).
+	 *
+	 * Per clip because the screen source's SHAPE is per clip — a clip is a screen
+	 * recording plus an optional camera and audio, and nothing forces two clips to share
+	 * a recording size or ratio. Cropping is one more way that shape varies: a 16:9
+	 * recording cropped to 9:16 must lay out exactly like one recorded natively in 9:16.
+	 * Distinct from the scene's aspect ratio, which is global.
+	 *
+	 * Resolving one layout for the whole scene was therefore already wrong for a document
+	 * mixing recording resolutions; cropping only made it reachable in a single document.
+	 */
+	layoutByClip?: Array<ResolvedClipLayout | null>;
+	/**
 	 * Corner radius of the webcam box, same output-pixel convention as `screenRadius`
 	 * and resolved by the same `computeCompositeLayout` call — so "the block frames
 	 * screen and camera alike" can actually hold. It could not before: the screen took
@@ -158,6 +182,16 @@ export interface SceneLayout {
 	 * rounding proportional through those animations.
 	 */
 	webcamRadius?: number | null;
+}
+
+/** The shape-dependent half of a layout, resolved for one clip. See `layoutByClip`. */
+export interface ResolvedClipLayout {
+	screenRect: SceneRect;
+	webcamRect: SceneRect | null;
+	screenRadius: number | null;
+	webcamRadius: number | null;
+	webcamShape: "rectangle" | "circle" | "square" | "rounded";
+	screenCover: boolean;
 }
 
 /** Frame-styling effects, from the editor settings. */
@@ -461,52 +495,74 @@ export function buildSceneDescription(
 	// `webcamRect` verbatim (it only scale_frame's the SCREEN by padding), so an
 	// unpadded rect here would leave the camera behind while the screen moved.
 	const paddingFit = 1 - (Math.min(100, Math.max(0, settings.padding)) / 100) * 0.4;
-	// The screen box must be fit to the CROPPED aspect ratio, not the full source
-	// frame's — the exact same rule `PreviewCanvas` states and `frameRenderer` applies.
-	// This used to be a hardcoded 1920x1080 placeholder, harmless while only
-	// `webcamRect` was consumed from this layout: the screen box merely bounded the
-	// camera slot. It became load-bearing when `screenRect` started shipping to native
-	// as a rect the compositor consumes AS-IS, "already at the crop's aspect ratio".
-	// It was not: a 30%x89% crop was handed a 16:9 box and the video stretched to fill
-	// it. Derived here from the first visible clip's real asset dimensions, matching the
-	// "unités sources du premier asset visible" convention documented just above.
-	const firstVisibleClip = visibleClips[0];
-	const firstAssetVideo = firstVisibleClip
-		? assetById.get(firstVisibleClip.assetId)?.video
-		: undefined;
-	const fullScreenSize = {
-		width: firstAssetVideo?.width || 1920,
-		height: firstAssetVideo?.height || 1080,
+	/**
+	 * The screen source SHAPE of a clip = its recording's own dimensions × its crop.
+	 *
+	 * Both halves vary per clip and always have: a clip is a screen recording + an
+	 * optional camera + optional audio, and nothing forces two clips to have been
+	 * recorded at the same size or ratio. Cropping is simply one more way that shape
+	 * varies — a 16:9 recording cropped to 9:16 must lay out exactly like a clip
+	 * recorded natively in 9:16. This is NOT the scene's aspect ratio, which is global
+	 * (`outputDims`); it is per clip.
+	 *
+	 * So the layout has to be resolved per clip. Resolving it once for the whole scene
+	 * was already wrong for a document mixing recording resolutions — the crop only
+	 * made the existing defect visible, by letting one document hold two shapes.
+	 */
+	const screenSourceSizeOf = (clip: AxcutClip, index: number) => {
+		const video = assetById.get(clip.assetId)?.video;
+		const crop = cropByClip[index]; // index-aligned; null = identity crop
+		return {
+			width: Math.max(1, Math.round((video?.width || 1920) * (crop?.width ?? 1))),
+			height: Math.max(1, Math.round((video?.height || 1080) * (crop?.height ?? 1))),
+		};
 	};
-	// `cropByClip` is index-aligned with `visibleClips`; `null` means the identity crop.
-	const firstCrop = cropByClip[0];
-	const croppedScreenSize = {
-		width: Math.max(1, Math.round(fullScreenSize.width * (firstCrop?.width ?? 1))),
-		height: Math.max(1, Math.round(fullScreenSize.height * (firstCrop?.height ?? 1))),
-	};
-	const computedLayout = computeCompositeLayout({
-		canvasSize: outputDims,
-		maxContentSize: {
-			width: Math.round(outputDims.width * paddingFit),
-			height: Math.round(outputDims.height * paddingFit),
-		},
-		screenSize: croppedScreenSize,
-		webcamSize:
-			settings.webcamLayoutPreset === "no-webcam"
-				? null
-				: (webcamSourceSize ?? { width: 960, height: 720 }),
-		layoutPreset: settings.webcamLayoutPreset,
-		webcamSizePreset: settings.webcamSizePreset,
-		webcamPosition:
-			settings.webcamLayoutPreset === "picture-in-picture" ? settings.webcamPosition : null,
-		webcamMaskShape: settings.webcamMaskShape,
-	});
+	const layoutForScreenSize = (screenSize: { width: number; height: number }) =>
+		computeCompositeLayout({
+			canvasSize: outputDims,
+			maxContentSize: {
+				width: Math.round(outputDims.width * paddingFit),
+				height: Math.round(outputDims.height * paddingFit),
+			},
+			screenSize,
+			webcamSize:
+				settings.webcamLayoutPreset === "no-webcam"
+					? null
+					: (webcamSourceSize ?? { width: 960, height: 720 }),
+			layoutPreset: settings.webcamLayoutPreset,
+			webcamSizePreset: settings.webcamSizePreset,
+			webcamPosition:
+				settings.webcamLayoutPreset === "picture-in-picture" ? settings.webcamPosition : null,
+			webcamMaskShape: settings.webcamMaskShape,
+		});
 	const toFrameFractions = (r: RenderRect) => ({
 		x: r.x / outputDims.width,
 		y: r.y / outputDims.height,
 		width: r.width / outputDims.width,
 		height: r.height / outputDims.height,
 	});
+	const resolvedLayoutOf = (layout: ReturnType<typeof layoutForScreenSize>) =>
+		layout
+			? {
+					screenRect: toFrameFractions(layout.screenRect),
+					webcamRect: layout.webcamRect ? toFrameFractions(layout.webcamRect) : null,
+					screenRadius: layout.screenBorderRadius ?? null,
+					webcamRadius: layout.webcamRect?.borderRadius ?? null,
+					webcamShape: layout.webcamRect?.maskShape ?? settings.webcamMaskShape,
+					screenCover: layout.screenCover ?? false,
+				}
+			: null;
+	// One resolved layout per visible clip, index-aligned with `clips` / `cropByClip`.
+	// `for_clip_window` (Rust) selects the entry for the clip being composed, so the
+	// draw path keeps reading a single `layout` and needs no per-clip branch of its own.
+	const layoutByClip = visibleClips.map((clip, index) =>
+		resolvedLayoutOf(layoutForScreenSize(screenSourceSizeOf(clip, index))),
+	);
+	// Scalar fields stay the FIRST clip's layout: they are the fallback for a payload
+	// without `layoutByClip`, and the value native starts from before any clip is active.
+	const computedLayout = visibleClips[0]
+		? layoutForScreenSize(screenSourceSizeOf(visibleClips[0], 0))
+		: null;
 	const webcamRect = computedLayout?.webcamRect
 		? toFrameFractions(computedLayout.webcamRect)
 		: null;
@@ -533,7 +589,9 @@ export function buildSceneDescription(
 			webcamRect,
 			screenRect,
 			screenRadius: computedLayout?.screenBorderRadius ?? null,
+			screenCover: computedLayout?.screenCover ?? false,
 			webcamRadius: computedLayout?.webcamRect?.borderRadius ?? null,
+			layoutByClip,
 		},
 		effects: {
 			padding: settings.padding / 100,

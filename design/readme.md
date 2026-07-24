@@ -108,9 +108,11 @@ How OpenScreen writes.
 
 ### Brand mark
 
-- **`assets/logo-icon.png`** — the OpenScreen app icon (22×22 in the topbar). This is the only
-  provided brand asset. There is **no wordmark file**; the product sets "OpenScreen" in Geist
-  600, 15px, `-0.015em` tracking next to the icon. Do not redraw or recolour the mark.
+- **`assets/logo-icon.png`** — the OpenScreen app icon, transparent (24×24 in the topbar; the
+  mark is a disc, so it needs a little more box than a filled tile to carry the same optical
+  weight). This is the only provided brand asset. There is **no wordmark file**; the product sets
+  "OpenScreen" in Geist 600, 15px, `-0.015em` tracking next to the icon. Do not redraw or
+  recolour the mark.
 
 ---
 

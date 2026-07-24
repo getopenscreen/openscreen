@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AxcutAsset, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
+import { ASPECT_RATIO_PRESETS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import {
 	collectNativeFormats,
 	pickOutputDims,
@@ -149,6 +150,41 @@ describe("pickOutputDims", () => {
 	it("accepts a concrete non-preset token picked from the Original section", () => {
 		const d = doc([asset("a1", 2560, 1080)], [clip("c1", "a1")]);
 		expect(pickOutputDims(d, "64:27")).toEqual({ width: 2560, height: 1080 });
+	});
+
+	it("never emits an odd axis — an Original token on a differently-shaped reference", () => {
+		// The case enumeration makes reachable: the user picks the shape of the 1366x768 clip
+		// ("683:384") while the 4K clip is the reference by pixel area. 3840/(683/384) = 2158.946,
+		// which bare rounding turns into an odd 3840x2159 — a height H.264's 4:2:0 plane cannot
+		// subsample. Snapping to the NEAREST even lands on 2158, not 2160.
+		const mixed = doc(
+			[asset("a1", 1366, 768), asset("a2", 3840, 2160)],
+			[clip("c1", "a1"), clip("c2", "a2")],
+		);
+		expect(pickOutputDims(mixed, "683:384")).toEqual({ width: 3840, height: 2158 });
+	});
+
+	it("keeps both axes even across every preset and odd-capture token", () => {
+		// Presets pass this even without the clamp (they divide a normal long side evenly), which
+		// is exactly why the odd case stayed latent — so the sweep has to include odd shapes too.
+		const d = doc(
+			[asset("a1", 1366, 768), asset("a2", 3840, 2160)],
+			[clip("c1", "a1"), clip("c2", "a2")],
+		);
+		const tokens: AspectRatio[] = [
+			...ASPECT_RATIO_PRESETS,
+			"683:384",
+			"64:27",
+			"1023:767",
+			"native",
+		];
+		for (const token of tokens) {
+			const out = pickOutputDims(d, token);
+			expect(out.width % 2, `width for ${token}`).toBe(0);
+			expect(out.height % 2, `height for ${token}`).toBe(0);
+			expect(out.width).toBeGreaterThanOrEqual(2);
+			expect(out.height).toBeGreaterThanOrEqual(2);
+		}
 	});
 
 	it("a stored shape no longer moves when a bigger clip of another shape is added", () => {

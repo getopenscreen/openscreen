@@ -86,7 +86,7 @@ interface PlayheadOverlayProps {
 	pct: number;
 	canvasStyle: React.CSSProperties;
 	onPointerDown: (e: ReactPointerEvent) => void;
-	playheadRef?: React.RefObject<HTMLDivElement | null>;
+	playheadRef?: React.MutableRefObject<HTMLDivElement | null>;
 }
 
 const PlayheadOverlay = memo(function PlayheadOverlay({

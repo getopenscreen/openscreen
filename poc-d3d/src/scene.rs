@@ -143,9 +143,9 @@ pub struct SceneSpeedRegion {
     pub speed: f64,
 }
 
-/// Une zone "Full Camera" de la timeline (temps en secondes) : la webcam grandit pour couvrir
-/// (presque) tout le cadre pendant cette fenêtre. Pas de champs au-delà des bornes temporelles
-/// (miroir de `CameraFullscreenRegion`, TS).
+/// Une zone "Full Camera" de la timeline (temps en secondes) : la caméra PREND tout le cadre
+/// pendant cette fenêtre (plein écran net — ni marge, ni arrondi, ni masque, ni fond derrière).
+/// Pas de champs au-delà des bornes temporelles (miroir de `CameraFullscreenRegion`, TS).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneCameraFullscreenRegion {

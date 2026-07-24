@@ -43,9 +43,8 @@ import {
 	computeZoomTransform,
 } from "@/components/video-editor/videoPlayback/zoomTransform";
 import {
-	computeCameraFullscreenTargetRect,
+	computeCameraFullscreenRect,
 	computeCompositeLayout,
-	lerpRect,
 	reactiveWebcamScale,
 	resolveWebcamReactiveZoom,
 	type Size,
@@ -345,19 +344,10 @@ function evaluateWebcamRect(
 	const shape = base.maskShape ?? scene.webcamMaskShape ?? "rectangle";
 
 	if (fullscreenProgress > 0) {
-		// Full Camera owns size and position outright; reactive zoom is ignored for
-		// the frame (mixing "shrink for zoom" and "grow to full" means nothing).
-		const target = computeCameraFullscreenTargetRect(scene.outputSize, base);
-		const full: StyledRenderRect = {
-			x: target.x,
-			y: target.y,
-			width: target.width,
-			height: target.height,
-			borderRadius: 0,
-			maskShape: base.maskShape,
-		};
-		const r = lerpRect(base, full, fullscreenProgress);
-		return { ...r, shape };
+		// Full Camera owns size, position AND shape outright; reactive zoom is ignored
+		// for the frame (mixing "shrink for zoom" and "grow to full" means nothing).
+		const r = computeCameraFullscreenRect(base, scene.outputSize, fullscreenProgress);
+		return { ...r, shape: r.maskShape ?? "rectangle" };
 	}
 
 	const reactive = resolveWebcamReactiveZoom(scene.webcamLayoutPreset, scene.webcamReactiveZoom)

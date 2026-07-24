@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-	CAMERA_FULLSCREEN_MARGIN_FRACTION,
-	computeCameraFullscreenTargetRect,
+	computeCameraFullscreenRect,
 	computeCompositeLayout,
 	isWebcamBlockLayout,
 	resolveWebcamReactiveZoom,
+	type StyledRenderRect,
 } from "./compositeLayout";
 
 describe("resolveWebcamReactiveZoom", () => {
@@ -446,52 +446,84 @@ describe("computeCompositeLayout", () => {
 	});
 });
 
-describe("computeCameraFullscreenTargetRect", () => {
-	it("insets the target rect by the margin fraction of the canvas' shorter dimension", () => {
-		const canvasSize = { width: 1920, height: 1080 };
-		const margin = Math.round(
-			Math.min(canvasSize.width, canvasSize.height) * CAMERA_FULLSCREEN_MARGIN_FRACTION,
+describe("computeCameraFullscreenRect", () => {
+	const CANVAS = { width: 1920, height: 1080 };
+	const pip = (over: Partial<StyledRenderRect> = {}): StyledRenderRect => ({
+		x: 1520,
+		y: 740,
+		width: 360,
+		height: 270,
+		borderRadius: 24,
+		maskShape: "rectangle",
+		...over,
+	});
+
+	it("is the whole frame at full progress — no margin, no rounding, no mask", () => {
+		const rect = computeCameraFullscreenRect(pip(), CANVAS, 1);
+
+		expect(rect).toEqual({
+			x: 0,
+			y: 0,
+			width: CANVAS.width,
+			height: CANVAS.height,
+			borderRadius: 0,
+			maskShape: "rectangle",
+		});
+	});
+
+	it("leaves the layout rect untouched at zero progress", () => {
+		const base = pip();
+		const rect = computeCameraFullscreenRect(base, CANVAS, 0);
+
+		expect(rect.x).toBe(base.x);
+		expect(rect.y).toBe(base.y);
+		expect(rect.width).toBe(base.width);
+		expect(rect.height).toBe(base.height);
+		expect(rect.borderRadius).toBe(base.borderRadius);
+	});
+
+	it("takes the frame whatever the canvas' own aspect ratio", () => {
+		const portrait = { width: 1080, height: 1920 };
+		const rect = computeCameraFullscreenRect(pip(), portrait, 1);
+
+		expect(rect.width).toBe(portrait.width);
+		expect(rect.height).toBe(portrait.height);
+	});
+
+	it("dissolves a circle mask through its radius instead of popping it to a rectangle", () => {
+		// computeCompositeLayout gives a circle a square box and a radius of half its
+		// side, so a rounded rect at that radius IS that circle — the mask can flatten
+		// to "rectangle" on frame one and the shape still eases out continuously.
+		const circle = pip({ width: 270, height: 270, borderRadius: 135, maskShape: "circle" });
+
+		const start = computeCameraFullscreenRect(circle, CANVAS, 0);
+		expect(start.borderRadius).toBe(Math.min(circle.width, circle.height) / 2);
+		expect(start.maskShape).toBe("rectangle");
+
+		const mid = computeCameraFullscreenRect(circle, CANVAS, 0.5);
+		expect(mid.borderRadius).toBeCloseTo(circle.borderRadius / 2, 5);
+		expect(computeCameraFullscreenRect(circle, CANVAS, 1).borderRadius).toBe(0);
+	});
+
+	it("moves monotonically toward the frame, so the growth never doubles back", () => {
+		const base = pip();
+		let prevArea = base.width * base.height;
+		for (const t of [0.25, 0.5, 0.75, 1]) {
+			const rect = computeCameraFullscreenRect(base, CANVAS, t);
+			const area = rect.width * rect.height;
+			expect(area).toBeGreaterThan(prevArea);
+			expect(rect.x).toBeGreaterThanOrEqual(0);
+			expect(rect.y).toBeGreaterThanOrEqual(0);
+			prevArea = area;
+		}
+	});
+
+	it("clamps progress outside 0..1 instead of overshooting the frame", () => {
+		expect(computeCameraFullscreenRect(pip(), CANVAS, 2)).toEqual(
+			computeCameraFullscreenRect(pip(), CANVAS, 1),
 		);
-		// Square aspect source so height is the constrained dimension in a landscape canvas.
-		const rect = computeCameraFullscreenTargetRect(canvasSize, { width: 1080, height: 1080 });
-
-		expect(rect.height).toBeCloseTo(canvasSize.height - margin * 2, 0);
-		expect(rect.y).toBeCloseTo(margin, 0);
-	});
-
-	it("preserves the source aspect ratio (contain-fit) instead of stretching to the canvas", () => {
-		const canvasSize = { width: 1920, height: 1080 };
-		const source = { width: 1280, height: 720 }; // 16:9, same as canvas
-		const rect = computeCameraFullscreenTargetRect(canvasSize, source);
-
-		expect(rect.width / rect.height).toBeCloseTo(source.width / source.height, 3);
-	});
-
-	it("fits a portrait source by constraining height, centering vertically and horizontally", () => {
-		const canvasSize = { width: 1920, height: 1080 };
-		const source = { width: 9, height: 16 }; // portrait webcam frame
-		const rect = computeCameraFullscreenTargetRect(canvasSize, source);
-
-		expect(rect.width / rect.height).toBeCloseTo(source.width / source.height, 3);
-		expect(rect.height).toBeLessThanOrEqual(canvasSize.height);
-		expect(rect.width).toBeLessThanOrEqual(canvasSize.width);
-		// Centered: equal leftover space on both sides horizontally.
-		expect(rect.x).toBeCloseTo(canvasSize.width - rect.x - rect.width, 0);
-	});
-
-	it("fits a landscape source by constraining width when it would overflow", () => {
-		const canvasSize = { width: 1080, height: 1920 }; // portrait canvas
-		const source = { width: 16, height: 9 }; // landscape webcam frame
-		const rect = computeCameraFullscreenTargetRect(canvasSize, source);
-
-		expect(rect.width / rect.height).toBeCloseTo(source.width / source.height, 3);
-		expect(rect.y).toBeCloseTo(canvasSize.height - rect.y - rect.height, 0);
-	});
-
-	it("falls back to a 1:1 aspect ratio for degenerate (zero-size) source rects", () => {
-		const canvasSize = { width: 1920, height: 1080 };
-		const rect = computeCameraFullscreenTargetRect(canvasSize, { width: 0, height: 0 });
-
-		expect(rect.width).toBeCloseTo(rect.height, 0);
+		expect(computeCameraFullscreenRect(pip(), CANVAS, -1)).toEqual(
+			computeCameraFullscreenRect(pip(), CANVAS, 0),
+		);
 	});
 });

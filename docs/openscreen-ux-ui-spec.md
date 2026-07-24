@@ -358,6 +358,14 @@ A single red destructive button "Delete Trim Region".
 - Custom speed input — decimal text field; Enter or blur commits. Out-of-range (>16×) shows a toast "Speed can't go higher than 16×".
 - **Delete Speed Region** button.
 
+##### Inspector: Selected Full Camera
+
+- Explanatory paragraph + **Delete region** button. The timing is edited by dragging the region's edges on the timeline; there is nothing else to tune.
+- Full Camera is **not** a zoom of the webcam bubble: it hands the camera the whole frame. At full strength the camera rect is exactly the output frame — no margin, no padding, no corner radius, no mask shape, no drop shadow, and nothing of the composition (wallpaper, screen capture, cursor) left showing behind it (`computeCameraFullscreenRect`).
+- Getting there is one lerp from the layout rect to `[0, 0, W, H]`, eased in at the region's start and out (over a longer window) at its end. The box changes aspect ratio along the way; every renderer cover-crops the camera into whatever box it is handed, so the image is never stretched by the animation.
+- The mask dissolves through its own radius rather than popping: a circle mask already *is* a rounded rect at radius = half its (square) box, so flattening the shape to a rectangle on frame one and easing the radius to 0 carries every shape out continuously, with no per-shape branch. The PiP drop shadow fades out on the same curve.
+- Reactive "shrink on zoom" is ignored for any frame where Full Camera is active — "shrink for the zoom" and "grow to full" in the same frame means nothing.
+
 ##### Inspector: Selected annotation (`<AnnotationSettingsPanel>`)
 
 Top-level tabs: **Text** / **Image** / **Arrow**.

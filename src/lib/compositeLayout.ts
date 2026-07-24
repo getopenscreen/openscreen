@@ -25,69 +25,40 @@ export interface StyledRenderRect extends RenderRect {
 }
 
 /**
- * Linearly interpolates position/size/borderRadius between two rects. Used to grow the
- * webcam overlay from its normal layout to a full-canvas rect during a "Full Camera"
- * timeline region, at progress `t` (0 = from, 1 = to). Pure and shape-agnostic so preview
- * (DOM transform) and export (canvas draw) can share the exact same math.
+ * The camera's rect during a "Full Camera" region: its layout rect at `progress` 0,
+ * the WHOLE frame at 1.
+ *
+ * Full Camera is not a zoom of the picture-in-picture bubble — it is the camera taking
+ * the frame. The endpoint is exactly `[0, 0, canvasWidth, canvasHeight]`: no margin, no
+ * padding, no corner rounding, and nothing of the composition (wallpaper, screen,
+ * shadow) left showing behind it. The box may change aspect ratio on its way there
+ * because every renderer cover-crops the camera into whatever box it is handed, so the
+ * image is never stretched by the animation.
+ *
+ * The mask shape degenerates to a plain rounded rectangle whose radius eases to 0, which
+ * is what makes the morph continuous instead of a pop: `computeCompositeLayout` already
+ * gives a circle mask a radius of half its (square) box, and a rounded rect at that
+ * radius IS that circle — so one lerp carries every shape out of existence with no
+ * per-shape branch.
+ *
+ * Pure, and shared by the preview, both exporters and the native compositor, so all four
+ * animate to the identical rect.
  */
-export function lerpRect(
-	from: StyledRenderRect,
-	to: StyledRenderRect,
-	t: number,
-): StyledRenderRect {
-	const clamped = Math.max(0, Math.min(1, t));
-	return {
-		x: from.x + (to.x - from.x) * clamped,
-		y: from.y + (to.y - from.y) * clamped,
-		width: from.width + (to.width - from.width) * clamped,
-		height: from.height + (to.height - from.height) * clamped,
-		borderRadius: from.borderRadius + (to.borderRadius - from.borderRadius) * clamped,
-		maskShape: from.maskShape,
-	};
-}
-
-/**
- * Inset fraction (of the canvas' shorter dimension) left as a visible border around the
- * webcam when Full Camera expands it, so rounded/circular webcam masks never touch the
- * canvas edge at full screen. Matches the same order of magnitude as `MARGIN_FRACTION`
- * used for the picture-in-picture layout above.
- */
-export const CAMERA_FULLSCREEN_MARGIN_FRACTION = 0.025;
-
-/**
- * Computes the Full Camera "grown" target rect: the largest rect matching `aspectRect`'s
- * aspect ratio that fits centered inside the canvas, inset by `CAMERA_FULLSCREEN_MARGIN_FRACTION`
- * of the canvas' shorter dimension. Preserving the base rect's aspect ratio (rather than
- * filling the canvas' own aspect ratio) keeps the webcam undistorted throughout the lerp,
- * since `lerpRect` only stays proportion-correct if both endpoints share the same ratio.
- * Pure function shared by preview (`VideoPlayback.tsx`) and export (`frameRenderer.ts`) so
- * both animate to the identical rect.
- */
-export function computeCameraFullscreenTargetRect(
+export function computeCameraFullscreenRect(
+	base: StyledRenderRect,
 	canvasSize: Size,
-	aspectRect: { width: number; height: number },
-): RenderRect {
-	const { width: canvasWidth, height: canvasHeight } = canvasSize;
-	const margin = Math.round(
-		Math.min(canvasWidth, canvasHeight) * CAMERA_FULLSCREEN_MARGIN_FRACTION,
-	);
-	const boundsWidth = Math.max(0, canvasWidth - margin * 2);
-	const boundsHeight = Math.max(0, canvasHeight - margin * 2);
-
-	const aspect =
-		aspectRect.width > 0 && aspectRect.height > 0 ? aspectRect.width / aspectRect.height : 1;
-
-	let width = boundsWidth;
-	let height = width / aspect;
-	if (height > boundsHeight) {
-		height = boundsHeight;
-		width = height * aspect;
-	}
-
-	const x = margin + (boundsWidth - width) / 2;
-	const y = margin + (boundsHeight - height) / 2;
-
-	return { x, y, width, height };
+	progress: number,
+): StyledRenderRect {
+	const t = Math.max(0, Math.min(1, progress));
+	const lerp = (from: number, to: number) => from + (to - from) * t;
+	return {
+		x: lerp(base.x, 0),
+		y: lerp(base.y, 0),
+		width: lerp(base.width, canvasSize.width),
+		height: lerp(base.height, canvasSize.height),
+		borderRadius: lerp(base.borderRadius, 0),
+		maskShape: "rectangle",
+	};
 }
 
 export interface Size {

@@ -45,10 +45,9 @@ import {
 	type MotionBlurState,
 } from "@/components/video-editor/videoPlayback/zoomTransform";
 import {
-	computeCameraFullscreenTargetRect,
+	computeCameraFullscreenRect,
 	computeCompositeLayout,
 	getWebcamLayoutPresetDefinition,
-	lerpRect,
 	reactiveWebcamScale,
 	resolveWebcamReactiveZoom,
 	type Size,
@@ -1386,28 +1385,19 @@ export class FrameRenderer {
 		const webcamRect = this.layoutCache?.webcamRect ?? null;
 		if (webcamFrame && webcamRect) {
 			const preset = getWebcamLayoutPresetDefinition(this.config.webcamLayoutPreset);
-			const shape = webcamRect.maskShape ?? this.config.webcamMaskShape ?? "rectangle";
 			const cameraFullProgress = this.animationState.cameraFullscreenProgress;
 			let drawRect: StyledRenderRect;
 			if (cameraFullProgress > 0) {
-				// Full Camera takes over the webcam's size/position entirely, growing it to cover
-				// the whole stage (inset by a margin, aspect-preserving — see
-				// computeCameraFullscreenTargetRect). Reactive zoom is ignored for this frame (see
+				// Full Camera takes over the webcam's size/position entirely, growing it to BE
+				// the frame — no margin, no rounding, no mask left (see
+				// computeCameraFullscreenRect). Reactive zoom is ignored for this frame (see
 				// design notes 6.4): mixing "shrink for zoom" and "grow to full" in the same frame
 				// doesn't make sense.
-				const targetRect = computeCameraFullscreenTargetRect(
-					{ width: this.config.width, height: this.config.height },
+				drawRect = computeCameraFullscreenRect(
 					webcamRect,
+					{ width: this.config.width, height: this.config.height },
+					cameraFullProgress,
 				);
-				const fullRect: StyledRenderRect = {
-					x: targetRect.x,
-					y: targetRect.y,
-					width: targetRect.width,
-					height: targetRect.height,
-					borderRadius: 0,
-					maskShape: webcamRect.maskShape,
-				};
-				drawRect = lerpRect(webcamRect, fullRect, cameraFullProgress);
 			} else {
 				// Scale the PiP webcam inversely with the eased zoom, anchoring the shrink to the
 				// docked corner (bottom-right by default) like the preview, so it stays flush to the
@@ -1441,7 +1431,10 @@ export class FrameRenderer {
 					? webcamFrame.displayHeight
 					: webcamFrame.codedHeight) || webcamRect.height;
 			const sourceAspect = sourceWidth / sourceHeight;
-			const targetAspect = webcamRect.width / webcamRect.height;
+			// The crop follows the box actually being DRAWN, not the layout box: Full
+			// Camera walks the box from the layout's aspect ratio to the frame's, and a
+			// crop pinned to the layout's aspect would stretch the face all the way there.
+			const targetAspect = drawRect.width / drawRect.height;
 			const sourceCropWidth =
 				sourceAspect > targetAspect ? Math.round(sourceHeight * targetAspect) : sourceWidth;
 			const sourceCropHeight =
@@ -1455,14 +1448,18 @@ export class FrameRenderer {
 				drawRect.y,
 				drawRect.width,
 				drawRect.height,
-				shape,
+				drawRect.maskShape ?? this.config.webcamMaskShape ?? "rectangle",
 				drawRect.borderRadius,
 			);
-			if (preset.shadow) {
+			// The drop shadow belongs to the floating bubble, so it recedes with it: at
+			// full screen the camera is the frame and nothing may frame it. Zero blur and
+			// zero offset leave the shadow exactly under the opaque camera, invisible.
+			const shadowFade = 1 - cameraFullProgress;
+			if (preset.shadow && shadowFade > 0) {
 				fgCtx.shadowColor = preset.shadow.color;
-				fgCtx.shadowBlur = preset.shadow.blur;
-				fgCtx.shadowOffsetX = preset.shadow.offsetX;
-				fgCtx.shadowOffsetY = preset.shadow.offsetY;
+				fgCtx.shadowBlur = preset.shadow.blur * shadowFade;
+				fgCtx.shadowOffsetX = preset.shadow.offsetX * shadowFade;
+				fgCtx.shadowOffsetY = preset.shadow.offsetY * shadowFade;
 			}
 			fgCtx.fillStyle = "#000000";
 			fgCtx.fill();

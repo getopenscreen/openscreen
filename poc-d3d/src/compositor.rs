@@ -1462,35 +1462,17 @@ impl Compositor {
             fit_cam_aspect(scale_corner_br(pp.webcam.dst, webcam_size_scale_prev))
         };
 
-        // Full Camera : la webcam grandit pour couvrir (presque) tout le cadre, en conservant
-        // SON ratio actuel (pas celui du cadre) — parité `computeCameraFullscreenTargetRect` (TS) :
-        // marge = 2.5% du plus petit côté du cadre, ajustée pour tenir dans les bornes.
+        // Full Camera : la caméra PREND le cadre — parité `computeCameraFullscreenRect` (TS).
+        // La cible est exactement [0,0,1,1] : pas de marge, pas de padding, pas d'arrondi, et
+        // plus rien de la composition (fond, écran, ombre) derrière. Le rect change de ratio en
+        // chemin, mais `cover_crop_uv` (plus bas) dérive la coupe source du ratio RÉEL de la
+        // boîte à chaque frame : la caméra n'est donc jamais étirée pendant l'animation.
         let fullscreen_dst = |dst: [f32; 4], progress: f32| -> [f32; 4] {
             if progress <= 0.0 {
                 return dst;
             }
-            let margin_px = self.rw().min(self.rh()) * 0.025;
-            let bounds_w = (self.rw() - margin_px * 2.0).max(0.0);
-            let bounds_h = (self.rh() - margin_px * 2.0).max(0.0);
-            let cur_w_px = dst[2] * self.rw();
-            let cur_h_px = dst[3] * self.rh();
-            let aspect = if cur_h_px > 0.0 { cur_w_px / cur_h_px } else { 1.0 };
-            let (mut full_w, mut full_h) = (bounds_w, bounds_w / aspect);
-            if full_h > bounds_h {
-                full_h = bounds_h;
-                full_w = full_h * aspect;
-            }
-            let full_x = margin_px + (bounds_w - full_w) * 0.5;
-            let full_y = margin_px + (bounds_h - full_h) * 0.5;
-            let cur_x_px = dst[0] * self.rw();
-            let cur_y_px = dst[1] * self.rh();
             let lerp = |a: f32, b: f32| a + (b - a) * progress;
-            [
-                lerp(cur_x_px, full_x) / self.rw(),
-                lerp(cur_y_px, full_y) / self.rh(),
-                lerp(cur_w_px, full_w) / self.rw(),
-                lerp(cur_h_px, full_h) / self.rh(),
-            ]
+            [lerp(dst[0], 0.0), lerp(dst[1], 0.0), lerp(dst[2], 1.0), lerp(dst[3], 1.0)]
         };
         w_dst = fullscreen_dst(w_dst, cam_progress);
         w_dst_prev = fullscreen_dst(w_dst_prev, cam_progress_prev);
@@ -1530,11 +1512,18 @@ impl Compositor {
         // ratio de sortie.
         let w_px_final = w_px;
         let w_min_final = w_px_final[0].min(w_px_final[1]);
-        let w_radius = match lp.webcam_shape {
-            1 => w_min_final * 0.5,  // circle
-            3 => w_min_final * 0.3,  // rounded (nettement plus arrondi)
-            _ => w_min_final * 0.12, // rectangle / square → léger arrondi (identique)
-        };
+        // Full Camera dissout la forme en même temps qu'elle prend le cadre : le rayon fond
+        // vers 0 avec `cam_progress`, donc le cercle devient un rect à coins de plus en plus
+        // francs puis un plein cadre net — aucun masque ne survit au plein écran (parité
+        // `computeCameraFullscreenRect`, qui ramène `maskShape` à "rectangle" et lerpe le
+        // rayon vers 0 pour exactement la même raison).
+        let shape_fade = (1.0 - cam_progress).clamp(0.0, 1.0);
+        let w_radius = shape_fade
+            * match lp.webcam_shape {
+                1 => w_min_final * 0.5,  // circle
+                3 => w_min_final * 0.3,  // rounded (nettement plus arrondi)
+                _ => w_min_final * 0.12, // rectangle / square → léger arrondi (identique)
+            };
 
         self.begin([0.0, 0.0, 0.0, 1.0]);
 
@@ -1834,8 +1823,11 @@ impl Compositor {
         // miroir = échanger les bornes u du rect source (flip horizontal).
         let (u0, u1) = if lp.webcam_mirror { (su1, su0) } else { (su0, su1) };
         if lp.has_webcam {
-            if cfg.shadow {
-                self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], 0.5 * lp.shadow_scale);
+            // L'ombre portée appartient à la bulle flottante : elle se retire avec elle
+            // (`shape_fade`), pour qu'au plein écran plus rien n'encadre la caméra.
+            if cfg.shadow && shape_fade > 0.0 {
+                let strength = 0.5 * lp.shadow_scale * shape_fade;
+                self.draw_shadow(w_dst, w_px, w_radius, 32.0, [0.0, 12.0], strength);
             }
             self.draw_video(
                 &LayerCB {

@@ -276,18 +276,11 @@ export function V4Timeline({
 	// them instead means the user picks a shape explicitly, and what gets stored is a concrete
 	// "W:H" token that no longer moves when the clip list changes.
 	const nativeFormats = useMemo(() => (document ? collectNativeFormats(document) : []), [document]);
-	// Common case (every clip shares one format): no separate section, just a badge on the preset
-	// that already matches — no extra row, no extra decision. Only shapes with no preset
-	// equivalent (an ultrawide "64:27", an odd capture size) need a row of their own.
-	const nativeByToken = useMemo(
-		() => new Map(nativeFormats.map((f) => [f.token, f])),
-		[nativeFormats],
-	);
-	const unlistedNativeFormats = useMemo(
-		() =>
-			nativeFormats.filter((f) => !(ASPECT_RATIO_PRESETS as readonly string[]).includes(f.token)),
-		[nativeFormats],
-	);
+	// The ORIGINAL section lists every distinct shape actually on the timeline (deduplicated by
+	// ratio), so the user sees what their footage is — including shapes that also happen to match a
+	// preset. A preset row and its matching Original row select the same token; the preset section
+	// stays a pure list of fixed choices, and "which shapes are my clips" lives solely in ORIGINAL
+	// (no more per-preset badge, which split that one answer across two places).
 	const timelineIsMixed = nativeFormats.length > 1;
 	// A project saved before the shapes were enumerated still stores "native". Resolve it to the
 	// shape it currently means so the menu highlights a real row (and the button names a real
@@ -1132,35 +1125,25 @@ export function V4Timeline({
 									className={styles.recMenu}
 									style={{ position: "relative", bottom: "auto", width: 210 }}
 								>
-									{ASPECT_RATIO_PRESETS.map((ratio) => {
-										const native = nativeByToken.get(ratio);
-										return (
-											<button
-												type="button"
-												key={ratio}
-												className={`${styles.recMenuRow}${
-													ratio === activeToken ? ` ${styles.active}` : ""
-												}`}
-												onClick={() => {
-													void setSettings({ aspectRatio: ratio });
-													setAspectMenuOpen(false);
-												}}
-											>
-												{ratio}
-												{native ? (
-													<span style={nativeBadgeStyle}>
-														{timelineIsMixed
-															? `${t("toolbar.original")} · ${native.clipCount}`
-															: t("toolbar.original")}
-													</span>
-												) : null}
-											</button>
-										);
-									})}
-									{unlistedNativeFormats.length > 0 ? (
+									{ASPECT_RATIO_PRESETS.map((ratio) => (
+										<button
+											type="button"
+											key={ratio}
+											className={`${styles.recMenuRow}${
+												ratio === activeToken ? ` ${styles.active}` : ""
+											}`}
+											onClick={() => {
+												void setSettings({ aspectRatio: ratio });
+												setAspectMenuOpen(false);
+											}}
+										>
+											{ratio}
+										</button>
+									))}
+									{nativeFormats.length > 0 ? (
 										<>
 											<div style={aspectSectionLabelStyle}>{t("toolbar.original")}</div>
-											{unlistedNativeFormats.map((format) => (
+											{nativeFormats.map((format) => (
 												<button
 													type="button"
 													key={format.token}

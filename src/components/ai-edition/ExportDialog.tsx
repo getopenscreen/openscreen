@@ -11,7 +11,6 @@
 import { Download, FileVideo, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
 	collectEffectiveClipDims,
@@ -27,7 +26,6 @@ import {
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
-import { probeVideoDimensions } from "@/lib/ai-edition/timeline/duration";
 import {
 	type ExportFormat,
 	type ExportProgress,
@@ -137,36 +135,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	//  streams into a normal `<canvas>` inside the DOM — CSS z-index handles stacking naturally
 	//  and there's no OS window to hide. The hide/show dance is now dead code; removed.)
 
-	// Fallback for assets whose `video` dims were never probed (nothing populated them for most
-	// existing recordings until this was fixed at the source — see `probeAndCorrectClip`).
-	// Without this, `referenceSource`/`smallestSource` below silently find nothing and the
-	// quality tiers show no size/badges at all rather than a wrong one.
-	const [probedAssetDims, setProbedAssetDims] = useState<
-		Record<string, { width: number; height: number }>
-	>({});
-	useEffect(() => {
-		if (!open || !document) return;
-		let cancelled = false;
-		const usedAssetIds = new Set(document.timeline.clips.map((c) => c.assetId));
-		const missing = document.assets.filter(
-			(a) =>
-				usedAssetIds.has(a.id) &&
-				(!a.video || a.video.width === 0 || a.video.height === 0) &&
-				a.originalPath &&
-				!probedAssetDims[a.id],
-		);
-		if (missing.length === 0) return;
-		(async () => {
-			for (const a of missing) {
-				const dims = await probeVideoDimensions(toFileUrl(a.originalPath));
-				if (cancelled) return;
-				if (dims) setProbedAssetDims((prev) => ({ ...prev, [a.id]: dims }));
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [open, document, probedAssetDims]);
+	// Source dimensions come straight off `asset.video`. This dialog used to probe missing ones
+	// into local state as a fallback for recordings that were never probed; `useTimeline` now
+	// backfills them on editor load (before this dialog can open) and persists them, so every
+	// consumer reads the one populated source instead of each re-probing on its own.
 	const primaryAsset = useMemo(
 		() =>
 			document
@@ -181,8 +153,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	// reduce+fallback loops. Crop is per-clip, so this must iterate clips, not assets: the
 	// same recording can be cropped differently in two different clips on the timeline.
 	const effectiveClipDims = useMemo<Dims[]>(
-		() => (document ? collectEffectiveClipDims(document, probedAssetDims) : []),
-		[document, probedAssetDims],
+		() => (document ? collectEffectiveClipDims(document) : []),
+		[document],
 	);
 	// Largest clip's true (cropped) footprint — used only by the GIF export path below (its
 	// own, separate sizing option), which sizes to the best available footage the same way
@@ -213,9 +185,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	// this dialog can't drift from the compositor if the storage ever moves. `resolveAspectRatioValue`
 	// owns the legacy "native" case (uncropped reference asset), previously hand-rolled here.
 	const EXPORT_ASPECT = useMemo(
-		() =>
-			resolveAspectRatioValue(document, getEditorSettings(document).aspectRatio, probedAssetDims),
-		[document, probedAssetDims],
+		() => resolveAspectRatioValue(document, getEditorSettings(document).aspectRatio),
+		[document],
 	);
 	// Output dimensions the export will produce for a given tier, from the (crop-aware)
 	// SMALLEST clip on the timeline — see `smallestSource` above for why. Only "Source"

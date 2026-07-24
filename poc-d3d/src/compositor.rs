@@ -1255,23 +1255,29 @@ impl Compositor {
             .as_ref()
             .and_then(|s| s.layout.screen_rect)
             .map(|r| [r.x, r.y, r.width, r.height]);
-        let (mut p, mut pp) = match (&scene_preset, app_webcam_rect) {
-            (Some(_preset), Some(wr)) => {
-                // webcam rect résolu côté app → on s'aligne strictement. Idem pour l'écran quand
-                // l'app le fournit ; sinon il reste plein cadre (le padding slider l'insètera
-                // ensuite dans `scale_frame`).
-                let mut fp = preset_placements(_preset);
-                fp.webcam.dst = wr;
+        let (mut p, mut pp) = match &scene_preset {
+            Some(preset) => {
+                // Chaque rect résolu par l'app remplace INDÉPENDAMMENT sa contrepartie du
+                // preset ; sinon celle du preset reste (le padding slider l'insèrera ensuite
+                // dans `scale_frame`).
+                //
+                // Avant, ce match portait sur `app_webcam_rect` et le rect ÉCRAN n'était donc
+                // honoré que si un rect webcam arrivait aussi. Un layout sans caméra gardait
+                // l'écran plein cadre du preset — pendant que `fit_screen` (plus bas) coupait
+                // quand même son fit au ratio du crop, puisqu'un `app_screen_rect` était bien
+                // présent. Résultat : un clip recadré sans caméra était étiré, et aucune des
+                // deux voies ne le rattrapait. Coupler l'écran à la présence de la caméra
+                // n'avait aucune raison d'être — ce sont deux calques indépendants.
+                let mut fp = preset_placements(preset);
+                if let Some(wr) = app_webcam_rect {
+                    fp.webcam.dst = wr;
+                }
                 if let Some(sr) = app_screen_rect {
                     fp.screen.dst = sr;
                 }
                 (fp, fp) // layout statique → vélocité nulle
             }
-            (Some(preset), None) => {
-                let fp = preset_placements(preset);
-                (fp, fp)
-            }
-            (None, _) => (timeline(frame, cfg), timeline(frame - 1.0, cfg)),
+            None => (timeline(frame, cfg), timeline(frame - 1.0, cfg)),
         };
         let lp = *self.live_params.borrow();
         // Motion blur écran : quand la scène (contrat de l'app) est posée, c'est elle qui pilote

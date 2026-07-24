@@ -461,13 +461,36 @@ export function buildSceneDescription(
 	// `webcamRect` verbatim (it only scale_frame's the SCREEN by padding), so an
 	// unpadded rect here would leave the camera behind while the screen moved.
 	const paddingFit = 1 - (Math.min(100, Math.max(0, settings.padding)) / 100) * 0.4;
+	// The screen box must be fit to the CROPPED aspect ratio, not the full source
+	// frame's — the exact same rule `PreviewCanvas` states and `frameRenderer` applies.
+	// This used to be a hardcoded 1920x1080 placeholder, harmless while only
+	// `webcamRect` was consumed from this layout: the screen box merely bounded the
+	// camera slot. It became load-bearing when `screenRect` started shipping to native
+	// as a rect the compositor consumes AS-IS, "already at the crop's aspect ratio".
+	// It was not: a 30%x89% crop was handed a 16:9 box and the video stretched to fill
+	// it. Derived here from the first visible clip's real asset dimensions, matching the
+	// "unités sources du premier asset visible" convention documented just above.
+	const firstVisibleClip = visibleClips[0];
+	const firstAssetVideo = firstVisibleClip
+		? assetById.get(firstVisibleClip.assetId)?.video
+		: undefined;
+	const fullScreenSize = {
+		width: firstAssetVideo?.width || 1920,
+		height: firstAssetVideo?.height || 1080,
+	};
+	// `cropByClip` is index-aligned with `visibleClips`; `null` means the identity crop.
+	const firstCrop = cropByClip[0];
+	const croppedScreenSize = {
+		width: Math.max(1, Math.round(fullScreenSize.width * (firstCrop?.width ?? 1))),
+		height: Math.max(1, Math.round(fullScreenSize.height * (firstCrop?.height ?? 1))),
+	};
 	const computedLayout = computeCompositeLayout({
 		canvasSize: outputDims,
 		maxContentSize: {
 			width: Math.round(outputDims.width * paddingFit),
 			height: Math.round(outputDims.height * paddingFit),
 		},
-		screenSize: { width: 1920, height: 1080 },
+		screenSize: croppedScreenSize,
 		webcamSize:
 			settings.webcamLayoutPreset === "no-webcam"
 				? null

@@ -1014,3 +1014,55 @@ describe("buildSceneDescription.output", () => {
 		expect(output.height).toBe(1920);
 	});
 });
+
+// --- screenRect vs crop ------------------------------------------------------
+
+describe("buildSceneDescription.layout.screenRect", () => {
+	// `compositor.rs` consumes `layout.screenRect` AS-IS — its `fit_screen` closure skips
+	// its own crop fit precisely because the rect is documented as "already at the crop's
+	// aspect ratio". So the rect's aspect IS the contract: get it wrong and the video is
+	// stretched to fill a mis-shaped box, with nothing downstream to catch it.
+	const cropped = (crop: { x: number; y: number; width: number; height: number } | undefined) => {
+		const asset = makeAsset({
+			id: "a",
+			originalPath: "/screen.mp4",
+			video: { width: 1920, height: 1080 },
+		});
+		const clip = makeClip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 0,
+			sourceEndSec: 4,
+			timelineStartSec: 0,
+			timelineEndSec: 4,
+			...(crop ? { cropRegion: crop } : {}),
+		});
+		const scene = buildSceneDescription(makeDoc({ assets: [asset], clips: [clip] }));
+		const r = scene.layout.screenRect;
+		if (!r) throw new Error("screenRect absent");
+		// fractions of the output frame -> pixels, to compare a real aspect
+		return (r.width * scene.output.width) / (r.height * scene.output.height);
+	};
+
+	// `computeCompositeLayout` works in integer pixels, so an extreme aspect quantizes
+	// by a fraction of a percent. A RELATIVE tolerance is the meaningful check here:
+	// the failure this guards against is off by 2-3x, not by 0.1%.
+	const expectAspect = (got: number, want: number) =>
+		expect(Math.abs(got - want) / want).toBeLessThan(0.01);
+
+	it("matches the cropped source aspect, not the full frame's", () => {
+		// The reported regression: a tall narrow crop (30% x 89% of a 16:9 source) was
+		// handed a 16:9 box, so the strip was stretched ~2.8x horizontally.
+		const crop = { x: 0.44, y: 0.06, width: 0.3, height: 0.89 };
+		expectAspect(cropped(crop), (1920 * crop.width) / (1080 * crop.height));
+	});
+
+	it("keeps the full source aspect when the clip is not cropped", () => {
+		expectAspect(cropped(undefined), 1920 / 1080);
+	});
+
+	it("follows a wide letterbox crop too", () => {
+		const crop = { x: 0, y: 0.3, width: 1, height: 0.4 };
+		expectAspect(cropped(crop), (1920 * 1) / (1080 * 0.4));
+	});
+});

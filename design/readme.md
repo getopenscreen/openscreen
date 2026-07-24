@@ -125,7 +125,13 @@ Root:
 - `assets/logo-icon.png` — brand mark.
 
 `tokens/` — CSS custom properties (all reachable from `styles.css`):
-- `fonts.css` · `colors.css` · `typography.css` · `spacing.css` · `radii.css` · `elevation.css` · `base.css`
+- `fonts.css` · `colors.css` · `typography.css` · `spacing.css` · `radii.css` · `elevation.css` · `effects.css` · `base.css`
+- `v4.css` — **the vocabulary the cards and components actually use** (`--bg`, `--fg`,
+  `--font-display`, `--surface-N`, `--accent-*`, …). A verbatim re-export of the product's
+  `src/styles/design-tokens.css`, imported last so it wins the dozen names the older files
+  also declare. Re-export it after any token change upstream; `diff` the two files and only
+  the header comment should differ. Author new work against these names — the older token
+  files are legacy and largely unreferenced.
 
 `guidelines/` — foundation specimen cards (Design System tab): colors, type, spacing, radii, elevation, motion.
 

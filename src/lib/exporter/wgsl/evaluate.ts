@@ -47,6 +47,7 @@ import {
 	computeCompositeLayout,
 	lerpRect,
 	reactiveWebcamScale,
+	resolveWebcamReactiveZoom,
 	type Size,
 	type StyledRenderRect,
 	type WebcamLayoutPreset,
@@ -140,10 +141,10 @@ export function evaluateLayout(scene: EvaluateScene, hasWebcam: boolean) {
 		height: scene.videoSize.height * crop.height,
 	};
 
-	// Padding is a percentage (0-100) where 50% ~ 0.8 scale; vertical stack is
-	// full-bleed and ignores it. Same constants as the Canvas2D path, on purpose.
-	const effectivePadding = scene.webcamLayoutPreset === "vertical-stack" ? 0 : scene.padding;
-	const paddingScale = 1.0 - (effectivePadding / 100) * 0.4;
+	// Padding is a percentage (0-100) where 50% ~ 0.8 scale, applied to every preset
+	// (in the block layouts it insets the welded screen+camera block as one). Same
+	// constants as the Canvas2D path, on purpose.
+	const paddingScale = 1.0 - (scene.padding / 100) * 0.4;
 
 	const layout = computeCompositeLayout({
 		canvasSize: { width, height },
@@ -359,10 +360,9 @@ function evaluateWebcamRect(
 		return { ...r, shape };
 	}
 
-	const reactive =
-		scene.webcamReactiveZoom && scene.webcamLayoutPreset === "picture-in-picture"
-			? reactiveWebcamScale(appliedScale)
-			: 1;
+	const reactive = resolveWebcamReactiveZoom(scene.webcamLayoutPreset, scene.webcamReactiveZoom)
+		? reactiveWebcamScale(appliedScale)
+		: 1;
 	if (!(reactive < 1)) return { ...base, shape };
 
 	// Anchor the shrink to the docked corner (bottom-right by default), like the

@@ -50,6 +50,7 @@ import {
 	getWebcamLayoutPresetDefinition,
 	lerpRect,
 	reactiveWebcamScale,
+	resolveWebcamReactiveZoom,
 	type Size,
 	type StyledRenderRect,
 } from "@/lib/compositeLayout";
@@ -890,10 +891,10 @@ export class FrameRenderer {
 		const croppedVideoWidth = videoWidth * (cropEndX - cropStartX);
 		const croppedVideoHeight = videoHeight * (cropEndY - cropStartY);
 
-		// Padding is a percentage (0-100), where 50% ~ 0.8 scale.
-		// Vertical stack is full-bleed, so it ignores padding.
-		const effectivePadding = this.config.webcamLayoutPreset === "vertical-stack" ? 0 : padding;
-		const paddingScale = 1.0 - (effectivePadding / 100) * 0.4;
+		// Padding is a percentage (0-100), where 50% ~ 0.8 scale. It applies to every
+		// preset — in the block layouts it insets the welded screen+camera block as
+		// one, which is the whole point of welding them (see `computeCompositeLayout`).
+		const paddingScale = 1.0 - (padding / 100) * 0.4;
 		const viewportWidth = width * paddingScale;
 		const viewportHeight = height * paddingScale;
 		const compositeLayout = computeCompositeLayout({
@@ -1411,10 +1412,12 @@ export class FrameRenderer {
 				// Scale the PiP webcam inversely with the eased zoom, anchoring the shrink to the
 				// docked corner (bottom-right by default) like the preview, so it stays flush to the
 				// edges instead of drifting toward center.
-				const reactiveFactor =
-					this.config.webcamReactiveZoom && this.config.webcamLayoutPreset === "picture-in-picture"
-						? reactiveWebcamScale(this.animationState.appliedScale)
-						: 1;
+				const reactiveFactor = resolveWebcamReactiveZoom(
+					this.config.webcamLayoutPreset,
+					this.config.webcamReactiveZoom,
+				)
+					? reactiveWebcamScale(this.animationState.appliedScale)
+					: 1;
 				const camPos = this.config.webcamPosition;
 				const biasX = (camPos ? camPos.cx >= 0.5 : true) ? 1 : 0;
 				const biasY = (camPos ? camPos.cy >= 0.5 : true) ? 1 : 0;

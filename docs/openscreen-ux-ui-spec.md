@@ -278,7 +278,7 @@ Two columns of rounded "control surfaces":
 - **Motion Blur** — slider 0–1, step 0.01. Live numeric display.
 - **Shadow** — slider 0–1, step 0.01. `Math.round(value*100)%` numeric.
 - **Roundness** — slider 0–64 px, step 0.5. Numeric in px.
-- **Padding** — slider 0–100 %, step 1. Disabled when webcam layout is "vertical-stack".
+- **Padding** — slider 0–100 %, step 1. Applies to every webcam layout; in `dual-frame` / `vertical-stack` it insets the welded screen+camera block as one piece.
 
 All sliders commit their value when the user releases the thumb (`onValueCommit`). Some update live (`onValueChange`) — e.g. padding uses `updateState` for the live preview and `commitState` on commit.
 
@@ -288,9 +288,17 @@ Only visible if a webcam video is present.
 
 - **Preset** dropdown — `picture-in-picture` / `vertical-stack` / `dual-frame` / `no-webcam`. Some entries are filtered based on canvas aspect (e.g. vertical-stack only in portrait, dual-frame only in landscape). Switching presets also clears the saved PiP position unless the new preset is PiP.
 - **Mirror Webcam** toggle — visible when preset ≠ no-webcam.
-- **Shrink on Zoom (Reactive Webcam)** toggle + info-tooltip — only when preset = PiP.
+- **Shrink on Zoom (Reactive Webcam)** toggle + info-tooltip — only when preset = PiP. `dual-frame` / `vertical-stack` force it off and hide the control: their camera box is sized off the screen capture, so shrinking it mid-zoom would tear a hole in the block (`supportsWebcamReactiveZoom`).
 - **Camera Shape** — four small icon-buttons (rectangle / circle / square / rounded), each rendered as an SVG glyph.
 - **Webcam Size** slider — 10–50 %.
+
+`dual-frame` ("Side by side") and `vertical-stack` ("Top / bottom") weld the screen and the camera into a single block, governed by three constraints (`computeCompositeLayout`, `block` branch):
+
+1. **Screen keeps its ratio** — the screen box is always the capture's own aspect ratio, untouched.
+2. **The block is contained in the scene** — screen + gap + camera contain-fit the (padded) scene whatever its ratio, so at padding 0 the block sits flush against the two edges its own ratio makes it reach.
+3. **The camera tends toward square** — the camera shares the screen's cross-edge (same height beside it, same width under it, so they read as one solid block); its one free dimension is chosen to make the *block* match the scene's aspect ratio (perfect fill, no bars), then held within **[0.8, 1.25]** of square (`BLOCK_CAMERA_ASPECT_TOLERANCE`). So the camera fills when it can and only goes *slightly* rectangular — never a thin slice — when the scene ratio pulls it there.
+
+There is no fixed split anymore: it falls out of those three constraints and adapts to both the capture ratio and the scene ratio. When the geometry allows a near-square camera that also fills the scene, both happen at once (e.g. a 4:3 capture top/bottom in a 9:16 scene → square camera, 100 % fill). Camera Shape and Webcam Size do not apply to either preset. The single tunable is the square tolerance.
 
 The webcam bubble can also be dragged around the canvas (mouse-drag) — the position persists as `webcamPosition`.
 

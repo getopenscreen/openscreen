@@ -32,6 +32,8 @@ interface LayoutResult {
 	baseScale: number;
 	baseOffset: { x: number; y: number };
 	maskRect: RenderRect;
+	/** The painted crop rectangle before the screen mask clips cover layouts. */
+	paintedRect: RenderRect;
 	maskBorderRadius: number;
 	webcamRect: StyledRenderRect | null;
 	cropBounds: { startX: number; endX: number; startY: number; endY: number };
@@ -147,6 +149,12 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
 		baseScale: scale,
 		baseOffset: { x: spriteX, y: spriteY },
 		maskRect: compositeLayout.screenRect,
+		paintedRect: {
+			x: offsetX,
+			y: offsetY,
+			width: croppedDisplayWidth,
+			height: croppedDisplayHeight,
+		},
 		maskBorderRadius:
 			compositeLayout.screenBorderRadius ?? (compositeLayout.screenCover ? 0 : borderRadius),
 		webcamRect: compositeLayout.webcamRect,

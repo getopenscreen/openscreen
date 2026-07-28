@@ -1,6 +1,14 @@
 import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
-import { Gauge, Maximize, MessageSquare, MousePointer2, Scissors, ZoomIn } from "lucide-react";
+import {
+	Gauge,
+	Maximize,
+	MessageSquare,
+	MousePointer2,
+	Scissors,
+	Spline,
+	ZoomIn,
+} from "lucide-react";
 import { useMemo } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
@@ -17,7 +25,15 @@ interface ItemProps {
 	zoomCustomScale?: number;
 	speedValue?: number;
 	isAutoFocus?: boolean;
-	variant?: "zoom" | "camera-fullscreen" | "trim" | "annotation" | "speed" | "blur";
+	disabled?: boolean;
+	variant?:
+		| "zoom"
+		| "camera-fullscreen"
+		| "trim"
+		| "annotation"
+		| "speed"
+		| "blur"
+		| "cursor-motion";
 }
 
 // Map zoom depth to multiplier labels
@@ -50,6 +66,7 @@ export default function Item({
 	zoomCustomScale,
 	speedValue,
 	isAutoFocus = false,
+	disabled = false,
 	variant = "zoom",
 	children,
 }: ItemProps) {
@@ -57,6 +74,7 @@ export default function Item({
 	const { setNodeRef, attributes, listeners, itemStyle, itemContentStyle } = useItem({
 		id,
 		span,
+		disabled,
 		data: { rowId },
 	});
 
@@ -64,6 +82,7 @@ export default function Item({
 	const isCameraFullscreen = variant === "camera-fullscreen";
 	const isTrim = variant === "trim";
 	const isSpeed = variant === "speed";
+	const isCursorMotion = variant === "cursor-motion";
 
 	const glassClass = isZoom
 		? glassStyles.glassGreen
@@ -73,7 +92,9 @@ export default function Item({
 				? glassStyles.glassRed
 				: isSpeed
 					? glassStyles.glassAmber
-					: glassStyles.glassYellow;
+					: isCursorMotion
+						? glassStyles.glassPurple
+						: glassStyles.glassYellow;
 
 	const endCapColor = isZoom
 		? "#21916A"
@@ -83,7 +104,9 @@ export default function Item({
 				? "#ef4444"
 				: isSpeed
 					? "#d97706"
-					: "#B4A046";
+					: isCursorMotion
+						? "#8b5cf6"
+						: "#B4A046";
 
 	const timeLabel = useMemo(
 		() => `${formatMs(span.start)} – ${formatMs(span.end)}`,
@@ -108,7 +131,8 @@ export default function Item({
 				<div
 					className={cn(
 						glassClass,
-						"w-full h-full overflow-hidden flex items-center justify-center gap-1.5 cursor-grab active:cursor-grabbing relative",
+						"w-full h-full overflow-hidden flex items-center justify-center gap-1.5 relative",
+						disabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
 						isSelected && glassStyles.selected,
 					)}
 					style={{ height: 30, color: "#fff", minWidth: 24 }}
@@ -117,28 +141,32 @@ export default function Item({
 						onSelect?.();
 					}}
 				>
-					<div
-						className={cn(glassStyles.zoomEndCap, glassStyles.left)}
-						style={{
-							cursor: "col-resize",
-							pointerEvents: "auto",
-							width: 8,
-							opacity: 0.9,
-							background: endCapColor,
-						}}
-						title="Resize left"
-					/>
-					<div
-						className={cn(glassStyles.zoomEndCap, glassStyles.right)}
-						style={{
-							cursor: "col-resize",
-							pointerEvents: "auto",
-							width: 8,
-							opacity: 0.9,
-							background: endCapColor,
-						}}
-						title="Resize right"
-					/>
+					{!disabled && (
+						<>
+							<div
+								className={cn(glassStyles.zoomEndCap, glassStyles.left)}
+								style={{
+									cursor: "col-resize",
+									pointerEvents: "auto",
+									width: 8,
+									opacity: 0.9,
+									background: endCapColor,
+								}}
+								title="Resize left"
+							/>
+							<div
+								className={cn(glassStyles.zoomEndCap, glassStyles.right)}
+								style={{
+									cursor: "col-resize",
+									pointerEvents: "auto",
+									width: 8,
+									opacity: 0.9,
+									background: endCapColor,
+								}}
+								title="Resize right"
+							/>
+						</>
+					)}
 					{/* Content */}
 					<div className="relative z-10 flex min-w-0 flex-col items-center justify-center text-white/90 opacity-85 group-hover:opacity-100 transition-opacity select-none overflow-hidden px-3">
 						<div className="flex items-center gap-1.5">
@@ -176,6 +204,13 @@ export default function Item({
 									<Gauge className="w-3.5 h-3.5 shrink-0" />
 									<span className="text-[11px] font-semibold whitespace-nowrap">
 										{speedValue !== undefined ? `${speedValue}×` : t("labels.speed")}
+									</span>
+								</>
+							) : isCursorMotion ? (
+								<>
+									<Spline className="w-3.5 h-3.5 shrink-0" />
+									<span className="text-[11px] font-semibold truncate whitespace-nowrap">
+										{children}
 									</span>
 								</>
 							) : (

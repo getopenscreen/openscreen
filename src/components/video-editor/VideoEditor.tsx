@@ -34,6 +34,23 @@ import {
 	transcribeMono16kToSegments,
 	trimLeadingSilenceMono16k,
 } from "@/lib/captioning";
+import {
+	applyCursorMotionSettingsToMoveRegions,
+	buildCursorMotionSegments,
+	type CursorMotionEasing,
+	type CursorMotionPoint,
+	type CursorMotionPreset,
+	type CursorMotionRegion,
+	clampCursorMotionCycles,
+	clampCursorMotionPoint,
+	clampCursorMotionSpeed,
+	createDefaultCursorMotionControlPoint,
+	DEFAULT_CURSOR_MOTION_SPEED,
+	resolveCursorMotionClickAnchoredRange,
+	sampleCursorMotionPath,
+	splitCursorMotionRegionAtTime,
+} from "@/lib/cursor/cursorMotion";
+import { getSmoothedCursorPath } from "@/lib/cursor/cursorPathSmoothing";
 import { hasNativeCursorRecordingData } from "@/lib/cursor/nativeCursor";
 import {
 	calculateEffectiveSourceDimensions,
@@ -208,6 +225,7 @@ export default function VideoEditor() {
 
 	const {
 		zoomRegions,
+		cursorMotionRegions,
 		cameraFullscreenRegions,
 		autoZoomEnabled,
 		autoFocusAll,
@@ -247,6 +265,8 @@ export default function VideoEditor() {
 	const durationRef = useRef(duration);
 	durationRef.current = duration;
 	const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
+	const [selectedCursorMotionId, setSelectedCursorMotionId] = useState<string | null>(null);
+	const [isEditingCursorMotion, setIsEditingCursorMotion] = useState(false);
 	const [selectedCameraFullscreenId, setSelectedCameraFullscreenId] = useState<string | null>(null);
 	const [isPreviewingZoom, setIsPreviewingZoom] = useState(false);
 	const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
@@ -300,6 +320,10 @@ export default function VideoEditor() {
 			.filter((sample) => isClickInteractionType(sample.interactionType))
 			.map((sample) => sample.timeMs);
 	}, [cursorRecordingData, cursorTelemetry]);
+	const cursorMotionSamples = useMemo(
+		() => (cursorRecordingData?.samples.length ? cursorRecordingData.samples : cursorTelemetry),
+		[cursorRecordingData, cursorTelemetry],
+	);
 
 	// Cursor & motion blur visual settings (non-undoable preferences)
 	const [showCursor, setShowCursor] = useState(DEFAULT_CURSOR_SETTINGS.show);
@@ -318,6 +342,7 @@ export default function VideoEditor() {
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 
 	const nextZoomIdRef = useRef(1);
+	const nextCursorMotionIdRef = useRef(1);
 	const nextCameraFullscreenIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
@@ -332,6 +357,34 @@ export default function VideoEditor() {
 		hasNativeCursorRecordingData(cursorRecordingData);
 	const effectiveShowCursor = showCursor && hasEditableCursorRecording;
 	const showCursorSettings = hasEditableCursorRecording;
+	const cursorMotionBasePath = useMemo(
+		() => getSmoothedCursorPath(cursorRecordingData, cursorSmoothing),
+		[cursorRecordingData, cursorSmoothing],
+	);
+	const selectedCursorMotionRegion = useMemo(
+		() =>
+			selectedCursorMotionId
+				? (cursorMotionRegions.find((region) => region.id === selectedCursorMotionId) ?? null)
+				: null,
+		[cursorMotionRegions, selectedCursorMotionId],
+	);
+	const orderedCursorMotionRegions = useMemo(
+		() =>
+			[...cursorMotionRegions].sort(
+				(a, b) => a.startMs - b.startMs || a.endMs - b.endMs || a.id.localeCompare(b.id),
+			),
+		[cursorMotionRegions],
+	);
+	const selectedCursorMotionIndex = useMemo(
+		() => orderedCursorMotionRegions.findIndex((region) => region.id === selectedCursorMotionId),
+		[orderedCursorMotionRegions, selectedCursorMotionId],
+	);
+	useEffect(() => {
+		if (selectedCursorMotionId && !selectedCursorMotionRegion) {
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
+		}
+	}, [selectedCursorMotionId, selectedCursorMotionRegion]);
 	const { locale, setLocale, t: rawT } = useI18n();
 	const t = useScopedT("editor");
 	const ts = useScopedT("settings");
@@ -395,6 +448,7 @@ export default function VideoEditor() {
 			const inferredDurationMs = Math.max(
 				0,
 				...normalizedEditor.zoomRegions.map((region) => region.endMs),
+				...normalizedEditor.cursorMotionRegions.map((region) => region.endMs),
 				...normalizedEditor.cameraFullscreenRegions.map((region) => region.endMs),
 				...normalizedEditor.trimRegions.map((region) => region.endMs),
 				...normalizedEditor.speedRegions.map((region) => region.endMs),
@@ -441,6 +495,7 @@ export default function VideoEditor() {
 				padding: normalizedEditor.padding,
 				cropRegion: normalizedEditor.cropRegion,
 				zoomRegions: normalizedEditor.zoomRegions,
+				cursorMotionRegions: normalizedEditor.cursorMotionRegions,
 				cameraFullscreenRegions: normalizedEditor.cameraFullscreenRegions,
 				autoZoomEnabled: normalizedEditor.autoZoomEnabled,
 				autoFocusAll: normalizedEditor.autoFocusAll,
@@ -463,6 +518,8 @@ export default function VideoEditor() {
 			setCursorTheme(normalizedEditor.cursorTheme);
 
 			setSelectedZoomId(null);
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
 			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
 			setSelectedSpeedId(null);
@@ -472,6 +529,10 @@ export default function VideoEditor() {
 			nextZoomIdRef.current = deriveNextId(
 				"zoom",
 				normalizedEditor.zoomRegions.map((region) => region.id),
+			);
+			nextCursorMotionIdRef.current = deriveNextId(
+				"cursor-motion",
+				normalizedEditor.cursorMotionRegions.map((region) => region.id),
 			);
 			nextCameraFullscreenIdRef.current = deriveNextId(
 				"camera-fullscreen",
@@ -524,6 +585,7 @@ export default function VideoEditor() {
 			padding,
 			cropRegion,
 			zoomRegions,
+			cursorMotionRegions,
 			cameraFullscreenRegions,
 			autoZoomEnabled,
 			autoFocusAll,
@@ -556,6 +618,7 @@ export default function VideoEditor() {
 		padding,
 		cropRegion,
 		zoomRegions,
+		cursorMotionRegions,
 		cameraFullscreenRegions,
 		autoZoomEnabled,
 		autoFocusAll,
@@ -685,6 +748,7 @@ export default function VideoEditor() {
 				padding,
 				cropRegion,
 				zoomRegions,
+				cursorMotionRegions,
 				cameraFullscreenRegions,
 				autoZoomEnabled,
 				autoFocusAll,
@@ -751,6 +815,7 @@ export default function VideoEditor() {
 			padding,
 			cropRegion,
 			zoomRegions,
+			cursorMotionRegions,
 			cameraFullscreenRegions,
 			autoZoomEnabled,
 			autoFocusAll,
@@ -889,6 +954,8 @@ export default function VideoEditor() {
 		resetState();
 		// Reset non-undoable selection state.
 		setSelectedZoomId(null);
+		setSelectedCursorMotionId(null);
+		setIsEditingCursorMotion(false);
 		setSelectedCameraFullscreenId(null);
 		setSelectedTrimId(null);
 		setSelectedSpeedId(null);
@@ -907,6 +974,7 @@ export default function VideoEditor() {
 		setCursorTheme(DEFAULT_CURSOR_SETTINGS.theme);
 		// Reset region ID counters.
 		nextZoomIdRef.current = 1;
+		nextCursorMotionIdRef.current = 1;
 		nextCameraFullscreenIdRef.current = 1;
 		nextTrimIdRef.current = 1;
 		nextSpeedIdRef.current = 1;
@@ -1028,6 +1096,22 @@ export default function VideoEditor() {
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
 		if (id) {
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
+			setSelectedCameraFullscreenId(null);
+			setSelectedTrimId(null);
+			setSelectedSpeedId(null);
+			setSelectedAnnotationId(null);
+			setSelectedBlurId(null);
+		}
+	}, []);
+
+	const handleSelectCursorMotion = useCallback((id: string | null) => {
+		setSelectedCursorMotionId(id);
+		setIsEditingCursorMotion(Boolean(id));
+		if (id) {
+			videoPlaybackRef.current?.pause();
+			setSelectedZoomId(null);
 			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
 			setSelectedSpeedId(null);
@@ -1039,6 +1123,8 @@ export default function VideoEditor() {
 	const handleSelectCameraFullscreen = useCallback((id: string | null) => {
 		setSelectedCameraFullscreenId(id);
 		if (id) {
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
 			setSelectedSpeedId(null);
@@ -1050,6 +1136,8 @@ export default function VideoEditor() {
 	const handleSelectTrim = useCallback((id: string | null) => {
 		setSelectedTrimId(id);
 		if (id) {
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
 			setSelectedZoomId(null);
 			setSelectedCameraFullscreenId(null);
 			setSelectedSpeedId(null);
@@ -1061,6 +1149,8 @@ export default function VideoEditor() {
 	const handleSelectAnnotation = useCallback((id: string | null) => {
 		setSelectedAnnotationId(id);
 		if (id) {
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
 			setSelectedZoomId(null);
 			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
@@ -1072,6 +1162,8 @@ export default function VideoEditor() {
 	const handleSelectBlur = useCallback((id: string | null) => {
 		setSelectedBlurId(id);
 		if (id) {
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
 			setSelectedZoomId(null);
 			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
@@ -1103,6 +1195,258 @@ export default function VideoEditor() {
 			setSelectedBlurId(null);
 		},
 		[pushState, autoFocusAll],
+	);
+
+	const handleCursorMotionAdded = useCallback(
+		(span: Span) => {
+			const anchoredRange = resolveCursorMotionClickAnchoredRange(
+				span.start,
+				cursorClickTimestamps,
+			);
+			if (!anchoredRange) {
+				toast.error(ts("cursorMotion.noFollowingClick"));
+				return;
+			}
+			const { startMs, endMs } = anchoredRange;
+			const overlapsExisting = cursorMotionRegions.some(
+				(region) => region.endMs > startMs && region.startMs < endMs,
+			);
+			if (overlapsExisting) {
+				toast.error(ts("cursorMotion.overlapExisting"));
+				return;
+			}
+			const segments = buildCursorMotionSegments({
+				startMs,
+				endMs,
+				samples: cursorMotionSamples,
+				path: cursorMotionBasePath,
+			});
+			if (segments.length === 0) {
+				toast.error(ts("cursorMotion.noCursorData"));
+				return;
+			}
+
+			const newRegions: CursorMotionRegion[] = segments.map((segment) => ({
+				id: `cursor-motion-${nextCursorMotionIdRef.current++}`,
+				...segment,
+				preset: "recorded",
+				controlPoint: createDefaultCursorMotionControlPoint(segment.startPoint, segment.endPoint),
+				cycles: 2,
+				speed: DEFAULT_CURSOR_MOTION_SPEED,
+				easing: "ease-in-out",
+			}));
+			pushState((prev) => ({
+				cursorMotionRegions: [...prev.cursorMotionRegions, ...newRegions],
+			}));
+			handleSelectCursorMotion(newRegions[0].id);
+			toast.success(ts("cursorMotion.createdSegments", { count: String(newRegions.length) }));
+		},
+		[
+			cursorClickTimestamps,
+			cursorMotionBasePath,
+			cursorMotionRegions,
+			cursorMotionSamples,
+			handleSelectCursorMotion,
+			pushState,
+			ts,
+		],
+	);
+
+	const handleCursorMotionSplitAtPlayhead = useCallback(() => {
+		const region = selectedCursorMotionRegion;
+		if (!region) return;
+		const splitMs = Math.round(currentTime * 1000);
+		if (splitMs <= region.startMs + 1 || splitMs >= region.endMs - 1) {
+			toast.error(ts("cursorMotion.splitOutsideRegion"));
+			return;
+		}
+		const splitPoint = sampleCursorMotionPath(cursorMotionBasePath, [region], splitMs);
+		const startPoint = region.startPoint ?? cursorMotionBasePath?.sampleAt(region.startMs) ?? null;
+		const endPoint = region.endPoint ?? cursorMotionBasePath?.sampleAt(region.endMs) ?? null;
+		if (!splitPoint || !startPoint || !endPoint) {
+			toast.error(ts("cursorMotion.noCursorData"));
+			return;
+		}
+
+		const rightId = `cursor-motion-${nextCursorMotionIdRef.current++}`;
+		const split = splitCursorMotionRegionAtTime({
+			region,
+			splitMs,
+			splitPoint,
+			startPoint,
+			endPoint,
+			rightId,
+		});
+		if (!split) return;
+		const [left, right] = split;
+		pushState((prev) => ({
+			cursorMotionRegions: prev.cursorMotionRegions.flatMap((candidate) =>
+				candidate.id === region.id ? [left, right] : [candidate],
+			),
+		}));
+		handleSelectCursorMotion(rightId);
+	}, [
+		currentTime,
+		cursorMotionBasePath,
+		handleSelectCursorMotion,
+		pushState,
+		selectedCursorMotionRegion,
+		ts,
+	]);
+
+	const handleCursorMotionAutoSplitSelected = useCallback(() => {
+		const region = selectedCursorMotionRegion;
+		if (!region) return;
+		const selectedPath = {
+			sampleAt: (timeMs: number) => sampleCursorMotionPath(cursorMotionBasePath, [region], timeMs),
+		};
+		const segments = buildCursorMotionSegments({
+			startMs: region.startMs,
+			endMs: region.endMs,
+			samples: cursorMotionSamples,
+			path: selectedPath,
+		});
+		if (segments.length <= 1) {
+			toast.error(ts("cursorMotion.noSplitPoints"));
+			return;
+		}
+		const splitRegions = segments.map((segment, index) => {
+			const startPoint =
+				index === 0 ? (region.startPoint ?? segment.startPoint) : segment.startPoint;
+			const endPoint =
+				index === segments.length - 1 ? (region.endPoint ?? segment.endPoint) : segment.endPoint;
+			return {
+				...region,
+				...segment,
+				id: index === 0 ? region.id : `cursor-motion-${nextCursorMotionIdRef.current++}`,
+				startPoint,
+				endPoint,
+				startAnchorKind:
+					index === 0
+						? (region.startAnchorKind ?? segment.startAnchorKind)
+						: segment.startAnchorKind,
+				endAnchorKind:
+					index === segments.length - 1
+						? (region.endAnchorKind ?? segment.endAnchorKind)
+						: segment.endAnchorKind,
+				preset: segment.segmentKind === "hold" ? ("recorded" as const) : region.preset,
+				controlPoint: createDefaultCursorMotionControlPoint(startPoint, endPoint),
+			};
+		});
+		pushState((prev) => ({
+			cursorMotionRegions: prev.cursorMotionRegions.flatMap((candidate) =>
+				candidate.id === region.id ? splitRegions : [candidate],
+			),
+		}));
+		handleSelectCursorMotion(splitRegions[0].id);
+		toast.success(ts("cursorMotion.createdSegments", { count: String(splitRegions.length) }));
+	}, [
+		cursorMotionBasePath,
+		cursorMotionSamples,
+		handleSelectCursorMotion,
+		pushState,
+		selectedCursorMotionRegion,
+		ts,
+	]);
+
+	const updateSelectedCursorMotion = useCallback(
+		(update: (region: CursorMotionRegion) => CursorMotionRegion, checkpoint = true) => {
+			if (!selectedCursorMotionId) return;
+			const apply = checkpoint ? pushState : updateState;
+			apply((prev) => ({
+				cursorMotionRegions: prev.cursorMotionRegions.map((region) =>
+					region.id === selectedCursorMotionId ? update(region) : region,
+				),
+			}));
+		},
+		[pushState, selectedCursorMotionId, updateState],
+	);
+
+	const handleCursorMotionPresetChange = useCallback(
+		(preset: CursorMotionPreset) => {
+			updateSelectedCursorMotion((region) => ({ ...region, preset }));
+		},
+		[updateSelectedCursorMotion],
+	);
+
+	const handleCursorMotionEasingChange = useCallback(
+		(easing: CursorMotionEasing) => {
+			updateSelectedCursorMotion((region) => ({ ...region, easing }));
+		},
+		[updateSelectedCursorMotion],
+	);
+
+	const handleCursorMotionCyclesChange = useCallback(
+		(cycles: number) => {
+			updateSelectedCursorMotion(
+				(region) => ({ ...region, cycles: clampCursorMotionCycles(cycles) }),
+				false,
+			);
+		},
+		[updateSelectedCursorMotion],
+	);
+
+	const handleCursorMotionSpeedChange = useCallback(
+		(speed: number, checkpoint = false) => {
+			updateSelectedCursorMotion(
+				(region) => ({ ...region, speed: clampCursorMotionSpeed(speed) }),
+				checkpoint,
+			);
+		},
+		[updateSelectedCursorMotion],
+	);
+
+	const handleCursorMotionApplyToAllMoves = useCallback(() => {
+		const source = selectedCursorMotionRegion;
+		if (!source) return;
+		pushState((prev) => ({
+			cursorMotionRegions: applyCursorMotionSettingsToMoveRegions(prev.cursorMotionRegions, source),
+		}));
+		toast.success(ts("cursorMotion.appliedToAllMoves"));
+	}, [pushState, selectedCursorMotionRegion, ts]);
+
+	const handleCursorMotionNavigate = useCallback(
+		(direction: -1 | 1) => {
+			if (selectedCursorMotionIndex < 0) return;
+			const target = orderedCursorMotionRegions[selectedCursorMotionIndex + direction];
+			if (!target) return;
+			setCurrentTime(target.startMs / 1000);
+			handleSelectCursorMotion(target.id);
+		},
+		[handleSelectCursorMotion, orderedCursorMotionRegions, selectedCursorMotionIndex],
+	);
+
+	const handleCursorMotionControlPointChange = useCallback(
+		(_id: string, point: CursorMotionPoint) => {
+			updateSelectedCursorMotion(
+				(region) => ({ ...region, controlPoint: clampCursorMotionPoint(point) }),
+				false,
+			);
+		},
+		[updateSelectedCursorMotion],
+	);
+
+	const handleCursorMotionCommit = useCallback(() => {
+		commitState();
+	}, [commitState]);
+
+	const handleCursorMotionEditingChange = useCallback((editing: boolean) => {
+		setIsEditingCursorMotion(editing);
+		if (editing) {
+			videoPlaybackRef.current?.pause();
+		}
+	}, []);
+
+	const handleCursorMotionDelete = useCallback(
+		(id: string) => {
+			pushState((prev) => ({
+				cursorMotionRegions: prev.cursorMotionRegions.filter((region) => region.id !== id),
+			}));
+			if (selectedCursorMotionId === id) {
+				handleSelectCursorMotion(null);
+			}
+		},
+		[handleSelectCursorMotion, pushState, selectedCursorMotionId],
 	);
 
 	const handleCameraFullscreenAdded = useCallback(
@@ -1409,6 +1753,8 @@ export default function VideoEditor() {
 	const handleSelectSpeed = useCallback((id: string | null) => {
 		setSelectedSpeedId(id);
 		if (id) {
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
 			setSelectedZoomId(null);
 			setSelectedCameraFullscreenId(null);
 			setSelectedTrimId(null);
@@ -1430,6 +1776,8 @@ export default function VideoEditor() {
 				speedRegions: [...prev.speedRegions, newRegion],
 			}));
 			setSelectedSpeedId(id);
+			setSelectedCursorMotionId(null);
+			setIsEditingCursorMotion(false);
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
@@ -2266,6 +2614,7 @@ export default function VideoEditor() {
 						cursorRecordingData,
 						cursorScale: effectiveShowCursor ? cursorSize : 0,
 						cursorSmoothing,
+						cursorMotionRegions,
 						cursorMotionBlur,
 						cursorClickBounce,
 						cursorClipToBounds,
@@ -2361,6 +2710,7 @@ export default function VideoEditor() {
 						cursorRecordingData,
 						cursorScale: effectiveShowCursor ? cursorSize : 0,
 						cursorSmoothing,
+						cursorMotionRegions,
 						cursorMotionBlur,
 						cursorClickBounce,
 						cursorClipToBounds,
@@ -2483,6 +2833,7 @@ export default function VideoEditor() {
 			effectiveShowCursor,
 			cursorSize,
 			cursorSmoothing,
+			cursorMotionRegions,
 			cursorMotionBlur,
 			cursorClickBounce,
 			cursorClipToBounds,
@@ -2984,7 +3335,10 @@ export default function VideoEditor() {
 													onDurationChange={setDuration}
 													onTimeUpdate={setCurrentTime}
 													currentTime={currentTime}
-													onPlayStateChange={setIsPlaying}
+													onPlayStateChange={(playing) => {
+														setIsPlaying(playing);
+														if (playing) setIsEditingCursorMotion(false);
+													}}
 													onError={setError}
 													wallpaper={wallpaper}
 													zoomRegions={zoomRegions}
@@ -3021,6 +3375,11 @@ export default function VideoEditor() {
 													showCursor={effectiveShowCursor}
 													cursorSize={cursorSize}
 													cursorSmoothing={cursorSmoothing}
+													cursorMotionRegions={cursorMotionRegions}
+													selectedCursorMotionId={selectedCursorMotionId}
+													isEditingCursorMotion={isEditingCursorMotion}
+													onCursorMotionControlPointChange={handleCursorMotionControlPointChange}
+													onCursorMotionControlPointCommit={handleCursorMotionCommit}
 													cursorMotionBlur={cursorMotionBlur}
 													cursorClickBounce={cursorClickBounce}
 													cursorClipToBounds={cursorClipToBounds}
@@ -3175,6 +3534,8 @@ export default function VideoEditor() {
 											setSelectedZoomId(null);
 											setSelectedTrimId(null);
 											setSelectedSpeedId(null);
+											setSelectedCursorMotionId(null);
+											setIsEditingCursorMotion(false);
 										}}
 										selectedAnnotationId={selectedAnnotationId}
 										annotationRegions={annotationOnlyRegions}
@@ -3197,6 +3558,32 @@ export default function VideoEditor() {
 										}
 										onSpeedChange={handleSpeedChange}
 										onSpeedDelete={handleSpeedDelete}
+										selectedCursorMotionRegion={selectedCursorMotionRegion}
+										isEditingCursorMotion={isEditingCursorMotion}
+										onCursorMotionEditingChange={handleCursorMotionEditingChange}
+										onCursorMotionPresetChange={handleCursorMotionPresetChange}
+										onCursorMotionEasingChange={handleCursorMotionEasingChange}
+										onCursorMotionCyclesChange={handleCursorMotionCyclesChange}
+										onCursorMotionSpeedChange={handleCursorMotionSpeedChange}
+										onCursorMotionCommit={handleCursorMotionCommit}
+										cursorMotionSectionIndex={selectedCursorMotionIndex + 1}
+										cursorMotionSectionCount={orderedCursorMotionRegions.length}
+										canSelectPreviousCursorMotion={selectedCursorMotionIndex > 0}
+										canSelectNextCursorMotion={
+											selectedCursorMotionIndex >= 0 &&
+											selectedCursorMotionIndex < orderedCursorMotionRegions.length - 1
+										}
+										onSelectPreviousCursorMotion={() => handleCursorMotionNavigate(-1)}
+										onSelectNextCursorMotion={() => handleCursorMotionNavigate(1)}
+										onCursorMotionApplyToAllMoves={handleCursorMotionApplyToAllMoves}
+										canSplitCursorMotion={Boolean(
+											selectedCursorMotionRegion &&
+												Math.round(currentTime * 1000) > selectedCursorMotionRegion.startMs + 1 &&
+												Math.round(currentTime * 1000) < selectedCursorMotionRegion.endMs - 1,
+										)}
+										onCursorMotionSplit={handleCursorMotionSplitAtPlayhead}
+										onCursorMotionAutoSplit={handleCursorMotionAutoSplitSelected}
+										onCursorMotionDelete={handleCursorMotionDelete}
 										unsavedExport={unsavedExport}
 										onSaveUnsavedExport={handleSaveUnsavedExport}
 										onSaveDiagnostic={handleSaveDiagnostic}
@@ -3264,6 +3651,11 @@ export default function VideoEditor() {
 									onSpeedDelete={handleSpeedDelete}
 									selectedSpeedId={selectedSpeedId}
 									onSelectSpeed={handleSelectSpeed}
+									cursorMotionRegions={cursorMotionRegions}
+									onCursorMotionAdded={handleCursorMotionAdded}
+									onCursorMotionDelete={handleCursorMotionDelete}
+									selectedCursorMotionId={selectedCursorMotionId}
+									onSelectCursorMotion={handleSelectCursorMotion}
 									annotationRegions={annotationOnlyRegions}
 									onAnnotationAdded={handleAnnotationAdded}
 									onAnnotationSpanChange={handleAnnotationSpanChange}

@@ -1,5 +1,6 @@
 {
 	"buttons": {
+		"addCursorMotion": "Auto-split cursor motion at stops and clicks",
 		"addZoom": "Добавить масштабирование (Z)",
 		"suggestZooms": "Предложить масштабирование на основе курсора",
 		"addTrim": "Добавить обрезку (T)",
@@ -9,12 +10,27 @@
 		"addCameraFullscreen": "Добавить камеру на весь экран (C)"
 	},
 	"hints": {
+		"pressCursorMotion": "Auto-split cursor motion after the playhead into editable stop/click sections",
 		"pressZoom": "Нажмите Z для добавления масштабирования",
 		"pressTrim": "Нажмите T для добавления обрезки",
 		"pressAnnotation": "Нажмите A для добавления аннотации",
 		"pressBlur": "Нажмите B для добавления области размытия",
 		"pressSpeed": "Нажмите S для изменения скорости",
 		"pressCameraFullscreen": "Нажмите C, чтобы добавить сегмент камеры на весь экран"
+	},
+	"cursorMotion": {
+		"segmentKinds": {
+			"move": "Move",
+			"hold": "Hold"
+		},
+		"presets": {
+			"recorded": "Recorded",
+			"straight": "Straight",
+			"arc": "Arc",
+			"wave": "Wave",
+			"loop": "Loop",
+			"overshoot": "Overshoot"
+		}
 	},
 	"labels": {
 		"pan": "Панорамирование",

@@ -9,6 +9,7 @@ import type {
 	WebcamSizePreset,
 	ZoomRegion,
 } from "@/components/video-editor/types";
+import type { CursorMotionRegion } from "@/lib/cursor/cursorMotion";
 import { BackgroundLoadError } from "@/lib/wallpaper";
 import type { CursorRecordingData } from "@/native/contracts";
 import { getPlatform } from "@/utils/platformUtils";
@@ -55,6 +56,7 @@ interface GifExporterConfig {
 	cursorRecordingData?: CursorRecordingData | null;
 	cursorScale?: number;
 	cursorSmoothing?: number;
+	cursorMotionRegions?: CursorMotionRegion[];
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
 	cursorClipToBounds?: boolean;
@@ -164,6 +166,7 @@ export class GifExporter {
 				cursorRecordingData: this.config.cursorRecordingData,
 				cursorScale: this.config.cursorScale,
 				cursorSmoothing: this.config.cursorSmoothing,
+				cursorMotionRegions: this.config.cursorMotionRegions,
 				cursorMotionBlur: this.config.cursorMotionBlur,
 				cursorClickBounce: this.config.cursorClickBounce,
 				cursorClipToBounds: this.config.cursorClipToBounds,

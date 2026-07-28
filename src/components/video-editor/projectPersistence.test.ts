@@ -23,7 +23,7 @@ describe("projectPersistence media compatibility", () => {
 		});
 	});
 
-	it("creates version 2 projects with explicit media", () => {
+	it("creates version 3 projects with explicit media", () => {
 		const project = createProjectData(
 			{
 				screenVideoPath: "/tmp/screen.webm",
@@ -61,6 +61,66 @@ describe("projectPersistence media compatibility", () => {
 			webcamVideoPath: "/tmp/webcam.webm",
 		});
 		expect(validateProjectData(project)).toBe(true);
+	});
+
+	it("normalizes cursor motion choreography safely", () => {
+		const editor = normalizeProjectEditor({
+			cursorMotionRegions: [
+				{
+					id: "cursor-motion-1",
+					startMs: 900,
+					endMs: 100,
+					startPoint: { cx: -2, cy: 0.4 },
+					endPoint: { cx: 0.8, cy: 4 },
+					startAnchorKind: "rest",
+					endAnchorKind: "click",
+					segmentKind: "hold",
+					preset: "wave",
+					controlPoint: { cx: 2, cy: -1 },
+					cycles: 99,
+					speed: 99,
+					easing: "ease-in-out",
+				},
+				{
+					id: "cursor-motion-2",
+					startMs: 0,
+					endMs: 500,
+					startAnchorKind: "invalid" as never,
+					endAnchorKind: "invalid" as never,
+					segmentKind: "invalid" as never,
+					preset: "invalid" as never,
+					controlPoint: { cx: Number.NaN, cy: 0.25 },
+					cycles: Number.NaN,
+					speed: Number.NaN,
+					easing: "invalid" as never,
+				},
+			],
+		});
+
+		expect(editor.cursorMotionRegions[0]).toMatchObject({
+			startMs: 100,
+			endMs: 900,
+			startPoint: { cx: 0, cy: 0.4 },
+			endPoint: { cx: 0.8, cy: 1 },
+			startAnchorKind: "rest",
+			endAnchorKind: "click",
+			segmentKind: "hold",
+			preset: "wave",
+			controlPoint: { cx: 1, cy: 0 },
+			cycles: 6,
+			speed: 4,
+			easing: "ease-in-out",
+		});
+		expect(editor.cursorMotionRegions[1]).toMatchObject({
+			startAnchorKind: "manual",
+			endAnchorKind: "click",
+			segmentKind: "move",
+			preset: "recorded",
+			controlPoint: { cx: 0.5, cy: 0.25 },
+			cycles: 1,
+			speed: 1,
+			easing: "ease-in-out",
+		});
 	});
 
 	it("normalizes webcam mask shape values safely", () => {

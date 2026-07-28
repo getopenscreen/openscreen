@@ -138,6 +138,34 @@
 	z-index: 10;
 }
 
+.glassPurple {
+	position: relative;
+	border-radius: 10px;
+	-corner-smoothing: antialiased;
+	background: linear-gradient(180deg, rgba(139, 92, 246, 0.3), rgba(91, 33, 182, 0.2));
+	border: 1px solid rgba(167, 139, 250, 0.42);
+	box-shadow:
+		0 1px 0 rgba(255, 255, 255, 0.1) inset,
+		0 8px 22px rgba(0, 0, 0, 0.22);
+	margin: 3px 0;
+	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glassPurple:hover {
+	background: linear-gradient(180deg, rgba(139, 92, 246, 0.42), rgba(91, 33, 182, 0.28));
+	border-color: rgba(196, 181, 253, 0.72);
+}
+
+.glassPurple.selected {
+	background: linear-gradient(180deg, rgba(139, 92, 246, 0.55), rgba(91, 33, 182, 0.38));
+	border-color: #a78bfa;
+	box-shadow:
+		0 0 0 1px rgba(167, 139, 250, 0.95),
+		0 0 0 4px rgba(139, 92, 246, 0.16),
+		0 12px 26px rgba(0, 0, 0, 0.28);
+	z-index: 10;
+}
+
 .zoomEndCap {
 	position: absolute;
 	top: 0;
@@ -160,7 +188,9 @@
 .glassAmber:hover .zoomEndCap,
 .glassAmber.selected .zoomEndCap,
 .glassBlue:hover .zoomEndCap,
-.glassBlue.selected .zoomEndCap {
+.glassBlue.selected .zoomEndCap,
+.glassPurple:hover .zoomEndCap,
+.glassPurple.selected .zoomEndCap {
 	opacity: 1;
 }
 

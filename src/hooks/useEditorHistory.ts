@@ -21,12 +21,14 @@ import {
 	DEFAULT_WEBCAM_MIRRORED,
 	DEFAULT_WEBCAM_REACTIVE_ZOOM,
 } from "@/components/video-editor/types";
+import type { CursorMotionRegion } from "@/lib/cursor/cursorMotion";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
 
 // Undoable state. Selection IDs are excluded, since undoing a selection change
 // would feel surprising.
 export interface EditorState {
 	zoomRegions: ZoomRegion[];
+	cursorMotionRegions: CursorMotionRegion[];
 	cameraFullscreenRegions: CameraFullscreenRegion[];
 	/** Magic-wand auto-zoom toggle. When on, fresh recordings get suggested zooms. */
 	autoZoomEnabled: boolean;
@@ -55,6 +57,7 @@ export interface EditorState {
 
 export const INITIAL_EDITOR_STATE: EditorState = {
 	zoomRegions: [],
+	cursorMotionRegions: [],
 	cameraFullscreenRegions: [],
 	autoZoomEnabled: true,
 	autoFocusAll: false,

@@ -53,6 +53,7 @@ import {
 	type Size,
 	type StyledRenderRect,
 } from "@/lib/compositeLayout";
+import { type CursorMotionRegion, sampleCursorMotionPath } from "@/lib/cursor/cursorMotion";
 import { getSmoothedCursorPath } from "@/lib/cursor/cursorPathSmoothing";
 import {
 	createNativeCursorMotionBlurState,
@@ -93,6 +94,7 @@ interface FrameRenderConfig {
 	cursorRecordingData?: CursorRecordingData | null;
 	cursorScale?: number;
 	cursorSmoothing?: number;
+	cursorMotionRegions?: CursorMotionRegion[];
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
 	cursorClipToBounds?: boolean;
@@ -571,10 +573,11 @@ export class FrameRenderer {
 		}
 		// Position comes from the precomputed smoothed path (deterministic, matches preview);
 		// the frame still supplies the cursor image, type, and click timing.
-		const smoothedPos = getSmoothedCursorPath(
-			this.config.cursorRecordingData,
-			this.config.cursorSmoothing ?? 0,
-		)?.sampleAt(timeMs);
+		const smoothedPos = sampleCursorMotionPath(
+			getSmoothedCursorPath(this.config.cursorRecordingData, this.config.cursorSmoothing ?? 0),
+			this.config.cursorMotionRegions ?? [],
+			timeMs,
+		);
 		const displaySample = smoothedPos
 			? { ...activeNativeCursor.sample, cx: smoothedPos.cx, cy: smoothedPos.cy }
 			: activeNativeCursor.sample;

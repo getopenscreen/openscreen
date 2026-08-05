@@ -84,6 +84,22 @@ Diagnosing a suspected stale addon: serde embeds its field-name literals in the 
 
 The default electron-builder target is NSIS, with an assisted installer that allows users to change the installation directory. `npm run build:win:store` explicitly selects the configured `appx` target for Microsoft Store packaging. The AppX identity, publisher, capabilities, and Store languages come from `electron-builder.json5`. Release CI builds and retains both the NSIS installer and AppX package, although the GitHub release publisher currently downloads only the `openscreen-windows` NSIS artifact.
 
+#### Neither Windows artifact is signed
+
+Unlike macOS, no Windows signing is configured anywhere in the repo. Both CI artifacts come out unsigned — confirmed by `Get-AuthenticodeSignature` on the 1.8.0 build:
+
+| Artifact | Signature |
+|---|---|
+| `Openscreen.Setup.1.8.0.exe` | `NotSigned` |
+| `Openscreen.Setup.1.8.0.appx` | `NotSigned` |
+
+That the AppX is unsigned is not a defect: Microsoft signs Store submissions during certification, and the signed copy exists only in the Store. It is never handed back, so it cannot be redistributed. Two consequences worth knowing before anyone tries to "just ship the appx instead":
+
+- **The AppX is not a drop-in replacement for the NSIS installer.** Windows runs an unsigned `.exe` after a SmartScreen prompt, but refuses outright to install an unsigned MSIX/AppX — sideloading requires a signature the machine already trusts. Swapping one for the other makes distribution strictly worse.
+- **SmartScreen reputation is per file hash while the installer is unsigned**, so every release starts from zero and users meet the interstitial again on each new version. Signing would attach reputation to the publisher identity instead, and it would accumulate across releases.
+
+Buying a certificate is the fix for the `.exe`, and it stays a live option (roughly €120/year for a cloud-HSM certificate an individual can buy, since the 2023 baseline requirements forbid keeping the key in a file). It was deliberately deferred: the Store route is already signed and already paid for through the developer account, so the README recommends it first and treats the `.exe` as the documented fallback.
+
 ### macOS
 
 > **The macOS job is currently disabled** (`if: false` in `build.yml`) because 1.8.0 ships Windows-only. That flag is release-branch-only and must not reach `main` when promoting, or every later release becomes Windows-only too. Until it is lifted, the macOS packaging path — including the compositor and ffmpeg steps described above — is exercised only by `npm run build:mac` locally.

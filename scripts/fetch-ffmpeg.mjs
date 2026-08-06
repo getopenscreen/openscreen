@@ -111,6 +111,10 @@ const SHARED_PINNED = {
 		asset: "ffmpeg-n8.1.2-32-gcfa62de001-linux64-lgpl-shared-8.1.tar.xz",
 		sha256: "74ef679aa7e4f8cdbd5193da3d99bf220a679f64d35daf078397081b789f150e",
 	},
+	"linux-arm64": {
+		asset: "ffmpeg-n8.1.2-32-gcfa62de001-linuxarm64-lgpl-shared-8.1.tar.xz",
+		sha256: "d1d632deac102b865d43ef3c1eca0d0f8c0df148b784327d1d381a39159f8285",
+	},
 	"win32-x64": {
 		asset: "ffmpeg-n8.1.2-32-gcfa62de001-win64-lgpl-shared-8.1.zip",
 		sha256: "23429f940316ea92e376f6946c0a1f1b9043c930f3bc068228461d65ae24f8b8",

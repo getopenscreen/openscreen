@@ -439,8 +439,11 @@ jobs:
       - name: Setup Node.js
         uses: ./.github/actions/setup
 
-      - name: Install pacman build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+      - name: Install pacman and rpm build dependencies
+        # libarchive-tools -> bsdtar, for the pacman target. rpm -> rpmbuild,
+        # which electron-builder shells out to for the rpm target; without it
+        # the Linux build fails at the packaging step, not at config parse.
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm
 
       - name: Stage whisper-stt binaries
         shell: bash
@@ -460,6 +463,7 @@ jobs:
             release/**/*.zsync
             release/**/*.deb
             release/**/*.pacman
+            release/**/*.rpm
           if-no-files-found: error
           retention-days: 30
 

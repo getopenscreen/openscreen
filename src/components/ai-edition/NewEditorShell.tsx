@@ -14,6 +14,7 @@ import {
 } from "@/lib/ai-edition/document/timeline";
 import { type AxcutClip, documentSchema } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { saveTimelineMutation } from "@/lib/ai-edition/store/timelineSave";
 import {
 	useAssetTranscriptions,
 	useAutoTranscription,
@@ -358,6 +359,7 @@ export function NewEditorShell() {
 			// stale-closure bugs.
 			const known = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 60;
 			const state = useProjectStore.getState();
+			const persist = state.saveDocument;
 			setSourceDuration(known);
 			const doc = state.document;
 			if (!doc || doc.assets.length === 0) return;
@@ -380,7 +382,7 @@ export function NewEditorShell() {
 					[{ startSec: 0, endSec: known }],
 					"Auto-created full-duration clip",
 				);
-				void state.saveDocument(next);
+				void saveTimelineMutation(persist, next);
 				return;
 			}
 			// Hand the probed duration to the pure document layer: it patches only the
@@ -391,7 +393,7 @@ export function NewEditorShell() {
 			// nothing is waiting, so there is nothing to guard here.
 			const next = applyProbedDuration(doc, assetId, known);
 			if (next !== doc) {
-				void state.saveDocument(next);
+				void saveTimelineMutation(persist, next);
 			}
 		},
 		[setSourceDuration],

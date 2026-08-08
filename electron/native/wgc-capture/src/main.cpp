@@ -893,10 +893,17 @@ int main(int argc, char* argv[]) {
                 }
                 if (latestFrameTexture) {
                     // captureVideoSample performs the GPU readback
-                    // (CopyResource/Map) from latestFrameTexture. No lock is
-                    // needed around it: this thread is the only writer of
-                    // latestFrameTexture too (the CopyResource above), so
-                    // there is no concurrent access to serialize against.
+                    // (CopyResource/Map) from latestFrameTexture. On the
+                    // pull-based (default) path, no lock is needed around it:
+                    // this thread is the only writer of latestFrameTexture
+                    // too (the CopyResource above), so there is no
+                    // concurrent access to serialize against. On the legacy
+                    // path, the WGC callback thread also writes
+                    // latestFrameTexture, under frameMutex -- legacyLock is
+                    // still held here (see its declaration above) and is
+                    // what keeps this readback safe in that case. Do not
+                    // remove the legacy locking on the strength of this
+                    // comment; it describes the default path only.
                     hasVideoSample = encoder.captureVideoSample(
                         latestFrameTexture.Get(),
                         frameTimestampHns,
@@ -909,6 +916,15 @@ int main(int argc, char* argv[]) {
                     }
                     lastEncodedVideoTimestampHns = frameTimestampHns;
                 }
+            }
+            // Explicitly released here, not left to the end of the loop
+            // iteration: on the legacy path, legacyLock still owns frameMutex
+            // at this point (unique_lock's scope is its own lifetime, not the
+            // braces above), and the submission calls below are synchronous
+            // H.264 encodes that must not run while the WGC callback thread
+            // is blocked waiting for this same mutex (issue #115).
+            if (legacyLock.owns_lock()) {
+                legacyLock.unlock();
             }
 
             // Submit the captured samples to their sink writers after the
@@ -1208,22 +1224,23 @@ int main(int argc, char* argv[]) {
     beginStopStep("video-writer-join", stepBudgetMs);
     stopVideoWriter();
     logStopStep("video-writer-join");
-    // Closing the WGC session only after the writer thread has joined, not
-    // before: writeVideoFrames is now the only caller of
-    // session.tryGetNextFrame()/CopyResource, so joining it first guarantees
-    // nothing is still touching WGC or the D3D device when session.stop()
-    // tears them down. There is no separate "quiesce the producer" step
-    // anymore because the writer thread's own exit from its while loop *is*
-    // the producer stopping -- WGC has no thread of its own left to quiesce.
-    beginStopStep("wgc-session-close", stepBudgetMs);
-    session.stop();
-    logStopStep("wgc-session-close");
-    // The ordering above is what makes finalize() safe rather than
+    // Finalizing before closing the WGC session, not after: MFEncoder holds
+    // its own ComPtr<ID3D11Device>/ComPtr<ID3D11DeviceContext> (see
+    // mf_encoder.h), separate from WgcSession's, so session.stop() resetting
+    // WgcSession's pointers does not by itself invalidate what finalize()
+    // uses -- COM reference counting keeps the underlying device alive until
+    // MFEncoder releases its own reference. Finalizing first regardless,
+    // rather than relying on that, because it removes the dependency
+    // entirely instead of documenting it: a future change to MFEncoder (e.g.
+    // taking a raw, non-owning pointer) would silently reintroduce a
+    // use-after-free that this ordering makes structurally impossible.
+    //
+    // The ordering below it is what makes finalize() safe rather than
     // incidental: stopVideoWriter() joined the only thread that calls into
     // the encoder's GPU readback, and audioMixer->stop() joined the only other
     // thread that writes to it. MFEncoder's own writerMutex_ deliberately does
     // NOT cover copyFrameToBuffer, so finalizing before those joins would race
-    // the staging texture -- do not reorder these.
+    // the staging texture -- do not reorder those.
     beginStopStep("encoder-finalize", shutdownBudgetMs);
     const bool screenFinalized = encoder.finalize();
     logStopStep("encoder-finalize");
@@ -1266,6 +1283,17 @@ int main(int argc, char* argv[]) {
             std::cerr << "ERROR: Failed to finalize the webcam recording" << std::endl;
         }
     }
+
+    // Closing the WGC session only now, after every encoder that might still
+    // hold a reference to WgcSession's device has released it via finalize()
+    // above. There is no separate "quiesce the producer" step: writeVideoFrames
+    // (already joined by stopVideoWriter() above) was the only caller of
+    // session.tryGetNextFrame()/CopyResource, so its own exit from the while
+    // loop *is* the producer stopping -- WGC has no thread of its own left to
+    // quiesce.
+    beginStopStep("wgc-session-close", stepBudgetMs);
+    session.stop();
+    logStopStep("wgc-session-close");
 
     shutdownComplete = true;
     shutdownWatchdog.join();

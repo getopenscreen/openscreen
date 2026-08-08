@@ -18,6 +18,10 @@ import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema
 import { useProjectStore } from "./projectStore";
 import { useSequentialTimelineOps } from "./useSequentialTimelineOps";
 
+const toastErrorMock = vi.hoisted(() => vi.fn());
+
+vi.mock("sonner", () => ({ toast: { error: toastErrorMock } }));
+
 function makeDocWithAsset(): AxcutDocument {
 	const base = createEmptyDocument({ projectId: "proj_seq", title: "seq" });
 	return {
@@ -55,6 +59,7 @@ function makeDocWithAsset(): AxcutDocument {
 
 beforeEach(() => {
 	useProjectStore.getState().clear();
+	toastErrorMock.mockReset();
 });
 
 afterEach(() => {
@@ -112,7 +117,7 @@ describe("useSequentialTimelineOps", () => {
 		expect(doc2.timeline.trimRanges.map((t) => t.startSec).sort()).toEqual([1, 5]);
 	});
 
-	it("swallows save errors so the next call can still proceed", async () => {
+	it("surfaces save errors without rejecting or poisoning the queue", async () => {
 		const seed = makeDocWithAsset();
 		useProjectStore.setState({ document: seed });
 
@@ -140,24 +145,23 @@ describe("useSequentialTimelineOps", () => {
 			reason: "second",
 		};
 
-		let firstSettled = false;
-		let secondSettled = false;
+		let firstResult: AxcutDocument | null | undefined;
+		let secondResult: AxcutDocument | null | undefined;
 		await act(async () => {
 			const p1 = result.current.apply(op1);
 			const p2 = result.current.apply(op2);
-			await p1.catch((err: unknown) => {
-				firstSettled = true;
-				expect((err as Error).message).toBe("save failed");
-			});
-			await p2.then(() => {
-				secondSettled = true;
-			});
+			firstResult = await p1;
+			secondResult = await p2;
 		});
 
-		expect(firstSettled).toBe(true);
-		expect(secondSettled).toBe(true);
+		expect(firstResult).toBeNull();
+		expect(secondResult).not.toBeNull();
+		expect(toastErrorMock).toHaveBeenCalledWith("Save failed", {
+			description: "save failed",
+		});
 		// The queue survived the first failure — both saves were attempted.
 		expect(saveDocument).toHaveBeenCalledTimes(2);
+		expect(saveDocument).toHaveBeenNthCalledWith(2, secondResult);
 	});
 
 	it("returns null when the store has no document and no fallback is supplied", async () => {

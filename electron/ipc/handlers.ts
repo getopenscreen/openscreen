@@ -79,6 +79,7 @@ import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
 import { RecordingStreamRegistry, registerRecordingStreamHandlers } from "./recordingStream";
+import { isAwaitingScreenPromptAnswer, shouldPromptForScreenAccess } from "./screenAccessPrompt";
 
 const PROJECT_FILE_EXTENSION = "openscreen";
 export const SHORTCUTS_FILE = path.join(app.getPath("userData"), "shortcuts.json");
@@ -455,6 +456,8 @@ type AttachNativeMacWebcamRecordingInput = {
 
 let selectedSource: SelectedSource | null = null;
 let selectedDesktopSource: DesktopCapturerSource | null = null;
+/** When macOS was asked for Screen Recording this launch, if it has been. */
+let screenAccessPromptedAt: number | null = null;
 let lastEnumeratedSources = new Map<string, DesktopCapturerSource>();
 let currentProjectPath: string | null = null;
 let currentRecordingSession: RecordingSession | null = null;
@@ -1674,7 +1677,14 @@ export function registerIpcHandlers(
 
 			// Screen recording has no askForMediaAccess equivalent, so trigger the
 			// TCC prompt without opening OpenScreen's source selector above it.
-			if (status === "not-determined") {
+			// macOS reports a never-asked machine as "denied", so the decision has to
+			// come from shouldPromptForScreenAccess rather than the status alone.
+			//
+			// Report "not-determined" while that prompt is up: it is the status the
+			// renderer's retry loop polls on, and macOS keeps answering "denied"
+			// until the user actually accepts.
+			if (shouldPromptForScreenAccess(status, screenAccessPromptedAt)) {
+				screenAccessPromptedAt = Date.now();
 				const mainWin = getMainWindow();
 				if (mainWin && !mainWin.isDestroyed()) {
 					if (!mainWin.isVisible()) {
@@ -1688,6 +1698,14 @@ export function registerIpcHandlers(
 					.catch(() => {
 						// Permission probing failure is reported by the explicit status check below.
 					});
+				return { success: true, granted: false, status: "not-determined" };
+			}
+
+			// Keep reporting "not-determined" while that prompt may still be up.
+			// macOS answers "denied" the whole time it is on screen, so returning the
+			// real status here would open System Settings over the prompt and stop
+			// the renderer's retry loop on its first poll.
+			if (isAwaitingScreenPromptAnswer(screenAccessPromptedAt, Date.now())) {
 				return { success: true, granted: false, status: "not-determined" };
 			}
 

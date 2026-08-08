@@ -145,6 +145,15 @@ int readEnvInt(const char* name, int fallback) {
     }
 }
 
+// Rollback lever for the pull-based WGC frame delivery (default; see
+// wgc_session.h). Forces the previously-shipped FrameArrived-callback path
+// instead, for anyone hit by a regression the pull-based path was not tested
+// against. Kept only until the pull-based path has enough field time to
+// retire this flag and the legacy path with it.
+bool useLegacyFrameCallback() {
+    return readEnvInt("OPENSCREEN_WGC_LEGACY_FRAME_CALLBACK", 0) != 0;
+}
+
 std::wstring utf8ToWide(const std::string& value) {
     if (value.empty()) {
         return {};
@@ -648,44 +657,64 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::mutex mutex;
+    // By default, no mutex guards frame handoff: writeVideoFrames is the
+    // only thread that ever touches WGC or latestFrameTexture. It pulls each
+    // frame with session.tryGetNextFrame() itself (see wgc_session.h for why
+    // -- matches Chromium's WgcCaptureSession, which pulls for the same
+    // reason) instead of a separate thread pushing into a shared,
+    // lock-guarded texture. A CopyResource that wedges inside the display
+    // driver (issue #252, and the DXGI path in PR #305 did not avoid it
+    // either) then blocks only this thread, which is already the thread
+    // whose job is to notice stopRequested and give up -- there is no second
+    // thread left for it to take down with it.
+    //
+    // OPENSCREEN_WGC_LEGACY_FRAME_CALLBACK=1 reverts to the previously
+    // shipped push-based design (frameMutex/frameCv guard the handoff from
+    // WGC's own callback thread) as a rollback lever -- see wgc_session.h.
+    const bool legacyFrameCallback = useLegacyFrameCallback();
     CaptureControl control;
     std::atomic<bool> firstFrameWritten = false;
     std::atomic<bool> encodeFailed = false;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> latestFrameTexture;
-    int64_t latestFrameTimestampHns = 0;
-    int64_t firstFrameTimestampHns = -1;
     std::vector<BYTE> latestWebcamFrame;
     int latestWebcamWidth = 0;
     int latestWebcamHeight = 0;
     uint64_t latestWebcamSequence = 0;
     bool hasVisibleWebcamFrame = false;
 
-    session.setFrameCallback([&](ID3D11Texture2D* texture, int64_t timestampHns) {
-        if (control.stopRequested || control.paused) {
-            return;
-        }
+    // Legacy-path-only state. frameMutex guards latestFrameTexture/
+    // legacyLatestFrameTimestampHns between WGC's callback thread (writer)
+    // and writeVideoFrames (reader); frameCv wakes the reader. Both are
+    // unused on the default pull-based path.
+    std::timed_mutex frameMutex;
+    std::condition_variable_any frameCv;
+    int64_t legacyLatestFrameTimestampHns = 0;
 
-        std::scoped_lock lock(mutex);
-        if (!latestFrameTexture) {
-            D3D11_TEXTURE2D_DESC desc{};
-            texture->GetDesc(&desc);
-            desc.BindFlags = 0;
-            desc.CPUAccessFlags = 0;
-            desc.MiscFlags = 0;
-            if (FAILED(session.device()->CreateTexture2D(&desc, nullptr, &latestFrameTexture))) {
-                encodeFailed = true;
-                control.requestStop();
+    if (legacyFrameCallback) {
+        session.setFrameCallback([&](ID3D11Texture2D* texture, int64_t timestampHns) {
+            if (control.stopRequested || control.paused) {
                 return;
             }
-        }
-
-        session.context()->CopyResource(latestFrameTexture.Get(), texture);
-        latestFrameTimestampHns = timestampHns;
-        if (!firstFrameWritten.exchange(true)) {
-            control.cv.notify_all();
-        }
-    });
+            std::scoped_lock lock(frameMutex);
+            if (!latestFrameTexture) {
+                D3D11_TEXTURE2D_DESC desc{};
+                texture->GetDesc(&desc);
+                desc.BindFlags = 0;
+                desc.CPUAccessFlags = 0;
+                desc.MiscFlags = 0;
+                if (FAILED(session.device()->CreateTexture2D(&desc, nullptr, &latestFrameTexture))) {
+                    encodeFailed = true;
+                    control.requestStop();
+                    return;
+                }
+            }
+            session.context()->CopyResource(latestFrameTexture.Get(), texture);
+            legacyLatestFrameTimestampHns = timestampHns;
+            if (!firstFrameWritten.exchange(true)) {
+                frameCv.notify_all();
+            }
+        });
+    }
 
     auto writeVideoFrames = [&]() {
         const auto frameDuration = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
@@ -706,6 +735,8 @@ int main(int argc, char* argv[]) {
         int64_t nextWebcamWriteDueHns = 0;
         const int64_t nominalWebcamIntervalHns =
             static_cast<int64_t>(10'000'000ULL / std::max(1, webcamCapture.fps()));
+        int64_t firstFrameTimestampHns = -1;
+        int64_t latestFrameTimestampHns = 0;
 
         while (!control.stopRequested && !encodeFailed) {
             Microsoft::WRL::ComPtr<IMFSample> videoSample;
@@ -713,15 +744,75 @@ int main(int argc, char* argv[]) {
             bool hasVideoSample = false;
             bool hasWebcamSample = false;
 
+            std::unique_lock<std::timed_mutex> legacyLock;
             {
-                std::unique_lock lock(mutex);
-                control.cv.wait_for(lock, std::chrono::milliseconds(100), [&] {
-                    return control.stopRequested.load() ||
-                        encodeFailed.load() ||
-                        (!control.paused.load() && latestFrameTexture);
-                });
-                if (control.stopRequested || encodeFailed) {
-                    break;
+                if (legacyFrameCallback) {
+                    // try_lock_for, not a blocking lock: the WGC callback
+                    // holds frameMutex across CopyResource, which can wedge
+                    // inside the display driver and never return (#252).
+                    // This is the exact failure OPENSCREEN_WGC_LEGACY_FRAME_
+                    // CALLBACK=1 opts back into; a blocking acquire here
+                    // would let it also stall this thread's stop detection.
+                    legacyLock = std::unique_lock<std::timed_mutex>(frameMutex, std::defer_lock);
+                    if (!legacyLock.try_lock_for(std::chrono::milliseconds(100))) {
+                        if (control.stopRequested || encodeFailed) {
+                            break;
+                        }
+                        continue;
+                    }
+                    frameCv.wait_for(legacyLock, std::chrono::milliseconds(100), [&] {
+                        return control.stopRequested.load() ||
+                            encodeFailed.load() ||
+                            (!control.paused.load() && latestFrameTexture);
+                    });
+                    if (control.stopRequested || encodeFailed) {
+                        break;
+                    }
+                    if (!latestFrameTexture) {
+                        continue;
+                    }
+                    latestFrameTimestampHns = legacyLatestFrameTimestampHns;
+                } else {
+                    if (control.paused) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        continue;
+                    }
+
+                    ID3D11Texture2D* wgcTexture = nullptr;
+                    int64_t wgcTimestampHns = 0;
+                    const bool gotFrame = session.tryGetNextFrame(&wgcTexture, &wgcTimestampHns);
+                    if (gotFrame) {
+                        if (!latestFrameTexture) {
+                            D3D11_TEXTURE2D_DESC desc{};
+                            wgcTexture->GetDesc(&desc);
+                            desc.BindFlags = 0;
+                            desc.CPUAccessFlags = 0;
+                            desc.MiscFlags = 0;
+                            if (FAILED(session.device()->CreateTexture2D(&desc, nullptr, &latestFrameTexture))) {
+                                encodeFailed = true;
+                                control.requestStop();
+                                break;
+                            }
+                        }
+                        // The wedge risk this class exists to avoid: this call
+                        // can block inside the display driver and never return
+                        // (#252, still true of PR #305's DXGI path on some
+                        // hardware). It now does so only on this thread, which
+                        // already owns deciding when to give up -- there is no
+                        // separate WGC callback thread left for it to take a
+                        // lock down with it.
+                        session.context()->CopyResource(latestFrameTexture.Get(), wgcTexture);
+                        latestFrameTimestampHns = wgcTimestampHns;
+                        firstFrameWritten = true;
+                    } else if (!latestFrameTexture) {
+                        // No frame captured yet at all: nothing to encode
+                        // this iteration, and nothing gated on it either (the
+                        // first-frame wait below polls firstFrameWritten
+                        // directly, not a condition variable this thread
+                        // would need to notify).
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        continue;
+                    }
                 }
                 if (webcamActive) {
                     WebcamFrameSnapshot candidateWebcamFrame;
@@ -779,10 +870,9 @@ int main(int argc, char* argv[]) {
                         if (lastWebcamTimestampHns >= 0 && webcamTimestampHns <= lastWebcamTimestampHns) {
                             webcamTimestampHns = lastWebcamTimestampHns + nominalWebcamIntervalHns;
                         }
-                        // Capture the sample under `mutex` (the frame copy), but
-                        // submit it to the sink writer OUTSIDE the mutex below
-                        // (issue #115) so a slow WriteSample can't starve the main
-                        // thread's stop-wait.
+                        // Capture the sample here, but submit it to the sink
+                        // writer OUTSIDE this block below (issue #115) so a
+                        // slow WriteSample can't hold up the next frame pull.
                         hasWebcamSample = webcamEncoder.captureBgraSample(webcamFrame, webcamTimestampHns, webcamSample);
                         if (!hasWebcamSample) {
                             encodeFailed = true;
@@ -803,10 +893,17 @@ int main(int argc, char* argv[]) {
                 }
                 if (latestFrameTexture) {
                     // captureVideoSample performs the GPU readback
-                    // (CopyResource/Map) from latestFrameTexture, which must
-                    // stay serialized (via `mutex`) against the WGC
-                    // frame-arrival callback above, which writes new data
-                    // into the same texture on another thread.
+                    // (CopyResource/Map) from latestFrameTexture. On the
+                    // pull-based (default) path, no lock is needed around it:
+                    // this thread is the only writer of latestFrameTexture
+                    // too (the CopyResource above), so there is no
+                    // concurrent access to serialize against. On the legacy
+                    // path, the WGC callback thread also writes
+                    // latestFrameTexture, under frameMutex -- legacyLock is
+                    // still held here (see its declaration above) and is
+                    // what keeps this readback safe in that case. Do not
+                    // remove the legacy locking on the strength of this
+                    // comment; it describes the default path only.
                     hasVideoSample = encoder.captureVideoSample(
                         latestFrameTexture.Get(),
                         frameTimestampHns,
@@ -820,18 +917,27 @@ int main(int argc, char* argv[]) {
                     lastEncodedVideoTimestampHns = frameTimestampHns;
                 }
             }
+            // Explicitly released here, not left to the end of the loop
+            // iteration: on the legacy path, legacyLock still owns frameMutex
+            // at this point (unique_lock's scope is its own lifetime, not the
+            // braces above), and the submission calls below are synchronous
+            // H.264 encodes that must not run while the WGC callback thread
+            // is blocked waiting for this same mutex (issue #115).
+            if (legacyLock.owns_lock()) {
+                legacyLock.unlock();
+            }
 
-            // Submit the captured samples to their sink writers OUTSIDE
-            // `mutex`. IMFSinkWriter::WriteSample runs the H.264 encode
-            // synchronously and can be slow (especially the software encoder
-            // fallback used when preferSoftwareEncoder is set), and every
-            // millisecond it holds `mutex` is a millisecond the WGC frame
-            // callback spends queued behind it dropping frames (issue #115).
+            // Submit the captured samples to their sink writers after the
+            // pull-and-copy block above has finished. IMFSinkWriter::
+            // WriteSample runs the H.264 encode synchronously and can be slow
+            // (especially the software encoder fallback used when
+            // preferSoftwareEncoder is set); doing it here rather than inside
+            // the block keeps a slow encode from delaying the next frame pull
+            // (issue #115).
             //
-            // This no longer has anything to do with noticing a stop -- that
-            // moved off `mutex` entirely (see CaptureControl::stopMutex) after
-            // issue #252 showed the readback below can wedge inside the lock
-            // regardless of how briefly WriteSample is held.
+            // Stop detection has nothing to do with this ordering -- that is
+            // CaptureControl::stopMutex/stopCv, checked by the loop condition
+            // above, unrelated to sample submission (issue #252).
             if (hasWebcamSample && !webcamEncoder.submitVideoSample(webcamSample.Get())) {
                 encodeFailed = true;
                 control.requestStop();
@@ -974,24 +1080,34 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    // The lock covers the wait and the decision, and nothing else. Every
-    // teardown call below runs outside it, because session.stop() waits for any
-    // in-flight WGC callback to finish -- and those callbacks block on this very
-    // mutex. Tearing down while holding it deadlocks the two against each other,
-    // on the one path the shutdown watchdog does not cover.
+    // writeVideoFrames is the only caller of session.tryGetNextFrame() now
+    // (see wgc_session.h), so it has to be running before anything can wait
+    // for a first frame to arrive -- there is no separate WGC callback thread
+    // left to deliver one on its own.
+    if (audioMixer) {
+        audioMixer->beginTimeline();
+    }
+    control.recordingStartedAt = std::chrono::steady_clock::now();
+    startVideoWriter();
+
+    // firstFrameWritten is set by writeVideoFrames on its own thread; this
+    // just polls it with the same 10s ceiling the old condition-variable wait
+    // used.
     bool firstFrameArrived = false;
     {
-        std::unique_lock lock(mutex);
-        const bool started = control.cv.wait_for(lock, std::chrono::seconds(10), [&] {
-            return firstFrameWritten.load() || control.stopRequested.load();
-        });
-        firstFrameArrived = started && firstFrameWritten.load();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!firstFrameWritten.load() && !control.stopRequested.load() &&
+               std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        firstFrameArrived = firstFrameWritten.load();
     }
     if (!firstFrameArrived) {
         control.requestStop();
         if (stdinThread.joinable()) {
             stdinThread.detach();
         }
+        stopVideoWriter();
         microphoneCapture.stop();
         loopbackCapture.stop();
         webcamCapture.stop();
@@ -1002,12 +1118,6 @@ int main(int argc, char* argv[]) {
         std::cerr << "ERROR: Timed out waiting for first WGC frame" << std::endl;
         return 1;
     }
-
-    if (audioMixer) {
-        audioMixer->beginTimeline();
-    }
-    control.recordingStartedAt = std::chrono::steady_clock::now();
-    startVideoWriter();
 
     std::cout << "{\"event\":\"recording-started\",\"schemaVersion\":2}" << std::endl;
     std::cout << "Recording started" << std::endl;
@@ -1097,16 +1207,6 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    // Quiesce the frame producer first. Until WGC is closed, callbacks keep
-    // arriving and keep taking the frame lock, racing the writer's last pass on
-    // the shared D3D context at exactly the moment we can least afford a stall.
-    beginStopStep("wgc-quiesce", stepBudgetMs);
-    // The drain outcome decides the shape of the whole rest of the shutdown:
-    // a callback that never came back makes wgc-session-close skip the device
-    // release, so a report that does not say which happened cannot be read.
-    const bool wgcDrained = session.quiesceCapture();
-    std::cerr << "[stop-timing] step=wgc-quiesce elapsed_ms=" << stopElapsedMs()
-              << " drained=" << (wgcDrained ? "true" : "false") << std::endl;
     beginStopStep("microphone", stepBudgetMs);
     microphoneCapture.stop();
     logStopStep("microphone");
@@ -1124,12 +1224,23 @@ int main(int argc, char* argv[]) {
     beginStopStep("video-writer-join", stepBudgetMs);
     stopVideoWriter();
     logStopStep("video-writer-join");
-    // No frame lock here, and the ordering above is what makes that safe rather
-    // than incidental: stopVideoWriter() joined the only thread that calls into
+    // Finalizing before closing the WGC session, not after: MFEncoder holds
+    // its own ComPtr<ID3D11Device>/ComPtr<ID3D11DeviceContext> (see
+    // mf_encoder.h), separate from WgcSession's, so session.stop() resetting
+    // WgcSession's pointers does not by itself invalidate what finalize()
+    // uses -- COM reference counting keeps the underlying device alive until
+    // MFEncoder releases its own reference. Finalizing first regardless,
+    // rather than relying on that, because it removes the dependency
+    // entirely instead of documenting it: a future change to MFEncoder (e.g.
+    // taking a raw, non-owning pointer) would silently reintroduce a
+    // use-after-free that this ordering makes structurally impossible.
+    //
+    // The ordering below it is what makes finalize() safe rather than
+    // incidental: stopVideoWriter() joined the only thread that calls into
     // the encoder's GPU readback, and audioMixer->stop() joined the only other
     // thread that writes to it. MFEncoder's own writerMutex_ deliberately does
     // NOT cover copyFrameToBuffer, so finalizing before those joins would race
-    // the staging texture -- do not reorder these.
+    // the staging texture -- do not reorder those.
     beginStopStep("encoder-finalize", shutdownBudgetMs);
     const bool screenFinalized = encoder.finalize();
     logStopStep("encoder-finalize");
@@ -1173,8 +1284,13 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Releasing the device goes last: by now no thread can still be holding the
-    // D3D context.
+    // Closing the WGC session only now, after every encoder that might still
+    // hold a reference to WgcSession's device has released it via finalize()
+    // above. There is no separate "quiesce the producer" step: writeVideoFrames
+    // (already joined by stopVideoWriter() above) was the only caller of
+    // session.tryGetNextFrame()/CopyResource, so its own exit from the while
+    // loop *is* the producer stopping -- WGC has no thread of its own left to
+    // quiesce.
     beginStopStep("wgc-session-close", stepBudgetMs);
     session.stop();
     logStopStep("wgc-session-close");

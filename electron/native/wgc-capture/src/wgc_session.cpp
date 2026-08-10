@@ -230,7 +230,6 @@ bool WgcSession::initialize(HMONITOR monitor, int fps, bool captureCursor) {
         return false;
     }
 
-    frameArrivedToken_ = framePool_.FrameArrived({this, &WgcSession::onFrameArrived});
     return true;
 }
 
@@ -254,13 +253,7 @@ bool WgcSession::initialize(HWND window, int fps, bool captureCursor) {
         return false;
     }
 
-    frameArrivedToken_ = framePool_.FrameArrived({this, &WgcSession::onFrameArrived});
     return true;
-}
-
-void WgcSession::setFrameCallback(FrameCallback callback) {
-    std::scoped_lock lock(callbackMutex_);
-    frameCallback_ = std::move(callback);
 }
 
 bool WgcSession::start() {
@@ -275,11 +268,127 @@ bool WgcSession::start() {
     return true;
 }
 
-bool WgcSession::quiesceCapture(int drainTimeoutMs) {
+bool WgcSession::tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimestampHns) {
+    if (!framePool_) {
+        return false;
+    }
+
+    // TryGetNextFrame() and frame.Close() are the only WGC calls this makes;
+    // neither performs the GPU copy itself, so neither is where a wedge in
+    // #252 was ever observed. The copy (CopyResource, on whatever the caller
+    // does with *outTexture) is the caller's own doing on the caller's own
+    // thread -- this class has no thread of its own left to hang on their
+    // behalf.
+    auto frame = framePool_.TryGetNextFrame();
+    if (!frame) {
+        return false;
+    }
+
+    auto surface = frame.Surface();
+    auto access = surface.as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+    HRESULT hr = access->GetInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(texture.GetAddressOf()));
+    if (FAILED(hr) || !texture) {
+        return false;
+    }
+
+    // Closing the previous frame here (rather than right after this class
+    // copied out of it) returns it to the pool only once the caller has had a
+    // full interval to read the one before that -- the pool has 2 buffers, so
+    // closing eagerly would let WGC recycle a buffer the caller might still
+    // be mid-CopyResource on across the two-call boundary. currentFrame_
+    // holds the reference that keeps *outTexture valid until this class's
+    // next call or stop() closes it.
+    currentFrame_ = frame;
+
+    *outTexture = texture.Get();
+    *outTimestampHns = timeSpanToHns(frame.SystemRelativeTime());
+    return true;
+}
+
+void WgcSession::setFrameCallback(FrameCallback callback) {
+    if (!legacyCallbackRegistered_ && framePool_) {
+        frameArrivedToken_ = framePool_.FrameArrived({this, &WgcSession::onFrameArrived});
+        legacyCallbackRegistered_ = true;
+    }
+    std::scoped_lock lock(callbackMutex_);
+    frameCallback_ = std::move(callback);
+}
+
+void WgcSession::onFrameArrived(
+    wgcap::Direct3D11CaptureFramePool const& sender,
+    wf::IInspectable const&) {
+    // Scoped rather than a bare decrement at the end, for two reasons: a
+    // callback that left by exception would otherwise strand
+    // quiesceLegacyCallback()'s drain forever, and the guard has to outlive
+    // every pool-owned object this handler touches -- dropping the count
+    // first would let quiesce return and close the frame pool while this
+    // handler still holds a reference into it.
+    struct InFlightGuard {
+        std::atomic<int>& counter;
+        ~InFlightGuard() {
+            counter -= 1;
+        }
+    };
+
+    // Captured and counted before TryGetNextFrame(), not after: this handler
+    // starts touching the pool (TryGetNextFrame, Surface(), GetInterface())
+    // immediately below, and none of that is safe to run concurrently with
+    // framePool_.Close(). Counting only after those calls succeeded left a
+    // window where quiesceLegacyCallback() could see callbacksInFlight_ == 0
+    // and return while this handler was still mid-frame -- registering the
+    // guard first, before anything pool-related, closes that window instead
+    // of narrowing it.
+    //
+    // Returns here, before incrementing the counter or touching the pool, if
+    // frameCallback_ is already null: there is nothing to do with a frame in
+    // that case, so the handler should not acquire one. This also means a
+    // handler that starts after quiesceLegacyCallback() has cleared
+    // frameCallback_ is never counted at all -- which is fine, since it never
+    // reaches the pool either.
+    FrameCallback callback;
+    {
+        std::scoped_lock lock(callbackMutex_);
+        callback = frameCallback_;
+        if (!callback) {
+            return;
+        }
+        // Counted under the same lock quiesceLegacyCallback() clears the
+        // callback under, so once it has cleared it no new handler can start
+        // and the counter it then drains cannot go back up.
+        callbacksInFlight_ += 1;
+    }
+    InFlightGuard guard{callbacksInFlight_};
+
+    auto frame = sender.TryGetNextFrame();
+    if (!frame) {
+        return;
+    }
+
+    auto surface = frame.Surface();
+    auto access = surface.as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+    HRESULT hr = access->GetInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(texture.GetAddressOf()));
+    if (FAILED(hr) || !texture) {
+        frame.Close();
+        return;
+    }
+
+    // callback is never null here: the only path that reaches this point
+    // returned earlier if frameCallback_ was null when captured.
+    callback(texture.Get(), timeSpanToHns(frame.SystemRelativeTime()));
+    frame.Close();
+}
+
+bool WgcSession::quiesceLegacyCallback(int drainTimeoutMs) {
     if (quiesced_) {
         return callbacksInFlight_.load() == 0;
     }
     quiesced_ = true;
+
+    if (!legacyCallbackRegistered_) {
+        return true;
+    }
 
     try {
         if (framePool_) {
@@ -290,20 +399,21 @@ bool WgcSession::quiesceCapture(int drainTimeoutMs) {
         // to abandon the rest of the shutdown.
     }
     {
-        // Drop the callback under the same lock onFrameArrived copies it under,
-        // so any handler that has not read it yet becomes a no-op...
+        // Drop the callback under the same lock onFrameArrived copies it
+        // under, so any handler that has not read it yet becomes a no-op...
         std::scoped_lock lock(callbackMutex_);
         frameCallback_ = nullptr;
     }
-    // ...then wait out the handlers that already read it. Without this, stop()
-    // could Reset() the D3D context while a callback was still issuing
-    // CopyResource on it.
+    // ...then wait out the handlers that already read it. Without this,
+    // stop() could Reset() the D3D context while a callback was still
+    // issuing CopyResource on it.
     //
     // Bounded, because a callback wedged inside the display driver never
-    // finishes and this runs on paths that have no watchdog above them (the
-    // first-frame timeout in main.cpp). Giving up is reported rather than
-    // papered over: the caller keeps the device alive instead, which leaks it
-    // until the process exits and is the lesser of the two failures.
+    // finishes (this is #252 -- the exact failure this legacy path is kept
+    // around to let a user opt back into, so its own known weakness needs no
+    // further comment here). Giving up is reported rather than papered over:
+    // the caller keeps the device alive instead, which leaks it until the
+    // process exits and is the lesser of the two failures.
     const auto drainDeadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds(drainTimeoutMs);
     while (callbacksInFlight_.load() > 0) {
@@ -314,13 +424,38 @@ bool WgcSession::quiesceCapture(int drainTimeoutMs) {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+    return true;
+}
+
+void WgcSession::stop() {
+    if (!started_ && !framePool_) {
+        return;
+    }
+
+    if (legacyCallbackRegistered_ && !quiesceLegacyCallback()) {
+        // A callback is still inside the driver holding this context.
+        // Releasing it now would pull the device out from under a live
+        // CopyResource, so leak it and let process exit reclaim it. This is
+        // the exact hang class the pull-based default avoids; it is only
+        // reachable via OPENSCREEN_WGC_LEGACY_FRAME_CALLBACK=1.
+        return;
+    }
 
     // Close() is a C++/WinRT projection and throws hresult_error on failure.
     // Letting that escape would take the process down through std::terminate
-    // mid-shutdown, discarding a recording that is already finalized by the time
-    // this runs. There is nothing to do about a capture session that refuses to
-    // close except stop caring about it.
+    // mid-shutdown, discarding a recording that is already finalized by the
+    // time this runs. There is nothing to do about a capture session that
+    // refuses to close except stop caring about it.
+    //
+    // On the pull-based (default) path, there is no other thread that could
+    // be mid-copy on currentFrame_'s texture when this runs: the caller only
+    // ever calls tryGetNextFrame() and stop() from its own thread, so by the
+    // time stop() is reached whatever the caller was doing with the last
+    // texture it read is already done. On the legacy path, the
+    // quiesceLegacyCallback() call above already established the same
+    // invariant before falling through to here.
     try {
+        currentFrame_ = nullptr;
         if (session_) {
             session_.Close();
         }
@@ -336,68 +471,10 @@ bool WgcSession::quiesceCapture(int drainTimeoutMs) {
     session_ = nullptr;
     framePool_ = nullptr;
     started_ = false;
-    return true;
-}
-
-void WgcSession::stop() {
-    if (!quiesceCapture()) {
-        // A callback is still inside the driver holding this context. Releasing
-        // it now would pull the device out from under a live CopyResource, so
-        // leak it and let process exit reclaim it.
-        return;
-    }
     item_ = nullptr;
     winrtDevice_ = nullptr;
     d3dContext_.Reset();
     d3dDevice_.Reset();
-}
-
-void WgcSession::onFrameArrived(
-    wgcap::Direct3D11CaptureFramePool const& sender,
-    wf::IInspectable const&) {
-    auto frame = sender.TryGetNextFrame();
-    if (!frame) {
-        return;
-    }
-
-    auto surface = frame.Surface();
-    auto access = surface.as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-    HRESULT hr = access->GetInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(texture.GetAddressOf()));
-    if (FAILED(hr) || !texture) {
-        return;
-    }
-
-    FrameCallback callback;
-    {
-        std::scoped_lock lock(callbackMutex_);
-        callback = frameCallback_;
-        if (callback) {
-            // Counted under the same lock quiesceCapture() clears the callback
-            // under, so once it has cleared it no new callback can start and
-            // the counter it then drains cannot go back up.
-            callbacksInFlight_ += 1;
-        }
-    }
-
-    if (callback) {
-        // Scoped rather than a bare decrement after the call, for two reasons:
-        // a callback that left by exception would otherwise strand
-        // quiesceCapture()'s drain forever, and the guard has to outlive
-        // frame.Close() -- dropping the count first would let quiesce return and
-        // close the frame pool while this handler is still closing a frame that
-        // pool owns.
-        struct InFlightGuard {
-            std::atomic<int>& counter;
-            ~InFlightGuard() {
-                counter -= 1;
-            }
-        } guard{callbacksInFlight_};
-        callback(texture.Get(), timeSpanToHns(frame.SystemRelativeTime()));
-        frame.Close();
-        return;
-    }
-    frame.Close();
 }
 
 int WgcSession::captureWidth() const {

@@ -1081,8 +1081,6 @@ export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectInputSchema>;
-export type AddAssetInput = z.infer<typeof addAssetInputSchema>;
-export type ChatInput = z.infer<typeof chatInputSchema>;
 export type TranscriptLanguageCode = z.infer<typeof transcriptLanguageSchema>;
 /** A real whisper.cpp language code — `TranscriptLanguageCode` minus the "auto" detection sentinel. */
 export type WhisperLanguageCode = Exclude<TranscriptLanguageCode, "auto">;

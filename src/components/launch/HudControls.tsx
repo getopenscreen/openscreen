@@ -273,6 +273,7 @@ export const HudAutoZoomButton = memo(function HudAutoZoomButton({
 					? "bg-[#10b981] text-[#08090d] hover:bg-[#0e9e6e]"
 					: "bg-transparent text-[#828c99] hover:bg-[#1a1e25] hover:text-[#f5f7fa]"
 			}`}
+			aria-pressed={enabled}
 			onClick={onClick}
 			disabled={disabled}
 			title={label}

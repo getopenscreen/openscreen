@@ -354,6 +354,21 @@ describe("LaunchWindow record button", () => {
 		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
 	});
 
+	// The button says "on" with a colour fill and nothing else, so a screen reader
+	// gets no toggle state at all — the same `aria-pressed` the mic and camera
+	// buttons beside it already carry.
+	it("reports the auto-zoom toggle state", () => {
+		renderLaunchWindow();
+
+		expect(screen.getByTestId("launch-auto-zoom-button")).toHaveAttribute("aria-pressed", "true");
+
+		cleanup();
+		recorderState.value.autoZoomEnabled = false;
+		renderLaunchWindow();
+
+		expect(screen.getByTestId("launch-auto-zoom-button")).toHaveAttribute("aria-pressed", "false");
+	});
+
 	it("toggles post-record auto-zoom without touching cursor capture", () => {
 		renderLaunchWindow();
 

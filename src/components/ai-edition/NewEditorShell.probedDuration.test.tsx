@@ -1,9 +1,8 @@
-// @vitest-environment jsdom
 // The decision a `loadedmetadata` event makes, on its own.
 //
 // The event itself arrives through Preview -> PreviewCanvas -> VirtualPreview and a
-// real <video>, which jsdom never fires, so the component cannot be driven end to
-// end here. `documentAfterProbedDuration` is the part that decides what gets
+// real <video>, which no test environment here can decode, so the component cannot
+// be driven end to end. `documentAfterProbedDuration` is the part that decides what gets
 // written, and both guards below live in it: the queue the shell puts this write on
 // is what makes them necessary, because it puts real time between the event and the
 // write. The queue's own serialization is covered by useSequentialTimelineOps.test.

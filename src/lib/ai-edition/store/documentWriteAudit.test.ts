@@ -124,8 +124,10 @@ const DECLARED: WritePath[] = [
 	// "Save" on the unsaved-changes prompt.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleConfirmUnsaved", "save", "gesture"),
 	// The probed duration folded into the document when the <video> loads. One
-	// call now covers both the first-clip seed and the placeholder-length backfill.
-	w("src/components/ai-edition/NewEditorShell.tsx", "handleLoadedMetadata", "save", "automatic"),
+	// call covers both the first-clip seed and the placeholder-length backfill. It
+	// sits in `runLoadedMetadataWrite` rather than the handler because the handler
+	// only puts it on the chain — the write itself, and its deadline, are there.
+	w("src/components/ai-edition/NewEditorShell.tsx", "runLoadedMetadataWrite", "save", "automatic"),
 	// Renaming the project from the title field.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.

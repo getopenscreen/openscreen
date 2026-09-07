@@ -21,7 +21,12 @@ import {
 	setDocumentWordText,
 } from "@/lib/ai-edition/document/transcript";
 import { isModalOpen } from "@/lib/ai-edition/modalGuard";
-import { type AxcutAudioTrack, type AxcutClip, documentSchema } from "@/lib/ai-edition/schema";
+import {
+	type AxcutAudioTrack,
+	type AxcutClip,
+	type AxcutDocument,
+	documentSchema,
+} from "@/lib/ai-edition/schema";
 import { saveWithDeadline, useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
@@ -115,6 +120,53 @@ function NativePlaybackSync({
 export const DEFAULT_TIMELINE_HEIGHT_PX = 392;
 export const MIN_TIMELINE_HEIGHT_PX = 160;
 export const MAX_TIMELINE_HEIGHT_PX = 560;
+
+/**
+ * What one `loadedmetadata` event does once it reaches the front of the chain.
+ *
+ * Exported because the chain is the point: the shell runs these one after another
+ * so a queued duration cannot land on the wrong project, which also means one
+ * stuck step stalls every later event. That behaviour is only reachable from
+ * outside the component — the event itself arrives through Preview,
+ * PreviewCanvas, VirtualPreview and a real `<video>` decoding real media, which
+ * no test environment here provides.
+ *
+ * Every store read is at call time, not from a closure: by the time this runs the
+ * document may have moved on, and `originatingProjectId` is what says whether it
+ * moved to a different project.
+ */
+export async function runLoadedMetadataWrite(
+	durationSec: number,
+	assetId: string,
+	originatingProjectId: string | undefined,
+	deps: {
+		/** Defaults to the real auto-zoom pass; injected in tests. */
+		autoZoom?: (document: AxcutDocument) => Promise<unknown>;
+		saveTimeoutMs?: number;
+	} = {},
+): Promise<void> {
+	const state = useProjectStore.getState();
+	const doc = state.document;
+	if (!isLoadedMetadataForDocument(doc, originatingProjectId) || doc.assets.length === 0) return;
+	let next = documentAfterLoadedMetadata(doc, durationSec, assetId);
+	// `history: false` for the duration write: it is the probed length being folded
+	// in on load, not something the user did — an undo landing on it would empty
+	// their timeline. Auto-zoom is a later, undoable suggestion.
+	//
+	// Bounded, because a bridge call that never answers leaves the save pending
+	// forever and takes the chain with it: every later `loadedmetadata` and the
+	// auto-zoom pass below would queue behind a promise that is not coming back.
+	// `saveDocument` never rejects, so the abandoned write is safe to let go of; on
+	// a timeout we carry on with whatever the store actually holds, and auto-zoom's
+	// own guards decide what that is worth.
+	if (next !== doc) {
+		await saveWithDeadline(state.saveDocument(next, { history: false }), deps.saveTimeoutMs);
+		next = useProjectStore.getState().document ?? next;
+	}
+	await (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(
+		useProjectStore.getState().document ?? next,
+	);
+}
 
 export function NewEditorShell() {
 	const te = useScopedT("editor");
@@ -437,29 +489,7 @@ export function NewEditorShell() {
 			setSourceDuration(known);
 			metadataChainRef.current = metadataChainRef.current
 				.catch(() => undefined)
-				.then(async () => {
-					const state = useProjectStore.getState();
-					const doc = state.document;
-					if (!isLoadedMetadataForDocument(doc, originatingProjectId) || doc.assets.length === 0) {
-						return;
-					}
-					let next = documentAfterLoadedMetadata(doc, durationSec, assetId);
-					// `history: false` for the duration write: it is the probed length being
-					// folded in on load, not something the user did — an undo landing on it
-					// would empty their timeline. Auto-zoom is a later, undoable suggestion.
-					//
-					// Bounded, because this chain is what makes the callbacks ordered: a
-					// bridge call that never answers leaves the save pending forever, and
-					// with it every later `loadedmetadata` and the auto-zoom pass below.
-					// `saveDocument` never rejects, so the abandoned write is safe to let
-					// go of; on a timeout we carry on with whatever the store actually
-					// holds, and auto-zoom's own guards decide what that is worth.
-					if (next !== doc) {
-						await saveWithDeadline(state.saveDocument(next, { history: false }));
-						next = useProjectStore.getState().document ?? next;
-					}
-					await maybeSaveFreshRecordingAutoZooms(useProjectStore.getState().document ?? next);
-				});
+				.then(() => runLoadedMetadataWrite(durationSec, assetId, originatingProjectId));
 		},
 		[setSourceDuration],
 	);

@@ -539,9 +539,7 @@ export function applyProbedDuration(
 	const withClips: AxcutDocument = {
 		...document,
 		assets: document.assets.map((asset) =>
-			asset.id === assetId && asset.durationSec == null
-				? { ...asset, durationSec: durationSec }
-				: asset,
+			asset.id === assetId ? { ...asset, durationSec: durationSec } : asset,
 		),
 		timeline: { ...document.timeline, clips: nextClips },
 	};

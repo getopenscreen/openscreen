@@ -89,6 +89,30 @@ describe("applyProbedDuration — the v1.7 import gap", () => {
 		expect(next.timeline.clips[0].timelineEndSec).toBe(12);
 	});
 
+	it("overwrites a leftover 60s fallback on the asset when the real duration arrives", () => {
+		const doc = documentSchema.parse(migrateProjectDataToAxcutDocument(legacyProjectWithZoom()));
+		const assetId = doc.assets[0].id;
+		const seeded: AxcutDocument = {
+			...doc,
+			assets: doc.assets.map((asset) =>
+				asset.id === assetId ? { ...asset, durationSec: PLACEHOLDER_DURATION_SEC } : asset,
+			),
+			timeline: {
+				...doc.timeline,
+				clips: [
+					{
+						...doc.timeline.clips[0],
+						sourceEndSec: PLACEHOLDER_DURATION_SEC,
+						timelineEndSec: PLACEHOLDER_DURATION_SEC,
+					},
+				],
+			},
+		};
+		const next = applyProbedDuration(seeded, assetId, 90);
+		expect(next.timeline.clips[0].sourceEndSec).toBe(90);
+		expect(next.assets[0].durationSec).toBe(90);
+	});
+
 	it("leaves a clip the user has already trimmed alone", () => {
 		const doc = documentSchema.parse(migrateProjectDataToAxcutDocument(legacyProjectWithZoom()));
 		const assetId = doc.assets[0].id;

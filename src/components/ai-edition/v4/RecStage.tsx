@@ -202,6 +202,12 @@ export function RecStage({
 							<span className={styles.recDot} aria-hidden />
 							<span>{sourceLabel}</span>
 						</div>
+						{prefs.micEnabled && (
+							<div className={styles.recMicMeter}>
+								<MicOn size={13} />
+								<AudioLevelMeter level={micLevel} className={styles.recLevelMeter} />
+							</div>
+						)}
 					</div>
 				</div>
 
@@ -263,38 +269,35 @@ export function RecStage({
 						</div>
 						<div className={styles.recRowControl}>
 							{prefs.micEnabled ? (
-								<>
-									{micDevices.isLoading ? (
-										<span className={styles.recRowMuted}>
-											<Loader2 size={13} className="animate-spin" />
-											{t("rec.loading")}
-										</span>
-									) : (
-										<select
-											className={styles.recSelect}
-											value={prefs.micDeviceId ?? micDevices.selectedDeviceId}
-											onChange={(e) => {
-												const deviceId = e.target.value;
-												micDevices.setSelectedDeviceId(deviceId);
-												// The label travels with the id: the native Windows
-												// helper selects a microphone by NAME, and records the
-												// Windows default endpoint when it is missing.
-												updatePrefs({
-													micDeviceId: deviceId,
-													micDeviceName:
-														micDevices.devices.find((d) => d.deviceId === deviceId)?.label ?? null,
-												});
-											}}
-										>
-											{micDevices.devices.map((d) => (
-												<option key={d.deviceId} value={d.deviceId}>
-													{d.label}
-												</option>
-											))}
-										</select>
-									)}
-									<AudioLevelMeter level={micLevel} className={styles.recLevelMeter} />
-								</>
+								micDevices.isLoading ? (
+									<span className={styles.recRowMuted}>
+										<Loader2 size={13} className="animate-spin" />
+										{t("rec.loading")}
+									</span>
+								) : (
+									<select
+										className={styles.recSelect}
+										value={prefs.micDeviceId ?? micDevices.selectedDeviceId}
+										onChange={(e) => {
+											const deviceId = e.target.value;
+											micDevices.setSelectedDeviceId(deviceId);
+											// The label travels with the id: the native Windows
+											// helper selects a microphone by NAME, and records the
+											// Windows default endpoint when it is missing.
+											updatePrefs({
+												micDeviceId: deviceId,
+												micDeviceName:
+													micDevices.devices.find((d) => d.deviceId === deviceId)?.label ?? null,
+											});
+										}}
+									>
+										{micDevices.devices.map((d) => (
+											<option key={d.deviceId} value={d.deviceId}>
+												{d.label}
+											</option>
+										))}
+									</select>
+								)
 							) : null}
 							<button
 								type="button"

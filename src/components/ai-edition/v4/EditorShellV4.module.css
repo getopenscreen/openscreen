@@ -950,6 +950,24 @@
 	border-radius: 50%;
 	background: var(--danger);
 }
+/* Mic level lives on the preview (bottom-left), not in the settings row — that
+   keeps the microphone row as compact as the others so its On/Off toggle is
+   always in view (issue #624). */
+.recMicMeter {
+	position: absolute;
+	left: 16px;
+	bottom: 16px;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 9999px;
+	background: rgba(8, 10, 13, 0.5);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	color: #fff;
+}
 .recPanel {
 	width: 360px;
 	flex-shrink: 0;
@@ -999,6 +1017,9 @@
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	/* Let the control group shrink within the row so a long device name in the
+	   dropdown can't push the On/Off toggle off the panel edge (issue #624). */
+	min-width: 0;
 }
 .recRowMuted {
 	display: inline-flex;
@@ -1035,6 +1056,11 @@
 .recSelect {
 	height: 32px;
 	max-width: 200px;
+	/* Absorb the row's shrink and truncate a long device name instead of forcing
+	   the row wider than the panel and clipping the toggle. */
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	padding: 0 8px;
 	border-radius: 9px;
 	border: 1px solid var(--border);
@@ -1052,6 +1078,9 @@
 	align-items: center;
 	justify-content: center;
 	min-width: 44px;
+	/* The toggle keeps its size; the device dropdown yields space instead, so the
+	   On/Off control is always fully visible (issue #624). */
+	flex-shrink: 0;
 	height: 28px;
 	padding: 0 10px;
 	border-radius: 8px;

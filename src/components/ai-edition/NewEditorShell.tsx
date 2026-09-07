@@ -429,47 +429,60 @@ export function NewEditorShell() {
 			// placeholder. All store reads go through getState() to avoid
 			// stale-closure bugs.
 			const known = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 60;
-			const state = useProjectStore.getState();
 			setSourceDuration(known);
-			const doc = state.document;
-			if (!doc || doc.assets.length === 0) return;
-			if (doc.timeline.clips.length === 0) {
-				// ponytail: replaceTimeline derives clip length from
-				// asset.durationSec, which import never populates — without this
-				// patch the first auto-created clip silently comes out empty
-				// (normalizeIntervals clamps against a 0 duration and drops it).
-				const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
-				const docWithDuration = primaryAssetId
-					? {
-							...doc,
-							assets: doc.assets.map((a) =>
-								a.id === primaryAssetId ? { ...a, durationSec: known } : a,
-							),
-						}
-					: doc;
-				const next = replaceTimelineOp(
-					docWithDuration,
-					[{ startSec: 0, endSec: known }],
-					"Auto-created full-duration clip",
-				);
-				// `history: false` for both writes in this callback: they are the probed
-				// duration being folded into the document on load, not something the user
-				// did — an undo landing on one of them would empty their timeline.
-				void state.saveDocument(next, { history: false });
-				return;
-			}
-			// Hand the probed duration to the pure document layer: it patches only the
-			// clips of THIS asset that are still waiting for a real length (the
-			// pre-probe placeholder, or the extent-less clip a legacy v2 import mints),
-			// shifts what follows, and brings the modifiers along — anchoring the ones
-			// migration had to leave unanchored. Returns the document untouched when
-			// nothing is waiting, so there is nothing to guard here.
-			const next = applyProbedDuration(doc, assetId, known);
-			if (next !== doc) {
-				void state.saveDocument(next, { history: false });
-			}
+			// On the shared write queue, and reading the document inside it. Folding a
+			// probed duration in is a read-modify-write of the whole document, which is
+			// what `useSequentialTimelineOps` exists for -- its header says anything that
+			// reads the doc and saves it back belongs there. Off the queue, `getState()`
+			// returns the PRE-edit document while a user's save is still in flight (the
+			// store is only written once the bridge answers), and the full snapshot built
+			// from it lands after theirs and takes their edit with it.
+			void enqueueTimelineWrite(async () => {
+				const state = useProjectStore.getState();
+				const doc = state.document;
+				if (!doc || doc.assets.length === 0) return;
+				if (doc.timeline.clips.length === 0) {
+					// ponytail: replaceTimeline derives clip length from
+					// asset.durationSec, which import never populates — without this
+					// patch the first auto-created clip silently comes out empty
+					// (normalizeIntervals clamps against a 0 duration and drops it).
+					const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
+					const docWithDuration = primaryAssetId
+						? {
+								...doc,
+								assets: doc.assets.map((a) =>
+									a.id === primaryAssetId ? { ...a, durationSec: known } : a,
+								),
+							}
+						: doc;
+					const next = replaceTimelineOp(
+						docWithDuration,
+						[{ startSec: 0, endSec: known }],
+						"Auto-created full-duration clip",
+					);
+					// `history: false` for both writes in this callback: they are the probed
+					// duration being folded into the document on load, not something the user
+					// did — an undo landing on one of them would empty their timeline.
+					//
+					// Awaited, not `void`ed: the queue only serialises what it can see finish,
+					// so a fire-and-forget write here would let the next queued edit read the
+					// document this one has not committed yet.
+					await state.saveDocument(next, { history: false });
+					return;
+				}
+				// Hand the probed duration to the pure document layer: it patches only the
+				// clips of THIS asset that are still waiting for a real length (the
+				// pre-probe placeholder, or the extent-less clip a legacy v2 import mints),
+				// shifts what follows, and brings the modifiers along — anchoring the ones
+				// migration had to leave unanchored. Returns the document untouched when
+				// nothing is waiting, so there is nothing to guard here.
+				const next = applyProbedDuration(doc, assetId, known);
+				if (next !== doc) {
+					await state.saveDocument(next, { history: false });
+				}
+			});
 		},
-		[setSourceDuration],
+		[setSourceDuration, enqueueTimelineWrite],
 	);
 
 	const handleSeek = useCallback(

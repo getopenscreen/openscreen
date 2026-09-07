@@ -36,7 +36,13 @@ export function documentAfterLoadedMetadata(
 
 	if (document.timeline.clips.length === 0) {
 		const primaryAssetId = document.project.primaryAssetId ?? document.assets[0]?.id;
-		if (!primaryAssetId) return document;
+		// The seed belongs to the primary asset: `replaceTimeline` pins the clip it
+		// builds to `primaryAssetId ?? assets[0]`, and the length comes from THIS
+		// event. So an event from any other asset would file one video's duration
+		// under another video's id. The primary's own event does the seeding, and
+		// Preview mounts the primary while the timeline is empty so that event is
+		// the one that arrives.
+		if (!primaryAssetId || primaryAssetId !== assetId) return document;
 		const withSeedDuration: AxcutDocument = {
 			...document,
 			assets: document.assets.map((asset) =>

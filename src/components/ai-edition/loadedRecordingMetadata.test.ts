@@ -42,6 +42,23 @@ function emptyRecordingDoc(projectId = "proj_fresh"): AxcutDocument {
 	};
 }
 
+/** A second asset that is NOT the primary — a voiceover imported alongside. */
+function withSecondAsset(doc: AxcutDocument): AxcutDocument {
+	return {
+		...doc,
+		assets: [
+			...doc.assets,
+			{
+				id: "asset_2",
+				kind: "audio",
+				label: "bgm.mp3",
+				originalPath: "/tmp/bgm.mp3",
+				cameraTrack: null,
+			},
+		],
+	};
+}
+
 describe("documentAfterLoadedMetadata", () => {
 	it("seeds an empty timeline from a finite probe and writes it on the asset", () => {
 		const doc = emptyRecordingDoc();
@@ -72,6 +89,33 @@ describe("documentAfterLoadedMetadata", () => {
 		const next = documentAfterLoadedMetadata(seeded, 8, "asset_1");
 		expect(next.timeline.clips[0].sourceEndSec).toBe(8);
 		expect(next.assets[0].durationSec).toBe(8);
+	});
+
+	// The seeded clip is pinned to the primary asset by `replaceTimeline` and sized
+	// from THIS event, so an event from any other asset would file one video's
+	// length under another video's id. A project whose first import was audio is
+	// the real case: audio never claims the empty primary slot, so `assets[0]` is
+	// the audio and the primary is the video added after it.
+	it("ignores an event from an asset the seed is not about", () => {
+		const doc = withSecondAsset(emptyRecordingDoc());
+
+		expect(documentAfterLoadedMetadata(doc, 12.5, "asset_2")).toBe(doc);
+		expect(documentAfterLoadedMetadata(doc, Number.NaN, "asset_2")).toBe(doc);
+		// …and the primary still seeds normally on the same document.
+		expect(documentAfterLoadedMetadata(doc, 12.5, "asset_1").timeline.clips).toHaveLength(1);
+	});
+
+	// No primary recorded (a project older than the field): `assets[0]` is what the
+	// seed falls back to, so that is the asset whose event counts.
+	it("falls back to the first asset when the project has no primary", () => {
+		const doc = withSecondAsset(emptyRecordingDoc());
+		const noPrimary: AxcutDocument = {
+			...doc,
+			project: { ...doc.project, primaryAssetId: undefined },
+		};
+
+		expect(documentAfterLoadedMetadata(noPrimary, 12.5, "asset_2")).toBe(noPrimary);
+		expect(documentAfterLoadedMetadata(noPrimary, 12.5, "asset_1").timeline.clips).toHaveLength(1);
 	});
 });
 

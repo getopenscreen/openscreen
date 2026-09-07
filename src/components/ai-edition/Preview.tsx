@@ -23,6 +23,9 @@ interface PreviewProps {
 	hasProject: boolean;
 	hasAsset: boolean;
 	videoSources: VideoSource[];
+	/** `document.project.primaryAssetId`, when the project has one. Read only while
+	 *  the timeline is empty — see `previewSources`. */
+	primaryAssetId?: string;
 	/** Imported audio tracks and the (unfiltered) asset URLs they resolve to
 	 *  (issue #350). Passed straight through to VirtualPreview — unlike the video
 	 *  `previewSources` below, these are NOT narrowed to clip-referenced assets,
@@ -61,6 +64,7 @@ export function Preview({
 	hasProject,
 	hasAsset,
 	videoSources,
+	primaryAssetId,
 	audioTracks = [],
 	audioSources = [],
 	clips,
@@ -116,8 +120,23 @@ export function Preview({
 			const source = videoSources.find((s) => s.id === clip.assetId);
 			if (source) referenced.push(source);
 		}
-		return referenced.length > 0 ? referenced : videoSources;
-	}, [clips, videoSources]);
+		if (referenced.length > 0) return referenced;
+		// Empty timeline: mount the asset the seed is minted FOR, not whichever asset
+		// happens to sort first. `handleLoadedMetadata` sizes that first clip against
+		// `primaryAssetId ?? assets[0]` and ignores an event from any other asset, and
+		// only ONE source is ever mounted (`videoSources[sourceIndex]` in
+		// VirtualPreview, index 0 while nothing on the timeline moves it) — so mounting
+		// a non-primary asset here fires an event nothing acts on and the timeline
+		// stays empty for good. A project whose first import was audio is exactly that
+		// case: audio never claims the empty primary slot (document-service.addAsset),
+		// so `assets[0]` is the audio and the primary is the video added after it.
+		// `videoSources` mirrors `document.assets` in order, so index 0 is the same
+		// `assets[0]` the seed itself falls back to.
+		const primary = primaryAssetId
+			? videoSources.find((source) => source.id === primaryAssetId)
+			: videoSources[0];
+		return primary ? [primary] : videoSources;
+	}, [clips, videoSources, primaryAssetId]);
 
 	// ponytail: a media failure used to fall through to `EditorEmptyState`, and
 	// that is issue #395: ONE `error` event on the hidden <video> — including the

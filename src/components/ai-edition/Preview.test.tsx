@@ -75,6 +75,7 @@ function source(id: string): VideoSource {
 function previewProps(props: {
 	videoSources: VideoSource[];
 	clips: AxcutClip[];
+	primaryAssetId?: string;
 	hasAsset?: boolean;
 	hasProject?: boolean;
 }) {
@@ -84,6 +85,7 @@ function previewProps(props: {
 				hasProject={props.hasProject ?? true}
 				hasAsset={props.hasAsset ?? true}
 				videoSources={props.videoSources}
+				primaryAssetId={props.primaryAssetId}
 				clips={props.clips}
 				seekTarget={null}
 				onTimeChange={vi.fn()}
@@ -157,10 +159,46 @@ describe("Preview follows the timeline, not the asset list", () => {
 	// The bootstrap path: `handleLoadedMetadata` mints the very first clip from
 	// the <video>'s own metadata, so a just-imported asset has to be mounted
 	// while nothing references it yet.
-	it("falls back to every asset while the timeline is empty", () => {
+	it("mounts the asset while the timeline is empty", () => {
 		renderPreview({ videoSources: [source("fresh_import")], clips: [] });
 
 		expect(canvas()).toHaveAttribute("data-sources", "fresh_import");
+	});
+
+	// A project whose first import was audio: audio never claims the empty primary
+	// slot, so `assets[0]` is the audio track and the primary is the video added
+	// after it. Only one source is mounted at a time and nothing on an empty
+	// timeline moves that index off 0 — so mounting the audio would hand
+	// `handleLoadedMetadata` an event for an asset it refuses to seed from, and the
+	// timeline would never get its first clip at all.
+	it("mounts the primary asset, not the one that sorts first", () => {
+		renderPreview({
+			videoSources: [source("bgm"), source("screen")],
+			primaryAssetId: "screen",
+			clips: [],
+		});
+
+		expect(canvas()).toHaveAttribute("data-sources", "screen");
+	});
+
+	// No primary recorded (a v1.7 project that predates the field): fall back to
+	// `assets[0]`, which is what the seed itself falls back to.
+	it("mounts the first asset when the project has no primary", () => {
+		renderPreview({ videoSources: [source("first"), source("second")], clips: [] });
+
+		expect(canvas()).toHaveAttribute("data-sources", "first");
+	});
+
+	// A primary id pointing at an asset with no source would otherwise mount
+	// nothing and collapse the stage to the empty state.
+	it("keeps every asset when the primary has no source", () => {
+		renderPreview({
+			videoSources: [source("a"), source("b")],
+			primaryAssetId: "gone",
+			clips: [],
+		});
+
+		expect(canvas()).toHaveAttribute("data-sources", "a,b");
 	});
 
 	// A clip landing on a healthy asset takes over the preview regardless of what

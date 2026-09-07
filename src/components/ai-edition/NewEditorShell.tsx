@@ -1606,6 +1606,10 @@ export function NewEditorShell() {
 									hasProject={hasProject}
 									hasAsset={hasAsset}
 									videoSources={videoSources}
+									// While the timeline is empty the preview mounts this asset rather
+									// than whichever one sorts first, so the clip `handleLoadedMetadata`
+									// seeds comes from the video it is sized against.
+									primaryAssetId={document?.project.primaryAssetId}
 									// Imported audio tracks (issue #350). `videoSources` already
 									// resolves a URL for every asset (audio included), so it doubles as
 									// the audio source list; VirtualPreview looks each track up by assetId.

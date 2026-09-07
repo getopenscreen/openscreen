@@ -125,7 +125,18 @@ const DECLARED: WritePath[] = [
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleConfirmUnsaved", "save", "gesture"),
 	// The probed duration folded into the document when the <video> loads. Twice:
 	// the first clip seed, and the backfill for clips still on a placeholder length.
-	w("src/components/ai-edition/NewEditorShell.tsx", "handleLoadedMetadata", "save", "automatic"),
+	// It sits in `runLoadedMetadataWrite` rather than the handler because the handler
+	// only puts it on the write queue — the write itself, and its deadline, are there.
+	w("src/components/ai-edition/NewEditorShell.tsx", "runLoadedMetadataWrite", "save", "automatic"),
+	// Auto-zoom regions suggested for a freshly imported recording. `history: true`
+	// on purpose: unlike the probed duration above, this is a suggestion the user is
+	// meant to be able to undo.
+	w(
+		"src/components/ai-edition/recordingImport.ts",
+		"writeFreshRecordingAutoZooms",
+		"save",
+		"gesture",
+	),
 	// Renaming the project from the title field.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.

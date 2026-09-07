@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useProjectStore } from "./projectStore";
+import { saveWithDeadline, useProjectStore, waitForDocumentSaves } from "./projectStore";
 import { clearHistory, past, pushHistory } from "./undoStack";
 
 const bridgeMocks = vi.hoisted(() => ({
@@ -634,6 +634,69 @@ describe("useProjectStore", () => {
 			// Still the project the user chose, not the one the add was building on.
 			expect(useProjectStore.getState().projectId).toBe("proj_other");
 			expect(useProjectStore.getState().document?.project.id).toBe("proj_other");
+		});
+	});
+
+	// The other half of the deadline. `waitForDocumentSaves` is for a caller queued
+	// BEHIND a save; this is for the one that started it, whose own `await` is what
+	// a chain or a queue gets sequenced on. Plain promises rather than the store, so
+	// nothing here leaves the in-flight counter raised.
+	describe("saveWithDeadline", () => {
+		it("passes the save's own answer through", async () => {
+			await expect(saveWithDeadline(Promise.resolve(true), 5_000)).resolves.toBe(true);
+			await expect(saveWithDeadline(Promise.resolve(false), 5_000)).resolves.toBe(false);
+		});
+
+		it("gives up on a save that never settles", async () => {
+			await expect(saveWithDeadline(new Promise(() => undefined), 10)).resolves.toBe("timeout");
+		});
+
+		it("clears the deadline once the save answers", async () => {
+			vi.useFakeTimers();
+			try {
+				await expect(saveWithDeadline(Promise.resolve(true), 10_000)).resolves.toBe(true);
+				expect(vi.getTimerCount()).toBe(0);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+	});
+
+	// `saveDocument` releases waiters from a `finally`, so a save that REJECTS is
+	// already covered. A bridge call that never settles at all runs no `finally`:
+	// without a deadline the in-flight counter stays above zero and every waiter
+	// parks for the life of the renderer, wedging the fresh-recording auto-zoom
+	// chain behind it. The stuck case is deliberately last in this file — its save
+	// never resolves, so it leaves the counter raised for anything after it.
+	describe("waitForDocumentSaves", () => {
+		it("resolves idle immediately when nothing is in flight", async () => {
+			await expect(waitForDocumentSaves(5_000)).resolves.toBe("idle");
+		});
+
+		it("resolves idle once an in-flight save settles", async () => {
+			useProjectStore.setState({ projectId: "proj_test", document: sampleDoc, dirty: true });
+			let release!: () => void;
+			bridgeMocks.save.mockReturnValue(
+				new Promise((resolve) => {
+					release = () => resolve({ success: true, document: sampleDoc });
+				}),
+			);
+			const inFlight = useProjectStore.getState().saveDocument(sampleDoc, { history: false });
+			const wait = waitForDocumentSaves(5_000);
+			release();
+			await inFlight;
+			await expect(wait).resolves.toBe("idle");
+		});
+
+		it("gives up with a timeout when a save never settles", async () => {
+			useProjectStore.setState({ projectId: "proj_test", document: sampleDoc, dirty: true });
+			bridgeMocks.save.mockReturnValue(new Promise(() => undefined));
+			void useProjectStore.getState().saveDocument(sampleDoc, { history: false });
+
+			await expect(waitForDocumentSaves(10)).resolves.toBe("timeout");
+			// A timed-out waiter takes itself out of the queue, so the next caller gets
+			// its own deadline rather than inheriting a stale resolver.
+			await expect(waitForDocumentSaves(10)).resolves.toBe("timeout");
 		});
 	});
 });

@@ -1,1 +1,8 @@
 * @EtienneLescot
+
+# Linux / Wayland capture — @Beetix
+/electron/native/pipewire-capture/                          @Beetix @EtienneLescot
+/electron/native-bridge/capture/linuxNativeCaptureSession*  @Beetix @EtienneLescot
+/electron/native-bridge/cursor/recording/pipeWire*          @Beetix @EtienneLescot
+/crates/compositor/src/linux_*.rs                           @Beetix @EtienneLescot
+/crates/compositor/src/*_linux.rs                           @Beetix @EtienneLescot

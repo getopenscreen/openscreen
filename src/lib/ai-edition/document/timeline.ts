@@ -481,7 +481,7 @@ function rederiveAnchoredRegion<
  *  source extent at all (what `migrateProjectDataToAxcutDocument` produces — the
  *  migration is pure, so it cannot probe the file for a duration), or it still sits at
  *  the pre-probe placeholder length. Both mean "waiting for the real duration". */
-function clipAwaitsProbedDuration(clip: AxcutClip, assetId: string): boolean {
+export function clipAwaitsProbedDuration(clip: AxcutClip, assetId: string): boolean {
 	if (clip.assetId !== assetId || clip.sourceStartSec !== 0) return false;
 	const end = clip.sourceEndSec ?? 0;
 	if (end <= clip.sourceStartSec) return true; // no extent at all (v2 migration)

@@ -16,6 +16,7 @@
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "@/lib/ai-edition/document/ids";
+import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import {
 	DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
@@ -109,6 +110,15 @@ async function readAutoZoomPref(): Promise<boolean> {
 	}
 }
 
+function clipExtentSignature(document: AxcutDocument): string {
+	return document.timeline.clips
+		.map(
+			(clip) =>
+				`${clip.id}:${clip.assetId}:${clip.sourceStartSec}:${clip.sourceEndSec ?? ""}:${clip.timelineStartSec}:${clip.timelineEndSec}`,
+		)
+		.join("|");
+}
+
 function pendingFreshRecordingAsset(document: AxcutDocument) {
 	if (pendingFreshRecordingAutoZoomPath) {
 		return document.assets.find(
@@ -119,23 +129,31 @@ function pendingFreshRecordingAsset(document: AxcutDocument) {
 	return document.assets.find((asset) => asset.id === primaryId) ?? document.assets[0];
 }
 
+/**
+ * Whether the pending take's real length has landed yet.
+ *
+ * Not just `asset.durationSec != null`. A recording whose container reports no
+ * duration (MediaRecorder WebM, until the EBML fix) still gets the placeholder
+ * written to that field, because the timeline layer clamps every interval it
+ * builds against `primaryAssetDuration` and would otherwise drop every clip. So
+ * the asset says "60" for a take nothing has measured, and the clips are what
+ * distinguish the two: one still sitting at the placeholder length is waiting.
+ *
+ * The cost is a take of exactly 60.000 s never being auto-zoomed. That is the
+ * same ambiguity `applyProbedDuration` already lives with, and it is a far
+ * smaller price than suggesting zooms against a length nothing measured.
+ */
 function hasProbedDurationForPendingAsset(document: AxcutDocument): boolean {
 	const asset = pendingFreshRecordingAsset(document);
-	return (
-		asset != null &&
-		asset.durationSec != null &&
-		Number.isFinite(asset.durationSec) &&
-		asset.durationSec > 0
-	);
-}
-
-function clipExtentSignature(document: AxcutDocument): string {
-	return document.timeline.clips
-		.map(
-			(clip) =>
-				`${clip.id}:${clip.assetId}:${clip.sourceStartSec}:${clip.sourceEndSec ?? ""}:${clip.timelineStartSec}:${clip.timelineEndSec}`,
-		)
-		.join("|");
+	if (
+		asset == null ||
+		asset.durationSec == null ||
+		!Number.isFinite(asset.durationSec) ||
+		asset.durationSec <= 0
+	) {
+		return false;
+	}
+	return !document.timeline.clips.some((clip) => clipAwaitsProbedDuration(clip, asset.id));
 }
 
 function canApplyFreshRecordingAutoZooms(document: AxcutDocument): boolean {

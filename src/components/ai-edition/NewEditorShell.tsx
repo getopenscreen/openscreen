@@ -148,10 +148,17 @@ export async function runLoadedMetadataWrite(
 	// a length something already measured. Auto-zoom is not fooled by it either --
 	// `hasProbedDurationForPendingAsset` asks the CLIPS, not the asset, and a clip
 	// still sitting at the placeholder reads as waiting.
-	const knownSec =
-		Number.isFinite(durationSec) && durationSec > 0 ? durationSec : PLACEHOLDER_DURATION_SEC;
+	const finite = Number.isFinite(durationSec) && durationSec > 0;
+	const knownSec = finite ? durationSec : PLACEHOLDER_DURATION_SEC;
 	const state = useProjectStore.getState();
-	const next = documentAfterProbedDuration(state.document, assetId, knownSec, originatingProjectId);
+	// The placeholder exists so the FIRST clip is not empty, nothing more. Once a
+	// timeline is there, a length nothing measured has nothing to fold in -- and
+	// re-applying it to a clip already sitting at it means a `history: false` write on
+	// every metadata event for the same unmeasured take.
+	const next =
+		finite || state.document?.timeline.clips.length === 0
+			? documentAfterProbedDuration(state.document, assetId, knownSec, originatingProjectId)
+			: null;
 	if (next) {
 		// `history: false`: this is the probed duration being folded into the document
 		// on load, not something the user did — an undo landing on it would empty their

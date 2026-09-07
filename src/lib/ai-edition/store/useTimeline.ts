@@ -334,7 +334,15 @@ export function useTimeline() {
 	// Returns the count actually added (0 when there's no doc/suggestions).
 	const addZoomsBulk = useCallback(
 		async (suggestions: AutoZoomSuggestion[]) => {
-			if (!document || suggestions.length === 0) return 0;
+			// Read from the store, not off the render closure. Unlike its `add*` siblings,
+			// which compute and save in the same tick, this one is reached from the wand
+			// AFTER a multi-second cursor-telemetry IPC: the closure document is the one
+			// from before that wait, so anything the user committed during it is missing
+			// from the snapshot, and writing the snapshot back drops their edit. Reading
+			// here is also what lets this compose with `useSequentialTimelineOps` -- same
+			// reason as `applyClipEdit`, `setTrimEntries` and `insertClipAt`.
+			const doc = useProjectStore.getState().document;
+			if (!doc || suggestions.length === 0) return 0;
 			const anchored = suggestions.flatMap((s) =>
 				anchorRegionsWithDerivedMs(
 					[
@@ -347,18 +355,21 @@ export function useTimeline() {
 							focusMode: "auto" as const,
 						},
 					],
-					document.timeline.clips,
+					// Anchored against the SAME document the write is built from: anchoring
+					// on the stale clips and saving the fresh document would place regions
+					// against a timeline that no longer exists.
+					doc.timeline.clips,
 					() => createId("zoom"),
 				),
 			);
 			const next: AxcutDocument = {
-				...document,
-				zoomRanges: [...document.zoomRanges, ...anchored] as AxcutDocument["zoomRanges"],
+				...doc,
+				zoomRanges: [...doc.zoomRanges, ...anchored] as AxcutDocument["zoomRanges"],
 			};
 			if (!(await saveDocument(next, { history: true }))) return 0;
 			return suggestions.length;
 		},
-		[document, saveDocument],
+		[saveDocument],
 	);
 
 	const addTrim = useCallback(

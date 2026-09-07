@@ -437,16 +437,30 @@ export function NewEditorShell() {
 			// returns the PRE-edit document while a user's save is still in flight (the
 			// store is only written once the bridge answers), and the full snapshot built
 			// from it lands after theirs and takes their edit with it.
+			// Bound to the project that was open when the event fired. Queueing puts real
+			// time between the two, and `known` came off THAT video: applied to a project
+			// the user switched to meanwhile it is simply a wrong number, and
+			// `saveDocument`'s epoch check cannot catch it because the write is issued
+			// after the switch, not across it.
+			const originatingProjectId = useProjectStore.getState().document?.project.id;
 			void enqueueTimelineWrite(async () => {
 				const state = useProjectStore.getState();
 				const doc = state.document;
 				if (!doc || doc.assets.length === 0) return;
+				if (doc.project.id !== originatingProjectId) return;
 				if (doc.timeline.clips.length === 0) {
 					// ponytail: replaceTimeline derives clip length from
 					// asset.durationSec, which import never populates — without this
 					// patch the first auto-created clip silently comes out empty
 					// (normalizeIntervals clamps against a 0 duration and drops it).
 					const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
+					// Only the asset that actually fired this event. The seed stamps `known`
+					// on the primary asset and sizes the whole clip from it, so on a project
+					// whose primary is some OTHER asset that is one video's length written as
+					// another's -- a full-duration clip at the wrong length. The sibling
+					// branch never had this hole: `applyProbedDuration` is handed `assetId`
+					// and returns the document untouched when it does not hold it.
+					if (primaryAssetId !== assetId) return;
 					const docWithDuration = primaryAssetId
 						? {
 								...doc,

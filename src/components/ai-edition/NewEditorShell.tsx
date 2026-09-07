@@ -148,7 +148,7 @@ export async function runLoadedMetadataWrite(
 	const state = useProjectStore.getState();
 	const doc = state.document;
 	if (!isLoadedMetadataForDocument(doc, originatingProjectId) || doc.assets.length === 0) return;
-	let next = documentAfterLoadedMetadata(doc, durationSec, assetId);
+	const next = documentAfterLoadedMetadata(doc, durationSec, assetId);
 	// `history: false` for the duration write: it is the probed length being folded
 	// in on load, not something the user did — an undo landing on it would empty
 	// their timeline. Auto-zoom is a later, undoable suggestion.
@@ -161,11 +161,18 @@ export async function runLoadedMetadataWrite(
 	// own guards decide what that is worth.
 	if (next !== doc) {
 		await saveWithDeadline(state.saveDocument(next, { history: false }), deps.saveTimeoutMs);
-		next = useProjectStore.getState().document ?? next;
 	}
-	await (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(
-		useProjectStore.getState().document ?? next,
-	);
+	// Re-checked rather than assumed: that await is exactly when a project switch
+	// lands, and the guard at the top only spoke for the document as it was before
+	// it. Handing the auto-zoom pass another project's document would not write
+	// zooms into it — `canApplyFreshRecordingAutoZooms` refuses a document that
+	// does not hold the pending recording — but the passes before that check DO
+	// clear the pending flag on what they are given, so the take that was actually
+	// imported would silently lose its auto-zoom. Stopping is also right when the
+	// store has no document at all: there is nothing left this event belongs to.
+	const settled = useProjectStore.getState().document;
+	if (!isLoadedMetadataForDocument(settled, originatingProjectId)) return;
+	await (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(settled);
 }
 
 export function NewEditorShell() {

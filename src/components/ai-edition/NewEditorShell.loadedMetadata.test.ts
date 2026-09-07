@@ -100,9 +100,44 @@ describe("runLoadedMetadataWrite", () => {
 		expect(useProjectStore.getState().document?.timeline.clips).toHaveLength(0);
 	});
 
+	// The switch that happens DURING the save, which the guard at the top cannot
+	// see. Auto-zoom would not write zooms into the new project — the pending-path
+	// guard refuses it — but the passes before that check clear the pending flag on
+	// whatever document they are handed, so the take that was actually imported
+	// would lose its auto-zoom without a trace.
+	it("stops when the project changes while the save is in flight", async () => {
+		const other = createEmptyDocument({ projectId: "proj_b", title: "B" });
+		const saveDocument = vi.fn(async () => {
+			useProjectStore.setState({ document: other });
+			return true;
+		});
+		useProjectStore.setState({ saveDocument });
+		const autoZoom = vi.fn(async () => undefined);
+
+		await runLoadedMetadataWrite(12.5, "asset_1", PROJECT, { autoZoom });
+
+		expect(saveDocument).toHaveBeenCalledTimes(1);
+		expect(autoZoom).not.toHaveBeenCalled();
+	});
+
+	// Same for the project being closed outright: there is nothing left for this
+	// event to belong to, and the pre-switch snapshot is not a stand-in for it.
+	it("stops when the project is closed while the save is in flight", async () => {
+		const saveDocument = vi.fn(async () => {
+			useProjectStore.setState({ document: null });
+			return true;
+		});
+		useProjectStore.setState({ saveDocument });
+		const autoZoom = vi.fn(async () => undefined);
+
+		await runLoadedMetadataWrite(12.5, "asset_1", PROJECT, { autoZoom });
+
+		expect(autoZoom).not.toHaveBeenCalled();
+	});
+
 	// The event is bound to the project that owned the video when it fired, and the
 	// chain puts real time between the two.
-	it("writes nothing when the project changed while it waited", async () => {
+	it("writes nothing when the project changed before it ran", async () => {
 		const saveDocument = settlingSave();
 		useProjectStore.setState({ saveDocument });
 		const autoZoom = vi.fn(async () => undefined);

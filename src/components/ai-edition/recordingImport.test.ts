@@ -29,8 +29,17 @@ vi.mock("@/native/client", () => ({
 	},
 }));
 
-const createProject = vi.fn(async () => undefined);
-const addAsset = vi.fn(async () => null);
+// Typed to the store's own action signatures rather than cast through `any`:
+// tsconfig.test.json typechecks this file in CI, so a stub that drifts from the
+// contract it stands in for should fail there instead of passing silently.
+// `createProject` returns a document because the real one does — the import path
+// discards it, but a stub that lies about the shape is a stub that stops catching
+// the day something starts reading it.
+const createProject = vi.fn(
+	async (title: string): Promise<AxcutDocument> =>
+		createEmptyDocument({ projectId: "proj_stub", title }),
+);
+const addAsset = vi.fn(async (): Promise<null> => null);
 const replaceTimeline = vi.fn(async () => undefined);
 
 // Read before anything stubs them: the first describe replaces these actions on the
@@ -72,10 +81,8 @@ describe("importPendingRecording", () => {
 		consumeFreshRecordingAutoZoomPending();
 		useProjectStore.setState({
 			document: null,
-			// biome-ignore lint/suspicious/noExplicitAny: partial action stubs, the rest of the store is untouched
-			createProject: createProject as any,
-			// biome-ignore lint/suspicious/noExplicitAny: partial action stubs, the rest of the store is untouched
-			addAsset: addAsset as any,
+			createProject,
+			addAsset,
 			replaceTimeline,
 		});
 	});
@@ -265,10 +272,8 @@ describe("fresh-recording auto-zoom", () => {
 		consumeFreshRecordingAutoZoomPending();
 		useProjectStore.setState({
 			document: null,
-			// biome-ignore lint/suspicious/noExplicitAny: partial action stubs
-			createProject: createProject as any,
-			// biome-ignore lint/suspicious/noExplicitAny: partial action stubs
-			addAsset: addAsset as any,
+			createProject,
+			addAsset,
 			replaceTimeline,
 		});
 	});
@@ -502,8 +507,7 @@ describe("fresh-recording auto-zoom", () => {
 		});
 		useProjectStore.setState({
 			document,
-			// biome-ignore lint/suspicious/noExplicitAny: test-only save stub
-			saveDocument: saveDocument as any,
+			saveDocument,
 		});
 		markFreshRecordingAutoZoomPending(document.assets[0].originalPath);
 		await expect(

@@ -22,7 +22,7 @@ import {
 } from "@/lib/ai-edition/document/transcript";
 import { isModalOpen } from "@/lib/ai-edition/modalGuard";
 import { type AxcutAudioTrack, type AxcutClip, documentSchema } from "@/lib/ai-edition/schema";
-import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { saveWithDeadline, useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
 	useAutoTranscription,
@@ -447,8 +447,15 @@ export function NewEditorShell() {
 					// `history: false` for the duration write: it is the probed length being
 					// folded in on load, not something the user did — an undo landing on it
 					// would empty their timeline. Auto-zoom is a later, undoable suggestion.
+					//
+					// Bounded, because this chain is what makes the callbacks ordered: a
+					// bridge call that never answers leaves the save pending forever, and
+					// with it every later `loadedmetadata` and the auto-zoom pass below.
+					// `saveDocument` never rejects, so the abandoned write is safe to let
+					// go of; on a timeout we carry on with whatever the store actually
+					// holds, and auto-zoom's own guards decide what that is worth.
 					if (next !== doc) {
-						await state.saveDocument(next, { history: false });
+						await saveWithDeadline(state.saveDocument(next, { history: false }));
 						next = useProjectStore.getState().document ?? next;
 					}
 					await maybeSaveFreshRecordingAutoZooms(useProjectStore.getState().document ?? next);

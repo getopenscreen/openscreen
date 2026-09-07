@@ -19,6 +19,7 @@ import { createId } from "@/lib/ai-edition/document/ids";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import {
 	DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+	saveWithDeadline,
 	useProjectStore,
 	waitForDocumentSaves,
 } from "@/lib/ai-edition/store/projectStore";
@@ -98,30 +99,6 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
 	/** Deadline for waiting on writes somebody else started. Tests shorten it. */
 	waitTimeoutMs?: number;
 };
-
-/**
- * `saveDocument` awaits the bridge with no deadline of its own and, by contract,
- * never rejects — so a main process that stops answering leaves this `await`
- * pending forever. That matters more here than at a normal call site: the write
- * runs inside `freshRecordingAutoZoomSaveChain`, so a wedged save takes the
- * chain with it and every later retry queues behind a promise that will not
- * settle. Racing a deadline lets the attempt end and the chain move on; the
- * abandoned save is safe to drop precisely because it cannot reject.
- */
-async function saveWithDeadline(
-	save: Promise<boolean>,
-	timeoutMs: number,
-): Promise<boolean | "timeout"> {
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	const deadline = new Promise<"timeout">((resolve) => {
-		timer = setTimeout(() => resolve("timeout"), timeoutMs);
-	});
-	try {
-		return await Promise.race([save, deadline]);
-	} finally {
-		clearTimeout(timer);
-	}
-}
 
 async function readAutoZoomPref(): Promise<boolean> {
 	try {

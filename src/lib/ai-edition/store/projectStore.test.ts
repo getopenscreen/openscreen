@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useProjectStore, waitForDocumentSaves } from "./projectStore";
+import { saveWithDeadline, useProjectStore, waitForDocumentSaves } from "./projectStore";
 import { clearHistory, past, pushHistory } from "./undoStack";
 
 const bridgeMocks = vi.hoisted(() => ({
@@ -634,6 +634,31 @@ describe("useProjectStore", () => {
 			// Still the project the user chose, not the one the add was building on.
 			expect(useProjectStore.getState().projectId).toBe("proj_other");
 			expect(useProjectStore.getState().document?.project.id).toBe("proj_other");
+		});
+	});
+
+	// The other half of the deadline. `waitForDocumentSaves` is for a caller queued
+	// BEHIND a save; this is for the one that started it, whose own `await` is what
+	// a chain or a queue gets sequenced on. Plain promises rather than the store, so
+	// nothing here leaves the in-flight counter raised.
+	describe("saveWithDeadline", () => {
+		it("passes the save's own answer through", async () => {
+			await expect(saveWithDeadline(Promise.resolve(true), 5_000)).resolves.toBe(true);
+			await expect(saveWithDeadline(Promise.resolve(false), 5_000)).resolves.toBe(false);
+		});
+
+		it("gives up on a save that never settles", async () => {
+			await expect(saveWithDeadline(new Promise(() => undefined), 10)).resolves.toBe("timeout");
+		});
+
+		it("clears the deadline once the save answers", async () => {
+			vi.useFakeTimers();
+			try {
+				await expect(saveWithDeadline(Promise.resolve(true), 10_000)).resolves.toBe(true);
+				expect(vi.getTimerCount()).toBe(0);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 	});
 

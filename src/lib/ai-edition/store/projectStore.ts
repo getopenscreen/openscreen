@@ -60,6 +60,32 @@ export function waitForDocumentSaves(
 	});
 }
 
+/**
+ * `saveDocument`'s own answer, or `"timeout"` if it has not produced one within
+ * `timeoutMs`.
+ *
+ * The companion to {@link waitForDocumentSaves}, for the caller that started the
+ * save rather than one waiting behind it: a bridge call that never settles leaves
+ * this promise pending forever, and anything sequenced after it — a queue, a
+ * chain of later callbacks — stops with it. `"timeout"` carries the same meaning
+ * here as there: the write may still land, so treat the document as unknown and
+ * keep whatever state lets a later attempt retry.
+ */
+export async function saveWithDeadline(
+	save: Promise<boolean>,
+	timeoutMs: number = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+): Promise<boolean | "timeout"> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const deadline = new Promise<"timeout">((resolve) => {
+		timer = setTimeout(() => resolve("timeout"), timeoutMs);
+	});
+	try {
+		return await Promise.race([save, deadline]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 // ponytail: thin Zustand wrapper over the native-bridge client. Keeps the
 // current project + revision counter in renderer memory; mutations round-trip
 // through the main process via the bridge so disk state stays authoritative.

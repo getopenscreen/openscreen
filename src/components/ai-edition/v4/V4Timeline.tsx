@@ -52,7 +52,7 @@ import { useTimelineTranscriptGate } from "@/lib/ai-edition/store/transcriptionS
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
-import { collectAutoZoomSuggestionsForDocument } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { collectAutoZoomSuggestionsForLatestDocument } from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatSec } from "@/lib/ai-edition/timeline/format";
 import {
@@ -1488,9 +1488,16 @@ export function V4Timeline({
 		}
 		setAutoBusy(true);
 		try {
-			const suggestions = await collectAutoZoomSuggestionsForDocument(document, (videoPath) =>
-				nativeBridgeClient.cursor.getTelemetry(videoPath),
+			// Collected against the document as it is now, and again if the clips moved
+			// while the telemetry was being read: the suggestions carry timeline spans and
+			// `addZoomsBulk` anchors them against whatever the store holds at write time,
+			// so a trim or a reorder during that multi-second wait would land them on
+			// different media.
+			const collected = await collectAutoZoomSuggestionsForLatestDocument(
+				() => useProjectStore.getState().document,
+				(videoPath) => nativeBridgeClient.cursor.getTelemetry(videoPath),
 			);
+			const suggestions = collected?.suggestions ?? [];
 			if (suggestions.length === 0) {
 				toast.info(t("toolbar.noAutoZoomMoments"), {
 					description: t("toolbar.noAutoZoomMomentsDescription"),

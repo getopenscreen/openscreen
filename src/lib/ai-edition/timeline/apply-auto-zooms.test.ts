@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { type AxcutDocument, createEmptyDocument } from "../schema";
 import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForDocument,
+	collectAutoZoomSuggestionsForLatestDocument,
 } from "./apply-auto-zooms";
 
 function dwell(
@@ -108,5 +109,54 @@ describe("appendAutoZoomSuggestions", () => {
 			focusMode: "auto",
 			clipId: "clip_1",
 		});
+	});
+});
+
+describe("collectAutoZoomSuggestionsForLatestDocument", () => {
+	const telemetry: CursorTelemetryPoint[] = [0, 600, 1200, 1800].map((timeMs) => ({
+		timeMs,
+		cx: 0.5,
+		cy: 0.5,
+	}));
+
+	it("collects once when the clips stand still", async () => {
+		const doc = documentWithClip();
+		const getTelemetry = vi.fn(async () => telemetry);
+
+		const out = await collectAutoZoomSuggestionsForLatestDocument(() => doc, getTelemetry);
+
+		expect(out?.document).toBe(doc);
+		expect(getTelemetry).toHaveBeenCalledTimes(1);
+	});
+
+	// THE case: the telemetry read takes seconds, and the suggestions carry timeline
+	// spans that `appendAutoZoomSuggestions` will anchor against whatever the store
+	// holds at write time. A trim landing in between makes the first collection
+	// describe a timeline that no longer exists.
+	it("collects again when the clips moved during the read", async () => {
+		const before = documentWithClip();
+		const after: AxcutDocument = {
+			...before,
+			timeline: {
+				...before.timeline,
+				clips: before.timeline.clips.map((clip) => ({ ...clip, sourceEndSec: 4 })),
+			},
+		};
+		let current = before;
+		const getTelemetry = vi.fn(async () => {
+			current = after;
+			return telemetry;
+		});
+
+		const out = await collectAutoZoomSuggestionsForLatestDocument(() => current, getTelemetry);
+
+		expect(out?.document).toBe(after);
+		expect(getTelemetry.mock.calls.length).toBeGreaterThan(1);
+	});
+
+	it("gives up when the project is gone", async () => {
+		const getTelemetry = vi.fn(async () => telemetry);
+		expect(await collectAutoZoomSuggestionsForLatestDocument(() => null, getTelemetry)).toBeNull();
+		expect(getTelemetry).not.toHaveBeenCalled();
 	});
 });

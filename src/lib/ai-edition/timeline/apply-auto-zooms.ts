@@ -39,6 +39,52 @@ export async function collectAutoZoomSuggestionsForDocument(
 	return perSource.flat();
 }
 
+/**
+ * The clip geometry the suggestions were built against, as a comparable string.
+ *
+ * Suggestions carry TIMELINE spans, and `appendAutoZoomSuggestions` anchors them
+ * against whatever clips the document holds when the write happens. Collecting
+ * takes a multi-second telemetry round trip, so those two documents are not
+ * necessarily the same one — and if a clip was trimmed, moved, added, removed or
+ * reordered in between, the spans land on different media, or on nothing.
+ */
+export function clipExtentSignature(document: AxcutDocument): string {
+	return document.timeline.clips
+		.map(
+			(clip) =>
+				`${clip.id}:${clip.assetId}:${clip.sourceStartSec}:${clip.sourceEndSec ?? ""}:${clip.timelineStartSec}:${clip.timelineEndSec}`,
+		)
+		.join("|");
+}
+
+/**
+ * Collect against the document as it is NOW, and collect again if the clips moved
+ * while the telemetry was being read.
+ *
+ * One retry, not a loop: a user who keeps editing through the wait will keep
+ * invalidating it, and the honest answer there is the write-time guards, not
+ * spinning here. Returns the suggestions together with the document they were
+ * built from, so the caller can tell what they describe.
+ */
+export async function collectAutoZoomSuggestionsForLatestDocument(
+	readDocument: () => AxcutDocument | null,
+	getTelemetry: (videoPath: string) => Promise<CursorTelemetryPoint[] | null | undefined>,
+): Promise<{ document: AxcutDocument; suggestions: AutoZoomSuggestion[] } | null> {
+	const start = readDocument();
+	if (!start) return null;
+	const startSignature = clipExtentSignature(start);
+	const suggestions = await collectAutoZoomSuggestionsForDocument(start, getTelemetry);
+	const latest = readDocument();
+	if (!latest) return null;
+	if (clipExtentSignature(latest) === startSignature) {
+		return { document: latest, suggestions };
+	}
+	return {
+		document: latest,
+		suggestions: await collectAutoZoomSuggestionsForDocument(latest, getTelemetry),
+	};
+}
+
 export function appendAutoZoomSuggestions(
 	document: AxcutDocument,
 	suggestions: AutoZoomSuggestion[],

@@ -26,6 +26,7 @@ import {
 } from "@/lib/ai-edition/store/projectStore";
 import {
 	appendAutoZoomSuggestions,
+	clipExtentSignature,
 	collectAutoZoomSuggestionsForDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { nativeBridgeClient } from "@/native/client";
@@ -108,15 +109,6 @@ async function readAutoZoomPref(): Promise<boolean> {
 	} catch {
 		return true;
 	}
-}
-
-function clipExtentSignature(document: AxcutDocument): string {
-	return document.timeline.clips
-		.map(
-			(clip) =>
-				`${clip.id}:${clip.assetId}:${clip.sourceStartSec}:${clip.sourceEndSec ?? ""}:${clip.timelineStartSec}:${clip.timelineEndSec}`,
-		)
-		.join("|");
 }
 
 function pendingFreshRecordingAsset(document: AxcutDocument) {

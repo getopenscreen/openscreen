@@ -56,6 +56,11 @@
 		"useEditableCursor": "編集可能なカーソルを使う",
 		"useSystemCursor": "システムカーソルを使う"
 	},
+	"autoZoom": {
+		"enable": "録画後の自動ズームをオンにする",
+		"disable": "録画後の自動ズームをオフにする",
+		"needsEditableCursor": "自動ズームには編集可能なカーソルが必要です。カーソルモードを切り替えてください。"
+	},
 	"sourceSelector": {
 		"loading": "ソースを読み込み中...",
 		"screens": "画面 ({{count}})",

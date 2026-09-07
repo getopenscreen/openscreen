@@ -110,6 +110,8 @@
 		"microphone": "마이크",
 		"camera": "카메라",
 		"cursorHighlight": "커서 강조",
+		"autoZoom": "녹화 후 자동 확대",
+		"autoZoomNeedsEditableCursor": "자동 확대는 편집 가능한 커서가 필요합니다. 커서 모드를 전환하세요.",
 		"on": "켜짐",
 		"off": "꺼짐",
 		"loading": "로딩 중…",

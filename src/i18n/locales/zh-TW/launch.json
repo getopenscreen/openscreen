@@ -56,6 +56,11 @@
 		"useEditableCursor": "使用可編輯游標",
 		"useSystemCursor": "使用系統游標"
 	},
+	"autoZoom": {
+		"enable": "啟用錄製後自動縮放",
+		"disable": "關閉錄製後自動縮放",
+		"needsEditableCursor": "自動縮放需要可編輯游標。請先切換游標模式。"
+	},
 	"sourceSelector": {
 		"loading": "正在載入來源...",
 		"screens": "螢幕 ({{count}})",

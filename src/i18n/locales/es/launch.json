@@ -56,6 +56,11 @@
 		"useEditableCursor": "Usar cursor editable",
 		"useSystemCursor": "Usar cursor del sistema"
 	},
+	"autoZoom": {
+		"enable": "Activar zoom automático tras grabar",
+		"disable": "Desactivar zoom automático tras grabar",
+		"needsEditableCursor": "El zoom automático necesita el cursor editable. Cambia el modo del cursor para activarlo."
+	},
 	"sourceSelector": {
 		"loading": "Cargando fuentes...",
 		"screens": "Pantallas ({{count}})",

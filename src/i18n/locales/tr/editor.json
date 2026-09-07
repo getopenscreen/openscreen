@@ -110,6 +110,8 @@
 		"microphone": "Mikrofon",
 		"camera": "Kamera",
 		"cursorHighlight": "İmleç vurgusu",
+		"autoZoom": "Kayıttan sonra otomatik yakınlaştırma",
+		"autoZoomNeedsEditableCursor": "Otomatik yakınlaştırma düzenlenebilir imleç ister. Etkinleştirmek için imleç modunu değiştirin.",
 		"on": "Açık",
 		"off": "Kapalı",
 		"loading": "Yükleniyor…",

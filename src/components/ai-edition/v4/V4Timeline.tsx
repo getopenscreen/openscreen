@@ -28,7 +28,7 @@ import {
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
-import { fromFileUrl, toFileUrl } from "@/components/video-editor/projectPersistence";
+import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
@@ -52,6 +52,7 @@ import { useTimelineTranscriptGate } from "@/lib/ai-edition/store/transcriptionS
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
+import { collectAutoZoomSuggestionsForDocument } from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatSec } from "@/lib/ai-edition/timeline/format";
 import {
@@ -65,10 +66,6 @@ import {
 	resolveTimelineSpanToTrim,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
-import {
-	type AutoZoomSuggestion,
-	buildAutoZoomSuggestionsForClips,
-} from "@/lib/ai-edition/timeline/zoom-suggestions";
 import { formatBinding } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
@@ -1484,44 +1481,15 @@ export function V4Timeline({
 	// timeline was previously never consulted at all.
 	const runAutoZooms = useCallback(async () => {
 		setAutoEnhanceOpen(false);
-		const sources = videoSources.filter((source) => clips.some((c) => c.assetId === source.id));
-		if (sources.length === 0) {
+		const document = useProjectStore.getState().document;
+		if (!document || document.timeline.clips.length === 0) {
 			toast.error(t("toolbar.importRecordingFirst"));
 			return;
 		}
 		setAutoBusy(true);
 		try {
-			// Telemetry first, and nothing derived from the document until it is back.
-			// `Promise.all` preserves input order, so the suggestions still come out in the
-			// same sequence a loop would have produced.
-			const perSource = await Promise.all(
-				sources.map(async (source) => ({
-					assetId: source.id,
-					telemetry: (await nativeBridgeClient.cursor.getTelemetry(fromFileUrl(source.src))) ?? [],
-				})),
-			);
-			// Read AFTER the round trip, not before it. `addZoomsBulk` anchors what comes out
-			// of here against the document IT reads at write time, so building the spans from
-			// the pre-await `clips` puts the two halves on different rulers: a trim landing
-			// during the wait moves every clip, and a span that no longer falls in one is
-			// stored unanchored. A stale `zoomRegions` is the same shape one step over — a
-			// zoom the user added during the wait would not be reserved, and the region
-			// minted here would sit on top of it.
-			//
-			// Still read ONCE for every asset rather than per asset: each clip reserves
-			// against the zooms the document already holds, and two clips can never contest
-			// the same stretch of ruler, so nothing depends on the order they are visited.
-			const doc = useProjectStore.getState().document;
-			if (!doc) return;
-			const existingRegions = doc.zoomRanges.map((z) => ({ startMs: z.startMs, endMs: z.endMs }));
-			const suggestions: AutoZoomSuggestion[] = perSource.flatMap(({ assetId, telemetry }) =>
-				buildAutoZoomSuggestionsForClips({
-					cursorTelemetry: telemetry,
-					assetId,
-					clips: doc.timeline.clips,
-					existingRegions,
-					defaultDurationMs: 2000,
-				}),
+			const suggestions = await collectAutoZoomSuggestionsForDocument(document, (videoPath) =>
+				nativeBridgeClient.cursor.getTelemetry(videoPath),
 			);
 			if (suggestions.length === 0) {
 				toast.info(t("toolbar.noAutoZoomMoments"), {
@@ -1544,7 +1512,7 @@ export function V4Timeline({
 		} finally {
 			setAutoBusy(false);
 		}
-	}, [videoSources, clips, tl, t]);
+	}, [tl, t]);
 
 	// Auto-enhance option 2 — hand a generic prompt to the AI agent (smart
 	// zooms + cuts) via the chat prompt-bus. The chat panel owns the outcome

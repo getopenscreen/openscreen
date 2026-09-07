@@ -110,6 +110,8 @@
 		"microphone": "Microfono",
 		"camera": "Fotocamera",
 		"cursorHighlight": "Evidenzia cursore",
+		"autoZoom": "Zoom automatico dopo la registrazione",
+		"autoZoomNeedsEditableCursor": "Lo zoom automatico richiede il cursore modificabile. Cambia la modalità del cursore per attivarlo.",
 		"on": "Attivo",
 		"off": "Disattivo",
 		"loading": "Caricamento…",

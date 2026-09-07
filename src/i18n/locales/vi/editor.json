@@ -110,6 +110,8 @@
 		"microphone": "Micro",
 		"camera": "Máy ảnh",
 		"cursorHighlight": "Làm nổi bật con trỏ",
+		"autoZoom": "Tự động phóng to sau khi ghi",
+		"autoZoomNeedsEditableCursor": "Tự động phóng to cần con trỏ chỉnh sửa được. Hãy đổi chế độ con trỏ.",
 		"on": "Bật",
 		"off": "Tắt",
 		"loading": "Đang tải…",

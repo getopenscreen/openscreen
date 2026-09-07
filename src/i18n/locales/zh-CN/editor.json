@@ -110,6 +110,8 @@
 		"microphone": "麦克风",
 		"camera": "摄像头",
 		"cursorHighlight": "光标高亮",
+		"autoZoom": "录制后自动缩放",
+		"autoZoomNeedsEditableCursor": "自动缩放需要可编辑光标。请先切换光标模式。",
 		"on": "开",
 		"off": "关",
 		"loading": "加载中…",

@@ -106,6 +106,12 @@ const MAC_REQUIRED = [
 		fix: FIX_MAC,
 	})),
 	{
+		match: (name) => /^libavdevice\.\d+\.dylib$/.test(name),
+		what: "the LGPL libavdevice dylib the ffmpeg CLI links",
+		breaks: "ffmpeg dies in dyld before main(), so waveform and STT extraction cannot start",
+		fix: FIX_MAC,
+	},
+	{
 		match: (name) => name === "whisper-stt-server",
 		what: "the whisper.cpp STT helper",
 		breaks: "transcription and captions fail with a developer error shown to end users",
@@ -123,6 +129,14 @@ const MAC_REQUIRED = [
 		what: "the ScreenCaptureKit capture helper",
 		breaks: "native screen capture is unavailable",
 		fix: "Build it with:\n\n    npm run build:native:mac",
+	},
+	{
+		match: (name) => name === "ffmpeg",
+		what: "the LGPL ffmpeg CLI (spawned for waveform peaks and STT audio extraction)",
+		breaks:
+			"transcription falls back to the renderer decode or fails outright on machines with no\n" +
+			'system ffmpeg, shown to the user only as "Failed to fetch" (#616)',
+		fix: "Build it with:\n\n    npm run build:native:compositor:mac\n\nwhich stages the SDK's ffmpeg beside the vendored dylibs.",
 	},
 ];
 
@@ -790,6 +804,8 @@ exports.__testing = {
 	machoMinOs,
 	checkMacOsVersionFloor,
 	MAC_MIN_OS_FLOOR,
+	MAC_REQUIRED,
+	checkNativePayload,
 };
 
 /** Every ELF under `dir`, recursively — the helper's ffmpeg sits in a subdirectory. */

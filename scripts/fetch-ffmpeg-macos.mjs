@@ -162,21 +162,56 @@ function isLgpl(dir) {
 	return /Lesser General Public/i.test(banner) && !/GNU General Public License/i.test(banner);
 }
 
+/**
+ * Whether the vendored tree was built for the pinned deployment target. Part of the
+ * reuse decision alongside the licence: a tree that predates the pin (or was built by
+ * hand without it) is LGPL and would otherwise be reused forever, only for
+ * before-pack's floor guard to refuse it at packaging time — a five-minute rebuild
+ * deferred to the worst possible moment. The binary, not the dylibs, because it is one
+ * vtool call and the whole tree shares a configure.
+ */
+function isAtDeploymentTarget(dir) {
+	const bin = path.join(dir, "bin", "ffmpeg");
+	if (!fs.existsSync(bin)) return false;
+	const build = execFileSync("vtool", ["-show-build", bin], { encoding: "utf8" });
+	const minos = /minos (\d+(?:\.\d+)+)/.exec(build)?.[1];
+	if (minos === undefined) return false;
+	const compareVersions = (a, b) => {
+		const left = a.split(".").map(Number);
+		const right = b.split(".").map(Number);
+		for (let i = 0; i < Math.max(left.length, right.length); i++) {
+			if ((left[i] ?? 0) !== (right[i] ?? 0)) return (left[i] ?? 0) - (right[i] ?? 0);
+		}
+		return 0;
+	};
+	return compareVersions(minos, MACOS_DEPLOYMENT_TARGET) <= 0;
+}
+
 if (process.platform !== "darwin") {
 	console.log("Skipping macOS ffmpeg vendoring: macOS-only (Windows uses fetch:ffmpeg).");
 	process.exit(0);
 }
 
-if (fs.existsSync(path.join(DEST, "include")) && isLgpl(DEST)) {
-	console.log(`ffmpeg already vendored at ${DEST} and its -L banner says LGPL. Nothing to do.`);
+if (fs.existsSync(path.join(DEST, "include")) && isLgpl(DEST) && isAtDeploymentTarget(DEST)) {
+	console.log(
+		`ffmpeg already vendored at ${DEST}: LGPL, built for macOS ${MACOS_DEPLOYMENT_TARGET}. Nothing to do.`,
+	);
 	process.exit(0);
 }
-if (fs.existsSync(path.join(DEST, "include"))) {
+if (fs.existsSync(path.join(DEST, "include")) && !isLgpl(DEST)) {
 	throw new Error(
 		`${DEST} exists but is not an LGPL build (checked with \`ffmpeg -L\`).\n` +
 			"Refusing to reuse it — linking a GPL ffmpeg would relicense OpenScreen.\n" +
 			"Delete the directory and re-run to rebuild it from source.",
 	);
+}
+if (fs.existsSync(path.join(DEST, "include"))) {
+	console.warn(
+		`${DEST} was not built for the ${MACOS_DEPLOYMENT_TARGET} deployment target ` +
+			"(check: vtool -show-build). Rebuilding — a stale floor here only fails at packaging,\n" +
+			"in before-pack's macOS version guard.",
+	);
+	fs.rmSync(DEST, { recursive: true, force: true });
 }
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-ffmpeg-"));

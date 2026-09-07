@@ -25,7 +25,12 @@ import {
 	setDocumentWordText,
 } from "@/lib/ai-edition/document/transcript";
 import { isModalOpen } from "@/lib/ai-edition/modalGuard";
-import { type AxcutAudioTrack, type AxcutClip, documentSchema } from "@/lib/ai-edition/schema";
+import {
+	type AxcutAudioTrack,
+	type AxcutClip,
+	type AxcutDocument,
+	documentSchema,
+} from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
@@ -114,6 +119,57 @@ function NativePlaybackSync({
 export const DEFAULT_TIMELINE_HEIGHT_PX = 392;
 export const MIN_TIMELINE_HEIGHT_PX = 160;
 export const MAX_TIMELINE_HEIGHT_PX = 560;
+
+/**
+ * What a `loadedmetadata` event should write, or `null` for "write nothing".
+ *
+ * Exported because it is the only part of this path a test can reach: the event
+ * arrives through Preview -> PreviewCanvas -> VirtualPreview and a real <video>,
+ * none of which jsdom fires. Keeping the decision here and the queueing in the
+ * component means the two guards below are testable without standing all four up.
+ *
+ * `originatingProjectId` is the project that was open when the event fired. It
+ * matters because the write is queued: by the time this runs the user may have
+ * switched, and `knownSec` came off the OLD video, so applying it to the new
+ * project is simply a wrong number. `saveDocument`'s epoch check cannot catch
+ * that — the write is issued after the switch rather than across it.
+ */
+export function documentAfterProbedDuration(
+	doc: AxcutDocument | null,
+	assetId: string,
+	knownSec: number,
+	originatingProjectId: string | undefined,
+): AxcutDocument | null {
+	if (!doc || doc.assets.length === 0) return null;
+	if (doc.project.id !== originatingProjectId) return null;
+	if (doc.timeline.clips.length === 0) {
+		// ponytail: replaceTimeline derives clip length from asset.durationSec, which
+		// import never populates — without this the first auto-created clip silently
+		// comes out empty (normalizeIntervals clamps against a 0 duration, dropping it).
+		const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
+		// Only the asset that actually fired. `replaceTimeline` pins every clip it
+		// builds to the primary asset, and the seed sizes that clip from `knownSec` —
+		// so seeding on an event from any OTHER asset writes one video's length under
+		// another's id. Not a lost seed: the primary's own event does its own seeding.
+		if (!primaryAssetId || primaryAssetId !== assetId) return null;
+		const docWithDuration: AxcutDocument = {
+			...doc,
+			assets: doc.assets.map((a) => (a.id === primaryAssetId ? { ...a, durationSec: knownSec } : a)),
+		};
+		return replaceTimelineOp(
+			docWithDuration,
+			[{ startSec: 0, endSec: knownSec }],
+			"Auto-created full-duration clip",
+		);
+	}
+	// The pure document layer patches only the clips of THIS asset that are still
+	// waiting for a real length (the pre-probe placeholder, or the extent-less clip a
+	// legacy v2 import mints), shifts what follows, and brings the modifiers along —
+	// anchoring the ones migration had to leave unanchored. It returns the document
+	// untouched when nothing is waiting, which is this function's "write nothing".
+	const next = applyProbedDuration(doc, assetId, knownSec);
+	return next === doc ? null : next;
+}
 
 export function NewEditorShell() {
 	const te = useScopedT("editor");
@@ -426,10 +482,12 @@ export function NewEditorShell() {
 			// ponytail: WebM recordings from MediaRecorder report NaN/Infinity
 			// until the main-process EBML fix lands. Fall back to a 60s seed if
 			// duration is unknown so the timeline never gets stuck on an empty
-			// placeholder. All store reads go through getState() to avoid
-			// stale-closure bugs.
+			// placeholder.
 			const known = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 60;
 			setSourceDuration(known);
+			// Read before queueing: this is the project the event belongs to. What the
+			// decision does with it is `documentAfterProbedDuration`'s business.
+			const originatingProjectId = useProjectStore.getState().document?.project.id;
 			// On the shared write queue, and reading the document inside it. Folding a
 			// probed duration in is a read-modify-write of the whole document, which is
 			// what `useSequentialTimelineOps` exists for -- its header says anything that
@@ -437,63 +495,18 @@ export function NewEditorShell() {
 			// returns the PRE-edit document while a user's save is still in flight (the
 			// store is only written once the bridge answers), and the full snapshot built
 			// from it lands after theirs and takes their edit with it.
-			// Bound to the project that was open when the event fired. Queueing puts real
-			// time between the two, and `known` came off THAT video: applied to a project
-			// the user switched to meanwhile it is simply a wrong number, and
-			// `saveDocument`'s epoch check cannot catch it because the write is issued
-			// after the switch, not across it.
-			const originatingProjectId = useProjectStore.getState().document?.project.id;
 			void enqueueTimelineWrite(async () => {
 				const state = useProjectStore.getState();
-				const doc = state.document;
-				if (!doc || doc.assets.length === 0) return;
-				if (doc.project.id !== originatingProjectId) return;
-				if (doc.timeline.clips.length === 0) {
-					// ponytail: replaceTimeline derives clip length from
-					// asset.durationSec, which import never populates — without this
-					// patch the first auto-created clip silently comes out empty
-					// (normalizeIntervals clamps against a 0 duration and drops it).
-					const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
-					// Only the asset that actually fired this event. The seed stamps `known`
-					// on the primary asset and sizes the whole clip from it, so on a project
-					// whose primary is some OTHER asset that is one video's length written as
-					// another's -- a full-duration clip at the wrong length. The sibling
-					// branch never had this hole: `applyProbedDuration` is handed `assetId`
-					// and returns the document untouched when it does not hold it.
-					if (primaryAssetId !== assetId) return;
-					const docWithDuration = primaryAssetId
-						? {
-								...doc,
-								assets: doc.assets.map((a) =>
-									a.id === primaryAssetId ? { ...a, durationSec: known } : a,
-								),
-							}
-						: doc;
-					const next = replaceTimelineOp(
-						docWithDuration,
-						[{ startSec: 0, endSec: known }],
-						"Auto-created full-duration clip",
-					);
-					// `history: false` for both writes in this callback: they are the probed
-					// duration being folded into the document on load, not something the user
-					// did — an undo landing on one of them would empty their timeline.
-					//
-					// Awaited, not `void`ed: the queue only serialises what it can see finish,
-					// so a fire-and-forget write here would let the next queued edit read the
-					// document this one has not committed yet.
-					await state.saveDocument(next, { history: false });
-					return;
-				}
-				// Hand the probed duration to the pure document layer: it patches only the
-				// clips of THIS asset that are still waiting for a real length (the
-				// pre-probe placeholder, or the extent-less clip a legacy v2 import mints),
-				// shifts what follows, and brings the modifiers along — anchoring the ones
-				// migration had to leave unanchored. Returns the document untouched when
-				// nothing is waiting, so there is nothing to guard here.
-				const next = applyProbedDuration(doc, assetId, known);
-				if (next !== doc) {
-					await state.saveDocument(next, { history: false });
-				}
+				const next = documentAfterProbedDuration(state.document, assetId, known, originatingProjectId);
+				if (!next) return;
+				// `history: false`: this is the probed duration being folded into the
+				// document on load, not something the user did — an undo landing on it would
+				// empty their timeline.
+				//
+				// Awaited, not `void`ed: the queue only serialises what it can see finish, so
+				// a fire-and-forget write would let the next queued edit read a document this
+				// one has not committed yet.
+				await state.saveDocument(next, { history: false });
 			});
 		},
 		[setSourceDuration, enqueueTimelineWrite],

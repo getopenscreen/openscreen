@@ -126,7 +126,6 @@ const DECLARED: WritePath[] = [
 	// The probed duration folded into the document when the <video> loads. Twice:
 	// the first clip seed, and the backfill for clips still on a placeholder length.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleLoadedMetadata", "save", "automatic"),
-	w("src/components/ai-edition/NewEditorShell.tsx", "handleLoadedMetadata", "save", "automatic"),
 	// Renaming the project from the title field.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.

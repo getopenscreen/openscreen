@@ -154,7 +154,9 @@ export function documentAfterProbedDuration(
 		if (!primaryAssetId || primaryAssetId !== assetId) return null;
 		const docWithDuration: AxcutDocument = {
 			...doc,
-			assets: doc.assets.map((a) => (a.id === primaryAssetId ? { ...a, durationSec: knownSec } : a)),
+			assets: doc.assets.map((a) =>
+				a.id === primaryAssetId ? { ...a, durationSec: knownSec } : a,
+			),
 		};
 		return replaceTimelineOp(
 			docWithDuration,
@@ -497,7 +499,12 @@ export function NewEditorShell() {
 			// from it lands after theirs and takes their edit with it.
 			void enqueueTimelineWrite(async () => {
 				const state = useProjectStore.getState();
-				const next = documentAfterProbedDuration(state.document, assetId, known, originatingProjectId);
+				const next = documentAfterProbedDuration(
+					state.document,
+					assetId,
+					known,
+					originatingProjectId,
+				);
 				if (!next) return;
 				// `history: false`: this is the probed duration being folded into the
 				// document on load, not something the user did — an undo landing on it would

@@ -126,6 +126,8 @@ describe("documentAfterProbedDuration", () => {
 
 	it("writes nothing without a document or without assets", () => {
 		expect(documentAfterProbedDuration(null, "asset_1", 30, PROJECT)).toBeNull();
-		expect(documentAfterProbedDuration(emptyTimeline("asset_1", []), "asset_1", 30, PROJECT)).toBeNull();
+		expect(
+			documentAfterProbedDuration(emptyTimeline("asset_1", []), "asset_1", 30, PROJECT),
+		).toBeNull();
 	});
 });

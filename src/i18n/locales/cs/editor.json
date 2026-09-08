@@ -19,7 +19,7 @@
 		"gifExportFailed": "Export GIF selhal",
 		"noVideoLoaded": "Žádné video nenačteno",
 		"previewCompositorUnavailable": "Náhled na tomto počítači není dostupný",
-		"trimNoFilm": "Tam není co vystřihnout — pod těmito slovy není žádný film.",
+		"trimNoFilm": "Tam není co vystřihnout. Pod těmito slovy není žádný film.",
 		"unableToDetermineSourcePath": "Nelze určit cestu ke zdrojovému videu",
 		"videoNotReady": "Video není připraveno",
 		"wordEditFailed": "Nepodařilo se změnit toto slovo",
@@ -135,7 +135,7 @@
 		"couldNotAddAsset": "Nepodařilo se přidat médium",
 		"searchPlaceholder": "Hledat média…",
 		"dragHint": "Přetáhněte klip na níže uvedenou časovou osu pro přidání",
-		"emptyHint": "Zatím žádná média — importujte nahrávku pro začátek.",
+		"emptyHint": "Zatím žádná média. Importujte nahrávku pro začátek.",
 		"importMedia": "Importovat média",
 		"added": "Přidáno {{label}}",
 		"addToTimeline": "Přidat na časovou osu",
@@ -148,17 +148,17 @@
 		"initializingModel": "Spouštění modelu řeči",
 		"pendingTranscription": "Přepis čeká",
 		"transcriptionFailed": "Přepis selhal",
-		"cpuBackendHint": "Běží na CPU — přibližně 2× pomalejší než na GPU",
+		"cpuBackendHint": "Běží na CPU (přibližně 2× pomalejší než na GPU)",
 		"noTranscript": "Žádný přepis",
 		"regenerateAs": "Znovu generovat jako",
 		"auto": "Automaticky",
 		"regenerate": "Znovu generovat",
 		"transcriptEmpty": "Přepis je prázdný.",
-		"notGeneratedHint": "Ještě nevygenerováno — vyberte jazyk a klikněte na znovu generovat.",
-		"generationFailedHint": "Generování selhalo — vyberte jazyk a znovu generujte.",
+		"notGeneratedHint": "Ještě nevygenerováno. Vyberte jazyk a klikněte na Znovu generovat.",
+		"generationFailedHint": "Generování selhalo. Vyberte jazyk a znovu generujte.",
 		"detectedLanguage": "Zjištěný jazyk: {{language}}",
 		"noAudioTrack": "Žádná zvuková stopa",
-		"noAudioTrackHint": "Toto médium nemá zvukovou stopu — není co přepisovat.",
+		"noAudioTrackHint": "Toto médium nemá zvukovou stopu, takže není co přepisovat.",
 		"noSpeechDetected": "Žádná řeč nezjištěna"
 	},
 	"exportDialog": {
@@ -196,7 +196,7 @@
 		"exportFailed": "Export selhal",
 		"failedToWriteFile": "Nepodařilo se zapsat soubor",
 		"qualityUpscaleWarning": "Zvýšení rozlišení",
-		"nothingToExport": "Není co exportovat — časová osa je prázdná."
+		"nothingToExport": "Není co exportovat, časová osa je prázdná."
 	},
 	"inspector": {
 		"resetFocusPoint": "Obnovit bod zaostření",
@@ -206,11 +206,11 @@
 		"collapseInspector": "Sbalit inspektor",
 		"captionsDescription": "Generujte titulky synchronizované se slovy z přepisu a přetáhněte je na časovou osu.",
 		"generateCaptions": "Generovat titulky",
-		"cropDescription": "Přeformátujte nahrávku — vyberte poměr stran a přibližte oblast, kterou chcete zachovat.",
+		"cropDescription": "Přeformátujte nahrávku: vyberte poměr stran a přibližte oblast, kterou chcete zachovat.",
 		"openCrop": "Otevřít oříznutí…",
-		"cameraFullscreenDescription": "Během přehrávání této oblasti kamera zabírá celý snímek — bez okraje, bez zaoblení, bez pozadí — a na konci se vrátí. Přetáhněte okraje oblasti na časové ose pro změnu začátku a délky trvání.",
+		"cameraFullscreenDescription": "Během přehrávání této oblasti kamera zabírá celý snímek (bez okraje, bez zaoblení, bez pozadí) a na konci se vrátí. Přetáhněte okraje oblasti na časové ose pro změnu začátku a délky trvání.",
 		"deleteRegion": "Smazat oblast",
-		"freehandRendersAsBox": "Při exportu je volně kreslený tvar pokryt svým ohraničujícím rámečkem — vždy překrytý, nikdy nepokrytý."
+		"freehandRendersAsBox": "Při exportu je volně kreslený tvar pokryt svým ohraničujícím rámečkem: vždy překrytý, nikdy nepokrytý."
 	},
 	"chat": {
 		"changeProvider": "Změnit poskytovatele",
@@ -357,7 +357,7 @@
 		"webcamPreview": "Náhled webkamery (přetáhněte pro přemístění)",
 		"mediaError": {
 			"title": "Náhled zastaven",
-			"description": "Video nelze dekódovat. Soubor může být poškozen, stále se zapisuje nebo již není tam, kde ho projekt očekává — váš projekt je v pořádku.",
+			"description": "Video nelze dekódovat. Soubor může být poškozen, stále se zapisuje nebo již není tam, kde ho projekt očekává. Váš projekt je v pořádku.",
 			"retry": "Zkusit znovu",
 			"detail": "Podrobnosti: {{detail}}"
 		}
@@ -398,7 +398,7 @@
 		"saveAndUse": "Uložit a použít"
 	},
 	"cpuCompositor": {
-		"notice": "Běží bez kompatibilního GPU — renderování na CPU, takže přehrávání je pomalejší.",
+		"notice": "Běží bez kompatibilního GPU, takže renderování probíhá na CPU a přehrávání je pomalejší.",
 		"exportWarning": "Žádné kompatibilní GPU: tento export běží na CPU a bude trvat mnohem déle než obvykle."
 	}
 }

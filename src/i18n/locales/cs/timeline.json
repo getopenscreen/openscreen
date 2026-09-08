@@ -2,9 +2,9 @@
 	"buttons": {
 		"addZoom": "Přidat přiblížení (Z)",
 		"suggestZooms": "Navrhnout přiblížení podle kurzoru",
-		"autoZoomOn": "Automatické návrhy přiblížení zapnuty — klikněte pro odstranění navržených přiblížení",
-		"autoZoomOff": "Automatické návrhy přiblížení vypnuty — klikněte pro návrh přiblížení podle kurzoru",
-		"autoFocusAllOn": "Automatické zaostření zapnuto pro všechna přiblížení — klikněte pro přepnutí všech na ruční",
+		"autoZoomOn": "Automatické návrhy přiblížení zapnuty, klikněte pro odstranění navržených přiblížení",
+		"autoZoomOff": "Automatické návrhy přiblížení vypnuty, klikněte pro návrh přiblížení podle kurzoru",
+		"autoFocusAllOn": "Automatické zaostření zapnuto pro všechna přiblížení, klikněte pro přepnutí všech na ruční",
 		"autoFocusAllOff": "Automaticky zaostřit všechna přiblížení (kamera sleduje kurzor)",
 		"addTrim": "Přidat oříznutí (T)",
 		"addAnnotation": "Přidat anotaci (A)",
@@ -86,9 +86,9 @@
 		"smartCutsNeedsTranscript": "Vyžaduje přepis",
 		"smartCutsNoAudio": "Toto médium nemá zvuk",
 		"smartCutsNoSpeech": "Řeč nebyla detekována",
-		"smartCutsFailed": "Přepisování selhalo — zkuste to znovu z Média",
+		"smartCutsFailed": "Přepisování selhalo, zkuste to znovu z Média",
 		"addAudioTooltip": "Přidat zvuk",
-		"addedWord": "Přidáno slovo: „{{word}}\" — za ním není žádný zvuk"
+		"addedWord": "Přidáno slovo: „{{word}}\", za ním není žádný zvuk"
 	},
 	"audio": {
 		"addVoiceover": "Přidat komentář",
@@ -98,7 +98,7 @@
 		"importFile": "Importovat zvukový soubor",
 		"importFileHint": "Přineste hudbu nebo zvukový soubor",
 		"recording": "Nahrávání",
-		"recordingHint": "Komentujte spolu s videem — přehrává se při nahrávání",
+		"recordingHint": "Komentujte spolu s videem, které se přehrává při nahrávání",
 		"stop": "Zastavit",
 		"micDenied": "Přístup k mikrofonu byl odepřen",
 		"recordingUnavailable": "Nahrávání zde není dostupné",

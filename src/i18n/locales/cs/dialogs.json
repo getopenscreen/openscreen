@@ -29,7 +29,7 @@
 		"description": "Jak vystřihnout nežádoucí části videa.",
 		"explanationBefore": "Nástroj Oříznutí funguje tak, že definujete segmenty, které chcete",
 		"remove": "odstranit",
-		"explanationMiddle": " — vše",
+		"explanationMiddle": ", vše",
 		"covered": "pokryté",
 		"explanationAfter": "červeným segmentem oříznutí bude při exportu vystřiženo.",
 		"visualExample": "Vizuální příklad",

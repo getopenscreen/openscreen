@@ -14,10 +14,7 @@ import {
 	migrateProjectDataToAxcutDocument,
 	migrateRawDocumentToCurrent,
 } from "@/lib/ai-edition/document/migrate";
-import {
-	applyProbedDuration,
-	replaceTimeline as replaceTimelineOp,
-} from "@/lib/ai-edition/document/timeline";
+import { documentAfterProbedDuration } from "@/lib/ai-edition/document/timeline";
 import {
 	type InsertSide,
 	insertDocumentWord,
@@ -25,12 +22,7 @@ import {
 	setDocumentWordText,
 } from "@/lib/ai-edition/document/transcript";
 import { isModalOpen } from "@/lib/ai-edition/modalGuard";
-import {
-	type AxcutAudioTrack,
-	type AxcutClip,
-	type AxcutDocument,
-	documentSchema,
-} from "@/lib/ai-edition/schema";
+import { type AxcutAudioTrack, type AxcutClip, documentSchema } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
@@ -119,59 +111,6 @@ function NativePlaybackSync({
 export const DEFAULT_TIMELINE_HEIGHT_PX = 392;
 export const MIN_TIMELINE_HEIGHT_PX = 160;
 export const MAX_TIMELINE_HEIGHT_PX = 560;
-
-/**
- * What a `loadedmetadata` event should write, or `null` for "write nothing".
- *
- * Exported because it is the only part of this path a test can reach: the event
- * arrives through Preview -> PreviewCanvas -> VirtualPreview and a real <video>,
- * none of which jsdom fires. Keeping the decision here and the queueing in the
- * component means the two guards below are testable without standing all four up.
- *
- * `originatingProjectId` is the project that was open when the event fired. It
- * matters because the write is queued: by the time this runs the user may have
- * switched, and `knownSec` came off the OLD video, so applying it to the new
- * project is simply a wrong number. `saveDocument`'s epoch check cannot catch
- * that — the write is issued after the switch rather than across it.
- */
-export function documentAfterProbedDuration(
-	doc: AxcutDocument | null,
-	assetId: string,
-	knownSec: number,
-	originatingProjectId: string | undefined,
-): AxcutDocument | null {
-	if (!doc || doc.assets.length === 0) return null;
-	if (doc.project.id !== originatingProjectId) return null;
-	if (doc.timeline.clips.length === 0) {
-		// ponytail: replaceTimeline derives clip length from asset.durationSec, which
-		// import never populates — without this the first auto-created clip silently
-		// comes out empty (normalizeIntervals clamps against a 0 duration, dropping it).
-		const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
-		// Only the asset that actually fired. `replaceTimeline` pins every clip it
-		// builds to the primary asset, and the seed sizes that clip from `knownSec` —
-		// so seeding on an event from any OTHER asset writes one video's length under
-		// another's id. Not a lost seed: the primary's own event does its own seeding.
-		if (!primaryAssetId || primaryAssetId !== assetId) return null;
-		const docWithDuration: AxcutDocument = {
-			...doc,
-			assets: doc.assets.map((a) =>
-				a.id === primaryAssetId ? { ...a, durationSec: knownSec } : a,
-			),
-		};
-		return replaceTimelineOp(
-			docWithDuration,
-			[{ startSec: 0, endSec: knownSec }],
-			"Auto-created full-duration clip",
-		);
-	}
-	// The pure document layer patches only the clips of THIS asset that are still
-	// waiting for a real length (the pre-probe placeholder, or the extent-less clip a
-	// legacy v2 import mints), shifts what follows, and brings the modifiers along —
-	// anchoring the ones migration had to leave unanchored. It returns the document
-	// untouched when nothing is waiting, which is this function's "write nothing".
-	const next = applyProbedDuration(doc, assetId, knownSec);
-	return next === doc ? null : next;
-}
 
 export function NewEditorShell() {
 	const te = useScopedT("editor");

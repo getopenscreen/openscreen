@@ -1655,4 +1655,32 @@ describe("useTimeline.addZoomsBulk reads the document at write time", () => {
 			"Edited while the wand was busy",
 		);
 	});
+
+	// Reading the document fresh is what makes this reachable: the spans were built
+	// from the OLD project's telemetry and its ruler, so writing them into whatever is
+	// loaded now puts one project's zooms in another. `saveDocument`'s epoch check does
+	// not cover it -- the write is issued after the switch, not across it.
+	it("writes nothing when the project changed during the telemetry wait", async () => {
+		const { result } = renderTimeline();
+		const addZoomsBulk = result.current.addZoomsBulk;
+
+		// The user switches projects while the wand is off fetching telemetry.
+		act(() => {
+			useProjectStore.setState({
+				projectId: "proj_switched_to",
+				document: sampleDoc,
+				revision: 2,
+			});
+		});
+
+		let added: number | undefined;
+		await act(async () => {
+			added = await addZoomsBulk([
+				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 } },
+			]);
+		});
+
+		expect(added).toBe(0);
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+	});
 });

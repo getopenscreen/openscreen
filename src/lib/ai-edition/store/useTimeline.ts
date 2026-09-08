@@ -343,6 +343,13 @@ export function useTimeline() {
 			// reason as `applyClipEdit`, `setTrimEntries` and `insertClipAt`.
 			const doc = useProjectStore.getState().document;
 			if (!doc || suggestions.length === 0) return 0;
+			// The same wait makes the PROJECT stale, and reading the document fresh is what
+			// exposes it: the suggestions were built from the OLD project's telemetry and its
+			// ruler, so applying them to whatever is loaded now writes one project's zooms into
+			// another. `saveDocument`'s epoch check cannot see this one -- the write is issued
+			// after the switch, not across it -- which is the same reason
+			// `documentAfterProbedDuration` carries an `originatingProjectId`.
+			if (useProjectStore.getState().projectId !== projectId) return 0;
 			const anchored = suggestions.flatMap((s) =>
 				anchorRegionsWithDerivedMs(
 					[
@@ -369,7 +376,7 @@ export function useTimeline() {
 			if (!(await saveDocument(next, { history: true }))) return 0;
 			return suggestions.length;
 		},
-		[saveDocument],
+		[projectId, saveDocument],
 	);
 
 	const addTrim = useCallback(

@@ -562,6 +562,70 @@ export function applyProbedDuration(
 	);
 }
 
+/**
+ * What a `loadedmetadata` event should write, or `null` for "write nothing".
+ *
+ * Lives here rather than in the component that fires it because it is pure document
+ * logic: `applyProbedDuration` above and `replaceTimeline` below are the whole body.
+ *
+ * `originatingProjectId` is the project that was open when the event fired. It matters
+ * because the write is queued (`NewEditorShell.handleLoadedMetadata` puts it on the
+ * shared timeline write queue): by the time this runs the user may have switched, and
+ * `knownSec` came off the OLD video, so applying it to the new project is simply a wrong
+ * number. `saveDocument`'s epoch check cannot catch that — the write is issued after the
+ * switch rather than across it.
+ */
+export function documentAfterProbedDuration(
+	doc: AxcutDocument | null,
+	assetId: string,
+	knownSec: number,
+	originatingProjectId: string | undefined,
+): AxcutDocument | null {
+	if (!doc || doc.assets.length === 0) return null;
+	if (doc.project.id !== originatingProjectId) return null;
+	if (doc.timeline.clips.length === 0) {
+		// ponytail: replaceTimeline derives clip length from asset.durationSec, which
+		// import never populates — without this the first auto-created clip silently
+		// comes out empty (normalizeIntervals clamps against a 0 duration, dropping it).
+		const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
+		// Only the asset that actually fired. `replaceTimeline` pins every clip it
+		// builds to the primary asset, and the seed sizes that clip from `knownSec` —
+		// so seeding on an event from any OTHER asset writes one video's length under
+		// another's id. Not a lost seed: the primary's own event does its own seeding.
+		if (!primaryAssetId || primaryAssetId !== assetId) return null;
+		const docWithDuration: AxcutDocument = {
+			...doc,
+			// Only a length that was never measured, which is `applyProbedDuration`'s rule
+			// above widened to cover a stored 0 — the seed exists to give `replaceTimeline` a
+			// duration to clamp against, and a 0 defeats that exactly as a missing one does.
+			//
+			// An empty timeline is NOT proof the asset is unmeasured: the user can delete
+			// their only clip. And `knownSec` is the 60 s fallback whenever a MediaRecorder
+			// WebM reports a non-finite duration, so writing it unconditionally traded a real
+			// 26.517 for 60 under `history: false`, with no undo to get it back. Left alone,
+			// the recorded length is what the clip below is clamped against, which is the
+			// right number either way.
+			assets: doc.assets.map((a) =>
+				a.id === primaryAssetId && !(a.durationSec && a.durationSec > 0)
+					? { ...a, durationSec: knownSec }
+					: a,
+			),
+		};
+		return replaceTimeline(
+			docWithDuration,
+			[{ startSec: 0, endSec: knownSec }],
+			"Auto-created full-duration clip",
+		);
+	}
+	// The pure document layer patches only the clips of THIS asset that are still
+	// waiting for a real length (the pre-probe placeholder, or the extent-less clip a
+	// legacy v2 import mints), shifts what follows, and brings the modifiers along —
+	// anchoring the ones migration had to leave unanchored. It returns the document
+	// untouched when nothing is waiting, which is this function's "write nothing".
+	const next = applyProbedDuration(doc, assetId, knownSec);
+	return next === doc ? null : next;
+}
+
 /** One interval of a rebuilt timeline, plus the identity it inherits. `keepClipId`
  *  is set when the CALLER'S raw interval is (to the epsilon) an existing clip's own
  *  source window: the same stretch of media, so the same clip. */

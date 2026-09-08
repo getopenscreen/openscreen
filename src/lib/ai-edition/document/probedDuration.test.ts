@@ -1,36 +1,15 @@
 // The decision a `loadedmetadata` event makes, on its own.
 //
 // The event itself arrives through Preview -> PreviewCanvas -> VirtualPreview and a
-// real <video>, which no test environment here can decode, so the component cannot
-// be driven end to end. `documentAfterProbedDuration` is the part that decides what gets
-// written, and both guards below live in it: the queue the shell puts this write on
+// real <video>, which no test environment here can decode, so the component cannot be
+// driven end to end. `documentAfterProbedDuration` is the part that decides what gets
+// written, and every guard below lives in it: the queue the shell puts this write on
 // is what makes them necessary, because it puts real time between the event and the
 // write. The queue's own serialization is covered by useSequentialTimelineOps.test.
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("@/contexts/ShortcutsContext", async () => {
-	const { DEFAULT_SHORTCUTS } = await import("@/lib/shortcuts");
-	return {
-		useShortcuts: () => ({
-			shortcuts: DEFAULT_SHORTCUTS,
-			isMac: false,
-			isConfigOpen: false,
-			openConfig: vi.fn(),
-			closeConfig: vi.fn(),
-			setShortcuts: vi.fn(),
-			persistShortcuts: () => Promise.resolve(true),
-		}),
-	};
-});
-
-vi.mock("@/contexts/I18nContext", () => ({
-	useI18n: () => ({ locale: "en", setLocale: vi.fn() }),
-	useScopedT: () => (key: string) => key,
-}));
-
-import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
+import { describe, expect, it } from "vitest";
 import { type AxcutDocument, createEmptyDocument, documentSchema } from "@/lib/ai-edition/schema";
-import { documentAfterProbedDuration } from "./NewEditorShell";
+import { migrateProjectDataToAxcutDocument } from "./migrate";
+import { documentAfterProbedDuration } from "./timeline";
 
 const PROJECT = "proj_a";
 
@@ -121,6 +100,22 @@ describe("documentAfterProbedDuration", () => {
 		expect(
 			documentAfterProbedDuration(settled as AxcutDocument, assetId, 30, doc.project.id),
 		).toBeNull();
+	});
+
+	// Empty is not the same as unseeded — the user can delete their only clip — and
+	// `knownSec` is 60 whenever the <video> reports a non-finite duration. Overwriting
+	// here traded a real length for the fallback under `history: false`.
+	it("keeps a length the asset already carries, and sizes the seed against it", () => {
+		const doc = emptyTimeline("asset_1", ["asset_1"]);
+		const measured: AxcutDocument = {
+			...doc,
+			assets: doc.assets.map((a) => ({ ...a, durationSec: 26.517 })),
+		};
+
+		const next = documentAfterProbedDuration(measured, "asset_1", 60, PROJECT);
+
+		expect(next?.assets[0].durationSec).toBe(26.517);
+		expect(next?.timeline.clips[0].timelineEndSec).toBeCloseTo(26.517, 3);
 	});
 
 	it("writes nothing without a document or without assets", () => {

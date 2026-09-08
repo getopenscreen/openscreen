@@ -1,0 +1,99 @@
+{
+	"tooltips": {
+		"hideHUD": "Skrýt HUD",
+		"closeApp": "Zavřít aplikaci",
+		"restartRecording": "Restartovat nahrávání",
+		"cancelRecording": "Zrušit nahrávání",
+		"pauseRecording": "Pozastavit nahrávání",
+		"resumeRecording": "Obnovit nahrávání",
+		"useVerticalTray": "Použít svislý panel",
+		"useHorizontalTray": "Použít vodorovný panel",
+		"openStudio": "Otevřít Studio",
+		"openNotes": "Otevřít poznámky",
+		"openNotesPlaceholder": "Pište poznámky zde...",
+		"notesToolbar": {
+			"bold": "Tučně",
+			"italic": "Kurzíva",
+			"strikethrough": "Přeškrtnutí",
+			"bulletList": "Odrážkový seznam",
+			"numberedList": "Číslovaný seznam",
+			"blockquote": "Bloková citace",
+			"codeBlock": "Blok kódu",
+			"play": "Spustit automatické posouvání",
+			"pause": "Pozastavit automatické posouvání",
+			"speed": "Rychlost posouvání",
+			"decreaseSpeed": "Snížit rychlost posouvání",
+			"increaseSpeed": "Zvýšit rychlost posouvání",
+			"fontSize": "Velikost písma",
+			"decreaseFontSize": "Zmenšit písmo",
+			"increaseFontSize": "Zvětšit písmo",
+			"mirror": "Zrcadlit vodorovně"
+		}
+	},
+	"audio": {
+		"enableSystemAudio": "Povolit systémový zvuk",
+		"disableSystemAudio": "Zakázat systémový zvuk",
+		"enableMicrophone": "Povolit mikrofon",
+		"disableMicrophone": "Zakázat mikrofon",
+		"defaultMicrophone": "Výchozí mikrofon",
+		"systemAudio": "Systémový zvuk",
+		"microphone": "Mikrofon",
+		"on": "Zapnuto",
+		"off": "Vypnuto",
+		"inputDevice": "Vstupní zařízení"
+	},
+	"webcam": {
+		"enableWebcam": "Povolit webkameru",
+		"disableWebcam": "Zakázat webkameru",
+		"defaultCamera": "Výchozí kamera",
+		"searching": "Hledání...",
+		"noneFound": "Kamera nenalezena",
+		"unavailable": "Kamera nedostupná",
+		"camera": "Kamera",
+		"cameraDevice": "Zařízení kamery"
+	},
+	"cursor": {
+		"useEditableCursor": "Použít upravitelný kurzor",
+		"useSystemCursor": "Použít systémový kurzor"
+	},
+	"sourceSelector": {
+		"loading": "Načítání zdrojů...",
+		"screens": "Obrazovky ({{count}})",
+		"windows": "Okna ({{count}})",
+		"emptyTitle": "Žádné obrazovky ani okna nenalezena",
+		"emptyDescription": "Pokud jste právě udělili oprávnění pro záznam obrazovky, znovu načtěte tento výběr. Na macOS může být nutné znovu otevřít OpenScreen.",
+		"loadFailedDescription": "OpenScreen nemohl načíst zdroje záznamu. Znovu načtěte tento výběr a zkuste to znovu.",
+		"defaultSourceName": "Obrazovka"
+	},
+	"recording": {
+		"selectSource": "Vyberte prosím zdroj pro nahrávání",
+		"systemPicker": "Systém se zeptá, co sdílet",
+		"inProgress": "Nahrávání",
+		"saving": "Ukládání..."
+	},
+	"language": "Jazyk",
+	"systemLanguagePrompt": {
+		"title": "Použít jazyk systému?",
+		"description": "Detekovali jsme {{language}} jako jazyk vašeho systému. Chcete přepnout OpenScreen na {{language}}?",
+		"switch": "Přepnout na {{language}}",
+		"keepDefault": "Ponechat aktuální jazyk"
+	},
+	"softwareEncoderFallback": {
+		"title": "Přepnuto na softwarové kódování",
+		"description": "Výchozí GPU enkodér se nepodařilo spustit, takže OpenScreen přepnul na softwarové kódování H.264. Nahrávání by mělo pokračovat normálně, ale využití CPU může být vyšší.",
+		"dismiss": "Rozumím",
+		"dontShowAgain": "Již nezobrazovat"
+	},
+	"deviceSettings": {
+		"title": "Nastavení zařízení",
+		"done": "Hotovo",
+		"micLevel": "Úroveň vstupu",
+		"micHint": "Mluvte pro kontrolu mikrofonu",
+		"noMicrophones": "Mikrofon nenalezen",
+		"preview": "Náhled",
+		"previewUnavailable": "Náhled nedostupný",
+		"about": "O aplikaci",
+		"version": "Verze {{version}}",
+		"checkingForUpdates": "Kontrola…"
+	}
+}

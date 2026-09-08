@@ -232,6 +232,8 @@ function dwell(
 	}));
 }
 
+const RECORDING_PATH = "C:\\recordings\\rec.mp4";
+
 function documentWithClip(durationSec = 10): AxcutDocument {
 	const doc = createEmptyDocument({ projectId: "p_autozoom", title: "Recording" });
 	return {
@@ -241,7 +243,7 @@ function documentWithClip(durationSec = 10): AxcutDocument {
 				id: "asset_1",
 				kind: "video",
 				label: "rec.mp4",
-				originalPath: "C:\\recordings\\rec.mp4",
+				originalPath: RECORDING_PATH,
 				cameraTrack: null,
 				durationSec,
 			},
@@ -291,8 +293,8 @@ describe("fresh-recording auto-zoom", () => {
 	});
 
 	// A system-cursor take writes no `.cursor.json`, so there is never a dwell to
-	// find. Marking it pending anyway left the flag set for the life of the window
-	// and burned all three retries on an empty sidecar.
+	// find. Marking it pending anyway armed the hand-off for a take that can never
+	// spend it.
 	it("does not mark a system-cursor take as waiting", async () => {
 		stubElectronApi("C:\\recordings\\recording-1.mp4", "system");
 		await importPendingRecording();
@@ -306,7 +308,7 @@ describe("fresh-recording auto-zoom", () => {
 	});
 
 	it("applies cursor-dwell zooms once, after duration is known", async () => {
-		markFreshRecordingAutoZoomPending();
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const next = await applyPendingFreshRecordingAutoZooms(documentWithClip(), {
 			enabled: true,
 			getTelemetry: async () => dwell(4000, 0.4, 0.6),
@@ -322,7 +324,7 @@ describe("fresh-recording auto-zoom", () => {
 	});
 
 	it("skips when the HUD toggle is off", async () => {
-		markFreshRecordingAutoZoomPending();
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const document = documentWithClip();
 		const next = await applyPendingFreshRecordingAutoZooms(document, {
 			enabled: false,
@@ -332,25 +334,23 @@ describe("fresh-recording auto-zoom", () => {
 		expect(next.zoomRanges).toEqual([]);
 	});
 
-	it("keeps the pending flag when the sidecar is still empty, then applies on retry", async () => {
-		markFreshRecordingAutoZoomPending();
+	// The stop handler awaits `writePendingCursorTelemetry` before it publishes the
+	// session, so the sidecar is on disk by the time a take can be imported. An empty
+	// read is therefore the take's real answer, not a mid-flush one, and leaving the
+	// hand-off armed would let it fire on the next document loaded in this window.
+	it("consumes the hand-off when the sidecar holds no dwell", async () => {
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const document = documentWithClip();
 		const first = await applyPendingFreshRecordingAutoZooms(document, {
 			enabled: true,
 			getTelemetry: async () => [],
 		});
 		expect(first).toBe(document);
-		const next = await applyPendingFreshRecordingAutoZooms(document, {
-			enabled: true,
-			getTelemetry: async () => dwell(4000, 0.4, 0.6),
-			createId: (prefix) => `${prefix}_retry`,
-		});
-		expect(next.zoomRanges).toHaveLength(1);
-		expect(await applyPendingFreshRecordingAutoZooms(next, { enabled: true })).toBe(next);
+		expect(consumeFreshRecordingAutoZoomPending()).toBe(false);
 	});
 
 	it("keeps the pending flag when clips are not on the document yet", async () => {
-		markFreshRecordingAutoZoomPending();
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const document = createEmptyDocument({ projectId: "p_empty", title: "Recording" });
 		const next = await applyPendingFreshRecordingAutoZooms(document, {
 			enabled: true,
@@ -360,8 +360,8 @@ describe("fresh-recording auto-zoom", () => {
 		expect(consumeFreshRecordingAutoZoomPending()).toBe(true);
 	});
 
-	it("keeps pending when telemetry is present but no dwell has landed yet", async () => {
-		markFreshRecordingAutoZoomPending();
+	it("consumes the hand-off when the cursor never sits still", async () => {
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const document = documentWithClip();
 		const moving = Array.from({ length: 8 }, (_, i) => ({
 			timeMs: 1000 + i * 80,
@@ -373,16 +373,13 @@ describe("fresh-recording auto-zoom", () => {
 			getTelemetry: async () => moving,
 		});
 		expect(first).toBe(document);
-		const next = await applyPendingFreshRecordingAutoZooms(document, {
-			enabled: true,
-			getTelemetry: async () => dwell(4000, 0.4, 0.6),
-			createId: (prefix) => `${prefix}_late`,
-		});
-		expect(next.zoomRanges).toHaveLength(1);
+		expect(consumeFreshRecordingAutoZoomPending()).toBe(false);
 	});
 
+	// The one read that is not an answer: an error says nothing about whether the take
+	// has a dwell, so the hand-off survives it.
 	it("keeps pending when telemetry read throws", async () => {
-		markFreshRecordingAutoZoomPending();
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const document = documentWithClip();
 		const next = await applyPendingFreshRecordingAutoZooms(document, {
 			enabled: true,
@@ -445,13 +442,16 @@ describe("fresh-recording auto-zoom", () => {
 			getTelemetry: async (videoPath) => (videoPath === laterPath ? dwell(14000, 0.4, 0.6) : []),
 			createId: (prefix) => `${prefix}_later`,
 		});
+		// The point of the test: the later clip's dwell is not read at all, so the fresh
+		// take is never decorated with another asset's telemetry. Its own sidecar was
+		// empty, which is a real answer, so the hand-off is spent either way.
 		expect(next).toBe(withLater);
 		expect(next.zoomRanges).toEqual([]);
-		expect(consumeFreshRecordingAutoZoomPending()).toBe(true);
+		expect(consumeFreshRecordingAutoZoomPending()).toBe(false);
 	});
 
 	it("waits for a probed asset duration before generating zooms", async () => {
-		markFreshRecordingAutoZoomPending();
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const placeholder = documentWithClip(60);
 		placeholder.assets[0].durationSec = undefined;
 		const first = await applyPendingFreshRecordingAutoZooms(placeholder, {
@@ -585,10 +585,11 @@ describe("fresh-recording auto-zoom", () => {
 		expect(stored?.zoomRanges).toHaveLength(1);
 	});
 
-	// Contention is an exit, not a rebase: recomputing onto the document the other
-	// writer just produced only races that writer again. The attempt is dropped
-	// with pending intact so a retry runs against a settled document.
-	it("exits without writing when a user save lands mid-attempt", async () => {
+	// Contention is never a rebase: writing the snapshot this attempt built from would
+	// take the user's trim with it. The attempt is dropped whole and repeated once, from
+	// scratch, after `waitForDocumentSaves` has seen that writer finish -- so the zooms
+	// land ON the trim rather than over it.
+	it("re-collects from scratch when a user save lands mid-attempt", async () => {
 		const stale = documentWithClip(90);
 		const trimmed = {
 			...stale,
@@ -619,12 +620,12 @@ describe("fresh-recording auto-zoom", () => {
 			createId: (prefix) => `${prefix}_contended`,
 		});
 
-		expect(result).toBe(false);
+		expect(result).toBe(true);
 		const stored = useProjectStore.getState().document;
+		// The user's trim survived, and the zooms sit on top of it.
 		expect(stored?.timeline.clips[0].sourceEndSec).toBe(80);
-		expect(stored?.zoomRanges).toEqual([]);
-		// Still pending: the retries are what eventually apply the zooms.
-		expect(consumeFreshRecordingAutoZoomPending()).toBe(true);
+		expect(stored?.zoomRanges).toHaveLength(1);
+		expect(consumeFreshRecordingAutoZoomPending()).toBe(false);
 	});
 
 	it("keeps pending when a later user save wipes zooms before they settle", async () => {

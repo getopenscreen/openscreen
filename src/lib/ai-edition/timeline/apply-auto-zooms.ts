@@ -4,15 +4,21 @@
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "../document/ids";
-import type { AxcutDocument } from "../schema";
+import type { AxcutAsset, AxcutDocument } from "../schema";
 import { anchorRegionsWithDerivedMs } from "./timelineMap";
 import { type AutoZoomSuggestion, buildAutoZoomSuggestionsForClips } from "./zoom-suggestions";
 
 export const AUTO_ZOOM_DEFAULT_DURATION_MS = 2000;
 
+/** Which assets to read telemetry for. The wand takes every video on the document;
+ *  the fresh-recording import narrows it to the take it is pending on, so a project
+ *  that already holds other footage does not pay an IPC round trip per asset. */
+export type AutoZoomAssetFilter = (asset: AxcutAsset) => boolean;
+
 export async function collectAutoZoomSuggestionsForDocument(
 	document: AxcutDocument,
 	getTelemetry: (videoPath: string) => Promise<CursorTelemetryPoint[] | null | undefined>,
+	includeAsset: AutoZoomAssetFilter = () => true,
 ): Promise<AutoZoomSuggestion[]> {
 	const existingRegions = document.zoomRanges.map((region) => ({
 		startMs: region.startMs,
@@ -22,6 +28,7 @@ export async function collectAutoZoomSuggestionsForDocument(
 		(asset) =>
 			asset.kind === "video" &&
 			asset.originalPath &&
+			includeAsset(asset) &&
 			document.timeline.clips.some((clip) => clip.assetId === asset.id),
 	);
 	const perSource = await Promise.all(
@@ -69,11 +76,16 @@ export function clipExtentSignature(document: AxcutDocument): string {
 export async function collectAutoZoomSuggestionsForLatestDocument(
 	readDocument: () => AxcutDocument | null,
 	getTelemetry: (videoPath: string) => Promise<CursorTelemetryPoint[] | null | undefined>,
+	includeAsset?: AutoZoomAssetFilter,
 ): Promise<{ document: AxcutDocument; suggestions: AutoZoomSuggestion[] } | null> {
 	const start = readDocument();
 	if (!start) return null;
 	const startSignature = clipExtentSignature(start);
-	const suggestions = await collectAutoZoomSuggestionsForDocument(start, getTelemetry);
+	const suggestions = await collectAutoZoomSuggestionsForDocument(
+		start,
+		getTelemetry,
+		includeAsset,
+	);
 	const latest = readDocument();
 	if (!latest) return null;
 	if (clipExtentSignature(latest) === startSignature) {
@@ -81,7 +93,7 @@ export async function collectAutoZoomSuggestionsForLatestDocument(
 	}
 	return {
 		document: latest,
-		suggestions: await collectAutoZoomSuggestionsForDocument(latest, getTelemetry),
+		suggestions: await collectAutoZoomSuggestionsForDocument(latest, getTelemetry, includeAsset),
 	};
 }
 

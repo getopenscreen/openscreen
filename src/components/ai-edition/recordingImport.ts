@@ -26,62 +26,37 @@ import {
 } from "@/lib/ai-edition/store/projectStore";
 import {
 	appendAutoZoomSuggestions,
-	clipExtentSignature,
-	collectAutoZoomSuggestionsForDocument,
+	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { nativeBridgeClient } from "@/native/client";
 
 // Fresh recordings used to get cursor-dwell zooms on load (legacy editor
 // `autoZoomEnabled`, default on). The ai-edition import only seeded a clip, so
 // the wand still worked but a new take landed un-zoomed. This flag is the
-// one-shot hand-off: set as soon as the asset is on the document, then taken
-// only after a real apply attempt (clips exist, duration is probed, and
-// telemetry was readable, or the toggle is off). Keeping it across an
-// empty-clip / empty-sidecar / placeholder-duration pass is what lets metadata
-// win the race against the helper flush. The path stops a leftover flag from
-// decorating a later, unrelated project in the same window. A successful save
-// records the project id so a later undo or delete cannot be silently re-seeded.
+// one-shot hand-off: set as soon as the asset is on the document, then taken on
+// the first pass that can give a real answer -- zooms written, no dwell in the
+// sidecar, or the toggle is off. What keeps it set is only ever "not enough of
+// the document yet" (no clips, still the placeholder duration), and the
+// `loadedmetadata` write is what comes back when that resolves.
+//
+// The recording path is what scopes it: `importPendingRecording` always has one,
+// and it is what stops a flag left over from a take with nothing to zoom from
+// decorating the next document loaded in the same window. A successful save
+// records the project id so a later undo or delete cannot silently re-seed it.
 let pendingFreshRecordingAutoZoom = false;
 let pendingFreshRecordingAutoZoomPath: string | null = null;
 let appliedFreshRecordingAutoZoomProjectId: string | null = null;
-let pendingFreshRecordingAutoZoomTimers: ReturnType<typeof setTimeout>[] = [];
 let freshRecordingAutoZoomSaveChain: Promise<void> = Promise.resolve();
 
-const FRESH_RECORDING_AUTO_ZOOM_RETRY_MS = [500, 1500, 3000];
-
-function clearFreshRecordingAutoZoomTimers(): void {
-	for (const timer of pendingFreshRecordingAutoZoomTimers) {
-		clearTimeout(timer);
-	}
-	pendingFreshRecordingAutoZoomTimers = [];
-}
-
-function scheduleFreshRecordingAutoZoomRetries(): void {
-	clearFreshRecordingAutoZoomTimers();
-	for (const delayMs of FRESH_RECORDING_AUTO_ZOOM_RETRY_MS) {
-		pendingFreshRecordingAutoZoomTimers.push(
-			setTimeout(() => {
-				if (!pendingFreshRecordingAutoZoom) return;
-				const document = useProjectStore.getState().document;
-				if (document) {
-					void maybeSaveFreshRecordingAutoZooms(document);
-				}
-			}, delayMs),
-		);
-	}
-}
-
-export function markFreshRecordingAutoZoomPending(assetPath?: string): void {
+export function markFreshRecordingAutoZoomPending(assetPath: string): void {
 	pendingFreshRecordingAutoZoom = true;
-	pendingFreshRecordingAutoZoomPath = assetPath ?? null;
+	pendingFreshRecordingAutoZoomPath = assetPath;
 	appliedFreshRecordingAutoZoomProjectId = null;
-	scheduleFreshRecordingAutoZoomRetries();
 }
 
 function clearFreshRecordingAutoZoomPending(): void {
 	pendingFreshRecordingAutoZoom = false;
 	pendingFreshRecordingAutoZoomPath = null;
-	clearFreshRecordingAutoZoomTimers();
 }
 
 export function consumeFreshRecordingAutoZoomPending(): boolean {
@@ -111,14 +86,12 @@ async function readAutoZoomPref(): Promise<boolean> {
 	}
 }
 
+function isPendingFreshRecordingAsset(asset: { originalPath?: string | null }): boolean {
+	return asset.originalPath === pendingFreshRecordingAutoZoomPath;
+}
+
 function pendingFreshRecordingAsset(document: AxcutDocument) {
-	if (pendingFreshRecordingAutoZoomPath) {
-		return document.assets.find(
-			(asset) => asset.originalPath === pendingFreshRecordingAutoZoomPath,
-		);
-	}
-	const primaryId = document.project.primaryAssetId;
-	return document.assets.find((asset) => asset.id === primaryId) ?? document.assets[0];
+	return document.assets.find(isPendingFreshRecordingAsset);
 }
 
 /**
@@ -154,12 +127,15 @@ function canApplyFreshRecordingAutoZooms(document: AxcutDocument): boolean {
 	if ((document.zoomRanges?.length ?? 0) > 0) return false;
 	if ((document.timeline?.clips?.length ?? 0) === 0) return false;
 	if (!hasProbedDurationForPendingAsset(document)) return false;
-	if (
-		pendingFreshRecordingAutoZoomPath &&
-		!document.assets.some((asset) => asset.originalPath === pendingFreshRecordingAutoZoomPath)
-	) {
-		return false;
-	}
+	return document.assets.some(isPendingFreshRecordingAsset);
+}
+
+/** Zooms are on the document already -- the wand ran, or a redo brought them back.
+ *  The take is decorated, so the hand-off is spent for this project. */
+function markDecoratedIfZoomed(document: AxcutDocument): boolean {
+	if ((document.zoomRanges?.length ?? 0) === 0) return false;
+	clearFreshRecordingAutoZoomPending();
+	appliedFreshRecordingAutoZoomProjectId = document.project.id;
 	return true;
 }
 
@@ -182,78 +158,70 @@ export async function applyPendingFreshRecordingAutoZooms(
 		return liveDocument(document);
 	}
 	const start = liveDocument(document);
-	if ((start.zoomRanges?.length ?? 0) > 0) {
-		clearFreshRecordingAutoZoomPending();
-		appliedFreshRecordingAutoZoomProjectId = start.project.id;
-		return start;
-	}
-	if (!canApplyFreshRecordingAutoZooms(start)) {
-		return start;
-	}
+	if (markDecoratedIfZoomed(start)) return start;
+	if (!canApplyFreshRecordingAutoZooms(start)) return start;
+
 	const inner =
 		deps.getTelemetry ?? ((videoPath: string) => nativeBridgeClient.cursor.getTelemetry(videoPath));
+	let telemetryFailed = false;
 	const getTelemetry = async (videoPath: string) => {
 		try {
 			return await inner(videoPath);
 		} catch {
-			// Sidecar may not be readable yet. Keep pending for the delayed retries.
+			// An unreadable sidecar is NOT the same answer as an empty one: it says
+			// nothing about whether this take has a dwell, so pending survives it and a
+			// later `loadedmetadata` for the same take gets another go.
+			telemetryFailed = true;
 			return [];
 		}
 	};
-	const collectFrom = async (source: AxcutDocument) => {
-		const scoped = pendingFreshRecordingAutoZoomPath
-			? {
-					...source,
-					assets: source.assets.filter(
-						(asset) => asset.originalPath === pendingFreshRecordingAutoZoomPath,
-					),
-				}
-			: source;
-		return collectAutoZoomSuggestionsForDocument(scoped, getTelemetry);
-	};
-
-	const firstSignature = clipExtentSignature(start);
-	let suggestions = await collectFrom(start);
-	let latest = liveDocument(start);
-	if (latest.project.id !== start.project.id) {
-		return latest;
+	// The wand's own collect path, scoped to the take this hand-off is about: read the
+	// document, collect, and collect again if the clips moved while the telemetry was
+	// being read. Sharing it is the point -- the suggestions carry TIMELINE spans and
+	// `appendAutoZoomSuggestions` anchors them against whatever the store holds at write
+	// time, so the two callers must agree on when a collected set has gone stale.
+	//
+	// The reader re-runs every guard, so a project switch, a wand run or a delete
+	// landing during the wait ends the pass exactly where the retry would have started.
+	const collected = await collectAutoZoomSuggestionsForLatestDocument(
+		() => {
+			const live = liveDocument(start);
+			if (live.project.id !== start.project.id) return null;
+			if (markDecoratedIfZoomed(live)) return null;
+			return canApplyFreshRecordingAutoZooms(live) ? live : null;
+		},
+		getTelemetry,
+		isPendingFreshRecordingAsset,
+	);
+	if (!collected) return liveDocument(start);
+	if (collected.suggestions.length === 0) {
+		// A real answer, not a race: the stop handler awaits `writePendingCursorTelemetry`
+		// BEFORE it publishes the session, so by the time the editor can import the take
+		// its sidecar is on disk. An empty read therefore means this take has no dwell to
+		// zoom, and no amount of retrying changes that -- consume the hand-off rather than
+		// leaving it armed for the next document loaded in this window.
+		if (!telemetryFailed) clearFreshRecordingAutoZoomPending();
+		return collected.document;
 	}
-	if ((latest.zoomRanges?.length ?? 0) > 0) {
-		clearFreshRecordingAutoZoomPending();
-		appliedFreshRecordingAutoZoomProjectId = latest.project.id;
-		return latest;
-	}
-	if (!canApplyFreshRecordingAutoZooms(latest)) {
-		return latest;
-	}
-	if (clipExtentSignature(latest) !== firstSignature) {
-		suggestions = await collectFrom(latest);
-		latest = liveDocument(latest);
-		if (latest.project.id !== start.project.id) return latest;
-		if ((latest.zoomRanges?.length ?? 0) > 0) {
-			clearFreshRecordingAutoZoomPending();
-			appliedFreshRecordingAutoZoomProjectId = latest.project.id;
-			return latest;
-		}
-		if (!canApplyFreshRecordingAutoZooms(latest)) return latest;
-	}
-	if (suggestions.length === 0) {
-		// Do not consume: a mid-flush sidecar can have samples but no dwell yet
-		// (the qualifying sit is often the last second of the take).
-		return latest;
-	}
-	return appendAutoZoomSuggestions(latest, suggestions, deps.createId ?? createId);
+	return appendAutoZoomSuggestions(
+		collected.document,
+		collected.suggestions,
+		deps.createId ?? createId,
+	);
 }
 
 export async function maybeSaveFreshRecordingAutoZooms(
 	document: AxcutDocument,
 	deps: ApplyFreshRecordingAutoZoomsDeps = {},
 ): Promise<boolean> {
-	const writeFreshRecordingAutoZooms = async (): Promise<boolean> => {
+	/** `"contended"`: a user write landed on the snapshot this attempt built from, so
+	 *  it decided nothing and is worth repeating against the settled document. */
+	const writeFreshRecordingAutoZooms = async (): Promise<boolean | "contended"> => {
 		try {
 			// A wait that times out has told us nothing about what is on disk, so the
-			// only safe move is to abandon this attempt with pending still set: the
-			// retries below rebase onto whatever the stuck save eventually leaves.
+			// only safe move is to abandon this attempt with pending still set, and let
+			// a later `loadedmetadata` for this take rebase onto whatever the stuck save
+			// eventually leaves.
 			if ((await waitForDocumentSaves(deps.waitTimeoutMs)) === "timeout") return false;
 			const latest = liveDocument(document);
 			const next = await applyPendingFreshRecordingAutoZooms(latest, deps);
@@ -265,31 +233,28 @@ export async function maybeSaveFreshRecordingAutoZooms(
 				clearFreshRecordingAutoZoomPending();
 				return false;
 			}
-			// Contention means exit, not rebase. If the document moved while the
+			// Contention means start over, not rebase. If the document moved while the
 			// suggestion pass ran, this attempt is working from a snapshot that is
-			// already history — recomputing onto the newer one just races the writer
-			// that produced it. Drop the attempt with pending still set; the
-			// 500/1500/3000 ms retries run against a settled document instead.
-			if (current !== latest) return false;
-			const toSave = next;
-			const storedNow = liveDocument(document);
-			if (storedNow !== latest) return false;
-			if (toSave === latest || toSave === storedNow) return false;
-			if (storedNow.project.id !== latest.project.id) return false;
+			// already history — writing `next` over the newer one would take the user's
+			// edit with it. Drop it and let the repeat below re-collect from scratch,
+			// after `waitForDocumentSaves` has seen that writer finish.
+			if (current !== latest) return "contended";
+			// Nothing to write: the pass returned the document it was given, because a
+			// guard refused it or the take has no dwell.
+			if (next === latest) return false;
 			const saved = await saveWithDeadline(
-				useProjectStore.getState().saveDocument(toSave, { history: true }),
+				useProjectStore.getState().saveDocument(next, { history: true }),
 				deps.saveTimeoutMs ?? DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
 			);
-			// The write never answered. Keep pending and let go of the chain, so the
-			// retries get to run instead of queueing behind a promise that is not
-			// coming back.
+			// The write never answered. Keep pending and let go of the chain, so nothing
+			// queues behind a promise that is not coming back.
 			if (saved === "timeout") return false;
 			// A trim (or any other edit) can start after this save was submitted and
 			// still be in flight when it returns: `waitForDocumentSaves` before the
 			// write only sees saves that have already begun. Wait again, then look at
 			// the store — if that later write landed on the unzoomed snapshot, keep
-			// pending so a retry can try again. A timeout here says the same thing for
-			// a different reason: we cannot tell what landed, so do not clear pending.
+			// pending. A timeout here says the same thing for a different reason: we
+			// cannot tell what landed, so do not clear pending.
 			if ((await waitForDocumentSaves(deps.waitTimeoutMs)) === "timeout") return saved;
 			const stored = useProjectStore.getState().document;
 			if (saved && stored && (stored.zoomRanges?.length ?? 0) > 0) {
@@ -299,15 +264,23 @@ export async function maybeSaveFreshRecordingAutoZooms(
 			return saved;
 		} catch (error) {
 			// `saveDocument` reports failure by returning false, so anything thrown
-			// here came from the suggestion pass or a bridge call. Pending stays set
-			// and the retries fire silently — log it, or the whole path is invisible.
+			// here came from the suggestion pass or a bridge call. Pending stays set and
+			// the path goes quiet — log it, or it is invisible.
 			console.warn("[recording] fresh-recording auto-zoom write failed:", error);
 			return false;
 		}
 	};
+	// One repeat, not a loop: a user who keeps editing through the telemetry wait keeps
+	// invalidating the attempt, and the honest answer there is the wand, not spinning.
+	const attemptFreshRecordingAutoZooms = async (): Promise<boolean> => {
+		const first = await writeFreshRecordingAutoZooms();
+		if (first !== "contended") return first;
+		const second = await writeFreshRecordingAutoZooms();
+		return second === "contended" ? false : second;
+	};
 	const done = freshRecordingAutoZoomSaveChain.then(
-		writeFreshRecordingAutoZooms,
-		writeFreshRecordingAutoZooms,
+		attemptFreshRecordingAutoZooms,
+		attemptFreshRecordingAutoZooms,
 	);
 	freshRecordingAutoZoomSaveChain = done.then(
 		() => undefined,
@@ -342,9 +315,9 @@ export async function importPendingRecording(): Promise<boolean> {
 	//
 	// Except for a system-cursor take, which writes no `.cursor.json` at all: the
 	// toggle stays on in prefs (it is only disabled in the UI while that mode is
-	// picked), so without this the flag was set for a recording that can never
-	// produce a dwell, and all three retries ran against an empty sidecar. What
-	// governs is the mode THIS take was recorded in, not the current preference.
+	// picked), so without this the flag is set for a recording that can never produce
+	// a dwell. What governs is the mode THIS take was recorded in, not the current
+	// preference.
 	if (cursorCaptureMode !== "system") {
 		markFreshRecordingAutoZoomPending(screenPath);
 	}

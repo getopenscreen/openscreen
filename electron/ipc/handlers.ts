@@ -3487,10 +3487,15 @@ export function registerIpcHandlers(
 					...(cursorCaptureMode ? { cursorCaptureMode } : {}),
 				}
 			: { screenVideoPath, createdAt, ...(cursorCaptureMode ? { cursorCaptureMode } : {}) };
+		// Sidecar BEFORE the session is published, as the three native stop paths already
+		// do it. Publishing first opens a window where `getCurrentRecordingSession` hands
+		// the editor a take whose `.cursor.json` is not on disk yet, and the editor's
+		// fresh-take auto-zoom reads that file the moment it imports -- an empty read there
+		// is indistinguishable from a take with no dwell, so the zooms are silently
+		// skipped.
+		await writePendingCursorTelemetry(screenVideoPath);
 		setCurrentRecordingSessionState(session);
 		currentProjectPath = null;
-
-		await writePendingCursorTelemetry(screenVideoPath);
 
 		const sessionManifestPath = path.join(
 			RECORDINGS_DIR,

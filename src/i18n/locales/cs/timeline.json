@@ -42,7 +42,7 @@
 		"zoomExistsAtLocation": "Přiblížení na tomto místě již existuje nebo není dostatek místa.",
 		"zoomSuggestionUnavailable": "Obslužná rutina návrhů přiblížení není dostupná",
 		"noCursorTelemetry": "Nejsou dostupná žádná data kurzoru",
-		"noCursorTelemetryDescription": "Nejprve nahrajte screenscast pro generování návrhů na základě kurzoru.",
+		"noCursorTelemetryDescription": "Nejprve nahrajte screencast pro generování návrhů na základě kurzoru.",
 		"noUsableTelemetry": "Žádná použitelná data kurzoru",
 		"noUsableTelemetryDescription": "Nahrávka neobsahuje dostatek dat o pohybu kurzoru.",
 		"noDwellMoments": "Nenalezeny žádné výrazné momenty zastavení kurzoru",

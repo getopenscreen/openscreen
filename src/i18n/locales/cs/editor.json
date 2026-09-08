@@ -1,6 +1,6 @@
 {
 	"newRecording": {
-		"title": "Vrátit se na nahrávání",
+		"title": "Vrátit se k nahrávání",
 		"description": "Vaše aktuální relace byla uložena.",
 		"cancel": "Zrušit",
 		"confirm": "Potvrdit"
@@ -132,7 +132,7 @@
 	},
 	"mediaStage": {
 		"openProjectFirst": "Nejprve otevřete projekt",
-		"couldNotAddAsset": "Nepodařilo se přidat asset",
+		"couldNotAddAsset": "Nepodařilo se přidat médium",
 		"searchPlaceholder": "Hledat média…",
 		"dragHint": "Přetáhněte klip na níže uvedenou časovou osu pro přidání",
 		"emptyHint": "Zatím žádná média — importujte nahrávku pro začátek.",
@@ -162,8 +162,8 @@
 		"noSpeechDetected": "Žádná řeč nezjištěna"
 	},
 	"exportDialog": {
-		"title": "Exportovat",
-		"subtitle": "Renderovat časovou osu do souboru",
+		"title": "Export",
+		"subtitle": "Vykreslení časové osy do souboru",
 		"addVideoBeforeExporting": "Před exportem přidejte video.",
 		"quality": "Kvalita",
 		"qualityMatchRecording": "Odpovídat nahrávce",
@@ -274,7 +274,7 @@
 		"sendTitle": "Odeslat (Enter)",
 		"send": "Odeslat",
 		"rewindConfirmTitle": "Přetočit sem?",
-		"rewindConfirmBody": "Úpravy agenta a navazující otočení po tomto bodu budou vráceny. Projekt, konverzace a stav agenta budou obnoveny. Jakékoli úpravy, které jste od té doby provedli, budou také nahrazeny.",
+		"rewindConfirmBody": "Úpravy agenta a navazující zprávy po tomto bodu budou vráceny. Projekt, konverzace a stav agenta budou obnoveny. Jakékoli úpravy, které jste od té doby provedli, budou také nahrazeny.",
 		"rewindConfirm": "Přetočit",
 		"configureModel": "Konfigurovat AI model",
 		"historyDialog": {
@@ -344,7 +344,7 @@
 		"previousClip": "Předchozí klip",
 		"nextClip": "Další klip",
 		"loop": "Opakovat",
-		"seekVideo": "Vyhledat v videu"
+		"seekVideo": "Vyhledat ve videu"
 	},
 	"shell": {
 		"aiEditor": "AI editor",
@@ -390,7 +390,7 @@
 		"apiKeyLabel": "API klíč",
 		"apiKeyHintStored": "Uloženo v safeStorage. Ponechte prázdné pro zachování stávajícího záznamu.",
 		"projectEditsLabel": "Úpravy projektu",
-		"projectEditsHint": "Pokud je vypnuto, agent musí požádat před změnou časové osy. Úpravy jsou vždy vrácení zpět.",
+		"projectEditsHint": "Pokud je vypnuto, agent musí požádat před změnou časové osy. Úpravy lze vždy vrátit zpět.",
 		"allowAgentEdits": "Povolit agentovi úpravy projektu",
 		"disconnect": "Odpojit",
 		"cancel": "Zrušit",

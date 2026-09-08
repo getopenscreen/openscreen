@@ -186,7 +186,7 @@
 		"original": "Původní (přepis)",
 		"maxWords": "Max. slov na řádek",
 		"font": "Písmo",
-		"translating": "Překladání…",
+		"translating": "Překládání…",
 		"show": "Zobrazit titulky",
 		"textColor": "Barva textu"
 	},
@@ -327,7 +327,7 @@
 		"save": "Uložit projekt"
 	},
 	"support": {
-		"starOnGithub": "Ohodnotit na GitHubu",
+		"starOnGithub": "Přidat hvězdičku na GitHubu",
 		"saveDiagnostics": "Uložit diagnostiku",
 		"reportBug": "Nahlásit chybu"
 	},

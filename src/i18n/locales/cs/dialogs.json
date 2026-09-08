@@ -26,7 +26,7 @@
 	"tutorial": {
 		"triggerLabel": "Jak funguje oříznutí",
 		"title": "Jak funguje oříznutí",
-		"description": "Pochopte, jak vystřihnout nežádoucí části videa.",
+		"description": "Jak vystřihnout nežádoucí části videa.",
 		"explanationBefore": "Nástroj Oříznutí funguje tak, že definujete segmenty, které chcete",
 		"remove": "odstranit",
 		"explanationMiddle": " — vše",

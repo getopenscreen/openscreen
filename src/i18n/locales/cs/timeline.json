@@ -88,7 +88,7 @@
 		"smartCutsNoSpeech": "Řeč nebyla detekována",
 		"smartCutsFailed": "Přepisování selhalo, zkuste to znovu z Média",
 		"addAudioTooltip": "Přidat zvuk",
-		"addedWord": "Přidáno slovo: „{{word}}\", za ním není žádný zvuk"
+		"addedWord": "Přidáno slovo: „{{word}}”, za ním není žádný zvuk"
 	},
 	"audio": {
 		"addVoiceover": "Přidat komentář",

@@ -10,7 +10,7 @@
 	"resetToDefaults": "Obnovit výchozí nastavení",
 	"alreadyUsedBy": "Již používáno pro {{action}}",
 	"swap": "Prohodit",
-	"reservedShortcut": "Tato zkratka je vyhrazena pro „{{label}}\" a nelze ji přiřadit.",
+	"reservedShortcut": "Tato zkratka je vyhrazena pro „{{label}}” a nelze ji přiřadit.",
 	"savedToast": "Klávesové zkratky uloženy",
 	"resetToast": "Výchozí zkratky obnoveny. Klikněte Uložit pro jejich použití.",
 	"registrationFailed": "Nepodařilo se zaregistrovat zkratku. Může být používána jinou aplikací. Zkuste jinou klávesu.",

@@ -65,7 +65,7 @@
 		"dropOverlay": "Přetáhněte soubor projektu pro otevření",
 		"dropErrors": {
 			"unsupportedFormatTitle": "Nepodporovaný formát",
-			"unsupportedFormatMessage": "Sem lze přetáhnout pouze soubory projektů .openscreen. Pro import video souboru použijte tlačítko „Importovat video soubor…\" na této obrazovce.",
+			"unsupportedFormatMessage": "Sem lze přetáhnout pouze soubory projektů .openscreen. Pro import video souboru použijte tlačítko „Importovat video soubor…” na této obrazovce.",
 			"couldNotOpenTitle": "Soubor nelze otevřít",
 			"couldNotOpenMessage": "Soubor projektu nelze otevřít. Video, na které odkazuje, mohlo být přesunuto nebo smazáno."
 		}
@@ -248,7 +248,7 @@
 		"clickToRename": "Klikněte pro přejmenování",
 		"renameConversation": "Přejmenovat konverzaci",
 		"deleteConversation": "Smazat konverzaci",
-		"confirmDeleteConversation": "Smazat „{{title}}\"?",
+		"confirmDeleteConversation": "Smazat „{{title}}”?",
 		"emptyState": "Zatím žádné zprávy. Požádejte agenta o vystřižení ticha, zkrácení pauz nebo přidání titulků.",
 		"welcome": {
 			"title": "Přineste si vlastní AI",
@@ -301,7 +301,7 @@
 		"title": "Otevřít projekt",
 		"subtitle": "Pokračujte v existujícím projektu nebo procházejte soubory",
 		"searchPlaceholder": "Hledat projekty…",
-		"noMatches": "Žádné projekty neodpovídají „{{query}}\".",
+		"noMatches": "Žádné projekty neodpovídají „{{query}}”.",
 		"navigateHint": "pro navigaci ·",
 		"openHint": "pro otevření",
 		"browseFiles": "Procházet soubory…",
@@ -322,7 +322,7 @@
 	},
 	"insertSourceDialog": {
 		"title": "Vložit zdroj",
-		"subtitle": "Kam umístit „{{assetLabel}}\" na časové ose?",
+		"subtitle": "Kam umístit „{{assetLabel}}” na časové ose?",
 		"addBefore": "Přidat před",
 		"addBeforeDesc": "Vložit celý zdroj před cílový klip.",
 		"addAfter": "Přidat za",

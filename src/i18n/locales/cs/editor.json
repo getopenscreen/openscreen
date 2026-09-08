@@ -47,7 +47,7 @@
 		"cameraDisconnected": "Webkamera odpojena.",
 		"cameraNotFound": "Kamera nenalezena.",
 		"cameraCaptureUnavailable": "Kameru se nepodařilo otevřít. Nahrávání probíhá bez ní.",
-		"microphoneDefaulted": "Vybraný mikrofon se nepodařilo identifikovat. Nahrávání výchozího vstupu.",
+		"microphoneDefaulted": "Vybraný mikrofon se nepodařilo identifikovat. Nahrávání bude pokračovat s výchozím vstupem.",
 		"permissionDenied": "Oprávnění k nahrávání odepřeno. Povolte prosím záznam obrazovky.",
 		"accessibilityAllowAndRetry": "Povolte přístup k usnadnění pro OpenScreen a poté znovu stiskněte tlačítko nahrávání pro zahájení odpočítávání.",
 		"selectSource": "Vyberte prosím zdroj pro nahrávání"
@@ -75,7 +75,7 @@
 		"pasted": "Atributy {{region}} vloženy",
 		"nothingToCopy": "Vyberte oblast pro zkopírování jejích atributů",
 		"nothingToPaste": "Zatím nebyly zkopírovány žádné atributy",
-		"pasteAssetMissing": "Soubor tohoto zvukového stopy není v tomto projektu",
+		"pasteAssetMissing": "Soubor této zvukové stopy není v tomto projektu",
 		"kinds": {
 			"zoom": "Přiblížení",
 			"speed": "Rychlost",

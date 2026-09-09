@@ -91,6 +91,7 @@ function makeDoc(
 		},
 		annotations: overrides.annotations ?? [],
 		zoomRanges: overrides.zoomRanges ?? [],
+		audioTracks: overrides.audioTracks ?? [],
 		legacyEditor: overrides.legacyEditor ?? null,
 	};
 }
@@ -174,6 +175,42 @@ describe("buildSceneDescription.background", () => {
 			kind: "image",
 			path: "data:image/png;base64,AAAA",
 		});
+	});
+});
+
+describe("buildSceneDescription.webcamEffect", () => {
+	// Omitted rather than sent as {mode:"none"}: the Rust side defaults the field, so every
+	// project without an effect would otherwise carry it for nothing.
+	it("omits the effect entirely when no webcam background is set", () => {
+		expect(buildSceneDescription(makeDoc()).webcamEffect).toBeUndefined();
+	});
+
+	it("carries the mode and its parameters, never pixels", () => {
+		const doc = makeDoc({
+			legacyEditor: { webcamBackgroundMode: "blur", webcamBlurIntensity: 0.85 },
+		});
+		expect(buildSceneDescription(doc).webcamEffect).toEqual({
+			mode: "blur",
+			blurIntensity: 0.85,
+			background: { kind: "image", path: "/wallpapers/wallpaper1.jpg" },
+		});
+	});
+
+	it("parses the custom background the same way the scene wallpaper is parsed", () => {
+		const doc = makeDoc({
+			legacyEditor: { webcamBackgroundMode: "custom", webcamWallpaper: "#34b27b" },
+		});
+		expect(buildSceneDescription(doc).webcamEffect?.background).toEqual({
+			kind: "color",
+			color: "#34b27b",
+		});
+	});
+
+	// An unknown mode is already rejected by `getEditorSettings`, so it can never reach the
+	// scene — this pins that the two guards agree rather than each assuming the other.
+	it("falls back to omitting the effect when the stored mode is not a known one", () => {
+		const doc = makeDoc({ legacyEditor: { webcamBackgroundMode: "hologram" } });
+		expect(buildSceneDescription(doc).webcamEffect).toBeUndefined();
 	});
 });
 
@@ -579,6 +616,74 @@ describe("buildSceneDescription.zoomRegions with an earlier trim", () => {
 			},
 		]);
 	});
+
+	it("keeps a zoom that a trim removes entirely, marked underTrim", () => {
+		// A trim cuts at render time, but it is marked by its pill and the user can still park
+		// the playhead on it — so what lies underneath has to reach the compositor (issue #216).
+		// Trim removes source [2,8]; the zoom at raw [3,5] falls entirely inside it. It is
+		// emitted on its own source span, addressed to the segment the cut interrupts (seg1,
+		// source [0,2] → clipIndex 0), and marked so native gates it on that span alone.
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 2, endSec: 8, reason: "", origin: "user" },
+				],
+			},
+			zoomRanges: [
+				makeZoom({ id: "z", startMs: 3000, endMs: 5000, depth: 3, focus: { cx: 0.5, cy: 0.5 } }),
+			],
+		});
+		expect(buildSceneDescription(doc).zoomRegions).toEqual([
+			{
+				id: "z",
+				startSec: 3,
+				endSec: 5,
+				scale: ZOOM_DEPTH_SCALES[3],
+				focusX: 0.5,
+				focusY: 0.5,
+				focusMode: null,
+				rotation: null,
+				clipIndex: 0,
+				underTrim: true,
+			},
+		]);
+	});
+
+	it("drops a speed region a trim removes entirely rather than shipping it inert", () => {
+		// Same geometry, speed instead of zoom. A still frame has no rate to show, and these
+		// spans are what the export's frame count is derived from — nothing to gain.
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 2, endSec: 8, reason: "", origin: "user" },
+				],
+			},
+			legacyEditor: { speedRegions: [{ id: "s", startMs: 3000, endMs: 5000, speed: 2 }] },
+		});
+		expect(buildSceneDescription(doc).speedRegions).toEqual([]);
+	});
 });
 
 // --- cameraFullscreenRegions -------------------------------------------------
@@ -629,6 +734,36 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		expect(cameraFullscreenRegions).toEqual([
 			{ startSec: 103, endSec: 105, clipIndex: 0 },
 			{ startSec: 200, endSec: 202, clipIndex: 1 },
+		]);
+	});
+
+	it("keeps a region a trim removes entirely, marked underTrim", () => {
+		// Same rule as zoom and annotations (issue #216): addressed by the segment the cut
+		// interrupts (seg1, source [0,2] → clipIndex 0) instead of dropped. Full Camera needs
+		// no extra gate native-side — its envelope is already contained in [startSec, endSec].
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 2, endSec: 8, reason: "", origin: "user" },
+				],
+			},
+			legacyEditor: {
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 3000, endMs: 5000 }],
+			},
+		});
+		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+			{ startSec: 3, endSec: 5, clipIndex: 0, underTrim: true },
 		]);
 	});
 });
@@ -1638,6 +1773,74 @@ describe("buildSceneDescription.annotations", () => {
 		const scene = buildSceneDescription(docWithAnnotations([]));
 		expect(scene.annotations).toEqual([]);
 	});
+
+	it("keeps an annotation a trim removes entirely, marked underTrim", () => {
+		// The symptom issue #216 opens on. The trim removes source [2,8]; the annotation at
+		// raw [3,5] falls entirely inside it, so it reaches native addressed by the segment
+		// the cut interrupts (seg1, source [0,2] → clipIndex 0) rather than being dropped.
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a1", originalPath: "/tmp/a1.mp4", durationSec: 10 })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a1",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a1", startSec: 2, endSec: 8, reason: "", origin: "user" },
+				],
+			},
+			annotations: [
+				{
+					id: "ann1",
+					startMs: 3000,
+					endMs: 5000,
+					type: "text",
+					content: "",
+					textContent: "Hello",
+					position: { x: 25, y: 50 },
+					size: { width: 40, height: 10 },
+					style,
+					zIndex: 0,
+				},
+			],
+		});
+		const scene = buildSceneDescription(doc);
+		expect(scene.annotations).toHaveLength(1);
+		expect(scene.annotations[0]).toMatchObject({
+			id: "ann1",
+			startSec: 3,
+			endSec: 5,
+			clipIndex: 0,
+			underTrim: true,
+		});
+	});
+
+	it("omits underTrim entirely when no trim sits under the annotation", () => {
+		// Not `false`: a payload with nothing cut under it stays byte-for-byte what it was.
+		const scene = buildSceneDescription(
+			docWithAnnotations([
+				{
+					id: "ann1",
+					startMs: 1000,
+					endMs: 3000,
+					type: "text",
+					content: "",
+					textContent: "Hello",
+					position: { x: 25, y: 50 },
+					size: { width: 40, height: 10 },
+					style,
+					zIndex: 0,
+				},
+			]),
+		);
+		expect(scene.annotations[0]).not.toHaveProperty("underTrim");
+	});
 });
 
 // --- captions --------------------------------------------------------------
@@ -1786,5 +1989,345 @@ describe("buildSceneDescription.captions", () => {
 		// The text colour is independently chosen via ColorField (hex); the background is the
 		// only piece that goes through the opacity-combining path.
 		expect(text?.color).toBe("#ffffff");
+	});
+});
+
+// --- imported audio tracks (issue #350) ------------------------------------
+describe("buildSceneDescription.audioTracks", () => {
+	const audioAsset = makeAsset({
+		id: "aud",
+		kind: "audio",
+		originalPath: "/music.mp3",
+		durationSec: 30,
+	});
+	// A 10s span starting at raw 5s, playing the source from 2s in.
+	const track = {
+		id: "trk1",
+		assetId: "aud",
+		kind: "music" as const,
+		startMs: 5000,
+		endMs: 15_000,
+		durationSec: 30,
+		offsetMs: 2000,
+		gainDb: -3,
+		loop: false,
+		fadeInMs: 0,
+		fadeOutMs: 0,
+		muted: false,
+		label: "",
+		origin: "user" as const,
+	};
+
+	it("maps a track to the mix list with its resolved path and window", () => {
+		const doc = makeDoc({ assets: [audioAsset], audioTracks: [track] });
+		expect(buildSceneDescription(doc).audioTracks).toEqual([
+			{
+				path: "/music.mp3",
+				startSec: 5,
+				gainDb: -3,
+				trimStartSec: 2,
+				// The span is 10s and the file has 28s left after the offset, so the
+				// span is what runs out first.
+				trimEndSec: 12,
+				fadeInSec: 0,
+				fadeOutSec: 0,
+			},
+		]);
+	});
+
+	it("caps the trim-out at the end of the file when the span outlasts it", () => {
+		const doc = makeDoc({
+			assets: [audioAsset],
+			// A 40s span over a 30s file, offset 2s: only 28s of source exist.
+			audioTracks: [{ ...track, endMs: 45_000 }],
+		});
+		expect(buildSceneDescription(doc).audioTracks[0]?.trimEndSec).toBe(30);
+	});
+
+	// ─── A cut under a voiceover ────────────────────────────────────────────────
+	// Issue #560. A trim removes the moment it covers; the transcript pane strikes the
+	// words said there through. If the mix played them anyway, shifted earlier, the red
+	// would be a lie — so a voiceover is SLICED by the cuts. Music is not: a bed plays
+	// through and ends early, deliberately, and has no words whose redness must be true.
+
+	/** One 10s clip, cut over raw 4..6. */
+	function cutDoc(tracks: Array<Omit<typeof track, "kind"> & { kind: "music" | "voiceover" }>) {
+		return makeDoc({
+			assets: [
+				audioAsset,
+				makeAsset({ id: "scr", kind: "video", originalPath: "/screen.mp4", durationSec: 10 }),
+			],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "scr",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{
+						id: "t1",
+						assetId: "scr",
+						clipId: "c1",
+						startSec: 4,
+						endSec: 6,
+						reason: "",
+						origin: "user",
+					},
+				],
+			},
+			audioTracks: tracks,
+		});
+	}
+
+	/** A voiceover over the whole 10s, reading its file from the head. */
+	const voice = {
+		...track,
+		kind: "voiceover" as const,
+		startMs: 0,
+		endMs: 10_000,
+		offsetMs: 0,
+		gainDb: 0,
+	};
+
+	it("splits a voiceover at the cut, skipping exactly the seconds the film lost", () => {
+		const entries = buildSceneDescription(cutDoc([voice])).audioTracks;
+		expect(entries).toHaveLength(2);
+		// Before the cut: raw 0..4 of the take, at output 0.
+		expect(entries[0]).toMatchObject({ startSec: 0, trimStartSec: 0, trimEndSec: 4 });
+		// After it: raw 6..10 of the take, at output 4 — the source jumps the two seconds
+		// the cut took. Today's music path would instead play 0..8 and stop early.
+		expect(entries[1]).toMatchObject({ startSec: 4, trimStartSec: 6, trimEndSec: 10 });
+	});
+
+	it("keeps the fades on the take's outer edges across a split", () => {
+		const entries = buildSceneDescription(
+			cutDoc([{ ...voice, fadeInMs: 500, fadeOutMs: 500 }]),
+		).audioTracks;
+		expect(entries.map((e) => [e.fadeInSec, e.fadeOutSec])).toEqual([
+			[0.5, 0],
+			[0, 0.5],
+		]);
+	});
+
+	it("drops a voiceover buried inside a cut, and keeps one that hangs past the film", () => {
+		expect(
+			buildSceneDescription(cutDoc([{ ...voice, startMs: 4200, endMs: 5800 }])).audioTracks,
+		).toEqual([]);
+		// Raw time past the last clip is unfilmed, not removed: the narration plays on.
+		const over = buildSceneDescription(
+			cutDoc([{ ...voice, startMs: 10_000, endMs: 14_000 }]),
+		).audioTracks;
+		expect(over).toHaveLength(1);
+		expect(over[0]).toMatchObject({ trimStartSec: 0, trimEndSec: 4 });
+	});
+
+	it("leaves a music bed under the same cut exactly as it was", () => {
+		const entries = buildSceneDescription(cutDoc([{ ...voice, kind: "music" }])).audioTracks;
+		// One contiguous entry, shortened at the tail by what the cut took — the behaviour
+		// `VirtualPreview` and `mix_external_tracks` have always had for a bed.
+		expect(entries).toEqual([
+			{
+				path: "/music.mp3",
+				startSec: 0,
+				gainDb: 0,
+				trimStartSec: 0,
+				trimEndSec: 8,
+				fadeInSec: 0,
+				fadeOutSec: 0,
+			},
+		]);
+	});
+
+	it("leaves a LOOPING voiceover on the music path, which step 6 will forbid outright", () => {
+		// The window comes from the ASSET's duration, so the short file has to be there.
+		const doc = cutDoc([{ ...voice, loop: true, endMs: 10_000 }]);
+		const short = {
+			...doc,
+			assets: doc.assets.map((a) => (a.id === "aud" ? { ...a, durationSec: 3 } : a)),
+		};
+		const entries = buildSceneDescription(short).audioTracks;
+		// Repeats, not slices: inventing semantics for a combination about to be banned
+		// would be the worse answer.
+		expect(entries.length).toBeGreaterThan(1);
+		expect(entries.every((e) => e.trimStartSec === 0)).toBe(true);
+	});
+
+	it("drops a muted track from the mix list", () => {
+		const doc = makeDoc({ assets: [audioAsset], audioTracks: [{ ...track, muted: true }] });
+		expect(buildSceneDescription(doc).audioTracks).toEqual([]);
+	});
+
+	it("emits one entry per repeat for a looping track", () => {
+		const doc = makeDoc({
+			assets: [audioAsset],
+			// 4s of source (offset 26 into a 30s file) under a 10s span → 3 repeats.
+			audioTracks: [{ ...track, offsetMs: 26_000, loop: true, fadeInMs: 500, fadeOutMs: 500 }],
+		});
+		const entries = buildSceneDescription(doc).audioTracks;
+		expect(entries.map((e) => [e.startSec, e.trimStartSec, e.trimEndSec])).toEqual([
+			[5, 26, 30],
+			[9, 26, 30],
+			[13, 26, 28],
+		]);
+		// The fades belong to the track's edges, not to every repeat.
+		expect(entries.map((e) => [e.fadeInSec, e.fadeOutSec])).toEqual([
+			[0.5, 0],
+			[0, 0],
+			[0, 0.5],
+		]);
+	});
+
+	it("projects the head onto the trim-compressed programme (issue #350)", () => {
+		// A 10s screen clip with an interior cut removing raw [2,4] (2s). The audio track's
+		// raw head is 5; on the compressed programme that is 3. Passing 5 through verbatim was
+		// the bug — the track played 2s (the trim) late in the render while the preview, whose
+		// playhead jumps the cut, had it on time.
+		const screen = makeAsset({ id: "scr", originalPath: "/screen.mp4", durationSec: 10 });
+		const doc = makeDoc({
+			assets: [screen, audioAsset],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "scr",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "scr", startSec: 2, endSec: 4, reason: "", origin: "user" },
+				],
+			},
+			audioTracks: [track],
+		});
+		expect(buildSceneDescription(doc).audioTracks[0]?.startSec).toBeCloseTo(3, 6);
+	});
+
+	it("drops a track that sits entirely inside a trimmed stretch", () => {
+		// The trim takes raw 4..8 out of the programme; a track living at raw 5..7
+		// has nowhere left to play. It used to project both ends onto the cut and
+		// then play its full raw length there — audible, and out of place, with
+		// nothing on screen to account for it.
+		const screen = makeAsset({ id: "scr", originalPath: "/screen.mp4", durationSec: 20 });
+		const doc = makeDoc({
+			assets: [screen, audioAsset],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "scr",
+					sourceStartSec: 0,
+					sourceEndSec: 20,
+					timelineStartSec: 0,
+					timelineEndSec: 20,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "scr", startSec: 4, endSec: 8, reason: "", origin: "user" },
+				],
+			},
+			audioTracks: [{ ...track, startMs: 5000, endMs: 7000 }],
+		});
+		expect(buildSceneDescription(doc).audioTracks).toEqual([]);
+	});
+
+	it("shortens a track by the trim it crosses", () => {
+		// Raw 2..12 with raw 4..8 cut is 6s of programme, not 10.
+		const screen = makeAsset({ id: "scr", originalPath: "/screen.mp4", durationSec: 20 });
+		const doc = makeDoc({
+			assets: [screen, audioAsset],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "scr",
+					sourceStartSec: 0,
+					sourceEndSec: 20,
+					timelineStartSec: 0,
+					timelineEndSec: 20,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "scr", startSec: 4, endSec: 8, reason: "", origin: "user" },
+				],
+			},
+			audioTracks: [{ ...track, startMs: 2000, endMs: 12_000, offsetMs: 0 }],
+		});
+		const [entry] = buildSceneDescription(doc).audioTracks;
+		expect(entry.startSec).toBeCloseTo(2, 6);
+		expect(entry.trimEndSec - entry.trimStartSec).toBeCloseTo(6, 6);
+	});
+
+	it("places a track after a speed region on the compressed clock", () => {
+		// The programme is time-stretched before the tracks are mixed onto it
+		// (`stretch_clip_pcm_by_speed` then `mix_external_tracks`), so raw 12 with
+		// raw 4..8 at 2x is output 10. Blind to speed the track landed at 12 —
+		// two seconds late, and later still the more the video is sped up.
+		const screen = makeAsset({ id: "scr", originalPath: "/screen.mp4", durationSec: 20 });
+		const doc = makeDoc({
+			assets: [screen, audioAsset],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "scr",
+					sourceStartSec: 0,
+					sourceEndSec: 20,
+					timelineStartSec: 0,
+					timelineEndSec: 20,
+				}),
+			],
+			legacyEditor: { speedRegions: [{ id: "s1", startMs: 4000, endMs: 8000, speed: 2 }] },
+			audioTracks: [{ ...track, startMs: 12_000, endMs: 16_000, offsetMs: 0 }],
+		});
+		const [entry] = buildSceneDescription(doc).audioTracks;
+		expect(entry.startSec).toBeCloseTo(10, 6);
+		// ...and the track itself is NOT stretched: 4 raw seconds of audio stay 4
+		// seconds of source, whatever the video under it is doing.
+		expect(entry.trimEndSec - entry.trimStartSec).toBeCloseTo(4, 6);
+	});
+
+	it("does not shorten a track just because the video under it is sped up", () => {
+		// A speed region compresses the programme; it does not delete anything. The
+		// track still holds all its audio and still plays at 1x, so a 4s voiceover
+		// under a 2x region is still 4s of narration — measuring its length on the
+		// compressed clock silently cut it in half.
+		const screen = makeAsset({ id: "scr", originalPath: "/screen.mp4", durationSec: 20 });
+		const doc = makeDoc({
+			assets: [screen, audioAsset],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "scr",
+					sourceStartSec: 0,
+					sourceEndSec: 20,
+					timelineStartSec: 0,
+					timelineEndSec: 20,
+				}),
+			],
+			legacyEditor: { speedRegions: [{ id: "s1", startMs: 2000, endMs: 10_000, speed: 2 }] },
+			audioTracks: [{ ...track, startMs: 4000, endMs: 8000, offsetMs: 0 }],
+		});
+		const [entry] = buildSceneDescription(doc).audioTracks;
+		expect(entry.trimEndSec - entry.trimStartSec).toBeCloseTo(4, 6);
+		// Its head still moves onto the compressed clock: raw 4 is 1s into a 2x
+		// stretch that began at raw 2, so output 3.
+		expect(entry.startSec).toBeCloseTo(3, 6);
+	});
+
+	it("drops a track whose asset has no resolvable path", () => {
+		const doc = makeDoc({ assets: [], audioTracks: [track] });
+		expect(buildSceneDescription(doc).audioTracks).toEqual([]);
+	});
+
+	it("is empty for a project with no imported audio", () => {
+		const doc = makeDoc({ assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })] });
+		expect(buildSceneDescription(doc).audioTracks).toEqual([]);
 	});
 });

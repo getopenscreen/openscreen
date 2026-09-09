@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import {
 	type AssetTranscriptionView,
+	assetCanCarrySpeech,
 	classifyTranscriptionError,
 	deriveAssetStatus,
+	firstBusyView,
+	firstTimelineBusyView,
 	isCpuBackend,
+	isModelDownloadInFlight,
 	isPermanentFailure,
 	progressFraction,
 	realtimeSpeed,
@@ -230,53 +234,54 @@ describe("resolveTranscriptGate", () => {
 	});
 });
 
-describe("transcriptRelevantAssetIds", () => {
-	const base = {
-		schemaVersion: 7 as const,
-		project: {
-			id: "proj_1",
-			title: "T",
-			createdAt: "2026-06-25T10:00:00.000Z",
-			updatedAt: "2026-06-25T10:00:00.000Z",
-		},
-		transcript: null,
-		transcripts: [],
-		annotations: [],
-		zoomRanges: [],
-		legacyEditor: null,
-	};
+const base = {
+	schemaVersion: 7 as const,
+	project: {
+		id: "proj_1",
+		title: "T",
+		createdAt: "2026-06-25T10:00:00.000Z",
+		updatedAt: "2026-06-25T10:00:00.000Z",
+	},
+	transcript: null,
+	transcripts: [],
+	annotations: [],
+	zoomRanges: [],
+	audioTracks: [],
+	legacyEditor: null,
+};
 
-	function doc(assetIds: string[], clipAssetIds: string[]): AxcutDocument {
-		return {
-			...base,
-			assets: assetIds.map((id) => ({
-				id,
-				kind: "video" as const,
-				label: id,
-				originalPath: `/tmp/${id}.mp4`,
-				cameraTrack: null,
+function doc(assetIds: string[], clipAssetIds: string[]): AxcutDocument {
+	return {
+		...base,
+		assets: assetIds.map((id) => ({
+			id,
+			kind: "video" as const,
+			label: id,
+			originalPath: `/tmp/${id}.mp4`,
+			cameraTrack: null,
+		})),
+		timeline: {
+			clips: clipAssetIds.map((assetId, i) => ({
+				id: `clip_${i}`,
+				assetId,
+				sourceStartSec: 0,
+				sourceEndSec: 10,
+				timelineStartSec: i * 10,
+				timelineEndSec: i * 10 + 10,
+				wordRefs: [],
+				origin: "system" as const,
+				reason: "",
 			})),
-			timeline: {
-				clips: clipAssetIds.map((assetId, i) => ({
-					id: `clip_${i}`,
-					assetId,
-					sourceStartSec: 0,
-					sourceEndSec: 10,
-					timelineStartSec: i * 10,
-					timelineEndSec: i * 10 + 10,
-					wordRefs: [],
-					origin: "system" as const,
-					reason: "",
-				})),
-				gaps: [],
-				trimRanges: [],
-				muteRanges: [],
-				speedRanges: [],
-				captionRanges: [],
-			},
-		} as AxcutDocument;
-	}
+			gaps: [],
+			trimRanges: [],
+			muteRanges: [],
+			speedRanges: [],
+			captionRanges: [],
+		},
+	} as AxcutDocument;
+}
 
+describe("transcriptRelevantAssetIds", () => {
 	it("only counts the assets the timeline plays", () => {
 		expect(transcriptRelevantAssetIds(doc(["a", "b"], ["a", "a"]))).toEqual(["a"]);
 	});
@@ -291,6 +296,30 @@ describe("transcriptRelevantAssetIds", () => {
 
 	it("has nothing to say about a missing document", () => {
 		expect(transcriptRelevantAssetIds(null)).toEqual([]);
+	});
+});
+
+describe("firstTimelineBusyView", () => {
+	it("ignores a busy job on an asset the timeline does not play", () => {
+		// "b" is in the bin and mid-transcription, but the timeline only plays
+		// "a" — the timeline-scoped label must stay idle, like the gate does.
+		const views = { b: view("b", "running") };
+		expect(firstTimelineBusyView(doc(["a", "b"], ["a"]), views)).toBeUndefined();
+	});
+
+	it("reports a busy job on a timeline asset", () => {
+		const views = { a: view("a", "running"), b: view("b", "running") };
+		expect(firstTimelineBusyView(doc(["a", "b"], ["a"]), views)?.assetId).toBe("a");
+	});
+
+	it("keeps the empty-timeline fallback: whole-bin jobs count", () => {
+		const views = { b: view("b", "queued") };
+		expect(firstTimelineBusyView(doc(["a", "b"], []), views)?.assetId).toBe("b");
+	});
+
+	it("is quiet when nothing relevant is busy", () => {
+		const views = { a: view("a", "ready") };
+		expect(firstTimelineBusyView(doc(["a"], ["a"]), views)).toBeUndefined();
 	});
 });
 
@@ -325,6 +354,22 @@ describe("isCpuBackend", () => {
 	});
 });
 
+describe("model download bytes", () => {
+	it("is in-flight only when totalBytes is positive and download is incomplete", () => {
+		expect(isModelDownloadInFlight({ downloadedBytes: 10, totalBytes: 100 })).toBe(true);
+		expect(isModelDownloadInFlight({ downloadedBytes: 100, totalBytes: 100 })).toBe(false);
+		expect(isModelDownloadInFlight({})).toBe(false);
+	});
+
+	it("prefers a running view over a queued one for pane copy", () => {
+		const busy = firstBusyView([
+			view("a", "queued"),
+			{ assetId: "b", status: "running", phase: "loading-model" },
+		]);
+		expect(busy?.assetId).toBe("b");
+	});
+});
+
 describe("deriveAssetStatus carries the engine's own report", () => {
 	// Both facts come from the main process on the chunk status events, and the
 	// view is the only thing the three status surfaces read.
@@ -348,5 +393,56 @@ describe("deriveAssetStatus carries the engine's own report", () => {
 		expect(derived.status).toBe("ready");
 		expect(derived.backend).toBeUndefined();
 		expect(derived.rtf).toBeUndefined();
+	});
+});
+
+describe("assetCanCarrySpeech", () => {
+	/** A document with one video asset and one imported audio asset. */
+	const doc = (audioTracks: Array<Record<string, unknown>>) =>
+		({
+			assets: [
+				{ id: "vid", kind: "video" },
+				{ id: "aud", kind: "audio" },
+			],
+			audioTracks,
+		}) as unknown as Parameters<typeof assetCanCarrySpeech>[0];
+
+	const track = (kind: "voiceover" | "music", assetId = "aud") => ({
+		id: `t_${kind}`,
+		assetId,
+		kind,
+	});
+
+	it("says yes to footage without consulting the timeline", () => {
+		// Video is the case that always carried speech; the guard must not regress it.
+		expect(assetCanCarrySpeech(doc([]), "vid")).toBe(true);
+	});
+
+	it("says yes to an audio asset played on a voiceover lane", () => {
+		expect(assetCanCarrySpeech(doc([track("voiceover")]), "aud")).toBe(true);
+	});
+
+	it("says no to a music bed", () => {
+		// The whole point: 35s of inference at editor open, to transcribe music.
+		expect(assetCanCarrySpeech(doc([track("music")]), "aud")).toBe(false);
+	});
+
+	it("says yes when the same file is on both lanes", () => {
+		// One voiceover placement is enough — the file demonstrably carries speech,
+		// whatever else it is also used for.
+		expect(assetCanCarrySpeech(doc([track("music"), track("voiceover")]), "aud")).toBe(true);
+	});
+
+	it("says no to an audio asset no region plays", () => {
+		// Nothing is asking for it, so nothing should pay for it.
+		expect(assetCanCarrySpeech(doc([]), "aud")).toBe(false);
+	});
+
+	it("ignores regions playing a different file", () => {
+		expect(assetCanCarrySpeech(doc([track("voiceover", "other")]), "aud")).toBe(false);
+	});
+
+	it("says no to an asset that is not in the document", () => {
+		expect(assetCanCarrySpeech(doc([]), "ghost")).toBe(false);
 	});
 });

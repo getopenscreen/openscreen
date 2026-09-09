@@ -30,9 +30,10 @@
 //! décodeurs, symétrique.
 
 use crate::audio::{
-    assemble_concatenated_pcm, build_audio_concat_plan, decode_clip_audio, finish_audio,
-    stretch_clip_pcm_by_speed, AacEncoder, PlanarPcm,
+    assemble_concatenated_pcm, build_audio_concat_plan, finish_audio, mix_external_tracks,
+    AacEncoder, PlanarPcm,
 };
+use crate::audio_jobs::{decode_and_stretch_clip_audio, ClipAudioJobs};
 use crate::compositor::Compositor;
 use crate::d3d::Gpu;
 use crate::timeline_walk::NextFrameTime;
@@ -62,6 +63,20 @@ impl Drop for FrameGuard {
 /// plutôt que de dérouler. Identique à `pipeline_windows::SEEK_FORWARD_MAX_SEC` — le
 /// seuil dépend du GOP des captures, pas du backend de décodage.
 const SEEK_FORWARD_MAX_SEC: f64 = 0.5;
+
+/// Pourquoi ce décodeur est ouvert. La preview et l'export ne demandent pas la même chose
+/// au décodeur, et sur macOS ils ne prennent donc pas le même backend.
+///
+/// La preview lit au temps réel : il lui suffit de tenir la cadence, et elle scrube, donc la
+/// latence d'un seek pèse plus que le débit. Une marche d'export déroule aussi vite que la
+/// machine le permet — c'est du débit pur, et l'arbitrage n'est pas le même.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DecodeIntent {
+    /// Lecture temps réel (`live.rs`). Arbitrage historique, inchangé.
+    Preview,
+    /// Marche d'export (`timeline_walk`, `gif_export`).
+    Export,
+}
 
 /// Décodeur ffmpeg — câblage VideoToolbox (et repli logiciel pour les codecs hors-session).
 /// Cf. `pipeline_windows::Decoder` pour la version D3D11VA. Mêmes champs publics pour
@@ -97,7 +112,19 @@ pub struct Decoder {
 }
 
 impl Decoder {
+    /// Ouvre pour la PREVIEW. Signature conservée pour tous les appelants existants.
     pub fn open(path: &str, gpu: &Gpu) -> Result<Decoder> {
+        Self::open_with(path, gpu, DecodeIntent::Preview)
+    }
+
+    /// Ouvre pour une marche d'EXPORT, où seul le débit compte. Windows et Linux exposent le
+    /// même point d'entrée sans rien en faire de particulier ; c'est ici qu'il change quelque
+    /// chose.
+    pub fn open_for_export(path: &str, gpu: &Gpu) -> Result<Decoder> {
+        Self::open_with(path, gpu, DecodeIntent::Export)
+    }
+
+    pub fn open_with(path: &str, gpu: &Gpu, intent: DecodeIntent) -> Result<Decoder> {
         unsafe {
             let mut fmt: *mut crate::ffi::AVFormatContext = ptr::null_mut();
             let cpath = CString::new(path)?;
@@ -162,11 +189,58 @@ impl Decoder {
             const FF_PROFILE_H264_CONSTRAINED_BASELINE: i32 = 578;
             let is_baseline =
                 profile == FF_PROFILE_H264_BASELINE || profile == FF_PROFILE_H264_CONSTRAINED_BASELINE;
+            // H.264 8 bits 4:2:0 : ce que produit toute capture d'écran, et le SEUL cas sur
+            // lequel l'arbitrage ci-dessous a été mesuré. `format` vient de `codecpar`, donc
+            // rempli par `avformat_find_stream_info` ; un flux dont le format reste inconnu
+            // n'est pas éligible et garde le comportement d'avant.
+            let is_h264_8bit = (*codecpar).codec_id == crate::ffi::AVCodecID::AV_CODEC_ID_H264
+                && (*codecpar).format == crate::ffi::AVPixelFormat::AV_PIX_FMT_YUV420P as i32;
             let forced = std::env::var("OPENSCREEN_MAC_DECODE").ok();
             let want_hw = match forced.as_deref() {
                 Some("software") => false,
                 Some("videotoolbox") => true,
-                _ => !is_baseline,
+                // Baseline : arbitrage historique, inchangé (cf. la note ci-dessus).
+                _ if is_baseline => false,
+                // MESURÉ, et contraire à ce que la note ci-dessus annonçait. Sur une marche
+                // d'export, un flux H.264 8 bits se décode plus vite en logiciel que par
+                // VideoToolbox — y compris en profil High, que cette note donnait à VT.
+                //
+                // Mac mini M1 8 Go / macOS 26.5. Source 1920x1080@60, 60 s, profil High.
+                // Scénario S4 du benchmark, sortie 1080p60 H.264. Trois cycles, un floor
+                // ffmpeg intercalé par cycle, dérive de fermeture 1,0002, machine à 86 % idle :
+                //
+                //     VideoToolbox   32 079 ms   1,819x floor   (MAD 34 ms)
+                //     logiciel       22 863 ms   1,296x floor   (MAD 16 ms)   -28,7 %
+                //
+                // Par étage : décodage écran 13,13 s -> 1,02 s, webcam 4,20 s -> 0,29 s.
+                // L'image ne bouge pas — bitstream H.264 (NAL SEI retirés), pixels décodés et
+                // audio ont le même md5 sur les six sorties des deux variantes.
+                //
+                // La raison est celle que la note Baseline donne déjà, et elle ne dépend pas
+                // du profil : VideoToolbox a une latence FIXE par frame et alloue un
+                // CVPixelBuffer à chacune, là où le décodeur logiciel étale le travail sur des
+                // cœurs qui sont multiples. Ce qui compte est que la frame soit assez bon
+                // marché à décoder — ce que du 1080p 8 bits est.
+                //
+                // LA 4K AUSSI, mesurée depuis. Décodage seul, 1200 frames, meilleur de trois
+                // passes, même machine — avec le cas 1080p en témoin pour valider la méthode
+                // contre le résultat bout-en-bout ci-dessus :
+                //
+                //     1080p   logiciel 2586 fps   VideoToolbox 212 fps   x12,2
+                //     4K      logiciel  849 fps   VideoToolbox  71 fps   x11,9
+                //
+                // Le rapport ne bouge quasiment pas avec la résolution : la latence fixe par
+                // frame de VideoToolbox domine des deux côtés. Il n'y a donc pas de seuil de
+                // résolution à poser, et en poser un « par prudence » écarterait le chemin
+                // rapide du cas qui en profite le plus — 71 fps, c'est en dessous du temps
+                // réel pour une timeline 4K60.
+                //
+                // RESTE NON MESURÉ : 10 bits et HEVC. Ils gardent VideoToolbox, et la
+                // condition les écarte par construction (`format == YUV420P` et
+                // `codec_id == H264`). La preview aussi n'a pas été mesurée, et la changer
+                // sans la mesurer serait exactement l'erreur que ce commit corrige.
+                _ if intent == DecodeIntent::Export && is_h264_8bit => false,
+                _ => true,
             };
             let r = if want_hw {
                 crate::ffi::av_hwdevice_ctx_create(
@@ -179,6 +253,18 @@ impl Decoder {
             } else {
                 -1 // repli logiciel délibéré, pas un échec
             };
+            // Dire lequel a été pris. Sans cette ligne, « l'export est lent » et « l'export a
+            // pris VideoToolbox » ne se distinguent pas dans un rapport de bug, et un
+            // changement d'arbitrage ne se vérifie qu'au chronomètre.
+            eprintln!(
+                "[pipeline] décodage {} : {} (codec={} profil={} format={} intention={:?})",
+                path.rsplit('/').next().unwrap_or(path),
+                if r == 0 { "videotoolbox" } else { "logiciel" },
+                (*codecpar).codec_id,
+                profile,
+                (*codecpar).format,
+                intent,
+            );
             let cpu = if r != 0 {
                 // Pas de VideoToolbox sur ce codec : fallback software. `get_format` est
                 // laissé à NULL (libavcodec choisit son format de sortie, ici NV12 via
@@ -852,14 +938,18 @@ impl VideoEncoder {
             if self.sw.is_null() {
                 // Chemin zero-copy : une frame du pool VideoToolbox, dont `data[3]` porte le
                 // `CVPixelBuffer` dans lequel le compositeur va rendre directement.
-                let frame = crate::ffi::av_frame_alloc();
-                if frame.is_null() {
-                    bail!("av_frame_alloc (frame VT)");
-                }
-                let mut frame = frame;
-                if crate::ffi::av_hwframe_get_buffer((*self.ctx).hw_frames_ctx, frame, 0) < 0 {
-                    crate::ffi::av_frame_free(&mut frame);
-                    bail!("av_hwframe_get_buffer (pool VT épuisé)");
+                let mut frame;
+                {
+                    let _p = crate::export_probe::scope(crate::export_probe::Stage::VtGetBuffer);
+                    let f = crate::ffi::av_frame_alloc();
+                    if f.is_null() {
+                        bail!("av_frame_alloc (frame VT)");
+                    }
+                    frame = f;
+                    if crate::ffi::av_hwframe_get_buffer((*self.ctx).hw_frames_ctx, frame, 0) < 0 {
+                        crate::ffi::av_frame_free(&mut frame);
+                        bail!("av_hwframe_get_buffer (pool VT épuisé)");
+                    }
                 }
                 let pb = (*frame).data[3] as *mut std::ffi::c_void;
                 if pb.is_null() {
@@ -872,10 +962,13 @@ impl VideoEncoder {
                     return Err(e);
                 }
                 (*frame).pts = pts;
-                let sent = crate::ffi::averr(
-                    crate::ffi::avcodec_send_frame(self.ctx, frame),
-                    "send_frame_composited_vt",
-                );
+                let sent = {
+                    let _p = crate::export_probe::scope(crate::export_probe::Stage::SendFrame);
+                    crate::ffi::averr(
+                        crate::ffi::avcodec_send_frame(self.ctx, frame),
+                        "send_frame_composited_vt",
+                    )
+                };
                 crate::ffi::av_frame_free(&mut frame);
                 return sent;
             }
@@ -897,6 +990,7 @@ impl VideoEncoder {
                 (*self.sw).linesize[1] as usize,
             )?;
             (*self.sw).pts = pts;
+            let _p = crate::export_probe::scope(crate::export_probe::Stage::SendFrame);
             crate::ffi::averr(
                 crate::ffi::avcodec_send_frame(self.ctx, self.sw),
                 "send_frame_composited",
@@ -998,6 +1092,7 @@ pub fn run_composited_multi(
         bail!("run_composited_multi: aucun clip à exporter");
     }
     let (out_w, out_h) = (params.width, params.height);
+    crate::export_probe::reset();
     let t0 = std::time::Instant::now();
     let mut frames: u64 = 0;
 
@@ -1064,7 +1159,7 @@ pub fn run_composited_multi(
     }
     // Un PCM par clip, assemblé après la marche vidéo : c'est elle qui dit combien de
     // frames chaque clip a réellement produit, donc combien d'audio lui revient.
-    let mut clip_pcm: Vec<Option<PlanarPcm>> = (0..clips.len()).map(|_| None).collect();
+    let mut audio_jobs: ClipAudioJobs<Option<PlanarPcm>> = ClipAudioJobs::new(clips.len());
     let mut clip_frame_counts: Vec<u64> = vec![0; clips.len()];
 
     let mut opkt = unsafe { crate::ffi::av_packet_alloc() };
@@ -1077,6 +1172,11 @@ pub fn run_composited_multi(
     // raconte avoir déjà coûté une fois.
     let scene = comp.scene_snapshot();
     let audio_settings = scene.as_ref().map(|scene| scene.audio).unwrap_or_default();
+    // Imported audio tracks (issue #350), cloned out of the borrowed scene.
+    let audio_tracks = scene
+        .as_ref()
+        .map(|scene| scene.audio_tracks.clone())
+        .unwrap_or_default();
     frames = unsafe {
         crate::timeline_walk::walk_composited_timeline(
             clips,
@@ -1089,29 +1189,38 @@ pub fn run_composited_multi(
             &mut webcam_decs,
             &mut |n| {
                 enc.send_composited(comp, out_w, out_h, n as i64)?;
-                drain_encoder(ectx, octx, ostream, opkt)?;
-                progress(n + 1);
+                {
+                    let _p = crate::export_probe::scope(crate::export_probe::Stage::DrainMux);
+                    drain_encoder(ectx, octx, ostream, opkt)?;
+                }
+                {
+                    let _p = crate::export_probe::scope(crate::export_probe::Stage::Progress);
+                    progress(n + 1);
+                }
                 Ok(())
             },
             &mut |clip_index, source_end_sec, frames_in_clip, speed_segments| {
                 clip_frame_counts[clip_index] = frames_in_clip;
                 let clip = &clips[clip_index];
                 if clip.has_audio && frames_in_clip > 0 {
-                    match decode_clip_audio(&clip.screen, clip.source_start_sec, source_end_sec) {
-                        Ok(Some(pcm)) => {
-                            clip_pcm[clip_index] = Some(stretch_clip_pcm_by_speed(
-                                &pcm,
-                                speed_segments,
-                                out_fps as f64,
-                            ));
-                        }
-                        Ok(None) => eprintln!(
-                            "[pipeline] warning: clip #{clip_index} déclaré audio mais sans flux décodable; silence conservé",
-                        ),
-                        Err(error) => eprintln!(
-                            "[pipeline] warning: décodage audio du clip #{clip_index} échoué ({error:#}); silence conservé",
-                        ),
-                    }
+                    // L'audio d'un clip ne dépend que de ce clip : le décoder et l'étirer ici,
+                    // sur le thread de rendu, immobilisait la barre d'export pour toute sa
+                    // durée — rien n'appelle `progress()` entre deux clips. Le travail part
+                    // sur un thread et se recouvre avec la composition du clip suivant ; les
+                    // résultats sont récupérés après le parcours, rangés par index de clip.
+                    let path = clip.screen.clone();
+                    let source_start_sec = clip.source_start_sec;
+                    let segments = speed_segments.to_vec();
+                    audio_jobs.spawn(clip_index, move || {
+                        decode_and_stretch_clip_audio(
+                            clip_index,
+                            &path,
+                            source_start_sec,
+                            source_end_sec,
+                            &segments,
+                            out_fps as f64,
+                        )
+                    });
                 }
                 Ok(())
             },
@@ -1119,6 +1228,7 @@ pub fn run_composited_multi(
     };
 
     // Flush : un null frame à l'encodeur finalise son bitstream.
+    let _finalize = crate::export_probe::scope(crate::export_probe::Stage::Finalize);
     unsafe {
         crate::ffi::averr(
             crate::ffi::avcodec_send_frame(ectx, ptr::null_mut()),
@@ -1129,10 +1239,23 @@ pub fn run_composited_multi(
         // Le plan part des frames RÉELLEMENT produites par clip, pas des durées demandées :
         // un clip raccourci (source plus courte que sa borne) doit voir son audio raccourci
         // d'autant, sinon la piste dérive pour tous les suivants.
+        // Récupération des jobs audio lancés pendant le parcours. `spawn` en admet quatre
+        // avant d'en collecter un, donc il en reste au plus quatre à attendre ici — bornés
+        // par le plus lent, pas par leur somme ; les autres se sont recouverts avec
+        // l'encodage vidéo.
+        let clip_pcm: Vec<Option<PlanarPcm>> = audio_jobs
+            .into_results()
+            .into_iter()
+            .map(|slot| slot.flatten())
+            .collect();
+
         let declared_audio: Vec<bool> = clips.iter().map(|clip| clip.has_audio).collect();
         let plan = build_audio_concat_plan(&clip_frame_counts, &declared_audio, out_fps as f64);
         audio_encoder.encode(
-            &finish_audio(assemble_concatenated_pcm(&clip_pcm, &plan), audio_settings),
+            &finish_audio(
+                mix_external_tracks(assemble_concatenated_pcm(&clip_pcm, &plan), &audio_tracks),
+                audio_settings,
+            ),
             octx,
         )?;
 
@@ -1146,6 +1269,8 @@ pub fn run_composited_multi(
     }
 
     let wall_s = t0.elapsed().as_secs_f64();
+    drop(_finalize);
+    crate::export_probe::report(wall_s, frames);
     Ok(Stats {
         frames,
         wall_s,

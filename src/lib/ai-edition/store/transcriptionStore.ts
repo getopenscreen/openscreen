@@ -26,10 +26,12 @@ import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { toastText as translateToast } from "@/i18n/toastText";
-import { transcribeAsset, withTranscript } from "../document/transcribe";
+import { transcribeAsset } from "../document/transcribe";
+import { carryOverWordEdits, withTranscript } from "../document/transcript";
 import type { AxcutDocument } from "../schema";
 import {
 	type AssetTranscriptionView,
+	assetCanCarrySpeech,
 	classifyTranscriptionError,
 	deriveAssetStatus,
 	findAssetTranscript,
@@ -59,6 +61,8 @@ export interface TranscriptionJob {
 	 */
 	backend?: string;
 	rtf?: number;
+	downloadedBytes?: number;
+	totalBytes?: number;
 	/** `"auto"` unless the user forced a language from the media card. */
 	language: string;
 	failure?: TranscriptionFailure;
@@ -128,6 +132,10 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 				if (jobs[asset.id]) continue;
 				if (findAssetTranscript(document, asset.id)) continue;
 				if (asset.transcriptionFailure) continue;
+				// Music is not speech, and finding that out costs a whole inference pass —
+				// 35s at editor open for a four-minute bed. The manual regenerate in the
+				// media stage stays available for anything this refuses.
+				if (!assetCanCarrySpeech(document, asset.id)) continue;
 				patch()[asset.id] = { status: "queued", language: "auto", manual: false };
 			}
 		}
@@ -386,6 +394,10 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 					// first chunk (audio extraction, the model download) carry neither.
 					...(status.backend !== undefined ? { backend: status.backend } : {}),
 					...(status.rtf !== undefined ? { rtf: status.rtf } : {}),
+					...(status.downloadedBytes !== undefined
+						? { downloadedBytes: status.downloadedBytes }
+						: {}),
+					...(status.totalBytes !== undefined ? { totalBytes: status.totalBytes } : {}),
 				}),
 		});
 		if (controller.signal.aborted) {
@@ -398,6 +410,20 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		if (!current || current.project.id !== projectId) {
 			dropJob(assetId, runId);
 			return;
+		}
+		// A run REPLACES the asset's transcript, so any word the user had corrected by
+		// hand would go with it. Carry those corrections onto the new words first —
+		// strictly, so nothing is invented (see `carryOverWordEdits`). What could not be
+		// carried is lost; telling the user so is the UI's job, and there is no surface
+		// for it yet.
+		const merged = carryOverWordEdits(
+			current.transcripts.find((t) => t.assetId === assetId),
+			transcript,
+		);
+		if (merged.dropped > 0) {
+			console.warn(
+				`[transcription] ${merged.dropped} word correction(s) on asset ${assetId} could not be carried over to the new transcript.`,
+			);
 		}
 		// One save: the transcript, and (on a successful retry) the removal of
 		// the verdict remembered on the asset.
@@ -412,7 +438,7 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 						a.id === assetId && a.transcriptionFailure ? { ...a, transcriptionFailure: null } : a,
 					),
 				},
-				transcript,
+				merged.transcript,
 			),
 			{ history: false },
 		);

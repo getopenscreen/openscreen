@@ -63,6 +63,23 @@ export const wordSchema = z
 		startSec: z.number().nonnegative(),
 		endSec: z.number().nonnegative(),
 		text: z.string(),
+		// Provenance of the TEXT, so a hand-corrected word can be told from a
+		// transcribed one. Both fields are additive and absent on every document
+		// written before them (like `cameraTrack.width`), so no schema bump: an
+		// older build simply drops them on save.
+		//
+		// `document/transcript.ts` is the only writer, and it keeps the pair
+		// consistent: `originalText` is set from the ASR text the first time a user
+		// rewrites the word and never overwritten afterwards, so it stays the revert
+		// target however many times the word is edited; typing the original back
+		// clears both, which IS the revert.
+		//
+		// Absent `source` means the word came from the transcriber. It is what makes
+		// a re-transcription able to carry the user's corrections forward
+		// (`carryOverWordEdits`) instead of silently discarding them — and what a
+		// future TTS pass will read to know which words it has to speak.
+		originalText: z.string().optional(),
+		source: z.enum(["asr", "user", "synth"]).optional(),
 	})
 	.refine((data) => data.endSec >= data.startSec, {
 		message: "endSec must be greater than or equal to startSec",
@@ -150,7 +167,12 @@ export const assetTranscriptionFailureSchema = z.object({
 
 export const assetSchema = z.object({
 	id: z.string().min(1),
-	kind: z.literal("video"),
+	// Widened from a `"video"` literal when external-audio import landed (issue
+	// #350). An imported voiceover / BGM / SFX file carries no video stream, so it
+	// needs its own kind; every document written before this only ever held
+	// `"video"`, which still validates, so the widening is additive (no
+	// schemaVersion bump — same rule as `transcriptionFailure` below).
+	kind: z.enum(["video", "audio"]).default("video"),
 	label: z.string().min(1),
 	originalPath: z.string().min(1),
 	proxyPath: z.string().optional(),
@@ -269,6 +291,9 @@ export const timelineSchema = z.preprocess(
 		clips: z.array(clipSchema).default([]),
 		gaps: z.array(gapSchema).default([]),
 		trimRanges: z.array(trimRangeSchema).default([]),
+		// Additive, like every optional field before it: absent on every document written
+		// before this, so no schema bump — an older build simply drops the key on save, and
+		// the words it belonged to keep their text and lose only their pause.
 		muteRanges: z.array(rangeSchema).default([]),
 		speedRanges: z.array(rangeSchema).default([]),
 		captionRanges: z.array(rangeSchema).default([]),
@@ -471,6 +496,73 @@ export const zoomRegionSchema = endGteStart(
 	"startMs",
 );
 
+// External audio import (issue #350) — voiceover / BGM / SFX layered over the
+// programme. Unlike zoom/speed/annotation/trim, an audio track is NOT
+// clip-anchored: it floats over the whole timeline, addressed in RAW/document
+// timeline seconds — the same clock the ruler, playhead and clip
+// `timelineStartSec`/`timelineEndSec` use, and the one `addAudioTrack` seeds from
+// the playhead. The preview positions the track on exactly this clock (see
+// `resolveTimelineAudioPlayback` in VirtualPreview). The export's OUTPUT programme
+// is trim-compressed, so the renderer maps this position to output time when
+// building the scene — an identity map when the project has no trims/speed (the
+// common case), an accepted approximation otherwise, the same way the preview
+// approximates trims by re-seeking. See `SceneAudioTrack` (sceneDescription.ts,
+// audio.rs).
+//
+// `assetId` points at an asset with `kind: "audio"`. `timelineStartSec` places
+// the track's head; `trimStartSec`/`trimEndSec` window the source file (both in
+// source seconds); `gainDb` sets its level.
+// An imported or recorded audio track (voiceover / BGM / SFX) placed on the
+// timeline (issue #350).
+//
+// CLIP-ANCHORED, on the same v5 contract as zoom/annotation: `{clipId,
+// sourceStartSec, sourceEndSec}` is the source of truth and `startMs`/`endMs`
+// is a derived ruler cache, so a track travels with the content it was placed
+// over instead of sitting still while a reorder or trim slides the programme
+// underneath it. Positions are RAW ruler ms; the export projects them onto the
+// trim-compressed programme (`projectRawTimelineSecToPlayback`).
+//
+// `offsetMs` skips INTO the source file — start the music at its chorus. It
+// replaces #502's `trimStartSec`/`trimEndSec` pair: the track's own span
+// (`startMs`..`endMs`) is where it plays, so the tail trim is implied by the
+// span and does not need storing twice. A file longer than its span is cut off
+// at the span unless `loop` is set, in which case it repeats.
+//
+// The anchor ventilates one user-visible track into one fragment PER CLIP it
+// covers. Fragments of the same track share `trackId`, and each carries its own
+// `offsetMs` advanced by the source time its predecessors consumed — see
+// `anchorAudioTrackFragments`. Without that every fragment would restart the
+// file at the same offset and re-run the fades, so a bed spanning a cut would
+// audibly restart at the boundary.
+export const audioTrackSchema = endGteStart(
+	z.object({
+		id: z.string().min(1),
+		// Shared by every fragment of one user-visible track: what the lane draws
+		// as a single pill, what the inspector edits, and what delete removes.
+		// Absent on tracks written before ventilation existed — they are their own
+		// single fragment, so `trackId ?? id` is always the group key.
+		trackId: z.string().min(1).optional(),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		...clipAnchorShape,
+		assetId: z.string().min(1),
+		kind: z.enum(["voiceover", "music"]).default("music"),
+		// Full source duration of the underlying file, cached here so the timeline
+		// can lay out the pill before the asset is re-probed on load.
+		durationSec: z.number().nonnegative().default(0),
+		offsetMs: z.number().int().nonnegative().default(0),
+		gainDb: z.number().min(-60).max(12).default(0),
+		loop: z.boolean().default(false),
+		fadeInMs: z.number().int().nonnegative().default(0),
+		fadeOutMs: z.number().int().nonnegative().default(0),
+		muted: z.boolean().default(false),
+		label: z.string().default(""),
+		origin: z.enum(["system", "agent", "user"]).default("user"),
+	}),
+	"endMs",
+	"startMs",
+);
+
 // Legacy OpenScreen appearance / export settings that the v3 schema doesn't
 // normalize into the timeline / assets model. They are applied at export time
 // by the existing pipeline (see technical-documentation/architecture/document-model.md).
@@ -503,6 +595,9 @@ const documentSchemaShape = z.object({
 	}),
 	annotations: z.array(annotationRegionSchema).default([]),
 	zoomRanges: z.array(zoomRegionSchema).default([]),
+	// Imported audio tracks (issue #350). Defaulted so every document written
+	// before this loads unchanged; an older build simply strips the key on save.
+	audioTracks: z.array(audioTrackSchema).default([]),
 	legacyEditor: legacyEditorSchema.nullable().default(null),
 });
 
@@ -781,9 +876,59 @@ export function upgradeV6DocumentToV7(raw: unknown): unknown {
  * (`PROJECT_VERSION`) through the `@/` alias, which `vite-plugin-electron` does
  * not configure for the main bundle. Keep this module alias-free.
  */
+/**
+ * Drop the ghost trims commit `b9e0f1ff` wrote (issue #560).
+ *
+ * That build let the transcript pane author a cut from the voiceover lane while still
+ * anchoring it on whatever the words belonged to — an AUDIO asset and an audio fragment.
+ * `resolvePlaybackSegments` matches no clip for such a row, so it removed nothing from the
+ * film, the preview or the export; all it did was strike the word through. Now that both
+ * lanes read the same removed set, leaving those rows behind would keep striking words
+ * through for a cut that never existed.
+ *
+ * The test is exact and needs no clip lookup: an audio asset is never a clip's `assetId`
+ * (audio is filtered out of the lists that make clips), so a trim naming one can only have
+ * come from that build. An un-anchored pre-v7 trim names a VIDEO asset and is untouched;
+ * so is a trim whose clip was deleted, which in-session undo can still bring back.
+ *
+ * No `schemaVersion` bump: nothing about the format changed, and no output moves — these
+ * rows were already inert. What changes is that words the user "deleted" on that build
+ * come back as kept, which is the correction, and belongs in the release note.
+ *
+ * Runs on RAW, untrusted input like the rest of the chain, so every read is guarded.
+ */
+function dropAudioAnchoredTrims(raw: unknown): unknown {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+	const doc = raw as Record<string, unknown>;
+	const assets = Array.isArray(doc.assets) ? doc.assets : null;
+	if (!assets) return raw;
+	const audioAssetIds = new Set<string>();
+	for (const asset of assets) {
+		if (!asset || typeof asset !== "object" || Array.isArray(asset)) continue;
+		const entry = asset as Record<string, unknown>;
+		if (entry.kind === "audio" && typeof entry.id === "string") audioAssetIds.add(entry.id);
+	}
+	if (audioAssetIds.size === 0) return raw;
+
+	const timeline =
+		doc.timeline && typeof doc.timeline === "object" && !Array.isArray(doc.timeline)
+			? (doc.timeline as Record<string, unknown>)
+			: null;
+	const trims = timeline && Array.isArray(timeline.trimRanges) ? timeline.trimRanges : null;
+	if (!trims) return raw;
+
+	const kept = trims.filter((entry) => {
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) return true;
+		const trim = entry as Record<string, unknown>;
+		return !(typeof trim.assetId === "string" && audioAssetIds.has(trim.assetId));
+	});
+	if (kept.length === trims.length) return raw;
+	return { ...doc, timeline: { ...timeline, trimRanges: kept } };
+}
+
 export function migrateRawDocumentToCurrent(raw: unknown): unknown {
-	return upgradeV6DocumentToV7(
-		upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+	return dropAudioAnchoredTrims(
+		upgradeV6DocumentToV7(upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw)))),
 	);
 }
 
@@ -803,6 +948,10 @@ export const createProjectInputSchema = z.object({
 export const addAssetInputSchema = z.object({
 	path: z.string().trim().min(1),
 	label: z.string().trim().optional(),
+	// "audio" imports an external voiceover / BGM / SFX file (issue #350); it has
+	// no video stream and never becomes the project's primary asset. Defaults to
+	// "video" so every existing caller keeps its current behaviour.
+	kind: z.enum(["video", "audio"]).default("video"),
 	autoTranscribe: z.boolean().default(true),
 });
 
@@ -819,11 +968,9 @@ export const chatInputSchema = z.object({
 // value outside this list fails to resolve a language id there. "auto" is
 // always index 0 — code that needs "every real language, no sentinel" relies
 // on that (see `WhisperLanguageCode` below) rather than filtering it out.
-// Consumed by both "Regenerate as" pickers: `MediaStage.tsx` (the one
-// actually mounted by `NewEditorShell`) and `Modals.tsx`'s
-// `SourceTranscriptModal` (currently unreachable — `LeftPanel` is only ever
-// mounted with `active="chat"` — but kept correct rather than deleted, since
-// nothing marks it dead code and a test or a future rewire could reach it).
+// Consumed by the "Regenerate as" picker in `MediaStage.tsx`. A second,
+// unreachable copy lived in the v3 left panel's transcript modal until that
+// whole surface was deleted — see decisions.md.
 export const TRANSCRIPT_LANGUAGE_CODES = [
 	"auto",
 	"en",
@@ -944,6 +1091,7 @@ export type AxcutTimelineOperation = z.infer<typeof timelineOperationSchema>;
 export type AxcutAnnotationRegion = z.infer<typeof annotationRegionSchema>;
 export type AxcutZoomRegion = z.infer<typeof zoomRegionSchema>;
 export type AxcutCameraTrack = z.infer<typeof cameraTrackSchema>;
+export type AxcutAudioTrack = z.infer<typeof audioTrackSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;
@@ -979,10 +1127,48 @@ export function createEmptyDocument(
 		},
 		annotations: [],
 		zoomRanges: [],
+		audioTracks: [],
 		legacyEditor: null,
 	});
 }
 
 export function ensureDocument(value: unknown): AxcutDocument {
 	return documentSchema.parse(value);
+}
+
+/**
+ * Build a timeline audio track for an imported or recorded audio asset
+ * (issue #350). The head is placed at `timelineStartSec` (RAW/document timeline
+ * seconds — the same clock the ruler, playhead and clip `timelineStartSec` use,
+ * NOT the trim-compressed output programme; the export projects it with
+ * `projectRawTimelineSecToPlayback`) and the track spans the whole source file
+ * unless the caller asks for a shorter `spanSec`. Parsed through the schema so
+ * every default (gain, fades, loop) is applied in one place.
+ *
+ * The result is UNANCHORED — `clipId` is absent. Callers place it through
+ * `anchorAudioTrackFragments`, which ventilates it across the clips it covers.
+ */
+export function createAudioTrack(input: {
+	assetId: string;
+	durationSec: number;
+	kind?: "voiceover" | "music";
+	/** Raw ruler head. The span runs from here for `durationSec`, or for
+	 *  `spanSec` when the caller wants a shorter placement than the file. */
+	timelineStartSec?: number;
+	spanSec?: number;
+	label?: string;
+}): AxcutAudioTrack {
+	const startMs = Math.round(Math.max(0, input.timelineStartSec ?? 0) * 1000);
+	// A track with no measurable source still needs a visible span, or the pill
+	// is zero-width and cannot be grabbed to fix.
+	const spanMs = Math.max(1, Math.round((input.spanSec ?? input.durationSec) * 1000));
+	return audioTrackSchema.parse({
+		id: createId("audio"),
+		assetId: input.assetId,
+		kind: input.kind ?? "music",
+		durationSec: input.durationSec,
+		startMs,
+		endMs: startMs + spanMs,
+		label: input.label ?? "",
+	});
 }

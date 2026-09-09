@@ -49,13 +49,17 @@ function renderPane(
 		<I18nProvider>
 			<TranscriptPane
 				clips={CLIPS}
+				audioTracks={[]}
 				transcripts={[]}
 				assets={[ASSET]}
 				trimRanges={[]}
 				busyAssetIds={[]}
 				onSeek={vi.fn()}
-				onAddTrimRange={vi.fn()}
-				onRemoveTrimRange={vi.fn()}
+				onTrimTimelineSpan={vi.fn()}
+				onRemoveTrimRanges={vi.fn()}
+				onSetWordText={vi.fn()}
+				onInsertWord={vi.fn()}
+				onRemoveWords={vi.fn()}
 				onTranscribe={vi.fn()}
 				canTranscribe
 				isTranscribing={overrides.isTranscribing ?? false}
@@ -77,8 +81,9 @@ describe("transcript pane gating", () => {
 
 	it("shows the background run in progress instead of an idle button", () => {
 		renderPane({ isTranscribing: true });
-		const button = screen.getByRole("button", { name: "Transcribing…" });
+		const button = screen.getByRole("button", { name: "Starting speech model" });
 		expect(button).toBeDisabled();
+		expect(screen.queryByRole("button", { name: "Transcribing…" })).toBeNull();
 	});
 
 	it("disables the button when the timeline's media have no audio track, and says why", () => {

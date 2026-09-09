@@ -3,9 +3,11 @@ import { create } from "zustand";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { toastText } from "@/i18n/toastText";
 import { nativeBridgeClient } from "@/native/client";
+import { placeAudioTrackInDocument } from "../document/audioTracks";
+import { createId } from "../document/ids";
 import { type Interval, replaceTimeline as replaceTimelineOp } from "../document/timeline";
-import { type AxcutAsset, type AxcutDocument, documentSchema } from "../schema";
-import { probeVideoDimensions } from "../timeline/duration";
+import { type AxcutAsset, type AxcutDocument, createAudioTrack, documentSchema } from "../schema";
+import { probeAudioDuration, probeVideoDimensions } from "../timeline/duration";
 import { clearHistory, currentWriteEpoch, pushHistory } from "./undoStack";
 
 // ponytail: thin Zustand wrapper over the native-bridge client. Keeps the
@@ -58,6 +60,11 @@ export interface ProjectState {
 	error: string | null;
 	sourceDurationSec: number;
 	currentTimeSec: number;
+	/** The selected imported audio track (issue #350), or null. In the store — not
+	 *  `useTimeline`'s local selection — because the media panel (which imports the
+	 *  file) and the inspector (which edits it) sit in different component subtrees
+	 *  and both need to read/set it; the region/clip selection stays hook-local. */
+	selectedAudioTrackId: string | null;
 	/** Single source of truth for "is the timeline transport playing?" — previously
 	 *  duplicated as separate local state in NewEditorShell AND VirtualPreview, each
 	 *  independently wired to the same raw <video> DOM events, which let one advance
@@ -72,6 +79,37 @@ export interface ProjectState {
 	createProject: (title: string) => Promise<AxcutDocument>;
 	refresh: () => Promise<void>;
 	addAsset: (path: string, label?: string) => Promise<AxcutAsset | null>;
+	/**
+	 * Import an external audio file (voiceover / BGM / SFX) as a `kind: "audio"`
+	 * asset — issue #350. Unlike {@link addAsset} it never looks for a camera
+	 * sidecar, and it probes the file's duration up front so the timeline can lay
+	 * out its track (added separately, see the timeline store). Returns the added
+	 * asset, or null if the write was superseded.
+	 */
+	addAudioAsset: (path: string, label?: string) => Promise<AxcutAsset | null>;
+	/**
+	 * One-shot "Import audio" for the media panel (issue #350): {@link addAudioAsset}
+	 * then place a track for it at the current playhead and select it, so the file
+	 * lands visibly on the timeline in a single user action. Returns the asset (or
+	 * null if the import was superseded). The timeline's own {@link addAudioTrack}
+	 * covers placing an already-imported asset.
+	 */
+	importAudioAsset: (path: string, label?: string) => Promise<AxcutAsset | null>;
+	/** Place a track for an already-imported audio asset at `timelineStartSec`
+	 *  (default: the playhead) and select it. Returns the new track id, or null. */
+	addAudioTrack: (
+		assetId: string,
+		timelineStartSec?: number,
+		options?: {
+			kind?: "voiceover" | "music";
+			/** Real source duration, when the caller measured it (a fresh recording
+			 *  knows its own length before the asset is probed). */
+			durationSec?: number;
+			/** Timeline span, when it should differ from the source duration. */
+			spanSec?: number;
+		},
+	) => Promise<string | null>;
+	setSelectedAudioTrackId: (id: string | null) => void;
 	removeAsset: (assetId: string) => Promise<void>;
 	/**
 	 * Write the document to disk. Resolves `true` when it took effect, `false` when it
@@ -159,6 +197,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 	error: null,
 	sourceDurationSec: 0,
 	currentTimeSec: 0,
+	selectedAudioTrackId: null,
 	playing: false,
 	dirty: false,
 	lastSavedAt: null,
@@ -179,6 +218,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				error: null,
 				dirty: false,
 				lastSavedAt: new Date(),
+				selectedAudioTrackId: null,
 			});
 			clearHistory();
 		} catch (error) {
@@ -325,6 +365,96 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 		return addedAsset;
 	},
 
+	async addAudioAsset(path, label) {
+		const { projectId } = get();
+		if (!projectId) throw new Error("No project loaded");
+		// Same superseded guard as addAsset: the native add, a duration probe and a
+		// save all await, and a project switch / clear can land in between.
+		const epoch = currentWriteEpoch();
+		const superseded = () => get().projectId !== projectId || currentWriteEpoch() !== epoch;
+		const result = await nativeBridgeClient.aiEdition.addAsset(projectId, path, label, "audio");
+		if (superseded()) return null;
+		let document = parseDocument(result.document);
+		const addedAsset =
+			document.assets.find(
+				(a) => a.kind === "audio" && a.originalPath === path && (label ? a.label === label : true),
+			) ??
+			document.assets.at(-1) ??
+			null;
+		if (!addedAsset) return null;
+
+		// Probe the real length so the timeline can size the track pill immediately
+		// on add. Non-fatal: an unreadable file just leaves durationSec unset and the
+		// track store falls back to a placeholder. No camera lookup — audio has none.
+		const durationSec = await probeAudioDuration(toFileUrl(addedAsset.originalPath)).catch(
+			() => null,
+		);
+		if (superseded()) return null;
+		if (durationSec != null) {
+			const next: AxcutDocument = {
+				...document,
+				assets: document.assets.map((a) => (a.id === addedAsset.id ? { ...a, durationSec } : a)),
+			};
+			// history: false — probing a duration is part of the import, not an edit
+			// of its own, so it must not become the thing the next Ctrl+Z reverses.
+			if (await get().saveDocument(next, { history: false })) document = parseDocument(next);
+		}
+
+		if (superseded()) return null;
+		set({
+			document,
+			revision: get().revision + 1,
+			dirty: false,
+			lastSavedAt: new Date(),
+		});
+		return document.assets.find((a) => a.id === addedAsset.id) ?? addedAsset;
+	},
+
+	setSelectedAudioTrackId(id) {
+		set({ selectedAudioTrackId: id });
+	},
+
+	async addAudioTrack(assetId, timelineStartSec, options) {
+		const document = get().document;
+		if (!document) return null;
+		const asset = document.assets.find((a) => a.id === assetId);
+		if (!asset || asset.kind !== "audio") return null;
+		const track = createAudioTrack({
+			assetId,
+			durationSec: options?.durationSec ?? asset.durationSec ?? 0,
+			kind: options?.kind,
+			spanSec: options?.spanSec,
+			// Default to the playhead (RAW/document timeline seconds — the clock the
+			// ruler and playhead use, NOT the trim-compressed output programme),
+			// matching the timeline hook's placement. A voiceover passes the playhead
+			// captured when RECORDING STARTED — by the time the take ends the live
+			// playhead has run on by the take's own length.
+			timelineStartSec: timelineStartSec ?? get().currentTimeSec,
+			label: asset.label,
+		});
+		// Through the placement door: it anchors the track into one fragment per clip it
+		// covers AND queues it behind whatever already occupies its kind's row, so two
+		// takes recorded from the same playhead no longer land on top of each other
+		// (issue #560).
+		const next = placeAudioTrackInDocument(document, track, () => createId("audio"), "create");
+		if (next === document) return null;
+		if (!(await get().saveDocument(next, { history: true }))) return null;
+		set({ selectedAudioTrackId: track.id });
+		return track.id;
+	},
+
+	async importAudioAsset(path, label) {
+		const asset = await get().addAudioAsset(path, label);
+		if (!asset) return null;
+		// addAudioAsset already committed the asset (with its probed duration), so
+		// the current document is the one to place the track on. If the placement
+		// write fails or is superseded, the import did NOT succeed as a one-shot —
+		// report failure rather than claim success with an asset but no track.
+		const trackId = await get().addAudioTrack(asset.id);
+		if (!trackId) return null;
+		return asset;
+	},
+
 	async removeAsset(assetId) {
 		const { projectId } = get();
 		if (!projectId) throw new Error("No project loaded");
@@ -451,6 +581,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			error: null,
 			sourceDurationSec: 0,
 			currentTimeSec: 0,
+			selectedAudioTrackId: null,
 			playing: false,
 			dirty: false,
 			lastSavedAt: null,

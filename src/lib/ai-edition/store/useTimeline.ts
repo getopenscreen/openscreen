@@ -4,24 +4,32 @@
 // (a reasonable default for the user to then resize).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type { AnnotationRegion, AnnotationType } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import {
+	collapseTracksToPills,
+	patchAudioTrack,
+	placeAudioTrackInDocument,
+	removeAudioTrack as removeAudioTrackInDocument,
+	trackGroupId,
+} from "../document/audioTracks";
 import { createId } from "../document/ids";
 import {
 	duplicateClip as duplicateClipInDocument,
 	moveClip as moveClipInDocument,
 	PLACEHOLDER_DURATION_SEC,
 	type RegionKind,
-	rederiveRegionMs,
 	removeClip as removeClipInDocument,
 	removeRegion as removeRegionInDocument,
 	resequenceClips,
 	setClipSourceRange,
+	withClipsChanged,
 } from "../document/timeline";
-import type { AxcutClipCropRegion, AxcutDocument } from "../schema";
+import type { AxcutAudioTrack, AxcutClipCropRegion, AxcutDocument } from "../schema";
 import { hasAnyClipWithCamera } from "../timeline/camera";
-import { probeVideoDimensions, probeVideoDuration } from "../timeline/duration";
+import { probeAudioDuration, probeVideoDimensions, probeVideoDuration } from "../timeline/duration";
 import {
 	anchorRegionsWithDerivedMs,
 	dropPillsByIds,
@@ -105,6 +113,15 @@ export function useTimeline() {
 	// the Delete key operates on.
 	const [multiSelection, setMultiSelection] = useState<RegionHandle[]>([]);
 	const [clipSelection, setClipSelection] = useState<string | null>(null);
+	// The selected imported audio track (issue #350) lives in the project store —
+	// not here — because the media panel and the inspector, in different subtrees,
+	// both touch it (see projectStore). It shares "this is the thing I mean"
+	// exclusivity with the region/clip selection above, so the selects below clear
+	// it and it clears them, but it carries none of the region delete/anchor logic.
+	const selectedAudioTrackId = useProjectStore((s) => s.selectedAudioTrackId);
+	const setSelectedAudioTrackId = useProjectStore((s) => s.setSelectedAudioTrackId);
+	const storeAddAudioTrack = useProjectStore((s) => s.addAudioTrack);
+	const importAudioAsset = useProjectStore((s) => s.importAudioAsset);
 	// Pre-drag snapshots for the two optimistic paths (zoom focus, annotations), so a
 	// failed commit can put the document back instead of leaving an edit on screen that
 	// was never written.
@@ -128,6 +145,17 @@ export function useTimeline() {
 	}, [projectId]);
 
 	const hasDoc = document !== null && projectId !== null;
+
+	// Clear a stale audio-track selection. `removeAudioTrack` clears it on an explicit
+	// delete, but an undo (or any document swap) can drop the selected track WITHOUT
+	// going through that op — and then `selectedAudioTrackId` points at nothing while the
+	// inspector stays open on an empty AudioTrackPane, recoverable only by clicking a facet.
+	useEffect(() => {
+		if (selectedAudioTrackId === null) return;
+		if (!document?.audioTracks.some((t) => trackGroupId(t) === selectedAudioTrackId)) {
+			setSelectedAudioTrackId(null);
+		}
+	}, [document, selectedAudioTrackId, setSelectedAudioTrackId]);
 
 	// Backfill missing source dimensions for any USED asset whose `video` was never probed.
 	// `probeAndCorrectClip` only populates dims on INSERT, gated on a null duration, so an asset
@@ -204,6 +232,60 @@ export function useTimeline() {
 								: {}),
 						};
 					}),
+				},
+				{ history: false },
+			);
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [document]);
+
+	// Backfill the real duration of imported audio assets (issue #350), the audio
+	// counterpart of the dimension backfill above. `addAudioAsset` probes once at
+	// import; a transient failure (timeout, a file still being written) would
+	// otherwise leave `durationSec` at 0 forever, and a 0-length window is a track
+	// that never plays and a pill with no width. Re-probe on load — once per asset
+	// per session, success or not — and stamp both the asset AND every track that
+	// caches its duration, with `history: false` so the fix is not an undo step.
+	const probedAudioAssetIdsRef = useRef<Set<string>>(new Set());
+	useEffect(() => {
+		if (!document) return;
+		const usedAssetIds = new Set(document.audioTracks.map((t) => t.assetId));
+		const missing = document.assets.filter(
+			(a) =>
+				a.kind === "audio" &&
+				a.originalPath &&
+				usedAssetIds.has(a.id) &&
+				!(a.durationSec && a.durationSec > 0) &&
+				!probedAudioAssetIdsRef.current.has(a.id),
+		);
+		if (missing.length === 0) return;
+		// Mark every candidate BEFORE the first await. Marking each only as its turn
+		// came meant a document change that re-entered this effect while asset #1 was
+		// still awaiting found #2+ unmarked and probed them a second time.
+		for (const a of missing) probedAudioAssetIdsRef.current.add(a.id);
+		let cancelled = false;
+		void (async () => {
+			const probed: Record<string, number> = {};
+			for (const a of missing) {
+				const durationSec = await probeAudioDuration(toFileUrl(a.originalPath));
+				if (durationSec != null && durationSec > 0) probed[a.id] = durationSec;
+			}
+			if (cancelled || Object.keys(probed).length === 0) return;
+			const current = useProjectStore.getState().document;
+			if (!current) return;
+			await useProjectStore.getState().saveDocument(
+				{
+					...current,
+					assets: current.assets.map((a) =>
+						probed[a.id] ? { ...a, durationSec: probed[a.id] } : a,
+					),
+					audioTracks: current.audioTracks.map((t) =>
+						probed[t.assetId] && !(t.durationSec > 0)
+							? { ...t, durationSec: probed[t.assetId] }
+							: t,
+					),
 				},
 				{ history: false },
 			);
@@ -894,6 +976,7 @@ export function useTimeline() {
 		(kind: RegionKind, id: string, opts?: { additive?: boolean }) => {
 			const handle = { kind, id };
 			setClipSelection(null);
+			setSelectedAudioTrackId(null);
 			if (opts?.additive) {
 				// Shift-click toggles membership; the focused region follows the click.
 				setMultiSelection((prev) => {
@@ -906,14 +989,15 @@ export function useTimeline() {
 			setMultiSelection([handle]);
 			setSelection(handle);
 		},
-		[],
+		[setSelectedAudioTrackId],
 	);
 
 	const clearSelection = useCallback(() => {
 		setSelection(null);
 		setMultiSelection([]);
 		setClipSelection(null);
-	}, []);
+		setSelectedAudioTrackId(null);
+	}, [setSelectedAudioTrackId]);
 
 	// The Edit Clip dialog's Apply, as ONE document and ONE save.
 	//
@@ -1081,12 +1165,7 @@ export function useTimeline() {
 			const arr = [...oldClips];
 			const at = Math.max(0, Math.min(arr.length, index));
 			arr.splice(at, 0, newClip);
-			const newClips = resequenceClips(arr);
-			const next: AxcutDocument = {
-				...currentDoc,
-				timeline: { ...currentDoc.timeline, clips: newClips },
-			};
-			const finalDoc = rederiveRegionMs(next, newClips);
+			const finalDoc = withClipsChanged(currentDoc, arr);
 			if (!(await saveDocument(finalDoc, { history: true }))) return;
 			setClipSelection(newClip.id);
 
@@ -1149,11 +1228,26 @@ export function useTimeline() {
 	);
 
 	// Mirror of selectRegion: picking a clip retires the pill selection.
-	const selectClip = useCallback((id: string) => {
-		setClipSelection(id);
-		setSelection(null);
-		setMultiSelection([]);
-	}, []);
+	const selectClip = useCallback(
+		(id: string) => {
+			setClipSelection(id);
+			setSelection(null);
+			setMultiSelection([]);
+			setSelectedAudioTrackId(null);
+		},
+		[setSelectedAudioTrackId],
+	);
+
+	// Picking an audio track retires every other selection, same exclusivity rule.
+	const selectAudioTrack = useCallback(
+		(id: string) => {
+			setSelectedAudioTrackId(id);
+			setSelection(null);
+			setMultiSelection([]);
+			setClipSelection(null);
+		},
+		[setSelectedAudioTrackId],
+	);
 
 	const speedRegions = hasDoc
 		? (((document.legacyEditor as Record<string, unknown> | null)?.speedRegions as Array<{
@@ -1173,14 +1267,197 @@ export function useTimeline() {
 			}>) ?? [])
 		: [];
 
+	// --- Timeline audio tracks (issue #350) -------------------------------------
+	// CLIP-ANCHORED like every region above: one user-visible track is one pill
+	// over one-or-more stored fragments, so these ops go through the shared pill
+	// helpers and address a track by its group id, never a fragment id.
+
+	// Place a new track for an imported audio asset, its head at the playhead (in
+	// RAW/document timeline seconds — the clock the ruler and playhead use, NOT the
+	// trim-compressed output programme the export mixes onto) unless the caller says
+	// otherwise. Delegates to the store op, which also selects the new track and
+	// returns its id (or null). On success, retire the hook-local region/clip
+	// selection so the new audio-track selection isn't held CONCURRENTLY with a
+	// stale region/clip one.
+	const addAudioTrack = useCallback(
+		async (
+			assetId: string,
+			timelineStartSec?: number,
+			options?: { kind?: "voiceover" | "music"; durationSec?: number; spanSec?: number },
+		): Promise<string | null> => {
+			const id = await storeAddAudioTrack(assetId, timelineStartSec ?? playheadSec(), options);
+			if (id) {
+				setSelection(null);
+				setMultiSelection([]);
+				setClipSelection(null);
+			}
+			return id;
+		},
+		[storeAddAudioTrack],
+	);
+
+	// Import an audio file and drop it on the timeline (issue #350). Lives here — not in
+	// the timeline toolbar — so the toolbar button and the keyboard shortcut (both call
+	// through `tl`) share one path. Opens a file picker, so unlike the region adds it takes
+	// no playhead duration; `importAudioAsset` places the track at the current playhead.
+	const addAudio = useCallback(async () => {
+		try {
+			// Inside the try so a rejected picker (an IPC failure, not a cancel) still reaches the
+			// localized toast instead of surfacing as an unhandled rejection. A cancel resolves with
+			// `success: false` and is a silent early return, not an error.
+			const picker = await window.electronAPI?.openAudioFilePicker?.();
+			if (!picker?.success || !picker.path) return;
+			const label = picker.name || picker.path.split(/[\\/]/).pop() || "Audio";
+			const asset = await importAudioAsset(picker.path, label);
+			// `importAudioAsset` selects the new track in the store, but the region/clip
+			// selections are hook-local state it can't touch — clear them here so an import
+			// doesn't leave a stale annotation/clip selected alongside the new track (the same
+			// exclusivity `addAudioTrack` keeps). Only on success: a failed import changes nothing.
+			if (asset) {
+				setSelection(null);
+				setMultiSelection([]);
+				setClipSelection(null);
+			}
+		} catch (err) {
+			toast.error(ts("audioTrack.importFailed"), {
+				description: err instanceof Error ? err.message : String(err),
+			});
+		}
+	}, [importAudioAsset, ts]);
+
+	const removeAudioTrack = useCallback(
+		async (trackId: string) => {
+			if (!document) return;
+			// Clear the inspector selection only AFTER the delete commits. A failed
+			// write leaves the track in the document, so it must keep its selection.
+			const ok = await saveDocument(removeAudioTrackInDocument(document, trackId), {
+				history: true,
+			});
+			if (ok && selectedAudioTrackId === trackId) setSelectedAudioTrackId(null);
+		},
+		[document, saveDocument, selectedAudioTrackId, setSelectedAudioTrackId],
+	);
+
+	// The commit for a lane drag or edge-resize: move the pill's whole span and
+	// re-ventilate it, so a track dragged across a cut becomes the right set of
+	// fragments in one write (one undo step). `offsetMs` is preserved as the
+	// track's own — `anchorAudioTrackFragments` re-derives each fragment's
+	// advance from the new geometry.
+	const placeAudioTrack = useCallback(
+		async (trackId: string, span: { startMs: number; endMs: number; offsetMs?: number }) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return;
+			// The door replaces the whole group, so the survivors no longer need naming here.
+			const [pill] = collapseTracksToPills(
+				doc.audioTracks.filter((t) => trackGroupId(t) === trackId),
+			);
+			if (!pill) return;
+			const moved = {
+				...pill,
+				startMs: Math.max(0, Math.round(span.startMs)),
+				endMs: Math.max(Math.round(span.startMs) + 1, Math.round(span.endMs)),
+				// A left-edge drag is a trim IN: the head moves right and the same
+				// amount is skipped in the source, so the audio under the pill stays
+				// put instead of sliding with it. Omitted by a plain move, which
+				// keeps the offset it already had.
+				offsetMs:
+					span.offsetMs === undefined ? pill.offsetMs : Math.max(0, Math.round(span.offsetMs)),
+			};
+			// A resize stops the dragged edge at the neighbour; a move keeps the take's
+			// duration and parks it against the wall. Cropping a take because it was
+			// dragged somewhere crowded would lose audio the user never asked to lose.
+			const next = placeAudioTrackInDocument(
+				doc,
+				moved,
+				() => createId("audio"),
+				span.offsetMs === undefined ? "move" : "resize",
+			);
+			if (next === doc) return;
+			await saveDocument(next, { history: true });
+		},
+		[saveDocument],
+	);
+
+	// Payload edits hit every fragment of the track — the halves of a split take
+	// must not disagree about gain, mute or loop.
+	const updateAudioTrack = useCallback(
+		async (
+			trackId: string,
+			patch: Partial<
+				Pick<AxcutAudioTrack, "gainDb" | "muted" | "loop" | "fadeInMs" | "fadeOutMs" | "offsetMs">
+			>,
+		) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return;
+			await saveDocument(patchAudioTrack(doc, trackId, patch), { history: true });
+		},
+		[saveDocument],
+	);
+
+	// Turning loop ON fills the rest of the programme with the track.
+	//
+	// Looping only means anything when the span EXCEEDS the source, so a toggle
+	// that changed nothing else did nothing at all — the user had to know to then
+	// drag the pill's right edge out, which is not a thing anyone guesses. Filling
+	// is what "loop" is for, it is one undo away, and the edge still trims it back
+	// to any length. Turning loop OFF deliberately leaves the span alone: shrinking
+	// it would throw away a length the user may have set by hand.
+	const setAudioTrackLoop = useCallback(
+		async (trackId: string, loop: boolean) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return;
+			const fragments = doc.audioTracks.filter((t) => trackGroupId(t) === trackId);
+			const [pill] = collapseTracksToPills(fragments);
+			if (!pill) return;
+			// Refused on a voiceover. `anchorAudioTrackFragments` does not advance `offsetMs`
+			// across a looping track's fragments, so its words map to raw moments they do not
+			// occupy — the transcript lane drops it, and a cut authored from it would land in
+			// the wrong place. Music loops; narration does not (issue #560).
+			if (loop && pill.kind === "voiceover") return;
+			const programmeEndMs = Math.round(
+				doc.timeline.clips.reduce((max, c) => Math.max(max, c.timelineEndSec), 0) * 1000,
+			);
+			// One write, so the fill and the flag are a single undo step.
+			const patched = patchAudioTrack(doc, trackId, { loop });
+			if (!loop || programmeEndMs <= pill.endMs) {
+				await saveDocument(patched, { history: true });
+				return;
+			}
+			// The fill stops at the next pill of its own kind, not at the programme end: a
+			// bed filling the timeline must not swallow a second bed that comes after it.
+			const filled = placeAudioTrackInDocument(
+				patched,
+				{ ...pill, loop, endMs: programmeEndMs },
+				() => createId("audio"),
+				"resize",
+			);
+			await saveDocument(filled === patched ? patched : filled, { history: true });
+		},
+		[saveDocument],
+	);
+
+	const setAudioTrackGain = useCallback(
+		async (trackId: string, gainDb: number) => {
+			await updateAudioTrack(trackId, { gainDb });
+		},
+		[updateAudioTrack],
+	);
+
 	return {
 		zoomRegions: document?.zoomRanges ?? [],
 		trimRanges: document?.timeline.trimRanges ?? [],
+		audioTracks: document?.audioTracks ?? [],
+		// The pauses added words created. The ruler counts them; nothing else in the
+		// timeline store writes them (see `document/transcript.ts`).
 		annotationRegions: (document?.annotations ?? []) as unknown as AnnotationRegion[],
 		speedRegions,
 		cameraFullscreenRegions,
 		clips: document?.timeline.clips ?? [],
 		assets: document?.assets ?? [],
+		// The timeline marks where the user has ADDED words — text with no audio behind it.
+		// Read straight off the transcript: the word is the only record of an insert, and a
+		// mark derived from it can never disagree with the pane that shows the same word.
+		transcripts: document?.transcripts ?? [],
 		hasDoc,
 		selection,
 		multiSelection,
@@ -1193,6 +1470,15 @@ export function useTimeline() {
 		addCameraFullscreen,
 		removeRegion,
 		removeRegions,
+		addAudioTrack,
+		addAudio,
+		removeAudioTrack,
+		updateAudioTrack,
+		setAudioTrackLoop,
+		placeAudioTrack,
+		setAudioTrackGain,
+		selectedAudioTrackId,
+		selectAudioTrack,
 		selectRegion,
 		clearSelection,
 		applyClipEdit,

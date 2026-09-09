@@ -1,41 +1,22 @@
-import {
-	AlertTriangle,
-	Crop,
-	FolderOpen,
-	FolderPlus,
-	Loader2,
-	Maximize2,
-	Pencil,
-	Plus,
-	RefreshCw,
-	RotateCcw,
-	Trash2,
-	Triangle,
-	X,
-} from "lucide-react";
+import { AlertTriangle, Crop, FolderOpen, FolderPlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
 	useEffect,
-	useMemo,
 	useRef,
 	useState,
 } from "react";
-import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type { CropRegion } from "@/components/video-editor/types";
-import { useI18n, useScopedT } from "@/contexts/I18nContext";
-import { toAxcutTranscriptDsl } from "@/lib/ai-edition/document/transcribe";
+import { useScopedT } from "@/contexts/I18nContext";
+import type { AxcutClip } from "@/lib/ai-edition/schema";
+import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import {
-	type AxcutClip,
-	type AxcutTranscript,
-	type TranscriptLanguageCode,
-	transcriptLanguageSchema,
-} from "@/lib/ai-edition/schema";
-import { formatSec, formatSeconds } from "@/lib/ai-edition/timeline/format";
-import {
-	languageLabel,
-	sortedLanguageOptions,
-} from "@/lib/ai-edition/transcription/languageLabels";
+	cropDraftFromRegion,
+	cropDraftToPct,
+	displayPct,
+	previewBoxStyle,
+	stepPct,
+} from "./cropDraft";
 import styles from "./NewEditorShell.module.css";
 import type { VideoSource } from "./VirtualPreview";
 
@@ -622,11 +603,19 @@ function CropField({
 	label,
 	value,
 	onChange,
+	step,
 }: {
 	label: string;
 	value: number;
 	onChange: (n: number) => void;
+	step: number;
 }) {
+	// While the field is focused the user's raw text is the value: rendering
+	// `displayPct(value)` on a controlled input would rewrite "25." to "25" on
+	// every keystroke, making decimals untypable. The buffer seeds from the
+	// UNROUNDED stored value so native stepper arrows step from the exact
+	// state, not the rounded display; two-decimal formatting happens on blur.
+	const [draft, setDraft] = useState<string | null>(null);
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
 			<label
@@ -641,10 +630,17 @@ function CropField({
 			</label>
 			<input
 				type="number"
-				value={value}
+				value={draft ?? displayPct(value)}
 				min={0}
 				max={100}
-				onChange={(e) => onChange(Number(e.target.value))}
+				step={step}
+				onFocus={() => setDraft(String(value))}
+				onBlur={() => setDraft(null)}
+				onChange={(e) => {
+					setDraft(e.target.value);
+					const parsed = Number(e.target.value);
+					if (e.target.value !== "" && Number.isFinite(parsed)) onChange(parsed);
+				}}
 				style={{
 					width: "100%",
 					padding: "8px 10px",
@@ -713,6 +709,7 @@ export function EditClipModal({
 	// fraction-of-frame width/height. 16/9 is just a placeholder until the
 	// crop <video>'s real metadata loads (see the effect below).
 	const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
+	const [frameSizePx, setFrameSizePx] = useState({ width: 0, height: 0 });
 	const cropFrameRef = useRef<HTMLDivElement | null>(null);
 	const cropVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -724,10 +721,11 @@ export function EditClipModal({
 		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
 		setActiveEdge(null);
 		const region = clip.cropRegion ?? IDENTITY_CROP;
-		setCropXPct(Math.round(region.x * 100));
-		setCropYPct(Math.round(region.y * 100));
-		setCropWPct(Math.round(region.width * 100));
-		setCropHPct(Math.round(region.height * 100));
+		const pct = cropDraftToPct(cropDraftFromRegion(region));
+		setCropXPct(pct.x);
+		setCropYPct(pct.y);
+		setCropWPct(pct.w);
+		setCropHPct(pct.h);
 		setCropTouched(false);
 	}, [open, clip]);
 
@@ -748,6 +746,14 @@ export function EditClipModal({
 	// clip's original in-point, not on every trim drag.
 	useEffect(() => {
 		if (!open || !clip) return;
+		// A clip switch must not leave the previous clip's dimensions live: an
+		// immediate preset or typed edit would quantize against the wrong
+		// resolution and `cropTouched` would lock the wrong aspect in. Reset to
+		// the same defaults a fresh dialog starts with; the metadata handler
+		// below refills them (immediately, when this clip's metadata is already
+		// loaded).
+		setVideoAspectRatio(16 / 9);
+		setFrameSizePx({ width: 0, height: 0 });
 		const v = cropVideoRef.current;
 		if (!v) return;
 		const seek = () => {
@@ -755,6 +761,7 @@ export function EditClipModal({
 			if (Number.isFinite(clip.sourceStartSec)) v.currentTime = clip.sourceStartSec;
 			if (v.videoWidth > 0 && v.videoHeight > 0) {
 				setVideoAspectRatio(v.videoWidth / v.videoHeight);
+				setFrameSizePx({ width: v.videoWidth, height: v.videoHeight });
 			}
 		};
 		if (v.readyState >= 1) seek();
@@ -811,10 +818,10 @@ export function EditClipModal({
 		// field/handle logic below, keeps every later edit at that ratio).
 		if (!candidate?.ratio) return;
 		const fit = centeredFitPct(candidate.ratio / videoAspectRatio);
-		setCropXPct(Math.round(fit.x));
-		setCropYPct(Math.round(fit.y));
-		setCropWPct(Math.round(fit.w));
-		setCropHPct(Math.round(fit.h));
+		setCropXPct(fit.x);
+		setCropYPct(fit.y);
+		setCropWPct(fit.w);
+		setCropHPct(fit.h);
 	};
 
 	// Fraction-space width/height ratio the crop is locked to while a preset is
@@ -828,11 +835,11 @@ export function EditClipModal({
 	// independently. All keep the rectangle inside the frame.
 	const applyCropX = (v: number) => {
 		setCropTouched(true);
-		setCropXPct(Math.round(clampPct(v, 0, 100 - cropWPct)));
+		setCropXPct(clampPct(v, 0, 100 - cropWPct));
 	};
 	const applyCropY = (v: number) => {
 		setCropTouched(true);
-		setCropYPct(Math.round(clampPct(v, 0, 100 - cropHPct)));
+		setCropYPct(clampPct(v, 0, 100 - cropHPct));
 	};
 	const applyCropW = (v: number) => {
 		setCropTouched(true);
@@ -843,10 +850,10 @@ export function EditClipModal({
 				h = 100 - cropYPct;
 				w = h * lockedFractionRatio;
 			}
-			setCropWPct(Math.round(w));
-			setCropHPct(Math.round(h));
+			setCropWPct(w);
+			setCropHPct(h);
 		} else {
-			setCropWPct(Math.round(clampPct(v, MIN_PCT, 100 - cropXPct)));
+			setCropWPct(clampPct(v, MIN_PCT, 100 - cropXPct));
 		}
 	};
 	const applyCropH = (v: number) => {
@@ -858,10 +865,10 @@ export function EditClipModal({
 				w = 100 - cropXPct;
 				h = w / lockedFractionRatio;
 			}
-			setCropWPct(Math.round(w));
-			setCropHPct(Math.round(h));
+			setCropWPct(w);
+			setCropHPct(h);
 		} else {
-			setCropHPct(Math.round(clampPct(v, MIN_PCT, 100 - cropYPct)));
+			setCropHPct(clampPct(v, MIN_PCT, 100 - cropYPct));
 		}
 	};
 
@@ -879,8 +886,8 @@ export function EditClipModal({
 		const move = (ev: PointerEvent) => {
 			const dxPct = ((ev.clientX - startX) / r.width) * 100;
 			const dyPct = ((ev.clientY - startY) / r.height) * 100;
-			setCropXPct(Math.round(clampPct(start.x + dxPct, 0, 100 - start.w)));
-			setCropYPct(Math.round(clampPct(start.y + dyPct, 0, 100 - start.h)));
+			setCropXPct(clampPct(start.x + dxPct, 0, 100 - start.w));
+			setCropYPct(clampPct(start.y + dyPct, 0, 100 - start.h));
 		};
 		const up = () => {
 			window.removeEventListener("pointermove", move);
@@ -950,10 +957,10 @@ export function EditClipModal({
 				x = fixedLeft ? anchorX : anchorX - w;
 				y = fixedTop ? anchorY : anchorY - h;
 			}
-			setCropXPct(Math.round(x));
-			setCropYPct(Math.round(y));
-			setCropWPct(Math.round(w));
-			setCropHPct(Math.round(h));
+			setCropXPct(x);
+			setCropYPct(y);
+			setCropWPct(w);
+			setCropHPct(h);
 		};
 		const up = () => {
 			window.removeEventListener("pointermove", move);
@@ -977,10 +984,11 @@ export function EditClipModal({
 		setDraftStart(clip.sourceStartSec);
 		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
 		const region = clip.cropRegion ?? IDENTITY_CROP;
-		setCropXPct(Math.round(region.x * 100));
-		setCropYPct(Math.round(region.y * 100));
-		setCropWPct(Math.round(region.width * 100));
-		setCropHPct(Math.round(region.height * 100));
+		const pct = cropDraftToPct(cropDraftFromRegion(region));
+		setCropXPct(pct.x);
+		setCropYPct(pct.y);
+		setCropWPct(pct.w);
+		setCropHPct(pct.h);
 		setCropRatio(detectRatio(region, videoAspectRatio));
 		setCropTouched(false);
 	};
@@ -1005,21 +1013,7 @@ export function EditClipModal({
 			subtitle={assetMeta?.label ?? undefined}
 			wide
 		>
-			<div
-				ref={cropFrameRef}
-				style={{
-					position: "relative",
-					width: "100%",
-					height: 230,
-					maxWidth: 409,
-					margin: "0 auto 14px",
-					flexShrink: 0,
-					background: "#0a0b0e",
-					borderRadius: "var(--r-md)",
-					border: "1px solid var(--border)",
-					overflow: "hidden",
-				}}
-			>
+			<div ref={cropFrameRef} style={previewBoxStyle(videoAspectRatio)}>
 				{cropPreviewSource ? (
 					<video
 						ref={cropVideoRef}
@@ -1226,10 +1220,30 @@ export function EditClipModal({
 						alignItems: "end",
 					}}
 				>
-					<CropField label={t("cropDialog.fieldX")} value={cropXPct} onChange={applyCropX} />
-					<CropField label={t("cropDialog.fieldY")} value={cropYPct} onChange={applyCropY} />
-					<CropField label={t("cropDialog.fieldW")} value={cropWPct} onChange={applyCropW} />
-					<CropField label={t("cropDialog.fieldH")} value={cropHPct} onChange={applyCropH} />
+					<CropField
+						label={t("cropDialog.fieldX")}
+						value={cropXPct}
+						step={stepPct(frameSizePx.width)}
+						onChange={applyCropX}
+					/>
+					<CropField
+						label={t("cropDialog.fieldY")}
+						value={cropYPct}
+						step={stepPct(frameSizePx.height)}
+						onChange={applyCropY}
+					/>
+					<CropField
+						label={t("cropDialog.fieldW")}
+						value={cropWPct}
+						step={stepPct(frameSizePx.width)}
+						onChange={applyCropW}
+					/>
+					<CropField
+						label={t("cropDialog.fieldH")}
+						value={cropHPct}
+						step={stepPct(frameSizePx.height)}
+						onChange={applyCropH}
+					/>
 					<div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 110 }}>
 						<label
 							style={{
@@ -1270,7 +1284,7 @@ export function EditClipModal({
 							whiteSpace: "nowrap",
 						}}
 					>
-						{cropWPct}% × {cropHPct}%
+						{displayPct(cropWPct)}% × {displayPct(cropHPct)}%
 					</span>
 				</div>
 			</div>
@@ -1512,472 +1526,6 @@ export function InsertSourceModal({
 					</div>
 				</button>
 			</div>
-		</ModalShell>
-	);
-}
-
-/**
- * `AxcutTranscript.language` is `z.string().min(1)`, not validated against
- * the known code list, so a stored transcript can hold a value no
- * `<option>` matches — falls back to "auto" rather than letting the select
- * go visibly out of sync with the code a regenerate would actually submit.
- */
-function supportedTranscriptLanguage(language: string | undefined): TranscriptLanguageCode {
-	const parsed = transcriptLanguageSchema.safeParse(language);
-	return parsed.success ? parsed.data : "auto";
-}
-
-export interface SourceTranscriptModalProps extends BaseModalProps {
-	assetLabel: string;
-	assetPath: string;
-	tcFormatted: string;
-	transcript: AxcutTranscript | null;
-	isTranscribing: boolean;
-	isFailed: boolean;
-	/** Why the last run produced nothing — "no audio track", or the engine's own message. */
-	failureMessage?: string;
-	onRegenerate: (language: TranscriptLanguageCode) => void;
-}
-
-export function SourceTranscriptModal({
-	open,
-	onClose,
-	assetLabel,
-	assetPath,
-	tcFormatted,
-	transcript,
-	isTranscribing,
-	isFailed,
-	failureMessage,
-	onRegenerate,
-}: SourceTranscriptModalProps) {
-	const t = useScopedT("editor");
-	const tc = useScopedT("common");
-	const videoRef = useRef<HTMLVideoElement | null>(null);
-	const [isPlaying, setIsPlaying] = useState(false);
-	const [playTime, setPlayTime] = useState(0);
-	const [duration, setDuration] = useState<number | null>(null);
-	const { locale } = useI18n();
-	const [regenLang, setRegenLang] = useState<TranscriptLanguageCode>(
-		supportedTranscriptLanguage(transcript?.language),
-	);
-
-	// ponytail: sync the language picker to whatever the stored transcript was
-	// generated with. Avoids surprising the user with a different selection on
-	// every open after a regenerate.
-	useEffect(() => {
-		if (open) setRegenLang(supportedTranscriptLanguage(transcript?.language));
-	}, [open, transcript?.language]);
-
-	const regenLanguageOptions = useMemo(
-		() => sortedLanguageOptions(locale, t("mediaStage.auto")),
-		[locale, t],
-	);
-
-	useEffect(() => {
-		if (!open) {
-			setIsPlaying(false);
-			setPlayTime(0);
-			setDuration(null);
-			const v = videoRef.current;
-			if (v) {
-				v.pause();
-				v.currentTime = 0;
-			}
-		}
-	}, [open]);
-
-	const detectedLanguage =
-		transcript?.language && transcript.language !== "auto" ? transcript.language : null;
-
-	const statusLabel = isTranscribing
-		? t("mediaStage.generating")
-		: isFailed
-			? t("mediaStage.generationFailed")
-			: transcript
-				? t("mediaStage.generated")
-				: t("mediaStage.notGeneratedYet");
-
-	const transcriptBody = transcript
-		? toAxcutTranscriptDsl(transcript, assetLabel || undefined, duration ?? undefined)
-		: null;
-
-	const playLabel = isPlaying ? tc("playback.pause") : tc("playback.play");
-
-	const togglePlay = () => {
-		const v = videoRef.current;
-		if (!v) return;
-		if (v.paused) {
-			// Same catch as VirtualPreview's: `play()` rejects on the autoplay policy
-			// or when a new load interrupts it, and `isPlaying` is driven by the
-			// element's own play/pause events — so a rejection leaves nothing to
-			// reconcile, it just must not escape as an unhandled rejection.
-			void v.play().catch(() => {
-				// swallow: rejection just means playback never started
-			});
-		} else {
-			v.pause();
-		}
-	};
-
-	const restart = () => {
-		const v = videoRef.current;
-		if (!v) return;
-		v.currentTime = 0;
-		setPlayTime(0);
-	};
-
-	const requestFullscreen = () => {
-		const v = videoRef.current;
-		if (!v) return;
-		// Rejects when the gesture isn't accepted or the element can't go fullscreen.
-		// Nothing to reconcile — the document stays as it was.
-		void v.requestFullscreen?.().catch(() => {
-			// swallow: rejection just means we stayed windowed
-		});
-	};
-
-	return (
-		<ModalShell
-			open={open}
-			onClose={onClose}
-			title={t("mediaStage.sourceTranscript")}
-			subtitle={assetLabel}
-			wide
-		>
-			<div
-				style={{
-					display: "grid",
-					gridTemplateColumns: "minmax(220px, 320px) 1fr",
-					gap: 14,
-				}}
-			>
-				<div
-					style={{
-						position: "relative",
-						aspectRatio: "16 / 9",
-						borderRadius: "var(--r-md)",
-						overflow: "hidden",
-						background: "linear-gradient(135deg, #16171d, #16171d)",
-						border: "1px solid var(--border)",
-					}}
-				>
-					{assetPath ? (
-						<video
-							ref={videoRef}
-							src={toFileUrl(assetPath)}
-							style={{
-								width: "100%",
-								height: "100%",
-								objectFit: "contain",
-								background: "#16171d",
-							}}
-							preload="metadata"
-							onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-							onTimeUpdate={(e) => setPlayTime(e.currentTarget.currentTime)}
-							onPlay={() => setIsPlaying(true)}
-							onPause={() => setIsPlaying(false)}
-							onEnded={() => setIsPlaying(false)}
-						/>
-					) : (
-						<div
-							style={{
-								width: "100%",
-								height: "100%",
-								display: "grid",
-								placeItems: "center",
-								color: "var(--muted)",
-								font: "500 12px var(--font-body)",
-							}}
-						>
-							{t("mediaStage.noPreviewAvailable")}
-						</div>
-					)}
-					<div
-						style={{
-							position: "absolute",
-							left: 0,
-							right: 0,
-							bottom: 0,
-							display: "flex",
-							alignItems: "center",
-							gap: 8,
-							padding: "8px 10px",
-							background: "linear-gradient(180deg, transparent, rgba(22,23,29,.55))",
-							color: "#fff",
-						}}
-					>
-						<button
-							type="button"
-							aria-label={playLabel}
-							title={playLabel}
-							onClick={togglePlay}
-							style={{
-								background: "transparent",
-								border: 0,
-								color: "inherit",
-								cursor: "pointer",
-								padding: 2,
-								borderRadius: 4,
-								display: "inline-flex",
-								alignItems: "center",
-								justifyContent: "center",
-							}}
-						>
-							{isPlaying ? (
-								<span style={{ display: "inline-flex", gap: 2 }}>
-									<span
-										style={{
-											width: 4,
-											height: 12,
-											background: "currentColor",
-											borderRadius: 1,
-										}}
-									/>
-									<span
-										style={{
-											width: 4,
-											height: 12,
-											background: "currentColor",
-											borderRadius: 1,
-										}}
-									/>
-								</span>
-							) : (
-								<Triangle size={12} fill="currentColor" style={{ transform: "rotate(0deg)" }} />
-							)}
-						</button>
-						<button
-							type="button"
-							aria-label={t("mediaStage.restart")}
-							title={t("mediaStage.restart")}
-							onClick={restart}
-							style={{
-								background: "transparent",
-								border: 0,
-								color: "inherit",
-								cursor: "pointer",
-								padding: 2,
-								borderRadius: 4,
-								display: "inline-flex",
-								alignItems: "center",
-								justifyContent: "center",
-							}}
-						>
-							<RotateCcw size={13} />
-						</button>
-						<button
-							type="button"
-							aria-label={tc("playback.fullscreen")}
-							title={tc("playback.fullscreen")}
-							onClick={requestFullscreen}
-							style={{
-								background: "transparent",
-								border: 0,
-								color: "inherit",
-								cursor: "pointer",
-								padding: 2,
-								borderRadius: 4,
-								display: "inline-flex",
-								alignItems: "center",
-								justifyContent: "center",
-							}}
-						>
-							<Maximize2 size={13} />
-						</button>
-						<span
-							style={{
-								marginLeft: "auto",
-								font: "500 12px/1 var(--font-mono)",
-								display: "inline-flex",
-								alignItems: "baseline",
-								gap: 4,
-							}}
-						>
-							<strong>{formatSec(playTime)}</strong>
-							<i style={{ fontStyle: "normal", opacity: 0.55, margin: "0 2px" }}>/</i>
-							<span style={{ opacity: 0.8 }}>{duration ? formatSec(duration) : tcFormatted}</span>
-						</span>
-						{isTranscribing ? (
-							<span
-								style={{
-									width: 8,
-									height: 8,
-									borderRadius: "50%",
-									background: "var(--accent)",
-									boxShadow: "0 0 0 3px var(--accent-soft)",
-									marginLeft: 6,
-								}}
-								aria-label={t("mediaStage.transcribing")}
-							/>
-						) : (
-							<span
-								style={{
-									width: 8,
-									height: 8,
-									borderRadius: "50%",
-									background: isFailed ? "var(--danger)" : "var(--danger)",
-									boxShadow: isFailed
-										? "0 0 0 3px var(--danger-soft)"
-										: "0 0 0 3px rgba(239, 68, 68, 0.2)",
-									marginLeft: 6,
-								}}
-								aria-hidden
-							/>
-						)}
-					</div>
-				</div>
-				<div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-						<span
-							style={{
-								display: "inline-flex",
-								alignItems: "center",
-								gap: 6,
-								padding: "6px 12px",
-								borderRadius: 999,
-								background: isFailed ? "var(--danger-soft)" : "var(--success-soft)",
-								color: isFailed ? "var(--danger)" : "var(--success)",
-								font: "500 12px var(--font-body)",
-								border: `1px solid color-mix(in srgb, ${isFailed ? "var(--danger)" : "var(--success)"} 22%, transparent)`,
-							}}
-						>
-							{isTranscribing ? (
-								<Loader2 size={11} className="animate-spin" />
-							) : (
-								<span
-									style={{
-										width: 7,
-										height: 7,
-										borderRadius: "50%",
-										background: isFailed ? "var(--danger)" : "var(--success)",
-									}}
-								/>
-							)}
-							{statusLabel}
-						</span>
-						{detectedLanguage ? (
-							<span
-								style={{
-									display: "inline-flex",
-									alignItems: "center",
-									padding: "6px 12px",
-									borderRadius: 999,
-									background: "var(--success-soft)",
-									color: "var(--success)",
-									font: "500 12px var(--font-body)",
-									border: "1px solid color-mix(in srgb, var(--success) 22%, transparent)",
-								}}
-							>
-								{t("mediaStage.detectedLanguage", {
-									language: languageLabel(detectedLanguage, locale),
-								})}
-							</span>
-						) : null}
-					</div>
-					<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-						<label
-							style={{
-								font: "500 12px/1 var(--font-body)",
-								color: "var(--muted)",
-							}}
-						>
-							{t("mediaStage.regenerateAs")}
-						</label>
-						<div
-							style={{
-								display: "grid",
-								gridTemplateColumns: "1fr auto",
-								gap: 8,
-								alignItems: "center",
-							}}
-						>
-							<select
-								aria-label={t("mediaStage.regenerateAs")}
-								value={regenLang}
-								disabled={isTranscribing}
-								onChange={(e) => setRegenLang(e.target.value as TranscriptLanguageCode)}
-								style={{
-									width: "100%",
-									padding: "10px 12px",
-									borderRadius: "var(--r-md)",
-									border: "1px solid var(--border)",
-									background: "var(--surface)",
-									color: "var(--fg)",
-									font: "500 13px var(--font-body)",
-								}}
-							>
-								{regenLanguageOptions.map(({ code, label }) => (
-									<option key={code} value={code}>
-										{label}
-									</option>
-								))}
-							</select>
-							<button
-								type="button"
-								title={t("mediaStage.regenerate")}
-								aria-label={t("mediaStage.regenerate")}
-								disabled={isTranscribing}
-								onClick={() => onRegenerate(regenLang)}
-								style={{
-									width: 38,
-									height: 38,
-									borderRadius: "var(--r-md)",
-									border: "1px solid var(--border)",
-									background: "var(--surface)",
-									color: "var(--fg)",
-									cursor: isTranscribing ? "not-allowed" : "pointer",
-									display: "inline-flex",
-									alignItems: "center",
-									justifyContent: "center",
-									opacity: isTranscribing ? 0.6 : 1,
-								}}
-							>
-								{isTranscribing ? (
-									<Loader2 size={15} className="animate-spin" />
-								) : (
-									<RefreshCw size={15} />
-								)}
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
-			{transcriptBody ? (
-				<pre
-					style={{
-						margin: 0,
-						padding: "14px 16px",
-						borderRadius: "var(--r-md)",
-						border: "1px solid var(--border)",
-						background: "var(--surface-warm)",
-						font: "400 12px/1.55 var(--font-mono)",
-						color: "var(--fg)",
-						whiteSpace: "pre",
-						overflow: "auto",
-						maxHeight: "38vh",
-					}}
-				>
-					{transcriptBody}
-				</pre>
-			) : (
-				<div
-					style={{
-						padding: 32,
-						textAlign: "center",
-						color: "var(--muted)",
-						font: "500 13px var(--font-body)",
-						border: "1px dashed var(--border)",
-						borderRadius: "var(--r-md)",
-					}}
-				>
-					{isFailed
-						? (failureMessage ?? t("mediaStage.generationFailedHint"))
-						: isTranscribing
-							? t("mediaStage.transcribingEllipsis")
-							: t("mediaStage.notGeneratedHint")}
-				</div>
-			)}
 		</ModalShell>
 	);
 }

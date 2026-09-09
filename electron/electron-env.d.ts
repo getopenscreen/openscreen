@@ -81,7 +81,10 @@ interface Window {
 		requestNativeMacCursorAccess: () => Promise<{
 			success: boolean;
 			granted: boolean;
-			status: string;
+			// "not-determined" is the only genuine denial; the rest mean the helper
+			// never got to ask. See macNativeCursorRecordingSession.ts.
+			status: "granted" | "not-determined" | "missing-helper" | "error" | "exited" | "timeout";
+			accessibilityTrusted: boolean;
 			error?: string;
 		}>;
 		assetBaseUrl: string;
@@ -285,6 +288,22 @@ interface Window {
 			// the shim carries the picked File's real name here for the label.
 			name?: string;
 			canceled?: boolean;
+		}>;
+		// Import an external audio file from the timeline toolbar (issue #350).
+		openAudioFilePicker: () => Promise<{
+			success: boolean;
+			path?: string;
+			name?: string;
+			canceled?: boolean;
+			message?: string;
+		}>;
+		// Persist an in-editor voiceover take (raw MediaRecorder bytes) under the
+		// recordings dir, so it outlives the session like every other asset.
+		saveRecordedVoiceover: (data: ArrayBuffer) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
 		}>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
 		setCurrentRecordingSession: (

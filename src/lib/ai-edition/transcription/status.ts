@@ -7,6 +7,7 @@
 // effects, this module owns the vocabulary.
 
 import type { AxcutDocument, AxcutTranscript } from "../schema";
+import { voiceoverPlacements } from "../timeline/aggregated-transcript";
 
 /** Why a transcription run could not produce anything. */
 export type TranscriptionFailureKind = "no-audio" | "unsupported-audio" | "error";
@@ -64,6 +65,40 @@ export function realtimeSpeed(rtf: number | undefined): number | null {
  */
 export function isCpuBackend(backend: string | undefined): boolean {
 	return backend === "whispercpp-cpu";
+}
+
+/** True while a model file is still arriving — not merely "the model is loading". */
+export function isModelDownloadInFlight(view: {
+	downloadedBytes?: number;
+	totalBytes?: number;
+}): boolean {
+	return (view.totalBytes ?? 0) > 0 && (view.downloadedBytes ?? 0) < (view.totalBytes ?? 0);
+}
+
+/** First running job, else first queued one — the pane spinner's source of copy. */
+export function firstBusyView(
+	views: Iterable<AssetTranscriptionView>,
+): AssetTranscriptionView | undefined {
+	const list = [...views];
+	return list.find((v) => v.status === "running") ?? list.find((v) => v.status === "queued");
+}
+
+/**
+ * First busy view among the assets the timeline actually plays — the same
+ * scope every transcript-dependent gate uses (`transcriptRelevantAssetIds`).
+ * A job on an off-timeline asset must not relabel a timeline-scoped button
+ * that stays enabled: label and gate have to answer about the same assets.
+ */
+export function firstTimelineBusyView(
+	document: AxcutDocument | null,
+	views: Record<string, AssetTranscriptionView>,
+): AssetTranscriptionView | undefined {
+	const relevant: AssetTranscriptionView[] = [];
+	for (const id of transcriptRelevantAssetIds(document)) {
+		const view = views[id];
+		if (view) relevant.push(view);
+	}
+	return firstBusyView(relevant);
 }
 
 /**
@@ -128,6 +163,10 @@ export interface AssetTranscriptionView {
 	backend?: string;
 	/** Real-time factor for the run so far; pair with `realtimeSpeed()` to display. */
 	rtf?: number;
+	/** Bytes of the speech model fetched so far. Only during `"loading-model"`. */
+	downloadedBytes?: number;
+	/** Total bytes of the in-flight model download. */
+	totalBytes?: number;
 }
 
 /** In-flight (or last-failed) state of one asset's job. Mirrors the store entry. */
@@ -138,6 +177,8 @@ export interface TranscriptionJobLike {
 	failure?: TranscriptionFailure;
 	backend?: string;
 	rtf?: number;
+	downloadedBytes?: number;
+	totalBytes?: number;
 }
 
 export function findAssetTranscript(
@@ -187,6 +228,8 @@ export function deriveAssetStatus(input: {
 			progress: job.progress,
 			backend: job.backend,
 			rtf: job.rtf,
+			downloadedBytes: job.downloadedBytes,
+			totalBytes: job.totalBytes,
 		};
 	}
 	if (transcript) {
@@ -272,11 +315,50 @@ export function resolveTranscriptGate(views: AssetTranscriptionView[]): Transcri
  * make it look ready when the clip on screen has no transcript. Falls back to
  * the whole bin while the timeline is still empty.
  */
+/**
+ * Can this asset plausibly carry speech?
+ *
+ * The background pass transcribes every asset in the document, which was harmless
+ * while every asset was footage. Imported audio broke that: a music bed is speech to
+ * nobody, and whisper spends real time discovering it. Measured on a four-minute bed:
+ * 35s of GPU inference at editor open, for 164 segments of transcribed music.
+ *
+ * "Can carry speech" is NOT a property of the asset — `AxcutAsset.kind` only knows
+ * `video | audio`. The voiceover/music distinction lives on the TRACK, so the question
+ * is answered from the timeline: an audio asset qualifies exactly when some track
+ * playing it sits on the voiceover lane.
+ *
+ * Stable under a lane change, which matters because the track's `kind` is editable:
+ *
+ *   - music -> voiceover queues it, which is right: it is speech now.
+ *   - voiceover -> music discards nothing. The transcript already exists, and the
+ *     caller skips an asset that has one, so the round trip is lossless rather than
+ *     paid for twice.
+ *
+ * An audio asset no track plays is not transcribed either: nothing is asking for it.
+ * See issue #560, where this rule was settled.
+ */
+export function assetCanCarrySpeech(document: AxcutDocument, assetId: string): boolean {
+	const asset = document.assets.find((a) => a.id === assetId);
+	if (!asset) return false;
+	if (asset.kind !== "audio") return true;
+	return document.audioTracks.some(
+		(track) => track.assetId === assetId && track.kind === "voiceover",
+	);
+}
+
 export function transcriptRelevantAssetIds(document: AxcutDocument | null): string[] {
 	if (!document) return [];
+	// The UNION of both lanes. "Can this project be transcribed" is not a per-lane
+	// question — a voiceover-only project has speech to transcribe with no clip carrying
+	// it, and narrowing this to the selected lane would report "no transcript" on a
+	// project whose other lane is full of words (issue #560).
 	const onTimeline: string[] = [];
 	for (const clip of document.timeline.clips) {
 		if (!onTimeline.includes(clip.assetId)) onTimeline.push(clip.assetId);
+	}
+	for (const placement of voiceoverPlacements(document.audioTracks ?? [])) {
+		if (!onTimeline.includes(placement.assetId)) onTimeline.push(placement.assetId);
 	}
 	const known = new Set(document.assets.map((a) => a.id));
 	const filtered = onTimeline.filter((id) => known.has(id));

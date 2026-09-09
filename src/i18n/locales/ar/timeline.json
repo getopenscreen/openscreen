@@ -15,6 +15,7 @@
 		"pressZoom": "اضغط Z لإضافة تكبير",
 		"pressTrim": "اضغط T لإضافة قص",
 		"pressAnnotation": "اضغط A لإضافة شرح",
+		"pressAudio": "اضغط M لإضافة صوت، وV لتسجيل تعليق صوتي",
 		"pressSpeed": "اضغط S لإضافة سرعة",
 		"pressCameraFullscreen": "اضغط C لإضافة مقطع كاميرا كاملة الشاشة"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "يتطلب نصًا منسوخًا",
 		"smartCutsNoAudio": "لا يحتوي هذا الملف على صوت",
 		"smartCutsNoSpeech": "لم يتم اكتشاف كلام",
-		"smartCutsFailed": "فشل النسخ — أعد المحاولة من قسم الوسائط"
+		"smartCutsFailed": "فشل النسخ — أعد المحاولة من قسم الوسائط",
+		"addAudioTooltip": "إضافة صوت",
+		"addedWord": "كلمة مضافة: \"{{word}}\" — لا صوت خلفها"
+	},
+	"audio": {
+		"addVoiceover": "إضافة تعليق صوتي",
+		"addVoiceoverHint": "سجّل تعليقًا صوتيًا فوق الفيديو",
+		"subtitle": "ضع تعليقًا صوتيًا أو موسيقى خلفية على المخطط الزمني",
+		"record": "تسجيل تعليق صوتي",
+		"importFile": "استيراد ملف صوتي",
+		"importFileHint": "أدرج موسيقى أو ملفًا صوتيًا",
+		"recording": "جارٍ التسجيل",
+		"recordingHint": "علّق صوتيًا مع الفيديو — يعمل أثناء التسجيل",
+		"stop": "إيقاف",
+		"micDenied": "تم رفض الوصول إلى الميكروفون",
+		"recordingUnavailable": "التسجيل غير متاح هنا",
+		"saveFailed": "تعذر حفظ التسجيل",
+		"importFailed": "تعذر استيراد الملف الصوتي"
 	}
 }

@@ -15,6 +15,7 @@
 		"pressZoom": "Z를 눌러 줌 추가",
 		"pressTrim": "T를 눌러 트림 추가",
 		"pressAnnotation": "A를 눌러 주석 추가",
+		"pressAudio": "M 키로 오디오 추가, V 키로 보이스오버 녹음",
 		"pressSpeed": "S를 눌러 속도 추가",
 		"pressCameraFullscreen": "C를 눌러 전체 화면 카메라 구간을 추가하세요"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "받아쓰기가 필요합니다",
 		"smartCutsNoAudio": "이 미디어에는 오디오가 없습니다",
 		"smartCutsNoSpeech": "음성이 감지되지 않음",
-		"smartCutsFailed": "받아쓰기에 실패했습니다 — 미디어에서 다시 시도하세요"
+		"smartCutsFailed": "받아쓰기에 실패했습니다 — 미디어에서 다시 시도하세요",
+		"addAudioTooltip": "오디오 추가",
+		"addedWord": "추가한 단어: \"{{word}}\" — 뒤에 오디오가 없습니다"
+	},
+	"audio": {
+		"addVoiceover": "내레이션 추가",
+		"addVoiceoverHint": "영상 위에 내레이션을 녹음",
+		"subtitle": "타임라인에 내레이션 또는 배경 음악 레이어를 배치합니다",
+		"record": "내레이션 녹음",
+		"importFile": "오디오 파일 가져오기",
+		"importFileHint": "음악이나 오디오 파일 가져오기",
+		"recording": "녹음 중",
+		"recordingHint": "영상에 맞춰 말하세요 — 녹음하는 동안 재생됩니다",
+		"stop": "중지",
+		"micDenied": "마이크 접근이 거부되었습니다",
+		"recordingUnavailable": "여기에서는 녹음할 수 없습니다",
+		"saveFailed": "녹음을 저장하지 못했습니다",
+		"importFailed": "오디오 파일을 가져오지 못했습니다"
 	}
 }

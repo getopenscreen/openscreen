@@ -4,6 +4,18 @@
 // or a new document with updated clips.
 
 import type { AxcutClip, AxcutDocument, AxcutTranscript, AxcutTrimRange } from "../schema";
+
+/**
+ * What `resolvePlaybackSegments` returns: a clip-shaped slice of playable film.
+ *
+ * A plain clip, deliberately. An extension is one too by the time it gets here — `withExtensions`
+ * resolved it into a clip on its own asset upstream — so nothing below this line carries a
+ * notion of inserted media, and the trim arithmetic is the same it was before insertions existed.
+ */
+export type PlaybackSegment = AxcutClip;
+
+import { type Interval, subtractInterval } from "../timeline/intervals";
+import { keptRawSpans } from "../timeline/programme-time";
 import {
 	anchoredToRawSpanSec,
 	anchorRegionsWithDerivedMs,
@@ -11,13 +23,19 @@ import {
 	hasCompleteClipAnchor,
 } from "../timeline/timelineMap";
 import { dropTrimPillsByIds, trimAppliesToClip } from "../timeline/trim-mapping";
+import {
+	dropUnusedGeneratedMedia,
+	reanchorAudioTracks,
+	removeAudioTrack,
+	separateAudioLanes,
+} from "./audioTracks";
 import { createId } from "./ids";
 
 /** The region families a delete can target by id. Shared with the store so "which kinds
  *  exist" has exactly one definition. `trim` is a source-time cut; the rest are pill-merged
  *  effects (zoom / speed / annotation / camera-fullscreen). Clips are removed via
  *  {@link removeClip}, not here — deleting a clip reflows the whole timeline. */
-export type RegionKind = "zoom" | "trim" | "annotation" | "speed" | "cameraFullscreen";
+export type RegionKind = "zoom" | "trim" | "annotation" | "speed" | "cameraFullscreen" | "audio";
 
 /** Length a clip is given before its media has been probed. Lives here, in the pure
  *  document layer, because that layer decides which clips are still waiting for a real
@@ -28,10 +46,10 @@ export function byStart(a: { startSec: number }, b: { startSec: number }): numbe
 	return a.startSec - b.startSec;
 }
 
-export interface Interval {
-	startSec: number;
-	endSec: number;
-}
+// Re-exported, not redefined: `programme-time.ts` needs the same subtraction and cannot
+// import it from here without closing a dependency cycle (this module already imports from
+// `../timeline`). Callers of `Interval` / `subtractInterval` from this module are unaffected.
+export { type Interval, subtractInterval } from "../timeline/intervals";
 
 export function normalizeIntervals(durationSec: number, intervals: Interval[]): Interval[] {
 	const bounded = intervals
@@ -115,6 +133,7 @@ function collectWordRefs(
 // after any structural change (insert / move / remove / trim) so the timeline
 // never has gaps or overlaps between clips. Shared by useTimeline (UI) and
 // the agent tool executor (main process) so both enforce the same invariant.
+
 export function resequenceClips(clips: AxcutClip[]): AxcutClip[] {
 	let cursor = 0;
 	return clips.map((c) => {
@@ -125,23 +144,6 @@ export function resequenceClips(clips: AxcutClip[]): AxcutClip[] {
 		cursor += len;
 		return next;
 	});
-}
-
-export function subtractInterval(intervals: Interval[], cut: Interval): Interval[] {
-	const output: Interval[] = [];
-	for (const interval of intervals) {
-		if (cut.endSec <= interval.startSec || cut.startSec >= interval.endSec) {
-			output.push(interval);
-			continue;
-		}
-		if (cut.startSec > interval.startSec) {
-			output.push({ startSec: interval.startSec, endSec: cut.startSec });
-		}
-		if (cut.endSec < interval.endSec) {
-			output.push({ startSec: cut.endSec, endSec: interval.endSec });
-		}
-	}
-	return output;
 }
 
 /**
@@ -163,9 +165,9 @@ export function subtractInterval(intervals: Interval[], cut: Interval): Interval
 export function resolvePlaybackSegments(
 	clips: AxcutClip[],
 	trimRanges: AxcutTrimRange[],
-): AxcutClip[] {
+): PlaybackSegment[] {
 	const ordered = [...clips].sort((a, b) => a.timelineStartSec - b.timelineStartSec);
-	const result: AxcutClip[] = [];
+	const result: PlaybackSegment[] = [];
 	let timelineCursor = 0;
 	for (const clip of ordered) {
 		const sourceEnd = clip.sourceEndSec ?? clip.sourceStartSec;
@@ -185,14 +187,14 @@ export function resolvePlaybackSegments(
 			if (!trimAppliesToClip(trim, clip)) continue;
 			kept = subtractInterval(kept, { startSec: trim.startSec, endSec: trim.endSec });
 		}
-		kept.forEach((iv, i) => {
-			const dur = iv.endSec - iv.startSec;
-			if (dur <= 0) return;
+		const pieces = kept.filter((piece) => piece.endSec > piece.startSec);
+		pieces.forEach((piece, i) => {
+			const dur = piece.endSec - piece.startSec;
 			result.push({
 				...clip,
-				id: kept.length === 1 ? clip.id : `${clip.id}_seg${i + 1}`,
-				sourceStartSec: iv.startSec,
-				sourceEndSec: iv.endSec,
+				id: pieces.length === 1 ? clip.id : `${clip.id}_seg${i + 1}`,
+				sourceStartSec: piece.startSec,
+				sourceEndSec: piece.endSec,
 				timelineStartSec: timelineCursor,
 				timelineEndSec: timelineCursor + dur,
 			});
@@ -200,6 +202,108 @@ export function resolvePlaybackSegments(
 		});
 	}
 	return result;
+}
+
+/**
+ * Project a RAW/document-timeline second (the ruler where trims still occupy their space)
+ * onto the trim-COMPRESSED output programme — the concatenation of the kept segments that
+ * {@link resolvePlaybackSegments} produces and that `audio::mix_external_tracks` overlays on.
+ *
+ * Built from the SAME kept intervals as `resolvePlaybackSegments` (trims subtracted per clip
+ * via `subtractInterval`, then concatenated with a shared output cursor), so it agrees with the
+ * assembled programme in the two cases a naïve "raw − Σ trimmed-before" got wrong: OVERLAPPING
+ * trims (set subtraction counts the union once, not each trim) and RAW GAPS between clips (the
+ * cursor only advances on kept content, so a gap is removed just as the programme removes it).
+ *
+ * `output(T)` = how much kept content precedes `T`. A `T` inside a trimmed span (or an inter-clip
+ * gap) collapses to the output edge of the kept content just before it; a `T` past the last kept
+ * frame carries its raw overhang through unchanged, so a project with no clips is the identity and
+ * a track parked past the programme stays past it (the mixer then skips it). EXACT for trims; like
+ * the rest of the audio-track export path it does not model speed regions, which stay an approximation.
+ *
+ * Issue #350: imported audio tracks store their head in RAW seconds (seeded from the playhead),
+ * but the export mixes onto the compressed programme — passing the raw head through verbatim
+ * delayed every track by the total trim duration ahead of it. The preview already lands them
+ * correctly because its playhead jumps across trims; this makes the render agree.
+ */
+export interface PlaybackSpeedRegion {
+	startMs: number;
+	endMs: number;
+	speed: number;
+}
+
+/**
+ * Output seconds a raw interval `[fromSec, toSec)` occupies once the speed
+ * regions covering it are applied: a 2x stretch of raw time takes half as long
+ * to play, so it contributes half its raw length to the programme.
+ *
+ * Subdivides at every speed boundary the interval crosses and integrates
+ * `1 / speed` piecewise. Regions are matched on the raw ruler, the same
+ * coordinate their pills are drawn in.
+ */
+function outputDurationOfRawSpan(
+	fromSec: number,
+	toSec: number,
+	speedRegions: PlaybackSpeedRegion[],
+): number {
+	if (toSec <= fromSec) return 0;
+	if (speedRegions.length === 0) return toSec - fromSec;
+	// Every boundary inside the span, so each piece has one constant speed.
+	const cuts = new Set<number>([fromSec, toSec]);
+	for (const region of speedRegions) {
+		for (const edge of [region.startMs / 1000, region.endMs / 1000]) {
+			if (edge > fromSec && edge < toSec) cuts.add(edge);
+		}
+	}
+	const edges = [...cuts].sort((a, b) => a - b);
+	let out = 0;
+	for (let i = 0; i < edges.length - 1; i++) {
+		const start = edges[i];
+		const end = edges[i + 1];
+		const mid = (start + end) / 2;
+		const region = speedRegions.find(
+			(r) => mid >= r.startMs / 1000 && mid < r.endMs / 1000 && r.speed > 0,
+		);
+		out += (end - start) / (region?.speed ?? 1);
+	}
+	return out;
+}
+
+export function projectRawTimelineSecToPlayback(
+	clips: AxcutClip[],
+	trimRanges: AxcutTrimRange[],
+	rawSec: number,
+	/**
+	 * Speed regions on the raw ruler. Supplied by the AUDIO paths, which overlay
+	 * a 1x track onto the finished programme and so need its real, speed-adjusted
+	 * clock; omitted by callers that only care about trims. Left out, the
+	 * projection behaves exactly as it did before speed was modelled.
+	 */
+	speedRegions: PlaybackSpeedRegion[] = [],
+): number {
+	const ordered = [...clips].sort((a, b) => a.timelineStartSec - b.timelineStartSec);
+	let outCursor = 0; // output length of the kept content walked so far
+	let lastRawEnd = 0; // raw end of the last kept segment, for the trailing overhang
+	let landed: number | null = null; // output(rawSec), once it falls in/before a kept segment
+
+	// The kept stretches come from `keptRawSpans`, which is this walk — it was lifted out of
+	// here so the transcript lanes and the audio mix could ask the same question and get the
+	// same answer (issue #560). Trims only REMOVE, so a kept span's RAW length is what
+	// survives; how long it takes to PLAY is a separate question `outputDurationOfRawSpan`
+	// answers, because a speed region scales it.
+	for (const seg of keptRawSpans(ordered, trimRanges)) {
+		if (landed === null && rawSec < seg.endSec) {
+			// `rawSec` is inside this segment, or before it in a trimmed/gap region (then
+			// the span clamps to nothing → the output edge just before the gap).
+			const within = Math.min(Math.max(rawSec, seg.startSec), seg.endSec);
+			landed = outCursor + outputDurationOfRawSpan(seg.startSec, within, speedRegions);
+		}
+		outCursor += outputDurationOfRawSpan(seg.startSec, seg.endSec, speedRegions);
+		lastRawEnd = seg.endSec;
+	}
+	// Past every kept frame: programme end plus whatever raw time hangs off the end (identity when
+	// there are no clips at all). A value ≥ programme length just means the mixer skips the track.
+	return landed ?? outCursor + Math.max(0, rawSec - lastRawEnd);
 }
 
 export function invertIntervals(intervals: Interval[], durationSec: number): Interval[] {
@@ -259,6 +363,28 @@ function mapAllRegionCollections(
 			document.annotations as unknown as StoredRegion[],
 			"ann",
 		) as unknown as AxcutDocument["annotations"],
+		// Repaired here rather than at each of the four call sites, so no structural edit
+		// can skip it (issue #560).
+		//
+		// `reanchorAudioTracks` first: the generic pipeline copies `offsetMs` verbatim into
+		// every fragment, which corrupts a split take's offsets — a live bug, unrelated to
+		// lanes, that this walk was already causing. Then `separateAudioLanes`, because the
+		// same pipeline can slide two disjoint takes into overlap with no audio code
+		// running, and each kind has to keep ONE row.
+		//
+		// Repair, never refusal: a schema refine here would turn an ordinary clip drag into
+		// a thrown save, and would make every existing document with overlapping same-kind
+		// pills unloadable.
+		audioTracks: separateAudioLanes(
+			reanchorAudioTracks(
+				fn(
+					document.audioTracks as unknown as StoredRegion[],
+					"audio",
+				) as unknown as AxcutDocument["audioTracks"],
+				document.timeline.clips,
+				() => createId("audio"),
+			),
+		),
 		legacyEditor:
 			legacy && (speedRegions || cameraFullscreenRegions)
 				? {
@@ -766,15 +892,7 @@ export function moveClip(
 	const remaining = document.timeline.clips.filter((c) => c.id !== clipId);
 	const bounded = Math.max(0, Math.min(insertIndex, remaining.length));
 	const reordered = [...remaining.slice(0, bounded), movingClip, ...remaining.slice(bounded)];
-	const newClips = resequenceClips(reordered);
-	const next: AxcutDocument = {
-		...document,
-		timeline: {
-			...document.timeline,
-			clips: newClips,
-		},
-	};
-	return rederiveRegionMs(next, newClips);
+	return withClipsChanged(document, reordered);
 }
 
 // ponytail: duplicate a clip (preserves the original). Used for "split this
@@ -808,19 +926,19 @@ export function duplicateClip(
 	};
 	const oldClips = document.timeline.clips;
 	const next = [...oldClips.slice(0, index + 1), copy, ...oldClips.slice(index + 1)];
-	const newClips = resequenceClips(next);
 	const copiedTrims = document.timeline.trimRanges
 		.filter((t) => t.clipId === original.id)
 		.map((t) => ({ ...t, id: createId("trim"), clipId: copy.id }));
-	const updatedDoc: AxcutDocument = {
-		...document,
-		timeline: {
-			...document.timeline,
-			clips: newClips,
-			trimRanges: [...document.timeline.trimRanges, ...copiedTrims],
+	return withClipsChanged(
+		{
+			...document,
+			timeline: {
+				...document.timeline,
+				trimRanges: [...document.timeline.trimRanges, ...copiedTrims],
+			},
 		},
-	};
-	return rederiveRegionMs(updatedDoc, newClips);
+		next,
+	);
 }
 
 /**
@@ -850,12 +968,7 @@ export function setClipSourceRange(
 			? { ...c, sourceStartSec: lo, sourceEndSec: hi, timelineStartSec: 0, timelineEndSec: 0 }
 			: c,
 	);
-	const newClips = resequenceClips(arr);
-	const next: AxcutDocument = {
-		...document,
-		timeline: { ...document.timeline, clips: newClips },
-	};
-	return rederiveRegionMs(next, newClips);
+	return withClipsChanged(document, arr);
 }
 
 /**
@@ -879,6 +992,11 @@ export function removeRegion(document: AxcutDocument, kind: RegionKind, id: stri
 			};
 		case "annotation":
 			return { ...document, annotations: dropPillById(document.annotations, id) };
+		case "audio":
+			// Not `dropPillById`: an audio track's fragments are grouped by
+			// `trackId`, and deleting the pill has to take the asset with it when
+			// nothing else references it.
+			return removeAudioTrack(document, id);
 		case "trim":
 			return {
 				...document,
@@ -916,6 +1034,109 @@ export function removeRegion(document: AxcutDocument, kind: RegionKind, id: stri
 }
 
 /**
+ * The document, with its clip list changed to this one.
+ *
+ * The pass every clip mutation ends with, and where the clip list's one invariant lives:
+ * TWO ADJACENT CLIPS THAT ARE THE SAME MEDIA, THE SAME CROP, AND WHOSE MEDIA TIMECODES MEET
+ * ARE ONE CLIP.
+ *
+ * Media timecodes, not ruler ones. Clips are always laid back to back here, so every
+ * neighbouring pair touches on the ruler and that says nothing; what carries information is
+ * whether the left clip ENDS in the media where the right one BEGINS. Two clips of one
+ * recording are laid side by side precisely when they do NOT — a piece dropped between them,
+ * a different stretch, a different framing. When they do, and nothing distinguishes them,
+ * they already play as one clip and drawing them as two says nothing at all.
+ *
+ * Why it is safe to apply everywhere rather than at the one edit that needs it: given the
+ * invariant holds, no mutation can make it false in a way that loses anything.
+ * `duplicateClip` is the case that looks dangerous — a copy inserted after its original ends
+ * in the media where the original does, so it could meet the next clip. It cannot: the
+ * original was already adjacent to that clip and did not meet it, or they would be one clip
+ * already. The only states this can surprise are ones that already violated it, which is to
+ * say ones where the two clips were indistinguishable to begin with.
+ *
+ * The cost, stated so it is a decision: two such clips a user joined by hand fuse, and the
+ * way back is to move them apart. Cheaper than a marker on every cut, which would have to
+ * survive every move that makes it wrong.
+ */
+export function withClipsChanged(document: AxcutDocument, clips: AxcutClip[]): AxcutDocument {
+	const { clips: joined, absorbed } = joinContiguous(clips);
+	const laid = resequenceClips(joined);
+	const reanchored = absorbed.size === 0 ? document : reanchorRows(document, absorbed);
+	const next: AxcutDocument = {
+		...reanchored,
+		timeline: { ...reanchored.timeline, clips: laid },
+	};
+	// `rederiveRegionMs` bails on an empty clip list — a guard against a transient wipe
+	// dropping every region — so there is nothing to refresh against.
+	return laid.length === 0 ? next : rederiveRegionMs(next, laid);
+}
+
+/** Fold every run of same-media, same-crop, media-contiguous clips into one, reporting the
+ *  ids that went away and the clip that now carries their content. */
+function joinContiguous(clips: AxcutClip[]): {
+	clips: AxcutClip[];
+	absorbed: Map<string, string>;
+} {
+	// ARRAY order, not `timelineStartSec`: the list IS the order, and at this point the
+	// positions are still the pre-edit ones. Sorting by them re-sorted a reorder back to
+	// where it came from.
+	const out: AxcutClip[] = [];
+	const absorbed = new Map<string, string>();
+	for (const clip of clips) {
+		const previous = out[out.length - 1];
+		if (previous && joinable(previous, clip)) {
+			out[out.length - 1] = {
+				...previous,
+				sourceEndSec: clip.sourceEndSec,
+				timelineEndSec: previous.timelineEndSec + (clip.timelineEndSec - clip.timelineStartSec),
+				wordRefs: [...previous.wordRefs, ...clip.wordRefs],
+			};
+			absorbed.set(clip.id, previous.id);
+			continue;
+		}
+		out.push(clip);
+	}
+	return { clips: out, absorbed };
+}
+
+/** Same media, media timecodes that meet, same framing. Crop is the only property a clip
+ *  carries that two otherwise-identical neighbours could legitimately disagree on, so it is
+ *  the whole of the guard. */
+function joinable(left: AxcutClip, right: AxcutClip): boolean {
+	return (
+		left.assetId === right.assetId &&
+		left.sourceEndSec !== undefined &&
+		Math.abs(left.sourceEndSec - right.sourceStartSec) < 1e-6 &&
+		JSON.stringify(left.cropRegion ?? null) === JSON.stringify(right.cropRegion ?? null)
+	);
+}
+
+/** Move every row anchored to an absorbed clip onto the one that swallowed it. A trim, a
+ *  zoom, an annotation and an audio take all name a clip the same way, and an id that no
+ *  longer exists has to stop being named. */
+function reanchorRows(document: AxcutDocument, absorbed: Map<string, string>): AxcutDocument {
+	const moved = mapAllRegionCollections(document, (regions) =>
+		regions.map((region) =>
+			hasCompleteClipAnchor(region) && absorbed.has(region.clipId)
+				? { ...region, clipId: absorbed.get(region.clipId) as string }
+				: region,
+		),
+	);
+	return {
+		...moved,
+		timeline: {
+			...moved.timeline,
+			trimRanges: moved.timeline.trimRanges.map((trim) =>
+				trim.clipId && absorbed.has(trim.clipId)
+					? { ...trim, clipId: absorbed.get(trim.clipId) }
+					: trim,
+			),
+		},
+	};
+}
+
+/**
  * The single mutator for "delete a clip". Removing a clip closes the gap: the survivors are
  * re-laid back-to-back (`resequenceClips`) and every anchored pill's derived ms is refreshed
  * against the new layout (`rederiveRegionMs`) — pills anchored to the removed clip drop out,
@@ -929,12 +1150,10 @@ export function removeClip(document: AxcutDocument, clipId: string): AxcutDocume
 	const oldClips = document.timeline.clips;
 	const arr = oldClips.filter((c) => c.id !== clipId);
 	if (arr.length === oldClips.length) return document;
-	const newClips = resequenceClips(arr);
 	const next: AxcutDocument = {
 		...document,
 		timeline: {
 			...document.timeline,
-			clips: newClips,
 			trimRanges: document.timeline.trimRanges.filter((t) => t.clipId !== clipId),
 		},
 	};
@@ -963,12 +1182,15 @@ export function removeClip(document: AxcutDocument, clipId: string): AxcutDocume
 	// twice per delete. `rederiveRegionMs` bails on an empty clip list (a guard against
 	// a transient wipe deleting everything), which is why the empty case is handled
 	// here rather than left to it.
-	if (newClips.length === 0) {
-		return mapAllRegionCollections(next, (regions) =>
-			regions.filter((region) => !(hasCompleteClipAnchor(region) && region.clipId === clipId)),
+	if (arr.length === 0) {
+		const emptied = mapAllRegionCollections(
+			{ ...next, timeline: { ...next.timeline, clips: [] } },
+			(regions) =>
+				regions.filter((region) => !(hasCompleteClipAnchor(region) && region.clipId === clipId)),
 		);
+		return dropUnusedGeneratedMedia(emptied);
 	}
-	return rederiveRegionMs(next, newClips);
+	return dropUnusedGeneratedMedia(withClipsChanged(next, arr));
 }
 
 export function restoreFullTimeline(document: AxcutDocument): AxcutDocument {

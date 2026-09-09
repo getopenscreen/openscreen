@@ -1,18 +1,22 @@
 {
 	"errors": {
-		"noVideoLoaded": "No hay video cargado",
-		"videoNotReady": "El video no está listo",
-		"unableToDetermineSourcePath": "No se pudo determinar la ruta del video de origen",
-		"failedToSaveGif": "Error al guardar el GIF",
-		"gifExportFailed": "La exportación de GIF falló",
-		"failedToSaveVideo": "Error al guardar el video",
+		"exportBackgroundLoadFailed": "La exportación falló: no se pudo cargar la imagen de fondo ({{url}})",
 		"exportFailed": "La exportación falló",
 		"exportFailedWithError": "La exportación falló: {{error}}",
-		"exportBackgroundLoadFailed": "La exportación falló: no se pudo cargar la imagen de fondo ({{url}})",
+		"failedToRevealInFolder": "Error al mostrar en la carpeta: {{error}}",
 		"failedToSaveExport": "Error al guardar la exportación",
 		"failedToSaveExportedVideo": "Error al guardar el video exportado",
-		"failedToRevealInFolder": "Error al mostrar en la carpeta: {{error}}",
-		"previewCompositorUnavailable": "Vista previa no disponible en este equipo"
+		"failedToSaveGif": "Error al guardar el GIF",
+		"failedToSaveVideo": "Error al guardar el video",
+		"gifExportFailed": "La exportación de GIF falló",
+		"noVideoLoaded": "No hay video cargado",
+		"previewCompositorUnavailable": "Vista previa no disponible en este equipo",
+		"trimNoFilm": "No hay nada que cortar ahí: no hay metraje bajo esas palabras.",
+		"unableToDetermineSourcePath": "No se pudo determinar la ruta del video de origen",
+		"videoNotReady": "El video no está listo",
+		"wordEditFailed": "No se pudo cambiar esa palabra",
+		"wordInsertFailed": "No se pudo añadir esa palabra",
+		"wordRemoveFailed": "No se pudo eliminar esa palabra"
 	},
 	"export": {
 		"canceled": "Exportación cancelada",
@@ -71,6 +75,7 @@
 		"pasted": "Atributos de {{region}} pegados",
 		"nothingToCopy": "Selecciona una región para copiar sus atributos",
 		"nothingToPaste": "Aún no se han copiado atributos",
+		"pasteAssetMissing": "El archivo de esa pista de audio no está en este proyecto",
 		"kinds": {
 			"zoom": "Zoom",
 			"speed": "Velocidad",
@@ -138,7 +143,6 @@
 		"sourceTranscript": "Transcripción de la fuente",
 		"close": "Cerrar",
 		"transcriptReady": "Transcripción lista",
-		"notGeneratedYet": "Aún no generada",
 		"regenerateAs": "Regenerar en",
 		"auto": "Auto",
 		"regenerate": "Regenerar",
@@ -146,17 +150,12 @@
 		"notGeneratedHint": "Aún no generada — elige un idioma y haz clic en regenerar.",
 		"transcribing": "Transcribiendo",
 		"downloadingModel": "Descargando modelo de voz",
-		"transcribingEllipsis": "Transcribiendo…",
+		"initializingModel": "Iniciando el modelo de voz",
 		"pendingTranscription": "Transcripción pendiente",
 		"transcriptionFailed": "Error de transcripción",
 		"cpuBackendHint": "Ejecutándose en la CPU — unas 2× más lento que en la GPU",
 		"noTranscript": "Sin transcripción",
-		"generating": "Generando",
-		"generationFailed": "Error de generación",
-		"generated": "Generado",
 		"generationFailedHint": "Error de generación — elige un idioma y vuelve a generar.",
-		"noPreviewAvailable": "Vista previa no disponible",
-		"restart": "Reiniciar",
 		"detectedLanguage": "Idioma detectado: {{language}}",
 		"noAudioTrack": "Sin pista de audio",
 		"noAudioTrackHint": "Este medio no tiene pista de audio: no hay nada que transcribir.",
@@ -212,18 +211,6 @@
 		"cameraFullscreenDescription": "Mientras se reproduce esta región, la cámara ocupa todo el cuadro —sin borde, sin redondeo, sin fondo— y vuelve suavemente al final. Arrastra los bordes de la región en la línea de tiempo para cambiar cuándo empieza y cuánto dura.",
 		"deleteRegion": "Eliminar región",
 		"freehandRendersAsBox": "En la exportación, una forma libre se cubre con su caja contenedora: cubre de más, nunca de menos."
-	},
-	"leftPanel": {
-		"mediaTitle": "Medios",
-		"searchPlaceholder": "Buscar…",
-		"clearSearch": "Borrar búsqueda",
-		"emptyHint": "Aún no hay medios en este proyecto. Importa un vídeo a continuación.",
-		"transcriptReadyBadge": "TRANSCRIPCIÓN LISTA"
-	},
-	"leftRail": {
-		"chat": "Chat",
-		"media": "Medios",
-		"ariaLabel": "Herramientas izquierdas"
 	},
 	"chat": {
 		"changeProvider": "Cambiar proveedor",

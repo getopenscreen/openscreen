@@ -245,6 +245,34 @@ describe("DocumentService", () => {
 		});
 	});
 
+	describe("onProjectRead", () => {
+		it("announces every document it hands out, after the relink", async () => {
+			// The read allow-list lives in the main process and is in memory: a picker's
+			// approval is gone by the next launch. This callback is how a project reopened
+			// tomorrow can still read the media it declares — and it must fire with the
+			// RELINKED paths, since those are the ones the renderer will ask for.
+			const seen: string[][] = [];
+			const service = new DocumentService(tempDir, mediaDir, (doc) =>
+				seen.push(doc.assets.map((a) => a.originalPath)),
+			);
+			const created = await service.createProject("P");
+			const withAsset = await service.addAsset(created.project.id, {
+				path: path.join(mediaDir, "take.mp4"),
+				label: "take.mp4",
+			});
+			seen.length = 0;
+			await service.getProject(created.project.id);
+			expect(seen).toEqual([withAsset.assets.map((a) => a.originalPath)]);
+		});
+
+		it("is optional, so a service built without it loads as it always did", async () => {
+			const created = await service.createProject("P");
+			await expect(service.getProject(created.project.id)).resolves.toMatchObject({
+				project: { id: created.project.id },
+			});
+		});
+	});
+
 	describe("addAsset", () => {
 		it("appends a video asset and sets primaryAssetId on the first add", async () => {
 			const doc = await service.createProject("P");
@@ -279,6 +307,63 @@ describe("DocumentService", () => {
 			const after = await service.addAsset(doc.project.id, { path: "/tmp/b.mp4" });
 			expect(after.project.primaryAssetId).toBe(first.project.primaryAssetId);
 			expect(after.assets).toHaveLength(2);
+		});
+
+		// Issue #350 — external audio import (voiceover / BGM / SFX).
+		it("appends an audio asset without claiming the primary slot", async () => {
+			const doc = await service.createProject("P");
+			const updated = await service.addAsset(doc.project.id, {
+				path: "/tmp/voiceover.mp3",
+				kind: "audio",
+			});
+			expect(updated.assets).toHaveLength(1);
+			expect(updated.assets[0]?.kind).toBe("audio");
+			// An audio-only file must never become the project's primary asset, even
+			// when it is the first file added to an otherwise-empty project.
+			expect(updated.project.primaryAssetId).toBeUndefined();
+		});
+
+		it("keeps the existing video primary when an audio track is added", async () => {
+			const doc = await service.createProject("P");
+			const withVideo = await service.addAsset(doc.project.id, { path: "/tmp/screen.mp4" });
+			const primary = withVideo.project.primaryAssetId;
+			const withAudio = await service.addAsset(doc.project.id, {
+				path: "/tmp/bgm.wav",
+				kind: "audio",
+			});
+			expect(withAudio.project.primaryAssetId).toBe(primary);
+			expect(withAudio.assets).toHaveLength(2);
+		});
+
+		it("rejects unsupported audio extensions", async () => {
+			const doc = await service.createProject("P");
+			await expect(
+				service.addAsset(doc.project.id, { path: "/tmp/clip.mp4", kind: "audio" }),
+			).rejects.toBeInstanceOf(ProjectFileError);
+		});
+
+		it("accepts a recorded .webm take as audio", async () => {
+			// MediaRecorder writes a voiceover as webm/opus — the same extension a
+			// screen recording uses. The caller has already declared the kind here,
+			// so this gate must take it; only the import PICKER, which has nothing
+			// but the extension to go on, still refuses .webm as audio.
+			const doc = await service.createProject("P");
+			const next = await service.addAsset(doc.project.id, {
+				path: "/tmp/voiceover-2026.webm",
+				kind: "audio",
+			});
+			expect(next.assets.at(-1)).toMatchObject({ kind: "audio" });
+			// ...and it must not have claimed the primary (video-only) slot.
+			expect(next.project.primaryAssetId).toBeUndefined();
+		});
+
+		it("accepts a video extension under the default kind but not as audio", async () => {
+			const doc = await service.createProject("P");
+			// The same extension routing works in reverse: an .mp3 is fine as audio
+			// but rejected as video (covered above), and an .mp4 is the opposite.
+			await expect(
+				service.addAsset(doc.project.id, { path: "/tmp/a.mp3", kind: "audio" }),
+			).resolves.toBeDefined();
 		});
 	});
 
@@ -361,6 +446,57 @@ describe("DocumentService", () => {
 			expect(primaryId).toBeTruthy();
 			const after = await service.removeAsset(doc.project.id, primaryId ?? "");
 			expect(after.project.primaryAssetId).toBe(b.assets[1]?.id);
+		});
+
+		// Issue #350 — an audio overlay can never be primary.
+		it("passes primary to the next VIDEO asset, never to an audio asset", async () => {
+			const doc = await service.createProject("P");
+			const video = await service.addAsset(doc.project.id, { path: "/tmp/screen.mp4" });
+			await service.addAsset(doc.project.id, { path: "/tmp/music.mp3", kind: "audio" });
+			const primaryId = video.project.primaryAssetId;
+			expect(primaryId).toBeTruthy();
+			// Removing the only video leaves just the audio asset; primary must clear,
+			// not fall to the audio one.
+			const after = await service.removeAsset(doc.project.id, primaryId ?? "");
+			expect(after.project.primaryAssetId).toBeUndefined();
+			expect(after.assets).toHaveLength(1);
+			expect(after.assets[0]?.kind).toBe("audio");
+		});
+
+		it("drops audioTracks that referenced a removed audio asset", async () => {
+			const doc = await service.createProject("P");
+			await service.addAsset(doc.project.id, { path: "/tmp/screen.mp4" });
+			const withAudio = await service.addAsset(doc.project.id, {
+				path: "/tmp/music.mp3",
+				kind: "audio",
+			});
+			const audioId = withAudio.assets.find((a) => a.kind === "audio")?.id ?? "";
+			expect(audioId).toBeTruthy();
+			const withTrack = await service.saveProject({
+				...withAudio,
+				audioTracks: [
+					{
+						id: "trk_1",
+						assetId: audioId,
+						kind: "music",
+						startMs: 0,
+						endMs: 10_000,
+						durationSec: 10,
+						offsetMs: 0,
+						gainDb: 0,
+						loop: false,
+						fadeInMs: 0,
+						fadeOutMs: 0,
+						muted: false,
+						label: "music",
+						origin: "user",
+					},
+				],
+			});
+			expect(withTrack.audioTracks).toHaveLength(1);
+			const after = await service.removeAsset(doc.project.id, audioId);
+			expect(after.audioTracks).toEqual([]);
+			expect(after.assets.some((a) => a.id === audioId)).toBe(false);
 		});
 
 		it("resequences other assets and rederives their anchored regions", async () => {

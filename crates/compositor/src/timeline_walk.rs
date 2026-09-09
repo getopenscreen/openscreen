@@ -17,6 +17,7 @@ use crate::compositor::Compositor;
 use crate::config::Cfg;
 use crate::cursor::CursorTrack;
 use crate::d3d::Gpu;
+use crate::ffi::AVFrame;
 use crate::frame_geometry::webcam_is_real;
 use crate::pipeline::{ClipSource, Decoder};
 use crate::regions::{speed_segments_for_window, SpeedSegment};
@@ -164,6 +165,14 @@ pub(crate) unsafe fn walk_composited_timeline(
 
     let mut frames: u64 = 0;
 
+    // L'export doit être reproductible : deux rendus du même projet, les mêmes pixels. Cette
+    // boucle avance aussi vite que la machine décode, sans rapport avec le temps réel, alors que
+    // la segmentation est cadencée à l'horloge et calculée sur un worker — deux choix faits pour
+    // la preview, et qui deviennent ici des bugs : le nombre de frames couvertes par un masque
+    // suivrait la charge machine, et les premières frames sortiraient AVANT le premier masque,
+    // donc avec le vrai arrière-plan de la webcam gravé dans le fichier.
+    comp.set_segmentation_deterministic(true);
+
     for (clip_index, clip) in clips.iter().enumerate() {
         // Le preset de layout est GLOBAL (un seul panneau pour toute la timeline) mais la
         // caméra est PAR CLIP : un projet mélange sans problème un enregistrement avec webcam
@@ -194,10 +203,10 @@ pub(crate) unsafe fn walk_composited_timeline(
         comp.set_has_webcam(has_camera);
         let webcam_key = if has_camera { &clip.webcam } else { &clip.screen };
         if !screen_decs.contains_key(&clip.screen) {
-            screen_decs.insert(clip.screen.clone(), Decoder::open(&clip.screen, gpu)?);
+            screen_decs.insert(clip.screen.clone(), Decoder::open_for_export(&clip.screen, gpu)?);
         }
         if !webcam_decs.contains_key(webcam_key) {
-            webcam_decs.insert(webcam_key.clone(), Decoder::open(webcam_key, gpu)?);
+            webcam_decs.insert(webcam_key.clone(), Decoder::open_for_export(webcam_key, gpu)?);
         }
         let sdec = screen_decs.get_mut(&clip.screen).unwrap();
         let wdec = webcam_decs.get_mut(webcam_key).unwrap();
@@ -297,11 +306,17 @@ pub(crate) unsafe fn walk_composited_timeline(
             for segment_frame in 0..segment.frame_count {
                 let target_source_time =
                     segment.start_sec + segment_frame as f64 * segment.speed / out_fps as f64;
-                if !advance_decoder_to(sdec, target_source_time, 0.0)? {
-                    break 'clip_frames;
+                {
+                    let _p = crate::export_probe::scope(crate::export_probe::Stage::DecodeScreen);
+                    if !advance_decoder_to(sdec, target_source_time, 0.0)? {
+                        break 'clip_frames;
+                    }
                 }
-                if !advance_decoder_to(wdec, target_source_time, clip.webcam_offset_sec)? {
-                    break 'clip_frames;
+                {
+                    let _p = crate::export_probe::scope(crate::export_probe::Stage::DecodeWebcam);
+                    if !advance_decoder_to(wdec, target_source_time, clip.webcam_offset_sec)? {
+                        break 'clip_frames;
+                    }
                 }
                 let sf = sdec.cur_frame();
                 let wf = wdec.cur_frame();
@@ -313,12 +328,16 @@ pub(crate) unsafe fn walk_composited_timeline(
                 if cursor_enabled && cursor_active_path.is_some() {
                     comp.set_cursor_time(Some(target_source_time as f32));
                 }
-                comp.compose_frame(sf, wf, frames as f32, cfg)?;
+                {
+                    let _p = crate::export_probe::scope(crate::export_probe::Stage::Compose);
+                    comp.compose_frame(sf, wf, frames as f32, cfg)?;
+                }
 
                 on_frame(frames)?;
                 frames += 1;
             }
         }
+
         on_clip_end(
             clip_index,
             source_end_sec,
@@ -329,6 +348,8 @@ pub(crate) unsafe fn walk_composited_timeline(
 
     comp.set_cursor_time(None);
     comp.set_timeline_time(None);
+    // Le compositeur est réutilisé par la preview après un export : lui rendre sa cadence.
+    comp.set_segmentation_deterministic(false);
     Ok(frames)
 }
 

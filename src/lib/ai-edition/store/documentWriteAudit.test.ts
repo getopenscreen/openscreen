@@ -131,10 +131,26 @@ const DECLARED: WritePath[] = [
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleSave", "save", "gesture"),
+	// A word typed into the transcript pane, and the deletion of one. Both are the user's
+	// own edits to the transcript; neither touches the timeline.
+	w("src/components/ai-edition/NewEditorShell.tsx", "handleInsertWord", "save", "gesture"),
+	w("src/components/ai-edition/NewEditorShell.tsx", "handleRemoveWords", "save", "gesture"),
+	// The transcript lane, chosen in the pane and stored on the document because it decides
+	// the captions burnt into the export (#560). Written through `useCaptions.set`, which
+	// is already in the table under its own name.
+	// A cut made in the transcript pane, and its restore. Both moved off `applyTimelineOp`
+	// onto the write chain in #560: they read the document inside it, so a word edit landing
+	// between the read and the save can no longer overwrite the cut.
+	w("src/components/ai-edition/NewEditorShell.tsx", "handleRemoveTrimRanges", "save", "gesture"),
+	w("src/components/ai-edition/NewEditorShell.tsx", "handleTrimTimelineSpan", "save", "gesture"),
+	// A word rewritten in the transcript pane. A correction, not a cut: it writes
+	// `transcript.words[].text` and leaves the timeline alone.
+	w("src/components/ai-edition/NewEditorShell.tsx", "handleSetWordText", "save", "gesture"),
 	// "Save" chosen on the way out of Ctrl+N and Ctrl+O.
 	w("src/components/ai-edition/NewEditorShell.tsx", "onKey", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "onKey", "save", "gesture"),
-	// Ctrl+V of a copied region: zoom, annotation, or a legacy span.
+	// Ctrl+V of a copied region: an audio track, zoom, annotation, or a legacy span.
+	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
@@ -168,6 +184,12 @@ const DECLARED: WritePath[] = [
 	// Linking the camera track found next to a newly added asset. Part of the
 	// import, not an edit of its own.
 	w("src/lib/ai-edition/store/projectStore.ts", "addAsset", "save", "automatic"),
+	// Folding an imported audio file's probed duration onto its asset (issue #350).
+	// Part of the import, like the camera link above — not an edit of its own.
+	w("src/lib/ai-edition/store/projectStore.ts", "addAudioAsset", "save", "automatic"),
+	// Placing an imported audio track on the timeline. The user asked for it, via the
+	// media panel's "Import audio" or the timeline.
+	w("src/lib/ai-edition/store/projectStore.ts", "addAudioTrack", "save", "gesture"),
 	// THE round-3 fix. This is the shape that defeated round 2: a store action that
 	// writes on someone else's behalf. It forwards now, so its callers decide.
 	w("src/lib/ai-edition/store/projectStore.ts", "replaceTimeline", "save", "forwarded"),
@@ -234,6 +256,19 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "duplicateClip", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "insertClipAt", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "moveClip", "save", "gesture"),
+	// Timeline audio tracks (issue #350). Each is a direct user edit — drag or resize
+	// the track (placeAudioTrack), change its payload (updateAudioTrack, which
+	// setAudioTrackGain routes through), or delete it — one undo step apiece.
+	w("src/lib/ai-edition/store/useTimeline.ts", "placeAudioTrack", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "removeAudioTrack", "save", "gesture"),
+	// Three exits, one gesture: the toggle writes the flag alone when there is
+	// nothing to fill, and the flag plus the filled span when there is. Either
+	// way it is one undo step (see setAudioTrackLoop).
+	// Two, not three: the fill and its no-op fallback collapsed into one call when the
+	// placement door took over the clamping (#560).
+	w("src/lib/ai-edition/store/useTimeline.ts", "setAudioTrackLoop", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "setAudioTrackLoop", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateAudioTrack", "save", "gesture"),
 	// The round-2 defect: a background duration probe every freshly imported asset
 	// fires, because `addAsset` never populates `durationSec`.
 	w("src/lib/ai-edition/store/useTimeline.ts", "probeAndCorrectClip", "save", "automatic"),
@@ -255,6 +290,9 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomSpan", "save", "gesture"),
 	// Source-dimension backfill for assets a migration left unprobed. On load, for
 	// every project, whether or not the user touches anything.
+	w("src/lib/ai-edition/store/useTimeline.ts", "useTimeline", "save", "automatic"),
+	// Audio-duration backfill (issue #350) — the same on-load, un-asked-for probe
+	// for imported audio assets whose duration didn't stamp at import.
 	w("src/lib/ai-edition/store/useTimeline.ts", "useTimeline", "save", "automatic"),
 ];
 

@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { type AxcutDocument, type AxcutTranscript, axcutSchemaVersion } from "../schema";
-import { toAxcutTranscriptDsl, transcribeAsset } from "./transcribe";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "../../../../electron/stt/transcriptionContract";
+import { type AxcutDocument, axcutSchemaVersion } from "../schema";
+import { transcribeAsset } from "./transcribe";
 
 vi.mock("@/components/video-editor/projectPersistence", () => ({
 	toFileUrl: (path: string) => `file://${path}`,
@@ -12,10 +13,17 @@ vi.mock("@/lib/captioning", () => ({
 		sampleRate: 16_000,
 	})),
 	transcribeMono16kToSegments: vi.fn(),
+	transcribeSourceFileToSegments: vi.fn(),
 }));
 
-const { transcribeMono16kToSegments } = await import("@/lib/captioning");
-const transcribeMock = vi.mocked(transcribeMono16kToSegments);
+const { extractMono16kFromVideoUrl, transcribeMono16kToSegments, transcribeSourceFileToSegments } =
+	await import("@/lib/captioning");
+// `transcribeAsset` sends the PATH now and lets the main process decode; the samples
+// entry point is only reached when no ffmpeg can be resolved. The assertions below
+// therefore target the native call, and the fallback has tests of its own at the end.
+const transcribeMock = vi.mocked(transcribeSourceFileToSegments);
+const rendererMock = vi.mocked(transcribeMono16kToSegments);
+const extractMock = vi.mocked(extractMono16kFromVideoUrl);
 
 function makeDoc(): AxcutDocument {
 	return {
@@ -49,78 +57,54 @@ function makeDoc(): AxcutDocument {
 		},
 		annotations: [],
 		zoomRanges: [],
+		audioTracks: [],
 		legacyEditor: null,
 	};
 }
 
-describe("toAxcutTranscriptDsl", () => {
-	it("emits the AXCUT_TRANSCRIPT v1 header + META + segments + words", () => {
-		const transcript: AxcutTranscript = {
-			assetId: "asset_1",
-			language: "en",
-			segments: [
-				{
-					id: "seg_1",
-					kind: "speech",
-					startSec: 0,
-					endSec: 1.2,
-					text: "okay so let's",
-					wordIds: ["word_1", "word_2", "word_3"],
-				},
-			],
-			words: [
-				{ id: "word_1", segmentId: "seg_1", startSec: 0, endSec: 0.4, text: "okay" },
-				{ id: "word_2", segmentId: "seg_1", startSec: 0.4, endSec: 0.7, text: "so" },
-				{ id: "word_3", segmentId: "seg_1", startSec: 0.7, endSec: 1.2, text: "let's" },
-			],
-		};
+describe("transcribeAsset status sequence", () => {
+	it("does not emit transcribing between extract and the worker", async () => {
+		const phases: string[] = [];
+		transcribeMock.mockImplementationOnce(async (_samples, options) => {
+			options?.onStatus?.({ phase: "model" });
+			options?.onStatus?.({
+				phase: "transcribe",
+				completedSec: 1,
+				totalSec: 10,
+			});
+			return { segments: [], granularity: "phrase" as const, detectedLanguage: "en" };
+		});
 
-		const dsl = toAxcutTranscriptDsl(transcript, "demo.mp4", 1.2);
-		const lines = dsl.split("\n");
+		await transcribeAsset(makeDoc(), "asset_1", {
+			onStatus: (status) => phases.push(status.phase),
+		});
 
-		expect(lines[0]).toBe("AXCUT_TRANSCRIPT v1");
-		expect(lines[1]).toBe(
-			'META source_video="demo.mp4" duration=1.200 language="en" kind="source"',
-		);
-		expect(lines).toContain(`SEGMENT id=s0001 start=0.000 end=1.200 text="okay so let''s"`);
-		expect(lines).toContain('WORD id=w000001 segment=s0001 start=0.000 end=0.400 text="okay"');
-		expect(lines).toContain('WORD id=w000002 segment=s0001 start=0.400 end=0.700 text="so"');
-		expect(lines).toContain(`WORD id=w000003 segment=s0001 start=0.700 end=1.200 text="let''s"`);
-		expect(lines.at(-1)).toBe("ENDSEGMENT");
+		expect(phases[0]).toBe("extracting-audio");
+		expect(phases[1]).toBe("loading-model");
+		expect(phases.indexOf("transcribing")).toBeGreaterThan(1);
+		expect(phases.slice(0, phases.indexOf("transcribing"))).not.toContain("transcribing");
 	});
 
-	it("escapes quotes in segment/word text (both kinds)", () => {
-		const transcript: AxcutTranscript = {
-			assetId: "asset_1",
-			language: "auto",
-			segments: [
-				{
-					id: "seg_1",
-					kind: "speech",
-					startSec: 0,
-					endSec: 1,
-					text: 'he said "hi"',
-					wordIds: ["word_1"],
-				},
-			],
-			words: [{ id: "word_1", segmentId: "seg_1", startSec: 0, endSec: 1, text: "let's" }],
-		};
+	it("forwards model download bytes onto loading-model status", async () => {
+		const events: Array<{ phase: string; downloadedBytes?: number; totalBytes?: number }> = [];
+		transcribeMock.mockImplementationOnce(async (_samples, options) => {
+			options?.onStatus?.({
+				phase: "model",
+				downloadedBytes: 10,
+				totalBytes: 100,
+			});
+			return { segments: [], granularity: "phrase" as const, detectedLanguage: "en" };
+		});
 
-		const dsl = toAxcutTranscriptDsl(transcript);
-		expect(dsl).toContain(`text="he said ""hi"""`);
-		expect(dsl).toContain(`text="let''s"`);
-	});
+		await transcribeAsset(makeDoc(), "asset_1", {
+			onStatus: (status) => events.push(status),
+		});
 
-	it("omits duration when not provided", () => {
-		const transcript: AxcutTranscript = {
-			assetId: "asset_1",
-			language: "fr",
-			segments: [],
-			words: [],
-		};
-
-		const dsl = toAxcutTranscriptDsl(transcript, "x.mp4");
-		expect(dsl).toBe('AXCUT_TRANSCRIPT v1\nMETA source_video="x.mp4" language="fr" kind="source"');
+		expect(events).toContainEqual({
+			phase: "loading-model",
+			downloadedBytes: 10,
+			totalBytes: 100,
+		});
 	});
 });
 
@@ -189,5 +173,54 @@ describe("transcribeAsset language handling", () => {
 		const t = await transcribeAsset(doc, "asset_1");
 
 		expect(t.language).toBe("auto");
+	});
+});
+
+describe("transcribeAsset native extraction", () => {
+	// Call counts are the assertion here, so they start from zero every test —
+	// `mockResolvedValueOnce` queues a result, it does not clear the history.
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("hands the main process a path instead of decoding in the renderer", async () => {
+		// The point of the change: the renderer must not touch the audio at all on the
+		// happy path. `extractMono16kFromVideoUrl` reads the whole file, copies it twice
+		// and resamples on the UI thread — that is the freeze this avoids.
+		transcribeMock.mockResolvedValueOnce({
+			segments: [{ startSec: 0, endSec: 1, text: "hi" }],
+			granularity: "word",
+			detectedLanguage: "en",
+		});
+		await transcribeAsset(makeDoc(), "asset_1");
+		expect(transcribeMock).toHaveBeenCalledWith("/tmp/demo.mp4", expect.anything());
+		expect(extractMock).not.toHaveBeenCalled();
+		expect(rendererMock).not.toHaveBeenCalled();
+	});
+
+	it("falls back to the renderer decode when the install has no ffmpeg", async () => {
+		// A dev checkout that never fetched ffmpeg, or a platform build missing it, must
+		// still transcribe rather than lose the feature.
+		transcribeMock.mockRejectedValueOnce(
+			new Error(`${STT_NATIVE_EXTRACTION_UNAVAILABLE}: no ffmpeg binary`),
+		);
+		rendererMock.mockResolvedValueOnce({
+			segments: [{ startSec: 0, endSec: 1, text: "hi" }],
+			granularity: "word",
+			detectedLanguage: "en",
+		});
+		const transcript = await transcribeAsset(makeDoc(), "asset_1");
+		expect(extractMock).toHaveBeenCalled();
+		expect(rendererMock).toHaveBeenCalled();
+		expect(transcript.segments.length).toBeGreaterThan(0);
+	});
+
+	it("does NOT fall back on any other failure", async () => {
+		// "This file has no audio" is a verdict. Re-deriving it in the renderer would buy
+		// the same answer for the price of the decode this change exists to avoid.
+		transcribeMock.mockRejectedValueOnce(new Error("No decodable audio in /tmp/demo.mp4"));
+		await expect(transcribeAsset(makeDoc(), "asset_1")).rejects.toThrow("No decodable audio");
+		expect(extractMock).not.toHaveBeenCalled();
+		expect(rendererMock).not.toHaveBeenCalled();
 	});
 });

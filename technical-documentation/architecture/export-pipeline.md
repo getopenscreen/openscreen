@@ -61,9 +61,9 @@ and **one** encoder + muxer pair:
   per-segment rounded frame counts into a single output frame counter;
   audio follows the same integer accumulation (`AudioConcatPlan`).
 
-- **Audio and video junctions are seamless.** Audio is decoded per
-  segment up front (`audio.rs::decode_clip_audio`), WSOLA stretches each
-  speed sub-segment to its output sample count, and
+- **Audio and video junctions are seamless.** Audio is decoded per clip
+  (`audio.rs::decode_clip_audio`), a libavfilter `atempo` chain stretches
+  each speed sub-segment to its output sample count, and
   `assemble_concatenated_pcm` concatenates the per-segment PCM at the
   integer sample offsets the video loop just produced — never
   `round(cumulativeSec * sampleRate)`, because that compounds per-segment
@@ -71,8 +71,57 @@ and **one** encoder + muxer pair:
   timeline. A short equal-power fade (`cos` on the tail, `sin` on the
   head, `cos² + sin² = 1`) covers each internal boundary to suppress the
   click where two recordings meet butt-joined, without shifting timing.
-  The WSOLA stretch is kicked off before the video loop so it overlaps
-  the encode and does not add to the wall.
+  The in-tree WSOLA stretcher is still there, but only as the fallback
+  `stretch_pcm_to_length` takes when the filter chain cannot be built,
+  negotiates a format the drain does not read, or still comes up short of
+  the target after the corrected pass (see
+  [Audio](native-compositor.md#audio)).
+
+- **The stretch runs beside the encode, not inside it.**
+  `walk_composited_timeline`'s `on_clip_end` callback fires once per clip,
+  after that clip's frames have been composed and submitted to the
+  encoder. It used to decode and stretch that clip's audio right there,
+  on the render thread; since a clip's audio depends on nothing but that
+  clip, it now hands the work to `ClipAudioJobs`
+  ([`audio_jobs.rs`](../../crates/compositor/src/audio_jobs.rs), at most
+  four in flight) and the walk carries straight on to the next clip. The
+  results are collected after the walk, indexed by clip. `spawn` admits
+  four before it collects one, so what is left to wait for at the end is up
+  to four jobs — bounded by the slowest of them, not by their sum. Dropping
+  the collection joins them rather than detaching, so an export that fails
+  between the walk and the collection does not leave decoders running.
+
+  This matters for reporting as much as for wall time. `progress()`
+  counts composed frames as they are handed to the encoder and nothing
+  calls it during the audio phase, so while that work sat on the render
+  thread the bar parked at whatever percentage the clip's last frame
+  reported — for minutes, back when WSOLA was O(grain × radius) per
+  rendered sample. That is the reporting half of "frozen at ~80%"; the
+  cost half was the move to `atempo`.
+
+- **The progress total is speed-adjusted.** The native side reports a raw
+  running count of composed frames and never a total, so the percentage
+  is computed in the renderer
+  ([`outputFrameCount`](../../src/lib/exporter/outputFrameCount.ts)). It
+  has to mirror `speed_segments_for_window`, because a clip under a 1.25×
+  region emits `duration × fps / 1.25` frames: counting source seconds
+  instead made the bar stop at exactly 80% and the export finish there —
+  the number in the title of the bug. The two sides share one fixture
+  table, asserted by `outputFrameCount.test.ts` and by
+  `speed_segments_match_the_exporter_frame_totals`.
+
+- **Imported audio tracks** (voiceover / BGM / SFX, issue #350) are mixed
+  on top of the assembled programme by `audio.rs::mix_external_tracks`,
+  between `assemble_concatenated_pcm` and `finish_audio`. Each track's
+  trim window is decoded through the same `decode_clip_audio` path a clip
+  uses, scaled by its per-track gain, and summed in at its `startSec`
+  offset; a track running past the video is truncated to it so the two
+  streams stay the same length. `startSec` is resolved renderer-side
+  (`buildSceneDescription`) from the track's raw timeline position — an
+  identity map without trims/speed, an accepted approximation otherwise,
+  matching how the preview approximates trims by re-seeking. The CLI's
+  `openscreen export --audio` remains a separate post-export remux
+  (`voiceoverMix.ts`) for a single track and is unaffected.
 
 - **Output** honours the timeline's selected aspect ratio
   (`resolveAspectRatioValue` over `getEditorSettings(document).aspectRatio` —
@@ -149,6 +198,33 @@ Each cost hours and each produced a confident, wrong conclusion.
    launch exit 0 and report nothing. The installed app
    (`openscreen.exe`) resolves a different `userData` path and does not
    conflict.
+10. **`libopenh264` accepts a bitrate and does not control it**
+    ([#572](https://github.com/getopenscreen/openscreen/issues/572)). Not a
+    wiring mistake: ffmpeg *does* forward `bit_rate` into `iTargetBitrate`
+    and `sSpatialLayers[0].iSpatialBitrate`, and it reads back correctly
+    after `avcodec_open2`. The wrapper simply leaves `bEnableFrameSkip = 0`,
+    and openh264 says so out loud at open time — *"bitrate can't be
+    controlled for RC_QUALITY_MODE, RC_BITRATE_MODE and RC_TIMESTAMP_MODE
+    without enabling skip frame"*. The only option that restores a real
+    ceiling is `allow_skip_frames`, which pays for it in dropped frames (3
+    of 120 survived on incompressible input), so it stays off. `rc_mode`,
+    `rc_max_rate`, `rc_buffer_size`, `max_nal_size` and `level` were each
+    measured and each do nothing. What the requested bitrate *is*, on this
+    encoder, is a weak input to a complexity→QP model clamped to [12, 51]:
+    an approximate ceiling on dense content, and nothing at all on a static
+    screen, where it pins to QP 12 and spends the same 0.68 Mbps whether
+    you ask for 8 or 40. Two knobs do work and are set in
+    `VideoEncoder::tune_openh264` — see that doc comment before reaching
+    for a third.
+11. **A missing `gop_size` cost every Linux export its keyframes.** Most
+    encoders inherit the generic `AVCodecContext` default of 12, so leaving
+    the field unset is survivable; `libopenh264` overrides it to `-1` in its
+    `FFCodecDefault` table, which openh264 reads as `uiIntraPeriod = 0` —
+    *one* IDR for the whole file. Measured 1 I-frame in 300 before the fix.
+    Nothing warns, nothing fails, and the MP4 plays fine: the damage is that
+    every seek redecodes from frame 0 and one bad packet takes the rest of
+    the video with it. Set `gop_size` explicitly rather than trusting any
+    encoder's default.
 
 ## A truncated project file is unopenable, not partially readable
 

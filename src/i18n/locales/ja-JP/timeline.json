@@ -15,6 +15,7 @@
 		"pressZoom": "Zキーを押してズームを追加",
 		"pressTrim": "Tキーを押してトリムを追加",
 		"pressAnnotation": "Aキーを押して注釈を追加",
+		"pressAudio": "M キーで音声を追加、V キーでナレーションを録音",
 		"pressSpeed": "Sキーを押して再生速度を追加",
 		"pressCameraFullscreen": "Cキーを押してフルスクリーンカメラのセグメントを追加"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "文字起こしが必要です",
 		"smartCutsNoAudio": "このメディアには音声がありません",
 		"smartCutsNoSpeech": "音声が検出されませんでした",
-		"smartCutsFailed": "文字起こしに失敗しました — メディアから再試行してください"
+		"smartCutsFailed": "文字起こしに失敗しました — メディアから再試行してください",
+		"addAudioTooltip": "音声を追加",
+		"addedWord": "追加した単語:「{{word}}」— 音声はありません"
+	},
+	"audio": {
+		"addVoiceover": "ナレーションを追加",
+		"addVoiceoverHint": "動画にナレーションを録音",
+		"subtitle": "タイムラインにナレーションまたは BGM のレイヤーを配置します",
+		"record": "ナレーションを録音",
+		"importFile": "音声ファイルを読み込む",
+		"importFileHint": "音楽やオーディオファイルを読み込む",
+		"recording": "録音中",
+		"recordingHint": "動画に合わせて話してください — 録音中も再生されます",
+		"stop": "停止",
+		"micDenied": "マイクへのアクセスが拒否されました",
+		"recordingUnavailable": "ここでは録音できません",
+		"saveFailed": "録音を保存できませんでした",
+		"importFailed": "音声ファイルを読み込めませんでした"
 	}
 }

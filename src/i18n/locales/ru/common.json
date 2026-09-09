@@ -8,6 +8,10 @@
 		"done": "Готово",
 		"open": "Открыть",
 		"checkForUpdates": "Проверить обновления",
+		"updateSettings": "Настройки обновления",
+		"updateModeNotify": "Уведомлять, когда доступно обновление",
+		"updateModeDownload": "Загружать обновления автоматически",
+		"updateModeDownloadAndInstall": "Загружать и устанавливать обновления автоматически",
 		"viewRelease": "Открыть выпуск",
 		"downloadUpdate": "Загрузить обновление",
 		"restartNow": "Перезапустить",
@@ -40,22 +44,18 @@
 		"services": "Сервисы",
 		"hide": "Скрыть OpenScreen",
 		"hideOthers": "Скрыть остальные",
-		"unhide": "Показать все"
+		"unhide": "Показать все",
+		"saveDiagnostics": "Сохранить диагностику"
 	},
 	"updates": {
 		"available": "Доступен OpenScreen {{latestVersion}}. Установлена версия {{currentVersion}}.",
 		"current": "Установлена последняя версия OpenScreen ({{currentVersion}}).",
 		"readyToInstall": "OpenScreen {{latestVersion}} загружен. Перезапустите, чтобы завершить установку.",
+		"downloaded": "OpenScreen {{latestVersion}} загружен.",
 		"blockedRecording": "Завершите запись перед установкой обновления.",
 		"blockedLocation": "Переместите OpenScreen в папку «Программы» перед обновлением.",
 		"failed": "Не удалось проверить наличие обновлений.",
 		"downloadFailed": "Не удалось загрузить обновление."
-	},
-	"playback": {
-		"play": "Воспроизвести",
-		"pause": "Пауза",
-		"fullscreen": "Полный экран",
-		"exitFullscreen": "Выход из полного экрана"
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} пикс/с",

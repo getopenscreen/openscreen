@@ -193,8 +193,8 @@
 	background: var(--border);
 }
 .iconBtn {
-	width: 32px;
-	height: 32px;
+	width: var(--topbar-icon);
+	height: var(--topbar-icon);
 	display: grid;
 	place-items: center;
 	border-radius: 9px;
@@ -302,6 +302,58 @@
 	box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+.langAnchor {
+	position: relative;
+	flex-shrink: 0;
+}
+.langBtn {
+	width: auto;
+	padding: 0 8px;
+	gap: 6px;
+	display: inline-flex;
+	align-items: center;
+}
+.langIcon {
+	flex-shrink: 0;
+}
+.langChevron {
+	color: var(--muted);
+	flex-shrink: 0;
+}
+.langMenu {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	min-width: 160px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--r-md);
+	box-shadow: var(--elev-pop);
+	padding: 4px;
+	z-index: 60;
+}
+.langMenuItem {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 6px 10px;
+	border: 0;
+	background: transparent;
+	color: var(--fg-2);
+	border-radius: var(--r-sm);
+	cursor: pointer;
+	font: 500 12px var(--font-body);
+	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+}
+.langMenuItem:hover {
+	background: var(--surface-2);
+	color: var(--fg);
+}
+.langMenuItem[data-active="true"] {
+	background: var(--accent-wash);
+	color: var(--accent);
+}
+
 /* One box for every short locale label — see --topbar-lang-label-w. Without it
    the language button resized between "EN", "PT-BR" and the CJK "简中", moving
    everything to its right. */
@@ -330,12 +382,8 @@
 	background: var(--surface-1);
 	border: 1px solid var(--border);
 	border-radius: 11px;
-	/* The only shrinkable item in the bar (everything else is flex-shrink: 0), so
-	   a verbose locale — fr "Enregistrement" is nearly twice "Médias" — narrows
-	   this control instead of shoving Export off the edge of a 1200px window. The
-	   columns stay equal to each other while it happens; only the labels clip. */
-	flex-shrink: 1;
-	min-width: 0;
+	flex-shrink: 0;
+	min-width: fit-content;
 }
 .modeSwitch button {
 	padding: 5px 14px;
@@ -360,6 +408,7 @@
 	grid-template-columns: minmax(0, 1fr);
 	place-items: center;
 	min-width: 0;
+	max-width: 140px;
 	overflow: hidden;
 }
 .modeSwitch button::before {
@@ -367,6 +416,10 @@
 	grid-area: label;
 	font-weight: 600;
 	visibility: hidden;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .modeLabel {
 	grid-area: label;
@@ -385,7 +438,7 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 7px;
-	height: 32px;
+	height: var(--topbar-icon);
 	padding: 0 14px;
 	border-radius: 9px;
 	background: var(--accent);
@@ -404,6 +457,113 @@
 .exportBtn:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
+}
+
+/* ─── Responsive topbar rules ─── */
+@media (max-width: 1240px) {
+	.topbar {
+		--topbar-gap: 10px;
+		--topbar-project-w: 130px;
+	}
+	.modeSwitch button {
+		padding: 4px 10px;
+	}
+}
+
+@media (max-width: 1080px) {
+	.topbar {
+		--topbar-gap: 8px;
+		--topbar-icon: 30px;
+		--topbar-project-w: 100px;
+		padding-left: calc(12px + var(--titlebar-inset-left, 0px));
+		padding-right: calc(
+			12px + 100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px)
+		);
+	}
+	.brand .name {
+		display: none;
+	}
+	.brandBtn {
+		margin: 0;
+		padding: 4px;
+	}
+	.langBtn {
+		padding: 0 5px;
+		gap: 4px;
+	}
+	.langChevron {
+		display: none;
+	}
+	.modeSwitch button {
+		padding: 4px 8px;
+		font-size: 11px;
+		max-width: 90px;
+	}
+	.exportBtn {
+		padding: 0 10px;
+		gap: 5px;
+		font-size: 12px;
+	}
+}
+
+@media (max-width: 960px) {
+	.topbar {
+		--topbar-gap: 6px;
+		--topbar-project-w: 80px;
+		padding-left: calc(8px + var(--titlebar-inset-left, 0px));
+		padding-right: calc(
+			8px + 100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px)
+		);
+	}
+	.sep {
+		display: none;
+	}
+	.topbarLead {
+		width: var(--topbar-icon);
+		gap: 0;
+	}
+	.savedLabel {
+		display: none;
+	}
+	.saved {
+		width: auto;
+	}
+	.savedState {
+		gap: 0;
+	}
+	.langIcon {
+		display: none;
+	}
+	.langShort {
+		width: auto;
+		font-size: 11px;
+	}
+}
+
+@media (max-width: 850px) {
+	.topbar {
+		--topbar-gap: 4px;
+		--topbar-project-w: 70px;
+	}
+	.modeSwitch button {
+		padding: 3px 6px;
+		font-size: 10.5px;
+		max-width: 70px;
+	}
+	.exportLabel {
+		display: none;
+	}
+	.exportBtn {
+		padding: 0;
+		width: var(--topbar-icon);
+		justify-content: center;
+	}
+	.langBtn {
+		padding: 0 4px;
+	}
+	.langShort {
+		font-size: 10px;
+	}
 }
 
 /* ─── BODY ─────────────────────────────────────────────────────────── */
@@ -966,6 +1126,21 @@
 	cursor: pointer;
 	text-align: left;
 }
+/* The key that does the same thing, parked at the end of a menu row. Teaches
+   the shortcut at the moment the user is reaching for the slow way to do it. */
+.recMenuKey {
+	margin-left: auto;
+	flex-shrink: 0;
+	padding: 2px 6px;
+	border-radius: 5px;
+	border: 1px solid var(--border-soft);
+	background: var(--surface-2);
+	color: var(--muted);
+	font-size: 10.5px;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
 .recMenuRow:hover:not(:disabled) {
 	background: var(--surface-2);
 }
@@ -1496,6 +1671,118 @@
 	border-color: #a855f7;
 	background: rgba(168, 85, 247, 0.14);
 }
+/* Imported audio tracks (issue #350). A distinct teal so a BGM/voiceover track
+   reads apart from the effect pills, and taller than a lane pill so the waveform
+   inside it is legible. */
+/* The rest of an audio pill's tape (audioGhostExtent): where its file's content still
+   sits around the pill. Dimmed and unclickable, BELOW the pill, so the pill reads as a
+   window onto it and an edge drag shows what is still available on each side.
+
+   Height and row are set inline to match the pill exactly. They have to: a ghost that
+   does not line up with the pill reads as a separate object sitting behind it rather
+   than as the rest of the same strip. */
+.lanePillGhost {
+	position: absolute;
+	min-width: 1px;
+	overflow: hidden;
+	border-radius: 6px;
+	/* Faint enough to read as "not the pill". Louder than this and it draws the eye to
+	   the part you are NOT editing — and on a long file it spans the whole ruler. */
+	border: 1px dashed color-mix(in oklch, var(--accent) 18%, transparent);
+	pointer-events: none;
+	z-index: 1;
+}
+.lanePillGhost .tlWave {
+	opacity: 0.18;
+}
+/* Crop readout pinned to the pointer while an audio pill's edge is pulled, or while
+   Alt slips the media under it — in -> out over the file's length. Rendered at the
+   component root (see the JSX note about the canvas transform). */
+.tlDragTip {
+	position: fixed;
+	z-index: 1200;
+	transform: translate(-50%, calc(-100% - 18px));
+	padding: 3px 8px;
+	border-radius: 6px;
+	border: 1px solid var(--border-hi);
+	background: var(--bg);
+	color: var(--fg);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	pointer-events: none;
+}
+.laneAudio {
+	border-color: #14b8a6;
+	background: rgba(20, 184, 166, 0.16);
+	height: 30px;
+	top: 1px;
+	cursor: pointer;
+}
+/* Alt is held: the next drag on this pill slides the file under it rather than
+   moving the pill. The cursor is the confirmation, not the lesson — the tooltip
+   carries the words. */
+/* A take that holds somewhere is drawn in pieces inside ONE outline: the notch is cut out
+   of the fill, not laid over it, so the pill still reads as one take — one draggable,
+   slippable object. Opposite polarity to the clip lane's band, which means "the picture
+   freezes here"; this one means "the voice stops here, and the film runs on underneath"
+   (issue #560). */
+.laneAudioPiece {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.laneAudioNotch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--warn) 42%, transparent) 0 3px,
+    transparent 3px 6px
+  );
+  border-left: 1px solid color-mix(in srgb, var(--warn) 70%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--warn) 70%, transparent);
+}
+.laneAudioSlip {
+	cursor: ew-resize;
+}
+.laneAudio:active {
+	cursor: pointer;
+}
+/* The label rides above the waveform (which is inset:0 behind it). */
+/* Where a looping track starts its file over. A hairline rather than a full
+   divider: it has to be legible against the waveform without reading as a cut,
+   which is what a solid line on a timeline means everywhere else. */
+.laneLoopMark {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	z-index: 1;
+	pointer-events: none;
+	background: color-mix(in srgb, var(--fg) 45%, transparent);
+}
+
+.laneAudioLabel {
+	position: relative;
+	z-index: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+/* The audio lane is taller than the effect lanes to give the waveform room. */
+/* Height is set inline from the row count — the lane grows only as far as the
+   tracks actually overlap. This is the single-row floor. */
+.tlLaneAudio {
+	height: 32px;
+}
 .tlClips {
 	position: relative;
 	/* NOT a flex row. Clips are absolutely positioned by percentage of the
@@ -1552,6 +1839,45 @@
 }
 .tlClipSel {
 	border-color: var(--accent);
+}
+/* A generated clip: the media behind an inserted word, which nobody shot. Amber on the box
+   itself rather than a badge inside it, so it stays legible at the zoom levels where a clip
+   is a few pixels wide and there is no room to draw anything in it. */
+/* A clip a few pixels wide — an insertion of a few tenths of a second at a wide zoom is
+   exactly that. Nothing fits inside it, so while it is SELECTED its controls step out to the
+   right and float over whatever follows. Selection-only, so the timeline is never littered,
+   and no layout above or below has to make room for them. */
+.tlClipNarrow .tlClipLabel {
+	display: none;
+}
+.tlClipSel.tlClipNarrow {
+	overflow: visible;
+	z-index: 6;
+}
+/* Selected: the pencil comes back, beside the box rather than in it, and without the name —
+   which is what needed the room in the first place. */
+.tlClipSel.tlClipNarrow .tlClipLabel {
+	display: inline-flex;
+	left: calc(100% + 6px);
+	top: 50%;
+	transform: translateY(-50%);
+	max-width: none;
+	padding: 3px 6px;
+	cursor: pointer;
+}
+.tlClipSel.tlClipNarrow .tlClipName {
+	display: none;
+}
+/* Clear of the pencil chip beside it. */
+.tlClipDelete[data-narrow] {
+	right: auto;
+	left: calc(100% + 43px);
+	top: 50%;
+	transform: translateY(-50%);
+}
+.tlClipGenerated {
+	border-color: var(--warn);
+	background: color-mix(in srgb, var(--warn) 18%, var(--surface-1));
 }
 /* The clip being carried during a reorder drag — follows the pointer 1:1
    (no transition lag) while its siblings slide out of the way with the
@@ -1643,6 +1969,11 @@
 	background: var(--danger-soft);
 	color: var(--danger);
 }
+
+/* Where the user has ADDED a word: text with no audio behind it. A thin amber tick
+   over the waveform, at the moment the word sits on, wide enough to hit and no wider
+   — the clip underneath still has to be draggable everywhere else. Amber is the
+   colour the transcript pane gives the same word, so the two read as one thing. */
 .tlDropHint {
 	position: absolute;
 	inset: 0;
@@ -1755,4 +2086,84 @@
 	box-shadow: 0 0 6px color-mix(in oklch, var(--danger) 60%, transparent);
 	pointer-events: none;
 	z-index: 14;
+}
+
+/* ── Voiceover recorder ──────────────────────────────────────────────────
+   Deliberately NOT a modal. The whole point of a voiceover is narrating to
+   the video that is playing, so a centred dialog over a dimmed backdrop hides
+   the one thing the user needs to watch. This docks at the bottom instead:
+   no backdrop, nothing covered but a strip of the timeline, and the preview
+   stays lit and playing behind it. */
+.voiceoverBar {
+	position: fixed;
+	left: 50%;
+	bottom: 24px;
+	transform: translateX(-50%);
+	z-index: 60;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 12px 16px;
+	border-radius: 14px;
+	border: 1px solid var(--border);
+	background: var(--surface-1);
+	box-shadow: 0 18px 40px rgb(0 0 0 / 38%);
+}
+
+.voiceoverBarTitle {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-right: 4px;
+}
+.voiceoverBarTitle strong {
+	font: 600 13px var(--font-display);
+	color: var(--fg);
+}
+.voiceoverBarTitle span {
+	font-size: 11px;
+	color: var(--muted);
+}
+
+.voiceoverBarBtn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	padding: 9px 14px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: var(--bg-2, var(--surface-2));
+	color: var(--fg-1, var(--fg));
+	font: 600 13px var(--font-display);
+	cursor: pointer;
+	white-space: nowrap;
+}
+.voiceoverBarBtn:hover:not(:disabled) {
+	background: var(--surface-3);
+}
+.voiceoverBarBtn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+.voiceoverBarBtnDanger {
+	border-color: var(--danger);
+	color: var(--danger);
+}
+
+/* The live take: a pulsing dot and the running length, so the user can see it
+   is actually capturing without looking away from the video. */
+.voiceoverBarLive {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--danger);
+	font: 600 13px var(--font-display);
+	font-variant-numeric: tabular-nums;
+}
+.voiceoverBarDot {
+	width: 10px;
+	height: 10px;
+	border-radius: 999px;
+	background: var(--danger);
 }

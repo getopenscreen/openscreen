@@ -15,6 +15,7 @@
 		"pressZoom": "Yakınlaştırma eklemek için Z tuşuna basın",
 		"pressTrim": "Kırpma eklemek için T tuşuna basın",
 		"pressAnnotation": "Açıklama eklemek için A tuşuna basın",
+		"pressAudio": "Ses eklemek için M, seslendirme kaydetmek için V tuşuna basın",
 		"pressSpeed": "Hız eklemek için S tuşuna basın",
 		"pressCameraFullscreen": "Tam Ekran Kamera bölümü eklemek için C tuşuna basın"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "Bir döküm gerekiyor",
 		"smartCutsNoAudio": "Bu medyada ses yok",
 		"smartCutsNoSpeech": "Konuşma algılanmadı",
-		"smartCutsFailed": "Metne dökme başarısız — Medya bölümünden yeniden deneyin"
+		"smartCutsFailed": "Metne dökme başarısız — Medya bölümünden yeniden deneyin",
+		"addAudioTooltip": "Ses ekle",
+		"addedWord": "Eklenen kelime: \"{{word}}\" — arkasında ses yok"
+	},
+	"audio": {
+		"addVoiceover": "Seslendirme ekle",
+		"addVoiceoverHint": "Videonuzun üzerine anlatım kaydedin",
+		"subtitle": "Zaman çizelgesine seslendirme veya fon müziği katmanı yerleştirin",
+		"record": "Seslendirme kaydet",
+		"importFile": "Ses dosyası içe aktar",
+		"importFileHint": "Müzik veya ses dosyası içe aktarın",
+		"recording": "Kaydediliyor",
+		"recordingHint": "Videoyla birlikte anlatın — kayıt sırasında oynamaya devam eder",
+		"stop": "Durdur",
+		"micDenied": "Mikrofon erişimi reddedildi",
+		"recordingUnavailable": "Burada kayıt kullanılamıyor",
+		"saveFailed": "Kayıt kaydedilemedi",
+		"importFailed": "Ses dosyası içe aktarılamadı"
 	}
 }

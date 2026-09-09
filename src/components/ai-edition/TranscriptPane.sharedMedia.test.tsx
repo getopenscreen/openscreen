@@ -71,13 +71,17 @@ function renderPane(onSeek: (sec: number) => void = vi.fn()) {
 		<I18nProvider>
 			<TranscriptPane
 				clips={CLIPS}
+				audioTracks={[]}
 				transcripts={[TRANSCRIPT]}
 				assets={[ASSET]}
 				trimRanges={[]}
 				busyAssetIds={[]}
 				onSeek={onSeek}
-				onAddTrimRange={vi.fn()}
-				onRemoveTrimRange={vi.fn()}
+				onTrimTimelineSpan={vi.fn()}
+				onRemoveTrimRanges={vi.fn()}
+				onSetWordText={vi.fn()}
+				onInsertWord={vi.fn()}
+				onRemoveWords={vi.fn()}
 				onTranscribe={vi.fn()}
 				canTranscribe
 				isTranscribing={false}

@@ -30,6 +30,13 @@ import {
 	installSelfUpdate,
 	type UpdateOutcome,
 } from "./auto-updater";
+import {
+	BACKGROUND_UPDATE_INTERVAL_MS,
+	planBackgroundUpdate,
+	runUnblockedDownloadAndInstall,
+	shouldStartBackgroundUpdateTimer,
+	type UpdateMode,
+} from "./background-update";
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "./diagnostics/main-log-buffer";
@@ -40,11 +47,21 @@ import {
 	unregisterAllGlobalShortcuts,
 } from "./globalShortcut";
 import { mainT, setMainLocale } from "./i18n";
-import { getInstallChannel, offersUpdateCheck, platformOwnsUpdates } from "./install-channel";
-import { getSelectedDesktopSource, registerIpcHandlers } from "./ipc/handlers";
+import {
+	getInstallChannel,
+	offersUpdateCheck,
+	ownsItsUpdates,
+	platformOwnsUpdates,
+} from "./install-channel";
+import {
+	exportDiagnosticFile,
+	getSelectedDesktopSource,
+	registerIpcHandlers,
+} from "./ipc/handlers";
 import { installMainProcessErrorGuards } from "./main-process-errors";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
+import { loadUpdateMode, saveUpdateMode } from "./update-settings";
 import {
 	createCountdownOverlayWindow,
 	createEditorWindow,
@@ -211,6 +228,11 @@ function setupApplicationMenu() {
 					role: "about",
 					label: mainT("common", "actions.about") || "About OpenScreen",
 				},
+				{ type: "separator" as const },
+				{
+					label: mainT("common", "actions.saveDiagnostics") || "Save Diagnostics",
+					click: runSaveDiagnostics,
+				},
 				// Omitted entirely — here, in the Help menu and in the tray — where a package
 				// manager owns the update. See `canOfferUpdateCheck`.
 				...(canOfferUpdateCheck()
@@ -369,6 +391,11 @@ function setupApplicationMenu() {
 					label: mainT("common", "actions.about") || "About OpenScreen",
 					click: runAboutDialog,
 				},
+				{ type: "separator" as const },
+				{
+					label: mainT("common", "actions.saveDiagnostics") || "Save Diagnostics",
+					click: runSaveDiagnostics,
+				},
 			],
 		});
 	}
@@ -519,33 +546,108 @@ function runUpdateCheck() {
 	});
 }
 
+/**
+ * Menu and tray entry point for exporting a diagnostic bundle. The backend
+ * (`exportDiagnosticFile`) and its "Save Diagnostics" label already existed —
+ * nothing in the app ever called it (getopenscreen/openscreen#460). Reveals
+ * the written file on success, the same confirmation the export flow's "Show
+ * in folder" gives, so there is no need for a second dialog on top of the
+ * native Save dialog the user already went through.
+ *
+ * No renderer `projectState`/`logs` to attach from here, unlike the in-app
+ * crash path this shares a payload shape with — the diagnostic value for a
+ * capture bug is almost entirely `helperOutput`/`mainProcessLogs`, which
+ * `exportDiagnosticFile` reads straight from the main process regardless.
+ */
+function runSaveDiagnostics() {
+	exportDiagnosticFile({ error: "Manual diagnostic export", projectState: null, logs: [] })
+		.then((result) => {
+			if (result.canceled) return;
+			if (!result.success) {
+				// exportDiagnosticFile resolves rather than rejects on a write
+				// failure, so this is the branch that turns "user picked a save
+				// location and got silence" into a visible error instead of a
+				// menu action that looks like it did nothing.
+				showMessageBox({
+					type: "error",
+					title: PRODUCT_NAME,
+					message: mainT("dialogs", "export.failed") || "Export Failed",
+					detail: result.error,
+				}).catch((error) => {
+					console.error("[diagnostics] failure dialog failed", error);
+				});
+				return;
+			}
+			if (result.path) {
+				shell.showItemInFolder(result.path);
+			}
+		})
+		.catch((error) => {
+			console.error("[diagnostics] save failed", error);
+		});
+}
+
 /** Mirrors the flag that already drives the tray icon. An update must never interrupt a take —
  *  and on Windows it physically cannot, because the capture helpers spawn from inside the
  *  install directory and NSIS cannot overwrite a running .exe. */
 let isRecording = false;
+let currentUpdateMode: UpdateMode = "notify";
+let backgroundUpdateTimer: ReturnType<typeof setInterval> | null = null;
+
+function showUpdateSettingsMenu(): boolean {
+	return app.isPackaged && ownsItsUpdates(getInstallChannel());
+}
+
+function persistUpdateMode(mode: UpdateMode) {
+	currentUpdateMode = mode;
+	saveUpdateMode(app.getPath("userData"), mode);
+	updateTrayMenu(isRecording);
+}
 
 async function downloadAndInstall(latestVersion: string) {
-	const downloaded = await downloadSelfUpdate();
-	if (downloaded.kind === "failed") {
+	const result = await runUnblockedDownloadAndInstall({
+		download: downloadSelfUpdate,
+		blocked: () =>
+			blockedFromInstalling({
+				recording: isRecording,
+				inApplicationsFolder:
+					process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
+				platform: process.platform,
+			}),
+		confirmRestart: async () => {
+			const restart = await showMessageBox({
+				type: "info",
+				title: PRODUCT_NAME,
+				message: mainT("common", "updates.readyToInstall", { latestVersion }),
+				buttons: [
+					mainT("common", "actions.restartNow") || "Restart Now",
+					mainT("common", "actions.cancel") || "Cancel",
+				],
+				defaultId: 0,
+				cancelId: 1,
+			});
+			return restart.response;
+		},
+		install: installSelfUpdate,
+	});
+	if (result.status === "failed") {
 		await showMessageBox({
 			type: "error",
 			title: PRODUCT_NAME,
 			// Not `updates.failed`: the CHECK succeeded — that is how we got here — and telling
 			// the user we could not check for updates sends them looking in the wrong place.
 			message: mainT("common", "updates.downloadFailed"),
-			detail: downloaded.error.message,
+			detail: result.error.message,
 		});
 		return;
 	}
-
-	const blocked = blockedFromInstalling({
-		recording: isRecording,
-		// macOS-only API; absent elsewhere, and irrelevant there.
-		inApplicationsFolder:
-			process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
-		platform: process.platform,
-	});
-	if (blocked) {
+	if (result.status === "blocked") {
+		const blocked = blockedFromInstalling({
+			recording: isRecording,
+			inApplicationsFolder:
+				process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
+			platform: process.platform,
+		});
 		await showMessageBox({
 			type: "info",
 			title: PRODUCT_NAME,
@@ -554,21 +656,78 @@ async function downloadAndInstall(latestVersion: string) {
 				blocked === "recording" ? "updates.blockedRecording" : "updates.blockedLocation",
 			),
 		});
-		return;
 	}
+}
 
-	const restart = await showMessageBox({
+async function presentAvailableUpdate(latestVersion: string) {
+	const choice = await showMessageBox({
 		type: "info",
 		title: PRODUCT_NAME,
-		message: mainT("common", "updates.readyToInstall", { latestVersion }),
+		message: mainT("common", "updates.available", {
+			currentVersion: app.getVersion(),
+			latestVersion,
+		}),
 		buttons: [
-			mainT("common", "actions.restartNow") || "Restart Now",
+			mainT("common", "actions.downloadUpdate") || "Download Update",
 			mainT("common", "actions.cancel") || "Cancel",
 		],
 		defaultId: 0,
 		cancelId: 1,
 	});
-	if (restart.response === 0) await installSelfUpdate();
+	if (choice.response === 0) await downloadAndInstall(latestVersion);
+}
+
+async function runBackgroundUpdateCheck() {
+	if (updateCheckInFlight || !canOfferUpdateCheck()) return;
+	updateCheckInFlight = true;
+	try {
+		const outcome = await probeSelfUpdate();
+		const plan = planBackgroundUpdate({ outcome, mode: currentUpdateMode });
+		if (plan.action === "none") return;
+		if (plan.action === "notify-available") {
+			await presentAvailableUpdate(plan.version);
+			return;
+		}
+		if (plan.action === "download") {
+			const downloaded = await downloadSelfUpdate();
+			if (downloaded.kind === "failed") {
+				await showMessageBox({
+					type: "error",
+					title: PRODUCT_NAME,
+					message: mainT("common", "updates.downloadFailed"),
+					detail: downloaded.error.message,
+				});
+				return;
+			}
+			await showMessageBox({
+				type: "info",
+				title: PRODUCT_NAME,
+				message: mainT("common", "updates.downloaded", { latestVersion: plan.version }),
+			});
+			return;
+		}
+		await downloadAndInstall(plan.version);
+	} catch (error) {
+		console.error("[updates] background check failed", error);
+	} finally {
+		updateCheckInFlight = false;
+	}
+}
+
+function startBackgroundUpdateTimer() {
+	if (backgroundUpdateTimer) return;
+	if (
+		!shouldStartBackgroundUpdateTimer({
+			isPackaged: app.isPackaged,
+			ownsItsUpdates: ownsItsUpdates(getInstallChannel()),
+		})
+	) {
+		return;
+	}
+	backgroundUpdateTimer = setInterval(() => {
+		void runBackgroundUpdateCheck();
+	}, BACKGROUND_UPDATE_INTERVAL_MS);
+	backgroundUpdateTimer.unref?.();
 }
 
 /** `onVerdict` fires as soon as we know whether an update exists — before any of the dialogs
@@ -716,6 +875,29 @@ function updateTrayMenu(recording: boolean = false) {
 							},
 						]
 					: []),
+				...(showUpdateSettingsMenu()
+					? [
+							{
+								label: mainT("common", "actions.updateSettings") || "Update Settings",
+								submenu: (
+									[
+										["notify", "updateModeNotify", "Notify when an update is available"],
+										["download", "updateModeDownload", "Download updates automatically"],
+										[
+											"download-and-install",
+											"updateModeDownloadAndInstall",
+											"Download and install updates automatically",
+										],
+									] as const
+								).map(([mode, key, fallback]) => ({
+									label: mainT("common", `actions.${key}`) || fallback,
+									type: "radio" as const,
+									checked: currentUpdateMode === mode,
+									click: () => persistUpdateMode(mode),
+								})),
+							},
+						]
+					: []),
 				// The About box's other homes are menu-bar items, and no window this app creates
 				// shows a menu bar: the HUD is frameless (electron/windows.ts), and the editor and
 				// notes windows call setAutoHideMenuBar(true) on Windows and Linux. Without this
@@ -730,6 +912,14 @@ function updateTrayMenu(recording: boolean = false) {
 							label: mainT("common", "actions.about") || "About OpenScreen",
 							click: runAboutDialog,
 						},
+				// Right next to About, and reachable without opening any window: this is the
+				// one place in the app most likely to still be usable right after a recording
+				// failed to stop, which is exactly when the [stop-timing]/encoder-selection
+				// lines this exports are worth the most (getopenscreen/openscreen#460).
+				{
+					label: mainT("common", "actions.saveDiagnostics") || "Save Diagnostics",
+					click: runSaveDiagnostics,
+				},
 				{ type: "separator" as const },
 				{
 					label: mainT("common", "actions.quit") || "Quit",
@@ -1073,8 +1263,14 @@ appReady?.then(async () => {
 		});
 	});
 
+	// Deliberately no updater touch here: importing electron-updater costs
+	// startup time and the channels that cannot use it must not pay for it at
+	// all (see auto-updater.ts getUpdater) — every real update path applies
+	// its settings lazily on first use.
+	currentUpdateMode = loadUpdateMode(app.getPath("userData"));
 	createTray();
 	updateTrayMenu();
+	startBackgroundUpdateTimer();
 	configureAboutPanel();
 	setupApplicationMenu();
 	await ensureRecordingsDir();

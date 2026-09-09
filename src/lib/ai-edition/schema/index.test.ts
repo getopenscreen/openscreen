@@ -3,8 +3,10 @@ import { migrateRawDocumentToCurrent } from "../document/migrate";
 import {
 	annotationRegionSchema,
 	assetSchema,
+	audioTrackSchema,
 	axcutSchemaVersion,
 	clipSchema,
+	createAudioTrack,
 	createEmptyDocument,
 	documentSchema,
 	ensureDocument,
@@ -40,6 +42,7 @@ describe("axcut-schema v7", () => {
 		expect(doc.timeline.captionRanges).toEqual([]);
 		expect(doc.annotations).toEqual([]);
 		expect(doc.zoomRanges).toEqual([]);
+		expect(doc.audioTracks).toEqual([]);
 		expect(doc.transcripts).toEqual([]);
 		expect(doc.legacyEditor).toBeNull();
 	});
@@ -73,14 +76,22 @@ describe("axcut-schema v7", () => {
 		).toThrow();
 	});
 
-	it("assetSchema requires kind = 'video'", () => {
+	it("assetSchema accepts kind 'video' and 'audio', defaulting to 'video'", () => {
+		// Widened from a literal when external-audio import landed (issue #350).
+		const video = assetSchema.parse({ id: "a1", label: "x", originalPath: "/x.mp4" });
+		expect(video.kind).toBe("video");
+		const audio = assetSchema.parse({
+			id: "a2",
+			kind: "audio",
+			label: "bgm",
+			originalPath: "/bgm.mp3",
+		});
+		expect(audio.kind).toBe("audio");
+	});
+
+	it("assetSchema rejects an unknown kind", () => {
 		expect(() =>
-			assetSchema.parse({
-				id: "asset_1",
-				kind: "audio",
-				label: "x",
-				originalPath: "/x.mp4",
-			}),
+			assetSchema.parse({ id: "a1", kind: "image", label: "x", originalPath: "/x.png" }),
 		).toThrow();
 	});
 
@@ -960,5 +971,112 @@ describe("v6 -> v7 trim clip-anchor migration", () => {
 				reason: "",
 			},
 		]);
+	});
+});
+
+describe("audio tracks (issue #350)", () => {
+	it("applies defaults for kind, gain, offset, fades and label", () => {
+		const track = audioTrackSchema.parse({
+			id: "audio_1",
+			assetId: "asset_1",
+			durationSec: 42,
+			startMs: 0,
+			endMs: 42_000,
+		});
+		expect(track.kind).toBe("music");
+		expect(track.offsetMs).toBe(0);
+		expect(track.gainDb).toBe(0);
+		expect(track.loop).toBe(false);
+		expect(track.fadeInMs).toBe(0);
+		expect(track.fadeOutMs).toBe(0);
+		expect(track.muted).toBe(false);
+		expect(track.label).toBe("");
+		// Unanchored until a caller places it — same contract as every other
+		// clip-anchored region kind.
+		expect(track.clipId).toBeUndefined();
+	});
+
+	it("rejects a span whose end precedes its start", () => {
+		expect(() =>
+			audioTrackSchema.parse({
+				id: "audio_1",
+				assetId: "asset_1",
+				durationSec: 10,
+				startMs: 5000,
+				endMs: 2000,
+			}),
+		).toThrow();
+	});
+
+	it("rejects a negative head", () => {
+		expect(() =>
+			audioTrackSchema.parse({
+				id: "audio_1",
+				assetId: "asset_1",
+				durationSec: 10,
+				startMs: -1,
+				endMs: 1000,
+			}),
+		).toThrow();
+	});
+
+	it("createAudioTrack builds a schema-valid track with a prefixed id", () => {
+		const track = createAudioTrack({
+			assetId: "asset_1",
+			durationSec: 12.5,
+			timelineStartSec: 3,
+			label: "voiceover.mp3",
+		});
+		expect(track.id).toMatch(/^audio_/);
+		expect(track.assetId).toBe("asset_1");
+		expect(track.durationSec).toBe(12.5);
+		// The span runs from the head for the source duration by default.
+		expect(track.startMs).toBe(3000);
+		expect(track.endMs).toBe(15_500);
+		expect(track.label).toBe("voiceover.mp3");
+		// The factory output must itself round-trip through the schema.
+		expect(() => audioTrackSchema.parse(track)).not.toThrow();
+	});
+
+	it("createAudioTrack takes a shorter span than the source when asked", () => {
+		// A voiceover recorded over a 4s tail of the timeline should not lay a
+		// 30s pill down just because its file is 30s long.
+		const track = createAudioTrack({
+			assetId: "asset_1",
+			durationSec: 30,
+			kind: "voiceover",
+			timelineStartSec: 2,
+			spanSec: 4,
+		});
+		expect(track.kind).toBe("voiceover");
+		expect(track.startMs).toBe(2000);
+		expect(track.endMs).toBe(6000);
+	});
+
+	it("createAudioTrack still gives a grabbable span to a zero-duration source", () => {
+		const track = createAudioTrack({ assetId: "asset_1", durationSec: 0 });
+		expect(track.endMs).toBeGreaterThan(track.startMs);
+	});
+
+	it("defaults audioTracks to [] when a stored document omits the key", () => {
+		// A document written before issue #350 has no `audioTracks`; the defaulted
+		// array must fill in so older files load unchanged (no schemaVersion bump).
+		const { audioTracks: _drop, ...withoutAudio } = createEmptyDocument({
+			projectId: "p",
+			title: "t",
+		});
+		expect("audioTracks" in withoutAudio).toBe(false);
+		const parsed = documentSchema.parse(withoutAudio);
+		expect(parsed.audioTracks).toEqual([]);
+	});
+
+	it("round-trips a document carrying an audio track", () => {
+		const track = createAudioTrack({ assetId: "asset_1", durationSec: 8 });
+		const doc = {
+			...createEmptyDocument({ projectId: "p", title: "t" }),
+			audioTracks: [track],
+		};
+		const parsed = documentSchema.parse(doc);
+		expect(parsed.audioTracks).toEqual([track]);
 	});
 });

@@ -156,8 +156,23 @@ const GPL_LIBS = [
 /** Worse than GPL: these make the binary unredistributable at all. */
 const NONFREE_LIBS = ["libfdk-aac", "libfdk_aac"];
 
-/** The encoders the export path actually selects, per platform. */
-const WANTED_ENCODERS = {
+/**
+ * The hardware encoders we look for in a vendored build, per platform.
+ *
+ * REPORTED, NOT VERIFIED — and the distinction has bitten. Presence in
+ * `-encoders` means the build was compiled with the wrapper; it says nothing
+ * about whether the encoder RUNS on a given machine. The vendored builds list
+ * `h264_vaapi` on Linux, yet on any host with libva < 2.21 (Ubuntu 24.04 LTS
+ * included) it used to take the whole process down with SIGABRT rather than
+ * return an error, because the implib trampoline `abort()`s on a symbol it
+ * cannot resolve. See issues #552 and #576.
+ *
+ * So this list drives a log line and nothing else. The only evidence that an
+ * encoder works is a frame going through it — `vaapi_encodes_from_an_exported_dmabuf`
+ * in `crates/compositor/src/pipeline_linux.rs` is that evidence for the Linux
+ * hardware path, and the export falls back to software whenever it is absent.
+ */
+const REPORTED_ENCODERS = {
 	win32: ["h264_nvenc", "h264_qsv", "h264_amf"],
 	linux: ["h264_nvenc", "h264_vaapi"],
 };
@@ -230,13 +245,14 @@ function assertLgpl(exePath, extraEnv) {
 
 function reportEncoders(exePath, platform) {
 	const encoders = run(exePath, ["-hide_banner", "-encoders"]).stdout ?? "";
-	const wanted = WANTED_ENCODERS[platform] ?? [];
+	const wanted = REPORTED_ENCODERS[platform] ?? [];
 	const found = wanted.filter((e) => new RegExp(`\\s${e}\\s`).test(encoders));
 	const missing = wanted.filter((e) => !found.includes(e));
-	console.log(`  hardware encoders: ${found.join(", ") || "(none)"}`);
+	console.log(`  hardware encoders present (not verified): ${found.join(", ") || "(none)"}`);
 	if (missing.length > 0) {
-		// Not fatal: which encoders a build exposes is separate from which GPU the
-		// machine has. selectVideoEncoder() probes at runtime regardless.
+		// Not fatal, and deliberately so: which encoders a build EXPOSES is
+		// separate both from which GPU the machine has and from whether the
+		// encoder is usable there at all. The runtime probes regardless.
 		console.log(`  not in this build: ${missing.join(", ")}`);
 	}
 }
@@ -407,13 +423,33 @@ async function fetchSharedDlls(tag, binDir) {
 		return;
 	}
 
-	// probe for any previously vendored DLL by name; re-download is driven by
-	// --force same as the static exe, checked once we know what we'd extract.
-	const alreadyVendored =
-		process.platform === "win32" &&
+	// Completeness probe, not a mere existence probe. The compositor addon now
+	// links six shared ffmpeg DLLs — see crates/compositor/build.rs
+	// (avcodec, avformat, avutil, swresample, swscale, avfilter). A warm dev/CI
+	// tree that already holds the five pre-avfilter DLLs would satisfy an "any
+	// av*.dll is present" check and let `avfilter-11.dll` go un-vendored, breaking
+	// require() at runtime (OpenScreen#371 review, EtienneLescot). Require all
+	// six explicitly so a missing one forces a re-vendor.
+	const REQUIRED_SHARED_DLLS = [
+		"avcodec",
+		"avformat",
+		"avutil",
+		"swresample",
+		"swscale",
+		"avfilter",
+	];
+	fs.mkdirSync(binDir, { recursive: true });
+	const vendoredFiles = new Set(
 		fs
 			.readdirSync(binDir, { withFileTypes: true })
-			.some((e) => e.isFile() && isSharedLib(e.name) && /^(lib)?av/i.test(e.name));
+			.filter((e) => e.isFile())
+			.map((e) => e.name),
+	);
+	const alreadyVendored =
+		process.platform === "win32" &&
+		REQUIRED_SHARED_DLLS.every((lib) =>
+			[...vendoredFiles].some((f) => new RegExp(`^${lib}-\\d+\\.dll$`).test(f)),
+		);
 	// The build-time SDK comes out of this same archive, so a tree that has the
 	// DLLs but not the SDK must still re-download — otherwise we skip here and
 	// the compositor build fails afterwards on the missing FFMPEG_DIR.

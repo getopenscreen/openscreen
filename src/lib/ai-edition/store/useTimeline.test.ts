@@ -20,6 +20,7 @@ const probeVideoDurationMock = vi.hoisted(() => vi.fn());
 const probeVideoDimensionsMock = vi.hoisted(() =>
 	vi.fn().mockResolvedValue({ width: 1920, height: 1080 }),
 );
+const probeAudioDurationMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const toastErrorMock = vi.hoisted(() => vi.fn());
 
 vi.mock("sonner", () => ({ toast: { error: toastErrorMock } }));
@@ -30,6 +31,7 @@ vi.mock("../timeline/duration", async (importOriginal) => {
 		...actual,
 		probeVideoDuration: probeVideoDurationMock,
 		probeVideoDimensions: probeVideoDimensionsMock,
+		probeAudioDuration: probeAudioDurationMock,
 	};
 });
 
@@ -110,6 +112,7 @@ const sampleDoc: AxcutDocument = {
 	},
 	annotations: [],
 	zoomRanges: [],
+	audioTracks: [],
 	legacyEditor: null,
 };
 
@@ -188,8 +191,11 @@ describe("useTimeline.moveClip / duplicateClip (delegates to document/timeline.t
 				{
 					id: "clip_b",
 					assetId: "asset_1",
-					sourceStartSec: 10,
-					sourceEndSec: 20,
+					// Does not continue where clip_a stops, on purpose: two clips of one recording
+					// whose media timecodes meet are one clip, so a fixture like that would
+					// collapse under any structural edit.
+					sourceStartSec: 15,
+					sourceEndSec: 25,
 					timelineStartSec: 10,
 					timelineEndSec: 20,
 					wordRefs: [],
@@ -1283,5 +1289,310 @@ describe("useTimeline drag snapshots", () => {
 			expect(undo()).toBe(true);
 		});
 		expect(useProjectStore.getState().document?.annotations[0].content).toBe("before");
+	});
+});
+
+// Issue #350 — imported audio tracks. The hook wraps the pure ops in
+// document/audioTracks.ts (unit-tested separately); these cover the wiring:
+// asset lookup, playhead placement, the save, and undo.
+describe("useTimeline audio tracks", () => {
+	const audioDoc: AxcutDocument = {
+		...sampleDoc,
+		assets: [
+			...sampleDoc.assets,
+			{
+				id: "audio_1",
+				kind: "audio",
+				label: "voiceover.mp3",
+				originalPath: "/tmp/vo.mp3",
+				durationSec: 30,
+				cameraTrack: null,
+			},
+		],
+	};
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		clearHistory();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		probeAudioDurationMock.mockReset();
+		probeAudioDurationMock.mockResolvedValue(null);
+		bridgeMocks.save.mockImplementation(async (doc: typeof sampleDoc) => ({
+			success: true,
+			document: doc,
+		}));
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: audioDoc,
+			revision: 1,
+			status: "ready",
+			error: null,
+			currentTimeSec: 4,
+		});
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("addAudioTrack places a track for the asset at the playhead and returns its id", async () => {
+		const { result } = renderTimeline();
+		let id: string | null = null;
+		await act(async () => {
+			id = await result.current.addAudioTrack("audio_1");
+		});
+		const tracks = useProjectStore.getState().document?.audioTracks ?? [];
+		expect(tracks).toHaveLength(1);
+		expect(id).toBe(tracks[0]?.id);
+		expect(tracks[0]).toMatchObject({
+			assetId: "audio_1",
+			durationSec: 30,
+			// Head at the playhead (4s), span the source's own length.
+			startMs: 4000,
+			label: "voiceover.mp3",
+		});
+	});
+
+	it("addAudioTrack refuses a non-audio (or unknown) asset", async () => {
+		const { result } = renderTimeline();
+		let videoId: string | null = "x";
+		let missingId: string | null = "x";
+		await act(async () => {
+			videoId = await result.current.addAudioTrack("asset_1"); // a video asset
+			missingId = await result.current.addAudioTrack("nope");
+		});
+		expect(videoId).toBeNull();
+		expect(missingId).toBeNull();
+		expect(useProjectStore.getState().document?.audioTracks).toEqual([]);
+	});
+
+	it("place / gain update the track and each is one undo step", async () => {
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addAudioTrack("audio_1", 2)) ?? "";
+		});
+		// A lane drag commits the whole span in one write and re-ventilates it.
+		await act(async () => {
+			await result.current.placeAudioTrack(id, { startMs: 3000, endMs: 8000 });
+		});
+		await act(async () => {
+			await result.current.setAudioTrackGain(id, -6);
+		});
+
+		const track = useProjectStore.getState().document?.audioTracks[0];
+		expect(track).toMatchObject({
+			startMs: 3000,
+			endMs: 8000,
+			gainDb: -6,
+		});
+
+		// Three writes (add + place + gain) → the gain edit undoes first.
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(useProjectStore.getState().document?.audioTracks[0]?.gainDb).toBe(0);
+	});
+
+	it("clamps a track to the content under it, like every other anchored region", async () => {
+		// The sample timeline is one 0..10s clip. A track dragged past the end has
+		// nothing to anchor to out there — and the exported programme stops at the
+		// last clip regardless — so the span is cut at the content, not stored
+		// hanging off the end where it could never play.
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addAudioTrack("audio_1", 2)) ?? "";
+		});
+		await act(async () => {
+			await result.current.placeAudioTrack(id, { startMs: 9000, endMs: 16_000 });
+		});
+		const track = useProjectStore.getState().document?.audioTracks[0];
+		expect(track).toMatchObject({ startMs: 9000, endMs: 10_000 });
+	});
+
+	it("turning loop on fills the rest of the programme, in one undo step", async () => {
+		// Looping only means anything when the span exceeds the source, so a toggle
+		// that changed nothing else did nothing at all. The sample timeline is one
+		// 0..10s clip and the asset is 30s, so the track is created 2..10 (clamped
+		// to the content) and filling is a no-op — place it short first.
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addAudioTrack("audio_1", 2)) ?? "";
+		});
+		await act(async () => {
+			await result.current.placeAudioTrack(id, { startMs: 2000, endMs: 4000 });
+		});
+		await act(async () => {
+			await result.current.setAudioTrackLoop(id, true);
+		});
+		const tracks = useProjectStore.getState().document?.audioTracks ?? [];
+		expect(tracks[0]).toMatchObject({ startMs: 2000, endMs: 10_000, loop: true });
+
+		// One step: the flag and the fill undo together.
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		const back = useProjectStore.getState().document?.audioTracks[0];
+		expect(back).toMatchObject({ endMs: 4000, loop: false });
+	});
+
+	it("turning loop off leaves the span alone", async () => {
+		// Shrinking back would throw away a length the user may have set by hand.
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addAudioTrack("audio_1", 2)) ?? "";
+		});
+		await act(async () => {
+			await result.current.setAudioTrackLoop(id, true);
+		});
+		const filled = useProjectStore.getState().document?.audioTracks[0]?.endMs;
+		await act(async () => {
+			await result.current.setAudioTrackLoop(id, false);
+		});
+		const track = useProjectStore.getState().document?.audioTracks[0];
+		expect(track?.loop).toBe(false);
+		expect(track?.endMs).toBe(filled);
+	});
+
+	it("removeAudioTrack deletes the track", async () => {
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addAudioTrack("audio_1")) ?? "";
+		});
+		await act(async () => {
+			await result.current.removeAudioTrack(id);
+		});
+		expect(useProjectStore.getState().document?.audioTracks).toEqual([]);
+	});
+
+	// #350: the toolbar button and the `M` shortcut both call `tl.addAudio`, which opens
+	// the OS file picker and hands the result to `importAudioAsset`. Spy on the store's
+	// import so these assert the wiring (picker → import), not the import itself.
+	it("addAudio imports the picked file, and is a no-op when the picker is cancelled", async () => {
+		const importSpy = vi.fn().mockResolvedValue(null);
+		useProjectStore.setState({ importAudioAsset: importSpy });
+		const pickerMock = vi.fn();
+		Object.defineProperty(window, "electronAPI", {
+			configurable: true,
+			value: { openAudioFilePicker: pickerMock },
+		});
+		const { result } = renderTimeline();
+
+		// Cancelled picker → nothing imported.
+		pickerMock.mockResolvedValueOnce({ success: false });
+		await act(async () => {
+			await result.current.addAudio();
+		});
+		expect(importSpy).not.toHaveBeenCalled();
+
+		// Picked a file → imported with its path and display name.
+		pickerMock.mockResolvedValueOnce({ success: true, path: "/tmp/bgm.mp3", name: "bgm.mp3" });
+		await act(async () => {
+			await result.current.addAudio();
+		});
+		expect(importSpy).toHaveBeenCalledWith("/tmp/bgm.mp3", "bgm.mp3");
+	});
+
+	it("addAudio clears region/clip selections after a successful import", async () => {
+		// importAudioAsset must resolve an asset for the success path to run.
+		useProjectStore.setState({ importAudioAsset: vi.fn().mockResolvedValue({ id: "audio_1" }) });
+		Object.defineProperty(window, "electronAPI", {
+			configurable: true,
+			value: {
+				openAudioFilePicker: vi
+					.fn()
+					.mockResolvedValue({ success: true, path: "/tmp/bgm.mp3", name: "bgm.mp3" }),
+			},
+		});
+		const { result } = renderTimeline();
+
+		// A clip selected before the import (selectClip and selectRegion are mutually
+		// exclusive, so a clip is enough to prove the import wipes the local selection)…
+		act(() => result.current.selectClip("clip_1"));
+		expect(result.current.clipSelection).toBe("clip_1");
+
+		await act(async () => {
+			await result.current.addAudio();
+		});
+		// …is gone after it (the imported track becomes the sole selection).
+		expect(result.current.selection).toBeNull();
+		expect(result.current.multiSelection).toEqual([]);
+		expect(result.current.clipSelection).toBeNull();
+	});
+
+	it("addAudio toasts when the file picker itself rejects", async () => {
+		toastErrorMock.mockClear();
+		const importSpy = vi.fn();
+		useProjectStore.setState({ importAudioAsset: importSpy });
+		Object.defineProperty(window, "electronAPI", {
+			configurable: true,
+			value: { openAudioFilePicker: vi.fn().mockRejectedValueOnce(new Error("ipc down")) },
+		});
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.addAudio();
+		});
+		// A picker rejection reaches the localized toast, not an unhandled rejection, and never
+		// attempts an import.
+		expect(importSpy).not.toHaveBeenCalled();
+		expect(toastErrorMock).toHaveBeenCalledTimes(1);
+	});
+
+	// #350 regression: a failed import-time probe leaves durationSec at 0, which
+	// makes the playback window zero-length. The on-load backfill re-probes and
+	// stamps the real duration onto the asset AND the track, so it can play again.
+	it("backfills a missing audio duration on load", async () => {
+		probeAudioDurationMock.mockResolvedValue(12.5);
+		// Asset imported with an unknown duration (probe failed), and a track that
+		// cached the resulting 0.
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: {
+				...sampleDoc,
+				assets: [
+					...sampleDoc.assets,
+					{
+						id: "audio_2",
+						kind: "audio",
+						label: "bgm.mp3",
+						originalPath: "/tmp/bgm.mp3",
+						cameraTrack: null,
+					},
+				],
+				audioTracks: [
+					{
+						id: "trk_2",
+						assetId: "audio_2",
+						kind: "music" as const,
+						startMs: 0,
+						endMs: 1,
+						durationSec: 0,
+						offsetMs: 0,
+						gainDb: 0,
+						loop: false,
+						fadeInMs: 0,
+						fadeOutMs: 0,
+						muted: false,
+						label: "bgm.mp3",
+						origin: "user" as const,
+					},
+				],
+			},
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => {
+			const doc = useProjectStore.getState().document;
+			expect(doc?.assets.find((a) => a.id === "audio_2")?.durationSec).toBe(12.5);
+			expect(doc?.audioTracks[0]?.durationSec).toBe(12.5);
+		});
+		expect(probeAudioDurationMock).toHaveBeenCalledTimes(1);
 	});
 });

@@ -8,6 +8,10 @@
 		"done": "Terminer",
 		"open": "Ouvrir",
 		"checkForUpdates": "Rechercher des mises à jour",
+		"updateSettings": "Paramètres de mise à jour",
+		"updateModeNotify": "Notifier lorsqu'une mise à jour est disponible",
+		"updateModeDownload": "Télécharger les mises à jour automatiquement",
+		"updateModeDownloadAndInstall": "Télécharger et installer les mises à jour automatiquement",
 		"viewRelease": "Voir la version",
 		"downloadUpdate": "Télécharger la mise à jour",
 		"restartNow": "Redémarrer maintenant",
@@ -40,22 +44,18 @@
 		"services": "Services",
 		"hide": "Masquer OpenScreen",
 		"hideOthers": "Masquer les autres",
-		"unhide": "Tout afficher"
+		"unhide": "Tout afficher",
+		"saveDiagnostics": "Enregistrer les diagnostics"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} est disponible. Vous utilisez la version {{currentVersion}}.",
 		"current": "OpenScreen est à jour ({{currentVersion}}).",
 		"readyToInstall": "OpenScreen {{latestVersion}} a été téléchargé. Redémarrez pour terminer l'installation.",
+		"downloaded": "OpenScreen {{latestVersion}} a été téléchargé.",
 		"blockedRecording": "Terminez votre enregistrement avant d'installer la mise à jour.",
 		"blockedLocation": "Déplacez OpenScreen dans le dossier Applications avant de le mettre à jour.",
 		"failed": "Impossible de rechercher les mises à jour.",
 		"downloadFailed": "Impossible de télécharger la mise à jour."
-	},
-	"playback": {
-		"play": "Lecture",
-		"pause": "Pause",
-		"fullscreen": "Plein écran",
-		"exitFullscreen": "Quitter le plein écran"
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} pixels/s",

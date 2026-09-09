@@ -14,7 +14,8 @@
   <a href="https://github.com/getopenscreen/openscreen/blob/main/LICENSE"><img src="https://img.shields.io/github/license/getopenscreen/openscreen?style=for-the-badge&label=License" alt="License" /></a>
   <a href="https://github.com/getopenscreen/openscreen/releases/latest"><img src="https://img.shields.io/github/v/release/getopenscreen/openscreen?style=for-the-badge&label=Release" alt="Latest Release" /></a>
   <a href="https://github.com/getopenscreen/openscreen/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/getopenscreen/openscreen/ci.yml?style=for-the-badge&label=CI" alt="CI Status" /></a>
-  <a href="https://discord.gg/VvT6Vtnyh"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="https://getopenscreen.com/discord"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="https://github.com/sponsors/EtienneLescot"><img src="https://img.shields.io/badge/Sponsor-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=for-the-badge" alt="Platform" />
 </p>
 
@@ -61,6 +62,15 @@ See [docs/cli.md](./docs/cli.md).
 ## Installation
 
 Every platform has a recommended route below. On Windows that is the Microsoft Store; everywhere else it is the installer from the [GitHub Releases](https://github.com/getopenscreen/openscreen/releases) page.
+
+### System requirements
+
+- **Windows**: version 1903+ (build 18362) with Intel 8th Gen / AMD Ryzen 2000 series or newer minimum; Windows 11 with Intel 12th Gen / Ryzen 4000 series or newer recommended
+- **macOS**: 13 (Ventura) or later — required by ScreenCaptureKit for capture
+- **Linux**: `xdg-desktop-portal` and PipeWire for native capture and system audio; recording still works without them through the browser-capture fallback, with fewer capabilities (see [Platform differences](#platform-differences))
+- **RAM**: 8 GB minimum, 16 GB recommended
+
+Full table and notes on older integrated graphics: [system requirements](https://getopenscreen.com/docs/installation#system-requirements).
 
 ### macOS
 
@@ -162,10 +172,10 @@ You may need to grant screen recording permissions depending on your desktop env
 Everything in the editor and export is the same on macOS, Windows, and Linux: zooms, backgrounds, motion blur, crop/trim/speed, blur regions, annotations, auto-captions, AI editing, projects, export, and all languages. All three now record through a native capture pipeline; the remaining differences are narrower than they used to be:
 
 - **Native recording**: macOS (ScreenCaptureKit), Windows (Windows Graphics Capture), and Linux (PipeWire via the ScreenCast portal) all record through a native pipeline for higher quality and clean window-level capture. On Linux the browser pipeline stays as an automatic fallback if the helper isn't available.
-- **Custom cursors**: on macOS and Windows the real cursor is captured with shape, type, and clicks. Linux captures position and cursor shape through the portal, so cursor themes and the editable cursor overlay work there too — but the portal reports no mouse button events, so **click effects remain macOS and Windows only**.
+- **Custom cursors**: on macOS and Windows the real cursor is captured with shape, type, and clicks. Linux captures position and cursor shape through the portal, so cursor themes and the editable cursor overlay work there too. Click effects work on Linux as well, but not through the portal — Wayland exposes no portal for mouse buttons, so the capture helper reads the left button from evdev, which needs your user in the `input` group. Without that, recording is unaffected and every cursor sample is simply a move.
 - **Webcam**: Windows muxes the webcam natively into the recording; macOS and Linux record it alongside as a separate file. It works as a picture-in-picture overlay on all three.
 - **System audio** support varies by OS:
-  - **macOS**: requires macOS 13+. On macOS 14.2+ you'll be prompted to grant audio capture permission. macOS 12 and below can't capture system audio (mic still works).
+  - **macOS**: works on every supported version. On macOS 14.2+ you'll be prompted to grant audio capture permission.
   - **Windows**: works out of the box.
   - **Linux**: needs PipeWire (default on Ubuntu 22.04+, Fedora 34+). Older PulseAudio-only setups may not capture system audio (mic should still work).
 
@@ -185,9 +195,10 @@ For safety, download OpenScreen only from the official GitHub Releases linked fr
 
 OpenScreen is community-driven. If you need help, want to report a bug, or just want to chat with other users and contributors:
 
-- 💬 **Discord** — [Join the OpenScreen Discord](https://discord.gg/VvT6Vtnyh) for real-time help, showcase, and discussion
+- 💬 **Discord** — [Join the OpenScreen Discord](https://getopenscreen.com/discord) for real-time help, showcase, and discussion
 - 🐞 **[GitHub Issues](https://github.com/getopenscreen/openscreen/issues)** — bug reports and feature requests
 - 🗺️ **[Roadmap](./ROADMAP.md)** — see what we're building next
+- ❤️ **Support the project** — [GitHub Sponsors](https://github.com/sponsors/EtienneLescot) or [Ko-fi](https://ko-fi.com/etiennelescot)
 
 ---
 

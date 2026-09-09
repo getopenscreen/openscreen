@@ -29,6 +29,20 @@ const ROOT = path.join(__dirname, "..");
 const CRATES_DIR = path.join(ROOT, "crates");
 
 /** Pinned release. The directory name is what build.rs looks for. */
+// The macOS floor the app ships against — keep in step with `mac.minimumSystemVersion`
+// in electron-builder.json5, which is what the .app tells LaunchServices.
+//
+// Without it, clang defaults the deployment target
+// to the BUILD MACHINE's SDK, so the vendored dylibs inherit whatever macOS built them —
+// measured 26.0 on a local build and ~15.x from CI's `macos-latest`, a floor that moves on
+// its own every time GitHub rolls that image. That is the same class of leak the configure
+// comment below guards against for Homebrew packages, and it is the one it missed.
+//
+// Note this is NOT a loader version gate: dyld does not refuse a dylib whose minos exceeds
+// the running OS (verified). Setting it is what makes the LINKER enforce macOS 12 symbol
+// availability, which is the thing that actually breaks at load time. See issue #515.
+const MACOS_DEPLOYMENT_TARGET = "13.0";
+
 const VERSION = "8.1.2";
 const TARBALL_SHA256 = "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c";
 const DEST = path.join(CRATES_DIR, "thirdparty", `ffmpeg-n${VERSION}-macos64-lgpl-shared`);
@@ -148,21 +162,56 @@ function isLgpl(dir) {
 	return /Lesser General Public/i.test(banner) && !/GNU General Public License/i.test(banner);
 }
 
+/**
+ * Whether the vendored tree was built for the pinned deployment target. Part of the
+ * reuse decision alongside the licence: a tree that predates the pin (or was built by
+ * hand without it) is LGPL and would otherwise be reused forever, only for
+ * before-pack's floor guard to refuse it at packaging time — a five-minute rebuild
+ * deferred to the worst possible moment. The binary, not the dylibs, because it is one
+ * vtool call and the whole tree shares a configure.
+ */
+function isAtDeploymentTarget(dir) {
+	const bin = path.join(dir, "bin", "ffmpeg");
+	if (!fs.existsSync(bin)) return false;
+	const build = execFileSync("vtool", ["-show-build", bin], { encoding: "utf8" });
+	const minos = /minos (\d+(?:\.\d+)+)/.exec(build)?.[1];
+	if (minos === undefined) return false;
+	const compareVersions = (a, b) => {
+		const left = a.split(".").map(Number);
+		const right = b.split(".").map(Number);
+		for (let i = 0; i < Math.max(left.length, right.length); i++) {
+			if ((left[i] ?? 0) !== (right[i] ?? 0)) return (left[i] ?? 0) - (right[i] ?? 0);
+		}
+		return 0;
+	};
+	return compareVersions(minos, MACOS_DEPLOYMENT_TARGET) <= 0;
+}
+
 if (process.platform !== "darwin") {
 	console.log("Skipping macOS ffmpeg vendoring: macOS-only (Windows uses fetch:ffmpeg).");
 	process.exit(0);
 }
 
-if (fs.existsSync(path.join(DEST, "include")) && isLgpl(DEST)) {
-	console.log(`ffmpeg already vendored at ${DEST} and its -L banner says LGPL. Nothing to do.`);
+if (fs.existsSync(path.join(DEST, "include")) && isLgpl(DEST) && isAtDeploymentTarget(DEST)) {
+	console.log(
+		`ffmpeg already vendored at ${DEST}: LGPL, built for macOS ${MACOS_DEPLOYMENT_TARGET}. Nothing to do.`,
+	);
 	process.exit(0);
 }
-if (fs.existsSync(path.join(DEST, "include"))) {
+if (fs.existsSync(path.join(DEST, "include")) && !isLgpl(DEST)) {
 	throw new Error(
 		`${DEST} exists but is not an LGPL build (checked with \`ffmpeg -L\`).\n` +
 			"Refusing to reuse it — linking a GPL ffmpeg would relicense OpenScreen.\n" +
 			"Delete the directory and re-run to rebuild it from source.",
 	);
+}
+if (fs.existsSync(path.join(DEST, "include"))) {
+	console.warn(
+		`${DEST} was not built for the ${MACOS_DEPLOYMENT_TARGET} deployment target ` +
+			"(check: vtool -show-build). Rebuilding — a stale floor here only fails at packaging,\n" +
+			"in before-pack's macOS version guard.",
+	);
+	fs.rmSync(DEST, { recursive: true, force: true });
 }
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-ffmpeg-"));
@@ -202,6 +251,10 @@ run(
 		"--disable-x86asm",
 		`--arch=${process.arch === "arm64" ? "arm64" : "x86_64"}`,
 		"--cc=clang",
+		// Both, not just cflags: the deployment target has to reach the link step too, or
+		// the dylibs are stamped with the build machine's floor however they were compiled.
+		`--extra-cflags=-mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}`,
+		`--extra-ldflags=-mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}`,
 	],
 	{ cwd: src },
 );

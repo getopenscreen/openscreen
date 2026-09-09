@@ -15,6 +15,7 @@
 		"pressZoom": "Press Z to add zoom",
 		"pressTrim": "Press T to add trim",
 		"pressAnnotation": "Press A to add annotation",
+		"pressAudio": "Press M to add audio, V to record a voiceover",
 		"pressSpeed": "Press S to add speed",
 		"pressCameraFullscreen": "Press C to add a Full Camera segment"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "Needs a transcript",
 		"smartCutsNoAudio": "This media has no audio",
 		"smartCutsNoSpeech": "No speech detected",
-		"smartCutsFailed": "Transcription failed — retry it from Media"
+		"smartCutsFailed": "Transcription failed — retry it from Media",
+		"addAudioTooltip": "Add audio",
+		"addedWord": "Added word: \"{{word}}\" — no audio behind it"
+	},
+	"audio": {
+		"addVoiceover": "Add Voiceover",
+		"addVoiceoverHint": "Record narration over your video",
+		"subtitle": "Place a voiceover or background music layer on the timeline",
+		"record": "Record voiceover",
+		"importFile": "Import audio file",
+		"importFileHint": "Bring in music or an audio file",
+		"recording": "Recording",
+		"recordingHint": "Narrate along with the video — it plays while you record",
+		"stop": "Stop",
+		"micDenied": "Microphone access was denied",
+		"recordingUnavailable": "Recording is not available here",
+		"saveFailed": "Could not save the recording",
+		"importFailed": "Could not import the audio file"
 	}
 }

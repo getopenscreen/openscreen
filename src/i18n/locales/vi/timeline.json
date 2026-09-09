@@ -15,6 +15,7 @@
 		"pressZoom": "Nhấn Z để thêm thu phóng",
 		"pressTrim": "Nhấn T để thêm cắt",
 		"pressAnnotation": "Nhấn A để thêm chú thích",
+		"pressAudio": "Nhấn M để thêm âm thanh, V để ghi âm lời thuyết minh",
 		"pressSpeed": "Nhấn S để thêm tốc độ",
 		"pressCameraFullscreen": "Nhấn C để thêm một đoạn Camera Toàn màn hình"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "Cần có bản phiên âm",
 		"smartCutsNoAudio": "Media này không có âm thanh",
 		"smartCutsNoSpeech": "Không phát hiện giọng nói",
-		"smartCutsFailed": "Phiên âm thất bại — thử lại trong Media"
+		"smartCutsFailed": "Phiên âm thất bại — thử lại trong Media",
+		"addAudioTooltip": "Thêm âm thanh",
+		"addedWord": "Từ đã thêm: \"{{word}}\" — không có âm thanh phía sau"
+	},
+	"audio": {
+		"addVoiceover": "Thêm thuyết minh",
+		"addVoiceoverHint": "Ghi âm lời thuyết minh trên video của bạn",
+		"subtitle": "Đặt lớp thuyết minh hoặc nhạc nền lên dòng thời gian",
+		"record": "Ghi âm thuyết minh",
+		"importFile": "Nhập tệp âm thanh",
+		"importFileHint": "Nhập nhạc hoặc tệp âm thanh",
+		"recording": "Đang ghi",
+		"recordingHint": "Thuyết minh cùng video — video vẫn phát trong khi bạn ghi âm",
+		"stop": "Dừng",
+		"micDenied": "Quyền truy cập micrô bị từ chối",
+		"recordingUnavailable": "Không thể ghi âm ở đây",
+		"saveFailed": "Không thể lưu bản ghi",
+		"importFailed": "Không thể nhập tệp âm thanh"
 	}
 }

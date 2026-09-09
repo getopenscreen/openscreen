@@ -15,6 +15,7 @@
 		"pressZoom": "按 Z 添加缩放",
 		"pressTrim": "按 T 添加剪辑",
 		"pressAnnotation": "按 A 添加标注",
+		"pressAudio": "按 M 添加音频，按 V 录制配音",
 		"pressSpeed": "按 S 添加速度",
 		"pressCameraFullscreen": "按 C 添加一个全屏摄像头片段"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "需要转录文本",
 		"smartCutsNoAudio": "此媒体没有音频",
 		"smartCutsNoSpeech": "未检测到语音",
-		"smartCutsFailed": "转录失败 — 请在“媒体”中重试"
+		"smartCutsFailed": "转录失败 — 请在“媒体”中重试",
+		"addAudioTooltip": "添加音频",
+		"addedWord": "已添加的词：“{{word}}” — 背后没有声音"
+	},
+	"audio": {
+		"addVoiceover": "添加配音",
+		"addVoiceoverHint": "为视频录制旁白",
+		"subtitle": "在时间轴上放置配音或背景音乐图层",
+		"record": "录制配音",
+		"importFile": "导入音频文件",
+		"importFileHint": "导入音乐或音频文件",
+		"recording": "正在录制",
+		"recordingHint": "跟着视频讲解 — 录制时视频会继续播放",
+		"stop": "停止",
+		"micDenied": "麦克风访问被拒绝",
+		"recordingUnavailable": "此处无法录音",
+		"saveFailed": "无法保存录音",
+		"importFailed": "无法导入音频文件"
 	}
 }

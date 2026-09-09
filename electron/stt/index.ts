@@ -1,6 +1,7 @@
 import path from "node:path";
 import { app, type IpcMain } from "electron";
 import { planChunks } from "./chunking";
+import { extractMono16kPcm } from "./extractAudio";
 import { ensureModels, modelPaths } from "./modelManager";
 import type {
 	SttPhraseSegment,
@@ -104,6 +105,13 @@ export class SttManager {
 	private cancelEpoch = 0;
 
 	/**
+	 * The extraction in flight, if any. `cancelEpoch` alone stops the CHUNK loop, which is
+	 * checked between chunks — so a cancel during the decode left ffmpeg running to
+	 * completion on a file that can be hours long, and the user saw nothing stop.
+	 */
+	private extraction: AbortController | null = null;
+
+	/**
 	 * Attach a sink for the renderer status channel; returns its detach function.
 	 *
 	 * A SET rather than one slot: this used to be a single field that each IPC
@@ -134,6 +142,7 @@ export class SttManager {
 	 */
 	cancel(): void {
 		this.cancelEpoch++;
+		this.extraction?.abort();
 	}
 
 	/**
@@ -237,12 +246,34 @@ export class SttManager {
 	}
 
 	/** Transcribe a whole recording, chunk by chunk, reporting progress as it goes. */
+	/** Decode `sourcePath` into the samples `transcribe` needs. */
+	private async extract(req: SttTranscribeRequest): Promise<Float32Array> {
+		if (!req.sourcePath) {
+			throw new Error("stt:transcribe needs either `samples` or `sourcePath`");
+		}
+		const controller = new AbortController();
+		this.extraction = controller;
+		try {
+			return await extractMono16kPcm(req.sourcePath, { signal: controller.signal });
+		} finally {
+			// Only if it is still ours: a cancel that started a new run must not have its
+			// controller cleared by the old one unwinding.
+			if (this.extraction === controller) this.extraction = null;
+		}
+	}
+
 	async transcribe(req: SttTranscribeRequest): Promise<SttTranscribeResponse> {
 		await this.init();
 
 		const epoch = this.cancelEpoch;
-		const totalSec = req.samples.length / SAMPLE_RATE;
-		const chunks = planChunks(req.samples, SAMPLE_RATE);
+		// Extraction is part of the run, and on a long file it is the part the user used
+		// to watch the editor freeze through. Doing it here means the renderer hands over
+		// a path and gets segments back, holding none of the audio. No new status phase:
+		// the caller already reports "extracting-audio" around this call, and the work
+		// simply moved to the other side of the IPC.
+		const samples = req.samples ?? (await this.extract(req));
+		const totalSec = samples.length / SAMPLE_RATE;
+		const chunks = planChunks(samples, SAMPLE_RATE);
 		this.emit({ phase: "transcribe", completedSec: 0, totalSec });
 
 		const segments: SttPhraseSegment[] = [];
@@ -285,7 +316,7 @@ export class SttManager {
 			if (this.cancelEpoch !== epoch) throw cancelledError();
 			const offsetSec = chunk.startSample / SAMPLE_RATE;
 			const result = await this.transcribeChunk(
-				req.samples.subarray(chunk.startSample, chunk.endSample),
+				samples.subarray(chunk.startSample, chunk.endSample),
 				language,
 			).catch((error) => {
 				if (error instanceof Error && error.name === "AbortError") throw error;

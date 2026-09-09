@@ -7,19 +7,26 @@
 
 import {
 	AudioLines,
+	Camera,
+	Captions as CaptionsIcon,
 	ChevronDown,
 	FileText,
 	HelpCircle,
-	Layout as LayoutIcon,
 	Loader2,
+	Mic,
 	MousePointerClick,
+	Music,
 	Sliders,
 	Trash2,
+	Undo2,
+	Video,
+	X,
 } from "lucide-react";
+
 import {
 	type ChangeEvent,
 	type CSSProperties,
-	type FormEvent,
+	Fragment,
 	memo,
 	type ClipboardEvent as ReactClipboardEvent,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -37,9 +44,13 @@ import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
 import GradientEditor, { type GradientEditorState } from "@/components/ui/gradient-editor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
+import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import { collectNativeFormats } from "@/lib/ai-edition/document/outputFormat";
+import type { InsertSide } from "@/lib/ai-edition/document/transcript";
 import type {
 	AxcutAsset,
+	AxcutAudioTrack,
 	AxcutClip,
 	AxcutTranscript,
 	AxcutTrimRange,
@@ -50,23 +61,37 @@ import {
 	type EditorSettingsPatch,
 } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import {
 	buildAggregatedSections,
 	type ClipSection,
 	type ClipWord,
 	findCueWordId,
+	isInsertedWord,
 	isSilenceWord,
+	placementRawExtent,
+	placementRawSec,
+	type TranscriptLane,
 	type TrimRun,
+	voiceoverPlacements,
 } from "@/lib/ai-edition/timeline/aggregated-transcript";
 import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatMs } from "@/lib/ai-edition/timeline/format";
-import { locateVirtualPosition } from "@/lib/ai-edition/timeline/virtual-preview";
-import type { TranscriptGateReason } from "@/lib/ai-edition/transcription/status";
+import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
+import type {
+	AssetTranscriptionView,
+	TranscriptGateReason,
+} from "@/lib/ai-edition/transcription/status";
 import { getAssetPath } from "@/lib/assetPath";
 import { resolveWebcamLayoutPreset, supportsWebcamReactiveZoom } from "@/lib/compositeLayout";
 import { supportsCursorClickEffects } from "@/lib/cursor/cursorCapabilities";
-import { CURSOR_THEMES, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
+import {
+	CURSOR_THEMES,
+	DEFAULT_CURSOR_THEME_ID,
+	themePickerPreviewAssets,
+} from "@/lib/cursor/cursorThemes";
 import { buildGradientFromEditor } from "@/lib/gradientBuilder";
 import {
 	classifyWallpaper,
@@ -80,25 +105,47 @@ import {
 	type AspectRatio,
 	getAspectRatioLabel,
 } from "@/utils/aspectRatioUtils";
+import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
+import { CaptionsPane } from "./CaptionsPane";
+import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
+import { useTranscriptionLabel } from "./TranscriptionStatus";
+import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
 
 interface PaneProps {
 	title: string;
 	icon: ReactNode;
 	// P3.3 — contextual help shown in a popover when the ? button is clicked.
 	helpText: string;
+	// A control that belongs to the pane as a whole rather than to any one of its
+	// rows, sitting left of the Help button.
+	actions?: ReactNode;
+	onClose?: () => void;
 	children: ReactNode;
 }
 
-function Pane({ title, icon, helpText, children }: PaneProps) {
+function Pane({ title, icon, helpText, actions, onClose, children }: PaneProps) {
 	const ts = useScopedT("settings");
+	const tc = useScopedT("common");
 	const helpLabel = ts("panes.help");
 	const [helpOpen, setHelpOpen] = useState(false);
 	return (
 		<div className={`${styles.pane} ${styles.isActive}`}>
-			<header className={styles.paneHead} style={{ position: "relative" }}>
+			<header
+				className={styles.paneHead}
+				style={{
+					position: "relative",
+					...(onClose ? { paddingRight: "var(--sp-4)" } : {}),
+				}}
+			>
+				{icon ? (
+					<span style={{ display: "inline-flex", alignItems: "center", color: "var(--muted)" }}>
+						{icon}
+					</span>
+				) : null}
 				<h2>{title}</h2>
-				<span style={{ marginLeft: "auto", display: "inline-flex", gap: 4 }}>
+				<span style={{ marginLeft: "auto", display: "inline-flex", gap: 4, alignItems: "center" }}>
+					{actions}
 					<button
 						type="button"
 						className={styles.iconBtn}
@@ -109,8 +156,18 @@ function Pane({ title, icon, helpText, children }: PaneProps) {
 					>
 						<HelpCircle size={14} />
 					</button>
+					{onClose ? (
+						<button
+							type="button"
+							className={styles.iconBtn}
+							title={tc("actions.close")}
+							aria-label={tc("actions.close")}
+							onClick={onClose}
+						>
+							<X size={14} />
+						</button>
+					) : null}
 				</span>
-				<span style={{ display: "none" }}>{icon}</span>
 				{helpOpen ? (
 					<div
 						role="note"
@@ -214,60 +271,22 @@ export function isSupportedBackgroundImage(type: string, fileName: string): bool
 	return IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension));
 }
 
-// Wallpaper picker — image / solid color / gradient tabs.
-//
-// Wallpapers round-trip through the legacyEditor envelope exactly as they did
-// in the v2 editor: gradient strings stay as-is, colors as `#hex`, and image
-// paths are restricted to `/wallpapers/...` or the user's own data: URLs from
-// the upload custom flow.
-function BackgroundSection() {
+/**
+ * The "upload custom wallpaper" concern: a hidden `<input type=file>` plus the reader
+ * that turns the pick into a `data:` URL.
+ *
+ * A hook rather than part of `WallpaperPicker` because WHERE the input may be mounted is
+ * the caller's problem. `BackgroundSection` renders the picker inside a Popover, and
+ * opening the OS file dialog takes focus, which closes the Popover — an input mounted
+ * inside it would unmount mid-pick and drop the file. That caller mounts `input` outside
+ * the Popover; inline callers mount it next to the picker.
+ */
+function useWallpaperFileInput(onPicked: (dataUrl: string) => void): {
+	pick: () => void;
+	input: ReactNode;
+} {
 	const ts = useScopedT("settings");
-	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
-	const [pickerOpen, setPickerOpen] = useState(false);
-	// Seeded from what the project is actually using, so the picker opens on the tab the
-	// user is already in rather than always on Image.
-	const [tab, setTab] = useState<"image" | "color" | "gradient">(
-		() => classifyWallpaper(settings.wallpaper).kind,
-	);
-	const fileInputRef = useRef<HTMLInputElement | null>(null);
-	const customUrls = useMemoCustomWallpapers(settings.wallpaper);
-
-	// The custom gradient editor emits continuously while the user drags a
-	// color point / angle knob / brightness slider, so mirror the SliderCell
-	// model: preview live with setLive, then persist once the changes settle.
-	const gradientCommitTimer = useRef<number | null>(null);
-	const handleGradientChange = useCallback(
-		(state: GradientEditorState) => {
-			setLive({ wallpaper: buildGradientFromEditor(state) });
-			if (gradientCommitTimer.current !== null) {
-				window.clearTimeout(gradientCommitTimer.current);
-			}
-			gradientCommitTimer.current = window.setTimeout(() => {
-				gradientCommitTimer.current = null;
-				void commit();
-			}, 400);
-		},
-		[setLive, commit],
-	);
-	useEffect(
-		() => () => {
-			if (gradientCommitTimer.current !== null) {
-				window.clearTimeout(gradientCommitTimer.current);
-			}
-		},
-		[],
-	);
-
-	const isSelected = (value: string) => settings.wallpaper === value;
-
-	const handleTabChange = (next: "image" | "color" | "gradient") => {
-		setTab(next);
-	};
-
-	const handlePickFile = () => {
-		if (!hasDocument) return;
-		fileInputRef.current?.click();
-	};
+	const ref = useRef<HTMLInputElement | null>(null);
 
 	const handleFileSelected = (e: ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
@@ -284,11 +303,39 @@ function BackgroundSection() {
 				toast.error(ts("background.imageReadFailed"));
 				return;
 			}
-			void set({ wallpaper: dataUrl });
+			onPicked(dataUrl);
 		};
 		reader.onerror = () => toast.error(ts("background.imageReadFailed"));
 		reader.readAsDataURL(file);
 	};
+
+	return {
+		pick: () => ref.current?.click(),
+		input: (
+			<input
+				ref={ref}
+				type="file"
+				accept={IMAGE_ACCEPT}
+				style={{ display: "none" }}
+				onChange={handleFileSelected}
+			/>
+		),
+	};
+}
+
+// Wallpaper picker — image / solid color / gradient tabs.
+//
+// Wallpapers round-trip through the legacyEditor envelope exactly as they did
+// in the v2 editor: gradient strings stay as-is, colors as `#hex`, and image
+// paths are restricted to `/wallpapers/...` or the user's own data: URLs from
+// the upload custom flow.
+function BackgroundSection() {
+	const ts = useScopedT("settings");
+	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const [pickerOpen, setPickerOpen] = useState(false);
+	const { pick: handlePickFile, input: fileInput } = useWallpaperFileInput((dataUrl) =>
+		set({ wallpaper: dataUrl }),
+	);
 
 	return (
 		<>
@@ -328,117 +375,21 @@ function BackgroundSection() {
 					className="w-auto border-0 bg-transparent p-0 shadow-none"
 				>
 					<div className={styles.bgPopover}>
-						{/* role="tab" + aria-selected are what make the tablist above mean
-						    anything: without them a screen reader announces three plain
-						    buttons and never says which one is current. */}
-						<div className={styles.paneTabs} role="tablist">
-							<button
-								type="button"
-								role="tab"
-								aria-selected={tab === "image"}
-								className={tab === "image" ? styles.isActive : ""}
-								onClick={() => handleTabChange("image")}
-							>
-								{ts("background.image")}
-							</button>
-							<button
-								type="button"
-								role="tab"
-								aria-selected={tab === "color"}
-								className={tab === "color" ? styles.isActive : ""}
-								onClick={() => handleTabChange("color")}
-							>
-								{ts("background.color")}
-							</button>
-							<button
-								type="button"
-								role="tab"
-								aria-selected={tab === "gradient"}
-								className={tab === "gradient" ? styles.isActive : ""}
-								onClick={() => handleTabChange("gradient")}
-							>
-								{ts("background.gradient")}
-							</button>
-						</div>
-						{tab === "image" ? (
-							<>
-								<button
-									type="button"
-									className={styles.uploadBtn}
-									disabled={!hasDocument}
-									onClick={handlePickFile}
-								>
-									{ts("background.uploadCustom")}
-								</button>
-								<div className={styles.bgGrid}>
-									{customUrls.map((url) => (
-										<button
-											type="button"
-											key={`custom-${url.slice(-32)}`}
-											className={`${styles.bgThumb} ${isSelected(url) ? styles.isActive : ""}`}
-											style={{ background: `center/cover no-repeat url(${url})` }}
-											aria-label={ts("background.customWallpaper")}
-											disabled={!hasDocument}
-											onClick={() => void set({ wallpaper: url })}
-										/>
-									))}
-									{WALLPAPER_PATHS.map((path, i) => {
-										// Grid swatch paints the small pre-generated thumbnail (see
-										// WALLPAPER_THUMB_PATHS) — selecting it still stores/applies `path`,
-										// the full-res original, unchanged.
-										const previewUrl = resolveImageWallpaperUrl(WALLPAPER_THUMB_PATHS[i]);
-										return (
-											<button
-												type="button"
-												key={path}
-												className={`${styles.bgThumb} ${isSelected(path) ? styles.isActive : ""}`}
-												style={{ background: `center/cover no-repeat url(${previewUrl})` }}
-												aria-label={ts("background.imageLabel", { index: i + 1 })}
-												disabled={!hasDocument}
-												onClick={() => void set({ wallpaper: path })}
-											/>
-										);
-									})}
-								</div>
-							</>
-						) : tab === "color" ? (
-							<BackgroundColorTab
-								value={settings.wallpaper}
-								hasDocument={hasDocument}
-								isSelected={isSelected}
-								onPick={(color) => void set({ wallpaper: color })}
-							/>
-						) : (
-							<>
-								<div className={styles.bgGrid}>
-									{GRAD_PRESETS.map((bg, i) => (
-										<button
-											type="button"
-											key={bg}
-											className={`${styles.bgThumb} ${isSelected(bg) ? styles.isActive : ""}`}
-											style={{ background: bg }}
-											aria-label={ts("background.gradientLabel", { index: i + 1 })}
-											disabled={!hasDocument}
-											onClick={() => void set({ wallpaper: bg })}
-										/>
-									))}
-								</div>
-								{hasDocument ? <GradientEditor onChange={handleGradientChange} /> : null}
-							</>
-						)}
+						<WallpaperPicker
+							value={settings.wallpaper}
+							hasDocument={hasDocument}
+							onChange={(url) => void set({ wallpaper: url })}
+							onLiveChange={(url) => setLive({ wallpaper: url })}
+							onCommit={commit}
+							onPickFile={handlePickFile}
+						/>
 					</div>
 				</PopoverContent>
 			</Popover>
 			{/* Stays mounted OUTSIDE the popover: opening the OS file dialog takes focus,
 			    which closes the popover and would unmount the input mid-pick, dropping the
 			    file. It has no layout to cost us here. */}
-			<input
-				ref={fileInputRef}
-				type="file"
-				accept={IMAGE_ACCEPT}
-				style={{ display: "none" }}
-				onChange={handleFileSelected}
-			/>
+			{fileInput}
 			{/* Reads in the order it acts: pick a background, then blur it. Lived under
 			    "Effects" while that was a separate facet, which is how a control named
 			    "Blur BG" ended up in the tab that doesn't say background. */}
@@ -502,16 +453,26 @@ function useMemoCustomWallpapers(current: string): string[] {
 	return cached;
 }
 
+function normaliseHex(raw: string): string | null {
+	const trimmed = raw.trim();
+	if (!trimmed) return null;
+	const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+	if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(withHash)) return null;
+	return withHash.toLowerCase();
+}
+
 function BackgroundColorTab({
 	value,
 	hasDocument,
 	isSelected,
 	onPick,
+	updateNative = true,
 }: {
 	value: string;
 	hasDocument: boolean;
 	isSelected: (v: string) => boolean;
 	onPick: (next: string) => void;
+	updateNative?: boolean;
 }) {
 	const ts = useScopedT("settings");
 	const [hexDraft, setHexDraft] = useState(value.startsWith("#") ? value : "#000000");
@@ -522,7 +483,7 @@ function BackgroundColorTab({
 		const next = normaliseHex(hexDraft);
 		if (next) {
 			onPick(next);
-			if (isNativeCompositorActive()) {
+			if (updateNative && isNativeCompositorActive()) {
 				setNativeParam("backgroundColor", next);
 			}
 		}
@@ -540,7 +501,7 @@ function BackgroundColorTab({
 						disabled={!hasDocument}
 						onClick={() => {
 							onPick(c);
-							if (isNativeCompositorActive()) {
+							if (updateNative && isNativeCompositorActive()) {
 								setNativeParam("backgroundColor", c);
 							}
 						}}
@@ -595,22 +556,173 @@ function BackgroundColorTab({
 	);
 }
 
-function normaliseHex(raw: string): string | null {
-	const trimmed = raw.trim();
-	if (!trimmed) return null;
-	const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
-	if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(withHash)) return null;
-	return withHash.toLowerCase();
+export interface WallpaperPickerProps {
+	value: string;
+	hasDocument: boolean;
+	onChange: (val: string) => void;
+	onLiveChange?: (val: string) => void;
+	onCommit?: () => void;
+	updateNativeBackground?: boolean;
+	/** Opens the OS file dialog. The hidden `<input>` it clicks belongs to the caller
+	 *  (see `useWallpaperFileInput`): where it may be mounted depends on the caller. */
+	onPickFile: () => void;
 }
 
-/** Which clip a transcript cut lands on. The clip id is what makes the cut land on ONE
- *  block: two clips over the same media share an asset and a source range, so an
- *  asset-only target had the trim show up on both of them (and on the wrong one in the
- *  ruler). See `trimAppliesToClip`. */
-export interface TrimTarget {
-	assetId: string;
-	clipId: string;
+export function WallpaperPicker({
+	value,
+	hasDocument,
+	onChange,
+	onLiveChange,
+	onCommit,
+	updateNativeBackground = true,
+	onPickFile,
+}: WallpaperPickerProps) {
+	const ts = useScopedT("settings");
+	// Seeded from what is actually in use, so the picker opens on the tab the user is
+	// already in rather than always on Image.
+	const [tab, setTab] = useState<"image" | "color" | "gradient">(
+		() => classifyWallpaper(value).kind,
+	);
+	const customUrls = useMemoCustomWallpapers(value);
+
+	const gradientCommitTimer = useRef<number | null>(null);
+	const handleGradientChange = useCallback(
+		(state: GradientEditorState) => {
+			const grad = buildGradientFromEditor(state);
+			if (onLiveChange) onLiveChange(grad);
+			else onChange(grad);
+			if (gradientCommitTimer.current !== null) {
+				window.clearTimeout(gradientCommitTimer.current);
+			}
+			gradientCommitTimer.current = window.setTimeout(() => {
+				gradientCommitTimer.current = null;
+				if (onCommit) void onCommit();
+			}, 400);
+		},
+		[onChange, onLiveChange, onCommit],
+	);
+	useEffect(
+		() => () => {
+			if (gradientCommitTimer.current !== null) {
+				window.clearTimeout(gradientCommitTimer.current);
+			}
+		},
+		[],
+	);
+
+	const isSelected = (candidate: string) => value === candidate;
+
+	const handleTabChange = (next: "image" | "color" | "gradient") => {
+		setTab(next);
+	};
+
+	return (
+		<>
+			{/* role="tab" + aria-selected are what make the tablist mean anything: without
+			    them a screen reader announces three plain buttons and never says which one
+			    is current. */}
+			<div className={styles.paneTabs} role="tablist">
+				<button
+					type="button"
+					role="tab"
+					aria-selected={tab === "image"}
+					className={tab === "image" ? styles.isActive : ""}
+					onClick={() => handleTabChange("image")}
+				>
+					{ts("background.image")}
+				</button>
+				<button
+					type="button"
+					role="tab"
+					aria-selected={tab === "color"}
+					className={tab === "color" ? styles.isActive : ""}
+					onClick={() => handleTabChange("color")}
+				>
+					{ts("background.color")}
+				</button>
+				<button
+					type="button"
+					role="tab"
+					aria-selected={tab === "gradient"}
+					className={tab === "gradient" ? styles.isActive : ""}
+					onClick={() => handleTabChange("gradient")}
+				>
+					{ts("background.gradient")}
+				</button>
+			</div>
+			{tab === "image" ? (
+				<>
+					<button
+						type="button"
+						className={styles.uploadBtn}
+						disabled={!hasDocument}
+						onClick={onPickFile}
+					>
+						{ts("background.uploadCustom")}
+					</button>
+					<div className={styles.bgGrid}>
+						{customUrls.map((url) => (
+							<button
+								type="button"
+								key={`custom-${url.slice(-32)}`}
+								className={`${styles.bgThumb} ${isSelected(url) ? styles.isActive : ""}`}
+								style={{ background: `center/cover no-repeat url(${url})` }}
+								aria-label={ts("background.customWallpaper")}
+								disabled={!hasDocument}
+								onClick={() => onChange(url)}
+							/>
+						))}
+						{WALLPAPER_PATHS.map((path, i) => {
+							const previewUrl = resolveImageWallpaperUrl(WALLPAPER_THUMB_PATHS[i]);
+							return (
+								<button
+									type="button"
+									key={path}
+									className={`${styles.bgThumb} ${isSelected(path) ? styles.isActive : ""}`}
+									style={{ background: `center/cover no-repeat url(${previewUrl})` }}
+									aria-label={ts("background.imageLabel", { index: i + 1 })}
+									disabled={!hasDocument}
+									onClick={() => onChange(path)}
+								/>
+							);
+						})}
+					</div>
+				</>
+			) : tab === "color" ? (
+				<BackgroundColorTab
+					value={value}
+					hasDocument={hasDocument}
+					isSelected={isSelected}
+					onPick={(color) => onChange(color)}
+					updateNative={updateNativeBackground}
+				/>
+			) : (
+				<>
+					<div className={styles.bgGrid}>
+						{GRAD_PRESETS.map((bg, i) => (
+							<button
+								type="button"
+								key={bg}
+								className={`${styles.bgThumb} ${isSelected(bg) ? styles.isActive : ""}`}
+								style={{ background: bg }}
+								aria-label={ts("background.gradientLabel", { index: i + 1 })}
+								disabled={!hasDocument}
+								onClick={() => onChange(bg)}
+							/>
+						))}
+					</div>
+					{hasDocument ? <GradientEditor onChange={handleGradientChange} /> : null}
+				</>
+			)}
+		</>
+	);
 }
+
+// No `TrimTarget`. A cut used to name the thing it belonged to — an asset and a clip —
+// which is how a cut authored from the voiceover lane came to be anchored on an audio
+// FRAGMENT, where it removed precisely nothing while the word turned red (issue #560).
+// A cut names a stretch of the RAW ruler; which clips carry it is worked out at the write
+// site, from the clips actually under it.
 
 // ─── Transcript ────────────────────────────────────────────────────
 // Aggregated transcript view: one contentEditable region per clip on the
@@ -635,21 +747,119 @@ export interface TrimTarget {
 // needed no change beyond the ids they are handed.
 //
 // Mirrors axcut's apps/web/src/components/CurrentTranscriptView.tsx.
+/**
+ * Which lane's speech the transcript is read from (issue #560).
+ *
+ * Shown only when there is a voiceover to switch TO. A one-sided switch is worse
+ * than no switch: it asks a question about a lane the project does not have, and
+ * every project that never imports audio would carry it forever.
+ *
+ * A control, not a filter. Everything downstream — word edits, trims, the agent's
+ * grounding, captions — consumes the aggregate, so this changes what the whole tab
+ * IS rather than hiding part of it.
+ */
+function TranscriptLaneSwitch({
+	lane,
+	onChange,
+}: {
+	lane: TranscriptLane;
+	onChange: (lane: TranscriptLane) => void;
+}) {
+	const ts = useScopedT("settings");
+	return (
+		<>
+			<div className={styles.laneSwitch} role="group" aria-label={ts("transcript.laneLabel")}>
+				<button
+					type="button"
+					className={`${styles.laneSwitchBtn} ${lane === "recording" ? styles.isActive : ""}`}
+					aria-pressed={lane === "recording"}
+					onClick={() => onChange("recording")}
+				>
+					<Video size={13} />
+					{ts("transcript.laneRecording")}
+				</button>
+				<button
+					type="button"
+					className={`${styles.laneSwitchBtn} ${lane === "voiceover" ? styles.isActive : ""}`}
+					aria-pressed={lane === "voiceover"}
+					onClick={() => onChange("voiceover")}
+				>
+					<Mic size={13} />
+					{ts("transcript.laneVoiceover")}
+				</button>
+			</div>
+			{/* Said out loud, because the choice reaches further than this tab: it decides the
+		    text burnt into the exported file. A user must never be surprised by which
+		    lane their captions came from. */}
+			<p className={styles.laneSwitchNote}>{ts("transcript.laneFeedsCaptions")}</p>
+		</>
+	);
+}
+
+/**
+ * Caption settings, reached from the transcript tab (issue #560).
+ *
+ * The pane is reused VERBATIM rather than rebuilt into a popover body: it is ~600
+ * lines of settings that already work, and "make it a popover" is a question about
+ * where it is mounted, not about what it contains. Rebuilding it would have been the
+ * one reliable way to arrive at a popover that is not at parity with the tab it
+ * replaces.
+ *
+ * Safe inside a Popover specifically because nothing in it takes focus away — no file
+ * input, no OS dialog. That is the trap `useWallpaperFileInput` documents above, and
+ * it is worth re-checking if a picker is ever added to captions.
+ */
+function CaptionSettingsButton() {
+	const ts = useScopedT("settings");
+	const [open, setOpen] = useState(false);
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<button type="button" className={styles.paneHeadBtn} aria-expanded={open}>
+					<CaptionsIcon size={14} />
+					{ts("facets.captions")}
+				</button>
+			</PopoverTrigger>
+			<PopoverContent
+				align="end"
+				side="bottom"
+				sideOffset={8}
+				collisionPadding={16}
+				animated={false}
+				className="w-auto border-0 bg-transparent p-0 shadow-none z-50"
+			>
+				<div className={styles.captionsPopover}>
+					<CaptionsPane onClose={() => setOpen(false)} />
+				</div>
+			</PopoverContent>
+		</Popover>
+	);
+}
+
 export function TranscriptPane({
 	clips,
+	audioTracks,
 	transcripts,
 	assets,
 	trimRanges,
 	busyAssetIds,
+	transcriptions,
+	busyView,
 	onSeek,
-	onAddTrimRange,
-	onRemoveTrimRange,
+	onTrimTimelineSpan,
+	onRemoveTrimRanges,
+	onSetWordText,
+	onInsertWord,
+	onRemoveWords,
 	onTranscribe,
 	canTranscribe,
 	isTranscribing,
 	blocked,
 }: {
 	clips: AxcutClip[];
+	/** Every audio track on the timeline. Only the voiceover ones can be read from;
+	 *  music is not transcribed at all, so it never becomes a lane to choose. */
+	audioTracks: AxcutAudioTrack[];
 	transcripts: AxcutTranscript[];
 	assets: AxcutAsset[];
 	trimRanges: AxcutTrimRange[];
@@ -659,9 +869,24 @@ export function TranscriptPane({
 	 *  stream silently swallow Backspace and hover-bin clicks for the whole
 	 *  background pass, with nothing on screen to say why. */
 	busyAssetIds: readonly string[];
+	transcriptions?: Record<string, AssetTranscriptionView>;
+	/** First busy view over the TIMELINE's assets (same scope as `blocked` and
+	 *  `isTranscribing`) — the pane-level label reads this, never the whole
+	 *  `transcriptions` record, so an off-timeline job cannot relabel controls
+	 *  the gate keeps enabled. */
+	busyView?: AssetTranscriptionView;
 	onSeek: (sec: number) => void;
-	onAddTrimRange: (target: TrimTarget, startSec: number, endSec: number, reason: string) => void;
-	onRemoveTrimRange: (trimId: string) => void;
+	onTrimTimelineSpan: (startSec: number, endSec: number, reason: string) => void;
+	onRemoveTrimRanges: (trimIds: string[]) => void;
+	/** Rewrite ONE word's text. Takes the bare `AxcutWord.id`, never the clip-scoped
+	 *  `ClipWord.id`: the transcript belongs to the asset, so a correction lands on the
+	 *  media and shows on every clip that plays it — which is the point. */
+	onSetWordText: (assetId: string, wordId: string, text: string) => void;
+	/** Add a word nobody said, beside the word the caret was resting on. Bare id, as above. */
+	onInsertWord: (assetId: string, anchorWordId: string, side: InsertSide, text: string) => void;
+	/** Delete inserted words. Only ever called with `source: "synth"` ids — a transcribed
+	 *  word is cut with a trim, never deleted. */
+	onRemoveWords: (assetId: string, wordIds: string[]) => void;
 	onTranscribe: () => void;
 	canTranscribe: boolean;
 	isTranscribing: boolean;
@@ -678,42 +903,82 @@ export function TranscriptPane({
 	// on `cueWordId`, so a frame that doesn't cross a word boundary re-renders nothing
 	// but this component's own (cheap) lookup.
 	const currentTimeSec = useProjectStore((s) => s.currentTimeSec);
+
+	// Stored in the document, through the caption settings (issue #560). It was local
+	// state until the captions had to follow it — and the captions are burnt into the
+	// exported file by a path that never runs React, so a lane living here would caption
+	// the preview from one lane and the export from the other.
+	//
+	// `resolveCaptionLane` carries the fallback, in the pure layer for the same reason:
+	// deleting the last voiceover pill while reading it must not leave the pane, the
+	// preview and the exporter disagreeing about which lane that project has.
+	const { settings: captionSettings, set: setCaptionSettings } = useCaptions();
+	const document = useProjectStore((s) => s.document);
+	// From the RECORDING clips and the whole trim set, never from `placements`: the
+	// programme is one thing, and the voiceover lane is asking whether the film still
+	// contains a moment — not whether some trim happens to name an audio fragment.
+	const removed = useMemo(() => removedRawSpans(clips, trimRanges), [clips, trimRanges]);
+	// The take's placements are fed the cuts AND its own insertions, so a word after a pause
+	const voiceover = useMemo(
+		() => voiceoverPlacements(audioTracks, removed),
+		[audioTracks, removed],
+	);
+	const activeLane = resolveCaptionLane(document, captionSettings);
+	const setLane = useCallback(
+		(captionLane: TranscriptLane) => {
+			void setCaptionSettings({ captionLane });
+		},
+		[setCaptionSettings],
+	);
+	const placements = activeLane === "voiceover" ? voiceover : clips;
+
 	const sections = useMemo(
-		() => buildAggregatedSections(clips, transcripts, assets, trimRanges),
-		[clips, transcripts, assets, trimRanges],
+		() => buildAggregatedSections(placements, transcripts, assets, removed),
+		[placements, transcripts, assets, removed],
 	);
 
-	// the cue position is the playback head's location in the current clip's source time.
 	// `currentTimeSec` is the RAW/document timeline (same referential as the ruler, see
-	// NewEditorShell) — looked up against the raw `clips`, matching that referential.
-	// `clipId` is what `findCueWordId` keys on — do NOT drop it as unused: source time is
-	// per asset, so without it the resolver falls back to the first section of the asset
-	// and the cue tracks clip 1 forever on a timeline that plays one media twice.
-	const cue = useMemo(() => {
-		if (clips.length === 0) return null;
-		const position = locateVirtualPosition(clips, currentTimeSec);
-		if (!position) return null;
-		return {
-			assetId: position.clip.assetId,
-			clipId: position.clip.id,
-			sourceTimeSec: position.sourceTimeSec,
-		};
-	}, [clips, currentTimeSec]);
+	// NewEditorShell), which is exactly what `findCueWordId` now takes. It used to be
+	// resolved through `locateVirtualPosition` into a clip id + source second, and a clip
+	// id is something only the recording lane has — so the voiceover lane never
+	// highlighted. Raw seconds are the coordinate both lanes share.
+	const cueWordId = useMemo(
+		() => findCueWordId(sections, currentTimeSec),
+		[sections, currentTimeSec],
+	);
 
-	const cueWordId = useMemo(() => findCueWordId(sections, cue), [sections, cue]);
-
-	const hasAnyTranscript = transcripts.length > 0;
+	const laneSwitch =
+		voiceover.length > 0 ? <TranscriptLaneSwitch lane={activeLane} onChange={setLane} /> : null;
+	// Asked of the LANE, not the document: a project with a recording transcript and a
+	// freshly imported voiceover has transcripts, and the voiceover lane still has
+	// nothing to show — the empty state is what says so.
+	const hasAnyTranscript = sections.some((section) => section.transcript !== null);
 	// Only silence is a dead end: every other reason (a retryable failure, no
 	// engine, nothing attempted) leaves the button worth pressing.
 	const silentMedia = blocked?.reason === "no-audio";
+	const transcriptionLabel = useTranscriptionLabel();
+	const paneBusyLabel = transcriptionBusyLabel(
+		busyView ??
+			(isTranscribing ? { assetId: "", status: "running", phase: "loading-model" } : undefined),
+		transcriptionLabel,
+	);
 
-	if (clips.length === 0 || !hasAnyTranscript) {
+	// The insert gesture is dev-only until TTS (see openInsertion), so the copy follows
+	// the same gate: release builds must not advertise a dead gesture.
+	const helpText = ts("transcript.help");
+	const editingHint = ts(
+		insertionsEnabled() ? "transcript.editingHintDev" : "transcript.editingHint",
+	);
+
+	if (placements.length === 0 || !hasAnyTranscript) {
 		return (
 			<Pane
 				title={ts("transcript.title")}
 				icon={<FileText size={14} />}
-				helpText={ts("transcript.help")}
+				helpText={helpText}
+				actions={<CaptionSettingsButton />}
 			>
+				{laneSwitch}
 				<div
 					style={{
 						display: "flex",
@@ -728,10 +993,10 @@ export function TranscriptPane({
 				>
 					<FileText size={28} style={{ color: "var(--dim)" }} />
 					<p style={{ font: "500 13px var(--font-body)", color: "var(--fg-2)" }}>
-						{clips.length === 0
+						{placements.length === 0
 							? ts("transcript.noClips")
 							: isTranscribing
-								? ts("transcript.transcribing")
+								? (paneBusyLabel ?? ts("transcript.transcribing"))
 								: silentMedia
 									? ts("transcript.noAudio")
 									: ts("transcript.noTranscript")}
@@ -749,7 +1014,7 @@ export function TranscriptPane({
 						// fail on the same missing track every time.
 						disabled={!canTranscribe || isTranscribing || silentMedia}
 					>
-						{isTranscribing ? ts("transcript.transcribing") : ts("transcript.transcribeNow")}
+						{paneBusyLabel ?? ts("transcript.transcribeNow")}
 					</button>
 				</div>
 			</Pane>
@@ -757,25 +1022,46 @@ export function TranscriptPane({
 	}
 
 	return (
-		<div className={`${styles.pane} ${styles.isActive}`}>
-			<header className={styles.paneHead}>
-				<h2>{ts("transcript.title")}</h2>
-			</header>
-			<div className={styles.paneBody}>
-				{sections.map((section, idx) => (
-					<TranscriptClipBlock
-						key={section.clip.id}
-						index={idx}
-						section={section}
-						busy={busyAssetIds.includes(section.clip.assetId)}
-						cueWordId={cueWordId}
-						onSeek={onSeek}
-						onAddTrimRange={onAddTrimRange}
-						onRemoveTrimRange={onRemoveTrimRange}
-					/>
-				))}
-			</div>
-		</div>
+		<Pane
+			title={ts("transcript.title")}
+			icon={<FileText size={14} />}
+			helpText={helpText}
+			actions={<CaptionSettingsButton />}
+		>
+			{laneSwitch}
+			{/* The gestures are invisible until tried: nothing on a plain word stream says
+			 * that double-click corrects and Backspace cuts. One muted line names them; the
+			 * ? popover above carries the long version (amber inserts, hover-bin restore). */}
+			<p
+				style={{
+					margin: 0,
+					padding: "2px 4px 6px",
+					font: "400 12px/1.5 var(--font-body)",
+					color: "var(--muted)",
+				}}
+			>
+				{editingHint}
+			</p>
+			{sections.map((section, idx) => (
+				<TranscriptClipBlock
+					key={section.clip.id}
+					index={idx}
+					section={section}
+					busy={busyAssetIds.includes(section.clip.assetId)}
+					busyLabel={
+						transcriptionBusyLabel(transcriptions?.[section.clip.assetId], transcriptionLabel) ??
+						undefined
+					}
+					cueWordId={cueWordId}
+					onSeek={onSeek}
+					onTrimTimelineSpan={onTrimTimelineSpan}
+					onRemoveTrimRanges={onRemoveTrimRanges}
+					onSetWordText={onSetWordText}
+					onInsertWord={onInsertWord}
+					onRemoveWords={onRemoveWords}
+				/>
+			))}
+		</Pane>
 	);
 }
 
@@ -783,7 +1069,7 @@ export function TranscriptPane({
 // range) and a flowing word stream. The stream contains every transcript
 // word inside the clip's source range, color-coded by whether the word
 // is inside any trimRange. Backspace/Delete adds a new trimRange via
-// onAddTrimRange; hover-bin on a skip run removes it via onRemoveTrimRange.
+// onTrimTimelineSpan; hover-bin on a skip run removes it via onRemoveTrimRanges.
 //
 // `memo` matters here: this renders one DOM node per transcript word, and its
 // parent now re-renders on every playhead tick (~60×/s during playback). The only
@@ -795,26 +1081,46 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 	index,
 	section,
 	busy,
+	busyLabel,
 	cueWordId,
 	onSeek,
-	onAddTrimRange,
-	onRemoveTrimRange,
+	onTrimTimelineSpan,
+	onRemoveTrimRanges,
+	onSetWordText,
+	onInsertWord,
+	onRemoveWords,
 }: {
 	index: number;
 	section: ClipSection;
 	busy: boolean;
+	busyLabel?: string;
 	cueWordId: string | null;
 	onSeek: (sec: number) => void;
-	onAddTrimRange: (target: TrimTarget, startSec: number, endSec: number, reason: string) => void;
-	onRemoveTrimRange: (trimId: string) => void;
+	onTrimTimelineSpan: (startSec: number, endSec: number, reason: string) => void;
+	onRemoveTrimRanges: (trimIds: string[]) => void;
+	onSetWordText: (assetId: string, wordId: string, text: string) => void;
+	onInsertWord: (assetId: string, anchorWordId: string, side: InsertSide, text: string) => void;
+	onRemoveWords: (assetId: string, wordIds: string[]) => void;
 }) {
 	const ts = useScopedT("settings");
 	const { clip, asset, words } = section;
 	// Memoised: `TranscriptWord` renders once per word, so a fresh object literal here
 	// would break referential equality for the whole stream on every parent render.
-	const trimTarget = useMemo<TrimTarget>(
-		() => ({ assetId: clip.assetId, clipId: clip.id }),
-		[clip.assetId, clip.id],
+	// A cut is authored in RAW seconds, CLAMPED to this placement's own extent.
+	// `wordsInRange` admits a word by OVERLAP and consecutive fragments have touching
+	// source windows, so a word straddling an edge would otherwise produce a span reaching
+	// past this placement — and `ventilateTimelineSpanToTrims` walks every clip a span
+	// touches, so the overspill would cut the head of a neighbouring clip that has nothing
+	// to do with the word the user deleted.
+	const toRawSpan = useCallback(
+		(startSec: number, endSec: number): [number, number] => {
+			const extent = placementRawExtent(clip);
+			const lo = extent?.startSec ?? clip.timelineStartSec;
+			const hi = extent?.endSec ?? Number.POSITIVE_INFINITY;
+			const clamp = (sec: number) => Math.min(Math.max(placementRawSec(clip, sec), lo), hi);
+			return [clamp(startSec), clamp(endSec)];
+		},
+		[clip],
 	);
 	const filename = asset?.label ?? clip.assetId;
 	const sourceRangeLabel =
@@ -879,25 +1185,38 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 			// Only skip words that are currently kept (don't double-skip).
 			const keptRange = rangeWords.filter((w) => w.kept);
 			if (keptRange.length === 0) return;
+			// An inserted word has no audio to cut, so Backspace deletes it outright. Only a
+			// range made entirely of inserts takes this path: mixed with spoken words the trim
+			// covers them anyway — they sit inside its span and read as cut, which is what the
+			// keystroke asked for.
+			if (keptRange.every((w) => isInsertedWord(w.word))) {
+				onRemoveWords(
+					clip.assetId,
+					keptRange.map((w) => w.word.id),
+				);
+				return;
+			}
 			pendingCaretWordIdRef.current = keptRange[0].id;
 			const startSec = Math.min(...keptRange.map((w) => w.word.startSec));
 			const endSec = Math.max(...keptRange.map((w) => w.word.endSec));
-			onAddTrimRange(
-				trimTarget,
-				startSec,
-				endSec,
+			onTrimTimelineSpan(
+				...toRawSpan(startSec, endSec),
 				`Skip ${formatMs(startSec * 1000)}-${formatMs(endSec * 1000)} from ${clip.assetId}.`,
 			);
 		},
-		[busy, clip.assetId, trimTarget, onAddTrimRange],
+		[busy, clip.assetId, toRawSpan, onTrimTimelineSpan, onRemoveWords],
 	);
 
 	const removeTrimRun = useCallback(
 		(run: TrimRun) => {
-			if (busy || !run.trimId) return;
-			onRemoveTrimRange(run.trimId);
+			// An empty set is a gap between clips: removed from the film, but by nothing
+			// there is a pill for. Otherwise every row goes at once — a cut ventilated across
+			// a clip boundary is several rows and ONE pill, and dropping half of it would
+			// leave the word still cut with nothing left on screen to say so.
+			if (busy || run.trimIds.length === 0) return;
+			onRemoveTrimRanges(run.trimIds);
 		},
-		[busy, onRemoveTrimRange],
+		[busy, onRemoveTrimRanges],
 	);
 
 	const cutNativeSelection = useCallback(
@@ -952,29 +1271,94 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 		[cutNativeSelection],
 	);
 
-	const handleBeforeInput = useCallback(
-		(event: FormEvent<HTMLDivElement>) => {
-			const inputEvent = event.nativeEvent as InputEvent;
-			if (inputEvent.inputType.startsWith("delete")) {
-				event.preventDefault();
-				cutNativeSelection(
-					inputEvent.inputType === "deleteContentForward" ? "forward" : "backward",
-				);
-				return;
-			}
-			// typing/pasting free text is non-destructive by design
-			// (the user's transcript edits come via the Source Transcript
-			// modal, not here). Block inserts to keep the projection stable.
-			if (inputEvent.inputType === "insertText" || inputEvent.inputType === "insertFromPaste") {
-				event.preventDefault();
-			}
+	// The word an insert will sit beside, and what has been typed into it so far. Held on
+	// the block rather than the word, because the field belongs BETWEEN two words: the id is
+	// only how it finds its place in the stream.
+	const [insertion, setInsertion] = useState<{
+		clipWordId: string;
+		side: InsertSide;
+		draft: string;
+	} | null>(null);
+	const insertionAbandonedRef = useRef(false);
+
+	const openInsertion = useCallback(
+		(seed: string) => {
+			// The gesture, hidden. The shell refuses again where it would reach the document.
+			if (!insertionsEnabled()) return;
+			if (busy || !seed.trim()) return;
+			const editor = editorRef.current;
+			const selection = globalThis.getSelection();
+			if (!editor || !selection) return;
+			if (!editor.contains(selection.anchorNode)) return;
+			const caret = findInsertionAnchor(editor, selection.anchorNode, selection.anchorOffset);
+			if (!caret) return;
+			const anchor = resolveInsertionAnchor(words, caret.clipWordId, caret.side);
+			if (!anchor) return;
+			setInsertion({ ...anchor, draft: seed });
 		},
-		[cutNativeSelection],
+		[busy, words],
 	);
 
-	const handlePaste = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
-		event.preventDefault();
-	}, []);
+	const commitInsertion = useCallback(() => {
+		const pending = insertion;
+		setInsertion(null);
+		if (!pending) return;
+		const text = pending.draft.trim();
+		if (!text) return;
+		const anchor = words.find((w) => w.id === pending.clipWordId);
+		if (!anchor) return;
+		onInsertWord(clip.assetId, anchor.word.id, pending.side, text);
+	}, [insertion, words, onInsertWord, clip.assetId]);
+
+	// Attached to the DOM, not through React's `onBeforeInput`.
+	//
+	// React 18 does not build that synthetic event from the native `beforeinput`: it
+	// derives it from the legacy `textInput`, whose event object is a `TextEvent` and
+	// carries no `inputType` at all. So the guard that was supposed to keep typed text out
+	// of the projection threw `Cannot read properties of undefined (reading 'startsWith')`
+	// on every character, never reached its own `preventDefault`, and let the character
+	// land in the contentEditable — the exact desynchronisation between the DOM and `words`
+	// it was written to prevent. Verified in the browser before this was moved.
+	//
+	// The native event is a real `InputEvent`, its `inputType` is the thing both branches
+	// switch on, and preventing it actually stops the browser.
+	useEffect(() => {
+		const editor = editorRef.current;
+		if (!editor) return;
+		const onBeforeInput = (event: InputEvent) => {
+			// The word editor and the insertion field are `<input>`s INSIDE this element, so
+			// their own typing bubbles here natively — React's `stopPropagation` only ever
+			// stopped the synthetic tree. Their text is theirs.
+			if (event.target instanceof HTMLInputElement) return;
+			if (event.inputType.startsWith("delete")) {
+				event.preventDefault();
+				cutNativeSelection(event.inputType === "deleteContentForward" ? "forward" : "backward");
+				return;
+			}
+			// Free text never lands in the block itself: every run of text here maps back to a
+			// `transcript.words` entry by id, and typed characters have no id. What they open
+			// instead is a field beside the word the caret was on, whose commit creates a real
+			// word to hold them. So the gesture is the document one — put the caret somewhere
+			// and type — without the DOM ever getting ahead of `words`.
+			if (event.inputType.startsWith("insert")) {
+				event.preventDefault();
+				openInsertion(event.data ?? "");
+			}
+		};
+		editor.addEventListener("beforeinput", onBeforeInput);
+		return () => editor.removeEventListener("beforeinput", onBeforeInput);
+	}, [cutNativeSelection, openInsertion]);
+
+	const handlePaste = useCallback(
+		(event: ReactClipboardEvent<HTMLDivElement>) => {
+			// Handled here rather than through `insertFromPaste`: preventing the paste stops
+			// that beforeinput from ever firing, and this is the only place the clipboard text
+			// is still readable.
+			event.preventDefault();
+			openInsertion(event.clipboardData.getData("text/plain"));
+		},
+		[openInsertion],
+	);
 
 	const handlePointerUp = useCallback(
 		(event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1087,7 +1471,7 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 						}}
 					>
 						<Loader2 size={12} className="animate-spin" />
-						{ts("transcript.transcribing")}
+						{busyLabel ?? ts("transcript.transcribing")}
 					</span>
 				) : null}
 			</span>
@@ -1101,7 +1485,7 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 						fontStyle: "italic",
 					}}
 				>
-					{busy ? ts("transcript.transcribing") : ts("transcript.noClipTranscript")}
+					{busy ? (busyLabel ?? ts("transcript.transcribing")) : ts("transcript.noClipTranscript")}
 				</p>
 			) : (
 				<div
@@ -1115,11 +1499,13 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 					spellCheck={false}
 					aria-label={ts("transcript.editorAria", { filename })}
 					aria-multiline="true"
-					onBeforeInput={handleBeforeInput}
 					onKeyDown={handleKeyDown}
 					onPaste={handlePaste}
 					onPointerUp={handlePointerUp}
 					style={{
+						// Inline so a split clip reads as one sentence rather than one line per
+						// piece. The block that fronts a run still owns the header above it.
+						display: "inline",
 						padding: "4px 4px",
 						font: "400 13px/1.65 var(--font-body)",
 						color: "var(--fg)",
@@ -1137,16 +1523,39 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 						// scrollbar that breaks the cue auto-scroll UX.
 					}}
 				>
-					{words.map((cw) => (
-						<TranscriptWord
-							key={cw.id}
-							cw={cw}
-							isCue={cw.id === cueWordId}
-							target={trimTarget}
-							onRestore={removeTrimRun}
-							onAddTrimRange={onAddTrimRange}
-						/>
-					))}
+					{words.map((cw) => {
+						const field =
+							insertion?.clipWordId === cw.id ? (
+								<InsertionField
+									value={insertion.draft}
+									label={ts("transcript.insertAria")}
+									onChange={(draft) => setInsertion({ ...insertion, draft })}
+									onCommit={commitInsertion}
+									onCancel={() => {
+										insertionAbandonedRef.current = true;
+										setInsertion(null);
+									}}
+									abandonedRef={insertionAbandonedRef}
+								/>
+							) : null;
+						return (
+							<Fragment key={cw.id}>
+								{insertion?.side === "before" ? field : null}
+								<TranscriptWord
+									cw={cw}
+									isCue={cw.id === cueWordId}
+									editable={!busy}
+									assetId={clip.assetId}
+									toRawSpan={toRawSpan}
+									onRestore={removeTrimRun}
+									onTrimTimelineSpan={onTrimTimelineSpan}
+									onSetWordText={onSetWordText}
+									onRemoveWords={onRemoveWords}
+								/>
+								{insertion?.side === "after" ? field : null}
+							</Fragment>
+						);
+					})}
 				</div>
 			)}
 		</span>
@@ -1170,24 +1579,74 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 // the two words whose `isCue` actually flipped re-render.
 //
 // This holds because every other prop is referentially stable across a
-// playhead tick: `cw` comes from the memoised `sections`, `target` from a
+// playhead tick: `cw` comes from the memoised `sections`, `assetId` from a
 // `useMemo`, and both callbacks from `useCallback`s that do not depend on time.
 const TranscriptWord = memo(function TranscriptWord({
 	cw,
 	isCue,
-	target,
+	editable,
+	assetId,
+	toRawSpan,
 	onRestore,
-	onAddTrimRange,
+	onTrimTimelineSpan,
+	onSetWordText,
+	onRemoveWords,
 }: {
 	cw: ClipWord;
 	isCue: boolean;
-	target: TrimTarget;
+	/** False while this clip's transcript is being regenerated — the words on screen are
+	 *  about to be replaced, so an edit typed into them would be thrown away. */
+	editable: boolean;
+	assetId: string;
+	/** Clamped source→raw for this word's placement — see `toRawSpan` above. */
+	toRawSpan: (startSec: number, endSec: number) => [number, number];
 	onRestore: (run: TrimRun) => void;
-	onAddTrimRange: (target: TrimTarget, startSec: number, endSec: number, reason: string) => void;
+	onTrimTimelineSpan: (startSec: number, endSec: number, reason: string) => void;
+	onSetWordText: (assetId: string, wordId: string, text: string) => void;
+	onRemoveWords: (assetId: string, wordIds: string[]) => void;
 }) {
 	const ts = useScopedT("settings");
 	const [hover, setHover] = useState(false);
+	// The text being typed, or null when the word is not under edit.
+	const [draft, setDraft] = useState<string | null>(null);
+	// Escape unmounts the field, and an abandoned field's blur must not commit what the
+	// user just walked away from.
+	const abandonedRef = useRef(false);
 	const removed = !cw.kept;
+	// `originalText` is only ever written by a user edit (see `document/transcript.ts`), so
+	// it is what tells a corrected word from a transcribed one.
+	const original = cw.word.originalText;
+	const corrected = original !== undefined;
+	const blanked = corrected && cw.word.text.trim().length === 0;
+
+	const startEditing = useCallback(() => {
+		if (!editable) return;
+		// Correcting a transcribed word is a shipped feature; retyping an INSERTED one asks
+		// for generated media of a new length, which is the same thing the insert gesture is
+		// gated on. Not offered rather than silently refused — the shell refuses too.
+		if (!insertionsEnabled() && isInsertedWord(cw.word)) return;
+		setDraft(cw.word.text);
+	}, [editable, cw.word]);
+
+	const commitDraft = useCallback(() => {
+		const next = (draft ?? "").trim();
+		setDraft(null);
+		if (next === cw.word.text) return;
+		onSetWordText(assetId, cw.word.id, next);
+	}, [draft, cw.word.text, cw.word.id, onSetWordText, assetId]);
+
+	const inserted = isInsertedWord(cw.word);
+
+	const removeInserted = useCallback(() => {
+		onRemoveWords(assetId, [cw.word.id]);
+	}, [onRemoveWords, assetId, cw.word.id]);
+
+	const revert = useCallback(() => {
+		if (original === undefined) return;
+		// Writing the original back through the same path is what clears the provenance
+		// pair — there is no separate "unedit" operation that could fall out of step.
+		onSetWordText(assetId, cw.word.id, original);
+	}, [original, cw.word.id, onSetWordText, assetId]);
 
 	if (isSilenceWord(cw.word)) {
 		const durationSec = cw.word.endSec - cw.word.startSec;
@@ -1205,7 +1664,7 @@ const TranscriptWord = memo(function TranscriptWord({
 					onClick={(e) => {
 						e.stopPropagation();
 						onRestore({
-							trimId: cw.trimId ?? "",
+							trimIds: cw.trimIds,
 							assetId: "",
 							startWordIndex: 0,
 							endWordIndex: 0,
@@ -1240,10 +1699,8 @@ const TranscriptWord = memo(function TranscriptWord({
 				aria-label={ts("transcript.trimSilence", { duration })}
 				onClick={(e) => {
 					e.stopPropagation();
-					onAddTrimRange(
-						target,
-						cw.word.startSec,
-						cw.word.endSec,
+					onTrimTimelineSpan(
+						...toRawSpan(cw.word.startSec, cw.word.endSec),
 						`Skip silence ${formatMs(cw.word.startSec * 1000)}-${formatMs(cw.word.endSec * 1000)}.`,
 					);
 				}}
@@ -1265,31 +1722,197 @@ const TranscriptWord = memo(function TranscriptWord({
 		);
 	}
 
+	// The inline editor. `contentEditable={false}` keeps the browser from treating it as
+	// part of the enclosing editable block, and every event it raises is stopped here rather
+	// than in the block handlers: Backspace inside the field has to type, not cut, and a
+	// click in it must not seek.
+	if (draft !== null) {
+		return (
+			<input
+				contentEditable={false}
+				data-word-id={cw.id}
+				data-word-editor="true"
+				value={draft}
+				// The field exists only because the user just double-clicked the word it
+				// replaces, so focus follows the gesture rather than stealing it.
+				autoFocus
+				aria-label={ts("transcript.editWord", { word: cw.word.text })}
+				onChange={(event) => setDraft(event.target.value)}
+				onFocus={(event) => event.currentTarget.select()}
+				onBlur={() => {
+					if (abandonedRef.current) {
+						abandonedRef.current = false;
+						return;
+					}
+					commitDraft();
+				}}
+				onKeyDown={(event) => {
+					event.stopPropagation();
+					if (event.key === "Enter") {
+						event.preventDefault();
+						commitDraft();
+					} else if (event.key === "Escape") {
+						event.preventDefault();
+						abandonedRef.current = true;
+						setDraft(null);
+					}
+				}}
+				onPaste={(event) => event.stopPropagation()}
+				onPointerUp={(event) => event.stopPropagation()}
+				style={{
+					display: "inline",
+					// `ch` is the digit width, not the real glyph width, so this only
+					// approximates the word it replaces — the slack keeps it from clipping.
+					width: `${Math.max(draft.length, 3) + 2}ch`,
+					margin: 0,
+					padding: "0 2px",
+					border: 0,
+					borderBottom: "2px solid var(--accent)",
+					borderRadius: 0,
+					background: "var(--accent-soft)",
+					color: "var(--fg)",
+					font: "inherit",
+					outline: "none",
+				}}
+			/>
+		);
+	}
+
+	// A word nobody said. Amber rather than the accent: this one is not a fix to what was
+	// heard, it is text with no sound underneath — the caveat is the point. Double-click
+	// rewrites it like any other word; the cross deletes it, because there is no audio for a
+	// trim to remove.
+	if (inserted) {
+		return (
+			<span
+				data-word-id={cw.id}
+				data-start-sec={cw.word.startSec}
+				data-end-sec={cw.word.endSec}
+				data-inserted="true"
+				data-skip-id={cw.trimIds[0] ?? undefined}
+				style={{ display: "inline", opacity: removed ? 0.6 : 1 }}
+				onMouseEnter={() => setHover(true)}
+				onMouseLeave={() => setHover(false)}
+				onDoubleClick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					startEditing();
+				}}
+			>
+				<span
+					contentEditable={false}
+					title={ts("transcript.insertedWord")}
+					style={{
+						display: "inline-flex",
+						alignItems: "center",
+						margin: "0 3px 2px 0",
+						padding: "1px 7px",
+						borderRadius: 999,
+						border: "1px solid var(--warn)",
+						background: "var(--warn-soft)",
+						color: "var(--warn)",
+						font: "600 12px/1.5 var(--font-body)",
+						textDecoration: removed ? "line-through" : "none",
+					}}
+				>
+					{cw.word.text}
+				</span>
+				{hover ? (
+					<WordChipButton
+						label={ts("transcript.removeInserted", { word: cw.word.text })}
+						tone="var(--warn)"
+						onPress={removeInserted}
+					>
+						<Trash2 size={12} strokeWidth={1.9} aria-hidden="true" />
+					</WordChipButton>
+				) : null}{" "}
+			</span>
+		);
+	}
+
+	// A word the user emptied. It still owns a span of the media, so it keeps a place in
+	// the stream: rendered as its own (empty) text it would be a bare space — invisible,
+	// impossible to click, and therefore impossible to undo.
+	if (blanked) {
+		return (
+			<span
+				data-word-id={cw.id}
+				data-start-sec={cw.word.startSec}
+				data-end-sec={cw.word.endSec}
+				data-blanked="true"
+				style={{ display: "inline" }}
+				onMouseEnter={() => setHover(true)}
+				onMouseLeave={() => setHover(false)}
+				onDoubleClick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					startEditing();
+				}}
+			>
+				<span
+					contentEditable={false}
+					title={ts("transcript.correctedWord", { original })}
+					style={{
+						display: "inline-flex",
+						alignItems: "center",
+						margin: "0 3px 2px 0",
+						padding: "1px 6px",
+						borderRadius: 999,
+						border: "1px dashed var(--border-hi)",
+						background: "var(--surface-2)",
+						color: "var(--muted)",
+						font: "500 11px/1.5 var(--font-mono)",
+						fontStyle: "italic",
+					}}
+				>
+					{ts("transcript.blankedWord")}
+				</span>
+				{hover ? (
+					<RevertWordButton label={ts("transcript.revertWord", { original })} onRevert={revert} />
+				) : null}{" "}
+			</span>
+		);
+	}
+
 	return (
 		<span
 			data-word-id={cw.id}
 			data-start-sec={cw.word.startSec}
 			data-end-sec={cw.word.endSec}
-			data-skip-id={cw.trimId ?? undefined}
+			data-skip-id={cw.trimIds[0] ?? undefined}
+			data-corrected={corrected ? "true" : undefined}
 			data-cue={isCue ? "true" : undefined}
+			title={corrected ? ts("transcript.correctedWord", { original }) : undefined}
 			style={{
 				display: "inline",
-				color: removed ? "var(--danger)" : "var(--fg)",
+				// A cut word stays the loudest thing about itself: when a word is both cut and
+				// corrected, the strike-through wins and the correction mark steps aside.
+				color: removed ? "var(--danger)" : corrected ? "var(--accent)" : "var(--fg)",
 				fontWeight: removed ? 600 : 400,
-				textDecoration: removed ? "line-through" : "none",
-				textDecorationColor: removed ? "var(--danger)" : undefined,
+				textDecoration: removed ? "line-through" : corrected ? "underline" : "none",
+				textDecorationStyle: !removed && corrected ? "dotted" : undefined,
+				textDecorationThickness: !removed && corrected ? 2 : undefined,
+				textUnderlineOffset: !removed && corrected ? 3 : undefined,
+				textDecorationColor: removed ? "var(--danger)" : corrected ? "var(--accent)" : undefined,
 				opacity: removed ? 0.9 : 1,
 				borderBottom: isCue ? "2px solid var(--accent)" : "none",
 				paddingBottom: isCue ? 1 : 0,
 			}}
 			onMouseEnter={() => setHover(true)}
 			onMouseLeave={() => setHover(false)}
+			onDoubleClick={(e) => {
+				// Without this the browser selects the word inside the enclosing
+				// contentEditable; the field about to replace it does its own selecting.
+				e.preventDefault();
+				e.stopPropagation();
+				startEditing();
+			}}
 		>
 			{/* no filler chip. axcut renders every word the same way;
 			    the LLM is the only place that names a word a filler (via the
 			    filler_or_hesitation reason when generating suggestions). */}
 			{cw.word.text}{" "}
-			{removed && hover && cw.trimId ? (
+			{removed && hover && cw.trimIds.length > 0 ? (
 				<button
 					type="button"
 					contentEditable={false}
@@ -1297,10 +1920,10 @@ const TranscriptWord = memo(function TranscriptWord({
 					aria-label={ts("transcript.restoreWord", { word: cw.word.text })}
 					onClick={(e) => {
 						e.stopPropagation();
-						// build a minimal TrimRun stub — only trimId is
+						// build a minimal TrimRun stub — only the ids are
 						// read by onRestore.
 						onRestore({
-							trimId: cw.trimId ?? "",
+							trimIds: cw.trimIds,
 							assetId: "",
 							startWordIndex: 0,
 							endWordIndex: 0,
@@ -1326,9 +1949,137 @@ const TranscriptWord = memo(function TranscriptWord({
 					<Trash2 size={12} strokeWidth={1.9} aria-hidden="true" />
 				</button>
 			) : null}
+			{/* A cut word's bin already restores it — showing the revert beside it would put
+			    two undos for two different things one pixel apart. */}
+			{!removed && corrected && hover ? (
+				<RevertWordButton label={ts("transcript.revertWord", { original })} onRevert={revert} />
+			) : null}
 		</span>
 	);
 });
+
+/** Hover affordance on a corrected word: put the transcriber's own text back. Mirrors the
+ *  bin on a cut word — same size, same place, the accent rather than the danger colour,
+ *  since reverting a correction restores something instead of removing it. */
+function RevertWordButton({ label, onRevert }: { label: string; onRevert: () => void }) {
+	return (
+		<WordChipButton label={label} tone="var(--accent)" onPress={onRevert}>
+			<Undo2 size={12} strokeWidth={1.9} aria-hidden="true" />
+		</WordChipButton>
+	);
+}
+
+/** The one hover control shape the word stream uses, in whichever colour says what it does.
+ *  `contentEditable={false}` keeps it out of the enclosing editable block, and the click is
+ *  stopped so it never reaches the seek handler underneath. */
+function WordChipButton({
+	label,
+	tone,
+	onPress,
+	children,
+}: {
+	label: string;
+	tone: string;
+	onPress: () => void;
+	children: ReactNode;
+}) {
+	return (
+		<button
+			type="button"
+			contentEditable={false}
+			title={label}
+			aria-label={label}
+			onClick={(e) => {
+				e.stopPropagation();
+				onPress();
+			}}
+			style={{
+				display: "inline-flex",
+				alignItems: "center",
+				justifyContent: "center",
+				width: 18,
+				height: 18,
+				marginLeft: 4,
+				padding: 0,
+				border: 0,
+				borderRadius: 4,
+				background: tone,
+				color: "white",
+				cursor: "pointer",
+				verticalAlign: "middle",
+			}}
+		>
+			{children}
+		</button>
+	);
+}
+
+/**
+ * The field a typed character opens between two words. It is not a word yet — nothing is
+ * written until it commits — so it carries no `data-word-id` and no place in `words`.
+ *
+ * Every event it raises is stopped at the field, for the same reason the word editor stops
+ * its own: the block around it reads Backspace as a cut and a click as a seek.
+ */
+function InsertionField({
+	value,
+	label,
+	onChange,
+	onCommit,
+	onCancel,
+	abandonedRef,
+}: {
+	value: string;
+	label: string;
+	onChange: (value: string) => void;
+	onCommit: () => void;
+	onCancel: () => void;
+	abandonedRef: { current: boolean };
+}) {
+	return (
+		<input
+			contentEditable={false}
+			data-word-inserter="true"
+			value={value}
+			// Same reason as the word editor: the field exists because the user just typed.
+			autoFocus
+			aria-label={label}
+			onChange={(event) => onChange(event.target.value)}
+			onBlur={() => {
+				if (abandonedRef.current) {
+					abandonedRef.current = false;
+					return;
+				}
+				onCommit();
+			}}
+			onKeyDown={(event) => {
+				event.stopPropagation();
+				if (event.key === "Enter") {
+					event.preventDefault();
+					onCommit();
+				} else if (event.key === "Escape") {
+					event.preventDefault();
+					onCancel();
+				}
+			}}
+			onBeforeInput={(event) => event.stopPropagation()}
+			onPaste={(event) => event.stopPropagation()}
+			onPointerUp={(event) => event.stopPropagation()}
+			style={{
+				display: "inline",
+				width: `${Math.max(value.length, 3) + 2}ch`,
+				margin: "0 3px 2px 0",
+				padding: "0 5px",
+				border: "1px solid var(--warn)",
+				borderRadius: 999,
+				background: "var(--warn-soft)",
+				color: "var(--fg)",
+				font: "inherit",
+				outline: "none",
+			}}
+		/>
+	);
+}
 
 // ─── Caret / selection helpers ────────────────────────────────────
 // Ponytail port of axcut's findCollapsedDeletionWordId. The non-collapsed
@@ -1354,7 +2105,7 @@ function findCollapsedDeletionWordId(
 ): string | null {
 	// read the kept/skip state from the words array, not the
 	// DOM's data-skip-id. The DOM may be lagging a render behind (its
-	// trimId is only set on the next React commit), so a DOM check would
+	// skip id is only set on the next React commit), so a DOM check would
 	// re-trim an already-trimmed word. The words array is the React state
 	// captured at the call site — always current.
 	const skippedIds = new Set(words.filter((w) => !w.kept).map((w) => w.id));
@@ -1422,6 +2173,79 @@ function findCollapsedDeletionWordId(
 	}
 	const pool = direction === "backward" ? [...before].reverse() : after;
 	return pool.find((wordNode) => isKept(wordNode.dataset.wordId ?? null))?.dataset.wordId ?? null;
+}
+
+/**
+ * Where a typed character goes: beside the word the caret was resting on, never inside it.
+ *
+ * A caret in the middle of a word anchors AFTER that word rather than splitting it in two —
+ * a split would need two words where the transcript has one, and neither half would own the
+ * audio any more. At the very start of the block there is nothing to sit after, so the
+ * anchor is the first word and the new one lands before it.
+ */
+function findInsertionAnchor(
+	editor: HTMLElement,
+	node: Node | null,
+	offset: number,
+): { clipWordId: string; side: InsertSide } | null {
+	const wordNodes = Array.from(editor.querySelectorAll<HTMLElement>("[data-word-id]"));
+	if (wordNodes.length === 0 || !node) return null;
+
+	const direct = closestWordElement(node);
+	if (direct?.dataset.wordId) {
+		const atStart = node.nodeType === Node.TEXT_NODE && offset <= 0;
+		return { clipWordId: direct.dataset.wordId, side: atStart ? "before" : "after" };
+	}
+
+	// The caret is between the block's own children, and `offset` is a child index — the
+	// same shape `findCollapsedDeletionWordId` reads when it resolves a cut. Walk back for
+	// the word to sit after; if there is none, the caret is at the head of the stream and
+	// the new word goes before the first word ahead of it.
+	const childNodes = Array.from(node.childNodes);
+	for (const candidate of childNodes.slice(0, clampRangeOffset(node, offset)).reverse()) {
+		const wordId = findWordId(candidate) ?? findDescendantWordId(candidate);
+		if (wordId) return { clipWordId: wordId, side: "after" };
+	}
+	for (const candidate of childNodes.slice(clampRangeOffset(node, offset))) {
+		const wordId = findWordId(candidate) ?? findDescendantWordId(candidate);
+		if (wordId) return { clipWordId: wordId, side: "before" };
+	}
+	const first = wordNodes[0];
+	return first?.dataset.wordId ? { clipWordId: first.dataset.wordId, side: "before" } : null;
+}
+
+/**
+ * Pull the DOM's answer back onto a word the TRANSCRIPT has.
+ *
+ * `[silence]` pills carry a `data-word-id` like everything else in the stream, but they are
+ * pseudo-words `withSilenceGaps` invents per clip — there is nothing in `transcript.words`
+ * for a new word to be inserted next to. So the anchor walks off a silence to the nearest
+ * real word in the direction the caret was already facing, and only crosses to the other
+ * side when that direction runs out of stream.
+ */
+function resolveInsertionAnchor(
+	words: ClipWord[],
+	clipWordId: string,
+	side: InsertSide,
+): { clipWordId: string; side: InsertSide } | null {
+	const from = words.findIndex((w) => w.id === clipWordId);
+	if (from < 0) return null;
+	const real = (index: number) =>
+		index >= 0 && index < words.length && !isSilenceWord(words[index].word);
+	if (side === "after") {
+		for (let i = from; i >= 0; i--) if (real(i)) return { clipWordId: words[i].id, side: "after" };
+		for (let i = 0; i < words.length; i++) {
+			if (real(i)) return { clipWordId: words[i].id, side: "before" };
+		}
+		return null;
+	}
+	for (let i = from; i < words.length; i++) {
+		if (real(i)) return { clipWordId: words[i].id, side: "before" };
+	}
+	for (let i = words.length - 1; i >= 0; i--) {
+		if (real(i)) return { clipWordId: words[i].id, side: "after" };
+	}
+	return null;
 }
 
 function findDescendantWordId(node: Node): string | null {
@@ -1828,9 +2652,61 @@ const CAMERA_SHAPES: Array<{
 	},
 ];
 
+// The camera-background control used to be gated on the platform: the mask is produced by the
+// native compositor, and Linux carried the shader branch with nothing feeding it, so `fx.z`
+// never left 0 there and the setting would have changed nothing. The Linux back-end now
+// captures the frame and uploads the mask like the other two, so the gate had become a lie
+// and is gone — all three platforms segment.
+const CAMERA_BACKGROUND_MODES: Array<{
+	value: "none" | "transparent" | "blur" | "custom";
+	labelKey: string;
+	icon: ReactNode;
+}> = [
+	{
+		value: "none",
+		labelKey: "layout.bgModes.none",
+		icon: <rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 3" />,
+	},
+	{
+		value: "transparent",
+		labelKey: "layout.bgModes.transparent",
+		icon: (
+			<>
+				<circle cx="12" cy="8" r="4" />
+				<path d="M6 20v-2a6 6 0 0 1 12 0v2" />
+			</>
+		),
+	},
+	{
+		value: "blur",
+		labelKey: "layout.bgModes.blur",
+		icon: (
+			<>
+				<circle cx="12" cy="12" r="9" strokeDasharray="2 2" />
+				<circle cx="12" cy="12" r="4" />
+			</>
+		),
+	},
+	{
+		value: "custom",
+		labelKey: "layout.bgModes.custom",
+		icon: (
+			<>
+				<rect x="3" y="3" width="18" height="18" rx="2" />
+				<circle cx="8.5" cy="8.5" r="1.5" />
+				<path d="m21 15-5-5L5 21" />
+			</>
+		),
+	},
+];
+
 export function LayoutPane() {
+	const canSegmentCamera = useCanSegmentCamera();
 	const ts = useScopedT("settings");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const { pick: handlePickWebcamWallpaper, input: webcamWallpaperInput } = useWallpaperFileInput(
+		(dataUrl) => set({ webcamWallpaper: dataUrl }),
+	);
 	const document = useProjectStore((s) => s.document);
 	// A project can hold clips with no camera attached at all (plain imports or a
 	// recording made without a webcam). Keep the saved camera preference for later, but
@@ -1898,7 +2774,7 @@ export function LayoutPane() {
 		setLive({ webcamCropPan: pan, webcamCropRegion: cropRegionFor(webcamCrop.width, pan) });
 	};
 	return (
-		<Pane title={ts("layout.title")} icon={<LayoutIcon size={14} />} helpText={helpText}>
+		<Pane title={ts("layout.title")} icon={<Camera size={14} />} helpText={helpText}>
 			<div className={styles.sectionLabel}>{ts("layout.preset")}</div>
 			<div className={styles.field}>
 				<label htmlFor="layout-preset">{ts("layout.preset")}</label>
@@ -1969,7 +2845,7 @@ export function LayoutPane() {
 									style={{
 										flexDirection: "column",
 										gap: 4,
-										padding: 8,
+										padding: "8px 4px",
 										display: "flex",
 										alignItems: "center",
 										// Sans `minWidth: 0` le bouton garde son minimum de
@@ -1995,7 +2871,9 @@ export function LayoutPane() {
 									>
 										{shape.icon}
 									</svg>
-									<span style={{ font: "500 11px/1 var(--font-body)" }}>{ts(shape.labelKey)}</span>
+									<span title={ts(shape.labelKey)} style={{ font: "500 11px/1 var(--font-body)" }}>
+										{ts(shape.labelKey)}
+									</span>
 								</button>
 							);
 						})}
@@ -2004,32 +2882,108 @@ export function LayoutPane() {
 			) : null}
 			{isPip ? (
 				<div className={styles.sliderGrid}>
-					<div className={`${styles.sliderCell} ${styles.full}`}>
-						<div className={styles.head}>
-							<span className={styles.label}>{ts("layout.webcamSize")}</span>
-							<span className={styles.val}>{Math.round(settings.webcamSizePreset)}%</span>
-						</div>
-						<input
-							aria-label={ts("layout.webcamSize")}
-							type="range"
-							min={10}
-							max={50}
-							step={1}
-							defaultValue={settings.webcamSizePreset}
-							disabled={layoutControlsDisabled}
-							onChange={(e) => {
-								const next = Number(e.target.value);
-								setLive({ webcamSizePreset: next });
-								if (isNativeCompositorActive()) {
-									setNativeParam("webcamSize", next / NATIVE_WEBCAM_BASE_PCT);
-								}
-							}}
-							onMouseUp={() => void commit()}
-							onTouchEnd={() => void commit()}
-							onKeyUp={() => void commit()}
-						/>
-					</div>
+					<SliderCell
+						full
+						label={ts("layout.webcamSize")}
+						value={settings.webcamSizePreset}
+						min={10}
+						max={50}
+						step={1}
+						suffix="%"
+						disabled={layoutControlsDisabled}
+						onChange={(next) => {
+							setLive({ webcamSizePreset: next });
+							if (isNativeCompositorActive()) {
+								setNativeParam("webcamSize", next / NATIVE_WEBCAM_BASE_PCT);
+							}
+						}}
+						onCommit={() => void commit()}
+					/>
 				</div>
+			) : null}
+			{/* Le seul contrôle de l'éditeur dont l'effet dépend d'un binaire optionnel : sans la
+			    bibliothèque ONNX Runtime, le compositeur dessine la webcam telle quelle et le réglage
+			    ne fait rien. On demande donc à la machine plutôt que de deviner depuis la plateforme —
+			    `process.platform` se trompait dans les deux sens : il cachait le contrôle sur des
+			    builds Linux capables de segmenter, et le montrait sur les Macs Intel, pour lesquels
+			    l'amont ne publie aucun binaire ONNX. */}
+			{canSegmentCamera ? (
+				<>
+					<div className={styles.sectionLabel}>{ts("layout.webcamBackground")}</div>
+					<div
+						style={{
+							display: "grid",
+							gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+							gap: 8,
+							padding: "0 var(--sp-4) 12px",
+						}}
+					>
+						{CAMERA_BACKGROUND_MODES.map((mode) => {
+							const isActive = settings.webcamBackgroundMode === mode.value;
+							return (
+								<button
+									type="button"
+									key={mode.value}
+									className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
+									style={{
+										flexDirection: "column",
+										gap: 4,
+										padding: "8px 4px",
+										display: "flex",
+										alignItems: "center",
+										minWidth: 0,
+									}}
+									disabled={layoutControlsDisabled}
+									onClick={() => {
+										void set({ webcamBackgroundMode: mode.value });
+									}}
+								>
+									<svg
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										strokeWidth="2"
+										width={22}
+										height={22}
+									>
+										{mode.icon}
+									</svg>
+									<span title={ts(mode.labelKey)} style={{ font: "500 11px/1 var(--font-body)" }}>
+										{ts(mode.labelKey)}
+									</span>
+								</button>
+							);
+						})}
+					</div>
+					{settings.webcamBackgroundMode === "blur" ? (
+						<div className={styles.sliderGrid}>
+							<SliderCell
+								label={ts("layout.webcamBlurIntensity")}
+								value={Math.round(settings.webcamBlurIntensity * 100)}
+								min={0}
+								max={100}
+								suffix="%"
+								disabled={layoutControlsDisabled}
+								onChange={(next) => setLive({ webcamBlurIntensity: next / 100 })}
+								onCommit={() => void commit()}
+							/>
+						</div>
+					) : null}
+					{settings.webcamBackgroundMode === "custom" ? (
+						<div style={{ padding: "0 var(--sp-4) 12px" }}>
+							<WallpaperPicker
+								value={settings.webcamWallpaper}
+								hasDocument={hasDocument && !layoutControlsDisabled}
+								onChange={(url) => void set({ webcamWallpaper: url })}
+								onLiveChange={(url) => setLive({ webcamWallpaper: url })}
+								onCommit={commit}
+								updateNativeBackground={false}
+								onPickFile={handlePickWebcamWallpaper}
+							/>
+							{webcamWallpaperInput}
+						</div>
+					) : null}
+				</>
 			) : null}
 			<div className={styles.sectionLabel}>{ts("layout.webcamFraming")}</div>
 			<div className={styles.sliderGrid}>
@@ -2101,6 +3055,199 @@ export function AudioPane() {
 	);
 }
 
+type TimelineApi = ReturnType<typeof useTimeline>;
+
+// Per-track controls for the selected imported audio track (issue #350). Shown by
+// the inspector in place of the facet when an audio track is selected (see
+// FloatingInspector). The header is the generic "Audio track"; the body leads
+// with the file name, then the volume (a local live value during the drag,
+// committed as one undo step on release), then a delete button styled like the
+// region panes' (position and mute are edited on the lane itself).
+// Longest fade the inspector offers. Past a few seconds a fade stops reading as
+// a fade and starts reading as a level change, and the track's own span caps it
+// anyway (`resolveFadeSecs` reduces one that does not fit).
+const FADE_MAX_MS = 5000;
+
+/**
+ * Per-track controls for the selected imported audio track (issue #350). Shown by
+ * the inspector in place of the facet when an audio track is selected (see
+ * FloatingInspector). The header is the generic "Audio track"; the body leads
+ * with the file name, then the volume, fade in/out, mute, and loop controls,
+ * with actions to reset all parameters or delete the track.
+ */
+export function AudioTrackPane({ tl, onClose }: { tl: TimelineApi; onClose?: () => void }) {
+	const ts = useScopedT("settings");
+	const trackId = tl.selectedAudioTrackId;
+	// The document stores one clip-anchored fragment per clip the track covers;
+	// the inspector edits the user-visible TRACK, so collapse first. Editing a
+	// single fragment would let the halves of a split take disagree.
+	const track = trackId
+		? collapseTracksToPills(tl.audioTracks.filter((t) => trackGroupId(t) === trackId))[0]
+		: undefined;
+	const asset = track ? tl.assets.find((a) => a.id === track.assetId) : undefined;
+	// Live-drag values; null means "show the committed value".
+	const [liveGain, setLiveGain] = useState<number | null>(null);
+	const [liveFadeIn, setLiveFadeIn] = useState<number | null>(null);
+	const [liveFadeOut, setLiveFadeOut] = useState<number | null>(null);
+	// Drop the live value when the selected track changes: a drag released outside
+	// the input never fires onCommit, so without this an uncommitted -10 dB from
+	// track A would show as track B's gain the moment B is selected.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: trackId is the trigger, not a read — the body only resets the live value.
+	useEffect(() => {
+		setLiveGain(null);
+		setLiveFadeIn(null);
+		setLiveFadeOut(null);
+	}, [trackId]);
+	if (!track) return null;
+	const fileName = track.label || asset?.label || asset?.originalPath?.split(/[\\/]/).pop() || "";
+
+	// Match the region panes' danger-outlined delete button (see SelectionPane).
+	const deleteBtnStyle: CSSProperties = {
+		display: "flex",
+		width: "100%",
+		alignItems: "center",
+		justifyContent: "center",
+		gap: 7,
+		padding: "9px 14px",
+		borderRadius: 10,
+		border: "1px solid var(--danger)",
+		background: "var(--danger-soft)",
+		color: "var(--danger)",
+		font: "600 13px var(--font-display)",
+		cursor: "pointer",
+	};
+
+	return (
+		<Pane
+			title={ts("audioTrack.defaultLabel")}
+			icon={<Music size={14} />}
+			helpText={ts("audioTrack.help")}
+			onClose={onClose ?? (() => tl.clearSelection())}
+		>
+			<div
+				title={fileName}
+				style={{
+					fontSize: 13,
+					fontWeight: 600,
+					color: "var(--fg)",
+					overflow: "hidden",
+					textOverflow: "ellipsis",
+					whiteSpace: "nowrap",
+					margin: "0 0 10px",
+				}}
+			>
+				{fileName}
+			</div>
+			<div className={styles.sliderGrid}>
+				<SliderCell
+					label={ts("audio.outputGain")}
+					value={liveGain ?? track.gainDb}
+					min={-AUDIO_GAIN_DB_LIMIT}
+					max={AUDIO_GAIN_DB_LIMIT}
+					step={0.5}
+					decimals={1}
+					suffix=" dB"
+					onChange={(value) => setLiveGain(value)}
+					onCommit={async () => {
+						if (liveGain !== null) {
+							const target = liveGain;
+							try {
+								await tl.setAudioTrackGain(track.id, target);
+							} finally {
+								setLiveGain((current) => (current === target ? null : current));
+							}
+						}
+					}}
+				/>
+				<SliderCell
+					label={ts("audioTrack.fadeIn")}
+					value={liveFadeIn ?? track.fadeInMs}
+					min={0}
+					max={FADE_MAX_MS}
+					step={50}
+					decimals={0}
+					suffix=" ms"
+					onChange={setLiveFadeIn}
+					onCommit={async () => {
+						if (liveFadeIn !== null) {
+							const target = liveFadeIn;
+							try {
+								await tl.updateAudioTrack(track.id, { fadeInMs: target });
+							} finally {
+								setLiveFadeIn((current) => (current === target ? null : current));
+							}
+						}
+					}}
+				/>
+				<SliderCell
+					label={ts("audioTrack.fadeOut")}
+					value={liveFadeOut ?? track.fadeOutMs}
+					min={0}
+					max={FADE_MAX_MS}
+					step={50}
+					decimals={0}
+					suffix=" ms"
+					onChange={setLiveFadeOut}
+					onCommit={async () => {
+						if (liveFadeOut !== null) {
+							const target = liveFadeOut;
+							try {
+								await tl.updateAudioTrack(track.id, { fadeOutMs: target });
+							} finally {
+								setLiveFadeOut((current) => (current === target ? null : current));
+							}
+						}
+					}}
+				/>
+			</div>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("audioTrack.mute")}</span>
+				<Toggle
+					checked={track.muted}
+					ariaLabel={ts("audioTrack.mute")}
+					onChange={(v) => void tl.updateAudioTrack(track.id, { muted: v })}
+				/>
+			</div>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("audioTrack.loop")}</span>
+				<Toggle
+					checked={track.loop}
+					ariaLabel={ts("audioTrack.loop")}
+					// Fills the rest of the programme on the way on — see
+					// setAudioTrackLoop for why the toggle moves the edge for you.
+					onChange={(v) => void tl.setAudioTrackLoop(track.id, v)}
+				/>
+			</div>
+			<button
+				type="button"
+				className={styles.secondaryBtn}
+				onClick={() => {
+					setLiveGain(null);
+					setLiveFadeIn(null);
+					setLiveFadeOut(null);
+					void tl.updateAudioTrack(track.id, {
+						gainDb: 0,
+						fadeInMs: 0,
+						fadeOutMs: 0,
+						muted: false,
+						loop: false,
+					});
+				}}
+			>
+				{ts("audio.reset")}
+			</button>
+			<button
+				type="button"
+				onClick={() => void tl.removeAudioTrack(track.id)}
+				style={deleteBtnStyle}
+			>
+				<Trash2 size={14} />
+				{ts("audioTrack.remove")}
+			</button>
+		</Pane>
+	);
+}
+
 // ─── Cursor ───────────────────────────────────────────────────────
 
 function safeAssetUrl(relativePath: string): string {
@@ -2119,22 +3266,25 @@ export function CursorPane() {
 	// handlers below push diffs live. Sizes are sent as direct scales (1 = fixture default).
 	// Synchro initiale : cf. NativeCompositorOverlay (`pushAllNativeParams`).
 
-	// Built-in "Default" plus each bundled theme. Thumbnails use the theme's
-	// arrow asset; the persisted value is the theme id. Same shape as the
-	// legacy SettingsPanel picker.
+	// Built-in "Default" plus each bundled theme. When arrow and pointer art
+	// differ, both sprites are shown so a pack is not previewed as arrow-only.
 	const cursorThemeOptions = useMemo(
 		() => [
 			{
 				id: DEFAULT_CURSOR_THEME_ID,
 				name: ts("cursor.themeDefault"),
-				previewUrl: defaultCursorPreviewUrl,
+				previewUrls: [defaultCursorPreviewUrl],
 			},
 			...CURSOR_THEMES.map((theme) => {
-				const previewPath = (theme.assets.arrow ?? theme.assets.pointer)?.assetPath;
+				const preview = themePickerPreviewAssets(theme);
+				const urls = [
+					preview.arrow ? safeAssetUrl(preview.arrow) : defaultCursorPreviewUrl,
+					...(preview.pointer ? [safeAssetUrl(preview.pointer)] : []),
+				];
 				return {
 					id: theme.id,
 					name: theme.name,
-					previewUrl: previewPath ? safeAssetUrl(previewPath) : defaultCursorPreviewUrl,
+					previewUrls: urls,
 				};
 			}),
 		],
@@ -2183,14 +3333,19 @@ export function CursorPane() {
 							disabled={!hasDocument}
 							onClick={() => void set({ cursor: { theme: option.id } })}
 						>
-							<img
-								src={option.previewUrl}
-								alt=""
-								width={20}
-								height={20}
-								draggable={false}
-								style={{ objectFit: "contain", pointerEvents: "none" }}
-							/>
+							<span className={styles.cursorCellPreviews}>
+								{option.previewUrls.map((url) => (
+									<img
+										key={url}
+										src={url}
+										alt=""
+										width={option.previewUrls.length > 1 ? 14 : 20}
+										height={option.previewUrls.length > 1 ? 14 : 20}
+										draggable={false}
+										style={{ objectFit: "contain", pointerEvents: "none" }}
+									/>
+								))}
+							</span>
 						</button>
 					);
 				})}
@@ -2316,6 +3471,7 @@ export function SliderCell({
 	onChange,
 	onCommit,
 	showValue = true,
+	full = false,
 }: {
 	label: string;
 	value: number;
@@ -2330,9 +3486,11 @@ export function SliderCell({
 	/** À passer `false` quand le libellé porte déjà la valeur (certaines chaînes i18n
 	 *  l'interpolent), sans quoi elle s'affiche deux fois. */
 	showValue?: boolean;
+	full?: boolean;
 }) {
+	const pct = Math.max(0, Math.min(100, max > min ? ((value - min) / (max - min)) * 100 : 0));
 	return (
-		<div className={styles.sliderCell}>
+		<div className={`${styles.sliderCell}${full ? ` ${styles.full}` : ""}`}>
 			<div className={styles.head}>
 				<span className={styles.label}>{label}</span>
 				{showValue ? (
@@ -2354,6 +3512,7 @@ export function SliderCell({
 				step={step}
 				value={value}
 				disabled={disabled}
+				style={{ "--slider-pct": `${pct}%` } as CSSProperties}
 				onChange={(e) => onChange(Number(e.target.value))}
 				onMouseUp={onCommit}
 				onTouchEnd={onCommit}

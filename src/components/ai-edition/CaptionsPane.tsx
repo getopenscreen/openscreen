@@ -9,7 +9,7 @@
 // translation is stored beside the transcript, keyed by segment id, and picking
 // "Original" goes straight back to the SSOT text.
 
-import { Captions as CaptionsIcon, Languages, Loader2, Trash2 } from "lucide-react";
+import { Captions as CaptionsIcon, Languages, Loader2, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { CaptionAnchorH, CaptionAnchorV } from "@/lib/ai-edition/captions";
@@ -20,14 +20,17 @@ import {
 } from "@/lib/ai-edition/captions";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
+	useAssetTranscriptions,
 	useTimelineTranscriptGate,
-	useTranscriptionStore,
 } from "@/lib/ai-edition/store/transcriptionStore";
 import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
+import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
 import { nativeBridgeClient } from "@/native";
 import { ColorField } from "./ColorField";
 import styles from "./NewEditorShell.module.css";
 import { SliderCell, Toggle } from "./RightPanes";
+import { useTranscriptionLabel } from "./TranscriptionStatus";
+import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
 
 /** The families `src/index.css` already loads for on-canvas text — anything else
  *  would render in the preview but fall back to a default in the export canvas. */
@@ -70,9 +73,10 @@ const TRANSLATION_LANGUAGES: ReadonlyArray<{ code: string; label: string }> = [
 	{ code: "zh", label: "中文" },
 ];
 
-export function CaptionsPane() {
+export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 	const t = useScopedT("settings");
 	const te = useScopedT("editor");
+	const tc = useScopedT("common");
 	const {
 		settings,
 		translations,
@@ -90,15 +94,25 @@ export function CaptionsPane() {
 	// Captions are a view of the transcript, and the transcript arrives on its
 	// own (transcriptionStore's background pass). The pane reads that state
 	// straight from the store rather than being handed a busy flag: it is the
-	// same answer everywhere, and "Transcribe" here is only ever a retry.
+	// same answer everywhere, and this pane only ever reports on the pass —
+	// starting one is the transcript tab's job.
 	//
 	// Resolved over the timeline's assets, not the primary one: `hasTranscript`
 	// below is already timeline-scoped (useCaptions), and mixing the two scopes
 	// is what let a silent primary asset dead-end this button for a project whose
 	// actual footage had speech.
 	const gate = useTimelineTranscriptGate();
-	const requestTimelineTranscripts = useTranscriptionStore((s) => s.requestTimelineTranscripts);
+	const transcriptions = useAssetTranscriptions();
+	const transcriptionLabel = useTranscriptionLabel();
 	const isTranscribing = gate.state === "pending";
+	// Timeline-scoped on purpose: the gate below answers for the timeline's
+	// assets, so the label must too — an off-timeline job must not relabel an
+	// enabled button.
+	const busyLabel = transcriptionBusyLabel(
+		firstTimelineBusyView(document, transcriptions) ??
+			(isTranscribing ? { assetId: "", status: "running", phase: "loading-model" } : undefined),
+		transcriptionLabel,
+	);
 	const silentMedia = gate.state === "blocked" && gate.reason === "no-audio";
 	const engineError = gate.state === "blocked" && gate.reason === "failed" ? gate.message : null;
 
@@ -180,14 +194,47 @@ export function CaptionsPane() {
 	};
 
 	return (
-		<div className={`${styles.pane} ${styles.isActive}`}>
-			<header className={styles.paneHead}>
-				<h2>{t("facets.captions")}</h2>
-				<span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
-					<CaptionsIcon size={14} style={{ color: "var(--muted)" }} />
+		<div
+			className={`${styles.pane} ${styles.isActive}`}
+			style={{ minHeight: 0, display: "flex", flexDirection: "column" }}
+		>
+			<header
+				className={styles.paneHead}
+				style={{
+					position: "relative",
+					paddingRight: "var(--sp-4)",
+					flexShrink: 0,
+				}}
+			>
+				<span style={{ display: "inline-flex", alignItems: "center", color: "var(--muted)" }}>
+					<CaptionsIcon size={14} />
 				</span>
+				<h2>{t("facets.captions")}</h2>
+				{onClose ? (
+					<button
+						type="button"
+						className={styles.iconBtn}
+						style={{ marginLeft: "auto" }}
+						title={tc("actions.close")}
+						aria-label={tc("actions.close")}
+						onClick={onClose}
+					>
+						<X size={14} />
+					</button>
+				) : null}
 			</header>
-			<div className={styles.paneBody} style={{ padding: 0 }}>
+			<div
+				className={styles.paneBody}
+				style={{
+					padding: "8px 0 16px",
+					minHeight: 0,
+					flex: "1 1 auto",
+					overflowY: "auto",
+					overflowX: "hidden",
+					scrollbarWidth: "thin",
+					scrollbarColor: "var(--border) transparent",
+				}}
+			>
 				<div className={styles.paneRow}>
 					<span className={styles.label}>{t("captions.show")}</span>
 					<Toggle
@@ -204,6 +251,7 @@ export function CaptionsPane() {
 							padding: "14px",
 							border: "1px dashed var(--border-hi)",
 							borderRadius: 10,
+							background: "var(--surface-2)",
 							display: "flex",
 							flexDirection: "column",
 							gap: 10,
@@ -223,32 +271,44 @@ export function CaptionsPane() {
 								{engineError}
 							</p>
 						) : null}
-						<button
-							type="button"
-							className={`${styles.btn} ${styles.btnPrimary}`}
-							// A media with no audio track has nothing to transcribe — the
-							// button would fail the same way every time it is pressed.
-							disabled={disabled || isTranscribing || silentMedia}
-							onClick={() => void requestTimelineTranscripts()}
-						>
-							{isTranscribing ? <Loader2 size={14} className="animate-spin" /> : null}
-							{isTranscribing ? t("captions.transcribing") : t("captions.transcribe")}
-						</button>
+						{/* No transcribe button here. This pane is reached from the transcript
+						    tab, whose empty state carries the one gate — and two buttons for
+						    one background pass is what made people believe captions were
+						    transcribed separately from the transcript (issue #560). What is
+						    worth saying here is whether a run is already going. */}
+						{isTranscribing ? (
+							<p
+								style={{
+									margin: 0,
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 6,
+									font: "400 12px/1.5 var(--font-body)",
+									color: "var(--muted)",
+								}}
+							>
+								<Loader2 size={14} className="animate-spin" />
+								{busyLabel ?? t("captions.transcribing")}
+							</p>
+						) : null}
 					</div>
 				) : (
 					<p
 						style={{
 							margin: "0 var(--sp-4) 12px",
 							font: "400 11.5px/1.5 var(--font-body)",
-							color: "var(--meta)",
+							color: "var(--muted)",
 						}}
 					>
 						{/* The cue count is only meaningful while the layer is on — deriving
 						    cues short-circuits when it's off, so a "0 lines" reading there
-						    would say the transcript is empty when it isn't. */}
-						{settings.enabled
-							? t("captions.derivedFromTranscript", { count: cues.length })
-							: t("captions.hiddenHint")}
+						    would say the transcript is empty when it isn't. While a
+						    regeneration is in flight the phase label matters more than the
+						    count of cues about to be replaced. */}
+						{busyLabel ??
+							(settings.enabled
+								? t("captions.derivedFromTranscript", { count: cues.length })
+								: t("captions.hiddenHint"))}
 					</p>
 				)}
 
@@ -259,7 +319,7 @@ export function CaptionsPane() {
 							padding: "12px 14px",
 							border: "1px solid var(--border)",
 							borderRadius: 10,
-							background: "var(--surface-warm)",
+							background: "var(--surface-2)",
 							display: "flex",
 							flexDirection: "column",
 							gap: 8,
@@ -310,7 +370,7 @@ export function CaptionsPane() {
 						value={target}
 						disabled={disabled || translating}
 						onChange={(e) => setTarget(e.target.value)}
-						style={{ ...selectStyle, flex: 1 }}
+						style={{ ...selectStyle, flex: 1, minWidth: 0 }}
 					>
 						{TRANSLATION_LANGUAGES.map((language) => (
 							<option key={language.code} value={language.code}>
@@ -321,6 +381,7 @@ export function CaptionsPane() {
 					<button
 						type="button"
 						className={`${styles.btn} ${styles.btnSecondary}`}
+						style={{ flexShrink: 0 }}
 						disabled={disabled || translating || !hasTranscript}
 						onClick={() => void handleTranslate()}
 						title={t("captions.translateHint")}
@@ -356,7 +417,7 @@ export function CaptionsPane() {
 					style={{
 						margin: "0 var(--sp-4) 14px",
 						font: "400 11px/1.5 var(--font-body)",
-						color: "var(--meta)",
+						color: "var(--muted)",
 					}}
 				>
 					{t("captions.translationIsNonDestructive")}
@@ -468,7 +529,7 @@ export function CaptionsPane() {
 					style={{
 						margin: "6px var(--sp-4) 10px",
 						font: "400 11px/1.5 var(--font-body)",
-						color: "var(--meta)",
+						color: "var(--muted)",
 					}}
 				>
 					{settings.anchorV === "bottom"
@@ -568,13 +629,14 @@ const WORD_COUNTS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const selectStyle: React.CSSProperties = {
 	height: 32,
-	padding: "0 8px",
+	padding: "0 10px",
 	borderRadius: 8,
 	border: "1px solid var(--border)",
-	background: "var(--surface)",
+	background: "var(--surface-2)",
 	color: "var(--fg)",
 	font: "500 12.5px var(--font-body)",
-	maxWidth: 160,
+	minWidth: 120,
+	cursor: "pointer",
 };
 
 /**

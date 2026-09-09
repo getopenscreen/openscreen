@@ -10,6 +10,17 @@
     "**/*.node"
   ],
   "productName": "Openscreen",
+  // There is deliberately no `electronVersion` here. electron-builder needs an EXACT
+  // version because it downloads the binaries for one release, and it takes that from
+  // package.json's `electron` devDependency, which is pinned without a caret for this
+  // reason. Setting it here as well would make the version two facts that have to agree,
+  // and nothing would notice when they stopped.
+  //
+  // The error that leads people here is "Electron version ... is a range, not a fixed
+  // version", raised when the project has no `node_modules/electron` of its own — a git
+  // worktree, typically, where module resolution finds the parent checkout's copy but
+  // electron-builder looks only at the project's. The fix is `npm ci` in the worktree, not
+  // a second declaration of the version.
   // Declared rather than left to default BECAUSE the default is package.json's `author` — one
   // name, where LICENSE has two holders. Feeds Info.plist's NSHumanReadableCopyright and the
   // Windows LegalCopyright, so leaving it implicit put an attribution on the binary that the
@@ -97,10 +108,30 @@
     {
       "from": "public/cursors",
       "to": "cursors"
+    },
+    // The segmentation model, out of the asar for the same reason as the two above: the main
+    // process resolves it with `original-fs` (see realExistsSync in compositorViewService.ts),
+    // which cannot see inside app.asar, so a copy that ships only in `dist` resolves to null and
+    // the compositor draws the webcam unsegmented — the whole camera-background feature, silently
+    // off in every installer. 457 KB.
+    {
+      "from": "public/mediapipe",
+      "to": "mediapipe"
     }
   ],
 
   "mac": {
+    // Declared, not merely documented. Electron 41's own LSMinimumSystemVersion is 12.0
+    // and the .app inherits it verbatim when this key is absent — so before this line the
+    // bundle advertised macOS 12 while its native payload was built for 13, and a
+    // Monterey user got as far as the record button before anything went wrong (#515).
+    // LaunchServices now refuses to open the app below 13 instead, which is the honest
+    // signal.
+    //
+    // macOS 13 because ScreenCaptureKit capture requires it: ScreenCaptureRecorder is
+    // `@available(macOS 13.0, *)`. Keep in step with README.md, website/docs/
+    // installation.md, and electron/native/screencapturekit/Package.swift.
+    "minimumSystemVersion": "13.0",
     "notarize": false,
     "hardenedRuntime": true,
     "entitlements": "macos.entitlements",

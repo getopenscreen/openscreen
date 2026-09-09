@@ -27,6 +27,7 @@ import type { AxcutDocument } from "../../../src/lib/ai-edition/schema";
 import { ZOOM_DEPTH_LEGEND } from "../../../src/lib/ai-edition/timeline/zoom-scale";
 import {
 	addAnnotationArgs,
+	addAudioArgs,
 	addCameraFullscreenArgs,
 	addSpeedArgs,
 	addTrimArgs,
@@ -37,6 +38,7 @@ import {
 	executeAgentTool,
 	getCursorTrackArgs,
 	getTranscriptArgs,
+	getTranscriptWordsArgs,
 	isMutatingTool,
 	moveClipArgs,
 	removeClipArgs,
@@ -45,10 +47,12 @@ import {
 	replaceTimelineArgs,
 	resolveCursorAssetId,
 	setAnnotationArgs,
+	setAudioArgs,
 	setCameraFullscreenArgs,
 	setClipRangeArgs,
 	setSpeedArgs,
 	setTrimArgs,
+	setWordTextArgs,
 	setZoomArgs,
 } from "../agent-tools";
 import {
@@ -115,6 +119,7 @@ const BASE_SYSTEM_PROMPT = [
 	"- Silences, pauses and dead stretches are removed as trims INSIDE the placed clip. Send them together with addTrims once you know the ranges; addTrim is for a single cut or a correction. The placed clip stays the canonical cut; it is not rebuilt to drop them.",
 	"- Changing where a clip starts or ends within its source is setClipRange — the clip's in/out, distinct from a trim.",
 	`- addZoom takes a virtual-timeline span (depth is an ordinal 1–6 selecting from a fixed table — ${ZOOM_DEPTH_LEGEND} — never a multiplier; focus in 0–1 frame fractions). addSpeed changes pacing over a span. addAnnotation puts text on screen. addCameraFullscreen enlarges the webcam, and only does something where assets[].hasCameraTrack is true.`,
+	"- addAudio lays an imported voiceover or music file over a span. It plays an asset the project already has (kind 'audio'); importing or recording one is the editor's job, not a tool you have — so when the project has none, say so rather than naming an id that does not exist.",
 	"- moveClip changes the order of placed clips, one call per clip that moves, preserving ids, source ranges, trims and anchored effects. replaceTimeline rebuilds the timeline from kept intervals and sorts them, so it cannot reorder anything.",
 	"- Deleting is a first-class action, not a workaround: removeTrim, removeModifier, removeClip. Never fake a deletion by re-adding an element or zeroing it out (span 0, speed 1×) — that leaves it in the document and misreports what you did.",
 	"If nothing in the list does what was asked, say so; do not approximate it with a bigger tool.",
@@ -143,6 +148,10 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Read the transcript segments (speech and silence, with start/end seconds and text) for an asset. Omit assetId to read the primary asset's transcript.",
 	getCursorTrack:
 		"Read the recorded pointer track for an asset: where the cursor was over time, downsampled to a readable rate. Each point carries atSec (the asset's own source clock), virtualSec (the same instant on the edited timeline — the coordinate addZoom takes, null when no clip carries it), cx/cy as 0–1 fractions of the frame, and `shape`, an index into the pointer bitmaps the recording used (equal values are the same pointer; a change means the pointer changed, e.g. arrow to text caret). Points that are not plain moves carry `kind`; points a trim cuts out of playback carry `trimmed`. These are real samples, not a summary — reading what the pointer was doing is yours. Omit assetId for the primary asset. It answers `available:false` in two DIFFERENT ways you must not confuse: reason 'no-sidecar' means this asset was checked and genuinely has no telemetry, while reason 'unavailable' means it could not be read from here.",
+	getTranscriptWords:
+		'Read the transcript one WORD at a time for an asset: each word\'s id, text, start/end seconds, and — only when it is not plain transcription — `source` ("user" for a word the user corrected, "synth" for one they typed in) and `originalText` (what the transcriber had heard before the correction). This is the ONLY read that gives you the ids setWordText takes; getTranscript answers in segments, whose ids belong to a different namespace and are not accepted there. A whole transcript is large, so pass startSec/endSec to read just the passage you mean to fix. Omit assetId for the primary asset.',
+	setWordText:
+		"Correct ONE word's text, by the id getTranscriptWords returns. This changes the TRANSCRIPT and nothing else: the captions follow it, the film is untouched and no audio is cut. Use it when the transcriber misheard something — a name, a technical term — and the user asks for it to read correctly. Passing an empty string BLANKS the word: it keeps its place in the media but leaves the captions, which is how a junk token like \"(inaudible)\" is removed without cutting the speech around it. Writing the transcriber's own text back clears the correction. This is NOT how you make a spoken word go away — that removes only the label and leaves the film saying it; use addTrim, which cuts the audio with it.",
 	addTrim:
 		"Add ONE trim range: a cut of a span inside a clip (this source-time span will not be played or exported) that does NOT split the clip. Times are in seconds of the asset's source time. This is the preferred (and for 'remove silences' requests, the only) way to handle silences; it preserves the user's placed clips and only adds a cut. When you have several cuts to make, use addTrims and send them together — this one is for a single cut or a later correction. A cut belongs to ONE clip: `clipId` is inferred when a single clip covers the range, but when several clips draw on the same asset over it the call FAILS and lists them — pass the `clipId` you mean (ids come from getCurrentDocument).",
 	addTrims:
@@ -170,10 +179,14 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Add a camera-fullscreen region over a span of the edited timeline (virtual seconds): the webcam fills the frame for that span. This only does something when the footage under that span comes from an asset with a linked webcam — check assets[].hasCameraTrack (or hasAnyCamera) in getCurrentDocument first. On footage with no camera the call is refused rather than storing a region that would render nothing; say so instead of retrying.",
 	setCameraFullscreen:
 		"Move or resize an existing camera-fullscreen region by id (virtual-timeline seconds). Only the fields you pass are changed. Refused if the new span lands on footage with no linked webcam.",
+	addAudio:
+		"Lay an ALREADY-IMPORTED audio file over the recording across a span of the edited timeline (virtual seconds): a voiceover, or a music bed. assetId must name an asset whose kind is 'audio' — getCurrentDocument lists them; nothing here can import a file from disk or record one, so if there is none, say so instead of guessing an id. Omit endSec to play the whole file from offsetSec. kind picks the lane ('voiceover' or 'music'). offsetSec is where in the FILE playback starts, gainDb its level (0 unchanged, negative ducks it). A voiceover-lane track is also what gets transcribed, so the lane is not only cosmetic.",
+	setAudio:
+		"Move, resize, re-level, re-lane, mute, loop or re-point an existing audio track by id (virtual-timeline seconds). Only the fields you pass are changed. Use it to duck a bed under narration (gainDb), to shift what part of the file plays (offsetSec), or to move it between the voiceover and music lanes (kind). The whole track is edited, not one fragment of it, so a track split across a cut stays one thing.",
 	removeTrim:
 		"Delete a trim range by id — the cut is undone and that span plays/exports again. This is how you 'remove a trim'; never re-add a trim to undo one.",
 	removeModifier:
-		"Delete a modifier (zoom / speed / annotation / camera-fullscreen) by id; the kind is resolved from the id. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. For a trim use removeTrim; for a clip use removeClip.",
+		"Delete a modifier (zoom / speed / annotation / camera-fullscreen / audio) by id; the kind is resolved from the id. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. For a trim use removeTrim; for a clip use removeClip.",
 	removeClip:
 		"Delete a placed clip by id; remaining clips close the gap and effects anchored to it are dropped. Use only when the user asks to remove a clip — to shorten one, use setClipRange.",
 };
@@ -323,7 +336,9 @@ export function buildTools(
 	return [
 		build("getCurrentDocument", z.object({})),
 		build("getTranscript", getTranscriptArgs),
+		build("getTranscriptWords", getTranscriptWordsArgs),
 		build("getCursorTrack", getCursorTrackArgs),
+		build("setWordText", setWordTextArgs),
 		build("addTrim", addTrimArgs),
 		build("addTrims", addTrimsArgs),
 		build("setTrim", setTrimArgs),
@@ -339,6 +354,8 @@ export function buildTools(
 		build("setAnnotation", setAnnotationArgs),
 		build("addCameraFullscreen", addCameraFullscreenArgs),
 		build("setCameraFullscreen", setCameraFullscreenArgs),
+		build("addAudio", addAudioArgs),
+		build("setAudio", setAudioArgs),
 		build("removeTrim", removeTrimArgs),
 		build("removeModifier", removeModifierArgs),
 		build("removeClip", removeClipArgs),

@@ -6,7 +6,13 @@
 // verbatim. No Python, no faster-whisper, no network calls. Privacy-safe.
 
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
-import { extractMono16kFromVideoUrl, transcribeMono16kToSegments } from "@/lib/captioning";
+import {
+	extractMono16kFromVideoUrl,
+	transcribeMono16kToSegments,
+	transcribeSourceFileToSegments,
+} from "@/lib/captioning";
+import type { SttRendererStatus } from "@/lib/captioning/transcribe";
+import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "../../../../electron/stt/transcriptionContract";
 import type { AxcutDocument, AxcutTranscript, AxcutTranscriptSegment, AxcutWord } from "../schema";
 
 /**
@@ -22,6 +28,10 @@ export interface TranscribeStatus {
 	backend?: string;
 	/** Real-time factor for the run so far — wall-clock / audio, lower is faster. */
 	rtf?: number;
+	/** Bytes of the speech model fetched so far. Only during `"loading-model"`. */
+	downloadedBytes?: number;
+	/** Total bytes of the in-flight model download. */
+	totalBytes?: number;
 }
 
 export interface TranscribeAssetOptions {
@@ -43,11 +53,11 @@ export async function transcribeAsset(
 	const videoUrl = toFileUrl(asset.originalPath);
 
 	options.onStatus?.({ phase: "extracting-audio" });
-	const audioResult = await extractMono16kFromVideoUrl(videoUrl, {
-		signal: options.signal,
-	});
 
-	options.onStatus?.({ phase: "transcribing" });
+	// Stay on loading-model until the main process reports inference chunks.
+	// Emitting "transcribing" here used to label the cold `server.start()` wait
+	// as if recognition had begun.
+	options.onStatus?.({ phase: "loading-model" });
 	// Only pass `language` to the worker when the caller forced a specific
 	// code. `"auto"` (or any falsy value) leaves Whisper to detect from
 	// the audio. The pipeline tags every chunk with the language it used
@@ -55,24 +65,54 @@ export async function transcribeAsset(
 	// so the stored transcript reflects reality, not the input option.
 	const forcedLanguage =
 		options.language && options.language !== "auto" ? options.language : undefined;
-	const result = await transcribeMono16kToSegments(audioResult.samples, {
+
+	// Forward the main process's per-chunk progress. Without this the status
+	// callback only ever fired the two coarse phases above, so a 30-minute
+	// recording showed one static "transcribing" for ten minutes.
+	const forwardStatus = (status: SttRendererStatus) =>
+		options.onStatus?.({
+			phase: status.phase === "model" ? "loading-model" : "transcribing",
+			completedSec: status.completedSec,
+			totalSec: status.totalSec,
+			// Which device is doing the work, and how fast. The main process is the
+			// only place that knows either, and a silent CPU fallback is exactly the
+			// case a user cannot otherwise diagnose.
+			backend: status.backend,
+			rtf: status.rtf,
+			...(status.downloadedBytes !== undefined ? { downloadedBytes: status.downloadedBytes } : {}),
+			...(status.totalBytes !== undefined ? { totalBytes: status.totalBytes } : {}),
+		});
+
+	// Native first. `extractMono16kFromVideoUrl` runs in the RENDERER: it reads the
+	// whole media into memory, copies it twice and resamples on the UI thread, which
+	// is what froze the editor at project open on a long import (measured on a
+	// four-minute bed: ~86 MB of decoded float32 there against 15.7 MB in the main
+	// process). Handing the path over keeps every byte on the other side of the IPC,
+	// and the whisper helper it feeds was already a separate process.
+	//
+	// The fallback is not decoration: an install with no resolvable ffmpeg — a dev
+	// checkout that never fetched it, a platform build missing the binary — must still
+	// transcribe rather than lose the feature. Only THAT case falls back. "This file
+	// has no audio" is a verdict, and re-deriving it in the renderer would buy the same
+	// answer for the price of the decode this exists to avoid.
+	const result = await transcribeSourceFileToSegments(asset.originalPath, {
 		trimRegions: [],
 		signal: options.signal,
 		language: forcedLanguage,
-		// Forward the main process's per-chunk progress. Without this the status
-		// callback only ever fired the two coarse phases above, so a 30-minute
-		// recording showed one static "transcribing" for ten minutes.
-		onStatus: (status) =>
-			options.onStatus?.({
-				phase: status.phase === "model" ? "loading-model" : "transcribing",
-				completedSec: status.completedSec,
-				totalSec: status.totalSec,
-				// Which device is doing the work, and how fast. The main process is the
-				// only place that knows either, and a silent CPU fallback is exactly the
-				// case a user cannot otherwise diagnose.
-				backend: status.backend,
-				rtf: status.rtf,
-			}),
+		onStatus: forwardStatus,
+	}).catch(async (error: unknown) => {
+		const message = error instanceof Error ? error.message : String(error);
+		if (!message.includes(STT_NATIVE_EXTRACTION_UNAVAILABLE)) throw error;
+		const audioResult = await extractMono16kFromVideoUrl(videoUrl, {
+			signal: options.signal,
+		});
+		options.onStatus?.({ phase: "transcribing" });
+		return transcribeMono16kToSegments(audioResult.samples, {
+			trimRegions: [],
+			signal: options.signal,
+			language: forcedLanguage,
+			onStatus: forwardStatus,
+		});
 	});
 
 	const segments: AxcutTranscriptSegment[] = [];
@@ -122,64 +162,6 @@ export async function transcribeAsset(
 	};
 }
 
-// ponytail: emit the upstream `AXCUT_TRANSCRIPT v1` plain-text DSL for display
-// in the Source Transcript modal. Mirrors `axcut_core/dsl.py` just enough for
-// the modal's <pre> body — a small segment/word loop, no Python needed. The
-// runtime still uses the structured `AxcutTranscript`; this string is the
-// "what the user reads" view of the same data.
-// Escape both single and double quotes — the DSL wraps every string in
-// double quotes and uses SQL/Python-style `''` doubling for an embedded
-// single quote.
-function escapeDslString(s: string): string {
-	return s.replace(/"/g, '""').replace(/'/g, "''");
-}
-
-export function toAxcutTranscriptDsl(
-	transcript: AxcutTranscript,
-	sourceLabel?: string,
-	durationSec?: number,
-): string {
-	const lines: string[] = ["AXCUT_TRANSCRIPT v1"];
-	const meta: string[] = [];
-	if (sourceLabel) meta.push(`source_video="${sourceLabel}"`);
-	if (typeof durationSec === "number" && Number.isFinite(durationSec)) {
-		meta.push(`duration=${durationSec.toFixed(3)}`);
-	}
-	meta.push(`language="${transcript.language || "auto"}"`, `kind="source"`);
-	lines.push(`META ${meta.join(" ")}`);
-
-	const segIndexById = new Map<string, number>();
-	transcript.segments.forEach((seg, i) => segIndexById.set(seg.id, i + 1));
-
-	for (const seg of transcript.segments) {
-		lines.push(
-			`SEGMENT id=s${String(segIndexById.get(seg.id) ?? 0).padStart(4, "0")} start=${seg.startSec.toFixed(3)} end=${seg.endSec.toFixed(3)} text="${escapeDslString(seg.text)}"`,
-		);
-		for (const wordId of seg.wordIds) {
-			const word = transcript.words.find((w) => w.id === wordId);
-			if (!word) continue;
-			const wSegIdx = segIndexById.get(word.segmentId) ?? 0;
-			lines.push(
-				`WORD id=w${String(transcript.words.indexOf(word) + 1).padStart(6, "0")} segment=s${String(wSegIdx).padStart(4, "0")} start=${word.startSec.toFixed(3)} end=${word.endSec.toFixed(3)} text="${escapeDslString(word.text)}"`,
-			);
-		}
-		lines.push("ENDSEGMENT");
-	}
-	return lines.join("\n");
-}
-
-export function withTranscript(
-	document: AxcutDocument,
-	transcript: AxcutTranscript,
-): AxcutDocument {
-	const transcripts = [
-		...document.transcripts.filter((t) => t.assetId !== transcript.assetId),
-		transcript,
-	];
-	return {
-		...document,
-		transcript:
-			document.project.primaryAssetId === transcript.assetId ? transcript : document.transcript,
-		transcripts,
-	};
-}
+// `withTranscript` used to live here. It moved to `document/transcript.ts`, next to
+// the other writers of the same object: it is a pure document operation, and the
+// Whisper adapter is not where a caller should have to look for it.

@@ -32,8 +32,15 @@ struct Layer {
 
 @group(0) @binding(0) var<uniform> layer: Layer;
 @group(0) @binding(1) var texY:  texture_2d<f32>;   // R8Unorm, sample .r
-@group(0) @binding(2) var texUV: texture_2d<f32>;   // Rg8Unorm, sample .rg
+@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r
 @group(0) @binding(3) var samp:  sampler;
+// Masque de segmentation du sujet webcam, R8. Une vue 1x1 est liee quand aucun masque
+// n'existe : la branche n'est de toute facon prise que si layer.fx.z > 0.5.
+@group(0) @binding(4) var texMask: texture_2d<f32>;
+// V est en binding 5 et pas 3 : les bindings 0-4 etaient deja pris quand le plan
+// de chroma a ete dedouble, et renumeroter aurait touche tous les bind groups
+// pour un gain nul.
+@group(0) @binding(5) var texV:  texture_2d<f32>;   // R8Unorm, sample .r
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
@@ -69,7 +76,10 @@ fn yuv709_limited(y: f32, cbcr: vec2<f32>) -> vec3<f32> {
 
 fn sample_yuv(uv: vec2<f32>) -> vec3<f32> {
     let y = textureSample(texY, samp, uv).r;
-    let cbcr = textureSample(texUV, samp, uv).rg;
+    let cbcr = vec2<f32>(
+        textureSample(texU, samp, uv).r,
+        textureSample(texV, samp, uv).r,
+    );
     return yuv709_limited(y, cbcr);
 }
 
@@ -77,6 +87,20 @@ fn sample_yuv(uv: vec2<f32>) -> vec3<f32> {
 fn sd_round_rect(p: vec2<f32>, halfsz: vec2<f32>, r: f32) -> f32 {
     let q = abs(p) - halfsz + vec2<f32>(r);
     return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+// Couverture du quad avec coins arrondis, pour le mode 6 qui retourne AVANT la queue de
+// `fs_main`. Il s'en passait tant qu'il ne servait qu'au fond plein cadre, qui n'a pas de
+// rayon ; depuis que la bulle webcam peut porter une image, sans ca le fond deborde en carre
+// opaque sur les coins arrondis de la bulle et mange l'ombre. Renvoie 1.0 quand aucun rayon
+// n'est demande -- le fond plein cadre est donc inchange.
+fn quad_round_alpha(local: vec2<f32>, quad_px: vec2<f32>, radius_px: f32) -> f32 {
+    if radius_px <= 0.0 || quad_px.x <= 0.0 || quad_px.y <= 0.0 {
+        return 1.0;
+    }
+    let halfsz = quad_px * 0.5;
+    let d = sd_round_rect(local - halfsz, halfsz, radius_px);
+    return 1.0 - smoothstep(0.0, 1.5, d); // meme feather ~1.5px que la queue
 }
 
 // ---- Primitives du tilt 3D (modes 8 et 12), portees de `shaders.metal` ----
@@ -197,10 +221,58 @@ fn quad_inverse_bilinear(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: vec2
     return r1;
 }
 
+// Fond flouté pour le mode "blur" de la webcam.
+// Disque de Vogel (spirale à angle d'or) à 21 échantillons avec pondération gaussienne et
+// rotation par pixel via Interleaved Gradient Noise (IGN) pour un bokeh photographique doux, isotrope et rapide.
+const VOGEL_TAPS = array<vec3<f32>, 21>(
+    vec3<f32>( 0.154303,  0.000000, 0.942213),
+    vec3<f32>(-0.197070,  0.180532, 0.836464),
+    vec3<f32>( 0.030165, -0.343712, 0.742584),
+    vec3<f32>( 0.248394,  0.323986, 0.659241),
+    vec3<f32>(-0.455834, -0.080631, 0.585251),
+    vec3<f32>( 0.431806, -0.274679, 0.519566),
+    vec3<f32>(-0.144431,  0.537274, 0.461253),
+    vec3<f32>(-0.275445, -0.530352, 0.409484),
+    vec3<f32>( 0.597605,  0.218244, 0.363526),
+    vec3<f32>(-0.621708,  0.256632, 0.322726),
+    vec3<f32>( 0.299704, -0.640451, 0.286505),
+    vec3<f32>( 0.221474,  0.706094, 0.254349),
+    vec3<f32>(-0.667525, -0.386844, 0.225802),
+    vec3<f32>( 0.783083, -0.172159, 0.200460),
+    vec3<f32>(-0.477903,  0.679768, 0.177961),
+    vec3<f32>(-0.110407, -0.852001, 0.157988),
+    vec3<f32>( 0.677789,  0.571241, 0.140256),
+    vec3<f32>(-0.912091,  0.037718, 0.124514),
+    vec3<f32>( 0.665301, -0.662063, 0.110540),
+    vec3<f32>(-0.044511,  0.962596, 0.098133),
+    vec3<f32>(-0.633036, -0.758588, 0.087119)
+);
+
+fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<f32>) -> vec3<f32> {
+    let max_r_px = max(intensity, 0.0) * 22.0 + 1.5;
+    let step = max_r_px / max(qpx, vec2<f32>(1.0));
+    let noise = fract(52.9829189 * fract(0.06711056 * local_px.x + 0.00583715 * local_px.y));
+    let angle = noise * 6.2831853;
+    let s = sin(angle);
+    let c = cos(angle);
+    var sum = vec3<f32>(0.0);
+    var total = 0.0;
+    for (var k: i32 = 0; k < 21; k = k + 1) {
+        let p = VOGEL_TAPS[k].xy;
+        let w = VOGEL_TAPS[k].z;
+        let rot_p = vec2<f32>(p.x * c - p.y * s, p.x * s + p.y * c);
+        sum = sum + sample_yuv(clamp(uv + rot_p * step, vec2<f32>(0.0), vec2<f32>(1.0))) * w;
+        total = total + w;
+    }
+    return sum / max(total, 1e-4);
+}
+
 @fragment
 fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
     var rgb: vec3<f32>;
     var alpha: f32;
+    // 1 sauf en detourage, ou il porte le masque du sujet. Cf. la branche fx.z plus bas.
+    var alpha_mask = 1.0;
 
     if layer.mode < 0.5 {
         // Mode 0 — vidéo NV12 + flou de mouvement par vélocité (§8), port 1:1 du
@@ -209,16 +281,18 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // floute le long de ce segment, ce qui capture la translation ET le zoom
         // du calque sans avoir à transporter un champ de vitesse.
         let taps = i32(layer.mb.x);
+        let mb_scale = clamp(layer.mb.y, 0.0, 1.0);
         // `taps` d'abord : un draw qui a oublié `dst_prev` le laisse à zéro, et
         // la division par `dst_prev.zw` produirait des UV infinis. Dégrader vers
         // le chemin net est le seul échec acceptable pour un effet cosmétique.
-        if taps <= 1 || layer.dst_prev.z <= 0.0 || layer.dst_prev.w <= 0.0 {
+        if taps <= 1 || mb_scale <= 0.001 || layer.dst_prev.z <= 0.0 || layer.dst_prev.w <= 0.0 {
             rgb = sample_yuv(i.uv);
         } else {
             let localp = (i.pout - layer.dst_prev.xy) / layer.dst_prev.zw;
             let uv_prev = layer.src_prev.xy + localp * (layer.src_prev.zw - layer.src_prev.xy);
             let duv = i.uv - uv_prev;
-            if dot(duv, duv) < 1e-9 {
+            let duv_blur = duv * mb_scale;
+            if dot(duv_blur, duv_blur) < 1e-9 {
                 rgb = sample_yuv(i.uv);
             } else {
                 // Borne 16 en dur, identique au HLSL et au MSL : `taps` vient d'un
@@ -229,9 +303,25 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
                 let step = 1.0 / f32(taps - 1);
                 for (var k: i32 = 0; k < 16; k = k + 1) {
                     if k >= taps { break; }
-                    acc = acc + sample_yuv(uv_prev + duv * (f32(k) * step));
+                    acc = acc + sample_yuv(i.uv - duv_blur * (1.0 - f32(k) * step));
                 }
                 rgb = acc / f32(taps);
+            }
+        }
+
+        // Effet d'arriere-plan webcam. Miroir exact des branches HLSL et MSL : fx.z porte le
+        // mode (1 = detourage, 2 = flou, 3 = fond plat), fx.w l'intensite du flou, fx.xy
+        // l'etendue valide de la texture webcam pour ramener uv dans l'espace du masque.
+        let effect = layer.fx.z;
+        if effect > 0.5 {
+            let mask_uv = i.uv / max(layer.fx.xy, vec2<f32>(1e-6));
+            let person = clamp(textureSample(texMask, samp, mask_uv).r, 0.0, 1.0);
+            if effect > 2.5 {
+                rgb = mix(layer.color.rgb, rgb, person);
+            } else if effect > 1.5 {
+                rgb = mix(blur_webcam_bg(i.uv, layer.fx.w, layer.quad_px, i.local), rgb, person);
+            } else {
+                alpha_mask = person;
             }
         }
     } else if layer.mode < 1.5 {
@@ -240,7 +330,17 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
     } else if layer.mode > 4.5 && layer.mode < 5.5 {
         // Mode 5 -- gradient lineaire : color (c0) -> src.rgb (c1) le long de
         // la direction fx.xy (sin, -cos de l'angle). Parite avec le HLSL/MSL.
-        let t = clamp(dot(i.pout - vec2<f32>(0.5), layer.fx.xy) + 0.5, 0.0, 1.0);
+        // `denom` : HLSL et MSL normalisent coin-a-coin (|dx|+|dy|) pour couvrir toute la
+        // diagonale. Il manquait ici, donc le meme degrade ne rendait pas pareil sur Linux.
+        let denom = max(abs(layer.fx.x) + abs(layer.fx.y), 1e-4);
+        // Parametre sur le QUAD des qu'il en a un (la bulle webcam), sinon sur la sortie. Pour
+        // le fond plein cadre les deux coincident ; pour une bulle dans un coin, `pout` ne
+        // montrerait que la tranche du degrade plein cadre qui passe dessous.
+        var gp = i.pout;
+        if layer.quad_px.x > 0.0 && layer.quad_px.y > 0.0 {
+            gp = i.local / layer.quad_px;
+        }
+        let t = clamp(0.5 + dot(gp - vec2<f32>(0.5), layer.fx.xy) / denom, 0.0, 1.0);
         rgb = mix(layer.color.rgb, layer.src.rgb, t);
     } else if layer.mode > 10.5 && layer.mode < 11.5 {
         // Mode 11 : texte. texY est l'atlas R8 (couverture alpha au canal .r,
@@ -339,7 +439,8 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Mode 6 -- fond image (wallpaper RGBA) cover-fit, echantillonne sur
         // texY. `src` porte le rect UV cover-fit (calcule cote Rust). Opaque :
         // le fond couvre tout le cadre.
-        return vec4<f32>(textureSample(texY, samp, i.uv).rgb, 1.0);
+        let bg_a = quad_round_alpha(i.local, layer.quad_px, layer.radius_px);
+        return vec4<f32>(textureSample(texY, samp, i.uv).rgb * bg_a, bg_a); // premultiplie
     } else if layer.mode > 7.5 && layer.mode < 8.5 {
         // Mode 8 -- ecran tilte (rotation 3D des zoom regions). Le quad projete est
         // dessine dans sa BBOX (le VS ne sait tracer qu'un rect) et chaque fragment
@@ -427,7 +528,7 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         return vec4<f32>(layer.color.rgb * a, a);
     }
 
-    alpha = layer.color.a;
+    alpha = layer.color.a * alpha_mask;
 
     if layer.radius_px > 0.0 {
         // Feather ~1.5 px sur le bord du quad — parité exacte avec le HLSL

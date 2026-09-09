@@ -34,7 +34,9 @@ import { useScopedT } from "@/contexts/I18nContext";
 import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat";
 import type {
 	AxcutAnnotationRegion,
+	AxcutAudioTrack,
 	AxcutClip,
+	AxcutTranscript,
 	AxcutTrimRange,
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
@@ -65,11 +67,17 @@ type BlurData = NonNullable<AxcutAnnotationRegion["blurData"]>;
 
 interface PreviewCanvasProps {
 	videoSources: VideoSource[];
+	/** Imported audio tracks + their asset URLs (issue #350), forwarded to
+	 *  VirtualPreview. */
+	audioTracks?: AxcutAudioTrack[];
+	audioSources?: VideoSource[];
 	clips: AxcutClip[];
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	trimRanges?: AxcutTrimRange[];
+	/** Relayed to `VirtualPreview` so a clip carrying added words plays their extensions. */
+	transcripts?: AxcutTranscript[];
 	selectedZoomRegionId?: string | null;
 	onZoomFocusChange?: (id: string, focus: ZoomFocus) => void;
 	onZoomFocusCommit?: () => void;

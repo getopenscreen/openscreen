@@ -139,24 +139,36 @@ async fn create_async(want: Backend) -> Result<Gpu> {
             info.name
         );
     }
-    let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("openscreen-linux"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-            },
-            None,
-        )
-        .await
-        .context("request_device a echoue")?;
+    let desc = wgpu::DeviceDescriptor {
+        label: Some("openscreen-linux"),
+        required_features: wgpu::Features::empty(),
+        required_limits: wgpu::Limits::default(),
+        memory_hints: wgpu::MemoryHints::default(),
+    };
+    // Ouvre le device AVEC les extensions de memoire externe si la machine les a,
+    // et retombe sur le chemin standard sinon. Le repli couvre un hote sans
+    // pilote Vulkan utilisable, ou un pilote sans memoire externe ; sur cette
+    // machine il n'est plus atteint depuis qu'on n'exige que deux extensions.
+    let (device, queue, dmabuf_export) = match open_device_with_dmabuf_export(&adapter, &desc) {
+        Some((d, q)) => (d, q, true),
+        None => {
+            let (d, q) = adapter
+                .request_device(&desc, None)
+                .await
+                .context("request_device a echoue")?;
+            (d, q, false)
+        }
+    };
     // Windows loggue son repli (`d3d_windows.rs`), Linux ne loggait rien : un hote
     // tombe sur lavapipe rendait a quelques fps sans que rien -- ni log, ni rapport
     // de bug -- ne permette de l'etablir a distance.
     eprintln!(
-        "[d3d] adaptateur Vulkan : {} ({:?}, {:?}) -> backend {:?}",
-        info.name, info.device_type, info.backend, got
+        "[d3d] adaptateur Vulkan : {} ({:?}, {:?}) -> backend {:?}, export dmabuf {}",
+        info.name,
+        info.device_type,
+        info.backend,
+        got,
+        if dmabuf_export { "actif" } else { "indisponible" }
     );
     Ok(Gpu {
         device,
@@ -392,5 +404,116 @@ mod tests {
         for b in [Backend::Hardware, Backend::Cpu] {
             assert_eq!(parse_forced_backend(b.as_str()), Some(b));
         }
+    }
+}
+
+/// Ouvre le `VkDevice` en AJOUTANT les extensions qui permettent d'exporter une
+/// image en dmabuf, et rend `None` si la machine ne les a pas toutes.
+///
+/// POURQUOI PASSER SOUS wgpu. `request_device` n'a aucun moyen de demander une
+/// extension Vulkan : wgpu n'active que ce que ses propres `Features` imposent.
+/// Or l'export dmabuf n'a pas de `Feature` equivalente. Le seul point d'entree
+/// est donc de construire le device soi-meme et de le rendre a wgpu via
+/// `create_device_from_hal`.
+///
+/// CE QUE CETTE FONCTION NE FAIT PAS. Elle n'exporte rien : elle rend seulement
+/// l'export POSSIBLE plus tard. Tant que personne n'appelle `vkGetMemoryFdKHR`,
+/// activer ces extensions ne change ni le rendu ni les performances -- c'est
+/// justement ce qui permet de la livrer seule et de la verifier seule.
+///
+/// LE REPLI EST LE CAS NORMAL, PAS L'EXCEPTION. Le rasteriseur logiciel
+/// (lavapipe) n'expose pas `VK_EXT_image_drm_format_modifier`, et une machine
+/// sans pilote GPU utilisable non plus. Rendre `None` doit donc rester
+/// silencieux et sans consequence : l'appelant repart sur `request_device`.
+#[cfg(target_os = "linux")]
+fn open_device_with_dmabuf_export(
+    adapter: &wgpu::Adapter,
+    desc: &wgpu::DeviceDescriptor<'_>,
+) -> Option<(wgpu::Device, wgpu::Queue)> {
+    use std::ffi::CStr;
+
+    // Les deux qu'il faut EN PLUS de ce que wgpu demande deja. `dma_buf` depend
+    // de `external_memory_fd` ; ensemble elles suffisent a exporter la memoire
+    // d'un buffer sous forme de descripteur dmabuf.
+    //
+    // PAS `VK_EXT_image_drm_format_modifier`. Il ne servirait qu'a exporter une
+    // IMAGE, dont la disposition en memoire depend du pavage et doit donc etre
+    // decrite au consommateur. Ce qu'on exporte ici est le buffer de staging que
+    // le compositeur remplit deja par `copy_texture_to_buffer` : lineaire par
+    // construction, avec des pitches qu'on choisit. Il n'y a aucun pavage a
+    // decrire, donc rien a demander au pilote.
+    //
+    // L'exiger etait une erreur mesurable, pas une precaution : c'est
+    // precisement l'extension que le rasteriseur logiciel n'expose pas, donc
+    // reclamer les trois refusait l'export a des machines parfaitement capables
+    // de le faire.
+    const WANTED: [&CStr; 2] = [c"VK_KHR_external_memory_fd", c"VK_EXT_external_memory_dma_buf"];
+
+    unsafe {
+        adapter.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_adapter| {
+            let hal_adapter = hal_adapter?;
+            let phys = hal_adapter.raw_physical_device();
+            let instance = hal_adapter.shared_instance().raw_instance();
+
+            // Refuser tot plutot que d'echouer a `vkCreateDevice` : une extension
+            // absente y devient une erreur opaque.
+            let available = instance.enumerate_device_extension_properties(phys).ok()?;
+            let has = |name: &CStr| {
+                available
+                    .iter()
+                    .any(|e| e.extension_name_as_c_str() == Ok(name))
+            };
+            if !WANTED.iter().all(|n| has(n)) {
+                return None;
+            }
+
+            // Aux extensions de wgpu, pas a la place : en omettre une casserait
+            // le rendu, pas l'export.
+            let mut exts = hal_adapter.required_device_extensions(desc.required_features);
+            exts.extend_from_slice(&WANTED);
+            let ext_ptrs: Vec<*const std::os::raw::c_char> =
+                exts.iter().map(|e| e.as_ptr()).collect();
+
+            // La famille 0 n'est PAS garantie graphique. Elle l'est sur la
+            // plupart des pilotes, ce qui rend l'erreur invisible jusqu'a la
+            // machine ou elle ne l'est pas — et la panne serait alors un device
+            // qui s'ouvre puis ne sait rien dessiner.
+            let families = instance.get_physical_device_queue_family_properties(phys);
+            let family_index = families
+                .iter()
+                .position(|f| f.queue_flags.contains(ash::vk::QueueFlags::GRAPHICS))?
+                as u32;
+            let queue_prio = [1.0f32];
+            let queue_info = ash::vk::DeviceQueueCreateInfo::default()
+                .queue_family_index(family_index)
+                .queue_priorities(&queue_prio);
+            let queue_infos = [queue_info];
+
+            // `physical_device_features` porte les activations que wgpu attend
+            // (elles vivent dans des structures chainees) : les reprendre telles
+            // quelles est ce qui garantit que le device rendu est celui que wgpu
+            // aurait construit, extensions en plus.
+            let mut phys_features =
+                hal_adapter.physical_device_features(&exts, desc.required_features);
+            let info = phys_features.add_to_device_create(
+                ash::vk::DeviceCreateInfo::default()
+                    .queue_create_infos(&queue_infos)
+                    .enabled_extension_names(&ext_ptrs),
+            );
+            let raw_device = instance.create_device(phys, &info, None).ok()?;
+
+            let open = hal_adapter
+                .device_from_raw(
+                    raw_device,
+                    None,
+                    &exts,
+                    desc.required_features,
+                    &desc.memory_hints,
+                    family_index,
+                    0,
+                )
+                .ok()?;
+            adapter.create_device_from_hal(open, desc, None).ok()
+        })
     }
 }

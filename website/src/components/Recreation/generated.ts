@@ -71,7 +71,7 @@ export const META = {
 
 /** The transcript pane's header. */
 export const INSPECTOR = {
-	title: "Current transcription",
+	title: "Transcript",
 	indexBadge: "1",
 	filename: "Bellrock — docs walkthrough",
 	clipRange: "Clip 1 · 0:00.0—0:40.0",
@@ -544,7 +544,7 @@ export const PANELS = {
 		],
 	},
 	effects: {
-		title: "Video Effects",
+		title: "Composition",
 		padding: "Padding",
 		blurBg: "Blur BG",
 		motionBlur: "Motion Blur",
@@ -765,14 +765,14 @@ export const TOKENS = {
 
 /** One entry per string on screen. */
 export const PROVENANCE: ProvenanceEntry[] = [
-	{ shown: "Current transcription", source: "src/i18n/locales/en/settings.json → transcript.title" },
+	{ shown: "Transcript", source: "src/i18n/locales/en/settings.json → transcript.title" },
 	{ shown: "Clip 1 · 0:00.0—0:40.0", source: "computed: settings.json transcript.clipLabel with index 1, joined to formatMs(0) and formatMs(40033) from src/lib/ai-edition/timeline/format.ts" },
 	{ shown: "Bellrock — docs walkthrough", source: "fixture assets[0].label" },
 	{ shown: "[silence 2.2s]", source: "computed: settings.json transcript.silence over the 2.190s gap 0–2.19 that buildClipSection inserted at SILENCE_THRESHOLD_SEC 0.2; inside trimRange trim_f52989cf-489c-47f5-a6c7-b95a7d71b399" },
 	{ shown: "[silence 0.2s]", source: "computed: settings.json transcript.silence over the 0.230s gap 27.09–27.32 that buildClipSection inserted at SILENCE_THRESHOLD_SEC 0.2; outside any trim" },
 	{ shown: "[silence 4.9s]", source: "computed: settings.json transcript.silence over the 4.913s gap 35.12–40.033 that buildClipSection inserted at SILENCE_THRESHOLD_SEC 0.2; inside trimRange trim_3bad6006-721a-4dd4-a218-091fa734a63e" },
 	{ shown: "Hi, quick walk through the documentation site. The new release went out this morning. The hero does the work now. One line, one promise, and the install command right under it. Scrolling down, those six cards are the whole library on one screen. No page gets more than a sentence. Over on status, every component with 30 days of probes behind it. One amber day on the validator, and it recovered, and releases. Three of them, newest first, and every line links into the commit that did it. Back to the top, and that is the whole flow. Tell me what you think.", source: "fixture transcript.words, rejoined in start order; every entry is rendered as its own span" },
-	{ shown: "Conversation 1", source: "computed: editor.json chat.untitledConversation + the session index, as LeftPanel.tsx:1433 renders it" },
+	{ shown: "Conversation 1", source: "computed: editor.json chat.untitledConversation + the session index, as LeftPanel.tsx:1184 renders it" },
 	{ shown: "No messages yet. Ask the agent to cut silences, tighten pauses, or add captions.", source: "editor.json chat.emptyState" },
 	{ shown: "You", source: "editor.json chat.authorUser" },
 	{ shown: "OpenScreen", source: "editor.json chat.authorAssistant" },
@@ -802,7 +802,7 @@ export const PROVENANCE: ProvenanceEntry[] = [
 	{ shown: "Gradient", source: "src/i18n/locales/en/settings.json → background.gradient" },
 	{ shown: "Upload Custom", source: "src/i18n/locales/en/settings.json → background.uploadCustom" },
 	{ shown: "Background 1", source: "computed: settings.json background.imageLabel over the 18 wallpapers WALLPAPER_COUNT declares in src/lib/wallpaper.ts" },
-	{ shown: "Video Effects", source: "src/i18n/locales/en/settings.json → effects.title" },
+	{ shown: "Composition", source: "src/i18n/locales/en/settings.json → effects.title" },
 	{ shown: "Padding", source: "src/i18n/locales/en/settings.json → effects.padding" },
 	{ shown: "Blur BG", source: "src/i18n/locales/en/settings.json → effects.blurBg" },
 	{ shown: "Motion Blur", source: "src/i18n/locales/en/settings.json → effects.motionBlur" },

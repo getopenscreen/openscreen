@@ -63,7 +63,7 @@ function clampSec(sec: number): number {
  * v2 inputs are not handled by it — `migrateProjectDataToAxcutDocument` below
  * still owns the legacy EditorProjectData → AxcutDocument translation.
  */
-export { migrateRawDocumentToCurrent };
+export { migrateRawDocumentToCurrent } from "../schema";
 
 function toLegacyMedia(input: ProjectMedia | undefined): ProjectMedia | null {
 	if (!input) return null;

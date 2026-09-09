@@ -21,6 +21,7 @@ import {
 	documentSchema,
 	migrateRawDocumentToCurrent,
 } from "../../src/lib/ai-edition/schema";
+import { ensureDocumentExtensions } from "../media/extensionClip";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 
 const PROJECT_FILE_EXTENSION = ".openscreen";
@@ -38,6 +39,9 @@ export interface ProjectSummary {
 export interface AddAssetInput {
 	path: string;
 	label?: string;
+	// "audio" imports an external voiceover / BGM / SFX file (issue #350).
+	// Defaults to "video" when omitted, so existing callers are unaffected.
+	kind?: "video" | "audio";
 }
 
 export class DocumentNotFoundError extends Error {
@@ -70,6 +74,35 @@ const SUPPORTED_VIDEO_EXTENSIONS = new Set([
 function isSupportedVideoPath(filePath: string): boolean {
 	const ext = path.extname(filePath).toLowerCase();
 	return SUPPORTED_VIDEO_EXTENSIONS.has(ext);
+}
+
+// Imported audio (issue #350). Decoding is handled downstream by the same
+// WebCodecs / ffmpeg paths that read a video's audio track, so this list is the
+// container formats decodeAudioData and the compositor can open.
+// What may be filed as an AUDIO asset. Deliberately WIDER than the import
+// picker's list in `electron/ipc/handlers.ts`: this gate runs when the caller
+// has already declared `kind: "audio"`, so it only has to reject files that
+// could not carry audio at all, whereas the picker has to guess from the
+// extension alone and must not offer a video as audio.
+//
+// `.webm` is exactly that difference. An in-editor voiceover take is written by
+// MediaRecorder as webm/opus — the same extension a screen recording uses — so
+// the picker rightly refuses it while this gate must accept it.
+const SUPPORTED_AUDIO_EXTENSIONS = new Set([
+	".mp3",
+	".wav",
+	".m4a",
+	".aac",
+	".flac",
+	".ogg",
+	".oga",
+	".opus",
+	".webm",
+]);
+
+function isSupportedAudioPath(filePath: string): boolean {
+	const ext = path.extname(filePath).toLowerCase();
+	return SUPPORTED_AUDIO_EXTENSIONS.has(ext);
 }
 
 function safeProjectId(raw: string): string {
@@ -124,9 +157,23 @@ export class DocumentService {
 	// `mediaRegistryDir` is where the media-links registry file lives
 	// (RECORDINGS_DIR in production) — see getProject. Injected for the same
 	// reason as `projectsRoot`: this module stays free of any `electron` import.
-	constructor(projectsRoot: string, mediaRegistryDir: string) {
+	/**
+	 * Called with every document this service hands out, so the process that owns the read
+	 * allow-list can grant the media that document declares.
+	 *
+	 * Injected for the same reason as the two paths above: this module stays free of any
+	 * `electron` import. Optional so the tests and the CLI construct it as they always did.
+	 */
+	private readonly onProjectRead?: (document: AxcutDocument) => void;
+
+	constructor(
+		projectsRoot: string,
+		mediaRegistryDir: string,
+		onProjectRead?: (document: AxcutDocument) => void,
+	) {
 		this.projectsRoot = projectsRoot;
 		this.mediaRegistryDir = mediaRegistryDir;
+		this.onProjectRead = onProjectRead;
 	}
 
 	async ensureProjectsDir(): Promise<void> {
@@ -241,7 +288,12 @@ export class DocumentService {
 		// back, and it is not persisted from here: the renderer saves the document
 		// it was given, as it does for any other load-time repair.
 		const migrated = migrateRawDocumentToCurrent(JSON.parse(raw));
-		return documentSchema.parse(await relinkProjectMedia(migrated, this.mediaRegistryDir));
+		const document = documentSchema.parse(
+			await relinkProjectMedia(migrated, this.mediaRegistryDir),
+		);
+		// AFTER the relink, so what is granted is the path the renderer will actually ask for.
+		this.onProjectRead?.(document);
+		return document;
 	}
 
 	async createProject(title: string): Promise<AxcutDocument> {
@@ -262,6 +314,9 @@ export class DocumentService {
 			project: { ...parsed.project, updatedAt: new Date().toISOString() },
 		};
 		await this.writeProject(stamped);
+		// After the write, never before: a derived file is not worth delaying the user's edit
+		// reaching disk, and a failure to generate one must not fail the save.
+		await ensureDocumentExtensions(stamped);
 		return stamped;
 	}
 
@@ -283,7 +338,15 @@ export class DocumentService {
 		if (!input.path) {
 			throw new ProjectFileError("Asset path is required.", projectId);
 		}
-		if (!isSupportedVideoPath(input.path)) {
+		const kind = input.kind ?? "video";
+		if (kind === "audio") {
+			if (!isSupportedAudioPath(input.path)) {
+				throw new ProjectFileError(
+					`Unsupported audio extension: ${path.extname(input.path)} (supported: ${[...SUPPORTED_AUDIO_EXTENSIONS].join(", ")})`,
+					projectId,
+				);
+			}
+		} else if (!isSupportedVideoPath(input.path)) {
 			throw new ProjectFileError(
 				`Unsupported video extension: ${path.extname(input.path)} (supported: ${[...SUPPORTED_VIDEO_EXTENSIONS].join(", ")})`,
 				projectId,
@@ -300,18 +363,24 @@ export class DocumentService {
 		}
 		const asset: AxcutAsset = {
 			id: createId("asset"),
-			kind: "video",
+			kind,
 			label: input.label?.trim() || path.basename(absolutePath),
 			originalPath: absolutePath,
 			sizeBytes,
 			cameraTrack: null,
 		};
+		// An audio import is an overlay, never the thing the timeline is built
+		// around, so it must not claim the empty primaryAssetId slot — otherwise the
+		// first file dropped into a fresh project (a BGM track) would become its
+		// primary asset and the editor would try to lay out clips from a file with
+		// no video.
+		const claimsPrimary = kind !== "audio" && !doc.project.primaryAssetId;
 		const next: AxcutDocument = {
 			...doc,
 			assets: [...doc.assets, asset],
 			project: {
 				...doc.project,
-				...(doc.project.primaryAssetId ? {} : { primaryAssetId: asset.id }),
+				...(claimsPrimary ? { primaryAssetId: asset.id } : {}),
 				updatedAt: new Date().toISOString(),
 			},
 		};
@@ -324,9 +393,13 @@ export class DocumentService {
 			throw new ProjectFileError(`Asset ${assetId} not found in project ${projectId}.`, projectId);
 		}
 		const assets = doc.assets.filter((a) => a.id !== assetId);
+		// Primary is the thing the timeline is built around, so it must fall to the
+		// next VIDEO asset — never an audio overlay (issue #350), which can't be
+		// primary (see addAsset). Falling back to `assets[0]` would hand primary to
+		// an audio asset when the removed one was the last video.
 		const primaryAssetId =
 			doc.project.primaryAssetId === assetId
-				? (assets[0]?.id ?? undefined)
+				? (assets.find((a) => a.kind !== "audio")?.id ?? undefined)
 				: doc.project.primaryAssetId;
 		const withoutAssetClips = doc.timeline.clips
 			.filter((clip) => clip.assetId === assetId)
@@ -334,6 +407,9 @@ export class DocumentService {
 		const next: AxcutDocument = {
 			...withoutAssetClips,
 			assets,
+			// Drop imported audio tracks that referenced the removed asset — they
+			// would otherwise dangle, pointing at an asset the document no longer has.
+			audioTracks: withoutAssetClips.audioTracks.filter((t) => t.assetId !== assetId),
 			timeline: {
 				...withoutAssetClips.timeline,
 				trimRanges: withoutAssetClips.timeline.trimRanges.filter((r) => r.assetId !== assetId),

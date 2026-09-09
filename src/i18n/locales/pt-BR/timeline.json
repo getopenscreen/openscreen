@@ -15,6 +15,7 @@
 		"pressZoom": "Pressione Z para adicionar zoom",
 		"pressTrim": "Pressione T para adicionar recorte",
 		"pressAnnotation": "Pressione A para adicionar anotação",
+		"pressAudio": "Pressione M para adicionar áudio, V para gravar uma narração",
 		"pressSpeed": "Pressione S para adicionar velocidade",
 		"pressCameraFullscreen": "Pressione C para adicionar um segmento de Câmera em Tela Cheia"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "Requer uma transcrição",
 		"smartCutsNoAudio": "Esta mídia não tem áudio",
 		"smartCutsNoSpeech": "Nenhuma fala detectada",
-		"smartCutsFailed": "Falha na transcrição — tente de novo em Mídia"
+		"smartCutsFailed": "Falha na transcrição — tente de novo em Mídia",
+		"addAudioTooltip": "Adicionar áudio",
+		"addedWord": "Palavra adicionada: \"{{word}}\" — sem áudio por trás"
+	},
+	"audio": {
+		"addVoiceover": "Adicionar narração",
+		"addVoiceoverHint": "Grave uma narração sobre o seu vídeo",
+		"subtitle": "Coloque uma camada de narração ou de música de fundo na linha do tempo",
+		"record": "Gravar narração",
+		"importFile": "Importar arquivo de áudio",
+		"importFileHint": "Importe música ou um arquivo de áudio",
+		"recording": "Gravando",
+		"recordingHint": "Narre junto com o vídeo — ele continua tocando enquanto você grava",
+		"stop": "Parar",
+		"micDenied": "Acesso ao microfone negado",
+		"recordingUnavailable": "A gravação não está disponível aqui",
+		"saveFailed": "Não foi possível salvar a gravação",
+		"importFailed": "Não foi possível importar o arquivo de áudio"
 	}
 }

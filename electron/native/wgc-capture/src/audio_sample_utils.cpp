@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 
@@ -87,6 +88,21 @@ double readMappedChannel(const BYTE* source, const AudioInputFormat& format, siz
     return readSampleAsDouble(source, format, frameIndex, std::min(targetChannel, format.channels - 1));
 }
 
+UINT32 aacCompatibleSampleRate(UINT32 sampleRate) {
+    constexpr UINT32 kAacSampleRates[] = {
+        8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000,
+    };
+    if (sampleRate == 0) {
+        return 48000;
+    }
+    for (UINT32 rate : kAacSampleRates) {
+        if (sampleRate == rate) {
+            return rate;
+        }
+    }
+    return 48000;
+}
+
 } // namespace
 
 constexpr int64_t HnsPerSecond = 10'000'000;
@@ -100,10 +116,16 @@ bool sameAudioFormatForMixing(const AudioInputFormat& left, const AudioInputForm
            left.avgBytesPerSec == right.avgBytesPerSec;
 }
 
+// Microsoft AAC encoder (MFAudioFormat_AAC) sample rates. WASAPI loopback
+// often reports 96000 or 192000; those are legal PCM mix rates but not AAC
+// input rates, and SetInputMediaType then fails with MF_E_INVALIDMEDIATYPE
+// (0xc00d36b4). Keep legal rates as-is so a working 44100/48000 path is
+// unchanged; snap everything else (including 0) to 48000. The mixer already
+// resamples through convertAudioWithGain when the source rate differs.
 AudioInputFormat makeAacCompatibleAudioFormat(const AudioInputFormat& source) {
     AudioInputFormat format{};
     format.subtype = MFAudioFormat_PCM;
-    format.sampleRate = source.sampleRate > 0 ? source.sampleRate : 48000;
+    format.sampleRate = aacCompatibleSampleRate(source.sampleRate);
     format.channels = 2;
     format.bitsPerSample = 16;
     format.blockAlign = format.channels * (format.bitsPerSample / 8);
@@ -168,6 +190,19 @@ void convertAudioWithGain(
     const AudioInputFormat& targetFormat,
     double gain,
     std::vector<BYTE>& destination) {
+    std::vector<BYTE> discardedRemainder;
+    convertAudioWithGain(
+        source, byteCount, sourceFormat, targetFormat, gain, destination, discardedRemainder);
+}
+
+void convertAudioWithGain(
+    const BYTE* source,
+    DWORD byteCount,
+    const AudioInputFormat& sourceFormat,
+    const AudioInputFormat& targetFormat,
+    double gain,
+    std::vector<BYTE>& destination,
+    std::vector<BYTE>& remainder) {
     if (!source || byteCount == 0 || sourceFormat.blockAlign == 0 || targetFormat.blockAlign == 0 ||
         sourceFormat.sampleRate == 0 || targetFormat.sampleRate == 0 || sourceFormat.channels == 0 ||
         targetFormat.channels == 0) {
@@ -180,12 +215,65 @@ void convertAudioWithGain(
         return;
     }
 
-    const size_t sourceFrames = byteCount / sourceFormat.blockAlign;
-    if (sourceFrames == 0) {
+    const size_t packetFrames = byteCount / sourceFormat.blockAlign;
+    if (packetFrames == 0) {
         destination.clear();
         return;
     }
 
+    // Integer-factor downsample (96 kHz / 192 kHz -> 48 kHz): average each
+    // group of source frames instead of picking one. Nearest-neighbour
+    // decimation aliases content above the new Nyquist into the recording.
+    // Incomplete groups stay in remainder so the next packet can finish them.
+    if (sourceFormat.sampleRate > targetFormat.sampleRate &&
+        sourceFormat.sampleRate % targetFormat.sampleRate == 0) {
+        const UINT32 factor = sourceFormat.sampleRate / targetFormat.sampleRate;
+        if (remainder.size() % sourceFormat.blockAlign != 0) {
+            remainder.clear();
+        }
+        std::vector<BYTE> combined;
+        combined.reserve(remainder.size() + byteCount);
+        combined.insert(combined.end(), remainder.begin(), remainder.end());
+        combined.insert(combined.end(), source, source + byteCount);
+        const size_t totalFrames = combined.size() / sourceFormat.blockAlign;
+        const size_t targetFrames = totalFrames / factor;
+        const size_t consumedFrames = targetFrames * factor;
+        const size_t leftoverBytes = (totalFrames - consumedFrames) * sourceFormat.blockAlign;
+        if (targetFrames == 0) {
+            destination.clear();
+            remainder.swap(combined);
+            return;
+        }
+        destination.assign(targetFrames * targetFormat.blockAlign, 0);
+        for (size_t targetFrame = 0; targetFrame < targetFrames; ++targetFrame) {
+            for (UINT32 channel = 0; channel < targetFormat.channels; ++channel) {
+                double sum = 0.0;
+                for (UINT32 tap = 0; tap < factor; ++tap) {
+                    sum += readMappedChannel(
+                        combined.data(),
+                        sourceFormat,
+                        targetFrame * factor + tap,
+                        channel,
+                        targetFormat.channels);
+                }
+                writeSampleFromDouble(
+                    destination.data(),
+                    targetFormat,
+                    targetFrame,
+                    channel,
+                    (sum / static_cast<double>(factor)) * gain);
+            }
+        }
+        remainder.assign(
+            combined.begin() + static_cast<std::ptrdiff_t>(consumedFrames * sourceFormat.blockAlign),
+            combined.end());
+        if (remainder.size() != leftoverBytes) {
+            remainder.resize(leftoverBytes);
+        }
+        return;
+    }
+
+    const size_t sourceFrames = packetFrames;
     const double rateRatio = static_cast<double>(targetFormat.sampleRate) /
         static_cast<double>(sourceFormat.sampleRate);
     const size_t targetFrames = std::max<size_t>(1, static_cast<size_t>(std::llround(sourceFrames * rateRatio)));
@@ -193,17 +281,20 @@ void convertAudioWithGain(
 
     for (size_t targetFrame = 0; targetFrame < targetFrames; ++targetFrame) {
         const double sourcePosition = static_cast<double>(targetFrame) / rateRatio;
-        const size_t sourceFrame = std::min(
-            sourceFrames - 1,
-            static_cast<size_t>(std::llround(sourcePosition)));
+        const size_t sourceFrame = std::min(sourceFrames - 1, static_cast<size_t>(sourcePosition));
+        const size_t nextFrame = std::min(sourceFrames - 1, sourceFrame + 1);
+        const double frac = sourcePosition - static_cast<double>(sourceFrame);
         for (UINT32 channel = 0; channel < targetFormat.channels; ++channel) {
-            const double sample = readMappedChannel(
-                source,
-                sourceFormat,
-                sourceFrame,
+            const double a = readMappedChannel(
+                source, sourceFormat, sourceFrame, channel, targetFormat.channels);
+            const double b = readMappedChannel(
+                source, sourceFormat, nextFrame, channel, targetFormat.channels);
+            writeSampleFromDouble(
+                destination.data(),
+                targetFormat,
+                targetFrame,
                 channel,
-                targetFormat.channels);
-            writeSampleFromDouble(destination.data(), targetFormat, targetFrame, channel, sample * gain);
+                (a + (b - a) * frac) * gain);
         }
     }
 }
@@ -280,6 +371,8 @@ bool AudioMixer::start() {
     emittedFrames_ = 0;
     timelineStarted_ = false;
     paused_ = false;
+    systemResampleRemainder_.clear();
+    microphoneResampleRemainder_.clear();
     thread_ = std::thread([this] {
         mixLoop();
     });
@@ -291,6 +384,8 @@ void AudioMixer::beginTimeline() {
         std::scoped_lock lock(mutex_);
         systemQueue_.clear();
         microphoneQueue_.clear();
+        systemResampleRemainder_.clear();
+        microphoneResampleRemainder_.clear();
         emittedFrames_ = 0;
         timelineStarted_ = true;
     }
@@ -304,6 +399,8 @@ void AudioMixer::setPaused(bool paused) {
         if (paused_) {
             systemQueue_.clear();
             microphoneQueue_.clear();
+            systemResampleRemainder_.clear();
+            microphoneResampleRemainder_.clear();
         }
     }
     cv_.notify_all();
@@ -327,7 +424,7 @@ void AudioMixer::pushSystem(const BYTE* data, DWORD byteCount) {
         if (paused_) {
             return;
         }
-        append(systemQueue_, data, byteCount, systemFormat_, 1.0);
+        append(systemQueue_, data, byteCount, systemFormat_, 1.0, systemResampleRemainder_);
     }
     cv_.notify_all();
 }
@@ -342,7 +439,13 @@ void AudioMixer::pushMicrophone(const BYTE* data, DWORD byteCount) {
         if (paused_) {
             return;
         }
-        append(microphoneQueue_, data, byteCount, microphoneFormat_, microphoneGain_);
+        append(
+            microphoneQueue_,
+            data,
+            byteCount,
+            microphoneFormat_,
+            microphoneGain_,
+            microphoneResampleRemainder_);
     }
     cv_.notify_all();
 }
@@ -352,12 +455,13 @@ void AudioMixer::append(
     const BYTE* data,
     DWORD byteCount,
     const AudioInputFormat& sourceFormat,
-    double gain) {
+    double gain,
+    std::vector<BYTE>& remainder) {
     if (!data || byteCount == 0) {
         return;
     }
 
-    convertAudioWithGain(data, byteCount, sourceFormat, format_, gain, gainBuffer_);
+    convertAudioWithGain(data, byteCount, sourceFormat, format_, gain, gainBuffer_, remainder);
     queue.insert(queue.end(), gainBuffer_.begin(), gainBuffer_.end());
 }
 

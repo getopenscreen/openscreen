@@ -6,19 +6,23 @@
 		"confirm": "Confirmer"
 	},
 	"errors": {
-		"noVideoLoaded": "Aucune vidéo chargée",
-		"videoNotReady": "Vidéo non prête",
-		"unableToDetermineSourcePath": "Impossible de déterminer le chemin de la vidéo source",
-		"failedToSaveGif": "Échec de l'enregistrement du GIF",
-		"gifExportFailed": "L'export du GIF a échoué",
-		"failedToSaveVideo": "Échec de l'enregistrement de la vidéo",
+		"exportBackgroundLoadFailed": "L'export a échoué : impossible de charger l'image d'arrière-plan ({{url}})",
 		"exportFailed": "L'export a échoué",
 		"exportFailedWithError": "L'export a échoué : {{error}}",
-		"exportBackgroundLoadFailed": "L'export a échoué : impossible de charger l'image d'arrière-plan ({{url}})",
+		"failedToRevealInFolder": "Erreur lors de l'affichage dans le dossier : {{error}}",
 		"failedToSaveExport": "Échec de l'enregistrement de l'export",
 		"failedToSaveExportedVideo": "Échec de l'enregistrement de la vidéo exportée",
-		"failedToRevealInFolder": "Erreur lors de l'affichage dans le dossier : {{error}}",
-		"previewCompositorUnavailable": "Aperçu indisponible sur cette machine"
+		"failedToSaveGif": "Échec de l'enregistrement du GIF",
+		"failedToSaveVideo": "Échec de l'enregistrement de la vidéo",
+		"gifExportFailed": "L'export du GIF a échoué",
+		"noVideoLoaded": "Aucune vidéo chargée",
+		"previewCompositorUnavailable": "Aperçu indisponible sur cette machine",
+		"trimNoFilm": "Rien à couper ici : aucun film ne se trouve sous ces mots.",
+		"unableToDetermineSourcePath": "Impossible de déterminer le chemin de la vidéo source",
+		"videoNotReady": "Vidéo non prête",
+		"wordEditFailed": "Impossible de modifier ce mot",
+		"wordInsertFailed": "Impossible d'ajouter ce mot",
+		"wordRemoveFailed": "Impossible de supprimer ce mot"
 	},
 	"export": {
 		"canceled": "Export annulé",
@@ -71,6 +75,7 @@
 		"pasted": "Attributs de {{region}} collés",
 		"nothingToCopy": "Sélectionnez une région pour copier ses attributs",
 		"nothingToPaste": "Aucun attribut copié pour l'instant",
+		"pasteAssetMissing": "Le fichier de cette piste audio n'est pas dans ce projet",
 		"kinds": {
 			"zoom": "Zoom",
 			"speed": "Vitesse",
@@ -138,7 +143,6 @@
 		"sourceTranscript": "Transcription de la source",
 		"close": "Fermer",
 		"transcriptReady": "Transcription prête",
-		"notGeneratedYet": "Pas encore générée",
 		"regenerateAs": "Régénérer en",
 		"auto": "Auto",
 		"regenerate": "Régénérer",
@@ -146,17 +150,12 @@
 		"notGeneratedHint": "Pas encore générée — choisissez une langue et cliquez sur régénérer.",
 		"transcribing": "Transcription en cours",
 		"downloadingModel": "Téléchargement du modèle vocal",
-		"transcribingEllipsis": "Transcription en cours…",
+		"initializingModel": "Démarrage du modèle vocal",
 		"pendingTranscription": "Transcription en attente",
 		"transcriptionFailed": "Échec de la transcription",
 		"cpuBackendHint": "Exécution sur le processeur — environ 2× plus lent que sur le GPU",
 		"noTranscript": "Aucune transcription",
-		"generating": "Génération en cours",
-		"generationFailed": "Échec de la génération",
-		"generated": "Généré",
 		"generationFailedHint": "Échec de la génération — choisissez une langue et régénérez.",
-		"noPreviewAvailable": "Aucun aperçu disponible",
-		"restart": "Redémarrer",
 		"detectedLanguage": "Langue détectée : {{language}}",
 		"noAudioTrack": "Aucune piste audio",
 		"noAudioTrackHint": "Ce média n'a pas de piste audio — il n'y a rien à transcrire.",
@@ -212,18 +211,6 @@
 		"cameraFullscreenDescription": "Pendant cette zone, la caméra occupe tout le cadre — sans bordure, sans arrondi, sans arrière-plan — puis revient en douceur à la fin. Faites glisser les bords de la zone sur la timeline pour changer son début et sa durée.",
 		"deleteRegion": "Supprimer la zone",
 		"freehandRendersAsBox": "À l'export, un tracé libre est couvert par sa boîte englobante — on couvre trop, jamais trop peu."
-	},
-	"leftPanel": {
-		"mediaTitle": "Médias",
-		"searchPlaceholder": "Rechercher…",
-		"clearSearch": "Effacer la recherche",
-		"emptyHint": "Aucun média dans ce projet pour l'instant. Importez une vidéo ci-dessous.",
-		"transcriptReadyBadge": "TRANSCRIPTION PRÊTE"
-	},
-	"leftRail": {
-		"chat": "Chat",
-		"media": "Médias",
-		"ariaLabel": "Outils de gauche"
 	},
 	"chat": {
 		"changeProvider": "Changer de fournisseur",

@@ -20,6 +20,8 @@
 		"addTrim": "Add Trim",
 		"addSpeed": "Add Speed",
 		"addAnnotation": "Add Annotation",
+		"addAudio": "Add Audio",
+		"addVoiceover": "Record Voiceover",
 		"addKeyframe": "Add Keyframe",
 		"addCameraFullscreen": "Add Full Camera",
 		"deleteSelected": "Delete Selected",

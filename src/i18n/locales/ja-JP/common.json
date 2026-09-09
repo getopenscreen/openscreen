@@ -8,6 +8,10 @@
 		"done": "完了",
 		"open": "開く",
 		"checkForUpdates": "アップデートを確認",
+		"updateSettings": "アップデート設定",
+		"updateModeNotify": "アップデートが利用可能になったら通知",
+		"updateModeDownload": "アップデートを自動でダウンロード",
+		"updateModeDownloadAndInstall": "アップデートを自動でダウンロードしてインストール",
 		"viewRelease": "リリースを表示",
 		"downloadUpdate": "アップデートをダウンロード",
 		"restartNow": "今すぐ再起動",
@@ -40,22 +44,18 @@
 		"services": "サービス",
 		"hide": "OpenScreenを隠す",
 		"hideOthers": "ほかを隠す",
-		"unhide": "すべて表示"
+		"unhide": "すべて表示",
+		"saveDiagnostics": "診断情報を保存"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} を利用できます。現在のバージョンは {{currentVersion}} です。",
 		"current": "OpenScreen は最新です（{{currentVersion}}）。",
 		"readyToInstall": "OpenScreen {{latestVersion}} をダウンロードしました。再起動してインストールを完了してください。",
+		"downloaded": "OpenScreen {{latestVersion}} をダウンロードしました。",
 		"blockedRecording": "アップデートをインストールする前に録画を終了してください。",
 		"blockedLocation": "アップデートする前に OpenScreen をアプリケーションフォルダに移動してください。",
 		"failed": "アップデートを確認できませんでした。",
 		"downloadFailed": "アップデートをダウンロードできませんでした。"
-	},
-	"playback": {
-		"play": "再生",
-		"pause": "一時停止",
-		"fullscreen": "全画面表示",
-		"exitFullscreen": "全画面表示を終了"
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} px/秒",

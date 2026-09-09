@@ -14,8 +14,59 @@
 // names a word a filler. The transcript view shows plain text for every
 // kept word; the user or the LLM decides what to mark as skipped.
 
-import type { AxcutAsset, AxcutClip, AxcutTranscript, AxcutTrimRange, AxcutWord } from "../schema";
-import { trimAppliesToClip } from "./trim-mapping";
+import { collapseTracksToPills } from "../document/audioTracks";
+import type { AxcutAsset, AxcutAudioTrack, AxcutClip, AxcutTranscript, AxcutWord } from "../schema";
+import { type RawSpan, type RemovedRawSpan, removalAt } from "./programme-time";
+import { takeProgramme } from "./take-programme";
+
+/**
+ * The unit the aggregation actually runs over: one stretch of ONE asset's source
+ * time, laid somewhere on the timeline (issue #560).
+ *
+ * `AxcutClip` is one provider of this and was, for a long time, the only one —
+ * which is why everything downstream is still named after clips. A voiceover is
+ * the second: speech that the transcript tab could not see, because the tab was
+ * wired to `timeline.clips` rather than to the shape clips happen to have.
+ *
+ * Deliberately structural rather than a union of the two record types. Nothing
+ * below this line needs to know which lane a section came from, and the moment it
+ * could ask, something would start behaving differently per lane — which is the
+ * one thing this parameterisation is meant to prevent.
+ */
+export interface TranscriptPlacement {
+	/** Unique on the timeline. Namespaces every rendered word (see {@link clipWordId}). */
+	id: string;
+	assetId: string;
+	sourceStartSec: number;
+	/** Open-ended when the placement runs to the end of its source. */
+	sourceEndSec?: number;
+	/** Where the window lands on the RAW ruler. Source time is per asset, so this is
+	 *  the only thing that turns a word back into a moment the playhead can seek to. */
+	timelineStartSec: number;
+}
+
+/** Which lane's speech the transcript tab is reading. */
+export type TranscriptLane = "recording" | "voiceover";
+
+/**
+ * A source second of this placement's asset, as a moment on the RAW ruler.
+ *
+ * The one coordinate both lanes share. Source time is per asset, so it cannot say
+ * whether two things coincide; raw time can, which is why kept-or-removed is asked here
+ * and not in source time (issue #560).
+ */
+export function placementRawSec(placement: TranscriptPlacement, sourceSec: number): number {
+	return placement.timelineStartSec + (sourceSec - placement.sourceStartSec);
+}
+
+/** The placement's own stretch of raw ruler, or null when it runs open-ended. */
+export function placementRawExtent(placement: TranscriptPlacement): RawSpan | null {
+	if (placement.sourceEndSec === undefined) return null;
+	return {
+		startSec: placement.timelineStartSec,
+		endSec: placementRawSec(placement, placement.sourceEndSec),
+	};
+}
 
 /** Gaps between words at least this long are surfaced as a `[silence]` token. */
 export const SILENCE_THRESHOLD_SEC = 0.2;
@@ -23,6 +74,13 @@ export const SILENCE_THRESHOLD_SEC = 0.2;
 /** True for the synthetic `[silence]` pseudo-words inserted by `withSilenceGaps`. */
 export function isSilenceWord(word: AxcutWord): boolean {
 	return word.id.startsWith("silence_");
+}
+
+/** True for a word the user typed in, which no one said and nothing in the media carries.
+ *  Keyed on `source`, never on the id: the id shape is only there to stop a transcription
+ *  run from reusing it. */
+export function isInsertedWord(word: AxcutWord): boolean {
+	return word.source === "synth";
 }
 
 /**
@@ -38,7 +96,14 @@ function withSilenceGaps(
 	clipStartSec: number,
 	clipEndSec: number | undefined,
 ): AxcutWord[] {
-	const sorted = [...words].sort((a, b) => a.startSec - b.startSec);
+	// Sorted by time, ties broken by the order the transcript stores them in. The tie is
+	// not hypothetical: a word inserted between two contiguous words has no duration and
+	// therefore shares its start with the one it sits against, and only the array says
+	// which of the two the reader sees first.
+	const order = new Map(words.map((word, index) => [word.id, index]));
+	const sorted = [...words].sort(
+		(a, b) => a.startSec - b.startSec || (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+	);
 	const result: AxcutWord[] = [];
 	let cursor = clipStartSec;
 	let n = 0;
@@ -66,8 +131,13 @@ function withSilenceGaps(
 
 /** A contiguous run of removed words inside one clip's source range. */
 export interface TrimRun {
-	/** Id of the trim range this run came from (used by the bin-icon restore). */
-	trimId: string;
+	/**
+	 * The trims that took this run — SEVERAL when they overlap, and EMPTY when the run
+	 * sits in a gap between clips, which is missing from the film without anything having
+	 * removed it. A restore affordance must be keyed on this being non-empty: there is no
+	 * pill to click for a gap.
+	 */
+	trimIds: string[];
 	/** Index of the first removed word in `words`. */
 	startWordIndex: number;
 	/** Inclusive index of the last removed word in `words`. */
@@ -98,15 +168,16 @@ export interface ClipWord {
 	/** {@link clipWordId} — the word's identity *in this clip*, unique across the pane. */
 	id: string;
 	word: AxcutWord;
-	/** Whether the word is inside a trimRange for this clip's asset. */
+	/** Whether the raw moment this word occupies is still in the film. */
 	kept: boolean;
-	/** Id of the trim range that removed this word, if any. */
-	trimId: string | null;
+	/** The trims that took it — empty when kept, and empty for a word over a gap. */
+	trimIds: string[];
 }
 
-/** One clip's contribution to the aggregated flow. */
+/** One placement's contribution to the aggregated flow. */
 export interface ClipSection {
-	clip: AxcutClip;
+	/** Named `clip` for its history, not its type — see {@link TranscriptPlacement}. */
+	clip: TranscriptPlacement;
 	asset: AxcutAsset | null;
 	transcript: AxcutTranscript | null;
 	words: ClipWord[];
@@ -114,40 +185,36 @@ export interface ClipSection {
 }
 
 function wordsInRange(transcript: AxcutTranscript, startSec: number, endSec: number): AxcutWord[] {
-	return transcript.words.filter((w) => w.endSec > startSec && w.startSec < endSec);
-}
-
-/** Find the trim range covering this word's center (returns the deepest match). */
-function findCoveringTrim(word: AxcutWord, trimRanges: AxcutTrimRange[]): AxcutTrimRange | null {
-	const center = (word.startSec + word.endSec) / 2;
-	for (const trim of trimRanges) {
-		if (center >= trim.startSec && center <= trim.endSec) return trim;
-	}
-	return null;
+	return transcript.words.filter((w) =>
+		// An inserted word dropped between two words that run into each other has NO
+		// duration, and an overlap test excludes a point at either edge of the range —
+		// which silently lost every word inserted at the very start of a clip. A word with
+		// no span is in the clip when its moment is.
+		w.endSec > w.startSec
+			? w.endSec > startSec && w.startSec < endSec
+			: w.startSec >= startSec && w.startSec < endSec,
+	);
 }
 
 /**
- * Build one clip section. Words inside the clip's source range that fall
- * inside any trim range for the same asset are marked removed; the rest
- * are kept. Contiguous removed words from the same trim range group into
- * one `TrimRun` (for the trim-duration pill + bin-icon restore).
+ * Build one placement's section. A word is removed when the RAW moment it occupies is not
+ * in the film; the rest are kept. Contiguous removed words taken by the same trims group
+ * into one `TrimRun` (for the trim-duration pill + bin-icon restore).
+ *
+ * Takes the precomputed removed set, not the trim rows. Filtering rows by identity —
+ * `trimAppliesToClip`, which is what this did — is a question a voiceover placement can
+ * never answer yes to: it carries an audio fragment id and an audio asset, while every
+ * trim carries a video clip. That is what left the voiceover lane reading every word as
+ * kept over film that had been cut away (issue #560). Asking the ruler instead makes both
+ * lanes agree by construction, and keeps the recording lane's answers identical: the same
+ * per-clip walk decides both.
  */
 export function buildClipSection(
-	clip: AxcutClip,
+	clip: TranscriptPlacement,
 	transcript: AxcutTranscript | null,
 	asset: AxcutAsset | null,
-	trimRanges: AxcutTrimRange[],
+	removed: RemovedRawSpan[],
 ): ClipSection {
-	// `trimAppliesToClip` — not a bare `assetId` match — is what keeps a cut on the
-	// second of two clips over the same media from also greying out the first one's
-	// words. Same media, same source range: only the clip anchor tells them apart.
-	const clipTrims = trimRanges.filter(
-		(trim) =>
-			trimAppliesToClip(trim, clip) &&
-			trim.endSec > clip.sourceStartSec &&
-			trim.startSec < (clip.sourceEndSec ?? Infinity),
-	);
-
 	const words = transcript
 		? withSilenceGaps(
 				wordsInRange(transcript, clip.sourceStartSec, clip.sourceEndSec ?? Infinity),
@@ -156,25 +223,27 @@ export function buildClipSection(
 			)
 		: [];
 	const tagged: ClipWord[] = words.map((word) => {
-		const covering = findCoveringTrim(word, clipTrims);
+		// The word's CENTRE, mirroring the rule the identity filter used, so the recording
+		// lane's tagging does not shift under this change.
+		const covering = removalAt(removed, placementRawSec(clip, (word.startSec + word.endSec) / 2));
 		return {
 			id: clipWordId(clip.id, word.id),
 			word,
 			kept: covering === null,
-			trimId: covering?.id ?? null,
+			trimIds: covering?.trimIds ?? [],
 		};
 	});
 
 	const trimRuns: TrimRun[] = [];
 	let runStart = -1;
 	let runEnd = -1;
-	let runTrimId = "";
+	let runTrimIds: string[] = [];
 	let runMinStart = 0;
 	let runMaxEnd = 0;
 	const flush = () => {
 		if (runStart >= 0) {
 			trimRuns.push({
-				trimId: runTrimId,
+				trimIds: runTrimIds,
 				assetId: clip.assetId,
 				startWordIndex: runStart,
 				endWordIndex: runEnd,
@@ -183,23 +252,26 @@ export function buildClipSection(
 		}
 		runStart = -1;
 		runEnd = -1;
-		runTrimId = "";
+		runTrimIds = [];
 		runMinStart = 0;
 		runMaxEnd = 0;
 	};
+	const key = (ids: string[]) => ids.join("|");
 	tagged.forEach((cw, i) => {
 		if (cw.kept) {
 			flush();
 			return;
 		}
-		// Split the run if the trim range id changes (overlapping trims).
-		if (runStart >= 0 && cw.trimId !== runTrimId) {
+		// Split the run when the SET of trims changes, so two cuts meeting at a word
+		// boundary stay two pills. A run whose set is empty is a gap between clips: still
+		// removed, still one run, but with nothing to restore.
+		if (runStart >= 0 && key(cw.trimIds) !== key(runTrimIds)) {
 			flush();
 		}
 		if (runStart < 0) {
 			runStart = i;
 			runMinStart = cw.word.startSec;
-			runTrimId = cw.trimId ?? "";
+			runTrimIds = cw.trimIds;
 		}
 		runEnd = i;
 		runMaxEnd = Math.max(runMaxEnd, cw.word.endSec);
@@ -215,10 +287,10 @@ export function buildClipSection(
  * the clip exists but no transcript is available for it yet.
  */
 export function buildAggregatedSections(
-	clips: AxcutClip[],
+	clips: TranscriptPlacement[],
 	transcripts: AxcutTranscript[],
 	assets: AxcutAsset[],
-	trimRanges: AxcutTrimRange[],
+	removed: RemovedRawSpan[],
 ): ClipSection[] {
 	const transcriptById = new Map(transcripts.map((t) => [t.assetId, t]));
 	const assetById = new Map(assets.map((a) => [a.id, a]));
@@ -227,19 +299,57 @@ export function buildAggregatedSections(
 			clip,
 			transcriptById.get(clip.assetId) ?? null,
 			assetById.get(clip.assetId) ?? null,
-			trimRanges,
+			removed,
 		),
 	);
 }
 
-/** Where the playback head currently is, in source time. */
-export interface CuePosition {
-	assetId: string;
-	/** Which clip is playing — the primary selector for the cue's section. Source time is
-	 *  per asset, so `assetId` cannot separate two clips over one media; pass this whenever
-	 *  the caller knows it (the transcript pane always does). */
-	clipId?: string;
-	sourceTimeSec: number;
+/**
+ * The voiceover lane as placements, in timeline order.
+ *
+ * Music is excluded here rather than filtered downstream: it is not transcribed at
+ * all (STT on a bed is noise we pay for), so a music placement could only ever
+ * produce an empty section that reads as a failed transcription.
+ *
+ * One placement per PLAY PIECE of the take's own walk: a cut under the take splits it into
+ * stretches that sit at different raw moments, and a placement is one uninterrupted shift.
+ *
+ * A LOOPING take contributes nothing at all. `anchorAudioTrackFragments` deliberately
+ * does not advance `offsetMs` across the fragments of a looping track, so their words map
+ * to raw moments the words do not occupy — a placement built from them would read
+ * kept-or-removed on false evidence, and would author a cut in the wrong place.
+ */
+export function voiceoverPlacements(
+	audioTracks: AxcutAudioTrack[],
+	/** What the film no longer contains. Empty is the honest default: with no cuts the walk
+	 *  yields one piece per take, which is what this always produced. */
+	removed: readonly RemovedRawSpan[] = [],
+): TranscriptPlacement[] {
+	return collapseTracksToPills(audioTracks)
+		.filter((pill) => pill.kind === "voiceover" && !pill.loop)
+		.sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id))
+		.flatMap((pill) =>
+			takeProgramme(pill, removed)
+				.filter((piece) => piece.kind === "play")
+				.map((piece, i) => ({
+					// Namespaced by piece so two stretches of one take never collide on a word id.
+					id: i === 0 ? pill.id : `${pill.id}#${i}`,
+					assetId: pill.assetId,
+					sourceStartSec: piece.sourceStartSec,
+					sourceEndSec: piece.sourceEndSec,
+					timelineStartSec: piece.rawStartSec,
+				})),
+		);
+}
+
+/** The placements a lane contributes, in timeline order. */
+export function lanePlacements(
+	lane: TranscriptLane,
+	clips: AxcutClip[],
+	audioTracks: AxcutAudioTrack[],
+	removed: readonly RemovedRawSpan[] = [],
+): TranscriptPlacement[] {
+	return lane === "voiceover" ? voiceoverPlacements(audioTracks, removed) : clips;
 }
 
 /**
@@ -254,22 +364,39 @@ export interface CuePosition {
  *   - Silence tokens (id starts with `silence_`) are skipped over so a
  *     long pause doesn't surface a fake cue word.
  *
- * The section is chosen by `cue.clipId` when the caller knows which clip is playing.
- * Matching on `assetId` alone always resolved to the FIRST section of that asset, so with
- * a clip duplicated on the timeline the cue tracked clip 1 while clip 2 played. `assetId`
- * stays as the fallback for callers that have no clip in hand.
+ * Takes a RAW ruler second. It used to take a clip id resolved from the playhead, which
+ * only ever named a video clip — so the voiceover lane never highlighted anything at all.
+ * Raw time is what both lanes have in common, and it also settles the case the clip id was
+ * introduced for: with one clip duplicated on the timeline, the two sections occupy
+ * different raw extents even though their source ranges are identical.
+ *
+ * The section is the one whose raw extent contains the head. An open-ended placement (a
+ * clip whose media has not been probed) has no extent of its own and runs to the next
+ * section's head, then to the end of time.
  */
-export function findCueWordId(sections: ClipSection[], cue: CuePosition | null): string | null {
-	if (!cue) return null;
-	const withWords = sections.filter((s) => s.words.length > 0);
-	// No fallback when `clipId` is given but that clip has no transcript: the playing clip
-	// simply has no cue word, and borrowing another clip's would point at the wrong text.
-	const match = cue.clipId
-		? withWords.find((s) => s.clip.id === cue.clipId)
-		: withWords.find((s) => s.clip.assetId === cue.assetId);
+export function findCueWordId(sections: ClipSection[], rawSec: number | null): string | null {
+	if (rawSec === null || !Number.isFinite(rawSec)) return null;
+	// No fallback to a neighbouring section: a placement with no transcript simply has no
+	// cue word, and borrowing another's would point at the wrong text.
+	const withWords = sections
+		.filter((s) => s.words.length > 0)
+		.sort((a, b) => a.clip.timelineStartSec - b.clip.timelineStartSec);
+
+	let match: ClipSection | null = null;
+	for (const [i, section] of withWords.entries()) {
+		if (rawSec < section.clip.timelineStartSec) break;
+		const extent = placementRawExtent(section.clip);
+		const endSec =
+			extent?.endSec ?? withWords[i + 1]?.clip.timelineStartSec ?? Number.POSITIVE_INFINITY;
+		if (rawSec < endSec) {
+			match = section;
+			break;
+		}
+	}
 	if (!match) return null;
 
-	const t = cue.sourceTimeSec;
+	// Back to the placement's own source clock, which is what the words are stamped in.
+	const t = match.clip.sourceStartSec + (rawSec - match.clip.timelineStartSec);
 	let previous: string | null = null;
 	for (const cw of match.words) {
 		if (isSilenceWord(cw.word)) continue;

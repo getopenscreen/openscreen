@@ -28,8 +28,10 @@
 //! — c'est précisément ce qui rend le port Metal possible (cf. PR #162).
 
 pub mod audio;
+pub mod audio_jobs;
 pub mod config;
 pub mod cursor;
+pub mod export_probe;
 pub mod ffi;
 pub mod frame_geometry;
 pub mod gif_export;
@@ -40,6 +42,10 @@ pub mod regions;
 // n'est spécifique à Linux.
 pub mod remux;
 pub mod scene;
+// Segmentation du sujet webcam (masque -> `t3`). Le module compile toujours ; sans la feature
+// `segmentation` ses deux entrées échouent proprement, ce qui garde le reste du crate
+// indépendant du choix de packaging d'ONNX Runtime.
+pub mod segmentation;
 pub mod text_anim;
 pub mod text_plate;
 pub(crate) mod timeline_walk;

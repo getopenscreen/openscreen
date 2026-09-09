@@ -15,6 +15,7 @@
 		"pressZoom": "Appuyez sur Z pour ajouter un zoom",
 		"pressTrim": "Appuyez sur T pour ajouter une coupe",
 		"pressAnnotation": "Appuyez sur A pour ajouter une annotation",
+		"pressAudio": "Appuyez sur M pour ajouter un audio, V pour enregistrer une voix off",
 		"pressSpeed": "Appuyez sur S pour ajouter une vitesse",
 		"pressCameraFullscreen": "Appuyez sur C pour ajouter un segment Caméra plein écran"
 	},
@@ -85,6 +86,23 @@
 		"smartCutsNeedsTranscript": "Nécessite une transcription",
 		"smartCutsNoAudio": "Ce média n'a pas d'audio",
 		"smartCutsNoSpeech": "Aucune parole détectée",
-		"smartCutsFailed": "Échec de la transcription — relancez-la depuis Médias"
+		"smartCutsFailed": "Échec de la transcription — relancez-la depuis Médias",
+		"addAudioTooltip": "Ajouter un audio",
+		"addedWord": "Mot ajouté : « {{word}} » — aucun son derrière"
+	},
+	"audio": {
+		"addVoiceover": "Ajouter une voix off",
+		"addVoiceoverHint": "Enregistrez une narration par-dessus votre vidéo",
+		"subtitle": "Placez une couche de voix off ou de musique de fond sur la timeline",
+		"record": "Enregistrer une voix off",
+		"importFile": "Importer un fichier audio",
+		"importFileHint": "Importez une musique ou un fichier audio",
+		"recording": "Enregistrement",
+		"recordingHint": "Commentez en même temps que la vidéo — elle joue pendant l'enregistrement",
+		"stop": "Arrêter",
+		"micDenied": "L'accès au micro a été refusé",
+		"recordingUnavailable": "L'enregistrement n'est pas disponible ici",
+		"saveFailed": "Impossible d'enregistrer la capture",
+		"importFailed": "Impossible d'importer le fichier audio"
 	}
 }

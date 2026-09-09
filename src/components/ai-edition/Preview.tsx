@@ -3,7 +3,9 @@ import type { CameraFullscreenRegion, ZoomFocus } from "@/components/video-edito
 import { useScopedT } from "@/contexts/I18nContext";
 import type {
 	AxcutAnnotationRegion,
+	AxcutAudioTrack,
 	AxcutClip,
+	AxcutTranscript,
 	AxcutTrimRange,
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
@@ -21,11 +23,18 @@ interface PreviewProps {
 	hasProject: boolean;
 	hasAsset: boolean;
 	videoSources: VideoSource[];
+	/** Imported audio tracks and the (unfiltered) asset URLs they resolve to
+	 *  (issue #350). Passed straight through to VirtualPreview — unlike the video
+	 *  `previewSources` below, these are NOT narrowed to clip-referenced assets,
+	 *  since an audio track has no clip. */
+	audioTracks?: AxcutAudioTrack[];
+	audioSources?: VideoSource[];
 	clips: AxcutClip[];
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	trimRanges?: AxcutTrimRange[];
+	transcripts?: AxcutTranscript[];
 	selectedZoomRegionId?: string | null;
 	onZoomFocusChange?: (id: string, focus: ZoomFocus) => void;
 	onZoomFocusCommit?: () => void;
@@ -52,11 +61,14 @@ export function Preview({
 	hasProject,
 	hasAsset,
 	videoSources,
+	audioTracks = [],
+	audioSources = [],
 	clips,
 	zoomRegions,
 	speedRegions,
 	cameraFullscreenRegions,
 	trimRanges,
+	transcripts,
 	selectedZoomRegionId,
 	onZoomFocusChange,
 	onZoomFocusCommit,
@@ -178,11 +190,14 @@ export function Preview({
 				<>
 					<PreviewCanvas
 						videoSources={previewSources}
+						audioTracks={audioTracks}
+						audioSources={audioSources}
 						clips={clips}
 						zoomRegions={zoomRegions}
 						speedRegions={speedRegions}
 						cameraFullscreenRegions={cameraFullscreenRegions}
 						trimRanges={trimRanges}
+						transcripts={transcripts}
 						selectedZoomRegionId={selectedZoomRegionId}
 						onZoomFocusChange={onZoomFocusChange}
 						onZoomFocusCommit={onZoomFocusCommit}

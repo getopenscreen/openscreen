@@ -10,6 +10,8 @@ export interface DiarizationOptions {
 	enabled?: boolean;
 	/** Expected number of speakers (optional steer hint). */
 	expectedSpeakers?: number;
+	/** Pre-clustered speaker labels or cluster mapping if available. */
+	clusters?: Record<string, SttSpeaker>;
 }
 
 export interface DiarizationResult {
@@ -18,6 +20,8 @@ export interface DiarizationResult {
 	segmentationUsed?: string;
 }
 
+const defaultHues = [210, 270, 45, 140, 0, 310];
+
 /**
  * Assigns speaker labels to word segments based on voiceprint clustering boundaries.
  */
@@ -25,19 +29,32 @@ export function assignSpeakersToWords(
 	words: SttWordSegment[],
 	options: DiarizationOptions = {},
 ): DiarizationResult {
-	if (!options.enabled || words.length === 0) {
+	const hasClusters = Boolean(options.clusters && Object.keys(options.clusters).length > 0);
+	const hasExistingWordLabels = words.some((w) => Boolean(w.sp));
+
+	if (!options.enabled || words.length === 0 || (!hasClusters && !hasExistingWordLabels)) {
 		return { words };
 	}
 
-	const speakers: Record<string, SttSpeaker> = {
-		s1: { id: "s1", name: "Speaker 1", hue: 210 },
-	};
+	const speakers: Record<string, SttSpeaker> = options.clusters ? { ...options.clusters } : {};
 
-	// Default single-speaker assignment when no voiceprint clusters are provided
-	const labeledWords = words.map((w) => ({
-		...w,
-		sp: w.sp ?? "s1",
-	}));
+	const labeledWords = words.map((w) => {
+		const sp = w.sp ?? "s1";
+		if (!speakers[sp]) {
+			const speakerIndex = Object.keys(speakers).length;
+			const speakerNum = sp.startsWith("s") ? sp.slice(1) : (speakerIndex + 1).toString();
+			const hue = defaultHues[speakerIndex % defaultHues.length];
+			speakers[sp] = {
+				id: sp,
+				name: `Speaker ${speakerNum}`,
+				hue,
+			};
+		}
+		return {
+			...w,
+			sp,
+		};
+	});
 
 	return {
 		words: labeledWords,

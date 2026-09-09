@@ -11,16 +11,30 @@ describe("assignSpeakersToWords", () => {
 		expect(result.words[0].sp).toBeUndefined();
 	});
 
-	it("assigns speaker tag 's1' and creates speaker registry when enabled", () => {
+	it("returns unchanged words without speaker metadata when no speaker clusters exist", () => {
 		const inputWords: SttWordSegment[] = [
 			{ word: "testing", startSec: 0, endSec: 0.5 },
 			{ word: "speech", startSec: 0.6, endSec: 1.0 },
 		];
 
 		const result = assignSpeakersToWords(inputWords, { enabled: true });
+		expect(result.speakers).toBeUndefined();
+		expect(result.segmentationUsed).toBeUndefined();
+		expect(result.words[0].sp).toBeUndefined();
+	});
+
+	it("creates consistent speaker registry for all encountered speaker tags (e.g. s2)", () => {
+		const inputWords: SttWordSegment[] = [
+			{ word: "speaker", startSec: 0, endSec: 0.5, sp: "s1" },
+			{ word: "two", startSec: 0.6, endSec: 1.0, sp: "s2" },
+		];
+
+		const result = assignSpeakersToWords(inputWords, { enabled: true });
 		expect(result.speakers).toBeDefined();
-		expect(result.speakers?.s1.name).toBe("Speaker 1");
+		expect(result.speakers?.s1).toBeDefined();
+		expect(result.speakers?.s2).toBeDefined();
+		expect(result.speakers?.s2.name).toBe("Speaker 2");
 		expect(result.words[0].sp).toBe("s1");
-		expect(result.words[1].sp).toBe("s1");
+		expect(result.words[1].sp).toBe("s2");
 	});
 });

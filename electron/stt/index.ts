@@ -432,7 +432,9 @@ export class SttManager {
 			speakers: diarizationResult.speakers,
 			provenance: {
 				aligner: alignResult.alignerUsed,
-				segmentation: diarizationResult.segmentationUsed,
+				...(diarizationResult.segmentationUsed
+					? { segmentation: diarizationResult.segmentationUsed }
+					: {}),
 			},
 		};
 	}

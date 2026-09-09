@@ -22,6 +22,18 @@ describe("alignWordSegments", () => {
 		];
 
 		const result = alignWordSegments(inputWords, { enabled: true });
+		expect(result.fallbackUsed).toBe(true);
+		expect(result.alignerUsed).toBe("whispercpp-dtw-fallback");
+		expect(result.alignedWords[0].endSec).toBe(0.5);
+	});
+
+	it("reports Qwen provenance when hasQwenInference is true", () => {
+		const inputWords: SttWordSegment[] = [
+			{ word: "quick", startSec: 0.1, endSec: 0.55 },
+			{ word: "brown", startSec: 0.5, endSec: 0.9 },
+		];
+
+		const result = alignWordSegments(inputWords, { enabled: true, hasQwenInference: true });
 		expect(result.fallbackUsed).toBe(false);
 		expect(result.alignerUsed).toBe("Qwen3-ForcedAligner-0.6B");
 		expect(result.alignedWords[0].endSec).toBe(0.5);

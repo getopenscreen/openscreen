@@ -55,9 +55,11 @@ export function computeVadSegments(
 				silenceStart = timeSec;
 			} else if (timeSec - silenceStart >= minSilenceDurationSec) {
 				const endSec = Math.min(numFrames * frameDurationSec, silenceStart + paddingSec);
-				if (endSec - speechStart >= minSpeechDurationSec) {
+				const prevEnd = segments.length > 0 ? segments[segments.length - 1].endSec : 0;
+				const effectiveStart = Math.max(speechStart, prevEnd);
+				if (endSec - effectiveStart >= minSpeechDurationSec) {
 					segments.push({
-						startSec: Number(speechStart.toFixed(3)),
+						startSec: Number(effectiveStart.toFixed(3)),
 						endSec: Number(endSec.toFixed(3)),
 					});
 				}
@@ -68,13 +70,16 @@ export function computeVadSegments(
 	}
 
 	if (isSpeech) {
+		const audioEndSec = numFrames * frameDurationSec;
 		const endSec = Math.min(
-			numFrames * frameDurationSec,
-			numFrames * frameDurationSec + paddingSec,
+			audioEndSec,
+			(silenceStart > 0 ? silenceStart : audioEndSec) + paddingSec,
 		);
-		if (endSec - speechStart >= minSpeechDurationSec) {
+		const prevEnd = segments.length > 0 ? segments[segments.length - 1].endSec : 0;
+		const effectiveStart = Math.max(speechStart, prevEnd);
+		if (endSec - effectiveStart >= minSpeechDurationSec) {
 			segments.push({
-				startSec: Number(speechStart.toFixed(3)),
+				startSec: Number(effectiveStart.toFixed(3)),
 				endSec: Number(endSec.toFixed(3)),
 			});
 		}

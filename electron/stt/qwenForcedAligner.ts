@@ -11,6 +11,8 @@ export interface ForcedAlignerOptions {
 	enabled?: boolean;
 	/** Model name or path for provenance recording. */
 	modelName?: string;
+	/** Set to true when actual Qwen forced-aligner inference results have been integrated. */
+	hasQwenInference?: boolean;
 }
 
 export interface ForcedAlignerResult {
@@ -28,6 +30,7 @@ export function alignWordSegments(
 	options: ForcedAlignerOptions = {},
 ): ForcedAlignerResult {
 	const modelName = options.modelName ?? "Qwen3-ForcedAligner-0.6B";
+	const isQwenInferred = Boolean(options.enabled && options.hasQwenInference);
 
 	if (!options.enabled || words.length === 0) {
 		return {
@@ -56,7 +59,7 @@ export function alignWordSegments(
 
 	return {
 		alignedWords,
-		alignerUsed: modelName,
-		fallbackUsed: false,
+		alignerUsed: isQwenInferred ? modelName : "whispercpp-dtw-fallback",
+		fallbackUsed: !isQwenInferred,
 	};
 }

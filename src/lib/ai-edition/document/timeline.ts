@@ -516,7 +516,20 @@ export function applyProbedDuration(
 ): AxcutDocument {
 	if (!Number.isFinite(durationSec) || durationSec <= 0) return document;
 	const clips = document.timeline.clips;
-	if (!clips.some((clip) => clipAwaitsProbedDuration(clip, assetId))) return document;
+	if (!clips.some((clip) => clipAwaitsProbedDuration(clip, assetId))) {
+		// A user may trim the placeholder before metadata arrives. Preserve that edit,
+		// but replace the asset's fallback so later timeline operations use real bounds.
+		const asset = document.assets.find((item) => item.id === assetId);
+		if (asset?.durationSec !== PLACEHOLDER_DURATION_SEC || asset.durationSec === durationSec) {
+			return document;
+		}
+		return {
+			...document,
+			assets: document.assets.map((item) =>
+				item.id === assetId ? { ...item, durationSec } : item,
+			),
+		};
+	}
 
 	// Widening a clip pushes everything after it down the ruler by the same delta.
 	let shiftSec = 0;

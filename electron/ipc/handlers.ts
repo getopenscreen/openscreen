@@ -93,6 +93,7 @@ import {
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
+import { registerRecordingPrefsHandlers } from "./recordingPrefs";
 import { RecordingStreamRegistry, registerRecordingStreamHandlers } from "./recordingStream";
 
 const PROJECT_FILE_EXTENSION = "openscreen";
@@ -587,8 +588,8 @@ let currentRecordingSession: RecordingSession | null = null;
 // useScreenRecorder (a separate renderer, own process, own React tree) picks
 // up those choices instead of silently reverting to its own defaults when
 // startNewRecording() switches windows. Mirrors the selectedSource pattern
-// above (in-memory, broadcast on change) rather than persisting to disk —
-// this is a live session preference, not project content.
+// above (in-memory, broadcast on change). Auto-zoom is the one durable choice;
+// the device selections remain session preferences, not project content.
 export interface RecordingPrefs {
 	micEnabled: boolean;
 	micDeviceId: string | null;
@@ -611,7 +612,7 @@ export interface RecordingPrefs {
 	/** After a take, suggest cursor-dwell zooms. Default on, matching 1.5. */
 	autoZoomEnabled: boolean;
 }
-let recordingPrefs: RecordingPrefs = {
+const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
 	micDeviceId: null,
 	micDeviceName: null,
@@ -1954,18 +1955,7 @@ export function registerIpcHandlers(
 		return selectedSource;
 	});
 
-	ipcMain.handle("get-recording-prefs", () => {
-		return recordingPrefs;
-	});
-
-	ipcMain.handle("set-recording-prefs", (_, prefs: Partial<RecordingPrefs>) => {
-		recordingPrefs = { ...recordingPrefs, ...prefs };
-		const mainWin = getMainWindow();
-		if (mainWin && !mainWin.isDestroyed()) {
-			mainWin.webContents.send("recording-prefs-changed", recordingPrefs);
-		}
-		return recordingPrefs;
-	});
+	registerRecordingPrefsHandlers(defaultRecordingPrefs, getMainWindow);
 
 	ipcMain.handle("request-camera-access", async () => {
 		if (process.platform !== "darwin") {

@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import type { AxcutDocument } from "../schema";
 import { documentSchema } from "../schema";
 import { migrateProjectDataToAxcutDocument } from "./migrate";
-import { applyProbedDuration, PLACEHOLDER_DURATION_SEC } from "./timeline";
+import { applyProbedDuration, PLACEHOLDER_DURATION_SEC, replaceTimeline } from "./timeline";
 
 /** A v1.7 project file: one recording, one zoom region at 6–8s of that recording. */
 function legacyProjectWithZoom() {
@@ -38,6 +38,23 @@ const zoomsOf = (doc: AxcutDocument) =>
 	(doc.zoomRanges ?? []) as unknown as Array<Record<string, unknown>>;
 
 describe("applyProbedDuration — the v1.7 import gap", () => {
+	it("updates a placeholder asset after the user trimmed its clip, preserving edits", () => {
+		const doc = documentSchema.parse(migrateProjectDataToAxcutDocument(legacyProjectWithZoom()));
+		const assetId = doc.assets[0].id;
+		doc.assets[0].durationSec = PLACEHOLDER_DURATION_SEC;
+		doc.timeline.clips[0].sourceEndSec = 9;
+		doc.timeline.clips[0].timelineEndSec = 9;
+		const next = applyProbedDuration(doc, assetId, 90);
+		expect(next.assets[0].durationSec).toBe(90);
+		expect(next.timeline).toBe(doc.timeline);
+		expect(next.zoomRanges).toBe(doc.zoomRanges);
+		expect(doc.assets[0].durationSec).toBe(PLACEHOLDER_DURATION_SEC);
+		expect(
+			replaceTimeline(next, [{ startSec: 0, endSec: 80 }], "extend").timeline.clips[0].sourceEndSec,
+		).toBe(80);
+		expect(applyProbedDuration(next, assetId, 90)).toBe(next);
+		expect(applyProbedDuration(doc, "missing_asset", 90)).toBe(doc);
+	});
 	it("opens a legacy project with an extent-less clip and unanchored regions", () => {
 		// Documents the STARTING state this function exists to repair. If migration ever
 		// learns the duration itself, this expectation is what will flag it.

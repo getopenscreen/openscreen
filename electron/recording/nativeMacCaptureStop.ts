@@ -106,7 +106,15 @@ export async function resolveNativeMacCaptureStop(options: {
 	isSalvageable?: (filePath: string | null, helperExited: boolean) => Promise<boolean>;
 }): Promise<NativeMacCaptureStopResolution> {
 	try {
-		return { path: await options.waitForStop(), recovered: false };
+		// The helper acknowledges the stop with `String(event.screenPath ?? target ?? "")`,
+		// so an acknowledgement carrying no usable path resolves an empty string. Falling
+		// back to the preferred path and refusing an empty one is what the call site did
+		// before recovery existed; without it a pathless acknowledgement is reported as a
+		// successful save and the session manifest is written for a file that is not there.
+		const acknowledgedPath = (await options.waitForStop()) || options.preferredPath;
+		if (acknowledgedPath) {
+			return { path: acknowledgedPath, recovered: false };
+		}
 	} catch (stopError) {
 		const helperExited = await options.waitForExit();
 		const isSalvageable = options.isSalvageable ?? isSalvageableNativeMacCapture;
@@ -119,4 +127,5 @@ export async function resolveNativeMacCaptureStop(options: {
 		}
 		return { path: options.preferredPath, recovered: true, stopError };
 	}
+	throw new Error("Native macOS capture did not return an output path.");
 }

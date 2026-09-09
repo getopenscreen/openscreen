@@ -98,4 +98,24 @@ describe("resolveNativeMacCaptureStop", () => {
 			}),
 		).rejects.toBe(stopError);
 	});
+
+	it("falls back to the preferred path when the acknowledgement names no output", async () => {
+		await expect(
+			resolveNativeMacCaptureStop({
+				preferredPath: "/recordings/preferred.mp4",
+				waitForStop: async () => "",
+				waitForExit: async () => true,
+			}),
+		).resolves.toEqual({ path: "/recordings/preferred.mp4", recovered: false });
+	});
+
+	it("fails when neither the acknowledgement nor the preferred path names an output", async () => {
+		await expect(
+			resolveNativeMacCaptureStop({
+				preferredPath: null,
+				waitForStop: async () => "",
+				waitForExit: async () => true,
+			}),
+		).rejects.toThrow("did not return an output path");
+	});
 });

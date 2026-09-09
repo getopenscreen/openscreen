@@ -20,6 +20,22 @@ export interface SttWordSegment {
 	endSec: number;
 	/** Confidence in `[0, 1]` when the recognizer exposes one; otherwise `undefined`. */
 	confidence?: number;
+	/** Speaker identifier (e.g. "s1") when diarization is active. */
+	sp?: string;
+}
+
+/** Speaker metadata in speaker registry. */
+export interface SttSpeaker {
+	id: string;
+	name: string;
+	hue?: number;
+}
+
+/** Engine provenance recorded per transcript. */
+export interface SttProvenance {
+	aligner?: string;
+	vad?: string;
+	segmentation?: string;
 }
 
 /** A phrase-level segment from the recognizer (Whisper phrase). */
@@ -154,6 +170,10 @@ export interface SttTranscribeResponse {
 	 * recording than the one that was transcribed.
 	 */
 	timing?: SttTiming;
+	/** Speaker registry mapping speaker IDs to metadata. */
+	speakers?: Record<string, SttSpeaker>;
+	/** Engine provenance metadata. */
+	provenance?: SttProvenance;
 }
 
 /** IPC success envelope; thrown errors cross as a rejection. */

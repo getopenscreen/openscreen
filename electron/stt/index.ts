@@ -3,6 +3,8 @@ import { app, type IpcMain } from "electron";
 import { planChunks } from "./chunking";
 import { extractMono16kPcm } from "./extractAudio";
 import { ensureModels, modelPaths } from "./modelManager";
+import { alignWordSegments } from "./qwenForcedAligner";
+import { assignSpeakersToWords } from "./speakerDiarization";
 import type {
 	SttPhraseSegment,
 	SttStatusEvent,
@@ -417,12 +419,21 @@ export class SttManager {
 						? "no timing reported"
 						: `timing incomplete (${untimedChunks}/${chunks.length} chunks unmeasured)`),
 		);
+		const isMac = process.platform === "darwin";
+		const alignResult = alignWordSegments(wordSegments, { enabled: isMac });
+		const diarizationResult = assignSpeakersToWords(alignResult.alignedWords, { enabled: isMac });
+
 		return {
 			segments,
-			wordSegments,
+			wordSegments: diarizationResult.words,
 			detectedLanguage: detectedLanguage ?? language ?? "auto",
 			backend,
 			timing,
+			speakers: diarizationResult.speakers,
+			provenance: {
+				aligner: alignResult.alignerUsed,
+				segmentation: diarizationResult.segmentationUsed,
+			},
 		};
 	}
 

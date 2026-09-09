@@ -48,6 +48,29 @@ function legacyWithClip(): AxcutDocument {
 }
 
 describe("documentAfterProbedDuration", () => {
+	it("resolves a missing primary asset before seeding the fallback", () => {
+		const doc = emptyTimeline("deleted_asset", ["asset_1", "asset_2"]);
+		const next = documentAfterProbedDuration(doc, "asset_1", 30, PROJECT);
+		expect(next?.project.primaryAssetId).toBe("asset_1");
+		expect(next?.timeline.clips).toHaveLength(1);
+		expect(next?.timeline.clips[0]).toMatchObject({
+			assetId: "asset_1",
+			sourceStartSec: 0,
+			sourceEndSec: 30,
+		});
+		expect(next?.assets[1].durationSec).toBeUndefined();
+		expect(doc.project.primaryAssetId).toBe("deleted_asset");
+		expect(documentAfterProbedDuration(doc, "asset_2", 30, PROJECT)).toBeNull();
+	});
+
+	it("keeps a valid primary asset even when it is not first", () => {
+		const doc = emptyTimeline("asset_2", ["asset_1", "asset_2"]);
+		expect(documentAfterProbedDuration(doc, "asset_1", 30, PROJECT)).toBeNull();
+		const next = documentAfterProbedDuration(doc, "asset_2", 30, PROJECT);
+		expect(next?.project.primaryAssetId).toBe("asset_2");
+		expect(next?.timeline.clips[0].assetId).toBe("asset_2");
+	});
+
 	it("seeds a full-duration clip when the primary asset reports its length", () => {
 		const doc = emptyTimeline("asset_1", ["asset_1"]);
 

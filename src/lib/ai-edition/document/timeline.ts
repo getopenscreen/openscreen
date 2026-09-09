@@ -587,7 +587,9 @@ export function documentAfterProbedDuration(
 		// ponytail: replaceTimeline derives clip length from asset.durationSec, which
 		// import never populates — without this the first auto-created clip silently
 		// comes out empty (normalizeIntervals clamps against a 0 duration, dropping it).
-		const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
+		const primaryAsset =
+			doc.assets.find((asset) => asset.id === doc.project.primaryAssetId) ?? doc.assets[0];
+		const primaryAssetId = primaryAsset.id;
 		// Only the asset that actually fired. `replaceTimeline` pins every clip it
 		// builds to the primary asset, and the seed sizes that clip from `knownSec` —
 		// so seeding on an event from any OTHER asset writes one video's length under
@@ -595,6 +597,7 @@ export function documentAfterProbedDuration(
 		if (!primaryAssetId || primaryAssetId !== assetId) return null;
 		const docWithDuration: AxcutDocument = {
 			...doc,
+			project: { ...doc.project, primaryAssetId },
 			// Only a length that was never measured, which is `applyProbedDuration`'s rule
 			// above widened to cover a stored 0 — the seed exists to give `replaceTimeline` a
 			// duration to clamp against, and a 0 defeats that exactly as a missing one does.

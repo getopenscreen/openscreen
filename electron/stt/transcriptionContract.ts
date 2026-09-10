@@ -141,6 +141,7 @@ export interface SttTranscribeRequest {
  * a literal typed twice is a fallback that silently stops working.
  */
 export const STT_NATIVE_EXTRACTION_UNAVAILABLE = "stt:native-extraction-unavailable";
+export const STT_VAD_UNAVAILABLE = "stt:vad-unavailable";
 
 /** IPC response: main → renderer. */
 export interface SttTranscribeResponse {

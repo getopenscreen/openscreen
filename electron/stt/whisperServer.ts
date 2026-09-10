@@ -8,12 +8,13 @@ import type { Readable } from "node:stream";
 
 import { resolveBinaryPath } from "./gpuDetector";
 import { snapWordBoundariesToAudio } from "./snapWordBoundaries";
-import type {
-	SttBackend,
-	SttPhraseSegment,
-	SttTiming,
-	SttVadSegment,
-	SttWordSegment,
+import {
+	STT_VAD_UNAVAILABLE,
+	type SttBackend,
+	type SttPhraseSegment,
+	type SttTiming,
+	type SttVadSegment,
+	type SttWordSegment,
 } from "./transcriptionContract";
 import { cleanupWav, writeSamplesAsWav } from "./wav";
 
@@ -75,6 +76,7 @@ export interface WhisperServerStatus {
 	backend: SttBackend | null;
 	startedAtMs: number | null;
 	lastError: string | null;
+	vadAvailable: boolean;
 }
 
 /** Per-word entry inside a whisper-stt-server `/inference` JSON segment. */
@@ -123,7 +125,11 @@ export class WhisperServerManager {
 	private lastError: string | null = null;
 	private startedAtMs: number | null = null;
 	private inFlight: Promise<unknown> = Promise.resolve();
-	private starting: Promise<{ port: number; backend: SttBackend }> | null = null;
+	private starting: Promise<{
+		port: number;
+		backend: SttBackend;
+		vadAvailable: boolean;
+	}> | null = null;
 
 	/** Buffered stderr from the helper; surfaced on shutdown + poll failures. */
 	private stderrTail = "";
@@ -148,12 +154,12 @@ export class WhisperServerManager {
 		});
 	}
 
-	/** Check the server's HTTP root for a 200; resolves once responsive. */
+	/** Check the server's HTTP root for a 200; resolves once responsive. Returns VAD availability. */
 	private static async pollUntilReady(
 		baseUrl: string,
 		timeoutMs = 30_000,
 		shouldContinue: () => boolean = () => true,
-	): Promise<void> {
+	): Promise<{ vad: boolean }> {
 		const deadline = Date.now() + timeoutMs;
 		while (Date.now() < deadline) {
 			if (!shouldContinue()) throw new Error("whisper-stt-server exited before readiness");
@@ -164,7 +170,10 @@ export class WhisperServerManager {
 			);
 			try {
 				const res = await fetch(baseUrl, { method: "GET", signal: controller.signal });
-				if (res.ok) return;
+				if (res.ok) {
+					const body = typeof res.json === "function" ? await res.json().catch(() => null) : null;
+					return { vad: Boolean((body as { vad?: boolean } | null)?.vad) };
+				}
 			} catch {
 				// not up yet
 			} finally {
@@ -199,6 +208,8 @@ export class WhisperServerManager {
 		if (log) console.error(`[stt] ${message}`);
 	}
 
+	private vadAvailable = false;
+
 	/** True when a process is alive and a model is loaded. */
 	get status(): WhisperServerStatus {
 		return {
@@ -208,7 +219,12 @@ export class WhisperServerManager {
 			backend: this.backend,
 			startedAtMs: this.startedAtMs,
 			lastError: this.lastError,
+			vadAvailable: this.vadAvailable,
 		};
+	}
+
+	get isVadAvailable(): boolean {
+		return this.vadAvailable;
 	}
 
 	/**
@@ -216,7 +232,9 @@ export class WhisperServerManager {
 	 * if a server is already up we just return its port so the caller never pays
 	 * the cold-start cost twice.
 	 */
-	async start(options: WhisperServerStartOptions): Promise<{ port: number; backend: SttBackend }> {
+	async start(
+		options: WhisperServerStartOptions,
+	): Promise<{ port: number; backend: SttBackend; vadAvailable: boolean }> {
 		if (this.starting) return this.starting;
 		this.starting = this.startImpl(options).finally(() => {
 			this.starting = null;
@@ -226,12 +244,16 @@ export class WhisperServerManager {
 
 	private async startImpl(
 		options: WhisperServerStartOptions,
-	): Promise<{ port: number; backend: SttBackend }> {
+	): Promise<{ port: number; backend: SttBackend; vadAvailable: boolean }> {
 		if (this.shuttingDown) {
 			throw new Error("whisper-stt-server manager is shutting down");
 		}
 		if (this.process && this.port) {
-			return { port: this.port, backend: this.backend ?? options.backend ?? "whispercpp-cpu" };
+			return {
+				port: this.port,
+				backend: this.backend ?? options.backend ?? "whispercpp-cpu",
+				vadAvailable: this.vadAvailable,
+			};
 		}
 
 		const resolved = options.binaryPath
@@ -259,7 +281,9 @@ export class WhisperServerManager {
 			throw new Error(`Whisper GGML model not found at ${options.modelPath}`);
 		}
 
-		const launch = async (forceCpu: boolean): Promise<{ port: number; backend: SttBackend }> => {
+		const launch = async (
+			forceCpu: boolean,
+		): Promise<{ port: number; backend: SttBackend; vadAvailable: boolean }> => {
 			const port = await WhisperServerManager.pickFreePort();
 			if (this.shuttingDown) {
 				throw new Error("whisper-stt-server manager is shutting down");
@@ -307,6 +331,7 @@ export class WhisperServerManager {
 					this.process = null;
 					this.port = null;
 					this.startedAtMs = null;
+					this.vadAvailable = false;
 				}
 			});
 			child.once("error", (err) => {
@@ -322,6 +347,7 @@ export class WhisperServerManager {
 					this.process = null;
 					this.port = null;
 					this.startedAtMs = null;
+					this.vadAvailable = false;
 				}
 			});
 
@@ -336,8 +362,9 @@ export class WhisperServerManager {
 				});
 				child.once("error", reject);
 			});
+			let readyInfo: { vad: boolean };
 			try {
-				await Promise.race([
+				readyInfo = await Promise.race([
 					WhisperServerManager.pollUntilReady(
 						`http://127.0.0.1:${port}`,
 						30_000,
@@ -357,7 +384,8 @@ export class WhisperServerManager {
 				this.recordError(message, { log: !alreadyLogged });
 				throw new Error(message);
 			}
-			return { port, backend: activeBackend };
+			this.vadAvailable = Boolean(readyInfo?.vad);
+			return { port, backend: activeBackend, vadAvailable: this.vadAvailable };
 		};
 
 		try {
@@ -383,6 +411,7 @@ export class WhisperServerManager {
 
 	/** Send SIGTERM and wait for the helper to exit. Resolves even if it was already down. */
 	async stop(): Promise<void> {
+		this.vadAvailable = false;
 		if (!this.process) {
 			this.port = null;
 			this.startedAtMs = null;
@@ -601,9 +630,8 @@ export class WhisperServerManager {
 		return task;
 	}
 
-	private async detectVadSegmentsImpl(opts: { samples: Float32Array }): Promise<SttVadSegment[]> {
-		await this.ensureReady();
-		const wavPath = await writeSamplesAsWav(opts.samples);
+	private async detectVadChunk(samples: Float32Array): Promise<SttVadSegment[]> {
+		const wavPath = await writeSamplesAsWav(samples);
 		try {
 			const url = `${this.baseUrl()}/vad`;
 			const form = new FormData();
@@ -654,4 +682,57 @@ export class WhisperServerManager {
 			await cleanupWav(wavPath);
 		}
 	}
+
+	private async detectVadSegmentsImpl(opts: { samples: Float32Array }): Promise<SttVadSegment[]> {
+		await this.ensureReady();
+		if (!this.vadAvailable) {
+			throw new Error(STT_VAD_UNAVAILABLE);
+		}
+		if (opts.samples.length === 0) return [];
+
+		const allSegments: SttVadSegment[] = [];
+		const totalSamples = opts.samples.length;
+		for (let offset = 0; offset < totalSamples; offset += MAX_VAD_CHUNK_SAMPLES) {
+			const chunkSamples = opts.samples.subarray(
+				offset,
+				Math.min(totalSamples, offset + MAX_VAD_CHUNK_SAMPLES),
+			);
+			const chunkSegments = await this.detectVadChunk(chunkSamples);
+			const offsetSec = offset / 16_000;
+			for (const seg of chunkSegments) {
+				allSegments.push({
+					startSec: Math.round((seg.startSec + offsetSec) * 1000) / 1000,
+					endSec: Math.round((seg.endSec + offsetSec) * 1000) / 1000,
+				});
+			}
+		}
+
+		return mergeVadIntervals(allSegments);
+	}
+}
+
+/**
+ * Silero VAD processes audio quickly, but buffering hours of 16 kHz audio as
+ * single WAV blobs can exhaust Node memory. We bound individual VAD passes to
+ * chunks of at most 3 minutes (180s = 2,880,000 samples @ 16 kHz), keeping
+ * memory under ~6 MB per WAV, and merge the resulting intervals.
+ */
+export const MAX_VAD_CHUNK_SAMPLES = 16_000 * 180;
+
+/**
+ * Merges contiguous or overlapping speech segments into non-overlapping intervals.
+ */
+export function mergeVadIntervals(segments: SttVadSegment[]): SttVadSegment[] {
+	if (segments.length <= 1) return segments;
+	const merged: SttVadSegment[] = [];
+	for (const seg of segments) {
+		if (seg.endSec <= seg.startSec) continue;
+		const last = merged[merged.length - 1];
+		if (last && seg.startSec <= last.endSec) {
+			last.endSec = Math.max(last.endSec, seg.endSec);
+		} else {
+			merged.push({ startSec: seg.startSec, endSec: seg.endSec });
+		}
+	}
+	return merged;
 }

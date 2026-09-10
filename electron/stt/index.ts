@@ -3,15 +3,16 @@ import { app, type IpcMain } from "electron";
 import { planChunks } from "./chunking";
 import { extractMono16kPcm } from "./extractAudio";
 import { ensureModels, modelPaths } from "./modelManager";
-import type {
-	SttPhraseSegment,
-	SttStatusEvent,
-	SttTiming,
-	SttTranscribeRequest,
-	SttTranscribeResponse,
-	SttVadResponse,
-	SttVadSegment,
-	SttWordSegment,
+import {
+	STT_VAD_UNAVAILABLE,
+	type SttPhraseSegment,
+	type SttStatusEvent,
+	type SttTiming,
+	type SttTranscribeRequest,
+	type SttTranscribeResponse,
+	type SttVadResponse,
+	type SttVadSegment,
+	type SttWordSegment,
 } from "./transcriptionContract";
 import { WhisperServerManager } from "./whisperServer";
 
@@ -443,12 +444,20 @@ export class SttManager {
 		await this.server.shutdown();
 	}
 
+	/** True when the helper reported Silero VAD loaded and ready. */
+	isVadAvailable(): boolean {
+		return this.server.status.vadAvailable;
+	}
+
 	/**
 	 * Run Voice Activity Detection (Silero VAD) to detect speech segments in samples.
 	 */
 	async detectSpeech(samples: Float32Array): Promise<SttVadSegment[]> {
 		if (this.shuttingDown) throw cancelledError();
 		await this.init();
+		if (!this.server.status.vadAvailable) {
+			throw new Error(STT_VAD_UNAVAILABLE);
+		}
 		return this.server.detectVadSegments({ samples });
 	}
 }

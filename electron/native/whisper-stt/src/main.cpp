@@ -126,8 +126,16 @@ bool read_wav_pcm16(const std::string& path, std::vector<float>& pcm,
 		if (f.gcount() != 4) break;
 		const uint32_t chunk_size = read_u32();
 		if (std::memcmp(chunk_tag, "fmt ", 4) == 0) {
+			if (chunk_size < 16) {
+				log("invalid fmt chunk size: " + std::to_string(chunk_size));
+				return false;
+			}
 			fmt_format      = read_u16();
 			fmt_channels    = read_u16();
+			if (fmt_channels == 0) {
+				log("invalid fmt_channels: 0");
+				return false;
+			}
 			fmt_sample_rate = read_u32();
 			(void)read_u32();
 			(void)read_u16();
@@ -136,9 +144,10 @@ bool read_wav_pcm16(const std::string& path, std::vector<float>& pcm,
 			if (fmt_extra) f.seekg(fmt_extra, std::ios::cur);
 			got_fmt = true;
 		} else if (std::memcmp(chunk_tag, "data", 4) == 0) {
-			if (!got_fmt || fmt_format != 1 || fmt_bits != 16) {
+			if (!got_fmt || fmt_format != 1 || fmt_bits != 16 || fmt_channels == 0) {
 				log("expected PCM16, got format=" + std::to_string(fmt_format) +
-				    " bits=" + std::to_string(fmt_bits));
+				    " bits=" + std::to_string(fmt_bits) +
+				    " channels=" + std::to_string(fmt_channels));
 				return false;
 			}
 			sample_rate_out = static_cast<int>(fmt_sample_rate);
@@ -328,8 +337,12 @@ int main(int argc, char** argv) {
 	// GET / — readiness probe. The Node wrapper polls this until 200 to know
 	// the model is loaded and the GPU is bound (a Vulkan/D3D driver bug can
 	// make whisper_init succeed but the first /inference still segfault).
-	svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
-		res.set_content("ok", "text/plain");
+	svr.Get("/", [&](const httplib::Request&, httplib::Response& res) {
+		nlohmann::json probe = {
+			{"status", "ok"},
+			{"vad",    vctx != nullptr}
+		};
+		res.set_content(probe.dump(), "application/json");
 	});
 
 	// POST /inference — multipart form with `file` (WAV) + `language` + `response_format`.
@@ -577,7 +590,7 @@ int main(int argc, char** argv) {
 	// Runs Silero VAD segmentation and returns speech intervals [start, end] in seconds.
 	svr.Post("/vad", [&](const httplib::Request& req, httplib::Response& res) {
 		if (!vctx) {
-			res.status = 400;
+			res.status = 503;
 			res.set_content(R"({"error":"VAD model was not loaded on server startup"})", "application/json");
 			return;
 		}
@@ -631,8 +644,8 @@ int main(int argc, char** argv) {
 				const float t0 = whisper_vad_segments_get_segment_t0(vad_segments, i);
 				const float t1 = whisper_vad_segments_get_segment_t1(vad_segments, i);
 				reply["segments"].push_back({
-					{"start", static_cast<double>(t0)},
-					{"end",   static_cast<double>(t1)}
+					{"start", static_cast<double>(t0) / 100.0},
+					{"end",   static_cast<double>(t1) / 100.0}
 				});
 			}
 			whisper_vad_free_segments(vad_segments);

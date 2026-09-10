@@ -94,6 +94,9 @@ export function MediaStage({
 		: { assetId: "", status: "idle" };
 	const selectedBusy =
 		selectedTranscription.status === "running" || selectedTranscription.status === "queued";
+	const selectedSilence =
+		selectedTranscription.failure?.kind === "no-audio" ||
+		selectedTranscription.failure?.kind === "unsupported-audio";
 
 	const handleImport = async () => {
 		if (!projectId) {
@@ -308,13 +311,17 @@ export function MediaStage({
 										borderRadius: 9999,
 										background:
 											selectedTranscription.status === "failed"
-												? "var(--danger-soft)"
+												? selectedSilence
+													? "var(--warn-soft)"
+													: "var(--danger-soft)"
 												: selectedTranscription.status === "ready"
 													? "var(--success-soft)"
 													: "var(--accent-soft)",
 										color:
 											selectedTranscription.status === "failed"
-												? "var(--danger)"
+												? selectedSilence
+													? "var(--warn)"
+													: "var(--danger)"
 												: selectedTranscription.status === "ready"
 													? "var(--success)"
 													: "var(--accent)",
@@ -452,7 +459,9 @@ export function MediaStage({
 										{selectedBusy
 											? transcriptionLabel(selectedTranscription)
 											: selectedTranscription.status === "failed"
-												? t("mediaStage.generationFailedHint")
+												? selectedSilence
+													? t("mediaStage.noAudioTrackHint")
+													: t("mediaStage.generationFailedHint")
 												: t("mediaStage.notGeneratedHint")}
 									</span>
 								)}

@@ -64,6 +64,28 @@ describe("classifyTranscriptionError", () => {
 		).toBe("no-audio");
 	});
 
+	it("recognises native extraction NoAudioTrackError", () => {
+		const err = Object.assign(
+			new Error("No decodable audio in /tmp/rec.mp4: Output file #0 does not contain any stream"),
+			{
+				name: "NoAudioTrackError",
+			},
+		);
+		const failure = classifyTranscriptionError(err);
+		expect(failure.kind).toBe("no-audio");
+		expect(isPermanentFailure(failure.kind)).toBe(true);
+	});
+
+	it("recognises remote IPC wrapped NoAudioTrackError", () => {
+		const failure = classifyTranscriptionError(
+			new Error(
+				"Error invoking remote method 'stt:transcribe': NoAudioTrackError: No decodable audio in C:\\test\\rec.mp4: Output file #0 does not contain any stream",
+			),
+		);
+		expect(failure.kind).toBe("no-audio");
+		expect(isPermanentFailure(failure.kind)).toBe(true);
+	});
+
 	it("recognises an audio codec the caption path cannot read", () => {
 		const failure = classifyTranscriptionError(
 			new Error("Audio codec not supported for captions: ac-3"),

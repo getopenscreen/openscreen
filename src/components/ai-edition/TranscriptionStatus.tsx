@@ -105,7 +105,10 @@ export function TranscriptionStatusDot({
 			</Loader2>
 		);
 	}
-	const { fill, halo } = DOT_COLOR[view.status];
+	const isSilence = view.failure?.kind === "no-audio" || view.failure?.kind === "unsupported-audio";
+	const { fill, halo } = isSilence
+		? { fill: "#f59e0b", halo: "0 0 0 3px rgba(245, 158, 11, 0.2)" }
+		: DOT_COLOR[view.status];
 	return (
 		<span
 			style={{
@@ -117,7 +120,11 @@ export function TranscriptionStatusDot({
 				flexShrink: 0,
 			}}
 			aria-label={label}
-			title={view.failure?.message ? `${label} — ${view.failure.message}` : label}
+			title={
+				view.failure?.kind === "error" && view.failure?.message
+					? `${label} — ${view.failure.message}`
+					: label
+			}
 		/>
 	);
 }

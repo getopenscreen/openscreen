@@ -483,6 +483,17 @@ describe("V4Timeline clip row", () => {
 		expect(screen.getByText("25:50.0")).toBeInTheDocument();
 	});
 
+	it("asks for the room this card's own timecode needs, not the shortest one", () => {
+		// 600s of 3965s is a ~130px card. `0:12.0` would fit there; `10:00.0` is a
+		// character wider and does not, and `formatSec` has no hour field to stop
+		// the string growing — a clip past a hundred minutes reads `100:00.0`. A
+		// single fixed width would have let those through onto the delete button.
+		renderTimeline([clip(0, 600), clip(600, 3965)]);
+
+		expect(screen.queryByText("10:00.0")).not.toBeInTheDocument();
+		expect(screen.getByText("56:05.0")).toBeInTheDocument();
+	});
+
 	it("takes the card gutter out of each clip's own width", () => {
 		// The 6px is what separates two cards. Taken off the clip's width it stays
 		// local to that clip; inserted between them (a flex gap) it displaced every

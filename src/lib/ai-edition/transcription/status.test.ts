@@ -10,6 +10,7 @@ import {
 	isCpuBackend,
 	isModelDownloadInFlight,
 	isPermanentFailure,
+	isSilentFailure,
 	progressFraction,
 	realtimeSpeed,
 	resolveTranscriptGate,
@@ -64,12 +65,35 @@ describe("classifyTranscriptionError", () => {
 		).toBe("no-audio");
 	});
 
+	// The native extractor phrases it its own way, and `ipcRenderer.invoke` wraps
+	// the rejection before the renderer ever sees it — this is the shape that
+	// reached `classifyTranscriptionError` in issue #628 and fell through to
+	// "error", turning a muted screen recording into a failed job.
+	it("recognises the native extractor's verdict, through the IPC wrapper", () => {
+		const failure = classifyTranscriptionError(
+			new Error(
+				"Error invoking remote method 'stt:transcribe': Error: No decodable audio in /rec.mp4: Output file #0 does not contain any stream",
+			),
+		);
+		expect(failure.kind).toBe("no-audio");
+		expect(isPermanentFailure(failure.kind)).toBe(true);
+	});
+
 	it("recognises an audio codec the caption path cannot read", () => {
 		const failure = classifyTranscriptionError(
 			new Error("Audio codec not supported for captions: ac-3"),
 		);
 		expect(failure.kind).toBe("unsupported-audio");
 		expect(isPermanentFailure(failure.kind)).toBe(true);
+	});
+
+	it("marks the media verdicts as silent, and an engine failure as not", () => {
+		expect(isSilentFailure(view("a", "failed", "no-audio"))).toBe(true);
+		expect(isSilentFailure(view("a", "failed", "unsupported-audio"))).toBe(true);
+		expect(isSilentFailure(view("a", "failed", "error"))).toBe(false);
+		// A stored transcript outranks a failed job (`deriveAssetStatus`), and that
+		// view still carries the failure — it must not be styled as silence.
+		expect(isSilentFailure(view("a", "ready", "no-audio"))).toBe(false);
 	});
 
 	it("treats anything else as a transient error worth retrying", () => {

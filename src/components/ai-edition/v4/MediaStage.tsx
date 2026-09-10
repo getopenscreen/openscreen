@@ -13,9 +13,10 @@ import {
 	languageLabel,
 	sortedLanguageOptions,
 } from "@/lib/ai-edition/transcription/languageLabels";
-import type {
-	AssetTranscriptionStatus,
-	AssetTranscriptionView,
+import {
+	type AssetTranscriptionStatus,
+	type AssetTranscriptionView,
+	isSilentFailure,
 } from "@/lib/ai-edition/transcription/status";
 import { formatBytes } from "@/utils/formatBytes";
 import {
@@ -306,14 +307,19 @@ export function MediaStage({
 										gap: 6,
 										padding: "5px 10px 5px 8px",
 										borderRadius: 9999,
+										// A silent recording reads as a verdict about the media, not as a
+										// broken run, so it keeps the neutral accent rather than the danger
+										// red the engine failures get (issue #628).
 										background:
-											selectedTranscription.status === "failed"
+											selectedTranscription.status === "failed" &&
+											!isSilentFailure(selectedTranscription)
 												? "var(--danger-soft)"
 												: selectedTranscription.status === "ready"
 													? "var(--success-soft)"
 													: "var(--accent-soft)",
 										color:
-											selectedTranscription.status === "failed"
+											selectedTranscription.status === "failed" &&
+											!isSilentFailure(selectedTranscription)
 												? "var(--danger)"
 												: selectedTranscription.status === "ready"
 													? "var(--success)"
@@ -451,9 +457,11 @@ export function MediaStage({
 									<span style={{ color: "var(--muted)" }}>
 										{selectedBusy
 											? transcriptionLabel(selectedTranscription)
-											: selectedTranscription.status === "failed"
-												? t("mediaStage.generationFailedHint")
-												: t("mediaStage.notGeneratedHint")}
+											: isSilentFailure(selectedTranscription)
+												? t("mediaStage.noAudioTrackHint")
+												: selectedTranscription.status === "failed"
+													? t("mediaStage.generationFailedHint")
+													: t("mediaStage.notGeneratedHint")}
 									</span>
 								)}
 							</div>

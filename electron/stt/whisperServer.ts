@@ -723,7 +723,7 @@ export const MAX_VAD_CHUNK_SAMPLES = 16_000 * 180;
  * Merges contiguous or overlapping speech segments into non-overlapping intervals.
  */
 export function mergeVadIntervals(segments: SttVadSegment[]): SttVadSegment[] {
-	if (segments.length <= 1) return segments;
+	if (segments.length <= 1) return segments.filter((seg) => seg.endSec > seg.startSec);
 	const merged: SttVadSegment[] = [];
 	for (const seg of segments) {
 		if (seg.endSec <= seg.startSec) continue;

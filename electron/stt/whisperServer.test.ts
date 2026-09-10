@@ -778,6 +778,30 @@ describe("WhisperServerManager", () => {
 		}
 	});
 
+	it("filters out /vad segments missing end that map to zero-length intervals", async () => {
+		const fakeJson = {
+			segments: [
+				{ start: 1.5 }, // missing end -> maps to startSec: 1.5, endSec: 1.5
+			],
+		};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(JSON.stringify(fakeJson), { status: 200 })),
+		);
+		try {
+			const mgr = new WhisperServerManager();
+			(mgr as unknown as { process: unknown; port: number; vadAvailable: boolean }).process = {};
+			(mgr as unknown as { process: unknown; port: number; vadAvailable: boolean }).port = 9999;
+			(mgr as unknown as { process: unknown; port: number; vadAvailable: boolean }).vadAvailable =
+				true;
+
+			const segments = await mgr.detectVadSegments({ samples: new Float32Array(1600) });
+			expect(segments).toEqual([]);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("handles malformed WAV /vad HTTP 400 without crashing helper availability", async () => {
 		vi.stubGlobal(
 			"fetch",
@@ -843,6 +867,11 @@ describe("WhisperServerManager", () => {
 				{ startSec: 3, endSec: 4 },
 			];
 			expect(mergeVadIntervals(input)).toEqual([{ startSec: 3, endSec: 4 }]);
+		});
+
+		it("drops singleton intervals where endSec <= startSec", () => {
+			expect(mergeVadIntervals([{ startSec: 2, endSec: 1 }])).toEqual([]);
+			expect(mergeVadIntervals([{ startSec: 2, endSec: 2 }])).toEqual([]);
 		});
 	});
 

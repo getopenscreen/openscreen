@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toastText } from "@/i18n/toastText";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { useProjectStore } from "./projectStore";
 import { useTranscriptionStore, whenTranscriptionIdle } from "./transcriptionStore";
@@ -267,6 +268,12 @@ describe("useTranscriptionStore", () => {
 
 		expect(toastMocks.error).not.toHaveBeenCalled();
 		expect(toastMocks.info).toHaveBeenCalledTimes(1);
+		// The COPY, not just the count: the point of the toast is that it says the
+		// file has no audio. Resolved through the same helper the store uses, so a
+		// reworded string stays a translation change rather than a test failure.
+		expect(toastMocks.info).toHaveBeenCalledWith(
+			toastText("editor", "mediaStage.noAudioTrackHint"),
+		);
 	});
 
 	it("request() re-runs a failed asset and clears the remembered verdict", async () => {

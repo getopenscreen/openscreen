@@ -1423,8 +1423,7 @@ function attachNativeMacCaptureOutputDrain(proc: ChildProcessWithoutNullStreams)
 	proc.once("error", cleanup);
 	// An 'error' event with no listener throws, and in the main process that is an
 	// uncaught exception rather than a rejected promise. `proc.once("error")` above
-	// covers the ChildProcess, NOT its pipes: writing "stop
-" to a helper that has
+	// covers the ChildProcess, NOT its pipes: sending the stop command to a helper that has
 	// already closed its command pipe raises EPIPE on `proc.stdin`, which would take
 	// the main process down before the recovery below ever runs — on exactly the
 	// failure this file exists to recover from. The Windows drain learned this first;

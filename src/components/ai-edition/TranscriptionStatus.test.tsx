@@ -114,4 +114,44 @@ describe("TranscriptionStatusDot", () => {
 		expect(container.querySelector("svg")).toBeNull();
 		expect(container.querySelector("span")).toHaveAttribute("title", "mediaStage.transcriptReady");
 	});
+
+	it("renders amber dot and clean title for silent media (no-audio)", () => {
+		const { container } = render(
+			<TranscriptionStatusDot
+				view={{
+					assetId: "a",
+					status: "failed",
+					failure: {
+						kind: "no-audio",
+						message:
+							"No decodable audio in /tmp/silent.mp4: Output file #0 does not contain any stream",
+					},
+				}}
+			/>,
+		);
+		const span = container.querySelector("span");
+		expect(span).toHaveStyle({ background: "#f59e0b" });
+		expect(span).toHaveAttribute("title", "mediaStage.noAudioTrack");
+	});
+
+	it("renders danger dot and detail title for actual error failure", () => {
+		const { container } = render(
+			<TranscriptionStatusDot
+				view={{
+					assetId: "a",
+					status: "failed",
+					failure: {
+						kind: "error",
+						message: "whisper-server exited unexpectedly",
+					},
+				}}
+			/>,
+		);
+		const span = container.querySelector("span");
+		expect(span).toHaveStyle({ background: "var(--danger)" });
+		expect(span).toHaveAttribute(
+			"title",
+			"mediaStage.transcriptionFailed — whisper-server exited unexpectedly",
+		);
+	});
 });

@@ -117,12 +117,19 @@ export type PersistableFailureKind = Exclude<TranscriptionFailureKind, "error">;
 
 /**
  * Map an exception out of `transcribeAsset` onto a failure the UI can explain.
- * The two deterministic cases come from `extractMono16kWebDemuxer` — it is the
- * only layer that knows whether the container actually holds audio.
+ * The deterministic silence cases come from `electron/stt/extractAudio` (`NoAudioTrackError`,
+ * "No decodable audio") or renderer extraction (`extractMono16kWebDemuxer`).
  */
 export function classifyTranscriptionError(error: unknown): TranscriptionFailure {
 	const message = error instanceof Error ? error.message : String(error);
-	if (/no audio track/i.test(message) || /zero audio frames/i.test(message)) {
+	const name = (error as { name?: string })?.name ?? "";
+	if (
+		name === "NoAudioTrackError" ||
+		/noaudiotrackerror/i.test(message) ||
+		/no decodable audio/i.test(message) ||
+		/no audio track/i.test(message) ||
+		/zero audio frames/i.test(message)
+	) {
 		return { kind: "no-audio", message };
 	}
 	if (/audio codec not supported/i.test(message)) {

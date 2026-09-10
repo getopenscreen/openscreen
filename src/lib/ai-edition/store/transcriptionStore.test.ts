@@ -195,6 +195,29 @@ describe("useTranscriptionStore", () => {
 		expect(transcribeMocks.transcribeAsset).toHaveBeenCalledTimes(1);
 	});
 
+	it("remembers NoAudioTrackError as a no-audio verdict and does not toast an error", async () => {
+		const err = Object.assign(
+			new Error(
+				"Error invoking remote method 'stt:transcribe': NoAudioTrackError: No decodable audio in /path/to/rec.mp4: Output file #0 does not contain any stream",
+			),
+			{ name: "NoAudioTrackError" },
+		);
+		transcribeMocks.transcribeAsset.mockRejectedValue(err);
+		loadDocument(makeDoc(["asset_1"]));
+
+		const { sync } = useTranscriptionStore.getState();
+		sync(useProjectStore.getState().document);
+		await whenTranscriptionIdle();
+
+		const job = useTranscriptionStore.getState().jobs.asset_1;
+		expect(job?.status).toBe("failed");
+		expect(job?.failure?.kind).toBe("no-audio");
+		expect(useProjectStore.getState().document?.assets[0].transcriptionFailure?.kind).toBe(
+			"no-audio",
+		);
+		expect(toastMocks.error).not.toHaveBeenCalled();
+	});
+
 	it("skips an asset that already carries a persisted failure on a fresh load", async () => {
 		const doc = makeDoc(["asset_1"]);
 		loadDocument({

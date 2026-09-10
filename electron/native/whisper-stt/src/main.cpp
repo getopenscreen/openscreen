@@ -44,6 +44,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -222,6 +223,7 @@ struct Word {
 
 int main(int argc, char** argv) {
 	std::string model_path;
+	std::string vad_model_path;
 	std::string host = "127.0.0.1";
 	bool host_from_flag = false;
 	bool force_cpu = false;
@@ -231,6 +233,7 @@ int main(int argc, char** argv) {
 	for (int i = 1; i < argc; ++i) {
 		const std::string a = argv[i];
 		if (a == "--model"   && i + 1 < argc) model_path = argv[++i];
+		else if (a == "--vad-model" && i + 1 < argc) vad_model_path = argv[++i];
 		else if (a == "--host" && i + 1 < argc) { host = argv[++i]; host_from_flag = true; }
 		else if (a == "--port" && i + 1 < argc) port = std::atoi(argv[++i]);
 		else if (a == "--threads" && i + 1 < argc) threads = std::atoi(argv[++i]);
@@ -240,6 +243,10 @@ int main(int argc, char** argv) {
 	// shape; the Node wrapper passes both ways).
 	if (model_path.empty()) {
 		if (const char* p = std::getenv("OPENSCREEN_WHISPER_MODEL")) model_path = p;
+	}
+	if (vad_model_path.empty()) {
+		if (const char* p = std::getenv("OPENSCREEN_VAD_MODEL")) vad_model_path = p;
+		else if (const char* p = std::getenv("OPENSCREEN_WHISPER_VAD_MODEL")) vad_model_path = p;
 	}
 	if (port == 0) {
 		if (const char* p = std::getenv("OPENSCREEN_WHISPER_PORT")) port = std::atoi(p);
@@ -264,7 +271,9 @@ int main(int argc, char** argv) {
 		             "OPENSCREEN_WHISPER_MODEL is required" << std::endl;
 		return 2;
 	}
-	log("boot: model=" + model_path + " host=" + host +
+	log("boot: model=" + model_path +
+	    (!vad_model_path.empty() ? (" vad_model=" + vad_model_path) : "") +
+	    " host=" + host +
 	    " port=" + (port > 0 ? std::to_string(port) : "(any)") +
 	    " threads=" + std::to_string(threads));
 
@@ -292,6 +301,25 @@ int main(int argc, char** argv) {
 	}
 	const std::string active_backend = cparams.use_gpu ? detect_active_backend() : "whispercpp-cpu";
 	log("model loaded; backend=" + active_backend);
+
+	// ---- Init VAD context (Silero VAD v6.2.0) ----
+	struct whisper_vad_context* vctx = nullptr;
+	if (!vad_model_path.empty()) {
+		struct whisper_vad_context_params vad_ctx_params = whisper_vad_default_context_params();
+		vad_ctx_params.n_threads = threads;
+		vad_ctx_params.use_gpu   = !force_cpu;
+		vctx = whisper_vad_init_from_file_with_params(vad_model_path.c_str(), vad_ctx_params);
+		if (!vctx && vad_ctx_params.use_gpu) {
+			log("GPU VAD initialization failed; retrying with CPU inference");
+			vad_ctx_params.use_gpu = false;
+			vctx = whisper_vad_init_from_file_with_params(vad_model_path.c_str(), vad_ctx_params);
+		}
+		if (vctx) {
+			log("VAD model loaded; path=" + vad_model_path);
+		} else {
+			log("WARNING: failed to load VAD model from " + vad_model_path);
+		}
+	}
 
 	// ---- HTTP server ----
 	httplib::Server svr;
@@ -366,6 +394,11 @@ int main(int argc, char** argv) {
 		wparams.print_realtime   = false;
 		wparams.print_timestamps = false;
 		wparams.n_threads        = threads;
+		if (vctx && !vad_model_path.empty()) {
+			wparams.vad            = true;
+			wparams.vad_model_path = vad_model_path.c_str();
+			wparams.vad_params     = whisper_vad_default_params();
+		}
 
 		const auto t0 = std::chrono::steady_clock::now();
 		const int rc  = whisper_full(ctx, wparams, pcm.data(), static_cast<int>(pcm.size()));
@@ -540,12 +573,80 @@ int main(int argc, char** argv) {
 		res.set_content(reply.dump(), "application/json");
 	});
 
+	// POST /vad — multipart form with `file` (WAV: 16 kHz mono PCM16).
+	// Runs Silero VAD segmentation and returns speech intervals [start, end] in seconds.
+	svr.Post("/vad", [&](const httplib::Request& req, httplib::Response& res) {
+		if (!vctx) {
+			res.status = 400;
+			res.set_content(R"({"error":"VAD model was not loaded on server startup"})", "application/json");
+			return;
+		}
+		auto it = req.files.find("file");
+		if (it == req.files.end()) {
+			res.status = 400;
+			res.set_content(R"({"error":"missing 'file' form field"})", "application/json");
+			return;
+		}
+		const auto& file_entry = it->second;
+
+		static std::atomic<uint64_t> tmp_vad_counter{0};
+		const auto tmp_vad_id = tmp_vad_counter.fetch_add(1, std::memory_order_relaxed);
+		const auto tmp_vad_ts = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+		const std::string tmp_wav = (std::filesystem::temp_directory_path() /
+		                             ("openscreen-vad-" + std::to_string(tmp_vad_ts) +
+		                              "-" + std::to_string(tmp_vad_id) + ".wav")).string();
+		{
+			std::ofstream out(tmp_wav, std::ios::binary);
+			out.write(file_entry.content.data(),
+			          static_cast<std::streamsize>(file_entry.content.size()));
+		}
+		std::vector<float> pcm;
+		int sample_rate = 0, channels = 0;
+		const bool ok = read_wav_pcm16(tmp_wav, pcm, sample_rate, channels);
+		std::error_code ec;
+		std::filesystem::remove(tmp_wav, ec);
+		if (!ok) {
+			res.status = 400;
+			res.set_content(R"({"error":"failed to parse WAV"})", "application/json");
+			return;
+		}
+		if (sample_rate != 16000 || channels != 1) {
+			res.status = 400;
+			res.set_content(
+				R"({"error":"expected 16 kHz mono PCM16 WAV"})",
+				"application/json");
+			return;
+		}
+
+		const std::lock_guard<std::mutex> lk(infer_mu);
+		struct whisper_vad_params vad_params = whisper_vad_default_params();
+		struct whisper_vad_segments* vad_segments =
+			whisper_vad_segments_from_samples(vctx, vad_params, pcm.data(), static_cast<int>(pcm.size()));
+
+		nlohmann::json reply;
+		reply["segments"] = nlohmann::json::array();
+		if (vad_segments) {
+			const int n_segs = whisper_vad_segments_n_segments(vad_segments);
+			for (int i = 0; i < n_segs; ++i) {
+				const float t0 = whisper_vad_segments_get_segment_t0(vad_segments, i);
+				const float t1 = whisper_vad_segments_get_segment_t1(vad_segments, i);
+				reply["segments"].push_back({
+					{"start", static_cast<double>(t0)},
+					{"end",   static_cast<double>(t1)}
+				});
+			}
+			whisper_vad_free_segments(vad_segments);
+		}
+		res.set_content(reply.dump(), "application/json");
+	});
+
 	// ---- bind + listen ----
 	int bound_port = port;
 	if (bound_port == 0) {
 		bound_port = svr.bind_to_any_port(host);
 	} else if (!svr.bind_to_port(host, bound_port)) {
 		std::cerr << "FATAL: bind_to_port(" << host << ":" << bound_port << ") failed" << std::endl;
+		if (vctx) whisper_vad_free(vctx);
 		whisper_free(ctx);
 		return 4;
 	}
@@ -554,6 +655,7 @@ int main(int argc, char** argv) {
 	if (rc != 0) {
 		std::cerr << "FATAL: listen_after_bind failed" << std::endl;
 	}
+	if (vctx) whisper_vad_free(vctx);
 	whisper_free(ctx);
 	return rc;
 }

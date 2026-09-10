@@ -71,7 +71,7 @@ export interface SttStatusEvent {
 	/** Total bytes for the in-flight download. */
 	totalBytes?: number;
 	/** Which model is downloading. */
-	model?: "whisper";
+	model?: "whisper" | "silero-vad";
 	/**
 	 * Seconds of audio transcribed so far, and the total for this request. Only
 	 * when `phase === "transcribe"`. Progress is reported per CHUNK (see
@@ -158,3 +158,14 @@ export interface SttTranscribeResponse {
 
 /** IPC success envelope; thrown errors cross as a rejection. */
 export type SttTranscribeResult = SttTranscribeResponse;
+
+/** A detected speech segment with timestamps in seconds. */
+export interface SttVadSegment {
+	startSec: number;
+	endSec: number;
+}
+
+/** Response from the VAD speech detection pass. */
+export interface SttVadResponse {
+	segments: SttVadSegment[];
+}

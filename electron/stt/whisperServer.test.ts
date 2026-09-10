@@ -675,4 +675,92 @@ describe("WhisperServerManager", () => {
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
+
+	it("passes --vad-model flag to spawned process when vadModelPath exists", async () => {
+		const fs = await import("node:fs/promises");
+		const { spawn } = await import("node:child_process");
+		const dir = await mkdtemp(path.join(tmpdir(), "whisper-vad-args-"));
+		try {
+			const modelPath = path.join(dir, "ggml-small-q8_0.bin");
+			const vadModelPath = path.join(dir, "ggml-silero-v6.2.0.bin");
+			const fakeBinaryPath = path.join(dir, "whisper-stt-server");
+			await fs.writeFile(modelPath, "dummy-ggml");
+			await fs.writeFile(vadModelPath, "dummy-vad");
+			await fs.writeFile(fakeBinaryPath, "x", { mode: 0o755 });
+
+			const child = Object.assign(new EventEmitter(), {
+				stdout: new EventEmitter(),
+				stderr: new EventEmitter(),
+				pid: 1234,
+				kill: vi.fn(() => {
+					queueMicrotask(() => child.emit("exit", 0));
+					return true;
+				}),
+			});
+			vi.mocked(spawn).mockImplementationOnce(() => child as never);
+			vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true } as Response));
+
+			const mgr = new WhisperServerManager();
+			await mgr.start({
+				modelPath,
+				vadModelPath,
+				binaryPath: fakeBinaryPath,
+				backend: "whispercpp-cpu",
+			});
+
+			expect(spawn).toHaveBeenCalledTimes(1);
+			const args = vi.mocked(spawn).mock.calls[0][1];
+			expect(args).toContain("--vad-model");
+			const vadIdx = args.indexOf("--vad-model");
+			expect(args[vadIdx + 1]).toBe(vadModelPath);
+			await mgr.stop();
+		} finally {
+			vi.unstubAllGlobals();
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("detectVadSegments extracts segments from /vad response", async () => {
+		const fakeJson = {
+			segments: [
+				{ start: 0.25, end: 1.5 },
+				{ start: 2.1, end: 4.8 },
+			],
+		};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(JSON.stringify(fakeJson), { status: 200 })),
+		);
+		try {
+			const mgr = new WhisperServerManager();
+			(mgr as unknown as { process: unknown; port: number }).process = {};
+			(mgr as unknown as { process: unknown; port: number }).port = 9999;
+
+			const segments = await mgr.detectVadSegments({ samples: new Float32Array(1600) });
+			expect(segments).toEqual([
+				{ startSec: 0.25, endSec: 1.5 },
+				{ startSec: 2.1, endSec: 4.8 },
+			]);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("detectVadSegments surfaces server error from /vad endpoint", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response("VAD model was not loaded", { status: 400 })),
+		);
+		try {
+			const mgr = new WhisperServerManager();
+			(mgr as unknown as { process: unknown; port: number }).process = {};
+			(mgr as unknown as { process: unknown; port: number }).port = 9999;
+
+			await expect(mgr.detectVadSegments({ samples: new Float32Array(1600) })).rejects.toThrow(
+				/whisper-stt-server \/vad HTTP 400/,
+			);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 });

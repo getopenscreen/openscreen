@@ -12,6 +12,7 @@ import type {
 	SttBackend,
 	SttPhraseSegment,
 	SttTiming,
+	SttVadSegment,
 	SttWordSegment,
 } from "./transcriptionContract";
 import { cleanupWav, writeSamplesAsWav } from "./wav";
@@ -59,6 +60,8 @@ const REQUEST_TIMEOUT_MS = 280_000;
 export interface WhisperServerStartOptions {
 	/** Absolute path to the GGML model file (e.g. ggml-small-q8_0.bin). */
 	modelPath: string;
+	/** Absolute path to the Silero VAD GGML model file (e.g. ggml-silero-v6.2.0.bin). */
+	vadModelPath?: string | null;
 	/** Externally-resolved binary path (skips gpuDetector on startup); null = auto. */
 	binaryPath?: string | null;
 	/** Externally-resolved backend (logs only); null = auto. */
@@ -271,6 +274,9 @@ export class WhisperServerManager {
 				"--threads",
 				String(Math.max(1, os.cpus().length)),
 			];
+			if (options.vadModelPath && existsSync(options.vadModelPath)) {
+				args.push("--vad-model", options.vadModelPath);
+			}
 			if (forceCpu) args.push("--cpu");
 			const child = spawn(binaryPath, args, { stdio: ["ignore", "pipe", "pipe"] });
 			const activeBackend: SttBackend = forceCpu ? "whispercpp-cpu" : resolved.backend;
@@ -583,6 +589,67 @@ export class WhisperServerManager {
 			const backend = this.toBackend(json.backend);
 			const timing = this.toTiming(json.timing);
 			return { segments, wordSegments, detectedLanguage, backend, timing };
+		} finally {
+			await cleanupWav(wavPath);
+		}
+	}
+
+	/** Run Voice Activity Detection (Silero VAD) to detect speech intervals. */
+	async detectVadSegments(opts: { samples: Float32Array }): Promise<SttVadSegment[]> {
+		const task = this.inFlight.then(() => this.detectVadSegmentsImpl(opts));
+		this.inFlight = task.catch(() => undefined);
+		return task;
+	}
+
+	private async detectVadSegmentsImpl(opts: { samples: Float32Array }): Promise<SttVadSegment[]> {
+		await this.ensureReady();
+		const wavPath = await writeSamplesAsWav(opts.samples);
+		try {
+			const url = `${this.baseUrl()}/vad`;
+			const form = new FormData();
+			const fileBuffer = await readFile(wavPath);
+			const blob = new Blob([fileBuffer], { type: "audio/wav" });
+			form.set("file", blob, path.basename(wavPath));
+
+			let res: Response;
+			try {
+				res = await fetch(url, {
+					method: "POST",
+					body: form,
+					signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+				});
+			} catch (error) {
+				throw Object.assign(
+					new Error(
+						`whisper-stt-server /vad failed: ` +
+							`${error instanceof Error ? error.message : String(error)}; ` +
+							`stderr=${this.stderrTail.slice(-256)}`,
+					),
+					{ cause: error },
+				);
+			}
+
+			if (!res.ok) {
+				const text = await res.text().catch(() => "");
+				throw new Error(`whisper-stt-server /vad HTTP ${res.status}: ${text.slice(0, 512)}`);
+			}
+
+			const json = (await res.json().catch((error: unknown) => {
+				throw Object.assign(
+					new Error(
+						`whisper-stt-server /vad response was unreadable: ` +
+							`${error instanceof Error ? error.message : String(error)}`,
+					),
+					{ cause: error },
+				);
+			})) as { segments?: Array<{ start?: number | string; end?: number | string }> };
+
+			const raw = json.segments ?? [];
+			return raw.map((seg) => {
+				const startSec = this.toSec(seg.start, 0);
+				const endSec = this.toSec(seg.end, startSec);
+				return { startSec, endSec };
+			});
 		} finally {
 			await cleanupWav(wavPath);
 		}

@@ -9,6 +9,8 @@ import type {
 	SttTiming,
 	SttTranscribeRequest,
 	SttTranscribeResponse,
+	SttVadResponse,
+	SttVadSegment,
 	SttWordSegment,
 } from "./transcriptionContract";
 import { WhisperServerManager } from "./whisperServer";
@@ -97,6 +99,7 @@ export class SttManager {
 	private initPromise: Promise<void> | null = null;
 	/** Kept from `prepare()` so a chunk retry can respawn a helper that died mid-run. */
 	private modelPath: string | null = null;
+	private vadModelPath: string | null = null;
 	/**
 	 * Bumped by `cancel()`. The chunk loop compares it against the value it
 	 * captured on entry, so a cancel that lands after a new run started cannot
@@ -194,8 +197,12 @@ export class SttManager {
 
 		const paths = modelPaths(modelsDir);
 		this.modelPath = paths.whisper;
+		this.vadModelPath = paths["silero-vad"];
 		try {
-			await this.server.start({ modelPath: paths.whisper });
+			await this.server.start({
+				modelPath: paths.whisper,
+				vadModelPath: paths["silero-vad"],
+			});
 		} catch (error) {
 			if (this.shuttingDown) throw cancelledError();
 			throw error;
@@ -236,7 +243,9 @@ export class SttManager {
 				if (this.shuttingDown) throw cancelledError();
 				if (attempt === CHUNK_ATTEMPTS) break;
 				if (this.modelPath) {
-					await this.server.start({ modelPath: this.modelPath }).catch(() => undefined);
+					await this.server
+						.start({ modelPath: this.modelPath, vadModelPath: this.vadModelPath })
+						.catch(() => undefined);
 				}
 				if (this.shuttingDown) throw cancelledError();
 				await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
@@ -433,6 +442,15 @@ export class SttManager {
 		this.cancelEpoch++;
 		await this.server.shutdown();
 	}
+
+	/**
+	 * Run Voice Activity Detection (Silero VAD) to detect speech segments in samples.
+	 */
+	async detectSpeech(samples: Float32Array): Promise<SttVadSegment[]> {
+		if (this.shuttingDown) throw cancelledError();
+		await this.init();
+		return this.server.detectVadSegments({ samples });
+	}
 }
 
 let singleton: SttManager | null = null;
@@ -489,6 +507,13 @@ export function registerSttIpc(ipcMain: IpcMain): void {
 			} finally {
 				detach();
 			}
+		},
+	);
+	ipcMain.handle(
+		"stt:vad",
+		async (_event, req: { samples: Float32Array }): Promise<SttVadResponse> => {
+			const segments = await manager.detectSpeech(req.samples);
+			return { segments };
 		},
 	);
 	ipcMain.handle("stt:cancel", () => {

@@ -151,6 +151,12 @@ const PILL_SNAP_PX = 8;
  *  clips that follow — which is what a flex `gap` did, once per junction. */
 /** Below this a clip cannot show a label and a delete button inside itself. */
 const NARROW_CLIP_PX = 120;
+// A card wide enough to also carry its edited duration. The label pill is capped
+// at `calc(100% - 50px)` to clear the delete button, and its incompressible
+// content — padding, the pencil, two gaps and the timecode — is ~76px, so below
+// this the timecode escapes the pill and lands on that button. Measured in the
+// running window: overlapping at 121px, clean from 131px.
+const CLIP_DURATION_PX = 132;
 
 const CLIP_GUTTER_PX = 6;
 /**
@@ -2232,6 +2238,9 @@ export function V4Timeline({
 											<span className={styles.tlClipName}>
 												{tl.assets.find((a) => a.id === c.assetId)?.label ?? c.assetId}
 											</span>
+											{boxLen * pxPerSec >= CLIP_DURATION_PX ? (
+												<span className={styles.tlClipDuration}>{formatSec(dur)}</span>
+											) : null}
 										</div>
 										{selected ? (
 											<button

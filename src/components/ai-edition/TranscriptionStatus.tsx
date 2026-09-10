@@ -13,6 +13,7 @@ import {
 	type AssetTranscriptionView,
 	isCpuBackend,
 	isModelDownloadInFlight,
+	isSilentFailure,
 	progressFraction,
 	realtimeSpeed,
 } from "@/lib/ai-edition/transcription/status";
@@ -105,7 +106,11 @@ export function TranscriptionStatusDot({
 			</Loader2>
 		);
 	}
-	const { fill, halo } = DOT_COLOR[view.status];
+	// A recording made with no system audio and no mic is not a broken job, so it
+	// gets the same amber as "no speech detected" rather than the danger red, and
+	// its label alone rather than a tooltip full of ffmpeg stderr (issue #628).
+	const silent = isSilentFailure(view);
+	const { fill, halo } = silent ? DOT_COLOR.empty : DOT_COLOR[view.status];
 	return (
 		<span
 			style={{
@@ -117,7 +122,7 @@ export function TranscriptionStatusDot({
 				flexShrink: 0,
 			}}
 			aria-label={label}
-			title={view.failure?.message ? `${label} — ${view.failure.message}` : label}
+			title={!silent && view.failure?.message ? `${label} — ${view.failure.message}` : label}
 		/>
 	);
 }

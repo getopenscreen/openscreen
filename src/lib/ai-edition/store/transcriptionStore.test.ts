@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toastText } from "@/i18n/toastText";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { useProjectStore } from "./projectStore";
 import { useTranscriptionStore, whenTranscriptionIdle } from "./transcriptionStore";
@@ -15,6 +16,7 @@ const transcribeMocks = vi.hoisted(() => ({
 const toastMocks = vi.hoisted(() => ({
 	success: vi.fn(),
 	error: vi.fn(),
+	info: vi.fn(),
 }));
 
 vi.mock("@/native/client", () => ({
@@ -26,7 +28,9 @@ vi.mock("../document/transcribe", async (importOriginal) => {
 	return { ...actual, transcribeAsset: transcribeMocks.transcribeAsset };
 });
 
-vi.mock("sonner", () => ({ toast: { success: toastMocks.success, error: toastMocks.error } }));
+vi.mock("sonner", () => ({
+	toast: { success: toastMocks.success, error: toastMocks.error, info: toastMocks.info },
+}));
 
 function asset(id: string, extra: Record<string, unknown> = {}) {
 	return {
@@ -112,6 +116,7 @@ describe("useTranscriptionStore", () => {
 		transcribeMocks.transcribeAsset.mockReset();
 		toastMocks.success.mockReset();
 		toastMocks.error.mockReset();
+		toastMocks.info.mockReset();
 		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the preload bridge
 		(window as any).electronAPI = { stt: { transcribe: vi.fn() } };
 	});
@@ -238,6 +243,37 @@ describe("useTranscriptionStore", () => {
 		expect(Object.values(jobs).map((j) => j.status)).toEqual(["failed", "failed", "failed"]);
 		expect(jobs.asset_3?.failure?.message).toBe("whisper-server exited");
 		expect(toastMocks.error).toHaveBeenCalledTimes(1);
+	});
+
+	// The verdict is about the FILE, so a run the user asked for by hand answers
+	// it as information rather than as a broken job — issue #628 showed a red
+	// "Transcription failed" carrying ffmpeg's stderr on a muted screen recording.
+	it("answers a hand-asked run on a silent media without calling it a failure", async () => {
+		transcribeMocks.transcribeAsset.mockRejectedValue(
+			new Error("No decodable audio in /rec.mp4: Output file #0 does not contain any stream"),
+		);
+		loadDocument(makeDoc(["asset_1"]));
+
+		// The background pass discovers the silence first, and says nothing about it.
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		await whenTranscriptionIdle();
+		expect(useTranscriptionStore.getState().jobs.asset_1?.failure?.kind).toBe("no-audio");
+		expect(toastMocks.info).not.toHaveBeenCalled();
+
+		// Asking by hand deserves an answer — an informational one. `request`
+		// resolves as soon as the job settles, which is before the run has finished
+		// writing the verdict and reporting it, so wait for the queue too.
+		await useTranscriptionStore.getState().request("asset_1", "auto");
+		await whenTranscriptionIdle();
+
+		expect(toastMocks.error).not.toHaveBeenCalled();
+		expect(toastMocks.info).toHaveBeenCalledTimes(1);
+		// The COPY, not just the count: the point of the toast is that it says the
+		// file has no audio. Resolved through the same helper the store uses, so a
+		// reworded string stays a translation change rather than a test failure.
+		expect(toastMocks.info).toHaveBeenCalledWith(
+			toastText("editor", "mediaStage.noAudioTrackHint"),
+		);
 	});
 
 	it("request() re-runs a failed asset and clears the remembered verdict", async () => {

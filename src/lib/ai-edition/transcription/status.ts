@@ -117,18 +117,40 @@ export type PersistableFailureKind = Exclude<TranscriptionFailureKind, "error">;
 
 /**
  * Map an exception out of `transcribeAsset` onto a failure the UI can explain.
- * The two deterministic cases come from `extractMono16kWebDemuxer` — it is the
- * only layer that knows whether the container actually holds audio.
+ * The deterministic cases come from whichever layer decoded the audio, and there
+ * are two of them: `extractMono16kWebDemuxer` in the renderer, and — since
+ * native extraction landed — `extractAudio.ts`'s `NoAudioTrackError` in the main
+ * process, whose wording ("No decodable audio in …") is its own.
+ *
+ * Matched on the message rather than on the class because `ipcRenderer.invoke`
+ * rebuilds a plain `Error` and drops both the prototype and the `name`. Missing
+ * the native phrasing here is not cosmetic: it demotes a silent screen recording
+ * to a generic `"error"`, which reads as a failed job, re-queues on every project
+ * open, and pops a toast carrying raw ffmpeg stderr (issue #628).
  */
 export function classifyTranscriptionError(error: unknown): TranscriptionFailure {
 	const message = error instanceof Error ? error.message : String(error);
-	if (/no audio track/i.test(message) || /zero audio frames/i.test(message)) {
+	if (/no audio track|zero audio frames|no decodable audio/i.test(message)) {
 		return { kind: "no-audio", message };
 	}
 	if (/audio codec not supported/i.test(message)) {
 		return { kind: "unsupported-audio", message };
 	}
 	return { kind: "error", message };
+}
+
+/**
+ * True when this asset's job ended on a verdict about the MEDIA rather than on
+ * something that went wrong: no audio track, or an audio codec nothing here can
+ * read. Both are expected outcomes of recording a screen with everything muted,
+ * so they get the "nothing to say" treatment (amber, a hint) rather than the
+ * error one (red, an engine message) — see issue #628.
+ */
+export function isSilentFailure(view: {
+	status: AssetTranscriptionStatus;
+	failure?: TranscriptionFailure;
+}): boolean {
+	return view.status === "failed" && view.failure !== undefined && view.failure.kind !== "error";
 }
 
 export function isAbortError(error: unknown): boolean {

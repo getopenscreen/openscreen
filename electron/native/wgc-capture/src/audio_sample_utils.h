@@ -27,6 +27,34 @@ void convertAudioWithGain(
     const AudioInputFormat& targetFormat,
     double gain,
     std::vector<BYTE>& destination);
+// Cross-packet state for the integer-factor downsample path (96/192 kHz -> 48).
+// Dropping frames is only safe once everything above the new Nyquist is gone,
+// and a filter long enough to do that reaches back further than one packet — so
+// its history has to outlive the call. `pendingFrames()` is how far into the
+// current output group the stream has got, which is the same accounting the
+// caller used to read off a leftover-bytes buffer: a group only produces an
+// output frame once all `factor` of its frames have arrived.
+class AudioDecimatorState {
+public:
+    void reset();
+    size_t pendingFrames() const { return phase_; }
+
+    // Used by the decimation path; not part of the caller's contract. `consume`
+    // takes one source frame and writes `channels` filtered samples into `out`
+    // on the frame that completes a group, which is the only frame that
+    // survives the decimation.
+    void prepare(UINT32 factor, UINT32 channels);
+    bool consume(const double* frame, double* out);
+
+private:
+    std::vector<double> taps_;
+    std::vector<double> history_;
+    size_t position_ = 0;
+    size_t phase_ = 0;
+    UINT32 factor_ = 0;
+    UINT32 channels_ = 0;
+};
+
 void convertAudioWithGain(
     const BYTE* source,
     DWORD byteCount,
@@ -34,7 +62,7 @@ void convertAudioWithGain(
     const AudioInputFormat& targetFormat,
     double gain,
     std::vector<BYTE>& destination,
-    std::vector<BYTE>& remainder);
+    AudioDecimatorState& decimator);
 void mixAudioInPlace(
     std::vector<BYTE>& destination,
     const BYTE* source,
@@ -72,7 +100,7 @@ private:
         DWORD byteCount,
         const AudioInputFormat& sourceFormat,
         double gain,
-        std::vector<BYTE>& remainder);
+        AudioDecimatorState& decimator);
     bool pop(std::vector<BYTE>& queue, std::vector<BYTE>& chunk, size_t byteCount);
     void mixLoop();
 
@@ -87,8 +115,8 @@ private:
     std::condition_variable cv_;
     std::vector<BYTE> systemQueue_;
     std::vector<BYTE> microphoneQueue_;
-    std::vector<BYTE> systemResampleRemainder_;
-    std::vector<BYTE> microphoneResampleRemainder_;
+    AudioDecimatorState systemDecimator_;
+    AudioDecimatorState microphoneDecimator_;
     std::vector<BYTE> gainBuffer_;
     std::thread thread_;
     std::atomic<bool> stopRequested_ = false;

@@ -3,12 +3,6 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.etiennelescot.openscreen",
   "asar": true,
-  // .node binaries can't be dlopen'd from inside an asar — must live unpacked.
-  // onnxruntime-node distributes as a `.node` shared object that whisper.cpp
-  // helpers run from process spawn, so they all unpack via the same glob.
-  "asarUnpack": [
-    "**/*.node"
-  ],
   "productName": "Openscreen",
   // There is deliberately no `electronVersion` here. electron-builder needs an EXACT
   // version because it downloads the binaries for one release, and it takes that from
@@ -58,8 +52,11 @@
   // needs a system libvips we don't provide and breaks on CI/local ("vips-cpp.42 not found"), so we
   // let electron-builder use the prebuilt instead of recompiling.
   "buildDependenciesFromSource": false,
-  "compression": "maximum",
+  "compression": "normal",
   // Strip unused Chromium locale pak files (saves ~20 MB). Only package locales supported by OpenScreen.
+  // Note: macOS uses underscore variants (e.g. pt_BR.lproj, zh_CN.lproj, zh_TW.lproj), while Windows
+  // and Linux use hyphenated pak files (e.g. pt-BR.pak, zh-CN.pak, zh-TW.pak). Both forms are listed
+  // so app-builder-lib retains the correct locale assets across all platforms.
   "electronLanguages": [
     "en-US",
     "fr",
@@ -69,11 +66,14 @@
     "ja",
     "ko",
     "pt-BR",
+    "pt_BR",
     "ru",
     "tr",
     "vi",
     "zh-CN",
-    "zh-TW"
+    "zh_CN",
+    "zh-TW",
+    "zh_TW"
   ],
   "directories": {
     "output": "release/${version}",
@@ -88,16 +88,12 @@
   "files": [
     "dist",
     "dist-electron",
-    // Exclude documentation assets that Vite copied from public/ (saves ~8 MB)
-    "!dist/demo.gif",
-    "!dist/preview*.png",
     // Exclude assets already bundled into extraResources (saves ~17 MB duplicate in asar)
     "!dist/wallpapers/**",
     "!dist/cursors/**",
     "!dist/mediapipe/**",
     // Exclude dead-weight node_modules: all frontend and electron code is pre-bundled by Vite (saves ~238 MB)
     "!node_modules/**",
-    "!**/node_modules/**",
     "!*.png",
     "!preview*.png",
     "!*.md",
@@ -395,7 +391,7 @@
         // in the app spawns. Shipping it added a large binary to every Windows
         // installer, plus an LGPL redistribution obligation, for a file no
         // shipped code opens.
-        "filter": ["win32-*/*", "!win32-*/ffmpeg.exe", "!win32-*/ffmpeg-shared.exe"]
+        "filter": ["win32-*/*", "!win32-*/ffmpeg.exe"]
       }
     ],
     // The D3D11 compositor addon deliberately does NOT travel through `files` into

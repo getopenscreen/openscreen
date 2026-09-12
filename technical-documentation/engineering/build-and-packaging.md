@@ -223,6 +223,54 @@ The check compares modification times, so `git checkout` (which restamps source 
 
 Diagnosing a suspected stale addon: serde embeds its field-name literals in the compiled binary, so `grep -c <newCamelCaseField> compositor_view.node` returning 0 means the binary predates that contract.
 
+## ASAR layout and packaging optimization
+
+`electron-builder.json5` configures package contents, file exclusions, and resource distribution. Several deliberate optimizations reduce installer payload size and eliminate redundant file copies across platforms.
+
+### Node modules excluded from ASAR
+
+All renderer application code and Electron main/preload entry points are pre-bundled by Vite into `dist/` and `dist-electron/`. The bundled main process relies solely on Node built-ins and `electron`. As a result, `node_modules/**` is excluded from `files` in `electron-builder.json5`, eliminating ~238 MB of redundant dependencies from `app.asar`.
+
+### Asset deduplication and extraResources
+
+Assets requiring direct filesystem access are distributed via `extraResources` rather than bundled inside `app.asar`:
+
+- Dynamic scene assets (`wallpapers/`, `cursors/`) resolve via `ASSET_BASE_DIR` (`process.resourcesPath`) in the renderer and `sceneAssetBaseDirs()` in the main process.
+- Background segmentation models (`dist/mediapipe/`) are placed in `resources/mediapipe/` for access by the segmentation worker.
+
+These directories are excluded from `files` (`!dist/wallpapers/**`, `!dist/cursors/**`, `!dist/mediapipe/**`), avoiding ~17 MB of duplicate files inside the ASAR archive.
+
+### Native addons ship outside ASAR
+
+Native `.node` addons cannot be loaded directly from an ASAR archive. The native compositor addon (`compositor_view.node`) and ONNX Runtime libraries are colocated with their linked FFmpeg/shared libraries under `electron/native/bin/<platform>-<arch>/` and distributed via `extraResources`. Because no `.node` binary travels through `files`, `asarUnpack: ["**/*.node"]` is unnecessary.
+
+### Windows FFmpeg runtime binaries
+
+On Windows, `scripts/fetch-ffmpeg.mjs` stages two artifacts: the shared `av*.dll` set required by the D3D11 compositor addon, and `ffmpeg-shared.exe` (~1 MB), which links against those same DLLs.
+
+`electron-builder.json5` explicitly excludes the standalone static `ffmpeg.exe` (`!win32-*/ffmpeg.exe`, ~109 MB), while retaining `ffmpeg-shared.exe` via `win32-*/*`. This shared executable is spawned at runtime by:
+- `electron/media/audioPeaks.ts` (`getAudioPeaks`): waveform peak extraction for timeline audio.
+- `electron/stt/extractAudio.ts`: 16 kHz mono WAV audio extraction for Whisper speech-to-text.
+- `electron/media/extensionClip.ts`: silence padding generation for AI word extension clips.
+
+`electron/media/audioPeaks.test.ts` validates that the `win.extraResources` filter in `electron-builder.json5` continues to package `ffmpeg-shared.exe`.
+
+### Locale pruning
+
+Chromium packages ~55 locale `.pak` files and macOS `.lproj` directories, totaling over 20 MB of unneeded translations. `electronLanguages` restricts the packaged locales to OpenScreen's 13 supported languages.
+
+Because macOS `ElectronFramework` directory matching uses underscores (`pt_BR.lproj`, `zh_CN.lproj`, `zh_TW.lproj`) while Windows and Linux `.pak` files use hyphens (`pt-BR.pak`, `zh-CN.pak`, `zh-TW.pak`), both forms are declared in `electronLanguages` to prevent `removeUnusedLanguagesIfNeeded` from deleting supported locales on macOS.
+
+`scripts/i18n-check.mjs` (`npm run i18n:check`) verifies that `SUPPORTED_LOCALES` in `src/i18n/config.ts`, `appx.languages`, and `electronLanguages` in `electron-builder.json5` remain synchronized.
+
+### Documentation assets outside `public/`
+
+Marketing and documentation assets (`demo.gif`, `preview*.png`) reside in `docs/assets/` rather than Vite's `public/` directory. This prevents Vite's dev server and build step from copying ~8 MB of documentation media into `dist/`.
+
+### Compression configuration
+
+`electron-builder.json5` declares `compression: "normal"`. For Windows NSIS installers, electron-builder's differential packaging options enforce normal, non-solid compression with a 1 MB dictionary (`dictSize = 1`, `solid = false`). Setting `"maximum"` has no effect on Windows installers and only increases build times for Linux AppImage targets without meaningful size reductions.
+
 ## Platform packaging
 
 ### Windows

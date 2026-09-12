@@ -140,11 +140,20 @@ if (extraOnDisk.length > 0) {
 
 // 2. Check appx.languages matches SUPPORTED_LOCALES
 // AppX uses BCP-47 / Windows store language tags: en-US for en, fr-FR for fr, and bare/region tags for the rest.
-for (const locale of supportedLocales) {
-	const expectedAppx = locale === "en" ? "en-US" : locale === "fr" ? "fr-FR" : locale;
-	if (!appxLanguages.includes(expectedAppx)) {
+const expectedAppxLanguages = supportedLocales.map((locale) =>
+	locale === "en" ? "en-US" : locale === "fr" ? "fr-FR" : locale,
+);
+
+for (const expected of expectedAppxLanguages) {
+	if (!appxLanguages.includes(expected)) {
+		console.error(`MISSING in electron-builder.json5 appx.languages: "${expected}"`);
+		hasErrors = true;
+	}
+}
+for (const configured of appxLanguages) {
+	if (!expectedAppxLanguages.includes(configured)) {
 		console.error(
-			`MISSING in electron-builder.json5 appx.languages: "${expectedAppx}" (for ${locale})`,
+			`EXTRA in electron-builder.json5 appx.languages: "${configured}" (not in SUPPORTED_LOCALES)`,
 		);
 		hasErrors = true;
 	}
@@ -159,23 +168,28 @@ for (const locale of supportedLocales) {
 // zh-CN -> requires both "zh-CN" and "zh_CN"
 // zh-TW -> requires both "zh-TW" and "zh_TW"
 // ar, es, it, ru, tr, vi, fr -> matches bare tag
-for (const locale of supportedLocales) {
-	let expectedElectron = [];
-	if (locale === "en") expectedElectron = ["en-US"];
-	else if (locale === "ja-JP") expectedElectron = ["ja"];
-	else if (locale === "ko-KR") expectedElectron = ["ko"];
-	else if (locale === "pt-BR") expectedElectron = ["pt-BR", "pt_BR"];
-	else if (locale === "zh-CN") expectedElectron = ["zh-CN", "zh_CN"];
-	else if (locale === "zh-TW") expectedElectron = ["zh-TW", "zh_TW"];
-	else expectedElectron = [locale];
+const expectedElectronLanguages = supportedLocales.flatMap((locale) => {
+	if (locale === "en") return ["en-US"];
+	if (locale === "ja-JP") return ["ja"];
+	if (locale === "ko-KR") return ["ko"];
+	if (locale === "pt-BR") return ["pt-BR", "pt_BR"];
+	if (locale === "zh-CN") return ["zh-CN", "zh_CN"];
+	if (locale === "zh-TW") return ["zh-TW", "zh_TW"];
+	return [locale];
+});
 
-	for (const expected of expectedElectron) {
-		if (!electronLanguages.includes(expected)) {
-			console.error(
-				`MISSING in electron-builder.json5 electronLanguages: "${expected}" (for ${locale})`,
-			);
-			hasErrors = true;
-		}
+for (const expected of expectedElectronLanguages) {
+	if (!electronLanguages.includes(expected)) {
+		console.error(`MISSING in electron-builder.json5 electronLanguages: "${expected}"`);
+		hasErrors = true;
+	}
+}
+for (const configured of electronLanguages) {
+	if (!expectedElectronLanguages.includes(configured)) {
+		console.error(
+			`EXTRA in electron-builder.json5 electronLanguages: "${configured}" (not in SUPPORTED_LOCALES)`,
+		);
+		hasErrors = true;
 	}
 }
 

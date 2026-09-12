@@ -173,7 +173,7 @@ Everything in the editor and export is the same on macOS, Windows, and Linux: zo
 
 - **Native recording**: macOS (ScreenCaptureKit), Windows (Windows Graphics Capture), and Linux (PipeWire via the ScreenCast portal) all record through a native pipeline for higher quality and clean window-level capture. On Linux the browser pipeline stays as an automatic fallback if the helper isn't available.
 - **Custom cursors**: on macOS and Windows the real cursor is captured with shape, type, and clicks. Linux captures position and cursor shape through the portal, so cursor themes and the editable cursor overlay work there too. Click effects work on Linux as well, but not through the portal — Wayland exposes no portal for mouse buttons, so the capture helper reads the left button from evdev, which needs your user in the `input` group. Without that, recording is unaffected and every cursor sample is simply a move.
-- **Webcam**: Windows muxes the webcam natively into the recording; macOS and Linux record it alongside as a separate file. It works as a picture-in-picture overlay on all three.
+- **Webcam**: every platform saves the webcam as a separate file next to the screen recording. Windows captures it natively in the recording helper; macOS and Linux record it in the app. It works as a picture-in-picture overlay on all three.
 - **System audio** support varies by OS:
   - **macOS**: works on every supported version. On macOS 14.2+ you'll be prompted to grant audio capture permission.
   - **Windows**: works out of the box.

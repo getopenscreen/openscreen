@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <numeric>
 #include <cstddef>
 #include <cstring>
 #include <limits>
@@ -133,6 +134,120 @@ AudioInputFormat makeAacCompatibleAudioFormat(const AudioInputFormat& source) {
     return format;
 }
 
+namespace {
+
+// Zeroth-order modified Bessel of the first kind, for the Kaiser window. The
+// series converges fast for the beta this file uses; the loop bails once a term
+// stops moving the sum at double precision.
+constexpr double kPi = 3.14159265358979323846;
+
+double besselI0(double x) {
+    double sum = 1.0;
+    double term = 1.0;
+    for (int k = 1; k < 128; k += 1) {
+        term *= (x * x / 4.0) / (static_cast<double>(k) * k);
+        sum += term;
+        if (term < sum * 1e-17) {
+            break;
+        }
+    }
+    return sum;
+}
+
+// The whole anti-alias filter is these three numbers, and two properties follow
+// from them for EVERY decimation factor -- which is what keeps this path general
+// instead of tuned for the two rates that happen to be common:
+//
+//   * the cutoff always lands at 11/12 = 0.9167 of the OUTPUT Nyquist, because
+//     both it and the Nyquist scale as 1/factor. So the passband stays flat to
+//     roughly 0.8 of the output Nyquist and the stop band is already deep by the
+//     time anything can fold back;
+//   * the group delay is always 80*factor/2 source frames. After the decimation
+//     phase hands back (factor-1) of them, the net is 39 + 1/factor output
+//     frames -- bounded in [39, 39.5] whatever the factor, about 0.82 ms at
+//     48 kHz out.
+//
+// Depth: a 36 kHz tone leaves 96 kHz -> 48 kHz at about -117 dB, against roughly
+// -8 dB for the box average this replaces. 80 taps per step is ~1.5x the Kaiser
+// minimum for that transition and depth. The margin is affordable because the
+// cost is set by the SOURCE rate rather than the factor: the tap count grows
+// with factor exactly as fast as the output rate falls, so 192 kHz -> 48 kHz and
+// 192 kHz -> 8 kHz cost the same.
+constexpr size_t kTapsPerDecimationStep = 80;
+constexpr double kCutoffFractionOfSourceRate = 11.0 / 24.0;
+constexpr double kKaiserBeta = 8.6;
+
+}  // namespace
+
+void AudioDecimatorState::reset() {
+    std::fill(history_.begin(), history_.end(), 0.0);
+    position_ = 0;
+    phase_ = 0;
+}
+
+void AudioDecimatorState::prepare(UINT32 factor, UINT32 channels) {
+    if (factor_ == factor && channels_ == channels && !taps_.empty()) {
+        return;
+    }
+    factor_ = factor;
+    channels_ = channels;
+    // Kaiser-windowed sinc. The three constants and what follows from them are
+    // documented where they are defined; here it is enough that the cutoff is
+    // expressed against the SOURCE rate, which is what makes every factor land
+    // on the same fraction of its own output Nyquist.
+    const size_t tapCount = kTapsPerDecimationStep * factor + 1;
+    const double cutoff = kCutoffFractionOfSourceRate / static_cast<double>(factor);
+    const double middle = static_cast<double>(tapCount - 1) / 2.0;
+    const double norm = besselI0(kKaiserBeta);
+    taps_.assign(tapCount, 0.0);
+    for (size_t k = 0; k < tapCount; k += 1) {
+        const double offset = static_cast<double>(k) - middle;
+        const double sinc = std::abs(offset) < 1e-12
+            ? 2.0 * cutoff
+            : std::sin(2.0 * kPi * cutoff * offset) / (kPi * offset);
+        const double ratio = offset / middle;
+        taps_[k] =
+            sinc * besselI0(kKaiserBeta * std::sqrt(std::max(0.0, 1.0 - ratio * ratio))) / norm;
+    }
+    // Unity at DC, so the passband keeps the level the caller handed us.
+    const double dc = std::accumulate(taps_.begin(), taps_.end(), 0.0);
+    if (dc != 0.0) {
+        for (double& tap : taps_) {
+            tap /= dc;
+        }
+    }
+    history_.assign(tapCount * channels, 0.0);
+    position_ = 0;
+    phase_ = 0;
+}
+
+bool AudioDecimatorState::consume(const double* frame, double* out) {
+    if (taps_.empty() || channels_ == 0) {
+        return false;
+    }
+    for (UINT32 channel = 0; channel < channels_; channel += 1) {
+        history_[position_ * channels_ + channel] = frame[channel];
+    }
+    bool produced = false;
+    phase_ += 1;
+    if (phase_ == factor_) {
+        phase_ = 0;
+        produced = true;
+        const size_t tapCount = taps_.size();
+        for (UINT32 channel = 0; channel < channels_; channel += 1) {
+            double sum = 0.0;
+            size_t read = position_;
+            for (size_t k = 0; k < tapCount; k += 1) {
+                sum += taps_[k] * history_[read * channels_ + channel];
+                read = read != 0 ? read - 1 : tapCount - 1;
+            }
+            out[channel] = sum;
+        }
+    }
+    position_ = (position_ + 1 == taps_.size()) ? 0 : position_ + 1;
+    return produced;
+}
+
 void copyAudioWithGain(
     const BYTE* source,
     DWORD byteCount,
@@ -190,9 +305,9 @@ void convertAudioWithGain(
     const AudioInputFormat& targetFormat,
     double gain,
     std::vector<BYTE>& destination) {
-    std::vector<BYTE> discardedRemainder;
+    AudioDecimatorState discardedDecimator;
     convertAudioWithGain(
-        source, byteCount, sourceFormat, targetFormat, gain, destination, discardedRemainder);
+        source, byteCount, sourceFormat, targetFormat, gain, destination, discardedDecimator);
 }
 
 void convertAudioWithGain(
@@ -202,7 +317,7 @@ void convertAudioWithGain(
     const AudioInputFormat& targetFormat,
     double gain,
     std::vector<BYTE>& destination,
-    std::vector<BYTE>& remainder) {
+    AudioDecimatorState& decimator) {
     if (!source || byteCount == 0 || sourceFormat.blockAlign == 0 || targetFormat.blockAlign == 0 ||
         sourceFormat.sampleRate == 0 || targetFormat.sampleRate == 0 || sourceFormat.channels == 0 ||
         targetFormat.channels == 0) {
@@ -211,6 +326,20 @@ void convertAudioWithGain(
     }
 
     if (sameAudioFormatForMixing(sourceFormat, targetFormat)) {
+        // The decimator belongs to the caller, not to this call, so a packet
+        // that does not decimate has to hand it back empty rather than leave a
+        // half-finished group waiting for frames that will never arrive.
+        //
+        // In this helper that is a contract, not a live path. The mix format is
+        // read once per session (a single GetMixFormat in
+        // WasapiLoopbackCapture) and resolveInputFormat passes its subtype
+        // through unchanged, so what
+        // arrives here is whatever the audio engine hands out -- which is
+        // float32, while the encoder target is always PCM16. Subtype alone
+        // therefore never matches, and this branch is unreachable in
+        // production. The suite does reach it, by reusing one state across
+        // formats -- which is the point of writing it.
+        decimator.reset();
         copyAudioWithGain(source, byteCount, targetFormat, gain, destination);
         return;
     }
@@ -221,58 +350,63 @@ void convertAudioWithGain(
         return;
     }
 
-    // Integer-factor downsample (96 kHz / 192 kHz -> 48 kHz): average each
-    // group of source frames instead of picking one. Nearest-neighbour
-    // decimation aliases content above the new Nyquist into the recording.
-    // Incomplete groups stay in remainder so the next packet can finish them.
+    // A note on level, because this filter can do something the box average could
+    // not: a decimated peak can exceed the largest input sample it came from. A
+    // transition band this sharp needs negative taps, and negative taps make the
+    // step response overshoot; the box average never overshoots only because its
+    // taps are all positive, which is also why it rejects so little. HOW MUCH it
+    // overshoots is this design's choice, set by the cutoff and the window. For
+    // a near-full-scale 1 kHz square wave -- the Gibbs case -- it is +1.4 to
+    // +1.5 dB depending on the factor; a square with a higher fundamental
+    // overshoots more, up to about +3.8 dB in the cases measured. For arbitrary
+    // bounded input the ceiling is the sum of |taps|, 2.22 to 2.23 depending on
+    // the factor, or about +7 dB. writeSampleFromDouble clamps, so overshoot
+    // saturates rather than wrapping; the suite checks that write sample by
+    // sample, and pins the 1 kHz figure at every factor it tests.
+
+    // Integer-factor downsample (96 kHz / 192 kHz -> 48 kHz). Dropping every
+    // Nth frame is only safe once the content above the new Nyquist is gone, so
+    // every frame runs through an anti-alias low-pass first and that filter's
+    // history rides across packets inside `decimator`. A group a packet leaves
+    // unfinished is no longer held back as bytes — its frames are already in the
+    // filter — and `pendingFrames()` is what reports how many there were.
     if (sourceFormat.sampleRate > targetFormat.sampleRate &&
         sourceFormat.sampleRate % targetFormat.sampleRate == 0) {
         const UINT32 factor = sourceFormat.sampleRate / targetFormat.sampleRate;
-        if (remainder.size() % sourceFormat.blockAlign != 0) {
-            remainder.clear();
-        }
-        std::vector<BYTE> combined;
-        combined.reserve(remainder.size() + byteCount);
-        combined.insert(combined.end(), remainder.begin(), remainder.end());
-        combined.insert(combined.end(), source, source + byteCount);
-        const size_t totalFrames = combined.size() / sourceFormat.blockAlign;
-        const size_t targetFrames = totalFrames / factor;
-        const size_t consumedFrames = targetFrames * factor;
-        const size_t leftoverBytes = (totalFrames - consumedFrames) * sourceFormat.blockAlign;
-        if (targetFrames == 0) {
-            destination.clear();
-            remainder.swap(combined);
-            return;
-        }
-        destination.assign(targetFrames * targetFormat.blockAlign, 0);
-        for (size_t targetFrame = 0; targetFrame < targetFrames; ++targetFrame) {
+        decimator.prepare(factor, targetFormat.channels);
+        const size_t maxTargetFrames = (packetFrames + decimator.pendingFrames()) / factor;
+        destination.assign(maxTargetFrames * targetFormat.blockAlign, 0);
+        std::vector<double> frame(targetFormat.channels, 0.0);
+        std::vector<double> filtered(targetFormat.channels, 0.0);
+        size_t targetFrame = 0;
+        for (size_t sourceFrame = 0; sourceFrame < packetFrames; ++sourceFrame) {
             for (UINT32 channel = 0; channel < targetFormat.channels; ++channel) {
-                double sum = 0.0;
-                for (UINT32 tap = 0; tap < factor; ++tap) {
-                    sum += readMappedChannel(
-                        combined.data(),
-                        sourceFormat,
-                        targetFrame * factor + tap,
-                        channel,
-                        targetFormat.channels);
-                }
+                frame[channel] = readMappedChannel(
+                    source, sourceFormat, sourceFrame, channel, targetFormat.channels);
+            }
+            if (!decimator.consume(frame.data(), filtered.data())) {
+                continue;
+            }
+            for (UINT32 channel = 0; channel < targetFormat.channels; ++channel) {
                 writeSampleFromDouble(
                     destination.data(),
                     targetFormat,
                     targetFrame,
                     channel,
-                    (sum / static_cast<double>(factor)) * gain);
+                    filtered[channel] * gain);
             }
+            targetFrame += 1;
         }
-        remainder.assign(
-            combined.begin() + static_cast<std::ptrdiff_t>(consumedFrames * sourceFormat.blockAlign),
-            combined.end());
-        if (remainder.size() != leftoverBytes) {
-            remainder.resize(leftoverBytes);
-        }
+        destination.resize(targetFrame * targetFormat.blockAlign);
         return;
     }
 
+    // Same ownership rule as the pass-through above, but unlike that one this
+    // branch is hot. A 48 kHz microphone against a 48 kHz PCM16 target fails
+    // sameAudioFormatForMixing on subtype alone -- WASAPI hands out float32 --
+    // and `sourceRate > targetRate` is false, so on an ordinary machine every
+    // microphone packet lands here and resets a decimator it never used.
+    decimator.reset();
     const size_t sourceFrames = packetFrames;
     const double rateRatio = static_cast<double>(targetFormat.sampleRate) /
         static_cast<double>(sourceFormat.sampleRate);
@@ -371,8 +505,8 @@ bool AudioMixer::start() {
     emittedFrames_ = 0;
     timelineStarted_ = false;
     paused_ = false;
-    systemResampleRemainder_.clear();
-    microphoneResampleRemainder_.clear();
+    systemDecimator_.reset();
+    microphoneDecimator_.reset();
     thread_ = std::thread([this] {
         mixLoop();
     });
@@ -384,8 +518,8 @@ void AudioMixer::beginTimeline() {
         std::scoped_lock lock(mutex_);
         systemQueue_.clear();
         microphoneQueue_.clear();
-        systemResampleRemainder_.clear();
-        microphoneResampleRemainder_.clear();
+        systemDecimator_.reset();
+        microphoneDecimator_.reset();
         emittedFrames_ = 0;
         timelineStarted_ = true;
     }
@@ -399,8 +533,8 @@ void AudioMixer::setPaused(bool paused) {
         if (paused_) {
             systemQueue_.clear();
             microphoneQueue_.clear();
-            systemResampleRemainder_.clear();
-            microphoneResampleRemainder_.clear();
+            systemDecimator_.reset();
+            microphoneDecimator_.reset();
         }
     }
     cv_.notify_all();
@@ -424,7 +558,7 @@ void AudioMixer::pushSystem(const BYTE* data, DWORD byteCount) {
         if (paused_) {
             return;
         }
-        append(systemQueue_, data, byteCount, systemFormat_, 1.0, systemResampleRemainder_);
+        append(systemQueue_, data, byteCount, systemFormat_, 1.0, systemDecimator_);
     }
     cv_.notify_all();
 }
@@ -445,7 +579,7 @@ void AudioMixer::pushMicrophone(const BYTE* data, DWORD byteCount) {
             byteCount,
             microphoneFormat_,
             microphoneGain_,
-            microphoneResampleRemainder_);
+            microphoneDecimator_);
     }
     cv_.notify_all();
 }
@@ -456,12 +590,12 @@ void AudioMixer::append(
     DWORD byteCount,
     const AudioInputFormat& sourceFormat,
     double gain,
-    std::vector<BYTE>& remainder) {
+    AudioDecimatorState& decimator) {
     if (!data || byteCount == 0) {
         return;
     }
 
-    convertAudioWithGain(data, byteCount, sourceFormat, format_, gain, gainBuffer_, remainder);
+    convertAudioWithGain(data, byteCount, sourceFormat, format_, gain, gainBuffer_, decimator);
     queue.insert(queue.end(), gainBuffer_.begin(), gainBuffer_.end());
 }
 

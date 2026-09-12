@@ -91,11 +91,21 @@ jobs:
         if: startsWith(matrix.os, 'macos')
         run: brew install ninja
 
-      - name: Setup MSVC (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+      # There is deliberately no "Setup MSVC" step for the Windows leg. It used to
+      # run ilammy/msvc-dev-cmd here, and nothing consumed what that action set up:
+      # scripts/build-whisper-stt.sh calls cmake without -G, so on Windows CMake
+      # picks its Visual Studio generator (the job log reads "Building for: Visual
+      # Studio 18 2026"), which locates MSVC through the Visual Studio installer
+      # and builds with MSBuild, whose VC targets set up the compiler environment
+      # themselves rather than inheriting the PATH/INCLUDE/LIB vcvarsall exported.
+      # vcpkg, in the SPIRV-Headers step below, finds the
+      # compiler on its own the same way, and windows-latest ships a single VS
+      # instance, so there is nothing for vcvars to disambiguate either. The
+      # action was also the last node20 action in the repo, with an upstream that
+      # stopped in 2024 (#317), so this drops a dependency rather than replacing
+      # it. Should the Windows build ever move to Ninja, that is the point where a
+      # vcvars step becomes necessary again; scripts/msvcEnv.mjs already has the
+      # vcvarsall discovery for it.
 
       - name: Install Vulkan SDK
         if: matrix.vulkan

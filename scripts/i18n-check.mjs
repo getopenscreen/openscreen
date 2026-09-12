@@ -138,60 +138,49 @@ if (extraOnDisk.length > 0) {
 	hasErrors = true;
 }
 
-// 2. Check appx.languages matches SUPPORTED_LOCALES
-// AppX uses BCP-47 / Windows store language tags: en-US for en, fr-FR for fr, and bare/region tags for the rest.
-const expectedAppxLanguages = supportedLocales.map((locale) =>
-	locale === "en" ? "en-US" : locale === "fr" ? "fr-FR" : locale,
-);
+// Packaging requirements differ across distribution channels:
+// - Microsoft Store (AppX) requires BCP-47 tags (en-US, fr-FR)
+// - Chromium pak files use bare tags for ja/ko (ja.pak, ko.pak) and hyphens (zh-CN, pt-BR)
+// - macOS .lproj folders require underscore variants (zh_CN, pt_BR, zh_TW)
+// Any locale not in this table defaults to its bare tag for both channels.
+const LOCALE_PACKAGING_OVERRIDES = {
+	en: { appx: "en-US", electron: ["en-US"] },
+	fr: { appx: "fr-FR", electron: ["fr"] },
+	"ja-JP": { appx: "ja-JP", electron: ["ja"] },
+	"ko-KR": { appx: "ko-KR", electron: ["ko"] },
+	"pt-BR": { appx: "pt-BR", electron: ["pt-BR", "pt_BR"] },
+	"zh-CN": { appx: "zh-CN", electron: ["zh-CN", "zh_CN"] },
+	"zh-TW": { appx: "zh-TW", electron: ["zh-TW", "zh_TW"] },
+};
 
-for (const expected of expectedAppxLanguages) {
-	if (!appxLanguages.includes(expected)) {
-		console.error(`MISSING in electron-builder.json5 appx.languages: "${expected}"`);
-		hasErrors = true;
+function getPackagingTags(locale) {
+	return LOCALE_PACKAGING_OVERRIDES[locale] ?? { appx: locale, electron: [locale] };
+}
+
+function assertListsMatch(actual, expected, label) {
+	for (const tag of expected) {
+		if (!actual.includes(tag)) {
+			console.error(`MISSING in electron-builder.json5 ${label}: "${tag}"`);
+			hasErrors = true;
+		}
+	}
+	for (const tag of actual) {
+		if (!expected.includes(tag)) {
+			console.error(
+				`EXTRA in electron-builder.json5 ${label}: "${tag}" (not in SUPPORTED_LOCALES)`,
+			);
+			hasErrors = true;
+		}
 	}
 }
-for (const configured of appxLanguages) {
-	if (!expectedAppxLanguages.includes(configured)) {
-		console.error(
-			`EXTRA in electron-builder.json5 appx.languages: "${configured}" (not in SUPPORTED_LOCALES)`,
-		);
-		hasErrors = true;
-	}
-}
+
+// 2. Check appx.languages matches SUPPORTED_LOCALES
+const expectedAppxLanguages = supportedLocales.map((l) => getPackagingTags(l).appx);
+assertListsMatch(appxLanguages, expectedAppxLanguages, "appx.languages");
 
 // 3. Check electronLanguages matches SUPPORTED_LOCALES
-// Electron/Chromium pak files:
-// en -> en-US
-// ja-JP -> ja (Chromium ja.pak / macOS ja.lproj)
-// ko-KR -> ko (Chromium ko.pak / macOS ko.lproj)
-// pt-BR -> requires both "pt-BR" (Windows/Linux) and "pt_BR" (macOS)
-// zh-CN -> requires both "zh-CN" and "zh_CN"
-// zh-TW -> requires both "zh-TW" and "zh_TW"
-// ar, es, it, ru, tr, vi, fr -> matches bare tag
-const expectedElectronLanguages = supportedLocales.flatMap((locale) => {
-	if (locale === "en") return ["en-US"];
-	if (locale === "ja-JP") return ["ja"];
-	if (locale === "ko-KR") return ["ko"];
-	if (locale === "pt-BR") return ["pt-BR", "pt_BR"];
-	if (locale === "zh-CN") return ["zh-CN", "zh_CN"];
-	if (locale === "zh-TW") return ["zh-TW", "zh_TW"];
-	return [locale];
-});
-
-for (const expected of expectedElectronLanguages) {
-	if (!electronLanguages.includes(expected)) {
-		console.error(`MISSING in electron-builder.json5 electronLanguages: "${expected}"`);
-		hasErrors = true;
-	}
-}
-for (const configured of electronLanguages) {
-	if (!expectedElectronLanguages.includes(configured)) {
-		console.error(
-			`EXTRA in electron-builder.json5 electronLanguages: "${configured}" (not in SUPPORTED_LOCALES)`,
-		);
-		hasErrors = true;
-	}
-}
+const expectedElectronLanguages = supportedLocales.flatMap((l) => getPackagingTags(l).electron);
+assertListsMatch(electronLanguages, expectedElectronLanguages, "electronLanguages");
 
 if (hasErrors) {
 	console.error(

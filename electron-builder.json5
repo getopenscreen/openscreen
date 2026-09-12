@@ -3,12 +3,6 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.etiennelescot.openscreen",
   "asar": true,
-  // .node binaries can't be dlopen'd from inside an asar — must live unpacked.
-  // onnxruntime-node distributes as a `.node` shared object that whisper.cpp
-  // helpers run from process spawn, so they all unpack via the same glob.
-  "asarUnpack": [
-    "**/*.node"
-  ],
   "productName": "Openscreen",
   // There is deliberately no `electronVersion` here. electron-builder needs an EXACT
   // version because it downloads the binaries for one release, and it takes that from
@@ -59,6 +53,28 @@
   // let electron-builder use the prebuilt instead of recompiling.
   "buildDependenciesFromSource": false,
   "compression": "normal",
+  // Strip unused Chromium locale pak files (saves ~20 MB). Only package locales supported by OpenScreen.
+  // Note: macOS uses underscore variants (e.g. pt_BR.lproj, zh_CN.lproj, zh_TW.lproj), while Windows
+  // and Linux use hyphenated pak files (e.g. pt-BR.pak, zh-CN.pak, zh-TW.pak). Both forms are listed
+  // so app-builder-lib retains the correct locale assets across all platforms.
+  "electronLanguages": [
+    "en-US",
+    "fr",
+    "ar",
+    "es",
+    "it",
+    "ja",
+    "ko",
+    "pt-BR",
+    "pt_BR",
+    "ru",
+    "tr",
+    "vi",
+    "zh-CN",
+    "zh_CN",
+    "zh-TW",
+    "zh_TW"
+  ],
   "directories": {
     "output": "release/${version}",
     // Electron-builder's default, spelled out because the appx target depends on it:
@@ -72,6 +88,12 @@
   "files": [
     "dist",
     "dist-electron",
+    // Exclude assets already bundled into extraResources (saves ~17 MB duplicate in asar)
+    "!dist/wallpapers/**",
+    "!dist/cursors/**",
+    "!dist/mediapipe/**",
+    // Exclude dead-weight node_modules: all frontend and electron code is pre-bundled by Vite (saves ~238 MB)
+    "!node_modules/**",
     "!*.png",
     "!preview*.png",
     "!*.md",

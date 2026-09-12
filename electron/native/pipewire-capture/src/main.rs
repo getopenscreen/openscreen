@@ -689,7 +689,7 @@ fn run<W: Write>(
             // its message is delivered after the stream-state one.
             Ok(Message::PointerButton(press_ms)) => {
                 if streaming_since.is_some_and(|since| press_ms >= since) {
-                    emit_sample(emitter, &cursor, size, &mut pending_asset, Some(press_ms));
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some(press_ms));
                 }
             }
 
@@ -858,7 +858,10 @@ fn run<W: Write>(
                     let (width, height) = (frame.crop.width, frame.crop.height);
                     mailbox.recycle(frame.pixels);
                     match staged {
-                        Ok(capture::StageOutcome::Staged) => {
+                        // A real frame, or a pause-freeze — neither is an import
+                        // failure, so end any run of them. (A freeze holds the last
+                        // picture; `advance` is a no-op while paused.)
+                        Ok(capture::StageOutcome::Staged | capture::StageOutcome::Frozen) => {
                             consecutive_drops = 0;
                         }
                         // Recoverable: one frame the GPU could not import. Warn so it
@@ -954,7 +957,8 @@ fn run<W: Write>(
                     // The portal's size is in the compositor's coordinate space
                     // and can differ from the negotiated pixel size on a scaled
                     // display. Logged rather than used: cursor positions arrive
-                    // in stream pixels, so only the negotiated size normalises them.
+                    // in stream pixels, and `content_rect` places them from
+                    // there.
                     let _ = emitter.emit(&Event::Debug {
                         code: "portal-stream".to_owned(),
                         data: json_map([
@@ -1212,14 +1216,14 @@ fn run<W: Write>(
                 // A new sprite ships immediately; positions respect the sample
                 // interval so a 120fps compositor cannot flood stdout.
                 if asset_is_new || last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, size, &mut pending_asset, None);
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
                     last_emit = Instant::now();
                 }
             }
 
             Err(RecvTimeoutError::Timeout) => {
                 if cursor.is_some() && last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, size, &mut pending_asset, None);
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
                     last_emit = Instant::now();
                 }
                 // The heartbeat that keeps the output at a constant frame rate
@@ -1287,6 +1291,24 @@ fn finish_capture<W: Write>(
                     ),
                 });
             }
+            // The video timeline should equal real elapsed wall-clock time. With
+            // wall-clock PTS it does by construction; a divergence beyond a frame
+            // or two means frames are being stamped off the clock again (#511) —
+            // surface it loudly rather than shipping a silently time-compressed
+            // file that plays ahead of audio, webcam and the cursor overlay.
+            const TIMELINE_SKEW_EPSILON_MS: i64 = 100;
+            let skew = summary.duration_ms as i64 - summary.wall_clock_ms as i64;
+            if skew.abs() > TIMELINE_SKEW_EPSILON_MS {
+                let _ = emitter.emit(&Event::Warning {
+                    code: "timeline-divergence".to_owned(),
+                    message: format!(
+                        "the recorded video timeline is {} ms but the recording ran {} ms of \
+                         wall-clock time (off by {} ms); the screen track may be out of sync \
+                         with audio, webcam and the cursor overlay. See issue #511.",
+                        summary.duration_ms, summary.wall_clock_ms, skew.abs()
+                    ),
+                });
+            }
             let _ = emitter.emit(&Event::CaptureStopped {
                 timestamp_ms: timestamp_ms(),
                 path: summary.path.display().to_string(),
@@ -1308,21 +1330,49 @@ fn finish_capture<W: Write>(
     }
 }
 
-/// Emits one cursor sample at the current position. `click` is `Some(press_ms)`
-/// for a left-button press — the sample is then tagged `"click"` and stamped with
-/// that press time — or `None` for an ordinary throttled position sample stamped
-/// now. Either way a pending new sprite rides out on it.
+/// The rectangle cursor positions are measured against.
+///
+/// The encoder's content rectangle once a frame has been staged — that is the
+/// only rectangle the file shows. Before then, and for a cursor-only session
+/// that opens no encoder at all, the whole negotiated stream, which is what the
+/// consumer of a cursor-only recording is compositing over.
+fn content_rect(capture: &Option<Capture>, size: Option<(i32, i32)>) -> Option<shim::CropRect> {
+    match capture {
+        Some(capture) if capture.started() => Some(capture.content_rect()),
+        _ => size.map(|(width, height)| shim::CropRect { x: 0, y: 0, width, height }),
+    }
+}
+
+/// Emits one cursor sample, positioned inside `content`.
+///
+/// `content` is the sub-rectangle of the stream the recording actually shows —
+/// [`Capture::content_rect`] once pixels are being encoded, the whole stream
+/// otherwise (a cursor-only session records no video of its own). The pointer
+/// arrives in STREAM pixels, so for a window stream it is measured from the
+/// corner of the monitor while the file starts at the corner of the window;
+/// subtracting the origin is what puts the two in the same space. The consumer
+/// normalises against the `width`/`height` reported here, so those must be the
+/// content's, not the stream's.
+///
+/// `click` is `Some(press_ms)` for a left-button press — the sample is then
+/// tagged `"click"` and stamped with that press time — or `None` for an ordinary
+/// throttled position sample stamped now. Either way a pending new sprite rides
+/// out on it.
 fn emit_sample<W: Write>(
     emitter: &mut Emitter<W>,
     cursor: &Option<CursorState>,
-    size: Option<(i32, i32)>,
+    content: Option<shim::CropRect>,
     pending_asset: &mut Option<CursorAsset>,
     click: Option<u64>,
 ) {
-    let (Some(state), Some((width, height))) = (cursor, size) else {
+    let (Some(state), Some(content)) = (cursor, content) else {
         return;
     };
-    let visible = state.x >= 0 && state.y >= 0 && state.x < width && state.y < height;
+    let (x, y) = (state.x - content.x, state.y - content.y);
+    // A pointer outside the recorded rectangle is REPORTED, not withheld: the
+    // consumer clamps the position and carries `visible` so a renderer can hide
+    // the sprite rather than pin it to an edge.
+    let visible = x >= 0 && y >= 0 && x < content.width && y < content.height;
     // A click carries its own press time so the bounce lands when the button went
     // down, not up to a sample interval later; the position is the latest known,
     // which at the sample cadence has not moved enough to be wrong.
@@ -1332,10 +1382,10 @@ fn emit_sample<W: Write>(
     };
     let _ = emitter.emit(&Event::CursorSample {
         timestamp_ms: timestamp,
-        x: state.x,
-        y: state.y,
-        width,
-        height,
+        x,
+        y,
+        width: content.width,
+        height: content.height,
         visible,
         asset_id: state.asset_id.clone(),
         asset: pending_asset.take(),
@@ -1405,6 +1455,150 @@ fn resolve_microphone_node(label: &str, sources: &[shim::AudioSourceInfo]) -> Op
         .collect();
     candidates.sort_by_key(|s| std::cmp::Reverse(s.description.len()));
     candidates.first().map(|s| s.name.clone())
+}
+
+#[cfg(test)]
+mod cursor_sample_tests {
+    use super::*;
+
+    fn sample_json(cursor: (i32, i32), content: Option<shim::CropRect>) -> serde_json::Value {
+        let mut buffer = Vec::new();
+        let mut emitter = Emitter::new(&mut buffer, false);
+        emit_sample(
+            &mut emitter,
+            &Some(CursorState { x: cursor.0, y: cursor.1, asset_id: None }),
+            content,
+            &mut None,
+            None,
+        );
+        let line = String::from_utf8(buffer).expect("utf8");
+        serde_json::from_str(line.trim()).expect("json")
+    }
+
+    /// A full-screen capture crops nothing, so the pointer keeps the numbers the
+    /// portal gave and is normalised against the whole stream.
+    #[test]
+    fn a_full_screen_capture_reports_stream_coordinates() {
+        let value = sample_json(
+            (960, 540),
+            Some(shim::CropRect { x: 0, y: 0, width: 1920, height: 1080 }),
+        );
+        assert_eq!(value["x"], 960);
+        assert_eq!(value["y"], 540);
+        assert_eq!(value["width"], 1920);
+        assert_eq!(value["height"], 1080);
+        assert_eq!(value["visible"], true);
+    }
+
+    /// THE WINDOW-CAPTURE BUG. mutter pins a window stream to the whole monitor
+    /// and carves the window out through SPA_META_VideoCrop, so the pointer
+    /// arrives measured from the monitor's corner while the file starts at the
+    /// window's. Reporting the stream's size here normalised a monitor position
+    /// against monitor dimensions and handed the compositor a fraction of the
+    /// wrong rectangle: the cursor sat at the wrong place in every window
+    /// recording, by the crop origin, at the wrong scale.
+    #[test]
+    fn a_window_capture_reports_coordinates_inside_the_window() {
+        // A 1920x1080 monitor carrying a 640x480 window at (100, 50), pointer
+        // one quarter into the window.
+        let value = sample_json(
+            (260, 170),
+            Some(shim::CropRect { x: 100, y: 50, width: 640, height: 480 }),
+        );
+        assert_eq!(value["x"], 160, "the crop origin has to come off the position");
+        assert_eq!(value["y"], 120);
+        assert_eq!(value["width"], 640, "the consumer normalises against what it is told");
+        assert_eq!(value["height"], 480);
+        assert_eq!(value["visible"], true);
+    }
+
+    /// Outside the window but still on the monitor. The old test was `x < width`
+    /// against the STREAM, which called this visible — and since the consumer
+    /// clamps to 0..1, it parked the sprite on the frame's edge for as long as
+    /// the pointer was anywhere else on screen.
+    #[test]
+    fn a_pointer_outside_the_window_is_reported_invisible() {
+        let outside = sample_json(
+            (1500, 900),
+            Some(shim::CropRect { x: 100, y: 50, width: 640, height: 480 }),
+        );
+        assert_eq!(outside["visible"], false);
+
+        // Above and to the left of the window, which goes negative rather than
+        // past the far edge.
+        let before = sample_json(
+            (10, 10),
+            Some(shim::CropRect { x: 100, y: 50, width: 640, height: 480 }),
+        );
+        assert_eq!(before["visible"], false);
+    }
+
+    /// No content rectangle means the format has not been negotiated yet. There
+    /// is nothing to measure against, so nothing is emitted — a sample stamped
+    /// with a guess would be indistinguishable from a real one downstream.
+    #[test]
+    fn nothing_is_emitted_before_the_format_is_known() {
+        let mut buffer = Vec::new();
+        let mut emitter = Emitter::new(&mut buffer, false);
+        emit_sample(
+            &mut emitter,
+            &Some(CursorState { x: 10, y: 10, asset_id: None }),
+            None,
+            &mut None,
+            None,
+        );
+        assert!(buffer.is_empty(), "emitted {}", String::from_utf8_lossy(&buffer));
+    }
+
+    /// A cursor-only session opens no encoder, so it falls back to the whole
+    /// stream; once pixels are flowing the encoder's rectangle wins.
+    #[test]
+    fn the_content_rect_prefers_the_encoder_once_it_has_started() {
+        // No encoder yet (cursor-only, or before the first frame): the whole
+        // negotiated stream, or nothing when the format is still unknown.
+        assert_eq!(
+            content_rect(&None, Some((1920, 1080))),
+            Some(shim::CropRect { x: 0, y: 0, width: 1920, height: 1080 })
+        );
+        assert_eq!(content_rect(&None, None), None);
+
+        // Once a window frame has been staged, the encoder's content rect — the
+        // window carved out of the monitor-sized stream — wins over the stream
+        // size. This is the branch the fix turns on, so it is the one that has
+        // to be pinned.
+        let output = std::env::temp_dir().join("openscreen-content-rect-encoder.mp4");
+        let (mut capture, _) = Capture::start(
+            &output,
+            320,
+            240,
+            30,
+            Some(1_000_000),
+            Some(encoder::Backend::Software),
+            Vec::new(),
+            None,
+        )
+        .expect("start");
+        let stride = 1920usize * 4;
+        capture
+            .stage(&shim::Frame {
+                pixels: vec![0x30; stride * 1080],
+                stride,
+                width: 1920,
+                height: 1080,
+                video_format: shim::constants().video_format_bgrx,
+                pts_ns: -1,
+                crop: shim::CropRect { x: 100, y: 50, width: 320, height: 240 },
+                has_crop: true,
+                dmabuf: None,
+            })
+            .expect("stage");
+        assert_eq!(
+            content_rect(&Some(capture), Some((1920, 1080))),
+            Some(shim::CropRect { x: 100, y: 50, width: 320, height: 240 }),
+            "a started encoder reports the window it read, not the monitor stream"
+        );
+        let _ = std::fs::remove_file(&output);
+    }
 }
 
 #[cfg(test)]

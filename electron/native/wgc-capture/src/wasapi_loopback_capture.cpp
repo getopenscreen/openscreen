@@ -203,9 +203,15 @@ bool WasapiLoopbackCapture::initialize(WasapiCaptureEndpoint endpoint, const std
         // resolve one in time, but a name that simply matches no endpoint lands
         // in exactly the same place. Either way the take sounds like the wrong
         // microphone with nothing explaining why (getopenscreen/openscreen#404).
+        // "default" vetoes the name, it does not merely sit beside it. The picker
+        // persists BOTH fields from whichever entry was clicked, and Chromium's own
+        // Default entry carries the label "Default - Microphone (…)" — a string no
+        // endpoint FriendlyName ever matches. Reading the name as an alternative
+        // therefore warned about a microphone the user never chose, every time they
+        // picked Default explicitly instead of leaving the picker alone.
         const bool wantedAParticularMicrophone =
-            endpoint == WasapiCaptureEndpoint::Microphone &&
-            ((!deviceId.empty() && deviceId != L"default") || !deviceName.empty());
+            endpoint == WasapiCaptureEndpoint::Microphone && deviceId != L"default" &&
+            (!deviceId.empty() || !deviceName.empty());
         if (wantedAParticularMicrophone) {
             std::cerr << "{\"event\":\"warning\",\"code\":\"microphone-defaulted\","
                          "\"message\":\"The requested microphone could not be resolved; "

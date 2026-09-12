@@ -1,0 +1,48 @@
+---
+title: An export benchmark built to be hard to fake
+description: An open, reproducible export benchmark for screen recorders. Same clip, same edit, every result divided by ffmpeg on the same machine and verified in pixels before it counts.
+authors: [etienne]
+tags: [benchmark, performance]
+image: /img/og-image.png
+---
+
+import BenchmarkLeaderboard from "@site/src/components/BenchmarkLeaderboard";
+
+Every screen recorder claims a fast export. None of them says fast compared to what.
+
+So the comparison is public now: [screen-recorder-benchmark](https://etiennelescot.github.io/screen-recorder-benchmark/). Same clip, same edit, same machine, across the desktop apps built to turn a recording into a finished demo. OpenScreen is one of the tools in it, and the standings are whatever the submissions say.
+
+{/* truncate */}
+
+## The current standings (lower is better) {#the-current-standings}
+
+<BenchmarkLeaderboard />
+
+Read the ratio, not seconds. Each figure is an export divided by what a plain ffmpeg transcode of the same clip needed on the same machine, measured minutes earlier. A tool at 1.5× did 50% more work than a bare re-encode, on whatever hardware you have. Seconds only ever compare a machine to itself.
+
+The scenario is a finished demo rather than a transcode: a sampled wallpaper, padding, rounded corners, a drop shadow, three animated zooms, motion blur, a cursor redrawn from telemetry, a webcam inset with mask and shadow, and the recording's audio, all pinned to 1920x1080 at 60 fps in H.264.
+
+## Four decisions that make it hard to fake
+
+**ffmpeg is the 1x, and it is not a competitor.** The reference is re-measured on your machine, under your load, immediately before each tool runs. Nothing is normalised against a number I recorded once on a laptop I own.
+
+**No tool is required in a submission.** Tools are nodes, every pair measured together on one machine is an edge, and the ranking is recovered by least squares across the whole graph. Two people who never measured the same app still contribute to the same ordering, as long as the submissions overlap somewhere.
+
+**The verifier decides what happened, not the app.** Every export is re-probed before it counts: resolution, frame rate, codec and duration against the target, then wallpaper, padding, corner radius, zooms, cursor and camera checked in the pixels, then audio by loudness, because a silent track passes any check that only asks whether audio exists. A tool reports what it configured. The verifier reports what came out, and the verifier wins.
+
+**The disagreement is published above the ranking.** Where one pair of tools was measured on more than one machine, the two ratios can differ by more than the gap the ranking puts between them, and that spread is printed at the top of the page rather than in a footnote. A single global order is not yet what this data supports, and the page says so before it shows you one.
+
+Roster membership follows what a tool is for, not whether I managed to automate it. An app I cannot drive is an empty cell, and an empty cell is a result.
+
+## Add a machine
+
+The hardware coverage is thin, and it shows in the spread above. A run needs any two tools and takes one command:
+
+```bash
+node bench.mjs run --bundle commons-upload --apps <two or more tools>
+node bench.mjs submit --run <runId> --as "your name" > submissions/<platform>/<chip>-<date>.json
+```
+
+Open a pull request. CI validates it against the schema and regenerates the site, so the table on this page moves as soon as it merges. The footage comes from permanent Wikimedia URLs with a hash, so two machines can prove they measured the same thing. It is MIT, and the results page is the repo's own output: [EtienneLescot/screen-recorder-benchmark](https://github.com/EtienneLescot/screen-recorder-benchmark).
+
+Building it this way meant accepting the answer before knowing it, on every machine anyone adds. A benchmark whose author always wins is a marketing page.

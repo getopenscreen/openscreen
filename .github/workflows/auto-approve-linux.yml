@@ -1,0 +1,72 @@
+name: auto-approve-linux
+
+# Approves Beetix's PRs when every changed file is one they own in
+# .github/CODEOWNERS. CODEOWNERS is the single source of truth for the paths and
+# is always read from the base branch, never from the pull request: otherwise a
+# PR could add its own author as an owner and approve itself.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  approve:
+    if: github.event.pull_request.user.login == 'Beetix' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - id: scope
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > files.txt
+          gh api "repos/$GITHUB_REPOSITORY/contents/.github/CODEOWNERS?ref=$BASE" --jq '.content' | base64 -d > CODEOWNERS
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+
+          author = "@" + os.environ["AUTHOR"].lower()
+
+          owned = []
+          for line in open("CODEOWNERS", encoding="utf-8"):
+              fields = line.split("#")[0].split()
+              if len(fields) > 1 and author in [f.lower() for f in fields[1:]]:
+                  owned.append(fields[0])
+
+          def to_regex(pattern):
+              # Only the CODEOWNERS subset this repo uses. Anything else fails closed,
+              # including a bare "*", which spans directories here but not below.
+              if any(c in pattern for c in "?[]!") or "**" in pattern or pattern.strip("/") == "*":
+                  sys.exit("unsupported CODEOWNERS pattern: " + pattern)
+              body = pattern.lstrip("/")
+              escaped = "".join("[^/]*" if c == "*" else re.escape(c) for c in body)
+              # A trailing slash means a directory prefix, anything else is a whole path.
+              return re.compile("^" + escaped + ("" if body.endswith("/") else "$"))
+
+          patterns = [to_regex(p) for p in owned]
+          files = [line.strip() for line in open("files.txt") if line.strip()]
+          in_scope = bool(patterns) and bool(files) and all(
+              any(p.match(f) for p in patterns) for f in files
+          )
+          print("in_scope=" + str(in_scope).lower())
+          PY
+
+      - if: steps.scope.outputs.in_scope == 'true'
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APPROVER_APP_ID }}
+          private-key: ${{ secrets.APPROVER_APP_PRIVATE_KEY }}
+
+      - if: steps.scope.outputs.in_scope == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr review "$PR" --repo "$GITHUB_REPOSITORY" --approve \
+            --body "Auto-approved: every changed file is owned by the author in CODEOWNERS."

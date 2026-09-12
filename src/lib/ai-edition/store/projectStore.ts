@@ -10,6 +10,82 @@ import { type AxcutAsset, type AxcutDocument, createAudioTrack, documentSchema }
 import { probeAudioDuration, probeVideoDimensions } from "../timeline/duration";
 import { clearHistory, currentWriteEpoch, pushHistory } from "./undoStack";
 
+let documentSavesInFlight = 0;
+const documentSavesIdle: Array<() => void> = [];
+
+/** Outcome of `waitForDocumentSaves`: saves drained, or the wait gave up. */
+export type DocumentSavesWait = "idle" | "timeout";
+
+/** How long a waiter sits before it stops believing a save will ever settle. */
+export const DOCUMENT_SAVES_WAIT_TIMEOUT_MS = 10_000;
+
+function beginDocumentSave() {
+	documentSavesInFlight += 1;
+}
+
+function endDocumentSave() {
+	documentSavesInFlight = Math.max(0, documentSavesInFlight - 1);
+	if (documentSavesInFlight > 0) return;
+	while (documentSavesIdle.length > 0) {
+		documentSavesIdle.shift()?.();
+	}
+}
+
+/**
+ * `"idle"` once no `saveDocument` is still waiting on IPC or installing its
+ * result; `"timeout"` if that has not happened within `timeoutMs`.
+ *
+ * The timeout is not decoration. `saveDocument` decrements its counter in a
+ * `finally`, so a rejected save still releases waiters — but a bridge call that
+ * never settles at all runs no `finally`, leaves the counter above zero, and
+ * would park every waiter here forever. Callers must treat `"timeout"` as "I do
+ * not know whether that save landed" and abandon the attempt, keeping whatever
+ * pending state lets a later attempt retry. Reporting it as `"idle"` would be a
+ * lie about disk state, and is how a queued write ends up racing a stuck one.
+ */
+export function waitForDocumentSaves(
+	timeoutMs: number = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+): Promise<DocumentSavesWait> {
+	if (documentSavesInFlight === 0) return Promise.resolve("idle");
+	return new Promise((resolve) => {
+		const settle = (outcome: DocumentSavesWait) => {
+			const at = documentSavesIdle.indexOf(waiter);
+			if (at >= 0) documentSavesIdle.splice(at, 1);
+			clearTimeout(timer);
+			resolve(outcome);
+		};
+		const waiter = () => settle("idle");
+		const timer = setTimeout(() => settle("timeout"), timeoutMs);
+		documentSavesIdle.push(waiter);
+	});
+}
+
+/**
+ * `saveDocument`'s own answer, or `"timeout"` if it has not produced one within
+ * `timeoutMs`.
+ *
+ * The companion to {@link waitForDocumentSaves}, for the caller that started the
+ * save rather than one waiting behind it: a bridge call that never settles leaves
+ * this promise pending forever, and anything sequenced after it — a queue, a
+ * chain of later callbacks — stops with it. `"timeout"` carries the same meaning
+ * here as there: the write may still land, so treat the document as unknown and
+ * keep whatever state lets a later attempt retry.
+ */
+export async function saveWithDeadline(
+	save: Promise<boolean>,
+	timeoutMs: number = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+): Promise<boolean | "timeout"> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const deadline = new Promise<"timeout">((resolve) => {
+		timer = setTimeout(() => resolve("timeout"), timeoutMs);
+	});
+	try {
+		return await Promise.race([save, deadline]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 // ponytail: thin Zustand wrapper over the native-bridge client. Keeps the
 // current project + revision counter in renderer memory; mutations round-trip
 // through the main process via the bridge so disk state stays authoritative.
@@ -469,61 +545,66 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 	},
 
 	async saveDocument(document, opts) {
-		// Read BEFORE the await, while `get().document` is still the pre-edit one.
-		// This is where undo history actually comes from: the editor writes through
-		// `saveDocument` for every user edit -- add a region, delete one, rename the
-		// project, every timeline op -- and `setDocument` is reserved for the handful
-		// of live/optimistic paths. Recording only in `setDocument` left `past` empty
-		// for everything the user does, so Ctrl+Z was a no-op (#433).
-		const base = historyBaseFor(opts, get().document);
-		// Read alongside it, and for the same reason: both describe the world this write
-		// is building on, and the await is where that world can change underneath it.
-		const epoch = currentWriteEpoch();
+		beginDocumentSave();
 		try {
-			const result = await nativeBridgeClient.aiEdition.save(document);
-			if (!result.success || !result.document) {
-				throw new Error(result.error ?? "Failed to save project");
+			// Read BEFORE the await, while `get().document` is still the pre-edit one.
+			// This is where undo history actually comes from: the editor writes through
+			// `saveDocument` for every user edit -- add a region, delete one, rename the
+			// project, every timeline op -- and `setDocument` is reserved for the handful
+			// of live/optimistic paths. Recording only in `setDocument` left `past` empty
+			// for everything the user does, so Ctrl+Z was a no-op (#433).
+			const base = historyBaseFor(opts, get().document);
+			// Read alongside it, and for the same reason: both describe the world this write
+			// is building on, and the await is where that world can change underneath it.
+			const epoch = currentWriteEpoch();
+			try {
+				const result = await nativeBridgeClient.aiEdition.save(document);
+				if (!result.success || !result.document) {
+					throw new Error(result.error ?? "Failed to save project");
+				}
+				// The undo wins, and this write is dropped -- store and history both. It was
+				// in flight when the user pressed Ctrl+Z (or switched projects), so its document
+				// is the one they just asked to leave: installing it reverted the undo on screen,
+				// and recording it put a FORWARD state on `past` and cleared `future`, so the
+				// redo they had just earned was gone.
+				//
+				// Dropped rather than reverted, because reverting is not this write's to do: the
+				// bytes are already on disk, and it is the undo's own persist -- issued from
+				// `useUndoRedoShortcuts`'s `onAfter` the moment it ran, so ordered after this one
+				// on the same IPC channel -- that puts the restored document back over them.
+				// `dirty` is deliberately left set for exactly that reason.
+				if (currentWriteEpoch() !== epoch) return false;
+				const parsed = parseDocument(result.document);
+				set({
+					document: parsed,
+					revision: get().revision + 1,
+					dirty: false,
+					lastSavedAt: new Date(),
+				});
+				// Recorded HERE, below the write, and not above it. `saveDocument` resolves
+				// false on a handled failure (a read-only project) and callers read that as
+				// "the edit did not happen". Recording first left `past` holding a snapshot
+				// identical to the live document and `future` wiped, so the next Ctrl+Z
+				// visibly did nothing and redo was gone -- #433's own symptom, re-created by
+				// the fix for it. Nothing between the `set` above and this line awaits, so no
+				// undo can observe the half-applied state.
+				recordHistory(base, document, opts);
+				return true;
+			} catch (error) {
+				// Logged as well as toasted: a toast is gone in five seconds, and "my edit
+				// disappeared" gets reported much later than that.
+				console.error("[project] failed to save document:", error);
+				toast.error(toastText("editor", "project.failedToSave"), {
+					description: error instanceof Error ? error.message : String(error),
+				});
+				// `dirty` is deliberately left alone. It is the only input to the
+				// `beforeunload` guard and to `setHasUnsavedChanges`, so clearing it here
+				// would let the window close without a prompt on the one path where there is
+				// definitely something unsaved.
+				return false;
 			}
-			// The undo wins, and this write is dropped -- store and history both. It was
-			// in flight when the user pressed Ctrl+Z (or switched projects), so its document
-			// is the one they just asked to leave: installing it reverted the undo on screen,
-			// and recording it put a FORWARD state on `past` and cleared `future`, so the
-			// redo they had just earned was gone.
-			//
-			// Dropped rather than reverted, because reverting is not this write's to do: the
-			// bytes are already on disk, and it is the undo's own persist -- issued from
-			// `useUndoRedoShortcuts`'s `onAfter` the moment it ran, so ordered after this one
-			// on the same IPC channel -- that puts the restored document back over them.
-			// `dirty` is deliberately left set for exactly that reason.
-			if (currentWriteEpoch() !== epoch) return false;
-			const parsed = parseDocument(result.document);
-			set({
-				document: parsed,
-				revision: get().revision + 1,
-				dirty: false,
-				lastSavedAt: new Date(),
-			});
-			// Recorded HERE, below the write, and not above it. `saveDocument` resolves
-			// false on a handled failure (a read-only project) and callers read that as
-			// "the edit did not happen". Recording first left `past` holding a snapshot
-			// identical to the live document and `future` wiped, so the next Ctrl+Z
-			// visibly did nothing and redo was gone -- #433's own symptom, re-created by
-			// the fix for it. Nothing between the `set` above and this line awaits, so no
-			// undo can observe the half-applied state.
-			recordHistory(base, document, opts);
-			return true;
-		} catch (error) {
-			// Logged as well as toasted: a toast is gone in five seconds, and "my edit
-			// disappeared" gets reported much later than that.
-			console.error("[project] failed to save document:", error);
-			toast.error(toastText("editor", "project.failedToSave"), {
-				description: error instanceof Error ? error.message : String(error),
-			});
-			// `dirty` is deliberately left alone. It is the only input to the
-			// `beforeunload` guard and to `setHasUnsavedChanges`, so clearing it here
-			// would let the window close without a prompt on the one path where there is
-			// definitely something unsaved.
-			return false;
+		} finally {
+			endDocumentSave();
 		}
 	},
 

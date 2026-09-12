@@ -1596,3 +1596,91 @@ describe("useTimeline audio tracks", () => {
 		expect(probeAudioDurationMock).toHaveBeenCalledTimes(1);
 	});
 });
+
+// The wand (`V4Timeline.runAutoZooms`) captures this callback, awaits a
+// multi-second cursor-telemetry IPC, and only then calls it. Anything the user
+// commits during that wait is in the store but not in the callback's render
+// closure, so reading the closure writes back a snapshot that drops their edit.
+// Its `add*` siblings compute and save in the same tick, which is why this one
+// is the reachable case.
+describe("useTimeline.addZoomsBulk reads the document at write time", () => {
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		toastErrorMock.mockReset();
+		bridgeMocks.save.mockImplementation(async (document: AxcutDocument) => ({
+			success: true,
+			document,
+		}));
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: sampleDoc,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+	});
+
+	it("does not write back the document from before the telemetry wait", async () => {
+		const { result } = renderTimeline();
+		// Captured the way the wand captures it: before the wait, not after.
+		const addZoomsBulk = result.current.addZoomsBulk;
+
+		// The user's edit lands while the wand is off fetching telemetry.
+		const edited: AxcutDocument = {
+			...sampleDoc,
+			project: { ...sampleDoc.project, title: "Edited while the wand was busy" },
+		};
+		act(() => {
+			useProjectStore.setState({ document: edited, revision: 2 });
+		});
+
+		let added: number | undefined;
+		await act(async () => {
+			added = await addZoomsBulk([
+				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 } },
+			]);
+		});
+
+		expect(added).toBe(1);
+		const saved = bridgeMocks.save.mock.calls.at(-1)?.[0] as AxcutDocument;
+		// The zoom was added, and the edit is still there.
+		expect(saved.zoomRanges).toHaveLength(1);
+		expect(saved.project.title).toBe("Edited while the wand was busy");
+		expect(useProjectStore.getState().document?.project.title).toBe(
+			"Edited while the wand was busy",
+		);
+	});
+
+	// Reading the document fresh is what makes this reachable: the spans were built
+	// from the OLD project's telemetry and its ruler, so writing them into whatever is
+	// loaded now puts one project's zooms in another. `saveDocument`'s epoch check does
+	// not cover it -- the write is issued after the switch, not across it.
+	it("writes nothing when the project changed during the telemetry wait", async () => {
+		const { result } = renderTimeline();
+		const addZoomsBulk = result.current.addZoomsBulk;
+
+		// The user switches projects while the wand is off fetching telemetry.
+		act(() => {
+			useProjectStore.setState({
+				projectId: "proj_switched_to",
+				document: sampleDoc,
+				revision: 2,
+			});
+		});
+
+		let added: number | undefined;
+		await act(async () => {
+			added = await addZoomsBulk([
+				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 } },
+			]);
+		});
+
+		expect(added).toBe(0);
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+	});
+});

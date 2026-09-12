@@ -56,6 +56,11 @@
 		"useEditableCursor": "편집 가능한 커서 사용",
 		"useSystemCursor": "시스템 커서 사용"
 	},
+	"autoZoom": {
+		"enable": "녹화 후 자동 확대 켜기",
+		"disable": "녹화 후 자동 확대 끄기",
+		"needsEditableCursor": "자동 확대는 편집 가능한 커서가 필요합니다. 커서 모드를 전환하세요."
+	},
 	"sourceSelector": {
 		"loading": "소스 불러오는 중...",
 		"screens": "화면 ({{count}}개)",

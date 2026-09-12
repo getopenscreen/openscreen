@@ -461,10 +461,14 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		// instead — the gate then reads "failed" (not "queued forever"), and one
 		// manual retry re-runs them all once the engine is back.
 		if (failure.kind === "error") failRemainingQueue(projectId, failure);
-		// A silent recording is an expected outcome, not an incident: the media
-		// card and every gated button already say so. Only surface the noisy
-		// (retryable) failures, plus anything the user asked for by hand.
-		if (failure.kind === "error" || job.manual) {
+		// A silent recording is an expected outcome, not an incident: the media card
+		// and every gated button already say so, so the background pass stays quiet.
+		// A run the user asked for by hand still gets an answer — but an
+		// informational one, because "this file has no audio" is the answer. Issue
+		// #628 got a red "Transcription failed" quoting ffmpeg's stderr instead.
+		if (isPermanentFailure(failure.kind)) {
+			if (job.manual) toast.info(toastText("mediaStage.noAudioTrackHint"));
+		} else {
 			toast.error(toastText("mediaStage.transcriptionFailed"), { description: failure.message });
 		}
 	} finally {

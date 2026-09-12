@@ -1,0 +1,169 @@
+/**
+ * One ranked series, so one colour: the bars carry magnitude and nothing else,
+ * and every piece of text stays on a text token rather than borrowing the
+ * accent. Sized to sit inside the post's measure without becoming the post.
+ */
+
+.panel {
+	margin: 1.75rem 0 2.25rem;
+	padding: 1.25rem 1.4rem 1rem;
+	border: 1px solid var(--os-border);
+	border-radius: 14px;
+	background: var(--os-surface-1);
+	box-shadow: var(--os-elev-card);
+}
+
+.head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem 1rem;
+	align-items: baseline;
+	justify-content: space-between;
+	margin-bottom: 0.9rem;
+}
+
+.kicker {
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 0.7rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--os-meta);
+}
+
+.meta {
+	font-size: 0.78rem;
+	color: var(--os-muted);
+}
+
+.fallback {
+	margin: 0;
+	font-size: 0.9rem;
+	color: var(--os-muted);
+}
+
+/* Overrides the blog's own table rules, which draw a card this table is
+   already sitting inside. */
+.table {
+	display: table;
+	width: 100%;
+	margin: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	border-collapse: collapse;
+}
+
+/* Read, never seen: the columns are self-evident, but a bar chart with no
+   header row is a table with no header row to a screen reader. */
+.table thead {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+}
+
+.table tr {
+	border: none;
+	background: transparent;
+}
+
+.table td {
+	border: none;
+	padding: 0.42rem 0;
+	vertical-align: middle;
+}
+
+.rank {
+	width: 1.9rem;
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 0.72rem;
+	color: var(--os-meta);
+}
+
+.name {
+	white-space: nowrap;
+	padding-right: 0.9rem !important;
+	font-size: 0.88rem;
+	font-weight: 600;
+	color: var(--os-fg-2);
+}
+
+.build {
+	margin-left: 0.45rem;
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 0.7rem;
+	font-weight: 400;
+	color: var(--os-meta);
+}
+
+
+/* The flex row lives in a span inside the cell: display:flex on the <td>
+   itself drops its table-cell box and the columns stop lining up. */
+.plotCell {
+	width: 100%;
+}
+
+.plot {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+}
+
+.track {
+	position: relative;
+	flex: 1;
+	min-width: 60px;
+	height: 10px;
+}
+
+.bar {
+	display: block;
+	height: 100%;
+	border-radius: 0 4px 4px 0;
+	background: var(--os-accent);
+}
+
+.floor {
+	position: absolute;
+	top: -3px;
+	bottom: -3px;
+	width: 1px;
+	background: var(--os-fg-2);
+	opacity: 0.55;
+}
+
+.value {
+	min-width: 3.1rem;
+	text-align: right;
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--os-fg-2);
+}
+
+.note {
+	margin: 0.85rem 0 0;
+	font-size: 0.76rem;
+	line-height: 1.5;
+	color: var(--os-muted);
+}
+
+.link {
+	display: inline-block;
+	margin-top: 0.9rem;
+	font-size: 0.82rem;
+	color: var(--os-accent);
+}
+
+@media (max-width: 600px) {
+	.name {
+		white-space: normal;
+		font-size: 0.82rem;
+	}
+
+	.build {
+		display: block;
+		margin-left: 0;
+	}
+}

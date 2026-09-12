@@ -117,6 +117,16 @@ export function CameraIcon({ off, className }: { off: boolean; className?: strin
 	);
 }
 
+export function AutoZoomIcon({ className }: { className?: string }) {
+	return (
+		<svg {...HUD_SVG_PROPS} className={className} aria-hidden="true">
+			<circle cx="10.5" cy="10.5" r="5.5" />
+			<path d="M14.5 14.5 20 20" />
+			<path d="M10.5 8v5M8 10.5h5" />
+		</svg>
+	);
+}
+
 export function CursorIcon({ className }: { className?: string }) {
 	return (
 		<svg

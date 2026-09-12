@@ -110,6 +110,8 @@
 		"microphone": "マイク",
 		"camera": "カメラ",
 		"cursorHighlight": "カーソルの強調表示",
+		"autoZoom": "録画後に自動ズーム",
+		"autoZoomNeedsEditableCursor": "自動ズームには編集可能なカーソルが必要です。カーソルモードを切り替えてください。",
 		"on": "オン",
 		"off": "オフ",
 		"loading": "読み込み中…",

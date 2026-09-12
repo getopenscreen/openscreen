@@ -4,6 +4,7 @@ import { formatTimePadded } from "../../utils/timeUtils";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import {
+	AutoZoomIcon,
 	CameraIcon,
 	CursorIcon,
 	getIcon,
@@ -250,6 +251,35 @@ export const HudSettingsButton = memo(function HudSettingsButton({
 				<Settings size={17} />
 			</button>
 		</Tooltip>
+	);
+});
+
+export const HudAutoZoomButton = memo(function HudAutoZoomButton({
+	enabled,
+	disabled,
+	label,
+	onClick,
+}: {
+	enabled: boolean;
+	disabled: boolean;
+	label: string;
+	onClick: () => void;
+}) {
+	return (
+		<button
+			data-testid="launch-auto-zoom-button"
+			className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border-0 cursor-pointer transition-all duration-150 active:scale-95 ${hudDisabledClasses} ${styles.electronNoDrag} ${
+				enabled
+					? "bg-[#10b981] text-[#08090d] hover:bg-[#0e9e6e]"
+					: "bg-transparent text-[#828c99] hover:bg-[#1a1e25] hover:text-[#f5f7fa]"
+			}`}
+			aria-pressed={enabled}
+			onClick={onClick}
+			disabled={disabled}
+			title={label}
+		>
+			<AutoZoomIcon />
+		</button>
 	);
 });
 

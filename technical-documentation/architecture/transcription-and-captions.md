@@ -85,7 +85,10 @@ What the store owns and what it does not:
   auto pass skips it on the next load instead of re-extracting its audio to
   rediscover it. Everything else stays in memory for the session and is retried
   on the next load. A successful manual retry clears the stored verdict in the
-  same save that writes the transcript.
+  same save that writes the transcript. The verdict is read off the exception
+  MESSAGE (`classifyTranscriptionError`), because `ipcRenderer.invoke` rebuilds a
+  plain `Error` and drops the class — so a new decoder phrasing has to be added
+  there or its silence gets filed as a generic failure, which is issue #628.
 - **No local engine, no background pass.** Without `window.electronAPI.stt`
   (browser preview, e2e shim) nothing is queued; a manual request still runs.
 

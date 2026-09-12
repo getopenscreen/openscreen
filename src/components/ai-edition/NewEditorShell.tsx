@@ -15,8 +15,8 @@ import {
 	migrateRawDocumentToCurrent,
 } from "@/lib/ai-edition/document/migrate";
 import {
-	applyProbedDuration,
-	replaceTimeline as replaceTimelineOp,
+	documentAfterProbedDuration,
+	PLACEHOLDER_DURATION_SEC,
 } from "@/lib/ai-edition/document/timeline";
 import {
 	type InsertSide,
@@ -25,8 +25,13 @@ import {
 	setDocumentWordText,
 } from "@/lib/ai-edition/document/transcript";
 import { isModalOpen } from "@/lib/ai-edition/modalGuard";
-import { type AxcutAudioTrack, type AxcutClip, documentSchema } from "@/lib/ai-edition/schema";
-import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import {
+	type AxcutAudioTrack,
+	type AxcutClip,
+	type AxcutDocument,
+	documentSchema,
+} from "@/lib/ai-edition/schema";
+import { saveWithDeadline, useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
 	useAutoTranscription,
@@ -61,7 +66,7 @@ import {
 	type UnsavedChoice,
 } from "./Modals";
 import { Preview } from "./Preview";
-import { importPendingRecording } from "./recordingImport";
+import { importPendingRecording, maybeSaveFreshRecordingAutoZooms } from "./recordingImport";
 import { AddAudioLayerDialog } from "./v4/AddAudioLayerDialog";
 import v4 from "./v4/EditorShellV4.module.css";
 import { type EditorMode, EditorTopBar } from "./v4/EditorTopBar";
@@ -114,6 +119,72 @@ function NativePlaybackSync({
 export const DEFAULT_TIMELINE_HEIGHT_PX = 392;
 export const MIN_TIMELINE_HEIGHT_PX = 160;
 export const MAX_TIMELINE_HEIGHT_PX = 560;
+
+/**
+ * What one `loadedmetadata` event does, from the front of the write queue.
+ *
+ * Exported because it is only reachable from outside the component: the event
+ * arrives through Preview, PreviewCanvas, VirtualPreview and a real `<video>`
+ * decoding real media, which no test environment here provides. The decision
+ * itself lives in `documentAfterProbedDuration`, and is tested next to it.
+ *
+ * Every store read is at call time, not from a closure. By the time this runs the
+ * document may have moved on, and `originatingProjectId` is what says whether it
+ * moved to a different project.
+ */
+export async function runLoadedMetadataWrite(
+	durationSec: number,
+	assetId: string,
+	originatingProjectId: string | undefined,
+	deps: {
+		/** Defaults to the real auto-zoom pass; injected in tests. */
+		autoZoom?: (document: AxcutDocument) => Promise<unknown>;
+		saveTimeoutMs?: number;
+	} = {},
+): Promise<void> {
+	// ponytail: WebM recordings from MediaRecorder report NaN/Infinity until the
+	// main-process EBML fix lands. Seed against a placeholder so the timeline never
+	// gets stuck empty; `documentAfterProbedDuration` is what refuses to write it over
+	// a length something already measured. Auto-zoom is not fooled by it either --
+	// `hasProbedDurationForPendingAsset` asks the CLIPS, not the asset, and a clip
+	// still sitting at the placeholder reads as waiting.
+	const finite = Number.isFinite(durationSec) && durationSec > 0;
+	const knownSec = finite ? durationSec : PLACEHOLDER_DURATION_SEC;
+	const state = useProjectStore.getState();
+	// The placeholder exists so the FIRST clip is not empty, nothing more. Once a
+	// timeline is there, a length nothing measured has nothing to fold in -- and
+	// re-applying it to a clip already sitting at it means a `history: false` write on
+	// every metadata event for the same unmeasured take.
+	const next =
+		finite || state.document?.timeline.clips.length === 0
+			? documentAfterProbedDuration(state.document, assetId, knownSec, originatingProjectId)
+			: null;
+	if (next) {
+		// `history: false`: this is the probed duration being folded into the document
+		// on load, not something the user did — an undo landing on it would empty their
+		// timeline. Auto-zoom below is a later, undoable suggestion.
+		//
+		// Awaited so the queue can serialise it, but bounded: `saveDocument` awaits the
+		// bridge with no deadline of its own and never rejects, so a main process that
+		// stops answering would hold this queue slot — and every edit behind it — for
+		// the life of the renderer. The abandoned write is safe to let go of.
+		await saveWithDeadline(state.saveDocument(next, { history: false }), deps.saveTimeoutMs);
+	}
+	// Re-checked rather than assumed: the await above is exactly when a project
+	// switch lands, and the check inside the decision spoke only for the document as
+	// it was before it. Handing the auto-zoom pass another project's document would
+	// not write zooms into it — `canApplyFreshRecordingAutoZooms` refuses a document
+	// that does not hold the pending recording — but the passes before that check DO
+	// clear the pending flag on what they are given, so the take that was actually
+	// imported would silently lose its auto-zoom. A closed project ends the step for
+	// the same reason: there is nothing left this event belongs to.
+	const settled = useProjectStore.getState().document;
+	if (!settled || settled.project.id !== originatingProjectId) return;
+	// A document with no assets has no take to suggest zooms for. The auto-zoom pass
+	// would refuse it anyway; not calling it keeps "nothing to do" meaning nothing.
+	if (settled.assets.length === 0) return;
+	await (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(settled);
+}
 
 export function NewEditorShell() {
 	const te = useScopedT("editor");
@@ -423,53 +494,26 @@ export function NewEditorShell() {
 
 	const handleLoadedMetadata = useCallback(
 		(durationSec: number, assetId: string) => {
-			// ponytail: WebM recordings from MediaRecorder report NaN/Infinity
-			// until the main-process EBML fix lands. Fall back to a 60s seed if
-			// duration is unknown so the timeline never gets stuck on an empty
-			// placeholder. All store reads go through getState() to avoid
-			// stale-closure bugs.
-			const known = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 60;
-			const state = useProjectStore.getState();
-			setSourceDuration(known);
-			const doc = state.document;
-			if (!doc || doc.assets.length === 0) return;
-			if (doc.timeline.clips.length === 0) {
-				// ponytail: replaceTimeline derives clip length from
-				// asset.durationSec, which import never populates — without this
-				// patch the first auto-created clip silently comes out empty
-				// (normalizeIntervals clamps against a 0 duration and drops it).
-				const primaryAssetId = doc.project.primaryAssetId ?? doc.assets[0]?.id;
-				const docWithDuration = primaryAssetId
-					? {
-							...doc,
-							assets: doc.assets.map((a) =>
-								a.id === primaryAssetId ? { ...a, durationSec: known } : a,
-							),
-						}
-					: doc;
-				const next = replaceTimelineOp(
-					docWithDuration,
-					[{ startSec: 0, endSec: known }],
-					"Auto-created full-duration clip",
-				);
-				// `history: false` for both writes in this callback: they are the probed
-				// duration being folded into the document on load, not something the user
-				// did — an undo landing on one of them would empty their timeline.
-				void state.saveDocument(next, { history: false });
-				return;
-			}
-			// Hand the probed duration to the pure document layer: it patches only the
-			// clips of THIS asset that are still waiting for a real length (the
-			// pre-probe placeholder, or the extent-less clip a legacy v2 import mints),
-			// shifts what follows, and brings the modifiers along — anchoring the ones
-			// migration had to leave unanchored. Returns the document untouched when
-			// nothing is waiting, so there is nothing to guard here.
-			const next = applyProbedDuration(doc, assetId, known);
-			if (next !== doc) {
-				void state.saveDocument(next, { history: false });
-			}
+			setSourceDuration(
+				Number.isFinite(durationSec) && durationSec > 0 ? durationSec : PLACEHOLDER_DURATION_SEC,
+			);
+			// Read before queueing: this is the project the event belongs to.
+			const originatingProjectId = useProjectStore.getState().document?.project.id;
+			// On the shared write queue, and reading the document inside it. Folding a
+			// probed duration in is a read-modify-write of the whole document, which is
+			// what `useSequentialTimelineOps` exists for -- its header says anything that
+			// reads the doc and saves it back belongs there. Off the queue, `getState()`
+			// returns the PRE-edit document while a user's save is still in flight (the
+			// store is only written once the bridge answers), and the full snapshot built
+			// from it lands after theirs and takes their edit with it.
+			//
+			// The auto-zoom pass goes on the same queued task rather than after it, so a
+			// fresh take's suggestions are serialised against user edits too.
+			void enqueueTimelineWrite(() =>
+				runLoadedMetadataWrite(durationSec, assetId, originatingProjectId),
+			);
 		},
-		[setSourceDuration],
+		[setSourceDuration, enqueueTimelineWrite],
 	);
 
 	const handleSeek = useCallback(
@@ -1559,6 +1603,10 @@ export function NewEditorShell() {
 									hasProject={hasProject}
 									hasAsset={hasAsset}
 									videoSources={videoSources}
+									// While the timeline is empty the preview mounts this asset rather
+									// than whichever one sorts first, so the clip `handleLoadedMetadata`
+									// seeds comes from the video it is sized against.
+									primaryAssetId={document?.project.primaryAssetId}
 									// Imported audio tracks (issue #350). `videoSources` already
 									// resolves a URL for every asset (audio included), so it doubles as
 									// the audio source list; VirtualPreview looks each track up by assetId.

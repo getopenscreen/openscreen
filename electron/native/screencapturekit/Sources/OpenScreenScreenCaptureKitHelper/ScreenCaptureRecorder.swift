@@ -65,6 +65,7 @@ struct RecordingRequest: Decodable {
 
 	let schemaVersion: Int?
 	let recordingId: Int?
+	let excludedWindowIds: [UInt32]?
 	let source: Source
 	let video: Video
 	let audio: Audio
@@ -387,7 +388,22 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			guard let display = content.displays.first(where: { $0.displayID == displayId }) else {
 				throw HelperError.sourceNotFound("No ScreenCaptureKit display found for id \(displayId).")
 			}
-			let filter = SCContentFilter(display: display, excludingWindows: [])
+			let requestedWindowIDs = request.excludedWindowIds ?? []
+			let resolvedWindowIDs = resolveCaptureExcludedWindowIDs(
+				requestedWindowIDs: requestedWindowIDs,
+				availableWindowIDs: content.windows.map(\.windowID)
+			)
+			let resolvedWindowIDSet = Set(resolvedWindowIDs)
+			let excludedWindows = content.windows.filter {
+				resolvedWindowIDSet.contains($0.windowID)
+			}
+			let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
+			emit([
+				"event": "capture-window-exclusion",
+				"requestedWindowIds": requestedWindowIDs,
+				"resolvedWindowIds": resolvedWindowIDs,
+				"excludedWindowCount": excludedWindows.count,
+			])
 			let size = captureSize(
 				for: filter,
 				fallbackPointSize: display.frame.size,
@@ -465,6 +481,12 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			configuration.setValue(true, forKey: "captureMicrophone")
 			if let deviceId = resolveMicrophoneCaptureDeviceID() {
 				configuration.setValue(deviceId, forKey: "microphoneCaptureDeviceID")
+			} else if requestedASpecificMicrophone {
+				emit([
+					"event": "warning",
+					"code": "microphone-defaulted",
+					"message": "The requested microphone could not be resolved; capturing the default input.",
+				])
 			}
 		} else {
 			nativeMicrophoneEnabled = false
@@ -778,6 +800,31 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		streamConfig.responds(to: Selector(("setCaptureMicrophone:"))) &&
 			streamConfig.responds(to: Selector(("setMicrophoneCaptureDeviceID:"))) &&
 			SCStreamOutputType(rawValue: microphoneOutputTypeRawValue) != nil
+	}
+
+	/// Did the user actually ask for a particular microphone?
+	///
+	/// The same test the Windows helper makes before emitting this warning
+	/// (`wantedAParticularMicrophone` in wgc-capture/src/wasapi_loopback_capture.cpp),
+	/// and it has to be made here too because `resolveMicrophoneCaptureDeviceID()`
+	/// returns nil for two very different situations. One is a chosen microphone that
+	/// nothing here could find, which is worth saying out loud. The other is no choice
+	/// at all, which is the common case and has to stay silent: the HUD leaves both
+	/// fields unset until its picker moves off "default", and persists the literal id
+	/// "default" when the user picks Chromium's own Default entry — so both shapes
+	/// arrive here meaning "the system default is fine", not "your microphone is gone".
+	private var requestedASpecificMicrophone: Bool {
+		let deviceId =
+			request.audio.microphone.deviceId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+		let deviceName =
+			request.audio.microphone.deviceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+		// "default" has to veto the name, not sit beside it. Chromium's picker
+		// persists BOTH fields from whichever entry was clicked, and its Default
+		// entry is labelled "Default - Microphone (…)" — a string no AVCaptureDevice
+		// localizedName ever matches. Reading the name here meant that picking
+		// "Default" warned about a microphone the user never chose.
+		if deviceId == "default" { return false }
+		return !deviceId.isEmpty || !deviceName.isEmpty
 	}
 
 	private func resolveMicrophoneCaptureDeviceID() -> String? {

@@ -28,6 +28,7 @@ import {
 	withClipsChanged,
 } from "../document/timeline";
 import type { AxcutAudioTrack, AxcutClipCropRegion, AxcutDocument } from "../schema";
+import { appendAutoZoomSuggestions } from "../timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "../timeline/camera";
 import { probeAudioDuration, probeVideoDimensions, probeVideoDuration } from "../timeline/duration";
 import {
@@ -334,31 +335,31 @@ export function useTimeline() {
 	// Returns the count actually added (0 when there's no doc/suggestions).
 	const addZoomsBulk = useCallback(
 		async (suggestions: AutoZoomSuggestion[]) => {
-			if (!document || suggestions.length === 0) return 0;
-			const anchored = suggestions.flatMap((s) =>
-				anchorRegionsWithDerivedMs(
-					[
-						{
-							id: createId("zoom"),
-							startMs: Math.round(s.span.start),
-							endMs: Math.round(s.span.end),
-							depth: 3 as const,
-							focus: { cx: s.focus.cx, cy: s.focus.cy },
-							focusMode: "auto" as const,
-						},
-					],
-					document.timeline.clips,
-					() => createId("zoom"),
-				),
-			);
-			const next: AxcutDocument = {
-				...document,
-				zoomRanges: [...document.zoomRanges, ...anchored] as AxcutDocument["zoomRanges"],
-			};
+			// Read from the store, not off the render closure. Unlike its `add*` siblings,
+			// which compute and save in the same tick, this one is reached from the wand
+			// AFTER a multi-second cursor-telemetry IPC: the closure document is the one
+			// from before that wait, so anything the user committed during it is missing
+			// from the snapshot, and writing the snapshot back drops their edit. Reading
+			// here is also what lets this compose with `useSequentialTimelineOps` -- same
+			// reason as `applyClipEdit`, `setTrimEntries` and `insertClipAt`.
+			const doc = useProjectStore.getState().document;
+			if (!doc || suggestions.length === 0) return 0;
+			// The same wait makes the PROJECT stale, and reading the document fresh is what
+			// exposes it: the suggestions were built from the OLD project's telemetry and its
+			// ruler, so applying them to whatever is loaded now writes one project's zooms into
+			// another. `saveDocument`'s epoch check cannot see this one -- the write is issued
+			// after the switch, not across it -- which is the same reason
+			// `documentAfterProbedDuration` carries an `originatingProjectId`.
+			if (useProjectStore.getState().projectId !== projectId) return 0;
+			// One append shared with the fresh-recording import path, so the wand and the
+			// import cannot drift apart. It anchors against the SAME document the write is
+			// built from: anchoring on stale clips and saving the fresh document would
+			// place the regions against a timeline that no longer exists.
+			const next = appendAutoZoomSuggestions(doc, suggestions);
 			if (!(await saveDocument(next, { history: true }))) return 0;
 			return suggestions.length;
 		},
-		[document, saveDocument],
+		[projectId, saveDocument],
 	);
 
 	const addTrim = useCallback(

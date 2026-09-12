@@ -28,7 +28,7 @@ import {
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
-import { fromFileUrl, toFileUrl } from "@/components/video-editor/projectPersistence";
+import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
@@ -52,6 +52,7 @@ import { useTimelineTranscriptGate } from "@/lib/ai-edition/store/transcriptionS
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
+import { collectAutoZoomSuggestionsForLatestDocument } from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatSec } from "@/lib/ai-edition/timeline/format";
 import {
@@ -65,10 +66,6 @@ import {
 	resolveTimelineSpanToTrim,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
-import {
-	type AutoZoomSuggestion,
-	buildAutoZoomSuggestionsForClips,
-} from "@/lib/ai-edition/timeline/zoom-suggestions";
 import { formatBinding } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
@@ -1484,34 +1481,23 @@ export function V4Timeline({
 	// timeline was previously never consulted at all.
 	const runAutoZooms = useCallback(async () => {
 		setAutoEnhanceOpen(false);
-		const sources = videoSources.filter((source) => clips.some((c) => c.assetId === source.id));
-		if (sources.length === 0) {
+		const document = useProjectStore.getState().document;
+		if (!document || document.timeline.clips.length === 0) {
 			toast.error(t("toolbar.importRecordingFirst"));
 			return;
 		}
 		setAutoBusy(true);
 		try {
-			// Read once, up front: every clip reserves against the zooms the document
-			// ALREADY holds, and two clips can never contest the same stretch of ruler, so
-			// nothing here depends on the order the assets are visited — which is what lets
-			// their telemetry be fetched concurrently rather than one IPC round trip after
-			// another. `Promise.all` preserves input order, so the suggestions come out in
-			// the same sequence a loop would have produced.
-			const existingRegions = tl.zoomRegions.map((z) => ({ startMs: z.startMs, endMs: z.endMs }));
-			const perSource = await Promise.all(
-				sources.map(async (source) => {
-					const telemetry =
-						(await nativeBridgeClient.cursor.getTelemetry(fromFileUrl(source.src))) ?? [];
-					return buildAutoZoomSuggestionsForClips({
-						cursorTelemetry: telemetry,
-						assetId: source.id,
-						clips,
-						existingRegions,
-						defaultDurationMs: 2000,
-					});
-				}),
+			// Collected against the document as it is now, and again if the clips moved
+			// while the telemetry was being read: the suggestions carry timeline spans and
+			// `addZoomsBulk` anchors them against whatever the store holds at write time,
+			// so a trim or a reorder during that multi-second wait would land them on
+			// different media.
+			const collected = await collectAutoZoomSuggestionsForLatestDocument(
+				() => useProjectStore.getState().document,
+				(videoPath) => nativeBridgeClient.cursor.getTelemetry(videoPath),
 			);
-			const suggestions: AutoZoomSuggestion[] = perSource.flat();
+			const suggestions = collected?.suggestions ?? [];
 			if (suggestions.length === 0) {
 				toast.info(t("toolbar.noAutoZoomMoments"), {
 					description: t("toolbar.noAutoZoomMomentsDescription"),
@@ -1533,7 +1519,7 @@ export function V4Timeline({
 		} finally {
 			setAutoBusy(false);
 		}
-	}, [videoSources, clips, tl, t]);
+	}, [tl, t]);
 
 	// Auto-enhance option 2 — hand a generic prompt to the AI agent (smart
 	// zooms + cuts) via the chat prompt-bus. The chat panel owns the outcome

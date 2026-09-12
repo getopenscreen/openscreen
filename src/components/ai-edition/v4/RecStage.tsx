@@ -9,6 +9,7 @@ import {
 	MousePointer2,
 	Volume2,
 	VolumeX,
+	ZoomIn,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AudioLevelMeter } from "@/components/ui/audio-level-meter";
@@ -28,6 +29,7 @@ interface RecordingPrefsState {
 	camDeviceId: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
+	autoZoomEnabled: boolean;
 }
 
 const DEFAULT_PREFS: RecordingPrefsState = {
@@ -38,6 +40,7 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	camDeviceId: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	autoZoomEnabled: true,
 };
 
 /**
@@ -67,7 +70,13 @@ export function RecStage({
 		void window.electronAPI
 			?.getRecordingPrefs?.()
 			.then((p) => {
-				if (!cancelled && p) setPrefsState(p as RecordingPrefsState);
+				if (!cancelled && p) {
+					setPrefsState({
+						...DEFAULT_PREFS,
+						...p,
+						autoZoomEnabled: p.autoZoomEnabled !== false,
+					} as RecordingPrefsState);
+				}
 			})
 			.catch((err) => {
 				// Bare ipcRenderer.invoke — rejects if the main handler throws. Keeping
@@ -202,6 +211,12 @@ export function RecStage({
 							<span className={styles.recDot} aria-hidden />
 							<span>{sourceLabel}</span>
 						</div>
+						{prefs.micEnabled && (
+							<div className={styles.recMicMeter}>
+								<MicOn size={13} />
+								<AudioLevelMeter level={micLevel} className={styles.recLevelMeter} />
+							</div>
+						)}
 					</div>
 				</div>
 
@@ -263,38 +278,35 @@ export function RecStage({
 						</div>
 						<div className={styles.recRowControl}>
 							{prefs.micEnabled ? (
-								<>
-									{micDevices.isLoading ? (
-										<span className={styles.recRowMuted}>
-											<Loader2 size={13} className="animate-spin" />
-											{t("rec.loading")}
-										</span>
-									) : (
-										<select
-											className={styles.recSelect}
-											value={prefs.micDeviceId ?? micDevices.selectedDeviceId}
-											onChange={(e) => {
-												const deviceId = e.target.value;
-												micDevices.setSelectedDeviceId(deviceId);
-												// The label travels with the id: the native Windows
-												// helper selects a microphone by NAME, and records the
-												// Windows default endpoint when it is missing.
-												updatePrefs({
-													micDeviceId: deviceId,
-													micDeviceName:
-														micDevices.devices.find((d) => d.deviceId === deviceId)?.label ?? null,
-												});
-											}}
-										>
-											{micDevices.devices.map((d) => (
-												<option key={d.deviceId} value={d.deviceId}>
-													{d.label}
-												</option>
-											))}
-										</select>
-									)}
-									<AudioLevelMeter level={micLevel} className={styles.recLevelMeter} />
-								</>
+								micDevices.isLoading ? (
+									<span className={styles.recRowMuted}>
+										<Loader2 size={13} className="animate-spin" />
+										{t("rec.loading")}
+									</span>
+								) : (
+									<select
+										className={styles.recSelect}
+										value={prefs.micDeviceId ?? micDevices.selectedDeviceId}
+										onChange={(e) => {
+											const deviceId = e.target.value;
+											micDevices.setSelectedDeviceId(deviceId);
+											// The label travels with the id: the native Windows
+											// helper selects a microphone by NAME, and records the
+											// Windows default endpoint when it is missing.
+											updatePrefs({
+												micDeviceId: deviceId,
+												micDeviceName:
+													micDevices.devices.find((d) => d.deviceId === deviceId)?.label ?? null,
+											});
+										}}
+									>
+										{micDevices.devices.map((d) => (
+											<option key={d.deviceId} value={d.deviceId}>
+												{d.label}
+											</option>
+										))}
+									</select>
+								)
 							) : null}
 							<button
 								type="button"
@@ -365,6 +377,27 @@ export function RecStage({
 							}
 						>
 							{cursorHighlight ? t("rec.on") : t("rec.off")}
+						</button>
+					</div>
+
+					<div className={styles.recRow}>
+						<div className={styles.recRowLabel}>
+							<ZoomIn size={15} />
+							{t("rec.autoZoom")}
+						</div>
+						<button
+							type="button"
+							data-testid="rec-auto-zoom-button"
+							className={`${styles.recToggleBtn}${prefs.autoZoomEnabled !== false && cursorHighlight ? ` ${styles.on}` : ""}`}
+							aria-pressed={prefs.autoZoomEnabled !== false && cursorHighlight}
+							disabled={!cursorHighlight}
+							title={cursorHighlight ? undefined : t("rec.autoZoomNeedsEditableCursor")}
+							onClick={() => {
+								if (!cursorHighlight) return;
+								updatePrefs({ autoZoomEnabled: prefs.autoZoomEnabled === false });
+							}}
+						>
+							{prefs.autoZoomEnabled !== false && cursorHighlight ? t("rec.on") : t("rec.off")}
 						</button>
 					</div>
 				</div>

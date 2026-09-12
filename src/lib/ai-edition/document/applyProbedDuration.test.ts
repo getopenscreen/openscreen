@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import type { AxcutDocument } from "../schema";
 import { documentSchema } from "../schema";
 import { migrateProjectDataToAxcutDocument } from "./migrate";
-import { applyProbedDuration, PLACEHOLDER_DURATION_SEC } from "./timeline";
+import { applyProbedDuration, PLACEHOLDER_DURATION_SEC, replaceTimeline } from "./timeline";
 
 /** A v1.7 project file: one recording, one zoom region at 6–8s of that recording. */
 function legacyProjectWithZoom() {
@@ -38,6 +38,23 @@ const zoomsOf = (doc: AxcutDocument) =>
 	(doc.zoomRanges ?? []) as unknown as Array<Record<string, unknown>>;
 
 describe("applyProbedDuration — the v1.7 import gap", () => {
+	it("updates a placeholder asset after the user trimmed its clip, preserving edits", () => {
+		const doc = documentSchema.parse(migrateProjectDataToAxcutDocument(legacyProjectWithZoom()));
+		const assetId = doc.assets[0].id;
+		doc.assets[0].durationSec = PLACEHOLDER_DURATION_SEC;
+		doc.timeline.clips[0].sourceEndSec = 9;
+		doc.timeline.clips[0].timelineEndSec = 9;
+		const next = applyProbedDuration(doc, assetId, 90);
+		expect(next.assets[0].durationSec).toBe(90);
+		expect(next.timeline).toBe(doc.timeline);
+		expect(next.zoomRanges).toBe(doc.zoomRanges);
+		expect(doc.assets[0].durationSec).toBe(PLACEHOLDER_DURATION_SEC);
+		expect(
+			replaceTimeline(next, [{ startSec: 0, endSec: 80 }], "extend").timeline.clips[0].sourceEndSec,
+		).toBe(80);
+		expect(applyProbedDuration(next, assetId, 90)).toBe(next);
+		expect(applyProbedDuration(doc, "missing_asset", 90)).toBe(doc);
+	});
 	it("opens a legacy project with an extent-less clip and unanchored regions", () => {
 		// Documents the STARTING state this function exists to repair. If migration ever
 		// learns the duration itself, this expectation is what will flag it.
@@ -87,6 +104,30 @@ describe("applyProbedDuration — the v1.7 import gap", () => {
 		const next = applyProbedDuration(seeded, assetId, 12);
 		expect(next.timeline.clips[0].sourceEndSec).toBe(12);
 		expect(next.timeline.clips[0].timelineEndSec).toBe(12);
+	});
+
+	it("overwrites a leftover 60s fallback on the asset when the real duration arrives", () => {
+		const doc = documentSchema.parse(migrateProjectDataToAxcutDocument(legacyProjectWithZoom()));
+		const assetId = doc.assets[0].id;
+		const seeded: AxcutDocument = {
+			...doc,
+			assets: doc.assets.map((asset) =>
+				asset.id === assetId ? { ...asset, durationSec: PLACEHOLDER_DURATION_SEC } : asset,
+			),
+			timeline: {
+				...doc.timeline,
+				clips: [
+					{
+						...doc.timeline.clips[0],
+						sourceEndSec: PLACEHOLDER_DURATION_SEC,
+						timelineEndSec: PLACEHOLDER_DURATION_SEC,
+					},
+				],
+			},
+		};
+		const next = applyProbedDuration(seeded, assetId, 90);
+		expect(next.timeline.clips[0].sourceEndSec).toBe(90);
+		expect(next.assets[0].durationSec).toBe(90);
 	});
 
 	it("leaves a clip the user has already trimmed alone", () => {

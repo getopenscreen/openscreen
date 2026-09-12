@@ -388,6 +388,39 @@ describe("V4Timeline clip row", () => {
 		expect(pill.style.left).toBe(clipEls[1].style.left);
 	});
 
+	it("shows each clip's edited duration on the card", () => {
+		renderTimeline(CLIPS);
+		// 600s / 300s / 900s of an 1800s source: each card reads the clip's own
+		// length on the timeline (out − in), not the asset's original length. A
+		// speed region over the clip changes how long it plays, not this number.
+		expect(screen.getByText("10:00.0")).toBeInTheDocument();
+		expect(screen.getByText("5:00.0")).toBeInTheDocument();
+		expect(screen.getByText("15:00.0")).toBeInTheDocument();
+	});
+
+	it("withholds the duration from a card too small to hold it", () => {
+		// 250s at this zoom is a 125px card: past the narrow gate, so it still shows
+		// its name and pencil, but not wide enough for the timecode — which would
+		// otherwise escape the label pill and sit on the delete button. Measured in
+		// the running window, not derived here.
+		renderTimeline([clip(0, 250), clip(250, TOTAL_SEC)]);
+
+		expect(screen.queryByText("4:10.0")).not.toBeInTheDocument();
+		// The card that does have the room still reads its length.
+		expect(screen.getByText("25:50.0")).toBeInTheDocument();
+	});
+
+	it("asks for the room this card's own timecode needs, not the shortest one", () => {
+		// 600s of 3965s is a ~130px card. `0:12.0` would fit there; `10:00.0` is a
+		// character wider and does not, and `formatSec` has no hour field to stop
+		// the string growing — a clip past a hundred minutes reads `100:00.0`. A
+		// single fixed width would have let those through onto the delete button.
+		renderTimeline([clip(0, 600), clip(600, 3965)]);
+
+		expect(screen.queryByText("10:00.0")).not.toBeInTheDocument();
+		expect(screen.getByText("56:05.0")).toBeInTheDocument();
+	});
+
 	it("takes the card gutter out of each clip's own width", () => {
 		// The 6px is what separates two cards. Taken off the clip's width it stays
 		// local to that clip; inserted between them (a flex gap) it displaced every

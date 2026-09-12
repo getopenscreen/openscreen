@@ -1971,6 +1971,12 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+.tlClipDuration {
+	font: 500 10px/1.2 var(--font-mono);
+	color: rgba(255, 255, 255, 0.7);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
 .tlClipDelete {
 	position: absolute;
 	right: 8px;

@@ -151,6 +151,22 @@ const PILL_SNAP_PX = 8;
  *  clips that follow — which is what a flex `gap` did, once per junction. */
 /** Below this a clip cannot show a label and a delete button inside itself. */
 const NARROW_CLIP_PX = 120;
+// Whether a card can also carry its edited duration. The label pill is capped at
+// `calc(100% - 50px)` so it clears the delete button, and everything inside it
+// but the name is incompressible: 15px of padding, the 16px pencil, two 8px
+// gaps, and the timecode. The timecode is the part that varies — `formatSec`
+// never prints an hour field, so a clip past ten minutes reads `16:40.0` and one
+// past a hundred `100:00.0` — so the room is measured against THIS card's own
+// text rather than a single number that only ever fitted the short form.
+// Measured in the running window: 6.0px per character at 10px in the mono face,
+// and a 6-character code overlapping the delete button at a 121px card, clear at
+// 131px.
+const CLIP_LABEL_RESERVE_PX = 50;
+const CLIP_LABEL_FIXED_PX = 47;
+const CLIP_LABEL_CHAR_PX = 6;
+function cardFitsDuration(cardPx: number, text: string): boolean {
+	return cardPx >= CLIP_LABEL_RESERVE_PX + CLIP_LABEL_FIXED_PX + text.length * CLIP_LABEL_CHAR_PX;
+}
 
 const CLIP_GUTTER_PX = 6;
 /**
@@ -2173,6 +2189,9 @@ export function V4Timeline({
 								// there is no arrangement that fits a button inside that — so while
 								// it is selected the controls step outside the box instead.
 								const narrow = boxLen * pxPerSec < NARROW_CLIP_PX;
+								// The gutter is taken out of the card's own width below, so the
+								// room the label actually has is that much less than the span.
+								const durText = formatSec(dur);
 								return (
 									<div
 										key={c.id}
@@ -2232,6 +2251,9 @@ export function V4Timeline({
 											<span className={styles.tlClipName}>
 												{tl.assets.find((a) => a.id === c.assetId)?.label ?? c.assetId}
 											</span>
+											{cardFitsDuration(boxLen * pxPerSec - CLIP_GUTTER_PX, durText) ? (
+												<span className={styles.tlClipDuration}>{durText}</span>
+											) : null}
 										</div>
 										{selected ? (
 											<button

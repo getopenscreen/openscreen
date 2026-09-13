@@ -3,7 +3,7 @@
 	"provider": "openai-compatible",
 	"model": "workbench-loopback-fixture",
 	"resolvedModel": "workbench",
-	"recordedAt": "2026-09-13T13:11:49.613Z",
+	"recordedAt": "2026-09-13T13:28:13.900Z",
 	"rounds": [
 		{
 			"round": 0,

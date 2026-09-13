@@ -1,7 +1,7 @@
 {
 	"schema": 1,
 	"id": "local-pr15-scripted-control-20260913-v1",
-	"createdAt": "2026-09-13T13:11:49.912Z",
+	"createdAt": "2026-09-13T13:28:14.349Z",
 	"complete": true,
 	"scenario": {
 		"id": "target-right-clip",
@@ -10,7 +10,7 @@
 	},
 	"source": {
 		"schema": 2,
-		"commit": "6549632e335fdcf96a33f0d21cf9f39904c489f2",
+		"commit": "0a06f6537d369c3d7da9e738344bd5ebe2752bc0",
 		"dirtyManifest": [],
 		"dirtySha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
 		"effectiveManifest": [
@@ -1967,7 +1967,7 @@
 			{
 				"path": "workbench/lib/cassette.ts",
 				"kind": "text",
-				"sha256": "b5918953e261f5d657e3e5eea1d8c3c03d10af0e66b3374cbead4cd700ea6e3f"
+				"sha256": "56a2ce8b15837c22b0825ddb0aee40639c33942de24cfe3b1221f1c22e09a38e"
 			},
 			{
 				"path": "workbench/lib/editorial.ts",
@@ -2052,7 +2052,7 @@
 			{
 				"path": "workbench/lib/runner.ts",
 				"kind": "text",
-				"sha256": "069aaa6aa574ff0220ca2be5689904a0dca8b7f36d2b0719b40b5a93e86cc375"
+				"sha256": "a31aa4de75aee54c5278cf5adcf820989b2fb734ec94c59bb2497f19214fb701"
 			},
 			{
 				"path": "workbench/lib/scenario.ts",
@@ -2175,7 +2175,7 @@
 				"sha256": "ee33a1a636e830cf7d1c7293e4455709929692cd2b367001d92f8d7b84872225"
 			}
 		],
-		"effectiveSha256": "b3aff4949c1e21098de5a198e6740e09258dd0aeddb4576f773092aab4b0d72a"
+		"effectiveSha256": "e45343005268519f22bcbe52ef24063c3f1fbd9cdd47b39a9e232a9955297545"
 	},
 	"input": {
 		"fixtureSha256": "bfe5c60e22e280cbba6874dc8039cb91166b3684eeac6bd5b33485c279d91cbc",
@@ -2202,7 +2202,7 @@
 	},
 	"provider": {
 		"provider": "openai-compatible",
-		"endpointSha256": "02d6fc71637201fd193ef2159a1f4e2af9de25a111ed389814cf31b462a26677"
+		"endpointSha256": "f07b92ad241cd519cc01fc25b26f3a02349c5882136fa90f12e3c4d0ca0a5a3c"
 	},
 	"artifacts": [
 		{
@@ -2213,7 +2213,7 @@
 		{
 			"role": "main-cassette",
 			"path": "main-cassette-rep-0.json",
-			"sha256": "e763f8cb044898ab2408c387e09c7c33375797d108a98eb8c6960acd073040b3"
+			"sha256": "eab0b376a97cbd4501046b4cba5700bad537a300c384593fb1a83c9f40b95f6c"
 		},
 		{
 			"role": "recorded-checks",
@@ -2223,12 +2223,12 @@
 		{
 			"role": "report",
 			"path": "measurement-report.json",
-			"sha256": "9dff0d760f494a88356eddaaec77b41da94f9783ebe7867cea16e572cdefe273"
+			"sha256": "a24adea7bdd50da2a2ac9542fb48a6df201d1f2fdbfe8ced3df1cb331f49ef63"
 		},
 		{
 			"role": "review-receipt",
 			"path": "review.json",
-			"sha256": "1513859e14643da79ba6fd000cad7f167c4885b43b97132d924e841687d34ea3"
+			"sha256": "a4f911f6635fbefd22882234fd0482cdce8540e7ad0411d3f899ebb2d1558a35"
 		}
 	],
 	"results": {

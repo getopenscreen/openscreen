@@ -436,6 +436,24 @@ describe("LaunchWindow record button", () => {
 		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
 	});
 
+	it("provides accessible aria-labels on HUD icon controls", async () => {
+		renderLaunchWindow();
+
+		const recordButton = await screen.findByTestId("launch-record-button");
+		const systemAudioButton = screen.getByTestId("launch-system-audio-button");
+		const micButton = screen.getByTestId("launch-microphone-button");
+		const webcamButton = screen.getByTestId("launch-webcam-button");
+		const cursorButton = screen.getByTestId("launch-cursor-mode-button");
+		const studioButton = screen.getByTestId("launch-open-studio-button");
+
+		expect(recordButton).toHaveAttribute("aria-label");
+		expect(systemAudioButton).toHaveAttribute("aria-label");
+		expect(micButton).toHaveAttribute("aria-label");
+		expect(webcamButton).toHaveAttribute("aria-label");
+		expect(cursorButton).toHaveAttribute("aria-label");
+		expect(studioButton).toHaveAttribute("aria-label");
+	});
+
 	it("clears record-after-selection intent when the source picker closes without a selection", async () => {
 		renderLaunchWindow();
 		await waitForSourceSelectionSubscription();

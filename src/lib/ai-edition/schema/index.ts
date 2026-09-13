@@ -63,6 +63,8 @@ export const wordSchema = z
 		startSec: z.number().nonnegative(),
 		endSec: z.number().nonnegative(),
 		text: z.string(),
+		// Speaker label (e.g. "s1") assigned by diarization engine
+		sp: z.string().optional(),
 		// Provenance of the TEXT, so a hand-corrected word can be told from a
 		// transcribed one. Both fields are additive and absent on every document
 		// written before them (like `cameraTrack.width`), so no schema bump: an
@@ -100,6 +102,17 @@ export const transcriptSegmentSchema = z
 		path: ["endSec"],
 	});
 
+export const speakerSchema = z.object({
+	name: z.string(),
+	hue: z.number().optional(),
+});
+
+export const transcriptProvenanceSchema = z.object({
+	aligner: z.string().optional(),
+	vad: z.string().optional(),
+	segmentation: z.string().optional(),
+});
+
 export const transcriptSchema = z.object({
 	assetId: z.string().min(1),
 	language: z.string().min(1),
@@ -107,6 +120,8 @@ export const transcriptSchema = z.object({
 	sourceJsonPath: z.string().optional(),
 	segments: z.array(transcriptSegmentSchema).default([]),
 	words: z.array(wordSchema).default([]),
+	speakers: z.record(z.string(), speakerSchema).optional(),
+	provenance: transcriptProvenanceSchema.optional(),
 });
 
 export const assetVideoSchema = z.object({

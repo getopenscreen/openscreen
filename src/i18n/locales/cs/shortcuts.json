@@ -1,0 +1,43 @@
+{
+	"title": "Klávesové zkratky",
+	"customize": "Přizpůsobit",
+	"configurable": "Konfigurovatelné",
+	"fixed": "Pevné",
+	"pressKey": "Stiskněte klávesu…",
+	"clickToChange": "Klikněte pro změnu",
+	"pressEscToCancel": "Stiskněte Esc pro zrušení",
+	"helpText": "Klikněte na zkratku a stiskněte novou kombinaci kláves. Stiskněte Esc pro zrušení.",
+	"resetToDefaults": "Obnovit výchozí nastavení",
+	"alreadyUsedBy": "Již používáno pro {{action}}",
+	"swap": "Prohodit",
+	"reservedShortcut": "Tato zkratka je vyhrazena pro „{{label}}” a nelze ji přiřadit.",
+	"savedToast": "Klávesové zkratky uloženy",
+	"resetToast": "Výchozí zkratky obnoveny. Klikněte na Uložit pro jejich použití.",
+	"registrationFailed": "Nepodařilo se zaregistrovat zkratku. Může být používána jinou aplikací. Zkuste jinou klávesu.",
+	"actions": {
+		"openApp": "Otevřít aplikaci",
+		"addZoom": "Přidat přiblížení",
+		"addTrim": "Přidat oříznutí",
+		"addSpeed": "Přidat rychlost",
+		"addAnnotation": "Přidat anotaci",
+		"addAudio": "Přidat zvuk",
+		"addVoiceover": "Nahrát komentář",
+		"addKeyframe": "Přidat klíčový snímek",
+		"addCameraFullscreen": "Přidat celou kameru",
+		"deleteSelected": "Smazat vybrané",
+		"playPause": "Přehrát / Pozastavit",
+		"copySelected": "Kopírovat vybrané",
+		"paste": "Vložit"
+	},
+	"fixedActions": {
+		"undo": "Zpět",
+		"redo": "Znovu",
+		"cycleAnnotationsForward": "Cyklovat anotace dopředu",
+		"cycleAnnotationsBackward": "Cyklovat anotace dozadu",
+		"deleteSelectedAlt": "Smazat vybrané (alternativa)",
+		"panTimeline": "Posunout časovou osu",
+		"zoomTimeline": "Přiblížit časovou osu",
+		"frameBack": "Snímek zpět",
+		"frameForward": "Snímek dopředu"
+	}
+}

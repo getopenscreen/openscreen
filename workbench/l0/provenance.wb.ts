@@ -348,7 +348,7 @@ describe("effective source identity across commits and clones", () => {
 		const outside = mkdtempSync(join(tmpdir(), "wb-source-outside-"));
 		roots.push(outside);
 		write(outside, "nested.ts", "outside source\n");
-		const link = join(root, "src", "linked");
+		const link = join(root, "src", "linked.ts");
 		try {
 			symlinkSync(outside, link, process.platform === "win32" ? "junction" : "dir");
 		} catch {

@@ -619,7 +619,6 @@ function wireIdentity(results: RepetitionResult[]): MeasurementIdentity["fingerp
 		toolsSha256: unknown(first?.toolsSha256),
 		wireSha256: sha256Canonical(
 			results.map((result) => ({
-				rounds: result.run.wire.rounds,
 				systemSha256: result.run.wire.systemSha256,
 				toolsSha256: result.run.wire.toolsSha256,
 				toolNames: result.run.wire.toolNames,
@@ -946,10 +945,16 @@ function assertRequiredRoles(manifest: MeasurementManifest): void {
 		if (roleRefs(manifest, role).length === 0)
 			fail("CANDIDATE_INCOMPLETE", `missing ${role} artifact`);
 	}
-	if (manifest.complete && manifest.scenario.judged) {
-		if (roleRefs(manifest, "judge-cassette").length === 0) {
+	const judgeCassettes = roleRefs(manifest, "judge-cassette");
+	if (judgeCassettes.length > 1) {
+		fail("CANDIDATE_INCOMPLETE", "measurement must reference at most one judge cassette");
+	}
+	if (manifest.scenario.judged) {
+		if (manifest.complete && judgeCassettes.length === 0) {
 			fail("CANDIDATE_INCOMPLETE", "judged measurement is missing its judge cassette");
 		}
+	} else if (judgeCassettes.length !== 0) {
+		fail("CANDIDATE_INCOMPLETE", "unjudged measurement must not include a judge cassette");
 	}
 }
 

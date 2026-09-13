@@ -423,6 +423,19 @@ describe("versioned measurement export and verification", () => {
 			readFileSync(join(counts.measurementsDir, "valid-measurement", "measurement.json")),
 		).toThrow();
 
+		const extraJudge = createCandidate(root());
+		rewriteCandidate(extraJudge.runDir, (manifest) => {
+			const main = manifest.artifacts.find((entry) => entry.role === "main-cassette");
+			if (main) {
+				manifest.artifacts.push({
+					role: "judge-cassette",
+					path: main.path,
+					sha256: main.sha256,
+				});
+			}
+		});
+		expectCode(() => exportValid(extraJudge), "CANDIDATE_INCOMPLETE");
+
 		const foreignChecks = createCandidate(root());
 		const checksFile = join(foreignChecks.runDir, "recorded-checks.json");
 		const recorded = JSON.parse(readFileSync(checksFile, "utf8")) as RecordedChecks;

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "measurementId": "local-pr15-scripted-control-20260913-v1",
+  "reviewer": {
+    "kind": "independent",
+    "label": "measurement_artifact_review"
+  },
+  "disposition": "approved",
+  "reviewedAt": "2026-09-13T10:42:36.978509+00:00",
+  "summary": "Approved candidate SHA256 9579AD14A92A86972BB081E43D1FEFE73BA396BF0E5C0906B9A4ED7A0FAA0B7C for adoption as a local scripted offline workflow control on the standalone workbench source. The source manifest and referenced artifact hashes were independently checked. Provider usage is explicitly incomplete with zero rounds reporting usage; no complete token-accounting or model-quality claim is approved. This does not validate the missing original real-take fixture or authorize external provider calls."
+}

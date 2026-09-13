@@ -3,7 +3,7 @@
 	"provider": "openai-compatible",
 	"model": "workbench-loopback-fixture",
 	"resolvedModel": "workbench",
-	"recordedAt": "2026-09-12T10:53:18.310Z",
+	"recordedAt": "2026-09-13T10:37:49.235Z",
 	"rounds": [
 		{
 			"round": 0,
@@ -55,6 +55,51 @@
 				"lastUserText": "Add a zoom in the middle of the second clip, the demo one."
 			},
 			"sse": "data: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Added one zoom from 0:43\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" to 0:48, in the middle \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"of the demo clip.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+		}
+	],
+	"wireApi": "chat-completions",
+	"transport": {
+		"schema": 1,
+		"wireApi": "chat-completions",
+		"inboundPaths": [
+			"/chat/completions",
+			"/v1/chat/completions"
+		],
+		"upstreamPathSuffix": "/chat/completions",
+		"requestPolicy": {
+			"store": "unchanged",
+			"maxOutputField": "unchanged",
+			"maxOutputTokens": null,
+			"reasoning": "unchanged"
+		},
+		"retryPolicy": {
+			"sdkMaxRetries": "default",
+			"repetitionRetries": 2
+		},
+		"limits": {
+			"maxRequests": 100,
+			"maxRequestBytes": 65536,
+			"maxResponseBytes": 1048576,
+			"requestTimeoutMs": 60000,
+			"invocationTimeoutMs": 20000
+		},
+		"publicHeadersSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+	},
+	"attempts": [
+		{
+			"attempt": 0,
+			"phase": "complete",
+			"status": "recorded"
+		},
+		{
+			"attempt": 1,
+			"phase": "complete",
+			"status": "recorded"
+		},
+		{
+			"attempt": 2,
+			"phase": "complete",
+			"status": "recorded"
 		}
 	]
 }

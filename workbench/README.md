@@ -209,6 +209,17 @@ synthétiques publiques inscrites dans le registre peuvent être adoptées. Pour
 paquet versionné avec ses cassettes et son reçu relu fait partie de l'évidence à committer ; un run
 de réglage, incomplet ou non relu reste sous `workbench/runs/`.
 
+Le paquet `local-pr15-scripted-control-20260913-v1` est un contrôle local scripté du workflow :
+
+```bash
+npm run wb:measurement -- verify --id local-pr15-scripted-control-20260913-v1
+npm run wb:measurement -- replay --id local-pr15-scripted-control-20260913-v1
+```
+
+Il rejoue une répétition synthétique sans requête externe. Sa cassette contient trois rounds et
+aucun bloc `usage` (`withUsage=0`) : elle prouve le chemin versionné et rejouable, mais ne fournit
+ni comptage de tokens ni mesure de qualité d'un modèle réel.
+
 ---
 
 ## Lire un rapport
@@ -718,11 +729,11 @@ vu par le CI, qui ne lance pas le banc.
 
 Le paquet original requis est exactement
 `workbench/fixtures/real-screencast.openscreen` et
-`workbench/fixtures/real-screencast.mp4.cursor.json`. Il n'est plus disponible auprès de son
-propriétaire. Les résumés 66,154 s, 129 mots et 1521 échantillons ne permettent pas de le
-reconstruire. Les quatre scénarios `real-*` restent donc indisponibles : on ne les remplace pas par
-une autre prise sous les mêmes ids, on ne transforme pas l'absence en skip vert, et on ne gèle pas
-leurs anciennes notes comme si elles avaient été relues.
+`workbench/fixtures/real-screencast.mp4.cursor.json`. Ces deux fichiers sont absents du checkout et
+de l'environnement de validation actuels. Les résumés 66,154 s, 129 mots et 1521 échantillons ne
+permettent pas de les reconstruire. Les quatre scénarios `real-*` restent donc indisponibles ici :
+on ne les remplace pas par une autre prise sous les mêmes ids, on ne transforme pas l'absence en
+skip vert, et on ne gèle pas leurs anciennes notes comme si elles avaient été relues.
 
 Le document arrive **tel qu'il est sur le disque**, y compris son `cameraTrack: null` alors qu'un
 fichier webcam existe à côté de l'enregistrement. Ce n'est pas un oubli de la copie ; c'est l'état

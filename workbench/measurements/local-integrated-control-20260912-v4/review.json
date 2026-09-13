@@ -1,8 +1,0 @@
-{
-  "schema": 1,
-  "measurementId": "local-integrated-control-20260912-v4",
-  "reviewer": { "kind": "independent", "label": "measurement_artifact_review" },
-  "disposition": "approved",
-  "reviewedAt": "2026-09-12T10:57:38.9279290Z",
-  "summary": "Approved candidate SHA256 AE1B24E86E3B181E8BB803567980DCD4C1BAB1E78443CDD7B2F9488CD1191296 for adoption as local-integrated-control-20260912-v4 solely as an offline local scripted workflow control for the combined integration source. This approval does not establish provider or model quality, reproduce the unavailable original fixture, approve an original-real baseline, establish full issue acceptance, or authorize publication or paid calls."
-}

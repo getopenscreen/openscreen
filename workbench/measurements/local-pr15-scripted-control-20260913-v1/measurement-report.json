@@ -1,6 +1,6 @@
 {
-	"label": "full459-integration-v4/target-right-clip",
-	"createdAt": "2026-09-12T10:53:18.732Z",
+	"label": "pr15-scripted-control-20260913-v1/target-right-clip",
+	"createdAt": "2026-09-13T10:37:49.964Z",
 	"fingerprint": {
 		"systemSha256": "796759e35e0d75b547ad4c6318e995bf543e88dfa68e5571c7b43d914a90b93a",
 		"systemChars": 3840,
@@ -33,9 +33,9 @@
 			"removeClip"
 		],
 		"model": "workbench-loopback-fixture",
-		"gitSha": "fbe461e9",
+		"gitSha": "1f45d5bd",
 		"gitDirty": true,
-		"effectiveSourceSha256": "0c7b1a208ccde2a36caabd507864a38acfc7ecae6c44043e613d409d7607b060",
+		"effectiveSourceSha256": "7dca97c018607840c63b6a816e2bc11924e46990309d09dc56406e9f9b37178a",
 		"overlayId": null,
 		"reps": 1
 	},
@@ -265,7 +265,7 @@
 				}
 			],
 			"unmeasuredAxes": [],
-			"msMean": 3083.5562
+			"msMean": 435.25880000000006
 		}
 	],
 	"notices": []

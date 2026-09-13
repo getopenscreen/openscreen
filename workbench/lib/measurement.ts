@@ -613,17 +613,26 @@ function unknown(value: string | null | undefined): string {
 
 function wireIdentity(results: RepetitionResult[]): MeasurementIdentity["fingerprints"] {
 	const first = results[0]?.run.wire;
+	const contract = {
+		systemSha256: first?.systemSha256 ?? null,
+		toolsSha256: first?.toolsSha256 ?? null,
+		toolNames: first?.toolNames ?? [],
+	};
+	for (const result of results) {
+		const next = {
+			systemSha256: result.run.wire.systemSha256 ?? null,
+			toolsSha256: result.run.wire.toolsSha256 ?? null,
+			toolNames: result.run.wire.toolNames ?? [],
+		};
+		if (canonicalJson(next) !== canonicalJson(contract)) {
+			fail("INCOMPATIBLE_IDENTITIES", "repetitions do not share a request-contract wire identity");
+		}
+	}
 	return {
 		promptSha256: "unknown",
 		systemSha256: unknown(first?.systemSha256),
 		toolsSha256: unknown(first?.toolsSha256),
-		wireSha256: sha256Canonical(
-			results.map((result) => ({
-				systemSha256: result.run.wire.systemSha256,
-				toolsSha256: result.run.wire.toolsSha256,
-				toolNames: result.run.wire.toolNames,
-			})),
-		),
+		wireSha256: sha256Canonical(contract),
 		rubricSha256: "unknown",
 	};
 }

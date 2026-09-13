@@ -28,6 +28,7 @@ import {
 import {
 	MANDATORY_SOURCE_ANCHORS,
 	sha256Bytes,
+	sha256Canonical,
 	sourceIdentityFromManifests,
 } from "../lib/provenance";
 import { wilson95 } from "../lib/stats";
@@ -605,6 +606,18 @@ describe("measurement identity and bound baseline", () => {
 		expect(counts.axes.behaviour).toEqual({ passed: 1, decided: 2, indeterminate: 1, total: 3 });
 		expect(counts.axisScores).toEqual({ behaviour: 0.25, dsl: 1 });
 		expect(counts.checks.find((check) => check.id === "beh.unknown")?.weight).toBe(9);
+	});
+
+	it("keeps the wire fingerprint independent of sample size", () => {
+		const contract = { systemSha256: HASH("d"), toolsSha256: HASH("e"), toolNames: ["read"] };
+		expect(sha256Canonical([contract, contract])).not.toBe(sha256Canonical(contract));
+		expect(sha256Canonical(contract)).toBe(
+			sha256Canonical({
+				systemSha256: HASH("d"),
+				toolsSha256: HASH("e"),
+				toolNames: ["read"],
+			}),
+		);
 	});
 
 	it("refuses unknown or incompatible identities and never silently compares them", () => {

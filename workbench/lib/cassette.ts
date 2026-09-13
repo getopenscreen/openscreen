@@ -416,12 +416,32 @@ export function readCassette(file: string): Cassette {
 	return cassette;
 }
 
-export function mergeRetryCassettes(success: Cassette, prior: readonly Cassette[]): Cassette {
-	const attempts = [
-		...prior.flatMap((cassette) => cassette.attempts ?? []),
-		...(success.attempts ?? []),
-	].map((attempt, index) => ({ ...attempt, attempt: index }));
+export function attemptsFromEndpoint(
+	endpoint: Pick<ModelServerHandle, "attempts"> | undefined,
+): CassetteAttempt[] {
+	return (endpoint?.attempts ?? []).map((attempt) => ({
+		attempt: attempt.attempt,
+		phase: attempt.phase as CassetteAttempt["phase"],
+		status: attempt.status as CassetteAttempt["status"],
+		...(typeof attempt.detail === "string" ? { detail: attempt.detail } : {}),
+	}));
+}
+
+export function adoptRetryEvidence(
+	success: Cassette,
+	attemptLists: ReadonlyArray<readonly CassetteAttempt[] | undefined>,
+): Cassette {
+	const attempts = attemptLists
+		.flatMap((list) => list ?? [])
+		.map((attempt, index) => ({ ...attempt, attempt: index }));
 	return { ...success, attempts };
+}
+
+export function mergeRetryCassettes(success: Cassette, prior: readonly Cassette[]): Cassette {
+	return adoptRetryEvidence(success, [
+		...prior.map((cassette) => cassette.attempts),
+		success.attempts,
+	]);
 }
 
 export function readCassetteEvidence(file: string): Cassette {

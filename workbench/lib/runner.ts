@@ -17,7 +17,9 @@ import { getReasoningCapability } from "../../electron/ai-edition/deep-agent/cha
 import type { LlmConfigStore } from "../../electron/ai-edition/llm-config-store";
 import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
 import {
-	mergeRetryCassettes,
+	adoptRetryEvidence,
+	attemptsFromEndpoint,
+	type CassetteAttempt,
 	readCassetteEvidence,
 	startRecorder,
 	writeCassette,
@@ -206,7 +208,8 @@ export async function runScenarioReps(
 	for (let rep = 0; rep < options.reps; rep += 1) {
 		budget?.refreshDeadline();
 		const canonicalFile = options.live?.record?.(rep);
-		const priorCassettes: ReturnType<typeof readCassetteEvidence>[] = [];
+		const attemptLists: CassetteAttempt[][] = [];
+		let successCassette: ReturnType<typeof readCassetteEvidence> | undefined;
 		let attempt = 0;
 		for (;;) {
 			const attemptFile =
@@ -230,10 +233,11 @@ export async function runScenarioReps(
 					maxRetries: env?.wireApi === "responses" ? 0 : undefined,
 				});
 			} finally {
+				attemptLists.push(attemptsFromEndpoint(endpoint));
 				endpoint?.close();
 			}
 			if (attemptFile && existsSync(attemptFile)) {
-				priorCassettes.push(readCassetteEvidence(attemptFile));
+				successCassette = readCassetteEvidence(attemptFile);
 			}
 			const failureClass = result.scored.failureClass;
 			if ((failureClass === "TIMEOUT" || failureClass === "TRANSPORT") && attempt < maxRetries) {
@@ -241,9 +245,8 @@ export async function runScenarioReps(
 				attempt += 1;
 				continue;
 			}
-			if (canonicalFile && priorCassettes.length > 0) {
-				const success = priorCassettes[priorCassettes.length - 1];
-				writeCassette(canonicalFile, mergeRetryCassettes(success, priorCassettes.slice(0, -1)));
+			if (canonicalFile && successCassette) {
+				writeCassette(canonicalFile, adoptRetryEvidence(successCassette, attemptLists));
 			}
 			results.push(result);
 			options.onRepetition?.(result);

@@ -6,12 +6,14 @@
 // exactly, and a cassette that no longer matches the request says so instead of
 // answering a question the app no longer asks.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+	adoptRetryEvidence,
+	attemptsFromEndpoint,
 	hashRequest,
 	mergeRetryCassettes,
 	readCassette,
@@ -520,6 +522,83 @@ describe("record then replay", () => {
 			{ attempt: 0, phase: "forward", status: "failed", detail: "timeout" },
 			{ attempt: 1, phase: "complete", status: "recorded" },
 		]);
+		expect(
+			adoptRetryEvidence(success, [
+				[{ attempt: 0, phase: "forward", status: "failed", detail: "connection reset" }],
+				success.attempts,
+			]).attempts,
+		).toEqual([
+			{ attempt: 0, phase: "forward", status: "failed", detail: "connection reset" },
+			{ attempt: 1, phase: "complete", status: "recorded" },
+		]);
+	});
+
+	it("keeps a pre-round forward failure when no attempt cassette exists", async () => {
+		const failedFile = join(DIRECTORY, "retry-pre-round-0.json");
+		const successFile = join(DIRECTORY, "retry-pre-round-1.json");
+		const canonical = join(DIRECTORY, "retry-pre-round.json");
+		const failedRecorder = await startRecorder({
+			upstream: "http://127.0.0.1:59999",
+			file: failedFile,
+			scenario: "retry-pre-round",
+			provider: "loopback",
+			model: "loopback",
+		});
+		try {
+			const response = await fetch(`${failedRecorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "loopback",
+					messages: [{ role: "user", content: "first" }],
+				}),
+			});
+			expect(response.status).toBe(502);
+			expect(existsSync(failedFile)).toBe(false);
+			expect(existsSync(`${failedFile}.attempts.json`)).toBe(true);
+			expect(failedRecorder.attempts).toEqual([
+				expect.objectContaining({ phase: "forward", status: "failed" }),
+			]);
+		} finally {
+			failedRecorder.close();
+		}
+
+		const upstream = await startRawProvider({
+			sse: 'data: {"model":"loopback"}\n\ndata: [DONE]\n\n',
+			onRequest: () => undefined,
+		});
+		const successRecorder = await startRecorder({
+			upstream: upstream.url,
+			file: successFile,
+			scenario: "retry-pre-round",
+			provider: "loopback",
+			model: "loopback",
+		});
+		try {
+			const response = await fetch(`${successRecorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "loopback",
+					messages: [{ role: "user", content: "second" }],
+				}),
+			});
+			expect(response.status).toBe(200);
+			await response.text();
+		} finally {
+			successRecorder.close();
+			upstream.close();
+		}
+
+		const success = readCassette(successFile);
+		const adopted = adoptRetryEvidence(success, [
+			attemptsFromEndpoint(failedRecorder),
+			attemptsFromEndpoint(successRecorder),
+		]);
+		writeCassette(canonical, adopted);
+		expect(existsSync(failedFile)).toBe(false);
+		expect(adopted.rounds).toEqual(success.rounds);
+		expect(adopted.attempts?.map((attempt) => attempt.status)).toEqual(["failed", "recorded"]);
 	});
 
 	it("rejects a Chat cassette whose rounds resolve to different models", () => {

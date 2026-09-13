@@ -7,10 +7,18 @@
 // answering a question the app no longer asks.
 
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { readCassette, startRecorder, startReplay, writeCassette } from "../lib/cassette";
+import {
+	hashRequest,
+	readCassette,
+	startRecorder,
+	startReplay,
+	usageFromSse,
+	writeCassette,
+} from "../lib/cassette";
 import { ENV_KEYS } from "../lib/env";
 import { singleClip } from "../lib/fixtures";
 import { normalizeIds, runScenario } from "../lib/harness";
@@ -18,7 +26,33 @@ import { startScriptedModel } from "../lib/model-server";
 
 const DIRECTORY = mkdtempSync(join(tmpdir(), "wb-cassette-"));
 const FILE = join(DIRECTORY, "wizard.json");
+const USAGE_FILE = join(DIRECTORY, "usage.json");
 const PROMPT = "enhance this recording";
+
+async function startRawProvider(options: {
+	sse: string;
+	onRequest: (body: string) => void;
+}): Promise<{ url: string; close: () => void }> {
+	const server = createServer((req, res) => {
+		let body = "";
+		req.on("data", (chunk) => {
+			body += chunk;
+		});
+		req.on("end", () => {
+			options.onRequest(body);
+			res.writeHead(200, { "content-type": "text/event-stream" });
+			res.end(options.sse);
+		});
+	});
+
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const address = server.address();
+	if (!address || typeof address === "string") throw new Error("raw provider has no address");
+	return {
+		url: `http://127.0.0.1:${address.port}`,
+		close: () => server.close(),
+	};
+}
 
 afterAll(() => rmSync(DIRECTORY, { recursive: true, force: true }));
 
@@ -152,5 +186,307 @@ describe("record then replay", () => {
 			replay.close();
 		}
 		expect(() => replay.assertFresh()).toThrow(/périmée aux rounds/);
+	});
+
+	it("records final usage while preserving the request and raw SSE", async () => {
+		const requestBody = JSON.stringify({
+			model: "fake-upstream",
+			stream: true,
+			messages: [{ role: "user", content: "usage probe" }],
+		});
+		const firstUsage = {
+			prompt_tokens: 4,
+			completion_tokens: 2,
+			total_tokens: 6,
+			prompt_tokens_details: { cached_tokens: 2 },
+			prompt_cache_hit_tokens: 2,
+			prompt_cache_miss_tokens: 2,
+		};
+		const finalUsage = {
+			prompt_tokens: 12,
+			completion_tokens: 7,
+			total_tokens: 19,
+			prompt_tokens_details: { cached_tokens: 8 },
+			completion_tokens_details: { reasoning_tokens: 3 },
+			prompt_cache_hit_tokens: 8,
+			prompt_cache_miss_tokens: 4,
+			provider_detail: { trace: "preserved" },
+		};
+		const sse = [
+			`data: ${JSON.stringify({ id: "usage-null", usage: null })}\n\n`,
+			`data: ${JSON.stringify({ id: "usage-first", usage: firstUsage })}\n\n`,
+			"data: {malformed\n\n",
+			`data: ${JSON.stringify({ id: "usage-array", usage: [] })}\n\n`,
+			`data: ${JSON.stringify({ id: "usage-final", usage: finalUsage })}\n\n`,
+			"data: [DONE]\n\n",
+			`data: ${JSON.stringify({ id: "after-done", usage: { prompt_tokens: 999 } })}\n\n`,
+		].join("");
+		let receivedBody = "";
+		const upstream = await startRawProvider({
+			sse,
+			onRequest: (body) => {
+				receivedBody = body;
+			},
+		});
+		const recorder = await startRecorder({
+			upstream: upstream.url,
+			file: USAGE_FILE,
+			scenario: "usage-probe",
+			provider: "openai-compatible",
+			model: "fake-upstream",
+		});
+		try {
+			const response = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: requestBody,
+			});
+			expect(response.status).toBe(200);
+			expect(await response.text()).toBe(sse);
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+
+		expect(receivedBody).toBe(requestBody);
+		const cassette = readCassette(USAGE_FILE);
+		expect(cassette.rounds).toHaveLength(1);
+		expect(cassette.rounds[0].sse).toBe(sse);
+		expect(cassette.rounds[0].usage).toEqual(finalUsage);
+	});
+
+	it("records and replays usage across sixty rounds", async () => {
+		let upstreamRound = 0;
+		const upstream = createServer((_req, res) => {
+			const round = upstreamRound;
+			upstreamRound += 1;
+			const usage = {
+				prompt_tokens: round + 1,
+				completion_tokens: 2,
+				total_tokens: round + 3,
+			};
+			res.writeHead(200, { "content-type": "text/event-stream" });
+			res.end(
+				`data: ${JSON.stringify({ id: `usage-${round}`, model: "usage-model", usage })}\n\n` +
+					"data: [DONE]\n\n",
+			);
+		});
+		await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+		const address = upstream.address();
+		if (!address || typeof address === "string") throw new Error("usage upstream has no address");
+		const file = join(DIRECTORY, "usage-60.json");
+		const recorder = await startRecorder({
+			upstream: `http://127.0.0.1:${address.port}`,
+			file,
+			scenario: "usage-60",
+			provider: "loopback",
+			model: "usage-model",
+		});
+		const bodies = Array.from({ length: 60 }, (_, round) =>
+			JSON.stringify({
+				model: "usage-model",
+				messages: [{ role: "user", content: `round ${round}` }],
+			}),
+		);
+		try {
+			for (const body of bodies) {
+				const response = await fetch(`${recorder.url}/chat/completions`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body,
+				});
+				expect(response.status).toBe(200);
+				await response.text();
+			}
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+		const cassette = readCassette(file);
+		expect(cassette.rounds).toHaveLength(60);
+		expect(cassette.rounds[0].usage).toEqual({
+			prompt_tokens: 1,
+			completion_tokens: 2,
+			total_tokens: 3,
+		});
+		expect(cassette.rounds[59].usage).toEqual({
+			prompt_tokens: 60,
+			completion_tokens: 2,
+			total_tokens: 62,
+		});
+
+		const replay = await startReplay({ file, onStale: "throw" });
+		try {
+			for (const body of bodies) {
+				const response = await fetch(`${replay.url}/chat/completions`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body,
+				});
+				expect(response.status).toBe(200);
+				await response.text();
+			}
+		} finally {
+			replay.close();
+		}
+		expect(replay.staleRounds).toEqual([]);
+		expect(() => replay.assertFresh()).not.toThrow();
+	});
+
+	it("records developer prompt length in proxy and upstream request digests", async () => {
+		const prompt = "d".repeat(3_840);
+		const body = {
+			model: "workbench",
+			messages: [
+				{ role: "developer", content: prompt },
+				{ role: "user", content: "preview" },
+			],
+		};
+		const upstream = await startScriptedModel([{ kind: "text", text: "done" }]);
+		const file = join(DIRECTORY, "developer-prompt.json");
+		const recorder = await startRecorder({
+			upstream: upstream.url,
+			file,
+			scenario: "developer-prompt",
+			provider: "loopback",
+			model: "workbench",
+		});
+		try {
+			const response = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			expect(response.status).toBe(200);
+			await response.text();
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+		expect(readCassette(file).rounds[0].digest).toMatchObject({
+			systemChars: 3_840,
+			roles: ["developer", "user"],
+		});
+		expect(upstream.requests[0].systemChars).toBe(3_840);
+		expect(
+			hashRequest({ ...body, messages: [{ role: "developer", content: `${prompt}!` }] }),
+		).not.toBe(hashRequest(body));
+	});
+
+	it("keeps an existing system-only cassette request fresh", async () => {
+		const body = {
+			model: "legacy",
+			messages: [
+				{ role: "system", content: "legacy system prompt" },
+				{ role: "user", content: "legacy user prompt" },
+			],
+			tools: [],
+		};
+		const file = join(DIRECTORY, "legacy-system-only.json");
+		writeCassette(file, {
+			scenario: "legacy-system-only",
+			provider: "loopback",
+			model: "legacy",
+			recordedAt: "2026-07-31T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: hashRequest(body),
+					digest: {
+						systemChars: "legacy system prompt".length,
+						toolCount: 0,
+						roles: ["system", "user"],
+						lastUserText: "legacy user prompt",
+					},
+					sse: "data: [DONE]\n\n",
+				},
+			],
+		});
+		const replay = await startReplay({ file, onStale: "throw" });
+		try {
+			const response = await fetch(`${replay.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			expect(response.status).toBe(200);
+			await response.text();
+		} finally {
+			replay.close();
+		}
+		expect(replay.staleRounds).toEqual([]);
+		expect(() => replay.assertFresh()).not.toThrow();
+	});
+
+	it("leaves usage unknown when no valid object appears", () => {
+		const sse = [
+			`data: ${JSON.stringify({ usage: null })}\n\n`,
+			`data: ${JSON.stringify({ usage: [] })}\n\n`,
+			"data: {malformed\n\n",
+			"data: [DONE]\n\n",
+		].join("");
+		expect(usageFromSse(sse)).toBeUndefined();
+	});
+
+	it("parses usage from CRLF data lines without a separator space", () => {
+		const usage = { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 };
+		const sse = [`data:${JSON.stringify({ usage })}\r\n\r\n`, "data:[DONE]\r\n\r\n"].join("");
+		expect(usageFromSse(sse)).toEqual(usage);
+	});
+
+	it("refuses an upstream redirect without forwarding the prompt to the new origin", async () => {
+		let targetCalls = 0;
+		const target = createServer((_req, res) => {
+			targetCalls += 1;
+			res.writeHead(200, { "content-type": "text/event-stream" });
+			res.end("data: [DONE]\n\n");
+		});
+		await new Promise<void>((resolve) => target.listen(0, "127.0.0.1", resolve));
+		const targetAddress = target.address();
+		if (!targetAddress || typeof targetAddress === "string")
+			throw new Error("target has no address");
+
+		const redirect = createServer((_req, res) => {
+			res.writeHead(307, {
+				location: `http://127.0.0.1:${targetAddress.port}/v1/chat/completions`,
+			});
+			res.end();
+		});
+		await new Promise<void>((resolve) => redirect.listen(0, "127.0.0.1", resolve));
+		const redirectAddress = redirect.address();
+		if (!redirectAddress || typeof redirectAddress === "string") {
+			throw new Error("redirect has no address");
+		}
+		const redirectFile = join(DIRECTORY, "redirect.json");
+		const recorder = await startRecorder({
+			upstream: `http://127.0.0.1:${redirectAddress.port}/v1`,
+			file: redirectFile,
+			scenario: "redirect-probe",
+			provider: "loopback",
+			model: "loopback",
+		});
+		try {
+			const response = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					authorization: "Bearer test-only-value",
+				},
+				body: JSON.stringify({
+					model: "loopback",
+					messages: [{ role: "user", content: "private prompt" }],
+				}),
+			});
+			expect(response.status).toBe(502);
+			expect(await response.json()).toEqual({
+				error: "workbench proxy: upstream redirect or transport failure",
+			});
+			expect(targetCalls).toBe(0);
+			expect(() => readCassette(redirectFile)).toThrow();
+		} finally {
+			recorder.close();
+			redirect.close();
+			target.close();
+		}
 	});
 });

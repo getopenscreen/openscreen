@@ -32,8 +32,11 @@ import { getScenario } from "../scenarios/registry";
 const SYSTEM_TEXT = "You are OpenScreen's editing agent. Ten thousand characters, abridged.";
 const scenario = getScenario("describe-project");
 
-function capturedRequests(options: { resultJson: string }): CapturedRequest[] {
-	const system = { role: "system", content: SYSTEM_TEXT };
+function capturedRequests(options: {
+	resultJson: string;
+	instructionRole?: "system" | "developer";
+}): CapturedRequest[] {
+	const system = { role: options.instructionRole ?? "system", content: SYSTEM_TEXT };
 	const user = { role: "user", content: scenario.prompt };
 	const assistant = {
 		role: "assistant",
@@ -83,10 +86,12 @@ function repetition(options?: {
 	resultJson?: string;
 	document?: AxcutDocument;
 	rep?: number;
+	instructionRole?: "system" | "developer";
 }): RepetitionResult {
 	const before = options?.document ?? twoClipsWithTrim();
 	const requests = capturedRequests({
 		resultJson: options?.resultJson ?? '{"trimRangeId":"trim_9"}',
+		instructionRole: options?.instructionRole,
 	});
 	const wire = wireFromRequests(requests);
 	const context = buildEvalContext({
@@ -180,6 +185,22 @@ describe("persistRepetition", () => {
 		// The reference is verifiable: the name carries the sha the report prints.
 		const turn = readTurn(`${root}/baseline/describe-project/rep-0.json`);
 		expect(files).toContain(turn.wire.systemFile);
+		expect(turn.wire.systemFile).toContain(turn.wire.systemSha256.slice(0, 12));
+	});
+
+	it("persists a developer instruction with its role and matching fingerprint", () => {
+		const root = scratch();
+		const written = persistRepetition({
+			root,
+			label: "developer-prompt",
+			result: repetition({ instructionRole: "developer" }),
+			prompt: scenario.prompt,
+			allowAgentEdits: true,
+		});
+		const turn = readTurn(written.file);
+		expect(turn.wire.instructionRoles).toEqual(["developer"]);
+		expect(turn.wire.systemChars).toBe(SYSTEM_TEXT.length);
+		expect(readFileSync(written.systemFile, "utf8")).toBe(`[developer]\n${SYSTEM_TEXT}`);
 		expect(turn.wire.systemFile).toContain(turn.wire.systemSha256.slice(0, 12));
 	});
 

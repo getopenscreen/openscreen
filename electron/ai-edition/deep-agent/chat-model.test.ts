@@ -91,6 +91,33 @@ describe("createOpenScreenChatModel — Anthropic-wire output budget", () => {
 	});
 });
 
+describe("createOpenScreenChatModel — runtime retry override", () => {
+	function retries(model: unknown): number | undefined {
+		return (model as { caller?: { maxRetries?: number } }).caller?.maxRetries;
+	}
+
+	it("passes an explicit zero to LangChain", async () => {
+		const model = await createOpenScreenChatModel({
+			provider: "openai-compatible",
+			model: "gpt-5-test",
+			apiKey: "test-key",
+			baseUrl: "http://127.0.0.1:1/v1",
+			maxRetries: 0,
+		});
+		expect(retries(model)).toBe(0);
+	});
+
+	it("keeps LangChain's default when the override is omitted", async () => {
+		const model = await createOpenScreenChatModel({
+			provider: "openai-compatible",
+			model: "gpt-5-test",
+			apiKey: "test-key",
+			baseUrl: "http://127.0.0.1:1/v1",
+		});
+		expect(retries(model)).toBe(6);
+	});
+});
+
 describe("messageContentToText", () => {
 	it("passes a plain string through", () => {
 		expect(messageContentToText("hello")).toBe("hello");

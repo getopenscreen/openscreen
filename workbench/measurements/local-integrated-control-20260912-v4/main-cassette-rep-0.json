@@ -1,0 +1,60 @@
+{
+	"scenario": "target-right-clip",
+	"provider": "openai-compatible",
+	"model": "workbench-loopback-fixture",
+	"resolvedModel": "workbench",
+	"recordedAt": "2026-09-12T10:53:18.310Z",
+	"rounds": [
+		{
+			"round": 0,
+			"requestHash": "a9f5459b3417be21",
+			"digest": {
+				"systemChars": 3840,
+				"toolCount": 25,
+				"roles": [
+					"system",
+					"user",
+					"user"
+				],
+				"lastUserText": "Add a zoom in the middle of the second clip, the demo one."
+			},
+			"sse": "data: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_wb-0_0\",\"type\":\"function\",\"function\":{\"name\":\"getCurrentDocument\",\"arguments\":\"{}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+		},
+		{
+			"round": 1,
+			"requestHash": "072c05ee6c47e869",
+			"digest": {
+				"systemChars": 3840,
+				"toolCount": 25,
+				"roles": [
+					"system",
+					"user",
+					"user",
+					"assistant",
+					"tool"
+				],
+				"lastUserText": "Add a zoom in the middle of the second clip, the demo one."
+			},
+			"sse": "data: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_wb-1_0\",\"type\":\"function\",\"function\":{\"name\":\"addZoom\",\"arguments\":\"{\\\"startSec\\\":43,\\\"endSec\\\":48,\\\"depth\\\":3}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+		},
+		{
+			"round": 2,
+			"requestHash": "c8a3ae35aafb58de",
+			"digest": {
+				"systemChars": 3840,
+				"toolCount": 25,
+				"roles": [
+					"system",
+					"user",
+					"user",
+					"assistant",
+					"tool",
+					"assistant",
+					"tool"
+				],
+				"lastUserText": "Add a zoom in the middle of the second clip, the demo one."
+			},
+			"sse": "data: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Added one zoom from 0:43\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" to 0:48, in the middle \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"of the demo clip.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+		}
+	]
+}

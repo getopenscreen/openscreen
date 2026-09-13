@@ -1,0 +1,272 @@
+{
+	"label": "full459-integration-v4/target-right-clip",
+	"createdAt": "2026-09-12T10:53:18.732Z",
+	"fingerprint": {
+		"systemSha256": "796759e35e0d75b547ad4c6318e995bf543e88dfa68e5571c7b43d914a90b93a",
+		"systemChars": 3840,
+		"toolsSha256": "314045e9f558c1cb8ff33550e3677a3849bf3335f761fc4a09a3bf6ef7a12475",
+		"toolNames": [
+			"getCurrentDocument",
+			"getTranscript",
+			"getTranscriptWords",
+			"getCursorTrack",
+			"setWordText",
+			"addTrim",
+			"addTrims",
+			"setTrim",
+			"setClipRange",
+			"moveClip",
+			"replaceTimeline",
+			"addZoom",
+			"addZooms",
+			"setZoom",
+			"addSpeed",
+			"setSpeed",
+			"addAnnotation",
+			"setAnnotation",
+			"addCameraFullscreen",
+			"setCameraFullscreen",
+			"addAudio",
+			"setAudio",
+			"removeTrim",
+			"removeModifier",
+			"removeClip"
+		],
+		"model": "workbench-loopback-fixture",
+		"gitSha": "fbe461e9",
+		"gitDirty": true,
+		"effectiveSourceSha256": "0c7b1a208ccde2a36caabd507864a38acfc7ecae6c44043e613d409d7607b060",
+		"overlayId": null,
+		"reps": 1
+	},
+	"minDetectableEffect": 1,
+	"scenarios": [
+		{
+			"scenarioId": "target-right-clip",
+			"title": "Ciblage — un zoom sur le SECOND clip parmi deux",
+			"tags": [
+				"targeting",
+				"dsl"
+			],
+			"gate": 0.6,
+			"reps": 1,
+			"behaviour": {
+				"k": 1,
+				"n": 1,
+				"rate": 1,
+				"low": 0.20654931179180275,
+				"high": 1
+			},
+			"dsl": {
+				"k": 1,
+				"n": 1,
+				"rate": 1,
+				"low": 0.20654931179180275,
+				"high": 1
+			},
+			"gateScoreMean": 1,
+			"passRate": {
+				"k": 1,
+				"n": 1,
+				"rate": 1,
+				"low": 0.20654931179180275,
+				"high": 1
+			},
+			"failureClasses": {
+				"NONE": 1
+			},
+			"checks": [
+				{
+					"id": "beh.grounding",
+					"axis": "behaviour",
+					"weight": 3,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "beh.no-fabrication",
+					"axis": "behaviour",
+					"weight": 2,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "dsl.bounds.in-clip",
+					"axis": "dsl",
+					"weight": 3,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "dsl.bounds.playable",
+					"axis": "dsl",
+					"weight": 2,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "dsl.effect.honest",
+					"axis": "dsl",
+					"weight": 2,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "dsl.single-zoom",
+					"axis": "dsl",
+					"weight": 2,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "dsl.target.correct-clip",
+					"axis": "dsl",
+					"weight": 4,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "dsl.timeline.untouched",
+					"axis": "dsl",
+					"weight": 2,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "dsl.turn.completed",
+					"axis": "dsl",
+					"weight": 2,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "struct.invariants",
+					"axis": "dsl",
+					"weight": 3,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				},
+				{
+					"id": "struct.schema-valid",
+					"axis": "dsl",
+					"weight": 3,
+					"passed": 1,
+					"total": 1,
+					"indeterminate": 0,
+					"wilson": {
+						"k": 1,
+						"n": 1,
+						"rate": 1,
+						"low": 0.20654931179180275,
+						"high": 1
+					},
+					"expected": false,
+					"evidence": []
+				}
+			],
+			"unmeasuredAxes": [],
+			"msMean": 3083.5562
+		}
+	],
+	"notices": []
+}

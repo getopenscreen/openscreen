@@ -23,9 +23,10 @@
 //      900-segment fixture is six figures of characters). Long fields are cut
 //      at `MAX_FIELD_CHARS` and every cut is NAMED in `truncated[]`, so a
 //      reader is never silently looking at a fragment.
-//   3. The system message goes beside the file, not in it — ~8.5 kB identical
-//      across every repetition of every scenario. It is written once per sha
-//      and referenced by name; the sha is the report's own fingerprint field,
+//   3. High-priority system/developer instructions go beside the file — often
+//      identical across every repetition — with roles retained when needed.
+//      The file is written once per sha and referenced by name; the sha is the
+//      report's own fingerprint field,
 //      so the reference is verifiable rather than decorative.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -91,7 +92,9 @@ export interface PersistedTurn {
 		rounds: number;
 		systemSha256: string;
 		systemChars: number;
-		/** Sibling file holding the system message in full. */
+		/** High-priority message roles in request order. Absent on legacy turns. */
+		instructionRoles?: Array<"system" | "developer">;
+		/** Sibling file holding high-priority instructions in full. */
 		systemFile: string;
 		toolsSha256: string;
 		toolNames: string[];
@@ -193,6 +196,9 @@ export function buildPersistedTurn(options: BuildPersistedTurnOptions): Persiste
 			rounds: wire.rounds,
 			systemSha256: wire.systemSha256,
 			systemChars: wire.systemChars,
+			...(wire.instructionMessages
+				? { instructionRoles: wire.instructionMessages.map((message) => message.role) }
+				: {}),
 			systemFile: systemFileName(wire.systemSha256),
 			toolsSha256: wire.toolsSha256,
 			toolNames: wire.toolNames,
@@ -327,7 +333,7 @@ export function listPersistedTurns(options: {
  *
  * ponytail: UNE chose ne survit pas au fichier, et la taire la rendrait
  * mesurable par erreur. `systemBlocks` et `toolsSent` ne sont pas persistés —
- * seuls leurs sha, leurs noms et le message système voisin le sont — donc un
+ * seuls leurs sha, leurs noms et le fichier d'instructions voisin le sont — donc un
  * check qui les lirait verrait des tableaux vides, ce qui ressemble à « rien
  * n'a été envoyé » et n'en est pas. Aucun check jugé ne les touche ; ce
  * commentaire est ce qui doit être lu avant qu'un futur check le fasse.

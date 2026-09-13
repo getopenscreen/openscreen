@@ -69,6 +69,7 @@ const FINGERPRINT = {
 	model: "workbench-scripted",
 	gitSha: "deadbee",
 	gitDirty: true,
+	effectiveSourceSha256: "c".repeat(64),
 	overlayId: null,
 	reps: 3,
 };
@@ -123,6 +124,8 @@ describe("report rendering", () => {
 		expect(markdown).toContain("8742 car.");
 		expect(markdown).toContain("deadbee");
 		expect(markdown).toContain("(dirty)");
+		expect(markdown).toContain("effective source");
+		expect(markdown).toContain("cccccccccccc");
 	});
 
 	it("labels a known failure as such and surfaces its evidence", () => {

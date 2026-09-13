@@ -66,7 +66,35 @@ par `node --env-file`. Aucun parseur maison, jamais `dotenv`.
 OPENSCREEN_WORKBENCH_API_KEY=…
 OPENSCREEN_WORKBENCH_BASE_URL=…
 OPENSCREEN_WORKBENCH_MODEL=…
+OPENSCREEN_WORKBENCH_WIRE_API=responses
+OPENSCREEN_WORKBENCH_USER_AGENT=codex_exec/…
+OPENSCREEN_WORKBENCH_ORIGINATOR=codex_exec
 ```
+
+`WIRE_API` vaut `chat-completions` par défaut ou `responses`. Les deux en-têtes sont facultatifs,
+validés comme valeurs publiques ordinaires, et leur profil normalisé est lié à l'identité de
+transport sans enregistrer la clé. En mode Responses, le modèle configuré doit réellement
+sélectionner le client Responses natif ; un désaccord échoue avant tout transfert.
+
+Un run Responses borné nomme toujours ses deux plafonds :
+
+```bash
+node workbench/.build/cli.cjs run --scenario target-right-clip --reps 1 \
+  --label <label> --record --timeout 180000 --max-requests 6 --max-output-tokens 2048
+```
+
+Le plafond de requêtes appartient à toute l'invocation. Le recorder impose `store:false`, le
+plafond de sortie demandé, 64 KiB par requête, 1 MiB par réponse, 60 s par requête, zéro retry SDK
+et zéro répétition de secours. Il conserve les octets de réponse décodés par HTTP avec leur SHA,
+statut et Content-Type exacts. Le replay principal ne lit aucun environnement live :
+
+```bash
+node workbench/.build/cli.cjs replay --scenario <id> --cassette <path> \
+  --label <nouveau-label> --timeout <ms>
+```
+
+Il écrit `workbench/runs/<label>/<scenario>/replay-receipt.json`, avec l'usage relu depuis les
+octets effectivement servis par le replay, puis exige `assertFresh()`.
 
 `workbench/lib/env.ts` est le **seul** fichier autorisé à nommer ces variables. Si l'une manque,
 on échoue avec un message nommé plutôt que de chercher ailleurs : sans `baseUrl`, ChatOpenAI part
@@ -76,6 +104,110 @@ ressort déguisé en « Empty response from model ». Deux pannes silencieuses �
 La valeur n'est **jamais** lue, journalisée ni écrite : `report.ts` et `writeCassette` **refusent**
 d'écrire un payload qui la contient, et `scenarios/contract.wb.ts` interdit à tout fichier de
 `workbench/**` de toucher au trousseau, à `safeStorage` ou à `Application Support`.
+
+### Usage observé dans les cassettes
+
+`workbench/lib/cassette.ts` ajoute, quand le flux le fournit, `rounds[].usage` à partir du dernier
+objet `usage` valide rencontré avant `[DONE]`. Pour Responses, l'usage vient exclusivement de
+`response.completed.response.usage`. Le champ est optionnel : son absence signifie
+« inconnu », jamais zéro. Les champs de détail propres au provider sont conservés tels quels ; le
+SSE brut reste dans `rounds[].sse`. Le profil Chat historique transmet le corps inchangé ; le
+profil Responses conserve le corps effectif après sa mutation déclarée (`store:false` et
+`max_output_tokens`). Les
+anciennes cassettes sans ce champ restent lisibles et rejouables.
+
+Cette extension couvre uniquement la métadonnée observée de l'issue #459 : elle ne demande pas
+`include_usage`, n'estime pas les tokens et ne réécrit ni les cassettes ni les baselines.
+
+### Adopter une mesure versionnée
+
+Un run enregistré garde d'abord ses artefacts exploratoires sous
+`workbench/runs/<label>/<scénario>/`. La cassette, les résultats check par check, le rapport et
+`measurement-candidate.json` y restent gitignorés. La fin d'un run ne les publie pas, ne les ajoute
+pas à Git et ne marque aucune revue comme approuvée.
+
+Si le scénario porte des checks jugés, ce candidat reste `complete: false` jusqu'à
+`npm run wb:judge -- --label <label> --record`. Cette passe doit utiliser le même provider et le
+même endpoint que le run agent ; elle ajoute `judge-cassette.json`, remplace les résultats
+indéterminés par les verdicts réellement enregistrés, puis rend le candidat exportable. Un juge
+interrompu ou exécuté contre une autre destination ne le complète pas.
+
+Une mesure qui doit étayer une baseline ou une PR passe par une adoption explicite :
+
+```bash
+npm run wb:record -- --scenario target-right-clip --reps 3 --label pr-123
+npm run wb:measurement -- export \
+  --run workbench/runs/pr-123/target-right-clip \
+  --id pr-123-target-right-clip \
+  --review checks/pr-123-target-right-clip-review.json
+npm run wb:measurement -- verify --id pr-123-target-right-clip
+npm run wb:measurement -- replay --id pr-123-target-right-clip
+npm run wb:measurement -- baseline --id pr-123-target-right-clip \
+  --out workbench/runs/pr-123/target-right-clip/baseline-candidate.json
+npm run wb:measurement -- compare \
+  --left pr-123-target-right-clip --right pr-124-target-right-clip
+```
+
+`export` valide tout avant de renommer atomiquement le paquet vers
+`workbench/measurements/<id>/`, un emplacement suivi par défaut. Un identifiant existant n'est
+jamais écrasé. La commande ne parcourt pas le répertoire : elle ne copie que les références
+énumérées et autorisées (`input-fixture`, cassettes agent/juge, résultats, rapport et reçu de
+revue), chacune sous un chemin POSIX relatif, sans lien symbolique ni jonction, et avec son SHA256.
+
+Les fichiers adoptés sont des preuves figées : leurs empreintes couvrent les octets, y compris
+les espaces et les fins de ligne. `.gitattributes` empêche leur conversion par Git, et Biome
+conserve le JSON sans le reformater, tout en gardant la validation syntaxique et le lint actifs.
+Ne normalisez pas ces fichiers manuellement : utilisez `verify`, puis `replay`. Une correction
+doit produire une nouvelle mesure avec un nouvel identifiant.
+
+Le manifeste version 1 porte une identité source de schéma 2 : `commit`, `dirtyManifest` et
+`dirtySha256` gardent la provenance HEAD + changements ; `effectiveManifest` et
+`effectiveSha256` décrivent les octets courants de tout le code et de la configuration concernés.
+Le manifeste effectif couvre les fichiers racine package/TypeScript/Vitest et les extensions de
+code/config sous `workbench/`, `src/` et `electron/`, avec quatorze ancres obligatoires. Il exclut
+les tests L0/L1, baselines, fixtures, runs, rapports, cassettes, builds et mesures adoptées. Un
+commit des mêmes octets, un commit d'artefact seul et son clone changent la provenance sans
+changer l'identité effective ; modifier, ajouter, supprimer ou renommer une source la change.
+Ce périmètre est volontairement conservateur, pas un graphe minimal de dépendances : une autre
+source TypeScript incluse peut donc rendre deux mesures incompatibles même si ce scénario ne
+l'importe pas directement.
+Une ancienne identité `contentManifest`/`contentSha256`, limitée au diff sale, reste
+legacy/non-comparable et n'est jamais interprétée comme l'arbre effectif.
+
+Le même manifeste lie les identités fixture/document/télémétrie, le prompt, les instructions haut
+niveau, les outils, le wire et le rubric. Il garde séparément les modèles demandés et observés
+pour l'agent et le juge. Le provider est un libellé ; l'endpoint n'apparaît que par le SHA256 de
+son origine et de son chemin
+normalisés. Une URL portant des credentials, une query ou un fragment est refusée. Une valeur
+`unknown` reste inconnue et interdit une assertion de comparabilité.
+
+Le reçu de revue est fourni par l'appelant. Il nomme l'id de mesure, un reviewer `human` ou
+`independent`, un verdict `approved` ou `rejected`, une date et un résumé. Le logiciel le vérifie
+et le référence ; il ne fabrique jamais un accord à partir d'une suite verte. Seule une mesure
+explicitement approuvée peut produire une baseline liée.
+
+Les nombres liés sont recalculés depuis chaque verdict de check **avec son poids**. Un indéterminé
+sort de `k` et de `n`, et son poids sort du score de sa répétition, mais il reste compté séparément.
+`behaviour` et `dsl` gardent donc leur sens historique : la moyenne des scores pondérés de chaque
+répétition, pas un nouveau taux brut de checks. `verify` recalcule les deux formes et refuse un
+dénominateur, un poids, un score d'axe, un résumé ou un hash modifié ;
+`replay` refait le tour contre les cassettes hors ligne et exige le même résultat. `compare` exige
+la même identité de scénario, fixture, document, télémétrie, source, prompts/outils/wire/rubric,
+endpoint et modèles. S'ils diffèrent, il affiche les deux comptes et rend
+`INCOMPATIBLE_IDENTITIES` au lieu de présenter un delta comme une comparaison canonique.
+
+Les trois JSON historiques de `workbench/baselines/` restent le cliquet des ids d'échec. Leurs
+champs `behaviour` et `dsl` sont toutefois **legacy/unbound** : aucun artefact ne permet de les
+recalculer, donc ils ne constituent pas une baseline numérique actuelle. Toute nouvelle
+affirmation quantitative doit venir de `baseline --id`, jamais d'une valeur recopiée dans un de
+ces fichiers.
+
+La barrière d'adoption est volontairement plus stricte que le stockage exploratoire. Elle refuse
+les secrets connus fournis par l'appelant, les en-têtes d'autorisation, clés API, endpoints bruts,
+chemins privés absolus et champs arbitraires de transcript/document. Seules les fixtures
+synthétiques publiques inscrites dans le registre peuvent être adoptées. Pour une PR jugée, le
+paquet versionné avec ses cassettes et son reçu relu fait partie de l'évidence à committer ; un run
+de réglage, incomplet ou non relu reste sous `workbench/runs/`.
 
 ---
 
@@ -88,13 +220,17 @@ Les rapports vont dans `workbench/reports/` (gitignoré), en JSON et en Markdown
 1. **L'effet minimal détectable**, imprimé en tête. À `--reps 3` il vaut ~81 points : à ce *n*,
    seule une différence énorme est lisible. Un check qui passe de 2/3 à 3/3 n'est pas une
    amélioration, c'est du bruit.
-2. **L'empreinte du run** : `systemSha256` (le message système réellement envoyé), `toolsSha256`,
+2. **L'empreinte du run** : `systemSha256` (tous les messages `system` et `developer` réellement
+   envoyés, avec leurs rôles), `toolsSha256`,
    `toolNames[]` (exactement `OPENSCREEN_TOOL_NAMES` — aucun compte n'est écrit ici : le roster
    est épinglé en CI par `deep-agent/service.test.ts` contre ce que `buildTools` construit
    vraiment, et un nombre recopié en prose est précisément ce qui a laissé ce banc en annoncer
-   19 pendant que le produit en livrait 21), l'id du modèle, le sha git. Deux rapports
-   d'empreintes différentes ne sont pas comparables. C'est arrivé le jour où `createAgent` a
-   remplacé `createDeepAgent` : le message système est passé de ~8 700 à 2 968 caractères et la
+   19 pendant que le produit en livrait 21), l'id du modèle et `effectiveSourceSha256`. Le sha Git
+   et l'état dirty restent affichés comme provenance ; ils ne rendent pas seuls deux arbres
+   effectifs identiques incompatibles. Deux rapports dont les identités effectives, prompts,
+   outils, wires, rubrics, endpoints ou modèles diffèrent ne sont pas comparables. C'est arrivé le
+   jour où `createAgent` a remplacé `createDeepAgent` : le message système est passé de ~8 700 à
+   2 968 caractères et la
    surface d'outils de 25 à 17. Elle a **rebougé trois fois depuis** — `moveClip` (18ᵉ outil),
    les descriptions de `replaceTimeline`/zoom/caméra, deux règles de sélection d'outil et le
    bloc de consentement ajouté au prompt quand `allowAgentEdits` est faux ; puis
@@ -141,7 +277,7 @@ perdrait les six premières) :
 
 ```
 workbench/runs/<label>/<scénario>/rep-<n>.json     appels, documents avant/après, texte final
-workbench/runs/<label>/<scénario>/system-<sha>.txt le message système, une fois par empreinte
+workbench/runs/<label>/<scénario>/system-<sha>.txt instructions system/developer, une fois par empreinte
 ```
 
 `--no-persist` s'en passe. Trois règles :
@@ -151,7 +287,8 @@ workbench/runs/<label>/<scénario>/system-<sha>.txt le message système, une foi
    le nettoyer — un fichier nettoyé cacherait qu'un secret y est passé.
 2. **Borné.** Les résultats d'outils sont illimités par nature. Au-delà de `MAX_FIELD_CHARS` le
    champ est coupé et **nommé** dans `truncated[]` : on ne lit jamais un fragment sans le savoir.
-3. Le message système est écrit **à côté**, une fois par sha, et référencé par nom — le sha est
+3. Les instructions `system`/`developer` sont écrites **à côté**, une fois par sha, et référencées
+   par nom — le sha est
    celui de l'empreinte du rapport, donc la référence est vérifiable.
 
 ### Le ratchet tourne dans les deux sens
@@ -376,7 +513,8 @@ autrement. C'est l'obligation de `scenario-pack.wb.ts` déplacée sur ce qui res
 
 Deux pièges à connaître avant d'écrire un `facts` :
 
-- **`wire.systemBlocks` et `toolsSent` ne survivent pas au fichier persisté** (`persist.ts`). Un
+- **`wire.systemBlocks` (instructions `system`/`developer`) et `toolsSent` ne survivent pas au
+  fichier persisté** (`persist.ts`). Un
   fait qui les lirait verrait des tableaux vides, ce qui ressemble à « rien n'a été envoyé ». Le
   réglage `allowAgentEdits`, lui, EST persisté et arrive jusqu'au contexte (`EvalContext`) : sans
   lui on demanderait au juge si l'assistant devait solliciter un accord sans lui dire s'il en avait
@@ -572,10 +710,19 @@ pas de `fixtures/README.md` versionné à aller lire, seulement celui que se gar
 prise. Rien d'autre que `lib/real-fixture.ts` ne doit les ouvrir.
 
 Conséquence à connaître avant de lancer le banc : **44 tests L0 échouent dans un clone neuf**,
-tous sur le même `ENOENT` (`l0/real-fixture.wb.ts`, `real-screencast-truth.wb.ts`,
+tous avec le code nommé `ORIGINAL_FIXTURE_UNAVAILABLE` (`l0/real-fixture.wb.ts`,
+`real-screencast-truth.wb.ts`,
 `quality.wb.ts`, et `score.wb.ts` qui construit le document de chaque scénario du registre).
 Fournir sa propre prise donnera d'autres chiffres que ceux assertés ici. Rien de tout cela n'est
 vu par le CI, qui ne lance pas le banc.
+
+Le paquet original requis est exactement
+`workbench/fixtures/real-screencast.openscreen` et
+`workbench/fixtures/real-screencast.mp4.cursor.json`. Il n'est plus disponible auprès de son
+propriétaire. Les résumés 66,154 s, 129 mots et 1521 échantillons ne permettent pas de le
+reconstruire. Les quatre scénarios `real-*` restent donc indisponibles : on ne les remplace pas par
+une autre prise sous les mêmes ids, on ne transforme pas l'absence en skip vert, et on ne gèle pas
+leurs anciennes notes comme si elles avaient été relues.
 
 Le document arrive **tel qu'il est sur le disque**, y compris son `cameraTrack: null` alors qu'un
 fichier webcam existe à côté de l'enregistrement. Ce n'est pas un oubli de la copie ; c'est l'état

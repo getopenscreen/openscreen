@@ -16,3 +16,6 @@ CMakeLists.txt text eol=lf
 # so the next one-line edit showed up as a whole-file rewrite in two locales.
 *.md   text eol=lf
 *.mdx  text eol=lf
+
+# Adopted measurement manifests hash exact bytes; keep their artifacts unchanged.
+workbench/measurements/** -text

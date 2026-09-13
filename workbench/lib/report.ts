@@ -3,7 +3,9 @@
 //
 // Two things a report must carry or it is worse than useless:
 //   • the RUN FINGERPRINT — the sha of the system message the model actually
-//     received, the sha of the tool surface, the model id, the git sha. Both
+//     received, the sha of the tool surface, the model id, and the effective
+//     source sha. Git HEAD/dirty state remain visible provenance but do not by
+//     themselves make identical program bytes incomparable. Both prompt/tool
 //     shas moved the day `createAgent` replaced `createDeepAgent` (system
 //     8742 → 2968 chars, tools 25 → 17), which is exactly the kind of change
 //     that would otherwise get blamed on whatever prompt edit happened that
@@ -34,6 +36,8 @@ export interface RunFingerprint {
 	model: string;
 	gitSha: string;
 	gitDirty: boolean;
+	/** Canonical effective source-tree digest. Absent on legacy reports. */
+	effectiveSourceSha256?: string;
 	overlayId: string | null;
 	reps: number;
 }
@@ -115,6 +119,7 @@ export function fingerprintOf(options: {
 	model: string;
 	overlayId?: string | null;
 	reps: number;
+	effectiveSourceSha256?: string;
 }): RunFingerprint {
 	const wire = options.wire;
 	const git = gitInfo();
@@ -126,6 +131,9 @@ export function fingerprintOf(options: {
 		model: options.model,
 		gitSha: git.sha,
 		gitDirty: git.dirty,
+		...(options.effectiveSourceSha256
+			? { effectiveSourceSha256: options.effectiveSourceSha256 }
+			: {}),
 		overlayId: options.overlayId ?? null,
 		reps: options.reps,
 	};
@@ -237,7 +245,7 @@ export function renderMarkdown(report: WorkbenchReport): string {
 	lines.push("| --- | --- |");
 	lines.push(`| modèle | \`${report.fingerprint.model}\` |`);
 	lines.push(
-		`| message système | ${report.fingerprint.systemChars} car., sha ` +
+		`| instructions système/developer | ${report.fingerprint.systemChars} car., sha ` +
 			`\`${report.fingerprint.systemSha256.slice(0, 12)}\` |`,
 	);
 	lines.push(
@@ -247,6 +255,11 @@ export function renderMarkdown(report: WorkbenchReport): string {
 	lines.push(
 		`| git | \`${report.fingerprint.gitSha}\`${report.fingerprint.gitDirty ? " (dirty)" : ""} |`,
 	);
+	if (report.fingerprint.effectiveSourceSha256) {
+		lines.push(
+			`| effective source | \`${report.fingerprint.effectiveSourceSha256.slice(0, 12)}\` |`,
+		);
+	}
 	lines.push(`| overlay | ${report.fingerprint.overlayId ?? "aucun"} |`);
 	lines.push("");
 

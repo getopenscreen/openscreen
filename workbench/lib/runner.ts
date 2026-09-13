@@ -12,10 +12,16 @@
 // observed, not because nothing happened. That false green cost one live run to
 // find; the proxy is now the only live path.
 
+import { existsSync } from "node:fs";
 import { getReasoningCapability } from "../../electron/ai-edition/deep-agent/chat-model";
 import type { LlmConfigStore } from "../../electron/ai-edition/llm-config-store";
 import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
-import { startRecorder } from "./cassette";
+import {
+	mergeRetryCassettes,
+	readCassetteEvidence,
+	startRecorder,
+	writeCassette,
+} from "./cassette";
 import { requireLiveEnv } from "./env";
 import {
 	DEFAULT_TURN_TIMEOUT_MS,
@@ -199,12 +205,16 @@ export async function runScenarioReps(
 
 	for (let rep = 0; rep < options.reps; rep += 1) {
 		budget?.refreshDeadline();
+		const canonicalFile = options.live?.record?.(rep);
+		const priorCassettes: ReturnType<typeof readCassetteEvidence>[] = [];
 		let attempt = 0;
 		for (;;) {
+			const attemptFile =
+				canonicalFile === undefined ? undefined : `${canonicalFile}.attempt-${attempt}`;
 			const endpoint = options.live
 				? await startLiveEndpoint({
 						scenario: options.scenario.id,
-						cassetteFile: options.live.record?.(rep),
+						cassetteFile: attemptFile,
 						transport,
 						budget,
 					})
@@ -222,11 +232,18 @@ export async function runScenarioReps(
 			} finally {
 				endpoint?.close();
 			}
+			if (attemptFile && existsSync(attemptFile)) {
+				priorCassettes.push(readCassetteEvidence(attemptFile));
+			}
 			const failureClass = result.scored.failureClass;
 			if ((failureClass === "TIMEOUT" || failureClass === "TRANSPORT") && attempt < maxRetries) {
 				discarded.push(result);
 				attempt += 1;
 				continue;
+			}
+			if (canonicalFile && priorCassettes.length > 0) {
+				const success = priorCassettes[priorCassettes.length - 1];
+				writeCassette(canonicalFile, mergeRetryCassettes(success, priorCassettes.slice(0, -1)));
 			}
 			results.push(result);
 			options.onRepetition?.(result);

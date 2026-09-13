@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
 	hashRequest,
+	mergeRetryCassettes,
 	readCassette,
 	startRecorder,
 	startReplay,
@@ -487,6 +488,112 @@ describe("record then replay", () => {
 			recorder.close();
 			redirect.close();
 			target.close();
+		}
+	});
+
+	it("keeps failed retry attempts on the successful cassette", () => {
+		const digest = { systemChars: 1, toolCount: 0, roles: ["user"], lastUserText: "retry" };
+		const failed = {
+			scenario: "retry-probe",
+			provider: "loopback",
+			model: "loopback",
+			recordedAt: "2026-09-13T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: "0123456789abcdef",
+					digest,
+					sse: "data: [DONE]\n\n",
+				},
+			],
+			attempts: [
+				{ attempt: 0, phase: "forward" as const, status: "failed" as const, detail: "timeout" },
+			],
+		};
+		const success = {
+			...failed,
+			attempts: [{ attempt: 0, phase: "complete" as const, status: "recorded" as const }],
+		};
+		const merged = mergeRetryCassettes(success, [failed]);
+		expect(merged.rounds).toEqual(success.rounds);
+		expect(merged.attempts).toEqual([
+			{ attempt: 0, phase: "forward", status: "failed", detail: "timeout" },
+			{ attempt: 1, phase: "complete", status: "recorded" },
+		]);
+	});
+
+	it("rejects a Chat cassette whose rounds resolve to different models", () => {
+		expect(() =>
+			writeCassette(join(DIRECTORY, "mixed-models.json"), {
+				scenario: "mixed-models",
+				provider: "loopback",
+				model: "alias",
+				resolvedModel: "gpt-a",
+				recordedAt: "2026-09-13T00:00:00.000Z",
+				rounds: [
+					{
+						round: 0,
+						requestHash: "0123456789abcdef",
+						digest: { systemChars: 0, toolCount: 0, roles: ["user"], lastUserText: "a" },
+						sse: `data: ${JSON.stringify({ model: "gpt-a" })}\n\ndata: [DONE]\n\n`,
+					},
+					{
+						round: 1,
+						requestHash: "fedcba9876543210",
+						digest: { systemChars: 0, toolCount: 0, roles: ["user"], lastUserText: "b" },
+						sse: `data: ${JSON.stringify({ model: "gpt-b" })}\n\ndata: [DONE]\n\n`,
+					},
+				],
+			}),
+		).toThrow(/model mismatch/);
+	});
+
+	it("fails closed when the concrete Chat model changes mid-measurement", async () => {
+		let round = 0;
+		const upstream = createServer((_req, res) => {
+			const model = round === 0 ? "gpt-a" : "gpt-b";
+			round += 1;
+			res.writeHead(200, { "content-type": "text/event-stream" });
+			res.end(`data: ${JSON.stringify({ model })}\n\ndata: [DONE]\n\n`);
+		});
+		await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+		const address = upstream.address();
+		if (!address || typeof address === "string")
+			throw new Error("model-change upstream has no address");
+		const file = join(DIRECTORY, "model-change.json");
+		const recorder = await startRecorder({
+			upstream: `http://127.0.0.1:${address.port}`,
+			file,
+			scenario: "model-change",
+			provider: "loopback",
+			model: "alias",
+		});
+		try {
+			const first = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "alias",
+					messages: [{ role: "user", content: "first" }],
+				}),
+			});
+			expect(first.status).toBe(200);
+			await first.text();
+			const second = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "alias",
+					messages: [{ role: "user", content: "second" }],
+				}),
+			});
+			expect(second.status).toBe(502);
+			expect(await second.json()).toEqual({
+				error: "workbench proxy: resolved model changed mid-measurement",
+			});
+		} finally {
+			recorder.close();
+			upstream.close();
 		}
 	});
 });

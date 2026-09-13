@@ -345,6 +345,7 @@ export function validateCassette(cassette: Cassette): void {
 				"cassette has transport or Responses evidence without a wireApi discriminator",
 			);
 		}
+		assertChatResolvedModel(cassette);
 		return;
 	}
 	if (declaredWireApi !== "chat-completions" && declaredWireApi !== "responses") {
@@ -369,6 +370,7 @@ export function validateCassette(cassette: Cassette): void {
 		if (hasResponsesEvidence || hasResponsesSseEvents) {
 			throw new Error("Chat cassette contains Responses-only round evidence");
 		}
+		assertChatResolvedModel(cassette);
 		return;
 	}
 	for (const round of cassette.rounds) {
@@ -399,10 +401,35 @@ export function validateCassette(cassette: Cassette): void {
 	}
 }
 
+function assertChatResolvedModel(cassette: Cassette): void {
+	for (const round of cassette.rounds) {
+		const model = modelFromSse(round.sse, "chat-completions");
+		if (model && cassette.resolvedModel && model !== cassette.resolvedModel) {
+			throw new Error(`Chat round ${round.round} model mismatch`);
+		}
+	}
+}
+
 export function readCassette(file: string): Cassette {
 	const cassette = JSON.parse(readFileSync(file, "utf8")) as Cassette;
 	validateCassette(cassette);
 	return cassette;
+}
+
+export function mergeRetryCassettes(success: Cassette, prior: readonly Cassette[]): Cassette {
+	const attempts = [
+		...prior.flatMap((cassette) => cassette.attempts ?? []),
+		...(success.attempts ?? []),
+	].map((attempt, index) => ({ ...attempt, attempt: index }));
+	return { ...success, attempts };
+}
+
+export function readCassetteEvidence(file: string): Cassette {
+	try {
+		return readCassette(file);
+	} catch {
+		return JSON.parse(readFileSync(file, "utf8")) as Cassette;
+	}
 }
 
 export function writeCassette(file: string, cassette: Cassette): void {
@@ -695,7 +722,21 @@ export async function startRecorder(options: {
 			res.end('{"error":"workbench proxy: invalid Responses terminal sequence"}');
 			return;
 		}
-		resolvedModel ??= terminal?.model ?? modelFromSse(decoded, wireApi);
+		const observedModel = terminal?.model ?? modelFromSse(decoded, wireApi);
+		if (observedModel) {
+			if (resolvedModel && observedModel !== resolvedModel) {
+				retainAttempt({
+					attempt,
+					phase: "response",
+					status: "failed",
+					detail: "resolved model changed mid-measurement",
+				});
+				res.writeHead(502, { "content-type": "application/json" });
+				res.end('{"error":"workbench proxy: resolved model changed mid-measurement"}');
+				return;
+			}
+			resolvedModel = observedModel;
+		}
 		const usage = terminal?.usage ?? usageFromSse(decoded, wireApi);
 		const responseEvidence: ResponseByteEvidence = {
 			bodyBase64: responseBytes.toString("base64"),

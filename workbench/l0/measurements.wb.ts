@@ -15,6 +15,7 @@ import {
 	type ArtifactReference,
 	assertComparable,
 	boundBaselineFromMeasurement,
+	boundMeasurementFingerprints,
 	exportMeasurement,
 	MeasurementError,
 	type MeasurementManifest,
@@ -33,6 +34,7 @@ import {
 } from "../lib/provenance";
 import { wilson95 } from "../lib/stats";
 import { runMeasurementCli } from "../measurement-cli";
+import { getScenario } from "../scenarios/registry";
 
 const roots: string[] = [];
 const cliOutputs: string[] = [];
@@ -186,11 +188,13 @@ function createCandidate(root: string): {
 			telemetrySha256: fixture.telemetrySha256,
 		},
 		fingerprints: {
-			promptSha256: HASH("1"),
+			...boundMeasurementFingerprints(getScenario("target-right-clip"), {
+				systemSha256: HASH("d"),
+				toolsSha256: HASH("e"),
+				toolNames: [],
+			}),
 			systemSha256: HASH("d"),
 			toolsSha256: HASH("e"),
-			wireSha256: HASH("4"),
-			rubricSha256: HASH("5"),
 		},
 		models: {
 			agent: { requested: "loopback-model", observed: "loopback-model" },
@@ -661,7 +665,28 @@ describe("measurement identity and bound baseline", () => {
 		const changedSource = structuredClone(baseline);
 		changedSource.effectiveSourceSha256 = HASH("0");
 		expectCode(() => verifyBoundBaseline(changedSource, verified), "SOURCE_IDENTITY_MISMATCH");
+		const changedFailures = structuredClone(baseline);
+		changedFailures.expectedFailures = ["whatever-I-want"];
+		expectCode(() => verifyBoundBaseline(changedFailures, verified), "CHECK_COUNT_MISMATCH");
 		expect(() => assertComparable(baseline.identity, verified.manifest)).not.toThrow();
+	});
+
+	it("rejects a rewritten prompt, wire, or rubric fingerprint", () => {
+		const fingerprints = createCandidate(root());
+		rewriteCandidate(fingerprints.runDir, (manifest) => {
+			manifest.fingerprints.promptSha256 = HASH("1");
+		});
+		expectCode(() => exportValid(fingerprints), "INCOMPATIBLE_IDENTITIES");
+		const wire = createCandidate(root());
+		rewriteCandidate(wire.runDir, (manifest) => {
+			manifest.fingerprints.wireSha256 = HASH("4");
+		});
+		expectCode(() => exportValid(wire), "INCOMPATIBLE_IDENTITIES");
+		const rubric = createCandidate(root());
+		rewriteCandidate(rubric.runDir, (manifest) => {
+			manifest.fingerprints.rubricSha256 = HASH("5");
+		});
+		expectCode(() => exportValid(rubric), "INCOMPATIBLE_IDENTITIES");
 	});
 
 	it("never turns an explicit rejected review into baseline approval", () => {

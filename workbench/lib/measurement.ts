@@ -568,6 +568,25 @@ export function weightedAxisTrials(
 	return { k: Math.round(results.axisScores[axis] * n), n };
 }
 
+export function boundMeasurementFingerprints(
+	scenario: Scenario,
+	wire: {
+		systemSha256?: string | null;
+		toolsSha256?: string | null;
+		toolNames?: string[];
+	},
+): Pick<MeasurementIdentity["fingerprints"], "promptSha256" | "rubricSha256" | "wireSha256"> {
+	return {
+		promptSha256: sha256Bytes(scenario.prompt.replace(/\r\n?/g, "\n")),
+		rubricSha256: scenarioRubricSha256(scenario),
+		wireSha256: sha256Canonical({
+			systemSha256: wire.systemSha256 ?? null,
+			toolsSha256: wire.toolsSha256 ?? null,
+			toolNames: wire.toolNames ?? [],
+		}),
+	};
+}
+
 function scenarioRubricSha256(scenario: Scenario): string {
 	return sha256Canonical({
 		behaviour: scenario.behaviour.map((check) => ({
@@ -738,8 +757,10 @@ export function prepareMeasurementCandidate(options: PrepareMeasurementCandidate
 		return artifactRef(runDir, absolute, "main-cassette");
 	});
 	const fingerprints = wireIdentity(options.results);
-	fingerprints.promptSha256 = sha256Bytes(options.scenario.prompt.replace(/\r\n?/g, "\n"));
-	fingerprints.rubricSha256 = scenarioRubricSha256(options.scenario);
+	const bound = boundMeasurementFingerprints(options.scenario, options.results[0]?.run.wire ?? {});
+	fingerprints.promptSha256 = bound.promptSha256;
+	fingerprints.wireSha256 = bound.wireSha256;
+	fingerprints.rubricSha256 = bound.rubricSha256;
 	const agentTransports = cassetteTransportProfiles(options.cassetteFiles);
 	if (agentTransports) {
 		fingerprints.transportSha256 = transportFingerprint(agentTransports, "no-judge");
@@ -978,6 +999,20 @@ function assertRequiredRoles(manifest: MeasurementManifest): void {
 		}
 	} else if (judgeCassettes.length !== 0) {
 		fail("CANDIDATE_INCOMPLETE", "unjudged measurement must not include a judge cassette");
+	}
+}
+
+function assertBoundFingerprints(manifest: MeasurementManifest, report: WorkbenchReport): void {
+	const scenario = getScenario(manifest.scenario.id);
+	const bound = boundMeasurementFingerprints(scenario, report.fingerprint);
+	if (manifest.fingerprints.promptSha256 !== bound.promptSha256) {
+		fail("INCOMPATIBLE_IDENTITIES", "prompt fingerprint does not match the registered scenario");
+	}
+	if (manifest.fingerprints.rubricSha256 !== bound.rubricSha256) {
+		fail("INCOMPATIBLE_IDENTITIES", "rubric fingerprint does not match the registered scenario");
+	}
+	if (manifest.fingerprints.wireSha256 !== bound.wireSha256) {
+		fail("INCOMPATIBLE_IDENTITIES", "wire fingerprint does not match the bound report contract");
 	}
 }
 
@@ -1231,10 +1266,9 @@ export function verifyMeasurementDirectory(
 	const reportRefs = roleRefs(manifest, "report");
 	if (reportRefs.length !== 1)
 		fail("CANDIDATE_INCOMPLETE", "exactly one report artifact is required");
-	assertCountsAgainstReport(
-		manifest,
-		readJson(resolveArtifact(root, reportRefs[0].path)) as WorkbenchReport,
-	);
+	const report = readJson(resolveArtifact(root, reportRefs[0].path)) as WorkbenchReport;
+	assertCountsAgainstReport(manifest, report);
+	assertBoundFingerprints(manifest, report);
 	const reviewRefs = roleRefs(manifest, "review-receipt");
 	if (reviewRefs.length !== 1)
 		fail("REVIEW_MISSING", "exactly one explicit review receipt is required");
@@ -1539,5 +1573,15 @@ export function verifyBoundBaseline(baseline: BoundBaseline, verified: VerifiedM
 	assertComparable(baseline.identity, verified.manifest);
 	if (canonicalJson(baseline.counts) !== canonicalJson(verified.manifest.results)) {
 		fail("CHECK_COUNT_MISMATCH", "baseline k/n does not match its bound measurement");
+	}
+	const expected = boundBaselineFromMeasurement(verified);
+	if (canonicalJson(baseline.expectedFailures) !== canonicalJson(expected.expectedFailures)) {
+		fail("CHECK_COUNT_MISMATCH", "baseline expectedFailures do not match its bound measurement");
+	}
+	if (baseline.recordedAt !== expected.recordedAt) {
+		fail("INCOMPATIBLE_IDENTITIES", "baseline recordedAt does not match its measurement");
+	}
+	if (canonicalJson(baseline.identity) !== canonicalJson(expected.identity)) {
+		fail("INCOMPATIBLE_IDENTITIES", "baseline identity is not rebound from the measurement");
 	}
 }

@@ -569,7 +569,6 @@ async function commandJudge(options: Options): Promise<number> {
 				if (!liveJudgeTransport || !liveJudgeBudget) {
 					throw new Error("live judge transport was not prepared");
 				}
-				liveJudgeBudget.refreshDeadline();
 				endpoint = await startRecorder({
 					// Le proxy, pas le provider en direct — même règle que `runner.ts` :
 					// c'est le seul endroit d'où une cassette peut sortir, et le seul
@@ -612,6 +611,7 @@ async function commandJudge(options: Options): Promise<number> {
 				const context = contextFromPersistedTurn(turn);
 				const readings = new Map<string, JudgeReading>();
 				for (const judged of scenario.judged ?? []) {
+					liveJudgeBudget?.refreshDeadline();
 					const reading = await askJudge({
 						endpoint: {
 							baseUrl: endpoint.url,

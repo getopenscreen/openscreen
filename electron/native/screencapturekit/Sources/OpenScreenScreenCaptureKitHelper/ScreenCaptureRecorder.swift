@@ -828,23 +828,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	}
 
 	private func resolveMicrophoneCaptureDeviceID() -> String? {
-		let devices = AVCaptureDevice.devices(for: .audio)
-
-		if let deviceName = request.audio.microphone.deviceName?.trimmingCharacters(in: .whitespacesAndNewlines),
-			!deviceName.isEmpty,
-			let device = devices.first(where: { $0.localizedName == deviceName })
-		{
-			return device.uniqueID
-		}
-
-		if let deviceId = request.audio.microphone.deviceId?.trimmingCharacters(in: .whitespacesAndNewlines),
-			!deviceId.isEmpty,
-			devices.contains(where: { $0.uniqueID == deviceId })
-		{
-			return deviceId
-		}
-
-		return nil
+		resolveMicrophoneDeviceID(
+			deviceID: request.audio.microphone.deviceId,
+			deviceName: request.audio.microphone.deviceName,
+			devices: AVCaptureDevice.devices(for: .audio).map {
+				(id: $0.uniqueID, name: $0.localizedName)
+			}
+		)
 	}
 }
 

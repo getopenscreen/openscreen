@@ -559,6 +559,15 @@ export function recomputeMeasurementCounts(recorded: RecordedChecks): Measuremen
 	};
 }
 
+/** One independent trial per repetition, weighted the same way as `axisScores`. */
+export function weightedAxisTrials(
+	results: Pick<MeasurementCounts, "repetitions" | "axisScores">,
+	axis: "behaviour" | "dsl",
+): { k: number; n: number } {
+	const n = results.repetitions;
+	return { k: Math.round(results.axisScores[axis] * n), n };
+}
+
 function scenarioRubricSha256(scenario: Scenario): string {
 	return sha256Canonical({
 		behaviour: scenario.behaviour.map((check) => ({
@@ -947,6 +956,14 @@ function assertRequiredRoles(manifest: MeasurementManifest): void {
 function assertCountsAgainstReport(manifest: MeasurementManifest, report: WorkbenchReport): void {
 	const scenario = report.scenarios.find((entry) => entry.scenarioId === manifest.scenario.id);
 	if (!scenario) fail("CHECK_COUNT_MISMATCH", "report does not contain the measured scenario");
+	const infrastructureFailures =
+		(scenario.failureClasses.TRANSPORT ?? 0) + (scenario.failureClasses.TIMEOUT ?? 0);
+	if (infrastructureFailures > 0) {
+		fail(
+			"CANDIDATE_INCOMPLETE",
+			"measurement contains infrastructure failure classes and cannot be adopted",
+		);
+	}
 	if (
 		report.scenarios.length !== 1 ||
 		scenario.reps !== manifest.results.repetitions ||
@@ -1014,16 +1031,25 @@ function assertCassettes(manifest: MeasurementManifest, root: string): void {
 			fail("MANIFEST_INVALID", `${ref.path} observed model is inconsistent with the manifest`);
 		}
 		if (
-			cassette.wireApi === "responses" &&
-			cassette.rounds.some(
-				(round) =>
-					round.terminalStatus !== "completed" ||
-					!round.response ||
-					round.response.status < 200 ||
-					round.response.status >= 300,
-			)
+			cassette.rounds.some((round) => {
+				if (cassette.wireApi === "responses") {
+					return (
+						round.terminalStatus !== "completed" ||
+						!round.response ||
+						round.response.status < 200 ||
+						round.response.status >= 300
+					);
+				}
+				return (
+					typeof round.httpStatus === "number" &&
+					(round.httpStatus < 200 || round.httpStatus >= 300)
+				);
+			})
 		) {
-			fail("CANDIDATE_INCOMPLETE", `${ref.path} contains a failed Responses round`);
+			fail(
+				"CANDIDATE_INCOMPLETE",
+				`${ref.path} contains a failed ${cassette.wireApi === "responses" ? "Responses" : "Chat"} round`,
+			);
 		}
 		if (
 			cassette.wireApi === "responses" &&
@@ -1164,6 +1190,12 @@ export function verifyMeasurementDirectory(
 		fail("CANDIDATE_INCOMPLETE", "exactly one recorded-checks artifact is required");
 	const recorded = readJson(resolveArtifact(root, checksRefs[0].path)) as RecordedChecks;
 	if (!recorded.complete) fail("CANDIDATE_INCOMPLETE", "recorded checks are not complete");
+	if (recorded.scenarioId !== manifest.scenario.id) {
+		fail(
+			"CHECK_COUNT_MISMATCH",
+			"recorded-checks scenario does not match the measurement scenario",
+		);
+	}
 	const recomputed = recomputeMeasurementCounts(recorded);
 	if (canonicalJson(recomputed) !== canonicalJson(manifest.results)) {
 		fail("CHECK_COUNT_MISMATCH", "manifest k/n does not match recorded check outcomes");

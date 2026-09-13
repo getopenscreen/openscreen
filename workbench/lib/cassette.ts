@@ -50,6 +50,8 @@ export interface CassetteRound {
 	requestSha256?: string;
 	response?: ResponseByteEvidence;
 	terminalStatus?: "completed" | "incomplete" | "failed" | "missing";
+	/** Chat Completions HTTP status. Absent on historical text-only cassettes. */
+	httpStatus?: number;
 }
 
 export interface Cassette {
@@ -184,8 +186,22 @@ export function hashRequest(body: Record<string, unknown>): string {
 	return sha256(canonical).slice(0, 16);
 }
 
+/** Transport-bound Chat hash. Includes tool schemas, temperature, and model options. */
+export function hashChatRequest(body: Record<string, unknown>): string {
+	return sha256(JSON.stringify(normalizeIds(body)));
+}
+
 export function hashResponsesRequest(body: Record<string, unknown>): string {
 	return sha256(JSON.stringify(normalizeIds(body)));
+}
+
+function hashRoundRequest(
+	body: Record<string, unknown>,
+	wireApi: WireApi,
+	transportBound: boolean,
+): string {
+	if (wireApi === "responses") return hashResponsesRequest(body);
+	return transportBound ? hashChatRequest(body) : hashRequest(body);
 }
 
 function responseInput(body: Record<string, unknown>): Array<Record<string, unknown>> {
@@ -690,8 +706,11 @@ export async function startRecorder(options: {
 		};
 		const recordedRound: CassetteRound = {
 			round: myRound,
-			requestHash:
-				wireApi === "responses" ? hashResponsesRequest(effectiveBody) : hashRequest(effectiveBody),
+			requestHash: hashRoundRequest(
+				effectiveBody,
+				wireApi,
+				Boolean(options.transport || options.wireApi),
+			),
 			digest: digestOf(effectiveBody, wireApi),
 			sse: decoded,
 			...(usage ? { usage } : {}),
@@ -704,7 +723,7 @@ export async function startRecorder(options: {
 						response: responseEvidence,
 						terminalStatus: terminal?.status ?? "missing",
 					}
-				: {}),
+				: { httpStatus: responseEvidence.status }),
 		};
 		rounds.push(recordedRound);
 		retainAttempt({ attempt, phase: "complete", status: "recorded" });
@@ -806,8 +825,11 @@ export async function startReplay(options: {
 			res.end('{"error":"workbench replay: cassette exhausted"}');
 			return;
 		}
-		const requestHash =
-			wireApi === "responses" ? hashResponsesRequest(effectiveBody) : hashRequest(effectiveBody);
+		const requestHash = hashRoundRequest(
+			effectiveBody,
+			wireApi,
+			Boolean(cassette.transport) && wireApi !== "responses",
+		);
 		if (
 			requestHash !== stored.requestHash ||
 			(stored.inboundPath && stored.inboundPath !== inboundPath)

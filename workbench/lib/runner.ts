@@ -198,6 +198,7 @@ export async function runScenarioReps(
 		options.live?.budget ?? (transport ? createInvocationBudget(transport.limits) : undefined);
 
 	for (let rep = 0; rep < options.reps; rep += 1) {
+		budget?.refreshDeadline();
 		let attempt = 0;
 		for (;;) {
 			const endpoint = options.live

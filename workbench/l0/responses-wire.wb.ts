@@ -4,7 +4,7 @@
 // call_id-linked outputs. They do not exercise a live provider.
 
 import { describe, expect, it } from "vitest";
-import { hashRequest, hashResponsesRequest } from "../lib/cassette";
+import { hashChatRequest, hashRequest, hashResponsesRequest } from "../lib/cassette";
 import type { CapturedRequest } from "../lib/model-server";
 import { applyRequestPolicy, transportIdentity } from "../lib/transport";
 import { systemTextOf, wireFromRequests } from "../lib/wire";
@@ -312,5 +312,26 @@ describe("Responses request fingerprints", () => {
 			hashRequest({ ...legacy, model: "gpt-5-test", stream: true, max_output_tokens: 2048 }),
 		).toBe(expected);
 		expect(hashResponsesRequest({ ...legacy, model: "gpt-5-test" })).not.toBe(expected);
+	});
+
+	it("hashes the full Chat body for transport-bound cassettes", () => {
+		const body = {
+			model: "gpt-5-test",
+			temperature: 0,
+			messages: [{ role: "user", content: "hello" }],
+			tools: [
+				{ function: { name: "addZoom", description: "one", parameters: { type: "object" } } },
+			],
+		};
+		expect(hashChatRequest(body)).not.toBe(hashRequest(body));
+		expect(hashChatRequest({ ...body, temperature: 1 })).not.toBe(hashChatRequest(body));
+		expect(
+			hashChatRequest({
+				...body,
+				tools: [
+					{ function: { name: "addZoom", description: "two", parameters: { type: "object" } } },
+				],
+			}),
+		).not.toBe(hashChatRequest(body));
 	});
 });

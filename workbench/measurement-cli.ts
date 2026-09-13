@@ -5,6 +5,7 @@ import {
 	MeasurementError,
 	replayMeasurement,
 	verifyMeasurementId,
+	weightedAxisTrials,
 	writeBoundBaseline,
 } from "./lib/measurement";
 import { newcombeDelta } from "./lib/stats";
@@ -146,24 +147,12 @@ export async function runMeasurementCli(argv: string[]): Promise<number> {
 					leftScores: left.manifest.results.axisScores,
 					rightScores: right.manifest.results.axisScores,
 					behaviour: newcombeDelta(
-						{
-							k: left.manifest.results.axes.behaviour.passed,
-							n: left.manifest.results.axes.behaviour.decided,
-						},
-						{
-							k: right.manifest.results.axes.behaviour.passed,
-							n: right.manifest.results.axes.behaviour.decided,
-						},
+						weightedAxisTrials(left.manifest.results, "behaviour"),
+						weightedAxisTrials(right.manifest.results, "behaviour"),
 					),
 					dsl: newcombeDelta(
-						{
-							k: left.manifest.results.axes.dsl.passed,
-							n: left.manifest.results.axes.dsl.decided,
-						},
-						{
-							k: right.manifest.results.axes.dsl.passed,
-							n: right.manifest.results.axes.dsl.decided,
-						},
+						weightedAxisTrials(left.manifest.results, "dsl"),
+						weightedAxisTrials(right.manifest.results, "dsl"),
 					),
 				});
 				return 0;

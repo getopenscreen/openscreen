@@ -333,6 +333,10 @@ describe("transport validation and invocation budget", () => {
 		expect(() => budget.reserveRequest(5)).toThrow(/exceeds 4/);
 		expect(budget.requestCount).toBe(1);
 		expect(budget.reserveRequest(1)).toBe(2);
+		const beforeRefresh = budget.startedAt;
+		budget.refreshDeadline();
+		expect(budget.startedAt).toBeGreaterThanOrEqual(beforeRefresh);
+		expect(budget.requestCount).toBe(2);
 		expect(() => budget.reserveRequest(1)).toThrow(/budget exhausted at 2/);
 		expect(budget.requestCount).toBe(2);
 

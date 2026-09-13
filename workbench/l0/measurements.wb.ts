@@ -23,6 +23,7 @@ import {
 	verifyBoundBaseline,
 	verifyMeasurementDirectory,
 	verifyMeasurementId,
+	weightedAxisTrials,
 } from "../lib/measurement";
 import {
 	MANDATORY_SOURCE_ANCHORS,
@@ -300,6 +301,8 @@ describe("versioned measurement export and verification", () => {
 		});
 		expect(counts.axisScores.behaviour).toBe(0.625);
 		expect(counts.axisScores.dsl).toBe(1);
+		expect(weightedAxisTrials(counts, "behaviour")).toEqual({ k: 1, n: 2 });
+		expect(weightedAxisTrials(counts, "dsl")).toEqual({ k: 2, n: 2 });
 	});
 
 	it("accepts the exact finite CLI argument shapes without reading environment configuration", async () => {
@@ -419,6 +422,30 @@ describe("versioned measurement export and verification", () => {
 		expect(() =>
 			readFileSync(join(counts.measurementsDir, "valid-measurement", "measurement.json")),
 		).toThrow();
+
+		const foreignChecks = createCandidate(root());
+		const checksFile = join(foreignChecks.runDir, "recorded-checks.json");
+		const recorded = JSON.parse(readFileSync(checksFile, "utf8")) as RecordedChecks;
+		recorded.scenarioId = "another-scenario";
+		writeJson(checksFile, recorded);
+		rewriteCandidate(foreignChecks.runDir, (manifest) => {
+			const artifact = manifest.artifacts.find((entry) => entry.path === "recorded-checks.json");
+			if (artifact) artifact.sha256 = sha256Bytes(readFileSync(checksFile));
+		});
+		expectCode(() => exportValid(foreignChecks), "CHECK_COUNT_MISMATCH");
+
+		const transport = createCandidate(root());
+		const reportFile = join(transport.runDir, "measurement-report.json");
+		const report = JSON.parse(readFileSync(reportFile, "utf8")) as {
+			scenarios: Array<{ failureClasses: Record<string, number> }>;
+		};
+		report.scenarios[0].failureClasses = { TRANSPORT: 1 };
+		writeJson(reportFile, report);
+		rewriteCandidate(transport.runDir, (manifest) => {
+			const artifact = manifest.artifacts.find((entry) => entry.path === "measurement-report.json");
+			if (artifact) artifact.sha256 = sha256Bytes(readFileSync(reportFile));
+		});
+		expectCode(() => exportValid(transport), "CANDIDATE_INCOMPLETE");
 
 		const source = createCandidate(root());
 		rewriteCandidate(source.runDir, (manifest) => {

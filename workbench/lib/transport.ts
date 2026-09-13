@@ -153,17 +153,20 @@ export interface InvocationBudget {
 	readonly requestCount: number;
 	reserveRequest: (bodyBytes: number) => number;
 	remainingMs: () => number;
+	refreshDeadline: () => void;
 	track: (controller: AbortController) => () => void;
 	abort: () => void;
 }
 
 export function createInvocationBudget(limits: TransportLimits): InvocationBudget {
-	const startedAt = Date.now();
+	let startedAt = Date.now();
 	let requestCount = 0;
 	const controllers = new Set<AbortController>();
 	return {
 		limits,
-		startedAt,
+		get startedAt() {
+			return startedAt;
+		},
 		get requestCount() {
 			return requestCount;
 		},
@@ -181,6 +184,9 @@ export function createInvocationBudget(limits: TransportLimits): InvocationBudge
 			return requestCount;
 		},
 		remainingMs: () => Math.max(0, limits.invocationTimeoutMs - (Date.now() - startedAt)),
+		refreshDeadline() {
+			startedAt = Date.now();
+		},
 		track(controller) {
 			controllers.add(controller);
 			return () => controllers.delete(controller);

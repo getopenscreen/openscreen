@@ -143,6 +143,7 @@ export function pushAllNativeParams(settings: EditorSettingsSnapshot): void {
 	setNativeParam("webcamShape", settings.webcamMaskShape);
 
 	setNativeParam("cursorShow", settings.cursorShow);
+	setNativeParam("cursorAutoHide", settings.cursorAutoHide);
 	setNativeParam("cursorSize", settings.cursor.size);
 	setNativeParam("cursorClickBounce", settings.cursor.clickBounce);
 	setNativeParam("cursorSmoothing", settings.cursor.smoothing);

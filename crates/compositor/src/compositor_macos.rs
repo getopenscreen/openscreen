@@ -2138,7 +2138,7 @@ impl Compositor {
                 let kind = plan.cursor_type.as_deref();
                 if plan.taps <= 1 {
                     let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
-                    self.draw_cur_themed(e, &sprites, kind, plan.placement, plan.size_px, 1.0, plan.clip);
+                    self.draw_cur_themed(e, &sprites, kind, plan.placement, plan.size_px, plan.alpha, plan.clip);
                     e.end_encoding();
                 } else {
                     // Flou RÉEL, pas des copies discrètes : les N échantillons s'accumulent dans
@@ -2161,7 +2161,7 @@ impl Compositor {
                             kind,
                             plan.prev_placement.lerp(plan.placement, f),
                             plan.size_px,
-                            1.0,
+                            plan.alpha,
                             plan.clip,
                         );
                     }

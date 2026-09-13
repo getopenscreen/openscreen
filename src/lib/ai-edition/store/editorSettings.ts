@@ -108,6 +108,7 @@ export interface EditorSettingsSnapshot {
 	webcamBlurIntensity: number;
 	cursor: CursorVisualSettings;
 	cursorShow: boolean;
+	cursorAutoHide: boolean;
 	cursorTheme: string;
 	autoFocusAll: boolean;
 }
@@ -144,8 +145,10 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 		motionBlur: DEFAULT_CURSOR_MOTION_BLUR,
 		clickBounce: DEFAULT_CURSOR_CLICK_BOUNCE,
 		clipToBounds: DEFAULT_CURSOR_CLIP_TO_BOUNDS,
+		autoHide: false,
 	},
 	cursorShow: true,
+	cursorAutoHide: false,
 	cursorTheme: DEFAULT_CURSOR_THEME_ID,
 	autoFocusAll: false,
 };
@@ -177,6 +180,7 @@ interface LegacyShape {
 	cursorClickBounce?: number;
 	cursorClipToBounds?: boolean;
 	cursorShow?: boolean;
+	cursorAutoHide?: boolean;
 	cursorTheme?: string;
 	autoFocusAll?: boolean;
 }
@@ -206,6 +210,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		motionBlur: num(legacy?.cursorMotionBlur, DEFAULT_EDITOR_SETTINGS.cursor.motionBlur),
 		clickBounce: num(legacy?.cursorClickBounce, DEFAULT_EDITOR_SETTINGS.cursor.clickBounce),
 		clipToBounds: bool(legacy?.cursorClipToBounds, DEFAULT_EDITOR_SETTINGS.cursor.clipToBounds),
+		autoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
 	};
 
 	// The pan is authoritative and the rect's offset is rebuilt from it, so the two cannot
@@ -258,6 +263,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		),
 		cursor,
 		cursorShow: bool(legacy?.cursorShow, DEFAULT_EDITOR_SETTINGS.cursorShow),
+		cursorAutoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
 		cursorTheme: str(legacy?.cursorTheme, DEFAULT_EDITOR_SETTINGS.cursorTheme),
 		autoFocusAll: bool(legacy?.autoFocusAll, DEFAULT_EDITOR_SETTINGS.autoFocusAll),
 	};
@@ -283,7 +289,8 @@ export interface EditorSettingsPatch {
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
-	cursor?: Partial<CursorVisualSettings> & { theme?: string; show?: boolean };
+	cursor?: Partial<CursorVisualSettings> & { theme?: string; show?: boolean; autoHide?: boolean };
+	cursorAutoHide?: boolean;
 	autoFocusAll?: boolean;
 }
 
@@ -310,7 +317,9 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 		if (c.clipToBounds !== undefined) next.cursorClipToBounds = c.clipToBounds;
 		if (c.theme !== undefined) next.cursorTheme = c.theme;
 		if (c.show !== undefined) next.cursorShow = c.show;
+		if (c.autoHide !== undefined) next.cursorAutoHide = c.autoHide;
 	}
+	if (patch.cursorAutoHide !== undefined) next.cursorAutoHide = patch.cursorAutoHide;
 	return next;
 }
 

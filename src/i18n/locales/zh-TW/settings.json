@@ -310,7 +310,12 @@
 		"level": "縮放級別",
 		"previewHold": "按住預覽放大效果",
 		"customScale": "自訂縮放",
-		"selectRegion": "選擇要調整的縮放區域"
+		"selectRegion": "選擇要調整的縮放區域",
+		"cursor": {
+			"title": "游標",
+			"show": "顯示",
+			"hide": "隱藏"
+		}
 	},
 	"audio": {
 		"outputGain": "輸出音量",
@@ -342,7 +347,8 @@
 		"themeDefault": "預設",
 		"clipToBounds": "裁切至畫布",
 		"motionBlur": "動態模糊",
-		"theme": "游標樣式"
+		"theme": "游標樣式",
+		"autoHide": "閒置時隱藏"
 	},
 	"export": {
 		"gifButton": "匯出 GIF",

@@ -491,6 +491,7 @@ export const zoomRegionSchema = endGteStart(
 		rotationPreset: z.enum(["iso", "left", "right"]).optional(),
 		customScale: z.number().positive().optional(),
 		source: z.enum(["auto", "manual"]).optional(),
+		hideCursor: z.boolean().optional(),
 	}),
 	"endMs",
 	"startMs",

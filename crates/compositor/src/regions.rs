@@ -203,6 +203,72 @@ fn zoom_region_strength(region: &SceneZoomRegion, t: f32) -> f32 {
     1.0 - ease_out_screen_studio(progress)
 }
 
+/// Facteur d'opacité du curseur (0.0..1.0) induit par les régions de zoom ayant `hide_cursor = true`.
+/// Si aucune région masquant le curseur n'est active, retourne 1.0.
+/// S'estompe avec l'ease-in du zoom (1.0 -> 0.0) et réapparaît avec l'ease-out (0.0 -> 1.0).
+/// En cas de transition chaînée (connected pan), suit le même enchaînement que `zoom_state_at`.
+pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32) -> f32 {
+    if regions.is_empty() || !regions.iter().any(|r| r.hide_cursor) {
+        return 1.0;
+    }
+    let pairs = connected_pairs(regions);
+
+    // 1) transition chaînée : pan lissé de la région courante vers la suivante.
+    for &(ci, ni, t_start, t_end) in &pairs {
+        if t < t_start || t > t_end {
+            continue;
+        }
+        let progress = ease_connected_pan(clamp01((t - t_start) / (t_end - t_start).max(1e-3)));
+        let cur_alpha = if regions[ci].hide_cursor { 0.0 } else { 1.0 };
+        let next_alpha = if regions[ni].hide_cursor { 0.0 } else { 1.0 };
+        return lerp(cur_alpha, next_alpha, progress).clamp(0.0, 1.0);
+    }
+
+    // 2) palier chaîné : entre la fin de la transition et le début officiel de la région
+    // suivante, celle-ci est déjà pleinement active (anticipe son propre ease-in).
+    for &(_, ni, _, t_end) in &pairs {
+        let next = &regions[ni];
+        if t > t_end && t < next.start_sec as f32 {
+            return if next.hide_cursor { 0.0 } else { 1.0 };
+        }
+    }
+
+    // 3) région dominante indépendante — exclut celles déjà couvertes par une transition/palier
+    // chaîné ci-dessus.
+    let mut best: Option<(usize, f32)> = None;
+    for (i, r) in regions.iter().enumerate() {
+        let outgoing_past_end =
+            pairs.iter().any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
+        let incoming_before_transition_end =
+            pairs.iter().any(|&(_, ni, _, t_end)| ni == i && t < t_end);
+        if outgoing_past_end || incoming_before_transition_end {
+            continue;
+        }
+        let s = zoom_region_strength(r, t);
+        if s <= 0.0 {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((bi, bs)) => s > bs || (s == bs && r.start_sec > regions[bi].start_sec),
+        };
+        if better {
+            best = Some((i, s));
+        }
+    }
+
+    match best {
+        Some((i, strength)) => {
+            if regions[i].hide_cursor {
+                (1.0 - strength).clamp(0.0, 1.0)
+            } else {
+                1.0
+            }
+        }
+        None => 1.0,
+    }
+}
+
 /// État de zoom complet au temps `t` : échelle, focus, ET tilt 3D (degrés X/Y/Z — rendu en
 /// pixel shader par `compositor.rs`, ce module ne fait que le calcul temporel).
 pub struct ZoomState {
@@ -642,7 +708,71 @@ mod zoom_focus_tests {
             focus_mode: Some("manual".into()),
             rotation: None,
             under_trim: false,
+            hide_cursor: false,
         }
+    }
+
+    #[test]
+    fn zoom_cursor_alpha_hides_during_zoom() {
+        let mut r = region(2.0, 0.5);
+        r.start_sec = 3.0;
+        r.end_sec = 6.0;
+        r.hide_cursor = true;
+
+        let regions = vec![r];
+
+        // Bien avant le zoom (t=0.0) -> pleine opacité
+        assert_eq!(zoom_cursor_alpha(&regions, 0.0), 1.0);
+
+        // Plein milieu du zoom (t=4.5) -> complètement masqué
+        assert_eq!(zoom_cursor_alpha(&regions, 4.5), 0.0);
+
+        // Bien après le zoom (t=10.0) -> pleine opacité
+        assert_eq!(zoom_cursor_alpha(&regions, 10.0), 1.0);
+    }
+
+    #[test]
+    fn zoom_cursor_alpha_connected_regions_stay_hidden() {
+        let mut r1 = region(2.0, 0.5);
+        r1.start_sec = 2.0;
+        r1.end_sec = 4.0;
+        r1.hide_cursor = true;
+
+        let mut r2 = region(2.5, 0.5);
+        r2.start_sec = 4.5;
+        r2.end_sec = 7.0;
+        r2.hide_cursor = true;
+
+        let regions = vec![r1, r2];
+
+        // Pendant la région 1 (t=3.0) -> masqué
+        assert_eq!(zoom_cursor_alpha(&regions, 3.0), 0.0);
+        // Pendant la transition chaînée (connected pan entre t=4.0 et t=4.3) -> reste masqué
+        assert_eq!(zoom_cursor_alpha(&regions, 4.15), 0.0);
+        // Pendant le palier chaîné (t=4.4) -> reste masqué
+        assert_eq!(zoom_cursor_alpha(&regions, 4.4), 0.0);
+        // Pendant la région 2 (t=5.5) -> masqué
+        assert_eq!(zoom_cursor_alpha(&regions, 5.5), 0.0);
+    }
+
+    #[test]
+    fn zoom_cursor_alpha_connected_regions_transition() {
+        let mut r1 = region(2.0, 0.5);
+        r1.start_sec = 2.0;
+        r1.end_sec = 4.0;
+        r1.hide_cursor = true;
+
+        let mut r2 = region(2.5, 0.5);
+        r2.start_sec = 4.5;
+        r2.end_sec = 7.0;
+        r2.hide_cursor = false;
+
+        let regions = vec![r1, r2];
+
+        // Avant la transition (r1 actif) -> 0.0
+        assert_eq!(zoom_cursor_alpha(&regions, 3.0), 0.0);
+        // Après la transition (r2 actif avec hide_cursor=false) -> 1.0
+        assert_eq!(zoom_cursor_alpha(&regions, 5.5), 1.0);
     }
 
     /// Où le point source `f` atterrit à l'écran (0..1) : le crop est centré sur `focus` et

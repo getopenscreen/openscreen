@@ -310,7 +310,12 @@
 		"level": "مستوى التكبير",
 		"previewHold": "اضغط مع الاستمرار لمعاينة تأثير التكبير",
 		"customScale": "تكبير مخصص",
-		"selectRegion": "حدد منطقة التكبير للتعديل"
+		"selectRegion": "حدد منطقة التكبير للتعديل",
+		"cursor": {
+			"title": "المؤشر",
+			"show": "مرئي",
+			"hide": "مخفي"
+		}
 	},
 	"audio": {
 		"outputGain": "ضبط مستوى الإخراج",
@@ -342,7 +347,8 @@
 		"themeDefault": "افتراضي",
 		"clipToBounds": "القص ضمن اللوحة",
 		"motionBlur": "ضبابية الحركة",
-		"theme": "نمط المؤشر"
+		"theme": "نمط المؤشر",
+		"autoHide": "إخفاء عند عدم النشاط"
 	},
 	"export": {
 		"gifButton": "تصدير GIF",

@@ -224,6 +224,83 @@ impl CursorTrack {
         // déplace la trajectoire, pas la chronologie de ce que faisait l'utilisateur.
         CursorTrack::new(samples, self.clicks.clone(), self.types.clone())
     }
+
+    /// Opacité du curseur (0.0..1.0) selon l'inactivité (auto-hide).
+    /// Si `auto_hide` est faux, retourne toujours 1.0.
+    /// Si `auto_hide` est vrai :
+    /// - Le curseur reste à 1.0 tant qu'il bouge ou clique, et pendant 1.5s après le dernier mouvement/clic.
+    /// - Entre 1.5s et 1.8s d'inactivité, il s'estompe linéairement de 1.0 à 0.0 (fade-out 300ms).
+    /// - Au-delà de 1.8s, opacité 0.0.
+    pub fn opacity_at(&self, t: f32, auto_hide: bool) -> f32 {
+        if !auto_hide || self.samples.is_empty() {
+            return 1.0;
+        }
+
+        const IDLE_TIMEOUT_S: f32 = 1.5;
+        const FADE_DURATION_S: f32 = 0.3;
+        const MOVE_THRESH_SQ: f32 = 0.015 * 0.015;
+
+        let last_click = match self.clicks.partition_point(|&tc| tc <= t) {
+            0 => None,
+            i => Some(self.clicks[i - 1]),
+        };
+
+        let (cx, cy) = match self.at(t) {
+            Some(p) => p,
+            None => return 1.0,
+        };
+
+        let idx = self.samples.partition_point(|s| s.0 <= t);
+        let start_t = self.samples[0].0;
+
+        let mut arrival_t = if idx > 0 { self.samples[idx - 1].0 } else { start_t };
+
+        if idx > 0 {
+            let mut i = idx - 1;
+            while i > 0 {
+                let prev = self.samples[i - 1];
+                let dx = cx - prev.1;
+                let dy = cy - prev.2;
+                if dx * dx + dy * dy > MOVE_THRESH_SQ {
+                    arrival_t = self.samples[i].0;
+                    break;
+                }
+                if t - prev.0 > IDLE_TIMEOUT_S + FADE_DURATION_S {
+                    arrival_t = prev.0;
+                    break;
+                }
+                i -= 1;
+                if i == 0 {
+                    arrival_t = start_t;
+                }
+            }
+        }
+
+        if idx > 1 {
+            let s1 = self.samples[idx - 1];
+            let s0 = self.samples[idx - 2];
+            let d_step = (s1.1 - s0.1) * (s1.1 - s0.1) + (s1.2 - s0.2) * (s1.2 - s0.2);
+            if d_step > 0.005 * 0.005 && (t - s1.0).abs() < 0.1 {
+                arrival_t = t;
+            }
+        }
+
+        let mut last_activity = arrival_t;
+        if let Some(tc) = last_click {
+            if tc > last_activity {
+                last_activity = tc;
+            }
+        }
+
+        let idle_time = (t - last_activity).max(0.0);
+        if idle_time <= IDLE_TIMEOUT_S {
+            1.0
+        } else if idle_time >= IDLE_TIMEOUT_S + FADE_DURATION_S {
+            0.0
+        } else {
+            1.0 - (idle_time - IDLE_TIMEOUT_S) / FADE_DURATION_S
+        }
+    }
 }
 
 /// Ressort-amortisseur, intégration semi-implicite (symplectique) d'Euler — stable pour ces
@@ -340,5 +417,71 @@ mod tests {
             Some("arrow"),
             "omitted cursorType after pointer must reset to arrow independently"
         );
+    }
+
+    #[test]
+    fn auto_hide_disabled_always_full_opacity() {
+        let track = CursorTrack::new(
+            vec![(0.0, 0.5, 0.5), (10.0, 0.5, 0.5)],
+            vec![],
+            vec![],
+        );
+        assert_eq!(track.opacity_at(0.0, false), 1.0);
+        assert_eq!(track.opacity_at(5.0, false), 1.0);
+        assert_eq!(track.opacity_at(10.0, false), 1.0);
+    }
+
+    #[test]
+    fn auto_hide_fades_out_after_idle_timeout() {
+        // Le curseur est stationnaire à (0.5, 0.5) de 0 à 5s.
+        let track = CursorTrack::new(
+            vec![(0.0, 0.5, 0.5), (1.0, 0.5, 0.5), (2.0, 0.5, 0.5), (3.0, 0.5, 0.5), (4.0, 0.5, 0.5)],
+            vec![],
+            vec![],
+        );
+        // Pendant 1.5s, opacité 1.0
+        assert_eq!(track.opacity_at(0.0, true), 1.0);
+        assert_eq!(track.opacity_at(1.0, true), 1.0);
+        assert_eq!(track.opacity_at(1.5, true), 1.0);
+
+        // Entre 1.5s et 1.8s, estompage linéaire
+        let op_mid = track.opacity_at(1.65, true);
+        assert!((op_mid - 0.5).abs() < 0.05, "mi-parcours d'estompage: {op_mid}");
+
+        // À 1.8s et au-delà, opacité 0.0
+        assert_eq!(track.opacity_at(1.8, true), 0.0);
+        assert_eq!(track.opacity_at(3.0, true), 0.0);
+    }
+
+    #[test]
+    fn auto_hide_wakes_on_movement_or_click() {
+        // Reste immobile jusqu'à 2s, bouge à 2.5s, s'arrête, clic à 4.0s
+        let track = CursorTrack::new(
+            vec![
+                (0.0, 0.1, 0.1),
+                (1.0, 0.1, 0.1),
+                (2.0, 0.1, 0.1),
+                (2.5, 0.8, 0.8), // mouvement net
+                (2.6, 0.8, 0.8),
+                (4.0, 0.8, 0.8),
+                (5.0, 0.8, 0.8),
+            ],
+            vec![4.0], // clic à 4.0s
+            vec![],
+        );
+
+        // À 1.9s, inactif depuis 0s -> 0.0
+        assert_eq!(track.opacity_at(1.9, true), 0.0);
+
+        // À 2.5s, vient de bouger -> réveil à 1.0
+        assert_eq!(track.opacity_at(2.5, true), 1.0);
+        // À 3.5s, 1s après le mouvement -> toujours 1.0
+        assert_eq!(track.opacity_at(3.5, true), 1.0);
+
+        // Sans le clic à 4.0, à 4.5s (2s après 2.5) il serait éteint.
+        // Mais le clic à 4.0s le réveille -> 1.0
+        assert_eq!(track.opacity_at(4.2, true), 1.0);
+        // Et s'éteint 1.8s après le clic (4.0 + 1.8 = 5.8s)
+        assert_eq!(track.opacity_at(5.9, true), 0.0);
     }
 }

@@ -310,7 +310,12 @@
 		"level": "Yakınlaştırma Seviyesi",
 		"previewHold": "Yakınlaştırma efektini önizlemek için basılı tutun",
 		"customScale": "Özel Yakınlaştırma",
-		"selectRegion": "Ayarlamak için bir yakınlaştırma bölgesi seçin"
+		"selectRegion": "Ayarlamak için bir yakınlaştırma bölgesi seçin",
+		"cursor": {
+			"title": "İmleç",
+			"show": "Görünür",
+			"hide": "Gizli"
+		}
 	},
 	"audio": {
 		"outputGain": "Çıkış seviyesi",
@@ -342,7 +347,8 @@
 		"themeDefault": "Varsayılan",
 		"clipToBounds": "Tuvale Kırp",
 		"motionBlur": "Hareket Bulanıklığı",
-		"theme": "İmleç Stili"
+		"theme": "İmleç Stili",
+		"autoHide": "Hareketsizken gizle"
 	},
 	"export": {
 		"gifButton": "GIF Olarak Dışa Aktar",

@@ -343,6 +343,9 @@ pub struct SceneZoomRegion {
     /// `#[serde(default)]` : absent de tout payload sans trim sous un modificateur (issue #216).
     #[serde(default)]
     pub under_trim: bool,
+    /// Masque le curseur pendant cette région de zoom.
+    #[serde(default)]
+    pub hide_cursor: bool,
 }
 
 /// Une zone de vitesse portée par le temps source d'un clip.
@@ -375,6 +378,9 @@ pub struct SceneCameraFullscreenRegion {
 #[serde(rename_all = "camelCase")]
 pub struct SceneCursor {
     pub show: bool,
+    /// Masque automatiquement le curseur après une période d'inactivité.
+    #[serde(default)]
+    pub auto_hide: bool,
     /// échelle directe (1 = défaut).
     pub size: f32,
     pub smoothing: f32,

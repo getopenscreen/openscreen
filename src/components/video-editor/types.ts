@@ -109,6 +109,8 @@ export interface ZoomRegion {
 	/** Custom scale overriding the preset depth (1.0-5.0, two decimal precision). */
 	customScale?: number;
 	source?: ZoomRegionSource;
+	/** When true, cursor is hidden during this zoom region. */
+	hideCursor?: boolean;
 }
 
 export function getRotation3D(region: Pick<ZoomRegion, "rotationPreset">): Rotation3D {
@@ -228,6 +230,7 @@ export interface CursorVisualSettings {
 	motionBlur: number;
 	clickBounce: number;
 	clipToBounds: boolean;
+	autoHide?: boolean;
 }
 
 export const DEFAULT_CURSOR_SIZE = 3.0;
@@ -236,6 +239,7 @@ export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
 export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
 // false lets the cursor overflow into the background; true clips it to the canvas bounds.
 export const DEFAULT_CURSOR_CLIP_TO_BOUNDS = false;
+export const DEFAULT_CURSOR_AUTO_HIDE = false;
 export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
 
 export interface TrimRegion {

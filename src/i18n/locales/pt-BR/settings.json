@@ -310,7 +310,12 @@
 		"level": "Nível de Zoom",
 		"previewHold": "Mantenha pressionado para pré-visualizar o efeito de zoom",
 		"customScale": "Zoom Personalizado",
-		"selectRegion": "Selecione uma região de zoom para ajustar"
+		"selectRegion": "Selecione uma região de zoom para ajustar",
+		"cursor": {
+			"title": "Cursor",
+			"show": "Visível",
+			"hide": "Oculto"
+		}
 	},
 	"audio": {
 		"outputGain": "Nível de saída",
@@ -342,7 +347,8 @@
 		"themeDefault": "Padrão",
 		"clipToBounds": "Recortar à tela",
 		"motionBlur": "Desfoque de movimento",
-		"theme": "Estilo do cursor"
+		"theme": "Estilo do cursor",
+		"autoHide": "Ocultar quando inativo"
 	},
 	"export": {
 		"gifButton": "Exportar GIF",

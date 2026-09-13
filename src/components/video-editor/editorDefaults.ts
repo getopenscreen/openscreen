@@ -5,6 +5,7 @@ import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import {
 	type CursorVisualSettings,
 	DEFAULT_CROP_REGION,
+	DEFAULT_CURSOR_AUTO_HIDE,
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_CLIP_TO_BOUNDS,
 	DEFAULT_CURSOR_MOTION_BLUR,
@@ -70,6 +71,7 @@ export const DEFAULT_WEBCAM_SETTINGS = {
 
 export const DEFAULT_CURSOR_SETTINGS: CursorVisualSettings & { show: boolean; theme: string } = {
 	show: true,
+	autoHide: DEFAULT_CURSOR_AUTO_HIDE,
 	size: DEFAULT_CURSOR_SIZE,
 	smoothing: DEFAULT_CURSOR_SMOOTHING,
 	motionBlur: DEFAULT_CURSOR_MOTION_BLUR,

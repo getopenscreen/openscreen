@@ -2615,7 +2615,7 @@ impl Compositor {
                         dst: cursor_sprite_dst(center, pw / rw, ph / rh, hotspot),
                         src: [0.0, 0.0, 1.0, 1.0],
                         mode: 7.0,
-                        color: [1.0, 1.0, 1.0, 1.0],
+                        color: [1.0, 1.0, 1.0, plan.alpha],
                         fx: plan.clip,
                         ..Default::default()
                     },
@@ -2651,7 +2651,7 @@ impl Compositor {
                         dst: [min_x / rw, min_y / rh, bw / rw, bh / rh],
                         quad_px: [bw, bh],
                         mode: 13.0,
-                        color: [1.0, 1.0, 1.0, 1.0],
+                        color: [1.0, 1.0, 1.0, plan.alpha],
                         fx: [tl0, tl1, tr0, tr1],
                         src_prev: [br0, br1, bl0, bl1],
                         // Le clip vit ici et NON dans `fx` (mode 7) : `fx` porte les coins.

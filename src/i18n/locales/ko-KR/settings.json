@@ -310,7 +310,12 @@
 		"level": "줌 레벨",
 		"previewHold": "누르고 있으면 줌 효과 미리보기",
 		"customScale": "커스텀 줌",
-		"selectRegion": "조정할 줌 구간을 선택하세요"
+		"selectRegion": "조정할 줌 구간을 선택하세요",
+		"cursor": {
+			"title": "커서",
+			"show": "표시",
+			"hide": "숨기기"
+		}
 	},
 	"audio": {
 		"outputGain": "출력 레벨",
@@ -342,7 +347,8 @@
 		"themeDefault": "기본",
 		"clipToBounds": "캔버스에 맞춰 자르기",
 		"motionBlur": "모션 블러",
-		"theme": "커서 스타일"
+		"theme": "커서 스타일",
+		"autoHide": "비활성 시 자동 숨김"
 	},
 	"export": {
 		"gifButton": "GIF 내보내기",

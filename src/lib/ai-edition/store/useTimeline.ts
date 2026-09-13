@@ -748,6 +748,20 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
+	const updateZoomHideCursor = useCallback(
+		async (id: string, hideCursor: boolean | undefined) => {
+			if (!document) return;
+			const next: AxcutDocument = {
+				...document,
+				zoomRanges: patchPillById(document.zoomRanges, id, {
+					hideCursor: hideCursor ? true : undefined,
+				}) as AxcutDocument["zoomRanges"],
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
 	const updateAnnotationSpan = useCallback(
 		async (id: string, startMs: number, endMs: number) => {
 			if (!document) return;
@@ -1496,6 +1510,7 @@ export function useTimeline() {
 		updateZoomDepth,
 		updateZoomRotation,
 		updateZoomFocusMode,
+		updateZoomHideCursor,
 		updateAnnotationSpan,
 		updateAnnotationLive,
 		commitAnnotationChange,

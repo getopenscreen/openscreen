@@ -3300,6 +3300,7 @@ export function CursorPane() {
 			<div className={styles.paneRow}>
 				<span className={styles.label}>{ts("cursor.show")}</span>
 				<Toggle
+					ariaLabel={ts("cursor.show")}
 					checked={settings.cursorShow}
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -3311,8 +3312,23 @@ export function CursorPane() {
 				/>
 			</div>
 			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("cursor.autoHide")}</span>
+				<Toggle
+					ariaLabel={ts("cursor.autoHide")}
+					checked={settings.cursorAutoHide}
+					disabled={!hasDocument || !settings.cursorShow}
+					onChange={(v) => {
+						void set({ cursorAutoHide: v });
+						if (isNativeCompositorActive()) {
+							setNativeParam("cursorAutoHide", v);
+						}
+					}}
+				/>
+			</div>
+			<div className={styles.paneRow}>
 				<span className={styles.label}>{ts("cursor.clipToBounds")}</span>
 				<Toggle
+					ariaLabel={ts("cursor.clipToBounds")}
 					checked={settings.cursor.clipToBounds}
 					disabled={!hasDocument}
 					onChange={(v) => void set({ cursor: { clipToBounds: v } })}

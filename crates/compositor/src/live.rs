@@ -631,6 +631,7 @@ struct InspectorParams {
     cursor_smoothing: f32,
     /// 0..1 : force du flou de mouvement DU CURSEUR (indépendant du motion blur écran).
     cursor_motion_blur: f32,
+    cursor_auto_hide: bool,
 }
 
 impl Default for InspectorParams {
@@ -650,6 +651,7 @@ impl Default for InspectorParams {
             cursor_bounce_scale: 1.0,
             cursor_smoothing: 0.0,
             cursor_motion_blur: 0.0,
+            cursor_auto_hide: false,
         }
     }
 }
@@ -905,6 +907,7 @@ impl LiveView {
                 "backgroundBlur" => p.bg_blur = value,
                 "webcamMirror" => p.webcam_mirror = value,
                 "cursorShow" => p.cursor_show = value,
+                "cursorAutoHide" => p.cursor_auto_hide = value,
                 _ => {}
             }
         }
@@ -964,6 +967,10 @@ impl LiveView {
     pub fn set_scene(&self, json: &str) {
         match Scene::from_json(json) {
             Ok(scene) => {
+                if let Ok(mut p) = self.shared.inspector.lock() {
+                    p.cursor_show = scene.cursor.show;
+                    p.cursor_auto_hide = scene.cursor.auto_hide;
+                }
                 if let Ok(mut s) = self.shared.scene.lock() {
                     *s = Some(scene);
                     self.shared.scene_dirty.store(true, Ordering::Relaxed);
@@ -1522,6 +1529,7 @@ unsafe fn render_thread(
             cursor_size_scale: ip.cursor_size_scale,
             cursor_bounce_scale: ip.cursor_bounce_scale,
             cursor_motion_blur: ip.cursor_motion_blur,
+            cursor_auto_hide: ip.cursor_auto_hide,
             has_webcam: has_real_webcam,
         });
         // Lissage ressort-amortisseur : re-génère la piste (240 Hz) uniquement quand la valeur

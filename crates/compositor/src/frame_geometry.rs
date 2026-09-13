@@ -615,6 +615,8 @@ pub struct LiveParams {
     /// vélocité), pas par un flou gaussien variable comme le canvas web — plus simple à
     /// réutiliser côté GPU, effet de streak équivalent.
     pub cursor_motion_blur: f32,
+    /// Masquage auto du curseur en cas d'inactivité.
+    pub cursor_auto_hide: bool,
     /// False when the "webcam" decoder is actually just the screen video again (the TS side
     /// falls `webcamPath` back to the screen asset's own path when a clip has no real camera,
     /// purely so the decoder pipeline has something valid to open) — drawing the PiP box in
@@ -662,6 +664,7 @@ impl Default for LiveParams {
             cursor_size_scale: 1.0,
             cursor_bounce_scale: 1.0,
             cursor_motion_blur: 0.0,
+            cursor_auto_hide: false,
             has_webcam: true,
         }
     }
@@ -699,6 +702,7 @@ pub fn live_params_from_scene(s: &crate::scene::Scene) -> LiveParams {
         cursor_size_scale: s.cursor.size,
         cursor_bounce_scale: s.cursor.click_bounce,
         cursor_motion_blur: s.cursor.motion_blur,
+        cursor_auto_hide: s.cursor.auto_hide,
         ..LiveParams::default()
     }
 }
@@ -1206,6 +1210,8 @@ pub struct CursorPlan {
     pub clip: [f32; 4],
     /// État du curseur à cet instant (`arrow`, `pointer`, …) pour choisir le sprite.
     pub cursor_type: Option<String>,
+    /// Opacité effective (0..1) tenant compte de l'inactivité (auto-hide) et du zoom.
+    pub alpha: f32,
 }
 
 /// Ce que `plan_cursor` doit savoir en plus de `FrameGeometry`.
@@ -1229,6 +1235,17 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     if !show {
         return None;
     }
+
+    let idle_alpha = input.track.opacity_at(input.t, input.live.cursor_auto_hide);
+    let zoom_alpha = match input.scene {
+        Some(s) => crate::regions::zoom_cursor_alpha(&s.zoom_regions, input.t),
+        None => 1.0,
+    };
+    let alpha = idle_alpha * zoom_alpha;
+    if alpha <= 0.001 {
+        return None;
+    }
+
     let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
     let tilt = (!crate::regions::is_identity_rotation(g.zoom_rotation))
         .then(|| crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], g.zoom_rotation));
@@ -1320,6 +1337,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         taps,
         clip,
         cursor_type: input.track.type_at(input.t).map(str::to_string),
+        alpha,
     })
 }
 

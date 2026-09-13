@@ -1893,7 +1893,7 @@ impl Compositor {
                         cursor_type,
                         plan.placement,
                         plan.size_px,
-                        1.0,
+                        plan.alpha,
                         plan.clip,
                     );
                 } else {
@@ -1910,7 +1910,7 @@ impl Compositor {
                             cursor_type,
                             plan.prev_placement.lerp(plan.placement, f),
                             plan.size_px,
-                            1.0,
+                            plan.alpha,
                             plan.clip,
                         );
                     }
@@ -1921,8 +1921,12 @@ impl Compositor {
                     self.ctx.PSSetShader(&self.ps_tex, None);
                     self.ctx.PSSetSamplers(0, Some(&[Some(self.sampler.clone())]));
                     let vp = D3D11_VIEWPORT {
-                        TopLeftX: 0.0, TopLeftY: 0.0,
-                        Width: self.rw(), Height: self.rh(), MinDepth: 0.0, MaxDepth: 1.0,
+                        TopLeftX: 0.0,
+                        TopLeftY: 0.0,
+                        Width: self.rw(),
+                        Height: self.rh(),
+                        MinDepth: 0.0,
+                        MaxDepth: 1.0,
                     };
                     self.ctx.RSSetViewports(Some(&[vp]));
                     self.ctx.OMSetBlendState(&self.blend, None, 0xffffffff);

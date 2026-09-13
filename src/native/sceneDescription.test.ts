@@ -519,12 +519,14 @@ describe("buildSceneDescription.zoomRegions", () => {
 			depth: 4,
 			focus: { cx: 0.25, cy: 0.75 },
 			rotationPreset: "iso",
+			hideCursor: true,
 		});
 		const doc = makeDoc({ zoomRanges: [z] });
 		const { zoomRegions } = buildSceneDescription(doc);
 		expect(zoomRegions[0].focusX).toBe(0.25);
 		expect(zoomRegions[0].focusY).toBe(0.75);
 		expect(zoomRegions[0].rotation).toBe("iso");
+		expect(zoomRegions[0].hideCursor).toBe(true);
 	});
 
 	it("converts ms→sec for start/end", () => {
@@ -1014,6 +1016,7 @@ describe("buildSceneDescription.settings mapping", () => {
 				webcamMaskShape: "circle",
 				webcamMirrored: true,
 				cursorShow: false,
+				cursorAutoHide: true,
 				cursorTheme: "macos-dark",
 			},
 		});
@@ -1021,6 +1024,7 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(scene.layout.webcamShape).toBe("circle");
 		expect(scene.layout.webcamMirror).toBe(true);
 		expect(scene.cursor.show).toBe(false);
+		expect(scene.cursor.autoHide).toBe(true);
 		expect(scene.cursor.theme).toBe("macos-dark");
 	});
 

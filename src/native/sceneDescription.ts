@@ -87,9 +87,11 @@ export interface SceneZoomRegion {
 	 *  Native shows it when the playhead is parked on the cut and gates it HARD on its own
 	 *  span: no ease-in / ease-out window, and no chaining with a neighbouring zoom. That gate
 	 *  is what keeps the render cut — an export never composes a frame at those source times,
-	 *  and a transition envelope would otherwise reach the kept frames beside the cut.
-	 *  Omitted (not `false`) when there is no trim under the region. See issue #216. */
+	 *  and a transition envelope would otherwise reach the kept frames beside the cut. */
+	/** Omitted (not `false`) when there is no trim under the region. See issue #216. */
 	underTrim?: boolean;
+	/** When true, cursor is hidden during this zoom region. */
+	hideCursor?: boolean;
 }
 
 /** A "Full Camera" timeline region (from `legacyEditor.cameraFullscreenRegions`). Times in seconds. */
@@ -357,6 +359,7 @@ export interface SceneEffects {
 /** Cursor rendering, from the editor settings. */
 export interface SceneCursor {
 	show: boolean;
+	autoHide: boolean;
 	/** Direct scale (1 = default). */
 	size: number;
 	smoothing: number;
@@ -1020,6 +1023,7 @@ export function buildSceneDescription(
 		},
 		cursor: {
 			show: settings.cursorShow,
+			autoHide: settings.cursorAutoHide,
 			size: settings.cursor.size,
 			smoothing: settings.cursor.smoothing,
 			motionBlur: settings.cursor.motionBlur,
@@ -1061,6 +1065,7 @@ export function buildSceneDescription(
 			rotation: region.rotationPreset ?? null,
 			clipIndex: region.clipIndex,
 			...(region.underTrim ? { underTrim: true } : {}),
+			...(region.hideCursor ? { hideCursor: true } : {}),
 		})),
 		annotations: projectedAnnotations
 			.map((region) => {

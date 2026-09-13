@@ -580,6 +580,18 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							<option value="auto">{ts("zoom.focusMode.auto")}</option>
 						</select>,
 					)}
+					{paneRow(
+						ts("zoom.cursor.title"),
+						<select
+							aria-label={ts("zoom.cursor.title")}
+							value={region.hideCursor ? "hide" : "show"}
+							onChange={(e) => void tl.updateZoomHideCursor(region.id, e.target.value === "hide")}
+							style={selectStyle}
+						>
+							<option value="show">{ts("zoom.cursor.show")}</option>
+							<option value="hide">{ts("zoom.cursor.hide")}</option>
+						</select>,
+					)}
 					{autoFocusAll || region.focusMode === "auto" ? (
 						// Auto resamples the focus from cursor telemetry every frame, so there is no fixed
 						// point to reset and no gimbal on the canvas (ZoomFocusOverlay bows out) — the

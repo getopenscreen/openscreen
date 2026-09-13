@@ -310,7 +310,12 @@
 		"level": "ズーム倍率",
 		"previewHold": "押している間ズーム効果をプレビュー",
 		"customScale": "カスタムズーム",
-		"selectRegion": "ズーム範囲を選択して調整"
+		"selectRegion": "ズーム範囲を選択して調整",
+		"cursor": {
+			"title": "カーソル",
+			"show": "表示",
+			"hide": "非表示"
+		}
 	},
 	"audio": {
 		"outputGain": "出力レベル",
@@ -342,7 +347,8 @@
 		"themeDefault": "デフォルト",
 		"clipToBounds": "キャンバスにクリップ",
 		"motionBlur": "モーションブラー",
-		"theme": "カーソルのスタイル"
+		"theme": "カーソルのスタイル",
+		"autoHide": "非アクティブ時に非表示"
 	},
 	"export": {
 		"gifButton": "GIF をエクスポート",

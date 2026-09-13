@@ -310,7 +310,12 @@
 		"level": "缩放级别",
 		"previewHold": "按住预览放大效果",
 		"customScale": "自定义缩放",
-		"selectRegion": "选择要调整的缩放区域"
+		"selectRegion": "选择要调整的缩放区域",
+		"cursor": {
+			"title": "光标",
+			"show": "显示",
+			"hide": "隐藏"
+		}
 	},
 	"audio": {
 		"outputGain": "输出电平",
@@ -342,7 +347,8 @@
 		"themeDefault": "默认",
 		"clipToBounds": "裁剪到画布",
 		"motionBlur": "运动模糊",
-		"theme": "光标样式"
+		"theme": "光标样式",
+		"autoHide": "闲置时隐藏"
 	},
 	"export": {
 		"gifButton": "导出 GIF",

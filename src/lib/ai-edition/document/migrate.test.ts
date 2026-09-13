@@ -111,6 +111,7 @@ describe("migrateProjectDataToAxcutDocument", () => {
 							rotationPreset: "iso",
 							customScale: 2.5,
 							source: "manual",
+							hideCursor: true,
 						},
 					],
 				},
@@ -125,6 +126,7 @@ describe("migrateProjectDataToAxcutDocument", () => {
 		expect(z.endMs).toBe(2000);
 		expect(z.customScale).toBe(2.5);
 		expect(z.rotationPreset).toBe("iso");
+		expect(z.hideCursor).toBe(true);
 	});
 
 	it("converts annotationRegions to seconds with type and content preserved", () => {
@@ -269,6 +271,7 @@ describe("migrateAxcutDocumentToProjectData", () => {
 						endMs: 2000,
 						depth: 4,
 						focus: { cx: 0.5, cy: 0.5 },
+						hideCursor: true,
 					},
 				],
 				annotationRegions: [
@@ -299,6 +302,7 @@ describe("migrateAxcutDocumentToProjectData", () => {
 		const back = migrateAxcutDocumentToProjectData(doc);
 		expect(back.editor.zoomRegions[0].startMs).toBe(0);
 		expect(back.editor.zoomRegions[0].endMs).toBe(2000);
+		expect(back.editor.zoomRegions[0].hideCursor).toBe(true);
 		expect(back.editor.annotationRegions[0].startMs).toBe(1000);
 		expect(back.editor.annotationRegions[0].endMs).toBe(3000);
 	});

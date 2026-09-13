@@ -310,7 +310,12 @@
 		"level": "Zoom Level",
 		"previewHold": "Hold to preview zoom effect",
 		"customScale": "Custom Zoom",
-		"selectRegion": "Select a zoom region to adjust"
+		"selectRegion": "Select a zoom region to adjust",
+		"cursor": {
+			"title": "Cursor",
+			"show": "Visible",
+			"hide": "Hidden"
+		}
 	},
 	"audio": {
 		"outputGain": "Output level",
@@ -342,7 +347,8 @@
 		"themeDefault": "Default",
 		"clipToBounds": "Clip to Canvas",
 		"motionBlur": "Motion Blur",
-		"theme": "Cursor Style"
+		"theme": "Cursor Style",
+		"autoHide": "Auto-hide when inactive"
 	},
 	"export": {
 		"gifButton": "Export GIF",

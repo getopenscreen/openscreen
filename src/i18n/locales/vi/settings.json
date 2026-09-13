@@ -310,7 +310,12 @@
 		"level": "Mức độ thu phóng",
 		"previewHold": "Giữ để xem trước hiệu ứng phóng to",
 		"customScale": "Thu phóng tùy chỉnh",
-		"selectRegion": "Chọn vùng thu phóng để điều chỉnh"
+		"selectRegion": "Chọn vùng thu phóng để điều chỉnh",
+		"cursor": {
+			"title": "Con trỏ",
+			"show": "Hiện",
+			"hide": "Ẩn"
+		}
 	},
 	"audio": {
 		"outputGain": "Mức đầu ra",
@@ -342,7 +347,8 @@
 		"themeDefault": "Mặc định",
 		"clipToBounds": "Cắt theo khung",
 		"motionBlur": "Làm mờ chuyển động",
-		"theme": "Kiểu con trỏ"
+		"theme": "Kiểu con trỏ",
+		"autoHide": "Ẩn khi không hoạt động"
 	},
 	"export": {
 		"gifButton": "Xuất GIF",

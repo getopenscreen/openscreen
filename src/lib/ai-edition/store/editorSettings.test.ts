@@ -121,6 +121,21 @@ describe("patchEditorSettings", () => {
 		expect(snap.cursor.smoothing).toBe(0.9);
 	});
 
+	it("toggles cursorAutoHide on and off via patch", () => {
+		const enabled = patchEditorSettings(baseDoc, { cursorAutoHide: true });
+		expect(getEditorSettings(enabled).cursorAutoHide).toBe(true);
+		expect(getEditorSettings(enabled).cursor.autoHide).toBe(true);
+
+		const disabled = patchEditorSettings(enabled, { cursorAutoHide: false });
+		expect(getEditorSettings(disabled).cursorAutoHide).toBe(false);
+		expect(getEditorSettings(disabled).cursor.autoHide).toBe(false);
+
+		// Also verify via nested cursor.autoHide patch
+		const nestedEnabled = patchEditorSettings(disabled, { cursor: { autoHide: true } });
+		expect(getEditorSettings(nestedEnabled).cursorAutoHide).toBe(true);
+		expect(getEditorSettings(nestedEnabled).cursor.autoHide).toBe(true);
+	});
+
 	it("does not mutate the source document", () => {
 		const before = getEditorSettings(baseDoc);
 		patchEditorSettings(baseDoc, { showBlur: true });

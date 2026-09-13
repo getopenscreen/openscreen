@@ -277,7 +277,7 @@ describe("transport identity and request policy", () => {
 		expect(transportSha256(identity)).toHaveLength(64);
 	});
 
-	it("binds agent order and the optional judge profile into the measurement fingerprint", () => {
+	it("binds a single agent contract and the optional judge profile into the measurement fingerprint", () => {
 		const headers = publicHeaderProfile({}).sha256;
 		const agent = responseIdentity(headers);
 		const secondAgent = responseIdentity(headers, { maxRequests: 7 });
@@ -285,9 +285,12 @@ describe("transport identity and request policy", () => {
 
 		const noJudge = measurementTransportSha256([agent], "no-judge");
 		expect(noJudge).toBe(measurementTransportSha256([cloneIdentity(agent)], "no-judge"));
+		expect(noJudge).toBe(
+			measurementTransportSha256([agent, cloneIdentity(agent), agent], "no-judge"),
+		);
 		expect(measurementTransportSha256([agent], judge)).not.toBe(noJudge);
-		expect(measurementTransportSha256([agent, secondAgent], "no-judge")).not.toBe(
-			measurementTransportSha256([secondAgent, agent], "no-judge"),
+		expect(() => measurementTransportSha256([agent, secondAgent], "no-judge")).toThrow(
+			/incompatible agent transport/,
 		);
 	});
 });

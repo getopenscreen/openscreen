@@ -637,6 +637,20 @@ function wireIdentity(results: RepetitionResult[]): MeasurementIdentity["fingerp
 	};
 }
 
+function transportFingerprint(
+	agent: TransportIdentity[],
+	judge: TransportIdentity | "no-judge",
+): string {
+	try {
+		return measurementTransportSha256(agent, judge);
+	} catch (error) {
+		fail(
+			"INCOMPATIBLE_IDENTITIES",
+			error instanceof Error ? error.message : "incompatible agent transport identities",
+		);
+	}
+}
+
 function cassetteTransportProfiles(files: string[]): TransportIdentity[] | null {
 	const profiles = files.map((file) => readCassette(file).transport);
 	if (profiles.every((profile) => profile === undefined)) return null;
@@ -728,7 +742,7 @@ export function prepareMeasurementCandidate(options: PrepareMeasurementCandidate
 	fingerprints.rubricSha256 = scenarioRubricSha256(options.scenario);
 	const agentTransports = cassetteTransportProfiles(options.cassetteFiles);
 	if (agentTransports) {
-		fingerprints.transportSha256 = measurementTransportSha256(agentTransports, "no-judge");
+		fingerprints.transportSha256 = transportFingerprint(agentTransports, "no-judge");
 	}
 	const manifest: MeasurementManifest = {
 		schema: 1,
@@ -829,7 +843,7 @@ export function finalizeJudgedMeasurementCandidate(options: {
 		fingerprints: {
 			...candidate.fingerprints,
 			...(agentTransports && judgeTransport
-				? { transportSha256: measurementTransportSha256(agentTransports, judgeTransport) }
+				? { transportSha256: transportFingerprint(agentTransports, judgeTransport) }
 				: {}),
 		},
 		models: {
@@ -1097,7 +1111,7 @@ function assertTransportFingerprint(manifest: MeasurementManifest, root: string)
 	if (agent === null || (judgeRef && judge === undefined)) {
 		fail("INCOMPATIBLE_IDENTITIES", "measurement mixes legacy and transport-bound cassettes");
 	}
-	const expected = measurementTransportSha256(agent, judge ?? "no-judge");
+	const expected = transportFingerprint(agent, judge ?? "no-judge");
 	if (manifest.fingerprints.transportSha256 !== expected) {
 		fail("INCOMPATIBLE_IDENTITIES", "measurement transport fingerprint does not match cassettes");
 	}

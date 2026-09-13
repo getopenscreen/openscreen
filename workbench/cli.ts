@@ -506,6 +506,21 @@ async function commandJudge(options: Options): Promise<number> {
 		);
 	} else log("juge : replay de cassettes, aucun appel sortant");
 
+	const liveJudgeTransport = env
+		? transportIdentity({
+				wireApi: env.wireApi,
+				maxOutputTokens: options.maxOutputTokens ?? 2048,
+				publicHeadersSha256: env.publicHeaders.sha256,
+				limits: {
+					maxRequests: options.maxRequests ?? 100,
+					invocationTimeoutMs: options.timeoutMs,
+				},
+			})
+		: undefined;
+	const liveJudgeBudget = liveJudgeTransport
+		? createInvocationBudget(liveJudgeTransport.limits)
+		: undefined;
+
 	const summaries: ScenarioReport[] = [];
 	const notices: string[] = [];
 	let firstWire: ReturnType<typeof readPersistedTurn>["wire"] | undefined;
@@ -551,15 +566,10 @@ async function commandJudge(options: Options): Promise<number> {
 				endpoint = replayHandle;
 			} else {
 				judgeWireApi = env.wireApi;
-				const transport = transportIdentity({
-					wireApi: env.wireApi,
-					maxOutputTokens: options.maxOutputTokens ?? 2048,
-					publicHeadersSha256: env.publicHeaders.sha256,
-					limits: {
-						maxRequests: options.maxRequests ?? 100,
-						invocationTimeoutMs: options.timeoutMs,
-					},
-				});
+				if (!liveJudgeTransport || !liveJudgeBudget) {
+					throw new Error("live judge transport was not prepared");
+				}
+				liveJudgeBudget.refreshDeadline();
 				endpoint = await startRecorder({
 					// Le proxy, pas le provider en direct — même règle que `runner.ts` :
 					// c'est le seul endroit d'où une cassette peut sortir, et le seul
@@ -570,9 +580,9 @@ async function commandJudge(options: Options): Promise<number> {
 					provider: "openai-compatible",
 					model: env.model,
 					wireApi: env.wireApi,
-					transport,
+					transport: liveJudgeTransport,
 					publicHeaders: env.publicHeaders,
-					budget: createInvocationBudget(transport.limits),
+					budget: liveJudgeBudget,
 				});
 			}
 		} catch (error) {

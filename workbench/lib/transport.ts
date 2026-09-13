@@ -129,7 +129,13 @@ export function measurementTransportSha256(
 	agent: TransportIdentity[],
 	judge: TransportIdentity | "no-judge",
 ): string {
-	return sha256Bytes(JSON.stringify({ schema: 1, agent, judge }));
+	const contract = agent[0];
+	for (const profile of agent) {
+		if (JSON.stringify(profile) !== JSON.stringify(contract)) {
+			throw new Error("measurement mixes incompatible agent transport identities");
+		}
+	}
+	return sha256Bytes(JSON.stringify({ schema: 1, agent: contract ?? null, judge }));
 }
 
 export function applyRequestPolicy(

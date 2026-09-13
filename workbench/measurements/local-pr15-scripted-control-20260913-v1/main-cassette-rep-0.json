@@ -3,11 +3,11 @@
 	"provider": "openai-compatible",
 	"model": "workbench-loopback-fixture",
 	"resolvedModel": "workbench",
-	"recordedAt": "2026-09-13T10:37:49.235Z",
+	"recordedAt": "2026-09-13T13:11:49.613Z",
 	"rounds": [
 		{
 			"round": 0,
-			"requestHash": "a9f5459b3417be21",
+			"requestHash": "49b90339b9ff54b4bf40cae290a01377fbdd25c5ca6e3a747a6e962311c46741",
 			"digest": {
 				"systemChars": 3840,
 				"toolCount": 25,
@@ -18,11 +18,12 @@
 				],
 				"lastUserText": "Add a zoom in the middle of the second clip, the demo one."
 			},
-			"sse": "data: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_wb-0_0\",\"type\":\"function\",\"function\":{\"name\":\"getCurrentDocument\",\"arguments\":\"{}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+			"sse": "data: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_wb-0_0\",\"type\":\"function\",\"function\":{\"name\":\"getCurrentDocument\",\"arguments\":\"{}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n",
+			"httpStatus": 200
 		},
 		{
 			"round": 1,
-			"requestHash": "072c05ee6c47e869",
+			"requestHash": "3bfb23b26d9b76292929d4bc4042655c2729c076edae323a5f8a5b80accb644b",
 			"digest": {
 				"systemChars": 3840,
 				"toolCount": 25,
@@ -35,11 +36,12 @@
 				],
 				"lastUserText": "Add a zoom in the middle of the second clip, the demo one."
 			},
-			"sse": "data: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_wb-1_0\",\"type\":\"function\",\"function\":{\"name\":\"addZoom\",\"arguments\":\"{\\\"startSec\\\":43,\\\"endSec\\\":48,\\\"depth\\\":3}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+			"sse": "data: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_wb-1_0\",\"type\":\"function\",\"function\":{\"name\":\"addZoom\",\"arguments\":\"{\\\"startSec\\\":43,\\\"endSec\\\":48,\\\"depth\\\":3}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n",
+			"httpStatus": 200
 		},
 		{
 			"round": 2,
-			"requestHash": "c8a3ae35aafb58de",
+			"requestHash": "479d47611f4efb77694f7ce81d370878da477dbf0222d7d40df4945d3a353460",
 			"digest": {
 				"systemChars": 3840,
 				"toolCount": 25,
@@ -54,7 +56,8 @@
 				],
 				"lastUserText": "Add a zoom in the middle of the second clip, the demo one."
 			},
-			"sse": "data: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Added one zoom from 0:43\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" to 0:48, in the middle \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"of the demo clip.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+			"sse": "data: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Added one zoom from 0:43\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" to 0:48, in the middle \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"of the demo clip.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"wb-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"workbench\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+			"httpStatus": 200
 		}
 	],
 	"wireApi": "chat-completions",

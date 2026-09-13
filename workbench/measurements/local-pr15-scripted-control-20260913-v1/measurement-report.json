@@ -1,6 +1,6 @@
 {
 	"label": "pr15-scripted-control-20260913-v1/target-right-clip",
-	"createdAt": "2026-09-13T10:37:49.964Z",
+	"createdAt": "2026-09-13T13:11:49.908Z",
 	"fingerprint": {
 		"systemSha256": "796759e35e0d75b547ad4c6318e995bf543e88dfa68e5571c7b43d914a90b93a",
 		"systemChars": 3840,
@@ -33,9 +33,9 @@
 			"removeClip"
 		],
 		"model": "workbench-loopback-fixture",
-		"gitSha": "1f45d5bd",
+		"gitSha": "6549632e",
 		"gitDirty": true,
-		"effectiveSourceSha256": "7dca97c018607840c63b6a816e2bc11924e46990309d09dc56406e9f9b37178a",
+		"effectiveSourceSha256": "b3aff4949c1e21098de5a198e6740e09258dd0aeddb4576f773092aab4b0d72a",
 		"overlayId": null,
 		"reps": 1
 	},
@@ -265,7 +265,7 @@
 				}
 			],
 			"unmeasuredAxes": [],
-			"msMean": 435.25880000000006
+			"msMean": 189.19630000000006
 		}
 	],
 	"notices": []

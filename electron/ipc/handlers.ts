@@ -1566,6 +1566,14 @@ function attachNativeMacCaptureOutputDrain(
 	proc.stdin.on("error", (error) => {
 		console.warn("[native-sck] helper command pipe error:", error);
 	});
+	// The output pipes too, as the Windows drain does: the guard only swallows a few
+	// codes, and any other stream error would take the main process down.
+	proc.stdout.on("error", (error) => {
+		console.warn("[native-sck] helper stdout error:", error);
+	});
+	proc.stderr.on("error", (error) => {
+		console.warn("[native-sck] helper stderr error:", error);
+	});
 }
 
 function waitForNativeMacCaptureStart(proc: ChildProcessWithoutNullStreams) {

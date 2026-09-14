@@ -8,6 +8,7 @@ import {
 	saveEditorWindowState,
 	shouldTrackEditorWindow,
 } from "./editorWindowState";
+import { clampHudToWorkArea, hudDragDestination } from "./hudWindowBounds";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -101,6 +102,41 @@ let hudOverlayWindow: BrowserWindow | null = null;
 // an absolute `origin + delta` — no rounding to accumulate, and a dropped message
 // self-corrects on the next one instead of leaving the window permanently offset.
 let hudDragOrigin: { x: number; y: number } | null = null;
+
+// The work area can shrink under a HUD nobody is touching: the taskbar stops auto-hiding
+// (or is revealed), the Dock moves, the resolution or the scale changes. A bar parked at
+// the bottom edge would then be left sitting on the taskbar until the next drag — and the
+// drag handle is under the taskbar. Re-clamp whenever the displays change, so the
+// invariant the drag and resize paths both maintain holds without user input too.
+let isWatchingHudWorkArea = false;
+function watchHudWorkAreaChanges() {
+	if (isWatchingHudWorkArea) return;
+	isWatchingHudWorkArea = true;
+
+	const reclampHud = () => {
+		const win = hudOverlayWindow;
+		if (!win || win.isDestroyed()) return;
+		// A drag owns the position frame by frame; moving the window out from under it
+		// would fight the gesture. The renderer re-measures on release, and the next
+		// metric change re-clamps it anyway.
+		if (hudDragOrigin) return;
+
+		const bounds = win.getBounds();
+		const next = clampHudToWorkArea(bounds, screen.getDisplayMatching(bounds).workArea);
+		if (
+			next.x !== bounds.x ||
+			next.y !== bounds.y ||
+			next.width !== bounds.width ||
+			next.height !== bounds.height
+		) {
+			win.setBounds(next, false);
+		}
+	};
+
+	screen.on("display-metrics-changed", reclampHud);
+	screen.on("display-added", reclampHud);
+	screen.on("display-removed", reclampHud);
+}
 
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
@@ -206,17 +242,20 @@ ipcMain.on("hud-overlay-drag-to", (_event, deltaX: number, deltaY: number) => {
 		return;
 	}
 
-	// `| 0` is load-bearing, not defensive noise. Math.round returns NEGATIVE ZERO for
-	// any delta in [-0.5, 0) — routine under fractional scaling, where screenY deltas
-	// are fractional. V8's IsInt32() rejects -0, so gin refuses to convert it and the
-	// main process dies with "Error processing argument at index 1, conversion failure
-	// from". `Number.isFinite(-0)` is true, so a finiteness check does NOT catch this;
-	// `| 0` collapses -0 to 0 and pins the value to int32. (`+ 0` would not: -0 + 0 is
-	// still -0, and Math.trunc preserves it too.)
-	const x = Math.round(hudDragOrigin.x + deltaX) | 0;
-	const y = Math.round(hudDragOrigin.y + deltaY) | 0;
+	// Clamp to the work area of the display the drag is heading *for* — resolved from the
+	// destination, not from where the window currently sits, so a drag towards a second
+	// display follows the pointer instead of stopping at the edge it started on.
+	//
+	// Without this the drag handle was a one-way trip off the screen: the taskbar and the
+	// Dock live outside the work area, and an always-on-top, `skipTaskbar` HUD parked
+	// there covers them, with no taskbar entry to click to get it back. The tray icon was
+	// the only way home. "hud-overlay-set-size" already clamped for exactly this reason;
+	// this path did not.
+	const bounds = hudOverlayWindow.getBounds();
+	const destination = hudDragDestination({ bounds, origin: hudDragOrigin, deltaX, deltaY });
+	const { workArea } = screen.getDisplayMatching(destination);
 
-	hudOverlayWindow.setPosition(x, y, false);
+	hudOverlayWindow.setBounds(clampHudToWorkArea(destination, workArea), false);
 });
 
 ipcMain.on("hud-overlay-drag-end", () => {
@@ -365,6 +404,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	});
 
 	hudOverlayWindow = win;
+	watchHudWorkAreaChanges();
 
 	win.on("closed", () => {
 		if (hudOverlayWindow === win) {

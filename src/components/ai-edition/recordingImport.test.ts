@@ -338,7 +338,6 @@ describe("fresh-recording auto-zoom", () => {
 	it("applies cursor-dwell zooms once, after duration is known", async () => {
 		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const next = await applyPendingFreshRecordingAutoZooms(documentWithClip(), {
-			enabled: true,
 			getTelemetry: async () => dwell(4000, 0.4, 0.6),
 			createId: (prefix) => `${prefix}_test`,
 		});
@@ -348,18 +347,17 @@ describe("fresh-recording auto-zoom", () => {
 			endMs: 5000,
 			focusMode: "auto",
 		});
-		expect(await applyPendingFreshRecordingAutoZooms(next, { enabled: true })).toBe(next);
+		expect(await applyPendingFreshRecordingAutoZooms(next)).toBe(next);
 	});
 
-	it("skips when the HUD toggle is off", async () => {
+	it("applies cursor-dwell zooms by default without requiring an enabled flag", async () => {
 		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const document = documentWithClip();
 		const next = await applyPendingFreshRecordingAutoZooms(document, {
-			enabled: false,
 			getTelemetry: async () => dwell(4000, 0.5, 0.5),
+			createId: (prefix) => `${prefix}_test`,
 		});
-		expect(next).toBe(document);
-		expect(next.zoomRanges).toEqual([]);
+		expect(next.zoomRanges).toHaveLength(1);
 	});
 
 	// The stop handler awaits `writePendingCursorTelemetry` before it publishes the

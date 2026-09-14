@@ -61,8 +61,6 @@ const recorderState = vi.hoisted(() => ({
 		setSystemAudioEnabled: vi.fn(),
 		cursorCaptureMode: "editable-overlay",
 		setCursorCaptureMode: vi.fn(),
-		autoZoomEnabled: true,
-		setAutoZoomEnabled: vi.fn(),
 		softwareEncoderFallbackNoticeVisible: false,
 		dismissSoftwareEncoderFallbackNotice: vi.fn(),
 	},
@@ -175,10 +173,6 @@ vi.mock("@/contexts/I18nContext", () => ({
 			"webcam.cameraDevice": "Camera device",
 			"cursor.useEditableCursor": "Use editable cursor",
 			"cursor.useSystemCursor": "Use system cursor",
-			"autoZoom.enable": "Enable auto-zoom after recording",
-			"autoZoom.disable": "Disable auto-zoom after recording",
-			"autoZoom.needsEditableCursor":
-				"Auto-zoom needs the editable cursor. Switch cursor mode to enable.",
 			"tooltips.openStudio": "Open Studio",
 			"tooltips.hideHUD": "Hide HUD",
 			"tooltips.closeApp": "Close App",
@@ -297,8 +291,6 @@ function resetLaunchMocks() {
 	vi.stubGlobal("ResizeObserver", StubResizeObserver);
 	recorderState.value.toggleRecording.mockClear();
 	recorderState.value.cursorCaptureMode = "editable-overlay";
-	recorderState.value.autoZoomEnabled = true;
-	recorderState.value.setAutoZoomEnabled.mockClear();
 	recorderState.value.setCursorCaptureMode.mockClear();
 	recorderState.value.softwareEncoderFallbackNoticeVisible = false;
 	recorderState.value.dismissSoftwareEncoderFallbackNotice.mockClear();
@@ -354,61 +346,9 @@ describe("LaunchWindow record button", () => {
 		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
 	});
 
-	// The button says "on" with a colour fill and nothing else, so a screen reader
-	// gets no toggle state at all — the same `aria-pressed` the mic and camera
-	// buttons beside it already carry.
-	it("reports the auto-zoom toggle state", () => {
+	it("does not render an auto-zoom toggle button (auto-zoom is systematic)", () => {
 		renderLaunchWindow();
-
-		expect(screen.getByTestId("launch-auto-zoom-button")).toHaveAttribute("aria-pressed", "true");
-
-		cleanup();
-		recorderState.value.autoZoomEnabled = false;
-		renderLaunchWindow();
-
-		expect(screen.getByTestId("launch-auto-zoom-button")).toHaveAttribute("aria-pressed", "false");
-	});
-
-	it("toggles post-record auto-zoom without touching cursor capture", () => {
-		renderLaunchWindow();
-
-		const button = screen.getByTestId("launch-auto-zoom-button");
-		expect(button).toHaveAttribute("title", "Disable auto-zoom after recording");
-		fireEvent.click(button);
-
-		expect(recorderState.value.setAutoZoomEnabled).toHaveBeenCalledWith(false);
-		expect(window.electronAPI.setRecordingPrefs).toHaveBeenCalledWith({ autoZoomEnabled: false });
-		expect(recorderState.value.setCursorCaptureMode).not.toHaveBeenCalled();
-	});
-
-	it("disables auto-zoom while the HUD is in system-cursor mode", async () => {
-		recorderState.value.cursorCaptureMode = "system";
-		renderLaunchWindow();
-
-		const button = await waitFor(() => {
-			const el = screen.getByTestId("launch-auto-zoom-button");
-			expect(el).toBeDisabled();
-			return el;
-		});
-		expect(button).toHaveAttribute(
-			"title",
-			"Auto-zoom needs the editable cursor. Switch cursor mode to enable.",
-		);
-		fireEvent.click(button);
-		expect(recorderState.value.setAutoZoomEnabled).not.toHaveBeenCalled();
-	});
-
-	it("disables auto-zoom in system-cursor mode before platform detection finishes", () => {
-		vi.mocked(nativeBridgeClient.system.getPlatform).mockImplementation(
-			() => new Promise(() => undefined),
-		);
-		recorderState.value.cursorCaptureMode = "system";
-		renderLaunchWindow();
-
-		const button = screen.getByTestId("launch-auto-zoom-button");
-		expect(button).toBeDisabled();
-		fireEvent.click(button);
-		expect(recorderState.value.setAutoZoomEnabled).not.toHaveBeenCalled();
+		expect(screen.queryByTestId("launch-auto-zoom-button")).toBeNull();
 	});
 
 	it("records immediately after source selection when the record button opened the picker", async () => {

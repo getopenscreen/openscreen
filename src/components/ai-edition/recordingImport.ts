@@ -77,15 +77,6 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
 	waitTimeoutMs?: number;
 };
 
-async function readAutoZoomPref(): Promise<boolean> {
-	try {
-		const prefs = await window.electronAPI?.getRecordingPrefs?.();
-		return prefs?.autoZoomEnabled !== false;
-	} catch {
-		return true;
-	}
-}
-
 function isPendingFreshRecordingAsset(asset: { originalPath?: string | null }): boolean {
 	return asset.originalPath === pendingFreshRecordingAutoZoomPath;
 }
@@ -152,7 +143,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 		clearFreshRecordingAutoZoomPending();
 		return document;
 	}
-	const enabled = deps.enabled ?? (await readAutoZoomPref());
+	const enabled = deps.enabled ?? true;
 	if (!enabled) {
 		clearFreshRecordingAutoZoomPending();
 		return liveDocument(document);

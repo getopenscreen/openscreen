@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RecStage } from "./RecStage";
 
@@ -56,7 +56,7 @@ function renderRecStage() {
 	return { onStartRecording };
 }
 
-describe("RecStage auto-zoom", () => {
+describe("RecStage controls", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
@@ -66,7 +66,7 @@ describe("RecStage auto-zoom", () => {
 		(window as unknown as { electronAPI?: unknown }).electronAPI = undefined;
 	});
 
-	it("defaults on when a legacy prefs blob has no autoZoomEnabled key", async () => {
+	it("does not render an auto-zoom toggle button (auto-zoom is systematic)", async () => {
 		const { getRecordingPrefs } = stubRecordingPrefs({
 			micEnabled: false,
 			cursorCaptureMode: "editable-overlay",
@@ -75,39 +75,6 @@ describe("RecStage auto-zoom", () => {
 		await waitFor(() => {
 			expect(getRecordingPrefs).toHaveBeenCalled();
 		});
-		const button = await screen.findByTestId("rec-auto-zoom-button");
-		expect(button).toHaveAttribute("aria-pressed", "true");
-		expect(button).toHaveTextContent("rec.on");
-		expect(button).toBeEnabled();
-	});
-
-	it("writes autoZoomEnabled through setRecordingPrefs on click", async () => {
-		const { setRecordingPrefs } = stubRecordingPrefs({
-			cursorCaptureMode: "editable-overlay",
-			autoZoomEnabled: true,
-		});
-		renderRecStage();
-		const button = await screen.findByTestId("rec-auto-zoom-button");
-		await waitFor(() => {
-			expect(button).toBeEnabled();
-		});
-		fireEvent.click(button);
-		expect(setRecordingPrefs).toHaveBeenCalledWith({ autoZoomEnabled: false });
-	});
-
-	it("disables auto-zoom while Rec-stage cursor capture is system", async () => {
-		const { setRecordingPrefs } = stubRecordingPrefs({
-			cursorCaptureMode: "system",
-			autoZoomEnabled: true,
-		});
-		renderRecStage();
-		const button = await screen.findByTestId("rec-auto-zoom-button");
-		await waitFor(() => {
-			expect(button).toBeDisabled();
-		});
-		expect(button).toHaveAttribute("title", "rec.autoZoomNeedsEditableCursor");
-		expect(button).toHaveAttribute("aria-pressed", "false");
-		fireEvent.click(button);
-		expect(setRecordingPrefs).not.toHaveBeenCalled();
+		expect(screen.queryByTestId("rec-auto-zoom-button")).toBeNull();
 	});
 });

@@ -106,8 +106,6 @@ type UseScreenRecorderReturn = {
 	setWebcamEnabled: (enabled: boolean) => Promise<boolean>;
 	cursorCaptureMode: CursorCaptureMode;
 	setCursorCaptureMode: (mode: CursorCaptureMode) => void;
-	autoZoomEnabled: boolean;
-	setAutoZoomEnabled: (enabled: boolean) => void;
 	softwareEncoderFallbackNoticeVisible: boolean;
 	dismissSoftwareEncoderFallbackNotice: (dontShowAgain?: boolean) => void;
 };
@@ -244,7 +242,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
 	const [webcamEnabled, setWebcamEnabledState] = useState(false);
 	const [cursorCaptureMode, setCursorCaptureMode] = useState<CursorCaptureMode>("editable-overlay");
-	const [autoZoomEnabled, setAutoZoomEnabled] = useState(true);
 	const [softwareEncoderFallbackNoticeVisible, setSoftwareEncoderFallbackNoticeVisible] =
 		useState(false);
 
@@ -270,7 +267,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (prefs.camDeviceId) setWebcamDeviceId(prefs.camDeviceId);
 				setSystemAudioEnabled(prefs.systemAudioEnabled);
 				setCursorCaptureMode(prefs.cursorCaptureMode);
-				setAutoZoomEnabled(prefs.autoZoomEnabled !== false);
 			})
 			.catch((err) => {
 				// Bare ipcRenderer.invoke — rejects if the main handler throws. Falling
@@ -2354,8 +2350,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setWebcamEnabled,
 		cursorCaptureMode,
 		setCursorCaptureMode,
-		autoZoomEnabled,
-		setAutoZoomEnabled,
 		softwareEncoderFallbackNoticeVisible,
 		dismissSoftwareEncoderFallbackNotice,
 	};

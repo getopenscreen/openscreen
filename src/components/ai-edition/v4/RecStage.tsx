@@ -9,7 +9,6 @@ import {
 	MousePointer2,
 	Volume2,
 	VolumeX,
-	ZoomIn,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AudioLevelMeter } from "@/components/ui/audio-level-meter";
@@ -29,7 +28,6 @@ interface RecordingPrefsState {
 	camDeviceId: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
-	autoZoomEnabled: boolean;
 }
 
 const DEFAULT_PREFS: RecordingPrefsState = {
@@ -40,7 +38,6 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	camDeviceId: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
-	autoZoomEnabled: true,
 };
 
 /**
@@ -74,7 +71,6 @@ export function RecStage({
 					setPrefsState({
 						...DEFAULT_PREFS,
 						...p,
-						autoZoomEnabled: p.autoZoomEnabled !== false,
 					} as RecordingPrefsState);
 				}
 			})
@@ -377,27 +373,6 @@ export function RecStage({
 							}
 						>
 							{cursorHighlight ? t("rec.on") : t("rec.off")}
-						</button>
-					</div>
-
-					<div className={styles.recRow}>
-						<div className={styles.recRowLabel}>
-							<ZoomIn size={15} />
-							{t("rec.autoZoom")}
-						</div>
-						<button
-							type="button"
-							data-testid="rec-auto-zoom-button"
-							className={`${styles.recToggleBtn}${prefs.autoZoomEnabled !== false && cursorHighlight ? ` ${styles.on}` : ""}`}
-							aria-pressed={prefs.autoZoomEnabled !== false && cursorHighlight}
-							disabled={!cursorHighlight}
-							title={cursorHighlight ? undefined : t("rec.autoZoomNeedsEditableCursor")}
-							onClick={() => {
-								if (!cursorHighlight) return;
-								updatePrefs({ autoZoomEnabled: prefs.autoZoomEnabled === false });
-							}}
-						>
-							{prefs.autoZoomEnabled !== false && cursorHighlight ? t("rec.on") : t("rec.off")}
 						</button>
 					</div>
 				</div>

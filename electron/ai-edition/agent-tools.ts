@@ -94,6 +94,12 @@ function modifierIds(document: AxcutDocument, kind: ModifierKind): string[] {
 			return ((legacy.cameraFullscreenRegions as Array<{ id: string }> | undefined) ?? []).map(
 				(region) => region.id,
 			);
+		case "audio":
+			// Fragments of one user-visible track share `trackId` and render as a single pill,
+			// so the id that disappears is the group key once, not one per fragment.
+			// `removeRegion` applies the same grouping by routing this kind through
+			// `removeAudioTrack`.
+			return [...new Set(document.audioTracks.map(trackGroupId))];
 	}
 }
 

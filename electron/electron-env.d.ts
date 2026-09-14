@@ -179,6 +179,8 @@ interface Window {
 			session?: import("../src/lib/recordingSession").RecordingSession;
 			message?: string;
 			discarded?: boolean;
+			/** The take ended before it was stopped, but its recording was kept. */
+			warning?: string;
 			error?: string;
 		}>;
 		attachNativeMacWebcamRecording: (payload: {

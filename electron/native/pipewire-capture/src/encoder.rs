@@ -248,7 +248,10 @@ impl VideoEncoder {
 
         let mut failures = Vec::new();
         for backend in candidates {
-            if backend == Backend::Vaapi && forced.is_none() && !vaapi_is_safe_to_probe() {
+            // Forced too: every CPU frame on this path is uploaded, so a forced VAAPI
+            // encoder on such a libva would abort on its first frame instead of
+            // failing here with a readable reason.
+            if backend == Backend::Vaapi && !vaapi_is_safe_to_probe() {
                 let reason = "libva.so.2 does not export vaMapBuffer2, so this ffmpeg build \
                               would abort inside VA-API rather than fail cleanly"
                     .to_owned();

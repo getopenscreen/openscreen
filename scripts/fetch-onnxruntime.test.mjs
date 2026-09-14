@@ -16,14 +16,15 @@
 // Neither direction is visible in review — the two lines are in different files, in
 // different languages, edited by different tasks. This test is the thing that sees it.
 //
-// Read as source text rather than imported: fetch-onnxruntime.mjs calls main() at
-// import and would start downloading. The property under test is a property of the
-// literal table anyway.
+// The pin table is read as source text: the property under test is a property of the
+// literal table. The staged-library check is imported — main() only runs as a CLI.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { stagedMismatch, stampPathFor, writeStamp } from "./fetch-onnxruntime.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(HERE, "fetch-onnxruntime.mjs"), "utf8");
@@ -112,5 +113,62 @@ describe("fetch-onnxruntime pins", () => {
 	it("does not pin darwin-x64, which upstream does not publish", () => {
 		expect(tags).not.toContain("darwin-x64");
 		expect(source).toMatch(/tag === "darwin-x64"/);
+	});
+});
+
+// The version string cannot tell two builds of one release apart: Microsoft's osx-arm64
+// 1.27.1 (minos 14.0) and the floor-pinned one built here (minos 13.0) both carry it, and
+// a checkout that had staged the first kept hearing "Already present" until
+// before-pack.cjs refused to package it.
+describe("fetch-onnxruntime staged library", () => {
+	const pinned = { sha256: "a".repeat(64) };
+	let dir;
+	let dest;
+	let stamp;
+
+	/** A library the version-string check alone accepted: Mach-O magic + `\0VERSION\0`. */
+	const stage = (build) =>
+		fs.writeFileSync(
+			dest,
+			Buffer.concat([
+				Buffer.from([0xcf, 0xfa, 0xed, 0xfe]),
+				Buffer.from(`\0${version}\0${build}`, "latin1"),
+			]),
+		);
+
+	beforeEach(() => {
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-ort-test-"));
+		dest = path.join(dir, "libonnxruntime.dylib");
+		stamp = path.join(dir, ".onnxruntime-darwin-arm64.json");
+	});
+	afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+	it("keeps the library it vendored", () => {
+		stage("floor-pinned");
+		writeStamp(dest, stamp, pinned);
+		expect(stagedMismatch(dest, stamp, pinned)).toBeNull();
+	});
+
+	it("re-fetches the right version string with no record of its archive", () => {
+		stage("upstream");
+		expect(stagedMismatch(dest, stamp, pinned)).toMatch(/no record/);
+	});
+
+	it("re-fetches the right version string vendored from another archive", () => {
+		stage("upstream");
+		writeStamp(dest, stamp, { sha256: "b".repeat(64) });
+		expect(stagedMismatch(dest, stamp, pinned)).toMatch(/different archive/);
+	});
+
+	it("re-fetches the right version string copied over a vendored library", () => {
+		stage("floor-pinned");
+		writeStamp(dest, stamp, pinned);
+		stage("upstream");
+		expect(stagedMismatch(dest, stamp, pinned)).toMatch(/replaced/);
+	});
+
+	it("keeps the stamp out of the per-target directories electron-builder ships", () => {
+		const bin = path.join(HERE, "..", "electron", "native", "bin");
+		expect(path.dirname(stampPathFor("darwin-arm64"))).toBe(bin);
 	});
 });

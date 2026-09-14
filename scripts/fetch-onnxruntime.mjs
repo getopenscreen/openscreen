@@ -38,7 +38,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -275,6 +275,43 @@ async function download(spec) {
 	return tmp;
 }
 
+/**
+ * Where the fast path learns WHICH archive a staged library came from.
+ *
+ * The version string cannot tell two builds of one release apart, and on darwin-arm64
+ * that is the whole difference: Microsoft's osx-arm64 1.27.1 and the floor-pinned one
+ * built here both carry `\01.27.1\0`, but only the second passes before-pack.cjs's
+ * macOS floor. A checkout that staged the upstream library kept hearing "Already
+ * present" and then failed to package. `spec.sha256` is the ARCHIVE's digest, so the
+ * staged file cannot be compared to it directly — this record ties the two together.
+ *
+ * Beside the per-target directories rather than inside them: every `extraResources`
+ * filter in electron-builder.json5 ships the contents of `<platform>-<arch>/` only.
+ */
+export const stampPathFor = (tag) =>
+	path.join(ROOT, "electron", "native", "bin", `.onnxruntime-${tag}.json`);
+
+const sha256Of = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+
+/** Records that `dest` was vendored from the archive `spec` pins. */
+export function writeStamp(dest, stamp, spec) {
+	const record = { archive: spec.sha256, library: sha256Of(dest) };
+	fs.writeFileSync(stamp, `${JSON.stringify(record, null, "\t")}\n`);
+}
+
+/** Why the library at `dest` is not the one `spec` pins, or null when it is. */
+export function stagedMismatch(dest, stamp, spec) {
+	let record;
+	try {
+		record = JSON.parse(fs.readFileSync(stamp, "utf8"));
+	} catch {
+		return "no record of the archive it came from";
+	}
+	if (record?.archive !== spec.sha256) return "vendored from a different archive";
+	if (record.library !== sha256Of(dest)) return "replaced since it was vendored";
+	return null;
+}
+
 async function main() {
 	// `--target` exists for CI, which provisions for the runner it is on; without it
 	// the host is the target, which is what every local build wants.
@@ -311,21 +348,24 @@ async function main() {
 	const binDir = path.join(ROOT, "electron", "native", "bin", tag);
 	const dest = path.join(binDir, spec.out);
 
+	const stamp = stampPathFor(tag);
+
 	if (fs.existsSync(dest) && !process.argv.includes("--force")) {
 		// Re-verify rather than trusting the filename: this directory is gitignored
-		// scratch space that a half-finished run or a hand copy can leave anything in.
-		const buf = fs.readFileSync(dest);
-		const magic = MAGIC[targetPlatform];
-		const looksRight =
-			magic.bytes.every((b, i) => buf[i] === b) &&
-			buf.includes(Buffer.from(`\0${VERSION}\0`, "latin1"));
-		if (looksRight) {
+		// scratch space that a half-finished run, a hand copy or an older pin can leave
+		// anything in — including the right version from the wrong archive.
+		const why = stagedMismatch(dest, stamp, spec);
+		if (!why) {
 			console.log(`Already present: ${dest}`);
-			console.log(`  ONNX Runtime ${VERSION}, ${(buf.length / 1048576).toFixed(1)} MB`);
+			console.log(
+				`  ONNX Runtime ${VERSION} from ${assetName(spec)}, ${(fs.statSync(dest).size / 1048576).toFixed(1)} MB`,
+			);
 			console.log("Use --force to re-download.");
 			return;
 		}
-		console.log(`Present but not ONNX Runtime ${VERSION} — re-fetching: ${dest}`);
+		console.log(
+			`Present but not the pinned ONNX Runtime ${VERSION} (${why}) — re-fetching: ${dest}`,
+		);
 	}
 
 	const tmp = await download(spec);
@@ -343,6 +383,7 @@ async function main() {
 		fs.mkdirSync(binDir, { recursive: true });
 		fs.copyFileSync(lib, dest);
 		if (targetPlatform !== "win32") fs.chmodSync(dest, 0o755);
+		writeStamp(dest, stamp, spec);
 
 		console.log(`  ${banner}`);
 		// Où que viennent les octets, dire de quelle source ils sortent. Pour un artefact
@@ -358,7 +399,11 @@ async function main() {
 	}
 }
 
-main().catch((err) => {
-	console.error(`\n${err.message}`);
-	process.exit(1);
-});
+// Only when run as a CLI — importing this from a test must not start downloading.
+// realpath because Node resolves the entry point through symlinks before naming it.
+if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href) {
+	main().catch((err) => {
+		console.error(`\n${err.message}`);
+		process.exit(1);
+	});
+}

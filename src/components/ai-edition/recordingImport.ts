@@ -297,7 +297,14 @@ export async function maybeSaveFreshRecordingAutoZooms(
  * reopening the most recent project. Throws if the import itself fails, leaving
  * the session in place so a later mount can retry it.
  */
-export async function importPendingRecording(): Promise<boolean> {
+export async function importPendingRecording(
+	/**
+	 * Called once the import succeeded, with why the take ended before it was
+	 * stopped when it did. The HUD that ran the stop closes as the editor opens, so
+	 * the editor is the only window left to say it.
+	 */
+	onWarning?: (message: string) => void,
+): Promise<boolean> {
 	const api = window.electronAPI;
 	if (!api) return false;
 
@@ -305,6 +312,7 @@ export async function importPendingRecording(): Promise<boolean> {
 	const screenPath = result.success ? result.session?.screenVideoPath : undefined;
 	if (!screenPath) return false;
 	const cursorCaptureMode = result.success ? result.session?.cursorCaptureMode : undefined;
+	const warning = result.success ? result.warning : undefined;
 
 	const label = screenPath.split(/[\\/]/).pop() || "Recording";
 	await useProjectStore.getState().createProject(`Recording ${new Date().toLocaleString()}`);
@@ -347,6 +355,9 @@ export async function importPendingRecording(): Promise<boolean> {
 	const latest = useProjectStore.getState().document;
 	if (latest) {
 		await maybeSaveFreshRecordingAutoZooms(latest);
+	}
+	if (warning) {
+		onWarning?.(warning);
 	}
 	return true;
 }

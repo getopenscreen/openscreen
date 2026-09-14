@@ -380,7 +380,7 @@ export function NewEditorShell() {
 		void (async () => {
 			if (!window.electronAPI) return;
 			try {
-				if (await importPendingRecording()) {
+				if (await importPendingRecording((warning) => toast.warning(warning))) {
 					toast.success("Recording added to a new project");
 					return;
 				}

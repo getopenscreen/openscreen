@@ -55,6 +55,7 @@ const realActions = {
 function stubElectronApi(
 	screenVideoPath: string | null,
 	cursorCaptureMode: "editable-overlay" | "system" = "editable-overlay",
+	warning?: string,
 ) {
 	let session: {
 		screenVideoPath: string;
@@ -63,7 +64,7 @@ function stubElectronApi(
 	} | null = screenVideoPath ? { screenVideoPath, createdAt: 0, cursorCaptureMode } : null;
 	const api = {
 		getCurrentRecordingSession: vi.fn(async () =>
-			session ? { success: true, session } : { success: false },
+			session ? { success: true, session, ...(warning ? { warning } : {}) } : { success: false },
 		),
 		setCurrentRecordingSession: vi.fn(async (next: typeof session) => {
 			session = next;
@@ -91,6 +92,33 @@ describe("importPendingRecording", () => {
 		stubElectronApi(null);
 		await expect(importPendingRecording()).resolves.toBe(false);
 		expect(createProject).not.toHaveBeenCalled();
+	});
+
+	// The HUD that stopped a take which ended on its own closes as the editor opens,
+	// so the editor has to be the one that says the recording was cut short.
+	it("hands over why the take ended early once the import succeeded", async () => {
+		stubElectronApi(
+			"/recordings/recording-1.mp4",
+			"editable-overlay",
+			"Recording ended early (stream stopped). The part recorded until then was saved.",
+		);
+		const onWarning = vi.fn();
+
+		await expect(importPendingRecording(onWarning)).resolves.toBe(true);
+
+		expect(onWarning).toHaveBeenCalledTimes(1);
+		expect(onWarning).toHaveBeenCalledWith(
+			"Recording ended early (stream stopped). The part recorded until then was saved.",
+		);
+	});
+
+	it("says nothing about a take that was stopped normally", async () => {
+		stubElectronApi("/recordings/recording-1.mp4");
+		const onWarning = vi.fn();
+
+		await importPendingRecording(onWarning);
+
+		expect(onWarning).not.toHaveBeenCalled();
 	});
 
 	it("imports the recording into a new project and consumes the hand-off", async () => {

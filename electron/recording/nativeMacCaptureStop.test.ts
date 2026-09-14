@@ -4,6 +4,7 @@ import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	type NativeMacCaptureExit,
+	nativeMacDiscardTargets,
 	readNativeMacHelperEvents,
 	readNativeMacStopOutcome,
 	sendNativeMacStopCommand,
@@ -17,12 +18,19 @@ function line(event: Record<string, unknown>) {
 	return `${JSON.stringify(event)}\n`;
 }
 
+// The messages as the Swift helper really prints them: the interruption embeds the
+// writer's NSError, and a stream the system stopped reports its NSError alone.
+const WRITER_DIED_MESSAGE =
+	'Recording stopped: the video file could not be written (video append: Error Domain=AVFoundationErrorDomain Code=-11800 "The operation could not be completed" UserInfo={NSLocalizedFailureReason=An unknown error occurred (-16364)}).';
+const CAPTURE_STOPPED_MESSAGE =
+	'Error Domain=com.apple.ScreenCaptureKit.SCStreamErrorDomain Code=-3815 "The stream was stopped by the system." UserInfo={NSLocalizedDescription=The stream was stopped by the system.}';
+
 const started = line({ event: "recording-started", width: 3840, height: 2160 });
 const stopped = line({ event: "recording-stopped", screenPath: TARGET });
 const writerDied = line({
 	event: "error",
 	code: "writer-failed-during-capture",
-	message: "Recording stopped: the video file could not be written (video append: -11800).",
+	message: WRITER_DIED_MESSAGE,
 });
 const writerFailed = line({
 	event: "error",
@@ -32,7 +40,7 @@ const writerFailed = line({
 const captureStopped = line({
 	event: "error",
 	code: "capture-stopped-with-error",
-	message: "The display was disconnected.",
+	message: CAPTURE_STOPPED_MESSAGE,
 });
 
 /**
@@ -131,8 +139,7 @@ describe("readNativeMacStopOutcome", () => {
 		expect(readNativeMacStopOutcome(started + captureStopped + stopped, null, TARGET)).toEqual({
 			ok: true,
 			screenVideoPath: TARGET,
-			warning:
-				"Recording ended early (The display was disconnected). The part recorded until then was saved.",
+			warning: `Recording ended early (${CAPTURE_STOPPED_MESSAGE}). The part recorded until then was saved.`,
 		});
 	});
 
@@ -140,7 +147,7 @@ describe("readNativeMacStopOutcome", () => {
 		expect(readNativeMacStopOutcome(started + writerDied + writerFailed, null, TARGET)).toEqual({
 			ok: false,
 			reason: "helper-failed",
-			message: "Recording stopped: the video file could not be written (video append: -11800).",
+			message: WRITER_DIED_MESSAGE,
 			exited: false,
 		});
 	});
@@ -164,7 +171,7 @@ describe("readNativeMacStopOutcome", () => {
 		).toEqual({
 			ok: false,
 			reason: "helper-failed",
-			message: "Recording stopped: the video file could not be written (video append: -11800).",
+			message: WRITER_DIED_MESSAGE,
 			exited: true,
 		});
 	});
@@ -206,7 +213,7 @@ describe("waitForNativeMacCaptureStop", () => {
 
 		await expect(pending).resolves.toMatchObject({
 			ok: false,
-			message: "Recording stopped: the video file could not be written (video append: -11800).",
+			message: WRITER_DIED_MESSAGE,
 			exited: true,
 		});
 	});
@@ -286,5 +293,42 @@ describe("sendNativeMacStopCommand", () => {
 	it("does not write to a command pipe that is already closed", () => {
 		helper.stdin.destroy();
 		expect(sendNativeMacStopCommand(asProc(helper))).toBe(false);
+	});
+});
+
+describe("nativeMacDiscardTargets", () => {
+	it("removes the file the helper finalized", () => {
+		expect(nativeMacDiscardTargets({ ok: true, screenVideoPath: "/rec/a.mp4" }, TARGET)).toEqual([
+			"/rec/a.mp4",
+			"/rec/a.mp4.cursor.json",
+		]);
+	});
+
+	/** The orphan: a take thrown away after its writer died. */
+	it("removes the requested file when the stop failed", () => {
+		expect(
+			nativeMacDiscardTargets(
+				{ ok: false, reason: "helper-failed", message: WRITER_DIED_MESSAGE, exited: true },
+				TARGET,
+			),
+		).toEqual([TARGET, `${TARGET}.cursor.json`]);
+	});
+
+	it("removes the requested file when the stop timed out", () => {
+		expect(
+			nativeMacDiscardTargets(
+				{ ok: false, reason: "stop-timeout", message: "timed out", exited: false },
+				TARGET,
+			),
+		).toEqual([TARGET, `${TARGET}.cursor.json`]);
+	});
+
+	it("has nothing to remove when no file was ever requested", () => {
+		expect(
+			nativeMacDiscardTargets(
+				{ ok: false, reason: "helper-failed", message: "x", exited: true },
+				null,
+			),
+		).toEqual([]);
 	});
 });

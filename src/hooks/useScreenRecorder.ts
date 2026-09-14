@@ -767,9 +767,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					clearNativeRecordingState();
 					return true;
 				}
-				if (result.warning) {
-					toast.warning(result.warning);
-				}
 
 				if (webcamResult.asset && result.path) {
 					const attachResult = await window.electronAPI.attachNativeMacWebcamRecording({

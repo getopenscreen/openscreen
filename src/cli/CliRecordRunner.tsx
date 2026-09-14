@@ -284,6 +284,9 @@ export function CliRecordRunner() {
 					cursorDataPath: `${session.screenVideoPath}.cursor.json`,
 					durationMs,
 					...(request?.projectOut ? { projectData: buildDefaultProject(session) } : {}),
+					// The take ended before it was stopped but was kept: a script must be
+					// able to tell that apart from a clean run.
+					...(sessionResult.warning ? { warnings: [sessionResult.warning] } : {}),
 				});
 			} catch (error) {
 				await fail(error);

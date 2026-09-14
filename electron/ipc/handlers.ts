@@ -83,6 +83,7 @@ import { toHelperRect } from "../native-bridge/helperCoordinates";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import {
 	type NativeMacCaptureExit,
+	nativeMacDiscardTargets,
 	sendNativeMacStopCommand,
 	waitForNativeMacCaptureStop,
 } from "../recording/nativeMacCaptureStop";
@@ -775,6 +776,18 @@ let nativeMacIsPaused = false;
  * point at which its output has been read in full.
  */
 const nativeMacCaptureExits = new WeakMap<ChildProcessWithoutNullStreams, NativeMacCaptureExit>();
+/**
+ * Each macOS helper's own output. The shared `nativeMacCaptureOutput` belongs to
+ * the current take; a helper whose stop timed out keeps talking after the next
+ * take has started, and its late `recording-stopped` must not settle that take.
+ */
+const nativeMacCaptureOutputs = new WeakMap<ChildProcessWithoutNullStreams, string>();
+/**
+ * Why the last macOS take ended before it was stopped, keyed by the file it was
+ * kept in. Handed to whatever opens that recording next — the editor or the CLI —
+ * because the HUD that ran the stop closes as the editor opens.
+ */
+let nativeMacRecordingWarning: { screenVideoPath: string; message: string } | null = null;
 /** True while stop-native-mac-recording runs: the take is ending on purpose. */
 let nativeMacStopInFlight = false;
 // Global frame of the region captured by the SCK helper (see getSelectedSourceBounds).
@@ -1511,14 +1524,22 @@ function attachNativeMacCaptureOutputDrain(
 	);
 	const drain = (chunk: Buffer) => {
 		const text = chunk.toString();
-		nativeMacCaptureOutput += text;
+		nativeMacCaptureOutputs.set(proc, (nativeMacCaptureOutputs.get(proc) ?? "") + text);
+		// Only the current take's helper feeds the shared buffer and event bus that the
+		// start wait, the microphone check and the diagnostics bundle read.
+		const isCurrent = nativeMacCaptureProcess === proc;
+		if (isCurrent) {
+			nativeMacCaptureOutput += text;
+		}
 		lineBuffer += text;
 		const lines = lineBuffer.split(/\r?\n/);
 		lineBuffer = lines.pop() ?? "";
 		for (const line of lines) {
 			const event = tryParseNativeHelperEvent(line.trim());
 			if (event) {
-				dispatchNativeMacHelperEvent(event);
+				if (isCurrent) {
+					dispatchNativeMacHelperEvent(event);
+				}
 				watchLiveTake(event);
 			}
 		}
@@ -2787,6 +2808,7 @@ export function registerIpcHandlers(
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
 			nativeMacStopInFlight = false;
+			nativeMacRecordingWarning = null;
 			activeMacCaptureBounds = null;
 
 			const cursorStartTimeMs = Date.now();
@@ -3174,7 +3196,7 @@ export function registerIpcHandlers(
 			const stopResultPromise = waitForNativeMacCaptureStop({
 				proc,
 				targetPath: preferredPath,
-				readOutput: () => nativeMacCaptureOutput,
+				readOutput: () => nativeMacCaptureOutputs.get(proc) ?? "",
 				readExit: () => nativeMacCaptureExits.get(proc) ?? null,
 			});
 			sendNativeMacStopCommand(proc);
@@ -3187,15 +3209,11 @@ export function registerIpcHandlers(
 			}
 			if (discard) {
 				pendingCursorRecordingData = null;
-				// Discarding does not wait on the stop having worked: a take thrown away
-				// after its writer died used to stay behind as an orphan .mp4.
-				const discardedPath = stopResult.ok ? stopResult.screenVideoPath : preferredPath;
-				if (discardedPath) {
-					await Promise.all([
-						fs.rm(discardedPath, { force: true }),
-						fs.rm(`${discardedPath}.cursor.json`, { force: true }),
-					]);
-				}
+				await Promise.all(
+					nativeMacDiscardTargets(stopResult, preferredPath).map((target) =>
+						fs.rm(target, { force: true }),
+					),
+				);
 				if (!stopResult.ok) {
 					console.warn("[native-sck] discarded a take whose stop did not complete", {
 						reason: stopResult.reason,
@@ -3210,11 +3228,14 @@ export function registerIpcHandlers(
 					reason: stopResult.reason,
 					message: stopResult.message,
 					helperExited: stopResult.exited,
-					output: nativeMacCaptureOutput.trim(),
+					output: (nativeMacCaptureOutputs.get(proc) ?? "").trim(),
 				});
 				return { success: false, error: stopResult.message };
 			}
 			const screenVideoPath = stopResult.screenVideoPath;
+			nativeMacRecordingWarning = stopResult.warning
+				? { screenVideoPath, message: stopResult.warning }
+				: null;
 			if (stopResult.warning) {
 				console.warn("[native-sck] the take ended before it was stopped; its recording was kept", {
 					warning: stopResult.warning,
@@ -4254,9 +4275,14 @@ export function registerIpcHandlers(
 	});
 
 	ipcMain.handle("get-current-recording-session", () => {
-		return currentRecordingSession
-			? { success: true, session: currentRecordingSession }
-			: { success: false };
+		if (!currentRecordingSession) {
+			return { success: false };
+		}
+		const warning =
+			nativeMacRecordingWarning?.screenVideoPath === currentRecordingSession.screenVideoPath
+				? nativeMacRecordingWarning.message
+				: undefined;
+		return { success: true, session: currentRecordingSession, ...(warning ? { warning } : {}) };
 	});
 
 	// returns the webcam path (if any) for a given screen video by

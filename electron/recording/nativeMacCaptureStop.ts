@@ -178,9 +178,11 @@ export function readNativeMacStopOutcome(
 		return null;
 	}
 
-	// A helper that exits 0 without a word finalized the file it was asked for —
-	// unless it had already said the take ended, in which case exit 0 only means
-	// its command pipe closed.
+	// Exit 0 with no terminal word is the command loop reaching stdin EOF without a
+	// `stop` — nothing in the app closes that pipe, and `stop()` always reports
+	// before its exit(0). It keeps the meaning the stop wait gave it before this
+	// module (the requested file), except after an interruption, when nothing
+	// finalized that file.
 	if (exit.code === 0 && !exit.signal && targetPath && !interruption) {
 		return { ok: true, screenVideoPath: targetPath };
 	}
@@ -224,9 +226,9 @@ export function waitForNativeMacCaptureStop(options: {
 			exited: true,
 		};
 
-	// The helper may already be gone: killed, crashed, or exited after stopping
-	// itself. Node never re-emits `close`, so waiting for one would burn the whole
-	// timeout on a recorder that has nothing left to say.
+	// The helper may already be gone: killed or crashed. (One that stopped itself
+	// stays alive until it is sent `stop`.) Node never re-emits `close`, so waiting
+	// for one would burn the whole timeout on a recorder that has nothing left to say.
 	const alreadyExited = readExit();
 	if (alreadyExited) {
 		return Promise.resolve(settleFromExit(alreadyExited));
@@ -286,4 +288,17 @@ export function sendNativeMacStopCommand(proc: ChildProcessWithoutNullStreams): 
 	}
 	proc.stdin.write("stop\n");
 	return true;
+}
+
+/**
+ * The files a discarded take leaves behind, whatever its stop returned: a take
+ * thrown away after its writer died used to stay on disk as an orphan .mp4,
+ * because removing it depended on the stop having worked.
+ */
+export function nativeMacDiscardTargets(
+	result: NativeMacCaptureStopResult,
+	targetPath: string | null,
+): string[] {
+	const screenVideoPath = result.ok ? result.screenVideoPath : targetPath;
+	return screenVideoPath ? [screenVideoPath, `${screenVideoPath}.cursor.json`] : [];
 }

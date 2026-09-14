@@ -319,6 +319,8 @@ interface Window {
 			success: boolean;
 			session?: RecordingSession | null;
 			canceled?: boolean;
+			/** Why this recording ended before it was stopped, when it did. */
+			warning?: string;
 		}>;
 		findRecordingCamera: (videoPath: string) => Promise<{
 			success: boolean;

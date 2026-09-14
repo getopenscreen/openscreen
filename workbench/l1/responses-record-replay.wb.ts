@@ -130,8 +130,46 @@ describe("native Responses record and replay", () => {
 	});
 
 	it("rejects omitted, unknown, and Chat-disguised Responses discriminators", () => {
-		const source = JSON.parse(readFileSync(`${ROOT}/native-tool-loop.json`, "utf8"));
-		const writeTamper = (name: string, mutate: (value: typeof source) => void): string => {
+		type TamperCassette = {
+			wireApi?: string;
+			transport?: unknown;
+			rounds: Array<Record<string, unknown>>;
+			[key: string]: unknown;
+		};
+		const source = {
+			scenario: "discriminator-base",
+			provider: "loopback",
+			model: "gpt-5-test",
+			recordedAt: "2026-09-12T00:00:00.000Z",
+			wireApi: "responses",
+			transport: transportIdentity({ wireApi: "responses", maxOutputTokens: 2048 }),
+			rounds: [
+				{
+					round: 0,
+					requestHash: "discriminator-hash",
+					digest: {
+						systemChars: 0,
+						toolCount: 0,
+						roles: ["user"],
+						lastUserText: "Explain Responses",
+					},
+					sse: 'data: {"type":"response.completed"}\n\n',
+					inboundPath: "/v1/responses",
+					requestBodyBase64: Buffer.from("{}").toString("base64"),
+					requestByteCount: 2,
+					requestSha256: "0".repeat(64),
+					response: {
+						bodyBase64: Buffer.from('data: {"type":"response.completed"}\n\n').toString("base64"),
+						byteCount: 36,
+						sha256: "0".repeat(64),
+						status: 200,
+						contentType: "text/event-stream",
+					},
+					terminalStatus: "completed",
+				},
+			],
+		} as TamperCassette;
+		const writeTamper = (name: string, mutate: (value: TamperCassette) => void): string => {
 			const value = structuredClone(source);
 			mutate(value);
 			const file = `${ROOT}/discriminator-${name}-${randomUUID()}.json`;
@@ -258,7 +296,41 @@ describe("native Responses record and replay", () => {
 	});
 
 	it("rejects byte-attestation drift and sends one request on provider failure", async () => {
-		const file = `${ROOT}/non-2xx-bytes.json`;
+		const file = `${ROOT}/isolated-non-2xx-bytes.json`;
+		const responseText = '{"error":"split 🙂 body"}';
+		const bytes = Buffer.from(responseText);
+		const upstreamForCassette = createServer((_req, res) => {
+			res.writeHead(429, { "content-type": "application/problem+json; charset=utf-8" });
+			res.end(bytes);
+		});
+		await new Promise<void>((resolve) => upstreamForCassette.listen(0, "127.0.0.1", resolve));
+		const cassetteAddress = upstreamForCassette.address();
+		if (!cassetteAddress || typeof cassetteAddress === "string") throw new Error("no address");
+		const cassetteProfile = profile(1);
+		const cassetteRecorder = await startRecorder({
+			upstream: `http://127.0.0.1:${cassetteAddress.port}`,
+			file,
+			scenario: "byte-failure",
+			provider: "loopback",
+			model: "gpt-5-test",
+			wireApi: "responses",
+			transport: cassetteProfile.transport,
+			publicHeaders: cassetteProfile.headers,
+		});
+		try {
+			await fetch(`${cassetteRecorder.url}/responses`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "gpt-5-test",
+					input: [],
+					reasoning: { effort: "medium" },
+				}),
+			});
+		} finally {
+			cassetteRecorder.close();
+			upstreamForCassette.close();
+		}
 		const tampered = `${ROOT}/tampered.json`;
 		const value = JSON.parse(readFileSync(file, "utf8"));
 		value.rounds[0].response.sha256 = "0".repeat(64);

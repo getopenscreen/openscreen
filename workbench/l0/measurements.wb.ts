@@ -564,19 +564,32 @@ describe("versioned measurement export and verification", () => {
 		);
 	});
 
-	it("rejects a symlink or junction artifact when the platform can create one", ({ skip }) => {
+	it.skipIf(process.platform === "win32")("rejects a directory symlink artifact on posix", () => {
 		const base = createCandidate(root());
 		const outsideDirectory = join(dirname(base.runDir), "outside");
 		mkdirSync(outsideDirectory);
 		const outside = join(outsideDirectory, "outside.json");
 		writeFileSync(outside, "{}\n", "utf8");
 		const link = join(base.runDir, "linked");
-		try {
-			symlinkSync(outsideDirectory, link, process.platform === "win32" ? "junction" : "dir");
-		} catch {
-			skip();
-			return;
-		}
+		symlinkSync(outsideDirectory, link, "dir");
+		rewriteCandidate(base.runDir, (manifest) => {
+			manifest.artifacts[0] = {
+				role: "input-fixture",
+				path: "linked/outside.json",
+				sha256: sha256Bytes(readFileSync(outside)),
+			};
+		});
+		expectCode(() => exportValid(base), "SYMLINK_TRAVERSAL");
+	});
+
+	it.skipIf(process.platform !== "win32")("rejects a junction artifact on windows", () => {
+		const base = createCandidate(root());
+		const outsideDirectory = join(dirname(base.runDir), "outside");
+		mkdirSync(outsideDirectory);
+		const outside = join(outsideDirectory, "outside.json");
+		writeFileSync(outside, "{}\n", "utf8");
+		const link = join(base.runDir, "linked");
+		symlinkSync(outsideDirectory, link, "junction");
 		rewriteCandidate(base.runDir, (manifest) => {
 			manifest.artifacts[0] = {
 				role: "input-fixture",

@@ -914,12 +914,13 @@ export async function startReplay(options: {
 			res.end(bytes);
 			return;
 		}
-		res.writeHead(200, { "content-type": "text/event-stream" });
+		const httpStatus = stored.httpStatus ?? 200;
+		res.writeHead(httpStatus, { "content-type": "text/event-stream" });
 		servedRounds.push({
 			round: myRound,
 			terminalStatus: "legacy-or-unknown",
 			usage: usageFromSse(stored.sse) ?? null,
-			status: 200,
+			status: httpStatus,
 			contentType: "text/event-stream",
 			bodySha256: sha256(Buffer.from(stored.sse)),
 		});

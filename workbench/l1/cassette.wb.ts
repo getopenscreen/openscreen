@@ -8,6 +8,7 @@
 
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -26,6 +27,7 @@ import { ENV_KEYS } from "../lib/env";
 import { singleClip } from "../lib/fixtures";
 import { normalizeIds, runScenario } from "../lib/harness";
 import { startScriptedModel } from "../lib/model-server";
+import { adoptCassetteForRetainedAttempt } from "../lib/runner";
 
 const DIRECTORY = mkdtempSync(join(tmpdir(), "wb-cassette-"));
 const FILE = join(DIRECTORY, "wizard.json");
@@ -421,6 +423,47 @@ describe("record then replay", () => {
 		expect(() => replay.assertFresh()).not.toThrow();
 	});
 
+	it("replays a recorded Chat httpStatus instead of inventing 200", async () => {
+		const body = {
+			model: "legacy",
+			messages: [{ role: "user", content: "rate limited" }],
+			tools: [],
+		};
+		const file = join(DIRECTORY, "chat-http-status.json");
+		writeCassette(file, {
+			scenario: "chat-http-status",
+			provider: "loopback",
+			model: "legacy",
+			recordedAt: "2026-09-13T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: hashRequest(body),
+					digest: {
+						systemChars: 0,
+						toolCount: 0,
+						roles: ["user"],
+						lastUserText: "rate limited",
+					},
+					sse: "data: [DONE]\n\n",
+					httpStatus: 429,
+				},
+			],
+		});
+		const replay = await startReplay({ file });
+		try {
+			const response = await fetch(`${replay.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			expect(response.status).toBe(429);
+			expect(replay.servedRounds[0]?.status).toBe(429);
+		} finally {
+			replay.close();
+		}
+	});
+
 	it("leaves usage unknown when no valid object appears", () => {
 		const sse = [
 			`data: ${JSON.stringify({ usage: null })}\n\n`,
@@ -537,8 +580,20 @@ describe("record then replay", () => {
 		const failedFile = join(DIRECTORY, "retry-pre-round-0.json");
 		const successFile = join(DIRECTORY, "retry-pre-round-1.json");
 		const canonical = join(DIRECTORY, "retry-pre-round.json");
+		const occupied = createNetServer((socket) => {
+			socket.destroy();
+		});
+		await new Promise<void>((resolve, reject) => {
+			occupied.once("error", reject);
+			occupied.listen(0, "127.0.0.1", () => resolve());
+		});
+		const occupiedAddress = occupied.address();
+		if (!occupiedAddress || typeof occupiedAddress === "string") {
+			occupied.close();
+			throw new Error("occupied upstream has no address");
+		}
 		const failedRecorder = await startRecorder({
-			upstream: "http://127.0.0.1:59999",
+			upstream: `http://127.0.0.1:${occupiedAddress.port}`,
 			file: failedFile,
 			scenario: "retry-pre-round",
 			provider: "loopback",
@@ -561,6 +616,7 @@ describe("record then replay", () => {
 			]);
 		} finally {
 			failedRecorder.close();
+			await new Promise<void>((resolve) => occupied.close(() => resolve()));
 		}
 
 		const upstream = await startRawProvider({
@@ -599,6 +655,40 @@ describe("record then replay", () => {
 		expect(existsSync(failedFile)).toBe(false);
 		expect(adopted.rounds).toEqual(success.rounds);
 		expect(adopted.attempts?.map((attempt) => attempt.status)).toEqual(["failed", "recorded"]);
+	});
+
+	it("adopts only the retained attempt tape, never an earlier retry cassette", () => {
+		const earlier = join(DIRECTORY, "retained-attempt-0.json");
+		writeCassette(earlier, {
+			scenario: "retained-attempt",
+			provider: "loopback",
+			model: "loopback",
+			recordedAt: "2026-09-13T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: "0123456789abcdef",
+					digest: {
+						systemChars: 0,
+						toolCount: 0,
+						roles: ["user"],
+						lastUserText: "attempt-0",
+					},
+					sse: "data: [DONE]\n\n",
+				},
+			],
+		});
+		const lists = [
+			[{ attempt: 0, phase: "forward" as const, status: "failed" as const, detail: "timeout" }],
+			[],
+		];
+		expect(adoptCassetteForRetainedAttempt(undefined, lists)).toBeUndefined();
+		expect(
+			adoptCassetteForRetainedAttempt(join(DIRECTORY, "retained-attempt-1.json"), lists),
+		).toBeUndefined();
+		expect(adoptCassetteForRetainedAttempt(earlier, lists)?.rounds[0]?.digest.lastUserText).toBe(
+			"attempt-0",
+		);
 	});
 
 	it("rejects a Chat cassette whose rounds resolve to different models", () => {

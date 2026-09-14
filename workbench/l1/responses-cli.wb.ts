@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { buildSync } from "esbuild";
 import { describe, expect, it } from "vitest";
 import { readCassette, startRecorder } from "../lib/cassette";
@@ -72,6 +72,7 @@ describe("offline main CLI replay", () => {
 		const cleanEnv = Object.fromEntries(
 			Object.entries(process.env).filter(([name]) => !envNames.has(name)),
 		);
+		rmSync(`workbench/runs/${LABEL}`, { recursive: true, force: true });
 		const child = spawnSync(
 			process.execPath,
 			[

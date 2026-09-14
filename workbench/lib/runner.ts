@@ -19,6 +19,7 @@ import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
 import {
 	adoptRetryEvidence,
 	attemptsFromEndpoint,
+	type Cassette,
 	type CassetteAttempt,
 	readCassetteEvidence,
 	startRecorder,
@@ -173,6 +174,15 @@ export interface ScenarioRepsOptions {
 	onRepetition?: (result: RepetitionResult) => void;
 }
 
+/** Only the retained attempt's tape may become canonical. */
+export function adoptCassetteForRetainedAttempt(
+	retainedAttemptFile: string | undefined,
+	attemptLists: CassetteAttempt[][],
+): Cassette | undefined {
+	if (!retainedAttemptFile || !existsSync(retainedAttemptFile)) return undefined;
+	return adoptRetryEvidence(readCassetteEvidence(retainedAttemptFile), attemptLists);
+}
+
 /**
  * Runs a scenario `reps` times, sequentially.
  *
@@ -209,7 +219,6 @@ export async function runScenarioReps(
 		budget?.refreshDeadline();
 		const canonicalFile = options.live?.record?.(rep);
 		const attemptLists: CassetteAttempt[][] = [];
-		let successCassette: ReturnType<typeof readCassetteEvidence> | undefined;
 		let attempt = 0;
 		for (;;) {
 			const attemptFile =
@@ -236,17 +245,15 @@ export async function runScenarioReps(
 				attemptLists.push(attemptsFromEndpoint(endpoint));
 				endpoint?.close();
 			}
-			if (attemptFile && existsSync(attemptFile)) {
-				successCassette = readCassetteEvidence(attemptFile);
-			}
 			const failureClass = result.scored.failureClass;
 			if ((failureClass === "TIMEOUT" || failureClass === "TRANSPORT") && attempt < maxRetries) {
 				discarded.push(result);
 				attempt += 1;
 				continue;
 			}
-			if (canonicalFile && successCassette) {
-				writeCassette(canonicalFile, adoptRetryEvidence(successCassette, attemptLists));
+			if (canonicalFile) {
+				const adopted = adoptCassetteForRetainedAttempt(attemptFile, attemptLists);
+				if (adopted) writeCassette(canonicalFile, adopted);
 			}
 			results.push(result);
 			options.onRepetition?.(result);

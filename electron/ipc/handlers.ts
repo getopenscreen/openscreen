@@ -82,6 +82,10 @@ import type { CursorRecordingSession } from "../native-bridge/cursor/recording/s
 import { toHelperRect } from "../native-bridge/helperCoordinates";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import {
+	describeSalvagedTake,
+	salvageNativeMacCapture,
+} from "../recording/nativeMacCaptureSalvage";
+import {
 	type NativeMacCaptureExit,
 	nativeMacDiscardTargets,
 	sendNativeMacStopCommand,
@@ -3230,26 +3234,50 @@ export function registerIpcHandlers(
 				}
 				return { success: true, discarded: true };
 			}
-			if (!stopResult.ok) {
-				pendingCursorRecordingData = null;
-				console.error("Failed to stop native macOS recording:", {
-					reason: stopResult.reason,
-					message: stopResult.message,
-					helperExited: stopResult.exited,
-					output: (nativeMacCaptureOutputs.get(proc) ?? "").trim(),
-				});
-				return { success: false, error: stopResult.message };
-			}
-			const screenVideoPath = stopResult.screenVideoPath;
-			nativeMacRecordingWarning = stopResult.warning
-				? { screenVideoPath, message: stopResult.warning }
-				: null;
-			if (stopResult.warning) {
-				console.warn("[native-sck] the take ended before it was stopped; its recording was kept", {
-					warning: stopResult.warning,
+			let screenVideoPath: string;
+			let warning: string | undefined;
+			let recovered = false;
+			if (stopResult.ok) {
+				screenVideoPath = stopResult.screenVideoPath;
+				warning = stopResult.warning;
+				if (warning) {
+					console.warn(
+						"[native-sck] the take ended before it was stopped; its recording was kept",
+						{
+							warning,
+							path: screenVideoPath,
+						},
+					);
+				}
+			} else {
+				// A helper that exited left a file nothing writes to any more, and what its
+				// writer finished before the failure is usually a playable fragmented take.
+				// One still running may be mid-write, so it is left alone.
+				const salvage =
+					stopResult.exited && preferredPath ? await salvageNativeMacCapture(preferredPath) : null;
+				if (!salvage || !salvage.ok) {
+					pendingCursorRecordingData = null;
+					console.error("Failed to stop native macOS recording:", {
+						reason: stopResult.reason,
+						message: stopResult.message,
+						helperExited: stopResult.exited,
+						salvage: salvage ? salvage.reason : "not attempted: the helper had not exited",
+						output: (nativeMacCaptureOutputs.get(proc) ?? "").trim(),
+					});
+					return { success: false, error: stopResult.message };
+				}
+				screenVideoPath = salvage.screenVideoPath;
+				warning = describeSalvagedTake(stopResult.message, salvage.durationSec);
+				recovered = true;
+				console.warn("[native-sck] recovered the part of the take written before its stop failed", {
+					stopFailure: stopResult.message,
 					path: screenVideoPath,
+					videoSamples: salvage.videoSamples,
+					durationSec: salvage.durationSec,
+					truncatedBytes: salvage.truncatedBytes,
 				});
 			}
+			nativeMacRecordingWarning = warning ? { screenVideoPath, message: warning } : null;
 
 			if (cursorCaptureMode === "editable-overlay") {
 				compactPendingCursorTelemetryPauseRanges(nativeMacPauseRanges);
@@ -3276,8 +3304,11 @@ export function registerIpcHandlers(
 				success: true,
 				path: screenVideoPath,
 				session,
-				message: "Native macOS recording session stored successfully",
-				...(stopResult.warning ? { warning: stopResult.warning } : {}),
+				message: recovered
+					? "Native macOS recording recovered from a failed stop"
+					: "Native macOS recording session stored successfully",
+				...(warning ? { warning } : {}),
+				...(recovered ? { recovered: true } : {}),
 			};
 		} catch (error) {
 			console.error("Failed to stop native macOS recording:", error);

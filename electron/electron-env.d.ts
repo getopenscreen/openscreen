@@ -181,6 +181,8 @@ interface Window {
 			discarded?: boolean;
 			/** The take ended before it was stopped, but its recording was kept. */
 			warning?: string;
+			/** The stop failed and the recording was recovered from what was on disk. */
+			recovered?: boolean;
 			error?: string;
 		}>;
 		attachNativeMacWebcamRecording: (payload: {

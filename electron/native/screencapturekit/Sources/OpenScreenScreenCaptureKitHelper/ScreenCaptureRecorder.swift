@@ -134,6 +134,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var isPaused = false
 	private var pauseStartedAt: CMTime?
 	private var totalPausedDuration = CMTime.zero
+	/// Sample queue only. See `VideoTimestampGate` for the failure it exists to prevent.
+	private var videoTimestampGate = VideoTimestampGate()
 	private var nativeMicrophoneEnabled = false
 	private var outputWidth = 1920
 	private var outputHeight = 1080
@@ -290,6 +292,19 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			return
 		}
 		let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+		// A frame that does not move the timeline forward fails the whole writer one append
+		// later (-16364), so it is dropped here instead. After a resume that is one frame the
+		// user never sees; without the check it was the end of the recording.
+		switch videoTimestampGate.check(presentationTime) {
+		case .admit:
+			break
+		case .invalid:
+			reportRefusedVideoFrame(presentationTime, previous: nil, pauseOffset: pauseState.offset)
+			return
+		case .notAfterPrevious(let previous):
+			reportRefusedVideoFrame(presentationTime, previous: previous, pauseOffset: pauseState.offset)
+			return
+		}
 		if !didStartWriting {
 			writer.startWriting()
 			writer.startSession(atSourceTime: presentationTime)
@@ -299,6 +314,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		}
 
 		if videoInput.isReadyForMoreMediaData {
+			videoTimestampGate.record(presentationTime)
 			let appended = videoInput.append(sampleBuffer)
 			if appended, !didEmitRecordingStarted {
 				didEmitRecordingStarted = true
@@ -341,6 +357,23 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				+ (writer.error.map { "\($0)" }
 					?? "AVAssetWriter status \(writer.status.rawValue)"),
 		)
+	}
+
+	/// Once per take, with the numbers that tell the cause apart: a refusal right after a resume
+	/// with a sub-frame overlap is the pause shift; anything else is a source handing over time
+	/// that goes backwards, which nothing here has observed yet and is worth a report.
+	private func reportRefusedVideoFrame(_ presentationTime: CMTime, previous: CMTime?, pauseOffset: CMTime) {
+		guard videoTimestampGate.rejectedCount == 1 else {
+			return
+		}
+		emit([
+			"event": "warning",
+			"code": "video-frame-timestamp-refused",
+			"message": "Dropped a video frame whose timestamp did not advance.",
+			"presentationTimeSeconds": presentationTime.isNumeric ? CMTimeGetSeconds(presentationTime) : -1,
+			"previousSeconds": previous.map { CMTimeGetSeconds($0) } ?? -1,
+			"pauseOffsetSeconds": pauseOffset.isNumeric ? CMTimeGetSeconds(pauseOffset) : 0,
+		])
 	}
 
 	private func ensureRequestedPermissions() throws {
@@ -637,6 +670,16 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			}
 		}
 
+		let refusedVideoFrames = sampleQueue.sync { videoTimestampGate.rejectedCount }
+		if refusedVideoFrames > 1 {
+			emit([
+				"event": "warning",
+				"code": "video-frame-timestamps-refused",
+				"message": "Dropped \(refusedVideoFrames) video frames whose timestamps did not advance.",
+				"count": refusedVideoFrames,
+			])
+		}
+
 		videoInput?.markAsFinished()
 		audioInput?.markAsFinished()
 
@@ -700,13 +743,16 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			arrayToFill: &timing,
 			entriesNeededOut: nil
 		)
+		// Both failures drop the sample rather than pass it on unshifted. An unshifted frame sits
+		// a whole pause ahead of the timeline, and every correctly shifted frame after it would
+		// then fall behind it — refused by the timestamp gate for as long as the pause lasted.
 		if timingStatus != noErr {
 			emit([
 				"event": "warning",
 				"code": "sample-retime-failed",
 				"message": "Unable to read sample timing info: \(timingStatus).",
 			])
-			return sampleBuffer
+			return nil
 		}
 
 		for index in timing.indices {
@@ -735,7 +781,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				"code": "sample-retime-failed",
 				"message": "Unable to copy sample timing info: \(copyStatus).",
 			])
-			return sampleBuffer
+			return nil
 		}
 
 		return retimedBuffer

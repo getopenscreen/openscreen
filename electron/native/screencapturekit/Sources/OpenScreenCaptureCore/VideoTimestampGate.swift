@@ -20,15 +20,17 @@ import CoreMedia
 /// Pause/resume. The helper measures a pause on the host clock and shifts every later sample
 /// back by it, but a ScreenCaptureKit frame's presentation time is not the instant it was
 /// delivered: it runs a few milliseconds ahead of the host clock, by an amount that varies from
-/// frame to frame (median 4.8 ms, spread about 20 ms). When the last frame before a pause led
-/// the clock by more than the first frame after it does, subtracting the exact pause length
-/// lands the new frame just behind the old one. Over 200 real pause/resume cycles at 1080p60 on
-/// an M1 (macOS 26.5), 6 did, by 0.2 to 1.9 ms. Every one was captured after resume, so gating
-/// frames on when they were captured would not have caught them.
+/// frame to frame (median 4.8 ms, spread about 20 ms). Subtracting the exact pause length lands
+/// the first frame after a resume behind the last one before it when that lead drops, between
+/// the two frames, by more than the delivery gaps on either side of the pause add up to. Over
+/// 200 real pause/resume cycles at 1080p60 on an M1 (macOS 26.5), 6 resumes did, by 0.2 to
+/// 1.9 ms; 7 did at 4K60. Every one was captured after resume, so gating frames on when they
+/// were captured would not have caught them.
 ///
-/// Dropping the frame is the whole fix for that case, because the overlap is always less than
-/// one frame interval: the next frame is already past it. Audio is not involved — its track is
-/// clocked by `AudioTrackMixer`, and the writer accepts audio that steps backwards.
+/// The gate refuses frames until time moves past the last one the writer received, however many
+/// that takes. Every overlap measured was under 2 ms, so in practice that has been a single frame
+/// at 60 fps. Audio is not involved — its track is clocked by `AudioTrackMixer`, and the writer
+/// accepts audio that steps backwards.
 ///
 /// The gate compares in the samples' own time base. Two frames closer together than the track's
 /// 1/600 s media timescale are accepted and re-spaced by the writer, so there is no rounding to

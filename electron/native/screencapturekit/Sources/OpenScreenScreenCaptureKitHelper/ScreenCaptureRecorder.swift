@@ -359,9 +359,10 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		)
 	}
 
-	/// Once per take, with the numbers that tell the cause apart: a refusal right after a resume
-	/// with a sub-frame overlap is the pause shift; anything else is a source handing over time
-	/// that goes backwards, which nothing here has observed yet and is worth a report.
+	/// Once per take, with the numbers that tell the cause apart. A refusal with a non-zero pause
+	/// offset, a few milliseconds behind the previous frame, is the pause shift measured in
+	/// `VideoTimestampGate`. One with no pause offset at all is a source handing over time that
+	/// goes backwards, which nothing here has observed yet and is worth a report.
 	private func reportRefusedVideoFrame(_ presentationTime: CMTime, previous: CMTime?, pauseOffset: CMTime) {
 		guard videoTimestampGate.rejectedCount == 1 else {
 			return

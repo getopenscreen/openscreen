@@ -37,10 +37,27 @@ final class VideoTimestampGateTests: XCTestCase {
 		let firstAfterResume = CMTimeSubtract(seconds(2420.5588043749999), seconds(0.93589941600000004))
 		XCTAssertEqual(gate.check(firstAfterResume), .notAfterPrevious(previous: lastBeforePause))
 
-		// The overlap is less than one frame, so the frame after it is already clear.
+		// This overlap was under one frame, so the frame after it is already clear.
 		let next = CMTimeSubtract(seconds(2420.5588043749999 + 1.0 / 60), seconds(0.93589941600000004))
 		XCTAssertEqual(gate.check(next), .admit)
 		XCTAssertEqual(gate.rejectedCount, 1)
+	}
+
+	/// Nothing bounds the overlap to one frame, so the gate has to keep refusing until time moves
+	/// past the last frame the writer received, and then let the stream through again.
+	func testOverlapLongerThanOneFrameIsRefusedUntilTimeAdvances() {
+		var gate = VideoTimestampGate()
+		let lastBeforePause = seconds(100)
+		gate.record(lastBeforePause)
+
+		let frame = 1.0 / 60
+		let first = seconds(100 - 1.5 * frame)
+		let second = seconds(100 - 0.5 * frame)
+		let third = seconds(100 + 0.5 * frame)
+		XCTAssertEqual(gate.check(first), .notAfterPrevious(previous: lastBeforePause))
+		XCTAssertEqual(gate.check(second), .notAfterPrevious(previous: lastBeforePause))
+		XCTAssertEqual(gate.check(third), .admit)
+		XCTAssertEqual(gate.rejectedCount, 2)
 	}
 
 	func testDuplicateTimestampIsRefused() {

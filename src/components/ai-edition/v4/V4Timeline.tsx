@@ -153,19 +153,33 @@ const PILL_SNAP_PX = 8;
 const NARROW_CLIP_PX = 120;
 // Whether a card can also carry its edited duration. The label pill is capped at
 // `calc(100% - 50px)` so it clears the delete button, and everything inside it
-// but the name is incompressible: 15px of padding, the 16px pencil, two 8px
-// gaps, and the timecode. The timecode is the part that varies — `formatSec`
-// never prints an hour field, so a clip past ten minutes reads `16:40.0` and one
-// past a hundred `100:00.0` — so the room is measured against THIS card's own
-// text rather than a single number that only ever fitted the short form.
-// Measured in the running window: 6.0px per character at 10px in the mono face,
-// and a 6-character code overlapping the delete button at a 121px card, clear at
-// 131px.
+// but the name is incompressible: 15px of pill padding (`3px 9px 3px 6px`), the
+// pencil and two 8px gaps — 47px. The timecode is the part that varies —
+// `formatSec` never prints an hour field, so a clip past ten minutes reads
+// `16:40.0` and one past a hundred `100:00.0` — so its width is measured with
+// canvas `measureText` in the face `.tlClipDuration` actually renders, rather
+// than guessed from a per-character average. Only where canvas is unavailable
+// (jsdom) does the gate fall back to the first cut's estimate: 6px per
+// character at 10px in the mono face.
 const CLIP_LABEL_RESERVE_PX = 50;
 const CLIP_LABEL_FIXED_PX = 47;
-const CLIP_LABEL_CHAR_PX = 6;
+const CLIP_LABEL_FALLBACK_CHAR_PX = 6;
+// `.tlClipDuration` renders `500 10px/1.2 var(--font-mono)`; canvas wants the
+// same face without the line height, so the family comes from the token itself.
+let durationMeasureCtx: CanvasRenderingContext2D | null | undefined;
+function durationTextPx(text: string): number | undefined {
+	if (durationMeasureCtx === undefined) {
+		durationMeasureCtx = document.createElement("canvas").getContext("2d");
+	}
+	const ctx = durationMeasureCtx;
+	if (ctx === null) return undefined;
+	const family = getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim();
+	ctx.font = `500 10px ${family || "monospace"}`;
+	return ctx.measureText(text).width;
+}
 function cardFitsDuration(cardPx: number, text: string): boolean {
-	return cardPx >= CLIP_LABEL_RESERVE_PX + CLIP_LABEL_FIXED_PX + text.length * CLIP_LABEL_CHAR_PX;
+	const textPx = durationTextPx(text) ?? text.length * CLIP_LABEL_FALLBACK_CHAR_PX;
+	return cardPx >= CLIP_LABEL_RESERVE_PX + CLIP_LABEL_FIXED_PX + textPx;
 }
 
 const CLIP_GUTTER_PX = 6;

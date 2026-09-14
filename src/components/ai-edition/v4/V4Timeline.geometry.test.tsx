@@ -17,6 +17,13 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), success: vi.f
 // The audio lane's pill renders a ClipWaveform; no decode in this geometry suite.
 vi.mock("@/hooks/useAudioPeaks", () => ({ useAudioPeaks: () => null }));
 
+// The duration gate reads its timecode's width off a canvas context. jsdom has
+// no canvas, so every test here runs against this stub: 6px a character, the
+// same figure the component's no-canvas fallback assumes, which keeps the width
+// arithmetic in the tests below the one the first cut reasoned in. The
+// measured-path test re-aims it at a wider face and expects the gate to follow.
+const measureText = vi.fn((text: string) => ({ width: text.length * 6 }));
+
 import { ShortcutsProvider } from "@/contexts/ShortcutsContext";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { DEFAULT_SHORTCUTS, formatBinding } from "@/lib/shortcuts";
@@ -55,6 +62,13 @@ beforeAll(() => {
 			},
 		}),
 	});
+	vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+		() => ({ measureText }) as unknown as CanvasRenderingContext2D,
+	);
+});
+
+afterEach(() => {
+	measureText.mockImplementation((text: string) => ({ width: text.length * 6 }));
 });
 
 function clip(startSec: number, endSec: number) {
@@ -492,6 +506,18 @@ describe("V4Timeline clip row", () => {
 
 		expect(screen.queryByText("10:00.0")).not.toBeInTheDocument();
 		expect(screen.getByText("56:05.0")).toBeInTheDocument();
+	});
+
+	it("measures the timecode where a canvas exists, rather than averaging its length", () => {
+		// The stubbed face costs 9px a character against the 6px the jsdom fallback
+		// assumes. A 700s clip of this 3965s span is a ~159px card — roomy enough
+		// by the count (50 + 47 + 7×6 = 139) and too tight once the face is read
+		// (50 + 47 + 7×9 = 160) — so only a measured gate withholds it.
+		measureText.mockImplementation((text: string) => ({ width: text.length * 9 }));
+		renderTimeline([clip(0, 700), clip(700, 3965)]);
+
+		expect(screen.queryByText("11:40.0")).not.toBeInTheDocument();
+		expect(screen.getByText("54:25.0")).toBeInTheDocument();
 	});
 
 	it("takes the card gutter out of each clip's own width", () => {

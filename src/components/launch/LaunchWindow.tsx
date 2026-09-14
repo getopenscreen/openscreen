@@ -349,6 +349,14 @@ export function LaunchWindow() {
 	//      down as CSS custom properties.
 	// ---------------------------------------------------------------------------
 	const hudAllocatedSizeRef = useRef({ width: 0, height: 0, orientation: trayLayout });
+	// Last bar rect sent to the main process, so a measurement that changed nothing
+	// (a popover opening in reserved space) costs no IPC either.
+	const lastSentHudContentRef = useRef<{
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+	} | null>(null);
 	const isDraggingHudRef = useRef(false);
 
 	useLayoutEffect(() => {
@@ -418,14 +426,48 @@ export function LaunchWindow() {
 			required.height > allocated.height ||
 			granted.width + HUD_GROWTH_RESERVE < allocated.width ||
 			granted.height + HUD_GROWTH_RESERVE < allocated.height;
+
+		// The main process positions the HUD by this rect, not by the window: the
+		// window is mostly transparent reserve, and clamping it would strand the
+		// bar at the bottom of the screen. `barRect` is already window-relative
+		// (the frameless viewport is the whole window), and since the stack is
+		// centred and pinned HUD_BAR_BOTTOM above the window's bottom edge
+		// (LaunchWindow.module.css), the rect the granted size will produce is
+		// computed exactly rather than measured a frame late.
+		const currentContent = {
+			x: barRect.x,
+			y: barRect.y,
+			width: barWidth,
+			height: barHeight,
+		};
+		const grantedContent = {
+			x: (granted.width - barWidth) / 2,
+			y: granted.height - HUD_BAR_BOTTOM - barHeight,
+			width: barWidth,
+			height: barHeight,
+		};
+
 		if (!needsResize) {
+			const last = lastSentHudContentRef.current;
+			const contentChanged =
+				!last ||
+				last.width !== currentContent.width ||
+				last.height !== currentContent.height ||
+				Math.abs(last.x - currentContent.x) >= 1 ||
+				Math.abs(last.y - currentContent.y) >= 1;
+			if (!contentChanged) return;
+			// No resize — but the bar grew inside the reserve, and the main process
+			// must know before that growth pushes it past an edge it sits flush on.
+			lastSentHudContentRef.current = currentContent;
+			window.electronAPI.setHudOverlaySize(allocated.width, allocated.height, currentContent);
 			return;
 		}
 
 		allocated.orientation = trayLayout;
 		allocated.width = granted.width;
 		allocated.height = granted.height;
-		window.electronAPI.setHudOverlaySize(granted.width, granted.height);
+		lastSentHudContentRef.current = grantedContent;
+		window.electronAPI.setHudOverlaySize(granted.width, granted.height, grantedContent);
 	}, [trayLayout]);
 
 	// One persistent observer; elements wire themselves up via callback refs as

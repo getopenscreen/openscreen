@@ -94,8 +94,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	endHudOverlayDrag: () => {
 		ipcRenderer.send("hud-overlay-drag-end");
 	},
-	setHudOverlaySize: (width: number, height: number) => {
-		ipcRenderer.send("hud-overlay-set-size", width, height);
+	setHudOverlaySize: (
+		width: number,
+		height: number,
+		content: { x: number; y: number; width: number; height: number },
+	) => {
+		ipcRenderer.send("hud-overlay-set-size", width, height, content);
 	},
 	getSources: async (opts: Electron.SourcesOptions) => {
 		return await ipcRenderer.invoke("get-sources", opts);

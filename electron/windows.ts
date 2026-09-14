@@ -8,7 +8,14 @@ import {
 	saveEditorWindowState,
 	shouldTrackEditorWindow,
 } from "./editorWindowState";
-import { clampHudToWorkArea, hudDragDestination } from "./hudWindowBounds";
+import {
+	clampHudBoundsToWorkArea,
+	type HudContentRect,
+	hudContentScreenRect,
+	hudDragDestination,
+	hudResizeBounds,
+	parseHudContentRect,
+} from "./hudWindowBounds";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -103,6 +110,18 @@ let hudOverlayWindow: BrowserWindow | null = null;
 // self-corrects on the next one instead of leaving the window permanently offset.
 let hudDragOrigin: { x: number; y: number } | null = null;
 
+// The bar's rect inside the window, as last measured by the renderer. Everything
+// that positions the HUD clamps this rect — not the window — into the work area,
+// because the window around the bar is transparent reserve that may overhang any
+// edge (see hudWindowBounds.ts). Null until the renderer's first measurement.
+let hudContentRect: HudContentRect | null = null;
+
+/** Work area of the display the bar is on (or heading for), not the window. */
+function hudWorkAreaFor(bounds: Electron.Rectangle): Electron.Rectangle {
+	const reference = hudContentRect ? hudContentScreenRect(bounds, hudContentRect) : bounds;
+	return screen.getDisplayMatching(reference).workArea;
+}
+
 // The work area can shrink under a HUD nobody is touching: the taskbar stops auto-hiding
 // (or is revealed), the Dock moves, the resolution or the scale changes. A bar parked at
 // the bottom edge would then be left sitting on the taskbar until the next drag — and the
@@ -115,14 +134,19 @@ function watchHudWorkAreaChanges() {
 
 	const reclampHud = () => {
 		const win = hudOverlayWindow;
-		if (!win || win.isDestroyed()) return;
+		// Minimized is skipped per platform for different reasons: Windows reports
+		// sentinel bounds (−32000,−32000) for a minimized window and clamping those
+		// would teleport the HUD somewhere in the work area on restore; macOS keeps
+		// real bounds, so skipping only delays the re-clamp to the next display
+		// event. Either way the position was legal when the window was minimized.
+		if (!win || win.isDestroyed() || win.isMinimized()) return;
 		// A drag owns the position frame by frame; moving the window out from under it
 		// would fight the gesture. The renderer re-measures on release, and the next
 		// metric change re-clamps it anyway.
 		if (hudDragOrigin) return;
 
 		const bounds = win.getBounds();
-		const next = clampHudToWorkArea(bounds, screen.getDisplayMatching(bounds).workArea);
+		const next = clampHudBoundsToWorkArea(bounds, hudContentRect, hudWorkAreaFor(bounds));
 		if (
 			next.x !== bounds.x ||
 			next.y !== bounds.y ||
@@ -242,36 +266,45 @@ ipcMain.on("hud-overlay-drag-to", (_event, deltaX: number, deltaY: number) => {
 		return;
 	}
 
-	// Clamp to the work area of the display the drag is heading *for* — resolved from the
-	// destination, not from where the window currently sits, so a drag towards a second
-	// display follows the pointer instead of stopping at the edge it started on.
-	//
-	// Without this the drag handle was a one-way trip off the screen: the taskbar and the
-	// Dock live outside the work area, and an always-on-top, `skipTaskbar` HUD parked
-	// there covers them, with no taskbar entry to click to get it back. The tray icon was
-	// the only way home. "hud-overlay-set-size" already clamped for exactly this reason;
-	// this path did not.
+	// Clamp the *bar* into the work area of the display the drag is heading for —
+	// resolved from the destination, not from where the window currently sits, so a
+	// drag towards a second display follows the pointer instead of stopping at the
+	// edge it started on. The window itself may overhang: everything in it except
+	// the bar is transparent reserve (see hudWindowBounds.ts), and clamping the
+	// window instead would hand the bar the reserve's width and ~600px of height as
+	// a margin it can never cross — the "stuck at the bottom of the screen" trap.
 	const bounds = hudOverlayWindow.getBounds();
 	const destination = hudDragDestination({ bounds, origin: hudDragOrigin, deltaX, deltaY });
-	const { workArea } = screen.getDisplayMatching(destination);
 
-	hudOverlayWindow.setBounds(clampHudToWorkArea(destination, workArea), false);
+	hudOverlayWindow.setBounds(
+		clampHudBoundsToWorkArea(destination, hudContentRect, hudWorkAreaFor(destination)),
+		false,
+	);
 });
 
 ipcMain.on("hud-overlay-drag-end", () => {
 	hudDragOrigin = null;
 });
 
-// Resize the HUD to fit its rendered content. Anchored by its bottom-centre so it
-// stays where the user dragged it while only growing/shrinking, which lets the
-// vertical tray layout grow tall instead of scrolling inside a fixed window.
+// Resize the HUD to fit its rendered content. The renderer also sends the bar's
+// rect inside the requested size (the stack layout is deterministic: centred,
+// pinned HUD_BAR_BOTTOM above the window's bottom edge), and every positioning
+// decision below is made on that rect rather than on the window — anchored on
+// the bar's bottom-centre so a horizontal↔vertical flip resizes the window
+// around the bar instead of moving it, and clamped so the bar cannot end up off
+// screen. The window around it may overhang; the reserve is invisible.
+//
+// The same message doubles as a content-rect update: when only the bar changed
+// (growth into the reserve costs no resize), the size is unchanged and the
+// handler just refreshes the rect — repositioning only if the bar now overhangs
+// an edge it sits flush against.
 //
 // Applied in one shot rather than tweened. The renderer now reserves space for
 // everything that can float above the bar, so a resize only ever accompanies a
 // discrete content change (orientation flip, recording controls appearing) that
 // snaps anyway — tweening the window across 10 frames just meant 10 frames of the
 // bar sitting at an offset that didn't match the content it was drawn with.
-ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number) => {
+ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, content: unknown) => {
 	if (
 		!hudOverlayWindow ||
 		hudOverlayWindow.isDestroyed() ||
@@ -282,48 +315,37 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number) => {
 	}
 
 	// A resize re-anchors from the window's current bounds, which would fight the
-	// position an in-flight drag is applying. The renderer re-measures on release.
+	// position an in-flight drag is applying. The renderer re-measures on release,
+	// which re-sends the rect that matched the size actually in force.
 	if (hudDragOrigin) {
 		return;
 	}
 
 	const bounds = hudOverlayWindow.getBounds();
-
-	// Clamp to the work area of the display the HUD sits on; on a short screen the
-	// vertical layout can exceed the display, where the bar's own overflow scroll takes over.
-	const { workArea } = screen.getDisplayMatching(bounds);
-	const nextWidth = Math.min(workArea.width, Math.max(1, Math.round(width)));
-	const nextHeight = Math.min(workArea.height, Math.max(1, Math.round(height)));
-
-	if (bounds.width === nextWidth && bounds.height === nextHeight) {
-		return;
+	const nextContent = parseHudContentRect(content);
+	const next = hudResizeBounds({
+		bounds,
+		previousContent: hudContentRect,
+		width,
+		height,
+		nextContent,
+		workArea: hudWorkAreaFor(bounds),
+	});
+	// A malformed rect must not clobber the last good one: the stored rect is
+	// what every later positioning decision clamps by.
+	if (nextContent) {
+		hudContentRect = nextContent;
 	}
 
-	const centerX = bounds.x + bounds.width / 2;
-	const bottomY = bounds.y + bounds.height;
-
-	// Growing height keeps the bottom edge anchored (so the vertical tray grows
-	// upward from where the user left it), but that alone can push the top edge
-	// above the screen — e.g. switching to the tall vertical layout while sitting
-	// low/mid-screen. The drag handle lives at the tray's start (top, in vertical
-	// mode), so an off-screen top edge makes the HUD both invisible and
-	// undraggable back into view. Clamp both axes to the display's work area so
-	// the window (and its drag handle) always stays fully reachable.
-	const nextX = Math.min(
-		Math.max(workArea.x, Math.round(centerX - nextWidth / 2)),
-		workArea.x + workArea.width - nextWidth,
-	);
-	const nextY = Math.min(
-		Math.max(workArea.y, Math.round(bottomY - nextHeight)),
-		workArea.y + workArea.height - nextHeight,
-	);
-
-	hudOverlayWindow.setBounds({
-		x: nextX,
-		y: nextY,
-		width: nextWidth,
-		height: nextHeight,
-	});
+	if (
+		next.x === bounds.x &&
+		next.y === bounds.y &&
+		next.width === bounds.width &&
+		next.height === bounds.height
+	) {
+		return;
+	}
+	hudOverlayWindow.setBounds(next, false);
 });
 
 /**

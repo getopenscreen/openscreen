@@ -435,7 +435,13 @@ interface Window {
 		/** Total pointer travel since `beginHudOverlayDrag`, not a per-frame delta. */
 		dragHudOverlayTo: (deltaX: number, deltaY: number) => void;
 		endHudOverlayDrag: () => void;
-		setHudOverlaySize: (width: number, height: number) => void;
+		/** Resizes the overlay and reports the bar's rect inside the requested
+		 *  size (window-relative); positioning decisions are made on that rect. */
+		setHudOverlaySize: (
+			width: number,
+			height: number,
+			content: { x: number; y: number; width: number; height: number },
+		) => void;
 		showCountdownOverlay: (value: number, runId: number) => Promise<void>;
 		setCountdownOverlayValue: (value: number, runId: number) => Promise<void>;
 		hideCountdownOverlay: (runId: number) => Promise<void>;

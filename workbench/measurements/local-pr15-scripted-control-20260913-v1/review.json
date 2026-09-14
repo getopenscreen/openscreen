@@ -6,6 +6,6 @@
 		"label": "measurement_artifact_review"
 	},
 	"disposition": "approved",
-	"reviewedAt": "2026-09-13T13:28:14.351Z",
-	"summary": "Approved candidate SHA256 A79440C39D69B31FF5AE9D7AF4DD4BD2700BDD0A17D014C15E711B9346465E52 for adoption as a local scripted offline workflow control on the standalone workbench source. The source manifest and referenced artifact hashes were independently checked. Provider usage is explicitly incomplete with zero rounds reporting usage; no complete token-accounting or model-quality claim is approved. This does not validate the missing original real-take fixture or authorize external provider calls."
+	"reviewedAt": "2026-09-14T02:50:31.433Z",
+	"summary": "Approved regenerated scripted offline workflow control after the retained-attempt cassette pairing fix. The source manifest and referenced artifact hashes were independently checked. Provider usage is explicitly incomplete with zero rounds reporting usage; no complete token-accounting or model-quality claim is approved. This does not validate the missing original real-take fixture or authorize external provider calls."
 }

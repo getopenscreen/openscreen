@@ -1,7 +1,7 @@
 {
 	"schema": 1,
 	"id": "local-pr15-scripted-control-20260913-v1",
-	"createdAt": "2026-09-13T13:28:14.349Z",
+	"createdAt": "2026-09-14T02:50:31.432Z",
 	"complete": true,
 	"scenario": {
 		"id": "target-right-clip",
@@ -10,7 +10,7 @@
 	},
 	"source": {
 		"schema": 2,
-		"commit": "0a06f6537d369c3d7da9e738344bd5ebe2752bc0",
+		"commit": "8ec9c33e29b079e260d8df41786d981ce9a17594",
 		"dirtyManifest": [],
 		"dirtySha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
 		"effectiveManifest": [
@@ -1967,7 +1967,7 @@
 			{
 				"path": "workbench/lib/cassette.ts",
 				"kind": "text",
-				"sha256": "56a2ce8b15837c22b0825ddb0aee40639c33942de24cfe3b1221f1c22e09a38e"
+				"sha256": "d1c2c6cec376e9ffe60fa4bbb2859a9431c1446539fb97b48ac4e513c89237ef"
 			},
 			{
 				"path": "workbench/lib/editorial.ts",
@@ -2052,7 +2052,7 @@
 			{
 				"path": "workbench/lib/runner.ts",
 				"kind": "text",
-				"sha256": "a31aa4de75aee54c5278cf5adcf820989b2fb734ec94c59bb2497f19214fb701"
+				"sha256": "633d9c0de23a0990bb10522667aef6bee49f5bc1d4e3cdc17bc94c8134281848"
 			},
 			{
 				"path": "workbench/lib/scenario.ts",
@@ -2175,7 +2175,7 @@
 				"sha256": "ee33a1a636e830cf7d1c7293e4455709929692cd2b367001d92f8d7b84872225"
 			}
 		],
-		"effectiveSha256": "e45343005268519f22bcbe52ef24063c3f1fbd9cdd47b39a9e232a9955297545"
+		"effectiveSha256": "6499da3498c3e4ffc34c05511647d1654cd010f95c63eac95872b5b3baff6ca1"
 	},
 	"input": {
 		"fixtureSha256": "bfe5c60e22e280cbba6874dc8039cb91166b3684eeac6bd5b33485c279d91cbc",
@@ -2187,8 +2187,7 @@
 		"systemSha256": "796759e35e0d75b547ad4c6318e995bf543e88dfa68e5571c7b43d914a90b93a",
 		"toolsSha256": "314045e9f558c1cb8ff33550e3677a3849bf3335f761fc4a09a3bf6ef7a12475",
 		"wireSha256": "df4f4732a580dabea7819a2ec85089f2a43a57d7b870aed9187961e5e9ce1cd0",
-		"rubricSha256": "e537991d30f2f37617318b1347ede5571ec6ae7d2f5cbfe511a87ad0e845982c",
-		"transportSha256": "d06ce2ee82317f195cd79b97d3a45db6defe6695a2a4378e7ac475891679a82e"
+		"rubricSha256": "e537991d30f2f37617318b1347ede5571ec6ae7d2f5cbfe511a87ad0e845982c"
 	},
 	"models": {
 		"agent": {
@@ -2202,7 +2201,7 @@
 	},
 	"provider": {
 		"provider": "openai-compatible",
-		"endpointSha256": "f07b92ad241cd519cc01fc25b26f3a02349c5882136fa90f12e3c4d0ca0a5a3c"
+		"endpointSha256": "a30cdbf63c0f8a4ae17b6b2013386bffa3ed3f14409a1d90d919ae64a8a94802"
 	},
 	"artifacts": [
 		{
@@ -2213,7 +2212,7 @@
 		{
 			"role": "main-cassette",
 			"path": "main-cassette-rep-0.json",
-			"sha256": "eab0b376a97cbd4501046b4cba5700bad537a300c384593fb1a83c9f40b95f6c"
+			"sha256": "bd56cd7b238d9fa0b98860a52365b9429f2e6e91a5c3398b48a2e609835781a3"
 		},
 		{
 			"role": "recorded-checks",
@@ -2223,12 +2222,12 @@
 		{
 			"role": "report",
 			"path": "measurement-report.json",
-			"sha256": "a24adea7bdd50da2a2ac9542fb48a6df201d1f2fdbfe8ced3df1cb331f49ef63"
+			"sha256": "7e5bf619c520778e430ab1df4f782becc4fa03d85b9a6dcda9508e427d832993"
 		},
 		{
 			"role": "review-receipt",
 			"path": "review.json",
-			"sha256": "a4f911f6635fbefd22882234fd0482cdce8540e7ad0411d3f899ebb2d1558a35"
+			"sha256": "c5c34bd086a717a04439d92195cd08708c0acfa785e0abbc581548043afa0c34"
 		}
 	],
 	"results": {

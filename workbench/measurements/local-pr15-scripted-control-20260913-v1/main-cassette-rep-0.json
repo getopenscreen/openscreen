@@ -3,11 +3,11 @@
 	"provider": "openai-compatible",
 	"model": "workbench-loopback-fixture",
 	"resolvedModel": "workbench",
-	"recordedAt": "2026-09-13T13:28:13.900Z",
+	"recordedAt": "2026-09-14T02:50:31.133Z",
 	"rounds": [
 		{
 			"round": 0,
-			"requestHash": "49b90339b9ff54b4bf40cae290a01377fbdd25c5ca6e3a747a6e962311c46741",
+			"requestHash": "a9f5459b3417be21",
 			"digest": {
 				"systemChars": 3840,
 				"toolCount": 25,
@@ -23,7 +23,7 @@
 		},
 		{
 			"round": 1,
-			"requestHash": "3bfb23b26d9b76292929d4bc4042655c2729c076edae323a5f8a5b80accb644b",
+			"requestHash": "072c05ee6c47e869",
 			"digest": {
 				"systemChars": 3840,
 				"toolCount": 25,
@@ -41,7 +41,7 @@
 		},
 		{
 			"round": 2,
-			"requestHash": "479d47611f4efb77694f7ce81d370878da477dbf0222d7d40df4945d3a353460",
+			"requestHash": "c8a3ae35aafb58de",
 			"digest": {
 				"systemChars": 3840,
 				"toolCount": 25,
@@ -60,34 +60,6 @@
 			"httpStatus": 200
 		}
 	],
-	"wireApi": "chat-completions",
-	"transport": {
-		"schema": 1,
-		"wireApi": "chat-completions",
-		"inboundPaths": [
-			"/chat/completions",
-			"/v1/chat/completions"
-		],
-		"upstreamPathSuffix": "/chat/completions",
-		"requestPolicy": {
-			"store": "unchanged",
-			"maxOutputField": "unchanged",
-			"maxOutputTokens": null,
-			"reasoning": "unchanged"
-		},
-		"retryPolicy": {
-			"sdkMaxRetries": "default",
-			"repetitionRetries": 2
-		},
-		"limits": {
-			"maxRequests": 100,
-			"maxRequestBytes": 65536,
-			"maxResponseBytes": 1048576,
-			"requestTimeoutMs": 60000,
-			"invocationTimeoutMs": 20000
-		},
-		"publicHeadersSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
-	},
 	"attempts": [
 		{
 			"attempt": 0,

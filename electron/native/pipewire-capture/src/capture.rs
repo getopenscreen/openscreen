@@ -297,6 +297,14 @@ impl Capture {
                 // for a monitor, or the window's crop rectangle for a window. The
                 // encoder is FORCED to VAAPI — the only backend that can consume the
                 // mapped surface; a non-VAAPI machine never negotiates dmabuf.
+                //
+                // This branch never goes through `VideoEncoder::open`, so it skips the
+                // ladder's `vaMapBuffer2` guard, as `dmabuf_import::available` does.
+                // That is safe only while nothing here uploads a CPU frame: the import
+                // maps and never transfers, and `open_importing` re-applies the guard
+                // to the one upload left, in `VideoEncoder::stage`. On a libva without
+                // the symbol this branch is also the ONLY route to hardware H.264, so
+                // anything that disables it there downgrades to software (issue #534).
                 let importer = crate::dmabuf_import::DmabufImporter::new(
                     desc.width,
                     desc.height,

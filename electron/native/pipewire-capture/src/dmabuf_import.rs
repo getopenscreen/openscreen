@@ -10,6 +10,13 @@
 //! The importer owns the VAAPI device and the filtergraph. The encoder is opened
 //! against [`Self::output_frames_ctx`] so the NV12 surface this produces is one
 //! `avcodec_send_frame` accepts directly. See docs/dmabuf-vaapi-plan.md.
+//!
+//! NEVER READ OR WRITE A SURFACE FROM SYSTEM MEMORY HERE. Nothing on this path,
+//! `available()` included, consults the `vaMapBuffer2` guard in encoder.rs
+//! (`vaapi_is_safe_to_probe`). It gets away with that only because it maps and
+//! never transfers. A CPU fallback added here, such as `av_hwframe_transfer_data`
+//! or a map into a software frame, would reach that symbol unguarded and abort
+//! the helper on a libva that lacks it (issues #534 and #576).
 
 use crate::ffmpeg as ff;
 use std::os::fd::AsRawFd;

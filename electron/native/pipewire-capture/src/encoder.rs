@@ -210,6 +210,10 @@ pub struct VideoEncoder {
     /// and held across the clock-driven re-encodes until the next frame replaces
     /// it. Null on the shm/software path.
     hw_staged: *mut ff::AVFrame,
+    /// False only for an encoder from [`Self::open_importing`] on a libva
+    /// without `vaMapBuffer2`, where [`Self::stage`] refuses CPU frames because
+    /// their upload would abort the process (issue #534).
+    upload_is_safe: bool,
     sws: *mut ff::SwsContext,
     sws_src_format: ff::AVPixelFormat,
     packet: *mut ff::AVPacket,
@@ -276,12 +280,20 @@ impl VideoEncoder {
     ///
     /// SAFETY: `device` and `frames_ctx` must be a live VAAPI device and an NV12
     /// VAAPI frames context on it; the encoder takes its own references.
+    ///
+    /// BYPASSES THE LADDER'S `vaMapBuffer2` GUARD. The importer only maps, so
+    /// nothing it does reaches that symbol. A CPU frame staged later (after a
+    /// renegotiation to a modifier-less format) would be uploaded into this pool
+    /// through `av_hwframe_transfer_data`, which does. So the guard is taken here
+    /// and enforced in [`Self::stage`], the only way to reach that upload.
     pub unsafe fn open_importing(
         params: VideoParams,
         device: *mut ff::AVBufferRef,
         frames_ctx: *mut ff::AVBufferRef,
     ) -> Result<Self, String> {
-        Self::open_backend(Backend::Vaapi, &params, Some((device, frames_ctx)))
+        let mut encoder = Self::open_backend(Backend::Vaapi, &params, Some((device, frames_ctx)))?;
+        encoder.upload_is_safe = vaapi_is_safe_to_probe();
+        Ok(encoder)
     }
 
     fn open_backend(
@@ -314,6 +326,7 @@ impl VideoEncoder {
                 sw_frame: ptr::null_mut(),
                 hw_frame: ptr::null_mut(),
                 hw_staged: ptr::null_mut(),
+                upload_is_safe: true,
                 sws: ptr::null_mut(),
                 sws_src_format: ff::AV_PIX_FMT_NONE,
                 packet: ptr::null_mut(),
@@ -508,6 +521,16 @@ impl VideoEncoder {
         stride: usize,
         src_format: ff::AVPixelFormat,
     ) -> Result<(), String> {
+        // Before anything is touched, `hw_staged` above all: `Capture::finish`
+        // re-sends that last imported surface as its tail write, so refusing here
+        // ends the recording with a playable file instead of a core dump.
+        if !self.upload_is_safe {
+            return Err(concat!(
+                "a CPU frame reached the dmabuf encoder, and libva.so.2 does not export ",
+                "vaMapBuffer2: uploading it would abort the process"
+            )
+            .to_owned());
+        }
         // The LAST row needs only its own pixels, not a further stride's worth of
         // padding. Demanding `stride * height` rejected exactly the frames a
         // window crop produces: `pixels` there starts partway into the buffer, so

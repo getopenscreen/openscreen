@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
 	clampHudBoundsToWorkArea,
 	clampHudContentToWorkArea,
-	HUD_WINDOW_MIN,
 	hudDragDestination,
 	hudResizeBounds,
 	parseHudContentRect,
@@ -203,6 +202,22 @@ describe("hud resize bounds", () => {
 		});
 		expect(next).toEqual(WINDOW);
 	});
+
+	it("does not cap the window to the work area, so the renderer's rect stays exact", () => {
+		// A capped height would shift the bar by the difference while main still
+		// stored the rect computed for the requested size.
+		const next = hudResizeBounds({
+			bounds: WINDOW,
+			previousContent: BAR,
+			width: 930,
+			height: 1200,
+			nextContent: { ...BAR, y: 1200 - BAR_BOTTOM_INSET - BAR.height },
+			workArea: WORK_AREA,
+		});
+		expect(next.height).toBe(1200);
+		// The bar's bottom edge stays exactly where it was.
+		expect(next.y + next.height - BAR_BOTTOM_INSET).toBe(WINDOW.y + BAR.y + BAR.height);
+	});
 });
 
 describe("hud content rect parsing", () => {
@@ -221,12 +236,5 @@ describe("hud content rect parsing", () => {
 		expect(parseHudContentRect({ x: 0, y: 0, width: Number.NaN, height: 64 })).toBeNull();
 		expect(parseHudContentRect({ x: 0, y: 0, width: 0, height: 64 })).toBeNull();
 		expect(parseHudContentRect({ x: 0, y: 0, width: 560 })).toBeNull();
-	});
-});
-
-describe("hud window minimum", () => {
-	it("matches the window's own floor, not the editor's", () => {
-		// browserWindow minWidth/minHeight at construction (electron/windows.ts).
-		expect(HUD_WINDOW_MIN).toEqual({ width: 120, height: 80 });
 	});
 });

@@ -441,13 +441,21 @@ interface Window {
 		/** Total pointer travel since `beginHudOverlayDrag`, not a per-frame delta. */
 		dragHudOverlayTo: (deltaX: number, deltaY: number) => void;
 		endHudOverlayDrag: () => void;
-		/** Resizes the overlay and reports the bar's rect inside the requested
+		/** Resizes the overlay and reports the visible stack's rect inside the requested
 		 *  size (window-relative); positioning decisions are made on that rect. */
 		setHudOverlaySize: (
 			width: number,
 			height: number,
 			content: { x: number; y: number; width: number; height: number },
 		) => void;
+		/** The visible stack's rect changed without a resize (a popover opened, the bar
+		 *  grew into its reserve); the overlay is re-clamped by it. */
+		setHudOverlayContent: (content: {
+			x: number;
+			y: number;
+			width: number;
+			height: number;
+		}) => void;
 		showCountdownOverlay: (value: number, runId: number) => Promise<void>;
 		setCountdownOverlayValue: (value: number, runId: number) => Promise<void>;
 		hideCountdownOverlay: (runId: number) => Promise<void>;

@@ -9,7 +9,7 @@
 // the screen. So the invariant is stated on the bar, not on the window: the
 // content rect the renderer measures must sit fully inside the work area, and
 // the window around it may overhang any edge — the overhang is transparent and
-// click-through.
+// click-through (not on Linux, where windows.ts clamps the whole window instead).
 //
 // The Windows taskbar and the macOS Dock live *outside* the work area, so a HUD
 // whose bar lands there is painted over them with no taskbar entry to bring it
@@ -28,11 +28,16 @@ import {
 export const HUD_WINDOW_MIN = { width: 120, height: 80 };
 
 /**
- * The bar's rect relative to the window, as measured by the renderer. The
- * viewport of the frameless window is the whole window, so a
- * `getBoundingClientRect()` on the bar is already in these coordinates.
+ * The visible stack's rect relative to the window, as measured by the renderer:
+ * the bar plus any popover or notice open above it, which is just as visible as
+ * the bar. The viewport of the frameless window is the whole window, so a
+ * `getBoundingClientRect()` is already in these coordinates.
  */
 export type HudContentRect = EditorWindowRect;
+
+export function sameRect(a: EditorWindowRect, b: EditorWindowRect): boolean {
+	return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
 
 /** Screenspace rect of the bar, given the window's position. */
 export function hudContentScreenRect(
@@ -57,10 +62,9 @@ export function clampHudContentToWorkArea(
 	content: HudContentRect,
 	workArea: DisplayWorkArea,
 ): EditorWindowRect {
-	const maxX = workArea.x + Math.max(0, workArea.width - content.width);
-	const maxY = workArea.y + Math.max(0, workArea.height - content.height);
-	const x = Math.min(Math.max(bounds.x + content.x, workArea.x), maxX);
-	const y = Math.min(Math.max(bounds.y + content.y, workArea.y), maxY);
+	// The content's own size as the floor leaves its size untouched: only the
+	// position is clamped.
+	const { x, y } = clampRectToWorkArea(hudContentScreenRect(bounds, content), workArea, content);
 	// `| 0` collapses the negative zero Math.round can produce and pins the value
 	// to int32 for the native setter — same reasons as in hudDragDestination.
 	return {
@@ -105,8 +109,10 @@ export function hudResizeBounds(input: {
 	nextContent: HudContentRect | null;
 	workArea: DisplayWorkArea;
 }): EditorWindowRect {
-	const width = Math.max(1, Math.min(Math.round(input.width), input.workArea.width));
-	const height = Math.max(1, Math.min(Math.round(input.height), input.workArea.height));
+	// Not capped to the work area: the window may overhang, and capping it would move
+	// the content away from the rect the renderer computed for this exact size.
+	const width = Math.max(1, Math.round(input.width));
+	const height = Math.max(1, Math.round(input.height));
 
 	const anchorCenterX = input.previousContent
 		? input.bounds.x + input.previousContent.x + input.previousContent.width / 2

@@ -60,6 +60,10 @@ function getAvailableScreenHeight(): number {
 	return available && available > 0 ? available : FALLBACK_SCREEN_HEIGHT;
 }
 
+function hudBarMaxHeightCss(): string {
+	return `${computeHudBarMaxHeight(getAvailableScreenHeight())}px`;
+}
+
 /** Launches the floating recording HUD and its recorder controls. */
 export function LaunchWindow() {
 	const t = useScopedT("launch");
@@ -349,8 +353,8 @@ export function LaunchWindow() {
 	//      down as CSS custom properties.
 	// ---------------------------------------------------------------------------
 	const hudAllocatedSizeRef = useRef({ width: 0, height: 0, orientation: trayLayout });
-	// Last bar rect sent to the main process, so a measurement that changed nothing
-	// (a popover opening in reserved space) costs no IPC either.
+	// Last stack rect sent to the main process, so a measurement that changed nothing
+	// costs no IPC.
 	const lastSentHudContentRef = useRef<{
 		x: number;
 		y: number;
@@ -365,10 +369,7 @@ export function LaunchWindow() {
 		anchor.style.setProperty("--hud-bar-bottom", `${HUD_BAR_BOTTOM}px`);
 		anchor.style.setProperty("--hud-popover-gap", `${HUD_POPOVER_GAP}px`);
 		anchor.style.setProperty("--hud-stack-gap", `${HUD_STACK_GAP}px`);
-		anchor.style.setProperty(
-			"--hud-bar-max-h",
-			`${computeHudBarMaxHeight(getAvailableScreenHeight())}px`,
-		);
+		anchor.style.setProperty("--hud-bar-max-h", hudBarMaxHeightCss());
 	}, []);
 
 	const measureHudSize = useCallback(() => {
@@ -427,24 +428,29 @@ export function LaunchWindow() {
 			granted.width + HUD_GROWTH_RESERVE < allocated.width ||
 			granted.height + HUD_GROWTH_RESERVE < allocated.height;
 
-		// The main process positions the HUD by this rect, not by the window: the
-		// window is mostly transparent reserve, and clamping it would strand the
-		// bar at the bottom of the screen. `barRect` is already window-relative
-		// (the frameless viewport is the whole window), and since the stack is
-		// centred and pinned HUD_BAR_BOTTOM above the window's bottom edge
-		// (LaunchWindow.module.css), the rect the granted size will produce is
-		// computed exactly rather than measured a frame late.
+		// The main process keeps this rect on screen, not the window: the window is
+		// mostly transparent reserve, and clamping it would strand the bar at the
+		// bottom of the screen. It is the whole stack, the bar plus any popover or
+		// notice open above it, because those are just as visible as the bar. Rects
+		// are already window-relative (the frameless viewport is the whole window),
+		// and since the stack is centred and pinned HUD_BAR_BOTTOM above the window's
+		// bottom edge (LaunchWindow.module.css), the rect the granted size will
+		// produce is computed exactly rather than measured a frame late.
+		const anchorRect = anchorEl?.getBoundingClientRect();
+		const stackRect = anchorRect?.width && anchorRect.height ? anchorRect : barRect;
+		const stackWidth = stackRect.width || barWidth;
+		const stackHeight = stackRect.height || barHeight;
 		const currentContent = {
-			x: barRect.x,
-			y: barRect.y,
-			width: barWidth,
-			height: barHeight,
+			x: stackRect.x,
+			y: stackRect.y,
+			width: stackWidth,
+			height: stackHeight,
 		};
 		const grantedContent = {
-			x: (granted.width - barWidth) / 2,
-			y: granted.height - HUD_BAR_BOTTOM - barHeight,
-			width: barWidth,
-			height: barHeight,
+			x: (granted.width - stackWidth) / 2,
+			y: granted.height - HUD_BAR_BOTTOM - stackHeight,
+			width: stackWidth,
+			height: stackHeight,
 		};
 
 		if (!needsResize) {
@@ -456,10 +462,10 @@ export function LaunchWindow() {
 				Math.abs(last.x - currentContent.x) >= 1 ||
 				Math.abs(last.y - currentContent.y) >= 1;
 			if (!contentChanged) return;
-			// No resize — but the bar grew inside the reserve, and the main process
-			// must know before that growth pushes it past an edge it sits flush on.
+			// No resize, but the stack changed inside the reserve (the bar grew, a
+			// popover opened), and the main process must keep it on screen.
 			lastSentHudContentRef.current = currentContent;
-			window.electronAPI.setHudOverlaySize(allocated.width, allocated.height, currentContent);
+			window.electronAPI.setHudOverlayContent?.(currentContent);
 			return;
 		}
 
@@ -471,19 +477,34 @@ export function LaunchWindow() {
 	}, [trayLayout]);
 
 	// One persistent observer; elements wire themselves up via callback refs as
-	// they mount/unmount. Only the bar and the notice column are observed — the
-	// popovers deliberately are not, since their space is already reserved.
+	// they mount/unmount. The bar and the notice column size the window; the anchor
+	// (the whole stack) only feeds the content rect, so a popover opening costs a
+	// re-clamp but never a native resize.
 	const hudResizeObserverRef = useRef<ResizeObserver | null>(null);
 	useEffect(() => {
 		const observer = new ResizeObserver(() => measureHudSize());
 		hudResizeObserverRef.current = observer;
 		if (hudBarRef.current) observer.observe(hudBarRef.current);
 		if (hudNoticesRef.current) observer.observe(hudNoticesRef.current);
+		if (hudAnchorRef.current) observer.observe(hudAnchorRef.current);
 		measureHudSize();
 		return () => {
 			observer.disconnect();
 			hudResizeObserverRef.current = null;
 		};
+	}, [measureHudSize]);
+
+	// Screen-derived caps follow the display the HUD is on: after a drag onto a
+	// shorter display, a tall vertical tray would otherwise overflow its work area.
+	useEffect(() => {
+		const onScreenChange = () => {
+			hudAnchorRef.current?.style.setProperty("--hud-bar-max-h", hudBarMaxHeightCss());
+			measureHudSize();
+		};
+		// Chromium's Screen is an EventTarget; TypeScript's DOM lib does not say so yet.
+		const hudScreen = window.screen as Screen & Partial<EventTarget>;
+		hudScreen.addEventListener?.("change", onScreenChange);
+		return () => hudScreen.removeEventListener?.("change", onScreenChange);
 	}, [measureHudSize]);
 
 	const observeHudElement = useCallback(

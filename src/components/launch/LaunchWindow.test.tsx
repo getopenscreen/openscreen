@@ -233,6 +233,7 @@ function stubElectronAPI(getSelectedSource: Window["electronAPI"]["getSelectedSo
 		getAppInfo: vi.fn(async () => appInfoState.value),
 		checkForUpdates: updateCheckMock,
 		setHudOverlaySize: vi.fn(),
+		setHudOverlayContent: vi.fn(),
 		setHudOverlayIgnoreMouseEvents: vi.fn(),
 		onHudOverlayCursor: vi.fn((callback) => {
 			hudCursorListeners.push(callback);
@@ -844,6 +845,31 @@ describe("LaunchWindow overlay sizing", () => {
 		await flushResizeObservers();
 
 		expect(window.electronAPI.setHudOverlaySize).not.toHaveBeenCalled();
+	});
+
+	it("reports an opened popover as part of the rect kept on screen", async () => {
+		renderLaunchWindow();
+
+		const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+			"[data-tray-layout]",
+		) as HTMLElement;
+		stubBox(bar, 400, 56);
+		await flushResizeObservers();
+
+		fireEvent.click(screen.getByRole("button", { name: "English" }));
+		await screen.findByTestId("hud-language-menu");
+		// The anchor wraps the bar and the stack above it: with the menu open it is
+		// taller than the bar, and that whole height must stay inside the work area.
+		const stackHeight = 56 + HUD_POPOVER_GAP + 300;
+		stubBox(bar.parentElement as HTMLElement, 400, stackHeight);
+		await flushResizeObservers();
+
+		expect(window.electronAPI.setHudOverlayContent).toHaveBeenLastCalledWith({
+			x: 0,
+			y: 0,
+			width: 400,
+			height: stackHeight,
+		});
 	});
 
 	it("grows the HUD overlay tall enough to fit the system language prompt", async () => {

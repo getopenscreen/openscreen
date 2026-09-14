@@ -101,6 +101,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	) => {
 		ipcRenderer.send("hud-overlay-set-size", width, height, content);
 	},
+	setHudOverlayContent: (content: { x: number; y: number; width: number; height: number }) => {
+		ipcRenderer.send("hud-overlay-content", content);
+	},
 	getSources: async (opts: Electron.SourcesOptions) => {
 		return await ipcRenderer.invoke("get-sources", opts);
 	},

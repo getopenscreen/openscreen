@@ -135,7 +135,7 @@ export function computeHudWindowSize(input: HudSizeInput): {
 		noticeBlock +
 		HUD_EDGE_SLACK;
 
-	// The main process clamps to the display's work area, so clamp here too:
+	// The main process clamps the whole window to the work area on Linux, so clamp here too:
 	// otherwise the caller would record an allocation the window never actually
 	// got, then skip a resize it genuinely needs later on.
 	const ceiling = input.availableHeight > 0 ? input.availableHeight : Number.POSITIVE_INFINITY;

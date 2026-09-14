@@ -83,6 +83,7 @@ import { toHelperRect } from "../native-bridge/helperCoordinates";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import {
 	describeSalvagedTake,
+	nativeMacSalvageTarget,
 	salvageNativeMacCapture,
 } from "../recording/nativeMacCaptureSalvage";
 import {
@@ -3253,8 +3254,8 @@ export function registerIpcHandlers(
 				// A helper that exited left a file nothing writes to any more, and what its
 				// writer finished before the failure is usually a playable fragmented take.
 				// One still running may be mid-write, so it is left alone.
-				const salvage =
-					stopResult.exited && preferredPath ? await salvageNativeMacCapture(preferredPath) : null;
+				const salvageTarget = nativeMacSalvageTarget(stopResult, preferredPath);
+				const salvage = salvageTarget ? await salvageNativeMacCapture(salvageTarget) : null;
 				if (!salvage || !salvage.ok) {
 					pendingCursorRecordingData = null;
 					console.error("Failed to stop native macOS recording:", {
@@ -3279,10 +3280,29 @@ export function registerIpcHandlers(
 			}
 			nativeMacRecordingWarning = warning ? { screenVideoPath, message: warning } : null;
 
+			// A recovered take most often follows a disk that filled up, and these writes
+			// go to the same volume. The video is already safe on disk, so for a recovered
+			// take a failed side write is logged, and its partial file removed, instead of
+			// turning the recovery back into a lost take.
+			const writeAlongside = async (label: string, target: string, write: () => Promise<void>) => {
+				if (!recovered) {
+					await write();
+					return;
+				}
+				try {
+					await write();
+				} catch (error) {
+					console.warn(`[native-sck] could not write the recovered take's ${label}:`, error);
+					await fs.rm(target, { force: true }).catch(() => undefined);
+				}
+			};
+
 			if (cursorCaptureMode === "editable-overlay") {
 				compactPendingCursorTelemetryPauseRanges(nativeMacPauseRanges);
 				shiftPendingCursorTelemetry(nativeMacCursorOffsetMs);
-				await writePendingCursorTelemetry(screenVideoPath);
+				await writeAlongside("cursor telemetry", `${screenVideoPath}.cursor.json`, () =>
+					writePendingCursorTelemetry(screenVideoPath),
+				);
 			}
 
 			const session: RecordingSession = {
@@ -3297,7 +3317,9 @@ export function registerIpcHandlers(
 				RECORDINGS_DIR,
 				`${path.parse(screenVideoPath).name}${RECORDING_SESSION_SUFFIX}`,
 			);
-			await fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8");
+			await writeAlongside("session manifest", sessionManifestPath, () =>
+				fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8"),
+			);
 			await registerRecordingMediaLinks(screenVideoPath, { cursorCaptureMode });
 
 			return {

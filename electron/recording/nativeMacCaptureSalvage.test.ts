@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
 	describeSalvagedTake,
 	inspectNativeMacCapture,
+	nativeMacSalvageTarget,
 	salvageNativeMacCapture,
 } from "./nativeMacCaptureSalvage";
 
@@ -176,6 +177,7 @@ describe("salvageNativeMacCapture", () => {
 		expect(await sizeOf(file)).toBe(KILLED_29S.firstMoof);
 	});
 
+	/** Players skip these 4 bytes anyway; the cut is a precaution, and it loses nothing. */
 	it("cuts off a box header left half-written at the end", async () => {
 		const file = await take("helper-killed-29s", KILLED_29S.wide + 4);
 
@@ -195,19 +197,88 @@ describe("salvageNativeMacCapture", () => {
 	});
 });
 
+describe("nativeMacSalvageTarget", () => {
+	const TARGET = "/rec/recording-1.mp4";
+
+	it("salvages the requested file once the helper has exited", () => {
+		expect(
+			nativeMacSalvageTarget(
+				{ ok: false, reason: "helper-failed", message: "x", exited: true },
+				TARGET,
+			),
+		).toBe(TARGET);
+	});
+
+	/** Salvage truncates; a helper that did not exit may still be inside finishWriting. */
+	it("never salvages a file a helper that did not exit may still be writing", () => {
+		expect(
+			nativeMacSalvageTarget(
+				{ ok: false, reason: "stop-timeout", message: "x", exited: false },
+				TARGET,
+			),
+		).toBeNull();
+	});
+
+	it("has nothing to salvage after a stop that worked", () => {
+		expect(nativeMacSalvageTarget({ ok: true, screenVideoPath: TARGET }, TARGET)).toBeNull();
+	});
+
+	it("has nothing to salvage when no file was requested", () => {
+		expect(
+			nativeMacSalvageTarget(
+				{ ok: false, reason: "helper-failed", message: "x", exited: true },
+				null,
+			),
+		).toBeNull();
+	});
+});
+
 describe("describeSalvagedTake", () => {
-	it("quotes the readable part of an NSError", () => {
+	/** Verbatim from the helper, in the disk-full end-to-end run. */
+	it("keeps the helper's sentence and adds a description that says something", () => {
 		expect(
 			describeSalvagedTake(
-				'Recording stopped: the video file could not be written (video append: Error Domain=AVFoundationErrorDomain Code=-11807 "Disk Full" UserInfo={NSLocalizedDescription=Disk Full, NSUnderlyingError=0x1 {Error Domain=NSPOSIXErrorDomain Code=28}}).',
+				'Recording stopped: the video file could not be written (writer status: Error Domain=AVFoundationErrorDomain Code=-11807 "Disk Full" UserInfo={NSLocalizedDescription=Disk Full, NSUnderlyingError=0x9e326c930 {Error Domain=NSPOSIXErrorDomain Code=28 "No space left on device"}, NSLocalizedRecoverySuggestion=Make room by deleting existing files and try again., NSLocalizedFailureReason=There is not enough available space to continue the file writing.}).',
 				35.01,
 			),
-		).toBe("Recording stopped after 0:35: Disk Full. The part recorded until then was saved.");
+		).toBe(
+			"Recording stopped after 0:35: the video file could not be written (Disk Full). The part recorded until then was saved.",
+		);
+	});
+
+	/** The -16364 writer death this whole path started from; its description is generic. */
+	it("does not replace the helper's sentence with a generic NSError description", () => {
+		expect(
+			describeSalvagedTake(
+				'Recording stopped: the video file could not be written (video append: Error Domain=AVFoundationErrorDomain Code=-11800 "The operation could not be completed" UserInfo={NSLocalizedFailureReason=An unknown error occurred (-16364), NSLocalizedDescription=The operation could not be completed, NSUnderlyingError=0x1 {Error Domain=NSOSStatusErrorDomain Code=-16364 "(null)"}}).',
+				73.01,
+			),
+		).toBe(
+			"Recording stopped after 1:13: the video file could not be written. The part recorded until then was saved.",
+		);
+	});
+
+	it("reads a bare NSError by its description", () => {
+		expect(
+			describeSalvagedTake(
+				'Error Domain=com.apple.ScreenCaptureKit.SCStreamErrorDomain Code=-3815 "The stream was stopped by the system." UserInfo={NSLocalizedDescription=The stream was stopped by the system.}',
+				12,
+			),
+		).toBe(
+			"Recording stopped after 0:12: The stream was stopped by the system. The part recorded until then was saved.",
+		);
 	});
 
 	it("uses the whole message when there is no NSError in it", () => {
 		expect(describeSalvagedTake("The recorder stopped unexpectedly (signal SIGKILL).", 9)).toBe(
 			"Recording stopped after 0:09: The recorder stopped unexpectedly (signal SIGKILL). The part recorded until then was saved.",
+		);
+	});
+
+	/** Measured: a 35 s disk-full take whose frame durations sum to 34.98 s. */
+	it("rounds the length rather than cutting a second off it", () => {
+		expect(describeSalvagedTake("Disk Full", 34.983333)).toBe(
+			"Recording stopped after 0:35: Disk Full. The part recorded until then was saved.",
 		);
 	});
 

@@ -28,11 +28,15 @@ import fs from "node:fs/promises";
  *
  * # The one layout that has to be repaired
  *
- * A file cut inside a box other than `mdat` (a torn `moof`) does not open anywhere.
- * Cut back to the start of that box it opens, and keeps every fragment before it.
- * So a torn tail is truncated and the file inspected again — a file is never
- * reported recoverable while bytes that break it are still on disk.
+ * A file cut inside a `moof` opens nowhere: ffmpeg, libavformat and Chromium all
+ * refuse it. Cut back to the start of that `moof` it opens, and keeps every fragment
+ * before it. So a torn tail is truncated and the file inspected again. The same cut
+ * is applied to anything else left unfinished at the end, such as a header of a few
+ * bytes, which players skip anyway: it costs nothing, and a file is never reported
+ * recoverable while bytes that could break it are still on disk.
  */
+
+import type { NativeMacCaptureStopResult } from "./nativeMacCaptureStop";
 
 /** Guards against a corrupt size field making a structural box look enormous. */
 const MAX_INDEX_BOX_BYTES = 64 * 1024 * 1024;
@@ -483,7 +487,9 @@ export async function salvageNativeMacCapture(filePath: string): Promise<NativeM
 }
 
 function formatDuration(seconds: number) {
-	const total = Math.max(0, Math.floor(seconds));
+	// Rounded, not floored: the frame durations of a 35 s take sum to 34.98 s, and
+	// "0:34" would contradict the length the editor then shows.
+	const total = Math.max(0, Math.round(seconds));
 	const hours = Math.floor(total / 3600);
 	const minutes = Math.floor((total % 3600) / 60);
 	const rest = String(total % 60).padStart(2, "0");
@@ -491,15 +497,47 @@ function formatDuration(seconds: number) {
 }
 
 /**
+ * The file a failed stop may be salvaged from, or null.
+ *
+ * Only once the helper has exited: a stop that timed out leaves a helper that may
+ * still be inside finishWriting, and salvaging truncates.
+ */
+export function nativeMacSalvageTarget(
+	result: NativeMacCaptureStopResult,
+	targetPath: string | null,
+): string | null {
+	return !result.ok && result.exited && targetPath ? targetPath : null;
+}
+
+/** NSError descriptions that say nothing a person can act on. */
+const GENERIC_ERROR_DESCRIPTIONS = new Set(["The operation could not be completed"]);
+
+/**
  * The warning for a take whose stop failed but whose file was recovered.
  *
- * The stop's message usually embeds an NSError; its localized description is the
- * part a person can read ("Disk Full").
+ * The helper's messages are a sentence followed by a raw NSError, e.g. "Recording
+ * stopped: the video file could not be written (video append: Error Domain=…
+ * NSLocalizedDescription=Disk Full …)". The sentence is kept; the NSError is
+ * reduced to its localized description, and only when that says something —
+ * AVFoundation's -11800 says "The operation could not be completed".
  */
 export function describeSalvagedTake(failureMessage: string, durationSec: number) {
-	const description = /NSLocalizedDescription=([^,}]+)/.exec(failureMessage)?.[1]?.trim();
-	const reason = (description ?? failureMessage)
-		.replace(/^Recording stopped:\s*/i, "")
-		.replace(/[.\s]+$/, "");
+	const text = failureMessage.trim().replace(/^Recording stopped:\s*/i, "");
+	const description = /NSLocalizedDescription=([^,}]+)/.exec(text)?.[1]?.trim();
+	const usefulDescription =
+		description && !GENERIC_ERROR_DESCRIPTIONS.has(description) ? description : undefined;
+
+	let reason = text;
+	const errorStart = text.indexOf("Error Domain=");
+	if (errorStart !== -1) {
+		const openParen = text.lastIndexOf("(", errorStart);
+		const sentence = text.slice(0, openParen === -1 ? errorStart : openParen).trim();
+		if (sentence && usefulDescription) {
+			reason = `${sentence} (${usefulDescription})`;
+		} else {
+			reason = sentence || usefulDescription || description || "the recorder failed";
+		}
+	}
+	reason = reason.replace(/[.\s]+$/, "");
 	return `Recording stopped after ${formatDuration(durationSec)}: ${reason}. The part recorded until then was saved.`;
 }

@@ -186,25 +186,36 @@ describe("V4Timeline scrubbing", () => {
 		const ruler = document.querySelector<HTMLElement>("[class*=tlRulerRow]");
 		expect(ruler).not.toBeNull();
 
+		// What ONE scrub-state update costs in commits, measured on the pointer-down seek
+		// (which sets it once, synchronously) rather than hardcoded: the toolbar's Radix
+		// tooltip triggers re-attach their ref on every commit and add a nested one.
+		const commitsBeforePointerDown = onRender.mock.calls.length;
 		fireEvent.pointerDown(ruler as HTMLElement, { button: 0, clientX: 90 });
-		const commitsAfterPointerDown = onRender.mock.calls.length;
-		setCurrentTime.mockClear();
+		const commitsPerUpdate = onRender.mock.calls.length - commitsBeforePointerDown;
+		expect(commitsPerUpdate).toBeGreaterThan(0);
 
-		fireEvent.pointerMove(window, { clientX: 180 });
-		fireEvent.pointerMove(window, { clientX: 270 });
-		fireEvent.pointerMove(window, { clientX: 360 });
+		// Over two frames: no pointer move commits, and each frame costs exactly one
+		// update however many moves it coalesced.
+		for (const [clientXs, expectedSec] of [
+			[[180, 270, 360], 720],
+			[[450, 540], 1080],
+		] as const) {
+			const commitsBeforeFrame = onRender.mock.calls.length;
+			setCurrentTime.mockClear();
+			for (const clientX of clientXs) fireEvent.pointerMove(window, { clientX });
 
-		expect(onRender).toHaveBeenCalledTimes(commitsAfterPointerDown);
-		expect(setCurrentTime).not.toHaveBeenCalled();
-		expect(frames.size).toBe(1);
+			expect(onRender).toHaveBeenCalledTimes(commitsBeforeFrame);
+			expect(setCurrentTime).not.toHaveBeenCalled();
+			expect(frames.size).toBe(1);
 
-		const [[frameId, frame]] = frames;
-		frames.delete(frameId);
-		act(() => frame(0));
+			const [[frameId, frame]] = frames;
+			frames.delete(frameId);
+			act(() => frame(0));
 
-		expect(onRender).toHaveBeenCalledTimes(commitsAfterPointerDown + 1);
-		expect(setCurrentTime).toHaveBeenCalledTimes(1);
-		expect(setCurrentTime).toHaveBeenCalledWith(720);
+			expect(onRender).toHaveBeenCalledTimes(commitsBeforeFrame + commitsPerUpdate);
+			expect(setCurrentTime).toHaveBeenCalledTimes(1);
+			expect(setCurrentTime).toHaveBeenCalledWith(expectedSec);
+		}
 		fireEvent.pointerUp(window);
 	});
 });

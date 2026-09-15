@@ -73,6 +73,8 @@
 		"newAnnotation": "标注",
 		"dragToReorderHint": "拖动以重新排序 · 双击以编辑入点/出点",
 		"editInOutPoints": "编辑入点/出点",
+		"splitClip": "在播放头处分割片段",
+		"splitClipNothingToSplit": "请将播放头置于片段内部，远离两端。",
 		"deleteClip": "删除片段",
 		"dropToAdd": "拖放以添加到时间轴",
 		"importRecordingFirst": "请先导入录制内容",

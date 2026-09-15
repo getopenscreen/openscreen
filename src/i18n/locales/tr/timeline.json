@@ -73,6 +73,8 @@
 		"newAnnotation": "Açıklama",
 		"dragToReorderHint": "Yeniden sıralamak için sürükleyin · giriş/çıkış noktalarını düzenlemek için çift tıklayın",
 		"editInOutPoints": "Giriş/çıkış noktalarını düzenle",
+		"splitClip": "Klibi oynatma başlığında böl",
+		"splitClipNothingToSplit": "Oynatma başlığını bir klibin içine, uçlarından uzağa yerleştirin.",
 		"deleteClip": "Klibi sil",
 		"dropToAdd": "Zaman çizelgesine eklemek için bırakın",
 		"importRecordingFirst": "Önce bir kayıt içe aktarın",

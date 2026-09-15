@@ -73,6 +73,8 @@
 		"newAnnotation": "Annotation",
 		"dragToReorderHint": "Drag to reorder · double-click to edit in/out points",
 		"editInOutPoints": "Edit in/out points",
+		"splitClip": "Split clip at playhead",
+		"splitClipNothingToSplit": "Park the playhead inside a clip, away from its ends.",
 		"deleteClip": "Delete clip",
 		"dropToAdd": "Drop to add to timeline",
 		"importRecordingFirst": "Import a recording first",

@@ -9,8 +9,8 @@ import {
 	Music,
 	Pencil,
 	Scissors,
+	SeparatorVertical,
 	Sparkles,
-	SplitSquareHorizontal,
 	Trash2,
 	Wand2,
 	ZoomIn,
@@ -1493,7 +1493,11 @@ export function V4Timeline({
 	);
 
 	const tools: Array<{ id: ToolId; label: string; icon: React.ReactNode }> = [
-		{ id: "cut", label: t("buttons.addTrim"), icon: <SplitSquareHorizontal size={15} /> },
+		// Scissors, which is what a trim IS: the row that takes film out. It is also the
+		// glyph its own pills carry (`pillIcon`), so the tool and what it draws now agree.
+		// They did not: the trim wore a divided block and the split beside it wore the
+		// scissors, which is the two of them exactly the wrong way round.
+		{ id: "cut", label: t("buttons.addTrim"), icon: <Scissors size={15} /> },
 		{ id: "comment", label: t("toolbar.comment"), icon: <MessageSquare size={15} /> },
 		{ id: "speed", label: t("buttons.addSpeed"), icon: <Clock size={15} /> },
 	];
@@ -1833,6 +1837,33 @@ export function V4Timeline({
 								</PopoverContent>
 							</Popover>
 							<span className={styles.tlToolSep} aria-hidden />
+							{/* Immediately before the trim tool, because the two are what you reach for
+							    when a take is wrong, and apart from it in every other way. A split takes
+							    no film out: it draws a boundary, and both halves keep playing. A trim is
+							    the one that removes. They are deliberately given different glyphs for
+							    that reason: the scissors belong to the trim, which is the cut, and this
+							    one is a divider, a line drawn where the two halves meet. Everything after
+							    them adds something instead. */}
+							<Tooltip content={t("toolbar.splitClip")}>
+								<button
+									type="button"
+									className={styles.tlToolBtn}
+									aria-label={t("toolbar.splitClip")}
+									onClick={() => {
+										// Not disabled when there is nowhere to split: knowing that needs
+										// the live playhead, and this component deliberately does not
+										// subscribe to it (see the playhead's own comment, it reads the
+										// store itself so playback does not re-render the timeline 60
+										// times a second). So it always fires, and says when it did not
+										// split rather than looking broken.
+										void tl.splitClipAtPlayhead().then((didSplit) => {
+											if (!didSplit) toast.info(t("toolbar.splitClipNothingToSplit"));
+										});
+									}}
+								>
+									<SeparatorVertical size={15} />
+								</button>
+							</Tooltip>
 							{tools.map((tool) => (
 								<Fragment key={tool.id}>
 									<Tooltip content={tool.label}>

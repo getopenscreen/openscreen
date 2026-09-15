@@ -220,6 +220,20 @@ export const clipSchema = z
 		// that as the identity region {x:0,y:0,width:1,height:1} rather than
 		// storing the identity explicitly, so untouched clips stay lean.
 		cropRegion: clipCropRegionSchema.optional(),
+		// A cut the user asked for, marked so it survives.
+		//
+		// Two clips of the same media whose timecodes meet are otherwise
+		// indistinguishable from one clip, and `joinContiguous` folds them back
+		// together on the next structural edit — deliberately, so hand-joined clips
+		// do not litter the timeline. That fold also annihilates a split at the
+		// playhead, which produces exactly such a pair, on the very call that would
+		// persist it. This flag is what tells the two cases apart: it says a person
+		// put a cut here, so do not undo it on their behalf.
+		//
+		// Optional, so every document written before it parses unchanged. It can
+		// only ever keep clips apart, never join them, which is the safe direction
+		// for a flag that travels with a clip through moves it knows nothing about.
+		splitFromPrevious: z.boolean().optional(),
 	})
 	.refine((data) => data.timelineEndSec >= data.timelineStartSec, {
 		message: "timelineEndSec must be greater than or equal to timelineStartSec",

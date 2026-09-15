@@ -73,6 +73,8 @@
 		"newAnnotation": "주석",
 		"dragToReorderHint": "드래그하여 순서 변경 · 더블클릭하여 시작/종료 지점 편집",
 		"editInOutPoints": "시작/종료 지점 편집",
+		"splitClip": "재생 헤드에서 클립 나누기",
+		"splitClipNothingToSplit": "재생 헤드를 클립 안쪽, 양 끝에서 떨어진 위치에 두세요.",
 		"deleteClip": "클립 삭제",
 		"dropToAdd": "타임라인에 추가하려면 놓으세요",
 		"importRecordingFirst": "먼저 녹화 파일을 가져오세요",

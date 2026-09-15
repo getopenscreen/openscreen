@@ -73,6 +73,8 @@
 		"newAnnotation": "Annotazione",
 		"dragToReorderHint": "Trascina per riordinare · doppio clic per modificare i punti di entrata/uscita",
 		"editInOutPoints": "Modifica punti di entrata/uscita",
+		"splitClip": "Dividi la clip alla testina",
+		"splitClipNothingToSplit": "Posiziona la testina all'interno di una clip, lontano dalle estremità.",
 		"deleteClip": "Elimina clip",
 		"dropToAdd": "Rilascia per aggiungere alla timeline",
 		"importRecordingFirst": "Importa prima una registrazione",

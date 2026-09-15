@@ -538,6 +538,16 @@ impl Decoder {
         }
     }
 
+    /// Le décodeur rend-il ses frames par VideoToolbox (`false` = chemin logiciel
+    /// `CpuFrames`). Exposé pour que le harnais de mesure
+    /// (`examples/decode_bench_macos.rs`) puisse vérifier que le mode demandé via
+    /// `OPENSCREEN_MAC_DECODE` a bien été pris : `open_with` retombe silencieusement sur
+    /// logiciel si `av_hwdevice_ctx_create` échoue, et un bench qui mesure l'autre chemin
+    /// que celui qu'il croit mesurer est pire qu'un bench qui échoue.
+    pub fn uses_videotoolbox(&self) -> bool {
+        self.cpu.is_none()
+    }
+
     /// Temps (s) de la frame courante, via son pts. 0 si pas de pts fiable.
     /// Symétrique de `pipeline_windows::Decoder::cur_time_sec`.
     pub unsafe fn cur_time_sec(&self) -> f64 {

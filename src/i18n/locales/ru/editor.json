@@ -57,7 +57,7 @@
 		"description": "Создайте новый проект или откройте существующий.",
 		"titleHasAsset": "Добавьте видео, чтобы начать",
 		"descriptionHasAsset": "Импортируйте запись, чтобы начать редактирование.",
-		"newProjectButton": "Новый проект + импорт видео",
+		"newProjectButton": "Новый проект",
 		"importVideoButton": "Импортировать видео",
 		"loadProjectButton": "Открыть проект",
 		"supportedFormats": "Поддерживаемые форматы: MP4, MOV, WebM, MKV, AVI, M4V, WMV",

@@ -146,7 +146,7 @@
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 	padding: 5px;
-	background: var(--surface);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: var(--r-md);
 	box-shadow: var(--elev-pop);
@@ -267,39 +267,27 @@
 	font: 500 13px var(--font-display);
 	outline: none;
 }
-/* Both states are rendered into the SAME grid cell, so the slot is as wide as
-   the longer of the two and never resizes when the document goes dirty — which
-   happens on every keystroke. Sizing to the longer string beats guessing a width:
-   "Saved"/"Unsaved" differ by 2 characters in English and by 4 in French, and a
-   hard-coded width would clip somewhere among the 13 locales. */
-.saved {
-	display: inline-grid;
-	grid-template-areas: "state";
-	align-items: center;
-	justify-items: start;
-	font-family: var(--font-mono);
-	font-size: 11px;
-	color: var(--muted);
-	flex-shrink: 0;
-}
-.savedState {
-	grid-area: state;
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	white-space: nowrap;
-}
-/* visibility (not display) so the hidden state still contributes its width —
-   and stays out of the accessibility tree. */
-.savedState[data-on="false"] {
-	visibility: hidden;
-}
-.saved .dot {
-	width: 6px;
-	height: 6px;
+/* Unsaved work is marked on the document name, the way a native editor marks a
+   modified file, rather than by a status badge elsewhere in the bar: the state
+   belongs to the thing that is modified, and a badge reading "Saved" 95% of the
+   time is decoration, not information. Deliberately --muted and not --warn: the
+   Save button's own dot is the warning (that button has something to do), this
+   one only says which document it is about.
+
+   visibility, not display, and the slot is always reserved: `dirty` flips on the
+   first keystroke, and a marker that appeared would resize the name under the
+   pointer the moment someone starts typing. */
+.projectDirtyDot {
+	width: 5px;
+	height: 5px;
 	border-radius: 50%;
-	background: var(--accent);
-	box-shadow: 0 0 0 3px var(--accent-soft);
+	background: var(--muted);
+	flex-shrink: 0;
+	/* Against .ghostBtn's 7px gap, to sit with the name rather than beside it. */
+	margin-left: -2px;
+}
+.projectDirtyDot[data-on="false"] {
+	visibility: hidden;
 }
 
 .langAnchor {
@@ -324,18 +312,29 @@
 	position: absolute;
 	top: calc(100% + 4px);
 	right: 0;
-	min-width: 160px;
-	background: var(--surface);
+	min-width: 184px;
+	/* Thirteen rows is taller than a short window, and the menu used to simply run
+	   off the bottom with no way to reach what fell past the edge. */
+	max-height: min(360px, calc(100vh - 96px));
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: var(--r-md);
 	box-shadow: var(--elev-pop);
 	padding: 4px;
 	z-index: 60;
 }
+/* A fixed gutter for the tick, so every name sits on one left edge whether or not
+   it is the chosen one. */
 .langMenuItem {
-	display: block;
+	display: grid;
+	grid-template-columns: 14px 1fr;
+	align-items: center;
+	gap: 8px;
 	width: 100%;
 	text-align: left;
+	white-space: nowrap;
 	padding: 6px 10px;
 	border: 0;
 	background: transparent;
@@ -345,13 +344,29 @@
 	font: 500 12px var(--font-body);
 	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
+.langMenuCheck {
+	display: grid;
+	place-items: center;
+	color: var(--accent-fill);
+}
 .langMenuItem:hover {
 	background: var(--surface-2);
 	color: var(--fg);
 }
+/* Arrow keys move focus through this list, so the ring has to be visible — it is
+   the only thing saying where you are before you commit. */
+.langMenuItem:focus-visible {
+	outline: none;
+	background: var(--surface-2);
+	color: var(--fg);
+	box-shadow: var(--focus-ring);
+}
+/* --accent-fill, not --accent: mint on the near-white wash was 2.5:1, which made
+   the language you are actually in the least readable line in the menu. The tick
+   above carries the state anyway; this only has to stay legible. */
 .langMenuItem[data-active="true"] {
 	background: var(--accent-wash);
-	color: var(--accent);
+	color: var(--accent-fill);
 }
 
 /* One box for every short locale label — see --topbar-lang-label-w. Without it
@@ -401,15 +416,22 @@
 	   widest column and shift the whole control. Reserving the bold width up front
 	   makes each button the same size selected, hovered or idle. */
 	display: grid;
-	grid-template-areas: "label";
-	/* minmax(0,…) so the cell can be narrower than the text: without it the inner
-	   column sizes to the label and the button just clips it mid-glyph, instead of
-	   letting the label ellipsise. */
-	grid-template-columns: minmax(0, 1fr);
+	grid-template-areas: "icon label";
+	/* Both columns size to content and the pair is centred as a unit, rather than
+	   the label column absorbing the slack and pushing the glyph off to the left.
+	   minmax(0,…) on the label so its cell can be narrower than the text: without
+	   it the column sizes to the label and the button clips it mid-glyph instead
+	   of letting it ellipsise. */
+	grid-template-columns: auto minmax(0, auto);
+	justify-content: center;
+	column-gap: 6px;
 	place-items: center;
 	min-width: 0;
 	max-width: 140px;
 	overflow: hidden;
+}
+.modeIcon {
+	grid-area: icon;
 }
 .modeSwitch button::before {
 	content: attr(data-label);
@@ -428,11 +450,27 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+/* The selected segment is a plate that LIFTS off the track, the way a segmented
+   control has worked since the first one — so it takes --surface-hi, which is
+   the raised surface in both themes.
+
+   It used to take --surface-3, and that token does not mean the same thing on
+   each side: the light scale runs downward in lightness (#f1f5f9 → #cbd5e1) and
+   the dark scale runs upward (#14181f → #252a35). So one declaration produced a
+   plate that rose by ΔL +0.014 in dark and sank by ΔL -0.251 in light — the
+   selected tab was the heaviest grey in the control, reading as pressed-out
+   rather than picked.
+
+   The shadow goes to the system's own token too, in flat black no longer but in
+   the slate the rest of the app casts. --elev-card rather than --elev-card-soft:
+   white on --surface-1 separates by only ΔL* ~3.6 (macOS gives its own segmented
+   control ~9), so the plate needs the wider, softer half of the card shadow to
+   read at all — a 1px hairline alone would leave it floating. */
 .modeSwitch button[aria-selected="true"] {
-	background: var(--surface-3);
+	background: var(--surface-hi);
 	color: var(--fg-emphasis);
 	font-weight: 600;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+	box-shadow: var(--elev-card);
 }
 .exportBtn {
 	display: inline-flex;
@@ -441,9 +479,9 @@
 	height: var(--topbar-icon);
 	padding: 0 14px;
 	border-radius: 9px;
-	background: var(--accent);
+	background: var(--accent-fill);
 	color: var(--accent-on);
-	border: 1px solid var(--accent);
+	border: 1px solid var(--accent-fill);
 	font-size: 13px;
 	font-weight: 600;
 	cursor: pointer;
@@ -452,7 +490,7 @@
 	transition: background var(--motion-fast) var(--ease);
 }
 .exportBtn:hover {
-	background: var(--brand-lo);
+	background: var(--accent-fill-lo);
 }
 .exportBtn:disabled {
 	opacity: 0.5;
@@ -497,7 +535,7 @@
 	.modeSwitch button {
 		padding: 4px 8px;
 		font-size: 11px;
-		max-width: 90px;
+		max-width: 112px;
 	}
 	.exportBtn {
 		padding: 0 10px;
@@ -522,14 +560,19 @@
 		width: var(--topbar-icon);
 		gap: 0;
 	}
-	.savedLabel {
+	/* Below this the three labels ellipsise into stumps ("Enregistr…"), so the
+	   tabs drop to their glyphs instead. Each button keeps its aria-label and
+	   title, so the trio is still named -- just not painted. */
+	.modeLabel,
+	.modeSwitch button::before {
 		display: none;
 	}
-	.saved {
-		width: auto;
-	}
-	.savedState {
-		gap: 0;
+	.modeSwitch button {
+		grid-template-areas: "icon";
+		grid-template-columns: auto;
+		column-gap: 0;
+		padding: 5px 9px;
+		max-width: none;
 	}
 	.langIcon {
 		display: none;
@@ -546,9 +589,7 @@
 		--topbar-project-w: 70px;
 	}
 	.modeSwitch button {
-		padding: 3px 6px;
-		font-size: 10.5px;
-		max-width: 70px;
+		padding: 5px 7px;
 	}
 	.exportLabel {
 		display: none;
@@ -642,7 +683,7 @@
 	max-height: 100%;
 	display: flex;
 	flex-direction: column;
-	background: var(--surface-1);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 16px;
 	box-shadow: var(--elev-pop);
@@ -662,7 +703,7 @@
 	align-items: center;
 	gap: 4px;
 	padding: 6px;
-	background: var(--surface-1);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 14px;
 	box-shadow: var(--elev-pop);
@@ -808,13 +849,16 @@
 	justify-content: space-between;
 	gap: 8px;
 }
+/* The size travels with the duration here — they are one row of figures, and
+   leaving one monospace beside a proportional one is more conspicuous than
+   either choice on its own. */
 .mediaCardStats .dur {
-	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
 	font-size: 10.5px;
 	color: var(--muted);
 }
 .mediaCardStats .size {
-	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
 	font-size: 10.5px;
 	color: var(--muted);
 }
@@ -1129,11 +1173,17 @@
 .recCancelBtn:hover {
 	background: var(--surface-2);
 }
+/* --bg, the same ground the left dock and the shell itself stand on, so the two
+   menus this toolbar opens belong to the same surface family as the rest of the
+   chrome. They were --surface-1, which is a step off it in light and a long way
+   off it in dark (#14181f against #0a0d12). Nothing is lost by going flush: the
+   border and --elev-pop are what make these read as a floating layer, and both
+   carry against --bg in either theme. */
 .recMenu {
 	position: absolute;
 	bottom: 46px;
 	min-width: 210px;
-	background: var(--surface-1);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 12px;
 	box-shadow: var(--elev-pop);
@@ -1329,9 +1379,9 @@
 	height: 52px;
 	padding: 0 26px;
 	border-radius: 16px;
-	border: 1px solid var(--accent);
+	border: 1px solid var(--accent-fill);
 	color: var(--accent-on);
-	background: var(--accent);
+	background: var(--accent-fill);
 	font-size: 14px;
 	font-weight: 600;
 	cursor: pointer;
@@ -1339,7 +1389,7 @@
 	transition: background var(--motion-fast) var(--ease);
 }
 .bigRecBtn:hover {
-	background: var(--brand-lo);
+	background: var(--accent-fill-lo);
 }
 .bigRecBtn.recording {
 	border-color: var(--danger);
@@ -1421,26 +1471,38 @@
 	margin-left: auto;
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: 18px;
 }
+/* Passive text: nothing here is clickable, so it carries no plate of its own —
+   a bordered pill around a hint advertises an affordance that isn't there, and
+   two of them side by side read as a pair of dead buttons. The keycap below is
+   the one bordered thing, because there the border IS the content. */
 .tlHint {
 	display: inline-flex;
 	align-items: center;
-	gap: 7px;
-	height: 26px;
-	padding: 0 10px;
-	background: var(--surface-1);
-	border: 1px solid var(--border);
-	border-radius: 7px;
+	gap: 6px;
 	font-size: 11px;
 	font-weight: 500;
 	color: var(--muted);
 }
+/* The same keycap as .recMenuKey's, so a key looks like a key everywhere in this
+   app rather than this toolbar inventing a second one — plus a floor on the
+   width, so "⇧" and "⌃" don't come out two different sizes sitting side by side.
+   Deliberately NOT --font-mono: a monospace face on a two-character label is a
+   typographic costume, and it is what made these read as generated. The one
+   divergence is the text colour: .recMenuKey is --muted against --fg rows, while
+   here the label beside it is already --muted, so the key takes --fg-2 to stay
+   the emphasised half of the pair. */
 .tlKbd {
-	font-family: var(--font-mono);
-	font-size: 10.5px;
-	font-weight: 600;
+	display: inline-grid;
+	place-items: center;
+	min-width: 20px;
+	padding: 2px 6px;
+	border: 1px solid var(--border-soft);
+	border-radius: 5px;
+	background: var(--surface-2);
 	color: var(--fg-2);
+	font: 600 10.5px/1.4 var(--font-body);
 }
 /* Ruler + tracks live in one relative wrapper (between the toolbar and the zoom
    bar) so a single playhead overlay can span both. */
@@ -1594,7 +1656,7 @@
 	top: 12px;
 	left: 50%;
 	transform: translateX(-50%);
-	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
 	font-size: 10px;
 	color: var(--meta);
 	white-space: nowrap;
@@ -1643,6 +1705,9 @@
 	color: var(--fg);
 	font-size: 11px;
 	font-weight: 600;
+	/* A trim pill's label IS a duration, so its digits hold still while the pill
+	   is dragged — and it keeps the "Zoom 1"/"Zoom 2" numerals aligned too. */
+	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 	overflow: hidden;
 	box-sizing: border-box;
@@ -1972,7 +2037,8 @@
 	text-overflow: ellipsis;
 }
 .tlClipDuration {
-	font: 500 10px/1.2 var(--font-mono);
+	font: 500 10px/1.2 var(--font-body);
+	font-variant-numeric: tabular-nums;
 	color: rgba(255, 255, 255, 0.7);
 	white-space: nowrap;
 	flex-shrink: 0;

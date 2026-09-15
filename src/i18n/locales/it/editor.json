@@ -57,7 +57,7 @@
 		"description": "Crea un nuovo progetto o aprine uno esistente.",
 		"titleHasAsset": "Aggiungi un video per iniziare",
 		"descriptionHasAsset": "Importa una registrazione per iniziare a modificare.",
-		"newProjectButton": "Nuovo progetto + importa video",
+		"newProjectButton": "Nuovo progetto",
 		"importVideoButton": "Importa video",
 		"loadProjectButton": "Apri progetto",
 		"supportedFormats": "Formati supportati: MP4, MOV, WebM, MKV, AVI, M4V, WMV",

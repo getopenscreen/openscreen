@@ -57,7 +57,7 @@
 		"description": "创建新项目或打开现有项目。",
 		"titleHasAsset": "添加视频以开始",
 		"descriptionHasAsset": "导入录制内容以开始编辑。",
-		"newProjectButton": "新建项目并导入视频",
+		"newProjectButton": "新建项目",
 		"importVideoButton": "导入视频",
 		"loadProjectButton": "打开项目",
 		"supportedFormats": "支持的格式：MP4、MOV、WebM、MKV、AVI、M4V、WMV",

@@ -57,7 +57,7 @@
 		"description": "新しいプロジェクトを作成するか、既存のプロジェクトを開いてください。",
 		"titleHasAsset": "動画を追加して開始",
 		"descriptionHasAsset": "録画をインポートして編集を開始します。",
-		"newProjectButton": "新規プロジェクト＋動画をインポート",
+		"newProjectButton": "新規プロジェクト",
 		"importVideoButton": "動画をインポート",
 		"loadProjectButton": "プロジェクトを開く",
 		"supportedFormats": "対応フォーマット：MP4、MOV、WebM、MKV、AVI、M4V、WMV",

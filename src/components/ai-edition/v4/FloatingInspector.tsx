@@ -231,7 +231,13 @@ export function FloatingInspector({
 									<span style={{ font: "600 12.5px var(--font-display)" }}>
 										{te("editClipDialog.clipLabel", { index: index + 1 })}
 									</span>
-									<span style={{ font: "500 11px var(--font-mono)", color: "var(--muted)" }}>
+									<span
+										style={{
+											font: "500 11px var(--font-body)",
+											fontVariantNumeric: "tabular-nums",
+											color: "var(--muted)",
+										}}
+									>
 										{formatSeconds(clip.timelineStartSec)}–{formatSeconds(clip.timelineEndSec)}
 									</span>
 								</button>

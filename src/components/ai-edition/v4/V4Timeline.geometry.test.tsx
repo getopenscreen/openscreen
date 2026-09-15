@@ -644,8 +644,13 @@ describe("V4Timeline audio lane drag", () => {
 		// shortcuts dialog moves the menu with it instead of teaching a stale key.
 		renderAudio();
 		fireEvent.click(screen.getByLabelText("toolbar.addAudioTooltip"));
-		const keys = Array.from(document.querySelectorAll("kbd"), (k) => k.textContent);
-		expect(keys).toEqual([
+		// Scoped to each row rather than swept off the whole document: the toolbar
+		// teaches keys of its own (the scroll-gesture hints), and a document-wide
+		// kbd sweep makes this assertion fail whenever an unrelated key is added
+		// anywhere in the timeline.
+		const keyTaughtBy = (label: string) =>
+			screen.getByText(label).closest("button")?.querySelector("kbd")?.textContent;
+		expect([keyTaughtBy("audio.addVoiceover"), keyTaughtBy("audioTrack.add")]).toEqual([
 			formatBinding(DEFAULT_SHORTCUTS.addVoiceover, false),
 			formatBinding(DEFAULT_SHORTCUTS.addAudio, false),
 		]);

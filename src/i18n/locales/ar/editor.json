@@ -57,7 +57,7 @@
 		"description": "أنشئ مشروعًا جديدًا أو افتح مشروعًا موجودًا.",
 		"titleHasAsset": "أضف فيديو للبدء",
 		"descriptionHasAsset": "استورد تسجيلاً لبدء التحرير.",
-		"newProjectButton": "مشروع جديد + استيراد فيديو",
+		"newProjectButton": "مشروع جديد",
 		"importVideoButton": "استيراد فيديو",
 		"loadProjectButton": "فتح مشروع",
 		"supportedFormats": "الصيغ المدعومة: MP4، MOV، WebM، MKV، AVI، M4V، WMV",

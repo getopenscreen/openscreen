@@ -57,7 +57,7 @@
 		"description": "Tạo dự án mới hoặc mở một dự án hiện có.",
 		"titleHasAsset": "Thêm video để bắt đầu",
 		"descriptionHasAsset": "Nhập một bản ghi để bắt đầu chỉnh sửa.",
-		"newProjectButton": "Dự án mới + nhập video",
+		"newProjectButton": "Dự án mới",
 		"importVideoButton": "Nhập video",
 		"loadProjectButton": "Mở dự án",
 		"supportedFormats": "Định dạng được hỗ trợ: MP4, MOV, WebM, MKV, AVI, M4V, WMV",

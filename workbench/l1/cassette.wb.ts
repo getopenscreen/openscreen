@@ -6,19 +6,58 @@
 // exactly, and a cassette that no longer matches the request says so instead of
 // answering a question the app no longer asks.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { readCassette, startRecorder, startReplay, writeCassette } from "../lib/cassette";
+import {
+	adoptRetryEvidence,
+	attemptsFromEndpoint,
+	hashRequest,
+	mergeRetryCassettes,
+	readCassette,
+	startRecorder,
+	startReplay,
+	usageFromSse,
+	writeCassette,
+} from "../lib/cassette";
 import { ENV_KEYS } from "../lib/env";
 import { singleClip } from "../lib/fixtures";
 import { normalizeIds, runScenario } from "../lib/harness";
 import { startScriptedModel } from "../lib/model-server";
+import { adoptCassetteForRetainedAttempt } from "../lib/runner";
 
 const DIRECTORY = mkdtempSync(join(tmpdir(), "wb-cassette-"));
 const FILE = join(DIRECTORY, "wizard.json");
+const USAGE_FILE = join(DIRECTORY, "usage.json");
 const PROMPT = "enhance this recording";
+
+async function startRawProvider(options: {
+	sse: string;
+	onRequest: (body: string) => void;
+}): Promise<{ url: string; close: () => void }> {
+	const server = createServer((req, res) => {
+		let body = "";
+		req.on("data", (chunk) => {
+			body += chunk;
+		});
+		req.on("end", () => {
+			options.onRequest(body);
+			res.writeHead(200, { "content-type": "text/event-stream" });
+			res.end(options.sse);
+		});
+	});
+
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const address = server.address();
+	if (!address || typeof address === "string") throw new Error("raw provider has no address");
+	return {
+		url: `http://127.0.0.1:${address.port}`,
+		close: () => server.close(),
+	};
+}
 
 afterAll(() => rmSync(DIRECTORY, { recursive: true, force: true }));
 
@@ -152,5 +191,578 @@ describe("record then replay", () => {
 			replay.close();
 		}
 		expect(() => replay.assertFresh()).toThrow(/périmée aux rounds/);
+	});
+
+	it("records final usage while preserving the request and raw SSE", async () => {
+		const requestBody = JSON.stringify({
+			model: "fake-upstream",
+			stream: true,
+			messages: [{ role: "user", content: "usage probe" }],
+		});
+		const firstUsage = {
+			prompt_tokens: 4,
+			completion_tokens: 2,
+			total_tokens: 6,
+			prompt_tokens_details: { cached_tokens: 2 },
+			prompt_cache_hit_tokens: 2,
+			prompt_cache_miss_tokens: 2,
+		};
+		const finalUsage = {
+			prompt_tokens: 12,
+			completion_tokens: 7,
+			total_tokens: 19,
+			prompt_tokens_details: { cached_tokens: 8 },
+			completion_tokens_details: { reasoning_tokens: 3 },
+			prompt_cache_hit_tokens: 8,
+			prompt_cache_miss_tokens: 4,
+			provider_detail: { trace: "preserved" },
+		};
+		const sse = [
+			`data: ${JSON.stringify({ id: "usage-null", usage: null })}\n\n`,
+			`data: ${JSON.stringify({ id: "usage-first", usage: firstUsage })}\n\n`,
+			"data: {malformed\n\n",
+			`data: ${JSON.stringify({ id: "usage-array", usage: [] })}\n\n`,
+			`data: ${JSON.stringify({ id: "usage-final", usage: finalUsage })}\n\n`,
+			"data: [DONE]\n\n",
+			`data: ${JSON.stringify({ id: "after-done", usage: { prompt_tokens: 999 } })}\n\n`,
+		].join("");
+		let receivedBody = "";
+		const upstream = await startRawProvider({
+			sse,
+			onRequest: (body) => {
+				receivedBody = body;
+			},
+		});
+		const recorder = await startRecorder({
+			upstream: upstream.url,
+			file: USAGE_FILE,
+			scenario: "usage-probe",
+			provider: "openai-compatible",
+			model: "fake-upstream",
+		});
+		try {
+			const response = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: requestBody,
+			});
+			expect(response.status).toBe(200);
+			expect(await response.text()).toBe(sse);
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+
+		expect(receivedBody).toBe(requestBody);
+		const cassette = readCassette(USAGE_FILE);
+		expect(cassette.rounds).toHaveLength(1);
+		expect(cassette.rounds[0].sse).toBe(sse);
+		expect(cassette.rounds[0].usage).toEqual(finalUsage);
+	});
+
+	it("records and replays usage across sixty rounds", async () => {
+		let upstreamRound = 0;
+		const upstream = createServer((_req, res) => {
+			const round = upstreamRound;
+			upstreamRound += 1;
+			const usage = {
+				prompt_tokens: round + 1,
+				completion_tokens: 2,
+				total_tokens: round + 3,
+			};
+			res.writeHead(200, { "content-type": "text/event-stream" });
+			res.end(
+				`data: ${JSON.stringify({ id: `usage-${round}`, model: "usage-model", usage })}\n\n` +
+					"data: [DONE]\n\n",
+			);
+		});
+		await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+		const address = upstream.address();
+		if (!address || typeof address === "string") throw new Error("usage upstream has no address");
+		const file = join(DIRECTORY, "usage-60.json");
+		const recorder = await startRecorder({
+			upstream: `http://127.0.0.1:${address.port}`,
+			file,
+			scenario: "usage-60",
+			provider: "loopback",
+			model: "usage-model",
+		});
+		const bodies = Array.from({ length: 60 }, (_, round) =>
+			JSON.stringify({
+				model: "usage-model",
+				messages: [{ role: "user", content: `round ${round}` }],
+			}),
+		);
+		try {
+			for (const body of bodies) {
+				const response = await fetch(`${recorder.url}/chat/completions`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body,
+				});
+				expect(response.status).toBe(200);
+				await response.text();
+			}
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+		const cassette = readCassette(file);
+		expect(cassette.rounds).toHaveLength(60);
+		expect(cassette.rounds[0].usage).toEqual({
+			prompt_tokens: 1,
+			completion_tokens: 2,
+			total_tokens: 3,
+		});
+		expect(cassette.rounds[59].usage).toEqual({
+			prompt_tokens: 60,
+			completion_tokens: 2,
+			total_tokens: 62,
+		});
+
+		const replay = await startReplay({ file, onStale: "throw" });
+		try {
+			for (const body of bodies) {
+				const response = await fetch(`${replay.url}/chat/completions`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body,
+				});
+				expect(response.status).toBe(200);
+				await response.text();
+			}
+		} finally {
+			replay.close();
+		}
+		expect(replay.staleRounds).toEqual([]);
+		expect(() => replay.assertFresh()).not.toThrow();
+	});
+
+	it("records developer prompt length in proxy and upstream request digests", async () => {
+		const prompt = "d".repeat(3_840);
+		const body = {
+			model: "workbench",
+			messages: [
+				{ role: "developer", content: prompt },
+				{ role: "user", content: "preview" },
+			],
+		};
+		const upstream = await startScriptedModel([{ kind: "text", text: "done" }]);
+		const file = join(DIRECTORY, "developer-prompt.json");
+		const recorder = await startRecorder({
+			upstream: upstream.url,
+			file,
+			scenario: "developer-prompt",
+			provider: "loopback",
+			model: "workbench",
+		});
+		try {
+			const response = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			expect(response.status).toBe(200);
+			await response.text();
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+		expect(readCassette(file).rounds[0].digest).toMatchObject({
+			systemChars: 3_840,
+			roles: ["developer", "user"],
+		});
+		expect(upstream.requests[0].systemChars).toBe(3_840);
+		expect(
+			hashRequest({ ...body, messages: [{ role: "developer", content: `${prompt}!` }] }),
+		).not.toBe(hashRequest(body));
+	});
+
+	it("keeps an existing system-only cassette request fresh", async () => {
+		const body = {
+			model: "legacy",
+			messages: [
+				{ role: "system", content: "legacy system prompt" },
+				{ role: "user", content: "legacy user prompt" },
+			],
+			tools: [],
+		};
+		const file = join(DIRECTORY, "legacy-system-only.json");
+		writeCassette(file, {
+			scenario: "legacy-system-only",
+			provider: "loopback",
+			model: "legacy",
+			recordedAt: "2026-07-31T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: hashRequest(body),
+					digest: {
+						systemChars: "legacy system prompt".length,
+						toolCount: 0,
+						roles: ["system", "user"],
+						lastUserText: "legacy user prompt",
+					},
+					sse: "data: [DONE]\n\n",
+				},
+			],
+		});
+		const replay = await startReplay({ file, onStale: "throw" });
+		try {
+			const response = await fetch(`${replay.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			expect(response.status).toBe(200);
+			await response.text();
+		} finally {
+			replay.close();
+		}
+		expect(replay.staleRounds).toEqual([]);
+		expect(() => replay.assertFresh()).not.toThrow();
+	});
+
+	it("replays a recorded Chat httpStatus instead of inventing 200", async () => {
+		const body = {
+			model: "legacy",
+			messages: [{ role: "user", content: "rate limited" }],
+			tools: [],
+		};
+		const file = join(DIRECTORY, "chat-http-status.json");
+		writeCassette(file, {
+			scenario: "chat-http-status",
+			provider: "loopback",
+			model: "legacy",
+			recordedAt: "2026-09-13T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: hashRequest(body),
+					digest: {
+						systemChars: 0,
+						toolCount: 0,
+						roles: ["user"],
+						lastUserText: "rate limited",
+					},
+					sse: "data: [DONE]\n\n",
+					httpStatus: 429,
+				},
+			],
+		});
+		const replay = await startReplay({ file });
+		try {
+			const response = await fetch(`${replay.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			expect(response.status).toBe(429);
+			expect(replay.servedRounds[0]?.status).toBe(429);
+		} finally {
+			replay.close();
+		}
+	});
+
+	it("leaves usage unknown when no valid object appears", () => {
+		const sse = [
+			`data: ${JSON.stringify({ usage: null })}\n\n`,
+			`data: ${JSON.stringify({ usage: [] })}\n\n`,
+			"data: {malformed\n\n",
+			"data: [DONE]\n\n",
+		].join("");
+		expect(usageFromSse(sse)).toBeUndefined();
+	});
+
+	it("parses usage from CRLF data lines without a separator space", () => {
+		const usage = { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 };
+		const sse = [`data:${JSON.stringify({ usage })}\r\n\r\n`, "data:[DONE]\r\n\r\n"].join("");
+		expect(usageFromSse(sse)).toEqual(usage);
+	});
+
+	it("refuses an upstream redirect without forwarding the prompt to the new origin", async () => {
+		let targetCalls = 0;
+		const target = createServer((_req, res) => {
+			targetCalls += 1;
+			res.writeHead(200, { "content-type": "text/event-stream" });
+			res.end("data: [DONE]\n\n");
+		});
+		await new Promise<void>((resolve) => target.listen(0, "127.0.0.1", resolve));
+		const targetAddress = target.address();
+		if (!targetAddress || typeof targetAddress === "string")
+			throw new Error("target has no address");
+
+		const redirect = createServer((_req, res) => {
+			res.writeHead(307, {
+				location: `http://127.0.0.1:${targetAddress.port}/v1/chat/completions`,
+			});
+			res.end();
+		});
+		await new Promise<void>((resolve) => redirect.listen(0, "127.0.0.1", resolve));
+		const redirectAddress = redirect.address();
+		if (!redirectAddress || typeof redirectAddress === "string") {
+			throw new Error("redirect has no address");
+		}
+		const redirectFile = join(DIRECTORY, "redirect.json");
+		const recorder = await startRecorder({
+			upstream: `http://127.0.0.1:${redirectAddress.port}/v1`,
+			file: redirectFile,
+			scenario: "redirect-probe",
+			provider: "loopback",
+			model: "loopback",
+		});
+		try {
+			const response = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					authorization: "Bearer test-only-value",
+				},
+				body: JSON.stringify({
+					model: "loopback",
+					messages: [{ role: "user", content: "private prompt" }],
+				}),
+			});
+			expect(response.status).toBe(502);
+			expect(await response.json()).toEqual({
+				error: "workbench proxy: upstream redirect or transport failure",
+			});
+			expect(targetCalls).toBe(0);
+			expect(() => readCassette(redirectFile)).toThrow();
+		} finally {
+			recorder.close();
+			redirect.close();
+			target.close();
+		}
+	});
+
+	it("keeps failed retry attempts on the successful cassette", () => {
+		const digest = { systemChars: 1, toolCount: 0, roles: ["user"], lastUserText: "retry" };
+		const failed = {
+			scenario: "retry-probe",
+			provider: "loopback",
+			model: "loopback",
+			recordedAt: "2026-09-13T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: "0123456789abcdef",
+					digest,
+					sse: "data: [DONE]\n\n",
+				},
+			],
+			attempts: [
+				{ attempt: 0, phase: "forward" as const, status: "failed" as const, detail: "timeout" },
+			],
+		};
+		const success = {
+			...failed,
+			attempts: [{ attempt: 0, phase: "complete" as const, status: "recorded" as const }],
+		};
+		const merged = mergeRetryCassettes(success, [failed]);
+		expect(merged.rounds).toEqual(success.rounds);
+		expect(merged.attempts).toEqual([
+			{ attempt: 0, phase: "forward", status: "failed", detail: "timeout" },
+			{ attempt: 1, phase: "complete", status: "recorded" },
+		]);
+		expect(
+			adoptRetryEvidence(success, [
+				[{ attempt: 0, phase: "forward", status: "failed", detail: "connection reset" }],
+				success.attempts,
+			]).attempts,
+		).toEqual([
+			{ attempt: 0, phase: "forward", status: "failed", detail: "connection reset" },
+			{ attempt: 1, phase: "complete", status: "recorded" },
+		]);
+	});
+
+	it("keeps a pre-round forward failure when no attempt cassette exists", async () => {
+		const failedFile = join(DIRECTORY, "retry-pre-round-0.json");
+		const successFile = join(DIRECTORY, "retry-pre-round-1.json");
+		const canonical = join(DIRECTORY, "retry-pre-round.json");
+		const occupied = createNetServer((socket) => {
+			socket.destroy();
+		});
+		await new Promise<void>((resolve, reject) => {
+			occupied.once("error", reject);
+			occupied.listen(0, "127.0.0.1", () => resolve());
+		});
+		const occupiedAddress = occupied.address();
+		if (!occupiedAddress || typeof occupiedAddress === "string") {
+			occupied.close();
+			throw new Error("occupied upstream has no address");
+		}
+		const failedRecorder = await startRecorder({
+			upstream: `http://127.0.0.1:${occupiedAddress.port}`,
+			file: failedFile,
+			scenario: "retry-pre-round",
+			provider: "loopback",
+			model: "loopback",
+		});
+		try {
+			const response = await fetch(`${failedRecorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "loopback",
+					messages: [{ role: "user", content: "first" }],
+				}),
+			});
+			expect(response.status).toBe(502);
+			expect(existsSync(failedFile)).toBe(false);
+			expect(existsSync(`${failedFile}.attempts.json`)).toBe(true);
+			expect(failedRecorder.attempts).toEqual([
+				expect.objectContaining({ phase: "forward", status: "failed" }),
+			]);
+		} finally {
+			failedRecorder.close();
+			await new Promise<void>((resolve) => occupied.close(() => resolve()));
+		}
+
+		const upstream = await startRawProvider({
+			sse: 'data: {"model":"loopback"}\n\ndata: [DONE]\n\n',
+			onRequest: () => undefined,
+		});
+		const successRecorder = await startRecorder({
+			upstream: upstream.url,
+			file: successFile,
+			scenario: "retry-pre-round",
+			provider: "loopback",
+			model: "loopback",
+		});
+		try {
+			const response = await fetch(`${successRecorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "loopback",
+					messages: [{ role: "user", content: "second" }],
+				}),
+			});
+			expect(response.status).toBe(200);
+			await response.text();
+		} finally {
+			successRecorder.close();
+			upstream.close();
+		}
+
+		const success = readCassette(successFile);
+		const adopted = adoptRetryEvidence(success, [
+			attemptsFromEndpoint(failedRecorder),
+			attemptsFromEndpoint(successRecorder),
+		]);
+		writeCassette(canonical, adopted);
+		expect(existsSync(failedFile)).toBe(false);
+		expect(adopted.rounds).toEqual(success.rounds);
+		expect(adopted.attempts?.map((attempt) => attempt.status)).toEqual(["failed", "recorded"]);
+	});
+
+	it("adopts only the retained attempt tape, never an earlier retry cassette", () => {
+		const earlier = join(DIRECTORY, "retained-attempt-0.json");
+		writeCassette(earlier, {
+			scenario: "retained-attempt",
+			provider: "loopback",
+			model: "loopback",
+			recordedAt: "2026-09-13T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: "0123456789abcdef",
+					digest: {
+						systemChars: 0,
+						toolCount: 0,
+						roles: ["user"],
+						lastUserText: "attempt-0",
+					},
+					sse: "data: [DONE]\n\n",
+				},
+			],
+		});
+		const lists = [
+			[{ attempt: 0, phase: "forward" as const, status: "failed" as const, detail: "timeout" }],
+			[],
+		];
+		expect(adoptCassetteForRetainedAttempt(undefined, lists)).toBeUndefined();
+		expect(
+			adoptCassetteForRetainedAttempt(join(DIRECTORY, "retained-attempt-1.json"), lists),
+		).toBeUndefined();
+		expect(adoptCassetteForRetainedAttempt(earlier, lists)?.rounds[0]?.digest.lastUserText).toBe(
+			"attempt-0",
+		);
+	});
+
+	it("rejects a Chat cassette whose rounds resolve to different models", () => {
+		expect(() =>
+			writeCassette(join(DIRECTORY, "mixed-models.json"), {
+				scenario: "mixed-models",
+				provider: "loopback",
+				model: "alias",
+				resolvedModel: "gpt-a",
+				recordedAt: "2026-09-13T00:00:00.000Z",
+				rounds: [
+					{
+						round: 0,
+						requestHash: "0123456789abcdef",
+						digest: { systemChars: 0, toolCount: 0, roles: ["user"], lastUserText: "a" },
+						sse: `data: ${JSON.stringify({ model: "gpt-a" })}\n\ndata: [DONE]\n\n`,
+					},
+					{
+						round: 1,
+						requestHash: "fedcba9876543210",
+						digest: { systemChars: 0, toolCount: 0, roles: ["user"], lastUserText: "b" },
+						sse: `data: ${JSON.stringify({ model: "gpt-b" })}\n\ndata: [DONE]\n\n`,
+					},
+				],
+			}),
+		).toThrow(/model mismatch/);
+	});
+
+	it("fails closed when the concrete Chat model changes mid-measurement", async () => {
+		let round = 0;
+		const upstream = createServer((_req, res) => {
+			const model = round === 0 ? "gpt-a" : "gpt-b";
+			round += 1;
+			res.writeHead(200, { "content-type": "text/event-stream" });
+			res.end(`data: ${JSON.stringify({ model })}\n\ndata: [DONE]\n\n`);
+		});
+		await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+		const address = upstream.address();
+		if (!address || typeof address === "string")
+			throw new Error("model-change upstream has no address");
+		const file = join(DIRECTORY, "model-change.json");
+		const recorder = await startRecorder({
+			upstream: `http://127.0.0.1:${address.port}`,
+			file,
+			scenario: "model-change",
+			provider: "loopback",
+			model: "alias",
+		});
+		try {
+			const first = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "alias",
+					messages: [{ role: "user", content: "first" }],
+				}),
+			});
+			expect(first.status).toBe(200);
+			await first.text();
+			const second = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					model: "alias",
+					messages: [{ role: "user", content: "second" }],
+				}),
+			});
+			expect(second.status).toBe(502);
+			expect(await second.json()).toEqual({
+				error: "workbench proxy: resolved model changed mid-measurement",
+			});
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
 	});
 });

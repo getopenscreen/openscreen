@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"measurementId": "local-pr15-scripted-control-20260913-v1",
+	"reviewer": {
+		"kind": "independent",
+		"label": "measurement_artifact_review"
+	},
+	"disposition": "approved",
+	"reviewedAt": "2026-09-14T02:50:31.433Z",
+	"summary": "Approved regenerated scripted offline workflow control after the retained-attempt cassette pairing fix. The source manifest and referenced artifact hashes were independently checked. Provider usage is explicitly incomplete with zero rounds reporting usage; no complete token-accounting or model-quality claim is approved. This does not validate the missing original real-take fixture or authorize external provider calls."
+}

@@ -12,17 +12,24 @@
 // it to every file under `workbench/`; it is deliberately the only place in the
 // repository that spells those names out.
 
+import { type PublicHeaderProfile, publicHeaderProfile, type WireApi } from "./transport";
+
 /** Env var names, in one place so the ban-list test can quote them. */
 export const ENV_KEYS = {
 	apiKey: "OPENSCREEN_WORKBENCH_API_KEY",
 	baseUrl: "OPENSCREEN_WORKBENCH_BASE_URL",
 	model: "OPENSCREEN_WORKBENCH_MODEL",
+	wireApi: "OPENSCREEN_WORKBENCH_WIRE_API",
+	userAgent: "OPENSCREEN_WORKBENCH_USER_AGENT",
+	originator: "OPENSCREEN_WORKBENCH_ORIGINATOR",
 } as const;
 
 export interface LiveEnv {
 	model: string;
 	baseUrl: string;
 	apiKey: string;
+	wireApi: WireApi;
+	publicHeaders: PublicHeaderProfile;
 }
 
 function readVar(name: string): string | null {
@@ -60,7 +67,39 @@ export function requireLiveEnv(): LiveEnv {
 	}
 	// The three nulls are excluded by the loop above; the casts keep `strict` happy
 	// without re-reading process.env.
-	return { apiKey: apiKey as string, baseUrl: baseUrl as string, model: model as string };
+	let parsedBase: URL;
+	try {
+		parsedBase = new URL(baseUrl as string);
+	} catch {
+		throw new Error(`${ENV_KEYS.baseUrl} doit être une URL absolue http(s)`);
+	}
+	if (
+		!/^https?:$/.test(parsedBase.protocol) ||
+		parsedBase.username ||
+		parsedBase.password ||
+		parsedBase.search ||
+		parsedBase.hash
+	) {
+		throw new Error(`${ENV_KEYS.baseUrl} doit être une URL http(s) sans identifiants`);
+	}
+	const rawWireApi = readVar(ENV_KEYS.wireApi) ?? "chat-completions";
+	if (rawWireApi !== "chat-completions" && rawWireApi !== "responses") {
+		throw new Error(
+			`${ENV_KEYS.wireApi} doit valoir chat-completions ou responses, reçu ${rawWireApi}`,
+		);
+	}
+	const headers: Record<string, string> = {};
+	const userAgent = readVar(ENV_KEYS.userAgent);
+	const originator = readVar(ENV_KEYS.originator);
+	if (userAgent) headers["user-agent"] = userAgent;
+	if (originator) headers.originator = originator;
+	return {
+		apiKey: apiKey as string,
+		baseUrl: parsedBase.toString().replace(/\/$/, ""),
+		model: model as string,
+		wireApi: rawWireApi,
+		publicHeaders: publicHeaderProfile(headers),
+	};
 }
 
 /** True when all three variables are present — lets a suite skip cleanly. */

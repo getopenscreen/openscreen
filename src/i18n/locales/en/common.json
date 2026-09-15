@@ -45,7 +45,8 @@
 		"hide": "Hide OpenScreen",
 		"hideOthers": "Hide Others",
 		"unhide": "Show All",
-		"saveDiagnostics": "Save Diagnostics"
+		"saveDiagnostics": "Save Diagnostics",
+		"closeNotification": "Close notification"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} is available. You are using {{currentVersion}}.",

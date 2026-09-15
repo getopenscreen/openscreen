@@ -851,18 +851,24 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 12px 14px;
-	margin: 8px var(--sp-4);
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	background: var(--bg);
+	padding: 2px 0;
+	margin: 10px var(--sp-4);
 }
-.paneRow .label { font: 500 var(--fs-app) var(--font-body); color: var(--fg-2); }
+.paneRow .label { font: 500 var(--fs-app) var(--font-body); color: var(--fg); }
 .paneRow .info  { color: var(--meta); font-size: var(--fs-app-sm); margin-left: 4px; }
+/* Panel layout: sections, not cards.
+   Every control used to sit in its own bordered box, so a pane read as a stack of
+   five identical containers and the borders carried no information -- they said
+   "control" for things that were already obviously controls. The structure now comes
+   from a heading that owns what follows it, whitespace between groups, and one rule
+   where a group actually ends. What keeps a fill is what you can press: pills,
+   buttons, thumbnails. See `.paneDivider` below. */
 .sectionLabel {
-	font: 500 var(--fs-app-sm) var(--font-body);
-	color: var(--fg-2);
-	margin: 4px var(--sp-4) 8px;
+	font: 600 var(--fs-app) var(--font-body);
+	color: var(--fg);
+	/* More above than below: the gap is what ties the heading to its controls, so it
+	   has to be smaller than the gap separating it from the group before. */
+	margin: 18px var(--sp-4) 10px;
 }
 /* ─── action menu (a button's list of things it could do) ─────── */
 /* Sits where a Toggle would; reads as the current value, not as on/off. */
@@ -935,8 +941,39 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
-	margin: 4px var(--sp-4) 8px;
+	margin: 18px var(--sp-4) 10px;
 }
+/* The one border left in the flow. It marks where a group ENDS, which a per-control
+   border never did -- five boxes in a column say nothing about which of them belong
+   together. */
+.paneDivider {
+	height: 1px;
+	margin: 18px var(--sp-4);
+	border: 0;
+	background: var(--border);
+}
+
+/* The wallpaper picker, inline in the pane instead of over it.
+   The height cap is the whole reason this can sit inline at all: 18 swatches plus the
+   tabs and the upload button run past 300px, which is what pushed padding, roundness
+   and shadow off a laptop screen and sent the picker into a popover in the first place
+   (#84). Bounded, the section spends a fixed share of the pane and the grid scrolls
+   inside it, so what is below stays reachable no matter how many wallpapers ship.
+   `40vh` rather than a px figure so a tall window gives the grid the room it has. */
+.bgInline {
+	max-height: min(320px, 40vh);
+	overflow-y: auto;
+	/* Chaining left ON, deliberately. `overscroll-behavior: contain` is the reflex here
+	   and it was wrong: the grid fills most of the pane, so the wheel lands on it almost
+	   wherever the pointer is, and containing the scroll meant that once the grid hit its
+	   end the pane never moved at all -- everything under the background section became
+	   unreachable by wheel. Chaining hands the leftover delta up, which is the behaviour
+	   a nested scroller owes its parent when it is this large a share of it. */
+	overscroll-behavior-y: auto;
+}
+/* The picker's own rows are padded for a popover that has no other content; inline they
+   sit under a heading that already provides the space above. */
+.bgInline .paneTabs { margin-top: 0; }
 .sectionHead .sectionLabel { margin: 0; }
 /* Deliberately quieter than the settings it overwrites: it is reached on purpose, not
    stumbled into, and it must not read as a fifth control in the group. */
@@ -962,6 +999,10 @@
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
+	/* Full width, like every other control in the pane now that none of them sit in a
+	   box. Half a row wide, it read as one option among several rather than as the one
+	   way in that it is. */
+	width: calc(100% - 2 * var(--sp-4));
 	margin: 0 var(--sp-4) 12px;
 	padding: 12px;
 	border: 1px dashed var(--border);
@@ -1115,21 +1156,21 @@
 .sliderGrid {
 	display: grid;
 	grid-template-columns: 1fr;
-	gap: 8px;
+	/* Was 8px between bordered boxes; with the boxes gone the gap is the only thing
+	   keeping one slider's track off the next one's label. */
+	gap: 16px;
 	padding: 0 var(--sp-4) var(--sp-4);
 }
 .sliderCell {
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	background: var(--bg);
-	padding: 10px 12px;
 	display: grid;
 	grid-template-rows: auto auto;
-	gap: 8px;
+	gap: 7px;
 }
 .sliderCell .head { display: flex; align-items: center; gap: 6px; }
-.sliderCell .label { font: 500 11px var(--font-body); color: var(--fg-2); }
-.sliderCell .val { font: 500 11px var(--font-mono); color: var(--brand); margin-left: auto; }
+.sliderCell .label { font: 500 var(--fs-app) var(--font-body); color: var(--fg); }
+/* Muted, not brand. Out of a box the readout sits on the same ground as the label, and
+   a mint number there competed with the mint track directly under it for the same fact. */
+.sliderCell .val { font: 500 11px var(--font-mono); color: var(--muted); margin-left: auto; }
 .sliderCell input[type=range] {
 	width: 100%;
 	height: 4px;

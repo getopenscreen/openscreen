@@ -329,3 +329,53 @@
 		-ms-overflow-style: none;
 	}
 }
+
+/* Sonner puts the toast close button on the START side — top-left in a left-to-right UI —
+   and overhanging the corner, half outside the toast. Nothing else in this app closes
+   there: every dialog, pane and inspector puts its cross INSIDE the top end corner, and a
+   dismiss control that moves depending on the surface is one the eye has to hunt for.
+
+   Three things have to change together, which is why this is not a one-liner:
+     - the side, via sonner's own custom properties;
+     - the overhang, by dropping its translate — sonner's default pulls the button out of
+       the box by 35% in both axes;
+     - `top`, which sonner hardcodes to 0 rather than exposing as a variable, so it takes a
+       rule on the element itself.
+
+   Flipped per direction rather than hard-coded to `right`, so the mirroring survives an
+   RTL locale (ar ships today; the app does not set `dir` yet, but this must not be the
+   thing that breaks when it does).
+
+   The leading `html` is not decoration: sonner injects its stylesheet at runtime, after
+   this file, so an override of equal specificity would lose on source order. */
+html [data-sonner-toaster][dir="ltr"] {
+	--toast-close-button-start: unset;
+	--toast-close-button-end: 8px;
+	--toast-close-button-transform: none;
+}
+
+html [data-sonner-toaster][dir="rtl"] {
+	--toast-close-button-start: 8px;
+	--toast-close-button-end: unset;
+	--toast-close-button-transform: none;
+}
+
+/* Room for the button, so a long title does not run under it. Logical, not `padding-right`,
+   for the same mirroring reason as above. */
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+	padding-inline-end: 36px;
+}
+
+/* Inside the box, the chrome sonner gives the button stops making sense: a bordered,
+   opaque chip reads as a badge stuck on the corner when it is overhanging, and as a second
+   surface floating on the toast when it is not. Plain icon, weight on hover only. */
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button] {
+	top: 8px;
+	border-color: transparent;
+	background: transparent;
+	transition: background 0.12s ease-out, color 0.12s ease-out;
+}
+
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button]:hover {
+	background: rgb(255 255 255 / 10%);
+}

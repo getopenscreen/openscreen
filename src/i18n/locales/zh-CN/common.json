@@ -45,7 +45,8 @@
 		"hide": "隐藏 OpenScreen",
 		"hideOthers": "隐藏其他",
 		"unhide": "显示全部",
-		"saveDiagnostics": "保存诊断信息"
+		"saveDiagnostics": "保存诊断信息",
+		"closeNotification": "关闭通知"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} 已发布。当前版本为 {{currentVersion}}。",

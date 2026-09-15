@@ -636,9 +636,31 @@
 	z-index: 20;
 	pointer-events: none;
 }
+/* Open, the rail and the panel are ONE object: same height, touching, sharing the edge
+   between them. Closed, the rail is on its own again and goes back to being a floating
+   pill of its own height — stretching an empty rail to the full stage would be a tall
+   column of nothing over the video. Hence the attribute rather than a blanket rule. */
+.inspectorWrap[data-open] {
+	align-items: stretch;
+	gap: 0;
+}
+.inspectorWrap[data-open] .facetRail {
+	/* Buttons stay at the top of a rail that is now as tall as the panel. */
+	justify-content: flex-start;
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+	/* The panel's own left border is the shared one; two of them would draw 2px. */
+	border-right: 0;
+}
+.inspectorWrap[data-open] .inspector {
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+}
 .inspector {
 	pointer-events: auto;
 	width: 300px;
+	/* `stretch` on the wrap gives it the full height; this keeps it from exceeding that
+	   on its own, and keeps the closed/legacy case honest. */
 	max-height: 100%;
 	display: flex;
 	flex-direction: column;

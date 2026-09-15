@@ -1,9 +1,11 @@
 import { Toaster as Sonner } from "sonner";
+import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ className, ...props }: ToasterProps) => {
+	const tc = useScopedT("common");
 	return (
 		<Sonner
 			theme="dark"
@@ -12,13 +14,26 @@ const Toaster = ({ className, ...props }: ToasterProps) => {
 				className,
 			)}
 			duration={3000}
+			// A toast that can only be waited out is the one case where the 3s timer works
+			// against the reader: an error with a long description is dismissed before it is
+			// finished, and a stack of them hides the editor with no way to clear it. The
+			// cross is placed on the END side by `src/index.css` — sonner puts it on the
+			// start side, which is not where anything else in this app closes.
+			closeButton
 			toastOptions={{
+				// Sonner's default is the untranslated "Close toast"; the rest of the app
+				// speaks 13 languages.
+				closeButtonAriaLabel: tc("actions.closeNotification"),
 				classNames: {
 					toast:
 						"group toast border border-white/10 bg-[#09090b] text-slate-200 shadow-lg backdrop-blur-xl",
 					description: "group-[.toast]:text-slate-400",
 					actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
 					cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+					// The button's colours live in src/index.css with its placement: sitting
+					// inside the toast, the two are one decision, and splitting them across a
+					// class list and a stylesheet is how they drift.
+					closeButton: "group-[.toast]:text-slate-400 group-[.toast]:hover:text-slate-100",
 				},
 			}}
 			{...props}

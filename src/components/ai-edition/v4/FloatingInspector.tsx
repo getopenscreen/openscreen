@@ -120,18 +120,11 @@ export function FloatingInspector({
 	const audioTrackSelected = Boolean(tl.selectedAudioTrackId);
 	const effectiveOpen = open || selection !== null || audioTrackSelected;
 	return (
-		<div className={styles.inspectorWrap}>
-			{effectiveOpen ? (
-				<div className={styles.inspector}>
-					{selection ? (
-						<SelectionPane tl={tl} onClose={() => tl.clearSelection()} />
-					) : audioTrackSelected ? (
-						<AudioTrackPane tl={tl} onClose={() => tl.clearSelection()} />
-					) : (
-						<FacetBody facet={facet} onCollapse={onToggleOpen} transcriptProps={transcriptProps} />
-					)}
-				</div>
-			) : null}
+		<div className={styles.inspectorWrap} data-open={effectiveOpen ? "true" : undefined}>
+			{/* The rail leads, the panel follows. It is the chooser and the panel is what it
+			    chose, so meeting it first is the right reading order for a keyboard and a
+			    screen reader alike -- which is why this is a DOM reorder and not
+			    `row-reverse`, where the two would disagree. */}
 			<div className={styles.facetRail}>
 				{FACETS.map(({ id, labelKey, icon: Icon }) => (
 					<button
@@ -240,6 +233,17 @@ export function FloatingInspector({
 					) : null}
 				</div>
 			</div>
+			{effectiveOpen ? (
+				<div className={styles.inspector}>
+					{selection ? (
+						<SelectionPane tl={tl} onClose={() => tl.clearSelection()} />
+					) : audioTrackSelected ? (
+						<AudioTrackPane tl={tl} onClose={() => tl.clearSelection()} />
+					) : (
+						<FacetBody facet={facet} onCollapse={onToggleOpen} transcriptProps={transcriptProps} />
+					)}
+				</div>
+			) : null}
 		</div>
 	);
 }

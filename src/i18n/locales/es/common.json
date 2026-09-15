@@ -45,7 +45,8 @@
 		"hide": "Ocultar OpenScreen",
 		"hideOthers": "Ocultar otros",
 		"unhide": "Mostrar todo",
-		"saveDiagnostics": "Guardar diagnósticos"
+		"saveDiagnostics": "Guardar diagnósticos",
+		"closeNotification": "Cerrar la notificación"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} está disponible. Estás usando {{currentVersion}}.",

@@ -22,6 +22,14 @@ const probeVideoDimensionsMock = vi.hoisted(() =>
 );
 const probeAudioDurationMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const toastErrorMock = vi.hoisted(() => vi.fn());
+// Real implementation unless a test forces an answer (the backfill's timeout branch).
+const waitForDocumentSavesMock = vi.hoisted(() => vi.fn());
+
+vi.mock("./projectStore", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./projectStore")>();
+	waitForDocumentSavesMock.mockImplementation(actual.waitForDocumentSaves);
+	return { ...actual, waitForDocumentSaves: waitForDocumentSavesMock };
+});
 
 vi.mock("sonner", () => ({ toast: { error: toastErrorMock } }));
 
@@ -392,6 +400,34 @@ describe("useTimeline backfills missing source dimensions on load", () => {
 				height: 1920,
 			});
 		});
+	});
+
+	// A wait that times out says nothing about what landed, so the backfill writes nothing.
+	// It must not leave the asset marked attempted either, or no later run ever probes it.
+	it("probes again on the next document change after the save wait timed out", async () => {
+		waitForDocumentSavesMock.mockResolvedValueOnce("timeout");
+		const unprobed = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: unprobed,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => expect(waitForDocumentSavesMock).toHaveBeenCalledTimes(1));
+		await act(async () => {
+			await new Promise((r) => setTimeout(r, 0));
+		});
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+
+		act(() => {
+			useProjectStore.setState({ document: { ...unprobed, zoomRanges: [] }, revision: 2 });
+		});
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(2);
+		const saved = useProjectStore.getState().document?.assets.find((a) => a.id === "asset_1");
+		expect(saved?.video).toMatchObject({ width: 1920, height: 1080 });
 	});
 
 	it("leaves an asset that already has video dims untouched", async () => {

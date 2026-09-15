@@ -134,6 +134,7 @@ function renderTimeline(
 				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
 				onAddVoiceover={vi.fn()}
+				onOpenMusicLibrary={vi.fn()}
 			/>
 		</ShortcutsProvider>
 	);
@@ -567,7 +568,7 @@ describe("V4Timeline audio lane drag", () => {
 
 	function renderAudio(
 		trackOverrides: Partial<ReturnType<typeof makeTrack>> = {},
-		props: { onAddVoiceover?: () => void } = {},
+		props: { onAddVoiceover?: () => void; onOpenMusicLibrary?: () => void } = {},
 		tracks?: Array<ReturnType<typeof makeTrack>>,
 	) {
 		const placeAudioTrack = vi.fn(
@@ -611,6 +612,7 @@ describe("V4Timeline audio lane drag", () => {
 					onNextClip={vi.fn()}
 					onEditClip={vi.fn()}
 					onAddVoiceover={props.onAddVoiceover ?? vi.fn()}
+					onOpenMusicLibrary={props.onOpenMusicLibrary ?? vi.fn()}
 				/>
 			</ShortcutsProvider>,
 		);

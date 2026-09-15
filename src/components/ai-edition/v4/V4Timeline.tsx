@@ -2,6 +2,7 @@ import {
 	AudioLines,
 	Clock,
 	Crosshair,
+	Library,
 	Loader2,
 	Maximize2,
 	MessageSquare,
@@ -572,6 +573,7 @@ export function V4Timeline({
 	onNextClip,
 	onEditClip,
 	onAddVoiceover,
+	onOpenMusicLibrary,
 }: {
 	tl: TimelineApi;
 	setCurrentTime: (sec: number) => void;
@@ -588,6 +590,7 @@ export function V4Timeline({
 	/** Opens the voiceover recorder. Shell-level like the clip editor: the
 	 *  dialog owns the microphone and the shell owns the transport. */
 	onAddVoiceover: () => void;
+	onOpenMusicLibrary: () => void;
 }) {
 	const t = useScopedT("timeline");
 	// The live bindings, not the defaults: these keys are remappable, and a menu
@@ -1899,6 +1902,22 @@ export function V4Timeline({
 														<kbd className={styles.recMenuKey}>
 															{formatBinding(shortcuts.addVoiceover, isMac)}
 														</kbd>
+													</button>
+													<button
+														type="button"
+														className={styles.recMenuRow}
+														onClick={() => {
+															setAudioMenuOpen(false);
+															onOpenMusicLibrary();
+														}}
+													>
+														<Library size={15} style={{ flexShrink: 0 }} />
+														<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+															<span style={{ fontWeight: 600 }}>{t("audio.musicLibrary")}</span>
+															<span style={{ fontSize: 11, color: "var(--muted)" }}>
+																{t("audio.musicLibraryHint")}
+															</span>
+														</span>
 													</button>
 													<button
 														type="button"

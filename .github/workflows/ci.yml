@@ -66,6 +66,19 @@ jobs:
           node-version: 22
       - run: npm run docs:check
 
+  music-licences:
+    name: Music licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Same reasoning as the Docs job above: check-music-licences.mjs imports only
+      # node builtins, so npm ci would buy nothing. This job is what stands between a
+      # track with unverifiable provenance and an installer that redistributes it.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm run music:check
+
   appstream:
     name: AppStream metadata
     runs-on: ubuntu-latest

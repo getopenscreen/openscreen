@@ -123,6 +123,57 @@ distributed by their own registries, not redistributed inside our binaries.
   so nothing of PipeWire's ships inside our installers beyond the compiled
   result of its headers (inline functions and struct layouts).
 
+## Bundled background music — CC0 1.0
+
+- **Components**: the audio files under `resources/music/`, listed track by track
+  below, plus the `catalogue.json` manifest beside them.
+- **Used by**: the editor's music library, which lays one of these tracks on the
+  timeline as a background music track.
+- **License**: **Creative Commons CC0 1.0 Universal** — a public-domain
+  dedication (<https://creativecommons.org/publicdomain/zero/1.0/>). The authors
+  waived their rights, so **no attribution is required**, by us or by anyone
+  exporting a video that uses one of these tracks, including commercially.
+  The credits below are courtesy, not obligation.
+- **Why this section exists at all.** CC0 asks nothing in return, so strictly
+  speaking nothing here is owed. It ships anyway because provenance is the only
+  thing that makes the claim checkable later, and because the `"!*.md"` filter in
+  `electron-builder.json5` strips every README from the package — this file is
+  the only provenance document a user ever receives.
+- **Only CC0 is eligible.** Licences that merely permit *use* (Pixabay, Mixkit,
+  Bensound, Uppbeat and similar) forbid redistributing the raw file, which is
+  exactly what bundling a music library does. CC-BY is excluded for a different
+  reason: its obligation would travel all the way to the user's exported video.
+  `scripts/check-music-licences.mjs` enforces this at build time, the way
+  `scripts/fetch-ffmpeg.mjs` enforces FFmpeg's LGPL configuration.
+- **Integrity**: every track is bundled byte-for-byte as published upstream, and
+  `public/music/catalogue.json` pins each one by SHA-256. Nothing is re-encoded,
+  so the digest can be checked against the source file itself.
+- **A note for people publishing to YouTube.** Content ID matches audio
+  fingerprints, not licences, so a public-domain track can still draw an
+  automated claim if a third party registered it. That is disputable, and the
+  dedication above is the ground to dispute it on.
+
+### Tracks
+
+- **`sleepy-clouds`** — “Sleepy Clouds” by fupi, `sleepy-clouds.ogg`.
+  Source: <https://opengameart.org/content/sleepy-clouds>.
+  Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20251025095136/https://opengameart.org/content/sleepy-clouds>.
+- **`chill-loop`** — “Chill (Loopable)” by pro-sensory, `chill-loop.mp3`.
+  Source: <https://opengameart.org/content/chill-loopable>.
+  Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20260606041706/https://opengameart.org/content/chill-loopable>.
+- **`soft-piano`** — “Softpiano20” by tozan, `soft-piano.ogg`.
+  Source: <https://opengameart.org/content/softpiano20>.
+  Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20260312203601/https://opengameart.org/content/softpiano20>.
+- **`slow-stride`** — “Slow Stride” by isaiah658, `slow-stride.ogg`.
+  Source: <https://opengameart.org/content/slow-stride>.
+  Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20260529105344/https://opengameart.org/content/slow-stride>.
+- **`meadow-thoughts`** — “Meadow Thoughts” by mishonis, `meadow-thoughts.ogg`.
+  Source: <https://opengameart.org/content/meadow-thoughts>.
+  Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20260915114237/https://opengameart.org/content/meadow-thoughts>.
+- **`napping-on-a-cloud`** — “Napping on a Cloud” by congusbongus, `napping-on-a-cloud.ogg`.
+  Source: <https://opengameart.org/content/napping-on-a-cloud>.
+  Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20251119042411/https://opengameart.org/content/napping-on-a-cloud>.
+
 ## OpenScreen native helpers
 
 `wgc-capture` (Windows Graphics Capture), the ScreenCaptureKit helper (macOS),

@@ -103,6 +103,17 @@
 		"micDenied": "Доступ к микрофону запрещён",
 		"recordingUnavailable": "Запись здесь недоступна",
 		"saveFailed": "Не удалось сохранить запись",
-		"importFailed": "Не удалось импортировать аудиофайл"
+		"importFailed": "Не удалось импортировать аудиофайл",
+		"musicLibrary": "Музыкальная библиотека",
+		"musicLibraryHint": "Фоновые треки без роялти в комплекте с OpenScreen",
+		"musicLoading": "Загрузка библиотеки…",
+		"musicEmpty": "Встроенные треки не найдены.",
+		"musicPreview": "Прослушать",
+		"musicStopPreview": "Остановить",
+		"musicAdd": "Добавить",
+		"musicLicenceNote": "CC0 1.0 — используйте где угодно, без указания автора.",
+		"moreMusic": "Больше музыки",
+		"musicAddFailed": "Не удалось добавить трек",
+		"musicNeedsProject": "Откройте или создайте проект, чтобы добавить музыку."
 	}
 }

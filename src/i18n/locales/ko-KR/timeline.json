@@ -103,6 +103,17 @@
 		"micDenied": "마이크 접근이 거부되었습니다",
 		"recordingUnavailable": "여기에서는 녹음할 수 없습니다",
 		"saveFailed": "녹음을 저장하지 못했습니다",
-		"importFailed": "오디오 파일을 가져오지 못했습니다"
+		"importFailed": "오디오 파일을 가져오지 못했습니다",
+		"musicLibrary": "음악 라이브러리",
+		"musicLibraryHint": "OpenScreen에 포함된 로열티 프리 배경음악",
+		"musicLoading": "라이브러리를 불러오는 중…",
+		"musicEmpty": "포함된 트랙을 찾을 수 없습니다.",
+		"musicPreview": "미리 듣기",
+		"musicStopPreview": "정지",
+		"musicAdd": "추가",
+		"musicLicenceNote": "CC0 1.0 — 출처 표기 없이 어디서나 사용할 수 있습니다.",
+		"moreMusic": "음악 더 보기",
+		"musicAddFailed": "트랙을 추가하지 못했습니다",
+		"musicNeedsProject": "음악을 추가하려면 프로젝트를 열거나 만드세요."
 	}
 }

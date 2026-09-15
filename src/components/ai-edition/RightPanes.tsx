@@ -111,6 +111,8 @@ import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
+import { MusicLibraryList } from "./v4/MusicLibraryList";
+import { useAddMusicTrack } from "./v4/useAddMusicTrack";
 
 interface PaneProps {
 	title: string;
@@ -3024,9 +3026,22 @@ export function LayoutPane() {
 
 // ─── Audio ────────────────────────────────────────────────────────
 
-export function AudioPane() {
+type TimelineApi = ReturnType<typeof useTimeline>;
+
+/**
+ * The inspector's audio facet: the document-wide output gain, then the bundled CC0 music
+ * library.
+ *
+ * The library is a SECTION here rather than a facet of its own, for the reason the
+ * background and the caption settings were folded back into theirs: music is audio, and a
+ * second audio icon in the rail would be a second entry point to the same concern — the
+ * split this file has already undone twice (see the notes on FACETS in FloatingInspector).
+ */
+export function AudioPane({ tl }: { tl: TimelineApi }) {
 	const ts = useScopedT("settings");
+	const tt = useScopedT("timeline");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const addMusicTrack = useAddMusicTrack(tl);
 	return (
 		<Pane title={ts("audio.title")} icon={<AudioLines size={14} />} helpText={ts("audio.help")}>
 			<div className={styles.sliderGrid}>
@@ -3051,11 +3066,21 @@ export function AudioPane() {
 			>
 				{ts("audio.reset")}
 			</button>
+
+			<div className={styles.sectionLabel}>{tt("audio.musicLibrary")}</div>
+			{/* Gated on a loaded document for the same reason the gain slider is: there is
+			    nowhere to put a track otherwise, and a list that adds nothing when clicked
+			    is worse than a list that says why it is not there. */}
+			{hasDocument ? (
+				<MusicLibraryList active onPick={(track) => void addMusicTrack(track)} />
+			) : (
+				<div style={{ padding: "10px 2px", fontSize: 12, color: "var(--muted)" }}>
+					{tt("audio.musicNeedsProject")}
+				</div>
+			)}
 		</Pane>
 	);
 }
-
-type TimelineApi = ReturnType<typeof useTimeline>;
 
 // Per-track controls for the selected imported audio track (issue #350). Shown by
 // the inspector in place of the facet when an audio track is selected (see

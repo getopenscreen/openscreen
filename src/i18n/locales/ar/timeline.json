@@ -103,6 +103,17 @@
 		"micDenied": "تم رفض الوصول إلى الميكروفون",
 		"recordingUnavailable": "التسجيل غير متاح هنا",
 		"saveFailed": "تعذر حفظ التسجيل",
-		"importFailed": "تعذر استيراد الملف الصوتي"
+		"importFailed": "تعذر استيراد الملف الصوتي",
+		"musicLibrary": "مكتبة الموسيقى",
+		"musicLibraryHint": "مقطوعات خلفية خالية من الحقوق مضمّنة مع OpenScreen",
+		"musicLoading": "جارٍ تحميل المكتبة…",
+		"musicEmpty": "لم يتم العثور على مقطوعات مضمّنة.",
+		"musicPreview": "استماع",
+		"musicStopPreview": "إيقاف",
+		"musicAdd": "إضافة",
+		"musicLicenceNote": "CC0 1.0 — استخدمها في أي مكان دون نسب.",
+		"moreMusic": "المزيد من الموسيقى",
+		"musicAddFailed": "تعذّرت إضافة المقطوعة",
+		"musicNeedsProject": "افتح مشروعًا أو أنشئ واحدًا لإضافة الموسيقى."
 	}
 }

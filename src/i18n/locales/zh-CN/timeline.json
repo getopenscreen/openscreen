@@ -103,6 +103,17 @@
 		"micDenied": "麦克风访问被拒绝",
 		"recordingUnavailable": "此处无法录音",
 		"saveFailed": "无法保存录音",
-		"importFailed": "无法导入音频文件"
+		"importFailed": "无法导入音频文件",
+		"musicLibrary": "音乐库",
+		"musicLibraryHint": "随 OpenScreen 附带的免版税背景音乐",
+		"musicLoading": "正在加载音乐库…",
+		"musicEmpty": "未找到内置曲目。",
+		"musicPreview": "试听",
+		"musicStopPreview": "停止",
+		"musicAdd": "添加",
+		"musicLicenceNote": "CC0 1.0 — 任意场景使用，无需署名。",
+		"moreMusic": "更多音乐",
+		"musicAddFailed": "无法添加曲目",
+		"musicNeedsProject": "打开或新建一个项目后即可添加音乐。"
 	}
 }

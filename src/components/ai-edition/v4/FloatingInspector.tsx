@@ -128,7 +128,12 @@ export function FloatingInspector({
 					) : audioTrackSelected ? (
 						<AudioTrackPane tl={tl} onClose={() => tl.clearSelection()} />
 					) : (
-						<FacetBody facet={facet} onCollapse={onToggleOpen} transcriptProps={transcriptProps} />
+						<FacetBody
+							facet={facet}
+							onCollapse={onToggleOpen}
+							transcriptProps={transcriptProps}
+							tl={tl}
+						/>
 					)}
 				</div>
 			) : null}
@@ -1045,10 +1050,13 @@ function FacetBody({
 	facet,
 	onCollapse,
 	transcriptProps,
+	tl,
 }: {
 	facet: Facet;
 	onCollapse: () => void;
 	transcriptProps: TranscriptProps;
+	/** The audio facet's music library places tracks on the timeline. */
+	tl: TimelineApi;
 }) {
 	const te = useScopedT("editor");
 	// A small collapse affordance floated over the reused pane header.
@@ -1079,7 +1087,7 @@ function FacetBody({
 	);
 
 	if (facet === "layout") return wrap(collapse, <LayoutPane />);
-	if (facet === "audio") return wrap(collapse, <AudioPane />);
+	if (facet === "audio") return wrap(collapse, <AudioPane tl={tl} />);
 	if (facet === "cursor") return wrap(collapse, <CursorPane />);
 	if (facet === "transcript") return wrap(collapse, <TranscriptPane {...transcriptProps} />);
 	// `effects` is the fallthrough rather than a branch of its own: the union has no

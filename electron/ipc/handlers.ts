@@ -69,6 +69,7 @@ import {
 } from "../media/cursorSidecar";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
+import { listMusicCatalogue, resolveMusicTrackPath } from "../music/catalogue";
 import {
 	type LinuxCaptureSourceKind,
 	LinuxNativeCaptureSession,
@@ -3974,6 +3975,42 @@ export function registerIpcHandlers(
 	// the timeline's "Add audio" tool: audio is a timeline overlay (like an
 	// annotation), not a media-tab clip, so it has its own audio-only picker and the
 	// renderer adds it as a kind:"audio" asset + track at the playhead.
+	// The bundled CC0 music library. Two handlers, not one: listing must not hand out
+	// read approval for tracks the user never picks, and the renderer needs a real
+	// filesystem path only at the moment it imports one — the native compositor opens
+	// the file by path, so an asset URL would not do.
+	ipcMain.handle("music:list", async () => {
+		try {
+			return { success: true, tracks: await listMusicCatalogue() };
+		} catch (error) {
+			console.error("Failed to list the music catalogue:", error);
+			return { success: false, tracks: [], message: String(error) };
+		}
+	});
+
+	// Resolves a catalogue id to an approved absolute path. The id is confined to the
+	// catalogue by `resolveMusicTrackPath`, and the path still goes through the same
+	// approver the file picker uses, so nothing here widens what a read may reach.
+	ipcMain.handle("music:resolve", async (_event, id: unknown) => {
+		try {
+			if (typeof id !== "string" || id === "") {
+				return { success: false, message: "A catalogue id is required" };
+			}
+			const resolved = await resolveMusicTrackPath(id);
+			if (!resolved) {
+				return { success: false, message: `Unknown catalogue track: ${id}` };
+			}
+			const approved = await approveReadableAudioPath(resolved);
+			if (!approved) {
+				return { success: false, message: "Catalogue track is not a readable audio file" };
+			}
+			return { success: true, path: approved };
+		} catch (error) {
+			console.error("Failed to resolve a music catalogue track:", error);
+			return { success: false, message: String(error) };
+		}
+	});
+
 	ipcMain.handle("open-audio-file-picker", async () => {
 		try {
 			const dialogOptions = buildDialogOptions(

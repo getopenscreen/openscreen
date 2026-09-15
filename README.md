@@ -209,3 +209,10 @@ OpenScreen is community-driven. If you need help, want to report a bug, or just 
 ## License
 
 This project is licensed under the [MIT License](./LICENSE). By using this software, you agree that the authors are not liable for any issues, damages, or claims arising from its use.
+
+The **code** is MIT. The **background music bundled with the app** is not code and is not
+MIT: every track is [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), a
+public-domain dedication, so videos you export with it owe no credit to anyone and may be
+used commercially. Track-by-track provenance is in
+[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md), and the same file covers everything
+else redistributed inside the installers.

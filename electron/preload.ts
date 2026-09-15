@@ -289,6 +289,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	saveRecordedVoiceover: (data: ArrayBuffer) => {
 		return ipcRenderer.invoke("save-recorded-voiceover", data);
 	},
+	listMusicCatalogue: () => {
+		return ipcRenderer.invoke("music:list");
+	},
+	resolveMusicTrack: (id: string) => {
+		return ipcRenderer.invoke("music:resolve", id);
+	},
 	setCurrentVideoPath: (path: string) => {
 		return ipcRenderer.invoke("set-current-video-path", path);
 	},

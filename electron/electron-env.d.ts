@@ -314,6 +314,28 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		// The bundled CC0 music library: metadata for the picker, then a resolved and
+		// read-approved absolute path for the one track the user actually imports.
+		listMusicCatalogue: () => Promise<{
+			success: boolean;
+			tracks: Array<{
+				id: string;
+				file: string;
+				title: string;
+				author: string;
+				durationSec: number;
+				mood: string[];
+				license: string;
+				licenseUrl: string;
+				sourceUrl: string;
+			}>;
+			message?: string;
+		}>;
+		resolveMusicTrack: (id: string) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+		}>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
 		setCurrentRecordingSession: (
 			session: import("../src/lib/recordingSession").RecordingSession | null,

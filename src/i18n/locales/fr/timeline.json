@@ -103,6 +103,17 @@
 		"micDenied": "L'accès au micro a été refusé",
 		"recordingUnavailable": "L'enregistrement n'est pas disponible ici",
 		"saveFailed": "Impossible d'enregistrer la capture",
-		"importFailed": "Impossible d'importer le fichier audio"
+		"importFailed": "Impossible d'importer le fichier audio",
+		"musicLibrary": "Bibliothèque musicale",
+		"musicLibraryHint": "Des nappes libres de droits, fournies avec OpenScreen",
+		"musicLoading": "Chargement de la bibliothèque…",
+		"musicEmpty": "Aucun morceau fourni n'a été trouvé.",
+		"musicPreview": "Écouter",
+		"musicStopPreview": "Arrêter l'écoute",
+		"musicAdd": "Ajouter",
+		"musicLicenceNote": "CC0 1.0 : utilisable partout, sans attribution.",
+		"moreMusic": "Plus de musiques",
+		"musicAddFailed": "Impossible d'ajouter le morceau",
+		"musicNeedsProject": "Ouvre ou crée un projet pour ajouter de la musique."
 	}
 }

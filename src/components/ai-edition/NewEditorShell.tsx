@@ -1056,6 +1056,14 @@ export function NewEditorShell() {
 		[tl],
 	);
 
+	// The bundled CC0 music library lives in the inspector's audio facet — the toolbar
+	// entry is a door to it, not a second copy. Same move as `handleTranscribe` above,
+	// which reveals the transcript facet rather than opening a transcript of its own.
+	const openMusicLibrary = useCallback(() => {
+		setFacet("audio");
+		setInspectorOpen(true);
+	}, []);
+
 	const pasteRegion = useCallback(async () => {
 		const doc = useProjectStore.getState().document;
 		if (!doc) return;
@@ -1707,6 +1715,7 @@ export function NewEditorShell() {
 						onPrevClip={handlePrevClip}
 						onNextClip={handleNextClip}
 						onAddVoiceover={openVoiceoverFlow}
+						onOpenMusicLibrary={openMusicLibrary}
 						onEditClip={setEditClipTarget}
 					/>
 				</div>

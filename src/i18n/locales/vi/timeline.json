@@ -103,6 +103,17 @@
 		"micDenied": "Quyền truy cập micrô bị từ chối",
 		"recordingUnavailable": "Không thể ghi âm ở đây",
 		"saveFailed": "Không thể lưu bản ghi",
-		"importFailed": "Không thể nhập tệp âm thanh"
+		"importFailed": "Không thể nhập tệp âm thanh",
+		"musicLibrary": "Thư viện nhạc",
+		"musicLibraryHint": "Nhạc nền miễn phí bản quyền đi kèm OpenScreen",
+		"musicLoading": "Đang tải thư viện…",
+		"musicEmpty": "Không tìm thấy bản nhạc đi kèm.",
+		"musicPreview": "Nghe thử",
+		"musicStopPreview": "Dừng",
+		"musicAdd": "Thêm",
+		"musicLicenceNote": "CC0 1.0 — dùng ở bất cứ đâu, không cần ghi công.",
+		"moreMusic": "Thêm nhạc",
+		"musicAddFailed": "Không thể thêm bản nhạc",
+		"musicNeedsProject": "Mở hoặc tạo một dự án để thêm nhạc."
 	}
 }

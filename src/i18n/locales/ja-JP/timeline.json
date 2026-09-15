@@ -103,6 +103,17 @@
 		"micDenied": "マイクへのアクセスが拒否されました",
 		"recordingUnavailable": "ここでは録音できません",
 		"saveFailed": "録音を保存できませんでした",
-		"importFailed": "音声ファイルを読み込めませんでした"
+		"importFailed": "音声ファイルを読み込めませんでした",
+		"musicLibrary": "音楽ライブラリ",
+		"musicLibraryHint": "OpenScreen に同梱されたロイヤリティフリーの BGM",
+		"musicLoading": "ライブラリを読み込み中…",
+		"musicEmpty": "同梱トラックが見つかりません。",
+		"musicPreview": "試聴",
+		"musicStopPreview": "停止",
+		"musicAdd": "追加",
+		"musicLicenceNote": "CC0 1.0 — クレジット表記なしで自由に使えます。",
+		"moreMusic": "その他の音楽",
+		"musicAddFailed": "トラックを追加できませんでした",
+		"musicNeedsProject": "音楽を追加するにはプロジェクトを開くか作成してください。"
 	}
 }

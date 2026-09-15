@@ -42,6 +42,7 @@ import type {
 	ProjectFileResult,
 	ProjectPathResult,
 } from "../../src/native/contracts";
+import { PRODUCT_NAME } from "../about";
 import {
 	compactSessionNow,
 	createSession,
@@ -56,6 +57,7 @@ import {
 import type { CursorTelemetryReader } from "../ai-edition/deep-agent/service";
 import { DocumentService } from "../ai-edition/document-service";
 import { LlmConfigStore } from "../ai-edition/llm-config-store";
+import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
@@ -4589,6 +4591,12 @@ export function registerIpcHandlers(
 			exportDiagnosticFile(payload),
 	);
 
+	// Same one-instance rule: the service serialises its writes per instance. The folder is
+	// in Documents, not userData, because presets are files users are meant to find and share.
+	const stylePresets = new StylePresetService(
+		path.join(app.getPath("documents"), `${PRODUCT_NAME} Presets`),
+	);
+
 	// One instance each, not one per call. DocumentService serialises saves of a
 	// project through a per-INSTANCE queue (see its writeProject comment — this
 	// race destroyed two real project files), so a second instance means a second
@@ -4651,6 +4659,7 @@ export function registerIpcHandlers(
 			}
 		},
 		getAiEditionDocuments: () => aiEditionDocuments,
+		getStylePresets: () => stylePresets,
 		getAiEditionLlmConfig,
 		runAiEditionChat: (projectId, sessionId, message, document, sink) =>
 			runChat(projectId, sessionId, message, getAiEditionLlmConfig(), document, sink, {

@@ -1,3 +1,5 @@
+import type { StylePreset, StylePresetAppearance } from "../lib/ai-edition/stylePresets";
+
 export const NATIVE_BRIDGE_CHANNEL = "native-bridge:invoke";
 export const NATIVE_BRIDGE_VERSION = 1;
 
@@ -364,10 +366,26 @@ export interface AiEditionCaptionTranslateResult {
 	error?: string;
 }
 
+// ---- Style presets domain -------------------------------------------------
+// One `<name>.openscreenpreset` file per preset in Documents/OpenScreen Presets. The
+// shape and its validation live in src/lib/ai-edition/stylePresets.ts, shared with main.
+
+export type { StylePreset, StylePresetAppearance };
+
+export interface StylePresetDeleteResult {
+	success: true;
+}
+
+export interface StylePresetRevealResult {
+	success: true;
+}
+
 export type NativeBridgeErrorCode =
 	| "INVALID_REQUEST"
 	| "UNSUPPORTED_ACTION"
 	| "NOT_FOUND"
+	/** A style preset create/rename collided with an existing name (case-insensitive). */
+	| "NAME_TAKEN"
 	| "UNAVAILABLE"
 	| "INTERNAL_ERROR";
 
@@ -784,6 +802,42 @@ export type NativeBridgeRequest =
 				sceneJson?: string;
 				params?: CompositorExportGifParams;
 			};
+			requestId?: string;
+	  }
+	| {
+			domain: "presets";
+			action: "list";
+			payload?: EmptyPayload;
+			requestId?: string;
+	  }
+	| {
+			domain: "presets";
+			action: "create";
+			payload: { name: string; appearance: StylePresetAppearance };
+			requestId?: string;
+	  }
+	| {
+			domain: "presets";
+			action: "rename";
+			payload: { id: string; name: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "presets";
+			action: "update";
+			payload: { id: string; appearance: StylePresetAppearance };
+			requestId?: string;
+	  }
+	| {
+			domain: "presets";
+			action: "delete";
+			payload: { id: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "presets";
+			action: "reveal";
+			payload: { id: string };
 			requestId?: string;
 	  };
 

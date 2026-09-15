@@ -17,14 +17,42 @@ import {
 	type CursorRecordingData,
 	type CursorTelemetryPoint,
 	NATIVE_BRIDGE_CHANNEL,
+	type NativeBridgeError,
+	type NativeBridgeErrorCode,
 	type NativeBridgeRequest,
 	type NativeBridgeResponse,
 	type NativePlatform,
 	type ProjectContext,
 	type ProjectFileResult,
 	type ProjectPathResult,
+	type StylePreset,
+	type StylePresetAppearance,
+	type StylePresetDeleteResult,
+	type StylePresetRevealResult,
 	type SystemCapabilities,
 } from "./contracts";
+
+/**
+ * A failed bridge request, carrying the bridge's error code so a caller can tell one
+ * failure from another without matching on message text — e.g. `NAME_TAKEN` from a style
+ * preset create/rename. Still an `Error` with the same message as before.
+ */
+export class NativeBridgeRequestError extends Error {
+	readonly code: NativeBridgeErrorCode;
+	readonly retryable: boolean;
+
+	constructor(error: NativeBridgeError) {
+		super(error.message);
+		this.name = "NativeBridgeRequestError";
+		this.code = error.code;
+		this.retryable = error.retryable;
+	}
+}
+
+/** True when a style preset create/rename failed because the name is already used. */
+export function isStylePresetNameTakenError(error: unknown): boolean {
+	return error instanceof NativeBridgeRequestError && error.code === "NAME_TAKEN";
+}
 
 function createRequestId() {
 	if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -57,7 +85,7 @@ export async function invokeNativeBridge<TData = unknown>(
 export async function requireNativeBridgeData<TData>(request: NativeBridgeRequest): Promise<TData> {
 	const response = await invokeNativeBridge<TData>(request);
 	if (!response.ok) {
-		throw new Error(response.error.message);
+		throw new NativeBridgeRequestError(response.error);
 	}
 
 	return response.data;
@@ -317,6 +345,45 @@ export const nativeBridgeClient = {
 				domain: "aiEdition",
 				action: "captions.translate",
 				payload: input,
+			}),
+	},
+	/** Style presets. `create` and `rename` reject with a `NativeBridgeRequestError` whose
+	 *  `code` is `"NAME_TAKEN"` when the name is in use — see `isStylePresetNameTakenError`. */
+	presets: {
+		list: () =>
+			requireNativeBridgeData<StylePreset[]>({
+				domain: "presets",
+				action: "list",
+			}),
+		create: (name: string, appearance: StylePresetAppearance) =>
+			requireNativeBridgeData<StylePreset>({
+				domain: "presets",
+				action: "create",
+				payload: { name, appearance },
+			}),
+		rename: (id: string, name: string) =>
+			requireNativeBridgeData<StylePreset>({
+				domain: "presets",
+				action: "rename",
+				payload: { id, name },
+			}),
+		update: (id: string, appearance: StylePresetAppearance) =>
+			requireNativeBridgeData<StylePreset>({
+				domain: "presets",
+				action: "update",
+				payload: { id, appearance },
+			}),
+		delete: (id: string) =>
+			requireNativeBridgeData<StylePresetDeleteResult>({
+				domain: "presets",
+				action: "delete",
+				payload: { id },
+			}),
+		reveal: (id: string) =>
+			requireNativeBridgeData<StylePresetRevealResult>({
+				domain: "presets",
+				action: "reveal",
+				payload: { id },
 			}),
 	},
 };

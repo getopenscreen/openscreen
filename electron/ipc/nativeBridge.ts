@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, shell } from "electron";
 import type { AiEditionChatEvent } from "../../src/native/contracts";
 import {
 	NATIVE_BRIDGE_CHANNEL,
@@ -12,6 +12,7 @@ import {
 } from "../../src/native/contracts";
 import type { ChatEventSink } from "../ai-edition/chat-service";
 import type { DocumentService } from "../ai-edition/document-service";
+import { StylePresetError, type StylePresetService } from "../ai-edition/style-preset-service";
 import {
 	type CursorTelemetryLoadResult,
 	TelemetryCursorAdapter,
@@ -53,6 +54,8 @@ export interface NativeBridgeContext {
 	 */
 	getNativeWindowHandle?: (sender: import("electron").WebContents) => Buffer | null;
 	getAiEditionDocuments: () => DocumentService;
+	/** The one shared style preset service — it serialises writes per instance. */
+	getStylePresets: () => StylePresetService;
 	getAiEditionLlmConfig: () => import("../ai-edition/llm-config-store").LlmConfigStore;
 	runAiEditionChat: (
 		projectId: string,
@@ -646,6 +649,50 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 					}
 				}
 
+				case "presets": {
+					const action = request.action as string;
+					const presets = context.getStylePresets();
+					switch (request.action) {
+						case "list":
+							return createSuccessResponse(requestId, await presets.list());
+						case "create":
+							return createSuccessResponse(
+								requestId,
+								await presets.create(request.payload.name, request.payload.appearance),
+							);
+						case "rename":
+							return createSuccessResponse(
+								requestId,
+								await presets.rename(request.payload.id, request.payload.name),
+							);
+						case "update":
+							return createSuccessResponse(
+								requestId,
+								await presets.update(request.payload.id, request.payload.appearance),
+							);
+						case "delete":
+							await presets.delete(request.payload.id);
+							return createSuccessResponse(requestId, { success: true });
+						case "reveal": {
+							// The path is built here from the id, never taken from the renderer.
+							const target = await presets.revealTarget(request.payload.id);
+							if (target.kind === "file") {
+								shell.showItemInFolder(target.path);
+							} else {
+								const openError = await shell.openPath(target.path);
+								if (openError) throw new Error(openError);
+							}
+							return createSuccessResponse(requestId, { success: true });
+						}
+						default:
+							return createErrorResponse(
+								requestId,
+								"UNSUPPORTED_ACTION",
+								`Unsupported presets action: ${action}`,
+							);
+					}
+				}
+
 				default:
 					return createErrorResponse(
 						requestId,
@@ -659,6 +706,19 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 			// the client to spin on them. The message keeps the reason but drops any
 			// absolute path — it crosses to the renderer and ends up in UI strings.
 			console.error(`native bridge ${domain}.${request.action} failed:`, error);
+			// Style preset failures the UI acts on keep their own code: a taken name is a
+			// prompt to pick another, not a crash. A TypeError there is a preset or name that
+			// failed validation, i.e. a bad request.
+			if (error instanceof StylePresetError) {
+				return createErrorResponse(
+					requestId,
+					error.code === "INVALID_ID" ? "INVALID_REQUEST" : error.code,
+					redactPaths(error.message),
+				);
+			}
+			if (domain === "presets" && error instanceof TypeError) {
+				return createErrorResponse(requestId, "INVALID_REQUEST", redactPaths(error.message));
+			}
 			return createErrorResponse(
 				requestId,
 				"INTERNAL_ERROR",

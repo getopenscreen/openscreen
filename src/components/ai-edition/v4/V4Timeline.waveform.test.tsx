@@ -138,6 +138,7 @@ function renderBars(atGainDb: number): string[] {
 				onPrevClip={vi.fn()}
 				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
+				onApplyClipEdit={vi.fn()}
 				onAddVoiceover={vi.fn()}
 			/>
 		</ShortcutsProvider>,

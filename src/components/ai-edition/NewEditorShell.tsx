@@ -1698,6 +1698,11 @@ export function NewEditorShell() {
 					) : null}
 					<V4Timeline
 						tl={tl}
+						// Same queue the Edit modal's call site uses below: every document write
+						// is a read-modify-write of the whole document, so they all share one.
+						onApplyClipEdit={(clipId, sStart, sEnd) =>
+							void enqueueTimelineWrite(() => tl.applyClipEdit(clipId, sStart, sEnd))
+						}
 						setCurrentTime={handleSeek}
 						variant={mode === "media" ? "media" : "edit"}
 						onDropAsset={handleDropAsset}

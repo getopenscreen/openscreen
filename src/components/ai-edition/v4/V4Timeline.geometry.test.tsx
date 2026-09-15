@@ -71,7 +71,19 @@ afterEach(() => {
 	measureText.mockImplementation((text: string) => ({ width: text.length * 6 }));
 });
 
-function clip(startSec: number, endSec: number) {
+/** `sourceEndSec` is OPTIONAL here because it is optional in the schema: a clip whose
+ *  asset was never probed carries none, and the trim has to cope with that. Spelling the
+ *  return type out is what lets a fixture leave it off. */
+type TestClip = {
+	id: string;
+	assetId: string;
+	timelineStartSec: number;
+	timelineEndSec: number;
+	sourceStartSec: number;
+	sourceEndSec?: number;
+};
+
+function clip(startSec: number, endSec: number): TestClip {
 	return {
 		id: `c@${startSec}`,
 		assetId: "a1",
@@ -92,6 +104,9 @@ function renderTimeline(
 	annotation = { id: "ann1", startMs: 10_000, endMs: 11_000 },
 	assets: Array<Record<string, unknown>> = [NO_CAMERA_ASSET],
 	onRender?: ProfilerOnRenderCallback,
+	/** Overrides for the props the shell owns. Only the write callback needs it so far:
+	 *  a test that wants to see WHERE the commit goes has to be handed its own spy. */
+	overrides: { onApplyClipEdit?: (id: string, s: number, e: number) => void } = {},
 ) {
 	const tl = {
 		clips,
@@ -119,6 +134,9 @@ function renderTimeline(
 		addZoom: vi.fn(async () => {
 			/* the toolbar only awaits it */
 		}),
+		applyClipEdit: vi.fn(async (_clipId: string, _startSec: number, _endSec: number) => {
+			/* the edge trim only awaits it */
+		}),
 	};
 	const setCurrentTime = vi.fn();
 	const timeline = (
@@ -133,11 +151,16 @@ function renderTimeline(
 				onPrevClip={vi.fn()}
 				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
+				// The shell wraps this in its write queue; here it goes straight to the mock,
+				// so the assertions below read the range the component asked to commit.
+				onApplyClipEdit={
+					overrides.onApplyClipEdit ?? ((clipId, s, e) => void tl.applyClipEdit(clipId, s, e))
+				}
 				onAddVoiceover={vi.fn()}
 			/>
 		</ShortcutsProvider>
 	);
-	render(
+	const view = render(
 		onRender ? (
 			<Profiler id="timeline" onRender={onRender}>
 				{timeline}
@@ -151,6 +174,9 @@ function renderTimeline(
 		clipEls: Array.from(document.querySelectorAll<HTMLElement>("[data-clip-id]")),
 		tl,
 		setCurrentTime,
+		// A drag keeps its listeners on `window`, so a test can outlive the component
+		// on purpose and see what the gesture does without one.
+		unmount: view.unmount,
 	};
 }
 
@@ -158,12 +184,20 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
+/** One pointer's event, carrying the id that ties it to the gesture it belongs to.
+ *  jsdom's `fireEvent.pointerDown` defaults `pointerId` to 0 while a hand-built
+ *  `MouseEvent` leaves it undefined, so a handler that filters on the id — the edge
+ *  trim does, or a second finger could end someone else's drag — would ignore a
+ *  sequence dispatched as plain mouse events. */
+const pointerEvent = (type: string, clientX: number, pointerId = 0) =>
+	new PointerEvent(type, { clientX, pointerId, bubbles: true });
+
 /** Drag a handle by `dxPx`. The move/up listeners live on `window`, so the drag
  *  is driven by pointer deltas alone — the handle may re-mount under it. */
-function dragHandle(handle: Element, dxPx: number) {
-	fireEvent.pointerDown(handle, { clientX: 0 });
-	window.dispatchEvent(new MouseEvent("pointermove", { clientX: dxPx }));
-	window.dispatchEvent(new MouseEvent("pointerup", { clientX: dxPx }));
+function dragHandle(handle: Element, dxPx: number, pointerId = 0) {
+	fireEvent.pointerDown(handle, { clientX: 0, pointerId });
+	window.dispatchEvent(pointerEvent("pointermove", dxPx, pointerId));
+	window.dispatchEvent(pointerEvent("pointerup", dxPx, pointerId));
 }
 
 /** Ctrl+wheel up = zoom in; the handler is a native listener, so dispatch real events.
@@ -610,6 +644,7 @@ describe("V4Timeline audio lane drag", () => {
 					onPrevClip={vi.fn()}
 					onNextClip={vi.fn()}
 					onEditClip={vi.fn()}
+					onApplyClipEdit={vi.fn()}
 					onAddVoiceover={props.onAddVoiceover ?? vi.fn()}
 				/>
 			</ShortcutsProvider>,
@@ -777,5 +812,301 @@ describe("V4Timeline audio lane drag", () => {
 		// The head is pinned; only the tail comes in, so the span gets shorter.
 		expect(placement.startMs).toBe(100_000);
 		expect(placement.endMs - placement.startMs).toBeLessThan(60_000);
+	});
+});
+
+// Trimming a clip by dragging its own edge in the row, rather than opening the
+// Edit modal to move the same two numbers. The document work is shared with that
+// modal (applyClipEdit → setClipSourceRange); what is new here is turning pointer
+// travel into a source range, and refusing the ranges that are not edits.
+//
+// The arithmetic below rests on pxPerSec: VIEWPORT_PX / total. With the default
+// 1800s timeline that is 0.5px per second, so 1px of travel is 2 seconds.
+describe("V4Timeline clip edge trim", () => {
+	const gripsOf = (clipEl: Element) =>
+		Array.from(clipEl.querySelectorAll<HTMLElement>("[data-edge]"));
+	const gripFor = (clipEl: Element, edge: "start" | "end") =>
+		clipEl.querySelector<HTMLElement>(`[data-edge="${edge}"]`) as HTMLElement;
+
+	it("takes the tail in when the end grip is dragged left", () => {
+		const { clipEls, tl } = renderTimeline();
+		dragHandle(gripFor(clipEls[0], "end"), -100);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+	});
+
+	it("takes the head in when the start grip is dragged right", () => {
+		const { clipEls, tl } = renderTimeline();
+		dragHandle(gripFor(clipEls[0], "start"), 100);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 200, 1800);
+	});
+
+	// The clip is 900s of an 1800s file, so there is real footage to give back.
+	it("lets the tail back out into footage the file still has", () => {
+		const { clipEls, tl } = renderTimeline([clip(0, 900)]);
+		// One clip spanning the timeline: pxPerSec is 1 here, not 0.5.
+		dragHandle(gripFor(clipEls[0], "end"), 100);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1000);
+	});
+
+	// The asset is 1800s and the clip already ends there, so there is nothing to
+	// give back. Inventing footage past the end of the file is the failure this
+	// clamp exists to prevent.
+	it("refuses to pull the tail past the end of the file", () => {
+		const { clipEls, tl } = renderTimeline();
+		dragHandle(gripFor(clipEls[0], "end"), 400);
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	it("refuses to push the head before the start of the file", () => {
+		const { clipEls, tl } = renderTimeline();
+		dragHandle(gripFor(clipEls[0], "start"), -400);
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// Dragged clean through its own start: the clip stops at the floor rather than
+	// inverting, which would hand setClipSourceRange a backwards range.
+	it("stops at the minimum length instead of turning the clip inside out", () => {
+		const { clipEls, tl } = renderTimeline([clip(0, 900)]);
+		dragHandle(gripFor(clipEls[0], "end"), -2000);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 0.05);
+	});
+
+	// A grip is a plausible thing to click by accident on the way to selecting a
+	// clip, and an empty step on the undo stack is the tell that it happened.
+	it("writes nothing for a press that never moved", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0 });
+		window.dispatchEvent(pointerEvent("pointerup", 0));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// Two grips on a clip a few pixels wide would cover it entirely and leave no
+	// body to grab for a reorder. The pencil stays the way in at that size.
+	it("keeps its grips off a clip too narrow to hold them", () => {
+		const { clipEls } = renderTimeline([clip(0, 1790), clip(1790, 1800)]);
+		expect(gripsOf(clipEls[0])).toHaveLength(2);
+		expect(gripsOf(clipEls[1])).toHaveLength(0);
+	});
+
+	// The grips are focusable buttons, so they owe the keyboard an answer.
+	it("nudges by a tenth with an arrow, and by a second with shift", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.keyDown(grip, { key: "ArrowLeft" });
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+		fireEvent.keyDown(grip, { key: "ArrowLeft", shiftKey: true });
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799);
+	});
+
+	// `sourceEndSec` is optional in the schema — an unprobed asset carries none — and
+	// the waveform painter has always stood in the clip's timeline length for it. The
+	// trim handlers defaulted to 0 instead, which puts the out-point BEFORE the
+	// in-point: `setClipSourceRange` then orders the pair and commits a clip collapsed
+	// to the minimum rather than the trim that was asked for.
+	const unprobed = () => ({ ...clip(0, TOTAL_SEC), sourceEndSec: undefined });
+
+	it("trims a clip whose out-point was never probed against the length it occupies", () => {
+		const { clipEls, tl } = renderTimeline([unprobed()]);
+		dragHandle(gripFor(clipEls[0], "end"), -100);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+	});
+
+	it("nudges an unprobed clip against that same length", () => {
+		const { clipEls, tl } = renderTimeline([unprobed()]);
+		fireEvent.keyDown(gripFor(clipEls[0], "end"), { key: "ArrowLeft" });
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+	});
+
+	// A palm rejection, a system gesture or a lost capture takes the pointer away and
+	// sends no `pointerup` at all. The drag has to end there: cancelled means abandoned,
+	// and a drag left live would commit on whatever release came next.
+	it("abandons the trim when the browser cancels the pointer", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0 });
+		window.dispatchEvent(pointerEvent("pointermove", -100));
+		window.dispatchEvent(pointerEvent("pointercancel", -100));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+
+		// And the listeners went with it, so a later, unrelated release is not the
+		// cancelled trim's to commit.
+		window.dispatchEvent(pointerEvent("pointermove", -300));
+		window.dispatchEvent(pointerEvent("pointerup", -300));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// `window` hears every pointer on the device. On a touchscreen a second finger is an
+	// ordinary thing to put down mid-drag, and it used to end the first one's trim —
+	// committing a range from a release that happened somewhere else entirely, and taking
+	// the `{ once: true }` listeners with it so the finger still dragging ended up
+	// attached to nothing.
+	it("lets a second finger come and go without ending the first one's trim", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -50, 1));
+
+		// Another pointer lands far away, moves, and lifts.
+		window.dispatchEvent(pointerEvent("pointermove", 400, 2));
+		window.dispatchEvent(pointerEvent("pointerup", 400, 2));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+
+		// The trim is still live, still the first pointer's, and still tracking only it.
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+	});
+
+	// Same for a cancel: the browser taking another pointer away says nothing about this one.
+	it("keeps the trim when a different pointer is cancelled", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		window.dispatchEvent(pointerEvent("pointercancel", 0, 2));
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+	});
+
+	// The card resizes live under the drag; the duration printed inside it has to go
+	// with it. It is the precise half of the preview, and the keyboard step is a tenth
+	// precisely because this is printed to a tenth.
+	it("counts the duration down as the clip is dragged shorter", () => {
+		const { clipEls, tl } = renderTimeline([clip(0, 900)]);
+		const durationOf = () => document.querySelector('[class*="tlClipDuration"]')?.textContent;
+		expect(durationOf()).toBe("15:00.0");
+
+		// `act` because these go straight to `window`, unlike fireEvent: the preview is
+		// React state, and an unflushed render would read as the bug this guards.
+		// pxPerSec is 1 on a single clip spanning the timeline, so 100px is 100s.
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		act(() => {
+			window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		});
+		expect(durationOf()).toBe("13:20.0");
+
+		// And back to the committed value once the gesture is abandoned.
+		act(() => {
+			window.dispatchEvent(pointerEvent("pointercancel", -100, 1));
+		});
+		expect(durationOf()).toBe("15:00.0");
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// Two grips per clip, all carrying the same label: "Adjust clip start" names one
+	// button per clip in the row and says nothing about which. The card's own name
+	// element is what tells them apart.
+	it("tells the grips of one clip apart from another clip's", () => {
+		const { clipEls } = renderTimeline([clip(0, 900), clip(900, 1800)]);
+		const described = (el: Element, edge: "start" | "end") =>
+			gripFor(el, edge).getAttribute("aria-describedby");
+		// Each grip points at the name of the clip it belongs to, not at a shared node.
+		expect(described(clipEls[0], "start")).toBe(described(clipEls[0], "end"));
+		expect(described(clipEls[0], "start")).not.toBe(described(clipEls[1], "start"));
+		// And the target exists and carries the clip's name, or the reference is dead.
+		for (const el of clipEls) {
+			const target = document.getElementById(described(el, "start") as string);
+			expect(target?.textContent).toBe("rec");
+		}
+	});
+
+	// A grip keeps DOM focus through a drag on it, so an arrow key can land mid-drag. The
+	// drag's pending range came from a snapshot the nudge's write invalidates, so it must
+	// stop being pending rather than commit over the nudge when the pointer is released.
+	it("lets a keyboard nudge take over from a drag instead of being overwritten by it", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+
+		fireEvent.keyDown(grip, { key: "ArrowLeft" });
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+
+		// The drag is off: its release does not put the pre-nudge range back.
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+	});
+
+	// The commit goes through the prop, which the shell has wrapped in the one queue every
+	// document write shares. Calling `tl.applyClipEdit` here instead would read the document
+	// at call time and save it back, so two writes in flight would both build on the same
+	// pre-trim document -- a held arrow key repeats about thirty times a second, which is
+	// exactly how you get two.
+	it("commits through the shell's write callback, not straight at the timeline api", () => {
+		const onApplyClipEdit = vi.fn();
+		const { clipEls, tl } = renderTimeline(undefined, undefined, undefined, undefined, {
+			onApplyClipEdit,
+		});
+		dragHandle(gripFor(clipEls[0], "end"), -100);
+		expect(onApplyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+
+		fireEvent.keyDown(gripFor(clipEls[0], "end"), { key: "ArrowLeft" });
+		expect(onApplyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// A gesture that ignores foreign pointers is also a gesture that no longer ends when
+	// another grip is pressed. Two live drags would fight over the single preview and both
+	// commit on release, with only the newer one reachable through the ref the unmount
+	// effect cancels — so the older press is abandoned the moment the next one starts.
+	it("abandons a trim still in flight when another grip is pressed", () => {
+		const { clipEls, tl } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+
+		fireEvent.pointerDown(gripFor(clipEls[0], "start"), { clientX: 0, pointerId: 2 });
+		// The first press is no longer anybody's: its release writes nothing.
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+
+		// The second is the live one, and it commits its own edge alone.
+		window.dispatchEvent(pointerEvent("pointermove", 100, 2));
+		window.dispatchEvent(pointerEvent("pointerup", 100, 2));
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 200, 1800);
+	});
+
+	it("drops every trim in flight when the timeline unmounts, not just the newest", () => {
+		const { clipEls, tl, unmount } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		fireEvent.pointerDown(gripFor(clipEls[0], "start"), { clientX: 0, pointerId: 2 });
+		window.dispatchEvent(pointerEvent("pointermove", 100, 2));
+
+		unmount();
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		window.dispatchEvent(pointerEvent("pointerup", 100, 2));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// The shell renders the timeline conditionally, so it can go away under a drag that
+	// is still holding its `window` listeners. Those closures survive the unmount, and
+	// the next release would otherwise write a trim through a hook the user has already
+	// navigated away from.
+	it("drops a trim still in flight when the timeline unmounts", () => {
+		const { clipEls, tl, unmount } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0 });
+		window.dispatchEvent(pointerEvent("pointermove", -100));
+		unmount();
+		window.dispatchEvent(pointerEvent("pointerup", -100));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// The grip sits inside the card, whose own pointerdown starts a reorder and
+	// whose click selects. Only one gesture can own the press.
+	it("does not let a trim double as a selection", () => {
+		const { clipEls, tl } = renderTimeline([clip(0, 900), clip(900, 1800)]);
+		const grip = gripFor(clipEls[0], "end");
+		dragHandle(grip, -50);
+		// dragHandle stops at pointerup, but a real pointer sequence ends in a click
+		// that bubbles to the card, whose handler selects. Dispatching it is the only
+		// way this asserts anything: without it the test passes even with the grip's
+		// stopPropagation deleted.
+		fireEvent.click(grip);
+		expect(tl.selectClip).not.toHaveBeenCalled();
 	});
 });

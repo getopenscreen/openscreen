@@ -306,6 +306,94 @@ describe("useTimeline backfills missing source dimensions on load", () => {
 		expect(saved?.video).toMatchObject({ width: 1920, height: 1080 });
 	});
 
+	// A fresh recording: the document is rewritten (duration, camera link, auto-zoom) while
+	// the probe is still out. That re-render used to cancel the probe's write for good.
+	it("still persists probed dims when the document changes while the probe is running", async () => {
+		let resolveProbe!: (dims: { width: number; height: number }) => void;
+		probeVideoDimensionsMock.mockReturnValue(
+			new Promise((resolve) => {
+				resolveProbe = resolve;
+			}),
+		);
+		const unprobed = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: unprobed,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(1));
+		act(() => {
+			useProjectStore.setState({ document: { ...unprobed, zoomRanges: [] }, revision: 2 });
+		});
+		await act(async () => {
+			resolveProbe({ width: 1080, height: 1920 });
+		});
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		const saved = useProjectStore.getState().document?.assets.find((a) => a.id === "asset_1");
+		expect(saved?.video).toMatchObject({ width: 1080, height: 1920 });
+	});
+
+	// The fresh-recording auto-zooms are saved while the probe is out. The store only takes
+	// them once that save returns, so a backfill built on the store before then erased them.
+	it("keeps a save that is still in flight when the probe resolves", async () => {
+		let resolveProbe!: (dims: { width: number; height: number }) => void;
+		probeVideoDimensionsMock.mockReturnValue(
+			new Promise((resolve) => {
+				resolveProbe = resolve;
+			}),
+		);
+		const unprobed = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: unprobed,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(1));
+
+		let releaseZoomSave!: () => void;
+		const zoomSaveGate = new Promise<void>((resolve) => {
+			releaseZoomSave = resolve;
+		});
+		bridgeMocks.save.mockImplementationOnce(async (doc: typeof sampleDoc) => {
+			await zoomSaveGate;
+			return { success: true, document: doc };
+		});
+		const zoomed = {
+			...unprobed,
+			zoomRanges: [
+				{ id: "zoom_1", startMs: 0, endMs: 1000, depth: 3, focus: { cx: 0.5, cy: 0.5 } },
+			],
+		} as AxcutDocument;
+		let zoomSave!: Promise<boolean>;
+		act(() => {
+			zoomSave = useProjectStore.getState().saveDocument(zoomed, { history: true });
+		});
+		await act(async () => {
+			resolveProbe({ width: 1080, height: 1920 });
+			await new Promise((r) => setTimeout(r, 0));
+		});
+		await act(async () => {
+			releaseZoomSave();
+			await zoomSave;
+		});
+
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(2));
+		await waitFor(() => {
+			const doc = useProjectStore.getState().document;
+			expect(doc?.zoomRanges).toHaveLength(1);
+			expect(doc?.assets.find((a) => a.id === "asset_1")?.video).toMatchObject({
+				width: 1080,
+				height: 1920,
+			});
+		});
+	});
+
 	it("leaves an asset that already has video dims untouched", async () => {
 		useProjectStore.setState({
 			projectId: "proj_test",

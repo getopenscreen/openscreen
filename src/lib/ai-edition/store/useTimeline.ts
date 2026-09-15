@@ -39,7 +39,7 @@ import {
 } from "../timeline/timelineMap";
 import { dropTrimPillsByIds, resolveTimelineSpanToTrim } from "../timeline/trim-mapping";
 import type { AutoZoomSuggestion } from "../timeline/zoom-suggestions";
-import { useProjectStore } from "./projectStore";
+import { useProjectStore, waitForDocumentSaves } from "./projectStore";
 
 // How long a region lasts when the caller doesn't say. The timeline's toolbar
 // passes its own duration instead, derived from the current zoom so the new pill
@@ -192,7 +192,13 @@ export function useTimeline() {
 				!probedAssetIdsRef.current.has(a.id),
 		);
 		if (missing.length === 0) return;
-		let cancelled = false;
+		// No cleanup cancels this. The effect re-runs on EVERY document change, and a fresh
+		// recording changes it several times while the probe is out (placeholder seed,
+		// measured duration, camera link, auto-zoom). A cancel dropped the result while the
+		// asset was already marked attempted, so nothing ever probed it again that session and
+		// the take was exported with no dims. The write below re-reads the store instead, and
+		// the project check is the only staleness that matters.
+		const originatingProjectId = document.project.id;
 		void (async () => {
 			type Dims = { width: number; height: number };
 			const probed: Record<string, { video?: Dims; camera?: Dims }> = {};
@@ -211,10 +217,18 @@ export function useTimeline() {
 				}
 				if (entry.video || entry.camera) probed[a.id] = entry;
 			}
-			if (cancelled || Object.keys(probed).length === 0) return;
+			if (Object.keys(probed).length === 0) return;
+			// The store only takes a document once its save returns, so a write still in flight
+			// (the fresh-recording auto-zooms, typically) is invisible here. Building on the store
+			// before it lands and saving after it would erase it. Wait it out; on a timeout,
+			// write nothing and let a later run probe again.
+			if ((await waitForDocumentSaves()) === "timeout") {
+				for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
+				return;
+			}
 			// Re-read fresh state so a concurrent edit made while probing isn't stomped.
 			const current = useProjectStore.getState().document;
-			if (!current) return;
+			if (!current || current.project.id !== originatingProjectId) return;
 			// `history: false` — see the comment above: a backfill nobody asked for must
 			// not become the thing the next Ctrl+Z reverses.
 			await useProjectStore.getState().saveDocument(
@@ -237,9 +251,6 @@ export function useTimeline() {
 				{ history: false },
 			);
 		})();
-		return () => {
-			cancelled = true;
-		};
 	}, [document]);
 
 	// Backfill the real duration of imported audio assets (issue #350), the audio

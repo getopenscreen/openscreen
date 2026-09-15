@@ -48,7 +48,8 @@
 		"unhide": "显示全部",
 		"saveDiagnostics": "保存诊断信息",
 		"starOnGithub": "在 GitHub 上点星标",
-		"permissions": "权限…"
+		"permissions": "权限…",
+		"closeNotification": "关闭通知"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} 已发布。当前版本为 {{currentVersion}}。",

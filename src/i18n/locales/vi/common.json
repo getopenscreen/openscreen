@@ -48,7 +48,8 @@
 		"unhide": "Hiển thị tất cả",
 		"saveDiagnostics": "Lưu thông tin chẩn đoán",
 		"starOnGithub": "Gắn sao trên GitHub",
-		"permissions": "Quyền…"
+		"permissions": "Quyền…",
+		"closeNotification": "Đóng thông báo"
 	},
 	"updates": {
 		"available": "Đã có OpenScreen {{latestVersion}}. Bạn đang dùng phiên bản {{currentVersion}}.",

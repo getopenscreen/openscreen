@@ -48,7 +48,8 @@
 		"unhide": "すべて表示",
 		"saveDiagnostics": "診断情報を保存",
 		"starOnGithub": "GitHub でスターを付ける",
-		"permissions": "アクセス許可…"
+		"permissions": "アクセス許可…",
+		"closeNotification": "通知を閉じる"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} を利用できます。現在のバージョンは {{currentVersion}} です。",

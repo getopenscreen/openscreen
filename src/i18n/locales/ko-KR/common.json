@@ -48,7 +48,8 @@
 		"unhide": "모두 보기",
 		"saveDiagnostics": "진단 정보 저장",
 		"starOnGithub": "GitHub에서 별 누르기",
-		"permissions": "권한…"
+		"permissions": "권한…",
+		"closeNotification": "알림 닫기"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} 버전을 사용할 수 있습니다. 현재 버전은 {{currentVersion}}입니다.",

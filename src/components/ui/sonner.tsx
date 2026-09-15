@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { Toaster as Sonner } from "sonner";
+import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
@@ -18,6 +19,7 @@ const TOKEN_STYLE = {
 } as CSSProperties;
 
 const Toaster = ({ className, style, ...props }: ToasterProps) => {
+	const tc = useScopedT("common");
 	return (
 		<Sonner
 			className={cn(
@@ -26,7 +28,16 @@ const Toaster = ({ className, style, ...props }: ToasterProps) => {
 			)}
 			style={{ ...TOKEN_STYLE, ...style }}
 			duration={3000}
+			// A toast that can only be waited out is the one case where the 3s timer works
+			// against the reader: an error with a long description is dismissed before it is
+			// finished, and a stack of them hides the editor with no way to clear it. The
+			// cross is placed on the END side by `src/index.css` — sonner puts it on the
+			// start side, which is not where anything else in this app closes.
+			closeButton
 			toastOptions={{
+				// Sonner's default is the untranslated "Close toast"; the rest of the app
+				// speaks 13 languages.
+				closeButtonAriaLabel: tc("actions.closeNotification"),
 				style: { boxShadow: "var(--elev-pop)" },
 				classNames: {
 					// `!`: sonner colours the description per its own theme, above any plain class.
@@ -35,6 +46,8 @@ const Toaster = ({ className, style, ...props }: ToasterProps) => {
 						"!h-7 !rounded-[8px] !bg-[var(--accent)] !px-2.5 !text-[13px] !text-[var(--accent-on)]",
 					cancelButton:
 						"!h-7 !rounded-[8px] !bg-[var(--surface-3)] !px-2.5 !text-[13px] !text-[var(--fg)]",
+					// The button's placement lives in src/index.css; only its colours follow the tokens.
+					closeButton: "!text-[var(--muted)] hover:!text-[var(--fg)]",
 				},
 			}}
 			{...props}

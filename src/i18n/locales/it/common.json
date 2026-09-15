@@ -48,7 +48,8 @@
 		"unhide": "Mostra tutto",
 		"saveDiagnostics": "Salva dati diagnostici",
 		"starOnGithub": "Metti una stella su GitHub",
-		"permissions": "Permessi…"
+		"permissions": "Permessi…",
+		"closeNotification": "Chiudi la notifica"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} è disponibile. Stai usando la versione {{currentVersion}}.",

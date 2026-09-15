@@ -48,7 +48,8 @@
 		"unhide": "Zobrazit vše",
 		"saveDiagnostics": "Uložit diagnostiku",
 		"starOnGithub": "Dát hvězdu na GitHubu",
-		"permissions": "Oprávnění…"
+		"permissions": "Oprávnění…",
+		"closeNotification": "Zavřít oznámení"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} je k dispozici. Používáte verzi {{currentVersion}}.",

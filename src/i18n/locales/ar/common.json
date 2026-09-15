@@ -48,7 +48,8 @@
 		"unhide": "إظهار الكل",
 		"saveDiagnostics": "حفظ التشخيصات",
 		"starOnGithub": "ضع نجمة على GitHub",
-		"permissions": "الأذونات…"
+		"permissions": "الأذونات…",
+		"closeNotification": "إغلاق الإشعار"
 	},
 	"updates": {
 		"available": "يتوفر OpenScreen {{latestVersion}}. الإصدار المثبت هو {{currentVersion}}.",

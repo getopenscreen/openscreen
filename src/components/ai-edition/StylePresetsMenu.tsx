@@ -17,12 +17,12 @@ import { getEditorSettings, patchEditorSettings } from "@/lib/ai-edition/store/e
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import {
+	FACTORY_STYLE_PRESET_ID,
 	type StylePreset,
 	type StylePresetAppearance,
 	sanitizeStylePresetName,
 } from "@/lib/ai-edition/stylePresets";
 import {
-	FACTORY_STYLE_PRESET_ID,
 	factoryStylePresetAppearance,
 	stylePresetAppearanceFromSettings,
 	stylePresetPatch,
@@ -96,7 +96,7 @@ function NameForm({
 }: NameFormProps) {
 	const [name, setName] = useState(initialName);
 	const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-		if (event.key === "Enter") {
+		if (event.key === "Enter" && !busy) {
 			event.preventDefault();
 			onSubmit(name);
 		}
@@ -106,6 +106,7 @@ function NameForm({
 		<div className={styles.presetForm}>
 			<input
 				type="text"
+				disabled={busy}
 				autoFocus
 				value={name}
 				placeholder={placeholder}
@@ -188,16 +189,16 @@ export function StylePresetsMenu() {
 	const current = stylePresetAppearanceFromSettings(settings);
 	const factory = factoryStylePresetAppearance();
 
-	const apply = (appearance: StylePresetAppearance, name: string) => {
+	const apply = async (appearance: StylePresetAppearance, name: string) => {
 		setOpen(false);
 		const patch = stylePresetPatch(appearance);
+		if (!(await set(patch))) return;
 		// The overlay only pushes native params on mount, and each control here pushes its own
 		// diff; a preset touches all of them at once, so it pushes the whole resulting snapshot.
 		const doc = useProjectStore.getState().document;
 		if (doc && isNativeCompositorActive()) {
 			pushAllNativeParams(getEditorSettings(patchEditorSettings(doc, patch)));
 		}
-		void set(patch);
 		toast.success(ts("stylePresets.applied", { name }));
 	};
 
@@ -323,7 +324,7 @@ export function StylePresetsMenu() {
 							role="menuitemradio"
 							aria-checked={active}
 							className={rowClass(active)}
-							onClick={() => apply(preset.appearance, preset.name)}
+							onClick={() => void apply(preset.appearance, preset.name)}
 						>
 							<span className={styles.presetCheck} aria-hidden="true">
 								{active ? <Check size={12} /> : null}
@@ -433,7 +434,7 @@ export function StylePresetsMenu() {
 						aria-checked={factoryActive}
 						key={FACTORY_STYLE_PRESET_ID}
 						className={rowClass(factoryActive)}
-						onClick={() => apply(factory, ts("stylePresets.factoryName"))}
+						onClick={() => void apply(factory, ts("stylePresets.factoryName"))}
 					>
 						<span className={styles.presetCheck} aria-hidden="true">
 							{factoryActive ? <Check size={12} /> : null}

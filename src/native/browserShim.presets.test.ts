@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The shim keeps presets in localStorage, so this needs a DOM.
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StylePresetAppearance } from "@/lib/ai-edition/stylePresets";
 import { installBrowserShims } from "./browserShim";
 import {
@@ -76,6 +76,36 @@ describe("browserShim presets", () => {
 		const renamed = await presets.rename(one.id, "Three");
 		expect(renamed).toMatchObject({ id: "Three", name: "Three" });
 		expect((await presets.list()).map((p) => p.id)).toEqual(["Three", "Two"]);
+	});
+
+	it("reserves the built-in preset id on create and rename", async () => {
+		await expect(presets.create("openscreen-factory", APPEARANCE)).rejects.toMatchObject({
+			code: "NAME_TAKEN",
+		});
+		const created = await presets.create("Mine", APPEARANCE);
+		await expect(presets.rename(created.id, "OPENSCREEN-FACTORY")).rejects.toMatchObject({
+			code: "NAME_TAKEN",
+		});
+	});
+
+	it("rejects every mutation when localStorage persistence fails", async () => {
+		const created = await presets.create("Mine", APPEARANCE);
+		const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+			throw new DOMException("full", "QuotaExceededError");
+		});
+		try {
+			for (const mutate of [
+				() => presets.create("Other", APPEARANCE),
+				() => presets.rename(created.id, "Renamed"),
+				() => presets.update(created.id, { ...APPEARANCE, padding: 10 }),
+				() => presets.delete(created.id),
+			]) {
+				await expect(mutate()).rejects.toMatchObject({ code: "INTERNAL_ERROR" });
+			}
+		} finally {
+			setItem.mockRestore();
+		}
+		expect((await presets.list()).map((preset) => preset.id)).toEqual(["Mine"]);
 	});
 
 	it("reports invalid input and missing presets with the bridge's codes", async () => {

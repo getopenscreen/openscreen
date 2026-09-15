@@ -7,6 +7,7 @@ import { PROVIDER_DEFINITIONS } from "../../electron/ai-edition/provider-registr
 import { axcutSchemaVersion, migrateRawDocumentToCurrent } from "../lib/ai-edition/schema";
 import {
 	compareStylePresets,
+	FACTORY_STYLE_PRESET_ID,
 	parseStylePresetAppearance,
 	type StylePreset,
 	type StylePresetAppearance,
@@ -400,7 +401,11 @@ function createShimBridgeClient() {
 		try {
 			localStorage.setItem(presetsStorageKey, JSON.stringify(records));
 		} catch {
-			// ponytail: localStorage may be full or unavailable; silently skip
+			throw new NativeBridgeRequestError({
+				code: "INTERNAL_ERROR",
+				message: "Failed to persist style presets.",
+				retryable: false,
+			});
 		}
 	};
 	const presetError = (code: "NAME_TAKEN" | "NOT_FOUND" | "INVALID_REQUEST", message: string) =>
@@ -426,6 +431,9 @@ function createShimBridgeClient() {
 		name: string,
 		exceptId?: string,
 	) => {
+		if (id.toLowerCase() === FACTORY_STYLE_PRESET_ID) {
+			throw presetError("NAME_TAKEN", `A style preset named "${name}" already exists.`);
+		}
 		const taken = Object.entries(records).some(
 			([otherId, record]) =>
 				otherId !== exceptId &&

@@ -129,6 +129,13 @@ describe("StylePresetService", () => {
 		await expectCode(service.create("corrupt", APPEARANCE), "NAME_TAKEN");
 	});
 
+	it("reserves the built-in preset id on create and rename", async () => {
+		await expectCode(service.create("openscreen-factory", APPEARANCE), "NAME_TAKEN");
+		const created = await service.create("Mine", APPEARANCE);
+		await expectCode(service.rename(created.id, "OPENSCREEN-FACTORY"), "NAME_TAKEN");
+		expect((await service.list()).map((preset) => preset.id)).toEqual(["Mine"]);
+	});
+
 	it("rejects an invalid appearance before writing anything", async () => {
 		await expect(
 			service.create("Bad", { ...APPEARANCE, wallpaper: "file:///Users/alice/a.jpg" }),
@@ -154,6 +161,24 @@ describe("StylePresetService", () => {
 		const renamed = await service.rename(created.id, "Studio");
 		expect(renamed).toMatchObject({ id: "Studio", name: "Studio", appearance: APPEARANCE });
 		expect(await fs.readdir(dir)).toEqual(["Studio.openscreenpreset"]);
+	});
+
+	it("removes the destination and preserves the source when rename cleanup fails", async () => {
+		const created = await service.create("Source", APPEARANCE);
+		const sourcePath = path.join(dir, "Source.openscreenpreset");
+		const unlink = fs.unlink.bind(fs);
+		vi.spyOn(fs, "unlink").mockImplementation(async (filePath) => {
+			if (filePath === sourcePath) {
+				throw Object.assign(new Error("busy"), { code: "EBUSY" });
+			}
+			return unlink(filePath);
+		});
+
+		await expect(service.rename(created.id, "Destination")).rejects.toMatchObject({
+			code: "EBUSY",
+		});
+		expect((await fs.readdir(dir)).sort()).toEqual(["Source.openscreenpreset"]);
+		expect(await service.list()).toMatchObject([{ id: "Source", name: "Source" }]);
 	});
 
 	it("updates the appearance and keeps the name", async () => {

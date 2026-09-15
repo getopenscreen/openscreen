@@ -24,6 +24,8 @@ export const STYLE_PRESET_FILE_EXTENSION = ".openscreenpreset";
 export const STYLE_PRESET_FORMAT = "openscreen-style-preset";
 export const STYLE_PRESET_FORMAT_VERSION = 1;
 export const STYLE_PRESET_NAME_MAX_LENGTH = 80;
+/** Reserved for the built-in row; a user preset must never resolve to this file id. */
+export const FACTORY_STYLE_PRESET_ID = "openscreen-factory";
 /** Characters, not bytes: a 15 MB base64 image is ~11 MB decoded, far past any wallpaper. */
 export const STYLE_PRESET_DATA_URL_MAX_LENGTH = 15 * 1024 * 1024;
 /** Colours and gradients are CSS text; anything this long is not one a user typed. */

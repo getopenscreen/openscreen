@@ -11,6 +11,7 @@ import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import {
 	compareStylePresets,
+	FACTORY_STYLE_PRESET_ID,
 	parseStylePresetFile,
 	STYLE_PRESET_FILE_EXTENSION,
 	type StylePreset,
@@ -116,6 +117,7 @@ export class StylePresetService {
 			// Validates before anything touches the disk.
 			const json = serializeStylePresetFile({ name: cleanName, appearance });
 			const id = stylePresetFileBaseName(cleanName);
+			this.assertNotFactoryId(id, cleanName);
 			await this.ensureDirectory();
 			this.assertNameFree(await this.readEntries(), id, cleanName);
 			await this.writeAtomic(this.pathFor(id), json);
@@ -128,6 +130,7 @@ export class StylePresetService {
 			const current = await this.read(id);
 			const cleanName = sanitizeStylePresetName(name);
 			const nextId = stylePresetFileBaseName(cleanName);
+			this.assertNotFactoryId(nextId, cleanName);
 			this.assertNameFree(await this.readEntries(), nextId, cleanName, id);
 			const json = serializeStylePresetFile({ name: cleanName, appearance: current.appearance });
 			const from = this.pathFor(id);
@@ -142,9 +145,12 @@ export class StylePresetService {
 				await renameWithRetry(from, to);
 			} else {
 				await this.writeAtomic(to, json);
-				await fs.unlink(from).catch((error) => {
+				try {
+					await fs.unlink(from);
+				} catch (error) {
+					if (!isMissing(error)) await fs.unlink(to).catch(() => undefined);
 					if (!isMissing(error)) throw error;
-				});
+				}
 			}
 			return this.read(nextId);
 		});
@@ -241,6 +247,12 @@ export class StylePresetService {
 				(preset) => preset.id !== exceptId && preset.name.toLowerCase() === nameKey,
 			);
 		if (taken) {
+			throw new StylePresetError("NAME_TAKEN", `A style preset named "${name}" already exists.`);
+		}
+	}
+
+	private assertNotFactoryId(id: string, name: string): void {
+		if (id.toLowerCase() === FACTORY_STYLE_PRESET_ID) {
 			throw new StylePresetError("NAME_TAKEN", `A style preset named "${name}" already exists.`);
 		}
 	}

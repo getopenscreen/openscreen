@@ -131,7 +131,7 @@ beforeEach(() => {
 	localStorage.clear();
 	state.platform = "darwin";
 	state.settings = DEFAULT_EDITOR_SETTINGS;
-	state.set = vi.fn<Fn>(async () => undefined);
+	state.set = vi.fn<Fn>(async () => true);
 	state.toastSuccess = vi.fn<Fn>();
 	state.presets.list = vi.fn<Fn>(async () => [WARM]);
 	state.presets.create = vi.fn<Fn>(async (name) => ({ ...WARM, id: name, name }));
@@ -182,7 +182,16 @@ describe("Presets menu in the editor top bar", () => {
 		expect(state.set).toHaveBeenCalledTimes(1);
 		expect(state.set).toHaveBeenCalledWith(stylePresetPatch(WARM.appearance));
 		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-		expect(state.toastSuccess).toHaveBeenCalledWith("Applied “Warm”");
+		await waitFor(() => expect(state.toastSuccess).toHaveBeenCalledWith("Applied “Warm”"));
+	});
+
+	it("does not report an applied preset when the project save fails", async () => {
+		state.set = vi.fn<Fn>(async () => false);
+		renderPane();
+		await openMenu();
+		fireEvent.click(screen.getByRole("menuitemradio", { name: "Warm" }));
+		await waitFor(() => expect(state.set).toHaveBeenCalledTimes(1));
+		expect(state.toastSuccess).not.toHaveBeenCalled();
 	});
 
 	it("applies the built-in preset from its row", async () => {
@@ -251,6 +260,23 @@ describe("Presets menu in the editor top bar", () => {
 		expect(state.presets.list).toHaveBeenCalledTimes(2);
 		expect(state.toastSuccess).toHaveBeenCalledWith("Preset saved");
 		expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+	});
+
+	it("blocks repeated Enter submissions while create is busy", async () => {
+		let finishCreate: (() => void) | undefined;
+		state.presets.create = vi.fn<Fn>(
+			() => new Promise<void>((resolve) => (finishCreate = resolve)),
+		);
+		renderPane();
+		await openMenu();
+		fireEvent.click(screen.getByRole("menuitem", { name: "Create new preset…" }));
+		const input = screen.getByRole("textbox", { name: "Preset name" });
+		fireEvent.change(input, { target: { value: "Mine" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await waitFor(() => expect(input).toBeDisabled());
+		fireEvent.keyDown(input, { key: "Enter" });
+		expect(state.presets.create).toHaveBeenCalledTimes(1);
+		finishCreate?.();
 	});
 
 	it("asks for a name instead of saving a blank one", async () => {

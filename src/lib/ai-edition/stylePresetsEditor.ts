@@ -9,10 +9,6 @@ import {
 } from "@/lib/ai-edition/store/editorSettings";
 import type { StylePresetAppearance } from "@/lib/ai-edition/stylePresets";
 
-/** The built-in look every new project starts from. Never a file, so never an id on disk
- *  either: file ids are base names, and this one is reserved for the list's first entry. */
-export const FACTORY_STYLE_PRESET_ID = "openscreen-factory";
-
 /** Copies the appearance fields out of a settings snapshot — nothing footage-dependent. */
 export function stylePresetAppearanceFromSettings(
 	settings: EditorSettingsSnapshot,

@@ -30,20 +30,39 @@ describe("modelManager", () => {
 		}
 	});
 
+	it("exposes the silero-vad model descriptor with a single GGML file", () => {
+		expect(STT_MODELS["silero-vad"].cacheDir).toBe("whisper-ggml");
+		expect(STT_MODELS["silero-vad"].repoId).toBe("ggml-org/whisper-vad");
+		expect(STT_MODELS["silero-vad"].files.length).toBe(1);
+		expect(STT_MODELS["silero-vad"].files[0].name).toBe("ggml-silero-v6.2.0.bin");
+		expect(STT_MODELS["silero-vad"].files[0].expectedSha256).toBe(
+			"2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
+		);
+		for (const f of STT_MODELS["silero-vad"].files) {
+			expect(f.approximateBytes).toBeGreaterThan(0);
+			expect(f.url).toContain("huggingface.co");
+			expect(f.url).toMatch(/\/resolve\/[0-9a-f]{40}\//);
+		}
+	});
+
 	it("modelPaths places the GGML file under the cache directory", () => {
 		const paths = modelPaths(dir);
 		expect(paths.whisper).toBe(path.join(dir, "whisper-ggml", "ggml-small-q8_0.bin"));
+		expect(paths["silero-vad"]).toBe(path.join(dir, "whisper-ggml", "ggml-silero-v6.2.0.bin"));
 	});
 
 	it("areModelsPresent returns false when the model file is missing", async () => {
 		expect(await areModelsPresent(dir)).toBe(false);
 	});
 
-	it("areModelsPresent returns true once the GGML file is present", async () => {
+	it("areModelsPresent returns true once the GGML files are present", async () => {
 		const paths = modelPaths(dir);
 		await mkdir(path.dirname(paths.whisper), { recursive: true });
 		expect(await areModelsPresent(dir)).toBe(false);
 		await writeFile(paths.whisper, "dummy-ggml");
+		expect(await areModelsPresent(dir, ["whisper"])).toBe(true);
+		expect(await areModelsPresent(dir)).toBe(false);
+		await writeFile(paths["silero-vad"], "dummy-vad");
 		expect(await areModelsPresent(dir)).toBe(true);
 	});
 

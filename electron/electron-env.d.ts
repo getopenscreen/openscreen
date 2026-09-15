@@ -422,6 +422,13 @@ interface Window {
 		revealInFolder: (
 			filePath: string,
 		) => Promise<{ success: boolean; error?: string; message?: string }>;
+		getRecordingsDir: () => Promise<{ path: string; isDefault: boolean }>;
+		chooseRecordingsDir: () => Promise<
+			{ success: true; path: string } | { success: false; canceled?: boolean; message?: string }
+		>;
+		resetRecordingsDir: () => Promise<
+			{ success: true; path: string } | { success: false; message?: string }
+		>;
 		getShortcuts: () => Promise<Record<string, unknown> | null>;
 		saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>;
 		updateGlobalShortcut: (binding: {

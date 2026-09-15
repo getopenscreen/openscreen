@@ -94,6 +94,12 @@
 		"previewUnavailable": "المعاينة غير متاحة",
 		"about": "حول",
 		"version": "الإصدار {{version}}",
-		"checkingForUpdates": "جارٍ التحقق…"
+		"checkingForUpdates": "جارٍ التحقق…",
+		"storage": "التخزين",
+		"storageHint": "أين يتم تخزين التسجيلات مؤقتًا أثناء الالتقاط وحفظها عند التوقف.",
+		"chooseFolder": "اختر مجلدًا",
+		"resetToDefault": "إعادة التعيين إلى الافتراضي",
+		"changingFolder": "جارٍ التبديل…",
+		"changeFolderFailed": "تعذّر التبديل إلى هذا المجلد"
 	}
 }

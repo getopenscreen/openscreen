@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -59,6 +58,7 @@ import {
 	registerIpcHandlers,
 } from "./ipc/handlers";
 import { installMainProcessErrorGuards } from "./main-process-errors";
+import { RecordingsDirManager } from "./recording/recordingsDirManager";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
 import { loadUpdateMode, saveUpdateMode } from "./update-settings";
@@ -102,16 +102,42 @@ if (process.platform === "linux") {
 
 installMainProcessErrorGuards();
 
-export const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
+const recordingsDirManager = new RecordingsDirManager(app.getPath("userData"), () => isRecording);
+
+export const DEFAULT_RECORDINGS_DIR = recordingsDirManager.defaultDir;
+
+// Mutable: reassigned by setRecordingsDir() when the user picks a custom
+// location in settings. `handlers.ts` imports this as a live named binding,
+// so every call site there sees the change immediately — no restart needed.
+export let RECORDINGS_DIR = recordingsDirManager.dir;
 
 async function ensureRecordingsDir() {
 	try {
-		await fs.mkdir(RECORDINGS_DIR, { recursive: true });
+		await recordingsDirManager.ensureExists();
 		console.log("RECORDINGS_DIR:", RECORDINGS_DIR);
 		console.log("User Data Path:", app.getPath("userData"));
 	} catch (error) {
 		console.error("Failed to create recordings directory:", error);
 	}
+}
+
+/**
+ * Switches where recordings are read from and written to, going forward.
+ * Pass `null` to reset to the default (userData/recordings). Does not move
+ * any existing files — the old location is left untouched.
+ *
+ * Refuses to run while a recording is active: a capture in progress builds
+ * its output path from `RECORDINGS_DIR` up front, so swapping it mid-take
+ * would split one session's video and manifest across two directories. See
+ * RecordingsDirManager.setDir for the tested guard/ordering logic.
+ */
+export async function setRecordingsDir(customDir: string | null): Promise<string> {
+	RECORDINGS_DIR = await recordingsDirManager.setDir(customDir);
+	return RECORDINGS_DIR;
+}
+
+export function getRecordingsDirInfo() {
+	return recordingsDirManager.getInfo();
 }
 
 // The built directory structure

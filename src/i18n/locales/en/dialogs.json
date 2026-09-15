@@ -87,6 +87,10 @@
 		"videoFiles": "Video Files",
 		"audioFiles": "Audio Files",
 		"openscreenProject": "OpenScreen Project",
-		"allFiles": "All Files"
+		"allFiles": "All Files",
+		"selectRecordingsFolder": "Select Recordings Folder"
+	},
+	"recording": {
+		"lowDiskSpace": "Not enough disk space to start recording (only {{availableMb}} MB free). Free up space or choose a different recordings folder, then try again."
 	}
 }

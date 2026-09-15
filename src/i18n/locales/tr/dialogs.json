@@ -87,6 +87,10 @@
 		"videoFiles": "Video Dosyaları",
 		"audioFiles": "Ses dosyaları",
 		"openscreenProject": "OpenScreen Projesi",
-		"allFiles": "Tüm Dosyalar"
+		"allFiles": "Tüm Dosyalar",
+		"selectRecordingsFolder": "Kayıt klasörünü seç"
+	},
+	"recording": {
+		"lowDiskSpace": "Kaydı başlatmak için yeterli disk alanı yok (yalnızca {{availableMb}} MB boş). Alan boşaltın veya farklı bir kayıt klasörü seçip tekrar deneyin."
 	}
 }

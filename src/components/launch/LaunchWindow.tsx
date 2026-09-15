@@ -963,6 +963,12 @@ export function LaunchWindow() {
 			about: t("deviceSettings.about"),
 			checkForUpdates: tCommon("actions.checkForUpdates"),
 			checkingForUpdates: t("deviceSettings.checkingForUpdates"),
+			storage: t("deviceSettings.storage"),
+			storageHint: t("deviceSettings.storageHint"),
+			chooseFolder: t("deviceSettings.chooseFolder"),
+			resetToDefault: t("deviceSettings.resetToDefault"),
+			changingFolder: t("deviceSettings.changingFolder"),
+			changeFolderFailed: t("deviceSettings.changeFolderFailed"),
 		}),
 		[t, tCommon],
 	);

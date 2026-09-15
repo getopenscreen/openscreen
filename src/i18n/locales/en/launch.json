@@ -94,6 +94,12 @@
 		"previewUnavailable": "Preview unavailable",
 		"about": "About",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Checking…"
+		"checkingForUpdates": "Checking…",
+		"storage": "Storage",
+		"storageHint": "Where recordings are cached while capturing and saved when you stop.",
+		"chooseFolder": "Choose folder",
+		"resetToDefault": "Reset to default",
+		"changingFolder": "Switching…",
+		"changeFolderFailed": "Couldn't switch to that folder"
 	}
 }

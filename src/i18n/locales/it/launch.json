@@ -94,6 +94,12 @@
 		"previewUnavailable": "Anteprima non disponibile",
 		"about": "Info",
 		"version": "Versione {{version}}",
-		"checkingForUpdates": "Controllo…"
+		"checkingForUpdates": "Controllo…",
+		"storage": "Archiviazione",
+		"storageHint": "Dove vengono memorizzate nella cache le registrazioni durante la cattura e salvate all'arresto.",
+		"chooseFolder": "Scegli cartella",
+		"resetToDefault": "Ripristina predefinito",
+		"changingFolder": "Cambio in corso…",
+		"changeFolderFailed": "Impossibile passare a quella cartella"
 	}
 }

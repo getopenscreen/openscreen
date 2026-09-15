@@ -94,6 +94,12 @@
 		"previewUnavailable": "预览不可用",
 		"about": "关于",
 		"version": "版本 {{version}}",
-		"checkingForUpdates": "正在检查…"
+		"checkingForUpdates": "正在检查…",
+		"storage": "存储位置",
+		"storageHint": "录制过程中缓存的位置，以及停止后保存的位置。",
+		"chooseFolder": "选择文件夹",
+		"resetToDefault": "恢复默认设置",
+		"changingFolder": "正在切换…",
+		"changeFolderFailed": "无法切换到该文件夹"
 	}
 }

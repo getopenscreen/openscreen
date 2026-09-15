@@ -1,5 +1,5 @@
-import { Check, X } from "lucide-react";
-import { memo, useEffect, useRef } from "react";
+import { Check, FolderOpen, RotateCcw, X } from "lucide-react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import type { CameraDevice } from "../../hooks/useCameraDevices";
 import { useCameraPreviewStream } from "../../hooks/useCameraPreviewStream";
@@ -25,7 +25,108 @@ export interface HudDeviceSettingsLabels {
 	about: string;
 	checkForUpdates: string;
 	checkingForUpdates: string;
+	storage: string;
+	storageHint: string;
+	chooseFolder: string;
+	resetToDefault: string;
+	changingFolder: string;
+	changeFolderFailed: string;
 }
+
+/** Where recordings are cached and saved, with folder-picker and reset. */
+const RecordingsLocationSetting = memo(function RecordingsLocationSetting({
+	labels,
+}: {
+	labels: HudDeviceSettingsLabels;
+}) {
+	const [info, setInfo] = useState<{ path: string; isDefault: boolean } | null>(null);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState(false);
+
+	useEffect(() => {
+		let cancelled = false;
+		window.electronAPI
+			?.getRecordingsDir?.()
+			.then((result) => {
+				if (!cancelled) setInfo(result);
+			})
+			.catch(() => {
+				// Nothing to show if this fails; the picker still works on demand.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const handleChoose = async () => {
+		setBusy(true);
+		setError(false);
+		try {
+			const result = await window.electronAPI?.chooseRecordingsDir?.();
+			if (result?.success) {
+				setInfo({ path: result.path, isDefault: false });
+			} else if (result && !result.canceled) {
+				setError(true);
+			}
+		} catch {
+			setError(true);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const handleReset = async () => {
+		setBusy(true);
+		setError(false);
+		try {
+			const result = await window.electronAPI?.resetRecordingsDir?.();
+			if (result?.success) {
+				setInfo({ path: result.path, isDefault: true });
+			} else {
+				setError(true);
+			}
+		} catch {
+			setError(true);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<>
+			<div className={styles.hudMenuSectionLabel}>{labels.storage}</div>
+			<div className={styles.hudModalHint}>{labels.storageHint}</div>
+			{info ? (
+				<div className={styles.hudStoragePath} title={info.path}>
+					{info.path}
+				</div>
+			) : null}
+			<div className={styles.hudStorageActionRow}>
+				<button
+					type="button"
+					className={styles.hudStorageActionButton}
+					onClick={handleChoose}
+					disabled={busy}
+				>
+					<FolderOpen size={12} />
+					<span className="truncate">{busy ? labels.changingFolder : labels.chooseFolder}</span>
+				</button>
+				{info && !info.isDefault ? (
+					<button
+						type="button"
+						className={styles.hudStorageActionButton}
+						onClick={handleReset}
+						disabled={busy}
+					>
+						<RotateCcw size={12} />
+						<span className="truncate">{labels.resetToDefault}</span>
+					</button>
+				) : null}
+			</div>
+			{error ? <div className={styles.hudModalHint}>{labels.changeFolderFailed}</div> : null}
+		</>
+	);
+});
 
 /** Segmented input-level bar, driven by the live analyser. */
 const LevelMeter = memo(function LevelMeter({ level }: { level: number }) {
@@ -241,6 +342,8 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 					</div>
 				</>
 			) : null}
+
+			<RecordingsLocationSetting labels={labels} />
 		</div>
 	);
 });

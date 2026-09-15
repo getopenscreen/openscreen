@@ -87,6 +87,10 @@
 		"videoFiles": "影片檔案",
 		"audioFiles": "音訊檔案",
 		"openscreenProject": "OpenScreen 專案",
-		"allFiles": "所有檔案"
+		"allFiles": "所有檔案",
+		"selectRecordingsFolder": "選擇錄製資料夾"
+	},
+	"recording": {
+		"lowDiskSpace": "磁碟空間不足，無法開始錄製（僅剩 {{availableMb}} MB 可用空間）。請釋放空間或選擇其他錄製資料夾，然後再試一次。"
 	}
 }

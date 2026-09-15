@@ -87,6 +87,10 @@
 		"videoFiles": "File video",
 		"audioFiles": "File audio",
 		"openscreenProject": "Progetto OpenScreen",
-		"allFiles": "Tutti i file"
+		"allFiles": "Tutti i file",
+		"selectRecordingsFolder": "Seleziona cartella registrazioni"
+	},
+	"recording": {
+		"lowDiskSpace": "Spazio su disco insufficiente per avviare la registrazione (solo {{availableMb}} MB disponibili). Libera spazio o scegli un'altra cartella per le registrazioni, quindi riprova."
 	}
 }

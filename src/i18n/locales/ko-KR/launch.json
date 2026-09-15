@@ -94,6 +94,12 @@
 		"previewUnavailable": "미리 보기를 사용할 수 없습니다",
 		"about": "정보",
 		"version": "버전 {{version}}",
-		"checkingForUpdates": "확인 중…"
+		"checkingForUpdates": "확인 중…",
+		"storage": "저장 위치",
+		"storageHint": "캡처 중 녹화가 캐시되고 중지 시 저장되는 위치입니다.",
+		"chooseFolder": "폴더 선택",
+		"resetToDefault": "기본값으로 재설정",
+		"changingFolder": "전환 중…",
+		"changeFolderFailed": "해당 폴더로 전환하지 못했습니다"
 	}
 }

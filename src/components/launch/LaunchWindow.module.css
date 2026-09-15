@@ -338,6 +338,51 @@
 	color: rgba(255, 255, 255, 0.4);
 }
 
+/* Storage-location action buttons (choose folder / reset to default): same
+   visual language as .languageMenuItem but inline, side by side, not full-width. */
+.hudStorageActionRow {
+	display: flex;
+	gap: 6px;
+	padding: 0 10px 8px;
+}
+
+.hudStorageActionButton {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	padding: 0.425rem 0.5rem;
+	border-radius: 0.45rem;
+	font-size: 11px;
+	color: rgba(255, 255, 255, 0.72);
+	background: rgba(255, 255, 255, 0.05);
+	border: 0;
+	cursor: pointer;
+	transition: background-color 120ms ease, color 120ms ease;
+}
+
+.hudStorageActionButton:hover,
+.hudStorageActionButton:focus-visible {
+	background: rgba(255, 255, 255, 0.1);
+	color: #ffffff;
+	outline: none;
+}
+
+.hudStorageActionButton:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.hudStoragePath {
+	padding: 0 10px 4px;
+	font-size: 10px;
+	color: rgba(255, 255, 255, 0.35);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 /* Thin separators between HUD toolbar control groups. */
 .hudDivider {
 	flex-shrink: 0;

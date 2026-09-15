@@ -94,6 +94,12 @@
 		"previewUnavailable": "Aperçu indisponible",
 		"about": "À propos",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Recherche…"
+		"checkingForUpdates": "Recherche…",
+		"storage": "Stockage",
+		"storageHint": "Emplacement de mise en cache des enregistrements pendant la capture, et d'enregistrement à l'arrêt.",
+		"chooseFolder": "Choisir un dossier",
+		"resetToDefault": "Réinitialiser par défaut",
+		"changingFolder": "Changement…",
+		"changeFolderFailed": "Impossible de passer à ce dossier"
 	}
 }

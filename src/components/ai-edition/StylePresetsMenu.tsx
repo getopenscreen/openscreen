@@ -1,4 +1,4 @@
-// The Composition pane's "Presets" menu: apply, save and manage editor style presets.
+// The editor top bar's "Presets" menu: apply, save and manage editor style presets.
 //
 // A preset is a file on disk (see src/lib/ai-edition/stylePresets.ts), so everything but
 // applying one goes through `nativeBridgeClient.presets`. Applying is a single
@@ -35,6 +35,7 @@ import {
 } from "@/native";
 import { getPlatform } from "@/utils/platformUtils";
 import styles from "./NewEditorShell.module.css";
+import topbarStyles from "./v4/EditorShellV4.module.css";
 
 /** Structural equality over plain JSON-shaped values. A preset read from disk carries its
  *  keys in file order, so a key-order-sensitive comparison would never light a row. */
@@ -397,11 +398,11 @@ export function StylePresetsMenu() {
 			<PopoverTrigger asChild>
 				<button
 					type="button"
-					className={styles.paneHeadBtn}
+					className={topbarStyles.ghostBtn}
 					aria-expanded={open}
 					disabled={!hasDocument}
 				>
-					<SwatchBook size={14} />
+					<SwatchBook size={15} />
 					{ts("stylePresets.button")}
 				</button>
 			</PopoverTrigger>

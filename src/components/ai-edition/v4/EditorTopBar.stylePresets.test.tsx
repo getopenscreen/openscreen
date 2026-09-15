@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The Composition pane's Presets menu, driven through the real pane and the real English
+// The editor top bar's Presets menu, driven through the real top bar and the real English
 // catalog: the bridge, the settings hook, the platform and the toaster are the only fakes.
 
 import "@testing-library/jest-dom";
@@ -77,7 +77,7 @@ vi.mock("@/native", async (importOriginal) => {
 	};
 });
 
-import { VideoEffectsPane } from "./RightPanes";
+import { EditorTopBar } from "./EditorTopBar";
 
 const WARM: StylePreset = {
 	id: "Warm",
@@ -86,11 +86,32 @@ const WARM: StylePreset = {
 	appearance: { ...factoryStylePresetAppearance(), padding: 42, wallpaper: "#aa5500" },
 };
 
+const noop = () => {};
+
 function renderPane() {
 	localStorage.setItem(LOCALE_STORAGE_KEY, "en");
 	return render(
 		<I18nProvider>
-			<VideoEffectsPane />
+			<EditorTopBar
+				mode="edit"
+				onModeChange={noop}
+				projectTitle="Project"
+				dirty={false}
+				canExport={false}
+				chatOpen={false}
+				actions={{
+					openProject: noop,
+					newProject: noop,
+					save: noop,
+					export: noop,
+					openSettings: noop,
+					renameProject: noop,
+					toggleChat: noop,
+					openProviderSettings: noop,
+					showAbout: noop,
+					checkForUpdates: noop,
+				}}
+			/>
 		</I18nProvider>,
 	);
 }
@@ -125,7 +146,7 @@ afterEach(() => {
 	localStorage.clear();
 });
 
-describe("Presets menu in the Composition pane", () => {
+describe("Presets menu in the editor top bar", () => {
 	it("lists the built-in preset first, then the saved ones", async () => {
 		renderPane();
 		const menu = await openMenu();

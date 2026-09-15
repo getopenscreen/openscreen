@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
@@ -70,10 +71,13 @@ async function closeApp(app: ElectronApplication) {
  * no `write-export-to-path` round-trip through the renderer any more, so the test
  * reads the finished file off disk instead of intercepting a buffer.
  */
-async function exportFromLoadedVideo(format: "gif" | "mp4"): Promise<Buffer> {
-	const outputPath = path.join(os.tmpdir(), `test-${format}-export-${Date.now()}.${format}`);
+async function exportFromLoadedVideo(
+	format: "gif" | "mp4",
+	cancelThenRetry = false,
+): Promise<Buffer> {
 	const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-e2e-export-"));
 	const appTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-e2e-tmp-"));
+	const outputPath = path.join(appTmpDir, `test-export.${format}`);
 	const app = await launchApp(userDataDir, appTmpDir);
 
 	try {
@@ -95,7 +99,34 @@ async function exportFromLoadedVideo(format: "gif" | "mp4"): Promise<Buffer> {
 		);
 		const testVideoInRecordings = path.join(recordingsDir, "test-sample.webm");
 		fs.mkdirSync(recordingsDir, { recursive: true });
-		fs.copyFileSync(TEST_VIDEO, testVideoInRecordings);
+		if (cancelThenRetry) {
+			// The two-second fixture can finish before a UI click reaches Cancel.
+			// Stream-copy repeats into a real eight-second source; no mocked exporter
+			// or artificial delay in the native frame walk.
+			execFileSync(
+				process.env.OPENSCREEN_TEST_FFMPEG ?? "ffmpeg",
+				[
+					"-v",
+					"error",
+					"-stream_loop",
+					"3",
+					"-i",
+					TEST_VIDEO,
+					"-c",
+					"copy",
+					"-t",
+					"8",
+					testVideoInRecordings,
+				],
+				{ timeout: 20_000 },
+			);
+			fs.writeFileSync(
+				outputPath,
+				Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64"),
+			);
+		} else {
+			fs.copyFileSync(TEST_VIDEO, testVideoInRecordings);
+		}
 
 		await hudWindow.evaluate(
 			(videoPath: string) => window.electronAPI.setCurrentVideoPath(videoPath),
@@ -143,6 +174,22 @@ async function exportFromLoadedVideo(format: "gif" | "mp4"): Promise<Buffer> {
 		await expect(startExport).toBeEnabled();
 		await startExport.click();
 
+		if (cancelThenRetry) {
+			const previousOutput = fs.readFileSync(outputPath);
+			// Progress proves the actual native encoder has produced frames.
+			await expect(dialog.getByText(/^[1-9]\d?%$/)).toBeVisible({ timeout: 30_000 });
+			await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
+			await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+			await expect(startExport).toBeEnabled({ timeout: 15_000 });
+			await expect(dialog).toBeVisible();
+			expect(fs.readFileSync(outputPath)).toEqual(previousOutput);
+			expect(
+				fs.readdirSync(appTmpDir).filter((name) => name.startsWith(".openscreen-gif-")),
+			).toEqual([]);
+			await expect(dialog.getByText("Saved to")).not.toBeVisible();
+			await startExport.click();
+		}
+
 		// The dialog swaps the placeholder for a progress block while the native
 		// exporter runs and finally reports the path it wrote to.
 		await expect(dialog.getByText("Saved to")).toBeVisible({ timeout: 85_000 });
@@ -153,6 +200,21 @@ async function exportFromLoadedVideo(format: "gif" | "mp4"): Promise<Buffer> {
 		);
 		expect(fs.statSync(outputPath).size).toBeGreaterThan(1024);
 		return fs.readFileSync(outputPath);
+	} catch (error) {
+		const editor = app.windows().find((window) => window.url().includes("windowType=editor"));
+		if (editor) {
+			await editor
+				.screenshot({ path: test.info().outputPath("export-failure.png") })
+				.catch(() => undefined);
+			console.error(
+				"Export dialog at failure:",
+				await editor
+					.getByRole("dialog")
+					.textContent({ timeout: 1_000 })
+					.catch(() => "unavailable"),
+			);
+		}
+		throw error;
 	} finally {
 		await closeApp(app);
 		if (fs.existsSync(outputPath)) {
@@ -173,5 +235,11 @@ test("exports an MP4 from a loaded video", async () => {
 test("exports a GIF from a loaded video", async () => {
 	const exported = await exportFromLoadedVideo("gif");
 
+	expect(exported.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a/);
+});
+
+test("cancels a running native GIF, preserves an existing file, and retries successfully", async () => {
+	test.setTimeout(180_000);
+	const exported = await exportFromLoadedVideo("gif", true);
 	expect(exported.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a/);
 });

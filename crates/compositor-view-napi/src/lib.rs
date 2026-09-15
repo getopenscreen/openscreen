@@ -12,6 +12,7 @@ use napi_derive::napi;
 use openscreen_compositor::compositor::{live_params_from_scene, Compositor};
 use openscreen_compositor::d3d::{Backend, Gpu};
 use openscreen_compositor::gif_export::{GifExportParams, GifStats};
+use openscreen_compositor::gif_export_control::{GifExportCancelled, GifExportControl};
 use openscreen_compositor::live::{LiveView, PausedPreviews};
 use openscreen_compositor::scene::Scene;
 use openscreen_compositor::{config, pipeline};
@@ -544,6 +545,24 @@ pub struct GifParamsInput {
 /// `Option<&str>`, et `None` désactive le rendu du curseur côté
 /// `Compositor` (équivalent de `cfg.cursor = false` dans
 /// `run_composited_multi`).
+#[napi]
+pub fn create_gif_export_control() -> External<GifExportControl> {
+    External::new(GifExportControl::default())
+}
+
+#[napi]
+pub fn cancel_gif_export(control: External<GifExportControl>) -> bool {
+    control.cancel()
+}
+
+fn gif_task_error(error: anyhow::Error) -> Error {
+    if error.is::<GifExportCancelled>() {
+        Error::from_reason("GIF_EXPORT_CANCELLED")
+    } else {
+        Error::from_reason(format!("{error:#}"))
+    }
+}
+
 pub struct ExportGifTask {
     /// Same clip list the MP4 export takes — GIF is now a multiclip export
     /// driven by the same walk, not a single-file special case.
@@ -554,6 +573,7 @@ pub struct ExportGifTask {
     scene_json: Option<String>,
     out_path: PathBuf,
     params: GifExportParams,
+    control: GifExportControl,
     on_progress: Option<ThreadsafeFunction<u32, ErrorStrategy::Fatal>>,
 }
 
@@ -562,6 +582,7 @@ impl Task for ExportGifTask {
     type JsValue = GifExportStats;
 
     fn compute(&mut self) -> Result<Self::Output> {
+        self.control.check().map_err(gif_task_error)?;
         // Mêmes garanties que `ExportMultiTask` : previews paused for the
         // whole render et restored exactement comme trouvées, y compris
         // sur les chemins d'erreur. L'export GPU+CPU ne partage pas le
@@ -576,6 +597,7 @@ impl Task for ExportGifTask {
         // host without a usable GPU could export an MP4 but not a GIF — the one path
         // where the CPU backend exists specifically so the export still completes.
         let gpu = Gpu::create_auto(false).map_err(|e| Error::from_reason(format!("{e:#}")))?;
+        self.control.check().map_err(gif_task_error)?;
         let mut cfg = config::all().pop().expect("au moins une config"); // C8
         cfg.zoom = false;
         cfg.layout_anim = false;
@@ -605,7 +627,7 @@ impl Task for ExportGifTask {
         comp.set_scene(scene);
 
         let mut progress = throttled_progress(self.on_progress.take());
-        openscreen_compositor::gif_export::export_gif(
+        openscreen_compositor::gif_export::export_gif_cancellable(
             &self.clips,
             &self.out_path,
             &gpu,
@@ -613,8 +635,9 @@ impl Task for ExportGifTask {
             &cfg,
             &self.params,
             &mut progress,
+            &self.control,
         )
-        .map_err(|e| Error::from_reason(format!("{e:#}")))
+        .map_err(gif_task_error)
     }
 
     fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
@@ -644,6 +667,7 @@ pub fn export_gif(
     scene_json: Option<String>,
     params: Option<GifParamsInput>,
     on_progress: Option<JsFunction>,
+    control: Option<External<GifExportControl>>,
 ) -> Result<AsyncTask<ExportGifTask>> {
     // Deliberately the same argument shape as `export_multi`: the caller builds
     // one clip list and one scene, and picks the container. Cursor comes from
@@ -673,6 +697,7 @@ pub fn export_gif(
         scene_json,
         out_path: PathBuf::from(out_path),
         params: gif_params,
+        control: control.map(|c| (*c).clone()).unwrap_or_default(),
         on_progress: make_progress_tsfn(on_progress)?,
     }))
 }

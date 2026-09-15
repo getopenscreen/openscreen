@@ -35,6 +35,7 @@ pub mod export_probe;
 pub mod ffi;
 pub mod frame_geometry;
 pub mod gif_export;
+pub mod gif_export_control;
 pub mod regions;
 // Multiplateforme à dessein : n'utilise que libavformat (liée sur les trois
 // cibles) et le shim C. Seul Linux l'appelle aujourd'hui, parce que c'est la

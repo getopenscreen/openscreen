@@ -1,14 +1,62 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CURSOR_THEMES, DEFAULT_CURSOR_SPRITES } from "../../../src/lib/cursor/cursorThemes";
+import type { CompositorViewAddon, GifExportStats } from "../../native/compositor-view/addon";
 import {
 	buildCandidatePaths,
 	CompositorViewService,
 	ffmpegSharedBinCandidates,
 	resolveSceneAssetPaths,
 } from "./compositorViewService";
+
+describe("native GIF cancellation capability", () => {
+	it("passes one opaque control to native start and cancel before settlement", async () => {
+		const control = {};
+		let finish!: (stats: GifExportStats) => void;
+		const exportGif = vi.fn(
+			() =>
+				new Promise<GifExportStats>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const cancelGifExport = vi.fn(() => true);
+		const service = new CompositorViewService({
+			addon: {
+				createGifExportControl: () => control,
+				cancelGifExport,
+				exportGif,
+			} as unknown as CompositorViewAddon,
+		});
+		const progress = vi.fn();
+		const job = service.startGifExport([], "/tmp/test.gif", undefined, { fps: 15 }, progress);
+		expect(exportGif).toHaveBeenCalledWith(
+			[],
+			"/tmp/test.gif",
+			undefined,
+			{ fps: 15 },
+			progress,
+			control,
+		);
+		expect(job.cancel()).toBe(true);
+		expect(cancelGifExport).toHaveBeenCalledWith(control);
+		const stats = { frames: 1, wallS: 1, fps: 1, videoDurationS: 1, fileBytes: 100 };
+		finish(stats);
+		await expect(job.result).resolves.toEqual(stats);
+	});
+
+	it("rejects a stale addon before starting an export that cannot be cancelled", () => {
+		const exportGif = vi.fn();
+		const service = new CompositorViewService({
+			addon: { exportGif } as unknown as CompositorViewAddon,
+		});
+		expect(() => service.startGifExport([], "/tmp/test.gif")).toThrow(
+			"cancellation is unavailable",
+		);
+		expect(exportGif).not.toHaveBeenCalled();
+	});
+});
 
 /** A source checkout's `crates/.cargo/config.toml`, with `FFMPEG_DIR` written as `body`. */
 function writeCargoConfig(root: string, body: string): void {

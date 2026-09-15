@@ -17,6 +17,7 @@ import {
 	type CursorRecordingData,
 	type CursorTelemetryPoint,
 	NATIVE_BRIDGE_CHANNEL,
+	type NativeBridgeErrorCode,
 	type NativeBridgeRequest,
 	type NativeBridgeResponse,
 	type NativePlatform,
@@ -54,10 +55,20 @@ export async function invokeNativeBridge<TData = unknown>(
 	});
 }
 
+export class NativeBridgeRequestError extends Error {
+	constructor(
+		message: string,
+		readonly code: NativeBridgeErrorCode,
+	) {
+		super(message);
+		this.name = "NativeBridgeRequestError";
+	}
+}
+
 export async function requireNativeBridgeData<TData>(request: NativeBridgeRequest): Promise<TData> {
 	const response = await invokeNativeBridge<TData>(request);
 	if (!response.ok) {
-		throw new Error(response.error.message);
+		throw new NativeBridgeRequestError(response.error.message, response.error.code);
 	}
 
 	return response.data;

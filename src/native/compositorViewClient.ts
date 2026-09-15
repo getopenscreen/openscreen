@@ -173,10 +173,19 @@ export function exportGifNative(
 	outPath?: string,
 	sceneJson?: string,
 	params?: CompositorExportGifParams,
+	exportId?: string,
 ): Promise<CompositorExportGifResult> {
 	return requireNativeBridgeData<CompositorExportGifResult>({
 		domain: "compositor",
 		action: "exportGif",
-		payload: { clips, outPath, sceneJson, params },
+		payload: { clips, outPath, sceneJson, params, exportId },
+	});
+}
+
+export function cancelGifExportNative(exportId: string): Promise<{ accepted: boolean }> {
+	return requireNativeBridgeData<{ accepted: boolean }>({
+		domain: "compositor",
+		action: "cancelGifExport",
+		payload: { exportId },
 	});
 }

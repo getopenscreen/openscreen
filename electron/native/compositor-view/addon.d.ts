@@ -191,7 +191,11 @@ export interface CompositorViewAddon {
 		sceneJson?: string,
 		params?: GifParamsInput,
 		onProgress?: (frames: number) => void,
+		control?: object,
 	): Promise<GifExportStats>;
+	/** Opaque napi External: kept in main, never sent to a renderer. */
+	createGifExportControl?(): object;
+	cancelGifExport?(control: object): boolean;
 
 	/** Stream-copy `inputPath` to `outputPath` through the matroska muxer, rebuilding the
 	 *  container (real `Duration` computed from the packet timestamps, plus `Cues` and

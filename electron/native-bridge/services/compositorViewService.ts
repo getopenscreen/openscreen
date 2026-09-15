@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { resolveCursorSprites } from "../../../src/lib/cursor/cursorThemes";
+import type { GifExportJob } from "../../ipc/gifExportJobs";
 import type {
 	ClipInput,
 	CompositorBackend,
@@ -179,6 +180,8 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 }
 
 export interface CompositorViewServiceOptions {
+	/** Explicit in-process addon, used by tests of native job lifecycle. */
+	addon?: CompositorViewAddon;
 	/**
 	 * Optional explicit override for the addon path. Has precedence over the
 	 * `OPENSCREEN_COMPOSITOR_VIEW_NODE` env var and the candidate path list.
@@ -437,6 +440,7 @@ export class CompositorViewService {
 	}
 
 	private ensureAddon(): CompositorViewAddon | null {
+		if (this.options.addon) return this.options.addon;
 		if (this.loadAttempted) {
 			return this.addon;
 		}
@@ -659,6 +663,7 @@ export class CompositorViewService {
 		sceneJson?: string,
 		params?: GifParamsInput,
 		onProgress?: (frames: number) => void,
+		control?: object,
 	): Promise<GifExportStats | null> {
 		const addon = this.ensureAddon();
 		if (!addon) {
@@ -671,7 +676,29 @@ export class CompositorViewService {
 			sceneJson ? resolveSceneAssetPaths(sceneJson) : undefined,
 			params,
 			onProgress,
+			control,
 		);
+	}
+
+	startGifExport(
+		clips: ClipInput[],
+		outPath?: string,
+		sceneJson?: string,
+		params?: GifParamsInput,
+		onProgress?: (frames: number) => void,
+	): GifExportJob<GifExportStats | null> {
+		const addon = this.ensureAddon();
+		if (!addon?.createGifExportControl || !addon.cancelGifExport) {
+			throw new Error(
+				"Native GIF cancellation is unavailable. Rebuild or update the compositor addon.",
+			);
+		}
+		const control = addon.createGifExportControl();
+		const cancel = addon.cancelGifExport.bind(addon);
+		return {
+			result: this.exportGif(clips, outPath, sceneJson, params, onProgress, control),
+			cancel: () => cancel(control),
+		};
 	}
 
 	/** Stream-copy `inputPath` to `outputPath` through libavformat's matroska muxer.

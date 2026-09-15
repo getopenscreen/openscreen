@@ -109,6 +109,7 @@ import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
 import { CaptionsPane } from "./CaptionsPane";
 import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
+import { StylePresetsMenu } from "./StylePresetsMenu";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
 
@@ -2387,6 +2388,9 @@ export function VideoEffectsPane() {
 			// translate 13 times — both already exist in every locale and neither is a
 			// fragment of the other, so joining them survives translation and RTL alike.
 			helpText={`${ts("background.help")} ${ts("effects.help")}`}
+			// A preset is the whole look this pane (and the camera and cursor panes) edits, so
+			// it rides the header rather than joining any one section — as captions do.
+			actions={<StylePresetsMenu />}
 		>
 			<BackgroundSection />
 			<div className={styles.sectionHead}>

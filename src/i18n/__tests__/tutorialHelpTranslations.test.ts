@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { type Locale, SUPPORTED_LOCALES } from "@/i18n/config";
 import arDialogs from "@/i18n/locales/ar/dialogs.json";
 import csDialogs from "@/i18n/locales/cs/dialogs.json";
+import deDialogs from "@/i18n/locales/de/dialogs.json";
 import enDialogs from "@/i18n/locales/en/dialogs.json";
 import esDialogs from "@/i18n/locales/es/dialogs.json";
 import frDialogs from "@/i18n/locales/fr/dialogs.json";
@@ -44,6 +45,7 @@ const dialogsByLocale = {
 	en: enDialogs,
 	ar: arDialogs,
 	cs: csDialogs,
+	de: deDialogs,
 	es: esDialogs,
 	fr: frDialogs,
 	it: itDialogs,

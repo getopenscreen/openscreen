@@ -73,6 +73,14 @@ describe("right-rail panes are localized", () => {
 		expect(screen.getByText("Masquer si inactif")).toBeInTheDocument();
 	});
 
+	it("renders the cursor pane in German", () => {
+		renderIn("de", <CursorPane />);
+		expect(screen.getByRole("heading", { name: "Cursor" })).toBeInTheDocument();
+		expect(screen.getByText("Glättung")).toBeInTheDocument();
+		expect(screen.getByText("Klick-Federung")).toBeInTheDocument();
+		expect(screen.getByText("Bei Inaktivität ausblenden")).toBeInTheDocument();
+	});
+
 	it("falls back to English when the locale is English", () => {
 		renderIn("en", <VideoEffectsPane />);
 		expect(screen.getByRole("heading", { name: "Composition" })).toBeInTheDocument();

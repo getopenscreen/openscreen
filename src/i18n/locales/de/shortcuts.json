@@ -1,0 +1,43 @@
+{
+	"title": "Tastaturkürzel",
+	"customize": "Anpassen",
+	"configurable": "Anpassbar",
+	"fixed": "Fest",
+	"pressKey": "Taste drücken…",
+	"clickToChange": "Zum Ändern klicken",
+	"pressEscToCancel": "Esc drücken zum Abbrechen",
+	"helpText": "Klicke auf ein Kürzel und drücke dann die neue Tastenkombination. Esc drücken zum Abbrechen.",
+	"resetToDefaults": "Auf Standard zurücksetzen",
+	"alreadyUsedBy": "Bereits belegt von „{{action}}“",
+	"swap": "Tauschen",
+	"reservedShortcut": "Dieses Kürzel ist für „{{label}}“ reserviert und kann nicht neu belegt werden.",
+	"savedToast": "Tastaturkürzel gespeichert",
+	"resetToast": "Auf Standardkürzel zurückgesetzt — klicke auf Speichern, um sie zu übernehmen",
+	"registrationFailed": "Kürzel konnte nicht registriert werden. Möglicherweise wird es von einer anderen App verwendet. Probiere eine andere Taste.",
+	"actions": {
+		"openApp": "App öffnen",
+		"addZoom": "Zoom hinzufügen",
+		"addTrim": "Trim hinzufügen",
+		"addSpeed": "Tempo hinzufügen",
+		"addAnnotation": "Anmerkung hinzufügen",
+		"addAudio": "Audio hinzufügen",
+		"addVoiceover": "Voiceover aufnehmen",
+		"addKeyframe": "Keyframe hinzufügen",
+		"addCameraFullscreen": "Vollbild-Kamera hinzufügen",
+		"deleteSelected": "Auswahl löschen",
+		"playPause": "Wiedergabe / Pause",
+		"copySelected": "Auswahl kopieren",
+		"paste": "Einfügen"
+	},
+	"fixedActions": {
+		"undo": "Rückgängig",
+		"redo": "Wiederholen",
+		"cycleAnnotationsForward": "Anmerkungen vorwärts durchlaufen",
+		"cycleAnnotationsBackward": "Anmerkungen rückwärts durchlaufen",
+		"deleteSelectedAlt": "Auswahl löschen (Alternative)",
+		"panTimeline": "Timeline verschieben",
+		"zoomTimeline": "Timeline zoomen",
+		"frameBack": "Ein Bild zurück",
+		"frameForward": "Ein Bild vor"
+	}
+}

@@ -3706,10 +3706,11 @@ mod tests {
     // Le flou Kawase du fond
     // -----------------------------------------------------------------------
 
-    /// Une passe Kawase du modele CPU, en 1D. L'image de test ne varie qu'en x,
-    /// donc les prises decalees en y lisent la meme valeur : seuls les decalages
-    /// x comptent. `taps` = (decalage en texels SOURCE, poids). Bilineaire,
-    /// clamp-to-edge, aux centres de texel, comme le sampler du compositeur.
+    /// Une passe Kawase du modele CPU, en 1D. L'image de test ne varie que le
+    /// long d'un axe, donc les prises decalees sur l'autre lisent la meme valeur :
+    /// seuls les decalages le long de l'axe comptent. `taps` = (decalage en
+    /// texels SOURCE, poids). Bilineaire, clamp-to-edge, aux centres de texel,
+    /// comme le sampler du compositeur.
     fn kawase_1d(src: &[f64], dst_len: usize, taps: &[(f64, f64)]) -> Vec<f64> {
         let n = src.len() as isize;
         let at = |i: isize| src[i.clamp(0, n - 1) as usize];
@@ -3741,12 +3742,29 @@ mod tests {
     #[test]
     fn background_blur_matches_the_hlsl_kawase_kernels() {
         let Some(gpu) = gpu() else { return };
-        // Largeur et hauteur divisibles par 8 : la pyramide tombe juste.
-        let (w, h) = (640u32, 64u32);
-        let comp = Compositor::new_sized(&gpu, w, h).expect("Compositor::new_sized");
+        check_kawase_step(&gpu, true);
+    }
 
-        // Une marche verticale noir -> blanc, opaque, posee sur le RT par
-        // `fs_copy` (le RT n'a pas COPY_DST).
+    /// Meme verification sur l'autre axe : une marche horizontale, lue sur une
+    /// colonne. Sans elle, une derive de `fx.y` (le texel vertical) ou des
+    /// seuls poids verticaux passerait inapercue, la marche verticale ne lisant
+    /// que la projection en x des noyaux.
+    #[test]
+    fn background_blur_matches_the_hlsl_kawase_kernels_vertically() {
+        let Some(gpu) = gpu() else { return };
+        check_kawase_step(&gpu, false);
+    }
+
+    /// `vertical_edge` : marche noir -> blanc le long de x (lue sur une ligne),
+    /// sinon le long de y (lue sur une colonne). Les noyaux HLSL sont
+    /// symetriques, donc leur projection 1D est la meme sur les deux axes.
+    fn check_kawase_step(gpu: &Gpu, vertical_edge: bool) {
+        // Dimensions divisibles par 8 : la pyramide tombe juste.
+        let (w, h) = if vertical_edge { (640u32, 64u32) } else { (64u32, 640u32) };
+        let comp = Compositor::new_sized(gpu, w, h).expect("Compositor::new_sized");
+
+        // La marche, opaque, posee sur le RT par `fs_copy` (le RT n'a pas
+        // COPY_DST).
         let src = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("test-step"),
             size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
@@ -3759,7 +3777,8 @@ mod tests {
         });
         let step: Vec<u8> = (0..w * h)
             .flat_map(|i| {
-                let v = if i % w < w / 2 { 0 } else { 255 };
+                let dark = if vertical_edge { i % w < w / 2 } else { i / w < h / 2 };
+                let v = if dark { 0 } else { 255 };
                 [v, v, v, 255]
             })
             .collect();
@@ -3796,29 +3815,32 @@ mod tests {
             (-HP, 4.0 / 12.0),
             (HP, 4.0 / 12.0),
         ];
-        let w = w as usize;
-        let mut model: Vec<f64> = (0..w).map(|x| if x < w / 2 { 0.0 } else { 1.0 }).collect();
-        for d in [w / 2, w / 4, w / 8] {
+        let (w, h) = (w as usize, h as usize);
+        let n = if vertical_edge { w } else { h };
+        let mut model: Vec<f64> = (0..n).map(|k| if k < n / 2 { 0.0 } else { 1.0 }).collect();
+        for d in [n / 2, n / 4, n / 8] {
             model = kawase_1d(&model, d, &down);
         }
-        for d in [w / 4, w / 2, w] {
+        for d in [n / 4, n / 2, n] {
             model = kawase_1d(&model, d, &up);
         }
 
-        let row = (h as usize / 2) * w * 4;
-        let worst = (0..w)
-            .map(|x| ((px[row + x * 4] as f64 - model[x] * 255.0).abs(), x))
+        // Octet RVBA du k-ieme echantillon de la ligne (ou colonne) mediane.
+        let at = |k: usize| if vertical_edge { ((h / 2) * w + k) * 4 } else { (k * w + w / 2) * 4 };
+        let worst = (0..n)
+            .map(|k| ((px[at(k)] as f64 - model[k] * 255.0).abs(), k))
             .fold((0.0, 0), |a, b| if b.0 > a.0 { b } else { a });
         assert!(
             worst.0 <= 3.0,
-            "flou Kawase hors parite HLSL : {:.1} niveaux d'ecart en x={} (GPU {}, modele {:.1})",
+            "flou Kawase hors parite HLSL ({}) : {:.1} niveaux d'ecart en {} (GPU {}, modele {:.1})",
+            if vertical_edge { "axe x" } else { "axe y" },
             worst.0,
             worst.1,
-            px[row + worst.1 * 4],
+            px[at(worst.1)],
             model[worst.1] * 255.0
         );
         // L'alpha echantillonne est conserve (fond opaque -> opaque), comme en HLSL.
-        assert!((0..w).all(|x| px[row + x * 4 + 3] == 255), "alpha du fond floute != 255");
+        assert!((0..n).all(|k| px[at(k) + 3] == 255), "alpha du fond floute != 255");
     }
 
     // -----------------------------------------------------------------------

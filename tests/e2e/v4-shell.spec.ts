@@ -14,6 +14,18 @@ const EDITOR_URL = `${BASE_URL}/?windowType=editor`;
 // 300 MB exactly, so MediaStage's formatSize renders "300 MB".
 const SIZED_BYTES = 314_572_800;
 
+// Only what a zoom region needs to survive `documentSchema` and reach the timeline.
+interface ZoomFixture {
+	id: string;
+	startMs: number;
+	endMs: number;
+	clipId: string;
+	sourceStartSec: number;
+	sourceEndSec: number;
+	depth: 1 | 2 | 3 | 4 | 5 | 6;
+	focus: { cx: number; cy: number };
+}
+
 function makeAsset(id: string, label: string, sizeBytes?: number) {
 	return {
 		id,
@@ -64,13 +76,33 @@ function makeDoc() {
 			captionRanges: [],
 		},
 		annotations: [],
-		zoomRanges: [],
+		zoomRanges: [] as ZoomFixture[],
 		legacyEditor: null,
 		agent: { pendingQuestions: [], suggestions: [], lastAppliedOperations: [] },
 		preview: { strategy: "seek" as const, revision: 0 },
 		export: { preset: "final-balanced" as const, lastJobId: null },
 		history: { revisions: [] },
 	};
+}
+
+// Same fixture with one zoom region on the only clip, so the inspector's zoom pane —
+// and the level row inside it — has something to select. Depth 3 is the editor's default,
+// and `ZOOM_DEPTH_SCALES` renders it as the "1.80×" the pill is addressed by below.
+function makeZoomDoc(): ReturnType<typeof makeDoc> {
+	const doc = makeDoc();
+	doc.zoomRanges = [
+		{
+			id: "zoom_e2e",
+			startMs: 60_000,
+			endMs: 180_000,
+			clipId: "clip_e2e",
+			sourceStartSec: 60,
+			sourceEndSec: 180,
+			depth: 3,
+			focus: { cx: 0.5, cy: 0.5 },
+		},
+	];
+	return doc;
 }
 
 // Same fixture, split into two clips: FloatingInspector's "Edit clip" button
@@ -241,6 +273,60 @@ test.describe("v4 editor shell", () => {
 		await page.mouse.up();
 		await expect.poll(leftPct).toBeCloseTo(75, 0);
 		expect(await storeTimeSec()).toBeGreaterThan(400);
+	});
+
+	// The zoom levels are buttons rather than a `<select>` (issue #670), which puts them
+	// under the shell's WINDOW key handling: Space there is play/pause and it
+	// `preventDefault()`s the keydown, which cancels a button's own activation outright.
+	// jsdom dispatches no native activation for Space at all, so a browser is the only
+	// place that can hold the line that Space still commits the focused level.
+	test("the zoom level row commits the focused level on Space and keeps focus in place", async ({
+		page,
+	}) => {
+		await seedAndOpen(page, makeZoomDoc());
+		await page.locator('[class*="lanePill"][title="1.80×"]').first().click();
+
+		const levels = page.getByRole("group", { name: "Zoom Level" }).getByRole("button");
+		await expect(levels).toHaveCount(6);
+
+		// One row inside the 300px pane, with every label intact: the reason this control
+		// stacks its own label instead of sitting in a `paneRow` like its neighbours.
+		const tops = await levels.evaluateAll((els) =>
+			els.map((el) => Math.round(el.getBoundingClientRect().top)),
+		);
+		expect(new Set(tops).size).toBe(1);
+		expect(
+			await levels.evaluateAll((els) => els.every((el) => el.scrollWidth <= el.clientWidth + 1)),
+		).toBe(true);
+
+		const depth = () =>
+			page.evaluate(
+				() =>
+					(
+						window as unknown as {
+							__osProjectStore: {
+								getState: () => { document: { zoomRanges: Array<{ depth: number }> } | null };
+							};
+						}
+					).__osProjectStore.getState().document?.zoomRanges[0]?.depth ?? null,
+			);
+		expect(await depth()).toBe(3);
+
+		await levels.nth(3).focus(); // 2.2×, depth 4
+		await page.keyboard.press("Space");
+		await expect.poll(depth).toBe(4);
+		await expect(levels.nth(3)).toBeFocused();
+
+		// Arrows step from the focused level, not from the selected one: every level is a
+		// Tab stop, so ArrowRight on the last button has nowhere to go — and must not throw
+		// focus back across the row to wherever the selection happens to be.
+		await levels.nth(5).focus();
+		await page.keyboard.press("ArrowRight");
+		await expect(levels.nth(5)).toBeFocused();
+		expect(await depth()).toBe(4);
+		await page.keyboard.press("ArrowLeft");
+		await expect.poll(depth).toBe(5);
+		await expect(levels.nth(4)).toBeFocused();
 	});
 
 	test("clicking outside the clip picker popover closes it", async ({ page }) => {

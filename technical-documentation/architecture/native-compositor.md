@@ -81,7 +81,8 @@ what `shaders.hlsl` actually implements:
    ([`compositor.rs:1765`](../../crates/compositor/src/compositor_windows.rs)), or a cover-fitted
    image loaded through `draw_image_bg`
    ([`compositor.rs:1156`](../../crates/compositor/src/compositor_windows.rs)). When the
-   scene's `effects.blur` is on, `blur_bg` (dual-Kawase, ~18 px) blurs whatever
+   scene's `effects.blur` is on, `blur_bg` (dual-Kawase, sigma ~13 px at 1080p, same kernels on all three
+   backends) blurs whatever
    was just drawn — that is what "Blur BG" does, mirroring the web
    `frameRenderer.blurredBackgroundLayer`
    ([`compositor.rs:1807`](../../crates/compositor/src/compositor_windows.rs)).

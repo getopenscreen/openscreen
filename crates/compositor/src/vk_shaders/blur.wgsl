@@ -1,16 +1,18 @@
 // Tranche verticale WP4 — Kawase blur (mode 9+10 du HLSL) porté en WGSL.
 //
 // Le Kawase blur est une approximation gaussienne en 6 passes : down 3x
-// (RT→½→¼→⅛) puis up 3x (⅛→¼→½→RT). Chaque passe est un 5-tap linéaire
-// à offset 2.2 px (cf. HLSL `ps_kawase_down` / `ps_kawase_up`). Le résultat
-// est visuellement équivalent à un flou gaussien ~30-50 px (selon la
-// taille de la pyramide) à un coût constant 6×5 = 30 taps — vs 49 taps
-// pour une passe gaussienne équivalente. Cf. HLSL `Compositor::blur_bg`.
+// (RT→½→¼→⅛) puis up 3x (⅛→¼→½→RT). Down = 5 taps, up = 8 taps, bilinéaires,
+// à demi-pas `hp` = 0.5 × 2.2 texels SOURCE. Soit un sigma d'environ 13 px en
+// 1080p, pour un coût constant de 3×5 + 3×8 = 39 taps.
+//
+// Les noyaux et la convention d'offset sont ceux de `shaders.hlsl`
+// (`ps_kawase_down` / `ps_kawase_up`) et de `shaders.metal`, à l'identique :
+// les trois backends doivent flouter pareil. Cf. HLSL `Compositor::blur_bg`.
 //
 // Bindings : la passe de down lit d'une texture RGBA8 et écrit dans
 // une texture RGBA8 plus petite ; la passe d'up fait l'inverse. Toutes
-// les passes partagent le même bind group layout, seule la constante
-// `texel_offset` (dans LayerCB `fx`) change entre les passes.
+// les passes partagent le même bind group layout, seul `fx` (texel de la
+// source) change entre les passes.
 
 struct Layer {
     dst: vec4<f32>,
@@ -19,7 +21,7 @@ struct Layer {
     radius_px: f32,
     mode: f32,
     color: vec4<f32>,
-    fx: vec4<f32>,        // .x = texel offset (2.2 pour Kawase)
+    fx: vec4<f32>,        // Kawase : .xy = 1/dims SOURCE, .z = offset (2.2)
     src_prev: vec4<f32>,
     dst_prev: vec4<f32>,
     mb: vec4<f32>,
@@ -99,34 +101,34 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     return textureSample(tex, samp, i.uv);
 }
 
-// Kawase down : 5-tap linéaire à offset `texel_offset` en coords source.
-// `texel_offset` est 2.2 typiquement (le spread mesuré du filtre).
+// Port à l'identique de `ps_kawase_down` / `ps_kawase_up` (shaders.hlsl,
+// shaders.metal), pour la parité des trois backends. L'alpha échantillonné est
+// conservé, comme là-bas.
 @fragment
 fn fs_kawase_down(i: VsOut) -> @location(0) vec4<f32> {
-    let o = layer.fx.x;
-    let c = textureSample(tex, samp, i.uv).rgb;
-    let s1 = textureSample(tex, samp, i.uv + vec2<f32>( o,  o) / vec2<f32>(layer.quad_px.x, layer.quad_px.y)).rgb;
-    let s2 = textureSample(tex, samp, i.uv + vec2<f32>(-o,  o) / vec2<f32>(layer.quad_px.x, layer.quad_px.y)).rgb;
-    let s3 = textureSample(tex, samp, i.uv + vec2<f32>( o, -o) / vec2<f32>(layer.quad_px.x, layer.quad_px.y)).rgb;
-    let s4 = textureSample(tex, samp, i.uv + vec2<f32>(-o, -o) / vec2<f32>(layer.quad_px.x, layer.quad_px.y)).rgb;
-    return vec4<f32>((c + s1 + s2 + s3 + s4) * 0.2, layer.color.a);
+    let hp = layer.fx.xy * 0.5 * layer.fx.z;
+    let uv = i.uv;
+    var s = textureSample(tex, samp, uv) * 4.0;
+    s += textureSample(tex, samp, uv - hp);
+    s += textureSample(tex, samp, uv + hp);
+    s += textureSample(tex, samp, uv + vec2<f32>(hp.x, -hp.y));
+    s += textureSample(tex, samp, uv - vec2<f32>(hp.x, -hp.y));
+    return s / 8.0;
 }
 
-// Kawase up : interpolation linéaire entre la texture de destination
-// (`tex`) et l'échantillon à offset `texel_offset` dans la même texture.
-// C'est l'algorithme Kawase « up » original — moins connu que le down
-// mais c'est ce qui donne le look "soft glow" mesuré sur le banc.
-//
-// On interpole entre la valeur au centre et les 4 voisins à offset `o`.
+// Poids 1,2,1,2,1,2,1,2 : somme 12 (cf. la cicatrice de shaders.metal, où des
+// prises verticales doublées rendaient l'image 1,59x trop claire).
 @fragment
 fn fs_kawase_up(i: VsOut) -> @location(0) vec4<f32> {
-    let o = layer.fx.x;
-    let c = textureSample(tex, samp, i.uv).rgb;
-    let s1 = textureSample(tex, samp, i.uv + vec2<f32>( o,  o) / vec2<f32>(layer.quad_px.x, layer.quad_px.y)).rgb;
-    let s2 = textureSample(tex, samp, i.uv + vec2<f32>(-o,  o) / vec2<f32>(layer.quad_px.x, layer.quad_px.y)).rgb;
-    let s3 = textureSample(tex, samp, i.uv + vec2<f32>( o, -o) / vec2<f32>(layer.quad_px.x, layer.quad_px.y)).rgb;
-    let s4 = textureSample(tex, samp, i.uv + vec2<f32>(-o, -o) / vec2<f32>(layer.quad_px.x, layer.quad_px.y)).rgb;
-    // Pondération (1.0 centre, 0.5 chaque voisin) — 1+4×0.5 = 3.0, /3 = 1/3 par
-    // échantillon. Le rendu Kawase up est plus doux que le down.
-    return vec4<f32>((c + (s1 + s2 + s3 + s4) * 0.5) / 3.0, layer.color.a);
+    let hp = layer.fx.xy * 0.5 * layer.fx.z;
+    let uv = i.uv;
+    var s = textureSample(tex, samp, uv + vec2<f32>(-hp.x * 2.0, 0.0));
+    s += textureSample(tex, samp, uv + vec2<f32>(-hp.x, hp.y)) * 2.0;
+    s += textureSample(tex, samp, uv + vec2<f32>(0.0, hp.y * 2.0));
+    s += textureSample(tex, samp, uv + vec2<f32>(hp.x, hp.y)) * 2.0;
+    s += textureSample(tex, samp, uv + vec2<f32>(hp.x * 2.0, 0.0));
+    s += textureSample(tex, samp, uv + vec2<f32>(hp.x, -hp.y)) * 2.0;
+    s += textureSample(tex, samp, uv + vec2<f32>(0.0, -hp.y * 2.0));
+    s += textureSample(tex, samp, uv + vec2<f32>(-hp.x, -hp.y)) * 2.0;
+    return s / 12.0;
 }

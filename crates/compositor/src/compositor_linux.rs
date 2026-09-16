@@ -872,10 +872,11 @@ impl Compositor {
         src_px: [f32; 2],
     ) {
         let cb = LayerCB {
-            quad_px: src_px,
             mode: -1.0,
             color: [1.0, 1.0, 1.0, 1.0],
-            fx: [2.0, 0.0, 0.0, 0.0], // texel offset Kawase
+            // Convention HLSL/Metal (`compositor_windows::blur_bg`) : texel de la
+            // SOURCE en .xy, offset 2.2 en .z. Parite des trois backends.
+            fx: [1.0 / src_px[0], 1.0 / src_px[1], 2.2, 0.0],
             ..Default::default()
         };
         let uniform = self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -3699,6 +3700,125 @@ mod tests {
         }
         comp.gpu.context.submit(std::iter::once(encoder.finish()));
         unsafe { comp.readback_direct().expect("readback_direct") }
+    }
+
+    // -----------------------------------------------------------------------
+    // Le flou Kawase du fond
+    // -----------------------------------------------------------------------
+
+    /// Une passe Kawase du modele CPU, en 1D. L'image de test ne varie qu'en x,
+    /// donc les prises decalees en y lisent la meme valeur : seuls les decalages
+    /// x comptent. `taps` = (decalage en texels SOURCE, poids). Bilineaire,
+    /// clamp-to-edge, aux centres de texel, comme le sampler du compositeur.
+    fn kawase_1d(src: &[f64], dst_len: usize, taps: &[(f64, f64)]) -> Vec<f64> {
+        let n = src.len() as isize;
+        let at = |i: isize| src[i.clamp(0, n - 1) as usize];
+        (0..dst_len)
+            .map(|j| {
+                let x = (j as f64 + 0.5) * src.len() as f64 / dst_len as f64;
+                taps.iter()
+                    .map(|&(dx, w)| {
+                        let p = x + dx - 0.5;
+                        let i = p.floor();
+                        let f = p - i;
+                        w * (at(i as isize) * (1.0 - f) + at(i as isize + 1) * f)
+                    })
+                    .sum()
+            })
+            .collect()
+    }
+
+    /// Le flou du fond doit etre celui de Windows et macOS. La reference est le
+    /// modele CPU des noyaux de `shaders.hlsl` (`ps_kawase_down/up`), projetes
+    /// en 1D : demi-pas `hp` = 0.5 x 2.2 texels source, down 4 + 4 diagonales
+    /// (/8), up 4 axiales a 2 hp (x1) + 4 diagonales (x2) (/12).
+    ///
+    /// Un test de comportement plutot qu'une comparaison de sources : il voit
+    /// une derive des poids, des offsets OU de la convention `fx` cote Rust.
+    /// L'ancien portage (offset 2.0 texels, autres noyaux) s'ecartait de ce
+    /// modele de 21 niveaux sur cette marche ; la tolerance de 3 niveaux
+    /// absorbe l'arrondi 8 bits entre passes.
+    #[test]
+    fn background_blur_matches_the_hlsl_kawase_kernels() {
+        let Some(gpu) = gpu() else { return };
+        // Largeur et hauteur divisibles par 8 : la pyramide tombe juste.
+        let (w, h) = (640u32, 64u32);
+        let comp = Compositor::new_sized(&gpu, w, h).expect("Compositor::new_sized");
+
+        // Une marche verticale noir -> blanc, opaque, posee sur le RT par
+        // `fs_copy` (le RT n'a pas COPY_DST).
+        let src = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("test-step"),
+            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let step: Vec<u8> = (0..w * h)
+            .flat_map(|i| {
+                let v = if i % w < w / 2 { 0 } else { 255 };
+                [v, v, v, 255]
+            })
+            .collect();
+        gpu.context.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &src,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &step,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(w * 4),
+                rows_per_image: Some(h),
+            },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        let src_view = src.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test-blur") });
+        comp.blur_pass(&mut encoder, &comp.pipeline_copy, &src_view, &comp.rt_view, [w as f32, h as f32]);
+        comp.blur_bg(&mut encoder);
+        gpu.context.submit(std::iter::once(encoder.finish()));
+        let (_, _, px) = unsafe { comp.readback_direct().expect("readback_direct") };
+
+        const HP: f64 = 0.5 * 2.2;
+        let down = [(0.0, 4.0 / 8.0), (-HP, 2.0 / 8.0), (HP, 2.0 / 8.0)];
+        let up = [
+            (-2.0 * HP, 1.0 / 12.0),
+            (2.0 * HP, 1.0 / 12.0),
+            (0.0, 2.0 / 12.0),
+            (-HP, 4.0 / 12.0),
+            (HP, 4.0 / 12.0),
+        ];
+        let w = w as usize;
+        let mut model: Vec<f64> = (0..w).map(|x| if x < w / 2 { 0.0 } else { 1.0 }).collect();
+        for d in [w / 2, w / 4, w / 8] {
+            model = kawase_1d(&model, d, &down);
+        }
+        for d in [w / 4, w / 2, w] {
+            model = kawase_1d(&model, d, &up);
+        }
+
+        let row = (h as usize / 2) * w * 4;
+        let worst = (0..w)
+            .map(|x| ((px[row + x * 4] as f64 - model[x] * 255.0).abs(), x))
+            .fold((0.0, 0), |a, b| if b.0 > a.0 { b } else { a });
+        assert!(
+            worst.0 <= 3.0,
+            "flou Kawase hors parite HLSL : {:.1} niveaux d'ecart en x={} (GPU {}, modele {:.1})",
+            worst.0,
+            worst.1,
+            px[row + worst.1 * 4],
+            model[worst.1] * 255.0
+        );
+        // L'alpha echantillonne est conserve (fond opaque -> opaque), comme en HLSL.
+        assert!((0..w).all(|x| px[row + x * 4 + 3] == 255), "alpha du fond floute != 255");
     }
 
     // -----------------------------------------------------------------------

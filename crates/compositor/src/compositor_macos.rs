@@ -1272,7 +1272,9 @@ impl Compositor {
                     let amount = if is_blur > 0.5 { blur.intensity } else { blur.block_size };
                     // Le repli passe par le rectangle, pas l'ovale : un ovale inscrit
                     // retirerait les coins, donc une partie de ce qui est couvert.
-                    let is_oval = if blur.shape == "oval" && !freehand { 1.0 } else { 0.0 };
+                    // Masque élargi à la trace du flou de mouvement : l'ovale n'y couvrirait plus tout.
+                    let is_oval =
+                        if blur.shape == "oval" && !freehand && mask.oval_ok { 1.0 } else { 0.0 };
                     // La teinte n'a de sens qu'en mosaïque : un flou teinté ne ressemble plus
                     // à un flou.
                     let tinted = if is_blur > 0.5 { 0.0 } else { 1.0 };

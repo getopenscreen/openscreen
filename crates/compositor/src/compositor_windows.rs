@@ -2160,7 +2160,9 @@ impl Compositor {
                     // Le repli du tracé libre passe par le rectangle, pas l'ovale : un ovale
                     // inscrit dans la boîte englobante en retirerait les coins, donc une partie de
                     // ce que l'utilisateur a couvert.
-                    let is_oval = if blur.shape == "oval" && !freehand_fallback { 1.0 } else { 0.0 };
+                    // Masque élargi à la trace du flou de mouvement : l'ovale n'y couvrirait plus tout.
+                    let is_oval =
+                        if blur.shape == "oval" && !freehand_fallback && mask.oval_ok { 1.0 } else { 0.0 };
                     // La teinte n'a de sens qu'en mosaïque : elle sert à marquer visiblement une
                     // zone caviardée. Un flou teinté ne ressemblerait plus à un flou.
                     let tinted = if is_blur > 0.5 { 0.0 } else { 1.0 };

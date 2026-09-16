@@ -837,7 +837,8 @@ impl FrameGeometry {
         // cas, elle garde le comportement du cadre.
         if annotation.in_frame_space() {
             let dst = annotation_dst_in([0.0, 0.0, 1.0, 1.0], x, y, w, h);
-            return Some(PrivacyMask::upright(pad_rect(dst, render_px), render_px, 1.0));
+            let dst = pad_rect(dst, render_px, PRIVACY_MASK_PAD_PX);
+            return Some(PrivacyMask::upright(dst, render_px, 1.0));
         }
         let upright = annotation_dst_in(self.s_dst, x, y, w, h);
         // Grossissement du zoom : le contenu grandit de `s_dst / s_ann`, le grain du masque doit
@@ -852,12 +853,19 @@ impl FrameGeometry {
             // du secret sort du rect courant. Chaque coordonnée étalée reste entre ses deux
             // extrémités, donc la boîte englobante des deux rects la contient.
             // Mêmes conditions que le shader : `(int) mb.x > 1` et `saturate(mb.y) > 0.001`.
-            let rect = if self.mb_taps >= 2.0 && self.mb_amount > 0.001 {
+            let trail = self.mb_taps >= 2.0 && self.mb_amount > 0.001 && self.s_dst_prev != self.s_dst;
+            let rect = if trail {
                 union_rect(upright, annotation_dst_in(self.s_dst_prev, x, y, w, h))
             } else {
                 upright
             };
-            return Some(PrivacyMask::upright(pad_rect(rect, render_px), render_px, zoom_k));
+            let dst = pad_rect(rect, render_px, PRIVACY_MASK_PAD_PX * zoom_k);
+            let mut mask = PrivacyMask::upright(dst, render_px, zoom_k);
+            // Un ovale inscrit dans la boîte ÉLARGIE ne contient plus l'ovale courant dès que
+            // les deux centres diffèrent : son bord laisserait passer une frange du secret. On
+            // retombe alors sur le rectangle, comme le tracé libre.
+            mask.oval_ok = !trail;
+            return Some(mask);
         }
 
         // Écran incliné (le mode 8 n'a pas de flou de mouvement : pas de trace à couvrir).
@@ -868,10 +876,12 @@ impl FrameGeometry {
             (self.s_dst[0] + self.s_dst[2] * 0.5) * rw,
             (self.s_dst[1] + self.s_dst[3] * 0.5) * rh,
         ];
-        // La marge d'un pixel se prend dans le repère du plan, avant projection.
+        // La marge se prend en fraction du contenu, comme sur le chemin droit : `zoom_k` px de
+        // la boîte zoomée, soit un pixel de la boîte au repos. La projection l'emmène ensuite
+        // avec le contenu qu'elle borde.
         let (mx, my) = (
-            PRIVACY_MASK_PAD_PX / (s_px[0] * quad.scale).max(1.0),
-            PRIVACY_MASK_PAD_PX / (s_px[1] * quad.scale).max(1.0),
+            PRIVACY_MASK_PAD_PX * zoom_k / s_px[0].max(1.0),
+            PRIVACY_MASK_PAD_PX * zoom_k / s_px[1].max(1.0),
         );
         let (x0, y0, x1, y1) = (x - mx, y - my, x + w + mx, y + h + my);
         let at = |fx: f32, fy: f32| {
@@ -904,13 +914,16 @@ impl FrameGeometry {
             quad_px,
             warp: Some(local),
             strength: (zoom_k * tilt_k).max(1.0),
+            oval_ok: true,
         })
     }
 }
 
-/// Marge, en px de sortie, ajoutée autour d'un masque de confidentialité. Un pixel n'est couvert
-/// que si son CENTRE tombe dans le rect, alors que le bord du contenu, lui, est échantillonné en
-/// bilinéaire : sans marge, la rangée de bord laisse passer une frange du secret.
+/// Marge ajoutée autour d'un masque de confidentialité, en px de la boîte écran AU REPOS : un
+/// pixel n'est couvert que si son CENTRE tombe dans le rect, alors que le bord du contenu, lui,
+/// est échantillonné en bilinéaire, sur un demi-texel source. Sans marge, la rangée de bord
+/// laisse passer une frange du secret. Sous un zoom la frange grossit avec le contenu, d'où le
+/// facteur `zoom_k` appliqué par `privacy_mask`.
 pub const PRIVACY_MASK_PAD_PX: f32 = 1.0;
 
 /// Placement d'un masque de confidentialité, prêt pour le mode 10.
@@ -925,6 +938,9 @@ pub struct PrivacyMask {
     pub warp: Option<[[f32; 2]; 4]>,
     /// Multiplicateur du rayon de flou et du pas de mosaïque, jamais sous 1.
     pub strength: f32,
+    /// `false` quand le rect a été élargi à la trace du flou de mouvement : un ovale inscrit
+    /// dans ce rect-là ne couvrirait plus l'ovale courant, le backend dessine alors le rect.
+    pub oval_ok: bool,
 }
 
 impl PrivacyMask {
@@ -934,6 +950,7 @@ impl PrivacyMask {
             quad_px: [dst[2] * render_px[0], dst[3] * render_px[1]],
             warp: None,
             strength,
+            oval_ok: true,
         }
     }
 
@@ -958,8 +975,8 @@ fn union_rect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
     [x0, y0, x1 - x0, y1 - y0]
 }
 
-fn pad_rect(r: [f32; 4], render_px: [f32; 2]) -> [f32; 4] {
-    let (px, py) = (PRIVACY_MASK_PAD_PX / render_px[0], PRIVACY_MASK_PAD_PX / render_px[1]);
+fn pad_rect(r: [f32; 4], render_px: [f32; 2], pad_px: f32) -> [f32; 4] {
+    let (px, py) = (pad_px / render_px[0], pad_px / render_px[1]);
     [r[0] - px, r[1] - py, r[2] + 2.0 * px, r[3] + 2.0 * py]
 }
 
@@ -1792,6 +1809,7 @@ mod tests {
         let a = blur_annotation("");
         let render = [1170.0, 658.0];
         let m = g.privacy_mask(&a, render).expect("masque");
+        assert!(m.oval_ok);
         let r = g.annotation_dst(a.x, a.y, a.w, a.h);
         let (px, py) = (1.0 / render[0], 1.0 / render[1]);
         let want = [r[0] - px, r[1] - py, r[2] + 2.0 * px, r[3] + 2.0 * py];
@@ -1835,10 +1853,10 @@ mod tests {
                 m.dst
             );
         }
-        // Serré : au plus la marge d'un pixel au-delà du contenu.
+        // Serré : la marge grossit avec le contenu, un pixel du repos devient deux sous un x2.
         let (x0, y0) = drawn_under_zoom(uv_at_rest(a.x, a.y));
-        assert!((m.dst[0] - (x0 - 1.0 / render[0])).abs() < 1e-5, "{:?}", m.dst);
-        assert!((m.dst[1] - (y0 - 1.0 / render[1])).abs() < 1e-5, "{:?}", m.dst);
+        assert!((m.dst[0] - (x0 - 2.0 / render[0])).abs() < 1e-5, "{:?}", m.dst);
+        assert!((m.dst[1] - (y0 - 2.0 / render[1])).abs() < 1e-5, "{:?}", m.dst);
         // L'ancien placement ratait le contenu : c'est la fuite que ce test garde fermée.
         let old = zoomed.annotation_dst(a.x, a.y, a.w, a.h);
         let (cx, cy) = drawn_under_zoom(uv_at_rest(a.x + a.w * 0.5, a.y + a.h * 0.5));
@@ -1877,7 +1895,9 @@ mod tests {
             let want = drawn(fx, fy);
             let got = [origin[0] + warp[k][0], origin[1] + warp[k][1]];
             let gap = (got[0] - want[0]).hypot(got[1] - want[1]);
-            assert!(gap < 2.0, "coin {k} : {got:?} à {gap} px du contenu {want:?}");
+            // La marge vaut deux pixels de la boîte zoomée par axe, projetés : au plus ~3 px
+            // en diagonale.
+            assert!(gap > 0.5 && gap < 3.5, "coin {k} : {got:?} à {gap} px du contenu {want:?}");
             // Côté sur-masquage : le coin du masque est plus loin du centre que celui du contenu.
             assert!(from_mid(got) > from_mid(want), "coin {k} rentré dans le contenu");
             assert!(got[0] >= origin[0] - 1e-3 && got[0] <= origin[0] + m.quad_px[0] + 1e-3);
@@ -1910,6 +1930,8 @@ mod tests {
             .expect("garde : la rampe de zoom doit déplacer la boîte d'une frame à l'autre");
         assert!(moving.mb_taps >= 2.0 && moving.mb_amount > 0.001, "garde : flou de mouvement actif");
         let m = moving.privacy_mask(&a, render).expect("masque");
+        // Élargi, le masque ne peut plus être un ovale inscrit : il retombe sur le rect.
+        assert!(!m.oval_ok, "un masque élargi à la trace doit refuser l'ovale");
         for anchor in [moving.s_dst, moving.s_dst_prev] {
             let r = annotation_dst_in(anchor, a.x, a.y, a.w, a.h);
             for (x, y) in [(r[0], r[1]), (r[0] + r[2], r[1] + r[3])] {

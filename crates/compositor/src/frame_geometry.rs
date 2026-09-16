@@ -1227,8 +1227,9 @@ pub struct CursorPlanInput<'a> {
     pub t: f32,
 }
 
-/// `None` = rien à dessiner cette frame : curseur masqué, ou pointeur hors du rect source
-/// courant (zoom serré, hors écran) — un état normal en lecture, pas une erreur.
+/// `None` = rien à dessiner cette frame : curseur masqué, pointeur hors du rect source
+/// courant (zoom serré, hors écran), ou sprite réduit à rien au creux d'un click bounce
+/// extrême — un état normal en lecture, pas une erreur.
 pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorPlan> {
     let (rw, rh) = (input.render_px[0], input.render_px[1]);
     let show = input.scene.map(|s| s.cursor.show).unwrap_or(input.cfg.cursor);
@@ -1296,9 +1297,19 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     let placement = place(input.track.at(input.t), g.s_dst)?;
 
     let lp = input.live;
-    let bounce = 1.0 + (input.track.bounce(input.t) - 1.0) * lp.cursor_bounce_scale;
+    // `cursor_bounce_scale` est le clickBounce brut (0..5) : au-delà de 1/0.24 ≈ 4.17, le creux
+    // de la pression (0.76) passe sous zéro. Une taille négative retournerait le sprite, donc
+    // plancher à 0 — le curseur disparaît le temps du creux, c'est ce qu'une telle amplitude dit.
+    let bounce = (1.0 + (input.track.bounce(input.t) - 1.0) * lp.cursor_bounce_scale).max(0.0);
     let size_px =
         CURSOR_BASE_SIZE_FRAC * g.frame_min_px * lp.cursor_size_scale * bounce * g.padding_scale;
+    // Taille nulle = rien à dessiner, et surtout rien à projeter : sur un plan incliné les quatre
+    // coins du sprite se confondent, et le warp inverse du mode 13 résout alors 0/0. Son rejet
+    // ne tiendrait qu'à des comparaisons avec NaN, que Metal (fast-math) ne garantit pas.
+    // Couvre aussi la traînée : ses copies partagent `size_px`.
+    if !(size_px > 0.0) {
+        return None;
+    }
 
     let blur01 = lp.cursor_motion_blur.clamp(0.0, 1.0);
     let has_scene = input.scene.is_some();
@@ -2058,21 +2069,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn plan_cursor_motion_blur_adaptive_and_stationary() {
-        let cfg = crate::config::all().pop().expect("cfg");
-        let track_immobile = crate::cursor::CursorTrack::new(
-            vec![(0.0, 0.5, 0.5), (2.0, 0.5, 0.5)],
-            vec![],
-            vec![],
-        );
-        let track_moving = crate::cursor::CursorTrack::new(
-            vec![(0.0, 0.1, 0.1), (1.0, 0.9, 0.9)],
-            vec![],
-            vec![],
-        );
-        let scene = zoomed_golden_scene();
-        let fg = FrameGeometry {
+    /// Écran droit plein cadre, sans zoom : le curseur y tombe toujours dans le rect source.
+    fn full_frame_geometry() -> FrameGeometry {
+        FrameGeometry {
             scene_preset: None,
             mb_taps: 1.0,
             mb_amount: 0.0,
@@ -2090,7 +2089,24 @@ mod tests {
             w_px: [0.0, 0.0],
             w_radius: 0.0,
             shape_fade: 0.0,
-        };
+        }
+    }
+
+    #[test]
+    fn plan_cursor_motion_blur_adaptive_and_stationary() {
+        let cfg = crate::config::all().pop().expect("cfg");
+        let track_immobile = crate::cursor::CursorTrack::new(
+            vec![(0.0, 0.5, 0.5), (2.0, 0.5, 0.5)],
+            vec![],
+            vec![],
+        );
+        let track_moving = crate::cursor::CursorTrack::new(
+            vec![(0.0, 0.1, 0.1), (1.0, 0.9, 0.9)],
+            vec![],
+            vec![],
+        );
+        let scene = zoomed_golden_scene();
+        let fg = full_frame_geometry();
 
         // 1. Curseur immobile avec blur actif -> taps = 1
         let live_with_blur = LiveParams {
@@ -2141,6 +2157,46 @@ mod tests {
         };
         let plan = plan_cursor(&fg, &input_moving).expect("plan cursor");
         assert!(plan.taps >= 2 && plan.taps <= 16, "taps adaptatifs dans [2, 16], got {}", plan.taps);
+    }
+
+    /// clickBounce au maximum du slider (5) : le creux de la pression donnerait 1 - 0.24 * 5 < 0.
+    /// La taille ne doit jamais devenir négative ; au creux, rien n'est dessiné.
+    #[test]
+    fn plan_cursor_never_yields_a_negative_size_at_max_bounce() {
+        let cfg = crate::config::all().pop().expect("cfg");
+        let scene = zoomed_golden_scene();
+        let fg = full_frame_geometry();
+        let track = crate::cursor::CursorTrack::new(
+            vec![(0.0, 0.5, 0.5), (2.0, 0.5, 0.5)],
+            vec![0.5],
+            vec![],
+        );
+        let plan_at = |t: f32| {
+            plan_cursor(
+                &fg,
+                &CursorPlanInput {
+                    render_px: [1920.0, 1080.0],
+                    u_max: 1.0,
+                    v_max: 1.0,
+                    cfg: &cfg,
+                    live: LiveParams { cursor_bounce_scale: 5.0, ..LiveParams::default() },
+                    scene: Some(&scene),
+                    track: &track,
+                    t,
+                },
+            )
+        };
+
+        for ms in 450..=800 {
+            let t = ms as f32 / 1000.0;
+            if let Some(plan) = plan_at(t) {
+                assert!(plan.size_px > 0.0, "taille {} à t = {t}", plan.size_px);
+            }
+        }
+        let rest = plan_at(0.45).expect("hors fenêtre de clic").size_px;
+        assert!(plan_at(0.5 + 0.0494).is_none(), "au creux, le sprite est réduit à rien");
+        let peak = plan_at(0.5 + 0.1794).expect("au pic").size_px;
+        assert!((peak / rest - 1.8).abs() < 1e-3, "pic = 1 + 0.16 * 5, got {}", peak / rest);
     }
 }
 

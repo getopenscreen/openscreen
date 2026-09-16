@@ -1222,7 +1222,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						enabled: microphoneEnabled,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
-						gain: MIC_GAIN_BOOST,
+						// Same rule as mixAudioTracks: boosted only when the mic has to
+						// sit over system audio; at unity on its own so a hot mic does
+						// not get +2.9 dB of unconditional gain in the native mixer.
+						gain: systemAudioEnabled ? MIC_GAIN_BOOST : 1,
 					},
 				},
 				webcam: {
@@ -1383,7 +1386,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						enabled: microphoneEnabled,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
-						gain: MIC_GAIN_BOOST,
+						// Boosted only over system audio, like the Windows request above.
+						gain: systemAudioEnabled ? MIC_GAIN_BOOST : 1,
 					},
 				},
 				webcam: {
@@ -1486,7 +1490,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// microphone get the empty headphone jack recorded, because the
 				// helper then fell back to the session default source.
 				...(microphoneDeviceName ? { deviceName: microphoneDeviceName } : {}),
-				gain: MIC_GAIN_BOOST,
+				// Boosted only over system audio, like the Windows request above.
+				gain: systemAudioEnabled ? MIC_GAIN_BOOST : 1,
 			},
 		},
 		cursor: { mode: cursorCaptureMode },

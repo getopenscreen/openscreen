@@ -437,7 +437,8 @@ void mixAudioInPlace(
     std::vector<BYTE>& destination,
     const BYTE* source,
     DWORD byteCount,
-    const AudioInputFormat& format) {
+    const AudioInputFormat& format,
+    double sourceGain) {
     if (!source || byteCount == 0 || destination.empty()) {
         return;
     }
@@ -449,7 +450,8 @@ void mixAudioInPlace(
         const auto* input = reinterpret_cast<const float*>(source);
         const size_t sampleCount = mixByteCount / sizeof(float);
         for (size_t index = 0; index < sampleCount; index += 1) {
-            output[index] = static_cast<float>(std::clamp(output[index] + input[index], -1.0f, 1.0f));
+            output[index] = static_cast<float>(
+                std::clamp(static_cast<double>(output[index]) + static_cast<double>(input[index]) * sourceGain, -1.0, 1.0));
         }
         return;
     }
@@ -460,7 +462,7 @@ void mixAudioInPlace(
         const size_t sampleCount = mixByteCount / sizeof(int16_t);
         for (size_t index = 0; index < sampleCount; index += 1) {
             output[index] = clampTo<int16_t>(
-                static_cast<double>(output[index]) + static_cast<double>(input[index]));
+                static_cast<double>(output[index]) + static_cast<double>(input[index]) * sourceGain);
         }
         return;
     }
@@ -471,7 +473,7 @@ void mixAudioInPlace(
         const size_t sampleCount = mixByteCount / sizeof(int32_t);
         for (size_t index = 0; index < sampleCount; index += 1) {
             output[index] = clampTo<int32_t>(
-                static_cast<double>(output[index]) + static_cast<double>(input[index]));
+                static_cast<double>(output[index]) + static_cast<double>(input[index]) * sourceGain);
         }
     }
 }
@@ -573,13 +575,13 @@ void AudioMixer::pushMicrophone(const BYTE* data, DWORD byteCount) {
         if (paused_) {
             return;
         }
-        append(
-            microphoneQueue_,
-            data,
-            byteCount,
-            microphoneFormat_,
-            microphoneGain_,
-            microphoneDecimator_);
+        // The microphone is stored at unity and `microphoneGain_` is applied by
+        // mixLoop inside the sum. Applying it here instead would clamp a hot
+        // boosted mic to the rails in PCM16 BEFORE the system stream is mixed
+        // in: the queue would hold a flat-topped signal and the mix would add
+        // further distortion on top of it, with whatever headroom the opposite
+        // polarity of the system stream offered already destroyed.
+        append(microphoneQueue_, data, byteCount, microphoneFormat_, 1.0, microphoneDecimator_);
     }
     cv_.notify_all();
 }
@@ -691,7 +693,9 @@ void AudioMixer::mixLoop() {
                 }
                 if (includeMicrophone_) {
                     pop(microphoneQueue_, sourceChunk, chunkBytes);
-                    mixAudioInPlace(mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_);
+                    mixAudioInPlace(
+                        mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_,
+                        microphoneGain_);
                 }
             }
 

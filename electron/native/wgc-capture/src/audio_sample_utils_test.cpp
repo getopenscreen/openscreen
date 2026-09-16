@@ -1351,6 +1351,101 @@ int main() {
         runMixer(true, "-with-mic");
     }
 
+    // --- Gain staging: where the microphone gain clamps ----------------------
+    //
+    // The microphone used to be boosted at push time, clamping to the rails in
+    // PCM16 before the system stream was mixed in -- a hot boosted mic arrived
+    // flat-topped and the sum then distorted again on top of it. The gain now
+    // rides in the double-domain sum and the result clamps exactly once, at the
+    // write. DC levels make every post-fill output sample an exact number, so
+    // the three cases below pin the arithmetic itself rather than a tendency.
+    //
+    // float32 in, PCM16 out, both 48 kHz -- the interpolation branch, which is
+    // what an ordinary machine's microphone packet takes.
+    {
+        const AudioInputFormat f32stereo = makeFormat(MFAudioFormat_Float, 48000, 2, 32);
+        const auto dcPacket = [&](double value, size_t frames) {
+            std::vector<BYTE> bytes(frames * f32stereo.blockAlign, 0);
+            auto* samples = reinterpret_cast<float*>(bytes.data());
+            for (size_t i = 0; i < frames; i += 1) {
+                samples[i * 2] = static_cast<float>(value);
+                samples[i * 2 + 1] = static_cast<float>(value);
+            }
+            return bytes;
+        };
+        const auto steadySample = [&](bool includeSystem, double system, double mic,
+                                      double gain) -> int {
+            std::mutex guard;
+            std::vector<BYTE> collected;
+            AudioMixer mixer(
+                target48k, f32stereo, f32stereo, includeSystem, true, gain,
+                [&](const BYTE* data, DWORD byteCount, int64_t, int64_t) {
+                    std::scoped_lock lock(guard);
+                    collected.insert(collected.end(), data, data + byteCount);
+                    return true;
+                });
+            expect("gain-stage-mixer-start", mixer.start(), "");
+            mixer.beginTimeline();
+            // Far more than the 10 ms cadence can consume in the wait window, so
+            // no pop() ever zero-fills into the measured region.
+            const auto systemPackets = dcPacket(system, 48000);
+            const auto micPackets = dcPacket(mic, 48000);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            for (int burst = 0; burst < 20; burst += 1) {
+                if (includeSystem) {
+                    mixer.pushSystem(systemPackets.data(), static_cast<DWORD>(systemPackets.size()));
+                }
+                mixer.pushMicrophone(micPackets.data(), static_cast<DWORD>(micPackets.size()));
+                std::this_thread::sleep_for(std::chrono::milliseconds(25));
+                std::scoped_lock lock(guard);
+                // 2 s of output is well past queue fill-in; DC never varies after.
+                if (collected.size() >= 2 * 48000 * target48k.blockAlign) {
+                    break;
+                }
+                if (std::chrono::steady_clock::now() > deadline) {
+                    break;
+                }
+            }
+            mixer.stop();
+            const size_t frames = collected.size() / target48k.blockAlign;
+            // The bursts span ~0.65 s of real time and mixLoop emits on the
+            // clock, so that is what there is; 0.5 s is far past queue fill-in
+            // and DC never varies after it.
+            expect("gain-stage-produced-output", frames >= 24000, "frames=" + std::to_string(frames));
+            // The last written sample: every one of them is the same number once
+            // both queues have delivered, which is what DC buys us.
+            const auto* out = reinterpret_cast<const int16_t*>(collected.data());
+            return out[(frames - 1) * 2];
+        };
+
+        // (1) 0.9 * 1.4 - 0.5 = 0.76 -> 24903. The old clamp-then-sum path read
+        // 0.5 (16384) here because the boosted mic was already flat at 1.0.
+        {
+            const int got = steadySample(true, -0.5, 0.9, 1.4);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=24903", got);
+            std::cout << "GAIN_RAW mix-over-system " << detail << std::endl;
+            expect("mixer-mic-gain-applied-at-mix", std::abs(got - 24903) <= 2, detail);
+        }
+        // (2) 0.9 * 1.4 + 0.5 = 1.76 -> clamped once at the rail.
+        {
+            const int got = steadySample(true, 0.5, 0.9, 1.4);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=32767", got);
+            std::cout << "GAIN_RAW sum-clamp " << detail << std::endl;
+            expect("mixer-sum-clamps-once-at-rail", got >= 32766, detail);
+        }
+        // (3) Unity passthrough: the level a mic-only take must ride at, since
+        // the request now sends 1.0 when there is no system audio to sit over.
+        {
+            const int got = steadySample(false, 0.0, 0.9, 1.0);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=29490", got);
+            std::cout << "GAIN_RAW unity " << detail << std::endl;
+            expect("mixer-unity-gain-passthrough", std::abs(got - 29490) <= 2, detail);
+        }
+    }
+
     HRESULT mfHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(mfHr) && mfHr != RPC_E_CHANGED_MODE) {
         skip("mf-startup", "CoInitializeEx failed — no Media Foundation on this host");

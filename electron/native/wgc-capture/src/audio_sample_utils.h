@@ -63,11 +63,18 @@ void convertAudioWithGain(
     double gain,
     std::vector<BYTE>& destination,
     AudioDecimatorState& decimator);
+// Mixes `source` into `destination`, scaling the source by `sourceGain` first.
+// The gain rides in the double-domain sum and the result is clamped exactly
+// once, at the write: a source whose scaled samples exceed full scale must
+// saturate against the OTHER sources too (sum-then-clamp), not arrive
+// pre-flattened by its own conversion (clamp-then-sum, which distorts twice
+// and loses whatever headroom the opposite polarity of the mix had).
 void mixAudioInPlace(
     std::vector<BYTE>& destination,
     const BYTE* source,
     DWORD byteCount,
-    const AudioInputFormat& format);
+    const AudioInputFormat& format,
+    double sourceGain = 1.0);
 
 class AudioMixer {
 public:

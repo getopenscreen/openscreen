@@ -925,9 +925,18 @@ impl Compositor {
     /// 1/4 -> 1/8) + 3 up (1/8 -> 1/4 -> 1/2 -> RT). ~gaussien a cout constant.
     fn blur_bg(&self, encoder: &mut wgpu::CommandEncoder) {
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
-        let (hw, hh) = (rw * 0.5, rh * 0.5);
-        let (qw, qh) = (rw * 0.25, rh * 0.25);
-        let (ow, oh) = (rw * 0.125, rh * 0.125);
+        let (hw, hh) = (
+            (self.render_w / 2).max(1) as f32,
+            (self.render_h / 2).max(1) as f32,
+        );
+        let (qw, qh) = (
+            (self.render_w / 4).max(1) as f32,
+            (self.render_h / 4).max(1) as f32,
+        );
+        let (ow, oh) = (
+            (self.render_w / 8).max(1) as f32,
+            (self.render_h / 8).max(1) as f32,
+        );
         self.blur_pass(encoder, &self.blur_down, &self.rt_view, &self.blur_half, [rw, rh]);
         self.blur_pass(encoder, &self.blur_down, &self.blur_half, &self.blur_qtr, [hw, hh]);
         self.blur_pass(encoder, &self.blur_down, &self.blur_qtr, &self.blur_oct, [qw, qh]);
@@ -3755,12 +3764,26 @@ mod tests {
         check_kawase_step(&gpu, false);
     }
 
+    /// Meme verification sur une dimension non divisible par 8 (854 px, standard
+    /// 480p 16:9), ou la pyramide subit la division entiere : les texels source
+    /// doivent utiliser les dimensions reelles des textures de la pyramide et non
+    /// des multiples fractionnaires.
+    #[test]
+    fn background_blur_matches_the_hlsl_kawase_kernels_non_multiple_of_8() {
+        let Some(gpu) = gpu() else { return };
+        check_kawase_step_dims(&gpu, 854, 64, true);
+    }
+
     /// `vertical_edge` : marche noir -> blanc le long de x (lue sur une ligne),
     /// sinon le long de y (lue sur une colonne). Les noyaux HLSL sont
     /// symetriques, donc leur projection 1D est la meme sur les deux axes.
     fn check_kawase_step(gpu: &Gpu, vertical_edge: bool) {
         // Dimensions divisibles par 8 : la pyramide tombe juste.
         let (w, h) = if vertical_edge { (640u32, 64u32) } else { (64u32, 640u32) };
+        check_kawase_step_dims(gpu, w, h, vertical_edge);
+    }
+
+    fn check_kawase_step_dims(gpu: &Gpu, w: u32, h: u32, vertical_edge: bool) {
         let comp = Compositor::new_sized(gpu, w, h).expect("Compositor::new_sized");
 
         // La marche, opaque, posee sur le RT par `fs_copy` (le RT n'a pas

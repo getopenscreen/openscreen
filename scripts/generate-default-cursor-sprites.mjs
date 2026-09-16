@@ -29,9 +29,9 @@ const OUT_SIZE = 128;
 
 /**
  * cursorType -> { file, hotspotX, hotspotY } in the 32-logical reference.
- * Hotspots are copied from PRETTY_NATIVE_CURSOR_ASSETS in src/lib/cursor/nativeCursor.ts,
- * which is the live web renderer's table and stays the source of truth; this generator
- * only re-expresses them for the native path.
+ * Hotspots were copied from the web renderer's table (src/lib/cursor/nativeCursor.ts), which
+ * was deleted with pixi.js. This table is now their source of truth: the table this script
+ * prints for DEFAULT_CURSOR_SPRITES (src/lib/cursor/cursorThemes.ts) comes from it.
  */
 const SPRITES = {
 	arrow: { file: "Cursor=Default.svg", hotspotX: 16.25, hotspotY: 15.03 },

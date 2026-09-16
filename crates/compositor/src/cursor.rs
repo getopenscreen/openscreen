@@ -165,9 +165,9 @@ impl CursorTrack {
 
     /// Facteur d'échelle « click bounce ». Cette fonction est la SEULE référence de la courbe :
     /// son ancien jumeau TS (`nativeCursor.ts`) a été supprimé avec pixi.js, et
-    /// `scripts/inspect-native-cursor-click-bounce.mjs` ne fait que la recopier. Le curseur PRESSE (rétrécit
-    /// jusqu'à 0.76, 0..38% de la fenêtre d'animation) PUIS REBONDIT (grossit jusqu'à 1.16,
-    /// 38..100%), pas un simple pop qui ne fait que grossir puis redécroître. Seul le clic le
+    /// `scripts/inspect-native-cursor-click-bounce.mjs` ne fait que la recopier. Le curseur
+    /// PRESSE (rétrécit jusqu'à 0.76, 0..38% de la fenêtre d'animation) PUIS REBONDIT (grossit
+    /// jusqu'à 1.16, 38..100%), pas un simple pop qui ne fait que grossir puis redécroître. Seul le clic le
     /// plus récent précédant `t` compte (au-delà de la fenêtre, un clic antérieur n'a plus
     /// aucun effet — contrairement à l'ancienne décroissance exponentielle à queue infinie qui
     /// masquait ce bug). L'amplitude utilisateur (clickBounce) s'applique dans `plan_cursor`.

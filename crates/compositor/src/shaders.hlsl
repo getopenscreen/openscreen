@@ -303,19 +303,34 @@ float4 ps_main(VSOut i) : SV_Target
     // arrive dans `texImg` (recopie du render target : on ne peut pas échantillonner la cible sur
     // laquelle on dessine). `i.pout` donne directement l'UV de sortie, donc aucun mapping à
     // refaire. fx.x = 0 mosaïque / 1 flou ; fx.y = taille de bloc px (mosaïque) ou rayon px
-    // (flou) ; fx.z = 0 rectangle / 1 ovale ; fx.w = 1 si le masque doit être teinté.
+    // (flou) ; fx.z = 0 rectangle / 1 ovale ; fx.w = 1 si le masque doit être teinté ;
+    // mb.z = 1 si le masque est un quad incliné (coins TL, TR dans dst_prev, BR, BL dans src_prev).
     if (mode > 9.5)
     {
         // Masque de forme, en coords locales normalisées du quad.
         float2 n = i.local / max(quad_px, 1e-6);
+        // Écran incliné (mb.z = 1) : le masque est le quad dst_prev = TL, TR / src_prev = BR, BL,
+        // warpé comme le contenu qu'il cache (`FrameGeometry::privacy_mask`), par le même inverse
+        // que le mode 8. Bord net, marge de 2 % comprise : un fondu rendrait le masque en partie
+        // transparent SUR la zone à cacher.
+        if (mb.z > 0.5)
+        {
+            float3 w = quad_inverse_bilinear(i.local, dst_prev.xy, dst_prev.zw, src_prev.xy, src_prev.zw);
+            if (w.z < 0.5)
+            {
+                return float4(0.0, 0.0, 0.0, 0.0);
+            }
+            n = w.xy;
+        }
         float cov = 1.0;
         if (fx.z > 0.5)
         {
-            // Ovale inscrit : distance au centre en unités de demi-axes, adoucie sur ~1px.
+            // Ovale inscrit : distance au centre en unités de demi-axes, adoucie sur ~1px. Le
+            // fondu tombe HORS de l'ellipse : dedans, le masque reste plein.
             float2 d = (n - 0.5) * 2.0;
             float r = length(d);
             float aa = 2.0 / max(min(quad_px.x, quad_px.y), 1.0);
-            cov = 1.0 - smoothstep(1.0 - aa, 1.0, r);
+            cov = 1.0 - smoothstep(1.0, 1.0 + aa, r);
         }
         if (cov <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);
 

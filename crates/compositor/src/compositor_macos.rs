@@ -1188,15 +1188,17 @@ impl Compositor {
     /// conteneur que reçoit l'overlay web. Port de `compositor_windows::draw_annotations`.
     ///
     /// Le paramètre s'appelle `s_ann` et pas `screen_dst` parce que c'est le seul rect
-    /// correct : lui passer `s_dst` fait dériver et grossir les sous-titres sous un zoom
-    /// (issue #179, puis #397 sur Linux). L'arithmétique elle-même vit dans
-    /// `frame_geometry::annotation_dst_in`, partagée par les trois backends.
+    /// correct pour le texte, les flèches et les images : lui passer `s_dst` fait dériver et
+    /// grossir les sous-titres sous un zoom (issue #179, puis #397 sur Linux). L'arithmétique
+    /// elle-même vit dans `frame_geometry::annotation_dst_in`, partagée par les trois backends.
+    /// Le flou, lui, se place par `g.privacy_mask` : un masque doit rester sur ce qu'il cache.
     unsafe fn draw_annotations(
         &self,
         cmd: &metal::CommandBufferRef,
         scene: Option<&Scene>,
         t: f32,
         s_ann: [f32; 4],
+        g: &crate::frame_geometry::FrameGeometry,
     ) -> Result<()> {
         let Some(scene) = scene else { return Ok(()) };
         if scene.annotations.is_empty() {
@@ -1260,6 +1262,7 @@ impl Compositor {
                 }
                 "blur" => {
                     let Some(blur) = a.blur.as_ref() else { continue };
+                    let Some(mask) = g.privacy_mask(a, [rw, rh]) else { continue };
                     // Le masque en tracé libre demanderait une liste de points côté GPU : on
                     // masque la BOÎTE ENGLOBANTE. Choix délibérément asymétrique — ne rien
                     // dessiner laisserait passer en clair ce que l'utilisateur a désigné comme
@@ -1278,13 +1281,17 @@ impl Compositor {
                     } else {
                         [1.0, 1.0, 1.0, 1.0]
                     };
+                    let (dst_prev, src_prev, mb) = mask.warp_fields();
                     enc.set_fragment_texture(2, Some(&self.ann_copy));
                     self.draw_solid(enc, &LayerCB {
-                        dst,
-                        quad_px,
+                        dst: mask.dst,
+                        quad_px: mask.quad_px,
                         mode: 10.0,
                         color: tint,
-                        fx: [is_blur, amount.max(1.0), is_oval, tinted],
+                        fx: [is_blur, amount.max(1.0) * mask.strength, is_oval, tinted],
+                        src_prev,
+                        dst_prev,
+                        mb,
                         ..Default::default()
                     });
                 }
@@ -2273,8 +2280,9 @@ impl Compositor {
 
         // --- annotations : calque le plus haut, ancré sur le rect ÉCRAN SANS ZOOM ---
         // `s_ann`, pas `s_dst` : le zoom vit dans la boîte depuis l'issue #179, donc `s_dst`
-        // grandit avec lui et emmenait annotations et sous-titres dans le mouvement.
-        self.draw_annotations(cmd_buf, scene_ref.as_ref(), g.source_t, g.s_ann)?;
+        // grandit avec lui et emmenait annotations et sous-titres dans le mouvement. Le flou de
+        // confidentialité est l'exception : il suit le contenu, d'où `&g`.
+        self.draw_annotations(cmd_buf, scene_ref.as_ref(), g.source_t, g.s_ann, &g)?;
 
         // Ni miroir RGBA ni attente ici : le miroir ne sert qu'à `readback_direct` (la
         // preview), et l'export ne lit jamais le RGBA — le blit pleine résolution était payé

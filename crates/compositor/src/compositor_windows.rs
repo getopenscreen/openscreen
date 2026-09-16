@@ -2054,25 +2054,30 @@ impl Compositor {
         // la transform, donc les annotations restent en place pendant que le contenu zoome dessous.
         // Ce fut `s_dst` tant que le zoom vivait dans la coupe source ; depuis l'issue #179 il vit
         // dans la BOÎTE, et `s_dst` emmenait annotations et sous-titres avec lui.
+        // Exception : le flou de confidentialité suit le contenu (`FrameGeometry::privacy_mask`),
+        // d'où la géométrie entière passée en plus de `s_ann`.
         // `source_t`, la même base de temps que les zoom/speed regions : le temps SOURCE du clip,
         // pas le compteur de frames. C'est ce qui garde une annotation alignée sur l'image quand
         // une speed region répète ou saute des frames.
-        self.draw_annotations(scene_ref.as_ref(), source_t, s_ann);
+        self.draw_annotations(scene_ref.as_ref(), source_t, s_ann, &g);
         Ok(())
     }
 
     /// Dessine les annotations visibles à `t`. `s_ann` = rect écran SANS ZOOM, en fractions de
     /// sortie.
     ///
-    /// Le paramètre s'appelle `s_ann` et pas `screen_dst` parce que c'est le seul rect correct :
-    /// lui passer `s_dst` fait dériver et grossir les sous-titres sous un zoom (issue #179, puis
-    /// #397 sur Linux). L'arithmétique elle-même vit dans `frame_geometry::annotation_dst_in`,
-    /// partagée par les trois backends.
-    ///
-    /// Seule la « figure » (flèche) est rendue à ce stade ; texte, image et flou suivront. Les
-    /// types non gérés sont ignorés silencieusement plutôt que dessinés de travers : mieux vaut
-    /// l'absence connue qu'un placeholder qui ferait croire à un bug de style.
-    unsafe fn draw_annotations(&self, scene: Option<&Scene>, t: f32, s_ann: [f32; 4]) {
+    /// Le paramètre s'appelle `s_ann` et pas `screen_dst` parce que c'est le seul rect correct
+    /// pour le texte, les flèches et les images : lui passer `s_dst` fait dériver et grossir les
+    /// sous-titres sous un zoom (issue #179, puis #397 sur Linux). L'arithmétique elle-même vit
+    /// dans `frame_geometry::annotation_dst_in`, partagée par les trois backends. Le flou, lui,
+    /// se place par `g.privacy_mask` : un masque doit rester sur ce qu'il cache.
+    unsafe fn draw_annotations(
+        &self,
+        scene: Option<&Scene>,
+        t: f32,
+        s_ann: [f32; 4],
+        g: &crate::frame_geometry::FrameGeometry,
+    ) {
         let Some(scene) = scene else { return };
         if scene.annotations.is_empty() {
             return;
@@ -2136,6 +2141,9 @@ impl Compositor {
                 }
                 "blur" => {
                     let Some(blur) = annotation.blur.as_ref() else { continue };
+                    let Some(mask) = g.privacy_mask(annotation, [self.rw(), self.rh()]) else {
+                        continue;
+                    };
                     // Le masque en tracé libre demande une liste de points côté GPU (buffer
                     // structuré), pas encore faite : on masque alors la BOÎTE ENGLOBANTE.
                     //
@@ -2161,13 +2169,17 @@ impl Compositor {
                     } else {
                         [1.0, 1.0, 1.0, 1.0]
                     };
+                    let (dst_prev, src_prev, mb) = mask.warp_fields();
                     self.ctx.PSSetShaderResources(2, Some(&[Some(self.ann_copy_srv.clone())]));
                     self.draw_solid(&LayerCB {
-                        dst,
-                        quad_px,
+                        dst: mask.dst,
+                        quad_px: mask.quad_px,
                         mode: 10.0,
                         color: tint,
-                        fx: [is_blur, amount.max(1.0), is_oval, tinted],
+                        fx: [is_blur, amount.max(1.0) * mask.strength, is_oval, tinted],
+                        src_prev,
+                        dst_prev,
+                        mb,
                         ..Default::default()
                     });
                 }

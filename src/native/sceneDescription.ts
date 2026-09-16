@@ -133,6 +133,11 @@ export interface SceneSpeedRegion {
  *  crop: the overlay is a sibling of the element carrying the zoom transform, so annotations
  *  hold still while the content zooms underneath them.
  *
+ *  The exception is `kind: "blur"`: a privacy mask that held still would let the content it
+ *  hides slide out from under it. Native renders it on the content instead, through the zoom and
+ *  any 3D tilt (`FrameGeometry::privacy_mask`), so its rect names what it covers at rest. The
+ *  selection outline in the editor overlay still sits on the unzoomed rect.
+ *
  *  `space: "frame"` opts an entry out of that and measures it against the output frame instead.
  *  Only captions set it: an annotation is authored on top of the visible video, so it must track
  *  the screen rect, whereas a subtitle belongs to the frame the viewer sees and has to hold still

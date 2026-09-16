@@ -184,6 +184,11 @@ pub enum SceneBackground {
 /// elles ne subissent **pas** le crop de zoom : l'overlay est frère de l'élément qui porte la
 /// transform, donc les annotations restent en place pendant que le contenu zoome dessous.
 ///
+/// Exception : `kind: "blur"`. Un masque de confidentialité qui resterait en place laisserait
+/// sortir de dessous ce qu'il cache ; il suit donc le contenu sous le zoom et l'inclinaison 3D
+/// (`FrameGeometry::privacy_mask`). Les mêmes `x`/`y`/`w`/`h` désignent alors le contenu couvert
+/// au repos.
+///
 /// `space: "frame"` change cette boîte de référence pour le **cadre de sortie**. Seuls les
 /// sous-titres l'envoient : une annotation est posée sur la vidéo visible et doit donc suivre le
 /// rect écran, alors qu'un sous-titre appartient au cadre que le spectateur voit et doit rester
@@ -236,10 +241,12 @@ impl SceneAnnotation {
     /// sur le rect écran immobiliserait le sous-titre tout en continuant de rétrécir ses lettres
     /// avec le curseur de padding.
     pub fn anchor_rect(&self, screen_dst: [f32; 4]) -> [f32; 4] {
-        match self.space.as_deref() {
-            Some("frame") => [0.0, 0.0, 1.0, 1.0],
-            _ => screen_dst,
-        }
+        if self.in_frame_space() { [0.0, 0.0, 1.0, 1.0] } else { screen_dst }
+    }
+
+    /// `true` pour une entrée mesurée sur le cadre de sortie (`space: "frame"`, les sous-titres).
+    pub fn in_frame_space(&self) -> bool {
+        self.space.as_deref() == Some("frame")
     }
 }
 

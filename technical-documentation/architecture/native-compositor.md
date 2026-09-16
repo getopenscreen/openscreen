@@ -134,6 +134,17 @@ what `shaders.hlsl` actually implements:
    text (DirectWrite → D3D11 SRV, then `mode = 0`), image (cached per
    annotation id).
 
+   Text, figures, images and captions are anchored on the screen box *without*
+   the zoom (`s_ann`), so they hold still while the content zooms underneath.
+   Blur/mosaic is the one exception: it is a privacy mask, so it must keep
+   covering what it hides. `FrameGeometry::privacy_mask`
+   ([`frame_geometry.rs`](../../crates/compositor/src/frame_geometry.rs)) places
+   it on the zoomed box, warps it through the same `TiltedQuad` as the screen
+   under a 3D preset (`mode = 10` with `mb.z = 1`), widens it to the previous
+   frame's rect while velocity motion blur is on, pads it by one pixel, and
+   scales the blur radius / mosaic block with the content's magnification.
+   `crates/compositor/tests/privacy_blur_under_zoom.rs` renders it on D3D11.
+
 ```mermaid
 flowchart TB
     subgraph frame["compose_frame - one frame"]

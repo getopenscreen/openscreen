@@ -745,7 +745,8 @@ pub struct FrameGeometry {
     pub s_dst: [f32; 4],
     pub s_dst_prev: [f32; 4],
     /// Boîte écran **sans le zoom** : le conteneur auquel les annotations et les
-    /// sous-titres sont ancrés.
+    /// sous-titres sont ancrés — sauf le flou de confidentialité, qui suit le contenu
+    /// (`privacy_mask`).
     ///
     /// C'est `s_dst` avant le `remap_box` du zoom, donc le rect que l'app a résolu
     /// (`layout.screenRect`) et que l'overlay web reçoit comme conteneur. Le contrat de
@@ -767,7 +768,9 @@ pub struct FrameGeometry {
 
 /// Rect de destination d'une annotation dans un rect d'ancrage, en fractions de la sortie.
 ///
-/// `anchor` est TOUJOURS `s_ann`, le rect écran sans le zoom — jamais `s_dst`. Les deux
+/// Pour le texte, les flèches, les images et les sous-titres, `anchor` est TOUJOURS `s_ann`,
+/// le rect écran sans le zoom — jamais `s_dst`. (Le flou passe par
+/// `FrameGeometry::privacy_mask`, qui fait l'inverse exprès.) Les deux
 /// coïncident sans zoom, ce qui rend l'erreur invisible sur la moitié des scènes ; sous
 /// zoom, `s_dst` grandit et emmène annotations et sous-titres avec lui, alors que le
 /// contrat de `SceneAnnotation` les veut « deliberately NOT affected by the zoom crop ».
@@ -801,6 +804,163 @@ impl FrameGeometry {
     pub fn annotation_anchor_h_px(&self, rh: f32) -> f32 {
         self.s_ann[3] * rh
     }
+
+    /// Où dessiner le masque d'une annotation « flou » pour qu'il couvre le CONTENU qu'il
+    /// cachait au repos, et à quelle force. `None` si le rect est dégénéré.
+    ///
+    /// C'est l'exception au contrat de `annotation_dst_in`, et elle est voulue. Une flèche ou un
+    /// texte peuvent rester immobiles pendant que l'image zoome dessous ; un masque de
+    /// confidentialité, non : ancré sur `s_ann`, il masquait un rectangle FIXE de la sortie
+    /// pendant que le mot de passe grossissait dans `s_dst` et sortait de dessous — en preview
+    /// comme dans le fichier exporté.
+    ///
+    /// Le contenu à la fraction `f` de l'écran tombe exactement en `s_dst.xy + f * s_dst.wh` :
+    /// la coupe source ne dépend pas du zoom (elle est prise à zoom 1), seul `s_dst` en porte
+    /// l'agrandissement. Sous un préset 3D il tombe en `centre + quad.point_px(f)`, le warp que
+    /// le mode 8 inverse ; un warp bilinéaire restreint à un sous-rectangle est le warp
+    /// bilinéaire de ses quatre coins, donc warper ces coins-là est exact.
+    ///
+    /// Tout arrondi va du côté du SUR-masquage : 1 px de marge autour du rect, la trace du flou
+    /// de mouvement incluse, et une force qui ne descend jamais sous celle du repos.
+    pub fn privacy_mask(
+        &self,
+        annotation: &crate::scene::SceneAnnotation,
+        render_px: [f32; 2],
+    ) -> Option<PrivacyMask> {
+        let [rw, rh] = render_px;
+        let (x, y, w, h) = (annotation.x, annotation.y, annotation.w, annotation.h);
+        if w <= 0.0 || h <= 0.0 || rw <= 0.0 || rh <= 0.0 {
+            return None;
+        }
+        // Un sous-titre (`space: "frame"`) se mesure sur le cadre de sortie, que le zoom ne
+        // touche pas. Aucune annotation flou n'envoie la clé aujourd'hui ; si un jour c'est le
+        // cas, elle garde le comportement du cadre.
+        if annotation.in_frame_space() {
+            let dst = annotation_dst_in([0.0, 0.0, 1.0, 1.0], x, y, w, h);
+            return Some(PrivacyMask::upright(pad_rect(dst, render_px), render_px, 1.0));
+        }
+        let upright = annotation_dst_in(self.s_dst, x, y, w, h);
+        // Grossissement du zoom : le contenu grandit de `s_dst / s_ann`, le grain du masque doit
+        // grandir d'autant, sinon une mosaïque de 12 px ne moyenne plus que 6 px de source sur
+        // un zoom x2 et le texte redevient lisible.
+        let zoom_k =
+            if self.s_ann[3] > 0.0 { (self.s_dst[3] / self.s_ann[3]).max(1.0) } else { 1.0 };
+
+        if crate::regions::is_identity_rotation(self.zoom_rotation) {
+            // Le mode 0 étale chaque pixel entre sa position courante et celle de la frame
+            // précédente (`dst_prev = s_dst_prev`) : pendant une rampe de zoom, une copie traînée
+            // du secret sort du rect courant. Chaque coordonnée étalée reste entre ses deux
+            // extrémités, donc la boîte englobante des deux rects la contient.
+            // Mêmes conditions que le shader : `(int) mb.x > 1` et `saturate(mb.y) > 0.001`.
+            let rect = if self.mb_taps >= 2.0 && self.mb_amount > 0.001 {
+                union_rect(upright, annotation_dst_in(self.s_dst_prev, x, y, w, h))
+            } else {
+                upright
+            };
+            return Some(PrivacyMask::upright(pad_rect(rect, render_px), render_px, zoom_k));
+        }
+
+        // Écran incliné (le mode 8 n'a pas de flou de mouvement : pas de trace à couvrir).
+        // Même quad et même centre que le dessin de l'écran et que `plan_cursor`.
+        let s_px = [self.s_dst[2] * rw, self.s_dst[3] * rh];
+        let quad = crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], self.zoom_rotation);
+        let centre = [
+            (self.s_dst[0] + self.s_dst[2] * 0.5) * rw,
+            (self.s_dst[1] + self.s_dst[3] * 0.5) * rh,
+        ];
+        // La marge d'un pixel se prend dans le repère du plan, avant projection.
+        let (mx, my) = (
+            PRIVACY_MASK_PAD_PX / (s_px[0] * quad.scale).max(1.0),
+            PRIVACY_MASK_PAD_PX / (s_px[1] * quad.scale).max(1.0),
+        );
+        let (x0, y0, x1, y1) = (x - mx, y - my, x + w + mx, y + h + my);
+        let at = |fx: f32, fy: f32| {
+            let (px, py) = quad.point_px(fx, fy);
+            [centre[0] + px, centre[1] + py]
+        };
+        let pts = [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)];
+        let (mut min_x, mut min_y) = (f32::MAX, f32::MAX);
+        let (mut max_x, mut max_y) = (f32::MIN, f32::MIN);
+        for [px, py] in pts {
+            min_x = min_x.min(px);
+            min_y = min_y.min(py);
+            max_x = max_x.max(px);
+            max_y = max_y.max(py);
+        }
+        // Plancher d'un pixel : un masque très fin ferait diverger le warp inverse.
+        let quad_px = [(max_x - min_x).max(1.0), (max_y - min_y).max(1.0)];
+        let local = pts.map(|[px, py]| [px - min_x, py - min_y]);
+        // La perspective grossit localement le côté proche : la force suit l'arête la plus
+        // agrandie par rapport au rect droit zoomé, pour que nulle part le masque ne soit plus
+        // fin, rapporté au contenu, qu'au repos.
+        let (ew, eh) = ((x1 - x0) * s_px[0], (y1 - y0) * s_px[1]);
+        let len = |a: [f32; 2], b: [f32; 2]| (b[0] - a[0]).hypot(b[1] - a[1]);
+        let tilt_k = (len(pts[0], pts[1]) / ew)
+            .max(len(pts[3], pts[2]) / ew)
+            .max(len(pts[0], pts[3]) / eh)
+            .max(len(pts[1], pts[2]) / eh);
+        Some(PrivacyMask {
+            dst: [min_x / rw, min_y / rh, quad_px[0] / rw, quad_px[1] / rh],
+            quad_px,
+            warp: Some(local),
+            strength: (zoom_k * tilt_k).max(1.0),
+        })
+    }
+}
+
+/// Marge, en px de sortie, ajoutée autour d'un masque de confidentialité. Un pixel n'est couvert
+/// que si son CENTRE tombe dans le rect, alors que le bord du contenu, lui, est échantillonné en
+/// bilinéaire : sans marge, la rangée de bord laisse passer une frange du secret.
+pub const PRIVACY_MASK_PAD_PX: f32 = 1.0;
+
+/// Placement d'un masque de confidentialité, prêt pour le mode 10.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PrivacyMask {
+    /// Rect de dessin, en fractions de sortie : la boîte englobante quand l'écran est incliné.
+    pub dst: [f32; 4],
+    /// Taille de `dst` en px de sortie.
+    pub quad_px: [f32; 2],
+    /// Écran incliné : coins TL, TR, BR, BL du masque, en px locaux à `dst` (la convention de
+    /// `i.local` dans le shader). `None` : le masque est le rect `dst` lui-même.
+    pub warp: Option<[[f32; 2]; 4]>,
+    /// Multiplicateur du rayon de flou et du pas de mosaïque, jamais sous 1.
+    pub strength: f32,
+}
+
+impl PrivacyMask {
+    fn upright(dst: [f32; 4], render_px: [f32; 2], strength: f32) -> Self {
+        Self {
+            dst,
+            quad_px: [dst[2] * render_px[0], dst[3] * render_px[1]],
+            warp: None,
+            strength,
+        }
+    }
+
+    /// Les champs du mode 10 qui portent le masque incliné : `(dst_prev, src_prev, mb)`, avec
+    /// `dst_prev` = TL, TR, `src_prev` = BR, BL et `mb.z` = 1. Le mode 10 lit déjà `fx` pour
+    /// ses propres réglages, d'où ces trois champs-là, qu'il ne lisait pas.
+    pub fn warp_fields(&self) -> ([f32; 4], [f32; 4], [f32; 4]) {
+        match self.warp {
+            None => ([0.0; 4], [0.0; 4], [0.0; 4]),
+            Some([tl, tr, br, bl]) => (
+                [tl[0], tl[1], tr[0], tr[1]],
+                [br[0], br[1], bl[0], bl[1]],
+                [0.0, 0.0, 1.0, 0.0],
+            ),
+        }
+    }
+}
+
+fn union_rect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    let (x0, y0) = (a[0].min(b[0]), a[1].min(b[1]));
+    let (x1, y1) = ((a[0] + a[2]).max(b[0] + b[2]), (a[1] + a[3]).max(b[1] + b[3]));
+    [x0, y0, x1 - x0, y1 - y0]
+}
+
+fn pad_rect(r: [f32; 4], render_px: [f32; 2]) -> [f32; 4] {
+    let (px, py) = (PRIVACY_MASK_PAD_PX / render_px[0], PRIVACY_MASK_PAD_PX / render_px[1]);
+    [r[0] - px, r[1] - py, r[2] + 2.0 * px, r[3] + 2.0 * py]
 }
 
 /// Où va chaque calque, pour une frame — sans toucher au GPU.
@@ -1547,7 +1707,10 @@ mod tests {
     ///
     /// Ce qu'il ne couvre toujours PAS : le choix du rect au call site de Metal et D3D,
     /// qui prennent leur ancre en paramètre. Ce niveau-là n'est vérifiable qu'en rendant
-    /// des pixels — c'est `compose_linux_annotation_ancree_hors_zoom`, opt-in.
+    /// des pixels.
+    ///
+    /// Le flou de confidentialité est l'exception, et elle a ses propres tests plus bas
+    /// (`a_privacy_mask_*`) : lui DOIT suivre le contenu, sinon ce qu'il cache sort de dessous.
     ///
     /// La rotation compte autant que le zoom : un préset iso/left/right est une propriété
     /// de région de zoom, donc l'incliner amenait aussi la boîte — et les sous-titres
@@ -1606,6 +1769,165 @@ mod tests {
                  si les deux coïncident, ce test ne prouve plus rien"
             );
         }
+    }
+
+    fn blur_annotation(json_extra: &str) -> crate::scene::SceneAnnotation {
+        serde_json::from_str(&format!(
+            r#"{{"id":"secret","startSec":0,"endSec":10,"kind":"blur",
+                "x":0.62,"y":0.18,"w":0.2,"h":0.1{json_extra},
+                "blur":{{"style":"mosaic","shape":"rectangle","color":"white","intensity":12,"blockSize":12}}}}"#
+        ))
+        .expect("annotation flou valide")
+    }
+
+    fn inside(r: [f32; 4], x: f32, y: f32) -> bool {
+        x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3]
+    }
+
+    /// Au repos, le masque est le rect de l'annotation, marge d'un pixel comprise.
+    #[test]
+    fn a_privacy_mask_at_rest_is_the_annotation_rect_plus_a_pixel() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let g = plan_frame(&golden_input(&golden_scene(), &cfg));
+        let a = blur_annotation("");
+        let render = [1170.0, 658.0];
+        let m = g.privacy_mask(&a, render).expect("masque");
+        let r = g.annotation_dst(a.x, a.y, a.w, a.h);
+        let (px, py) = (1.0 / render[0], 1.0 / render[1]);
+        let want = [r[0] - px, r[1] - py, r[2] + 2.0 * px, r[3] + 2.0 * py];
+        for k in 0..4 {
+            assert!((m.dst[k] - want[k]).abs() < 1e-6, "{:?} au lieu de {want:?}", m.dst);
+        }
+        assert_eq!(m.warp, None);
+        assert_eq!(m.strength, 1.0);
+    }
+
+    /// Sous un zoom, le masque couvre le MÊME contenu qu'au repos.
+    ///
+    /// La vérification passe par ce que le mode 0 dessine vraiment : l'UV `cut + c * taille`
+    /// au point `s_dst + c * taille`. On relit l'UV que le masque couvrait au repos, puis on
+    /// cherche où ce contenu tombe sous le zoom, sans passer par `privacy_mask`.
+    #[test]
+    fn a_privacy_mask_follows_the_zoomed_content() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let plain = plan_frame(&golden_input(&golden_scene(), &cfg));
+        let zoomed = plan_frame(&golden_input(&zoomed_golden_scene(), &cfg));
+        assert_ne!(plain.s_dst, zoomed.s_dst, "garde : le zoom doit agir");
+        let a = blur_annotation("");
+        let render = [1170.0, 658.0];
+        let m = zoomed.privacy_mask(&a, render).expect("masque");
+        assert_eq!(m.warp, None);
+
+        let uv_at_rest = |fx: f32, fy: f32| {
+            let c = plain.cut;
+            (c[0] + fx * (c[2] - c[0]), c[1] + fy * (c[3] - c[1]))
+        };
+        let drawn_under_zoom = |(u, v): (f32, f32)| {
+            let (c, d) = (zoomed.cut, zoomed.s_dst);
+            (d[0] + (u - c[0]) / (c[2] - c[0]) * d[2], d[1] + (v - c[1]) / (c[3] - c[1]) * d[3])
+        };
+        let corners = [(a.x, a.y), (a.x + a.w, a.y), (a.x + a.w, a.y + a.h), (a.x, a.y + a.h)];
+        for (fx, fy) in corners {
+            let (x, y) = drawn_under_zoom(uv_at_rest(fx, fy));
+            assert!(
+                inside(m.dst, x, y),
+                "le coin ({fx}, {fy}) du contenu tombe en ({x}, {y}), hors de {:?}",
+                m.dst
+            );
+        }
+        // Serré : au plus la marge d'un pixel au-delà du contenu.
+        let (x0, y0) = drawn_under_zoom(uv_at_rest(a.x, a.y));
+        assert!((m.dst[0] - (x0 - 1.0 / render[0])).abs() < 1e-5, "{:?}", m.dst);
+        assert!((m.dst[1] - (y0 - 1.0 / render[1])).abs() < 1e-5, "{:?}", m.dst);
+        // L'ancien placement ratait le contenu : c'est la fuite que ce test garde fermée.
+        let old = zoomed.annotation_dst(a.x, a.y, a.w, a.h);
+        let (cx, cy) = drawn_under_zoom(uv_at_rest(a.x + a.w * 0.5, a.y + a.h * 0.5));
+        assert!(!inside(old, cx, cy), "garde : sous ce zoom l'ancien rect devrait rater le contenu");
+        // Le grain grandit avec le contenu : un zoom x2 double le pas de mosaïque.
+        assert!((m.strength - 2.0).abs() < 1e-3, "force {} au lieu de 2", m.strength);
+    }
+
+    /// Sous un préset 3D, le masque est le quad du contenu, warpé comme le mode 8 le dessine.
+    #[test]
+    fn a_privacy_mask_follows_the_tilted_content() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let g = plan_frame(&golden_input(&tilted_golden_scene(), &cfg));
+        assert!(!crate::regions::is_identity_rotation(g.zoom_rotation), "garde : iso doit incliner");
+        let a = blur_annotation("");
+        let render = [1170.0, 658.0];
+        let m = g.privacy_mask(&a, render).expect("masque");
+        let warp = m.warp.expect("un écran incliné demande un masque warpé");
+
+        // Le même quad et le même centre que le dessin du mode 8 (`compose_frame`).
+        let s_px = [g.s_dst[2] * render[0], g.s_dst[3] * render[1]];
+        let quad = crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], g.zoom_rotation);
+        let centre = [
+            (g.s_dst[0] + g.s_dst[2] * 0.5) * render[0],
+            (g.s_dst[1] + g.s_dst[3] * 0.5) * render[1],
+        ];
+        let drawn = |fx: f32, fy: f32| {
+            let (px, py) = quad.point_px(fx, fy);
+            [centre[0] + px, centre[1] + py]
+        };
+        let content = [(a.x, a.y), (a.x + a.w, a.y), (a.x + a.w, a.y + a.h), (a.x, a.y + a.h)];
+        let mid = drawn(a.x + a.w * 0.5, a.y + a.h * 0.5);
+        let from_mid = |p: [f32; 2]| (p[0] - mid[0]).hypot(p[1] - mid[1]);
+        let origin = [m.dst[0] * render[0], m.dst[1] * render[1]];
+        for (k, &(fx, fy)) in content.iter().enumerate() {
+            let want = drawn(fx, fy);
+            let got = [origin[0] + warp[k][0], origin[1] + warp[k][1]];
+            let gap = (got[0] - want[0]).hypot(got[1] - want[1]);
+            assert!(gap < 2.0, "coin {k} : {got:?} à {gap} px du contenu {want:?}");
+            // Côté sur-masquage : le coin du masque est plus loin du centre que celui du contenu.
+            assert!(from_mid(got) > from_mid(want), "coin {k} rentré dans le contenu");
+            assert!(got[0] >= origin[0] - 1e-3 && got[0] <= origin[0] + m.quad_px[0] + 1e-3);
+            assert!(got[1] >= origin[1] - 1e-3 && got[1] <= origin[1] + m.quad_px[1] + 1e-3);
+        }
+        // L'ancien rect droit ne couvrait pas le centre du contenu incliné.
+        let old = g.annotation_dst(a.x, a.y, a.w, a.h);
+        assert!(
+            !inside(old, mid[0] / render[0], mid[1] / render[1]),
+            "garde : sous ce préset l'ancien rect devrait rater le contenu"
+        );
+        assert!(m.strength >= 1.0);
+    }
+
+    /// Pendant une rampe de zoom, le flou de mouvement du mode 0 étale le contenu jusqu'à sa
+    /// position de la frame précédente : le masque couvre les deux.
+    #[test]
+    fn a_privacy_mask_covers_the_motion_blur_trail() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let scene = zoomed_golden_scene();
+        let a = blur_annotation("");
+        let render = [1170.0, 658.0];
+        let moving = (0..400)
+            .map(|k| {
+                let mut input = golden_input(&scene, &cfg);
+                input.timeline_t_override = Some(k as f32 * 0.02 - 1.0);
+                plan_frame(&input)
+            })
+            .find(|g| g.s_dst != g.s_dst_prev)
+            .expect("garde : la rampe de zoom doit déplacer la boîte d'une frame à l'autre");
+        assert!(moving.mb_taps >= 2.0 && moving.mb_amount > 0.001, "garde : flou de mouvement actif");
+        let m = moving.privacy_mask(&a, render).expect("masque");
+        for anchor in [moving.s_dst, moving.s_dst_prev] {
+            let r = annotation_dst_in(anchor, a.x, a.y, a.w, a.h);
+            for (x, y) in [(r[0], r[1]), (r[0] + r[2], r[1] + r[3])] {
+                assert!(inside(m.dst, x, y), "({x}, {y}) hors du masque {:?}", m.dst);
+            }
+        }
+    }
+
+    /// Une entrée mesurée sur le cadre de sortie n'est pas concernée par le zoom.
+    #[test]
+    fn a_privacy_mask_in_frame_space_ignores_the_zoom() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let g = plan_frame(&golden_input(&tilted_golden_scene(), &cfg));
+        let a = blur_annotation(r#","space":"frame""#);
+        let m = g.privacy_mask(&a, [1170.0, 658.0]).expect("masque");
+        assert_eq!(m.warp, None);
+        assert_eq!(m.strength, 1.0);
+        assert!(inside(m.dst, a.x, a.y) && inside(m.dst, a.x + a.w, a.y + a.h));
     }
 
     /// **Le golden iso-render.**

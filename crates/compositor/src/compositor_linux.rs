@@ -2191,9 +2191,10 @@ impl Compositor {
         // gratuitement tant que le zoom vivait dans la coupe source ; depuis
         // l'issue #179 il vit dans la BOITE, et l'ancrer dessus fait zoomer les
         // sous-titres avec l'ecran. Windows et macOS ont ete corriges alors, ce
-        // backend non -- d'ou le passage par `FrameGeometry::annotation_dst`, qui
-        // ne laisse plus le choix. Le natif peignant AUSSI l'apercu, la derive se
-        // voyait des l'edition, pas seulement a l'export.
+        // backend non. Le natif peignant AUSSI l'apercu, la derive se voyait des
+        // l'edition, pas seulement a l'export.
+        // Exception : le flou de confidentialite suit le contenu, via
+        // `FrameGeometry::privacy_mask` -- un masque doit rester sur ce qu'il cache.
         // Port de `compositor_macos::draw_annotations` : memes modes, memes
         // replis, meme ordre. Seul le texte diverge, tinte cote shader (atlas R8)
         // au lieu d'une couleur bakee dans la texture.
@@ -2271,6 +2272,7 @@ impl Compositor {
                     }
                     "blur" => {
                         let Some(blur) = a.blur.as_ref() else { continue };
+                        let Some(mask) = g.privacy_mask(a, [rw, rh]) else { continue };
                         // Le masque en trace libre demanderait une liste de points
                         // cote GPU : on masque la BOITE ENGLOBANTE. Choix
                         // deliberement asymetrique -- ne rien dessiner laisserait
@@ -2293,12 +2295,16 @@ impl Compositor {
                         } else {
                             [1.0, 1.0, 1.0, 1.0]
                         };
+                        let (dst_prev, src_prev, mb) = mask.warp_fields();
                         let cb = LayerCB {
-                            dst,
-                            quad_px,
+                            dst: mask.dst,
+                            quad_px: mask.quad_px,
                             mode: 10.0,
                             color: tint,
-                            fx: [is_blur, amount.max(1.0), is_oval, tinted],
+                            fx: [is_blur, amount.max(1.0) * mask.strength, is_oval, tinted],
+                            src_prev,
+                            dst_prev,
+                            mb,
                             ..Default::default()
                         };
                         // La copie mipmappee au binding 1 (texY), la ou le mode 10

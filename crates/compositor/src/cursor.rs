@@ -24,7 +24,8 @@ pub struct CursorTrack {
     clicks: Vec<f32>,
     /// CHANGEMENTS d'état du curseur : (instant, `"arrow"` / `"text"` / `"pointer"` / …), triés.
     /// Une fonction en escalier, pas une valeur par échantillon : l'état tient sur des secondes
-    /// entières alors que la position est échantillonnée à ~120 Hz, donc n'enregistrer que les
+    /// entières alors que la position est échantillonnée toutes les 33 ms (~30 Hz, cf.
+    /// `CURSOR_SAMPLE_INTERVAL_MS` côté Electron), donc n'enregistrer que les
     /// transitions garde cette liste minuscule et rend `type_at` trivial.
     types: Vec<(f32, String)>,
 }
@@ -162,14 +163,16 @@ impl CursorTrack {
         sample_at(&self.samples, t)
     }
 
-    /// Facteur d'échelle « click bounce » — parité `getNativeCursorClickBounceScale` (TS,
-    /// `nativeCursor.ts`) : le curseur PRESSE (rétrécit, 0..38% de la fenêtre d'animation)
-    /// PUIS REBONDIT (grossit, 38..100%), pas un simple pop qui ne fait que grossir puis
-    /// redécroître. Seul le clic le plus récent précédant `t` compte (au-delà de la fenêtre,
-    /// un clic antérieur n'a plus aucun effet — contrairement à l'ancienne décroissance
-    /// exponentielle à queue infinie qui masquait ce bug).
+    /// Facteur d'échelle « click bounce ». Cette fonction est la SEULE référence de la courbe :
+    /// son ancien jumeau TS (`nativeCursor.ts`) a été supprimé avec pixi.js, et
+    /// `scripts/inspect-native-cursor-click-bounce.mjs` ne fait que la recopier. Le curseur PRESSE (rétrécit
+    /// jusqu'à 0.76, 0..38% de la fenêtre d'animation) PUIS REBONDIT (grossit jusqu'à 1.16,
+    /// 38..100%), pas un simple pop qui ne fait que grossir puis redécroître. Seul le clic le
+    /// plus récent précédant `t` compte (au-delà de la fenêtre, un clic antérieur n'a plus
+    /// aucun effet — contrairement à l'ancienne décroissance exponentielle à queue infinie qui
+    /// masquait ce bug). L'amplitude utilisateur (clickBounce) s'applique dans `plan_cursor`.
     pub fn bounce(&self, t: f32) -> f32 {
-        const ANIM_S: f32 = 0.26; // NATIVE_CURSOR_CLICK_ANIMATION_MS (TS) = 260ms
+        const ANIM_S: f32 = 0.26; // 260 ms
         const PRESS_FRAC: f32 = 0.38;
         let mut last_tc: Option<f32> = None;
         for &tc in &self.clicks {
@@ -417,6 +420,44 @@ mod tests {
             Some("arrow"),
             "omitted cursorType after pointer must reset to arrow independently"
         );
+    }
+
+    /// Enveloppe du click bounce : neutre hors fenêtre, continue aux jonctions, creux à 0.76 et
+    /// pic à 1.16 aux bons instants, et un nouveau clic redémarre la courbe.
+    #[test]
+    fn click_bounce_envelope() {
+        let near = |a: f32, b: f32, tol: f32| (a - b).abs() < tol;
+        let track = CursorTrack::new(vec![], vec![1.0], vec![]);
+        let b = |t: f32| track.bounce(t);
+
+        // Exactement neutre avant le premier clic et après la fenêtre de 260 ms.
+        assert_eq!(b(0.0), 1.0);
+        assert_eq!(b(0.999), 1.0);
+        assert_eq!(b(1.2601), 1.0);
+        assert_eq!(b(5.0), 1.0);
+
+        // Continuité aux jonctions (fraction 0, 0.38 et 1) : ±0.1 ms autour reste à ~1.
+        const DT: f32 = 1e-4;
+        assert_eq!(b(1.0), 1.0, "fraction 0");
+        assert!(near(b(1.0 + DT), 1.0, 2e-3));
+        let press_end = 1.0 + 0.38 * 0.26;
+        assert!(near(b(press_end - DT), 1.0, 2e-3), "fraction 0.38⁻ : {}", b(press_end - DT));
+        assert!(near(b(press_end + DT), 1.0, 2e-3), "fraction 0.38⁺ : {}", b(press_end + DT));
+        assert!(near(b(1.26 - DT), 1.0, 2e-3), "fraction 1⁻ : {}", b(1.26 - DT));
+
+        // Creux de la pression (fraction 0.19 → +49.4 ms), pic du rebond (0.69 → +179.4 ms).
+        assert!(near(b(1.0494), 0.76, 1e-4), "creux : {}", b(1.0494));
+        assert!(near(b(1.1794), 1.16, 1e-4), "pic : {}", b(1.1794));
+        assert!(b(1.03) > 0.76 && b(1.07) > 0.76, "le creux est un minimum");
+        assert!(b(1.15) < 1.16 && b(1.21) < 1.16, "le pic est un maximum");
+
+        // Seul le clic le plus récent compte : le second redémarre la courbe. À 1.1 s le premier
+        // serait encore dans son rebond (≈1.0037), le second l'écrase à 1.0 pile.
+        let double = CursorTrack::new(vec![], vec![1.0, 1.1], vec![]);
+        assert_eq!(double.bounce(1.1), 1.0, "redémarrage à la fraction 0");
+        assert!(near(double.bounce(1.1494), 0.76, 1e-4), "nouveau creux : {}", double.bounce(1.1494));
+        assert!(near(double.bounce(1.2794), 1.16, 1e-4), "nouveau pic : {}", double.bounce(1.2794));
+        assert_eq!(double.bounce(1.3601), 1.0, "neutre après la fenêtre du second clic");
     }
 
     #[test]

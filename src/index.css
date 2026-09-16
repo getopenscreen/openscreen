@@ -388,7 +388,12 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-b
 	transition: background 0.12s ease-out, color 0.12s ease-out;
 }
 
+/* `border-color` again, on purpose. The base rule's `transparent` loses on hover: sonner's
+   `:hover` rule sits at (0,5,0), above that rule's (0,4,1), and brings back
+   `--normal-border-hover`, a ring around a cross that has no border at rest. The `html`
+   keeps this one at (0,5,1). */
 html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button]:hover {
+	border-color: transparent;
 	background: color-mix(in oklab, var(--fg) 10%, transparent);
 	color: var(--fg);
 }

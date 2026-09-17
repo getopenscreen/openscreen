@@ -10,7 +10,8 @@
 		"clear": "docusaurus clear",
 		"typecheck": "tsc --noEmit",
 		"check:media": "node scripts/check-media-budget.mjs",
-		"check:recreation": "node scripts/gen-recreation.mjs --check"
+		"check:recreation": "node scripts/gen-recreation.mjs --check",
+		"test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
 	},
 	"dependencies": {
 		"@docusaurus/core": "~3.10.1",

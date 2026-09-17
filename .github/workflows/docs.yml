@@ -57,6 +57,9 @@ jobs:
       - name: Type-check
         working-directory: website
         run: npm run typecheck
+      - name: Unit tests
+        working-directory: website
+        run: npm test
       # The walkthrough's clips and stills are committed to this repo, which has
       # no LFS filter — their size is permanent, so a budget that lives only in a
       # design note drifts on the first re-cut. This also fails any clip encoded

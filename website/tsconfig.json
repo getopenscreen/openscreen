@@ -1,6 +1,9 @@
 {
 	"extends": "@docusaurus/tsconfig",
 	"compilerOptions": {
-		"baseUrl": "."
+		"baseUrl": ".",
+		// The node:test files import their subject with its .ts extension, which
+		// Node's type stripping needs; noEmit (from the base config) allows it.
+		"allowImportingTsExtensions": true
 	}
 }

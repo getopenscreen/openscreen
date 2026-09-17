@@ -660,7 +660,8 @@ fn compose_linux_flou_de_velocite_camera() {
 /// Trainee fantome du curseur (accumulation temporelle, pas un mode de shader).
 ///
 /// Le curseur traverse le cadre ; a `cursor.motionBlur = 1` `plan_cursor` rend
-/// 11 taps entre sa position d'il y a 8 frames (8/60 s) et sa position courante.
+/// 2 a 16 prises, ponderees vers la tete, entre sa position d'il y a UNE frame
+/// (1/60 s, l'obturateur borne depuis 34b2e5847) et sa position courante.
 /// On compare au meme rendu sans trainee : la seule difference possible etant le
 /// curseur, un exces de vert la ou le curseur N'EST PAS (mais est PASSE) est la
 /// signature de la trainee.
@@ -686,13 +687,15 @@ fn compose_linux_trainee_de_curseur() {
     let comp = Compositor::new_sized(&gpu, W, H).expect("Compositor::new_sized");
     let mut dec = Decoder::open(FIXTURE, &gpu).expect("Decoder::open");
 
-    // Piste : deplacement horizontal regulier cx 0,1 -> 0,9 en 0,4 s, a cy fixe.
-    // Assez rapide pour que les 8/60 s de recul de la trainee separent nettement
-    // les deux extremites (~256 px a 960 de large) : sans quoi la trainee se
-    // superpose au curseur lui-meme et on ne pourrait plus les distinguer.
+    // Piste : deplacement horizontal regulier cx 0,1 -> 0,9 en 0,1 s, a cy fixe.
+    // L'obturateur de la trainee est borne a UNE frame (`trail_dt = blur01 / FPS`
+    // dans `plan_cursor`, 1/60 s a flou 100 %), donc le curseur doit aller vite
+    // pour que la trainee separe nettement ses deux extremites : 8 cx/s donne
+    // ~128 px a 960 de large. Plus lent, la trainee se superpose au curseur
+    // lui-meme (51 px de cote) et on ne peut plus les distinguer.
     let mut samples = String::new();
     for k in 0..=8 {
-        let (ms, cx) = (k * 50, 0.1 + 0.1 * k as f32);
+        let (ms, cx) = (k as f32 * 12.5, 0.1 + 0.1 * k as f32);
         if k > 0 {
             samples.push(',');
         }
@@ -704,7 +707,7 @@ fn compose_linux_trainee_de_curseur() {
     std::fs::write(&track_path, format!(r#"{{"samples":[{samples}]}}"#)).expect("write track");
     let track = CursorTrack::load(track_path.to_str().unwrap(), 0.0, 2.0).expect("CursorTrack::load");
     comp.set_cursor(track);
-    comp.set_cursor_time(Some(0.35));
+    comp.set_cursor_time(Some(0.0875));
 
     let scene_of = |mblur: f32| {
         format!(
@@ -730,13 +733,15 @@ fn compose_linux_trainee_de_curseur() {
     write_ppm("compose_linux_cursor_trail_off", W, H, &sharp);
     write_ppm("compose_linux_cursor_trail_on", W, H, &trail);
 
-    // A t = 0,35 s le curseur est en cx 0,8 (x ~ 768 px) et 8/60 s plus tot en
-    // cx ~ 0,533 (x ~ 512 px) ; le sprite fait 51 px de cote a size 3 (34/1080
-    // de frame_min_px, x3), donc le curseur COURANT occupe x = 742..794. La
-    // fenetre ci-dessous couvre le milieu du trajet, franchement a sa gauche :
-    // sans trainee il n'y a rien du tout. La bande miroir est son reflet par
-    // rapport a l'axe horizontal de l'image (cy = 0,28 est hors de cet axe
-    // exprès), donc un `accum` composite a l'envers y atterrirait.
+    // A t = 0,0875 s le curseur est en cx 0,8 (x ~ 768 px) et une frame (1/60 s)
+    // plus tot en cx ~ 0,667 (x ~ 640 px) ; le sprite fait 51 px de cote a
+    // size 3 (34/1080 de frame_min_px, x3), donc le curseur COURANT occupe
+    // x = 742..794 et la copie la plus ancienne x = 614..666. La fenetre
+    // ci-dessous tient entre les deux (x = 670..738, y = 130..172 autour de
+    // cy = 0,28 soit y ~ 151) : sans trainee il n'y a rien du tout. La bande
+    // miroir est son reflet par rapport a l'axe horizontal de l'image (cy = 0,28
+    // est hors de cet axe expres), donc un `accum` composite a l'envers y
+    // atterrirait.
     let greener = |x0: u32, x1: u32, y0: u32, y1: u32| -> usize {
         let excess = |img: &[u8], i: usize| {
             img[i + 1] as i32 - (img[i] as i32).max(img[i + 2] as i32)
@@ -752,15 +757,17 @@ fn compose_linux_trainee_de_curseur() {
         }
         n
     };
-    let on_path = greener(530, 700, 130, 172);
-    let mirrored = greener(530, 700, 368, 410);
+    let on_path = greener(670, 738, 130, 172);
+    let mirrored = greener(670, 738, 368, 410);
     println!("compose_linux trainee curseur : sur le trajet={on_path} bande miroir={mirrored}");
 
-    // La fenetre fait 170x42 = 7140 px et la trainee la remplit entierement.
-    // Le seuil a 4000 laisse de la marge tout en refusant une trainee qui ne
-    // couvrirait qu'un bout du trajet.
+    // La fenetre fait 68x42 = 2856 px et la trainee la remplit entierement : les
+    // copies sont espacees de ~8,5 px (16 prises sur 128 px) pour un sprite de
+    // 51 px, et chaque pixel en recoit au moins cinq. Le seuil a 1700 laisse de
+    // la marge tout en refusant une trainee qui ne couvrirait qu'un bout du
+    // trajet.
     assert!(
-        on_path > 4000,
+        on_path > 1700,
         "pas de trainee au milieu du trajet ({on_path} px plus verts) — le curseur n'est dessine qu'a sa position courante"
     );
     assert!(

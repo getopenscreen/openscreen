@@ -895,6 +895,10 @@ pub struct FrameGeometryInput<'a> {
     pub scene: Option<&'a Scene>,
     pub cursor: Option<&'a crate::cursor::CursorTrack>,
     pub timeline_t_override: Option<f32>,
+    /// Temps PROGRAMME (secondes de sortie), continu à travers les coupes et les clips :
+    /// `frames / out_fps` à l'export, `regions::ProgrammeClock` en preview. `None` = fixture
+    /// (`frame / FPS`). Voir `FrameGeometry::programme_t`.
+    pub programme_time: Option<f32>,
 }
 
 /// Les 15 valeurs que la moitié « dessin » consomme. Sur les 75 locaux que le calcul
@@ -905,6 +909,11 @@ pub struct FrameGeometry {
     pub mb_taps: f32,
     pub mb_amount: f32,
     pub source_t: f32,
+    /// Horloge des effets qui vivent sur la SORTIE et non sur la source (fond animé) :
+    /// `source_t` saute à chaque coupe et à chaque clip, pas elle. Recopiée telle quelle de
+    /// l'entrée, jamais déduite de `frame` — en preview ce compteur n'est qu'un tick, qui
+    /// diffère entre lecture et seek pour la même image.
+    pub programme_t: f32,
     /// Rotation 3D de BASE (préset × force) : elle seule fixe l'échelle de containment et le
     /// choix mode 0 / mode 8.
     pub zoom_rotation: [f32; 3],
@@ -1566,6 +1575,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         mb_taps,
         mb_amount,
         source_t,
+        programme_t: input.programme_time.unwrap_or(frame / FPS),
         zoom_rotation,
         zoom_rotation_dyn,
         padding_scale,
@@ -2048,6 +2058,8 @@ mod tests {
             scene: Some(scene),
             cursor: None,
             timeline_t_override: Some(1.5),
+            // Distinct de `source_t` et de `frame / FPS` : un croisement des trois se verrait.
+            programme_time: Some(2.25),
         }
     }
 
@@ -2551,18 +2563,20 @@ mod tests {
             g.cut[0], g.cut[1], g.cut[2], g.cut[3],
             g.s_radius, g.w_radius, g.w_px[0], g.w_px[1],
             g.frame_min_px, g.padding_scale, g.shape_fade, g.mb_taps, g.source_t,
+            g.programme_t,
         ];
-        // Valeurs mesurées, pas devinées : toute dérive est une divergence à expliquer,
-        // pas un seuil à relâcher.
         // Mesuré sur ce code, pas deviné : toute dérive est une divergence à expliquer,
         // pas un seuil à relâcher. Ordre : s_dst[4], w_dst[4], cut[4], s_radius, w_radius,
-        // w_px[2], frame_min_px, padding_scale, shape_fade, mb_taps, source_t.
-        let want: [f32; 21] = [
+        // w_px[2], frame_min_px, padding_scale, shape_fade, mb_taps, source_t, programme_t.
+        // `programme_t` ajouté avec l'horloge programme : c'est une recopie de l'entrée, les
+        // 21 valeurs d'avant n'ont pas bougé d'un bit.
+        let want: [f32; 22] = [
             0.10207555, 0.102, 0.7958489, 0.796,
             0.9058473, 0.8325926, 0.0733194, 0.13037036,
             0.0, 0.0, 0.61, 0.6055147,
             16.779, 42.89185, 85.7837, 85.7837,
             658.0, 0.796, 1.0, 6.25, 1.5,
+            2.25,
         ];
         for (i, (a, b)) in got.iter().zip(want.iter()).enumerate() {
             assert_eq!(
@@ -2571,6 +2585,26 @@ mod tests {
                 "sortie #{i} de plan_frame : {a} != {b}",
             );
         }
+    }
+
+    /// En preview, la même image arrive avec deux compteurs `frame` différents selon qu'on y
+    /// vient en lecture (`idx` incrémenté) ou par un seek (`idx` dérivé du temps). Le temps
+    /// programme ne doit dépendre que de l'instant fourni, jamais de ce compteur.
+    #[test]
+    fn programme_time_ignores_the_frame_counter() {
+        let scene = golden_scene();
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let mut played = golden_input(&scene, &cfg);
+        played.frame = 7.0;
+        let mut sought = golden_input(&scene, &cfg);
+        sought.frame = 90.0;
+        assert_eq!(
+            plan_frame(&played).programme_t.to_bits(),
+            plan_frame(&sought).programme_t.to_bits()
+        );
+        // Sans horloge programme (bench/fixture), repli sur le compteur comme `source_t`.
+        sought.programme_time = None;
+        assert_eq!(plan_frame(&sought).programme_t, 90.0 / FPS);
     }
 
     /// Le contrat cross-backend, verrouillé octet par octet. Un shader qui lit un champ
@@ -2982,6 +3016,7 @@ mod tests {
             mb_taps: 1.0,
             mb_amount: 0.0,
             source_t: 0.0,
+            programme_t: 0.0,
             zoom_rotation: [0.0, 0.0, 0.0],
             zoom_rotation_dyn: [0.0, 0.0, 0.0],
             padding_scale: 1.0,

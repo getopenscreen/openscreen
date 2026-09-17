@@ -132,6 +132,8 @@ pub struct Compositor {
     /// entre clips : les régions projetées par l'app portent elles aussi des temps source.
     /// Séparé de l'override curseur pour préserver les chemins fixture sans télémétrie.
     timeline_t_override: RefCell<Option<f32>>,
+    /// Temps programme (secondes de sortie) — cf. `FrameGeometryInput::programme_time`.
+    programme_time: RefCell<Option<f32>>,
     // cache des SRV décodeur par (texture array, slice) : le pool réutilise ~32 textures,
     // donc après warmup plus aucune création de SRV par frame (overhead CPU supprimé).
     srv_cache: RefCell<HashMap<(usize, u32), (ID3D11ShaderResourceView, ID3D11ShaderResourceView)>>,
@@ -606,6 +608,7 @@ impl Compositor {
             cursor: RefCell::new(None),
             cursor_t_override: RefCell::new(None),
             timeline_t_override: RefCell::new(None),
+            programme_time: RefCell::new(None),
             srv_cache: RefCell::new(HashMap::new()),
             live_params: RefCell::new(LiveParams::default()),
             scene: RefCell::new(None),
@@ -1391,6 +1394,18 @@ impl Compositor {
         *self.timeline_t_override.borrow_mut() = t;
     }
 
+    /// Voir `programme_time`. `None` restaure le comportement fixture (`frame / FPS`).
+    pub fn set_programme_time(&self, t: Option<f32>) {
+        *self.programme_time.borrow_mut() = t;
+    }
+
+    /// Dernier temps programme reçu : pour que les tests vérifient ce qui atteint vraiment
+    /// `FrameGeometryInput`, pas seulement ce que l'appelant croit envoyer.
+    #[doc(hidden)]
+    pub fn programme_time(&self) -> Option<f32> {
+        *self.programme_time.borrow()
+    }
+
     /// Copie de la scène courante (si présente) — utilisé par l'export multiclip pour lire les
     /// réglages curseur (thème/lissage/show) sans dupliquer le contrat de scène côté pipeline.
     pub fn scene_snapshot(&self) -> Option<Scene> {
@@ -1604,6 +1619,7 @@ impl Compositor {
             scene: scene_ref.as_ref(),
             cursor: cursor_ref.as_ref(),
             timeline_t_override: *self.timeline_t_override.borrow(),
+            programme_time: *self.programme_time.borrow(),
         });
         let scene_preset = g.scene_preset.clone();
         let mb_taps = g.mb_taps;

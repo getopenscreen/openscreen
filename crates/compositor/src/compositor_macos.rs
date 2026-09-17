@@ -262,6 +262,8 @@ pub struct Compositor {
     cursor: RefCell<Option<crate::cursor::CursorTrack>>,
     cursor_time: RefCell<Option<f32>>,
     timeline_time: RefCell<Option<f32>>,
+    /// Temps programme (secondes de sortie) — cf. `FrameGeometryInput::programme_time`.
+    programme_time: RefCell<Option<f32>>,
     live_params: RefCell<LiveParams>,
     metal_texture_cache: CVMetalTextureCache,
     /// Dernier command buffer soumis, gardé pour pouvoir l'attendre AU MOMENT où le CPU lit
@@ -611,6 +613,7 @@ impl Compositor {
             cursor: RefCell::new(None),
             cursor_time: RefCell::new(None),
             timeline_time: RefCell::new(None),
+            programme_time: RefCell::new(None),
             live_params: RefCell::new(LiveParams::default()),
             metal_texture_cache: cache,
             last_cmd: RefCell::new(None),
@@ -684,6 +687,17 @@ impl Compositor {
 
     pub fn set_timeline_time(&self, t: Option<f32>) {
         *self.timeline_time.borrow_mut() = t;
+    }
+
+    pub fn set_programme_time(&self, t: Option<f32>) {
+        *self.programme_time.borrow_mut() = t;
+    }
+
+    /// Dernier temps programme reçu : pour que les tests vérifient ce qui atteint vraiment
+    /// `FrameGeometryInput`, pas seulement ce que l'appelant croit envoyer.
+    #[doc(hidden)]
+    pub fn programme_time(&self) -> Option<f32> {
+        *self.programme_time.borrow()
     }
 
     pub fn clear_cursor(&self) {
@@ -1955,6 +1969,7 @@ impl Compositor {
             scene: scene_ref.as_ref(),
             cursor: cursor_ref.as_ref(),
             timeline_t_override: *self.timeline_time.borrow(),
+            programme_time: *self.programme_time.borrow(),
         });
 
         let cmd_buf = self.gpu.context.new_command_buffer();

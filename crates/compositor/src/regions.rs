@@ -93,6 +93,70 @@ pub fn speed_at(regions: &[SceneSpeedRegion], active_clip_index: usize, t: f64) 
     1.0
 }
 
+/// Le temps PROGRAMME (secondes de sortie) d'un clip, en fonction de son temps source.
+///
+/// L'export le connaît sans calcul : c'est `frames / out_fps`, le compteur de
+/// `walk_composited_timeline`. La preview n'a pas ce compteur — sa lecture libre avance au pts
+/// du décodeur et le renderer ne pousse un seek qu'en pause — donc elle le RECONSTRUIT depuis
+/// la scène : les frames des clips précédents, puis celles des spans de vitesse du clip actif,
+/// avec les mêmes `speed_segments_for_window` que l'export. Pour un temps source que l'export
+/// vise (`start + k·speed/fps`), `at` rend exactement `(frames avant + k) / fps`.
+///
+/// Fonction pure du temps source : la même image donne le même temps programme, qu'on y
+/// arrive en lecture ou par un seek. C'est tout ce que l'horloge garantit — pas un intégrateur.
+///
+/// ponytail: fenêtres déclarées, pas bornées à la durée réelle du fichier comme le fait
+/// l'export (`available_duration_sec`) ; une source plus courte que sa fenêtre décale les
+/// clips suivants d'autant. Même limite que `outputFrameCount.ts`.
+#[derive(Debug, Clone)]
+pub struct ProgrammeClock {
+    /// Frames de sortie de tous les clips qui précèdent.
+    frames_before: u64,
+    segments: Vec<SpeedSegment>,
+    fps: f64,
+}
+
+impl ProgrammeClock {
+    /// `None` si l'index ne désigne aucun clip ou si `fps` n'est pas utilisable.
+    pub fn for_clip(scene: &crate::scene::Scene, clip_index: usize, fps: f64) -> Option<Self> {
+        if !fps.is_finite() || fps <= 0.0 || clip_index >= scene.clips.len() {
+            return None;
+        }
+        // Même appartenance que `Scene::for_clip_window` : l'index décide quand il est là,
+        // sinon le chevauchement de fenêtre (que `speed_segments_for_window` filtre déjà).
+        let segments_of = |i: usize| {
+            let clip = &scene.clips[i];
+            let regions: Vec<SceneSpeedRegion> = scene
+                .speed_regions
+                .iter()
+                .filter(|r| r.clip_index.map(|c| c == i).unwrap_or(true))
+                .copied()
+                .collect();
+            speed_segments_for_window(&regions, clip.source_start_sec, clip.source_end_sec, fps)
+        };
+        let frames_before = (0..clip_index)
+            .flat_map(&segments_of)
+            .map(|s| s.frame_count)
+            .sum();
+        Some(Self { frames_before, segments: segments_of(clip_index), fps })
+    }
+
+    /// Temps programme au temps source `source_sec` du clip. Borné à la fenêtre du clip :
+    /// avant, le premier frame ; après (ou sous une coupe en fin), le premier du clip suivant.
+    pub fn at(&self, source_sec: f64) -> f64 {
+        let mut frames = self.frames_before as f64;
+        for s in &self.segments {
+            if source_sec < s.end_sec {
+                let k = ((source_sec - s.start_sec).max(0.0) / s.speed * self.fps)
+                    .min(s.frame_count as f64);
+                return (frames + k) / self.fps;
+            }
+            frames += s.frame_count as f64;
+        }
+        frames / self.fps
+    }
+}
+
 fn push_speed_segment(
     spans: &mut Vec<SpeedSegment>,
     start_sec: f64,
@@ -1938,5 +2002,94 @@ mod exporter_frame_totals {
         );
         assert_eq!(frames(4.0, 4.0, &[], FPS), 0, "fenêtre vide");
         assert_eq!(frames(0.0, 10.0, &[], 0.0), 0, "fps non positif");
+    }
+}
+
+#[cfg(test)]
+mod programme_clock {
+    use super::*;
+    use crate::scene::Scene;
+
+    const FPS: f64 = 30.0;
+
+    /// Deux clips du même fichier, une région de vitesse chacun, et une région du clip 1 posée
+    /// dans la fenêtre du clip 0 : seul son `clipIndex` dit qu'elle n'est pas à lui.
+    fn scene() -> Scene {
+        Scene::from_json(
+            r##"{
+            "clips":[{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":4,"webcamOffsetSec":0,"hasAudio":false},
+                     {"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":10,"sourceEndSec":13,"webcamOffsetSec":0,"hasAudio":false}],
+            "layout":{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false},
+            "effects":{"padding":0,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0},
+            "background":{"kind":"color","color":"#000000"},
+            "zoomRegions":[],
+            "speedRegions":[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"speed":2.0},
+                            {"clipIndex":1,"startSec":0.5,"endSec":3.5,"speed":4.0},
+                            {"clipIndex":1,"startSec":11.0,"endSec":12.0,"speed":0.5}],
+            "cursor":{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"},
+            "cropByClip":[null,null],
+            "output":{"width":1920,"height":1080,"fps":null}
+        }"##,
+        )
+        .expect("scène")
+    }
+
+    /// La preview et l'export tombent sur le même temps programme : pour chaque frame que la
+    /// marche d'export compose (mêmes spans, même cible source, même `frames / out_fps`),
+    /// l'horloge interrogée au seul temps source rend la même valeur.
+    #[test]
+    fn the_clock_matches_the_export_walk_at_every_frame() {
+        let scene = scene();
+        let mut frames: u64 = 0;
+        for (i, clip) in scene.clips.iter().enumerate() {
+            let window = scene.for_clip_window(i, clip.source_start_sec, clip.source_end_sec);
+            let clock = ProgrammeClock::for_clip(&scene, i, FPS).expect("horloge");
+            let segments = speed_segments_for_window(
+                &window.speed_regions,
+                clip.source_start_sec,
+                clip.source_end_sec,
+                FPS,
+            );
+            for s in &segments {
+                for k in 0..s.frame_count {
+                    let target = s.start_sec + k as f64 * s.speed / FPS;
+                    let export = (frames as f64 / FPS) as f32;
+                    let preview = clock.at(target) as f32;
+                    assert!(
+                        (export - preview).abs() <= 1e-6,
+                        "clip {i} frame {frames} (source {target}) : export {export}, preview {preview}"
+                    );
+                    frames += 1;
+                }
+            }
+        }
+        // 1 s à 1×, 1 s à 2×, 2 s à 1× ; puis 1 s à 1×, 1 s à 0,5×, 1 s à 1×.
+        assert_eq!(
+            frames,
+            30 + 15 + 60 + 30 + 60 + 30,
+            "garde : la région du clip 1 posée dans la fenêtre du clip 0 doit être ignorée"
+        );
+    }
+
+    /// Le temps programme ne saute pas à la frontière de clip et ne recule jamais.
+    #[test]
+    fn the_clock_is_continuous_across_clips_and_clamped_to_the_window() {
+        let scene = scene();
+        let first = ProgrammeClock::for_clip(&scene, 0, FPS).expect("clip 0");
+        let second = ProgrammeClock::for_clip(&scene, 1, FPS).expect("clip 1");
+        assert_eq!(first.at(0.0), 0.0);
+        assert_eq!(first.at(4.0), second.at(10.0));
+        assert_eq!(second.at(10.0), 105.0 / FPS);
+        // Hors fenêtre (sous une coupe) : borné, jamais extrapolé.
+        assert_eq!(second.at(3.0), second.at(10.0));
+        assert_eq!(second.at(99.0), 225.0 / FPS);
+        let mut last = -1.0;
+        for step in 0..=1300 {
+            let t = second.at(step as f64 / 100.0);
+            assert!(t >= last, "recul à {step}");
+            last = t;
+        }
+        assert!(ProgrammeClock::for_clip(&scene, 2, FPS).is_none());
+        assert!(ProgrammeClock::for_clip(&scene, 0, 0.0).is_none());
     }
 }

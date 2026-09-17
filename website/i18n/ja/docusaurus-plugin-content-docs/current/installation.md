@@ -162,6 +162,6 @@ sudo usermod -aG input $USER
 ライブプレビューと MP4 エクスポートを担う GPU コンポジターには、3 つのバックエンド（Windows では Direct3D 11、macOS では Metal、Linux では wgpu/WGSL）があり、3 つのビルドすべてに含まれています。Linux では、GPU ドライバーが VAAPI に対応し、*かつ* Vulkan デバイスがフレームを dmabuf として受け渡せる（`VK_KHR_external_memory_fd` と `VK_EXT_external_memory_dma_buf`）場合、H.264 エクスポートは合成した各フレームを CPU へコピーせずに `h264_vaapi` に渡します。そのどれかが欠けている場合（レンダーノードがない、ドライバーが VAAPI に対応していない、Vulkan デバイスがこれらの拡張に対応していない）、エクスポートはソフトウェアエンコーダーにフォールバックし、時間が長くかかるだけで、ほかには何も変わりません。Linux では、H.265 のエクスポートは常にソフトウェアエンコーダーを使います。
 :::
 
-各 OS で OpenScreen ができること、そしてほかのツールのほうが適している場合については、[Windows](/screen-recorder-windows/)、[Mac](/screen-recorder-mac/)、[Linux](/screen-recorder-linux/) の各ページ（英語）にまとめています。
+各 OS で OpenScreen ができること、そしてほかのツールのほうが適している場合については、[Windows](/screen-recorder-windows/)、[Mac](/screen-recorder-mac/)、[Linux](/screen-recorder-linux/) の各ページにまとめています。
 
 次は、[クイックスタート](./quick-start.md)で最初の録画の手順を説明します。

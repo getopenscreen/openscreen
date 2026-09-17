@@ -135,7 +135,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--quality <medium\|good\|source>` | Taille de sortie : `medium` correspond à 720p, `good` à 1080p, et `source` suit le plus petit clip après recadrage, donc n'agrandit jamais. Un GIF part lui aussi de cette taille |
 | `--gif-fps <15\|20\|25\|30>` | Fréquence d'images du GIF |
 | `--gif-size <medium\|large\|original>` | Hauteur maximale du GIF, appliquée à cette taille : 720, 1080, ou aucune |
-| `--auto-zoom` | Avant le rendu, ajoute des zooms là où le pointeur enregistré s'est arrêté, avec le même moteur que les [zooms automatiques (en anglais)](/features/auto-zoom/) de l'éditeur. Les zooms existants sont conservés, et les nouveaux ne les chevauchent jamais |
+| `--auto-zoom` | Avant le rendu, ajoute des zooms là où le pointeur enregistré s'est arrêté, avec le même moteur que les [zooms automatiques](/features/auto-zoom/) de l'éditeur. Les zooms existants sont conservés, et les nouveaux ne les chevauchent jamais |
 | `--audio <file>` | Mixe un fichier de voix off (mp3, wav ou m4a) dans le MP4. MP4 uniquement |
 | `--audio-mode <mix\|replace>` | `mix` (par défaut) garde l'audio de l'enregistrement sous la voix off, avec un gain de 40 % ; `replace` le supprime |
 | `--audio-offset <seconds>` | Délai avant le début de la voix off (0 par défaut) |

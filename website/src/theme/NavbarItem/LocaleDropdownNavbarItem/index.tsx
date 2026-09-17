@@ -12,7 +12,7 @@ import { isEnglishOnlyPath } from "../../../lib/locale-routes";
 
 /**
  * The stock dropdown links each locale to the current page under that locale's
- * baseUrl. On the blog and the marketing pages, which exist in English only
+ * baseUrl. On the blog, which exists in English only
  * (src/lib/locale-routes.ts), every one of those links 404s. There the menu
  * lists the same locales but sends each one to its home page instead, and
  * English to the page the reader is on.

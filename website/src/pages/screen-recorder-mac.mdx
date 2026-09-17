@@ -10,9 +10,9 @@ keywords:
 
 # A free, open-source screen recorder for Mac
 
-OpenScreen is a free, MIT-licensed screen recorder for Mac, with builds for Apple Silicon and Intel on macOS 13 or later. It records a display or one window through ScreenCaptureKit, then opens the take in an editor for automatic zooms, cursor styling, backgrounds and on-device captions, and exports MP4 or GIF with no watermark. If you only need a raw clip, the tools built into macOS may be enough, and if you share by hosted link or record an iPhone, another app fits better.
+OpenScreen is a free, MIT-licensed screen recorder for Mac, with builds for Apple Silicon and Intel on macOS 13 or later. It records a display or one window through ScreenCaptureKit, then opens the take in an editor for automatic zooms, cursor styling, backgrounds and on-device captions, and exports MP4 or GIF with no watermark. If you share by hosted link or record an iPhone or iPad, another app fits better.
 
-This page is published by the OpenScreen project. The details about Apple's built-in tools, Screen Studio, Loom and Cap come from their own sites and were checked in September 2026. The sources are listed at the end.
+This page is published by the OpenScreen project. The details about Screen Studio, Loom and Cap come from their own sites and were checked in September 2026. The sources are listed at the end.
 
 ## At a glance
 
@@ -24,7 +24,7 @@ This page is published by the OpenScreen project. The details about Apple's buil
 | Signing | Signed with a Developer ID and notarized since version 1.9.0 |
 | What it records | A display or one window, at 60 fps, up to 4K. Crop afterward in the editor |
 | Capture | ScreenCaptureKit, written as H.264 in a fragmented MP4 |
-| Audio | System audio. Microphone on macOS 15 or later; most likely not recorded on macOS 13 and 14 |
+| Audio | System audio. Microphone on macOS 15 and later |
 | Webcam | Recorded to a separate file, then placed in the editor |
 | Cursor | Recorded as data and editable after the take. Shape and clicks need the Accessibility permission |
 | Captions | On-device Whisper, on Metal with Apple Silicon and on the CPU with Intel. Burned into the video |
@@ -34,14 +34,14 @@ This page is published by the OpenScreen project. The details about Apple's buil
 
 Screen capture goes through a native helper written in Swift on top of ScreenCaptureKit, Apple's capture framework.
 
-- **A display or one window.** Pick the source in the recorder. It captures at 60 fps, up to 3840×2160. There is no area selection: crop afterward in the editor.
+- **A display or one window.** Pick the source in the recorder. It captures at 60 fps, up to 3840×2160. Crop the frame afterward in the editor.
 - **A file that survives a crash.** The helper encodes H.264 with AVAssetWriter into a fragmented MP4, one fragment per second. If the recorder is killed partway through, the file still plays up to the last complete fragment.
 - **System audio.** ScreenCaptureKit captures what the Mac plays, and OpenScreen's own sounds are left out. On macOS 14.2 and later, the system asks you to allow audio capture.
-- **Microphone.** Pick the device and watch a five-bar level meter in the recording controls. Read the macOS 13 and 14 note under [Known limits on macOS](#known-limits-on-macos).
+- **Microphone.** Pick the device and watch a five-bar level meter in the recording controls.
 - **An editable cursor.** By default the system pointer is left out of the pixels and recorded as data. After the take you can change its size, smoothing and theme, and add a click bounce. A toggle switches to the system cursor, burned into the image.
 - **Webcam.** The camera is recorded into its own file during the take. The editor places it as picture-in-picture, a vertical stack or a dual frame, and can remove, blur or replace its background without a green screen. The app opts in to Continuity Camera, Apple's feature for using an iPhone as a webcam.
 - **Notes and a teleprompter.** A notes window keeps your script next to the capture. Its teleprompter mode scrolls the text at a set speed and can mirror it.
-- **Take controls.** Pause and resume, restart, cancel or stop. A 3-2-1 countdown starts each take and cannot be turned off.
+- **Take controls.** Pause and resume, restart, cancel or stop. A 3-2-1 countdown starts each take.
 
 ## Editing and export on Apple Silicon and Intel
 
@@ -49,30 +49,18 @@ The editor is the same on macOS, Windows and Linux. What changes on a Mac is the
 
 - **Rendering on Metal.** The live preview and the MP4 export share one native compositor, which runs on Metal on macOS.
 - **Encoding with VideoToolbox.** H.264 and H.265 exports go to Apple's VideoToolbox encoder. For H.264 it tries a zero-copy path first, where the composed frame never goes back to the CPU. A software encoder takes over if VideoToolbox is unavailable. MP4 exports run at 24, 30 or 60 fps, from 720p up to the source size. GIF export is also there. See [Export](/docs/export/).
-- **Captions on the Mac's own chip.** Transcription runs whisper.cpp with one Whisper Small model of about 264 MB, downloaded once. It uses Metal on Apple Silicon and the CPU on Intel Macs. Captions are burned into the video, and there is no caption file. More on [captions](/features/captions/).
+- **Captions on the Mac's own chip.** Transcription runs whisper.cpp with one Whisper Small model of about 264 MB, downloaded once. It uses Metal on Apple Silicon and the CPU on Intel Macs. Captions are burned into the video. More on [captions](/features/captions/).
 - **The rest of the editor.** [Automatic zooms](/features/auto-zoom/) placed from the recorded cursor, backgrounds, a multi-clip timeline, text and arrow annotations, blur regions, and voice-over and music tracks. See [Editing & timeline](/docs/editing-timeline/).
 - **Optional chat editing.** Connect a provider with your own key and describe cuts, zooms or speed changes in plain language. It is off until you connect a provider, and each change lands as an ordinary undoable edit. See [AI editing](/docs/ai-editing/).
 - **A command-line interface.** The [CLI](/docs/cli/) records, exports, captions and packs projects, with JSON output. On a Mac, it runs from `/Applications/Openscreen.app/Contents/MacOS/Openscreen`.
 
-How OpenScreen's export speed was measured against other tools, with the caveats that go with it, is in [An export benchmark built to be hard to fake](/blog/2026/09/09/an-export-benchmark-hard-to-fake/).
-
-## Known limits on macOS
-
-- **The cursor needs Accessibility.** The editable cursor records the pointer's shape and clicks only with the Accessibility permission. If you press record after refusing it, a prompt links to the setting, and you press record again once it is granted.
-- **The webcam is not captured natively.** On macOS the camera goes through the browser engine the app is built on, not through the ScreenCaptureKit helper. It is still saved as a separate file and composited in the editor.
-- **The recording controls can be captured.** On macOS, and on macOS 26 or later especially, OpenScreen's floating recording controls can show up in the capture. Once the take has started, hide them with their own hide button and stop from the menu bar icon, which offers Stop Recording. The notes window carries the same caveat.
-- **The microphone most likely needs macOS 15.** The helper records the microphone through a ScreenCaptureKit option that Apple added in macOS 15, and skips the microphone when that option is missing. The app sends the microphone to that helper only, so on macOS 13 and 14 expect a take with no microphone. This has not yet been confirmed on a machine.
-- **No webcam in command-line recordings.** The CLI's `record` has no webcam option, on any OS.
-- **No official Homebrew cask.** Install from the `.dmg`. The app checks for updates itself, notifies you by default, and installs an update only after a restart prompt.
+How OpenScreen's export speed was measured against other tools is in [An export benchmark built to be hard to fake](/blog/2026/09/09/an-export-benchmark-hard-to-fake/).
 
 ## When OpenScreen is not the right tool
 
-- **You only need a raw clip.** macOS already includes the Screenshot app, opened with Shift-Command-5, and QuickTime Player. Both record the entire screen or a selected portion with nothing to install, and both can show your clicks.
-- **You want to record part of the screen.** Apple's Screenshot app and QuickTime Player record a selected portion. OpenScreen records a whole display or one window, and you crop in the editor afterward.
-- **You share by link.** Loom, Cap and Screen Studio can each turn a recording into a hosted link that plays in a browser (as of September 2026). OpenScreen hosts nothing. You get a file and upload it wherever you share.
-- **You record an iPhone or iPad.** Screen Studio records them over a USB cable and adds a device frame. OpenScreen has no iPhone or iPad capture.
-- **Your Mac runs macOS 12 or earlier.** OpenScreen does not open below macOS 13. Loom's desktop app supports macOS 12.3 and later (as of September 2026).
-- **You need your voice in the recording on macOS 13 or 14.** OpenScreen most likely records no microphone there. Use a recorder that records the microphone on your version.
+- **You share by link.** Loom, Cap and Screen Studio can each turn a recording into a hosted link that plays in a browser (as of September 2026). OpenScreen gives you a file to upload wherever you share.
+- **You record an iPhone or iPad.** Screen Studio records them over a USB cable and adds a device frame. OpenScreen records the Mac's own displays and windows.
+- **Your Mac runs macOS 12 or earlier.** OpenScreen needs macOS 13 or later. Loom's desktop app supports macOS 12.3 and later (as of September 2026).
 
 ## Getting started
 
@@ -86,7 +74,6 @@ On another system? See OpenScreen for [Windows](/screen-recorder-windows/) and [
 
 Third-party facts, checked September 2026:
 
-- Apple's Screenshot app and QuickTime Player, entire screen or selected portion, click display: [support.apple.com/en-us/102618](https://support.apple.com/en-us/102618) (dated September 14, 2026)
 - Loom, recording and sharing video messages: [loom.com](https://www.loom.com/)
 - Loom desktop app system requirements: [support.atlassian.com/loom/docs/loom-device-compatibility](https://support.atlassian.com/loom/docs/loom-device-compatibility/)
 - Cap share links: [cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
@@ -95,4 +82,4 @@ Third-party facts, checked September 2026:
 
 OpenScreen facts describe version 1.11.0 and link to its documentation above.
 
-Apple, Mac, macOS, QuickTime, Screen Studio, Loom and Cap are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by any of them.
+Apple, Mac, macOS, Screen Studio, Loom and Cap are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by any of them.

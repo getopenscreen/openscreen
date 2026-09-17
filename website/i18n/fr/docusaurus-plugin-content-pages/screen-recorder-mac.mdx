@@ -1,0 +1,85 @@
+---
+title: Enregistreur d'écran Mac gratuit et open source
+description: "Enregistreur d'écran gratuit et open source pour Mac, Apple Silicon et Intel, sous macOS 13 ou ultérieur, avec zooms automatiques et sans filigrane."
+keywords:
+  - enregistreur d'écran pour mac
+  - enregistreur d'écran gratuit mac sans filigrane
+  - enregistreur d'écran open source mac
+  - alternative gratuite à screen studio mac
+---
+
+# Un enregistreur d'écran gratuit et open source pour Mac
+
+OpenScreen est un enregistreur d'écran gratuit, sous licence MIT, pour Mac, avec des builds pour Apple Silicon et Intel sous macOS 13 ou ultérieur. Il enregistre un écran ou une fenêtre via ScreenCaptureKit, puis ouvre la prise dans un éditeur pour les zooms automatiques, le style du curseur, les arrière-plans et les sous-titres locaux, et exporte en MP4 ou en GIF sans filigrane. Si vous partagez par lien hébergé ou enregistrez un iPhone ou un iPad, une autre application convient mieux.
+
+Cette page est publiée par le projet OpenScreen. Les informations sur Screen Studio, Loom et Cap proviennent de leurs propres sites et ont été vérifiées en septembre 2026. Les sources sont listées à la fin.
+
+## En un coup d'œil {#at-a-glance}
+
+| | |
+| --- | --- |
+| Prix | Gratuit, y compris pour un usage commercial. Licence MIT, aucun compte |
+| Version macOS | macOS 13 Ventura ou ultérieur |
+| Mac | Apple Silicon et Intel, un `.dmg` pour chacun |
+| Signature | Signé avec un Developer ID et notarisé depuis la version 1.9.0 |
+| Ce qu'il enregistre | Un écran ou une fenêtre, à 60 fps, jusqu'en 4K. Recadrage possible ensuite dans l'éditeur |
+| Capture | ScreenCaptureKit, écrit en H.264 dans un MP4 fragmenté |
+| Audio | Audio système. Microphone sous macOS 15 et ultérieur |
+| Webcam | Enregistrée dans un fichier séparé, puis placée dans l'éditeur |
+| Curseur | Enregistré sous forme de données et modifiable après la prise. La forme et les clics nécessitent l'autorisation Accessibilité |
+| Sous-titres | Whisper en local, sur Metal avec Apple Silicon et sur le CPU avec Intel. Incrustés dans la vidéo |
+| Export | MP4 (H.264 ou H.265) via VideoToolbox, ou GIF. Jusqu'à 60 fps, sans filigrane |
+
+## Comment OpenScreen enregistre sur un Mac {#how-openscreen-records-on-a-mac}
+
+La capture d'écran passe par un module auxiliaire natif écrit en Swift sur ScreenCaptureKit, le framework de capture d'Apple.
+
+- **Un écran ou une fenêtre.** Choisissez la source dans l'enregistreur. Il capture à 60 fps, jusqu'à 3840×2160. Recadrez l'image ensuite dans l'éditeur.
+- **Un fichier qui survit à un plantage.** Le module encode en H.264 avec AVAssetWriter dans un MP4 fragmenté, un fragment par seconde. Si l'enregistreur est arrêté de force en cours de route, le fichier reste lisible jusqu'au dernier fragment complet.
+- **Audio système.** ScreenCaptureKit capture ce que le Mac diffuse, et les propres sons d'OpenScreen sont exclus. Sous macOS 14.2 et ultérieur, le système vous demande d'autoriser la capture audio.
+- **Microphone.** Choisissez le périphérique et surveillez un vumètre à cinq barres dans les commandes d'enregistrement.
+- **Un curseur éditable.** Par défaut, le pointeur système est exclu des pixels et enregistré sous forme de données. Après la prise, vous pouvez changer sa taille, son lissage et son thème, et ajouter un rebond au clic. Un interrupteur bascule vers le curseur système, incrusté dans l'image.
+- **Webcam.** La caméra est enregistrée dans son propre fichier pendant la prise. L'éditeur la place en incrustation d'image, en pile verticale ou en double cadre, et peut retirer, flouter ou remplacer son arrière-plan sans écran vert. L'application prend en charge Caméra de continuité, la fonction d'Apple qui permet d'utiliser un iPhone comme webcam.
+- **Notes et téléprompteur.** Une fenêtre de notes garde votre script à côté de la capture. Son mode téléprompteur fait défiler le texte à une vitesse définie et peut l'inverser en miroir.
+- **Commandes de prise.** Pause et reprise, redémarrage, annulation ou arrêt. Un compte à rebours 3-2-1 démarre chaque prise.
+
+## Montage et export sur Apple Silicon et Intel {#editing-and-export-on-apple-silicon-and-intel}
+
+L'éditeur est le même sous macOS, Windows et Linux. Ce qui change sur un Mac, c'est le matériel qu'il utilise.
+
+- **Rendu sur Metal.** L'aperçu en direct et l'export MP4 partagent un même compositeur natif, qui tourne sur Metal sous macOS.
+- **Encodage avec VideoToolbox.** Les exports H.264 et H.265 passent par l'encodeur VideoToolbox d'Apple. Pour le H.264, il essaie d'abord un chemin sans copie, où l'image composée ne revient jamais au CPU. Un encodeur logiciel prend le relais si VideoToolbox n'est pas disponible. Les exports MP4 se font à 24, 30 ou 60 fps, de 720p jusqu'à la taille source. L'export GIF est aussi disponible. Voir [Export](/docs/export/).
+- **Des sous-titres calculés par le Mac lui-même.** La transcription tourne avec whisper.cpp et un modèle Whisper Small d'environ 264 Mo, téléchargé une fois. Elle utilise Metal sur Apple Silicon et le CPU sur les Mac Intel. Les sous-titres sont incrustés dans la vidéo. Plus de détails sur les [sous-titres](/features/captions/).
+- **Le reste de l'éditeur.** Les [zooms automatiques](/features/auto-zoom/) placés à partir du curseur enregistré, les arrière-plans, une timeline multiclip, des annotations texte et flèche, des régions de flou, et des pistes de voix off et de musique. Voir [Montage et timeline](/docs/editing-timeline/).
+- **Montage par chat en option.** Connectez un fournisseur avec votre propre clé et décrivez des coupes, des zooms ou des changements de vitesse en langage courant. C'est désactivé tant que vous n'avez pas connecté de fournisseur, et chaque modification s'applique comme une modification ordinaire, que vous pouvez annuler. Voir [Montage par IA](/docs/ai-editing/).
+- **Une interface en ligne de commande.** La [CLI](/docs/cli/) enregistre, exporte, sous-titre et empaquette des projets, avec sortie JSON. Sur un Mac, elle s'exécute depuis `/Applications/Openscreen.app/Contents/MacOS/Openscreen`.
+
+La façon dont la vitesse d'export d'OpenScreen a été mesurée face à d'autres outils est expliquée dans [Un comparatif d'export conçu pour être difficile à truquer (en anglais)](/blog/2026/09/09/an-export-benchmark-hard-to-fake/).
+
+## Quand OpenScreen n'est pas le bon outil {#when-openscreen-is-not-the-right-tool}
+
+- **Vous partagez par lien.** Loom, Cap et Screen Studio peuvent chacun transformer un enregistrement en lien hébergé qui se lit dans un navigateur (en septembre 2026). OpenScreen vous donne un fichier à mettre en ligne où vous voulez le partager.
+- **Vous enregistrez un iPhone ou un iPad.** Screen Studio les enregistre via un câble USB et ajoute un cadre d'appareil. OpenScreen enregistre les propres écrans et fenêtres du Mac.
+- **Votre Mac tourne sous macOS 12 ou antérieur.** OpenScreen a besoin de macOS 13 ou ultérieur. L'application de bureau de Loom prend en charge macOS 12.3 et ultérieur (en septembre 2026).
+
+## Pour commencer {#getting-started}
+
+1. Téléchargez le `.dmg` Apple Silicon ou Intel depuis la [page de téléchargement](/download/), environ 210 Mo, et faites glisser OpenScreen dans Applications. La build est signée et notarisée, donc aucune étape en terminal n'est nécessaire.
+2. Dans **Réglages Système → Confidentialité et sécurité**, accordez **Enregistrement de l'écran** et **Accessibilité** à OpenScreen. Le [guide d'installation](/docs/installation/#macos) explique les deux.
+3. Faites un premier enregistrement avec le [démarrage rapide](/docs/quick-start/), puis lancez **Amélioration auto → Zooms automatiques** dessus. [Enregistrement d'écran](/docs/recording/) couvre les options de l'enregistreur.
+
+Sur un autre système  Voir OpenScreen pour [Windows](/screen-recorder-windows/) et [Linux](/screen-recorder-linux/). Vous hésitez avec d'autres enregistreurs Mac  Lisez les pages [alternative à Screen Studio](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) et [alternative à Loom](/alternatives/loom/). La licence, l'usage réseau et la signature sont couverts dans la [FAQ](/docs/faq/), et la [page d'accueil d'OpenScreen](/) présente l'ensemble.
+
+## Sources {#sources}
+
+Informations sur des tiers, vérifiées en septembre 2026 :
+
+- Loom, enregistrement et partage de messages vidéo : [loom.com](https://www.loom.com/)
+- Configuration requise de l'application de bureau Loom : [support.atlassian.com/loom/docs/loom-device-compatibility](https://support.atlassian.com/loom/docs/loom-device-compatibility/)
+- Liens de partage Cap : [cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
+- Liens partageables de Screen Studio : [screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
+- Enregistrement iPhone et iPad de Screen Studio : [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
+
+Les informations sur OpenScreen décrivent la version 1.11.0 et renvoient à sa documentation ci-dessus.
+
+Apple, Mac, macOS, Screen Studio, Loom et Cap sont des marques de leurs propriétaires respectifs. OpenScreen est un projet indépendant qui n'est affilié à aucun d'eux ni approuvé par eux.

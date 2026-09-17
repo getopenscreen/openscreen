@@ -21,8 +21,8 @@ OpenScreen は**無料・オープンソースの画面録画・編集ソフト*
 
 このドキュメントは、2026 年 9 月 9 日に公開された安定版 **OpenScreen 1.11.0** について説明しています。各リリースで何がなぜ変わったかは、[開発ジャーナル（英語）](/blog/)にまとめています。
 
-:::warning
-OpenScreen はまだ**本番運用に耐える品質ではありません**。活発に開発中のため、粗削りな部分や、ときどき互換性のない変更があることを想定してください。これは `.openscreen` プロジェクト形式や [CLI](/docs/cli/) にも当てはまります。
+:::note
+OpenScreen は頻繁にリリースされます。リリースの間に、`.openscreen` プロジェクト形式や [CLI](/docs/cli/) が変わることがまだあります。
 :::
 
 ## できること {#what-you-can-do}
@@ -34,7 +34,7 @@ OpenScreen はまだ**本番運用に耐える品質ではありません**。�
 - 必要なら自分の LLM キーを接続して、[チャットで編集](./ai-editing.md)できます。この機能は既定でオフで、必須ではありません。
 - MP4（720p/1080p/Source、H.264 または H.265）やアニメーション GIF に[エクスポート](./export.md)できます。
 
-ライセンス、透かし、ネットワーク通信についての質問には、[よくある質問](/docs/faq/)で回答しています。OpenScreen とほかの録画ソフトとの比較は、[Screen Studio](/alternatives/screen-studio/)、[Cap](/compare/openscreen-vs-cap/)、[OBS Studio](/compare/openscreen-vs-obs/) の各ページ（英語）にあります。
+ライセンス、透かし、ネットワーク通信についての質問には、[よくある質問](/docs/faq/)で回答しています。OpenScreen とほかの録画ソフトとの比較は、[Screen Studio](/alternatives/screen-studio/)、[Cap](/compare/openscreen-vs-cap/)、[OBS Studio](/compare/openscreen-vs-obs/) の各ページにあります。
 
 :::note
 録画、編集、文字起こし、字幕、エクスポートにはアカウントが不要で、ネットワークに接続していなくても動作します。ただし文字起こしには、最初に一度だけダウンロードが必要です。初回実行時に Whisper モデル（約 264 MB）を取得します。接続がある場合、アプリは起動時に注釈用のフォントを Google Fonts から読み込みます。また、GitHub Releases からインストールしたビルドは、GitHub でアップデートを確認します。AI チャット編集と字幕の翻訳が通信を行うのは、あなたが自分でプロバイダーを接続した場合だけで、通信先もそのプロバイダーだけです。

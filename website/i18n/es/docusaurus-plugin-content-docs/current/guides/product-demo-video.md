@@ -65,7 +65,7 @@ En la barra de herramientas de la línea de tiempo, abre **Mejora automática** 
 
 Luego revísalos. Haz clic en un zoom para definir su nivel (de 1.25× a 5×), su modo de enfoque (Auto sigue al cursor, Manual mantiene un punto fijo) y una rotación 3D opcional. Presiona `Z` para agregar un zoom a mano, y `Ctrl/Cmd+D` para eliminar uno que no quieras.
 
-Más información sobre cómo se colocan los zooms: [Zoom automático (en inglés)](/features/auto-zoom/).
+Más información sobre cómo se colocan los zooms: [Zoom automático](/features/auto-zoom/).
 
 ## 5. Corta desde la transcripción y acelera los tiempos muertos {#5-cut-from-the-transcript-and-speed-up-dead-time}
 
@@ -98,7 +98,7 @@ En el panel **Transcripción**, haz clic en **Subtítulos** y activa **Mostrar s
 
 Whisper detecta el idioma hablado, o puedes forzar uno de los 100 idiomas con **Regenerar en** en la vista Multimedia. Para publicar en otro idioma, usa **Traducir** hacia uno de los 15 idiomas de destino y selecciona ese idioma en **Visualización** antes de exportar. La traducción pasa por tu propio proveedor de LLM, así que necesita una clave.
 
-Los subtítulos se incrustan en el video. OpenScreen no escribe ningún archivo `.srt` ni `.vtt`, así que un reproductor no puede desactivarlos. Detalles: [Subtítulos y transcripción](../captions.md) y [cómo funciona la función de subtítulos (en inglés)](/features/captions/).
+Los subtítulos se incrustan en el video. OpenScreen no escribe ningún archivo `.srt` ni `.vtt`, así que un reproductor no puede desactivarlos. Detalles: [Subtítulos y transcripción](../captions.md) y [cómo funciona la función de subtítulos](/features/captions/).
 
 ## 8. Exporta {#8-export}
 
@@ -119,7 +119,7 @@ OpenScreen no aloja tu video, no crea enlaces para compartir ni cuenta reproducc
 
 ## Cuándo OpenScreen no es la herramienta adecuada {#when-openscreen-is-not-the-right-tool}
 
-- **Quieres un enlace alojado con estadísticas de espectadores o comentarios.** Te conviene más un grabador con alojamiento. Loom, por ejemplo, comparte cada grabación como un enlace en loom.com, y su página de precios incluye estadísticas de espectadores y comentarios en los videos en todos los planes (en septiembre de 2026). Consulta [OpenScreen como alternativa a Loom (en inglés)](/alternatives/loom/) para el caso, más acotado, en que OpenScreen sí encaja.
+- **Quieres un enlace alojado con estadísticas de espectadores o comentarios.** Te conviene más un grabador con alojamiento. Loom, por ejemplo, comparte cada grabación como un enlace en loom.com, y su página de precios incluye estadísticas de espectadores y comentarios en los videos en todos los planes (en septiembre de 2026). Consulta [OpenScreen como alternativa a Loom](/alternatives/loom/) para el caso, más acotado, en que OpenScreen sí encaja.
 - **Quieres una demo interactiva** en la que el espectador haga clic. OpenScreen solo exporta video y GIF.
 - **Tu reproductor de video necesita un archivo de subtítulos aparte.** OpenScreen solo incrusta los subtítulos.
 - **Grabas en un teléfono o una tableta.** OpenScreen es una app de escritorio para Windows, macOS 13 o posterior, y Linux.

@@ -1,0 +1,107 @@
+---
+title: 免费开源的 Camtasia 替代品
+description: OpenScreen 是一款适用于 Windows、macOS 和 Linux 的免费 Camtasia 替代软件。开源、无需订阅、无水印，支持自动缩放和本地字幕。
+keywords:
+  - 免费 Camtasia 替代品
+  - 开源 Camtasia 替代品
+  - Camtasia 替代软件 Linux
+  - 无水印 Camtasia 替代品
+  - Camtasia 永久许可证替代方案
+---
+
+# 一款免费开源的 Camtasia 替代品
+
+OpenScreen 是一款适用于 Windows、macOS 和 Linux 的免费 Camtasia 替代软件，基于 MIT 许可证发布。和 Camtasia 一样，它可以录制屏幕、摄像头和音频，在光标所在处自动缩放，用 Whisper 在本机转录语音，并导出 MP4 或 GIF。与 Camtasia 不同的是，后者以年度订阅形式出售，且免费编辑器导出的内容带水印，而 OpenScreen 不收费、无需账号，也不添加水印。如果你要制作带测验和 SCORM 报告的培训内容、需要提供隐藏式字幕或 VTT 文件，或者要直接发布到 YouTube 或 Screencast，Camtasia 仍是更好的选择。
+
+本页由 OpenScreen 项目发布。关于 Camtasia 的信息来自 TechSmith 自己的页面，核实于 2026 年 9 月。信息来源列于文末。
+
+## 一览 {#at-a-glance}
+
+| | OpenScreen | Camtasia |
+| --- | --- | --- |
+| 价格 | 免费，含商业用途 | 付费方案均为年度订阅。在 TechSmith 商店中，以欧元计：Starter 每年 39.56 欧元，带水印；Essentials 每年 182.49 欧元，无水印（截至 2026 年 9 月） |
+| 免费选项 | 整个应用 | Camtasia Editor 导出的内容会带水印，直到升级至 Essentials、Create、Pro 或商业许可证。Camtasia Online 是一款浏览器录制工具，免费且无水印 |
+| 账号与激活 | 无需账号，无需激活 | 试用需要 TechSmith 账号和网络连接。订阅需要联网才能激活，此后每 90 天需联网一次 |
+| 源代码 | 开源，MIT 许可证 | 闭源 |
+| 平台 | Windows 10（1903 及以上）和 11，x64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 | Windows 10 20H2 及以上，64 位，需要 AVX2 处理器。macOS 14.0 及以上。不支持 Linux（截至 2026 年 9 月） |
+| 录制内容 | 一个显示器或一个窗口，含摄像头、麦克风和系统音频 | 屏幕、摄像头、麦克风和系统音频，分别录制为独立轨道 |
+| 自动缩放 | 是，根据录制的光标位置放置 | 是，SmartFocus，适用于 Camtasia Recorder 和 Camtasia Rev 的录制内容 |
+| 光标效果 | 大小、平滑、运动模糊、点击回弹和光标主题 | 14 种光标效果，外加波纹、光环、点击缩放等点击效果 |
+| 字幕 | 本机 Whisper，一个约 264 MB 的模型，仅下载一次。自动检测或从 100 种语言代码中选择。烧录进视频 | 本机 Whisper，列出支持 57 种语言。动态字幕、隐藏式字幕，以及基础的 VTT 导入导出 |
+| 翻译 | 字幕翻译成 15 种语言，通过你连接的 AI 提供方 | 音频和转录文本可翻译成 7 种语言、9 种方言，属于 Pro 方案功能 |
+| 生成式 AI | 可选的聊天式编辑，使用你自己的密钥 | 内置于 Create 和 Pro 方案。两者均含语音生成，Pro 方案还含虚拟形象、配音和翻译 |
+| 测验和 SCORM | 无 | 有，四种题型，结果可上报给符合 SCORM 标准的学习管理系统 |
+| 导出 | MP4（H.264 或 H.265）或 GIF，最高 60 fps，无水印 | MP4、GIF、M4A、带透明通道的 WebM，或交互式 Smart Player 视频 |
+| 发布 | 生成本地文件，不提供托管 | Screencast 托管和直接上传 YouTube |
+| 命令行 | `record`、`export`、`captions` 和 `pack` 命令，`--json` 输出 NDJSON | 有文档说明的命令行开关，可控制 Windows 版 Camtasia Recorder（9 及以上版本） |
+
+## 两款软件的共同点 {#what-both-apps-do}
+
+屏幕录制工作流的核心功能两者都具备，以下内容并非任何一方独有。
+
+- **自动缩放。** Camtasia 的 SmartFocus 会从 Camtasia Recorder 文件中读取鼠标移动、滚动和点击，也适用于 Camtasia Rev 素材。在 OpenScreen 中，**自动增强 → 自动缩放**会根据录制的光标移动放置缩放，无需联网、无需模型。六种深度的手动缩放也可与之并用。详见[自动缩放](/features/auto-zoom/)。
+- **可事后调整的光标。** 两者都会保留各自录制内容中的光标数据，因此光标和点击效果都是在录制结束后再应用的。
+- **同一段录制中的摄像头、麦克风和系统音频。**
+- **多片段时间轴。** 两者都能在时间轴上编辑录制内容和导入的视频。在 OpenScreen 中，时间轴还容纳配音和音乐轨道、变速区间，以及每个片段各自的裁剪。参见[媒体库与片段](/docs/media-library/)。
+- **标注。** Camtasia 提供标注框，包括曲线箭头。OpenScreen 提供六种动画效果的文字、八个方向的箭头、图片，以及模糊区域。
+- **摄像头背景移除。** Camtasia 有背景移除效果；OpenScreen 可以去除、模糊或替换摄像头背景，无需绿幕。
+- **在本机上转录。** Camtasia 的字幕功能使用 Whisper，TechSmith 表示转录在设备本地完成。OpenScreen 运行一个约 264 MB 的 Whisper Small 模型，仅下载一次。详见[字幕](/features/captions/)。
+- **通过转录文本编辑。** Camtasia 列出了基于文本的视频编辑功能。在 OpenScreen 中，你可以在转录文本中选中词语并删除，以剪掉对应片段。参见[字幕与转录](/docs/captions/)。
+
+## OpenScreen 的不同之处 {#where-openscreen-differs}
+
+### 价格与许可证 {#price-and-license}
+
+- **完全免费，无需订阅。** 没有付费方案，没有账号，没有激活步骤，没有水印，允许商业用途。Camtasia 以年度订阅形式出售，其免费编辑器和 Starter 方案导出的每个文件都带水印。
+- **永久许可证停售后，也无需续订。** TechSmith 从 2025 版起转为仅提供订阅许可证。你已购买的永久版本仍可继续使用，但 TechSmith 对 Camtasia Editor 2024 的支持只到 2026 年 12 月 31 日（无维护计划），或 2027 年 10 月 2 日（有维护计划）。OpenScreen 没有会过期的许可证。
+- **MIT 许可的源代码。** 代码托管在 [GitHub](https://github.com/getopenscreen/openscreen)。Camtasia 是闭源软件。
+
+### 平台 {#platforms}
+
+- **支持 Linux。** Camtasia 仅支持 Windows 和 macOS。OpenScreen 为 x64 Linux 提供 AppImage、`.deb`、`.rpm` 和 `.pacman` 包，还有 Nix flake，此外还有 Windows 安装程序、Microsoft Store 上架版本，以及两种 Mac 的 `.dmg` 文件。参见 [Linux](/screen-recorder-linux/)、[Windows](/screen-recorder-windows/) 和 [macOS](/screen-recorder-mac/) 页面。
+
+### 自动化与 AI {#automation-and-ai}
+
+- **每个平台都有命令行界面。** 应用的可执行文件支持 `record`、`export`、`captions` 和 `pack` 命令，可在无可见窗口的情况下运行，并通过 `--json` 输出 NDJSON，适合脚本、CI 和编程代理使用。TechSmith 为 Windows 版 Camtasia Recorder（9 及以上版本）提供了命令行开关的文档。参见 [CLI 参考](/docs/cli/)，以及它在 CI 和服务器上的运行条件：[显示器、CI 与服务器](/docs/cli/#displays-ci-and-servers)。
+- **可选的聊天式编辑，使用你自己的密钥。** 连接 Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax 或任意 OpenAI 兼容端点，用日常语言描述剪切、缩放、变速或标注。每次修改都是一次可撤销的普通编辑。在你连接提供方之前，此功能处于关闭状态；同一个提供方也用于将字幕翻译成 15 种语言。Camtasia 则是将生成式功能内置于 Create 和 Pro 方案中。参见 [AI 编辑](/docs/ai-editing/)。
+
+## 何时 Camtasia 是更好的选择 {#when-camtasia-is-the-better-choice}
+
+- **制作带测验的在线学习内容。** Camtasia 可以在 Smart Player 视频中添加测验题，并将结果上报给符合 SCORM 标准的学习管理系统。
+- **需要提供字幕文件。** Camtasia 可导入和导出 VTT 文件；OpenScreen 是把字幕烧录进视频中。
+- **从编辑器直接发布。** Camtasia 可上传到 YouTube 并托管在 Screencast；OpenScreen 给你的是一个文件，想在哪里分享就上传到哪里。
+- **面向组织采购。** Camtasia 的每个方案都包含聊天和邮件支持，可转让的团队订阅通过 TechSmith 的销售团队或经销商购买，还有部署工具可供管理员关闭转录功能。
+
+## 开始使用 {#getting-started}
+
+1. 从[下载页面](/download/)下载 OpenScreen。在 Windows 上，推荐通过 Microsoft Store 安装。
+2. 按照[安装说明](/docs/installation/)操作。在 macOS 上，首次录制前请先授予屏幕录制和辅助功能权限。
+3. 将已完成的作品以视频文件形式迁移过来。OpenScreen 不能打开 Camtasia 项目，所以请先将其导出为 MP4，再从[媒体库](/docs/media-library/)导入这些文件。
+4. 参照[快速上手](/docs/quick-start/)完成第一次录制，然后运行**自动增强 → 自动缩放**，并添加[字幕](/docs/captions/)。
+
+还想比较其他工具？参见 [Screen Studio 替代方案](/alternatives/screen-studio/)、[OpenScreen 对比 Cap](/compare/openscreen-vs-cap/)、[OpenScreen 对比 OBS Studio](/compare/openscreen-vs-obs/)和 [Loom 替代方案](/alternatives/loom/)，或返回 [OpenScreen 首页](/)。
+
+## 信息来源 {#sources}
+
+Camtasia 相关信息，核实于 2026 年 9 月：
+
+- 平台、免费编辑器水印、分离录制轨道以及翻译语言：[www.techsmith.com/camtasia](https://www.techsmith.com/camtasia/)
+- 方案价格及哪些方案导出无水印：[www.techsmith.com/store/camtasia](https://www.techsmith.com/store/camtasia)
+- 系统要求和试用要求：[www.techsmith.com/camtasia/system-requirements](https://www.techsmith.com/camtasia/system-requirements/)
+- 方案内容、隐藏式字幕、语音、虚拟形象、配音、支持和团队订阅：[support.techsmith.com/hc/en-us/articles/41688340554765](https://support.techsmith.com/hc/en-us/articles/41688340554765-What-Is-the-Difference-Between-Camtasia-Pro-Create-and-Essentials)（日期为 2026 年 6 月 16 日）
+- 各方案功能，包括基于文本的视频编辑：[support.techsmith.com/hc/en-us/articles/40593880288397](https://support.techsmith.com/hc/en-us/articles/40593880288397-Getting-Started-with-a-Camtasia-Starter-Plan)（日期为 2026 年 6 月 11 日）
+- 仅限订阅的授权模式、支持截止日期与激活：[support.techsmith.com/hc/en-us/articles/27009223314701](https://support.techsmith.com/hc/en-us/articles/27009223314701-TechSmith-Transition-to-Annual-Subscription-Pricing-Model-in-2025)（日期为 2026 年 6 月 10 日）
+- Camtasia Online：[camtasia.techsmith.com](https://camtasia.techsmith.com/)
+- SmartFocus：[www.techsmith.com/camtasia/features/ai-auto-zoom-and-pan](https://www.techsmith.com/camtasia/features/ai-auto-zoom-and-pan/)
+- 光标与点击效果：[www.techsmith.com/learn/tutorials/camtasia/cursor-effects](https://www.techsmith.com/learn/tutorials/camtasia/cursor-effects/)
+- Whisper 字幕：[support.techsmith.com/hc/en-us/articles/203729278](https://support.techsmith.com/hc/en-us/articles/203729278-How-to-use-Speech-To-Text-in-Camtasia-Editor)（日期为 2025 年 10 月 10 日）
+- 本地转录与部署工具：[support.techsmith.com/hc/en-us/articles/26713588518413](https://support.techsmith.com/hc/en-us/articles/26713588518413-Dynamic-Captions-Best-Practices)（日期为 2025 年 10 月 10 日）
+- 转录支持的语言：[support.techsmith.com/hc/en-us/articles/27321254593549](https://support.techsmith.com/hc/en-us/articles/27321254593549-Supported-Languages-for-Speech-to-Text)（日期为 2024 年 6 月 5 日）
+- 导出格式、Screencast、YouTube 和 Smart Player：[www.techsmith.com/learn/tutorials/camtasia/export-share](https://www.techsmith.com/learn/tutorials/camtasia/export-share/)
+- 测验与 SCORM 报告：[www.techsmith.com/learn/tutorials/camtasia/quizzing](https://www.techsmith.com/learn/tutorials/camtasia/quizzing/)
+- Rev 素材上的 SmartFocus、VTT、WebM 导出、曲线箭头标注框和背景移除：[support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History)（日期为 2026 年 8 月 18 日）
+- Camtasia Recorder 的命令行开关：[support.techsmith.com/hc/en-us/articles/203728678](https://support.techsmith.com/hc/en-us/articles/203728678-Camtasia-Windows-Command-line-switches-and-options-for-automation-with-Camtasia-Recorder)（日期为 2025 年 8 月 8 日）
+
+OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+
+Camtasia、TechSmith 及本页出现的其他产品名称均为其各自所有者的商标。OpenScreen 是一个独立项目，与 TechSmith 没有关联，也未获得其背书。

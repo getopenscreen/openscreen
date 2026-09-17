@@ -102,28 +102,20 @@ A [Instalação](./installation.md) traz os passos para cada plataforma.
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | Projeto original, arquivado e somente leitura | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 
-## O OpenScreen está pronto para uso em produção? {#is-openscreen-ready-for-production-work}
+## O que acontece se uma gravação for interrompida? {#what-happens-if-a-recording-is-interrupted}
 
-**Ainda não, segundo a própria descrição.** O projeto diz que ainda não está pronto para uso em produção.
+No Windows e no macOS, os gravadores nativos escrevem MP4 fragmentado, em fragmentos de um segundo. Se uma gravação for interrompida, o arquivo ainda pode ser reproduzido até o último fragmento completo.
 
-- Espere imperfeições e mudanças incompatíveis ocasionais no formato de projeto `.openscreen` e na [CLI](/docs/cli/).
-- No Windows e no macOS, os gravadores nativos escrevem MP4 fragmentado, em fragmentos de um segundo. Se uma gravação for interrompida, o arquivo ainda pode ser reproduzido até o último fragmento completo. O Windows recorre a um MP4 comum quando a escrita em MP4 fragmentado não está disponível.
-- O Linux escreve um MP4 comum: um travamento antes de o arquivo ser finalizado o deixa ilegível.
-
-Os relatos de bugs vão para as [issues do GitHub](https://github.com/getopenscreen/openscreen/issues).
+Os relatos de bugs e os pedidos de recursos vão para as [issues do GitHub](https://github.com/getopenscreen/openscreen/issues).
 
 ## O que o OpenScreen não faz? {#what-doesnt-openscreen-do}
 
 Se você precisa de algum destes itens, o OpenScreen não é a ferramenta certa:
 
-- **Compartilhamento hospedado.** Sem links de compartilhamento, armazenamento em nuvem, espaços de equipe ou comentários. Seus arquivos ficam no seu disco. Veja [OpenScreen como alternativa ao Loom (em inglês)](/alternatives/loom/).
-- **Transmissão ao vivo.** Veja [OpenScreen vs OBS Studio (em inglês)](/compare/openscreen-vs-obs/).
-- **Captura de uma região.** Ele grava uma tela inteira ou uma janela. Você corta a imagem depois, no editor.
+- **Compartilhamento hospedado.** Sem links de compartilhamento, armazenamento em nuvem, espaços de equipe ou comentários. Seus arquivos ficam no seu disco. Veja [OpenScreen como alternativa ao Loom](/alternatives/loom/).
+- **Transmissão ao vivo.** Veja [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
 - **Arquivos de legenda.** As legendas são embutidas no vídeo. Não há exportação em SRT ou VTT. Veja [Legendas](./captions.md).
 - **Celular.** Não há app para celular nem captura no iOS ou no Android.
-- **Gravação agendada**, ou um atalho global para iniciar e parar uma gravação.
-- **Outros formatos de exportação.** Só MP4 (H.264 ou H.265) e GIF: sem exportação em WebM, ProRes, AV1 ou só áudio.
-- **Um serviço de IA incluído.** A edição por chat e a tradução de legendas só funcionam com um provedor de IA que você mesmo conecta, geralmente com sua própria chave de API. A transcrição roda localmente e não precisa de nenhum dos dois.
 
 ## Como começar? {#how-do-i-get-started}
 

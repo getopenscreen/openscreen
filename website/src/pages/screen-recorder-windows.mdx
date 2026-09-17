@@ -10,7 +10,7 @@ keywords:
 
 # A free, open-source screen recorder for Windows
 
-OpenScreen is a free, MIT-licensed screen recorder for Windows 10 and 11 that also edits the take into a finished video. On Windows it records through Windows Graphics Capture, takes system audio with no extra driver, writes a file that stays playable if the recorder crashes, and exports MP4 or GIF with no watermark and no account. OBS Studio is still the better choice if you stream, and ShareX if you mostly take screenshots and upload them.
+OpenScreen is a free, MIT-licensed screen recorder for Windows 10 and 11 that also edits the take into a finished video. On Windows it records through Windows Graphics Capture, takes system audio with no extra driver, writes a file that stays playable if the recorder crashes, and exports MP4 or GIF with no watermark and no account. OBS Studio is still the better choice if you stream.
 
 This page is published by the OpenScreen project. The details about other tools come from their own sites and documentation and were checked in September 2026. The sources are listed at the end.
 
@@ -38,9 +38,9 @@ Screen Studio, the app that defined this kind of recorder, runs only on macOS, a
 
 ### Recording
 
-- **Native capture.** A helper built on Windows Graphics Capture records a display or one window, from Windows 10 build 19041. It targets 60 fps, up to 3840×2160. There is no area selection: crop the frame in the editor afterward. See [Recording](/docs/recording/).
+- **Native capture.** A helper built on Windows Graphics Capture records a display or one window, from Windows 10 build 19041. It targets 60 fps, up to 3840×2160. Crop the frame in the editor afterward. See [Recording](/docs/recording/).
 - **Hardware H.264 where available.** The helper encodes through Media Foundation. Since version 1.11, it uses a hardware encoder when one is installed and working.
-- **A take that survives a crash.** The recording is written as fragmented MP4, one second per fragment. If the capture process dies, the file still plays up to the last complete fragment. If that process fails to stop cleanly and exits, OpenScreen keeps the playable file and opens it like any other take. When the fragmented writer is unavailable, Windows falls back to a plain MP4.
+- **A take that survives a crash.** The recording is written as fragmented MP4, one second per fragment. If the capture process dies, the file still plays up to the last complete fragment. If that process fails to stop cleanly and exits, OpenScreen keeps the playable file and opens it like any other take.
 - **System audio without a driver.** WASAPI loopback captures what the PC plays, with no virtual audio device to install. It is mixed with the microphone on one track.
 - **Webcam through Media Foundation.** Cameras that Media Foundation cannot see, such as NVIDIA Broadcast, are picked up through a DirectShow fallback. The webcam is saved as its own file and composited in the editor.
 - **Controls that stay out of the video.** On Windows 10 build 19041 and later, the floating recording controls and the notes window are excluded from the capture, so they can stay on screen while you record. The notes window has a teleprompter mode.
@@ -52,7 +52,7 @@ Screen Studio, the app that defined this kind of recorder, runs only on macOS, a
 - **Rendering on Direct3D 11.** The live preview and the MP4 export share one native compositor, which runs on Direct3D 11 on Windows.
 - **Hardware export encoders.** MP4 export tries AMD AMF, NVIDIA NVENC, Intel Quick Sync and Media Foundation, in that order, then a software encoder. You choose H.264 or H.265, 720p, 1080p or Source quality, and 24, 30 or 60 fps. GIF export is also available, and neither format has a watermark. See [Export](/docs/export/). For export speed, read the [export benchmark post](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) and its caveats.
 - **An export without a usable GPU.** On a PC with no compatible GPU, OpenScreen renders on the CPU through WARP, with software decoding. The export dialog says so before you start, and the export takes longer.
-- **Captions on your machine.** whisper.cpp runs on Vulkan, with a CPU fallback. It uses one Whisper Small model of about 264 MB, downloaded once, and the captions are burned into the video. There is no caption file. See [captions](/features/captions/).
+- **Captions on your machine.** whisper.cpp runs on Vulkan, with a CPU fallback. It uses one Whisper Small model of about 264 MB, downloaded once, and the captions are burned into the video. See [captions](/features/captions/).
 - **A command-line interface.** The [CLI](/docs/cli/) records, exports, captions and packs projects, with JSON output. With the installer, it runs from `Openscreen.exe` in the folder chosen during setup.
 
 ### Installing and updating
@@ -64,13 +64,10 @@ Screen Studio, the app that defined this kind of recorder, runs only on macOS, a
 
 ## When OpenScreen is not the right tool
 
-- **Your PC runs Windows on ARM.** OpenScreen publishes an x64 build only. OBS Studio publishes a Windows ARM64 zip, and ShareX runs natively on ARM64 from the Microsoft Store (both as of September 2026).
+- **Your PC runs Windows on ARM.** OpenScreen publishes an x64 build only. OBS Studio publishes a Windows ARM64 zip (as of September 2026).
 - **Your Windows 10 is older than version 2004.** OpenScreen supports Windows 10 from version 1903, but its native recorder needs build 19041. Older builds record only through a browser-capture fallback, without the native capture described above.
 - **You stream.** OpenScreen records and edits, and does not stream. OBS Studio, also free and open source, records and streams live.
-- **You mostly take screenshots and upload them.** OpenScreen has no screenshot tool and no upload feature. ShareX, a free and open-source Windows app, combines screenshots, screen recording, image editing and uploads to many destinations.
-- **You need to record part of the screen.** OpenScreen records a whole display or one window, and you crop afterward. ShareX records a selected region.
-- **You share recordings by link.** OpenScreen hosts nothing. You get a file and upload it wherever you share. Cap can publish a capture to a web page that viewers watch in the browser, and Loom shares a recording through a copied link with access settings. See [OpenScreen vs Cap](/compare/openscreen-vs-cap/) and the [Loom alternative](/alternatives/loom/).
-- **You need a stable, finished product.** OpenScreen is under active development, and its documentation says it is not production-grade yet. Expect rough edges and occasional breaking changes.
+- **You share recordings by link.** OpenScreen gives you a file to upload wherever you share. Cap can publish a capture to a web page that viewers watch in the browser, and Loom shares a recording through a copied link with access settings. See [OpenScreen vs Cap](/compare/openscreen-vs-cap/) and the [Loom alternative](/alternatives/loom/).
 
 ## Getting started
 
@@ -87,14 +84,9 @@ Other tools, checked September 2026:
 - Screen Studio runs only on macOS, with no near-future Windows plans (FAQ): [screen.studio](https://screen.studio/)
 - OBS Studio, free and open-source recording and live streaming: [obsproject.com](https://obsproject.com/)
 - OBS Studio Windows ARM64 zip, version 32.2.2: [github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2) (dated August 14, 2026)
-- ShareX is free and open source: [getsharex.com](https://getsharex.com/)
-- ShareX is a Windows application: [getsharex.com/compare/sharex-vs-snagit](https://getsharex.com/compare/sharex-vs-snagit/)
-- ShareX screenshots, screen recording, image editing and uploads: [github.com/ShareX/ShareX](https://github.com/ShareX/ShareX)
-- ShareX region recording: [getsharex.com/blog/how-to-record-screen-windows](https://getsharex.com/blog/how-to-record-screen-windows/)
-- ShareX native ARM64 support through the Microsoft Store, version 20.0.2: [getsharex.com/changelog](https://getsharex.com/changelog)
 - Cap share pages watched in the browser: [cap.so](https://cap.so/)
 - Loom link sharing and access settings: [support.atlassian.com/loom/docs/share-your-recording](https://support.atlassian.com/loom/docs/share-your-recording/)
 
 OpenScreen facts describe version 1.11.0 and link to its documentation above.
 
-Screen Studio, OBS Studio, ShareX, Cap, Loom, Windows and the other product names on this page are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by any of them.
+Screen Studio, OBS Studio, Cap, Loom, Windows and the other product names on this page are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by any of them.

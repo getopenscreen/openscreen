@@ -135,7 +135,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--quality <medium\|good\|source>` | Tamanho de saída: `medium` é 720p, `good` é 1080p, `source` segue o menor clipe depois do corte da imagem, então nunca amplia. Um GIF também parte desse tamanho |
 | `--gif-fps <15\|20\|25\|30>` | Taxa de quadros do GIF |
 | `--gif-size <medium\|large\|original>` | Limite de altura do GIF aplicado a esse tamanho: 720, 1080 ou nenhum |
-| `--auto-zoom` | Antes de renderizar, adiciona zooms onde o ponteiro gravado parou, com o mesmo mecanismo dos [zooms automáticos do editor (em inglês)](/features/auto-zoom/). Os zooms existentes são mantidos, e os novos nunca se sobrepõem a eles |
+| `--auto-zoom` | Antes de renderizar, adiciona zooms onde o ponteiro gravado parou, com o mesmo mecanismo dos [zooms automáticos do editor](/features/auto-zoom/). Os zooms existentes são mantidos, e os novos nunca se sobrepõem a eles |
 | `--audio <file>` | Mixa um arquivo de narração (mp3, wav ou m4a) no MP4. Só MP4 |
 | `--audio-mode <mix\|replace>` | `mix` (padrão) mantém o áudio da gravação por baixo da narração, com ganho de 40%; `replace` o descarta |
 | `--audio-offset <seconds>` | Atraso antes de a narração começar (padrão 0) |

@@ -10,7 +10,7 @@ keywords:
 
 # A free screen recorder with auto zoom
 
-OpenScreen is a free, MIT-licensed screen recorder with auto zoom for Windows, macOS and Linux. After a take, **Auto-enhance → Automatic zooms** reads the cursor movement OpenScreen recorded and adds a zoom wherever the pointer paused, with no network call and no AI model. Screen Studio, Cap and Camtasia also zoom automatically. OpenScreen is not the right tool if you want to shape the zoom animation, or to auto-zoom a video made with another recorder.
+OpenScreen is a free, MIT-licensed screen recorder with auto zoom for Windows, macOS and Linux. After a take, **Auto-enhance → Automatic zooms** reads the cursor movement OpenScreen recorded and adds a zoom wherever the pointer paused, with no network call and no AI model. Screen Studio, Cap and Camtasia also zoom automatically; OpenScreen does it for free, on all three systems.
 
 This page is published by the OpenScreen project. The Screen Studio, Cap and Camtasia details come from screen.studio, cap.so and techsmith.com and were checked in September 2026. The sources are listed at the end.
 
@@ -26,7 +26,6 @@ This page is published by the OpenScreen project. The Screen Studio, Cap and Cam
 | Manual zoom depths | 1.25×, 1.5×, 1.8×, 2.2×, 3.5× or 5× |
 | Focus | A point you place, or the recorded cursor |
 | 3D tilt | None, Iso, Left or Right |
-| Easing control | None |
 | Command line | The `export` command's `--auto-zoom` flag |
 | Platforms | Windows 10 (1903 or later) and 11, x64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 |
 | Price | Free, including commercial use. MIT license |
@@ -49,11 +48,8 @@ A few details matter in practice:
 - **The results are ordinary zooms.** Click one to change its depth, tilt or focus, drag its edges to move its start and end, or delete it.
 - **It runs when you ask.** In version 1.11.0, nothing is added after a take until you choose Automatic zooms in the editor, or pass `--auto-zoom` on the command line.
 - **It tells you when nothing qualifies.** The editor reports that no auto-zoom moments were found.
-
-What the detector does not look at:
-
-- **Clicks and typing.** It reads positions only. A click made while the pointer is moving does not trigger a zoom. The upside is that a Linux take gets automatic zooms even without click data, which is what you get when your user is not in the `input` group.
-- **Long pauses.** A pointer parked for more than 2.6 seconds, for example while you talk over a slide, gets no automatic zoom. Add one by hand with `Z`.
+- **It needs no click data.** A take recorded without clicks, such as a Linux take when your user is not in the `input` group, still gets automatic zooms.
+- **Long pauses are yours to frame.** A pointer parked for more than 2.6 seconds, for example while you talk over a slide, is left alone. Add a zoom by hand with `Z`.
 
 The same menu has a second item, **Smart cuts**, marked *With AI*. It is a different feature: it asks the optional chat agent to cut dead time. It waits for the recording's transcript, and it only works once you connect an AI provider with your own key. See [AI editing](/docs/ai-editing/).
 
@@ -88,13 +84,11 @@ Automatic zooms are common in this category, and OpenScreen is one of several to
 - **Cap.** Its Studio Mode generates zoom segments around recorded clicks, from the cursor and click data Cap records. Its docs say imported MP4s do not gain click data during import.
 - **Camtasia.** SmartFocus identifies actions such as scrolling and clicks, then adds pan and zoom animations. It needs a `.trec` file from Camtasia Recorder.
 
-Like OpenScreen, Cap and Camtasia need data their own recorder captured. The trigger is what differs. Screen Studio and Cap zoom on clicks, Camtasia's AI picks actions such as scrolling and clicks, and OpenScreen applies a fixed rule to pauses in the pointer's movement. For side-by-side comparisons, see the [Screen Studio alternative](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) and the [Camtasia alternative](/alternatives/camtasia/).
+Like OpenScreen, Cap and Camtasia need data their own recorder captured. Screen Studio and Cap trigger on clicks, Camtasia's AI picks actions such as scrolling and clicks, and OpenScreen follows the pauses in the pointer's movement, which works even when no clicks were recorded. For side-by-side comparisons, see the [Screen Studio alternative](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) and the [Camtasia alternative](/alternatives/camtasia/).
 
 ## When OpenScreen is not the right tool
 
-- **You want to shape the zoom animation.** A zoom's settings are its depth, tilt and focus. There is no control over easing or transition speed. Cap 0.6.0 added 3D tracks, camera shots with their own perspective, easing and focus blur.
 - **You want automatic zooms on footage from another recorder.** Automatic zooms need the cursor file OpenScreen writes. A video from another app has none, and neither does an OpenScreen take recorded in the System cursor mode. Manual zooms still work on both.
-- **You want zooms placed on clicks.** OpenScreen's detector ignores clicks. Screen Studio and Cap build their automatic zooms from recorded clicks instead.
 - **You record an iPhone or iPad.** OpenScreen records a display or one window on a Windows, macOS or Linux computer, not a phone or tablet.
 
 ## Getting started
@@ -112,7 +106,6 @@ Screen Studio, Cap and Camtasia facts, checked September 2026:
 
 - Screen Studio auto zoom on click positions: [screen.studio/guide/auto-zoom](https://screen.studio/guide/auto-zoom)
 - Cap automatic and manual zooms, and imported MP4s: [cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
-- Cap 0.6.0 3D tracks with perspective, easing and focus blur: [cap.so/changelog](https://cap.so/changelog)
 - Camtasia SmartFocus and its `.trec` requirement: [techsmith.com/camtasia/features/ai-auto-zoom-and-pan](https://www.techsmith.com/camtasia/features/ai-auto-zoom-and-pan/)
 
 OpenScreen facts describe version 1.11.0 and link to its documentation above.

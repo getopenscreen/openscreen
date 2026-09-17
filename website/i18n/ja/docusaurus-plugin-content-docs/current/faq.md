@@ -102,28 +102,20 @@ OpenScreen は、Windows、macOS、Linux に対応した、MIT ライセンス�
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | 元のプロジェクト（アーカイブ済み、読み取り専用） | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 
-## OpenScreen は本番の業務に使えますか？ {#is-openscreen-ready-for-production-work}
+## 録画が途中で途切れたらどうなりますか？ {#what-happens-if-a-recording-is-interrupted}
 
-**まだです。プロジェクト自身がそう説明しています。** プロジェクトは、自らを本番運用に耐える品質ではないとしています。
+Windows と macOS では、ネイティブのレコーダーが 1 秒単位のフラグメントで fragmented MP4 を書き込みます。録画が途中で途切れても、ファイルは最後の完全なフラグメントまで再生できます。
 
-- 粗削りな部分や、`.openscreen` プロジェクト形式と [CLI](/docs/cli/) にときどき互換性のない変更があることを想定してください。
-- Windows と macOS では、ネイティブのレコーダーが 1 秒単位のフラグメントで fragmented MP4 を書き込みます。録画が途中で途切れても、ファイルは最後の完全なフラグメントまで再生できます。Windows では、fragmented MP4 の書き込みが使えない場合、通常の MP4 にフォールバックします。
-- Linux は通常の MP4 を書き込むため、ファイルが確定する前にクラッシュすると、そのファイルは読めなくなります。
-
-バグの報告は [GitHub の Issue](https://github.com/getopenscreen/openscreen/issues) にお寄せください。
+バグの報告や機能のリクエストは [GitHub の Issue](https://github.com/getopenscreen/openscreen/issues) にお寄せください。
 
 ## OpenScreen にできないことは？ {#what-doesnt-openscreen-do}
 
 次のいずれかが必要な場合、OpenScreen は適したツールではありません。
 
-- **オンライン共有。** 共有リンク、クラウドストレージ、チームのワークスペース、コメント機能はありません。ファイルはディスク上に残ります。[Loom の代替としての OpenScreen（英語）](/alternatives/loom/)を参照してください。
-- **ライブ配信。** [OpenScreen と OBS Studio の比較（英語）](/compare/openscreen-vs-obs/)を参照してください。
-- **範囲指定のキャプチャ。** 録画できるのは画面全体か 1 つのウィンドウです。クロップはあとからエディターで行います。
+- **オンライン共有。** 共有リンク、クラウドストレージ、チームのワークスペース、コメント機能はありません。ファイルはディスク上に残ります。[Loom の代替としての OpenScreen](/alternatives/loom/)を参照してください。
+- **ライブ配信。** [OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)を参照してください。
 - **字幕ファイル。** 字幕は動画に焼き込まれます。SRT や VTT のエクスポートはありません。[字幕と文字起こし](./captions.md)を参照してください。
 - **モバイル。** モバイルアプリはなく、iOS や Android の画面もキャプチャできません。
-- **予約録画**、および録画を開始・停止するためのグローバルショートカット。
-- **その他のエクスポート形式。** 対応するのは MP4（H.264 または H.265）と GIF のみです。WebM、ProRes、AV1、音声のみのエクスポートはありません。
-- **同梱の AI サービス。** チャット編集と字幕の翻訳は、自分で接続した AI プロバイダー（通常は自分の API キーを使用）でのみ動作します。文字起こしはローカルで実行され、どちらも必要ありません。
 
 ## どうやって始めればいいですか？ {#how-do-i-get-started}
 

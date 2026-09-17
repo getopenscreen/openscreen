@@ -11,7 +11,7 @@ keywords:
 
 # OpenScreen vs OBS Studio
 
-OpenScreen and OBS Studio are both free, open-source screen recorders for Windows, macOS and Linux, so choosing between them is mostly a question of editing. OBS records and streams scenes built from many sources and leaves editing to another app, while OpenScreen records a display or one window and edits the take itself: automatic zooms, a cursor you restyle afterward, on-device captions, and MP4 or GIF export. OBS Studio is still the better choice for live streaming, multi-scene productions, a virtual camera or plugins.
+OpenScreen and OBS Studio are both free, open-source screen recorders for Windows, macOS and Linux, so choosing between them is mostly a question of editing. OBS records and streams scenes built from many sources and leaves editing to another app, while OpenScreen records a display or one window and edits the take itself: automatic zooms, a cursor you restyle afterward, on-device captions, and MP4 or GIF export. OBS Studio is still the better choice for live streaming and multi-scene productions.
 
 This page is published by the OpenScreen project. The OBS Studio details come from obsproject.com, the OBS Studio GitHub repository and Flathub, and were checked in September 2026. The sources are listed at the end.
 
@@ -29,9 +29,7 @@ This page is published by the OpenScreen project. The OBS Studio details come fr
 | Captions | On-device Whisper, one model of about 264 MB, downloaded once. Burned into the video | Built-in captions tool on Windows only. The free LocalVocal plugin transcribes locally on all three systems and writes .srt files |
 | Recording format | H.264 MP4 with native capture | H.264, AV1, HEVC with a hardware encoder, or ProRes on a Mac. Hybrid MP4 or MOV by default, also MKV, FLV, MPEG-TS and others |
 | Output | MP4 (H.264 or H.265) or GIF, up to 60 fps, no watermark | The recording file itself |
-| Virtual camera | No | Yes |
-| Replay Buffer | No | Yes |
-| Extending it | A command-line interface. No plugin system | Plugin manager, Lua and Python scripts, WebSocket remote control |
+| Extending it | A command-line interface with JSON output | Plugin manager, Lua and Python scripts, WebSocket remote control |
 
 ## What both tools do
 
@@ -40,7 +38,7 @@ The two overlap more than the "streamer versus editor" split suggests. None of t
 - **Free and open source.** Both cost nothing, and both publish their code on GitHub. Both licenses let you use the app for paid work.
 - **Windows, macOS and Linux.** Both ship for all three, with macOS 13 as the minimum.
 - **Screen, webcam, microphone and system audio** in the same recording.
-- **Recordings that survive a crash.** OBS's default Hybrid MP4 and MOV formats stay recoverable if writing stops. OpenScreen writes fragmented MP4 on Windows and macOS, so a take cut short stays readable up to its last second or so. Its Linux recordings are plain MP4 and do not have that protection.
+- **Recordings that survive a crash.** OBS's default Hybrid MP4 and MOV formats stay recoverable if writing stops. OpenScreen writes fragmented MP4 on Windows and macOS, so a take cut short stays readable up to its last second or so.
 - **Local speech-to-text with Whisper.** OpenScreen has it built in. On OBS, the LocalVocal plugin runs Whisper on your machine and can show live captions through a text source.
 - **Automation.** OBS includes a WebSocket server for remote control and runs Lua or Python scripts. OpenScreen has a [command line](/docs/cli/) that records, exports, captions and packs projects, with JSON output.
 
@@ -67,22 +65,10 @@ The two overlap more than the "streamer versus editor" split suggests. None of t
 
 ## When OBS Studio is the better choice
 
-- **You stream.** OBS streams to built-in services or to a custom server. OpenScreen does not stream.
-- **You produce with several sources.** OBS offers unlimited scenes, custom transitions, a Studio Mode to preview changes before they go out, and a Multiview that monitors 8 scenes. OpenScreen records one display or one window, plus the webcam.
-- **You need a virtual camera or a Replay Buffer.** OBS can send a scene to any app that takes a webcam, and save the last moments of a session on a hotkey. OpenScreen has neither.
-- **You want control over the recording format.** OBS encodes H.264 and AV1, HEVC with a hardware encoder, and ProRes on a Mac. It writes Hybrid MP4 or MOV, MKV and other containers, and can record several audio tracks. OpenScreen's native capture records H.264, and it exports MP4 or GIF only.
-- **You rely on plugins and scripts.** OBS has had a plugin manager since version 32.0, and its forum lists hundreds of plugins and scripts (as of September 2026). OpenScreen has no plugin system.
-- **You clean up audio while recording.** OBS applies noise gate, noise suppression and gain filters per source, and supports VST plugins. OpenScreen has no one-click audio cleanup.
-- **You start and stop takes from a hotkey.** OBS has hotkeys for starting and stopping recordings. OpenScreen's only global shortcut opens the app.
-- **You want to record only part of the screen.** OBS crops a source before it is recorded. OpenScreen records a whole display or one window, and you crop in the editor afterward.
-- **You need a caption file.** The LocalVocal plugin writes `.srt` files. OpenScreen burns captions into the video and writes no caption file.
-- **You run Windows on ARM or install from Flathub.** OBS publishes a Windows ARM64 zip and a Flathub package (as of September 2026). OpenScreen's Windows builds are x64 only, and it has no Flathub listing.
-- **You want the more mature tool.** The OBS Studio repository dates from 2013. OpenScreen is under active development, and its own documentation says it is not production-grade yet.
-
-Two OpenScreen limits matter on a Mac:
-
-- **The recording controls can end up in the video.** On macOS, and on macOS 26 or later especially, the floating controls can show up in the capture, as they can on Linux. Hide them before you record.
-- **The microphone may not record on macOS 13 and 14.** OpenScreen captures it through a ScreenCaptureKit option Apple added in macOS 15.
+- **You stream.** OBS streams to built-in services or to a custom server. OpenScreen records and edits.
+- **You produce with several sources.** OBS offers unlimited scenes, custom transitions, a Studio Mode to preview changes before they go out, and a Multiview that monitors 8 scenes.
+- **You need a caption file.** The LocalVocal plugin writes `.srt` files. OpenScreen burns captions into the video.
+- **You run Windows on ARM.** OBS publishes a Windows ARM64 zip (as of September 2026). OpenScreen's Windows builds are x64.
 
 ## Using both
 
@@ -93,7 +79,7 @@ You do not have to choose. OBS can record, and OpenScreen can edit the result.
 3. Drag the source card onto the clip row, then cut, speed up, zoom, annotate and frame it as usual.
 4. Select its card in **Media** mode and choose **Regenerate** to transcribe it for captions and transcript editing.
 
-Some features will not apply to an OBS file. Automatic zooms, cursor-following zoom focus and cursor styling read the cursor data that OpenScreen saves next to its own recordings, and an OBS file has none. Manual zooms still work. If your OBS scene included a webcam, the webcam is part of the picture, so OpenScreen's webcam layouts and Full Camera segments have nothing to work with. Try the round trip on a short clip before a long session.
+Some features will not apply to an OBS file. Automatic zooms, cursor-following zoom focus and cursor styling read the cursor data that OpenScreen saves next to its own recordings, and an OBS file has none. Manual zooms still work. If your OBS scene included a webcam, the webcam is part of the picture, so OpenScreen's webcam layouts and Full Camera segments have nothing to work with.
 
 ## Getting started
 
@@ -107,15 +93,13 @@ Comparing other tools as well? See the [Screen Studio alternative](/alternatives
 
 OBS Studio facts, checked September 2026:
 
-- Tagline, scene sources, transitions, audio filters and VST, hotkeys, Studio Mode, Multiview, plugins and Lua or Python scripts, sponsors: [obsproject.com](https://obsproject.com/)
+- Tagline, scene sources, transitions, Studio Mode, Multiview, plugins and Lua or Python scripts, sponsors: [obsproject.com](https://obsproject.com/)
 - Supported Windows and macOS versions, Flathub and PPA distribution: [obsproject.com/download](https://obsproject.com/download)
 - Current version 32.2.2 and its Windows x64, Windows ARM64, macOS and Ubuntu files: [github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2)
 - Flathub package: [flathub.org/apps/com.obsproject.Studio](https://flathub.org/apps/com.obsproject.Studio)
 - License: [COPYING](https://raw.githubusercontent.com/obsproject/obs-studio/master/COPYING)
-- Repository creation date: [api.github.com/repos/obsproject/obs-studio](https://api.github.com/repos/obsproject/obs-studio)
 - Donations and sponsorship: [obsproject.com/contribute](https://obsproject.com/contribute)
-- Streaming services and custom servers, Replay Buffer, multiple audio tracks, desktop audio, source cropping, output settings: [obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
-- Virtual camera: [obsproject.com/kb/virtual-camera-guide](https://obsproject.com/kb/virtual-camera-guide) (dated August 31, 2022)
+- Streaming services and custom servers, desktop audio, source cropping, output settings: [obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
 - Containers, encoders, HEVC hardware-only and ProRes on Macs: [obsproject.com/kb/audio-video-formats-guide](https://obsproject.com/kb/audio-video-formats-guide) (dated March 26, 2023)
 - Hybrid MP4 and MOV as default containers for new profiles: [github.com/obsproject/obs-studio/releases/tag/32.0.0](https://github.com/obsproject/obs-studio/releases/tag/32.0.0)
 - Hybrid MOV as the macOS default and Hybrid MP4 on Windows and Linux: [frontend/widgets/OBSBasic.cpp](https://github.com/obsproject/obs-studio/blob/master/frontend/widgets/OBSBasic.cpp)
@@ -123,7 +107,6 @@ OBS Studio facts, checked September 2026:
 - Plugin manager: [obsproject.com/blog/obs-studio-32-0-release-notes](https://obsproject.com/blog/obs-studio-32-0-release-notes)
 - WebSocket remote control: [obsproject.com/kb/remote-control-guide](https://obsproject.com/kb/remote-control-guide)
 - Built-in captions compiled only for Windows: [plugins/frontend-tools/CMakeLists.txt](https://github.com/obsproject/obs-studio/blob/master/plugins/frontend-tools/CMakeLists.txt)
-- Plugin and script listings: [obsproject.com/forum/resources](https://obsproject.com/forum/resources/)
 - Zoom to Mouse script: [obsproject.com/forum/resources/zoom-to-mouse.1823](https://obsproject.com/forum/resources/zoom-to-mouse.1823/)
 - LocalVocal plugin, its platforms, Whisper engine, on-screen captions and .srt output: [obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769](https://obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769/)
 

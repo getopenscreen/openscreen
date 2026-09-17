@@ -102,28 +102,20 @@ OpenScreen 是一款採用 MIT 授權的免費螢幕錄影與影片剪輯軟體�
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | 原始專案（已封存，唯讀） | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 
-## OpenScreen 可以用於正式工作了嗎？ {#is-openscreen-ready-for-production-work}
+## 如果錄影中途被中斷會怎樣？ {#what-happens-if-a-recording-is-interrupted}
 
-**依專案自己的說法，還不行。** 專案自稱尚未達到正式上線的品質。
+在 Windows 與 macOS 上，原生錄影程式會以每段一秒的方式寫入分段 MP4（fragmented MP4）。如果錄影中途被中斷，檔案仍可播放到最後一個完整的分段。
 
-- 請預期會有不夠完善的地方，`.openscreen` 專案格式與 [CLI](/docs/cli/) 偶爾也會有不相容的變更。
-- 在 Windows 與 macOS 上，原生錄影程式會以每段一秒的方式寫入分段 MP4（fragmented MP4）。如果錄影中途被中斷，檔案仍可播放到最後一個完整的分段。當分段寫入器無法使用時，Windows 會改為寫入一般的 MP4。
-- Linux 寫入的是一般的 MP4：如果在檔案完成寫入前當機，檔案就無法讀取。
-
-錯誤回報請提交到 [GitHub issues](https://github.com/getopenscreen/openscreen/issues)。
+錯誤回報與功能請求請提交到 [GitHub issues](https://github.com/getopenscreen/openscreen/issues)。
 
 ## OpenScreen 不做哪些事？ {#what-doesnt-openscreen-do}
 
 如果你需要以下任何一項，OpenScreen 就不是合適的工具：
 
-- **託管分享。** 沒有分享連結、雲端儲存、團隊工作區或留言功能。你的檔案會留在你的磁碟上。請參閱[以 OpenScreen 替代 Loom（英文）](/alternatives/loom/)。
-- **直播。** 請參閱 [OpenScreen 與 OBS Studio 比較（英文）](/compare/openscreen-vs-obs/)。
-- **區域擷取。** 它只錄製整個螢幕或單一視窗，事後再到編輯器中裁切。
+- **託管分享。** 沒有分享連結、雲端儲存、團隊工作區或留言功能。你的檔案會留在你的磁碟上。請參閱[以 OpenScreen 替代 Loom](/alternatives/loom/)。
+- **直播。** 請參閱 [OpenScreen 與 OBS Studio 比較](/compare/openscreen-vs-obs/)。
 - **字幕檔。** 字幕會燒錄進影片，沒有 SRT 或 VTT 匯出。請參閱[字幕](./captions.md)。
 - **行動裝置。** 沒有行動應用程式，也不支援 iOS 或 Android 擷取。
-- **排程錄影**，或用來開始與停止錄影的全域快捷鍵。
-- **其他匯出格式。** 只有 MP4（H.264 或 H.265）與 GIF：沒有 WebM、ProRes、AV1，也沒有純音訊匯出。
-- **內建的 AI 服務。** 聊天剪輯與字幕翻譯只能搭配你自行連接的 AI 提供者使用，通常需要你自己的 API 金鑰。轉錄在本機執行，兩者都不需要。
 
 ## 如何開始使用？ {#how-do-i-get-started}
 

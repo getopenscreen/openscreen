@@ -21,8 +21,8 @@ OpenScreen est un **enregistreur d'écran et éditeur gratuit et open source**. 
 
 Ces pages décrivent **OpenScreen 1.11.0**, la version stable du 9 septembre 2026. Ce qui a changé à chaque version, et pourquoi, se trouve dans le [journal de développement (en anglais)](/blog/).
 
-:::warning
-OpenScreen **n'est pas encore prêt pour la production**. Il est en développement actif : attendez-vous à des imperfections et à des changements incompatibles de temps à autre, y compris dans le format de projet `.openscreen` et la [CLI](/docs/cli/).
+:::note
+OpenScreen sort souvent de nouvelles versions. D'une version à l'autre, le format de projet `.openscreen` et la [CLI](/docs/cli/) peuvent encore changer.
 :::
 
 ## Ce que vous pouvez faire {#what-you-can-do}
@@ -34,7 +34,7 @@ OpenScreen **n'est pas encore prêt pour la production**. Il est en développeme
 - Connecter, si vous le souhaitez, votre propre clé LLM pour [monter par chat](./ai-editing.md). Cette fonction est désactivée par défaut et n'est jamais obligatoire.
 - [Exporter](./export.md) en MP4 (720p/1080p/source, H.264 ou H.265) ou en GIF animé.
 
-Les questions sur la licence, les filigranes ou ce qui passe par le réseau trouvent leur réponse dans la [FAQ](/docs/faq/). La comparaison d'OpenScreen avec d'autres enregistreurs se trouve sur les pages [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) et [OBS Studio](/compare/openscreen-vs-obs/), en anglais.
+Les questions sur la licence, les filigranes ou ce qui passe par le réseau trouvent leur réponse dans la [FAQ](/docs/faq/). La comparaison d'OpenScreen avec d'autres enregistreurs se trouve sur les pages [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) et [OBS Studio](/compare/openscreen-vs-obs/).
 
 :::note
 L'enregistrement, le montage, la transcription, les sous-titres et l'export ne demandent aucun compte et continuent de fonctionner sans connexion réseau. La transcription exige d'abord un téléchargement : son modèle Whisper (environ 264 Mo), récupéré lors de votre première transcription. Quand une connexion est disponible, l'application charge aussi ses polices d'annotation depuis Google Fonts au démarrage, et les versions installées depuis GitHub Releases vérifient sur GitHub la présence de mises à jour. Le montage par chat avec l'IA et la traduction des sous-titres ne passent en ligne qu'une fois que vous avez vous-même connecté un fournisseur, et seulement vers ce fournisseur.

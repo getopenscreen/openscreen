@@ -102,28 +102,20 @@ La page [Installation](./installation.md) donne les étapes pour chaque platefor
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | Projet d'origine, archivé et en lecture seule | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 
-## OpenScreen est-il prêt pour un usage en production ? {#is-openscreen-ready-for-production-work}
+## Que se passe-t-il si un enregistrement est interrompu ? {#what-happens-if-a-recording-is-interrupted}
 
-**Pas encore, de son propre aveu.** Le projet se décrit comme n'étant pas prêt pour la production.
+Sous Windows et macOS, les enregistreurs natifs écrivent un MP4 fragmenté, par fragments d'une seconde. Si un enregistrement est interrompu, le fichier reste lisible jusqu'au dernier fragment complet.
 
-- Attendez-vous à des imperfections, et de temps à autre à des changements incompatibles du format de projet `.openscreen` et de la [CLI](/docs/cli/).
-- Sous Windows et macOS, les enregistreurs natifs écrivent un MP4 fragmenté, par fragments d'une seconde. Si un enregistrement est interrompu, le fichier reste lisible jusqu'au dernier fragment complet. Windows se rabat sur un MP4 classique quand l'écriture fragmentée n'est pas disponible.
-- Linux écrit un MP4 classique : un plantage avant la finalisation du fichier le rend illisible.
-
-Signalez les bugs dans les [tickets GitHub](https://github.com/getopenscreen/openscreen/issues).
+Les signalements de bugs et les demandes de fonctionnalités vont dans les [tickets GitHub](https://github.com/getopenscreen/openscreen/issues).
 
 ## Que ne fait pas OpenScreen ? {#what-doesnt-openscreen-do}
 
 Si vous avez besoin de l'une de ces fonctions, OpenScreen n'est pas le bon outil :
 
-- **Partage hébergé.** Pas de liens de partage, de stockage cloud, d'espaces d'équipe ni de commentaires. Vos fichiers restent sur votre disque. Voir [OpenScreen comme alternative à Loom (en anglais)](/alternatives/loom/).
-- **Diffusion en direct.** Voir [OpenScreen vs OBS Studio (en anglais)](/compare/openscreen-vs-obs/).
-- **Capture d'une zone de l'écran.** Il enregistre un écran entier ou une fenêtre. Vous recadrez ensuite dans l'éditeur.
+- **Partage hébergé.** Pas de liens de partage, de stockage cloud, d'espaces d'équipe ni de commentaires. Vos fichiers restent sur votre disque. Voir [OpenScreen comme alternative à Loom](/alternatives/loom/).
+- **Diffusion en direct.** Voir [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
 - **Fichiers de sous-titres.** Les sous-titres sont incrustés dans la vidéo. Il n'y a pas d'export SRT ni VTT. Voir [Sous-titres et transcription](./captions.md).
 - **Mobile.** Pas d'application mobile, ni de capture iOS ou Android.
-- **Enregistrement programmé**, ou raccourci global pour démarrer et arrêter un enregistrement.
-- **Autres formats d'export.** MP4 (H.264 ou H.265) et GIF uniquement : pas d'export WebM, ProRes, AV1 ni audio seul.
-- **Service d'IA intégré.** Le montage par chat et la traduction des sous-titres ne fonctionnent qu'avec un fournisseur d'IA que vous connectez vous-même, généralement avec votre propre clé API. La transcription tourne en local et n'a besoin ni de l'un ni de l'autre.
 
 ## Comment commencer ? {#how-do-i-get-started}
 

@@ -21,8 +21,8 @@ OpenScreen es un **grabador de pantalla y editor gratis y de código abierto**. 
 
 Estas páginas describen **OpenScreen 1.11.0**, la versión estable del 9 de septiembre de 2026. Qué cambió en cada versión, y por qué, está en el [diario de desarrollo (en inglés)](/blog/).
 
-:::warning
-OpenScreen **todavía no está listo para producción**. Está en desarrollo activo: espera detalles sin pulir y cambios incompatibles ocasionales, incluso en el formato de proyecto `.openscreen` y en la [CLI](/docs/cli/).
+:::note
+OpenScreen publica versiones con frecuencia. De una versión a otra, el formato de proyecto `.openscreen` y la [CLI](/docs/cli/) todavía pueden cambiar.
 :::
 
 ## Lo que puedes hacer {#what-you-can-do}
@@ -34,7 +34,7 @@ OpenScreen **todavía no está listo para producción**. Está en desarrollo act
 - Conectar, si quieres, tu propia clave de LLM para [editar por chat](./ai-editing.md): desactivado por defecto y nunca obligatorio.
 - [Exportar](./export.md) a MP4 (720p/1080p/Source, H.264 o H.265) o a GIF animado.
 
-Las preguntas sobre la licencia, las marcas de agua o lo que pasa por la red se responden en las [preguntas frecuentes](/docs/faq/). Cómo se compara OpenScreen con otros grabadores se explica en las páginas (en inglés) sobre [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) y [OBS Studio](/compare/openscreen-vs-obs/).
+Las preguntas sobre la licencia, las marcas de agua o lo que pasa por la red se responden en las [preguntas frecuentes](/docs/faq/). Cómo se compara OpenScreen con otros grabadores se explica en las páginas sobre [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) y [OBS Studio](/compare/openscreen-vs-obs/).
 
 :::note
 La grabación, la edición, la transcripción, los subtítulos y la exportación no necesitan cuenta y siguen funcionando sin conexión a la red. La transcripción requiere antes una descarga: su modelo Whisper (~264 MB), que se obtiene la primera vez que la usas. Cuando hay conexión, la app también carga al iniciarse las fuentes de sus anotaciones desde Google Fonts, y las compilaciones instaladas desde GitHub Releases consultan GitHub en busca de actualizaciones. La edición por chat con IA y la traducción de subtítulos solo se conectan a internet cuando tú mismo conectas un proveedor, y solo con ese proveedor.

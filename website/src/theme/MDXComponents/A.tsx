@@ -7,10 +7,9 @@ import { isEnglishOnlyPath } from "../../lib/locale-routes";
 
 /**
  * Markdown links in the docs go through LocaleLink when they point at an
- * English-only page. In a translated build, `[Auto zoom](/features/auto-zoom/)`
- * would otherwise render as /fr/features/auto-zoom/, a page that build does not
- * have, and onBrokenLinks fails it. That is true of a translated doc and of an
- * untranslated one, which Docusaurus publishes from the English source.
+ * English-only page (the blog). In a translated build, `[journal](/blog/)` would
+ * otherwise render as /fr/blog/, a page that build does not have, and
+ * onBrokenLinks fails it.
  */
 export default function AWrapper(props: Props): ReactNode {
 	const { href, ...rest } = props;

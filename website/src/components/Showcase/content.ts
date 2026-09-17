@@ -139,7 +139,7 @@ export function getFeatures(): Feature[] {
 					label: translate({
 						id: "showcase.captions.link.feature",
 						message: "How local captions compare",
-						description: "Links to an English-only page.",
+						description: "Link label under the panel.",
 					}),
 				},
 			],
@@ -174,7 +174,7 @@ export function getFeatures(): Feature[] {
 					label: translate({
 						id: "showcase.agent.link.feature",
 						message: "How automatic zooms work",
-						description: "Links to an English-only page.",
+						description: "Link label under the panel.",
 					}),
 				},
 			],

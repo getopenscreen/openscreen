@@ -1,0 +1,91 @@
+---
+title: Linux-Bildschirmrekorder & Editor für Wayland
+description: "OpenScreen ist ein kostenloser, quelloffener Bildschirmrekorder für Linux: Aufnahme über PipeWire und ScreenCast-Portal, dazu Zooms und lokale Untertitel."
+keywords:
+  - bildschirmrekorder linux
+  - wayland bildschirmrekorder
+  - pipewire bildschirmrekorder
+  - screen studio alternative linux
+  - linux bildschirmrekorder mit editor
+---
+
+# Ein Bildschirmrekorder für Linux, mit eingebautem Editor
+
+OpenScreen ist ein kostenloser, unter der MIT-Lizenz stehender Bildschirmrekorder für Linux, der einen Bildschirm oder ein Fenster über PipeWire und das ScreenCast-Portal des Desktops erfasst und deshalb unter Wayland aufnimmt. Dieselbe App bearbeitet dann die Aufnahme: automatische Zooms aus dem Menü **Auto-enhance**, ein bearbeitbarer Cursor, lokale Whisper-Untertitel und Export als MP4 oder GIF. OBS Studio ist weiterhin die bessere Wahl, wenn du streamst. Release-Pakete sind x64, und ARM64-Rechner bauen OpenScreen über sein Nix-Flake.
+
+Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu Screen Studio und OBS Studio stammen von screen.studio und obsproject.com, die Standardeinstellungen der Distributionen aus den Release Notes von Ubuntu und Fedora. Alle wurden im September 2026 geprüft. Die Quellen stehen am Ende.
+
+## Auf einen Blick {#at-a-glance}
+
+| | |
+| --- | --- |
+| Preis | Kostenlos, auch für kommerzielle Nutzung. MIT-Lizenz, kein Konto |
+| Pakete | AppImage, `.deb`, `.rpm` und `.pacman`, x64. Nix-Flake für x86_64 und aarch64 |
+| Was aufgenommen wird | Ein Bildschirm oder ein Fenster. Danach im Editor zuschneiden |
+| Aufnahme | PipeWire über das ScreenCast-Portal, mit 60 fps als Ziel. Die Größe bestimmt der Compositor |
+| Kodierung während der Aufnahme | H.264 über VAAPI, dann Vulkan, dann Software |
+| Systemton | Der PipeWire-Sink-Monitor, gemischt mit dem Mikrofon |
+| Cursor | Position und Form vom Portal. Linksklicks mit der Gruppe `input` |
+| Untertitel | Lokales Whisper auf Vulkan, mit CPU-Fallback. In das Video eingebrannt |
+| Export | MP4 (H.264 oder H.265) oder GIF, kein Wasserzeichen. H.264 auf der GPU über VAAPI, wenn der Treiber es erlaubt |
+| Eingebaute Updates | AppImage, `.deb`, `.rpm` und `.pacman`. Nicht Nix |
+
+## Wayland und PipeWire {#wayland-and-pipewire}
+
+OpenScreen nimmt den Bildschirm unter Linux mit einem eigenen nativen Helferprogramm auf, nicht mit der Browser-Engine in der App.
+
+- **Aufnahme über das Portal.** Ein Rust-Helferprogramm nimmt über PipeWire und die xdg-desktop-portal-ScreenCast-Schnittstelle auf. Der Freigabedialog deines Desktops wählt den Bildschirm oder das Fenster, bevor der 3-2-1-Countdown startet.
+- **Hardware-Kodierung während der Aufnahme.** Das Helferprogramm schreibt H.264 und versucht zuerst VAAPI, dann Vulkan-Videokodierung, dann den Software-Encoder libopenh264. Genutzt wird der erste, der sich auf deinem Rechner öffnen lässt.
+- **Systemton von PipeWire.** Er kommt vom Monitor des Standard-PipeWire-Sinks und wird mit dem Mikrofon zu einer AAC-Spur gemischt. Dafür muss PipeWire der Sound-Server sein, wie standardmäßig ab Ubuntu 22.10 und ab Fedora 34.
+- **Mikrofonwahl.** Das HUD listet jedes Eingabegerät mit einem Live-Pegelmesser. Das Helferprogramm findet den passenden PipeWire-Knoten anhand seiner Beschreibung.
+- **Ein bearbeitbarer Cursor.** Im Standardmodus **Use editable cursor** meldet das Portal Position und Form des Cursors, sodass du ihn im Editor neu gestalten kannst. Der Modus **Use system cursor** nimmt den Zeiger so auf, wie er ist.
+- **Klicks unter Wayland.** Wayland hat kein Portal für Eingabeereignisse, deshalb liest OpenScreen Linksklicks über evdev. Das funktioniert, wenn dein Nutzer in der Gruppe `input` ist, und OpenScreen liest nur die linke Taste, niemals Tastenanschläge. Die Gruppe selbst ist breiter gefasst: Sie erlaubt jedem Programm, das du ausführst, jedes Eingabegerät zu lesen, Tastatur eingeschlossen. Ohne die Gruppe funktioniert die Aufnahme weiterhin, und jeder Cursor-Messpunkt wird als Bewegung gespeichert. [Mausklicks unter Wayland](/docs/installation/#mouse-clicks-on-wayland) hat den Befehl dafür.
+- **Browser-Aufnahme nur als Fallback.** Chromiums Aufnahme übernimmt nur in einem Build, dem das Helferprogramm fehlt. Ein Helferprogramm, das fehlschlägt, meldet einen Fehler, statt auf den Fallback umzuschalten. Siehe [Aufnahme](/docs/recording/).
+
+## Feinschliff im Stil von Screen Studio unter Linux {#screen-studio-style-polish-on-linux}
+
+Screen Studio unterstützt nur macOS (Stand September 2026). OpenScreen bietet denselben Feinschliff unter Linux, und seine Bearbeitungswerkzeuge sind unter Windows, macOS und Linux dieselben.
+
+- **Automatische Zooms.** **Auto-enhance → Automatic zooms** platziert Zooms anhand der aufgezeichneten Cursorbewegung, ohne Netzwerkaufruf und ohne Modell. Manuelle Zooms haben sechs Tiefen. Mehr zu [Auto-Zoom](/features/auto-zoom/).
+- **Cursor-Gestaltung.** Blende den Cursor ein oder aus, ändere seine Größe, glätte ihn und füge Bewegungsunschärfe sowie einen Klick-Bounce hinzu. Klickeffekte brauchen aufgezeichnete Klicks, also wieder die Gruppe `input`.
+- **Hintergründe und Rahmung.** 18 mitgelieferte Wallpaper, eine Volltonfarbe, ein Verlauf oder ein eigenes Bild, mit Innenabstand, abgerundeten Ecken und Schatten. Ausgabe in 16:9, 9:16, 1:1 und weiteren Seitenverhältnissen.
+- **Lokale Untertitel.** whisper.cpp läuft auf deinem Rechner, auf Vulkan mit CPU-Fallback. Es nutzt ein Whisper-Small-Modell von etwa 264 MB, einmalig heruntergeladen. Untertitel werden in das Video eingebrannt, und das Löschen von Wörtern im Transkript schneidet sie aus dem Video. Mehr zu [Untertiteln](/features/captions/).
+- **Webcam-Layouts.** Bild-im-Bild und andere Layouts, mit entferntem, verwischtem oder ersetztem Kamerahintergrund, ohne Greenscreen.
+- **Eine Zeitleiste mit mehreren Clips.** Mehrere Clips pro Projekt, Schnitte, Geschwindigkeitsbereiche, Text-, Pfeil-, Bild- und Unschärfeannotationen, eine Voice-over-Spur und Musik. Siehe [Bearbeitung & Zeitleiste](/docs/editing-timeline/).
+- **Export ohne Wasserzeichen.** MP4 in H.264 oder H.265 mit bis zu 60 fps, oder GIF. Unter Linux rendert der Compositor über Vulkan, und H.264 geht über `h264_vaapi` an die GPU, wenn der Treiber VAAPI zur Verfügung stellt und das Vulkan-Gerät Frames übergeben kann. Siehe [Export](/docs/export/).
+- **Optionale Chat-Bearbeitung mit eigenem Schlüssel.** Schnitte, Zooms oder Annotationen in Alltagssprache beschreiben. Sie ist aus, bis du einen Anbieter verbindest, und jede Änderung landet als gewöhnliche, rückgängig machbare Bearbeitung. Siehe [KI-Bearbeitung](/docs/ai-editing/).
+
+## Pakete {#packages}
+
+- **Vier x64-Pakete pro Release.** Ein AppImage, ein `.deb`, ein `.rpm` und ein `.pacman`, auf der [Download-Seite](/download/) und bei GitHub Releases.
+- **Updates aus der App heraus.** Diese vier Pakete können sich selbst aktualisieren. Standardmäßig meldet die App nur, dass ein Update existiert, sie prüft alle 24 Stunden, und sie bietet nie eines während einer Aufnahme an. Installiert wird immer erst nach einer Rückfrage zum Neustart.
+- **Ein Nix-Flake.** Es baut aus dem Quellcode für `x86_64-linux` und `aarch64-linux` und stellt ein NixOS-Modul und ein Home-Manager-Modul bereit. `nix run github:getopenscreen/openscreen` startet es zum Ausprobieren ohne Installation. Der Updater der App lässt Nix-Installationen unangetastet.
+- **ARM64 über Nix.** Release-Pakete sind x64. Auf einem aarch64-Rechner installierst du über das Nix-Flake.
+- **Eine Kommandozeile.** Die [CLI](/docs/cli/) nimmt in deiner Desktop-Sitzung auf und exportiert, untertitelt und packt Projekte, mit JSON-Ausgabe. [Displays, CI und Server](/docs/cli/#displays-ci-and-servers) zeigt, was jeder Befehl braucht.
+
+## Wann OpenScreen nicht das richtige Werkzeug ist {#when-openscreen-is-not-the-right-tool}
+
+- **Du brauchst ARM64-Pakete.** OpenScreen veröffentlicht x64-Pakete. Auf aarch64 baut es aus dem Quellcode über das Nix-Flake.
+- **Du streamst.** OpenScreen streamt nicht. OBS Studio streamt zu einem integrierten Dienst oder einem eigenen Server und wird unter Linux offiziell als Flatpak auf Flathub sowie als PPA für Ubuntu 24.04 und neuer verteilt (Stand September 2026). Siehe [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
+
+## Erste Schritte {#getting-started}
+
+1. Lade das Paket für deine Distribution von der [Download-Seite](/download/) herunter, oder nutze das Nix-Flake.
+2. Folge den [Linux-Installationsschritten](/docs/installation/#linux). Füge deinen Nutzer der Gruppe `input` hinzu, wenn du Klicks aufzeichnen willst und mit dem einverstanden bist, was diese Gruppe erlaubt.
+3. Mach eine erste Aufnahme mit dem [Schnellstart](/docs/quick-start/), beantworte den Portal-Dialog, wenn er sich öffnet, und führe dann **Auto-enhance → Automatic zooms** auf der Aufnahme aus.
+
+Auf einem anderen System? Siehe die Seiten zu [Windows](/screen-recorder-windows/) und [macOS](/screen-recorder-mac/). Kommst du von einer Mac-App? Siehe die [Screen-Studio-Alternative](/alternatives/screen-studio/). Oder geh zurück zur [OpenScreen-Startseite](/).
+
+## Quellen {#sources}
+
+Angaben zu Drittanbietern, geprüft im September 2026:
+
+- Screen Studio unterstützt nur macOS: [screen.studio](https://screen.studio/)
+- OBS Studio unter Linux, Flathub und das Ubuntu-PPA: [obsproject.com/download](https://obsproject.com/download)
+- OBS Studio streamt zu einem integrierten Dienst oder einem eigenen Server: [obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
+- PipeWire als Standard-Sound-Server in Ubuntu 22.10: [Release Notes zu Ubuntu 22.10](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)
+- PipeWire als Standard-Sound-Server in Fedora 34: [Fedora-Änderungsseite](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)
+
+Die Angaben zu OpenScreen beschreiben Version 1.11.0 und verlinken oben auf seine Dokumentation.
+
+Screen Studio und OBS Studio sind Marken ihrer jeweiligen Inhaber. OpenScreen ist ein unabhängiges Projekt und steht mit keinem der beiden in Verbindung und wird von keinem der beiden unterstützt.

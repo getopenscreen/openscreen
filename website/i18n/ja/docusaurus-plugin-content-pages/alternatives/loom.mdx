@@ -1,0 +1,100 @@
+---
+title: Linux とローカル録画向けの Loom 代替
+description: "OpenScreen は Linux・Windows・macOS 向けの無料・オープンソースの Loom 代替です。時間制限のないローカル録画を、ディスク上の MP4 ファイルとして出力します。"
+keywords:
+  - Loom 代替 Linux
+  - Loom 代替 オフライン
+  - Loom 代替 時間制限なし
+  - Loom 代替 無料 ローカル録画
+---
+
+# Linux とローカル録画向けの Loom 代替
+
+OpenScreen は、Linux・Windows・macOS 向けの無料の MIT ライセンスの Loom 代替です。Loom と同じように、画面・ウェブカメラ・マイク・システム音声を録画し、話した内容を文字起こしします。2026 年 9 月時点でデスクトップアプリが Windows と macOS 向けしかなく、無料の録画が 5 分で止まる Loom と違い、OpenScreen は録画を自分のマシンに残し、時間制限もアカウントも不要で MP4 ファイルを出力します。コメント、リアクション、視聴者インサイトの付いたホスティングされたページとして動画をリンクで共有したい場合は、Loom のほうが今も適しています。
+
+このページは OpenScreen プロジェクトが公開しています。Loom に関する情報は Loom 自身のサイトと GitHub の組織によるもので、2026 年 9 月に確認しました。情報源は末尾に一覧しています。
+
+## 概要 {#at-a-glance}
+
+| | OpenScreen | Loom |
+| --- | --- | --- |
+| ホスティングされた共有リンク | なし。ファイルを受け取り、自分で共有する | あり。無料の Starter プランでもコメント、絵文字リアクション、視聴者インサイト付き（2026 年 9 月時点） |
+| 価格 | 商用利用を含めて無料 | Starter は無料。Business は 1 ユーザーあたり月額 18 ドル、年払いなら月額 15 ドル。Business + AI は月額 24 ドル、年払いなら月額 20 ドル。Enterprise は営業チームに問い合わせ（2026 年 9 月時点） |
+| 無料プランの上限 | なし。録画時間にも動画の本数にも上限なし | Starter：1 人あたり 25 本、録画 1 本あたり 5 分、最大 720p、動画のダウンロード不可（2026 年 9 月時点） |
+| ソースコード | オープンソース、MIT ライセンス | 非公開 |
+| 対応デスクトッププラットフォーム | Windows 10（1903 以降）と 11、x64。macOS 13 以降、Apple Silicon と Intel。Linux、x64 | Windows 10 以降と macOS 12.3 以降。Linux・ChromeOS アプリなし（2026 年 9 月時点） |
+| ほかの録画方法 | デスクトップアプリに加えてコマンドラインインターフェース | Chrome 拡張機能、iOS・Android アプリ（2026 年 9 月時点） |
+| 動画の保存先 | 自分のディスク上のファイル | Loom のクラウド。有料プランは MP4 としてダウンロード可能（2026 年 9 月時点） |
+| アップロード速度 | 影響なし。キャプチャとエクスポートは自分のマシンで完結 | トラブルシューティングガイドでは、録画を成功させるために最低 5 Mbps のアップロード速度を求めている |
+| 文字起こし | 端末上の Whisper、約 264 MB のモデル 1 つを一度だけダウンロード。言語の自動検出または 100 言語から選択 | Loom 側で処理。セルフホストの Whisper と Speechmatics などのプロバイダーを使用。すべてのプランで 50 以上の言語に対応（2026 年 9 月時点） |
+| 字幕 | 動画に焼き込み | Loom プレイヤー内のクローズドキャプション。ダウンロードした MP4 には含まれない |
+| 自動ズーム | あり。記録したカーソルから配置 | 編集ガイドに自動ズームの記載なし |
+| 編集 | マルチクリップのタイムライン、カット、速度変更、ズーム、注釈、文字起こしからの編集、すべて無料 | Business でトリムと結合。Business + AI で文字起こしからの編集とオーバーレイ（2026 年 9 月時点） |
+| エクスポート | MP4（H.264 または H.265）720p・1080p・元のサイズ、または GIF。透かしなし | 有料プランで MP4 ダウンロード。Business 以上で最大 4K の録画（2026 年 9 月時点） |
+
+## 両方のアプリができること {#what-both-apps-do}
+
+共有よりも録画の面で共通点が多くあります。以下はどちらか一方に固有のものではありません。
+
+- **画面・カメラ・音声。** どちらも、ウェブカメラ・マイク・システム音声とともに画面を録画します。OpenScreen が録画するのはディスプレイかウィンドウ 1 つで、ウェブカメラは独立したレイヤーとして保持し、エディターで配置・整形します。
+- **カメラの背景。** Loom はすべてのプランでバーチャル背景を挙げています。OpenScreen は、グリーンスクリーンなしにウェブカメラの背景を削除・ぼかし・置き換えできます。
+- **スピーカーノート。** どちらも録画中にノートを表示できます。Windows と macOS では、OpenScreen のノートウィンドウにテレプロンプターモードもあります。
+- **文字起こしと字幕。** どちらも録画を文字起こしし、そこから字幕を表示します。
+- **編集。** どちらも録画をトリムし、クリップを結合し、文字起こしから単語を削除すると動画がカットされます。無音区間も扱います。Loom はそれを取り除き、OpenScreen はマークしてカットできるようにします。Loom では、これらはすべて有料プランの機能です。
+- **動画上のテキストと矢印。** Loom のオーバーレイはテキスト、ボックス、矢印です。OpenScreen の注釈はテキスト、矢印、画像、ぼかし領域です。
+
+## OpenScreen が異なる点 {#where-openscreen-differs}
+
+### 価格、上限、対応プラットフォーム {#price-limits-and-platforms}
+
+- **プランも上限もなし。** 録画時間にも動画の本数にも上限がなく、ロックされたエクスポートもアカウントもありません。商用利用も認められています。2026 年 9 月時点で、Loom の無料 Starter プランは 1 人あたり 25 本、録画 1 本あたり 5 分で止まり、最大 720p まで、動画のダウンロードはできません。
+- **MIT ライセンスのソース。** コードは [GitHub](https://github.com/getopenscreen/openscreen) にあります。Atlassian が所有する Loom は非公開です。
+- **Linux 向けのデスクトップアプリ。** Linux と ChromeOS に対応しているかという問いに対し、Loom の互換性に関する FAQ は「残念ながら非対応」と答えています。OpenScreen は x64 Linux 向けに AppImage・`.deb`・`.rpm`・`.pacman` を提供するほか Nix flake も用意し、PipeWire と ScreenCast ポータル経由で録画します。詳しくは [Linux 向け OpenScreen](/screen-recorder-linux/) を参照してください。
+
+### 既定でローカル {#local-by-default}
+
+- **最初からファイルは自分のもの。** 録画は自分のディスクに残り、エクスポートは 720p・1080p・元のサイズで最大 60 fps の H.264 または H.265 の MP4、あるいは GIF を、透かしなしで書き出します。Loom は動画をクラウドに保持します。ダウンロードした MP4 にはトリムは反映されますが、クローズドキャプション、チャプター、行動喚起、フィラーワードや無音の除去は含まれません。[エクスポート](/docs/export/)を参照してください。
+- **アップロード速度は関係ない。** Loom のトラブルシューティングガイドは、録画を成功させるために最低 5 Mbps のアップロード速度を求めています。OpenScreen にはアカウントも、独自サーバーも、分析機能もありません。それでも行われるわずかな通信は[よくある質問](/docs/faq/#does-openscreen-work-offline)に一覧しています。
+- **自分のマシンでの文字起こし。** Whisper は約 264 MB のモデル 1 つを一度だけダウンロードすればローカルで動作し、以降はオフラインで使えます。言語は自動検出するか、100 言語から選べます。字幕は動画に焼き込まれます。詳しくは[字幕](/features/captions/)を参照してください。
+- **接続した場合のみの AI。** チャット編集は任意で、Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax、または任意の OpenAI 互換エンドポイントを自分の API キーで使えます。プロバイダーを接続するまではオフで、変更はすべて元に戻せる通常の編集として反映されます。Loom の AI 機能は文字起こしをテキストとして OpenAI に送信し、Google Gemini は AI エージェント向けの行動計画を作るために映像と音声を受け取ります。[AI 編集](/docs/ai-editing/)を参照してください。
+
+### デモの仕上げ {#demo-polish}
+
+- **自動ズーム。** **自動強化 → 自動ズーム**は、記録したカーソルの動きからズームを配置し、通信もモデルも使いません。カーソルはデータとして記録されるため、テイク後にサイズ変更やスムージング、クリックバウンスの追加ができます。Loom の編集ガイドに自動ズームの記載はありません。詳しくは[自動ズーム](/features/auto-zoom/)を参照してください。
+- **プランに縛られない編集ツール。** Loom は編集機能をプランごとに分けています。OpenScreen では、1 つのインストールに、クリップごとのクロップ付きマルチクリップタイムライン、0.1 倍から 100 倍までの速度変更、6 種類のアニメーション付きテキスト、8 方向の矢印、画像、ぼかし領域、ナレーションと音楽のトラック、余白と影付きの背景、16:9・9:16・1:1 などのアスペクト比での出力がすべて含まれます。[編集とタイムライン](/docs/editing-timeline/)を参照してください。
+- **コマンドラインインターフェース。** スクリプトとコーディングエージェントが[コマンドライン](/docs/cli/)から OpenScreen を操作できます。
+
+## Loom のほうが適している場合 {#when-loom-is-the-better-choice}
+
+このセクションの Loom のプラン内容は 2026 年 9 月時点のものです。
+
+- **動画をリンクとして送りたい場合。** それが Loom の本来の用途です。視聴者はコメント、絵文字リアクション、視聴者インサイト付きのホスティングされたページを見ることができ、Business プランではパスワード保護付きの動画も使えます。OpenScreen が出力するのはファイルなので、共有したい場所に自分でアップロードします。
+- **チームで共有の動画ライブラリを使う場合。** Loom には個人・共有・チームのライブラリ、フォルダー、プライバシー設定があり、Enterprise では SSO と SCIM も使えます。
+- **スマートフォンやブラウザーから録画したい場合。** Loom には iOS・Android アプリと Chrome 拡張機能があります。OpenScreen は Windows・macOS・Linux 向けのデスクトップアプリです。
+- **Mac が macOS 12 の場合。** Loom のデスクトップアプリは macOS 12.3 以降で動作します。OpenScreen には macOS 13 以降が必要です。
+
+## はじめかた {#getting-started}
+
+1. [ダウンロードページ](/download/)から OpenScreen を入手します。Linux では、AppImage・`.deb`・`.rpm`・`.pacman` から選ぶか、Nix flake を使います。
+2. [インストール](/docs/installation/)の手順に従います。macOS では、最初の録画の前に画面収録とアクセシビリティの権限を許可してください。Linux では、録画に PipeWire と `xdg-desktop-portal` が必要で、[Wayland でのマウスクリック](/docs/installation/#mouse-clicks-on-wayland)には自分のユーザーを `input` グループに追加する必要があります。
+3. [クイックスタート](/docs/quick-start/)で最初の録画を行い、MP4 としてエクスポートして、すでにチームが使っている場所でファイルを共有します。
+
+ほかのツールとも比較したいですか。[Screen Studio の代替](/alternatives/screen-studio/)、[OpenScreen と Cap の比較](/compare/openscreen-vs-cap/)、[OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)、[Camtasia の代替](/alternatives/camtasia/)を参照するか、[OpenScreen のホームページ](/)に戻ってください。
+
+## 情報源 {#sources}
+
+Loom に関する情報、2026 年 9 月確認：
+
+- プラン、価格、上限、機能：[loom.com/pricing](https://www.loom.com/pricing)
+- デスクトップとモバイルの要件、Linux と ChromeOS：[support.atlassian.com/loom/docs/loom-device-compatibility](https://support.atlassian.com/loom/docs/loom-device-compatibility/)
+- 録画プラットフォームと Chrome 拡張機能：[support.atlassian.com/loom/docs/the-loom-recording-platforms](https://support.atlassian.com/loom/docs/the-loom-recording-platforms/)
+- ダウンロードと、そこに含まれない要素：[support.atlassian.com/loom/docs/download-your-loom-video](https://support.atlassian.com/loom/docs/download-your-loom-video/)
+- 録画に必要なアップロード速度：[support.atlassian.com/loom/kb/cant-record](https://support.atlassian.com/loom/kb/cant-record/)
+- AI 機能、そのプランとデータの扱い、文字起こしプロバイダー：[support.atlassian.com/loom/docs/loom-ai-features](https://support.atlassian.com/loom/docs/loom-ai-features/)
+- 編集ガイド（自動ズームの記載なし）：[support.atlassian.com/loom/docs/edit-your-loom-video](https://support.atlassian.com/loom/docs/edit-your-loom-video/)
+- 公開リポジトリ（アプリ本体は含まれない）：[github.com/loomhq](https://github.com/loomhq)
+- Atlassian による買収：[atlassian.com/blog/announcements/atlassian-acquires-loom](https://www.atlassian.com/blog/announcements/atlassian-acquires-loom)（2023 年 10 月 12 日付）
+
+OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+
+Loom はその所有者の商標です。OpenScreen は独立したプロジェクトであり、Loom または Atlassian と提携または承認された関係にはありません。

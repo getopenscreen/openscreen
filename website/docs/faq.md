@@ -102,15 +102,11 @@ OpenScreen is a free, MIT-licensed screen recorder and video editor for Windows,
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | Original project, archived and read-only | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 
-## Is OpenScreen ready for production work?
+## What happens if a recording is interrupted?
 
-**Not yet, by its own description.** The project calls itself not production-grade.
+On Windows and macOS, the native recorders write fragmented MP4 in one-second fragments. If a recording is cut off, the file still plays up to the last complete fragment.
 
-- Expect rough edges, and occasional breaking changes to the `.openscreen` project format and the [CLI](/docs/cli/).
-- On Windows and macOS, the native recorders write fragmented MP4 in one-second fragments. If a recording is cut off, the file still plays up to the last complete fragment. Windows falls back to a plain MP4 when the fragmented writer is unavailable.
-- Linux writes a plain MP4: a crash before the file is finalized makes it unreadable.
-
-Bug reports go to [GitHub issues](https://github.com/getopenscreen/openscreen/issues).
+Bug reports and feature requests go to [GitHub issues](https://github.com/getopenscreen/openscreen/issues).
 
 ## What doesn't OpenScreen do?
 
@@ -118,12 +114,8 @@ If you need any of these, OpenScreen is not the right tool:
 
 - **Hosted sharing.** No share links, cloud storage, team workspaces or comments. Your files stay on your disk. See [OpenScreen as a Loom alternative](/alternatives/loom/).
 - **Live streaming.** See [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
-- **Region capture.** It records a whole screen or one window. You crop afterwards in the editor.
 - **Caption files.** Captions are burned into the video. There is no SRT or VTT export. See [Captions](./captions.md).
 - **Mobile.** No mobile app, and no iOS or Android capture.
-- **Scheduled recording**, or a global shortcut to start and stop a recording.
-- **Other export formats.** MP4 (H.264 or H.265) and GIF only: no WebM, ProRes, AV1 or audio-only export.
-- **A bundled AI service.** Chat editing and caption translation only work with an AI provider you connect yourself, usually with your own API key. Transcription runs locally and needs neither.
 
 ## How do I get started?
 

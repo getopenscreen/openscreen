@@ -60,6 +60,14 @@ jobs:
       - name: Unit tests
         working-directory: website
         run: npm test
+      # Warnings only: an English edit should not block a deploy, and the list
+      # says what to hand a translator (website/i18n/TRANSLATING.md). Needs the
+      # full history the checkout fetches.
+      - name: Translation freshness
+        working-directory: website
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run i18n:check
       # The walkthrough's clips and stills are committed to this repo, which has
       # no LFS filter — their size is permanent, so a budget that lives only in a
       # design note drifts on the first re-cut. This also fails any clip encoded

@@ -1,0 +1,119 @@
+---
+title: 带本地 Whisper 字幕的录屏软件
+description: "OpenScreen 是一款带字幕功能的免费录屏软件：Whisper 在本机转录，之后你可以为字幕设置样式、翻译，并烧录进视频。"
+keywords:
+  - 带字幕的录屏软件
+  - 离线自动字幕录屏软件
+  - Whisper 录屏软件
+  - 免费按转录文本编辑视频
+  - 屏幕录制自动字幕
+---
+
+# 一款字幕在本机生成的录屏软件
+
+OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费录屏软件，采用 MIT 许可证，具备字幕功能。它会在你自己的电脑上用 Whisper 转录录制内容，只需一次性下载约 264 MB 的模型，并将带样式的字幕烧录进导出的视频。如果你需要为课程平台或无障碍要求提供独立的 SRT 或 VTT 字幕文件，Cap 或 Camtasia 是更好的选择。
+
+本页由 OpenScreen 项目发布。关于 Cap、Camtasia 和 Screen Studio 的信息来自 cap.so、techsmith.com 和 screen.studio，核实于 2026 年 9 月。信息来源列于文末。
+
+## 一览 {#at-a-glance}
+
+| | |
+| --- | --- |
+| 引擎 | whisper.cpp，运行在你的电脑上 |
+| 模型 | 一个约 264 MB 的 Whisper Small 模型 |
+| 模型下载 | 从 huggingface.co 下载一次，通过 SHA-256 校验，不包含在安装程序中 |
+| 硬件 | Apple Silicon 上使用 Metal；Intel Mac 上使用 CPU；Windows 和 Linux 上使用 Vulkan，并有 CPU 回退方案 |
+| 语言 | 自动检测，或从 100 种语言中手动选择 |
+| 样式 | 字体、字号、粗体、文字颜色、背景、位置，以及每行 1 到 12 个词 |
+| 输出 | 烧录进导出的视频 |
+| 转录文本编辑 | 删除词语即可从视频中剪掉对应内容；静音会被标出，也可以剪切 |
+| 翻译 | 15 种语言，通过你用自己密钥连接的 AI 提供方 |
+| 命令行 | `captions` 命令可为项目添加字幕 |
+| 价格 | 免费，含商业用途，无需账号 |
+
+## OpenScreen 中字幕的工作原理 {#how-captions-work-in-openscreen}
+
+### 在你的电脑上转录 {#transcription-on-your-computer}
+
+在编辑器的**转录文本**面板中点击**立即转录**，或在媒体工作区的素材卡片上点击**重新生成**。首次运行时会从 huggingface.co 获取模型：一个约 264 MB 的 Whisper Small 模型，仅下载一次。OpenScreen 会先核对文件与固定的 SHA-256 摘要是否一致，再使用它。此后，转录不再需要网络连接。
+
+这项处理会在 OpenScreen 支持的 GPU 上运行：Apple Silicon 上使用 Metal，Windows 和 Linux 上使用 Vulkan。当 Vulkan 不可用时，Windows 和 Linux 会回退到 CPU；Intel Mac 则使用 CPU。
+
+Whisper 会自行检测所说的语言。如果检测错误，可以在媒体工作区的**重新生成为**中选择 100 种语言之一，再重新运行一次。参见[媒体库](/docs/media-library/)。
+
+### 由转录文本生成的字幕 {#captions-drawn-from-the-transcript}
+
+字幕是转录文本的实时视图，而不是它的副本。从转录文本中剪掉词语、修改样式，或移动某个片段，字幕都会在下一帧随之更新，无需重新生成。
+
+- **文字。** 字体、字号、粗体和颜色。
+- **背景。** 文字后方的底板，可设置自己的颜色和不透明度，也可以不显示。
+- **位置。** 顶部或底部，左对齐、居中或右对齐，并可设置与边缘的距离。
+- **行长。** 每行的最少和最多词数，范围为 1 到 12 个词。
+
+预览和导出使用同一套排版，因此你看到的字幕就是烧录进视频的字幕。**显示字幕**开关可用于导出不带字幕的版本。完整参考请见[字幕与转录](/docs/captions/)。
+
+### 通过删除词语来剪切 {#cutting-by-deleting-words}
+
+**转录文本**面板显示时间轴上每个片段的词语。选中一个词或一段文字并按删除键：对应的片段会从播放和导出中剪掉，效果与时间轴上的修剪相同。被剪掉的词语会显示删除线，你也可以将其恢复。静音同样会在文本中标出，可以用同样的方式剪切或恢复。
+
+Whisper 报告的词语时间点会略微偏晚。OpenScreen 会把每个词语的边界拉回到音频本身，因此剪切会从词语实际开始的位置起效，而不是晚一个音节。参见[转录文本编辑](/docs/captions/#transcript-editing)。
+
+### 使用你自己密钥的翻译 {#translation-with-your-own-key}
+
+翻译支持 15 种语言：英语、法语、西班牙语、德语、意大利语、葡萄牙语、荷兰语、波兰语、土耳其语、俄语、阿拉伯语、印地语、日语、韩语和中文。它通过你为聊天式编辑连接的 AI 提供方完成，使用你自己的密钥。在你连接提供方之前，不会发送任何内容。译文与转录文本分开保存，因此原文及其时间点保持不变，你可以随时切换回原文。参见[翻译](/docs/captions/#translation)和 [AI 编辑](/docs/ai-editing/)。
+
+### 通过命令行 {#from-the-command-line}
+
+[CLI](/docs/cli/) 的 `captions` 命令会使用同一个本地 Whisper 模型转录项目，并为其添加字幕。`--min-words` 和 `--max-words` 用于设置每条字幕的词数，`export` 会将字幕烧录进视频。
+
+### 联网情形 {#what-goes-over-the-network}
+
+音频始终保留在你的电脑上。除了模型下载之外，只有翻译功能会联网：它会把转录文本发送给你选择的提供方。就整个应用而言，OpenScreen 没有账号体系，没有自己的服务器，也没有分析统计。[常见问题](/docs/faq/#does-openscreen-work-offline)列出了它仍会联网的少数情形。
+
+## 其他具备本地字幕功能的录制工具 {#other-recorders-with-local-captions}
+
+本机 Whisper 并非 OpenScreen 独有。截至 2026 年 9 月：
+
+- **Screen Studio** 在 Mac 上使用 Whisper Base、Small 或 Medium 进行转录，或在 macOS 26 及以上版本使用 Apple 语音识别，并可将转录文本导出为独立文件。
+- **Cap** 在其 Studio Mode 中进行本地转录（测试版功能），可选择模型，可以将字幕烧录进视频，也可以保存为 SRT 或 WebVTT 文件。Cap 将字幕翻译列为 Cap Pro 的功能之一。
+- **Camtasia** 在设备本地使用 Whisper 转录，在其 Essentials 方案中提供动态字幕和隐藏式字幕功能，在付费方案中提供基于文本的视频编辑。2026.1.0 版新增了基础的 VTT 字幕导入导出功能。
+
+## OpenScreen 的不同之处 {#where-openscreen-differs}
+
+- **完全免费，含商业用途。** 没有付费方案，也无需账号。Cap 的定价页面表示其免费版本仅限个人使用。Screen Studio 需要有效方案才能导出视频文件。Camtasia 的桌面编辑器会为导出内容添加水印，直到升级至付费的 Essentials、Create、Pro 方案或商业许可证。以上三者的信息均截至 2026 年 9 月。
+- **支持 Windows、macOS 和 Linux。** OpenScreen 运行于 Windows 10（1903 及以上）和 11，x64；macOS 13 及以上，Apple Silicon 和 Intel；以及 Linux，x64。截至 2026 年 9 月，Screen Studio 仅支持 macOS，Camtasia 的桌面编辑器支持 Windows 和 macOS，而 Cap 为三个平台都提供应用。参见 [Linux](/screen-recorder-linux/)、[Windows](/screen-recorder-windows/) 和 [macOS](/screen-recorder-mac/)。
+- **无需订阅即可编辑转录文本。** 通过删除词语进行剪切是免费应用自带的功能。Camtasia 将基于文本的编辑列在其付费方案中（截至 2026 年 9 月）。Cap 在 2026 年 7 月为其网页编辑器加入了按转录文本剪切的功能，其桌面版 Studio Mode 指南涵盖了修正字幕文字和时间点的内容，但没有描述从转录文本剪切视频的功能。
+- **可自由选择翻译提供方。** 使用 OpenScreen 支持的任意提供方，配合你自己的密钥，无需向 OpenScreen 购买任何方案。翻译功能本身并非独有：Cap Pro 同样提供字幕翻译（截至 2026 年 9 月）。
+
+## 何时 OpenScreen 不是合适的工具 {#when-openscreen-is-not-the-right-tool}
+
+- **你必须提供字幕文件。** 如果课程平台或无障碍要求需要观众可以关闭的字幕，你就需要一个独立的文件。Cap 可保存 SRT 和 WebVTT 文件，Camtasia 支持导入导出 VTT。OpenScreen 是把字幕烧录进视频中。
+
+## 开始使用 {#getting-started}
+
+1. 从[下载页面](/download/)下载 OpenScreen，并按照[安装说明](/docs/installation/)操作。
+2. 参照[快速上手](/docs/quick-start/)在打开麦克风的情况下进行录制。
+3. 在编辑器中打开**转录文本**面板并点击**立即转录**。首次运行会下载模型。
+4. 设置字幕样式，如有需要可在**转录文本**面板中剪切，然后导出。参见[导出](/docs/export/)。
+
+也值得一读：[自动缩放](/features/auto-zoom/)、[Screen Studio 替代方案](/alternatives/screen-studio/)、[OpenScreen 对比 Cap](/compare/openscreen-vs-cap/)、[Camtasia 替代方案](/alternatives/camtasia/)，以及[常见问题](/docs/faq/)。或返回 [OpenScreen 首页](/)。
+
+## 信息来源 {#sources}
+
+Cap、Camtasia 和 Screen Studio 相关信息，核实于 2026 年 9 月：
+
+- Screen Studio 的本机模型、Apple 语音识别和转录文件：[screen.studio/guide/captions](https://screen.studio/guide/captions)
+- Screen Studio 导出需要有效方案：[screen.studio/download](https://screen.studio/download)
+- Screen Studio 仅支持 macOS，来自其常见问题：[screen.studio](https://screen.studio/)
+- Cap 的本地字幕、模型选择、烧录字幕、SRT 和 WebVTT 文件：[cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Cap Pro 字幕翻译：[cap.so/llms-full.txt](https://cap.so/llms-full.txt)
+- Cap 免费版仅限个人使用，以及 macOS、Windows 和 Linux 应用：[cap.so/pricing](https://cap.so/pricing)
+- Camtasia 使用 Whisper 转录：[support.techsmith.com/hc/en-us/articles/203729278](https://support.techsmith.com/hc/en-us/articles/203729278-How-to-use-Speech-To-Text-in-Camtasia-Editor)
+- Camtasia 在设备本地转录：[support.techsmith.com/hc/en-us/articles/26713588518413](https://support.techsmith.com/hc/en-us/articles/26713588518413-Dynamic-Captions-Best-Practices)
+- Camtasia 在 Essentials 中提供字幕功能，付费方案中提供基于文本的编辑：[support.techsmith.com/hc/en-us/articles/41688340554765](https://support.techsmith.com/hc/en-us/articles/41688340554765-What-Is-the-Difference-Between-Camtasia-Pro-Create-and-Essentials)
+- Camtasia 在 2026.1.0 版本中的 VTT 字幕导入导出：[support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History)
+- Camtasia 的平台支持和带水印的免费导出：[techsmith.com/camtasia](https://www.techsmith.com/camtasia/)
+
+OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+
+Cap、Camtasia 和 Screen Studio 均为其各自所有者的商标。OpenScreen 是一个独立项目，与它们均无关联，也未获得其中任何一方的背书。

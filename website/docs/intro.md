@@ -21,8 +21,8 @@ OpenScreen is a **free, open-source screen recorder and editor**. It records thr
 
 These pages describe **OpenScreen 1.11.0**, the stable release of September 9, 2026. What changed in each release, and why, is in the [development journal](/blog/).
 
-:::warning
-OpenScreen is **not production-grade** yet. It is under active development: expect rough edges and occasional breaking changes, including to the `.openscreen` project format and the [CLI](/docs/cli/).
+:::note
+OpenScreen ships often. Between releases, the `.openscreen` project format and the [CLI](/docs/cli/) can still change.
 :::
 
 ## What you can do

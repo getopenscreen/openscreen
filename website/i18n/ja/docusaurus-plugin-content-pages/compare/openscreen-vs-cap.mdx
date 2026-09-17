@@ -1,0 +1,106 @@
+---
+title: "OpenScreen と Cap の比較：商用利用も無料"
+description: "OpenScreen と Cap の比較。OpenScreen は MIT ライセンスで商用利用も無料、アカウントも不要です。ライセンス・共有・エディターの違いを解説します。"
+keywords:
+  - OpenScreen Cap 比較
+  - Cap 画面録画 代替
+  - cap.so 代替
+  - オープンソース 画面録画 MIT ライセンス
+---
+
+# OpenScreen と Cap の比較
+
+OpenScreen は、Windows・macOS・Linux 向けの MIT ライセンスの画面録画ソフトで、商用利用も無料、アカウントもサーバーも不要です。Cap も似た領域をカバーしており、自動ズーム、編集可能なカーソル、端末上の字幕、透かしなしのエクスポートに対応していますが、無料版のダウンロードは個人利用限定で、公式アプリの商用利用には有料ライセンスが必要です。Cap のソースは AGPLv3 で、Cap はホスティングされた共有リンクも備えていますが、これには Cap へのサインインが必要です。チームで録画をリンク共有したい場合、SSO やコンプライアンス認証が必要な場合、SRT や WebVTT の字幕ファイルを納品したい場合は、Cap のほうが適しています。
+
+このページは OpenScreen プロジェクトが公開しています。Cap に関する情報は cap.so と Cap の GitHub リポジトリによるもので、2026 年 9 月に確認しました。情報源は末尾に一覧しています。
+
+## 概要 {#at-a-glance}
+
+| | OpenScreen | Cap |
+| --- | --- | --- |
+| 価格 | 商用利用を含めて無料 | 個人利用は無料。商用利用には Desktop License（年額 29 ドルまたは買い切り 58 ドル）か、Cap Pro（1 ユーザーあたり月払いで月額 12 ドル）が必要（2026 年 9 月時点） |
+| ソースコード | MIT ライセンス | AGPLv3。ただしカメラとキャプチャのクレートのみ MIT |
+| 対応プラットフォーム | Windows 10（1903 以降）と 11、x64。macOS 13 以降、Apple Silicon と Intel。Linux、x64 | macOS は 13.1 以降を推奨、Apple Silicon と Intel。64 ビット Windows は、ダウンロードの選択肢の中で「Windows (Beta)」として掲載。Linux は .deb、AppImage、RPM、Arch パッケージ（2026 年 9 月時点） |
+| 録画対象 | ディスプレイまたはウィンドウ 1 つ。エディターで後からクロップ可能 | ディスプレイ、ウィンドウ、範囲、またはカメラのみ |
+| ホスティングされた共有リンク | なし | あり。Free と Desktop License ではリンク 1 本あたり最大 5 分、Cap Pro では無制限（2026 年 9 月時点） |
+| サインイン | 不要 | 共有リンクと Instant Mode に必要 |
+| 自動ズーム | あり。記録したカーソルの動きから配置 | あり。記録したクリックから生成 |
+| 字幕 | 端末上の Whisper、約 264 MB のモデル 1 つを一度だけダウンロード。動画に焼き込み | 端末上の Whisper または Parakeet（ベータ）。動画への焼き込み、または SRT・WebVTT として保存 |
+| AI 機能 | 自分のプロバイダーの API キーによる任意のチャット編集と、字幕の 15 言語への翻訳 | Cap Pro に含まれるホスティング型の機能：タイトル、要約、チャプター、文字起こし、字幕の翻訳。キー不要 |
+| エクスポート | MP4（H.264 または H.265）720p・1080p・元のサイズ、24・30・60 fps。GIF は 15〜30 fps。透かしなし | MP4 は 720p・1080p・4K、15・30・60 fps。GIF は 10〜30 fps。透過対応のカーソルのみの MOV。透かしなし。コーデック設定の記載なし |
+| チームとコンプライアンス | なし | チームワークスペース。SAML SSO アドオンは月額 199 ドル。SOC 2 Type II、ISO 27001、HIPAA（署名済み BAA は月額 99 ドル、2026 年 9 月時点） |
+| コマンドラインインターフェース | あり。JSON 出力対応 | あり。JSON 出力対応 |
+
+## 両方のアプリができること {#what-both-apps-do}
+
+2 つのエディターは広く重なっています。以下はどちらか一方に固有のものではありません。
+
+- **自動ズームと手動ズーム。** OpenScreen では、**自動強化 → 自動ズーム**が、記録したカーソルの動きからズームを通信もモデルも使わずに配置し、手動ズームは 6 段階で用意されています。Cap は記録したクリックの周辺にズームを生成し、1 倍から 4.5 倍までの手動ズームも用意しています。詳しくは[自動ズーム](/features/auto-zoom/)を参照してください。
+- **後から変更できるカーソル。** どちらもポインターをピクセルではなくデータとして記録するため、テイク後にサイズ変更、動きのスムージング、非表示ができます。
+- **背景とフレーミング。** どちらも、壁紙、単色、グラデーション、自分の画像を録画の背後に追加でき、余白、角丸、影を設定できます。どちらも横向き・縦向き・正方形の動画を出力できます。
+- **同じ録画内でのウェブカメラ、マイク、システム音声。** どちらもウェブカメラの背景をぼかせます。OpenScreen はさらに、グリーンスクリーンなしに背景を削除したり画像に置き換えたりできます。Cap はバージョン 0.6.0 で macOS での背景削除を追加しました。
+- **1 つのプロジェクトに複数のクリップ。** どちらも、新しい録画のほかに既存の MP4 ファイルをインポートし、クリップを並べ替え、区間ごとに速度を変更できます。
+- **テキスト、画像、ぼかしマスク、音楽。** どちらも動画の上にテキストや画像を配置し、ぼかしやモザイクのマスクで機密部分を隠し、音楽トラックを追加できます。
+- **自分のマシンでの文字起こし。** どちらもローカルで Whisper を実行し、文字起こしを修正し、字幕のスタイルを設定し、動画に焼き込めます。詳しくは[字幕](/features/captions/)を参照してください。
+- **テキストによるカット。** OpenScreen のデスクトップエディターでは、文字起こしの中で単語を選んで削除すると、その箇所がカットされます。Cap は 2026 年 7 月に、同種のカット機能を Web エディターに追加しました。
+- **テレプロンプター。** 録画中に台本を読み上げるための機能です。OpenScreen では Windows と macOS で使えます。
+- **ローカルでの編集。** Cap の Studio Mode は、共有リンクとしてエクスポートするまでプロジェクトを自分のマシンに残します。OpenScreen にはアカウントも、独自サーバーも、分析機能もありません。それでも行われるわずかな通信は[よくある質問](/docs/faq/#does-openscreen-work-offline)に一覧しています。
+- **スクリプトとコーディングエージェント向けのコマンドラインインターフェース。** どちらも、機械が読み取れる JSON を出力します。[OpenScreen の CLI リファレンス](/docs/cli/)を参照してください。
+
+## OpenScreen が異なる点 {#where-openscreen-differs}
+
+両者のどちらかを選ぶなら、まずライセンスを確認してください。それ以外の違いは、各プロジェクトが何を中心に作られているかから来ています。
+
+### ライセンスとコスト {#license-and-cost}
+
+- **商用利用も無料。** OpenScreen の公式ビルドは、どんな用途でも費用がかかりません。Cap の公式ビルドは、収益に結びつく活動に関わる利用に商用ライセンスが必要で、Cap は同僚間のコミュニケーション用の動画も商用利用とみなします。そのライセンスは年額 29 ドルまたは買い切り 58 ドルで、Cap Pro にも含まれます（2026 年 9 月時点）。Cap のソースから自分でビルドしたものは対象外です。
+- **AGPLv3 ではなく MIT。** OpenScreen は MIT ライセンスで公開されており、コードは [GitHub](https://github.com/getopenscreen/openscreen) にあります。Cap のコードは、カメラとキャプチャのクレートを除いて AGPLv3 です。AGPL は、自社製品に AGPL コードを含めたくない組織にとって重要な違いです。
+
+### サービスではなくデスクトップアプリ {#a-desktop-app-not-a-service}
+
+- **サインインする先がない。** OpenScreen は自分のマシンで録画・編集し、ファイルを渡します。ホスティングされたリンクもアカウントもプランもありません。Cap はローカルの Studio Mode に加えて、録画中にアップロードする Instant Mode を備えており、共有リンクにはサインインが必要です。
+- **自分の API キーによるチャット編集。** 任意の機能で、Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax、または任意の OpenAI 互換エンドポイントを接続し、カット、ズーム、速度変更、注釈を普段の言葉で指示できます。プロバイダーを接続するまではオフで、変更はすべて元に戻せる通常の編集として反映されます。同じプロバイダーが字幕を 15 言語に翻訳します。Cap のホスティングされた AI 機能（タイトル、要約、チャプターなど）は Cap Pro に付属します。[AI 編集](/docs/ai-editing/)を参照してください。
+
+### 編集とエクスポート {#editing-and-export}
+
+- **コーデックの選択。** MP4 は H.264 または H.265 でエクスポートされます。Cap のエクスポート設定には解像度、フレームレート、画質のプリセットが並びますが、コーデック設定はありません。[エクスポート](/docs/export/)を参照してください。
+- **より広い速度範囲。** OpenScreen の速度範囲は 0.1 倍から 100 倍までです。Cap の Studio Mode のドキュメントに記載されている区間速度は 0.25 倍から 8 倍までです。
+- **エクスポート速度。** どちらのアプリも公開されている[エクスポートベンチマーク（英語）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)に含まれています。このページの執筆時点で、OpenScreen のスコアは Cap 0.6.0 を上回っています。結果はマシンによって変わるため、最新の順位はそちらで確認してください。
+
+### 対応プラットフォーム {#platforms}
+
+- **ベータ表記のない Windows ビルド。** OpenScreen は Windows インストーラーと Microsoft Store での配布を提供しています。Cap のダウンロードページでは、Windows へのリンクがほかのダウンロードの選択肢の中で「Windows (Beta)」として掲載されています。
+- **同じ Linux パッケージに加えて Nix。** どちらも .deb、AppImage、RPM、Arch パッケージを提供しています。Cap はディストリビューションごとのパッケージを、2026 年 8 月 31 日付のバージョン 0.6.0 で追加しました。OpenScreen には Nix flake もあります。[Linux](/screen-recorder-linux/)、[Windows](/screen-recorder-windows/)、[macOS](/screen-recorder-mac/) の各ページを参照してください。
+
+## Cap のほうが適している場合 {#when-cap-is-the-better-choice}
+
+- **リンクで共有したい場合。** Cap の Instant Mode は録画中にアップロードし、公開リンクの視聴者はアカウントなしでブラウザー上で再生できます。サインインした視聴者はコメントを残すことができ、Cap Pro は視聴者分析、パスワード保護、カスタムドメインを追加します。OpenScreen が出力するのはファイルなので、共有したい場所に自分でアップロードします。
+- **組織に SSO やコンプライアンスが必要な場合。** Cap はチームワークスペース、SAML SSO アドオン、SOC 2 Type II と ISO 27001 の認証、署名済み BAA による HIPAA 準拠を提供しています。
+- **字幕ファイルを納品する場合。** Cap は字幕を SRT または WebVTT として保存できます。OpenScreen は字幕を動画に焼き込みます。
+
+## はじめかた {#getting-started}
+
+1. [ダウンロードページ](/download/)から OpenScreen を入手します。Windows では Microsoft Store の利用がおすすめです。
+2. [インストール](/docs/installation/)の手順に従います。macOS では、最初の録画の前に画面収録とアクセシビリティの権限を許可してください。
+3. [クイックスタート](/docs/quick-start/)で最初の録画を行い、**自動強化 → 自動ズーム**を実行します。
+4. Cap で作った動画を再利用するには、まず MP4 にエクスポートしてください。[メディアライブラリ](/docs/media-library/)は MP4、MOV、MKV などの動画ファイルをプロジェクトにインポートできます。
+
+ほかのツールとも比較したいですか。[Screen Studio の代替](/alternatives/screen-studio/)、[OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)、[Camtasia の代替](/alternatives/camtasia/)、[Loom の代替](/alternatives/loom/)を参照するか、[OpenScreen のホームページ](/)に戻ってください。
+
+## 情報源 {#sources}
+
+Cap に関する情報、2026 年 9 月確認：
+
+- プラン、価格、共有リンクの上限、SSO と BAA のアドオン、Cap Pro の機能、無料版の個人利用限定：[cap.so/pricing](https://cap.so/pricing)
+- 商用利用に該当する条件と、自分でビルドした場合の例外：[cap.so/docs/commercial-license](https://cap.so/docs/commercial-license)
+- AGPLv3 と MIT のライセンス分け：[github.com/CapSoftware/Cap/blob/main/LICENSE](https://github.com/CapSoftware/Cap/blob/main/LICENSE)
+- 対応プラットフォーム、「Windows (Beta)」のリンク、Linux パッケージ、CLI：[cap.so/download](https://cap.so/download)
+- インストールガイドにおける 64 ビット Windows と Linux パッケージ：[cap.so/docs/installation](https://cap.so/docs/installation)
+- 録画対象、ズーム、クリップ、速度、マスク、テキスト、字幕とその SRT・WebVTT エクスポート、音楽、カメラのぼかし、エクスポート形式、共有リンクのサインイン：[cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Instant Mode、共有ページ、コメントのためのサインイン：[cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
+- リリース履歴、バージョン 0.6.0（Linux パッケージ、macOS でのカメラ背景削除、画像トラック）、0.5.7 のテレプロンプター、Web エディターでの文字起こしカット、SOC 2 Type II、ISO 27001、HIPAA：[cap.so/changelog](https://cap.so/changelog)
+- Instant Mode のサインイン、ホスティングされた AI 機能と字幕翻訳、透かしなし、CLI の JSON 出力：[cap.so/llms-full.txt](https://cap.so/llms-full.txt)
+
+OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+
+Cap はその所有者の商標です。OpenScreen は独立したプロジェクトであり、Cap と提携または承認された関係にはありません。

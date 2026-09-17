@@ -1,0 +1,91 @@
+---
+title: 面向 Wayland 的 Linux 录屏与编辑软件
+description: OpenScreen 是一款免费开源的 Linux 录屏软件。它通过 PipeWire 和 ScreenCast 门户进行录制，再添加缩放和本地字幕。
+keywords:
+  - Linux 录屏软件
+  - Wayland 录屏软件
+  - PipeWire 录屏软件
+  - Screen Studio 替代软件 Linux
+  - 带编辑器的 Linux 录屏软件
+---
+
+# 一款内置编辑器的 Linux 录屏软件
+
+OpenScreen 是一款面向 Linux 的免费录屏软件，采用 MIT 许可证，通过 PipeWire 和桌面环境的 ScreenCast 门户采集一个显示器或一个窗口，因此可以在 Wayland 上录制。同一个应用随后完成后期编辑：从**自动增强**菜单进行自动缩放、可编辑光标、本地 Whisper 字幕，以及 MP4 或 GIF 导出。如果你需要直播，OBS Studio 仍是更好的选择。发布的软件包为 x64 架构，ARM64 机器可通过其 Nix flake 构建 OpenScreen。
+
+本页由 OpenScreen 项目发布。关于 Screen Studio 和 OBS Studio 的信息来自 screen.studio 和 obsproject.com，发行版默认设置的信息来自 Ubuntu 和 Fedora 的发布说明，均核实于 2026 年 9 月。信息来源列于文末。
+
+## 一览 {#at-a-glance}
+
+| | |
+| --- | --- |
+| 价格 | 免费，含商业用途。MIT 许可证，无需账号 |
+| 软件包 | AppImage、`.deb`、`.rpm` 和 `.pacman`，均为 x64。面向 x86_64 和 aarch64 的 Nix flake |
+| 录制内容 | 一个显示器或一个窗口，之后可在编辑器中裁剪 |
+| 采集 | 通过 ScreenCast 门户使用 PipeWire，目标帧率 60 fps，尺寸取决于合成器提供的画面 |
+| 录制时编码 | H.264，依次尝试 VAAPI、Vulkan，最后是软件编码 |
+| 系统音频 | PipeWire sink 的监听输出，与麦克风混合 |
+| 光标 | 位置和形状来自门户；加入 `input` 组后可采集左键点击 |
+| 字幕 | 本地 Whisper，使用 Vulkan，并有 CPU 回退方案，烧录进视频 |
+| 导出 | MP4（H.264 或 H.265）或 GIF，无水印。在驱动允许时，H.264 通过 VAAPI 使用 GPU 编码 |
+| 内置更新 | AppImage、`.deb`、`.rpm` 和 `.pacman` 支持，Nix 版本不支持 |
+
+## Wayland 与 PipeWire {#wayland-and-pipewire}
+
+OpenScreen 在 Linux 上使用自己的原生辅助程序录制屏幕，而不是应用内置的浏览器引擎。
+
+- **通过门户采集。** 一个 Rust 编写的辅助程序通过 PipeWire 和 xdg-desktop-portal 的 ScreenCast 接口进行录制。在 3-2-1 倒计时开始之前，你的桌面环境的共享对话框会负责选择显示器或窗口。
+- **录制时的硬件编码。** 该辅助程序写入 H.264，依次尝试 VAAPI、Vulkan 视频编码，最后是 libopenh264 软件编码器，使用你的机器上第一个可正常开启的方案。
+- **来自 PipeWire 的系统音频。** 音频来自默认 PipeWire sink 的监听输出，与麦克风混合为一条 AAC 音轨。这需要以 PipeWire 作为声音服务器，Ubuntu 22.10 及以上和 Fedora 34 及以上默认已启用。
+- **麦克风选择。** HUD 会列出所有输入设备，并配有实时音量表。该辅助程序会根据设备描述找到对应的 PipeWire 节点。
+- **可编辑的光标。** 在默认的叠加模式下，门户会上报光标位置和形状，因此你可以在编辑器中重新设置光标样式；系统模式则原样录制指针。
+- **Wayland 上的点击。** Wayland 没有用于输入事件的门户，因此 OpenScreen 通过 evdev 读取左键按下事件。这需要你的用户加入 `input` 组，且 OpenScreen 只读取左键，绝不读取按键。该用户组的权限范围更广：它允许你运行的任何程序读取所有输入设备，包括键盘。未加入该组时，录制仍可正常进行，只是每个光标采样都会被记为移动。[Wayland 上的鼠标点击](/docs/installation/#mouse-clicks-on-wayland)提供了相应命令。
+- **浏览器采集仅作为回退方案。** 只有在缺少该辅助程序的构建版本中，Chromium 的采集功能才会接管；辅助程序出错时会报告错误，而不会切换到回退方案。参见[屏幕录制](/docs/recording/)。
+
+## Linux 上的 Screen Studio 式打磨 {#screen-studio-style-polish-on-linux}
+
+Screen Studio 仅支持 macOS（截至 2026 年 9 月）。OpenScreen 在 Linux 上提供同类型的后期打磨功能，其编辑工具在 Windows、macOS 和 Linux 上是同一套。
+
+- **自动缩放。** **自动增强 → 自动缩放**会根据录制的光标移动放置缩放，无需联网、无需模型。手动缩放提供六种深度。详见[自动缩放](/features/auto-zoom/)。
+- **光标样式设置。** 显示或隐藏光标，调整大小并使其平滑，添加运动模糊和点击回弹效果。点击效果需要录制到的点击数据，因此同样需要 `input` 组。
+- **背景与画面构图。** 18 张内置壁纸、纯色、渐变或你自己的图片，带内边距、圆角和阴影。可输出为 16:9、9:16、1:1 等多种画面比例。
+- **本地字幕。** whisper.cpp 在你的机器上运行，使用 Vulkan，并有 CPU 回退方案。它使用一个约 264 MB 的 Whisper Small 模型，仅下载一次。字幕会烧录进视频，删除转录文本中的词语即可从视频中剪掉对应内容。详见[字幕](/features/captions/)。
+- **摄像头布局。** 画中画及其他布局，摄像头背景可去除、模糊或替换，无需绿幕。
+- **多片段时间轴。** 每个项目可容纳多个片段、剪切、变速区间、文字、箭头、图片和模糊标注、配音轨道和音乐。参见[编辑与时间轴](/docs/editing-timeline/)。
+- **无水印导出。** MP4，H.264 或 H.265，最高 60 fps，或 GIF。在 Linux 上，合成器通过 Vulkan 渲染，当驱动支持 VAAPI 且 Vulkan 设备可以传递帧数据时，H.264 会通过 `h264_vaapi` 使用 GPU 编码。参见[导出](/docs/export/)。
+- **可选的聊天式编辑，使用你自己的密钥。** 用日常语言描述剪切、缩放或标注。在你连接提供方之前处于关闭状态，每次修改都是一次可撤销的普通编辑。参见 [AI 编辑](/docs/ai-editing/)。
+
+## 软件包 {#packages}
+
+- **每个版本发布四个 x64 软件包。** AppImage、`.deb`、`.rpm` 和 `.pacman`，可在[下载页面](/download/)和 GitHub Releases 获取。
+- **在应用内更新。** 这四种软件包都能自我更新。默认情况下应用只会告知你有更新可用，每 24 小时检查一次，录制期间不会提示更新。安装始终会经过重启提示。
+- **Nix flake。** 它会为 `x86_64-linux` 和 `aarch64-linux` 从源代码构建，并提供 NixOS 模块和 Home Manager 模块。`nix run github:getopenscreen/openscreen` 可以在不安装的情况下试用。应用的更新程序不会干预 Nix 安装的版本。
+- **通过 Nix 支持 ARM64。** 发布的软件包为 x64 架构。在 aarch64 机器上，请通过 Nix flake 安装。
+- **命令行界面。** [CLI](/docs/cli/) 可在你的桌面会话中录制，也可导出、添加字幕和打包项目，并支持 JSON 输出。各命令的运行条件见[显示器、CI 与服务器](/docs/cli/#displays-ci-and-servers)。
+
+## 何时 OpenScreen 不是合适的工具 {#when-openscreen-is-not-the-right-tool}
+
+- **你需要 ARM64 软件包。** OpenScreen 只发布 x64 软件包。在 aarch64 架构上，需通过 Nix flake 从源代码构建。
+- **你需要直播。** OpenScreen 不支持直播。OBS Studio 可以直播到集成服务或自定义服务器，并在 Linux 上以 Flathub 上的 Flatpak，以及 Ubuntu 24.04 及以上版本的 PPA 形式官方发布（截至 2026 年 9 月）。参见 [OpenScreen 对比 OBS Studio](/compare/openscreen-vs-obs/)。
+
+## 开始使用 {#getting-started}
+
+1. 从[下载页面](/download/)下载适合你发行版的软件包，或使用 Nix flake。
+2. 按照 [Linux 安装步骤](/docs/installation/#linux)操作。如果你想让点击被录制下来，请将你的用户加入 `input` 组，并接受该用户组带来的权限。
+3. 参照[快速上手](/docs/quick-start/)完成第一次录制，在门户对话框弹出时作出选择，然后对录制内容运行**自动增强 → 自动缩放**。
+
+在使用其他系统？参见 [Windows](/screen-recorder-windows/) 和 [macOS](/screen-recorder-mac/) 页面。从 Mac 应用转来？参见 [Screen Studio 替代方案](/alternatives/screen-studio/)。或返回 [OpenScreen 首页](/)。
+
+## 信息来源 {#sources}
+
+第三方信息，核实于 2026 年 9 月：
+
+- Screen Studio 仅支持 macOS：[screen.studio](https://screen.studio/)
+- OBS Studio 在 Linux 上的 Flathub 和 Ubuntu PPA：[obsproject.com/download](https://obsproject.com/download)
+- OBS Studio 直播到集成服务或自定义服务器：[obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
+- Ubuntu 22.10 默认使用 PipeWire 作为声音服务器：[Ubuntu 22.10 发布说明](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)
+- Fedora 34 默认使用 PipeWire 作为声音服务器：[Fedora 变更页面](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)
+
+OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+
+Screen Studio 和 OBS Studio 均为其各自所有者的商标。OpenScreen 是一个独立项目，与两者均无关联，也未获得其中任何一方的背书。

@@ -44,7 +44,7 @@ Na aba **Transcrição** do inspetor, clique em **Legendas**:
 
 Tudo em **Posição** é medido em relação ao **quadro exportado**, não ao vídeo dentro dele. Quando você muda o espaçamento, as legendas continuam onde você as colocou, e podem ficar na área de espaçamento — defina a distância vertical como 0 e o texto encosta na borda superior ou inferior do quadro. As legendas longas crescem para longe da borda em que estão fixadas: uma legenda na base cresce para cima, e uma no topo cresce para baixo.
 
-O tamanho é expresso em pixels em um quadro de 1080 de altura e é ajustado à escala da saída real, então as legendas ficam iguais em 720p, 1080p ou na resolução de origem. A pré-visualização e a exportação usam o mesmo código de layout — o que você vê é o que fica embutido. Elas só existem na forma embutida: o OpenScreen não grava nenhum arquivo `.srt` ou `.vtt` à parte, então quem assiste ao arquivo não consegue desativar as legendas. O [comparativo de legendas locais (em inglês)](/features/captions/) cita gravadores que geram um arquivo de legenda.
+O tamanho é expresso em pixels em um quadro de 1080 de altura e é ajustado à escala da saída real, então as legendas ficam iguais em 720p, 1080p ou na resolução de origem. A pré-visualização e a exportação usam o mesmo código de layout — o que você vê é o que fica embutido. Elas só existem na forma embutida: o OpenScreen não grava nenhum arquivo `.srt` ou `.vtt` à parte, então quem assiste ao arquivo não consegue desativar as legendas. O [comparativo de legendas locais](/features/captions/) cita gravadores que geram um arquivo de legenda.
 
 ### Tradução {#translation}
 

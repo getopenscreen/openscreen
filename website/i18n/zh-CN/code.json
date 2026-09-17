@@ -146,11 +146,11 @@
   },
   "home.features.summary": {
     "message": "OpenScreen 是一款免费、开源的录屏与视频剪辑软件，支持 Windows、macOS 和 Linux：放进去的是原始录屏，产出的是成品演示视频，属于 {screenStudio} 开创的这类工具。它采用 MIT 许可证，没有水印，无需账号，是{originalProject}的延续；原作者在 v1.5.0 之后将原项目归档。",
-    "description": "{screenStudio} links to an English-only page."
+    "description": "{screenStudio} is a link to the Screen Studio comparison page."
   },
   "home.features.summary.screenStudio": {
     "message": "Screen Studio",
-    "description": "A product name. The link goes to an English-only page."
+    "description": "A product name, used as a link."
   },
   "home.features.summary.originalProject": {
     "message": "原版 OpenScreen 项目"
@@ -201,8 +201,8 @@
     "message": "通过 ScreenCast 门户进行 PipeWire 采集；需要 PipeWire 和 xdg-desktop-portal。"
   },
   "home.install.note": {
-    "message": "Windows 另有 {exe} 安装程序。它没有代码签名，因此运行前 SmartScreen 会发出警告：请选择“更多信息”，再选择“仍要运行”。Linux 另提供 {rpm}、{pacman}、AppImage 和 Nix flake。所有安装文件都在 {releasesPage}，完整步骤见{installation}页面。各系统能录制什么，请参阅 {windows}、{mac} 和 {linux} 页面（英文）。",
-    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to English-only pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
+    "message": "Windows 另有 {exe} 安装程序。它没有代码签名，因此运行前 SmartScreen 会发出警告：请选择“更多信息”，再选择“仍要运行”。Linux 另提供 {rpm}、{pacman}、AppImage 和 Nix flake。所有安装文件都在 {releasesPage}，完整步骤见{installation}页面。各系统能录制什么，请参阅 {windows}、{mac} 和 {linux} 页面。",
+    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
     "message": "Releases 页面"
@@ -325,8 +325,8 @@
     "message": "字幕与转录文档"
   },
   "showcase.captions.link.feature": {
-    "message": "本地字幕方案对比（英文）",
-    "description": "Links to an English-only page."
+    "message": "本地字幕方案对比",
+    "description": "Link label under the panel."
   },
   "showcase.captions.label": {
     "message": "字幕面板的示意图：“amber day on the validator, and it”这行字幕以大字号显示在视频上；旁边，字幕已开启，一条说明写着七行字幕由转录文本实时生成，还有一行语言选项，提供 English、Français、Translate 按钮以及删除翻译的选项。",
@@ -348,8 +348,8 @@
     "message": "AI 编辑文档"
   },
   "showcase.agent.link.feature": {
-    "message": "自动缩放的工作原理（英文）",
-    "description": "Links to an English-only page."
+    "message": "自动缩放的工作原理",
+    "description": "Link label under the panel."
   },
   "showcase.agent.label": {
     "message": "AI 代理回复的示意图。被要求剪掉无声的空白时，它用时间码作答：“Hi”之前 0 到 2.19 秒的开场，以及“think.”之后 35.12 到 40.03 秒的结尾，把视频的可播放时长从 40 秒缩短到 33 秒，已有的缩放仍留在原来的时刻；最后是一行绿色文字：“applied: added 2 trims”。",
@@ -368,52 +368,42 @@
     "message": "下载"
   },
   "footer.product.autoZoom": {
-    "message": "自动缩放（英文）",
-    "description": "Links to an English-only page."
+    "message": "自动缩放"
   },
   "footer.product.captions": {
-    "message": "本地字幕（英文）",
-    "description": "Links to an English-only page."
+    "message": "本地字幕"
   },
   "footer.platforms.title": {
-    "message": "平台（英文）",
-    "description": "Its three links go to English-only pages."
+    "message": "平台",
+    "description": "Footer column title."
   },
   "footer.platforms.windows": {
-    "message": "Windows",
-    "description": "Links to an English-only page."
+    "message": "Windows"
   },
   "footer.platforms.mac": {
-    "message": "macOS",
-    "description": "Links to an English-only page."
+    "message": "macOS"
   },
   "footer.platforms.linux": {
-    "message": "Linux",
-    "description": "Links to an English-only page."
+    "message": "Linux"
   },
   "footer.compare.title": {
-    "message": "对比（英文）",
-    "description": "Its five links go to English-only pages."
+    "message": "对比",
+    "description": "Footer column title."
   },
   "footer.compare.screenStudio": {
-    "message": "Screen Studio 替代方案",
-    "description": "Links to an English-only page."
+    "message": "Screen Studio 替代方案"
   },
   "footer.compare.camtasia": {
-    "message": "Camtasia 替代方案",
-    "description": "Links to an English-only page."
+    "message": "Camtasia 替代方案"
   },
   "footer.compare.loom": {
-    "message": "Loom 替代方案",
-    "description": "Links to an English-only page."
+    "message": "Loom 替代方案"
   },
   "footer.compare.cap": {
-    "message": "OpenScreen 与 Cap 对比",
-    "description": "Links to an English-only page."
+    "message": "OpenScreen 与 Cap 对比"
   },
   "footer.compare.obs": {
-    "message": "OpenScreen 与 OBS Studio 对比",
-    "description": "Links to an English-only page."
+    "message": "OpenScreen 与 OBS Studio 对比"
   },
   "footer.project.title": {
     "message": "项目"

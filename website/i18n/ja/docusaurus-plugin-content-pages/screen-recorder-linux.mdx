@@ -1,0 +1,91 @@
+---
+title: Wayland 対応 Linux 画面録画・編集ソフト
+description: OpenScreen は Linux 向けの無料・オープンソースの画面録画ソフトです。PipeWire と ScreenCast ポータル経由で録画し、ズームと端末上の字幕を追加できます。
+keywords:
+  - 画面録画 Linux
+  - Wayland 画面録画
+  - PipeWire 画面録画
+  - Screen Studio 代替 Linux
+  - Linux 画面録画 編集機能付き
+---
+
+# エディター内蔵の Linux 向け画面録画ソフト
+
+OpenScreen は、Linux 向けの無料の MIT ライセンスの画面録画ソフトで、PipeWire とデスクトップの ScreenCast ポータル経由でディスプレイまたはウィンドウ 1 つをキャプチャするため、Wayland でも録画できます。同じアプリがそのままテイクを編集します。**自動強化**メニューからの自動ズーム、編集可能なカーソル、ローカルの Whisper による字幕、MP4 または GIF のエクスポート。配信する場合は、OBS Studio のほうが今も適しています。リリースパッケージは x64 で、ARM64 のマシンは Nix flake を通じて OpenScreen をビルドします。
+
+このページは OpenScreen プロジェクトが公開しています。Screen Studio と OBS Studio に関する情報は screen.studio と obsproject.com によるもので、ディストリビューションの既定値は Ubuntu と Fedora のリリースノートによるものです。いずれも 2026 年 9 月に確認しました。情報源は末尾に一覧しています。
+
+## 概要 {#at-a-glance}
+
+| | |
+| --- | --- |
+| 価格 | 商用利用を含めて無料。MIT ライセンス、アカウント不要 |
+| パッケージ | AppImage、`.deb`、`.rpm`、`.pacman`、x64。x86_64 と aarch64 向けの Nix flake |
+| 録画対象 | ディスプレイまたはウィンドウ 1 つ。エディターで後からクロップ可能 |
+| キャプチャ | ScreenCast ポータル経由の PipeWire、60 fps を目標。サイズはコンポジターが渡す値のまま |
+| 録画中のエンコード | H.264。VAAPI、Vulkan、ソフトウェアの順に試行 |
+| システム音声 | PipeWire のシンクモニター、マイクとミックス |
+| カーソル | ポータルから位置と形状を取得。左クリックには `input` グループが必要 |
+| 字幕 | Vulkan 上のローカル Whisper、CPU へのフォールバックあり。動画に焼き込み |
+| エクスポート | MP4（H.264 または H.265）または GIF、透かしなし。ドライバーが対応していれば VAAPI 経由で H.264 を GPU でエンコード |
+| アプリ内アップデート | AppImage、`.deb`、`.rpm`、`.pacman`。Nix は対象外 |
+
+## Wayland と PipeWire {#wayland-and-pipewire}
+
+OpenScreen は、アプリ内蔵のブラウザーエンジンではなく、独自のネイティブヘルパーで Linux の画面を録画します。
+
+- **ポータル経由のキャプチャ。** Rust 製のヘルパーが、PipeWire と xdg-desktop-portal の ScreenCast インターフェース経由で録画します。3-2-1 のカウントダウンが始まる前に、デスクトップの共有ダイアログでディスプレイまたはウィンドウを選びます。
+- **録画中のハードウェアエンコード。** ヘルパーは H.264 を書き込み、まず VAAPI、次に Vulkan のビデオエンコード、そして libopenh264 のソフトウェアエンコーダーの順に試します。自分のマシンで最初に開けたものが使われます。
+- **PipeWire からのシステム音声。** 既定の PipeWire シンクのモニターから取得し、マイクと 1 つの AAC トラックにミックスされます。サウンドサーバーとして PipeWire が必要で、これは Ubuntu 22.10 以降と Fedora 34 以降の既定です。
+- **マイクの選択。** HUD には、ライブレベルメーター付きですべての入力デバイスが並びます。ヘルパーは説明文が一致する PipeWire ノードを探します。
+- **編集可能なカーソル。** 既定の編集可能なカーソルのモードでは、ポータルがカーソルの位置と形状を報告するため、エディターでカーソルのスタイルを変更できます。システムカーソルのモードでは、ポインターをそのまま記録します。
+- **Wayland でのクリック。** Wayland には入力イベント用のポータルがないため、OpenScreen は左ボタンの押下を evdev から読み取ります。これは、ユーザーが `input` グループに入っている場合に機能し、OpenScreen が読み取るのは左ボタンのみで、キー入力は読み取りません。このグループ自体はより広い権限を持ち、実行するすべてのプログラムが、キーボードを含むすべての入力デバイスを読み取れるようになります。グループに入っていなくても録画は機能し、カーソルのすべてのサンプルは移動として保存されます。コマンドは [Wayland でのマウスクリック](/docs/installation/#mouse-clicks-on-wayland)にあります。
+- **フォールバックとしてのみのブラウザーキャプチャ。** Chromium のキャプチャが使われるのは、ヘルパーを含まないビルドの場合のみです。ヘルパーが失敗した場合は、切り替えるのではなくエラーを報告します。[録画](/docs/recording/)を参照してください。
+
+## Linux での Screen Studio 風の仕上げ {#screen-studio-style-polish-on-linux}
+
+Screen Studio は macOS にのみ対応しています（2026 年 9 月時点）。OpenScreen は Linux でも同種の仕上げ機能を提供しており、編集ツールは Windows・macOS・Linux で共通です。
+
+- **自動ズーム。** **自動強化 → 自動ズーム**は、記録したカーソルの動きからズームを配置し、通信もモデルも使いません。手動ズームは 6 段階です。詳しくは[自動ズーム](/features/auto-zoom/)を参照してください。
+- **カーソルのスタイル設定。** カーソルの表示・非表示、サイズ変更、スムージング、モーションブラーとクリックバウンスの追加。クリックエフェクトには記録されたクリックが必要なので、ここでも `input` グループが必要です。
+- **背景とフレーミング。** 18 種類の同梱壁紙、単色、グラデーション、自分の画像、余白・角丸・影付き。16:9、9:16、1:1 などのアスペクト比で出力できます。
+- **ローカル字幕。** whisper.cpp は自分のマシン上で、Vulkan（CPU へのフォールバックあり）で動作します。約 264 MB の Whisper Small モデル 1 つを一度だけダウンロードして使います。字幕は動画に焼き込まれ、文字起こしで単語を削除すると動画からもカットされます。詳しくは[字幕](/features/captions/)を参照してください。
+- **ウェブカメラのレイアウト。** ピクチャーインピクチャーなどのレイアウトで、カメラの背景をグリーンスクリーンなしで削除・ぼかし・置き換えできます。
+- **マルチクリップのタイムライン。** 1 プロジェクトに複数のクリップ、カット、速度範囲、テキスト・矢印・画像・ぼかしの注釈、ナレーショントラック、音楽。[編集とタイムライン](/docs/editing-timeline/)を参照してください。
+- **透かしなしのエクスポート。** 最大 60 fps の H.264 または H.265 の MP4、あるいは GIF。Linux ではコンポジターが Vulkan でレンダリングし、ドライバーが VAAPI を公開し Vulkan デバイスがフレームを渡せる場合、H.264 は `h264_vaapi` 経由で GPU に送られます。[エクスポート](/docs/export/)を参照してください。
+- **自分の API キーによる任意のチャット編集。** カット、ズーム、注釈を普段の言葉で指示できます。プロバイダーを接続するまではオフで、変更はすべて元に戻せる通常の編集として反映されます。[AI 編集](/docs/ai-editing/)を参照してください。
+
+## パッケージ {#packages}
+
+- **リリースごとに 4 つの x64 パッケージ。** AppImage、`.deb`、`.rpm`、`.pacman` を、[ダウンロードページ](/download/)と GitHub Releases で提供しています。
+- **アプリ内からのアップデート。** これら 4 つのパッケージは自身をアップデートできます。既定ではアプリはアップデートの存在を通知するだけで、24 時間ごとに確認し、録画中にアップデートを提示することはありません。インストールは常に再起動のプロンプトを経由します。
+- **Nix flake。** `x86_64-linux` と `aarch64-linux` 向けにソースからビルドし、NixOS モジュールと Home Manager モジュールを提供します。`nix run github:getopenscreen/openscreen` で、インストールせずに試せます。アプリのアップデーターは Nix でのインストールには関与しません。
+- **Nix 経由の ARM64。** リリースパッケージは x64 です。aarch64 マシンでは、Nix flake 経由でインストールしてください。
+- **コマンドラインインターフェース。** [CLI](/docs/cli/) は、デスクトップセッションからの録画に加え、プロジェクトのエクスポート・字幕付け・パックを JSON 出力付きで行います。各コマンドに必要な環境は[ディスプレイ、CI、サーバー](/docs/cli/#displays-ci-and-servers)にまとめています。
+
+## OpenScreen が適さない場合 {#when-openscreen-is-not-the-right-tool}
+
+- **ARM64 パッケージが必要な場合。** OpenScreen は x64 パッケージを公開しています。aarch64 では、Nix flake 経由でソースからビルドします。
+- **配信したい場合。** OpenScreen は配信しません。OBS Studio は組み込みのサービスやカスタムサーバーに配信でき、Linux では Flathub の Flatpak と Ubuntu 24.04 以降向けの PPA として正式に配布されています（2026 年 9 月時点）。[OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)を参照してください。
+
+## はじめかた {#getting-started}
+
+1. [ダウンロードページ](/download/)からお使いのディストリビューション向けのパッケージをダウンロードするか、Nix flake を使います。
+2. [Linux 向けのインストール手順](/docs/installation/#linux)に従います。クリックを記録したい場合は、そのグループが許可する内容を了承したうえで、ユーザーを `input` グループに追加してください。
+3. [クイックスタート](/docs/quick-start/)で最初の録画を行い、ポータルのダイアログが開いたら応答し、そのテイクで**自動強化 → 自動ズーム**を実行します。
+
+ほかのシステムをお使いですか。[Windows](/screen-recorder-windows/) と [macOS](/screen-recorder-mac/) のページもあります。Mac アプリから乗り換えですか。[Screen Studio の代替](/alternatives/screen-studio/)を参照してください。または [OpenScreen のホームページ](/)に戻ってください。
+
+## 情報源 {#sources}
+
+サードパーティに関する情報、2026 年 9 月確認：
+
+- Screen Studio は macOS のみに対応：[screen.studio](https://screen.studio/)
+- Linux での OBS Studio、Flathub と Ubuntu の PPA：[obsproject.com/download](https://obsproject.com/download)
+- 組み込みのサービスやカスタムサーバーへの OBS Studio の配信：[obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
+- Ubuntu 22.10 での PipeWire の既定サウンドサーバー化：[Ubuntu 22.10 のリリースノート](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)
+- Fedora 34 での PipeWire の既定サウンドサーバー化：[Fedora の変更ページ](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)
+
+OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+
+Screen Studio と OBS Studio はそれぞれの所有者の商標です。OpenScreen は独立したプロジェクトであり、どちらとも提携または承認された関係にはありません。

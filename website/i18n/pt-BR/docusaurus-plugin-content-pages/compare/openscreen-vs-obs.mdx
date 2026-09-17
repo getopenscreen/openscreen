@@ -1,0 +1,115 @@
+---
+title: OpenScreen vs OBS Studio para demonstrações
+description: "OpenScreen vs OBS Studio: ambos são grátis e open source. O OBS grava e transmite cenas; o OpenScreen grava e edita a gravação em um só app."
+keywords:
+  - openscreen vs obs
+  - alternativa ao obs para tutoriais
+  - editar gravações do obs
+  - obs zoom no mouse
+  - legendas automáticas no obs
+---
+
+# OpenScreen vs OBS Studio
+
+O OpenScreen e o OBS Studio são gravadores de tela grátis e de código aberto para Windows, macOS e Linux, então escolher entre eles é sobretudo uma questão de edição. O OBS grava e transmite cenas montadas a partir de várias fontes e deixa a edição para outro app, enquanto o OpenScreen grava uma tela ou uma janela e edita a gravação por conta própria: zooms automáticos, um cursor que você restiliza depois, legendas no dispositivo, e exportação em MP4 ou GIF. O OBS Studio ainda é a melhor escolha para transmissão ao vivo e produções com várias cenas.
+
+Esta página é publicada pelo projeto OpenScreen. Os dados sobre o OBS Studio vêm de obsproject.com, do repositório do OBS Studio no GitHub e do Flathub, e foram verificados em setembro de 2026. As fontes estão listadas no final.
+
+## Resumo rápido {#at-a-glance}
+
+| | OpenScreen | OBS Studio |
+| --- | --- | --- |
+| Preço | Grátis, inclusive para uso comercial | Grátis, financiado por patrocinadores e doações (em setembro de 2026) |
+| Licença | MIT | GNU GPL versão 2 |
+| Plataformas | Windows 10 (1903 ou posterior) e 11, x64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 | Windows 10 e 11, instalador x64 e zip ARM64. macOS 13 ou posterior, Apple Silicon e Intel. Linux via Flathub ou um PPA do Ubuntu 24.04+ (em setembro de 2026) |
+| O que grava | Uma tela ou uma janela, com webcam, microfone e áudio do sistema. Corte a imagem depois no editor | Cenas que combinam telas, janelas, webcams, imagens, texto, janelas de navegador e placas de captura. As fontes podem ser cortadas antes de gravar |
+| Transmissão ao vivo | Não | Sim, para serviços integrados ou um servidor personalizado |
+| Editor integrado | Sim. Linha do tempo com vários clipes, cortes, mudanças de velocidade, zooms e anotações | Nenhum. A lista de recursos dele cobre captura, mixagem, cenas e transmissão |
+| Zooms automáticos | Sim, posicionados a partir do cursor gravado | Script da comunidade "Zoom to Mouse", acionado por atalho |
+| Legendas | Whisper no dispositivo, um modelo de cerca de 264 MB, baixado uma vez. Embutidas no vídeo | Ferramenta de legendas integrada, só no Windows. O plugin gratuito LocalVocal transcreve localmente nos três sistemas e grava arquivos .srt |
+| Formato de gravação | MP4 H.264 com captura nativa | H.264, AV1, HEVC com codificador por hardware, ou ProRes em um Mac. Hybrid MP4 ou MOV por padrão, além de MKV, FLV, MPEG-TS e outros |
+| Saída | MP4 (H.264 ou H.265) ou GIF, até 60 fps, sem marca d'água | O próprio arquivo de gravação |
+| Como estender | Uma interface de linha de comando com saída em JSON | Gerenciador de plugins, scripts Lua e Python, controle remoto por WebSocket |
+
+## O que as duas ferramentas fazem {#what-both-tools-do}
+
+As duas se sobrepõem mais do que a divisão "quem transmite versus quem edita" sugere. Nada do que segue é exclusivo de uma ou outra.
+
+- **Grátis e código aberto.** Nenhum dos dois custa nada, e os dois publicam o código no GitHub. As duas licenças permitem usar o app em trabalho pago.
+- **Windows, macOS e Linux.** Os dois são publicados para os três sistemas, com macOS 13 como mínimo.
+- **Tela, webcam, microfone e áudio do sistema** na mesma gravação.
+- **Gravações que sobrevivem a uma falha.** Os formatos padrão Hybrid MP4 e MOV do OBS continuam recuperáveis se a gravação parar. O OpenScreen grava MP4 fragmentado no Windows e no macOS, então uma gravação interrompida continua legível até cerca do último segundo.
+- **Conversão de fala em texto local com Whisper.** O OpenScreen tem isso embutido. No OBS, o plugin LocalVocal roda o Whisper na sua máquina e pode mostrar legendas ao vivo por meio de uma fonte de texto.
+- **Automação.** O OBS inclui um servidor WebSocket para controle remoto e roda scripts Lua ou Python. O OpenScreen tem uma [linha de comando](/docs/cli/) que grava, exporta, legenda e empacota projetos, com saída em JSON.
+
+## Onde o OpenScreen se diferencia {#where-openscreen-differs}
+
+### Edição no mesmo app {#editing-in-the-same-app}
+
+- **Uma linha do tempo depois da gravação.** Importe gravações ou vídeos existentes, reordene-os, e defina pontos de entrada e saída e um corte da imagem para cada clipe. Corte trechos e mude a velocidade de 0,1× até 100×. Veja [Edição e linha do tempo](/docs/editing-timeline/) e [Biblioteca de mídia](/docs/media-library/).
+- **Zooms posicionados depois.** **Melhoria automática → Zooms automáticos** lê o movimento gravado do cursor e coloca regiões de zoom nos momentos em que o cursor se detém, sem chamada de rede e sem modelo. Zooms manuais em seis profundidades ficam ao lado deles. O script "Zoom to Mouse" do OBS dá zoom em uma captura de tela quando você pressiona o atalho dele, então cada zoom é decidido durante a gravação. Mais em [zoom automático](/features/auto-zoom/).
+- **Um cursor que você pode mudar depois.** Por padrão, o OpenScreen grava o ponteiro como dados em vez de pixels. Você pode redimensioná-lo, suavizar o caminho dele, e adicionar desfoque de movimento e rebote de clique depois de gravar. O que cada sistema captura está listado em [Modo do cursor](/docs/recording/#cursor-mode).
+- **Enquadramento.** Adicione um papel de parede, uma cor sólida, um gradiente ou sua própria imagem atrás da gravação, com espaçamento, cantos arredondados e sombra. Saída em 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, ou o formato original dos clipes.
+- **Anotações na linha do tempo.** Texto com seis animações, setas em oito direções, imagens e regiões de desfoque, gaussiano ou mosaico. O OBS adiciona texto e imagens como fontes de cena enquanto você grava. O OpenScreen os posiciona depois da gravação, onde você pode movê-los.
+
+### Legendas e transcrição {#captions-and-transcript}
+
+- **Legendas sem plugin, nos três sistemas.** O whisper.cpp vem dentro do app. Um modelo Whisper Small de cerca de 264 MB é baixado uma vez, e as legendas são embutidas no vídeo. A própria ferramenta de legendas do OBS é compilada só para Windows. Mais em [legendas](/features/captions/).
+- **Edição por texto.** Selecione palavras na transcrição e apague-as para cortar aquele trecho do vídeo. Os silêncios são marcados e podem ser cortados da mesma forma. Veja [Edição da transcrição](/docs/captions/#transcript-editing).
+- **Tradução de legendas** em 15 idiomas, por um provedor de IA que você conecta.
+
+### Exportação e edição por chat {#export-and-chat-editing}
+
+- **Uma etapa de exportação com opções.** MP4 em 720p, 1080p ou resolução de origem, a 24, 30 ou 60 fps, em H.264 ou H.265, ou um GIF. Sem marca d'água. No OBS, a resolução de saída, a taxa de quadros e o codificador são definidos em Configurações antes de gravar. Veja [Exportação](/docs/export/).
+- **Edição por chat opcional, com sua própria chave.** Descreva cortes, zooms, mudanças de velocidade ou anotações em linguagem natural. Cada mudança vira uma edição comum, que pode ser desfeita. Fica desligado até você conectar um provedor. Veja [Edição com IA](/docs/ai-editing/).
+
+## Quando o OBS Studio é a melhor escolha {#when-obs-studio-is-the-better-choice}
+
+- **Você transmite.** O OBS transmite para serviços integrados ou para um servidor personalizado. O OpenScreen grava e edita.
+- **Você produz com várias fontes.** O OBS oferece cenas ilimitadas, transições personalizadas, um Studio Mode para pré-visualizar mudanças antes de irem ao ar, e um Multiview que monitora 8 cenas.
+- **Você precisa de um arquivo de legenda.** O plugin LocalVocal grava arquivos `.srt`. O OpenScreen embute as legendas no vídeo.
+- **Você roda Windows em ARM.** O OBS publica um zip Windows ARM64 (em setembro de 2026). As builds do OpenScreen para Windows são x64.
+
+## Usando os dois {#using-both}
+
+Você não precisa escolher. O OBS pode gravar, e o OpenScreen pode editar o resultado.
+
+1. Grave no OBS. Desde a versão 32.0, novos perfis gravam em Hybrid MP4 no Windows e no Linux, e em Hybrid MOV no macOS.
+2. No OpenScreen, mude para **Mídia** e escolha **Importar mídia**. A caixa de diálogo de arquivos aceita arquivos `mp4`, `mov`, `mkv`, `flv` e `ts`, entre outros.
+3. Arraste o cartão da fonte para a fileira de clipes, depois corte, acelere, dê zoom, anote e enquadre normalmente.
+4. Selecione o cartão dele no modo **Mídia** e escolha **Regenerar** para transcrevê-lo, para legendas e edição da transcrição.
+
+Alguns recursos não se aplicam a um arquivo do OBS. Zooms automáticos, foco de zoom que segue o cursor e estilização do cursor leem os dados de cursor que o OpenScreen salva junto das próprias gravações, e um arquivo do OBS não tem nenhum. Zooms manuais continuam funcionando. Se sua cena do OBS incluía uma webcam, a webcam já faz parte da imagem, então os layouts de webcam e os segmentos de Câmera em Tela Cheia do OpenScreen não têm com o que trabalhar.
+
+## Primeiros passos {#getting-started}
+
+1. Baixe o OpenScreen na [página de download](/download/). No Windows, a Microsoft Store é o caminho recomendado.
+2. Siga a [Instalação](/docs/installation/). No macOS, conceda as permissões de Gravação de Tela e Acessibilidade antes da primeira gravação.
+3. Faça uma primeira gravação com o [início rápido](/docs/quick-start/), depois rode **Melhoria automática → Zooms automáticos** nela. Para editar uma gravação do OBS, comece pela [biblioteca de mídia](/docs/media-library/) e adicione [legendas](/docs/captions/).
+
+Comparando outras ferramentas também? Veja a [alternativa ao Screen Studio](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/), a [alternativa ao Camtasia](/alternatives/camtasia/) e a [alternativa ao Loom](/alternatives/loom/). Para um passo a passo completo, leia o [guia de vídeo de demonstração de produto](/docs/guides/product-demo-video/), ou volte para a [página inicial do OpenScreen](/).
+
+## Fontes {#sources}
+
+Dados sobre o OBS Studio, verificados em setembro de 2026:
+
+- Slogan, fontes de cena, transições, Studio Mode, Multiview, plugins e scripts Lua ou Python, patrocinadores: [obsproject.com](https://obsproject.com/)
+- Versões suportadas de Windows e macOS, distribuição via Flathub e PPA: [obsproject.com/download](https://obsproject.com/download)
+- Versão atual 32.2.2 e seus arquivos para Windows x64, Windows ARM64, macOS e Ubuntu: [github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2)
+- Pacote Flathub: [flathub.org/apps/com.obsproject.Studio](https://flathub.org/apps/com.obsproject.Studio)
+- Licença: [COPYING](https://raw.githubusercontent.com/obsproject/obs-studio/master/COPYING)
+- Doações e patrocínio: [obsproject.com/contribute](https://obsproject.com/contribute)
+- Serviços de transmissão e servidores personalizados, áudio de desktop, recorte de fontes, configurações de saída: [obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
+- Contêineres, codificadores, HEVC só por hardware e ProRes em Macs: [obsproject.com/kb/audio-video-formats-guide](https://obsproject.com/kb/audio-video-formats-guide) (datado de 26 de março de 2023)
+- Hybrid MP4 e MOV como contêineres padrão para novos perfis: [github.com/obsproject/obs-studio/releases/tag/32.0.0](https://github.com/obsproject/obs-studio/releases/tag/32.0.0)
+- Hybrid MOV como padrão no macOS e Hybrid MP4 no Windows e no Linux: [frontend/widgets/OBSBasic.cpp](https://github.com/obsproject/obs-studio/blob/master/frontend/widgets/OBSBasic.cpp)
+- Recuperação de falhas com Hybrid MP4: [obsproject.com/kb/hybrid-mp4](https://obsproject.com/kb/hybrid-mp4)
+- Gerenciador de plugins: [obsproject.com/blog/obs-studio-32-0-release-notes](https://obsproject.com/blog/obs-studio-32-0-release-notes)
+- Controle remoto por WebSocket: [obsproject.com/kb/remote-control-guide](https://obsproject.com/kb/remote-control-guide)
+- Ferramenta de legendas integrada compilada só para Windows: [plugins/frontend-tools/CMakeLists.txt](https://github.com/obsproject/obs-studio/blob/master/plugins/frontend-tools/CMakeLists.txt)
+- Script Zoom to Mouse: [obsproject.com/forum/resources/zoom-to-mouse.1823](https://obsproject.com/forum/resources/zoom-to-mouse.1823/)
+- Plugin LocalVocal, suas plataformas, motor Whisper, legendas na tela e saída em .srt: [obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769](https://obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769/)
+
+Os dados do OpenScreen descrevem a versão 1.11.0 e remetem à documentação dele acima.
+
+OBS Studio e os outros nomes de produtos nesta página são marcas registradas dos respectivos proprietários. O OpenScreen é um projeto independente e não é afiliado nem endossado pelo OBS Project.

@@ -1,0 +1,119 @@
+---
+title: Gravador de tela com legendas locais via Whisper
+description: "O OpenScreen é um gravador de tela grátis com legendas: o Whisper transcreve na sua máquina, e você estiliza, traduz e embute as legendas no vídeo."
+keywords:
+  - gravador de tela com legendas
+  - gravador de tela com legendas automáticas offline
+  - gravador de tela whisper
+  - editar vídeo pela transcrição grátis
+  - legendas automáticas gravação de tela
+---
+
+# Um gravador de tela com legendas feitas na sua máquina
+
+O OpenScreen é um gravador de tela gratuito, com licença MIT, com legendas para Windows, macOS e Linux. Ele transcreve sua gravação no seu próprio computador com o Whisper, depois de um download único de modelo de cerca de 264 MB, e embute legendas estilizadas no vídeo exportado. Se você precisa de arquivos de legenda SRT ou VTT separados para uma plataforma de curso ou um requisito de acessibilidade, o Cap ou o Camtasia é a melhor escolha.
+
+Esta página é publicada pelo projeto OpenScreen. Os dados sobre Cap, Camtasia e Screen Studio vêm de cap.so, techsmith.com e screen.studio e foram verificados em setembro de 2026. As fontes estão listadas no final.
+
+## Resumo rápido {#at-a-glance}
+
+| | |
+| --- | --- |
+| Motor | whisper.cpp, rodando no seu computador |
+| Modelo | Um modelo Whisper Small de cerca de 264 MB |
+| Download do modelo | Uma vez, de huggingface.co, verificado por SHA-256. Não incluído no instalador |
+| Hardware | Metal em Apple Silicon. CPU em Macs Intel. Vulkan com alternativa na CPU no Windows e no Linux |
+| Idiomas | Detectados automaticamente, ou definidos manualmente entre 100 idiomas |
+| Estilização | Fonte, tamanho, negrito, cor do texto, fundo, posição, e 1 a 12 palavras por linha |
+| Saída | Embutida no vídeo exportado |
+| Edição da transcrição | Apague palavras para cortá-las do vídeo. Silêncios são marcados e também podem ser cortados |
+| Tradução | 15 idiomas, por um provedor de IA que você conecta com sua própria chave |
+| Linha de comando | O comando `captions` adiciona legendas a um projeto |
+| Preço | Grátis, inclusive para uso comercial. Sem conta |
+
+## Como as legendas funcionam no OpenScreen {#how-captions-work-in-openscreen}
+
+### Transcrição no seu computador {#transcription-on-your-computer}
+
+Clique em **Transcrever agora** na aba **Transcrição** do editor, ou em **Regenerar** em um cartão de mídia na etapa Mídia. A primeira execução busca o modelo em huggingface.co: um modelo Whisper Small de cerca de 264 MB, baixado uma vez. O OpenScreen compara o arquivo com um hash SHA-256 fixado antes de usá-lo. Depois disso, a transcrição não precisa de conexão de rede.
+
+O processamento roda na GPU quando o OpenScreen oferece suporte a ela: Metal em Apple Silicon e Vulkan no Windows e no Linux. Windows e Linux recorrem à CPU quando o Vulkan não está disponível. Macs Intel usam a CPU.
+
+O Whisper detecta o idioma falado por conta própria. Se ele errar, escolha um dos 100 idiomas em **Regenerar em** na etapa Mídia e rode de novo. Veja [Biblioteca de mídia](/docs/media-library/).
+
+### Legendas geradas a partir da transcrição {#captions-drawn-from-the-transcript}
+
+As legendas são uma visualização ao vivo da transcrição, não uma cópia dela. Corte palavras da transcrição, mude o estilo ou mova um clipe, e as legendas acompanham já no quadro seguinte, sem etapa de regeneração.
+
+- **Texto.** Fonte, tamanho, negrito e cor.
+- **Fundo.** Uma placa atrás do texto, com cor e opacidade próprias, ou nenhuma.
+- **Posição.** Topo ou base, esquerda, centro ou direita, com uma distância da borda.
+- **Comprimento da linha.** Um mínimo e máximo de 1 a 12 palavras por linha.
+
+A pré-visualização e a exportação usam o mesmo layout, então as legendas que você vê são as que ficam embutidas no vídeo. **Mostrar legendas** as desativa para uma exportação sem elas. Referência completa em [Legendas e transcrição](/docs/captions/).
+
+### Corte ao apagar palavras {#cutting-by-deleting-words}
+
+O painel **Transcrição** mostra as palavras de cada clipe na linha do tempo. Selecione uma palavra ou um trecho e pressione Delete: esse intervalo é cortado da reprodução e da exportação, como um recorte na linha do tempo. As palavras cortadas aparecem riscadas, e você pode restaurá-las. Os silêncios são marcados no texto e podem ser cortados ou restaurados da mesma forma.
+
+O Whisper informa os tempos das palavras com um pequeno atraso. O OpenScreen puxa cada limite de palavra de volta para o áudio, então um corte começa onde a palavra falada começa, e não uma sílaba depois. Veja [Edição da transcrição](/docs/captions/#transcript-editing).
+
+### Tradução com sua própria chave {#translation-with-your-own-key}
+
+A tradução cobre 15 idiomas: inglês, francês, espanhol, alemão, italiano, português, holandês, polonês, turco, russo, árabe, hindi, japonês, coreano e chinês. Ela passa pelo provedor de IA que você conecta para edição por chat, com sua própria chave. Até você conectar um provedor, nada é enviado. A tradução é armazenada ao lado da transcrição, então as palavras e os tempos originais continuam como estavam, e você pode voltar a qualquer momento. Veja [Tradução](/docs/captions/#translation) e [Edição com IA](/docs/ai-editing/).
+
+### Pela linha de comando {#from-the-command-line}
+
+O comando `captions` da [CLI](/docs/cli/) transcreve um projeto com o mesmo modelo Whisper local e adiciona legendas a ele. `--min-words` e `--max-words` definem as palavras por legenda, e `export` as embute no vídeo.
+
+### O que passa pela rede {#what-goes-over-the-network}
+
+O áudio fica no seu computador. Além do download do modelo, só a tradução alcança a rede: ela envia o texto da transcrição ao provedor que você escolheu. Para o app como um todo: o OpenScreen não tem conta, não tem servidor próprio e não tem análise de uso. As [Perguntas frequentes](/docs/faq/#does-openscreen-work-offline) listam as poucas conexões que ele ainda faz.
+
+## Outros gravadores com legendas locais {#other-recorders-with-local-captions}
+
+O Whisper no dispositivo não é exclusivo do OpenScreen. Em setembro de 2026:
+
+- **Screen Studio** transcreve no Mac com Whisper Base, Small ou Medium, ou com Apple Speech Recognition no macOS 26 ou posterior. Pode exportar a transcrição como um arquivo separado.
+- **Cap** transcreve localmente no Studio Mode dele, em beta, com escolha de modelo. Pode embutir legendas no vídeo ou salvá-las como arquivos SRT ou WebVTT. O Cap lista tradução de legendas entre os recursos do Cap Pro.
+- **Camtasia** transcreve no dispositivo com Whisper. Lista legendas dinâmicas e ocultas no plano Essentials, e edição de vídeo baseada em texto nos planos pagos. A versão 2026.1.0 adicionou importação e exportação básica de legendas VTT.
+
+## Onde o OpenScreen se diferencia {#where-openscreen-differs}
+
+- **Grátis, inclusive para uso comercial.** Nenhum plano e nenhuma conta. A página de preços do Cap diz que a versão gratuita dele é só para uso pessoal. O Screen Studio precisa de um plano ativo para exportar arquivos de vídeo. O editor de desktop do Camtasia coloca marca d'água nas exportações até você migrar para um plano pago Essentials, Create ou Pro, ou uma licença empresarial. Os três em setembro de 2026.
+- **Windows, macOS e Linux.** O OpenScreen roda em Windows 10 (1903 ou posterior) e 11, x64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64. Em setembro de 2026, o Screen Studio roda só no macOS, o editor de desktop do Camtasia roda no Windows e no macOS, e o Cap oferece apps para os três. Veja [Linux](/screen-recorder-linux/), [Windows](/screen-recorder-windows/) e [macOS](/screen-recorder-mac/).
+- **Edição da transcrição sem assinatura.** Cortar apagando palavras faz parte do app gratuito. O Camtasia lista edição baseada em texto nos planos pagos (em setembro de 2026). O Cap adicionou corte por transcrição ao editor web dele em julho de 2026. O guia do Studio Mode de desktop dele cobre a correção do texto e do tempo das legendas, e não descreve cortar vídeo pela transcrição.
+- **Tradução por um provedor que você escolhe.** Qualquer provedor compatível com o OpenScreen, com sua própria chave, e nenhum plano para comprar do OpenScreen. A tradução em si não é exclusiva: o Cap Pro também lista tradução de legendas (em setembro de 2026).
+
+## Quando o OpenScreen não é a ferramenta certa {#when-openscreen-is-not-the-right-tool}
+
+- **Você precisa entregar um arquivo de legenda.** Se uma plataforma de curso ou um requisito de acessibilidade pede legendas que quem assiste pode desativar, você precisa de um arquivo separado. O Cap salva arquivos SRT e WebVTT, e o Camtasia importa e exporta VTT. O OpenScreen embute as legendas no vídeo.
+
+## Primeiros passos {#getting-started}
+
+1. Baixe o OpenScreen na [página de download](/download/) e siga a [Instalação](/docs/installation/).
+2. Grave com o microfone ligado, seguindo o [início rápido](/docs/quick-start/).
+3. No editor, abra a aba **Transcrição** e clique em **Transcrever agora**. A primeira execução baixa o modelo.
+4. Estilize as legendas, corte pelo painel **Transcrição** se precisar, e exporte. Veja [Exportação](/docs/export/).
+
+Também vale a pena ler: [zooms automáticos](/features/auto-zoom/), a [alternativa ao Screen Studio](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/), a [alternativa ao Camtasia](/alternatives/camtasia/), e as [Perguntas frequentes](/docs/faq/). Ou volte para a [página inicial do OpenScreen](/).
+
+## Fontes {#sources}
+
+Dados sobre Cap, Camtasia e Screen Studio, verificados em setembro de 2026:
+
+- Modelos no dispositivo do Screen Studio, Apple Speech Recognition e arquivo de transcrição: [screen.studio/guide/captions](https://screen.studio/guide/captions)
+- A exportação do Screen Studio exige um plano ativo: [screen.studio/download](https://screen.studio/download)
+- O Screen Studio roda só no macOS, das perguntas frequentes dele: [screen.studio](https://screen.studio/)
+- Legendas locais do Cap, escolha de modelo, legendas embutidas, arquivos SRT e WebVTT: [cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Tradução de legendas do Cap Pro: [cap.so/llms-full.txt](https://cap.so/llms-full.txt)
+- Versão gratuita do Cap só para uso pessoal, e apps para macOS, Windows e Linux: [cap.so/pricing](https://cap.so/pricing)
+- Transcrição do Camtasia com Whisper: [support.techsmith.com/hc/en-us/articles/203729278](https://support.techsmith.com/hc/en-us/articles/203729278-How-to-use-Speech-To-Text-in-Camtasia-Editor)
+- Transcrição do Camtasia no dispositivo: [support.techsmith.com/hc/en-us/articles/26713588518413](https://support.techsmith.com/hc/en-us/articles/26713588518413-Dynamic-Captions-Best-Practices)
+- Legendagem do Camtasia no Essentials, edição baseada em texto nos planos pagos: [support.techsmith.com/hc/en-us/articles/41688340554765](https://support.techsmith.com/hc/en-us/articles/41688340554765-What-Is-the-Difference-Between-Camtasia-Pro-Create-and-Essentials)
+- Importação e exportação de legendas VTT do Camtasia na 2026.1.0: [support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History)
+- Plataformas do Camtasia e exportações gratuitas com marca d'água: [techsmith.com/camtasia](https://www.techsmith.com/camtasia/)
+
+Os dados do OpenScreen descrevem a versão 1.11.0 e remetem à documentação dele acima.
+
+Cap, Camtasia e Screen Studio são marcas registradas dos respectivos proprietários. O OpenScreen é um projeto independente e não é afiliado nem endossado por nenhum deles.

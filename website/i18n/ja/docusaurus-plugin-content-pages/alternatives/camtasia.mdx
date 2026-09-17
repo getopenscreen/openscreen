@@ -1,0 +1,107 @@
+---
+title: 無料・オープンソースの Camtasia 代替
+description: OpenScreen は Windows・macOS・Linux 向けの無料の Camtasia 代替です。オープンソースでサブスクリプションも透かしもなく、自動ズームと端末上の字幕に対応しています。
+keywords:
+  - Camtasia 代替 無料
+  - Camtasia 代替 オープンソース
+  - Camtasia 代替 Linux
+  - Camtasia 透かしなし
+  - Camtasia 買い切り 代替
+---
+
+# 無料・オープンソースの Camtasia 代替
+
+OpenScreen は、Windows・macOS・Linux 向けの無料の Camtasia 代替で、MIT ライセンスのもとで公開されています。Camtasia と同じように、画面・ウェブカメラ・音声を録画し、カーソルが動いた場所にズームし、自分のマシン上で Whisper により音声を文字起こしし、MP4 または GIF を出力します。年額のサブスクリプションとして販売され、無料版エディターのエクスポートに透かしが入る Camtasia と違い、OpenScreen は無料で、アカウントも不要、透かしも入りません。クイズと SCORM レポートを備えたトレーニング教材を作る場合、クローズドキャプションや VTT ファイルを納品する場合、YouTube や Screencast に直接公開する場合は、Camtasia のほうが今も適しています。
+
+このページは OpenScreen プロジェクトが公開しています。Camtasia に関する情報は TechSmith 自身のページによるもので、2026 年 9 月に確認しました。情報源は末尾に一覧しています。
+
+## 概要 {#at-a-glance}
+
+| | OpenScreen | Camtasia |
+| --- | --- | --- |
+| 価格 | 商用利用を含めて無料 | 有料プランは年額のサブスクリプション。TechSmith のストアではユーロ建てで、Starter は年額 39.56 ユーロで透かし付き、Essentials は年額 182.49 ユーロで透かしなし（2026 年 9 月時点） |
+| 無料版 | アプリ全体 | Camtasia Editor のエクスポートは、Essentials・Create・Pro またはビジネスライセンスに移行するまで透かし付き。ブラウザー録画の Camtasia Online は透かしなしで無料 |
+| アカウントとアクティベーション | アカウント不要。アクティベーション不要 | 体験版には TechSmith アカウントとインターネット接続が必要。サブスクリプションはアクティベーションにインターネット接続が必要で、以降は 90 日ごとに必要 |
+| ソースコード | オープンソース、MIT ライセンス | 非公開 |
+| 対応プラットフォーム | Windows 10（1903 以降）と 11、x64。macOS 13 以降、Apple Silicon と Intel。Linux、x64 | Windows 10 20H2 以降、64 ビット、AVX2 対応プロセッサが必要。macOS 14.0 以降。Linux 非対応（2026 年 9 月時点） |
+| 録画対象 | ディスプレイまたはウィンドウ 1 つ。ウェブカメラ、マイク、システム音声付き | 画面、ウェブカメラ、マイク、システム音声を別々のトラックで |
+| 自動ズーム | あり。記録したカーソルから配置 | あり。SmartFocus。Camtasia Recorder と Camtasia Rev の録画で使用可能 |
+| カーソルエフェクト | サイズ、スムージング、モーションブラー、クリックバウンス、カーソルテーマ | 14 種類のカーソルエフェクトに加え、リップル、リング、クリックズームなどのクリックエフェクト |
+| 字幕 | 端末上の Whisper、約 264 MB のモデル 1 つを一度だけダウンロード。自動検出または 100 の言語コード。動画に焼き込み | 端末上の Whisper、対応言語として 57 言語を掲載。ダイナミックキャプション、クローズドキャプション、基本的な VTT のインポート・エクスポート |
+| 翻訳 | 接続した AI プロバイダーを通じて字幕を 15 言語に | Pro プランで、音声と文字起こしを 7 言語 9 方言に |
+| 生成 AI | 自分の API キーによる任意のチャット編集 | Create プランと Pro プランに組み込み。両プランで音声、Pro でアバター・吹き替え・翻訳 |
+| クイズと SCORM | なし | あり。4 種類の設問形式、SCORM 準拠の LMS への結果レポート |
+| エクスポート | MP4（H.264 または H.265）または GIF、最大 60 fps、透かしなし | MP4、GIF、M4A、透過対応 WebM、またはインタラクティブな Smart Player 動画 |
+| 公開 | ディスク上のファイル。ホスティングなし | Screencast でのホスティングと YouTube への直接アップロード |
+| コマンドライン | `record`、`export`、`captions`、`pack` の各コマンド。`--json` で NDJSON 出力 | Windows の Camtasia Recorder（バージョン 9 以降）を制御するスイッチを文書化 |
+
+## 両方のアプリができること {#what-both-apps-do}
+
+画面録画ワークフローの核となる部分は、どちらのアプリにもあります。以下はどちらか一方に固有のものではありません。
+
+- **自動ズーム。** Camtasia の SmartFocus は、Camtasia Recorder のファイルからマウスの動き、スクロール、クリックを読み取り、Camtasia Rev のメディアにも対応します。OpenScreen では、**自動強化 → 自動ズーム**が、記録したカーソルの動きからズームを配置し、通信もモデルも使いません。6 段階の手動ズームも併用できます。詳しくは[自動ズーム](/features/auto-zoom/)を参照してください。
+- **後から変更できるカーソル。** どちらも自身の録画からカーソルデータを保持しているため、カーソルとクリックのエフェクトはテイク後に適用されます。
+- **同じ録画内でのウェブカメラ、マイク、システム音声。**
+- **複数クリップのタイムライン。** どちらも、録画とインポートした動画をタイムライン上で編集します。OpenScreen ではタイムラインにナレーションと音楽のトラック、速度範囲、クリップごとのクロップも含まれます。[メディアライブラリとクリップ](/docs/media-library/)を参照してください。
+- **注釈。** Camtasia には、曲線矢印を含むコールアウトがあります。OpenScreen には、6 種類のアニメーション付きテキスト、8 方向の矢印、画像、ぼかし領域があります。
+- **カメラ背景の削除。** Camtasia には背景削除エフェクトがあります。OpenScreen は、グリーンスクリーンなしにウェブカメラの背景を削除・ぼかし・置き換えできます。
+- **自分のマシンでの文字起こし。** Camtasia の字幕は Whisper を使い、TechSmith は文字起こしを端末上で行うとしています。OpenScreen は約 264 MB の Whisper Small モデルを 1 つ、一度だけダウンロードして実行します。詳しくは[字幕](/features/captions/)を参照してください。
+- **文字起こしからの編集。** Camtasia はテキストベースの動画編集を挙げています。OpenScreen では、文字起こしの中で単語を選んで削除すると、その箇所がカットされます。[字幕と文字起こし](/docs/captions/)を参照してください。
+
+## OpenScreen が異なる点 {#where-openscreen-differs}
+
+### 価格とライセンス {#price-and-license}
+
+- **サブスクリプション不要で無料。** プランもアカウントもアクティベーションも透かしもなく、商用利用も認められています。Camtasia は年額のサブスクリプションとして販売され、無料版エディターと Starter プランの両方で、すべてのエクスポートに透かしが入ります。
+- **買い切りライセンスの廃止後も、更新するものがない。** TechSmith は 2025 年版からサブスクリプション専用のライセンスに移行しました。すでに購入した買い切り版へのアクセスは保持されますが、TechSmith が Camtasia Editor 2024 をサポートするのは、メンテナンスなしなら 2026 年 12 月 31 日まで、ありなら 2027 年 10 月 2 日までです。OpenScreen には期限切れになるライセンスがありません。
+- **MIT ライセンスのソース。** コードは [GitHub](https://github.com/getopenscreen/openscreen) にあります。Camtasia は非公開です。
+
+### 対応プラットフォーム {#platforms}
+
+- **Linux。** Camtasia は Windows と macOS のみで動作します。OpenScreen は x64 Linux 向けに AppImage・`.deb`・`.rpm`・`.pacman` を提供するほか Nix flake も用意し、これに加えて Windows インストーラー、Microsoft Store での配布、両方の Mac 向けの `.dmg` があります。[Linux](/screen-recorder-linux/)、[Windows](/screen-recorder-windows/)、[macOS](/screen-recorder-mac/) の各ページを参照してください。
+
+### 自動化と AI {#automation-and-ai}
+
+- **すべてのプラットフォームで使えるコマンドラインインターフェース。** アプリの実行ファイルは `record`、`export`、`captions`、`pack` の各コマンドを受け付け、ウィンドウを表示せずに実行し、`--json` で NDJSON を出力します。スクリプト、CI、コーディングエージェント向けです。TechSmith が文書化しているのは、Windows 版 Camtasia Recorder（バージョン 9 以降）のコマンドラインスイッチです。[CLI リファレンス](/docs/cli/)と、CI やサーバーで必要な環境を説明した[ディスプレイ、CI、サーバー](/docs/cli/#displays-ci-and-servers)を参照してください。
+- **自分の API キーによる任意のチャット編集。** Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax、または任意の OpenAI 互換エンドポイントを接続し、カット、ズーム、速度変更、注釈を普段の言葉で指示できます。変更はすべて元に戻せる通常の編集として反映されます。プロバイダーを接続するまではオフで、同じプロバイダーが字幕を 15 言語に翻訳します。Camtasia は代わりに、生成機能を Create プランと Pro プランに組み込んでいます。[AI 編集](/docs/ai-editing/)を参照してください。
+
+## Camtasia のほうが適している場合 {#when-camtasia-is-the-better-choice}
+
+- **クイズ付きの e ラーニングを作る場合。** Camtasia は Smart Player 動画にクイズの設問を追加し、SCORM 準拠の LMS へ結果をレポートします。
+- **字幕ファイルを納品する場合。** Camtasia は VTT ファイルのインポートとエクスポートに対応しています。OpenScreen は字幕を動画に焼き込みます。
+- **エディターから直接公開する場合。** Camtasia は YouTube へのアップロードと Screencast でのホスティングに対応しています。OpenScreen が出力するのはファイルなので、共有したい場所に自分でアップロードします。
+- **組織として購入する場合。** すべての Camtasia プランにチャットとメールのサポートが含まれ、譲渡可能なチームサブスクリプションは TechSmith の営業チームまたは販売代理店を通じて購入でき、管理者が文字起こしをオフにできる展開ツールもあります。
+
+## はじめかた {#getting-started}
+
+1. [ダウンロードページ](/download/)から OpenScreen を入手します。Windows では Microsoft Store の利用がおすすめです。
+2. [インストール](/docs/installation/)の手順に従います。macOS では、最初の録画の前に画面収録とアクセシビリティの権限を許可してください。
+3. 制作済みの作品は動画ファイルとして移行します。OpenScreen は Camtasia のプロジェクトを開けないため、まず MP4 にエクスポートしてから、[メディアライブラリ](/docs/media-library/)でそのファイルをインポートしてください。
+4. [クイックスタート](/docs/quick-start/)で最初の録画を行い、**自動強化 → 自動ズーム**を実行して[字幕](/docs/captions/)を追加します。
+
+ほかのツールとも比較したいですか。[Screen Studio の代替](/alternatives/screen-studio/)、[OpenScreen と Cap の比較](/compare/openscreen-vs-cap/)、[OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)、[Loom の代替](/alternatives/loom/)を参照するか、[OpenScreen のホームページ](/)に戻ってください。
+
+## 情報源 {#sources}
+
+Camtasia に関する情報、2026 年 9 月確認：
+
+- 対応プラットフォーム、無料版エディターの透かし、別々の録画トラック、翻訳言語：[www.techsmith.com/camtasia](https://www.techsmith.com/camtasia/)
+- プランの価格と、透かしなしでエクスポートできるプラン：[www.techsmith.com/store/camtasia](https://www.techsmith.com/store/camtasia)
+- システム要件と体験版の要件：[www.techsmith.com/camtasia/system-requirements](https://www.techsmith.com/camtasia/system-requirements/)
+- プランの内容、クローズドキャプション、音声、アバター、吹き替え、サポート、チームサブスクリプション：[support.techsmith.com/hc/en-us/articles/41688340554765](https://support.techsmith.com/hc/en-us/articles/41688340554765-What-Is-the-Difference-Between-Camtasia-Pro-Create-and-Essentials)（2026 年 6 月 16 日付）
+- プランごとの機能、テキストベースの動画編集を含む：[support.techsmith.com/hc/en-us/articles/40593880288397](https://support.techsmith.com/hc/en-us/articles/40593880288397-Getting-Started-with-a-Camtasia-Starter-Plan)（2026 年 6 月 11 日付）
+- サブスクリプション専用のライセンス、サポート終了日、アクティベーション：[support.techsmith.com/hc/en-us/articles/27009223314701](https://support.techsmith.com/hc/en-us/articles/27009223314701-TechSmith-Transition-to-Annual-Subscription-Pricing-Model-in-2025)（2026 年 6 月 10 日付）
+- Camtasia Online：[camtasia.techsmith.com](https://camtasia.techsmith.com/)
+- SmartFocus：[www.techsmith.com/camtasia/features/ai-auto-zoom-and-pan](https://www.techsmith.com/camtasia/features/ai-auto-zoom-and-pan/)
+- カーソルとクリックのエフェクト：[www.techsmith.com/learn/tutorials/camtasia/cursor-effects](https://www.techsmith.com/learn/tutorials/camtasia/cursor-effects/)
+- Whisper による字幕：[support.techsmith.com/hc/en-us/articles/203729278](https://support.techsmith.com/hc/en-us/articles/203729278-How-to-use-Speech-To-Text-in-Camtasia-Editor)（2025 年 10 月 10 日付）
+- ローカルでの文字起こしと展開ツール：[support.techsmith.com/hc/en-us/articles/26713588518413](https://support.techsmith.com/hc/en-us/articles/26713588518413-Dynamic-Captions-Best-Practices)（2025 年 10 月 10 日付）
+- 文字起こし対応言語：[support.techsmith.com/hc/en-us/articles/27321254593549](https://support.techsmith.com/hc/en-us/articles/27321254593549-Supported-Languages-for-Speech-to-Text)（2024 年 6 月 5 日付）
+- エクスポート形式、Screencast、YouTube、Smart Player：[www.techsmith.com/learn/tutorials/camtasia/export-share](https://www.techsmith.com/learn/tutorials/camtasia/export-share/)
+- クイズと SCORM レポート：[www.techsmith.com/learn/tutorials/camtasia/quizzing](https://www.techsmith.com/learn/tutorials/camtasia/quizzing/)
+- Rev メディアでの SmartFocus、VTT、WebM エクスポート、曲線矢印のコールアウト、背景削除：[support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History)（2026 年 8 月 18 日付）
+- Camtasia Recorder のコマンドラインスイッチ：[support.techsmith.com/hc/en-us/articles/203728678](https://support.techsmith.com/hc/en-us/articles/203728678-Camtasia-Windows-Command-line-switches-and-options-for-automation-with-Camtasia-Recorder)（2025 年 8 月 8 日付）
+
+OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+
+Camtasia、TechSmith、およびこのページに登場するその他の製品名は、それぞれの所有者の商標です。OpenScreen は独立したプロジェクトであり、TechSmith と提携または承認された関係にはありません。

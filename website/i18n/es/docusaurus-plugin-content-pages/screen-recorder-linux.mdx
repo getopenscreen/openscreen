@@ -1,0 +1,91 @@
+---
+title: Grabador y editor de pantalla para Linux y Wayland
+description: "OpenScreen es un grabador de pantalla gratis y de código abierto para Linux: graba con PipeWire y el portal ScreenCast, y agrega zooms y subtítulos."
+keywords:
+  - grabador de pantalla linux
+  - grabador de pantalla wayland
+  - grabador de pantalla pipewire
+  - alternativa a screen studio para linux
+  - grabador de pantalla linux con editor
+---
+
+# Un grabador de pantalla para Linux, con el editor integrado
+
+OpenScreen es un grabador de pantalla para Linux, gratis y con licencia MIT, que captura una pantalla o una ventana mediante PipeWire y el portal ScreenCast del escritorio, así que graba en Wayland. La misma app luego edita la toma: zooms automáticos desde el menú **Mejora automática**, un cursor editable, subtítulos locales con Whisper y exportación MP4 o GIF. OBS Studio sigue siendo la mejor opción si transmites en vivo. Los paquetes publicados son x64, y las máquinas ARM64 compilan OpenScreen mediante su flake de Nix.
+
+Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio y OBS Studio vienen de screen.studio y obsproject.com, y los valores por defecto de las distribuciones vienen de las notas de lanzamiento de Ubuntu y Fedora. Todos se verificaron en septiembre de 2026. Las fuentes están al final.
+
+## De un vistazo {#at-a-glance}
+
+| | |
+| --- | --- |
+| Precio | Gratis, incluido el uso comercial. Licencia MIT, sin cuenta |
+| Paquetes | AppImage, `.deb`, `.rpm` y `.pacman`, x64. Flake de Nix para x86_64 y aarch64 |
+| Qué graba | Una pantalla o una ventana. Recorte posterior en el editor |
+| Captura | PipeWire mediante el portal ScreenCast, con un objetivo de 60 fps. El tamaño es el que entregue el compositor |
+| Codificación durante la grabación | H.264 mediante VAAPI, luego Vulkan, luego software |
+| Audio del sistema | El monitor del sink de PipeWire, mezclado con el micrófono |
+| Cursor | Posición y forma del portal. Clics izquierdos con el grupo `input` |
+| Subtítulos | Whisper local en Vulkan, con respaldo en CPU. Incrustados en el video |
+| Exportación | MP4 (H.264 o H.265) o GIF, sin marca de agua. H.264 en la GPU mediante VAAPI cuando el controlador lo permite |
+| Actualizaciones integradas | AppImage, `.deb`, `.rpm` y `.pacman`. No Nix |
+
+## Wayland y PipeWire {#wayland-and-pipewire}
+
+OpenScreen graba la pantalla en Linux con su propio módulo auxiliar nativo, no con el motor de navegador integrado en la app.
+
+- **Captura mediante el portal.** Un módulo auxiliar en Rust graba mediante PipeWire y la interfaz ScreenCast de xdg-desktop-portal. El cuadro de diálogo para compartir pantalla de tu escritorio elige la pantalla o ventana, antes de que empiece la cuenta regresiva de 3-2-1.
+- **Codificación por hardware mientras grabas.** El módulo auxiliar escribe H.264 y prueba primero VAAPI, luego la codificación de video Vulkan, luego el codificador por software libopenh264. Se usa el primero que abre en tu equipo.
+- **Audio del sistema desde PipeWire.** Viene del monitor del sink de PipeWire predeterminado y se mezcla con el micrófono en una sola pista AAC. Necesita PipeWire como servidor de sonido, el predeterminado en Ubuntu 22.10 y Fedora 34 y versiones posteriores.
+- **Elección de micrófono.** El HUD enumera todos los dispositivos de entrada, con un medidor de nivel en vivo. El módulo auxiliar encuentra el nodo de PipeWire correspondiente por su descripción.
+- **Un cursor editable.** En el modo predeterminado, Cursor editable, el portal reporta la posición y forma del cursor, así que puedes cambiar su estilo en el editor. El modo Cursor del sistema graba el puntero tal cual.
+- **Clics en Wayland.** Wayland no tiene portal para eventos de entrada, así que OpenScreen lee las pulsaciones del botón izquierdo desde evdev. Eso funciona cuando tu usuario está en el grupo `input`, y OpenScreen solo lee el botón izquierdo, nunca las pulsaciones de teclado. El grupo en sí es más amplio: deja que cualquier programa que ejecutes lea cualquier dispositivo de entrada, teclado incluido. Sin el grupo, la grabación sigue funcionando y cada muestra de cursor se guarda como un movimiento. [Clics del mouse en Wayland](/docs/installation/#mouse-clicks-on-wayland) tiene el comando.
+- **Captura por navegador solo como respaldo.** La captura de Chromium solo entra en juego en una compilación a la que le falta el módulo auxiliar. Un módulo auxiliar que falla reporta un error en lugar de cambiar de método. Consulta [Grabación](/docs/recording/).
+
+## Acabado al estilo Screen Studio en Linux {#screen-studio-style-polish-on-linux}
+
+Screen Studio solo es compatible con macOS (a septiembre de 2026). OpenScreen ofrece el mismo tipo de acabado en Linux, y sus herramientas de edición son las mismas en Windows, macOS y Linux.
+
+- **Zooms automáticos.** **Mejora automática → Zooms automáticos** coloca los zooms a partir del movimiento del cursor grabado, sin llamadas de red ni modelo. Los zooms manuales tienen seis profundidades. Más en [zoom automático](/features/auto-zoom/).
+- **Estilo del cursor.** Muestra u oculta el cursor, redimensiónalo y suavízalo, y agrega desenfoque de movimiento y rebote al clic. Los efectos de clic necesitan clics grabados, así que de nuevo el grupo `input`.
+- **Fondos y encuadre.** 18 fondos de pantalla incluidos, un color sólido, un degradado o tu propia imagen, con relleno, esquinas redondeadas y sombra. Exporta en 16:9, 9:16, 1:1 y otras relaciones de aspecto.
+- **Subtítulos locales.** whisper.cpp se ejecuta en tu equipo, en Vulkan con respaldo en CPU. Usa un modelo Whisper Small de unos 264 MB, descargado una vez. Los subtítulos se incrustan en el video, y eliminar palabras en la transcripción las corta del video. Más en [subtítulos](/features/captions/).
+- **Disposiciones de cámara web.** Imagen en imagen y otras disposiciones, con el fondo de la cámara quitado, desenfocado o reemplazado sin pantalla verde.
+- **Una línea de tiempo multiclip.** Varios clips por proyecto, cortes, regiones de velocidad, anotaciones de texto, flecha, imagen y desenfoque, una pista de voz en off y música. Consulta [Edición y línea de tiempo](/docs/editing-timeline/).
+- **Exportación sin marca de agua.** MP4 en H.264 o H.265 hasta 60 fps, o GIF. En Linux el compositor renderiza mediante Vulkan, y el H.264 va a la GPU mediante `h264_vaapi` cuando el controlador expone VAAPI y el dispositivo Vulkan puede entregar fotogramas. Consulta [Exportación](/docs/export/).
+- **Edición por chat opcional con tu propia clave.** Describe cortes, zooms o anotaciones en lenguaje natural. Está desactivada hasta que conectas un proveedor, y cada cambio se aplica como una edición común que se puede deshacer. Consulta [Edición con IA](/docs/ai-editing/).
+
+## Paquetes {#packages}
+
+- **Cuatro paquetes x64 por versión.** Un AppImage, un `.deb`, un `.rpm` y un `.pacman`, en la [página de descargas](/download/) y en GitHub Releases.
+- **Actualizaciones desde dentro de la app.** Esos cuatro paquetes pueden actualizarse solos. Por defecto la app solo te avisa de que existe una actualización, revisa cada 24 horas, y nunca ofrece una durante una grabación. Instalar siempre pasa por un aviso de reinicio.
+- **Un flake de Nix.** Compila desde el código fuente para `x86_64-linux` y `aarch64-linux`, y ofrece un módulo de NixOS y un módulo de Home Manager. `nix run github:getopenscreen/openscreen` lo prueba sin instalarlo. El actualizador de la app no toca las instalaciones con Nix.
+- **ARM64 mediante Nix.** Los paquetes publicados son x64. En una máquina aarch64, instala mediante el flake de Nix.
+- **Una interfaz de línea de comandos.** La [CLI](/docs/cli/) graba desde tu sesión de escritorio, y exporta, subtitula y empaqueta proyectos, con salida JSON. [Pantallas, CI y servidores](/docs/cli/#displays-ci-and-servers) indica lo que necesita cada comando.
+
+## Cuándo OpenScreen no es la herramienta adecuada {#when-openscreen-is-not-the-right-tool}
+
+- **Necesitas paquetes ARM64.** OpenScreen publica paquetes x64. En aarch64, compila desde el código fuente mediante el flake de Nix.
+- **Transmites en vivo.** OpenScreen no transmite. OBS Studio transmite a un servicio integrado o a un servidor propio, y se distribuye oficialmente en Linux como Flatpak en Flathub y como PPA para Ubuntu 24.04 y versiones posteriores (a septiembre de 2026). Consulta [OpenScreen frente a OBS Studio](/compare/openscreen-vs-obs/).
+
+## Primeros pasos {#getting-started}
+
+1. Descarga el paquete para tu distribución desde la [página de descargas](/download/), o usa el flake de Nix.
+2. Sigue los [pasos de instalación para Linux](/docs/installation/#linux). Agrega tu usuario al grupo `input` si quieres que se graben los clics, y acepta lo que ese grupo permite.
+3. Haz una primera grabación con el [inicio rápido](/docs/quick-start/), responde al cuadro de diálogo del portal cuando se abra, y luego ejecuta **Mejora automática → Zooms automáticos** sobre la toma.
+
+¿En otro sistema? Consulta las páginas de [Windows](/screen-recorder-windows/) y [macOS](/screen-recorder-mac/). ¿Vienes de una app de Mac? Consulta la [alternativa a Screen Studio](/alternatives/screen-studio/). O vuelve a la [página de inicio de OpenScreen](/).
+
+## Fuentes {#sources}
+
+Datos de terceros, verificados en septiembre de 2026:
+
+- Screen Studio solo es compatible con macOS: [screen.studio](https://screen.studio/)
+- OBS Studio en Linux, Flathub y el PPA de Ubuntu: [obsproject.com/download](https://obsproject.com/download)
+- OBS Studio transmite a un servicio integrado o a un servidor propio: [obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
+- PipeWire como servidor de sonido predeterminado en Ubuntu 22.10: [notas de lanzamiento de Ubuntu 22.10](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)
+- PipeWire como servidor de sonido predeterminado en Fedora 34: [página de cambios de Fedora](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)
+
+Los datos de OpenScreen describen la versión 1.11.0 y enlazan con su documentación arriba.
+
+Screen Studio y OBS Studio son marcas comerciales de sus respectivos propietarios. OpenScreen es un proyecto independiente y no está afiliado a ninguno de los dos ni cuenta con su respaldo.

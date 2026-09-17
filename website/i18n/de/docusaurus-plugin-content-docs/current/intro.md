@@ -21,8 +21,8 @@ OpenScreen ist ein **kostenloser Open-Source-Bildschirmrekorder mit Editor**. Op
 
 Diese Seiten beschreiben **OpenScreen 1.11.0**, die stabile Version vom 9. September 2026. Was sich in jeder Version geändert hat und warum, steht im [Entwicklungstagebuch (auf Englisch)](/blog/).
 
-:::warning
-OpenScreen ist noch **nicht produktionsreif**. Das Projekt wird aktiv entwickelt: Rechne mit Ecken und Kanten und gelegentlich mit inkompatiblen Änderungen, auch am Projektformat `.openscreen` und an der [CLI](/docs/cli/).
+:::note
+OpenScreen erscheint häufig in neuen Versionen. Zwischen zwei Versionen können sich das Projektformat `.openscreen` und die [CLI](/docs/cli/) noch ändern.
 :::
 
 ## Was du damit machen kannst {#what-you-can-do}
@@ -34,7 +34,7 @@ OpenScreen ist noch **nicht produktionsreif**. Das Projekt wird aktiv entwickelt
 - Optional deinen eigenen LLM-Schlüssel verbinden, um [per Chat zu bearbeiten](./ai-editing.md). Das ist standardmäßig aus und nie erforderlich.
 - Als MP4 (720p/1080p/Quellauflösung, H.264 oder H.265) oder animiertes GIF [exportieren](./export.md).
 
-Fragen zu Lizenz, Wasserzeichen oder dazu, was über das Netzwerk geht, beantwortet die [FAQ](/docs/faq/). Wie OpenScreen im Vergleich zu anderen Rekordern abschneidet, steht auf den Seiten zu [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) und [OBS Studio](/compare/openscreen-vs-obs/), jeweils auf Englisch.
+Fragen zu Lizenz, Wasserzeichen oder dazu, was über das Netzwerk geht, beantwortet die [FAQ](/docs/faq/). Wie OpenScreen im Vergleich zu anderen Rekordern abschneidet, steht auf den Seiten zu [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) und [OBS Studio](/compare/openscreen-vs-obs/).
 
 :::note
 Aufnahme, Bearbeitung, Transkription, Untertitel und Export brauchen kein Konto und funktionieren auch ohne Netzwerkverbindung weiter. Die Transkription braucht vorher einen Download: ihr Whisper-Modell (ca. 264 MB), das beim ersten Durchlauf geladen wird. Wenn eine Verbindung besteht, lädt die App beim Start außerdem ihre Schriften für Annotationen von Google Fonts, und über GitHub Releases installierte Versionen fragen bei GitHub nach Updates. Die Chat-Bearbeitung mit KI und die Untertitelübersetzung gehen erst online, wenn du selbst einen Anbieter verbindest, und dann nur zu diesem Anbieter.

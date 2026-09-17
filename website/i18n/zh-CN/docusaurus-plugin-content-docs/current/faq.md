@@ -102,28 +102,20 @@ OpenScreen 是一款免费的录屏与视频剪辑软件，采用 MIT 许可证�
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | 原项目，已归档，只读 | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 
-## OpenScreen 可以用于正式工作吗？ {#is-openscreen-ready-for-production-work}
+## 如果录制中断了会怎样？ {#what-happens-if-a-recording-is-interrupted}
 
-**按项目自己的说法，还不行**。项目自称尚未达到生产级质量。
+在 Windows 和 macOS 上，原生录制器会写入以一秒为分段的分段式 MP4。如果录制意外中断，文件仍可播放到最后一个完整的分段为止。
 
-- 难免有粗糙之处，`.openscreen` 项目格式和 [CLI](/docs/cli/) 偶尔也会有不兼容的变更。
-- 在 Windows 和 macOS 上，原生录制器会写入以一秒为分段的分段式 MP4。如果录制意外中断，文件仍可播放到最后一个完整的分段为止。当分段写入器不可用时，Windows 会回退到普通 MP4。
-- Linux 写入的是普通 MP4：如果在文件完成写入之前崩溃，文件将无法读取。
-
-错误报告请提交到 [GitHub issues](https://github.com/getopenscreen/openscreen/issues)。
+错误报告和功能请求请提交到 [GitHub issues](https://github.com/getopenscreen/openscreen/issues)。
 
 ## OpenScreen 不能做什么？ {#what-doesnt-openscreen-do}
 
 如果你需要以下任何一项，OpenScreen 并不是合适的工具：
 
-- **在线托管分享**。没有分享链接、云存储、团队空间或评论功能。你的文件保留在你的磁盘上。请参阅 [OpenScreen 作为 Loom 替代方案（英文）](/alternatives/loom/)。
-- **直播**。请参阅 [OpenScreen 与 OBS Studio 对比（英文）](/compare/openscreen-vs-obs/)。
-- **区域录制**。它录制整个屏幕或单个窗口，之后再在编辑器中裁剪。
+- **在线托管分享**。没有分享链接、云存储、团队空间或评论功能。你的文件保留在你的磁盘上。请参阅 [OpenScreen 作为 Loom 替代方案](/alternatives/loom/)。
+- **直播**。请参阅 [OpenScreen 与 OBS Studio 对比](/compare/openscreen-vs-obs/)。
 - **字幕文件**。字幕会烧录进视频，不支持导出 SRT 或 VTT。请参阅[字幕](./captions.md)。
 - **移动端**。没有移动应用，也不能录制 iOS 或 Android。
-- **定时录制**，或用于开始和停止录制的全局快捷键。
-- **其他导出格式**。仅支持 MP4（H.264 或 H.265）和 GIF：不支持导出 WebM、ProRes、AV1 或纯音频。
-- **内置的 AI 服务**。聊天编辑和字幕翻译只能配合你自己连接的 AI 提供方使用，通常需要你自己的 API 密钥。转录在本地运行，两者都不需要。
 
 ## 如何开始使用？ {#how-do-i-get-started}
 

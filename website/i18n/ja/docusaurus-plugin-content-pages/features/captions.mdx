@@ -1,0 +1,119 @@
+---
+title: ローカルの Whisper で字幕を付ける画面録画ソフト
+description: "OpenScreen は字幕付きの無料画面録画ソフトです。Whisper が自分のマシン上で文字起こしし、字幕をスタイル設定・翻訳して動画に焼き込みます。"
+keywords:
+  - 画面録画 字幕
+  - 字幕 自動生成 オフライン 画面録画
+  - Whisper 画面録画
+  - 文字起こし 動画編集 無料
+  - 字幕 自動生成 画面録画
+---
+
+# 自分のマシンで字幕を作る画面録画ソフト
+
+OpenScreen は、Windows・macOS・Linux 向けの無料の MIT ライセンスの字幕付き画面録画ソフトです。約 264 MB のモデルを一度だけダウンロードしたあと、Whisper で自分のパソコン上で録画を文字起こしし、スタイルを設定した字幕をエクスポートする動画に焼き込みます。コース用プラットフォームやアクセシビリティ要件のために別ファイルの SRT や VTT の字幕が必要な場合は、Cap または Camtasia のほうが適しています。
+
+このページは OpenScreen プロジェクトが公開しています。Cap、Camtasia、Screen Studio に関する情報は cap.so、techsmith.com、screen.studio によるもので、2026 年 9 月に確認しました。情報源は末尾に一覧しています。
+
+## 概要 {#at-a-glance}
+
+| | |
+| --- | --- |
+| エンジン | whisper.cpp、自分のパソコン上で実行 |
+| モデル | 約 264 MB の Whisper Small モデル 1 つ |
+| モデルのダウンロード | 一度だけ、huggingface.co から、SHA-256 で検証。インストーラーには含まれない |
+| ハードウェア | Apple Silicon では Metal。Intel Mac では CPU。Windows と Linux では Vulkan（CPU へのフォールバックあり） |
+| 対応言語 | 自動検出、または 100 言語から手動で選択 |
+| スタイル | フォント、サイズ、太字、文字色、背景、位置、1 行あたり 1〜12 単語 |
+| 出力 | エクスポートする動画に焼き込み |
+| 文字起こしの編集 | 単語を削除すると動画からカット。無音部分もマークされ、同様にカット可能 |
+| 翻訳 | 自分の API キーで接続した AI プロバイダーを通じて 15 言語 |
+| コマンドライン | `captions` コマンドがプロジェクトに字幕を追加 |
+| 価格 | 商用利用を含めて無料。アカウント不要 |
+
+## OpenScreen での字幕の仕組み {#how-captions-work-in-openscreen}
+
+### 自分のパソコンでの文字起こし {#transcription-on-your-computer}
+
+エディターの**文字起こし**パネルで**今すぐ文字起こし**をクリックするか、メディアステージのメディアカードで**再生成**をクリックします。初回実行時に、huggingface.co から約 264 MB の Whisper Small モデル 1 つを一度だけダウンロードします。OpenScreen は、使用する前にそのファイルを固定された SHA-256 のダイジェストと照合します。それ以降、文字起こしに通信は必要ありません。
+
+処理は、OpenScreen が対応している場合は GPU 上で実行されます。Apple Silicon では Metal、Windows と Linux では Vulkan です。Vulkan が使えない場合、Windows と Linux は CPU にフォールバックします。Intel Mac は CPU を使います。
+
+Whisper は話されている言語を自動で検出します。判定が誤っている場合は、メディアステージの**この言語で再生成**で 100 言語のいずれかを選び、再実行してください。詳しくは[メディアライブラリ](/docs/media-library/)を参照してください。
+
+### 文字起こしから描画される字幕 {#captions-drawn-from-the-transcript}
+
+字幕は文字起こしのコピーではなく、その内容をリアルタイムに表示したものです。文字起こしから単語をカットしたり、スタイルを変更したり、クリップを移動したりすると、次のフレームで字幕が追従し、再生成の手順は不要です。
+
+- **テキスト。** フォント、サイズ、太字、文字色。
+- **背景。** テキストの背後の下地。専用の色と不透明度、または非表示。
+- **位置。** 上または下、左・中央・右、端からの距離。
+- **行の長さ。** 1 行あたりの最小・最大単語数（1〜12）。
+
+プレビューとエクスポートは同じレイアウトを使うため、見えている字幕がそのまま動画に焼き込まれます。**字幕を表示**をオフにすると、それらを含まないエクスポートになります。詳しい仕様は[字幕と文字起こし](/docs/captions/)を参照してください。
+
+### 単語を削除してカットする {#cutting-by-deleting-words}
+
+**文字起こし**パネルには、タイムライン上のすべてのクリップの単語が表示されます。単語や範囲を選んで Delete を押すと、その区間が再生とエクスポートからカットされます。タイムライン上のトリムと同じ扱いです。カットした単語は取り消し線で表示され、元に戻すこともできます。無音部分もテキスト内でマークされ、同じ方法でカットまたは復元できます。
+
+Whisper が報告する単語のタイミングはやや遅めです。OpenScreen は各単語の境界を音声そのものに合わせて引き戻すため、カットは 1 音節遅れることなく、実際に話された単語が始まる位置から始まります。詳しくは[文字起こしの編集](/docs/captions/#transcript-editing)を参照してください。
+
+### 自分の API キーによる翻訳 {#translation-with-your-own-key}
+
+翻訳は 15 言語に対応しています。英語、フランス語、スペイン語、ドイツ語、イタリア語、ポルトガル語、オランダ語、ポーランド語、トルコ語、ロシア語、アラビア語、ヒンディー語、日本語、韓国語、中国語です。チャット編集のために接続した AI プロバイダーを、自分の API キーで経由します。プロバイダーを接続するまでは何も送信されません。翻訳は文字起こしとは別に、その横に保存されるため、元の単語とタイミングはそのまま残り、いつでも切り替えて戻せます。詳しくは[翻訳](/docs/captions/#translation)と [AI 編集](/docs/ai-editing/)を参照してください。
+
+### コマンドラインから {#from-the-command-line}
+
+[CLI](/docs/cli/) の `captions` コマンドは、同じローカルの Whisper モデルでプロジェクトを文字起こしし、字幕を追加します。`--min-words` と `--max-words` で字幕 1 つあたりの単語数を設定し、`export` がそれを動画に焼き込みます。
+
+### 通信が発生する内容 {#what-goes-over-the-network}
+
+音声は自分のパソコンに残ります。モデルのダウンロードを除けば、通信が発生するのは翻訳だけで、選んだプロバイダーに文字起こしのテキストを送信します。アプリ全体としては、OpenScreen にはアカウントも、独自サーバーも、分析機能もありません。それでも行われるわずかな通信は[よくある質問](/docs/faq/#does-openscreen-work-offline)に一覧しています。
+
+## ローカル字幕に対応するほかのレコーダー {#other-recorders-with-local-captions}
+
+端末上の Whisper は OpenScreen に限った機能ではありません。2026 年 9 月時点では次のとおりです。
+
+- **Screen Studio** は、Mac 上で、Whisper Base・Small・Medium、または macOS 26 以降では Apple の音声認識を使って文字起こしします。文字起こしを別ファイルとしてエクスポートできます。
+- **Cap** は、Studio Mode で、モデルを選んでローカルに文字起こしします（ベータ版）。字幕を動画に焼き込むか、SRT・WebVTT ファイルとして保存できます。Cap は字幕の翻訳を Cap Pro の機能として挙げています。
+- **Camtasia** は、端末上で Whisper により文字起こしします。Essentials プランにダイナミックとクローズドの両方のキャプション機能を挙げ、有料プランにテキストベースの動画編集を挙げています。バージョン 2026.1.0 で基本的な VTT 字幕のインポート・エクスポートが追加されました。
+
+## OpenScreen が異なる点 {#where-openscreen-differs}
+
+- **商用利用を含めて無料。** プランもアカウントも不要です。Cap の価格ページには、無料版は個人利用限定だと書かれています。Screen Studio は動画ファイルのエクスポートに有効なプランが必要です。Camtasia のデスクトップエディターは、有料の Essentials・Create・Pro プランまたはビジネスライセンスにアップグレードするまでエクスポートに透かしが入ります。いずれも 2026 年 9 月時点です。
+- **Windows・macOS・Linux。** OpenScreen は Windows 10（1903 以降）と 11、x64。macOS 13 以降、Apple Silicon と Intel。Linux、x64 で動作します。2026 年 9 月時点で、Screen Studio は macOS のみ、Camtasia のデスクトップエディターは Windows と macOS で動作し、Cap は 3 つすべてにアプリを提供しています。[Linux](/screen-recorder-linux/)、[Windows](/screen-recorder-windows/)、[macOS](/screen-recorder-mac/) を参照してください。
+- **サブスクリプション不要の文字起こし編集。** 単語を削除してのカットは、無料版アプリの一部です。Camtasia はテキストベースの編集を有料プランに挙げています（2026 年 9 月時点）。Cap は 2026 年 7 月に、文字起こしからのカットを Web エディターに追加しました。そのデスクトップの Studio Mode のガイドは、字幕テキストとタイミングの修正について説明していますが、文字起こしから動画をカットする機能については説明していません。
+- **自分で選ぶプロバイダーによる翻訳。** OpenScreen が対応する任意のプロバイダーを、自分の API キーで使え、OpenScreen から購入するプランはありません。翻訳自体は OpenScreen に固有の機能ではなく、Cap Pro も字幕の翻訳を挙げています（2026 年 9 月時点）。
+
+## OpenScreen が適さない場合 {#when-openscreen-is-not-the-right-tool}
+
+- **字幕ファイルを納品する必要がある場合。** コース用プラットフォームやアクセシビリティ要件が、視聴者がオフにできる字幕を求めている場合は、別ファイルが必要です。Cap は SRT・WebVTT ファイルを保存でき、Camtasia は VTT のインポート・エクスポートに対応しています。OpenScreen は字幕を動画に焼き込みます。
+
+## はじめかた {#getting-started}
+
+1. [ダウンロードページ](/download/)から OpenScreen を入手し、[インストール](/docs/installation/)の手順に従います。
+2. [クイックスタート](/docs/quick-start/)に沿って、マイクをオンにして録画します。
+3. エディターで**文字起こし**パネルを開き、**今すぐ文字起こし**をクリックします。初回実行時にモデルがダウンロードされます。
+4. 字幕にスタイルを設定し、必要であれば**文字起こし**パネルからカットしてエクスポートします。[エクスポート](/docs/export/)を参照してください。
+
+あわせてお読みください。[自動ズーム](/features/auto-zoom/)、[Screen Studio の代替](/alternatives/screen-studio/)、[OpenScreen と Cap の比較](/compare/openscreen-vs-cap/)、[Camtasia の代替](/alternatives/camtasia/)、[よくある質問](/docs/faq/)。または [OpenScreen のホームページ](/)に戻ってください。
+
+## 情報源 {#sources}
+
+Cap、Camtasia、Screen Studio に関する情報、2026 年 9 月確認：
+
+- Screen Studio の端末上のモデル、Apple の音声認識、文字起こしファイル：[screen.studio/guide/captions](https://screen.studio/guide/captions)
+- Screen Studio のエクスポートには有効なプランが必要：[screen.studio/download](https://screen.studio/download)
+- Screen Studio は macOS のみで動作（FAQ より）：[screen.studio](https://screen.studio/)
+- Cap のローカル字幕、モデルの選択、焼き込み字幕、SRT・WebVTT ファイル：[cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Cap Pro の字幕翻訳：[cap.so/llms-full.txt](https://cap.so/llms-full.txt)
+- Cap の無料版は個人利用限定、macOS・Windows・Linux 向けアプリ：[cap.so/pricing](https://cap.so/pricing)
+- Camtasia の Whisper による文字起こし：[support.techsmith.com/hc/en-us/articles/203729278](https://support.techsmith.com/hc/en-us/articles/203729278-How-to-use-Speech-To-Text-in-Camtasia-Editor)
+- Camtasia の端末上での文字起こし：[support.techsmith.com/hc/en-us/articles/26713588518413](https://support.techsmith.com/hc/en-us/articles/26713588518413-Dynamic-Captions-Best-Practices)
+- Essentials プランでのキャプション機能、有料プランでのテキストベース編集：[support.techsmith.com/hc/en-us/articles/41688340554765](https://support.techsmith.com/hc/en-us/articles/41688340554765-What-Is-the-Difference-Between-Camtasia-Pro-Create-and-Essentials)
+- 2026.1.0 での Camtasia の VTT 字幕インポート・エクスポート：[support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History)
+- Camtasia の対応プラットフォームと透かし付きの無料エクスポート：[techsmith.com/camtasia](https://www.techsmith.com/camtasia/)
+
+OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+
+Cap、Camtasia、Screen Studio はそれぞれの所有者の商標です。OpenScreen は独立したプロジェクトであり、これらのいずれとも提携または承認された関係にはありません。

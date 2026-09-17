@@ -1,0 +1,85 @@
+---
+title: 免费开源的 Mac 录屏软件
+description: OpenScreen 是一款免费开源的 Mac 录屏软件，支持 Apple Silicon 和 Intel，需要 macOS 13 及以上，具备自动缩放功能，无水印。
+keywords:
+  - Mac 录屏软件
+  - 免费录屏软件 Mac 无水印
+  - 开源录屏软件 Mac
+  - 免费 Screen Studio 替代品 Mac
+---
+
+# 一款免费开源的 Mac 录屏软件
+
+OpenScreen 是一款面向 Mac 的免费录屏软件，采用 MIT 许可证，为 Apple Silicon 和 Intel 提供构建版本，需要 macOS 13 及以上。它通过 ScreenCaptureKit 录制一个显示器或一个窗口，然后在编辑器中打开录制内容，进行自动缩放、光标样式设置、背景处理和本机字幕，最后导出无水印的 MP4 或 GIF。如果你需要以托管链接分享，或录制 iPhone、iPad，其他应用会更适合。
+
+本页由 OpenScreen 项目发布。关于 Screen Studio、Loom 和 Cap 的信息来自它们各自的网站，核实于 2026 年 9 月。信息来源列于文末。
+
+## 一览 {#at-a-glance}
+
+| | |
+| --- | --- |
+| 价格 | 免费，含商业用途。MIT 许可证，无需账号 |
+| macOS 版本 | macOS 13 Ventura 及以上 |
+| 适用 Mac | Apple Silicon 和 Intel，各有一个 `.dmg` |
+| 签名 | 自 1.9.0 版起使用 Developer ID 签名并经过公证 |
+| 录制内容 | 一个显示器或一个窗口，60 fps，最高 4K，之后可在编辑器中裁剪 |
+| 采集方式 | ScreenCaptureKit，以 H.264 编码写入分段式 MP4 |
+| 音频 | 系统音频；macOS 15 及以上支持麦克风 |
+| 摄像头 | 录制为独立文件，之后在编辑器中放置 |
+| 光标 | 以数据形式录制，录制结束后可编辑；形状和点击需要辅助功能权限 |
+| 字幕 | 本机 Whisper，在 Apple Silicon 上使用 Metal，在 Intel 上使用 CPU，烧录进视频 |
+| 导出 | 通过 VideoToolbox 导出 MP4（H.264 或 H.265），或 GIF，最高 60 fps，无水印 |
+
+## OpenScreen 在 Mac 上的录制方式 {#how-openscreen-records-on-a-mac}
+
+屏幕采集通过一个用 Swift 编写、基于苹果采集框架 ScreenCaptureKit 构建的原生辅助程序完成。
+
+- **一个显示器或一个窗口。** 在录制器中选择来源，以 60 fps、最高 3840×2160 进行采集。之后可在编辑器中裁剪画面。
+- **可在崩溃后保留的文件。** 该辅助程序使用 AVAssetWriter 以 H.264 编码写入分段式 MP4，每段一秒。如果录制程序在中途被终止，文件仍可播放到最后一个完整片段。
+- **系统音频。** ScreenCaptureKit 会采集 Mac 播放的声音，OpenScreen 自身发出的声音会被排除在外。在 macOS 14.2 及以上版本中，系统会请求你允许音频采集。
+- **麦克风。** 选择设备后，可在录制控件中查看五格音量表。
+- **可编辑的光标。** 默认情况下，系统指针不会出现在像素画面中，而是以数据形式记录。录制结束后，你可以修改其大小、平滑度和主题，并添加点击回弹效果。可通过开关切换为系统光标，直接烧录进画面。
+- **摄像头。** 摄像头画面在录制过程中被录制为独立文件。编辑器可以将其放置为画中画、垂直堆叠或双画框布局，并可去除、模糊或替换其背景，无需绿幕。应用支持苹果的连续互通相机（Continuity Camera）功能，可将 iPhone 用作摄像头。
+- **笔记与提词器。** 笔记窗口会将你的脚本保留在采集画面旁边，其提词器模式会以设定速度滚动文字，也可以镜像显示。
+- **录制控件。** 暂停与继续、重新开始、取消或停止。每次录制开始前都有 3-2-1 倒计时。
+
+## 在 Apple Silicon 和 Intel 上编辑与导出 {#editing-and-export-on-apple-silicon-and-intel}
+
+编辑器在 macOS、Windows 和 Linux 上是同一套。在 Mac 上发生变化的是它所使用的硬件。
+
+- **基于 Metal 渲染。** 实时预览和 MP4 导出共用同一个原生合成器，在 macOS 上运行于 Metal。
+- **使用 VideoToolbox 编码。** H.264 和 H.265 导出都交给苹果的 VideoToolbox 编码器处理。对于 H.264，会优先尝试零拷贝路径，即合成后的帧不会再返回 CPU。如果 VideoToolbox 不可用，则由软件编码器接管。MP4 导出支持 24、30 或 60 fps，从 720p 到原始尺寸。GIF 导出同样可用。参见[导出](/docs/export/)。
+- **基于 Mac 自身芯片的字幕。** 转录运行 whisper.cpp，使用一个约 264 MB 的 Whisper Small 模型，仅下载一次。在 Apple Silicon 上使用 Metal，在 Intel Mac 上使用 CPU。字幕会烧录进视频。详见[字幕](/features/captions/)。
+- **编辑器的其余功能。** 根据录制光标放置的[自动缩放](/features/auto-zoom/)、背景、多片段时间轴、文字和箭头标注、模糊区域，以及配音和音乐轨道。参见[编辑与时间轴](/docs/editing-timeline/)。
+- **可选的聊天式编辑。** 使用你自己的密钥连接提供方，用日常语言描述剪切、缩放或变速。在你连接提供方之前处于关闭状态，每次修改都是一次可撤销的普通编辑。参见 [AI 编辑](/docs/ai-editing/)。
+- **命令行界面。** [CLI](/docs/cli/) 可完成录制、导出、字幕和项目打包，并支持 JSON 输出。在 Mac 上，可从 `/Applications/Openscreen.app/Contents/MacOS/Openscreen` 运行。
+
+关于 OpenScreen 的导出速度是如何与其他工具进行测量比较的，详见[一份力求难以作弊的导出基准测试（英文）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)。
+
+## 何时 OpenScreen 不是合适的工具 {#when-openscreen-is-not-the-right-tool}
+
+- **你要以链接分享。** Loom、Cap 和 Screen Studio 都能把录制内容变成可在浏览器中播放的托管链接（截至 2026 年 9 月）。OpenScreen 给你的是一个文件，想在哪里分享就上传到哪里。
+- **你要录制 iPhone 或 iPad。** Screen Studio 通过 USB 线录制这些设备并添加设备边框。OpenScreen 录制的是 Mac 自身的显示器和窗口。
+- **你的 Mac 运行 macOS 12 或更早版本。** OpenScreen 需要 macOS 13 及以上。Loom 的桌面应用支持 macOS 12.3 及以上（截至 2026 年 9 月）。
+
+## 开始使用 {#getting-started}
+
+1. 从[下载页面](/download/)下载 Apple Silicon 或 Intel 版 `.dmg`（约 210 MB），并将 OpenScreen 拖入应用程序文件夹。该构建版本已签名并经过公证，无需任何终端操作。
+2. 在**系统设置 → 隐私与安全性**中，为 OpenScreen 授予**屏幕录制**和**辅助功能**权限。[安装指南](/docs/installation/#macos)对两者都有说明。
+3. 参照[快速上手](/docs/quick-start/)完成第一次录制，然后对它运行**自动增强 → 自动缩放**。[屏幕录制](/docs/recording/)页面介绍了录制器的各项选项。
+
+在使用其他系统？参见 OpenScreen 的 [Windows](/screen-recorder-windows/) 和 [Linux](/screen-recorder-linux/) 页面。在权衡其他 Mac 录屏工具？阅读 [Screen Studio 替代方案](/alternatives/screen-studio/)、[OpenScreen 对比 Cap](/compare/openscreen-vs-cap/)和 [Loom 替代方案](/alternatives/loom/)页面。许可、网络使用和签名相关内容参见[常见问题](/docs/faq/)，完整介绍参见 [OpenScreen 首页](/)。
+
+## 信息来源 {#sources}
+
+第三方信息，核实于 2026 年 9 月：
+
+- Loom，录制和分享视频消息：[loom.com](https://www.loom.com/)
+- Loom 桌面应用系统要求：[support.atlassian.com/loom/docs/loom-device-compatibility](https://support.atlassian.com/loom/docs/loom-device-compatibility/)
+- Cap 分享链接：[cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
+- Screen Studio 可分享链接：[screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
+- Screen Studio 的 iPhone 和 iPad 录制：[screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
+
+OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+
+Apple、Mac、macOS、Screen Studio、Loom 和 Cap 均为其各自所有者的商标。OpenScreen 是一个独立项目，与它们均无关联，也未获得其中任何一方的背书。

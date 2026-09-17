@@ -65,7 +65,7 @@
 		"dropOverlay": "Projektdatei ablegen zum Öffnen",
 		"dropErrors": {
 			"unsupportedFormatTitle": "Nicht unterstütztes Format",
-			"unsupportedFormatMessage": "Hier können nur .openscreen-Projektdateien abgelegt werden. Um eine Videodatei zu importieren, nutze auf diesem Bildschirm die Schaltfläche „Videodatei importieren…“.",
+			"unsupportedFormatMessage": "Hier können nur .openscreen-Projektdateien abgelegt werden. Um eine Videodatei zu importieren, nutze auf diesem Bildschirm die Schaltfläche „Video importieren“.",
 			"couldNotOpenTitle": "Datei konnte nicht geöffnet werden",
 			"couldNotOpenMessage": "Die Projektdatei konnte nicht geöffnet werden. Das darin referenzierte Video wurde möglicherweise verschoben oder gelöscht."
 		}

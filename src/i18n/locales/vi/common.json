@@ -45,7 +45,8 @@
 		"hide": "Ẩn OpenScreen",
 		"hideOthers": "Ẩn ứng dụng khác",
 		"unhide": "Hiển thị tất cả",
-		"saveDiagnostics": "Lưu thông tin chẩn đoán"
+		"saveDiagnostics": "Lưu thông tin chẩn đoán",
+		"closeNotification": "Đóng thông báo"
 	},
 	"updates": {
 		"available": "Đã có OpenScreen {{latestVersion}}. Bạn đang dùng phiên bản {{currentVersion}}.",

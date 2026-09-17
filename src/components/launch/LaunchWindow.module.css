@@ -8,6 +8,26 @@
 }
 
 /*
+ * Nothing in the HUD styled its own focus ring, so every control fell through to
+ * the platform default. On macOS that default is painted in the system accent
+ * colour, at a weight no other line in a 34px bar comes close to — a user with
+ * the accent set to orange gets a thick orange band around a mint-and-slate bar.
+ *
+ * It is not only a keyboard cost. `:focus-visible` also matches on a programmatic
+ * focus() and on the overlay window taking focus back, and this window loses and
+ * regains focus constantly, so the ring reappears unbidden on a button the user
+ * clicked with the mouse minutes ago.
+ *
+ * One rule on the anchor covers the bar, the popovers and the notices. It sits
+ * here, ahead of the specific rules, so the menu items further down — which
+ * deliberately answer focus with a background instead of a ring — still win.
+ */
+.hudAnchor :focus-visible {
+	outline: 1px solid rgba(16, 185, 129, 0.75);
+	outline-offset: 2px;
+}
+
+/*
  * The HUD is one bottom-anchored, upward-growing stack: the bar sits at the
  * bottom, popovers and notices float above it in DOM order. Everything that
  * floats is a sibling laid out by flexbox rather than a `fixed` element placed

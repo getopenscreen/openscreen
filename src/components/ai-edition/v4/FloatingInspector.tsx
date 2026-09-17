@@ -120,18 +120,18 @@ export function FloatingInspector({
 	const audioTrackSelected = Boolean(tl.selectedAudioTrackId);
 	const effectiveOpen = open || selection !== null || audioTrackSelected;
 	return (
-		<div className={styles.inspectorWrap}>
-			{effectiveOpen ? (
-				<div className={styles.inspector}>
-					{selection ? (
-						<SelectionPane tl={tl} onClose={() => tl.clearSelection()} />
-					) : audioTrackSelected ? (
-						<AudioTrackPane tl={tl} onClose={() => tl.clearSelection()} />
-					) : (
-						<FacetBody facet={facet} onCollapse={onToggleOpen} transcriptProps={transcriptProps} />
-					)}
-				</div>
-			) : null}
+		<div className={styles.inspectorWrap} data-open={effectiveOpen ? "true" : undefined}>
+			{/* The rail leads in the DOM, the panel follows: the rail is the chooser and the
+			    panel is what it chose, so a keyboard or screen-reader user presses a facet
+			    and the next Tab lands in its controls, instead of having to back out through
+			    the rail to reach them.
+
+			    On screen the rail sits at the END edge with the panel opening towards the
+			    start (`row-reverse` on the wrap). That keeps the rail fixed while the panel
+			    comes and goes, so re-clicking the active facet closes it from the same spot.
+			    The visual order runs panel then rail, against the DOM, but the rail is a
+			    vertical toolbar pinned to the stage edge rather than a line of text read
+			    across, and chooser-then-content is the order that serves tabbing. */}
 			<div className={styles.facetRail}>
 				{FACETS.map(({ id, labelKey, icon: Icon }) => (
 					<button
@@ -240,6 +240,17 @@ export function FloatingInspector({
 					) : null}
 				</div>
 			</div>
+			{effectiveOpen ? (
+				<div className={styles.inspector}>
+					{selection ? (
+						<SelectionPane tl={tl} onClose={() => tl.clearSelection()} />
+					) : audioTrackSelected ? (
+						<AudioTrackPane tl={tl} onClose={() => tl.clearSelection()} />
+					) : (
+						<FacetBody facet={facet} onCollapse={onToggleOpen} transcriptProps={transcriptProps} />
+					)}
+				</div>
+			) : null}
 		</div>
 	);
 }

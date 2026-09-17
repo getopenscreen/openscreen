@@ -628,17 +628,53 @@
 .inspectorWrap {
 	position: absolute;
 	top: 20px;
-	right: 20px;
+	/* Logical, so the inspector sits against the stage's END edge: the right in a
+	   left-to-right UI, the left once the app sets dir="rtl" for ar. */
+	inset-inline-end: 20px;
 	bottom: 20px;
 	display: flex;
+	/* The rail comes first in the DOM (see FloatingInspector) but lays out at the END
+	   edge, with the panel opening towards the start. The wrap is anchored by that end
+	   edge, so the rail keeps the same spot on screen whether the panel is open or not:
+	   re-clicking the active facet closes the panel from where the pointer already is,
+	   and selecting a timeline region does not make the rail jump by a panel's width.
+	   `row-reverse` follows the writing direction, so this mirrors under RTL by itself. */
+	flex-direction: row-reverse;
 	align-items: flex-start;
 	gap: 10px;
 	z-index: 20;
 	pointer-events: none;
 }
+/* Open, the rail and the panel are ONE object: same height, touching, sharing the edge
+   between them. Closed, the rail is on its own again and goes back to being a floating
+   pill of its own height; stretching an empty rail to the full stage would be a tall
+   column of nothing over the video. Hence the attribute rather than a blanket rule.
+
+   The seam is on the rail's START side (the panel opens towards the start), written with
+   logical properties so it follows the mirroring above. */
+.inspectorWrap[data-open] {
+	align-items: stretch;
+	gap: 0;
+}
+.inspectorWrap[data-open] .facetRail {
+	/* Buttons stay at the top of a rail that is now as tall as the panel. */
+	justify-content: flex-start;
+	border-start-start-radius: 0;
+	border-end-start-radius: 0;
+	/* The panel's own end border is the shared one; two of them would draw 2px. Dropping
+	   it on the start side leaves the rail's end edge, and so its buttons, where they
+	   were while it was closed. */
+	border-inline-start: 0;
+}
+.inspectorWrap[data-open] .inspector {
+	border-start-end-radius: 0;
+	border-end-end-radius: 0;
+}
 .inspector {
 	pointer-events: auto;
 	width: 300px;
+	/* `stretch` on the wrap gives it the full height; this keeps it from exceeding that
+	   on its own, and keeps the closed/legacy case honest. */
 	max-height: 100%;
 	display: flex;
 	flex-direction: column;

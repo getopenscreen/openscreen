@@ -45,7 +45,8 @@
 		"hide": "Скрыть OpenScreen",
 		"hideOthers": "Скрыть остальные",
 		"unhide": "Показать все",
-		"saveDiagnostics": "Сохранить диагностику"
+		"saveDiagnostics": "Сохранить диагностику",
+		"closeNotification": "Закрыть уведомление"
 	},
 	"updates": {
 		"available": "Доступен OpenScreen {{latestVersion}}. Установлена версия {{currentVersion}}.",

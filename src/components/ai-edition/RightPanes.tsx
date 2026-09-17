@@ -276,10 +276,10 @@ export function isSupportedBackgroundImage(type: string, fileName: string): bool
  * that turns the pick into a `data:` URL.
  *
  * A hook rather than part of `WallpaperPicker` because WHERE the input may be mounted is
- * the caller's problem. `BackgroundSection` renders the picker inside a Popover, and
- * opening the OS file dialog takes focus, which closes the Popover — an input mounted
- * inside it would unmount mid-pick and drop the file. That caller mounts `input` outside
- * the Popover; inline callers mount it next to the picker.
+ * the caller's problem. A Popover-hosted picker cannot hold it: opening the OS file dialog
+ * takes focus, which closes the Popover, and an input mounted inside would unmount mid-pick
+ * and drop the file. `BackgroundSection` is inline now and mounts `input` beside the picker;
+ * the hook stays a hook because the Popover callers do not go away.
  */
 function useWallpaperFileInput(onPicked: (dataUrl: string) => void): {
 	pick: () => void;
@@ -332,7 +332,6 @@ function useWallpaperFileInput(onPicked: (dataUrl: string) => void): {
 function BackgroundSection() {
 	const ts = useScopedT("settings");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
-	const [pickerOpen, setPickerOpen] = useState(false);
 	const { pick: handlePickFile, input: fileInput } = useWallpaperFileInput((dataUrl) =>
 		set({ wallpaper: dataUrl }),
 	);
@@ -340,56 +339,27 @@ function BackgroundSection() {
 	return (
 		<>
 			<div className={styles.sectionLabel}>{ts("background.title")}</div>
-			{/* The picker FLOATS instead of sitting inline. Inline, the 18-swatch grid was
-			    ~300px of the pane on its own and pushed padding/roundness/shadow — the
-			    controls #84 is actually about — below the fold on a laptop window. A user
-			    who opened the one appearance tab saw wallpapers and nothing else, which is
-			    the same failure the facet merge set out to fix, one level down. Same
-			    trade the aspect-ratio menu makes in the timeline toolbar: big choice,
-			    small trigger. */}
-			<Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-				<PopoverTrigger asChild>
-					<button
-						type="button"
-						className={styles.bgTrigger}
-						style={backgroundSwatchStyle(settings.wallpaper)}
-						// Deliberately NOT gated on hasDocument: opening the picker mutates
-						// nothing, and the swatches inside carry their own gate. The inline grid
-						// was browsable with no project open; collapsing it should not take that
-						// away, only the space it used.
-						aria-label={ts("background.title")}
-					>
-						<span className={styles.bgTriggerChip}>
-							{ts(`background.${classifyWallpaper(settings.wallpaper).kind}`)}
-							<ChevronDown size={11} />
-						</span>
-					</button>
-				</PopoverTrigger>
-				<PopoverContent
-					align="start"
-					sideOffset={6}
-					// Keeps the picker off the window edge, and the same padding is what Radix
-					// subtracts from `--radix-popover-content-available-height`, which sizes it.
-					collisionPadding={12}
-					animated={false}
-					className="w-auto border-0 bg-transparent p-0 shadow-none"
-				>
-					<div className={styles.bgPopover}>
-						<WallpaperPicker
-							value={settings.wallpaper}
-							hasDocument={hasDocument}
-							onChange={(url) => void set({ wallpaper: url })}
-							onLiveChange={(url) => setLive({ wallpaper: url })}
-							onCommit={commit}
-							onPickFile={handlePickFile}
-						/>
-					</div>
-				</PopoverContent>
-			</Popover>
-			{/* Stays mounted OUTSIDE the popover: opening the OS file dialog takes focus,
-			    which closes the popover and would unmount the input mid-pick, dropping the
-			    file. It has no layout to cost us here. */}
+			{/* The picker sits INLINE again. It floated because the 18-swatch grid was ~300px
+			    of the pane on its own and pushed padding/roundness/shadow -- the controls #84
+			    is about -- below the fold, and a user who opened the one appearance tab saw
+			    wallpapers and nothing else. Collapsing it to a trigger fixed that by taking
+			    the space away. Inline, it takes its full height and the pane scrolls past it:
+			    no inner cap, because the gradient tab is ~600px tall and any cap a laptop
+			    can afford cuts it in half (see `.bgInline`). The tabs, the grid and the upload
+			    button are the picker's own, unchanged: what changed is that they are on the
+			    pane rather than over it. */}
+			<div className={styles.bgInline}>
+				<WallpaperPicker
+					value={settings.wallpaper}
+					hasDocument={hasDocument}
+					onChange={(url) => void set({ wallpaper: url })}
+					onLiveChange={(url) => setLive({ wallpaper: url })}
+					onCommit={commit}
+					onPickFile={handlePickFile}
+				/>
+			</div>
 			{fileInput}
+			<hr className={styles.paneDivider} />
 			{/* Reads in the order it acts: pick a background, then blur it. Lived under
 			    "Effects" while that was a separate facet, which is how a control named
 			    "Blur BG" ended up in the tab that doesn't say background. */}
@@ -406,34 +376,12 @@ function BackgroundSection() {
 					}}
 				/>
 			</div>
+			{/* The group is the background AND the blur applied to it, so the rule goes here
+			    rather than above the toggle: between the grid and this it would have split
+			    one idea in two. */}
+			<hr className={styles.paneDivider} />
 		</>
 	);
-}
-
-/**
- * The CSS `background` shorthand that paints a wallpaper value as a swatch — the same
- * painting the grid thumbs do, hoisted out so the collapsed trigger shows exactly what the
- * grid would show as selected. Bundled wallpapers resolve to their small pre-generated
- * thumbnail; colours and gradients are their own literal; a custom `data:` URL passes
- * through `resolveImageWallpaperUrl` untouched.
- */
-function backgroundSwatchStyle(value: string): CSSProperties {
-	const classified = classifyWallpaper(value);
-	if (classified.kind !== "image") return { background: classified.value };
-	const bundled = WALLPAPER_PATHS.indexOf(classified.path);
-	try {
-		const url = resolveImageWallpaperUrl(
-			bundled >= 0 ? WALLPAPER_THUMB_PATHS[bundled] : classified.path,
-		);
-		return { background: `center/cover no-repeat url(${url})` };
-	} catch {
-		// resolveImageWallpaperUrl THROWS for an image path outside /wallpapers/ — a guard
-		// that exists to stop the app loading arbitrary files. The swatch grid only ever
-		// feeds it constants, but this call site feeds it whatever the document holds, and a
-		// throw here happens during render: one project saved by an older build with a path
-		// we no longer allow would take the whole pane down instead of drawing a dull square.
-		return { background: "var(--surface-2)" };
-	}
 }
 
 // keep the user's last data: URL after they switch tabs so the Image
@@ -2593,6 +2541,7 @@ export function VideoEffectsPane() {
 			    (zooms, layout changes) — see `effects.motion_blur` driving the tap count in
 			    frame_geometry.rs. It is the one control here that never touches the
 			    background, so it does not belong under "Frame" either. */}
+			<hr className={styles.paneDivider} />
 			<div className={styles.sectionLabel}>{ts("effects.motion")}</div>
 			<div className={styles.sliderGrid}>
 				<SliderCell

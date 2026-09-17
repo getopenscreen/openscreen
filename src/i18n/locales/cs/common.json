@@ -45,7 +45,8 @@
 		"hide": "Skrýt OpenScreen",
 		"hideOthers": "Skrýt ostatní",
 		"unhide": "Zobrazit vše",
-		"saveDiagnostics": "Uložit diagnostiku"
+		"saveDiagnostics": "Uložit diagnostiku",
+		"closeNotification": "Zavřít oznámení"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} je k dispozici. Používáte verzi {{currentVersion}}.",

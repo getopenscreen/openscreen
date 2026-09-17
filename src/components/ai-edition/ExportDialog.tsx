@@ -16,6 +16,7 @@ import {
 	collectEffectiveClipDims,
 	type Dims,
 	pickExtremeDims,
+	referenceClipDims,
 	resolveAspectRatioValue,
 } from "@/lib/ai-edition/document/outputFormat";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
@@ -178,9 +179,14 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	// SMALLEST clip's own resolution means no clip on the timeline is ever upscaled past its
 	// true footprint by picking Source. It also feeds the upscale badge on the fixed
 	// 720p/1080p tiers, which can still genuinely upscale a small clip.
+	// Never null while there is a document: with no probed dims, `referenceClipDims` is the same
+	// fallback the scene's output frame is built from. A null here used to send no size at all,
+	// and the native side then encoded its own 1920x1080, a 16:9 file for a 9:16 preview.
 	const smallestSource = useMemo(
-		() => pickExtremeDims(effectiveClipDims, "smallest"),
-		[effectiveClipDims],
+		() =>
+			pickExtremeDims(effectiveClipDims, "smallest") ??
+			(document ? referenceClipDims(document) : null),
+		[effectiveClipDims, document],
 	);
 
 	// Aspect the export normalizes to: the timeline's selected ratio (mirrors documentExporter),

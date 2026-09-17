@@ -160,6 +160,7 @@ export const HudSystemAudioButton = memo(function HudSystemAudioButton({
 		<button
 			data-testid="launch-system-audio-button"
 			className={hudIconBtnClasses}
+			aria-label={label}
 			onClick={onClick}
 			disabled={disabled}
 			title={label}
@@ -184,6 +185,7 @@ export const HudMicButton = memo(function HudMicButton({
 		<button
 			data-testid="launch-microphone-button"
 			className={hudIconBtnClasses}
+			aria-label={label}
 			aria-pressed={enabled}
 			onClick={onClick}
 			disabled={disabled}
@@ -209,6 +211,7 @@ export const HudCameraButton = memo(function HudCameraButton({
 		<button
 			data-testid="launch-webcam-button"
 			className={hudIconBtnClasses}
+			aria-label={label}
 			aria-pressed={enabled}
 			onClick={onClick}
 			disabled={disabled}
@@ -267,6 +270,7 @@ export const HudCursorButton = memo(function HudCursorButton({
 	return (
 		<button
 			data-testid="launch-cursor-mode-button"
+			aria-label={label}
 			className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border-0 cursor-pointer transition-all duration-150 active:scale-95 ${hudDisabledClasses} ${styles.electronNoDrag} ${
 				editableOverlay
 					? "bg-[#10b981] text-[#08090d] hover:bg-[#0e9e6e]"
@@ -353,6 +357,7 @@ export const HudStudioButton = memo(function HudStudioButton({
 		<Tooltip content={label}>
 			<button
 				data-testid="launch-open-studio-button"
+				aria-label={label}
 				disabled={disabled}
 				className={`${hudIconBtnClasses} ${disabled ? "opacity-30 cursor-not-allowed pointer-events-none" : ""}`}
 				onClick={onClick}
@@ -416,18 +421,36 @@ export const HudRecordingControls = memo(function HudRecordingControls({
 		>
 			{canPause && (
 				<Tooltip content={pauseLabel}>
-					<button className={hudAuxIconBtnClasses} onClick={onTogglePause} disabled={saving}>
+					<button
+						data-testid="launch-pause-button"
+						className={hudAuxIconBtnClasses}
+						aria-label={pauseLabel}
+						onClick={onTogglePause}
+						disabled={saving}
+					>
 						{getIcon(paused ? "resume" : "pause", paused ? "text-amber-400" : "text-white/60")}
 					</button>
 				</Tooltip>
 			)}
 			<Tooltip content={restartLabel}>
-				<button className={hudAuxIconBtnClasses} onClick={onRestart} disabled={saving}>
+				<button
+					data-testid="launch-restart-button"
+					className={hudAuxIconBtnClasses}
+					aria-label={restartLabel}
+					onClick={onRestart}
+					disabled={saving}
+				>
 					{getIcon("restart", "text-white/60")}
 				</button>
 			</Tooltip>
 			<Tooltip content={cancelLabel}>
-				<button className={hudAuxIconBtnClasses} onClick={onCancel} disabled={saving}>
+				<button
+					data-testid="launch-cancel-button"
+					className={hudAuxIconBtnClasses}
+					aria-label={cancelLabel}
+					onClick={onCancel}
+					disabled={saving}
+				>
 					{getIcon("cancel", "text-white/60")}
 				</button>
 			</Tooltip>
@@ -493,10 +516,22 @@ export const HudWindowControls = memo(function HudWindowControls({
 }) {
 	return (
 		<div className={`flex items-center gap-[5px] ${vertical ? "flex-col" : ""}`}>
-			<button className={windowBtnClasses} title={hideLabel} onClick={onHide} disabled={disabled}>
+			<button
+				className={windowBtnClasses}
+				title={hideLabel}
+				aria-label={hideLabel}
+				onClick={onHide}
+				disabled={disabled}
+			>
 				{getIcon("minimize")}
 			</button>
-			<button className={closeBtnClasses} title={closeLabel} onClick={onClose} disabled={disabled}>
+			<button
+				className={closeBtnClasses}
+				title={closeLabel}
+				aria-label={closeLabel}
+				onClick={onClose}
+				disabled={disabled}
+			>
 				{getIcon("close")}
 			</button>
 		</div>

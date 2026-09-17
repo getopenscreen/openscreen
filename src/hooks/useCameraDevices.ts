@@ -15,11 +15,16 @@ export interface CameraDevice {
  * only the *name* reached the native helper, so the preview showed the chosen
  * camera while the recording captured the other one.
  */
-export function useCameraDevices(enabled: boolean = false, preferredDeviceId?: string) {
+export function useCameraDevices(
+	enabled: boolean = false,
+	preferredDeviceId?: string,
+	preferredDeviceName?: string,
+) {
 	const [devices, setDevices] = useState<CameraDevice[]>([]);
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [isReady, setIsReady] = useState(!enabled);
 	// `loadDevices` runs long after the render that scheduled it — on a
 	// `devicechange` that may arrive at any moment — so it reads these two
 	// through refs rather than closing over them.
@@ -31,16 +36,24 @@ export function useCameraDevices(enabled: boolean = false, preferredDeviceId?: s
 	// the first enumeration reads them.
 	const selectedDeviceIdRef = useRef(selectedDeviceId);
 	const preferredDeviceIdRef = useRef(preferredDeviceId);
+	const preferredDeviceNameRef = useRef(preferredDeviceName);
+	const hadPreferenceRef = useRef(false);
 	useEffect(() => {
 		selectedDeviceIdRef.current = selectedDeviceId;
 		preferredDeviceIdRef.current = preferredDeviceId;
-	}, [selectedDeviceId, preferredDeviceId]);
+		preferredDeviceNameRef.current = preferredDeviceName;
+	}, [selectedDeviceId, preferredDeviceId, preferredDeviceName]);
 
 	useEffect(() => {
 		if (!enabled) return;
+		setIsReady(false);
 		let mounted = true;
+		let latestLoad = 0;
 
 		const loadDevices = async () => {
+			const loadToken = ++latestLoad;
+			const isCurrent = () => mounted && loadToken === latestLoad;
+			setIsReady(false);
 			try {
 				setIsLoading(true);
 				setError(null);
@@ -56,24 +69,28 @@ export function useCameraDevices(enabled: boolean = false, preferredDeviceId?: s
 						groupId: device.groupId,
 					}));
 
-				if (mounted) {
-					setDevices(videoInputs);
-					const currentId = selectedDeviceIdRef.current;
-					const stillAvailable = videoInputs.some((d) => d.deviceId === currentId);
-					if (!currentId || !stillAvailable) {
-						const preferredId = preferredDeviceIdRef.current;
-						const preferred = preferredId
-							? videoInputs.find((d) => d.deviceId === preferredId)
-							: undefined;
-						setSelectedDeviceId(preferred?.deviceId ?? videoInputs[0]?.deviceId ?? "");
-					}
-					setIsLoading(false);
+				if (!isCurrent()) return;
+				setDevices(videoInputs);
+				const currentId = selectedDeviceIdRef.current;
+				const stillAvailable = videoInputs.some((d) => d.deviceId === currentId);
+				if (!currentId || !stillAvailable) {
+					const preferredId = preferredDeviceIdRef.current;
+					const preferredName = preferredDeviceNameRef.current;
+					const labelMatches = preferredName
+						? videoInputs.filter((d) => d.label === preferredName)
+						: [];
+					const preferred =
+						(preferredId ? videoInputs.find((d) => d.deviceId === preferredId) : undefined) ??
+						(labelMatches.length === 1 ? labelMatches[0] : undefined);
+					setSelectedDeviceId(preferred?.deviceId ?? videoInputs[0]?.deviceId ?? "");
 				}
+				setIsLoading(false);
+				setIsReady(true);
 			} catch (err) {
-				if (mounted) {
-					setError(err instanceof Error ? err.message : "Failed to load cameras");
-					setIsLoading(false);
-				}
+				if (!isCurrent()) return;
+				setError(err instanceof Error ? err.message : "Failed to load cameras");
+				setIsLoading(false);
+				setIsReady(true);
 			}
 		};
 
@@ -91,11 +108,26 @@ export function useCameraDevices(enabled: boolean = false, preferredDeviceId?: s
 	// first device. Adopting it here is what makes the two async sources converge
 	// on the same camera instead of racing.
 	useEffect(() => {
-		if (!enabled || !preferredDeviceId) return;
-		if (preferredDeviceId === selectedDeviceId) return;
-		if (!devices.some((d) => d.deviceId === preferredDeviceId)) return;
-		setSelectedDeviceId(preferredDeviceId);
-	}, [enabled, preferredDeviceId, devices, selectedDeviceId]);
+		if (!enabled) return;
+		const hasPreference = Boolean(preferredDeviceId || preferredDeviceName);
+		if (!hasPreference) {
+			if (hadPreferenceRef.current) {
+				hadPreferenceRef.current = false;
+				setSelectedDeviceId("");
+			}
+			return;
+		}
+		hadPreferenceRef.current = true;
+		const byId = preferredDeviceId
+			? devices.find((device) => device.deviceId === preferredDeviceId)
+			: undefined;
+		const byLabel = preferredDeviceName
+			? devices.filter((device) => device.label === preferredDeviceName)
+			: [];
+		const preferred = byId ?? (byLabel.length === 1 ? byLabel[0] : undefined);
+		if (!preferred || preferred.deviceId === selectedDeviceId) return;
+		setSelectedDeviceId(preferred.deviceId);
+	}, [enabled, preferredDeviceId, preferredDeviceName, devices, selectedDeviceId]);
 
 	// The selected entry itself, so callers can react to "which camera is chosen"
 	// without depending on the identity of `devices`. `loadDevices` rebuilds that
@@ -105,6 +137,24 @@ export function useCameraDevices(enabled: boolean = false, preferredDeviceId?: s
 	// settling. Depending on this object's fields instead makes the write-back
 	// fire only when the chosen camera really changed.
 	const selectedDevice = devices.find((d) => d.deviceId === selectedDeviceId);
+	const preferredById = preferredDeviceId
+		? devices.find((device) => device.deviceId === preferredDeviceId)
+		: undefined;
+	const preferredByLabel = preferredDeviceName
+		? devices.filter((device) => device.label === preferredDeviceName)
+		: [];
+	const resolvedPreference =
+		preferredById ?? (preferredByLabel.length === 1 ? preferredByLabel[0] : undefined);
+	const selectionReady =
+		isReady && (!resolvedPreference || resolvedPreference.deviceId === selectedDeviceId);
 
-	return { devices, selectedDevice, selectedDeviceId, setSelectedDeviceId, isLoading, error };
+	return {
+		devices,
+		selectedDevice,
+		selectedDeviceId,
+		setSelectedDeviceId,
+		isLoading,
+		isReady: selectionReady,
+		error,
+	};
 }

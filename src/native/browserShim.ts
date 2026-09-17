@@ -5,7 +5,16 @@
 
 import { PROVIDER_DEFINITIONS } from "../../electron/ai-edition/provider-registry";
 import { axcutSchemaVersion, migrateRawDocumentToCurrent } from "../lib/ai-edition/schema";
-import { nativeBridgeClient as realClient } from "./client";
+import {
+	compareStylePresets,
+	FACTORY_STYLE_PRESET_ID,
+	parseStylePresetAppearance,
+	type StylePreset,
+	type StylePresetAppearance,
+	sanitizeStylePresetName,
+	stylePresetFileBaseName,
+} from "../lib/ai-edition/stylePresets";
+import { NativeBridgeRequestError, nativeBridgeClient as realClient } from "./client";
 
 function detectBrowserMode(): boolean {
 	if (typeof window === "undefined") return false;
@@ -37,6 +46,7 @@ const SHIM_SOURCES: ShimDesktopSource[] = [
 	{ id: "window:100", name: "OpenScreen", display_id: "", thumbnail: null, appIcon: null },
 	{ id: "window:101", name: "Terminal", display_id: "", thumbnail: null, appIcon: null },
 ];
+const selectedSourceStorageKey = "browser-shim-selected-source";
 let shimSelectedSource: ShimDesktopSource | null = null;
 
 type ShimRecordingPrefs = {
@@ -45,6 +55,7 @@ type ShimRecordingPrefs = {
 	micDeviceName: string | null;
 	camEnabled: boolean;
 	camDeviceId: string | null;
+	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
 };
@@ -55,15 +66,40 @@ let shimRecordingPrefs: ShimRecordingPrefs = {
 	micDeviceName: null,
 	camEnabled: false,
 	camDeviceId: null,
+	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
 };
+const shimRecordingPrefsListeners = new Set<(prefs: ShimRecordingPrefs) => void>();
+const shimSelectedSourceListeners = new Set<(source: ShimDesktopSource | null) => void>();
+function persistShimSelectedSource(source: ShimDesktopSource | null) {
+	try {
+		if (source) {
+			localStorage.setItem(selectedSourceStorageKey, JSON.stringify(source));
+			return;
+		}
+		localStorage.removeItem(selectedSourceStorageKey);
+	} catch {
+		// ponytail: corrupt/unavailable localStorage — keep the in-memory pick.
+	}
+}
+
 (() => {
 	try {
 		const raw = localStorage.getItem(recordingPrefsStorageKey);
 		if (raw) shimRecordingPrefs = { ...shimRecordingPrefs, ...JSON.parse(raw) };
 	} catch {
 		// ponytail: corrupt/unavailable localStorage — start fresh.
+	}
+	try {
+		const raw = localStorage.getItem(selectedSourceStorageKey);
+		if (!raw) return;
+		const parsed = JSON.parse(raw) as ShimDesktopSource;
+		if (parsed && typeof parsed.id === "string" && typeof parsed.name === "string") {
+			shimSelectedSource = parsed;
+		}
+	} catch {
+		// ponytail: corrupt/unavailable localStorage — start with no source.
 	}
 })();
 
@@ -134,23 +170,33 @@ function createShimElectronAPI() {
 		// No installer in browser mode, so nothing may ever be checked.
 		canCheckForUpdatesNow: () => Promise.resolve(false),
 		getSources: () => Promise.resolve(SHIM_SOURCES),
-		selectSource: (source: ShimDesktopSource) => {
+		selectSource: (source: ShimDesktopSource, options?: { persist?: boolean }) => {
 			shimSelectedSource = source;
+			if (options?.persist !== false) persistShimSelectedSource(source);
+			shimSelectedSourceListeners.forEach((listener) => listener(source));
 			return Promise.resolve(source);
 		},
 		getSelectedSource: () => Promise.resolve(shimSelectedSource),
-		onSelectedSourceChanged: () => () => undefined,
+		onSelectedSourceChanged: (callback: (source: ShimDesktopSource | null) => void) => {
+			shimSelectedSourceListeners.add(callback);
+			return () => shimSelectedSourceListeners.delete(callback);
+		},
 		getRecordingPrefs: () => Promise.resolve(shimRecordingPrefs),
 		setRecordingPrefs: (patch: Partial<ShimRecordingPrefs>) => {
-			shimRecordingPrefs = { ...shimRecordingPrefs, ...patch };
+			const next = { ...shimRecordingPrefs, ...patch };
 			try {
-				localStorage.setItem(recordingPrefsStorageKey, JSON.stringify(shimRecordingPrefs));
-			} catch {
-				// ponytail: localStorage may be full or unavailable; silently skip
+				localStorage.setItem(recordingPrefsStorageKey, JSON.stringify(next));
+			} catch (error) {
+				return Promise.reject(error);
 			}
+			shimRecordingPrefs = next;
+			shimRecordingPrefsListeners.forEach((listener) => listener(next));
 			return Promise.resolve(shimRecordingPrefs);
 		},
-		onRecordingPrefsChanged: () => () => undefined,
+		onRecordingPrefsChanged: (callback: (prefs: ShimRecordingPrefs) => void) => {
+			shimRecordingPrefsListeners.add(callback);
+			return () => shimRecordingPrefsListeners.delete(callback);
+		},
 		// ponytail: the chat panel subscribes to this on mount, unconditionally.
 		// Without a stub the whole editor tree throws before it paints, so every
 		// browser-shim test fails at boot, not just the chat ones. Nothing streams
@@ -337,6 +383,66 @@ function createShimBridgeClient() {
 		}
 		return m;
 	};
+	// Style presets: localStorage stands in for the presets folder, keyed by the same file
+	// base name the real service would use, and re-read on every call as `list` re-reads
+	// the folder. Failures reject with the same `NativeBridgeRequestError` codes the real
+	// bridge returns, so the UI's NAME_TAKEN handling can be exercised in browser mode.
+	type ShimPresetRecord = { name: string; updatedAt: string; appearance: StylePresetAppearance };
+	const presetsStorageKey = "browser-shim-style-presets-v1";
+	const readPresets = (): Record<string, ShimPresetRecord> => {
+		try {
+			const parsed = JSON.parse(localStorage.getItem(presetsStorageKey) ?? "{}");
+			return parsed && typeof parsed === "object" ? parsed : {};
+		} catch {
+			return {};
+		}
+	};
+	const writePresets = (records: Record<string, ShimPresetRecord>) => {
+		try {
+			localStorage.setItem(presetsStorageKey, JSON.stringify(records));
+		} catch {
+			throw new NativeBridgeRequestError({
+				code: "INTERNAL_ERROR",
+				message: "Failed to persist style presets.",
+				retryable: false,
+			});
+		}
+	};
+	const presetError = (code: "NAME_TAKEN" | "NOT_FOUND" | "INVALID_REQUEST", message: string) =>
+		new NativeBridgeRequestError({ code, message, retryable: false });
+	const toPreset = (id: string, record: ShimPresetRecord): StylePreset => ({ id, ...record });
+	// Same shape as the real bridge: validation TypeErrors become INVALID_REQUEST.
+	const presetCall = async <T>(work: () => T): Promise<T> => {
+		try {
+			return work();
+		} catch (error) {
+			if (error instanceof NativeBridgeRequestError) throw error;
+			throw presetError("INVALID_REQUEST", error instanceof Error ? error.message : String(error));
+		}
+	};
+	const requirePreset = (records: Record<string, ShimPresetRecord>, id: string) => {
+		const record = records[id];
+		if (!record) throw presetError("NOT_FOUND", `Style preset not found: ${id}`);
+		return record;
+	};
+	const assertPresetNameFree = (
+		records: Record<string, ShimPresetRecord>,
+		id: string,
+		name: string,
+		exceptId?: string,
+	) => {
+		if (id.toLowerCase() === FACTORY_STYLE_PRESET_ID) {
+			throw presetError("NAME_TAKEN", `A style preset named "${name}" already exists.`);
+		}
+		const taken = Object.entries(records).some(
+			([otherId, record]) =>
+				otherId !== exceptId &&
+				(otherId.toLowerCase() === id.toLowerCase() ||
+					record.name.toLowerCase() === name.toLowerCase()),
+		);
+		if (taken) throw presetError("NAME_TAKEN", `A style preset named "${name}" already exists.`);
+	};
+
 	const summarize = (s: ShimSession) => ({
 		id: s.id,
 		projectId: s.projectId,
@@ -361,7 +467,7 @@ function createShimBridgeClient() {
 				);
 			},
 			create: (title?: string) => {
-				const doc: ShimDocument = {
+				const empty: ShimDocument = {
 					// Mint at the current schema version so the renderer's
 					// `documentSchema.parse` (a pure validator, no migration) accepts
 					// the returned document. Must never be a literal: this value has to
@@ -389,6 +495,7 @@ function createShimBridgeClient() {
 					audioTracks: [],
 					legacyEditor: null,
 				};
+				const doc = empty as unknown as ShimDocument;
 				documentsByProject[doc.project.id] = doc;
 				projectOrder.unshift(doc.project.id);
 				saveProjectsState();
@@ -629,6 +736,67 @@ function createShimBridgeClient() {
 			getCurrentContext: () =>
 				Promise.resolve({ currentProjectPath: null, currentVideoPath: null }),
 			loadProjectFile: () => Promise.resolve({ success: false, canceled: true }),
+		},
+		presets: {
+			list: () =>
+				presetCall(() =>
+					Object.entries(readPresets())
+						.flatMap(([id, record]) => {
+							try {
+								const appearance = parseStylePresetAppearance(record.appearance);
+								return [toPreset(id, { ...record, appearance })];
+							} catch {
+								return [];
+							}
+						})
+						.sort(compareStylePresets),
+				),
+			create: (name: string, appearance: StylePresetAppearance) =>
+				presetCall(() => {
+					const records = readPresets();
+					const cleanName = sanitizeStylePresetName(name);
+					const id = stylePresetFileBaseName(cleanName);
+					const record = {
+						name: cleanName,
+						updatedAt: new Date().toISOString(),
+						appearance: parseStylePresetAppearance(appearance),
+					};
+					assertPresetNameFree(records, id, cleanName);
+					writePresets({ ...records, [id]: record });
+					return toPreset(id, record);
+				}),
+			rename: (id: string, name: string) =>
+				presetCall(() => {
+					const records = readPresets();
+					const current = requirePreset(records, id);
+					const cleanName = sanitizeStylePresetName(name);
+					const nextId = stylePresetFileBaseName(cleanName);
+					assertPresetNameFree(records, nextId, cleanName, id);
+					const { [id]: _previous, ...rest } = records;
+					const record = { ...current, name: cleanName, updatedAt: new Date().toISOString() };
+					writePresets({ ...rest, [nextId]: record });
+					return toPreset(nextId, record);
+				}),
+			update: (id: string, appearance: StylePresetAppearance) =>
+				presetCall(() => {
+					const records = readPresets();
+					const current = requirePreset(records, id);
+					const record = {
+						...current,
+						updatedAt: new Date().toISOString(),
+						appearance: parseStylePresetAppearance(appearance),
+					};
+					writePresets({ ...records, [id]: record });
+					return toPreset(id, record);
+				}),
+			delete: (id: string) =>
+				presetCall(() => {
+					const { [id]: _removed, ...rest } = readPresets();
+					writePresets(rest);
+					return { success: true as const };
+				}),
+			// No folder to open in a browser tab.
+			reveal: () => Promise.resolve({ success: true as const }),
 		},
 	};
 }

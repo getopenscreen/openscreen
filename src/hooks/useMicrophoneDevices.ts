@@ -6,17 +6,45 @@ export interface MicrophoneDevice {
 	groupId: string;
 }
 
+export function isPlaceholderMicrophoneLabel(label: string, deviceId: string): boolean {
+	return label === `Microphone ${deviceId.slice(0, 8)}`;
+}
+
+function microphoneDevices(devices: readonly MediaDeviceInfo[]): MicrophoneDevice[] {
+	return devices
+		.filter((device) => device.kind === "audioinput")
+		.map((device) => ({
+			deviceId: device.deviceId,
+			label: device.label || `Microphone ${device.deviceId.slice(0, 8)}`,
+			groupId: device.groupId,
+		}));
+}
+
+function resolvePreferredDevice(
+	devices: readonly MicrophoneDevice[],
+	preferredDeviceId?: string,
+	preferredDeviceName?: string,
+): MicrophoneDevice | undefined {
+	const byId = preferredDeviceId
+		? devices.find((device) => device.deviceId === preferredDeviceId)
+		: undefined;
+	if (byId) return byId;
+	const byLabel = preferredDeviceName
+		? devices.filter((device) => device.label === preferredDeviceName)
+		: [];
+	return byLabel.length === 1 ? byLabel[0] : undefined;
+}
+
 /**
- * @param preferredDeviceId The microphone the session already settled on —
- * normally the one restored from the recording prefs. It outranks "first in the
- * list", which is the OS enumeration order and has nothing to do with what the
- * user chose. The HUD window is destroyed and rebuilt for every recording, so
- * without this its pick reverted on each take.
- * @param preferredDeviceName The same choice by label, tried when the id finds
- * nothing. Chromium's device ids are per-origin salted, so the id a previous
- * window persisted can name nothing in this one while the microphone is sitting
- * right there in the list — and falling through to the first input would then
- * discard a choice that was perfectly resolvable.
+ * Enumerates live microphone inputs and resolves a stored preference by exact id,
+ * then unique label, then the first live input.
+ *
+ * Enumeration happens before any permission probe. Chromium exposes labels after
+ * permission has already been granted, which is the common restart path and needs
+ * no temporary stream. If labels are still hidden, a short probe unlocks them and
+ * the list is read once more. The first enumeration remains usable when that probe
+ * or the second enumeration fails, and every acquired probe stream is stopped in
+ * `finally`.
  */
 export function useMicrophoneDevices(
 	enabled: boolean = true,
@@ -27,16 +55,14 @@ export function useMicrophoneDevices(
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("default");
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	// Read through a ref rather than a dependency: `selectedDeviceId` is written by
-	// this very effect, so depending on it re-ran the whole load — a second
-	// getUserMedia() permission stream acquired and torn down on every open.
+	// The enabled value identifies the load generation. When false→true renders,
+	// the prior disabled "ready" state cannot briefly start a competing meter.
+	const [readyGeneration, setReadyGeneration] = useState<boolean | null>(enabled ? null : false);
+
 	const selectedDeviceIdRef = useRef(selectedDeviceId);
 	const preferredDeviceIdRef = useRef(preferredDeviceId);
 	const preferredDeviceNameRef = useRef(preferredDeviceName);
-	// Synchronised in an effect rather than during render: React may discard a
-	// render without committing it, and a ref written there keeps the value
-	// anyway, which would resolve the selection against a device the committed
-	// tree never agreed on.
+	const hadPreferenceRef = useRef(false);
 	useEffect(() => {
 		selectedDeviceIdRef.current = selectedDeviceId;
 		preferredDeviceIdRef.current = preferredDeviceId;
@@ -45,79 +71,112 @@ export function useMicrophoneDevices(
 
 	useEffect(() => {
 		if (!enabled) {
+			setIsLoading(false);
+			setReadyGeneration(false);
 			return;
 		}
 
 		let mounted = true;
-
+		let latestLoad = 0;
 		const loadDevices = async () => {
+			if (!mounted) return;
+			const loadToken = ++latestLoad;
+			const isCurrent = () => mounted && loadToken === latestLoad;
+			setIsLoading(true);
+			setReadyGeneration(null);
+			setError(null);
+			let probeStream: MediaStream | null = null;
 			try {
-				setIsLoading(true);
-				setError(null);
-
-				// Request permission first to get actual device labels
-				const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-				const allDevices = await navigator.mediaDevices.enumerateDevices();
-				const audioInputs = allDevices
-					.filter((device) => device.kind === "audioinput")
-					.map((device) => ({
-						deviceId: device.deviceId,
-						label: device.label || `Microphone ${device.deviceId.slice(0, 8)}`,
-						groupId: device.groupId,
-					}));
-
-				// Stop the permission stream
-				stream.getTracks().forEach((track) => track.stop());
-
-				if (mounted) {
-					setDevices(audioInputs);
-					const currentId = selectedDeviceIdRef.current;
-					const stillAvailable = audioInputs.some((d) => d.deviceId === currentId);
-					if ((currentId === "default" || !stillAvailable) && audioInputs.length > 0) {
-						const preferredId = preferredDeviceIdRef.current;
-						const preferredName = preferredDeviceNameRef.current;
-						// By id, then by label, then whatever is first. Always an entry
-						// from THIS list, so the id and the label the caller ends up
-						// sending to the native helper describe the same device — the
-						// pairing that #387 and #404 were both about.
-						const preferred =
-							(preferredId ? audioInputs.find((d) => d.deviceId === preferredId) : undefined) ??
-							(preferredName ? audioInputs.find((d) => d.label === preferredName) : undefined);
-						setSelectedDeviceId(preferred?.deviceId ?? audioInputs[0].deviceId);
+				const firstEnumeration = await navigator.mediaDevices.enumerateDevices();
+				if (!isCurrent()) return;
+				let inputs = microphoneDevices(firstEnumeration);
+				const labelsHidden = firstEnumeration.some(
+					(device) => device.kind === "audioinput" && !device.label,
+				);
+				if (labelsHidden) {
+					try {
+						probeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+						if (!isCurrent()) return;
+						try {
+							inputs = microphoneDevices(await navigator.mediaDevices.enumerateDevices());
+						} catch (secondEnumerationError) {
+							if (isCurrent())
+								console.warn(
+									"Could not refresh microphone labels after permission probe:",
+									secondEnumerationError,
+								);
+						}
+					} catch (probeError) {
+						if (isCurrent()) console.warn("Could not unlock microphone labels:", probeError);
 					}
-					setIsLoading(false);
 				}
-			} catch (err) {
-				if (mounted) {
-					const errorMessage =
-						err instanceof Error ? err.message : "Failed to enumerate audio devices";
-					setError(errorMessage);
+
+				if (!isCurrent()) return;
+				setDevices(inputs);
+				const currentId = selectedDeviceIdRef.current;
+				const stillAvailable = inputs.some((device) => device.deviceId === currentId);
+				if (currentId === "default" || !stillAvailable) {
+					const preferred = resolvePreferredDevice(
+						inputs,
+						preferredDeviceIdRef.current,
+						preferredDeviceNameRef.current,
+					);
+					setSelectedDeviceId(preferred?.deviceId ?? inputs[0]?.deviceId ?? "default");
+				}
+			} catch (cause) {
+				if (!isCurrent()) return;
+				setDevices([]);
+				setSelectedDeviceId("default");
+				setError(cause instanceof Error ? cause.message : "Failed to enumerate audio devices");
+				console.error("Error loading microphone devices:", cause);
+			} finally {
+				probeStream?.getTracks().forEach((track) => track.stop());
+				if (isCurrent()) {
 					setIsLoading(false);
-					console.error("Error loading microphone devices:", err);
+					setReadyGeneration(true);
 				}
 			}
 		};
 
-		loadDevices();
-
-		const handleDeviceChange = () => {
-			loadDevices();
-		};
-
-		navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
-
+		void loadDevices();
+		navigator.mediaDevices.addEventListener("devicechange", loadDevices);
 		return () => {
 			mounted = false;
-			navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
+			navigator.mediaDevices.removeEventListener("devicechange", loadDevices);
 		};
 	}, [enabled]);
+
+	useEffect(() => {
+		if (!enabled) return;
+		const hasPreference = Boolean(preferredDeviceId || preferredDeviceName);
+		if (!hasPreference) {
+			if (hadPreferenceRef.current) {
+				hadPreferenceRef.current = false;
+				setSelectedDeviceId("default");
+			}
+			return;
+		}
+		hadPreferenceRef.current = true;
+		const preferred = resolvePreferredDevice(devices, preferredDeviceId, preferredDeviceName);
+		if (!preferred || preferred.deviceId === selectedDeviceId) return;
+		setSelectedDeviceId(preferred.deviceId);
+	}, [enabled, preferredDeviceId, preferredDeviceName, devices, selectedDeviceId]);
+
+	const resolvedPreference = resolvePreferredDevice(
+		devices,
+		preferredDeviceId,
+		preferredDeviceName,
+	);
+	const generationReady = enabled ? readyGeneration === true : readyGeneration === false;
+	const selectionReady =
+		generationReady && (!resolvedPreference || resolvedPreference.deviceId === selectedDeviceId);
 
 	return {
 		devices,
 		selectedDeviceId,
 		setSelectedDeviceId,
 		isLoading,
+		isReady: selectionReady,
 		error,
 	};
 }

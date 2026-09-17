@@ -58,3 +58,56 @@ describe("browserShim addAsset (issue #350)", () => {
 		expect(doc.project.primaryAssetId).toBe(asset?.id);
 	});
 });
+
+describe("browserShim recording settings", () => {
+	it("publishes recording settings only after localStorage succeeds", async () => {
+		await window.electronAPI.setRecordingPrefs({ micEnabled: false });
+		const setItem = Storage.prototype.setItem;
+		Storage.prototype.setItem = () => {
+			throw new Error("storage unavailable");
+		};
+		try {
+			await expect(window.electronAPI.setRecordingPrefs({ micEnabled: true })).rejects.toThrow(
+				"storage unavailable",
+			);
+			expect((await window.electronAPI.getRecordingPrefs()).micEnabled).toBe(false);
+		} finally {
+			Storage.prototype.setItem = setItem;
+		}
+	});
+
+	it("notifies recording and source subscribers on changes", async () => {
+		await window.electronAPI.setRecordingPrefs({ micEnabled: false });
+		const prefsEvents: boolean[] = [];
+		const sourceEvents: Array<string | null> = [];
+		const stopPrefs = window.electronAPI.onRecordingPrefsChanged((prefs) =>
+			prefsEvents.push(prefs.micEnabled),
+		);
+		const stopSource = window.electronAPI.onSelectedSourceChanged((source) =>
+			sourceEvents.push(source?.id ?? null),
+		);
+
+		await window.electronAPI.setRecordingPrefs({ micEnabled: true });
+		const source = (await window.electronAPI.getSources({ types: ["screen"] }))[0];
+		await window.electronAPI.selectSource(source);
+
+		expect(prefsEvents).toEqual([true]);
+		expect(sourceEvents).toEqual([source.id]);
+		stopPrefs();
+		stopSource();
+		await window.electronAPI.setRecordingPrefs({ micEnabled: false });
+		expect(prefsEvents).toEqual([true]);
+	});
+
+	it("persists the selected source unless persist is false", async () => {
+		const source = (await window.electronAPI.getSources({ types: ["screen"] }))[0];
+		await window.electronAPI.selectSource(source, { persist: false });
+		expect(localStorage.getItem("browser-shim-selected-source")).toBeNull();
+		expect(await window.electronAPI.getSelectedSource()).toMatchObject({ id: source.id });
+
+		await window.electronAPI.selectSource(source);
+		expect(
+			JSON.parse(localStorage.getItem("browser-shim-selected-source") ?? "null"),
+		).toMatchObject({ id: source.id });
+	});
+});

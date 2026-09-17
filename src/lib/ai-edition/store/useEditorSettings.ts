@@ -27,7 +27,7 @@ export interface UseEditorSettingsResult {
 	/** True when there's a project loaded — `set`/`setLive` are no-ops otherwise. */
 	hasDocument: boolean;
 	/** Apply a patch, persist to disk. */
-	set: (patch: EditorSettingsPatch) => Promise<void>;
+	set: (patch: EditorSettingsPatch) => Promise<boolean>;
 	/** Apply a patch, no persist. Pair with `commit` on slider release. */
 	setLive: (patch: EditorSettingsPatch) => void;
 	/** Force-flush the current document to disk. */
@@ -47,13 +47,13 @@ export function useEditorSettings(): UseEditorSettingsResult {
 	const set = useCallback(
 		async (patch: EditorSettingsPatch) => {
 			const doc = useProjectStore.getState().document;
-			if (!doc) return;
+			if (!doc) return false;
 			const next = patchEditorSettings(doc, patch);
 			// The optimistic write is not the edit — the save is. Only the one that can
 			// fail records, and it names `doc` as what Ctrl+Z returns to because by then
 			// the store already holds `next`.
 			setDocument(next, { history: false });
-			await saveDocument(next, { history: true, historyBase: doc });
+			return saveDocument(next, { history: true, historyBase: doc });
 		},
 		[setDocument, saveDocument],
 	);

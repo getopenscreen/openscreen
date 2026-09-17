@@ -928,6 +928,51 @@
 	font-variant-numeric: tabular-nums;
 	color: var(--meta);
 }
+/* ─── style presets menu (Composition pane header) ────────────── */
+/* A preset row plus its "⋯" button, which must never be part of the apply target. */
+.presetRow { display: flex; align-items: center; gap: 2px; }
+.presetRow .actionMenuRow { flex: 1; min-width: 0; }
+.presetRow .actionMenuMain { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.presetCheck {
+	flex-shrink: 0;
+	align-self: center;
+	display: inline-grid;
+	place-items: center;
+	width: 12px;
+	color: var(--brand);
+}
+.presetActionLabel { font: 500 12px var(--font-body); color: var(--fg-2); }
+.presetActions {
+	margin: 2px 0 4px 20px;
+	padding-left: 4px;
+	border-left: 1px solid var(--border);
+}
+.presetActions .actionMenuRow:disabled { cursor: default; opacity: 0.5; }
+.presetStatus {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 8px;
+	font: 400 11px var(--font-body);
+	color: var(--muted);
+}
+.presetDivider { height: 1px; margin: 4px 2px; background: var(--border); }
+.presetForm { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; }
+.presetForm input {
+	width: 100%;
+	padding: 6px 8px;
+	font: 400 var(--fs-app-sm) var(--font-body);
+	color: var(--fg);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	outline: none;
+}
+.presetForm input:focus { border-color: var(--brand); }
+.presetForm input[aria-invalid="true"] { border-color: var(--danger); }
+.presetFormButtons { display: flex; justify-content: flex-end; gap: 6px; }
+.presetConfirm { font: 500 12px var(--font-body); color: var(--fg); }
+.presetError { font: 400 11px var(--font-body); color: var(--danger); }
 
 /* A section title that carries an action on its right. */
 .sectionHead {

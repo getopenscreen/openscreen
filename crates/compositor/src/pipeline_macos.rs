@@ -235,10 +235,30 @@ impl Decoder {
                 // rapide du cas qui en profite le plus — 71 fps, c'est en dessous du temps
                 // réel pour une timeline 4K60.
                 //
-                // RESTE NON MESURÉ : 10 bits et HEVC. Ils gardent VideoToolbox, et la
-                // condition les écarte par construction (`format == YUV420P` et
-                // `codec_id == H264`). La preview aussi n'a pas été mesurée, et la changer
-                // sans la mesurer serait exactement l'erreur que ce commit corrige.
+                // HEVC 8 bits : MESURÉ DEPUIS, et le logiciel ne gagne plus nettement. Même
+                // protocole via le Decoder de production (present NV12/CVPixelBuffer compris),
+                // 1200 frames, meilleur de trois passes, Mac mini M1 8 Go / macOS 26.5, Parsec
+                // déconnecté. Sources hevc_videotoolbox Main yuv420p encodées depuis la capture
+                // réelle la plus dense (11,5 Mbps) ; le 4K est un upscale lanczos à 24 Mbps :
+                //
+                //     HEVC 1080p60   logiciel 452 fps   VideoToolbox 303 fps   x1,5
+                //     HEVC 4K60      logiciel 179 fps   VideoToolbox 102 fps   x1,8
+                //
+                // Le décodeur logiciel HEVC coûte ~3x le H.264 (452 contre 1862 fps en 1080p,
+                // même session), et VideoToolbox tient le temps réel dans les deux cas (303
+                // fps en 1080p60, 102 fps en 4K60) : la marche d'export, bornée par l'encodeur
+                // (cf. technical-documentation/engineering/rendering-performance.md), n'y
+                // gagnerait presque rien. HEVC garde VideoToolbox. Témoin de méthode : le
+                // côté logiciel du cas 1080p ci-dessus reproduit les 2586 fps d'alors (2721
+                // fps en décodage pur) ; le 212 fps VideoToolbox ne se reproduit sous aucune
+                // variante du harnais (294-330), le x12,2 est donc une borne haute. Outil :
+                // `examples/decode_bench_macos.rs` et `examples/decode_pure_macos.rs`.
+                //
+                // RESTE NON MESURÉ : 10 bits. Il garde VideoToolbox, la condition l'écarte
+                // par construction (`format == YUV420P`), et le chemin logiciel le tronquerait
+                // en 8 bits (`CpuFrames` ne rend que du NV12). La preview aussi n'a pas été
+                // mesurée, et la changer sans la mesurer serait exactement l'erreur que ce
+                // commit corrige.
                 _ if intent == DecodeIntent::Export && is_h264_8bit => false,
                 _ => true,
             };
@@ -516,6 +536,16 @@ impl Decoder {
             Some(cpu) => cpu.current(),
             None => self.frame,
         }
+    }
+
+    /// Le décodeur rend-il ses frames par VideoToolbox (`false` = chemin logiciel
+    /// `CpuFrames`). Exposé pour que le harnais de mesure
+    /// (`examples/decode_bench_macos.rs`) puisse vérifier que le mode demandé via
+    /// `OPENSCREEN_MAC_DECODE` a bien été pris : `open_with` retombe silencieusement sur
+    /// logiciel si `av_hwdevice_ctx_create` échoue, et un bench qui mesure l'autre chemin
+    /// que celui qu'il croit mesurer est pire qu'un bench qui échoue.
+    pub fn uses_videotoolbox(&self) -> bool {
+        self.cpu.is_none()
     }
 
     /// Temps (s) de la frame courante, via son pts. 0 si pas de pts fiable.

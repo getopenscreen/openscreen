@@ -18,6 +18,7 @@ import logoMark from "@/assets/openscreen-mark.png";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useTheme } from "@/hooks/useTheme";
 import { getAvailableLocales, getLocaleName, getLocaleShort } from "@/i18n/loader";
+import { StylePresetsMenu } from "../StylePresetsMenu";
 import styles from "./EditorShellV4.module.css";
 
 export type EditorMode = "media" | "edit" | "rec";
@@ -173,6 +174,10 @@ export function EditorTopBar({
 				))}
 			</div>
 
+			{/* A preset is the whole look the right panel's panes edit — Composition, camera,
+			    cursor — so its entry sits in the bar, reachable from every pane and mode,
+			    rather than in any one pane's header. */}
+			<StylePresetsMenu />
 			<button
 				type="button"
 				className={styles.iconBtn}

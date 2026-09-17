@@ -111,6 +111,13 @@ describe("useEditorSettings drag snapshots", () => {
 		vi.clearAllMocks();
 	});
 
+	it("returns whether a settings edit persisted", async () => {
+		const { result } = renderHook(() => useEditorSettings());
+		await expect(result.current.set({ borderRadius: 10 })).resolves.toBe(true);
+		bridgeMocks.save.mockResolvedValueOnce({ success: false, error: "disk full" });
+		await expect(result.current.set({ borderRadius: 20 })).resolves.toBe(false);
+	});
+
 	it("does not record a snapshot of the project the user left", async () => {
 		const { result, rerender } = renderHook(() => useEditorSettings());
 

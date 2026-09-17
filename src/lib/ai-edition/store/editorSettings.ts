@@ -12,19 +12,7 @@ import {
 	type CropRegion,
 	type CursorVisualSettings,
 	DEFAULT_CROP_REGION,
-	DEFAULT_CURSOR_CLICK_BOUNCE,
-	DEFAULT_CURSOR_CLIP_TO_BOUNDS,
-	DEFAULT_CURSOR_MOTION_BLUR,
-	DEFAULT_CURSOR_SIZE,
-	DEFAULT_CURSOR_SMOOTHING,
-	DEFAULT_WEBCAM_BACKGROUND_MODE,
-	DEFAULT_WEBCAM_BLUR_INTENSITY,
-	DEFAULT_WEBCAM_LAYOUT_PRESET,
-	DEFAULT_WEBCAM_MASK_SHAPE,
-	DEFAULT_WEBCAM_MIRRORED,
 	DEFAULT_WEBCAM_POSITION,
-	DEFAULT_WEBCAM_REACTIVE_ZOOM,
-	DEFAULT_WEBCAM_SIZE_PRESET,
 	isWebcamBackgroundMode,
 	type WebcamBackgroundMode,
 	type WebcamLayoutPreset,
@@ -32,8 +20,7 @@ import {
 	type WebcamPosition,
 	type WebcamSizePreset,
 } from "@/components/video-editor/types";
-import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
-import { DEFAULT_WALLPAPER } from "@/lib/wallpaper";
+import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import { clamp01 } from "@/utils/math";
 import type { AxcutDocument } from "../schema";
@@ -114,43 +101,16 @@ export interface EditorSettingsSnapshot {
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
-	wallpaper: DEFAULT_WALLPAPER,
-	aspectRatio: "16:9",
 	// Opinionated by default: the wallpaper and the padding were already on, but
 	// with square corners and no shadow the recording read as a rectangle pasted
 	// onto the background rather than a window floating above it (#271 reported
 	// the symptom and blamed the padding). These three are the rest of that look;
 	// shipping the background without them was shipping half a composition.
-	shadowIntensity: 0.2,
-	showBlur: false,
-	motionBlurAmount: 0.2,
-	borderRadius: 40,
-	padding: 50,
+	...DEFAULT_PROJECT_APPEARANCE,
 	cropRegion: DEFAULT_CROP_REGION,
-	webcamLayoutPreset: DEFAULT_WEBCAM_LAYOUT_PRESET,
-	webcamMaskShape: DEFAULT_WEBCAM_MASK_SHAPE,
-	webcamMirrored: DEFAULT_WEBCAM_MIRRORED,
-	webcamReactiveZoom: DEFAULT_WEBCAM_REACTIVE_ZOOM,
-	webcamSizePreset: DEFAULT_WEBCAM_SIZE_PRESET,
-	webcamPosition: DEFAULT_WEBCAM_POSITION,
 	webcamCropRegion: DEFAULT_CROP_REGION,
 	webcamCropPan: DEFAULT_CROP_PAN,
 	audioGainDb: 0,
-	webcamBackgroundMode: DEFAULT_WEBCAM_BACKGROUND_MODE,
-	webcamWallpaper: DEFAULT_WALLPAPER,
-	webcamBlurIntensity: DEFAULT_WEBCAM_BLUR_INTENSITY,
-	cursor: {
-		size: DEFAULT_CURSOR_SIZE,
-		smoothing: DEFAULT_CURSOR_SMOOTHING,
-		motionBlur: DEFAULT_CURSOR_MOTION_BLUR,
-		clickBounce: DEFAULT_CURSOR_CLICK_BOUNCE,
-		clipToBounds: DEFAULT_CURSOR_CLIP_TO_BOUNDS,
-		autoHide: false,
-	},
-	cursorShow: true,
-	cursorAutoHide: false,
-	cursorTheme: DEFAULT_CURSOR_THEME_ID,
-	autoFocusAll: false,
 };
 
 interface LegacyShape {

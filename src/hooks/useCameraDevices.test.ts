@@ -97,6 +97,19 @@ describe("useCameraDevices", () => {
 	// settled on the first device. Losing the user's camera at that point is what
 	// made a HUD rebuilt for a new recording revert to a virtual camera that emits
 	// nothing, while the native helper was told to capture it by name.
+	it("clears the live selection when the remembered camera is reset", async () => {
+		const { result, rerender } = renderHook<
+			ReturnType<typeof useCameraDevices>,
+			{ preferred?: string }
+		>(({ preferred }) => useCameraDevices(true, preferred), {
+			initialProps: { preferred: "cam2" },
+		});
+		await waitFor(() => expect(result.current.selectedDeviceId).toBe("cam2"));
+
+		rerender({});
+		await waitFor(() => expect(result.current.selectedDeviceId).toBe(""));
+	});
+
 	it("should adopt the restored device when it arrives after enumeration", async () => {
 		const { result, rerender } = renderHook(
 			({ preferred }: { preferred?: string }) => useCameraDevices(true, preferred),
@@ -120,6 +133,20 @@ describe("useCameraDevices", () => {
 		await waitFor(() => {
 			expect(result.current.selectedDeviceId).toBe("cam1");
 		});
+	});
+
+	it("resolves a stale id by a unique saved camera label", async () => {
+		const { result } = renderHook(() => useCameraDevices(true, "stale-id", "Camera 2"));
+		await waitFor(() => expect(result.current.selectedDeviceId).toBe("cam2"));
+	});
+
+	it("does not guess when a saved camera label is ambiguous", async () => {
+		mockEnumerateDevices.mockResolvedValueOnce([
+			{ kind: "videoinput", deviceId: "cam1", label: "Same camera", groupId: "g1" },
+			{ kind: "videoinput", deviceId: "cam2", label: "Same camera", groupId: "g2" },
+		]);
+		const { result } = renderHook(() => useCameraDevices(true, "stale-id", "Same camera"));
+		await waitFor(() => expect(result.current.selectedDeviceId).toBe("cam1"));
 	});
 
 	/**
@@ -161,6 +188,31 @@ describe("useCameraDevices", () => {
 		// Only the render this test asked for; the effect no longer has anything to say.
 		expect(renders - settled).toBeLessThanOrEqual(2);
 		expect(result.current.selectedDeviceId).toBe("cam2");
+	});
+
+	it("clears readiness while a later devicechange is still loading", async () => {
+		const { result } = renderHook(() => useCameraDevices(true));
+		await waitFor(() => expect(result.current.isReady).toBe(true));
+
+		let resolveNewest: ((devices: typeof mockDevices) => void) | undefined;
+		mockEnumerateDevices.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveNewest = resolve;
+				}),
+		);
+		const devicechangeHandler = (
+			navigator.mediaDevices.addEventListener as ReturnType<typeof vi.fn>
+		).mock.calls[0]?.[1] as (() => void) | undefined;
+		if (!devicechangeHandler) throw new Error("devicechange listener was not registered");
+
+		act(() => {
+			void devicechangeHandler();
+		});
+		expect(result.current.isReady).toBe(false);
+
+		await act(async () => resolveNewest?.(mockDevices));
+		await waitFor(() => expect(result.current.isReady).toBe(true));
 	});
 
 	it("should fall back to first available device when selected device is unplugged", async () => {

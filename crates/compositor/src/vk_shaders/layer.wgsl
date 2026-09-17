@@ -25,9 +25,9 @@ struct Layer {
     mode: f32,            // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre, 8 = écran tilté, 9 = flèche, 10 = flou/mosaïque, 12 = ombre du quad tilté, 13 = curseur tilté
     color: vec4<f32>,
     fx: vec4<f32>,        // mode 2 : spread ombre en px ; modes 8/12/13 : coins TL,TR du quad projeté ; mode 9 : hampe de la flèche ; mode 10 : (flou?, rayon/bloc px, ovale?, teinté?)
-    src_prev: vec4<f32>,  // modes 8/12/13 : coins BR,BL du quad projeté ; mode 9 : barbe 1
-    dst_prev: vec4<f32>,  // mode 8 : taille du plan en px AVANT projection (le rayon y vit) ; mode 13 : rect de clip ; mode 9 : barbe 2
-    mb: vec4<f32>,        // mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px
+    src_prev: vec4<f32>,  // modes 8/12/13 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque
+    dst_prev: vec4<f32>,  // mode 8 : taille du plan en px AVANT projection (le rayon y vit) ; mode 13 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque
+    mb: vec4<f32>,        // mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -375,16 +375,31 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // `i.pout` donne directement l'UV de sortie, donc aucun mapping a refaire.
         //
         // fx.x = 0 mosaique / 1 flou ; fx.y = taille de bloc px (mosaique) ou
-        // rayon px (flou) ; fx.z = 0 rectangle / 1 ovale ; fx.w = 1 si teinte.
-        let n = i.local / max(layer.quad_px, vec2<f32>(1e-6));
+        // rayon px (flou) ; fx.z = 0 rectangle / 1 ovale ; fx.w = 1 si teinte ;
+        // mb.z = 1 si le masque est un quad incline (coins TL, TR dans dst_prev,
+        // BR, BL dans src_prev).
+        var n = i.local / max(layer.quad_px, vec2<f32>(1e-6));
+        // Ecran incline : le masque est warpe comme le contenu qu'il cache
+        // (`FrameGeometry::privacy_mask`), par le meme inverse que le mode 8.
+        // Bord net, marge de 2 % comprise : un fondu rendrait le masque en
+        // partie transparent SUR la zone a cacher.
+        if layer.mb.z > 0.5 {
+            let wq = quad_inverse_bilinear(i.local, layer.dst_prev.xy, layer.dst_prev.zw,
+                                           layer.src_prev.xy, layer.src_prev.zw);
+            if wq.z < 0.5 {
+                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+            }
+            n = wq.xy;
+        }
         var cov = 1.0;
         if layer.fx.z > 0.5 {
             // Ovale inscrit : distance au centre en unites de demi-axes, adoucie
-            // sur ~1px.
+            // sur ~1px. Le fondu tombe HORS de l'ellipse : dedans, le masque
+            // reste plein.
             let dc = (n - vec2<f32>(0.5)) * 2.0;
             let r = length(dc);
             let aa = 2.0 / max(min(layer.quad_px.x, layer.quad_px.y), 1.0);
-            cov = 1.0 - smoothstep(1.0 - aa, 1.0, r);
+            cov = 1.0 - smoothstep(1.0, 1.0 + aa, r);
         }
         if cov <= 0.0 {
             return vec4<f32>(0.0, 0.0, 0.0, 0.0);

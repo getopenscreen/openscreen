@@ -1,10 +1,14 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { BrowserWindow } from "electron";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RecordingPrefs } from "./handlers";
 import { registerRecordingPrefsHandlers } from "./recordingPrefs";
 
-const electron = vi.hoisted(() => ({ handle: vi.fn() }));
+const electron = vi.hoisted(() => ({ getPath: vi.fn(), handle: vi.fn() }));
 vi.mock("electron", () => ({
+	app: { getPath: electron.getPath },
 	ipcMain: { handle: electron.handle },
 }));
 
@@ -14,17 +18,24 @@ const defaults: RecordingPrefs = {
 	micDeviceName: null,
 	camEnabled: false,
 	camDeviceId: null,
+	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
 };
-
+let dir: string;
 beforeEach(() => {
+	dir = mkdtempSync(path.join(os.tmpdir(), "openscreen-recording-ipc-"));
+	electron.getPath.mockReturnValue(dir);
 	electron.handle.mockClear();
 });
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-function start(getWindow: () => BrowserWindow | null = () => null) {
+function start(
+	getWindow: () => BrowserWindow | null = () => null,
+	getAppWindows?: () => BrowserWindow[],
+) {
 	electron.handle.mockClear();
-	registerRecordingPrefsHandlers(defaults, getWindow);
+	registerRecordingPrefsHandlers(defaults, getWindow, getAppWindows);
 	const get = electron.handle.mock.calls.find(
 		([name]) => name === "get-recording-prefs",
 	)?.[1] as () => RecordingPrefs;
@@ -32,28 +43,74 @@ function start(getWindow: () => BrowserWindow | null = () => null) {
 		_event: unknown,
 		prefs: Partial<RecordingPrefs>,
 	) => RecordingPrefs;
-	return { get, set: (prefs: Partial<RecordingPrefs>) => set(undefined, prefs) };
+	return {
+		get,
+		set: (prefs: Partial<RecordingPrefs>) => set(undefined, prefs),
+	};
 }
 
 describe("recording preferences IPC", () => {
-	it("returns defaults and updates session preferences", () => {
-		const session = start();
-		expect(session.get()).toEqual(defaults);
-		const updated = session.set({ micEnabled: true, micDeviceId: "test-mic" });
-		expect(updated.micEnabled).toBe(true);
-		expect(updated.micDeviceId).toBe("test-mic");
-		expect(session.get().micEnabled).toBe(true);
+	it("restores toggles and device preferences on restart", () => {
+		const first = start();
+		expect(first.get().micEnabled).toBe(false);
+		expect(first.get().camDeviceName).toBeNull();
+		expect(first.set({ camDeviceName: "Camera A" }).camDeviceName).toBe("Camera A");
+		first.set({ micEnabled: true, micDeviceId: "temporary-device" });
+		const disk = JSON.parse(readFileSync(path.join(dir, "recording-settings.json"), "utf8"));
+		expect(disk).toMatchObject({
+			camDeviceName: "Camera A",
+			micEnabled: true,
+			micDeviceId: "temporary-device",
+		});
+		const restarted = start();
+		expect(restarted.get()).toEqual({
+			...defaults,
+			camDeviceName: "Camera A",
+			micEnabled: true,
+			micDeviceId: "temporary-device",
+		});
+		restarted.set({ camDeviceName: "Camera B" });
+		expect(start().get().camDeviceName).toBe("Camera B");
 	});
 
-	it("broadcasts changes to main window and tolerates an absent or destroyed window", () => {
-		const send = vi.fn();
-		const isDestroyed = vi.fn(() => false);
-		const window = { isDestroyed, webContents: { send } } as unknown as BrowserWindow;
-		const session = start(() => window);
-		const updated = session.set({ camEnabled: true });
-		expect(send).toHaveBeenCalledWith("recording-prefs-changed", updated);
-		isDestroyed.mockReturnValue(true);
+	it("broadcasts saved values to every live application window", () => {
+		const firstSend = vi.fn();
+		const secondSend = vi.fn();
+		const destroyedSend = vi.fn();
+		const first = {
+			isDestroyed: () => false,
+			webContents: { send: firstSend },
+		} as unknown as BrowserWindow;
+		const second = {
+			isDestroyed: () => false,
+			webContents: { send: secondSend },
+		} as unknown as BrowserWindow;
+		const destroyed = {
+			isDestroyed: () => true,
+			webContents: { send: destroyedSend },
+		} as unknown as BrowserWindow;
+		const session = start(
+			() => first,
+			() => [first, second, first, destroyed],
+		);
+		const updated = session.set({ micEnabled: true });
+		expect(firstSend).toHaveBeenCalledWith("recording-prefs-changed", updated);
+		expect(secondSend).toHaveBeenCalledWith("recording-prefs-changed", updated);
+		expect(firstSend).toHaveBeenCalledTimes(1);
+		expect(destroyedSend).not.toHaveBeenCalled();
+	});
+
+	it("does not publish an invalid or failed preference write", () => {
+		const session = start();
+		expect(() => session.set({ micEnabled: null } as unknown as Partial<RecordingPrefs>)).toThrow(
+			TypeError,
+		);
+		expect(session.get().micEnabled).toBe(false);
 		session.set({ micEnabled: true });
-		expect(send).toHaveBeenCalledTimes(1);
+		session.set({ micEnabled: undefined, camEnabled: true });
+		expect(session.get().micEnabled).toBe(true);
+		rmSync(dir, { recursive: true, force: true });
+		expect(() => session.set({ micEnabled: false })).toThrow();
+		expect(session.get().micEnabled).toBe(true);
 	});
 });

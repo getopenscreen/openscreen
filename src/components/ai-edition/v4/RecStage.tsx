@@ -26,6 +26,7 @@ interface RecordingPrefsState {
 	micDeviceName: string | null;
 	camEnabled: boolean;
 	camDeviceId: string | null;
+	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
 }
@@ -36,9 +37,17 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	micDeviceName: null,
 	camEnabled: false,
 	camDeviceId: null,
+	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
 };
+
+function normalizedRecordingPrefs(prefs: Partial<RecordingPrefsState>): RecordingPrefsState {
+	return {
+		...DEFAULT_PREFS,
+		...prefs,
+	};
+}
 
 /**
  * Rec-mode stage. The real capture pipeline lives in the standalone recorder
@@ -64,14 +73,16 @@ export function RecStage({
 	const [prefs, setPrefsState] = useState<RecordingPrefsState>(DEFAULT_PREFS);
 	useEffect(() => {
 		let cancelled = false;
+		let receivedNewerSnapshot = false;
+		const unsubscribe = window.electronAPI?.onRecordingPrefsChanged?.((next) => {
+			receivedNewerSnapshot = true;
+			if (!cancelled) setPrefsState(normalizedRecordingPrefs(next));
+		});
 		void window.electronAPI
 			?.getRecordingPrefs?.()
 			.then((p) => {
-				if (!cancelled && p) {
-					setPrefsState({
-						...DEFAULT_PREFS,
-						...p,
-					} as RecordingPrefsState);
+				if (!cancelled && !receivedNewerSnapshot && p) {
+					setPrefsState(normalizedRecordingPrefs(p));
 				}
 			})
 			.catch((err) => {
@@ -81,6 +92,7 @@ export function RecStage({
 			});
 		return () => {
 			cancelled = true;
+			unsubscribe?.();
 		};
 	}, []);
 	const updatePrefs = (patch: Partial<RecordingPrefsState>) => {
@@ -93,8 +105,16 @@ export function RecStage({
 		});
 	};
 
-	const micDevices = useMicrophoneDevices(true);
-	const camDevices = useCameraDevices(true);
+	const micDevices = useMicrophoneDevices(
+		prefs.micEnabled,
+		prefs.micDeviceId ?? undefined,
+		prefs.micDeviceName ?? undefined,
+	);
+	const camDevices = useCameraDevices(
+		true,
+		prefs.camDeviceId ?? undefined,
+		prefs.camDeviceName ?? undefined,
+	);
 
 	// Seed the device hooks' local "selected" state from the persisted prefs
 	// once devices are enumerated, so the dropdown reflects the last real
@@ -113,12 +133,15 @@ export function RecStage({
 	// Live proof the selected devices actually work — a level meter for mic,
 	// a real <video> feed for camera — instead of just toggling a pref flag.
 	const { level: micLevel } = useAudioLevelMeter({
-		enabled: prefs.micEnabled,
-		deviceId: prefs.micDeviceId ?? undefined,
+		enabled: prefs.micEnabled && micDevices.isReady && micDevices.devices.length > 0,
+		deviceId:
+			micDevices.selectedDeviceId && micDevices.selectedDeviceId !== "default"
+				? micDevices.selectedDeviceId
+				: undefined,
 	});
 	const { stream: cameraStream, error: cameraError } = useCameraPreviewStream({
 		enabled: prefs.camEnabled,
-		deviceId: prefs.camDeviceId ?? undefined,
+		deviceId: camDevices.selectedDeviceId || undefined,
 	});
 	const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
 	useEffect(() => {
@@ -128,12 +151,24 @@ export function RecStage({
 	// ── capture source (screen/window) ──────────────────────────────
 	const [source, setSource] = useState<ProcessedDesktopSource | null>(null);
 	useEffect(() => {
+		let cancelled = false;
+		let receivedNewerSource = false;
+		const unsubscribe = window.electronAPI?.onSelectedSourceChanged?.((next) => {
+			receivedNewerSource = true;
+			if (!cancelled) setSource(next);
+		});
 		void window.electronAPI
 			?.getSelectedSource?.()
-			.then((s) => setSource(s ?? null))
+			.then((next) => {
+				if (!cancelled && !receivedNewerSource) setSource(next ?? null);
+			})
 			.catch((err) => {
 				console.warn("[rec-stage] failed to read the selected source:", err);
 			});
+		return () => {
+			cancelled = true;
+			unsubscribe?.();
+		};
 	}, []);
 	const [sourceModalOpen, setSourceModalOpen] = useState(false);
 	const [sourceTab, setSourceTab] = useState<"screen" | "window">("screen");
@@ -155,7 +190,7 @@ export function RecStage({
 	};
 	const chooseSource = async (candidate: ProcessedDesktopSource) => {
 		const result = await window.electronAPI?.selectSource?.(candidate);
-		setSource(result ?? candidate);
+		setSource(result ?? null);
 		setSourceModalOpen(false);
 	};
 	const screenSources = sources.filter((s) => s.id.startsWith("screen:"));
@@ -169,7 +204,7 @@ export function RecStage({
 	const portalOwnsSource = usePortalOwnsSource();
 	const sourceLabel = portalOwnsSource
 		? t("rec.systemPicker")
-		: (source?.name ?? t("rec.entireScreen"));
+		: (source?.name ?? t("rec.selectSource"));
 
 	return (
 		<div className={styles.recStage}>
@@ -274,15 +309,21 @@ export function RecStage({
 						</div>
 						<div className={styles.recRowControl}>
 							{prefs.micEnabled ? (
-								micDevices.isLoading ? (
+								micDevices.isLoading || !micDevices.isReady ? (
 									<span className={styles.recRowMuted}>
 										<Loader2 size={13} className="animate-spin" />
 										{t("rec.loading")}
 									</span>
+								) : micDevices.error ? (
+									<span className={styles.recRowMuted} title={micDevices.error}>
+										{t("rec.microphoneUnavailable")}
+									</span>
+								) : micDevices.devices.length === 0 ? (
+									<span className={styles.recRowMuted}>{t("rec.noMicrophoneFound")}</span>
 								) : (
 									<select
 										className={styles.recSelect}
-										value={prefs.micDeviceId ?? micDevices.selectedDeviceId}
+										value={micDevices.selectedDeviceId}
 										onChange={(e) => {
 											const deviceId = e.target.value;
 											micDevices.setSelectedDeviceId(deviceId);
@@ -332,10 +373,15 @@ export function RecStage({
 								) : (
 									<select
 										className={styles.recSelect}
-										value={prefs.camDeviceId ?? camDevices.selectedDeviceId}
+										value={camDevices.selectedDeviceId}
 										onChange={(e) => {
-											camDevices.setSelectedDeviceId(e.target.value);
-											updatePrefs({ camDeviceId: e.target.value });
+											const deviceId = e.target.value;
+											camDevices.setSelectedDeviceId(deviceId);
+											updatePrefs({
+												camDeviceId: deviceId,
+												camDeviceName:
+													camDevices.devices.find((d) => d.deviceId === deviceId)?.label ?? null,
+											});
 										}}
 									>
 										{camDevices.devices.map((d) => (

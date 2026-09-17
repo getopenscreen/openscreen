@@ -124,7 +124,7 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 	const hasCamera = cameraDevices.length > 0 && !cameraError && !cameraLoading;
 	const { level } = useAudioLevelMeter({
 		enabled: micDevices.length > 0,
-		deviceId: activeMicId,
+		deviceId: activeMicId && activeMicId !== "default" ? activeMicId : undefined,
 	});
 	const { stream, error: previewError } = useCameraPreviewStream({
 		enabled: hasCamera,

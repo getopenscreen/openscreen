@@ -3,10 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 
 const CLICK_ANIMATION_MS = 260;
+// DEFAULT_CURSOR_CLICK_BOUNCE (src/components/video-editor/types.ts).
+const DEFAULT_CLICK_BOUNCE = 2.5;
 
 function usage() {
 	console.error(
-		"Usage: node scripts/inspect-native-cursor-click-bounce.mjs <video-or-cursor-json-path> [--bounce=5]",
+		"Usage: node scripts/inspect-native-cursor-click-bounce.mjs <video-or-cursor-json-path> [--bounce=2.5]",
 	);
 	process.exit(1);
 }
@@ -25,8 +27,8 @@ function getCursorJsonPath(inputPath) {
 
 function getBounceValue() {
 	const arg = process.argv.find((value) => value.startsWith("--bounce="));
-	const parsed = Number(arg?.slice("--bounce=".length) ?? 5);
-	return Number.isFinite(parsed) ? Math.min(5, Math.max(0, parsed)) : 5;
+	const parsed = Number(arg?.slice("--bounce=".length) ?? DEFAULT_CLICK_BOUNCE);
+	return Number.isFinite(parsed) ? Math.min(5, Math.max(0, parsed)) : DEFAULT_CLICK_BOUNCE;
 }
 
 function clickBounceProgress(samples, timeMs) {
@@ -49,20 +51,21 @@ function clickBounceProgress(samples, timeMs) {
 	return 0;
 }
 
+// Copy of the compositor's curve, the only authority: CursorTrack::bounce
+// (crates/compositor/src/cursor.rs) gives the envelope, plan_cursor
+// (crates/compositor/src/frame_geometry.rs) scales its deviation by the raw
+// clickBounce and floors the result at 0 (the cursor is not drawn there).
 function clickBounceScale(clickBounce, progress) {
 	if (progress <= 0 || clickBounce <= 0) {
 		return 1;
 	}
 
-	const intensity = Math.min(5, Math.max(0, clickBounce)) / 5;
 	const elapsed = 1 - Math.min(1, Math.max(0, progress));
-	if (elapsed < 0.38) {
-		const pressProgress = Math.sin((elapsed / 0.38) * Math.PI);
-		return 1 - pressProgress * intensity * 0.24;
-	}
-
-	const reboundProgress = Math.sin(((elapsed - 0.38) / 0.62) * Math.PI);
-	return 1 + reboundProgress * intensity * 0.16;
+	const envelope =
+		elapsed < 0.38
+			? 1 - Math.sin((elapsed / 0.38) * Math.PI) * 0.24
+			: 1 + Math.sin(((elapsed - 0.38) / 0.62) * Math.PI) * 0.16;
+	return Math.max(0, 1 + (envelope - 1) * clickBounce);
 }
 
 const cursorJsonPath = getCursorJsonPath(process.argv[2]);

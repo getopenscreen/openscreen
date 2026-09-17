@@ -122,8 +122,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	openNotes: () => {
 		return ipcRenderer.invoke("open-notes");
 	},
-	selectSource: (source: ProcessedDesktopSource) => {
-		return ipcRenderer.invoke("select-source", source);
+	selectSource: (source: ProcessedDesktopSource, options?: { persist?: boolean }) => {
+		return ipcRenderer.invoke("select-source", source, options);
 	},
 	getSelectedSource: () => {
 		return ipcRenderer.invoke("get-selected-source");
@@ -139,8 +139,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("recording-prefs-changed", listener);
 		return () => ipcRenderer.removeListener("recording-prefs-changed", listener);
 	},
-	onSelectedSourceChanged: (callback: (source: ProcessedDesktopSource) => void) => {
-		const listener = (_event: unknown, source: ProcessedDesktopSource) => callback(source);
+	onSelectedSourceChanged: (callback: (source: ProcessedDesktopSource | null) => void) => {
+		const listener = (_event: unknown, source: ProcessedDesktopSource | null) => callback(source);
 		ipcRenderer.on("selected-source-changed", listener);
 		return () => ipcRenderer.removeListener("selected-source-changed", listener);
 	},

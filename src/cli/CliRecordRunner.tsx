@@ -120,6 +120,10 @@ export function CliRecordRunner() {
 		setMicrophoneDeviceName,
 		setSystemAudioEnabled,
 		setCursorCaptureMode,
+		setWebcamEnabled,
+		setWebcamDeviceId,
+		setWebcamDeviceName,
+		recordingPrefsLoaded,
 	} = recorder;
 
 	// Keep latest values in refs for the stop/finish effects.
@@ -137,9 +141,11 @@ export function CliRecordRunner() {
 	};
 
 	// Bootstrap: pick source, configure recorder, start.
+	// Wait for persisted GUI prefs to land first, then overwrite every field
+	// from the CLI request so a previous HUD session cannot enable mic/webcam.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentional run-once bootstrap; startedRef guards re-entry
 	useEffect(() => {
-		if (startedRef.current) return;
+		if (startedRef.current || !recordingPrefsLoaded) return;
 		startedRef.current = true;
 
 		void (async () => {
@@ -157,18 +163,30 @@ export function CliRecordRunner() {
 				requestRef.current = request;
 
 				const source = await pickSource(request);
-				await window.electronAPI.selectSource(source);
-				window.electronAPI.cliLog("info", `Recording source: ${source.name}`);
+				const selected = await window.electronAPI.selectSource(source, { persist: false });
+				if (!selected) {
+					throw new Error(
+						`Recording source "${source.name}" (${source.id}) is no longer available. ` +
+							"Re-list sources with `openscreen sources` and pick one that is currently shared.",
+					);
+				}
+				window.electronAPI.cliLog("info", `Recording source: ${selected.name}`);
 
+				setMicrophoneEnabled(Boolean(request.mic));
 				if (request.mic) {
 					const mic = await resolveMicDeviceId(request.micDevice);
-					setMicrophoneEnabled(true);
 					setMicrophoneDeviceId(mic.deviceId);
 					setMicrophoneDeviceName(mic.deviceName);
 					if (mic.deviceName) {
 						window.electronAPI.cliLog("info", `Microphone: ${mic.deviceName}`);
 					}
+				} else {
+					setMicrophoneDeviceId(undefined);
+					setMicrophoneDeviceName(undefined);
 				}
+				await setWebcamEnabled(false);
+				setWebcamDeviceId(undefined);
+				setWebcamDeviceName(undefined);
 				setSystemAudioEnabled(request.systemAudio);
 				setCursorCaptureMode(request.cursorMode);
 				setStatus("Starting recording…");
@@ -177,7 +195,7 @@ export function CliRecordRunner() {
 				await fail(error);
 			}
 		})();
-	}, []);
+	}, [recordingPrefsLoaded]);
 
 	// The setters above land on the *next* render; start only once they have.
 	const configuredRef = useRef(false);
@@ -185,10 +203,11 @@ export function CliRecordRunner() {
 	useEffect(() => {
 		const request = requestReady;
 		if (!request || configuredRef.current || phaseRef.current !== "init") return;
-		const micReady = !request.mic || recorder.microphoneEnabled;
+		const micReady = recorder.microphoneEnabled === Boolean(request.mic);
+		const webcamReady = !recorder.webcamEnabled;
 		const systemAudioReady = recorder.systemAudioEnabled === request.systemAudio;
 		const cursorReady = recorder.cursorCaptureMode === request.cursorMode;
-		if (!micReady || !systemAudioReady || !cursorReady) return;
+		if (!micReady || !webcamReady || !systemAudioReady || !cursorReady) return;
 
 		configuredRef.current = true;
 		phaseRef.current = "recording";
@@ -214,6 +233,7 @@ export function CliRecordRunner() {
 	}, [
 		requestReady,
 		recorder.microphoneEnabled,
+		recorder.webcamEnabled,
 		recorder.systemAudioEnabled,
 		recorder.cursorCaptureMode,
 	]);

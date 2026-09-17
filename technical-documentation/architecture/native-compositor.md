@@ -81,8 +81,8 @@ what `shaders.hlsl` actually implements:
    ([`compositor.rs:1765`](../../crates/compositor/src/compositor_windows.rs)), or a cover-fitted
    image loaded through `draw_image_bg`
    ([`compositor.rs:1156`](../../crates/compositor/src/compositor_windows.rs)). When the
-   scene's `effects.blur` is on, `blur_bg` (dual-Kawase, ~18 px) blurs whatever
-   was just drawn — that is what "Blur BG" does, mirroring the web
+   scene's `effects.blur` is on, `blur_bg` (dual-Kawase, sigma ~13 px at
+   1080p, same kernels on all three backends) blurs whatever was just drawn — that is what "Blur BG" does, mirroring the web
    `frameRenderer.blurredBackgroundLayer`
    ([`compositor.rs:1807`](../../crates/compositor/src/compositor_windows.rs)).
 2. **Screen shadow.** Drop-shadow SDF; opacity scales with the `shadow`
@@ -133,6 +133,20 @@ what `shaders.hlsl` actually implements:
    Per-annotation: figure (arrow, `mode = 9`), blur/mosaic (`mode = 10`),
    text (DirectWrite → D3D11 SRV, then `mode = 0`), image (cached per
    annotation id).
+
+   Text, figures and images are anchored on the screen box *without* the zoom
+   (`s_ann`); captions (`space: "frame"`) are anchored on the output frame.
+   Neither follows the zoom, so they hold still while the content zooms
+   underneath.
+   Blur/mosaic is the one exception: it is a privacy mask, so it must keep
+   covering what it hides. `FrameGeometry::privacy_mask`
+   ([`frame_geometry.rs`](../../crates/compositor/src/frame_geometry.rs)) places
+   it on the zoomed box, warps it through the same `TiltedQuad` as the screen
+   under a 3D preset (`mode = 10` with `mb.z = 1`), widens it to the previous
+   frame's rect while velocity motion blur is on (an oval then falls back to
+   its rectangle), pads it by one resting-box pixel per side, and scales the
+   blur radius / mosaic block with the content's magnification.
+   `crates/compositor/tests/privacy_blur_under_zoom.rs` renders it on D3D11.
 
 ```mermaid
 flowchart TB

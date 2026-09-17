@@ -487,20 +487,33 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     // qui arrive dans `texImg` (recopie mipmappée du render target : on ne peut pas
     // échantillonner la cible sur laquelle on dessine). `i.pout` donne directement l'UV de
     // sortie. fx.x = 0 mosaïque / 1 flou ; fx.y = taille de bloc px ou rayon px ;
-    // fx.z = 0 rectangle / 1 ovale ; fx.w = 1 si le masque doit être teinté.
+    // fx.z = 0 rectangle / 1 ovale ; fx.w = 1 si le masque doit être teinté ;
+    // mb.z = 1 si le masque est un quad incliné (coins TL, TR dans dst_prev, BR, BL dans src_prev).
     //
     // Le port se contentait de recopier `texImg` : ni forme, ni flou, ni mosaïque, ni teinte.
     if (layer.mode > 9.5 && layer.mode < 10.5)
     {
         float2 n = i.local / max(layer.quad_px, float2(1e-6));
+        // Écran incliné : masque warpé comme le contenu qu'il cache. Cf. commentaires HLSL.
+        if (layer.mb.z > 0.5)
+        {
+            float3 w = quad_inverse_bilinear(i.local, layer.dst_prev.xy, layer.dst_prev.zw,
+                                             layer.src_prev.xy, layer.src_prev.zw);
+            if (w.z < 0.5)
+            {
+                return float4(0.0, 0.0, 0.0, 0.0);
+            }
+            n = w.xy;
+        }
         float cov = 1.0;
         if (layer.fx.z > 0.5)
         {
-            // Ovale inscrit : distance au centre en unités de demi-axes, adoucie sur ~1px.
+            // Ovale inscrit : distance au centre en unités de demi-axes, adoucie sur ~1px. Le
+            // fondu tombe HORS de l'ellipse : dedans, le masque reste plein.
             float2 dd = (n - 0.5) * 2.0;
             float r = length(dd);
             float aa = 2.0 / max(min(layer.quad_px.x, layer.quad_px.y), 1.0);
-            cov = 1.0 - smoothstep(1.0 - aa, 1.0, r);
+            cov = 1.0 - smoothstep(1.0, 1.0 + aa, r);
         }
         if (cov <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);
 

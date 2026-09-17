@@ -138,6 +138,10 @@ Melde dich ab und wieder an, damit die neue Gruppe wirksam wird. Ohne sie geht n
 
 Der Umfang ist bewusst eng: Gelesen wird nur die linke Maustaste (`BTN_LEFT`), niemals Tastatureingaben. Um das Auslesen auch dort ganz abzuschalten, wo die Berechtigung besteht, setze `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` in der Umgebung, aus der OpenScreen gestartet wird.
 
+:::caution
+Die Gruppe `input` gilt nicht nur für OpenScreen: Danach kann jedes Programm, das unter deinem Benutzer läuft, alle Eingabegeräte auslesen, auch die Tastatur. Füge dich nur hinzu, wenn du das auf diesem Rechner akzeptierst.
+:::
+
 **Touchpads:** Aufgenommen wird nur ein physischer Klick, bei dem du das Pad herunterdrückst, bis es nachgibt. **Tippen zum Klicken wird nicht aufgenommen**: Der Eingabe-Stack deines Compositors (libinput) erzeugt diese Taps für den eigenen Gebrauch und schreibt sie nie an das Kernel-Gerät zurück, das OpenScreen liest. Auf evdev-Ebene gibt es also nichts zu sehen. Mit einer Maus oder mit einem Touchpad, bei dem Tippen zum Klicken ausgeschaltet ist, wird jeder Klick aufgenommen.
 
 ## Unterschiede zwischen den Plattformen {#platform-differences}

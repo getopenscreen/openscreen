@@ -138,6 +138,10 @@ Déconnectez-vous puis reconnectez-vous pour que le nouveau groupe soit pris en 
 
 La portée est volontairement limitée : seul le bouton gauche de la souris (`BTN_LEFT`) est lu, jamais les frappes au clavier. Pour désactiver complètement ce lecteur, même là où l'autorisation existe, définissez `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` dans l'environnement depuis lequel OpenScreen est lancé.
 
+:::caution
+Le groupe `input` ne se limite pas à OpenScreen : tout programme lancé sous votre compte peut alors lire tous les périphériques d'entrée, clavier compris. Ne vous y ajoutez que si vous l'acceptez sur cette machine.
+:::
+
 **Pavés tactiles :** seul un clic physique est enregistré, quand vous appuyez sur le pavé jusqu'à ce qu'il s'enfonce. **Le tapotement pour cliquer (tap-to-click) ne l'est pas** : la pile d'entrée de votre compositeur (libinput) synthétise ces tapotements pour son propre usage et ne les renvoie jamais au périphérique du noyau que lit OpenScreen ; il n'y a donc rien à lire au niveau d'evdev. Avec une souris, ou un pavé tactile dont le tapotement pour cliquer est désactivé, chaque clic est enregistré.
 
 ## Différences entre plateformes {#platform-differences}

@@ -138,6 +138,10 @@ Log out and back in for the new group to take effect. Nothing breaks without it 
 
 The scope is deliberately narrow: only the left mouse button (`BTN_LEFT`) is ever read, never keystrokes. To turn the reader off entirely even where the permission exists, set `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` in the environment OpenScreen is launched from.
 
+:::caution
+The `input` group is not limited to OpenScreen: every program running as your user can then read every input device, keyboard included. Add yourself only if you accept that on this machine.
+:::
+
 **Touchpads:** only a physical click — pressing the pad down until it depresses — is recorded. **Tap-to-click is not**, because your compositor's input stack (libinput) synthesises those taps for its own use and never writes them back to the kernel device that OpenScreen reads, so there is nothing at the evdev layer to see. A mouse, or a touchpad with tap-to-click turned off, records every click.
 
 ## Platform differences

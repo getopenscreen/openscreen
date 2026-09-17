@@ -138,6 +138,10 @@ sudo usermod -aG input $USER
 
 读取范围被刻意限定得很窄：只读取鼠标左键（`BTN_LEFT`），绝不读取键盘按键。如果即使有权限也要完全关闭这个读取功能，请在启动 OpenScreen 的环境中设置 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
 
+:::caution
+`input` 组并不只对 OpenScreen 生效：加入后，以你的用户身份运行的任何程序都能读取所有输入设备，包括键盘。请仅在你接受这一点的机器上加入该组。
+:::
+
 **触控板**：只有物理点击（把触控板按下去直到它下沉）才会被记录。**轻触点击不会被记录**，因为轻触是由合成器的输入栈（libinput）自行合成、供自己使用的，从不会写回 OpenScreen 读取的内核设备，所以在 evdev 这一层根本看不到。使用鼠标，或关闭轻触点击的触控板，每次点击都会被记录。
 
 ## 平台差异 {#platform-differences}

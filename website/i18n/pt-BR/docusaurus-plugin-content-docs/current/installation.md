@@ -138,6 +138,10 @@ Encerre a sessão e entre de novo para que o novo grupo passe a valer. Nada queb
 
 O escopo é restrito de propósito: só o botão esquerdo do mouse (`BTN_LEFT`) é lido, nunca as teclas digitadas. Para desativar o leitor por completo, mesmo onde a permissão existe, defina `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` no ambiente a partir do qual o OpenScreen é iniciado.
 
+:::caution
+O grupo `input` não se limita ao OpenScreen: qualquer programa executado com o seu usuário passa a poder ler todos os dispositivos de entrada, inclusive o teclado. Só se adicione se aceitar isso nesta máquina.
+:::
+
 **Touchpads:** só um clique físico — pressionar o touchpad até ele afundar — é registrado. **O toque para clicar não é**, porque a pilha de entrada do seu compositor (libinput) sintetiza esses toques para uso próprio e nunca os repassa ao dispositivo do kernel que o OpenScreen lê, então não há nada para ver na camada evdev. Um mouse, ou um touchpad com o toque para clicar desativado, registra todos os cliques.
 
 ## Diferenças entre plataformas {#platform-differences}

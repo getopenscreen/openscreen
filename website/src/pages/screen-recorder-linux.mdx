@@ -40,7 +40,7 @@ OpenScreen records the screen on Linux with its own native helper, not with the 
 - **System audio from PipeWire.** It comes from the monitor of the default PipeWire sink and is mixed with the microphone into one AAC track. It needs PipeWire as the sound server, the default on Ubuntu 22.10 and later and Fedora 34 and later.
 - **Microphone choice.** The HUD lists every input device, with a live level meter. The helper finds the matching PipeWire node by its description.
 - **An editable cursor.** In the default overlay mode, the portal reports the cursor position and shape, so you can restyle the cursor in the editor. System mode records the pointer as it is.
-- **Clicks on Wayland.** Wayland has no portal for input events, so OpenScreen reads left-button presses from evdev. That works when your user is in the `input` group, and only the left button is read, never keystrokes. Without the group, recording still works and every cursor sample is saved as a move. [Mouse clicks on Wayland](/docs/installation/#mouse-clicks-on-wayland) has the command.
+- **Clicks on Wayland.** Wayland has no portal for input events, so OpenScreen reads left-button presses from evdev. That works when your user is in the `input` group, and OpenScreen reads only the left button, never keystrokes. The group itself is broader: it lets every program you run read every input device, keyboard included. Without the group, recording still works and every cursor sample is saved as a move. [Mouse clicks on Wayland](/docs/installation/#mouse-clicks-on-wayland) has the command.
 - **Browser capture only as a fallback.** Chromium's capture takes over only in a build that is missing the helper. A helper that fails reports an error instead of switching. See [Recording](/docs/recording/).
 
 ## Screen Studio-style polish on Linux
@@ -84,7 +84,7 @@ Screen Studio supports only macOS (as of September 2026). OpenScreen offers the 
 ## Getting started
 
 1. Download the package for your distribution from the [download page](/download/), or use the Nix flake.
-2. Follow the [Linux installation steps](/docs/installation/#linux). Add your user to the `input` group if you want clicks recorded.
+2. Follow the [Linux installation steps](/docs/installation/#linux). Add your user to the `input` group if you want clicks recorded and accept what that group allows.
 3. Make a first recording with the [quick start](/docs/quick-start/), answer the portal dialog when it opens, then run **Auto-enhance → Automatic zooms** on the take.
 
 On another system? See the [Windows](/screen-recorder-windows/) and [macOS](/screen-recorder-mac/) pages. Coming from a Mac app? See the [Screen Studio alternative](/alternatives/screen-studio/). Or go back to the [OpenScreen home page](/).

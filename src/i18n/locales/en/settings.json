@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "Animation",
+		"motionNone": "None",
+		"motionDrift": "Drift",
+		"motionAurora": "Aurora",
+		"motionWaves": "Waves",
+		"motionGradientOnly": "Animation applies to gradient backgrounds only. Pick a gradient to animate it.",
 		"gradientLabel": "Gradient {{index}}",
 		"uploadCustom": "Upload Custom",
 		"unsupportedImage": "Unsupported image. Use a JPG or PNG file.",

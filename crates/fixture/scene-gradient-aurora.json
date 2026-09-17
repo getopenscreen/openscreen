@@ -1,0 +1,37 @@
+{
+	"clips": [],
+	"layout": {
+		"preset": "picture-in-picture",
+		"webcamSize": 1,
+		"webcamShape": "rectangle",
+		"webcamMirror": false,
+		"webcamPosition": null,
+		"webcamReactiveZoom": false
+	},
+	"effects": {
+		"padding": 0.5,
+		"blur": false,
+		"shadow": 0.8,
+		"roundnessFrac": 0.0222,
+		"motionBlur": 0
+	},
+	"background": {
+		"kind": "gradient",
+		"angleDeg": 135,
+		"stops": ["#2b3a67", "#b8577f"],
+		"motion": "aurora"
+	},
+	"zoomRegions": [],
+	"speedRegions": [],
+	"cursor": {
+		"show": false,
+		"size": 1,
+		"smoothing": 0,
+		"motionBlur": 0,
+		"clickBounce": 0,
+		"clipToBounds": false,
+		"theme": "default"
+	},
+	"cropByClip": [],
+	"output": { "width": 1920, "height": 1080, "fps": 60 }
+}

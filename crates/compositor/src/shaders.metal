@@ -310,6 +310,55 @@ static float4 cursor_extruded(float2 local, constant Layer &layer,
     return acc;
 }
 
+// Hash 2D -> [0,1) sans sin(). Miroir de `hash12` côté HLSL.
+inline float hash12(float2 p)
+{
+    float3 p3 = fract(float3(p.x, p.y, p.x) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// Bruit de valeur lissé (hermite), sans texture. Miroir de `value_noise` côté HLSL.
+inline float value_noise(float2 q)
+{
+    float2 i = floor(q);
+    float2 f = fract(q);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    float a = hash12(i);
+    float b = hash12(i + float2(1.0, 0.0));
+    float c = hash12(i + float2(0.0, 1.0));
+    float d = hash12(i + float2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
+// `gradient_motion` côté HLSL (commentaires complets là-bas).
+inline float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, float3 c1,
+                              float time, float motion, float aspect)
+{
+    const float TAU = 6.2831853;
+    float u = dot(gp - 0.5, dir) / denom; // position le long de l'axe, -0.5..0.5
+    if (motion < 2.5)
+    {
+        // Aurore : rampe perturbée par un bruit lent, puis trois nappes gaussiennes.
+        float2 p = float2((gp.x - 0.5) * aspect, gp.y - 0.5);
+        float ph = TAU * time / 120.0;
+        float n = value_noise(p * 2.5 + 1.5 * float2(cos(ph), sin(ph)));
+        float3 g = mix(c0, c1, clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0));
+        float2 b0 = float2(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
+        float2 b1 = float2(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
+        float2 b2 = float2(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
+        g = mix(g, c1, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
+        g = mix(g, c0, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
+        g = mix(g, c1, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        return g;
+    }
+    // Vagues : trois bandes sinus perpendiculaires à l'axe (12 s), ondulées (20 s).
+    float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
+    float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
+    return mix(c0, c1, clamp(0.5 + u + 0.07 * w, 0.0, 1.0));
+}
+
 fragment float4 ps_main(VSOut i [[stage_in]],
                         constant Layer &layer [[buffer(0)]],
                         texture2d<float, access::sample> texY [[texture(0)]],
@@ -455,9 +504,20 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     //
     // Le port avait remplacé tout ce calcul par une couleur plate : un dégradé s'affichait
     // comme son premier stop, uniformément.
+    //
+    // Fond animé : fx.z = temps programme (s, replié sur 120), fx.w = mouvement (0 immobile,
+    // 1 dérive, 2 aurore, 3 vagues), mb.x = aspect w/h. 0 rend le dégradé d'avant à l'octet.
     if (layer.mode > 4.5 && layer.mode < 5.5)
     {
         float2 dir = layer.fx.xy;
+        if (layer.fx.w > 0.5 && layer.fx.w < 1.5)
+        {
+            // Dérive : l'axe respire de ±15° (0.2617994 rad) en 20 s.
+            float da = 0.2617994 * sin(6.2831853 * layer.fx.z / 20.0);
+            float sa = sin(da);
+            float ca = cos(da);
+            dir = float2(dir.x * ca - dir.y * sa, dir.x * sa + dir.y * ca);
+        }
         float denom = max(abs(dir.x) + abs(dir.y), 1e-4);
         // Paramétré sur le QUAD dès qu'il en a un (la bulle webcam), sinon sur la sortie. Pour le
         // fond plein cadre les deux coïncident ; pour une bulle dans un coin, `pout` ne montrerait
@@ -468,6 +528,11 @@ fragment float4 ps_main(VSOut i [[stage_in]],
             : i.pout;
         float t = clamp(0.5 + dot(gp - 0.5, dir) / denom, 0.0, 1.0);
         float3 g = mix(layer.color.rgb, layer.src.xyz, t);
+        if (layer.fx.w > 1.5)
+        {
+            g = gradient_motion(gp, dir, denom, layer.color.rgb, layer.src.xyz, layer.fx.z,
+                                layer.fx.w, layer.mb.x);
+        }
         float a = quad_round_alpha(i.local, layer.quad_px, layer.radius_px);
         return float4(g * a, a); // prémultiplié
     }

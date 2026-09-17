@@ -283,6 +283,14 @@ describe("patchEditorSettings", () => {
 		expect(getEditorSettings(doc).webcamBackgroundMode).toBe("none");
 	});
 
+	it("round-trips the wallpaper motion and rejects an unknown one", () => {
+		expect(getEditorSettings(baseDoc).wallpaperMotion).toBe("none");
+		const patched = patchEditorSettings(baseDoc, { wallpaperMotion: "aurora" });
+		expect(getEditorSettings(patched).wallpaperMotion).toBe("aurora");
+		const doc = { ...baseDoc, legacyEditor: { wallpaperMotion: "plasma" } } as typeof baseDoc;
+		expect(getEditorSettings(doc).wallpaperMotion).toBe("none");
+	});
+
 	it("clamps a stored webcam blur intensity into 0..1", () => {
 		const tooHigh = { ...baseDoc, legacyEditor: { webcamBlurIntensity: 1000 } } as typeof baseDoc;
 		expect(getEditorSettings(tooHigh).webcamBlurIntensity).toBe(1);

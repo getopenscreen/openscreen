@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "Animación",
+		"motionNone": "Ninguno",
+		"motionDrift": "Deriva",
+		"motionAurora": "Aurora",
+		"motionWaves": "Ondas",
+		"motionGradientOnly": "La animación solo se aplica a fondos degradados. Elige un degradado para animarlo.",
 		"gradientLabel": "Degradado {{index}}",
 		"uploadCustom": "Subir personalizado",
 		"unsupportedImage": "Imagen no compatible. Usa un archivo JPG o PNG.",

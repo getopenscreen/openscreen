@@ -172,6 +172,46 @@ The encoder is not the bottleneck either way — the two CPU rows differ by 5 %,
 gap to hardware is 18×. That gap is the blur and motion-blur shaders (see the table above),
 not the codec.
 
+### Animated background (C9) — 2026-09-16
+
+The animated gradient (`background.motion`, shader mode 5) is not a `Cfg` flag: it only
+exists in a scene. So its row is an A/B of two scenes that differ by that one key,
+[`scene-gradient-still.json`](../../crates/fixture/scene-gradient-still.json) and
+[`scene-gradient-aurora.json`](../../crates/fixture/scene-gradient-aurora.json). Aurora is
+the priced motion because it is the most expensive: value noise plus three gaussians on
+every output pixel.
+
+```bash
+x.bat run --release -- --cfg C3,C8 --preview --frames 300 --repeat 5 --scene fixture/scene-gradient-aurora.json
+x.bat run --release -- --cfg C3,C8 --export --scene fixture/scene-gradient-aurora.json
+x.bat run --release -- --cfg C3 --backend cpu --preview --frames 300 --repeat 3 --scene fixture/scene-gradient-aurora.json
+```
+
+One machine (RTX 4070 Ti, Ryzen 7 5800X, ~55 browser processes live), not the reference
+iGPU. The frozen fixture media were absent, so the sources are two 6 s `-c copy` cuts of a
+local 1080p60 recording. One warm-up pass discarded, then three rounds with still and
+aurora interleaved. Each cell is the best of the three rounds, and each round is itself
+best-of-5 (preview), best-of-3 (WARP) or a single run (export).
+
+| path | cfg | still ms/f | aurora ms/f | Δ ms/f | spread (per round) |
+|---|---|---:|---:|---:|---|
+| HW preview | C3 | 4.20 | 4.20 | 0.00 | 59–70 % |
+| HW preview | C8 | 6.76 | 6.77 | +0.01 | 5.8–9.0 % |
+| HW export | C3 | 2.22 | 2.24 | +0.02 | 2.22–2.36 over rounds |
+| HW export | C8 | 2.17 | 2.19 | +0.02 | 2.17–2.26 over rounds |
+| WARP preview | C3 | 12.54 | 19.69 | **+7.15** | 5.9/6.3 % still, 3.2/2.2 % aurora |
+
+**Free on a GPU, +57 % on WARP.** On the hardware backend the delta is below the noise in
+every path. On WARP the shader costs ~7 ms per 1080p frame, the same shape as the blur
+cliffs above: fine for a real GPU, heavy for a per-pixel loop on the CPU rasteriser.
+
+> **HW preview C3 is not admissible** under [§ spread thresholds](#spread-thresholds): its
+> first repeat is a cold outlier in every round, so only its best-of is readable. One WARP
+> round per arm blew the gate too (still 42.8 %, aurora 24.1 %) and is left out of the
+> table. The export rows are single runs per round. The export does animate: a 60 px strip
+> of the aurora export moves by up to 22/255 between frames 0 and 300, against 4/255 for the
+> still one.
+
 ## The macOS export path — 2026-09-03/04
 
 Everything above is the Windows reference machine. This section is a **different machine and a different pipeline**: a Mac mini M1 (8 cores, 8 GiB, macOS 26.5), Metal compositor, VideoToolbox on both ends. Nothing here transfers to the Windows numbers, and the reverse held too — of the three levers that mattered on Windows and Linux, **none applied here**.

@@ -24,10 +24,10 @@ struct Layer {
     radius_px: f32,
     mode: f32,            // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre, 8 = écran tilté, 9 = flèche, 10 = flou/mosaïque, 12 = ombre du quad tilté, 13 = curseur tilté
     color: vec4<f32>,
-    fx: vec4<f32>,        // mode 2 : spread ombre en px ; modes 8/12/13 : coins TL,TR du quad projeté ; mode 9 : hampe de la flèche ; mode 10 : (flou?, rayon/bloc px, ovale?, teinté?)
+    fx: vec4<f32>,        // mode 2 : spread ombre en px ; mode 5 : (direction xy, temps programme replie, mouvement 0..3) ; modes 8/12/13 : coins TL,TR du quad projeté ; mode 9 : hampe de la flèche ; mode 10 : (flou?, rayon/bloc px, ovale?, teinté?)
     src_prev: vec4<f32>,  // modes 8/12/13 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque
     dst_prev: vec4<f32>,  // mode 8 : taille du plan en px AVANT projection (le rayon y vit) ; mode 13 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque
-    mb: vec4<f32>,        // mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné ; mode 13 : mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume, <= 1 = plat)
+    mb: vec4<f32>,        // mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné ; mode 13 : mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume, <= 1 = plat)
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -221,6 +221,51 @@ fn quad_inverse_bilinear(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: vec2
     return r1;
 }
 
+// Hash 2D -> [0,1) sans sin(). Miroir de `hash12` cote HLSL.
+fn hash12(p: vec2<f32>) -> f32 {
+    var p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031);
+    p3 = p3 + vec3<f32>(dot(p3, p3.yzx + vec3<f32>(33.33)));
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// Bruit de valeur lisse (hermite), sans texture. Miroir de `value_noise` cote HLSL.
+fn value_noise(q: vec2<f32>) -> f32 {
+    let i = floor(q);
+    let f = fract(q);
+    let u = f * f * (vec2<f32>(3.0) - 2.0 * f);
+    let a = hash12(i);
+    let b = hash12(i + vec2<f32>(1.0, 0.0));
+    let c = hash12(i + vec2<f32>(0.0, 1.0));
+    let d = hash12(i + vec2<f32>(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
+// `gradient_motion` cote HLSL (commentaires complets la-bas).
+fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, c0: vec3<f32>, c1: vec3<f32>,
+                   time: f32, motion: f32, aspect: f32) -> vec3<f32> {
+    let TAU = 6.2831853;
+    let u = dot(gp - vec2<f32>(0.5), dir) / denom; // position le long de l'axe, -0.5..0.5
+    if motion < 2.5 {
+        // Aurore : rampe perturbee par un bruit lent, puis trois nappes gaussiennes.
+        let p = vec2<f32>((gp.x - 0.5) * aspect, gp.y - 0.5);
+        let ph = TAU * time / 120.0;
+        let n = value_noise(p * 2.5 + 1.5 * vec2<f32>(cos(ph), sin(ph)));
+        var g = mix(c0, c1, clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0));
+        let b0 = vec2<f32>(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
+        let b1 = vec2<f32>(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
+        let b2 = vec2<f32>(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
+        g = mix(g, c1, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
+        g = mix(g, c0, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
+        g = mix(g, c1, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        return g;
+    }
+    // Vagues : trois bandes sinus perpendiculaires a l'axe (12 s), ondulees (20 s).
+    let v = dot(gp - vec2<f32>(0.5), vec2<f32>(-dir.y, dir.x)) / denom;
+    let w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
+    return mix(c0, c1, clamp(0.5 + u + 0.07 * w, 0.0, 1.0));
+}
+
 // Fond flouté pour le mode "blur" de la webcam.
 // Disque de Vogel (spirale à angle d'or) à 21 échantillons avec pondération gaussienne et
 // rotation par pixel via Interleaved Gradient Noise (IGN) pour un bokeh photographique doux, isotrope et rapide.
@@ -361,7 +406,17 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // la direction fx.xy (sin, -cos de l'angle). Parite avec le HLSL/MSL.
         // `denom` : HLSL et MSL normalisent coin-a-coin (|dx|+|dy|) pour couvrir toute la
         // diagonale. Il manquait ici, donc le meme degrade ne rendait pas pareil sur Linux.
-        let denom = max(abs(layer.fx.x) + abs(layer.fx.y), 1e-4);
+        // Fond anime : fx.z = temps programme (s, replie sur 120), fx.w = mouvement (0 immobile,
+        // 1 derive, 2 aurore, 3 vagues), mb.x = aspect w/h. 0 rend le degrade d'avant a l'octet.
+        var dir = layer.fx.xy;
+        if layer.fx.w > 0.5 && layer.fx.w < 1.5 {
+            // Derive : l'axe respire de +-15 deg (0.2617994 rad) en 20 s.
+            let da = 0.2617994 * sin(6.2831853 * layer.fx.z / 20.0);
+            let sa = sin(da);
+            let ca = cos(da);
+            dir = vec2<f32>(dir.x * ca - dir.y * sa, dir.x * sa + dir.y * ca);
+        }
+        let denom = max(abs(dir.x) + abs(dir.y), 1e-4);
         // Parametre sur le QUAD des qu'il en a un (la bulle webcam), sinon sur la sortie. Pour
         // le fond plein cadre les deux coincident ; pour une bulle dans un coin, `pout` ne
         // montrerait que la tranche du degrade plein cadre qui passe dessous.
@@ -369,8 +424,12 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         if layer.quad_px.x > 0.0 && layer.quad_px.y > 0.0 {
             gp = i.local / layer.quad_px;
         }
-        let t = clamp(0.5 + dot(gp - vec2<f32>(0.5), layer.fx.xy) / denom, 0.0, 1.0);
+        let t = clamp(0.5 + dot(gp - vec2<f32>(0.5), dir) / denom, 0.0, 1.0);
         rgb = mix(layer.color.rgb, layer.src.rgb, t);
+        if layer.fx.w > 1.5 {
+            rgb = gradient_motion(gp, dir, denom, layer.color.rgb, layer.src.rgb, layer.fx.z,
+                                  layer.fx.w, layer.mb.x);
+        }
     } else if layer.mode > 10.5 && layer.mode < 11.5 {
         // Mode 11 : texte. texY est l'atlas R8 (couverture alpha au canal .r,
         // produit par text_cosmic::TextRasterizer), teinte par layer.color.

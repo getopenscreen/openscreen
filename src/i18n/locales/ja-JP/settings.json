@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "アニメーション",
+		"motionNone": "なし",
+		"motionDrift": "ドリフト",
+		"motionAurora": "オーロラ",
+		"motionWaves": "ウェーブ",
+		"motionGradientOnly": "アニメーションはグラデーション背景にのみ適用されます。アニメーションするにはグラデーションを選択してください。",
 		"gradientLabel": "グラデーション {{index}}",
 		"uploadCustom": "カスタム画像を読み込む",
 		"unsupportedImage": "対応していない画像です。JPG または PNG ファイルを使用してください。",

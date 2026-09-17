@@ -32,6 +32,7 @@ describe("projectPersistence media compatibility", () => {
 			},
 			{
 				wallpaper: "/wallpapers/wallpaper1.jpg",
+				wallpaperMotion: "none",
 				shadowIntensity: 0,
 				showBlur: false,
 				motionBlurAmount: 0,
@@ -67,6 +68,16 @@ describe("projectPersistence media compatibility", () => {
 			webcamVideoPath: "/tmp/webcam.webm",
 		});
 		expect(validateProjectData(project)).toBe(true);
+	});
+
+	// The CLI export reads projects through this function: a dropped key is a motion the
+	// preview shows and the export does not.
+	it("keeps a known wallpaper motion and drops an unknown one", () => {
+		expect(normalizeProjectEditor({ wallpaperMotion: "drift" }).wallpaperMotion).toBe("drift");
+		expect(normalizeProjectEditor({}).wallpaperMotion).toBe("none");
+		expect(normalizeProjectEditor({ wallpaperMotion: "plasma" as never }).wallpaperMotion).toBe(
+			"none",
+		);
 	});
 
 	it("normalizes webcam mask shape values safely", () => {

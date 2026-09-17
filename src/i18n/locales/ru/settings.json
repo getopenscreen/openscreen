@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "Анимация",
+		"motionNone": "Нет",
+		"motionDrift": "Дрейф",
+		"motionAurora": "Сияние",
+		"motionWaves": "Волны",
+		"motionGradientOnly": "Анимация применяется только к градиентным фонам. Выберите градиент, чтобы анимировать его.",
 		"gradientLabel": "Градиент {{index}}",
 		"uploadCustom": "Загрузить свой",
 		"unsupportedImage": "Неподдерживаемое изображение. Используйте файл JPG или PNG.",

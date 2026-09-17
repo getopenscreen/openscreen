@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "动画",
+		"motionNone": "无",
+		"motionDrift": "漂移",
+		"motionAurora": "极光",
+		"motionWaves": "波浪",
+		"motionGradientOnly": "动画仅适用于渐变背景。请选择一个渐变来启用动画。",
 		"gradientLabel": "渐变 {{index}}",
 		"uploadCustom": "上传自定义",
 		"unsupportedImage": "不支持的图片格式。请使用 JPG 或 PNG 文件。",

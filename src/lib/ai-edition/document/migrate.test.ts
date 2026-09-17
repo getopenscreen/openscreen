@@ -14,6 +14,7 @@ function makeV2Project(overrides: Partial<EditorProjectData> = {}): EditorProjec
 		media: { screenVideoPath: "/recordings/screen.webm" },
 		editor: {
 			wallpaper: "/wallpapers/wallpaper1.jpg",
+			wallpaperMotion: "none",
 			shadowIntensity: 0,
 			showBlur: false,
 			motionBlurAmount: 0,
@@ -260,6 +261,21 @@ describe("migrateAxcutDocumentToProjectData", () => {
 		expect(back.editor.wallpaper).toBe("/wallpapers/wallpaper1.jpg");
 		expect(back.editor.cursorTheme).toBe("default");
 		expect(back.editor.webcamMaskShape).toBe("circle");
+	});
+
+	it("defaults wallpaperMotion to none when legacyEditor lacks it", () => {
+		const doc = migrateProjectDataToAxcutDocument(makeV2Project());
+		const { wallpaperMotion: _omitted, ...legacy } = doc.legacyEditor as Record<string, unknown>;
+		const back = migrateAxcutDocumentToProjectData({ ...doc, legacyEditor: legacy });
+		expect(back.editor.wallpaperMotion).toBe("none");
+	});
+
+	it("keeps a legacy wallpaperMotion over the default", () => {
+		const v2 = makeV2Project({
+			editor: { ...makeV2Project().editor, wallpaperMotion: "aurora" },
+		});
+		const back = migrateAxcutDocumentToProjectData(migrateProjectDataToAxcutDocument(v2));
+		expect(back.editor.wallpaperMotion).toBe("aurora");
 	});
 
 	it("round-trips zoomRegions and annotationRegions back to ms", () => {

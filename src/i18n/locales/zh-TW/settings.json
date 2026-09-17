@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "動畫",
+		"motionNone": "無",
+		"motionDrift": "漂移",
+		"motionAurora": "極光",
+		"motionWaves": "波浪",
+		"motionGradientOnly": "動畫僅適用於漸層背景。請選擇一個漸層來啟用動畫。",
 		"gradientLabel": "漸層 {{index}}",
 		"uploadCustom": "上傳自訂",
 		"unsupportedImage": "不支援的圖片格式。請使用 JPG 或 PNG 檔案。",

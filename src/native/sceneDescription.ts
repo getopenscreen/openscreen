@@ -18,6 +18,7 @@
 import type {
 	CameraFullscreenRegion,
 	SpeedRegion,
+	WallpaperMotion,
 	WebcamBackgroundMode,
 } from "@/components/video-editor/types";
 import { DEFAULT_CROP_REGION, getZoomScale } from "@/components/video-editor/types";
@@ -57,7 +58,14 @@ import type { CompositorClipInput } from "./contracts";
 /** Background behind the screen. Parsed from `settings.wallpaper`. */
 export type SceneBackground =
 	| { kind: "color"; color: string } // "#rrggbb"
-	| { kind: "gradient"; angleDeg: number; stops: string[] } // linear-gradient(deg, c1, c2, …)
+	// linear-gradient(deg, c1, c2, …). `motion` is omitted when still, so a project without
+	// animation sends the same payload as before the setting existed.
+	| {
+			kind: "gradient";
+			angleDeg: number;
+			stops: string[];
+			motion?: Exclude<WallpaperMotion, "none">;
+	  }
 	| { kind: "image"; path: string }; // "/wallpapers/…" or a data: URL
 
 /** A timeline zoom region (from `document.zoomRanges`). Times in seconds. */
@@ -507,6 +515,23 @@ function parseWallpaper(wallpaper: string) {
 		} as const;
 	}
 	return { kind: "image", path: wallpaper } as const;
+}
+
+/**
+ * True when `settings.wallpaperMotion` has something to move: the compositor animates only
+ * the gradient it draws itself. The motion control asks this, not its own guess at what a
+ * gradient is, so it is enabled exactly when the export would show the motion.
+ */
+export function wallpaperAcceptsMotion(wallpaper: string): boolean {
+	return parseWallpaper(wallpaper).kind === "gradient";
+}
+
+/** The screen background with the chosen motion attached, when there is one to attach. */
+function sceneBackground(wallpaper: string, motion: WallpaperMotion): SceneBackground {
+	const background = parseWallpaper(wallpaper);
+	return background.kind === "gradient" && motion !== "none"
+		? { ...background, motion }
+		: background;
 }
 
 /**
@@ -1046,7 +1071,7 @@ export function buildSceneDescription(
 			gainDb: settings.audioGainDb,
 		},
 		audioTracks,
-		background: parseWallpaper(settings.wallpaper),
+		background: sceneBackground(settings.wallpaper, settings.wallpaperMotion),
 		zoomRegions: projectedZoomRegions.map((region) => ({
 			id: region.id,
 			startSec: region.startMs / 1000,

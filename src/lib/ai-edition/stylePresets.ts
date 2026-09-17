@@ -12,6 +12,7 @@
 
 import type {
 	CursorVisualSettings,
+	WallpaperMotion,
 	WebcamBackgroundMode,
 	WebcamLayoutPreset,
 	WebcamMaskShape,
@@ -34,6 +35,7 @@ const CSS_WALLPAPER_MAX_LENGTH = 10_000;
 /** The appearance fields of `EditorSettingsSnapshot`, in the snapshot's own shape. */
 export interface StylePresetAppearance {
 	wallpaper: string;
+	wallpaperMotion: WallpaperMotion;
 	aspectRatio: AspectRatio;
 	shadowIntensity: number;
 	showBlur: boolean;
@@ -92,6 +94,12 @@ const WEBCAM_BACKGROUND_MODES = [
 	"blur",
 	"custom",
 ] as const satisfies readonly WebcamBackgroundMode[];
+const WALLPAPER_MOTIONS = [
+	"none",
+	"drift",
+	"aurora",
+	"waves",
+] as const satisfies readonly WallpaperMotion[];
 
 // Bounds are the editor sliders' (RightPanes.tsx), in stored units. `getEditorSettings`
 // only clamps two of these, so a preset is the stricter gate: a value no slider can
@@ -205,8 +213,9 @@ export function parseStylePresetWallpaper(value: unknown, key = "wallpaper"): st
  * lenient field is `cursorTheme`: themes come and go between builds, so an id this build
  * does not ship falls back to the default cursor instead of rejecting a preset that is
  * otherwise sound (the editor does the same when it renders one). `cursor.volume` may be
- * absent: it postdates format version 1, and a preset without it was authored flat. Unknown
- * extra keys are dropped.
+ * absent: it postdates format version 1, and a preset without it was authored flat.
+ * `wallpaperMotion` may be absent too: a preset saved before it has a still wallpaper, which
+ * is exactly what "none" means. Unknown extra keys are dropped.
  */
 export function parseStylePresetAppearance(value: unknown): StylePresetAppearance {
 	if (!isRecord(value)) {
@@ -224,6 +233,10 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 	}
 	return {
 		wallpaper: parseStylePresetWallpaper(value.wallpaper),
+		wallpaperMotion:
+			value.wallpaperMotion === undefined
+				? "none"
+				: readEnum(value, "wallpaperMotion", WALLPAPER_MOTIONS),
 		aspectRatio: value.aspectRatio,
 		shadowIntensity: readNumber(value, "shadowIntensity", NUMBER_RANGES.shadowIntensity),
 		showBlur: readBoolean(value, "showBlur"),

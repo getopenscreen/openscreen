@@ -15,6 +15,7 @@ import {
 function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePresetAppearance {
 	return {
 		wallpaper: "/wallpapers/wallpaper3.jpg",
+		wallpaperMotion: "drift",
 		aspectRatio: "16:9",
 		shadowIntensity: 0.2,
 		showBlur: false,
@@ -54,6 +55,15 @@ describe("parseStylePresetAppearance", () => {
 	it("rejects a missing field instead of guessing a factory value", () => {
 		const { padding: _padding, ...rest } = appearance();
 		expect(() => parseStylePresetAppearance(rest)).toThrow(/padding/);
+	});
+
+	// Added after format version 1 shipped: an older preset has a still wallpaper.
+	it("reads a preset without a wallpaper motion as still, and refuses an unknown one", () => {
+		const { wallpaperMotion: _motion, ...older } = appearance();
+		expect(parseStylePresetAppearance(older).wallpaperMotion).toBe("none");
+		expect(() =>
+			parseStylePresetAppearance({ ...appearance(), wallpaperMotion: "plasma" }),
+		).toThrow(/wallpaperMotion/);
 	});
 
 	it("rejects out-of-range numbers, wrong types and unknown enum values", () => {

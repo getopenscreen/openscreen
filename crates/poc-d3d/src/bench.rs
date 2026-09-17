@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result};
 use openscreen_compositor::compositor::Compositor;
 use openscreen_compositor::gif_export::{GifExportParams, GifStats};
 use openscreen_compositor::pipeline::ClipSource;
-use openscreen_compositor::{config, cursor, d3d, gif_export, live, pipeline, scene};
+use openscreen_compositor::{config, cursor, d3d, frame_geometry, gif_export, live, pipeline, scene};
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -134,7 +134,11 @@ fn run_bench(args: &[String]) -> Result<()> {
     if !scene_arg.is_empty() {
         let json = std::fs::read_to_string(&scene_arg)
             .with_context(|| format!("lecture de la scène {scene_arg}"))?;
-        comp.set_scene(Some(scene::Scene::from_json(&json)?));
+        let s = scene::Scene::from_json(&json)?;
+        // Comme l'export de l'app : sans ces réglages, le padding de la scène est ignoré, la
+        // vidéo couvre tout le cadre et le fond n'apparaît pas dans la preuve visuelle.
+        comp.set_live_params(frame_geometry::live_params_from_scene(&s));
+        comp.set_scene(Some(s));
         println!("scène chargée depuis {scene_arg}");
     }
 

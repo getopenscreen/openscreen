@@ -114,7 +114,12 @@
 		"format": "Biçim",
 		"fitClip": "Sığdır",
 		"motionBlur": "Hareket Bulanıklığı",
-		"roundness": "Yuvarlaklık"
+		"roundness": "Yuvarlaklık",
+		"window": "Pencere",
+		"windowNone": "Yok",
+		"windowLight": "Açık",
+		"windowDark": "Koyu",
+		"windowHelp": "Kaydın çevresine bir pencere başlık çubuğu ve kenarlığı çizer."
 	},
 	"stylePresets": {
 		"button": "Ön ayarlar",

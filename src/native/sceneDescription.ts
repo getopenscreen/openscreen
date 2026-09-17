@@ -53,6 +53,7 @@ import {
 	webcamSizeToFraction,
 } from "@/lib/compositeLayout";
 import { parseCssGradient, resolveLinearGradientAngle } from "@/lib/exporter/gradientParser";
+import type { RecordingFrame } from "@/lib/projectDefaults";
 import type { CompositorClipInput } from "./contracts";
 
 /** Background behind the screen. Parsed from `settings.wallpaper`. */
@@ -370,6 +371,12 @@ export interface SceneEffects {
 	roundnessFrac: number;
 	/** 0..1 motion blur. */
 	motionBlur: number;
+	/**
+	 * The frame drawn around the recording. Omitted for "none", like `webcamEffect`: the
+	 * Rust side defaults the field (`SceneFrame::None`), and a scene without a frame then
+	 * serializes exactly as it did before the field existed.
+	 */
+	frame?: Exclude<RecordingFrame, "none">;
 }
 
 /** Cursor rendering, from the editor settings. */
@@ -1055,6 +1062,7 @@ export function buildSceneDescription(
 			roundnessFrac:
 				settings.borderRadius / Math.max(1, Math.min(outputDims.width, outputDims.height)),
 			motionBlur: settings.motionBlurAmount,
+			...(settings.frame !== "none" ? { frame: settings.frame } : {}),
 		},
 		cursor: {
 			show: settings.cursorShow,

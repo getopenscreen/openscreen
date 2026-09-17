@@ -114,7 +114,12 @@
 		"format": "Formato",
 		"fitClip": "Adatta",
 		"motionBlur": "Sfocatura movimento",
-		"roundness": "Arrotondamento"
+		"roundness": "Arrotondamento",
+		"window": "Finestra",
+		"windowNone": "Nessuna",
+		"windowLight": "Chiara",
+		"windowDark": "Scura",
+		"windowHelp": "Disegna una barra del titolo e un bordo di finestra attorno alla registrazione."
 	},
 	"stylePresets": {
 		"button": "Preset",

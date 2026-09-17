@@ -229,6 +229,19 @@ float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, float3 c1,
     return lerp(c0, c1, saturate(0.5 + u + 0.07 * w));
 }
 
+// Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
+float disc_cov(float2 p, float2 c, float r)
+{
+    return 1.0 - smoothstep(r - 0.75, r + 0.75, length(p - c));
+}
+
+// Couverture d'un trait centré sur `x = 0`, de demi-épaisseur `half_w`, sur ~1 px. Un trait plus
+// fin qu'un pixel s'estompe au lieu de disparaître (même forme que la flèche du mode 9).
+float band_cov(float x, float half_w)
+{
+    return saturate(half_w + 0.5 - abs(x));
+}
+
 // Fond flouté pour le mode "blur" de la webcam.
 // Disque de Vogel (spirale à angle d'or) à 21 échantillons avec pondération gaussienne et
 // rotation par pixel via Interleaved Gradient Noise (IGN) pour un bokeh photographique doux, isotrope et rapide.
@@ -309,6 +322,45 @@ float4 cursor_extruded(float2 local)
 
 float4 ps_main(VSOut i) : SV_Target
 {
+    // mode 14 : CADRE DE FENÊTRE autour de l'écran (barre de titre, trois pastilles, filet),
+    // dessiné SOUS lui. Testé en premier : la branche du mode 13 n'a pas de borne haute.
+    // Même warp que le mode 8 — le cadre est le quad de l'écran prolongé, il penche donc avec
+    // lui ; à plat, le quad est un rect et le warp l'identité exacte.
+    // fx.xy/fx.zw = coins TL/TR, src_prev.xy/.zw = BR/BL (px locaux) ; dst_prev.xy = taille du
+    // cadre dans son plan, dst_prev.z = hauteur de la barre, dst_prev.w = épaisseur du filet
+    // (px du plan) ; radius_px = rayon extérieur (les coins hauts plafonnent à la barre) ;
+    // color = fond de la barre, mb = couleur du filet (alpha droit).
+    if (mode > 13.5)
+    {
+        float3 r = quad_inverse_bilinear(i.local, fx.xy, fx.zw, src_prev.xy, src_prev.zw);
+        if (r.z < 0.5)
+        {
+            return float4(0.0, 0.0, 0.0, 0.0); // hors du cadre projeté
+        }
+        float2 plane_px = dst_prev.xy;
+        float bar = dst_prev.z;
+        float line_w = dst_prev.w;
+        float2 q = float2(r.x, r.y) * plane_px; // px du plan depuis le coin haut-gauche
+        float2 p = q - plane_px * 0.5;
+        // Coins hauts plafonnés à la barre : au-delà, l'arrondi descendrait sous la barre et
+        // les coins carrés de l'écran en dépasseraient.
+        float rad = max(radius_px, 0.0);
+        float d = sd_round_rect(p, plane_px * 0.5, (p.y < 0.0) ? min(rad, bar) : rad);
+        float cov = 1.0 - smoothstep(0.0, 1.5, d);
+        // Filet intérieur le long du contour, et séparation entre la barre et le contenu.
+        float stroke = max(band_cov(-d - line_w * 0.5, line_w * 0.5),
+                           band_cov(q.y - (bar - line_w * 0.5), line_w * 0.5));
+        float3 rgb = lerp(color.rgb, mb.rgb, stroke * mb.a);
+        // Pastilles : proportions d'une barre de 28 px (rayon 6, pas de 20).
+        float dr = bar * 0.214;
+        float dx = bar * 0.714;
+        rgb = lerp(rgb, float3(1.000, 0.373, 0.341), disc_cov(q, float2(dx, bar * 0.5), dr));
+        rgb = lerp(rgb, float3(0.996, 0.737, 0.180), disc_cov(q, float2(2.0 * dx, bar * 0.5), dr));
+        rgb = lerp(rgb, float3(0.157, 0.784, 0.251), disc_cov(q, float2(3.0 * dx, bar * 0.5), dr));
+        float a = cov * color.a;
+        return float4(rgb * a, a); // prémultiplié
+    }
+
     // mode 13 : SPRITE DE CURSEUR posé sur l'écran incliné. Même warp que le mode 8, mais
     // échantillonnant la texture du curseur en alpha DROIT (comme le mode 7) au lieu de la
     // vidéo NV12. Le curseur remplace un pointeur qui faisait partie de l'image capturée : il
@@ -500,9 +552,10 @@ float4 ps_main(VSOut i) : SV_Target
         // en escalier franc, soit la troncature même que cette branche existe pour éviter (d'où le
         // symptôme « le tilt 3D est tronqué, mais pas au-dessus d'un certain arrondi »). L'ombre du
         // mode 12 applique déjà son `max(radius_px, 0.0)` sans garde, pour la même raison.
+        // dst_prev.z = 1 : écran sous un cadre de fenêtre, coins HAUTS carrés (sous la barre).
         float2 plane_px = dst_prev.xy;
         float2 p = float2(r.x, r.y) * plane_px - plane_px * 0.5;
-        float d = sd_round_rect(p, plane_px * 0.5, max(radius_px, 0.0));
+        float d = sd_round_rect(p, plane_px * 0.5, (dst_prev.z > 0.5 && p.y < 0.0) ? 0.0 : max(radius_px, 0.0));
         float tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
         return float4(sample_yuv(uv) * tilt_a, tilt_a); // prémultiplié, comme les autres modes
     }
@@ -676,9 +729,10 @@ float4 ps_main(VSOut i) : SV_Target
         // même espace, le coin est donc rond par construction. (Avant, le canvas figé en 16:9
         // était étiré en fin de pipeline et il fallait pré-déformer par `mb.yz` pour que le
         // cercle ne ressorte pas elliptique.)
+        // mb.w = 1 : écran sous un cadre de fenêtre, coins HAUTS carrés (sous la barre de titre).
         float2 halfsz = quad_px * 0.5;
         float2 p = i.local - quad_px * 0.5;
-        float d = sd_round_rect(p, halfsz, radius_px);
+        float d = sd_round_rect(p, halfsz, (mb.w > 0.5 && p.y < 0.0) ? 0.0 : radius_px);
         alpha *= 1.0 - smoothstep(0.0, 1.5, d); // ~1.5px feather (§7 fwidth-like)
     }
     return float4(rgb * alpha, alpha); // prémultiplié

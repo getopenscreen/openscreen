@@ -11,7 +11,7 @@ pub use crate::frame_geometry::{live_params_from_scene, webcam_shape_code, Layer
 use crate::frame_geometry::{
     cover_crop_uv, cover_uv_rect, decode_data_uri, ease_in_out_cubic, lerp,
     lerp4, parse_hex, preset_placements, remap_box, screen_source_rect, timeline, CursorPlacement,
-    FrameParams, Placement, CURSOR_BASE_SIZE_FRAC, FPS, SCREEN_SHADOW_OFFSET_FRAC,
+    FrameParams, Placement, ShadowCaster, CURSOR_BASE_SIZE_FRAC, FPS, SCREEN_SHADOW_OFFSET_FRAC,
     SCREEN_SHADOW_SPREAD_FRAC, SHADOW_TUNING_REF_PX, WEBCAM_SHADOW_OFFSET_FRAC,
     WEBCAM_SHADOW_OPACITY, WEBCAM_SHADOW_SPREAD_FRAC,
 };
@@ -1761,23 +1761,29 @@ impl Compositor {
         // penché ne se lisait pas comme son ombre mais comme une seconde surface. Elle suit
         // aussi la croissance de la boîte pendant un zoom (issue #179) : quand la boîte sort
         // du cadre, l'ombre en sort avec elle, sans jamais se lire comme une bande noire.
+        // Avec un cadre de fenêtre, c'est le CADRE qui porte l'ombre (`shadow_caster`), sinon
+        // elle tomberait sous l'écran seul et la barre de titre flotterait au-dessus.
+        let render_px = [self.rw(), self.rh()];
         if cfg.shadow {
             let spread = SCREEN_SHADOW_SPREAD_FRAC * frame_min_px;
             let offset = [0.0, SCREEN_SHADOW_OFFSET_FRAC * frame_min_px];
             let opacity = 0.45 * lp.shadow_scale;
-            match tilt.as_ref() {
-                None => self.draw_shadow(s_dst, s_px, s_radius, spread, offset, opacity),
-                Some(quad) => self.draw_quad_shadow(
-                    &quad.corners,
-                    quad_center_px,
-                    // Même rayon que le plan incliné lui-même (cf. le dessin du mode 8).
-                    s_radius * quad.scale,
-                    spread,
-                    offset,
-                    opacity,
-                ),
+            match g.shadow_caster(render_px) {
+                ShadowCaster::Upright { dst, size_px, radius } => {
+                    self.draw_shadow(dst, size_px, radius, spread, offset, opacity)
+                }
+                // Même rayon que le plan incliné lui-même (cf. le dessin du mode 8).
+                ShadowCaster::Tilted { corners, center_px, radius } => {
+                    self.draw_quad_shadow(&corners, center_px, radius, spread, offset, opacity)
+                }
             }
         }
+        // Le cadre (mode 14) passe SOUS l'écran : l'écran le recouvre, ne laissant voir que la
+        // barre de titre, le filet et les coins bas entre les deux arrondis.
+        if let Some(cb) = g.window_frame_cb(render_px) {
+            self.draw_solid(&cb);
+        }
+        let square_top = g.screen_square_top();
         if crate::regions::is_identity_rotation(zoom_rotation) {
             self.draw_video(
                 &LayerCB {
@@ -1789,7 +1795,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
                     dst_prev: s_dst_prev,
-                    mb: [mb_taps, mb_amount, 1.0, 0.0],
+                    mb: [mb_taps, mb_amount, 1.0, square_top],
                     ..Default::default()
                 },
                 &sy,
@@ -1847,7 +1853,7 @@ impl Compositor {
                     mode: 8.0,
                     fx: [tl0, tl1, tr0, tr1],
                     src_prev: [br0, br1, bl0, bl1],
-                    dst_prev: [plane_px[0], plane_px[1], 0.0, 0.0],
+                    dst_prev: [plane_px[0], plane_px[1], square_top, 0.0],
                     ..Default::default()
                 },
                 &sy,

@@ -22,12 +22,12 @@ struct Layer {
     src: vec4<f32>,       // u0,v0,u1,v1 source 0..1
     quad_px: vec2<f32>,   // taille du quad en px de sortie (pour la SDF isotrope)
     radius_px: f32,
-    mode: f32,            // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre, 8 = écran tilté, 9 = flèche, 10 = flou/mosaïque, 12 = ombre du quad tilté, 13 = curseur tilté
-    color: vec4<f32>,
-    fx: vec4<f32>,        // mode 2 : spread ombre en px ; mode 5 : (direction xy, temps programme replie, mouvement 0..3) ; modes 8/12/13 : coins TL,TR du quad projeté ; mode 9 : hampe de la flèche ; mode 10 : (flou?, rayon/bloc px, ovale?, teinté?)
-    src_prev: vec4<f32>,  // modes 8/12/13 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque
-    dst_prev: vec4<f32>,  // mode 8 : taille du plan en px AVANT projection (le rayon y vit) ; mode 13 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque
-    mb: vec4<f32>,        // mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné ; mode 13 : mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume, <= 1 = plat)
+    mode: f32,            // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre, 8 = écran tilté, 9 = flèche, 10 = flou/mosaïque, 12 = ombre du quad tilté, 13 = curseur tilté, 14 = cadre de fenetre
+    color: vec4<f32>,     // mode 14 : fond de la barre de titre
+    fx: vec4<f32>,        // mode 2 : spread ombre en px ; mode 5 : (direction xy, temps programme replie, mouvement 0..3) ; modes 8/12/13/14 : coins TL,TR du quad projeté ; mode 9 : hampe de la flèche ; mode 10 : (flou?, rayon/bloc px, ovale?, teinté?)
+    src_prev: vec4<f32>,  // modes 8/12/13/14 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque
+    dst_prev: vec4<f32>,  // mode 8 : .xy = taille du plan en px AVANT projection (le rayon y vit), .z = 1 si coins hauts carres (sous un cadre) ; mode 14 : .xy = taille du plan du cadre, .z = hauteur de la barre, .w = epaisseur du filet (px du plan) ; mode 13 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque
+    mb: vec4<f32>,        // mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné ; mode 13 : mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume, <= 1 = plat) ; mode 14 : couleur du filet (alpha droit)
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -264,6 +264,16 @@ fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, c0: vec3<f32>, c1:
     let v = dot(gp - vec2<f32>(0.5), vec2<f32>(-dir.y, dir.x)) / denom;
     let w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
     return mix(c0, c1, clamp(0.5 + u + 0.07 * w, 0.0, 1.0));
+}
+
+// Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
+fn disc_cov(p: vec2<f32>, c: vec2<f32>, r: f32) -> f32 {
+    return 1.0 - smoothstep(r - 0.75, r + 0.75, length(p - c));
+}
+
+// Couverture d'un trait centre sur `x = 0`, de demi-epaisseur `half_w`, sur ~1 px.
+fn band_cov(x: f32, half_w: f32) -> f32 {
+    return clamp(half_w + 0.5 - abs(x), 0.0, 1.0);
 }
 
 // Fond flouté pour le mode "blur" de la webcam.
@@ -570,9 +580,11 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Inconditionnel, rayon 0 compris -- `sd_round_rect` degenere en SDF de
         // rectangle et le feather de 1,5 px subsiste, ce qui fait lire une arete
         // inclinee COMME une arete plutot que comme un escalier.
+        // dst_prev.z = 1 : ecran sous un cadre de fenetre, coins HAUTS carres (sous la barre).
         let plane_px = layer.dst_prev.xy;
         let p = vec2<f32>(r.x, r.y) * plane_px - plane_px * 0.5;
-        let d = sd_round_rect(p, plane_px * 0.5, max(layer.radius_px, 0.0));
+        let d = sd_round_rect(p, plane_px * 0.5,
+                              select(max(layer.radius_px, 0.0), 0.0, layer.dst_prev.z > 0.5 && p.y < 0.0));
         let tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
         // L'alpha est cette couverture, pas `color.a` : les draws du mode 8 laissent
         // `color` a zero, donc s'en servir rendrait un plan totalement transparent.
@@ -625,6 +637,39 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         let s = textureSample(texY, samp, clamp(vec2<f32>(r.x, r.y), vec2<f32>(0.0), vec2<f32>(1.0)));
         let ca = s.a * layer.color.a;
         return vec4<f32>(s.rgb * ca, ca);
+    } else if layer.mode > 13.5 && layer.mode < 14.5 {
+        // Mode 14 -- CADRE DE FENETRE autour de l'ecran (barre de titre, trois pastilles,
+        // filet), dessine SOUS lui. Meme warp que le mode 8 : le cadre est le quad de l'ecran
+        // prolonge, il penche donc avec lui ; a plat le quad est un rect et le warp l'identite.
+        let r = quad_inverse_bilinear(
+            i.local, layer.fx.xy, layer.fx.zw, layer.src_prev.xy, layer.src_prev.zw,
+        );
+        if r.z < 0.5 {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0); // hors du cadre projete
+        }
+        let plane_px = layer.dst_prev.xy;
+        let bar = layer.dst_prev.z;
+        let line_w = layer.dst_prev.w;
+        let q = vec2<f32>(r.x, r.y) * plane_px; // px du plan depuis le coin haut-gauche
+        let p = q - plane_px * 0.5;
+        // Coins hauts plafonnes a la barre : au-dela, l'arrondi descendrait sous la barre et
+        // les coins carres de l'ecran en depasseraient.
+        let rad = max(layer.radius_px, 0.0);
+        let d = sd_round_rect(p, plane_px * 0.5, select(rad, min(rad, bar), p.y < 0.0));
+        let cov = 1.0 - smoothstep(0.0, 1.5, d);
+        // Filet interieur le long du contour, et separation entre la barre et le contenu.
+        let stroke = max(band_cov(-d - line_w * 0.5, line_w * 0.5),
+                         band_cov(q.y - (bar - line_w * 0.5), line_w * 0.5));
+        var frame_rgb = mix(layer.color.rgb, layer.mb.rgb, stroke * layer.mb.a);
+        // Pastilles : proportions d'une barre de 28 px (rayon 6, pas de 20). Deroulees a la
+        // main, comme `sd_convex_quad` : pas de tableau local indexe.
+        let dr = bar * 0.214;
+        let dx = bar * 0.714;
+        frame_rgb = mix(frame_rgb, vec3<f32>(1.000, 0.373, 0.341), disc_cov(q, vec2<f32>(dx, bar * 0.5), dr));
+        frame_rgb = mix(frame_rgb, vec3<f32>(0.996, 0.737, 0.180), disc_cov(q, vec2<f32>(2.0 * dx, bar * 0.5), dr));
+        frame_rgb = mix(frame_rgb, vec3<f32>(0.157, 0.784, 0.251), disc_cov(q, vec2<f32>(3.0 * dx, bar * 0.5), dr));
+        let fa = cov * layer.color.a;
+        return vec4<f32>(frame_rgb * fa, fa); // premultiplie
     } else {
         // Mode 2 — ombre portée (SDF d'un quad arrondi élargi de `fx.x`).
         let spread = layer.fx.x;
@@ -641,9 +686,10 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Feather ~1.5 px sur le bord du quad — parité exacte avec le HLSL
         // (`smoothstep(0.0, 1.5, d)`). Le shader HLSL inclut `quad_px` en px de
         // SORTIE ; on reproduit la même chose ici.
+        // mb.w = 1 : ecran sous un cadre de fenetre, coins HAUTS carres (sous la barre de titre).
         let halfsz = layer.quad_px * 0.5;
         let p = i.local - layer.quad_px * 0.5;
-        let d = sd_round_rect(p, halfsz, layer.radius_px);
+        let d = sd_round_rect(p, halfsz, select(layer.radius_px, 0.0, layer.mb.w > 0.5 && p.y < 0.0));
         alpha *= 1.0 - smoothstep(0.0, 1.5, d);
     }
 

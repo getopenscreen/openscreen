@@ -34,7 +34,7 @@ use crate::ffi::AVFrame;
 pub use crate::frame_geometry::{
     live_params_from_scene, webcam_shape_code, FIXTURE_FRAMES, LayerCB, LiveParams, OUT_H, OUT_W,
 };
-use crate::frame_geometry::{parse_hex, FrameGeometryInput, SCREEN_SHADOW_OFFSET_FRAC,
+use crate::frame_geometry::{parse_hex, FrameGeometryInput, ShadowCaster, SCREEN_SHADOW_OFFSET_FRAC,
     SCREEN_SHADOW_SPREAD_FRAC, WEBCAM_SHADOW_OFFSET_FRAC, WEBCAM_SHADOW_OPACITY,
     WEBCAM_SHADOW_SPREAD_FRAC};
 use crate::scene::{Scene, SceneBackground};
@@ -1147,6 +1147,7 @@ impl Compositor {
 
     /// Écran incliné (mode 8) : warp bilinéaire inverse dans la bbox du quad projeté.
     /// Pas de motion blur sur ce chemin — le tilt est bref, la simplification ne se voit pas.
+    #[allow(clippy::too_many_arguments)]
     unsafe fn draw_tilted_screen(
         &self,
         enc: &metal::RenderCommandEncoderRef,
@@ -1155,6 +1156,8 @@ impl Compositor {
         center_px: [f32; 2],
         cut: [f32; 4],
         radius: f32,
+        // 1 : coins hauts carrés, l'écran est sous la barre d'un cadre (`dst_prev.z`).
+        square_top: f32,
         y: &metal::Texture,
         uv: &metal::Texture,
     ) {
@@ -1190,7 +1193,7 @@ impl Compositor {
                 mode: 8.0,
                 fx: [tl0, tl1, tr0, tr1],
                 src_prev: [br0, br1, bl0, bl1],
-                dst_prev: [plane_px[0], plane_px[1], 0.0, 0.0],
+                dst_prev: [plane_px[0], plane_px[1], square_top, 0.0],
                 ..Default::default()
             },
             y,
@@ -2069,20 +2072,22 @@ impl Compositor {
             let opacity = 0.45 * lp.shadow_scale;
             // L'ombre suit la silhouette réellement affichée : rect arrondi quand l'écran est
             // droit, quadrilatère projeté quand il est penché. Un rect droit derrière un écran
-            // incliné se lit comme une seconde surface, pas comme son ombre.
-            match tilt.as_ref() {
-                None => self.draw_shadow(enc, g.s_dst, s_px, g.s_radius, spread, offset, opacity),
-                Some(quad) => self.draw_quad_shadow(
-                    enc,
-                    &quad.corners,
-                    quad_center_px,
-                    g.s_radius * quad.scale,
-                    spread,
-                    offset,
-                    opacity,
+            // incliné se lit comme une seconde surface, pas comme son ombre. Avec un cadre de
+            // fenêtre, c'est le CADRE qui la porte (`shadow_caster`).
+            match g.shadow_caster([rw, rh]) {
+                ShadowCaster::Upright { dst, size_px, radius } => {
+                    self.draw_shadow(enc, dst, size_px, radius, spread, offset, opacity)
+                }
+                ShadowCaster::Tilted { corners, center_px, radius } => self.draw_quad_shadow(
+                    enc, &corners, center_px, radius, spread, offset, opacity,
                 ),
             }
         }
+        // Le cadre (mode 14) passe SOUS l'écran, qui ne laisse voir que la barre et le filet.
+        if let Some(cb) = g.window_frame_cb([rw, rh]) {
+            self.draw_solid(enc, &cb);
+        }
+        let square_top = g.screen_square_top();
         let [su0, sv0, su1, sv1] = g.cut;
         match tilt.as_ref() {
             None => self.draw_video(
@@ -2096,14 +2101,14 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0, sv0, su1, sv1],
                     dst_prev: g.s_dst_prev,
-                    mb: [g.mb_taps, g.mb_amount, 1.0, 0.0],
+                    mb: [g.mb_taps, g.mb_amount, 1.0, square_top],
                     ..Default::default()
                 },
                 &sy,
                 &suv,
             ),
             Some(quad) => self.draw_tilted_screen(
-                enc, quad, s_px, quad_center_px, g.cut, g.s_radius, &sy, &suv,
+                enc, quad, s_px, quad_center_px, g.cut, g.s_radius, square_top, &sy, &suv,
             ),
         }
 

@@ -114,7 +114,12 @@
 		"format": "Formát",
 		"fitClip": "Přizpůsobit",
 		"motionBlur": "Pohybové rozmazání",
-		"roundness": "Zaoblení"
+		"roundness": "Zaoblení",
+		"window": "Okno",
+		"windowNone": "Žádné",
+		"windowLight": "Světlé",
+		"windowDark": "Tmavé",
+		"windowHelp": "Kolem záznamu vykreslí záhlaví a okraj okna."
 	},
 	"stylePresets": {
 		"button": "Předvolby",

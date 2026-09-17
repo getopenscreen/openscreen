@@ -5,6 +5,40 @@ export interface RenderRect {
 	height: number;
 }
 
+/**
+ * Window-frame proportions, as fractions of the short side of the screen box the frame is
+ * fitted into. Must match `WINDOW_FRAME_BAR_FRAC` / `WINDOW_FRAME_LINE_FRAC` in
+ * crates/compositor/src/frame_geometry.rs.
+ */
+export const WINDOW_FRAME_BAR_FRAC = 0.04;
+export const WINDOW_FRAME_LINE_FRAC = 0.0012;
+
+/**
+ * The content rect of the screen once a window frame is drawn around it: the screen shrinks
+ * so screen + frame fit in `box`. Port of `fit_in_window_frame` (frame_geometry.rs). The
+ * native compositor still receives the unshrunk `box` and shrinks it itself; the preview
+ * overlay uses this rect so annotation, blur and zoom-focus handles sit on the content the
+ * compositor draws, not on the title bar.
+ */
+export function fitInWindowFrame(box: RenderRect, cover: boolean): RenderRect {
+	const m = Math.min(box.width, box.height);
+	const bar = WINDOW_FRAME_BAR_FRAC * m;
+	const line = WINDOW_FRAME_LINE_FRAC * m;
+	const iw = Math.max(1, box.width - 2 * line);
+	const ih = Math.max(1, box.height - bar - line);
+	let sw = iw;
+	let sh = ih;
+	if (!cover) {
+		const ar = box.width / Math.max(1e-4, box.height);
+		if (iw / ih > ar) sw = ih * ar;
+		else sh = iw / ar;
+	}
+	const fh = sh + bar + line;
+	const cx = box.x + box.width / 2;
+	const cy = box.y + box.height / 2;
+	return { x: cx - sw / 2, y: cy - fh / 2 + bar, width: sw, height: sh };
+}
+
 /** Floor for the reactive webcam multiplier so the camera never shrinks below ~35% at deep zoom. */
 export const WEBCAM_REACTIVE_ZOOM_MIN_SCALE = 0.35;
 

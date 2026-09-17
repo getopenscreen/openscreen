@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	computeCameraFullscreenRect,
 	computeCompositeLayout,
+	fitInWindowFrame,
 	isWebcamBlockLayout,
 	resolveWebcamReactiveZoom,
 	type StyledRenderRect,
@@ -526,5 +527,24 @@ describe("computeCameraFullscreenRect", () => {
 		expect(computeCameraFullscreenRect(pip(), CANVAS, -1)).toEqual(
 			computeCameraFullscreenRect(pip(), CANVAS, 0),
 		);
+	});
+});
+
+describe("fitInWindowFrame", () => {
+	// Same box and numbers as `a_framed_privacy_mask_covers_what_the_overlay_shows`
+	// (frame_geometry.rs): the preview overlay and the compositor must agree on this rect.
+	it("matches the native content rect of a framed screen", () => {
+		const r = fitInWindowFrame({ x: 192, y: 108, width: 1536, height: 864 }, false);
+		expect(r.x).toBeCloseTo(223.6416, 3);
+		expect(r.y).toBeCloseTo(142.56, 3);
+		expect(r.width).toBeCloseTo(1472.7168, 3);
+		expect(r.height).toBeCloseTo(828.4032, 3);
+	});
+
+	it("fills what the frame leaves under cover", () => {
+		const r = fitInWindowFrame({ x: 0, y: 0, width: 1000, height: 500 }, true);
+		expect(r.width).toBeCloseTo(1000 - 2 * 0.6, 6);
+		expect(r.y).toBeCloseTo(20, 6);
+		expect(r.y + r.height).toBeCloseTo(500 - 0.6, 6);
 	});
 });

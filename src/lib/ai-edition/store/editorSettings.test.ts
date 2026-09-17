@@ -291,6 +291,14 @@ describe("patchEditorSettings", () => {
 		expect(getEditorSettings(doc).wallpaperMotion).toBe("none");
 	});
 
+	it("round-trips the recording frame and reads an unknown one as no frame", () => {
+		expect(getEditorSettings(baseDoc).frame).toBe("none");
+		const patched = patchEditorSettings(baseDoc, { frame: "window-dark" });
+		expect(getEditorSettings(patched).frame).toBe("window-dark");
+		const unknown = { ...baseDoc, legacyEditor: { frame: "browser" } } as typeof baseDoc;
+		expect(getEditorSettings(unknown).frame).toBe("none");
+	});
+
 	it("clamps a stored webcam blur intensity into 0..1", () => {
 		const tooHigh = { ...baseDoc, legacyEditor: { webcamBlurIntensity: 1000 } } as typeof baseDoc;
 		expect(getEditorSettings(tooHigh).webcamBlurIntensity).toBe(1);

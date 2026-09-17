@@ -114,7 +114,12 @@
 		"format": "Format",
 		"fitClip": "Fit",
 		"motionBlur": "Motion Blur",
-		"roundness": "Roundness"
+		"roundness": "Roundness",
+		"window": "Window",
+		"windowNone": "None",
+		"windowLight": "Light",
+		"windowDark": "Dark",
+		"windowHelp": "Draws a window title bar and border around the recording."
 	},
 	"stylePresets": {
 		"button": "Presets",

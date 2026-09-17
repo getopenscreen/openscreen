@@ -114,7 +114,12 @@
 		"format": "格式",
 		"fitClip": "符合",
 		"motionBlur": "動態模糊",
-		"roundness": "圓角"
+		"roundness": "圓角",
+		"window": "視窗",
+		"windowNone": "無",
+		"windowLight": "淺色",
+		"windowDark": "深色",
+		"windowHelp": "在錄製內容周圍繪製視窗標題列和邊框。"
 	},
 	"stylePresets": {
 		"button": "預設",

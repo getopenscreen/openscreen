@@ -1,0 +1,120 @@
+---
+title: Free screen recorder with auto zoom
+description: OpenScreen is a free, open-source screen recorder with auto zoom for Windows, macOS and Linux. It places zooms where your recorded cursor pauses.
+keywords:
+  - screen recorder with auto zoom
+  - free auto zoom screen recorder open source
+  - zoom follow cursor screen recorder
+  - auto zoom screen recording windows
+---
+
+# A free screen recorder with auto zoom
+
+OpenScreen is a free, MIT-licensed screen recorder with auto zoom for Windows, macOS and Linux. After a take, **Auto-enhance → Automatic zooms** reads the cursor movement OpenScreen recorded and adds a zoom wherever the pointer paused, with no network call and no AI model. Screen Studio, Cap and Camtasia also zoom automatically. OpenScreen is not the right tool if you want to shape the zoom animation, or to auto-zoom a video made with another recorder.
+
+This page is published by the OpenScreen project. The Screen Studio, Cap and Camtasia details come from screen.studio, cap.so and techsmith.com and were checked in September 2026. The sources are listed at the end.
+
+## At a glance
+
+| | |
+| --- | --- |
+| Where to find it | Auto-enhance → Automatic zooms, in the editor's timeline toolbar |
+| What it reads | The cursor movement OpenScreen saves with a recording |
+| Where zooms land | Where the pointer holds nearly still for about half a second to 2.6 seconds |
+| Each automatic zoom | 1.8×, with the focus following the cursor. Two seconds long when added in the editor |
+| AI, network or key | None |
+| Manual zoom depths | 1.25×, 1.5×, 1.8×, 2.2×, 3.5× or 5× |
+| Focus | A point you place, or the recorded cursor |
+| 3D tilt | None, Iso, Left or Right |
+| Easing control | None |
+| Command line | The `export` command's `--auto-zoom` flag |
+| Platforms | Windows 10 (1903 or later) and 11, x64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 |
+| Price | Free, including commercial use. MIT license |
+
+## How automatic zooms work
+
+In its default editable cursor mode, OpenScreen records the pointer apart from the pixels. It keeps the system cursor out of the video and saves the pointer's movement in a `.cursor.json` file next to it. Automatic zooms are built from that file.
+
+1. **Find the pauses.** OpenScreen scans the recorded positions for stretches where the pointer holds nearly still for about half a second to 2.6 seconds. Each pause becomes a candidate, aimed at the spot where the pointer rested.
+2. **Rank and space them.** Longer pauses come first. A candidate less than 1.8 seconds from one already kept is dropped, and so is one that would overlap a zoom already on the timeline.
+3. **Add the zooms.** In the editor, each kept pause becomes a two-second zoom at 1.8×, centered on the pause, with its focus set to follow the cursor.
+
+The pass is a deterministic rule over recorded positions, not an AI feature. It makes no network call and loads no model, and it works the same way on Windows, macOS and Linux.
+
+A few details matter in practice:
+
+- **Your own zooms stay.** Zooms you placed by hand are kept, and the new ones never overlap them.
+- **Every clip gets its own zooms.** On a multi-clip timeline, each clip is matched to its own stretch of the recording, even when two clips come from the same take.
+- **One undo removes the batch.** The whole pass is a single edit.
+- **The results are ordinary zooms.** Click one to change its depth, tilt or focus, drag its edges to move its start and end, or delete it.
+- **It runs when you ask.** In version 1.11.0, nothing is added after a take until you choose Automatic zooms in the editor, or pass `--auto-zoom` on the command line.
+- **It tells you when nothing qualifies.** The editor reports that no auto-zoom moments were found.
+
+What the detector does not look at:
+
+- **Clicks and typing.** It reads positions only. A click made while the pointer is moving does not trigger a zoom. The upside is that a Linux take gets automatic zooms even without click data, which is what you get when your user is not in the `input` group.
+- **Long pauses.** A pointer parked for more than 2.6 seconds, for example while you talk over a slide, gets no automatic zoom. Add one by hand with `Z`.
+
+The same menu has a second item, **Smart cuts**, marked *With AI*. It is a different feature: it asks the optional chat agent to cut dead time. It waits for the recording's transcript, and it only works once you connect an AI provider with your own key. See [AI editing](/docs/ai-editing/).
+
+## Manual zooms and cursor-following focus
+
+Automatic zooms are a starting point. The same zoom regions can be placed and tuned by hand.
+
+- **Add a zoom with `Z`.** It lands at the playhead at 1.8×, with its focus in the center of the frame. Drag its edges to set when it starts and ends.
+- **Six depths.** 1.25×, 1.5×, 1.8×, 2.2×, 3.5× and 5×.
+- **Two focus modes.** Manual holds a point: drag the focus marker in the preview, or reset it to the center. Auto follows the recorded cursor.
+- **One toggle for every zoom.** The Auto focus crosshair in the toolbar makes all zooms follow the cursor. Turn it off and each zoom goes back to its own setting.
+- **3D tilt.** Each zoom can stay flat, or tilt Iso, Left or Right.
+- **The webcam during a zoom.** In the picture-in-picture layout, **Shrink on Zoom** makes the camera smaller while the screen is zoomed in. It is on by default.
+
+A manual zoom with a manual focus needs no cursor data, so it also works on a video imported from another tool. See [Zoom regions](/docs/editing-timeline/#zoom-regions) for the zoom inspector.
+
+## The cursor after the take
+
+The same recorded movement drives the cursor in the export. The Cursor facet shows or hides it, offers a set of cursor themes, and sets its size, smoothing, motion blur and click bounce. The cursor path is smoothed the same way for the preview and the export, so the preview matches the file.
+
+Click bounce needs recorded clicks. On macOS that takes the Accessibility permission, and on Linux your user must be in the `input` group. [Recording](/docs/recording/) lists what each platform captures.
+
+## From the command line
+
+The `export` command of the [CLI](/docs/cli/) accepts `--auto-zoom`. Before rendering, it runs the same pause detector over the recording's cursor data and adds zooms that never overlap the project's own. Each of those zooms lasts one second or 5% of the recording, whichever is longer. A video with no OpenScreen cursor data gives it nothing to work from.
+
+## Other tools that zoom automatically
+
+Automatic zooms are common in this category, and OpenScreen is one of several tools that offer them.
+
+- **Screen Studio.** Its auto zoom focuses on the places where clicks occurred during the recording.
+- **Cap.** Its Studio Mode generates zoom segments around recorded clicks, from the cursor and click data Cap records. Its docs say imported MP4s do not gain click data during import.
+- **Camtasia.** SmartFocus identifies actions such as scrolling and clicks, then adds pan and zoom animations. It needs a `.trec` file from Camtasia Recorder.
+
+Like OpenScreen, Cap and Camtasia need data their own recorder captured. The trigger is what differs. Screen Studio and Cap zoom on clicks, Camtasia's AI picks actions such as scrolling and clicks, and OpenScreen applies a fixed rule to pauses in the pointer's movement. For side-by-side comparisons, see the [Screen Studio alternative](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) and the [Camtasia alternative](/alternatives/camtasia/).
+
+## When OpenScreen is not the right tool
+
+- **You want to shape the zoom animation.** A zoom's settings are its depth, tilt and focus. There is no control over easing or transition speed. Cap 0.6.0 added 3D tracks, camera shots with their own perspective, easing and focus blur.
+- **You want automatic zooms on footage from another recorder.** Automatic zooms need the cursor file OpenScreen writes. A video from another app has none, and neither does an OpenScreen take recorded in the System cursor mode. Manual zooms still work on both.
+- **You want zooms placed on clicks.** OpenScreen's detector ignores clicks. Screen Studio and Cap build their automatic zooms from recorded clicks instead.
+- **You record an iPhone or iPad.** OpenScreen records a display or one window on a Windows, macOS or Linux computer, not a phone or tablet.
+
+## Getting started
+
+1. Download OpenScreen from the [download page](/download/). On Windows, the Microsoft Store is the recommended route.
+2. Follow [Installation](/docs/installation/). On macOS, grant the Screen Recording and Accessibility permissions before the first take.
+3. Record a first take with the [quick start](/docs/quick-start/), and leave the cursor mode on Editable overlay.
+4. In the editor, choose **Auto-enhance → Automatic zooms**, then adjust the zooms as described in [Editing & timeline](/docs/editing-timeline/).
+
+Building a full demo? The [product demo video guide](/docs/guides/product-demo-video/) shows how to pace a take for these zooms, and the [captions page](/features/captions/) covers on-device transcription. OpenScreen runs on [Windows](/screen-recorder-windows/), [macOS](/screen-recorder-mac/) and [Linux](/screen-recorder-linux/). Or go back to the [OpenScreen home page](/).
+
+## Sources
+
+Screen Studio, Cap and Camtasia facts, checked September 2026:
+
+- Screen Studio auto zoom on click positions: [screen.studio/guide/auto-zoom](https://screen.studio/guide/auto-zoom)
+- Cap automatic and manual zooms, and imported MP4s: [cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Cap 0.6.0 3D tracks with perspective, easing and focus blur: [cap.so/changelog](https://cap.so/changelog)
+- Camtasia SmartFocus and its `.trec` requirement: [techsmith.com/camtasia/features/ai-auto-zoom-and-pan](https://www.techsmith.com/camtasia/features/ai-auto-zoom-and-pan/)
+
+OpenScreen facts describe version 1.11.0 and link to its documentation above.
+
+Screen Studio, Cap and Camtasia are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by any of them.

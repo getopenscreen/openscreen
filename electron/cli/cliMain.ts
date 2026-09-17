@@ -207,7 +207,7 @@ async function writeProjectFile(projectOut: string, projectData: unknown): Promi
 
 function setupRecordStopSignals(stop: (reason: string) => void): void {
 	// SIGINT covers Ctrl+C everywhere; SIGTERM never fires on Windows, where
-	// stdin "stop" or --duration are the graceful alternatives (see docs/cli.md).
+	// stdin "stop" or --duration are the graceful alternatives (see website/docs/cli.md).
 	process.on("SIGINT", () => stop("SIGINT"));
 	process.on("SIGTERM", () => stop("SIGTERM"));
 	try {
@@ -447,7 +447,7 @@ export function runCli(command: CliCommand): void {
 						await fs.mkdir(path.dirname(command.jsonOutPath), { recursive: true });
 						// Write beside the target and rename over it. writeFile truncates
 						// first, so a failure part-way through -- a full disk is the easy
-						// case -- would leave a half-written file where docs/cli.md promises
+						// case -- would leave a half-written file where website/docs/cli.md promises
 						// an earlier run's result is untouched by a later failure. rename is
 						// atomic within a directory, so the reader sees the old file or the
 						// new one and never a torn one.

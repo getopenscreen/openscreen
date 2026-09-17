@@ -61,7 +61,7 @@ openscreen record --duration 20 --project demo.openscreen --json
 openscreen export demo.openscreen -o demo.mp4 --json
 ```
 
-See [docs/cli.md](./docs/cli.md).
+See the [CLI reference](https://getopenscreen.com/docs/cli/).
 
 ## Installation
 

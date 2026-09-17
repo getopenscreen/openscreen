@@ -1,0 +1,52 @@
+# OpenScreen
+
+> Free, MIT-licensed desktop screen recorder and video editor for Windows, macOS and Linux. It records a display or one window through each system's native capture API (ScreenCaptureKit, Windows Graphics Capture, PipeWire), edits the take on a timeline with automatic zooms, cursor styling and on-device Whisper captions, and exports MP4 (H.264 or H.265) or GIF with no watermark and no account. It is the community-maintained continuation of the original OpenScreen project, which its creator archived after v1.5.0.
+
+OpenScreen is not the same product as Open Screen at openscreen.io.
+
+- Official site: https://getopenscreen.com/
+- Source code, releases and issues: https://github.com/getopenscreen/openscreen
+- Microsoft Store: https://apps.microsoft.com/detail/9MXQ1HQJL5G5
+- Original, archived repository: https://github.com/siddharthvaddem/openscreen
+- Maintainer: Etienne Lescot (https://github.com/EtienneLescot)
+
+## Get started
+
+- [Download](https://getopenscreen.com/download/): installers for the current stable release on every platform
+- [Introduction](https://getopenscreen.com/docs/intro/): what OpenScreen is, the documented version, project facts and official links
+- [Installation](https://getopenscreen.com/docs/installation/): system requirements, per-platform steps and platform differences
+- [Quick start](https://getopenscreen.com/docs/quick-start/): record, trim and export a first recording in six steps
+- [FAQ](https://getopenscreen.com/docs/faq/): commercial use, watermarks, offline use, network access, installer signing
+
+## Docs
+
+- [Screen recording](https://getopenscreen.com/docs/recording/): window or full-screen capture, system audio, microphone, webcam, cursor modes and native capture per platform
+- [Media library](https://getopenscreen.com/docs/media-library/): import videos, then trim, crop, split and reorder clips on one timeline
+- [Editing and timeline](https://getopenscreen.com/docs/editing-timeline/): zoom, trim and speed regions, annotations, cursor styling, shortcuts
+- [Captions and transcript](https://getopenscreen.com/docs/captions/): on-device Whisper transcription, burned-in captions, translation, editing by transcript
+- [AI editing](https://getopenscreen.com/docs/ai-editing/): optional chat editing with an LLM key you supply, off by default
+- [Export](https://getopenscreen.com/docs/export/): MP4 and GIF settings and encoders
+- [CLI](https://getopenscreen.com/docs/cli/): record, caption and export from scripts, CI jobs and coding agents, with NDJSON output
+- [How to make a product demo video](https://getopenscreen.com/docs/guides/product-demo-video/): a step-by-step guide from script to export
+
+## Platforms and features
+
+- [Screen recorder for Windows](https://getopenscreen.com/screen-recorder-windows/): Windows 10 and 11, Windows Graphics Capture, Microsoft Store
+- [Screen recorder for Mac](https://getopenscreen.com/screen-recorder-mac/): macOS 13 or later on Apple Silicon and Intel, ScreenCaptureKit
+- [Screen recorder for Linux](https://getopenscreen.com/screen-recorder-linux/): PipeWire and the ScreenCast portal, so it records on Wayland
+- [Auto zoom](https://getopenscreen.com/features/auto-zoom/): how automatic zooms are placed from the recorded cursor movement
+- [Local captions](https://getopenscreen.com/features/captions/): Whisper transcription on your machine, and where other recorders differ
+
+## Comparisons
+
+- [Screen Studio alternative](https://getopenscreen.com/alternatives/screen-studio/)
+- [Camtasia alternative](https://getopenscreen.com/alternatives/camtasia/)
+- [Loom alternative](https://getopenscreen.com/alternatives/loom/)
+- [OpenScreen vs Cap](https://getopenscreen.com/compare/openscreen-vs-cap/)
+- [OpenScreen vs OBS Studio](https://getopenscreen.com/compare/openscreen-vs-obs/)
+
+## Development journal
+
+- [Picking up OpenScreen](https://getopenscreen.com/blog/2026/06/15/picking-up-openscreen/): how and why the project continued after the original was archived
+- [An export benchmark built to be hard to fake](https://getopenscreen.com/blog/2026/09/09/an-export-benchmark-hard-to-fake/): an open, reproducible export benchmark and its caveats
+- [All posts](https://getopenscreen.com/blog/): release notes with the reasoning attached

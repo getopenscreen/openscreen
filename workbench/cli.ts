@@ -11,16 +11,29 @@
 // printed, never written, and `report.ts` refuses any payload that carries it.
 // The app itself only ever talks to the local proxy — see runner.ts.
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import {
 	assertAgainstBaseline,
 	baselineFromRun,
 	readBaseline,
 	writeBaseline,
 } from "./lib/baseline";
-import { cassetteExists, type ReplayHandle, startRecorder, startReplay } from "./lib/cassette";
-import { requireLiveEnv } from "./lib/env";
-import { DEFAULT_TURN_TIMEOUT_MS } from "./lib/harness";
+import {
+	cassetteExists,
+	type ReplayHandle,
+	readCassette,
+	startRecorder,
+	startReplay,
+} from "./lib/cassette";
+import { containsSecret, requireLiveEnv } from "./lib/env";
+import { DEFAULT_TURN_TIMEOUT_MS, normalizeIds, offlineStore } from "./lib/harness";
 import { askJudge, type JudgeReading } from "./lib/judge";
+import {
+	CANDIDATE_FILE,
+	finalizeJudgedMeasurementCandidate,
+	prepareMeasurementCandidate,
+} from "./lib/measurement";
 import type { ModelServerHandle } from "./lib/model-server";
 import {
 	contextFromPersistedTurn,
@@ -29,6 +42,7 @@ import {
 	RUNS_DIR,
 	readPersistedTurn,
 } from "./lib/persist";
+import { captureSourceIdentity, endpointIdentity } from "./lib/provenance";
 import {
 	buildReport,
 	fingerprintOf,
@@ -36,9 +50,10 @@ import {
 	summarizeScenario,
 	writeReport,
 } from "./lib/report";
-import { type RepetitionResult, runScenarioReps } from "./lib/runner";
+import { type RepetitionResult, runRepetition, runScenarioReps } from "./lib/runner";
 import { allResults, scoreRun } from "./lib/score";
 import { formatPercent, minDetectableEffect } from "./lib/stats";
+import { createInvocationBudget, transportIdentity } from "./lib/transport";
 import { getScenario, selectScenarios } from "./scenarios/registry";
 
 const REPORTS_DIR = "workbench/reports";
@@ -46,7 +61,7 @@ const BASELINES_DIR = "workbench/baselines";
 const CASSETTES_DIR = "workbench/cassettes";
 
 interface Options {
-	command: "run" | "judge" | "compare" | "help";
+	command: "run" | "replay" | "judge" | "compare" | "help";
 	scenarios: string[];
 	tags: string[];
 	reps: number;
@@ -64,6 +79,9 @@ interface Options {
 	/** `judge` only: rejoue les cassettes du juge au lieu d'appeler le provider.
 	 *  Sans clé, sans réseau sortant, et le même verdict à chaque fois. */
 	replay: boolean;
+	cassette?: string;
+	maxRequests?: number;
+	maxOutputTokens?: number;
 }
 
 /**
@@ -99,9 +117,14 @@ function parseArgs(argv: string[]): Options {
 		record: false,
 		persist: true,
 		replay: false,
+		cassette: undefined,
+		maxRequests: undefined,
+		maxOutputTokens: undefined,
 	};
 	const [command, ...rest] = argv;
-	if (command === "run" || command === "judge" || command === "compare") options.command = command;
+	if (command === "run" || command === "replay" || command === "judge" || command === "compare") {
+		options.command = command;
+	}
 	for (let i = 0; i < rest.length; i += 1) {
 		const flag = rest[i];
 		const value = rest[i + 1];
@@ -139,12 +162,32 @@ function parseArgs(argv: string[]): Options {
 			case "--replay":
 				options.replay = true;
 				break;
+			case "--cassette":
+				options.cassette = value;
+				i += 1;
+				break;
+			case "--max-requests":
+				options.maxRequests = Number(value);
+				i += 1;
+				break;
+			case "--max-output-tokens":
+				options.maxOutputTokens = Number(value);
+				i += 1;
+				break;
 			default:
 				break;
 		}
 	}
 	if (!Number.isInteger(options.reps) || options.reps < 1) {
 		throw new Error(`--reps doit être un entier positif, reçu ${options.reps}`);
+	}
+	for (const [name, value] of [
+		["--max-requests", options.maxRequests],
+		["--max-output-tokens", options.maxOutputTokens],
+	] as const) {
+		if (value !== undefined && (!Number.isInteger(value) || value <= 0)) {
+			throw new Error(`${name} doit être un entier positif, reçu ${value}`);
+		}
 	}
 	return options;
 }
@@ -157,7 +200,24 @@ async function commandRun(options: Options): Promise<number> {
 	// Fails here, loudly and by name, rather than letting a missing baseUrl
 	// silently retarget api.openai.com with the user's Deepseek key.
 	const env = requireLiveEnv();
-	log(`modèle ${env.model} · endpoint ${env.baseUrl} · clé présente (${env.apiKey.length} car.)`);
+	const provider = endpointIdentity("openai-compatible", env.baseUrl);
+	log(
+		`modèle demandé ${env.model} · provider ${provider.provider} · endpoint sha ${provider.endpointSha256.slice(0, 12)}`,
+	);
+	const source = captureSourceIdentity();
+	if (env.wireApi === "responses" && (!options.maxRequests || !options.maxOutputTokens)) {
+		throw new Error("Responses run exige --max-requests et --max-output-tokens");
+	}
+	const liveTransport = transportIdentity({
+		wireApi: env.wireApi,
+		maxOutputTokens: options.maxOutputTokens,
+		publicHeadersSha256: env.publicHeaders.sha256,
+		limits: {
+			...(options.maxRequests ? { maxRequests: options.maxRequests } : {}),
+			invocationTimeoutMs: options.timeoutMs,
+		},
+	});
+	const liveBudget = createInvocationBudget(liveTransport.limits);
 
 	const scenarios = selectScenarios({ ids: options.scenarios, tags: options.tags });
 	// ponytail: a scenario may pin its own `reps`, so the headline figure must
@@ -174,19 +234,33 @@ async function commandRun(options: Options): Promise<number> {
 	const summaries: ScenarioReport[] = [];
 	const notices: string[] = [];
 	const everyResult: RepetitionResult[] = [];
+	const candidates: Array<{
+		scenario: (typeof scenarios)[number];
+		results: RepetitionResult[];
+		summary: ScenarioReport;
+		cassetteFiles: string[];
+	}> = [];
 	let failed = false;
 
 	for (const scenario of scenarios) {
 		const reps = effectiveReps(scenario, options);
+		const cassetteFiles = Array.from(
+			{ length: reps },
+			(_, rep) => `${RUNS_DIR}/${options.label}/${scenario.id}/main-cassette-rep-${rep}.json`,
+		);
 		log(`\n▸ ${scenario.id} — ${scenario.title} (n=${reps})`);
 		const { results, discarded } = await runScenarioReps({
 			scenario,
 			reps,
 			live: {
-				record: (rep) =>
-					options.record ? `${CASSETTES_DIR}/${scenario.id}-rep${rep}.json` : undefined,
+				record: (rep) => (options.record ? cassetteFiles[rep] : undefined),
+				maxRequests: options.maxRequests,
+				maxOutputTokens: options.maxOutputTokens,
+				transport: liveTransport,
+				budget: liveBudget,
 			},
 			timeoutMs: options.timeoutMs,
+			maxRetries: env.wireApi === "responses" ? 0 : undefined,
 			onRepetition: (result) => {
 				log(
 					`  rep ${result.rep}: comportement ${formatPercent(result.scored.behaviour.score)} · ` +
@@ -220,6 +294,7 @@ async function commandRun(options: Options): Promise<number> {
 			results,
 		});
 		summaries.push(summary);
+		if (options.record) candidates.push({ scenario, results, summary, cassetteFiles });
 
 		// The ratchet is fed by the union of the repetitions: a check that failed
 		// at least once is a failure for baseline purposes.
@@ -274,6 +349,7 @@ async function commandRun(options: Options): Promise<number> {
 			wire: everyResult[0]?.run.wire,
 			model: env.model,
 			reps: smallestN,
+			effectiveSourceSha256: source.effectiveSha256,
 		}),
 		scenarios: summaries,
 		notices,
@@ -285,7 +361,113 @@ async function commandRun(options: Options): Promise<number> {
 		report,
 	});
 	log(`\nrapport : ${written.markdown}`);
+	for (const candidate of candidates) {
+		const observed = [
+			...new Set(
+				candidate.cassetteFiles
+					.map((file) => readCassette(file).resolvedModel)
+					.filter((model): model is string => typeof model === "string" && model.length > 0),
+			),
+		];
+		const candidateReport = buildReport({
+			label: `${options.label}/${candidate.scenario.id}`,
+			fingerprint: fingerprintOf({
+				wire: candidate.results[0]?.run.wire,
+				model: env.model,
+				reps: candidate.results.length,
+				effectiveSourceSha256: source.effectiveSha256,
+			}),
+			scenarios: [candidate.summary],
+			notices: notices.filter((notice) => notice.includes(`${candidate.scenario.id}/`)),
+		});
+		const prepared = prepareMeasurementCandidate({
+			runDir: `${RUNS_DIR}/${options.label}/${candidate.scenario.id}`,
+			scenario: candidate.scenario,
+			results: candidate.results,
+			cassetteFiles: candidate.cassetteFiles,
+			report: candidateReport,
+			requestedModel: env.model,
+			observedModel: observed.length === 1 ? observed[0] : undefined,
+			provider: provider.provider,
+			endpoint: env.baseUrl,
+			source,
+		});
+		log(
+			`candidat de mesure : ${prepared.file}${prepared.manifest.complete ? "" : " (juge requis)"}`,
+		);
+	}
 	return failed ? 1 : 0;
+}
+
+async function commandReplay(options: Options): Promise<number> {
+	if (options.scenarios.length !== 1 || !options.cassette) {
+		throw new Error("replay exige --scenario <id> et --cassette <path>");
+	}
+	const scenario = getScenario(options.scenarios[0]);
+	const cassette = readCassette(options.cassette);
+	if (cassette.scenario !== scenario.id) {
+		throw new Error(`cassette scenario mismatch: ${cassette.scenario} != ${scenario.id}`);
+	}
+	const replay = await startReplay({ file: options.cassette, onStale: "throw" });
+	let result: RepetitionResult;
+	try {
+		result = await runRepetition({
+			scenario,
+			rep: 0,
+			endpoint: replay,
+			store: offlineStore({
+				baseUrl: replay.url,
+				allowAgentEdits: scenario.allowAgentEdits ?? true,
+				model: cassette.model,
+			}),
+			timeoutMs: options.timeoutMs,
+			maxRetries: cassette.wireApi === "responses" ? 0 : undefined,
+		});
+		replay.assertFresh();
+	} finally {
+		replay.close();
+	}
+	const persisted = persistRepetition({
+		label: options.label,
+		result,
+		prompt: scenario.prompt,
+		allowAgentEdits: scenario.allowAgentEdits ?? true,
+	});
+	const receiptFile = `${RUNS_DIR}/${options.label}/${scenario.id}/replay-receipt.json`;
+	const receipt = {
+		schema: 1,
+		kind: "offline-main-replay",
+		label: options.label,
+		scenario: scenario.id,
+		cassette: options.cassette,
+		fresh: replay.staleRounds.length === 0,
+		upstreamRequests: 0,
+		localReplayRequests: replay.requests.length,
+		observedUsage: replay.servedRounds.map(({ round, terminalStatus, usage }) => ({
+			round,
+			terminalStatus,
+			usage,
+		})),
+		result: normalizeIds({
+			ok: result.run.ok,
+			answer: result.run.answer,
+			document: result.run.document ?? null,
+			toolSequence: result.run.wire.calls.map((call) => ({
+				id: call.id,
+				name: call.name,
+				args: call.args,
+				resultJson: call.resultJson,
+				resultOk: call.resultOk,
+			})),
+		}),
+	};
+	const payload = `${JSON.stringify(receipt, null, "\t")}\n`;
+	if (containsSecret(payload)) throw new Error("replay receipt contains a secret");
+	mkdirSync(dirname(receiptFile), { recursive: true });
+	writeFileSync(receiptFile, payload, "utf8");
+	log(`replay turn: ${persisted.file}`);
+	log(`replay receipt: ${receiptFile}`);
+	return result.run.ok ? 0 : 1;
 }
 
 /**
@@ -316,8 +498,28 @@ async function commandJudge(options: Options): Promise<number> {
 	}
 	// En replay la clé n'est pas lue du tout : le proxy ne sort pas de 127.0.0.1.
 	const env = options.replay ? null : requireLiveEnv();
-	if (env) log(`juge : modèle ${env.model} · endpoint ${env.baseUrl}`);
-	else log("juge : replay de cassettes, aucun appel sortant");
+	if (env) {
+		const provider = endpointIdentity("openai-compatible", env.baseUrl);
+		log(
+			`juge : modèle demandé ${env.model} · provider ${provider.provider} · ` +
+				`endpoint sha ${provider.endpointSha256.slice(0, 12)}`,
+		);
+	} else log("juge : replay de cassettes, aucun appel sortant");
+
+	const liveJudgeTransport = env
+		? transportIdentity({
+				wireApi: env.wireApi,
+				maxOutputTokens: options.maxOutputTokens ?? 2048,
+				publicHeadersSha256: env.publicHeaders.sha256,
+				limits: {
+					maxRequests: options.maxRequests ?? 100,
+					invocationTimeoutMs: options.timeoutMs,
+				},
+			})
+		: undefined;
+	const liveJudgeBudget = liveJudgeTransport
+		? createInvocationBudget(liveJudgeTransport.limits)
+		: undefined;
 
 	const summaries: ScenarioReport[] = [];
 	const notices: string[] = [];
@@ -339,7 +541,15 @@ async function commandJudge(options: Options): Promise<number> {
 		if ((scenario.judged ?? []).length === 0) continue;
 		log(`\n▸ ${scenario.id} — ${(scenario.judged ?? []).length} check(s) jugé(s)`);
 
-		const cassetteFile = `${CASSETTES_DIR}/judge-${options.label}-${scenario.id}.json`;
+		const candidateRunDir = `${RUNS_DIR}/${options.label}/${scenario.id}`;
+		const recordedJudgeCassette = `${candidateRunDir}/judge-cassette.json`;
+		const legacyJudgeCassette = `${CASSETTES_DIR}/judge-${options.label}-${scenario.id}.json`;
+		const cassetteFile =
+			env === null && cassetteExists(recordedJudgeCassette)
+				? recordedJudgeCassette
+				: env !== null && options.record
+					? recordedJudgeCassette
+					: legacyJudgeCassette;
 		if (env === null && !cassetteExists(cassetteFile)) {
 			// Nommé, comme `env.ts` nomme la variable manquante : sans cette ligne
 			// le replay ressort en ENOENT sur un chemin que personne n'a tapé.
@@ -348,11 +558,17 @@ async function commandJudge(options: Options): Promise<number> {
 		}
 		let replayHandle: ReplayHandle | null = null;
 		let endpoint: ModelServerHandle;
+		let judgeWireApi: "chat-completions" | "responses" = "chat-completions";
 		try {
 			if (env === null) {
+				judgeWireApi = readCassette(cassetteFile).wireApi ?? "chat-completions";
 				replayHandle = await startReplay({ file: cassetteFile });
 				endpoint = replayHandle;
 			} else {
+				judgeWireApi = env.wireApi;
+				if (!liveJudgeTransport || !liveJudgeBudget) {
+					throw new Error("live judge transport was not prepared");
+				}
 				endpoint = await startRecorder({
 					// Le proxy, pas le provider en direct — même règle que `runner.ts` :
 					// c'est le seul endroit d'où une cassette peut sortir, et le seul
@@ -362,6 +578,10 @@ async function commandJudge(options: Options): Promise<number> {
 					scenario: `judge-${scenario.id}`,
 					provider: "openai-compatible",
 					model: env.model,
+					wireApi: env.wireApi,
+					transport: liveJudgeTransport,
+					publicHeaders: env.publicHeaders,
+					budget: liveJudgeBudget,
 				});
 			}
 		} catch (error) {
@@ -374,7 +594,8 @@ async function commandJudge(options: Options): Promise<number> {
 			failed = true;
 			continue;
 		}
-		const scored: Array<{ scored: ReturnType<typeof scoreRun> }> = [];
+		const scored: Array<{ rep: number; scored: ReturnType<typeof scoreRun> }> = [];
+		let scenarioWire: ReturnType<typeof readPersistedTurn>["wire"] | undefined;
 		// ponytail: une panne reste une ERREUR — `askJudge` lève toujours sur un
 		// transport mort, et c'est voulu : « le juge n'a pas répondu » n'est pas
 		// « la réponse ne tranche pas ». Ce qui change est sa PORTÉE. Non bornée,
@@ -386,14 +607,17 @@ async function commandJudge(options: Options): Promise<number> {
 			for (const file of group.files) {
 				const turn = readPersistedTurn(file);
 				firstWire ??= turn.wire;
+				scenarioWire ??= turn.wire;
 				const context = contextFromPersistedTurn(turn);
 				const readings = new Map<string, JudgeReading>();
 				for (const judged of scenario.judged ?? []) {
+					liveJudgeBudget?.refreshDeadline();
 					const reading = await askJudge({
 						endpoint: {
 							baseUrl: endpoint.url,
 							model: env?.model ?? "cassette",
 							...(env ? { apiKey: env.apiKey } : {}),
+							wireApi: judgeWireApi,
 						},
 						rubric: judged.rubric,
 						input: { prompt: turn.prompt, answer: turn.answer, facts: judged.facts(context) },
@@ -402,7 +626,7 @@ async function commandJudge(options: Options): Promise<number> {
 					readings.set(judged.id, reading);
 					log(`  rep ${turn.rep} ${judged.id} : ${reading.verdict} — ${reading.reason}`);
 				}
-				scored.push({ scored: scoreRun(scenario, context, readings) });
+				scored.push({ rep: turn.rep, scored: scoreRun(scenario, context, readings) });
 			}
 		} catch (error) {
 			interrompu = error instanceof Error ? error.message : String(error);
@@ -496,6 +720,39 @@ async function commandJudge(options: Options): Promise<number> {
 			);
 			log(`  baseline écrite : ${baselineFile}`);
 		}
+
+		if (env && options.record && cassetteExists(`${candidateRunDir}/${CANDIDATE_FILE}`)) {
+			try {
+				const candidateReport = buildReport({
+					label: `${options.label}/${scenario.id}/judge`,
+					fingerprint: fingerprintOf({
+						wire: scenarioWire,
+						model: env.model,
+						reps: scored.length,
+						effectiveSourceSha256: captureSourceIdentity().effectiveSha256,
+					}),
+					scenarios: [summary],
+					notices: notices.filter((notice) => notice.includes(`${scenario.id}/`)),
+				});
+				const prepared = finalizeJudgedMeasurementCandidate({
+					runDir: candidateRunDir,
+					scenario,
+					scored,
+					judgeCassetteFile: recordedJudgeCassette,
+					report: candidateReport,
+					requestedJudgeModel: env.model,
+					observedJudgeModel: endpoint.resolvedModel,
+					provider: "openai-compatible",
+					endpoint: env.baseUrl,
+				});
+				log(`  candidat de mesure jugé : ${prepared.file}`);
+			} catch (error) {
+				const message = `CANDIDAT INCOMPLET ${scenario.id} : ${error instanceof Error ? error.message : String(error)}`;
+				notices.push(message);
+				log(`  ! ${message}`);
+				failed = true;
+			}
+		}
 	}
 
 	if (summaries.length === 0) {
@@ -540,6 +797,8 @@ function commandHelp(): number {
 			"",
 			"  wb:live   [--scenario <id>] [--tag <tag>] [--reps <n>] [--label <nom>]",
 			"            [--timeout <ms>] [--update-baseline] [--record] [--no-persist]",
+			"            [--max-requests <n>] [--max-output-tokens <n>]",
+			"  replay     --scenario <id> --cassette <path> --label <nom> [--timeout <ms>]",
 			"  wb:judge  --label <nom> [--scenario <id>] [--record] [--replay]",
 			"            [--update-baseline]",
 			"  wb:compare <rapport-a.json> <rapport-b.json>",
@@ -573,6 +832,9 @@ export async function main(): Promise<void> {
 	switch (options.command) {
 		case "run":
 			code = await commandRun(options);
+			break;
+		case "replay":
+			code = await commandReplay(options);
 			break;
 		case "judge":
 			code = await commandJudge(options);

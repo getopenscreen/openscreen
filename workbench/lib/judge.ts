@@ -31,6 +31,7 @@
 //      `l0/judge.wb.ts` l'épingle au lieu de le promettre.
 
 import { containsSecret } from "./env";
+import type { WireApi } from "./transport";
 import { transcriptFromSse } from "./wire";
 
 /** Les trois verdicts. Le troisième n'est pas un échec du juge, c'est un
@@ -275,6 +276,7 @@ export interface JudgeEndpoint {
 	model: string;
 	/** Absente contre un serveur scripté ou un replay : ils n'authentifient rien. */
 	apiKey?: string;
+	wireApi?: WireApi;
 }
 
 export class JudgeTransportError extends Error {}
@@ -299,13 +301,23 @@ export async function askJudge(options: {
 	timeoutMs?: number;
 }): Promise<JudgeReading> {
 	const messages = buildJudgeMessages(options.rubric, options.input);
-	const body = JSON.stringify({
-		model: options.endpoint.model,
-		messages,
-		// Un juge est une mesure : il doit rendre le même verdict deux fois.
-		temperature: 0,
-		stream: true,
-	});
+	const wireApi = options.endpoint.wireApi ?? "chat-completions";
+	const body = JSON.stringify(
+		wireApi === "responses"
+			? {
+					model: options.endpoint.model,
+					input: messages,
+					reasoning: { effort: "medium" },
+					stream: true,
+				}
+			: {
+					model: options.endpoint.model,
+					messages,
+					// Un juge est une mesure : il doit rendre le même verdict deux fois.
+					temperature: 0,
+					stream: true,
+				},
+	);
 	if (containsSecret(body)) {
 		throw new Error(
 			"refus d'envoyer le tour au juge : le payload contient la clé API ou un en-tête " +
@@ -316,15 +328,20 @@ export async function askJudge(options: {
 	const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 60_000);
 	let sse: string;
 	try {
-		const response = await fetch(`${options.endpoint.baseUrl}/chat/completions`, {
-			method: "POST",
-			headers: {
-				"content-type": "application/json",
-				...(options.endpoint.apiKey ? { authorization: `Bearer ${options.endpoint.apiKey}` } : {}),
+		const response = await fetch(
+			`${options.endpoint.baseUrl}/${wireApi === "responses" ? "responses" : "chat/completions"}`,
+			{
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					...(options.endpoint.apiKey
+						? { authorization: `Bearer ${options.endpoint.apiKey}` }
+						: {}),
+				},
+				body,
+				signal: controller.signal,
 			},
-			body,
-			signal: controller.signal,
-		});
+		);
 		if (!response.ok) {
 			// ponytail: une panne de transport n'est PAS un `indéterminé`. Le
 			// troisième verdict dit « la réponse ne tranche pas » ; le confondre

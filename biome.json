@@ -108,6 +108,10 @@
 	"javascript": { "formatter": { "quoteStyle": "double" } },
 	"overrides": [
 		{
+			"includes": ["workbench/measurements/**/*.json"],
+			"formatter": { "enabled": false }
+		},
+		{
 			"includes": ["*.ts", "*.tsx", "*.mts", "*.cts"],
 			"linter": {
 				"rules": {

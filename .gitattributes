@@ -12,3 +12,6 @@
 # Same drift, caught on the native helper's build file: an edit from Windows
 # rewrote all 67 lines as CRLF and buried a 22-line change in a 156-line diff.
 CMakeLists.txt text eol=lf
+
+# Adopted measurement manifests hash exact bytes; keep their artifacts unchanged.
+workbench/measurements/** -text

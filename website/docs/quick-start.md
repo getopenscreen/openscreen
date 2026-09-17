@@ -1,8 +1,9 @@
 ---
 id: quick-start
-title: Quick start
+title: How to record your screen with OpenScreen
+sidebar_label: Quick start
 sidebar_position: 3
-description: "Record, trim, and export your first video with OpenScreen in six steps — from opening the recording HUD to exporting a finished MP4."
+description: "Record, trim, and export your first screen recording with OpenScreen in six steps, from opening the recording HUD to exporting a finished MP4 or GIF."
 keywords:
   - screen recording tutorial
   - quick start
@@ -11,9 +12,9 @@ keywords:
   - export MP4
 ---
 
-# Quick start
+# How to record your screen with OpenScreen
 
-This walks through recording, trimming, and exporting your first video. See [Installation](./installation.md) first if you haven't installed OpenScreen yet.
+This quick start walks through recording, trimming, and exporting your first video. See [Installation](./installation.md) first if you haven't installed OpenScreen yet.
 
 ## 1. Open the recording HUD
 
@@ -22,6 +23,8 @@ Launching OpenScreen shows a small floating pill (the HUD) docked at the bottom 
 ## 2. Pick what to record
 
 Click the source picker (screen icon) to open the source selector. It lists your **Screens** and **Windows** in two tabs — pick a thumbnail and hit **Share**.
+
+On Linux the HUD has no source picker. It reads *Your system will ask what to share*: when you press record, your desktop's own sharing dialog asks for the screen or window, before the countdown and again on every take.
 
 ## 3. Turn on audio and webcam (optional)
 

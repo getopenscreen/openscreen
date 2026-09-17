@@ -1,0 +1,104 @@
+---
+title: Linux screen recorder and editor for Wayland
+description: OpenScreen is a free, open-source screen recorder for Linux. It records through PipeWire and the ScreenCast portal, then adds zooms and local captions.
+keywords:
+  - screen recorder linux
+  - wayland screen recorder
+  - pipewire screen recorder
+  - screen studio alternative linux
+  - linux screen recorder with editor
+---
+
+# A screen recorder for Linux, with the editor built in
+
+OpenScreen is a free, MIT-licensed screen recorder for Linux that captures a display or one window through PipeWire and the desktop's ScreenCast portal, so it records on Wayland. The same app then edits the take: automatic zooms from the **Auto-enhance** menu, an editable cursor, local Whisper captions and MP4 or GIF export. OBS Studio is still the better choice if you stream, and OpenScreen is not the right tool if you need unattended recordings, ARM64 packages or a Flatpak.
+
+This page is published by the OpenScreen project. The Screen Studio and OBS Studio details come from screen.studio and obsproject.com, and the distribution defaults from the Ubuntu and Fedora release notes. All were checked in September 2026. The sources are listed at the end.
+
+## At a glance
+
+| | |
+| --- | --- |
+| Price | Free, including commercial use. MIT license, no account |
+| Packages | AppImage, `.deb`, `.rpm` and `.pacman`, x64. Nix flake for x86_64 and aarch64 |
+| What it records | A display or one window. Crop afterward in the editor |
+| Capture | PipeWire through the ScreenCast portal, at a 60 fps target. The size is whatever the compositor hands over |
+| Encoding while recording | H.264 through VAAPI, then Vulkan, then software |
+| System audio | The PipeWire sink monitor, mixed with the microphone |
+| Cursor | Position and shape from the portal. Left clicks with the `input` group |
+| Captions | Local Whisper on Vulkan, with a CPU fallback. Burned into the video |
+| Export | MP4 (H.264 or H.265) or GIF, no watermark. H.264 on the GPU through VAAPI when the driver allows it |
+| Crash protection | None. The MP4 cannot be read if the app dies before the take ends |
+| Built-in updates | AppImage, `.deb`, `.rpm` and `.pacman`. Not Nix |
+
+## Wayland and PipeWire
+
+OpenScreen records the screen on Linux with its own native helper, not with the browser engine inside the app.
+
+- **Capture through the portal.** A Rust helper records through PipeWire and the xdg-desktop-portal ScreenCast interface. Your desktop's sharing dialog picks the display or window, before the 3-2-1 countdown starts.
+- **Hardware encoding while you record.** The helper writes H.264 and tries VAAPI first, then Vulkan video encoding, then the libopenh264 software encoder. The first one that opens on your machine is used.
+- **System audio from PipeWire.** It comes from the monitor of the default PipeWire sink and is mixed with the microphone into one AAC track. It needs PipeWire as the sound server, the default on Ubuntu 22.10 and later and Fedora 34 and later.
+- **Microphone choice.** The HUD lists every input device, with a live level meter. The helper finds the matching PipeWire node by its description.
+- **An editable cursor.** In the default overlay mode, the portal reports the cursor position and shape, so you can restyle the cursor in the editor. System mode records the pointer as it is.
+- **Clicks on Wayland.** Wayland has no portal for input events, so OpenScreen reads left-button presses from evdev. That works when your user is in the `input` group, and OpenScreen reads only the left button, never keystrokes. The group itself is broader: it lets every program you run read every input device, keyboard included. Without the group, recording still works and every cursor sample is saved as a move. [Mouse clicks on Wayland](/docs/installation/#mouse-clicks-on-wayland) has the command.
+- **Browser capture only as a fallback.** Chromium's capture takes over only in a build that is missing the helper. A helper that fails reports an error instead of switching. See [Recording](/docs/recording/).
+
+## Screen Studio-style polish on Linux
+
+Screen Studio supports only macOS (as of September 2026). OpenScreen offers the same kind of finishing on Linux, and its editing tools are the same on Windows, macOS and Linux.
+
+- **Automatic zooms.** **Auto-enhance → Automatic zooms** places zooms from the recorded cursor movement, with no network call and no model. Manual zooms have six depths. More on [auto-zoom](/features/auto-zoom/).
+- **Cursor styling.** Show or hide the cursor, resize and smooth it, and add motion blur and a click bounce. Click effects need recorded clicks, so the `input` group again.
+- **Backgrounds and framing.** 18 bundled wallpapers, a solid color, a gradient or your own image, with padding, rounded corners and a shadow. Output in 16:9, 9:16, 1:1 and other aspect ratios.
+- **Local captions.** whisper.cpp runs on your machine, on Vulkan with a CPU fallback. It uses one Whisper Small model of about 264 MB, downloaded once. Captions are burned into the video, and deleting words in the transcript cuts them from the video. More on [captions](/features/captions/).
+- **Webcam layouts.** Picture-in-picture and other layouts, with the camera background removed, blurred or replaced without a green screen. That option appears when the segmentation runtime loads on your machine.
+- **A multi-clip timeline.** Several clips per project, cuts, speed regions, text, arrow, image and blur annotations, a voice-over track and music. See [Editing & timeline](/docs/editing-timeline/).
+- **Export without a watermark.** MP4 in H.264 or H.265 at up to 60 fps, or GIF. On Linux the compositor renders through Vulkan, and H.264 goes to the GPU through `h264_vaapi` when the driver exposes VAAPI and the Vulkan device can hand frames over. Otherwise, and always for H.265, the encoder is software and the export takes longer. See [Export](/docs/export/).
+- **Optional chat editing with your own key.** Describe cuts, zooms or annotations in plain language. It is off until you connect a provider, and each change lands as an ordinary undoable edit. See [AI editing](/docs/ai-editing/).
+
+## Packages
+
+- **Four x64 packages per release.** An AppImage, a `.deb`, an `.rpm` and a `.pacman`, on the [download page](/download/) and on GitHub Releases.
+- **Updates from inside the app.** Those four packages can update themselves. By default the app only tells you an update exists, it checks every 24 hours, and it never offers one during a recording. Installing always goes through a restart prompt.
+- **A Nix flake.** It builds from source for `x86_64-linux` and `aarch64-linux`, and provides a NixOS module and a Home Manager module. `nix run github:getopenscreen/openscreen` tries it without installing. The app's updater leaves Nix installs alone.
+- **No Flathub listing and no ARM64 packages.** On an aarch64 machine, the Nix flake is the only route.
+- **A command-line interface.** The [CLI](/docs/cli/) records, exports, captions and packs projects, with JSON output. On Linux, `record` still needs a desktop session with the portal.
+
+## Linux limits to know before you record
+
+- **The portal asks every time.** The sharing dialog opens on every take, and no earlier choice is reused. The CLI's `--display` and `--window` options cannot preselect a source on Linux either.
+- **No crash protection.** Linux writes a plain MP4 that is finalized when the recording stops. If the app dies before that, the file cannot be read. Windows and macOS normally write fragmented MP4, which stays readable up to the last second or so.
+- **Tap-to-click is not recorded.** libinput synthesizes those taps and never writes them to the evdev device OpenScreen reads. A mouse, or a physical press on the touchpad, is recorded.
+- **The webcam goes through the browser engine.** It is captured into a separate file and composited in the editor.
+- **The recording controls can show up in the capture.** On Linux, nothing keeps OpenScreen's floating controls out of the recording. Hide them before you record.
+
+## When OpenScreen is not the right tool
+
+- **You record over SSH or on a server.** Recording needs a desktop session with `xdg-desktop-portal`. An SSH session without a display cannot record.
+- **You want recordings that start on their own.** Someone has to answer the portal dialog on each take, and OpenScreen has no scheduled recording.
+- **You need ARM64 packages or a Flatpak.** OpenScreen publishes x64 packages only and has no Flathub listing. On aarch64, it means building from source through Nix.
+- **Your takes are long and a crash would be costly.** Linux writes a plain MP4, so a crash before the end loses the file.
+- **You stream.** OpenScreen does not stream. OBS Studio streams to an integrated service or a custom server, and it is officially distributed on Linux as a Flatpak on Flathub and as a PPA for Ubuntu 24.04 and newer (as of September 2026). See [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
+- **You mostly take screenshots.** A screenshot tool fits better. OpenScreen is built around video.
+
+## Getting started
+
+1. Download the package for your distribution from the [download page](/download/), or use the Nix flake.
+2. Follow the [Linux installation steps](/docs/installation/#linux). Add your user to the `input` group if you want clicks recorded and accept what that group allows.
+3. Make a first recording with the [quick start](/docs/quick-start/), answer the portal dialog when it opens, then run **Auto-enhance → Automatic zooms** on the take.
+
+On another system? See the [Windows](/screen-recorder-windows/) and [macOS](/screen-recorder-mac/) pages. Coming from a Mac app? See the [Screen Studio alternative](/alternatives/screen-studio/). Or go back to the [OpenScreen home page](/).
+
+## Sources
+
+Third-party facts, checked September 2026:
+
+- Screen Studio supports only macOS: [screen.studio](https://screen.studio/)
+- OBS Studio on Linux, Flathub and the Ubuntu PPA: [obsproject.com/download](https://obsproject.com/download)
+- OBS Studio streaming to an integrated service or a custom server: [obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
+- PipeWire as the default sound server in Ubuntu 22.10: [Ubuntu 22.10 release notes](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)
+- PipeWire as the default sound server in Fedora 34: [Fedora change page](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)
+
+OpenScreen facts describe version 1.11.0 and link to its documentation above.
+
+Screen Studio and OBS Studio are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by either.

@@ -1,12 +1,13 @@
 ---
-title: Recordings that survive a crash, and an app you can actually install
-description: v1.10.0 put OpenScreen in the Microsoft Store, on Fedora and on ARM64, and made capture write fragmented MP4 so a helper that dies mid-recording leaves a playable file.
+title: Crash-safe recordings, and an app you can install
+title_meta: Crash-safe recordings and an installable app
+description: By v1.10.0, OpenScreen was in the Microsoft Store and on Fedora, and Windows and macOS capture wrote fragmented MP4, so a crash leaves a playable file.
 authors: [etienne]
 tags: [release, distribution]
 image: /img/og-image.png
 ---
 
-Two things in this stretch matter more than the version numbers. Capture now writes fragmented MP4, so a recorder that dies halfway through leaves you a playable file instead of a corrupt one. And the app finally installs the way people on each platform expect it to.
+Two things in this stretch matter more than the version numbers. Capture on Windows and macOS now writes fragmented MP4, so a recorder that dies halfway through leaves you a playable file instead of a corrupt one. And the app finally installs the way people on each platform expect it to.
 
 That is [v1.10.0](https://github.com/getopenscreen/openscreen/releases/tag/v1.10.0), August 24. Before it, v1.9.0 through v1.9.6 in under two weeks.
 
@@ -16,7 +17,7 @@ That is [v1.10.0](https://github.com/getopenscreen/openscreen/releases/tag/v1.10
 
 A screen recorder that can lose the take is not a screen recorder. The old capture path wrote a single MP4 whose index is finalised at the end, so a helper crash, a forced quit or a dead battery left a file no player could open. The recording had happened. It was just unreadable.
 
-Capture writes fragmented MP4 now. The file is valid at every fragment boundary, so whatever was captured before the process died is still there and still plays.
+Capture on Windows and macOS writes fragmented MP4 now. The file is valid at every fragment boundary, so whatever was captured before the process died is still there and still plays. Linux still writes a plain MP4, so a crash there can still cost the file.
 
 The same release stopped two other ways to lose work. The native webcam stream writes to disk while it records, so killing a recording can't take the camera track with it, and the Windows capture helper stopped hanging on stop, which used to require killing the process and losing the file.
 
@@ -24,11 +25,11 @@ The same release stopped two other ways to lose work. The native webcam stream w
 
 Most of v1.10.0 was packaging. Distribution is where free desktop software quietly fails: the build works, and nobody can get it.
 
-**Windows.** The appx goes to the Microsoft Store from the release build, with branded tiles. That is the route I'd recommend on Windows now. winget stopped skipping silently. There is no Visual C++ Redistributable dependency any more, and the OpenMP runtime the transcription backends actually import is bundled, so transcription works on a clean machine.
+**Windows.** The appx goes to the Microsoft Store from the release build, with branded tiles. That is the route I'd recommend on Windows now, and the [installation docs](/docs/installation/) walk through it. winget stopped skipping silently. There is no Visual C++ Redistributable dependency any more, and the OpenMP runtime the transcription backends actually import is bundled, so transcription works on a clean machine.
 
-**Linux.** Fedora RPM ([@Mundo-Dev0ps](https://github.com/getopenscreen/openscreen/pull/101)), ARM64 builds ([@zebster-cmd](https://github.com/getopenscreen/openscreen/pull/293)), and DMA-BUF negotiation so capture works on niri and other wlroots compositors, which had no working screen recorder from this project at all. Packages now respect the glibc floor of the distros they claim to target, declared and proven on a clean machine, and AppStream metadata is in place for Flathub.
+**Linux.** Fedora RPM ([@Mundo-Dev0ps](https://github.com/getopenscreen/openscreen/pull/101)), a source build that completes on ARM64 machines ([@zebster-cmd](https://github.com/getopenscreen/openscreen/pull/293)), and DMA-BUF negotiation so capture works on niri and other wlroots compositors, which had no working screen recorder from this project at all. Packages now respect the glibc floor of the distros they claim to target, declared and proven on a clean machine, and AppStream metadata is in place for Flathub. The released packages, all x64, are on the [download page](/download/).
 
-**macOS.** The Homebrew cask job runs again instead of sitting dormant.
+**macOS.** The Homebrew cask job now reports that it published nothing, instead of passing silently.
 
 Capture is also DPI-aware and stops guessing which monitor you meant, and there is a GPU DXGI encode path behind a flag, opt-in until it earns the default.
 
@@ -39,7 +40,7 @@ v1.9.0 shipped August 5, the day after v1.8.0 was promoted. That is a backed-up 
 Two features in it:
 
 - Teleprompter mode in the notes window. Your script scrolls next to the capture, mirrored so it reads right in a webcam ([@My-Denia](https://github.com/getopenscreen/openscreen/pull/152)).
-- A headless CLI with `record`, `export` and `info`, driving the same engine the app does, which makes OpenScreen usable from a script or on a server ([@PeterTakahashi](https://github.com/getopenscreen/openscreen/pull/176)).
+- A CLI with `record`, `export` and `info`, driving the same engine the app does, which makes OpenScreen usable from a script ([@PeterTakahashi](https://github.com/getopenscreen/openscreen/pull/176)). Recording still needs a real desktop session, as the [CLI docs](/docs/cli/) explain.
 
 It also removed a PID-file instance lock that could permanently brick startup, notarized macOS RCs like stable builds, and made the AppX package declare all 13 locales instead of one.
 
@@ -55,6 +56,6 @@ Every release's regression pass is written up in the repo's testing docs, includ
 
 Webcam background effects have landed on all three compositor backends. Blur or replace what is behind you, including an AI cutout that doesn't need a green screen. The transcription helper reports its real timing and which compute backend it used, so "how long will this take" has an answer instead of a progress bar with no scale.
 
-Still open: hardware encode on Linux, and measurements on discrete GPUs and QSV. It is still pre-1.x, so rough edges are expected and bug reports are welcome.
+Still open: hardware encode on Linux, and measurements on discrete GPUs and QSV. It is still not production-grade, so rough edges are expected and bug reports are welcome.
 
-Three months, ten releases. [Discord](https://getopenscreen.com/discord) is open if you want to argue with any of it.
+Three months, ten releases. [Discord](https://getopenscreen.com/discord/) is open if you want to argue with any of it.

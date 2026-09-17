@@ -1,0 +1,99 @@
+{
+	"tooltips": {
+		"hideHUD": "HUD ausblenden",
+		"closeApp": "App schließen",
+		"restartRecording": "Aufnahme neu starten",
+		"cancelRecording": "Aufnahme abbrechen",
+		"pauseRecording": "Aufnahme pausieren",
+		"resumeRecording": "Aufnahme fortsetzen",
+		"useVerticalTray": "Vertikale Leiste verwenden",
+		"useHorizontalTray": "Horizontale Leiste verwenden",
+		"openStudio": "Studio öffnen",
+		"openNotes": "Notizen öffnen",
+		"openNotesPlaceholder": "Hier Notizen schreiben…",
+		"notesToolbar": {
+			"bold": "Fett",
+			"italic": "Kursiv",
+			"strikethrough": "Durchgestrichen",
+			"bulletList": "Aufzählung",
+			"numberedList": "Nummerierte Liste",
+			"blockquote": "Zitat",
+			"codeBlock": "Codeblock",
+			"play": "Auto-Scroll starten",
+			"pause": "Auto-Scroll pausieren",
+			"speed": "Scroll-Tempo",
+			"decreaseSpeed": "Scroll-Tempo verringern",
+			"increaseSpeed": "Scroll-Tempo erhöhen",
+			"fontSize": "Schriftgröße",
+			"decreaseFontSize": "Schrift verkleinern",
+			"increaseFontSize": "Schrift vergrößern",
+			"mirror": "Horizontal spiegeln"
+		}
+	},
+	"audio": {
+		"enableSystemAudio": "Systemton aktivieren",
+		"disableSystemAudio": "Systemton deaktivieren",
+		"enableMicrophone": "Mikrofon aktivieren",
+		"disableMicrophone": "Mikrofon deaktivieren",
+		"defaultMicrophone": "Standardmikrofon",
+		"systemAudio": "Systemton",
+		"microphone": "Mikrofon",
+		"on": "An",
+		"off": "Aus",
+		"inputDevice": "Eingabegerät"
+	},
+	"webcam": {
+		"enableWebcam": "Webcam aktivieren",
+		"disableWebcam": "Webcam deaktivieren",
+		"defaultCamera": "Standardkamera",
+		"searching": "Suche läuft…",
+		"noneFound": "Keine Kamera gefunden",
+		"unavailable": "Kamera nicht verfügbar",
+		"camera": "Kamera",
+		"cameraDevice": "Kameragerät"
+	},
+	"cursor": {
+		"useEditableCursor": "Bearbeitbaren Cursor verwenden",
+		"useSystemCursor": "System-Cursor verwenden"
+	},
+	"sourceSelector": {
+		"loading": "Quellen werden geladen…",
+		"screens": "Bildschirme ({{count}})",
+		"windows": "Fenster ({{count}})",
+		"emptyTitle": "Keine Bildschirme oder Fenster gefunden",
+		"emptyDescription": "Wenn du die Berechtigung zur Bildschirmaufnahme gerade erteilt hast, lade diese Auswahl neu. Unter macOS musst du OpenScreen eventuell neu öffnen.",
+		"loadFailedDescription": "OpenScreen konnte die Aufnahmequellen nicht laden. Lade diese Auswahl neu und versuche es erneut.",
+		"defaultSourceName": "Bildschirm"
+	},
+	"recording": {
+		"selectSource": "Bitte wähle eine Quelle für die Aufnahme",
+		"systemPicker": "Dein System fragt gleich, was du teilen möchtest",
+		"inProgress": "Aufnahme läuft",
+		"saving": "Wird gespeichert…"
+	},
+	"language": "Sprache",
+	"systemLanguagePrompt": {
+		"title": "Systemsprache verwenden?",
+		"description": "{{language}} wurde als deine Systemsprache erkannt. Soll OpenScreen auf {{language}} umgestellt werden?",
+		"switch": "Zu {{language}} wechseln",
+		"keepDefault": "Aktuelle Sprache behalten"
+	},
+	"softwareEncoderFallback": {
+		"title": "Auf Software-Encoding umgestellt",
+		"description": "Der Standard-GPU-Encoder konnte nicht gestartet werden, deshalb ist OpenScreen auf Software-H.264-Encoding zurückgefallen. Die Aufnahme läuft normal weiter, die CPU-Auslastung kann aber höher sein.",
+		"dismiss": "Verstanden",
+		"dontShowAgain": "Nicht mehr anzeigen"
+	},
+	"deviceSettings": {
+		"title": "Geräteeinstellungen",
+		"done": "Fertig",
+		"micLevel": "Eingangspegel",
+		"micHint": "Sprich, um dein Mikrofon zu prüfen",
+		"noMicrophones": "Kein Mikrofon gefunden",
+		"preview": "Vorschau",
+		"previewUnavailable": "Vorschau nicht verfügbar",
+		"about": "Über",
+		"version": "Version {{version}}",
+		"checkingForUpdates": "Wird geprüft…"
+	}
+}

@@ -47,7 +47,7 @@ A raw capture goes in and comes out ready to post — on X, Reddit, YouTube, a d
 - Timeline snapping guides and an audio waveform to make trimming easier.
 - Customizable keyboard shortcuts.
 - Export to MP4 or GIF in multiple aspect ratios and resolutions, rendered and encoded on the GPU (Metal on macOS, D3D11 on Windows, Vulkan on Linux) with an automatic CPU fallback.
-- Languages supported: Arabic, English, Spanish, French, Italian, Japanese, Korean, Portuguese (Brazil), Russian, Turkish, Vietnamese, Simplified Chinese, and Traditional Chinese.
+- Languages supported: Arabic, Czech, English, Spanish, French, German, Italian, Japanese, Korean, Portuguese (Brazil), Russian, Turkish, Vietnamese, Simplified Chinese, and Traditional Chinese.
 
 ## Command-line interface (headless)
 
@@ -61,7 +61,7 @@ openscreen record --duration 20 --project demo.openscreen --json
 openscreen export demo.openscreen -o demo.mp4 --json
 ```
 
-See [docs/cli.md](./docs/cli.md).
+See the [CLI reference](https://getopenscreen.com/docs/cli/).
 
 ## Installation
 

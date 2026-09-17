@@ -405,13 +405,14 @@
     // Mirrors SUPPORTED_LOCALES in src/i18n/config.ts. This list is what the Store
     // shows as "supported languages" on the product page and what lets the listing
     // surface in each language's Store search — declaring only en-US/fr-FR advertised
-    // 2 of the 14 languages the app actually ships. Bare tags (ar, es, ...) match every
+    // 2 of the 15 languages the app actually ships. Bare tags (ar, es, ...) match every
     // region of that language, which is what the renderer's locale resolution does too.
     "languages": [
       "en-US",
       "fr-FR",
       "ar",
       "cs",
+      "de",
       "es",
       "it",
       "ja-JP",

@@ -1,0 +1,776 @@
+{
+  "appLanguages.line": {
+    "message": "インターフェースは {count} 言語に対応：{names}",
+    "description": "{count} is a number; {names} is the list of language names, each in its own language"
+  },
+  "download.macos.arm.label": {
+    "message": "Apple Silicon"
+  },
+  "download.macos.arm.sublabel": {
+    "message": "M1 以降 · .dmg"
+  },
+  "download.macos.intel.label": {
+    "message": "Intel"
+  },
+  "download.macos.intel.sublabel": {
+    "message": "x86_64 · .dmg"
+  },
+  "download.macos.footnote": {
+    "message": "署名・公証済みのため、ターミナルでの操作なしで開けます。初回起動時に「画面収録」と「アクセシビリティ」を許可してください。",
+    "description": "Screen Recording and Accessibility are macOS privacy settings: use the names macOS shows in your language."
+  },
+  "download.windows.store.label": {
+    "message": "Microsoft Store"
+  },
+  "download.windows.store.sublabel": {
+    "message": "推奨 · Microsoft による署名"
+  },
+  "download.windows.exe.label": {
+    "message": "Windows 10 / 11"
+  },
+  "download.windows.exe.sublabel": {
+    "message": "インストーラー · .exe · 署名なし"
+  },
+  "download.windows.footnote": {
+    "message": "システム音声は追加のドライバーなしで録音できます。おおむね第 8 世代 Intel（AMD では Ryzen 2000 シリーズ相当）より古い内蔵グラフィックスでは、録画の停止に関する既知の問題が起きることがあります。詳しくは{systemRequirements}を参照してください。"
+  },
+  "download.windows.footnote.systemRequirements": {
+    "message": "システム要件"
+  },
+  "download.linux.deb.sublabel": {
+    "message": "パッケージ · .deb"
+  },
+  "download.linux.rpm.sublabel": {
+    "message": "パッケージ · .rpm"
+  },
+  "download.linux.pacman.sublabel": {
+    "message": "パッケージ · .pacman"
+  },
+  "download.linux.appImage.label": {
+    "message": "全ディストリビューション"
+  },
+  "download.linux.appImage.sublabel": {
+    "message": "ポータブル · .AppImage"
+  },
+  "download.linux.footnote": {
+    "message": "キャプチャは PipeWire と xdg-desktop-portal を経由します。どちらも必須です。"
+  },
+  "download.meta.title": {
+    "message": "Windows・macOS・Linux 版をダウンロード"
+  },
+  "download.meta.description": {
+    "message": "OpenScreen を Windows・macOS・Linux 向けに無料でダウンロード。配布形式は Microsoft Store、.exe、.dmg、.deb、.rpm、.pacman、AppImage、Nix flake。オープンソースで、アカウントは不要です。"
+  },
+  "download.hero.badge.release": {
+    "message": "{tag} · MIT ライセンス",
+    "description": "{tag} is the release tag, e.g. v1.11.0"
+  },
+  "download.hero.badge.noRelease": {
+    "message": "MIT ライセンス · ずっと無料"
+  },
+  "download.hero.title": {
+    "message": "OpenScreen をダウンロード"
+  },
+  "download.hero.tagline": {
+    "message": "無料・オープンソースの画面録画・動画編集ソフト。アカウント不要、透かしなし、サブスクリプションなし。"
+  },
+  "download.hero.published": {
+    "message": "最新の安定版：{date} 公開",
+    "description": "{date} is formatted for your language at build time"
+  },
+  "download.panels.winget.title": {
+    "message": "Windows：Store 版をターミナルから"
+  },
+  "download.panels.winget.foot": {
+    "message": ".exe はコード署名されていないため、SmartScreen が「Windows によって PC が保護されました」と表示します。「詳細情報」を選び、「実行」をクリックしてください。.exe は必ず{releasesPage}からダウンロードしてください。",
+    "description": "Windows protected your PC, More info and Run anyway are SmartScreen's own words: use the ones Windows shows in your language."
+  },
+  "download.panels.winget.foot.releasesPage": {
+    "message": "Releases ページ"
+  },
+  "download.panels.nix.title": {
+    "message": "Nix：インストールせずに実行"
+  },
+  "download.panels.nix.foot": {
+    "message": "ディストリビューションごとの手順は{installationGuide}にあります。"
+  },
+  "download.panels.nix.foot.installationGuide": {
+    "message": "インストールガイド"
+  },
+  "download.preRelease.title": {
+    "message": "次のバージョンを試してみませんか？"
+  },
+  "download.preRelease.body": {
+    "message": "安定版の合間にはリリース候補版が公開されます。過去のリリース、チェックサム、完全なリリースノートも同じ場所にあります。"
+  },
+  "download.preRelease.cta": {
+    "message": "すべてのリリースを見る"
+  },
+  "home.meta.title": {
+    "message": "無料・オープンソースの画面録画・動画編集ソフト"
+  },
+  "home.meta.description": {
+    "message": "OpenScreen は Windows・macOS・Linux に対応した、無料・オープンソースの画面録画・動画編集ソフトです。OS ネイティブのキャプチャ、端末上で生成する字幕、透かしなし。"
+  },
+  "home.hero.badge.new": {
+    "message": "NEW"
+  },
+  "home.hero.badge.text": {
+    "message": "1.11：macOS・Linux でエクスポート高速化",
+    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
+  },
+  "home.hero.titleTagline": {
+    "message": "無料・オープンソースの画面録画・動画編集ソフト"
+  },
+  "home.hero.tagline": {
+    "message": "ネイティブキャプチャ、ローカル AI、課金不要の画面録画。"
+  },
+  "home.hero.download": {
+    "message": "ダウンロード"
+  },
+  "home.hero.readDocs": {
+    "message": "ドキュメントを読む"
+  },
+  "home.hero.scrollHint": {
+    "message": "下にスクロール"
+  },
+  "home.features.kicker": {
+    "message": "さらに"
+  },
+  "home.features.title": {
+    "message": "無料、ローカル、クロスプラットフォーム：スクリーンショットでは伝わらない 3 つのこと。"
+  },
+  "home.features.summary": {
+    "message": "OpenScreen は Windows・macOS・Linux 向けの、無料・オープンソースの画面録画・動画編集ソフトです。録画したままの素材から完成したデモ動画を仕上げる、{screenStudio} が確立したジャンルのツールです。MIT ライセンスで、透かしは入らず、アカウントも不要です。作者が v1.5.0 のあとにアーカイブした{originalProject}を引き継いでいます。",
+    "description": "{screenStudio} links to an English-only page."
+  },
+  "home.features.summary.screenStudio": {
+    "message": "Screen Studio",
+    "description": "A product name. The link goes to an English-only page."
+  },
+  "home.features.summary.originalProject": {
+    "message": "元の OpenScreen プロジェクト"
+  },
+  "home.features.free.title": {
+    "message": "MIT ライセンス、ずっと無料"
+  },
+  "home.features.free.body": {
+    "message": "課金による機能制限も、プレミアムプランも、利用上限もありません。すべての機能を、個人でも商用でも無料で使えます。"
+  },
+  "home.features.local.title": {
+    "message": "何もアップロードされません"
+  },
+  "home.features.local.body": {
+    "message": "録画、文字起こし、レンダリングはすべてお使いのパソコン上で行われ、動画が外に出ることはありません。テキストが送信されるのは、あなたが求めたときだけです。対象はチャットパネルと字幕の翻訳で、どちらもあなたが用意したキーを使います。文字起こしは初回実行時に、264 MB の Whisper モデルを一度だけダウンロードします。"
+  },
+  "home.features.platforms.title": {
+    "message": "Windows、macOS、Linux"
+  },
+  "home.features.platforms.body": {
+    "message": "ソースコードはひとつで、どの OS でもネイティブキャプチャ。配布形式は Microsoft Store、.dmg、.exe、.deb、.rpm、.pacman、AppImage、Nix flake です。"
+  },
+  "home.install.kicker": {
+    "message": "クイックスタート"
+  },
+  "home.install.title": {
+    "message": "ダウンロードとインストール"
+  },
+  "home.install.mac.comment": {
+    "message": "# .dmg を開いてから"
+  },
+  "home.install.mac.action": {
+    "message": "OpenScreen を「アプリケーション」にドラッグします。"
+  },
+  "home.install.mac.foot": {
+    "message": "署名・公証済み。ScreenCaptureKit でキャプチャし、「アクセシビリティ」を許可するとカーソルの形状とクリックも記録します。"
+  },
+  "home.install.windows.comment": {
+    "message": "# ターミナルから Microsoft Store 版を"
+  },
+  "home.install.windows.foot": {
+    "message": "Windows Graphics Capture でキャプチャ。システム音声は設定不要で録音でき、ウェブカメラは Media Foundation でキャプチャします。"
+  },
+  "home.install.linux.comment": {
+    "message": "# Releases から .deb をダウンロードしてから"
+  },
+  "home.install.linux.foot": {
+    "message": "ScreenCast ポータル経由の PipeWire キャプチャ。PipeWire と xdg-desktop-portal が必要です。"
+  },
+  "home.install.note": {
+    "message": "Windows には {exe} インストーラーもあります。コード署名されていないため、実行前に SmartScreen が警告を表示します。「詳細情報」を選び、「実行」をクリックしてください。Linux 向けには {rpm}、{pacman}、AppImage、Nix flake もあります。すべての配布ファイルは{releasesPage}にあり、詳しい手順は{installation}のページにあります。各 OS で何を録画できるかは、{windows}・{mac}・{linux} の各ページ（英語）で説明しています。",
+    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to English-only pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
+  },
+  "home.install.note.releasesPage": {
+    "message": "Releases ページ"
+  },
+  "home.install.note.installation": {
+    "message": "インストール"
+  },
+  "home.install.note.windows": {
+    "message": "Windows"
+  },
+  "home.install.note.mac": {
+    "message": "Mac"
+  },
+  "home.install.note.linux": {
+    "message": "Linux"
+  },
+  "editor.skipLink": {
+    "message": "エディターの紹介を飛ばしてダウンロードへ"
+  },
+  "editor.title": {
+    "message": "実際によく使う 5 つの操作",
+    "description": "Read by screen readers only: the heading of the five captioned steps below"
+  },
+  "showcase.record.kicker": {
+    "message": "録画"
+  },
+  "showcase.record.claim": {
+    "message": "OS を迂回せず、OS の仕組みで録画します。"
+  },
+  "showcase.record.body": {
+    "message": "ウィンドウかディスプレイを選びます。macOS は ScreenCaptureKit、Windows は Windows Graphics Capture、Linux は PipeWire と ScreenCast ポータルを経由します。いずれも、その OS 自身が提供するキャプチャ経路です。ポインターは映像のピクセルに焼き込まれず、データとして記録されます。このページの上のほうでポインターのスタイルを変えられたのは、ひとえにそのためです。"
+  },
+  "showcase.record.fact": {
+    "message": "ScreenCaptureKit · Windows Graphics Capture · PipeWire · 追加ドライバー不要のシステム音声"
+  },
+  "showcase.record.link.docs": {
+    "message": "画面録画のドキュメント"
+  },
+  "showcase.record.label": {
+    "message": "レコーダーのイラスト：2 つのキャプチャ対象が並び、Display 1 が選択され、その横に Terminal というタイトルのウィンドウがあります。続いてテイクの設定（ScreenCaptureKit、システム音声、1920 × 1080・60 fps）、マイクとシステム音声の切り替え、Start recording ボタンがあります。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.export.kicker": {
+    "message": "エクスポート"
+  },
+  "showcase.export.claim": {
+    "message": "そして、ファイルに書き出します。"
+  },
+  "showcase.export.body": {
+    "message": "MP4 は 720p から元の解像度まで、24・30・60 fps、H.264 または H.265。GIF も選べます。エンコードはお使いのパソコン上で行われ、処理中はフレーム数をカウントします。順番待ちも、アカウントも、透かしもありません。バーが埋まった時点で、ファイルはディスク上にあります。"
+  },
+  "showcase.export.fact": {
+    "message": "H.264 / H.265 · 24・30・60 fps · 透かしなし"
+  },
+  "showcase.export.link.docs": {
+    "message": "動画エクスポートのドキュメント"
+  },
+  "showcase.export.label": {
+    "message": "エクスポートパネルのイラスト：recording-1783066227227.mp4 を MP4 としてエクスポートしています。H.264、1080p、60 fps、GIF と並んで H.265 が選択され、進行状況バーは 62% の位置で frame 1 488 of 2 400 と表示し、Movies フォルダーに書き込んでいます。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.captions.kicker": {
+    "message": "字幕"
+  },
+  "showcase.captions.claim": {
+    "message": "文字起こしは、お使いのパソコン上で動きます。"
+  },
+  "showcase.captions.body": {
+    "message": "whisper.cpp はアプリに同梱され、モデルは初回使用時に一度だけダウンロードされます。それ以降は、ネットワークを切っても動作します。音声がノートパソコンの外に出ることはなく、結果は編集できるテキストとして返ってきます。書体、サイズ、色、位置を設定し、レンダリング時に映像へ焼き込みます。"
+  },
+  "showcase.captions.fact": {
+    "message": "whisper.cpp · 100 言語 · 初回以降はオフラインで動作"
+  },
+  "showcase.captions.link.docs": {
+    "message": "字幕と文字起こしのドキュメント"
+  },
+  "showcase.captions.link.feature": {
+    "message": "ローカル字幕の比較（英語）",
+    "description": "Links to an English-only page."
+  },
+  "showcase.captions.label": {
+    "message": "字幕パネルのイラスト：動画の上に「amber day on the validator, and it」という一行が大きく表示されています。その横では字幕がオンになっていて、7 行の字幕が文字起こしからリアルタイムに生成されているという注記と、English、Français、Translate ボタン、翻訳を削除するオプションが並ぶ言語の行があります。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.agent.kicker": {
+    "message": "エージェント"
+  },
+  "showcase.agent.claim": {
+    "message": "または、カットする箇所を言葉で指示。"
+  },
+  "showcase.agent.body": {
+    "message": "このページの上にあるウィザードは、カーソルの動きを見てズームを配置します。エージェントはさらに踏み込み、実際の文字起こしと実際のタイムラインを読み取ります。そのため、どの区間をカットし、それでどれだけ短くなるかを、確認できるタイムコード付きで答えます。エージェントの編集はどれも通常どおり元に戻せる操作で、あなたが用意したプロバイダーのキーが必要です。キーを接続するまで、何も実行されません。"
+  },
+  "showcase.agent.fact": {
+    "message": "自分のキーを使用 · 既定でオフ · すべての編集を元に戻せる"
+  },
+  "showcase.agent.link.docs": {
+    "message": "AI 編集のドキュメント"
+  },
+  "showcase.agent.link.feature": {
+    "message": "自動ズームの仕組み（英語）",
+    "description": "Links to an English-only page."
+  },
+  "showcase.agent.label": {
+    "message": "エージェントの返答のイラスト。無音部分のカットを頼まれ、タイムコードで答えています。「Hi」の前の導入部 0〜2.19 秒と、「think.」の後の末尾 35.12〜40.03 秒をカットし、再生できる映像を 40 秒から 33 秒にします。既存のズームは同じ場面に残ります。最後に「applied: added 2 trims」という緑色の行があります。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.title": {
+    "message": "レコーダー、字幕、エージェント、エンコーダー。"
+  },
+  "recreation.style.kicker": {
+    "message": "スタイル"
+  },
+  "recreation.style.title": {
+    "message": "背景を入れ替える"
+  },
+  "recreation.style.sub": {
+    "message": "録画の背景に画像、単色、グラデーション。撮り直しは不要です。"
+  },
+  "recreation.effects.kicker": {
+    "message": "エフェクト"
+  },
+  "recreation.effects.title": {
+    "message": "思いどおりのフレームに"
+  },
+  "recreation.effects.sub": {
+    "message": "余白、モーションブラー、影、丸み。どのエフェクトもリアルタイムで合成されます。"
+  },
+  "recreation.cursor.kicker": {
+    "message": "カーソル"
+  },
+  "recreation.cursor.title": {
+    "message": "目で追いたくなるカーソル"
+  },
+  "recreation.cursor.sub": {
+    "message": "サイズ、スムージング、モーションブラー、クリックバウンス。どの動きも画面上でわかりやすく。"
+  },
+  "recreation.timeline.kicker": {
+    "message": "タイムライン"
+  },
+  "recreation.timeline.title": {
+    "message": "ワンクリックで、すべてのズームを配置"
+  },
+  "recreation.timeline.sub": {
+    "message": "ズーム、速度変化、トリム、コメント。どの編集もタイムライン上にブロックとして並びます。"
+  },
+  "recreation.transcript.kicker": {
+    "message": "文字起こし"
+  },
+  "recreation.transcript.title": {
+    "message": "テキストのように動画を編集"
+  },
+  "recreation.transcript.sub": {
+    "message": "単語や無音を削除すると、そのカットがタイムラインに反映されます。すべて非破壊です。"
+  },
+  "footer.brand.description": {
+    "message": "無料・オープンソースの画面録画・編集ソフト。コミュニティがメンテナンスする後継プロジェクトで、MIT ライセンスです。"
+  },
+  "footer.product.title": {
+    "message": "製品"
+  },
+  "footer.product.download": {
+    "message": "ダウンロード"
+  },
+  "footer.product.autoZoom": {
+    "message": "自動ズーム（英語）",
+    "description": "Links to an English-only page."
+  },
+  "footer.product.captions": {
+    "message": "ローカル字幕（英語）",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.title": {
+    "message": "プラットフォーム（英語）",
+    "description": "Its three links go to English-only pages."
+  },
+  "footer.platforms.windows": {
+    "message": "Windows",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.mac": {
+    "message": "macOS",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.linux": {
+    "message": "Linux",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.title": {
+    "message": "比較（英語）",
+    "description": "Its five links go to English-only pages."
+  },
+  "footer.compare.screenStudio": {
+    "message": "Screen Studio の代替",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.camtasia": {
+    "message": "Camtasia の代替",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.loom": {
+    "message": "Loom の代替",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.cap": {
+    "message": "OpenScreen と Cap の比較",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.obs": {
+    "message": "OpenScreen と OBS Studio の比較",
+    "description": "Links to an English-only page."
+  },
+  "footer.project.title": {
+    "message": "プロジェクト"
+  },
+  "footer.project.releases": {
+    "message": "リリース"
+  },
+  "footer.project.blog": {
+    "message": "ブログ（英語）",
+    "description": "Links to an English-only page."
+  },
+  "footer.project.faq": {
+    "message": "よくある質問"
+  },
+  "footer.community.title": {
+    "message": "コミュニティ"
+  },
+  "footer.community.contributing": {
+    "message": "コントリビューション"
+  },
+  "footer.community.license": {
+    "message": "ライセンス（MIT）"
+  },
+  "footer.bottom.license": {
+    "message": "OpenScreen は MIT ライセンスで公開されています。コミュニティが開発し、これからもずっと無料です。"
+  },
+  "footer.bottom.lineage": {
+    "message": "{originalProject}（スター数 3.9 万、現在はアーカイブ済み）の公式スピンオフです。"
+  },
+  "footer.bottom.lineage.originalProject": {
+    "message": "元の OpenScreen プロジェクト"
+  },
+  "theme.navbar.mobileLanguageDropdown.label": {
+    "message": "言語",
+    "description": "The label for the mobile language switcher dropdown"
+  },
+  "theme.ErrorPageContent.title": {
+    "message": "エラーが発生しました",
+    "description": "The title of the fallback page when the page crashed"
+  },
+  "theme.BackToTopButton.buttonAriaLabel": {
+    "message": "先頭へ戻る",
+    "description": "The ARIA label for the back to top button"
+  },
+  "theme.blog.archive.title": {
+    "message": "アーカイブ",
+    "description": "The page & hero title of the blog archive page"
+  },
+  "theme.blog.archive.description": {
+    "message": "アーカイブ",
+    "description": "The page & hero description of the blog archive page"
+  },
+  "theme.blog.paginator.navAriaLabel": {
+    "message": "ブログ記事一覧のナビゲーション",
+    "description": "The ARIA label for the blog pagination"
+  },
+  "theme.blog.paginator.newerEntries": {
+    "message": "新しい記事",
+    "description": "The label used to navigate to the newer blog posts page (previous page)"
+  },
+  "theme.blog.paginator.olderEntries": {
+    "message": "過去の記事",
+    "description": "The label used to navigate to the older blog posts page (next page)"
+  },
+  "theme.blog.post.paginator.navAriaLabel": {
+    "message": "ブログ記事のナビゲーション",
+    "description": "The ARIA label for the blog posts pagination"
+  },
+  "theme.blog.post.paginator.newerPost": {
+    "message": "新しい記事",
+    "description": "The blog post button label to navigate to the newer/previous post"
+  },
+  "theme.blog.post.paginator.olderPost": {
+    "message": "過去の記事",
+    "description": "The blog post button label to navigate to the older/next post"
+  },
+  "theme.tags.tagsPageLink": {
+    "message": "全てのタグを見る",
+    "description": "The label of the link targeting the tag list page"
+  },
+  "theme.colorToggle.ariaLabel.mode.system": {
+    "message": "システムモード",
+    "description": "The name for the system color mode"
+  },
+  "theme.colorToggle.ariaLabel.mode.light": {
+    "message": "ライトモード",
+    "description": "The name for the light color mode"
+  },
+  "theme.colorToggle.ariaLabel.mode.dark": {
+    "message": "ダークモード",
+    "description": "The name for the dark color mode"
+  },
+  "theme.colorToggle.ariaLabel": {
+    "message": "カラーモードを切り替える（現在は{mode}）",
+    "description": "The ARIA label for the color mode toggle"
+  },
+  "theme.docs.breadcrumbs.navAriaLabel": {
+    "message": "パンくずリストのナビゲーション",
+    "description": "The ARIA label for the breadcrumbs"
+  },
+  "theme.docs.paginator.navAriaLabel": {
+    "message": "ドキュメントページ",
+    "description": "The ARIA label for the docs pagination"
+  },
+  "theme.docs.paginator.previous": {
+    "message": "前へ",
+    "description": "The label used to navigate to the previous doc"
+  },
+  "theme.docs.paginator.next": {
+    "message": "次へ",
+    "description": "The label used to navigate to the next doc"
+  },
+  "theme.docs.tagDocListPageTitle.nDocsTagged": {
+    "message": "{count}記事",
+    "description": "Pluralized label for \"{count} docs tagged\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.docs.tagDocListPageTitle": {
+    "message": "「{tagName}」タグのついた{nDocsTagged}",
+    "description": "The title of the page for a docs tag"
+  },
+  "theme.docs.versionBadge.label": {
+    "message": "バージョン: {versionLabel}"
+  },
+  "theme.docs.versions.unreleasedVersionLabel": {
+    "message": "これはリリース前のバージョン{versionLabel}の{siteTitle}のドキュメントです。",
+    "description": "The label used to tell the user that he's browsing an unreleased doc version"
+  },
+  "theme.docs.versions.unmaintainedVersionLabel": {
+    "message": "これはバージョン{versionLabel}の{siteTitle}のドキュメントで現在はメンテナンスされていません",
+    "description": "The label used to tell the user that he's browsing an unmaintained doc version"
+  },
+  "theme.docs.versions.latestVersionSuggestionLabel": {
+    "message": "最新のドキュメントは{latestVersionLink} ({versionLabel}) を見てください",
+    "description": "The label used to tell the user to check the latest version"
+  },
+  "theme.docs.versions.latestVersionLinkLabel": {
+    "message": "最新バージョン",
+    "description": "The label used for the latest version suggestion link label"
+  },
+  "theme.common.editThisPage": {
+    "message": "このページを編集",
+    "description": "The link label to edit the current page"
+  },
+  "theme.common.headingLinkTitle": {
+    "message": "{heading} への直接リンク",
+    "description": "Title for link to heading"
+  },
+  "theme.lastUpdated.atDate": {
+    "message": "{date}に",
+    "description": "The words used to describe on which date a page has been last updated"
+  },
+  "theme.lastUpdated.byUser": {
+    "message": "{user}が",
+    "description": "The words used to describe by who the page has been last updated"
+  },
+  "theme.lastUpdated.lastUpdatedAtBy": {
+    "message": "{atDate}{byUser}最終更新",
+    "description": "The sentence used to display when a page has been last updated, and by who"
+  },
+  "theme.navbar.mobileVersionsDropdown.label": {
+    "message": "他のバージョン",
+    "description": "The label for the navbar versions dropdown on mobile view"
+  },
+  "theme.NotFound.title": {
+    "message": "ページが見つかりません",
+    "description": "The title of the 404 page"
+  },
+  "theme.tags.tagsListLabel": {
+    "message": "タグ:",
+    "description": "The label alongside a tag list"
+  },
+  "theme.admonition.caution": {
+    "message": "注意",
+    "description": "The default label used for the Caution admonition (:::caution)"
+  },
+  "theme.admonition.danger": {
+    "message": "危険",
+    "description": "The default label used for the Danger admonition (:::danger)"
+  },
+  "theme.admonition.info": {
+    "message": "備考",
+    "description": "The default label used for the Info admonition (:::info)"
+  },
+  "theme.admonition.note": {
+    "message": "注記",
+    "description": "The default label used for the Note admonition (:::note)"
+  },
+  "theme.admonition.tip": {
+    "message": "ヒント",
+    "description": "The default label used for the Tip admonition (:::tip)"
+  },
+  "theme.admonition.warning": {
+    "message": "警告",
+    "description": "The default label used for the Warning admonition (:::warning)"
+  },
+  "theme.AnnouncementBar.closeButtonAriaLabel": {
+    "message": "閉じる",
+    "description": "The ARIA label for close button of announcement bar"
+  },
+  "theme.blog.sidebar.navAriaLabel": {
+    "message": "最近のブログ記事のナビゲーション",
+    "description": "The ARIA label for recent posts in the blog sidebar"
+  },
+  "theme.DocSidebarItem.expandCategoryAriaLabel": {
+    "message": "'{label}'の目次を開く",
+    "description": "The ARIA label to expand the sidebar category"
+  },
+  "theme.DocSidebarItem.collapseCategoryAriaLabel": {
+    "message": "'{label}'の目次を隠す",
+    "description": "The ARIA label to collapse the sidebar category"
+  },
+  "theme.IconExternalLink.ariaLabel": {
+    "message": "（新しいタブで開きます）",
+    "description": "The ARIA label for the external link icon"
+  },
+  "theme.NavBar.navAriaLabel": {
+    "message": "ナビゲーション",
+    "description": "The ARIA label for the main navigation"
+  },
+  "theme.NotFound.p1": {
+    "message": "お探しのページが見つかりませんでした",
+    "description": "The first paragraph of the 404 page"
+  },
+  "theme.NotFound.p2": {
+    "message": "このページにリンクしているサイトの所有者にリンクが壊れていることを伝えてください",
+    "description": "The 2nd paragraph of the 404 page"
+  },
+  "theme.TOCCollapsible.toggleButtonLabel": {
+    "message": "このページの見出し",
+    "description": "The label used by the button on the collapsible TOC component"
+  },
+  "theme.blog.post.readMore": {
+    "message": "もっと見る",
+    "description": "The label used in blog post item excerpts to link to full blog posts"
+  },
+  "theme.blog.post.readMoreLabel": {
+    "message": "{title}についてもっと見る",
+    "description": "The ARIA label for the link to full blog posts from excerpts"
+  },
+  "theme.blog.post.readingTime.plurals": {
+    "message": "約{readingTime}分",
+    "description": "Pluralized label for \"{readingTime} min read\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.CodeBlock.copy": {
+    "message": "コピー",
+    "description": "The copy button label on code blocks"
+  },
+  "theme.CodeBlock.copied": {
+    "message": "コピーしました",
+    "description": "The copied button label on code blocks"
+  },
+  "theme.CodeBlock.copyButtonAriaLabel": {
+    "message": "クリップボードにコードをコピー",
+    "description": "The ARIA label for copy code blocks button"
+  },
+  "theme.CodeBlock.wordWrapToggle": {
+    "message": "折り返し",
+    "description": "The title attribute for toggle word wrapping button of code block lines"
+  },
+  "theme.docs.breadcrumbs.home": {
+    "message": "ホームページ",
+    "description": "The ARIA label for the home page in the breadcrumbs"
+  },
+  "theme.docs.sidebar.collapseButtonTitle": {
+    "message": "サイドバーを隠す",
+    "description": "The title attribute for collapse button of doc sidebar"
+  },
+  "theme.docs.sidebar.collapseButtonAriaLabel": {
+    "message": "サイドバーを隠す",
+    "description": "The title attribute for collapse button of doc sidebar"
+  },
+  "theme.docs.sidebar.navAriaLabel": {
+    "message": "ドキュメントのサイドバー",
+    "description": "The ARIA label for the sidebar navigation"
+  },
+  "theme.docs.sidebar.closeSidebarButtonAriaLabel": {
+    "message": "ナビゲーションバーを閉じる",
+    "description": "The ARIA label for close button of mobile sidebar"
+  },
+  "theme.navbar.mobileDropdown.collapseButton.expandAriaLabel": {
+    "message": "ドロップダウンを展開",
+    "description": "The ARIA label of the button to expand the mobile dropdown navbar item"
+  },
+  "theme.navbar.mobileDropdown.collapseButton.collapseAriaLabel": {
+    "message": "ドロップダウンを折りたたむ",
+    "description": "The ARIA label of the button to collapse the mobile dropdown navbar item"
+  },
+  "theme.navbar.mobileSidebarSecondaryMenu.backButtonLabel": {
+    "message": "← メインメニューに戻る",
+    "description": "The label of the back button to return to main menu, inside the mobile navbar sidebar secondary menu (notably used to display the docs sidebar)"
+  },
+  "theme.docs.sidebar.toggleSidebarButtonAriaLabel": {
+    "message": "ナビゲーションバーを開く",
+    "description": "The ARIA label for hamburger menu button of mobile navigation"
+  },
+  "theme.docs.sidebar.expandButtonTitle": {
+    "message": "サイドバーを開く",
+    "description": "The ARIA label and title attribute for expand button of doc sidebar"
+  },
+  "theme.docs.sidebar.expandButtonAriaLabel": {
+    "message": "サイドバーを開く",
+    "description": "The ARIA label and title attribute for expand button of doc sidebar"
+  },
+  "theme.blog.post.plurals": {
+    "message": "{count}件",
+    "description": "Pluralized label for \"{count} posts\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.blog.tagTitle": {
+    "message": "「{tagName}」タグの記事が{nPosts}件あります",
+    "description": "The title of the page for a blog tag"
+  },
+  "theme.blog.author.pageTitle": {
+    "message": "{authorName} - {nPosts}",
+    "description": "The title of the page for a blog author"
+  },
+  "theme.blog.authorsList.pageTitle": {
+    "message": "著者一覧",
+    "description": "The title of the authors page"
+  },
+  "theme.blog.authorsList.viewAll": {
+    "message": "すべての著者を見る",
+    "description": "The label of the link targeting the blog authors page"
+  },
+  "theme.blog.author.noPosts": {
+    "message": "この著者による投稿はまだありません。",
+    "description": "The text for authors with 0 blog post"
+  },
+  "theme.contentVisibility.unlistedBanner.title": {
+    "message": "非公開のページ",
+    "description": "The unlisted content banner title"
+  },
+  "theme.contentVisibility.unlistedBanner.message": {
+    "message": "このページは非公開です。 検索対象外となり、このページのリンクに直接アクセスできるユーザーのみに公開されます。",
+    "description": "The unlisted content banner message"
+  },
+  "theme.contentVisibility.draftBanner.title": {
+    "message": "下書きのページ",
+    "description": "The draft content banner title"
+  },
+  "theme.contentVisibility.draftBanner.message": {
+    "message": "このページは下書きです。開発環境でのみ表示され、本番環境のビルドには含まれません。",
+    "description": "The draft content banner message"
+  },
+  "theme.docs.DocCard.categoryDescription.plurals": {
+    "message": "{count}項目",
+    "description": "The default description for a category card in the generated index about how many items this category includes"
+  },
+  "theme.ErrorPageContent.tryAgain": {
+    "message": "もう一度試してください",
+    "description": "The label of the button to try again rendering when the React error boundary captures an error"
+  },
+  "theme.common.skipToMainContent": {
+    "message": "メインコンテンツまでスキップ",
+    "description": "The skip to content label used for accessibility, allowing to rapidly navigate to main content with keyboard tab/enter navigation"
+  },
+  "theme.tags.tagsPageTitle": {
+    "message": "タグ",
+    "description": "The title of the tag list page"
+  },
+  "download.option.size": {
+    "message": "{size} MB",
+    "description": "{size} is a whole number of megabytes. Use your language's unit symbol (Mo in French)."
+  }
+}

@@ -38,6 +38,7 @@
  * screen reader that walked it would recite a hundred nodes of chrome.
  */
 
+import { translate } from "@docusaurus/Translate";
 import {
 	Clock,
 	Crosshair,
@@ -52,6 +53,7 @@ import { attachDriver, SCENE_QUERIES } from "./driver";
 import { CONTROLS, CURSORS, INSPECTOR, PANELS } from "./generated";
 import {
 	BEATS,
+	type BeatId,
 	CLIPS,
 	CUT_INDEX,
 	FLOOR_H,
@@ -122,6 +124,63 @@ function Toggle({ label, on }: { label: string; on: boolean }) {
 const pctOf = (c: { value: number; min: number; max: number }) =>
 	((c.value - c.min) / (c.max - c.min)) * 100;
 
+/* ── the captions ─────────────────────────────────────────────────────────── */
+
+/** The five captions, the section's real copy: translated, unlike the drawn
+ *  application around them, which stays the English build of the app. Built at
+ *  render because translate() answers in the locale being rendered. */
+function beatCopy(): Record<BeatId, { kicker: string; title: string; sub: string }> {
+	return {
+		style: {
+			kicker: translate({ id: "recreation.style.kicker", message: "Style" }),
+			title: translate({ id: "recreation.style.title", message: "Swap the background" }),
+			sub: translate({
+				id: "recreation.style.sub",
+				message: "Image, color or gradient behind your recording — no re-shoot.",
+			}),
+		},
+		effects: {
+			kicker: translate({ id: "recreation.effects.kicker", message: "Effects" }),
+			title: translate({ id: "recreation.effects.title", message: "Frame it your way" }),
+			sub: translate({
+				id: "recreation.effects.sub",
+				message: "Padding, motion blur, shadow, roundness — every effect composites live.",
+			}),
+		},
+		cursor: {
+			kicker: translate({ id: "recreation.cursor.kicker", message: "Cursor" }),
+			title: translate({ id: "recreation.cursor.title", message: "A cursor worth watching" }),
+			sub: translate({
+				id: "recreation.cursor.sub",
+				message: "Size, smoothing, motion blur, click bounce — every move reads on screen.",
+			}),
+		},
+		timeline: {
+			kicker: translate({ id: "recreation.timeline.kicker", message: "Timeline" }),
+			/* Not "One click, one pill": the click this beat actually shows is the
+			   wand's, and it places three zooms at once. The claim is the same one —
+			   an edit is an object you can see — but counted the way the screen
+			   counts it. */
+			title: translate({
+				id: "recreation.timeline.title",
+				message: "One click, every zoom placed",
+			}),
+			sub: translate({
+				id: "recreation.timeline.sub",
+				message: "Zooms, speed ramps, trims, comments — each edit lands as a pill on the timeline.",
+			}),
+		},
+		transcript: {
+			kicker: translate({ id: "recreation.transcript.kicker", message: "Transcript" }),
+			title: translate({ id: "recreation.transcript.title", message: "Edit video like text" }),
+			sub: translate({
+				id: "recreation.transcript.sub",
+				message: "Delete a word or a silence; the cut lands on the timeline. Nothing destructive.",
+			}),
+		},
+	};
+}
+
 /* ── the component ────────────────────────────────────────────────────────── */
 
 export default function Recreation() {
@@ -162,6 +221,7 @@ export default function Recreation() {
 	}, []);
 
 	const placed = trims(0);
+	const copy = beatCopy();
 
 	return (
 		<section className={styles.band} ref={band} data-recreation="">
@@ -204,15 +264,17 @@ export default function Recreation() {
 					<div className={styles.captions}>
 						{BEATS.map((b) => (
 							<article key={b.id} className={styles.cap} data-cap={b.id}>
-								<p className={styles.capKicker}>{b.kicker}</p>
-								<h3 className={styles.capTitle}>{b.title}</h3>
-								<p className={styles.capSub}>{b.sub}</p>
+								<p className={styles.capKicker}>{copy[b.id].kicker}</p>
+								<h3 className={styles.capTitle}>{copy[b.id].title}</h3>
+								<p className={styles.capSub}>{copy[b.id].sub}</p>
 							</article>
 						))}
 					</div>
 
-					{/* ═══ THE INSPECTOR ═══ */}
-					<div className={styles.panel} aria-hidden="true">
+					{/* ═══ THE INSPECTOR ═══ Drawn from the app's English strings in
+					    every locale, as is the scene: both carry lang="en", which the
+					    translated captions beside them must not. */}
+					<div className={styles.panel} aria-hidden="true" lang="en">
 						<header className={styles.panelHead}>
 							<h4 className={styles.panelTitle} data-pane="style">
 								{PANELS.background.title}
@@ -400,7 +462,11 @@ export default function Recreation() {
 					</div>
 				</div>
 
-				<div className={styles.scene} aria-hidden="true">
+				{/* The recorded page is a made-up product ("Fern"), and aria-hidden
+				    only hides it from screen readers. data-nosnippet keeps Google
+				    from quoting it as if it described OpenScreen; the headline is a
+				    <p> so the fiction adds no heading to this page's outline. */}
+				<div className={styles.scene} aria-hidden="true" data-nosnippet="" lang="en">
 					{/* ═══ THE COMPOSITE ═══ */}
 					<div className={styles.card}>
 						<div className={styles.cardClip}>
@@ -441,7 +507,7 @@ export default function Recreation() {
 												<span className={styles.pageSignIn}>Sign in</span>
 											</div>
 											<div className={styles.pageHero}>
-												<h3>Grow smarter, water less.</h3>
+												<p className={styles.pageHeadline}>Grow smarter, water less.</p>
 												<p>
 													Fern watches your plants&apos; soil, light and weather — and waters only
 													when they ask for it.

@@ -1,0 +1,30 @@
+{
+  "title": {
+    "message": "OpenScreen",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "OpenScreen のロゴ",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.Docs": {
+    "message": "ドキュメント",
+    "description": "Navbar item with label Docs"
+  },
+  "item.label.Blog": {
+    "message": "ブログ",
+    "description": "Navbar item with label Blog"
+  },
+  "item.label.Roadmap": {
+    "message": "開発計画",
+    "description": "Navbar item with label Roadmap"
+  },
+  "item.label.Discord": {
+    "message": "Discord",
+    "description": "Navbar item with label Discord"
+  },
+  "item.label.Download": {
+    "message": "ダウンロード",
+    "description": "Navbar item with label Download"
+  }
+}

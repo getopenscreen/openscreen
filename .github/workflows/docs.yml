@@ -42,6 +42,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Full history. The sitemap's <lastmod> is read from `git log` per
+          # file, and the default depth-1 clone gives every file the deployed
+          # commit's date — all sixteen dated URLs carried the same day.
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
@@ -53,6 +57,9 @@ jobs:
       - name: Type-check
         working-directory: website
         run: npm run typecheck
+      - name: Unit tests
+        working-directory: website
+        run: npm test
       # The walkthrough's clips and stills are committed to this repo, which has
       # no LFS filter — their size is permanent, so a budget that lives only in a
       # design note drifts on the first re-cut. This also fails any clip encoded
@@ -70,9 +77,28 @@ jobs:
       - name: Check recreation data
         working-directory: website
         run: npm run check:recreation
+      # The config reads the star count and the latest release from the GitHub
+      # API once per build. Unauthenticated, that is the runner IP's 60-an-hour
+      # quota; the workflow token lifts it, with the read-only contents
+      # permission this job already has.
       - name: Build
         working-directory: website
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run build
+      # The rspack-minimizers plugin in docusaurus.config.ts edits options that
+      # Rspack keeps privately, so an Rspack update can make it a silent no-op:
+      # the license files disappear and range media queries come back, and the
+      # build still passes. `if` rather than `! grep`, which `bash -e` ignores
+      # unless it is the last command.
+      - name: Check minifier output
+        working-directory: website/build
+        run: |
+          ls assets/js/main.*.js.LICENSE.txt
+          if grep -qE '\((width|height)[<>]' assets/css/*.css */assets/css/*.css; then
+            echo "Range media syntax in CSS: the rspack-minimizers plugin no longer applies."
+            exit 1
+          fi
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

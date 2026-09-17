@@ -2,7 +2,7 @@
 id: ai-editing
 title: AI editing
 sidebar_position: 8
-description: "Connect your own LLM key to edit OpenScreen projects from a chat panel. Entirely optional and off by default — nothing leaves your machine until you opt in."
+description: "Connect your own LLM key to edit OpenScreen projects from a chat panel. Optional and off by default: nothing is sent to a model until you connect one."
 keywords:
   - AI video editing
   - LLM video editor
@@ -13,10 +13,10 @@ keywords:
 
 # AI editing
 
-OpenScreen ships an optional agent that edits your project from a chat panel. It is **off until you connect a provider yourself**. Apart from the one-time Whisper model download, the provider you connect is the only network OpenScreen uses — for this agent, and for [caption translation](./captions.md#translation).
+OpenScreen ships an optional agent that edits your project from a chat panel. It is **off until you connect a provider yourself**, and nothing is sent to any model before that. Once connected, the agent talks only to that provider, and so does [caption translation](./captions.md#translation). The app's other network use (the Whisper model download, annotation fonts, update checks) is listed in the [introduction](./intro.md).
 
 :::tip
-None of this is required. Recording, editing, transcription, captions, and export all work with no account and no provider, whether or not you ever open the chat panel — the only network any of them touches is the [one-time Whisper model download](./captions.md#transcribing) on your first transcription.
+None of this is required. Recording, editing, transcription, captions, and export all work with no account and no provider, whether or not you ever open the chat panel. Of those, only transcription needs a download, once: the [Whisper model](./captions.md#transcribing), on your first run.
 :::
 
 ## Connecting a provider
@@ -49,11 +49,11 @@ The panel around it:
 - **Model picker** — live model list from the connected provider, with a reasoning-effort control where the provider supports one.
 - **Context meter** — estimated tokens used against the budget, with a **Compact** action that summarizes earlier turns instead of dropping them.
 - **Rewind to this message** — rolls back the agent's edits and every follow-up turn after that point, restoring project, conversation, and agent state together.
-- **+ skip** — hand the agent an explicit `startSec-endSec` range to cut, when it's easier to say than to describe.
+- **Project edits** — a switch in **AI settings**. When it is off, every edit the agent tries is refused: it can still read the project and describe the change it would make, and it applies nothing until you turn the switch back on.
 
 `Ctrl/Cmd + Z` undoes an agent edit exactly like a manual one.
 
-The **Smart zooms + cuts** entry in the timeline's auto-enhance menu is the same agent on a one-shot prompt. (The other entry, **Automatic zooms**, reads recorded cursor movement and needs no provider at all.)
+The **Smart cuts** entry (marked *With AI*) in the timeline's auto-enhance menu is the same agent on a one-shot prompt. (The other entry, **Automatic zooms**, reads recorded cursor movement and needs no provider at all.)
 
 ## What else uses your provider
 

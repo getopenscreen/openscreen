@@ -30,6 +30,13 @@
 	margin: 0 auto;
 }
 
+/* Japanese has no spaces, so the centred hero lines broke mid-word on phones
+   (動 / 画編集). auto-phrase breaks between phrases instead; browsers without it
+   keep the old behaviour. */
+.heroInner:lang(ja) {
+	word-break: auto-phrase;
+}
+
 .badge {
 	display: inline-flex;
 	align-items: center;
@@ -333,6 +340,29 @@
 	color: var(--os-accent);
 }
 
+.productSummary {
+	margin: 18px auto 0;
+	max-width: 700px;
+	font-size: 16px;
+	line-height: 1.7;
+	color: var(--os-fg-2);
+}
+
+.productSummary a {
+	color: var(--os-accent);
+}
+
+/* The interface languages, under the trio: a quiet line in the note's type, so
+   a dozen names read as a list rather than as a fourth claim. */
+.appLanguages {
+	margin: 36px auto 0;
+	max-width: 700px;
+	font-size: 13px;
+	line-height: 1.7;
+	color: var(--os-muted);
+	text-align: center;
+}
+
 .quickStartNote {
 	margin: 30px auto 0;
 	max-width: 700px;
@@ -404,6 +434,14 @@
 .badgeText {
 	font-size: 13.5px;
 	color: var(--os-fg-2);
+	text-decoration: underline;
+	text-decoration-color: var(--os-muted);
+	text-underline-offset: 3px;
+}
+
+.badgeText:hover {
+	color: var(--os-fg-emphasis);
+	text-decoration-color: currentColor;
 }
 
 /* Pinned to the bottom of the first screen, where an edge belongs, rather than

@@ -738,10 +738,9 @@ const defaultsSrc = [
 		"src/components/video-editor/types.ts",
 		readFileSync(resolve(APP, "src/components/video-editor/types.ts"), "utf8"),
 	],
-	[
-		"src/lib/ai-edition/store/editorSettings.ts",
-		readFileSync(resolve(APP, "src/lib/ai-edition/store/editorSettings.ts"), "utf8"),
-	],
+	// DEFAULT_EDITOR_SETTINGS (store/editorSettings.ts) spreads its appearance
+	// defaults from here since the app began persisting them.
+	["src/lib/projectDefaults.ts", readFileSync(resolve(APP, "src/lib/projectDefaults.ts"), "utf8")],
 ];
 /** `DEFAULT_EDITOR_SETTINGS` spells some of its defaults as named constants and
  *  others inline, so look for both shapes and fail rather than assume. */

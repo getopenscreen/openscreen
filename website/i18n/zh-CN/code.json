@@ -1,0 +1,776 @@
+{
+  "appLanguages.line": {
+    "message": "界面支持 {count} 种语言：{names}",
+    "description": "{count} is a number; {names} is the list of language names, each in its own language"
+  },
+  "download.macos.arm.label": {
+    "message": "Apple Silicon"
+  },
+  "download.macos.arm.sublabel": {
+    "message": "M1 及更新机型 · .dmg"
+  },
+  "download.macos.intel.label": {
+    "message": "Intel"
+  },
+  "download.macos.intel.sublabel": {
+    "message": "x86_64 · .dmg"
+  },
+  "download.macos.footnote": {
+    "message": "已签名并经过公证，打开时无需在终端中操作。首次启动时，请授予“屏幕录制”和“辅助功能”权限。",
+    "description": "Screen Recording and Accessibility are macOS privacy settings: use the names macOS shows in your language."
+  },
+  "download.windows.store.label": {
+    "message": "Microsoft Store"
+  },
+  "download.windows.store.sublabel": {
+    "message": "推荐 · 由 Microsoft 签名"
+  },
+  "download.windows.exe.label": {
+    "message": "Windows 10 和 11"
+  },
+  "download.windows.exe.sublabel": {
+    "message": "安装程序 · .exe · 未签名"
+  },
+  "download.windows.footnote": {
+    "message": "无需额外驱动即可录制系统音频。早于约第 8 代 Intel（或同级别的 AMD Ryzen 2000 系列）的集成显卡，可能会遇到录制无法停止的已知问题，详见{systemRequirements}。"
+  },
+  "download.windows.footnote.systemRequirements": {
+    "message": "系统要求"
+  },
+  "download.linux.deb.sublabel": {
+    "message": "软件包 · .deb"
+  },
+  "download.linux.rpm.sublabel": {
+    "message": "软件包 · .rpm"
+  },
+  "download.linux.pacman.sublabel": {
+    "message": "软件包 · .pacman"
+  },
+  "download.linux.appImage.label": {
+    "message": "任意发行版"
+  },
+  "download.linux.appImage.sublabel": {
+    "message": "便携版 · .AppImage"
+  },
+  "download.linux.footnote": {
+    "message": "屏幕采集通过 PipeWire 和 xdg-desktop-portal 进行，两者缺一不可。"
+  },
+  "download.meta.title": {
+    "message": "下载 Windows、macOS 和 Linux 版"
+  },
+  "download.meta.description": {
+    "message": "免费下载 OpenScreen，支持 Windows、macOS 和 Linux：Microsoft Store、.exe、.dmg、.deb、.rpm、.pacman、AppImage、Nix flake。开源软件，无需账号。"
+  },
+  "download.hero.badge.release": {
+    "message": "{tag} · MIT 许可证",
+    "description": "{tag} is the release tag, e.g. v1.11.0"
+  },
+  "download.hero.badge.noRelease": {
+    "message": "MIT 许可证 · 永久免费"
+  },
+  "download.hero.title": {
+    "message": "下载 OpenScreen"
+  },
+  "download.hero.tagline": {
+    "message": "免费、开源的录屏与视频剪辑软件。无需账号，没有水印，不用订阅。"
+  },
+  "download.hero.published": {
+    "message": "最新稳定版，发布于 {date}",
+    "description": "{date} is formatted for your language at build time"
+  },
+  "download.option.size": {
+    "message": "{size} MB",
+    "description": "{size} is a whole number of megabytes. Use your language's unit symbol (Mo in French)."
+  },
+  "download.panels.winget.title": {
+    "message": "Windows：在终端中安装 Store 版"
+  },
+  "download.panels.winget.foot": {
+    "message": ".exe 没有代码签名，因此 SmartScreen 会显示“Windows 已保护你的电脑”：请选择“更多信息”，再选择“仍要运行”。请只从 {releasesPage}下载它。",
+    "description": "Windows protected your PC, More info and Run anyway are SmartScreen's own words: use the ones Windows shows in your language."
+  },
+  "download.panels.winget.foot.releasesPage": {
+    "message": "Releases 页面"
+  },
+  "download.panels.nix.title": {
+    "message": "Nix：免安装直接运行"
+  },
+  "download.panels.nix.foot": {
+    "message": "各发行版的具体步骤见{installationGuide}。"
+  },
+  "download.panels.nix.foot.installationGuide": {
+    "message": "安装指南"
+  },
+  "download.preRelease.title": {
+    "message": "想试试即将推出的版本？"
+  },
+  "download.preRelease.body": {
+    "message": "两个稳定版之间会发布候选版本，与旧版本、校验和以及完整的发布说明放在一起。"
+  },
+  "download.preRelease.cta": {
+    "message": "浏览所有版本"
+  },
+  "home.meta.title": {
+    "message": "免费开源的录屏与视频剪辑软件"
+  },
+  "home.meta.description": {
+    "message": "OpenScreen 是一款免费、开源的录屏与视频剪辑软件，支持 Windows、macOS 和 Linux：采用系统原生屏幕采集，字幕在本机生成，导出视频无水印。"
+  },
+  "home.hero.badge.new": {
+    "message": "新"
+  },
+  "home.hero.badge.text": {
+    "message": "1.11：macOS 和 Linux 导出更快",
+    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
+  },
+  "home.hero.titleTagline": {
+    "message": "免费、开源的录屏与视频剪辑软件"
+  },
+  "home.hero.tagline": {
+    "message": "原生采集、本地 AI、没有付费墙的屏幕录制。"
+  },
+  "home.hero.download": {
+    "message": "下载"
+  },
+  "home.hero.readDocs": {
+    "message": "阅读文档"
+  },
+  "home.hero.scrollHint": {
+    "message": "向下滚动"
+  },
+  "home.features.kicker": {
+    "message": "此外"
+  },
+  "home.features.title": {
+    "message": "免费、本地、跨平台：截图展示不了的三件事。"
+  },
+  "home.features.summary": {
+    "message": "OpenScreen 是一款免费、开源的录屏与视频剪辑软件，支持 Windows、macOS 和 Linux：放进去的是原始录屏，产出的是成品演示视频，属于 {screenStudio} 开创的这类工具。它采用 MIT 许可证，没有水印，无需账号，是{originalProject}的延续；原作者在 v1.5.0 之后将原项目归档。",
+    "description": "{screenStudio} links to an English-only page."
+  },
+  "home.features.summary.screenStudio": {
+    "message": "Screen Studio",
+    "description": "A product name. The link goes to an English-only page."
+  },
+  "home.features.summary.originalProject": {
+    "message": "原版 OpenScreen 项目"
+  },
+  "home.features.free.title": {
+    "message": "MIT 许可证，永久免费"
+  },
+  "home.features.free.body": {
+    "message": "没有付费墙，没有高级版，没有用量上限。所有功能都免费提供，个人和商业用途均可。"
+  },
+  "home.features.local.title": {
+    "message": "不上传任何内容"
+  },
+  "home.features.local.body": {
+    "message": "录制、转录和渲染全部在你的电脑上完成，视频始终留在本机。只有在你主动使用时才会发送文字：聊天面板和字幕翻译，两者都使用你自己提供的密钥。转录功能会在首次运行时下载一次 264 MB 的 Whisper 模型。"
+  },
+  "home.features.platforms.title": {
+    "message": "Windows、macOS、Linux"
+  },
+  "home.features.platforms.body": {
+    "message": "同一套源代码，在每个系统上都使用原生采集。提供 Microsoft Store 版、.dmg、.exe、.deb、.rpm、.pacman、AppImage 和 Nix flake。"
+  },
+  "home.install.kicker": {
+    "message": "快速上手"
+  },
+  "home.install.title": {
+    "message": "下载并安装"
+  },
+  "home.install.mac.comment": {
+    "message": "# 打开 .dmg，然后"
+  },
+  "home.install.mac.action": {
+    "message": "将 OpenScreen 拖到“应用程序”文件夹。"
+  },
+  "home.install.mac.foot": {
+    "message": "已签名并经过公证。使用 ScreenCaptureKit 采集；授予“辅助功能”权限后，还会记录光标形状和点击。"
+  },
+  "home.install.windows.comment": {
+    "message": "# 在终端中安装 Microsoft Store 版"
+  },
+  "home.install.windows.foot": {
+    "message": "使用 Windows Graphics Capture 采集，系统音频开箱即录，摄像头通过 Media Foundation 采集。"
+  },
+  "home.install.linux.comment": {
+    "message": "# 从 Releases 下载 .deb，然后"
+  },
+  "home.install.linux.foot": {
+    "message": "通过 ScreenCast 门户进行 PipeWire 采集；需要 PipeWire 和 xdg-desktop-portal。"
+  },
+  "home.install.note": {
+    "message": "Windows 另有 {exe} 安装程序。它没有代码签名，因此运行前 SmartScreen 会发出警告：请选择“更多信息”，再选择“仍要运行”。Linux 另提供 {rpm}、{pacman}、AppImage 和 Nix flake。所有安装文件都在 {releasesPage}，完整步骤见{installation}页面。各系统能录制什么，请参阅 {windows}、{mac} 和 {linux} 页面（英文）。",
+    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to English-only pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
+  },
+  "home.install.note.releasesPage": {
+    "message": "Releases 页面"
+  },
+  "home.install.note.installation": {
+    "message": "安装"
+  },
+  "home.install.note.windows": {
+    "message": "Windows"
+  },
+  "home.install.note.mac": {
+    "message": "Mac"
+  },
+  "home.install.note.linux": {
+    "message": "Linux"
+  },
+  "editor.skipLink": {
+    "message": "跳过编辑器演示，直接前往下载"
+  },
+  "editor.title": {
+    "message": "你真正会用到的五项操作",
+    "description": "Read by screen readers only: the heading of the five captioned steps below"
+  },
+  "recreation.style.kicker": {
+    "message": "样式"
+  },
+  "recreation.style.title": {
+    "message": "更换背景"
+  },
+  "recreation.style.sub": {
+    "message": "在录制画面后面换上图片、纯色或渐变，无需重录。"
+  },
+  "recreation.effects.kicker": {
+    "message": "效果"
+  },
+  "recreation.effects.title": {
+    "message": "画框随心调整"
+  },
+  "recreation.effects.sub": {
+    "message": "内边距、运动模糊、阴影、圆角，每种效果都实时合成。"
+  },
+  "recreation.cursor.kicker": {
+    "message": "光标"
+  },
+  "recreation.cursor.title": {
+    "message": "值得一看的光标"
+  },
+  "recreation.cursor.sub": {
+    "message": "大小、平滑、运动模糊、点击弹跳，每个动作在画面上都清晰可辨。"
+  },
+  "recreation.timeline.kicker": {
+    "message": "时间轴"
+  },
+  "recreation.timeline.title": {
+    "message": "一键放好所有缩放"
+  },
+  "recreation.timeline.sub": {
+    "message": "缩放、变速、剪辑、评论，每项编辑都会以一个色块出现在时间轴上。"
+  },
+  "recreation.transcript.kicker": {
+    "message": "转录文本"
+  },
+  "recreation.transcript.title": {
+    "message": "像编辑文字一样编辑视频"
+  },
+  "recreation.transcript.sub": {
+    "message": "删掉一个词或一段静音，对应的剪切就会出现在时间轴上。所有操作都是非破坏性的。"
+  },
+  "showcase.record.kicker": {
+    "message": "录制"
+  },
+  "showcase.record.claim": {
+    "message": "它借助操作系统录制，而不是绕开系统。"
+  },
+  "showcase.record.body": {
+    "message": "选择一个窗口或一个显示器。macOS 通过 ScreenCaptureKit，Windows 通过 Windows Graphics Capture，Linux 通过 PipeWire 和 ScreenCast 门户：每个平台用的都是系统自身提供的采集途径。指针以数据形式记录，而不是烧进像素里，正因如此，你才能在本页上方重新设置它的样式。"
+  },
+  "showcase.record.fact": {
+    "message": "ScreenCaptureKit · Windows Graphics Capture · PipeWire · 系统音频无需额外驱动"
+  },
+  "showcase.record.link.docs": {
+    "message": "屏幕录制文档"
+  },
+  "showcase.record.label": {
+    "message": "录制器的示意图：两个采集目标并排，Display 1 已选中，旁边是标题为 Terminal 的窗口；然后是本次录制的设置（ScreenCaptureKit、系统音频、1920 × 1080、60 fps），一个麦克风开关和一个系统音频开关，以及 Start recording 按钮。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.export.kicker": {
+    "message": "导出"
+  },
+  "showcase.export.claim": {
+    "message": "然后写出文件。"
+  },
+  "showcase.export.body": {
+    "message": "MP4 从 720p 到源分辨率，24、30 或 60 fps，H.264 或 H.265；也可以导出 GIF。编码在你的电脑上进行，并在编码时统计帧数。无需排队，无需账号，没有水印，进度条走满时，文件已经在磁盘上了。"
+  },
+  "showcase.export.fact": {
+    "message": "H.264 / H.265 · 24、30、60 fps · 无水印"
+  },
+  "showcase.export.link.docs": {
+    "message": "视频导出文档"
+  },
+  "showcase.export.label": {
+    "message": "导出面板的示意图：recording-1783066227227.mp4 正以 MP4 格式导出，已选中 H.265，旁边是 H.264、1080p、60 fps 和 GIF；进度条走到 62%，显示 frame 1 488 of 2 400，正在写入 Movies 文件夹。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.captions.kicker": {
+    "message": "字幕"
+  },
+  "showcase.captions.claim": {
+    "message": "转录在你的电脑上运行。"
+  },
+  "showcase.captions.body": {
+    "message": "whisper.cpp 随应用一起提供，模型在首次使用时下载一次，之后断网也能使用。音频不会离开你的笔记本电脑，返回的是可编辑的文字：设置字体、字号、颜色和位置，然后在渲染时烧录进画面。"
+  },
+  "showcase.captions.fact": {
+    "message": "whisper.cpp · 100 种语言 · 首次运行后可离线使用"
+  },
+  "showcase.captions.link.docs": {
+    "message": "字幕与转录文档"
+  },
+  "showcase.captions.link.feature": {
+    "message": "本地字幕方案对比（英文）",
+    "description": "Links to an English-only page."
+  },
+  "showcase.captions.label": {
+    "message": "字幕面板的示意图：“amber day on the validator, and it”这行字幕以大字号显示在视频上；旁边，字幕已开启，一条说明写着七行字幕由转录文本实时生成，还有一行语言选项，提供 English、Français、Translate 按钮以及删除翻译的选项。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.agent.kicker": {
+    "message": "AI 代理"
+  },
+  "showcase.agent.claim": {
+    "message": "或者，直接说要剪掉哪些部分。"
+  },
+  "showcase.agent.body": {
+    "message": "本页上方的向导根据光标去过的位置放置缩放。AI 代理更进一步：它读取真实的转录文本和真实的时间轴，因此回答时会给出你可以去核对的时间码，说明要剪掉哪些片段、能省下多少时间。它做的每项编辑都是可撤销的普通编辑，并且需要你自己提供的提供方密钥。在你连接之前，什么都不会运行。"
+  },
+  "showcase.agent.fact": {
+    "message": "自带密钥 · 默认关闭 · 每项编辑均可撤销"
+  },
+  "showcase.agent.link.docs": {
+    "message": "AI 编辑文档"
+  },
+  "showcase.agent.link.feature": {
+    "message": "自动缩放的工作原理（英文）",
+    "description": "Links to an English-only page."
+  },
+  "showcase.agent.label": {
+    "message": "AI 代理回复的示意图。被要求剪掉无声的空白时，它用时间码作答：“Hi”之前 0 到 2.19 秒的开场，以及“think.”之后 35.12 到 40.03 秒的结尾，把视频的可播放时长从 40 秒缩短到 33 秒，已有的缩放仍留在原来的时刻；最后是一行绿色文字：“applied: added 2 trims”。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.title": {
+    "message": "录制器、字幕、AI 代理、编码器。"
+  },
+  "footer.brand.description": {
+    "message": "免费、开源的录屏与剪辑软件。由社区维护的延续版本，采用 MIT 许可证。"
+  },
+  "footer.product.title": {
+    "message": "产品"
+  },
+  "footer.product.download": {
+    "message": "下载"
+  },
+  "footer.product.autoZoom": {
+    "message": "自动缩放（英文）",
+    "description": "Links to an English-only page."
+  },
+  "footer.product.captions": {
+    "message": "本地字幕（英文）",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.title": {
+    "message": "平台（英文）",
+    "description": "Its three links go to English-only pages."
+  },
+  "footer.platforms.windows": {
+    "message": "Windows",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.mac": {
+    "message": "macOS",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.linux": {
+    "message": "Linux",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.title": {
+    "message": "对比（英文）",
+    "description": "Its five links go to English-only pages."
+  },
+  "footer.compare.screenStudio": {
+    "message": "Screen Studio 替代方案",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.camtasia": {
+    "message": "Camtasia 替代方案",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.loom": {
+    "message": "Loom 替代方案",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.cap": {
+    "message": "OpenScreen 与 Cap 对比",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.obs": {
+    "message": "OpenScreen 与 OBS Studio 对比",
+    "description": "Links to an English-only page."
+  },
+  "footer.project.title": {
+    "message": "项目"
+  },
+  "footer.project.releases": {
+    "message": "版本发布"
+  },
+  "footer.project.blog": {
+    "message": "博客（英文）",
+    "description": "Links to an English-only page."
+  },
+  "footer.project.faq": {
+    "message": "常见问题"
+  },
+  "footer.community.title": {
+    "message": "社区"
+  },
+  "footer.community.contributing": {
+    "message": "参与贡献"
+  },
+  "footer.community.license": {
+    "message": "许可证（MIT）"
+  },
+  "footer.bottom.license": {
+    "message": "OpenScreen 以 MIT 许可证发布。由社区打造，永久免费。"
+  },
+  "footer.bottom.lineage": {
+    "message": "{originalProject}（3.9 万星标，现已归档）的官方衍生项目。"
+  },
+  "footer.bottom.lineage.originalProject": {
+    "message": "原版 OpenScreen 项目"
+  },
+  "theme.navbar.mobileLanguageDropdown.label": {
+    "message": "选择语言",
+    "description": "The label for the mobile language switcher dropdown"
+  },
+  "theme.ErrorPageContent.title": {
+    "message": "页面已崩溃。",
+    "description": "The title of the fallback page when the page crashed"
+  },
+  "theme.BackToTopButton.buttonAriaLabel": {
+    "message": "回到顶部",
+    "description": "The ARIA label for the back to top button"
+  },
+  "theme.blog.archive.title": {
+    "message": "历史博文",
+    "description": "The page & hero title of the blog archive page"
+  },
+  "theme.blog.archive.description": {
+    "message": "历史博文",
+    "description": "The page & hero description of the blog archive page"
+  },
+  "theme.blog.paginator.navAriaLabel": {
+    "message": "博文列表分页导航",
+    "description": "The ARIA label for the blog pagination"
+  },
+  "theme.blog.paginator.newerEntries": {
+    "message": "较新的博文",
+    "description": "The label used to navigate to the newer blog posts page (previous page)"
+  },
+  "theme.blog.paginator.olderEntries": {
+    "message": "较旧的博文",
+    "description": "The label used to navigate to the older blog posts page (next page)"
+  },
+  "theme.blog.post.paginator.navAriaLabel": {
+    "message": "博文分页导航",
+    "description": "The ARIA label for the blog posts pagination"
+  },
+  "theme.blog.post.paginator.newerPost": {
+    "message": "较新一篇",
+    "description": "The blog post button label to navigate to the newer/previous post"
+  },
+  "theme.blog.post.paginator.olderPost": {
+    "message": "较旧一篇",
+    "description": "The blog post button label to navigate to the older/next post"
+  },
+  "theme.tags.tagsPageLink": {
+    "message": "查看所有标签",
+    "description": "The label of the link targeting the tag list page"
+  },
+  "theme.colorToggle.ariaLabel.mode.system": {
+    "message": "跟随系统",
+    "description": "The name for the system color mode"
+  },
+  "theme.colorToggle.ariaLabel.mode.light": {
+    "message": "浅色模式",
+    "description": "The name for the light color mode"
+  },
+  "theme.colorToggle.ariaLabel.mode.dark": {
+    "message": "深色模式",
+    "description": "The name for the dark color mode"
+  },
+  "theme.colorToggle.ariaLabel": {
+    "message": "切换浅色/深色模式（当前为{mode}）",
+    "description": "The ARIA label for the color mode toggle"
+  },
+  "theme.docs.breadcrumbs.navAriaLabel": {
+    "message": "页面路径",
+    "description": "The ARIA label for the breadcrumbs"
+  },
+  "theme.docs.paginator.navAriaLabel": {
+    "message": "文档分页导航",
+    "description": "The ARIA label for the docs pagination"
+  },
+  "theme.docs.paginator.previous": {
+    "message": "上一页",
+    "description": "The label used to navigate to the previous doc"
+  },
+  "theme.docs.paginator.next": {
+    "message": "下一页",
+    "description": "The label used to navigate to the next doc"
+  },
+  "theme.docs.tagDocListPageTitle.nDocsTagged": {
+    "message": "{count} 篇文档带有标签",
+    "description": "Pluralized label for \"{count} docs tagged\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.docs.tagDocListPageTitle": {
+    "message": "{nDocsTagged}“{tagName}”",
+    "description": "The title of the page for a docs tag"
+  },
+  "theme.docs.versionBadge.label": {
+    "message": "版本：{versionLabel}"
+  },
+  "theme.docs.versions.unreleasedVersionLabel": {
+    "message": "此为 {siteTitle} {versionLabel} 版尚未发行的文档。",
+    "description": "The label used to tell the user that he's browsing an unreleased doc version"
+  },
+  "theme.docs.versions.unmaintainedVersionLabel": {
+    "message": "此为 {siteTitle} {versionLabel} 版的文档，现已不再积极维护。",
+    "description": "The label used to tell the user that he's browsing an unmaintained doc version"
+  },
+  "theme.docs.versions.latestVersionSuggestionLabel": {
+    "message": "最新的文档请参阅 {latestVersionLink}（{versionLabel}）。",
+    "description": "The label used to tell the user to check the latest version"
+  },
+  "theme.docs.versions.latestVersionLinkLabel": {
+    "message": "最新版本",
+    "description": "The label used for the latest version suggestion link label"
+  },
+  "theme.common.editThisPage": {
+    "message": "编辑此页",
+    "description": "The link label to edit the current page"
+  },
+  "theme.common.headingLinkTitle": {
+    "message": "{heading}的直接链接",
+    "description": "Title for link to heading"
+  },
+  "theme.lastUpdated.atDate": {
+    "message": "于 {date} ",
+    "description": "The words used to describe on which date a page has been last updated"
+  },
+  "theme.lastUpdated.byUser": {
+    "message": "由 {user} ",
+    "description": "The words used to describe by who the page has been last updated"
+  },
+  "theme.lastUpdated.lastUpdatedAtBy": {
+    "message": "最后{byUser}{atDate}更新",
+    "description": "The sentence used to display when a page has been last updated, and by who"
+  },
+  "theme.navbar.mobileVersionsDropdown.label": {
+    "message": "选择版本",
+    "description": "The label for the navbar versions dropdown on mobile view"
+  },
+  "theme.NotFound.title": {
+    "message": "找不到页面",
+    "description": "The title of the 404 page"
+  },
+  "theme.tags.tagsListLabel": {
+    "message": "标签：",
+    "description": "The label alongside a tag list"
+  },
+  "theme.AnnouncementBar.closeButtonAriaLabel": {
+    "message": "关闭",
+    "description": "The ARIA label for close button of announcement bar"
+  },
+  "theme.admonition.caution": {
+    "message": "注意",
+    "description": "The default label used for the Caution admonition (:::caution)"
+  },
+  "theme.admonition.danger": {
+    "message": "危险",
+    "description": "The default label used for the Danger admonition (:::danger)"
+  },
+  "theme.admonition.info": {
+    "message": "信息",
+    "description": "The default label used for the Info admonition (:::info)"
+  },
+  "theme.admonition.note": {
+    "message": "备注",
+    "description": "The default label used for the Note admonition (:::note)"
+  },
+  "theme.admonition.tip": {
+    "message": "提示",
+    "description": "The default label used for the Tip admonition (:::tip)"
+  },
+  "theme.admonition.warning": {
+    "message": "警告",
+    "description": "The default label used for the Warning admonition (:::warning)"
+  },
+  "theme.blog.sidebar.navAriaLabel": {
+    "message": "最近博文导航",
+    "description": "The ARIA label for recent posts in the blog sidebar"
+  },
+  "theme.DocSidebarItem.expandCategoryAriaLabel": {
+    "message": "展开侧边栏分类“{label}”",
+    "description": "The ARIA label to expand the sidebar category"
+  },
+  "theme.DocSidebarItem.collapseCategoryAriaLabel": {
+    "message": "折叠侧边栏分类“{label}”",
+    "description": "The ARIA label to collapse the sidebar category"
+  },
+  "theme.IconExternalLink.ariaLabel": {
+    "message": "（在新标签页中打开）",
+    "description": "The ARIA label for the external link icon"
+  },
+  "theme.NavBar.navAriaLabel": {
+    "message": "主导航",
+    "description": "The ARIA label for the main navigation"
+  },
+  "theme.NotFound.p1": {
+    "message": "我们找不到你要找的页面。",
+    "description": "The first paragraph of the 404 page"
+  },
+  "theme.NotFound.p2": {
+    "message": "请联系原始链接来源网站的所有者，并告知他们链接已损坏。",
+    "description": "The 2nd paragraph of the 404 page"
+  },
+  "theme.TOCCollapsible.toggleButtonLabel": {
+    "message": "本页总览",
+    "description": "The label used by the button on the collapsible TOC component"
+  },
+  "theme.blog.post.readMore": {
+    "message": "阅读更多",
+    "description": "The label used in blog post item excerpts to link to full blog posts"
+  },
+  "theme.blog.post.readMoreLabel": {
+    "message": "阅读 {title} 的全文",
+    "description": "The ARIA label for the link to full blog posts from excerpts"
+  },
+  "theme.blog.post.readingTime.plurals": {
+    "message": "阅读需 {readingTime} 分钟",
+    "description": "Pluralized label for \"{readingTime} min read\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.CodeBlock.copy": {
+    "message": "复制",
+    "description": "The copy button label on code blocks"
+  },
+  "theme.CodeBlock.copied": {
+    "message": "复制成功",
+    "description": "The copied button label on code blocks"
+  },
+  "theme.CodeBlock.copyButtonAriaLabel": {
+    "message": "复制代码到剪贴板",
+    "description": "The ARIA label for copy code blocks button"
+  },
+  "theme.docs.breadcrumbs.home": {
+    "message": "首页",
+    "description": "The ARIA label for the home page in the breadcrumbs"
+  },
+  "theme.CodeBlock.wordWrapToggle": {
+    "message": "切换自动换行",
+    "description": "The title attribute for toggle word wrapping button of code block lines"
+  },
+  "theme.docs.sidebar.collapseButtonTitle": {
+    "message": "收起侧边栏",
+    "description": "The title attribute for collapse button of doc sidebar"
+  },
+  "theme.docs.sidebar.collapseButtonAriaLabel": {
+    "message": "收起侧边栏",
+    "description": "The title attribute for collapse button of doc sidebar"
+  },
+  "theme.docs.sidebar.navAriaLabel": {
+    "message": "文档侧边栏",
+    "description": "The ARIA label for the sidebar navigation"
+  },
+  "theme.docs.sidebar.closeSidebarButtonAriaLabel": {
+    "message": "关闭导航菜单",
+    "description": "The ARIA label for close button of mobile sidebar"
+  },
+  "theme.docs.sidebar.toggleSidebarButtonAriaLabel": {
+    "message": "打开或关闭导航菜单",
+    "description": "The ARIA label for hamburger menu button of mobile navigation"
+  },
+  "theme.navbar.mobileSidebarSecondaryMenu.backButtonLabel": {
+    "message": "← 回到主菜单",
+    "description": "The label of the back button to return to main menu, inside the mobile navbar sidebar secondary menu (notably used to display the docs sidebar)"
+  },
+  "theme.navbar.mobileDropdown.collapseButton.expandAriaLabel": {
+    "message": "展开下拉菜单",
+    "description": "The ARIA label of the button to expand the mobile dropdown navbar item"
+  },
+  "theme.navbar.mobileDropdown.collapseButton.collapseAriaLabel": {
+    "message": "收起下拉菜单",
+    "description": "The ARIA label of the button to collapse the mobile dropdown navbar item"
+  },
+  "theme.docs.sidebar.expandButtonTitle": {
+    "message": "展开侧边栏",
+    "description": "The ARIA label and title attribute for expand button of doc sidebar"
+  },
+  "theme.docs.sidebar.expandButtonAriaLabel": {
+    "message": "展开侧边栏",
+    "description": "The ARIA label and title attribute for expand button of doc sidebar"
+  },
+  "theme.blog.post.plurals": {
+    "message": "{count} 篇博文",
+    "description": "Pluralized label for \"{count} posts\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.blog.tagTitle": {
+    "message": "{nPosts} 含有标签“{tagName}”",
+    "description": "The title of the page for a blog tag"
+  },
+  "theme.blog.author.pageTitle": {
+    "message": "{authorName} - {nPosts}",
+    "description": "The title of the page for a blog author"
+  },
+  "theme.blog.authorsList.pageTitle": {
+    "message": "作者",
+    "description": "The title of the authors page"
+  },
+  "theme.blog.authorsList.viewAll": {
+    "message": "查看所有作者",
+    "description": "The label of the link targeting the blog authors page"
+  },
+  "theme.blog.author.noPosts": {
+    "message": "该作者尚未撰写任何文章。",
+    "description": "The text for authors with 0 blog post"
+  },
+  "theme.contentVisibility.unlistedBanner.title": {
+    "message": "未列出页",
+    "description": "The unlisted content banner title"
+  },
+  "theme.contentVisibility.unlistedBanner.message": {
+    "message": "此页面未列出。搜索引擎不会对其索引，只有拥有直接链接的用户才能访问。",
+    "description": "The unlisted content banner message"
+  },
+  "theme.contentVisibility.draftBanner.title": {
+    "message": "草稿页",
+    "description": "The draft content banner title"
+  },
+  "theme.contentVisibility.draftBanner.message": {
+    "message": "此页面是草稿，仅在开发环境中可见，不会包含在正式版本中。",
+    "description": "The draft content banner message"
+  },
+  "theme.docs.DocCard.categoryDescription.plurals": {
+    "message": "{count} 个项目",
+    "description": "The default description for a category card in the generated index about how many items this category includes"
+  },
+  "theme.ErrorPageContent.tryAgain": {
+    "message": "重试",
+    "description": "The label of the button to try again rendering when the React error boundary captures an error"
+  },
+  "theme.common.skipToMainContent": {
+    "message": "跳到主要内容",
+    "description": "The skip to content label used for accessibility, allowing to rapidly navigate to main content with keyboard tab/enter navigation"
+  },
+  "theme.tags.tagsPageTitle": {
+    "message": "标签",
+    "description": "The title of the tag list page"
+  }
+}

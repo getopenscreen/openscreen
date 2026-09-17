@@ -3,6 +3,7 @@ export const SUPPORTED_LOCALES = [
 	"en",
 	"ar",
 	"cs",
+	"de",
 	"es",
 	"fr",
 	"it",

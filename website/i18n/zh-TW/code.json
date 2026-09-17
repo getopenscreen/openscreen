@@ -1,0 +1,776 @@
+{
+  "appLanguages.line": {
+    "message": "介面支援 {count} 種語言：{names}",
+    "description": "{count} is a number; {names} is the list of language names, each in its own language"
+  },
+  "download.macos.arm.label": {
+    "message": "Apple Silicon"
+  },
+  "download.macos.arm.sublabel": {
+    "message": "M1 及更新機型 · .dmg"
+  },
+  "download.macos.intel.label": {
+    "message": "Intel"
+  },
+  "download.macos.intel.sublabel": {
+    "message": "x86_64 · .dmg"
+  },
+  "download.macos.footnote": {
+    "message": "已簽署並完成公證，開啟時不需要在終端機操作。首次啟動時，請授予「螢幕錄製」與「輔助使用」權限。",
+    "description": "Screen Recording and Accessibility are macOS privacy settings: use the names macOS shows in your language."
+  },
+  "download.windows.store.label": {
+    "message": "Microsoft Store"
+  },
+  "download.windows.store.sublabel": {
+    "message": "建議 · 由 Microsoft 簽署"
+  },
+  "download.windows.exe.label": {
+    "message": "Windows 10 與 11"
+  },
+  "download.windows.exe.sublabel": {
+    "message": "安裝程式 · .exe · 未簽署"
+  },
+  "download.windows.footnote": {
+    "message": "不需額外的驅動程式即可錄製系統音訊。早於約第 8 代 Intel（或同級 AMD Ryzen 2000 系列）的內建顯示晶片，可能會遇到錄影無法停止的已知問題，詳見{systemRequirements}。"
+  },
+  "download.windows.footnote.systemRequirements": {
+    "message": "系統需求"
+  },
+  "download.linux.deb.sublabel": {
+    "message": "套件 · .deb"
+  },
+  "download.linux.rpm.sublabel": {
+    "message": "套件 · .rpm"
+  },
+  "download.linux.pacman.sublabel": {
+    "message": "套件 · .pacman"
+  },
+  "download.linux.appImage.label": {
+    "message": "任何發行版"
+  },
+  "download.linux.appImage.sublabel": {
+    "message": "可攜式 · .AppImage"
+  },
+  "download.linux.footnote": {
+    "message": "擷取透過 PipeWire 與 xdg-desktop-portal 進行，兩者缺一不可。"
+  },
+  "download.meta.title": {
+    "message": "下載 Windows、macOS 與 Linux 版"
+  },
+  "download.meta.description": {
+    "message": "免費下載 OpenScreen 螢幕錄影軟體的 Windows、macOS 與 Linux 版：Microsoft Store、.exe、.dmg、.deb、.rpm、.pacman、AppImage 與 Nix flake。開源軟體，不需要帳號。"
+  },
+  "download.hero.badge.release": {
+    "message": "{tag} · MIT 授權",
+    "description": "{tag} is the release tag, e.g. v1.11.0"
+  },
+  "download.hero.badge.noRelease": {
+    "message": "MIT 授權 · 永久免費"
+  },
+  "download.hero.title": {
+    "message": "下載 OpenScreen"
+  },
+  "download.hero.tagline": {
+    "message": "免費、開源的螢幕錄影與影片剪輯軟體。不需要帳號，沒有浮水印，也不用訂閱。"
+  },
+  "download.hero.published": {
+    "message": "最新穩定版，發布於 {date}",
+    "description": "{date} is formatted for your language at build time"
+  },
+  "download.option.size": {
+    "message": "{size} MB",
+    "description": "{size} is a whole number of megabytes. Use your language's unit symbol (Mo in French)."
+  },
+  "download.panels.winget.title": {
+    "message": "Windows：從終端機安裝 Store 版"
+  },
+  "download.panels.winget.foot": {
+    "message": ".exe 沒有程式碼簽署，因此 SmartScreen 會顯示「Windows 已保護您的電腦」：請選擇「其他資訊」，再選擇「仍要執行」。請只從 {releasesPage}下載 .exe。",
+    "description": "Windows protected your PC, More info and Run anyway are SmartScreen's own words: use the ones Windows shows in your language."
+  },
+  "download.panels.winget.foot.releasesPage": {
+    "message": "Releases 頁面"
+  },
+  "download.panels.nix.title": {
+    "message": "Nix：免安裝直接執行"
+  },
+  "download.panels.nix.foot": {
+    "message": "各發行版的安裝步驟請見{installationGuide}。"
+  },
+  "download.panels.nix.foot.installationGuide": {
+    "message": "安裝指南"
+  },
+  "download.preRelease.title": {
+    "message": "想測試下一版的內容嗎？"
+  },
+  "download.preRelease.body": {
+    "message": "兩個穩定版之間會推出候選版本（release candidate），和舊版本、檢查碼及完整的發行說明放在一起。"
+  },
+  "download.preRelease.cta": {
+    "message": "瀏覽所有版本"
+  },
+  "home.meta.title": {
+    "message": "免費開源的螢幕錄影與影片剪輯軟體"
+  },
+  "home.meta.description": {
+    "message": "OpenScreen 是一款免費、開源的螢幕錄影與影片剪輯軟體，適用於 Windows、macOS 與 Linux 電腦：使用系統原生的螢幕擷取，字幕直接在你的裝置上產生，匯出的影片也沒有浮水印。"
+  },
+  "home.hero.badge.new": {
+    "message": "最新"
+  },
+  "home.hero.badge.text": {
+    "message": "1.11 在 macOS 與 Linux 上匯出更快",
+    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
+  },
+  "home.hero.titleTagline": {
+    "message": "免費開源的螢幕錄影與影片剪輯軟體"
+  },
+  "home.hero.tagline": {
+    "message": "原生擷取、本機 AI、沒有付費牆的螢幕錄影。"
+  },
+  "home.hero.download": {
+    "message": "下載"
+  },
+  "home.hero.readDocs": {
+    "message": "閱讀文件"
+  },
+  "home.hero.scrollHint": {
+    "message": "向下捲動"
+  },
+  "home.features.kicker": {
+    "message": "此外"
+  },
+  "home.features.title": {
+    "message": "免費、本機、跨平台：螢幕截圖呈現不了的三件事。"
+  },
+  "home.features.summary": {
+    "message": "OpenScreen 是免費、開源的螢幕錄影與影片剪輯軟體，支援 Windows、macOS 與 Linux：放進原始錄影，產出完成的示範影片，屬於 {screenStudio} 所開創的這類工具。它採用 MIT 授權，沒有浮水印，也不需要帳號，並延續了{originalProject}；原作者在 v1.5.0 之後封存了該專案。",
+    "description": "{screenStudio} links to an English-only page."
+  },
+  "home.features.summary.screenStudio": {
+    "message": "Screen Studio",
+    "description": "A product name. The link goes to an English-only page."
+  },
+  "home.features.summary.originalProject": {
+    "message": "原始 OpenScreen 專案"
+  },
+  "home.features.free.title": {
+    "message": "MIT 授權，永久免費"
+  },
+  "home.features.free.body": {
+    "message": "沒有付費牆，沒有進階方案，沒有使用上限。所有功能都免費提供，個人與商業用途皆可使用。"
+  },
+  "home.features.local.title": {
+    "message": "不上傳任何內容"
+  },
+  "home.features.local.body": {
+    "message": "錄影、轉錄與算繪都在你的電腦上進行，影片不會離開你的電腦。只有在你要求時才會送出文字：聊天面板與字幕翻譯，兩者都使用你自行提供的金鑰。轉錄功能會在第一次執行時，下載一次 264 MB 的 Whisper 模型。"
+  },
+  "home.features.platforms.title": {
+    "message": "Windows、macOS、Linux"
+  },
+  "home.features.platforms.body": {
+    "message": "同一套原始碼，各平台都使用原生擷取。提供 Microsoft Store 版、.dmg、.exe、.deb、.rpm、.pacman、AppImage 與 Nix flake。"
+  },
+  "home.install.kicker": {
+    "message": "快速入門"
+  },
+  "home.install.title": {
+    "message": "下載與安裝"
+  },
+  "home.install.mac.comment": {
+    "message": "# 開啟 .dmg 後"
+  },
+  "home.install.mac.action": {
+    "message": "將 OpenScreen 拖曳到「應用程式」。"
+  },
+  "home.install.mac.foot": {
+    "message": "已簽署並完成公證。以 ScreenCaptureKit 擷取；授予「輔助使用」權限後，也會記錄游標形狀與點擊。"
+  },
+  "home.install.windows.comment": {
+    "message": "# 從終端機安裝 Microsoft Store 版"
+  },
+  "home.install.windows.foot": {
+    "message": "以 Windows Graphics Capture 擷取，系統音訊開箱即用，網路攝影機透過 Media Foundation 擷取。"
+  },
+  "home.install.linux.comment": {
+    "message": "# 從 Releases 下載 .deb 後"
+  },
+  "home.install.linux.foot": {
+    "message": "透過 ScreenCast portal 以 PipeWire 擷取；需要 PipeWire 與 xdg-desktop-portal。"
+  },
+  "home.install.note": {
+    "message": "Windows 另有 {exe} 安裝程式。它沒有程式碼簽署，因此執行前 SmartScreen 會發出警告：請選擇「其他資訊」，再選擇「仍要執行」。Linux 另提供 {rpm}、{pacman}、AppImage 與 Nix flake。所有檔案都在 {releasesPage}，完整步驟請見{installation}頁面。各系統能錄製哪些內容，請見 {windows}、{mac} 與 {linux} 頁面（英文）。",
+    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to English-only pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
+  },
+  "home.install.note.releasesPage": {
+    "message": "Releases 頁面"
+  },
+  "home.install.note.installation": {
+    "message": "安裝"
+  },
+  "home.install.note.windows": {
+    "message": "Windows"
+  },
+  "home.install.note.mac": {
+    "message": "Mac"
+  },
+  "home.install.note.linux": {
+    "message": "Linux"
+  },
+  "editor.skipLink": {
+    "message": "略過編輯器介紹，前往下載"
+  },
+  "editor.title": {
+    "message": "你實際會做的五件事",
+    "description": "Read by screen readers only: the heading of the five captioned steps below"
+  },
+  "showcase.record.kicker": {
+    "message": "錄影"
+  },
+  "showcase.record.claim": {
+    "message": "透過作業系統錄影，而不是繞過它。"
+  },
+  "showcase.record.body": {
+    "message": "選擇一個視窗或一台顯示器。macOS 透過 ScreenCaptureKit，Windows 透過 Windows Graphics Capture，Linux 透過 PipeWire 與 ScreenCast portal：每個平台都使用系統本身提供的擷取途徑。滑鼠指標以資料形式記錄，而不是烙進像素裡；正因為如此，你才能在本頁上方改變它的樣式。"
+  },
+  "showcase.record.fact": {
+    "message": "ScreenCaptureKit · Windows Graphics Capture · PipeWire · 不需額外驅動程式即可錄製系統音訊"
+  },
+  "showcase.record.link.docs": {
+    "message": "螢幕錄影說明文件"
+  },
+  "showcase.record.label": {
+    "message": "錄影工具的示意圖：兩個擷取目標並排，已選取 Display 1，旁邊是標題為 Terminal 的視窗；接著是這次錄影的設定（ScreenCaptureKit、系統音訊、1920 × 1080、60 fps）、麥克風與系統音訊開關，以及 Start recording 按鈕。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.export.kicker": {
+    "message": "匯出"
+  },
+  "showcase.export.claim": {
+    "message": "接著寫出檔案。"
+  },
+  "showcase.export.body": {
+    "message": "MP4 可選 720p 到原始解析度，24、30 或 60 fps，H.264 或 H.265；也可以輸出 GIF。編碼在你的電腦上執行，過程中會計算影格數。不用排隊，不需要帳號，沒有浮水印，進度條跑滿時，檔案就已經在磁碟上。"
+  },
+  "showcase.export.fact": {
+    "message": "H.264 / H.265 · 24、30、60 fps · 無浮水印"
+  },
+  "showcase.export.link.docs": {
+    "message": "影片匯出說明文件"
+  },
+  "showcase.export.label": {
+    "message": "匯出面板的示意圖：recording-1783066227227.mp4 正以 MP4 匯出，已選取 H.265，旁邊是 H.264、1080p、60 fps 與 GIF；進度條走到 62%，顯示 frame 1 488 of 2 400，正在寫入 Movies 資料夾。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.captions.kicker": {
+    "message": "字幕"
+  },
+  "showcase.captions.claim": {
+    "message": "轉錄在你的電腦上執行。"
+  },
+  "showcase.captions.body": {
+    "message": "whisper.cpp 內建於應用程式中，模型會在第一次使用時下載一次，之後即使關閉網路也能運作。音訊從不離開這台筆電，產出的是可編輯的文字：設定字體、大小、顏色與位置，再於算繪時燒錄進影片。"
+  },
+  "showcase.captions.fact": {
+    "message": "whisper.cpp · 100 種語言 · 首次執行後即可離線使用"
+  },
+  "showcase.captions.link.docs": {
+    "message": "字幕與逐字稿說明文件"
+  },
+  "showcase.captions.link.feature": {
+    "message": "本機字幕功能比較（英文）",
+    "description": "Links to an English-only page."
+  },
+  "showcase.captions.label": {
+    "message": "字幕面板的示意圖：影片上以大字顯示「amber day on the validator, and it」這一行；旁邊的字幕已開啟，註明有七行字幕是從逐字稿即時產生，還有一列語言選項，提供 English、Français、Translate 按鈕，以及刪除翻譯的選項。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.agent.kicker": {
+    "message": "代理"
+  },
+  "showcase.agent.claim": {
+    "message": "或者，直接說要剪掉哪些部分。"
+  },
+  "showcase.agent.body": {
+    "message": "本頁上方的精靈會觀察游標移動到哪裡，據此放置縮放。代理則更進一步：它會讀取實際的逐字稿與實際的時間軸，因此回答時會附上你可以自行核對的時間碼，說明要剪掉哪些區段、能省下多少時間。它做的每一項編輯都是一般可復原的操作，而且需要你自備提供者的金鑰。在你連接之前，什麼都不會執行。"
+  },
+  "showcase.agent.fact": {
+    "message": "自備金鑰 · 預設關閉 · 每項編輯皆可復原"
+  },
+  "showcase.agent.link.docs": {
+    "message": "AI 剪輯說明文件"
+  },
+  "showcase.agent.link.feature": {
+    "message": "自動縮放的運作方式（英文）",
+    "description": "Links to an English-only page."
+  },
+  "showcase.agent.label": {
+    "message": "代理回覆的示意圖。被要求剪掉空檔時，它以時間碼回答：「Hi」之前 0 到 2.19 秒的開場，以及「think.」之後 35.12 到 40.03 秒的結尾，讓影片的可播放長度從 40 秒變成 33 秒，既有的縮放仍留在相同的時刻；最後是一行綠字「applied: added 2 trims」。",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.title": {
+    "message": "錄影工具、字幕、代理、編碼器。"
+  },
+  "recreation.style.kicker": {
+    "message": "樣式"
+  },
+  "recreation.style.title": {
+    "message": "更換背景"
+  },
+  "recreation.style.sub": {
+    "message": "在錄影後方放上圖片、純色或漸層，不必重錄。"
+  },
+  "recreation.effects.kicker": {
+    "message": "效果"
+  },
+  "recreation.effects.title": {
+    "message": "打造你要的畫面"
+  },
+  "recreation.effects.sub": {
+    "message": "內邊距、動態模糊、陰影、圓角，每種效果都即時合成。"
+  },
+  "recreation.cursor.kicker": {
+    "message": "游標"
+  },
+  "recreation.cursor.title": {
+    "message": "值得一看的游標"
+  },
+  "recreation.cursor.sub": {
+    "message": "大小、平滑、動態模糊、點擊彈跳，每個動作在畫面上都清楚可見。"
+  },
+  "recreation.timeline.kicker": {
+    "message": "時間軸"
+  },
+  "recreation.timeline.title": {
+    "message": "一鍵放好所有縮放"
+  },
+  "recreation.timeline.sub": {
+    "message": "縮放、變速、剪輯、留言，每項編輯都會以膠囊區塊出現在時間軸上。"
+  },
+  "recreation.transcript.kicker": {
+    "message": "逐字稿"
+  },
+  "recreation.transcript.title": {
+    "message": "像編輯文字一樣剪輯影片"
+  },
+  "recreation.transcript.sub": {
+    "message": "刪除一個字詞或一段靜音，剪輯就會出現在時間軸上。全部都是非破壞性編輯。"
+  },
+  "footer.brand.description": {
+    "message": "免費、開源的螢幕錄影與剪輯軟體。由社群維護的延續專案，採用 MIT 授權。"
+  },
+  "footer.product.title": {
+    "message": "產品"
+  },
+  "footer.product.download": {
+    "message": "下載"
+  },
+  "footer.product.autoZoom": {
+    "message": "自動縮放（英文）",
+    "description": "Links to an English-only page."
+  },
+  "footer.product.captions": {
+    "message": "本機字幕（英文）",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.title": {
+    "message": "平台（英文）",
+    "description": "Its three links go to English-only pages."
+  },
+  "footer.platforms.windows": {
+    "message": "Windows",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.mac": {
+    "message": "macOS",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.linux": {
+    "message": "Linux",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.title": {
+    "message": "比較（英文）",
+    "description": "Its five links go to English-only pages."
+  },
+  "footer.compare.screenStudio": {
+    "message": "Screen Studio 替代方案",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.camtasia": {
+    "message": "Camtasia 替代方案",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.loom": {
+    "message": "Loom 替代方案",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.cap": {
+    "message": "OpenScreen 與 Cap 比較",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.obs": {
+    "message": "OpenScreen 與 OBS Studio 比較",
+    "description": "Links to an English-only page."
+  },
+  "footer.project.title": {
+    "message": "專案"
+  },
+  "footer.project.releases": {
+    "message": "版本發布"
+  },
+  "footer.project.blog": {
+    "message": "部落格（英文）",
+    "description": "Links to an English-only page."
+  },
+  "footer.project.faq": {
+    "message": "常見問題"
+  },
+  "footer.community.title": {
+    "message": "社群"
+  },
+  "footer.community.contributing": {
+    "message": "參與貢獻"
+  },
+  "footer.community.license": {
+    "message": "授權條款（MIT）"
+  },
+  "footer.bottom.license": {
+    "message": "OpenScreen 以 MIT 授權釋出。由社群打造，永久免費。"
+  },
+  "footer.bottom.lineage": {
+    "message": "{originalProject}（3.9 萬顆星，現已封存）的官方衍生專案。"
+  },
+  "footer.bottom.lineage.originalProject": {
+    "message": "原始 OpenScreen 專案"
+  },
+  "theme.navbar.mobileLanguageDropdown.label": {
+    "message": "選擇語言",
+    "description": "The label for the mobile language switcher dropdown"
+  },
+  "theme.ErrorPageContent.title": {
+    "message": "此頁已當機。",
+    "description": "The title of the fallback page when the page crashed"
+  },
+  "theme.BackToTopButton.buttonAriaLabel": {
+    "message": "回到頂部",
+    "description": "The ARIA label for the back to top button"
+  },
+  "theme.blog.archive.title": {
+    "message": "歷史文章",
+    "description": "The page & hero title of the blog archive page"
+  },
+  "theme.blog.archive.description": {
+    "message": "歷史文章",
+    "description": "The page & hero description of the blog archive page"
+  },
+  "theme.blog.paginator.navAriaLabel": {
+    "message": "部落格文章列表分頁導覽",
+    "description": "The ARIA label for the blog pagination"
+  },
+  "theme.blog.paginator.newerEntries": {
+    "message": "較新的文章",
+    "description": "The label used to navigate to the newer blog posts page (previous page)"
+  },
+  "theme.blog.paginator.olderEntries": {
+    "message": "較舊的文章",
+    "description": "The label used to navigate to the older blog posts page (next page)"
+  },
+  "theme.blog.post.paginator.navAriaLabel": {
+    "message": "部落格文章分頁導覽",
+    "description": "The ARIA label for the blog posts pagination"
+  },
+  "theme.blog.post.paginator.newerPost": {
+    "message": "較新一篇",
+    "description": "The blog post button label to navigate to the newer/previous post"
+  },
+  "theme.blog.post.paginator.olderPost": {
+    "message": "較舊一篇",
+    "description": "The blog post button label to navigate to the older/next post"
+  },
+  "theme.tags.tagsPageLink": {
+    "message": "檢視所有標籤",
+    "description": "The label of the link targeting the tag list page"
+  },
+  "theme.colorToggle.ariaLabel.mode.system": {
+    "message": "系統模式",
+    "description": "The name for the system color mode"
+  },
+  "theme.colorToggle.ariaLabel.mode.light": {
+    "message": "淺色模式",
+    "description": "The name for the light color mode"
+  },
+  "theme.colorToggle.ariaLabel.mode.dark": {
+    "message": "深色模式",
+    "description": "The name for the dark color mode"
+  },
+  "theme.colorToggle.ariaLabel": {
+    "message": "切換淺色/深色模式（目前為{mode}）",
+    "description": "The ARIA label for the color mode toggle"
+  },
+  "theme.docs.breadcrumbs.navAriaLabel": {
+    "message": "頁面路徑",
+    "description": "The ARIA label for the breadcrumbs"
+  },
+  "theme.docs.paginator.navAriaLabel": {
+    "message": "文件分頁導覽",
+    "description": "The ARIA label for the docs pagination"
+  },
+  "theme.docs.paginator.previous": {
+    "message": "上一頁",
+    "description": "The label used to navigate to the previous doc"
+  },
+  "theme.docs.paginator.next": {
+    "message": "下一頁",
+    "description": "The label used to navigate to the next doc"
+  },
+  "theme.docs.tagDocListPageTitle.nDocsTagged": {
+    "message": "{count} 篇文件帶有標籤",
+    "description": "Pluralized label for \"{count} docs tagged\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.docs.tagDocListPageTitle": {
+    "message": "{nDocsTagged}「{tagName}」",
+    "description": "The title of the page for a docs tag"
+  },
+  "theme.docs.versionBadge.label": {
+    "message": "版本：{versionLabel}"
+  },
+  "theme.docs.versions.unreleasedVersionLabel": {
+    "message": "此為 {siteTitle} {versionLabel} 版尚未發行的文件。",
+    "description": "The label used to tell the user that he's browsing an unreleased doc version"
+  },
+  "theme.docs.versions.unmaintainedVersionLabel": {
+    "message": "此為 {siteTitle} {versionLabel} 版的文件，現已不再積極維護。",
+    "description": "The label used to tell the user that he's browsing an unmaintained doc version"
+  },
+  "theme.docs.versions.latestVersionSuggestionLabel": {
+    "message": "最新的文件請參閱 {latestVersionLink}（{versionLabel}）。",
+    "description": "The label used to tell the user to check the latest version"
+  },
+  "theme.docs.versions.latestVersionLinkLabel": {
+    "message": "最新版本",
+    "description": "The label used for the latest version suggestion link label"
+  },
+  "theme.common.editThisPage": {
+    "message": "編輯此頁",
+    "description": "The link label to edit the current page"
+  },
+  "theme.common.headingLinkTitle": {
+    "message": "{heading}的直接連結",
+    "description": "Title for link to heading"
+  },
+  "theme.lastUpdated.atDate": {
+    "message": "於 {date} ",
+    "description": "The words used to describe on which date a page has been last updated"
+  },
+  "theme.lastUpdated.byUser": {
+    "message": "由 {user} ",
+    "description": "The words used to describe by who the page has been last updated"
+  },
+  "theme.lastUpdated.lastUpdatedAtBy": {
+    "message": "最後{byUser}{atDate}更新",
+    "description": "The sentence used to display when a page has been last updated, and by who"
+  },
+  "theme.navbar.mobileVersionsDropdown.label": {
+    "message": "選擇版本",
+    "description": "The label for the navbar versions dropdown on mobile view"
+  },
+  "theme.NotFound.title": {
+    "message": "找不到頁面",
+    "description": "The title of the 404 page"
+  },
+  "theme.tags.tagsListLabel": {
+    "message": "標籤：",
+    "description": "The label alongside a tag list"
+  },
+  "theme.AnnouncementBar.closeButtonAriaLabel": {
+    "message": "關閉",
+    "description": "The ARIA label for close button of announcement bar"
+  },
+  "theme.admonition.caution": {
+    "message": "警告",
+    "description": "The default label used for the Caution admonition (:::caution)"
+  },
+  "theme.admonition.danger": {
+    "message": "危險",
+    "description": "The default label used for the Danger admonition (:::danger)"
+  },
+  "theme.admonition.info": {
+    "message": "資訊",
+    "description": "The default label used for the Info admonition (:::info)"
+  },
+  "theme.admonition.note": {
+    "message": "備註",
+    "description": "The default label used for the Note admonition (:::note)"
+  },
+  "theme.admonition.tip": {
+    "message": "提示",
+    "description": "The default label used for the Tip admonition (:::tip)"
+  },
+  "theme.admonition.warning": {
+    "message": "注意",
+    "description": "The default label used for the Warning admonition (:::warning)"
+  },
+  "theme.blog.sidebar.navAriaLabel": {
+    "message": "最近部落格文章導覽",
+    "description": "The ARIA label for recent posts in the blog sidebar"
+  },
+  "theme.DocSidebarItem.expandCategoryAriaLabel": {
+    "message": "展開側邊欄分類「{label}」",
+    "description": "The ARIA label to expand the sidebar category"
+  },
+  "theme.DocSidebarItem.collapseCategoryAriaLabel": {
+    "message": "收合側邊欄分類「{label}」",
+    "description": "The ARIA label to collapse the sidebar category"
+  },
+  "theme.IconExternalLink.ariaLabel": {
+    "message": "（在新分頁開啟）",
+    "description": "The ARIA label for the external link icon"
+  },
+  "theme.NavBar.navAriaLabel": {
+    "message": "主導覽列",
+    "description": "The ARIA label for the main navigation"
+  },
+  "theme.NotFound.p1": {
+    "message": "我們沒有您要找的頁面。",
+    "description": "The first paragraph of the 404 page"
+  },
+  "theme.NotFound.p2": {
+    "message": "請聯絡原始連結來源網站的所有者，並通知他們連結已毀損。",
+    "description": "The 2nd paragraph of the 404 page"
+  },
+  "theme.TOCCollapsible.toggleButtonLabel": {
+    "message": "本頁導覽",
+    "description": "The label used by the button on the collapsible TOC component"
+  },
+  "theme.blog.post.readingTime.plurals": {
+    "message": "閱讀時間約 {readingTime} 分鐘",
+    "description": "Pluralized label for \"{readingTime} min read\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.blog.post.readMore": {
+    "message": "閱讀更多",
+    "description": "The label used in blog post item excerpts to link to full blog posts"
+  },
+  "theme.blog.post.readMoreLabel": {
+    "message": "閱讀 {title} 全文",
+    "description": "The ARIA label for the link to full blog posts from excerpts"
+  },
+  "theme.CodeBlock.copy": {
+    "message": "複製",
+    "description": "The copy button label on code blocks"
+  },
+  "theme.CodeBlock.copied": {
+    "message": "已複製",
+    "description": "The copied button label on code blocks"
+  },
+  "theme.CodeBlock.copyButtonAriaLabel": {
+    "message": "複製程式碼至剪貼簿",
+    "description": "The ARIA label for copy code blocks button"
+  },
+  "theme.CodeBlock.wordWrapToggle": {
+    "message": "切換自動換行",
+    "description": "The title attribute for toggle word wrapping button of code block lines"
+  },
+  "theme.docs.breadcrumbs.home": {
+    "message": "首頁",
+    "description": "The ARIA label for the home page in the breadcrumbs"
+  },
+  "theme.docs.sidebar.navAriaLabel": {
+    "message": "文件側邊欄",
+    "description": "The ARIA label for the sidebar navigation"
+  },
+  "theme.docs.sidebar.collapseButtonTitle": {
+    "message": "收合側邊欄",
+    "description": "The title attribute for collapse button of doc sidebar"
+  },
+  "theme.docs.sidebar.collapseButtonAriaLabel": {
+    "message": "收合側邊欄",
+    "description": "The title attribute for collapse button of doc sidebar"
+  },
+  "theme.docs.sidebar.closeSidebarButtonAriaLabel": {
+    "message": "關閉導覽列",
+    "description": "The ARIA label for close button of mobile sidebar"
+  },
+  "theme.navbar.mobileSidebarSecondaryMenu.backButtonLabel": {
+    "message": "← 回到主選單",
+    "description": "The label of the back button to return to main menu, inside the mobile navbar sidebar secondary menu (notably used to display the docs sidebar)"
+  },
+  "theme.docs.sidebar.toggleSidebarButtonAriaLabel": {
+    "message": "切換導覽列",
+    "description": "The ARIA label for hamburger menu button of mobile navigation"
+  },
+  "theme.navbar.mobileDropdown.collapseButton.expandAriaLabel": {
+    "message": "展開下拉選單",
+    "description": "The ARIA label of the button to expand the mobile dropdown navbar item"
+  },
+  "theme.navbar.mobileDropdown.collapseButton.collapseAriaLabel": {
+    "message": "收合下拉選單",
+    "description": "The ARIA label of the button to collapse the mobile dropdown navbar item"
+  },
+  "theme.docs.sidebar.expandButtonTitle": {
+    "message": "展開側邊欄",
+    "description": "The ARIA label and title attribute for expand button of doc sidebar"
+  },
+  "theme.docs.sidebar.expandButtonAriaLabel": {
+    "message": "展開側邊欄",
+    "description": "The ARIA label and title attribute for expand button of doc sidebar"
+  },
+  "theme.blog.post.plurals": {
+    "message": "{count} 篇文章",
+    "description": "Pluralized label for \"{count} posts\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.blog.tagTitle": {
+    "message": "{nPosts} 含有標籤「{tagName}」",
+    "description": "The title of the page for a blog tag"
+  },
+  "theme.blog.author.pageTitle": {
+    "message": "{authorName} - {nPosts}",
+    "description": "The title of the page for a blog author"
+  },
+  "theme.blog.authorsList.pageTitle": {
+    "message": "作者列表",
+    "description": "The title of the authors page"
+  },
+  "theme.blog.authorsList.viewAll": {
+    "message": "檢視所有作者",
+    "description": "The label of the link targeting the blog authors page"
+  },
+  "theme.blog.author.noPosts": {
+    "message": "此作者尚未撰寫任何文章。",
+    "description": "The text for authors with 0 blog post"
+  },
+  "theme.contentVisibility.unlistedBanner.title": {
+    "message": "未公開列出的頁面",
+    "description": "The unlisted content banner title"
+  },
+  "theme.contentVisibility.unlistedBanner.message": {
+    "message": "此頁面未公開列出。搜尋引擎不會為它建立索引，只有持有直接連結的使用者才能存取。",
+    "description": "The unlisted content banner message"
+  },
+  "theme.contentVisibility.draftBanner.title": {
+    "message": "草稿頁",
+    "description": "The draft content banner title"
+  },
+  "theme.contentVisibility.draftBanner.message": {
+    "message": "此頁面為草稿，僅在開發環境中可見，不會包含於正式版本中。",
+    "description": "The draft content banner message"
+  },
+  "theme.docs.DocCard.categoryDescription.plurals": {
+    "message": "{count} 個項目",
+    "description": "The default description for a category card in the generated index about how many items this category includes"
+  },
+  "theme.ErrorPageContent.tryAgain": {
+    "message": "重試",
+    "description": "The label of the button to try again rendering when the React error boundary captures an error"
+  },
+  "theme.common.skipToMainContent": {
+    "message": "跳至主要內容",
+    "description": "The skip to content label used for accessibility, allowing to rapidly navigate to main content with keyboard tab/enter navigation"
+  },
+  "theme.tags.tagsPageTitle": {
+    "message": "標籤",
+    "description": "The title of the tag list page"
+  }
+}

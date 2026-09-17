@@ -43,52 +43,16 @@ export const T_TOTAL = 26.0;
  * at [0, 0.6), which is the state of the stage on every approach to the band,
  * and the reader met the transcript panel before the background panel. There
  * were two more at [14.5, 15.0) and [19.5, 19.6), invisible only because the
- * panel happens to be faded out across both. */
+ * panel happens to be faded out across both.
+ *
+ * The caption each beat shows lives in index.tsx (beatCopy): it is page copy,
+ * and translate() has to run at render, in the locale being built. */
 export const BEATS = [
-	{
-		id: "style",
-		from: 0,
-		to: 7.2,
-		kicker: "Style",
-		title: "Swap the background",
-		sub: "Image, color or gradient behind your recording — no re-shoot.",
-	},
-	{
-		id: "effects",
-		from: 7.2,
-		to: 10.4,
-		kicker: "Effects",
-		title: "Frame it your way",
-		sub: "Padding, motion blur, shadow, roundness — every effect composites live.",
-	},
-	{
-		id: "cursor",
-		from: 10.4,
-		to: 15.0,
-		kicker: "Cursor",
-		title: "A cursor worth watching",
-		sub: "Size, smoothing, motion blur, click bounce — every move reads on screen.",
-	},
-	{
-		id: "timeline",
-		from: 15.0,
-		to: 19.6,
-		kicker: "Timeline",
-		/* Not "One click, one pill": the click this beat actually shows is the
-		   wand's, and it places three zooms at once. The claim is the same one —
-		   an edit is an object you can see — but counted the way the screen
-		   counts it. */
-		title: "One click, every zoom placed",
-		sub: "Zooms, speed ramps, trims, comments — each edit lands as a pill on the timeline.",
-	},
-	{
-		id: "transcript",
-		from: 19.6,
-		to: 26.0,
-		kicker: "Transcript",
-		title: "Edit video like text",
-		sub: "Delete a word or a silence; the cut lands on the timeline. Nothing destructive.",
-	},
+	{ id: "style", from: 0, to: 7.2 },
+	{ id: "effects", from: 7.2, to: 10.4 },
+	{ id: "cursor", from: 10.4, to: 15.0 },
+	{ id: "timeline", from: 15.0, to: 19.6 },
+	{ id: "transcript", from: 19.6, to: 26.0 },
 ] as const;
 
 export type BeatId = (typeof BEATS)[number]["id"];

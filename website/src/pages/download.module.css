@@ -57,6 +57,16 @@
 	color: var(--os-meta);
 }
 
+/* Under the release line, at its size: a list of a dozen names wraps, so it
+   gets the tagline's measure and a line height of its own. */
+.appLanguages {
+	margin: 8px auto 0;
+	max-width: 560px;
+	font-size: 12.5px;
+	line-height: 1.6;
+	color: var(--os-muted);
+}
+
 /* ---- platform cards ---- */
 
 .platforms {

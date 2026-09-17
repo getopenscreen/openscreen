@@ -1047,7 +1047,7 @@
 	padding: 2.6cqw 3cqw 0;
 }
 
-.pageHero h3 {
+.pageHero .pageHeadline {
 	margin: 0;
 	font-size: 3.8cqw;
 	font-weight: 750;

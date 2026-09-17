@@ -1,0 +1,776 @@
+{
+  "appLanguages.line": {
+    "message": "Interface en {count} langues : {names}",
+    "description": "{count} is a number; {names} is the list of language names, each in its own language"
+  },
+  "download.macos.arm.label": {
+    "message": "Apple Silicon"
+  },
+  "download.macos.arm.sublabel": {
+    "message": "M1 et suivants · .dmg"
+  },
+  "download.macos.intel.label": {
+    "message": "Intel"
+  },
+  "download.macos.intel.sublabel": {
+    "message": "x86_64 · .dmg"
+  },
+  "download.macos.footnote": {
+    "message": "Signé et notarisé : il s'ouvre sans passer par le terminal. Au premier lancement, accordez les autorisations Enregistrement de l'écran et Accessibilité.",
+    "description": "Screen Recording and Accessibility are macOS privacy settings: use the names macOS shows in your language."
+  },
+  "download.windows.store.label": {
+    "message": "Microsoft Store"
+  },
+  "download.windows.store.sublabel": {
+    "message": "Recommandé · signé par Microsoft"
+  },
+  "download.windows.exe.label": {
+    "message": "Windows 10 et 11"
+  },
+  "download.windows.exe.sublabel": {
+    "message": "Programme d'installation · .exe · non signé"
+  },
+  "download.windows.footnote": {
+    "message": "L'audio système est capturé sans pilote supplémentaire. Les puces graphiques intégrées antérieures à la 8e génération Intel environ (ou à la série AMD Ryzen 2000 équivalente) peuvent rencontrer des problèmes connus à l'arrêt de l'enregistrement : voir la {systemRequirements}."
+  },
+  "download.windows.footnote.systemRequirements": {
+    "message": "configuration requise"
+  },
+  "download.linux.deb.sublabel": {
+    "message": "Paquet · .deb"
+  },
+  "download.linux.rpm.sublabel": {
+    "message": "Paquet · .rpm"
+  },
+  "download.linux.pacman.sublabel": {
+    "message": "Paquet · .pacman"
+  },
+  "download.linux.appImage.label": {
+    "message": "Toute distribution"
+  },
+  "download.linux.appImage.sublabel": {
+    "message": "Portable · .AppImage"
+  },
+  "download.linux.footnote": {
+    "message": "La capture passe par PipeWire et xdg-desktop-portal ; les deux sont nécessaires."
+  },
+  "download.meta.title": {
+    "message": "Télécharger pour Windows, macOS et Linux"
+  },
+  "download.meta.description": {
+    "message": "Téléchargez gratuitement OpenScreen (Windows, macOS, Linux) : Microsoft Store, .exe, .dmg, .deb, .rpm, .pacman, AppImage, flake Nix. Open source, sans compte."
+  },
+  "download.hero.badge.release": {
+    "message": "{tag} · sous licence MIT",
+    "description": "{tag} is the release tag, e.g. v1.11.0"
+  },
+  "download.hero.badge.noRelease": {
+    "message": "Sous licence MIT · gratuit pour toujours"
+  },
+  "download.hero.title": {
+    "message": "Télécharger OpenScreen"
+  },
+  "download.hero.tagline": {
+    "message": "Un enregistreur d'écran et éditeur vidéo gratuit et open source. Sans compte, sans filigrane, sans abonnement."
+  },
+  "download.hero.published": {
+    "message": "Dernière version stable, publiée le {date}",
+    "description": "{date} is formatted for your language at build time"
+  },
+  "download.panels.winget.title": {
+    "message": "Windows : la version du Store depuis un terminal"
+  },
+  "download.panels.winget.foot": {
+    "message": "Le .exe n'est pas signé : SmartScreen affiche donc « Windows a protégé votre ordinateur ». Choisissez Informations complémentaires, puis Exécuter quand même. Téléchargez-le uniquement depuis la {releasesPage}.",
+    "description": "Windows protected your PC, More info and Run anyway are SmartScreen's own words: use the ones Windows shows in your language."
+  },
+  "download.panels.winget.foot.releasesPage": {
+    "message": "page Releases"
+  },
+  "download.panels.nix.title": {
+    "message": "Nix : le lancer sans l'installer"
+  },
+  "download.panels.nix.foot": {
+    "message": "Les étapes propres à chaque distribution se trouvent dans le {installationGuide}."
+  },
+  "download.panels.nix.foot.installationGuide": {
+    "message": "guide d'installation"
+  },
+  "download.preRelease.title": {
+    "message": "Envie de tester ce qui arrive ?"
+  },
+  "download.preRelease.body": {
+    "message": "Des versions candidates sortent entre les versions stables. Elles sont publiées aux côtés des anciennes versions, des sommes de contrôle et des notes de version complètes."
+  },
+  "download.preRelease.cta": {
+    "message": "Voir toutes les versions"
+  },
+  "home.meta.title": {
+    "message": "Enregistreur d'écran gratuit et open source avec éditeur vidéo"
+  },
+  "home.meta.description": {
+    "message": "OpenScreen, enregistreur d'écran et éditeur vidéo gratuit et open source pour Windows, macOS et Linux : capture native, sous-titres en local, sans filigrane."
+  },
+  "home.hero.badge.new": {
+    "message": "NOUVEAU"
+  },
+  "home.hero.badge.text": {
+    "message": "La 1.11 exporte plus vite (Mac, Linux)",
+    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
+  },
+  "home.hero.titleTagline": {
+    "message": "Un enregistreur d'écran et éditeur vidéo gratuit et open source"
+  },
+  "home.hero.tagline": {
+    "message": "Enregistrement d'écran avec capture native et IA locale, sans fonction payante."
+  },
+  "home.hero.download": {
+    "message": "Télécharger"
+  },
+  "home.hero.readDocs": {
+    "message": "Lire la documentation"
+  },
+  "home.hero.scrollHint": {
+    "message": "Faites défiler"
+  },
+  "home.features.kicker": {
+    "message": "Tout aussi vrai"
+  },
+  "home.features.title": {
+    "message": "Gratuit, local, multiplateforme : trois choses qu'une capture d'écran ne peut pas montrer."
+  },
+  "home.features.summary": {
+    "message": "OpenScreen est un enregistreur d'écran et éditeur vidéo gratuit et open source pour Windows, macOS et Linux : une capture brute en entrée, une démo finie en sortie, dans la catégorie qu'a définie {screenStudio}. Il est sous licence MIT, sans filigrane ni compte, et prend la suite du {originalProject}, que son créateur a archivé après la v1.5.0.",
+    "description": "{screenStudio} links to an English-only page."
+  },
+  "home.features.summary.screenStudio": {
+    "message": "Screen Studio",
+    "description": "A product name. The link goes to an English-only page."
+  },
+  "home.features.summary.originalProject": {
+    "message": "projet OpenScreen d'origine"
+  },
+  "home.features.free.title": {
+    "message": "MIT, gratuit pour toujours"
+  },
+  "home.features.free.body": {
+    "message": "Aucune fonction payante, aucune offre premium, aucune limite d'utilisation. Toutes les fonctionnalités sont gratuites, pour un usage personnel comme commercial."
+  },
+  "home.features.local.title": {
+    "message": "Rien n'est mis en ligne"
+  },
+  "home.features.local.body": {
+    "message": "L'enregistrement, la transcription et le rendu se font sur votre machine, et votre vidéo n'en sort jamais. Du texte n'en sort que si vous le demandez : le panneau de discussion et la traduction des sous-titres, chacun avec une clé que vous fournissez. La transcription télécharge son modèle Whisper de 264 Mo une seule fois, lors de sa première exécution."
+  },
+  "home.features.platforms.title": {
+    "message": "Windows, macOS, Linux"
+  },
+  "home.features.platforms.body": {
+    "message": "Une seule base de code, une capture native sur chaque système. Une fiche Microsoft Store, un .dmg, un .exe, un .deb, un .rpm, un .pacman, une AppImage et un flake Nix."
+  },
+  "home.install.kicker": {
+    "message": "Démarrage rapide"
+  },
+  "home.install.title": {
+    "message": "Télécharger et installer"
+  },
+  "home.install.mac.comment": {
+    "message": "# ouvrez le .dmg, puis"
+  },
+  "home.install.mac.action": {
+    "message": "Glissez OpenScreen dans Applications."
+  },
+  "home.install.mac.foot": {
+    "message": "Signé et notarisé. Capture ScreenCaptureKit ; forme du curseur et clics une fois l'autorisation Accessibilité accordée."
+  },
+  "home.install.windows.comment": {
+    "message": "# Microsoft Store, depuis un terminal"
+  },
+  "home.install.windows.foot": {
+    "message": "Windows Graphics Capture, audio système sans configuration, capture de la webcam via Media Foundation."
+  },
+  "home.install.linux.comment": {
+    "message": "# téléchargez le .deb depuis Releases, puis"
+  },
+  "home.install.linux.foot": {
+    "message": "Capture PipeWire via le portail ScreenCast ; nécessite PipeWire et xdg-desktop-portal."
+  },
+  "home.install.note": {
+    "message": "Windows a aussi un programme d'installation {exe}. Il n'est pas signé : SmartScreen affiche donc un avertissement avant son exécution. Choisissez Informations complémentaires, puis Exécuter quand même. Linux propose aussi {rpm}, {pacman}, une AppImage et un flake Nix. Tous les fichiers sont sur la {releasesPage}, et la page {installation} détaille toutes les étapes. Ce que chaque système enregistre est décrit sur les pages {windows}, {mac} et {linux} (en anglais).",
+    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to English-only pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
+  },
+  "home.install.note.releasesPage": {
+    "message": "page Releases"
+  },
+  "home.install.note.installation": {
+    "message": "Installation"
+  },
+  "home.install.note.windows": {
+    "message": "Windows"
+  },
+  "home.install.note.mac": {
+    "message": "Mac"
+  },
+  "home.install.note.linux": {
+    "message": "Linux"
+  },
+  "editor.skipLink": {
+    "message": "Passer l'éditeur et aller aux téléchargements"
+  },
+  "editor.title": {
+    "message": "Cinq choses que vous ferez vraiment",
+    "description": "Read by screen readers only: the heading of the five captioned steps below"
+  },
+  "recreation.style.kicker": {
+    "message": "Style"
+  },
+  "recreation.style.title": {
+    "message": "Changez l'arrière-plan"
+  },
+  "recreation.style.sub": {
+    "message": "Image, couleur ou dégradé derrière votre enregistrement, sans rien réenregistrer."
+  },
+  "recreation.effects.kicker": {
+    "message": "Effets"
+  },
+  "recreation.effects.title": {
+    "message": "Cadrez à votre façon"
+  },
+  "recreation.effects.sub": {
+    "message": "Marge, flou de mouvement, ombre, arrondi : chaque effet est rendu en direct."
+  },
+  "recreation.cursor.kicker": {
+    "message": "Curseur"
+  },
+  "recreation.cursor.title": {
+    "message": "Un curseur qu'on suit des yeux"
+  },
+  "recreation.cursor.sub": {
+    "message": "Taille, lissage, flou de mouvement, rebond au clic : chaque geste se lit à l'écran."
+  },
+  "recreation.timeline.kicker": {
+    "message": "Timeline"
+  },
+  "recreation.timeline.title": {
+    "message": "Un clic, tous les zooms placés"
+  },
+  "recreation.timeline.sub": {
+    "message": "Zooms, changements de vitesse, coupes, commentaires : chaque modification apparaît comme une pastille sur la timeline."
+  },
+  "recreation.transcript.kicker": {
+    "message": "Transcription"
+  },
+  "recreation.transcript.title": {
+    "message": "Montez la vidéo comme un texte"
+  },
+  "recreation.transcript.sub": {
+    "message": "Supprimez un mot ou un silence : la coupe apparaît sur la timeline. Rien n'est destructif."
+  },
+  "showcase.record.kicker": {
+    "message": "enregistrement"
+  },
+  "showcase.record.claim": {
+    "message": "Il enregistre avec le système d'exploitation, pas en le contournant."
+  },
+  "showcase.record.body": {
+    "message": "Choisissez une fenêtre ou un écran. macOS passe par ScreenCaptureKit, Windows par Windows Graphics Capture, Linux par PipeWire et le portail ScreenCast : sur chacun, la voie de capture que fournit le système lui-même. Le pointeur est enregistré sous forme de données au lieu d'être incrusté dans les pixels, et c'est la seule raison pour laquelle vous avez pu en changer le style plus haut sur cette page."
+  },
+  "showcase.record.fact": {
+    "message": "ScreenCaptureKit · Windows Graphics Capture · PipeWire · audio système sans pilote supplémentaire"
+  },
+  "showcase.record.link.docs": {
+    "message": "Documentation de l'enregistrement d'écran"
+  },
+  "showcase.record.label": {
+    "message": "Dessin de l'enregistreur : deux cibles de capture côte à côte, Display 1 sélectionné et une fenêtre intitulée Terminal à côté, puis les réglages de la prise (ScreenCaptureKit, audio système, 1920 × 1080 à 60 fps), un micro et un interrupteur d'audio système, et un bouton Start recording.",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.export.kicker": {
+    "message": "export"
+  },
+  "showcase.export.claim": {
+    "message": "Puis il écrit le fichier."
+  },
+  "showcase.export.body": {
+    "message": "Du MP4 de 720p jusqu'à la résolution source, à 24, 30 ou 60 images par seconde, en H.264 ou H.265, ou bien un GIF. L'encodage tourne sur votre machine et compte les images au fur et à mesure. Pas de file d'attente, pas de compte, pas de filigrane, et le fichier est sur le disque quand la barre est pleine."
+  },
+  "showcase.export.fact": {
+    "message": "H.264 / H.265 · 24, 30, 60 fps · sans filigrane"
+  },
+  "showcase.export.link.docs": {
+    "message": "Documentation de l'export vidéo"
+  },
+  "showcase.export.label": {
+    "message": "Dessin du panneau d'export : recording-1783066227227.mp4 exporté en MP4, avec H.265 choisi à côté de H.264, 1080p, 60 fps et GIF, et une barre de progression à 62 % qui indique l'image 1 488 sur 2 400, avec écriture dans le dossier Movies.",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.captions.kicker": {
+    "message": "sous-titres"
+  },
+  "showcase.captions.claim": {
+    "message": "La transcription tourne sur votre machine."
+  },
+  "showcase.captions.body": {
+    "message": "whisper.cpp est fourni avec l'application, et le modèle se télécharge une seule fois, à la première utilisation : ensuite, la transcription fonctionne réseau coupé. L'audio ne quitte jamais l'ordinateur, et vous obtenez du texte modifiable : choisissez la police, la taille, la couleur et la position, puis incrustez-le dans le rendu."
+  },
+  "showcase.captions.fact": {
+    "message": "whisper.cpp · 100 langues · hors ligne après la première exécution"
+  },
+  "showcase.captions.link.docs": {
+    "message": "Documentation des sous-titres et de la transcription"
+  },
+  "showcase.captions.link.feature": {
+    "message": "Comparatif des sous-titres locaux (en anglais)",
+    "description": "Links to an English-only page."
+  },
+  "showcase.captions.label": {
+    "message": "Dessin du panneau des sous-titres : la ligne « amber day on the validator, and it » en grand sur la vidéo, et à côté les sous-titres activés, une note indiquant que sept lignes de sous-titres sont dérivées en direct de la transcription, et une ligne de langues qui propose English, Français, un bouton Translate et l'option de supprimer une traduction.",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.agent.kicker": {
+    "message": "agent"
+  },
+  "showcase.agent.claim": {
+    "message": "Ou dites-lui quoi couper."
+  },
+  "showcase.agent.body": {
+    "message": "La baguette magique, plus haut sur cette page, place les zooms en observant où votre curseur est passé. L'agent va plus loin : il lit la vraie transcription et la vraie timeline, et répond donc avec des timecodes que vous pouvez aller vérifier, en indiquant quels passages il va couper et combien de temps cela fait gagner. Chaque modification qu'il fait est une modification ordinaire, annulable, et il a besoin d'une clé de fournisseur que vous apportez. Rien ne tourne tant que vous n'en avez pas connecté une."
+  },
+  "showcase.agent.fact": {
+    "message": "votre propre clé · désactivé par défaut · chaque modification est annulable"
+  },
+  "showcase.agent.link.docs": {
+    "message": "Documentation du montage par IA"
+  },
+  "showcase.agent.link.feature": {
+    "message": "Fonctionnement des zooms automatiques (en anglais)",
+    "description": "Links to an English-only page."
+  },
+  "showcase.agent.label": {
+    "message": "Dessin de la réponse de l'agent. Prié de couper les temps morts, il répond avec des timecodes : de 0 à 2,19 secondes d'amorce avant « Hi » et de 35,12 à 40,03 secondes de fin après « think. », ce qui fait passer la vidéo de 40 à 33 secondes de contenu lisible, les zooms existants restant sur les mêmes moments ; puis une ligne verte qui indique « applied: added 2 trims ».",
+    "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
+  },
+  "showcase.title": {
+    "message": "Enregistreur, sous-titres, agent, encodeur."
+  },
+  "footer.brand.description": {
+    "message": "Un enregistreur d'écran et éditeur gratuit et open source. Suite maintenue par la communauté, sous licence MIT."
+  },
+  "footer.product.title": {
+    "message": "Produit"
+  },
+  "footer.product.download": {
+    "message": "Télécharger"
+  },
+  "footer.product.autoZoom": {
+    "message": "Zoom automatique (en anglais)",
+    "description": "Links to an English-only page."
+  },
+  "footer.product.captions": {
+    "message": "Sous-titres locaux (en anglais)",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.title": {
+    "message": "Plateformes (en anglais)",
+    "description": "Its three links go to English-only pages."
+  },
+  "footer.platforms.windows": {
+    "message": "Windows",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.mac": {
+    "message": "macOS",
+    "description": "Links to an English-only page."
+  },
+  "footer.platforms.linux": {
+    "message": "Linux",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.title": {
+    "message": "Comparatifs (en anglais)",
+    "description": "Its five links go to English-only pages."
+  },
+  "footer.compare.screenStudio": {
+    "message": "Alternative à Screen Studio",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.camtasia": {
+    "message": "Alternative à Camtasia",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.loom": {
+    "message": "Alternative à Loom",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.cap": {
+    "message": "OpenScreen vs Cap",
+    "description": "Links to an English-only page."
+  },
+  "footer.compare.obs": {
+    "message": "OpenScreen vs OBS Studio",
+    "description": "Links to an English-only page."
+  },
+  "footer.project.title": {
+    "message": "Projet"
+  },
+  "footer.project.releases": {
+    "message": "Versions"
+  },
+  "footer.project.blog": {
+    "message": "Blog (en anglais)",
+    "description": "Links to an English-only page."
+  },
+  "footer.project.faq": {
+    "message": "FAQ"
+  },
+  "footer.community.title": {
+    "message": "Communauté"
+  },
+  "footer.community.contributing": {
+    "message": "Contribuer"
+  },
+  "footer.community.license": {
+    "message": "Licence (MIT)"
+  },
+  "footer.bottom.license": {
+    "message": "OpenScreen est publié sous licence MIT. Conçu par la communauté, gratuit pour toujours."
+  },
+  "footer.bottom.lineage": {
+    "message": "Le dérivé officiel du {originalProject}, qui compte 39 k étoiles et est désormais archivé."
+  },
+  "footer.bottom.lineage.originalProject": {
+    "message": "projet OpenScreen d'origine"
+  },
+  "theme.navbar.mobileLanguageDropdown.label": {
+    "message": "Langues",
+    "description": "The label for the mobile language switcher dropdown"
+  },
+  "theme.ErrorPageContent.title": {
+    "message": "Cette page a planté.",
+    "description": "The title of the fallback page when the page crashed"
+  },
+  "theme.BackToTopButton.buttonAriaLabel": {
+    "message": "Retour au début de la page",
+    "description": "The ARIA label for the back to top button"
+  },
+  "theme.blog.archive.title": {
+    "message": "Archive",
+    "description": "The page & hero title of the blog archive page"
+  },
+  "theme.blog.archive.description": {
+    "message": "Archive",
+    "description": "The page & hero description of the blog archive page"
+  },
+  "theme.blog.paginator.navAriaLabel": {
+    "message": "Pagination de la liste des articles du blog",
+    "description": "The ARIA label for the blog pagination"
+  },
+  "theme.blog.paginator.newerEntries": {
+    "message": "Nouvelles entrées",
+    "description": "The label used to navigate to the newer blog posts page (previous page)"
+  },
+  "theme.blog.paginator.olderEntries": {
+    "message": "Anciennes entrées",
+    "description": "The label used to navigate to the older blog posts page (next page)"
+  },
+  "theme.blog.post.paginator.navAriaLabel": {
+    "message": "Pagination des articles du blog",
+    "description": "The ARIA label for the blog posts pagination"
+  },
+  "theme.blog.post.paginator.newerPost": {
+    "message": "Article plus récent",
+    "description": "The blog post button label to navigate to the newer/previous post"
+  },
+  "theme.blog.post.paginator.olderPost": {
+    "message": "Article plus ancien",
+    "description": "The blog post button label to navigate to the older/next post"
+  },
+  "theme.tags.tagsPageLink": {
+    "message": "Voir tous les tags",
+    "description": "The label of the link targeting the tag list page"
+  },
+  "theme.colorToggle.ariaLabel.mode.system": {
+    "message": "mode système",
+    "description": "The name for the system color mode"
+  },
+  "theme.colorToggle.ariaLabel.mode.light": {
+    "message": "mode clair",
+    "description": "The name for the light color mode"
+  },
+  "theme.colorToggle.ariaLabel.mode.dark": {
+    "message": "mode sombre",
+    "description": "The name for the dark color mode"
+  },
+  "theme.colorToggle.ariaLabel": {
+    "message": "Basculer entre le mode sombre et clair (actuellement {mode})",
+    "description": "The ARIA label for the color mode toggle"
+  },
+  "theme.docs.breadcrumbs.navAriaLabel": {
+    "message": "Fil d'Ariane",
+    "description": "The ARIA label for the breadcrumbs"
+  },
+  "theme.docs.paginator.navAriaLabel": {
+    "message": "Pages de documentation",
+    "description": "The ARIA label for the docs pagination"
+  },
+  "theme.docs.paginator.previous": {
+    "message": "Précédent",
+    "description": "The label used to navigate to the previous doc"
+  },
+  "theme.docs.paginator.next": {
+    "message": "Suivant",
+    "description": "The label used to navigate to the next doc"
+  },
+  "theme.docs.tagDocListPageTitle.nDocsTagged": {
+    "message": "Un document tagué|{count} documents tagués",
+    "description": "Pluralized label for \"{count} docs tagged\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.docs.tagDocListPageTitle": {
+    "message": "{nDocsTagged} avec « {tagName} »",
+    "description": "The title of the page for a docs tag"
+  },
+  "theme.docs.versionBadge.label": {
+    "message": "Version : {versionLabel}"
+  },
+  "theme.docs.versions.unreleasedVersionLabel": {
+    "message": "Ceci est la documentation de la prochaine version {versionLabel} de {siteTitle}.",
+    "description": "The label used to tell the user that he's browsing an unreleased doc version"
+  },
+  "theme.docs.versions.unmaintainedVersionLabel": {
+    "message": "Ceci est la documentation de {siteTitle} {versionLabel}, qui n'est plus activement maintenue.",
+    "description": "The label used to tell the user that he's browsing an unmaintained doc version"
+  },
+  "theme.docs.versions.latestVersionSuggestionLabel": {
+    "message": "Pour une documentation à jour, consultez la {latestVersionLink} ({versionLabel}).",
+    "description": "The label used to tell the user to check the latest version"
+  },
+  "theme.docs.versions.latestVersionLinkLabel": {
+    "message": "dernière version",
+    "description": "The label used for the latest version suggestion link label"
+  },
+  "theme.common.editThisPage": {
+    "message": "Modifier cette page",
+    "description": "The link label to edit the current page"
+  },
+  "theme.common.headingLinkTitle": {
+    "message": "Lien direct vers {heading}",
+    "description": "Title for link to heading"
+  },
+  "theme.lastUpdated.atDate": {
+    "message": " le {date}",
+    "description": "The words used to describe on which date a page has been last updated"
+  },
+  "theme.lastUpdated.byUser": {
+    "message": " par {user}",
+    "description": "The words used to describe by who the page has been last updated"
+  },
+  "theme.lastUpdated.lastUpdatedAtBy": {
+    "message": "Dernière mise à jour{atDate}{byUser}",
+    "description": "The sentence used to display when a page has been last updated, and by who"
+  },
+  "theme.navbar.mobileVersionsDropdown.label": {
+    "message": "Versions",
+    "description": "The label for the navbar versions dropdown on mobile view"
+  },
+  "theme.NotFound.title": {
+    "message": "Page introuvable",
+    "description": "The title of the 404 page"
+  },
+  "theme.tags.tagsListLabel": {
+    "message": "Tags :",
+    "description": "The label alongside a tag list"
+  },
+  "theme.AnnouncementBar.closeButtonAriaLabel": {
+    "message": "Fermer",
+    "description": "The ARIA label for close button of announcement bar"
+  },
+  "theme.admonition.caution": {
+    "message": "attention",
+    "description": "The default label used for the Caution admonition (:::caution)"
+  },
+  "theme.admonition.danger": {
+    "message": "danger",
+    "description": "The default label used for the Danger admonition (:::danger)"
+  },
+  "theme.admonition.info": {
+    "message": "info",
+    "description": "The default label used for the Info admonition (:::info)"
+  },
+  "theme.admonition.note": {
+    "message": "remarque",
+    "description": "The default label used for the Note admonition (:::note)"
+  },
+  "theme.admonition.tip": {
+    "message": "astuce",
+    "description": "The default label used for the Tip admonition (:::tip)"
+  },
+  "theme.admonition.warning": {
+    "message": "avertissement",
+    "description": "The default label used for the Warning admonition (:::warning)"
+  },
+  "theme.blog.sidebar.navAriaLabel": {
+    "message": "Navigation des articles de blog récents",
+    "description": "The ARIA label for recent posts in the blog sidebar"
+  },
+  "theme.DocSidebarItem.expandCategoryAriaLabel": {
+    "message": "Déplier la catégorie « {label} » de la barre latérale",
+    "description": "The ARIA label to expand the sidebar category"
+  },
+  "theme.DocSidebarItem.collapseCategoryAriaLabel": {
+    "message": "Replier la catégorie « {label} » de la barre latérale",
+    "description": "The ARIA label to collapse the sidebar category"
+  },
+  "theme.IconExternalLink.ariaLabel": {
+    "message": "(s'ouvre dans un nouvel onglet)",
+    "description": "The ARIA label for the external link icon"
+  },
+  "theme.NavBar.navAriaLabel": {
+    "message": "Navigation principale",
+    "description": "The ARIA label for the main navigation"
+  },
+  "theme.NotFound.p1": {
+    "message": "Nous n'avons pas trouvé ce que vous recherchez.",
+    "description": "The first paragraph of the 404 page"
+  },
+  "theme.NotFound.p2": {
+    "message": "Veuillez contacter le propriétaire du site qui vous a envoyé vers l'URL d'origine et lui signaler que son lien est cassé.",
+    "description": "The 2nd paragraph of the 404 page"
+  },
+  "theme.TOCCollapsible.toggleButtonLabel": {
+    "message": "Sur cette page",
+    "description": "The label used by the button on the collapsible TOC component"
+  },
+  "theme.blog.post.readMore": {
+    "message": "Lire la suite",
+    "description": "The label used in blog post item excerpts to link to full blog posts"
+  },
+  "theme.blog.post.readMoreLabel": {
+    "message": "En savoir plus sur {title}",
+    "description": "The ARIA label for the link to full blog posts from excerpts"
+  },
+  "theme.blog.post.readingTime.plurals": {
+    "message": "Une minute de lecture|{readingTime} minutes de lecture",
+    "description": "Pluralized label for \"{readingTime} min read\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.CodeBlock.copy": {
+    "message": "Copier",
+    "description": "The copy button label on code blocks"
+  },
+  "theme.CodeBlock.copied": {
+    "message": "Copié",
+    "description": "The copied button label on code blocks"
+  },
+  "theme.CodeBlock.copyButtonAriaLabel": {
+    "message": "Copier le code",
+    "description": "The ARIA label for copy code blocks button"
+  },
+  "theme.CodeBlock.wordWrapToggle": {
+    "message": "Activer/désactiver le retour à la ligne",
+    "description": "The title attribute for toggle word wrapping button of code block lines"
+  },
+  "theme.docs.breadcrumbs.home": {
+    "message": "Page d'accueil",
+    "description": "The ARIA label for the home page in the breadcrumbs"
+  },
+  "theme.docs.sidebar.collapseButtonTitle": {
+    "message": "Réduire le menu latéral",
+    "description": "The title attribute for collapse button of doc sidebar"
+  },
+  "theme.docs.sidebar.collapseButtonAriaLabel": {
+    "message": "Réduire le menu latéral",
+    "description": "The title attribute for collapse button of doc sidebar"
+  },
+  "theme.docs.sidebar.navAriaLabel": {
+    "message": "Barre latérale de la documentation",
+    "description": "The ARIA label for the sidebar navigation"
+  },
+  "theme.docs.sidebar.closeSidebarButtonAriaLabel": {
+    "message": "Fermer la barre de navigation",
+    "description": "The ARIA label for close button of mobile sidebar"
+  },
+  "theme.navbar.mobileSidebarSecondaryMenu.backButtonLabel": {
+    "message": "← Retour au menu principal",
+    "description": "The label of the back button to return to main menu, inside the mobile navbar sidebar secondary menu (notably used to display the docs sidebar)"
+  },
+  "theme.docs.sidebar.toggleSidebarButtonAriaLabel": {
+    "message": "Ouvrir/fermer la barre de navigation",
+    "description": "The ARIA label for hamburger menu button of mobile navigation"
+  },
+  "theme.navbar.mobileDropdown.collapseButton.expandAriaLabel": {
+    "message": "Déplier le menu déroulant",
+    "description": "The ARIA label of the button to expand the mobile dropdown navbar item"
+  },
+  "theme.navbar.mobileDropdown.collapseButton.collapseAriaLabel": {
+    "message": "Replier le menu déroulant",
+    "description": "The ARIA label of the button to collapse the mobile dropdown navbar item"
+  },
+  "theme.docs.sidebar.expandButtonTitle": {
+    "message": "Déplier le menu latéral",
+    "description": "The ARIA label and title attribute for expand button of doc sidebar"
+  },
+  "theme.docs.sidebar.expandButtonAriaLabel": {
+    "message": "Déplier le menu latéral",
+    "description": "The ARIA label and title attribute for expand button of doc sidebar"
+  },
+  "theme.blog.post.plurals": {
+    "message": "Un article|{count} articles",
+    "description": "Pluralized label for \"{count} posts\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.blog.tagTitle": {
+    "message": "{nPosts} tagués avec « {tagName} »",
+    "description": "The title of the page for a blog tag"
+  },
+  "theme.blog.author.pageTitle": {
+    "message": "{authorName} - {nPosts}",
+    "description": "The title of the page for a blog author"
+  },
+  "theme.blog.authorsList.pageTitle": {
+    "message": "Auteurs",
+    "description": "The title of the authors page"
+  },
+  "theme.blog.authorsList.viewAll": {
+    "message": "Voir tous les auteurs",
+    "description": "The label of the link targeting the blog authors page"
+  },
+  "theme.blog.author.noPosts": {
+    "message": "Cet auteur n'a encore écrit aucun article.",
+    "description": "The text for authors with 0 blog post"
+  },
+  "theme.contentVisibility.unlistedBanner.title": {
+    "message": "Page non répertoriée",
+    "description": "The unlisted content banner title"
+  },
+  "theme.contentVisibility.unlistedBanner.message": {
+    "message": "Cette page n'est pas répertoriée. Les moteurs de recherche ne l'indexeront pas, et seuls les utilisateurs ayant un lien direct peuvent y accéder.",
+    "description": "The unlisted content banner message"
+  },
+  "theme.contentVisibility.draftBanner.title": {
+    "message": "Brouillon",
+    "description": "The draft content banner title"
+  },
+  "theme.contentVisibility.draftBanner.message": {
+    "message": "Cette page est un brouillon. Elle n'est visible qu'en développement et sera exclue du build de production.",
+    "description": "The draft content banner message"
+  },
+  "theme.docs.DocCard.categoryDescription.plurals": {
+    "message": "1 élément|{count} éléments",
+    "description": "The default description for a category card in the generated index about how many items this category includes"
+  },
+  "theme.ErrorPageContent.tryAgain": {
+    "message": "Réessayer",
+    "description": "The label of the button to try again rendering when the React error boundary captures an error"
+  },
+  "theme.common.skipToMainContent": {
+    "message": "Aller au contenu principal",
+    "description": "The skip to content label used for accessibility, allowing to rapidly navigate to main content with keyboard tab/enter navigation"
+  },
+  "theme.tags.tagsPageTitle": {
+    "message": "Tags",
+    "description": "The title of the tag list page"
+  },
+  "download.option.size": {
+    "message": "{size} Mo",
+    "description": "{size} is a whole number of megabytes. Use your language's unit symbol (Mo in French)."
+  }
+}

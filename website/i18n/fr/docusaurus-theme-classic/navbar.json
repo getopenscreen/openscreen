@@ -1,0 +1,30 @@
+{
+  "title": {
+    "message": "OpenScreen",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "Logo d'OpenScreen",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.Docs": {
+    "message": "Doc",
+    "description": "Navbar item with label Docs"
+  },
+  "item.label.Blog": {
+    "message": "Blog",
+    "description": "Navbar item with label Blog"
+  },
+  "item.label.Roadmap": {
+    "message": "Roadmap",
+    "description": "Navbar item with label Roadmap"
+  },
+  "item.label.Discord": {
+    "message": "Discord",
+    "description": "Navbar item with label Discord"
+  },
+  "item.label.Download": {
+    "message": "Télécharger",
+    "description": "Navbar item with label Download"
+  }
+}

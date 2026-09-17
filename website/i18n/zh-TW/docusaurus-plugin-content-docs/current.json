@@ -1,0 +1,30 @@
+{
+  "version.label": {
+    "message": "下一版",
+    "description": "The label for version current"
+  },
+  "sidebar.mainSidebar.category.Getting Started": {
+    "message": "入門",
+    "description": "The label for category 'Getting Started' in sidebar 'mainSidebar'"
+  },
+  "sidebar.mainSidebar.category.Features": {
+    "message": "功能",
+    "description": "The label for category 'Features' in sidebar 'mainSidebar'"
+  },
+  "sidebar.mainSidebar.category.Guides": {
+    "message": "指南",
+    "description": "The label for category 'Guides' in sidebar 'mainSidebar'"
+  },
+  "sidebar.mainSidebar.category.Community": {
+    "message": "社群",
+    "description": "The label for category 'Community' in sidebar 'mainSidebar'"
+  },
+  "sidebar.mainSidebar.link.Contributing": {
+    "message": "參與貢獻",
+    "description": "The label for link 'Contributing' in sidebar 'mainSidebar', linking to 'https://github.com/getopenscreen/openscreen/blob/main/CONTRIBUTING.md'"
+  },
+  "sidebar.mainSidebar.link.Roadmap": {
+    "message": "開發藍圖",
+    "description": "The label for link 'Roadmap' in sidebar 'mainSidebar', linking to 'https://github.com/getopenscreen/openscreen/blob/main/ROADMAP.md'"
+  }
+}

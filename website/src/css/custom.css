@@ -356,6 +356,27 @@ body {
 	border-color: var(--os-border-hi);
 }
 
+/* The language menu (the only dropdown on the right) names the current
+   language, 135px of "Français" at 1000px, where the bar had 55px to spare
+   before any label was translated, and "Hoja de ruta" is longer than
+   "Roadmap". Up to 1199px it shows its icon and caret only (a 58px link,
+   82px with the item's spacing). The
+   name is a bare text node beside the icon, so font-size hides it: it stays
+   in the accessibility tree, and the caret, sized in em, gets its size back. */
+@media (min-width: 997px) and (max-width: 1199px) {
+	.navbar__items--right .dropdown > .navbar__link {
+		font-size: 0;
+	}
+
+	.navbar__items--right .dropdown > .navbar__link::after {
+		font-size: 13px;
+	}
+
+	.navbar__items--right .dropdown > .navbar__link svg {
+		margin-right: 0 !important;
+	}
+}
+
 [class*="navbarSearchContainer"]:empty {
 	display: none;
 }
@@ -445,7 +466,10 @@ body {
 	background: var(--os-surface);
 }
 
-.menu__list-item-collapsible {
+/* Scoped to the docs sidebar, which carries this class on desktop and in the
+   drawer: the drawer's language menu builds its header from the same class,
+   and read as a sidebar category beside the plain links. */
+.theme-doc-sidebar-menu .menu__list-item-collapsible {
 	font-family: var(--ifm-font-family-monospace);
 	font-size: 0.7rem;
 	letter-spacing: 0.06em;
@@ -485,20 +509,23 @@ body {
 	color: var(--os-accent);
 }
 
-.theme-doc-markdown h1 {
+.theme-doc-markdown h1,
+.mdx-page article h1 {
 	font-weight: 700;
 	letter-spacing: -0.02em;
 	color: var(--os-fg-emphasis);
 }
 
-.theme-doc-markdown h2 {
+.theme-doc-markdown h2,
+.mdx-page article h2 {
 	font-weight: 600;
 	letter-spacing: -0.01em;
 	color: var(--os-fg-emphasis);
 	margin-top: 2.25rem;
 }
 
-.theme-doc-markdown table {
+.theme-doc-markdown table,
+.mdx-page article table {
 	display: table;
 	width: 100%;
 	border-radius: 12px;
@@ -511,15 +538,18 @@ body {
 /* The docs' two-column "fact card" tables carry an empty header row, which is
    what this hides. A table with real headers — the platform matrix in
    Installation — keeps them, or its ✅/❌ columns say nothing. */
-.theme-doc-markdown table thead {
+.theme-doc-markdown table thead,
+.mdx-page article table thead {
 	display: none;
 }
 
-.theme-doc-markdown table:has(thead th:not(:empty)) thead {
+.theme-doc-markdown table:has(thead th:not(:empty)) thead,
+.mdx-page article table:has(thead th:not(:empty)) thead {
 	display: table-header-group;
 }
 
-.theme-doc-markdown table th {
+.theme-doc-markdown table th,
+.mdx-page article table th {
 	border: none;
 	padding: 0.75rem 1rem;
 	font-size: 0.85em;
@@ -528,16 +558,19 @@ body {
 	text-align: left;
 }
 
-.theme-doc-markdown table tr {
+.theme-doc-markdown table tr,
+.mdx-page article table tr {
 	border-top: 1px solid var(--os-border-soft);
 	background: transparent;
 }
 
-.theme-doc-markdown table tr:first-child {
+.theme-doc-markdown table tr:first-child,
+.mdx-page article table tr:first-child {
 	border-top: none;
 }
 
-.theme-doc-markdown table td {
+.theme-doc-markdown table td,
+.mdx-page article table td {
 	border: none;
 	padding: 0.75rem 1rem;
 }
@@ -546,11 +579,13 @@ body {
    width and drags the whole page past the viewport on a phone. Scoped to
    links: prose has to keep breaking on word boundaries, or a narrow column
    shreds it one letter per line. */
-.theme-doc-markdown table td a {
+.theme-doc-markdown table td a,
+.mdx-page article table td a {
 	overflow-wrap: anywhere;
 }
 
-.theme-doc-markdown table td:first-child {
+.theme-doc-markdown table td:first-child,
+.mdx-page article table td:first-child {
 	width: 160px;
 	color: var(--os-muted);
 	font-weight: 400;
@@ -560,23 +595,72 @@ body {
 	/* display: table above dropped Infima's scroll container, so a table wider
 	   than the screen (the platform matrix) widened the document instead of
 	   scrolling inside its own card. */
-	.theme-doc-markdown table {
+	.theme-doc-markdown table,
+	.mdx-page article table {
 		display: block;
 		overflow-x: auto;
 	}
 
-	.theme-doc-markdown table td:first-child {
+	.theme-doc-markdown table td:first-child,
+	.mdx-page article table td:first-child {
 		width: auto;
+	}
+
+	/* Tighter cells so the three-column comparison tables fit a 375px
+	   phone instead of cutting the last column mid-word. */
+	.theme-doc-markdown table th,
+	.theme-doc-markdown table td,
+	.mdx-page article table th,
+	.mdx-page article table td {
+		padding: 0.5rem 0.6rem;
 	}
 }
 
-.theme-doc-markdown pre {
+.theme-doc-markdown pre,
+.mdx-page article pre {
 	border-radius: 12px;
 	border: 1px solid var(--os-border);
 }
 
-.theme-doc-markdown a {
+.theme-doc-markdown a,
+.mdx-page article a {
 	color: var(--os-accent);
+}
+
+/* Standalone MDX pages (src/pages/*.mdx) share the docs rules above, but
+   theme-classic's MDXPage renders their <article> without Infima's .markdown
+   class, inside a fluid container. This restores the docs' measure, heading
+   scale and vertical rhythm that .markdown would have given them. */
+.mdx-page main.container {
+	max-width: var(--ifm-container-width-xl);
+}
+
+.mdx-page article {
+	--ifm-h1-font-size: 3rem;
+	--ifm-h2-font-size: 2rem;
+	--ifm-h3-font-size: 1.5rem;
+	--ifm-heading-margin-bottom: var(--ifm-leading);
+	--ifm-list-margin: var(--ifm-leading);
+}
+
+.mdx-page article h1 {
+	margin-bottom: calc(1.25 * var(--ifm-leading));
+}
+
+.mdx-page article h3 {
+	margin-top: calc(1.5 * var(--ifm-leading));
+}
+
+.mdx-page article li + li {
+	margin-top: var(--ifm-list-item-margin);
+}
+
+@media (max-width: 576px) {
+	.mdx-page article {
+		--ifm-h1-font-size: 2rem;
+		--ifm-h2-font-size: 1.5rem;
+		--ifm-h3-font-size: 1.25rem;
+	}
 }
 
 .alert {

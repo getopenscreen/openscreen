@@ -22,6 +22,7 @@
  *   already decided.
  */
 
+import Translate from "@docusaurus/Translate";
 import Heading from "@theme/Heading";
 
 import Recreation from "../Recreation";
@@ -32,11 +33,16 @@ export default function Editor() {
 		<section className={styles.section} aria-labelledby="editor-title">
 			<div className={styles.head}>
 				<a className={styles.skip} href="#download-install">
-					Skip the editor — go to downloads
+					<Translate id="editor.skipLink">Skip the editor — go to downloads</Translate>
 				</a>
 
 				<Heading as="h2" id="editor-title" className={styles.title}>
-					Five things you will actually do
+					<Translate
+						id="editor.title"
+						description="Read by screen readers only: the heading of the five captioned steps below"
+					>
+						Five things you will actually do
+					</Translate>
 				</Heading>
 			</div>
 

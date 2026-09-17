@@ -1,0 +1,30 @@
+{
+  "version.label": {
+    "message": "Nächste",
+    "description": "The label for version current"
+  },
+  "sidebar.mainSidebar.category.Getting Started": {
+    "message": "Erste Schritte",
+    "description": "The label for category 'Getting Started' in sidebar 'mainSidebar'"
+  },
+  "sidebar.mainSidebar.category.Features": {
+    "message": "Funktionen",
+    "description": "The label for category 'Features' in sidebar 'mainSidebar'"
+  },
+  "sidebar.mainSidebar.category.Guides": {
+    "message": "Anleitungen",
+    "description": "The label for category 'Guides' in sidebar 'mainSidebar'"
+  },
+  "sidebar.mainSidebar.category.Community": {
+    "message": "Community",
+    "description": "The label for category 'Community' in sidebar 'mainSidebar'"
+  },
+  "sidebar.mainSidebar.link.Contributing": {
+    "message": "Mitwirken",
+    "description": "The label for link 'Contributing' in sidebar 'mainSidebar', linking to 'https://github.com/getopenscreen/openscreen/blob/main/CONTRIBUTING.md'"
+  },
+  "sidebar.mainSidebar.link.Roadmap": {
+    "message": "Roadmap",
+    "description": "The label for link 'Roadmap' in sidebar 'mainSidebar', linking to 'https://github.com/getopenscreen/openscreen/blob/main/ROADMAP.md'"
+  }
+}

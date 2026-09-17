@@ -10,7 +10,7 @@
  * engines reconcile them into one entity rather than two competing copies.
  */
 
-import type { LatestRelease } from "./release";
+import type { AppLanguage, LatestRelease } from "./release";
 
 const SITE_URL = "https://getopenscreen.com";
 
@@ -27,7 +27,7 @@ const SOFTWARE_APPLICATION_LD = {
 	applicationSubCategory: "Screen Recorder",
 	operatingSystem: "Windows, macOS, Linux",
 	description:
-		"Free, open-source screen recorder and video editor. Native capture on macOS and Windows, multi-track timeline editing, on-device Whisper captions, and MP4/GIF export — no watermarks, no subscription, no account.",
+		"Free, open-source screen recorder and video editor. Native capture on Windows, macOS, and Linux, multi-track timeline editing, on-device Whisper captions, and MP4/GIF export — no watermarks, no subscription, no account.",
 	url: SITE_URL,
 	// Our own page rather than the Releases list: it is the URL we want ranking
 	// for "openscreen download", and it routes to GitHub from there anyway.
@@ -47,6 +47,10 @@ const SOFTWARE_APPLICATION_LD = {
 	// that rich result describes, and declaring a video the page never presents
 	// as one is a manual-action risk.
 	license: "https://github.com/getopenscreen/openscreen/blob/main/LICENSE",
+	// Listings of this same product. The archived original is lineage, not
+	// identity, so it is isBasedOn rather than another sameAs.
+	sameAs: ["https://apps.microsoft.com/detail/9MXQ1HQJL5G5"],
+	isBasedOn: "https://github.com/siddharthvaddem/openscreen",
 	isAccessibleForFree: true,
 	// `offers` at price 0 is what lets a result carry a "Free" annotation;
 	// omitting it on a free app just forfeits the label.
@@ -56,7 +60,7 @@ const SOFTWARE_APPLICATION_LD = {
 		priceCurrency: "USD",
 	},
 	featureList: [
-		"Native screen capture (ScreenCaptureKit, Windows Graphics Capture)",
+		"Native screen capture (ScreenCaptureKit, Windows Graphics Capture, PipeWire)",
 		"Multi-track timeline editing with zoom, trim, and speed regions",
 		"On-device Whisper transcription and burned-in captions",
 		"Webcam picture-in-picture and cursor smoothing",
@@ -70,14 +74,28 @@ const SOFTWARE_APPLICATION_LD = {
  * has the build-time release lookup to hand. Those two properties belong to the
  * same @id as the bare node, so a page that knows the current version and one
  * that doesn't describe one entity, not a contradiction.
+ *
+ * The interface languages (siteConfig.customFields.appLanguages) join the
+ * feature list in English, in every locale: it is one entity, and the page
+ * line in src/components/AppLanguages says the same thing in the page's
+ * language.
  */
-export function softwareApplicationLd(release?: LatestRelease) {
-	if (!release) return SOFTWARE_APPLICATION_LD;
+export function softwareApplicationLd(release?: LatestRelease, languages: AppLanguage[] = []) {
+	const featureList =
+		languages.length === 0
+			? SOFTWARE_APPLICATION_LD.featureList
+			: [
+					...SOFTWARE_APPLICATION_LD.featureList,
+					`Interface in ${languages.length} languages: ${languages.map((l) => l.name).join(", ")}`,
+				];
 	return {
 		...SOFTWARE_APPLICATION_LD,
-		// Tags are minted as v1.8.0; schema.org wants the version alone.
-		softwareVersion: release.tag.replace(/^v/, ""),
-		...(release.publishedIso ? { datePublished: release.publishedIso } : {}),
+		featureList,
+		...(release && {
+			// Tags are minted as v1.8.0; schema.org wants the version alone.
+			softwareVersion: release.tag.replace(/^v/, ""),
+			...(release.publishedIso ? { datePublished: release.publishedIso } : {}),
+		}),
 	};
 }
 

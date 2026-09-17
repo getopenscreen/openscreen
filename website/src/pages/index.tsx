@@ -145,13 +145,13 @@ export default function Home() {
 					<p className={styles.productSummary}>
 						<Translate
 							id="home.features.summary"
-							description="{screenStudio} links to an English-only page."
+							description="{screenStudio} is a link to the Screen Studio comparison page."
 							values={{
 								screenStudio: (
 									<LocaleLink to="/alternatives/screen-studio/">
 										<Translate
 											id="home.features.summary.screenStudio"
-											description="A product name. The link goes to an English-only page."
+											description="A product name, used as a link."
 										>
 											Screen Studio
 										</Translate>
@@ -321,7 +321,7 @@ export default function Home() {
 					<p className={styles.quickStartNote}>
 						<Translate
 							id="home.install.note"
-							description="{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to English-only pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
+							description="{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
 							values={{
 								exe: <code>.exe</code>,
 								rpm: <code>.rpm</code>,

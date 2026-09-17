@@ -8,8 +8,8 @@ import styles from "./styles.module.css";
 
 const UPSTREAM_REPO_URL = "https://github.com/siddharthvaddem/openscreen";
 
-// Shown to translators next to every label whose page is English only. The
-// label can say so ("Blog (English)") where the column leaves it unclear.
+// Shown to translators next to the blog label, the one English-only page the
+// footer links. The label can say so ("Blog (English)").
 const EN_ONLY = "Links to an English-only page.";
 
 /**
@@ -23,7 +23,8 @@ const EN_ONLY = "Links to an English-only page.";
  * The design had two link columns, Project and Community. Product, Platforms
  * and Compare were added so the platform, feature and comparison pages are one
  * click from every URL on the site instead of reachable only from each other.
- * Those pages are English only, so they go through LocaleLink.
+ * Links go through LocaleLink, which keeps the blog link working from a
+ * translated build.
  */
 export default function Footer(): ReactNode {
 	const logoSrc = useBaseUrl("img/logo-icon.png");
@@ -54,80 +55,54 @@ export default function Footer(): ReactNode {
 								<Translate id="footer.product.download">Download</Translate>
 							</Link>
 							<LocaleLink to="/features/auto-zoom/">
-								<Translate id="footer.product.autoZoom" description={EN_ONLY}>
-									Auto zoom
-								</Translate>
+								<Translate id="footer.product.autoZoom">Auto zoom</Translate>
 							</LocaleLink>
 							<LocaleLink to="/features/captions/">
-								<Translate id="footer.product.captions" description={EN_ONLY}>
-									Local captions
-								</Translate>
+								<Translate id="footer.product.captions">Local captions</Translate>
 							</LocaleLink>
 						</div>
 					</div>
 
 					<div>
 						<div className={styles.colTitle}>
-							<Translate
-								id="footer.platforms.title"
-								description="Its three links go to English-only pages."
-							>
+							<Translate id="footer.platforms.title" description="Footer column title.">
 								Platforms
 							</Translate>
 						</div>
 						<div className={styles.colLinks}>
 							<LocaleLink to="/screen-recorder-windows/">
-								<Translate id="footer.platforms.windows" description={EN_ONLY}>
-									Windows
-								</Translate>
+								<Translate id="footer.platforms.windows">Windows</Translate>
 							</LocaleLink>
 							<LocaleLink to="/screen-recorder-mac/">
-								<Translate id="footer.platforms.mac" description={EN_ONLY}>
-									macOS
-								</Translate>
+								<Translate id="footer.platforms.mac">macOS</Translate>
 							</LocaleLink>
 							<LocaleLink to="/screen-recorder-linux/">
-								<Translate id="footer.platforms.linux" description={EN_ONLY}>
-									Linux
-								</Translate>
+								<Translate id="footer.platforms.linux">Linux</Translate>
 							</LocaleLink>
 						</div>
 					</div>
 
 					<div>
 						<div className={styles.colTitle}>
-							<Translate
-								id="footer.compare.title"
-								description="Its five links go to English-only pages."
-							>
+							<Translate id="footer.compare.title" description="Footer column title.">
 								Compare
 							</Translate>
 						</div>
 						<div className={styles.colLinks}>
 							<LocaleLink to="/alternatives/screen-studio/">
-								<Translate id="footer.compare.screenStudio" description={EN_ONLY}>
-									Screen Studio alternative
-								</Translate>
+								<Translate id="footer.compare.screenStudio">Screen Studio alternative</Translate>
 							</LocaleLink>
 							<LocaleLink to="/alternatives/camtasia/">
-								<Translate id="footer.compare.camtasia" description={EN_ONLY}>
-									Camtasia alternative
-								</Translate>
+								<Translate id="footer.compare.camtasia">Camtasia alternative</Translate>
 							</LocaleLink>
 							<LocaleLink to="/alternatives/loom/">
-								<Translate id="footer.compare.loom" description={EN_ONLY}>
-									Loom alternative
-								</Translate>
+								<Translate id="footer.compare.loom">Loom alternative</Translate>
 							</LocaleLink>
 							<LocaleLink to="/compare/openscreen-vs-cap/">
-								<Translate id="footer.compare.cap" description={EN_ONLY}>
-									OpenScreen vs Cap
-								</Translate>
+								<Translate id="footer.compare.cap">OpenScreen vs Cap</Translate>
 							</LocaleLink>
 							<LocaleLink to="/compare/openscreen-vs-obs/">
-								<Translate id="footer.compare.obs" description={EN_ONLY}>
-									OpenScreen vs OBS Studio
-								</Translate>
+								<Translate id="footer.compare.obs">OpenScreen vs OBS Studio</Translate>
 							</LocaleLink>
 						</div>
 					</div>

@@ -6,8 +6,9 @@ The site is translated into `fr`, `es`, `pt-BR`, `ja`, `zh-CN`, `zh-TW` and `de`
 
 ## What is translated, and what is not
 
-- **Translated:** the landing page, `/download/`, all 12 docs pages, the navbar, the docs sidebar, the footer and the theme (404 page, pagination, "last updated"…). The translated 404 page only shows after a click inside the site: GitHub Pages answers every missing URL, `/fr/…` included, with the English one.
-- **English only:** the blog, and the pages under `/alternatives/`, `/compare/`, `/features/` and `/screen-recorder-*/`. A translated build does not contain them. Links to them from translated pages go to the English page (see below).
+- **Translated:** everything but the blog: the landing page, `/download/`, the docs, the comparison, platform and feature pages (`src/pages/**/*.mdx`), the navbar, the docs sidebar, the footer and the theme (404 page, pagination, "last updated"…). The translated 404 page only shows after a click inside the site: GitHub Pages answers every missing URL, `/fr/…` included, with the English one.
+- **English only:** the blog, a dated development journal. A translated build does not contain it, and links to it from translated pages go to the English blog (see below).
+- **The build enforces it:** a locale missing any doc or `.mdx` page fails `npm run build`, because Docusaurus would otherwise publish the English file under `/<locale>/` marked as your language.
 
 ## Files to fill, per locale
 
@@ -24,6 +25,7 @@ Replace `<locale>` with `fr`, `es`, `pt-BR`, `ja`, `zh-CN`, `zh-TW` or `de`.
    - `guides/product-demo-video.md`
 
    Start from a copy of `website/docs/<file>`. In the front matter, translate `title`, `description`, `sidebar_label` and `keywords`. Leave `id`, `slug` and `sidebar_position` as they are.
+5. **`i18n/<locale>/docusaurus-plugin-content-pages/`**: one translated copy of each `website/src/pages/**/*.mdx`, same path (`alternatives/screen-studio.mdx`, `screen-recorder-linux.mdx`…). Translate `title`, `description` and `keywords` in the front matter. Prices, plan limits and "checked September 2026" dates are facts: copy them as they are, in your language's number and currency format. Keep the Sources list's URLs, and translate the trademark note.
 
 **All 12 docs of a locale land together.** The docs link to each other with relative paths (`./captions.md`), and Docusaurus only resolves those between files in the same folder: with some docs translated and others not, the build fails on broken links. A doc missing from a finished locale would also be published under `/<locale>/docs/` in English, marked as your language.
 
@@ -43,25 +45,15 @@ npx docusaurus write-heading-ids . i18n/<locale>/docusaurus-plugin-content-docs/
 
 It appends `{#…}` to each `##` to `######` heading (the `#` page title has no anchor to keep), computed from the English text: the same anchors the English pages have. Then translate the heading text and leave the `{#…}` alone. The build fails on a broken anchor.
 
-## Links to English-only pages
+## Links
 
-In a doc, keep the Markdown link as it is:
+Keep Markdown links as they are. Links to translated pages (`/docs/…`, `/download/`, `/features/…`, `./other-doc.md`) get the `/<locale>/` prefix automatically, so do not add "(in English)" to them.
+
+A link to the blog, the one English-only page, is rendered as a plain link to the English page, with `hreflang="en"` and without the prefix. Say in the link text that it is in English where the reader would not expect it:
 
 ```md
-[Zoom automatique (en anglais)](/features/auto-zoom/)
+[journal de développement (en anglais)](/blog/)
 ```
-
-The site renders it as a plain link to the English page, with `hreflang="en"` and without the `/<locale>/` prefix. Say in the link text that the page is in English where the reader would not expect it.
-
-A raw HTML link also works:
-
-```mdx
-<a href="/features/captions/" hrefLang="en">Sous-titres locaux (en anglais)</a>
-```
-
-MDX leaves a raw `<a>` alone, so it never gets the locale prefix. Use it only for English-only pages: a raw `<a href="/docs/faq/">` would send the reader to the English FAQ.
-
-Links to translated pages (`/docs/…`, `/download/`, `./other-doc.md`) stay as Markdown links: they get the `/<locale>/` prefix automatically.
 
 In `code.json`, a description that mentions an English-only page means the same thing for that label.
 
@@ -95,12 +87,16 @@ From `website/`:
 - **While translating:** `npm run dev -- --locale <locale>`, then open the URL it prints.
 - **Before a pull request:** `npm run build`, which builds every locale as CI does, then `npm run serve` and open `/fr/`, `/es/`, `/ja/`, `/de/`, or the lowercase `/pt-br/`, `/zh-cn/` or `/zh-tw/`.
 
-## Regenerating the JSON files
+## Keeping translations up to date
 
-After a change to the site's strings, refresh the files; existing translations are kept. The locale variable is required: without it, the command extracts the English build's strings.
+The English changes; the translations follow. Translate **what changed**, not the whole page again.
 
-```sh
-DOCUSAURUS_CURRENT_LOCALE=<locale> npx docusaurus write-translations --locale <locale>
-```
+1. **See what is behind:** `npm run i18n:check` (CI runs it and prints the same list as warnings; it never fails the build).
+   - A Markdown translation is behind when its English source has a newer commit. `git log -p <source>` since the translation's last commit shows exactly what to carry over.
+   - `code.json` is behind when a `<Translate>` string changed or was added in the English source; the ids are listed.
+2. **Refresh the string files:** `npm run i18n:sync`. It adds new ids to every `code.json` (with the English text as a placeholder), drops removed ones and copies the English descriptions. Existing translations are kept.
+3. **Translate the changes** in every locale: the diff of each stale file, and the listed `code.json` ids. One pass per locale, by a translator or an agent given this file, the English diff and the locale's files.
+4. **Record it:** `npm run i18n:sync -- --accept` once every locale has the new strings. It stores the English strings the translations now match in `i18n/code.source.json`. Commit the translations and that file together: committing a translated `.md`/`.mdx` is what marks it up to date.
+5. **Check:** `npm run build`. A new English page or doc with no translation fails here; add the translated file in every locale (the same pass as step 3, for the whole file).
 
-In PowerShell: `$env:DOCUSAURUS_CURRENT_LOCALE="<locale>"; npx docusaurus write-translations --locale <locale>`.
+A new page gets a full review in each language before it ships. An update to an existing page does not need one: the diff is small, and the build checks links and anchors.

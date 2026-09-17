@@ -5,10 +5,9 @@ import path from "node:path";
 
 import type * as Preset from "@docusaurus/preset-classic";
 import type { Config } from "@docusaurus/types";
-import { GlobExcludeDefault } from "@docusaurus/utils";
 import { themes as prismThemes } from "prism-react-renderer";
 
-import { BLOG_PATH, ENGLISH_ONLY_PAGE_GLOBS } from "./src/lib/locale-routes";
+import { BLOG_PATH } from "./src/lib/locale-routes";
 import {
 	type AppLanguage,
 	ASSET_PATTERNS,
@@ -262,28 +261,36 @@ function buildLookups(): Promise<BuildLookups> {
 }
 
 /**
- * Docusaurus serves the English source for any doc a locale lacks, under
- * /<locale>/docs/ with that locale's lang and hreflang: an English page that
- * says it is French. A new English doc would reach every locale that way with
- * no warning, so a build refuses it. Excluding the doc instead is not an
- * option: sidebars.ts names it by id, and the sidebar would fail to load.
- * `start` only warns, so a translator can preview a locale half done.
+ * Docusaurus serves the English source for any doc or Markdown page a locale
+ * lacks, under /<locale>/ with that locale's lang and hreflang: an English page
+ * that says it is French. A new English doc or page would reach every locale
+ * that way with no warning, so a build refuses it. Excluding the file instead
+ * is not an option for docs (sidebars.ts names them by id), and keeping one
+ * rule for both is simpler than a per-locale exclusion list. `start` only
+ * warns, so a translator can preview a locale half done. The .tsx pages are
+ * translated through code.json and are not listed here.
  */
-function checkDocTranslations(): void {
+const TRANSLATED_SOURCES = [
+	{ source: "docs", target: "docusaurus-plugin-content-docs/current" },
+	{ source: "src/pages", target: "docusaurus-plugin-content-pages" },
+];
+
+function checkTranslations(): void {
 	if (LOCALE === "en") return;
-	const docs = path.join(__dirname, "docs");
-	const translated = path.join(__dirname, "i18n", LOCALE, "docusaurus-plugin-content-docs/current");
-	const missing = readdirSync(docs, { recursive: true, encoding: "utf8" }).filter(
-		(file) => /\.mdx?$/.test(file) && !existsSync(path.join(translated, file)),
+	const missing = TRANSLATED_SOURCES.flatMap(({ source, target }) =>
+		readdirSync(path.join(__dirname, source), { recursive: true, encoding: "utf8" })
+			.filter((file) => /\.mdx?$/.test(file))
+			.filter((file) => !existsSync(path.join(__dirname, "i18n", LOCALE, target, file)))
+			.map((file) => path.posix.join(source, file.replaceAll("\\", "/"))),
 	);
 	if (missing.length === 0) return;
-	const message = `[config] ${LOCALE} has no translation of docs/${missing.join(", docs/")}; see i18n/TRANSLATING.md`;
+	const message = `[config] ${LOCALE} has no translation of ${missing.join(", ")}; see i18n/TRANSLATING.md`;
 	if (process.env.NODE_ENV === "production") throw new Error(message);
 	console.warn(message);
 }
 
 export default async function createConfig(): Promise<Config> {
-	checkDocTranslations();
+	checkTranslations();
 	const { starCount, release, appLanguages } = await buildLookups();
 	// Formatted here rather than in the component: toLocaleDateString would
 	// resolve against the visitor's locale and time zone on hydration and
@@ -525,13 +532,8 @@ export default async function createConfig(): Promise<Config> {
 									},
 								},
 					// The MDX landing pages carry dated vendor facts; show their git date.
-					// They are English only, so a translated build leaves them out, on
-					// top of Docusaurus's own default excludes.
 					pages: {
 						showLastUpdateTime: true,
-						...(LOCALE !== "en" && {
-							exclude: [...GlobExcludeDefault, ...ENGLISH_ONLY_PAGE_GLOBS],
-						}),
 					},
 					theme: {
 						customCss: "./src/css/custom.css",

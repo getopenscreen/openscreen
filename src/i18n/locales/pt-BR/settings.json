@@ -370,6 +370,8 @@
 	"cursor": {
 		"smoothing": "Suavização",
 		"clickBounce": "Rebote ao clicar",
+		"depth": "Profundidade 3D",
+		"depthNeedsCursor": "Ative “Mostrar cursor” para dar profundidade a ele.",
 		"help": "Renderização do cursor a partir da telemetria gravada: tema, tamanho, suavização, desfoque de movimento e salto ao clicar.",
 		"clipToBoundsDescription": "Mantém o cursor dentro do quadro do vídeo. Desative para permitir que o cursor ultrapasse as bordas — útil ao aplicar zoom ou ao deslocar.",
 		"size": "Tamanho",

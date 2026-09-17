@@ -38,6 +38,7 @@ const ADDON_KEYS = [
 	"webcamSize",
 	"cursorSize",
 	"cursorClickBounce",
+	"cursorVolume",
 	"cursorSmoothing",
 	"cursorMotionBlur",
 	"backgroundColor",
@@ -79,10 +80,11 @@ describe("pushAllNativeParams", () => {
 		// here would scale the preview by 10 or 100 on load — a regression that
 		// would look like "the cursor is enormous when I open a project".
 		const pushed = await pushWith({
-			cursor: { size: 3, clickBounce: 2.5, smoothing: 0.67, motionBlur: 0.35 },
+			cursor: { size: 3, clickBounce: 2.5, volume: 0.4, smoothing: 0.67, motionBlur: 0.35 },
 		});
 		expect(pushed.get("cursorSize")).toBe(3);
 		expect(pushed.get("cursorClickBounce")).toBe(2.5);
+		expect(pushed.get("cursorVolume")).toBeCloseTo(0.4, 5);
 		expect(pushed.get("cursorSmoothing")).toBeCloseTo(0.67, 5);
 		expect(pushed.get("cursorMotionBlur")).toBeCloseTo(0.35, 5);
 	});

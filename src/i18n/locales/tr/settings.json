@@ -370,6 +370,8 @@
 	"cursor": {
 		"smoothing": "Yumuşatma",
 		"clickBounce": "Tıklama Sıçraması",
+		"depth": "3B Derinlik",
+		"depthNeedsCursor": "Derinlik vermek için «İmleci Göster»i açın.",
 		"help": "Kaydedilen telemetriden imleç çizimi: tema, boyut, yumuşatma, hareket bulanıklığı ve tıklama sıçraması.",
 		"clipToBoundsDescription": "İmleci video kare içinde tutar. İmlecin kenarları aşmasına izin vermek için kapatın — yakınlaştırma veya kaydırma yapılırken kullanışlıdır.",
 		"size": "Boyut",

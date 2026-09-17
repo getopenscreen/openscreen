@@ -287,6 +287,29 @@ inline float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 loca
     return sum / max(total, 1e-4);
 }
 
+// Curseur EN VOLUME (mode 13, mb.z > 1). Port ligne pour ligne de `cursor_extruded` (HLSL),
+// dont les commentaires font foi ; seules différences : `layer` et `texImg` arrivent en
+// paramètres, et `SampleLevel(…, 0)` s'écrit `sample(…, level(0.0))`.
+static float4 cursor_extruded(float2 local, constant Layer &layer,
+                              texture2d<float, access::sample> texImg)
+{
+    int taps = min((int) layer.mb.z, 48);
+    float4 acc = float4(0.0);
+    for (int k = 0; k < 48; k++)
+    {
+        if (k >= taps || acc.a > 0.999) break;
+        float f = (float) k / (float) (taps - 1);
+        float3 r = quad_inverse_bilinear(local - layer.mb.xy * f, layer.fx.xy, layer.fx.zw,
+                                          layer.src_prev.xy, layer.src_prev.zw);
+        if (r.z < 0.5) continue;
+        float4 s = texImg.sample(samp, clamp(float2(r.x, r.y), 0.0, 1.0), level(0.0));
+        float shade = (k == 0) ? 1.0 : 0.72 - 0.3 * f;
+        float a = s.a * layer.color.a;
+        acc += (1.0 - acc.a) * float4(s.rgb * shade * a, a);
+    }
+    return acc;
+}
+
 fragment float4 ps_main(VSOut i [[stage_in]],
                         constant Layer &layer [[buffer(0)]],
                         texture2d<float, access::sample> texY [[texture(0)]],
@@ -298,12 +321,18 @@ fragment float4 ps_main(VSOut i [[stage_in]],
                         texture2d<float, access::sample> texMask [[texture(3)]])
 {
     // mode 13 : SPRITE DE CURSEUR posé sur l'écran incliné. Cf. commentaires HLSL.
+    // mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume) ; mb.z ≤ 1 = plat.
+    // Un futur mode 14 doit être testé AVANT cette branche, qui n'a pas de borne haute.
     if (layer.mode > 12.5)
     {
         if (i.pout.x < layer.dst_prev.x || i.pout.x > layer.dst_prev.x + layer.dst_prev.z ||
             i.pout.y < layer.dst_prev.y || i.pout.y > layer.dst_prev.y + layer.dst_prev.w)
         {
             return float4(0.0, 0.0, 0.0, 0.0);
+        }
+        if (layer.mb.z > 1.5)
+        {
+            return cursor_extruded(i.local, layer, texImg);
         }
         float3 r = quad_inverse_bilinear(i.local, layer.fx.xy, layer.fx.zw,
                                           layer.src_prev.xy, layer.src_prev.zw);

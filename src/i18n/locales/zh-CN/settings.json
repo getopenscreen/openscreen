@@ -370,6 +370,8 @@
 	"cursor": {
 		"smoothing": "平滑",
 		"clickBounce": "点击弹跳",
+		"depth": "3D 深度",
+		"depthNeedsCursor": "开启“显示光标”后才能为光标添加深度。",
 		"help": "基于录制遥测数据的光标渲染：主题、大小、平滑、运动模糊和点击回弹。",
 		"clipToBoundsDescription": "将光标保持在视频画面内。关闭后光标可以超出边缘——在放大或平移时很有用。",
 		"size": "大小",

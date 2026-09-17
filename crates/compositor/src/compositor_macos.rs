@@ -1827,8 +1827,10 @@ impl Compositor {
         Ok(enc)
     }
 
-    /// Sprite de curseur (mode 7). Rend `Err` quand l'art n'est pas chargeable, pour que
-    /// l'appelant retombe sur le curseur dessiné.
+    /// Sprite de curseur (mode 7, ou 13 posé sur le plan). Rend `Err` quand l'art n'est pas
+    /// chargeable, pour que l'appelant retombe sur le curseur dessiné. La géométrie vient de
+    /// `frame_geometry::cursor_sprite_cb`, partagée avec Windows et Linux.
+    #[allow(clippy::too_many_arguments)]
     unsafe fn draw_cursor_sprite(
         &self,
         enc: &metal::RenderCommandEncoderRef,
@@ -1837,61 +1839,21 @@ impl Compositor {
         a: f32,
         sprite: &crate::scene::SceneCursorSprite,
         clip: [f32; 4],
+        volume: Option<&crate::frame_geometry::CursorVolume>,
     ) -> Result<()> {
         let (tex, iw, ih) = self.cached_image(sprite.path.as_str())?;
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
         let ar = iw as f32 / ih.max(1) as f32;
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
-        let hotspot = [sprite.hotspot_x, sprite.hotspot_y];
-        let cb = match placement {
-            crate::frame_geometry::CursorPlacement::Upright { center } => LayerCB {
-                dst: crate::frame_geometry::cursor_sprite_dst(center, pw / rw, ph / rh, hotspot),
-                src: [0.0, 0.0, 1.0, 1.0],
-                mode: 7.0,
-                color: [1.0, 1.0, 1.0, a],
-                fx: clip,
-                ..Default::default()
-            },
-            crate::frame_geometry::CursorPlacement::Tilted {
-                plane_pt, quad, center_px, screen_px, ..
-            } => {
-                // Le sprite est posé DANS le plan : sa taille devient une fraction du plan et
-                // ses quatre coins traversent la même projection que la vidéo. La réduction
-                // due au tilt vient donc de la projection — rien à multiplier à la main.
-                let (wf, hf) = (pw / screen_px[0], ph / screen_px[1]);
-                let x0 = plane_pt[0] - hotspot[0] * wf;
-                let y0 = plane_pt[1] - hotspot[1] * hf;
-                let corners = [(x0, y0), (x0 + wf, y0), (x0 + wf, y0 + hf), (x0, y0 + hf)]
-                    .map(|(fx, fy)| {
-                        let (px, py) = quad.point_px(fx, fy);
-                        (center_px[0] + px, center_px[1] + py)
-                    });
-                let (min_x, max_x) = corners
-                    .iter()
-                    .fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| (mn.min(x), mx.max(x)));
-                let (min_y, max_y) = corners
-                    .iter()
-                    .fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| (mn.min(y), mx.max(y)));
-                // Le quad projeté d'un sprite peut être très fin de biais : une bbox d'un pixel
-                // de large ferait diverger le warp inverse, donc plancher à 1 px.
-                let (bw, bh) = ((max_x - min_x).max(1.0), (max_y - min_y).max(1.0));
-                let local = |(x, y): (f32, f32)| [x - min_x, y - min_y];
-                let [tl0, tl1] = local(corners[0]);
-                let [tr0, tr1] = local(corners[1]);
-                let [br0, br1] = local(corners[2]);
-                let [bl0, bl1] = local(corners[3]);
-                LayerCB {
-                    dst: [min_x / rw, min_y / rh, bw / rw, bh / rh],
-                    quad_px: [bw, bh],
-                    mode: 13.0,
-                    color: [1.0, 1.0, 1.0, a],
-                    fx: [tl0, tl1, tr0, tr1],
-                    src_prev: [br0, br1, bl0, bl1],
-                    dst_prev: clip,
-                    ..Default::default()
-                }
-            }
-        };
+        let cb = crate::frame_geometry::cursor_sprite_cb(
+            placement,
+            [pw, ph],
+            [sprite.hotspot_x, sprite.hotspot_y],
+            a,
+            clip,
+            [rw, rh],
+            volume,
+        );
         enc.set_fragment_texture(2, Some(&tex));
         self.draw_solid(enc, &cb);
         Ok(())
@@ -1902,7 +1864,9 @@ impl Compositor {
     /// Le repli « dot + ring » mathématique (mode 4) du chemin Windows n'est pas porté :
     /// l'app résout toujours un jeu de sprites, et l'art intégré couvre les états qu'un
     /// thème ne fournit pas. S'il n'y a vraiment aucun sprite, ne rien dessiner est plus
-    /// honnête qu'un curseur qui ne ressemble à aucun réglage.
+    /// honnête qu'un curseur qui ne ressemble à aucun réglage. Le volume disparaît avec lui :
+    /// sans sprite, pas de silhouette à extruder ni d'ombre de contact.
+    #[allow(clippy::too_many_arguments)]
     unsafe fn draw_cur_themed(
         &self,
         enc: &metal::RenderCommandEncoderRef,
@@ -1912,10 +1876,13 @@ impl Compositor {
         size_px: f32,
         a: f32,
         clip: [f32; 4],
+        volume: Option<&crate::frame_geometry::CursorVolume>,
     ) {
         let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
         if let Some(sprite) = sprite {
-            if let Err(e) = self.draw_cursor_sprite(enc, placement, size_px, a, sprite, clip) {
+            if let Err(e) =
+                self.draw_cursor_sprite(enc, placement, size_px, a, sprite, clip, volume)
+            {
                 eprintln!("[compositor] sprite curseur \"{}\" : {e:#}", sprite.path);
             }
         }
@@ -2144,9 +2111,29 @@ impl Compositor {
                     .map(|s| s.cursor.cursor_sprites.clone())
                     .unwrap_or_default();
                 let kind = plan.cursor_type.as_deref();
+                let volume = plan.volume.as_ref();
+                // Ombre de contact du volume : une fois, sur la scène, SOUS le curseur et sa
+                // traînée — et seulement si le sprite existe. Parité `compositor_windows.rs`.
+                if let Some(v) = volume {
+                    let sprite = kind.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
+                    if sprite.is_some_and(|s| self.cached_image(s.path.as_str()).is_ok()) {
+                        let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
+                        self.draw_solid(e, &v.shadow);
+                        e.end_encoding();
+                    }
+                }
                 if plan.taps <= 1 {
                     let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
-                    self.draw_cur_themed(e, &sprites, kind, plan.placement, plan.size_px, plan.alpha, plan.clip);
+                    self.draw_cur_themed(
+                        e,
+                        &sprites,
+                        kind,
+                        plan.placement,
+                        plan.size_px,
+                        plan.alpha,
+                        plan.clip,
+                        volume,
+                    );
                     e.end_encoding();
                 } else {
                     // Flou RÉEL, pas des copies discrètes : les N échantillons s'accumulent dans
@@ -2171,6 +2158,7 @@ impl Compositor {
                             plan.size_px,
                             plan.alpha,
                             plan.clip,
+                            volume,
                         );
                     }
                     e.end_encoding();

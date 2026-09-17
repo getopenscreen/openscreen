@@ -223,6 +223,35 @@ float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px)
     return sum / max(total, 1e-4);
 }
 
+// Curseur EN VOLUME (mode 13, mb.z > 1) : extrusion par répétition, sans maillage. La silhouette
+// alpha du sprite est rééchantillonnée `mb.z` fois (≤ 48), chaque copie translatée d'une fraction
+// de `mb.xy` — le vecteur d'extrusion `e` en px, déjà projeté côté CPU
+// (`frame_geometry::cursor_extrusion_px`). Une translation est la même dans tous les repères,
+// donc `local - e·f` retombe sur la copie f sans autre calcul. La copie 0 est la face avant,
+// intacte ; les suivantes sont les flancs, assombris avec la profondeur. Composition
+// avant→arrière (« under ») : un flanc ne se voit que là où rien de plus proche ne couvre déjà
+// le pixel, et la boucle s'arrête dès que le pixel est plein.
+// `SampleLevel(…, 0)` et non `Sample` : un gradient implicite est interdit dans une boucle à
+// sortie dynamique, et les textures d'image n'ont qu'un niveau — le résultat est le même.
+// Alpha DROIT comme le mode 13 plat : on prémultiplie ici.
+float4 cursor_extruded(float2 local)
+{
+    int taps = min((int) mb.z, 48);
+    float4 acc = 0.0;
+    [loop] for (int k = 0; k < 48; k++)
+    {
+        if (k >= taps || acc.a > 0.999) break;
+        float f = (float) k / (float) (taps - 1);
+        float3 r = quad_inverse_bilinear(local - mb.xy * f, fx.xy, fx.zw, src_prev.xy, src_prev.zw);
+        if (r.z < 0.5) continue;
+        float4 s = texImg.SampleLevel(samp, saturate(float2(r.x, r.y)), 0.0);
+        float shade = (k == 0) ? 1.0 : 0.72 - 0.3 * f;
+        float a = s.a * color.a;
+        acc += (1.0 - acc.a) * float4(s.rgb * shade * a, a);
+    }
+    return acc;
+}
+
 float4 ps_main(VSOut i) : SV_Target
 {
     // mode 13 : SPRITE DE CURSEUR posé sur l'écran incliné. Même warp que le mode 8, mais
@@ -231,13 +260,19 @@ float4 ps_main(VSOut i) : SV_Target
     // doit donc subir la même inclinaison qu'elle, sinon il se lit comme un autocollant plat
     // collé par-dessus la scène. Corriger sa seule position ne suffisait pas.
     // fx.xy/fx.zw = coins TL/TR (px locaux) ; src_prev.xy/.zw = BR/BL ; dst_prev = rect de clip
-    // « Clip to canvas » en espace sortie.
+    // « Clip to canvas » en espace sortie. mb.xy = vecteur d'extrusion en px, mb.z = nombre de
+    // copies (volume, cf. `cursor_extruded`) ; mb.z ≤ 1 = sprite plat, le rendu d'avant.
+    // Un futur mode 14 doit être testé AVANT cette branche, qui n'a pas de borne haute.
     if (mode > 12.5)
     {
         if (i.pout.x < dst_prev.x || i.pout.x > dst_prev.x + dst_prev.z ||
             i.pout.y < dst_prev.y || i.pout.y > dst_prev.y + dst_prev.w)
         {
             return float4(0.0, 0.0, 0.0, 0.0);
+        }
+        if (mb.z > 1.5)
+        {
+            return cursor_extruded(i.local);
         }
         float3 r = quad_inverse_bilinear(i.local, fx.xy, fx.zw, src_prev.xy, src_prev.zw);
         if (r.z < 0.5)

@@ -109,6 +109,7 @@ const CURSOR_NUMBER_RANGES = {
 	smoothing: [0, 1],
 	motionBlur: [0, 1],
 	clickBounce: [0, 5],
+	volume: [0, 1],
 } as const;
 
 type Fields = Record<string, unknown>;
@@ -203,8 +204,9 @@ export function parseStylePresetWallpaper(value: unknown, key = "wallpaper"): st
  * guessing a factory value for it would apply something the author never chose. The one
  * lenient field is `cursorTheme`: themes come and go between builds, so an id this build
  * does not ship falls back to the default cursor instead of rejecting a preset that is
- * otherwise sound (the editor does the same when it renders one). Unknown extra keys are
- * dropped.
+ * otherwise sound (the editor does the same when it renders one). `cursor.volume` may be
+ * absent: it postdates format version 1, and a preset without it was authored flat. Unknown
+ * extra keys are dropped.
  */
 export function parseStylePresetAppearance(value: unknown): StylePresetAppearance {
 	if (!isRecord(value)) {
@@ -245,6 +247,11 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 			smoothing: readNumber(cursor, "smoothing", CURSOR_NUMBER_RANGES.smoothing, "cursor."),
 			motionBlur: readNumber(cursor, "motionBlur", CURSOR_NUMBER_RANGES.motionBlur, "cursor."),
 			clickBounce: readNumber(cursor, "clickBounce", CURSOR_NUMBER_RANGES.clickBounce, "cursor."),
+			// Presets written before the setting existed have no volume: they meant a flat cursor.
+			volume:
+				cursor.volume === undefined
+					? 0
+					: readNumber(cursor, "volume", CURSOR_NUMBER_RANGES.volume, "cursor."),
 			clipToBounds: readBoolean(cursor, "clipToBounds", "cursor."),
 		},
 		cursorShow: readBoolean(value, "cursorShow"),

@@ -374,6 +374,8 @@ export interface SceneCursor {
 	/** 0..1. */
 	motionBlur: number;
 	clickBounce: number;
+	/** 0..1 cursor extrusion + contact shadow (`scene.rs` `SceneCursor::volume`). 0 = flat. */
+	volume: number;
 	clipToBounds: boolean;
 	/** Cursor theme id (sprite set). */
 	theme: string;
@@ -1036,6 +1038,7 @@ export function buildSceneDescription(
 			smoothing: settings.cursor.smoothing,
 			motionBlur: settings.cursor.motionBlur,
 			clickBounce: settings.cursor.clickBounce,
+			volume: settings.cursor.volume,
 			clipToBounds: settings.cursor.clipToBounds,
 			theme: settings.cursorTheme,
 		},

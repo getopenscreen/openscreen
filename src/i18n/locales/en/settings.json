@@ -370,6 +370,8 @@
 	"cursor": {
 		"smoothing": "Smoothing",
 		"clickBounce": "Click Bounce",
+		"depth": "3D Depth",
+		"depthNeedsCursor": "Turn on Show Cursor to give it depth.",
 		"help": "Cursor rendering from the recorded telemetry: theme, size, smoothing, motion blur, and click-bounce emphasis.",
 		"clipToBoundsDescription": "Keeps the cursor inside the video frame. Turn off to let the cursor extend past the edges - useful when zoomed in or panned.",
 		"size": "Size",

@@ -29,7 +29,14 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 		webcamBackgroundMode: "blur",
 		webcamWallpaper: "#112233",
 		webcamBlurIntensity: 0.5,
-		cursor: { size: 3, smoothing: 0.67, motionBlur: 0.35, clickBounce: 2.5, clipToBounds: false },
+		cursor: {
+			size: 3,
+			smoothing: 0.67,
+			motionBlur: 0.35,
+			clickBounce: 2.5,
+			volume: 0,
+			clipToBounds: false,
+		},
 		cursorShow: true,
 		cursorAutoHide: false,
 		cursorTheme: "default",
@@ -75,6 +82,25 @@ describe("parseStylePresetAppearance", () => {
 				cursor: { ...appearance().cursor, size: 11 },
 			}),
 		).toThrow(/cursor\.size/);
+	});
+
+	it("reads a preset written before cursor.volume as a flat cursor, and bounds it", () => {
+		const { volume: _volume, ...flatCursor } = appearance().cursor;
+		expect(parseStylePresetAppearance({ ...appearance(), cursor: flatCursor }).cursor.volume).toBe(
+			0,
+		);
+		expect(
+			parseStylePresetAppearance({
+				...appearance(),
+				cursor: { ...appearance().cursor, volume: 0.4 },
+			}).cursor.volume,
+		).toBe(0.4);
+		expect(() =>
+			parseStylePresetAppearance({
+				...appearance(),
+				cursor: { ...appearance().cursor, volume: 1.5 },
+			}),
+		).toThrow(/cursor\.volume/);
 	});
 
 	it("falls back to the default cursor theme for an id this build does not ship", () => {

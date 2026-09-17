@@ -16,7 +16,7 @@ import { isEnglishOnlyPath } from "../../lib/locale-routes";
  * upstream on every Docusaurus upgrade). One change, in AlternateLangHeaders.
  *
  * Upstream emits an hreflang alternate for every locale on every page. The blog
- * and the marketing pages are built in English only (src/lib/locale-routes.ts),
+ * is built in English only (src/lib/locale-routes.ts),
  * so on those routes each alternate pointed at a /fr/, /es/... URL that 404s,
  * which is the one hreflang error search engines report. Those routes now emit
  * no alternates at all, and no og:locale:alternate either, for the same reason.

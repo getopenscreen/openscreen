@@ -142,11 +142,11 @@
   },
   "home.features.summary": {
     "message": "O OpenScreen é um gravador de tela e editor de vídeo gratuito e de código aberto para Windows, macOS e Linux: entra uma captura bruta e sai uma demo pronta, na categoria que o {screenStudio} definiu. Tem licença MIT, sem marca d'água e sem conta, e dá continuidade ao {originalProject}, que o criador arquivou após a v1.5.0.",
-    "description": "{screenStudio} links to an English-only page."
+    "description": "{screenStudio} is a link to the Screen Studio comparison page."
   },
   "home.features.summary.screenStudio": {
     "message": "Screen Studio",
-    "description": "A product name. The link goes to an English-only page."
+    "description": "A product name, used as a link."
   },
   "home.features.summary.originalProject": {
     "message": "projeto OpenScreen original"
@@ -198,7 +198,7 @@
   },
   "home.install.note": {
     "message": "O Windows também tem um instalador {exe}. Ele não tem assinatura de código, então o SmartScreen avisa antes da execução: escolha Mais informações e depois Executar assim mesmo. O Linux também tem {rpm}, {pacman}, um AppImage e um flake Nix. Todos os arquivos estão na {releasesPage}, e a página {installation} traz o passo a passo completo. O que cada sistema grava está nas páginas {windows}, {mac} e {linux} (em inglês).",
-    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to English-only pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
+    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
     "message": "página de Releases"
@@ -277,7 +277,7 @@
   },
   "showcase.captions.link.feature": {
     "message": "Como as legendas locais se comparam (em inglês)",
-    "description": "Links to an English-only page."
+    "description": "Link label under the panel."
   },
   "showcase.captions.label": {
     "message": "Um desenho do painel de legendas: a frase “amber day on the validator, and it” em letras grandes sobre o vídeo e, ao lado, as legendas ativadas, uma nota de que sete linhas de legenda são derivadas ao vivo a partir da transcrição e uma linha de idiomas com English, Français, um botão Translate e a opção de excluir uma tradução.",
@@ -300,7 +300,7 @@
   },
   "showcase.agent.link.feature": {
     "message": "Como funcionam os zooms automáticos (em inglês)",
-    "description": "Links to an English-only page."
+    "description": "Link label under the panel."
   },
   "showcase.agent.label": {
     "message": "Um desenho da resposta do agente. Ao receber o pedido de cortar o tempo morto, ele responde com timecodes: de 0 a 2,19 segundos de abertura antes de “Hi” e de 35,12 a 40,03 segundos de final depois de “think.”, levando o vídeo de 40 para 33 segundos reproduzíveis, com os zooms existentes mantidos nos mesmos momentos — e depois uma linha verde com “applied: added 2 trims”.",
@@ -364,52 +364,42 @@
     "message": "Baixar"
   },
   "footer.product.autoZoom": {
-    "message": "Zoom automático (em inglês)",
-    "description": "Links to an English-only page."
+    "message": "Zoom automático (em inglês)"
   },
   "footer.product.captions": {
-    "message": "Legendas locais (em inglês)",
-    "description": "Links to an English-only page."
+    "message": "Legendas locais (em inglês)"
   },
   "footer.platforms.title": {
     "message": "Plataformas (em inglês)",
-    "description": "Its three links go to English-only pages."
+    "description": "Footer column title."
   },
   "footer.platforms.windows": {
-    "message": "Windows",
-    "description": "Links to an English-only page."
+    "message": "Windows"
   },
   "footer.platforms.mac": {
-    "message": "macOS",
-    "description": "Links to an English-only page."
+    "message": "macOS"
   },
   "footer.platforms.linux": {
-    "message": "Linux",
-    "description": "Links to an English-only page."
+    "message": "Linux"
   },
   "footer.compare.title": {
     "message": "Comparações (em inglês)",
-    "description": "Its five links go to English-only pages."
+    "description": "Footer column title."
   },
   "footer.compare.screenStudio": {
-    "message": "Alternativa ao Screen Studio",
-    "description": "Links to an English-only page."
+    "message": "Alternativa ao Screen Studio"
   },
   "footer.compare.camtasia": {
-    "message": "Alternativa ao Camtasia",
-    "description": "Links to an English-only page."
+    "message": "Alternativa ao Camtasia"
   },
   "footer.compare.loom": {
-    "message": "Alternativa ao Loom",
-    "description": "Links to an English-only page."
+    "message": "Alternativa ao Loom"
   },
   "footer.compare.cap": {
-    "message": "OpenScreen vs Cap",
-    "description": "Links to an English-only page."
+    "message": "OpenScreen vs Cap"
   },
   "footer.compare.obs": {
-    "message": "OpenScreen vs OBS Studio",
-    "description": "Links to an English-only page."
+    "message": "OpenScreen vs OBS Studio"
   },
   "footer.project.title": {
     "message": "Projeto"

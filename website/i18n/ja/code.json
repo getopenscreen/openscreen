@@ -142,11 +142,11 @@
   },
   "home.features.summary": {
     "message": "OpenScreen は Windows・macOS・Linux 向けの、無料・オープンソースの画面録画・動画編集ソフトです。録画したままの素材から完成したデモ動画を仕上げる、{screenStudio} が確立したジャンルのツールです。MIT ライセンスで、透かしは入らず、アカウントも不要です。作者が v1.5.0 のあとにアーカイブした{originalProject}を引き継いでいます。",
-    "description": "{screenStudio} links to an English-only page."
+    "description": "{screenStudio} is a link to the Screen Studio comparison page."
   },
   "home.features.summary.screenStudio": {
     "message": "Screen Studio",
-    "description": "A product name. The link goes to an English-only page."
+    "description": "A product name, used as a link."
   },
   "home.features.summary.originalProject": {
     "message": "元の OpenScreen プロジェクト"
@@ -198,7 +198,7 @@
   },
   "home.install.note": {
     "message": "Windows には {exe} インストーラーもあります。コード署名されていないため、実行前に SmartScreen が警告を表示します。「詳細情報」を選び、「実行」をクリックしてください。Linux 向けには {rpm}、{pacman}、AppImage、Nix flake もあります。すべての配布ファイルは{releasesPage}にあり、詳しい手順は{installation}のページにあります。各 OS で何を録画できるかは、{windows}・{mac}・{linux} の各ページ（英語）で説明しています。",
-    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to English-only pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
+    "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
     "message": "Releases ページ"
@@ -277,7 +277,7 @@
   },
   "showcase.captions.link.feature": {
     "message": "ローカル字幕の比較（英語）",
-    "description": "Links to an English-only page."
+    "description": "Link label under the panel."
   },
   "showcase.captions.label": {
     "message": "字幕パネルのイラスト：動画の上に「amber day on the validator, and it」という一行が大きく表示されています。その横では字幕がオンになっていて、7 行の字幕が文字起こしからリアルタイムに生成されているという注記と、English、Français、Translate ボタン、翻訳を削除するオプションが並ぶ言語の行があります。",
@@ -300,7 +300,7 @@
   },
   "showcase.agent.link.feature": {
     "message": "自動ズームの仕組み（英語）",
-    "description": "Links to an English-only page."
+    "description": "Link label under the panel."
   },
   "showcase.agent.label": {
     "message": "エージェントの返答のイラスト。無音部分のカットを頼まれ、タイムコードで答えています。「Hi」の前の導入部 0〜2.19 秒と、「think.」の後の末尾 35.12〜40.03 秒をカットし、再生できる映像を 40 秒から 33 秒にします。既存のズームは同じ場面に残ります。最後に「applied: added 2 trims」という緑色の行があります。",
@@ -364,52 +364,42 @@
     "message": "ダウンロード"
   },
   "footer.product.autoZoom": {
-    "message": "自動ズーム（英語）",
-    "description": "Links to an English-only page."
+    "message": "自動ズーム（英語）"
   },
   "footer.product.captions": {
-    "message": "ローカル字幕（英語）",
-    "description": "Links to an English-only page."
+    "message": "ローカル字幕（英語）"
   },
   "footer.platforms.title": {
     "message": "プラットフォーム（英語）",
-    "description": "Its three links go to English-only pages."
+    "description": "Footer column title."
   },
   "footer.platforms.windows": {
-    "message": "Windows",
-    "description": "Links to an English-only page."
+    "message": "Windows"
   },
   "footer.platforms.mac": {
-    "message": "macOS",
-    "description": "Links to an English-only page."
+    "message": "macOS"
   },
   "footer.platforms.linux": {
-    "message": "Linux",
-    "description": "Links to an English-only page."
+    "message": "Linux"
   },
   "footer.compare.title": {
     "message": "比較（英語）",
-    "description": "Its five links go to English-only pages."
+    "description": "Footer column title."
   },
   "footer.compare.screenStudio": {
-    "message": "Screen Studio の代替",
-    "description": "Links to an English-only page."
+    "message": "Screen Studio の代替"
   },
   "footer.compare.camtasia": {
-    "message": "Camtasia の代替",
-    "description": "Links to an English-only page."
+    "message": "Camtasia の代替"
   },
   "footer.compare.loom": {
-    "message": "Loom の代替",
-    "description": "Links to an English-only page."
+    "message": "Loom の代替"
   },
   "footer.compare.cap": {
-    "message": "OpenScreen と Cap の比較",
-    "description": "Links to an English-only page."
+    "message": "OpenScreen と Cap の比較"
   },
   "footer.compare.obs": {
-    "message": "OpenScreen と OBS Studio の比較",
-    "description": "Links to an English-only page."
+    "message": "OpenScreen と OBS Studio の比較"
   },
   "footer.project.title": {
     "message": "プロジェクト"

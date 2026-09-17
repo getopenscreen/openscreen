@@ -11,6 +11,8 @@
 		"typecheck": "tsc --noEmit",
 		"check:media": "node scripts/check-media-budget.mjs",
 		"check:recreation": "node scripts/gen-recreation.mjs --check",
+		"i18n:check": "node scripts/i18n.mjs check",
+		"i18n:sync": "node scripts/i18n.mjs sync",
 		"test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
 	},
 	"dependencies": {
@@ -18,7 +20,6 @@
 		"@docusaurus/faster": "~3.10.1",
 		"@docusaurus/preset-classic": "~3.10.1",
 		"@docusaurus/theme-common": "~3.10.1",
-		"@docusaurus/utils": "~3.10.1",
 		"@docusaurus/utils-common": "~3.10.1",
 		"@mdx-js/react": "^3.1.0",
 		"clsx": "^2.1.1",

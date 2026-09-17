@@ -21,8 +21,8 @@ O OpenScreen é um **gravador de tela e editor gratuito e de código aberto**. E
 
 Estas páginas descrevem o **OpenScreen 1.11.0**, a versão estável de 9 de setembro de 2026. O que mudou em cada versão, e por quê, está no [diário de desenvolvimento (em inglês)](/blog/).
 
-:::warning
-O OpenScreen **ainda não está pronto para uso em produção**. Ele está em desenvolvimento ativo: espere imperfeições e mudanças incompatíveis ocasionais, inclusive no formato de projeto `.openscreen` e na [CLI](/docs/cli/).
+:::note
+O OpenScreen lança versões com frequência. De uma versão para outra, o formato de projeto `.openscreen` e a [CLI](/docs/cli/) ainda podem mudar.
 :::
 
 ## O que você pode fazer {#what-you-can-do}

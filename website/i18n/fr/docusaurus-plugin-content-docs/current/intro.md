@@ -21,8 +21,8 @@ OpenScreen est un **enregistreur d'écran et éditeur gratuit et open source**. 
 
 Ces pages décrivent **OpenScreen 1.11.0**, la version stable du 9 septembre 2026. Ce qui a changé à chaque version, et pourquoi, se trouve dans le [journal de développement (en anglais)](/blog/).
 
-:::warning
-OpenScreen **n'est pas encore prêt pour la production**. Il est en développement actif : attendez-vous à des imperfections et à des changements incompatibles de temps à autre, y compris dans le format de projet `.openscreen` et la [CLI](/docs/cli/).
+:::note
+OpenScreen sort souvent de nouvelles versions. D'une version à l'autre, le format de projet `.openscreen` et la [CLI](/docs/cli/) peuvent encore changer.
 :::
 
 ## Ce que vous pouvez faire {#what-you-can-do}

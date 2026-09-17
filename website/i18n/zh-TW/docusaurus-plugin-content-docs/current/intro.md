@@ -21,8 +21,8 @@ OpenScreen 是一款**免費、開源的螢幕錄影與剪輯軟體**。它透�
 
 本文件說明的是 **OpenScreen 1.11.0**，也就是 2026 年 9 月 9 日發布的穩定版。每個版本改了什麼、為什麼改，都記錄在[開發日誌（英文）](/blog/)中。
 
-:::warning
-OpenScreen **尚未達到正式上線的品質**。它仍在積極開發中：請預期會有不夠完善的地方，偶爾也會有不相容的變更，包括 `.openscreen` 專案格式與 [CLI](/docs/cli/)。
+:::note
+OpenScreen 發布頻繁。在兩個版本之間，`.openscreen` 專案格式與 [CLI](/docs/cli/) 仍可能有所變更。
 :::
 
 ## 你可以做什麼 {#what-you-can-do}

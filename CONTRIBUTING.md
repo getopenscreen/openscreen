@@ -76,6 +76,27 @@ Related to #123
 - Write clear, concise, and descriptive commit messages.
 - Include comments where necessary to explain complex code.
 
+## Adding music to the bundled library
+
+Only **CC0 1.0** tracks are eligible, and the reason is not taste. A licence that merely
+permits *use* (Pixabay, Mixkit, Bensound, Uppbeat and the like) forbids redistributing the
+file, which is exactly what bundling does; CC-BY is worse for our users, because its
+attribution obligation follows the video they export all the way to their viewers.
+
+So a PR that adds a track must add, in the same commit:
+
+1. The audio file under `public/music/`, **byte-for-byte as published upstream** — do not
+   re-encode it, or the digest stops being checkable against the source.
+2. A complete entry in `public/music/catalogue.json`, including `sourceUrl` and a
+   `licenseSnapshotUrl` pointing at a [web.archive.org](https://web.archive.org) capture of
+   the page that states the licence. The live page is not evidence; it can change.
+3. A line in the track list in `THIRD-PARTY-NOTICES.md` — electron-builder strips every
+   README from the package, so that file is the only provenance a user receives.
+
+Run `node scripts/check-music-licences.mjs --update-digests` to fill in `sha256` and
+`bytes`, then `npm run music:check`. CI runs the same guard, and it fails the build rather
+than shipping a track whose licence nobody can verify.
+
 ## License
 
 By contributing to this project, you agree that your contributions will be licensed under the [MIT License](./LICENSE).

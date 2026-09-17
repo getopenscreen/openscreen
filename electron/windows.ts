@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { assetBaseDir } from "./assetBaseDir";
 import {
 	clampRectToWorkArea,
 	loadEditorWindowState,
@@ -97,11 +98,11 @@ function applyContentProtection(win: BrowserWindow, label: string) {
 	win.setContentProtection(true);
 }
 
-// Asset base URL for renderer (wallpapers, etc.). Packaged: extraResources copies
+// Asset base URL for renderer (wallpapers, music, etc.). Packaged: extraResources copies
 // public/wallpapers to resources/wallpapers. Unpackaged: <appRoot>/public/.
-const ASSET_BASE_DIR = process.defaultApp
-	? path.join(__dirname, "..", "public")
-	: process.resourcesPath;
+// Defined in its own electron-free module so the music catalogue can share it without
+// importing this one — see the comment there.
+const ASSET_BASE_DIR = assetBaseDir();
 export const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}${path.sep}`).toString()}`;
 
 let hudOverlayWindow: BrowserWindow | null = null;

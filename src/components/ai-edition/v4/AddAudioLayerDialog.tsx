@@ -15,10 +15,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useScopedT } from "@/contexts/I18nContext";
-import type { AxcutAsset } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { probeAudioDuration } from "@/lib/ai-edition/timeline/duration";
 import styles from "./EditorShellV4.module.css";
+import { findExistingAsset } from "./findExistingAsset";
 
 const RECORDER_MIME_PREFERENCES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
 
@@ -28,17 +28,6 @@ function pickRecorderMimeType(): string {
 		if (MediaRecorder.isTypeSupported(mime)) return mime;
 	}
 	return "";
-}
-
-/** Reuse an already-imported asset over importing the same file twice. */
-function findExistingAsset(path: string): AxcutAsset | null {
-	const doc = useProjectStore.getState().document;
-	if (!doc) return null;
-	return (
-		doc.assets.find((a) => a.kind === "audio" && a.originalPath === path) ??
-		doc.assets.find((a) => a.originalPath === path) ??
-		null
-	);
 }
 
 export function AddAudioLayerDialog({

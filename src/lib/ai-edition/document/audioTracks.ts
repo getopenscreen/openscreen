@@ -447,6 +447,53 @@ export function placeAudioTrackInDocument(
 	return { ...doc, audioTracks: [...kept, ...fragments] };
 }
 
+/** The payload a new track can be placed with, in the same write as the placement. */
+export type AudioTrackInitialPayload = Partial<
+	Pick<AxcutAudioTrack, "gainDb" | "fadeInMs" | "fadeOutMs" | "loop">
+>;
+
+/**
+ * Set a track's loop flag and, when turning it ON, fill the rest of the programme with it.
+ *
+ * Looping only means anything when the span EXCEEDS the source, so a flag that changed
+ * nothing else did nothing at all: the user had to know to then drag the pill's right edge
+ * out, which is not a thing anyone guesses. Filling is what "loop" is for, and the edge
+ * still trims it back to any length. Turning loop OFF deliberately leaves the span alone:
+ * shrinking it would throw away a length the user may have set by hand.
+ *
+ * Returns `doc` itself when there is nothing to do, so a caller can skip the write.
+ *
+ * A pure document op so the flag and the fill are ONE write wherever they happen: the
+ * inspector's loop toggle, and a music bed laid down already looping.
+ */
+export function setAudioTrackLoopInDocument(
+	doc: AxcutDocument,
+	trackId: string,
+	loop: boolean,
+	makeId: () => string,
+): AxcutDocument {
+	const [pill] = collapseTracksToPills(doc.audioTracks.filter((t) => trackGroupId(t) === trackId));
+	if (!pill) return doc;
+	// Refused on a voiceover. `anchorAudioTrackFragments` does not advance `offsetMs`
+	// across a looping track's fragments, so its words map to raw moments they do not
+	// occupy: the transcript lane drops it, and a cut authored from it would land in
+	// the wrong place. Music loops; narration does not (issue #560).
+	if (loop && pill.kind === "voiceover") return doc;
+	const programmeEndMs = Math.round(
+		doc.timeline.clips.reduce((max, c) => Math.max(max, c.timelineEndSec), 0) * 1000,
+	);
+	const patched = patchAudioTrack(doc, trackId, { loop });
+	if (!loop || programmeEndMs <= pill.endMs) return patched;
+	// The fill stops at the next pill of its own kind, not at the programme end: a bed
+	// filling the timeline must not swallow a second bed that comes after it.
+	return placeAudioTrackInDocument(
+		patched,
+		{ ...pill, loop, endMs: programmeEndMs },
+		makeId,
+		"resize",
+	);
+}
+
 /**
  * Push any same-kind pill whose head fell inside its predecessor forward to that
  * predecessor's end, so each kind is back to one row.

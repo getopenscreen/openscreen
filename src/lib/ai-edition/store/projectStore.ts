@@ -3,7 +3,12 @@ import { create } from "zustand";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { toastText } from "@/i18n/toastText";
 import { nativeBridgeClient } from "@/native/client";
-import { placeAudioTrackInDocument } from "../document/audioTracks";
+import {
+	type AudioTrackInitialPayload,
+	patchAudioTrack,
+	placeAudioTrackInDocument,
+	setAudioTrackLoopInDocument,
+} from "../document/audioTracks";
 import { createId } from "../document/ids";
 import { type Interval, replaceTimeline as replaceTimelineOp } from "../document/timeline";
 import { type AxcutAsset, type AxcutDocument, createAudioTrack, documentSchema } from "../schema";
@@ -183,6 +188,11 @@ export interface ProjectState {
 			durationSec?: number;
 			/** Timeline span, when it should differ from the source duration. */
 			spanSec?: number;
+			/** Payload the track is laid down WITH, in the same write as the placement, so
+			 *  a track that arrives with defaults (a music bed: quiet, faded, looping) is one
+			 *  undo step rather than one per default. `loop: true` also fills the rest of the
+			 *  programme, exactly like the inspector's toggle. */
+			initial?: AudioTrackInitialPayload;
 		},
 	) => Promise<string | null>;
 	setSelectedAudioTrackId: (id: string | null) => void;
@@ -512,8 +522,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 		// covers AND queues it behind whatever already occupies its kind's row, so two
 		// takes recorded from the same playhead no longer land on top of each other
 		// (issue #560).
-		const next = placeAudioTrackInDocument(document, track, () => createId("audio"), "create");
-		if (next === document) return null;
+		const makeId = () => createId("audio");
+		const placed = placeAudioTrackInDocument(document, track, makeId, "create");
+		if (placed === document) return null;
+		// Applied to the PLACED track, through the same ops an inspector edit uses, so the
+		// fades land on the outer fragments and a loop fills from wherever the placement
+		// actually put the head.
+		const { loop, ...payload } = options?.initial ?? {};
+		let next = patchAudioTrack(placed, track.id, payload);
+		if (loop) next = setAudioTrackLoopInDocument(next, track.id, true, makeId);
 		if (!(await get().saveDocument(next, { history: true }))) return null;
 		set({ selectedAudioTrackId: track.id });
 		return track.id;

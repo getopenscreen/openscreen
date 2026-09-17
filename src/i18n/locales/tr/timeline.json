@@ -103,6 +103,17 @@
 		"micDenied": "Mikrofon erişimi reddedildi",
 		"recordingUnavailable": "Burada kayıt kullanılamıyor",
 		"saveFailed": "Kayıt kaydedilemedi",
-		"importFailed": "Ses dosyası içe aktarılamadı"
+		"importFailed": "Ses dosyası içe aktarılamadı",
+		"musicLibrary": "Müzik kitaplığı",
+		"musicLibraryHint": "OpenScreen ile gelen telifsiz fon müzikleri",
+		"musicLoading": "Kitaplık yükleniyor…",
+		"musicEmpty": "Pakete dahil parça bulunamadı.",
+		"musicPreview": "Dinle",
+		"musicStopPreview": "Durdur",
+		"musicAdd": "Ekle",
+		"musicLicenceNote": "CC0 1.0 — her yerde, atıfsız kullanabilirsiniz.",
+		"moreMusic": "Daha fazla müzik",
+		"musicAddFailed": "Parça eklenemedi",
+		"musicNeedsProject": "Müzik eklemek için bir proje açın veya oluşturun."
 	}
 }

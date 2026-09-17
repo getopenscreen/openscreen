@@ -11,6 +11,7 @@
 // footage, which is worse than opening it with a missing-media placeholder.
 
 import fs from "node:fs/promises";
+import { resolveBundledMusicPath } from "../music/catalogue";
 import {
 	findMediaLinksByFingerprint,
 	findRelocatedMediaByStoredPath,
@@ -46,6 +47,18 @@ async function resolveAssetMedia(
 	// Nothing to repair, and this runs on every project open — don't fingerprint
 	// (i.e. open and read) every asset just to confirm what the stats already say.
 	if (screenExists && !cameraMissing) return asset;
+
+	// A bundled music track relinks by computation, not by fingerprint: the file ships
+	// with the app, so a stale path (the app moved, the project came from another
+	// machine, or it was authored in a dev run) has a known local answer. Checked first
+	// because it is certain, and free.
+	if (!screenExists) {
+		const bundled = await resolveBundledMusicPath(originalPath);
+		if (bundled && bundled !== originalPath) {
+			console.log(`[media-relink] bundled music ${originalPath} -> ${bundled}`);
+			return { ...asset, originalPath: bundled };
+		}
+	}
 
 	let links: RelocatedMediaLookup | null = null;
 	if (screenExists) {

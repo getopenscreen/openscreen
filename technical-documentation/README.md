@@ -37,6 +37,7 @@ who reads and writes the project document.
 |---|---|
 | [rendering-performance.md](engineering/rendering-performance.md) | The measurement record for preview fluidity and export speed |
 | [build-and-packaging.md](engineering/build-and-packaging.md) | Build commands, native artifacts, per-platform packaging |
+| [bundled-music.md](engineering/bundled-music.md) | The CC0 music library: licence rules, the provenance manifest, and its build-time guard |
 | [ci-workflows.md](engineering/ci-workflows.md) | The GitHub Actions tiers and how artifacts flow between them |
 | [release-and-secrets.md](engineering/release-and-secrets.md) | Cutting and promoting a release; the secrets it needs |
 

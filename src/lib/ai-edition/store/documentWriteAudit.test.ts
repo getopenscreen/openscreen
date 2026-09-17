@@ -271,12 +271,10 @@ const DECLARED: WritePath[] = [
 	// setAudioTrackGain routes through), or delete it — one undo step apiece.
 	w("src/lib/ai-edition/store/useTimeline.ts", "placeAudioTrack", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "removeAudioTrack", "save", "gesture"),
-	// Three exits, one gesture: the toggle writes the flag alone when there is
-	// nothing to fill, and the flag plus the filled span when there is. Either
-	// way it is one undo step (see setAudioTrackLoop).
-	// Two, not three: the fill and its no-op fallback collapsed into one call when the
-	// placement door took over the clamping (#560).
-	w("src/lib/ai-edition/store/useTimeline.ts", "setAudioTrackLoop", "save", "gesture"),
+	// One exit, one gesture: the toggle writes the flag alone when there is nothing
+	// to fill, and the flag plus the filled span when there is. Either way it is one
+	// undo step. One call, not two, since the flag-and-fill became a document op
+	// (`setAudioTrackLoopInDocument`) that a music bed placed already looping shares.
 	w("src/lib/ai-edition/store/useTimeline.ts", "setAudioTrackLoop", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateAudioTrack", "save", "gesture"),
 	// The round-2 defect: a background duration probe every freshly imported asset

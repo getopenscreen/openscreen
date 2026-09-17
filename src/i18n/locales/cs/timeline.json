@@ -103,6 +103,17 @@
 		"micDenied": "Přístup k mikrofonu byl odepřen",
 		"recordingUnavailable": "Nahrávání zde není dostupné",
 		"saveFailed": "Nepodařilo se uložit nahrávku",
-		"importFailed": "Nepodařilo se importovat zvukový soubor"
+		"importFailed": "Nepodařilo se importovat zvukový soubor",
+		"musicLibrary": "Hudební knihovna",
+		"musicLibraryHint": "Podkresy bez licenčních poplatků dodávané s OpenScreenem",
+		"musicLoading": "Načítání knihovny…",
+		"musicEmpty": "Nebyly nalezeny žádné dodané skladby.",
+		"musicPreview": "Přehrát",
+		"musicStopPreview": "Zastavit",
+		"musicAdd": "Přidat",
+		"musicLicenceNote": "CC0 1.0 — použijte kdekoli, bez uvedení autora.",
+		"moreMusic": "Další hudba",
+		"musicAddFailed": "Skladbu se nepodařilo přidat",
+		"musicNeedsProject": "Otevřete nebo vytvořte projekt, abyste mohli přidat hudbu."
 	}
 }

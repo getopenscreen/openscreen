@@ -2202,3 +2202,105 @@
 	border-radius: 999px;
 	background: var(--danger);
 }
+
+/* Bundled CC0 music library, shown as a section of the inspector's Audio pane. Caps its
+   height rather than growing with the catalogue, so the pane's other controls stay
+   reachable. */
+
+.musicList {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 260px;
+	overflow-y: auto;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.musicRow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: 9px;
+}
+.musicRow:hover {
+	background: var(--surface-2);
+}
+
+.musicRowMain {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+.musicRowTitle {
+	font: 600 12px var(--font-display);
+	color: var(--fg);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.musicRowMeta {
+	font-size: 11px;
+	color: var(--muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.musicPreviewBtn,
+.musicAddBtn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface-2);
+	color: var(--fg);
+	cursor: pointer;
+	font-size: 11px;
+	flex-shrink: 0;
+}
+.musicPreviewBtn {
+	width: 26px;
+	height: 26px;
+	justify-content: center;
+}
+.musicAddBtn {
+	padding: 5px 9px;
+}
+.musicPreviewBtn:hover,
+.musicAddBtn:hover:not(:disabled) {
+	background: var(--surface-3, var(--surface-2));
+}
+.musicAddBtn:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.musicEmpty {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 8px;
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.musicFoot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding-top: 8px;
+	border-top: 1px solid var(--border);
+}
+
+.musicBadge {
+	font-size: 11px;
+	line-height: 1.35;
+	color: var(--muted);
+}

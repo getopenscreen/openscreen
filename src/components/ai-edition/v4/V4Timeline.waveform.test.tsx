@@ -139,6 +139,7 @@ function renderBars(atGainDb: number): string[] {
 				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
 				onAddVoiceover={vi.fn()}
+				onOpenMusicLibrary={vi.fn()}
 			/>
 		</ShortcutsProvider>,
 	);

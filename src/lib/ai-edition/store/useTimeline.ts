@@ -9,10 +9,12 @@ import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type { AnnotationRegion, AnnotationType } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
+	type AudioTrackInitialPayload,
 	collapseTracksToPills,
 	patchAudioTrack,
 	placeAudioTrackInDocument,
 	removeAudioTrack as removeAudioTrackInDocument,
+	setAudioTrackLoopInDocument,
 	trackGroupId,
 } from "../document/audioTracks";
 import { createId } from "../document/ids";
@@ -1309,7 +1311,12 @@ export function useTimeline() {
 		async (
 			assetId: string,
 			timelineStartSec?: number,
-			options?: { kind?: "voiceover" | "music"; durationSec?: number; spanSec?: number },
+			options?: {
+				kind?: "voiceover" | "music";
+				durationSec?: number;
+				spanSec?: number;
+				initial?: AudioTrackInitialPayload;
+			},
 		): Promise<string | null> => {
 			const id = await storeAddAudioTrack(assetId, timelineStartSec ?? playheadSec(), options);
 			if (id) {
@@ -1420,44 +1427,16 @@ export function useTimeline() {
 		[saveDocument],
 	);
 
-	// Turning loop ON fills the rest of the programme with the track.
-	//
-	// Looping only means anything when the span EXCEEDS the source, so a toggle
-	// that changed nothing else did nothing at all — the user had to know to then
-	// drag the pill's right edge out, which is not a thing anyone guesses. Filling
-	// is what "loop" is for, it is one undo away, and the edge still trims it back
-	// to any length. Turning loop OFF deliberately leaves the span alone: shrinking
-	// it would throw away a length the user may have set by hand.
+	// Turning loop ON fills the rest of the programme with the track; see
+	// `setAudioTrackLoopInDocument` for why, and for the voiceover refusal.
 	const setAudioTrackLoop = useCallback(
 		async (trackId: string, loop: boolean) => {
 			const doc = useProjectStore.getState().document;
 			if (!doc) return;
-			const fragments = doc.audioTracks.filter((t) => trackGroupId(t) === trackId);
-			const [pill] = collapseTracksToPills(fragments);
-			if (!pill) return;
-			// Refused on a voiceover. `anchorAudioTrackFragments` does not advance `offsetMs`
-			// across a looping track's fragments, so its words map to raw moments they do not
-			// occupy — the transcript lane drops it, and a cut authored from it would land in
-			// the wrong place. Music loops; narration does not (issue #560).
-			if (loop && pill.kind === "voiceover") return;
-			const programmeEndMs = Math.round(
-				doc.timeline.clips.reduce((max, c) => Math.max(max, c.timelineEndSec), 0) * 1000,
-			);
 			// One write, so the fill and the flag are a single undo step.
-			const patched = patchAudioTrack(doc, trackId, { loop });
-			if (!loop || programmeEndMs <= pill.endMs) {
-				await saveDocument(patched, { history: true });
-				return;
-			}
-			// The fill stops at the next pill of its own kind, not at the programme end: a
-			// bed filling the timeline must not swallow a second bed that comes after it.
-			const filled = placeAudioTrackInDocument(
-				patched,
-				{ ...pill, loop, endMs: programmeEndMs },
-				() => createId("audio"),
-				"resize",
-			);
-			await saveDocument(filled === patched ? patched : filled, { history: true });
+			const next = setAudioTrackLoopInDocument(doc, trackId, loop, () => createId("audio"));
+			if (next === doc) return;
+			await saveDocument(next, { history: true });
 		},
 		[saveDocument],
 	);

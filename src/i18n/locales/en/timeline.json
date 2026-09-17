@@ -103,6 +103,17 @@
 		"micDenied": "Microphone access was denied",
 		"recordingUnavailable": "Recording is not available here",
 		"saveFailed": "Could not save the recording",
-		"importFailed": "Could not import the audio file"
+		"importFailed": "Could not import the audio file",
+		"musicLibrary": "Music library",
+		"musicLibraryHint": "Royalty-free beds bundled with OpenScreen",
+		"musicLoading": "Loading the library…",
+		"musicEmpty": "No bundled tracks were found.",
+		"musicPreview": "Preview",
+		"musicStopPreview": "Stop preview",
+		"musicAdd": "Add",
+		"musicLicenceNote": "CC0 1.0 — yours to use anywhere, with no attribution.",
+		"moreMusic": "More music",
+		"musicAddFailed": "Could not add the track",
+		"musicNeedsProject": "Open or create a project to add music."
 	}
 }

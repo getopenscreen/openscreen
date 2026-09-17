@@ -1490,6 +1490,42 @@ describe("useTimeline audio tracks", () => {
 		});
 	});
 
+	// A music bed arrives with defaults (quiet, faded, looping). Laid down as a placement
+	// and then one edit per default, it was three saves: three undo steps for one pick,
+	// and a bed left at unity gain if a later save failed.
+	it("addAudioTrack lays a track down with its initial payload in one write", async () => {
+		const { result } = renderTimeline();
+		const savesBefore = bridgeMocks.save.mock.calls.length;
+		let id: string | null = null;
+		await act(async () => {
+			id = await result.current.addAudioTrack("audio_1", 2, {
+				kind: "music",
+				spanSec: 2,
+				initial: { gainDb: -18, fadeInMs: 500, fadeOutMs: 500, loop: true },
+			});
+		});
+		const tracks = useProjectStore.getState().document?.audioTracks ?? [];
+		expect(tracks).toHaveLength(1);
+		expect(id).toBe(tracks[0]?.id);
+		// The loop filled 2..4 out to the end of the 0..10s programme, as the toggle does.
+		expect(tracks[0]).toMatchObject({
+			kind: "music",
+			startMs: 2000,
+			endMs: 10_000,
+			gainDb: -18,
+			fadeInMs: 500,
+			fadeOutMs: 500,
+			loop: true,
+		});
+		expect(bridgeMocks.save.mock.calls.length - savesBefore).toBe(1);
+
+		// One step: the placement and every default undo together.
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(useProjectStore.getState().document?.audioTracks).toEqual([]);
+	});
+
 	it("addAudioTrack refuses a non-audio (or unknown) asset", async () => {
 		const { result } = renderTimeline();
 		let videoId: string | null = "x";

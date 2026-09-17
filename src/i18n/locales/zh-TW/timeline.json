@@ -103,6 +103,17 @@
 		"micDenied": "麥克風存取遭拒絕",
 		"recordingUnavailable": "此處無法錄音",
 		"saveFailed": "無法儲存錄音",
-		"importFailed": "無法匯入音訊檔案"
+		"importFailed": "無法匯入音訊檔案",
+		"musicLibrary": "音樂庫",
+		"musicLibraryHint": "隨 OpenScreen 附帶的免版稅背景音樂",
+		"musicLoading": "正在載入音樂庫…",
+		"musicEmpty": "找不到內建曲目。",
+		"musicPreview": "試聽",
+		"musicStopPreview": "停止",
+		"musicAdd": "新增",
+		"musicLicenceNote": "CC0 1.0 — 任意場景使用，無需署名。",
+		"moreMusic": "更多音樂",
+		"musicAddFailed": "無法新增曲目",
+		"musicNeedsProject": "開啟或新建一個專案後即可加入音樂。"
 	}
 }

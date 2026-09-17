@@ -71,6 +71,13 @@
   },
   "files": [
     "dist",
+    // Vite copies all of `public/` into `dist/`, so the music library would otherwise ship
+    // twice: once in app.asar, once in `extraResources` below. Only the second copy is ever
+    // read. The native compositor needs a real path, and the renderer auditions tracks through
+    // `getAssetPath`, which resolves to resources/ in a packaged app (file:// load) and to the
+    // Vite dev server's `public/` in dev. Nothing loads `/music/...` out of `dist/`. ~10 MB.
+    // (wallpapers, cursors and mediapipe are duplicated the same way; not addressed here.)
+    "!dist/music",
     "dist-electron",
     "!*.png",
     "!preview*.png",
@@ -79,7 +86,7 @@
     "!CONTRIBUTING.md",
     "!LICENSE"
   ],
-  // Asset layout contract: "wallpapers/" and "cursors/" under resourcesPath must
+  // Asset layout contract: "wallpapers/", "cursors/" and "music/" under resourcesPath must
   // align with assetBaseDir in electron/preload.ts (packaged branch).
   // Native capture helpers + whisper-stt-server binaries (and their ggml
   // backend sidecars) live under `electron/native/bin/<platform>-<arch>/`
@@ -108,6 +115,16 @@
     {
       "from": "public/cursors",
       "to": "cursors"
+    },
+    // The CC0 music library. Out of the asar for the same reason as mediapipe below, but
+    // with a different consumer: the NATIVE compositor opens every audio track by absolute
+    // filesystem path (`SceneAudioTrack.path`), and a path inside app.asar is not one. The
+    // manifest rides along so the main process can resolve ids without a second source of
+    // truth. ~11 MB. Licensing lives in THIRD-PARTY-NOTICES.md, enforced by
+    // `npm run music:check`.
+    {
+      "from": "public/music",
+      "to": "music"
     },
     // The segmentation model, out of the asar for the same reason as the two above: the main
     // process resolves it with `original-fs` (see realExistsSync in compositorViewService.ts),

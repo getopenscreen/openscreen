@@ -1,0 +1,74 @@
+{
+	"_comment": "Scène de mesure du tilt 3D pour `poc-d3d --scene` : les trois présets (iso en suivi auto, left, right en manuel), séparés de plus de 1,5 s pour garder chacun son ease-in/ease-out, curseur affiché pour que la parallaxe tourne. Couvre les 6 s de la fixture ; le bench preview (300 frames à 60 fps) en voit 5.",
+	"clips": [
+		{
+			"screenPath": "fixture/screen.mp4",
+			"webcamPath": "fixture/webcam.mp4",
+			"sourceStartSec": 0,
+			"sourceEndSec": 6,
+			"webcamOffsetSec": 0,
+			"hasAudio": false
+		}
+	],
+	"layout": {
+		"preset": "picture-in-picture",
+		"webcamSize": 0.3,
+		"webcamShape": "circle",
+		"webcamMirror": false,
+		"webcamPosition": null,
+		"webcamReactiveZoom": false
+	},
+	"effects": {
+		"padding": 0.3,
+		"blur": false,
+		"shadow": 0.5,
+		"roundnessFrac": 0.02,
+		"motionBlur": 0.35
+	},
+	"background": { "kind": "color", "color": "#1e1e2e" },
+	"zoomRegions": [
+		{
+			"id": "iso",
+			"startSec": 0.0,
+			"endSec": 1.0,
+			"scale": 1.6,
+			"focusX": 0.5,
+			"focusY": 0.5,
+			"focusMode": "auto",
+			"rotation": "iso"
+		},
+		{
+			"id": "left",
+			"startSec": 2.6,
+			"endSec": 3.2,
+			"scale": 1.4,
+			"focusX": 0.4,
+			"focusY": 0.5,
+			"focusMode": "manual",
+			"rotation": "left"
+		},
+		{
+			"id": "right",
+			"startSec": 4.8,
+			"endSec": 5.5,
+			"scale": 1.4,
+			"focusX": 0.6,
+			"focusY": 0.5,
+			"focusMode": "manual",
+			"rotation": "right"
+		}
+	],
+	"annotations": [],
+	"speedRegions": [],
+	"cursor": {
+		"show": true,
+		"size": 1,
+		"smoothing": 0,
+		"motionBlur": 0.35,
+		"clickBounce": 1,
+		"clipToBounds": false,
+		"theme": "default"
+	},
+	"cropByClip": [null],
+	"output": { "width": 1920, "height": 1080, "fps": 60 }
+}

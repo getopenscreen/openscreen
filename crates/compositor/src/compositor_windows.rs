@@ -1648,6 +1648,7 @@ impl Compositor {
         let mb_amount = g.mb_amount;
         let source_t = g.source_t;
         let zoom_rotation = g.zoom_rotation;
+        let zoom_rotation_dyn = g.zoom_rotation_dyn;
         let _padding_scale = g.padding_scale;
         let cut = g.cut;
         let s_dst = g.s_dst;
@@ -1767,8 +1768,7 @@ impl Compositor {
         // Géométrie du tilt, calculée UNE fois : l'ombre et l'écran doivent porter exactement le
         // même quadrilatère. Deux calculs séparés, c'est une ombre qui se décolle dès qu'un des
         // deux change.
-        let tilt = (!crate::regions::is_identity_rotation(zoom_rotation))
-            .then(|| crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], zoom_rotation));
+        let tilt = g.screen_tilt(s_px);
         let quad_center_px =
             [(s_dst[0] + s_dst[2] * 0.5) * self.rw(), (s_dst[1] + s_dst[3] * 0.5) * self.rh()];
         // L'ombre suit la silhouette réellement affichée : le rect arrondi quand l'écran est
@@ -1818,7 +1818,12 @@ impl Compositor {
             // une découpe (« un overflow hidden qui tronque l'enregistrement ») là où il devrait
             // lire une inclinaison. Ils sont donc rendus, dans le repère DU PLAN.
             let quad = tilt.unwrap_or_else(|| {
-                crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], zoom_rotation)
+                crate::regions::rotated_quad_corners_px(
+                    s_px[0],
+                    s_px[1],
+                    zoom_rotation,
+                    zoom_rotation_dyn,
+                )
             });
             let corners = quad.corners;
             // Taille du plan dans son propre repère, avant projection : c'est là que vit le rayon,

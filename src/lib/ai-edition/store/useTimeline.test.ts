@@ -1170,6 +1170,75 @@ describe("useTimeline undo history", () => {
 		expect(useProjectStore.getState().document?.timeline.clips).toHaveLength(2);
 	});
 
+	// Holds the first document save until the test releases it; every later one lands at once.
+	const gateFirstSave = () => {
+		const gate: { release?: () => void } = {};
+		let calls = 0;
+		bridgeMocks.save.mockImplementation(async (doc: AxcutDocument) => {
+			calls += 1;
+			if (calls === 1) {
+				await new Promise<void>((resolve) => {
+					gate.release = resolve;
+				});
+			}
+			return { success: true, document: doc };
+		});
+		return gate;
+	};
+
+	it("lands rapid zoom-level steps in order, one undo step each", async () => {
+		seed(docWithZoom);
+		const gate = gateFirstSave();
+		const { result } = renderTimeline();
+
+		const p4 = result.current.updateZoomDepth("zoom_a", 4);
+		const p5 = result.current.updateZoomDepth("zoom_a", 5);
+		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
+		await act(async () => {
+			gate.release?.();
+			await Promise.all([p4, p5]);
+		});
+
+		expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(5);
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(4);
+	});
+
+	it("keeps a pending zoom level when the 3D tilt is changed before it lands", async () => {
+		seed(docWithZoom);
+		const gate = gateFirstSave();
+		const { result } = renderTimeline();
+
+		const pDepth = result.current.updateZoomDepth("zoom_a", 4);
+		const pRotation = result.current.updateZoomRotation("zoom_a", "iso");
+		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
+		await act(async () => {
+			gate.release?.();
+			await Promise.all([pDepth, pRotation]);
+		});
+
+		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
+			depth: 4,
+			rotationPreset: "iso",
+		});
+	});
+
+	it("resolves a zoom-level write with whether the save took effect", async () => {
+		seed(docWithZoom);
+		const { result } = renderTimeline();
+		bridgeMocks.save.mockResolvedValueOnce({ success: false, error: "read-only" });
+
+		let ok: boolean | undefined;
+		await act(async () => {
+			ok = await result.current.updateZoomDepth("zoom_a", 4);
+		});
+
+		expect(ok).toBe(false);
+		expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(3);
+	});
+
 	it("leaves no undo step behind a focus drag whose commit failed", async () => {
 		// The drag used to push its pre-drag document from the FIRST `setDocument`. When
 		// the commit then failed, `commitZoomFocus` restored that same document through

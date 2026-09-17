@@ -40,6 +40,7 @@ import {
 import { dropTrimPillsByIds, resolveTimelineSpanToTrim } from "../timeline/trim-mapping";
 import type { AutoZoomSuggestion } from "../timeline/zoom-suggestions";
 import { useProjectStore, waitForDocumentSaves } from "./projectStore";
+import { useSequentialTimelineOps } from "./useSequentialTimelineOps";
 
 // How long a region lasts when the caller doesn't say. The timeline's toolbar
 // passes its own duration instead, derived from the current zoom so the new pill
@@ -108,6 +109,12 @@ export function useTimeline() {
 	const projectId = useProjectStore((s) => s.projectId);
 	const saveDocument = useProjectStore((s) => s.saveDocument);
 	const setDocument = useProjectStore((s) => s.setDocument);
+	// The zoom pane's own write chain -- see `saveZoomPatch`. Only `enqueue` is used, so
+	// there is no fallback document to hand it.
+	const { enqueue: enqueueZoomWrite } = useSequentialTimelineOps({
+		fallbackDocument: null,
+		saveDocument,
+	});
 	const [selection, setSelection] = useState<RegionHandle | null>(null);
 	// F2.7 — shift-click multi-selection. `selection` stays the inspector's
 	// focused region (the last one clicked); `multiSelection` is the full set
@@ -701,21 +708,35 @@ export function useTimeline() {
 		}
 	}, [saveDocument]);
 
+	// The zoom pane's one-field writes: level, 3D tilt, focus mode, cursor. Each is a
+	// whole-document save, so they share one chain and read the document INSIDE it. The level
+	// buttons step while the previous save is still out, and 3 -> 4 -> 5 built both saves from
+	// the render's depth-3 document: the main process does not order them, so the 4 could land
+	// last, and even in order one Ctrl+Z skipped a level. A neighbouring select changed while a
+	// level was pending rebuilt from that same document and put 3 back. Resolves
+	// `saveDocument`'s answer, so the level buttons can retry a failed write.
+	const saveZoomPatch = useCallback(
+		(id: string, patch: Partial<AxcutDocument["zoomRanges"][number]>) =>
+			enqueueZoomWrite(async () => {
+				const doc = useProjectStore.getState().document;
+				if (!doc) return false;
+				return saveDocument(
+					{
+						...doc,
+						zoomRanges: patchPillById(doc.zoomRanges, id, patch) as AxcutDocument["zoomRanges"],
+					},
+					{ history: true },
+				);
+			}),
+		[enqueueZoomWrite, saveDocument],
+	);
+
 	// Zoom-level control for the region-settings panel (1-6, matches
 	// zoomRegionSchema's depth literal union — 1.0x..3.5x in 0.5x steps per
 	// the `depth/2 + 0.5` label formula used throughout the timeline UI).
 	const updateZoomDepth = useCallback(
-		async (id: string, depth: 1 | 2 | 3 | 4 | 5 | 6) => {
-			if (!document) return;
-			const next: AxcutDocument = {
-				...document,
-				zoomRanges: patchPillById(document.zoomRanges, id, {
-					depth,
-				}) as AxcutDocument["zoomRanges"],
-			};
-			await saveDocument(next, { history: true });
-		},
-		[document, saveDocument],
+		(id: string, depth: 1 | 2 | 3 | 4 | 5 | 6) => saveZoomPatch(id, { depth }),
+		[saveZoomPatch],
 	);
 
 	// Same story as `focusMode` below: the 3D tilt was implemented end to end — schema
@@ -724,17 +745,9 @@ export function useTimeline() {
 	// `undefined` clears the preset back to a flat frame; `migrate.ts` already drops the field
 	// when it is falsy, so absent and "no rotation" are the same state.
 	const updateZoomRotation = useCallback(
-		async (id: string, rotationPreset: "iso" | "left" | "right" | undefined) => {
-			if (!document) return;
-			const next: AxcutDocument = {
-				...document,
-				zoomRanges: patchPillById(document.zoomRanges, id, {
-					rotationPreset,
-				}) as AxcutDocument["zoomRanges"],
-			};
-			await saveDocument(next, { history: true });
-		},
-		[document, saveDocument],
+		(id: string, rotationPreset: "iso" | "left" | "right" | undefined) =>
+			saveZoomPatch(id, { rotationPreset }),
+		[saveZoomPatch],
 	);
 
 	// Nothing could set `focusMode`: "auto" only ever arrived from the automatic suggestion pass
@@ -746,31 +759,14 @@ export function useTimeline() {
 	// Writing "manual" explicitly is safe even though `migrate.ts` only persists "auto": an absent
 	// field MEANS manual, so both forms resolve identically.
 	const updateZoomFocusMode = useCallback(
-		async (id: string, focusMode: "manual" | "auto") => {
-			if (!document) return;
-			const next: AxcutDocument = {
-				...document,
-				zoomRanges: patchPillById(document.zoomRanges, id, {
-					focusMode,
-				}) as AxcutDocument["zoomRanges"],
-			};
-			await saveDocument(next, { history: true });
-		},
-		[document, saveDocument],
+		(id: string, focusMode: "manual" | "auto") => saveZoomPatch(id, { focusMode }),
+		[saveZoomPatch],
 	);
 
 	const updateZoomHideCursor = useCallback(
-		async (id: string, hideCursor: boolean | undefined) => {
-			if (!document) return;
-			const next: AxcutDocument = {
-				...document,
-				zoomRanges: patchPillById(document.zoomRanges, id, {
-					hideCursor: hideCursor ? true : undefined,
-				}) as AxcutDocument["zoomRanges"],
-			};
-			await saveDocument(next, { history: true });
-		},
-		[document, saveDocument],
+		(id: string, hideCursor: boolean | undefined) =>
+			saveZoomPatch(id, { hideCursor: hideCursor ? true : undefined }),
+		[saveZoomPatch],
 	);
 
 	const updateAnnotationSpan = useCallback(

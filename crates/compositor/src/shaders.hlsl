@@ -4,16 +4,18 @@
 cbuffer Layer : register(b0)
 {
     float4 dst;       // x,y,w,h dans l'espace sortie 0..1 (origine haut-gauche)
-    float4 src;       // u0,v0,u1,v1 dans l'espace source 0..1
+    float4 src;       // u0,v0,u1,v1 dans l'espace source 0..1 ; mode 15 : décalage px du rayon, P, U
     float2 quad_px;   // taille du quad en pixels (pour les SDF)
     float  radius_px; // rayon des coins arrondis en px (0 = aucun)
-    float  mode;      // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre portée, 4 = curseur
-    float4 color;     // couleur pleine / teinte (ombre : rgb + opacité dans a)
-    float4 fx;        // fx.x = spread ombre (px), fx.y,fx.z libres
-    float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité)
-    float4 dst_prev;  // dst à la frame précédente
-    float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé)
+    float  mode;      // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre portée, 4 = curseur, 15 = curseur 3D, 16 = impact du clic
+    float4 color;     // couleur pleine / teinte (ombre : rgb + opacité dans a) ; mode 15 : coin du sprite, écrasement, opacité
+    float4 fx;        // fx.x = spread ombre (px), fx.y,fx.z libres ; mode 15 : rotation du plan (rad), tangage
+    float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet
+    float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip
+    float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; mode 15 : demi-taille du plan, translation
 };
+// Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
+// de la section « Curseur modélisé » (`cursor_model_cb`).
 
 struct VSOut
 {
@@ -43,6 +45,9 @@ Texture2D<float4> texImg : register(t2); // wallpaper image RGBA (fond, mode 6) 
 // resolution du modele (256x144) ; l'upscale vers la resolution webcam est fait par le sampler
 // lineaire, ce qui est exactement le filtrage qu'on veut sur un masque.
 Texture2D<float> texMask : register(t3);
+// Champ de distance signé du sprite de curseur (mode 15 seulement), R16F, cf. `cursor_sdf.rs`.
+// Le sprite lui-même est en t2 (texImg), comme aux modes 7 et 13.
+Texture2D<float> texSdf : register(t4);
 SamplerState samp : register(s0);
 
 // Plafond de la profondeur de champ du mode 8, en niveau de la pyramide demi-résolution (1.5 =
@@ -178,6 +183,45 @@ float3 quad_inverse_bilinear(float2 P, float2 c00, float2 c10, float2 c11, float
     return (r0.z > 0.5) ? r0 : r1;
 }
 
+// (s, t, ok) du point `P` dans le quad c00->c10->c11->c01 par l'homographie EXACTE du carré unité
+// sur le quad (forme de Heckbert, coordonnées relatives à c00), résolue à l'envers par Cramer.
+// C'est la projection d'un plan par une vraie caméra (`camera.rs`) : le warp bilinéaire s'en écarte
+// de plusieurs dizaines de px au centre d'un écran vu de biais. Miroir de `regions::square_to_quad`.
+float3 quad_inverse_projective(float2 P, float2 c00, float2 c10, float2 c11, float2 c01)
+{
+    float2 p1 = c10 - c00;
+    float2 p2 = c11 - c00;
+    float2 p3 = c01 - c00;
+    float2 d1 = p1 - p2;
+    float2 d2 = p3 - p2;
+    float2 d3 = p2 - p1 - p3;
+    float den = d1.x * d2.y - d2.x * d1.y;
+    float g = (d3.x * d2.y - d2.x * d3.y) / den;
+    float h = (d1.x * d3.y - d3.x * d1.y) / den;
+    float2 q = P - c00;
+    // x·(g s + h t + 1) = a s + b t, idem en y : un système 2×2 linéaire en (s, t).
+    float m00 = p1.x * (1.0 + g) - g * q.x;
+    float m01 = p3.x * (1.0 + h) - h * q.x;
+    float m10 = p1.y * (1.0 + g) - g * q.y;
+    float m11 = p3.y * (1.0 + h) - h * q.y;
+    float det = m00 * m11 - m01 * m10;
+    float s = (q.x * m11 - m01 * q.y) / det;
+    float t = (m00 * q.y - q.x * m10) / det;
+    float ok = (s >= -0.02 && s <= 1.02 && t >= -0.02 && t <= 1.02) ? 1.0 : 0.0;
+    return float3(s, t, ok);
+}
+
+// Le warp inverse d'un calque posé sur le plan : projectif sous la caméra réelle (`projective` =
+// 1, cf. `TiltedQuad::warp_flag`), bilinéaire sous un angle fixe, inchangé.
+float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, float projective)
+{
+    if (projective > 0.5)
+    {
+        return quad_inverse_projective(P, c00, c10, c11, c01);
+    }
+    return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
 // Hash 2D -> [0,1) sans sin() : le hash `frac(sin(x) * 43758)` dépend de la précision du GPU,
 // celui-ci (Hoskins, « hash12 ») ne fait que des produits de petites valeurs.
 float hash12(float2 p)
@@ -295,48 +339,341 @@ float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px)
     return sum / max(total, 1e-4);
 }
 
-// Curseur EN VOLUME (mode 13, mb.z > 1) : extrusion par répétition, sans maillage. La silhouette
-// alpha du sprite est rééchantillonnée `mb.z` fois (≤ 48), chaque copie translatée d'une fraction
-// de `mb.xy` — le vecteur d'extrusion `e` en px, déjà projeté côté CPU
-// (`frame_geometry::cursor_extrusion_px`). Une translation est la même dans tous les repères,
-// donc `local - e·f` retombe sur la copie f sans autre calcul. La copie 0 est la face avant,
-// intacte ; les suivantes sont les flancs, assombris avec la profondeur. Composition
-// avant→arrière (« under ») : un flanc ne se voit que là où rien de plus proche ne couvre déjà
-// le pixel, et la boucle s'arrête dès que le pixel est plein.
-// `SampleLevel(…, 0)` et non `Sample` : un gradient implicite est interdit dans une boucle à
-// sortie dynamique, et les textures d'image n'ont qu'un niveau — le résultat est le même.
-// Alpha DROIT comme le mode 13 plat : on prémultiplie ici.
-float4 cursor_extruded(float2 local)
+// ============ Curseur MODÉLISÉ (mode 15) ============
+// Le sprite de l'état courant en objet 3D : sa silhouette (champ de distance signé tiré de son
+// alpha par `cursor_sdf.rs`), extrudée avec un chanfrein, lancé de rayons par pixel. Le dessus
+// porte l'art du sprite ; le chanfrein et les flancs, la couleur de son bord. Ce qui touche le
+// modèle est éclairé ; ce qui le rate tombe sur le plan de l'écran, où l'on mesure l'ombre portée
+// (marche vers la lumière, pénombre douce) et l'ombre de contact. La caméra est reconstruite à
+// l'identique de `regions::rotate_point` + perspective P / (P - z) ; la pose, la caméra et la
+// boîte de dessin viennent de `frame_geometry::cursor_model_cb`, qui documente les emplacements
+// du cbuffer.
+//
+// Repère du MODÈLE : unité = plus grand côté du sprite, origine au hotspot de la face du dessus,
+// x à droite, y vers le bas, z vers la caméra ; le modèle occupe z de -MODEL_THICK à 0. Le rect
+// du sprite y commence en `color.rg` et mesure `sprite_size()` (rapport w/h dans `radius_px`).
+// Textures : t2 (texImg) = le sprite, RGBA en alpha droit ; t4 (texSdf) = son champ, R16F, en
+// unités du modèle, négatif dedans, sur le même rect.
+// Constantes : miroir exact de `frame_geometry.rs` (MODEL_*).
+static const float MODEL_THICK = 0.19;
+
+// Taille du sprite, repère du modèle : son plus grand côté vaut 1, `radius_px` porte w/h.
+float2 sprite_size()
 {
-    int taps = min((int) mb.z, 48);
-    float4 acc = 0.0;
-    [loop] for (int k = 0; k < 48; k++)
+    return float2(min(radius_px, 1.0), min(1.0 / radius_px, 1.0));
+}
+
+// Un texel du sprite, en unités du modèle : le champ est le sprite suréchantillonné ×4
+// (`cursor_sdf::SDF_UPSAMPLE`) et le plus grand côté du sprite vaut 1.
+static const float CURSOR_SDF_UPSAMPLE = 4.0;
+float sprite_texel()
+{
+    uint w, h;
+    texSdf.GetDimensions(w, h);
+    return CURSOR_SDF_UPSAMPLE / (float)max(w, h);
+}
+
+// Épaisseur du modèle, écrasé au clic de `color.b` (`CursorPose::squash`).
+float model_thick()
+{
+    return MODEL_THICK * color.b;
+}
+static const float MODEL_BEVEL = 0.045;
+// Direction VERS la lumière, repère caméra : haut-gauche, devant.
+static const float3 MODEL_LIGHT = float3(-0.4194, -0.5792, 0.6990);
+static const float MODEL_AMBIENT = 0.36;
+static const float MODEL_DIFFUSE = 0.75;
+static const float MODEL_SPECULAR = 0.45;
+// Profondeur (texels du sprite) à laquelle on lit la couleur du bord : assez loin de la frange
+// antialiasée, assez près pour rester dans le filet de l'art (~4 texels).
+static const float MODEL_RIM_INSET = 1.5;
+// Ombre portée : dureté de la pénombre (plus grand = plus net), portée maximale (la marche vers
+// la lumière s'arrête à la boîte du modèle élargie d'autant) et opacité ; ombre de contact :
+// portée (unités) et opacité. La boîte de dessin en dépend : miroir des constantes
+// `MODEL_SOFTNESS`, `MODEL_SHADOW_PAD` et `MODEL_CONTACT_RADIUS` de `frame_geometry.rs`.
+static const float MODEL_SOFTNESS = 6.0;
+static const float MODEL_SHADOW_PAD = 0.45;
+static const float MODEL_SHADOW_ALPHA = 0.5;
+static const float MODEL_CONTACT_RADIUS = 0.12;
+static const float MODEL_CONTACT_ALPHA = 0.5;
+
+// Distance signée à la silhouette (plan xy du modèle). Dans le rect du sprite, le champ ; hors de
+// lui, une borne inférieure exacte le long de la normale au rect : le sprite tient dans son rect,
+// qui est convexe, donc |p - s|² >= |p - c|² + |c - s|² pour tout point s du sprite (c = p ramené
+// dans le rect). Échantillonné au niveau 0 : la marche est une boucle à sortie anticipée.
+float sd_sprite2(float2 p)
+{
+    float2 c = clamp(p, color.rg, color.rg + sprite_size());
+    float d = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0);
+    float2 o = p - c;
+    float out2 = dot(o, o);
+    float e = max(d, 0.0);
+    return out2 > 0.0 ? sqrt(out2 + e * e) : d;
+}
+
+// Distance signée au modèle : le contour rentré du chanfrein, épaisseur rentrée du chanfrein, puis
+// regonflé : les arêtes du dessus et du dessous sont arrondies de MODEL_BEVEL.
+float sd_model(float3 p)
+{
+    float half_t = model_thick() * 0.5;
+    float2 w = float2(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z + half_t) - (half_t - MODEL_BEVEL));
+    return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - MODEL_BEVEL;
+}
+
+// Normale par le gradient du champ (tétraèdre, quatre évaluations).
+float3 model_normal(float3 p)
+{
+    const float e = 0.002;
+    return normalize(float3(1, -1, -1) * sd_model(p + float3(1, -1, -1) * e) +
+                     float3(-1, -1, 1) * sd_model(p + float3(-1, -1, 1) * e) +
+                     float3(-1, 1, -1) * sd_model(p + float3(-1, 1, -1) * e) +
+                     float3(1, 1, 1) * sd_model(p + float3(1, 1, 1) * e));
+}
+
+// Entrée/sortie d'un rayon dans une boîte alignée (x = entrée, y = sortie ; x >= y : raté).
+float2 ray_box(float3 o, float3 d, float3 lo, float3 hi)
+{
+    float3 inv = 1.0 / (abs(d) > 1e-6 ? d : 1e-6);
+    float3 t0 = (lo - o) * inv;
+    float3 t1 = (hi - o) * inv;
+    float3 tn = min(t0, t1);
+    float3 tf = max(t0, t1);
+    return float2(max(max(tn.x, tn.y), tn.z), min(min(tf.x, tf.y), tf.z));
+}
+
+// Cosinus/sinus de la pose : rotation du plan (X, Y, Z), tangage et lacet du modèle.
+struct ModelFrame
+{
+    float3 c;
+    float3 s;
+    float cp;
+    float sp;
+    float cy;
+    float sy;
+};
+
+// Repère caméra -> repère du plan : la transposée de `regions::rotate_point` (X, Y, puis Z).
+float3 world_to_plane(float3 v, ModelFrame f)
+{
+    float y = v.y * f.c.x + v.z * f.s.x;
+    float z = -v.y * f.s.x + v.z * f.c.x;
+    float x = v.x * f.c.y - z * f.s.y;
+    z = v.x * f.s.y + z * f.c.y;
+    return float3(x * f.c.z + y * f.s.z, -x * f.s.z + y * f.c.z, z);
+}
+
+// Repère du modèle -> repère du plan (sans échelle ni translation) : tangage autour de x, puis
+// lacet autour de z (`ModelView::model_to_plane`).
+float3 model_to_plane(float3 v, ModelFrame f)
+{
+    float y = v.y * f.cp - v.z * f.sp;
+    float z = v.y * f.sp + v.z * f.cp;
+    return float3(v.x * f.cy - y * f.sy, v.x * f.sy + y * f.cy, z);
+}
+
+// L'inverse du précédent.
+float3 plane_to_model(float3 v, ModelFrame f)
+{
+    float x = v.x * f.cy + v.y * f.sy;
+    float y = -v.x * f.sy + v.y * f.cy;
+    return float3(x, y * f.cp + v.z * f.sp, -y * f.sp + v.z * f.cp);
+}
+
+// Pénombre vers la lumière depuis `o` (1 = éclairé, 0 = dans l'ombre). Marche bornée à la boîte
+// du modèle élargie de la portée de la pénombre, pas bornés, sortie dès que l'ombre est pleine.
+float model_soft_shadow(float3 o, float3 l, float3 lo, float3 hi)
+{
+    float2 tb = ray_box(o, l, lo - MODEL_SHADOW_PAD, hi + MODEL_SHADOW_PAD);
+    if (tb.x >= tb.y || tb.y <= 0.0)
     {
-        if (k >= taps || acc.a > 0.999) break;
-        float f = (float) k / (float) (taps - 1);
-        float3 r = quad_inverse_bilinear(local - mb.xy * f, fx.xy, fx.zw, src_prev.xy, src_prev.zw);
-        if (r.z < 0.5) continue;
-        float4 s = texImg.SampleLevel(samp, saturate(float2(r.x, r.y)), 0.0);
-        float shade = (k == 0) ? 1.0 : 0.72 - 0.3 * f;
-        float a = s.a * color.a;
-        acc += (1.0 - acc.a) * float4(s.rgb * shade * a, a);
+        return 1.0;
     }
-    return acc;
+    float res = 1.0;
+    float t = max(tb.x, 0.004);
+    [loop] for (int k = 0; k < 32; k++)
+    {
+        float d = sd_model(o + l * t);
+        res = min(res, MODEL_SOFTNESS * d / t);
+        if (res < 0.002 || t > tb.y)
+        {
+            break;
+        }
+        t += clamp(d, 0.01, 0.2);
+    }
+    res = saturate(res);
+    return res * res * (3.0 - 2.0 * res);
+}
+
+// Couleur de la matière au point `p` du plan xy (alpha droit) : l'art du sprite, lu au plus à
+// MODEL_RIM_INSET texels du bord vers l'intérieur. Le dessus garde donc son art, et le chanfrein,
+// les flancs et le dessous prennent la couleur du bord de CE sprite (le filet blanc de la flèche,
+// le trait noir des mains), jamais la frange mêlée au transparent.
+float3 model_albedo(float2 p)
+{
+    float texel = sprite_texel();
+    float e = 0.25 * texel;
+    float2 g = float2(sd_sprite2(p + float2(e, 0.0)) - sd_sprite2(p - float2(e, 0.0)),
+                      sd_sprite2(p + float2(0.0, e)) - sd_sprite2(p - float2(0.0, e)));
+    float2 q = p - g / max(length(g), 1e-6) * max(sd_sprite2(p) + MODEL_RIM_INSET * texel, 0.0);
+    return texImg.SampleLevel(samp, (q - color.rg) / sprite_size(), 0.0).rgb;
+}
+
+// Couleur (alpha droit) d'un point de la surface vu le long de `rd`.
+float3 model_shade(float3 q, float3 rd, float3 l)
+{
+    float3 n = model_normal(q);
+    float3 albedo = model_albedo(q.xy);
+    float diffuse = saturate(dot(n, l));
+    // Reflet sur les arrondis seulement : une face plane l'allumerait d'un bloc (la lumière est
+    // directionnelle), et le dessus sombre d'un sprite virerait au gris à chaque clic.
+    float gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
+    float spec = gloss * pow(saturate(dot(n, normalize(l - rd))), 110.0);
+    return albedo * (MODEL_AMBIENT + MODEL_DIFFUSE * diffuse) + MODEL_SPECULAR * spec;
+}
+
+float4 cursor_model(float2 local)
+{
+    ModelFrame f;
+    f.c = cos(fx.xyz);
+    f.s = sin(fx.xyz);
+    f.cp = cos(fx.w);
+    f.sp = sin(fx.w);
+    f.cy = cos(src_prev.w);
+    f.sy = sin(src_prev.w);
+    float persp = src.z;
+    float unit = src.w;
+    float3 tip = src_prev.xyz;
+    // La boîte du modèle : le rect du sprite, sur toute l'épaisseur.
+    float3 lo = float3(color.rg, -model_thick());
+    float3 hi = float3(color.rg + sprite_size(), 0.0);
+
+    // Le rayon de ce pixel : de la caméra (0, 0, P) à travers le pixel sur le plan image z = 0.
+    // Le plan est translaté de mb.zw dans le repère caméra (caméra réelle, 0 sous un angle fixe).
+    float3 dw = float3(local + src.xy, -persp);
+    float dlen = length(dw);
+    float3 ro = plane_to_model((world_to_plane(float3(-mb.z, -mb.w, persp), f) - tip) / unit, f);
+    float3 rd = plane_to_model(world_to_plane(dw / dlen, f), f);
+    float3 l = plane_to_model(world_to_plane(MODEL_LIGHT, f), f);
+    // Le plan de l'écran dans le repère du modèle : dot(p, nz) = hz.
+    float3 nz = plane_to_model(float3(0.0, 0.0, 1.0), f);
+    float hz = -tip.z / unit;
+
+    // Le modèle. Silhouette antialiasée : un rayon qui la frôle à moins d'un pixel la couvre en
+    // partie (`best`, la plus petite distance rencontrée, en pixels).
+    float cov = 0.0;
+    float3 rgb = 0.0;
+    float2 tb = ray_box(ro, rd, lo - 0.02, hi + 0.02);
+    if (tb.x < tb.y && tb.y > 0.0)
+    {
+        float t = max(tb.x, 0.0);
+        float best = 1e9;
+        float t_best = t;
+        bool hit = false;
+        [loop] for (int k = 0; k < 64; k++)
+        {
+            float d = sd_model(ro + rd * t);
+            float fp = t / dlen;
+            if (d < 0.1 * fp)
+            {
+                hit = true;
+                t_best = t;
+                break;
+            }
+            if (d / fp < best)
+            {
+                best = d / fp;
+                t_best = t;
+            }
+            t += d;
+            if (t > tb.y)
+            {
+                break;
+            }
+        }
+        cov = hit ? 1.0 : saturate(1.0 - best);
+        if (cov > 0.0)
+        {
+            rgb = model_shade(ro + rd * t_best, rd, l);
+        }
+    }
+
+    // Le plan, là où le modèle ne couvre pas tout le pixel : ombre portée et ombre de contact,
+    // seulement à l'intérieur de l'écran (`mb.xy` = sa demi-taille, px du plan).
+    float shadow = 0.0;
+    float denom = dot(rd, nz);
+    if (cov < 1.0 && denom < -1e-4)
+    {
+        float3 g = ro + rd * ((hz - dot(ro, nz)) / denom);
+        float3 gp = tip + unit * model_to_plane(g, f);
+        float inside = saturate(min(mb.x - abs(gp.x), mb.y - abs(gp.y)) + 0.5);
+        if (inside > 0.0)
+        {
+            float dropped = 1.0 - model_soft_shadow(g, l, lo, hi);
+            float contact = 1.0 - smoothstep(0.0, MODEL_CONTACT_RADIUS, sd_model(g));
+            shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
+        }
+    }
+
+    float a = cov * color.a;
+    return float4(rgb * a, a + (1.0 - a) * shadow * color.a); // prémultiplié, ombre noire
+}
+
+// ============ Impact du clic (mode 16) ============
+// Sous le curseur modélisé : une tache de pression et un anneau posés SUR l'écran, centrés sur le
+// point cliqué. Même warp que le mode 13 (fx/src_prev = coins, mb.x = 1 : projectif) ; le carré
+// (s, t) porte un disque, d = 0 au point cliqué et 1 sur le cercle inscrit. src = anneau (rayon,
+// demi-épaisseur, opacité, opacité du halo sombre) ; mb.yz = tache (rayon, opacité) ; dst_prev =
+// le carré en fractions du plan, pour ne rien dessiner hors de l'écran ; radius_px = largeur de
+// l'antialiasing ; color = teinte de l'anneau et opacité. Emplacements : `cursor_impact_cb`.
+float4 cursor_impact(float2 local)
+{
+    float3 r = quad_inverse(local, fx.xy, fx.zw, src_prev.xy, src_prev.zw, mb.x);
+    float2 pf = dst_prev.xy + r.xy * dst_prev.zw;
+    if (r.z < 0.5 || any(pf < 0.0) || any(pf > 1.0))
+    {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+    float d = length(r.xy * 2.0 - 1.0);
+    float x = abs(d - src.x);
+    float ring = src.z * (1.0 - smoothstep(src.y - radius_px, src.y + radius_px, x));
+    float halo = src.w * exp(-x * x / (6.0 * src.y * src.y + radius_px * radius_px));
+    float spot = mb.z * exp(-d * d / max(mb.y * mb.y, 1e-6));
+    float shade = saturate(halo + spot);
+    float a = ring + (1.0 - ring) * shade;
+    return float4(color.rgb * ring, a) * color.a; // prémultiplié, ombre noire
 }
 
 float4 ps_main(VSOut i) : SV_Target
 {
+    // mode 16 : IMPACT DU CLIC (cf. `cursor_impact`). Testé en premier, comme le mode 15.
+    if (mode > 15.5)
+    {
+        return cursor_impact(i.local);
+    }
+
+    // mode 15 : CURSEUR MODÉLISÉ (cf. `cursor_model`). Testé en premier : les branches suivantes
+    // n'ont pas de borne haute. dst_prev = rect de clip « Clip to canvas », comme au mode 13.
+    if (mode > 14.5)
+    {
+        if (i.pout.x < dst_prev.x || i.pout.x > dst_prev.x + dst_prev.z ||
+            i.pout.y < dst_prev.y || i.pout.y > dst_prev.y + dst_prev.w)
+        {
+            return float4(0.0, 0.0, 0.0, 0.0);
+        }
+        return cursor_model(i.local);
+    }
+
     // mode 14 : CADRE DE FENÊTRE autour de l'écran (barre de titre, trois pastilles, filet),
-    // dessiné SOUS lui. Testé en premier : la branche du mode 13 n'a pas de borne haute.
+    // dessiné SOUS lui. Testé avant le mode 13, dont la branche n'a pas de borne haute.
     // Même warp que le mode 8 — le cadre est le quad de l'écran prolongé, il penche donc avec
     // lui ; à plat, le quad est un rect et le warp l'identité exacte.
     // fx.xy/fx.zw = coins TL/TR, src_prev.xy/.zw = BR/BL (px locaux) ; dst_prev.xy = taille du
     // cadre dans son plan, dst_prev.z = hauteur de la barre, dst_prev.w = épaisseur du filet
     // (px du plan) ; radius_px = rayon extérieur (les coins hauts plafonnent à la barre) ;
-    // color = fond de la barre, mb = couleur du filet (alpha droit).
+    // color = fond de la barre, mb = couleur du filet (alpha droit) ; src.x = 1 : warp projectif.
     if (mode > 13.5)
     {
-        float3 r = quad_inverse_bilinear(i.local, fx.xy, fx.zw, src_prev.xy, src_prev.zw);
+        float3 r = quad_inverse(i.local, fx.xy, fx.zw, src_prev.xy, src_prev.zw, src.x);
         if (r.z < 0.5)
         {
             return float4(0.0, 0.0, 0.0, 0.0); // hors du cadre projeté
@@ -371,9 +708,8 @@ float4 ps_main(VSOut i) : SV_Target
     // doit donc subir la même inclinaison qu'elle, sinon il se lit comme un autocollant plat
     // collé par-dessus la scène. Corriger sa seule position ne suffisait pas.
     // fx.xy/fx.zw = coins TL/TR (px locaux) ; src_prev.xy/.zw = BR/BL ; dst_prev = rect de clip
-    // « Clip to canvas » en espace sortie. mb.xy = vecteur d'extrusion en px, mb.z = nombre de
-    // copies (volume, cf. `cursor_extruded`) ; mb.z ≤ 1 = sprite plat, le rendu d'avant.
-    // Un futur mode 14 doit être testé AVANT cette branche, qui n'a pas de borne haute.
+    // « Clip to canvas » en espace sortie ; mb.x = 1 : warp projectif.
+    // Un mode supérieur doit être testé AVANT cette branche, qui n'a pas de borne haute.
     if (mode > 12.5)
     {
         if (i.pout.x < dst_prev.x || i.pout.x > dst_prev.x + dst_prev.z ||
@@ -381,11 +717,7 @@ float4 ps_main(VSOut i) : SV_Target
         {
             return float4(0.0, 0.0, 0.0, 0.0);
         }
-        if (mb.z > 1.5)
-        {
-            return cursor_extruded(i.local);
-        }
-        float3 r = quad_inverse_bilinear(i.local, fx.xy, fx.zw, src_prev.xy, src_prev.zw);
+        float3 r = quad_inverse(i.local, fx.xy, fx.zw, src_prev.xy, src_prev.zw, mb.x);
         if (r.z < 0.5)
         {
             return float4(0.0, 0.0, 0.0, 0.0); // hors du sprite projeté
@@ -395,12 +727,13 @@ float4 ps_main(VSOut i) : SV_Target
         return float4(s.rgb * a, a);
     }
 
-    // mode 8 : écran tilté en 3D (zoom regions "rotation" : iso/left/right). `dst`/`quad_px`
-    // couvrent la BOUNDING BOX des 4 coins projetés (calculée côté CPU, `regions.rs`) ; ce
-    // shader retrouve où tombe chaque pixel DANS le quad tilté (warp bilinéaire inverse — pas
-    // de perspective-correct exact, mais indiscernable à l'œil pour un tilt de 10-22°) et
-    // échantillonne la vidéo à l'UV correspondant, sinon transparent (hors du quad projeté).
+    // mode 8 : écran tilté en 3D (zoom regions "rotation" : iso/left/right) ou vu par la caméra
+    // réelle (`follow-cursor`). `dst`/`quad_px` couvrent la BOUNDING BOX des 4 coins projetés
+    // (`frame_geometry::tilted_screen_cb`) ; ce shader retrouve où tombe chaque pixel DANS le quad
+    // (warp inverse : bilinéaire sous un angle fixe, projectif exact sous la caméra réelle,
+    // dst_prev.w = 1) et échantillonne la vidéo à l'UV correspondant, sinon transparent.
     // fx.xy/fx.zw = coins TL/TR (px locaux, 0..quad_px) ; src_prev.xy/.zw = coins BR/BL.
+    // color.xy (caméra réelle) : éclairage 1 + color.x·(s − 0.5) + color.y·(t − 0.5).
     // mb = [gx, gy, z_focus, k] : profondeur du point r du plan = (r.x - 0.5)*gx + (r.y - 0.5)*gy
     // en px, positive vers la caméra ; z_focus = celle du focus du zoom (`TiltedQuad::depth_mb`) ;
     // k = texels source de flou par px d'écart de profondeur (0 = profondeur de champ coupée).
@@ -455,7 +788,8 @@ float4 ps_main(VSOut i) : SV_Target
     // laquelle on dessine). `i.pout` donne directement l'UV de sortie, donc aucun mapping à
     // refaire. fx.x = 0 mosaïque / 1 flou ; fx.y = taille de bloc px (mosaïque) ou rayon px
     // (flou) ; fx.z = 0 rectangle / 1 ovale ; fx.w = 1 si le masque doit être teinté ;
-    // mb.z = 1 si le masque est un quad incliné (coins TL, TR dans dst_prev, BR, BL dans src_prev).
+    // mb.z = 1 si le masque est un quad incliné (coins TL, TR dans dst_prev, BR, BL dans src_prev),
+    // mb.w = 1 si son warp est projectif.
     if (mode > 9.5)
     {
         // Masque de forme, en coords locales normalisées du quad.
@@ -466,7 +800,7 @@ float4 ps_main(VSOut i) : SV_Target
         // transparent SUR la zone à cacher.
         if (mb.z > 0.5)
         {
-            float3 w = quad_inverse_bilinear(i.local, dst_prev.xy, dst_prev.zw, src_prev.xy, src_prev.zw);
+            float3 w = quad_inverse(i.local, dst_prev.xy, dst_prev.zw, src_prev.xy, src_prev.zw, mb.w);
             if (w.z < 0.5)
             {
                 return float4(0.0, 0.0, 0.0, 0.0);
@@ -542,7 +876,7 @@ float4 ps_main(VSOut i) : SV_Target
 
     if (mode > 7.5)
     {
-        float3 r = quad_inverse_bilinear(i.local, fx.xy, fx.zw, src_prev.xy, src_prev.zw);
+        float3 r = quad_inverse(i.local, fx.xy, fx.zw, src_prev.xy, src_prev.zw, dst_prev.w);
         if (r.z < 0.5)
         {
             return float4(0.0, 0.0, 0.0, 0.0); // hors du quad projeté
@@ -581,6 +915,11 @@ float4 ps_main(VSOut i) : SV_Target
             float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
             float3 far_rgb = texImg.SampleLevel(samp, uv, lod).rgb;
             rgb = lerp(rgb, far_rgb, saturate((coc - 0.5) / 1.5));
+        }
+        if (dst_prev.w > 0.5)
+        {
+            // La lampe de la caméra réelle : le côté proche un peu plus clair.
+            rgb = saturate(rgb * (1.0 + color.x * (rs.x - 0.5) + color.y * (rs.y - 0.5)));
         }
         return float4(rgb * tilt_a, tilt_a); // prémultiplié, comme les autres modes
     }

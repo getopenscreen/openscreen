@@ -47,7 +47,7 @@ function styledSettings(): EditorSettingsSnapshot {
 			smoothing: 0.1,
 			motionBlur: 0.9,
 			clickBounce: 4,
-			volume: 0.6,
+			model3d: true,
 			clipToBounds: true,
 		},
 		cursorShow: false,

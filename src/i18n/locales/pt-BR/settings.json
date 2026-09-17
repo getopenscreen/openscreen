@@ -337,20 +337,32 @@
 			"autoDescription": "A câmera segue a posição do cursor gravado",
 			"title": "Modo de Foco"
 		},
-		"threeD": {
+		"camera": {
+			"title": "Câmera 3D",
+			"off": "Desativada",
+			"fixed": "Ângulo fixo",
+			"moving": "Câmera em movimento",
 			"preset": {
-				"left": "Esquerda",
-				"right": "Direita",
-				"iso": "Iso"
+				"iso": "De cima, na diagonal",
+				"left": "Tela virada para a esquerda",
+				"right": "Tela virada para a direita",
+				"followCursor": "Gira com o cursor"
 			},
-			"none": "Nenhuma",
-			"title": "Rotação 3D"
+			"description": {
+				"off": "A tela fica plana.",
+				"iso": "Mantém uma única pose: virada para a esquerda e vista de cima.",
+				"left": "Mantém uma única pose: a tela olha para a esquerda e a borda direita avança.",
+				"right": "Mantém uma única pose: a tela olha para a direita e a borda esquerda avança.",
+				"followCursor": "A tela fica parada; a câmera gira ao redor dela, para o lado do cursor, e sobe ou desce com ele."
+			},
+			"needsCursor": "O cursor está oculto: esta câmera não tem o que seguir e mantém seu ângulo inicial."
 		},
 		"clickImpact": {
 			"title": "Impacto do clique",
 			"description": "Cada clique pressiona a tela inclinada: o lado clicado afunda e depois volta.",
-			"needsRotation": "Escolha primeiro uma rotação 3D: só uma tela inclinada pode ser pressionada.",
-			"needsCursor": "O cursor está oculto: a tela só reage a cliques visíveis."
+			"needsRotation": "Escolha primeiro uma câmera 3D: só uma tela inclinada pode ser pressionada.",
+			"needsCursor": "O cursor está oculto: a tela só reage a cliques visíveis.",
+			"descriptionCamera": "Cada clique faz a câmera recuar um pouco e depois voltar."
 		},
 		"level": "Nível de Zoom",
 		"previewHold": "Mantenha pressionado para pré-visualizar o efeito de zoom",
@@ -384,8 +396,9 @@
 	"cursor": {
 		"smoothing": "Suavização",
 		"clickBounce": "Rebote ao clicar",
-		"depth": "Profundidade 3D",
-		"depthNeedsCursor": "Ative “Mostrar cursor” para dar profundidade a ele.",
+		"model3d": "Cursor 3D",
+		"model3dHint": "Estilo padrão: todas as formas do cursor ficam em 3D. Os outros estilos continuam planos.",
+		"model3dNeedsCursor": "Ative “Mostrar cursor” para usar o cursor 3D.",
 		"help": "Renderização do cursor a partir da telemetria gravada: tema, tamanho, suavização, desfoque de movimento e salto ao clicar.",
 		"clipToBoundsDescription": "Mantém o cursor dentro do quadro do vídeo. Desative para permitir que o cursor ultrapasse as bordas — útil ao aplicar zoom ou ao deslocar.",
 		"size": "Tamanho",

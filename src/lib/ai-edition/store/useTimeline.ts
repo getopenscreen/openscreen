@@ -6,7 +6,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
-import type { AnnotationRegion, AnnotationType } from "@/components/video-editor/types";
+import type {
+	AnnotationRegion,
+	AnnotationType,
+	Rotation3DPreset,
+} from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
 	collapseTracksToPills,
@@ -724,7 +728,7 @@ export function useTimeline() {
 	// `undefined` clears the preset back to a flat frame; `migrate.ts` already drops the field
 	// when it is falsy, so absent and "no rotation" are the same state.
 	const updateZoomRotation = useCallback(
-		async (id: string, rotationPreset: "iso" | "left" | "right" | undefined) => {
+		async (id: string, rotationPreset: Rotation3DPreset | undefined) => {
 			if (!document) return;
 			const next: AxcutDocument = {
 				...document,

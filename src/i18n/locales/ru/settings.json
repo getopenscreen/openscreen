@@ -114,7 +114,12 @@
 		"format": "Формат",
 		"fitClip": "Подогнать",
 		"motionBlur": "Размытие движения",
-		"roundness": "Скругление"
+		"roundness": "Скругление",
+		"window": "Окно",
+		"windowNone": "Нет",
+		"windowLight": "Светлое",
+		"windowDark": "Тёмное",
+		"windowHelp": "Рисует заголовок и рамку окна вокруг записи."
 	},
 	"stylePresets": {
 		"button": "Пресеты",

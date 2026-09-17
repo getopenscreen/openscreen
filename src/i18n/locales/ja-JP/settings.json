@@ -114,7 +114,12 @@
 		"format": "フォーマット",
 		"fitClip": "合わせる",
 		"motionBlur": "モーションブラー",
-		"roundness": "丸み"
+		"roundness": "丸み",
+		"window": "ウィンドウ",
+		"windowNone": "なし",
+		"windowLight": "ライト",
+		"windowDark": "ダーク",
+		"windowHelp": "録画の周りにウィンドウのタイトルバーと枠を描画します。"
 	},
 	"stylePresets": {
 		"button": "プリセット",

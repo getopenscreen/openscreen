@@ -162,6 +162,26 @@ pub struct SceneEffects {
     pub roundness_frac: f32,
     /// 0..1 flou de mouvement.
     pub motion_blur: f32,
+    /// Cadre dessiné autour de l'enregistrement. `#[serde(default)]` : l'app omet la clé quand
+    /// il n'y en a pas, et tout payload d'avant le cadre se lit « sans cadre ».
+    #[serde(default)]
+    pub frame: SceneFrame,
+}
+
+/// Le cadre autour de l'écran (`effects.frame` côté TS). Une valeur inconnue — un cadre ajouté
+/// par une version plus récente de l'app — retombe sur `None` au lieu de faire échouer toute la
+/// scène : l'enregistrement reste rendu, sans cadre.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SceneFrame {
+    /// Chrome de fenêtre : barre de titre, trois pastilles, filet. Thème clair.
+    WindowLight,
+    /// Le même chrome, thème sombre.
+    WindowDark,
+    /// Dernier : serde n'accepte `other` que sur la dernière variante.
+    #[default]
+    #[serde(other)]
+    None,
 }
 
 /// Fond derrière l'écran (parsé depuis `settings.wallpaper`).
@@ -691,6 +711,22 @@ mod tests {
         assert!(scene.clips[0].has_audio);
         assert_eq!(scene.crop_by_clip.len(), 1);
         assert_eq!(scene.output.width, 1920);
+    }
+
+    #[test]
+    fn the_frame_defaults_to_none_and_tolerates_an_unknown_value() {
+        let effects = |frame: &str| -> SceneEffects {
+            serde_json::from_str(&format!(
+                r#"{{"padding":0,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0{frame}}}"#
+            ))
+            .expect("parse effects")
+        };
+        assert_eq!(effects("").frame, SceneFrame::None);
+        assert_eq!(effects(r#","frame":"none""#).frame, SceneFrame::None);
+        assert_eq!(effects(r#","frame":"window-light""#).frame, SceneFrame::WindowLight);
+        assert_eq!(effects(r#","frame":"window-dark""#).frame, SceneFrame::WindowDark);
+        // Un cadre d'une version plus récente de l'app : pas de cadre, mais la scène se lit.
+        assert_eq!(effects(r#","frame":"browser""#).frame, SceneFrame::None);
     }
 
     #[test]

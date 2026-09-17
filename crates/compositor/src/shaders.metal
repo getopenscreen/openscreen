@@ -230,8 +230,20 @@ inline float3 quad_inverse_bilinear(float2 P, float2 c00, float2 c10, float2 c11
     return (r0.z > 0.5) ? r0 : r1;
 }
 
+// Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
+inline float disc_cov(float2 p, float2 c, float r)
+{
+    return 1.0 - smoothstep(r - 0.75, r + 0.75, length(p - c));
+}
+
+// Couverture d'un trait centré sur `x = 0`, de demi-épaisseur `half_w`, sur ~1 px.
+inline float band_cov(float x, float half_w)
+{
+    return clamp(half_w + 0.5 - abs(x), 0.0, 1.0);
+}
+
 // =================================================================================
-// Pixel shader principal : un seul `ps_main` qui gère 14 modes via `layer.mode`.
+// Pixel shader principal : un seul `ps_main` qui gère 15 modes via `layer.mode`.
 // Identique à `ps_main` côté HLSL ligne pour ligne (à la syntaxe MSL près).
 // =================================================================================
 
@@ -369,6 +381,38 @@ fragment float4 ps_main(VSOut i [[stage_in]],
                         // puisque la branche n'est prise que si layer.fx.z > 0.5.
                         texture2d<float, access::sample> texMask [[texture(3)]])
 {
+    // mode 14 : CADRE DE FENÊTRE autour de l'écran, dessiné SOUS lui. Cf. commentaires HLSL.
+    // Testé en premier : la branche du mode 13 n'a pas de borne haute.
+    // fx/src_prev = coins du cadre projeté ; dst_prev = (taille du plan, barre, filet) ;
+    // radius_px = rayon extérieur ; color = fond de la barre ; mb = couleur du filet.
+    if (layer.mode > 13.5)
+    {
+        float3 r = quad_inverse_bilinear(i.local, layer.fx.xy, layer.fx.zw,
+                                          layer.src_prev.xy, layer.src_prev.zw);
+        if (r.z < 0.5)
+        {
+            return float4(0.0, 0.0, 0.0, 0.0); // hors du cadre projeté
+        }
+        float2 plane_px = layer.dst_prev.xy;
+        float bar = layer.dst_prev.z;
+        float line_w = layer.dst_prev.w;
+        float2 q = float2(r.x, r.y) * plane_px;
+        float2 p = q - plane_px * 0.5;
+        float rad = max(layer.radius_px, 0.0);
+        float d = sd_round_rect(p, plane_px * 0.5, (p.y < 0.0) ? min(rad, bar) : rad);
+        float cov = 1.0 - smoothstep(0.0, 1.5, d);
+        float stroke = max(band_cov(-d - line_w * 0.5, line_w * 0.5),
+                           band_cov(q.y - (bar - line_w * 0.5), line_w * 0.5));
+        float3 rgb = mix(layer.color.rgb, layer.mb.rgb, stroke * layer.mb.a);
+        float dr = bar * 0.214;
+        float dx = bar * 0.714;
+        rgb = mix(rgb, float3(1.000, 0.373, 0.341), disc_cov(q, float2(dx, bar * 0.5), dr));
+        rgb = mix(rgb, float3(0.996, 0.737, 0.180), disc_cov(q, float2(2.0 * dx, bar * 0.5), dr));
+        rgb = mix(rgb, float3(0.157, 0.784, 0.251), disc_cov(q, float2(3.0 * dx, bar * 0.5), dr));
+        float a = cov * layer.color.a;
+        return float4(rgb * a, a);
+    }
+
     // mode 13 : SPRITE DE CURSEUR posé sur l'écran incliné. Cf. commentaires HLSL.
     // mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume) ; mb.z ≤ 1 = plat.
     // Un futur mode 14 doit être testé AVANT cette branche, qui n'a pas de borne haute.
@@ -458,9 +502,11 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         // Inconditionnel, rayon 0 compris — `sd_round_rect` dégénère en SDF de rectangle et
         // le feather de 1,5 px subsiste, ce qui fait lire une arête inclinée COMME une arête
         // plutôt que comme une troncature en marches d'escalier.
+        // dst_prev.z = 1 : écran sous un cadre de fenêtre, coins HAUTS carrés (sous la barre).
         float2 plane_px = layer.dst_prev.xy;
         float2 p = float2(r.x, r.y) * plane_px - plane_px * 0.5;
-        float d = sd_round_rect(p, plane_px * 0.5, max(layer.radius_px, 0.0));
+        float d = sd_round_rect(p, plane_px * 0.5,
+                                (layer.dst_prev.z > 0.5 && p.y < 0.0) ? 0.0 : max(layer.radius_px, 0.0));
         float tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
         // L'alpha est cette couverture, pas `color.a` : les draws du mode 8 laissent `color`
         // à zéro, donc le port rendait de toute façon un plan totalement transparent.
@@ -713,9 +759,10 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     float alpha = layer.color.a * alpha_mask;
     if (layer.radius_px > 0.0)
     {
+        // mb.w = 1 : écran sous un cadre de fenêtre, coins HAUTS carrés (sous la barre de titre).
         float2 halfsz = layer.quad_px * 0.5;
         float2 p = i.local - layer.quad_px * 0.5;
-        float d = sd_round_rect(p, halfsz, layer.radius_px);
+        float d = sd_round_rect(p, halfsz, (layer.mb.w > 0.5 && p.y < 0.0) ? 0.0 : layer.radius_px);
         alpha *= 1.0 - smoothstep(0.0, 1.5, d);
     }
     return float4(rgb * alpha, alpha);

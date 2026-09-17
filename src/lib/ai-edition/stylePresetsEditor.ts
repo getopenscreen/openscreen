@@ -16,6 +16,7 @@ export function stylePresetAppearanceFromSettings(
 	return {
 		wallpaper: settings.wallpaper,
 		wallpaperMotion: settings.wallpaperMotion,
+		frame: settings.frame,
 		aspectRatio: settings.aspectRatio,
 		shadowIntensity: settings.shadowIntensity,
 		showBlur: settings.showBlur,
@@ -60,6 +61,7 @@ export function stylePresetPatch(appearance: StylePresetAppearance): EditorSetti
 	return {
 		wallpaper: appearance.wallpaper,
 		wallpaperMotion: appearance.wallpaperMotion,
+		frame: appearance.frame,
 		aspectRatio: appearance.aspectRatio,
 		shadowIntensity: appearance.shadowIntensity,
 		showBlur: appearance.showBlur,

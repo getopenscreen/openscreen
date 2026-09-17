@@ -49,6 +49,7 @@ import { locateVirtualPosition } from "@/lib/ai-edition/timeline/virtual-preview
 import {
 	computeCameraFullscreenRect,
 	computeCompositeLayout,
+	fitInWindowFrame,
 	resolveWebcamLayoutPreset,
 	type WebcamCompositeLayout,
 } from "@/lib/compositeLayout";
@@ -313,10 +314,22 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		};
 	}, [layout, cameraFullscreenProgress, frameSize]);
 
+	// The stage hosting the interactive overlays is the CONTENT rect: with a window frame the
+	// compositor shrinks the screen under the title bar, and every handle (annotations, privacy
+	// blur, zoom focus) must sit on the pixels it edits. `layout` itself stays unshrunk: the
+	// native scene receives it and applies the same fit.
+	const stageLayout = useMemo<WebcamCompositeLayout | null>(() => {
+		if (!layout?.screenRect || settings.frame === "none") return layout;
+		return {
+			...layout,
+			screenRect: fitInWindowFrame(layout.screenRect, layout.screenCover ?? false),
+		};
+	}, [layout, settings.frame]);
+
 	const frameStyle = useMemo(() => buildFrameStyle(settings), [settings]);
 	const screenStyle = useMemo(
-		() => buildScreenStyle(layout, settings, frameSize),
-		[layout, settings, frameSize],
+		() => buildScreenStyle(stageLayout, settings, frameSize),
+		[stageLayout, settings, frameSize],
 	);
 	const webcamStyle = useMemo(
 		() => buildWebcamStyle(effectiveLayout, settings, frameSize),
@@ -454,8 +467,8 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 							annotations={props.annotationRegions}
 							selectedAnnotationId={props.selectedAnnotationId ?? null}
 							currentTimeSec={props.currentTimeSec}
-							containerWidth={layout.screenRect.width}
-							containerHeight={layout.screenRect.height}
+							containerWidth={(stageLayout ?? layout).screenRect.width}
+							containerHeight={(stageLayout ?? layout).screenRect.height}
 							onSelectAnnotation={props.onSelectAnnotation}
 							onPositionChange={props.onAnnotationPositionChange}
 							onSizeChange={props.onAnnotationSizeChange}

@@ -114,7 +114,12 @@
 		"format": "형식",
 		"fitClip": "맞추기",
 		"motionBlur": "모션 블러",
-		"roundness": "모서리 둥글기"
+		"roundness": "모서리 둥글기",
+		"window": "창",
+		"windowNone": "없음",
+		"windowLight": "밝게",
+		"windowDark": "어둡게",
+		"windowHelp": "녹화 화면 주위에 창 제목 표시줄과 테두리를 그립니다."
 	},
 	"stylePresets": {
 		"button": "프리셋",

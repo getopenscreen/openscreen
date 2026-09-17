@@ -216,3 +216,23 @@ describe("fitting a clip is an action, and a choice only when there is one", () 
 		expect(screen.queryByRole("note")).not.toBeInTheDocument();
 	});
 });
+
+describe("the window frame menu persists the pick", () => {
+	it("writes each frame to the document", async () => {
+		mount(documentWithShapes([[1920, 1080]]));
+		// Starts at "none", so each pick below moves the stored value.
+		for (const [label, frame] of [
+			["Light", "window-light"],
+			["Dark", "window-dark"],
+			["None", "none"],
+		] as const) {
+			fireEvent.click(screen.getByRole("button", { name: "Window" }));
+			fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: label }));
+			await waitFor(() =>
+				expect(
+					(useProjectStore.getState().document?.legacyEditor as Record<string, unknown>)?.frame,
+				).toBe(frame),
+			);
+		}
+	});
+});

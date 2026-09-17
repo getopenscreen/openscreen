@@ -114,7 +114,12 @@
 		"format": "Formato",
 		"fitClip": "Ajustar",
 		"motionBlur": "Desfoque de Movimento",
-		"roundness": "Arredondamento"
+		"roundness": "Arredondamento",
+		"window": "Janela",
+		"windowNone": "Nenhuma",
+		"windowLight": "Clara",
+		"windowDark": "Escura",
+		"windowHelp": "Desenha uma barra de título e uma borda de janela ao redor da gravação."
 	},
 	"stylePresets": {
 		"button": "Predefinições",

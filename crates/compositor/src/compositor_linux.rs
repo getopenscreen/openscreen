@@ -43,8 +43,8 @@ pub use crate::frame_geometry::{
     live_params_from_scene, webcam_shape_code, FIXTURE_FRAMES, LayerCB, LiveParams, OUT_H, OUT_W,
 };
 use crate::frame_geometry::{
-    cursor_sprite_cb, parse_hex, plan_cursor, plan_frame, CursorPlacement, CursorPlanInput,
-    FrameGeometryInput,
+    cursor_sprite_cb, cursor_sprite_dst, parse_hex, plan_cursor, plan_frame, CursorPlacement,
+    CursorPlanInput, FrameGeometryInput, ShadowCaster,
 };
 use crate::scene::{Scene, SceneBackground};
 
@@ -1994,6 +1994,9 @@ impl Compositor {
         // `plane_px` dans `dst_prev`). Les deux sens ne peuvent pas cohabiter dans
         // un meme draw. macOS et Windows sautent egalement le flou sur le chemin
         // incline, pour la meme raison.
+        // Sous un cadre de fenetre, l'ecran garde ses coins HAUTS carres (`mb.w` au mode 0,
+        // `dst_prev.z` au mode 8) ; 0 sans cadre, soit le rendu d'avant.
+        let square_top = g.screen_square_top();
         let screen_layer = match tilt.as_ref() {
             None => LayerCB {
                 dst: g.s_dst,
@@ -2004,10 +2007,14 @@ impl Compositor {
                 color: [1.0, 1.0, 1.0, 1.0],
                 src_prev: g.cut,
                 dst_prev: g.s_dst_prev,
-                mb: [g.mb_taps, g.mb_amount, 1.0, 0.0],
+                mb: [g.mb_taps, g.mb_amount, 1.0, square_top],
                 ..Default::default()
             },
-            Some(quad) => self.tilted_screen_cb(quad, s_px, quad_center_px, g.cut, g.s_radius),
+            Some(quad) => {
+                let mut cb = self.tilted_screen_cb(quad, s_px, quad_center_px, g.cut, g.s_radius);
+                cb.dst_prev[2] = square_top;
+                cb
+            }
         };
         // Bind group construit AVANT le pass (doit vivre pendant tout le pass) ;
         // `_screen_uniform` garde le buffer uniforme en vie (reference par le bind).
@@ -2025,24 +2032,26 @@ impl Compositor {
         // plateformes quelle que soit la resolution de sortie.
         //
         // L'ombre suit la silhouette REELLEMENT affichee : rect arrondi (mode 2)
-        // quand l'ecran est droit, quadrilatere projete (mode 12) quand il penche.
+        // quand l'ecran est droit, quadrilatere projete (mode 12) quand il penche. Avec un
+        // cadre de fenetre, c'est le CADRE qui la porte (`shadow_caster`), sinon la barre de
+        // titre flotterait au-dessus de l'ombre.
         let screen_shadow = cfg.shadow.then(|| {
             let spread = crate::frame_geometry::SCREEN_SHADOW_SPREAD_FRAC * g.frame_min_px;
             let offset = [0.0, crate::frame_geometry::SCREEN_SHADOW_OFFSET_FRAC * g.frame_min_px];
             let opacity = 0.45 * lp.shadow_scale;
-            let cb = match tilt.as_ref() {
-                None => self.shadow_cb(g.s_dst, s_px, g.s_radius, spread, offset, opacity),
-                Some(quad) => self.quad_shadow_cb(
-                    &quad.corners,
-                    quad_center_px,
-                    g.s_radius * quad.scale,
-                    spread,
-                    offset,
-                    opacity,
-                ),
+            let cb = match g.shadow_caster([rw, rh]) {
+                ShadowCaster::Upright { dst, size_px, radius } => {
+                    self.shadow_cb(dst, size_px, radius, spread, offset, opacity)
+                }
+                ShadowCaster::Tilted { corners, center_px, radius } => {
+                    self.quad_shadow_cb(&corners, center_px, radius, spread, offset, opacity)
+                }
             };
             self.make_bind(&cb, None, &dummy)
         });
+        // Le cadre (mode 14), dessine entre l'ombre et l'ecran : l'ecran le recouvre et ne
+        // laisse voir que la barre de titre et le filet.
+        let window_frame = g.window_frame_cb([rw, rh]).map(|cb| self.make_bind(&cb, None, &dummy));
 
         // Fond (gradient mode 5 OU image mode 6), dessine dans la passe de fond.
         let bg_draw = bg_layer.and_then(|bl| match bl {
@@ -2763,6 +2772,10 @@ impl Compositor {
             // elle doit passer sous lui mais au-dessus du fond (et, pour la
             // camera, au-dessus de l'ecran).
             if let Some((_buf, bind)) = &screen_shadow {
+                rpass.set_bind_group(0, bind, &[]);
+                rpass.draw(0..4, 0..1);
+            }
+            if let Some((_buf, bind)) = &window_frame {
                 rpass.set_bind_group(0, bind, &[]);
                 rpass.draw(0..4, 0..1);
             }
@@ -4522,6 +4535,85 @@ mod tests {
                 .expect("compose_frame");
             let (_, _, rgba) = comp.readback_direct().expect("readback_direct");
             rgba
+        }
+    }
+
+    /// Ecran gris sur fond gris moyen, avec ou sans cadre de fenetre (`frame` est insere tel
+    /// quel dans `effects`), droit ou incline (`rotation`, JSON).
+    fn compose_framed(comp: &Compositor, gpu: &Gpu, frame: &str, rotation: &str) -> Vec<u8> {
+        let json = format!(
+            r##"{{"clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+                "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded",
+                           "webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false,
+                           "screenRect":{{"x":0.1,"y":0.1,"width":0.8,"height":0.8}}}},
+                "effects":{{"padding":0.2,"blur":false,"shadow":0.6,"roundnessFrac":0.03,"motionBlur":0{frame}}},
+                "background":{{"kind":"color","color":"#6070a0"}},
+                "zoomRegions":[{{"clipIndex":0,"startSec":0,"endSec":10,"scale":1,"focusX":0.5,"focusY":0.5,"rotation":{rotation}}}],
+                "annotations":[],
+                "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,
+                           "clipToBounds":false,"theme":"default"}},
+                "cropByClip":[null],
+                "output":{{"width":1280,"height":720,"fps":30}}}}"##
+        );
+        let scene = Scene::from_json(&json).expect("scene json");
+        comp.set_live_params(live_params_from_scene(&scene));
+        comp.set_has_webcam(false);
+        comp.set_scene(Some(scene));
+        let screen = FakeFrame::new(gpu, 640, 360, |_, _| 60);
+        let webcam = FakeFrame::new(gpu, 64, 64, |_, _| 60);
+        let mut cfg = Cfg::c8();
+        cfg.bg_blur = false;
+        cfg.zoom = false;
+        cfg.layout_anim = false;
+        cfg.cursor = false;
+        cfg.mblur_n = 1;
+        cfg.shadow = true;
+        unsafe {
+            comp.set_timeline_time(Some(2.0));
+            comp.compose_frame(screen.as_ptr(), webcam.as_ptr(), 0.0, &cfg)
+                .expect("compose_frame");
+            let (_, _, rgba) = comp.readback_direct().expect("readback_direct");
+            rgba
+        }
+    }
+
+    /// Le cadre de fenetre (mode 14) se dessine sur Linux comme ailleurs : `"none"` rend
+    /// l'image d'avant a l'octet, le theme clair ajoute une barre claire, droite comme
+    /// inclinee, et les deux themes different. `OPENSCREEN_FRAME_OUT` recoit les PNG.
+    #[test]
+    fn the_window_frame_draws_its_title_bar_flat_and_tilted() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let out_dir = std::env::var("OPENSCREEN_FRAME_OUT").ok();
+        let bright = |rgba: &[u8]| {
+            rgba.chunks_exact(4).filter(|p| p[0] > 215 && p[1] > 215 && p[2] > 215).count()
+        };
+        let differing = |a: &[u8], b: &[u8]| {
+            a.chunks_exact(4)
+                .zip(b.chunks_exact(4))
+                .filter(|(p, q)| p.iter().zip(q.iter()).take(3).any(|(x, y)| x.abs_diff(*y) > 8))
+                .count()
+        };
+        for (name, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
+            let absent = compose_framed(&comp, &gpu, "", rotation);
+            let none = compose_framed(&comp, &gpu, r#","frame":"none""#, rotation);
+            let light = compose_framed(&comp, &gpu, r#","frame":"window-light""#, rotation);
+            let dark = compose_framed(&comp, &gpu, r#","frame":"window-dark""#, rotation);
+            if let Some(dir) = &out_dir {
+                for (theme, rgba) in [("light", &light), ("dark", &dark)] {
+                    let path = format!("{dir}/linux-{name}-{theme}.png");
+                    image::RgbaImage::from_raw(1280, 720, rgba.clone())
+                        .expect("dimensions du readback")
+                        .save(&path)
+                        .unwrap_or_else(|e| panic!("ecriture {path} : {e}"));
+                }
+            }
+            assert_eq!(absent, none, "{name}: frame none a change des pixels");
+            assert_eq!(bright(&none), 0, "{name}: le temoin a deja des pixels clairs");
+            // Barre de titre : ~0.04 x 576 px de haut sur ~1000 px de large, moins l'inclinaison.
+            assert!(bright(&light) > 10_000, "{name}: barre claire absente ({} px)", bright(&light));
+            assert!(differing(&none, &dark) > 10_000, "{name}: cadre sombre absent");
+            assert!(differing(&light, &dark) > 10_000, "{name}: les deux themes se confondent");
         }
     }
 }

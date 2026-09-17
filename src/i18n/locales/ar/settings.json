@@ -114,7 +114,12 @@
 		"format": "التنسيق",
 		"fitClip": "ملاءمة",
 		"motionBlur": "ضبابية الحركة",
-		"roundness": "الاستدارة"
+		"roundness": "الاستدارة",
+		"window": "نافذة",
+		"windowNone": "بلا",
+		"windowLight": "فاتح",
+		"windowDark": "داكن",
+		"windowHelp": "يرسم شريط عنوان وإطار نافذة حول التسجيل."
 	},
 	"stylePresets": {
 		"button": "الإعدادات المسبقة",

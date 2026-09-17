@@ -114,7 +114,12 @@
 		"format": "格式",
 		"fitClip": "适配",
 		"motionBlur": "运动模糊",
-		"roundness": "圆角"
+		"roundness": "圆角",
+		"window": "窗口",
+		"windowNone": "无",
+		"windowLight": "浅色",
+		"windowDark": "深色",
+		"windowHelp": "在录制内容周围绘制窗口标题栏和边框。"
 	},
 	"stylePresets": {
 		"button": "预设",

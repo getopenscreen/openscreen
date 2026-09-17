@@ -114,7 +114,12 @@
 		"format": "Định dạng",
 		"fitClip": "Vừa khít",
 		"motionBlur": "Làm mờ chuyển động",
-		"roundness": "Độ bo tròn"
+		"roundness": "Độ bo tròn",
+		"window": "Cửa sổ",
+		"windowNone": "Không",
+		"windowLight": "Sáng",
+		"windowDark": "Tối",
+		"windowHelp": "Vẽ thanh tiêu đề và viền cửa sổ quanh bản ghi."
 	},
 	"stylePresets": {
 		"button": "Cài đặt sẵn",

@@ -1,6 +1,23 @@
+/**
+ * The frame drawn around the recording, a project setting like the wallpaper. "none" draws
+ * nothing and renders exactly as before the setting existed.
+ */
+export type RecordingFrame = "none" | "window-light" | "window-dark";
+
+export const RECORDING_FRAMES = [
+	"none",
+	"window-light",
+	"window-dark",
+] as const satisfies readonly RecordingFrame[];
+
+export function isRecordingFrame(value: unknown): value is RecordingFrame {
+	return typeof value === "string" && (RECORDING_FRAMES as readonly string[]).includes(value);
+}
+
 export interface ProjectAppearanceDefaults {
 	wallpaper: string;
 	wallpaperMotion: "none" | "drift" | "aurora" | "waves";
+	frame: RecordingFrame;
 	aspectRatio: `${number}:${number}` | "native";
 	shadowIntensity: number;
 	showBlur: boolean;
@@ -35,6 +52,7 @@ export interface ProjectAppearanceDefaults {
 export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	wallpaper: "/wallpapers/wallpaper1.jpg",
 	wallpaperMotion: "none",
+	frame: "none",
 	aspectRatio: "16:9",
 	shadowIntensity: 0.2,
 	showBlur: false,

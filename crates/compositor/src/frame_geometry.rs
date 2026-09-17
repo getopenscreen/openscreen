@@ -362,6 +362,65 @@ pub(crate) const WEBCAM_SHADOW_OFFSET_FRAC: f32 = 12.0 / SHADOW_TUNING_REF_PX;
 pub(crate) const WEBCAM_SHADOW_OPACITY: f32 = 0.35;
 /// Taille de base du curseur, même convention (34 px réglés contre un cadre 1080).
 pub(crate) const CURSOR_BASE_SIZE_FRAC: f32 = 34.0 / SHADOW_TUNING_REF_PX;
+
+/// Hauteur de la barre de titre du cadre de fenêtre, en fraction du petit côté de la boîte où
+/// l'écran tenait sans cadre. Environ 35 px sur une boîte de 864 px (1080p, padding 50 %) : la
+/// proportion d'une barre de titre de bureau à cette échelle.
+pub(crate) const WINDOW_FRAME_BAR_FRAC: f32 = 0.04;
+/// Épaisseur du filet qui borde le cadre, même référence : environ un pixel sur la même boîte.
+/// Pas de plancher en px — il rendrait le filet plus épais, en proportion, dans la petite
+/// preview qu'à l'export ; le shader l'estompe plutôt que de le faire disparaître.
+pub(crate) const WINDOW_FRAME_LINE_FRAC: f32 = 0.0012;
+
+/// Le cadre de fenêtre posé autour de l'écran (`effects.frame`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WindowFrame {
+    pub dark: bool,
+    /// Marges du cadre autour de `s_dst`, en FRACTION de cette boîte : gauche, haut, droite, bas
+    /// (le haut est la barre de titre, les trois autres le filet). Des fractions et non des px :
+    /// `remap_box` agrandit la boîte sous un zoom (#179) et le cadre doit grandir avec elle. Ce
+    /// sont aussi, prises en négatif ou au-delà de 1, les coordonnées du plan où
+    /// `TiltedQuad::point_px` extrapole les coins du cadre sous un préset 3D.
+    pub margins: [f32; 4],
+    /// Rayon extérieur du cadre, en px de la boîte droite : c'est lui que règle Roundness quand
+    /// il y a un cadre. L'écran n'arrondit plus que ses coins bas, de ce rayon moins le filet.
+    pub radius: f32,
+}
+
+/// Rétrécit la boîte écran `a` (fractions de sortie) pour que l'écran ET son cadre tiennent là
+/// où l'écran seul tenait. Rend la nouvelle boîte écran et les marges du cadre (cf.
+/// `WindowFrame::margins`).
+///
+/// Sans ça le cadre déborderait de la boîte, donc du canvas à petit padding. La boîte garde son
+/// ratio (celui du crop, déjà cuit dans `a`) et se centre dans `a` ; sous `cover` (layouts en
+/// bloc) l'écran prend au contraire tout ce que le cadre laisse, le cover rognant la source.
+pub(crate) fn fit_in_window_frame(a: [f32; 4], render_px: [f32; 2], cover: bool) -> ([f32; 4], [f32; 4]) {
+    let [rw, rh] = render_px;
+    let (aw, ah) = (a[2] * rw, a[3] * rh);
+    let m = aw.min(ah);
+    let bar = WINDOW_FRAME_BAR_FRAC * m;
+    let line = WINDOW_FRAME_LINE_FRAC * m;
+    let (iw, ih) = ((aw - 2.0 * line).max(1.0), (ah - bar - line).max(1.0));
+    let (sw, sh) = if cover {
+        (iw, ih)
+    } else {
+        let ar = aw / ah.max(1e-4);
+        if iw / ih > ar { (ih * ar, ih) } else { (iw, iw / ar) }
+    };
+    let (fw, fh) = (sw + 2.0 * line, sh + bar + line);
+    let (cx, cy) = ((a[0] + a[2] * 0.5) * rw, (a[1] + a[3] * 0.5) * rh);
+    let (x0, y0) = (cx - fw * 0.5 + line, cy - fh * 0.5 + bar);
+    ([x0 / rw, y0 / rh, sw / rw, sh / rh], [line / sw, bar / sh, line / sw, line / sh])
+}
+
+/// Qui porte l'ombre portée de l'écran, et avec quelle silhouette.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ShadowCaster {
+    /// Rect droit (mode 2) : `dst` en fractions de sortie, `size_px` sa taille, `radius` en px.
+    Upright { dst: [f32; 4], size_px: [f32; 2], radius: f32 },
+    /// Quad incliné (mode 12) : coins TL, TR, BR, BL relatifs à `center_px`, rayon du plan.
+    Tilted { corners: [(f32, f32); 4], center_px: [f32; 2], radius: f32 },
+}
 /// Rect [x,y,w,h] normalisé d'un sprite de curseur de taille `w`×`h` dont le pivot `hotspot`
 /// (fraction 0..1 de l'image) doit tomber exactement sur `center`.
 ///
@@ -960,7 +1019,8 @@ pub struct FrameGeometry {
     /// (`privacy_mask`).
     ///
     /// C'est `s_dst` avant le `remap_box` du zoom, donc le rect que l'app a résolu
-    /// (`layout.screenRect`) et que l'overlay web reçoit comme conteneur. Le contrat de
+    /// (`layout.screenRect`, rétréci par `fitInWindowFrame` sous un cadre) et que l'overlay web
+    /// reçoit comme conteneur. Le contrat de
     /// `SceneAnnotation` est explicite : « deliberately NOT affected by the zoom crop — the
     /// overlay is a sibling of the element carrying the zoom transform, so annotations hold
     /// still while the content zooms underneath them ». Tant que le zoom vivait dans la
@@ -975,6 +1035,10 @@ pub struct FrameGeometry {
     pub w_px: [f32; 2],
     pub w_radius: f32,
     pub shape_fade: f32,
+    /// Cadre de fenêtre autour de l'écran. `None` : aucun, et le rendu est celui d'avant le
+    /// cadre, à l'octet. `Some` : `s_dst` est déjà la boîte rétrécie, et `s_radius` le rayon des
+    /// seuls coins BAS de l'écran (les coins hauts sont carrés, sous la barre de titre).
+    pub window_frame: Option<WindowFrame>,
 }
 
 /// Rect de destination d'une annotation dans un rect d'ancrage, en fractions de la sortie.
@@ -1028,6 +1092,130 @@ impl FrameGeometry {
     /// `annotation_dst` le déplacerait.
     pub fn annotation_anchor_h_px(&self, rh: f32) -> f32 {
         self.s_ann[3] * rh
+    }
+
+    /// 1 quand l'écran doit garder ses coins HAUTS carrés (il est sous la barre de titre d'un
+    /// cadre), 0 sinon. Le mode 0 le lit dans `mb.w`, le mode 8 dans `dst_prev.z` — deux
+    /// emplacements que ces modes laissaient à zéro, d'où un rendu inchangé sans cadre.
+    pub fn screen_square_top(&self) -> f32 {
+        if self.window_frame.is_some() { 1.0 } else { 0.0 }
+    }
+
+    /// Le plan incliné de l'écran, `None` quand il est droit. Même appel que les backends : un
+    /// calcul déterministe, donc le même quadrilatère au bit près.
+    fn screen_tilt(&self, render_px: [f32; 2]) -> Option<crate::regions::TiltedQuad> {
+        let s_px = [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]];
+        (!crate::regions::is_identity_rotation(self.zoom_rotation))
+            .then(|| crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], self.zoom_rotation))
+    }
+
+    fn screen_center_px(&self, render_px: [f32; 2]) -> [f32; 2] {
+        [
+            (self.s_dst[0] + self.s_dst[2] * 0.5) * render_px[0],
+            (self.s_dst[1] + self.s_dst[3] * 0.5) * render_px[1],
+        ]
+    }
+
+    /// Les coins TL, TR, BR, BL du cadre, en px relatifs au centre de l'écran, plus l'échelle du
+    /// plan (1 à plat). Incliné, c'est le MÊME `TiltedQuad` que l'écran, prolongé au-delà de
+    /// 0..1 : un warp bilinéaire est entièrement fixé par ses quatre coins, donc le prolonger
+    /// donne exactement le plan que le mode 8 dessine, et le cadre penche avec l'écran sans
+    /// aucune trigonométrie de plus.
+    fn window_frame_corners(&self, frame: &WindowFrame, render_px: [f32; 2]) -> ([(f32, f32); 4], f32) {
+        let [ml, mt, mr, mb] = frame.margins;
+        let quad = self.screen_tilt(render_px).unwrap_or_else(|| {
+            let (hw, hh) = (self.s_dst[2] * render_px[0] * 0.5, self.s_dst[3] * render_px[1] * 0.5);
+            crate::regions::TiltedQuad {
+                corners: [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)],
+                scale: 1.0,
+            }
+        });
+        let corners = [
+            quad.point_px(-ml, -mt),
+            quad.point_px(1.0 + mr, -mt),
+            quad.point_px(1.0 + mr, 1.0 + mb),
+            quad.point_px(-ml, 1.0 + mb),
+        ];
+        (corners, quad.scale)
+    }
+
+    /// Ce qui porte l'ombre portée : le cadre quand il y en a un — sinon l'ombre tomberait sous
+    /// l'écran seul et la barre de titre flotterait au-dessus d'elle —, l'écran sinon, avec
+    /// exactement l'arithmétique que les backends faisaient avant le cadre.
+    pub fn shadow_caster(&self, render_px: [f32; 2]) -> ShadowCaster {
+        let center_px = self.screen_center_px(render_px);
+        match (&self.window_frame, self.screen_tilt(render_px)) {
+            (None, None) => ShadowCaster::Upright {
+                dst: self.s_dst,
+                size_px: [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]],
+                radius: self.s_radius,
+            },
+            (None, Some(quad)) => ShadowCaster::Tilted {
+                corners: quad.corners,
+                center_px,
+                radius: self.s_radius * quad.scale,
+            },
+            (Some(frame), None) => {
+                let [ml, mt, mr, mb] = frame.margins;
+                let d = self.s_dst;
+                let dst = [
+                    d[0] - ml * d[2],
+                    d[1] - mt * d[3],
+                    d[2] * (1.0 + ml + mr),
+                    d[3] * (1.0 + mt + mb),
+                ];
+                ShadowCaster::Upright {
+                    dst,
+                    size_px: [dst[2] * render_px[0], dst[3] * render_px[1]],
+                    radius: frame.radius,
+                }
+            }
+            (Some(frame), Some(_)) => {
+                let (corners, scale) = self.window_frame_corners(frame, render_px);
+                ShadowCaster::Tilted { corners, center_px, radius: frame.radius * scale }
+            }
+        }
+    }
+
+    /// Le calque du cadre (mode 14), à dessiner après l'ombre et AVANT l'écran. `None` sans cadre.
+    ///
+    /// Une seule forme pour le cas droit et le cas incliné : le mode 14 fait toujours le warp
+    /// inverse du mode 8, et sur un rect ce warp est l'identité exacte (le terme quadratique est
+    /// nul). Le calque se construit donc ici, une fois, pour les trois backends.
+    pub fn window_frame_cb(&self, render_px: [f32; 2]) -> Option<LayerCB> {
+        let frame = self.window_frame.as_ref()?;
+        let [rw, rh] = render_px;
+        let (corners, scale) = self.window_frame_corners(frame, render_px);
+        let center = self.screen_center_px(render_px);
+        let (min_x, max_x) =
+            corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| (mn.min(x), mx.max(x)));
+        let (min_y, max_y) =
+            corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| (mn.min(y), mx.max(y)));
+        let bbox = [(max_x - min_x).max(1.0), (max_y - min_y).max(1.0)];
+        let local = |(x, y): (f32, f32)| [x - min_x, y - min_y];
+        let [tl, tr, br, bl] = corners.map(local);
+        let [ml, mt, mr, mb] = frame.margins;
+        let (s_w, s_h) = (self.s_dst[2] * rw, self.s_dst[3] * rh);
+        // Dimensions dans le repère du plan, avant projection, comme `plane_px` au mode 8.
+        let plane_px = [s_w * (1.0 + ml + mr) * scale, s_h * (1.0 + mt + mb) * scale];
+        let (bar_px, line_px) = (mt * s_h * scale, ml * s_w * scale);
+        let (fill, line) = if frame.dark {
+            ([0.165, 0.165, 0.180, 1.0], [1.0, 1.0, 1.0, 0.14])
+        } else {
+            ([0.925, 0.925, 0.935, 1.0], [0.0, 0.0, 0.0, 0.16])
+        };
+        Some(LayerCB {
+            dst: [(center[0] + min_x) / rw, (center[1] + min_y) / rh, bbox[0] / rw, bbox[1] / rh],
+            quad_px: bbox,
+            radius_px: frame.radius * scale,
+            mode: 14.0,
+            color: fill,
+            fx: [tl[0], tl[1], tr[0], tr[1]],
+            src_prev: [br[0], br[1], bl[0], bl[1]],
+            dst_prev: [plane_px[0], plane_px[1], bar_px, line_px],
+            mb: line,
+            ..Default::default()
+        })
     }
 
     /// Où dessiner le masque d'une annotation « flou » pour qu'il couvre le CONTENU qu'il
@@ -1433,8 +1621,24 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // d'atteindre les bords du cadre. On rend le zoom à la BOÎTE (cf. `remap_box`) :
         // la coupe dessinée redevient le crop nu, la boîte porte le grossissement et
         // déborde le padding — c'est la géométrie de `applyZoomTransform` (TS).
-        let s_base = fit_screen(p.screen.dst);
-        let s_base_prev = fit_screen(pp.screen.dst);
+        let s_box = fit_screen(p.screen.dst);
+        let s_box_prev = fit_screen(pp.screen.dst);
+        // Cadre de fenêtre : l'écran rétrécit pour que lui ET son cadre tiennent dans la boîte
+        // où il tenait seul — le padding garde donc son sens, et rien ne sort du canvas. Le reste
+        // du calcul (cover, zoom, rayon) part de cette boîte rétrécie.
+        let frame_kind = scene.map(|s| s.effects.frame).unwrap_or_default();
+        let screen_cover = scene.map(|s| s.layout.screen_cover).unwrap_or(false);
+        let (s_base, frame_margins) = match frame_kind {
+            crate::scene::SceneFrame::None => (s_box, None),
+            _ => {
+                let (b, m) = fit_in_window_frame(s_box, [rw, rh], screen_cover);
+                (b, Some(m))
+            }
+        };
+        let s_base_prev = match frame_margins {
+            None => s_box_prev,
+            Some(_) => fit_in_window_frame(s_box_prev, [rw, rh], screen_cover).0,
+        };
         // Layouts "bloc" (side-by-side / top-bottom) : la boîte écran est un SLOT au ratio
         // arbitraire, et le web y fait tenir l'image en `cover` (`computeCompositeLayout`
         // renvoie `screenCover: true`, honoré par `frameRenderer`). Le natif l'ignorait, donc
@@ -1563,14 +1767,33 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // Le rayon suit la boîte : quand le zoom l'agrandit (issue #179), les coins grandissent
         // avec elle puis sortent du cadre — comme le masque de la référence, qui porte le même
         // `br: maskBorderRadius * camS` et quitte l'étage au même moment.
-        let s_radius = match (cfg.rounded, app_screen_radius_frac, scene_roundness_frac) {
+        // Avec un cadre, le rayon appartient au CADRE : c'est sa boîte extérieure qui sert de
+        // référence, et Roundness arrondit le cadre au lieu de doubler un arrondi d'écran.
+        let rounded_box_min_px = match frame_margins {
+            None => s_min_px,
+            Some([ml, mt, mr, mb]) => {
+                ((s_dst[2] * rw) * (1.0 + ml + mr)).min((s_dst[3] * rh) * (1.0 + mt + mb))
+            }
+        };
+        let outer_radius = match (cfg.rounded, app_screen_radius_frac, scene_roundness_frac) {
             (false, _, _) => 0.0,
             // Preset en bloc : le rayon appartient à la boîte écran (parité exacte avec la caméra).
-            (true, Some(f), _) => f * s_min_px,
+            (true, Some(f), _) => f * rounded_box_min_px,
             // Scène sans rayon imposé : slider Roundness, relatif au cadre.
             (true, None, Some(f)) => f * frame_min_px,
             // Fixture/bench (pas de scène) : chemin inspector historique, inchangé.
             (true, None, None) => p.screen.radius * lp.radius_scale,
+        };
+        // Sous un cadre, l'écran est rentré du filet : ses coins bas restent concentriques à
+        // ceux du cadre en perdant l'épaisseur du filet ; ses coins hauts sont carrés (shader).
+        let window_frame = frame_margins.map(|margins| WindowFrame {
+            dark: frame_kind == crate::scene::SceneFrame::WindowDark,
+            margins,
+            radius: outer_radius,
+        });
+        let s_radius = match frame_margins {
+            None => outer_radius,
+            Some([ml, ..]) => (outer_radius - ml * s_dst[2] * rw).max(0.0),
         };
         let w_px = [w_dst[2] * rw, w_dst[3] * rh];
         // Rayon caméra. Le slider Roundness ne s'y applique jamais (il ne vaut que pour l'ÉCRAN).
@@ -1612,7 +1835,10 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         cut,
         s_dst,
         s_dst_prev,
-        // La boîte écran telle qu'elle serait sans zoom : `remap_box` n'est PAS appliqué.
+        // La boîte écran telle qu'elle serait sans zoom : `remap_box` n'est PAS appliqué. Le
+        // cadre, lui, l'est : c'est le rect du CONTENU, celui où l'overlay web pose ses poignées
+        // (`fitInWindowFrame` côté TS, même calcul), et sans quoi un flou tracé sur un secret
+        // tombait une barre de titre plus haut que ce qu'il devait couvrir.
         s_ann: s_base,
         s_radius,
         frame_min_px,
@@ -1621,6 +1847,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         w_px,
         w_radius,
         shape_fade,
+        window_frame,
     }
 }
 
@@ -2143,6 +2370,217 @@ mod tests {
         // Et sans zoom, l'ancre EST la boîte écran : `s_ann` ne doit pas devenir un rect
         // parallèle qui dériverait de `s_dst` pour d'autres raisons (padding, cover, crop).
         assert_eq!(a.s_ann, a.s_dst, "sans zoom, ancre et boîte écran coïncident");
+    }
+
+    /// Scène à boîte écran résolue par l'app, pour le cadre de fenêtre. `frame` est inséré tel
+    /// quel dans `effects` (chaîne vide = clé absente).
+    fn framed_scene(frame: &str, rotation: &str, zoom: f32, cover: bool) -> Scene {
+        Scene::from_json(&format!(
+            r##"{{
+            "clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+            "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,
+                      "webcamReactiveZoom":false,"screenRect":{{"x":0.1,"y":0.1,"width":0.8,"height":0.8}},"screenCover":{cover}}},
+            "effects":{{"padding":0.2,"blur":false,"shadow":0.5,"roundnessFrac":0.03,"motionBlur":0{frame}}},
+            "background":{{"kind":"color","color":"#1e1e2e"}},
+            "zoomRegions":[{{"clipIndex":0,"startSec":0.0,"endSec":5.0,"scale":{zoom},"focusX":0.5,"focusY":0.5,"rotation":{rotation}}}],
+            "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":1,"clipToBounds":false,"theme":"default"}},
+            "cropByClip":[null],
+            "output":{{"width":1920,"height":1080,"fps":60}}
+        }}"##
+        ))
+        .expect("framed scene")
+    }
+
+    fn framed_plan(scene: &Scene) -> FrameGeometry {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let mut input = golden_input(scene, &cfg);
+        input.render_px = [1920.0, 1080.0];
+        plan_frame(&input)
+    }
+
+    const RENDER: [f32; 2] = [1920.0, 1080.0];
+
+    fn contains(outer: [f32; 4], inner: [f32; 4], eps: f32) -> bool {
+        inner[0] >= outer[0] - eps
+            && inner[1] >= outer[1] - eps
+            && inner[0] + inner[2] <= outer[0] + outer[2] + eps
+            && inner[1] + inner[3] <= outer[1] + outer[3] + eps
+    }
+
+    /// Sans cadre — clé absente ou `"none"` —, la géométrie est celle d'avant le cadre, champ
+    /// pour champ, et l'ombre reprend exactement l'arithmétique des backends.
+    #[test]
+    fn no_frame_leaves_the_geometry_untouched() {
+        for rotation in ["null", r#""iso""#] {
+            let absent = framed_plan(&framed_scene("", rotation, 1.5, false));
+            let none = framed_plan(&framed_scene(r#","frame":"none""#, rotation, 1.5, false));
+            assert_eq!(absent.s_dst, none.s_dst);
+            assert_eq!(absent.s_ann, none.s_ann);
+            assert_eq!(absent.s_radius.to_bits(), none.s_radius.to_bits());
+            assert!(none.window_frame.is_none());
+            assert!(none.window_frame_cb(RENDER).is_none());
+            assert_eq!(none.screen_square_top(), 0.0);
+            let s_px = [none.s_dst[2] * RENDER[0], none.s_dst[3] * RENDER[1]];
+            let expected = match none.screen_tilt(RENDER) {
+                None => ShadowCaster::Upright { dst: none.s_dst, size_px: s_px, radius: none.s_radius },
+                Some(q) => ShadowCaster::Tilted {
+                    corners: q.corners,
+                    center_px: none.screen_center_px(RENDER),
+                    radius: none.s_radius * q.scale,
+                },
+            };
+            assert_eq!(none.shadow_caster(RENDER), expected);
+            // Sans zoom, l'ancre des annotations reste la boîte écran.
+            let rest = framed_plan(&framed_scene(r#","frame":"none""#, rotation, 1.0, false));
+            assert_eq!(rest.s_ann, rest.s_dst);
+            // Et cette boîte est celle que la scène a résolue, au bit près : sans cadre, rien ne
+            // la rétrécit. Épinglé sur l'entrée, pas sur une mesure du code.
+            let want: [f32; 4] = [0.1, 0.1, 0.8, 0.8];
+            assert_eq!(rest.s_dst.map(f32::to_bits), want.map(f32::to_bits));
+            assert_eq!(rest.s_ann.map(f32::to_bits), want.map(f32::to_bits));
+            assert_eq!(rest.s_radius.to_bits(), (0.03f32 * 1080.0).to_bits());
+        }
+    }
+
+    /// Sous un cadre, le masque de confidentialité couvre le rect que l'overlay web montre à
+    /// l'utilisateur : l'overlay pose ses poignées sur `fitInWindowFrame(screenRect)` (TS), le
+    /// portage de `fit_in_window_frame`. Ancré sur la boîte non rétrécie, le masque tombait une
+    /// barre de titre plus bas que le secret tracé, et en laissait une bande lisible.
+    #[test]
+    fn a_framed_privacy_mask_covers_what_the_overlay_shows() {
+        // A plat seulement : incliné, le contenu ne tombe plus dans un rect droit, et l'overlay
+        // web ne s'incline pas non plus (limite antérieure au cadre).
+        {
+            let rotation = "null";
+            let g = framed_plan(&framed_scene(r#","frame":"window-light""#, rotation, 1.0, false));
+            // Valeurs épinglées aussi dans `compositeLayout.test.ts` : les deux portages
+            // doivent rendre ce rect-là.
+            let overlay = fit_in_window_frame([0.1, 0.1, 0.8, 0.8], RENDER, false).0;
+            let want = [223.6416 / 1920.0, 142.56 / 1080.0, 1472.7168 / 1920.0, 828.4032 / 1080.0];
+            for k in 0..4 {
+                assert!((overlay[k] - want[k]).abs() < 1e-5, "{overlay:?} au lieu de {want:?}");
+            }
+            assert_eq!(g.s_ann, overlay, "{rotation}: l'ancre n'est pas le rect de l'overlay");
+            for (x, y) in [(0.0, 0.0), (0.62, 0.18), (0.8, 0.9)] {
+                let mut a = blur_annotation("");
+                (a.x, a.y) = (x, y);
+                let drawn = annotation_dst_in(overlay, a.x, a.y, a.w, a.h);
+                let m = g.privacy_mask(&a, RENDER).expect("masque");
+                assert!(contains(m.dst, drawn, 1e-6), "{rotation}: masque {:?} / tracé {drawn:?}", m.dst);
+                // Et il ne déborde que de sa marge d'un pixel.
+                assert!((m.dst[1] - drawn[1]).abs() * RENDER[1] < 1.01);
+            }
+        }
+    }
+
+    /// À plat : le cadre contient l'écran, porte l'ombre, et le tout tient dans la boîte où
+    /// l'écran tenait seul — au ratio près, l'écran garde celui de sa source.
+    #[test]
+    fn the_flat_frame_wraps_the_screen_inside_the_old_box() {
+        for (frame, dark) in [(r#","frame":"window-light""#, false), (r#","frame":"window-dark""#, true)] {
+            for cover in [false, true] {
+                let old = framed_plan(&framed_scene("", "null", 1.0, cover));
+                let g = framed_plan(&framed_scene(frame, "null", 1.0, cover));
+                let wf = g.window_frame.expect("un cadre");
+                assert_eq!(wf.dark, dark);
+                assert_eq!(g.screen_square_top(), 1.0);
+                let ShadowCaster::Upright { dst: outer, size_px, radius } = g.shadow_caster(RENDER) else {
+                    panic!("un cadre droit porte une ombre droite");
+                };
+                assert!(contains(outer, g.s_dst, 1e-6), "cadre {outer:?} / écran {:?}", g.s_dst);
+                assert!(contains(old.s_dst, outer, 1e-6), "boîte {:?} / cadre {outer:?}", old.s_dst);
+                // Il remplit la boîte sur au moins un axe : le padding garde son sens.
+                let fills = (outer[2] - old.s_dst[2]).abs() < 1e-5 || (outer[3] - old.s_dst[3]).abs() < 1e-5;
+                assert!(fills, "le cadre ne remplit pas la boîte : {outer:?} dans {:?}", old.s_dst);
+                // La barre de titre est en haut, le filet ailleurs.
+                assert!(wf.margins[1] * g.s_dst[3] > 10.0 * wf.margins[0] * g.s_dst[2]);
+                if !cover {
+                    let ar = |r: [f32; 4]| (r[2] * RENDER[0]) / (r[3] * RENDER[1]);
+                    assert!((ar(g.s_dst) - ar(old.s_dst)).abs() < 1e-3, "l'écran a changé de ratio");
+                }
+                // Roundness arrondit le cadre ; l'écran perd l'épaisseur du filet.
+                assert!((radius - old.s_radius).abs() < old.s_radius * 0.05, "rayon {radius} vs {}", old.s_radius);
+                let line_px = wf.margins[0] * g.s_dst[2] * RENDER[0];
+                assert!((g.s_radius - (radius - line_px)).abs() < 1e-3);
+                // Le calque du cadre : un rect exact, bbox comprise.
+                let cb = g.window_frame_cb(RENDER).expect("calque");
+                assert_eq!(cb.mode, 14.0);
+                assert!((cb.quad_px[0] - size_px[0]).abs() < 1e-2 && (cb.quad_px[1] - size_px[1]).abs() < 1e-2);
+                assert_eq!([cb.fx[0], cb.fx[1]], [0.0, 0.0]);
+                assert!((cb.src_prev[0] - size_px[0]).abs() < 1e-2 && (cb.src_prev[1] - size_px[1]).abs() < 1e-2);
+                assert!((cb.dst_prev[0] - size_px[0]).abs() < 1e-2);
+                assert_eq!(cb.radius_px, radius);
+            }
+        }
+    }
+
+    /// Incliné : le cadre est le même plan que l'écran, prolongé. Les coins de l'écran sont
+    /// l'image bilinéaire des coins du cadre aux fractions de ses marges — la propriété qui
+    /// garantit que le cadre penche exactement comme le contenu —, le cadre contient l'écran,
+    /// porte l'ombre (mode 12), et tient dans la boîte d'avant.
+    #[test]
+    fn the_tilted_frame_is_the_screen_plane_extended() {
+        for preset in [r#""iso""#, r#""left""#, r#""right""#] {
+            let old = framed_plan(&framed_scene("", preset, 1.0, false));
+            let g = framed_plan(&framed_scene(r#","frame":"window-light""#, preset, 1.0, false));
+            let wf = g.window_frame.expect("un cadre");
+            let quad = g.screen_tilt(RENDER).expect("incliné");
+            let ShadowCaster::Tilted { corners: frame, center_px, radius } = g.shadow_caster(RENDER) else {
+                panic!("un cadre incliné porte une ombre inclinée");
+            };
+            assert_eq!(center_px, g.screen_center_px(RENDER));
+            assert!((radius - wf.radius * quad.scale).abs() < 1e-4);
+
+            let [ml, mt, mr, mb] = wf.margins;
+            let frame_quad = crate::regions::TiltedQuad { corners: frame, scale: quad.scale };
+            let (u0, v0) = (ml / (1.0 + ml + mr), mt / (1.0 + mt + mb));
+            let (u1, v1) = ((1.0 + ml) / (1.0 + ml + mr), (1.0 + mt) / (1.0 + mt + mb));
+            for (i, (u, v)) in [(u0, v0), (u1, v0), (u1, v1), (u0, v1)].into_iter().enumerate() {
+                let (x, y) = frame_quad.point_px(u, v);
+                let (sx, sy) = quad.corners[i];
+                assert!((x - sx).abs() < 0.05 && (y - sy).abs() < 0.05, "{preset} coin {i}: {x},{y} vs {sx},{sy}");
+            }
+
+            // Le cadre contient l'écran : chaque coin de l'écran est du bon côté des 4 arêtes.
+            for &(px, py) in &quad.corners {
+                for k in 0..4 {
+                    let (ax, ay) = frame[k];
+                    let (bx, by) = frame[(k + 1) % 4];
+                    let cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+                    assert!(cross > 0.0, "{preset}: coin d'écran hors du cadre (arête {k})");
+                }
+            }
+
+            // Il tient dans la boîte où l'écran tenait seul. Le prolongement bilinéaire n'est pas
+            // une vraie projection et le containment ne porte que sur l'écran : on tolère 1 %.
+            let (min_x, max_x) = frame.iter().fold((f32::MAX, f32::MIN), |(a, b), &(x, _)| (a.min(x), b.max(x)));
+            let (min_y, max_y) = frame.iter().fold((f32::MAX, f32::MIN), |(a, b), &(_, y)| (a.min(y), b.max(y)));
+            let bbox = [
+                (center_px[0] + min_x) / RENDER[0],
+                (center_px[1] + min_y) / RENDER[1],
+                (max_x - min_x) / RENDER[0],
+                (max_y - min_y) / RENDER[1],
+            ];
+            assert!(contains(old.s_dst, bbox, 0.01), "{preset}: cadre {bbox:?} hors de {:?}", old.s_dst);
+
+            let cb = g.window_frame_cb(RENDER).expect("calque");
+            assert!((cb.dst_prev[2] - mt * g.s_dst[3] * RENDER[1] * quad.scale).abs() < 1e-3);
+            assert_eq!(g.screen_square_top(), 1.0);
+        }
+    }
+
+    /// Sous un zoom (#179) le cadre grandit avec la boîte : ses marges sont des fractions de
+    /// `s_dst`, qui porte le grossissement. L'ancre des annotations, elle, ne bouge pas.
+    #[test]
+    fn the_frame_zooms_with_the_box() {
+        let frame = r#","frame":"window-dark""#;
+        let rest = framed_plan(&framed_scene(frame, "null", 1.0, false));
+        let zoomed = framed_plan(&framed_scene(frame, "null", 2.0, false));
+        assert_eq!(rest.window_frame.unwrap().margins, zoomed.window_frame.unwrap().margins);
+        assert!((zoomed.s_dst[2] / rest.s_dst[2] - 2.0).abs() < 1e-4);
+        assert_eq!(rest.s_ann, zoomed.s_ann);
+        let ShadowCaster::Upright { dst, .. } = zoomed.shadow_caster(RENDER) else { panic!() };
+        assert!(contains(dst, zoomed.s_dst, 1e-6));
     }
 
     /// La même scène, zoomée ET inclinée par un préset de rotation 3D.
@@ -3078,6 +3516,7 @@ mod tests {
             w_px: [0.0, 0.0],
             w_radius: 0.0,
             shape_fade: 0.0,
+            window_frame: None,
         }
     }
 

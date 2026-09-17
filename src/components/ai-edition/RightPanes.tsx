@@ -94,6 +94,7 @@ import {
 	themePickerPreviewAssets,
 } from "@/lib/cursor/cursorThemes";
 import { buildGradientFromEditor } from "@/lib/gradientBuilder";
+import { RECORDING_FRAMES, type RecordingFrame } from "@/lib/projectDefaults";
 import {
 	classifyWallpaper,
 	resolveImageWallpaperUrl,
@@ -2375,6 +2376,12 @@ function pluralKey(locale: string, count: number): string {
 
 // ─── Video Effects ─────────────────────────────────────────────────
 
+const RECORDING_FRAME_LABEL_KEYS: Record<RecordingFrame, string> = {
+	none: "effects.windowNone",
+	"window-light": "effects.windowLight",
+	"window-dark": "effects.windowDark",
+};
+
 /**
  * One pane for everything that shapes the composition.
  *
@@ -2399,6 +2406,7 @@ export function VideoEffectsPane() {
 	const nativeFormats = useMemo(() => (document ? collectNativeFormats(document) : []), [document]);
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
 	const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
+	const [frameMenuOpen, setFrameMenuOpen] = useState(false);
 	const { locale } = useI18n();
 	const clipCountLabel = (count: number) => ts(pluralKey(locale, count), { count });
 
@@ -2579,6 +2587,57 @@ export function VideoEffectsPane() {
 									))}
 								</>
 							) : null}
+						</div>
+					</PopoverContent>
+				</Popover>
+			</div>
+			{/* The window chrome drawn around the recording. A menu like Format above it, and
+			    for the same reason: it picks one project-wide look among a few. With a frame
+			    on, Roundness rounds the frame and Shadow falls under it — both still move what
+			    they name. */}
+			<div className={styles.paneRow}>
+				<span className={styles.label} title={ts("effects.windowHelp")}>
+					{ts("effects.window")}
+				</span>
+				<Popover open={frameMenuOpen} onOpenChange={setFrameMenuOpen}>
+					<PopoverTrigger asChild>
+						<button
+							type="button"
+							className={styles.rowAction}
+							disabled={!hasDocument}
+							aria-label={ts("effects.window")}
+							title={ts("effects.windowHelp")}
+						>
+							{ts(RECORDING_FRAME_LABEL_KEYS[settings.frame])}
+							<ChevronDown size={11} />
+						</button>
+					</PopoverTrigger>
+					<PopoverContent
+						align="end"
+						sideOffset={6}
+						collisionPadding={12}
+						animated={false}
+						className="w-auto border-0 bg-transparent p-0 shadow-none"
+					>
+						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.window")}>
+							{RECORDING_FRAMES.map((frame) => (
+								<button
+									type="button"
+									role="menuitem"
+									key={frame}
+									className={`${styles.actionMenuRow}${
+										frame === settings.frame ? ` ${styles.isActive}` : ""
+									}`}
+									onClick={() => {
+										setFrameMenuOpen(false);
+										void set({ frame });
+									}}
+								>
+									<span className={styles.actionMenuMain}>
+										{ts(RECORDING_FRAME_LABEL_KEYS[frame])}
+									</span>
+								</button>
+							))}
 						</div>
 					</PopoverContent>
 				</Popover>

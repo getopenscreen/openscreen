@@ -224,6 +224,21 @@ describe("buildSceneDescription.background motion", () => {
 	});
 });
 
+describe("buildSceneDescription.effects.frame", () => {
+	// Omitted for "none", like `webcamEffect`: `SceneFrame` defaults on the Rust side, so a
+	// frameless project serializes exactly as it did before the setting existed.
+	it("omits the frame when there is none", () => {
+		expect(buildSceneDescription(makeDoc()).effects).not.toHaveProperty("frame");
+		const none = makeDoc({ legacyEditor: { frame: "none" } });
+		expect(buildSceneDescription(none).effects).not.toHaveProperty("frame");
+	});
+
+	it("carries the chosen window frame", () => {
+		const doc = makeDoc({ legacyEditor: { frame: "window-light" } });
+		expect(buildSceneDescription(doc).effects.frame).toBe("window-light");
+	});
+});
+
 describe("buildSceneDescription.webcamEffect", () => {
 	// Omitted rather than sent as {mode:"none"}: the Rust side defaults the field, so every
 	// project without an effect would otherwise carry it for nothing.

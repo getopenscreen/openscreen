@@ -61,7 +61,7 @@ Screen Studio 目前僅支援 macOS（截至 2026 年 9 月）。OpenScreen 在 
 - **應用程式內建更新。** 上述四種套件都能自我更新。預設情況下應用程式只會通知你有更新，每 24 小時檢查一次，且絕不會在錄影期間提示更新。安裝一律會經過重新啟動的提示。
 - **Nix flake。** 它會為 `x86_64-linux` 與 `aarch64-linux` 從原始碼建置，並提供 NixOS 模組與 Home Manager 模組。`nix run github:getopenscreen/openscreen` 可以在不安裝的情況下試用。應用程式的更新機制不會影響 Nix 安裝版本。
 - **透過 Nix 支援 ARM64。** 發布的套件為 x64 版本。在 aarch64 機器上，請透過 Nix flake 安裝。
-- **命令列介面。** [CLI](/docs/cli/) 可錄製、匯出、加字幕並打包專案，並支援 JSON 輸出。
+- **命令列介面。** [CLI](/docs/cli/) 可在你的桌面工作階段中錄製，也可匯出、加字幕並打包專案，並支援 JSON 輸出。各指令的執行條件請見[顯示環境、CI 與伺服器](/docs/cli/#displays-ci-and-servers)。
 
 ## 不適合使用 OpenScreen 的情況 {#when-openscreen-is-not-the-right-tool}
 

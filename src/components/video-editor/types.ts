@@ -111,6 +111,8 @@ export interface ZoomRegion {
 	source?: ZoomRegionSource;
 	/** When true, cursor is hidden during this zoom region. */
 	hideCursor?: boolean;
+	/** When true, each click presses the tilted plane (needs `rotationPreset`). Omitted when off. */
+	clickImpact?: true;
 }
 
 export function getRotation3D(region: Pick<ZoomRegion, "rotationPreset">): Rotation3D {

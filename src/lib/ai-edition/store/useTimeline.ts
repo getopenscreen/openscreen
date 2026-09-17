@@ -773,6 +773,22 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
+	// Per-region, like the preset it animates. `undefined` rather than `false` so the document
+	// keeps omitting the key when the option is off.
+	const updateZoomClickImpact = useCallback(
+		async (id: string, clickImpact: boolean) => {
+			if (!document) return;
+			const next: AxcutDocument = {
+				...document,
+				zoomRanges: patchPillById(document.zoomRanges, id, {
+					clickImpact: clickImpact ? true : undefined,
+				}) as AxcutDocument["zoomRanges"],
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
 	const updateAnnotationSpan = useCallback(
 		async (id: string, startMs: number, endMs: number) => {
 			if (!document) return;
@@ -1522,6 +1538,7 @@ export function useTimeline() {
 		updateZoomRotation,
 		updateZoomFocusMode,
 		updateZoomHideCursor,
+		updateZoomClickImpact,
 		updateAnnotationSpan,
 		updateAnnotationLive,
 		commitAnnotationChange,

@@ -332,6 +332,12 @@
 			"none": "Aucune",
 			"title": "Rotation 3D"
 		},
+		"clickImpact": {
+			"title": "Impact du clic",
+			"description": "Chaque clic enfonce l'écran incliné : le côté cliqué s'abaisse, puis revient.",
+			"needsRotation": "Choisissez d'abord une rotation 3D : seul un écran incliné peut être enfoncé.",
+			"needsCursor": "Le curseur est masqué : l'écran ne réagit qu'aux clics visibles."
+		},
 		"level": "Niveau de zoom",
 		"previewHold": "Maintenir pour prévisualiser l'effet de zoom",
 		"customScale": "Zoom personnalisé",

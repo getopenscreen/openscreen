@@ -303,6 +303,49 @@ function paneRow(label: string, control: React.ReactNode) {
 	);
 }
 
+/** « Click impact » : une case à cocher, et dessous ce qu'elle fait — ou pourquoi elle ne peut
+ *  rien faire ici. */
+function ClickImpactToggle({
+	checked,
+	blocker,
+	label,
+	description,
+	onChange,
+}: {
+	checked: boolean;
+	blocker: string | null;
+	label: string;
+	description: string;
+	onChange: (on: boolean) => void;
+}) {
+	const disabled = blocker !== null;
+	return (
+		<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+			<label
+				style={{
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "space-between",
+					gap: 10,
+					opacity: disabled ? 0.5 : 1,
+					cursor: disabled ? "not-allowed" : "pointer",
+				}}
+			>
+				<span style={{ fontSize: 12.5, color: "var(--fg-2)", fontWeight: 500 }}>{label}</span>
+				<input
+					type="checkbox"
+					checked={checked}
+					disabled={disabled}
+					onChange={(e) => onChange(e.target.checked)}
+				/>
+			</label>
+			<p style={{ margin: 0, font: "400 11px/1.45 var(--font-sans)", color: "var(--fg-2)" }}>
+				{blocker ?? description}
+			</p>
+		</div>
+	);
+}
+
 type AnnotationKind = AxcutAnnotationRegion["type"];
 type ArrowDirectionKind = NonNullable<AxcutAnnotationRegion["figureData"]>["arrowDirection"];
 
@@ -559,6 +602,21 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							<option value="right">{ts("zoom.threeD.preset.right")}</option>
 						</select>,
 					)}
+					<ClickImpactToggle
+						checked={region.clickImpact === true}
+						// The click presses the TILTED plane and follows the visible pointer: without a
+						// preset, or with the cursor hidden, the checkbox would move nothing.
+						blocker={
+							!region.rotationPreset
+								? ts("zoom.clickImpact.needsRotation")
+								: !settings.cursorShow || region.hideCursor
+									? ts("zoom.clickImpact.needsCursor")
+									: null
+						}
+						label={ts("zoom.clickImpact.title")}
+						description={ts("zoom.clickImpact.description")}
+						onChange={(on) => void tl.updateZoomClickImpact(region.id, on)}
+					/>
 					{paneRow(
 						ts("zoom.focusMode.title"),
 						// While the global toggle is on it OVERRIDES every region, so the control shows

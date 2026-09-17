@@ -293,6 +293,7 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedValue", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateTrim", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomClickImpact", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomDepth", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomFocusLive", "set", "automatic"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomFocusMode", "save", "gesture"),

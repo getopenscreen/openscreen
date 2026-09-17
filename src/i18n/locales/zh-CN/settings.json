@@ -332,6 +332,12 @@
 			"none": "无",
 			"title": "3D 旋转"
 		},
+		"clickImpact": {
+			"title": "点击按压",
+			"description": "每次点击都会按压倾斜的画面：被点击的一侧下沉，然后弹回。",
+			"needsRotation": "请先选择 3D 旋转：只有倾斜的画面才能被按压。",
+			"needsCursor": "光标已隐藏：画面只对可见的点击做出反应。"
+		},
 		"level": "缩放级别",
 		"previewHold": "按住预览放大效果",
 		"customScale": "自定义缩放",

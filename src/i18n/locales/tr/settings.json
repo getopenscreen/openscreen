@@ -332,6 +332,12 @@
 			"none": "Yok",
 			"title": "3D Döndürme"
 		},
+		"clickImpact": {
+			"title": "Tıklama etkisi",
+			"description": "Her tıklama eğik ekranı bastırır: tıklanan taraf çöker, sonra geri döner.",
+			"needsRotation": "Önce bir 3D döndürme seçin: yalnızca eğik bir ekran bastırılabilir.",
+			"needsCursor": "İmleç gizli: ekran yalnızca görünen tıklamalara tepki verir."
+		},
 		"level": "Yakınlaştırma Seviyesi",
 		"previewHold": "Yakınlaştırma efektini önizlemek için basılı tutun",
 		"customScale": "Özel Yakınlaştırma",

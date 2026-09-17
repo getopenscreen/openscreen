@@ -332,6 +332,12 @@
 			"none": "None",
 			"title": "3D Rotation"
 		},
+		"clickImpact": {
+			"title": "Click impact",
+			"description": "Each click presses the tilted screen: the clicked side dips, then springs back.",
+			"needsRotation": "Pick a 3D rotation first: only a tilted screen can be pressed.",
+			"needsCursor": "The cursor is hidden: the screen only reacts to clicks you can see."
+		},
 		"level": "Zoom Level",
 		"previewHold": "Hold to preview zoom effect",
 		"customScale": "Custom Zoom",

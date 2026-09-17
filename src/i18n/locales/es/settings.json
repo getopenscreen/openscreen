@@ -332,6 +332,12 @@
 			"none": "Ninguna",
 			"title": "Rotación 3D"
 		},
+		"clickImpact": {
+			"title": "Impacto del clic",
+			"description": "Cada clic presiona la pantalla inclinada: el lado pulsado se hunde y luego vuelve.",
+			"needsRotation": "Elige primero una rotación 3D: solo se puede presionar una pantalla inclinada.",
+			"needsCursor": "El cursor está oculto: la pantalla solo reacciona a los clics visibles."
+		},
 		"level": "Nivel de zoom",
 		"previewHold": "Mantener para previsualizar el efecto de zoom",
 		"customScale": "Zoom personalizado",

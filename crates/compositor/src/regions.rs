@@ -279,14 +279,28 @@ pub struct ZoomState {
     /// un, 0 sinon ; interpolé entre deux régions chaînées, et refermé en milieu de course
     /// quand leurs présets diffèrent. C'est la porte de `dynamic_tilt`.
     pub tilt: f32,
+    /// Poids de l'impact du clic (0..1) : 1 sur une région qui l'active (`click_impact`),
+    /// interpolé entre deux régions chaînées. Ne suffit pas seul : l'impact passe aussi par la
+    /// porte de `tilt` (`dynamic_tilt`), donc rien sans préset.
+    pub click_impact: f32,
 }
 
-const IDENTITY_ZOOM: ZoomState =
-    ZoomState { scale: 1.0, focus: [0.5, 0.5], rotation: [0.0, 0.0, 0.0], tilt: 0.0 };
+const IDENTITY_ZOOM: ZoomState = ZoomState {
+    scale: 1.0,
+    focus: [0.5, 0.5],
+    rotation: [0.0, 0.0, 0.0],
+    tilt: 0.0,
+    click_impact: 0.0,
+};
 
 /// 1 si la région porte un préset 3D, 0 sinon.
 fn has_tilt(region: &SceneZoomRegion) -> f32 {
     if is_identity_rotation(rotation3d_for(&region.rotation)) { 0.0 } else { 1.0 }
+}
+
+/// 1 si la région active l'impact du clic, 0 sinon.
+fn impact_flag(region: &SceneZoomRegion) -> f32 {
+    if region.click_impact { 1.0 } else { 0.0 }
 }
 
 /// Port de `easeConnectedPan` (TS) : cubic-bezier(0.1, 0, 0.2, 1).
@@ -446,6 +460,7 @@ pub fn zoom_state_at(regions: &[SceneZoomRegion], t: f32, cursor: Option<&Cursor
             focus: [lerp(cur_focus[0], next_focus[0], progress), lerp(cur_focus[1], next_focus[1], progress)],
             rotation: lerp_rotation3d(cur_rot, next_rot, progress),
             tilt: lerp(has_tilt(cur), has_tilt(next), progress) * crossing,
+            click_impact: lerp(impact_flag(cur), impact_flag(next), progress),
         };
     }
 
@@ -459,6 +474,7 @@ pub fn zoom_state_at(regions: &[SceneZoomRegion], t: f32, cursor: Option<&Cursor
                 focus: resolve_focus(next, t, cursor),
                 rotation: rotation3d_for(&next.rotation),
                 tilt: has_tilt(next),
+                click_impact: impact_flag(next),
             };
         }
     }
@@ -504,6 +520,7 @@ pub fn zoom_state_at(regions: &[SceneZoomRegion], t: f32, cursor: Option<&Cursor
                 focus: [ease(focus[0]), ease(focus[1])],
                 rotation: lerp_rotation3d([0.0, 0.0, 0.0], rotation3d_for(&r.rotation), strength),
                 tilt: has_tilt(r) * strength,
+                click_impact: impact_flag(r),
             }
         }
         None => IDENTITY_ZOOM,
@@ -566,6 +583,22 @@ pub fn is_identity_rotation(r: [f32; 3]) -> bool {
 /// perspective `perspective` (distance en px ; <=0 = orthographique). `None` si le point
 /// passe derrière le plan de projection (cas pathologique, comme le `return 1` du TS).
 fn project_corner(x0: f32, y0: f32, rot: [f32; 3], perspective: f32) -> Option<(f32, f32)> {
+    let (mut px, mut py, pz) = rotate_corner(x0, y0, rot);
+    if perspective > 0.0 {
+        let denom = perspective - pz;
+        if denom <= 0.0 {
+            return None;
+        }
+        let f = perspective / denom;
+        px *= f;
+        py *= f;
+    }
+    Some((px, py))
+}
+
+/// Le point local (x0,y0,0) tourné par `rot` (degrés X/Y/Z), avant perspective. `z` > 0 vient
+/// vers la caméra, < 0 recule.
+fn rotate_corner(x0: f32, y0: f32, rot: [f32; 3]) -> (f32, f32, f32) {
     let (a, b, g) = (rot[0].to_radians(), rot[1].to_radians(), rot[2].to_radians());
     let (ca, sa) = (a.cos(), a.sin());
     let (cb, sb) = (b.cos(), b.sin());
@@ -583,16 +616,7 @@ fn project_corner(x0: f32, y0: f32, rot: [f32; 3], perspective: f32) -> Option<(
     let (xy, xz) = (py * ca - pz * sa, py * sa + pz * ca);
     py = xy;
     pz = xz;
-    if perspective > 0.0 {
-        let denom = perspective - pz;
-        if denom <= 0.0 {
-            return None;
-        }
-        let f = perspective / denom;
-        px *= f;
-        py *= f;
-    }
-    Some((px, py))
+    (px, py, pz)
 }
 
 /// Les 4 coins d'un quad `width`×`height` réduit de `scale`, projetés. `None` si un coin part
@@ -763,23 +787,105 @@ const PARALLAX_VELOCITY_HALF_WINDOW_S: f32 = 0.1;
 ///
 /// Sens : le plan se penche vers le geste — curseur vers la droite → le bord droit recule
 /// (+Y), vers le bas → le bord bas recule (−X). Même convention que l'impact du clic.
-pub fn dynamic_tilt(t: f32, track: Option<&CursorTrack>, cut: [f32; 4], strength: f32) -> [f32; 3] {
+///
+/// `impact` : l'impact du clic (`click_impact`), déjà pondéré par ses propres portes. Il
+/// s'ADDITIONNE à la parallaxe, la somme est bornée au budget, puis la porte d'ease-in
+/// s'applique au tout : les deux effets passent par la même porte et le même budget.
+pub fn dynamic_tilt(
+    t: f32,
+    track: Option<&CursorTrack>,
+    cut: [f32; 4],
+    strength: f32,
+    impact: [f32; 3],
+) -> [f32; 3] {
     let gate = smoothstep(PARALLAX_GATE_START, 1.0, strength);
     if gate <= 0.0 {
         return [0.0; 3];
     }
-    let Some(track) = track else { return [0.0; 3] };
     let h = PARALLAX_VELOCITY_HALF_WINDOW_S;
-    let (Some(a), Some(b)) = (track.follow_at(t - h), track.follow_at(t + h)) else {
-        return [0.0; 3];
+    let parallax = match track.map(|tr| (tr.follow_at(t - h), tr.follow_at(t + h))) {
+        Some((Some(a), Some(b))) => {
+            let (cw, ch) = ((cut[2] - cut[0]).max(1e-3), (cut[3] - cut[1]).max(1e-3));
+            let (vx, vy) = ((b.0 - a.0) / (2.0 * h * cw), (b.1 - a.1) / (2.0 * h * ch));
+            // Saturation douce : jamais au-delà du budget, sans plateau sec pendant un geste
+            // rapide.
+            let soft = |v: f32, budget: f32| budget * (PARALLAX_DEG_PER_SPEED * v / budget).tanh();
+            let b = DYNAMIC_TILT_BUDGET;
+            [soft(-vy, b[0]), soft(vx, b[1]), 0.0]
+        }
+        _ => [0.0; 3],
     };
-    let (cw, ch) = ((cut[2] - cut[0]).max(1e-3), (cut[3] - cut[1]).max(1e-3));
-    let (vx, vy) = ((b.0 - a.0) / (2.0 * h * cw), (b.1 - a.1) / (2.0 * h * ch));
-    // Saturation douce : jamais au-delà du budget, sans plateau sec pendant un geste rapide.
-    let soft = |v: f32, budget: f32| budget * (PARALLAX_DEG_PER_SPEED * v / budget).tanh();
-    let b = DYNAMIC_TILT_BUDGET;
-    let parallax = [soft(-vy, b[0]), soft(vx, b[1]), 0.0];
-    clamp_dynamic_tilt(parallax).map(|d| d * gate)
+    let sum = [parallax[0] + impact[0], parallax[1] + impact[1], parallax[2] + impact[2]];
+    clamp_dynamic_tilt(sum).map(|d| d * gate)
+}
+
+/// Durée de l'impact du clic : la fenêtre de `CursorTrack::bounce`, pour que le plan et le
+/// pointeur lisent comme un seul contact.
+pub const CLICK_IMPACT_WINDOW_S: f32 = 0.26;
+/// Amplitude `A` de l'impact, en degrés, au creux de `tap` pour un clic au bord de la coupe.
+/// Calée sur le budget X (`DYNAMIC_TILT_BUDGET`, le plus serré) : un clic dans un coin pèse
+/// autant sur les deux axes sans que X sature seul et ne tourne l'axe du pivot. Ce n'est PAS
+/// le réglage `clickBounce` du curseur (brut sur [0, 5], 2,5 par défaut) : il rendrait le plan
+/// 2,5 fois trop fort. Cf. `a_corner_click_moves_the_plane_visibly_at_a_frozen_scale`.
+pub const CLICK_IMPACT_DEG: f32 = 1.9;
+/// Valeur du pic de `sin(2πe)·(1−e)²` (en e ≈ 0,1904), pour que le creux de `tap` vaille −1.
+const TAP_NORM: f32 = 0.610;
+
+/// L'enveloppe de l'impact, `e` = temps depuis le clic / `CLICK_IMPACT_WINDOW_S`.
+///
+/// Courbe sœur de `CursorTrack::bounce`, qui reste intouchée : même instant de contact (creux
+/// −1 à 49,5 ms) et même fenêtre (260 ms), mais sans la cassure de pente de `bounce` à 98,8 ms
+/// (×2,45) — invisible sur un sprite de 30 px, brutale sur un plan entier. Rebond plus mou
+/// (+0,164 à 165 ms contre 0,67) : un écran pèse plus qu'un pointeur. Retour à zéro avec une
+/// pente nulle à 260 ms. Nulle hors de `[0, 1)`.
+pub fn tap(e: f32) -> f32 {
+    if !(0.0..1.0).contains(&e) {
+        return 0.0;
+    }
+    let o = 1.0 - e;
+    -(std::f32::consts::TAU * e).sin() * o * o / TAP_NORM
+}
+
+/// L'impact des clics au temps `t`, en degrés X/Y/Z, SANS ses portes (préset installé,
+/// curseur visible, vitesse, masques : cf. `plan_frame`). À passer à `dynamic_tilt`.
+///
+/// Un pivot RIGIDE autour du centre : le côté cliqué recule, le plan ne se déforme pas
+/// localement — la géométrie ne sait pas dessiner une bosse (`project_corner` part d'un point
+/// z = 0, le warp est bilinéaire).
+///
+/// - `window` : la fenêtre source `[début, fin)` du clip actif. Un clic hors fenêtre est sur
+///   une portion coupée : ses 260 ms déborderaient sur les frames gardées.
+/// - `aim` : où tombe une position curseur dans la coupe VISIBLE (0..1 par axe), `None` hors
+///   coupe — `frame_geometry::cursor_plane_point`, le test même de `plan_cursor`. Un clic hors
+///   de ce qu'on voit ne bascule rien.
+///
+/// Loi : `A · Σ tap((t − t_c) / 0,26) · [+dy, −dx, 0]`, chaque composante de la somme bornée à
+/// [−1, 1] avant `A` — un double clic à 33 ms d'écart atteindrait 1,81. `dx`, `dy` ∈ [−1, 1] :
+/// le décalage du clic au centre de la coupe, y vers le bas, visé à `at(t_c)` sur la piste
+/// brute (pas `at(t)` : un glisser ferait vaciller l'axe en plein impact). `tap` vaut −1 au
+/// contact : clic à droite → +Y → le bord droit recule ; clic en bas → −X → le bord bas recule.
+pub fn click_impact(
+    t: f32,
+    track: &CursorTrack,
+    window: [f32; 2],
+    aim: impl Fn((f32, f32)) -> Option<[f32; 2]>,
+) -> [f32; 3] {
+    let mut sum = [0.0f32; 2];
+    for &tc in track.clicks_between(t - CLICK_IMPACT_WINDOW_S, t) {
+        if tc < window[0] || tc >= window[1] {
+            continue;
+        }
+        let Some([fx, fy]) = track.at(tc).and_then(&aim) else { continue };
+        let (dx, dy) = ((2.0 * fx - 1.0).clamp(-1.0, 1.0), (2.0 * fy - 1.0).clamp(-1.0, 1.0));
+        let k = tap((t - tc) / CLICK_IMPACT_WINDOW_S);
+        sum[0] += k * dy;
+        sum[1] -= k * dx;
+    }
+    [
+        CLICK_IMPACT_DEG * sum[0].clamp(-1.0, 1.0),
+        CLICK_IMPACT_DEG * sum[1].clamp(-1.0, 1.0),
+        0.0,
+    ]
 }
 
 fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
@@ -828,6 +934,7 @@ mod zoom_focus_tests {
             rotation: None,
             under_trim: false,
             hide_cursor: false,
+            click_impact: false,
         }
     }
 
@@ -1313,6 +1420,7 @@ mod tilt_tests {
             rotation: rotation.map(Into::into),
             under_trim: false,
             hide_cursor: false,
+            click_impact: false,
         };
         let presets = [None, Some("iso"), Some("left"), Some("right")];
         for a in presets {
@@ -1390,7 +1498,7 @@ mod tilt_tests {
 
     #[test]
     fn no_track_means_no_dynamic_tilt() {
-        assert_eq!(dynamic_tilt(1.0, None, FULL_CUT, 1.0), [0.0; 3]);
+        assert_eq!(dynamic_tilt(1.0, None, FULL_CUT, 1.0, [0.0; 3]), [0.0; 3]);
     }
 
     #[test]
@@ -1399,23 +1507,23 @@ mod tilt_tests {
         for k in 0..=85 {
             let strength = k as f32 / 100.0;
             assert_eq!(
-                dynamic_tilt(1.0, Some(&track), FULL_CUT, strength),
+                dynamic_tilt(1.0, Some(&track), FULL_CUT, strength, [0.0; 3]),
                 [0.0; 3],
                 "force {strength}"
             );
         }
-        assert_ne!(dynamic_tilt(1.0, Some(&track), FULL_CUT, 0.95), [0.0; 3]);
+        assert_ne!(dynamic_tilt(1.0, Some(&track), FULL_CUT, 0.95, [0.0; 3]), [0.0; 3]);
     }
 
     /// Le geste penche le plan dans son sens, puis le plan revient à la pose du préset au repos.
     #[test]
     fn the_plane_leans_into_the_gesture_and_settles_at_rest() {
         let track = swipe(0.5, 1.5);
-        let moving = dynamic_tilt(1.0, Some(&track), FULL_CUT, 1.0);
+        let moving = dynamic_tilt(1.0, Some(&track), FULL_CUT, 1.0, [0.0; 3]);
         assert!(moving[1] > 0.5, "vers la droite → +Y : {moving:?}");
         assert!(moving[0].abs() < 1e-3 && moving[2] == 0.0, "{moving:?}");
         // La piste de suivi rattrape en quelques centaines de ms.
-        let rest = dynamic_tilt(4.0, Some(&track), FULL_CUT, 1.0);
+        let rest = dynamic_tilt(4.0, Some(&track), FULL_CUT, 1.0, [0.0; 3]);
         assert!(rest[1].abs() < 0.05, "au repos : {rest:?}");
         // Vers le bas → le bord bas recule (−X).
         let down = CursorTrack::new(
@@ -1423,7 +1531,7 @@ mod tilt_tests {
             vec![],
             vec![],
         );
-        assert!(dynamic_tilt(1.0, Some(&down), FULL_CUT, 1.0)[0] < -0.5);
+        assert!(dynamic_tilt(1.0, Some(&down), FULL_CUT, 1.0, [0.0; 3])[0] < -0.5);
     }
 
     /// Quelle que soit la vitesse, la parallaxe reste dans le budget. Une coupe serrée (crop
@@ -1434,11 +1542,11 @@ mod tilt_tests {
         for speed in [0.1f32, 1.0, 10.0, 1000.0, -1000.0] {
             let track = swipe(speed, 9.0);
             for cut in [FULL_CUT, [0.4, 0.4, 0.45, 0.45]] {
-                let d = dynamic_tilt(1.0, Some(&track), cut, 1.0);
+                let d = dynamic_tilt(1.0, Some(&track), cut, 1.0, [0.0; 3]);
                 assert!(d[0].abs() <= b[0] && d[1].abs() <= b[1] && d[2] == 0.0, "{speed} {d:?}");
             }
         }
-        let fast = dynamic_tilt(1.0, Some(&swipe(1000.0, 9.0)), FULL_CUT, 1.0);
+        let fast = dynamic_tilt(1.0, Some(&swipe(1000.0, 9.0)), FULL_CUT, 1.0, [0.0; 3]);
         assert!(fast[1] > 2.9, "saturation au budget : {fast:?}");
     }
 
@@ -1446,11 +1554,193 @@ mod tilt_tests {
     #[test]
     fn the_dynamic_tilt_is_a_pure_function_of_time() {
         let track = swipe(0.7, 2.0);
-        let at = |i: usize| dynamic_tilt(i as f32 / 30.0, Some(&track), FULL_CUT, 1.0);
+        let at = |i: usize| dynamic_tilt(i as f32 / 30.0, Some(&track), FULL_CUT, 1.0, [0.0; 3]);
         let forward: Vec<_> = (0..90).map(at).collect();
         for i in (0..90).rev() {
             assert_eq!(at(i), forward[i]);
         }
+    }
+
+    // ---- Impact du clic ----------------------------------------------------------------
+
+    const MS: f32 = 1.0 / 260.0;
+
+    /// Creux −1 à 49,5 ms, rebond +0,164 à 165 ms, zéro à pente nulle à 260 ms, rien hors
+    /// fenêtre.
+    #[test]
+    fn the_tap_envelope_has_its_contact_rebound_and_flat_landing() {
+        let (mut lo, mut lo_ms) = (f32::MAX, 0.0);
+        let (mut hi, mut hi_ms) = (f32::MIN, 0.0);
+        for i in 0..2600 {
+            let ms = i as f32 * 0.1;
+            let v = tap(ms * MS);
+            if v < lo {
+                (lo, lo_ms) = (v, ms);
+            }
+            if v > hi {
+                (hi, hi_ms) = (v, ms);
+            }
+        }
+        assert!((lo + 1.0).abs() < 1e-3 && (lo_ms - 49.5).abs() < 0.3, "creux {lo} à {lo_ms} ms");
+        assert!((hi - 0.164).abs() < 1e-3 && (hi_ms - 165.3).abs() < 0.5, "rebond {hi} à {hi_ms} ms");
+        assert_eq!(tap(1.0), 0.0);
+        assert_eq!(tap(-1e-4), 0.0);
+        assert_eq!(tap(0.0), 0.0);
+        // Pente nulle à l'atterrissage : à 1 ms de la fin, la valeur est déjà sous 1e-4.
+        assert!(tap(259.0 * MS).abs() < 1e-4, "{}", tap(259.0 * MS));
+        // Pas de cassure de pente (celle de `bounce` à 98,8 ms) : dérivée seconde bornée partout.
+        let d2 = |e: f32| (tap(e + 1e-3) - 2.0 * tap(e) + tap(e - 1e-3)) / 1e-6;
+        for i in 2..998 {
+            assert!(d2(i as f32 / 1000.0).abs() < 60.0, "cassure à e = {}", i as f32 / 1000.0);
+        }
+    }
+
+    /// Une piste immobile au point `(x, y)`, avec des clics.
+    fn still(x: f32, y: f32, clicks: Vec<f32>) -> CursorTrack {
+        CursorTrack::new((0..=90).map(|i| (i as f32 / 30.0, x, y)).collect(), clicks, vec![])
+    }
+
+    /// La coupe entière, sans restriction : le point de la piste EST le point du plan.
+    fn full_aim(p: (f32, f32)) -> Option<[f32; 2]> {
+        ((0.0..=1.0).contains(&p.0) && (0.0..=1.0).contains(&p.1)).then_some([p.0, p.1])
+    }
+
+    const WHOLE: [f32; 2] = [0.0, 100.0];
+
+    /// Clic à droite → +Y ; en bas → −X ; au contact, le côté cliqué recule (z diminue).
+    #[test]
+    fn the_clicked_side_recedes() {
+        let t = 1.0 + 49.5 / 1000.0;
+        let right = click_impact(t, &still(1.0, 0.5, vec![1.0]), WHOLE, full_aim);
+        assert!((right[1] - CLICK_IMPACT_DEG).abs() < 1e-2 && right[0].abs() < 1e-6, "{right:?}");
+        let bottom = click_impact(t, &still(0.5, 1.0, vec![1.0]), WHOLE, full_aim);
+        assert!((bottom[0] + CLICK_IMPACT_DEG).abs() < 1e-2 && bottom[1].abs() < 1e-6, "{bottom:?}");
+
+        let z = |x: f32, y: f32, rot: [f32; 3]| rotate_corner(x, y, rot).2;
+        for name in ["iso", "left", "right"] {
+            let base = preset(name);
+            let with = |d: [f32; 3]| [base[0] + d[0], base[1] + d[1], base[2] + d[2]];
+            // Milieu du bord droit / du bord bas, et le bord opposé qui avance.
+            assert!(z(960.0, 0.0, with(right)) < z(960.0, 0.0, base), "{name} droite");
+            assert!(z(-960.0, 0.0, with(right)) > z(-960.0, 0.0, base), "{name} gauche");
+            assert!(z(0.0, 540.0, with(bottom)) < z(0.0, 540.0, base), "{name} bas");
+            assert!(z(0.0, -540.0, with(bottom)) > z(0.0, -540.0, base), "{name} haut");
+        }
+        // Au centre : pas d'axe, rien ne bouge.
+        assert_eq!(click_impact(t, &still(0.5, 0.5, vec![1.0]), WHOLE, full_aim), [0.0; 3]);
+    }
+
+    /// Double clic : la somme est bornée — à 33 ms d'écart elle atteindrait 1,81.
+    #[test]
+    fn a_double_click_stays_bounded() {
+        let track = still(1.0, 1.0, vec![1.0, 1.033]);
+        let mut peak = 0.0f32;
+        for i in 0..400 {
+            let d = click_impact(1.0 + i as f32 / 1000.0, &track, WHOLE, full_aim);
+            assert!(d[0].abs() <= CLICK_IMPACT_DEG && d[1].abs() <= CLICK_IMPACT_DEG, "{d:?}");
+            peak = peak.max(d[1]);
+        }
+        assert_eq!(peak, CLICK_IMPACT_DEG, "la somme brute dépasse 1 et se fait borner");
+    }
+
+    /// Rien hors de la fenêtre du clic, du clip actif ou de la coupe visible.
+    #[test]
+    fn clicks_outside_the_window_the_clip_or_the_crop_do_nothing() {
+        let track = still(1.0, 0.5, vec![1.0]);
+        assert_eq!(click_impact(0.99, &track, WHOLE, full_aim), [0.0; 3], "avant le clic");
+        assert_eq!(click_impact(1.26, &track, WHOLE, full_aim), [0.0; 3], "après 260 ms");
+        let t = 1.05;
+        assert_eq!(click_impact(t, &track, [1.01, 9.0], full_aim), [0.0; 3], "clic coupé avant");
+        assert_eq!(click_impact(t, &track, [0.0, 1.0], full_aim), [0.0; 3], "fin exclusive");
+        assert_ne!(click_impact(t, &track, [1.0, 9.0], full_aim), [0.0; 3], "début inclus");
+        assert_eq!(click_impact(t, &track, WHOLE, |_| None), [0.0; 3], "hors coupe");
+        assert_eq!(dynamic_tilt(t, None, FULL_CUT, 1.0, [0.0; 3]), [0.0; 3]);
+    }
+
+    /// L'axe est visé à l'instant du clic : un glisser qui suit ne le fait pas vaciller.
+    #[test]
+    fn the_aim_is_frozen_at_the_click() {
+        let drag = CursorTrack::new(
+            (0..=90)
+                .map(|i| {
+                    let t = i as f32 / 30.0;
+                    (t, if t <= 1.0 { 1.0 } else { (1.0 - 3.0 * (t - 1.0)).max(0.0) }, 0.5)
+                })
+                .collect(),
+            vec![1.0],
+            vec![],
+        );
+        let rest = still(1.0, 0.5, vec![1.0]);
+        for i in 0..26 {
+            let t = 1.0 + i as f32 / 100.0;
+            assert_eq!(
+                click_impact(t, &drag, WHOLE, full_aim),
+                click_impact(t, &rest, WHOLE, full_aim),
+                "{t}"
+            );
+        }
+    }
+
+    /// L'impact passe par la porte de la parallaxe : rien pendant l'ease-in, et la somme des
+    /// deux reste dans le budget — donc dans le balayage des tests de la règle des 2°.
+    #[test]
+    fn the_impact_shares_the_parallax_gate_and_budget() {
+        let impact = [-CLICK_IMPACT_DEG, CLICK_IMPACT_DEG, 0.0];
+        for k in 0..=85 {
+            let strength = k as f32 / 100.0;
+            assert_eq!(dynamic_tilt(1.0, None, FULL_CUT, strength, impact), [0.0; 3]);
+        }
+        assert_eq!(dynamic_tilt(1.0, None, FULL_CUT, 1.0, impact), impact);
+        let b = DYNAMIC_TILT_BUDGET;
+        assert!(CLICK_IMPACT_DEG <= b[0] && CLICK_IMPACT_DEG <= b[1]);
+        // Parallaxe saturée dans le même sens : la SOMME est bornée.
+        let fast = swipe(1000.0, 9.0);
+        let d = dynamic_tilt(1.0, Some(&fast), FULL_CUT, 1.0, impact);
+        assert!(d[1] <= b[1] && d[1] > b[1] - 1e-3, "{d:?}");
+        let d = dynamic_tilt(1.0, Some(&fast), FULL_CUT, 0.95, impact);
+        let gate = smoothstep(PARALLAX_GATE_START, 1.0, 0.95);
+        assert!(d[1] <= b[1] * gate + 1e-5 && d[0].abs() <= b[0] * gate + 1e-5, "{d:?}");
+    }
+
+    /// Échelle gelée pendant l'impact : seuls les coins bougent, et assez pour se voir.
+    #[test]
+    fn a_corner_click_moves_the_plane_visibly_at_a_frozen_scale() {
+        let track = still(1.0, 1.0, vec![1.0]);
+        for name in ["iso", "left", "right"] {
+            let base = rotated_quad_corners_px(1920.0, 1080.0, preset(name), [0.0; 3]);
+            let mut worst = 0.0f32;
+            for i in 0..=26 {
+                let d = click_impact(1.0 + i as f32 / 100.0, &track, WHOLE, full_aim);
+                let q = rotated_quad_corners_px(1920.0, 1080.0, preset(name), d);
+                assert_eq!(q.scale, base.scale, "{name}");
+                for (a, b) in q.corners.iter().zip(base.corners) {
+                    worst = worst.max((a.0 - b.0).hypot(a.1 - b.1));
+                }
+            }
+            // Mesuré : 24 px (iso), 25 (left), 27 (right) à 1080p pour un clic dans un coin.
+            assert!(worst > 15.0, "{name} : {worst:.1} px, invisible");
+        }
+    }
+
+    #[test]
+    fn the_click_impact_weight_follows_the_region_flag() {
+        let region = |click_impact: bool| SceneZoomRegion {
+            id: "z".into(),
+            clip_index: None,
+            start_sec: 2.0,
+            end_sec: 8.0,
+            scale: 2.0,
+            focus_x: 0.5,
+            focus_y: 0.5,
+            focus_mode: None,
+            rotation: Some("iso".into()),
+            under_trim: false,
+            hide_cursor: false,
+            click_impact,
+        };
+        assert_eq!(zoom_state_at(&[region(true)], 5.0, None).click_impact, 1.0);
+        assert_eq!(zoom_state_at(&[region(false)], 5.0, None).click_impact, 0.0);
+        assert_eq!(zoom_state_at(&[region(true)], 0.0, None).click_impact, 0.0, "hors région");
     }
 
     /// `ZoomState::tilt` : la force pour une région à préset, 0 sans préset.
@@ -1468,6 +1758,7 @@ mod tilt_tests {
             rotation: rotation.map(Into::into),
             under_trim: false,
             hide_cursor: false,
+            click_impact: false,
         };
         assert_eq!(zoom_state_at(&[region(Some("iso"))], 5.0, None).tilt, 1.0);
         assert_eq!(zoom_state_at(&[region(None)], 5.0, None).tilt, 0.0);

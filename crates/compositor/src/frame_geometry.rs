@@ -1084,12 +1084,14 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // écran normal (vélocité pour le motion blur du chemin non-tilté).
         let mut zoom_rotation = [0.0f32; 3];
         let mut zoom_tilt = 0.0f32;
+        let mut zoom_click_impact = 0.0f32;
         if !zoom_regions.is_empty() {
             let zs = crate::regions::zoom_state_at(zoom_regions, source_t, cursor_for_zoom);
             p.zoom = zs.scale;
             p.focus = zs.focus;
             zoom_rotation = zs.rotation;
             zoom_tilt = zs.tilt;
+            zoom_click_impact = zs.click_impact;
             let zs_p = crate::regions::zoom_state_at(zoom_regions, source_t_prev, cursor_for_zoom);
             pp.zoom = zs_p.scale;
             pp.focus = zs_p.focus;
@@ -1271,8 +1273,16 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             cut_ref[2] / u_max.max(1e-6),
             cut_ref[3] / v_max.max(1e-6),
         ];
+        // Impact du clic : mêmes piste, coupe, porte et budget que la parallaxe.
+        let impact = match (scene, parallax_track) {
+            (Some(s), Some(track)) if zoom_click_impact > 0.0 => {
+                click_impact_at(s, cfg, &lp, track, source_t, cut, [u_max, v_max])
+                    .map(|d| d * zoom_click_impact)
+            }
+            _ => [0.0; 3],
+        };
         let zoom_rotation_dyn =
-            crate::regions::dynamic_tilt(source_t, parallax_track, cut_norm, zoom_tilt);
+            crate::regions::dynamic_tilt(source_t, parallax_track, cut_norm, zoom_tilt, impact);
         let s_dst_prev = remap_box(s_base_prev, cut_ref_prev, cut);
         // le padding n'affecte QUE l'écran (la quantité de fond révélée). La webcam reste ancrée
         // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame)
@@ -1442,22 +1452,83 @@ pub struct CursorPlanInput<'a> {
     pub t: f32,
 }
 
+/// Opacité du curseur à `t`, avant placement : 0 quand il est masqué (`cursor.show`), sinon
+/// l'auto-hide × le `hideCursor` des régions de zoom. Partagée par `plan_cursor` et l'impact du
+/// clic : le plan ne bascule que sous un pointeur qu'on voit.
+pub fn cursor_alpha(
+    scene: Option<&Scene>,
+    cfg: &Cfg,
+    live: &LiveParams,
+    track: &crate::cursor::CursorTrack,
+    t: f32,
+) -> f32 {
+    if !scene.map(|s| s.cursor.show).unwrap_or(cfg.cursor) {
+        return 0.0;
+    }
+    let idle_alpha = track.opacity_at(t, live.cursor_auto_hide);
+    let zoom_alpha = match scene {
+        Some(s) => crate::regions::zoom_cursor_alpha(&s.zoom_regions, t),
+        None => 1.0,
+    };
+    idle_alpha * zoom_alpha
+}
+
+/// Où tombe la position curseur `p` (repère normalisé de l'écran) dans la coupe `cut` (UV
+/// texture), en fraction 0..1 par axe ; `None` hors coupe. Le test « pointeur dans la coupe »
+/// de `plan_cursor`, repris tel quel par l'impact du clic.
+pub fn cursor_plane_point(cut: [f32; 4], uv_max: [f32; 2], p: (f32, f32)) -> Option<[f32; 2]> {
+    let [su0, sv0, su1, sv1] = cut;
+    let (hu, hv) = ((su1 - su0) * 0.5, (sv1 - sv0) * 0.5);
+    let fx = (p.0 * uv_max[0] - su0) / (2.0 * hu);
+    let fy = (p.1 * uv_max[1] - sv0) / (2.0 * hv);
+    ((0.0..=1.0).contains(&fx) && (0.0..=1.0).contains(&fy)).then_some([fx, fy])
+}
+
+/// L'impact des clics (`regions::click_impact`) avec les portes qui dépendent de la scène, à
+/// multiplier encore par le poids des régions (`ZoomState::click_impact`) ; la porte du préset
+/// vient ensuite, dans `dynamic_tilt`.
+///
+/// - curseur visible (`cursor_alpha`) : `cursor.show` explicite, parce que l'export ne charge la
+///   piste que si le curseur est affiché alors que la preview la charge toujours ;
+/// - clics dans la fenêtre source du clip actif seulement (cf. `click_impact`) ;
+/// - vitesse : poids `clamp(2 − vitesse, 0, 1)`. À 100× une frame couvre 3,3 s de source, la
+///   courbe serait échantillonnée une fois, au hasard : une secousse d'une frame ;
+/// - masques de confidentialité : rien tant qu'un flou/mosaïque est visible. Le masque suit
+///   déjà le quad dynamique (`privacy_mask`), c'est une marge de sûreté que la spec demande.
+fn click_impact_at(
+    scene: &Scene,
+    cfg: &Cfg,
+    live: &LiveParams,
+    track: &crate::cursor::CursorTrack,
+    t: f32,
+    cut: [f32; 4],
+    uv_max: [f32; 2],
+) -> [f32; 3] {
+    let Some(clip) = scene.clips.get(scene.active_clip_index) else { return [0.0; 3] };
+    let masked = scene.annotations.iter().any(|a| {
+        a.kind == "blur" && a.blur.is_some() && t >= a.start_sec as f32 && t < a.end_sec as f32
+    });
+    if masked {
+        return [0.0; 3];
+    }
+    let speed = crate::regions::speed_at(&scene.speed_regions, scene.active_clip_index, t as f64);
+    let speed_weight = (2.0 - speed as f32).clamp(0.0, 1.0);
+    let weight = cursor_alpha(Some(scene), cfg, live, track, t) * speed_weight;
+    if weight <= 0.0 {
+        return [0.0; 3];
+    }
+    let window = [clip.source_start_sec as f32, clip.source_end_sec as f32];
+    crate::regions::click_impact(t, track, window, |p| cursor_plane_point(cut, uv_max, p))
+        .map(|d| d * weight)
+}
+
 /// `None` = rien à dessiner cette frame : curseur masqué, pointeur hors du rect source
 /// courant (zoom serré, hors écran), ou sprite réduit à rien au creux d'un click bounce
 /// extrême — un état normal en lecture, pas une erreur.
 pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorPlan> {
     let (rw, rh) = (input.render_px[0], input.render_px[1]);
-    let show = input.scene.map(|s| s.cursor.show).unwrap_or(input.cfg.cursor);
-    if !show {
-        return None;
-    }
 
-    let idle_alpha = input.track.opacity_at(input.t, input.live.cursor_auto_hide);
-    let zoom_alpha = match input.scene {
-        Some(s) => crate::regions::zoom_cursor_alpha(&s.zoom_regions, input.t),
-        None => 1.0,
-    };
-    let alpha = idle_alpha * zoom_alpha;
+    let alpha = cursor_alpha(input.scene, input.cfg, &input.live, input.track, input.t);
     if alpha <= 0.001 {
         return None;
     }
@@ -1485,15 +1556,9 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         _ => [-1.0, -1.0, 3.0, 3.0],
     };
 
-    let [su0, sv0, su1, sv1] = g.cut;
-    let (hu, hv) = ((su1 - su0) * 0.5, (sv1 - sv0) * 0.5);
     let place = |cxy: Option<(f32, f32)>, dst: [f32; 4]| -> Option<CursorPlacement> {
-        cxy.and_then(|(cx2, cy2)| {
-            let fx = (cx2 * input.u_max - su0) / (2.0 * hu);
-            let fy = (cy2 * input.v_max - sv0) / (2.0 * hv);
-            if !(0.0..=1.0).contains(&fx) || !(0.0..=1.0).contains(&fy) {
-                return None;
-            }
+        cxy.and_then(|p| {
+            let [fx, fy] = cursor_plane_point(g.cut, [input.u_max, input.v_max], p)?;
             Some(match tilt.as_ref() {
                 Some(&quad) => CursorPlacement::Tilted {
                     plane_pt: [fx, fy],
@@ -2001,6 +2066,90 @@ mod tests {
         let budget = crate::regions::DYNAMIC_TILT_BUDGET[1];
         assert!(flat > 0.1 && zoomed < budget * 0.9, "garde, hors saturation : {flat} {zoomed}");
         assert!(zoomed > flat * 1.4, "zoom x2 : {zoomed} devrait dépasser {flat} nettement");
+    }
+
+    /// L'impact du clic passe par `plan_frame` et chacune de ses portes l'éteint : région sans
+    /// l'option ou sans préset, curseur masqué (réglage ou région), clic hors du clip actif ou
+    /// de la coupe, vitesse ≥ 2×, masque de flou visible.
+    #[test]
+    fn every_gate_cancels_the_click_impact() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        // Pointeur immobile près du bord droit du crop (0,61 de large), clic 50 ms avant
+        // l'instant du golden (1,5 s) : le creux de `tap`.
+        let track_at = |x: f32| -> &'static crate::cursor::CursorTrack {
+            Box::leak(Box::new(crate::cursor::CursorTrack::new(
+                (0..=90).map(|i| (i as f32 / 30.0, x, 0.3)).collect(),
+                vec![1.45],
+                vec![],
+            )))
+        };
+        let on_edge = track_at(0.6);
+        let impact_json = zoomed_golden_scene_json()
+            .replace(r#""rotation":"none""#, r#""rotation":"iso","clickImpact":true"#);
+        let dyn_of = |edit: &dyn Fn(String) -> String, track| {
+            let scene = Scene::from_json(&edit(impact_json.clone())).expect("scène");
+            plan_frame(&FrameGeometryInput { cursor: Some(track), ..golden_input(&scene, &cfg) })
+                .zoom_rotation_dyn
+        };
+        let same = |s: String| s;
+        let on = dyn_of(&same, on_edge);
+        assert!(on[1] > 1.5, "clic à droite → +Y : {on:?}");
+
+        let insert = |field: &'static str| {
+            move |s: String| s.replace(r#""cursor":"#, &format!(r#"{field},"cursor":"#))
+        };
+        let cases: [(&str, Box<dyn Fn(String) -> String>); 7] = [
+            ("option absente", Box::new(|s: String| s.replace(r#","clickImpact":true"#, ""))),
+            ("sans préset", Box::new(|s: String| s.replace(r#""rotation":"iso""#, r#""rotation":"none""#))),
+            ("curseur masqué", Box::new(|s: String| s.replace(r#""show":true"#, r#""show":false"#))),
+            ("région hideCursor", Box::new(|s: String| s.replace(r#""clickImpact":true"#, r#""clickImpact":true,"hideCursor":true"#))),
+            ("clic avant le clip", Box::new(|s: String| s.replace(r#""sourceStartSec":0"#, r#""sourceStartSec":1.46"#))),
+            ("vitesse 2x", Box::new(insert(r#""speedRegions":[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"speed":2.0}]"#))),
+            ("flou visible", Box::new(insert(r#""annotations":[{"id":"b","startSec":1.0,"endSec":2.0,"kind":"blur","x":0.1,"y":0.1,"w":0.2,"h":0.2,"blur":{"style":"mosaic","shape":"rectangle","color":"black","intensity":8,"blockSize":16}}]"#))),
+        ];
+        for (name, edit) in &cases {
+            assert_eq!(dyn_of(edit.as_ref(), on_edge), [0.0; 3], "{name}");
+        }
+        assert_eq!(dyn_of(&same, track_at(0.9)), [0.0; 3], "clic hors du crop");
+
+        // Un flou qui n'est plus visible ne retient rien ; une vitesse 1,5× pèse moitié.
+        let later_blur = insert(r#""annotations":[{"id":"b","startSec":3.0,"endSec":4.0,"kind":"blur","x":0.1,"y":0.1,"w":0.2,"h":0.2,"blur":{"style":"blur","shape":"rectangle","color":"black","intensity":8,"blockSize":16}}]"#);
+        assert_eq!(dyn_of(&later_blur, on_edge), on);
+        let slow = dyn_of(
+            &insert(r#""speedRegions":[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"speed":1.5}]"#),
+            on_edge,
+        );
+        assert!((slow[1] - on[1] * 0.5).abs() < 1e-4, "{slow:?} vs {on:?}");
+
+        // Le curseur monte sur le même plan basculé que l'écran.
+        let g = plan_frame(&FrameGeometryInput {
+            cursor: Some(on_edge),
+            ..golden_input(&Scene::from_json(&impact_json).expect("scène"), &cfg)
+        });
+        let render = [1170.0, 658.0];
+        let s_px = [g.s_dst[2] * render[0], g.s_dst[3] * render[1]];
+        let quad = g.screen_tilt(s_px).expect("iso incline");
+        let scene = Scene::from_json(&impact_json).expect("scène");
+        let plan = plan_cursor(
+            &g,
+            &CursorPlanInput {
+                render_px: render,
+                u_max: 1.0,
+                v_max: 1080.0 / 1088.0,
+                cfg: &cfg,
+                live: live_params_from_scene(&scene),
+                scene: Some(&scene),
+                track: on_edge,
+                t: 1.5,
+            },
+        )
+        .expect("curseur visible");
+        match plan.placement {
+            CursorPlacement::Tilted { quad: cursor_quad, .. } => {
+                assert_eq!(cursor_quad.corners, quad.corners)
+            }
+            _ => panic!("le curseur doit suivre le plan incliné"),
+        }
     }
 
     /// Sous un préset 3D, le masque est le quad du contenu, warpé comme le mode 8 le dessine.

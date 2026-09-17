@@ -99,4 +99,6 @@ The English changes; the translations follow. Translate **what changed**, not th
 4. **Record it:** `npm run i18n:sync -- --accept` once every locale has the new strings. It stores the English strings the translations now match in `i18n/code.source.json`. Commit the translations and that file together: committing a translated `.md`/`.mdx` is what marks it up to date.
 5. **Check:** `npm run build`. A new English page or doc with no translation fails here; add the translated file in every locale (the same pass as step 3, for the whole file).
 
+One blind spot: the check compares commit order, so a branch of translations rebased on top of a newer English change looks up to date. When you rebase translation work, run `git log -p <base>..` on the English sources it now sits on and carry those changes over by hand.
+
 A new page gets a full review in each language before it ships. An update to an existing page does not need one: the diff is small, and the build checks links and anchors.

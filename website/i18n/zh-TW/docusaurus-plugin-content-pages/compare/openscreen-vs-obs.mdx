@@ -1,0 +1,115 @@
+---
+title: OpenScreen 與 OBS Studio 比較：適合示範影片
+description: "OpenScreen 與 OBS Studio 比較：兩者皆免費開源。OBS 錄製並直播場景，OpenScreen 則在同一個應用程式中錄製並剪輯你的內容。"
+keywords:
+  - OpenScreen 與 OBS 比較
+  - OBS 教學影片替代方案
+  - 剪輯 OBS 錄影
+  - OBS 游標縮放
+  - OBS 自動字幕
+---
+
+# OpenScreen 與 OBS Studio 比較
+
+OpenScreen 與 OBS Studio 都是支援 Windows、macOS 與 Linux 的免費開源螢幕錄影軟體，所以兩者之間的選擇主要取決於剪輯需求。OBS 會錄製並直播由多種來源組成的場景，並把剪輯工作交給其他應用程式；OpenScreen 則錄製螢幕畫面或單一視窗，並自行剪輯內容：自動縮放、錄完後可重新設計的游標、裝置端字幕，以及 MP4 或 GIF 匯出。對於直播與多場景製作，OBS Studio 仍然是較好的選擇。
+
+本頁由 OpenScreen 專案發布。OBS Studio 的資訊來自 obsproject.com、OBS Studio 的 GitHub 儲存庫與 Flathub，於 2026 年 9 月確認。資料來源列於文末。
+
+## 概覽 {#at-a-glance}
+
+| | OpenScreen | OBS Studio |
+| --- | --- | --- |
+| 價格 | 免費，包含商業使用 | 免費，由贊助者與捐款資助（截至 2026 年 9 月） |
+| 授權 | MIT | GNU GPL 第 2 版 |
+| 平台 | Windows 10（1903 或更新版本）與 11，x64。macOS 13 或更新版本，Apple Silicon 與 Intel。Linux，x64 | Windows 10 與 11，提供 x64 安裝程式與 ARM64 壓縮檔。macOS 13 或更新版本，Apple Silicon 與 Intel。Linux 透過 Flathub 或 Ubuntu 24.04 以上版本的 PPA（截至 2026 年 9 月） |
+| 錄製內容 | 螢幕畫面或單一視窗，含攝影機、麥克風與系統音訊，之後可在編輯器中裁切 | 組合螢幕、視窗、攝影機、圖片、文字、瀏覽器視窗與擷取卡的場景。來源可在錄製前先行裁切 |
+| 直播 | 無 | 有，可直播至內建服務或自訂伺服器 |
+| 內建編輯器 | 有。多片段時間軸、剪切、變速、縮放與標註 | 無。其功能列表涵蓋擷取、混音、場景與直播 |
+| 自動縮放 | 是，根據錄下的游標放置 | 社群製作的「Zoom to Mouse」腳本，由快捷鍵觸發 |
+| 字幕 | 裝置端 Whisper，一個約 264 MB 的模型，下載一次。燒錄進影片 | 內建字幕工具僅支援 Windows。免費的 LocalVocal 外掛可在三個系統上本機轉錄，並寫出 .srt 檔 |
+| 錄製格式 | 原生擷取搭配 H.264 MP4 | H.264、AV1、以硬體編碼器編碼的 HEVC，或在 Mac 上使用 ProRes。預設為 Hybrid MP4 或 MOV，另外也支援 MKV、FLV、MPEG-TS 等格式 |
+| 輸出 | MP4（H.264 或 H.265）或 GIF，最高 60 fps，無浮水印 | 錄製的檔案本身 |
+| 擴充方式 | 可輸出 JSON 的命令列介面 | 外掛管理員、Lua 與 Python 腳本、WebSocket 遠端控制 |
+
+## 兩者共通的功能 {#what-both-tools-do}
+
+兩者的重疊之處，比「直播工具對編輯工具」這種分法所暗示的還要多。以下並非任一方獨有。
+
+- **免費且開源。** 兩者都不收費，也都在 GitHub 上公開原始碼。兩者的授權都允許你將應用程式用於有償工作。
+- **支援 Windows、macOS 與 Linux。** 兩者都支援全部三個平台，macOS 最低需求皆為 13。
+- **同一次錄影中的螢幕、攝影機、麥克風與系統音訊。**
+- **能撐過當機的錄影檔。** OBS 預設的 Hybrid MP4 與 MOV 格式，在寫入中斷時仍可復原。OpenScreen 在 Windows 與 macOS 上寫出分段式 MP4（fragmented MP4），因此即使錄影中途中斷，檔案仍可讀取到中斷前大約最後一秒。
+- **本機語音轉文字，使用 Whisper。** OpenScreen 內建此功能。在 OBS 上，LocalVocal 外掛會在你的電腦上執行 Whisper，並可透過文字來源顯示即時字幕。
+- **自動化。** OBS 內建供遠端控制的 WebSocket 伺服器，並可執行 Lua 或 Python 腳本。OpenScreen 有一個可錄製、匯出、加字幕並打包專案的[命令列](/docs/cli/)，並支援 JSON 輸出。
+
+## OpenScreen 的不同之處 {#where-openscreen-differs}
+
+### 在同一個應用程式中剪輯 {#editing-in-the-same-app}
+
+- **錄完後的時間軸。** 可匯入錄影或現有影片，重新排序，並為每個片段設定入點、出點與裁切範圍。可剪切區段，並將速度從 0.1× 調整到 100×。詳見[剪輯與時間軸](/docs/editing-timeline/)與[媒體庫](/docs/media-library/)。
+- **錄完後才放置的縮放。** **自動加強 → 自動縮放**會讀取錄下的游標移動，在指標停留處放上縮放區域，不需要連線，也不需要模型。另外還有六種深度的手動縮放可搭配使用。OBS 的「Zoom to Mouse」腳本會在你按下快捷鍵時，對畫面擷取進行縮放，因此每個縮放都是在錄製當下決定的。詳見[自動縮放](/features/auto-zoom/)。
+- **可在事後更改的游標。** OpenScreen 預設會將指標記錄為資料而非像素。你可以在錄完後調整大小、使路徑平滑，並加上動態模糊與點擊彈跳效果。各系統會擷取哪些內容，列於[游標模式](/docs/recording/#cursor-mode)。
+- **構圖。** 在錄影後方加上桌布、純色、漸層或自訂圖片，並提供內邊距、圓角與陰影。可輸出為 16:9、9:16、1:1、4:3、4:5、16:10、10:16，或片段本身的形狀。
+- **時間軸上的標註。** 六種動畫效果的文字、八個方向的箭頭、圖片，以及高斯或馬賽克模糊區域。OBS 是在錄製時把文字與圖片當作場景來源加入。OpenScreen 則是在錄完後放置，之後仍可移動。
+
+### 字幕與逐字稿 {#captions-and-transcript}
+
+- **三個系統都不需要外掛即可使用字幕。** whisper.cpp 內建在應用程式中。下載一次約 264 MB 的 Whisper Small 模型後，字幕就會燒錄進影片。OBS 自家的字幕工具僅支援 Windows。詳見[字幕](/features/captions/)。
+- **依文字剪輯。** 選取逐字稿中的字詞並刪除，即可從影片中剪掉那段內容。靜音片段會被標記，也能用同樣的方式剪掉。詳見[逐字稿編輯](/docs/captions/#transcript-editing)。
+- **字幕翻譯**支援 15 種語言，透過你自行連接的 AI 提供者。
+
+### 匯出與聊天剪輯 {#export-and-chat-editing}
+
+- **可調整的匯出步驟。** MP4 可選 720p、1080p 或原始尺寸，24、30 或 60 fps，編碼為 H.264 或 H.265，或輸出為 GIF。無浮水印。在 OBS 中，輸出解析度、影格率與編碼器要在錄製前於設定中先行設定。詳見[匯出](/docs/export/)。
+- **可選用自己金鑰的聊天剪輯。** 用一般語言描述剪切、縮放、變速或標註。每項變更都會成為一般可復原的編輯。在你連接提供者之前，這項功能是關閉的。詳見 [AI 剪輯](/docs/ai-editing/)。
+
+## OBS Studio 更適合的情況 {#when-obs-studio-is-the-better-choice}
+
+- **你要直播。** OBS 可直播至內建服務或自訂伺服器。OpenScreen 則是錄製與剪輯。
+- **你要用多種來源製作內容。** OBS 提供不限數量的場景、自訂轉場效果、可在畫面切換前預覽變更的 Studio Mode，以及可同時監看 8 個場景的 Multiview。
+- **你需要字幕檔案。** LocalVocal 外掛會寫出 `.srt` 檔。OpenScreen 則是把字幕燒錄進影片。
+- **你使用 Windows on ARM。** OBS 提供 Windows ARM64 壓縮檔（截至 2026 年 9 月）。OpenScreen 的 Windows 版本為 x64。
+
+## 兩者搭配使用 {#using-both}
+
+你不必二選一。OBS 可以負責錄製，OpenScreen 可以負責剪輯成果。
+
+1. 在 OBS 中錄製。從 32.0 版開始，新的設定檔在 Windows 與 Linux 上會錄製為 Hybrid MP4，在 macOS 上則是 Hybrid MOV。
+2. 在 OpenScreen 中，切換到**媒體**並選擇**匯入媒體**。檔案對話框接受 `mp4`、`mov`、`mkv`、`flv` 與 `ts` 等格式的檔案。
+3. 把來源卡片拖曳到片段列，再依平常方式剪切、加速、縮放、標註與構圖。
+4. 在**媒體**模式中選取該卡片，選擇**重新產生**，即可轉錄以供字幕與逐字稿編輯使用。
+
+有些功能不適用於 OBS 檔案。自動縮放、跟隨游標的縮放焦點與游標樣式設定，都需要讀取 OpenScreen 在自家錄影旁儲存的游標資料，而 OBS 檔案沒有這項資料。手動縮放仍然可以使用。如果你的 OBS 場景包含攝影機畫面，攝影機已經是畫面的一部分，所以 OpenScreen 的攝影機版面與全螢幕攝影機片段將沒有可運作的素材。
+
+## 開始使用 {#getting-started}
+
+1. 從[下載頁面](/download/)下載 OpenScreen。在 Windows 上，建議使用 Microsoft Store。
+2. 依照[安裝](/docs/installation/)步驟進行。在 macOS 上，請在第一次錄影前授予「螢幕錄製」與「輔助使用」權限。
+3. 依照[快速入門](/docs/quick-start/)錄下第一段影片，然後執行**自動加強 → 自動縮放**。若要改為剪輯 OBS 錄下的內容，請從[媒體庫](/docs/media-library/)開始，並加上[字幕](/docs/captions/)。
+
+也想比較其他工具嗎？請見[取代 Screen Studio](/alternatives/screen-studio/)、[OpenScreen 與 Cap 比較](/compare/openscreen-vs-cap/)、[取代 Camtasia](/alternatives/camtasia/)與[取代 Loom](/alternatives/loom/)。想看完整的實作流程，請閱讀[產品示範影片指南](/docs/guides/product-demo-video/)，或回到 [OpenScreen 首頁](/)。
+
+## 資料來源 {#sources}
+
+OBS Studio 的資訊，於 2026 年 9 月確認：
+
+- 標語、場景來源、轉場效果、Studio Mode、Multiview、外掛與 Lua 或 Python 腳本、贊助者：[obsproject.com](https://obsproject.com/)
+- 支援的 Windows 與 macOS 版本、Flathub 與 PPA 發行方式：[obsproject.com/download](https://obsproject.com/download)
+- 目前版本 32.2.2 及其 Windows x64、Windows ARM64、macOS 與 Ubuntu 檔案：[github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2)
+- Flathub 套件：[flathub.org/apps/com.obsproject.Studio](https://flathub.org/apps/com.obsproject.Studio)
+- 授權：[COPYING](https://raw.githubusercontent.com/obsproject/obs-studio/master/COPYING)
+- 捐款與贊助：[obsproject.com/contribute](https://obsproject.com/contribute)
+- 直播服務與自訂伺服器、桌面音訊、來源裁切、輸出設定：[obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
+- 容器格式、編碼器、僅限硬體的 HEVC 與 Mac 上的 ProRes：[obsproject.com/kb/audio-video-formats-guide](https://obsproject.com/kb/audio-video-formats-guide)（日期為 2023 年 3 月 26 日）
+- 新設定檔預設使用 Hybrid MP4 與 MOV 作為容器格式：[github.com/obsproject/obs-studio/releases/tag/32.0.0](https://github.com/obsproject/obs-studio/releases/tag/32.0.0)
+- macOS 預設使用 Hybrid MOV，Windows 與 Linux 使用 Hybrid MP4：[frontend/widgets/OBSBasic.cpp](https://github.com/obsproject/obs-studio/blob/master/frontend/widgets/OBSBasic.cpp)
+- Hybrid MP4 的當機復原能力：[obsproject.com/kb/hybrid-mp4](https://obsproject.com/kb/hybrid-mp4)
+- 外掛管理員：[obsproject.com/blog/obs-studio-32-0-release-notes](https://obsproject.com/blog/obs-studio-32-0-release-notes)
+- WebSocket 遠端控制：[obsproject.com/kb/remote-control-guide](https://obsproject.com/kb/remote-control-guide)
+- 內建字幕僅為 Windows 編譯：[plugins/frontend-tools/CMakeLists.txt](https://github.com/obsproject/obs-studio/blob/master/plugins/frontend-tools/CMakeLists.txt)
+- Zoom to Mouse 腳本：[obsproject.com/forum/resources/zoom-to-mouse.1823](https://obsproject.com/forum/resources/zoom-to-mouse.1823/)
+- LocalVocal 外掛、其支援平台、Whisper 引擎、螢幕上字幕與 .srt 輸出：[obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769](https://obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769/)
+
+OpenScreen 的資訊描述的是 1.11.0 版，並連結至上方的說明文件。
+
+OBS Studio 及本頁提及的其他產品名稱為其各自所有者的商標。OpenScreen 是獨立專案，與 OBS Project 無關，亦未獲其認可或贊助。

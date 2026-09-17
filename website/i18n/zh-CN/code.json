@@ -201,7 +201,7 @@
     "message": "通过 ScreenCast 门户进行 PipeWire 采集；需要 PipeWire 和 xdg-desktop-portal。"
   },
   "home.install.note": {
-    "message": "Windows 另有 {exe} 安装程序。它没有代码签名，因此运行前 SmartScreen 会发出警告：请选择“更多信息”，再选择“仍要运行”。Linux 另提供 {rpm}、{pacman}、AppImage 和 Nix flake。所有安装文件都在 {releasesPage}，完整步骤见{installation}页面。各系统能录制什么，请参阅 {windows}、{mac} 和 {linux} 页面（英文）。",
+    "message": "Windows 另有 {exe} 安装程序。它没有代码签名，因此运行前 SmartScreen 会发出警告：请选择“更多信息”，再选择“仍要运行”。Linux 另提供 {rpm}、{pacman}、AppImage 和 Nix flake。所有安装文件都在 {releasesPage}，完整步骤见{installation}页面。各系统能录制什么，请参阅 {windows}、{mac} 和 {linux} 页面。",
     "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
@@ -325,7 +325,7 @@
     "message": "字幕与转录文档"
   },
   "showcase.captions.link.feature": {
-    "message": "本地字幕方案对比（英文）",
+    "message": "本地字幕方案对比",
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
@@ -348,7 +348,7 @@
     "message": "AI 编辑文档"
   },
   "showcase.agent.link.feature": {
-    "message": "自动缩放的工作原理（英文）",
+    "message": "自动缩放的工作原理",
     "description": "Link label under the panel."
   },
   "showcase.agent.label": {
@@ -368,13 +368,13 @@
     "message": "下载"
   },
   "footer.product.autoZoom": {
-    "message": "自动缩放（英文）"
+    "message": "自动缩放"
   },
   "footer.product.captions": {
-    "message": "本地字幕（英文）"
+    "message": "本地字幕"
   },
   "footer.platforms.title": {
-    "message": "平台（英文）",
+    "message": "平台",
     "description": "Footer column title."
   },
   "footer.platforms.windows": {
@@ -387,7 +387,7 @@
     "message": "Linux"
   },
   "footer.compare.title": {
-    "message": "对比（英文）",
+    "message": "对比",
     "description": "Footer column title."
   },
   "footer.compare.screenStudio": {

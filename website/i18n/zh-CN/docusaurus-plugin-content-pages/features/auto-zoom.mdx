@@ -1,0 +1,113 @@
+---
+title: 带自动缩放的免费录屏软件
+description: OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费开源录屏软件，具备自动缩放功能，会在录制的光标暂停处自动放置缩放。
+keywords:
+  - 自动缩放录屏软件
+  - 免费开源自动缩放录屏软件
+  - 光标跟随缩放录屏软件
+  - Windows 自动缩放屏幕录制
+---
+
+# 一款带自动缩放的免费录屏软件
+
+OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费录屏软件，采用 MIT 许可证，具备自动缩放功能。录制结束后，**自动增强 → 自动缩放**会读取 OpenScreen 录制下来的光标移动，在指针暂停的每个位置添加缩放，无需联网、无需 AI 模型。Screen Studio、Cap 和 Camtasia 也都具备自动缩放功能；OpenScreen 在这三个系统上都免费提供这项功能。
+
+本页由 OpenScreen 项目发布。关于 Screen Studio、Cap 和 Camtasia 的信息来自 screen.studio、cap.so 和 techsmith.com，核实于 2026 年 9 月。信息来源列于文末。
+
+## 一览 {#at-a-glance}
+
+| | |
+| --- | --- |
+| 功能位置 | 编辑器时间轴工具栏中的“自动增强 → 自动缩放” |
+| 读取内容 | OpenScreen 随录制内容保存的光标移动数据 |
+| 缩放放置位置 | 指针几乎静止约半秒到 2.6 秒的位置 |
+| 每次自动缩放 | 1.8×，焦点跟随光标；在编辑器中添加时时长为两秒 |
+| AI、联网或密钥 | 均不需要 |
+| 手动缩放深度 | 1.25×、1.5×、1.8×、2.2×、3.5× 或 5× |
+| 焦点 | 你放置的一个点，或录制的光标 |
+| 3D 旋转 | 无、Iso、左或右 |
+| 命令行 | `export` 命令的 `--auto-zoom` 参数 |
+| 平台 | Windows 10（1903 及以上）和 11，x64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 |
+| 价格 | 免费，含商业用途，MIT 许可证 |
+
+## 自动缩放的工作原理 {#how-automatic-zooms-work}
+
+在默认的可编辑光标模式下，OpenScreen 会把光标与画面像素分开录制：系统光标不会出现在视频里，指针的移动会保存在旁边的 `.cursor.json` 文件中。自动缩放正是基于这个文件构建的。
+
+1. **寻找停顿。** OpenScreen 会扫描录制到的位置数据，找出指针几乎静止约半秒到 2.6 秒的时间段。每个停顿都会成为一个候选项，聚焦于指针停留的位置。
+2. **排序与间隔。** 较长的停顿会优先处理。如果某个候选项与已保留的候选项相距不到 1.8 秒，或会与时间轴上已有的缩放重叠，就会被丢弃。
+3. **添加缩放。** 在编辑器中，每个保留下来的停顿都会变成一段两秒、1.8× 的缩放，以该停顿为中心，焦点设置为跟随光标。
+
+这一处理过程是基于录制位置数据的确定性规则，而不是 AI 功能。它不发起任何网络请求，也不加载任何模型，在 Windows、macOS 和 Linux 上的工作方式完全相同。
+
+以下几个细节在实际使用中值得注意：
+
+- **你自己添加的缩放会被保留。** 手动放置的缩放会被保留，新添加的缩放绝不会与之重叠。
+- **每个片段都有自己的缩放。** 在多片段时间轴上，即使两个片段来自同一次录制，每个片段也会匹配自己那一段录制内容。
+- **一次撤销即可移除整批缩放。** 整个处理过程算作一次编辑。
+- **结果是普通的缩放。** 点击任意一个即可修改其深度、3D 旋转或焦点，拖动边缘可调整起止时间，也可以删除它。
+- **只在你要求时才运行。** 在 1.11.0 版本中，录制结束后不会自动添加任何内容，直到你在编辑器中选择自动缩放，或在命令行中传入 `--auto-zoom`。
+- **没有符合条件的内容时会告知你。** 编辑器会提示未找到可自动缩放的时刻。
+- **不需要点击数据。** 没有点击数据的录制内容，例如用户未加入 `input` 组时录制的 Linux 录制内容，同样可以获得自动缩放。
+- **较长的停顿由你自行处理。** 指针停留超过 2.6 秒的情况，例如你在讲解幻灯片时，不会被自动处理。可以用 `Z` 手动添加缩放。
+
+同一菜单中还有第二项，**智能剪切**，标有“*使用 AI*”字样。这是一项不同的功能：它会请求可选的聊天代理来剪掉无效时间。它需要等待录制内容的转录文本，并且只有在你用自己的密钥连接了 AI 提供方之后才能使用。参见 [AI 编辑](/docs/ai-editing/)。
+
+## 手动缩放与跟随光标的焦点 {#manual-zooms-and-cursor-following-focus}
+
+自动缩放只是一个起点，同样的缩放区域也可以手动放置和调整。
+
+- **用 `Z` 添加缩放。** 它会以 1.8× 落在播放头位置，焦点位于画面中心。拖动边缘可设置起止时间。
+- **六种深度。** 1.25×、1.5×、1.8×、2.2×、3.5× 和 5×。
+- **两种对焦模式。** 手动模式固定一个点：在预览中拖动焦点标记，或将其重置到中心。自动模式跟随录制的光标。
+- **一个总开关控制所有缩放。** 工具栏中的自动对焦十字准星会让所有缩放都跟随光标；关闭后，每个缩放会恢复各自的设置。
+- **3D 旋转。** 每个缩放都可以保持平面，也可以设为 Iso、左或右。
+- **缩放时的摄像头画面。** 在画中画布局中，**缩放时缩小**选项会在画面放大时让摄像头画面变小，默认开启。
+
+带有手动焦点的手动缩放不需要光标数据，因此也适用于从其他工具导入的视频。缩放检查器详见[缩放区间](/docs/editing-timeline/#zoom-regions)。
+
+## 录制结束后的光标 {#the-cursor-after-the-take}
+
+导出中的光标同样由这份录制的移动数据驱动。光标面板可以显示或隐藏光标，提供一系列光标主题，并设置其大小、平滑度、运动模糊和点击回弹效果。光标路径在预览和导出时采用相同的平滑处理方式，因此预览效果与最终文件一致。
+
+点击回弹需要录制到的点击数据。在 macOS 上，这需要辅助功能权限；在 Linux 上，你的用户必须加入 `input` 组。[屏幕录制](/docs/recording/)列出了各平台能采集到的内容。
+
+## 通过命令行 {#from-the-command-line}
+
+[CLI](/docs/cli/) 的 `export` 命令接受 `--auto-zoom` 参数。渲染之前，它会对录制内容的光标数据运行同一套停顿检测逻辑，并添加不会与项目中已有缩放重叠的新缩放。这些缩放每个时长为一秒或录制内容的 5%，取两者中较长者。没有 OpenScreen 光标数据的视频将无法生成任何自动缩放。
+
+## 其他具备自动缩放功能的工具 {#other-tools-that-zoom-automatically}
+
+自动缩放在这一类软件中很常见，OpenScreen 只是提供该功能的多款工具之一。
+
+- **Screen Studio。** 其自动缩放聚焦于录制过程中发生点击的位置。
+- **Cap。** 其 Studio Mode 会根据 Cap 记录的光标和点击数据，围绕录制的点击生成缩放片段。其文档表示，导入的 MP4 在导入过程中不会获得点击数据。
+- **Camtasia。** SmartFocus 会识别滚动、点击等动作，然后添加平移和缩放动画，需要来自 Camtasia Recorder 的 `.trec` 文件。
+
+和 OpenScreen 一样，Cap 和 Camtasia 都需要各自录制器采集到的数据。Screen Studio 和 Cap 依据点击触发，Camtasia 的 AI 会挑选滚动、点击等动作，而 OpenScreen 跟随的是指针移动中的停顿，即使没有记录到点击也同样有效。如需并列比较，参见 [Screen Studio 替代方案](/alternatives/screen-studio/)、[OpenScreen 对比 Cap](/compare/openscreen-vs-cap/)和 [Camtasia 替代方案](/alternatives/camtasia/)。
+
+## 何时 OpenScreen 不是合适的工具 {#when-openscreen-is-not-the-right-tool}
+
+- **你想对来自其他录制工具的素材使用自动缩放。** 自动缩放需要 OpenScreen 写入的光标文件。来自其他应用的视频没有这份文件，以系统光标模式录制的 OpenScreen 录制内容同样没有。手动缩放在这两种情况下仍可正常使用。
+- **你要录制 iPhone 或 iPad。** OpenScreen 录制的是 Windows、macOS 或 Linux 电脑上的一个显示器或一个窗口，而不是手机或平板电脑。
+
+## 开始使用 {#getting-started}
+
+1. 从[下载页面](/download/)下载 OpenScreen。在 Windows 上，推荐通过 Microsoft Store 安装。
+2. 按照[安装说明](/docs/installation/)操作。在 macOS 上，首次录制前请先授予屏幕录制和辅助功能权限。
+3. 参照[快速上手](/docs/quick-start/)完成第一次录制，并将光标模式保持为可编辑光标。
+4. 在编辑器中选择**自动增强 → 自动缩放**，然后按照[编辑与时间轴](/docs/editing-timeline/)中的说明调整这些缩放。
+
+在制作完整的演示视频？[产品演示视频指南](/docs/guides/product-demo-video/)介绍了如何为这些缩放安排录制节奏，[字幕页面](/features/captions/)则介绍了本机转录功能。OpenScreen 支持 [Windows](/screen-recorder-windows/)、[macOS](/screen-recorder-mac/) 和 [Linux](/screen-recorder-linux/)。或返回 [OpenScreen 首页](/)。
+
+## 信息来源 {#sources}
+
+Screen Studio、Cap 和 Camtasia 相关信息，核实于 2026 年 9 月：
+
+- Screen Studio 根据点击位置进行的自动缩放：[screen.studio/guide/auto-zoom](https://screen.studio/guide/auto-zoom)
+- Cap 的自动与手动缩放，以及导入的 MP4：[cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Camtasia 的 SmartFocus 及其对 `.trec` 文件的要求：[techsmith.com/camtasia/features/ai-auto-zoom-and-pan](https://www.techsmith.com/camtasia/features/ai-auto-zoom-and-pan/)
+
+OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+
+Screen Studio、Cap 和 Camtasia 均为其各自所有者的商标。OpenScreen 是一个独立项目，与它们均无关联，也未获得其中任何一方的背书。

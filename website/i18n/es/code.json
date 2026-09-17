@@ -197,7 +197,7 @@
     "message": "Captura con PipeWire a través del portal ScreenCast; requiere PipeWire y xdg-desktop-portal."
   },
   "home.install.note": {
-    "message": "Windows también tiene un instalador {exe}. No tiene firma de código, así que SmartScreen muestra una advertencia antes de ejecutarlo: elige Más información y luego Ejecutar de todas formas. Linux también se distribuye como {rpm}, {pacman}, AppImage y flake de Nix. Todos los archivos están en la {releasesPage}, y en {installation} están los pasos completos. Lo que graba cada sistema se explica en las páginas (en inglés) de {windows}, {mac} y {linux}.",
+    "message": "Windows también tiene un instalador {exe}. No tiene firma de código, así que SmartScreen muestra una advertencia antes de ejecutarlo: elige Más información y luego Ejecutar de todas formas. Linux también se distribuye como {rpm}, {pacman}, AppImage y flake de Nix. Todos los archivos están en la {releasesPage}, y en {installation} están los pasos completos. Lo que graba cada sistema se explica en las páginas de {windows}, {mac} y {linux}.",
     "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
@@ -321,7 +321,7 @@
     "message": "Documentación de subtítulos y transcripción"
   },
   "showcase.captions.link.feature": {
-    "message": "Comparativa de subtítulos locales (en inglés)",
+    "message": "Comparativa de subtítulos locales",
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
@@ -344,7 +344,7 @@
     "message": "Documentación de edición con IA"
   },
   "showcase.agent.link.feature": {
-    "message": "Cómo funcionan los zooms automáticos (en inglés)",
+    "message": "Cómo funcionan los zooms automáticos",
     "description": "Link label under the panel."
   },
   "showcase.agent.label": {
@@ -364,13 +364,13 @@
     "message": "Descargar"
   },
   "footer.product.autoZoom": {
-    "message": "Zoom automático (en inglés)"
+    "message": "Zoom automático"
   },
   "footer.product.captions": {
-    "message": "Subtítulos locales (en inglés)"
+    "message": "Subtítulos locales"
   },
   "footer.platforms.title": {
-    "message": "Plataformas (en inglés)",
+    "message": "Plataformas",
     "description": "Footer column title."
   },
   "footer.platforms.windows": {
@@ -383,7 +383,7 @@
     "message": "Linux"
   },
   "footer.compare.title": {
-    "message": "Comparativas (en inglés)",
+    "message": "Comparativas",
     "description": "Footer column title."
   },
   "footer.compare.screenStudio": {

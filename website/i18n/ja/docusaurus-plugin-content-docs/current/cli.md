@@ -135,7 +135,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--quality <medium\|good\|source>` | 出力サイズ。`medium` は 720p、`good` は 1080p、`source` はクロップ後のもっとも小さいクリップに合わせるため、アップスケールしません。GIF もこのサイズが出発点になります |
 | `--gif-fps <15\|20\|25\|30>` | GIF のフレームレート |
 | `--gif-size <medium\|large\|original>` | 上記のサイズに適用する GIF の高さの上限。720、1080、上限なしのいずれかです |
-| `--auto-zoom` | レンダリングの前に、記録されたポインターが止まった箇所にズームを追加します。エディターの[自動ズーム（英語）](/features/auto-zoom/)と同じエンジンを使います。既存のズームは保持され、新しいズームがそれと重なることはありません |
+| `--auto-zoom` | レンダリングの前に、記録されたポインターが止まった箇所にズームを追加します。エディターの[自動ズーム](/features/auto-zoom/)と同じエンジンを使います。既存のズームは保持され、新しいズームがそれと重なることはありません |
 | `--audio <file>` | ナレーションのファイル（mp3、wav、m4a）を MP4 にミックスします。MP4 のみ |
 | `--audio-mode <mix\|replace>` | `mix`（既定）は録画の音声を 40% のゲインでナレーションの下に残し、`replace` は録画の音声を取り除きます |
 | `--audio-offset <seconds>` | ナレーションが始まるまでの遅延（既定値 0） |

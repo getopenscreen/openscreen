@@ -1,0 +1,106 @@
+---
+title: "OpenScreen 與 Cap 比較：商業使用免費"
+description: "OpenScreen 與 Cap 比較：OpenScreen 採 MIT 授權，商業使用免費，也不需要帳號。比較授權、分享方式與編輯器差異。"
+keywords:
+  - OpenScreen 與 Cap 比較
+  - Cap 螢幕錄影替代方案
+  - cap.so 替代方案
+  - 開源螢幕錄影 MIT 授權
+---
+
+# OpenScreen 與 Cap 比較
+
+OpenScreen 是採 MIT 授權、支援 Windows、macOS 與 Linux 的螢幕錄影軟體，商業使用免費，且不需要帳號或伺服器即可運作。Cap 涵蓋類似的功能，具備自動縮放、可編輯游標、裝置端字幕與不含浮水印的匯出，但其免費下載版本僅供個人使用，官方應用程式的商業使用需要付費授權。Cap 的原始碼採 AGPLv3 授權，並提供需要 Cap 帳號登入的託管分享連結。如果你的團隊需要以連結分享錄影、需要 SSO 或合規認證，或需要提供 SRT 或 WebVTT 字幕檔，Cap 是較好的選擇。
+
+本頁由 OpenScreen 專案發布。Cap 的資訊來自 cap.so 與 Cap 的 GitHub 儲存庫，於 2026 年 9 月確認。資料來源列於文末。
+
+## 概覽 {#at-a-glance}
+
+| | OpenScreen | Cap |
+| --- | --- | --- |
+| 價格 | 免費，包含商業使用 | 個人使用免費。商業使用需要桌面授權，每年 29 美元或買斷 58 美元，或 Cap Pro 每位使用者每月 12 美元，按月計費（截至 2026 年 9 月） |
+| 原始碼 | MIT 授權 | AGPLv3，但攝影機與擷取相關套件為 MIT |
+| 平台 | Windows 10（1903 或更新版本）與 11，x64。macOS 13 或更新版本，Apple Silicon 與 Intel。Linux，x64 | macOS，建議 13.1 或更新版本，Apple Silicon 與 Intel。64 位元 Windows，其下載選項中列為「Windows（Beta）」。Linux 提供 .deb、AppImage、RPM 與 Arch 套件（截至 2026 年 9 月） |
+| 錄製內容 | 螢幕畫面或單一視窗，之後可在編輯器中裁切 | 螢幕畫面、視窗、區域，或僅攝影機畫面 |
+| 託管分享連結 | 無 | 有。免費版與桌面授權每個連結最長 5 分鐘，Cap Pro 則不限時長（截至 2026 年 9 月） |
+| 登入 | 永遠不需要 | 分享連結與 Instant Mode 需要登入 |
+| 自動縮放 | 是，根據錄下的游標移動放置 | 是，根據錄下的點擊產生 |
+| 字幕 | 裝置端 Whisper，一個約 264 MB 的模型，下載一次。燒錄進影片 | 裝置端 Whisper 或 Parakeet，目前為 beta。可燒錄進影片，或另存為 SRT 或 WebVTT |
+| AI 功能 | 可選用自己金鑰的聊天剪輯，以及支援 15 種語言的字幕翻譯 | Cap Pro 提供代管功能：標題、摘要、章節、轉錄與字幕翻譯，不需要金鑰 |
+| 匯出 | MP4（H.264 或 H.265），720p、1080p 或原始尺寸，24、30 或 60 fps。GIF 為 15 至 30 fps。無浮水印 | MP4，720p、1080p 或 4K，15、30 或 60 fps。GIF 為 10 至 30 fps。僅含游標的透明背景 MOV。無浮水印。未記載編碼格式設定 |
+| 團隊與合規 | 無 | 團隊工作區。SAML SSO 附加元件每月 199 美元。SOC 2 Type II、ISO 27001 與 HIPAA，簽署 BAA 每月 99 美元（截至 2026 年 9 月） |
+| 命令列介面 | 是，可輸出 JSON | 是，可輸出 JSON |
+
+## 兩者共通的功能 {#what-both-apps-do}
+
+兩款編輯器有相當大的重疊，以下並非任一方獨有。
+
+- **自動與手動縮放。** 在 OpenScreen 中，**自動加強 → 自動縮放**會根據錄下的游標移動放置縮放，不需要連線，也不需要模型，並提供六種深度的手動縮放。Cap 會根據錄下的點擊產生縮放，也提供 1x 到 4.5x 的手動縮放。詳見[自動縮放](/features/auto-zoom/)。
+- **可在事後更改的游標。** 兩者都會把指標記錄為資料而非像素，所以你可以在錄完後調整大小、使其移動平滑或隱藏。
+- **背景與構圖。** 兩者都能在錄影後方加上桌布、純色、漸層或自訂圖片，並提供內邊距、圓角與陰影。兩者都能輸出橫向、直向或正方形影片。
+- **同一次錄影中的攝影機、麥克風與系統音訊。** 兩者都能模糊攝影機背景。OpenScreen 還能在不使用綠幕的情況下移除或替換背景。Cap 在 0.6.0 版於 macOS 上加入了背景移除功能。
+- **同一個專案中的多個片段。** 兩者都能在新錄影旁匯入現有的 MP4 檔案，重新排序片段，並更改某段的速度。
+- **文字、圖片、模糊遮罩與音樂。** 兩者都能在影片上加入文字與圖片，用模糊或馬賽克遮罩隱藏敏感區域，並加上音樂軌道。
+- **在你自己的電腦上轉錄。** 兩者都在本機執行 Whisper，讓你修正逐字稿、設定字幕樣式，並將字幕燒錄進影片。詳見[字幕](/features/captions/)。
+- **依文字剪輯。** 在 OpenScreen 的桌面版編輯器中，選取逐字稿中的字詞並刪除即可剪掉那段內容。Cap 在 2026 年 7 月為其網頁版編輯器加入了同類的剪輯功能。
+- **提詞機**，可在錄影時閱讀講稿。OpenScreen 的提詞機支援 Windows 與 macOS。
+- **本機編輯。** Cap 的 Studio Mode 會將專案留在你的電腦上，直到你選擇匯出分享連結。OpenScreen 沒有帳號、沒有自己的伺服器，也不會做任何分析追蹤。[常見問題](/docs/faq/#does-openscreen-work-offline)列出了它仍會連線的少數幾種情況。
+- **供指令碼與程式碼代理使用的命令列介面。** 兩者都能輸出供機器讀取的 JSON。詳見 [OpenScreen CLI 參考](/docs/cli/)。
+
+## OpenScreen 的不同之處 {#where-openscreen-differs}
+
+如果你正在兩者之間做選擇，請先確認授權條款。其餘差異則來自兩個專案各自的設計核心。
+
+### 授權與成本 {#license-and-cost}
+
+- **商業使用免費。** OpenScreen 的官方版本無論何種用途皆不收費。Cap 的官方版本則需要商業授權才能用於任何與營收相關的活動，而 Cap 把同事之間用於溝通的影片也視為商業用途。這項授權每年 29 美元或買斷 58 美元，或包含在 Cap Pro 中（截至 2026 年 9 月）。你自行從 Cap 原始碼編譯的版本則不受此限制。
+- **採用 MIT 而非 AGPLv3。** OpenScreen 以 MIT 授權釋出，原始碼公開在 [GitHub](https://github.com/getopenscreen/openscreen) 上。Cap 的程式碼採用 AGPLv3，但攝影機與擷取相關套件除外，那部分是 MIT 授權。AGPL 條款對於不希望產品中含有 AGPL 程式碼的組織來說相當重要。
+
+### 桌面應用程式，而非服務 {#a-desktop-app-not-a-service}
+
+- **不需要登入任何東西。** OpenScreen 在你的電腦上錄製與剪輯，並直接交給你一個檔案。沒有託管連結，不需要帳號，也沒有方案。Cap 則將本機的 Studio Mode 與邊錄邊上傳的 Instant Mode 搭配使用，其分享連結需要登入。
+- **可選用自己金鑰的聊天剪輯。** 這是可選功能：連接 Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax，或任何相容 OpenAI 介面的服務，並用一般語言描述剪切、縮放、變速或標註。在你連接提供者之前，這項功能是關閉的，而每項變更都會成為一般可復原的編輯。同一個提供者也用來將字幕翻譯成 15 種語言。Cap 的代管 AI 功能，例如標題、摘要與章節，則包含在 Cap Pro 中。詳見 [AI 剪輯](/docs/ai-editing/)。
+
+### 剪輯與匯出 {#editing-and-export}
+
+- **編碼格式選擇。** MP4 匯出可選 H.264 或 H.265。Cap 的匯出選項列出解析度、影格率與品質預設，但沒有編碼格式設定。詳見[匯出](/docs/export/)。
+- **更寬的變速範圍。** OpenScreen 的變速區段範圍為 0.1x 到 100x。Cap 的 Studio Mode 文件列出的片段變速範圍為 0.25x 到 8x。
+- **匯出速度。** 兩款應用程式都在公開的[匯出效能評測（英文）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)中。撰寫本文時，OpenScreen 的成績排在 Cap 0.6.0 之前。結果會因機器而異，請以該處的即時排名為準。
+
+### 平台 {#platforms}
+
+- **不帶 Beta 標籤的 Windows 版本。** OpenScreen 提供 Windows 安裝程式與 Microsoft Store 上架版本。Cap 的下載頁面在其他下載選項中，將 Windows 連結列為「Windows（Beta）」。
+- **相同的 Linux 套件，另加 Nix。** 兩者都提供 .deb、AppImage、RPM 與 Arch 套件。Cap 在 2026 年 8 月 31 日發布的 0.6.0 版加入這些依發行版區分的套件。OpenScreen 另外也提供 Nix flake。詳見 [Linux](/screen-recorder-linux/)、[Windows](/screen-recorder-windows/) 與 [macOS](/screen-recorder-mac/) 頁面。
+
+## Cap 更適合的情況 {#when-cap-is-the-better-choice}
+
+- **你以連結分享。** Cap 的 Instant Mode 會邊錄邊上傳，公開連結的觀眾不需要帳號即可在瀏覽器中觀看。已登入的觀眾可以留言，Cap Pro 還提供觀眾分析、密碼保護與自訂網域。OpenScreen 則給你一個檔案，讓你自行上傳到想分享的地方。
+- **你的組織需要 SSO 或合規認證。** Cap 提供團隊工作區、SAML SSO 附加元件、SOC 2 Type II 與 ISO 27001 認證，以及簽署 BAA 的 HIPAA 合規服務。
+- **你需要提供字幕檔案。** Cap 可以另存為 SRT 或 WebVTT 檔案。OpenScreen 則是把字幕燒錄進影片。
+
+## 開始使用 {#getting-started}
+
+1. 從[下載頁面](/download/)下載 OpenScreen。在 Windows 上，建議使用 Microsoft Store。
+2. 依照[安裝](/docs/installation/)步驟進行。在 macOS 上，請在第一次錄影前授予「螢幕錄製」與「輔助使用」權限。
+3. 依照[快速入門](/docs/quick-start/)錄下第一段影片，然後執行**自動加強 → 自動縮放**。
+4. 若要重複使用在 Cap 中製作的影片，請先將它們匯出為 MP4。[媒體庫](/docs/media-library/)可將 MP4、MOV、MKV 等影片檔匯入專案。
+
+也想比較其他工具嗎？請見[取代 Screen Studio](/alternatives/screen-studio/)、[OpenScreen 與 OBS Studio 比較](/compare/openscreen-vs-obs/)、[取代 Camtasia](/alternatives/camtasia/)與[取代 Loom](/alternatives/loom/)，或回到 [OpenScreen 首頁](/)。
+
+## 資料來源 {#sources}
+
+Cap 的資訊，於 2026 年 9 月確認：
+
+- 方案、價格、分享連結限制、SSO 與 BAA 附加元件、Cap Pro 功能，以及免費版的個人使用限制：[cap.so/pricing](https://cap.so/pricing)
+- 何謂商業使用，以及自行編譯版本的例外規定：[cap.so/docs/commercial-license](https://cap.so/docs/commercial-license)
+- AGPLv3 與 MIT 的授權分割：[github.com/CapSoftware/Cap/blob/main/LICENSE](https://github.com/CapSoftware/Cap/blob/main/LICENSE)
+- 平台、「Windows（Beta）」連結、Linux 套件與 CLI：[cap.so/download](https://cap.so/download)
+- 安裝指南中的 64 位元 Windows 與 Linux 套件：[cap.so/docs/installation](https://cap.so/docs/installation)
+- 錄製目標、縮放、片段、速度、遮罩、文字、字幕及其 SRT 或 WebVTT 匯出、音樂、攝影機模糊、匯出格式，以及分享連結所需的登入：[cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Instant Mode、分享頁面與留言所需的登入：[cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
+- 版本歷史，包含 0.6.0 版（Linux 套件、macOS 攝影機背景移除、圖片軌道）、0.5.7 版的提詞機、網頁版編輯器的逐字稿剪輯、SOC 2 Type II、ISO 27001 與 HIPAA：[cap.so/changelog](https://cap.so/changelog)
+- Instant Mode 的登入、代管 AI 功能與字幕翻譯、無浮水印、CLI 的 JSON 輸出：[cap.so/llms-full.txt](https://cap.so/llms-full.txt)
+
+OpenScreen 的資訊描述的是 1.11.0 版，並連結至上方的說明文件。
+
+Cap 為其所有者的商標。OpenScreen 是獨立專案，與 Cap 無關，亦未獲其認可或贊助。

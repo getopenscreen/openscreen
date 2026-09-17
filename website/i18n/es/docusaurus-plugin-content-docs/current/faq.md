@@ -112,8 +112,8 @@ Los errores y las solicitudes de funciones se reportan en [GitHub Issues](https:
 
 Si necesitas algo de esto, OpenScreen no es la herramienta adecuada:
 
-- **Compartir desde un servicio alojado.** No hay enlaces para compartir, almacenamiento en la nube, espacios de trabajo en equipo ni comentarios. Tus archivos se quedan en tu disco. Consulta [OpenScreen como alternativa a Loom (en inglés)](/alternatives/loom/).
-- **Transmisión en vivo.** Consulta [OpenScreen vs. OBS Studio (en inglés)](/compare/openscreen-vs-obs/).
+- **Compartir desde un servicio alojado.** No hay enlaces para compartir, almacenamiento en la nube, espacios de trabajo en equipo ni comentarios. Tus archivos se quedan en tu disco. Consulta [OpenScreen como alternativa a Loom](/alternatives/loom/).
+- **Transmisión en vivo.** Consulta [OpenScreen vs. OBS Studio](/compare/openscreen-vs-obs/).
 - **Archivos de subtítulos.** Los subtítulos se incrustan en el video. No hay exportación SRT ni VTT. Consulta [Subtítulos](./captions.md).
 - **Dispositivos móviles.** No hay app móvil, ni captura en iOS o Android.
 

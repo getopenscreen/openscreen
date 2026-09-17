@@ -1,0 +1,85 @@
+---
+title: Gravador de tela grátis e open source para Mac
+description: "O OpenScreen é um gravador de tela grátis e open source para Mac Apple Silicon e Intel com macOS 13 ou posterior, com zoom automático e sem marca d'água."
+keywords:
+  - gravador de tela para mac
+  - gravador de tela grátis mac sem marca d'água
+  - gravador de tela open source mac
+  - alternativa grátis ao screen studio para mac
+---
+
+# Um gravador de tela grátis e de código aberto para Mac
+
+O OpenScreen é um gravador de tela gratuito, com licença MIT, para Mac, com builds para Apple Silicon e Intel no macOS 13 ou posterior. Ele grava uma tela ou uma janela pela ScreenCaptureKit, depois abre a gravação em um editor para zooms automáticos, estilização do cursor, fundos e legendas no dispositivo, e exporta em MP4 ou GIF sem marca d'água. Se você compartilha por link hospedado ou grava um iPhone ou iPad, outro app serve melhor.
+
+Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Screen Studio, o Loom e o Cap vêm dos próprios sites deles e foram verificados em setembro de 2026. As fontes estão listadas no final.
+
+## Resumo rápido {#at-a-glance}
+
+| | |
+| --- | --- |
+| Preço | Grátis, inclusive para uso comercial. Licença MIT, sem conta |
+| Versão do macOS | macOS 13 Ventura ou posterior |
+| Macs | Apple Silicon e Intel, um `.dmg` para cada |
+| Assinatura | Assinado com um Developer ID e notarizado desde a versão 1.9.0 |
+| O que grava | Uma tela ou uma janela, a 60 fps, até 4K. Corte a imagem depois no editor |
+| Captura | ScreenCaptureKit, gravada como H.264 em um MP4 fragmentado |
+| Áudio | Áudio do sistema. Microfone no macOS 15 e posteriores |
+| Webcam | Gravada em um arquivo separado, depois posicionada no editor |
+| Cursor | Gravado como dados e editável depois da gravação. Formato e cliques exigem a permissão de Acessibilidade |
+| Legendas | Whisper no dispositivo, em Metal com Apple Silicon e na CPU com Intel. Embutidas no vídeo |
+| Exportação | MP4 (H.264 ou H.265) pelo VideoToolbox, ou GIF. Até 60 fps, sem marca d'água |
+
+## Como o OpenScreen grava em um Mac {#how-openscreen-records-on-a-mac}
+
+A captura de tela passa por um auxiliar nativo escrito em Swift sobre a ScreenCaptureKit, o framework de captura da Apple.
+
+- **Uma tela ou uma janela.** Escolha a fonte no gravador. Ele captura a 60 fps, até 3840×2160. Corte a imagem depois no editor.
+- **Um arquivo que sobrevive a uma falha.** O auxiliar codifica H.264 com o AVAssetWriter em um MP4 fragmentado, um fragmento por segundo. Se o gravador for encerrado no meio do caminho, o arquivo continua reproduzível até o último fragmento completo.
+- **Áudio do sistema.** A ScreenCaptureKit captura o que o Mac reproduz, e os próprios sons do OpenScreen são deixados de fora. No macOS 14.2 e posteriores, o sistema pede para você permitir a captura de áudio.
+- **Microfone.** Escolha o dispositivo e acompanhe um medidor de nível de cinco barras nos controles de gravação.
+- **Um cursor editável.** Por padrão, o ponteiro do sistema é deixado de fora dos pixels e gravado como dados. Depois da gravação, você pode mudar o tamanho, a suavização e o tema dele, e adicionar um rebote de clique. Um botão alterna para o cursor do sistema, embutido na imagem.
+- **Webcam.** A câmera é gravada em um arquivo próprio durante a gravação. O editor a posiciona como picture-in-picture, empilhamento vertical ou quadro duplo, e pode remover, borrar ou substituir o fundo dela sem tela verde. O app é compatível com a Câmera de Continuidade, o recurso da Apple para usar um iPhone como webcam.
+- **Notas e teleprompter.** Uma janela de notas mantém seu roteiro junto da captura. O modo teleprompter dela rola o texto em uma velocidade definida e pode espelhá-lo.
+- **Controles de gravação.** Pausar e retomar, reiniciar, cancelar ou parar. Uma contagem regressiva 3-2-1 inicia cada gravação.
+
+## Edição e exportação em Apple Silicon e Intel {#editing-and-export-on-apple-silicon-and-intel}
+
+O editor é o mesmo no macOS, no Windows e no Linux. O que muda em um Mac é o hardware que ele usa.
+
+- **Renderização no Metal.** A pré-visualização ao vivo e a exportação em MP4 compartilham um único compositor nativo, que roda no Metal no macOS.
+- **Codificação com VideoToolbox.** As exportações em H.264 e H.265 vão para o codificador VideoToolbox da Apple. Para H.264, ele tenta primeiro um caminho sem cópia, em que o quadro composto nunca volta para a CPU. Um codificador por software assume se o VideoToolbox não estiver disponível. As exportações em MP4 rodam a 24, 30 ou 60 fps, de 720p até o tamanho de origem. A exportação em GIF também está disponível. Veja [Exportação](/docs/export/).
+- **Legendas no próprio chip do Mac.** A transcrição roda o whisper.cpp com um modelo Whisper Small de cerca de 264 MB, baixado uma vez. Ela usa Metal em Apple Silicon e a CPU em Macs Intel. As legendas são embutidas no vídeo. Mais em [legendas](/features/captions/).
+- **O resto do editor.** [Zooms automáticos](/features/auto-zoom/) posicionados a partir do cursor gravado, fundos, uma linha do tempo com vários clipes, anotações de texto e seta, regiões de desfoque, e faixas de locução e música. Veja [Edição e linha do tempo](/docs/editing-timeline/).
+- **Edição por chat opcional.** Conecte um provedor com sua própria chave e descreva cortes, zooms ou mudanças de velocidade em linguagem natural. Fica desligado até você conectar um provedor, e cada mudança vira uma edição comum, que pode ser desfeita. Veja [Edição com IA](/docs/ai-editing/).
+- **Uma interface de linha de comando.** A [CLI](/docs/cli/) grava, exporta, legenda e empacota projetos, com saída em JSON. Em um Mac, ela roda a partir de `/Applications/Openscreen.app/Contents/MacOS/Openscreen`.
+
+Como a velocidade de exportação do OpenScreen foi medida em relação a outras ferramentas está em [Um comparativo de exportação feito para ser difícil de fraudar (em inglês)](/blog/2026/09/09/an-export-benchmark-hard-to-fake/).
+
+## Quando o OpenScreen não é a ferramenta certa {#when-openscreen-is-not-the-right-tool}
+
+- **Você compartilha por link.** Loom, Cap e Screen Studio conseguem, cada um, transformar uma gravação em um link hospedado reproduzido em um navegador (em setembro de 2026). O OpenScreen entrega um arquivo para você enviar onde quiser compartilhar.
+- **Você grava um iPhone ou iPad.** O Screen Studio os grava por um cabo USB e adiciona uma moldura de dispositivo. O OpenScreen grava as próprias telas e janelas do Mac.
+- **Seu Mac roda macOS 12 ou anterior.** O OpenScreen precisa do macOS 13 ou posterior. O app de desktop do Loom dá suporte ao macOS 12.3 e posteriores (em setembro de 2026).
+
+## Primeiros passos {#getting-started}
+
+1. Baixe o `.dmg` Apple Silicon ou Intel na [página de download](/download/), cerca de 210 MB, e arraste o OpenScreen para Aplicativos. A build é assinada e notarizada, então nenhum passo no terminal é necessário.
+2. Em **Ajustes do Sistema → Privacidade e Segurança**, conceda **Gravação de Tela** e **Acessibilidade** ao OpenScreen. O [guia de instalação](/docs/installation/#macos) explica os dois.
+3. Faça uma primeira gravação com o [início rápido](/docs/quick-start/), depois rode **Melhoria automática → Zooms automáticos** nela. [Gravação de tela](/docs/recording/) cobre as opções do gravador.
+
+Em outro sistema? Veja o OpenScreen para [Windows](/screen-recorder-windows/) e [Linux](/screen-recorder-linux/). Avaliando outros gravadores para Mac? Leia as páginas [alternativa ao Screen Studio](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) e [alternativa ao Loom](/alternatives/loom/). Licenciamento, uso de rede e assinatura estão cobertos nas [Perguntas frequentes](/docs/faq/), e a [página inicial do OpenScreen](/) tem o tour completo.
+
+## Fontes {#sources}
+
+Dados de terceiros, verificados em setembro de 2026:
+
+- Loom, gravação e compartilhamento de mensagens em vídeo: [loom.com](https://www.loom.com/)
+- Requisitos de sistema do app de desktop do Loom: [support.atlassian.com/loom/docs/loom-device-compatibility](https://support.atlassian.com/loom/docs/loom-device-compatibility/)
+- Links de compartilhamento do Cap: [cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
+- Links de compartilhamento do Screen Studio: [screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
+- Gravação de iPhone e iPad do Screen Studio: [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
+
+Os dados do OpenScreen descrevem a versão 1.11.0 e remetem à documentação dele acima.
+
+Apple, Mac, macOS, Screen Studio, Loom e Cap são marcas registradas dos respectivos proprietários. O OpenScreen é um projeto independente e não é afiliado nem endossado por nenhum deles.

@@ -34,7 +34,7 @@ OpenScreen 发布频繁。在两个版本之间，`.openscreen` 项目格式和 
 - 可以选择连接你自己的 LLM 密钥，[通过聊天来编辑](./ai-editing.md)：此功能默认关闭，任何时候都不是必需的。
 - [导出](./export.md)为 MP4（720p/1080p/Source，H.264 或 H.265）或 GIF 动图。
 
-关于许可证、水印以及哪些内容会通过网络传输的问题，请参阅[常见问题](/docs/faq/)。OpenScreen 与其他录屏软件的对比，见 [Screen Studio](/alternatives/screen-studio/)、[Cap](/compare/openscreen-vs-cap/) 和 [OBS Studio](/compare/openscreen-vs-obs/) 页面（英文）。
+关于许可证、水印以及哪些内容会通过网络传输的问题，请参阅[常见问题](/docs/faq/)。OpenScreen 与其他录屏软件的对比，见 [Screen Studio](/alternatives/screen-studio/)、[Cap](/compare/openscreen-vs-cap/) 和 [OBS Studio](/compare/openscreen-vs-obs/) 页面。
 
 :::note
 录制、编辑、转录、字幕和导出都不需要账号，没有网络连接也能照常使用。转录需要先下载一次：首次运行时会获取它的 Whisper 模型（约 264 MB）。有网络连接时，应用还会在启动时从 Google Fonts 加载标注所用的字体，从 GitHub Releases 安装的版本也会向 GitHub 检查更新。AI 聊天编辑和字幕翻译只有在你亲自连接提供方之后才会联网，并且只连接该提供方。

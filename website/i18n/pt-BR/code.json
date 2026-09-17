@@ -197,7 +197,7 @@
     "message": "Captura via PipeWire pelo portal ScreenCast; requer PipeWire e xdg-desktop-portal."
   },
   "home.install.note": {
-    "message": "O Windows também tem um instalador {exe}. Ele não tem assinatura de código, então o SmartScreen avisa antes da execução: escolha Mais informações e depois Executar assim mesmo. O Linux também tem {rpm}, {pacman}, um AppImage e um flake Nix. Todos os arquivos estão na {releasesPage}, e a página {installation} traz o passo a passo completo. O que cada sistema grava está nas páginas {windows}, {mac} e {linux} (em inglês).",
+    "message": "O Windows também tem um instalador {exe}. Ele não tem assinatura de código, então o SmartScreen avisa antes da execução: escolha Mais informações e depois Executar assim mesmo. O Linux também tem {rpm}, {pacman}, um AppImage e um flake Nix. Todos os arquivos estão na {releasesPage}, e a página {installation} traz o passo a passo completo. O que cada sistema grava está nas páginas {windows}, {mac} e {linux}.",
     "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
@@ -276,7 +276,7 @@
     "message": "Documentação de legendas e transcrição"
   },
   "showcase.captions.link.feature": {
-    "message": "Como as legendas locais se comparam (em inglês)",
+    "message": "Como as legendas locais se comparam",
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
@@ -299,7 +299,7 @@
     "message": "Documentação da edição com IA"
   },
   "showcase.agent.link.feature": {
-    "message": "Como funcionam os zooms automáticos (em inglês)",
+    "message": "Como funcionam os zooms automáticos",
     "description": "Link label under the panel."
   },
   "showcase.agent.label": {
@@ -364,13 +364,13 @@
     "message": "Baixar"
   },
   "footer.product.autoZoom": {
-    "message": "Zoom automático (em inglês)"
+    "message": "Zoom automático"
   },
   "footer.product.captions": {
-    "message": "Legendas locais (em inglês)"
+    "message": "Legendas locais"
   },
   "footer.platforms.title": {
-    "message": "Plataformas (em inglês)",
+    "message": "Plataformas",
     "description": "Footer column title."
   },
   "footer.platforms.windows": {
@@ -383,7 +383,7 @@
     "message": "Linux"
   },
   "footer.compare.title": {
-    "message": "Comparações (em inglês)",
+    "message": "Comparações",
     "description": "Footer column title."
   },
   "footer.compare.screenStudio": {

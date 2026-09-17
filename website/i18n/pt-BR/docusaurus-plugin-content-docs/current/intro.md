@@ -34,7 +34,7 @@ O OpenScreen lança versões com frequência. De uma versão para outra, o forma
 - Conectar, se quiser, sua própria chave de LLM para [editar por chat](./ai-editing.md) — desativado por padrão, nunca obrigatório.
 - [Exportar](./export.md) para MP4 (720p/1080p/resolução de origem, H.264 ou H.265) ou GIF animado.
 
-As dúvidas sobre licença, marca d'água ou o que passa pela rede são respondidas nas [Perguntas frequentes](/docs/faq/). A comparação do OpenScreen com outros gravadores está nas páginas (em inglês) sobre o [Screen Studio](/alternatives/screen-studio/), o [Cap](/compare/openscreen-vs-cap/) e o [OBS Studio](/compare/openscreen-vs-obs/).
+As dúvidas sobre licença, marca d'água ou o que passa pela rede são respondidas nas [Perguntas frequentes](/docs/faq/). A comparação do OpenScreen com outros gravadores está nas páginas sobre o [Screen Studio](/alternatives/screen-studio/), o [Cap](/compare/openscreen-vs-cap/) e o [OBS Studio](/compare/openscreen-vs-obs/).
 
 :::note
 Gravação, edição, transcrição, legendas e exportação não exigem conta e continuam funcionando sem conexão com a rede. A transcrição precisa de um download antes: o modelo Whisper (~264 MB), baixado na primeira execução. Quando há conexão, o app também carrega do Google Fonts as fontes das anotações ao iniciar, e os builds instalados pelo GitHub Releases verificam atualizações no GitHub. A edição por chat com IA e a tradução de legendas só acessam a internet depois que você mesmo conecta um provedor, e apenas para se comunicar com ele.

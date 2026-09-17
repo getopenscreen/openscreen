@@ -162,6 +162,6 @@ Les outils de montage sont les mêmes partout : zooms, arrière-plans, recadrag
 Le moteur de composition GPU qui sert à l'aperçu en direct et à l'export MP4 a trois backends (Direct3D 11 sous Windows, Metal sous macOS, wgpu/WGSL sous Linux) et il est inclus dans les trois builds. Sous Linux, un export H.264 confie chaque image composée à `h264_vaapi` sans copie côté CPU quand le pilote GPU expose VAAPI *et* que le périphérique Vulkan peut transmettre l'image sous forme de dmabuf (`VK_KHR_external_memory_fd` et `VK_EXT_external_memory_dma_buf`). S'il manque l'un de ces éléments (pas de nœud de rendu, un pilote sans VAAPI, un périphérique Vulkan sans ces extensions), l'export se rabat sur un encodeur logiciel et prend simplement plus de temps ; rien d'autre ne change. Sous Linux, les exports H.265 utilisent toujours l'encodeur logiciel.
 :::
 
-Les pages [Windows](/screen-recorder-windows/), [Mac](/screen-recorder-mac/) et [Linux](/screen-recorder-linux/), en anglais, résument ce que fait OpenScreen sur chaque système, et les cas où un autre outil convient mieux.
+Les pages [Windows](/screen-recorder-windows/), [Mac](/screen-recorder-mac/) et [Linux](/screen-recorder-linux/) résument ce que fait OpenScreen sur chaque système, et les cas où un autre outil convient mieux.
 
 Étape suivante : le [Démarrage rapide](./quick-start.md) vous guide dans votre premier enregistrement.

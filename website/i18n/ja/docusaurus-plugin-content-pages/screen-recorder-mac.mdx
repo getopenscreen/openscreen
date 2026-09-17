@@ -1,0 +1,85 @@
+---
+title: Mac 向け無料・オープンソース画面録画ソフト
+description: OpenScreen は macOS 13 以降、Apple Silicon と Intel に対応した Mac 向けの無料・オープンソースの画面録画ソフトです。自動ズーム対応、透かしなし。
+keywords:
+  - 画面録画 Mac
+  - 画面録画 無料 Mac 透かしなし
+  - 画面録画 オープンソース Mac
+  - Screen Studio 代替 Mac 無料
+---
+
+# Mac 向け無料・オープンソース画面録画ソフト
+
+OpenScreen は、Mac 向けの無料の MIT ライセンスの画面録画ソフトで、macOS 13 以降の Apple Silicon と Intel それぞれにビルドを提供しています。ディスプレイまたはウィンドウ 1 つを ScreenCaptureKit で録画し、そのテイクをエディターで開いて自動ズーム、カーソルのスタイル設定、背景、端末上の字幕を適用し、透かしなしで MP4 または GIF を出力します。ホスティングされたリンクで共有したい場合や、iPhone・iPad を録画したい場合は、ほかのアプリのほうが向いています。
+
+このページは OpenScreen プロジェクトが公開しています。Screen Studio、Loom、Cap に関する情報はそれぞれのサイトによるもので、2026 年 9 月に確認しました。情報源は末尾に一覧しています。
+
+## 概要 {#at-a-glance}
+
+| | |
+| --- | --- |
+| 価格 | 商用利用を含めて無料。MIT ライセンス、アカウント不要 |
+| macOS バージョン | macOS 13 Ventura 以降 |
+| Mac | Apple Silicon と Intel、それぞれに `.dmg` を用意 |
+| 署名 | バージョン 1.9.0 以降、Developer ID で署名し公証済み |
+| 録画対象 | ディスプレイまたはウィンドウ 1 つ、60 fps、最大 4K。エディターで後からクロップ可能 |
+| キャプチャ | ScreenCaptureKit、フラグメント化された MP4 に H.264 として書き込み |
+| 音声 | システム音声。macOS 15 以降ではマイクも |
+| ウェブカメラ | 別ファイルに録画し、エディターで配置 |
+| カーソル | データとして記録され、テイク後に編集可能。形状とクリックにはアクセシビリティの権限が必要 |
+| 字幕 | 端末上の Whisper、Apple Silicon では Metal、Intel では CPU。動画に焼き込み |
+| エクスポート | VideoToolbox 経由の MP4（H.264 または H.265）または GIF。最大 60 fps、透かしなし |
+
+## Mac での OpenScreen の録画方法 {#how-openscreen-records-on-a-mac}
+
+画面キャプチャは、Apple のキャプチャフレームワークである ScreenCaptureKit を基盤に、Swift で書かれたネイティブヘルパーを通じて行われます。
+
+- **ディスプレイまたはウィンドウ 1 つ。** レコーダーでソースを選びます。60 fps で、最大 3840×2160 まで録画できます。フレームのクロップはあとからエディターで行います。
+- **クラッシュに耐えるファイル。** ヘルパーは AVAssetWriter で H.264 をフラグメント化された MP4 に、1 秒に 1 フラグメントでエンコードします。途中でレコーダーが強制終了しても、最後の完全なフラグメントまではファイルが再生可能なままです。
+- **システム音声。** ScreenCaptureKit が Mac が再生する音を取り込み、OpenScreen 自身が出す音は除外されます。macOS 14.2 以降では、システムが音声キャプチャの許可を求めます。
+- **マイク。** デバイスを選び、録画コントロール内の 5 段階のレベルメーターで確認できます。
+- **編集可能なカーソル。** 既定では、システムポインターはピクセルから除外され、データとして記録されます。テイク後にサイズ、スムージング、テーマを変更でき、クリックバウンスも追加できます。切り替えで、映像に焼き込まれるシステムカーソルに戻せます。
+- **ウェブカメラ。** カメラはテイク中に独立したファイルへ録画されます。エディターではピクチャーインピクチャー、縦並び、デュアルフレームとして配置でき、グリーンスクリーンなしで背景を削除・ぼかし・置き換えできます。アプリは、iPhone をウェブカメラとして使う Apple の機能である Continuity Camera に対応しています。
+- **ノートとテレプロンプター。** ノートウィンドウが、キャプチャの隣に台本を表示します。テレプロンプターモードは、設定した速度でテキストをスクロールし、反転表示もできます。
+- **テイクのコントロール。** 一時停止と再開、やり直し、キャンセル、停止。各テイクの開始時に 3-2-1 のカウントダウンがあります。
+
+## Apple Silicon と Intel での編集とエクスポート {#editing-and-export-on-apple-silicon-and-intel}
+
+エディターは macOS・Windows・Linux で共通です。Mac で変わるのは、使用するハードウェアです。
+
+- **Metal でのレンダリング。** ライブプレビューと MP4 エクスポートは 1 つのネイティブコンポジターを共有しており、macOS では Metal で動作します。
+- **VideoToolbox でのエンコード。** H.264・H.265 のエクスポートは、Apple の VideoToolbox エンコーダーに送られます。H.264 の場合、まずゼロコピーのパスを試み、合成したフレームが CPU に戻ることはありません。VideoToolbox が使えない場合はソフトウェアエンコーダーが引き継ぎます。MP4 エクスポートは 24・30・60 fps で、720p から元のサイズまで対応します。GIF エクスポートも利用できます。[エクスポート](/docs/export/)を参照してください。
+- **Mac 自身のチップでの字幕。** 文字起こしは whisper.cpp で、約 264 MB の Whisper Small モデル 1 つを一度だけダウンロードして実行します。Apple Silicon では Metal、Intel Mac では CPU を使います。字幕は動画に焼き込まれます。詳しくは[字幕](/features/captions/)を参照してください。
+- **エディターのそのほかの機能。** 記録したカーソルから配置される[自動ズーム](/features/auto-zoom/)、背景、マルチクリップのタイムライン、テキストと矢印の注釈、ぼかし領域、ナレーションと音楽のトラック。[編集とタイムライン](/docs/editing-timeline/)を参照してください。
+- **任意のチャット編集。** 自分の API キーでプロバイダーを接続し、カット、ズーム、速度変更を普段の言葉で指示できます。プロバイダーを接続するまではオフで、変更はすべて元に戻せる通常の編集として反映されます。[AI 編集](/docs/ai-editing/)を参照してください。
+- **コマンドラインインターフェース。** [CLI](/docs/cli/) は、プロジェクトの録画・エクスポート・字幕付け・パックを JSON 出力付きで行います。Mac では `/Applications/Openscreen.app/Contents/MacOS/Openscreen` から実行します。
+
+OpenScreen のエクスポート速度がほかのツールとどう比較されたかは、[ごまかしにくいエクスポートベンチマークの記事（英語）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)にまとめています。
+
+## OpenScreen が適さない場合 {#when-openscreen-is-not-the-right-tool}
+
+- **リンクで共有したい場合。** Loom、Cap、Screen Studio はそれぞれ、録画をブラウザーで再生できるホスティングされたリンクに変換できます（2026 年 9 月時点）。OpenScreen が出力するのはファイルなので、共有したい場所に自分でアップロードします。
+- **iPhone や iPad を録画したい場合。** Screen Studio は USB ケーブル経由でそれらを録画し、デバイスフレームを追加します。OpenScreen が録画するのは Mac 自身のディスプレイとウィンドウです。
+- **Mac が macOS 12 以前の場合。** OpenScreen には macOS 13 以降が必要です。Loom のデスクトップアプリは macOS 12.3 以降に対応しています（2026 年 9 月時点）。
+
+## はじめかた {#getting-started}
+
+1. [ダウンロードページ](/download/)から、Apple Silicon または Intel 向けの約 210 MB の `.dmg` をダウンロードし、OpenScreen を「アプリケーション」フォルダにドラッグします。ビルドは署名・公証済みのため、ターミナルでの操作は不要です。
+2. **システム設定 → プライバシーとセキュリティ**で、OpenScreen に**画面収録**と**アクセシビリティ**を許可します。両方については[インストールガイド](/docs/installation/#macos)で解説しています。
+3. [クイックスタート](/docs/quick-start/)で最初の録画を行い、**自動強化 → 自動ズーム**を実行します。レコーダーのオプションは[画面録画](/docs/recording/)にまとめています。
+
+ほかのシステムをお使いですか。OpenScreen の [Windows](/screen-recorder-windows/) 版と [Linux](/screen-recorder-linux/) 版もあります。ほかの Mac 向けレコーダーを検討中ですか。[Screen Studio の代替](/alternatives/screen-studio/)、[OpenScreen と Cap の比較](/compare/openscreen-vs-cap/)、[Loom の代替](/alternatives/loom/)のページをお読みください。ライセンス、通信、署名については[よくある質問](/docs/faq/)にまとめ、[OpenScreen のホームページ](/)には全体像があります。
+
+## 情報源 {#sources}
+
+サードパーティに関する情報、2026 年 9 月確認：
+
+- Loom、動画メッセージの録画と共有：[loom.com](https://www.loom.com/)
+- Loom デスクトップアプリのシステム要件：[support.atlassian.com/loom/docs/loom-device-compatibility](https://support.atlassian.com/loom/docs/loom-device-compatibility/)
+- Cap の共有リンク：[cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
+- Screen Studio の共有リンク：[screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
+- Screen Studio の iPhone・iPad 録画：[screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
+
+OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+
+Apple、Mac、macOS、Screen Studio、Loom、Cap はそれぞれの所有者の商標です。OpenScreen は独立したプロジェクトであり、これらのいずれとも提携または承認された関係にはありません。

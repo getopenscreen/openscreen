@@ -112,8 +112,8 @@ Fehlerberichte und Feature-Wünsche gehören in die [GitHub-Issues](https://gith
 
 Wenn du eines davon brauchst, ist OpenScreen nicht das richtige Werkzeug:
 
-- **Gehostetes Teilen.** Keine Freigabelinks, kein Cloudspeicher, keine Team-Arbeitsbereiche, keine Kommentare. Deine Dateien bleiben auf deiner Festplatte. Siehe [OpenScreen als Loom-Alternative (auf Englisch)](/alternatives/loom/).
-- **Livestreaming.** Siehe [OpenScreen vs OBS Studio (auf Englisch)](/compare/openscreen-vs-obs/).
+- **Gehostetes Teilen.** Keine Freigabelinks, kein Cloudspeicher, keine Team-Arbeitsbereiche, keine Kommentare. Deine Dateien bleiben auf deiner Festplatte. Siehe [OpenScreen als Loom-Alternative](/alternatives/loom/).
+- **Livestreaming.** Siehe [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
 - **Untertiteldateien.** Untertitel werden ins Video eingebrannt. Es gibt keinen Export als SRT oder VTT. Siehe [Untertitel](./captions.md).
 - **Mobilgeräte.** Keine Mobil-App und keine Aufnahme unter iOS oder Android.
 

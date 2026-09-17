@@ -1,0 +1,106 @@
+---
+title: "OpenScreen vs Cap: gratis para uso comercial"
+description: "OpenScreen vs Cap: OpenScreen tiene licencia MIT, es gratis para uso comercial y no pide cuenta. Comparamos licencias, enlaces para compartir y editores."
+keywords:
+  - openscreen vs cap
+  - alternativa a cap para grabar pantalla
+  - alternativa a cap.so
+  - grabador de pantalla de código abierto con licencia mit
+---
+
+# OpenScreen frente a Cap
+
+OpenScreen es un grabador de pantalla con licencia MIT para Windows, macOS y Linux, gratis para uso comercial y que funciona sin cuenta ni servidor. Cap cubre un terreno similar, con zooms automáticos, un cursor editable, subtítulos generados en el equipo y exportación sin marca de agua, pero su descarga gratuita es solo para uso personal, y el uso comercial de su app oficial necesita una licencia de pago. El código de Cap es AGPLv3, y Cap agrega enlaces alojados para compartir, que necesitan iniciar sesión en Cap. Cap es la mejor opción si tu equipo comparte grabaciones por enlace, necesita SSO o certificaciones de cumplimiento, o entrega archivos de subtítulos SRT o WebVTT.
+
+Esta página la publica el proyecto OpenScreen. Los datos sobre Cap vienen de cap.so y del repositorio de GitHub de Cap, y se verificaron en septiembre de 2026. Las fuentes están al final.
+
+## De un vistazo {#at-a-glance}
+
+| | OpenScreen | Cap |
+| --- | --- | --- |
+| Precio | Gratis, incluido el uso comercial | Gratis para uso personal. El uso comercial necesita una licencia de escritorio a 29 USD al año o 58 USD de por vida, o Cap Pro a 12 USD por usuario al mes con pago mensual (a septiembre de 2026) |
+| Código fuente | Licencia MIT | AGPLv3, salvo los crates de cámara y captura, que son MIT |
+| Plataformas | Windows 10 (1903 o posterior) y 11, x64. macOS 13 o posterior, Apple Silicon e Intel. Linux, x64 | macOS, se recomienda 13.1 o posterior, Apple Silicon e Intel. Windows de 64 bits, listado como "Windows (Beta)" entre sus opciones de descarga. Paquetes .deb, AppImage, RPM y Arch para Linux (a septiembre de 2026) |
+| Qué graba | Una pantalla o una ventana. Recorte posterior en el editor | Una pantalla, una ventana, un área o solo la cámara |
+| Enlaces alojados para compartir | No | Sí. Hasta 5 minutos por enlace en Free y en la licencia de escritorio, sin límite en Cap Pro (a septiembre de 2026) |
+| Inicio de sesión | Nunca hace falta | Necesario para los enlaces para compartir y el modo Instant |
+| Zooms automáticos | Sí, colocados a partir del movimiento del cursor grabado | Sí, generados a partir de los clics grabados |
+| Subtítulos | Whisper en el equipo, un modelo de unos 264 MB, descargado una vez. Incrustados en el video | Whisper o Parakeet en el equipo, en beta. Incrustados en el video, o guardados como SRT o WebVTT |
+| Funciones de IA | Edición por chat opcional y traducción de subtítulos a 15 idiomas, con la clave de tu propio proveedor | Alojadas en Cap Pro: títulos, resúmenes, capítulos, transcripciones y traducción de subtítulos. Sin necesidad de clave |
+| Exportación | MP4 (H.264 o H.265) a 720p, 1080p o tamaño de origen, 24, 30 o 60 fps. GIF de 15 a 30 fps. Sin marca de agua | MP4 a 720p, 1080p o 4K, 15, 30 o 60 fps. GIF de 10 a 30 fps. MOV transparente solo con cursor. Sin marca de agua. Sin ajuste de códec documentado |
+| Equipos y cumplimiento | Ninguno | Espacios de trabajo en equipo. Complemento SAML SSO a 199 USD/mes. SOC 2 tipo II, ISO 27001 y HIPAA, con BAA firmado a 99 USD/mes (a septiembre de 2026) |
+| Interfaz de línea de comandos | Sí, con salida JSON | Sí, con salida JSON |
+
+## Lo que hacen ambas apps {#what-both-apps-do}
+
+Los dos editores se solapan bastante. Nada de lo siguiente es exclusivo de una sola app.
+
+- **Zooms automáticos y manuales.** En OpenScreen, **Mejora automática → Zooms automáticos** coloca los zooms a partir del movimiento del cursor grabado, sin llamadas de red ni modelo, y los zooms manuales vienen en seis profundidades. Cap genera zooms alrededor de los clics grabados y ofrece zooms manuales de 1x a 4,5x. Más en [zoom automático](/features/auto-zoom/).
+- **Un cursor que puedes cambiar después.** Las dos graban el puntero como datos en lugar de píxeles, así que puedes redimensionarlo, suavizar su movimiento u ocultarlo después de la toma.
+- **Fondos y encuadre.** Las dos agregan fondos de pantalla, colores sólidos, degradados o tu propia imagen detrás de la grabación, con relleno, esquinas redondeadas y sombra. Las dos exportan video horizontal, vertical o cuadrado.
+- **Cámara web, micrófono y audio del sistema** en la misma grabación. Las dos pueden desenfocar el fondo de la cámara web. OpenScreen también puede quitarlo o reemplazarlo con una imagen, sin pantalla verde. Cap agregó la eliminación de fondo en macOS en la versión 0.6.0.
+- **Varios clips en un proyecto.** Las dos importan archivos MP4 existentes junto a nuevas grabaciones, reordenan clips y cambian la velocidad de una sección.
+- **Texto, imágenes, máscaras de desenfoque y música.** Las dos ponen texto e imágenes sobre el video, ocultan áreas sensibles con una máscara de desenfoque o mosaico, y agregan pistas de música.
+- **Transcripción en tu equipo.** Las dos ejecutan Whisper localmente, te dejan corregir la transcripción, dar estilo a los subtítulos e incrustarlos en el video. Más en [subtítulos](/features/captions/).
+- **Corte por texto.** En el editor de escritorio de OpenScreen, seleccionas palabras en la transcripción y las eliminas para cortar ese tramo. Cap agregó el mismo tipo de corte a su editor web en julio de 2026.
+- **Un teleprompter** para leer un guion mientras grabas. El de OpenScreen está disponible en Windows y macOS.
+- **Edición local.** El modo Studio de Cap mantiene el proyecto en tu equipo hasta que eliges exportar un enlace para compartir. OpenScreen no tiene cuenta, ni servidor propio, ni analíticas. Las [preguntas frecuentes](/docs/faq/#does-openscreen-work-offline) enumeran las pocas conexiones que sigue haciendo.
+- **Una interfaz de línea de comandos para scripts y agentes de código.** Las dos imprimen JSON para que lo lean máquinas. Consulta la [referencia de la CLI de OpenScreen](/docs/cli/).
+
+## En qué se diferencia OpenScreen {#where-openscreen-differs}
+
+Si estás eligiendo entre las dos, revisa primero la licencia. Las demás diferencias se derivan del enfoque de cada proyecto.
+
+### Licencia y costo {#license-and-cost}
+
+- **Gratis para uso comercial.** Las compilaciones oficiales de OpenScreen no cuestan nada para ningún propósito. Las compilaciones oficiales de Cap necesitan una licencia comercial para cualquier uso ligado a actividades que generan ingresos, y Cap considera comerciales los videos para comunicación entre colegas. Esa licencia cuesta 29 USD al año o 58 USD de por vida, o viene con Cap Pro (a septiembre de 2026). Las copias que compilas tú mismo desde el código de Cap están exentas.
+- **MIT en lugar de AGPLv3.** OpenScreen se publica bajo licencia MIT, en [GitHub](https://github.com/getopenscreen/openscreen). El código de Cap está bajo AGPLv3, salvo sus crates de cámara y captura, que son MIT. La AGPL importa a las organizaciones que mantienen el código AGPL fuera de sus productos.
+
+### Una app de escritorio, no un servicio {#a-desktop-app-not-a-service}
+
+- **Sin inicio de sesión.** OpenScreen graba y edita en tu equipo y te entrega un archivo. No hay enlace alojado, ni cuenta, ni plan. Cap combina su modo Studio local con el modo Instant, que sube mientras grabas, y sus enlaces para compartir exigen iniciar sesión.
+- **Edición por chat con tu propia clave.** Es opcional: conecta Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax o cualquier endpoint compatible con OpenAI, y describe cortes, zooms, cambios de velocidad o anotaciones en lenguaje natural. Está desactivada hasta que conectas un proveedor, y cada cambio se aplica como una edición común que se puede deshacer. Ese mismo proveedor traduce los subtítulos a 15 idiomas. Las funciones de IA alojadas de Cap, como títulos, resúmenes y capítulos, vienen con Cap Pro. Consulta [Edición con IA](/docs/ai-editing/).
+
+### Edición y exportación {#editing-and-export}
+
+- **Elección de códec.** Las exportaciones MP4 son en H.264 o H.265. Las opciones de exportación de Cap enumeran resolución, fps y preajustes de calidad, pero ningún ajuste de códec. Consulta [Exportación](/docs/export/).
+- **Un rango de velocidad más amplio.** Las regiones de velocidad de OpenScreen van de 0,1x a 100x. La documentación del modo Studio de Cap enumera velocidades de segmento de 0,25x a 8x.
+- **Velocidad de exportación.** Las dos apps están en el [banco de pruebas público de exportación (en inglés)](/blog/2026/09/09/an-export-benchmark-hard-to-fake/). Al momento de escribir esto, la entrada de OpenScreen se ubica por delante de Cap 0.6.0. Los resultados varían entre equipos, así que consulta ahí la clasificación en vivo.
+
+### Plataformas {#platforms}
+
+- **Una compilación de Windows sin etiqueta beta.** OpenScreen ofrece un instalador de Windows y una ficha en la Microsoft Store. La página de descargas de Cap enumera su enlace de Windows como "Windows (Beta)" entre sus otras opciones de descarga.
+- **Los mismos paquetes de Linux, más Nix.** Las dos ofrecen paquetes .deb, AppImage, RPM y Arch. Cap agregó sus paquetes por distribución en la versión 0.6.0, con fecha del 31 de agosto de 2026. OpenScreen también tiene un flake de Nix. Consulta las páginas de [Linux](/screen-recorder-linux/), [Windows](/screen-recorder-windows/) y [macOS](/screen-recorder-mac/).
+
+## Cuándo Cap es la mejor opción {#when-cap-is-the-better-choice}
+
+- **Compartes por enlace.** El modo Instant de Cap sube mientras grabas, y los espectadores de un enlace público lo ven en el navegador sin cuenta. Los espectadores con sesión iniciada pueden dejar comentarios, y Cap Pro agrega analíticas de espectadores, protección con contraseña y un dominio propio. OpenScreen te da un archivo para que lo subas donde quieras compartirlo.
+- **Tu organización necesita SSO o cumplimiento.** Cap ofrece espacios de trabajo en equipo, un complemento SAML SSO, certificación SOC 2 tipo II e ISO 27001, y cumplimiento HIPAA con BAA firmado.
+- **Entregas archivos de subtítulos.** Cap guarda los subtítulos como SRT o WebVTT. OpenScreen incrusta los subtítulos en el video.
+
+## Primeros pasos {#getting-started}
+
+1. Descarga OpenScreen desde la [página de descargas](/download/). En Windows, la Microsoft Store es la vía recomendada.
+2. Sigue la [instalación](/docs/installation/). En macOS, concede los permisos de Grabación de pantalla y Accesibilidad antes de la primera toma.
+3. Haz una primera grabación con el [inicio rápido](/docs/quick-start/) y luego ejecuta **Mejora automática → Zooms automáticos** sobre ella.
+4. Para reutilizar videos hechos en Cap, expórtalos primero como MP4. La [biblioteca multimedia](/docs/media-library/) importa archivos MP4, MOV, MKV y otros formatos de video a un proyecto.
+
+¿Comparas también otras herramientas? Consulta la [alternativa a Screen Studio](/alternatives/screen-studio/), [OpenScreen frente a OBS Studio](/compare/openscreen-vs-obs/), la [alternativa a Camtasia](/alternatives/camtasia/) y la [alternativa a Loom](/alternatives/loom/), o vuelve a la [página de inicio de OpenScreen](/).
+
+## Fuentes {#sources}
+
+Datos de Cap, verificados en septiembre de 2026:
+
+- Planes, precios, límites de enlaces para compartir, complementos de SSO y BAA, funciones de Cap Pro, y el límite de uso personal de la versión gratuita: [cap.so/pricing](https://cap.so/pricing)
+- Qué cuenta como uso comercial, y la exención para copias autocompiladas: [cap.so/docs/commercial-license](https://cap.so/docs/commercial-license)
+- Reparto de licencia entre AGPLv3 y MIT: [github.com/CapSoftware/Cap/blob/main/LICENSE](https://github.com/CapSoftware/Cap/blob/main/LICENSE)
+- Plataformas, el enlace "Windows (Beta)", paquetes de Linux y la CLI: [cap.so/download](https://cap.so/download)
+- Windows de 64 bits y el paquete de Linux en su guía de instalación: [cap.so/docs/installation](https://cap.so/docs/installation)
+- Objetivos de grabación, zooms, clips, velocidades, máscaras, texto, subtítulos y su exportación SRT o WebVTT, música, desenfoque de cámara, formatos de exportación, e inicio de sesión para enlaces para compartir: [cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Modo Instant, páginas para compartir e inicio de sesión para comentarios: [cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
+- Historial de versiones, versión 0.6.0 (paquetes de Linux, eliminación de fondo de cámara en macOS, pistas de imagen), el teleprompter de la 0.5.7, corte por transcripción en el editor web, SOC 2 tipo II, ISO 27001 y HIPAA: [cap.so/changelog](https://cap.so/changelog)
+- Inicio de sesión para el modo Instant, funciones de IA alojadas y traducción de subtítulos, sin marca de agua, salida JSON de la CLI: [cap.so/llms-full.txt](https://cap.so/llms-full.txt)
+
+Los datos de OpenScreen describen la versión 1.11.0 y enlazan con su documentación arriba.
+
+Cap es una marca comercial de su propietario. OpenScreen es un proyecto independiente y no está afiliado a Cap ni cuenta con su respaldo.

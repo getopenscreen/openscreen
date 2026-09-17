@@ -65,7 +65,7 @@ HUD 的全部控件请参阅[录制](../recording.md)。
 
 然后逐一检查。点击某个缩放，可以设置它的级别（1.25× 到 5×）、对焦模式（自动会跟随光标，手动则固定在某一点）以及可选的 3D 旋转。按 `Z` 可以手动添加缩放，按 `Ctrl/Cmd+D` 可以删除不需要的缩放。
 
-关于缩放的放置方式，详见[自动缩放（英文）](/features/auto-zoom/)。
+关于缩放的放置方式，详见[自动缩放](/features/auto-zoom/)。
 
 ## 5. 通过转录文本剪切，并加速空白时间 {#5-cut-from-the-transcript-and-speed-up-dead-time}
 
@@ -98,7 +98,7 @@ HUD 的全部控件请参阅[录制](../recording.md)。
 
 Whisper 会检测所说的语言，你也可以在媒体工作区中用**重新生成为**强制指定 100 种语言之一。如果要以另一种语言发布，请用**翻译**译成 15 种目标语言之一，并在导出前于**显示**下选择该语言。翻译通过你自己的 LLM 提供方进行，因此需要密钥。
 
-字幕会烧录进视频。OpenScreen 不会写出 `.srt` 或 `.vtt` 文件，所以播放器无法关闭字幕。详情请参阅[字幕与转录](../captions.md)，以及[字幕功能的工作原理（英文）](/features/captions/)。
+字幕会烧录进视频。OpenScreen 不会写出 `.srt` 或 `.vtt` 文件，所以播放器无法关闭字幕。详情请参阅[字幕与转录](../captions.md)，以及[字幕功能的工作原理](/features/captions/)。
 
 ## 8. 导出 {#8-export}
 
@@ -119,7 +119,7 @@ OpenScreen 不托管你的视频，不创建分享链接，也不统计观看次
 
 ## 什么情况下不适合使用 OpenScreen {#when-openscreen-is-not-the-right-tool}
 
-- **你想要一个带观看数据分析或评论功能的托管链接**。这种情况更适合使用托管式录屏工具。例如 Loom 会把每段录制作为 loom.com 上的链接分享，其价格页面列出所有套餐都包含观看者洞察和视频评论（截至 2026 年 9 月）。OpenScreen 确实适用的那种较窄的场景，请参阅 [OpenScreen 作为 Loom 替代方案（英文）](/alternatives/loom/)。
+- **你想要一个带观看数据分析或评论功能的托管链接**。这种情况更适合使用托管式录屏工具。例如 Loom 会把每段录制作为 loom.com 上的链接分享，其价格页面列出所有套餐都包含观看者洞察和视频评论（截至 2026 年 9 月）。OpenScreen 确实适用的那种较窄的场景，请参阅 [OpenScreen 作为 Loom 替代方案](/alternatives/loom/)。
 - **你想要观众可以逐步点击的交互式演示**。OpenScreen 只能导出视频和 GIF。
 - **你的视频播放器需要单独的字幕文件**。OpenScreen 只能烧录字幕。
 - **你在手机或平板上录制**。OpenScreen 是一款桌面应用，支持 Windows、macOS 13 或更高版本，以及 Linux。

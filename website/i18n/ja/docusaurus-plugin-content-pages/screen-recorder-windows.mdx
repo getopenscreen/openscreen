@@ -1,0 +1,92 @@
+---
+title: Windows 向け無料・オープンソース画面録画ソフト
+description: OpenScreen は Windows 10・11 向けの無料・オープンソースの画面録画ソフトです。ネイティブキャプチャ、システム音声、自動ズーム、透かしなしのエクスポートに対応しています。
+keywords:
+  - 画面録画 Windows
+  - 画面録画 無料 Windows11 透かしなし
+  - 画面録画 オープンソース Windows
+  - Screen Studio 代替 Windows
+---
+
+# Windows 向け無料・オープンソース画面録画ソフト
+
+OpenScreen は、Windows 10・11 向けの無料の MIT ライセンスの画面録画ソフトで、テイクを完成した動画に編集する機能も備えています。Windows では Windows Graphics Capture で録画し、追加のドライバーなしでシステム音声を取り込み、レコーダーがクラッシュしても再生可能なファイルを書き込み、透かしなし・アカウント不要で MP4 または GIF を出力します。配信する場合は、OBS Studio のほうが今も適しています。
+
+このページは OpenScreen プロジェクトが公開しています。ほかのツールに関する情報はそれぞれのサイトとドキュメントによるもので、2026 年 9 月に確認しました。情報源は末尾に一覧しています。
+
+## 概要 {#at-a-glance}
+
+| | |
+| --- | --- |
+| 価格 | 商用利用を含めて無料。アカウント不要 |
+| 対応 Windows バージョン | Windows 10（1903 以降）と 11。ネイティブキャプチャにはビルド 19041（バージョン 2004）以降が必要 |
+| アーキテクチャ | x64 のみ。ARM64 パッケージなし |
+| インストール | Microsoft Store（Microsoft が署名）、または署名なしの `.exe` インストーラー |
+| 画面キャプチャ | Windows Graphics Capture。ディスプレイまたはウィンドウ 1 つ、60 fps を目標に最大 3840×2160 |
+| 録画ファイル | 1 秒単位のフラグメント化 MP4。Media Foundation 経由の H.264 |
+| システム音声 | WASAPI ループバック。サードパーティ製ドライバー不要 |
+| ウェブカメラ | Media Foundation、DirectShow へのフォールバックあり。独立したファイルとして保存 |
+| 録画コントロール | ビルド 19041 以降、キャプチャから除外 |
+| エクスポート | MP4（H.264 または H.265）または GIF。透かしなし |
+| エクスポートエンコーダー | AMD AMF、NVIDIA NVENC、Intel Quick Sync、Media Foundation、その後ソフトウェア |
+| 字幕 | 自分のマシン上の Whisper、Vulkan または CPU。動画に焼き込み |
+| アップデート | `.exe` ビルドに組み込み。Store 版は自身でアップデート |
+
+## OpenScreen が Windows でできること {#what-openscreen-does-on-windows}
+
+この種のレコーダーの代名詞となった Screen Studio は macOS でしか動作せず、その FAQ は Windows 版について近い将来の計画はないとしています（2026 年 9 月時点）。OpenScreen は Windows でも動作し、システム自体のキャプチャ・音声・エンコーディングの API を通じて録画します。Screen Studio を探してこのページに来た方は、[Screen Studio の代替](/alternatives/screen-studio/)のページで両者の比較をご覧ください。
+
+### 録画 {#recording}
+
+- **ネイティブキャプチャ。** Windows Graphics Capture を基盤としたヘルパーが、Windows 10 ビルド 19041 以降でディスプレイまたはウィンドウ 1 つを録画します。60 fps を目標に、最大 3840×2160 まで対応します。フレームのクロップはあとからエディターで行います。[録画](/docs/recording/)を参照してください。
+- **利用可能な環境でのハードウェア H.264。** ヘルパーは Media Foundation 経由でエンコードします。バージョン 1.11 以降、ハードウェアエンコーダーがインストールされ動作している場合はそれを使います。
+- **クラッシュに耐えるテイク。** 録画は 1 秒単位のフラグメントに分けて、フラグメント化された MP4 として書き込まれます。キャプチャプロセスが停止しても、最後の完全なフラグメントまではファイルが再生可能なままです。そのプロセスが正常に停止できずに終了した場合でも、OpenScreen は再生可能なファイルを保持し、ほかのテイクと同じように開きます。
+- **ドライバー不要のシステム音声。** WASAPI ループバックが、仮想オーディオデバイスをインストールすることなく PC が再生する音を取り込みます。マイクと 1 つのトラックにミックスされます。
+- **Media Foundation 経由のウェブカメラ。** NVIDIA Broadcast など Media Foundation が認識できないカメラは、DirectShow へのフォールバックで取り込まれます。ウェブカメラは独立したファイルとして保存され、エディターで合成されます。
+- **映像に映り込まないコントロール。** Windows 10 ビルド 19041 以降では、フローティングの録画コントロールとノートウィンドウはキャプチャから除外されるため、録画中も画面に表示しておけます。ノートウィンドウにはテレプロンプターモードもあります。
+- **後から変更できるカーソル。** 既定のモードでは、実際のカーソルの形状とクリックがピクセルではなくデータとして記録されます。テイク後にカーソルのサイズ変更、スムージング、スタイル変更ができ、自動ズームはその動きから配置されます。
+
+### 編集とエクスポート {#editing-and-export}
+
+- **macOS・Linux と同じエディター。** マルチクリップのタイムライン、トリム、速度変更、注釈、背景、ウェブカメラレイアウト、そして記録したカーソルから配置される**自動強化 → 自動ズーム**。[自動ズーム](/features/auto-zoom/)と[編集とタイムライン](/docs/editing-timeline/)を参照してください。
+- **Direct3D 11 でのレンダリング。** ライブプレビューと MP4 エクスポートは 1 つのネイティブコンポジターを共有しており、Windows では Direct3D 11 で動作します。
+- **ハードウェアのエクスポートエンコーダー。** MP4 のエクスポートは、AMD AMF、NVIDIA NVENC、Intel Quick Sync、Media Foundation の順に試し、それでも使えない場合はソフトウェアエンコーダーを使います。H.264 か H.265、720p・1080p・Source 画質、24・30・60 fps を選べます。GIF エクスポートも利用でき、どちらの形式にも透かしはありません。[エクスポート](/docs/export/)を参照してください。エクスポート速度については、[エクスポートベンチマークの記事（英語）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)とその注意点を参照してください。
+- **使える GPU がない場合のエクスポート。** 対応する GPU がない PC では、OpenScreen は WARP を通じて CPU 上でレンダリングし、ソフトウェアデコードを行います。エクスポートダイアログは開始前にその旨を表示し、エクスポートには時間がかかります。
+- **自分のマシンでの字幕。** whisper.cpp は Vulkan 上で動作し、CPU へのフォールバックもあります。約 264 MB の Whisper Small モデル 1 つを一度だけダウンロードして使い、字幕は動画に焼き込まれます。[字幕](/features/captions/)を参照してください。
+- **コマンドラインインターフェース。** [CLI](/docs/cli/) は、プロジェクトの録画・エクスポート・字幕付け・パックを JSON 出力付きで行います。インストーラー版では、セットアップ時に選んだフォルダー内の `Openscreen.exe` から実行します。
+
+### インストールとアップデート {#installing-and-updating}
+
+- **推奨ルートの Microsoft Store。** Microsoft は認証時にパッケージに署名するため、警告なしにインストールでき、Store が最新の状態に保ちます。ターミナルから：`winget install --source msstore OpenScreen`。
+- **スタンドアロンの `.exe` インストーラー。** Store が使えない環境で利用します。約 231 MB でコード署名されていないため、SmartScreen が「Windows によって PC が保護されました」と表示します。**詳細情報**を選び、続けて**実行**を選んでください。
+- **`.exe` ビルドのアップデート。** アプリは 24 時間ごとに新しいバージョンを確認し、既定では通知のみを行います。ダウンロードのみ、またはダウンロードしてインストールするよう設定することもできます。インストールは常に再起動のプロンプトを経由し、録画中にアップデートが提示されることはありません。
+- **通信の内容。** OpenScreen にはアカウントも、独自サーバーも、分析機能もありません。それでも、起動時のフォント、一度だけの Whisper モデルのダウンロード、アップデートの確認、接続した場合の AI プロバイダーとの通信など、いくつかの場面で通信を行います。
+
+## OpenScreen が適さない場合 {#when-openscreen-is-not-the-right-tool}
+
+- **PC が Windows on ARM の場合。** OpenScreen は x64 ビルドのみを公開しています。OBS Studio は Windows ARM64 の zip を公開しています（2026 年 9 月時点）。
+- **Windows 10 がバージョン 2004 より古い場合。** OpenScreen は Windows 10 のバージョン 1903 以降に対応していますが、ネイティブレコーダーにはビルド 19041 が必要です。それより古いビルドでは、上記のネイティブキャプチャなしで、ブラウザーキャプチャによるフォールバックでのみ録画します。
+- **配信したい場合。** OpenScreen は録画と編集を行いますが、配信はしません。同じく無料でオープンソースの OBS Studio は、録画とライブ配信の両方を行えます。
+- **録画をリンクで共有したい場合。** OpenScreen が出力するのはファイルなので、共有したい場所に自分でアップロードします。Cap は録画をブラウザーで視聴できる Web ページとして公開でき、Loom はリンクをコピーして録画を共有でき、アクセス設定も指定できます。[OpenScreen と Cap の比較](/compare/openscreen-vs-cap/)と [Loom の代替](/alternatives/loom/)を参照してください。
+
+## はじめかた {#getting-started}
+
+1. Microsoft Store から OpenScreen をインストールするか、[ダウンロードページ](/download/)から `.exe` を入手します。
+2. [インストール](/docs/installation/#windows)の Windows 向けの手順に従い、同じページでシステム要件も確認してください。
+3. [クイックスタート](/docs/quick-start/)で最初の録画を行い、**自動強化 → 自動ズーム**を実行します。
+
+ほかのシステムをお使いですか。OpenScreen の [macOS](/screen-recorder-mac/) 版と [Linux](/screen-recorder-linux/) 版もあります。ツールを比較したいですか。[Screen Studio の代替](/alternatives/screen-studio/)、[OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)、[Camtasia の代替](/alternatives/camtasia/)を参照してください。インストール前によく寄せられる質問には、[よくある質問](/docs/faq/)で回答しています。または [OpenScreen のホームページ](/)に戻ってください。
+
+## 情報源 {#sources}
+
+ほかのツールに関する情報、2026 年 9 月確認：
+
+- Screen Studio は macOS のみで動作し、Windows 版の近い将来の計画はない（FAQ より）：[screen.studio](https://screen.studio/)
+- OBS Studio、無料・オープンソースの録画とライブ配信：[obsproject.com](https://obsproject.com/)
+- OBS Studio の Windows ARM64 zip、バージョン 32.2.2：[github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2)（2026 年 8 月 14 日付）
+- ブラウザーで視聴する Cap の共有ページ：[cap.so](https://cap.so/)
+- Loom のリンク共有とアクセス設定：[support.atlassian.com/loom/docs/share-your-recording](https://support.atlassian.com/loom/docs/share-your-recording/)
+
+OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+
+Screen Studio、OBS Studio、Cap、Loom、Windows、およびこのページに登場するその他の製品名は、それぞれの所有者の商標です。OpenScreen は独立したプロジェクトであり、これらのいずれとも提携または承認された関係にはありません。

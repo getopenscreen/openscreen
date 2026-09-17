@@ -197,7 +197,7 @@
     "message": "ScreenCast ポータル経由の PipeWire キャプチャ。PipeWire と xdg-desktop-portal が必要です。"
   },
   "home.install.note": {
-    "message": "Windows には {exe} インストーラーもあります。コード署名されていないため、実行前に SmartScreen が警告を表示します。「詳細情報」を選び、「実行」をクリックしてください。Linux 向けには {rpm}、{pacman}、AppImage、Nix flake もあります。すべての配布ファイルは{releasesPage}にあり、詳しい手順は{installation}のページにあります。各 OS で何を録画できるかは、{windows}・{mac}・{linux} の各ページ（英語）で説明しています。",
+    "message": "Windows には {exe} インストーラーもあります。コード署名されていないため、実行前に SmartScreen が警告を表示します。「詳細情報」を選び、「実行」をクリックしてください。Linux 向けには {rpm}、{pacman}、AppImage、Nix flake もあります。すべての配布ファイルは{releasesPage}にあり、詳しい手順は{installation}のページにあります。各 OS で何を録画できるかは、{windows}・{mac}・{linux} の各ページで説明しています。",
     "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
@@ -276,7 +276,7 @@
     "message": "字幕と文字起こしのドキュメント"
   },
   "showcase.captions.link.feature": {
-    "message": "ローカル字幕の比較（英語）",
+    "message": "ローカル字幕の比較",
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
@@ -299,7 +299,7 @@
     "message": "AI 編集のドキュメント"
   },
   "showcase.agent.link.feature": {
-    "message": "自動ズームの仕組み（英語）",
+    "message": "自動ズームの仕組み",
     "description": "Link label under the panel."
   },
   "showcase.agent.label": {
@@ -364,13 +364,13 @@
     "message": "ダウンロード"
   },
   "footer.product.autoZoom": {
-    "message": "自動ズーム（英語）"
+    "message": "自動ズーム"
   },
   "footer.product.captions": {
-    "message": "ローカル字幕（英語）"
+    "message": "ローカル字幕"
   },
   "footer.platforms.title": {
-    "message": "プラットフォーム（英語）",
+    "message": "プラットフォーム",
     "description": "Footer column title."
   },
   "footer.platforms.windows": {
@@ -383,7 +383,7 @@
     "message": "Linux"
   },
   "footer.compare.title": {
-    "message": "比較（英語）",
+    "message": "比較",
     "description": "Footer column title."
   },
   "footer.compare.screenStudio": {

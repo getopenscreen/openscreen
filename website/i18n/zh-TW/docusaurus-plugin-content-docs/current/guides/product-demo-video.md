@@ -65,7 +65,7 @@ OpenScreen 以 60 fps 為擷取目標，在 Windows 與 macOS 上最高可達 38
 
 接著逐一檢查。點擊某個縮放，即可設定它的倍率（1.25× 到 5×）、對焦模式（自動會跟隨游標，手動則固定在某一點），以及選用的 3D 旋轉。按 `Z` 可以手動加入縮放，按 `Ctrl/Cmd+D` 可以刪除不要的縮放。
 
-縮放放置方式的更多說明：[自動縮放（英文）](/features/auto-zoom/)。
+縮放放置方式的更多說明：[自動縮放](/features/auto-zoom/)。
 
 ## 5. 從逐字稿剪輯，並加速空檔 {#5-cut-from-the-transcript-and-speed-up-dead-time}
 
@@ -98,7 +98,7 @@ OpenScreen 以 60 fps 為擷取目標，在 Windows 與 macOS 上最高可達 38
 
 Whisper 會偵測所說的語言，你也可以在媒體畫面中用**以此語言重新產生**強制指定 100 種語言之一。若要以其他語言發布，請**翻譯**成 15 種目標語言之一，並在匯出前於**顯示**底下選擇該語言。翻譯會透過你自己的 LLM 提供者進行，所以需要金鑰。
 
-字幕會燒錄進影片。OpenScreen 不會寫出 `.srt` 或 `.vtt` 檔，所以播放器無法關閉字幕。詳細說明：[字幕與逐字稿](../captions.md)，以及[字幕功能的運作方式（英文）](/features/captions/)。
+字幕會燒錄進影片。OpenScreen 不會寫出 `.srt` 或 `.vtt` 檔，所以播放器無法關閉字幕。詳細說明：[字幕與逐字稿](../captions.md)，以及[字幕功能的運作方式](/features/captions/)。
 
 ## 8. 匯出 {#8-export}
 
@@ -119,7 +119,7 @@ OpenScreen 不會代管你的影片、建立分享連結，也不會計算觀看
 
 ## 什麼情況下不適合使用 OpenScreen {#when-openscreen-is-not-the-right-tool}
 
-- **你想要附帶觀看者分析或留言功能的託管連結。** 託管型錄影工具會更適合。例如 Loom 會把每段錄影以 loom.com 上的連結分享，而它的價格頁面列出每個方案都有觀看者洞察與影片留言功能（截至 2026 年 9 月）。至於 OpenScreen 確實適用的較有限情境，請見[以 OpenScreen 替代 Loom（英文）](/alternatives/loom/)。
+- **你想要附帶觀看者分析或留言功能的託管連結。** 託管型錄影工具會更適合。例如 Loom 會把每段錄影以 loom.com 上的連結分享，而它的價格頁面列出每個方案都有觀看者洞察與影片留言功能（截至 2026 年 9 月）。至於 OpenScreen 確實適用的較有限情境，請見[以 OpenScreen 替代 Loom](/alternatives/loom/)。
 - **你想要讓觀看者自行點擊操作的互動式示範。** OpenScreen 只能匯出影片與 GIF。
 - **你的影片播放器需要獨立的字幕檔。** OpenScreen 只會將字幕燒錄進影片。
 - **你在手機或平板上錄影。** OpenScreen 是桌面應用程式，支援 Windows、macOS 13 或更新版本，以及 Linux。

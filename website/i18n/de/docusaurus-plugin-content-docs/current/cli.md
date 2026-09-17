@@ -135,7 +135,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--quality <medium\|good\|source>` | Ausgabegröße: `medium` ist 720p, `good` ist 1080p, `source` richtet sich nach dem kleinsten Clip nach dem Zuschnitt und skaliert daher nie hoch. Auch ein GIF geht von dieser Größe aus |
 | `--gif-fps <15\|20\|25\|30>` | Bildrate des GIF |
 | `--gif-size <medium\|large\|original>` | Höhenbegrenzung des GIF, angewendet auf diese Größe: 720, 1080 oder keine |
-| `--auto-zoom` | Vor dem Rendern Zooms an den Stellen hinzufügen, an denen der aufgezeichnete Zeiger innehielt, mit derselben Engine wie die [automatischen Zooms (auf Englisch)](/features/auto-zoom/) des Editors. Vorhandene Zooms bleiben erhalten, und neue überlappen sie nie |
+| `--auto-zoom` | Vor dem Rendern Zooms an den Stellen hinzufügen, an denen der aufgezeichnete Zeiger innehielt, mit derselben Engine wie die [automatischen Zooms](/features/auto-zoom/) des Editors. Vorhandene Zooms bleiben erhalten, und neue überlappen sie nie |
 | `--audio <file>` | Eine Voice-over-Datei (mp3, wav oder m4a) ins MP4 mischen. Nur MP4 |
 | `--audio-mode <mix\|replace>` | `mix` (Standard) behält den Ton der Aufnahme mit 40 % Pegel unter dem Voice-over; `replace` entfernt ihn |
 | `--audio-offset <seconds>` | Verzögerung, bevor das Voice-over beginnt (Standard 0) |

@@ -1,0 +1,119 @@
+---
+title: Grabar pantalla con subtítulos locales de Whisper
+description: "OpenScreen es un grabador de pantalla gratis con subtítulos: Whisper transcribe en tu equipo y tú das estilo, traduces e incrustas los subtítulos."
+keywords:
+  - grabador de pantalla con subtítulos
+  - subtítulos automáticos sin conexión grabador de pantalla
+  - grabador de pantalla con whisper
+  - editar video desde la transcripción gratis
+  - subtítulos automáticos al grabar pantalla
+---
+
+# Un grabador de pantalla con subtítulos hechos en tu equipo
+
+OpenScreen es un grabador de pantalla con subtítulos para Windows, macOS y Linux, gratis y con licencia MIT. Transcribe tu grabación en tu propio equipo con Whisper, después de una descarga única del modelo de unos 264 MB, e incrusta subtítulos con estilo en el video exportado. Si necesitas archivos de subtítulos SRT o VTT separados para una plataforma de cursos o un requisito de accesibilidad, Cap o Camtasia son mejor opción.
+
+Esta página la publica el proyecto OpenScreen. Los datos sobre Cap, Camtasia y Screen Studio vienen de cap.so, techsmith.com y screen.studio, y se verificaron en septiembre de 2026. Las fuentes están al final.
+
+## De un vistazo {#at-a-glance}
+
+| | |
+| --- | --- |
+| Motor | whisper.cpp, ejecutado en tu equipo |
+| Modelo | Un modelo Whisper Small de unos 264 MB |
+| Descarga del modelo | Una vez, desde huggingface.co, verificada por SHA-256. No incluida en el instalador |
+| Hardware | Metal en Apple Silicon. CPU en Mac con Intel. Vulkan con respaldo en CPU en Windows y Linux |
+| Idiomas | Detectados automáticamente, o elegidos a mano entre 100 idiomas |
+| Estilo | Fuente, tamaño, negrita, color de texto, fondo, posición, y de 1 a 12 palabras por línea |
+| Salida | Incrustados en el video exportado |
+| Edición de la transcripción | Elimina palabras para cortarlas del video. Los silencios se marcan y también se pueden cortar |
+| Traducción | 15 idiomas, mediante un proveedor de IA que conectas con tu propia clave |
+| Línea de comandos | El comando `captions` agrega subtítulos a un proyecto |
+| Precio | Gratis, incluido el uso comercial. Sin cuenta |
+
+## Cómo funcionan los subtítulos en OpenScreen {#how-captions-work-in-openscreen}
+
+### Transcripción en tu equipo {#transcription-on-your-computer}
+
+Haz clic en **Transcribir ahora** en el panel **Transcripción** del editor, o en **Regenerar** en la tarjeta de un recurso de la vista **Multimedia**. La primera ejecución obtiene el modelo desde huggingface.co: un modelo Whisper Small de unos 264 MB, descargado una vez. OpenScreen verifica el archivo contra un hash SHA-256 fijo antes de usarlo. Después de eso, la transcripción no necesita conexión a internet.
+
+El trabajo se ejecuta en la GPU donde OpenScreen admite una: Metal en Apple Silicon y Vulkan en Windows y Linux. Windows y Linux recurren a la CPU cuando Vulkan no está disponible. Los Mac con Intel usan la CPU.
+
+Whisper detecta el idioma hablado por su cuenta. Si se equivoca, elige uno de los 100 idiomas en **Regenerar en**, en la vista **Multimedia**, y vuelve a ejecutarlo. Consulta [Biblioteca multimedia](/docs/media-library/).
+
+### Subtítulos generados a partir de la transcripción {#captions-drawn-from-the-transcript}
+
+Los subtítulos son una vista en vivo de la transcripción, no una copia de ella. Corta palabras de la transcripción, cambia el estilo o mueve un clip, y los subtítulos se actualizan en el siguiente fotograma, sin paso de regeneración.
+
+- **Texto.** Fuente, tamaño, negrita y color.
+- **Fondo.** Una placa detrás del texto, con su propio color y opacidad, o ninguna.
+- **Posición.** Arriba o abajo, izquierda, centro o derecha, con una distancia desde el borde.
+- **Longitud de línea.** Un mínimo y un máximo de 1 a 12 palabras por línea.
+
+La vista previa y la exportación usan el mismo diseño, así que los subtítulos que ves son los que se incrustan en el video. **Mostrar subtítulos** los desactiva para una exportación sin ellos. Referencia completa en [Subtítulos y transcripción](/docs/captions/).
+
+### Corte eliminando palabras {#cutting-by-deleting-words}
+
+El panel **Transcripción** muestra las palabras de cada clip de la línea de tiempo. Selecciona una palabra o un pasaje y presiona Suprimir: ese tramo se corta de la reproducción y de la exportación, como un recorte en la línea de tiempo. Las palabras cortadas aparecen tachadas, y puedes restaurarlas. Los silencios se marcan en el texto y se pueden cortar o restaurar de la misma forma.
+
+Whisper reporta los tiempos de las palabras un poco tarde. OpenScreen desplaza hacia atrás cada límite de palabra y lo ancla en el propio audio, así que un corte empieza donde realmente empieza la palabra hablada y no una sílaba después. Consulta [Edición de la transcripción](/docs/captions/#transcript-editing).
+
+### Traducción con tu propia clave {#translation-with-your-own-key}
+
+La traducción cubre 15 idiomas: inglés, francés, español, alemán, italiano, portugués, neerlandés, polaco, turco, ruso, árabe, hindi, japonés, coreano y chino. Pasa por el proveedor de IA que conectas para la edición por chat, con tu propia clave. Hasta que conectas un proveedor, no envía nada. La traducción se guarda junto a la transcripción, así que las palabras y tiempos originales quedan como estaban, y puedes volver atrás en cualquier momento. Consulta [Traducción](/docs/captions/#translation) y [Edición con IA](/docs/ai-editing/).
+
+### Desde la línea de comandos {#from-the-command-line}
+
+El comando `captions` de la [CLI](/docs/cli/) transcribe un proyecto con el mismo modelo Whisper local y le agrega subtítulos. `--min-words` y `--max-words` definen las palabras por subtítulo, y `export` los incrusta en el video.
+
+### Qué pasa por la red {#what-goes-over-the-network}
+
+El audio se queda en tu equipo. Aparte de la descarga del modelo, solo la traducción llega a la red: envía el texto de la transcripción al proveedor que elegiste. Para la app en general: OpenScreen no tiene cuenta, ni servidor propio, ni analíticas. Las [preguntas frecuentes](/docs/faq/#does-openscreen-work-offline) enumeran las pocas conexiones que sigue haciendo.
+
+## Otros grabadores con subtítulos locales {#other-recorders-with-local-captions}
+
+La transcripción en el propio dispositivo no es exclusiva de OpenScreen. A septiembre de 2026:
+
+- **Screen Studio** transcribe en el Mac con Whisper Base, Small o Medium, o con Apple Speech Recognition en macOS 26 o posterior. Puede exportar la transcripción como archivo aparte.
+- **Cap** transcribe en local en su modo Studio, en beta, con elección de modelo. Puede incrustar los subtítulos en el video o guardarlos como archivos SRT o WebVTT. Cap enumera la traducción de subtítulos entre las funciones de Cap Pro.
+- **Camtasia** transcribe en el dispositivo con Whisper. Incluye subtítulos dinámicos y cerrados en su plan Essentials, y edición de video basada en texto en sus planes de pago. La versión 2026.1.0 agregó importación y exportación básica de subtítulos VTT.
+
+## En qué se diferencia OpenScreen {#where-openscreen-differs}
+
+- **Gratis, incluido el uso comercial.** Sin plan y sin cuenta. La página de precios de Cap dice que su versión gratuita es solo para uso personal. Screen Studio necesita un plan activo para exportar archivos de video. El editor de escritorio de Camtasia pone marca de agua a las exportaciones hasta que actualizas a un plan de pago Essentials, Create o Pro, o a una licencia empresarial. Los tres a septiembre de 2026.
+- **Windows, macOS y Linux.** OpenScreen funciona en Windows 10 (1903 o posterior) y 11, x64. macOS 13 o posterior, Apple Silicon e Intel. Linux, x64. A septiembre de 2026, Screen Studio solo funciona en macOS, el editor de escritorio de Camtasia funciona en Windows y macOS, y Cap ofrece apps para los tres. Consulta [Linux](/screen-recorder-linux/), [Windows](/screen-recorder-windows/) y [macOS](/screen-recorder-mac/).
+- **Edición de la transcripción sin suscripción.** Cortar eliminando palabras es parte de la app gratuita. Camtasia enumera la edición basada en texto en sus planes de pago (a septiembre de 2026). Cap agregó el corte por transcripción a su editor web en julio de 2026. Su guía del modo Studio de escritorio cubre corregir el texto y el tiempo de los subtítulos, y no describe cortar video desde la transcripción.
+- **Traducción mediante un proveedor que tú eliges.** Cualquier proveedor que admita OpenScreen, con tu propia clave, y sin ningún plan que comprarle a OpenScreen. La traducción en sí no es exclusiva: Cap Pro también enumera traducción de subtítulos (a septiembre de 2026).
+
+## Cuándo OpenScreen no es la herramienta adecuada {#when-openscreen-is-not-the-right-tool}
+
+- **Debes entregar un archivo de subtítulos.** Si una plataforma de cursos o un requisito de accesibilidad piden subtítulos que los espectadores puedan desactivar, necesitas un archivo aparte. Cap guarda archivos SRT y WebVTT, y Camtasia importa y exporta VTT. OpenScreen incrusta los subtítulos en el video.
+
+## Primeros pasos {#getting-started}
+
+1. Descarga OpenScreen desde la [página de descargas](/download/) y sigue la [instalación](/docs/installation/).
+2. Graba con el micrófono activado, siguiendo el [inicio rápido](/docs/quick-start/).
+3. En el editor, abre el panel **Transcripción** y haz clic en **Transcribir ahora**. La primera ejecución descarga el modelo.
+4. Da estilo a los subtítulos, corta desde el panel **Transcripción** si lo necesitas, y exporta. Consulta [Exportación](/docs/export/).
+
+También vale la pena leer: [zooms automáticos](/features/auto-zoom/), la [alternativa a Screen Studio](/alternatives/screen-studio/), [OpenScreen frente a Cap](/compare/openscreen-vs-cap/), la [alternativa a Camtasia](/alternatives/camtasia/), y las [preguntas frecuentes](/docs/faq/). O vuelve a la [página de inicio de OpenScreen](/).
+
+## Fuentes {#sources}
+
+Datos de Cap, Camtasia y Screen Studio, verificados en septiembre de 2026:
+
+- Modelos en el dispositivo, Apple Speech Recognition y archivo de transcripción de Screen Studio: [screen.studio/guide/captions](https://screen.studio/guide/captions)
+- La exportación de Screen Studio requiere un plan activo: [screen.studio/download](https://screen.studio/download)
+- Screen Studio solo funciona en macOS, según sus preguntas frecuentes: [screen.studio](https://screen.studio/)
+- Subtítulos locales de Cap, elección de modelo, subtítulos incrustados, archivos SRT y WebVTT: [cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Traducción de subtítulos de Cap Pro: [cap.so/llms-full.txt](https://cap.so/llms-full.txt)
+- Versión gratuita de Cap solo para uso personal, y apps para macOS, Windows y Linux: [cap.so/pricing](https://cap.so/pricing)
+- Transcripción de Camtasia con Whisper: [support.techsmith.com/hc/en-us/articles/203729278](https://support.techsmith.com/hc/en-us/articles/203729278-How-to-use-Speech-To-Text-in-Camtasia-Editor)
+- Transcripción de Camtasia en el dispositivo: [support.techsmith.com/hc/en-us/articles/26713588518413](https://support.techsmith.com/hc/en-us/articles/26713588518413-Dynamic-Captions-Best-Practices)
+- Subtitulado de Camtasia en Essentials, edición basada en texto en planes de pago: [support.techsmith.com/hc/en-us/articles/41688340554765](https://support.techsmith.com/hc/en-us/articles/41688340554765-What-Is-the-Difference-Between-Camtasia-Pro-Create-and-Essentials)
+- Importación y exportación de subtítulos VTT de Camtasia en la 2026.1.0: [support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History)
+- Plataformas de Camtasia y exportaciones gratuitas con marca de agua: [techsmith.com/camtasia](https://www.techsmith.com/camtasia/)
+
+Los datos de OpenScreen describen la versión 1.11.0 y enlazan con su documentación arriba.
+
+Cap, Camtasia y Screen Studio son marcas comerciales de sus respectivos propietarios. OpenScreen es un proyecto independiente y no está afiliado a ninguno de ellos ni cuenta con su respaldo.

@@ -162,6 +162,6 @@ sudo usermod -aG input $USER
 負責即時預覽與 MP4 匯出的 GPU 合成器有三種後端（Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu/WGSL），三個版本都內建。在 Linux 上，當 GPU 驅動程式提供 VAAPI，*而且* Vulkan 裝置能以 dmabuf 形式交出影格（`VK_KHR_external_memory_fd` 與 `VK_EXT_external_memory_dma_buf`）時，H.264 匯出會把每個合成完成的影格直接交給 `h264_vaapi`，不經過 CPU 複製。只要缺少其中任何一項（沒有算繪節點、驅動程式不支援 VAAPI、Vulkan 裝置沒有這些擴充功能），匯出就會改用軟體編碼器，只是花的時間比較長，其他都不變。在 Linux 上，H.265 匯出一律使用軟體編碼器。
 :::
 
-OpenScreen 在各系統上的功能，以及何時其他工具更適合，整理在 [Windows](/screen-recorder-windows/)、[Mac](/screen-recorder-mac/) 與 [Linux](/screen-recorder-linux/) 頁面（英文）中。
+OpenScreen 在各系統上的功能，以及何時其他工具更適合，整理在 [Windows](/screen-recorder-windows/)、[Mac](/screen-recorder-mac/) 與 [Linux](/screen-recorder-linux/) 頁面中。
 
 下一步：[快速入門](./quick-start.md)會帶你完成第一次錄影。

@@ -43,7 +43,7 @@ Al seleccionar una región en la línea de tiempo (un bloque de zoom, recorte, a
 ## Barra de herramientas de la línea de tiempo {#timeline-toolbar}
 
 - **Mejora automática** (ícono de varita): un menú con dos pasadas que se ejecutan una sola vez:
-  - **Zooms automáticos**: lee el movimiento grabado del cursor y coloca regiones de zoom en los momentos en que el cursor se detiene. Sin red ni modelo. [Zoom automático (en inglés)](/features/auto-zoom/) explica cómo se eligen esos momentos.
+  - **Zooms automáticos**: lee el movimiento grabado del cursor y coloca regiones de zoom en los momentos en que el cursor se detiene. Sin red ni modelo. [Zoom automático](/features/auto-zoom/) explica cómo se eligen esos momentos.
   - **Cortes inteligentes** (marcado *Con IA*): en su lugar, le encarga el trabajo al agente de IA, que necesita un [proveedor conectado](./ai-editing.md).
 - **Velocidad** (`S`): agrega una región de cambio de velocidad en el cabezal de reproducción.
 - **Comentario** (`A`): agrega una anotación en el cabezal de reproducción.
@@ -64,7 +64,7 @@ Haz clic en un bloque de zoom para abrir su inspector:
 - **Modo de enfoque**: Manual (arrastra el marcador de enfoque en la vista previa) o Auto (sigue el cursor grabado). Queda fijo en Auto cuando el interruptor de enfoque automático de la barra de herramientas está activado.
 - **Posición de enfoque**: porcentaje X/Y numérico en el modo manual.
 
-Las regiones de zoom colocadas con **Mejora automática → Zooms automáticos** abren el mismo inspector. Cómo funciona esa pasada, y cómo se compara con los zooms automáticos de otros grabadores, se explica en [Zoom automático (en inglés)](/features/auto-zoom/).
+Las regiones de zoom colocadas con **Mejora automática → Zooms automáticos** abren el mismo inspector. Cómo funciona esa pasada, y cómo se compara con los zooms automáticos de otros grabadores, se explica en [Zoom automático](/features/auto-zoom/).
 
 ### Regiones de recorte {#trim-regions}
 

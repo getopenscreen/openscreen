@@ -162,6 +162,6 @@ Las herramientas de edición son las mismas en todas partes: zooms, fondos, encu
 El compositor GPU que hay detrás de la vista previa en vivo y de la exportación MP4 tiene tres backends (Direct3D 11 en Windows, Metal en macOS, wgpu/WGSL en Linux) y se incluye en las tres compilaciones. En Linux, una exportación H.264 entrega cada fotograma compuesto a `h264_vaapi` sin copia en la CPU cuando el controlador de la GPU expone VAAPI *y* el dispositivo Vulkan puede entregar el fotograma como dmabuf (`VK_KHR_external_memory_fd` y `VK_EXT_external_memory_dma_buf`). Cuando falta cualquiera de esas cosas (no hay nodo de renderizado, el controlador no tiene VAAPI, el dispositivo Vulkan no tiene esas extensiones), la exportación recurre a un codificador por software y simplemente tarda más; nada más cambia. En Linux, las exportaciones H.265 siempre usan el codificador por software.
 :::
 
-Lo que hace OpenScreen en cada sistema, y cuándo otra herramienta encaja mejor, se resume en las páginas (en inglés) de [Windows](/screen-recorder-windows/), [Mac](/screen-recorder-mac/) y [Linux](/screen-recorder-linux/).
+Lo que hace OpenScreen en cada sistema, y cuándo otra herramienta encaja mejor, se resume en las páginas de [Windows](/screen-recorder-windows/), [Mac](/screen-recorder-mac/) y [Linux](/screen-recorder-linux/).
 
 Siguiente: [Inicio rápido](./quick-start.md) te guía en tu primera grabación.

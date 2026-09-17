@@ -43,7 +43,7 @@ Sélectionner une région sur la timeline (un bloc de zoom, de coupe, d'annotati
 ## Barre d'outils de la timeline {#timeline-toolbar}
 
 - **Amélioration auto** (icône baguette) : un menu qui propose deux traitements à lancer ponctuellement :
-  - **Zooms automatiques** : lit le mouvement enregistré du curseur et place des régions de zoom aux moments où le curseur s'attarde. Pas de réseau, pas de modèle. [Zoom automatique (en anglais)](/features/auto-zoom/) explique comment ces moments sont choisis.
+  - **Zooms automatiques** : lit le mouvement enregistré du curseur et place des régions de zoom aux moments où le curseur s'attarde. Pas de réseau, pas de modèle. [Zoom automatique](/features/auto-zoom/) explique comment ces moments sont choisis.
   - **Coupes intelligentes** (avec la mention *Avec l'IA*) : confie plutôt la tâche à l'agent IA, qui a besoin d'un [fournisseur connecté](./ai-editing.md).
 - **Vitesse** (`S`) : ajoute une région de changement de vitesse à la tête de lecture.
 - **Commentaire** (`A`) : ajoute une annotation à la tête de lecture.
@@ -64,7 +64,7 @@ Cliquez sur un bloc de zoom pour ouvrir son inspecteur :
 - **Mode focus** : Manuel (faites glisser le repère de focus dans l'aperçu) ou Auto (suit le curseur enregistré). Verrouillé sur Auto quand l'interrupteur Mise au point automatique de la barre d'outils est activé.
 - **Position du focus** : pourcentage X/Y numérique en mode manuel.
 
-Les régions de zoom placées par **Amélioration auto → Zooms automatiques** ouvrent le même inspecteur. Le fonctionnement de ce traitement, et sa comparaison avec les zooms automatiques d'autres enregistreurs, sont décrits dans [Zoom automatique (en anglais)](/features/auto-zoom/).
+Les régions de zoom placées par **Amélioration auto → Zooms automatiques** ouvrent le même inspecteur. Le fonctionnement de ce traitement, et sa comparaison avec les zooms automatiques d'autres enregistreurs, sont décrits dans [Zoom automatique](/features/auto-zoom/).
 
 ### Régions de coupe {#trim-regions}
 

@@ -112,8 +112,8 @@ Windows と macOS では、ネイティブのレコーダーが 1 秒単位の�
 
 次のいずれかが必要な場合、OpenScreen は適したツールではありません。
 
-- **オンライン共有。** 共有リンク、クラウドストレージ、チームのワークスペース、コメント機能はありません。ファイルはディスク上に残ります。[Loom の代替としての OpenScreen（英語）](/alternatives/loom/)を参照してください。
-- **ライブ配信。** [OpenScreen と OBS Studio の比較（英語）](/compare/openscreen-vs-obs/)を参照してください。
+- **オンライン共有。** 共有リンク、クラウドストレージ、チームのワークスペース、コメント機能はありません。ファイルはディスク上に残ります。[Loom の代替としての OpenScreen](/alternatives/loom/)を参照してください。
+- **ライブ配信。** [OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)を参照してください。
 - **字幕ファイル。** 字幕は動画に焼き込まれます。SRT や VTT のエクスポートはありません。[字幕と文字起こし](./captions.md)を参照してください。
 - **モバイル。** モバイルアプリはなく、iOS や Android の画面もキャプチャできません。
 

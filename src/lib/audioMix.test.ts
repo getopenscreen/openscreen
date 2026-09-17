@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MIC_FADE_IN_S, MIC_GAIN_BOOST, mixAudioTracks } from "./audioMix";
+import { MIC_FADE_IN_S, MIC_GAIN_BOOST, mixAudioTracks, nativeMicrophoneGain } from "./audioMix";
 
 class FakeAudioParam {
 	value = 1;
@@ -63,6 +63,16 @@ const stubMediaStream = () => {
 };
 
 const track = (id: string) => ({ kind: "audio", id }) as unknown as MediaStreamTrack;
+
+describe("nativeMicrophoneGain", () => {
+	it("boosts the mic only when it has to sit over system audio", () => {
+		expect(nativeMicrophoneGain(true)).toBe(MIC_GAIN_BOOST);
+	});
+
+	it("rides at unity for mic-only recordings so a hot mic cannot clip in the native mixer", () => {
+		expect(nativeMicrophoneGain(false)).toBe(1);
+	});
+});
 
 describe("mixAudioTracks", () => {
 	beforeEach(() => {

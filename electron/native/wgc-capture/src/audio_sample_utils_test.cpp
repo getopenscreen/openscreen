@@ -1446,6 +1446,95 @@ int main() {
         }
     }
 
+    // --- mixAudioInPlace, per output format -----------------------------------
+    //
+    // The gain rides in mixAudioInPlace on every format branch, but the
+    // AudioMixer sections above can only reach PCM16: production always mixes
+    // into the AAC input format. These call the branches directly, with the
+    // negative-destination-plus-boosted-source case that pins sum-then-clamp
+    // (clamp-then-sum reads the destination alone: 0.4, not 0.76).
+    {
+        const size_t frames = 4;
+        const AudioInputFormat f32 = makeFormat(MFAudioFormat_Float, 48000, 2, 32);
+        {
+            std::vector<BYTE> dest(frames * f32.blockAlign, 0);
+            std::vector<BYTE> src(frames * f32.blockAlign, 0);
+            auto* d = reinterpret_cast<float*>(dest.data());
+            auto* s = reinterpret_cast<float*>(src.data());
+            for (size_t i = 0; i < frames * 2; i += 1) {
+                d[i] = -0.5f;
+                s[i] = 0.9f;
+            }
+            mixAudioInPlace(dest, src.data(), static_cast<DWORD>(src.size()), f32, 1.4);
+            char detail[96]{};
+            sprintf_s(detail, "got=%.6f want=0.76", d[0]);
+            std::cout << "MIXFMT_RAW float-over-system " << detail << std::endl;
+            expect("mix-in-place-float-sums-before-clamp", std::abs(d[0] - 0.76) < 1e-3, detail);
+            for (size_t i = 0; i < frames * 2; i += 1) {
+                d[i] = 0.5f;
+            }
+            mixAudioInPlace(dest, src.data(), static_cast<DWORD>(src.size()), f32, 1.4);
+            sprintf_s(detail, "got=%.6f want=1.0", d[0]);
+            std::cout << "MIXFMT_RAW float-rail " << detail << std::endl;
+            expect("mix-in-place-float-clamps-at-rail", d[0] == 1.0f, detail);
+        }
+        // PCM16 is the production path, pinned here in its own units too:
+        // -16384 + 29491 * 1.4 = 24903.4 -> 24903, and 16384 + 29491 * 1.4
+        // clamps at 32767.
+        {
+            std::vector<BYTE> dest(frames * target48k.blockAlign, 0);
+            std::vector<BYTE> src(frames * target48k.blockAlign, 0);
+            auto* d = reinterpret_cast<int16_t*>(dest.data());
+            auto* s = reinterpret_cast<int16_t*>(src.data());
+            for (size_t i = 0; i < frames * 2; i += 1) {
+                d[i] = -16384;
+                s[i] = 29491;
+            }
+            mixAudioInPlace(
+                dest, src.data(), static_cast<DWORD>(src.size()), target48k, 1.4);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=24903", d[0]);
+            std::cout << "MIXFMT_RAW pcm16-over-system " << detail << std::endl;
+            expect("mix-in-place-pcm16-sums-before-clamp", std::abs(d[0] - 24903) <= 1, detail);
+            for (size_t i = 0; i < frames * 2; i += 1) {
+                d[i] = 16384;
+            }
+            mixAudioInPlace(
+                dest, src.data(), static_cast<DWORD>(src.size()), target48k, 1.4);
+            sprintf_s(detail, "got=%d want=32767", d[0]);
+            std::cout << "MIXFMT_RAW pcm16-rail " << detail << std::endl;
+            expect("mix-in-place-pcm16-clamps-at-rail", d[0] == 32767, detail);
+        }
+        // Round numbers in int32 units: -1e9 + 2e9 * 1.4 = 1.8e9 (fits), and
+        // 1e9 + 2e9 * 1.4 = 3.8e9 clamps at INT32_MAX.
+        {
+            const AudioInputFormat p32 = makeFormat(MFAudioFormat_PCM, 48000, 2, 32);
+            std::vector<BYTE> dest(frames * p32.blockAlign, 0);
+            std::vector<BYTE> src(frames * p32.blockAlign, 0);
+            auto* d = reinterpret_cast<int32_t*>(dest.data());
+            auto* s = reinterpret_cast<int32_t*>(src.data());
+            for (size_t i = 0; i < frames * 2; i += 1) {
+                d[i] = -1000000000;
+                s[i] = 2000000000;
+            }
+            mixAudioInPlace(dest, src.data(), static_cast<DWORD>(src.size()), p32, 1.4);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=1800000000", static_cast<int>(d[0]));
+            std::cout << "MIXFMT_RAW pcm32-over-system " << detail << std::endl;
+            expect("mix-in-place-pcm32-sums-before-clamp", d[0] == 1800000000LL, detail);
+            for (size_t i = 0; i < frames * 2; i += 1) {
+                d[i] = 1000000000;
+            }
+            mixAudioInPlace(dest, src.data(), static_cast<DWORD>(src.size()), p32, 1.4);
+            sprintf_s(detail, "got=%d want=2147483647", static_cast<int>(d[0]));
+            std::cout << "MIXFMT_RAW pcm32-rail " << detail << std::endl;
+            expect(
+                "mix-in-place-pcm32-clamps-at-rail",
+                d[0] == static_cast<int32_t>(2147483647LL),
+                detail);
+        }
+    }
+
     HRESULT mfHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(mfHr) && mfHr != RPC_E_CHANGED_MODE) {
         skip("mf-startup", "CoInitializeEx failed — no Media Foundation on this host");

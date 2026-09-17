@@ -2,7 +2,7 @@ import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
-import { MIC_GAIN_BOOST, mixAudioTracks } from "@/lib/audioMix";
+import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
 import {
 	type NativeLinuxRecordingRequest,
 	portalOwnsSourceSelection,
@@ -1222,10 +1222,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						enabled: microphoneEnabled,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
-						// Same rule as mixAudioTracks: boosted only when the mic has to
-						// sit over system audio; at unity on its own so a hot mic does
-						// not get +2.9 dB of unconditional gain in the native mixer.
-						gain: systemAudioEnabled ? MIC_GAIN_BOOST : 1,
+						// Boosted only when the mic has to sit over system audio.
+						gain: nativeMicrophoneGain(systemAudioEnabled),
 					},
 				},
 				webcam: {
@@ -1387,7 +1385,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only over system audio, like the Windows request above.
-						gain: systemAudioEnabled ? MIC_GAIN_BOOST : 1,
+						gain: nativeMicrophoneGain(systemAudioEnabled),
 					},
 				},
 				webcam: {
@@ -1491,7 +1489,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// helper then fell back to the session default source.
 				...(microphoneDeviceName ? { deviceName: microphoneDeviceName } : {}),
 				// Boosted only over system audio, like the Windows request above.
-				gain: systemAudioEnabled ? MIC_GAIN_BOOST : 1,
+				gain: nativeMicrophoneGain(systemAudioEnabled),
 			},
 		},
 		cursor: { mode: cursorCaptureMode },

@@ -6,6 +6,18 @@
 export const MIC_GAIN_BOOST = 1.4;
 
 /**
+ * The mic gain the native capture helpers should receive: boosted above unity
+ * only when the mic has to sit over system audio, at unity on its own so a mic
+ * that already runs hot does not get +2.9 dB it cannot spend — the native
+ * mixers hard-clamp at full scale. This is the same rule mixAudioTracks applies
+ * from track presence, expressed from the system-audio toggle the native
+ * request builders know.
+ */
+export function nativeMicrophoneGain(systemAudioEnabled: boolean): number {
+	return systemAudioEnabled ? MIC_GAIN_BOOST : 1;
+}
+
+/**
  * Duration of the mic fade-in applied at the start of a recording. Masks the
  * click/pop that the mic produces at its first packet (echo-canceller warm-up,
  * DC offset, gain-stage step) without audibly muting speech.
@@ -52,7 +64,7 @@ export function mixAudioTracks({
 		systemSource.connect(destination);
 	}
 	// Unity when the mic is on its own; boosted only when competing with system audio.
-	const micTargetGain = systemAudioTrack ? MIC_GAIN_BOOST : 1;
+	const micTargetGain = nativeMicrophoneGain(Boolean(systemAudioTrack));
 	const micSource = context.createMediaStreamSource(new MediaStream([micAudioTrack]));
 	const micGain = context.createGain();
 	micGain.gain.setValueAtTime(0, context.currentTime);

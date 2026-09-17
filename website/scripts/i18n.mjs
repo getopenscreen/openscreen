@@ -9,7 +9,9 @@
  * Two kinds of source, two ways of telling that a translation is behind:
  *
  *   Markdown (docs/, src/pages/): git. A translation is behind when its English
- *   source has a commit newer than the translation's last commit. Translating a
+ *   source was last changed by a later commit than the translation was. "Later"
+ *   is the order in `git log`, not the commit time: a rebase-merge gives every
+ *   commit of a pull request the same timestamp. Translating a
  *   file means committing it, which is also what clears the flag. A missing
  *   translation is not reported here: docusaurus.config.ts fails the build.
  *
@@ -73,9 +75,9 @@ function englishStrings() {
 	}
 }
 
-/** Last commit time of every file under the website, newest first wins. */
-function lastCommitTimes() {
-	const log = execFileSync("git", ["log", "--format=%x00%ct", "--name-only", "--", "."], {
+/** For every file under the website, how many commits ago it last changed (0 = HEAD). */
+function lastChangeAge() {
+	const log = execFileSync("git", ["log", "--format=%x00", "--name-only", "--", "."], {
 		cwd: ROOT,
 		encoding: "utf8",
 		maxBuffer: 64 * 1024 * 1024,
@@ -84,30 +86,30 @@ function lastCommitTimes() {
 		cwd: ROOT,
 		encoding: "utf8",
 	}).trim();
-	const times = new Map();
-	for (const entry of log.split("\0").slice(1)) {
-		const [time, ...files] = entry.trim().split("\n");
-		for (const file of files) {
+	const ages = new Map();
+	for (const [age, entry] of log.split("\0").slice(1).entries()) {
+		for (const file of entry.trim().split("\n")) {
 			const path = file.startsWith(prefix) ? file.slice(prefix.length) : file;
-			if (path && !times.has(path)) times.set(path, Number(time));
+			if (path && !ages.has(path)) ages.set(path, age);
 		}
 	}
-	return times;
+	return ages;
 }
 
 function check() {
 	const stale = [];
-	const times = lastCommitTimes();
+	const ages = lastChangeAge();
 	for (const { source, target } of MARKDOWN) {
 		const files = readdirSync(join(ROOT, source), { recursive: true, encoding: "utf8" })
 			.map((file) => file.replaceAll("\\", "/"))
 			.filter((file) => /\.mdx?$/.test(file));
 		for (const file of files) {
-			const sourceTime = times.get(`${source}/${file}`) ?? Number.POSITIVE_INFINITY;
+			// Uncommitted English counts as the newest change of all.
+			const sourceAge = ages.get(`${source}/${file}`) ?? -1;
 			for (const locale of locales()) {
 				const translation = `i18n/${locale}/${target}/${file}`;
-				const translationTime = times.get(translation);
-				if (translationTime !== undefined && sourceTime > translationTime) {
+				const translationAge = ages.get(translation);
+				if (translationAge !== undefined && sourceAge < translationAge) {
 					stale.push({
 						file: translation,
 						why: `${source}/${file} changed since it was translated`,

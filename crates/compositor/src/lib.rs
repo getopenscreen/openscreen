@@ -29,8 +29,10 @@
 
 pub mod audio;
 pub mod audio_jobs;
+pub mod camera;
 pub mod config;
 pub mod cursor;
+pub mod cursor_sdf;
 pub mod export_probe;
 pub mod ffi;
 pub mod frame_geometry;

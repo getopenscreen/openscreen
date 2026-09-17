@@ -17,6 +17,7 @@
 
 import type {
 	CameraFullscreenRegion,
+	Rotation3DPreset,
 	SpeedRegion,
 	WallpaperMotion,
 	WebcamBackgroundMode,
@@ -82,8 +83,9 @@ export interface SceneZoomRegion {
 	focusY: number;
 	/** "auto" follows cursor telemetry instead of the fixed focus point. */
 	focusMode: "manual" | "auto" | null;
-	/** Optional rotation preset for the zoom. */
-	rotation: "iso" | "left" | "right" | null;
+	/** The zoom's 3D camera: a fixed angle or a moving camera (`regions.rs::camera_for`).
+	 *  `null` = flat; the native side also renders an unknown value flat. */
+	rotation: Rotation3DPreset | null;
 	/** Index of the clip (within `SceneDescription.clips`) whose source time this region's
 	 *  `startSec`/`endSec` are expressed in — disambiguates clips whose source windows
 	 *  numerically overlap (same or different asset). Unset only for a region that
@@ -394,8 +396,11 @@ export interface SceneCursor {
 	/** 0..1. */
 	motionBlur: number;
 	clickBounce: number;
-	/** 0..1 cursor extrusion + contact shadow (`scene.rs` `SceneCursor::volume`). 0 = flat. */
-	volume: number;
+	/**
+	 * Modelled 3D arrow (`scene.rs` `SceneCursor::model3d`, compositor mode 15). Only drawn for
+	 * the default theme's arrow; any other cursor keeps its flat sprite.
+	 */
+	model3d: boolean;
 	clipToBounds: boolean;
 	/** Cursor theme id (sprite set). */
 	theme: string;
@@ -1077,7 +1082,7 @@ export function buildSceneDescription(
 			smoothing: settings.cursor.smoothing,
 			motionBlur: settings.cursor.motionBlur,
 			clickBounce: settings.cursor.clickBounce,
-			volume: settings.cursor.volume,
+			model3d: settings.cursor.model3d,
 			clipToBounds: settings.cursor.clipToBounds,
 			theme: settings.cursorTheme,
 		},

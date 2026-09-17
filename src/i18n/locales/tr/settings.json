@@ -337,20 +337,32 @@
 			"autoDescription": "Kamera kaydedilen imleç konumunu takip eder",
 			"title": "Odak Modu"
 		},
-		"threeD": {
+		"camera": {
+			"title": "3D kamera",
+			"off": "Kapalı",
+			"fixed": "Sabit açı",
+			"moving": "Hareketli kamera",
 			"preset": {
-				"left": "Sol",
-				"right": "Sağ",
-				"iso": "Iso"
+				"iso": "Yukarıdan çapraz",
+				"left": "Ekran sola dönük",
+				"right": "Ekran sağa dönük",
+				"followCursor": "İmleçle birlikte döner"
 			},
-			"none": "Yok",
-			"title": "3D Döndürme"
+			"description": {
+				"off": "Ekran düz kalır.",
+				"iso": "Tek bir pozda kalır: sola dönük ve yukarıdan görünür.",
+				"left": "Tek bir pozda kalır: ekran sola bakar, sağ kenarı öne çıkar.",
+				"right": "Tek bir pozda kalır: ekran sağa bakar, sol kenarı öne çıkar.",
+				"followCursor": "Ekran sabit kalır; kamera etrafında imlecin olduğu tarafa döner ve imleçle birlikte yükselip alçalır."
+			},
+			"needsCursor": "İmleç gizli: bu kameranın izleyecek bir şeyi yok ve başlangıç açısında kalır."
 		},
 		"clickImpact": {
 			"title": "Tıklama etkisi",
 			"description": "Her tıklama eğik ekranı bastırır: tıklanan taraf çöker, sonra geri döner.",
-			"needsRotation": "Önce bir 3D döndürme seçin: yalnızca eğik bir ekran bastırılabilir.",
-			"needsCursor": "İmleç gizli: ekran yalnızca görünen tıklamalara tepki verir."
+			"needsRotation": "Önce bir 3D kamera seçin: yalnızca eğik bir ekran bastırılabilir.",
+			"needsCursor": "İmleç gizli: ekran yalnızca görünen tıklamalara tepki verir.",
+			"descriptionCamera": "Her tıklama kamerayı biraz geri iter, ardından kamera geri gelir."
 		},
 		"level": "Yakınlaştırma Seviyesi",
 		"previewHold": "Yakınlaştırma efektini önizlemek için basılı tutun",
@@ -384,8 +396,9 @@
 	"cursor": {
 		"smoothing": "Yumuşatma",
 		"clickBounce": "Tıklama Sıçraması",
-		"depth": "3B Derinlik",
-		"depthNeedsCursor": "Derinlik vermek için «İmleci Göster»i açın.",
+		"model3d": "3B imleç",
+		"model3dHint": "Varsayılan stil: tüm imleç şekilleri 3B olur. Diğer stiller düz kalır.",
+		"model3dNeedsCursor": "3B imleci kullanmak için «İmleci Göster»i açın.",
 		"help": "Kaydedilen telemetriden imleç çizimi: tema, boyut, yumuşatma, hareket bulanıklığı ve tıklama sıçraması.",
 		"clipToBoundsDescription": "İmleci video kare içinde tutar. İmlecin kenarları aşmasına izin vermek için kapatın — yakınlaştırma veya kaydırma yapılırken kullanışlıdır.",
 		"size": "Boyut",

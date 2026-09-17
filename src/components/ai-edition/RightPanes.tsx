@@ -3453,6 +3453,30 @@ export function CursorPane() {
 					onChange={(v) => void set({ cursor: { clipToBounds: v } })}
 				/>
 			</div>
+			{/* One switch for the modelled cursor. A hidden cursor has nothing to model, so the
+			    row is disabled then and both its hint and its tooltip say why. */}
+			<div
+				className={styles.paneRow}
+				title={settings.cursorShow ? undefined : ts("cursor.model3dNeedsCursor")}
+			>
+				<span className={styles.label}>
+					{ts("cursor.model3d")}
+					<span className={styles.info}>
+						{settings.cursorShow ? ts("cursor.model3dHint") : ts("cursor.model3dNeedsCursor")}
+					</span>
+				</span>
+				<Toggle
+					ariaLabel={ts("cursor.model3d")}
+					checked={settings.cursor.model3d}
+					disabled={!hasDocument || !settings.cursorShow}
+					onChange={(v) => {
+						void set({ cursor: { model3d: v } });
+						if (isNativeCompositorActive()) {
+							setNativeParam("cursorModel3d", v);
+						}
+					}}
+				/>
+			</div>
 			<div className={styles.sectionLabel}>{ts("cursor.theme")}</div>
 			<div className={styles.cursorGrid}>
 				{cursorThemeOptions.map((option) => {
@@ -3555,24 +3579,6 @@ export function CursorPane() {
 						onCommit={() => void commit()}
 					/>
 				) : null}
-				{/* 0..1 in storage, percent on screen. With the cursor hidden there is
-				    nothing to extrude, so the slider is disabled and its tooltip says why. */}
-				<SliderCell
-					label={ts("cursor.depth")}
-					value={settings.cursor.volume * 100}
-					min={0}
-					max={100}
-					suffix="%"
-					disabled={!hasDocument || !settings.cursorShow}
-					title={settings.cursorShow ? undefined : ts("cursor.depthNeedsCursor")}
-					onChange={(v) => {
-						setLive({ cursor: { volume: v / 100 } });
-						if (isNativeCompositorActive()) {
-							setNativeParam("cursorVolume", v / 100);
-						}
-					}}
-					onCommit={() => void commit()}
-				/>
 			</div>
 		</Pane>
 	);
@@ -3625,7 +3631,6 @@ export function SliderCell({
 	onCommit,
 	showValue = true,
 	full = false,
-	title,
 }: {
 	label: string;
 	value: number;
@@ -3641,12 +3646,10 @@ export function SliderCell({
 	 *  l'interpolent), sans quoi elle s'affiche deux fois. */
 	showValue?: boolean;
 	full?: boolean;
-	/** Tooltip on the whole cell — how a disabled slider says why it is disabled. */
-	title?: string;
 }) {
 	const pct = Math.max(0, Math.min(100, max > min ? ((value - min) / (max - min)) * 100 : 0));
 	return (
-		<div className={`${styles.sliderCell}${full ? ` ${styles.full}` : ""}`} title={title}>
+		<div className={`${styles.sliderCell}${full ? ` ${styles.full}` : ""}`}>
 			<div className={styles.head}>
 				<span className={styles.label}>{label}</span>
 				{showValue ? (

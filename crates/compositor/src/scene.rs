@@ -385,7 +385,10 @@ pub struct SceneZoomRegion {
     /// "manual" | "auto" (suit la télémétrie curseur) | null (= manual).
     #[serde(default)]
     pub focus_mode: Option<String>,
-    /// "iso" | "left" | "right" | null.
+    /// La caméra 3D du zoom : un angle fixe ("iso" | "left" | "right"), la caméra réelle qui
+    /// tourne autour de l'écran avec le pointeur ("follow-cursor", cf. `camera.rs`), ou null
+    /// (écran droit). Une valeur
+    /// inconnue rend l'écran droit.
     pub rotation: Option<String>,
     /// La région entière tombe sur une portion qu'un trim retire. Ses temps sont donc HORS de
     /// la fenêtre source de `clip_index`, qui n'est là que pour l'adresser (le segment que la
@@ -447,10 +450,11 @@ pub struct SceneCursor {
     pub smoothing: f32,
     pub motion_blur: f32,
     pub click_bounce: f32,
-    /// 0..1 : volume du curseur (extrusion + ombre de contact). 0 = sprite plat, le rendu
-    /// d'avant. `#[serde(default)]` : absent des projets et des JSON écrits avant ce réglage.
+    /// Curseur MODÉLISÉ en 3D (mode 15) : le sprite de chaque état du thème par défaut, extrudé,
+    /// à la place du sprite plat. Les autres thèmes restent plats. `#[serde(default)]` : absent
+    /// des projets et des JSON écrits avant le réglage, qui gardent donc le curseur plat.
     #[serde(default)]
-    pub volume: f32,
+    pub model3d: bool,
     pub clip_to_bounds: bool,
     /// id du thème (jeu de sprites) — informatif ici : le natif consomme `cursor_sprites`.
     pub theme: String,

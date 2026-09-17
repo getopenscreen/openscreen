@@ -337,20 +337,32 @@
 			"autoDescription": "Camera follows the recorded cursor position",
 			"title": "Focus Mode"
 		},
-		"threeD": {
+		"camera": {
+			"title": "3D camera",
+			"off": "Off",
+			"fixed": "Fixed angle",
+			"moving": "Moving camera",
 			"preset": {
-				"left": "Left",
-				"right": "Right",
-				"iso": "Iso"
+				"iso": "Angled from above",
+				"left": "Screen turned left",
+				"right": "Screen turned right",
+				"followCursor": "Orbits with the cursor"
 			},
-			"none": "None",
-			"title": "3D Rotation"
+			"description": {
+				"off": "The screen stays flat.",
+				"iso": "Holds one pose: turned left and seen from above.",
+				"left": "Holds one pose: the screen faces left, its right edge comes forward.",
+				"right": "Holds one pose: the screen faces right, its left edge comes forward.",
+				"followCursor": "The screen stays still; the camera circles it, swinging to the cursor's side and rising or dipping with it."
+			},
+			"needsCursor": "The cursor is hidden: this camera has nothing to follow and holds its starting angle."
 		},
 		"clickImpact": {
 			"title": "Click impact",
 			"description": "Each click presses the tilted screen: the clicked side dips, then springs back.",
-			"needsRotation": "Pick a 3D rotation first: only a tilted screen can be pressed.",
-			"needsCursor": "The cursor is hidden: the screen only reacts to clicks you can see."
+			"needsRotation": "Pick a 3D camera first: only a tilted screen can be pressed.",
+			"needsCursor": "The cursor is hidden: the screen only reacts to clicks you can see.",
+			"descriptionCamera": "Each click pushes the camera back a little, then it springs forward."
 		},
 		"level": "Zoom Level",
 		"previewHold": "Hold to preview zoom effect",
@@ -384,8 +396,9 @@
 	"cursor": {
 		"smoothing": "Smoothing",
 		"clickBounce": "Click Bounce",
-		"depth": "3D Depth",
-		"depthNeedsCursor": "Turn on Show Cursor to give it depth.",
+		"model3d": "3D cursor",
+		"model3dHint": "Default style: every cursor shape turns 3D. Other styles stay flat.",
+		"model3dNeedsCursor": "Turn on Show Cursor to use the 3D cursor.",
 		"help": "Cursor rendering from the recorded telemetry: theme, size, smoothing, motion blur, and click-bounce emphasis.",
 		"clipToBoundsDescription": "Keeps the cursor inside the video frame. Turn off to let the cursor extend past the edges - useful when zoomed in or panned.",
 		"size": "Size",

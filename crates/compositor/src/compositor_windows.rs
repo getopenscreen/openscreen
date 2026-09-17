@@ -11,7 +11,7 @@ pub use crate::frame_geometry::{live_params_from_scene, webcam_shape_code, Layer
 use crate::frame_geometry::{
     cover_crop_uv, cover_uv_rect, decode_data_uri, ease_in_out_cubic, lerp,
     lerp4, parse_hex, preset_placements, remap_box, screen_source_rect, timeline, CursorPlacement,
-    FrameParams, Placement, ShadowCaster, CURSOR_BASE_SIZE_FRAC, FPS, SCREEN_SHADOW_OFFSET_FRAC,
+    FrameParams, Placement, ShadowCaster, SpriteShape, CURSOR_BASE_SIZE_FRAC, FPS,
     SCREEN_SHADOW_SPREAD_FRAC, SHADOW_TUNING_REF_PX, WEBCAM_SHADOW_OFFSET_FRAC,
     WEBCAM_SHADOW_OPACITY, WEBCAM_SHADOW_SPREAD_FRAC,
 };
@@ -175,6 +175,9 @@ pub struct Compositor {
     /// Valeur de `img_tick` au début de la frame en cours. Tout ce qui a été touché depuis
     /// appartient au jeu actif et ne peut pas être évincé — voir `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
+    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
+    /// Pas d'éviction : seuls les seize sprites du thème par défaut y passent (~2,6 Mo en tout).
+    sdf_cache: RefCell<HashMap<String, (ID3D11ShaderResourceView, SpriteShape)>>,
     /// Masque de segmentation du sujet webcam, R8 à la résolution du modèle. Écrit par
     /// `set_webcam_mask` depuis le thread d'inférence, lu au moment de dessiner la webcam.
     /// `None` tant qu'aucune frame n'a été segmentée — l'effet reste alors éteint plutôt que
@@ -639,6 +642,7 @@ impl Compositor {
             img_cache: RefCell::new(HashMap::new()),
             img_tick: std::cell::Cell::new(0),
             img_frame_start: std::cell::Cell::new(0),
+            sdf_cache: RefCell::new(HashMap::new()),
             webcam_mask: RefCell::new(None),
             render_size: Cell::new((out_w, out_h)),
             resize_target: RefCell::new(None),
@@ -1139,6 +1143,39 @@ impl Compositor {
         Ok((srv.unwrap(), w, h))
     }
 
+    /// Champ de distance du sprite `path` (t4 du mode 15) et sa forme, calculés au premier appel.
+    unsafe fn cursor_sdf(&self, path: &str) -> Result<(ID3D11ShaderResourceView, SpriteShape)> {
+        if let Some(hit) = self.sdf_cache.borrow().get(path) {
+            return Ok(hit.clone());
+        }
+        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
+        let texels = sdf.f16_bytes();
+        let td = D3D11_TEXTURE2D_DESC {
+            Width: sdf.width,
+            Height: sdf.height,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_R16_FLOAT,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_IMMUTABLE,
+            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+        let init = D3D11_SUBRESOURCE_DATA {
+            pSysMem: texels.as_ptr() as *const c_void,
+            SysMemPitch: sdf.width * 2,
+            SysMemSlicePitch: 0,
+        };
+        let mut tex: Option<ID3D11Texture2D> = None;
+        self.dev.CreateTexture2D(&td, Some(&init), Some(&mut tex))?;
+        let mut srv: Option<ID3D11ShaderResourceView> = None;
+        self.dev.CreateShaderResourceView(&tex.unwrap(), None, Some(&mut srv))?;
+        let entry = (srv.unwrap(), sdf.shape);
+        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
+        Ok(entry)
+    }
+
     /// Extrait la frame webcam en RGB8 à la résolution du modèle, dans `out`.
     ///
     /// `src` est le rect source de la webcam en UV (le même que celui passé à `draw_video`),
@@ -1531,6 +1568,9 @@ impl Compositor {
     /// l'image) tombe sur `center`, à la taille de référence `size_px`. `Err` → l'appelant
     /// retombe sur `draw_cursor` (math dot+ring). La géométrie vient de
     /// `frame_geometry::cursor_sprite_cb`, partagée avec macOS et Linux.
+    ///
+    /// Avec `model`, le même sprite extrudé (mode 15, `cursor_model_cb`) : le sprite en t2, son
+    /// champ de distance en t4.
     unsafe fn draw_cursor_sprite(
         &self,
         placement: CursorPlacement,
@@ -1538,10 +1578,31 @@ impl Compositor {
         a: f32,
         sprite: &SceneCursorSprite,
         clip: [f32; 4],
-        volume: Option<&crate::frame_geometry::CursorVolume>,
+        model: Option<crate::frame_geometry::CursorPose>,
     ) -> Result<()> {
         let path = sprite.path.as_str();
         let (srv, iw, ih) = self.cached_image(path)?;
+        // Sans champ de distance, repli sur le sprite plat plutôt que sur le curseur math.
+        // Parité Linux.
+        if let Some(pose) = model {
+            match self.cursor_sdf(path) {
+                Ok((sdf, shape)) => {
+                    let shape =
+                        SpriteShape { hotspot: [sprite.hotspot_x, sprite.hotspot_y], ..shape };
+                    if let Some(cb) = crate::frame_geometry::cursor_model_cb(
+                        placement, size_px, pose, shape, a, clip,
+                    ) {
+                        self.upload_cb(&cb);
+                        self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
+                        self.ctx.PSSetShaderResources(4, Some(&[Some(sdf)]));
+                        self.ctx.Draw(4, 0);
+                        self.ctx.PSSetShaderResources(4, Some(&[None]));
+                    }
+                    return Ok(());
+                }
+                Err(e) => eprintln!("[curseur] champ de \"{path}\" : {e:#}"),
+            }
+        }
         let ar = iw as f32 / ih as f32;
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
         let cb = crate::frame_geometry::cursor_sprite_cb(
@@ -1551,7 +1612,6 @@ impl Compositor {
             a,
             clip,
             [self.rw(), self.rh()],
-            volume,
         );
         self.upload_cb(&cb);
         self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
@@ -1560,7 +1620,8 @@ impl Compositor {
     }
 
     /// Sprite de l'état courant (`cursor_type`, ex. `"text"`), à défaut celui de la flèche,
-    /// à défaut le curseur math (dot+ring).
+    /// à défaut le curseur math (dot+ring). Avec `model`, ce sprite extrudé (mode 15) : même
+    /// résolution que `plan_cursor`, qui en a tiré la pose.
     ///
     /// Le repli sur la flèche compte : un thème n'apporte que sa flèche et son pointeur, les
     /// autres états venant de l'art intégrée — mais si un état inconnu apparaît, mieux vaut
@@ -1574,17 +1635,17 @@ impl Compositor {
         size_px: f32,
         a: f32,
         clip: [f32; 4],
-        volume: Option<&crate::frame_geometry::CursorVolume>,
+        model: Option<crate::frame_geometry::CursorPose>,
     ) {
         let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
         if let Some(sprite) = sprite {
-            if self.draw_cursor_sprite(placement, size_px, a, sprite, clip, volume).is_ok() {
+            if self.draw_cursor_sprite(placement, size_px, a, sprite, clip, model).is_ok() {
                 return;
             }
         }
         // Le repli math reste droit même sur un plan incliné : il ne devrait plus apparaître
         // maintenant que l'art par défaut existe, et lui donner sa propre passe de warp pour
-        // un cas de secours ne se justifie pas. Il n'a donc pas de volume non plus.
+        // un cas de secours ne se justifie pas.
         self.draw_cursor(placement.upright_center(), size_px, a, clip);
     }
 
@@ -1723,8 +1784,6 @@ impl Compositor {
         let mb_taps = g.mb_taps;
         let mb_amount = g.mb_amount;
         let source_t = g.source_t;
-        let zoom_rotation = g.zoom_rotation;
-        let zoom_rotation_dyn = g.zoom_rotation_dyn;
         let _padding_scale = g.padding_scale;
         let cut = g.cut;
         let s_dst = g.s_dst;
@@ -1867,7 +1926,7 @@ impl Compositor {
         let render_px = [self.rw(), self.rh()];
         if cfg.shadow {
             let spread = SCREEN_SHADOW_SPREAD_FRAC * frame_min_px;
-            let offset = [0.0, SCREEN_SHADOW_OFFSET_FRAC * frame_min_px];
+            let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
             match g.shadow_caster(render_px) {
                 ShadowCaster::Upright { dst, size_px, radius } => {
@@ -1885,7 +1944,33 @@ impl Compositor {
             self.draw_solid(&cb);
         }
         let square_top = g.screen_square_top();
-        if crate::regions::is_identity_rotation(zoom_rotation) {
+        if let Some(quad) = tilt {
+            // Écran incliné (angle fixe) ou vu par la caméra réelle : warp inverse du mode 8 dans
+            // la bbox du quad projeté (`tilted_screen_cb`, partagé). Les coins arrondis y sont
+            // rendus dans le repère DU PLAN : sans eux le plan a des arêtes de couteau qui
+            // tranchent le contenu en pleine phrase, et l'œil lit une découpe là où il devrait
+            // lire une inclinaison.
+            // t2 EXPLICITE : `draw_video` ne lie que t0/t1, et t2 garde sinon ce que le draw
+            // précédent y a laissé (un wallpaper, un sprite). `None` quand l'effet est coupé :
+            // `k = 0`, le shader n'y lit rien.
+            self.ctx.PSSetShaderResources(2, Some(&[dof_srv.clone()]));
+            self.draw_video(
+                &crate::frame_geometry::tilted_screen_cb(
+                    &quad,
+                    s_px,
+                    quad_center_px,
+                    [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
+                    g.focus_plane,
+                    s_radius,
+                    square_top,
+                    dof,
+                    render_px,
+                ),
+                &sy,
+                &suv,
+            );
+            self.ctx.PSSetShaderResources(2, Some(&[None]));
+        } else {
             self.draw_video(
                 &LayerCB {
                     dst: s_dst,
@@ -1902,71 +1987,6 @@ impl Compositor {
                 &sy,
                 &suv,
             );
-        } else {
-            // Tilt 3D (zoom "rotation" iso/left/right) : warp bilinéaire inverse (mode 8, voir
-            // shaders.hlsl). Pas de motion blur dans ce chemin — le tilt est un effet bref, la
-            // simplification ne se voit pas. Les coins arrondis, eux, se voyaient : sans eux le
-            // plan a des arêtes de couteau qui tranchent le contenu en pleine phrase, et l'œil lit
-            // une découpe (« un overflow hidden qui tronque l'enregistrement ») là où il devrait
-            // lire une inclinaison. Ils sont donc rendus, dans le repère DU PLAN.
-            let quad = tilt.unwrap_or_else(|| {
-                crate::regions::rotated_quad_corners_px(
-                    s_px[0],
-                    s_px[1],
-                    zoom_rotation,
-                    zoom_rotation_dyn,
-                )
-            });
-            let corners = quad.corners;
-            // Taille du plan dans son propre repère, avant projection : c'est là que vit le rayon,
-            // pour qu'il reste un rayon constant le long du bord et non un arrondi qui s'étire avec
-            // la perspective.
-            let plane_px = [s_px[0] * quad.scale, s_px[1] * quad.scale];
-            let (cx_px, cy_px) = (quad_center_px[0], quad_center_px[1]);
-            let (min_x, max_x) = corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| {
-                (mn.min(x), mx.max(x))
-            });
-            let (min_y, max_y) = corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| {
-                (mn.min(y), mx.max(y))
-            });
-            let bbox_w = (max_x - min_x).max(1.0);
-            let bbox_h = (max_y - min_y).max(1.0);
-            let bbox_dst = [
-                (cx_px + min_x) / self.rw(),
-                (cy_px + min_y) / self.rh(),
-                bbox_w / self.rw(),
-                bbox_h / self.rh(),
-            ];
-            // coins en px LOCAUX à la bbox (0..bbox_w/h), pour matcher `i.local` du shader.
-            let local = |(x, y): (f32, f32)| -> [f32; 2] { [x - min_x, y - min_y] };
-            let [tl0, tl1] = local(corners[0]);
-            let [tr0, tr1] = local(corners[1]);
-            let [br0, br1] = local(corners[2]);
-            let [bl0, bl1] = local(corners[3]);
-            // t2 EXPLICITE : `draw_video` ne lie que t0/t1, et t2 garde sinon ce que le draw
-            // précédent y a laissé (un wallpaper, un sprite). `None` quand l'effet est coupé :
-            // `k = 0`, le shader n'y lit rien.
-            self.ctx.PSSetShaderResources(2, Some(&[dof_srv.clone()]));
-            self.draw_video(
-                &LayerCB {
-                    dst: bbox_dst,
-                    src: [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
-                    quad_px: [bbox_w, bbox_h],
-                    // Le rayon suit la réduction du plan : l'écran incliné est plus petit, ses
-                    // coins le sont d'autant, exactement comme s'il s'éloignait.
-                    radius_px: s_radius * quad.scale,
-                    mode: 8.0,
-                    fx: [tl0, tl1, tr0, tr1],
-                    src_prev: [br0, br1, bl0, bl1],
-                    dst_prev: [plane_px[0], plane_px[1], square_top, 0.0],
-                    // Gradient de profondeur du plan, profondeur du focus et `k` (`depth_mb`).
-                    mb: quad.depth_mb(s_px, g.focus_plane, dof),
-                    ..Default::default()
-                },
-                &sy,
-                &suv,
-            );
-            self.ctx.PSSetShaderResources(2, Some(&[None]));
         }
 
         // --- curseur custom : suit le mapping src/dst (zoom+layout), click bounce,
@@ -1984,23 +2004,17 @@ impl Compositor {
                     track,
                     t: self.cursor_t_override.borrow().unwrap_or(frame / FPS),
                 },
-            );
+            )
+            .map(|p| p.for_backend(self.cpu_backend));
             if let Some(plan) = plan {
                 let cursor_sprites: HashMap<String, SceneCursorSprite> = scene_ref
                     .as_ref()
                     .map(|s| s.cursor.cursor_sprites.clone())
                     .unwrap_or_default();
                 let cursor_type = plan.cursor_type.as_deref();
-                let volume = plan.volume.as_ref();
-                // Ombre de contact du volume : une fois, sur la scène, SOUS le curseur et sa
-                // traînée — et seulement si le sprite existe (le repli math n'a pas de volume).
-                if let Some(v) = volume {
-                    let sprite = cursor_type
-                        .and_then(|t| cursor_sprites.get(t))
-                        .or_else(|| cursor_sprites.get("arrow"));
-                    if sprite.is_some_and(|s| self.cached_image(&s.path).is_ok()) {
-                        self.draw_solid(&v.shadow);
-                    }
+                // L'impact des clics (mode 16, sans texture), posé sur l'écran SOUS le curseur.
+                for cb in &plan.impacts {
+                    self.draw_solid(cb);
                 }
                 if plan.taps <= 1 {
                     self.draw_cur_themed(
@@ -2010,7 +2024,7 @@ impl Compositor {
                         plan.size_px,
                         plan.alpha,
                         plan.clip,
-                        volume,
+                        plan.model,
                     );
                 } else {
                     // Flou RÉEL, pas des copies discrètes : accumule les N échantillons dans un
@@ -2028,7 +2042,7 @@ impl Compositor {
                             plan.size_px,
                             plan.alpha,
                             plan.clip,
-                            volume,
+                            plan.model,
                         );
                     }
                     // composite le buffer accumulé sur la scène (blend "over" normal, prémultiplié).

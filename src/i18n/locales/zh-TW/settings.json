@@ -337,20 +337,32 @@
 			"autoDescription": "攝影機跟隨錄製時的游標位置",
 			"title": "對焦模式"
 		},
-		"threeD": {
+		"camera": {
+			"title": "3D 鏡頭",
+			"off": "關閉",
+			"fixed": "固定角度",
+			"moving": "運動鏡頭",
 			"preset": {
-				"left": "左",
-				"right": "右",
-				"iso": "Iso"
+				"iso": "斜上方俯視",
+				"left": "畫面向左轉",
+				"right": "畫面向右轉",
+				"followCursor": "隨游標環繞"
 			},
-			"none": "無",
-			"title": "3D 旋轉"
+			"description": {
+				"off": "畫面保持平整。",
+				"iso": "保持單一姿態：向左轉，並從上方俯視。",
+				"left": "保持單一姿態：畫面朝向左側，右邊緣向前。",
+				"right": "保持單一姿態：畫面朝向右側，左邊緣向前。",
+				"followCursor": "螢幕保持不動，鏡頭繞著螢幕轉到游標所在的一側，並隨游標升降。"
+			},
+			"needsCursor": "游標已隱藏：此鏡頭沒有可跟隨的對象，維持初始角度。"
 		},
 		"clickImpact": {
 			"title": "點擊按壓",
 			"description": "每次點擊都會按壓傾斜的畫面：被點擊的一側下沉，然後彈回。",
-			"needsRotation": "請先選擇 3D 旋轉：只有傾斜的畫面才能被按壓。",
-			"needsCursor": "游標已隱藏：畫面只對看得見的點擊做出反應。"
+			"needsRotation": "請先選擇 3D 鏡頭：只有傾斜的畫面才能被按壓。",
+			"needsCursor": "游標已隱藏：畫面只對看得見的點擊做出反應。",
+			"descriptionCamera": "每次點擊，鏡頭都會稍微後退，然後回位。"
 		},
 		"level": "縮放級別",
 		"previewHold": "按住預覽放大效果",
@@ -384,8 +396,9 @@
 	"cursor": {
 		"smoothing": "平滑",
 		"clickBounce": "點擊彈跳",
-		"depth": "3D 深度",
-		"depthNeedsCursor": "開啟「顯示游標」後才能為游標加上深度。",
+		"model3d": "3D 游標",
+		"model3dHint": "預設樣式：所有游標形狀都會變成 3D。其他樣式維持平面。",
+		"model3dNeedsCursor": "開啟「顯示游標」後才能使用 3D 游標。",
 		"help": "根據錄製的遙測資料繪製游標：主題、大小、平滑、動態模糊與點擊回彈。",
 		"clipToBoundsDescription": "讓游標保持在影片畫面內。關閉後游標可超出邊緣——在縮放或平移時很有用。",
 		"size": "大小",

@@ -337,20 +337,32 @@
 			"autoDescription": "Kamera sleduje zaznamenanou pozici kurzoru",
 			"title": "Režim zaostření"
 		},
-		"threeD": {
+		"camera": {
+			"title": "3D kamera",
+			"off": "Vypnuto",
+			"fixed": "Pevný úhel",
+			"moving": "Pohyblivá kamera",
 			"preset": {
-				"left": "Vlevo",
-				"right": "Vpravo",
-				"iso": "Iso"
+				"iso": "Šikmo shora",
+				"left": "Obrazovka natočená doleva",
+				"right": "Obrazovka natočená doprava",
+				"followCursor": "Obíhá s kurzorem"
 			},
-			"none": "Žádné",
-			"title": "3D rotace"
+			"description": {
+				"off": "Obrazovka zůstane rovná.",
+				"iso": "Drží jednu pózu: natočená doleva a viděná shora.",
+				"left": "Drží jednu pózu: obrazovka hledí doleva, její pravý okraj vystupuje dopředu.",
+				"right": "Drží jednu pózu: obrazovka hledí doprava, její levý okraj vystupuje dopředu.",
+				"followCursor": "Obrazovka zůstává v klidu; kamera kolem ní krouží na stranu kurzoru a stoupá či klesá s ním."
+			},
+			"needsCursor": "Kurzor je skrytý: tato kamera nemá co sledovat a drží svůj výchozí úhel."
 		},
 		"clickImpact": {
 			"title": "Odezva kliknutí",
 			"description": "Každé kliknutí zatlačí nakloněnou obrazovku: kliknutá strana se prohne a vrátí zpět.",
-			"needsRotation": "Nejprve zvolte 3D rotaci: zatlačit lze jen nakloněnou obrazovku.",
-			"needsCursor": "Kurzor je skrytý: obrazovka reaguje jen na viditelná kliknutí."
+			"needsRotation": "Nejprve zvolte 3D kameru: zatlačit lze jen nakloněnou obrazovku.",
+			"needsCursor": "Kurzor je skrytý: obrazovka reaguje jen na viditelná kliknutí.",
+			"descriptionCamera": "Každé kliknutí kameru trochu oddálí, pak se vrátí."
 		},
 		"level": "Úroveň přiblížení",
 		"previewHold": "Podržte pro náhled efektu přiblížení",
@@ -384,8 +396,9 @@
 	"cursor": {
 		"smoothing": "Vyhlazení",
 		"clickBounce": "Odraz při kliknutí",
-		"depth": "3D hloubka",
-		"depthNeedsCursor": "Zapněte „Zobrazit kurzor“, aby kurzor získal hloubku.",
+		"model3d": "3D kurzor",
+		"model3dHint": "Výchozí styl: všechny tvary kurzoru budou 3D. Ostatní styly zůstanou ploché.",
+		"model3dNeedsCursor": "Zapněte „Zobrazit kurzor“, abyste mohli použít 3D kurzor.",
 		"help": "Renderování kurzoru ze zaznamenané telemetrie: motiv, velikost, vyhlazení, pohybové rozmazání a zdůraznění odrazu při kliknutí.",
 		"clipToBoundsDescription": "Udržuje kurzor uvnitř rámce videa. Vypněte, pokud chcete, aby kurzor přesahoval okraje, což se hodí při přiblížení nebo posunu.",
 		"size": "Velikost",

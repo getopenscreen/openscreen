@@ -1950,8 +1950,7 @@ impl Compositor {
         // change. `regions` fait toute la trigo (partagee avec macOS/Windows) ; ici
         // on ne fait que l'empaqueter.
         let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
-        let tilt = (!crate::regions::is_identity_rotation(g.zoom_rotation))
-            .then(|| crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], g.zoom_rotation));
+        let tilt = g.screen_tilt(s_px);
         let quad_center_px = [
             (g.s_dst[0] + g.s_dst[2] * 0.5) * rw,
             (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,

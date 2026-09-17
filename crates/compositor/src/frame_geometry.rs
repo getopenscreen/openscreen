@@ -738,7 +738,12 @@ pub struct FrameGeometry {
     pub mb_taps: f32,
     pub mb_amount: f32,
     pub source_t: f32,
+    /// Rotation 3D de BASE (préset × force) : elle seule fixe l'échelle de containment et le
+    /// choix mode 0 / mode 8.
     pub zoom_rotation: [f32; 3],
+    /// Part dynamique du tilt (parallaxe, `regions::dynamic_tilt`), ajoutée à la base à la
+    /// projection. Nulle quand la base est neutre.
+    pub zoom_rotation_dyn: [f32; 3],
     pub padding_scale: f32,
     /// Coupe source de l'écran en UV texture (crop utilisateur + zoom).
     pub cut: [f32; 4],
@@ -790,6 +795,20 @@ pub fn annotation_dst_in(anchor: [f32; 4], x: f32, y: f32, w: f32, h: f32) -> [f
 }
 
 impl FrameGeometry {
+    /// Le quad de l'écran incliné pour une boîte de `s_px` px, `None` quand l'écran est droit.
+    /// LE point de passage de l'écran, de son ombre, du curseur et du masque de flou : tous
+    /// doivent porter la même séparation base / dynamique, sinon ils se décollent.
+    pub fn screen_tilt(&self, s_px: [f32; 2]) -> Option<crate::regions::TiltedQuad> {
+        (!crate::regions::is_identity_rotation(self.zoom_rotation)).then(|| {
+            crate::regions::rotated_quad_corners_px(
+                s_px[0],
+                s_px[1],
+                self.zoom_rotation,
+                self.zoom_rotation_dyn,
+            )
+        })
+    }
+
     /// `annotation_dst_in` appliqué à `s_ann`, pour les backends qui tiennent la géométrie
     /// entière — c'est-à-dire ceux qui n'ont aucune raison de choisir un rect.
     pub fn annotation_dst(&self, x: f32, y: f32, w: f32, h: f32) -> [f32; 4] {
@@ -871,7 +890,7 @@ impl FrameGeometry {
         // Écran incliné (le mode 8 n'a pas de flou de mouvement : pas de trace à couvrir).
         // Même quad et même centre que le dessin de l'écran et que `plan_cursor`.
         let s_px = [self.s_dst[2] * rw, self.s_dst[3] * rh];
-        let quad = crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], self.zoom_rotation);
+        let quad = self.screen_tilt(s_px)?;
         let centre = [
             (self.s_dst[0] + self.s_dst[2] * 0.5) * rw,
             (self.s_dst[1] + self.s_dst[3] * 0.5) * rh,
@@ -1064,11 +1083,13 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // point d'appel) n'est calculée QUE pour la frame courante ; `pp` ne sert qu'au zoom
         // écran normal (vélocité pour le motion blur du chemin non-tilté).
         let mut zoom_rotation = [0.0f32; 3];
+        let mut zoom_tilt = 0.0f32;
         if !zoom_regions.is_empty() {
             let zs = crate::regions::zoom_state_at(zoom_regions, source_t, cursor_for_zoom);
             p.zoom = zs.scale;
             p.focus = zs.focus;
             zoom_rotation = zs.rotation;
+            zoom_tilt = zs.tilt;
             let zs_p = crate::regions::zoom_state_at(zoom_regions, source_t_prev, cursor_for_zoom);
             pp.zoom = zs_p.scale;
             pp.focus = zs_p.focus;
@@ -1236,6 +1257,22 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let cut_ref_prev = cover(screen_source_rect(u_max, v_max, active_crop, pp.zoom, p.focus));
         let cut = cover(screen_source_rect(u_max, v_max, active_crop, 1.0, p.focus));
         let s_dst = remap_box(s_base, cut_ref, cut);
+        // Parallaxe : calculée ici, une fois la coupe connue — elle mesure la vitesse du curseur
+        // en coupes VISIBLES par seconde. La coupe visible est `cut_ref`, zoom compris : `cut`
+        // ne porte plus que le crop depuis #179, et sous un x2 le même geste traverse deux fois
+        // plus d'écran. La coupe passe au repère normalisé du curseur.
+        // Curseur masqué → pas de parallaxe : l'export ne charge la piste que si le curseur est
+        // affiché (`timeline_walk`), la preview toujours. Sans cette porte, la preview pencherait
+        // un plan que l'export laisse immobile.
+        let parallax_track = cursor_for_zoom.filter(|_| scene.is_some_and(|s| s.cursor.show));
+        let cut_norm = [
+            cut_ref[0] / u_max.max(1e-6),
+            cut_ref[1] / v_max.max(1e-6),
+            cut_ref[2] / u_max.max(1e-6),
+            cut_ref[3] / v_max.max(1e-6),
+        ];
+        let zoom_rotation_dyn =
+            crate::regions::dynamic_tilt(source_t, parallax_track, cut_norm, zoom_tilt);
         let s_dst_prev = remap_box(s_base_prev, cut_ref_prev, cut);
         // le padding n'affecte QUE l'écran (la quantité de fond révélée). La webcam reste ancrée
         // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame)
@@ -1353,6 +1390,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         mb_amount,
         source_t,
         zoom_rotation,
+        zoom_rotation_dyn,
         padding_scale,
         cut,
         s_dst,
@@ -1425,8 +1463,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     }
 
     let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
-    let tilt = (!crate::regions::is_identity_rotation(g.zoom_rotation))
-        .then(|| crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], g.zoom_rotation));
+    let tilt = g.screen_tilt(s_px);
     let quad_center_px = [
         (g.s_dst[0] + g.s_dst[2] * 0.5) * rw,
         (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
@@ -1876,6 +1913,96 @@ mod tests {
         assert!((m.strength - 2.0).abs() < 1e-3, "force {} au lieu de 2", m.strength);
     }
 
+    /// La parallaxe (`regions::dynamic_tilt`) passe par `plan_frame` une seule fois, et le
+    /// curseur la porte comme l'écran : même quad, même échelle gelée. Curseur masqué ou
+    /// région sans préset → rien ne bouge.
+    #[test]
+    fn the_cursor_rides_the_same_dynamic_tilt_as_the_screen() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        // Le curseur file vers la droite autour de t = 1,5 s (l'instant de `golden_input`).
+        let track: &'static crate::cursor::CursorTrack = Box::leak(Box::new(
+            crate::cursor::CursorTrack::new(
+                (0..=90).map(|i| (i as f32 / 30.0, 0.05 + 0.1 * i as f32 / 30.0, 0.3)).collect(),
+                vec![],
+                vec![],
+            ),
+        ));
+        let with_track = |scene: &Scene| FrameGeometryInput {
+            cursor: Some(track),
+            ..golden_input(scene, &cfg)
+        };
+
+        let still = plan_frame(&golden_input(&tilted_golden_scene(), &cfg));
+        let g = plan_frame(&with_track(&tilted_golden_scene()));
+        assert_eq!(still.zoom_rotation_dyn, [0.0; 3], "sans piste");
+        assert_eq!(g.zoom_rotation, still.zoom_rotation, "la base ne dépend pas du curseur");
+        assert!(g.zoom_rotation_dyn[1] > 0.1, "vers la droite → +Y : {:?}", g.zoom_rotation_dyn);
+
+        let render = [1170.0, 658.0];
+        let s_px = [g.s_dst[2] * render[0], g.s_dst[3] * render[1]];
+        let quad = g.screen_tilt(s_px).expect("iso incline");
+        let still_quad = still.screen_tilt(s_px).expect("iso incline");
+        assert_eq!(quad.scale, still_quad.scale, "échelle gelée");
+        assert_ne!(quad.corners, still_quad.corners, "la parallaxe bouge les coins");
+
+        let plan = plan_cursor(
+            &g,
+            &CursorPlanInput {
+                render_px: render,
+                u_max: 1.0,
+                v_max: 1080.0 / 1088.0,
+                cfg: &cfg,
+                live: live_params_from_scene(&tilted_golden_scene()),
+                scene: Some(&tilted_golden_scene()),
+                track,
+                t: 1.5,
+            },
+        )
+        .expect("curseur visible");
+        match plan.placement {
+            CursorPlacement::Tilted { quad: cursor_quad, .. } => {
+                assert_eq!(cursor_quad.corners, quad.corners);
+                assert_eq!(cursor_quad.scale, quad.scale);
+            }
+            _ => panic!("le curseur doit suivre le plan incliné"),
+        }
+
+        let hidden_json = zoomed_golden_scene_json()
+            .replace(r#""rotation":"none""#, r#""rotation":"iso""#)
+            .replace(r#""show":true"#, r#""show":false"#);
+        let hidden = plan_frame(&with_track(&Scene::from_json(&hidden_json).expect("scène")));
+        assert_eq!(hidden.zoom_rotation_dyn, [0.0; 3], "curseur masqué : pas de piste en export");
+
+        let flat = plan_frame(&with_track(&zoomed_golden_scene()));
+        assert_eq!(flat.zoom_rotation_dyn, [0.0; 3], "sans préset");
+    }
+
+    /// La vitesse se mesure dans la coupe VISIBLE, zoom compris : sous un x2, le même geste
+    /// traverse deux fois plus d'écran et penche donc plus le plan (hors saturation).
+    #[test]
+    fn the_parallax_speed_is_measured_in_the_zoomed_cut() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let track: &'static crate::cursor::CursorTrack = Box::leak(Box::new(
+            crate::cursor::CursorTrack::new(
+                (0..=90).map(|i| (i as f32 / 30.0, 0.05 + 0.1 * i as f32 / 30.0, 0.3)).collect(),
+                vec![],
+                vec![],
+            ),
+        ));
+        let lean = |scale: &str| {
+            let json = zoomed_golden_scene_json()
+                .replace(r#""rotation":"none""#, r#""rotation":"iso""#)
+                .replace(r#""scale":2.0"#, scale);
+            let scene = Scene::from_json(&json).expect("scène");
+            plan_frame(&FrameGeometryInput { cursor: Some(track), ..golden_input(&scene, &cfg) })
+                .zoom_rotation_dyn[1]
+        };
+        let (flat, zoomed) = (lean(r#""scale":1.0"#), lean(r#""scale":2.0"#));
+        let budget = crate::regions::DYNAMIC_TILT_BUDGET[1];
+        assert!(flat > 0.1 && zoomed < budget * 0.9, "garde, hors saturation : {flat} {zoomed}");
+        assert!(zoomed > flat * 1.4, "zoom x2 : {zoomed} devrait dépasser {flat} nettement");
+    }
+
     /// Sous un préset 3D, le masque est le quad du contenu, warpé comme le mode 8 le dessine.
     #[test]
     fn a_privacy_mask_follows_the_tilted_content() {
@@ -1889,7 +2016,7 @@ mod tests {
 
         // Le même quad et le même centre que le dessin du mode 8 (`compose_frame`).
         let s_px = [g.s_dst[2] * render[0], g.s_dst[3] * render[1]];
-        let quad = crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], g.zoom_rotation);
+        let quad = g.screen_tilt(s_px).expect("iso incline");
         let centre = [
             (g.s_dst[0] + g.s_dst[2] * 0.5) * render[0],
             (g.s_dst[1] + g.s_dst[3] * 0.5) * render[1],
@@ -2421,6 +2548,7 @@ mod tests {
             mb_amount: 0.0,
             source_t: 0.0,
             zoom_rotation: [0.0, 0.0, 0.0],
+            zoom_rotation_dyn: [0.0, 0.0, 0.0],
             padding_scale: 1.0,
             cut: [0.0, 0.0, 1.0, 1.0],
             s_dst: [0.0, 0.0, 1.0, 1.0],

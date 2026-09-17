@@ -11,7 +11,7 @@ keywords:
 
 # A screen recorder with captions made on your machine
 
-OpenScreen is a free, MIT-licensed screen recorder with captions for Windows, macOS and Linux. It transcribes your recording on your own computer with Whisper, after a one-time model download of about 264 MB, and burns styled captions into the exported video. It writes no caption file, so if you need SRT or VTT subtitles for a course platform or an accessibility requirement, Cap or Camtasia is the better choice.
+OpenScreen is a free, MIT-licensed screen recorder with captions for Windows, macOS and Linux. It transcribes your recording on your own computer with Whisper, after a one-time model download of about 264 MB, and burns styled captions into the exported video. If you need separate SRT or VTT subtitle files for a course platform or an accessibility requirement, Cap or Camtasia is the better choice.
 
 This page is published by the OpenScreen project. The Cap, Camtasia and Screen Studio details come from cap.so, techsmith.com and screen.studio and were checked in September 2026. The sources are listed at the end.
 
@@ -20,12 +20,12 @@ This page is published by the OpenScreen project. The Cap, Camtasia and Screen S
 | | |
 | --- | --- |
 | Engine | whisper.cpp, running on your computer |
-| Model | One Whisper Small model of about 264 MB. No choice of model or size |
+| Model | One Whisper Small model of about 264 MB |
 | Model download | Once, from huggingface.co, checked by SHA-256. Not included in the installer |
 | Hardware | Metal on Apple Silicon. CPU on Intel Macs. Vulkan with a CPU fallback on Windows and Linux |
 | Languages | Detected automatically, or set by hand to one of 100 languages |
 | Styling | Font, size, bold, text color, background, position, and 1 to 12 words per line |
-| Output | Burned into the exported video. No caption file |
+| Output | Burned into the exported video |
 | Transcript editing | Delete words to cut them from the video. Silences are marked and can be cut too |
 | Translation | 15 languages, through an AI provider you connect with your own key |
 | Command line | The `captions` command adds captions to a project |
@@ -87,10 +87,7 @@ On-device Whisper is not unique to OpenScreen. As of September 2026:
 
 ## When OpenScreen is not the right tool
 
-- **You must deliver a caption file.** If a course platform or an accessibility requirement asks for subtitles that viewers can turn off, OpenScreen cannot provide them. It only burns captions into the video. Cap saves SRT and WebVTT files, and Camtasia imports and exports VTT.
-- **You want to choose the model.** OpenScreen uses one Whisper Small model. Screen Studio offers Base, Small and Medium, plus Apple Speech Recognition on macOS 26 or later, and Cap lets you pick a model.
-- **You want translation without an API key.** OpenScreen has no AI service of its own. Without a provider key, there is no translation.
-- **Your machine never goes online.** The first transcription needs a connection to download the model.
+- **You must deliver a caption file.** If a course platform or an accessibility requirement asks for subtitles that viewers can turn off, you need a separate file. Cap saves SRT and WebVTT files, and Camtasia imports and exports VTT. OpenScreen burns captions into the video.
 
 ## Getting started
 

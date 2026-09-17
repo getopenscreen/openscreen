@@ -11,7 +11,7 @@ keywords:
 
 # A free, open-source Screen Studio alternative
 
-OpenScreen is a free, MIT-licensed Screen Studio alternative for Windows, macOS and Linux. Like Screen Studio, it zooms in where your cursor goes, restyles the cursor after the take, adds backgrounds and on-device captions, and exports MP4 or GIF. Unlike Screen Studio, which runs only on macOS and needs a paid plan to export, it costs nothing and needs no account. Screen Studio is still the better choice if you share recordings as hosted links with comments, record an iPhone or iPad, or want the more mature Mac app.
+OpenScreen is a free, MIT-licensed Screen Studio alternative for Windows, macOS and Linux. Like Screen Studio, it zooms in where your cursor goes, restyles the cursor after the take, adds backgrounds and on-device captions, and exports MP4 or GIF. Unlike Screen Studio, which runs only on macOS and needs a paid plan to export, it costs nothing and needs no account. Screen Studio is still the better choice if you share recordings as hosted links with comments, or record an iPhone or iPad.
 
 This page is published by the OpenScreen project. The Screen Studio details come from screen.studio and were checked in September 2026. The sources are listed at the end.
 
@@ -32,7 +32,6 @@ This page is published by the OpenScreen project. The Screen Studio details come
 | Export | MP4 (H.264 or H.265) or GIF, up to 60 fps, no watermark | MP4 or GIF, with frame rate, output size and quality settings. No codec setting documented |
 | Hosted share links | No | Yes, up to 30 minutes per recording (as of September 2026), with timestamped comments |
 | iPhone and iPad recording | No | Yes, over USB, with device frames |
-| Keyboard shortcut overlay | No | Yes |
 | Command-line interface | Yes | None in its guide |
 
 ## What both apps do
@@ -72,18 +71,9 @@ Both apps cover the following. None of it is unique to either one.
 
 ## When Screen Studio is the better choice
 
-- **You share by link.** Screen Studio generates a hosted link for recordings up to 30 minutes, and viewers can leave comments tied to a timestamp. OpenScreen hosts nothing. You get a file and upload it wherever you share.
-- **You record an iPhone or iPad.** Screen Studio records them over USB and adds device frames. OpenScreen records a Windows, macOS or Linux screen only.
-- **You teach keyboard-driven workflows.** Screen Studio can show the shortcuts pressed during a recording. OpenScreen cannot.
-- **You want to record only part of the screen.** Screen Studio records a selected area. OpenScreen records a whole display or one window, and you crop in the editor afterward.
-- **You want control over transcription.** Screen Studio offers Whisper Base, Small and Medium, plus Apple Speech Recognition on macOS 26 or later, and exports the transcript as a file. OpenScreen ships a single Whisper Small model and burns captions into the video, with no caption file.
-- **You want built-in audio cleanup.** Screen Studio has an option that reduces noise and normalizes audio. OpenScreen has no equivalent.
-- **You want the more mature Mac app.** Screen Studio is at version 3.7.5 (August 2026), with a regular changelog, a Raycast extension, a music library you can use for any purpose, and shareable presets. OpenScreen is under active development, and its README says to expect rough edges.
-
-Two OpenScreen limits matter on a Mac:
-
-- **The recording controls can end up in the video.** On macOS, and on macOS 26 or later especially, the floating controls can show up in the capture, as they can on Linux. Hide them before you record.
-- **The microphone may not record on macOS 13 and 14.** OpenScreen captures it through a ScreenCaptureKit option Apple added in macOS 15.
+- **You share by link.** Screen Studio generates a hosted link for recordings up to 30 minutes, and viewers can leave comments tied to a timestamp. OpenScreen gives you a file to upload wherever you share.
+- **You record an iPhone or iPad.** Screen Studio records them over USB and adds device frames. OpenScreen records a Windows, macOS or Linux screen.
+- **You need the transcript as a file.** Screen Studio exports it. OpenScreen burns captions into the video.
 
 ## Getting started
 
@@ -105,17 +95,15 @@ Screen Studio facts, checked September 2026:
 - Project from an existing video: [screen.studio/guide/creating-project-from-existing-video](https://screen.studio/guide/creating-project-from-existing-video)
 - Cursor settings: [screen.studio/guide/cursor](https://screen.studio/guide/cursor)
 - Masks for sensitive data: [screen.studio/guide/adding-a-mask-and-highlight](https://screen.studio/guide/adding-a-mask-and-highlight)
-- Roadmap (multi-clip, annotations, camera background removal, click effects, voice-over, speaker notes, Raycast extension): [screen.studio/roadmap](https://screen.studio/roadmap)
-- Current version, and the noise reduction and normalization option: [screen.studio/changelog](https://screen.studio/changelog)
+- Roadmap (multi-clip, annotations, camera background removal, click effects, voice-over, speaker notes): [screen.studio/roadmap](https://screen.studio/roadmap)
 - Captions, model choice and transcript file: [screen.studio/guide/captions](https://screen.studio/guide/captions)
 - Export formats: [screen.studio/guide/exporting-the-video](https://screen.studio/guide/exporting-the-video)
 - Export settings: [screen.studio/guide/explanation-of-export-settings](https://screen.studio/guide/explanation-of-export-settings)
 - Shareable links and their 30-minute limit: [screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
 - Timestamped comments: [screen.studio/guide/shareable-links-comments](https://screen.studio/guide/shareable-links-comments)
 - iPhone and iPad recording: [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
-- Shortcut overlay: [screen.studio/guide/shortcuts](https://screen.studio/guide/shortcuts)
 - Background music: [screen.studio/guide/background-music](https://screen.studio/guide/background-music)
-- Cursor smoothing, zooms, backgrounds, recording sources, editing tools and shareable presets: [screen.studio/llms.txt](https://screen.studio/llms.txt) (dated October 21, 2025)
+- Cursor smoothing, zooms, backgrounds, recording sources, and editing tools: [screen.studio/llms.txt](https://screen.studio/llms.txt) (dated October 21, 2025)
 
 OpenScreen facts describe version 1.11.0 and link to its documentation above.
 

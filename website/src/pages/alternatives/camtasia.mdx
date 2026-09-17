@@ -13,7 +13,7 @@ keywords:
 
 OpenScreen is a free Camtasia alternative for Windows, macOS and Linux, released under the MIT license. Like Camtasia, it records the screen, webcam and audio, zooms in where the cursor goes, transcribes speech on your machine with Whisper, and exports MP4 or GIF. Unlike Camtasia, which is sold as an annual subscription and watermarks exports from its free editor, it costs nothing, needs no account and adds no watermark. Camtasia is still the better choice if you build training with quizzes and SCORM reporting, deliver closed captions or VTT files, or publish straight to YouTube or Screencast.
 
-This page is published by the OpenScreen project. The Camtasia details come from TechSmith's own pages and Wikipedia, and were checked in September 2026. The sources are listed at the end.
+This page is published by the OpenScreen project. The Camtasia details come from TechSmith's own pages and were checked in September 2026. The sources are listed at the end.
 
 ## At a glance
 
@@ -37,10 +37,10 @@ This page is published by the OpenScreen project. The Camtasia details come from
 
 ## What both apps do
 
-Camtasia is the larger product, but the core of a screen-recording workflow is in both. None of the following is unique to either app.
+The core of a screen-recording workflow is in both. None of the following is unique to either app.
 
 - **Automatic zooms.** Camtasia's SmartFocus reads mouse movement, scrolling and clicks from a Camtasia Recorder file, and also works on Camtasia Rev media. In OpenScreen, **Auto-enhance → Automatic zooms** places the zooms from the recorded cursor movement, with no network call and no model. Manual zooms at six depths sit alongside them. More on [auto-zoom](/features/auto-zoom/).
-- **A cursor you can change afterward.** Both keep cursor data from their own recordings, so cursor and click effects are applied after the take. On macOS, OpenScreen records clicks only with the Accessibility permission. On Linux, it needs membership in the `input` group.
+- **A cursor you can change afterward.** Both keep cursor data from their own recordings, so cursor and click effects are applied after the take.
 - **Webcam, microphone and system audio** in the same recording.
 - **A timeline with several clips.** Both edit recordings and imported videos on a timeline. In OpenScreen, the timeline also holds voice-over and music tracks, speed regions, and a crop for each clip. See [Media library & clips](/docs/media-library/).
 - **Annotations.** Camtasia has callouts, including curved arrows. OpenScreen has text with six animations, arrows in eight directions, images, and blur regions.
@@ -62,22 +62,15 @@ Camtasia is the larger product, but the core of a screen-recording workflow is i
 
 ### Automation and AI
 
-- **A command-line interface on every platform.** The app binary takes `record`, `export`, `captions` and `pack` commands, runs them with no visible window, and prints NDJSON with `--json`, for scripts, CI and coding agents. It still needs a display server, and on Linux the portal asks what to record on every run. TechSmith documents command-line switches for Camtasia Recorder on Windows, versions 9 and later. See the [CLI reference](/docs/cli/).
+- **A command-line interface on every platform.** The app binary takes `record`, `export`, `captions` and `pack` commands, runs them with no visible window, and prints NDJSON with `--json`, for scripts, CI and coding agents. TechSmith documents command-line switches for Camtasia Recorder on Windows, versions 9 and later. See the [CLI reference](/docs/cli/).
 - **Optional chat editing with your own key.** Connect Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax or any OpenAI-compatible endpoint, and describe cuts, zooms, speed changes or annotations in plain language. Each change lands as an ordinary undoable edit. It is off until you connect a provider, and the same provider translates captions into 15 languages. Camtasia builds its generative features into the Create and Pro plans instead. See [AI editing](/docs/ai-editing/).
 
 ## When Camtasia is the better choice
 
-- **You build e-learning.** Camtasia adds quizzes with multiple choice, fill-in-the-blank, short answer and true/false questions. Its Smart Player adds a table of contents, search and hotspots, and quiz results can go to a SCORM-compliant LMS. OpenScreen has none of this.
-- **You deliver accessible captions.** Camtasia offers closed captions it describes as ADA compliant, and imports and exports VTT files. OpenScreen burns captions into the video and writes no caption file.
-- **You publish from the editor.** Camtasia uploads to YouTube and hosts videos on Screencast. OpenScreen hosts nothing. You get a file and upload it wherever you share.
-- **You want generative AI without bringing a key.** Camtasia Create adds generated scripts, more than 200 voices, and audio cleanup that removes filler sounds and background noise. Pro adds avatars, dubbing, translation and more than 100 million premium assets. OpenScreen's AI features need a key from a provider you choose, and it has no one-click audio cleanup.
-- **You need other export formats.** Camtasia exports WebM with transparency and M4A audio. OpenScreen exports MP4 and GIF only.
-- **You want system audio and microphone on separate tracks.** Camtasia records them separately. OpenScreen mixes them into one track.
-- **You buy for an organization.** Every Camtasia plan includes chat and email support. Team subscriptions that can be transferred go through TechSmith's sales team or a reseller, and a deployment tool lets administrators turn transcription off.
-- **You want the more mature product.** Camtasia was first released in 2002. Its Windows version reached 2026.2.1 on August 18, 2026, and its Mac version reached 2026.2.2 on September 10, 2026, adding support for macOS 27. OpenScreen is under active development, and its documentation says it is not production-grade yet.
-- **You only need quick recordings in a browser.** Camtasia Online records the camera, screen and microphone in the browser, with no install, and TechSmith describes it as completely free with no watermark.
-
-One OpenScreen limit to know before you record: on macOS, especially macOS 26 or later, and on Linux, its floating recording controls can show up in the capture. Hide them before you record.
+- **You build e-learning with quizzes.** Camtasia adds quiz questions to a Smart Player video and reports the results to a SCORM-compliant LMS.
+- **You deliver caption files.** Camtasia imports and exports VTT files. OpenScreen burns captions into the video.
+- **You publish from the editor.** Camtasia uploads to YouTube and hosts videos on Screencast. OpenScreen gives you a file to upload wherever you share.
+- **You buy for an organization.** Every Camtasia plan includes chat and email support, transferable team subscriptions go through TechSmith's sales team or a reseller, and a deployment tool lets administrators turn transcription off.
 
 ## Getting started
 
@@ -95,7 +88,7 @@ Camtasia facts, checked September 2026:
 - Platforms, free-editor watermark, separate recording tracks and translation languages: [www.techsmith.com/camtasia](https://www.techsmith.com/camtasia/)
 - Plan prices and which plans export without a watermark: [www.techsmith.com/store/camtasia](https://www.techsmith.com/store/camtasia)
 - System requirements and trial requirements: [www.techsmith.com/camtasia/system-requirements](https://www.techsmith.com/camtasia/system-requirements/)
-- Plan contents, closed captions, voices, audio cleanup, avatars, assets, support and team subscriptions: [support.techsmith.com/hc/en-us/articles/41688340554765](https://support.techsmith.com/hc/en-us/articles/41688340554765-What-Is-the-Difference-Between-Camtasia-Pro-Create-and-Essentials) (dated June 16, 2026)
+- Plan contents, closed captions, voices, avatars, dubbing, support and team subscriptions: [support.techsmith.com/hc/en-us/articles/41688340554765](https://support.techsmith.com/hc/en-us/articles/41688340554765-What-Is-the-Difference-Between-Camtasia-Pro-Create-and-Essentials) (dated June 16, 2026)
 - Features by plan, including text-based video editing: [support.techsmith.com/hc/en-us/articles/40593880288397](https://support.techsmith.com/hc/en-us/articles/40593880288397-Getting-Started-with-a-Camtasia-Starter-Plan) (dated June 11, 2026)
 - Subscription-only licensing, support end dates and activation: [support.techsmith.com/hc/en-us/articles/27009223314701](https://support.techsmith.com/hc/en-us/articles/27009223314701-TechSmith-Transition-to-Annual-Subscription-Pricing-Model-in-2025) (dated June 10, 2026)
 - Camtasia Online: [camtasia.techsmith.com](https://camtasia.techsmith.com/)
@@ -106,10 +99,8 @@ Camtasia facts, checked September 2026:
 - Transcription languages: [support.techsmith.com/hc/en-us/articles/27321254593549](https://support.techsmith.com/hc/en-us/articles/27321254593549-Supported-Languages-for-Speech-to-Text) (dated June 5, 2024)
 - Export formats, Screencast, YouTube and Smart Player: [www.techsmith.com/learn/tutorials/camtasia/export-share](https://www.techsmith.com/learn/tutorials/camtasia/export-share/)
 - Quizzes and SCORM reporting: [www.techsmith.com/learn/tutorials/camtasia/quizzing](https://www.techsmith.com/learn/tutorials/camtasia/quizzing/)
-- Windows version, SmartFocus on Rev media, VTT, WebM export, curved arrow callouts and background removal: [support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History) (dated August 18, 2026)
-- Mac version and macOS 27 support: [support.techsmith.com/hc/en-us/articles/41263167862285](https://support.techsmith.com/hc/en-us/articles/41263167862285-Camtasia-Mac-2026-Version-History) (dated September 10, 2026)
+- SmartFocus on Rev media, VTT, WebM export, curved arrow callouts and background removal: [support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History) (dated August 18, 2026)
 - Command-line switches for Camtasia Recorder: [support.techsmith.com/hc/en-us/articles/203728678](https://support.techsmith.com/hc/en-us/articles/203728678-Camtasia-Windows-Command-line-switches-and-options-for-automation-with-Camtasia-Recorder) (dated August 8, 2025)
-- First release year: [en.wikipedia.org/wiki/Camtasia](https://en.wikipedia.org/wiki/Camtasia)
 
 OpenScreen facts describe version 1.11.0 and link to its documentation above.
 

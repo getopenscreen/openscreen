@@ -1,6 +1,6 @@
 ---
-title: "OpenScreen vs Cap: two open-source recorders"
-description: "OpenScreen vs Cap: two open-source screen recorders with auto-zoom and local captions. How their licenses, hosted sharing and editors differ."
+title: "OpenScreen vs Cap: free for commercial use"
+description: "OpenScreen vs Cap: OpenScreen is MIT-licensed, free for commercial use and needs no account. How licenses, sharing and editors compare."
 keywords:
   - openscreen vs cap
   - cap screen recorder alternative
@@ -10,7 +10,7 @@ keywords:
 
 # OpenScreen vs Cap
 
-OpenScreen and Cap are both open-source desktop screen recorders for Windows, macOS and Linux, with automatic zooms, an editable cursor, on-device captions and watermark-free export. OpenScreen is MIT-licensed, free for commercial use, and works without an account or a server. Cap's free download is for personal use only, and Cap adds hosted share links, which need a Cap sign-in. Cap is the better choice if your team shares recordings by link, needs SSO or compliance certifications, or delivers SRT or WebVTT caption files.
+OpenScreen is an MIT-licensed screen recorder for Windows, macOS and Linux that is free for commercial use and works without an account or a server. Cap covers similar ground, with automatic zooms, an editable cursor, on-device captions and watermark-free export, but its free download is for personal use only, and commercial use of its official app needs a paid license. Cap's source is AGPLv3, and Cap adds hosted share links, which need a Cap sign-in. Cap is the better choice if your team shares recordings by link, needs SSO or compliance certifications, or delivers SRT or WebVTT caption files.
 
 This page is published by the OpenScreen project. The Cap details come from cap.so and Cap's GitHub repository and were checked in September 2026. The sources are listed at the end.
 
@@ -28,14 +28,12 @@ This page is published by the OpenScreen project. The Cap details come from cap.
 | Captions | On-device Whisper, one model of about 264 MB, downloaded once. Burned into the video | On-device Whisper or Parakeet, in beta. Burned into the video, or saved as SRT or WebVTT |
 | AI features | Optional chat editing and caption translation into 15 languages, with your own provider key | Hosted in Cap Pro: titles, summaries, chapters, transcriptions and caption translation. No key needed |
 | Export | MP4 (H.264 or H.265) at 720p, 1080p or source size, 24, 30 or 60 fps. GIF at 15 to 30 fps. No watermark | MP4 at 720p, 1080p or 4K, 15, 30 or 60 fps. GIF at 10 to 30 fps. Transparent cursor-only MOV. No watermark. No codec setting documented |
-| Keystroke overlay | No | Yes, in beta |
-| Screenshots | No | Yes, with its own editor |
 | Teams and compliance | None | Team workspaces. SAML SSO add-on at $199/month. SOC 2 Type II, ISO 27001 and HIPAA, with a signed BAA at $99/month (as of September 2026) |
 | Command-line interface | Yes, with JSON output | Yes, with JSON output |
 
 ## What both apps do
 
-Most of what Cap's Studio Mode does, OpenScreen also does. None of the following is unique to either app.
+The two editors overlap widely. None of the following is unique to either app.
 
 - **Automatic and manual zooms.** In OpenScreen, **Auto-enhance → Automatic zooms** places zooms from the recorded cursor movement, with no network call and no model, and manual zooms come in six depths. Cap generates zooms around recorded clicks and offers manual zooms from 1x to 4.5x. More on [auto-zoom](/features/auto-zoom/).
 - **A cursor you can change afterward.** Both record the pointer as data rather than pixels, so you can resize it, smooth its movement or hide it after the take.
@@ -67,7 +65,7 @@ If you are choosing between the two, check the license first. The others come fr
 
 - **Codec choice.** MP4 exports in H.264 or H.265. Cap's export options list resolution, frame rate and quality presets, but no codec setting. See [Export](/docs/export/).
 - **A wider speed range.** OpenScreen speed regions go from 0.1x to 100x. Cap's Studio Mode docs list segment speeds from 0.25x to 8x.
-- **Export speed.** Both apps are in the public [export benchmark](/blog/2026/09/09/an-export-benchmark-hard-to-fake/). At the time of writing, OpenScreen's entry ranks ahead of Cap 0.6.0. That entry is a 1.11.0 release candidate, Cap 0.6.0 has few submissions, and results differ widely between machines, so read the live standings and their caveats there.
+- **Export speed.** Both apps are in the public [export benchmark](/blog/2026/09/09/an-export-benchmark-hard-to-fake/). At the time of writing, OpenScreen's entry ranks ahead of Cap 0.6.0. Results vary between machines, so check the live standings there.
 
 ### Platforms
 
@@ -76,17 +74,9 @@ If you are choosing between the two, check the license first. The others come fr
 
 ## When Cap is the better choice
 
-- **You share by link.** Cap's Instant Mode uploads while you record, and viewers of a public link watch in the browser without an account. Signed-in viewers can leave comments, and Cap Pro adds viewer analytics, password protection and a custom domain. OpenScreen hosts nothing. You get a file and upload it wherever you share.
-- **Your organization needs SSO or compliance.** Cap offers team workspaces, a SAML SSO add-on, SOC 2 Type II and ISO 27001 certification, and HIPAA compliance with a signed BAA. OpenScreen has no team features.
-- **Your recordings feed other tools.** Cap links unfurl in Slack, and Cap stores recordings in Google Drive or any S3-compatible bucket. It has a REST API, webhooks, a Chrome extension, a Loom importer, and a self-hostable version of its web platform that runs with Docker Compose.
-- **You deliver caption files.** Cap saves captions as SRT or WebVTT. OpenScreen burns captions into the video and writes no caption file.
-- **You want AI without managing a key.** Cap Pro generates titles, summaries, chapters and transcriptions without an API key of your own. OpenScreen's chat editing and translation need your own provider account and key.
-- **You need an export OpenScreen lacks.** Cap has a fixed 4K preset, MP4 at 15 fps, GIF from 10 fps, and a transparent MOV of the cursor alone. OpenScreen exports MP4 at 720p, 1080p or source size, and GIF from 15 fps.
-- **You record part of the screen or take screenshots.** Cap records a selected area and has a screenshot mode with its own editor. OpenScreen records a whole display or one window, crops in the editor afterward, and takes no screenshots.
-- **You want more finishing tools.** Cap has a keystroke overlay in beta, color correction, window and device frames, and 3D tracks with perspective, easing and focus blur. Its Studio Sound feature reduces microphone noise at a Light, Balanced or Strong setting. OpenScreen has none of these. Its only 3D effect is a fixed tilt on zooms: Iso, Left or Right.
-- **You want a company behind the tool.** Cap is made by Cap Software, Inc., ships frequent releases, and sells priority support with Cap Pro. OpenScreen is under active development, and its README says to expect rough edges.
-
-One OpenScreen limit matters while you record: on macOS, and on macOS 26 or later especially, its floating recording controls can show up in the capture. The same is true on Linux.
+- **You share by link.** Cap's Instant Mode uploads while you record, and viewers of a public link watch in the browser without an account. Signed-in viewers can leave comments, and Cap Pro adds viewer analytics, password protection and a custom domain. OpenScreen gives you a file to upload wherever you share.
+- **Your organization needs SSO or compliance.** Cap offers team workspaces, a SAML SSO add-on, SOC 2 Type II and ISO 27001 certification, and HIPAA compliance with a signed BAA.
+- **You deliver caption files.** Cap saves captions as SRT or WebVTT. OpenScreen burns captions into the video.
 
 ## Getting started
 
@@ -101,18 +91,15 @@ Comparing other tools as well? See the [Screen Studio alternative](/alternatives
 
 Cap facts, checked September 2026:
 
-- Plans, prices, share-link limits, SSO and BAA add-ons, Cap Pro features including the Loom importer, and the free version's personal-use limit: [cap.so/pricing](https://cap.so/pricing)
+- Plans, prices, share-link limits, SSO and BAA add-ons, Cap Pro features, and the free version's personal-use limit: [cap.so/pricing](https://cap.so/pricing)
 - What counts as commercial use, and the exemption for self-built copies: [cap.so/docs/commercial-license](https://cap.so/docs/commercial-license)
 - License split between AGPLv3 and MIT: [github.com/CapSoftware/Cap/blob/main/LICENSE](https://github.com/CapSoftware/Cap/blob/main/LICENSE)
-- Storage options and self-hosting with Docker Compose: [github.com/CapSoftware/Cap](https://github.com/CapSoftware/Cap)
-- Platforms, the "Windows (Beta)" link, Linux packages, the Chrome extension, the CLI and Cap Software, Inc. as the maker: [cap.so/download](https://cap.so/download)
+- Platforms, the "Windows (Beta)" link, Linux packages and the CLI: [cap.so/download](https://cap.so/download)
 - 64-bit Windows and the Linux package in its install guide: [cap.so/docs/installation](https://cap.so/docs/installation)
-- Recording targets, zooms, clips, speeds, masks, text, captions and their SRT or WebVTT export, keyboard track, music, frames, camera blur, export formats, and sign-in for share links: [cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
-- Instant Mode, share pages, sign-in for comments, and storage providers: [cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
-- Release history, version 0.6.0 (Linux packages, 3D tracks, Studio Sound, color correction, camera background removal on macOS, image tracks), the 0.5.7 teleprompter, transcript cutting in the web editor, Slack, SOC 2 Type II, ISO 27001 and HIPAA: [cap.so/changelog](https://cap.so/changelog)
-- Sign-in for Instant Mode, hosted AI features and caption translation, screenshot mode, no watermark, CLI JSON output: [cap.so/llms-full.txt](https://cap.so/llms-full.txt)
-- REST API: [cap.so/docs/api/rest-api](https://cap.so/docs/api/rest-api)
-- Webhooks: [cap.so/docs/api/webhooks](https://cap.so/docs/api/webhooks)
+- Recording targets, zooms, clips, speeds, masks, text, captions and their SRT or WebVTT export, music, camera blur, export formats, and sign-in for share links: [cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
+- Instant Mode, share pages and sign-in for comments: [cap.so/docs/recording/instant-mode](https://cap.so/docs/recording/instant-mode)
+- Release history, version 0.6.0 (Linux packages, camera background removal on macOS, image tracks), the 0.5.7 teleprompter, transcript cutting in the web editor, SOC 2 Type II, ISO 27001 and HIPAA: [cap.so/changelog](https://cap.so/changelog)
+- Sign-in for Instant Mode, hosted AI features and caption translation, no watermark, CLI JSON output: [cap.so/llms-full.txt](https://cap.so/llms-full.txt)
 
 OpenScreen facts describe version 1.11.0 and link to its documentation above.
 

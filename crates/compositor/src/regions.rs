@@ -660,8 +660,9 @@ fn project_corner(x0: f32, y0: f32, rot: [f32; 3], perspective: f32) -> Option<(
     Some((px, py))
 }
 
-/// Le point local (x0,y0,0) tourné par `rot` (degrés X/Y/Z), avant perspective. `z` > 0 vient
-/// vers la caméra, < 0 recule.
+/// La rotation seule de `project_corner` : le point local (x0,y0,0) tourné par `rot` (degrés
+/// X/Y/Z), AVANT perspective. `z > 0` = vers la caméra (la perspective divise par
+/// `perspective - z`, donc agrandit), < 0 recule.
 fn rotate_corner(x0: f32, y0: f32, rot: [f32; 3]) -> (f32, f32, f32) {
     let (a, b, g) = (rot[0].to_radians(), rot[1].to_radians(), rot[2].to_radians());
     let (ca, sa) = (a.cos(), a.sin());
@@ -682,6 +683,38 @@ fn rotate_corner(x0: f32, y0: f32, rot: [f32; 3]) -> (f32, f32, f32) {
     pz = xz;
     (px, py, pz)
 }
+
+/// `(Kx, Ky)` tels que le `pz` de `rotate_corner(x0, y0, rot)` vaille `Kx·x0 + Ky·y0`.
+///
+/// Forme close du `pz` ci-dessus : le point part de z = 0, donc rotateZ ne touche pas z,
+/// rotateY en tire `-x1·sb`, rotateX en tire `y1·sa + z·ca`, où (x1, y1) est le point après
+/// rotateZ. En développant x1 = x0·cg − y0·sg et y1 = x0·sg + y0·cg, `pz` est linéaire en
+/// (x0, y0) — d'où ces deux coefficients, sans rien de plus à calculer par pixel.
+fn depth_coefficients(rot: [f32; 3]) -> (f32, f32) {
+    let (a, b, g) = (rot[0].to_radians(), rot[1].to_radians(), rot[2].to_radians());
+    let (ca, sa) = (a.cos(), a.sin());
+    let sb = b.sin();
+    let (cg, sg) = (g.cos(), g.sin());
+    (sa * sg - sb * ca * cg, sa * cg + sb * ca * sg)
+}
+
+/// ROTATION_3D_PERSPECTIVE_FACTOR (TS) — à garder synchronisé avec `types.ts`, que la passe 3D
+/// de l'exporteur canvas lit encore. Distance de fuite = facteur × min(w,h) : plus le facteur
+/// est grand, plus la caméra est loin et plus la convergence des arêtes s'aplatit. À 2.6 elle
+/// était si faible que l'inclinaison ne se lisait plus (le bord haut d'iso ressortait à 0.08° de
+/// l'horizontale).
+const PERSPECTIVE_FACTOR: f32 = 1.6;
+
+/// Profondeur de champ du mode 8 : cercle de confusion, en texels SOURCE, par unité d'écart de
+/// profondeur rapporté à la distance de fuite (`|z − z_focus| / P`).
+///
+/// Réglé une fois, en unités de P : cet écart ne dépend ni de la résolution ni du zoom (la
+/// perspective se déduit de la taille du plan lui-même). Sur iso en 16:9, focus au centre, le
+/// coin lointain est à ~0.19 P, soit un flou de ~4.6 texels ; focus sur le coin proche, l'écart
+/// double et le shader plafonne (`DOF_MAX_LOD`, niveau 1.5 de la pyramide demi-résolution, soit
+/// ~5.7 texels). Un flou exprimé en texels suit le CONTENU : la même zone est aussi floue quel
+/// que soit le zoom qui l'affiche.
+pub const DOF_COC_PER_DEPTH: f32 = 24.0;
 
 /// Les 4 coins d'un quad `width`×`height` réduit de `scale`, projetés. `None` si un coin part
 /// derrière le plan de fuite.
@@ -714,6 +747,10 @@ pub struct TiltedQuad {
     /// Facteur de containment. Le plan mesure donc `taille_du_rect × scale` dans son PROPRE repère,
     /// avant projection — ce qu'il faut connaître pour y poser un rayon de coin à la bonne échelle.
     pub scale: f32,
+    /// `(Kx, Ky)` : la profondeur d'un point du plan, en px, vaut `Kx·x + Ky·y` pour (x, y) sa
+    /// position en px dans le repère du plan, centre à l'origine, AVANT projection. Positive =
+    /// vers la caméra. Nulle quand le quad est rendu à plat.
+    pub depth_k: (f32, f32),
 }
 
 /// Les 4 coins (TL, TR, BR, BL) du quad tilté en 3D, en px relatifs au CENTRE du rect d'origine
@@ -734,12 +771,6 @@ pub fn rotated_quad_corners_px(
     rot: [f32; 3],
     rot_dyn: [f32; 3],
 ) -> TiltedQuad {
-    // ROTATION_3D_PERSPECTIVE_FACTOR (TS) — à garder synchronisé avec `types.ts`, que la passe 3D
-    // de l'exporteur canvas lit encore. Distance de fuite = facteur × min(w,h) : plus le facteur
-    // est grand, plus la caméra est loin et plus la convergence des arêtes s'aplatit. À 2.6 elle
-    // était si faible que l'inclinaison ne se lisait plus (le bord haut d'iso ressortait à 0.08° de
-    // l'horizontale).
-    const PERSPECTIVE_FACTOR: f32 = 1.6;
     let perspective = width.min(height) * PERSPECTIVE_FACTOR;
     let (half_w, half_h) = (width * 0.5, height * 0.5);
 
@@ -766,6 +797,7 @@ pub fn rotated_quad_corners_px(
                     (-half_w, half_h),
                 ],
                 scale: 1.0,
+                depth_k: (0.0, 0.0),
             };
         }
     };
@@ -786,14 +818,18 @@ pub fn rotated_quad_corners_px(
             None => break,
         }
     }
+    // La profondeur suit l'angle RÉELLEMENT dessiné (base + dynamique), sinon le flou se
+    // décollerait du plan pendant la parallaxe.
+    let mut drawn = rot;
     if rot_dyn != [0.0; 3] {
         let full = [rot[0] + rot_dyn[0], rot[1] + rot_dyn[1], rot[2] + rot_dyn[2]];
         // Un coin qui passerait derrière le plan de fuite : on garde la pose de base.
         if let Some(c) = project_scaled_corners(width, height, scale, full, perspective) {
             corners = c;
+            drawn = full;
         }
     }
-    TiltedQuad { corners, scale }
+    TiltedQuad { corners, scale, depth_k: depth_coefficients(drawn) }
 }
 
 /// Amplitude maximale de la part dynamique du tilt, en degrés X/Y/Z. Partagée par tout ce qui
@@ -974,6 +1010,28 @@ impl TiltedQuad {
         (top.0 + (bottom.0 - top.0) * fy, top.1 + (bottom.1 - top.1) * fy)
     }
 
+    /// Le `mb` du draw mode 8 : `[gx, gy, z_focus, k]`.
+    ///
+    /// La profondeur du point (s, t) du plan (0..1, ce que le warp inverse du shader retrouve)
+    /// vaut `(s − 0.5)·gx + (t − 0.5)·gy`, en px, positive vers la caméra : deux multiply-add par
+    /// pixel, aucune trigo. `z_focus` est cette profondeur au point de focus du zoom
+    /// (`focus_plane`, 0..1 dans le plan — `FrameGeometry::focus_plane`).
+    ///
+    /// `k` convertit l'écart de profondeur en cercle de confusion : `coc = k·|z − z_focus|`, en
+    /// texels source (`DOF_COC_PER_DEPTH / P`). `dof = false` le laisse à 0 : le shader ne
+    /// quitte alors jamais son échantillon net, et la sortie est celle d'avant l'effet à l'octet.
+    ///
+    /// `screen_px` est la taille du rect d'origine, celle passée à `rotated_quad_corners_px` : le
+    /// plan mesure `screen_px × scale` dans son propre repère, et la distance de fuite en dérive.
+    pub fn depth_mb(&self, screen_px: [f32; 2], focus_plane: [f32; 2], dof: bool) -> [f32; 4] {
+        let gx = screen_px[0] * self.scale * self.depth_k.0;
+        let gy = screen_px[1] * self.scale * self.depth_k.1;
+        let z_focus = (focus_plane[0] - 0.5) * gx + (focus_plane[1] - 0.5) * gy;
+        let perspective = screen_px[0].min(screen_px[1]) * PERSPECTIVE_FACTOR;
+        let k = if dof && perspective > 0.0 { DOF_COC_PER_DEPTH / perspective } else { 0.0 };
+        [gx, gy, z_focus, k]
+    }
+
     /// Demi-largeur / demi-hauteur de la bounding box des coins projetés, en px.
     pub fn half_extents_px(&self) -> (f32, f32) {
         projected_extents(&self.corners)
@@ -1000,6 +1058,23 @@ mod zoom_focus_tests {
             hide_cursor: false,
             click_impact: false,
         }
+    }
+
+    /// Le focus automatique ne « perd » jamais la piste : hors de ses bornes, il tient la
+    /// dernière (ou la première) position suivie au lieu de retomber sur le point statique de la
+    /// région. Sans ça, le plan net sauterait d'un bout de l'écran à l'autre à la fin de la
+    /// télémétrie — et la netteté avec lui, maintenant que `z_focus` en dépend.
+    #[test]
+    fn auto_focus_holds_the_last_tracked_point_past_the_track() {
+        let track = CursorTrack::new(vec![(3.0, 0.8, 0.2), (4.0, 0.9, 0.1)], Vec::new(), Vec::new());
+        let mut r = region(1.5, 0.1);
+        r.focus_mode = Some("auto".into());
+        let last = track.follow_at(4.0).unwrap();
+        for t in [4.5f32, 6.0, 7.9] {
+            assert_eq!(resolve_focus(&r, t, Some(&track)), [last.0, last.1], "t = {t}");
+        }
+        let first = track.follow_at(3.0).unwrap();
+        assert_eq!(resolve_focus(&r, 2.1, Some(&track)), [first.0, first.1]);
     }
 
     #[test]
@@ -1353,6 +1428,113 @@ mod tilt_tests {
         }
     }
 
+    fn presets() -> [(&'static str, [f32; 3]); 3] {
+        [
+            ("iso", rotation3d_for(&Some("iso".into()))),
+            ("left", rotation3d_for(&Some("left".into()))),
+            ("right", rotation3d_for(&Some("right".into()))),
+        ]
+    }
+
+    fn depth_at(mb: [f32; 4], s: f32, t: f32) -> f32 {
+        (s - 0.5) * mb[0] + (t - 0.5) * mb[1]
+    }
+
+    /// La forme close de `depth_mb` doit redonner le `pz` que `project_corner` calcule — sur tout
+    /// le plan, pas seulement aux coins, et dans le repère exact où les coins ont été projetés.
+    #[test]
+    fn the_closed_form_depth_matches_the_rotation() {
+        for (name, rot) in presets() {
+            for (w, h) in [(1920.0f32, 1080.0f32), (1080.0, 1920.0), (800.0, 800.0)] {
+                let quad = rotated_quad_corners_px(w, h, rot, [0.0; 3]);
+                let mb = quad.depth_mb([w, h], [0.5, 0.5], false);
+                let perspective = w.min(h) * PERSPECTIVE_FACTOR;
+                for (i, (s, t)) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].into_iter().enumerate()
+                {
+                    let (x0, y0) = ((s - 0.5) * w * quad.scale, (t - 0.5) * h * quad.scale);
+                    // Même repère que les coins : projeter ce point redonne le coin rendu.
+                    let (px, py) = project_corner(x0, y0, rot, perspective).unwrap();
+                    let (cx, cy) = quad.corners[i];
+                    assert!((px - cx).abs() < 1e-2 && (py - cy).abs() < 1e-2, "{name} coin {i}");
+                }
+                for i in 0..=8 {
+                    for j in 0..=8 {
+                        let (s, t) = (i as f32 / 8.0, j as f32 / 8.0);
+                        let (x0, y0) = ((s - 0.5) * w * quad.scale, (t - 0.5) * h * quad.scale);
+                        let (_, _, pz) = rotate_corner(x0, y0, rot);
+                        let z = depth_at(mb, s, t);
+                        assert!(
+                            (z - pz).abs() <= 1e-3 * w.max(h),
+                            "{name} {w}x{h} ({s},{t}) : forme close {z} != pz {pz}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Le signe. Pour iso, le coin haut-droit est le PROCHE (dessiné plus grand), le bas-gauche le
+    /// lointain : z(BL) < z(TR). Un signe inversé flouterait le coin proche, et la règle des 2°
+    /// ne le verrait pas — d'où le recoupement avec la taille réellement dessinée.
+    #[test]
+    fn iso_depth_rises_towards_the_corner_drawn_larger() {
+        let (w, h) = (1920.0f32, 1080.0f32);
+        let rot = rotation3d_for(&Some("iso".into()));
+        let quad = rotated_quad_corners_px(w, h, rot, [0.0; 3]);
+        let mb = quad.depth_mb([w, h], [0.5, 0.5], false);
+        let (z_tr, z_bl) = (depth_at(mb, 1.0, 0.0), depth_at(mb, 0.0, 1.0));
+        assert!(z_bl < z_tr, "z(BL) = {z_bl} doit être < z(TR) = {z_tr}");
+        // Grossissement perspective d'un coin = position projetée / position tournée.
+        let magnification = |i: usize, s: f32, t: f32| {
+            let (x0, y0) = ((s - 0.5) * w * quad.scale, (t - 0.5) * h * quad.scale);
+            let (rx, ry, _) = rotate_corner(x0, y0, rot);
+            quad.corners[i].0.hypot(quad.corners[i].1) / rx.hypot(ry)
+        };
+        let (m_tr, m_bl) = (magnification(1, 1.0, 0.0), magnification(3, 0.0, 1.0));
+        assert!(m_tr > m_bl * 1.2, "TR x{m_tr} devrait être nettement plus grossi que BL x{m_bl}");
+    }
+
+    /// Le focus au centre du plan est à la profondeur du centre (0), et `k` reste nul réglage
+    /// coupé : le shader ne quitte alors jamais son échantillon net.
+    #[test]
+    fn the_depth_slot_is_inert_when_off_and_centred() {
+        for (name, rot) in presets() {
+            let quad = rotated_quad_corners_px(1920.0, 1080.0, rot, [0.0; 3]);
+            let mb = quad.depth_mb([1920.0, 1080.0], [0.5, 0.5], false);
+            assert_eq!(mb[2], 0.0, "{name}");
+            assert_eq!(mb[3], 0.0, "{name}");
+            let off = quad.depth_mb([1920.0, 1080.0], [0.9, 0.2], false);
+            assert!((off[2] - depth_at(off, 0.9, 0.2)).abs() < 1e-4, "{name}");
+        }
+        let flat = rotated_quad_corners_px(1920.0, 1080.0, [0.0, 0.0, 0.0], [0.0; 3]);
+        assert_eq!(flat.depth_mb([1920.0, 1080.0], [0.1, 0.9], false), [0.0; 4]);
+        // À plat, allumer ne floute rien : gx = gy = 0, donc |z − z_focus| = 0 partout.
+        let lit = flat.depth_mb([1920.0, 1080.0], [0.1, 0.9], true);
+        assert_eq!([lit[0], lit[1], lit[2]], [0.0; 3]);
+    }
+
+    /// Le cercle de confusion que le shader calcule (`k·|z − z_focus|`, texels source) : nul au
+    /// focus, croissant vers le coin LOINTAIN, et le même en 1080p qu'en 4K — il est réglé en
+    /// unités de la distance de fuite, pas en pixels de sortie.
+    #[test]
+    fn the_circle_of_confusion_grows_away_from_the_focus_and_ignores_resolution() {
+        let rot = rotation3d_for(&Some("iso".into()));
+        let coc = |w: f32, h: f32, focus: [f32; 2], s: f32, t: f32| {
+            let quad = rotated_quad_corners_px(w, h, rot, [0.0; 3]);
+            let mb = quad.depth_mb([w, h], focus, true);
+            mb[3] * (depth_at(mb, s, t) - mb[2]).abs()
+        };
+        let centre = [0.5, 0.5];
+        assert!(coc(1920.0, 1080.0, centre, 0.5, 0.5) < 1e-4);
+        // Coin lointain (BL) : ~0.19 P, donc ~4.6 texels, bien au-dessus du seuil net (0.5).
+        let far = coc(1920.0, 1080.0, centre, 0.0, 1.0);
+        assert!((3.5..6.0).contains(&far), "coin lointain {far}");
+        // Focus posé sur le coin proche (TR) : le lointain s'en éloigne encore.
+        assert!(coc(1920.0, 1080.0, [1.0, 0.0], 0.0, 1.0) > far * 1.8);
+        let far_4k = coc(3840.0, 2160.0, centre, 0.0, 1.0);
+        assert!((far_4k - far).abs() < 1e-3 * far, "{far_4k} != {far}");
+    }
+
     #[test]
     fn a_flat_quad_is_left_alone() {
         // Sans rotation, aucun containment ne doit s'appliquer : les coins sont ceux du rect.
@@ -1544,6 +1726,11 @@ mod tilt_tests {
             // Garde : la part dynamique bouge bien les coins.
             let moved = rotated_quad_corners_px(1920.0, 1080.0, base, [1.9, 3.0, 0.0]);
             assert!((moved.corners[1].0 - frozen.corners[1].0).abs() > 5.0);
+            // La profondeur de champ suit l'angle DESSINÉ, pas la base seule.
+            let d = [1.9, 3.0, 0.0];
+            let full = [base[0] + d[0], base[1] + d[1], base[2] + d[2]];
+            assert_eq!(moved.depth_k, depth_coefficients(full), "{name}");
+            assert_ne!(moved.depth_k, frozen.depth_k, "{name}");
         }
     }
 

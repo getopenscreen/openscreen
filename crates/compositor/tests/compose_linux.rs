@@ -1670,3 +1670,113 @@ fn compose_linux_annotation_ancree_hors_zoom() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Profondeur de champ du mode 8 (pendant Linux de `tilted_depth_of_field.rs`)
+// ---------------------------------------------------------------------------
+
+/// Nettete d'une fenetre `r`x`r` centree en `c` : moyenne des ecarts entre voisins (vert).
+fn dof_sharpness(rgba: &[u8], w: u32, c: (u32, u32), r: u32) -> f64 {
+    let g = |x: u32, y: u32| rgba[((y * w + x) * 4 + 1) as usize] as f64;
+    let (mut acc, mut n) = (0.0, 0.0);
+    for y in c.1 - r / 2..c.1 + r / 2 {
+        for x in c.0 - r / 2..c.0 + r / 2 {
+            acc += (g(x + 1, y) - g(x, y)).abs() + (g(x, y + 1) - g(x, y)).abs();
+            n += 1.0;
+        }
+    }
+    acc / n
+}
+
+/// Octets RGBA de la fenetre `r`x`r` centree en `c`.
+fn dof_window_bytes(rgba: &[u8], w: u32, c: (u32, u32), r: u32) -> Vec<u8> {
+    let mut out = Vec::new();
+    for y in c.1 - r / 2..c.1 + r / 2 {
+        let i = ((y * w + c.0 - r / 2) * 4) as usize;
+        out.extend_from_slice(&rgba[i..i + (r * 4) as usize]);
+    }
+    out
+}
+
+/// Coin du plan (hors fond magenta) extreme dans la direction `dir`, rentre de `inset`
+/// vers le centroide.
+fn dof_corner(rgba: &[u8], w: u32, h: u32, dir: (i64, i64), inset: f64) -> (u32, u32) {
+    let (mut best, mut at) = (i64::MIN, (0i64, 0i64));
+    let (mut sx, mut sy, mut n) = (0f64, 0f64, 0f64);
+    for y in 0..h as i64 {
+        for x in 0..w as i64 {
+            let i = ((y * w as i64 + x) * 4) as usize;
+            if !not_bg(&rgba[i..i + 4]) {
+                continue;
+            }
+            sx += x as f64;
+            sy += y as f64;
+            n += 1.0;
+            if x * dir.0 + y * dir.1 > best {
+                best = x * dir.0 + y * dir.1;
+                at = (x, y);
+            }
+        }
+    }
+    let x = at.0 as f64 + (sx / n - at.0 as f64) * inset;
+    let y = at.1 as f64 + (sy / n - at.1 as f64) * inset;
+    (x as u32, y as u32)
+}
+
+/// Golden par backend : iso, focus sur le coin proche. Le coin lointain perd son detail, le
+/// proche ne bouge pas d'un octet, et a plat le reglage ne change rien. Un `level(lod)` qui
+/// retomberait au niveau 0 (vue a un seul niveau, binding 4 mal lie) rendrait le lointain net.
+/// Source : `OPENSCREEN_DOF_SOURCE` (du texte de preference), sinon la fixture.
+#[test]
+fn compose_linux_profondeur_de_champ() {
+    let source = std::env::var("OPENSCREEN_DOF_SOURCE").unwrap_or_else(|_| FIXTURE.into());
+    if std::env::var("OPENSCREEN_LINUX_COMPOSE").is_err() || !Path::new(&source).is_file() {
+        eprintln!("compose_linux dof: opt-in (OPENSCREEN_LINUX_COMPOSE=1 + source). Skip.");
+        return;
+    }
+    let (w, h) = (1920u32, 1080u32);
+    // `create_auto` : lavapipe (backend CPU) compte, et `DOF_ON_CPU_BACKEND` l'y laisse tourner.
+    let gpu = Gpu::create_auto(false).expect("Gpu::create_auto");
+    let comp = Compositor::new_sized(&gpu, w, h).expect("Compositor::new_sized");
+    let mut dec = Decoder::open(&source, &gpu).expect("Decoder::open");
+    let mut cfg = Cfg::c8();
+    cfg.shadow = false;
+    let scene = |rotation: &str, dof: bool| {
+        tilt_scene_json(rotation, 0, 0.0)
+            .replace(r#""motionBlur":0}"#, &format!(r#""motionBlur":0,"depthOfField":{dof}}}"#))
+            .replace(r#""focusX":0.5,"focusY":0.5"#, r#""focusX":0.94,"focusY":0.06"#)
+    };
+    let (on, off, flat_on, flat_off) = unsafe {
+        let sf = dec.seek_to(1.0).expect("Decoder::seek_to");
+        let render = |json: String| {
+            let scene = Scene::from_json(&json).expect("scene json");
+            comp.set_live_params(openscreen_compositor::compositor::live_params_from_scene(&scene));
+            comp.set_scene(Some(scene));
+            comp.compose_frame(sf, sf, 90.0, &cfg).expect("compose_frame");
+            comp.readback_direct().expect("readback_direct").2
+        };
+        (
+            render(scene("\"iso\"", true)),
+            render(scene("\"iso\"", false)),
+            render(scene("null", true)),
+            render(scene("null", false)),
+        )
+    };
+    write_ppm("compose_linux_dof_on", w, h, &on);
+    write_ppm("compose_linux_dof_off", w, h, &off);
+    let r = 48;
+    let near = dof_corner(&off, w, h, (1, -1), 0.12);
+    let far = dof_corner(&off, w, h, (-1, 1), 0.12);
+    let (near_on, near_off) = (dof_sharpness(&on, w, near, r), dof_sharpness(&off, w, near, r));
+    let (far_on, far_off) = (dof_sharpness(&on, w, far, r), dof_sharpness(&off, w, far, r));
+    println!(
+        "compose_linux dof : proche {near_off:.2} -> {near_on:.2}, lointain {far_off:.2} -> {far_on:.2}"
+    );
+    assert!(far_off > 2.0, "fenetre lointaine sans detail ({far_off})");
+    assert!(
+        dof_window_bytes(&on, w, near, r) == dof_window_bytes(&off, w, near, r),
+        "coin proche modifie : {near_off} -> {near_on}"
+    );
+    assert!(far_on < far_off * 0.7, "coin lointain pas floute : {far_off} -> {far_on}");
+    assert!(flat_on == flat_off, "rotation nulle : la profondeur de champ a change la frame");
+}

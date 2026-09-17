@@ -2404,6 +2404,7 @@ export function VideoEffectsPane() {
 	// can never disagree about what shape the footage is. Already sorted by clip count then by
 	// pixel area, so [0] is "the shape most of this timeline is in" with no heuristic of ours.
 	const nativeFormats = useMemo(() => (document ? collectNativeFormats(document) : []), [document]);
+	const hasTiltedZoom = (document?.zoomRanges ?? []).some((z) => z.rotationPreset != null);
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
 	const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
 	const [frameMenuOpen, setFrameMenuOpen] = useState(false);
@@ -2712,11 +2713,28 @@ export function VideoEffectsPane() {
 					onCommit={() => void commit()}
 				/>
 			</div>
+			{/* Next to motion blur because it is the other blur of the RECORDING. It only ever
+			    acts on a 3D-tilted zoom, so with none in the project the switch would move
+			    nothing on screen: it is disabled then, and the row says why. */}
+			<div className={styles.paneRow}>
+				<span className={styles.label}>
+					{ts("effects.depthOfField")}
+					<span className={styles.info}>
+						{hasTiltedZoom ? ts("effects.depthOfFieldHint") : ts("effects.depthOfFieldNoTilt")}
+					</span>
+				</span>
+				<Toggle
+					checked={settings.depthOfField}
+					ariaLabel={ts("effects.depthOfField")}
+					disabled={!hasDocument || !hasTiltedZoom}
+					onChange={(v) => void set({ depthOfField: v })}
+				/>
+			</div>
 		</Pane>
 	);
 }
 
-// ─── Layout (webcam) ──────────────────────────────────────────────
+// ─── Layout (webcam)──────────────────────────────────────────────
 
 const WEBCAM_PRESETS = [
 	{ value: "picture-in-picture", labelKey: "layout.pictureInPicture" },

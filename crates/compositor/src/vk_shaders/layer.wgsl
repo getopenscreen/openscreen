@@ -27,7 +27,7 @@ struct Layer {
     fx: vec4<f32>,        // mode 2 : spread ombre en px ; mode 5 : (direction xy, temps programme replie, mouvement 0..3) ; modes 8/12/13/14 : coins TL,TR du quad projeté ; mode 9 : hampe de la flèche ; mode 10 : (flou?, rayon/bloc px, ovale?, teinté?)
     src_prev: vec4<f32>,  // modes 8/12/13/14 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque
     dst_prev: vec4<f32>,  // mode 8 : .xy = taille du plan en px AVANT projection (le rayon y vit), .z = 1 si coins hauts carres (sous un cadre) ; mode 14 : .xy = taille du plan du cadre, .z = hauteur de la barre, .w = epaisseur du filet (px du plan) ; mode 13 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque
-    mb: vec4<f32>,        // mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné ; mode 13 : mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume, <= 1 = plat) ; mode 14 : couleur du filet (alpha droit)
+    mb: vec4<f32>,        // mode 8 : [gx, gy, z_focus, k], profondeur du plan et flou (texels source) par px d'ecart, k = 0 coupe ; mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné ; mode 13 : mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume, <= 1 = plat) ; mode 14 : couleur du filet (alpha droit)
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -36,7 +36,13 @@ struct Layer {
 @group(0) @binding(3) var samp:  sampler;
 // Masque de segmentation du sujet webcam, R8. Une vue 1x1 est liee quand aucun masque
 // n'existe : la branche n'est de toute facon prise que si layer.fx.z > 0.5.
+// Mode 8 : ce binding porte a la place la pyramide RGBA de profondeur de champ (jamais le
+// binding 1, qui porte la luma).
 @group(0) @binding(4) var texMask: texture_2d<f32>;
+
+// Plafond de la profondeur de champ du mode 8, en niveau de la pyramide demi-resolution.
+// Meme valeur que `DOF_MAX_LOD` du HLSL.
+const DOF_MAX_LOD: f32 = 1.5;
 // V est en binding 5 et pas 3 : les bindings 0-4 etaient deja pris quand le plan
 // de chroma a ete dedouble, et renumeroter aurait touche tous les bind groups
 // pour un gain nul.
@@ -586,9 +592,22 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         let d = sd_round_rect(p, plane_px * 0.5,
                               select(max(layer.radius_px, 0.0), 0.0, layer.dst_prev.z > 0.5 && p.y < 0.0));
         let tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
+        // Profondeur de champ (cf. HLSL) : net sous un demi-texel de flou, l'echantillon
+        // d'avant a l'octet ; au-dela, fondu vers la pyramide demi-resolution liee en binding 4
+        // (a la place du masque webcam, que ce mode ne lit pas), au niveau `log2(coc) - 1`,
+        // plafonne. LOD explicite : pas de derivees dans cette branche.
+        var tilt_rgb = sample_yuv(uv);
+        let rs = clamp(vec2<f32>(r.x, r.y), vec2<f32>(0.0), vec2<f32>(1.0));
+        let z = (rs.x - 0.5) * layer.mb.x + (rs.y - 0.5) * layer.mb.y;
+        let coc = layer.mb.w * abs(z - layer.mb.z);
+        if coc > 0.5 {
+            let lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
+            let far_rgb = textureSampleLevel(texMask, samp, uv, lod).rgb;
+            tilt_rgb = mix(tilt_rgb, far_rgb, clamp((coc - 0.5) / 1.5, 0.0, 1.0));
+        }
         // L'alpha est cette couverture, pas `color.a` : les draws du mode 8 laissent
         // `color` a zero, donc s'en servir rendrait un plan totalement transparent.
-        return vec4<f32>(sample_yuv(uv) * tilt_a, tilt_a);
+        return vec4<f32>(tilt_rgb * tilt_a, tilt_a);
     } else if layer.mode > 11.5 && layer.mode < 12.5 {
         // Mode 12 -- ombre du quad projete. La penombre suit le QUADRILATERE, pas son
         // rect englobant : un rect droit derriere un ecran incline se lit comme une

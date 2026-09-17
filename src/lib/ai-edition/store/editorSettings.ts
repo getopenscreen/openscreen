@@ -86,6 +86,7 @@ export interface EditorSettingsSnapshot {
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
+	depthOfField: boolean;
 	borderRadius: number;
 	padding: number;
 	cropRegion: CropRegion;
@@ -131,6 +132,7 @@ interface LegacyShape {
 	shadowIntensity?: number;
 	showBlur?: boolean;
 	motionBlurAmount?: number;
+	depthOfField?: boolean;
 	borderRadius?: number;
 	padding?: number;
 	cropRegion?: CropRegion;
@@ -212,6 +214,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		shadowIntensity: num(legacy?.shadowIntensity, DEFAULT_EDITOR_SETTINGS.shadowIntensity),
 		showBlur: bool(legacy?.showBlur, DEFAULT_EDITOR_SETTINGS.showBlur),
 		motionBlurAmount: num(legacy?.motionBlurAmount, DEFAULT_EDITOR_SETTINGS.motionBlurAmount),
+		depthOfField: bool(legacy?.depthOfField, DEFAULT_EDITOR_SETTINGS.depthOfField),
 		borderRadius: num(legacy?.borderRadius, DEFAULT_EDITOR_SETTINGS.borderRadius),
 		padding: num(legacy?.padding, DEFAULT_EDITOR_SETTINGS.padding),
 		cropRegion: legacy?.cropRegion ?? DEFAULT_EDITOR_SETTINGS.cropRegion,
@@ -257,6 +260,7 @@ export interface EditorSettingsPatch {
 	shadowIntensity?: number;
 	showBlur?: boolean;
 	motionBlurAmount?: number;
+	depthOfField?: boolean;
 	borderRadius?: number;
 	padding?: number;
 	cropRegion?: CropRegion;

@@ -2,6 +2,7 @@ import { normalizeTextAnimation } from "@/lib/annotationTextAnimation";
 import { normalizeBlurColor, normalizeBlurType } from "@/lib/blurEffects";
 import { normalizeCursorThemeId } from "@/lib/cursor/cursorThemes";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
+import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
 import type { ProjectMedia } from "@/lib/recordingSession";
 import { normalizeProjectMedia } from "@/lib/recordingSession";
 import { DEFAULT_WALLPAPER, WALLPAPER_PATHS } from "@/lib/wallpaper";
@@ -74,6 +75,7 @@ export interface ProjectEditorState {
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
+	depthOfField: boolean;
 	borderRadius: number;
 	padding: number;
 	cropRegion: CropRegion;
@@ -497,6 +499,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					? DEFAULT_ZOOM_MOTION_BLUR
 					: DEFAULT_EDITOR_APPEARANCE_SETTINGS.motionBlurAmount
 				: DEFAULT_EDITOR_APPEARANCE_SETTINGS.motionBlurAmount,
+		depthOfField:
+			typeof editor.depthOfField === "boolean"
+				? editor.depthOfField
+				: DEFAULT_PROJECT_APPEARANCE.depthOfField,
 		borderRadius:
 			typeof editor.borderRadius === "number"
 				? editor.borderRadius

@@ -42,6 +42,7 @@ export interface StylePresetAppearance {
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
+	depthOfField: boolean;
 	borderRadius: number;
 	padding: number;
 	webcamLayoutPreset: WebcamLayoutPreset;
@@ -228,12 +229,12 @@ export function parseStylePresetWallpaper(value: unknown, key = "wallpaper"): st
  * guessing a factory value for it would apply something the author never chose. The one
  * lenient field is `cursorTheme`: themes come and go between builds, so an id this build
  * does not ship falls back to the default cursor instead of rejecting a preset that is
- * otherwise sound (the editor does the same when it renders one). `cursor.volume` may be
- * absent: it postdates format version 1, and a preset without it was authored flat.
- * `wallpaperMotion` may be absent too: a preset saved before it has a still wallpaper, which
- * is exactly what "none" means.
- * `frame` may be absent as well: a preset saved before it had no frame (see `readFrame`).
- * Unknown extra keys are dropped.
+ * otherwise sound (the editor does the same when it renders one). The others postdate the
+ * first version-1 files, so a preset saved before one of them existed carries no choice about
+ * it and gets the value that means "unchanged": `cursor.volume` may be absent (the preset was
+ * authored flat), `wallpaperMotion` too (a still wallpaper, which is exactly what "none"
+ * means), `frame` as well (no frame, see `readFrame`), and `depthOfField` keeps the factory
+ * value (on). A present but ill-typed value is still refused. Unknown extra keys are dropped.
  */
 export function parseStylePresetAppearance(value: unknown): StylePresetAppearance {
 	if (!isRecord(value)) {
@@ -260,6 +261,7 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		shadowIntensity: readNumber(value, "shadowIntensity", NUMBER_RANGES.shadowIntensity),
 		showBlur: readBoolean(value, "showBlur"),
 		motionBlurAmount: readNumber(value, "motionBlurAmount", NUMBER_RANGES.motionBlurAmount),
+		depthOfField: value.depthOfField === undefined ? true : readBoolean(value, "depthOfField"),
 		borderRadius: readNumber(value, "borderRadius", NUMBER_RANGES.borderRadius),
 		padding: readNumber(value, "padding", NUMBER_RANGES.padding),
 		webcamLayoutPreset: readEnum(value, "webcamLayoutPreset", WEBCAM_LAYOUT_PRESETS),

@@ -259,6 +259,27 @@ pub(crate) fn remap_box(base: [f32; 4], cut_ref: [f32; 4], cut: [f32; 4]) -> [f3
         base[3] * (cut[3] - cut[1]) / rh,
     ]
 }
+/// Où tombe le point de focus du zoom dans la coupe DESSINÉE `cut`, en 0..1 de cette coupe.
+///
+/// `focus` est exprimé dans le crop utilisateur (la convention de `screen_source_rect`), pas
+/// dans `cut` : les deux diffèrent dès qu'un crop ou un cover s'en mêle. Le zoom, lui, ne compte
+/// pas : la coupe dessinée est prise à zoom 1 (issue #179). Et le centre de la coupe zoomée
+/// n'est pas le focus dès qu'elle bute sur un bord, d'où le report du point lui-même, sans
+/// jamais supposer (0.5, 0.5).
+pub(crate) fn focus_in_cut(
+    u_max: f32,
+    v_max: f32,
+    crop: Option<SceneCrop>,
+    focus: [f32; 2],
+    cut: [f32; 4],
+) -> [f32; 2] {
+    // Zoom 1 : la coupe est le crop entier, quel que soit le focus.
+    let [cu0, cv0, cu1, cv1] = screen_source_rect(u_max, v_max, crop, 1.0, [0.5, 0.5]);
+    let f = |v: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.5 };
+    let (u, v) = (cu0 + f(focus[0]) * (cu1 - cu0), cv0 + f(focus[1]) * (cv1 - cv0));
+    let local = |x: f32, a: f32, b: f32| if b - a > 1e-6 { ((x - a) / (b - a)).clamp(0.0, 1.0) } else { 0.5 };
+    [local(u, cut[0], cut[2]), local(v, cut[1], cut[3])]
+}
 /// Sous-rect SOURCE (en UV de texture) qui remplit une boîte de ratio `box_ar` **sans
 /// déformer** l'image : le plus grand rect centré ayant ce ratio, tiré de la frame
 /// visible — l'équivalent de `object-fit: cover` côté web.
@@ -340,6 +361,20 @@ pub const HALF_W: u32 = OUT_W / 2;
 pub const HALF_H: u32 = OUT_H / 2;
 pub const FIXTURE_FRAMES: u32 = 360;
 pub(crate) const FPS: f32 = 60.0;
+/// La profondeur de champ tourne-t-elle sur le backend CPU (WARP, lavapipe) ? Le seul drapeau
+/// partagé qui la coupe là-bas si son coût y devient prohibitif (seuil fixé par la spec :
+/// 10 ms/frame). Mesuré (`tests/tilted_depth_of_field.rs`, 1080p iso, trois passes) : WARP
+/// +3.8 / +6.3 / +12.2 ms/frame, soit +35 à +45 % ; le matériel +0.04 à +0.08 ms/frame. Médiane
+/// sous le seuil : l'effet reste allumé partout, ce drapeau est le levier si ça change.
+pub const DOF_ON_CPU_BACKEND: bool = true;
+/// Niveaux de la pyramide de profondeur de champ (demi-résolution de la texture décodeur, donc
+/// son niveau 0 est le niveau 1 d'une pyramide pleine résolution). Le shader plafonne sa lecture
+/// à `DOF_MAX_LOD` (1.5) ; les niveaux au-delà laissent la marge de relever ce plafond sans
+/// toucher aux trois backends. Jamais plus que la chaîne complète d'une très petite source.
+pub fn dof_pyramid_levels(w: u32, h: u32) -> u32 {
+    const DOF_PYRAMID_LEVELS: u32 = 5;
+    DOF_PYRAMID_LEVELS.min(32 - w.max(h).max(1).leading_zeros())
+}
 /// Longueurs de style exprimées en FRACTION du petit côté du cadre, et non en pixels.
 ///
 /// Elles étaient écrites en px bruts au point d'appel, ce qui voulait dire « px du render
@@ -485,6 +520,10 @@ impl CursorPlacement {
                         )
                     }),
                     scale: lerp(quad.scale, quad_b.scale, f),
+                    depth_k: (
+                        lerp(quad.depth_k.0, quad_b.depth_k.0, f),
+                        lerp(quad.depth_k.1, quad_b.depth_k.1, f),
+                    ),
                 },
                 center_px: [lerp(center_px[0], center_b[0], f), lerp(center_px[1], center_b[1], f)],
                 screen_px: [lerp(screen_px[0], screen_b[0], f), lerp(screen_px[1], screen_b[1], f)],
@@ -1012,6 +1051,12 @@ pub struct FrameGeometry {
     pub padding_scale: f32,
     /// Coupe source de l'écran en UV texture (crop utilisateur + zoom).
     pub cut: [f32; 4],
+    /// Point de focus du zoom (résolu : suivi curseur et rampe compris) en 0..1 DANS la coupe
+    /// dessinée `cut`, c'est-à-dire dans le plan que le mode 8 incline. Borné au plan : un focus
+    /// que le cover a rogné retombe sur le bord. C'est lui qui fixe `z_focus` (`depth_mb`).
+    pub focus_plane: [f32; 2],
+    /// Réglage « Depth of field » du projet. Ne décide rien seul : voir `depth_of_field_on`.
+    pub depth_of_field: bool,
     pub s_dst: [f32; 4],
     pub s_dst_prev: [f32; 4],
     /// Boîte écran **sans le zoom** : le conteneur auquel les annotations et les
@@ -1079,6 +1124,16 @@ impl FrameGeometry {
         })
     }
 
+    /// La profondeur de champ tourne-t-elle sur CETTE frame ? Réglage allumé, écran réellement
+    /// incliné (à plat le mode 8 n'est pas dessiné), et backend qui en a les moyens (cf.
+    /// `DOF_ON_CPU_BACKEND`). Une seule réponse pour les trois backends : elle décide à la fois
+    /// du remplissage de la pyramide et du `k` du mode 8, qui ne doivent jamais diverger.
+    pub fn depth_of_field_on(&self, cpu_backend: bool) -> bool {
+        self.depth_of_field
+            && !crate::regions::is_identity_rotation(self.zoom_rotation)
+            && (DOF_ON_CPU_BACKEND || !cpu_backend)
+    }
+
     /// `annotation_dst_in` appliqué à `s_ann`, pour les backends qui tiennent la géométrie
     /// entière — c'est-à-dire ceux qui n'ont aucune raison de choisir un rect.
     pub fn annotation_dst(&self, x: f32, y: f32, w: f32, h: f32) -> [f32; 4] {
@@ -1103,10 +1158,8 @@ impl FrameGeometry {
 
     /// Le plan incliné de l'écran, `None` quand il est droit. Même appel que les backends : un
     /// calcul déterministe, donc le même quadrilatère au bit près.
-    fn screen_tilt(&self, render_px: [f32; 2]) -> Option<crate::regions::TiltedQuad> {
-        let s_px = [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]];
-        (!crate::regions::is_identity_rotation(self.zoom_rotation))
-            .then(|| crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], self.zoom_rotation))
+    fn screen_tilt_in(&self, render_px: [f32; 2]) -> Option<crate::regions::TiltedQuad> {
+        self.screen_tilt([self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]])
     }
 
     fn screen_center_px(&self, render_px: [f32; 2]) -> [f32; 2] {
@@ -1123,11 +1176,12 @@ impl FrameGeometry {
     /// aucune trigonométrie de plus.
     fn window_frame_corners(&self, frame: &WindowFrame, render_px: [f32; 2]) -> ([(f32, f32); 4], f32) {
         let [ml, mt, mr, mb] = frame.margins;
-        let quad = self.screen_tilt(render_px).unwrap_or_else(|| {
+        let quad = self.screen_tilt_in(render_px).unwrap_or_else(|| {
             let (hw, hh) = (self.s_dst[2] * render_px[0] * 0.5, self.s_dst[3] * render_px[1] * 0.5);
             crate::regions::TiltedQuad {
                 corners: [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)],
                 scale: 1.0,
+                depth_k: (0.0, 0.0),
             }
         });
         let corners = [
@@ -1144,7 +1198,7 @@ impl FrameGeometry {
     /// exactement l'arithmétique que les backends faisaient avant le cadre.
     pub fn shadow_caster(&self, render_px: [f32; 2]) -> ShadowCaster {
         let center_px = self.screen_center_px(render_px);
-        match (&self.window_frame, self.screen_tilt(render_px)) {
+        match (&self.window_frame, self.screen_tilt_in(render_px)) {
             (None, None) => ShadowCaster::Upright {
                 dst: self.s_dst,
                 size_px: [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]],
@@ -1668,6 +1722,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let cut_ref = cover(screen_source_rect(u_max, v_max, active_crop, p.zoom, p.focus));
         let cut_ref_prev = cover(screen_source_rect(u_max, v_max, active_crop, pp.zoom, p.focus));
         let cut = cover(screen_source_rect(u_max, v_max, active_crop, 1.0, p.focus));
+        let focus_plane = focus_in_cut(u_max, v_max, active_crop, p.focus, cut);
         let s_dst = remap_box(s_base, cut_ref, cut);
         // Parallaxe : calculée ici, une fois la coupe connue — elle mesure la vitesse du curseur
         // en coupes VISIBLES par seconde. La coupe visible est `cut_ref`, zoom compris : `cut`
@@ -1833,6 +1888,9 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         zoom_rotation_dyn,
         padding_scale,
         cut,
+        focus_plane,
+        // Sans scène (bench fixture), aucune zoom region, donc aucun tilt : rien à défocaliser.
+        depth_of_field: scene.is_some_and(|s| s.effects.depth_of_field),
         s_dst,
         s_dst_prev,
         // La boîte écran telle qu'elle serait sans zoom : `remap_box` n'est PAS appliqué. Le
@@ -2064,6 +2122,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
                         quad: crate::regions::rotated_quad_corners_px(
                             screen_px[0],
                             screen_px[1],
+                            [0.0; 3],
                             [0.0; 3],
                         ),
                         center_px: [(dst[0] + dst[2] * 0.5) * rw, (dst[1] + dst[3] * 0.5) * rh],
@@ -2421,7 +2480,7 @@ mod tests {
             assert!(none.window_frame_cb(RENDER).is_none());
             assert_eq!(none.screen_square_top(), 0.0);
             let s_px = [none.s_dst[2] * RENDER[0], none.s_dst[3] * RENDER[1]];
-            let expected = match none.screen_tilt(RENDER) {
+            let expected = match none.screen_tilt_in(RENDER) {
                 None => ShadowCaster::Upright { dst: none.s_dst, size_px: s_px, radius: none.s_radius },
                 Some(q) => ShadowCaster::Tilted {
                     corners: q.corners,
@@ -2524,7 +2583,7 @@ mod tests {
             let old = framed_plan(&framed_scene("", preset, 1.0, false));
             let g = framed_plan(&framed_scene(r#","frame":"window-light""#, preset, 1.0, false));
             let wf = g.window_frame.expect("un cadre");
-            let quad = g.screen_tilt(RENDER).expect("incliné");
+            let quad = g.screen_tilt_in(RENDER).expect("incliné");
             let ShadowCaster::Tilted { corners: frame, center_px, radius } = g.shadow_caster(RENDER) else {
                 panic!("un cadre incliné porte une ombre inclinée");
             };
@@ -2532,7 +2591,7 @@ mod tests {
             assert!((radius - wf.radius * quad.scale).abs() < 1e-4);
 
             let [ml, mt, mr, mb] = wf.margins;
-            let frame_quad = crate::regions::TiltedQuad { corners: frame, scale: quad.scale };
+            let frame_quad = crate::regions::TiltedQuad { corners: frame, scale: quad.scale, depth_k: quad.depth_k };
             let (u0, v0) = (ml / (1.0 + ml + mr), mt / (1.0 + mt + mb));
             let (u1, v1) = ((1.0 + ml) / (1.0 + ml + mr), (1.0 + mt) / (1.0 + mt + mb));
             for (i, (u, v)) in [(u0, v0), (u1, v0), (u1, v1), (u0, v1)].into_iter().enumerate() {
@@ -2664,6 +2723,56 @@ mod tests {
                 "sous le {name}, ancrer sur `s_dst` devrait déplacer le rect — \
                  si les deux coïncident, ce test ne prouve plus rien"
             );
+        }
+    }
+
+    /// Le focus de profondeur (`z_focus`, mode 8) passe par la coupe réellement dessinée.
+    ///
+    /// Crop décalé ET focus collé au bord droit sous un zoom x2 : la coupe zoomée bute sur le
+    /// bord, son centre tombe à 0.75 du crop alors que le point visé est à 0.95. C'est ce point-là
+    /// que le plan doit tenir net, pas le centre, et encore moins (0.5, 0.5).
+    #[test]
+    fn the_depth_focus_goes_through_the_drawn_cut() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let json = zoomed_golden_scene_json()
+            .replace(r#""rotation":"none""#, r#""rotation":"iso""#)
+            .replace(r#""focusX":0.5"#, r#""focusX":0.95"#)
+            .replace(
+                r#""cropByClip":[{"x":0,"y":0,"#,
+                r#""cropByClip":[{"x":0.3,"y":0.1,"#,
+            );
+        let scene = Scene::from_json(&json).expect("scène inclinée recadrée");
+        let input = golden_input(&scene, &cfg);
+        let g = plan_frame(&input);
+        assert!(!crate::regions::is_identity_rotation(g.zoom_rotation), "garde : iso doit incliner");
+        assert!((g.focus_plane[0] - 0.95).abs() < 1e-4, "focus x {:?}", g.focus_plane);
+        assert!((g.focus_plane[1] - 0.3).abs() < 1e-4, "focus y {:?}", g.focus_plane);
+
+        // Garde : la coupe zoomée est bien clampée, son centre n'est PAS le focus.
+        let crop = scene.crop_by_clip[0];
+        let cut_ref = screen_source_rect(input.u_max, input.v_max, crop, 2.0, [0.95, 0.3]);
+        let centre_local = ((cut_ref[0] + cut_ref[2]) * 0.5 - g.cut[0]) / (g.cut[2] - g.cut[0]);
+        assert!((centre_local - 0.75).abs() < 1e-3, "garde : centre de coupe {centre_local}");
+
+        // Et `z_focus` est la profondeur de CE point, pas celle du centre du plan.
+        let render = input.render_px;
+        let s_px = [g.s_dst[2] * render[0], g.s_dst[3] * render[1]];
+        let quad = g.screen_tilt(s_px).expect("iso incline");
+        let mb = quad.depth_mb(s_px, g.focus_plane, g.depth_of_field_on(false));
+        assert!(mb[3] > 0.0, "réglage absent de la scène : la profondeur de champ est allumée");
+        assert!(!g.depth_of_field_on(true) || DOF_ON_CPU_BACKEND);
+        let want = (0.95 - 0.5) * mb[0] + (0.3 - 0.5) * mb[1];
+        assert!((mb[2] - want).abs() < 1e-3 && mb[2].abs() > 1.0, "z_focus {} au lieu de {want}", mb[2]);
+    }
+
+    /// Un cover rogne la coupe dans le crop : le focus s'y reporte, et retombe sur le bord du
+    /// plan quand le cover l'a coupé.
+    #[test]
+    fn the_depth_focus_follows_a_cover_cut_and_clamps_to_it() {
+        let cut = [0.25, 0.0, 0.75, 1.0];
+        for (focus, want) in [([0.6, 0.5], [0.7, 0.5]), ([0.95, 0.5], [1.0, 0.5]), ([f32::NAN, 0.0], [0.5, 0.0])] {
+            let got = focus_in_cut(1.0, 1.0, None, focus, cut);
+            assert!((got[0] - want[0]).abs() < 1e-5 && (got[1] - want[1]).abs() < 1e-5, "{got:?} != {want:?}");
         }
     }
 
@@ -3506,6 +3615,8 @@ mod tests {
             zoom_rotation_dyn: [0.0, 0.0, 0.0],
             padding_scale: 1.0,
             cut: [0.0, 0.0, 1.0, 1.0],
+            focus_plane: [0.5, 0.5],
+            depth_of_field: false,
             s_dst: [0.0, 0.0, 1.0, 1.0],
             s_dst_prev: [0.0, 0.0, 1.0, 1.0],
             s_ann: [0.0, 0.0, 1.0, 1.0],
@@ -3733,7 +3844,7 @@ mod tests {
                 CursorPlacement::Upright { center: [dst[0] + fx * dst[2], dst[1] + fy * dst[3]] };
             let screen_px = [dst[2] * render[0], dst[3] * render[1]];
             let quad =
-                crate::regions::rotated_quad_corners_px(screen_px[0], screen_px[1], [0.0; 3]);
+                crate::regions::rotated_quad_corners_px(screen_px[0], screen_px[1], [0.0; 3], [0.0; 3]);
             assert_eq!(quad.scale, 1.0);
             let tilted = CursorPlacement::Tilted {
                 plane_pt: [fx, fy],

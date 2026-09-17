@@ -225,6 +225,16 @@ function readAppLanguages(tag: string | undefined): AppLanguage[] {
 	});
 }
 
+// The two @rspack/core minimizers the rspack-minimizers plugin adjusts, reduced
+// to what it touches: the options each instance was constructed with.
+type RspackMinimizer<Options> = abstract new (...args: never[]) => { _args: [Options] };
+type RspackMinimizers = {
+	SwcJsMinimizerRspackPlugin: RspackMinimizer<{ extractComments?: boolean }>;
+	LightningCssMinimizerRspackPlugin: RspackMinimizer<{
+		minimizerOptions: { include?: { mediaRangeSyntax?: boolean } };
+	}>;
+};
+
 type BuildLookups = {
 	starCount: number | null;
 	release: Awaited<ReturnType<typeof fetchLatestRelease>>;
@@ -361,6 +371,33 @@ export default async function createConfig(): Promise<Config> {
 			},
 		},
 
+		// Docusaurus Faster (Rspack, SWC, Lightning CSS). Each of the eight locales
+		// is a full build of its own, and bundling is most of `npm run build`.
+		// Measured locally on Windows, not on CI: with no cache, as in CI, the full
+		// build took 2m54s to 3m02s with webpack and 29s to 52s with this; with a
+		// warm cache, about 23s either way. The output matches the webpack build's
+		// once the rspack-minimizers plugin below and the two flags turned off here
+		// are in place. ssgWorkerThreads is left out: Docusaurus only starts worker
+		// threads above 100 pages per locale (the English build has 42), and it
+		// needs a future.v4 flag.
+		future: {
+			faster: {
+				swcJsLoader: true,
+				swcJsMinimizer: true,
+				lightningCssMinimizer: true,
+				mdxCrossCompilerCache: true,
+				rspackBundler: true,
+				rspackPersistentCache: true,
+				// Its HTML parser turns the NUL bytes React leaves in an attribute into
+				// U+FFFD before fix-build-output can drop them: 19 ja, zh and pt-BR pages
+				// had one in a sidebar title="…" or an aria-label.
+				swcHtmlMinimizer: false,
+				// The eager Git reader keys files by absolute path, and the sitemap asks
+				// for a .tsx page by relative path: / and /download/ lost <lastmod>.
+				gitEagerVcs: false,
+			},
+		},
+
 		headTags: [
 			{
 				tagName: "link",
@@ -420,6 +457,29 @@ export default async function createConfig(): Promise<Config> {
 						const html = await readFile(target, "utf8");
 						if (html.includes("\0")) await writeFile(target, html.replaceAll("\0", ""));
 					}
+				},
+			}),
+			// Rspack's minimizers, as Docusaurus Faster builds them, change two things
+			// the webpack ones did not, and Docusaurus takes no option for either, so
+			// this edits the options each instance keeps in `_args` until Rspack
+			// applies it. Recheck on a Docusaurus or Rspack upgrade. SWC dropped the
+			// license comments of the bundled libraries (React, NProgress, lucide),
+			// which Terser moved to *.js.LICENSE.txt. Lightning CSS wrote every
+			// `min-width` query in range syntax, which UC Browser 15.5, a browserslist
+			// target that Lightning CSS cannot target, does not read.
+			() => ({
+				name: "rspack-minimizers",
+				configureWebpack(config, isServer, { currentBundler }) {
+					if (isServer || currentBundler.name !== "rspack") return {};
+					const rspack = currentBundler.instance as unknown as RspackMinimizers;
+					for (const plugin of config.optimization?.minimizer ?? []) {
+						if (plugin instanceof rspack.SwcJsMinimizerRspackPlugin) {
+							plugin._args[0].extractComments = true;
+						} else if (plugin instanceof rspack.LightningCssMinimizerRspackPlugin) {
+							plugin._args[0].minimizerOptions.include = { mediaRangeSyntax: true };
+						}
+					}
+					return {};
 				},
 			}),
 		],

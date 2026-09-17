@@ -83,6 +83,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: npm run build
+      # The rspack-minimizers plugin in docusaurus.config.ts edits options that
+      # Rspack keeps privately, so an Rspack update can make it a silent no-op:
+      # the license files disappear and range media queries come back, and the
+      # build still passes. `if` rather than `! grep`, which `bash -e` ignores
+      # unless it is the last command.
+      - name: Check minifier output
+        working-directory: website/build
+        run: |
+          ls assets/js/main.*.js.LICENSE.txt
+          if grep -qE '\((width|height)[<>]' assets/css/*.css */assets/css/*.css; then
+            echo "Range media syntax in CSS: the rspack-minimizers plugin no longer applies."
+            exit 1
+          fi
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

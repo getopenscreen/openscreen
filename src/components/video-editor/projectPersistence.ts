@@ -32,6 +32,7 @@ import {
 	DEFAULT_WEBCAM_REACTIVE_ZOOM,
 	DEFAULT_ZOOM_DEPTH,
 	DEFAULT_ZOOM_MOTION_BLUR,
+	isWallpaperMotion,
 	MAX_BLUR_BLOCK_SIZE,
 	MAX_BLUR_INTENSITY,
 	MAX_PLAYBACK_SPEED,
@@ -40,6 +41,7 @@ import {
 	MIN_PLAYBACK_SPEED,
 	type SpeedRegion,
 	type TrimRegion,
+	type WallpaperMotion,
 	type WebcamLayoutPreset,
 	type WebcamMaskShape,
 	type WebcamPosition,
@@ -68,6 +70,7 @@ export const PROJECT_VERSION = 2;
 
 export interface ProjectEditorState {
 	wallpaper: string;
+	wallpaperMotion: WallpaperMotion;
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
@@ -476,6 +479,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			typeof editor.wallpaper === "string"
 				? normalizeWallpaperValue(editor.wallpaper)
 				: DEFAULT_EDITOR_LAYOUT_SETTINGS.wallpaper,
+		// Carried here too: the CLI export reads the project through this function, and a
+		// key it drops is a motion the preview shows and the export does not.
+		wallpaperMotion: isWallpaperMotion(editor.wallpaperMotion) ? editor.wallpaperMotion : "none",
 		shadowIntensity:
 			typeof editor.shadowIntensity === "number"
 				? editor.shadowIntensity

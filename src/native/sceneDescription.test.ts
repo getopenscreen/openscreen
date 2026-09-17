@@ -19,7 +19,7 @@ import type {
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
-import { buildSceneDescription } from "./sceneDescription";
+import { buildSceneDescription, wallpaperAcceptsMotion } from "./sceneDescription";
 
 // --- Fixture helpers --------------------------------------------------------
 // Keep fixtures minimal & deterministic — every field the serializer consults is filled in;
@@ -175,6 +175,52 @@ describe("buildSceneDescription.background", () => {
 			kind: "image",
 			path: "data:image/png;base64,AAAA",
 		});
+	});
+});
+
+describe("buildSceneDescription.background motion", () => {
+	const gradient = "linear-gradient(135deg, #eaebed, #bcc0c6)";
+
+	it("attaches the chosen motion to a gradient", () => {
+		const doc = makeDoc({ legacyEditor: { wallpaper: gradient, wallpaperMotion: "aurora" } });
+		expect(buildSceneDescription(doc).background).toEqual({
+			kind: "gradient",
+			angleDeg: 135,
+			stops: ["#eaebed", "#bcc0c6"],
+			motion: "aurora",
+		});
+	});
+
+	// The Rust side defaults the key: a still gradient sends the payload it sent before.
+	it("omits the key when the gradient is still", () => {
+		for (const wallpaperMotion of ["none", undefined, "plasma"]) {
+			const doc = makeDoc({ legacyEditor: { wallpaper: gradient, wallpaperMotion } });
+			expect(buildSceneDescription(doc).background).not.toHaveProperty("motion");
+		}
+	});
+
+	it("never moves a colour, an image or the webcam's own gradient", () => {
+		const doc = makeDoc({
+			legacyEditor: {
+				wallpaper: "/wallpapers/wallpaper1.jpg",
+				wallpaperMotion: "waves",
+				webcamBackgroundMode: "custom",
+				webcamWallpaper: gradient,
+			},
+		});
+		const scene = buildSceneDescription(doc);
+		expect(scene.background).toEqual({ kind: "image", path: "/wallpapers/wallpaper1.jpg" });
+		expect(scene.webcamEffect?.background).not.toHaveProperty("motion");
+		const colour = makeDoc({ legacyEditor: { wallpaper: "#123456", wallpaperMotion: "drift" } });
+		expect(buildSceneDescription(colour).background).toEqual({ kind: "color", color: "#123456" });
+	});
+
+	it("enables the control exactly for the wallpapers the compositor animates", () => {
+		expect(wallpaperAcceptsMotion(gradient)).toBe(true);
+		expect(wallpaperAcceptsMotion("#123456")).toBe(false);
+		expect(wallpaperAcceptsMotion("/wallpapers/wallpaper1.jpg")).toBe(false);
+		// Drawn by the web preview only; the compositor paints it as an image path.
+		expect(wallpaperAcceptsMotion("radial-gradient(#fff, #000)")).toBe(false);
 	});
 });
 

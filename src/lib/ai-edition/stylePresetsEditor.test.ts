@@ -26,6 +26,7 @@ function styledSettings(): EditorSettingsSnapshot {
 	return {
 		...DEFAULT_EDITOR_SETTINGS,
 		wallpaper: "linear-gradient(90deg, #000, #fff)",
+		wallpaperMotion: "waves",
 		aspectRatio: "9:16",
 		shadowIntensity: 0.8,
 		showBlur: true,

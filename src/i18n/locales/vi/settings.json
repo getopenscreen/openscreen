@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "Hoạt ảnh",
+		"motionNone": "Không",
+		"motionDrift": "Trôi",
+		"motionAurora": "Cực quang",
+		"motionWaves": "Sóng",
+		"motionGradientOnly": "Hoạt ảnh chỉ áp dụng cho nền chuyển sắc. Hãy chọn một nền chuyển sắc để tạo hoạt ảnh.",
 		"gradientLabel": "Dải màu {{index}}",
 		"uploadCustom": "Tải lên tùy chỉnh",
 		"unsupportedImage": "Ảnh không được hỗ trợ. Hãy dùng tệp JPG hoặc PNG.",

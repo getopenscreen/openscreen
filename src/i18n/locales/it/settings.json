@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "Animazione",
+		"motionNone": "Nessuno",
+		"motionDrift": "Deriva",
+		"motionAurora": "Aurora",
+		"motionWaves": "Onde",
+		"motionGradientOnly": "L'animazione si applica solo agli sfondi sfumati. Scegli una sfumatura per animarla.",
 		"gradientLabel": "Sfumatura {{index}}",
 		"uploadCustom": "Carica personalizzato",
 		"unsupportedImage": "Immagine non supportata. Usa un file JPG o PNG.",

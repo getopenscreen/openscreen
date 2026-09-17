@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "Animace",
+		"motionNone": "Žádný",
+		"motionDrift": "Posun",
+		"motionAurora": "Polární záře",
+		"motionWaves": "Vlny",
+		"motionGradientOnly": "Animace platí jen pro přechodová pozadí. Vyberte přechod, který chcete animovat.",
 		"gradientLabel": "Přechod {{index}}",
 		"uploadCustom": "Nahrát vlastní",
 		"unsupportedImage": "Nepodporovaný obrázek. Použijte soubor JPG nebo PNG.",

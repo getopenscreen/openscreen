@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
 import GradientEditor, { type GradientEditorState } from "@/components/ui/gradient-editor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { WALLPAPER_MOTIONS, type WallpaperMotion } from "@/components/video-editor/types";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
@@ -100,6 +101,7 @@ import {
 	WALLPAPER_THUMB_PATHS,
 } from "@/lib/wallpaper";
 import { isNativeCompositorActive, setNativeParam } from "@/native";
+import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
 import {
 	ASPECT_RATIO_PRESETS,
 	type AspectRatio,
@@ -323,6 +325,13 @@ function useWallpaperFileInput(onPicked: (dataUrl: string) => void): {
 	};
 }
 
+const WALLPAPER_MOTION_LABEL_KEYS: Record<WallpaperMotion, string> = {
+	none: "background.motionNone",
+	drift: "background.motionDrift",
+	aurora: "background.motionAurora",
+	waves: "background.motionWaves",
+};
+
 // Wallpaper picker — image / solid color / gradient tabs.
 //
 // Wallpapers round-trip through the legacyEditor envelope exactly as they did
@@ -336,6 +345,7 @@ function BackgroundSection() {
 	const { pick: handlePickFile, input: fileInput } = useWallpaperFileInput((dataUrl) =>
 		set({ wallpaper: dataUrl }),
 	);
+	const motionApplies = wallpaperAcceptsMotion(settings.wallpaper);
 
 	return (
 		<>
@@ -390,6 +400,38 @@ function BackgroundSection() {
 			    which closes the popover and would unmount the input mid-pick, dropping the
 			    file. It has no layout to cost us here. */}
 			{fileInput}
+			{/* Beside the picker because it moves what the picker chose. Only the compositor's own
+			    gradient can move; on anything else the control says so instead of holding a
+			    choice that changes nothing on screen. The stored choice is kept and comes back
+			    with the next gradient. */}
+			<div className={styles.field}>
+				<label htmlFor="background-motion">{ts("background.motion")}</label>
+				<select
+					id="background-motion"
+					value={motionApplies ? settings.wallpaperMotion : "none"}
+					disabled={!hasDocument || !motionApplies}
+					title={motionApplies ? undefined : ts("background.motionGradientOnly")}
+					onChange={(e) => void set({ wallpaperMotion: e.target.value as WallpaperMotion })}
+				>
+					{WALLPAPER_MOTIONS.map((motion) => (
+						<option key={motion} value={motion}>
+							{ts(WALLPAPER_MOTION_LABEL_KEYS[motion])}
+						</option>
+					))}
+				</select>
+			</div>
+			{motionApplies ? null : (
+				<p
+					style={{
+						margin: 0,
+						padding: "0 var(--sp-4) 8px",
+						font: "400 var(--fs-app-sm) var(--font-body)",
+						color: "var(--muted)",
+					}}
+				>
+					{ts("background.motionGradientOnly")}
+				</p>
+			)}
 			{/* Reads in the order it acts: pick a background, then blur it. Lived under
 			    "Effects" while that was a separate facet, which is how a control named
 			    "Blur BG" ended up in the tab that doesn't say background. */}

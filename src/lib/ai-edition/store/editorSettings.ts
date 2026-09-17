@@ -13,7 +13,9 @@ import {
 	type CursorVisualSettings,
 	DEFAULT_CROP_REGION,
 	DEFAULT_WEBCAM_POSITION,
+	isWallpaperMotion,
 	isWebcamBackgroundMode,
+	type WallpaperMotion,
 	type WebcamBackgroundMode,
 	type WebcamLayoutPreset,
 	type WebcamMaskShape,
@@ -72,6 +74,8 @@ const DEFAULT_CROP_PAN: CropPan = { x: 0.5, y: 0.5 };
 
 export interface EditorSettingsSnapshot {
 	wallpaper: string;
+	/** Only a gradient wallpaper moves; kept as chosen when the wallpaper changes kind. */
+	wallpaperMotion: WallpaperMotion;
 	aspectRatio: AspectRatio;
 	shadowIntensity: number;
 	showBlur: boolean;
@@ -115,6 +119,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 
 interface LegacyShape {
 	wallpaper?: string;
+	wallpaperMotion?: WallpaperMotion;
 	aspectRatio?: AspectRatio;
 	shadowIntensity?: number;
 	showBlur?: boolean;
@@ -191,6 +196,9 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 
 	return {
 		wallpaper: str(legacy?.wallpaper, DEFAULT_EDITOR_SETTINGS.wallpaper),
+		wallpaperMotion: isWallpaperMotion(legacy?.wallpaperMotion)
+			? legacy.wallpaperMotion
+			: DEFAULT_EDITOR_SETTINGS.wallpaperMotion,
 		aspectRatio: legacy?.aspectRatio ?? DEFAULT_EDITOR_SETTINGS.aspectRatio,
 		shadowIntensity: num(legacy?.shadowIntensity, DEFAULT_EDITOR_SETTINGS.shadowIntensity),
 		showBlur: bool(legacy?.showBlur, DEFAULT_EDITOR_SETTINGS.showBlur),
@@ -234,6 +242,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 }
 export interface EditorSettingsPatch {
 	wallpaper?: string;
+	wallpaperMotion?: WallpaperMotion;
 	aspectRatio?: AspectRatio;
 	shadowIntensity?: number;
 	showBlur?: boolean;

@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "Animasyon",
+		"motionNone": "Yok",
+		"motionDrift": "Kayma",
+		"motionAurora": "Kutup ışığı",
+		"motionWaves": "Dalgalar",
+		"motionGradientOnly": "Animasyon yalnızca gradyan arka planlara uygulanır. Canlandırmak için bir gradyan seçin.",
 		"gradientLabel": "Gradyan {{index}}",
 		"uploadCustom": "Özel Yükle",
 		"unsupportedImage": "Desteklenmeyen görsel. JPG veya PNG dosyası kullanın.",

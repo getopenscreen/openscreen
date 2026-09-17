@@ -36,6 +36,16 @@ export function isWebcamBackgroundMode(value: unknown): value is WebcamBackgroun
 
 export const DEFAULT_WEBCAM_BACKGROUND_MODE: WebcamBackgroundMode = "none";
 
+/** Slow motion of a gradient wallpaper, rendered by the native compositor from programme
+ *  time. Only a `linear-gradient(...)` wallpaper moves; any other keeps its value and ignores it. */
+export const WALLPAPER_MOTIONS = ["none", "drift", "aurora", "waves"] as const;
+
+export type WallpaperMotion = (typeof WALLPAPER_MOTIONS)[number];
+
+export function isWallpaperMotion(value: unknown): value is WallpaperMotion {
+	return (WALLPAPER_MOTIONS as readonly unknown[]).includes(value);
+}
+
 export const DEFAULT_WEBCAM_BLUR_INTENSITY = 0.5;
 
 /** When true, the picture-in-picture webcam scales inversely with zoom (shrinks as you zoom in). */

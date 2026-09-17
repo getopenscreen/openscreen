@@ -174,6 +174,61 @@ float3 quad_inverse_bilinear(float2 P, float2 c00, float2 c10, float2 c11, float
     return (r0.z > 0.5) ? r0 : r1;
 }
 
+// Hash 2D -> [0,1) sans sin() : le hash `frac(sin(x) * 43758)` dépend de la précision du GPU,
+// celui-ci (Hoskins, « hash12 ») ne fait que des produits de petites valeurs.
+float hash12(float2 p)
+{
+    float3 p3 = frac(float3(p.x, p.y, p.x) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+// Bruit de valeur lissé (hermite), sans texture.
+float value_noise(float2 q)
+{
+    float2 i = floor(q);
+    float2 f = frac(q);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    float a = hash12(i);
+    float b = hash12(i + float2(1.0, 0.0));
+    float c = hash12(i + float2(0.0, 1.0));
+    float d = hash12(i + float2(1.0, 1.0));
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+// Mouvements 2 (aurore) et 3 (vagues) du mode 5, dans les deux couleurs des stops seulement.
+// `gp` 0..1 sur le quad, `dir`/`denom` ceux du dégradé, `time` = temps programme replié sur
+// 120 s (toutes les périodes ci-dessous le divisent), `aspect` = w/h de la sortie. Périodes
+// longues et contraste bas : le fond ne doit jamais prendre l'attention.
+float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, float3 c1, float time,
+                       float motion, float aspect)
+{
+    const float TAU = 6.2831853;
+    float u = dot(gp - 0.5, dir) / denom; // position le long de l'axe, -0.5..0.5
+    if (motion < 2.5)
+    {
+        // Aurore : rampe perturbée par un bruit lent (dont l'origine tourne en 120 s), puis
+        // trois nappes gaussiennes sur des Lissajous de 20 à 40 s. Coordonnées corrigées de
+        // l'aspect pour que les nappes restent rondes.
+        float2 p = float2((gp.x - 0.5) * aspect, gp.y - 0.5);
+        float ph = TAU * time / 120.0;
+        float n = value_noise(p * 2.5 + 1.5 * float2(cos(ph), sin(ph)));
+        float3 g = lerp(c0, c1, saturate(0.5 + u + 0.3 * (n - 0.5)));
+        float2 b0 = float2(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
+        float2 b1 = float2(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
+        float2 b2 = float2(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
+        g = lerp(g, c1, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
+        g = lerp(g, c0, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
+        g = lerp(g, c1, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        return g;
+    }
+    // Vagues : trois bandes sinus perpendiculaires à l'axe, qui avancent d'une bande en 12 s,
+    // légèrement ondulées le long des bandes (20 s). Elles décalent la rampe, rien d'autre.
+    float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
+    float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
+    return lerp(c0, c1, saturate(0.5 + u + 0.07 * w));
+}
+
 // Fond flouté pour le mode "blur" de la webcam.
 // Disque de Vogel (spirale à angle d'or) à 21 échantillons avec pondération gaussienne et
 // rotation par pixel via Interleaved Gradient Noise (IGN) pour un bokeh photographique doux, isotrope et rapide.
@@ -478,9 +533,19 @@ float4 ps_main(VSOut i) : SV_Target
     // mode 5 : gradient linéaire 2 stops (parité web wallpaper dégradé). color = stop0,
     // src.xyz = stop1, fx.xy = direction unitaire (espace sortie, y vers le bas). t est
     // normalisé coin-à-coin (dénominateur = |dx|+|dy|) pour couvrir toute la diagonale.
+    // Fond animé : fx.z = temps programme (s, replié sur 120), fx.w = mouvement (0 immobile,
+    // 1 dérive, 2 aurore, 3 vagues), mb.x = aspect w/h. 0 rend le dégradé d'avant à l'octet.
     if (mode > 4.5)
     {
         float2 dir = fx.xy;
+        if (fx.w > 0.5 && fx.w < 1.5)
+        {
+            // Dérive : l'axe respire de ±15° (0.2617994 rad) en 20 s.
+            float da = 0.2617994 * sin(6.2831853 * fx.z / 20.0);
+            float sa = sin(da);
+            float ca = cos(da);
+            dir = float2(dir.x * ca - dir.y * sa, dir.x * sa + dir.y * ca);
+        }
         float denom = max(abs(dir.x) + abs(dir.y), 1e-4);
         // Paramétré sur le QUAD dès qu'il en a un (la bulle webcam), sinon sur la sortie. Pour le
         // fond plein cadre les deux coïncident ; pour une bulle dans un coin, `pout` ne montrerait
@@ -489,6 +554,10 @@ float4 ps_main(VSOut i) : SV_Target
         float2 gp = (quad_px.x > 0.0 && quad_px.y > 0.0) ? (i.local / quad_px) : i.pout;
         float t = saturate(0.5 + dot(gp - 0.5, dir) / denom);
         float3 g = lerp(color.rgb, src.xyz, t);
+        if (fx.w > 1.5)
+        {
+            g = gradient_motion(gp, dir, denom, color.rgb, src.xyz, fx.z, fx.w, mb.x);
+        }
         float a = quad_round_alpha(i.local, quad_px, radius_px);
         return float4(g * a, a); // prémultiplié
     }

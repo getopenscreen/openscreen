@@ -173,8 +173,28 @@ pub enum SceneBackground {
         #[serde(rename = "angleDeg")]
         angle_deg: f32,
         stops: Vec<String>,
+        /// Absent pour un fond immobile : l'app n'émet la clé que si un mouvement est choisi,
+        /// donc la scène d'un projet sans animation ne bouge pas d'un octet.
+        #[serde(default)]
+        motion: GradientMotion,
     },
     Image { path: String },
+}
+
+/// Mouvement lent d'un fond dégradé (`settings.wallpaperMotion`), lu par le mode 5 dans `fx.w`.
+///
+/// Une valeur inconnue (projet ouvert par une version plus ancienne que celle qui l'a écrit)
+/// retombe sur `None` au lieu de faire échouer le parse de toute la scène.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GradientMotion {
+    Drift,
+    Aurora,
+    Waves,
+    // Dernier : serde n'accepte `other` que sur la dernière variante.
+    #[default]
+    #[serde(other)]
+    None,
 }
 
 /// Une annotation de la timeline (temps en secondes, source du clip).
@@ -658,9 +678,10 @@ mod tests {
         assert!(scene.layout.webcam_mirror);
         assert!((scene.effects.roundness_frac - 0.0222).abs() < 1e-6);
         match scene.background {
-            SceneBackground::Gradient { angle_deg, ref stops } => {
+            SceneBackground::Gradient { angle_deg, ref stops, motion } => {
                 assert_eq!(angle_deg, 135.0);
                 assert_eq!(stops.len(), 2);
+                assert_eq!(motion, GradientMotion::None);
             }
             _ => panic!("expected gradient"),
         }
@@ -681,6 +702,20 @@ mod tests {
             _ => panic!("expected color"),
         }
         assert_eq!(s.output.fps, Some(30.0));
+    }
+
+    #[test]
+    fn gradient_motion_parses_and_tolerates_an_unknown_value() {
+        let motion_of = |json: &str| match serde_json::from_str::<SceneBackground>(json).expect("parse") {
+            SceneBackground::Gradient { motion, .. } => motion,
+            _ => panic!("expected gradient"),
+        };
+        let g = |m: &str| format!(r##"{{"kind":"gradient","angleDeg":90,"stops":["#000","#fff"]{m}}}"##);
+        assert_eq!(motion_of(&g("")), GradientMotion::None);
+        assert_eq!(motion_of(&g(r#","motion":"drift""#)), GradientMotion::Drift);
+        assert_eq!(motion_of(&g(r#","motion":"aurora""#)), GradientMotion::Aurora);
+        assert_eq!(motion_of(&g(r#","motion":"waves""#)), GradientMotion::Waves);
+        assert_eq!(motion_of(&g(r#","motion":"plasma""#)), GradientMotion::None);
     }
 
     #[test]

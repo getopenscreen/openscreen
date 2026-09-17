@@ -1016,7 +1016,8 @@ impl Compositor {
             Some(SceneBackground::Color { color }) => {
                 self.draw_solid(enc, &solid(parse_hex(color).unwrap_or(BLACK)));
             }
-            Some(SceneBackground::Gradient { angle_deg, stops }) => {
+            // Le mouvement ne vaut que pour le fond d'écran : la bulle garde son dégradé immobile.
+            Some(SceneBackground::Gradient { angle_deg, stops, .. }) => {
                 let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(BLACK);
                 let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
                 // angle CSS → direction unitaire, même convention que le fond d'écran.
@@ -1994,10 +1995,12 @@ impl Compositor {
                     &LayerCB { dst: [0.0, 0.0, 1.0, 1.0], mode: 1.0, color: c, ..Default::default() },
                 );
             }
-            Some(SceneBackground::Gradient { angle_deg, stops }) => {
+            Some(SceneBackground::Gradient { angle_deg, stops, motion }) => {
                 let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(lp.bg_color);
                 let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
                 let a = angle_deg.to_radians();
+                let (anim, mb) =
+                    crate::frame_geometry::gradient_motion_slots(motion, g.programme_t, rw / rh);
                 self.draw_solid(
                     enc,
                     &LayerCB {
@@ -2005,7 +2008,8 @@ impl Compositor {
                         src: [c1[0], c1[1], c1[2], c1[3]],
                         mode: 5.0,
                         color: c0,
-                        fx: [a.sin(), -a.cos(), 0.0, 0.0],
+                        fx: [a.sin(), -a.cos(), anim[0], anim[1]],
+                        mb,
                         ..Default::default()
                     },
                 );

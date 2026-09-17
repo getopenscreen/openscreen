@@ -27,6 +27,7 @@ vi.mock("../native-bridge/services/aiEditionService", () => ({
 
 const APPEARANCE: StylePresetAppearance = {
 	wallpaper: "#000000",
+	wallpaperMotion: "none",
 	aspectRatio: "16:9",
 	shadowIntensity: 0.2,
 	showBlur: false,

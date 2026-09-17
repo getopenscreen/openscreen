@@ -287,6 +287,7 @@ export function migrateAxcutDocumentToProjectData(input: AxcutDocument): EditorP
 
 	const editor: ProjectEditorState = {
 		wallpaper: "",
+		wallpaperMotion: "none",
 		shadowIntensity: 0,
 		showBlur: false,
 		motionBlurAmount: 0,

@@ -27,6 +27,20 @@ vi.mock("../RightPanes", () => ({
 	VideoEffectsPane: () => <div data-testid="effects-pane">VideoEffectsPane</div>,
 }));
 
+const editorSettings = vi.hoisted(() => ({ cursorShow: true }));
+vi.mock("@/lib/ai-edition/store/useEditorSettings", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/ai-edition/store/useEditorSettings")>();
+	return {
+		useEditorSettings: () => {
+			const result = actual.useEditorSettings();
+			return {
+				...result,
+				settings: { ...result.settings, cursorShow: editorSettings.cursorShow },
+			};
+		},
+	};
+});
+
 vi.mock("../CaptionsPane", () => ({
 	CaptionsPane: () => <div data-testid="captions-pane">CaptionsPane</div>,
 }));
@@ -85,5 +99,62 @@ describe("FloatingInspector", () => {
 		const closeBtn = screen.getByRole("button", { name: "common.actions.close" });
 		fireEvent.click(closeBtn);
 		expect(clearSelection).toHaveBeenCalledTimes(1);
+	});
+
+	describe("click impact checkbox", () => {
+		const zoomTl = (region: Record<string, unknown>) => {
+			const updateZoomClickImpact = vi.fn();
+			const tl = {
+				...defaultProps.tl,
+				selection: { kind: "zoom", id: "z" },
+				zoomRegions: [
+					{ id: "z", startMs: 0, endMs: 1000, depth: 3, focus: { cx: 0.5, cy: 0.5 }, ...region },
+				],
+				updateZoomClickImpact,
+			} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"];
+			return { tl, updateZoomClickImpact };
+		};
+
+		it("is off by default and disabled with its reason when there is no 3D preset", () => {
+			const { tl } = zoomTl({});
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			const box = screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" });
+			expect(box).not.toBeChecked();
+			expect(box).toBeDisabled();
+			expect(screen.getByText("settings.zoom.clickImpact.needsRotation")).toBeInTheDocument();
+		});
+
+		it("is disabled with its reason when the region hides the cursor", () => {
+			const { tl } = zoomTl({ rotationPreset: "iso", hideCursor: true });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			expect(
+				screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" }),
+			).toBeDisabled();
+			expect(screen.getByText("settings.zoom.clickImpact.needsCursor")).toBeInTheDocument();
+		});
+
+		it("is disabled with its reason when the cursor is hidden globally", () => {
+			editorSettings.cursorShow = false;
+			try {
+				const { tl } = zoomTl({ rotationPreset: "iso" });
+				render(<FloatingInspector {...defaultProps} tl={tl} />);
+				expect(
+					screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" }),
+				).toBeDisabled();
+				expect(screen.getByText("settings.zoom.clickImpact.needsCursor")).toBeInTheDocument();
+			} finally {
+				editorSettings.cursorShow = true;
+			}
+		});
+
+		it("toggles the region's clickImpact under a 3D preset", () => {
+			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "iso" });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			const box = screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" });
+			expect(box).toBeEnabled();
+			expect(screen.getByText("settings.zoom.clickImpact.description")).toBeInTheDocument();
+			fireEvent.click(box);
+			expect(updateZoomClickImpact).toHaveBeenCalledWith("z", true);
+		});
 	});
 });

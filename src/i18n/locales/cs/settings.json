@@ -332,6 +332,12 @@
 			"none": "Žádné",
 			"title": "3D rotace"
 		},
+		"clickImpact": {
+			"title": "Odezva kliknutí",
+			"description": "Každé kliknutí zatlačí nakloněnou obrazovku: kliknutá strana se prohne a vrátí zpět.",
+			"needsRotation": "Nejprve zvolte 3D rotaci: zatlačit lze jen nakloněnou obrazovku.",
+			"needsCursor": "Kurzor je skrytý: obrazovka reaguje jen na viditelná kliknutí."
+		},
 		"level": "Úroveň přiblížení",
 		"previewHold": "Podržte pro náhled efektu přiblížení",
 		"customScale": "Vlastní přiblížení",

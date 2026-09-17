@@ -92,6 +92,9 @@ export interface SceneZoomRegion {
 	underTrim?: boolean;
 	/** When true, cursor is hidden during this zoom region. */
 	hideCursor?: boolean;
+	/** Each click presses the tilted plane toward the clicked side (`regions::click_impact`).
+	 *  Native ignores it without a `rotation`. Omitted (not `false`) when off. */
+	clickImpact?: true;
 }
 
 /** A "Full Camera" timeline region (from `legacyEditor.cameraFullscreenRegions`). Times in seconds. */
@@ -1071,6 +1074,7 @@ export function buildSceneDescription(
 			clipIndex: region.clipIndex,
 			...(region.underTrim ? { underTrim: true } : {}),
 			...(region.hideCursor ? { hideCursor: true } : {}),
+			...(region.clickImpact ? { clickImpact: true as const } : {}),
 		})),
 		annotations: projectedAnnotations
 			.map((region) => {

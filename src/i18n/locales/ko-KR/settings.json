@@ -332,6 +332,12 @@
 			"none": "없음",
 			"title": "3D 회전"
 		},
+		"clickImpact": {
+			"title": "클릭 눌림",
+			"description": "클릭할 때마다 기울어진 화면이 눌려 클릭한 쪽이 내려갔다가 돌아옵니다.",
+			"needsRotation": "먼저 3D 회전을 선택하세요. 기울어진 화면만 누를 수 있습니다.",
+			"needsCursor": "커서가 숨겨져 있습니다. 화면은 보이는 클릭에만 반응합니다."
+		},
 		"level": "줌 레벨",
 		"previewHold": "누르고 있으면 줌 효과 미리보기",
 		"customScale": "커스텀 줌",

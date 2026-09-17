@@ -196,6 +196,14 @@ impl CursorTrack {
         }
     }
 
+    /// Les instants de clic dans `(lo, hi]`, triés. L'impact du clic sur le plan
+    /// (`regions::click_impact`) les somme tous, là où `bounce` ne garde que le dernier.
+    pub fn clicks_between(&self, lo: f32, hi: f32) -> &[f32] {
+        let a = self.clicks.partition_point(|&tc| tc <= lo);
+        let b = self.clicks.partition_point(|&tc| tc <= hi);
+        &self.clicks[a..b.max(a)]
+    }
+
     /// Piste repositionnée par un ressort-amortisseur (parité `cursorPathSmoothing.ts` :
     /// resample à 240 Hz + intégration semi-implicite d'Euler). `factor` 0..1 = valeur brute
     /// du slider (0 = passthrough, retourne un clone). Les clics restent sur leurs instants

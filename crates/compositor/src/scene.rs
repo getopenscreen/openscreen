@@ -353,6 +353,11 @@ pub struct SceneZoomRegion {
     /// Masque le curseur pendant cette région de zoom.
     #[serde(default)]
     pub hide_cursor: bool,
+    /// Chaque clic enfonce le plan incliné (`regions::click_impact`). Sans effet hors préset
+    /// 3D : c'est le préset qui installe le plan que le clic fait basculer.
+    /// `#[serde(default)]` : l'app omet la clé quand elle est fausse.
+    #[serde(default)]
+    pub click_impact: bool,
 }
 
 /// Une zone de vitesse portée par le temps source d'un clip.

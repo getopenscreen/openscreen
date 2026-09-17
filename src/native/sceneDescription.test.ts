@@ -529,6 +529,26 @@ describe("buildSceneDescription.zoomRegions", () => {
 		expect(zoomRegions[0].hideCursor).toBe(true);
 	});
 
+	it("emits clickImpact only when it is on", () => {
+		const base = {
+			startMs: 0,
+			endMs: 1000,
+			depth: 3 as const,
+			focus: { cx: 0.5, cy: 0.5 },
+			rotationPreset: "iso" as const,
+		};
+		const doc = makeDoc({
+			zoomRanges: [
+				makeZoom({ ...base, id: "on", clickImpact: true }),
+				makeZoom({ ...base, id: "off" }),
+			],
+		});
+		const { zoomRegions } = buildSceneDescription(doc);
+		expect(zoomRegions[0].clickImpact).toBe(true);
+		// Omitted, not `false`: scene payloads without the option stay byte-identical.
+		expect("clickImpact" in zoomRegions[1]).toBe(false);
+	});
+
 	it("converts ms→sec for start/end", () => {
 		const z = makeZoom({
 			id: "z",

@@ -151,6 +151,20 @@ describe("projectPersistence media compatibility", () => {
 		expect(editor.annotationRegions[1].blurData?.blockSize).toBe(4);
 	});
 
+	it("keeps clickImpact only when it is exactly true", () => {
+		const zoom = { startMs: 0, endMs: 1000, depth: 3 as const, focus: { cx: 0.5, cy: 0.5 } };
+		const [on, off, junk] = normalizeProjectEditor({
+			zoomRegions: [
+				{ ...zoom, id: "on", rotationPreset: "iso", clickImpact: true },
+				{ ...zoom, id: "off" },
+				{ ...zoom, id: "junk", clickImpact: "yes" as never },
+			],
+		}).zoomRegions;
+		expect(on.clickImpact).toBe(true);
+		expect("clickImpact" in off).toBe(false);
+		expect("clickImpact" in junk).toBe(false);
+	});
+
 	it("accepts the dual frame webcam layout preset", () => {
 		expect(normalizeProjectEditor({ webcamLayoutPreset: "dual-frame" }).webcamLayoutPreset).toBe(
 			"dual-frame",

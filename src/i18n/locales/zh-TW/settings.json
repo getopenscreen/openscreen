@@ -332,6 +332,12 @@
 			"none": "無",
 			"title": "3D 旋轉"
 		},
+		"clickImpact": {
+			"title": "點擊按壓",
+			"description": "每次點擊都會按壓傾斜的畫面：被點擊的一側下沉，然後彈回。",
+			"needsRotation": "請先選擇 3D 旋轉：只有傾斜的畫面才能被按壓。",
+			"needsCursor": "游標已隱藏：畫面只對看得見的點擊做出反應。"
+		},
 		"level": "縮放級別",
 		"previewHold": "按住預覽放大效果",
 		"customScale": "自訂縮放",

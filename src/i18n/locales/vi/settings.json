@@ -332,6 +332,12 @@
 			"none": "Không",
 			"title": "Xoay 3D"
 		},
+		"clickImpact": {
+			"title": "Hiệu ứng nhấp",
+			"description": "Mỗi lần nhấp sẽ ấn màn hình nghiêng: phía được nhấp lún xuống rồi bật lại.",
+			"needsRotation": "Hãy chọn xoay 3D trước: chỉ màn hình nghiêng mới ấn được.",
+			"needsCursor": "Con trỏ đang ẩn: màn hình chỉ phản ứng với các lần nhấp nhìn thấy được."
+		},
 		"level": "Mức độ thu phóng",
 		"previewHold": "Giữ để xem trước hiệu ứng phóng to",
 		"customScale": "Thu phóng tùy chỉnh",

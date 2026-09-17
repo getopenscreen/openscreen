@@ -812,6 +812,19 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 		expect(useProjectStore.getState().document?.zoomRanges[0].hideCursor).toBeUndefined();
 	});
 
+	it("updates clickImpact on a zoom region and drops the key when off", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.updateZoomClickImpact("zoom_a", true);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges[0].clickImpact).toBe(true);
+
+		await act(async () => {
+			await result.current.updateZoomClickImpact("zoom_a", false);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges[0].clickImpact).toBeUndefined();
+	});
+
 	it("rolls a live focus edit back when its commit cannot be saved", async () => {
 		bridgeMocks.save.mockResolvedValueOnce({ success: false, error: "project file locked" });
 		const { result } = renderTimeline();

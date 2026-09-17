@@ -23,7 +23,7 @@
 //! le napi — le `gen` est l'identité de la frame (cf. `LatestFrame`).
 
 use crate::compositor::{Compositor, LiveParams};
-use crate::regions::speed_at;
+use crate::regions::{speed_at, ProgrammeClock};
 use crate::scene::Scene;
 use crate::config::{self, Cfg};
 use crate::cursor::CursorTrack;
@@ -288,6 +288,9 @@ pub struct Player {
     has_current_frame: bool,
     use_current_on_next_step: bool,
     idx: u32,
+    /// Horloge programme du clip ACTIF, posée par `render_thread` à chaque changement de
+    /// clip ou de scène (`set_programme_clock`). `None` = pas de scène : fixture.
+    programme: Option<ProgrammeClock>,
 }
 
 impl Player {
@@ -307,6 +310,7 @@ impl Player {
             has_current_frame: false,
             use_current_on_next_step: false,
             idx: 0,
+            programme: None,
         })
     }
 
@@ -423,6 +427,27 @@ impl Player {
     /// `poc-d3d` (crate externe) en a besoin pour piloter sa propre boucle de lecture libre.
     pub unsafe fn screen_time_sec(&self) -> f64 {
         self.sdec.cur_time_sec()
+    }
+
+    /// Recalcule l'horloge programme pour le clip `clip_index` de `scene` (la scène COMPLÈTE,
+    /// pas la fenêtre d'un clip : il faut la durée de sortie des clips précédents).
+    ///
+    /// Cadence : `scene.output.fps`, sinon celle de la source, arrondie — le repli de l'export.
+    /// ponytail: l'export prend la source du PREMIER clip et, depuis la modale, sa propre
+    /// cadence ; un écart ne décale le temps programme que d'au plus une frame par span de
+    /// vitesse (arrondi `ceil` des spans). À aligner si un effet devient sensible à la frame.
+    pub unsafe fn set_programme_clock(&mut self, scene: Option<&Scene>, clip_index: usize) {
+        self.programme = scene.and_then(|s| {
+            let fps = s.output.fps.unwrap_or_else(|| self.sdec.fps().round().max(1.0));
+            ProgrammeClock::for_clip(s, clip_index, fps)
+        });
+    }
+
+    /// Temps programme de la frame écran courante : fonction de son seul pts, donc identique
+    /// qu'on y arrive en lecture (`step`) ou par un seek (`present_frame`).
+    pub unsafe fn programme_time(&self) -> Option<f32> {
+        let t = self.sdec.cur_time_sec();
+        self.programme.as_ref().map(|c| c.at(t) as f32)
     }
 
     /// Compose la PROCHAINE frame due (→ `comp.rt`), au plus une, si `target_source_time`
@@ -548,6 +573,7 @@ impl Player {
         let t = self.sdec.cur_time_sec() as f32;
         comp.set_cursor_time(Some(t));
         comp.set_timeline_time(Some(t));
+        comp.set_programme_time(self.programme_time());
     }
 
     /// Recompose la frame courante (déjà décodée) — rafraîchit après un changement de param.
@@ -1274,6 +1300,7 @@ unsafe fn advance_to_next_scene_clip(
             *active_webcam_offset_sec = next_clip.webcam_offset_sec;
             *active_clip_index = next_index;
             comp.set_scene(Some(scene_for_clip(scene, *active_clip_index)));
+            player.set_programme_clock(Some(scene), *active_clip_index);
             // Réutilise le curseur préchargé s'il est disponible (voir plus haut) — sinon
             // (préchargement pas encore prêt / raté) on retombe sur la lecture synchrone
             // habituelle, comme avant cette optimisation.
@@ -1572,6 +1599,11 @@ unsafe fn render_thread(
                 scene_for_clip(&base_scene, active_clip_index)
             });
             comp.set_scene(scene);
+        }
+        // Le temps programme dépend du clip actif ET de la scène entière (durées des clips
+        // précédents) : à recalculer dès que l'un des deux change.
+        if clip_changed || scene_changed {
+            player.set_programme_clock(full_scene.as_ref(), active_clip_index);
         }
 
         // résolution cible du preview (le canvas Electron) → force le recadrage des

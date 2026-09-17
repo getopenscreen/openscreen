@@ -3,8 +3,8 @@
 //! Equivalent Linux de `compositor_windows.rs` / `compositor_macos.rs` : meme
 //! surface publique (`Compositor::{new, new_sized, normalize_render_size,
 //! render_size, set_scene, set_live_params, set_cursor, set_cursor_time,
-//! set_timeline_time, clear_cursor, scene_snapshot, clear_srv_cache,
-//! compose_frame, readback_direct}`) pour que `live.rs` et `compositor-view-napi`
+//! set_timeline_time, set_programme_time, clear_cursor, scene_snapshot,
+//! clear_srv_cache, compose_frame, readback_direct}`) pour que `live.rs` et `compositor-view-napi`
 //! (cfg-re-exportes via `crate::compositor`) l'utilisent sans connaitre la
 //! plateforme. S'y ajoutent, specifiques a ce backend, les trois entrees de la
 //! ring de staging (`set_readback_depth`, `readback_submit`, `readback_take`) :
@@ -298,6 +298,8 @@ pub struct Compositor {
     cursor: RefCell<Option<crate::cursor::CursorTrack>>,
     cursor_time: RefCell<Option<f32>>,
     timeline_time: RefCell<Option<f32>>,
+    /// Temps programme (secondes de sortie) -- cf. `FrameGeometryInput::programme_time`.
+    programme_time: RefCell<Option<f32>>,
 
     /// Rasterizer de texte (annotations mode 11). `None` si l'init cosmic-text
     /// echoue -- le rendu continue sans texte plutot que de tout casser.
@@ -670,6 +672,7 @@ impl Compositor {
             cursor: RefCell::new(None),
             cursor_time: RefCell::new(None),
             timeline_time: RefCell::new(None),
+            programme_time: RefCell::new(None),
             text_raster: crate::text::TextRasterizer::new().ok(),
             img_cache: RefCell::new(std::collections::HashMap::new()),
             img_tick: std::cell::Cell::new(0),
@@ -978,6 +981,17 @@ impl Compositor {
 
     pub fn set_timeline_time(&self, t: Option<f32>) {
         *self.timeline_time.borrow_mut() = t;
+    }
+
+    pub fn set_programme_time(&self, t: Option<f32>) {
+        *self.programme_time.borrow_mut() = t;
+    }
+
+    /// Dernier temps programme reçu : pour que les tests vérifient ce qui atteint vraiment
+    /// `FrameGeometryInput`, pas seulement ce que l'appelant croit envoyer.
+    #[doc(hidden)]
+    pub fn programme_time(&self) -> Option<f32> {
+        *self.programme_time.borrow()
     }
 
     pub fn clear_cursor(&self) {
@@ -1908,6 +1922,7 @@ impl Compositor {
             scene: scene_ref.as_ref(),
             cursor: cursor_ref.as_ref(),
             timeline_t_override: *self.timeline_time.borrow(),
+            programme_time: *self.programme_time.borrow(),
         });
         // (`wtw`/`wth` sont les dims de la TEXTURE webcam, consommees par le
         // cover-crop du calque PiP plus bas.)

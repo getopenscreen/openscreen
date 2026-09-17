@@ -325,6 +325,9 @@ pub(crate) unsafe fn walk_composited_timeline(
                 }
 
                 comp.set_timeline_time(Some(target_source_time as f32));
+                // Le temps de SORTIE, lui, ne saute ni aux coupes ni aux clips. Même
+                // arithmétique (f64 puis f32) que `ProgrammeClock::at` côté preview.
+                comp.set_programme_time(Some((frames as f64 / out_fps as f64) as f32));
                 if cursor_enabled && cursor_active_path.is_some() {
                     comp.set_cursor_time(Some(target_source_time as f32));
                 }
@@ -348,6 +351,7 @@ pub(crate) unsafe fn walk_composited_timeline(
 
     comp.set_cursor_time(None);
     comp.set_timeline_time(None);
+    comp.set_programme_time(None);
     // Le compositeur est réutilisé par la preview après un export : lui rendre sa cadence.
     comp.set_segmentation_deterministic(false);
     Ok(frames)

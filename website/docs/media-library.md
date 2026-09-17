@@ -2,7 +2,7 @@
 id: media-library
 title: Media library & clips
 sidebar_position: 5
-description: "Manage sources and clips in OpenScreen: import media, then trim, crop, split, and reorder clips on one timeline, and set the project output size."
+description: "Manage sources and clips in OpenScreen: import videos, then trim, crop, split, and reorder clips on one timeline, and set the project output size."
 keywords:
   - media library
   - video clips
@@ -22,10 +22,10 @@ Switch to **Media** in the top bar. The stage shows one card per source in the p
 
 Select a card to open its detail panel:
 
-- **Source Transcript** — the full text for that asset, with its status (No transcript / Pending transcription / Downloading speech model / Transcribing / Transcript ready / No speech detected / No audio track / Transcription failed) and the detected language.
-- **Regenerate as** — re-run local Whisper for this asset, either on **Auto** detection or forced to English, French, or Spanish.
+- **Source Transcript** — the full text for that asset, with its status (No transcript / Pending transcription / Downloading speech model / Starting speech model / Transcribing / Transcript ready / No speech detected / No audio track / Transcription failed) and the detected language.
+- **Regenerate as** — re-run local Whisper for this asset, either on **Auto** detection or forced to one of the 100 languages Whisper supports.
 
-**Import media** adds a source from disk — video, audio, or images. The file dialog accepts `webm`, `mp4`, `mov`, `avi`, `mkv`, `m4v`, `wmv`, `flv`, and `ts`.
+**Import media** adds a video from disk. The file dialog accepts `webm`, `mp4`, `mov`, `avi`, `mkv`, `m4v`, `wmv`, `flv`, and `ts`. This stage holds video only: music and other audio files go in from the timeline toolbar's **Add audio** menu, and images go in as [image annotations](./editing-timeline.md#annotations).
 
 Importing a source does *not* put it on the timeline. Drag its card onto the clip row to do that.
 
@@ -42,7 +42,7 @@ Clips are always contiguous — no gaps, no overlaps. Removing or reordering one
 
 ## Output size
 
-The aspect-ratio picker in the timeline toolbar sets the shape of the frame; **Original** lists the actual shapes of the clips in your project. Every clip gets fitted into that frame, so mixing a 16:9 screen recording with a 9:16 phone capture in one timeline works — see [Export](./export.md#resolution) for what resolution comes out.
+The **Format** control in the **Composition** facet sets the shape of the frame; **Original** lists the actual shapes of the clips in your project. Every clip gets fitted into that frame, so mixing a 16:9 screen recording with a 9:16 phone capture in one timeline works — see [Export](./export.md#resolution) for what resolution comes out.
 
 ## Starting a project
 

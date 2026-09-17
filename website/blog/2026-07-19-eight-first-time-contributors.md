@@ -1,6 +1,7 @@
 ---
 title: v1.7.0 was mostly written by people I'd never met
-description: Eight first-time contributors shipped most of v1.7.0, including memory-safe handling of long recordings and a software H.264 fallback. Before it, v1.6.0 built the release process that made merging their work safe.
+title_meta: "v1.7.0, mostly written by people I'd never met"
+description: Eight first-time contributors shipped most of v1.7.0, including memory-safe long recordings. v1.6.0 built the release process that made merging safe.
 authors: [etienne]
 tags: [release]
 image: /img/og-image.png
@@ -40,6 +41,8 @@ Eight first-time contributors:
 - A custom gradient editor for backgrounds ([@psychosomat](https://github.com/getopenscreen/openscreen/pull/81)).
 
 The platform work in that release was mine. Preview recovery from WebGL context loss on Linux and Wayland. Vulkan off on Wayland so PipeWire capture can import DMA-BUF frames. webm duration patching rewritten so hour-long recordings stop killing the editor on load.
+
+Full Camera and speed regions are covered in the [timeline docs](/docs/editing-timeline/), and the [download page](/download/) has the current build.
 
 ## Why this matters more than the feature list
 

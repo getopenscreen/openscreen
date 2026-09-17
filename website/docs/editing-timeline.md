@@ -26,16 +26,15 @@ Everything below describes **Edit** mode: a resizable preview on top, a timeline
 
 ## Floating inspector
 
-A floating icon rail sits over the preview. Six facets:
+A floating icon rail sits over the preview. Five facets:
 
 | Facet | What it controls |
 |---|---|
-| **Background** | Image, solid color, or gradient behind your recording — upload your own image or pick from presets. |
-| **Effects** | Background blur, motion blur, shadow, corner roundness, and padding sliders. |
-| **Layout** | Webcam composite: picture-in-picture, vertical stack, dual frame, or no webcam. Mirror, "shrink on zoom," camera shape (rectangle/circle/square/rounded), and size. Drag the webcam bubble directly on the canvas to reposition it. |
-| **Cursor** | Only meaningful for recordings with editable cursor data (macOS/Windows). Show/hide, clip-to-canvas, a strip of cursor themes, and sliders for size, smoothing, motion blur, and click bounce. |
-| **Captions** | Turn captions on, style them, and translate them — see [Captions & transcript](./captions.md). |
-| **Transcript** | The aggregated transcript across every clip, editable — see [Transcript editing](./captions.md#transcript-editing). |
+| **Composition** | A background section (image, solid color, or gradient behind your recording; upload your own image or pick from presets), then background blur, shadow, motion blur, corner roundness, and padding. Its **Format** row sets the output shape for preview and export: your clips' own shapes under **Original**, plus 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, and 10:16. |
+| **Camera layout** | Webcam composite: picture-in-picture, vertical stack, dual frame, or no webcam. Mirror, "shrink on zoom," camera shape (rectangle/circle/square/rounded), and size. Drag the webcam bubble directly on the canvas to reposition it. |
+| **Audio** | The output level, applied the same way in the preview and the export. |
+| **Cursor** | Only meaningful for recordings made in the editable cursor mode, on Windows, macOS, or Linux. Show/hide, clip-to-canvas, a strip of cursor themes, and sliders for size, smoothing, motion blur, and click bounce. |
+| **Transcript** | The aggregated transcript across every clip, editable — see [Transcript editing](./captions.md#transcript-editing). Its **Captions** button turns captions on, styles them, and translates them — see [Captions & transcript](./captions.md#captions). |
 
 The **pencil** button on the same rail opens the **Edit clip** modal for the selected clip: a draggable crop rectangle with numeric X/Y/W/H inputs and aspect-ratio presets, plus the clip's in/out points. Crop is per clip, not per project.
 
@@ -44,15 +43,14 @@ Selecting a region on the timeline (a zoom, trim, annotation, speed, or Full Cam
 ## Timeline toolbar
 
 - **Auto-enhance** (wand icon) — a menu with two one-shot passes:
-  - **Automatic zooms** — reads the recorded cursor movement and drops zoom regions on the moments where the cursor dwells. No network, no model.
-  - **Smart zooms + cuts** — hands the job to the AI agent instead, which needs a [connected provider](./ai-editing.md).
+  - **Automatic zooms** — reads the recorded cursor movement and drops zoom regions on the moments where the cursor dwells. No network, no model. [Auto zoom](/features/auto-zoom/) explains how the moments are picked.
+  - **Smart cuts** (marked *With AI*) — hands the job to the AI agent instead, which needs a [connected provider](./ai-editing.md).
 - **Speed** (`S`) — adds a speed-change region at the playhead.
 - **Comment** (`A`) — adds an annotation at the playhead.
 - **Trim** (`T`) — drops a two-second cut ("trim region") at the playhead. Drag its edges to resize, like any other region.
 - **Add zoom** (`Z`) — drops an animated zoom region at the playhead.
 - **Auto focus** (crosshair) — toggle; when on, every zoom region follows the cursor and the per-zoom focus control locks.
 - **Full Camera** (`C`) — adds a segment where the webcam takes the whole frame.
-- **Aspect ratio** — the output shape for preview and export: your clips' own shapes under **Original**, plus 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, and 10:16.
 
 Drag a region's edges to resize, or drag the block to move it. Regions snap to the playhead, other region edges, and the timeline's start/end. `Ctrl/Cmd + C` / `Ctrl/Cmd + V` copies a selected region's attributes onto another region of the same kind.
 
@@ -65,6 +63,8 @@ Click a zoom block to open its inspector:
 - **3D rotation** — None, Iso, Left, or Right.
 - **Focus mode** — Manual (drag the focus marker in the preview) or Auto (follows the recorded cursor). Locked to Auto when the toolbar's Auto-focus toggle is on.
 - **Focus position** — numeric X/Y percentage in manual mode.
+
+Zoom regions placed by **Auto-enhance → Automatic zooms** open the same inspector. How that pass works, and how it compares with other recorders' automatic zooms, is on [Auto zoom](/features/auto-zoom/).
 
 ### Trim regions
 
@@ -93,7 +93,7 @@ Freehand blur shapes can no longer be drawn. Existing ones still render, but as 
 
 ## Cursor styling
 
-If your recording has editable cursor data (native capture on macOS/Windows), the Cursor facet lets you pick from a library of cursor themes and tune size, smoothing, motion blur, and click bounce independently of the raw capture — the underlying cursor path is smoothed deterministically, so what you see in preview matches the final export.
+If your recording has editable cursor data (native capture in the editable cursor mode, on Windows, macOS, or Linux; [Cursor mode](./recording.md#cursor-mode) lists what each platform records), the Cursor facet lets you pick from a library of cursor themes and tune size, smoothing, motion blur, and click bounce independently of the raw capture — the underlying cursor path is smoothed deterministically, so what you see in preview matches the final export.
 
 ## Keyboard shortcuts
 
@@ -106,10 +106,13 @@ The gear icon in the top bar opens the shortcuts dialog, where the configurable 
 | Add Speed | `S` |
 | Add Annotation | `A` |
 | Add Full Camera | `C` |
+| Add Audio | `M` |
+| Record Voiceover | `V` |
 | Delete Selected | `Ctrl/Cmd + D` |
 | Play / Pause | `Space` |
 | Copy region attributes | `Ctrl/Cmd + C` |
 | Paste region attributes | `Ctrl/Cmd + V` |
+| Open App (works from any app) | `Ctrl/Cmd + Shift + O` |
 
 Fixed (not reassignable):
 

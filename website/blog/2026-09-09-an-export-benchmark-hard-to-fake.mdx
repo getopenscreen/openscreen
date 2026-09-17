@@ -1,6 +1,6 @@
 ---
 title: An export benchmark built to be hard to fake
-description: An open, reproducible export benchmark for screen recorders. Same clip, same edit, every result divided by ffmpeg on the same machine and verified in pixels before it counts.
+description: An open, reproducible screen recorder export benchmark. Same clip, same edit, each result divided by ffmpeg on the same machine and verified in pixels.
 authors: [etienne]
 tags: [benchmark, performance]
 image: /img/og-image.png
@@ -10,7 +10,7 @@ import BenchmarkLeaderboard from "@site/src/components/BenchmarkLeaderboard";
 
 Every screen recorder claims a fast export. None of them says fast compared to what.
 
-So the comparison is public now: [screen-recorder-benchmark](https://etiennelescot.github.io/screen-recorder-benchmark/). Same clip, same edit, same machine, across the desktop apps built to turn a recording into a finished demo. OpenScreen is one of the tools in it, and the standings are whatever the submissions say.
+So the comparison is public now: [screen-recorder-benchmark](https://etiennelescot.github.io/screen-recorder-benchmark/). Same clip, same edit, same machine, across the desktop apps built to turn a recording into a finished demo. OpenScreen is one of the tools in it, alongside Cap, FocuSee, Recordly and Screen Studio, and the standings are whatever the submissions say.
 
 {/* truncate */}
 
@@ -20,7 +20,7 @@ So the comparison is public now: [screen-recorder-benchmark](https://etiennelesc
 
 Read the ratio, not seconds. Each figure is an export divided by what a plain ffmpeg transcode of the same clip needed on the same machine, measured minutes earlier. A tool at 1.5× did 50% more work than a bare re-encode, on whatever hardware you have. Seconds only ever compare a machine to itself.
 
-The scenario is a finished demo rather than a transcode: a sampled wallpaper, padding, rounded corners, a drop shadow, three animated zooms, motion blur, a cursor redrawn from telemetry, a webcam inset with mask and shadow, and the recording's audio, all pinned to 1920x1080 at 60 fps in H.264.
+The scenario is a finished demo rather than a transcode: a sampled wallpaper, padding, rounded corners, a drop shadow, three animated zooms, motion blur, a cursor redrawn from telemetry, a webcam inset with mask and shadow, and the recording's audio, all pinned to 1920x1080 at 60 fps in H.264. How the [current OpenScreen release](/download/) renders that is in the [export docs](/docs/export/).
 
 ## Four decisions that make it hard to fake
 

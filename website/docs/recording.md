@@ -3,7 +3,7 @@ id: recording
 title: Screen recording
 sidebar_position: 4
 sidebar_label: Recording
-description: "Record a window, screen, or region with OpenScreen's HUD — system audio, microphone, webcam, cursor modes, countdown, and native vs. browser capture."
+description: "Record a window or a whole screen with OpenScreen's HUD: system audio, microphone, webcam, cursor modes, countdown, and native capture on each platform."
 keywords:
   - record screen
   - window capture
@@ -11,9 +11,10 @@ keywords:
   - webcam recording
   - ScreenCaptureKit
   - Windows Graphics Capture
+  - PipeWire
 ---
 
-# Recording
+# Screen recording
 
 Recording happens through the **HUD** — a draggable, always-on-top overlay pill. It ignores mouse clicks everywhere except its own controls, so it never gets in the way of the app you're recording.
 
@@ -25,6 +26,10 @@ The source picker button shows the currently selected screen or window (truncate
 - **Windows** — one card per open window, with its app icon.
 
 Pick a thumbnail and hit **Share**. If no source is selected when you hit record, OpenScreen opens the picker first and starts recording automatically once you choose one.
+
+There is no region capture: you record a whole screen or a window, and crop the frame afterwards, clip by clip, in the editor.
+
+On Linux the HUD shows no source picker, only *Your system will ask what to share*. The ScreenCast portal owns that choice: pressing record opens your desktop's sharing dialog before the countdown, and it asks again on every take.
 
 ## Audio
 
@@ -38,11 +43,16 @@ System audio support depends on your OS — see [platform differences](./install
 
 ## Cursor mode
 
-On macOS and Windows only, a cursor-mode toggle switches between:
-- **Editable overlay** (default) — OpenScreen draws a stylized cursor you can theme, resize, and animate in the editor.
+On Windows, macOS, and Linux, a cursor-mode toggle switches between:
+- **Editable overlay** (default) — the OS cursor stays out of the pixels and its movement is recorded as data, so OpenScreen can draw a cursor you theme, resize, and animate in the editor.
 - **System** — records the OS cursor as-is, unedited.
 
-This toggle isn't available on Linux, where only cursor *position* is captured (used for auto-zoom, not for a themed overlay).
+What the editable overlay captures depends on the platform:
+- **Windows** — the real cursor shape and clicks.
+- **macOS** — the cursor shape and clicks, which need the Accessibility permission. In this mode, pressing record without it opens a prompt linking to the setting instead of starting (see [macOS installation](./installation.md#macos)).
+- **Linux** — position and shape through the ScreenCast portal, plus left clicks when your user is in the `input` group (see [Mouse clicks on Wayland](./installation.md#mouse-clicks-on-wayland)).
+
+A Linux take that falls back to [browser capture](#native-vs-browser-capture) records the system cursor, whichever mode you picked.
 
 ## Recording controls
 
@@ -60,7 +70,7 @@ Hitting record triggers a 3‑2‑1 countdown, rendered as a full-desktop overla
 
 - **Layout toggle** — switches the HUD between horizontal and vertical, persisted across sessions.
 - **Settings** — device settings for the selected mic and camera without leaving the HUD.
-- **Notes** — opens a small rich-text scratchpad window, handy for a script or cue sheet while you record. It's saved locally between sessions.
+- **Notes** (not on Linux) — opens a small rich-text scratchpad window, handy for a script or cue sheet while you record. It's saved locally between sessions.
 - **Language** — a locale picker (13 languages) that only affects the OpenScreen UI, not your recording.
 - Window controls to hide the HUD or quit the app.
 
@@ -68,7 +78,7 @@ Hitting record triggers a 3‑2‑1 countdown, rendered as a full-desktop overla
 
 You don't have to start from the HUD. In the editor, switch the top bar to **Rec** to get a full-size pre-flight page instead of a pill:
 
-- **Source** — same screen/window picker, in a modal.
+- **Source** — same screen/window picker, in a modal. On Linux this row also reads *Your system will ask what to share*, and the portal dialog does the choosing.
 - **System audio**, **Microphone**, **Camera** — each an on/off row; mic and camera expand to a device list, and the camera shows a live preview so you can frame yourself before going live.
 - **Cursor highlight** — on means the editable overlay cursor, off means the plain system cursor.
 
@@ -76,6 +86,8 @@ You don't have to start from the HUD. In the editor, switch the top bar to **Rec
 
 ## Native vs. browser capture
 
-macOS (ScreenCaptureKit) and Windows (Windows Graphics Capture) record through a native pipeline for higher-quality, clean window-level capture, including real cursor bitmaps and native webcam capture. Linux records through a browser-based pipeline instead — screen and webcam capture still work, but cursor themes and click effects aren't available since only cursor position is tracked. See the full [platform differences table](./installation.md#platform-differences).
+Every platform records the screen through a native helper: ScreenCaptureKit on macOS, Windows Graphics Capture on Windows 10 build 19041 and later, and PipeWire through the ScreenCast portal on Linux. The webcam is captured natively on Windows only; macOS and Linux record it through the browser. On all three it is saved as a separate file and composited in the editor.
+
+Browser capture replaces the native helper only on Windows builds older than 19041, or when a Windows or Linux build is missing its helper. A native helper that fails does not fall back: the recording reports the error. See the full [platform differences table](./installation.md#platform-differences).
 
 Once you've stopped recording, head to [Editing & timeline](./editing-timeline.md) to cut it into shape — or to [Media library](./media-library.md) if you're assembling several takes.

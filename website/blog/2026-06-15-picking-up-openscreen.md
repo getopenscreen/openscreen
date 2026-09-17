@@ -8,13 +8,13 @@ image: /img/og-image.png
 
 The last commit on [siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) landed on June 6, 2026. It bumped the Nix package to v1.5.0. Then the repo went read-only, like the README had been warning it would for a while. 39k stars, and v1.5.0 as the final release.
 
-I picked it up on June 15, with the original author's approval. Same name, same MIT license, new URL. This post starts a journal of what happens next.
+I picked it up on June 15, with [the original author's approval](https://github.com/siddharthvaddem/openscreen#readme). Same name, same MIT license, new URL. This post starts a journal of what happens next.
 
 <!-- truncate -->
 
 ## Where it lives now
 
-[github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen). It started as a personal fork and moved under the `getopenscreen` org in the first week. It stays there.
+[github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen). It started as a personal fork and moved under the `getopenscreen` org in the first week. It stays there. Installers are on the [download page](/download/), and the [docs](/docs/intro/) cover installing, recording, editing and export.
 
 The archived original is still online and still read-only. Every commit of it is in this repo's history.
 
@@ -28,7 +28,7 @@ Forking a popular archived project is a good way to quietly turn it into somethi
 - Stability before features. The recorder has to work on macOS, Windows and Linux. Bugs from real users go first.
 - It's not production-grade, and I'll keep saying so. Expect rough edges and breaking changes, including to the project format.
 
-The [roadmap](https://github.com/getopenscreen/openscreen/blob/main/ROADMAP.md) is public: record, edit, export, plus an optional AI editing layer that's off by default and never required. There's a [Discord](https://getopenscreen.com/discord) with a roadmap channel if you want to argue about any of it.
+The [roadmap](https://github.com/getopenscreen/openscreen/blob/main/ROADMAP.md) is public: record, edit, export, plus an optional AI editing layer that's off by default and never required. There's a [Discord](https://getopenscreen.com/discord/) with a roadmap channel if you want to argue about any of it.
 
 ## It already had contributors
 

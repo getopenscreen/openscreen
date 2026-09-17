@@ -85,6 +85,17 @@ describe("getEditorSettings", () => {
 		const snap = getEditorSettings(doc);
 		expect(snap.showBlur).toBe(false);
 	});
+
+	it("keeps depth of field on unless the project stored a boolean off", () => {
+		expect(getEditorSettings(baseDoc).depthOfField).toBe(true);
+		const junk: AxcutDocument = {
+			...baseDoc,
+			legacyEditor: { depthOfField: "no" as unknown as boolean },
+		};
+		expect(getEditorSettings(junk).depthOfField).toBe(true);
+		const off = patchEditorSettings(baseDoc, { depthOfField: false });
+		expect(getEditorSettings(off).depthOfField).toBe(false);
+	});
 });
 
 describe("patchEditorSettings", () => {

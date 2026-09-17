@@ -75,6 +75,16 @@ struct WebcamMask {
     height: u32,
 }
 
+/// Pyramide de la profondeur de champ (mode 8) : la vidéo en RGBA8 à demi-résolution de la
+/// texture DÉCODEUR, avec sa chaîne de mips. Dimensionnée sur la texture décodeur et remplie en
+/// UV plein (0..1) : ses UV sont ceux de t0/t1, et le calcul d'UV du mode 8 ne change pas.
+struct DofPyramid {
+    rtv: ID3D11RenderTargetView,
+    srv: ID3D11ShaderResourceView,
+    width: u32,
+    height: u32,
+}
+
 pub struct Compositor {
     dev: ID3D11Device,
     ctx: ID3D11DeviceContext,
@@ -219,6 +229,11 @@ pub struct Compositor {
     /// que `live_readback_staging`, mais en NV12 et non en RGBA : l'encodeur logiciel veut
     /// les plans Y/UV, pas des pixels RGBA. Voir `read_nv12_scaled`.
     nv12_readback_staging: RefCell<Option<(u32, u32, ID3D11Texture2D)>>,
+    /// Pyramide de profondeur de champ, allouée au premier écran incliné et recréée quand la
+    /// texture décodeur change de taille. Rien n'est alloué tant qu'aucun tilt n'est rendu.
+    dof_pyramid: RefCell<Option<DofPyramid>>,
+    /// Device WARP : la profondeur de champ y obéit à `DOF_ON_CPU_BACKEND`.
+    cpu_backend: bool,
 }
 
 /// Ressources d'un resize export à une taille cible : RGBA intermédiaire (résultat du
@@ -637,6 +652,8 @@ impl Compositor {
             seg_scratch: RefCell::new(Vec::new()),
             seg_failed: RefCell::new(false),
             nv12_readback_staging: RefCell::new(None),
+            dof_pyramid: RefCell::new(None),
+            cpu_backend: gpu.backend == crate::d3d::Backend::Cpu,
         })
     }
 
@@ -809,6 +826,86 @@ impl Compositor {
             [2.0 / hw, 2.0 / hh, off, 0.0]);
         self.fs_pass(&self.rtv, &self.half_a_srv, &self.ps_kup, rw_i, rh_i,
             [1.0 / hw, 1.0 / hh, off, 0.0]);
+    }
+
+    /// Remplit la pyramide de profondeur de champ depuis la frame écran et rend sa SRV.
+    ///
+    /// UN draw du mode 0 existant, en UV plein, vers une cible demi-résolution : un échantillon
+    /// bilinéaire 2:1 est une moyenne 2x2, cette cible EST donc déjà le niveau 1 d'une pyramide
+    /// pleine résolution. `GenerateMips` fait le reste, comme pour `ann_copy`. Cible vidée
+    /// d'abord et `color.a = 1` : un `LayerCB` par défaut a `color.a = 0`, et le mode 0 sortirait
+    /// une pyramide transparente. `mb.x = 1` : un seul tap, pas de flou de mouvement.
+    ///
+    /// Laisse l'état de composition lié sur le RT principal ; l'appelant enchaîne sur `begin`.
+    unsafe fn fill_dof_pyramid(
+        &self,
+        sy: &ID3D11ShaderResourceView,
+        suv: &ID3D11ShaderResourceView,
+        tex_w: u32,
+        tex_h: u32,
+    ) -> Result<ID3D11ShaderResourceView> {
+        let (w, h) = (tex_w.div_ceil(2).max(1), tex_h.div_ceil(2).max(1));
+        let stale = self.dof_pyramid.borrow().as_ref().is_none_or(|p| (p.width, p.height) != (w, h));
+        if stale {
+            let desc = D3D11_TEXTURE2D_DESC {
+                Width: w,
+                Height: h,
+                MipLevels: crate::frame_geometry::dof_pyramid_levels(w, h),
+                ArraySize: 1,
+                Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Usage: D3D11_USAGE_DEFAULT,
+                BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+                CPUAccessFlags: 0,
+                MiscFlags: D3D11_RESOURCE_MISC_GENERATE_MIPS.0 as u32,
+            };
+            let mut tex: Option<ID3D11Texture2D> = None;
+            self.dev.CreateTexture2D(&desc, None, Some(&mut tex))?;
+            let tex = tex.unwrap();
+            // RTV sur le niveau 0 seul (défaut), SRV sur toute la chaîne (défaut).
+            let mut rtv: Option<ID3D11RenderTargetView> = None;
+            self.dev.CreateRenderTargetView(&tex, None, Some(&mut rtv))?;
+            let mut srv: Option<ID3D11ShaderResourceView> = None;
+            self.dev.CreateShaderResourceView(&tex, None, Some(&mut srv))?;
+            *self.dof_pyramid.borrow_mut() =
+                Some(DofPyramid { rtv: rtv.unwrap(), srv: srv.unwrap(), width: w, height: h });
+        }
+        let pyr = self.dof_pyramid.borrow();
+        let pyr = pyr.as_ref().expect("pyramide allouée ci-dessus");
+        self.bind_compose_state();
+        // Délie t2 : la pyramide y est peut-être encore liée depuis le mode 8 précédent, et une
+        // ressource liée en lecture ET en écriture est retirée d'office par le runtime.
+        self.ctx.PSSetShaderResources(2, Some(&[None]));
+        self.ctx.OMSetRenderTargets(Some(&[Some(pyr.rtv.clone())]), None);
+        self.ctx.ClearRenderTargetView(&pyr.rtv, &[0.0, 0.0, 0.0, 0.0]);
+        self.ctx.RSSetViewports(Some(&[D3D11_VIEWPORT {
+            TopLeftX: 0.0,
+            TopLeftY: 0.0,
+            Width: w as f32,
+            Height: h as f32,
+            MinDepth: 0.0,
+            MaxDepth: 1.0,
+        }]));
+        let full = [0.0, 0.0, 1.0, 1.0];
+        self.draw_video(
+            &LayerCB {
+                dst: full,
+                src: full,
+                quad_px: [w as f32, h as f32],
+                mode: 0.0,
+                color: [1.0, 1.0, 1.0, 1.0],
+                src_prev: full,
+                dst_prev: full,
+                mb: [1.0, 0.0, 1.0, 0.0],
+                ..Default::default()
+            },
+            sy,
+            suv,
+        );
+        // La pyramide quitte la sortie avant de générer ses mips.
+        self.bind_compose_state();
+        self.ctx.GenerateMips(&pyr.srv);
+        Ok(pyr.srv.clone())
     }
 
     unsafe fn upload_cb(&self, cb: &LayerCB) {
@@ -1641,6 +1738,10 @@ impl Compositor {
         let w_radius = g.w_radius;
         let shape_fade = g.shape_fade;
 
+        // Profondeur de champ : la pyramide n'est remplie que sur une frame inclinée qui la lit,
+        // AVANT `begin`, qui rebranche ensuite le RT principal et le vide.
+        let dof = g.depth_of_field_on(self.cpu_backend);
+        let dof_srv = if dof { Some(self.fill_dof_pyramid(&sy, &suv, stw, sth)?) } else { None };
 
         self.begin([0.0, 0.0, 0.0, 1.0]);
 
@@ -1842,6 +1943,10 @@ impl Compositor {
             let [tr0, tr1] = local(corners[1]);
             let [br0, br1] = local(corners[2]);
             let [bl0, bl1] = local(corners[3]);
+            // t2 EXPLICITE : `draw_video` ne lie que t0/t1, et t2 garde sinon ce que le draw
+            // précédent y a laissé (un wallpaper, un sprite). `None` quand l'effet est coupé :
+            // `k = 0`, le shader n'y lit rien.
+            self.ctx.PSSetShaderResources(2, Some(&[dof_srv.clone()]));
             self.draw_video(
                 &LayerCB {
                     dst: bbox_dst,
@@ -1854,11 +1959,14 @@ impl Compositor {
                     fx: [tl0, tl1, tr0, tr1],
                     src_prev: [br0, br1, bl0, bl1],
                     dst_prev: [plane_px[0], plane_px[1], square_top, 0.0],
+                    // Gradient de profondeur du plan, profondeur du focus et `k` (`depth_mb`).
+                    mb: quad.depth_mb(s_px, g.focus_plane, dof),
                     ..Default::default()
                 },
                 &sy,
                 &suv,
             );
+            self.ctx.PSSetShaderResources(2, Some(&[None]));
         }
 
         // --- curseur custom : suit le mapping src/dst (zoom+layout), click bounce,

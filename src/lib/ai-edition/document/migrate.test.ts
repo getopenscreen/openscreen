@@ -18,6 +18,7 @@ function makeV2Project(overrides: Partial<EditorProjectData> = {}): EditorProjec
 			shadowIntensity: 0,
 			showBlur: false,
 			motionBlurAmount: 0,
+			depthOfField: true,
 			borderRadius: 0,
 			padding: 50,
 			cropRegion: { x: 0, y: 0, width: 1, height: 1 },
@@ -276,6 +277,17 @@ describe("migrateAxcutDocumentToProjectData", () => {
 		});
 		const back = migrateAxcutDocumentToProjectData(migrateProjectDataToAxcutDocument(v2));
 		expect(back.editor.wallpaperMotion).toBe("aurora");
+	});
+
+	it("round-trips depthOfField: on by default, an explicit off stays off", () => {
+		const roundTrip = (depthOfField: boolean) =>
+			migrateAxcutDocumentToProjectData(
+				migrateProjectDataToAxcutDocument(
+					makeV2Project({ editor: { ...makeV2Project().editor, depthOfField } }),
+				),
+			).editor.depthOfField;
+		expect(roundTrip(true)).toBe(true);
+		expect(roundTrip(false)).toBe(false);
 	});
 
 	it("round-trips zoomRegions and annotationRegions back to ms", () => {

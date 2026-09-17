@@ -38,12 +38,16 @@ VSOut vs_main(uint vid : SV_VertexID)
 
 Texture2D<float>  texY  : register(t0);
 Texture2D<float2> texUV : register(t1);
-Texture2D<float4> texImg : register(t2); // wallpaper image RGBA (fond, mode 6)
+Texture2D<float4> texImg : register(t2); // wallpaper image RGBA (fond, mode 6) ; mode 8 : pyramide de flou
 // Masque de segmentation du sujet, 0 = fond, 1 = sujet. Produit par `segmentation.rs` a la
 // resolution du modele (256x144) ; l'upscale vers la resolution webcam est fait par le sampler
 // lineaire, ce qui est exactement le filtrage qu'on veut sur un masque.
 Texture2D<float> texMask : register(t3);
 SamplerState samp : register(s0);
+
+// Plafond de la profondeur de champ du mode 8, en niveau de la pyramide demi-résolution (1.5 =
+// ~5.7 texels source). Validé à l'œil sur du texte : cf. `tests/tilted_depth_of_field.rs`.
+#define DOF_MAX_LOD 1.5
 
 // BT.709 limited -> RGB (§7 E1), matrice en dur, range mesuré en S1.
 float3 yuv709_limited(float y, float2 cbcr)
@@ -397,6 +401,11 @@ float4 ps_main(VSOut i) : SV_Target
     // de perspective-correct exact, mais indiscernable à l'œil pour un tilt de 10-22°) et
     // échantillonne la vidéo à l'UV correspondant, sinon transparent (hors du quad projeté).
     // fx.xy/fx.zw = coins TL/TR (px locaux, 0..quad_px) ; src_prev.xy/.zw = coins BR/BL.
+    // mb = [gx, gy, z_focus, k] : profondeur du point r du plan = (r.x - 0.5)*gx + (r.y - 0.5)*gy
+    // en px, positive vers la caméra ; z_focus = celle du focus du zoom (`TiltedQuad::depth_mb`) ;
+    // k = texels source de flou par px d'écart de profondeur (0 = profondeur de champ coupée).
+    // t2 (texImg) = pyramide demi-résolution de la vidéo, 5 niveaux, mêmes UV que t0/t1 ; liée
+    // explicitement à chaque draw du mode 8 (`draw_video` ne lie que t0/t1).
     // mode 11 : texte d'annotation, rastérisé par Direct2D (voir text.rs). D2D écrit sur une
     // surface DXGI en alpha PRÉMULTIPLIÉ, donc contrairement au mode 7 (sprite curseur, alpha
     // droit) il ne faut SURTOUT pas re-multiplier ici : les bords adoucis des glyphes
@@ -557,7 +566,23 @@ float4 ps_main(VSOut i) : SV_Target
         float2 p = float2(r.x, r.y) * plane_px - plane_px * 0.5;
         float d = sd_round_rect(p, plane_px * 0.5, (dst_prev.z > 0.5 && p.y < 0.0) ? 0.0 : max(radius_px, 0.0));
         float tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
-        return float4(sample_yuv(uv) * tilt_a, tilt_a); // prémultiplié, comme les autres modes
+        // Profondeur de champ : cercle de confusion en texels source, nul au focus du zoom.
+        // Sous un demi-texel, l'échantillon net d'avant, à l'octet : le texte net ne passe
+        // jamais par le RGBA de la pyramide, et `k = 0` (réglage coupé) ne quitte jamais cette
+        // voie. Au-delà, fondu vers la pyramide demi-résolution (t2) au niveau `log2(coc) - 1`
+        // (son niveau 0 est déjà une moyenne 2x2), plafonné à DOF_MAX_LOD : au niveau 2, un
+        // bloc 4x4 soude les jambages d'un « m » en 1080p.
+        float3 rgb = sample_yuv(uv);
+        float2 rs = saturate(float2(r.x, r.y));
+        float z = (rs.x - 0.5) * mb.x + (rs.y - 0.5) * mb.y;
+        float coc = mb.w * abs(z - mb.z);
+        if (coc > 0.5)
+        {
+            float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
+            float3 far_rgb = texImg.SampleLevel(samp, uv, lod).rgb;
+            rgb = lerp(rgb, far_rgb, saturate((coc - 0.5) / 1.5));
+        }
+        return float4(rgb * tilt_a, tilt_a); // prémultiplié, comme les autres modes
     }
 
     // mode 7 : sprite curseur thème (PNG alpha droite, arrow.png etc.). Prémultiplie ici

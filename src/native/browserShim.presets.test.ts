@@ -17,6 +17,7 @@ const APPEARANCE: StylePresetAppearance = {
 	shadowIntensity: 0.2,
 	showBlur: false,
 	motionBlurAmount: 0.2,
+	depthOfField: true,
 	borderRadius: 40,
 	padding: 50,
 	webcamLayoutPreset: "picture-in-picture",

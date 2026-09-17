@@ -102,6 +102,10 @@ vertex VSOut vs_main(uint vid [[vertex_id]],
 constexpr sampler samp(filter::linear, mip_filter::linear, address::clamp_to_edge);
 constexpr sampler sampNV(filter::linear, address::clamp_to_edge);
 
+// Plafond de la profondeur de champ du mode 8, en niveau de la pyramide demi-résolution.
+// Même valeur que `DOF_MAX_LOD` du HLSL.
+constant float DOF_MAX_LOD = 1.5;
+
 // Slots de texture, tenus par les paramètres des entry points :
 //   ps_main      : 0 = texY (Y, R8), 1 = texUV (CbCr, RG8), 2 = texImg (RGBA)
 //   ps_fs_*      : 0 = rgbTex (RGBA)
@@ -480,6 +484,11 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     }
 
     // mode 8 : écran tilté (zoom regions "rotation"). Warp bilinéaire inverse.
+    // mb = [gx, gy, z_focus, k] : profondeur du point r du plan = (r.x - 0.5)*gx + (r.y - 0.5)*gy
+    // en px, positive vers la caméra ; z_focus = celle du focus du zoom (`TiltedQuad::depth_mb`) ;
+    // k = texels source de flou par px d'écart de profondeur (0 = profondeur de champ coupée).
+    // texture(2) (texImg) = pyramide demi-résolution de la vidéo, 5 niveaux, mêmes UV que
+    // texture(0/1) ; liée explicitement à chaque draw du mode 8. Cf. commentaires HLSL.
     if (layer.mode > 7.5 && layer.mode < 8.5)
     {
         // PAS de test de clip sur `dst_prev` ici — le port en avait copié un depuis le
@@ -508,9 +517,22 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         float d = sd_round_rect(p, plane_px * 0.5,
                                 (layer.dst_prev.z > 0.5 && p.y < 0.0) ? 0.0 : max(layer.radius_px, 0.0));
         float tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
+        // Profondeur de champ : net sous un demi-texel de flou (l'échantillon d'avant, à
+        // l'octet), fondu au-delà vers la pyramide au niveau `log2(coc) - 1`, plafonné.
+        // `level(lod)` exige `mip_filter::linear` sur `samp` : sans lui, niveau 0 partout.
+        float3 rgb = sample_yuv(uv, texY, texUV);
+        float2 rs = clamp(float2(r.x, r.y), 0.0, 1.0);
+        float z = (rs.x - 0.5) * layer.mb.x + (rs.y - 0.5) * layer.mb.y;
+        float coc = layer.mb.w * abs(z - layer.mb.z);
+        if (coc > 0.5)
+        {
+            float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
+            float3 far_rgb = texImg.sample(samp, uv, level(lod)).rgb;
+            rgb = mix(rgb, far_rgb, clamp((coc - 0.5) / 1.5, 0.0, 1.0));
+        }
         // L'alpha est cette couverture, pas `color.a` : les draws du mode 8 laissent `color`
         // à zéro, donc le port rendait de toute façon un plan totalement transparent.
-        return float4(sample_yuv(uv, texY, texUV) * tilt_a, tilt_a);
+        return float4(rgb * tilt_a, tilt_a);
     }
 
     // mode 7 : sprite curseur thème (PNG alpha droite). Prémultiplie ici, comme partout

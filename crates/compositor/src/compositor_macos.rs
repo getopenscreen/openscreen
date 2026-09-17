@@ -327,6 +327,10 @@ pub struct Compositor {
     /// échantillonner la cible sur laquelle on dessine, et le mode 10 lit un niveau de mip
     /// pour flouter à coût constant.
     ann_copy: metal::Texture,
+    /// Pyramide de profondeur de champ (mode 8) : la vidéo en RGBA8 à demi-résolution de la
+    /// texture DÉCODEUR, mips compris. Allouée au premier écran incliné, recréée quand la
+    /// texture décodeur change de taille. Cf. `compositor_windows::DofPyramid`.
+    dof_pyramid: RefCell<Option<metal::Texture>>,
     /// Images d'annotation, indexées par ID d'annotation (pas par data-URL : celle-ci pèse
     /// souvent des mégaoctets et la hacher à chaque frame coûterait plus que le décodage).
     /// La longueur sert de garde-fou quand l'utilisateur change l'image.
@@ -639,6 +643,7 @@ impl Compositor {
             pipeline_kdown,
             pipeline_kup,
             ann_copy,
+            dof_pyramid: RefCell::new(None),
             ann_img_cache: RefCell::new(std::collections::HashMap::new()),
             text_cache: RefCell::new(std::collections::HashMap::new()),
             text_raster: crate::text::TextRasterizer::new().ok(),
@@ -1098,6 +1103,66 @@ impl Compositor {
     }
 
 
+    /// Remplit la pyramide de profondeur de champ depuis la frame écran et la rend. Port de
+    /// `compositor_windows::fill_dof_pyramid` : UN draw du mode 0 en UV plein vers une cible
+    /// demi-résolution vidée d'abord (`color.a = 1`, un seul tap), puis `generate_mipmaps`,
+    /// l'appel qui sert déjà `ann_copy`. Le viewport découle de la taille de l'attachement.
+    unsafe fn fill_dof_pyramid(
+        &self,
+        cmd: &metal::CommandBufferRef,
+        y: &metal::Texture,
+        uv: &metal::Texture,
+        tex_w: u32,
+        tex_h: u32,
+    ) -> Result<metal::Texture> {
+        let (w, h) = (tex_w.div_ceil(2).max(1), tex_h.div_ceil(2).max(1));
+        let stale = self
+            .dof_pyramid
+            .borrow()
+            .as_ref()
+            .is_none_or(|p| (p.width(), p.height()) != (w as u64, h as u64));
+        if stale {
+            let d = metal::TextureDescriptor::new();
+            d.set_texture_type(metal::MTLTextureType::D2);
+            d.set_pixel_format(metal::MTLPixelFormat::RGBA8Unorm);
+            d.set_width(w as u64);
+            d.set_height(h as u64);
+            d.set_storage_mode(metal::MTLStorageMode::Private);
+            d.set_usage(metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead);
+            d.set_mipmap_level_count(crate::frame_geometry::dof_pyramid_levels(w, h) as u64);
+            *self.dof_pyramid.borrow_mut() = Some(self.gpu.device.new_texture(&d));
+        }
+        let pyr = self.dof_pyramid.borrow().clone().expect("pyramide allouée ci-dessus");
+        let enc = self.begin_pass(
+            cmd,
+            &pyr,
+            Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 0.0)),
+            &self.pipeline_main,
+        )?;
+        let full = [0.0, 0.0, 1.0, 1.0];
+        self.draw_video(
+            enc,
+            &LayerCB {
+                dst: full,
+                src: full,
+                quad_px: [w as f32, h as f32],
+                mode: 0.0,
+                color: [1.0, 1.0, 1.0, 1.0],
+                src_prev: full,
+                dst_prev: full,
+                mb: [1.0, 0.0, 1.0, 0.0],
+                ..Default::default()
+            },
+            y,
+            uv,
+        );
+        enc.end_encoding();
+        let blit = cmd.new_blit_command_encoder();
+        blit.generate_mipmaps(&pyr);
+        blit.end_encoding();
+        Ok(pyr)
+    }
+
     /// Ombre d'un écran incliné en 3D : la pénombre suit le QUADRILATÈRE projeté (mode 12),
     /// pas son rect englobant. Port de `compositor_windows::draw_quad_shadow`.
     #[allow(clippy::too_many_arguments)]
@@ -1155,11 +1220,13 @@ impl Compositor {
         s_px: [f32; 2],
         center_px: [f32; 2],
         cut: [f32; 4],
+        focus_plane: [f32; 2],
         radius: f32,
         // 1 : coins hauts carrés, l'écran est sous la barre d'un cadre (`dst_prev.z`).
         square_top: f32,
         y: &metal::Texture,
         uv: &metal::Texture,
+        dof_pyramid: Option<&metal::Texture>,
     ) {
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
         let corners = quad.corners;
@@ -1178,6 +1245,9 @@ impl Compositor {
         let [tr0, tr1] = local(corners[1]);
         let [br0, br1] = local(corners[2]);
         let [bl0, bl1] = local(corners[3]);
+        // texture(2) EXPLICITE : `draw_video` ne lie que 0/1, et le slot 2 garde sinon ce que
+        // le draw précédent y a laissé. `None` quand l'effet est coupé : `k = 0`, rien n'y est lu.
+        enc.set_fragment_texture(2, dof_pyramid.map(|t| &**t));
         self.draw_video(
             enc,
             &LayerCB {
@@ -1194,6 +1264,9 @@ impl Compositor {
                 fx: [tl0, tl1, tr0, tr1],
                 src_prev: [br0, br1, bl0, bl1],
                 dst_prev: [plane_px[0], plane_px[1], square_top, 0.0],
+                // Gradient de profondeur du plan, profondeur du focus et `k` (`depth_mb`) : la
+                // pyramide liée décide seule si l'effet tourne.
+                mb: quad.depth_mb(s_px, focus_plane, dof_pyramid.is_some()),
                 ..Default::default()
             },
             y,
@@ -1977,6 +2050,13 @@ impl Compositor {
         });
 
         let cmd_buf = self.gpu.context.new_command_buffer();
+        // Profondeur de champ : pyramide remplie seulement sur une frame inclinée qui la lit,
+        // dans ses propres passes, avant celles de la composition.
+        let dof_pyramid = if g.depth_of_field_on(self.gpu.backend == crate::d3d::Backend::Cpu) {
+            Some(self.fill_dof_pyramid(cmd_buf, &sy, &suv, stw, sth)?)
+        } else {
+            None
+        };
         let enc = self.begin_pass(
             cmd_buf,
             &self.rt,
@@ -2108,7 +2188,17 @@ impl Compositor {
                 &suv,
             ),
             Some(quad) => self.draw_tilted_screen(
-                enc, quad, s_px, quad_center_px, g.cut, g.s_radius, square_top, &sy, &suv,
+                enc,
+                quad,
+                s_px,
+                quad_center_px,
+                g.cut,
+                g.focus_plane,
+                g.s_radius,
+                square_top,
+                &sy,
+                &suv,
+                dof_pyramid.as_ref(),
             ),
         }
 
@@ -3296,6 +3386,124 @@ mod tests {
             let (_, _, rgba) = comp.readback_direct().expect("readback_direct");
             rgba
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Profondeur de champ du mode 8 (pendant macOS de `tests/tilted_depth_of_field.rs`)
+    //
+    // Le seul golden de l'effet qui tourne en CI : celui de Windows est opt-in (source vidéo),
+    // celui de Linux aussi (`OPENSCREEN_LINUX_COMPOSE`). C'est aussi le premier vrai passage de
+    // `fill_dof_pyramid`, de `generate_mipmaps` et du `texture(2)` du mode 8. Le piège qu'il
+    // garde : un `level(lod)` qui retomberait au niveau 0 laisserait macOS net là où Windows
+    // floute.
+    // -----------------------------------------------------------------------
+
+    /// Écran seul sur fond magenta (couleur qu'aucune luma neutre ne produit), focus manuel sur
+    /// le coin proche d'`iso` (haut-droit), zoom 1 en plein palier sur 0..6 s.
+    fn dof_scene_json(rotation: &str, dof: bool) -> String {
+        format!(
+            r##"{{"clips":[],
+                "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle",
+                           "webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false}},
+                "effects":{{"padding":0.2,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0,
+                            "depthOfField":{dof}}},
+                "background":{{"kind":"color","color":"#ff00ff"}},
+                "zoomRegions":[{{"clipIndex":0,"startSec":0,"endSec":6,"scale":1.0,
+                                 "focusX":0.94,"focusY":0.06,"focusMode":"manual",
+                                 "rotation":{rotation}}}],
+                "annotations":[],
+                "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,
+                           "clipToBounds":false,"theme":"default"}},
+                "cropByClip":[],
+                "output":{{"width":1280,"height":720,"fps":30}}}}"##
+        )
+    }
+
+    fn compose_dof(comp: &super::Compositor, screen: &FakeFrame, rotation: &str, dof: bool) -> Vec<u8> {
+        let scene = crate::scene::Scene::from_json(&dof_scene_json(rotation, dof)).expect("scene json");
+        comp.set_live_params(live_params_from_scene(&scene));
+        comp.set_has_webcam(false);
+        comp.set_scene(Some(scene));
+        let mut cfg = crate::config::Cfg::c8();
+        cfg.shadow = false;
+        cfg.cursor = false;
+        cfg.mblur_n = 1;
+        unsafe {
+            // Frame 180 à `FPS` (60) = 3 s : en plein palier de la région.
+            comp.compose_frame(screen.as_ptr(), std::ptr::null(), 180.0, &cfg)
+                .expect("compose_frame");
+            comp.readback_direct().expect("readback_direct").2
+        }
+    }
+
+    /// Coin du plan (hors magenta) extrême dans la direction `dir`, rentré de `inset` vers le
+    /// centroïde : une fenêtre posée là est entièrement sur le plan, loin du feather.
+    fn dof_corner(rgba: &[u8], w: u32, h: u32, dir: (i64, i64), inset: f64) -> (u32, u32) {
+        let (mut best, mut at) = (i64::MIN, (0i64, 0i64));
+        let (mut sx, mut sy, mut n) = (0f64, 0f64, 0f64);
+        for y in 0..h as i64 {
+            for x in 0..w as i64 {
+                let p = &rgba[((y * w as i64 + x) * 4) as usize..];
+                if p[0] > 200 && p[1] < 60 && p[2] > 200 {
+                    continue;
+                }
+                sx += x as f64;
+                sy += y as f64;
+                n += 1.0;
+                if x * dir.0 + y * dir.1 > best {
+                    best = x * dir.0 + y * dir.1;
+                    at = (x, y);
+                }
+            }
+        }
+        let x = at.0 as f64 + (sx / n - at.0 as f64) * inset;
+        let y = at.1 as f64 + (sy / n - at.1 as f64) * inset;
+        (x as u32, y as u32)
+    }
+
+    /// Octets et netteté (écart moyen entre voisins, vert) d'une fenêtre `r`×`r` centrée en `c`.
+    fn dof_window(rgba: &[u8], w: u32, c: (u32, u32), r: u32) -> (Vec<u8>, f64) {
+        let g = |x: u32, y: u32| rgba[((y * w + x) * 4 + 1) as usize] as f64;
+        let (mut bytes, mut acc) = (Vec::new(), 0.0);
+        for y in c.1 - r / 2..c.1 + r / 2 {
+            for x in c.0 - r / 2..c.0 + r / 2 {
+                let i = ((y * w + x) * 4) as usize;
+                bytes.extend_from_slice(&rgba[i..i + 4]);
+                acc += (g(x + 1, y) - g(x, y)).abs() + (g(x, y + 1) - g(x, y)).abs();
+            }
+        }
+        (bytes, acc / (r * r) as f64)
+    }
+
+    #[test]
+    fn depth_of_field_defocuses_the_far_corner_of_a_tilted_screen_only() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let (w, h) = (1280u32, 720u32);
+        let comp = super::Compositor::new_sized(&gpu, w, h).expect("Compositor::new_sized");
+        // Damier de 2 texels : le détail le plus fin possible, que le moindre niveau de mip efface.
+        let screen = FakeFrame::new(640, 360, |col, row| if (col / 2 + row / 2) % 2 == 0 { 180 } else { 60 });
+
+        let on = compose_dof(&comp, &screen, "\"iso\"", true);
+        let off = compose_dof(&comp, &screen, "\"iso\"", false);
+        let r = 32;
+        let near = dof_corner(&off, w, h, (1, -1), 0.12);
+        let far = dof_corner(&off, w, h, (-1, 1), 0.12);
+        let ((near_on_px, near_on), (near_off_px, near_off)) =
+            (dof_window(&on, w, near, r), dof_window(&off, w, near, r));
+        let ((_, far_on), (_, far_off)) = (dof_window(&on, w, far, r), dof_window(&off, w, far, r));
+        println!("dof : proche {near_off:.2} -> {near_on:.2}, lointain {far_off:.2} -> {far_on:.2}");
+        assert!(far_off > 2.0, "fenêtre lointaine sans détail ({far_off})");
+        assert!(near_on_px == near_off_px, "coin proche modifié : {near_off} -> {near_on}");
+        assert!(far_on < far_off * 0.7, "coin lointain pas flouté : {far_off} -> {far_on}");
+
+        // À plat, l'effet n'existe pas : allumé ou non, la frame est la même à l'octet.
+        assert!(
+            compose_dof(&comp, &screen, "null", true) == compose_dof(&comp, &screen, "null", false),
+            "rotation nulle : la profondeur de champ a changé la frame"
+        );
     }
 
     /// Le pendant macOS de `compositor_windows`'s `every_shader_entry_point_compiles`.

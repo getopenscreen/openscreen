@@ -239,6 +239,17 @@ struct WebcamMask {
     height: u32,
 }
 
+/// Pyramide de profondeur de champ (cf. `Compositor::dof_pyramid`). `_tex` garde la
+/// texture en vie ; `view` porte tous les niveaux (binding 4 du mode 8), `mips` un
+/// niveau chacune (cible du remplissage puis de `generate_mips`).
+struct DofPyramid {
+    _tex: wgpu::Texture,
+    view: wgpu::TextureView,
+    mips: Vec<wgpu::TextureView>,
+    width: u32,
+    height: u32,
+}
+
 pub struct Compositor {
     gpu: Gpu,
     render_w: u32,
@@ -329,6 +340,12 @@ pub struct Compositor {
     ann_copy: wgpu::Texture,
     ann_copy_view: wgpu::TextureView,
     ann_copy_mips: Vec<wgpu::TextureView>,
+
+    /// Pyramide de profondeur de champ (mode 8) : la video en RGBA8 a demi-resolution
+    /// de la texture DECODEUR, mips compris (texture, vue tous niveaux, vue par niveau),
+    /// et sa taille de niveau 0. Allouee au premier ecran incline, recreee quand la
+    /// texture decodeur change de taille. Cf. `compositor_windows::DofPyramid`.
+    dof_pyramid: RefCell<Option<DofPyramid>>,
 
     /// Images d'annotation, indexees par ID d'annotation -- PAS par chemin comme
     /// `img_cache`. Une annotation image porte souvent une data-URI de plusieurs
@@ -680,6 +697,7 @@ impl Compositor {
             ann_copy,
             ann_copy_view,
             ann_copy_mips,
+            dof_pyramid: RefCell::new(None),
             ann_img_cache: RefCell::new(std::collections::HashMap::new()),
             webcam_mask: RefCell::new(None),
             seg_capture: RefCell::new(None),
@@ -749,8 +767,21 @@ impl Compositor {
     ) -> (wgpu::Texture, wgpu::TextureView, Vec<wgpu::TextureView>) {
         // floor(log2(max)) + 1 : le dernier niveau mesure 1x1.
         let levels = 32 - w.max(h).max(1).leading_zeros();
+        Self::make_mip_chain(gpu, "ann-copy", w, h, levels)
+    }
+
+    /// Texture RGBA8 a `levels` niveaux : la texture, une vue sur tous les niveaux
+    /// (echantillonnage) et une vue PAR niveau (cibles de `generate_mips`). Partagee
+    /// par `ann_copy` et la pyramide de profondeur de champ.
+    fn make_mip_chain(
+        gpu: &Gpu,
+        label: &str,
+        w: u32,
+        h: u32,
+        levels: u32,
+    ) -> (wgpu::Texture, wgpu::TextureView, Vec<wgpu::TextureView>) {
         let tex = gpu.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("ann-copy"),
+            label: Some(label),
             size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
             mip_level_count: levels,
             sample_count: 1,
@@ -765,7 +796,7 @@ impl Compositor {
         let mips = (0..levels)
             .map(|level| {
                 tex.create_view(&wgpu::TextureViewDescriptor {
-                    label: Some("ann-copy-mip"),
+                    label: Some("mip-level"),
                     base_mip_level: level,
                     mip_level_count: Some(1),
                     ..Default::default()
@@ -782,10 +813,6 @@ impl Compositor {
     /// recouvrent s'echantillonnent l'une l'autre selon l'ordre de dessin. Meme
     /// contrat que le `blit` + `generate_mipmaps` de `compositor_macos`.
     ///
-    /// wgpu n'a pas de `generate_mipmaps` : chaque niveau est une passe de rendu
-    /// plein ecran qui echantillonne le precedent. Le filtre lineaire sur une
-    /// source exactement deux fois plus grande EST la moyenne 2x2, donc cette
-    /// boucle produit la meme pyramide que le blit Metal.
     fn generate_ann_mips(&self, encoder: &mut wgpu::CommandEncoder) {
         encoder.copy_texture_to_texture(
             self.rt.as_image_copy(),
@@ -796,9 +823,34 @@ impl Compositor {
                 depth_or_array_layers: 1,
             },
         );
+        self.generate_mips(encoder, &self.ann_copy_mips);
+    }
+
+    /// Alloue (ou realloue a la taille de la texture decodeur) la pyramide de profondeur
+    /// de champ : demi-resolution, `dof_pyramid_levels` niveaux. Ses UV sont ceux des
+    /// plans video, le calcul d'UV du mode 8 ne change donc pas.
+    fn ensure_dof_pyramid(&self, tex_w: u32, tex_h: u32) {
+        let (w, h) = (tex_w.div_ceil(2).max(1), tex_h.div_ceil(2).max(1));
+        let stale =
+            self.dof_pyramid.borrow().as_ref().is_none_or(|p| (p.width, p.height) != (w, h));
+        if stale {
+            let levels = crate::frame_geometry::dof_pyramid_levels(w, h);
+            let (tex, view, mips) = Self::make_mip_chain(&self.gpu, "dof-pyramid", w, h, levels);
+            *self.dof_pyramid.borrow_mut() =
+                Some(DofPyramid { _tex: tex, view, mips, width: w, height: h });
+        }
+    }
+
+    /// Remplit les niveaux 1.. de `mips` depuis le niveau 0 (une vue par niveau).
+    ///
+    /// wgpu n'a pas de `generate_mipmaps` : chaque niveau est une passe de rendu
+    /// plein ecran qui echantillonne le precedent. Le filtre lineaire sur une
+    /// source exactement deux fois plus grande EST la moyenne 2x2, donc cette
+    /// boucle produit la meme pyramide que le blit Metal.
+    fn generate_mips(&self, encoder: &mut wgpu::CommandEncoder, mips: &[wgpu::TextureView]) {
         // Les bind groups doivent survivre a leur passe : on les garde tous ici.
         let mut keep: Vec<(wgpu::Buffer, wgpu::BindGroup)> = Vec::new();
-        for level in 1..self.ann_copy_mips.len() {
+        for level in 1..mips.len() {
             let uniform = self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("ann-mip-uniform"),
                 // `fs_copy` ne lit pas l'uniforme, mais le layout du blur l'exige.
@@ -812,9 +864,7 @@ impl Compositor {
                     wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(
-                            &self.ann_copy_mips[level - 1],
-                        ),
+                        resource: wgpu::BindingResource::TextureView(&mips[level - 1]),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
@@ -826,7 +876,7 @@ impl Compositor {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("ann-mip-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.ann_copy_mips[level],
+                    view: &mips[level],
                     resolve_target: None,
                     ops: wgpu::Operations {
                         // Clear plutot que Load : le niveau n'a jamais ete ecrit,
@@ -1121,7 +1171,9 @@ impl Compositor {
         s_px: [f32; 2],
         center_px: [f32; 2],
         cut: [f32; 4],
+        focus_plane: [f32; 2],
         radius: f32,
+        dof: bool,
     ) -> LayerCB {
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
         let corners = quad.corners;
@@ -1155,6 +1207,8 @@ impl Compositor {
             fx: [tl0, tl1, tr0, tr1],
             src_prev: [br0, br1, bl0, bl1],
             dst_prev: [plane_px[0], plane_px[1], 0.0, 0.0],
+            // Gradient de profondeur du plan, profondeur du focus et `k` (`depth_mb`).
+            mb: quad.depth_mb(s_px, focus_plane, dof),
             ..Default::default()
         }
     }
@@ -1164,6 +1218,19 @@ impl Compositor {
         cb: &LayerCB,
         planes: Option<(&wgpu::TextureView, &wgpu::TextureView, &wgpu::TextureView)>,
         dummy: &wgpu::TextureView,
+    ) -> (wgpu::Buffer, wgpu::BindGroup) {
+        self.make_bind_b4(cb, planes, dummy, None)
+    }
+
+    /// `make_bind`, binding 4 impose. Seul le mode 8 s'en sert, pour y lier la pyramide
+    /// de profondeur de champ a la place du masque webcam qu'il ne lit pas -- jamais le
+    /// binding 1, qui porte la luma.
+    fn make_bind_b4(
+        &self,
+        cb: &LayerCB,
+        planes: Option<(&wgpu::TextureView, &wgpu::TextureView, &wgpu::TextureView)>,
+        dummy: &wgpu::TextureView,
+        b4: Option<&wgpu::TextureView>,
     ) -> (wgpu::Buffer, wgpu::BindGroup) {
         let uniform = self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("layer-uniform"),
@@ -1179,7 +1246,7 @@ impl Compositor {
         // calque webcam leve `fx.z`. `dummy` reste le repli tant qu'aucune frame
         // n'a ete segmentee.
         let mask = self.webcam_mask.borrow();
-        let mask_view = mask.as_ref().map_or(dummy, |m| &m.view);
+        let mask_view = b4.unwrap_or_else(|| mask.as_ref().map_or(dummy, |m| &m.view));
         let bind = self.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("layer"),
             layout: &self.bind_group_layout,
@@ -1974,6 +2041,14 @@ impl Compositor {
             (g.s_dst[0] + g.s_dst[2] * 0.5) * rw,
             (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
         ];
+        // Profondeur de champ : pyramide allouee et remplie seulement sur une frame
+        // inclinee qui la lit. L'emprunt tient jusqu'a la soumission de l'encodeur.
+        let dof = g.depth_of_field_on(self.gpu.backend == crate::d3d::Backend::Cpu);
+        if dof {
+            self.ensure_dof_pyramid(stw, sth);
+        }
+        let dof_guard = self.dof_pyramid.borrow();
+        let dof_pyramid = dof_guard.as_ref().filter(|_| dof);
 
         // Calque ecran : mode 0 (rect droit, NV12 -> RGB) quand la rotation est
         // neutre, mode 8 (warp bilineaire inverse dans la bbox du quad projete)
@@ -2011,7 +2086,15 @@ impl Compositor {
                 ..Default::default()
             },
             Some(quad) => {
-                let mut cb = self.tilted_screen_cb(quad, s_px, quad_center_px, g.cut, g.s_radius);
+                let mut cb = self.tilted_screen_cb(
+                    quad,
+                    s_px,
+                    quad_center_px,
+                    g.cut,
+                    g.focus_plane,
+                    g.s_radius,
+                    dof,
+                );
                 cb.dst_prev[2] = square_top;
                 cb
             }
@@ -2019,8 +2102,31 @@ impl Compositor {
         // Bind group construit AVANT le pass (doit vivre pendant tout le pass) ;
         // `_screen_uniform` garde le buffer uniforme en vie (reference par le bind).
         let dummy = self.dummy_view();
-        let (_screen_uniform, screen_bind) =
-            self.make_bind(&screen_layer, Some((&sy, &su, &sv)), &dummy);
+        // Binding 4 EXPLICITE sur le mode 8 : la pyramide si l'effet tourne, sinon le
+        // repli habituel (`k = 0`, le shader n'y lit rien).
+        let (_screen_uniform, screen_bind) = self.make_bind_b4(
+            &screen_layer,
+            Some((&sy, &su, &sv)),
+            &dummy,
+            dof_pyramid.map(|p| &p.view),
+        );
+        // Remplissage de la pyramide : UN draw du mode 0 en UV plein vers son niveau 0
+        // (cf. `compositor_windows::fill_dof_pyramid`), `color.a = 1`, un seul tap.
+        let dof_fill = dof_pyramid.map(|p| {
+            let full = [0.0, 0.0, 1.0, 1.0];
+            let cb = LayerCB {
+                dst: full,
+                src: full,
+                quad_px: [p.width as f32, p.height as f32],
+                mode: 0.0,
+                color: [1.0, 1.0, 1.0, 1.0],
+                src_prev: full,
+                dst_prev: full,
+                mb: [1.0, 0.0, 1.0, 0.0],
+                ..Default::default()
+            };
+            self.make_bind(&cb, Some((&sy, &su, &sv)), &dummy)
+        });
 
         // OMBRE PORTEE de l'ecran, dessinee JUSTE AVANT le calque ecran. Le shader
         // la connait depuis le debut ; ce qui manquait etait uniquement le draw
@@ -2718,6 +2824,30 @@ impl Compositor {
         let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("compose"),
         });
+        // Passe 0 : pyramide de profondeur de champ, niveau 0 vide d'abord (le « over »
+        // rend alors la source telle quelle), puis ses mips.
+        if let (Some(p), Some((_buf, bind))) = (dof_pyramid, &dof_fill) {
+            {
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("dof-pyramid-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &p.mips[0],
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                rpass.set_pipeline(&self.pipeline);
+                rpass.set_bind_group(0, bind, &[]);
+                rpass.draw(0..4, 0..1);
+            }
+            self.generate_mips(&mut encoder, &p.mips);
+        }
         // Passe 1 : fond (clear a `bg_clear` + gradient mode 5 eventuel).
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

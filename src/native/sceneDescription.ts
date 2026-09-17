@@ -377,6 +377,11 @@ export interface SceneEffects {
 	 * serializes exactly as it did before the field existed.
 	 */
 	frame?: Exclude<RecordingFrame, "none">;
+	/**
+	 * Defocus a 3D-tilted screen by its depth, sharp at the zoom focus. Inert on flat zooms:
+	 * the native side only reads it where it draws a tilted plane.
+	 */
+	depthOfField: boolean;
 }
 
 /** Cursor rendering, from the editor settings. */
@@ -1063,6 +1068,7 @@ export function buildSceneDescription(
 				settings.borderRadius / Math.max(1, Math.min(outputDims.width, outputDims.height)),
 			motionBlur: settings.motionBlurAmount,
 			...(settings.frame !== "none" ? { frame: settings.frame } : {}),
+			depthOfField: settings.depthOfField,
 		},
 		cursor: {
 			show: settings.cursorShow,

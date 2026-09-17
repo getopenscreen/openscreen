@@ -1,5 +1,11 @@
 {
 	"background": {
+		"motion": "Animation",
+		"motionNone": "Keine",
+		"motionDrift": "Treiben",
+		"motionAurora": "Polarlicht",
+		"motionWaves": "Wellen",
+		"motionGradientOnly": "Animation gilt nur für Verlaufshintergründe. Wähle einen Verlauf, um ihn zu animieren.",
 		"gradientLabel": "Verlauf {{index}}",
 		"uploadCustom": "Eigenes hochladen",
 		"unsupportedImage": "Nicht unterstütztes Bild. Verwende eine JPG- oder PNG-Datei.",
@@ -108,7 +114,15 @@
 		"format": "Format",
 		"fitClip": "Einpassen",
 		"motionBlur": "Bewegungsunschärfe",
-		"roundness": "Rundung"
+		"depthOfField": "Tiefenschärfe",
+		"depthOfFieldHint": "3D-Zooms",
+		"depthOfFieldNoTilt": "Kein 3D-Zoom in diesem Projekt",
+		"roundness": "Rundung",
+		"window": "Fenster",
+		"windowNone": "Keins",
+		"windowLight": "Hell",
+		"windowDark": "Dunkel",
+		"windowHelp": "Zeichnet eine Fenstertitelleiste und einen Rahmen um die Aufnahme."
 	},
 	"stylePresets": {
 		"button": "Vorgaben",
@@ -323,14 +337,32 @@
 			"autoDescription": "Die Kamera folgt der aufgezeichneten Cursorposition",
 			"title": "Fokusmodus"
 		},
-		"threeD": {
+		"camera": {
+			"title": "3D-Kamera",
+			"off": "Aus",
+			"fixed": "Fester Winkel",
+			"moving": "Bewegte Kamera",
 			"preset": {
-				"left": "Links",
-				"right": "Rechts",
-				"iso": "Iso"
+				"iso": "Schräg von oben",
+				"left": "Bildschirm nach links gedreht",
+				"right": "Bildschirm nach rechts gedreht",
+				"followCursor": "Kreist mit dem Cursor"
 			},
-			"none": "Keine",
-			"title": "3D-Rotation"
+			"description": {
+				"off": "Der Bildschirm bleibt flach.",
+				"iso": "Hält eine Pose: nach links gedreht und von oben gesehen.",
+				"left": "Hält eine Pose: Der Bildschirm zeigt nach links, seine rechte Kante kommt nach vorn.",
+				"right": "Hält eine Pose: Der Bildschirm zeigt nach rechts, seine linke Kante kommt nach vorn.",
+				"followCursor": "Der Bildschirm bleibt stehen; die Kamera kreist um ihn, schwenkt zur Seite des Cursors und hebt oder senkt sich mit ihm."
+			},
+			"needsCursor": "Der Cursor ist ausgeblendet: Diese Kamera hat nichts zu folgen und hält ihren Startwinkel."
+		},
+		"clickImpact": {
+			"title": "Klick-Impuls",
+			"description": "Jeder Klick drückt den geneigten Bildschirm: Die geklickte Seite sinkt ein und federt zurück.",
+			"needsRotation": "Wähle zuerst eine 3D-Kamera: Nur ein geneigter Bildschirm kann gedrückt werden.",
+			"needsCursor": "Der Cursor ist ausgeblendet: Der Bildschirm reagiert nur auf sichtbare Klicks.",
+			"descriptionCamera": "Jeder Klick schiebt die Kamera ein wenig zurück, dann federt sie nach vorn."
 		},
 		"level": "Zoomstufe",
 		"previewHold": "Gedrückt halten für die Zoom-Vorschau",
@@ -364,6 +396,9 @@
 	"cursor": {
 		"smoothing": "Glättung",
 		"clickBounce": "Klick-Federung",
+		"model3d": "3D-Cursor",
+		"model3dHint": "Standardstil: Jede Cursorform wird 3D. Andere Stile bleiben flach.",
+		"model3dNeedsCursor": "Aktiviere „Cursor anzeigen“, um den 3D-Cursor zu verwenden.",
 		"help": "Cursor-Darstellung aus der aufgezeichneten Telemetrie: Stil, Größe, Glättung, Bewegungsunschärfe und Klick-Federung.",
 		"clipToBoundsDescription": "Hält den Cursor innerhalb des Videobilds. Schalte es aus, damit der Cursor über die Ränder hinausragen kann — nützlich beim Hineinzoomen oder Verschieben.",
 		"size": "Größe",

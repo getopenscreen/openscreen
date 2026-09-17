@@ -27,7 +27,7 @@ struct Layer {
     fx: vec4<f32>,        // mode 2 : spread ombre en px ; modes 8/12/13 : coins TL,TR du quad projeté ; mode 9 : hampe de la flèche ; mode 10 : (flou?, rayon/bloc px, ovale?, teinté?)
     src_prev: vec4<f32>,  // modes 8/12/13 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque
     dst_prev: vec4<f32>,  // mode 8 : taille du plan en px AVANT projection (le rayon y vit) ; mode 13 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque
-    mb: vec4<f32>,        // mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné
+    mb: vec4<f32>,        // mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné ; mode 13 : mb.xy = vecteur d'extrusion en px, mb.z = nombre de copies (volume, <= 1 = plat)
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -265,6 +265,35 @@ fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<
         total = total + w;
     }
     return sum / max(total, 1e-4);
+}
+
+// Curseur EN VOLUME (mode 13, mb.z > 1). Port ligne pour ligne de `cursor_extruded`
+// (HLSL), dont les commentaires font foi : la silhouette est reechantillonnee `mb.z`
+// fois (<= 48), translatee d'une fraction de `mb.xy` ; copie 0 = face avant intacte,
+// les suivantes = flancs assombris, composes avant->arriere. `textureSampleLevel` a
+// LOD 0 : pas de gradient implicite dans une boucle, et la texture n'a qu'un niveau.
+fn cursor_extruded(local: vec2<f32>) -> vec4<f32> {
+    let taps = min(i32(layer.mb.z), 48);
+    var acc = vec4<f32>(0.0);
+    for (var k: i32 = 0; k < 48; k = k + 1) {
+        if k >= taps || acc.a > 0.999 {
+            break;
+        }
+        let f = f32(k) / f32(taps - 1);
+        let r = quad_inverse_bilinear(
+            local - layer.mb.xy * f, layer.fx.xy, layer.fx.zw, layer.src_prev.xy, layer.src_prev.zw,
+        );
+        if r.z < 0.5 {
+            continue;
+        }
+        let s = textureSampleLevel(
+            texY, samp, clamp(vec2<f32>(r.x, r.y), vec2<f32>(0.0), vec2<f32>(1.0)), 0.0,
+        );
+        let shade = select(0.72 - 0.3 * f, 1.0, k == 0);
+        let a = s.a * layer.color.a;
+        acc += (1.0 - acc.a) * vec4<f32>(s.rgb * shade * a, a);
+    }
+    return acc;
 }
 
 @fragment
@@ -521,6 +550,10 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         if i.pout.x < layer.dst_prev.x || i.pout.x > layer.dst_prev.x + layer.dst_prev.z
             || i.pout.y < layer.dst_prev.y || i.pout.y > layer.dst_prev.y + layer.dst_prev.w {
             return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        // Volume (`mb.z` copies, `mb.xy` = extrusion en px) ; <= 1 = sprite plat, inchange.
+        if layer.mb.z > 1.5 {
+            return cursor_extruded(i.local);
         }
         let r = quad_inverse_bilinear(
             i.local, layer.fx.xy, layer.fx.zw, layer.src_prev.xy, layer.src_prev.zw,

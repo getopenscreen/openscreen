@@ -631,6 +631,8 @@ struct InspectorParams {
     cursor_smoothing: f32,
     /// 0..1 : force du flou de mouvement DU CURSEUR (indépendant du motion blur écran).
     cursor_motion_blur: f32,
+    /// 0..1 : volume du curseur (extrusion + ombre de contact).
+    cursor_volume: f32,
     cursor_auto_hide: bool,
 }
 
@@ -651,6 +653,7 @@ impl Default for InspectorParams {
             cursor_bounce_scale: 1.0,
             cursor_smoothing: 0.0,
             cursor_motion_blur: 0.0,
+            cursor_volume: 0.0,
             cursor_auto_hide: false,
         }
     }
@@ -929,6 +932,7 @@ impl LiveView {
                 "cursorClickBounce" => p.cursor_bounce_scale = v.max(0.0),
                 "cursorSmoothing" => p.cursor_smoothing = v.clamp(0.0, 1.0),
                 "cursorMotionBlur" => p.cursor_motion_blur = v.clamp(0.0, 1.0),
+                "cursorVolume" => p.cursor_volume = v.clamp(0.0, 1.0),
                 _ => {}
             }
         }
@@ -1529,6 +1533,7 @@ unsafe fn render_thread(
             cursor_size_scale: ip.cursor_size_scale,
             cursor_bounce_scale: ip.cursor_bounce_scale,
             cursor_motion_blur: ip.cursor_motion_blur,
+            cursor_volume: ip.cursor_volume,
             cursor_auto_hide: ip.cursor_auto_hide,
             has_webcam: has_real_webcam,
         });

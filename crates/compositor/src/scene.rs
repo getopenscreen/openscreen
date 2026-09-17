@@ -398,6 +398,10 @@ pub struct SceneCursor {
     pub smoothing: f32,
     pub motion_blur: f32,
     pub click_bounce: f32,
+    /// 0..1 : volume du curseur (extrusion + ombre de contact). 0 = sprite plat, le rendu
+    /// d'avant. `#[serde(default)]` : absent des projets et des JSON écrits avant ce réglage.
+    #[serde(default)]
+    pub volume: f32,
     pub clip_to_bounds: bool,
     /// id du thème (jeu de sprites) — informatif ici : le natif consomme `cursor_sprites`.
     pub theme: String,

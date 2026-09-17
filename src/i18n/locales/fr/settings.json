@@ -370,6 +370,8 @@
 	"cursor": {
 		"smoothing": "Lissage",
 		"clickBounce": "Rebond au clic",
+		"depth": "Profondeur 3D",
+		"depthNeedsCursor": "Activez « Afficher le curseur » pour lui donner de la profondeur.",
 		"help": "Rendu du curseur à partir de la télémétrie enregistrée : thème, taille, lissage, flou de mouvement et rebond au clic.",
 		"clipToBoundsDescription": "Garde le curseur à l'intérieur du cadre vidéo. Désactivez pour laisser le curseur dépasser les bords — utile en cas de zoom ou de panoramique.",
 		"size": "Taille",

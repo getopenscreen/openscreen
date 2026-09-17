@@ -372,6 +372,76 @@ fn compose_linux_curseur_sur_ecran_tilte() {
     );
 }
 
+/// Curseur en volume (`cursor.volume`, mode 13 avec `mb.z` copies) : parite avec
+/// `cursor_volume_render.rs` (Windows). Sprite vert opaque sur fond magenta : a
+/// volume 1 des flancs vert SOMBRE apparaissent autour du carre, sur ecran droit
+/// (quad identite, repli bas-droite) comme incline ; la face avant, verte vive,
+/// reste entiere. A volume 0 aucun pixel sombre : le chemin plat est intact.
+#[test]
+fn compose_linux_curseur_en_volume() {
+    if std::env::var("OPENSCREEN_LINUX_COMPOSE").is_err() || !Path::new(FIXTURE).is_file() {
+        eprintln!("compose_linux curseur en volume: opt-in. Skip.");
+        return;
+    }
+    const SPRITE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAABAAAAAQBPJcTWAAAAGElEQVR4nGNk+MdAEmAhTfmohlENQ0kDAGoRATwbkCdPAAAAAElFTkSuQmCC";
+
+    let gpu = Gpu::create(false).expect("Gpu::create");
+    let comp = Compositor::new_sized(&gpu, W, H).expect("Compositor::new_sized");
+    let mut dec = Decoder::open(FIXTURE, &gpu).expect("Decoder::open");
+
+    let track_path = std::env::temp_dir().join("os_cursor_track_volume.json");
+    std::fs::write(
+        &track_path,
+        r#"{"samples":[{"timeMs":3000,"cx":0.3,"cy":0.3,"cursorType":"arrow"}]}"#,
+    )
+    .expect("write track");
+    let track = CursorTrack::load(track_path.to_str().unwrap(), 0.0, 6.0).expect("CursorTrack::load");
+    comp.set_cursor(track);
+    comp.set_cursor_time(Some(3.0));
+
+    let scene_json = |rotation: &str, volume: f32| {
+        format!(
+            r##"{{"clips":[],"layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false}},"effects":{{"padding":0.2,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0}},"background":{{"kind":"color","color":"#ff00ff"}},"zoomRegions":[{{"clipIndex":0,"startSec":0,"endSec":6,"scale":1.0,"focusX":0.5,"focusY":0.5,"rotation":{rotation}}}],"annotations":[],"cursor":{{"show":true,"size":4,"smoothing":0,"motionBlur":0,"clickBounce":0,"volume":{volume},"clipToBounds":false,"theme":"default","cursorSprites":{{"arrow":{{"path":"{SPRITE}","hotspotX":0.5,"hotspotY":0.5}}}}}},"cropByClip":[],"output":{{"width":1920,"height":1080,"fps":30}}}}"##
+        )
+    };
+    let bright = |p: &[u8]| p[1] > 180 && p[0] < 120 && p[2] < 120;
+    let dark_green = |p: &[u8]| p[1] > 40 && p[1] < 170 && p[0] < 40 && p[2] < 40;
+
+    for rotation in ["null", "\"iso\""] {
+        let (w, h, flat, deep) = unsafe {
+            let sf = dec.seek_to(1.0).expect("Decoder::seek_to");
+            let render = |json: String| {
+                let scene = Scene::from_json(&json).expect("scene json");
+                comp.set_live_params(openscreen_compositor::compositor::live_params_from_scene(
+                    &scene,
+                ));
+                comp.set_scene(Some(scene));
+                comp.compose_frame(sf, sf, 90.0, &Cfg::c8()).expect("compose_frame");
+                comp.readback_direct().expect("readback_direct")
+            };
+            let (w, h, flat) = render(scene_json(rotation, 0.0));
+            let (_, _, deep) = render(scene_json(rotation, 1.0));
+            (w, h, flat, deep)
+        };
+        let name = if rotation == "null" { "flat" } else { "iso" };
+        write_ppm(&format!("compose_linux_cursor_volume_{name}"), w, h, &deep);
+        let count = |rgba: &[u8], f: &dyn Fn(&[u8]) -> bool| rgba.chunks_exact(4).filter(|p| f(p)).count();
+        let (front0, front1) = (count(&flat, &bright), count(&deep, &bright));
+        let (sides0, sides1) = (count(&flat, &dark_green), count(&deep, &dark_green));
+        println!(
+            "compose_linux curseur en volume ({name}) : face avant {front0} -> {front1}, \
+             flancs {sides0} -> {sides1}"
+        );
+        assert!(front0 > 50, "{name}: curseur absent a volume 0 (n={front0})");
+        assert!(
+            front1 * 100 >= front0 * 97,
+            "{name}: la face avant a perdu des pixels ({front0} -> {front1})"
+        );
+        assert!(sides0 < 20, "{name}: des flancs a volume 0 ({sides0})");
+        assert!(sides1 > 30, "{name}: pas de flancs a volume 1 ({sides1})");
+    }
+}
+
 /// Curseur : sprite thematise (mode 7) dessine au centre. Sprite VERT (data URI
 /// PNG) distinct du fond sombre et de l'ecran, pour l'affirmer sans ambiguite.
 #[test]

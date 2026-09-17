@@ -43,7 +43,7 @@ pub use crate::frame_geometry::{
     live_params_from_scene, webcam_shape_code, FIXTURE_FRAMES, LayerCB, LiveParams, OUT_H, OUT_W,
 };
 use crate::frame_geometry::{
-    cursor_sprite_dst, parse_hex, plan_cursor, plan_frame, CursorPlacement, CursorPlanInput,
+    cursor_sprite_cb, parse_hex, plan_cursor, plan_frame, CursorPlacement, CursorPlanInput,
     FrameGeometryInput,
 };
 use crate::scene::{Scene, SceneBackground};
@@ -2558,6 +2558,9 @@ impl Compositor {
             _tex: wgpu::Texture,
             _view: wgpu::TextureView,
             binds: Vec<wgpu::BindGroup>,
+            /// Ombre de contact du volume (mode 12), dessinee une fois SOUS le
+            /// curseur et sa trainee. `None` sans volume.
+            shadow: Option<(wgpu::Buffer, wgpu::BindGroup)>,
         }
         let cursor_draw: Option<CursorDraw> = (|| {
             let track = cursor_ref.as_ref()?;
@@ -2627,62 +2630,27 @@ impl Compositor {
             let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
             let (mut bufs, mut binds) = (Vec::new(), Vec::new());
             for placement in placements {
-                let cb = match placement {
-                    CursorPlacement::Upright { center } => LayerCB {
-                        dst: cursor_sprite_dst(center, pw / rw, ph / rh, hotspot),
-                        src: [0.0, 0.0, 1.0, 1.0],
-                        mode: 7.0,
-                        color: [1.0, 1.0, 1.0, plan.alpha],
-                        fx: plan.clip,
-                        ..Default::default()
-                    },
-                CursorPlacement::Tilted { plane_pt, quad, center_px, screen_px, .. } => {
-                    // Le sprite est pose DANS le plan : sa taille devient une fraction
-                    // du plan et ses quatre coins traversent la meme projection que la
-                    // video. La reduction due au tilt vient donc de la projection --
-                    // rien a multiplier a la main.
-                    let (wf, hf) = (pw / screen_px[0], ph / screen_px[1]);
-                    let x0 = plane_pt[0] - hotspot[0] * wf;
-                    let y0 = plane_pt[1] - hotspot[1] * hf;
-                    let corners = [(x0, y0), (x0 + wf, y0), (x0 + wf, y0 + hf), (x0, y0 + hf)]
-                        .map(|(fx, fy)| {
-                            let (px, py) = quad.point_px(fx, fy);
-                            (center_px[0] + px, center_px[1] + py)
-                        });
-                    let (min_x, max_x) = corners
-                        .iter()
-                        .fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| (mn.min(x), mx.max(x)));
-                    let (min_y, max_y) = corners
-                        .iter()
-                        .fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| (mn.min(y), mx.max(y)));
-                    // Le quad projete d'un sprite peut etre tres fin de biais : une bbox
-                    // d'un pixel de large ferait diverger le warp inverse, d'ou le
-                    // plancher a 1 px.
-                    let (bw, bh) = ((max_x - min_x).max(1.0), (max_y - min_y).max(1.0));
-                    let local = |(x, y): (f32, f32)| [x - min_x, y - min_y];
-                    let [tl0, tl1] = local(corners[0]);
-                    let [tr0, tr1] = local(corners[1]);
-                    let [br0, br1] = local(corners[2]);
-                    let [bl0, bl1] = local(corners[3]);
-                    LayerCB {
-                        dst: [min_x / rw, min_y / rh, bw / rw, bh / rh],
-                        quad_px: [bw, bh],
-                        mode: 13.0,
-                        color: [1.0, 1.0, 1.0, plan.alpha],
-                        fx: [tl0, tl1, tr0, tr1],
-                        src_prev: [br0, br1, bl0, bl1],
-                        // Le clip vit ici et NON dans `fx` (mode 7) : `fx` porte les coins.
-                        dst_prev: plan.clip,
-                        ..Default::default()
-                    }
-                }
-                };
+                // Geometrie partagee avec Windows et macOS (`cursor_sprite_cb`) :
+                // mode 7 droit, ou mode 13 pose sur le plan -- le clip vit alors
+                // dans `dst_prev`, et le volume dans `mb`.
+                let cb = cursor_sprite_cb(
+                    placement,
+                    [pw, ph],
+                    hotspot,
+                    plan.alpha,
+                    plan.clip,
+                    [rw, rh],
+                    plan.volume.as_ref(),
+                );
                 // Sprite RGBA au binding 1 (texY) que le mode 7 echantillonne.
                 let (buf, bind) = self.make_bind(&cb, Some((&view, &view, &view)), &dummy);
                 bufs.push(buf);
                 binds.push(bind);
             }
-            Some(CursorDraw { _bufs: bufs, _tex: tex, _view: view, binds })
+            // Le sprite existe (sinon on serait deja sorti) : l'ombre de contact
+            // peut suivre. Pas de sprite, pas de volume -- comme sur macOS.
+            let shadow = plan.volume.as_ref().map(|v| self.make_bind(&v.shadow, None, &dummy));
+            Some(CursorDraw { _bufs: bufs, _tex: tex, _view: view, binds, shadow })
         })();
         // Bind group de la passe de composition d'`accum` (layout du blur :
         // uniform + texture + sampler). Construit hors de la pass, comme les
@@ -2830,6 +2798,12 @@ impl Compositor {
             rpass.set_pipeline(&self.pipeline);
             for a in &ann_draws {
                 rpass.set_bind_group(0, &a.bind, &[]);
+                rpass.draw(0..4, 0..1);
+            }
+            // Ombre de contact du volume : sur la scene, sous le curseur ET sous
+            // sa trainee (composee apres cette pass). Parite Windows/macOS.
+            if let Some((_buf, bind)) = cursor_draw.as_ref().and_then(|c| c.shadow.as_ref()) {
+                rpass.set_bind_group(0, bind, &[]);
                 rpass.draw(0..4, 0..1);
             }
             // Curseur en dernier : au-dessus de l'ecran et des annotations.

@@ -1012,6 +1012,12 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(buildSceneDescription(high).layout.webcamSize).toBeCloseTo(0.5, 5);
 	});
 
+	it("keeps the cursor flat for a project saved before cursor volume, and clamps it", () => {
+		expect(buildSceneDescription(makeDoc({ legacyEditor: {} })).cursor.volume).toBe(0);
+		const tooDeep = makeDoc({ legacyEditor: { cursorVolume: 3 } });
+		expect(buildSceneDescription(tooDeep).cursor.volume).toBe(1);
+	});
+
 	it("maps the cursor sub-settings", () => {
 		const doc = makeDoc({
 			legacyEditor: {
@@ -1019,10 +1025,12 @@ describe("buildSceneDescription.settings mapping", () => {
 				cursorSmoothing: 0.9,
 				cursorMotionBlur: 0.5,
 				cursorClickBounce: 1.5,
+				cursorVolume: 0.7,
 				cursorClipToBounds: true,
 			},
 		});
 		const cursor = buildSceneDescription(doc).cursor;
+		expect(cursor.volume).toBe(0.7);
 		expect(cursor.size).toBe(4);
 		expect(cursor.smoothing).toBe(0.9);
 		expect(cursor.motionBlur).toBe(0.5);

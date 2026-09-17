@@ -119,6 +119,10 @@ describe("patchEditorSettings", () => {
 		const snap = getEditorSettings(next);
 		expect(snap.cursor.size).toBe(4);
 		expect(snap.cursor.smoothing).toBe(0.9);
+		const deep = getEditorSettings(patchEditorSettings(next, { cursor: { volume: 0.5 } }));
+		expect(deep.cursor.volume).toBe(0.5);
+		expect(deep.cursor.size).toBe(4);
+		expect(snap.cursor.volume).toBe(0);
 	});
 
 	it("toggles cursorAutoHide on and off via patch", () => {

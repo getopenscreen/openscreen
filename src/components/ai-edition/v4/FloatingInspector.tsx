@@ -17,11 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { parseCustomPlaybackSpeedInput } from "@/components/video-editor/customPlaybackSpeed";
 import {
-	FIXED_ROTATION_3D_PRESETS,
-	isRotation3DPreset,
 	MAX_PLAYBACK_SPEED,
-	MOVING_ROTATION_3D_PRESETS,
-	type Rotation3DPreset,
 	SPEED_OPTIONS,
 	ZOOM_DEPTH_SCALES,
 } from "@/components/video-editor/types";
@@ -307,57 +303,6 @@ function paneRow(label: string, control: React.ReactNode) {
 	);
 }
 
-/** Clé i18n (`zoom.camera.preset.*` / `zoom.camera.description.*`) de chaque caméra 3D. */
-const CAMERA_KEYS: Record<Rotation3DPreset, string> = {
-	iso: "iso",
-	left: "left",
-	right: "right",
-	"follow-cursor": "followCursor",
-};
-
-/** « Click impact » : une case à cocher, et dessous ce qu'elle fait — ou pourquoi elle ne peut
- *  rien faire ici. */
-function ClickImpactToggle({
-	checked,
-	blocker,
-	label,
-	description,
-	onChange,
-}: {
-	checked: boolean;
-	blocker: string | null;
-	label: string;
-	description: string;
-	onChange: (on: boolean) => void;
-}) {
-	const disabled = blocker !== null;
-	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-			<label
-				style={{
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "space-between",
-					gap: 10,
-					opacity: disabled ? 0.5 : 1,
-					cursor: disabled ? "not-allowed" : "pointer",
-				}}
-			>
-				<span style={{ fontSize: 12.5, color: "var(--fg-2)", fontWeight: 500 }}>{label}</span>
-				<input
-					type="checkbox"
-					checked={checked}
-					disabled={disabled}
-					onChange={(e) => onChange(e.target.checked)}
-				/>
-			</label>
-			<p style={{ margin: 0, font: "400 11px/1.45 var(--font-sans)", color: "var(--fg-2)" }}>
-				{blocker ?? description}
-			</p>
-		</div>
-	);
-}
-
 type AnnotationKind = AxcutAnnotationRegion["type"];
 type ArrowDirectionKind = NonNullable<AxcutAnnotationRegion["figureData"]>["arrowDirection"];
 
@@ -592,73 +537,28 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							))}
 						</select>,
 					)}
-					<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-						{paneRow(
-							ts("zoom.camera.title"),
-							// ONE control for the whole 3D camera: a fixed angle and a moving camera are
-							// alternatives, not two settings to combine.
-							<select
-								aria-label={ts("zoom.camera.title")}
-								value={region.rotationPreset ?? "off"}
-								onChange={(e) =>
-									void tl.updateZoomRotation(
-										region.id,
-										// "off" is the absence of a preset — the schema field is optional and
-										// `migrate.ts` drops it when falsy.
-										isRotation3DPreset(e.target.value) ? e.target.value : undefined,
-									)
-								}
-								style={selectStyle}
-							>
-								<option value="off">{ts("zoom.camera.off")}</option>
-								<optgroup label={ts("zoom.camera.fixed")}>
-									{FIXED_ROTATION_3D_PRESETS.map((preset) => (
-										<option key={preset} value={preset}>
-											{ts(`zoom.camera.preset.${CAMERA_KEYS[preset]}`)}
-										</option>
-									))}
-								</optgroup>
-								<optgroup label={ts("zoom.camera.moving")}>
-									{MOVING_ROTATION_3D_PRESETS.map((preset) => (
-										<option key={preset} value={preset}>
-											{ts(`zoom.camera.preset.${CAMERA_KEYS[preset]}`)}
-										</option>
-									))}
-								</optgroup>
-							</select>,
-						)}
-						<p style={{ margin: 0, font: "400 11px/1.45 var(--font-sans)", color: "var(--fg-2)" }}>
-							{
-								// A moving camera reads the cursor track, which the export only loads while the
-								// cursor is shown: say so rather than offer a camera that silently holds still.
-								!settings.cursorShow && region.rotationPreset === "follow-cursor"
-									? ts("zoom.camera.needsCursor")
-									: ts(
-											`zoom.camera.description.${region.rotationPreset ? CAMERA_KEYS[region.rotationPreset] : "off"}`,
-										)
+					{paneRow(
+						ts("zoom.threeD.title"),
+						<select
+							value={region.rotationPreset ?? "none"}
+							onChange={(e) =>
+								void tl.updateZoomRotation(
+									region.id,
+									// "none" is the absence of a preset, not a fourth preset — the schema field
+									// is optional and `migrate.ts` drops it when falsy.
+									e.target.value === "none"
+										? undefined
+										: (e.target.value as "iso" | "left" | "right"),
+								)
 							}
-						</p>
-					</div>
-					<ClickImpactToggle
-						checked={region.clickImpact === true}
-						// The click follows the visible pointer: without a preset, or with the cursor
-						// hidden, the checkbox would move nothing. A fixed angle presses the tilted
-						// screen; the orbiting camera keeps the screen still and recoils instead.
-						blocker={
-							!region.rotationPreset
-								? ts("zoom.clickImpact.needsRotation")
-								: !settings.cursorShow || region.hideCursor
-									? ts("zoom.clickImpact.needsCursor")
-									: null
-						}
-						label={ts("zoom.clickImpact.title")}
-						description={ts(
-							region.rotationPreset === "follow-cursor"
-								? "zoom.clickImpact.descriptionCamera"
-								: "zoom.clickImpact.description",
-						)}
-						onChange={(on) => void tl.updateZoomClickImpact(region.id, on)}
-					/>
+							style={selectStyle}
+						>
+							<option value="none">{ts("zoom.threeD.none")}</option>
+							<option value="iso">{ts("zoom.threeD.preset.iso")}</option>
+							<option value="left">{ts("zoom.threeD.preset.left")}</option>
+							<option value="right">{ts("zoom.threeD.preset.right")}</option>
+						</select>,
+					)}
 					{paneRow(
 						ts("zoom.focusMode.title"),
 						// While the global toggle is on it OVERRIDES every region, so the control shows

@@ -15,13 +15,10 @@ import {
 function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePresetAppearance {
 	return {
 		wallpaper: "/wallpapers/wallpaper3.jpg",
-		wallpaperMotion: "drift",
-		frame: "window-dark",
 		aspectRatio: "16:9",
 		shadowIntensity: 0.2,
 		showBlur: false,
 		motionBlurAmount: 0.2,
-		depthOfField: true,
 		borderRadius: 40,
 		padding: 50,
 		webcamLayoutPreset: "picture-in-picture",
@@ -32,14 +29,7 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 		webcamBackgroundMode: "blur",
 		webcamWallpaper: "#112233",
 		webcamBlurIntensity: 0.5,
-		cursor: {
-			size: 3,
-			smoothing: 0.67,
-			motionBlur: 0.35,
-			clickBounce: 2.5,
-			model3d: false,
-			clipToBounds: false,
-		},
+		cursor: { size: 3, smoothing: 0.67, motionBlur: 0.35, clickBounce: 2.5, clipToBounds: false },
 		cursorShow: true,
 		cursorAutoHide: false,
 		cursorTheme: "default",
@@ -57,26 +47,6 @@ describe("parseStylePresetAppearance", () => {
 	it("rejects a missing field instead of guessing a factory value", () => {
 		const { padding: _padding, ...rest } = appearance();
 		expect(() => parseStylePresetAppearance(rest)).toThrow(/padding/);
-	});
-
-	// Added after format version 1 shipped: an older preset has a still wallpaper.
-	it("reads a preset without a wallpaper motion as still, and refuses an unknown one", () => {
-		const { wallpaperMotion: _motion, ...older } = appearance();
-		expect(parseStylePresetAppearance(older).wallpaperMotion).toBe("none");
-		expect(() =>
-			parseStylePresetAppearance({ ...appearance(), wallpaperMotion: "plasma" }),
-		).toThrow(/wallpaperMotion/);
-	});
-
-	it("keeps depth of field on for a preset saved before the setting existed", () => {
-		const { depthOfField: _dof, ...older } = appearance({ depthOfField: false });
-		expect(parseStylePresetAppearance(older).depthOfField).toBe(true);
-		expect(parseStylePresetAppearance(appearance({ depthOfField: false })).depthOfField).toBe(
-			false,
-		);
-		expect(() => parseStylePresetAppearance({ ...appearance(), depthOfField: "on" })).toThrow(
-			/depthOfField/,
-		);
 	});
 
 	it("rejects out-of-range numbers, wrong types and unknown enum values", () => {
@@ -105,41 +75,6 @@ describe("parseStylePresetAppearance", () => {
 				cursor: { ...appearance().cursor, size: 11 },
 			}),
 		).toThrow(/cursor\.size/);
-	});
-
-	it("drops the retired cursor.volume and cursor.hover keys of an older preset", () => {
-		const older = {
-			...appearance(),
-			cursor: { ...appearance().cursor, volume: 0.6, hover: 0.4 },
-		};
-		expect(parseStylePresetAppearance(older).cursor).toEqual(appearance().cursor);
-	});
-
-	it("reads a preset written before the 3D cursor as a flat cursor, and type-checks it", () => {
-		const { model3d: _model3d, ...flat } = appearance().cursor;
-		expect(parseStylePresetAppearance({ ...appearance(), cursor: flat }).cursor.model3d).toBe(
-			false,
-		);
-		expect(
-			parseStylePresetAppearance({
-				...appearance(),
-				cursor: { ...appearance().cursor, model3d: true },
-			}).cursor.model3d,
-		).toBe(true);
-		expect(() =>
-			parseStylePresetAppearance({
-				...appearance(),
-				cursor: { ...appearance().cursor, model3d: 1 },
-			}),
-		).toThrow(/cursor\.model3d/);
-	});
-
-	it("reads a preset saved before the frame existed as frameless, and rejects an unknown frame", () => {
-		const { frame: _frame, ...older } = appearance();
-		expect(parseStylePresetAppearance(older).frame).toBe("none");
-		expect(() => parseStylePresetAppearance({ ...appearance(), frame: "window-sepia" })).toThrow(
-			/frame/,
-		);
 	});
 
 	it("falls back to the default cursor theme for an id this build does not ship", () => {

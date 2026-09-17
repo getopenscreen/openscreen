@@ -19,7 +19,7 @@ import type {
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
-import { buildSceneDescription, wallpaperAcceptsMotion } from "./sceneDescription";
+import { buildSceneDescription } from "./sceneDescription";
 
 // --- Fixture helpers --------------------------------------------------------
 // Keep fixtures minimal & deterministic — every field the serializer consults is filled in;
@@ -175,67 +175,6 @@ describe("buildSceneDescription.background", () => {
 			kind: "image",
 			path: "data:image/png;base64,AAAA",
 		});
-	});
-});
-
-describe("buildSceneDescription.background motion", () => {
-	const gradient = "linear-gradient(135deg, #eaebed, #bcc0c6)";
-
-	it("attaches the chosen motion to a gradient", () => {
-		const doc = makeDoc({ legacyEditor: { wallpaper: gradient, wallpaperMotion: "aurora" } });
-		expect(buildSceneDescription(doc).background).toEqual({
-			kind: "gradient",
-			angleDeg: 135,
-			stops: ["#eaebed", "#bcc0c6"],
-			motion: "aurora",
-		});
-	});
-
-	// The Rust side defaults the key: a still gradient sends the payload it sent before.
-	it("omits the key when the gradient is still", () => {
-		for (const wallpaperMotion of ["none", undefined, "plasma"]) {
-			const doc = makeDoc({ legacyEditor: { wallpaper: gradient, wallpaperMotion } });
-			expect(buildSceneDescription(doc).background).not.toHaveProperty("motion");
-		}
-	});
-
-	it("never moves a colour, an image or the webcam's own gradient", () => {
-		const doc = makeDoc({
-			legacyEditor: {
-				wallpaper: "/wallpapers/wallpaper1.jpg",
-				wallpaperMotion: "waves",
-				webcamBackgroundMode: "custom",
-				webcamWallpaper: gradient,
-			},
-		});
-		const scene = buildSceneDescription(doc);
-		expect(scene.background).toEqual({ kind: "image", path: "/wallpapers/wallpaper1.jpg" });
-		expect(scene.webcamEffect?.background).not.toHaveProperty("motion");
-		const colour = makeDoc({ legacyEditor: { wallpaper: "#123456", wallpaperMotion: "drift" } });
-		expect(buildSceneDescription(colour).background).toEqual({ kind: "color", color: "#123456" });
-	});
-
-	it("enables the control exactly for the wallpapers the compositor animates", () => {
-		expect(wallpaperAcceptsMotion(gradient)).toBe(true);
-		expect(wallpaperAcceptsMotion("#123456")).toBe(false);
-		expect(wallpaperAcceptsMotion("/wallpapers/wallpaper1.jpg")).toBe(false);
-		// Drawn by the web preview only; the compositor paints it as an image path.
-		expect(wallpaperAcceptsMotion("radial-gradient(#fff, #000)")).toBe(false);
-	});
-});
-
-describe("buildSceneDescription.effects.frame", () => {
-	// Omitted for "none", like `webcamEffect`: `SceneFrame` defaults on the Rust side, so a
-	// frameless project serializes exactly as it did before the setting existed.
-	it("omits the frame when there is none", () => {
-		expect(buildSceneDescription(makeDoc()).effects).not.toHaveProperty("frame");
-		const none = makeDoc({ legacyEditor: { frame: "none" } });
-		expect(buildSceneDescription(none).effects).not.toHaveProperty("frame");
-	});
-
-	it("carries the chosen window frame", () => {
-		const doc = makeDoc({ legacyEditor: { frame: "window-light" } });
-		expect(buildSceneDescription(doc).effects.frame).toBe("window-light");
 	});
 });
 
@@ -588,26 +527,6 @@ describe("buildSceneDescription.zoomRegions", () => {
 		expect(zoomRegions[0].focusY).toBe(0.75);
 		expect(zoomRegions[0].rotation).toBe("iso");
 		expect(zoomRegions[0].hideCursor).toBe(true);
-	});
-
-	it("emits clickImpact only when it is on", () => {
-		const base = {
-			startMs: 0,
-			endMs: 1000,
-			depth: 3 as const,
-			focus: { cx: 0.5, cy: 0.5 },
-			rotationPreset: "iso" as const,
-		};
-		const doc = makeDoc({
-			zoomRanges: [
-				makeZoom({ ...base, id: "on", clickImpact: true }),
-				makeZoom({ ...base, id: "off" }),
-			],
-		});
-		const { zoomRegions } = buildSceneDescription(doc);
-		expect(zoomRegions[0].clickImpact).toBe(true);
-		// Omitted, not `false`: scene payloads without the option stay byte-identical.
-		expect("clickImpact" in zoomRegions[1]).toBe(false);
 	});
 
 	it("converts ms→sec for start/end", () => {
@@ -1071,18 +990,6 @@ describe("buildSceneDescription.settings mapping", () => {
 		const high = makeDoc({ legacyEditor: { webcamSizePreset: 90 } });
 		expect(buildSceneDescription(low).layout.webcamSize).toBeCloseTo(0.1, 5);
 		expect(buildSceneDescription(high).layout.webcamSize).toBeCloseTo(0.5, 5);
-	});
-
-	it("keeps the flat cursor for an older project and carries the 3D cursor switch", () => {
-		expect(buildSceneDescription(makeDoc({ legacyEditor: {} })).cursor.model3d).toBe(false);
-		const on = makeDoc({ legacyEditor: { cursorModel3d: true } });
-		expect(buildSceneDescription(on).cursor.model3d).toBe(true);
-	});
-
-	it("carries depth of field: on by default, off when the project turns it off", () => {
-		expect(buildSceneDescription(makeDoc({})).effects.depthOfField).toBe(true);
-		const off = makeDoc({ legacyEditor: { depthOfField: false } });
-		expect(buildSceneDescription(off).effects.depthOfField).toBe(false);
 	});
 
 	it("maps the cursor sub-settings", () => {

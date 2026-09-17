@@ -1,11 +1,5 @@
 {
 	"background": {
-		"motion": "Hoạt ảnh",
-		"motionNone": "Không",
-		"motionDrift": "Trôi",
-		"motionAurora": "Cực quang",
-		"motionWaves": "Sóng",
-		"motionGradientOnly": "Hoạt ảnh chỉ áp dụng cho nền chuyển sắc. Hãy chọn một nền chuyển sắc để tạo hoạt ảnh.",
 		"gradientLabel": "Dải màu {{index}}",
 		"uploadCustom": "Tải lên tùy chỉnh",
 		"unsupportedImage": "Ảnh không được hỗ trợ. Hãy dùng tệp JPG hoặc PNG.",
@@ -114,15 +108,7 @@
 		"format": "Định dạng",
 		"fitClip": "Vừa khít",
 		"motionBlur": "Làm mờ chuyển động",
-		"depthOfField": "Độ sâu trường ảnh",
-		"depthOfFieldHint": "Thu phóng 3D",
-		"depthOfFieldNoTilt": "Dự án chưa có thu phóng 3D",
-		"roundness": "Độ bo tròn",
-		"window": "Cửa sổ",
-		"windowNone": "Không",
-		"windowLight": "Sáng",
-		"windowDark": "Tối",
-		"windowHelp": "Vẽ thanh tiêu đề và viền cửa sổ quanh bản ghi."
+		"roundness": "Độ bo tròn"
 	},
 	"stylePresets": {
 		"button": "Cài đặt sẵn",
@@ -337,32 +323,14 @@
 			"autoDescription": "Máy ảnh đi theo vị trí con trỏ đã ghi",
 			"title": "Chế độ lấy nét"
 		},
-		"camera": {
-			"title": "Camera 3D",
-			"off": "Tắt",
-			"fixed": "Góc cố định",
-			"moving": "Camera chuyển động",
+		"threeD": {
 			"preset": {
-				"iso": "Chéo từ trên xuống",
-				"left": "Màn hình xoay sang trái",
-				"right": "Màn hình xoay sang phải",
-				"followCursor": "Xoay quanh theo con trỏ"
+				"left": "Trái",
+				"right": "Phải",
+				"iso": "Đẳng phối"
 			},
-			"description": {
-				"off": "Màn hình giữ phẳng.",
-				"iso": "Giữ một tư thế: xoay sang trái và nhìn từ trên xuống.",
-				"left": "Giữ một tư thế: màn hình hướng sang trái, cạnh phải nhô về phía trước.",
-				"right": "Giữ một tư thế: màn hình hướng sang phải, cạnh trái nhô về phía trước.",
-				"followCursor": "Màn hình đứng yên; máy quay bay vòng quanh, sang phía có con trỏ và nâng lên hay hạ xuống theo nó."
-			},
-			"needsCursor": "Con trỏ đang bị ẩn: máy quay này không có gì để theo dõi và giữ nguyên góc ban đầu."
-		},
-		"clickImpact": {
-			"title": "Hiệu ứng nhấp",
-			"description": "Mỗi lần nhấp sẽ ấn màn hình nghiêng: phía được nhấp lún xuống rồi bật lại.",
-			"needsRotation": "Hãy chọn camera 3D trước: chỉ màn hình nghiêng mới ấn được.",
-			"needsCursor": "Con trỏ đang ẩn: màn hình chỉ phản ứng với các lần nhấp nhìn thấy được.",
-			"descriptionCamera": "Mỗi cú nhấp đẩy máy quay lùi lại một chút rồi trở về."
+			"none": "Không",
+			"title": "Xoay 3D"
 		},
 		"level": "Mức độ thu phóng",
 		"previewHold": "Giữ để xem trước hiệu ứng phóng to",
@@ -396,9 +364,6 @@
 	"cursor": {
 		"smoothing": "Làm mượt",
 		"clickBounce": "Nảy khi nhấp",
-		"model3d": "Con trỏ 3D",
-		"model3dHint": "Kiểu mặc định: mọi hình dạng con trỏ đều thành 3D. Các kiểu khác vẫn phẳng.",
-		"model3dNeedsCursor": "Bật “Hiện con trỏ” để dùng con trỏ 3D.",
 		"help": "Cách vẽ con trỏ từ dữ liệu đã ghi: chủ đề, kích thước, làm mượt, mờ chuyển động và hiệu ứng nảy khi nhấp.",
 		"clipToBoundsDescription": "Giữ con trỏ bên trong khung hình video. Tắt để cho phép con trỏ vượt ra ngoài mép — hữu ích khi phóng to hoặc lia máy.",
 		"size": "Kích thước",

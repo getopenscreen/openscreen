@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result};
 use openscreen_compositor::compositor::Compositor;
 use openscreen_compositor::gif_export::{GifExportParams, GifStats};
 use openscreen_compositor::pipeline::ClipSource;
-use openscreen_compositor::{config, cursor, d3d, frame_geometry, gif_export, live, pipeline, scene};
+use openscreen_compositor::{config, cursor, d3d, gif_export, live, pipeline, scene};
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -134,11 +134,7 @@ fn run_bench(args: &[String]) -> Result<()> {
     if !scene_arg.is_empty() {
         let json = std::fs::read_to_string(&scene_arg)
             .with_context(|| format!("lecture de la scène {scene_arg}"))?;
-        let s = scene::Scene::from_json(&json)?;
-        // Comme l'export de l'app : sans ces réglages, le padding de la scène est ignoré, la
-        // vidéo couvre tout le cadre et le fond n'apparaît pas dans la preuve visuelle.
-        comp.set_live_params(frame_geometry::live_params_from_scene(&s));
-        comp.set_scene(Some(s));
+        comp.set_scene(Some(scene::Scene::from_json(&json)?));
         println!("scène chargée depuis {scene_arg}");
     }
 
@@ -154,6 +150,7 @@ fn run_bench(args: &[String]) -> Result<()> {
                 source_end_sec: 6.0, // la fixture entière (§ fixture.json : 6 s, 360 frames)
                 webcam_offset_sec: 0.0,
                 has_audio: false,
+                hold_sec: 0.0,
             };
             let path = format!("{out}/{}_{:?}.mp4", cfg.name, backend).to_lowercase();
             let s = pipeline::run_composited_multi(
@@ -296,6 +293,7 @@ fn run_gif_bench(
         source_end_sec: f64::MAX,
         webcam_offset_sec: 0.0,
         has_audio: false,
+        hold_sec: 0.0,
     }];
     for r in 0..repeat {
         // Each run writes to the same path — the last frame wins. The

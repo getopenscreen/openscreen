@@ -43,7 +43,6 @@ import { toast } from "sonner";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
 import GradientEditor, { type GradientEditorState } from "@/components/ui/gradient-editor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { WALLPAPER_MOTIONS, type WallpaperMotion } from "@/components/video-editor/types";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
@@ -94,7 +93,6 @@ import {
 	themePickerPreviewAssets,
 } from "@/lib/cursor/cursorThemes";
 import { buildGradientFromEditor } from "@/lib/gradientBuilder";
-import { RECORDING_FRAMES, type RecordingFrame } from "@/lib/projectDefaults";
 import {
 	classifyWallpaper,
 	resolveImageWallpaperUrl,
@@ -102,7 +100,6 @@ import {
 	WALLPAPER_THUMB_PATHS,
 } from "@/lib/wallpaper";
 import { isNativeCompositorActive, setNativeParam } from "@/native";
-import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
 import {
 	ASPECT_RATIO_PRESETS,
 	type AspectRatio,
@@ -326,13 +323,6 @@ function useWallpaperFileInput(onPicked: (dataUrl: string) => void): {
 	};
 }
 
-const WALLPAPER_MOTION_LABEL_KEYS: Record<WallpaperMotion, string> = {
-	none: "background.motionNone",
-	drift: "background.motionDrift",
-	aurora: "background.motionAurora",
-	waves: "background.motionWaves",
-};
-
 // Wallpaper picker — image / solid color / gradient tabs.
 //
 // Wallpapers round-trip through the legacyEditor envelope exactly as they did
@@ -346,7 +336,6 @@ function BackgroundSection() {
 	const { pick: handlePickFile, input: fileInput } = useWallpaperFileInput((dataUrl) =>
 		set({ wallpaper: dataUrl }),
 	);
-	const motionApplies = wallpaperAcceptsMotion(settings.wallpaper);
 
 	return (
 		<>
@@ -401,38 +390,6 @@ function BackgroundSection() {
 			    which closes the popover and would unmount the input mid-pick, dropping the
 			    file. It has no layout to cost us here. */}
 			{fileInput}
-			{/* Beside the picker because it moves what the picker chose. Only the compositor's own
-			    gradient can move; on anything else the control says so instead of holding a
-			    choice that changes nothing on screen. The stored choice is kept and comes back
-			    with the next gradient. */}
-			<div className={styles.field}>
-				<label htmlFor="background-motion">{ts("background.motion")}</label>
-				<select
-					id="background-motion"
-					value={motionApplies ? settings.wallpaperMotion : "none"}
-					disabled={!hasDocument || !motionApplies}
-					title={motionApplies ? undefined : ts("background.motionGradientOnly")}
-					onChange={(e) => void set({ wallpaperMotion: e.target.value as WallpaperMotion })}
-				>
-					{WALLPAPER_MOTIONS.map((motion) => (
-						<option key={motion} value={motion}>
-							{ts(WALLPAPER_MOTION_LABEL_KEYS[motion])}
-						</option>
-					))}
-				</select>
-			</div>
-			{motionApplies ? null : (
-				<p
-					style={{
-						margin: 0,
-						padding: "0 var(--sp-4) 8px",
-						font: "400 var(--fs-app-sm) var(--font-body)",
-						color: "var(--muted)",
-					}}
-				>
-					{ts("background.motionGradientOnly")}
-				</p>
-			)}
 			{/* Reads in the order it acts: pick a background, then blur it. Lived under
 			    "Effects" while that was a separate facet, which is how a control named
 			    "Blur BG" ended up in the tab that doesn't say background. */}
@@ -2376,12 +2333,6 @@ function pluralKey(locale: string, count: number): string {
 
 // ─── Video Effects ─────────────────────────────────────────────────
 
-const RECORDING_FRAME_LABEL_KEYS: Record<RecordingFrame, string> = {
-	none: "effects.windowNone",
-	"window-light": "effects.windowLight",
-	"window-dark": "effects.windowDark",
-};
-
 /**
  * One pane for everything that shapes the composition.
  *
@@ -2404,10 +2355,8 @@ export function VideoEffectsPane() {
 	// can never disagree about what shape the footage is. Already sorted by clip count then by
 	// pixel area, so [0] is "the shape most of this timeline is in" with no heuristic of ours.
 	const nativeFormats = useMemo(() => (document ? collectNativeFormats(document) : []), [document]);
-	const hasTiltedZoom = (document?.zoomRanges ?? []).some((z) => z.rotationPreset != null);
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
 	const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
-	const [frameMenuOpen, setFrameMenuOpen] = useState(false);
 	const { locale } = useI18n();
 	const clipCountLabel = (count: number) => ts(pluralKey(locale, count), { count });
 
@@ -2592,57 +2541,6 @@ export function VideoEffectsPane() {
 					</PopoverContent>
 				</Popover>
 			</div>
-			{/* The window chrome drawn around the recording. A menu like Format above it, and
-			    for the same reason: it picks one project-wide look among a few. With a frame
-			    on, Roundness rounds the frame and Shadow falls under it — both still move what
-			    they name. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label} title={ts("effects.windowHelp")}>
-					{ts("effects.window")}
-				</span>
-				<Popover open={frameMenuOpen} onOpenChange={setFrameMenuOpen}>
-					<PopoverTrigger asChild>
-						<button
-							type="button"
-							className={styles.rowAction}
-							disabled={!hasDocument}
-							aria-label={ts("effects.window")}
-							title={ts("effects.windowHelp")}
-						>
-							{ts(RECORDING_FRAME_LABEL_KEYS[settings.frame])}
-							<ChevronDown size={11} />
-						</button>
-					</PopoverTrigger>
-					<PopoverContent
-						align="end"
-						sideOffset={6}
-						collisionPadding={12}
-						animated={false}
-						className="w-auto border-0 bg-transparent p-0 shadow-none"
-					>
-						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.window")}>
-							{RECORDING_FRAMES.map((frame) => (
-								<button
-									type="button"
-									role="menuitem"
-									key={frame}
-									className={`${styles.actionMenuRow}${
-										frame === settings.frame ? ` ${styles.isActive}` : ""
-									}`}
-									onClick={() => {
-										setFrameMenuOpen(false);
-										void set({ frame });
-									}}
-								>
-									<span className={styles.actionMenuMain}>
-										{ts(RECORDING_FRAME_LABEL_KEYS[frame])}
-									</span>
-								</button>
-							))}
-						</div>
-					</PopoverContent>
-				</Popover>
-			</div>
 			<div className={styles.sliderGrid}>
 				<SliderCell
 					label={ts("effects.shadow")}
@@ -2713,28 +2611,11 @@ export function VideoEffectsPane() {
 					onCommit={() => void commit()}
 				/>
 			</div>
-			{/* Next to motion blur because it is the other blur of the RECORDING. It only ever
-			    acts on a 3D-tilted zoom, so with none in the project the switch would move
-			    nothing on screen: it is disabled then, and the row says why. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label}>
-					{ts("effects.depthOfField")}
-					<span className={styles.info}>
-						{hasTiltedZoom ? ts("effects.depthOfFieldHint") : ts("effects.depthOfFieldNoTilt")}
-					</span>
-				</span>
-				<Toggle
-					checked={settings.depthOfField}
-					ariaLabel={ts("effects.depthOfField")}
-					disabled={!hasDocument || !hasTiltedZoom}
-					onChange={(v) => void set({ depthOfField: v })}
-				/>
-			</div>
 		</Pane>
 	);
 }
 
-// ─── Layout (webcam)──────────────────────────────────────────────
+// ─── Layout (webcam) ──────────────────────────────────────────────
 
 const WEBCAM_PRESETS = [
 	{ value: "picture-in-picture", labelKey: "layout.pictureInPicture" },
@@ -3451,30 +3332,6 @@ export function CursorPane() {
 					checked={settings.cursor.clipToBounds}
 					disabled={!hasDocument}
 					onChange={(v) => void set({ cursor: { clipToBounds: v } })}
-				/>
-			</div>
-			{/* One switch for the modelled cursor. A hidden cursor has nothing to model, so the
-			    row is disabled then and both its hint and its tooltip say why. */}
-			<div
-				className={styles.paneRow}
-				title={settings.cursorShow ? undefined : ts("cursor.model3dNeedsCursor")}
-			>
-				<span className={styles.label}>
-					{ts("cursor.model3d")}
-					<span className={styles.info}>
-						{settings.cursorShow ? ts("cursor.model3dHint") : ts("cursor.model3dNeedsCursor")}
-					</span>
-				</span>
-				<Toggle
-					ariaLabel={ts("cursor.model3d")}
-					checked={settings.cursor.model3d}
-					disabled={!hasDocument || !settings.cursorShow}
-					onChange={(v) => {
-						void set({ cursor: { model3d: v } });
-						if (isNativeCompositorActive()) {
-							setNativeParam("cursorModel3d", v);
-						}
-					}}
 				/>
 			</div>
 			<div className={styles.sectionLabel}>{ts("cursor.theme")}</div>

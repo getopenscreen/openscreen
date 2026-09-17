@@ -1,11 +1,5 @@
 {
 	"background": {
-		"motion": "Animation",
-		"motionNone": "None",
-		"motionDrift": "Drift",
-		"motionAurora": "Aurora",
-		"motionWaves": "Waves",
-		"motionGradientOnly": "Animation applies to gradient backgrounds only. Pick a gradient to animate it.",
 		"gradientLabel": "Gradient {{index}}",
 		"uploadCustom": "Upload Custom",
 		"unsupportedImage": "Unsupported image. Use a JPG or PNG file.",
@@ -114,15 +108,7 @@
 		"format": "Format",
 		"fitClip": "Fit",
 		"motionBlur": "Motion Blur",
-		"depthOfField": "Depth of field",
-		"depthOfFieldHint": "3D zooms",
-		"depthOfFieldNoTilt": "No 3D zoom in this project",
-		"roundness": "Roundness",
-		"window": "Window",
-		"windowNone": "None",
-		"windowLight": "Light",
-		"windowDark": "Dark",
-		"windowHelp": "Draws a window title bar and border around the recording."
+		"roundness": "Roundness"
 	},
 	"stylePresets": {
 		"button": "Presets",
@@ -337,32 +323,14 @@
 			"autoDescription": "Camera follows the recorded cursor position",
 			"title": "Focus Mode"
 		},
-		"camera": {
-			"title": "3D camera",
-			"off": "Off",
-			"fixed": "Fixed angle",
-			"moving": "Moving camera",
+		"threeD": {
 			"preset": {
-				"iso": "Angled from above",
-				"left": "Screen turned left",
-				"right": "Screen turned right",
-				"followCursor": "Orbits with the cursor"
+				"left": "Left",
+				"right": "Right",
+				"iso": "Iso"
 			},
-			"description": {
-				"off": "The screen stays flat.",
-				"iso": "Holds one pose: turned left and seen from above.",
-				"left": "Holds one pose: the screen faces left, its right edge comes forward.",
-				"right": "Holds one pose: the screen faces right, its left edge comes forward.",
-				"followCursor": "The screen stays still; the camera circles it, swinging to the cursor's side and rising or dipping with it."
-			},
-			"needsCursor": "The cursor is hidden: this camera has nothing to follow and holds its starting angle."
-		},
-		"clickImpact": {
-			"title": "Click impact",
-			"description": "Each click presses the tilted screen: the clicked side dips, then springs back.",
-			"needsRotation": "Pick a 3D camera first: only a tilted screen can be pressed.",
-			"needsCursor": "The cursor is hidden: the screen only reacts to clicks you can see.",
-			"descriptionCamera": "Each click pushes the camera back a little, then it springs forward."
+			"none": "None",
+			"title": "3D Rotation"
 		},
 		"level": "Zoom Level",
 		"previewHold": "Hold to preview zoom effect",
@@ -396,9 +364,6 @@
 	"cursor": {
 		"smoothing": "Smoothing",
 		"clickBounce": "Click Bounce",
-		"model3d": "3D cursor",
-		"model3dHint": "Default style: every cursor shape turns 3D. Other styles stay flat.",
-		"model3dNeedsCursor": "Turn on Show Cursor to use the 3D cursor.",
 		"help": "Cursor rendering from the recorded telemetry: theme, size, smoothing, motion blur, and click-bounce emphasis.",
 		"clipToBoundsDescription": "Keeps the cursor inside the video frame. Turn off to let the cursor extend past the edges - useful when zoomed in or panned.",
 		"size": "Size",

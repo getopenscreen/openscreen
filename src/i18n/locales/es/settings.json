@@ -1,11 +1,5 @@
 {
 	"background": {
-		"motion": "Animación",
-		"motionNone": "Ninguno",
-		"motionDrift": "Deriva",
-		"motionAurora": "Aurora",
-		"motionWaves": "Ondas",
-		"motionGradientOnly": "La animación solo se aplica a fondos degradados. Elige un degradado para animarlo.",
 		"gradientLabel": "Degradado {{index}}",
 		"uploadCustom": "Subir personalizado",
 		"unsupportedImage": "Imagen no compatible. Usa un archivo JPG o PNG.",
@@ -114,15 +108,7 @@
 		"format": "Formato",
 		"fitClip": "Ajustar",
 		"motionBlur": "Desenfoque de movimiento",
-		"depthOfField": "Profundidad de campo",
-		"depthOfFieldHint": "Zooms 3D",
-		"depthOfFieldNoTilt": "No hay zoom 3D en este proyecto",
-		"roundness": "Redondez",
-		"window": "Ventana",
-		"windowNone": "Ninguna",
-		"windowLight": "Clara",
-		"windowDark": "Oscura",
-		"windowHelp": "Dibuja una barra de título y un borde de ventana alrededor de la grabación."
+		"roundness": "Redondez"
 	},
 	"stylePresets": {
 		"button": "Preajustes",
@@ -337,32 +323,14 @@
 			"autoDescription": "La cámara sigue la posición del cursor grabado",
 			"title": "Modo de enfoque"
 		},
-		"camera": {
-			"title": "Cámara 3D",
-			"off": "Desactivada",
-			"fixed": "Ángulo fijo",
-			"moving": "Cámara en movimiento",
+		"threeD": {
 			"preset": {
-				"iso": "Picado en diagonal",
-				"left": "Pantalla girada a la izquierda",
-				"right": "Pantalla girada a la derecha",
-				"followCursor": "Gira con el cursor"
+				"left": "Izquierda",
+				"right": "Derecha",
+				"iso": "Iso"
 			},
-			"description": {
-				"off": "La pantalla se queda plana.",
-				"iso": "Mantiene una sola pose: girada a la izquierda y vista desde arriba.",
-				"left": "Mantiene una sola pose: la pantalla mira a la izquierda y su borde derecho avanza.",
-				"right": "Mantiene una sola pose: la pantalla mira a la derecha y su borde izquierdo avanza.",
-				"followCursor": "La pantalla no se mueve; la cámara la rodea hacia el lado del cursor y sube o baja con él."
-			},
-			"needsCursor": "El cursor está oculto: esta cámara no tiene nada que seguir y mantiene su ángulo inicial."
-		},
-		"clickImpact": {
-			"title": "Impacto del clic",
-			"description": "Cada clic presiona la pantalla inclinada: el lado pulsado se hunde y luego vuelve.",
-			"needsRotation": "Elige primero una cámara 3D: solo se puede presionar una pantalla inclinada.",
-			"needsCursor": "El cursor está oculto: la pantalla solo reacciona a los clics visibles.",
-			"descriptionCamera": "Cada clic hace retroceder un poco la cámara, que luego vuelve."
+			"none": "Ninguna",
+			"title": "Rotación 3D"
 		},
 		"level": "Nivel de zoom",
 		"previewHold": "Mantener para previsualizar el efecto de zoom",
@@ -396,9 +364,6 @@
 	"cursor": {
 		"smoothing": "Suavizado",
 		"clickBounce": "Rebote al clic",
-		"model3d": "Cursor 3D",
-		"model3dHint": "Estilo predeterminado: todas las formas del cursor pasan a 3D. Los demás estilos siguen planos.",
-		"model3dNeedsCursor": "Activa «Mostrar cursor» para usar el cursor 3D.",
 		"help": "Representación del cursor a partir de la telemetría grabada: tema, tamaño, suavizado, desenfoque de movimiento y rebote al hacer clic.",
 		"clipToBoundsDescription": "Mantiene el cursor dentro del cuadro del vídeo. Desactívalo para dejar que el cursor sobrepase los bordes; útil al hacer zoom o desplazar la imagen.",
 		"size": "Tamaño",

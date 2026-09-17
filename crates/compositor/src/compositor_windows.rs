@@ -9,9 +9,9 @@ use crate::config::Cfg;
 pub use crate::frame_geometry::{live_params_from_scene, webcam_shape_code, LayerCB,
     LiveParams, FIXTURE_FRAMES, HALF_H, HALF_W, OUT_H, OUT_W};
 use crate::frame_geometry::{
-    cover_crop_uv, cover_uv_rect, decode_data_uri, ease_in_out_cubic, lerp,
+    cover_crop_uv, cover_uv_rect, cursor_sprite_dst, decode_data_uri, ease_in_out_cubic, lerp,
     lerp4, parse_hex, preset_placements, remap_box, screen_source_rect, timeline, CursorPlacement,
-    FrameParams, Placement, ShadowCaster, SpriteShape, CURSOR_BASE_SIZE_FRAC, FPS,
+    FrameParams, Placement, CURSOR_BASE_SIZE_FRAC, FPS, SCREEN_SHADOW_OFFSET_FRAC,
     SCREEN_SHADOW_SPREAD_FRAC, SHADOW_TUNING_REF_PX, WEBCAM_SHADOW_OFFSET_FRAC,
     WEBCAM_SHADOW_OPACITY, WEBCAM_SHADOW_SPREAD_FRAC,
 };
@@ -75,16 +75,6 @@ struct WebcamMask {
     height: u32,
 }
 
-/// Pyramide de la profondeur de champ (mode 8) : la vidéo en RGBA8 à demi-résolution de la
-/// texture DÉCODEUR, avec sa chaîne de mips. Dimensionnée sur la texture décodeur et remplie en
-/// UV plein (0..1) : ses UV sont ceux de t0/t1, et le calcul d'UV du mode 8 ne change pas.
-struct DofPyramid {
-    rtv: ID3D11RenderTargetView,
-    srv: ID3D11ShaderResourceView,
-    width: u32,
-    height: u32,
-}
-
 pub struct Compositor {
     dev: ID3D11Device,
     ctx: ID3D11DeviceContext,
@@ -142,8 +132,6 @@ pub struct Compositor {
     /// entre clips : les régions projetées par l'app portent elles aussi des temps source.
     /// Séparé de l'override curseur pour préserver les chemins fixture sans télémétrie.
     timeline_t_override: RefCell<Option<f32>>,
-    /// Temps programme (secondes de sortie) — cf. `FrameGeometryInput::programme_time`.
-    programme_time: RefCell<Option<f32>>,
     // cache des SRV décodeur par (texture array, slice) : le pool réutilise ~32 textures,
     // donc après warmup plus aucune création de SRV par frame (overhead CPU supprimé).
     srv_cache: RefCell<HashMap<(usize, u32), (ID3D11ShaderResourceView, ID3D11ShaderResourceView)>>,
@@ -175,9 +163,6 @@ pub struct Compositor {
     /// Valeur de `img_tick` au début de la frame en cours. Tout ce qui a été touché depuis
     /// appartient au jeu actif et ne peut pas être évincé — voir `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
-    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
-    /// Pas d'éviction : seuls les seize sprites du thème par défaut y passent (~2,6 Mo en tout).
-    sdf_cache: RefCell<HashMap<String, (ID3D11ShaderResourceView, SpriteShape)>>,
     /// Masque de segmentation du sujet webcam, R8 à la résolution du modèle. Écrit par
     /// `set_webcam_mask` depuis le thread d'inférence, lu au moment de dessiner la webcam.
     /// `None` tant qu'aucune frame n'a été segmentée — l'effet reste alors éteint plutôt que
@@ -232,11 +217,6 @@ pub struct Compositor {
     /// que `live_readback_staging`, mais en NV12 et non en RGBA : l'encodeur logiciel veut
     /// les plans Y/UV, pas des pixels RGBA. Voir `read_nv12_scaled`.
     nv12_readback_staging: RefCell<Option<(u32, u32, ID3D11Texture2D)>>,
-    /// Pyramide de profondeur de champ, allouée au premier écran incliné et recréée quand la
-    /// texture décodeur change de taille. Rien n'est alloué tant qu'aucun tilt n'est rendu.
-    dof_pyramid: RefCell<Option<DofPyramid>>,
-    /// Device WARP : la profondeur de champ y obéit à `DOF_ON_CPU_BACKEND`.
-    cpu_backend: bool,
 }
 
 /// Ressources d'un resize export à une taille cible : RGBA intermédiaire (résultat du
@@ -626,7 +606,6 @@ impl Compositor {
             cursor: RefCell::new(None),
             cursor_t_override: RefCell::new(None),
             timeline_t_override: RefCell::new(None),
-            programme_time: RefCell::new(None),
             srv_cache: RefCell::new(HashMap::new()),
             live_params: RefCell::new(LiveParams::default()),
             scene: RefCell::new(None),
@@ -642,7 +621,6 @@ impl Compositor {
             img_cache: RefCell::new(HashMap::new()),
             img_tick: std::cell::Cell::new(0),
             img_frame_start: std::cell::Cell::new(0),
-            sdf_cache: RefCell::new(HashMap::new()),
             webcam_mask: RefCell::new(None),
             render_size: Cell::new((out_w, out_h)),
             resize_target: RefCell::new(None),
@@ -656,8 +634,6 @@ impl Compositor {
             seg_scratch: RefCell::new(Vec::new()),
             seg_failed: RefCell::new(false),
             nv12_readback_staging: RefCell::new(None),
-            dof_pyramid: RefCell::new(None),
-            cpu_backend: gpu.backend == crate::d3d::Backend::Cpu,
         })
     }
 
@@ -832,86 +808,6 @@ impl Compositor {
             [1.0 / hw, 1.0 / hh, off, 0.0]);
     }
 
-    /// Remplit la pyramide de profondeur de champ depuis la frame écran et rend sa SRV.
-    ///
-    /// UN draw du mode 0 existant, en UV plein, vers une cible demi-résolution : un échantillon
-    /// bilinéaire 2:1 est une moyenne 2x2, cette cible EST donc déjà le niveau 1 d'une pyramide
-    /// pleine résolution. `GenerateMips` fait le reste, comme pour `ann_copy`. Cible vidée
-    /// d'abord et `color.a = 1` : un `LayerCB` par défaut a `color.a = 0`, et le mode 0 sortirait
-    /// une pyramide transparente. `mb.x = 1` : un seul tap, pas de flou de mouvement.
-    ///
-    /// Laisse l'état de composition lié sur le RT principal ; l'appelant enchaîne sur `begin`.
-    unsafe fn fill_dof_pyramid(
-        &self,
-        sy: &ID3D11ShaderResourceView,
-        suv: &ID3D11ShaderResourceView,
-        tex_w: u32,
-        tex_h: u32,
-    ) -> Result<ID3D11ShaderResourceView> {
-        let (w, h) = (tex_w.div_ceil(2).max(1), tex_h.div_ceil(2).max(1));
-        let stale = self.dof_pyramid.borrow().as_ref().is_none_or(|p| (p.width, p.height) != (w, h));
-        if stale {
-            let desc = D3D11_TEXTURE2D_DESC {
-                Width: w,
-                Height: h,
-                MipLevels: crate::frame_geometry::dof_pyramid_levels(w, h),
-                ArraySize: 1,
-                Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-                Usage: D3D11_USAGE_DEFAULT,
-                BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
-                CPUAccessFlags: 0,
-                MiscFlags: D3D11_RESOURCE_MISC_GENERATE_MIPS.0 as u32,
-            };
-            let mut tex: Option<ID3D11Texture2D> = None;
-            self.dev.CreateTexture2D(&desc, None, Some(&mut tex))?;
-            let tex = tex.unwrap();
-            // RTV sur le niveau 0 seul (défaut), SRV sur toute la chaîne (défaut).
-            let mut rtv: Option<ID3D11RenderTargetView> = None;
-            self.dev.CreateRenderTargetView(&tex, None, Some(&mut rtv))?;
-            let mut srv: Option<ID3D11ShaderResourceView> = None;
-            self.dev.CreateShaderResourceView(&tex, None, Some(&mut srv))?;
-            *self.dof_pyramid.borrow_mut() =
-                Some(DofPyramid { rtv: rtv.unwrap(), srv: srv.unwrap(), width: w, height: h });
-        }
-        let pyr = self.dof_pyramid.borrow();
-        let pyr = pyr.as_ref().expect("pyramide allouée ci-dessus");
-        self.bind_compose_state();
-        // Délie t2 : la pyramide y est peut-être encore liée depuis le mode 8 précédent, et une
-        // ressource liée en lecture ET en écriture est retirée d'office par le runtime.
-        self.ctx.PSSetShaderResources(2, Some(&[None]));
-        self.ctx.OMSetRenderTargets(Some(&[Some(pyr.rtv.clone())]), None);
-        self.ctx.ClearRenderTargetView(&pyr.rtv, &[0.0, 0.0, 0.0, 0.0]);
-        self.ctx.RSSetViewports(Some(&[D3D11_VIEWPORT {
-            TopLeftX: 0.0,
-            TopLeftY: 0.0,
-            Width: w as f32,
-            Height: h as f32,
-            MinDepth: 0.0,
-            MaxDepth: 1.0,
-        }]));
-        let full = [0.0, 0.0, 1.0, 1.0];
-        self.draw_video(
-            &LayerCB {
-                dst: full,
-                src: full,
-                quad_px: [w as f32, h as f32],
-                mode: 0.0,
-                color: [1.0, 1.0, 1.0, 1.0],
-                src_prev: full,
-                dst_prev: full,
-                mb: [1.0, 0.0, 1.0, 0.0],
-                ..Default::default()
-            },
-            sy,
-            suv,
-        );
-        // La pyramide quitte la sortie avant de générer ses mips.
-        self.bind_compose_state();
-        self.ctx.GenerateMips(&pyr.srv);
-        Ok(pyr.srv.clone())
-    }
-
     unsafe fn upload_cb(&self, cb: &LayerCB) {
         let mut m = D3D11_MAPPED_SUBRESOURCE::default();
         self.ctx
@@ -1069,8 +965,7 @@ impl Compositor {
             Some(SceneBackground::Color { color }) => {
                 self.draw_solid(&solid(parse_hex(color).unwrap_or(BLACK)));
             }
-            // Le mouvement ne vaut que pour le fond d'écran : la bulle garde son dégradé immobile.
-            Some(SceneBackground::Gradient { angle_deg, stops, .. }) => {
+            Some(SceneBackground::Gradient { angle_deg, stops }) => {
                 let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(BLACK);
                 let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
                 // angle CSS → direction unitaire, même convention que le fond d'écran.
@@ -1141,39 +1036,6 @@ impl Compositor {
         let mut srv: Option<ID3D11ShaderResourceView> = None;
         self.dev.CreateShaderResourceView(&tex, None, Some(&mut srv))?;
         Ok((srv.unwrap(), w, h))
-    }
-
-    /// Champ de distance du sprite `path` (t4 du mode 15) et sa forme, calculés au premier appel.
-    unsafe fn cursor_sdf(&self, path: &str) -> Result<(ID3D11ShaderResourceView, SpriteShape)> {
-        if let Some(hit) = self.sdf_cache.borrow().get(path) {
-            return Ok(hit.clone());
-        }
-        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
-        let texels = sdf.f16_bytes();
-        let td = D3D11_TEXTURE2D_DESC {
-            Width: sdf.width,
-            Height: sdf.height,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_R16_FLOAT,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Usage: D3D11_USAGE_IMMUTABLE,
-            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-            CPUAccessFlags: 0,
-            MiscFlags: 0,
-        };
-        let init = D3D11_SUBRESOURCE_DATA {
-            pSysMem: texels.as_ptr() as *const c_void,
-            SysMemPitch: sdf.width * 2,
-            SysMemSlicePitch: 0,
-        };
-        let mut tex: Option<ID3D11Texture2D> = None;
-        self.dev.CreateTexture2D(&td, Some(&init), Some(&mut tex))?;
-        let mut srv: Option<ID3D11ShaderResourceView> = None;
-        self.dev.CreateShaderResourceView(&tex.unwrap(), None, Some(&mut srv))?;
-        let entry = (srv.unwrap(), sdf.shape);
-        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
-        Ok(entry)
     }
 
     /// Extrait la frame webcam en RGB8 à la résolution du modèle, dans `out`.
@@ -1529,18 +1391,6 @@ impl Compositor {
         *self.timeline_t_override.borrow_mut() = t;
     }
 
-    /// Voir `programme_time`. `None` restaure le comportement fixture (`frame / FPS`).
-    pub fn set_programme_time(&self, t: Option<f32>) {
-        *self.programme_time.borrow_mut() = t;
-    }
-
-    /// Dernier temps programme reçu : pour que les tests vérifient ce qui atteint vraiment
-    /// `FrameGeometryInput`, pas seulement ce que l'appelant croit envoyer.
-    #[doc(hidden)]
-    pub fn programme_time(&self) -> Option<f32> {
-        *self.programme_time.borrow()
-    }
-
     /// Copie de la scène courante (si présente) — utilisé par l'export multiclip pour lire les
     /// réglages curseur (thème/lissage/show) sans dupliquer le contrat de scène côté pipeline.
     pub fn scene_snapshot(&self) -> Option<Scene> {
@@ -1566,11 +1416,7 @@ impl Compositor {
 
     /// Curseur thème (sprite PNG, ex. arrow.png) dont le PIVOT `hotspot` (fraction 0..1 de
     /// l'image) tombe sur `center`, à la taille de référence `size_px`. `Err` → l'appelant
-    /// retombe sur `draw_cursor` (math dot+ring). La géométrie vient de
-    /// `frame_geometry::cursor_sprite_cb`, partagée avec macOS et Linux.
-    ///
-    /// Avec `model`, le même sprite extrudé (mode 15, `cursor_model_cb`) : le sprite en t2, son
-    /// champ de distance en t4.
+    /// retombe sur `draw_cursor` (math dot+ring).
     unsafe fn draw_cursor_sprite(
         &self,
         placement: CursorPlacement,
@@ -1578,41 +1424,62 @@ impl Compositor {
         a: f32,
         sprite: &SceneCursorSprite,
         clip: [f32; 4],
-        model: Option<crate::frame_geometry::CursorPose>,
     ) -> Result<()> {
         let path = sprite.path.as_str();
         let (srv, iw, ih) = self.cached_image(path)?;
-        // Sans champ de distance, repli sur le sprite plat plutôt que sur le curseur math.
-        // Parité Linux.
-        if let Some(pose) = model {
-            match self.cursor_sdf(path) {
-                Ok((sdf, shape)) => {
-                    let shape =
-                        SpriteShape { hotspot: [sprite.hotspot_x, sprite.hotspot_y], ..shape };
-                    if let Some(cb) = crate::frame_geometry::cursor_model_cb(
-                        placement, size_px, pose, shape, a, clip,
-                    ) {
-                        self.upload_cb(&cb);
-                        self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
-                        self.ctx.PSSetShaderResources(4, Some(&[Some(sdf)]));
-                        self.ctx.Draw(4, 0);
-                        self.ctx.PSSetShaderResources(4, Some(&[None]));
-                    }
-                    return Ok(());
-                }
-                Err(e) => eprintln!("[curseur] champ de \"{path}\" : {e:#}"),
-            }
-        }
         let ar = iw as f32 / ih as f32;
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
-        let cb = crate::frame_geometry::cursor_sprite_cb(
-            placement,
-            [pw, ph],
-            [sprite.hotspot_x, sprite.hotspot_y],
-            a,
-            clip,
-            [self.rw(), self.rh()],
-        );
+        let hotspot = [sprite.hotspot_x, sprite.hotspot_y];
+
+        let cb = match placement {
+            CursorPlacement::Upright { center } => LayerCB {
+                dst: cursor_sprite_dst(center, pw / self.rw(), ph / self.rh(), hotspot),
+                src: [0.0, 0.0, 1.0, 1.0],
+                mode: 7.0,
+                color: [1.0, 1.0, 1.0, a],
+                fx: clip,
+                ..Default::default()
+            },
+            CursorPlacement::Tilted { plane_pt, quad, center_px, screen_px, .. } => {
+                // Le sprite est posé DANS le plan : sa taille devient une fraction du plan
+                // (l'unité de `size_px` est le rect d'écran non incliné), et ses 4 coins
+                // traversent la même projection que la vidéo. La réduction due au tilt vient
+                // donc de la projection elle-même — rien à multiplier à la main.
+                let (wf, hf) = (pw / screen_px[0], ph / screen_px[1]);
+                let x0 = plane_pt[0] - hotspot[0] * wf;
+                let y0 = plane_pt[1] - hotspot[1] * hf;
+                let corners = [(x0, y0), (x0 + wf, y0), (x0 + wf, y0 + hf), (x0, y0 + hf)]
+                    .map(|(fx, fy)| {
+                        let (px, py) = quad.point_px(fx, fy);
+                        (center_px[0] + px, center_px[1] + py)
+                    });
+                let (min_x, max_x) = corners
+                    .iter()
+                    .fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| (mn.min(x), mx.max(x)));
+                let (min_y, max_y) = corners
+                    .iter()
+                    .fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| (mn.min(y), mx.max(y)));
+                // Le quad projeté d'un sprite peut être très fin de biais : une bbox d'un pixel
+                // de large ferait diverger le warp inverse, donc plancher à 1 px.
+                let (bw, bh) = ((max_x - min_x).max(1.0), (max_y - min_y).max(1.0));
+                let local = |(x, y): (f32, f32)| [x - min_x, y - min_y];
+                let [tl0, tl1] = local(corners[0]);
+                let [tr0, tr1] = local(corners[1]);
+                let [br0, br1] = local(corners[2]);
+                let [bl0, bl1] = local(corners[3]);
+                LayerCB {
+                    dst: [min_x / self.rw(), min_y / self.rh(), bw / self.rw(), bh / self.rh()],
+                    quad_px: [bw, bh],
+                    mode: 13.0,
+                    color: [1.0, 1.0, 1.0, a],
+                    fx: [tl0, tl1, tr0, tr1],
+                    src_prev: [br0, br1, bl0, bl1],
+                    dst_prev: clip,
+                    ..Default::default()
+                }
+            }
+        };
+
         self.upload_cb(&cb);
         self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
         self.ctx.Draw(4, 0);
@@ -1620,13 +1487,11 @@ impl Compositor {
     }
 
     /// Sprite de l'état courant (`cursor_type`, ex. `"text"`), à défaut celui de la flèche,
-    /// à défaut le curseur math (dot+ring). Avec `model`, ce sprite extrudé (mode 15) : même
-    /// résolution que `plan_cursor`, qui en a tiré la pose.
+    /// à défaut le curseur math (dot+ring).
     ///
     /// Le repli sur la flèche compte : un thème n'apporte que sa flèche et son pointeur, les
     /// autres états venant de l'art intégrée — mais si un état inconnu apparaît, mieux vaut
     /// une flèche qu'un point dans un cercle.
-    #[allow(clippy::too_many_arguments)]
     unsafe fn draw_cur_themed(
         &self,
         sprites: &HashMap<String, SceneCursorSprite>,
@@ -1635,11 +1500,10 @@ impl Compositor {
         size_px: f32,
         a: f32,
         clip: [f32; 4],
-        model: Option<crate::frame_geometry::CursorPose>,
     ) {
         let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
         if let Some(sprite) = sprite {
-            if self.draw_cursor_sprite(placement, size_px, a, sprite, clip, model).is_ok() {
+            if self.draw_cursor_sprite(placement, size_px, a, sprite, clip).is_ok() {
                 return;
             }
         }
@@ -1778,12 +1642,12 @@ impl Compositor {
             scene: scene_ref.as_ref(),
             cursor: cursor_ref.as_ref(),
             timeline_t_override: *self.timeline_t_override.borrow(),
-            programme_time: *self.programme_time.borrow(),
         });
         let scene_preset = g.scene_preset.clone();
         let mb_taps = g.mb_taps;
         let mb_amount = g.mb_amount;
         let source_t = g.source_t;
+        let zoom_rotation = g.zoom_rotation;
         let _padding_scale = g.padding_scale;
         let cut = g.cut;
         let s_dst = g.s_dst;
@@ -1797,10 +1661,6 @@ impl Compositor {
         let w_radius = g.w_radius;
         let shape_fade = g.shape_fade;
 
-        // Profondeur de champ : la pyramide n'est remplie que sur une frame inclinée qui la lit,
-        // AVANT `begin`, qui rebranche ensuite le RT principal et le vide.
-        let dof = g.depth_of_field_on(self.cpu_backend);
-        let dof_srv = if dof { Some(self.fill_dof_pyramid(&sy, &suv, stw, sth)?) } else { None };
 
         self.begin([0.0, 0.0, 0.0, 1.0]);
 
@@ -1823,25 +1683,19 @@ impl Compositor {
                         ..Default::default()
                     });
                 }
-                SceneBackground::Gradient { angle_deg, stops, motion } => {
+                SceneBackground::Gradient { angle_deg, stops } => {
                     let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(lp.bg_color);
                     let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
                     // angle CSS → direction unitaire (espace sortie, y vers le bas) :
                     // 0° = vers le haut, 90° = vers la droite.
                     let a = angle_deg.to_radians();
                     let dir = [a.sin(), -a.cos()];
-                    let (anim, mb) = crate::frame_geometry::gradient_motion_slots(
-                        motion,
-                        g.programme_t,
-                        self.rw() / self.rh(),
-                    );
                     self.draw_solid(&LayerCB {
                         dst: [0.0, 0.0, 1.0, 1.0],
                         src: [c1[0], c1[1], c1[2], c1[3]],
                         mode: 5.0,
                         color: c0,
-                        fx: [dir[0], dir[1], anim[0], anim[1]],
-                        mb,
+                        fx: [dir[0], dir[1], 0.0, 0.0],
                         ..Default::default()
                     });
                 }
@@ -1913,7 +1767,8 @@ impl Compositor {
         // Géométrie du tilt, calculée UNE fois : l'ombre et l'écran doivent porter exactement le
         // même quadrilatère. Deux calculs séparés, c'est une ombre qui se décolle dès qu'un des
         // deux change.
-        let tilt = g.screen_tilt(s_px);
+        let tilt = (!crate::regions::is_identity_rotation(zoom_rotation))
+            .then(|| crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], zoom_rotation));
         let quad_center_px =
             [(s_dst[0] + s_dst[2] * 0.5) * self.rw(), (s_dst[1] + s_dst[3] * 0.5) * self.rh()];
         // L'ombre suit la silhouette réellement affichée : le rect arrondi quand l'écran est
@@ -1921,56 +1776,24 @@ impl Compositor {
         // penché ne se lisait pas comme son ombre mais comme une seconde surface. Elle suit
         // aussi la croissance de la boîte pendant un zoom (issue #179) : quand la boîte sort
         // du cadre, l'ombre en sort avec elle, sans jamais se lire comme une bande noire.
-        // Avec un cadre de fenêtre, c'est le CADRE qui porte l'ombre (`shadow_caster`), sinon
-        // elle tomberait sous l'écran seul et la barre de titre flotterait au-dessus.
-        let render_px = [self.rw(), self.rh()];
         if cfg.shadow {
             let spread = SCREEN_SHADOW_SPREAD_FRAC * frame_min_px;
-            let offset = g.screen_shadow_offset();
+            let offset = [0.0, SCREEN_SHADOW_OFFSET_FRAC * frame_min_px];
             let opacity = 0.45 * lp.shadow_scale;
-            match g.shadow_caster(render_px) {
-                ShadowCaster::Upright { dst, size_px, radius } => {
-                    self.draw_shadow(dst, size_px, radius, spread, offset, opacity)
-                }
-                // Même rayon que le plan incliné lui-même (cf. le dessin du mode 8).
-                ShadowCaster::Tilted { corners, center_px, radius } => {
-                    self.draw_quad_shadow(&corners, center_px, radius, spread, offset, opacity)
-                }
+            match tilt.as_ref() {
+                None => self.draw_shadow(s_dst, s_px, s_radius, spread, offset, opacity),
+                Some(quad) => self.draw_quad_shadow(
+                    &quad.corners,
+                    quad_center_px,
+                    // Même rayon que le plan incliné lui-même (cf. le dessin du mode 8).
+                    s_radius * quad.scale,
+                    spread,
+                    offset,
+                    opacity,
+                ),
             }
         }
-        // Le cadre (mode 14) passe SOUS l'écran : l'écran le recouvre, ne laissant voir que la
-        // barre de titre, le filet et les coins bas entre les deux arrondis.
-        if let Some(cb) = g.window_frame_cb(render_px) {
-            self.draw_solid(&cb);
-        }
-        let square_top = g.screen_square_top();
-        if let Some(quad) = tilt {
-            // Écran incliné (angle fixe) ou vu par la caméra réelle : warp inverse du mode 8 dans
-            // la bbox du quad projeté (`tilted_screen_cb`, partagé). Les coins arrondis y sont
-            // rendus dans le repère DU PLAN : sans eux le plan a des arêtes de couteau qui
-            // tranchent le contenu en pleine phrase, et l'œil lit une découpe là où il devrait
-            // lire une inclinaison.
-            // t2 EXPLICITE : `draw_video` ne lie que t0/t1, et t2 garde sinon ce que le draw
-            // précédent y a laissé (un wallpaper, un sprite). `None` quand l'effet est coupé :
-            // `k = 0`, le shader n'y lit rien.
-            self.ctx.PSSetShaderResources(2, Some(&[dof_srv.clone()]));
-            self.draw_video(
-                &crate::frame_geometry::tilted_screen_cb(
-                    &quad,
-                    s_px,
-                    quad_center_px,
-                    [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
-                    g.focus_plane,
-                    s_radius,
-                    square_top,
-                    dof,
-                    render_px,
-                ),
-                &sy,
-                &suv,
-            );
-            self.ctx.PSSetShaderResources(2, Some(&[None]));
-        } else {
+        if crate::regions::is_identity_rotation(zoom_rotation) {
             self.draw_video(
                 &LayerCB {
                     dst: s_dst,
@@ -1981,7 +1804,60 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
                     dst_prev: s_dst_prev,
-                    mb: [mb_taps, mb_amount, 1.0, square_top],
+                    mb: [mb_taps, mb_amount, 1.0, 0.0],
+                    ..Default::default()
+                },
+                &sy,
+                &suv,
+            );
+        } else {
+            // Tilt 3D (zoom "rotation" iso/left/right) : warp bilinéaire inverse (mode 8, voir
+            // shaders.hlsl). Pas de motion blur dans ce chemin — le tilt est un effet bref, la
+            // simplification ne se voit pas. Les coins arrondis, eux, se voyaient : sans eux le
+            // plan a des arêtes de couteau qui tranchent le contenu en pleine phrase, et l'œil lit
+            // une découpe (« un overflow hidden qui tronque l'enregistrement ») là où il devrait
+            // lire une inclinaison. Ils sont donc rendus, dans le repère DU PLAN.
+            let quad = tilt.unwrap_or_else(|| {
+                crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], zoom_rotation)
+            });
+            let corners = quad.corners;
+            // Taille du plan dans son propre repère, avant projection : c'est là que vit le rayon,
+            // pour qu'il reste un rayon constant le long du bord et non un arrondi qui s'étire avec
+            // la perspective.
+            let plane_px = [s_px[0] * quad.scale, s_px[1] * quad.scale];
+            let (cx_px, cy_px) = (quad_center_px[0], quad_center_px[1]);
+            let (min_x, max_x) = corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| {
+                (mn.min(x), mx.max(x))
+            });
+            let (min_y, max_y) = corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| {
+                (mn.min(y), mx.max(y))
+            });
+            let bbox_w = (max_x - min_x).max(1.0);
+            let bbox_h = (max_y - min_y).max(1.0);
+            let bbox_dst = [
+                (cx_px + min_x) / self.rw(),
+                (cy_px + min_y) / self.rh(),
+                bbox_w / self.rw(),
+                bbox_h / self.rh(),
+            ];
+            // coins en px LOCAUX à la bbox (0..bbox_w/h), pour matcher `i.local` du shader.
+            let local = |(x, y): (f32, f32)| -> [f32; 2] { [x - min_x, y - min_y] };
+            let [tl0, tl1] = local(corners[0]);
+            let [tr0, tr1] = local(corners[1]);
+            let [br0, br1] = local(corners[2]);
+            let [bl0, bl1] = local(corners[3]);
+            self.draw_video(
+                &LayerCB {
+                    dst: bbox_dst,
+                    src: [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
+                    quad_px: [bbox_w, bbox_h],
+                    // Le rayon suit la réduction du plan : l'écran incliné est plus petit, ses
+                    // coins le sont d'autant, exactement comme s'il s'éloignait.
+                    radius_px: s_radius * quad.scale,
+                    mode: 8.0,
+                    fx: [tl0, tl1, tr0, tr1],
+                    src_prev: [br0, br1, bl0, bl1],
+                    dst_prev: [plane_px[0], plane_px[1], 0.0, 0.0],
                     ..Default::default()
                 },
                 &sy,
@@ -2004,18 +1880,13 @@ impl Compositor {
                     track,
                     t: self.cursor_t_override.borrow().unwrap_or(frame / FPS),
                 },
-            )
-            .map(|p| p.for_backend(self.cpu_backend));
+            );
             if let Some(plan) = plan {
                 let cursor_sprites: HashMap<String, SceneCursorSprite> = scene_ref
                     .as_ref()
                     .map(|s| s.cursor.cursor_sprites.clone())
                     .unwrap_or_default();
                 let cursor_type = plan.cursor_type.as_deref();
-                // L'impact des clics (mode 16, sans texture), posé sur l'écran SOUS le curseur.
-                for cb in &plan.impacts {
-                    self.draw_solid(cb);
-                }
                 if plan.taps <= 1 {
                     self.draw_cur_themed(
                         &cursor_sprites,
@@ -2024,7 +1895,6 @@ impl Compositor {
                         plan.size_px,
                         plan.alpha,
                         plan.clip,
-                        plan.model,
                     );
                 } else {
                     // Flou RÉEL, pas des copies discrètes : accumule les N échantillons dans un
@@ -2042,7 +1912,6 @@ impl Compositor {
                             plan.size_px,
                             plan.alpha,
                             plan.clip,
-                            plan.model,
                         );
                     }
                     // composite le buffer accumulé sur la scène (blend "over" normal, prémultiplié).

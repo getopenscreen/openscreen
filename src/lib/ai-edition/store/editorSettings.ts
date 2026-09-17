@@ -13,20 +13,14 @@ import {
 	type CursorVisualSettings,
 	DEFAULT_CROP_REGION,
 	DEFAULT_WEBCAM_POSITION,
-	isWallpaperMotion,
 	isWebcamBackgroundMode,
-	type WallpaperMotion,
 	type WebcamBackgroundMode,
 	type WebcamLayoutPreset,
 	type WebcamMaskShape,
 	type WebcamPosition,
 	type WebcamSizePreset,
 } from "@/components/video-editor/types";
-import {
-	DEFAULT_PROJECT_APPEARANCE,
-	isRecordingFrame,
-	type RecordingFrame,
-} from "@/lib/projectDefaults";
+import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import { clamp01 } from "@/utils/math";
 import type { AxcutDocument } from "../schema";
@@ -78,15 +72,10 @@ const DEFAULT_CROP_PAN: CropPan = { x: 0.5, y: 0.5 };
 
 export interface EditorSettingsSnapshot {
 	wallpaper: string;
-	/** Only a gradient wallpaper moves; kept as chosen when the wallpaper changes kind. */
-	wallpaperMotion: WallpaperMotion;
-	/** The frame drawn around the recording (window chrome), or "none". */
-	frame: RecordingFrame;
 	aspectRatio: AspectRatio;
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
-	depthOfField: boolean;
 	borderRadius: number;
 	padding: number;
 	cropRegion: CropRegion;
@@ -126,13 +115,10 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 
 interface LegacyShape {
 	wallpaper?: string;
-	wallpaperMotion?: WallpaperMotion;
-	frame?: RecordingFrame;
 	aspectRatio?: AspectRatio;
 	shadowIntensity?: number;
 	showBlur?: boolean;
 	motionBlurAmount?: number;
-	depthOfField?: boolean;
 	borderRadius?: number;
 	padding?: number;
 	cropRegion?: CropRegion;
@@ -152,7 +138,6 @@ interface LegacyShape {
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
-	cursorModel3d?: boolean;
 	cursorClipToBounds?: boolean;
 	cursorShow?: boolean;
 	cursorAutoHide?: boolean;
@@ -184,8 +169,6 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		smoothing: num(legacy?.cursorSmoothing, DEFAULT_EDITOR_SETTINGS.cursor.smoothing),
 		motionBlur: num(legacy?.cursorMotionBlur, DEFAULT_EDITOR_SETTINGS.cursor.motionBlur),
 		clickBounce: num(legacy?.cursorClickBounce, DEFAULT_EDITOR_SETTINGS.cursor.clickBounce),
-		// Absent in every project saved before the setting existed: those keep the flat cursor.
-		model3d: bool(legacy?.cursorModel3d, DEFAULT_EDITOR_SETTINGS.cursor.model3d),
 		clipToBounds: bool(legacy?.cursorClipToBounds, DEFAULT_EDITOR_SETTINGS.cursor.clipToBounds),
 		autoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
 	};
@@ -204,16 +187,10 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 
 	return {
 		wallpaper: str(legacy?.wallpaper, DEFAULT_EDITOR_SETTINGS.wallpaper),
-		wallpaperMotion: isWallpaperMotion(legacy?.wallpaperMotion)
-			? legacy.wallpaperMotion
-			: DEFAULT_EDITOR_SETTINGS.wallpaperMotion,
-		// An unknown value (a frame a newer build added) reads as no frame, like the compositor.
-		frame: isRecordingFrame(legacy?.frame) ? legacy.frame : DEFAULT_EDITOR_SETTINGS.frame,
 		aspectRatio: legacy?.aspectRatio ?? DEFAULT_EDITOR_SETTINGS.aspectRatio,
 		shadowIntensity: num(legacy?.shadowIntensity, DEFAULT_EDITOR_SETTINGS.shadowIntensity),
 		showBlur: bool(legacy?.showBlur, DEFAULT_EDITOR_SETTINGS.showBlur),
 		motionBlurAmount: num(legacy?.motionBlurAmount, DEFAULT_EDITOR_SETTINGS.motionBlurAmount),
-		depthOfField: bool(legacy?.depthOfField, DEFAULT_EDITOR_SETTINGS.depthOfField),
 		borderRadius: num(legacy?.borderRadius, DEFAULT_EDITOR_SETTINGS.borderRadius),
 		padding: num(legacy?.padding, DEFAULT_EDITOR_SETTINGS.padding),
 		cropRegion: legacy?.cropRegion ?? DEFAULT_EDITOR_SETTINGS.cropRegion,
@@ -253,13 +230,10 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 }
 export interface EditorSettingsPatch {
 	wallpaper?: string;
-	wallpaperMotion?: WallpaperMotion;
-	frame?: RecordingFrame;
 	aspectRatio?: AspectRatio;
 	shadowIntensity?: number;
 	showBlur?: boolean;
 	motionBlurAmount?: number;
-	depthOfField?: boolean;
 	borderRadius?: number;
 	padding?: number;
 	cropRegion?: CropRegion;
@@ -300,7 +274,6 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 		if (c.smoothing !== undefined) next.cursorSmoothing = c.smoothing;
 		if (c.motionBlur !== undefined) next.cursorMotionBlur = c.motionBlur;
 		if (c.clickBounce !== undefined) next.cursorClickBounce = c.clickBounce;
-		if (c.model3d !== undefined) next.cursorModel3d = c.model3d;
 		if (c.clipToBounds !== undefined) next.cursorClipToBounds = c.clipToBounds;
 		if (c.theme !== undefined) next.cursorTheme = c.theme;
 		if (c.show !== undefined) next.cursorShow = c.show;

@@ -488,17 +488,10 @@ export const zoomRegionSchema = endGteStart(
 			cy: z.number().min(0).max(1),
 		}),
 		focusMode: z.enum(["manual", "auto"]).optional(),
-		/** The zoom's 3D camera (`Rotation3DPreset` in `components/video-editor/types.ts` — same
-		 *  literal list, duplicated here): a fixed angle, or the camera that turns to the cursor
-		 *  (`crates/compositor/src/camera.rs`). Absent means a flat screen. */
-		rotationPreset: z.enum(["iso", "left", "right", "follow-cursor"]).optional(),
+		rotationPreset: z.enum(["iso", "left", "right"]).optional(),
 		customScale: z.number().positive().optional(),
 		source: z.enum(["auto", "manual"]).optional(),
 		hideCursor: z.boolean().optional(),
-		/** Each click gives an impact: a fixed-angle `rotationPreset` presses the tilted plane
-		 *  toward the clicked side, `follow-cursor` recoils the camera. Needs a `rotationPreset`;
-		 *  omitted (never `false`) when off. */
-		clickImpact: z.literal(true).optional(),
 	}),
 	"endMs",
 	"startMs",

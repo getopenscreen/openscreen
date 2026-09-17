@@ -2,7 +2,6 @@ import { normalizeTextAnimation } from "@/lib/annotationTextAnimation";
 import { normalizeBlurColor, normalizeBlurType } from "@/lib/blurEffects";
 import { normalizeCursorThemeId } from "@/lib/cursor/cursorThemes";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
-import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
 import type { ProjectMedia } from "@/lib/recordingSession";
 import { normalizeProjectMedia } from "@/lib/recordingSession";
 import { DEFAULT_WALLPAPER, WALLPAPER_PATHS } from "@/lib/wallpaper";
@@ -33,8 +32,6 @@ import {
 	DEFAULT_WEBCAM_REACTIVE_ZOOM,
 	DEFAULT_ZOOM_DEPTH,
 	DEFAULT_ZOOM_MOTION_BLUR,
-	isRotation3DPreset,
-	isWallpaperMotion,
 	MAX_BLUR_BLOCK_SIZE,
 	MAX_BLUR_INTENSITY,
 	MAX_PLAYBACK_SPEED,
@@ -43,7 +40,6 @@ import {
 	MIN_PLAYBACK_SPEED,
 	type SpeedRegion,
 	type TrimRegion,
-	type WallpaperMotion,
 	type WebcamLayoutPreset,
 	type WebcamMaskShape,
 	type WebcamPosition,
@@ -72,11 +68,9 @@ export const PROJECT_VERSION = 2;
 
 export interface ProjectEditorState {
 	wallpaper: string;
-	wallpaperMotion: WallpaperMotion;
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
-	depthOfField: boolean;
 	borderRadius: number;
 	padding: number;
 	cropRegion: CropRegion;
@@ -259,9 +253,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
-					const validPreset = isRotation3DPreset(region.rotationPreset)
-						? region.rotationPreset
-						: undefined;
+					const validPreset =
+						region.rotationPreset === "iso" ||
+						region.rotationPreset === "left" ||
+						region.rotationPreset === "right"
+							? region.rotationPreset
+							: undefined;
 					return {
 						id: region.id,
 						startMs,
@@ -274,7 +271,6 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						focusMode: region.focusMode === "auto" ? "auto" : "manual",
 						source: region.source === "auto" ? "auto" : "manual",
 						...(validPreset ? { rotationPreset: validPreset } : {}),
-						...(region.clickImpact === true ? { clickImpact: true as const } : {}),
 					};
 				})
 		: [];
@@ -479,9 +475,6 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			typeof editor.wallpaper === "string"
 				? normalizeWallpaperValue(editor.wallpaper)
 				: DEFAULT_EDITOR_LAYOUT_SETTINGS.wallpaper,
-		// Carried here too: the CLI export reads the project through this function, and a
-		// key it drops is a motion the preview shows and the export does not.
-		wallpaperMotion: isWallpaperMotion(editor.wallpaperMotion) ? editor.wallpaperMotion : "none",
 		shadowIntensity:
 			typeof editor.shadowIntensity === "number"
 				? editor.shadowIntensity
@@ -497,10 +490,6 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					? DEFAULT_ZOOM_MOTION_BLUR
 					: DEFAULT_EDITOR_APPEARANCE_SETTINGS.motionBlurAmount
 				: DEFAULT_EDITOR_APPEARANCE_SETTINGS.motionBlurAmount,
-		depthOfField:
-			typeof editor.depthOfField === "boolean"
-				? editor.depthOfField
-				: DEFAULT_PROJECT_APPEARANCE.depthOfField,
 		borderRadius:
 			typeof editor.borderRadius === "number"
 				? editor.borderRadius

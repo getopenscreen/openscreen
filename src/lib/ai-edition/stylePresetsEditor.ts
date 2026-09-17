@@ -15,13 +15,10 @@ export function stylePresetAppearanceFromSettings(
 ): StylePresetAppearance {
 	return {
 		wallpaper: settings.wallpaper,
-		wallpaperMotion: settings.wallpaperMotion,
-		frame: settings.frame,
 		aspectRatio: settings.aspectRatio,
 		shadowIntensity: settings.shadowIntensity,
 		showBlur: settings.showBlur,
 		motionBlurAmount: settings.motionBlurAmount,
-		depthOfField: settings.depthOfField,
 		borderRadius: settings.borderRadius,
 		padding: settings.padding,
 		webcamLayoutPreset: settings.webcamLayoutPreset,
@@ -37,7 +34,6 @@ export function stylePresetAppearanceFromSettings(
 			smoothing: settings.cursor.smoothing,
 			motionBlur: settings.cursor.motionBlur,
 			clickBounce: settings.cursor.clickBounce,
-			model3d: settings.cursor.model3d,
 			clipToBounds: settings.cursor.clipToBounds,
 		},
 		cursorShow: settings.cursorShow,
@@ -61,13 +57,10 @@ export function factoryStylePresetAppearance(): StylePresetAppearance {
 export function stylePresetPatch(appearance: StylePresetAppearance): EditorSettingsPatch {
 	return {
 		wallpaper: appearance.wallpaper,
-		wallpaperMotion: appearance.wallpaperMotion,
-		frame: appearance.frame,
 		aspectRatio: appearance.aspectRatio,
 		shadowIntensity: appearance.shadowIntensity,
 		showBlur: appearance.showBlur,
 		motionBlurAmount: appearance.motionBlurAmount,
-		depthOfField: appearance.depthOfField,
 		borderRadius: appearance.borderRadius,
 		padding: appearance.padding,
 		webcamLayoutPreset: appearance.webcamLayoutPreset,

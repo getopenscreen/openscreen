@@ -1,11 +1,5 @@
 {
 	"background": {
-		"motion": "Animation",
-		"motionNone": "Aucun",
-		"motionDrift": "Dérive",
-		"motionAurora": "Aurore",
-		"motionWaves": "Vagues",
-		"motionGradientOnly": "L'animation ne s'applique qu'aux fonds dégradés. Choisissez un dégradé pour l'animer.",
 		"gradientLabel": "Dégradé {{index}}",
 		"uploadCustom": "Téléverser une image",
 		"unsupportedImage": "Image non prise en charge. Utilisez un fichier JPG ou PNG.",
@@ -114,15 +108,7 @@
 		"format": "Format",
 		"fitClip": "Ajuster",
 		"motionBlur": "Flou de mouvement",
-		"depthOfField": "Profondeur de champ",
-		"depthOfFieldHint": "Zooms 3D",
-		"depthOfFieldNoTilt": "Aucun zoom 3D dans ce projet",
-		"roundness": "Arrondi",
-		"window": "Fenêtre",
-		"windowNone": "Aucune",
-		"windowLight": "Claire",
-		"windowDark": "Sombre",
-		"windowHelp": "Dessine une barre de titre et une bordure de fenêtre autour de l'enregistrement."
+		"roundness": "Arrondi"
 	},
 	"stylePresets": {
 		"button": "Préréglages",
@@ -337,32 +323,14 @@
 			"autoDescription": "La caméra suit la position du curseur enregistré",
 			"title": "Mode focus"
 		},
-		"camera": {
-			"title": "Caméra 3D",
-			"off": "Désactivée",
-			"fixed": "Angle fixe",
-			"moving": "Caméra mobile",
+		"threeD": {
 			"preset": {
-				"iso": "Plongée de biais",
-				"left": "Écran tourné à gauche",
-				"right": "Écran tourné à droite",
-				"followCursor": "Tourne avec le curseur"
+				"left": "Gauche",
+				"right": "Droite",
+				"iso": "Iso"
 			},
-			"description": {
-				"off": "L'écran reste à plat.",
-				"iso": "Garde une seule pose : tourné vers la gauche et vu d'en haut.",
-				"left": "Garde une seule pose : l'écran regarde vers la gauche, son bord droit avance.",
-				"right": "Garde une seule pose : l'écran regarde vers la droite, son bord gauche avance.",
-				"followCursor": "L'écran reste immobile ; la caméra tourne autour, du côté du curseur, et monte ou descend avec lui."
-			},
-			"needsCursor": "Le curseur est masqué : cette caméra n'a rien à suivre et garde son angle de départ."
-		},
-		"clickImpact": {
-			"title": "Impact du clic",
-			"description": "Chaque clic enfonce l'écran incliné : le côté cliqué s'abaisse, puis revient.",
-			"needsRotation": "Choisissez d'abord une caméra 3D : seul un écran incliné peut être enfoncé.",
-			"needsCursor": "Le curseur est masqué : l'écran ne réagit qu'aux clics visibles.",
-			"descriptionCamera": "Chaque clic fait reculer un peu la caméra, puis elle revient."
+			"none": "Aucune",
+			"title": "Rotation 3D"
 		},
 		"level": "Niveau de zoom",
 		"previewHold": "Maintenir pour prévisualiser l'effet de zoom",
@@ -396,9 +364,6 @@
 	"cursor": {
 		"smoothing": "Lissage",
 		"clickBounce": "Rebond au clic",
-		"model3d": "Curseur 3D",
-		"model3dHint": "Style par défaut : toutes les formes du curseur passent en 3D. Les autres styles restent plats.",
-		"model3dNeedsCursor": "Activez « Afficher le curseur » pour utiliser le curseur 3D.",
 		"help": "Rendu du curseur à partir de la télémétrie enregistrée : thème, taille, lissage, flou de mouvement et rebond au clic.",
 		"clipToBoundsDescription": "Garde le curseur à l'intérieur du cadre vidéo. Désactivez pour laisser le curseur dépasser les bords — utile en cas de zoom ou de panoramique.",
 		"size": "Taille",

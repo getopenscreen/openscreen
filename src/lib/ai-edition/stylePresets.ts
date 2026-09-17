@@ -12,7 +12,6 @@
 
 import type {
 	CursorVisualSettings,
-	WallpaperMotion,
 	WebcamBackgroundMode,
 	WebcamLayoutPreset,
 	WebcamMaskShape,
@@ -20,7 +19,6 @@ import type {
 } from "../../components/video-editor/types";
 import { type AspectRatio, isAspectRatio } from "../../utils/aspectRatioUtils";
 import { CURSOR_THEME_IDS, DEFAULT_CURSOR_THEME_ID } from "../cursor/cursorThemes";
-import { isRecordingFrame, type RecordingFrame } from "../projectDefaults";
 
 export const STYLE_PRESET_FILE_EXTENSION = ".openscreenpreset";
 export const STYLE_PRESET_FORMAT = "openscreen-style-preset";
@@ -36,13 +34,10 @@ const CSS_WALLPAPER_MAX_LENGTH = 10_000;
 /** The appearance fields of `EditorSettingsSnapshot`, in the snapshot's own shape. */
 export interface StylePresetAppearance {
 	wallpaper: string;
-	wallpaperMotion: WallpaperMotion;
-	frame: RecordingFrame;
 	aspectRatio: AspectRatio;
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
-	depthOfField: boolean;
 	borderRadius: number;
 	padding: number;
 	webcamLayoutPreset: WebcamLayoutPreset;
@@ -97,12 +92,6 @@ const WEBCAM_BACKGROUND_MODES = [
 	"blur",
 	"custom",
 ] as const satisfies readonly WebcamBackgroundMode[];
-const WALLPAPER_MOTIONS = [
-	"none",
-	"drift",
-	"aurora",
-	"waves",
-] as const satisfies readonly WallpaperMotion[];
 
 // Bounds are the editor sliders' (RightPanes.tsx), in stored units. `getEditorSettings`
 // only clamps two of these, so a preset is the stricter gate: a value no slider can
@@ -155,20 +144,6 @@ function readEnum<T extends string>(source: Fields, key: string, allowed: readon
 		throw new TypeError(`Style preset ${key} must be one of: ${allowed.join(", ")}.`);
 	}
 	return value as T;
-}
-
-/**
- * The one field a version-1 preset may omit: every preset written before the frame existed
- * lacks it, and "no frame" is exactly what those presets looked like. A value that IS there
- * must be one this build knows.
- */
-function readFrame(source: Fields): RecordingFrame {
-	const value = source.frame;
-	if (value === undefined) return "none";
-	if (!isRecordingFrame(value)) {
-		throw new TypeError("Style preset frame must be one of: none, window-light, window-dark.");
-	}
-	return value;
 }
 
 const HEX_COLOR_RE = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -228,12 +203,8 @@ export function parseStylePresetWallpaper(value: unknown, key = "wallpaper"): st
  * guessing a factory value for it would apply something the author never chose. The one
  * lenient field is `cursorTheme`: themes come and go between builds, so an id this build
  * does not ship falls back to the default cursor instead of rejecting a preset that is
- * otherwise sound (the editor does the same when it renders one). The others postdate the
- * first version-1 files, so a preset saved before one of them existed carries no choice about
- * it and gets the value that means "unchanged": `cursor.model3d` may be absent (the flat
- * cursor), `wallpaperMotion` too (a still wallpaper, which is exactly what "none" means),
- * `frame` as well (no frame, see `readFrame`), and `depthOfField` keeps the factory
- * value (on). A present but ill-typed value is still refused. Unknown extra keys are dropped.
+ * otherwise sound (the editor does the same when it renders one). Unknown extra keys are
+ * dropped.
  */
 export function parseStylePresetAppearance(value: unknown): StylePresetAppearance {
 	if (!isRecord(value)) {
@@ -251,16 +222,10 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 	}
 	return {
 		wallpaper: parseStylePresetWallpaper(value.wallpaper),
-		wallpaperMotion:
-			value.wallpaperMotion === undefined
-				? "none"
-				: readEnum(value, "wallpaperMotion", WALLPAPER_MOTIONS),
-		frame: readFrame(value),
 		aspectRatio: value.aspectRatio,
 		shadowIntensity: readNumber(value, "shadowIntensity", NUMBER_RANGES.shadowIntensity),
 		showBlur: readBoolean(value, "showBlur"),
 		motionBlurAmount: readNumber(value, "motionBlurAmount", NUMBER_RANGES.motionBlurAmount),
-		depthOfField: value.depthOfField === undefined ? true : readBoolean(value, "depthOfField"),
 		borderRadius: readNumber(value, "borderRadius", NUMBER_RANGES.borderRadius),
 		padding: readNumber(value, "padding", NUMBER_RANGES.padding),
 		webcamLayoutPreset: readEnum(value, "webcamLayoutPreset", WEBCAM_LAYOUT_PRESETS),
@@ -280,8 +245,6 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 			smoothing: readNumber(cursor, "smoothing", CURSOR_NUMBER_RANGES.smoothing, "cursor."),
 			motionBlur: readNumber(cursor, "motionBlur", CURSOR_NUMBER_RANGES.motionBlur, "cursor."),
 			clickBounce: readNumber(cursor, "clickBounce", CURSOR_NUMBER_RANGES.clickBounce, "cursor."),
-			// Presets written before the 3D cursor existed meant the flat one.
-			model3d: cursor.model3d === undefined ? false : readBoolean(cursor, "model3d", "cursor."),
 			clipToBounds: readBoolean(cursor, "clipToBounds", "cursor."),
 		},
 		cursorShow: readBoolean(value, "cursorShow"),

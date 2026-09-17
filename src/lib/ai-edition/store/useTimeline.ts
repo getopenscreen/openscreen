@@ -6,11 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
-import type {
-	AnnotationRegion,
-	AnnotationType,
-	Rotation3DPreset,
-} from "@/components/video-editor/types";
+import type { AnnotationRegion, AnnotationType } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
 	collapseTracksToPills,
@@ -728,7 +724,7 @@ export function useTimeline() {
 	// `undefined` clears the preset back to a flat frame; `migrate.ts` already drops the field
 	// when it is falsy, so absent and "no rotation" are the same state.
 	const updateZoomRotation = useCallback(
-		async (id: string, rotationPreset: Rotation3DPreset | undefined) => {
+		async (id: string, rotationPreset: "iso" | "left" | "right" | undefined) => {
 			if (!document) return;
 			const next: AxcutDocument = {
 				...document,
@@ -770,22 +766,6 @@ export function useTimeline() {
 				...document,
 				zoomRanges: patchPillById(document.zoomRanges, id, {
 					hideCursor: hideCursor ? true : undefined,
-				}) as AxcutDocument["zoomRanges"],
-			};
-			await saveDocument(next, { history: true });
-		},
-		[document, saveDocument],
-	);
-
-	// Per-region, like the preset it animates. `undefined` rather than `false` so the document
-	// keeps omitting the key when the option is off.
-	const updateZoomClickImpact = useCallback(
-		async (id: string, clickImpact: boolean) => {
-			if (!document) return;
-			const next: AxcutDocument = {
-				...document,
-				zoomRanges: patchPillById(document.zoomRanges, id, {
-					clickImpact: clickImpact ? true : undefined,
 				}) as AxcutDocument["zoomRanges"],
 			};
 			await saveDocument(next, { history: true });
@@ -1542,7 +1522,6 @@ export function useTimeline() {
 		updateZoomRotation,
 		updateZoomFocusMode,
 		updateZoomHideCursor,
-		updateZoomClickImpact,
 		updateAnnotationSpan,
 		updateAnnotationLive,
 		commitAnnotationChange,

@@ -85,17 +85,6 @@ describe("getEditorSettings", () => {
 		const snap = getEditorSettings(doc);
 		expect(snap.showBlur).toBe(false);
 	});
-
-	it("keeps depth of field on unless the project stored a boolean off", () => {
-		expect(getEditorSettings(baseDoc).depthOfField).toBe(true);
-		const junk: AxcutDocument = {
-			...baseDoc,
-			legacyEditor: { depthOfField: "no" as unknown as boolean },
-		};
-		expect(getEditorSettings(junk).depthOfField).toBe(true);
-		const off = patchEditorSettings(baseDoc, { depthOfField: false });
-		expect(getEditorSettings(off).depthOfField).toBe(false);
-	});
 });
 
 describe("patchEditorSettings", () => {
@@ -130,14 +119,6 @@ describe("patchEditorSettings", () => {
 		const snap = getEditorSettings(next);
 		expect(snap.cursor.size).toBe(4);
 		expect(snap.cursor.smoothing).toBe(0.9);
-	});
-
-	it("switches the 3D cursor without clobbering its siblings, off by default", () => {
-		expect(getEditorSettings(baseDoc).cursor.model3d).toBe(false);
-		const seed = patchEditorSettings(baseDoc, { cursor: { size: 4 } });
-		const on = getEditorSettings(patchEditorSettings(seed, { cursor: { model3d: true } }));
-		expect(on.cursor.model3d).toBe(true);
-		expect(on.cursor.size).toBe(4);
 	});
 
 	it("toggles cursorAutoHide on and off via patch", () => {
@@ -296,22 +277,6 @@ describe("patchEditorSettings", () => {
 			legacyEditor: { webcamBackgroundMode: "hologram" },
 		} as typeof baseDoc;
 		expect(getEditorSettings(doc).webcamBackgroundMode).toBe("none");
-	});
-
-	it("round-trips the wallpaper motion and rejects an unknown one", () => {
-		expect(getEditorSettings(baseDoc).wallpaperMotion).toBe("none");
-		const patched = patchEditorSettings(baseDoc, { wallpaperMotion: "aurora" });
-		expect(getEditorSettings(patched).wallpaperMotion).toBe("aurora");
-		const doc = { ...baseDoc, legacyEditor: { wallpaperMotion: "plasma" } } as typeof baseDoc;
-		expect(getEditorSettings(doc).wallpaperMotion).toBe("none");
-	});
-
-	it("round-trips the recording frame and reads an unknown one as no frame", () => {
-		expect(getEditorSettings(baseDoc).frame).toBe("none");
-		const patched = patchEditorSettings(baseDoc, { frame: "window-dark" });
-		expect(getEditorSettings(patched).frame).toBe("window-dark");
-		const unknown = { ...baseDoc, legacyEditor: { frame: "browser" } } as typeof baseDoc;
-		expect(getEditorSettings(unknown).frame).toBe("none");
 	});
 
 	it("clamps a stored webcam blur intensity into 0..1", () => {

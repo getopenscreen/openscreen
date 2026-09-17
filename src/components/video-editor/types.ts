@@ -36,16 +36,6 @@ export function isWebcamBackgroundMode(value: unknown): value is WebcamBackgroun
 
 export const DEFAULT_WEBCAM_BACKGROUND_MODE: WebcamBackgroundMode = "none";
 
-/** Slow motion of a gradient wallpaper, rendered by the native compositor from programme
- *  time. Only a `linear-gradient(...)` wallpaper moves; any other keeps its value and ignores it. */
-export const WALLPAPER_MOTIONS = ["none", "drift", "aurora", "waves"] as const;
-
-export type WallpaperMotion = (typeof WALLPAPER_MOTIONS)[number];
-
-export function isWallpaperMotion(value: unknown): value is WallpaperMotion {
-	return (WALLPAPER_MOTIONS as readonly unknown[]).includes(value);
-}
-
 export const DEFAULT_WEBCAM_BLUR_INTENSITY = 0.5;
 
 /** When true, the picture-in-picture webcam scales inversely with zoom (shrinks as you zoom in). */
@@ -75,30 +65,7 @@ export const DEFAULT_ROTATION_3D: Rotation3D = {
 	rotationZ: 0,
 };
 
-/** A fixed 3D angle: the screen holds one pose for the whole zoom. */
-export const FIXED_ROTATION_3D_PRESETS = ["iso", "left", "right"] as const;
-export type FixedRotation3DPreset = (typeof FIXED_ROTATION_3D_PRESETS)[number];
-
-/**
- * A moving 3D camera. `follow-cursor` keeps the screen still and moves a real camera around it:
- * the camera orbits to the side the cursor is on and rises or dips with it, always level. The
- * native compositor renders it (`crates/compositor/src/camera.rs`). It needs the cursor track,
- * which the export only loads while the cursor is shown.
- */
-export const MOVING_ROTATION_3D_PRESETS = ["follow-cursor"] as const;
-export type MovingRotation3DPreset = (typeof MOVING_ROTATION_3D_PRESETS)[number];
-
-/** The zoom's "3D camera": absent means a flat screen. */
-export type Rotation3DPreset = FixedRotation3DPreset | MovingRotation3DPreset;
-
-export const ROTATION_3D_PRESET_ORDER: Rotation3DPreset[] = [
-	...FIXED_ROTATION_3D_PRESETS,
-	...MOVING_ROTATION_3D_PRESETS,
-];
-
-export function isRotation3DPreset(value: unknown): value is Rotation3DPreset {
-	return typeof value === "string" && (ROTATION_3D_PRESET_ORDER as string[]).includes(value);
-}
+export type Rotation3DPreset = "iso" | "left" | "right";
 
 // Every preset carries all three components on purpose. With a single-axis rotation the projected
 // quad keeps an edge exactly parallel to the frame — both vertical edges for a pure Y rotation,
@@ -106,18 +73,13 @@ export function isRotation3DPreset(value: unknown): value is Rotation3DPreset {
 // indistinguishable from `overflow: hidden`. That is what got reported three times as "the
 // recording is truncated" while the plane was in fact drawn whole. `regions.rs` holds the same
 // numbers and a test asserting no edge comes within 2° of an axis.
-//
-// A moving camera has no single pose. Its entry is its resting angle (`ELEVATION_DEG` in
-// `camera.rs`: cursor centred, the camera 4° above the screen, facing it), what a renderer without
-// the cursor track draws. A camera above tips the top edge toward the viewer, which is a negative X
-// rotation of the screen. It is a camera angle, not a screen rotation, so this is the nearest
-// equivalent rather than the same picture.
 export const ROTATION_3D_PRESETS: Record<Rotation3DPreset, Rotation3D> = {
 	iso: { rotationX: -12, rotationY: -18, rotationZ: -2 },
 	left: { rotationX: -8, rotationY: -16, rotationZ: -1 },
 	right: { rotationX: -8, rotationY: 16, rotationZ: 1 },
-	"follow-cursor": { rotationX: -4, rotationY: 0, rotationZ: 0 },
 };
+
+export const ROTATION_3D_PRESET_ORDER: Rotation3DPreset[] = ["iso", "left", "right"];
 
 /** Perspective distance in CSS px is this factor times min(viewport w, h). Same
  * factor in preview and export so the look matches at any canvas resolution.
@@ -149,8 +111,6 @@ export interface ZoomRegion {
 	source?: ZoomRegionSource;
 	/** When true, cursor is hidden during this zoom region. */
 	hideCursor?: boolean;
-	/** When true, each click presses the tilted plane, or recoils the `follow-cursor` camera (needs a `rotationPreset`). Omitted when off. */
-	clickImpact?: true;
 }
 
 export function getRotation3D(region: Pick<ZoomRegion, "rotationPreset">): Rotation3D {
@@ -269,12 +229,6 @@ export interface CursorVisualSettings {
 	smoothing: number;
 	motionBlur: number;
 	clickBounce: number;
-	/**
-	 * Draws every default-theme cursor shape as a modelled 3D object (compositor mode 15, its
-	 * sprite extruded): it hovers over the screen, casts a real shadow on it and touches down on
-	 * each click; pointing shapes also lean towards their motion. Other themes stay flat sprites.
-	 */
-	model3d: boolean;
 	clipToBounds: boolean;
 	autoHide?: boolean;
 }
@@ -283,8 +237,6 @@ export const DEFAULT_CURSOR_SIZE = 3.0;
 export const DEFAULT_CURSOR_SMOOTHING = 0.67;
 export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
 export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
-// Off: the flat sprite every existing project renders.
-export const DEFAULT_CURSOR_MODEL3D = false;
 // false lets the cursor overflow into the background; true clips it to the canvas bounds.
 export const DEFAULT_CURSOR_CLIP_TO_BOUNDS = false;
 export const DEFAULT_CURSOR_AUTO_HIDE = false;

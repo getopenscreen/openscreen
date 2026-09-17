@@ -34,7 +34,7 @@ use crate::ffi::AVFrame;
 pub use crate::frame_geometry::{
     live_params_from_scene, webcam_shape_code, FIXTURE_FRAMES, LayerCB, LiveParams, OUT_H, OUT_W,
 };
-use crate::frame_geometry::{parse_hex, FrameGeometryInput, ShadowCaster,
+use crate::frame_geometry::{parse_hex, FrameGeometryInput, SCREEN_SHADOW_OFFSET_FRAC,
     SCREEN_SHADOW_SPREAD_FRAC, WEBCAM_SHADOW_OFFSET_FRAC, WEBCAM_SHADOW_OPACITY,
     WEBCAM_SHADOW_SPREAD_FRAC};
 use crate::scene::{Scene, SceneBackground};
@@ -262,8 +262,6 @@ pub struct Compositor {
     cursor: RefCell<Option<crate::cursor::CursorTrack>>,
     cursor_time: RefCell<Option<f32>>,
     timeline_time: RefCell<Option<f32>>,
-    /// Temps programme (secondes de sortie) — cf. `FrameGeometryInput::programme_time`.
-    programme_time: RefCell<Option<f32>>,
     live_params: RefCell<LiveParams>,
     metal_texture_cache: CVMetalTextureCache,
     /// Dernier command buffer soumis, gardé pour pouvoir l'attendre AU MOMENT où le CPU lit
@@ -282,11 +280,6 @@ pub struct Compositor {
     /// Valeur de `img_tick` au début de la frame en cours. Tout ce qui a été touché depuis
     /// appartient au jeu actif et ne peut pas être évincé — voir `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
-    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
-    /// Pas d'éviction : seuls les seize sprites du thème par défaut y passent (~2,6 Mo en tout).
-    sdf_cache: RefCell<
-        std::collections::HashMap<String, (metal::Texture, crate::frame_geometry::SpriteShape)>,
-    >,
 
     // --- Engine : render targets ---
     /// Render target principal RGBA8. Cible de `compose_frame`. `Private` : c'est une
@@ -332,10 +325,6 @@ pub struct Compositor {
     /// échantillonner la cible sur laquelle on dessine, et le mode 10 lit un niveau de mip
     /// pour flouter à coût constant.
     ann_copy: metal::Texture,
-    /// Pyramide de profondeur de champ (mode 8) : la vidéo en RGBA8 à demi-résolution de la
-    /// texture DÉCODEUR, mips compris. Allouée au premier écran incliné, recréée quand la
-    /// texture décodeur change de taille. Cf. `compositor_windows::DofPyramid`.
-    dof_pyramid: RefCell<Option<metal::Texture>>,
     /// Images d'annotation, indexées par ID d'annotation (pas par data-URL : celle-ci pèse
     /// souvent des mégaoctets et la hacher à chaque frame coûterait plus que le décodage).
     /// La longueur sert de garde-fou quand l'utilisateur change l'image.
@@ -622,14 +611,12 @@ impl Compositor {
             cursor: RefCell::new(None),
             cursor_time: RefCell::new(None),
             timeline_time: RefCell::new(None),
-            programme_time: RefCell::new(None),
             live_params: RefCell::new(LiveParams::default()),
             metal_texture_cache: cache,
             last_cmd: RefCell::new(None),
             img_cache: RefCell::new(std::collections::HashMap::new()),
             img_tick: std::cell::Cell::new(0),
             img_frame_start: std::cell::Cell::new(0),
-            sdf_cache: RefCell::new(std::collections::HashMap::new()),
             rt,
             rt_read,
             nv12_y,
@@ -649,7 +636,6 @@ impl Compositor {
             pipeline_kdown,
             pipeline_kup,
             ann_copy,
-            dof_pyramid: RefCell::new(None),
             ann_img_cache: RefCell::new(std::collections::HashMap::new()),
             text_cache: RefCell::new(std::collections::HashMap::new()),
             text_raster: crate::text::TextRasterizer::new().ok(),
@@ -698,17 +684,6 @@ impl Compositor {
 
     pub fn set_timeline_time(&self, t: Option<f32>) {
         *self.timeline_time.borrow_mut() = t;
-    }
-
-    pub fn set_programme_time(&self, t: Option<f32>) {
-        *self.programme_time.borrow_mut() = t;
-    }
-
-    /// Dernier temps programme reçu : pour que les tests vérifient ce qui atteint vraiment
-    /// `FrameGeometryInput`, pas seulement ce que l'appelant croit envoyer.
-    #[doc(hidden)]
-    pub fn programme_time(&self) -> Option<f32> {
-        *self.programme_time.borrow()
     }
 
     pub fn clear_cursor(&self) {
@@ -895,40 +870,6 @@ impl Compositor {
         Ok((tex, w, h))
     }
 
-    /// Champ de distance du sprite `path` (texture(4) du mode 15) et sa forme, calculés au
-    /// premier appel. Parité `compositor_windows::cursor_sdf`. R16Float : filtrable sur tous
-    /// les GPU Apple, contrairement au R32Float.
-    fn cursor_sdf(
-        &self,
-        path: &str,
-    ) -> Result<(metal::Texture, crate::frame_geometry::SpriteShape)> {
-        if let Some(hit) = self.sdf_cache.borrow().get(path) {
-            return Ok(hit.clone());
-        }
-        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
-        let texels = sdf.f16_bytes();
-        let tex = make_texture(
-            &self.gpu.device,
-            metal::MTLPixelFormat::R16Float,
-            sdf.width,
-            sdf.height,
-            metal::MTLStorageMode::Shared,
-            metal::MTLTextureUsage::ShaderRead,
-        );
-        tex.replace_region(
-            metal::MTLRegion {
-                origin: metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                size: metal::MTLSize { width: sdf.width as u64, height: sdf.height as u64, depth: 1 },
-            },
-            0,
-            texels.as_ptr() as *const std::ffi::c_void,
-            (sdf.width * 2) as u64,
-        );
-        let entry = (tex, sdf.shape);
-        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
-        Ok(entry)
-    }
-
     /// Ouvre une frame du point de vue de `img_cache` : tout ce qui sera touché après cet appel
     /// est le jeu actif, et devient inévinçable jusqu'à la frame suivante.
     fn begin_image_frame(&self) {
@@ -1061,8 +1002,7 @@ impl Compositor {
             Some(SceneBackground::Color { color }) => {
                 self.draw_solid(enc, &solid(parse_hex(color).unwrap_or(BLACK)));
             }
-            // Le mouvement ne vaut que pour le fond d'écran : la bulle garde son dégradé immobile.
-            Some(SceneBackground::Gradient { angle_deg, stops, .. }) => {
+            Some(SceneBackground::Gradient { angle_deg, stops }) => {
                 let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(BLACK);
                 let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
                 // angle CSS → direction unitaire, même convention que le fond d'écran.
@@ -1143,66 +1083,6 @@ impl Compositor {
     }
 
 
-    /// Remplit la pyramide de profondeur de champ depuis la frame écran et la rend. Port de
-    /// `compositor_windows::fill_dof_pyramid` : UN draw du mode 0 en UV plein vers une cible
-    /// demi-résolution vidée d'abord (`color.a = 1`, un seul tap), puis `generate_mipmaps`,
-    /// l'appel qui sert déjà `ann_copy`. Le viewport découle de la taille de l'attachement.
-    unsafe fn fill_dof_pyramid(
-        &self,
-        cmd: &metal::CommandBufferRef,
-        y: &metal::Texture,
-        uv: &metal::Texture,
-        tex_w: u32,
-        tex_h: u32,
-    ) -> Result<metal::Texture> {
-        let (w, h) = (tex_w.div_ceil(2).max(1), tex_h.div_ceil(2).max(1));
-        let stale = self
-            .dof_pyramid
-            .borrow()
-            .as_ref()
-            .is_none_or(|p| (p.width(), p.height()) != (w as u64, h as u64));
-        if stale {
-            let d = metal::TextureDescriptor::new();
-            d.set_texture_type(metal::MTLTextureType::D2);
-            d.set_pixel_format(metal::MTLPixelFormat::RGBA8Unorm);
-            d.set_width(w as u64);
-            d.set_height(h as u64);
-            d.set_storage_mode(metal::MTLStorageMode::Private);
-            d.set_usage(metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead);
-            d.set_mipmap_level_count(crate::frame_geometry::dof_pyramid_levels(w, h) as u64);
-            *self.dof_pyramid.borrow_mut() = Some(self.gpu.device.new_texture(&d));
-        }
-        let pyr = self.dof_pyramid.borrow().clone().expect("pyramide allouée ci-dessus");
-        let enc = self.begin_pass(
-            cmd,
-            &pyr,
-            Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 0.0)),
-            &self.pipeline_main,
-        )?;
-        let full = [0.0, 0.0, 1.0, 1.0];
-        self.draw_video(
-            enc,
-            &LayerCB {
-                dst: full,
-                src: full,
-                quad_px: [w as f32, h as f32],
-                mode: 0.0,
-                color: [1.0, 1.0, 1.0, 1.0],
-                src_prev: full,
-                dst_prev: full,
-                mb: [1.0, 0.0, 1.0, 0.0],
-                ..Default::default()
-            },
-            y,
-            uv,
-        );
-        enc.end_encoding();
-        let blit = cmd.new_blit_command_encoder();
-        blit.generate_mipmaps(&pyr);
-        blit.end_encoding();
-        Ok(pyr)
-    }
-
     /// Ombre d'un écran incliné en 3D : la pénombre suit le QUADRILATÈRE projeté (mode 12),
     /// pas son rect englobant. Port de `compositor_windows::draw_quad_shadow`.
     #[allow(clippy::too_many_arguments)]
@@ -1250,9 +1130,8 @@ impl Compositor {
         );
     }
 
-    /// Écran incliné (mode 8) : le calque partagé (`frame_geometry::tilted_screen_cb`), avec la
-    /// pyramide de profondeur de champ en texture(2).
-    #[allow(clippy::too_many_arguments)]
+    /// Écran incliné (mode 8) : warp bilinéaire inverse dans la bbox du quad projeté.
+    /// Pas de motion blur sur ce chemin — le tilt est bref, la simplification ne se voit pas.
     unsafe fn draw_tilted_screen(
         &self,
         enc: &metal::RenderCommandEncoderRef,
@@ -1260,31 +1139,48 @@ impl Compositor {
         s_px: [f32; 2],
         center_px: [f32; 2],
         cut: [f32; 4],
-        focus_plane: [f32; 2],
         radius: f32,
-        // 1 : coins hauts carrés, l'écran est sous la barre d'un cadre (`dst_prev.z`).
-        square_top: f32,
         y: &metal::Texture,
         uv: &metal::Texture,
-        dof_pyramid: Option<&metal::Texture>,
     ) {
-        let render_px = [self.render_w as f32, self.render_h as f32];
-        // texture(2) EXPLICITE : `draw_video` ne lie que 0/1, et le slot 2 garde sinon ce que
-        // le draw précédent y a laissé. `None` quand l'effet est coupé : `k = 0`, rien n'y est lu.
-        enc.set_fragment_texture(2, dof_pyramid.map(|t| &**t));
-        // La pyramide liée décide seule si la profondeur de champ tourne.
-        let cb = crate::frame_geometry::tilted_screen_cb(
-            quad,
-            s_px,
-            center_px,
-            cut,
-            focus_plane,
-            radius,
-            square_top,
-            dof_pyramid.is_some(),
-            render_px,
+        let (rw, rh) = (self.render_w as f32, self.render_h as f32);
+        let corners = quad.corners;
+        // Taille du plan dans son propre repère, avant projection : c'est là que vit le rayon,
+        // pour qu'il reste constant le long du bord au lieu de s'étirer avec la perspective.
+        let plane_px = [s_px[0] * quad.scale, s_px[1] * quad.scale];
+        let (min_x, max_x) =
+            corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| (mn.min(x), mx.max(x)));
+        let (min_y, max_y) =
+            corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| (mn.min(y), mx.max(y)));
+        let bbox_w = (max_x - min_x).max(1.0);
+        let bbox_h = (max_y - min_y).max(1.0);
+        // coins en px LOCAUX à la bbox, pour matcher `i.local` du shader.
+        let local = |(x, y): (f32, f32)| -> [f32; 2] { [x - min_x, y - min_y] };
+        let [tl0, tl1] = local(corners[0]);
+        let [tr0, tr1] = local(corners[1]);
+        let [br0, br1] = local(corners[2]);
+        let [bl0, bl1] = local(corners[3]);
+        self.draw_video(
+            enc,
+            &LayerCB {
+                dst: [
+                    (center_px[0] + min_x) / rw,
+                    (center_px[1] + min_y) / rh,
+                    bbox_w / rw,
+                    bbox_h / rh,
+                ],
+                src: cut,
+                quad_px: [bbox_w, bbox_h],
+                radius_px: radius * quad.scale,
+                mode: 8.0,
+                fx: [tl0, tl1, tr0, tr1],
+                src_prev: [br0, br1, bl0, bl1],
+                dst_prev: [plane_px[0], plane_px[1], 0.0, 0.0],
+                ..Default::default()
+            },
+            y,
+            uv,
         );
-        self.draw_video(enc, &cb, y, uv);
     }
 
 
@@ -1931,13 +1827,8 @@ impl Compositor {
         Ok(enc)
     }
 
-    /// Sprite de curseur (mode 7, ou 13 posé sur le plan). Rend `Err` quand l'art n'est pas
-    /// chargeable, pour que l'appelant retombe sur le curseur dessiné. La géométrie vient de
-    /// `frame_geometry::cursor_sprite_cb`, partagée avec Windows et Linux.
-    ///
-    /// Avec `model`, le même sprite extrudé (mode 15, `cursor_model_cb`) : le sprite en
-    /// texture(2), son champ de distance en texture(4).
-    #[allow(clippy::too_many_arguments)]
+    /// Sprite de curseur (mode 7). Rend `Err` quand l'art n'est pas chargeable, pour que
+    /// l'appelant retombe sur le curseur dessiné.
     unsafe fn draw_cursor_sprite(
         &self,
         enc: &metal::RenderCommandEncoderRef,
@@ -1946,40 +1837,61 @@ impl Compositor {
         a: f32,
         sprite: &crate::scene::SceneCursorSprite,
         clip: [f32; 4],
-        model: Option<crate::frame_geometry::CursorPose>,
     ) -> Result<()> {
         let (tex, iw, ih) = self.cached_image(sprite.path.as_str())?;
-        // Sans champ de distance, repli sur le sprite plat plutôt qu'aucun curseur. Parité Linux.
-        if let Some(pose) = model {
-            match self.cursor_sdf(sprite.path.as_str()) {
-                Ok((sdf, shape)) => {
-                    let shape = crate::frame_geometry::SpriteShape {
-                        hotspot: [sprite.hotspot_x, sprite.hotspot_y],
-                        ..shape
-                    };
-                    if let Some(cb) = crate::frame_geometry::cursor_model_cb(
-                        placement, size_px, pose, shape, a, clip,
-                    ) {
-                        enc.set_fragment_texture(2, Some(&tex));
-                        enc.set_fragment_texture(4, Some(&sdf));
-                        self.draw_solid(enc, &cb);
-                    }
-                    return Ok(());
-                }
-                Err(e) => eprintln!("[curseur] champ de \"{}\" : {e:#}", sprite.path),
-            }
-        }
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
         let ar = iw as f32 / ih.max(1) as f32;
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
-        let cb = crate::frame_geometry::cursor_sprite_cb(
-            placement,
-            [pw, ph],
-            [sprite.hotspot_x, sprite.hotspot_y],
-            a,
-            clip,
-            [rw, rh],
-        );
+        let hotspot = [sprite.hotspot_x, sprite.hotspot_y];
+        let cb = match placement {
+            crate::frame_geometry::CursorPlacement::Upright { center } => LayerCB {
+                dst: crate::frame_geometry::cursor_sprite_dst(center, pw / rw, ph / rh, hotspot),
+                src: [0.0, 0.0, 1.0, 1.0],
+                mode: 7.0,
+                color: [1.0, 1.0, 1.0, a],
+                fx: clip,
+                ..Default::default()
+            },
+            crate::frame_geometry::CursorPlacement::Tilted {
+                plane_pt, quad, center_px, screen_px, ..
+            } => {
+                // Le sprite est posé DANS le plan : sa taille devient une fraction du plan et
+                // ses quatre coins traversent la même projection que la vidéo. La réduction
+                // due au tilt vient donc de la projection — rien à multiplier à la main.
+                let (wf, hf) = (pw / screen_px[0], ph / screen_px[1]);
+                let x0 = plane_pt[0] - hotspot[0] * wf;
+                let y0 = plane_pt[1] - hotspot[1] * hf;
+                let corners = [(x0, y0), (x0 + wf, y0), (x0 + wf, y0 + hf), (x0, y0 + hf)]
+                    .map(|(fx, fy)| {
+                        let (px, py) = quad.point_px(fx, fy);
+                        (center_px[0] + px, center_px[1] + py)
+                    });
+                let (min_x, max_x) = corners
+                    .iter()
+                    .fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| (mn.min(x), mx.max(x)));
+                let (min_y, max_y) = corners
+                    .iter()
+                    .fold((f32::MAX, f32::MIN), |(mn, mx), &(_, y)| (mn.min(y), mx.max(y)));
+                // Le quad projeté d'un sprite peut être très fin de biais : une bbox d'un pixel
+                // de large ferait diverger le warp inverse, donc plancher à 1 px.
+                let (bw, bh) = ((max_x - min_x).max(1.0), (max_y - min_y).max(1.0));
+                let local = |(x, y): (f32, f32)| [x - min_x, y - min_y];
+                let [tl0, tl1] = local(corners[0]);
+                let [tr0, tr1] = local(corners[1]);
+                let [br0, br1] = local(corners[2]);
+                let [bl0, bl1] = local(corners[3]);
+                LayerCB {
+                    dst: [min_x / rw, min_y / rh, bw / rw, bh / rh],
+                    quad_px: [bw, bh],
+                    mode: 13.0,
+                    color: [1.0, 1.0, 1.0, a],
+                    fx: [tl0, tl1, tr0, tr1],
+                    src_prev: [br0, br1, bl0, bl1],
+                    dst_prev: clip,
+                    ..Default::default()
+                }
+            }
+        };
         enc.set_fragment_texture(2, Some(&tex));
         self.draw_solid(enc, &cb);
         Ok(())
@@ -1991,10 +1903,6 @@ impl Compositor {
     /// l'app résout toujours un jeu de sprites, et l'art intégré couvre les états qu'un
     /// thème ne fournit pas. S'il n'y a vraiment aucun sprite, ne rien dessiner est plus
     /// honnête qu'un curseur qui ne ressemble à aucun réglage.
-    ///
-    /// Avec `model`, ce sprite extrudé (mode 15) : même résolution que `plan_cursor`, qui en a
-    /// tiré la pose. Parité `compositor_windows.rs`.
-    #[allow(clippy::too_many_arguments)]
     unsafe fn draw_cur_themed(
         &self,
         enc: &metal::RenderCommandEncoderRef,
@@ -2004,12 +1912,10 @@ impl Compositor {
         size_px: f32,
         a: f32,
         clip: [f32; 4],
-        model: Option<crate::frame_geometry::CursorPose>,
     ) {
         let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
         if let Some(sprite) = sprite {
-            if let Err(e) = self.draw_cursor_sprite(enc, placement, size_px, a, sprite, clip, model)
-            {
+            if let Err(e) = self.draw_cursor_sprite(enc, placement, size_px, a, sprite, clip) {
                 eprintln!("[compositor] sprite curseur \"{}\" : {e:#}", sprite.path);
             }
         }
@@ -2082,17 +1988,9 @@ impl Compositor {
             scene: scene_ref.as_ref(),
             cursor: cursor_ref.as_ref(),
             timeline_t_override: *self.timeline_time.borrow(),
-            programme_time: *self.programme_time.borrow(),
         });
 
         let cmd_buf = self.gpu.context.new_command_buffer();
-        // Profondeur de champ : pyramide remplie seulement sur une frame inclinée qui la lit,
-        // dans ses propres passes, avant celles de la composition.
-        let dof_pyramid = if g.depth_of_field_on(self.gpu.backend == crate::d3d::Backend::Cpu) {
-            Some(self.fill_dof_pyramid(cmd_buf, &sy, &suv, stw, sth)?)
-        } else {
-            None
-        };
         let enc = self.begin_pass(
             cmd_buf,
             &self.rt,
@@ -2114,12 +2012,10 @@ impl Compositor {
                     &LayerCB { dst: [0.0, 0.0, 1.0, 1.0], mode: 1.0, color: c, ..Default::default() },
                 );
             }
-            Some(SceneBackground::Gradient { angle_deg, stops, motion }) => {
+            Some(SceneBackground::Gradient { angle_deg, stops }) => {
                 let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(lp.bg_color);
                 let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
                 let a = angle_deg.to_radians();
-                let (anim, mb) =
-                    crate::frame_geometry::gradient_motion_slots(motion, g.programme_t, rw / rh);
                 self.draw_solid(
                     enc,
                     &LayerCB {
@@ -2127,8 +2023,7 @@ impl Compositor {
                         src: [c1[0], c1[1], c1[2], c1[3]],
                         mode: 5.0,
                         color: c0,
-                        fx: [a.sin(), -a.cos(), anim[0], anim[1]],
-                        mb,
+                        fx: [a.sin(), -a.cos(), 0.0, 0.0],
                         ..Default::default()
                     },
                 );
@@ -2177,33 +2072,32 @@ impl Compositor {
         let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
         // Géométrie du tilt calculée UNE fois : l'ombre et l'écran doivent porter exactement
         // le même quadrilatère, sinon l'ombre se décolle dès que l'un des deux change.
-        let tilt = g.screen_tilt(s_px);
+        let tilt = (!crate::regions::is_identity_rotation(g.zoom_rotation))
+            .then(|| crate::regions::rotated_quad_corners_px(s_px[0], s_px[1], g.zoom_rotation));
         let quad_center_px = [
             (g.s_dst[0] + g.s_dst[2] * 0.5) * rw,
             (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
         ];
         if cfg.shadow {
             let spread = SCREEN_SHADOW_SPREAD_FRAC * g.frame_min_px;
-            let offset = g.screen_shadow_offset();
+            let offset = [0.0, SCREEN_SHADOW_OFFSET_FRAC * g.frame_min_px];
             let opacity = 0.45 * lp.shadow_scale;
             // L'ombre suit la silhouette réellement affichée : rect arrondi quand l'écran est
             // droit, quadrilatère projeté quand il est penché. Un rect droit derrière un écran
-            // incliné se lit comme une seconde surface, pas comme son ombre. Avec un cadre de
-            // fenêtre, c'est le CADRE qui la porte (`shadow_caster`).
-            match g.shadow_caster([rw, rh]) {
-                ShadowCaster::Upright { dst, size_px, radius } => {
-                    self.draw_shadow(enc, dst, size_px, radius, spread, offset, opacity)
-                }
-                ShadowCaster::Tilted { corners, center_px, radius } => self.draw_quad_shadow(
-                    enc, &corners, center_px, radius, spread, offset, opacity,
+            // incliné se lit comme une seconde surface, pas comme son ombre.
+            match tilt.as_ref() {
+                None => self.draw_shadow(enc, g.s_dst, s_px, g.s_radius, spread, offset, opacity),
+                Some(quad) => self.draw_quad_shadow(
+                    enc,
+                    &quad.corners,
+                    quad_center_px,
+                    g.s_radius * quad.scale,
+                    spread,
+                    offset,
+                    opacity,
                 ),
             }
         }
-        // Le cadre (mode 14) passe SOUS l'écran, qui ne laisse voir que la barre et le filet.
-        if let Some(cb) = g.window_frame_cb([rw, rh]) {
-            self.draw_solid(enc, &cb);
-        }
-        let square_top = g.screen_square_top();
         let [su0, sv0, su1, sv1] = g.cut;
         match tilt.as_ref() {
             None => self.draw_video(
@@ -2217,24 +2111,14 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0, sv0, su1, sv1],
                     dst_prev: g.s_dst_prev,
-                    mb: [g.mb_taps, g.mb_amount, 1.0, square_top],
+                    mb: [g.mb_taps, g.mb_amount, 1.0, 0.0],
                     ..Default::default()
                 },
                 &sy,
                 &suv,
             ),
             Some(quad) => self.draw_tilted_screen(
-                enc,
-                quad,
-                s_px,
-                quad_center_px,
-                g.cut,
-                g.focus_plane,
-                g.s_radius,
-                square_top,
-                &sy,
-                &suv,
-                dof_pyramid.as_ref(),
+                enc, quad, s_px, quad_center_px, g.cut, g.s_radius, &sy, &suv,
             ),
         }
 
@@ -2254,34 +2138,16 @@ impl Compositor {
                     track,
                     t: self.cursor_time.borrow().unwrap_or(frame / crate::frame_geometry::FPS),
                 },
-            )
-            .map(|p| p.for_backend(self.gpu.backend == crate::d3d::Backend::Cpu));
+            );
             if let Some(plan) = plan {
                 let sprites = scene_ref
                     .as_ref()
                     .map(|s| s.cursor.cursor_sprites.clone())
                     .unwrap_or_default();
                 let kind = plan.cursor_type.as_deref();
-                // L'impact des clics (mode 16, sans texture), posé sur l'écran SOUS le curseur.
-                if !plan.impacts.is_empty() {
-                    let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
-                    for cb in &plan.impacts {
-                        self.draw_solid(e, cb);
-                    }
-                    e.end_encoding();
-                }
                 if plan.taps <= 1 {
                     let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
-                    self.draw_cur_themed(
-                        e,
-                        &sprites,
-                        kind,
-                        plan.placement,
-                        plan.size_px,
-                        plan.alpha,
-                        plan.clip,
-                        plan.model,
-                    );
+                    self.draw_cur_themed(e, &sprites, kind, plan.placement, plan.size_px, plan.alpha, plan.clip);
                     e.end_encoding();
                 } else {
                     // Flou RÉEL, pas des copies discrètes : les N échantillons s'accumulent dans
@@ -2306,7 +2172,6 @@ impl Compositor {
                             plan.size_px,
                             plan.alpha,
                             plan.clip,
-                            plan.model,
                         );
                     }
                     e.end_encoding();
@@ -3419,543 +3284,6 @@ mod tests {
                 .expect("compose_frame");
             let (_, _, rgba) = comp.readback_direct().expect("readback_direct");
             rgba
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Profondeur de champ du mode 8 (pendant macOS de `tests/tilted_depth_of_field.rs`)
-    //
-    // Le seul golden de l'effet qui tourne en CI : celui de Windows est opt-in (source vidéo),
-    // celui de Linux aussi (`OPENSCREEN_LINUX_COMPOSE`). C'est aussi le premier vrai passage de
-    // `fill_dof_pyramid`, de `generate_mipmaps` et du `texture(2)` du mode 8. Le piège qu'il
-    // garde : un `level(lod)` qui retomberait au niveau 0 laisserait macOS net là où Windows
-    // floute.
-    // -----------------------------------------------------------------------
-
-    /// Écran seul sur fond magenta (couleur qu'aucune luma neutre ne produit), focus manuel sur
-    /// le coin proche d'`iso` (haut-droit), zoom 1 en plein palier sur 0..6 s.
-    fn dof_scene_json(rotation: &str, dof: bool) -> String {
-        format!(
-            r##"{{"clips":[],
-                "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle",
-                           "webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false}},
-                "effects":{{"padding":0.2,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0,
-                            "depthOfField":{dof}}},
-                "background":{{"kind":"color","color":"#ff00ff"}},
-                "zoomRegions":[{{"clipIndex":0,"startSec":0,"endSec":6,"scale":1.0,
-                                 "focusX":0.94,"focusY":0.06,"focusMode":"manual",
-                                 "rotation":{rotation}}}],
-                "annotations":[],
-                "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,
-                           "clipToBounds":false,"theme":"default"}},
-                "cropByClip":[],
-                "output":{{"width":1280,"height":720,"fps":30}}}}"##
-        )
-    }
-
-    fn compose_dof(comp: &super::Compositor, screen: &FakeFrame, rotation: &str, dof: bool) -> Vec<u8> {
-        let scene = crate::scene::Scene::from_json(&dof_scene_json(rotation, dof)).expect("scene json");
-        comp.set_live_params(live_params_from_scene(&scene));
-        comp.set_has_webcam(false);
-        comp.set_scene(Some(scene));
-        let mut cfg = crate::config::Cfg::c8();
-        cfg.shadow = false;
-        cfg.cursor = false;
-        cfg.mblur_n = 1;
-        unsafe {
-            // Frame 180 à `FPS` (60) = 3 s : en plein palier de la région.
-            comp.compose_frame(screen.as_ptr(), std::ptr::null(), 180.0, &cfg)
-                .expect("compose_frame");
-            comp.readback_direct().expect("readback_direct").2
-        }
-    }
-
-    /// Coin du plan (hors magenta) extrême dans la direction `dir`, rentré de `inset` vers le
-    /// centroïde : une fenêtre posée là est entièrement sur le plan, loin du feather.
-    fn dof_corner(rgba: &[u8], w: u32, h: u32, dir: (i64, i64), inset: f64) -> (u32, u32) {
-        let (mut best, mut at) = (i64::MIN, (0i64, 0i64));
-        let (mut sx, mut sy, mut n) = (0f64, 0f64, 0f64);
-        for y in 0..h as i64 {
-            for x in 0..w as i64 {
-                let p = &rgba[((y * w as i64 + x) * 4) as usize..];
-                if p[0] > 200 && p[1] < 60 && p[2] > 200 {
-                    continue;
-                }
-                sx += x as f64;
-                sy += y as f64;
-                n += 1.0;
-                if x * dir.0 + y * dir.1 > best {
-                    best = x * dir.0 + y * dir.1;
-                    at = (x, y);
-                }
-            }
-        }
-        let x = at.0 as f64 + (sx / n - at.0 as f64) * inset;
-        let y = at.1 as f64 + (sy / n - at.1 as f64) * inset;
-        (x as u32, y as u32)
-    }
-
-    /// Octets et netteté (écart moyen entre voisins, vert) d'une fenêtre `r`×`r` centrée en `c`.
-    fn dof_window(rgba: &[u8], w: u32, c: (u32, u32), r: u32) -> (Vec<u8>, f64) {
-        let g = |x: u32, y: u32| rgba[((y * w + x) * 4 + 1) as usize] as f64;
-        let (mut bytes, mut acc) = (Vec::new(), 0.0);
-        for y in c.1 - r / 2..c.1 + r / 2 {
-            for x in c.0 - r / 2..c.0 + r / 2 {
-                let i = ((y * w + x) * 4) as usize;
-                bytes.extend_from_slice(&rgba[i..i + 4]);
-                acc += (g(x + 1, y) - g(x, y)).abs() + (g(x, y + 1) - g(x, y)).abs();
-            }
-        }
-        (bytes, acc / (r * r) as f64)
-    }
-
-    #[test]
-    fn depth_of_field_defocuses_the_far_corner_of_a_tilted_screen_only() {
-        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
-            eprintln!("pas de device Metal — test sauté");
-            return;
-        };
-        let (w, h) = (1280u32, 720u32);
-        let comp = super::Compositor::new_sized(&gpu, w, h).expect("Compositor::new_sized");
-        // Damier de 2 texels : le détail le plus fin possible, que le moindre niveau de mip efface.
-        let screen = FakeFrame::new(640, 360, |col, row| if (col / 2 + row / 2) % 2 == 0 { 180 } else { 60 });
-
-        let on = compose_dof(&comp, &screen, "\"iso\"", true);
-        let off = compose_dof(&comp, &screen, "\"iso\"", false);
-        let r = 32;
-        let near = dof_corner(&off, w, h, (1, -1), 0.12);
-        let far = dof_corner(&off, w, h, (-1, 1), 0.12);
-        let ((near_on_px, near_on), (near_off_px, near_off)) =
-            (dof_window(&on, w, near, r), dof_window(&off, w, near, r));
-        let ((_, far_on), (_, far_off)) = (dof_window(&on, w, far, r), dof_window(&off, w, far, r));
-        println!("dof : proche {near_off:.2} -> {near_on:.2}, lointain {far_off:.2} -> {far_on:.2}");
-        assert!(far_off > 2.0, "fenêtre lointaine sans détail ({far_off})");
-        assert!(near_on_px == near_off_px, "coin proche modifié : {near_off} -> {near_on}");
-        assert!(far_on < far_off * 0.7, "coin lointain pas flouté : {far_off} -> {far_on}");
-
-        // À plat, l'effet n'existe pas : allumé ou non, la frame est la même à l'octet.
-        assert!(
-            compose_dof(&comp, &screen, "null", true) == compose_dof(&comp, &screen, "null", false),
-            "rotation nulle : la profondeur de champ a changé la frame"
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // Curseur modélisé (mode 15) : pendant de `tests/cursor_model_render.rs` (Windows). Il tourne sur la
-    // CI macOS : c'est la seule compilation et la seule exécution du mode 15 en MSL.
-    // -----------------------------------------------------------------------
-
-    /// Les états que le rendu passe en revue (hotspots de `DEFAULT_CURSOR_SPRITES`), et s'ils
-    /// sont centrés : ni tangage ni lacet.
-    const MODEL_STATES: [(&str, [f32; 2], bool); 6] = [
-        ("arrow", [0.119, 0.0874], false),
-        ("pointer", [0.3893, 0.0032], false),
-        ("text", [0.4375, 0.5333], true),
-        ("open-hand", [0.4375, 0.1781], false),
-        ("resize-ew", [0.4881, 0.4706], true),
-        ("not-allowed", [0.5, 0.5], true),
-    ];
-
-    /// Écran seul (strié) sous un zoom 1 porteur de `rotation`, curseur par défaut à la taille
-    /// `size` avec les sprites livrés de `MODEL_STATES`. `model3d` : `None` = clé absente.
-    fn model_scene_json(rotation: &str, model3d: Option<bool>, theme: &str, show: bool, size: f32) -> String {
-        let model3d = model3d.map(|m| format!(r#","model3d":{m}"#)).unwrap_or_default();
-        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../public/cursors/default").replace('\\', "/");
-        let sprites: Vec<String> = MODEL_STATES
-            .iter()
-            .map(|(key, [hx, hy], _)| format!(r#""{key}":{{"path":"{dir}/{key}.png","hotspotX":{hx},"hotspotY":{hy}}}"#))
-            .collect();
-        let sprites = sprites.join(",");
-        format!(
-            r##"{{"clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
-                "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false,
-                           "screenRect":{{"x":0.1,"y":0.1,"width":0.8,"height":0.8}}}},
-                "effects":{{"padding":0.2,"blur":false,"shadow":0,"roundnessFrac":0.03,"motionBlur":0}},
-                "background":{{"kind":"gradient","angleDeg":135,"stops":["#5b6ee1","#e8a0bf"]}},
-                "zoomRegions":[{{"clipIndex":0,"startSec":0,"endSec":10,"scale":1,"focusX":0.5,"focusY":0.5,"focusMode":"manual","rotation":{rotation}}}],
-                "annotations":[],
-                "cursor":{{"show":{show},"size":{size},"smoothing":0,"motionBlur":0,"clickBounce":2.5{model3d},"clipToBounds":false,"theme":"{theme}",
-                           "cursorSprites":{{{sprites}}}}},
-                "cropByClip":[null],
-                "output":{{"width":1280,"height":720,"fps":30}}}}"##
-        )
-    }
-
-    /// Une frame striée de barres sombres, bleue ou orangée : rien de NEUTRE, donc un pixel gris
-    /// est le curseur et un pixel teinté assombri son ombre ; un pixel identique sur les deux
-    /// teintes est du curseur opaque.
-    fn model_screen_planes(orange: bool) -> (Vec<u8>, Vec<u8>) {
-        let (w, h) = (640u32, 360u32);
-        let (u, v) = if orange { (100, 170) } else { (150, 120) };
-        let y = (0..w * h)
-            .map(|i| {
-                let (col, row) = (i % w, i / w);
-                if row % 24 >= 8 && row % 24 < 12 && (col / 40) % 3 != 2 { 90 } else { 150 }
-            })
-            .collect();
-        let uv = (0..w * (h / 2)).map(|i| if i % 2 == 0 { u } else { v }).collect();
-        (y, uv)
-    }
-
-    fn compose_model(
-        comp: &Compositor,
-        screen: &FakeFrame,
-        json: &str,
-        track: &crate::cursor::CursorTrack,
-    ) -> Vec<u8> {
-        let scene = crate::scene::Scene::from_json(json).expect("scene json");
-        comp.set_live_params(live_params_from_scene(&scene));
-        comp.set_has_webcam(false);
-        comp.set_scene(Some(scene));
-        comp.set_cursor(track.clone());
-        comp.set_cursor_time(Some(2.0));
-        comp.set_timeline_time(Some(2.0));
-        let mut cfg = crate::config::Cfg::c8();
-        cfg.bg_blur = false;
-        cfg.zoom = false;
-        cfg.layout_anim = false;
-        cfg.cursor = true;
-        cfg.mblur_n = 1;
-        cfg.shadow = false;
-        unsafe {
-            comp.compose_frame(screen.as_ptr(), screen.as_ptr(), 0.0, &cfg).expect("compose_frame");
-            comp.readback_direct().expect("readback_direct").2
-        }
-    }
-
-    /// Immobile en (`at`, `at`) dans l'état `kind`, avec un clic au creux de `tap` avant l'instant
-    /// rendu si `click` : le modèle est alors posé.
-    fn model_track(kind: &str, click: bool, at: f32) -> crate::cursor::CursorTrack {
-        crate::cursor::CursorTrack::new(
-            vec![(0.0, at, at), (9.0, at, at)],
-            if click { vec![2.0 - 0.0495] } else { vec![] },
-            vec![(0.0, kind.to_string())],
-        )
-    }
-
-    fn model_save(name: &str, rgba: &[u8]) {
-        let Ok(dir) = std::env::var("OPENSCREEN_CURSOR3D_OUT") else { return };
-        let path = format!("{dir}/macos-{name}.png");
-        image::RgbaImage::from_raw(1280, 720, rgba.to_vec())
-            .expect("dimensions du readback")
-            .save(&path)
-            .unwrap_or_else(|e| panic!("ecriture {path} : {e}"));
-    }
-
-    fn model_neutral(p: &[u8]) -> bool {
-        p[0].max(p[1]).max(p[2]) - p[0].min(p[1]).min(p[2]) < 12
-    }
-
-    fn model_luma(p: &[u8]) -> f32 {
-        0.2126 * p[0] as f32 + 0.7152 * p[1] as f32 + 0.0722 * p[2] as f32
-    }
-
-    /// Ce qui distingue la frame avec flèche de la même sans : pixels de la flèche (neutres),
-    /// d'ombre (le bleu assombri, hors frange antialiasée), leurs centroïdes, et la distance de
-    /// l'ombre la plus proche de l'apex (le pixel de flèche le plus haut).
-    struct ModelSplit {
-        white: usize,
-        black: usize,
-        shadow: usize,
-        body_c: [f32; 2],
-        shadow_c: [f32; 2],
-        near_apex: f32,
-    }
-
-    fn model_split(with: &[u8], without: &[u8]) -> ModelSplit {
-        let (w, h) = (1280i32, 720i32);
-        let at = |buf: &[u8], x: i32, y: i32| {
-            let i = ((y * w + x) * 4) as usize;
-            [buf[i], buf[i + 1], buf[i + 2]]
-        };
-        let body = |x: i32, y: i32| {
-            x >= 0 && y >= 0 && x < w && y < h && at(with, x, y) != at(without, x, y) && model_neutral(&at(with, x, y))
-        };
-        let mut s = ModelSplit { white: 0, black: 0, shadow: 0, body_c: [0.0; 2], shadow_c: [0.0; 2], near_apex: f32::MAX };
-        let (mut nb, mut apex) = (0usize, [0i32, i32::MAX]);
-        let mut shadows = Vec::new();
-        for y in 0..h {
-            for x in 0..w {
-                let (a, b) = (at(with, x, y), at(without, x, y));
-                if a == b {
-                    continue;
-                }
-                if model_neutral(&a) {
-                    nb += 1;
-                    s.white += a.iter().all(|&c| c > 200) as usize;
-                    s.black += a.iter().all(|&c| c < 45) as usize;
-                    s.body_c = [s.body_c[0] + x as f32, s.body_c[1] + y as f32];
-                    if y < apex[1] {
-                        apex = [x, y];
-                    }
-                } else if model_luma(&a) < model_luma(&b) - 6.0
-                    && !(-2..=2).any(|dy| (-2..=2).any(|dx| body(x + dx, y + dy)))
-                {
-                    shadows.push([x as f32, y as f32]);
-                }
-            }
-        }
-        s.shadow = shadows.len();
-        s.body_c = [s.body_c[0] / nb.max(1) as f32, s.body_c[1] / nb.max(1) as f32];
-        for p in &shadows {
-            s.shadow_c = [s.shadow_c[0] + p[0], s.shadow_c[1] + p[1]];
-            s.near_apex = s.near_apex.min((p[0] - apex[0] as f32).hypot(p[1] - apex[1] as f32));
-        }
-        s.shadow_c = [s.shadow_c[0] / s.shadow.max(1) as f32, s.shadow_c[1] / s.shadow.max(1) as f32];
-        s
-    }
-
-    /// Les pixels OPAQUES du curseur : identiques sur les deux teintes, différents du contenu nu.
-    fn model_opaque(on_blue: &[u8], on_orange: &[u8], bare: &[u8]) -> Vec<bool> {
-        (0..1280 * 720)
-            .map(|i| {
-                let px = |b: &[u8]| [b[i * 4], b[i * 4 + 1], b[i * 4 + 2]];
-                px(on_blue) == px(on_orange) && px(on_blue) != px(bare)
-            })
-            .collect()
-    }
-
-    fn model_iou(a: &[bool], b: &[bool]) -> f32 {
-        let inter = a.iter().zip(b).filter(|(x, y)| **x && **y).count();
-        let union = a.iter().zip(b).filter(|(x, y)| **x || **y).count();
-        inter as f32 / union.max(1) as f32
-    }
-
-    /// Part des pixels de `a` qui ont un pixel de `b` à `r` px au plus (norme max).
-    fn model_within(a: &[bool], b: &[bool], r: i32) -> f32 {
-        let near = |i: usize| {
-            let (x, y) = ((i % 1280) as i32, (i / 1280) as i32);
-            (-r..=r).any(|dy| {
-                (-r..=r).any(|dx| {
-                    let (x, y) = (x + dx, y + dy);
-                    (0..1280).contains(&x) && (0..720).contains(&y) && b[(y * 1280 + x) as usize]
-                })
-            })
-        };
-        let hits: Vec<usize> = (0..a.len()).filter(|&i| a[i]).collect();
-        hits.iter().filter(|&&i| near(i)).count() as f32 / hits.len().max(1) as f32
-    }
-
-    /// Parts des pixels sombres, clairs et rouges parmi ceux du masque qui tombent dans l'une
-    /// des trois classes.
-    fn model_palette(rgba: &[u8], mask: &[bool]) -> [f32; 3] {
-        let mut c = [0usize; 3];
-        for (i, _) in mask.iter().enumerate().filter(|(_, m)| **m) {
-            let p = [rgba[i * 4] as i32, rgba[i * 4 + 1] as i32, rgba[i * 4 + 2] as i32];
-            c[0] += (p.iter().max().unwrap() < &70) as usize;
-            c[1] += (p.iter().min().unwrap() > &150) as usize;
-            c[2] += (p[0] > p[1] + 60 && p[0] > p[2] + 60) as usize;
-        }
-        let n = c.iter().sum::<usize>().max(1) as f32;
-        c.map(|k| k as f32 / n)
-    }
-
-    #[test]
-    fn the_modelled_arrow_casts_its_shadow_and_touches_the_screen() {
-        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
-            eprintln!("pas de device Metal — test sauté");
-            return;
-        };
-        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
-        let (y, uv) = model_screen_planes(false);
-        let screen = FakeFrame::from_planes(640, 360, &y, &uv);
-        let (still, clicked) = (model_track("arrow", false, 0.45), model_track("arrow", true, 0.45));
-        for (name, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
-            let json = |m: Option<bool>, theme: &str, show: bool| model_scene_json(rotation, m, theme, show, 3.0);
-            let bare = compose_model(&comp, &screen, &json(Some(true), "default", false), &still);
-            let absent = compose_model(&comp, &screen, &json(None, "default", true), &still);
-            let off = compose_model(&comp, &screen, &json(Some(false), "default", true), &still);
-            let other = compose_model(&comp, &screen, &json(Some(true), "other", true), &still);
-            let hover = compose_model(&comp, &screen, &json(Some(true), "default", true), &still);
-            let touch = compose_model(&comp, &screen, &json(Some(true), "default", true), &clicked);
-            model_save(&format!("{name}-hover"), &hover);
-            model_save(&format!("{name}-touch"), &touch);
-            assert!(absent == off && absent == other, "{name}: le chemin plat a change");
-            assert!(absent != hover, "{name}: le reglage allume ne change rien");
-            let (a, b) = (model_split(&hover, &bare), model_split(&touch, &bare));
-            println!(
-                "{name} : blanc {}, noir {}, ombre {} (apex a {:.1} px, posee {:.1} px), centroides {:?} / {:?}",
-                a.white, a.black, a.shadow, a.near_apex, b.near_apex, a.body_c, a.shadow_c
-            );
-            // Taille 3 en 1280x720 : ~50 a 60 px de haut, ~1000 px de silhouette.
-            assert!(a.white > 150 && a.black > 250, "{name}: matieres absentes");
-            assert!(a.shadow > 300, "{name}: pas d'ombre");
-            assert!(a.shadow_c[0] > a.body_c[0] && a.shadow_c[1] > a.body_c[1], "{name}: ombre pas en bas a droite");
-            assert!(b.near_apex < 8.0, "{name}: posee, l'ombre est a {:.1} px de l'apex", b.near_apex);
-            assert!(a.near_apex > 12.0, "{name}: en l'air, l'ombre touche l'apex ({:.1} px)", a.near_apex);
-        }
-    }
-
-    /// Chaque état garde son art et sa silhouette : posé au centre de l'écran (vu de face), le
-    /// modèle couvre ce que couvre le sprite plat, avec ses couleurs ; il porte une ombre en
-    /// l'air, suit l'inclinaison du plan, et un autre thème (ou le réglage éteint) reste plat.
-    #[test]
-    fn every_modelled_state_keeps_its_art_footprint_and_shadow() {
-        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
-            eprintln!("pas de device Metal — test sauté");
-            return;
-        };
-        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
-        let (y, uv) = model_screen_planes(false);
-        let blue = FakeFrame::from_planes(640, 360, &y, &uv);
-        let (y, uv) = model_screen_planes(true);
-        let orange = FakeFrame::from_planes(640, 360, &y, &uv);
-        let json = |rotation: &str, m: Option<bool>, theme: &str, show: bool| model_scene_json(rotation, m, theme, show, 5.0);
-        let bare = compose_model(&comp, &blue, &json("null", Some(true), "default", false), &model_track("arrow", false, 0.5));
-        let mut failures = Vec::new();
-        for (key, _, centred) in MODEL_STATES {
-            let (still, clicked) = (model_track(key, false, 0.5), model_track(key, true, 0.5));
-            let on = json("null", Some(true), "default", true);
-            let flat = json("null", Some(false), "default", true);
-            let touch = compose_model(&comp, &blue, &on, &clicked);
-            let touch_b = compose_model(&comp, &orange, &on, &clicked);
-            let hover = compose_model(&comp, &blue, &on, &still);
-            let tilted = compose_model(&comp, &blue, &json(r#""iso""#, Some(true), "default", true), &still);
-            let sprite = compose_model(&comp, &blue, &flat, &still);
-            let sprite_b = compose_model(&comp, &orange, &flat, &still);
-            let absent = compose_model(&comp, &blue, &json("null", None, "default", true), &still);
-            let other = compose_model(&comp, &blue, &json("null", Some(true), "other", true), &still);
-            model_save(&format!("art-{key}-touch"), &touch);
-            model_save(&format!("art-{key}-iso"), &tilted);
-            if absent != sprite || other != sprite {
-                failures.push(format!("{key}: le sprite plat a change"));
-            }
-
-            let (m3d, m2d) = (model_opaque(&touch, &touch_b, &bare), model_opaque(&sprite, &sprite_b, &bare));
-            let overlap = model_iou(&m3d, &m2d);
-            let (near3d, near2d) = (model_within(&m3d, &m2d, 2), model_within(&m2d, &m3d, 2));
-            let (pal3d, pal2d) = (model_palette(&touch, &m3d), model_palette(&sprite, &m2d));
-            let area = m2d.iter().filter(|m| **m).count() as f32;
-            let differs = |a: &[u8], i: usize| a[i * 4..i * 4 + 3] != bare[i * 4..i * 4 + 3];
-            let shadow = (0..1280 * 720)
-                .filter(|&i| {
-                    let (a, b) = (&hover[i * 4..i * 4 + 3], &bare[i * 4..i * 4 + 3]);
-                    differs(&hover, i) && !model_neutral(a) && model_luma(a) < model_luma(b) - 6.0
-                })
-                .count() as f32;
-            let body = |rgba: &[u8]| (0..1280 * 720).filter(|&i| model_neutral(&rgba[i * 4..i * 4 + 3]) && differs(rgba, i)).count() as f32;
-            let (flat_body, tilted_body) = (body(&hover), body(&tilted));
-            println!(
-                "{key} : IoU {overlap:.3}, a 2 px pres {near3d:.3} / {near2d:.3}, sprite {area} px, palette 3D {pal3d:?} / sprite {pal2d:?}, \
-                 ombre {shadow} px, corps a plat {flat_body} / incline {tilted_body}"
-            );
-            let (min_iou, min_near, palette_tol) = if centred { (0.75, 0.98, 0.07) } else { (0.6, 0.9, 0.2) };
-            if overlap <= min_iou || near3d < min_near || near2d < min_near {
-                failures.push(format!("{key}: la silhouette s'ecarte du sprite (IoU {overlap}, {near3d} / {near2d})"));
-            }
-            for (c, (a, b)) in ["sombre", "clair", "rouge"].iter().zip(pal3d.iter().zip(pal2d.iter())) {
-                if (a - b).abs() >= palette_tol {
-                    failures.push(format!("{key}: part {c} {a} contre {b} dans le sprite"));
-                }
-            }
-            if shadow <= 0.3 * area {
-                failures.push(format!("{key}: pas d'ombre en l'air ({shadow} px)"));
-            }
-            // Le préset iso réduit le plan (unité 51,5 contre 62,6 px) et incline le modèle.
-            if !(tilted_body < 0.9 * flat_body && tilted_body > 0.3 * flat_body) {
-                failures.push(format!("{key}: le modele ne suit pas le plan ({tilted_body} / {flat_body})"));
-            }
-        }
-        assert!(failures.is_empty(), "{failures:#?}");
-    }
-
-    /// Pendant de `tests/cursor_tap_render.rs` (Windows) : sous un lissage qui traîne loin
-    /// derrière la souris, la pointe du modèle se pose sur la pastille rouge du clic, et l'anneau
-    /// de l'impact (mode 16) l'entoure, à plat et incliné. Seule exécution du mode 16 en MSL.
-    #[test]
-    fn the_modelled_tip_taps_the_marked_click_target() {
-        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
-            eprintln!("pas de device Metal — test sauté");
-            return;
-        };
-        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
-        let (w, h) = (640u32, 360u32);
-        // Pastille de 5 texels au centre d'un bloc de chroma : symétrique, chroma comprise.
-        let (tx, ty) = (193.0f32, 129.0f32);
-        let red = |x: f32, y: f32| (x - tx).hypot(y - ty) <= 5.0;
-        let (mut yp, mut uvp) = model_screen_planes(false);
-        for row in 0..h {
-            for col in 0..w {
-                // Un carré uni autour de la cible : l'anneau s'y mesure sans les barres.
-                if (col as f32 - tx).abs() < 45.0 && (row as f32 - ty).abs() < 45.0 {
-                    yp[(row * w + col) as usize] = 150;
-                }
-                if red(col as f32 + 0.5, row as f32 + 0.5) {
-                    yp[(row * w + col) as usize] = 63;
-                }
-            }
-        }
-        for row in 0..h / 2 {
-            for col in 0..w / 2 {
-                if red(2.0 * col as f32 + 1.0, 2.0 * row as f32 + 1.0) {
-                    let i = (row * w + 2 * col) as usize;
-                    uvp[i] = 102;
-                    uvp[i + 1] = 240;
-                }
-            }
-        }
-        let screen = FakeFrame::from_planes(w, h, &yp, &uvp);
-        // Arrivée sur la cible à 1,7 s, départ à 2,1 s, clic à `tc` entre les deux ; lissé à 0,5.
-        let target = (tx / w as f32, ty / h as f32);
-        let gesture = |tc: f32| {
-            let samples = (0..=240)
-                .map(|k| {
-                    let t = k as f32 / 60.0;
-                    let (x, y) = if t < 1.7 {
-                        let f = t / 1.7;
-                        (0.1 + (target.0 - 0.1) * f, 0.8 + (target.1 - 0.8) * f)
-                    } else if t < 2.1 {
-                        target
-                    } else {
-                        let f = ((t - 2.1) / 0.5).min(1.0);
-                        (target.0 + 0.3 * f, target.1 + 0.2 * f)
-                    };
-                    (t, x, y)
-                })
-                .collect();
-            crate::cursor::CursorTrack::new(samples, vec![tc], vec![(0.0, "arrow".to_string())]).smoothed(0.5)
-        };
-        let (contact, ring) = (gesture(2.0 - 0.0495), gesture(2.0 - 0.16));
-        let px = |b: &[u8], x: i32, y: i32| {
-            let i = ((y * 1280 + x) * 4) as usize;
-            [b[i] as i32, b[i + 1] as i32, b[i + 2] as i32]
-        };
-        let is_red = |p: [i32; 3]| p[0] > p[1] + 60 && p[0] > p[2] + 60;
-        for rotation in ["null", r#""iso""#] {
-            let json = model_scene_json(rotation, Some(true), "default", true, 3.0);
-            let hidden = json.replace(r#""rotation":"#, r#""hideCursor":true,"rotation":"#);
-            let quiet = json.replace(r#""clickBounce":2.5"#, r#""clickBounce":0"#);
-            let bare = compose_model(&comp, &screen, &hidden, &contact);
-            let (mut sx, mut sy, mut n) = (0.0f32, 0.0f32, 0.0f32);
-            for y in 0..720 {
-                for x in 0..1280 {
-                    if is_red(px(&bare, x, y)) {
-                        (sx, sy, n) = (sx + x as f32 + 0.5, sy + y as f32 + 0.5, n + 1.0);
-                    }
-                }
-            }
-            assert!(n > 10.0, "{rotation}: pastille introuvable");
-            let m = [sx / n, sy / n];
-            let touch = compose_model(&comp, &screen, &json, &contact);
-            model_save(&format!("tap-{}", if rotation == "null" { "flat" } else { "iso" }), &touch);
-            assert!(!is_red(px(&touch, m[0] as i32, (m[1] + 2.0) as i32)), "{rotation}: la pointe manque la pastille");
-            // L'écart dû à l'impact, le long de deux demi-droites (haut, gauche) : même rayon, à la
-            // perspective près sous `iso` (l'anneau y est une ellipse).
-            let (on, off) = (compose_model(&comp, &screen, &json, &ring), compose_model(&comp, &screen, &quiet, &ring));
-            let peak = |dx: i32, dy: i32| {
-                (4..45)
-                    .map(|r| {
-                        let (a, b) = (px(&on, m[0] as i32 + dx * r, m[1] as i32 + dy * r), px(&off, m[0] as i32 + dx * r, m[1] as i32 + dy * r));
-                        ((0..3).map(|c| (a[c] - b[c]).abs()).sum::<i32>(), r)
-                    })
-                    .max()
-                    .unwrap()
-            };
-            let (up, left) = (peak(0, -1), peak(-1, 0));
-            println!("{rotation} : pastille en {m:?}, anneau haut {up:?}, gauche {left:?}");
-            assert!(up.0 > 60 && left.0 > 60, "{rotation}: anneau absent ({up:?} {left:?})");
-            let tol = if rotation == "null" { 1 } else { 2 };
-            assert!((up.1 - left.1).abs() <= tol, "{rotation}: anneau décentré ({up:?} {left:?})");
         }
     }
 

@@ -799,20 +799,6 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 		});
 	});
 
-	it("stores a moving camera in the same field as the fixed angles", async () => {
-		// One control, one field: a moving camera replaces a fixed angle instead of stacking on it.
-		const { result } = renderTimeline();
-		await act(async () => {
-			await result.current.updateZoomRotation("zoom_a", "iso");
-		});
-		await act(async () => {
-			await result.current.updateZoomRotation("zoom_a", "follow-cursor");
-		});
-		const zoom = useProjectStore.getState().document?.zoomRanges[0];
-		expect(zoom?.rotationPreset).toBe("follow-cursor");
-		expect(zoom).not.toHaveProperty("cameraMotion");
-	});
-
 	it("updates hideCursor on a zoom region", async () => {
 		const { result } = renderTimeline();
 		await act(async () => {
@@ -824,19 +810,6 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 			await result.current.updateZoomHideCursor("zoom_a", false);
 		});
 		expect(useProjectStore.getState().document?.zoomRanges[0].hideCursor).toBeUndefined();
-	});
-
-	it("updates clickImpact on a zoom region and drops the key when off", async () => {
-		const { result } = renderTimeline();
-		await act(async () => {
-			await result.current.updateZoomClickImpact("zoom_a", true);
-		});
-		expect(useProjectStore.getState().document?.zoomRanges[0].clickImpact).toBe(true);
-
-		await act(async () => {
-			await result.current.updateZoomClickImpact("zoom_a", false);
-		});
-		expect(useProjectStore.getState().document?.zoomRanges[0].clickImpact).toBeUndefined();
 	});
 
 	it("rolls a live focus edit back when its commit cannot be saved", async () => {

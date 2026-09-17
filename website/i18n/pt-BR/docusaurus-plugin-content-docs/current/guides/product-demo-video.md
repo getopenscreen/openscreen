@@ -65,7 +65,7 @@ Na barra de ferramentas da linha do tempo, abra **Melhoria automática** e escol
 
 Depois, revise os zooms. Clique em um zoom para definir o nível (de 1.25× a 5×), o modo de foco (Automático segue o cursor, Manual mantém um ponto fixo) e uma rotação 3D opcional. Pressione `Z` para adicionar um zoom manualmente e `Ctrl/Cmd+D` para excluir um que você não quiser.
 
-Mais sobre como os zooms são posicionados: [Zoom automático (em inglês)](/features/auto-zoom/).
+Mais sobre como os zooms são posicionados: [Zoom automático](/features/auto-zoom/).
 
 ## 5. Corte pela transcrição e acelere o tempo morto {#5-cut-from-the-transcript-and-speed-up-dead-time}
 
@@ -98,7 +98,7 @@ Na aba **Transcrição**, clique em **Legendas** e ative **Mostrar legendas**. E
 
 O Whisper detecta o idioma falado, ou você pode forçar um dos 100 idiomas com **Regenerar em** na área Mídia. Para publicar em outro idioma, use **Traduzir** para um dos 15 idiomas de destino e selecione esse idioma em **Exibição** antes de exportar. A tradução passa pelo seu próprio provedor de LLM, então precisa de uma chave.
 
-As legendas são embutidas no vídeo. O OpenScreen não grava nenhum arquivo `.srt` ou `.vtt`, então um player não consegue desativá-las. Detalhes: [Legendas e transcrição](../captions.md) e [como funciona o recurso de legendas (em inglês)](/features/captions/).
+As legendas são embutidas no vídeo. O OpenScreen não grava nenhum arquivo `.srt` ou `.vtt`, então um player não consegue desativá-las. Detalhes: [Legendas e transcrição](../captions.md) e [como funciona o recurso de legendas](/features/captions/).
 
 ## 8. Exporte {#8-export}
 
@@ -119,7 +119,7 @@ O OpenScreen não hospeda o seu vídeo, não cria links de compartilhamento nem 
 
 ## Quando o OpenScreen não é a ferramenta certa {#when-openscreen-is-not-the-right-tool}
 
-- **Você quer um link hospedado com estatísticas de quem assistiu ou comentários.** Um gravador hospedado atende melhor. O Loom, por exemplo, compartilha cada gravação como um link em loom.com, e a página de preços dele lista informações sobre os espectadores e comentários em vídeo em todos os planos (em setembro de 2026). Veja [OpenScreen como alternativa ao Loom (em inglês)](/alternatives/loom/) para o caso mais restrito em que o OpenScreen serve.
+- **Você quer um link hospedado com estatísticas de quem assistiu ou comentários.** Um gravador hospedado atende melhor. O Loom, por exemplo, compartilha cada gravação como um link em loom.com, e a página de preços dele lista informações sobre os espectadores e comentários em vídeo em todos os planos (em setembro de 2026). Veja [OpenScreen como alternativa ao Loom](/alternatives/loom/) para o caso mais restrito em que o OpenScreen serve.
 - **Você quer uma demo interativa**, em que o espectador vai clicando. O OpenScreen exporta apenas vídeo e GIF.
 - **Seu player de vídeo precisa de um arquivo de legenda separado.** O OpenScreen só embute as legendas.
 - **Você grava em um celular ou tablet.** O OpenScreen é um app para desktop, para Windows, macOS 13 ou posterior e Linux.

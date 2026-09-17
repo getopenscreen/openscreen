@@ -197,7 +197,7 @@
     "message": "Capture PipeWire via le portail ScreenCast ; nécessite PipeWire et xdg-desktop-portal."
   },
   "home.install.note": {
-    "message": "Windows a aussi un programme d'installation {exe}. Il n'est pas signé : SmartScreen affiche donc un avertissement avant son exécution. Choisissez Informations complémentaires, puis Exécuter quand même. Linux propose aussi {rpm}, {pacman}, une AppImage et un flake Nix. Tous les fichiers sont sur la {releasesPage}, et la page {installation} détaille toutes les étapes. Ce que chaque système enregistre est décrit sur les pages {windows}, {mac} et {linux} (en anglais).",
+    "message": "Windows a aussi un programme d'installation {exe}. Il n'est pas signé : SmartScreen affiche donc un avertissement avant son exécution. Choisissez Informations complémentaires, puis Exécuter quand même. Linux propose aussi {rpm}, {pacman}, une AppImage et un flake Nix. Tous les fichiers sont sur la {releasesPage}, et la page {installation} détaille toutes les étapes. Ce que chaque système enregistre est décrit sur les pages {windows}, {mac} et {linux}.",
     "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
@@ -321,7 +321,7 @@
     "message": "Documentation des sous-titres et de la transcription"
   },
   "showcase.captions.link.feature": {
-    "message": "Comparatif des sous-titres locaux (en anglais)",
+    "message": "Comparatif des sous-titres locaux",
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
@@ -344,7 +344,7 @@
     "message": "Documentation du montage par IA"
   },
   "showcase.agent.link.feature": {
-    "message": "Fonctionnement des zooms automatiques (en anglais)",
+    "message": "Fonctionnement des zooms automatiques",
     "description": "Link label under the panel."
   },
   "showcase.agent.label": {
@@ -364,13 +364,13 @@
     "message": "Télécharger"
   },
   "footer.product.autoZoom": {
-    "message": "Zoom automatique (en anglais)"
+    "message": "Zoom automatique"
   },
   "footer.product.captions": {
-    "message": "Sous-titres locaux (en anglais)"
+    "message": "Sous-titres locaux"
   },
   "footer.platforms.title": {
-    "message": "Plateformes (en anglais)",
+    "message": "Plateformes",
     "description": "Footer column title."
   },
   "footer.platforms.windows": {
@@ -383,7 +383,7 @@
     "message": "Linux"
   },
   "footer.compare.title": {
-    "message": "Comparatifs (en anglais)",
+    "message": "Comparatifs",
     "description": "Footer column title."
   },
   "footer.compare.screenStudio": {

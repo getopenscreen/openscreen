@@ -201,7 +201,7 @@
     "message": "PipeWire-Aufnahme über das ScreenCast-Portal; braucht PipeWire und xdg-desktop-portal."
   },
   "home.install.note": {
-    "message": "Für Windows gibt es auch einen {exe}-Installer. Er ist nicht codesigniert, SmartScreen warnt deshalb vor dem Start: Wähle „Weitere Informationen“ und dann „Trotzdem ausführen“. Für Linux gibt es außerdem {rpm}, {pacman}, ein AppImage und einen Nix-Flake. Alle Dateien liegen auf der {releasesPage}, und unter {installation} stehen alle Schritte. Was jedes System aufnimmt, beschreiben die Seiten zu {windows}, {mac} und {linux} (auf Englisch).",
+    "message": "Für Windows gibt es auch einen {exe}-Installer. Er ist nicht codesigniert, SmartScreen warnt deshalb vor dem Start: Wähle „Weitere Informationen“ und dann „Trotzdem ausführen“. Für Linux gibt es außerdem {rpm}, {pacman}, ein AppImage und einen Nix-Flake. Alle Dateien liegen auf der {releasesPage}, und unter {installation} stehen alle Schritte. Was jedes System aufnimmt, beschreiben die Seiten zu {windows}, {mac} und {linux}.",
     "description": "{exe}, {rpm} and {pacman} are file extensions shown as code. {windows}, {mac} and {linux} link to the platform pages. More info and Run anyway are SmartScreen's buttons: use the labels Windows shows in your language."
   },
   "home.install.note.releasesPage": {
@@ -325,7 +325,7 @@
     "message": "Doku zu Untertiteln und Transkript"
   },
   "showcase.captions.link.feature": {
-    "message": "Lokale Untertitel im Vergleich (auf Englisch)",
+    "message": "Lokale Untertitel im Vergleich",
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
@@ -348,7 +348,7 @@
     "message": "Doku zur KI-Bearbeitung"
   },
   "showcase.agent.link.feature": {
-    "message": "So funktionieren automatische Zooms (auf Englisch)",
+    "message": "So funktionieren automatische Zooms",
     "description": "Link label under the panel."
   },
   "showcase.agent.label": {
@@ -368,13 +368,13 @@
     "message": "Download"
   },
   "footer.product.autoZoom": {
-    "message": "Auto-Zoom (auf Englisch)"
+    "message": "Auto-Zoom"
   },
   "footer.product.captions": {
-    "message": "Lokale Untertitel (auf Englisch)"
+    "message": "Lokale Untertitel"
   },
   "footer.platforms.title": {
-    "message": "Plattformen (auf Englisch)",
+    "message": "Plattformen",
     "description": "Footer column title."
   },
   "footer.platforms.windows": {
@@ -387,7 +387,7 @@
     "message": "Linux"
   },
   "footer.compare.title": {
-    "message": "Vergleiche (auf Englisch)",
+    "message": "Vergleiche",
     "description": "Footer column title."
   },
   "footer.compare.screenStudio": {

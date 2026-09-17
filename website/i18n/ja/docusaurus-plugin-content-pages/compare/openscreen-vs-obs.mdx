@@ -1,0 +1,115 @@
+---
+title: OpenScreen と OBS Studio の比較（デモ動画向け）
+description: "OpenScreen と OBS Studio の比較。どちらも無料でオープンソースです。OBS は複数のソースからシーンを録画・配信し、OpenScreen は 1 つのアプリで録画と編集を完結します。"
+keywords:
+  - OpenScreen OBS 比較
+  - OBS 代替 チュートリアル
+  - OBS 録画 編集
+  - OBS ズーム カーソル追従
+  - OBS 字幕 自動生成
+---
+
+# OpenScreen と OBS Studio の比較
+
+OpenScreen と OBS Studio は、どちらも Windows・macOS・Linux 向けの無料でオープンソースの画面録画ソフトなので、両者を選ぶ判断は主に編集機能の有無にかかっています。OBS は複数のソースから組み立てたシーンを録画・配信し、編集はほかのアプリに任せます。一方 OpenScreen は、ディスプレイまたはウィンドウ 1 つを録画し、そのテイク自体を編集します。自動ズーム、後からスタイルを変更できるカーソル、端末上の字幕、MP4 または GIF のエクスポートに対応しています。ライブ配信やマルチシーンの制作には、OBS Studio のほうが今も適しています。
+
+このページは OpenScreen プロジェクトが公開しています。OBS Studio に関する情報は obsproject.com、OBS Studio の GitHub リポジトリ、Flathub によるもので、2026 年 9 月に確認しました。情報源は末尾に一覧しています。
+
+## 概要 {#at-a-glance}
+
+| | OpenScreen | OBS Studio |
+| --- | --- | --- |
+| 価格 | 商用利用を含めて無料 | 無料。スポンサーと寄付で運営（2026 年 9 月時点） |
+| ライセンス | MIT | GNU GPL バージョン 2 |
+| 対応プラットフォーム | Windows 10（1903 以降）と 11、x64。macOS 13 以降、Apple Silicon と Intel。Linux、x64 | Windows 10 と 11、x64 インストーラーと ARM64 の zip。macOS 13 以降、Apple Silicon と Intel。Linux は Flathub または Ubuntu 24.04 以降の PPA（2026 年 9 月時点） |
+| 録画対象 | ディスプレイまたはウィンドウ 1 つ、ウェブカメラ・マイク・システム音声付き。エディターで後からクロップ可能 | ディスプレイ、ウィンドウ、ウェブカメラ、画像、テキスト、ブラウザーウィンドウ、キャプチャカードを組み合わせたシーン。ソースは録画前にクロップ可能 |
+| ライブ配信 | なし | あり。組み込みのサービスまたはカスタムサーバーへ |
+| 内蔵エディター | あり。マルチクリップのタイムライン、カット、速度変更、ズーム、注釈 | なし。機能一覧はキャプチャ、ミキシング、シーン、配信が中心 |
+| 自動ズーム | あり。記録したカーソルから配置 | コミュニティ製の「Zoom to Mouse」スクリプト。ホットキーで発動 |
+| 字幕 | 端末上の Whisper、約 264 MB のモデル 1 つを一度だけダウンロード。動画に焼き込み | 内蔵の字幕ツールは Windows のみ。無料の LocalVocal プラグインは 3 つの OS すべてでローカルに文字起こしし、.srt ファイルを書き出す |
+| 録画形式 | ネイティブキャプチャによる H.264 MP4 | H.264、AV1、HEVC（ハードウェアエンコーダーのみ）、または Mac では ProRes。既定は Hybrid の MP4 または MOV、ほかに MKV、FLV、MPEG-TS など |
+| 出力 | MP4（H.264 または H.265）または GIF、最大 60 fps、透かしなし | 録画ファイルそのもの |
+| 拡張方法 | JSON 出力対応のコマンドラインインターフェース | プラグインマネージャー、Lua・Python スクリプト、WebSocket リモート制御 |
+
+## 両方のツールができること {#what-both-tools-do}
+
+「配信用か編集用か」という区分から想像されるよりも、両者の共通点は多くあります。以下はどちらか一方に固有のものではありません。
+
+- **無料でオープンソース。** どちらも無料で、コードを GitHub で公開しています。どちらのライセンスも、有償の仕事でのアプリ利用を認めています。
+- **Windows・macOS・Linux。** どちらも 3 つのプラットフォームすべてに対応し、macOS 13 が最低要件です。
+- **同じ録画内での画面、ウェブカメラ、マイク、システム音声。**
+- **クラッシュに強い録画。** OBS の既定の Hybrid MP4・MOV 形式は、書き込みが止まっても復元可能です。OpenScreen は Windows と macOS でフラグメント化された MP4 を書き込むため、途中で切れたテイクも、最後の 1 秒程度までは再生可能なまま残ります。
+- **Whisper によるローカルの音声文字起こし。** OpenScreen には標準搭載されています。OBS では LocalVocal プラグインが自分のマシンで Whisper を実行し、テキストソースを通じてライブ字幕を表示できます。
+- **自動化。** OBS にはリモート制御用の WebSocket サーバーが組み込まれており、Lua や Python のスクリプトも実行できます。OpenScreen には、プロジェクトの録画・エクスポート・字幕付け・パックを行う JSON 出力対応の[コマンドライン](/docs/cli/)があります。
+
+## OpenScreen が異なる点 {#where-openscreen-differs}
+
+### 同じアプリ内での編集 {#editing-in-the-same-app}
+
+- **テイク後のタイムライン。** 録画や既存の動画をインポートし、並べ替え、クリップごとにイン点・アウト点とクロップを設定できます。区間のカットや、0.1 倍から 100 倍までの速度変更も可能です。[編集とタイムライン](/docs/editing-timeline/)と[メディアライブラリ](/docs/media-library/)を参照してください。
+- **後から配置するズーム。** **自動強化 → 自動ズーム**は、記録したカーソルの動きを読み取り、カーソルが留まった場所にズーム範囲を配置します。通信もモデルも使いません。6 段階の手動ズームも併用できます。OBS の「Zoom to Mouse」スクリプトは、ホットキーを押すとディスプレイキャプチャをズームするため、各ズームはテイク中にその場で決まります。詳しくは[自動ズーム](/features/auto-zoom/)を参照してください。
+- **後から変更できるカーソル。** OpenScreen は既定で、ポインターをピクセルではなくデータとして記録します。録画後にサイズ変更やパスのスムージングができ、モーションブラーやクリックバウンスも追加できます。各システムが取得する内容は[カーソルモード](/docs/recording/#cursor-mode)に一覧しています。
+- **フレーミング。** 録画の背後に壁紙、単色、グラデーション、自分の画像を追加し、余白、角丸、影を設定できます。16:9、9:16、1:1、4:3、4:5、16:10、10:16、またはクリップ本来の形状で出力できます。
+- **タイムライン上の注釈。** 6 種類のアニメーション付きテキスト、8 方向の矢印、画像、ガウスまたはモザイクのぼかし領域。OBS は録画中にテキストと画像をシーンソースとして追加します。OpenScreen はテイク後に配置し、あとから移動できます。
+
+### 字幕と文字起こし {#captions-and-transcript}
+
+- **プラグイン不要、3 つのシステムすべてで使える字幕。** whisper.cpp はアプリに同梱されています。約 264 MB の Whisper Small モデル 1 つを一度だけダウンロードし、字幕は動画に焼き込まれます。OBS 自体の字幕ツールは Windows 専用です。詳しくは[字幕](/features/captions/)を参照してください。
+- **テキストによる編集。** 文字起こしの中で単語を選んで削除すると、その箇所が動画からカットされます。無音区間もマークされ、同じ方法でカットできます。[文字起こしの編集](/docs/captions/#transcript-editing)を参照してください。
+- **字幕の翻訳。** 接続した AI プロバイダーを通じて 15 言語に対応しています。
+
+### エクスポートとチャット編集 {#export-and-chat-editing}
+
+- **選択肢のあるエクスポート手順。** MP4 は 720p・1080p・元のサイズで、24・30・60 fps、H.264 または H.265、あるいは GIF で出力できます。透かしなしです。OBS では、出力解像度、フレームレート、エンコーダーを録画前に設定で決めます。[エクスポート](/docs/export/)を参照してください。
+- **自分の API キーによる任意のチャット編集。** カット、ズーム、速度変更、注釈を普段の言葉で指示できます。変更はすべて元に戻せる通常の編集として反映されます。プロバイダーを接続するまではオフです。[AI 編集](/docs/ai-editing/)を参照してください。
+
+## OBS Studio のほうが適している場合 {#when-obs-studio-is-the-better-choice}
+
+- **配信する場合。** OBS は組み込みのサービスやカスタムサーバーに配信できます。OpenScreen は録画と編集を行います。
+- **複数のソースで制作する場合。** OBS には、数に上限のないシーン、カスタムトランジション、変更を配信前にプレビューできる Studio Mode、8 つのシーンを監視できる Multiview があります。
+- **字幕ファイルが必要な場合。** LocalVocal プラグインが `.srt` ファイルを書き出します。OpenScreen は字幕を動画に焼き込みます。
+- **Windows on ARM を使っている場合。** OBS は Windows ARM64 の zip を公開しています（2026 年 9 月時点）。OpenScreen の Windows ビルドは x64 です。
+
+## 両方を使う {#using-both}
+
+どちらか一方を選ぶ必要はありません。OBS で録画し、OpenScreen でその結果を編集できます。
+
+1. OBS で録画します。バージョン 32.0 以降、新しいプロファイルは Windows と Linux では Hybrid MP4、macOS では Hybrid MOV で録画します。
+2. OpenScreen で**メディア**に切り替え、**メディアをインポート**を選びます。ファイルダイアログは `mp4`、`mov`、`mkv`、`flv`、`ts` などのファイルを受け付けます。
+3. ソースのカードをクリップ行にドラッグし、いつもどおりカット、速度変更、ズーム、注釈、フレーミングを行います。
+4. **メディア**モードでそのカードを選び、**再生成**を選んで文字起こしを行い、字幕と文字起こしの編集を有効にします。
+
+OBS のファイルには当てはまらない機能もあります。自動ズーム、カーソル追従のズームフォーカス、カーソルのスタイル設定は、OpenScreen が自身の録画とともに保存するカーソルデータを読み取りますが、OBS のファイルにはそれがありません。手動ズームは引き続き使えます。OBS のシーンにウェブカメラが含まれていた場合、そのウェブカメラはすでに映像の一部になっているため、OpenScreen のウェブカメラレイアウトやフルスクリーンカメラのセグメントには手を加える対象がありません。
+
+## はじめかた {#getting-started}
+
+1. [ダウンロードページ](/download/)から OpenScreen を入手します。Windows では Microsoft Store の利用がおすすめです。
+2. [インストール](/docs/installation/)の手順に従います。macOS では、最初の録画の前に画面収録とアクセシビリティの権限を許可してください。
+3. [クイックスタート](/docs/quick-start/)で最初の録画を行い、**自動強化 → 自動ズーム**を実行します。代わりに OBS の録画を編集する場合は、[メディアライブラリ](/docs/media-library/)から始めて[字幕](/docs/captions/)を追加してください。
+
+ほかのツールとも比較したいですか。[Screen Studio の代替](/alternatives/screen-studio/)、[OpenScreen と Cap の比較](/compare/openscreen-vs-cap/)、[Camtasia の代替](/alternatives/camtasia/)、[Loom の代替](/alternatives/loom/)を参照してください。最初から最後までの手順は[製品デモ動画ガイド](/docs/guides/product-demo-video/)にまとめています。[OpenScreen のホームページ](/)に戻ることもできます。
+
+## 情報源 {#sources}
+
+OBS Studio に関する情報、2026 年 9 月確認：
+
+- キャッチコピー、シーンソース、トランジション、Studio Mode、Multiview、プラグイン、Lua・Python スクリプト、スポンサー：[obsproject.com](https://obsproject.com/)
+- 対応する Windows・macOS のバージョン、Flathub と PPA での配布：[obsproject.com/download](https://obsproject.com/download)
+- 現行バージョン 32.2.2 と、その Windows x64・Windows ARM64・macOS・Ubuntu 向けファイル：[github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2)
+- Flathub パッケージ：[flathub.org/apps/com.obsproject.Studio](https://flathub.org/apps/com.obsproject.Studio)
+- ライセンス：[COPYING](https://raw.githubusercontent.com/obsproject/obs-studio/master/COPYING)
+- 寄付とスポンサーシップ：[obsproject.com/contribute](https://obsproject.com/contribute)
+- 配信サービスとカスタムサーバー、デスクトップ音声、ソースのクロップ、出力設定：[obsproject.com/kb/obs-studio-overview](https://obsproject.com/kb/obs-studio-overview)
+- コンテナ、エンコーダー、HEVC はハードウェアのみ、Mac での ProRes：[obsproject.com/kb/audio-video-formats-guide](https://obsproject.com/kb/audio-video-formats-guide)（2023 年 3 月 26 日付）
+- 新しいプロファイルの既定コンテナとしての Hybrid MP4・MOV：[github.com/obsproject/obs-studio/releases/tag/32.0.0](https://github.com/obsproject/obs-studio/releases/tag/32.0.0)
+- macOS では既定が Hybrid MOV、Windows と Linux では Hybrid MP4：[frontend/widgets/OBSBasic.cpp](https://github.com/obsproject/obs-studio/blob/master/frontend/widgets/OBSBasic.cpp)
+- Hybrid MP4 のクラッシュ復旧：[obsproject.com/kb/hybrid-mp4](https://obsproject.com/kb/hybrid-mp4)
+- プラグインマネージャー：[obsproject.com/blog/obs-studio-32-0-release-notes](https://obsproject.com/blog/obs-studio-32-0-release-notes)
+- WebSocket リモート制御：[obsproject.com/kb/remote-control-guide](https://obsproject.com/kb/remote-control-guide)
+- Windows 専用でビルドされる内蔵の字幕：[plugins/frontend-tools/CMakeLists.txt](https://github.com/obsproject/obs-studio/blob/master/plugins/frontend-tools/CMakeLists.txt)
+- Zoom to Mouse スクリプト：[obsproject.com/forum/resources/zoom-to-mouse.1823](https://obsproject.com/forum/resources/zoom-to-mouse.1823/)
+- LocalVocal プラグイン、対応プラットフォーム、Whisper エンジン、画面上の字幕、.srt 出力：[obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769](https://obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769/)
+
+OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+
+OBS Studio、およびこのページに登場するその他の製品名は、それぞれの所有者の商標です。OpenScreen は独立したプロジェクトであり、OBS Project と提携または承認された関係にはありません。

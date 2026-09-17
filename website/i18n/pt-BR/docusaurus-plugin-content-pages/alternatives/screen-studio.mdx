@@ -1,0 +1,110 @@
+---
+title: Alternativa grátis e open source ao Screen Studio
+description: "O OpenScreen é uma alternativa grátis e open source ao Screen Studio para Windows, macOS e Linux, com zoom automático, legendas locais e sem marca d'água."
+keywords:
+  - alternativa ao screen studio
+  - alternativa grátis ao screen studio
+  - alternativa ao screen studio para windows
+  - alternativa ao screen studio para linux
+  - alternativa open source ao screen studio
+---
+
+# Uma alternativa grátis e de código aberto ao Screen Studio
+
+O OpenScreen é uma alternativa gratuita ao Screen Studio, com licença MIT, para Windows, macOS e Linux. Assim como o Screen Studio, ele dá zoom para onde o cursor vai, restiliza o cursor depois da gravação, adiciona fundos e legendas no dispositivo, e exporta em MP4 ou GIF. Diferente do Screen Studio, que roda só no macOS e precisa de um plano pago para exportar, ele não custa nada e não exige conta. O Screen Studio ainda é a melhor escolha se você compartilha gravações como links hospedados com comentários, ou grava um iPhone ou iPad.
+
+Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Screen Studio vêm de screen.studio e foram verificados em setembro de 2026. As fontes estão listadas no final.
+
+## Resumo rápido {#at-a-glance}
+
+| | OpenScreen | Screen Studio |
+| --- | --- | --- |
+| Preço | Grátis, inclusive para uso comercial | US$ 29/mês na cobrança mensal, ou US$ 9/mês na cobrança anual (em setembro de 2026) |
+| Exportar sem pagar | Sim, e nenhuma conta é necessária | Não. Sem um plano ativo, todo recurso funciona, exceto a exportação de arquivos de vídeo |
+| Código-fonte | Código aberto, licença MIT | Proprietário |
+| Plataformas | Windows 10 (1903 ou posterior) e 11, x64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 | Somente macOS, Ventura 13.1 ou posterior (em setembro de 2026) |
+| O que grava | Uma tela ou uma janela. Corte a imagem depois no editor | Uma tela, uma janela ou uma área selecionada |
+| Zooms automáticos | Sim, posicionados a partir do cursor gravado | Sim |
+| Legendas | Whisper no dispositivo, um modelo de cerca de 264 MB, baixado uma vez. Embutidas no vídeo | Whisper no dispositivo (Base, Small ou Medium), ou Apple Speech Recognition no macOS 26 ou posterior. A transcrição pode ser exportada como arquivo |
+| Tradução de legendas | 15 idiomas, por um provedor de IA que você conecta | Nenhuma etapa de tradução no guia de legendas dele |
+| Linha do tempo com vários clipes | Sim | "Gravações com vários clipes" listada como planejada no roadmap dele |
+| Anotações de texto, seta e imagem | Sim | "Anotações" listada como pausada no roadmap dele |
+| Exportação | MP4 (H.264 ou H.265) ou GIF, até 60 fps, sem marca d'água | MP4 ou GIF, com configurações de taxa de quadros, tamanho de saída e qualidade. Nenhuma configuração de codec documentada |
+| Links de compartilhamento hospedados | Não | Sim, até 30 minutos por gravação (em setembro de 2026), com comentários marcados por tempo |
+| Gravação de iPhone e iPad | Não | Sim, via USB, com molduras de dispositivo |
+| Interface de linha de comando | Sim | Nenhuma no guia dele |
+
+## O que os dois apps fazem {#what-both-apps-do}
+
+Os dois apps cobrem o seguinte. Nada disso é exclusivo de um ou outro.
+
+- **Zooms automáticos.** Os dois dão zoom na ação. No OpenScreen, **Melhoria automática → Zooms automáticos** posiciona os zooms a partir do movimento gravado do cursor, sem chamada de rede e sem modelo. Zooms manuais em seis profundidades ficam ao lado deles. Mais em [zoom automático](/features/auto-zoom/).
+- **Um cursor que você pode mudar depois.** Os dois permitem redimensionar, suavizar ou ocultar o cursor depois da gravação e adicionar efeitos de clique. Por padrão, o OpenScreen grava o ponteiro separado do vídeo para isso.
+- **Fundos e enquadramento.** Os dois adicionam um fundo, espaçamento e sombra, e geram vídeo horizontal ou vertical. O OpenScreen oferece papéis de parede, cores sólidas, gradientes ou sua própria imagem, e proporções incluindo 16:9, 9:16 e 1:1.
+- **Webcam, microfone e áudio do sistema** na mesma gravação.
+- **Recortes, cortes, mudanças de velocidade e desfoque de movimento** em uma linha do tempo.
+- **Locução e música.** Os dois adicionam locução e música de fundo. O Screen Studio traz uma biblioteca de músicas. O OpenScreen grava a locução na própria linha do tempo e importa seus arquivos de áudio.
+- **Transcrição na sua máquina.** Os dois rodam o Whisper localmente, mostram as legendas sobre o vídeo e permitem corrigir a transcrição. Mais em [legendas](/features/captions/).
+- **Ocultar conteúdo sensível.** O Screen Studio borra dados sensíveis com máscaras. O OpenScreen tem regiões de desfoque, gaussiano ou mosaico.
+- **Notas enquanto grava.** Os dois têm notas do apresentador. No Windows e no macOS, a janela de notas do OpenScreen também tem um modo teleprompter.
+- **Processamento local.** O Screen Studio diz que nunca envia dados sobre suas gravações para os servidores dele. O OpenScreen não tem conta, não tem servidor próprio e não tem análise de uso. As [Perguntas frequentes](/docs/faq/#does-openscreen-work-offline) listam as poucas conexões que ele ainda faz.
+
+## Onde o OpenScreen se diferencia {#where-openscreen-differs}
+
+### Preço, licença e plataformas {#price-license-and-platforms}
+
+- **Grátis, sem nada bloqueado.** Nenhum plano, nenhuma conta, nenhuma exportação bloqueada, e uso comercial é permitido.
+- **Código com licença MIT.** O código está no [GitHub](https://github.com/getopenscreen/openscreen). O Screen Studio é proprietário.
+- **Windows e Linux, não só macOS.** As perguntas frequentes do Screen Studio dizem que não há planos para uma versão Windows em um futuro próximo. O OpenScreen publica um instalador para Windows e uma listagem na Microsoft Store, arquivos `.dmg` para Macs Apple Silicon e Intel, e um AppImage, `.deb`, `.rpm` e `.pacman` para Linux, além de um flake Nix. Veja as páginas de [Windows](/screen-recorder-windows/), [macOS](/screen-recorder-mac/) e [Linux](/screen-recorder-linux/).
+
+### Edição {#editing}
+
+- **Vários clipes em um projeto.** Importe gravações ou vídeos existentes (MP4, MOV, MKV e outros), reordene-os, e defina pontos de entrada e saída e um corte da imagem para cada clipe. O Screen Studio pode iniciar um projeto a partir de um vídeo já existente, e o roadmap dele lista a fusão de várias gravações em um único projeto como planejada. Veja [Biblioteca de mídia](/docs/media-library/).
+- **Anotações.** Texto com seis animações, setas em oito direções, imagens e regiões de desfoque. O roadmap do Screen Studio lista "Anotações", descritas como descrições visuais ou textuais de cliques, como pausadas. Veja [Edição e linha do tempo](/docs/editing-timeline/).
+- **Fundo da webcam.** Remova, borre ou substitua o fundo da câmera sem tela verde, na versão estável. O Screen Studio lista a remoção de fundo da câmera como recurso beta.
+
+### Exportação e automação {#export-and-automation}
+
+- **Escolha de codec.** A exportação em MP4 é em H.264 ou H.265. O guia de exportação do Screen Studio não documenta uma configuração de codec. Veja [Exportação](/docs/export/).
+- **Uma interface de linha de comando.** Scripts, CI e agentes de código podem controlar o OpenScreen pela [linha de comando](/docs/cli/). O guia do Screen Studio não tem uma entrada de linha de comando.
+- **Edição por chat opcional, com sua própria chave.** Conecte Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax ou qualquer endpoint compatível com OpenAI, e descreva cortes, zooms, mudanças de velocidade ou anotações em linguagem natural. Cada mudança vira uma edição comum, que pode ser desfeita. Fica desligado até você conectar um provedor, e o mesmo provedor traduz legendas para 15 idiomas. Veja [Edição com IA](/docs/ai-editing/).
+
+## Quando o Screen Studio é a melhor escolha {#when-screen-studio-is-the-better-choice}
+
+- **Você compartilha por link.** O Screen Studio gera um link hospedado para gravações de até 30 minutos, e quem assiste pode deixar comentários ligados a um momento específico. O OpenScreen entrega um arquivo para você enviar onde quiser compartilhar.
+- **Você grava um iPhone ou iPad.** O Screen Studio grava esses dispositivos via USB e adiciona molduras. O OpenScreen grava uma tela Windows, macOS ou Linux.
+- **Você precisa da transcrição como arquivo.** O Screen Studio a exporta. O OpenScreen embute as legendas no vídeo.
+
+## Primeiros passos {#getting-started}
+
+1. Baixe o OpenScreen na [página de download](/download/). No Windows, a Microsoft Store é o caminho recomendado.
+2. Siga a [Instalação](/docs/installation/). No macOS, conceda as permissões de Gravação de Tela e Acessibilidade antes da primeira gravação.
+3. Faça uma primeira gravação com o [início rápido](/docs/quick-start/), depois rode **Melhoria automática → Zooms automáticos** nela.
+
+Comparando outras ferramentas também? Veja [OpenScreen vs Cap](/compare/openscreen-vs-cap/), [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/), a [alternativa ao Camtasia](/alternatives/camtasia/) e a [alternativa ao Loom](/alternatives/loom/), ou volte para a [página inicial do OpenScreen](/).
+
+## Fontes {#sources}
+
+Dados sobre o Screen Studio, verificados em setembro de 2026:
+
+- Preços, e as perguntas frequentes sobre planos para Windows e privacidade: [screen.studio](https://screen.studio/)
+- A exportação exige um plano ativo: [screen.studio/download](https://screen.studio/download)
+- Requisitos de sistema: [screen.studio/guide/system-requirements](https://screen.studio/guide/system-requirements)
+- Índice do guia (sem entrada de linha de comando): [screen.studio/guide](https://screen.studio/guide)
+- Gravação de área: [screen.studio/guide/recording-area](https://screen.studio/guide/recording-area)
+- Projeto a partir de um vídeo existente: [screen.studio/guide/creating-project-from-existing-video](https://screen.studio/guide/creating-project-from-existing-video)
+- Configurações de cursor: [screen.studio/guide/cursor](https://screen.studio/guide/cursor)
+- Máscaras para dados sensíveis: [screen.studio/guide/adding-a-mask-and-highlight](https://screen.studio/guide/adding-a-mask-and-highlight)
+- Roadmap (múltiplos clipes, anotações, remoção de fundo da câmera, efeitos de clique, locução, notas do apresentador): [screen.studio/roadmap](https://screen.studio/roadmap)
+- Legendas, escolha de modelo e arquivo de transcrição: [screen.studio/guide/captions](https://screen.studio/guide/captions)
+- Formatos de exportação: [screen.studio/guide/exporting-the-video](https://screen.studio/guide/exporting-the-video)
+- Configurações de exportação: [screen.studio/guide/explanation-of-export-settings](https://screen.studio/guide/explanation-of-export-settings)
+- Links de compartilhamento e o limite de 30 minutos: [screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
+- Comentários marcados por tempo: [screen.studio/guide/shareable-links-comments](https://screen.studio/guide/shareable-links-comments)
+- Gravação de iPhone e iPad: [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
+- Música de fundo: [screen.studio/guide/background-music](https://screen.studio/guide/background-music)
+- Suavização do cursor, zooms, fundos, fontes de gravação e ferramentas de edição: [screen.studio/llms.txt](https://screen.studio/llms.txt) (datado de 21 de outubro de 2025)
+
+Os dados do OpenScreen descrevem a versão 1.11.0 e remetem à documentação dele acima.
+
+Screen Studio é uma marca registrada do respectivo proprietário. O OpenScreen é um projeto independente e não é afiliado nem endossado pelo Screen Studio.

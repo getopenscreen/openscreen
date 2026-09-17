@@ -1,0 +1,92 @@
+---
+title: Freier Open-Source-Bildschirmrekorder für Windows
+description: "OpenScreen ist ein kostenloser, quelloffener Bildschirmrekorder für Windows 10 und 11: native Aufnahme, Systemton, Auto-Zoom, Export ohne Wasserzeichen."
+keywords:
+  - bildschirmrekorder für windows
+  - kostenloser bildschirmrekorder windows 11 ohne wasserzeichen
+  - open source bildschirmrekorder windows
+  - screen studio alternative windows
+---
+
+# Ein freier, quelloffener Bildschirmrekorder für Windows
+
+OpenScreen ist ein kostenloser, unter der MIT-Lizenz stehender Bildschirmrekorder für Windows 10 und 11, der die Aufnahme auch gleich zum fertigen Video bearbeitet. Unter Windows nimmt er über Windows Graphics Capture auf, erfasst Systemton ohne zusätzlichen Treiber, schreibt eine Datei, die auch bei einem Absturz des Rekorders abspielbar bleibt, und exportiert MP4 oder GIF ohne Wasserzeichen und ohne Konto. OBS Studio ist weiterhin die bessere Wahl, wenn du streamst.
+
+Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu anderen Tools stammen von ihren eigenen Websites und ihrer Dokumentation und wurden im September 2026 geprüft. Die Quellen stehen am Ende.
+
+## Auf einen Blick {#at-a-glance}
+
+| | |
+| --- | --- |
+| Preis | Kostenlos, auch für kommerzielle Nutzung. Kein Konto |
+| Windows-Versionen | Windows 10 (ab 1903) und 11. Native Aufnahme braucht Build 19041 (Version 2004) oder neuer |
+| Architektur | Nur x64. Kein ARM64-Paket |
+| Installation | Microsoft Store, von Microsoft signiert. Oder ein unsignierter `.exe`-Installer |
+| Bildschirmaufnahme | Windows Graphics Capture. Ein Bildschirm oder ein Fenster, mit 60 fps als Ziel, bis zu 3840×2160 |
+| Aufnahmedatei | Fragmentiertes MP4 in Ein-Sekunden-Fragmenten, H.264 über Media Foundation |
+| Systemton | WASAPI-Loopback. Kein Treiber von Drittanbietern |
+| Webcam | Media Foundation, mit DirectShow-Fallback. Als eigene Datei gespeichert |
+| Aufnahmesteuerung | Aus der Aufnahme ausgeschlossen, ab Build 19041 |
+| Export | MP4 (H.264 oder H.265) oder GIF. Kein Wasserzeichen |
+| Export-Encoder | AMD AMF, NVIDIA NVENC, Intel Quick Sync, Media Foundation, dann Software |
+| Untertitel | Whisper auf deinem Rechner, über Vulkan oder die CPU. In das Video eingebrannt |
+| Updates | In den `.exe`-Build eingebaut. Der Store aktualisiert seinen eigenen Build |
+
+## Was OpenScreen unter Windows kann {#what-openscreen-does-on-windows}
+
+Screen Studio, die App, die diese Art von Rekorder geprägt hat, läuft nur unter macOS, und seine FAQ sagt, es gebe keine kurzfristigen Pläne für Windows (Stand September 2026). OpenScreen läuft unter Windows und nimmt dort über die eigenen Aufnahme-, Audio- und Encoding-APIs des Systems auf. Wenn dich Screen Studio hierher geführt hat, vergleicht die Seite zur [Screen-Studio-Alternative](/alternatives/screen-studio/) beide.
+
+### Aufnahme {#recording}
+
+- **Native Aufnahme.** Ein Helferprogramm auf Basis von Windows Graphics Capture nimmt einen Bildschirm oder ein Fenster auf, ab Windows 10 Build 19041. Ziel sind 60 fps, bis zu 3840×2160. Zuschneiden kannst du das Bild danach im Editor. Siehe [Aufnahme](/docs/recording/).
+- **Hardware-H.264, wo verfügbar.** Das Helferprogramm kodiert über Media Foundation. Seit Version 1.11 nutzt es einen Hardware-Encoder, wenn einer installiert ist und funktioniert.
+- **Eine Aufnahme, die einen Absturz übersteht.** Die Aufnahme wird als fragmentiertes MP4 geschrieben, eine Sekunde pro Fragment. Bricht der Aufnahmeprozess ab, spielt die Datei trotzdem bis zum letzten vollständigen Fragment ab. Lässt sich dieser Prozess nicht sauber stoppen und bricht ab, behält OpenScreen die abspielbare Datei und öffnet sie wie jede andere Aufnahme.
+- **Systemton ohne Treiber.** WASAPI-Loopback nimmt auf, was der PC abspielt, ohne dass ein virtuelles Audiogerät installiert werden muss. Es wird mit dem Mikrofon auf einer Spur gemischt.
+- **Webcam über Media Foundation.** Kameras, die Media Foundation nicht erkennt, wie NVIDIA Broadcast, werden über einen DirectShow-Fallback erfasst. Die Webcam wird als eigene Datei gespeichert und im Editor zusammengesetzt.
+- **Steuerelemente, die aus dem Video herausbleiben.** Ab Windows 10 Build 19041 sind die schwebenden Aufnahme-Steuerelemente und das Notizfenster von der Aufnahme ausgeschlossen, sodass sie während der Aufnahme auf dem Bildschirm bleiben können. Das Notizfenster hat einen Teleprompter-Modus.
+- **Ein Cursor, den du später ändern kannst.** Im Standardmodus werden die tatsächliche Cursorform und Klicks als Daten statt als Pixel aufgezeichnet. Du kannst den Cursor nach der Aufnahme in der Größe ändern, glätten und neu gestalten, und automatische Zooms werden anhand seiner Bewegung platziert.
+
+### Bearbeitung und Export {#editing-and-export}
+
+- **Derselbe Editor wie unter macOS und Linux.** Eine Zeitleiste mit mehreren Clips, Kürzungen, Geschwindigkeitsänderungen, Annotationen, Hintergründe, Webcam-Layouts und **Auto-enhance → Automatic zooms**, platziert anhand des aufgezeichneten Cursors. Siehe [Auto-Zoom](/features/auto-zoom/) und [Bearbeitung & Zeitleiste](/docs/editing-timeline/).
+- **Rendering auf Direct3D 11.** Die Live-Vorschau und der MP4-Export teilen sich einen nativen Compositor, der unter Windows auf Direct3D 11 läuft.
+- **Hardware-Export-Encoder.** Der MP4-Export versucht der Reihe nach AMD AMF, NVIDIA NVENC, Intel Quick Sync und Media Foundation, dann einen Software-Encoder. Du wählst H.264 oder H.265, 720p, 1080p oder **Source**, sowie 24, 30 oder 60 fps. GIF-Export ist ebenfalls verfügbar, und keines der beiden Formate hat ein Wasserzeichen. Siehe [Export](/docs/export/). Zur Export-Geschwindigkeit lies den [Export-Benchmark-Beitrag](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) (auf Englisch) und seine Einschränkungen.
+- **Export ohne nutzbare GPU.** Auf einem PC ohne kompatible GPU rendert OpenScreen auf der CPU über WARP, mit Software-Dekodierung. Der Export-Dialog weist vor dem Start darauf hin, und der Export dauert länger.
+- **Untertitel auf deinem Rechner.** whisper.cpp läuft auf Vulkan, mit CPU-Fallback. Es nutzt ein Whisper-Small-Modell von etwa 264 MB, einmalig heruntergeladen, und die Untertitel werden in das Video eingebrannt. Siehe [Untertitel](/features/captions/).
+- **Eine Kommandozeile.** Die [CLI](/docs/cli/) nimmt auf, exportiert, untertitelt und packt Projekte, mit JSON-Ausgabe. Nach der Installation per Installer startest du sie über `Openscreen.exe` in dem Ordner, den du beim Setup gewählt hast.
+
+### Installation und Updates {#installing-and-updating}
+
+- **Microsoft Store, der empfohlene Weg.** Microsoft signiert das Paket während der Zertifizierung, sodass es sich ohne Warnung installieren lässt, und der Store hält es aktuell. Aus einem Terminal: `winget install --source msstore OpenScreen`.
+- **Ein eigenständiger `.exe`-Installer.** Nutze ihn, wo der Store keine Option ist. Er ist etwa 231 MB groß und nicht codesigniert, sodass SmartScreen „Der Computer wurde durch Windows geschützt“ anzeigt. Wähle **Weitere Informationen**, dann **Trotzdem ausführen**.
+- **Updates für den `.exe`-Build.** Die App prüft alle 24 Stunden auf eine neue Version und meldet standardmäßig nur, dass eine verfügbar ist. Du kannst einstellen, dass sie Updates herunterlädt oder herunterlädt und installiert. Installiert wird immer erst nach einer Rückfrage zum Neustart, und während einer Aufnahme wird kein Update angeboten.
+- **Was online geht.** OpenScreen hat kein Konto, keinen eigenen Server und keine Analytics. Für ein paar Dinge geht es trotzdem online: Schriften beim Start, den einmaligen Whisper-Modell-Download, Update-Prüfungen und den KI-Anbieter, falls du einen verbindest.
+
+## Wann OpenScreen nicht das richtige Werkzeug ist {#when-openscreen-is-not-the-right-tool}
+
+- **Auf deinem PC läuft Windows auf ARM.** OpenScreen veröffentlicht nur einen x64-Build. OBS Studio veröffentlicht ein Windows-ARM64-Zip (Stand September 2026).
+- **Dein Windows 10 ist älter als Version 2004.** OpenScreen unterstützt Windows 10 ab Version 1903, aber sein nativer Rekorder braucht Build 19041. Ältere Builds nehmen nur über einen Browser-Aufnahme-Fallback auf, ohne die oben beschriebene native Aufnahme.
+- **Du streamst.** OpenScreen nimmt auf und bearbeitet, es streamt nicht. OBS Studio, ebenfalls kostenlos und quelloffen, nimmt auf und streamt live.
+- **Du teilst Aufnahmen per Link.** OpenScreen gibt dir eine Datei, die du dort hochlädst, wo du teilst. Cap kann eine Aufnahme auf einer Webseite veröffentlichen, die Betrachter im Browser ansehen, und Loom teilt eine Aufnahme über einen kopierten Link mit Zugriffseinstellungen. Siehe [OpenScreen vs Cap](/compare/openscreen-vs-cap/) und die [Loom-Alternative](/alternatives/loom/).
+
+## Erste Schritte {#getting-started}
+
+1. Installiere OpenScreen aus dem Microsoft Store, oder lade die `.exe` von der [Download-Seite](/download/) herunter.
+2. Folge den Windows-Schritten in der [Installation](/docs/installation/#windows) und prüfe dort die Systemanforderungen.
+3. Mach eine erste Aufnahme mit dem [Schnellstart](/docs/quick-start/) und führe dann **Auto-enhance → Automatic zooms** darauf aus.
+
+Auf einem anderen System? Siehe OpenScreen für [macOS](/screen-recorder-mac/) und [Linux](/screen-recorder-linux/). Vergleichst du Tools? Siehe die [Screen-Studio-Alternative](/alternatives/screen-studio/), [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/) und die [Camtasia-Alternative](/alternatives/camtasia/). Die [FAQ](/docs/faq/) beantwortet Fragen, die vor der Installation aufkommen, oder geh zurück zur [OpenScreen-Startseite](/).
+
+## Quellen {#sources}
+
+Andere Tools, geprüft im September 2026:
+
+- Screen Studio läuft nur unter macOS, ohne kurzfristige Windows-Pläne (FAQ): [screen.studio](https://screen.studio/)
+- OBS Studio, kostenlose und quelloffene Aufnahme und Live-Streaming: [obsproject.com](https://obsproject.com/)
+- OBS Studio Windows-ARM64-Zip, Version 32.2.2: [github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2) (vom 14. August 2026)
+- Caps Share-Seiten, die im Browser angesehen werden: [cap.so](https://cap.so/)
+- Teilen per Link und Zugriffseinstellungen bei Loom: [support.atlassian.com/loom/docs/share-your-recording](https://support.atlassian.com/loom/docs/share-your-recording/)
+
+Die Angaben zu OpenScreen beschreiben Version 1.11.0 und verlinken oben auf seine Dokumentation.
+
+Screen Studio, OBS Studio, Cap, Loom, Windows und die anderen Produktnamen auf dieser Seite sind Marken ihrer jeweiligen Inhaber. OpenScreen ist ein unabhängiges Projekt und steht mit keinem von ihnen in Verbindung und wird von keinem von ihnen unterstützt.

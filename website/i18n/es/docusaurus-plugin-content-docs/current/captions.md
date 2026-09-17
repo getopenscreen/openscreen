@@ -44,7 +44,7 @@ En el panel **Transcripción** del inspector, haz clic en **Subtítulos**:
 
 Todo lo de **Posición** se mide respecto al **cuadro exportado**, no respecto al video que contiene. Los subtítulos se quedan donde los pusiste cuando cambias el relleno, y pueden quedar sobre el área de relleno: pon la distancia vertical en 0 y el texto queda pegado al borde superior o inferior del cuadro. Los subtítulos largos crecen alejándose del borde al que están anclados: uno anclado abajo crece hacia arriba, y uno anclado arriba crece hacia abajo.
 
-El tamaño se expresa en píxeles sobre un cuadro de 1080 píxeles de alto y se escala con la salida real, así que los subtítulos se ven igual en 720p, en 1080p o a la resolución de origen. La vista previa y la exportación comparten el mismo código de diseño: lo que ves es lo que se incrusta. Los subtítulos solo existen incrustados: OpenScreen no escribe ningún archivo `.srt` ni `.vtt` aparte, así que quien vea el archivo no puede desactivarlos. La [comparativa de subtítulos locales (en inglés)](/features/captions/) menciona grabadores que sí escriben un archivo de subtítulos.
+El tamaño se expresa en píxeles sobre un cuadro de 1080 píxeles de alto y se escala con la salida real, así que los subtítulos se ven igual en 720p, en 1080p o a la resolución de origen. La vista previa y la exportación comparten el mismo código de diseño: lo que ves es lo que se incrusta. Los subtítulos solo existen incrustados: OpenScreen no escribe ningún archivo `.srt` ni `.vtt` aparte, así que quien vea el archivo no puede desactivarlos. La [comparativa de subtítulos locales](/features/captions/) menciona grabadores que sí escriben un archivo de subtítulos.
 
 ### Traducción {#translation}
 

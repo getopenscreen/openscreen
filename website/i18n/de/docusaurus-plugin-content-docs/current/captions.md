@@ -44,7 +44,7 @@ Klicke im Tab **Transcript** des Inspektors auf **Captions**:
 
 Alles unter **Position** wird am **exportierten Bild** gemessen, nicht am Video darin. Untertitel bleiben an ihrem Platz, wenn du den Innenabstand änderst, und sie können im Randbereich sitzen: Setzt du den vertikalen Abstand auf 0, liegt der Text bündig am oberen oder unteren Bildrand. Lange Untertitel wachsen von dem Rand weg, an dem sie verankert sind: Ein Untertitel unten wächst nach oben, einer oben nach unten.
 
-Die Größe wird in Pixeln bei einem 1080 Pixel hohen Bild angegeben und skaliert mit der tatsächlichen Ausgabe, sodass Untertitel bei 720p, 1080p oder Quellauflösung gleich aussehen. Vorschau und Export nutzen denselben Layout-Code: Was du siehst, wird eingebrannt. Eingebrannt ist die einzige Form: OpenScreen schreibt keine separate `.srt`- oder `.vtt`-Datei, deshalb kann niemand, der das Video ansieht, die Untertitel ausschalten. [Lokale Untertitel im Vergleich (auf Englisch)](/features/captions/) nennt Rekorder, die eine Untertiteldatei schreiben.
+Die Größe wird in Pixeln bei einem 1080 Pixel hohen Bild angegeben und skaliert mit der tatsächlichen Ausgabe, sodass Untertitel bei 720p, 1080p oder Quellauflösung gleich aussehen. Vorschau und Export nutzen denselben Layout-Code: Was du siehst, wird eingebrannt. Eingebrannt ist die einzige Form: OpenScreen schreibt keine separate `.srt`- oder `.vtt`-Datei, deshalb kann niemand, der das Video ansieht, die Untertitel ausschalten. [Lokale Untertitel im Vergleich](/features/captions/) nennt Rekorder, die eine Untertiteldatei schreiben.
 
 ### Übersetzung {#translation}
 

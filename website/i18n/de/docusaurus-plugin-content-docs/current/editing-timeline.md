@@ -43,7 +43,7 @@ Wählst du auf der Zeitleiste einen Bereich aus (einen Zoom-, Schnitt-, Annotati
 ## Werkzeugleiste der Zeitleiste {#timeline-toolbar}
 
 - **Auto-enhance** (Zauberstab-Symbol): ein Menü mit zwei einmaligen Durchläufen:
-  - **Automatic zooms**: liest die aufgezeichnete Cursorbewegung und setzt Zoombereiche an die Stellen, an denen der Cursor verweilt. Kein Netzwerk, kein Modell. Wie diese Stellen gewählt werden, erklärt [Auto zoom (auf Englisch)](/features/auto-zoom/).
+  - **Automatic zooms**: liest die aufgezeichnete Cursorbewegung und setzt Zoombereiche an die Stellen, an denen der Cursor verweilt. Kein Netzwerk, kein Modell. Wie diese Stellen gewählt werden, erklärt [Auto zoom](/features/auto-zoom/).
   - **Smart cuts** (mit *With AI* markiert): übergibt die Aufgabe stattdessen dem KI-Agenten, der einen [verbundenen Anbieter](./ai-editing.md) braucht.
 - **Speed** (`S`): fügt am Abspielkopf einen Geschwindigkeitsbereich ein.
 - **Comment** (`A`): fügt am Abspielkopf eine Annotation ein.
@@ -64,7 +64,7 @@ Klicke auf einen Zoom-Block, um seinen Inspektor zu öffnen:
 - **Focus Mode**: Manual (die Fokusmarke in der Vorschau ziehen) oder Auto (folgt dem aufgezeichneten Cursor). Fest auf Auto, wenn der Schalter Auto-Focus in der Werkzeugleiste an ist.
 - **Focus Position**: X/Y als Prozentwerte im manuellen Modus.
 
-Zoombereiche aus **Auto-enhance → Automatic zooms** öffnen denselben Inspektor. Wie dieser Durchlauf arbeitet und wie er im Vergleich zu den automatischen Zooms anderer Rekorder abschneidet, steht unter [Auto zoom (auf Englisch)](/features/auto-zoom/).
+Zoombereiche aus **Auto-enhance → Automatic zooms** öffnen denselben Inspektor. Wie dieser Durchlauf arbeitet und wie er im Vergleich zu den automatischen Zooms anderer Rekorder abschneidet, steht unter [Auto zoom](/features/auto-zoom/).
 
 ### Schnittbereiche {#trim-regions}
 

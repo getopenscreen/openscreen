@@ -65,7 +65,7 @@ Dans la barre d'outils de la timeline, ouvrez **Amélioration auto** et choisiss
 
 Vérifiez-les ensuite. Cliquez sur un zoom pour régler son niveau (de 1.25× à 5×), son mode de focus (Auto suit le curseur, Manuel garde un point fixe) et une éventuelle rotation 3D. Appuyez sur `Z` pour ajouter un zoom à la main, et sur `Ctrl/Cmd+D` pour supprimer un zoom dont vous ne voulez pas.
 
-Pour en savoir plus sur le placement des zooms : [Zoom automatique (en anglais)](/features/auto-zoom/).
+Pour en savoir plus sur le placement des zooms : [Zoom automatique](/features/auto-zoom/).
 
 ## 5. Couper depuis la transcription et accélérer les temps morts {#5-cut-from-the-transcript-and-speed-up-dead-time}
 
@@ -98,7 +98,7 @@ Dans l'onglet **Transcription**, cliquez sur **Sous-titres** et activez **Affich
 
 Whisper détecte la langue parlée, mais vous pouvez aussi forcer l'une des 100 langues avec **Régénérer en** dans le mode Médias. Pour publier dans une autre langue, utilisez **Traduire** vers l'une des 15 langues cibles, puis sélectionnez cette langue sous **Affichage** avant d'exporter. La traduction passe par votre propre fournisseur de LLM : elle nécessite donc une clé.
 
-Les sous-titres sont incrustés dans la vidéo. OpenScreen n'écrit pas de fichier `.srt` ni `.vtt` : un lecteur ne peut donc pas les désactiver. Détails : [Sous-titres et transcription](../captions.md), et [fonctionnement des sous-titres (en anglais)](/features/captions/).
+Les sous-titres sont incrustés dans la vidéo. OpenScreen n'écrit pas de fichier `.srt` ni `.vtt` : un lecteur ne peut donc pas les désactiver. Détails : [Sous-titres et transcription](../captions.md), et [fonctionnement des sous-titres](/features/captions/).
 
 ## 8. Exporter {#8-export}
 
@@ -119,7 +119,7 @@ OpenScreen n'héberge pas votre vidéo, ne crée pas de liens de partage et ne c
 
 ## Quand OpenScreen n'est pas le bon outil {#when-openscreen-is-not-the-right-tool}
 
-- **Vous voulez un lien hébergé avec des statistiques de visionnage ou des commentaires.** Un enregistreur hébergé convient mieux. Loom, par exemple, partage chaque enregistrement sous forme de lien sur loom.com, et sa page de tarifs indique des statistiques de visionnage et des commentaires vidéo dans toutes les formules (en septembre 2026). Voir [OpenScreen comme alternative à Loom (en anglais)](/alternatives/loom/) pour le cas, plus restreint, où OpenScreen convient.
+- **Vous voulez un lien hébergé avec des statistiques de visionnage ou des commentaires.** Un enregistreur hébergé convient mieux. Loom, par exemple, partage chaque enregistrement sous forme de lien sur loom.com, et sa page de tarifs indique des statistiques de visionnage et des commentaires vidéo dans toutes les formules (en septembre 2026). Voir [OpenScreen comme alternative à Loom](/alternatives/loom/) pour le cas, plus restreint, où OpenScreen convient.
 - **Vous voulez une démo interactive** que le spectateur parcourt en cliquant. OpenScreen n'exporte que de la vidéo et des GIF.
 - **Votre lecteur vidéo a besoin d'un fichier de sous-titres séparé.** OpenScreen ne fait qu'incruster les sous-titres.
 - **Vous enregistrez sur un téléphone ou une tablette.** OpenScreen est une application de bureau pour Windows, macOS 13 ou ultérieur, et Linux.

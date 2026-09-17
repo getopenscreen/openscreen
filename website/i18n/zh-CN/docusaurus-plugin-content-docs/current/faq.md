@@ -112,8 +112,8 @@ OpenScreen 是一款免费的录屏与视频剪辑软件，采用 MIT 许可证�
 
 如果你需要以下任何一项，OpenScreen 并不是合适的工具：
 
-- **在线托管分享**。没有分享链接、云存储、团队空间或评论功能。你的文件保留在你的磁盘上。请参阅 [OpenScreen 作为 Loom 替代方案（英文）](/alternatives/loom/)。
-- **直播**。请参阅 [OpenScreen 与 OBS Studio 对比（英文）](/compare/openscreen-vs-obs/)。
+- **在线托管分享**。没有分享链接、云存储、团队空间或评论功能。你的文件保留在你的磁盘上。请参阅 [OpenScreen 作为 Loom 替代方案](/alternatives/loom/)。
+- **直播**。请参阅 [OpenScreen 与 OBS Studio 对比](/compare/openscreen-vs-obs/)。
 - **字幕文件**。字幕会烧录进视频，不支持导出 SRT 或 VTT。请参阅[字幕](./captions.md)。
 - **移动端**。没有移动应用，也不能录制 iOS 或 Android。
 

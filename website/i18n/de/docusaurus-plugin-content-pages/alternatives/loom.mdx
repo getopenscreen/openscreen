@@ -1,0 +1,100 @@
+---
+title: Loom-Alternative für Linux und lokale Aufnahmen
+description: "OpenScreen ist eine kostenlose, quelloffene Loom-Alternative für Linux, Windows, macOS: lokale Aufnahmen ohne Zeitlimit, als MP4 auf deiner Festplatte."
+keywords:
+  - loom alternative für linux
+  - loom alternative offline
+  - loom alternative ohne zeitlimit
+  - kostenlose loom alternative lokale aufnahme
+---
+
+# Eine Loom-Alternative für Linux und lokale Aufnahmen
+
+OpenScreen ist eine kostenlose, unter der MIT-Lizenz stehende Loom-Alternative für Linux, Windows und macOS. Wie Loom nimmt es deinen Bildschirm, deine Webcam, dein Mikrofon und den Systemton auf und transkribiert, was du sagst. Anders als Loom, das Stand September 2026 nur für Windows und macOS Desktop-Apps hat und kostenlose Aufnahmen nach 5 Minuten beendet, behält es die Aufnahme auf deinem Rechner und exportiert eine MP4-Datei, ohne Zeitlimit und ohne Konto. Loom ist weiterhin die bessere Wahl, wenn du Videos als Links teilst und Kommentare, Reaktionen und Betrachter-Insights auf einer gehosteten Seite willst.
+
+Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu Loom stammen von Looms eigener Website und GitHub-Organisation und wurden im September 2026 geprüft. Die Quellen stehen am Ende.
+
+## Auf einen Blick {#at-a-glance}
+
+| | OpenScreen | Loom |
+| --- | --- | --- |
+| Gehostete Share-Links | Nein. Du bekommst eine Datei und teilst sie selbst | Ja, mit Kommentaren, Emoji-Reaktionen und Betrachter-Insights, auch im kostenlosen Starter-Plan (Stand September 2026) |
+| Preis | Kostenlos, auch für kommerzielle Nutzung | Starter kostenlos. Business 18 $ pro Nutzer/Monat, oder 15 $/Monat bei jährlicher Abrechnung. Business + AI 24 $, oder 20 $/Monat bei jährlicher Abrechnung. Enterprise über den Vertrieb (Stand September 2026) |
+| Grenzen im kostenlosen Plan | Keine. Kein Limit bei Aufnahmelänge oder Videoanzahl | Starter: 25 Videos pro Person, 5 Minuten pro Aufnahme, bis zu 720p, kein Video-Download (Stand September 2026) |
+| Quellcode | Open Source, MIT-Lizenz | Proprietär |
+| Desktop-Plattformen | Windows 10 (ab 1903) und 11, x64. macOS ab 13, Apple Silicon und Intel. Linux, x64 | Windows 10 oder neuer und macOS ab 12.3. Keine Linux- oder ChromeOS-App (Stand September 2026) |
+| Weitere Aufnahmewege | Die Desktop-App, dazu eine Kommandozeile | Chrome-Erweiterung, sowie iOS- und Android-Apps (Stand September 2026) |
+| Wo das Video liegt | Eine Datei auf deiner Festplatte | Looms Cloud. Kostenpflichtige Pläne können es als MP4 herunterladen (Stand September 2026) |
+| Upload-Geschwindigkeit | Kein Faktor. Aufnahme und Export laufen auf deinem Rechner | Der Fehlerbehebungs-Guide verlangt mindestens 5 Mbit/s Upload für eine erfolgreiche Aufnahme |
+| Transkription | Lokales Whisper, ein Modell von etwa 264 MB, einmalig heruntergeladen. Sprache erkannt oder aus 100 gewählt | Auf Looms Seite, mit selbst gehostetem Whisper und Anbietern wie Speechmatics. 50+ Sprachen in jedem Plan (Stand September 2026) |
+| Untertitel | In das Video eingebrannt | Zuschaltbare Untertitel im Loom-Player. Fehlen in einer heruntergeladenen MP4 |
+| Automatische Zooms | Ja, platziert anhand des aufgezeichneten Cursors | Kein automatischer Zoom im Bearbeitungs-Guide |
+| Bearbeitung | Zeitleiste mit mehreren Clips, Schnitte, Geschwindigkeit, Zooms, Annotationen und Bearbeitung über das Transkript, alles kostenlos | Trimmen und Zusammenfügen in Business. Bearbeitung über das Transkript und Overlays in Business + AI (Stand September 2026) |
+| Export | MP4 (H.264 oder H.265) in 720p, 1080p oder Originalgröße, oder GIF. Kein Wasserzeichen | MP4-Download in kostenpflichtigen Plänen. Aufnahme bis zu 4K ab Business (Stand September 2026) |
+
+## Was beide Apps können {#what-both-apps-do}
+
+Bei der Aufnahme überschneiden sich beide stärker als beim Teilen. Nichts davon ist für eine der beiden Apps einzigartig.
+
+- **Bildschirm, Kamera und Audio.** Beide nehmen den Bildschirm mit Webcam, Mikrofon und Systemton auf. OpenScreen nimmt einen Bildschirm oder ein Fenster auf und behandelt die Webcam als eigene Ebene, die du im Editor platzierst und formst.
+- **Kamerahintergründe.** Loom listet virtuelle Hintergründe in jedem Plan. OpenScreen entfernt, verwischt oder ersetzt den Webcam-Hintergrund ohne Greenscreen.
+- **Sprechernotizen.** Beide zeigen Notizen während der Aufnahme. Unter Windows und macOS hat OpenScreens Notizfenster zusätzlich einen Teleprompter-Modus.
+- **Transkripte und Untertitel.** Beide transkribieren die Aufnahme und zeigen daraus Untertitel.
+- **Bearbeitung.** Beide trimmen eine Aufnahme, fügen Clips zusammen und schneiden das Video, wenn du Wörter aus dem Transkript löschst. Beide behandeln auch Stille: Loom entfernt sie, OpenScreen markiert sie, damit du sie schneiden kannst. Bei Loom ist all das in kostenpflichtigen Plänen.
+- **Text und Pfeile über dem Video.** Looms Overlays sind Text, Kästen und Pfeile. OpenScreens Annotationen sind Text, Pfeile, Bilder und Unschärfebereiche.
+
+## Wo OpenScreen sich unterscheidet {#where-openscreen-differs}
+
+### Preis, Grenzen und Plattformen {#price-limits-and-platforms}
+
+- **Kein Tarif und keine Grenzen.** Es gibt kein Limit bei Aufnahmelänge oder Videoanzahl, keinen gesperrten Export und kein Konto. Kommerzielle Nutzung ist erlaubt. Stand September 2026 ist Looms kostenloser Starter-Plan auf 25 Videos pro Person und 5 Minuten pro Aufnahme begrenzt, nimmt höchstens in 720p auf und erlaubt keinen Video-Download.
+- **Quelloffen unter MIT-Lizenz.** Der Code liegt auf [GitHub](https://github.com/getopenscreen/openscreen). Loom, im Besitz von Atlassian, ist proprietär.
+- **Eine Linux-Desktop-App.** Auf die Frage, ob es Linux und ChromeOS unterstützt, antwortet Looms Kompatibilitäts-FAQ „Leider nein“. OpenScreen liefert ein AppImage, `.deb`, `.rpm` und `.pacman` für x64-Linux, dazu ein Nix-Flake, und nimmt über PipeWire und das ScreenCast-Portal auf. Mehr zu [OpenScreen für Linux](/screen-recorder-linux/).
+
+### Lokal von Haus aus {#local-by-default}
+
+- **Die Datei gehört dir von Anfang an.** Die Aufnahme landet auf deiner Festplatte, und der Export schreibt eine MP4 in H.264 oder H.265, in 720p, 1080p oder Originalgröße, bis zu 60 fps, oder ein GIF, ohne Wasserzeichen. Loom speichert Videos in seiner Cloud. Die heruntergeladene MP4 behält deine Kürzungen, lässt aber zuschaltbare Untertitel, Kapitel, Calls to Action sowie die Entfernung von Füllwörtern und Stille weg. Siehe [Export](/docs/export/).
+- **Deine Upload-Geschwindigkeit spielt keine Rolle.** Looms Fehlerbehebungs-Guide verlangt mindestens 5 Mbit/s Upload-Geschwindigkeit für eine erfolgreiche Aufnahme. OpenScreen hat kein Konto, keinen eigenen Server und keine Analytics. Die [FAQ](/docs/faq/#does-openscreen-work-offline) listet die wenigen Verbindungen, die es dennoch aufbaut.
+- **Transkription auf dem eigenen Rechner.** Whisper läuft lokal mit einem Modell von etwa 264 MB, einmalig heruntergeladen, und funktioniert danach offline. Es erkennt die Sprache, oder du wählst eine von 100. Untertitel werden in das Video eingebrannt. Mehr zu [Untertiteln](/features/captions/).
+- **KI nur, wenn du sie anbindest.** Chat-Bearbeitung ist optional und funktioniert mit deinem eigenen Schlüssel für Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax oder einen beliebigen OpenAI-kompatiblen Endpunkt. Sie ist aus, bis du einen Anbieter verbindest, und jede Änderung landet als gewöhnliche, rückgängig machbare Bearbeitung. Looms KI-Funktionen senden Transkripte als Text an OpenAI, und Google Gemini erhält Video und Audio, um seine Aktionspläne für KI-Agenten zu erstellen. Siehe [KI-Bearbeitung](/docs/ai-editing/).
+
+### Feinschliff für Demos {#demo-polish}
+
+- **Automatische Zooms.** **Auto-enhance → Automatic zooms** platziert Zooms anhand der aufgezeichneten Cursorbewegung, ohne Netzwerkaufruf und ohne Modell. Der Cursor wird als Daten aufgezeichnet, sodass du ihn nach der Aufnahme in der Größe ändern, glätten und mit einem Klick-Bounce versehen kannst. Looms Bearbeitungs-Guide dokumentiert keinen automatischen Zoom. Mehr zu [Auto-Zoom](/features/auto-zoom/).
+- **Kein Bearbeitungswerkzeug hinter einem Plan.** Loom teilt die Bearbeitung nach Plan auf. In OpenScreen hat eine einzige Installation die Zeitleiste mit mehreren Clips samt Zuschnitt pro Clip, Geschwindigkeitsänderungen von 0,1× bis 100×, Text mit sechs Animationen, Pfeile in acht Richtungen, Bilder, Unschärfebereiche, Voice-over- und Musikspuren, Hintergründe mit Innenabstand und Schatten sowie Ausgabe in 16:9, 9:16, 1:1 und weiteren Seitenverhältnissen. Siehe [Bearbeitung & Zeitleiste](/docs/editing-timeline/).
+- **Eine Kommandozeile.** Skripte und Coding-Agenten können OpenScreen über die [Kommandozeile](/docs/cli/) steuern.
+
+## Wann Loom die bessere Wahl ist {#when-loom-is-the-better-choice}
+
+Looms Plandetails in diesem Abschnitt sind Stand September 2026.
+
+- **Du versendest Videos als Links.** Genau dafür ist Loom gebaut. Betrachter bekommen eine gehostete Seite mit Kommentaren, Emoji-Reaktionen und Betrachter-Insights, und Business fügt passwortgeschützte Videos hinzu. OpenScreen gibt dir eine Datei, die du dort hochlädst, wo du teilst.
+- **Dein Team arbeitet in einer gemeinsamen Videobibliothek.** Loom hat persönliche, geteilte und Team-Bibliotheken, Ordner und Datenschutzeinstellungen, mit SSO und SCIM in Enterprise.
+- **Du nimmst mit dem Smartphone oder im Browser auf.** Loom hat iOS- und Android-Apps sowie eine Chrome-Erweiterung. OpenScreen ist eine Desktop-App für Windows, macOS und Linux.
+- **Auf deinem Mac läuft macOS 12.** Looms Desktop-App läuft ab macOS 12.3. OpenScreen braucht macOS 13 oder neuer.
+
+## Erste Schritte {#getting-started}
+
+1. Lade OpenScreen von der [Download-Seite](/download/) herunter. Unter Linux wähle das AppImage, `.deb`, `.rpm` oder `.pacman`, oder nutze das Nix-Flake.
+2. Folge der [Installation](/docs/installation/). Unter macOS erteile die Berechtigungen **Bildschirmaufnahme** und **Bedienungshilfen**, bevor du die erste Aufnahme startest. Unter Linux braucht die Aufnahme PipeWire und `xdg-desktop-portal`, und [Mausklicks unter Wayland](/docs/installation/#mouse-clicks-on-wayland) brauchen deinen Nutzer in der Gruppe `input`.
+3. Mach eine erste Aufnahme mit dem [Schnellstart](/docs/quick-start/), exportiere sie dann als MP4 und teile die Datei, wo dein Team schon arbeitet.
+
+Vergleichst du auch andere Tools? Siehe die [Screen-Studio-Alternative](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/), [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/) und die [Camtasia-Alternative](/alternatives/camtasia/), oder geh zurück zur [OpenScreen-Startseite](/).
+
+## Quellen {#sources}
+
+Angaben zu Loom, geprüft im September 2026:
+
+- Pläne, Preise, Grenzen und Funktionen: [loom.com/pricing](https://www.loom.com/pricing)
+- Desktop- und Mobilanforderungen, Linux und ChromeOS: [support.atlassian.com/loom/docs/loom-device-compatibility](https://support.atlassian.com/loom/docs/loom-device-compatibility/)
+- Aufnahmeplattformen und die Chrome-Erweiterung: [support.atlassian.com/loom/docs/the-loom-recording-platforms](https://support.atlassian.com/loom/docs/the-loom-recording-platforms/)
+- Downloads, und was sie weglassen: [support.atlassian.com/loom/docs/download-your-loom-video](https://support.atlassian.com/loom/docs/download-your-loom-video/)
+- Für die Aufnahme nötige Upload-Geschwindigkeit: [support.atlassian.com/loom/kb/cant-record](https://support.atlassian.com/loom/kb/cant-record/)
+- KI-Funktionen, ihre Pläne und Datennutzung, Transkriptionsanbieter: [support.atlassian.com/loom/docs/loom-ai-features](https://support.atlassian.com/loom/docs/loom-ai-features/)
+- Bearbeitungs-Guide (kein automatischer Zoom): [support.atlassian.com/loom/docs/edit-your-loom-video](https://support.atlassian.com/loom/docs/edit-your-loom-video/)
+- Öffentliche Repositories, keines davon die App: [github.com/loomhq](https://github.com/loomhq)
+- Übernahme durch Atlassian: [atlassian.com/blog/announcements/atlassian-acquires-loom](https://www.atlassian.com/blog/announcements/atlassian-acquires-loom) (vom 12. Oktober 2023)
+
+Die Angaben zu OpenScreen beschreiben Version 1.11.0 und verlinken oben auf seine Dokumentation.
+
+Loom ist eine Marke seines Inhabers. OpenScreen ist ein unabhängiges Projekt und steht in keiner Verbindung zu Loom oder Atlassian und wird von keinem der beiden unterstützt.

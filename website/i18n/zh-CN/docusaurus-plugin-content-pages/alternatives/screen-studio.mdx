@@ -1,0 +1,110 @@
+---
+title: 免费开源的 Screen Studio 替代品
+description: OpenScreen 是一款适用于 Windows、macOS 和 Linux 的免费开源 Screen Studio 替代软件，支持自动缩放、本地字幕和无水印导出。
+keywords:
+  - Screen Studio 替代
+  - 免费 Screen Studio 替代品
+  - Screen Studio 替代软件 Windows
+  - Screen Studio 替代软件 Linux
+  - 开源 Screen Studio 替代品
+---
+
+# 一款免费开源的 Screen Studio 替代品
+
+OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费 Screen Studio 替代软件，采用 MIT 许可证。和 Screen Studio 一样，它会在光标所在处自动缩放，在录制结束后重新设置光标样式，添加背景和本机字幕，并导出 MP4 或 GIF。与 Screen Studio 不同的是，后者仅支持 macOS，且需要付费方案才能导出，而 OpenScreen 不收费、无需账号。如果你需要以带评论的托管链接分享录制内容，或录制 iPhone、iPad，Screen Studio 仍是更好的选择。
+
+本页由 OpenScreen 项目发布。关于 Screen Studio 的信息来自 screen.studio，核实于 2026 年 9 月。信息来源列于文末。
+
+## 一览 {#at-a-glance}
+
+| | OpenScreen | Screen Studio |
+| --- | --- | --- |
+| 价格 | 免费，含商业用途 | 按月计费 29 美元/月，或按年计费 9 美元/月（截至 2026 年 9 月） |
+| 免费导出 | 是，无需账号 | 否。没有有效方案时，除导出视频文件外其他功能均可使用 |
+| 源代码 | 开源，MIT 许可证 | 闭源 |
+| 平台 | Windows 10（1903 及以上）和 11，x64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 | 仅 macOS，Ventura 13.1 及以上（截至 2026 年 9 月） |
+| 录制内容 | 一个显示器或一个窗口，之后可在编辑器中裁剪 | 一个显示器、一个窗口，或选定区域 |
+| 自动缩放 | 是，根据录制的光标位置放置 | 是 |
+| 字幕 | 本机 Whisper，一个约 264 MB 的模型，仅下载一次，烧录进视频 | 本机 Whisper（Base、Small 或 Medium），或 macOS 26 及以上系统使用 Apple 语音识别。转录文本可导出为文件 |
+| 字幕翻译 | 15 种语言，通过你连接的 AI 提供方 | 其字幕指南中没有翻译步骤 |
+| 多片段时间轴 | 是 | “多片段录制”列在其路线图中，属于计划功能 |
+| 文字、箭头和图片标注 | 是 | “标注”功能在其路线图中标记为暂停 |
+| 导出 | MP4（H.264 或 H.265）或 GIF，最高 60 fps，无水印 | MP4 或 GIF，可设置帧率、输出尺寸和画质，文档未提及编码格式设置 |
+| 托管分享链接 | 无 | 有，每段录制最长 30 分钟（截至 2026 年 9 月），支持带时间戳的评论 |
+| iPhone 和 iPad 录制 | 无 | 有，通过 USB，并带设备边框 |
+| 命令行界面 | 有 | 其指南中未提及 |
+
+## 两款软件的共同点 {#what-both-apps-do}
+
+以下功能两款软件都具备，并非任何一方独有。
+
+- **自动缩放。** 两者都会自动放大画面重点。在 OpenScreen 中，**自动增强 → 自动缩放**会根据录制的光标移动放置缩放，无需联网、无需模型。六种深度的手动缩放也可与之并用。详见[自动缩放](/features/auto-zoom/)。
+- **可事后调整的光标。** 两者都能在录制结束后调整光标大小、平滑或隐藏光标，并添加点击效果。OpenScreen 默认会将光标数据与视频分开录制，以实现这一点。
+- **背景与画面构图。** 两者都能添加背景、内边距和阴影，并输出横向或竖向视频。OpenScreen 提供壁纸、纯色、渐变或你自己的图片，以及包括 16:9、9:16 和 1:1 在内的多种画面比例。
+- **同一段录制中的摄像头、麦克风和系统音频。**
+- **时间轴上的修剪、剪切、变速和运动模糊。**
+- **配音与音乐。** 两者都能添加配音和背景音乐。Screen Studio 自带音乐库；OpenScreen 在时间轴上录制配音，也可以导入你自己的音频文件。
+- **在本机上转录。** 两者都在本机运行 Whisper，在视频上显示字幕，并允许你修正转录文本。详见[字幕](/features/captions/)。
+- **隐藏敏感内容。** Screen Studio 用遮罩模糊敏感数据；OpenScreen 提供高斯或马赛克模糊区域。
+- **录制时的笔记。** 两者都有演讲者笔记功能。在 Windows 和 macOS 上，OpenScreen 的笔记窗口还带有提词器模式。
+- **本地处理。** Screen Studio 表示绝不会将录制内容的数据发送到其服务器。OpenScreen 没有账号体系，没有自己的服务器，也没有分析统计。[常见问题](/docs/faq/#does-openscreen-work-offline)列出了它仍会联网的少数情形。
+
+## OpenScreen 的不同之处 {#where-openscreen-differs}
+
+### 价格、许可证与平台 {#price-license-and-platforms}
+
+- **完全免费，功能不设限。** 没有付费方案，没有账号，没有锁定的导出功能，允许商业用途。
+- **MIT 许可的源代码。** 代码托管在 [GitHub](https://github.com/getopenscreen/openscreen)。Screen Studio 是闭源软件。
+- **支持 Windows 和 Linux，不止 macOS。** Screen Studio 的常见问题中表示近期没有推出 Windows 版本的计划。OpenScreen 提供 Windows 安装程序及 Microsoft Store 上架版本，为 Apple Silicon 和 Intel Mac 提供 `.dmg` 文件，为 Linux 提供 AppImage、`.deb`、`.rpm` 和 `.pacman` 包，还有 Nix flake。参见 [Windows](/screen-recorder-windows/)、[macOS](/screen-recorder-mac/) 和 [Linux](/screen-recorder-linux/) 页面。
+
+### 编辑 {#editing}
+
+- **一个项目中容纳多个片段。** 导入录制内容或已有视频（MP4、MOV、MKV 等），重新排序，并为每个片段设置入点、出点和裁剪范围。Screen Studio 可以从一段已有视频开始项目，其路线图将合并多段录制到一个项目中列为计划功能。参见[媒体库](/docs/media-library/)。
+- **标注。** 六种动画效果的文字、八个方向的箭头、图片，以及模糊区域。Screen Studio 的路线图将“标注”（描述为点击的视觉或文字说明）列为暂停状态。参见[编辑与时间轴](/docs/editing-timeline/)。
+- **摄像头背景。** 在正式版中即可去除、模糊或替换摄像头背景，无需绿幕。Screen Studio 将摄像头背景移除列为测试版功能。
+
+### 导出与自动化 {#export-and-automation}
+
+- **可选编码格式。** MP4 导出支持 H.264 或 H.265。Screen Studio 的导出指南没有提及编码格式设置。参见[导出](/docs/export/)。
+- **命令行界面。** 脚本、CI 和编程代理都可以通过[命令行](/docs/cli/)驱动 OpenScreen。Screen Studio 的指南中没有命令行相关条目。
+- **可选的聊天式编辑，使用你自己的密钥。** 连接 Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax 或任意 OpenAI 兼容端点，用日常语言描述剪切、缩放、变速或标注。每次修改都是一次可撤销的普通编辑。在你连接提供方之前，此功能处于关闭状态；同一个提供方也用于将字幕翻译成 15 种语言。参见 [AI 编辑](/docs/ai-editing/)。
+
+## 何时 Screen Studio 是更好的选择 {#when-screen-studio-is-the-better-choice}
+
+- **以链接分享。** Screen Studio 会为最长 30 分钟的录制生成托管链接，观众可以在指定时间点留下评论。OpenScreen 给你的是一个文件，想在哪里分享就上传到哪里。
+- **录制 iPhone 或 iPad。** Screen Studio 通过 USB 录制这些设备并添加设备边框。OpenScreen 录制的是 Windows、macOS 或 Linux 屏幕。
+- **需要转录文本文件。** Screen Studio 可以导出转录文本；OpenScreen 是把字幕烧录进视频中。
+
+## 开始使用 {#getting-started}
+
+1. 从[下载页面](/download/)下载 OpenScreen。在 Windows 上，推荐通过 Microsoft Store 安装。
+2. 按照[安装说明](/docs/installation/)操作。在 macOS 上，首次录制前请先授予屏幕录制和辅助功能权限。
+3. 参照[快速上手](/docs/quick-start/)完成第一次录制，然后对它运行**自动增强 → 自动缩放**。
+
+还想比较其他工具？参见 [OpenScreen 对比 Cap](/compare/openscreen-vs-cap/)、[OpenScreen 对比 OBS Studio](/compare/openscreen-vs-obs/)、[Camtasia 替代方案](/alternatives/camtasia/)和 [Loom 替代方案](/alternatives/loom/)，或返回 [OpenScreen 首页](/)。
+
+## 信息来源 {#sources}
+
+Screen Studio 相关信息，核实于 2026 年 9 月：
+
+- 定价，以及关于 Windows 计划和隐私的常见问题：[screen.studio](https://screen.studio/)
+- 导出需要有效方案：[screen.studio/download](https://screen.studio/download)
+- 系统要求：[screen.studio/guide/system-requirements](https://screen.studio/guide/system-requirements)
+- 指南索引（无命令行条目）：[screen.studio/guide](https://screen.studio/guide)
+- 区域录制：[screen.studio/guide/recording-area](https://screen.studio/guide/recording-area)
+- 从已有视频创建项目：[screen.studio/guide/creating-project-from-existing-video](https://screen.studio/guide/creating-project-from-existing-video)
+- 光标设置：[screen.studio/guide/cursor](https://screen.studio/guide/cursor)
+- 敏感数据遮罩：[screen.studio/guide/adding-a-mask-and-highlight](https://screen.studio/guide/adding-a-mask-and-highlight)
+- 路线图（多片段、标注、摄像头背景移除、点击效果、配音、演讲者笔记）：[screen.studio/roadmap](https://screen.studio/roadmap)
+- 字幕、模型选择及转录文件：[screen.studio/guide/captions](https://screen.studio/guide/captions)
+- 导出格式：[screen.studio/guide/exporting-the-video](https://screen.studio/guide/exporting-the-video)
+- 导出设置：[screen.studio/guide/explanation-of-export-settings](https://screen.studio/guide/explanation-of-export-settings)
+- 可分享链接及其 30 分钟限制：[screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
+- 带时间戳的评论：[screen.studio/guide/shareable-links-comments](https://screen.studio/guide/shareable-links-comments)
+- iPhone 和 iPad 录制：[screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
+- 背景音乐：[screen.studio/guide/background-music](https://screen.studio/guide/background-music)
+- 光标平滑、缩放、背景、录制来源和编辑工具：[screen.studio/llms.txt](https://screen.studio/llms.txt)（日期为 2025 年 10 月 21 日）
+
+OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+
+Screen Studio 是其所有者的商标。OpenScreen 是一个独立项目，与 Screen Studio 没有关联，也未获得其背书。

@@ -1,0 +1,100 @@
+---
+title: 面向 Linux 和本地录制的 Loom 替代品
+description: "OpenScreen 是一款适用于 Linux、Windows 和 macOS 的免费开源 Loom 替代软件：本地录制、无时长限制，导出为磁盘上的 MP4 文件。"
+keywords:
+  - Loom 替代品 Linux
+  - Loom 离线替代品
+  - 无时长限制的 Loom 替代品
+  - 免费本地录制 Loom 替代品
+---
+
+# 一款面向 Linux 和本地录制的 Loom 替代品
+
+OpenScreen 是一款适用于 Linux、Windows 和 macOS 的免费 Loom 替代软件，采用 MIT 许可证。和 Loom 一样，它可以录制屏幕、摄像头、麦克风和系统音频，并转录你说的内容。与 Loom 不同的是，截至 2026 年 9 月，Loom 的桌面应用仅支持 Windows 和 macOS，且免费录制上限为 5 分钟；而 OpenScreen 把录制内容留在你的电脑上，导出为 MP4 文件，没有时长限制，也无需账号。如果你要以链接形式分享视频，并希望在托管页面上获得评论、反应和观众洞察，Loom 仍是更好的选择。
+
+本页由 OpenScreen 项目发布。关于 Loom 的信息来自 Loom 自己的网站和 GitHub 组织，核实于 2026 年 9 月。信息来源列于文末。
+
+## 一览 {#at-a-glance}
+
+| | OpenScreen | Loom |
+| --- | --- | --- |
+| 托管分享链接 | 无，你会得到一个文件，需自行分享 | 有，支持评论、表情反应和观众洞察，免费的 Starter 方案也包含此功能（截至 2026 年 9 月） |
+| 价格 | 免费，含商业用途 | Starter 免费。Business 每用户每月 18 美元，或按年计费每月 15 美元。Business + AI 每用户每月 24 美元，或按年计费每月 20 美元。Enterprise 需联系销售（截至 2026 年 9 月） |
+| 免费方案限制 | 无限制，录制时长和视频数量均无上限 | Starter：每人 25 个视频，每段录制 5 分钟，最高 720p，不能下载视频（截至 2026 年 9 月） |
+| 源代码 | 开源，MIT 许可证 | 闭源 |
+| 桌面平台 | Windows 10（1903 及以上）和 11，x64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 | Windows 10 及以上，macOS 12.3 及以上。没有 Linux 或 ChromeOS 应用（截至 2026 年 9 月） |
+| 其他录制方式 | 桌面应用，外加命令行界面 | Chrome 扩展程序，以及 iOS 和 Android 应用（截至 2026 年 9 月） |
+| 视频存放位置 | 磁盘上的文件 | Loom 的云端。付费方案可下载为 MP4（截至 2026 年 9 月） |
+| 上传速度 | 不是影响因素，采集和导出都在本机进行 | 其故障排除指南要求至少 5 Mbps 上传速度才能成功录制 |
+| 转录 | 本机 Whisper，一个约 264 MB 的模型，仅下载一次。自动检测语言，或从 100 种语言中选择 | 在 Loom 服务端完成，使用自建 Whisper 和 Speechmatics 等提供方。所有方案均支持 50 种以上语言（截至 2026 年 9 月） |
+| 字幕 | 烧录进视频 | Loom 播放器中的隐藏式字幕，下载的 MP4 中不包含 |
+| 自动缩放 | 是，根据录制的光标位置放置 | 其编辑指南中没有自动缩放功能 |
+| 编辑 | 多片段时间轴、剪切、变速、缩放、标注和按转录文本编辑，全部免费 | Business 方案支持修剪和拼接。Business + AI 支持按转录文本编辑和叠加层（截至 2026 年 9 月） |
+| 导出 | MP4（H.264 或 H.265），720p、1080p 或原始尺寸，或 GIF，无水印 | 付费方案支持下载 MP4。Business 及以上方案支持最高 4K 录制（截至 2026 年 9 月） |
+
+## 两款软件的共同点 {#what-both-apps-do}
+
+录制方面的重合度高于分享方面。以下内容并非任何一方独有。
+
+- **屏幕、摄像头和音频。** 两者都能录制屏幕，并加上摄像头、麦克风和系统音频。OpenScreen 录制一个显示器或一个窗口，并将摄像头保留为独立图层，你可以在编辑器中放置和调整形状。
+- **摄像头背景。** Loom 在所有方案中都提供虚拟背景；OpenScreen 可以去除、模糊或替换摄像头背景，无需绿幕。
+- **演讲者笔记。** 两者都能在录制时显示笔记。在 Windows 和 macOS 上，OpenScreen 的笔记窗口还带有提词器模式。
+- **转录文本与字幕。** 两者都会转录录制内容，并据此显示字幕。
+- **编辑。** 两者都能修剪录制内容、拼接片段，并在你从转录文本中删除词语时剪掉对应视频片段，也都能处理静音：Loom 会直接移除，OpenScreen 会标出静音供你剪切。在 Loom 中，以上功能均属于付费方案。
+- **视频上的文字和箭头。** Loom 的叠加层是文字、方框和箭头；OpenScreen 的标注是文字、箭头、图片和模糊区域。
+
+## OpenScreen 的不同之处 {#where-openscreen-differs}
+
+### 价格、限制与平台 {#price-limits-and-platforms}
+
+- **没有付费方案，也没有上限。** 录制时长和视频数量均无限制，没有锁定的导出功能，也无需账号，允许商业用途。截至 2026 年 9 月，Loom 的免费 Starter 方案每人限 25 个视频、每段录制 5 分钟、最高 720p，且不能下载视频。
+- **MIT 许可的源代码。** 代码托管在 [GitHub](https://github.com/getopenscreen/openscreen)。Loom 归 Atlassian 所有，是闭源软件。
+- **提供 Linux 桌面应用。** 在被问及是否支持 Linux 和 ChromeOS 时，Loom 的兼容性常见问题回答“很遗憾，不支持”。OpenScreen 为 x64 Linux 提供 AppImage、`.deb`、`.rpm` 和 `.pacman` 包，还有 Nix flake，并通过 PipeWire 和 ScreenCast 门户进行录制。详见 [Linux 版 OpenScreen](/screen-recorder-linux/)。
+
+### 默认在本地 {#local-by-default}
+
+- **文件从一开始就是你的。** 录制内容落在你的磁盘上，导出会生成 H.264 或 H.265 编码的 MP4，尺寸为 720p、1080p 或原始尺寸，最高 60 fps，或生成 GIF，均无水印。Loom 把视频保存在其云端，下载的 MP4 会保留你的修剪，但不包含隐藏式字幕、章节、行动号召，以及对填充词和静音的移除。参见[导出](/docs/export/)。
+- **上传速度无关紧要。** Loom 的故障排除指南要求至少 5 Mbps 的上传速度才能成功录制。OpenScreen 没有账号体系，没有自己的服务器，也没有分析统计。[常见问题](/docs/faq/#does-openscreen-work-offline)列出了它仍会联网的少数情形。
+- **在本机上转录。** Whisper 在本地运行，使用一个约 264 MB 的模型，仅下载一次，之后即可离线工作。它会自动检测语言，或由你从 100 种语言中选择。字幕会烧录进视频中。详见[字幕](/features/captions/)。
+- **只有在你连接时才使用 AI。** 聊天式编辑是可选功能，可使用你自己的密钥，支持 Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax 或任意 OpenAI 兼容端点。在你连接提供方之前处于关闭状态，每次修改都是一次可撤销的普通编辑。Loom 的 AI 功能会把转录文本以文字形式发送给 OpenAI，而 Google Gemini 会接收视频和音频，用于为 AI 代理构建行动计划。参见 [AI 编辑](/docs/ai-editing/)。
+
+### 演示打磨 {#demo-polish}
+
+- **自动缩放。** **自动增强 → 自动缩放**会根据录制的光标移动放置缩放，无需联网、无需模型。光标以数据形式录制，因此你可以在录制结束后调整大小、使其平滑，并添加点击回弹效果。Loom 的编辑指南中没有记录自动缩放功能。详见[自动缩放](/features/auto-zoom/)。
+- **没有被付费方案锁住的编辑工具。** Loom 按方案拆分编辑功能。在 OpenScreen 中，单次安装即拥有多片段时间轴、每个片段各自的裁剪、0.1× 到 100× 的变速、六种动画效果的文字、八个方向的箭头、图片、模糊区域、配音和音乐轨道、带内边距和阴影的背景，以及 16:9、9:16、1:1 等多种输出比例。参见[编辑与时间轴](/docs/editing-timeline/)。
+- **命令行界面。** 脚本和编程代理都可以通过[命令行](/docs/cli/)驱动 OpenScreen。
+
+## 何时 Loom 是更好的选择 {#when-loom-is-the-better-choice}
+
+本节中 Loom 的方案细节截至 2026 年 9 月。
+
+- **以链接形式发送视频。** 这正是 Loom 的设计初衷。观众会获得一个托管页面，支持评论、表情反应和观众洞察，Business 方案还增加了密码保护视频功能。OpenScreen 给你的是一个文件，想在哪里分享就上传到哪里。
+- **团队使用共享视频库。** Loom 提供个人、共享和团队库、文件夹和隐私控制，Enterprise 方案还支持 SSO 和 SCIM。
+- **通过手机或浏览器录制。** Loom 有 iOS 和 Android 应用以及 Chrome 扩展程序；OpenScreen 是面向 Windows、macOS 和 Linux 的桌面应用。
+- **你的 Mac 运行 macOS 12。** Loom 的桌面应用支持 macOS 12.3 及以上；OpenScreen 需要 macOS 13 及以上。
+
+## 开始使用 {#getting-started}
+
+1. 从[下载页面](/download/)下载 OpenScreen。在 Linux 上，选择 AppImage、`.deb`、`.rpm` 或 `.pacman`，或使用 Nix flake。
+2. 按照[安装说明](/docs/installation/)操作。在 macOS 上，首次录制前请先授予屏幕录制和辅助功能权限。在 Linux 上，录制需要 PipeWire 和 `xdg-desktop-portal`，[Wayland 上的鼠标点击](/docs/installation/#mouse-clicks-on-wayland)需要你的用户加入 `input` 组。
+3. 参照[快速上手](/docs/quick-start/)完成第一次录制，然后导出为 MP4，并将文件分享到团队常用的渠道。
+
+还想比较其他工具？参见 [Screen Studio 替代方案](/alternatives/screen-studio/)、[OpenScreen 对比 Cap](/compare/openscreen-vs-cap/)、[OpenScreen 对比 OBS Studio](/compare/openscreen-vs-obs/)和 [Camtasia 替代方案](/alternatives/camtasia/)，或返回 [OpenScreen 首页](/)。
+
+## 信息来源 {#sources}
+
+Loom 相关信息，核实于 2026 年 9 月：
+
+- 方案、价格、限制和功能：[loom.com/pricing](https://www.loom.com/pricing)
+- 桌面端和移动端要求，Linux 和 ChromeOS：[support.atlassian.com/loom/docs/loom-device-compatibility](https://support.atlassian.com/loom/docs/loom-device-compatibility/)
+- 录制平台和 Chrome 扩展程序：[support.atlassian.com/loom/docs/the-loom-recording-platforms](https://support.atlassian.com/loom/docs/the-loom-recording-platforms/)
+- 下载内容及其缺失项：[support.atlassian.com/loom/docs/download-your-loom-video](https://support.atlassian.com/loom/docs/download-your-loom-video/)
+- 录制所需的上传速度：[support.atlassian.com/loom/kb/cant-record](https://support.atlassian.com/loom/kb/cant-record/)
+- AI 功能、所属方案与数据使用方式、转录提供方：[support.atlassian.com/loom/docs/loom-ai-features](https://support.atlassian.com/loom/docs/loom-ai-features/)
+- 编辑指南（无自动缩放）：[support.atlassian.com/loom/docs/edit-your-loom-video](https://support.atlassian.com/loom/docs/edit-your-loom-video/)
+- 公开代码仓库，均非应用本体：[github.com/loomhq](https://github.com/loomhq)
+- Atlassian 收购信息：[atlassian.com/blog/announcements/atlassian-acquires-loom](https://www.atlassian.com/blog/announcements/atlassian-acquires-loom)（日期为 2023 年 10 月 12 日）
+
+OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+
+Loom 是其所有者的商标。OpenScreen 是一个独立项目，与 Loom 或 Atlassian 没有关联，也未获得其背书。

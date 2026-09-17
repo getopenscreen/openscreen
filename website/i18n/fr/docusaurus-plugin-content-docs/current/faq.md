@@ -112,8 +112,8 @@ Les signalements de bugs et les demandes de fonctionnalités vont dans les [tick
 
 Si vous avez besoin de l'une de ces fonctions, OpenScreen n'est pas le bon outil :
 
-- **Partage hébergé.** Pas de liens de partage, de stockage cloud, d'espaces d'équipe ni de commentaires. Vos fichiers restent sur votre disque. Voir [OpenScreen comme alternative à Loom (en anglais)](/alternatives/loom/).
-- **Diffusion en direct.** Voir [OpenScreen vs OBS Studio (en anglais)](/compare/openscreen-vs-obs/).
+- **Partage hébergé.** Pas de liens de partage, de stockage cloud, d'espaces d'équipe ni de commentaires. Vos fichiers restent sur votre disque. Voir [OpenScreen comme alternative à Loom](/alternatives/loom/).
+- **Diffusion en direct.** Voir [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
 - **Fichiers de sous-titres.** Les sous-titres sont incrustés dans la vidéo. Il n'y a pas d'export SRT ni VTT. Voir [Sous-titres et transcription](./captions.md).
 - **Mobile.** Pas d'application mobile, ni de capture iOS ou Android.
 

@@ -135,7 +135,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--quality <medium\|good\|source>` | 输出尺寸：`medium` 为 720p，`good` 为 1080p，`source` 以裁剪后最小的片段为准，因此绝不会放大。GIF 也以这个尺寸为起点 |
 | `--gif-fps <15\|20\|25\|30>` | GIF 帧率 |
 | `--gif-size <medium\|large\|original>` | 在上述尺寸基础上施加的 GIF 高度上限：720、1080 或不限 |
-| `--auto-zoom` | 渲染之前，在录制的指针停顿处添加缩放，使用与编辑器[自动缩放（英文）](/features/auto-zoom/)相同的引擎。已有的缩放会保留，新的缩放绝不会与它们重叠 |
+| `--auto-zoom` | 渲染之前，在录制的指针停顿处添加缩放，使用与编辑器[自动缩放](/features/auto-zoom/)相同的引擎。已有的缩放会保留，新的缩放绝不会与它们重叠 |
 | `--audio <file>` | 把一个配音文件（mp3、wav 或 m4a）混入 MP4。仅限 MP4 |
 | `--audio-mode <mix\|replace>` | `mix`（默认）会以 40% 增益把录制原声保留在配音之下；`replace` 则去掉原声 |
 | `--audio-offset <seconds>` | 配音开始前的延迟（默认为 0） |

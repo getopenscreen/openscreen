@@ -61,7 +61,7 @@ O Screen Studio dá suporte só ao macOS (em setembro de 2026). O OpenScreen ofe
 - **Atualizações de dentro do app.** Esses quatro pacotes podem se atualizar sozinhos. Por padrão, o app só avisa que existe uma atualização, verifica a cada 24 horas, e nunca oferece uma durante uma gravação. A instalação sempre passa por um aviso de reinício.
 - **Um flake Nix.** Ele compila a partir do código-fonte para `x86_64-linux` e `aarch64-linux`, e fornece um módulo NixOS e um módulo Home Manager. `nix run github:getopenscreen/openscreen` testa sem instalar. O atualizador do app não mexe em instalações via Nix.
 - **ARM64 pelo Nix.** Os pacotes de lançamento são x64. Em uma máquina aarch64, instale pelo flake Nix.
-- **Uma interface de linha de comando.** A [CLI](/docs/cli/) grava, exporta, legenda e empacota projetos, com saída em JSON.
+- **Uma interface de linha de comando.** A [CLI](/docs/cli/) grava a partir da sua sessão de desktop, e exporta, legenda e empacota projetos, com saída em JSON. [Telas, CI e servidores](/docs/cli/#displays-ci-and-servers) lista o que cada comando exige.
 
 ## Quando o OpenScreen não é a ferramenta certa {#when-openscreen-is-not-the-right-tool}
 

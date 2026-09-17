@@ -61,7 +61,7 @@ Screen Studio 仅支持 macOS（截至 2026 年 9 月）。OpenScreen 在 Linux 
 - **在应用内更新。** 这四种软件包都能自我更新。默认情况下应用只会告知你有更新可用，每 24 小时检查一次，录制期间不会提示更新。安装始终会经过重启提示。
 - **Nix flake。** 它会为 `x86_64-linux` 和 `aarch64-linux` 从源代码构建，并提供 NixOS 模块和 Home Manager 模块。`nix run github:getopenscreen/openscreen` 可以在不安装的情况下试用。应用的更新程序不会干预 Nix 安装的版本。
 - **通过 Nix 支持 ARM64。** 发布的软件包为 x64 架构。在 aarch64 机器上，请通过 Nix flake 安装。
-- **命令行界面。** [CLI](/docs/cli/) 可完成录制、导出、字幕和项目打包，并支持 JSON 输出。
+- **命令行界面。** [CLI](/docs/cli/) 可在你的桌面会话中录制，也可导出、添加字幕和打包项目，并支持 JSON 输出。各命令的运行条件见[显示器、CI 与服务器](/docs/cli/#displays-ci-and-servers)。
 
 ## 何时 OpenScreen 不是合适的工具 {#when-openscreen-is-not-the-right-tool}
 

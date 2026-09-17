@@ -39,6 +39,7 @@ import {
 } from "./background-update";
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
+import { disableHttpCacheForDevServer } from "./dev-http-cache";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "./diagnostics/main-log-buffer";
 import { buildEditMenuSubmenu, type EditorUndoRedoChannel, routeEditorUndoRedo } from "./edit-menu";
 import {
@@ -99,6 +100,8 @@ if (process.platform === "linux") {
 		app.commandLine.appendSwitch("disable-features", "Vulkan");
 	}
 }
+
+disableHttpCacheForDevServer(app.commandLine, process.env);
 
 installMainProcessErrorGuards();
 

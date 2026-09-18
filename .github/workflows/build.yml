@@ -102,7 +102,14 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/stage-whisper-stt.sh win32-${{ matrix.arch }}
+        # win32-x64 for BOTH arches, deliberately: build-whisper-stt.yml produces no
+        # arm64 helper (scripts/build-whisper-stt.sh has no win32-arm64 acceleration
+        # case at all), so an arch-parameterised tag would simply fail the arm64 job.
+        # `candidateBinaryPaths` falls back to the win32-x64 directory on Windows on
+        # ARM, where the x64 helper runs under emulation — verified on a Snapdragon X
+        # Elite, Vulkan on the Adreno included. Point this at win32-arm64 the moment a
+        # native helper exists; the resolver already prefers it.
+        run: bash scripts/stage-whisper-stt.sh win32-x64
 
       - name: Build Windows app (x64)
         if: matrix.arch == 'x64'

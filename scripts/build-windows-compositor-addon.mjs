@@ -19,11 +19,30 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findVcVarsAll, run as spawnStep } from "./msvcEnv.mjs";
+import { resolveTargetArch, resolveVcvarsArch, winBinDirName } from "./windows-helper-arch.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const CRATES_DIR = path.join(ROOT, "crates");
 const BUILD_OUT_DIR = path.join(ROOT, "electron", "native", "compositor-view", "build");
+
+// Same resolution order as build-windows-wgc-helper.mjs so a single --arch (or
+// OPENSCREEN_WIN_HELPER_ARCH) drives every Windows native artefact the packaged
+// app ships. Without this the addon was always built x64 and copied into
+// win32-x64/, so an arm64 package either missed it or shipped one the ARM64
+// runtime cannot load.
+const cliArch = (() => {
+	const eq = process.argv.find((a) => a.startsWith("--arch="));
+	if (eq) return eq.slice("--arch=".length);
+	const idx = process.argv.indexOf("--arch");
+	return idx !== -1 ? process.argv[idx + 1] : undefined;
+})();
+const TARGET_ARCH = resolveTargetArch({
+	cliArch,
+	envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH,
+	hostArch: process.arch,
+});
+const VCVARS_ARCH = resolveVcvarsArch(process.arch, TARGET_ARCH);
 
 // cwd defaults to crates/, not ROOT: cargo reads FFMPEG_DIR and LIBCLANG_PATH
 // from crates/.cargo/config.toml, which only applies when it runs from there.
@@ -51,7 +70,7 @@ async function runInVsEnv(command) {
 		cmdPath,
 		[
 			"@echo off",
-			`call "${vcvarsAll}" x64`,
+			`call "${vcvarsAll}" ${VCVARS_ARCH}`,
 			"if errorlevel 1 exit /b %errorlevel%",
 			command,
 			"exit /b %errorlevel%",
@@ -118,7 +137,7 @@ fs.copyFileSync(builtDll, dest);
 // directory is searched for its dependencies. Colocating removes the PATH mechanism
 // rather than repairing it. `buildCandidatePaths` already probes this location
 // first, so no loader change is needed.
-const archBinDir = path.join(ROOT, "electron", "native", "bin", "win32-x64");
+const archBinDir = path.join(ROOT, "electron", "native", "bin", winBinDirName(TARGET_ARCH));
 fs.mkdirSync(archBinDir, { recursive: true });
 const archDest = path.join(archBinDir, "compositor_view.node");
 fs.copyFileSync(builtDll, archDest);

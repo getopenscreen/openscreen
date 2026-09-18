@@ -420,9 +420,7 @@ avec le chrome de fenêtre.
 
 **Aucune restriction.** Chaque cadre est toujours proposé, quelle que soit la forme du projet.
 C'est le cadre qui s'adapte au métrage — jamais l'inverse : un téléphone autour d'un clip paysage
-est un téléphone COUCHÉ, avec son haut-parleur et son œil de caméra sur le bord qui est devenu son
-haut. Rien n'est jamais recadré ni mis en boîte aux lettres pour faire tenir un appareil ; c'est la
-boîte écran qui rétrécit, à ratio constant.
+est un téléphone COUCHÉ, avec son œil de caméra sur le bord qui est devenu son haut.
 
 **Migration.** `window-light` et `window-dark` étaient un réglage qui faisait deux métiers. Ils se
 lisent encore, et se dédoublent en `window` + le thème qu'ils nommaient : côté app
@@ -431,133 +429,183 @@ lisent encore, et se dédoublent en `window` + le thème qu'ils nommaient : côt
 un projet écrit par une version antérieure s'ouvre avec le cadre ET le thème qu'il avait, et une
 valeur qu'aucune de ces deux familles ne connaît se lit « aucun cadre » des deux côtés.
 
-### C.2 Les formes
+### C.2 Le métrage ne bouge pas
+
+**Le métrage a la même boîte, la même coupe et le même rayon avec et sans cadre**, quel qu'il soit.
+Le cadre pousse vers l'EXTÉRIEUR : dans le padding, et au-delà du canevas s'il le faut, où la sortie
+le coupe. Il n'y a plus de `fit_in_window_frame` ni de `fit_in_device_frame` : rétrécir l'image
+pour loger un objet décoratif, c'était l'inverse de ce qu'on veut. Tout ce qui s'ancre sur `s_dst`
+— ombre de l'écran, masques de confidentialité, annotations, curseurs — n'a donc rien à rattraper,
+et l'overlay de l'éditeur pose ses poignées sur `layout.screenRect` tel quel (le portage TS
+`fitInWindowFrame` a disparu avec lui).
+
+Épinglé par `the_footage_box_is_the_same_under_every_frame` (chaque cadre × plat, iso, orbite ×
+zoom 1 et 2, au bit près) et `a_framed_privacy_mask_covers_what_the_overlay_shows`.
+
+### C.3 Les formes
 
 Modelées en **vraie 3D**, pas une image plate gauchie sur le plan : la caméra tourne vraiment
-autour d'elles. Un corps mince avec un micro-chanfrein et une lunette fine, dont la **face écran
-tombe exactement sur le plan du métrage** — le mode 8 continue d'y dessiner l'image, dans
-l'ouverture que le mode 17 creuse dans la face avant. Formes neutres dessinées par nous : aucune
-marque, aucun logo.
+autour d'elles. La **face écran tombe exactement sur le plan du métrage** — le mode 8 continue d'y
+dessiner l'image, dans l'ouverture que le mode 17 creuse dans la face avant. Formes neutres
+dessinées par nous : aucune marque, aucun logo, **aucune encoche d'écran** (la signature d'une
+marque) ; un œil de caméra minuscule en est l'équivalent neutre.
 
-Proportions d'appareils réels, en largeurs de la boîte écran (`frame_geometry.rs`) :
+Vus de face, elles se règlent sur deux produits de référence : un portable aluminium à lunette
+fine, et un moniteur à lunette fine sur colonne plate. Proportions en largeurs de la boîte écran
+(`frame_geometry.rs`, miroir `DEV_*` des trois shaders) :
 
-| | lunette G/H/D/B | épaisseur (du PETIT côté) | ce qui dépasse |
-|---|---|---|---|
-| `window` | 0,0012 / 0,04 / 0,0012 / 0,0012 (filet + barre) | — (plat) | — |
-| `laptop` | 0,014 / 0,018 / 0,014 / 0,028 | 0,0284 | socle articulé à **110°**, large comme la coque |
-| `phone` | 0,030 × 4 | 0,0900 | — |
-| `monitor` | 0,010 / 0,010 / 0,010 / 0,030 | 0,0284 | colonne 0,097 puis semelle plate 0,214 × 0,014 |
+| | lunette G/H/D/B (verre noir + liseré 0,003) | coins extérieurs | épaisseur (PETIT côté) | ce qui dépasse |
+|---|---|---|---|---|
+| `window` | filet 0,0012 × 3, barre 0,04 (du petit côté) | Roundness, concentriques | — (plat) | — |
+| `laptop` | 0,020 / 0,020 / 0,020 / 0,023 | haut 2,5 %, bas 0,4 % de la largeur | 0,0284 | socle 0,70 de profondeur, 0,024 → 0,021 d'épaisseur |
+| `phone` | 0,014 × 4 | Roundness, concentriques | 0,0900 | — |
+| `monitor` | 0,010 × 4 | 0,6 % de la largeur | 0,0284 | colonne 0,28 × 0,097, semelle 0,50 × 0,025 |
 
-- **L'épaisseur se mesure au PETIT CÔTÉ de l'ouverture**, pas à sa largeur : c'est lui qui donne
-  l'échelle d'un objet, et c'est lui qui bascule quand le métrage est couché. Sans ça, un téléphone
-  grossissait d'un facteur 1,8 en tournant.
-- **Socle et pied sont en largeurs de COQUE**, pas d'écran : ce qui dépasse reste proportionnel à
-  l'objet qui le porte, quelle que soit la forme du métrage.
-- **Le socle du portable a exactement la largeur de la coque** (aucun débord) et un profil en
-  **coin** : 0,029 de coque à la charnière, 0,013 au bord avant, séparé de l'écran par un jeu de
-  0,005 — le trait sombre qui dit deux pièces.
-- **Sa profondeur est ce que l'objectif laisse passer.** Un socle réel fait 0,71 largeur de coque
-  (MacBook Pro 14 : 221 mm pour 312 mm) ; à la perspective courte des présets l'œil est à 0,9
-  largeur du plan, et à 0,71 le bord avant du socle arrive aux trois quarts de cette distance : sa
-  projection fait trois fois la hauteur de l'image, à n'importe quel angle. `device_deck_len`
-  cherche par dichotomie la plus grande profondeur qui laisse à l'écran **au moins 45 % de la
-  hauteur de sa boîte** — 0,27 en 16:9, 0,65 sur un métrage portrait. C'est le socle qui cède,
-  jamais l'image.
-- **110° entre l'écran et le socle**, l'ouverture d'un portable posé. L'ancien 52° depuis le plan
-  (128°) couchait le socle vers l'arrière et donnait un jouet ; plus fermé, le socle se présente de
-  plus en plus par la tranche et le clavier disparaît — ce qu'un vrai portable fait vu à hauteur
-  d'écran, mais ici on veut le voir.
-- Clavier à **0,75 de la largeur du socle**, de 0,10 à 0,56 de sa profondeur ; pavé tactile centré
-  dans la moitié avant. Tous deux creusés d'un ton dans l'aluminium, avec le même filet de lumière
-  que les arêtes.
+- **Lunettes fines et uniformes**, sans menton : 2 % de verre noir pour le portable (un rien de plus
+  en bas, où l'écran rejoint la charnière), 1 % pour le moniteur, un anneau de 1,4 % pour le
+  téléphone. Autour, un **liseré d'aluminium** de 0,003 (`DEV_RIM`, quelques pixels) qui suit le
+  contour du corps. Aucun détail sauf un œil de caméra centré dans la lunette du haut ; plus de
+  fente de haut-parleur.
+- **L'épaisseur se mesure au PETIT CÔTÉ de l'ouverture**, pas à sa largeur : c'est lui qui bascule
+  quand le métrage est couché. Sans ça, un téléphone grossissait d'un facteur 1,8 en tournant.
+- **Socle et pied sont en largeurs de COQUE** (l'écran et ses deux lunettes) : ce qui dépasse reste
+  proportionnel à l'objet qui le porte, quelle que soit la forme du métrage.
+- **Le portable** : le couvercle est arrondi en haut, presque carré à la charnière. Le socle a
+  exactement la largeur de la coque, sa **profondeur réelle** (0,70, un 14 pouces : 221 mm pour
+  312 mm), une arête avant de 0,021 qui fonce doucement vers le bas, et une **encoche** peu
+  profonde au milieu de cette arête (15 % de la largeur), celle qui sert à ouvrir l'écran. Clavier
+  et pavé tactile, creusés d'un ton dans l'aluminium, n'apparaissent que quand la caméra tourne.
+- **Le moniteur** : une colonne LARGE et plate (28 % de la largeur), à flancs droits, qui descend de
+  derrière l'écran, puis une semelle mince (50 % × 2,5 %) aux coins avant arrondis. Aluminium, un
+  dégradé vertical doux.
 
-### C.3 La matière
+#### Le socle, par l'ORIENTATION
+
+Vu de face, le socle d'un portable n'est qu'une barre d'argent sous l'écran : sa tranche avant. On
+ne le raccourcit pas pour l'obtenir, on l'**oriente** : la charnière s'ouvre juste assez pour que le
+PLAN du socle passe à `DEV_DECK_EYE_CLEARANCE` (0,01) sous l'œil de la caméra droite. Le socle est
+alors vu par la tranche, et le modèle est **rigide** : le même angle montre le clavier dès que la
+caméra tourne.
+
+Dérivation (`device_deck_angle`) : l'œil est en `(0, 0, P)` dans le repère du plan, la charnière en
+`(0, h, −e/2)` avec `h = aspect/2 + lunette basse` et `e` l'épaisseur du corps. Le plan du socle
+contient l'axe x et la charnière ; il passe par `(0, c, P)` quand l'ouverture écran–socle vaut
+
+```
+ouverture = atan((P + e/2) / (h − c))
+```
+
+et l'angle depuis le plan de l'écran en est le supplément. Avec `P = DEV_EYE_MIN` (C.6), cela donne
+**86,9° en 16:9 et 80,5° sur un métrage portrait**. La borne est `[60°, 135°]`, pas `[90°, 135°]` :
+un œil à hauteur du centre de l'écran ne voit un socle par la tranche que si celui-ci remonte vers
+lui, donc sous 90° à toute distance finie. Un plancher à 90° montrerait le clavier, sur ~13 % de la
+hauteur de l'écran, au lieu de la barre. Épinglé par
+`the_laptop_deck_is_seen_edge_on_from_the_flat_camera` : la barre fait 40,8 px sous un écran de
+864 px en 16:9 (2,6 % de la largeur du couvercle), 21,5 px sous 1536 px en portrait.
+
+### C.4 La matière
 
 **Aluminium mat et verre noir, pas de plastique.** Un gros arrondi d'arête et un reflet large font
 un objet gonflé ; un produit se lit à ses faces PLATES, à une arête nette et à un filet de lumière
 d'un pixel.
 
-- **Micro-chanfrein de 0,0012 unité** (un dixième de l'arrondi d'avant) : assez pour que l'arête ne
-  coupe pas, trop peu pour arrondir la silhouette.
-- **Le filet de lumière est PEINT**, pas modelé : un chanfrein d'un millième fait moins d'un pixel
-  à l'écran et ne s'antialiaserait pas. Une ligne d'un pixel le long du contour de la face avant
-  (`dev_hairline`), qui borde aussi le clavier et le pavé tactile.
+- **Micro-chanfrein de 0,0012 unité** : assez pour que l'arête ne coupe pas, trop peu pour arrondir
+  la silhouette.
+- **Le liseré et le filet de lumière sont PEINTS**, pas modelés : un chanfrein d'un millième fait
+  moins d'un pixel à l'écran et ne s'antialiaserait pas.
 - **Aucun lobe spéculaire large.** Rien qu'un voile directionnel étroit sur le métal
   (`DEV_SHEEN` = 0,11, `pow(diffuse, 4)`) ; le verre reste mat.
-- Deux thèmes : argent (0,800) / dos 0,600 / verre 0,031, ou graphite (0,255) / dos 0,153 /
-  verre 0,043. Le shader les lit dans `color.g`.
+- Deux thèmes, les mêmes formes : argent (0,800) / dos 0,600 / verre 0,031, ou graphite (0,255) /
+  dos 0,153 / verre 0,043. Le shader les lit dans `color.g`.
 
-### C.4 Le rayon des coins, en une règle
+### C.5 Les coins, en une règle
 
-Le slider **Roundness** décide, et une seule fois (`plan_frame`, section « Le rayon des coins ») :
+**UNE fonction de coin** : `screen_corner_radius_px` — le rayon du slider, borné à la moitié du petit
+côté du métrage. Tout ce qui trace le coin du métrage la lit : le métrage lui-même (modes 0 et 8),
+l'**ouverture** de chaque appareil (mode 17, `dst_prev.y`), les coins bas de la fenêtre. Avant, le
+métrage ne bornait pas et l'ouverture bornait : à Roundness élevé les deux traçaient deux coins
+différents et le coin carré du contenu dépassait de l'arc de la lunette.
 
-- **le MÉTRAGE est arrondi du slider, à ses QUATRE coins, quel que soit le cadre** ;
-- **la fenêtre et le téléphone** suivent le slider aussi, **concentriques** au métrage (rayon du
-  métrage plus la marge, donc deux contours parallèles) — **y compris à 0, où ils sont carrés** ;
-- **le portable et le moniteur** gardent leur rayon industriel (1,2 % et 0,8 % de leur petit côté),
-  que le slider ne touche pas : le châssis d'un portable n'a pas de « roundness ».
+- **Le MÉTRAGE** suit le slider à ses quatre coins, sauf sous le chrome de fenêtre (ci-dessous).
+- **L'OUVERTURE** du portable, du moniteur et du téléphone a le rayon du métrage : l'intérieur de
+  la lunette s'arrondit avec lui, l'extérieur garde le rayon industriel du châssis (portable,
+  moniteur) ou suit le slider, concentrique (téléphone).
+- **La fenêtre** : l'arrondi du haut se fait **une seule fois, par le cadre**. Les coins HAUTS du
+  métrage sont carrés, à ras de la barre ; au-delà d'un rayon qui tient dans la barre, ils sont
+  rognés par l'arc du contour INTÉRIEUR du cadre, remonté de `screen_top_lift_px` (la barre moins
+  le filet) — le contour extérieur rentré du filet, rayon compris. Les coins BAS suivent le slider,
+  concentriques au cadre. Modes 0 et 8 : `sd_screen_under_bar`, drapeau et remontée dans
+  `mb.w`/`mb.z` (mode 0) ou `dst_prev.z`/`color.z` (mode 8).
+- **La lunette gagne partout hors de l'ouverture** : dessinée APRÈS le métrage, opaque jusqu'au bord
+  de l'ouverture, et la marche s'arrête au plan du métrage dans l'ouverture ARRONDIE — pas dans son
+  rect, sinon les coins laissaient voir le métrage ou le fond entre l'arc et le coin carré.
 
-Ce qui a disparu : le métrage avait ses **coins hauts carrés** sous une barre de titre, et le cadre
-plafonnait les siens à la hauteur de la barre. Les deux contours ne se suivaient donc pas, et le
-haut d'une fenêtre se lisait comme un défaut de tracé. `screen_square_top` rend 0 partout ; les
-emplacements qu'il occupait (`mb.w` au mode 0, `dst_prev.z` au mode 8) restent réservés.
+Épinglé par `the_aperture_and_the_footage_share_one_corner`,
+`the_window_rounds_the_top_once_and_the_bottom_with_the_slider`,
+`the_title_bar_dots_survive_the_maximum_roundness`, et en pixels par
+`the_bezel_fills_the_corners_at_maximum_roundness` (chaque cadre × plat, iso, orbite).
 
-**Les trois pastilles** de la barre de titre sont repoussées du coin d'au moins le rayon plus leur
-propre rayon et une marge (`x0 = max(0,714·bar, rayon + r + 0,18·bar)`) : au rayon maximal,
-l'arrondi en mordait la première. Bornes larges — l'arc est toujours en deçà du rayon — plutôt
-qu'une résolution exacte.
+### C.6 Coutures, ombre et caméra du modèle
 
-### C.5 Layout, ancrage et ombre
+- **Aucune couture.** Le métrage s'estompe AU-DELÀ de son bord sur 1,5 px ; la lunette est opaque
+  jusqu'au bord de l'ouverture et s'estompe EN DEÇÀ. L'ouverture est donc rentrée de
+  **`DEV_OVERLAP_PX` = 1,25 px** dans le métrage, sous le même rayon : la lunette couvre la frange
+  du métrage et fait son propre fondu sur de l'image opaque. En PIXELS (`dst_prev.z` converti en
+  unités) : exprimé en unités, le recouvrement fondait sous la somme des deux fondus sur un petit
+  écran. La fenêtre, elle, est dessinée SOUS le métrage : sa couture est déjà pleine.
+  `no_seam_lets_the_wallpaper_through` sonde chaque bord et chaque coin sur fond vert, chaque cadre
+  × Roundness 0 et maximal × plat, iso, orbite × 1080p et 4K.
+- **L'ombre d'un appareil a sa silhouette 3D.** Un quad plat étiré dans le plan de l'écran pendait
+  sous le portable comme une dalle grise. `device_shadow_cb` redessine le calque du mode 17 en mode
+  OMBRE (`dst_prev.w` = pénombre) : chaque pixel lance le rayon du pixel décalé de l'ombre, marche
+  le modèle PLEIN (écran compris), et la plus courte approche du rayon, en pixels, tient lieu de
+  distance au contour — pleine au contour, nulle à la pénombre, comme le mode 2. Même décalage,
+  même pénombre, même opacité que l'ombre de l'écran (`SCREEN_SHADOW_*`, slider Shadow). La fenêtre
+  garde son ombre de quad (`shadow_caster`), exacte pour un rect arrondi plat.
+  `the_device_shadow_follows_the_silhouette` : aucun pixel assombri au-delà de silhouette +
+  décalage + pénombre, une ombre juste sous le socle et le pied.
+- **L'œil du modèle.** Le plan garde l'objectif des présets (1,6 petit côté, 0,9 largeur d'un
+  paysage) : c'est lui qui fait lire l'inclinaison du métrage. Mais un socle de profondeur réelle
+  vient alors à 0,2 largeur de l'œil, sa tranche avant se projette sur toute la largeur de l'image,
+  et sous `iso` le clavier devient plus grand que l'écran. Le RELIEF du modèle est donc vu d'un œil
+  reculé sur la MÊME droite, à au moins **`DEV_EYE_MIN` = 5,4 largeurs** : chaque rayon passe par le
+  même point du plan que celui de l'objectif, si bien que la face écran reste au pixel près sur le
+  métrage (0,0003 px d'écart mesuré), et seul ce qui sort du plan change de perspective. 5,4 est
+  réglé sur le portable de référence : sa tranche avant, à 0,7 largeur devant l'écran, y paraît
+  ~15 % plus large que le couvercle (5,4 / 4,7).
 
-- `fit_in_device_frame` rétrécit la boîte écran pour que l'appareil ENTIER — corps ET débords —
-  tienne là où l'écran seul tenait, à ratio constant. Annotations, masques de confidentialité et
-  curseurs suivent `s_dst` comme sous le chrome de fenêtre : ils restent ancrés au contenu encadré
-  (`masks_and_annotations_stay_on_the_framed_content` balaie cadre × arrondi × inclinaison × zoom).
-- L'**ombre de contact** est portée par le CADRE : `shadow_caster` prolonge le plan aux marges de
-  l'EMPREINTE (`WindowFrame::outer`), socle et pied compris. Un seul calque (mode 2 ou 12).
-- **Le plan passe au warp projectif.** Le mode 17 lance ses rayons dans la perspective exacte,
-  alors que les angles fixes dessinaient l'écran par un warp BILINÉAIRE de ses coins. Les deux
-  coïncident aux quatre coins et s'écartent de **7,7 % de la largeur de l'écran au milieu d'un
-  bord** sous `iso` (113 px à 1080p) : une bande de fond d'écran entre l'image et la lunette. Sous
-  un cadre d'appareil, `screen_tilt` lève donc `TiltedQuad::projective`, ce que les modes 8, 10, 13
-  et 14 savent déjà lire (PR 6). Sans appareil, rien ne change, à l'octet.
-- **La lampe de la caméra, elle, reste éteinte.** Elle partageait ce drapeau ; un cadre d'appareil
-  l'aurait allumée sous un angle fixe et posé un dégradé de ±4 % en travers du métrage.
-  `TiltedQuad` porte maintenant `projective` et `lamp` séparément : un appareil RECALE l'image, il
-  ne la réexpose pas.
-
-### C.6 Le mode 17
+### C.7 Le mode 17
 
 Un seul mode de shader, identique en HLSL, MSL et WGSL (`device_frame`), lancé de rayons par pixel
-dans la boîte de dessin. La caméra est reconstruite comme au mode 15 (`regions::rotate_point` puis
-`P / (P − z)`), mais l'origine du modèle est le **centre du plan** : rien à ancrer, aucun décalage.
+dans la boîte de dessin.
 
-- **Repère du MODÈLE** : unité = largeur de la boîte écran, x à droite, y vers le bas, z vers la
-  caméra ; le corps occupe z de −épaisseur à 0.
-- **Le corps** est une dalle arrondie en xy et mince en z, chanfreinée, MOINS le creux de l'écran :
-  l'ouverture (le rect du métrage, rentré de `DEV_BEZEL_OVERLAP` = 0,004) ouverte vers la caméra et
-  fermée au fond. Un trou débouchant laisserait voir au travers par le côté.
-- **La marche s'arrête au plan du métrage dans l'ouverture** : c'est ce qui laisse le mode 8
-  dessiner l'image dans le cadre, et ce qui empêche de voir à travers l'appareil.
-- **Éclairage** : celui du curseur modélisé (`MODEL_LIGHT` / `AMBIENT` / `DIFFUSE`), pour que les
-  deux objets d'une même frame soient vus sous la même lampe.
-- 80 pas au plus, silhouette antialiasée sur un pixel comme au mode 15.
-- **Emplacements du cbuffer** : en tête de `device_frame_cb` (`frame_geometry.rs`), qui fait foi, et
-  résumés dans les trois structs de shader. `dst_prev.x` porte la longueur RÉELLE du socle.
-  `LayerCB` reste à 128 octets.
+- **Repère du MODÈLE** : unité = largeur de la boîte écran, origine au centre du plan, x à droite,
+  y vers le bas, z vers la caméra ; le corps occupe z de −épaisseur à 0.
+- **Le corps** est une dalle arrondie en xy (coins hauts et bas distincts), mince en z, chanfreinée,
+  MOINS le creux de l'écran, ouvert vers la caméra et fermé au fond.
+- **Surfaces analytiques.** Hors de l'ouverture, le point où le rayon traverse le plan dit s'il perce
+  la FACE AVANT ; le socle a son entrée analytique (`dev_deck_hit`, encoche comprise). Vu par la
+  tranche, un socle est frôlé par des rayons qui restent à quelques pixels de lui sur toute sa
+  profondeur : la marche y avançait à pas d'un quart de pixel et s'épuisait, et la lunette du bas
+  laissait voir le fond sur une dizaine de pixels. La marche (80 pas) ne sert plus qu'à ce qui
+  précède ces surfaces — arêtes, flancs, pied — et à l'antialiasing du contour.
+- **Éclairage** : celui du curseur modélisé (`MODEL_LIGHT` / `AMBIENT` / `DIFFUSE`), la même lampe
+  pour les deux objets d'une frame.
+- **Emplacements du cbuffer** : en tête de `device_frame_cb` (`frame_geometry.rs`), qui fait foi.
+  `color.b` = rayon des coins bas, `dst_prev` = (angle du socle, rayon de l'ouverture,
+  recouvrement, pénombre de l'ombre). `LayerCB` reste à 128 octets.
 
-### C.7 Limites
+### C.8 Limites
 
 - Le **MSL n'est compilé et exécuté que par la CI macOS**, comme le mode 15.
-- **Le socle ne peut pas être aussi profond qu'en vrai** : c'est l'objectif court des présets
-  (`PERSPECTIVE_FACTOR` = 1,6) qui l'interdit, et `device_deck_len` mesure ce qu'il concède.
-  Allonger l'objectif sous un cadre d'appareil le débloquerait, au prix d'une perspective plus
-  plate sur l'image elle-même.
-- L'ombre reste un quad plat prolongé dans le plan de l'écran : elle majore le socle du portable et
-  le pied du moniteur au lieu d'épouser leur silhouette.
-- Le socle ne reçoit pas l'ombre calculée de l'écran.
-- Rien ne coupe l'appareil au bord du canevas : il tient parce que `fit_in_device_frame` l'y fait
-  tenir, pas parce qu'un clip l'y forcerait.
+- **La charnière s'ouvre sous 90°** (80,5° à 86,9°) : c'est la condition pour voir le socle par la
+  tranche depuis un œil à hauteur d'écran (C.3).
+- **L'œil du modèle n'est pas celui du plan** : sous un angle fixe, le relief de l'appareil converge
+  un peu moins que les bords de l'image. C'est ce qui garde un socle réel lisible ; le prix est
+  invisible tant que le relief reste petit devant l'écran.
+- Le socle ne reçoit pas l'ombre calculée de l'écran, et la jonction colonne–semelle du moniteur
+  garde un filet de lumière d'un pixel (le pli des deux faces).
+- Un cadre peut sortir du canevas : c'est le prix d'un métrage qui ne rétrécit jamais.
 
 ---
 
@@ -569,7 +617,8 @@ dans la boîte de dessin. La caméra est reconstruite comme au mode 15 (`regions
 | **7** | `feat(cursor): model the default arrow in 3D` | `cursor.model3d`, mode 15, pose, ombre, retrait de `volume`/`hover` | PR 6 |
 | **7b** | `feat(cursor): model every default cursor state in 3D` | champ de distance tiré de chaque sprite (`cursor_sdf.rs`), mode 15 générique, pose selon le hotspot, i18n ×14 | 7 |
 | **7c** | `feat(cursor): tap the screen where the click happened` | convergence sur le point cliqué brut, écrasement, impact (mode 16), vidéo de revue | 7b |
-| **7d** | `feat(frames): frame the recording with a 3D device` | §C : `frame` = none/window/laptop/phone/screen, thème clair-sombre, mode 17, `fit_in_device_frame`, warp projectif sous un appareil, i18n ×14 | 7c |
+| **7d** | `feat(frames): frame the recording with a 3D device` | §C : `frame` = none/window/laptop/phone/screen, thème clair-sombre, mode 17, warp projectif sous un appareil, i18n ×14 | 7c |
+| **7e** | `fix(frames): keep the footage, model the devices after real products` | §C.2–C.6 : métrage constant, une seule fonction de coin, fenêtre arrondie une fois, socle par l'orientation, œil du modèle, coutures en pixels, ombre à la silhouette, proportions de référence | 7d |
 | **8** | `feat(zoom): dolly the camera` | distance de fuite par région, dolly-zoom | PR 6 |
 | **9** | `feat(cursor): the cursor picks things up` *(plus tard)* | long press : le plan reste pressé pendant un glisser (v1 §PR 2b « Later ») | 7 |
 

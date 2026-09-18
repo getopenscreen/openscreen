@@ -2063,6 +2063,9 @@ impl Compositor {
         // Sous un cadre de fenetre, l'ecran garde ses coins HAUTS carres (`mb.w` au mode 0,
         // `dst_prev.z` au mode 8) ; 0 sans cadre, soit le rendu d'avant.
         let square_top = g.screen_square_top();
+        // Et la remontee du contour interieur du chrome au-dessus de l'ecran (`mb.z` au mode 0,
+        // `color.z` au mode 8) : l'arrondi du haut se fait par le cadre. 0 sans fenetre.
+        let top_lift = g.screen_top_lift_px([rw, rh]);
         let screen_layer = match tilt.as_ref() {
             None => LayerCB {
                 dst: g.s_dst,
@@ -2073,7 +2076,7 @@ impl Compositor {
                 color: [1.0, 1.0, 1.0, 1.0],
                 src_prev: g.cut,
                 dst_prev: g.s_dst_prev,
-                mb: [g.mb_taps, g.mb_amount, 1.0, square_top],
+                mb: [g.mb_taps, g.mb_amount, top_lift, square_top],
                 ..Default::default()
             },
             // Mode 8, partage avec Windows et macOS (`tilted_screen_cb`).
@@ -2084,7 +2087,7 @@ impl Compositor {
                 g.cut,
                 g.focus_plane,
                 g.s_radius,
-                square_top,
+                top_lift,
                 dof,
                 [rw, rh],
             ),
@@ -2135,13 +2138,17 @@ impl Compositor {
             let spread = crate::frame_geometry::SCREEN_SHADOW_SPREAD_FRAC * g.frame_min_px;
             let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
-            let cb = match g.shadow_caster([rw, rh]) {
-                ShadowCaster::Upright { dst, size_px, radius } => {
-                    self.shadow_cb(dst, size_px, radius, spread, offset, opacity)
-                }
-                ShadowCaster::Tilted { corners, center_px, radius } => {
-                    self.quad_shadow_cb(&corners, center_px, radius, spread, offset, opacity)
-                }
+            // Un appareil porte l'ombre de sa silhouette 3D (mode 17), pas celle d'un quad.
+            let cb = match g.device_shadow_cb([rw, rh], spread, offset, opacity) {
+                Some(cb) => cb,
+                None => match g.shadow_caster([rw, rh]) {
+                    ShadowCaster::Upright { dst, size_px, radius } => {
+                        self.shadow_cb(dst, size_px, radius, spread, offset, opacity)
+                    }
+                    ShadowCaster::Tilted { corners, center_px, radius } => {
+                        self.quad_shadow_cb(&corners, center_px, radius, spread, offset, opacity)
+                    }
+                },
             };
             self.make_bind(&cb, None, &dummy)
         });
@@ -4837,10 +4844,11 @@ mod tests {
                 let seen = differing(&none, &rgba);
                 let kept = footage(&rgba, tone);
                 println!("{name:<5} {device:<8} {seen:>7} px de cadre, {kept:>7} px de metrage");
-                assert!(seen > 30_000, "{name} {device} : cadre invisible ({seen} px)");
-                // Le cadre retrecit la boite ecran — le socle du portable en mange le plus, ~22 %
-                // de l'aire d'origine —, mais il ne doit RIEN recouvrir : le metrage reste la.
-                assert!(kept > bare / 8, "{name} {device} : metrage couvert ({kept} sur {bare})");
+                // Des lunettes fines autour d'un grand metrage : un anneau, plus l'ombre.
+                assert!(seen > 15_000, "{name} {device} : cadre invisible ({seen} px)");
+                // Le metrage garde sa boite sous tous les cadres (le cadre pousse vers
+                // l'exterieur) : seul le recouvrement d'un pixel et quart de la lunette le mord.
+                assert!(kept > bare * 9 / 10, "{name} {device} : metrage couvert ({kept} sur {bare})");
                 shots.push((device, rgba));
             }
             for (i, (a, ra)) in shots.iter().enumerate() {

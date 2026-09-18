@@ -20,7 +20,8 @@ use openscreen_compositor::config::Cfg;
 use openscreen_compositor::cursor::CursorTrack;
 use openscreen_compositor::d3d::Gpu;
 use openscreen_compositor::ffi::AVFrame;
-use openscreen_compositor::frame_geometry::{live_params_from_scene, plan_frame, FrameGeometryInput};
+use openscreen_compositor::frame_geometry::{live_params_from_scene, plan_frame, FrameGeometry, FrameGeometryInput};
+use openscreen_compositor::regions::TiltedQuad;
 use openscreen_compositor::scene::Scene;
 use windows::core::Interface;
 use windows::Win32::Graphics::Direct3D11::{
@@ -200,27 +201,8 @@ fn render(comp: &Compositor, screen: &FakeFrame, json: &str, track: Option<&Curs
 /// l'appareil laisse au métrage —, et les marges de son CORPS, en fractions de ce quad. Même
 /// chemin que les backends (`plan_frame` + `screen_tilt`).
 fn aperture(json: &str, out: (u32, u32)) -> ([(f32, f32); 4], [f32; 4]) {
-    let scene = Scene::from_json(json).expect("scène valide");
-    let cfg = cfg();
-    let mut live = live_params_from_scene(&scene);
-    live.has_webcam = false;
+    let g = plan(json, out, SRC);
     let render_px = [out.0 as f32, out.1 as f32];
-    let src = [SRC.0 as f32, SRC.1 as f32];
-    let g = plan_frame(&FrameGeometryInput {
-        render_px,
-        screen_tex_px: src,
-        screen_visible_px: src,
-        webcam_visible_px: src,
-        u_max: 1.0,
-        v_max: 1.0,
-        frame: 0.0,
-        cfg: &cfg,
-        live,
-        scene: Some(&scene),
-        cursor: None,
-        timeline_t_override: Some(T),
-        programme_time: None,
-    });
     let s = g.s_dst;
     let s_px = [s[2] * render_px[0], s[3] * render_px[1]];
     let center = [(s[0] + s[2] * 0.5) * render_px[0], (s[1] + s[3] * 0.5) * render_px[1]];
@@ -238,6 +220,164 @@ fn aperture(json: &str, out: (u32, u32)) -> ([(f32, f32); 4], [f32; 4]) {
     };
     (corners, margins)
 }
+
+/// Le plan de la scène, par le même chemin que les backends.
+fn plan(json: &str, out: (u32, u32), src: (u32, u32)) -> FrameGeometry {
+    let scene = Scene::from_json(json).expect("scène valide");
+    let cfg = cfg();
+    let mut live = live_params_from_scene(&scene);
+    live.has_webcam = false;
+    let src = [src.0 as f32, src.1 as f32];
+    plan_frame(&FrameGeometryInput {
+        render_px: [out.0 as f32, out.1 as f32],
+        screen_tex_px: src,
+        screen_visible_px: src,
+        webcam_visible_px: src,
+        u_max: 1.0,
+        v_max: 1.0,
+        frame: 0.0,
+        cfg: &cfg,
+        live,
+        scene: Some(&scene),
+        cursor: None,
+        timeline_t_override: Some(T),
+        programme_time: None,
+    })
+}
+
+/// Le métrage et le corps du cadre dans le repère du rect DROIT du métrage (px, origine au coin
+/// haut-gauche), et le passage vers l'image rendue par le warp que le plan utilise VRAIMENT
+/// (`TiltedQuad::point_px` : projectif sous un appareil ou la caméra, bilinéaire sinon) : un point
+/// pris sur le métrage ou dans la lunette tombe au bon pixel, à plat comme incliné.
+struct Geo {
+    s_px: [f32; 2],
+    /// Rayon des coins du métrage (et de l'ouverture), px.
+    radius: f32,
+    /// Corps : marges gauche, haut, droite, bas, et rayon extérieur, px.
+    body: [f32; 4],
+    body_radius: f32,
+    tilt: Option<TiltedQuad>,
+    center: [f32; 2],
+    origin: [f32; 2],
+}
+
+impl Geo {
+    fn new(json: &str, out: (u32, u32), src: (u32, u32)) -> Geo {
+        let g = plan(json, out, src);
+        let (rw, rh) = (out.0 as f32, out.1 as f32);
+        let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
+        let center = [(g.s_dst[0] + g.s_dst[2] * 0.5) * rw, (g.s_dst[1] + g.s_dst[3] * 0.5) * rh];
+        let origin = [g.s_dst[0] * rw, g.s_dst[1] * rh];
+        let (body, body_radius) = match g.window_frame {
+            Some(f) => {
+                let m = f.margins;
+                ([m[0] * s_px[0], m[1] * s_px[1], m[2] * s_px[0], m[3] * s_px[1]], f.radius)
+            }
+            None => ([0.0; 4], g.s_radius),
+        };
+        Geo { s_px, radius: g.s_radius, body, body_radius, tilt: g.screen_tilt(s_px), center, origin }
+    }
+
+    fn to_out(&self, p: [f32; 2]) -> (f32, f32) {
+        match &self.tilt {
+            Some(q) => {
+                let (x, y) = q.point_px(p[0] / self.s_px[0], p[1] / self.s_px[1]);
+                (self.center[0] + x, self.center[1] + y)
+            }
+            None => (self.origin[0] + p[0], self.origin[1] + p[1]),
+        }
+    }
+
+    /// Distance signée au contour du métrage (rect arrondi de `radius`), <0 dedans.
+    fn footage_sd(&self, p: [f32; 2]) -> f32 {
+        let h = [self.s_px[0] * 0.5, self.s_px[1] * 0.5];
+        sd_rr([p[0] - h[0], p[1] - h[1]], h, self.radius)
+    }
+
+    /// Distance signée au contour extérieur du corps, <0 dedans.
+    fn body_sd(&self, p: [f32; 2]) -> f32 {
+        let [l, t, r, b] = self.body;
+        let h = [(self.s_px[0] + l + r) * 0.5, (self.s_px[1] + t + b) * 0.5];
+        let c = [-l + h[0], -t + h[1]];
+        sd_rr([p[0] - c[0], p[1] - c[1]], h, self.body_radius)
+    }
+
+    /// Les sondes de couture : un point du bord du métrage, sa normale sortante, et jusqu'où
+    /// marcher dehors sans quitter le corps du cadre (px). Le milieu des quatre bords et le
+    /// sommet de l'arc des quatre coins — sauf les coins HAUTS de la fenêtre, carrés et à ras de
+    /// la barre, dont le bord haut est déjà sondé.
+    fn seam_probes(&self, window: bool) -> Vec<([f32; 2], [f32; 2], f32)> {
+        let [w, h] = self.s_px;
+        let [l, t, r, b] = self.body;
+        // Jusqu'à un pixel et demi du bord EXTÉRIEUR du cadre : au-delà, c'est son propre
+        // antialiasing sur le fond, pas une couture.
+        let reach = |m: f32| (m - 1.5).min(6.0);
+        let mut v = vec![
+            ([w * 0.5, 0.0], [0.0, -1.0], reach(t)),
+            ([w * 0.5, h], [0.0, 1.0], reach(b)),
+            ([0.0, h * 0.5], [-1.0, 0.0], reach(l)),
+            ([w, h * 0.5], [1.0, 0.0], reach(r)),
+        ];
+        let k = self.radius * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
+        let n = std::f32::consts::FRAC_1_SQRT_2;
+        for (c, s, m) in [
+            ([0.0, 0.0], [-1.0, -1.0], l.min(t)),
+            ([w, 0.0], [1.0, -1.0], r.min(t)),
+            ([w, h], [1.0, 1.0], r.min(b)),
+            ([0.0, h], [-1.0, 1.0], l.min(b)),
+        ] {
+            if window && s[1] < 0.0 {
+                continue;
+            }
+            v.push(([c[0] - s[0] * k, c[1] - s[1] * k], [s[0] * n, s[1] * n], reach(m)));
+        }
+        v
+    }
+}
+
+/// `sd_round_rect` des shaders, <0 dedans.
+fn sd_rr(p: [f32; 2], h: [f32; 2], r: f32) -> f32 {
+    let r = r.min(h[0].min(h[1])).max(0.0);
+    let q = [p[0].abs() - h[0] + r, p[1].abs() - h[1] + r];
+    q[0].max(0.0).hypot(q[1].max(0.0)) + q[0].max(q[1]).min(0.0) - r
+}
+
+/// Un fond uni VERT, loin du métrage (lavande) comme des lunettes (neutres) : un pixel vert dans
+/// une couture ou dans un coin de lunette, c'est le fond d'écran qui passe.
+fn on_green(json: &str) -> String {
+    json.replace(
+        r##"{"kind":"gradient","angleDeg":135,"stops":["#5b6ee1","#e8a0bf"]}"##,
+        r##"{"kind":"color","color":"#10c040"}"##,
+    )
+}
+
+fn greenish(p: [u8; 3]) -> bool {
+    p[1] as i32 - p[0].max(p[2]) as i32 > 30
+}
+
+/// Roundness au maximum : au-delà de la moitié du petit côté, le rayon est borné
+/// (`screen_corner_radius_px`), donc 1 est le bout du slider et au-delà.
+const MAX_ROUND: f32 = 1.0;
+
+fn with_roundness(json: &str, r: f32) -> String {
+    json.replace(r#""roundnessFrac":0.02"#, &format!(r#""roundnessFrac":{r}"#))
+}
+
+/// Le métrage dans un rect PLUS PETIT que celui des planches, pour que le cadre tienne entier
+/// dans l'image (pied du moniteur compris) : `(x, y, w, h)` en fractions de la sortie.
+fn with_rect(json: &str, r: (f32, f32, f32, f32)) -> String {
+    json.replace(
+        r#""screenRect":{"x":0.08,"y":0.08,"width":0.84,"height":0.84}"#,
+        &format!(r#""screenRect":{{"x":{},"y":{},"width":{},"height":{}}}"#, r.0, r.1, r.2, r.3),
+    )
+}
+
+/// Un clip paysage et un clip PORTRAIT dans le même projet 16:9 (1280×720) : le portrait est un
+/// rect étroit au ratio 9:16 exact.
+const CLIPS: [(&str, (f32, f32, f32, f32), (u32, u32)); 2] = [
+    ("landscape", (0.2, 0.14, 0.6, 0.6), (640, 360)),
+    ("portrait", (0.3734375, 0.1, 0.253125, 0.8), (360, 640)),
+];
 
 /// Le point du quad aux fractions (fx, fy), prolongé au-delà de 0..1 par l'homographie de ses
 /// coins — donc aussi juste dans la lunette, qui vit hors de l'écran.
@@ -366,8 +506,9 @@ fn each_device_draws_around_untouched_footage() {
                     render(&comp, &blue, &scene_json("none", rotation, 0.0, NO_CURSOR, out), None, T);
                 let seen = differing(&a, &bare, 8);
                 println!("{shape:<5} {device:<8} {rotation:<16} {seen:>7} px changent");
+                // Une lunette fine autour d'un grand metrage : un anneau de 1 a 2 % de la largeur.
                 assert!(
-                    seen > (out.0 * out.1) as usize / 20,
+                    seen > (out.0 * out.1) as usize / 80,
                     "{shape} {device} {rotation} : cadre invisible"
                 );
             }
@@ -426,13 +567,8 @@ fn the_device_follows_the_tilt_and_the_orbit_camera() {
             let moved = differing(&flat, &tilted, 8);
             println!("{device:<8} {rotation:<16} {moved:>7} px bougent");
             assert!(moved > (W * H) as usize / 20, "{device} {rotation} : l'appareil n'a pas suivi");
-            // Rien ne touche le bord : l'appareil entier tient dans la boîte où l'écran tenait.
-            for x in 0..W {
-                for y in [0u32, H - 1] {
-                    let i = ((y * W + x) * 4) as usize;
-                    assert!(!neutral([tilted[i], tilted[i + 1], tilted[i + 2]]), "{device} {rotation} : l'appareil touche le bord");
-                }
-            }
+            // (Le cadre peut sortir de l'image : le métrage garde sa taille et le cadre pousse
+            // vers l'extérieur, la sortie le coupe. `the_footage_box_is_the_same_under_every_frame`.)
         }
     }
 }
@@ -466,6 +602,214 @@ fn the_frame_casts_the_contact_shadow() {
         println!("{device:<8} ombre {darker:>7} px, jusqu'à y={lowest} (écran jusqu'à {bottom:.0})");
         assert!(darker > (W * H) as usize / 200, "{device} : pas d'ombre ({darker} px)");
         assert!(lowest as f32 > bottom, "{device} : l'ombre s'arrête au-dessus du bas de l'écran");
+    }
+}
+
+/// AUCUNE couture ne laisse passer le fond d'écran entre le métrage et son cadre : le long de
+/// chaque bord et à travers chaque coin, du dedans du métrage jusqu'au corps du cadre, pas un
+/// pixel n'est du fond. Fond VERT, loin du métrage comme des lunettes : la moindre frange s'y
+/// voit. Roundness 0 et maximal, à plat, angle fixe et caméra en orbite, 1080p et 4K — le
+/// recouvrement se compte en pixels (`DEV_OVERLAP_PX`), il doit tenir à toutes les tailles.
+#[test]
+fn no_seam_lets_the_wallpaper_through() {
+    let Some(gpu) = gpu() else { return };
+    for (res, out) in [("1080p", (1920u32, 1080u32)), ("4K", (3840, 2160))] {
+        let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
+        let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+        for frame in ["window", "laptop", "phone", "monitor"] {
+            for roundness in [0.0f32, MAX_ROUND] {
+                for rotation in ["null", r#""iso""#, r#""follow-cursor""#] {
+                    let json = on_green(&with_roundness(&scene_json(frame, rotation, 0.6, NO_CURSOR, out), roundness));
+                    let rgba = render(&comp, &screen, &json, None, T);
+                    let g = Geo::new(&json, out, SRC);
+                    let (mut seen, mut leaks) = (0usize, Vec::new());
+                    for (p, n, reach) in g.seam_probes(frame == "window") {
+                        let mut d = -2.5f32;
+                        while d <= reach {
+                            let (x, y) = g.to_out([p[0] + n[0] * d, p[1] + n[1] * d]);
+                            if let Some(c) = px(&rgba, out, x, y) {
+                                seen += 1;
+                                if greenish(c) {
+                                    leaks.push((x.round(), y.round(), c));
+                                }
+                            }
+                            d += 0.5;
+                        }
+                    }
+                    let case = format!("{res} {frame} r{roundness} {rotation}");
+                    println!("{case:<40} {seen:>4} px sondés, {} verts", leaks.len());
+                    assert!(seen > 30, "{case} : trop peu de sondes ({seen})");
+                    assert!(leaks.is_empty(), "{case} : le fond passe en {:?}", &leaks[..leaks.len().min(6)]);
+                }
+            }
+        }
+    }
+}
+
+/// Au Roundness MAXIMAL, la région du coin entre l'arc du métrage et le coin carré n'est JAMAIS du
+/// métrage (il changerait avec la teinte de la source), et là où elle est dans le corps du cadre,
+/// jamais du fond (vert) : de la lunette, pixel par pixel. C'est là que le métrage non borné et
+/// l'ouverture bornée traçaient deux coins différents. Pour le téléphone et la fenêtre, dont le
+/// corps suit le slider, concentrique, le coin carré lui-même est hors du corps : du fond, voulu.
+#[test]
+fn the_bezel_fills_the_corners_at_maximum_roundness() {
+    let Some(gpu) = gpu() else { return };
+    let out = (1920u32, 1080u32);
+    let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
+    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    for frame in ["window", "laptop", "phone", "monitor"] {
+        for rotation in ["null", r#""iso""#, r#""follow-cursor""#] {
+            let json = on_green(&with_roundness(&scene_json(frame, rotation, 0.0, NO_CURSOR, out), MAX_ROUND));
+            let (a, b) = (render(&comp, &blue, &json, None, T), render(&comp, &orange, &json, None, T));
+            let g = Geo::new(&json, out, SRC);
+            let [w, h] = g.s_px;
+            // Coins : origine et sens vers l'intérieur. La fenêtre n'a que ses coins BAS arrondis.
+            let corners: &[([f32; 2], [f32; 2])] = if frame == "window" {
+                &[([w, h], [-1.0, -1.0]), ([0.0, h], [1.0, -1.0])]
+            } else {
+                &[([0.0, 0.0], [1.0, 1.0]), ([w, 0.0], [-1.0, 1.0]), ([w, h], [-1.0, -1.0]), ([0.0, h], [1.0, -1.0])]
+            };
+            let (mut n, mut inside, mut bad) = (0usize, 0usize, Vec::new());
+            // Le carré du coin, de son sommet jusqu'au rayon : dehors l'arc, dedans le corps.
+            for &(c, s) in corners {
+                let mut u = 0.75f32;
+                while u < g.radius {
+                    let mut v = 0.75f32;
+                    while v < g.radius {
+                        let p = [c[0] + s[0] * u, c[1] + s[1] * v];
+                        // Hors de l'arc : jamais de metrage. Et dans le corps : jamais de fond.
+                        // (3,5 px du plan : un angle fixe raccourcit le côté lointain, et la frange
+                        // d'antialiasing du métrage fait 1,5 px d'IMAGE.)
+                        if g.footage_sd(p) > 3.5 {
+                            let (x, y) = g.to_out(p);
+                            if let (Some(pa), Some(pb)) = (px(&a, out, x, y), px(&b, out, x, y)) {
+                                let in_body = g.body_sd(p) < -2.0;
+                                n += 1;
+                                inside += in_body as usize;
+                                if pa != pb || (in_body && greenish(pa)) {
+                                    bad.push((x.round(), y.round(), pa, pb));
+                                }
+                            }
+                        }
+                        v += 1.5;
+                    }
+                    u += 1.5;
+                }
+            }
+            println!("{frame:<8} {rotation:<16} {n:>6} px de coin dont {inside:>6} dans le corps, {} faux", bad.len());
+            assert!(n > 200, "{frame} {rotation} : région de coin vide ({n})");
+            // La fenetre n'a qu'un filet d'un pixel entre son arc et celui du metrage.
+            assert!(frame == "window" || inside > 200, "{frame} {rotation} : lunette de coin vide ({inside})");
+            assert!(bad.is_empty(), "{frame} {rotation} : métrage ou fond dans le coin en {:?}", &bad[..bad.len().min(6)]);
+        }
+    }
+}
+
+/// Distance (px) de chaque pixel au masque, par chanfrein (1, √2) en deux passes : elle
+/// SURESTIME l'euclidienne d'au plus 8 %, donc une borne vérifiée sur elle vaut a fortiori.
+fn distance_to(mask: &[bool], w: usize, h: usize) -> Vec<f32> {
+    let s2 = std::f32::consts::SQRT_2;
+    let mut d: Vec<f32> = mask.iter().map(|&m| if m { 0.0 } else { 1e9 }).collect();
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            let mut v = d[i];
+            if x > 0 {
+                v = v.min(d[i - 1] + 1.0);
+            }
+            if y > 0 {
+                v = v.min(d[i - w] + 1.0);
+                if x > 0 {
+                    v = v.min(d[i - w - 1] + s2);
+                }
+                if x + 1 < w {
+                    v = v.min(d[i - w + 1] + s2);
+                }
+            }
+            d[i] = v;
+        }
+    }
+    for y in (0..h).rev() {
+        for x in (0..w).rev() {
+            let i = y * w + x;
+            let mut v = d[i];
+            if x + 1 < w {
+                v = v.min(d[i + 1] + 1.0);
+            }
+            if y + 1 < h {
+                v = v.min(d[i + w] + 1.0);
+                if x + 1 < w {
+                    v = v.min(d[i + w + 1] + s2);
+                }
+                if x > 0 {
+                    v = v.min(d[i + w - 1] + s2);
+                }
+            }
+            d[i] = v;
+        }
+    }
+    d
+}
+
+/// L'ombre d'un appareil a la forme de sa SILHOUETTE 3D, socle et pied compris : aucun pixel
+/// assombri à plus de décalage + pénombre de la silhouette (l'ancien quad plat pendait sous le
+/// portable comme une dalle grise), et une ombre bien présente juste sous le socle et le pied.
+/// Clair et sombre, à plat, angle fixe et orbite.
+#[test]
+fn the_device_shadow_follows_the_silhouette() {
+    let Some(gpu) = gpu() else { return };
+    let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
+    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    let rect = CLIPS[0].1;
+    // SCREEN_SHADOW_SPREAD_FRAC (40 px réglés contre un cadre 1080), en px de CETTE sortie.
+    let spread = 40.0 / 1080.0 * W.min(H) as f32;
+    for frame in ["laptop", "monitor", "phone"] {
+        for theme in ["light", "dark"] {
+            for rotation in ["null", r#""iso""#, r#""follow-cursor""#] {
+                let json = |shadow: f32, f: &str| {
+                    with_rect(&scene_json_themed(f, theme, rotation, shadow, NO_CURSOR, (W, H)), rect)
+                };
+                let on = render(&comp, &blue, &json(1.0, frame), None, T);
+                let off = render(&comp, &blue, &json(0.0, frame), None, T);
+                let off_o = render(&comp, &orange, &json(0.0, frame), None, T);
+                let bare = render(&comp, &blue, &json(0.0, "none"), None, T);
+                let (w, h) = (W as usize, H as usize);
+                let differs = |a: &[u8], b: &[u8], i: usize, tol: u8| {
+                    (0..3).any(|k| a[i * 4 + k].abs_diff(b[i * 4 + k]) > tol)
+                };
+                // La silhouette : l'appareil (ce qui change avec le cadre) et le métrage (ce qui
+                // change avec la teinte de la source).
+                let sil: Vec<bool> =
+                    (0..w * h).map(|i| differs(&off, &bare, i, 6) || differs(&off, &off_o, i, 6)).collect();
+                let dist = distance_to(&sil, w, h);
+                let g = plan(&json(1.0, frame), (W, H), SRC);
+                let off_px = g.screen_shadow_offset();
+                let reach = (off_px[0].hypot(off_px[1]) + spread) * 1.09 + 2.0;
+                let (mut shade, mut worst) = (0usize, 0.0f32);
+                for i in 0..w * h {
+                    let darker = (0..3).all(|k| on[i * 4 + k] <= off[i * 4 + k])
+                        && (0..3).any(|k| off[i * 4 + k] - on[i * 4 + k] > 2);
+                    if darker && !sil[i] {
+                        shade += 1;
+                        worst = worst.max(dist[i]);
+                    }
+                }
+                // Juste sous la silhouette, dans la colonne du milieu : de l'ombre.
+                let x = w / 2;
+                let low = (0..h).rev().find(|&y| sil[y * w + x]).expect("silhouette");
+                let under = (low + 2..(low + 8).min(h)).any(|y| {
+                    let i = y * w + x;
+                    (0..3).any(|k| off[i * 4 + k].saturating_sub(on[i * 4 + k]) > 4)
+                });
+                let case = format!("{frame} {theme} {rotation}");
+                println!("{case:<28} ombre {shade:>7} px, au plus à {worst:.1} px (borne {reach:.1})");
+                assert!(shade > (w * h) / 200, "{case} : pas d'ombre");
+                assert!(worst <= reach, "{case} : ombre à {worst} px de la silhouette (borne {reach})");
+                assert!(under || low + 3 >= h, "{case} : pas d'ombre sous la silhouette (y = {low})");
+            }
+        }
     }
 }
 
@@ -534,6 +878,132 @@ fn contact_sheets() {
     let zoom = image::imageops::resize(&crop, 240 * 5, 150 * 5, image::imageops::FilterType::Nearest);
     zoom.save(format!("{dir}/laptop-hinge-closeup.png")).expect("gros plan");
     println!("planches ecrites dans {dir}");
+}
+
+/// Un carré de `2r` px centré sur `p`, agrandi `k` fois au plus proche.
+fn closeup(rgba: &[u8], out: (u32, u32), p: (f32, f32), r: u32, k: u32) -> image::RgbaImage {
+    let img = image::RgbaImage::from_raw(out.0, out.1, rgba.to_vec()).expect("readback");
+    let x0 = (p.0.round() as i64 - r as i64).clamp(0, (out.0 - 2 * r) as i64) as u32;
+    let y0 = (p.1.round() as i64 - r as i64).clamp(0, (out.1 - 2 * r) as i64) as u32;
+    let crop = image::imageops::crop_imm(&img, x0, y0, 2 * r, 2 * r).to_image();
+    image::imageops::resize(&crop, 2 * r * k, 2 * r * k, image::imageops::FilterType::Nearest)
+}
+
+/// Des images côte à côte, séparées d'un filet blanc.
+fn strip(imgs: &[image::RgbaImage]) -> image::RgbaImage {
+    let h = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
+    let w = imgs.iter().map(|i| i.width() + 6).sum::<u32>();
+    let mut s = image::RgbaImage::from_pixel(w, h, image::Rgba([255, 255, 255, 255]));
+    let mut x = 0i64;
+    for i in imgs {
+        image::imageops::overlay(&mut s, i, x, 0);
+        x += i.width() as i64 + 6;
+    }
+    s
+}
+
+fn save_in(dir: &str, sub: &str, name: &str, img: &image::RgbaImage) {
+    let d = format!("{dir}/{sub}");
+    std::fs::create_dir_all(&d).expect("dossier");
+    img.save(format!("{d}/{name}.png")).unwrap_or_else(|e| panic!("écriture {name} : {e}"));
+}
+
+/// Les rendus de la passe 3 (opt-in, `OPENSCREEN_DEVICE_V3`) : chaque cadre autour d'un clip
+/// paysage et d'un clip portrait, à plat et sous `iso`, dans les deux thèmes ; les gros plans de
+/// coins (portable, fenêtre) à Roundness 0, par défaut et maximal ; les coutures sur fond vert ;
+/// les ombres (plat, iso, orbite) ; et les vues de face à comparer aux références produit.
+#[test]
+fn v3_renders() {
+    let Some(dir) = out_dir("OPENSCREEN_DEVICE_V3") else {
+        eprintln!("OPENSCREEN_DEVICE_V3 absent - saute");
+        return;
+    };
+    let Some(gpu) = gpu() else { return };
+    let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
+    let all: [&str; 4] = ["window", "laptop", "phone", "monitor"];
+    let cams = [("flat", "null"), ("iso", r#""iso""#)];
+    let img = |rgba: Vec<u8>| image::RgbaImage::from_raw(W, H, rgba).expect("readback");
+
+    // 1. Paysage et portrait, plat et iso, clair et sombre : une image par cas, une planche par
+    // clip et par thème.
+    for (clip, rect, src) in CLIPS {
+        let f = FakeFrame::new(&gpu, src, Tint::Blue);
+        for theme in ["light", "dark"] {
+            let mut sheet = image::RgbaImage::new(W * 2, H * 4);
+            for (row, &frame) in all.iter().enumerate() {
+                for (col, (cam, rotation)) in cams.iter().enumerate() {
+                    let json = with_rect(&scene_json_themed(frame, theme, rotation, 0.6, NO_CURSOR, (W, H)), rect);
+                    let i = img(render(&comp, &f, &json, None, T));
+                    save_in(&dir, "clips", &format!("{frame}-{clip}-{cam}-{theme}"), &i);
+                    image::imageops::overlay(&mut sheet, &i, (col as u32 * W) as i64, (row as u32 * H) as i64);
+                }
+            }
+            save_in(&dir, "clips", &format!("sheet-{clip}-{theme}"), &sheet);
+        }
+    }
+
+    // 2. Gros plans de coins : les quatre coins de l'écran du portable et de la fenêtre, pris au
+    // sommet de l'arc du métrage.
+    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let arc_points = |g: &Geo| {
+        let [w, h] = g.s_px;
+        let k = g.radius * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
+        [[k, k], [w - k, k], [w - k, h - k], [k, h - k]].map(|p| g.to_out(p))
+    };
+    for (label, roundness) in [("r0", 0.0f32), ("r002", 0.02), ("rmax", MAX_ROUND)] {
+        for frame in ["laptop", "window", "phone", "monitor"] {
+            for (cam, rotation) in cams {
+                let json =
+                    with_roundness(&with_rect(&scene_json(frame, rotation, 0.6, NO_CURSOR, (W, H)), CLIPS[0].1), roundness);
+                let rgba = render(&comp, &screen, &json, None, T);
+                let g = Geo::new(&json, (W, H), SRC);
+                let crops: Vec<_> = arc_points(&g).iter().map(|&p| closeup(&rgba, (W, H), p, 30, 5)).collect();
+                save_in(&dir, "closeups", &format!("{frame}-corners-{label}-{cam}"), &strip(&crops));
+            }
+        }
+    }
+
+    // 3. Coutures sur fond VERT : les quatre coins (sommet de l'arc) et le milieu du bord bas,
+    // Roundness 0 et maximal, à plat et iso.
+    for frame in all {
+        for (label, roundness) in [("r0", 0.0f32), ("rmax", MAX_ROUND)] {
+            for (cam, rotation) in cams {
+                let json = on_green(&with_roundness(&scene_json(frame, rotation, 0.6, NO_CURSOR, (W, H)), roundness));
+                let rgba = render(&comp, &screen, &json, None, T);
+                let g = Geo::new(&json, (W, H), SRC);
+                let mut pts = arc_points(&g).to_vec();
+                pts.push(g.to_out([g.s_px[0] * 0.5, g.s_px[1]]));
+                let crops: Vec<_> = pts.iter().map(|&p| closeup(&rgba, (W, H), p, 16, 8)).collect();
+                save_in(&dir, "seams", &format!("{frame}-{label}-{cam}"), &strip(&crops));
+            }
+        }
+    }
+
+    // 4. Ombres : chaque cadre, clair et sombre, à plat, iso et en orbite, ombre au maximum.
+    for frame in all {
+        for theme in ["light", "dark"] {
+            let mut row = Vec::new();
+            for (cam, rotation) in [("flat", "null"), ("iso", r#""iso""#), ("orbit", r#""follow-cursor""#)] {
+                let json = with_rect(&scene_json_themed(frame, theme, rotation, 1.0, NO_CURSOR, (W, H)), CLIPS[0].1);
+                let i = img(render(&comp, &screen, &json, None, T));
+                save_in(&dir, "shadows", &format!("{frame}-{cam}-{theme}"), &i);
+                row.push(image::imageops::resize(&i, W / 2, H / 2, image::imageops::FilterType::Triangle));
+            }
+            save_in(&dir, "shadows", &format!("strip-{frame}-{theme}"), &strip(&row));
+        }
+    }
+
+    // 5. Références produit : portable, moniteur et téléphone DE FACE, en 1080p, clair et sombre.
+    let big = Compositor::new_sized(&gpu, 1920, 1080).expect("compositor");
+    for frame in ["laptop", "monitor", "phone"] {
+        for theme in ["light", "dark"] {
+            let json = with_rect(&scene_json_themed(frame, theme, "null", 0.6, NO_CURSOR, (1920, 1080)), CLIPS[0].1);
+            let rgba = render(&big, &screen, &json, None, T);
+            let i = image::RgbaImage::from_raw(1920, 1080, rgba).expect("readback");
+            save_in(&dir, "reference-match", &format!("{frame}-front-{theme}"), &i);
+        }
+    }
+    println!("rendus v3 écrits dans {dir}");
 }
 
 /// 6 s de portable sous la caméra en orbite, curseur modélisé allumé (opt-in,

@@ -1262,8 +1262,9 @@ impl Compositor {
         cut: [f32; 4],
         focus_plane: [f32; 2],
         radius: f32,
-        // 1 : coins hauts carrés, l'écran est sous la barre d'un cadre (`dst_prev.z`).
-        square_top: f32,
+        // Sous le chrome de fenêtre : la remontée de son contour intérieur au-dessus de
+        // l'écran (`screen_top_lift_px`), qui carre les coins hauts. 0 ailleurs.
+        top_lift: f32,
         y: &metal::Texture,
         uv: &metal::Texture,
         dof_pyramid: Option<&metal::Texture>,
@@ -1280,7 +1281,7 @@ impl Compositor {
             cut,
             focus_plane,
             radius,
-            square_top,
+            top_lift,
             dof_pyramid.is_some(),
             render_px,
         );
@@ -2189,14 +2190,19 @@ impl Compositor {
             // L'ombre suit la silhouette réellement affichée : rect arrondi quand l'écran est
             // droit, quadrilatère projeté quand il est penché. Un rect droit derrière un écran
             // incliné se lit comme une seconde surface, pas comme son ombre. Avec un cadre de
-            // fenêtre, c'est le CADRE qui la porte (`shadow_caster`).
-            match g.shadow_caster([rw, rh]) {
-                ShadowCaster::Upright { dst, size_px, radius } => {
-                    self.draw_shadow(enc, dst, size_px, radius, spread, offset, opacity)
+            // fenêtre, c'est le CADRE qui la porte (`shadow_caster`) ; un appareil porte celle de
+            // sa silhouette 3D (mode 17), pas celle d'un quad.
+            if let Some(cb) = g.device_shadow_cb([rw, rh], spread, offset, opacity) {
+                self.draw_solid(enc, &cb);
+            } else {
+                match g.shadow_caster([rw, rh]) {
+                    ShadowCaster::Upright { dst, size_px, radius } => {
+                        self.draw_shadow(enc, dst, size_px, radius, spread, offset, opacity)
+                    }
+                    ShadowCaster::Tilted { corners, center_px, radius } => self.draw_quad_shadow(
+                        enc, &corners, center_px, radius, spread, offset, opacity,
+                    ),
                 }
-                ShadowCaster::Tilted { corners, center_px, radius } => self.draw_quad_shadow(
-                    enc, &corners, center_px, radius, spread, offset, opacity,
-                ),
             }
         }
         // Le cadre (mode 14) passe SOUS l'écran, qui ne laisse voir que la barre et le filet.
@@ -2204,6 +2210,7 @@ impl Compositor {
             self.draw_solid(enc, &cb);
         }
         let square_top = g.screen_square_top();
+        let top_lift = g.screen_top_lift_px([rw, rh]);
         let [su0, sv0, su1, sv1] = g.cut;
         match tilt.as_ref() {
             None => self.draw_video(
@@ -2217,7 +2224,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0, sv0, su1, sv1],
                     dst_prev: g.s_dst_prev,
-                    mb: [g.mb_taps, g.mb_amount, 1.0, square_top],
+                    mb: [g.mb_taps, g.mb_amount, top_lift, square_top],
                     ..Default::default()
                 },
                 &sy,
@@ -2231,7 +2238,7 @@ impl Compositor {
                 g.cut,
                 g.focus_plane,
                 g.s_radius,
-                square_top,
+                top_lift,
                 &sy,
                 &suv,
                 dof_pyramid.as_ref(),
@@ -3596,8 +3603,8 @@ mod tests {
         };
         let (w, h) = (1280u32, 720u32);
         let comp = super::Compositor::new_sized(&gpu, w, h).expect("Compositor::new_sized");
-        // Métrage UNIFORME, et gris moyen : un damier changerait d'échelle avec la boîte que le
-        // cadre rétrécit, et le pixel du centre ne serait plus comparable d'un cas à l'autre.
+        // Métrage UNIFORME, et gris moyen : compter ses pixels dit ce que le cadre en recouvre, et
+        // le pixel du centre reste comparable d'un cas à l'autre.
         let screen = FakeFrame::new(640, 360, |_, _| 140);
         let differing = |a: &[u8], b: &[u8]| {
             a.chunks_exact(4)
@@ -3636,10 +3643,11 @@ mod tests {
                 let seen = differing(&none, &rgba);
                 let kept = footage(&rgba, tone);
                 println!("{name:<5} {device:<8} {seen:>7} px de cadre, {kept:>7} px de métrage");
-                assert!(seen > 30_000, "{name} {device} : cadre invisible ({seen} px)");
-                // Le cadre rétrécit la boîte écran — le socle du portable en mange le plus, ~22 %
-                // de l'aire d'origine —, mais il ne doit RIEN recouvrir : le métrage reste là.
-                assert!(kept > bare / 8, "{name} {device} : métrage couvert ({kept} sur {bare})");
+                // Des lunettes fines autour d'un grand métrage : un anneau, plus l'ombre.
+                assert!(seen > 15_000, "{name} {device} : cadre invisible ({seen} px)");
+                // Le métrage garde sa boîte sous tous les cadres (le cadre pousse vers
+                // l'extérieur) : seul le recouvrement d'un pixel et quart de la lunette le mord.
+                assert!(kept > bare * 9 / 10, "{name} {device} : métrage couvert ({kept} sur {bare})");
                 shots.push((device, rgba));
             }
             for (i, (a, ra)) in shots.iter().enumerate() {

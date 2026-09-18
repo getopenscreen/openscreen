@@ -95,6 +95,14 @@ fn sd_round_rect(p: vec2<f32>, halfsz: vec2<f32>, r: f32) -> f32 {
     return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - r;
 }
 
+// L'ecran sous le chrome de FENETRE (modes 0 et 8) : coins HAUTS carres, rognes par l'arc du
+// cadre quand le rayon depasse la barre. Port de `sd_screen_under_bar` (HLSL), qui fait foi.
+fn sd_screen_under_bar(p: vec2<f32>, halfsz: vec2<f32>, r: f32, lift: f32) -> f32 {
+    let own = sd_round_rect(p, halfsz, select(r, 0.0, p.y < 0.0));
+    let up = vec2<f32>(0.0, lift * 0.5);
+    return max(own, sd_round_rect(p + up, halfsz + up, r));
+}
+
 // Couverture du quad avec coins arrondis, pour le mode 6 qui retourne AVANT la queue de
 // `fs_main`. Il s'en passait tant qu'il ne servait qu'au fond plein cadre, qui n'a pas de
 // rayon ; depuis que la bulle webcam peut porter une image, sans ca le fond deborde en carre
@@ -606,18 +614,24 @@ fn cursor_impact(local: vec2<f32>) -> vec4<f32> {
 // Constantes : miroir de `frame_geometry.rs` (DEV_*) ; emplacements du cbuffer :
 // `frame_geometry::device_frame_cb`, resume au-dessus de `device_frame` dans le HLSL.
 const DEV_CHAMFER: f32 = 0.0012;
-const DEV_BEZEL_OVERLAP: f32 = 0.004;
-const DEV_DECK_ANGLE: f32 = 1.221730;
+// Distance minimale de l'oeil du relief, en largeurs d'ecran (`DEV_EYE_MIN`).
+const DEV_EYE_MIN: f32 = 5.4;
 // Socle et pied : en fractions de la LARGEUR DE COQUE, jamais de l'ecran.
-const DEV_DECK_LEN: f32 = 0.71;
-const DEV_DECK_THICK: f32 = 0.029;
-const DEV_DECK_THICK_FRONT: f32 = 0.013;
+const DEV_DECK_LEN: f32 = 0.70;
+// Liseré d'aluminium, rayon de la semelle, encoche du socle (cf. HLSL).
+const DEV_RIM: f32 = 0.003;
+const DEV_FOOT_R: f32 = 0.02;
+const DEV_SCOOP_W: f32 = 0.075;
+const DEV_SCOOP_D: f32 = 0.02;
+const DEV_SCOOP_H: f32 = 0.006;
+const DEV_DECK_THICK: f32 = 0.024;
+const DEV_DECK_THICK_FRONT: f32 = 0.021;
 const DEV_DECK_GAP: f32 = 0.005;
-const DEV_NECK_W: f32 = 0.039;
+const DEV_NECK_W: f32 = 0.14;
 const DEV_NECK_LEN: f32 = 0.097;
-const DEV_FOOT_W: f32 = 0.214;
-const DEV_FOOT_H: f32 = 0.014;
-const DEV_STAND_Z: f32 = 0.021;
+const DEV_FOOT_W: f32 = 0.25;
+const DEV_FOOT_H: f32 = 0.025;
+const DEV_STAND_Z: f32 = 0.012;
 const DEV_FOOT_Z: f32 = 0.107;
 const DEV_SHELL_LIGHT = vec3<f32>(0.800, 0.806, 0.812);
 const DEV_SHELL_LIGHT_BACK = vec3<f32>(0.600, 0.610, 0.622);
@@ -661,8 +675,12 @@ fn dev_shell_w() -> f32 {
     return 2.0 * dev_body_h().x;
 }
 
-// La longueur REELLE du socle : `device_deck_len` la raccourcit sur un metrage trop plat.
+// Le socle a sa profondeur reelle ; c'est son ANGLE (`device_deck_angle`) qui le rend discret.
 fn dev_deck_len() -> f32 {
+    return DEV_DECK_LEN * dev_shell_w();
+}
+
+fn dev_deck_angle() -> f32 {
     return layer.dst_prev.x;
 }
 
@@ -677,27 +695,44 @@ fn sd_dev_box(p: vec3<f32>, h: vec3<f32>, r: f32) -> f32 {
 }
 
 fn sd_dev_outline(p: vec2<f32>) -> f32 {
-    return sd_round_rect(p - dev_body_c(), dev_body_h(), layer.radius_px);
+    // Coins hauts `radius_px`, coins bas `color.b` (cf. HLSL).
+    let q = p - dev_body_c();
+    return sd_round_rect(q, dev_body_h(), select(layer.color.b, layer.radius_px, q.y < 0.0));
 }
 
-fn sd_dev_body(p: vec3<f32>) -> f32 {
+// Ellipsoide (borne de distance) : l'encoche du socle.
+fn sd_dev_ellipsoid(p: vec3<f32>, r: vec3<f32>) -> f32 {
+    let k0 = length(p / r);
+    let k1 = length(p / (r * r));
+    return k0 * (k0 - 1.0) / max(k1, 1e-6);
+}
+
+// La dalle PLEINE du corps, sans le creux de l'ecran : la silhouette qui porte l'ombre.
+fn sd_dev_slab(p: vec3<f32>) -> f32 {
     let t = layer.fx.w;
     let ch = dev_chamfer();
     let w = vec2<f32>(sd_dev_outline(p.xy) + ch, abs(p.z + t * 0.5) - (t * 0.5 - ch));
-    let body = min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0))) - ch;
-    // L'ouverture a le rayon du METRAGE : le corps moins sa marge, aux quatre coins.
-    let ah = layer.mb.xy - vec2<f32>(DEV_BEZEL_OVERLAP);
-    let ar = min(max(layer.radius_px - layer.src_prev.x, 0.0), min(ah.x, ah.y));
-    let hole = max(sd_round_rect(p.xy, ah, ar), -p.z - t * 0.55);
-    return max(body, -hole);
+    return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0))) - ch;
+}
+
+// L'OUVERTURE (<0 dedans) : le rect du metrage rentre du recouvrement `dst_prev.z`, au rayon du
+// METRAGE `dst_prev.y` -- la meme fonction de coin que lui, a toutes les valeurs de Roundness.
+fn sd_dev_aperture(p: vec2<f32>) -> f32 {
+    let ah = layer.mb.xy - vec2<f32>(layer.dst_prev.z);
+    return sd_round_rect(p, ah, min(layer.dst_prev.y, min(ah.x, ah.y)));
+}
+
+fn sd_dev_body(p: vec3<f32>) -> f32 {
+    let hole = max(sd_dev_aperture(p.xy), -p.z - layer.fx.w * 0.55);
+    return max(sd_dev_slab(p), -hole);
 }
 
 fn dev_deck_local(p: vec3<f32>) -> vec3<f32> {
     let c = dev_body_c();
     let h = dev_body_h();
     let d = p - vec3<f32>(0.0, c.y + h.y, -layer.fx.w * 0.5);
-    let ca = cos(DEV_DECK_ANGLE);
-    let sa = sin(DEV_DECK_ANGLE);
+    let ca = cos(dev_deck_angle());
+    let sa = sin(dev_deck_angle());
     return vec3<f32>(d.x, d.y * ca + d.z * sa, -d.y * sa + d.z * ca);
 }
 
@@ -713,7 +748,55 @@ fn sd_dev_deck(p: vec3<f32>) -> f32 {
     // Le dessous remonte vers l'avant : le profil en coin.
     let k = (DEV_DECK_THICK - DEV_DECK_THICK_FRONT) * w / max(dev_deck_len(), 1e-5);
     let under = (-tb + k * (q.y - y0) - q.z) * inverseSqrt(1.0 + k * k);
-    return max(slab, under);
+    // L'encoche au milieu de l'arete avant (cf. HLSL).
+    let scoop = sd_dev_ellipsoid(q - vec3<f32>(0.0, y1, 0.0), vec3<f32>(DEV_SCOOP_W, DEV_SCOOP_D, DEV_SCOOP_H) * w);
+    return max(max(slab, under), -scoop);
+}
+
+// Entree ANALYTIQUE du rayon dans le coin du socle, 1e9 s'il le manque (cf. HLSL, qui fait foi).
+fn dev_deck_hit(ro: vec3<f32>, rd: vec3<f32>) -> f32 {
+    let q0 = dev_deck_local(ro);
+    let qd = dev_deck_local(ro + rd) - q0;
+    let w = dev_shell_w();
+    let hw = dev_body_h().x;
+    let y0 = DEV_DECK_GAP * w;
+    let len = dev_deck_len();
+    let tb = DEV_DECK_THICK * w;
+    var tt = ray_box(q0, qd, vec3<f32>(-hw, y0, -tb), vec3<f32>(hw, y0 + len, 0.0));
+    let k = (DEV_DECK_THICK - DEV_DECK_THICK_FRONT) * w / max(len, 1e-5);
+    let g0 = -tb + k * (q0.y - y0) - q0.z;
+    let gd = k * qd.y - qd.z;
+    if abs(gd) > 1e-9 {
+        let tg = -g0 / gd;
+        if gd > 0.0 {
+            tt.y = min(tt.y, tg);
+        } else {
+            tt.x = max(tt.x, tg);
+        }
+    } else if g0 > 0.0 {
+        return 1e9;
+    }
+    if tt.x > tt.y || tt.y <= 0.0 {
+        return 1e9;
+    }
+    // Entre par l'encoche, le rayon touche la matiere a sa sortie de l'ellipsoide.
+    var t_in = max(tt.x, 0.0);
+    let sr = vec3<f32>(DEV_SCOOP_W, DEV_SCOOP_D, DEV_SCOOP_H) * w;
+    let o = (q0 - vec3<f32>(0.0, y0 + len, 0.0)) / sr;
+    let e = qd / sr;
+    let ea = dot(e, e);
+    let eb = dot(o, e);
+    let disc = eb * eb - ea * (dot(o, o) - 1.0);
+    if disc > 0.0 {
+        let s = sqrt(disc);
+        if t_in >= (-eb - s) / ea && t_in < (-eb + s) / ea {
+            t_in = (-eb + s) / ea;
+        }
+    }
+    if t_in <= tt.y {
+        return t_in;
+    }
+    return 1e9;
 }
 
 fn sd_dev_stand(p: vec3<f32>) -> f32 {
@@ -723,9 +806,11 @@ fn sd_dev_stand(p: vec3<f32>) -> f32 {
     let neck = sd_dev_box(p - vec3<f32>(0.0, y0 + DEV_NECK_LEN * w * 0.5 - 0.01, zc - DEV_STAND_Z * w * 0.5),
                           vec3<f32>(DEV_NECK_W * w, DEV_NECK_LEN * w * 0.5 + 0.01, DEV_STAND_Z * w * 0.5),
                           DEV_CHAMFER * 2.0);
-    let foot = sd_dev_box(p - vec3<f32>(0.0, y0 + (DEV_NECK_LEN + DEV_FOOT_H * 0.5) * w, zc - DEV_FOOT_Z * w * 0.5),
-                          vec3<f32>(DEV_FOOT_W * w, DEV_FOOT_H * w * 0.5, DEV_FOOT_Z * w * 0.5),
-                          DEV_CHAMFER * 2.0);
+    // La semelle : une plaque plate, coins arrondis dans son plan (xz), flancs droits.
+    let f = p - vec3<f32>(0.0, y0 + (DEV_NECK_LEN + DEV_FOOT_H * 0.5) * w, zc - DEV_FOOT_Z * w * 0.5);
+    let fd = vec2<f32>(sd_round_rect(f.xz, vec2<f32>(DEV_FOOT_W, DEV_FOOT_Z * 0.5) * w, DEV_FOOT_R * w),
+                       abs(f.y) - DEV_FOOT_H * w * 0.5);
+    let foot = min(max(fd.x, fd.y), 0.0) + length(max(fd, vec2<f32>(0.0)));
     return min(neck, foot);
 }
 
@@ -741,6 +826,11 @@ fn sd_dev_extra(p: vec3<f32>) -> f32 {
 
 fn sd_device(p: vec3<f32>) -> f32 {
     return min(sd_dev_body(p), sd_dev_extra(p));
+}
+
+// Le modele PLEIN, ecran compris : ce que l'ombre voit.
+fn sd_dev_solid(p: vec3<f32>) -> f32 {
+    return min(sd_dev_slab(p), sd_dev_extra(p));
 }
 
 fn device_normal(p: vec3<f32>) -> vec3<f32> {
@@ -766,17 +856,24 @@ fn device_albedo(p: vec3<f32>, n: vec3<f32>, aa: f32) -> vec4<f32> {
     let metal = dev_shell();
     let back = dev_shell_back();
     if sd_dev_body(p) > sd_dev_extra(p) {
+        let w = dev_shell_w();
         if !dev_is(1.0) {
-            return vec4<f32>(back, 1.0);
+            // Le pied du moniteur : de l'aluminium, un degrade vertical doux.
+            let v = clamp((p.y - dev_body_c().y - dev_body_h().y) / ((DEV_NECK_LEN + DEV_FOOT_H) * w), 0.0, 1.0);
+            return vec4<f32>(mix(metal, back, 0.15 + 0.45 * v), 1.0);
         }
         let q = dev_deck_local(p);
-        let w = dev_shell_w();
-        if q.z < -DEV_DECK_THICK * w * 0.25 {
-            return vec4<f32>(back, 1.0);
-        }
         let hw = dev_body_h().x;
         let y0 = DEV_DECK_GAP * w;
         let len = dev_deck_len();
+        // La tranche AVANT : une barre d'argent qui fonce doucement vers son arete basse.
+        if q.y > y0 + len - DEV_CHAMFER * 3.0 {
+            let s = clamp(-q.z / (DEV_DECK_THICK_FRONT * w), 0.0, 1.0);
+            return vec4<f32>(mix(metal, back, smoothstep(0.35, 1.0, s) * 0.8), 1.0);
+        }
+        if q.z < -DEV_DECK_THICK * w * 0.25 {
+            return vec4<f32>(back, 1.0);
+        }
         var top = metal;
         let key = sd_round_rect(q.xy - vec2<f32>(0.0, y0 + len * 0.33),
                                 vec2<f32>(hw * 0.75, len * 0.23), len * 0.02);
@@ -789,30 +886,64 @@ fn device_albedo(p: vec3<f32>, n: vec3<f32>, aa: f32) -> vec4<f32> {
         return vec4<f32>(top, 1.0);
     }
     let shell = mix(back, metal, clamp(n.z * 0.8 + 0.5, 0.0, 1.0));
-    let front = select(smoothstep(0.30, 0.80, n.z), 0.0, p.z < -layer.fx.w * 0.5);
+    // Le quart avant du corps seulement (cf. HLSL) : la colonne du moniteur n'est pas du verre.
+    let front = select(smoothstep(0.30, 0.80, n.z), 0.0, p.z < -layer.fx.w * 0.25);
     if front <= 0.0 {
         return vec4<f32>(shell, 1.0);
     }
-    let rim = dev_hairline(sd_dev_outline(p.xy), aa);
+    // Le lisere d'aluminium qui borde la face avant, et le filet de lumiere sur son arete.
+    let edge = sd_dev_outline(p.xy);
+    let band = 1.0 - dev_cov(edge + DEV_RIM, aa);
+    let rim = dev_hairline(edge, aa);
     var c = dev_glass();
     if dev_is(2.0) {
-        // Telephone : le detail reste sur le HAUT DU TELEPHONE. Une ouverture paysage est un
-        // telephone COUCHE : on le redresse d'un quart de tour et on dessine dedans.
+        // Telephone : un oeil de camera, rien d'autre, au milieu de la lunette du HAUT DU
+        // TELEPHONE. Une ouverture paysage est un telephone COUCHE, son haut vers la gauche.
         let upright = layer.mb.y >= layer.mb.x;
         let e = select(vec2<f32>(-p.y, p.x), p.xy, upright);
         let hh = select(vec2<f32>(layer.mb.y, layer.mb.x), layer.mb.xy, upright);
-        let bez = select(layer.src_prev.x, layer.src_prev.y, upright);
+        let bez = select(layer.src_prev.x, layer.src_prev.y, upright) - DEV_RIM;
         let s = 2.0 * min(hh.x, hh.y);
-        let y = -hh.y - bez * 0.5;
-        c = mix(c, vec3<f32>(0.180, 0.196, 0.220),
-                dev_cov(sd_round_rect(e - vec2<f32>(-0.010 * s, y), vec2<f32>(0.060 * s, 0.0040 * s), 0.0040 * s), aa));
-        c = mix(c, vec3<f32>(0.086, 0.102, 0.133), dev_cov(length(e - vec2<f32>(0.082 * s, y)) - 0.0075 * s, aa));
-    } else if dev_is(1.0) {
-        c = mix(c, vec3<f32>(0.120, 0.133, 0.161),
-                dev_cov(length(p.xy - vec2<f32>(0.0, -layer.mb.y - layer.src_prev.y * 0.5)) - 0.0035 * dev_shell_w(), aa));
+        c = mix(c, vec3<f32>(0.086, 0.102, 0.133), dev_cov(length(e - vec2<f32>(0.0, -hh.y - bez * 0.5)) - 0.004 * s, aa));
+    } else {
+        // Portable et moniteur : un oeil de camera centre dans la lunette du haut, pas d'encoche.
+        let bez = layer.src_prev.y - DEV_RIM;
+        c = mix(c, vec3<f32>(0.120, 0.133, 0.161), dev_cov(length(p.xy - vec2<f32>(0.0, -layer.mb.y - bez * 0.5)) - 0.2 * bez, aa));
     }
-    c = mix(c, metal, rim);
-    return vec4<f32>(mix(shell, c, front), rim);
+    c = mix(c, metal, band);
+    c = mix(c, min(metal * 1.12, vec3<f32>(1.0)), rim);
+    return vec4<f32>(mix(shell, c, front), max(band, rim));
+}
+
+// L'OMBRE portee de l'appareil (`dst_prev.w` = penombre en px) : la silhouette reelle du modele,
+// socle et pied compris. Cf. `device_shadow` (HLSL), qui fait foi.
+fn device_shadow(ro: vec3<f32>, rd: vec3<f32>, fpk: f32, lo: vec3<f32>, hi: vec3<f32>) -> vec4<f32> {
+    let spread = layer.dst_prev.w;
+    let m = vec3<f32>(2.0 * spread / layer.src.w);
+    let tb = ray_box(ro, rd, lo - m, hi + m);
+    if tb.x >= tb.y || tb.y <= 0.0 {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+    // Dans la silhouette pleine, a coup sur : le rayon perce la face avant ou le socle.
+    if rd.z < -1e-5 && sd_dev_outline((ro + rd * (-ro.z / rd.z)).xy) < 0.0 {
+        return vec4<f32>(0.0, 0.0, 0.0, layer.color.a);
+    }
+    if dev_is(1.0) && dev_deck_hit(ro, rd) < 1e9 {
+        return vec4<f32>(0.0, 0.0, 0.0, layer.color.a);
+    }
+    var t = max(tb.x, 0.0);
+    var best = 1e9;
+    for (var k = 0; k < 96; k = k + 1) {
+        let d = sd_dev_solid(ro + rd * t);
+        let fp = t * fpk;
+        best = min(best, max(d, 0.0) / fp);
+        if d < 0.08 * fp || t > tb.y {
+            break;
+        }
+        t = t + max(d, fp);
+    }
+    let a = layer.color.a * (1.0 - smoothstep(0.0, spread, best));
+    return vec4<f32>(0.0, 0.0, 0.0, a); // noir premultiplie
 }
 
 fn device_frame(local: vec2<f32>) -> vec4<f32> {
@@ -828,38 +959,77 @@ fn device_frame(local: vec2<f32>) -> vec4<f32> {
 
     let dw = vec3<f32>(local + layer.src.xy, -persp);
     let dlen = length(dw);
-    let ro = world_to_plane(vec3<f32>(-layer.mb.z, -layer.mb.w, persp), f) / unit;
-    let rd = world_to_plane(dw / dlen, f);
+    let ro0 = world_to_plane(vec3<f32>(-layer.mb.z, -layer.mb.w, persp), f) / unit;
+    let rd0 = world_to_plane(dw / dlen, f);
     let l = world_to_plane(MODEL_LIGHT, f);
 
-    // Le plan du metrage occulte tout ce qui est derriere lui DANS l'ouverture.
-    var t_max = 1e9;
+    // L'OEIL DU MODELE (`DeviceView::project`, cf. HLSL) : recule sur la meme droite a au moins
+    // `DEV_EYE_MIN` largeurs d'ecran ; chaque rayon passe par le MEME point du plan.
+    var ro = ro0;
+    var rd = rd0;
+    var fpk = 1.0 / dlen;
     if rd.z < -1e-5 {
         let ts = -ro.z / rd.z;
-        let p0 = ro.xy + rd.xy * ts;
-        let ah = layer.mb.xy - vec2<f32>(DEV_BEZEL_OVERLAP);
-        if ts > 0.0 && all(abs(p0) < ah) {
-            t_max = ts;
-        }
+        let eye = ro * max(1.0, DEV_EYE_MIN / max(length(ro), 1e-3));
+        let v = ro + rd * ts - eye;
+        let lv = length(v);
+        fpk = ts / dlen / lv;
+        ro = eye;
+        rd = v / lv;
     }
 
+    // La boite du modele, miroir de `DeviceView::model_points`.
     let bc = dev_body_c();
     let bh = dev_body_h();
     var lo = vec3<f32>(bc - bh, -layer.fx.w);
     var hi = vec3<f32>(bc + bh, 0.0);
     let sw = dev_shell_w();
     if dev_is(1.0) {
-        let reach = DEV_DECK_GAP * sw + dev_deck_len();
-        hi = vec3<f32>(hi.x, hi.y + reach * cos(DEV_DECK_ANGLE) + DEV_DECK_THICK * sw,
-                       hi.z + reach * sin(DEV_DECK_ANGLE));
+        // Les quatre coins du profil du socle, de la charniere au bord avant, dessus et dessous.
+        let ca = cos(dev_deck_angle());
+        let sa = sin(dev_deck_angle());
+        let hinge = vec2<f32>(bc.y + bh.y, -layer.fx.w * 0.5);
+        let qy = vec2<f32>(DEV_DECK_GAP * sw, DEV_DECK_GAP * sw + dev_deck_len());
+        let qz = vec2<f32>(0.0, -DEV_DECK_THICK * sw);
+        for (var j = 0; j < 4; j = j + 1) {
+            let a = qy[j & 1];
+            let b = qz[j >> 1u];
+            let yz = hinge + vec2<f32>(a * ca - b * sa, a * sa + b * ca);
+            lo = vec3<f32>(lo.x, min(lo.yz, yz));
+            hi = vec3<f32>(hi.x, max(hi.yz, yz));
+        }
     } else if dev_is(3.0) {
         lo = vec3<f32>(min(lo.x, -DEV_FOOT_W * sw), lo.y, lo.z - DEV_FOOT_Z * sw);
         hi = vec3<f32>(max(hi.x, DEV_FOOT_W * sw), hi.y + (DEV_NECK_LEN + DEV_FOOT_H) * sw, hi.z);
     }
 
+    if layer.dst_prev.w > 0.0 {
+        return device_shadow(ro, rd, fpk, lo, hi);
+    }
+
+    // Le plan du metrage occulte tout ce qui est derriere lui DANS l'ouverture ARRONDIE : entre
+    // l'arc et le coin carre, c'est de la lunette.
+    // Hors de l'ouverture, le meme point du plan dit si le rayon perce la FACE AVANT ; le socle a
+    // son entree analytique. La marche ne sert qu'a ce qui les precede et a l'antialiasing.
+    var t_max = 1e9;
+    var t_solid = 1e9;
+    if rd.z < -1e-5 {
+        let ts = -ro.z / rd.z;
+        let qp = ro.xy + rd.xy * ts;
+        if ts > 0.0 && sd_dev_aperture(qp) < 0.0 {
+            t_max = ts;
+        } else if ts > 0.0 && sd_dev_outline(qp) < 0.0 {
+            t_solid = ts;
+        }
+    }
+    if dev_is(1.0) {
+        t_solid = min(t_solid, dev_deck_hit(ro, rd));
+    }
+    let solid = t_solid < t_max;
+
     let tb = ray_box(ro, rd, lo - vec3<f32>(0.01), hi + vec3<f32>(0.01));
-    let t1 = min(tb.y, t_max);
-    if tb.x >= t1 || t1 <= 0.0 {
+    let t1 = min(min(tb.y, t_max), t_solid);
+    if !solid && (tb.x >= t1 || t1 <= 0.0) {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 
@@ -869,7 +1039,7 @@ fn device_frame(local: vec2<f32>) -> vec4<f32> {
     var hit = false;
     for (var k = 0; k < 80; k = k + 1) {
         let d = sd_device(ro + rd * t);
-        let fp = t / dlen;
+        let fp = t * fpk;
         if d < 0.08 * fp {
             hit = true;
             t_best = t;
@@ -884,13 +1054,17 @@ fn device_frame(local: vec2<f32>) -> vec4<f32> {
             break;
         }
     }
+    if !hit && solid {
+        hit = true;
+        t_best = t_solid;
+    }
     let cov = select(clamp(1.0 - best, 0.0, 1.0), 1.0, hit);
     if cov <= 0.0 {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
     let q = ro + rd * t_best;
     let n = device_normal(q);
-    let mat = device_albedo(q, n, t_best / dlen);
+    let mat = device_albedo(q, n, t_best * fpk);
     let diffuse = clamp(dot(n, l), 0.0, 1.0);
     // Aucun lobe speculaire large : rien qu'un voile directionnel etroit sur le metal.
     let sheen = DEV_SHEEN * mat.a * pow(diffuse, 4.0);
@@ -1129,11 +1303,14 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Inconditionnel, rayon 0 compris -- `sd_round_rect` degenere en SDF de
         // rectangle et le feather de 1,5 px subsiste, ce qui fait lire une arete
         // inclinee COMME une arete plutot que comme un escalier.
-        // dst_prev.z = 1 : ecran sous un cadre de fenetre, coins HAUTS carres (sous la barre).
+        // dst_prev.z = 1 : ecran sous le chrome de fenetre, coins HAUTS carres et rognes par
+        // l'arc du cadre (`sd_screen_under_bar`, `color.z` = la remontee, px du plan).
         let plane_px = layer.dst_prev.xy;
         let p = vec2<f32>(r.x, r.y) * plane_px - plane_px * 0.5;
-        let d = sd_round_rect(p, plane_px * 0.5,
-                              select(max(layer.radius_px, 0.0), 0.0, layer.dst_prev.z > 0.5 && p.y < 0.0));
+        let rad = max(layer.radius_px, 0.0);
+        let d = select(sd_round_rect(p, plane_px * 0.5, rad),
+                       sd_screen_under_bar(p, plane_px * 0.5, rad, layer.color.z),
+                       layer.dst_prev.z > 0.5);
         let tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
         // Profondeur de champ (cf. HLSL) : net sous un demi-texel de flou, l'echantillon
         // d'avant a l'octet ; au-dela, fondu vers la pyramide demi-resolution liee en binding 4
@@ -1268,10 +1445,13 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Feather ~1.5 px sur le bord du quad — parité exacte avec le HLSL
         // (`smoothstep(0.0, 1.5, d)`). Le shader HLSL inclut `quad_px` en px de
         // SORTIE ; on reproduit la même chose ici.
-        // mb.w = 1 : ecran sous un cadre de fenetre, coins HAUTS carres (sous la barre de titre).
+        // mb.w = 1 : ecran sous le chrome de fenetre, coins HAUTS carres et rognes par l'arc du
+        // cadre (`sd_screen_under_bar`, `mb.z` = la remontee du contour interieur, px).
         let halfsz = layer.quad_px * 0.5;
         let p = i.local - layer.quad_px * 0.5;
-        let d = sd_round_rect(p, halfsz, select(layer.radius_px, 0.0, layer.mb.w > 0.5 && p.y < 0.0));
+        let d = select(sd_round_rect(p, halfsz, layer.radius_px),
+                       sd_screen_under_bar(p, halfsz, layer.radius_px, layer.mb.z),
+                       layer.mb.w > 0.5);
         alpha *= 1.0 - smoothstep(0.0, 1.5, d);
     }
 

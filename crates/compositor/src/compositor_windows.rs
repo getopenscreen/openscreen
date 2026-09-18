@@ -1928,13 +1928,18 @@ impl Compositor {
             let spread = SCREEN_SHADOW_SPREAD_FRAC * frame_min_px;
             let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
-            match g.shadow_caster(render_px) {
-                ShadowCaster::Upright { dst, size_px, radius } => {
-                    self.draw_shadow(dst, size_px, radius, spread, offset, opacity)
-                }
-                // Même rayon que le plan incliné lui-même (cf. le dessin du mode 8).
-                ShadowCaster::Tilted { corners, center_px, radius } => {
-                    self.draw_quad_shadow(&corners, center_px, radius, spread, offset, opacity)
+            // Un appareil porte l'ombre de sa silhouette 3D (mode 17), pas celle d'un quad.
+            if let Some(cb) = g.device_shadow_cb(render_px, spread, offset, opacity) {
+                self.draw_solid(&cb);
+            } else {
+                match g.shadow_caster(render_px) {
+                    ShadowCaster::Upright { dst, size_px, radius } => {
+                        self.draw_shadow(dst, size_px, radius, spread, offset, opacity)
+                    }
+                    // Même rayon que le plan incliné lui-même (cf. le dessin du mode 8).
+                    ShadowCaster::Tilted { corners, center_px, radius } => {
+                        self.draw_quad_shadow(&corners, center_px, radius, spread, offset, opacity)
+                    }
                 }
             }
         }
@@ -1944,6 +1949,9 @@ impl Compositor {
             self.draw_solid(&cb);
         }
         let square_top = g.screen_square_top();
+        // Sous le chrome de fenetre, la remontee de son contour interieur au-dessus de l'ecran :
+        // l'arrondi du haut se fait par le cadre (`screen_top_lift_px`). 0 sans fenetre.
+        let top_lift = g.screen_top_lift_px(render_px);
         if let Some(quad) = tilt {
             // Écran incliné (angle fixe) ou vu par la caméra réelle : warp inverse du mode 8 dans
             // la bbox du quad projeté (`tilted_screen_cb`, partagé). Les coins arrondis y sont
@@ -1962,7 +1970,7 @@ impl Compositor {
                     [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
                     g.focus_plane,
                     s_radius,
-                    square_top,
+                    top_lift,
                     dof,
                     render_px,
                 ),
@@ -1981,7 +1989,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
                     dst_prev: s_dst_prev,
-                    mb: [mb_taps, mb_amount, 1.0, square_top],
+                    mb: [mb_taps, mb_amount, top_lift, square_top],
                     ..Default::default()
                 },
                 &sy,

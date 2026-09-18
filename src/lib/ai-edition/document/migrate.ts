@@ -75,6 +75,19 @@ function toLegacyMedia(input: ProjectMedia | undefined): ProjectMedia | null {
 }
 
 /**
+ * A v2 `editor.cropRegion` becomes the migrated clip's crop. Returns null for a
+ * missing, malformed, or identity region so the clip stays lean (see clipSchema).
+ */
+function toClipCropRegion(region: CropRegion | undefined): CropRegion | null {
+	if (!region) return null;
+	const { x, y, width, height } = region;
+	const finite = [x, y, width, height].every((v) => typeof v === "number" && Number.isFinite(v));
+	if (!finite) return null;
+	if (x === 0 && y === 0 && width === 1 && height === 1) return null;
+	return { x, y, width, height };
+}
+
+/**
  * Migrate a v2 EditorProjectData into a v3 AxcutDocument. The single recording
  * becomes one asset + one clip spanning the source. trimRegions become
  * trimRanges on that asset (semantically identical: both are cuts).
@@ -130,6 +143,8 @@ export function migrateProjectDataToAxcutDocument(
 		? input.editor.annotationRegions
 		: [];
 
+	const migratedCropRegion = toClipCropRegion(input.editor?.cropRegion);
+
 	const clip = primaryAssetId
 		? {
 				id: createId("clip"),
@@ -140,6 +155,10 @@ export function migrateProjectDataToAxcutDocument(
 				wordRefs: [] as string[],
 				origin: "system" as const,
 				reason: "migrated from v2",
+				// Crop lives on the clip in v3 (sceneDescription reads clip.cropRegion),
+				// so a v2 editor.cropRegion left only in legacyEditor is never applied.
+				// Identity stays absent so untouched clips remain lean.
+				...(migratedCropRegion ? { cropRegion: migratedCropRegion } : {}),
 			}
 		: null;
 

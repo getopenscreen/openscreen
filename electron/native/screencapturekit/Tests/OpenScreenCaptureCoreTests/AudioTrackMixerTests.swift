@@ -463,6 +463,7 @@ final class AudioTrackMixerTests: XCTestCase {
 	/// level and with the right sign.
 	func testIntegerMicrophoneFormatsAreHeardAtTheirLevel() {
 		let layouts: [(bits: Int, bytes: Int, alignedHigh: Bool, signed: Bool, label: String)] = [
+			(8, 1, false, true, "8-bit"),
 			(24, 3, false, true, "24-bit packed (the reported format)"),
 			(24, 4, false, true, "24-bit in 4 bytes, low-aligned"),
 			(24, 4, true, true, "24-bit in 4 bytes, high-aligned"),

@@ -505,7 +505,7 @@ public final class AudioTrackMixer {
 			sourceFrames > 0,
 			isFloat
 				? bitsPerChannel == 32 && bytesPerSample == 4
-				: (8...32).contains(bitsPerChannel) && (2...4).contains(bytesPerSample)
+				: (8...32).contains(bitsPerChannel) && (1...4).contains(bytesPerSample)
 					&& bitsPerChannel <= bytesPerSample * 8
 		else {
 			return nil

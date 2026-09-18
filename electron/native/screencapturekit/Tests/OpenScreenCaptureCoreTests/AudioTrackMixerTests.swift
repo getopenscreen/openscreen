@@ -455,6 +455,47 @@ final class AudioTrackMixerTests: XCTestCase {
 		XCTAssertLessThan(loudest, 16_500)
 	}
 
+	/// A microphone does not have to arrive as Float32. A MacBook Pro (M1, macOS 26.6) handed
+	/// the ScreenCaptureKit microphone output over as 48 kHz mono 24-bit integer, which the
+	/// decoder rejected — Float32, Int16 and Int32 were the only formats it read — so every take
+	/// recorded there had a silent microphone and one `audio-source-undecodable` warning to show
+	/// for it (issue #709). Every integer container CoreAudio describes must decode, at the right
+	/// level and with the right sign.
+	func testIntegerMicrophoneFormatsAreHeardAtTheirLevel() {
+		let layouts: [(bits: Int, bytes: Int, alignedHigh: Bool, label: String)] = [
+			(24, 3, false, "24-bit packed (the reported format)"),
+			(24, 4, false, "24-bit in 4 bytes, low-aligned"),
+			(24, 4, true, "24-bit in 4 bytes, high-aligned"),
+			(16, 2, false, "16-bit"),
+			(32, 4, false, "32-bit"),
+		]
+		for layout in layouts {
+			let sink = RecordingSink()
+			let clock = TestClock(.zero)
+			let mixer = makeMixer(sink: sink, clock: clock, includesMicrophone: true, microphoneGain: 1)
+			mixer.beginTimeline(at: clock.now)
+			mixer.ingest(
+				makeIntegerMonoBuffer(
+					alternating: 0.5, frames: sampleRate / 5, at: clock.now,
+					bits: layout.bits, bytes: layout.bytes, alignedHigh: layout.alignedHigh
+				),
+				from: .microphone
+			)
+			clock.advance(seconds: 0.2)
+			mixer.finish(atSourceTime: clock.now)
+
+			let frames = mixedFrames(sink)
+			XCTAssertEqual(seconds(ofFrames: frames), 0.2, accuracy: 0.011, layout.label)
+			// Mono feeds both sides at half scale, and +0.5 stays positive: a byte-order or
+			// sign-extension mistake shows up as the wrong level or a flipped first sample.
+			for lane in 0..<channelCount {
+				XCTAssertEqual(Int(peak(frames, from: 0, to: 0.2, channel: lane)), 16_384, accuracy: 2, layout.label)
+				XCTAssertGreaterThan(frames[lane], 16_000, layout.label)
+				XCTAssertLessThan(frames[channelCount + lane], -16_000, layout.label)
+			}
+		}
+	}
+
 	// MARK: - Fixtures
 
 	private func makeMixer(
@@ -587,6 +628,79 @@ final class AudioTrackMixerTests: XCTestCase {
 	}
 
 	// MARK: - Readback
+
+	/// A mono, interleaved integer capture buffer, `bits` significant bits in a `bytes`-wide
+	/// little-endian container, alternating +amplitude / -amplitude frame by frame.
+	private func makeIntegerMonoBuffer(
+		alternating amplitude: Float,
+		frames frameCount: Int,
+		at presentationTime: CMTime,
+		bits: Int,
+		bytes: Int,
+		alignedHigh: Bool
+	) -> CMSampleBuffer {
+		var asbd = AudioStreamBasicDescription(
+			mSampleRate: Float64(sampleRate),
+			mFormatID: kAudioFormatLinearPCM,
+			mFormatFlags: kAudioFormatFlagIsSignedInteger
+				| (bits == bytes * 8 ? kAudioFormatFlagIsPacked : 0)
+				| (alignedHigh ? kAudioFormatFlagIsAlignedHigh : 0),
+			mBytesPerPacket: UInt32(bytes),
+			mFramesPerPacket: 1,
+			mBytesPerFrame: UInt32(bytes),
+			mChannelsPerFrame: 1,
+			mBitsPerChannel: UInt32(bits),
+			mReserved: 0
+		)
+		var formatDescription: CMAudioFormatDescription?
+		XCTAssertEqual(
+			CMAudioFormatDescriptionCreate(
+				allocator: kCFAllocatorDefault, asbd: &asbd, layoutSize: 0, layout: nil,
+				magicCookieSize: 0, magicCookie: nil, extensions: nil,
+				formatDescriptionOut: &formatDescription
+			),
+			noErr
+		)
+		var sampleBuffer: CMSampleBuffer?
+		XCTAssertEqual(
+			CMAudioSampleBufferCreateWithPacketDescriptions(
+				allocator: kCFAllocatorDefault, dataBuffer: nil, dataReady: false,
+				makeDataReadyCallback: nil, refcon: nil, formatDescription: formatDescription!,
+				sampleCount: frameCount, presentationTimeStamp: presentationTime,
+				packetDescriptions: nil, sampleBufferOut: &sampleBuffer
+			),
+			noErr
+		)
+
+		let byteCount = frameCount * bytes
+		let memory = UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: 16)
+		defer { memory.deallocate() }
+		let fullScale = Double(Int64(1) << (bits - 1))
+		for frame in 0..<frameCount {
+			let sample = Double(frame % 2 == 0 ? amplitude : -amplitude)
+			var value = Int64((sample * fullScale).rounded())
+			value = min(max(value, -Int64(fullScale)), Int64(fullScale) - 1)
+			// High-aligned puts the padding below the value; low-aligned sign-extends above it.
+			let word = UInt32(truncatingIfNeeded: alignedHigh ? value << Int64(bytes * 8 - bits) : value)
+			for byte in 0..<bytes {
+				memory.storeBytes(of: UInt8(truncatingIfNeeded: word >> UInt32(8 * byte)),
+					toByteOffset: frame * bytes + byte, as: UInt8.self)
+			}
+		}
+		let bufferList = AudioBufferList.allocate(maximumBuffers: 1)
+		defer { free(bufferList.unsafeMutablePointer) }
+		bufferList[0] = AudioBuffer(mNumberChannels: 1, mDataByteSize: UInt32(byteCount), mData: memory)
+		XCTAssertEqual(
+			CMSampleBufferSetDataBufferFromAudioBufferList(
+				sampleBuffer!, blockBufferAllocator: kCFAllocatorDefault,
+				blockBufferMemoryAllocator: kCFAllocatorDefault, flags: 0,
+				bufferList: bufferList.unsafePointer
+			),
+			noErr
+		)
+		XCTAssertEqual(CMSampleBufferSetDataReady(sampleBuffer!), noErr)
+		return sampleBuffer!
+	}
 
 	private func mixedFrames(_ sink: RecordingSink) -> [Int16] {
 		var samples = [Int16]()

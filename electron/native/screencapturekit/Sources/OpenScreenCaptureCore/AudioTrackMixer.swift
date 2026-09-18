@@ -470,11 +470,13 @@ public final class AudioTrackMixer {
 
 	/// Decodes one capture buffer into gain-applied 48 kHz interleaved-stereo Float.
 	///
-	/// Both SCStream audio outputs are configured for 48 kHz stereo, so in practice this is a
-	/// straight Float32 de-interleave. The format-adaptive paths (Int16/Int32, interleaved or
-	/// not, off-rate sources) exist because the format is the stream's to choose, not ours —
-	/// and because a resampled source's rounding drift is absorbed by timeline placement
-	/// rather than accumulating, unlike in a FIFO mixer.
+	/// Both SCStream audio outputs are configured for 48 kHz stereo, but only system audio
+	/// honours that reliably: the microphone output can arrive in the input device's own format
+	/// — 48 kHz mono 24-bit integer on a MacBook Pro's built-in and USB microphones (#709). So
+	/// the format-adaptive paths (integers of any width up to 32 bits, interleaved or not,
+	/// off-rate sources) are not defensive extras; the format is the stream's to choose, not
+	/// ours. A resampled source's rounding drift is absorbed by timeline placement rather than
+	/// accumulating, unlike in a FIFO mixer.
 	private func decodeInterleavedStereo(_ sampleBuffer: CMSampleBuffer, gain: Float) -> [Float]? {
 		guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
 			let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)
@@ -487,11 +489,24 @@ public final class AudioTrackMixer {
 		let sourceChannels = Int(asbd.mChannelsPerFrame)
 		let bitsPerChannel = Int(asbd.mBitsPerChannel)
 		let isFloat = asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0
+		let isNonInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+		// The container each sample sits in, which is not always `bitsPerChannel / 8`: a
+		// microphone commonly arrives as 24-bit integer, either packed into 3 bytes or held in 4.
+		// Measured on a MacBook Pro (M1, macOS 26.6): the ScreenCaptureKit microphone output
+		// delivered 48 kHz mono 24-bit interleaved, which the Float32/Int16/Int32-only decoder
+		// rejected buffer by buffer — every take's microphone was silent (issue #709).
+		let bytesPerSample = sourceChannels > 0 && asbd.mBytesPerFrame > 0
+			? Int(asbd.mBytesPerFrame) / (isNonInterleaved ? 1 : sourceChannels)
+			: (bitsPerChannel + 7) / 8
 		guard asbd.mFormatID == kAudioFormatLinearPCM,
+			asbd.mFormatFlags & kAudioFormatFlagIsBigEndian == 0,
 			sourceChannels > 0,
 			asbd.mSampleRate > 0,
 			sourceFrames > 0,
-			isFloat ? bitsPerChannel == 32 : (bitsPerChannel == 16 || bitsPerChannel == 32)
+			isFloat
+				? bitsPerChannel == 32 && bytesPerSample == 4
+				: (8...32).contains(bitsPerChannel) && (2...4).contains(bytesPerSample)
+					&& bitsPerChannel <= bytesPerSample * 8
 		else {
 			return nil
 		}
@@ -503,7 +518,6 @@ public final class AudioTrackMixer {
 		// outputs disagree here: system audio arrives non-interleaved, the microphone
 		// interleaved, so sizing this off the channel count alone silently drops every
 		// microphone buffer.
-		let isNonInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
 		let bufferCount = isNonInterleaved ? sourceChannels : 1
 		let bufferList = AudioBufferList.allocate(maximumBuffers: bufferCount)
 		defer { free(bufferList.unsafeMutablePointer) }
@@ -524,7 +538,6 @@ public final class AudioTrackMixer {
 		}
 
 		return withExtendedLifetime(blockBuffer) { () -> [Float]? in
-			let bytesPerChannelSample = bitsPerChannel / 8
 			// `bufferList` is subscripted against its own count, not the format's channel
 			// count: indexing past `count` would trap rather than degrade.
 			guard bufferList.count > 0 else {
@@ -545,11 +558,15 @@ public final class AudioTrackMixer {
 				readers.append(
 					ChannelReader(
 						base: UnsafeRawPointer(data),
-						sampleCount: Int(buffer.mDataByteSize) / bytesPerChannelSample,
+						sampleCount: Int(buffer.mDataByteSize) / bytesPerSample,
 						stride: isNonInterleaved ? 1 : sourceChannels,
 						start: isNonInterleaved ? 0 : sourceChannel,
-						bytesPerSample: bytesPerChannelSample,
-						isFloat: isFloat
+						bytesPerSample: bytesPerSample,
+						isFloat: isFloat,
+						// Where the significant bits sit when they do not fill the container.
+						// Irrelevant to packed formats, where the two coincide.
+						padBits: bytesPerSample * 8 - bitsPerChannel,
+						isAlignedHigh: asbd.mFormatFlags & kAudioFormatFlagIsAlignedHigh != 0
 					)
 				)
 			}
@@ -691,6 +708,8 @@ public final class AudioTrackMixer {
 		let start: Int
 		let bytesPerSample: Int
 		let isFloat: Bool
+		let padBits: Int
+		let isAlignedHigh: Bool
 
 		func value(at frame: Int) -> Float {
 			let index = start + frame * stride
@@ -702,10 +721,18 @@ public final class AudioTrackMixer {
 			if isFloat {
 				return base.loadUnaligned(fromByteOffset: offset, as: Float.self)
 			}
-			if bytesPerSample == 2 {
-				return Float(base.loadUnaligned(fromByteOffset: offset, as: Int16.self)) / 32_768
+			// Integer of any width up to 32 bits: assemble the little-endian bytes at the top of
+			// a 32-bit word, so the sign bit lands on bit 31 and one full scale serves every width.
+			var word: UInt32 = 0
+			for byte in 0..<bytesPerSample {
+				let value = UInt32(base.load(fromByteOffset: offset + byte, as: UInt8.self))
+				word |= value << UInt32(8 * (4 - bytesPerSample + byte))
 			}
-			return Float(base.loadUnaligned(fromByteOffset: offset, as: Int32.self)) / 2_147_483_648
+			if padBits > 0 && !isAlignedHigh {
+				// Low-aligned: the padding is on top, so shift it out to put the sign bit on 31.
+				word <<= UInt32(padBits)
+			}
+			return Float(Int32(bitPattern: word)) / 2_147_483_648
 		}
 	}
 

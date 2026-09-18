@@ -95,11 +95,6 @@ public final class AudioTrackMixer {
 		static let maxPendingChunks = 500
 		/// How long the final flush waits for the input to accept the tail before giving up.
 		static let finalFlushTimeout = 5.0
-		/// How far a source's first buffer may sit from the clock before its timestamps are
-		/// taken to be on some other clock entirely. A live ScreenCaptureKit output hands
-		/// over audio tens of milliseconds after capturing it; a whole second apart is not
-		/// latency, it is a different time base. See `clockOffsets`.
-		static let foreignClockThreshold = CMTime(value: 1, timescale: 1)
 	}
 
 	private let input: MixedAudioSink
@@ -129,22 +124,6 @@ public final class AudioTrackMixer {
 	private var pending: [CMSampleBuffer] = []
 	private var didWarnAboutBacklog = false
 	private var didWarnAboutDecode: Set<Int> = []
-	/// Per source, what is added to every presentation timestamp before placement — fixed on
-	/// that source's first delivery, nil until then.
-	///
-	/// Zero for a source whose timestamps are on the writer's clock, which is what placement
-	/// by timestamp assumes. ScreenCaptureKit does not promise that for the microphone output
-	/// (Apple: the microphone and app audio are on independent clocks), and on a Mac with no
-	/// input device at all the microphone output mirrors system audio, clock included — so
-	/// the only machine the mixer had been proven on was the one place the assumption held.
-	/// Placed raw, a microphone stamped seconds or hours off the session lands entirely
-	/// before frame zero (all trimmed) or beyond the end of the take (never reached), and the
-	/// track comes out silent with every buffer accounted as delivered.
-	///
-	/// A foreign time base is recognised on the first buffer and mapped onto the clock once:
-	/// that buffer is taken to end where the clock stands, and every later one keeps its own
-	/// spacing from it, so the source's timing is preserved and only its origin moves.
-	private var clockOffsets = [CMTime?](repeating: nil, count: Source.allCases.count)
 
 	public init(
 		input: MixedAudioSink,
@@ -185,8 +164,8 @@ public final class AudioTrackMixer {
 		guard includes(source), let anchor else {
 			return
 		}
-		let capturedTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-		guard capturedTime.isValid, capturedTime.isNumeric else {
+		let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+		guard presentationTime.isValid, presentationTime.isNumeric else {
 			return
 		}
 		guard let frames = decodeInterleavedStereo(sampleBuffer, gain: gain(for: source)),
@@ -199,15 +178,6 @@ public final class AudioTrackMixer {
 		}
 
 		let now = clock()
-		let presentationTime = CMTimeAdd(
-			capturedTime,
-			clockOffset(
-				for: source,
-				capturedAt: capturedTime,
-				frameCount: frames.count / MixFormat.channelCount,
-				now: now
-			)
-		)
 		let startFrame = frameIndex(of: presentationTime, from: anchor)
 		noteDelivery(source, from: startFrame, frameCount: Int64(frames.count / MixFormat.channelCount))
 		sources[source.rawValue].ingest(frames, atFrame: startFrame)
@@ -240,41 +210,6 @@ public final class AudioTrackMixer {
 			emitTimelineSummary()
 		}
 		flushPending(force: true)
-	}
-
-	/// The offset `clockOffsets` documents, fixed on the source's first delivery.
-	private func clockOffset(
-		for source: Source,
-		capturedAt capturedTime: CMTime,
-		frameCount: Int,
-		now: CMTime
-	) -> CMTime {
-		if let offset = clockOffsets[source.rawValue] {
-			return offset
-		}
-		guard now.isValid, now.isNumeric else {
-			return .zero
-		}
-
-		// Judged on where the buffer starts: a live buffer is a few milliseconds long and
-		// arrives just after it, so start and arrival differ only by latency.
-		let skew = CMTimeSubtract(now, capturedTime)
-		guard CMTimeCompare(CMTimeAbsoluteValue(skew), MixFormat.foreignClockThreshold) > 0 else {
-			clockOffsets[source.rawValue] = .zero
-			return .zero
-		}
-		// Realigned so that the buffer ends where the clock stands — it was just captured.
-		let offset = CMTimeSubtract(
-			skew,
-			CMTime(value: CMTimeValue(frameCount), timescale: CMTimeScale(MixFormat.sampleRate))
-		)
-		clockOffsets[source.rawValue] = offset
-		emit([
-			"event": "warning",
-			"code": "audio-source-clock-rebased",
-			"message": "\(source == .system ? "System" : "Microphone") audio is timestamped \(String(format: "%.3f", CMTimeGetSeconds(skew))) s off the capture clock; it was realigned to arrival.",
-		])
-		return offset
 	}
 
 	private func warnAboutDecodeFailure(_ source: Source, _ sampleBuffer: CMSampleBuffer) {
@@ -373,7 +308,6 @@ public final class AudioTrackMixer {
 				"longestHoleSeconds": report.longestHoleSeconds,
 				"droppedSeconds": report.droppedSeconds,
 				"trimmedSeconds": report.trimmedSeconds,
-				"clockOffsetSeconds": report.clockOffsetSeconds,
 			]
 		}
 		emit(fields)
@@ -387,9 +321,6 @@ public final class AudioTrackMixer {
 		public let longestHoleSeconds: Double
 		public let droppedSeconds: Double
 		public let trimmedSeconds: Double
-		/// What `clockOffsets` added to this source's timestamps; 0 when it was already on the
-		/// capture clock (or never delivered).
-		public let clockOffsetSeconds: Double
 	}
 
 	public func deliveryReport(for source: Source) -> DeliveryReport {
@@ -398,8 +329,7 @@ public final class AudioTrackMixer {
 			undeliveredSeconds: seconds(undeliveredFrames[source.rawValue]),
 			longestHoleSeconds: seconds(longestHoleFrames[source.rawValue]),
 			droppedSeconds: seconds(sources[source.rawValue].droppedFrames),
-			trimmedSeconds: seconds(sources[source.rawValue].trimmedFrames),
-			clockOffsetSeconds: clockOffsets[source.rawValue].map(CMTimeGetSeconds) ?? 0
+			trimmedSeconds: seconds(sources[source.rawValue].trimmedFrames)
 		)
 	}
 

@@ -18,6 +18,7 @@ import {
 	parseHudContentRect,
 	sameRect,
 } from "./hudWindowBounds";
+import { followAcrossSpaces } from "./macSpaces";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -410,9 +411,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 	// Follow the user across macOS Spaces, else the HUD stays pinned to the Space
 	// it was first opened on.
-	if (process.platform === "darwin") {
-		win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-	}
+	followAcrossSpaces(win);
 
 	// Show only once painted to avoid the black rectangle flash when a transparent
 	// window is shown before its first paint.
@@ -591,9 +590,7 @@ export function createSourceSelectorWindow(): BrowserWindow {
 
 	// Follow the user across macOS Spaces so the selector appears on the active
 	// desktop regardless of where the HUD was opened.
-	if (process.platform === "darwin") {
-		win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-	}
+	followAcrossSpaces(win);
 
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=source-selector");
@@ -644,9 +641,7 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 
 	win.setIgnoreMouseEvents(true);
 
-	if (process.platform === "darwin") {
-		win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-	}
+	followAcrossSpaces(win);
 
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=countdown-overlay");

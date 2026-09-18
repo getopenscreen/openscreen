@@ -602,8 +602,9 @@ entre Roundness 0 et maximal, coins de l'écran visiblement changés),
 `the_title_bar_dots_survive_the_maximum_roundness`, et en pixels par
 `the_border_keeps_its_thickness_around_every_corner` : fenêtre, téléphone ×
 Roundness 0, par défaut, maximal × plat, iso × clair, sombre, la bordure mesurée le long de la
-diagonale à 45° de chaque coin vaut celle des deux bords voisins à **0,6 px de sortie** au plus
-(au Roundness 0, coin vif : l'antialiasing ; ailleurs 0,2 px). Sous iso, les épaisseurs se
+diagonale à 45° de chaque coin vaut celle des deux bords voisins à **1 px de sortie** près (la
+tolérance du test ; mesuré : 0,6 px au plus, au Roundness 0 où le coin vif laisse l'antialiasing
+épaissir la diagonale, et 0,2 px ailleurs). Sous iso, les épaisseurs se
 mesurent dans le plan, la tolérance en px de sortie. `the_bezel_fills_the_corners_at_maximum_roundness`
 reste vrai.
 
@@ -687,7 +688,7 @@ dans la boîte de dessin.
 ### C.8 Limites
 
 - Le **MSL n'est compilé et exécuté que par la CI macOS**, comme le mode 15.
-- **La charnière s'ouvre sous 90°** (80,5° à 86,9°) : c'est la condition pour voir le socle par la
+- **La charnière s'ouvre sous 90°** (84,5° à 86,9°) : c'est la condition pour voir le socle par la
   tranche depuis un œil à hauteur d'écran (C.3).
 - **L'œil du modèle n'est pas celui du plan** : sous un angle fixe, le relief de l'appareil converge
   un peu moins que les bords de l'image. C'est ce qui garde un socle réel lisible ; le prix est

@@ -87,11 +87,11 @@
   -->
   <screenshots>
     <screenshot type="default">
-      <image type="source">https://raw.githubusercontent.com/getopenscreen/openscreen/main/public/preview4.png</image>
+      <image type="source">https://raw.githubusercontent.com/getopenscreen/openscreen/main/docs/assets/preview4.png</image>
       <caption>Editing a recording: zoom regions, video effects and export settings</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/getopenscreen/openscreen/main/public/preview3.png</image>
+      <image type="source">https://raw.githubusercontent.com/getopenscreen/openscreen/main/docs/assets/preview3.png</image>
       <caption>The timeline, with trim, speed and zoom regions on separate tracks</caption>
     </screenshot>
   </screenshots>

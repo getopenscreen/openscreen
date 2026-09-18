@@ -17,7 +17,7 @@
  * String-aware rather than a plain `s.replace(/\/\/.*$/gm, "")` because the config also
  * carries URLs, whose `//` a naive strip would eat.
  */
-function stripJson5Comments(source) {
+export function stripJson5Comments(source) {
 	let out = "";
 	let inString = false;
 	for (let i = 0; i < source.length; i++) {
@@ -47,7 +47,7 @@ function stripJson5Comments(source) {
 }
 
 /** The body of a top-level `"<key>": { ... }` object, brace-matched. */
-function objectBody(source, key) {
+export function objectBody(source, key) {
 	const opener = new RegExp(`"${key}"\\s*:\\s*{`).exec(source);
 	if (!opener) {
 		return null;

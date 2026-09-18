@@ -1,11 +1,53 @@
 // @vitest-environment node
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ffmpegCandidates, peakBlockCount, resolveFfmpeg } from "./audioPeaks";
 
 const ROOT = path.resolve(__dirname, "..", "..");
+
+function stripJson5Comments(source: string): string {
+	let out = "";
+	let inString = false;
+	for (let i = 0; i < source.length; i++) {
+		const ch = source[i];
+		if (inString) {
+			out += ch;
+			if (ch === "\\") {
+				out += source[++i] ?? "";
+			} else if (ch === '"') {
+				inString = false;
+			}
+			continue;
+		}
+		if (ch === '"') {
+			inString = true;
+			out += ch;
+			continue;
+		}
+		if (ch === "/" && source[i + 1] === "/") {
+			while (i < source.length && source[i] !== "\n") i++;
+			out += "\n";
+			continue;
+		}
+		out += ch;
+	}
+	return out;
+}
+
+function objectBody(source: string, key: string): string | null {
+	const opener = new RegExp(`"${key}"\\s*:\\s*{`).exec(source);
+	if (!opener) return null;
+	let depth = 0;
+	for (let i = opener.index + opener[0].length - 1; i < source.length; i++) {
+		if (source[i] === "{") depth++;
+		else if (source[i] === "}" && --depth === 0) {
+			return source.slice(opener.index + opener[0].length, i);
+		}
+	}
+	return null;
+}
 
 describe("peakBlockCount", () => {
 	it("matches the browser pipelines' block maths", () => {
@@ -39,6 +81,33 @@ describe("ffmpeg resolution", () => {
 			).toBe(false);
 			expect(shared).toBeLessThan(vendorTree);
 		}
+	});
+
+	it("ensures the Windows installer filter packages ffmpeg-shared.exe", () => {
+		const configSource = readFileSync(path.join(ROOT, "electron-builder.json5"), "utf8");
+		const stripped = stripJson5Comments(configSource);
+		const winBlock = objectBody(stripped, "win");
+		expect(winBlock, "electron-builder.json5 must declare a win block").toBeTruthy();
+		const winFilterMatch = winBlock!.match(/"filter"\s*:\s*\[([^\]]+)\]/);
+		expect(winFilterMatch, "win.extraResources must declare a filter").toBeTruthy();
+		const filters = winFilterMatch![1]
+			.split(",")
+			.map((f: string) => f.trim().replace(/^["']|["']$/g, ""));
+		// Static ffmpeg.exe must be excluded
+		expect(filters).toContain("!win32-*/ffmpeg.exe");
+		// ffmpeg-shared.exe must NOT be excluded
+		expect(filters).not.toContain("!win32-*/ffmpeg-shared.exe");
+		// Verify win32 candidate survives the filter rules
+		const relativePath = "win32-x64/ffmpeg-shared.exe";
+		const isIncluded = filters.some(
+			(f: string) =>
+				!f.startsWith("!") && new RegExp(`^${f.replace(/\*/g, ".*")}$`).test(relativePath),
+		);
+		const isExcluded = filters.some(
+			(f: string) =>
+				f.startsWith("!") && new RegExp(`^${f.slice(1).replace(/\*/g, ".*")}$`).test(relativePath),
+		);
+		expect(isIncluded && !isExcluded).toBe(true);
 	});
 
 	it("honours the env override first", () => {

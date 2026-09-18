@@ -465,8 +465,8 @@ function checkWinNoRedistDependency(dir) {
 	);
 }
 
-function checkWinNativePayload() {
-	const dir = path.join(ROOT, "electron", "native", "bin", "win32-x64");
+function checkWinNativePayload(context) {
+	const dir = path.join(ROOT, "electron", "native", "bin", `win32-${archTagFor(context)}`);
 	checkNativePayload({
 		dir,
 		required: WIN_REQUIRED,
@@ -1138,15 +1138,9 @@ exports.default = async function beforePack(context) {
 		// The copy that ships is the arch-tagged one under electron/native/bin/
 		// (win.extraResources), beside its ffmpeg DLLs — not the dev copy this hook
 		// used to be the sole guardian of. Same reasoning as the darwin branch below.
-		const shipped = path.join(
-			ROOT,
-			"electron",
-			"native",
-			"bin",
-			"win32-x64",
-			"compositor_view.node",
-		);
-		checkWinNativePayload();
+		const tag = `win32-${archTagFor(context)}`;
+		const shipped = path.join(ROOT, "electron", "native", "bin", tag, "compositor_view.node");
+		checkWinNativePayload(context);
 		checkCompositorAddonFreshness(shipped, FIX, "D3D11");
 		return;
 	}

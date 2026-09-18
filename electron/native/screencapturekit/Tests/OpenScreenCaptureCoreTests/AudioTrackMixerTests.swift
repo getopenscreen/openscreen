@@ -218,6 +218,82 @@ final class AudioTrackMixerTests: XCTestCase {
 		XCTAssertEqual((microphoneOnset ?? 0) - (systemOnset ?? 0), 0.090, accuracy: 0.002)
 	}
 
+	/// The microphone output is not guaranteed to be stamped on the writer's clock. On this
+	/// project's only test Mac it was — with no input device, ScreenCaptureKit's microphone
+	/// output mirrors system audio, clock included — while on a MacBook with a real microphone
+	/// every take came out with a silent track. Placed raw, audio stamped far behind the
+	/// session is trimmed as pre-roll and audio stamped far ahead is never reached; either way
+	/// the file holds silence. Both directions must come out audible, where they were spoken.
+	func testAMicrophoneOnAForeignClockIsStillHeard() {
+		for foreignOffset in [-3_600.0, -47.5, 9_000.0] {
+			let (frames, mixer) = recordLiveTake(microphoneClockOffset: foreignOffset)
+			let label = "offset \(foreignOffset)"
+			XCTAssertEqual(seconds(ofFrames: frames), 2.0, accuracy: 0.011, label)
+			// Heard from its first delivery on (the span before that is the ordinary head trim
+			// every source gets) and still heard at the end of the take.
+			XCTAssertLessThanOrEqual(firstAudibleSecond(frames, channel: 1) ?? 99, 0.111, label)
+			XCTAssertGreaterThan(peak(frames, from: 1.7, to: 1.9, channel: 1), audibleThreshold, label)
+			// System audio, on the right clock, is untouched by the realignment.
+			XCTAssertGreaterThan(peak(frames, from: 0.1, to: 1.9, channel: 0), audibleThreshold, label)
+			XCTAssertEqual(mixer.deliveryReport(for: .system).clockOffsetSeconds, 0, label)
+			// The microphone was moved by its foreign offset and nothing else: its first buffer
+			// ends where the clock stood when it arrived, which is where it was captured.
+			XCTAssertEqual(
+				mixer.deliveryReport(for: .microphone).clockOffsetSeconds, -foreignOffset, accuracy: 0.001, label)
+			XCTAssertEqual(mixer.deliveryReport(for: .microphone).droppedSeconds, 0, label)
+		}
+	}
+
+	/// The realignment must not touch a microphone that is on the clock: its buffers arrive a
+	/// little after the audio they describe, and that latency is not a foreign time base.
+	func testAMicrophoneOnTheCaptureClockIsNotRealigned() {
+		let (frames, mixer) = recordLiveTake(microphoneClockOffset: 0, microphoneLatency: 0.3)
+		XCTAssertEqual(mixer.deliveryReport(for: .microphone).clockOffsetSeconds, 0)
+		XCTAssertGreaterThan(peak(frames, from: 1.2, to: 1.4, channel: 1), audibleThreshold)
+	}
+
+	/// Two seconds of live capture, delivered the way ScreenCaptureKit does: each 100 ms
+	/// buffer describes the 100 ms that just elapsed. System audio on the left, stamped on the
+	/// writer's clock; the microphone on the right, stamped `microphoneClockOffset` seconds off
+	/// it and handed over `microphoneLatency` seconds after its span ends.
+	private func recordLiveTake(
+		microphoneClockOffset: Double,
+		microphoneLatency: Double = 0
+	) -> ([Int16], AudioTrackMixer) {
+		let sink = RecordingSink()
+		let clock = TestClock(CMTime(value: 50, timescale: 1))
+		let mixer = makeMixer(sink: sink, clock: clock, includesMicrophone: true, microphoneGain: 1)
+		mixer.beginTimeline(at: clock.now)
+		let sessionStart = clock.now
+		let step = 0.1
+		var pendingMicrophone: [(deliverAt: Double, buffer: CMSampleBuffer)] = []
+
+		for index in 0..<20 {
+			let spanStart = CMTimeAdd(sessionStart, CMTime(seconds: Double(index) * step, preferredTimescale: 48_000))
+			clock.advance(seconds: step)
+			mixer.ingest(
+				makeSourceBuffer(burst(seconds: step, left: 0.5, right: 0), at: spanStart, nonInterleaved: true),
+				from: .system
+			)
+			pendingMicrophone.append((
+				deliverAt: Double(index + 1) * step + microphoneLatency,
+				buffer: makeSourceBuffer(
+					burst(seconds: step, left: 0, right: 0.5),
+					at: CMTimeAdd(spanStart, CMTime(seconds: microphoneClockOffset, preferredTimescale: 48_000)),
+					nonInterleaved: false
+				)
+			))
+			let elapsed = Double(index + 1) * step
+			while let next = pendingMicrophone.first, next.deliverAt <= elapsed + 1e-9 {
+				mixer.ingest(next.buffer, from: .microphone)
+				pendingMicrophone.removeFirst()
+			}
+			mixer.tick()
+		}
+		mixer.finish(atSourceTime: clock.now)
+		return (mixedFrames(sink), mixer)
+	}
+
 	/// A dead microphone must not hold the track back — the whole reason the mixer marks a
 	/// source stalled rather than waiting for it. Now that lateness is measured against the
 	/// clock, this works even when the *other* source is silent too, which is the case the old

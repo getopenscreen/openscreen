@@ -172,6 +172,33 @@ describe("migrateProjectDataToAxcutDocument", () => {
 		expect(a.annotationSource).toBe("auto-caption");
 	});
 
+	it("carries a non-identity editor.cropRegion onto the migrated clip", () => {
+		const v2 = makeV2Project();
+		v2.editor.cropRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+		const doc = migrateProjectDataToAxcutDocument(v2);
+		expect(doc.timeline.clips).toHaveLength(1);
+		expect(doc.timeline.clips[0]?.cropRegion).toEqual({
+			x: 0.25,
+			y: 0.25,
+			width: 0.5,
+			height: 0.5,
+		});
+	});
+
+	it("leaves the migrated clip without a cropRegion for the identity crop", () => {
+		const doc = migrateProjectDataToAxcutDocument(makeV2Project());
+		expect(doc.timeline.clips[0]?.cropRegion).toBeUndefined();
+	});
+
+	it("carries cursor tuning keys from a v2 editor into getEditorSettings", () => {
+		const v2 = makeV2Project();
+		v2.editor.cursorSize = 0.3;
+		v2.editor.cursorClickBounce = 0;
+		const settings = getEditorSettings(migrateProjectDataToAxcutDocument(v2));
+		expect(settings.cursor.size).toBe(0.3);
+		expect(settings.cursor.clickBounce).toBe(0);
+	});
+
 	it("stores the v2 editor shape under legacyEditor for round-trip", () => {
 		const v2 = makeV2Project();
 		const doc = migrateProjectDataToAxcutDocument(v2);

@@ -381,6 +381,7 @@ export interface StylePresetRevealResult {
 }
 
 export type NativeBridgeErrorCode =
+	| "CANCELLED"
 	| "INVALID_REQUEST"
 	| "UNSUPPORTED_ACTION"
 	| "NOT_FOUND"
@@ -797,11 +798,18 @@ export type NativeBridgeRequest =
 			 *  l'encodeur. La scène porte fond / layout / webcam / curseur, donc
 			 *  il n'y a aucune entrée spécifique au GIF. */
 			payload: {
+				exportId?: string;
 				clips: CompositorClipInput[];
 				outPath?: string;
 				sceneJson?: string;
 				params?: CompositorExportGifParams;
 			};
+			requestId?: string;
+	  }
+	| {
+			domain: "compositor";
+			action: "cancelGifExport";
+			payload: { exportId: string };
 			requestId?: string;
 	  }
 	| {

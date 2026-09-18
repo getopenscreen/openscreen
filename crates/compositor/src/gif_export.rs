@@ -74,6 +74,7 @@
 use crate::compositor::Compositor;
 use crate::config::Cfg;
 use crate::d3d::Gpu;
+use crate::gif_export_control::{with_gif_output, GifExportControl};
 use crate::pipeline::{ClipSource, Decoder};
 use crate::timeline_walk::walk_composited_timeline;
 use anyhow::{anyhow, bail, Context, Result};
@@ -160,9 +161,7 @@ impl Default for GifExportParams {
 /// MP4 hands the composed texture to a hardware NV12 encoder, GIF reads it back
 /// to the CPU and quantizes it to 256 colours.
 ///
-/// A failed run leaves a truncated GIF under exactly the name the user thinks
-/// they exported. Remove it rather than leave it lying around — same contract
-/// as `discard_partial_output` on the MP4 path.
+/// Publish only a finished GIF; errors leave an existing destination intact.
 pub fn export_gif(
 	clips: &[ClipSource],
 	out_path: &Path,
@@ -172,22 +171,36 @@ pub fn export_gif(
 	params: &GifExportParams,
 	progress: &mut dyn FnMut(u64),
 ) -> Result<GifStats> {
-	let result = export_gif_inner(clips, out_path, gpu, comp, cfg, params, progress);
-	if result.is_err() {
-		let _ = std::fs::remove_file(out_path);
-	}
-	result
+    export_gif_cancellable(clips, out_path, gpu, comp, cfg, params, progress, &GifExportControl::default())
+}
+
+pub fn export_gif_cancellable(
+    clips: &[ClipSource],
+    out_path: &Path,
+    gpu: &Gpu,
+    comp: &Compositor,
+    cfg: &Cfg,
+    params: &GifExportParams,
+    progress: &mut dyn FnMut(u64),
+    control: &GifExportControl,
+) -> Result<GifStats> {
+    with_gif_output(out_path, control, |file, staging_path| {
+        export_gif_inner(clips, staging_path, file, gpu, comp, cfg, params, progress, control)
+    })
 }
 
 fn export_gif_inner(
 	clips: &[ClipSource],
 	out_path: &Path,
+	file: File,
 	gpu: &Gpu,
 	comp: &Compositor,
 	cfg: &Cfg,
 	params: &GifExportParams,
 	progress: &mut dyn FnMut(u64),
+	control: &GifExportControl,
 ) -> Result<GifStats> {
+	control.check()?;
 	if clips.is_empty() {
 		bail!("export_gif: aucun clip à exporter");
 	}
@@ -203,13 +216,6 @@ fn export_gif_inner(
 	// per-frame local palette (the standard "high-quality" form: a
 	// palette tuned to each frame's colours), so the global palette in
 	// the header is empty.
-	if let Some(parent) = out_path.parent() {
-		if !parent.as_os_str().is_empty() {
-			std::fs::create_dir_all(parent).ok();
-		}
-	}
-	let file = File::create(out_path)
-		.with_context(|| format!("export_gif: create {}", out_path.display()))?;
 	let mut writer = BufWriter::new(file);
 
 	// GIF frame delay in centiseconds (= 1/100 s). `fps` →
@@ -268,6 +274,7 @@ fn export_gif_inner(
 				&mut screen_decs,
 				&mut webcam_decs,
 				&mut |frame_index| {
+					control.check()?;
 					// CPU readback of the staged RT (RGBA8 tightly-packed,
 					// `width * height * 4` bytes). The dominant per-frame cost,
 					// and the reason GIF can't use the MP4 zero-copy sink.
@@ -302,20 +309,23 @@ fn export_gif_inner(
 					}
 
 					// Per-frame palette (GIF local palette, written by `write_frame`).
+					control.check()?;
 					gw.write_frame(&indices, &palette_rgb, delay_cs, fps)?;
 					progress(frame_index + 1);
 					Ok(())
 				},
 				// GIF has no audio track, so clip boundaries need no work.
-				&mut |_, _, _, _| Ok(()),
+				&mut |_, _, _, _| control.check(),
 			)?
 		};
 
+		control.check()?;
 		gw.finish()?;
 		frames
 	};
 	// Drop the writer before stat-ing the file so the trailer is
 	// flushed.
+	writer.flush().context("flushing completed GIF")?;
 	drop(writer);
 
 	let wall_s = t0.elapsed().as_secs_f64();

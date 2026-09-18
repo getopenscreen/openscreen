@@ -1,12 +1,10 @@
 // Export dialog for the new editor. Wires together:
 // 1. pickExportSavePath (native save dialog)
 // 2. the native D3D exporter (exportMultiNative / exportGifNative)
-// 3. writeExportToPath (writes the resulting buffer to disk)
+// 3. per-job GIF cancellation, with native cleanup before returning to options
 //
 // Format/quality/GIF options live in the dialog's local state. The
-// legacy `ExportDialog` (in components/video-editor) is the rich version
-// used by the legacy VideoEditor; this one is a compact surface tuned for
-// the new shell's modal style.
+// dialog uses the new shell's modal style.
 
 import { Download, FileVideo, FolderOpen, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -35,13 +33,34 @@ import {
 } from "@/lib/exporter";
 import { calculateMp4ExportSettings, wouldUpscale } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
-import { exportGifNative, exportMultiNative, useIsCpuCompositor } from "@/native";
+import {
+	cancelGifExportNative,
+	exportGifNative,
+	exportMultiNative,
+	useIsCpuCompositor,
+} from "@/native";
+import { NativeBridgeRequestError } from "@/native/client";
 import type { CompositorClipInput } from "@/native/contracts";
 import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescription";
 import { ModalShell } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 
 type Phase = "idle" | "configuring" | "rendering" | "writing" | "done" | "error";
+
+interface ActiveExport {
+	id?: string;
+	cancelRequested: boolean;
+	unsubscribe?: () => void;
+}
+
+function disposeExport(exportJob: ActiveExport | null) {
+	exportJob?.unsubscribe?.();
+	if (exportJob?.id) {
+		void cancelGifExportNative(exportJob.id).catch((error) => {
+			console.warn("[export] failed to cancel detached GIF export", error);
+		});
+	}
+}
 
 /** hh:mm:ss (always shows hours, unlike the shared mm:ss `formatTimePadded`) — exports can run
  *  past an hour on either axis (video duration or render wall-time). */
@@ -141,7 +160,18 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	const [progress, setProgress] = useState<ExportProgress | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [savedPath, setSavedPath] = useState<string | null>(null);
-	const cancelRef = useRef<{ cancel: () => void } | null>(null);
+	const activeExport = useRef<ActiveExport | null>(null);
+	const [cancelPending, setCancelPending] = useState(false);
+	const pickerGeneration = useRef(0);
+
+	useEffect(
+		() => () => {
+			pickerGeneration.current += 1;
+			disposeExport(activeExport.current);
+			activeExport.current = null;
+		},
+		[],
+	);
 
 	// (Old behavior: the native compositor overlay used to be a top-level OS window outside the
 	//  Chromium surface, so we'd hide it here to put this modal in front. The compositor now
@@ -234,21 +264,48 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 
 	useEffect(() => {
 		if (!open) {
+			pickerGeneration.current += 1;
+			disposeExport(activeExport.current);
+			activeExport.current = null;
 			setPhase("idle");
 			setProgress(null);
 			setError(null);
 			setSavedPath(null);
-			cancelRef.current = null;
+			setCancelPending(false);
 		}
 	}, [open]);
 
 	const handleClose = () => {
-		if (phase === "rendering" || phase === "writing") return;
+		if (phase === "rendering" || phase === "writing" || phase === "configuring") return;
 		onClose();
 	};
 
+	const handleCancel = async () => {
+		const job = activeExport.current;
+		if (phase !== "rendering" || !job?.id) {
+			handleClose();
+			return;
+		}
+		if (job.cancelRequested) return;
+		job.cancelRequested = true;
+		setCancelPending(true);
+		try {
+			await cancelGifExportNative(job.id);
+			// Native settlement decides the winner and confirms file cleanup.
+		} catch (err) {
+			if (activeExport.current !== job) return;
+			job.cancelRequested = false;
+			setCancelPending(false);
+			const message = err instanceof Error ? err.message : String(err);
+			setError(message);
+			setPhase("error");
+			toast.error(message);
+		}
+	};
+
 	const handleStart = async () => {
-		if (!document) return;
+		if (!document || activeExport.current || phase === "configuring") return;
+		const generation = ++pickerGeneration.current;
 		const asset = primaryAsset;
 		if (!asset) {
 			setError(t("exportDialog.addVideoBeforeExporting"));
@@ -266,16 +323,19 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		setError(null);
 		setProgress(null);
 		setSavedPath(null);
+		setCancelPending(false);
 
 		let pickedPath: string | undefined;
 		try {
 			const picker = await window.electronAPI?.pickExportSavePath?.(suggested);
 			pickedPath = picker && "path" in picker ? picker.path : undefined;
 		} catch (err) {
+			if (generation !== pickerGeneration.current) return;
 			setError(err instanceof Error ? err.message : String(err));
 			setPhase("error");
 			return;
 		}
+		if (generation !== pickerGeneration.current) return;
 		if (!pickedPath) {
 			setPhase("idle");
 			return;
@@ -289,6 +349,11 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		// as the live preview, so an export can no longer disagree with what the
 		// user previewed.
 		{
+			const job: ActiveExport = {
+				id: format === "gif" ? crypto.randomUUID() : undefined,
+				cancelRequested: false,
+			};
+			activeExport.current = job;
 			setPhase("rendering");
 			// Render the real timeline when there are clips; else fall back to the fixture.
 			const clips = buildNativeClipList(document);
@@ -306,17 +371,21 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			const sceneDesc = buildSceneDescription(document);
 			const totalFrames = outputFrameCount(clips, sceneDesc.speedRegions, outFps);
 			const startedAt = Date.now();
-			const unsubscribeProgress = window.electronAPI?.onNativeExportProgress?.((frames) => {
-				const elapsedS = (Date.now() - startedAt) / 1000;
-				const fractionDone = Math.min(1, frames / totalFrames);
-				const estimatedTimeRemaining = fractionDone > 0 ? elapsedS / fractionDone - elapsedS : 0;
-				setProgress({
-					currentFrame: frames,
-					totalFrames,
-					percentage: fractionDone * 100,
-					estimatedTimeRemaining,
-				});
-			});
+			const unsubscribeProgress = window.electronAPI?.onNativeExportProgress?.(
+				(frames, exportId) => {
+					if (activeExport.current !== job || job.cancelRequested || exportId !== job.id) return;
+					const elapsedS = (Date.now() - startedAt) / 1000;
+					const fractionDone = Math.min(1, frames / totalFrames);
+					const estimatedTimeRemaining = fractionDone > 0 ? elapsedS / fractionDone - elapsedS : 0;
+					setProgress({
+						currentFrame: frames,
+						totalFrames,
+						percentage: fractionDone * 100,
+						estimatedTimeRemaining,
+					});
+				},
+			);
+			job.unsubscribe = unsubscribeProgress;
 			try {
 				// The webcam background effect is applied by the compositor from the scene,
 				// so the clip list needs no pre-rendering pass.
@@ -329,20 +398,27 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				}
 				const stats =
 					format === "gif"
-						? await exportGifNative(exportClips, pickedPath, sceneJson, {
-								// GIF is 256-colour and grows fast; cap the long edge at the
-								// chosen preset rather than exporting at source size.
-								...gifOutputDims(gifSize, outDims),
-								fps: gifFrameRate,
-								// 0 = infinite, the historical GIF default; 1 = play once.
-								loopCount: gifLoop ? 0 : 1,
-							})
+						? await exportGifNative(
+								exportClips,
+								pickedPath,
+								sceneJson,
+								{
+									// GIF is 256-colour and grows fast; cap the long edge at the
+									// chosen preset rather than exporting at source size.
+									...gifOutputDims(gifSize, outDims),
+									fps: gifFrameRate,
+									// 0 = infinite, the historical GIF default; 1 = play once.
+									loopCount: gifLoop ? 0 : 1,
+								},
+								job.id,
+							)
 						: await exportMultiNative(exportClips, pickedPath, sceneJson, {
 								width: outDims?.width,
 								height: outDims?.height,
 								fps,
 								codec,
 							});
+				if (activeExport.current !== job) return;
 				setSavedPath(pickedPath);
 				setPhase("done");
 				toast.success(t("exportDialog.exportedVideo"), {
@@ -355,6 +431,13 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					},
 				});
 			} catch (err) {
+				if (activeExport.current !== job) return;
+				if (err instanceof NativeBridgeRequestError && err.code === "CANCELLED") {
+					setPhase("idle");
+					setProgress(null);
+					setError(null);
+					return;
+				}
 				setError(err instanceof Error ? err.message : String(err));
 				setPhase("error");
 				toast.error(t("exportDialog.exportFailed"), {
@@ -362,6 +445,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				});
 			} finally {
 				unsubscribeProgress?.();
+				if (activeExport.current === job) {
+					activeExport.current = null;
+					setCancelPending(false);
+				}
 			}
 			return;
 		}
@@ -661,9 +748,11 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					<button
 						type="button"
 						className={`${styles.btn} ${styles.btnSecondary}`}
-						onClick={handleClose}
-						disabled={isBusy}
+						onClick={handleCancel}
+						disabled={isBusy && !(format === "gif" && phase === "rendering" && !cancelPending)}
+						aria-busy={cancelPending}
 					>
+						{cancelPending && <Loader2 size={14} className="animate-spin" />}
 						{phase === "done" ? t("exportDialog.close") : t("exportDialog.cancel")}
 					</button>
 					<button

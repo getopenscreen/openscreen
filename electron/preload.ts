@@ -63,8 +63,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	/** Native (D3D) export progress — frames encoded so far, pushed at ~10 Hz max while
 	 *  `compositor.export`/`compositor.exportMulti` runs. Distinct from `exportOnFrameAck`
 	 *  above, which is the OLD web/CPU pipeline's per-frame ack, not a progress signal. */
-	onNativeExportProgress: (cb: (frames: number) => void) => {
-		const handler = (_e: unknown, frames: number) => cb(frames);
+	onNativeExportProgress: (cb: (frames: number, exportId?: string) => void) => {
+		const handler = (_e: unknown, frames: number, exportId?: string) => cb(frames, exportId);
 		ipcRenderer.on("export:native-progress", handler);
 		return () => ipcRenderer.off("export:native-progress", handler);
 	},

@@ -572,8 +572,9 @@ vaut la moyenne des deux bordures à 0,15 px près.
 
 - **Plus de rayon industriel fixe.** Le portable et le moniteur gardaient une coque à 2,5 % / 0,4 %
   et 0,6 % de leur largeur, que le slider ne touchait pas : sous un grand Roundness, l'ouverture
-  s'arrondissait sous une coque presque carrée et la lunette gonflait de moitié au coin ; sous un
-  petit, la coque du haut du portable dépassait `r + b` et la lunette s'y amincissait. Un châssis
+  s'arrondissait sous une coque presque carrée et la lunette gonflait au coin (1,75 fois son
+  épaisseur à la valeur par défaut, six fois au maximum) ; sous un petit, la coque du haut du
+  portable dépassait `r + b` et la lunette s'y amincissait de 2 px. Un châssis
   garde un rayon « industriel » parce que son plafond est petit, pas parce que sa coque ignore
   l'ouverture. Le bas du couvercle du portable s'arrondit donc comme le haut.
 - **L'ouverture est le contour du métrage rentré du recouvrement** (C.6) comme un décalage : mêmes

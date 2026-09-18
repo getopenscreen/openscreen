@@ -1186,7 +1186,8 @@ const DEFAULT_ROUND: f32 = 40.0 / 1080.0;
 /// valeurs de Roundness : mesurée le long de la diagonale à 45° de chaque coin, elle vaut, au
 /// pixel près, celle des deux bords qui s'y rejoignent. Les deux contours sont concentriques
 /// (`concentric_radius`). Avant, la coque du portable et du moniteur gardait un rayon fixe : la
-/// lunette gonflait de moitié au coin sous un grand Roundness, et s'amincissait sous un petit.
+/// lunette gonflait au coin sous un grand Roundness (jusqu'à six fois son épaisseur), et
+/// s'amincissait sous un petit.
 ///
 /// Les épaisseurs se mesurent dans le PLAN (la géométrie du cadre) : sous un angle fixe, la
 /// perspective raccourcit x, y et la diagonale différemment. L'écart toléré, lui, est d'un pixel
@@ -1452,8 +1453,9 @@ fn v4_renders() {
     let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
     let img = |rgba: Vec<u8>, o: (u32, u32)| image::RgbaImage::from_raw(o.0, o.1, rgba).expect("readback");
 
-    // 1. Coins, au Roundness maximal : les quatre coins (les deux du bas pour la fenêtre, dont le
-    // haut est sa barre), 40 px de côté agrandis six fois, clair et sombre, à plat et sous iso.
+    // 1. Coins, au Roundness maximal : les quatre coins, 40 px de côté agrandis six fois, clair et
+    // sombre, à plat et sous iso. En haut de la fenêtre, la barre de titre entière : le coin du
+    // cadre au-dessus, le coin carré du métrage dessous.
     for frame in all {
         for theme in ["light", "dark"] {
             for (cam, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
@@ -1462,11 +1464,8 @@ fn v4_renders() {
                 let g = Geo::new(&json, out, SRC);
                 let [w, h] = g.s_px;
                 let k = g.radius * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
-                let pts: Vec<[f32; 2]> = if frame == "window" {
-                    vec![[k, h - k], [w - k, h - k]]
-                } else {
-                    vec![[k, k], [w - k, k], [w - k, h - k], [k, h - k]]
-                };
+                let top = if frame == "window" { -0.4 * g.body[1] } else { k };
+                let pts: Vec<[f32; 2]> = vec![[k, top], [w - k, top], [w - k, h - k], [k, h - k]];
                 let crops: Vec<_> = pts.iter().map(|&p| closeup(&rgba, out, g.to_out(p), 40, 6)).collect();
                 save_in(&dir, "corners", &format!("{frame}-rmax-{cam}-{theme}"), &strip(&crops));
             }

@@ -468,9 +468,10 @@ pub struct WindowFrame {
 /// diagonale du coin, et l'épaisseur y vaut la moyenne des deux bordures à 0,15 px près.
 ///
 /// Elle remplace les rayons industriels fixes du portable et du moniteur, que le slider ne
-/// touchait pas : à Roundness élevé, l'ouverture s'arrondissait sous une coque presque carrée et
-/// la lunette s'épaississait de moitié au coin ; à Roundness nul, la coque du haut du portable
-/// (2,5 % de sa largeur) dépassait `r + b` et la lunette s'y amincissait. Un châssis garde un
+/// touchait pas : sous un Roundness élevé, l'ouverture s'arrondissait sous une coque presque
+/// carrée et la lunette gonflait au coin, 1,75 fois son épaisseur à la valeur par défaut, six fois
+/// au maximum ; à Roundness nul, la coque du haut du portable (2,5 % de sa largeur) dépassait
+/// `r + b` et la lunette s'y amincissait de 2 px. Un châssis garde un
 /// rayon « industriel » parce que le plafond de Roundness de son cadre est petit
 /// (`frame_roundness_cap`), pas parce que sa coque ignore l'ouverture.
 pub(crate) fn concentric_radius(r: f32, bx: f32, by: f32) -> f32 {

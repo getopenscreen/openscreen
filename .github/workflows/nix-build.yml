@@ -339,13 +339,18 @@ jobs:
           mkdir -p "$XVFB_DIAG"
           run_cli() {
             RUN_CLI_N=$((RUN_CLI_N + 1))
+            local rc=0
+            # `|| rc=$?`, not a bare call: errexit is live inside the function
+            # at the one unguarded call site below, and a bare failing timeout
+            # kills the step before the mapping line gets to print -- the two
+            # files survive either way, but the line is the part the step log
+            # keeps. Same shape the guarded callers already use for RC.
             timeout --signal=TERM --kill-after=10s "${CLI_TIMEOUT:-120}" \
               xvfb-run -a -s "$XVFB_SCREEN" -e "$XVFB_DIAG/run-cli-$RUN_CLI_N.xvfb.log" \
               sh -c 'printf "%s\n" "$DISPLAY" >"$1"; shift; exec "$@"' \
-              xvfb-diag "$XVFB_DIAG/run-cli-$RUN_CLI_N.display" ./result/bin/openscreen "$@"
+              xvfb-diag "$XVFB_DIAG/run-cli-$RUN_CLI_N.display" ./result/bin/openscreen "$@" || rc=$?
             # The status that reaches the caller must stay the command's own,
             # or the HUNG/OK/FAILED accounting above would read the echo's.
-            local rc=$?
             echo "run_cli #$RUN_CLI_N: DISPLAY=$(cat "$XVFB_DIAG/run-cli-$RUN_CLI_N.display" 2>/dev/null || echo unknown), Xvfb output in $XVFB_DIAG/run-cli-$RUN_CLI_N.xvfb.log"
             return "$rc"
           }

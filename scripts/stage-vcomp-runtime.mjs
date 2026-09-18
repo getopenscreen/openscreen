@@ -35,10 +35,28 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findVcVarsAll } from "./msvcEnv.mjs";
+import { resolveTargetArch, winBinDirName } from "./windows-helper-arch.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
-const DEST_DIR = path.join(ROOT, "electron", "native", "bin", "win32-x64");
+// Same --arch / OPENSCREEN_WIN_HELPER_ARCH resolution as the two native build
+// scripts, so one flag drives the whole Windows payload. The Redist tree carries a
+// sibling arm64 directory beside x64 with an identical layout, so only the
+// architecture segment changes. Staging an x64 CRT beside an ARM64 onnxruntime.dll
+// would satisfy before-pack's name check and still fail in the loader on the
+// target machine.
+const TARGET_ARCH = resolveTargetArch({
+	cliArch: (() => {
+		const eq = process.argv.find((a) => a.startsWith("--arch="));
+		if (eq) return eq.slice("--arch=".length);
+		const idx = process.argv.indexOf("--arch");
+		return idx !== -1 ? process.argv[idx + 1] : undefined;
+	})(),
+	envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH,
+	hostArch: process.arch,
+});
+const ARCH_SEGMENT = TARGET_ARCH === "arm64" ? /\\arm64\\/i : /\\x64\\/i;
+const DEST_DIR = path.join(ROOT, "electron", "native", "bin", winBinDirName(TARGET_ARCH));
 // Lower-case, because that is how they are compared against `readdirSync` names.
 // vcomp140 lives in Microsoft.VC<nnn>.OpenMP, the other four in Microsoft.VC<nnn>.CRT —
 // sibling directories under the same Redist tree, so one walk finds them all.
@@ -104,7 +122,7 @@ function findRedistCopies() {
 			const lower = entry.name.toLowerCase();
 			if (entry.isDirectory()) {
 				walk(full, depth + 1);
-			} else if (wanted.has(lower) && /\\Redist\\/i.test(full) && /\\x64\\/i.test(full)) {
+			} else if (wanted.has(lower) && /\\Redist\\/i.test(full) && ARCH_SEGMENT.test(full)) {
 				// `onecore\x64` is a trimmed variant for Windows Core headless SKUs; the
 				// desktop app wants the ordinary one.
 				if (!/\\onecore\\/i.test(full)) found.get(lower).push(full);
@@ -136,7 +154,7 @@ const missing = DLLS.filter((name) => copies.get(name).length === 0);
 if (missing.length > 0) {
 	throw new Error(
 		`Could not find a redistributable ${missing.join(", ")} under any Visual Studio installation.\n\n` +
-			"They live in VC\\Redist\\MSVC\\<version>\\x64\\ — vcomp140.dll under\n" +
+			`They live in VC\\Redist\\MSVC\\<version>\\${TARGET_ARCH}\\ — vcomp140.dll under\n` +
 			"Microsoft.VC<nnn>.OpenMP, the rest under Microsoft.VC<nnn>.CRT.\n" +
 			"Install the Visual Studio C++ workload, which is required to build the native\n" +
 			"helpers anyway. Without these files the shipped whisper/ggml libraries and the\n" +

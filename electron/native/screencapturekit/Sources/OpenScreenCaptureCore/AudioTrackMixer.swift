@@ -566,7 +566,8 @@ public final class AudioTrackMixer {
 						// Where the significant bits sit when they do not fill the container.
 						// Irrelevant to packed formats, where the two coincide.
 						padBits: bytesPerSample * 8 - bitsPerChannel,
-						isAlignedHigh: asbd.mFormatFlags & kAudioFormatFlagIsAlignedHigh != 0
+						isAlignedHigh: asbd.mFormatFlags & kAudioFormatFlagIsAlignedHigh != 0,
+						isSigned: asbd.mFormatFlags & kAudioFormatFlagIsSignedInteger != 0
 					)
 				)
 			}
@@ -710,6 +711,9 @@ public final class AudioTrackMixer {
 		let isFloat: Bool
 		let padBits: Int
 		let isAlignedHigh: Bool
+		/// Unsigned PCM (offset binary, the usual 8-bit layout) centres on the midpoint, not on
+		/// zero; read as signed it would come out as full-scale noise rather than be rejected.
+		let isSigned: Bool
 
 		func value(at frame: Int) -> Float {
 			let index = start + frame * stride
@@ -731,6 +735,10 @@ public final class AudioTrackMixer {
 			if padBits > 0 && !isAlignedHigh {
 				// Low-aligned: the padding is on top, so shift it out to put the sign bit on 31.
 				word <<= UInt32(padBits)
+			}
+			if !isSigned {
+				// With the value left-justified, subtracting the midpoint is flipping bit 31.
+				word ^= 0x8000_0000
 			}
 			return Float(Int32(bitPattern: word)) / 2_147_483_648
 		}

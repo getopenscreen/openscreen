@@ -462,12 +462,14 @@ final class AudioTrackMixerTests: XCTestCase {
 	/// for it (issue #709). Every integer container CoreAudio describes must decode, at the right
 	/// level and with the right sign.
 	func testIntegerMicrophoneFormatsAreHeardAtTheirLevel() {
-		let layouts: [(bits: Int, bytes: Int, alignedHigh: Bool, label: String)] = [
-			(24, 3, false, "24-bit packed (the reported format)"),
-			(24, 4, false, "24-bit in 4 bytes, low-aligned"),
-			(24, 4, true, "24-bit in 4 bytes, high-aligned"),
-			(16, 2, false, "16-bit"),
-			(32, 4, false, "32-bit"),
+		let layouts: [(bits: Int, bytes: Int, alignedHigh: Bool, signed: Bool, label: String)] = [
+			(24, 3, false, true, "24-bit packed (the reported format)"),
+			(24, 4, false, true, "24-bit in 4 bytes, low-aligned"),
+			(24, 4, true, true, "24-bit in 4 bytes, high-aligned"),
+			(16, 2, false, true, "16-bit"),
+			(32, 4, false, true, "32-bit"),
+			(16, 2, false, false, "16-bit unsigned"),
+			(24, 3, false, false, "24-bit unsigned"),
 		]
 		for layout in layouts {
 			let sink = RecordingSink()
@@ -477,7 +479,8 @@ final class AudioTrackMixerTests: XCTestCase {
 			mixer.ingest(
 				makeIntegerMonoBuffer(
 					alternating: 0.5, frames: sampleRate / 5, at: clock.now,
-					bits: layout.bits, bytes: layout.bytes, alignedHigh: layout.alignedHigh
+					bits: layout.bits, bytes: layout.bytes, alignedHigh: layout.alignedHigh,
+					signed: layout.signed
 				),
 				from: .microphone
 			)
@@ -637,12 +640,13 @@ final class AudioTrackMixerTests: XCTestCase {
 		at presentationTime: CMTime,
 		bits: Int,
 		bytes: Int,
-		alignedHigh: Bool
+		alignedHigh: Bool,
+		signed: Bool = true
 	) -> CMSampleBuffer {
 		var asbd = AudioStreamBasicDescription(
 			mSampleRate: Float64(sampleRate),
 			mFormatID: kAudioFormatLinearPCM,
-			mFormatFlags: kAudioFormatFlagIsSignedInteger
+			mFormatFlags: (signed ? kAudioFormatFlagIsSignedInteger : 0)
 				| (bits == bytes * 8 ? kAudioFormatFlagIsPacked : 0)
 				| (alignedHigh ? kAudioFormatFlagIsAlignedHigh : 0),
 			mBytesPerPacket: UInt32(bytes),
@@ -680,6 +684,10 @@ final class AudioTrackMixerTests: XCTestCase {
 			let sample = Double(frame % 2 == 0 ? amplitude : -amplitude)
 			var value = Int64((sample * fullScale).rounded())
 			value = min(max(value, -Int64(fullScale)), Int64(fullScale) - 1)
+			if !signed {
+				// Offset binary: the midpoint is silence.
+				value += Int64(fullScale)
+			}
 			// High-aligned puts the padding below the value; low-aligned sign-extends above it.
 			let word = UInt32(truncatingIfNeeded: alignedHigh ? value << Int64(bytes * 8 - bits) : value)
 			for byte in 0..<bytes {

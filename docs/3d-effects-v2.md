@@ -734,4 +734,4 @@ face écran, de la boîte et du réglage ; rendus D3D11 sur une frame NV12 synth
 (`tests/device_frame_render.rs`) ; le même test de rendu dans les modules Linux (lavapipe) et
 macOS (CI).
 
-**État** : PR 6, 7, 7b, 7c et 7d écrites et testées. 8 et 9 restent à faire.
+**État** : PR 6, 7, 7b, 7c, 7d, 7e et 7f écrites et testées. 8 et 9 restent à faire.

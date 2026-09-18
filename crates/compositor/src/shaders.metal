@@ -50,9 +50,9 @@ struct Layer
     float4 dst;       // x,y,w,h dans l'espace sortie 0..1 (origine haut-gauche)
     float4 src;       // u0,v0,u1,v1 dans l'espace source 0..1 ; modes 15 et 17 : décalage px du rayon, P, U
     float2 quad_px;   // taille du quad en pixels (pour les SDF)
-    float  radius_px; // rayon des coins arrondis en px (0 = aucun) ; mode 17 : rayon du corps (unités du modèle)
+    float  radius_px; // rayon des coins arrondis en px (0 = aucun) ; mode 17 : rayon des coins hauts du corps (unités du modèle)
     float  mode;      // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre portée, ..., 15 = curseur 3D, 16 = impact du clic, 17 = appareil modelé
-    float4 color;     // couleur pleine / teinte (ombre : rgb + opacité dans a) ; mode 15 : coin du sprite, texel, opacité ; mode 17 : .r = l'appareil, .a = opacité
+    float4 color;     // couleur pleine / teinte (ombre : rgb + opacité dans a) ; mode 15 : coin du sprite, texel, opacité ; mode 17 : .r = l'appareil (1 portable, 2 téléphone, 3 moniteur), .g = thème sombre, .b = rayon des coins bas du corps, .a = opacité
     float4 fx;        // fx.x = spread ombre (px), fx.y,fx.z libres ; mode 15 : rotation du plan (rad), tangage ; mode 17 : rotation du plan (rad), épaisseur
     float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet ; mode 17 : marges du corps (unités du modèle)
     float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip ; mode 17 : angle du socle, rayon et recouvrement de l'ouverture, pénombre de l'ombre

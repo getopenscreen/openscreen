@@ -143,6 +143,31 @@ describe("parseStylePresetAppearance", () => {
 		);
 	});
 
+	it("defaults a preset without frame fields to no frame in the light theme", () => {
+		const { frame: _frame, frameTheme: _theme, ...older } = appearance();
+		const parsed = parseStylePresetAppearance(older);
+		expect(parsed.frame).toBe("none");
+		expect(parsed.frameTheme).toBe("light");
+	});
+
+	it("splits the legacy window-light and window-dark values into a frame and a theme", () => {
+		const { frameTheme: _theme, ...legacy } = appearance();
+		for (const [stored, theme] of [
+			["window-light", "light"],
+			["window-dark", "dark"],
+		] as const) {
+			const parsed = parseStylePresetAppearance({ ...legacy, frame: stored });
+			expect(parsed.frame).toBe("window");
+			expect(parsed.frameTheme).toBe(theme);
+		}
+	});
+
+	it("rejects an unknown frame theme", () => {
+		expect(() => parseStylePresetAppearance({ ...appearance(), frameTheme: "sepia" })).toThrow(
+			/frameTheme/,
+		);
+	});
+
 	it("falls back to the default cursor theme for an id this build does not ship", () => {
 		expect(
 			parseStylePresetAppearance(appearance({ cursorTheme: "theme-from-the-future" })).cursorTheme,

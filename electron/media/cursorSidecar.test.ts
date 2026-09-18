@@ -140,7 +140,7 @@ describe("readCursorRecordingFileAt", () => {
 });
 
 describe("readCursorTelemetryFile", () => {
-	it("drops interactionType — which is why the digest does not use it", async () => {
+	it("keeps interactionType — the auto-zoom detector needs the clicks", async () => {
 		const video = path.join(dir, "clicks.mp4");
 		await writeSidecar(video, {
 			samples: [{ timeMs: 10, cx: 0.5, cy: 0.5, interactionType: "click" }],
@@ -149,11 +149,34 @@ describe("readCursorTelemetryFile", () => {
 		const result = await readCursorTelemetryFile(video, {});
 
 		expect(result.success).toBe(true);
-		expect(result.samples).toEqual([{ timeMs: 10, cx: 0.5, cy: 0.5 }]);
-		// Locked deliberately: this projection is fine for the timeline overlay it
-		// feeds and useless for "where did the user act". Anything that wants
-		// clicks must go through `readCursorSidecar`, and this assertion is the
-		// reminder of why.
-		expect(Object.keys(result.samples[0])).not.toContain("interactionType");
+		expect(result.samples).toEqual([{ timeMs: 10, cx: 0.5, cy: 0.5, interactionType: "click" }]);
+		// This projection feeds the ai-edition auto-zoom detector, whose click
+		// candidates ARE the recorded interactions (issue #699). It used to strip
+		// the field — locked by a test, even — and the detector never saw a click
+		// however many the take recorded; the digest reads `readCursorSidecar`
+		// directly, which is how it kept working. Positions-only consumers ignore
+		// the extra field.
+	});
+
+	it("keeps every click kind, not only the plain left click", async () => {
+		const video = path.join(dir, "kinds.mp4");
+		await writeSidecar(video, {
+			samples: [
+				{ timeMs: 10, cx: 0.1, cy: 0.1, interactionType: "double-click" },
+				{ timeMs: 20, cx: 0.2, cy: 0.2, interactionType: "right-click" },
+				{ timeMs: 30, cx: 0.3, cy: 0.3, interactionType: "middle-click" },
+			],
+		});
+
+		const result = await readCursorTelemetryFile(video, {});
+
+		expect(result.success).toBe(true);
+		// normalizeCursorSample used to coerce these three kinds to "move", so the
+		// detector saw a take with no clicks at all.
+		expect(result.samples.map((sample) => sample.interactionType)).toEqual([
+			"double-click",
+			"right-click",
+			"middle-click",
+		]);
 	});
 });

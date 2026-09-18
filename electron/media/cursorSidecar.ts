@@ -57,6 +57,9 @@ export function normalizeCursorSample(sample: unknown): CursorRecordingSample | 
 	const point = sample as Partial<CursorRecordingSample>;
 	const interactionType =
 		point.interactionType === "click" ||
+		point.interactionType === "double-click" ||
+		point.interactionType === "right-click" ||
+		point.interactionType === "middle-click" ||
 		point.interactionType === "mouseup" ||
 		point.interactionType === "move"
 			? point.interactionType
@@ -223,12 +226,10 @@ export async function readCursorRecordingFile(
 	return (await readCursorSidecar(targetVideoPath, options)).data;
 }
 
-/** The renderer's `loadCursorTelemetry`: positions only, no interaction type.
- *
- * ponytail: this projection DROPS `interactionType`, which means it drops every
- * click. That is fine for the timeline overlay it feeds and wrong for anything
- * that wants to know where the user acted — the agent digest reads
- * `readCursorSidecar` directly for exactly that reason. */
+/** The renderer's `loadCursorTelemetry`. Carries `interactionType` through: the
+ * ai-edition auto-zoom detector places zooms on recorded clicks (issue #699), so
+ * this IS a "where did the user act" consumer. The old projection here dropped
+ * the field — the detector never saw a click, however many the take recorded. */
 export async function readCursorTelemetryFile(
 	targetVideoPath: string,
 	options: { recordingsDir?: string },
@@ -241,6 +242,7 @@ export async function readCursorTelemetryFile(
 				timeMs: sample.timeMs,
 				cx: sample.cx,
 				cy: sample.cy,
+				interactionType: sample.interactionType,
 			})),
 		};
 	} catch (error) {

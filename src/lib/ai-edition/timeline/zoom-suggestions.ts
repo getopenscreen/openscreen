@@ -2,9 +2,10 @@
 //
 // Ported from main's `src/components/video-editor/timeline/zoomSuggestionUtils.ts`
 // (the legacy editor's "magic wand" auto-zoom) into the ai-edition timeline
-// module. This is NOT an AI feature — it's a deterministic dwell-detector over
+// module. This is NOT an AI feature — it's a deterministic detector over
 // recorded cursor movement: stretches where the cursor sits still become
-// zoom-in candidates, focused on the average cursor position during the dwell.
+// zoom-in candidates, focused on the average cursor position during the dwell,
+// and so do recorded clicks, focused on the click itself (issue #699).
 
 import type { CursorTelemetryPoint, ZoomFocus } from "@/components/video-editor/types";
 import type { AxcutClip } from "../schema";
@@ -29,6 +30,7 @@ function normalizeTelemetrySample(
 		timeMs: Math.max(0, Math.min(sample.timeMs, totalMs)),
 		cx: Math.max(0, Math.min(sample.cx, 1)),
 		cy: Math.max(0, Math.min(sample.cy, 1)),
+		interactionType: sample.interactionType,
 	};
 }
 
@@ -105,15 +107,44 @@ export function detectZoomDwellCandidates(
 	return dwellCandidates;
 }
 
+/** The recorded interactions that count as a click; `move` and `mouseup` do not. */
+const CLICK_INTERACTION_TYPES: ReadonlySet<NonNullable<CursorTelemetryPoint["interactionType"]>> =
+	new Set(["click", "double-click", "right-click", "middle-click"]);
+
+/**
+ * Clicks are zoom candidates in their own right (issue #699): a click made while the
+ * pointer is still moving forms no dwell, yet it is exactly the moment a viewer wants
+ * magnified. The candidate is the click sample itself — its time, its position — and
+ * `strength` is 0 because a click has no duration to rank by; that only ever breaks
+ * ties between two clicks, where the stable sort keeps the earlier one.
+ */
+function detectZoomClickCandidates(samples: CursorTelemetryPoint[]): ZoomDwellCandidate[] {
+	return samples
+		.filter(
+			(sample) =>
+				sample.interactionType !== undefined && CLICK_INTERACTION_TYPES.has(sample.interactionType),
+		)
+		.map((sample) => ({
+			centerTimeMs: sample.timeMs,
+			focus: { cx: sample.cx, cy: sample.cy },
+			strength: 0,
+		}));
+}
+
 export interface AutoZoomSuggestion {
 	span: { start: number; end: number };
 	focus: ZoomFocus;
 }
 
 /**
- * Build non-overlapping zoom suggestions from cursor telemetry: detect dwell moments,
- * rank by duration, space by SUGGESTION_SPACING_MS, drop any overlapping an existing
- * region. Pure, shared by the magic-wand toggle and the on-load auto-suggest pass.
+ * Build non-overlapping zoom suggestions from cursor telemetry: detect dwell moments
+ * and recorded clicks, space by SUGGESTION_SPACING_MS, drop any overlapping an
+ * existing region. Clicks are honoured FIRST, so only an ACCEPTED click folds the
+ * dwells within suggestion spacing of it — the acceptance loop rejects those dwells
+ * against the accepted click's centre — while a click that spacing or an existing
+ * region rejects leaves its nearby dwells standing as the fallback. One recorded
+ * click still yields ONE zoom anchored on the click's own time and position
+ * (issue #699). Pure, shared by the magic-wand toggle and the on-load auto-suggest pass.
  */
 export function buildAutoZoomSuggestions(options: {
 	cursorTelemetry: CursorTelemetryPoint[];
@@ -122,7 +153,7 @@ export function buildAutoZoomSuggestions(options: {
 	defaultDurationMs: number;
 }): AutoZoomSuggestion[] {
 	const { cursorTelemetry, totalMs, existingRegions, defaultDurationMs } = options;
-	if (totalMs <= 0 || cursorTelemetry.length < 2) {
+	if (totalMs <= 0 || cursorTelemetry.length === 0) {
 		return [];
 	}
 
@@ -132,20 +163,29 @@ export function buildAutoZoomSuggestions(options: {
 	}
 
 	const normalizedSamples = normalizeCursorTelemetry(cursorTelemetry, totalMs);
-	if (normalizedSamples.length < 2) {
+	if (normalizedSamples.length === 0) {
 		return [];
 	}
 
 	const dwellCandidates = detectZoomDwellCandidates(normalizedSamples);
-	if (dwellCandidates.length === 0) {
+	const clickCandidates = detectZoomClickCandidates(normalizedSamples);
+	if (dwellCandidates.length === 0 && clickCandidates.length === 0) {
 		return [];
 	}
+
+	// Clicks are honoured FIRST so that only an accepted click folds its nearby dwells:
+	// the acceptance loop below rejects any dwell within SUGGESTION_SPACING_MS of an
+	// accepted click's centre, while a click that spacing or an existing region rejects
+	// leaves the dwells around it standing. Telemetry without click metadata runs the
+	// unchanged dwell-only ranking. Within each kind the order is the old one — clicks
+	// chronological, dwells by duration.
+	const dwellByDuration = [...dwellCandidates].sort((a, b) => b.strength - a.strength);
+	const sortedCandidates = [...clickCandidates, ...dwellByDuration];
 
 	const reservedSpans = existingRegions
 		.map((region) => ({ start: region.startMs, end: region.endMs }))
 		.sort((a, b) => a.start - b.start);
 
-	const sortedCandidates = [...dwellCandidates].sort((a, b) => b.strength - a.strength);
 	const acceptedCenters: number[] = [];
 	const suggestions: AutoZoomSuggestion[] = [];
 
@@ -195,8 +235,8 @@ export function buildAutoZoomSuggestions(options: {
  * them a dwell belongs to. It belongs to BOTH, and gets one zoom on each.
  *
  * So the projection is per clip, and it is a plain shift: a raw clip is identity between
- * its source time and its raw-virtual time (see timeline/timelineMap.ts), so a dwell at
- * source `t` on a clip covering `[sourceStartSec, sourceEndSec]` sits at
+ * its source time and its raw-virtual time (see timeline/timelineMap.ts), so a dwell or
+ * click at source `t` on a clip covering `[sourceStartSec, sourceEndSec]` sits at
  * `timelineStartSec + (t - sourceStartSec)`. Each clip is handed only the samples inside
  * its own source window, so a dwell that a cut split across two clips is no longer one
  * dwell — which is right: the cursor did not sit still across the cut on the timeline the

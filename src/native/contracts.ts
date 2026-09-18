@@ -33,7 +33,10 @@ export interface CursorRecordingSample extends CursorTelemetryPoint {
 	assetId?: string | null;
 	visible?: boolean;
 	cursorType?: NativeCursorType | null;
-	interactionType?: "move" | "click" | "mouseup";
+	/** The full interaction contract the sidecar may carry; matches the renderer's
+	 * CursorTelemetryPoint. The old narrow override ("move" | "click" | "mouseup")
+	 * legitimized coercing every other click kind to "move" at parse time. */
+	interactionType?: "move" | "click" | "double-click" | "right-click" | "middle-click" | "mouseup";
 }
 
 export interface NativeCursorAsset {

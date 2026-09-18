@@ -6,3 +6,10 @@
 /electron/native-bridge/cursor/recording/pipeWire*          @Beetix @EtienneLescot
 /crates/compositor/src/linux_*.rs                           @Beetix @EtienneLescot
 /crates/compositor/src/*_linux.rs                           @Beetix @EtienneLescot
+
+# Windows capture — @My-Denia
+/electron/native/wgc-capture/                                     @My-Denia @EtienneLescot
+/electron/native-bridge/cursor/recording/windowsNativeRecording*  @My-Denia @EtienneLescot
+/electron/recording/nativeWindowsCaptureStop*                     @My-Denia @EtienneLescot
+/crates/compositor/src/*_windows.rs                               @My-Denia @EtienneLescot
+/scripts/*-windows-*                                              @My-Denia @EtienneLescot

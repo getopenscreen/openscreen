@@ -4,12 +4,23 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveTargetArch, winBinDirName } from "./windows-helper-arch.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
+// The arch-tagged directory, not a fixed `win32-x64`. On an ARM64 host the hard-coded
+// path silently ran the x64 helper under emulation, so every smoke test reported on a
+// binary nobody ships to that machine — and its failures looked like arm64 capture bugs.
 const HELPER_PATH =
 	process.env.OPENSCREEN_WGC_CAPTURE_EXE ??
-	path.join(ROOT, "electron", "native", "bin", "win32-x64", "wgc-capture.exe");
+	path.join(
+		ROOT,
+		"electron",
+		"native",
+		"bin",
+		winBinDirName(resolveTargetArch({ envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH, hostArch: process.arch })),
+		"wgc-capture.exe",
+	);
 
 const DURATION_MS = Number(process.env.OPENSCREEN_WGC_TEST_DURATION_MS ?? 5000);
 const WITH_SYSTEM_AUDIO =

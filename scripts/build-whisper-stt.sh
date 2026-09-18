@@ -61,8 +61,14 @@ os_arch_tag() {
     Linux:x86_64)  os_arch="linux-x64" ;;
     Linux:aarch64) os_arch="linux-arm64" ;;
     MINGW*|CYGWIN*|MSYS*)
+      # `uname -m` cannot be trusted here. Git Bash is an x86_64 build, so on Windows
+      # on ARM it runs emulated and reports x86_64 while the machine is arm64 — the
+      # script would then build and stage an x64 helper on an ARM64 host without ever
+      # saying so. Node is a native binary and reports the real architecture, and this
+      # is a Node project, so it is always at hand. `uname -m` stays as the fallback.
       local arch
-      arch="$(uname -m)"
+      arch="$(node -p 'process.arch' 2>/dev/null || true)"
+      [[ -n "${arch}" ]] || arch="$(uname -m)"
       os_arch="win32-${arch/x86_64/x64}"
       ;;
     *) echo "Unsupported host: $(uname -s):$(uname -m)" >&2; exit 1 ;;
@@ -84,6 +90,19 @@ backend_flag_for_host() {
     darwin-arm64) echo "-DOSC_ENABLE_METAL=ON" ;;
     darwin-x64)   echo "" ;;
     win32-x64|linux-x64|linux-arm64) echo "-DOSC_ENABLE_VULKAN=ON" ;;
+    # Windows on ARM: CPU (ARM NEON), not Vulkan. ggml's Vulkan backend needs glslc
+    # from the Vulkan SDK to compile its shaders, and requiring a ~1 GB SDK install
+    # would make the arm64 helper unbuildable on a stock machine. Adreno itself is a
+    # capable Vulkan target — the emulated x64 helper already runs inference on it —
+    # so switching this to Vulkan is a worthwhile follow-up once the SDK is a declared
+    # build prerequisite. Measure before assuming it wins: native NEON on 12 Oryon
+    # cores against emulated code driving the GPU is not an obvious comparison.
+    # `-DGGML_OPENMP=OFF` is not optional here. clang-cl links ggml against
+    # `libomp140.aarch64.dll`, and the only copy of that file on a Visual Studio
+    # install lives under `VC/Redist/.../debug_nonredist/` — a directory whose name
+    # states the licence position: it may not be redistributed. Without OpenMP,
+    # ggml uses its own thread pool and the helper needs no runtime we cannot ship.
+    win32-arm64) echo "-DGGML_OPENMP=OFF" ;;
     *) echo "Unknown os-arch: ${OS_ARCH}" >&2; exit 1 ;;
   esac
 }
@@ -141,6 +160,62 @@ relocate_macos_rpaths() {
   echo "[whisper-stt] rewrote macOS rpaths to @loader_path in ${out_dir}"
 }
 
+# Runs a command inside the MSVC environment for the host/target pair.
+#
+# Only Windows on ARM needs this. Everywhere else the Visual Studio generator sets the
+# environment up itself, and Unix hosts have no such notion — so this is a no-op unless
+# a vcvarsall is both needed and found, and a plain `"$@"` otherwise.
+run_in_vs_env() {
+  if [[ "${OS_ARCH}" != "win32-arm64" ]]; then
+    "$@"
+    return
+  fi
+  local vcvars
+  vcvars="$(ls "/c/Program Files (x86)/Microsoft Visual Studio/2022"/*/VC/Auxiliary/Build/vcvarsall.bat 2>/dev/null | head -1)"
+  if [[ -z "${vcvars}" ]]; then
+    echo "[whisper-stt] WARN: vcvarsall.bat not found; building without an MSVC environment" >&2
+    "$@"
+    return
+  fi
+  # Host arch decides the vcvars argument: `arm64` when building natively on ARM64,
+  # `amd64_arm64` when cross-compiling from an x64 host such as a CI runner.
+  local host vcarg
+  host="$(node -p 'process.arch' 2>/dev/null || echo x64)"
+  if [[ "${host}" == "arm64" ]]; then vcarg="arm64"; else vcarg="amd64_arm64"; fi
+  # A throwaway .cmd rather than nested quoting. `cmd //c "call \"...\" && ..."`
+  # has to survive bash, MSYS path mangling and cmd in turn, and it did not: the
+  # escaped quotes reached cmd verbatim and it reported the batch file "not found".
+  # scripts/build-windows-compositor-addon.mjs solves it the same way.
+  # Where the standalone LLVM lives. `command -v` first so a PATH install wins;
+  # the default installer location is the fallback.
+  local llvm_bin=""
+  if command -v clang-cl >/dev/null 2>&1; then
+    llvm_bin="$(dirname "$(command -v clang-cl)")"
+  elif [[ -x "/c/Program Files/LLVM/bin/clang-cl.exe" ]]; then
+    llvm_bin="/c/Program Files/LLVM/bin"
+  fi
+  local script
+  script="$(mktemp -t whisper-vsenv-XXXXXX.cmd)"
+  {
+    echo "@echo off"
+    printf 'call "%s" %s || exit /b 1
+' "$(cygpath -w "${vcvars}")" "${vcarg}"
+    # vcvarsall does not add a standalone LLVM to PATH, and CMake then fails to find
+    # clang-cl at all. Prepend it so the compiler ggml demands for ARM is visible
+    # without turning its absolute path (which contains spaces) into another quoting
+    # problem inside the batch file.
+    if [[ -n "${llvm_bin}" ]]; then
+      printf 'set "PATH=%s;%%PATH%%"
+' "$(cygpath -w "${llvm_bin}")"
+    fi
+    echo "$*"
+  } > "${script}"
+  local status=0
+  cmd //c "$(cygpath -w "${script}")" || status=$?
+  rm -f "${script}"
+  return ${status}
+}
+
 build_variant() {
   local variant_name="$1"
   shift
@@ -158,14 +233,41 @@ build_variant() {
   # variable") even though bash 4+ treats it as zero words. The
   # `${arr[@]+"${arr[@]}"}` idiom expands to nothing when the array is empty
   # and to the normal quoted expansion otherwise, on both bash versions.
-  cmake -S "${SRC_DIR}" -B "${build_dir}" \
+  # Windows on ARM must be built with clang, not MSVC: ggmls CPU backend refuses
+  # outright ("MSVC is not supported for ARM, use clang" in
+  # ggml/src/ggml-cpu/CMakeLists.txt), because the NEON intrinsics it relies on are
+  # absent from MSVCs ARM64 code generator. The Visual Studio generator can host the
+  # LLVM toolset, so the target platform stays ARM64 and only the compiler changes.
+  local toolchain_flags=()
+  if [[ "${OS_ARCH}" == "win32-arm64" ]]; then
+    # clang-cl from a standalone LLVM, driven by Ninja rather than the Visual Studio
+    # generator. `-T ClangCL` would need the "C++ Clang tools for Windows" VS
+    # component, which is a second ~1 GB LLVM next to the one the compositor addon
+    # already requires for bindgen; Ninja lets both builds share one toolchain.
+    # Ninja gets no MSVC environment of its own, so configure and build run inside
+    # vcvarsall (see run_in_vs_env below) for the headers, libs and the linker.
+    toolchain_flags+=(-G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl)
+  fi
+
+  # Paths must be Windows-native for the arm64 path: cmake runs from inside a .cmd,
+  # where Git Bash no longer rewrites `/c/...` for the native program it invokes, and
+  # CMake reports the source directory as missing. Everywhere else the MSYS form is
+  # what the surrounding tooling expects, so only this branch converts.
+  local src_arg="${SRC_DIR}" build_arg="${build_dir}"
+  if [[ "${OS_ARCH}" == "win32-arm64" ]]; then
+    src_arg="$(cygpath -w "${SRC_DIR}")"
+    build_arg="$(cygpath -w "${build_dir}")"
+  fi
+
+  run_in_vs_env cmake -S "${src_arg}" -B "${build_arg}" \
     -DCMAKE_BUILD_TYPE=Release \
+    ${toolchain_flags[@]+"${toolchain_flags[@]}"} \
     ${extra_cmake_flags[@]+"${extra_cmake_flags[@]}"}
 
   echo "[whisper-stt] building ${variant_name}"
   # ponytail: macOS has no `nproc` (it is GNU coreutils), so this silently built
   # with -j4 on an 8-core Mac. `sysctl -n hw.ncpu` is the BSD equivalent.
-  cmake --build "${build_dir}" --config Release \
+  run_in_vs_env cmake --build "${build_arg}" --config Release \
     -j "$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
   local bin_name="whisper-stt-server"

@@ -488,9 +488,9 @@ fine, et un moniteur à lunette fine sur colonne plate. Proportions en **unités
 | | lunette G/H/D/B (verre noir + liseré 0,0053) | coins extérieurs | épaisseur | ce qui dépasse |
 |---|---|---|---|---|
 | `window` | filet 0,0012 × 3, barre 0,04 | concentriques (C.5) | — (plat) | — |
-| `laptop` | 0,0356 / 0,0356 / 0,0356 / 0,0409 | concentriques (C.5) | 0,0284 | socle 1,30 de profondeur, 0,0446 → 0,0391 d'épaisseur |
+| `laptop` | 0,0356 / 0,0356 / 0,0356 / 0,0409 | coque fixe 0,046 / 0,0074, ouverture au slider (C.5) | 0,0284 | socle 1,30 de profondeur, 0,0446 → 0,0391 d'épaisseur |
 | `phone` | 0,014 × 4 | concentriques (C.5) | 0,05 | — |
-| `monitor` | 0,0178 × 4 | concentriques (C.5) | 0,0284 | colonne 0,51 × 0,177, semelle 0,91 × 0,0456 |
+| `monitor` | 0,0178 × 4 | coque fixe 0,0109, ouverture au slider (C.5) | 0,0284 | colonne 0,51 × 0,177, semelle 0,91 × 0,0456 |
 
 - **Lunettes fines et uniformes**, sans menton : 2 % de la largeur d'un écran 16:9 en verre noir pour
   le portable (un rien de plus en bas, où l'écran rejoint la charnière), 1 % pour le moniteur, un
@@ -548,7 +548,7 @@ d'un pixel.
 - Deux thèmes, les mêmes formes : argent (0,800) / dos 0,600 / verre 0,031, ou graphite (0,255) /
   dos 0,153 / verre 0,043. Le shader les lit dans `color.g`.
 
-### C.5 Les coins : une course par cadre, des bordures concentriques
+### C.5 Les coins : une course par cadre, qui se voit
 
 **Sous un cadre, Roundness parcourt 0 → le plafond de CE cadre** (`frame_roundness_cap`, en `u`) :
 chaque position du slider est belle pour chaque cadre et chaque ratio, et un rendu laid n'est plus
@@ -556,34 +556,35 @@ atteignable. Sans cadre, rien ne change (le slider en px de sortie, à l'octet).
 
 | cadre | plafond du métrage | réglé sur |
 |---|---|---|
-| `window` | 0,013 u (11 px à u = 864) | ~10 pt de rayon pour une barre de 28 pt : le contour reste au tiers de la barre ; les coins HAUTS du métrage restent carrés sous elle, rien de ce qu'ils montrent n'est rogné |
-| `laptop`, `monitor` | 0,0056 u (5 px) | l'écran d'un produit à lunette fine : au bout de la course, la coque du portable retrouve son rayon industriel, 2,5 % de sa largeur |
+| `window` | 0,035 u (30 px à u = 864) | le contour reste sous la hauteur de la barre (0,04 u) : l'arc ne quitte jamais le chrome, les pastilles s'en écartent ; les coins HAUTS du métrage restent carrés sous la barre, rien de ce qu'ils montrent n'est rogné |
+| `laptop`, `monitor` | 0,04 u (35 px) | l'intérieur de la lunette seulement, du coin vif à un coin d'écran franchement arrondi ; la coque garde ses rayons (ci-dessous) |
 | `phone` | 0,08 u (69 px) | les grands coins d'un téléphone moderne, 14 % de sa largeur debout dans une sortie 16:9 |
 
 **UNE fonction de coin pour le métrage** : `screen_corner_radius_px` — le rayon demandé, borné à la
 moitié du petit côté du métrage. Tout ce qui trace ce coin la lit : le métrage (modes 0 et 8),
 l'**ouverture** de chaque appareil (mode 17, `dst_prev.y`), les coins bas de la fenêtre.
 
-**UNE fonction pour le corps** : `concentric_radius(r, b_x, b_y) = r + (b_x + b_y) / 2`. Les deux
+Les premiers plafonds (0,013 u pour la fenêtre, 0,0056 u pour le portable et le moniteur) rendaient
+la course invisible : de 0 à 100 %, le coin ne bougeait presque pas.
+
+**Le corps** : pour la **fenêtre** et le **téléphone**, `concentric_radius(r, b_x, b_y) = r + (b_x + b_y) / 2`. Les deux
 arcs ont le même centre, et la bordure garde son épaisseur tout autour du coin. Quand les deux
 bordures diffèrent (le bas du portable, 0,0409 contre 0,0356, liseré compris des deux côtés),
 leur moyenne : les centres se décalent alors perpendiculairement à la diagonale, et l'épaisseur y
 vaut la moyenne des deux bordures à 0,15 px près.
 
-- **Plus de rayon industriel fixe.** Le portable et le moniteur gardaient une coque à 2,5 % / 0,4 %
-  et 0,6 % de leur largeur, que le slider ne touchait pas : sous un grand Roundness, l'ouverture
-  s'arrondissait sous une coque presque carrée et la lunette gonflait au coin (1,75 fois son
-  épaisseur à la valeur par défaut, six fois au maximum) ; sous un petit, la coque du haut du
-  portable dépassait `r + b` et la lunette s'y amincissait de 2 px. Un châssis
-  garde un rayon « industriel » parce que son plafond est petit, pas parce que sa coque ignore
-  l'ouverture. Le bas du couvercle du portable s'arrondit donc comme le haut.
+- **Portable et moniteur : seule l'ouverture suit le slider.** Leur coque garde ses rayons
+  industriels (`device_shell_radius`, en `u`) : portable 0,046 en haut et 0,0074 en bas (2,5 % et
+  0,4 % de la largeur du capot), moniteur 0,0109 (0,6 %). La coque d'un produit ne change pas de
+  forme parce que son écran arrondit ses coins ; la lunette s'épaissit donc au coin quand le
+  slider monte, comme sur les produits de référence.
 - **L'ouverture est le contour du métrage rentré du recouvrement** (C.6) comme un décalage : mêmes
   centres, rayon `r − recouvrement`. Sous le même rayon, elle mordait le métrage d'un demi-pixel de
   plus sur la diagonale. Et le corps est concentrique à CE bord visible : quand le métrage
   s'arrondit moins que le recouvrement (Roundness 0), l'ouverture a un coin vif rentré d'un pixel
   et quart, et le corps s'arrondit autour de ce coin (`device_frame_cb`).
 - **La fenêtre** : l'arrondi du haut se fait **une seule fois, par le cadre**. Les coins HAUTS du
-  métrage sont carrés, à ras de la barre, et le plafond (0,013 u) tient toujours dans la barre moins
+  métrage sont carrés, à ras de la barre, et le plafond (0,035 u) tient toujours dans la barre moins
   le filet : l'arc du cadre ne descend jamais sous elle. Les coins BAS suivent la course,
   concentriques au cadre (rayon du métrage + filet, un seul rayon au mode 14). Modes 0 et 8 :
   `sd_screen_under_bar`, drapeau et remontée dans `mb.w`/`mb.z` (mode 0) ou `dst_prev.z`/`color.z`
@@ -593,10 +594,13 @@ vaut la moyenne des deux bordures à 0,15 px près.
   rect, sinon les coins laissaient voir le métrage ou le fond entre l'arc et le coin carré.
 
 Épinglé par `roundness_spans_each_frames_own_range` (0, la moitié, le plafond et rien au-delà ; le
-corps concentrique à chaque position ; les plafonds), `the_aperture_and_the_footage_share_one_corner`,
+corps concentrique à chaque position pour la fenêtre et le téléphone, la coque fixe pour le
+portable et le moniteur ; des plafonds qui se voient), `the_aperture_and_the_footage_share_one_corner`,
+`only_the_inside_of_the_laptop_and_screen_bezel_follows_roundness` (silhouette identique au pixel
+entre Roundness 0 et maximal, coins de l'écran visiblement changés),
 `the_window_rounds_the_top_once_and_the_bottom_with_the_slider`,
 `the_title_bar_dots_survive_the_maximum_roundness`, et en pixels par
-`the_border_keeps_its_thickness_around_every_corner` : fenêtre, portable, téléphone, moniteur ×
+`the_border_keeps_its_thickness_around_every_corner` : fenêtre, téléphone ×
 Roundness 0, par défaut, maximal × plat, iso × clair, sombre, la bordure mesurée le long de la
 diagonale à 45° de chaque coin vaut celle des deux bords voisins à **0,6 px de sortie** au plus
 (au Roundness 0, coin vif : l'antialiasing ; ailleurs 0,2 px). Sous iso, les épaisseurs se

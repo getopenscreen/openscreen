@@ -699,11 +699,13 @@ fn the_bezel_fills_the_corners_at_maximum_roundness() {
                 }
             }
             println!("{frame:<8} {rotation:<16} {n:>6} px de coin dont {inside:>6} dans le corps, {} faux", bad.len());
-            // Le plafond de Roundness de la fenêtre, du portable et du moniteur est petit
-            // (`frame_roundness_cap`) : leur coin carré n'est qu'à quelques pixels de l'arc, en deçà
-            // de la frange sondée. Seul un grand rayon — le téléphone — laisse une région à compter.
+            // Sous un petit rayon, le coin carré n'est qu'à quelques pixels de l'arc, en deçà de la
+            // frange sondée : on ne compte la région que quand le rayon en laisse une.
             if g.radius * (std::f32::consts::SQRT_2 - 1.0) > 8.0 {
-                assert!(n > 200, "{frame} {rotation} : région de coin vide ({n})");
+                // La fenêtre ne se sonde qu'à ses deux coins BAS (les hauts sont sa barre), sous un
+                // rayon plus petit que celui du téléphone : une région bien moindre à compter.
+                let min_n = if frame == "window" { 40 } else { 200 };
+                assert!(n > min_n, "{frame} {rotation} : région de coin vide ({n})");
                 // La fenetre n'a qu'un filet d'un pixel entre son arc et celui du metrage.
                 assert!(frame == "window" || inside > 200, "{frame} {rotation} : lunette de coin vide ({inside})");
             }
@@ -1182,18 +1184,18 @@ fn measure_corners(g: &Geo, a: &[u8], b: &[u8], out: (u32, u32), dark: bool) -> 
 /// Le Roundness que l'app envoie à sa valeur par défaut (40 px de slider) dans une sortie 1080p.
 const DEFAULT_ROUND: f32 = 40.0 / 1080.0;
 
-/// La bordure de chaque cadre garde son épaisseur TOUT AUTOUR de chaque coin, à toutes les
-/// valeurs de Roundness : mesurée le long de la diagonale à 45° de chaque coin, elle vaut, au
-/// pixel près, celle des deux bords qui s'y rejoignent. Les deux contours sont concentriques
-/// (`concentric_radius`). Avant, la coque du portable et du moniteur gardait un rayon fixe : la
-/// lunette gonflait au coin sous un grand Roundness (jusqu'à six fois son épaisseur), et
-/// s'amincissait sous un petit.
+/// La bordure de la fenêtre et du téléphone garde son épaisseur TOUT AUTOUR de chaque coin, à
+/// toutes les valeurs de Roundness : mesurée le long de la diagonale à 45° de chaque coin, elle
+/// vaut, au pixel près, celle des deux bords qui s'y rejoignent. Les deux contours sont
+/// concentriques (`concentric_radius`). Le portable et le moniteur n'y sont pas soumis : leur
+/// coque garde ses rayons et seul l'intérieur de la lunette suit le slider
+/// (`only_the_inside_of_the_laptop_and_screen_bezel_follows_roundness`).
 ///
 /// Les épaisseurs se mesurent dans le PLAN (la géométrie du cadre) : sous un angle fixe, la
 /// perspective raccourcit x, y et la diagonale différemment. L'écart toléré, lui, est d'un pixel
 /// de SORTIE, converti au coin par l'échelle locale de la projection.
 ///
-/// Fenêtre, portable, téléphone, moniteur ; Roundness 0, par défaut et maximal ; à plat et sous
+/// Fenêtre, téléphone ; Roundness 0, par défaut et maximal ; à plat et sous
 /// `iso` ; clair et sombre. À plat, l'anneau entier jusqu'au fond d'écran ; sous `iso`, où les
 /// flancs de l'appareil se voient, le verre de la lunette jusqu'à son liseré. Les coins HAUTS de
 /// la fenêtre sont sous la barre de titre, carrés par construction : on n'y mesure rien.
@@ -1205,7 +1207,7 @@ fn the_border_keeps_its_thickness_around_every_corner() {
     let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
     let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
     let (mut worst, mut failures) = (0.0f32, Vec::new());
-    for frame in ["window", "laptop", "phone", "monitor"] {
+    for frame in ["window", "phone"] {
         for (rlabel, roundness) in [("r0", 0.0f32), ("rdef", DEFAULT_ROUND), ("rmax", MAX_ROUND)] {
             for (cam, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
                 for theme in ["light", "dark"] {
@@ -1258,6 +1260,31 @@ fn the_border_keeps_its_thickness_around_every_corner() {
     }
     println!("écart maximal diagonale / bords : {worst:.2} px de sortie");
     assert!(failures.is_empty(), "{} coins hors tolérance :\n{}", failures.len(), failures.join("\n"));
+}
+
+/// Portable et écran : le slider Roundness n'arrondit QUE l'intérieur de la lunette. Entre
+/// Roundness 0 et maximal, la silhouette de l'appareil sur le fond (vert, sans ombre) est la même
+/// au pixel près, alors que les coins de l'écran, eux, changent visiblement.
+#[test]
+fn only_the_inside_of_the_laptop_and_screen_bezel_follows_roundness() {
+    let Some(gpu) = gpu() else { return };
+    let out = (1920u32, 1080u32);
+    let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
+    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    for frame in ["laptop", "monitor"] {
+        let at = |r: f32| {
+            let json = on_green(&with_roundness(&scene_json(frame, "null", 0.0, NO_CURSOR, out), r));
+            render(&comp, &blue, &json, None, T)
+        };
+        let (square, round) = (at(0.0), at(MAX_ROUND));
+        let wall = |rgba: &[u8]| -> Vec<bool> { rgba.chunks_exact(4).map(|p| greenish([p[0], p[1], p[2]])).collect() };
+        let (ws, wr) = (wall(&square), wall(&round));
+        let silhouette = ws.iter().zip(&wr).filter(|(a, b)| a != b).count();
+        let inside = differing(&square, &round, 24);
+        println!("{frame:<8} silhouette {silhouette} px différents, intérieur {inside} px différents");
+        assert!(silhouette <= 4, "{frame} : la coque a bougé avec Roundness ({silhouette} px)");
+        assert!(inside > 400, "{frame} : les coins de l'écran ne suivent pas Roundness ({inside} px)");
+    }
 }
 
 /// Un métrage de ratio `ar` contenu dans 80 % d'une sortie 16:9, comme l'app le contient dans la

@@ -467,13 +467,10 @@ pub struct WindowFrame {
 /// 0,0356 + liseré), leur moyenne : le décalage des deux centres est alors perpendiculaire à la
 /// diagonale du coin, et l'épaisseur y vaut la moyenne des deux bordures à 0,15 px près.
 ///
-/// Elle remplace les rayons industriels fixes du portable et du moniteur, que le slider ne
-/// touchait pas : sous un Roundness élevé, l'ouverture s'arrondissait sous une coque presque
-/// carrée et la lunette gonflait au coin, 1,75 fois son épaisseur à la valeur par défaut, six fois
-/// au maximum ; à Roundness nul, la coque du haut du portable (2,5 % de sa largeur) dépassait
-/// `r + b` et la lunette s'y amincissait de 2 px. Un châssis garde un
-/// rayon « industriel » parce que le plafond de Roundness de son cadre est petit
-/// (`frame_roundness_cap`), pas parce que sa coque ignore l'ouverture.
+/// Elle vaut pour la fenêtre et le téléphone, dont le corps suit le slider. Le portable et le
+/// moniteur n'y passent pas : leur coque garde ses rayons industriels (`device_shell_radius`) et
+/// seul l'intérieur de la lunette s'arrondit — la lunette s'y épaissit donc au coin quand le
+/// slider monte, comme sur les produits dont ils s'inspirent.
 pub(crate) fn concentric_radius(r: f32, bx: f32, by: f32) -> f32 {
     r.max(0.0) + 0.5 * (bx + by)
 }
@@ -494,23 +491,40 @@ pub(crate) fn roundness_slider_position(scene: &crate::scene::Scene) -> f32 {
 /// change (`plan_frame`).
 ///
 /// Réglés sur des objets réels :
-/// - **fenêtre** : ~10 pt de rayon pour une barre de 28 pt sur un bureau. 0,013 u de métrage
-///   (+ le filet) laisse le contour à un bon tiers de la barre : les pastilles gardent leur place
-///   et les coins HAUTS du métrage restent carrés sous la barre — rien de ce qu'ils montrent
-///   (le logo d'une app, ses menus) n'est rogné ;
-/// - **portable, moniteur** : l'écran d'un produit à lunette fine a des coins à peine arrondis,
-///   dans la ligne de la coque. 0,0056 u : au bout de la course, la coque du portable,
-///   concentrique (`concentric_radius`), retrouve exactement son rayon industriel de 2,5 % de sa
-///   largeur ;
+/// - **fenêtre** : 0,035 u de métrage (+ le filet) garde le contour SOUS la hauteur de la barre
+///   (0,04 u) : l'arc reste dans le chrome, les pastilles s'en écartent (leur premier centre est repoussé au-delà de l'arc, mode 14), et
+///   les coins HAUTS du métrage restent carrés sous la barre — rien de ce qu'ils montrent (le
+///   logo d'une app, ses menus) n'est rogné. En deçà, la course était invisible ;
+/// - **portable, moniteur** : seule l'OUVERTURE suit le slider, la coque garde son rayon
+///   industriel (`device_shell_radius`). 0,04 u : une course qui se voit, du coin vif à un coin
+///   d'écran franchement arrondi, sans jamais atteindre celui d'un téléphone ;
 /// - **téléphone** : de grands coins, ceux d'un téléphone moderne (14 % de sa largeur, debout
 ///   dans une sortie 16:9), concentriques au corps.
 pub(crate) fn frame_roundness_cap(kind: crate::scene::SceneFrame) -> f32 {
     use crate::scene::SceneFrame as F;
     match kind {
-        F::Window | F::WindowLight | F::WindowDark => 0.013,
-        F::Laptop | F::Monitor => 0.0056,
+        F::Window | F::WindowLight | F::WindowDark => 0.035,
+        F::Laptop | F::Monitor => 0.04,
         F::Phone => 0.08,
         F::None => 0.0,
+    }
+}
+
+/// Rayons FIXES de la coque du portable et du moniteur, coins HAUTS puis coins BAS, en unités du
+/// cadre ; `None` pour les cadres dont le corps suit le slider (fenêtre, téléphone), concentrique
+/// au métrage (`concentric_radius`).
+///
+/// Sur ces deux appareils, seul l'intérieur de la lunette s'arrondit avec le slider : la coque
+/// d'un produit ne change pas de forme parce que son écran arrondit ses coins. Rayons des
+/// produits de référence vus de face : portable, 2,5 % de la largeur du capot en haut et 0,4 %
+/// en bas, là où il rejoint la charnière ; moniteur, 0,6 %. Rapportés au petit côté d'un écran
+/// 16:9 (le capot y fait ~1,85 u de large, le moniteur ~1,81 u).
+pub(crate) fn device_shell_radius(kind: crate::scene::SceneFrame) -> Option<[f32; 2]> {
+    use crate::scene::SceneFrame as F;
+    match kind {
+        F::Laptop => Some([0.046, 0.0074]),
+        F::Monitor => Some([0.0109, 0.0109]),
+        _ => None,
     }
 }
 
@@ -1992,7 +2006,9 @@ impl FrameGeometry {
         // quart, et le corps s'arrondit autour de CE coin — sans quoi la lunette y gagnait un
         // demi-pixel sur la diagonale.
         let inner = (aperture_radius - overlap).max(0.0);
-        let [top, bottom] = [bt, bb].map(|b| concentric_radius(inner, bl + overlap, b + overlap));
+        // Portable et moniteur : coque à rayons fixes, l'ouverture seule suit le slider.
+        let [top, bottom] = device_shell_radius(frame.kind)
+            .unwrap_or_else(|| [bt, bb].map(|b| concentric_radius(inner, bl + overlap, b + overlap)));
         let [x0, y0, x1, y1] = view.footprint(frame.kind, body_c, body_h, thick, deck_angle)?;
         // Bords entiers : `local` vaut alors k + 0,5 au centre des pixels, comme le rastériseur.
         let (x0, y0, x1, y1) = (x0.floor(), y0.floor(), x1.ceil(), y1.ceil());
@@ -2688,12 +2704,12 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
                 crate::scene::SceneFrame::Window => concentric_radius(s_radius, l, b),
                 _ => concentric_radius(s_radius, l, t),
             };
-            WindowFrame {
-                kind: frame_kind,
-                dark: frame_dark,
-                margins,
-                radius: [top, concentric_radius(s_radius, l, b)],
-            }
+            // Portable et moniteur : la coque garde ses rayons, seule l'ouverture suit le slider.
+            let radius = match device_shell_radius(frame_kind) {
+                Some(shell) => shell.map(|r| r * frame_unit_px(s_px, [rw, rh])),
+                None => [top, concentric_radius(s_radius, l, b)],
+            };
+            WindowFrame { kind: frame_kind, dark: frame_dark, margins, radius }
         });
         let w_px = [w_dst[2] * rw, w_dst[3] * rh];
         // Rayon caméra. Le slider Roundness ne s'y applique jamais (il ne vaut que pour l'ÉCRAN).
@@ -4272,10 +4288,14 @@ mod tests {
                 // Le corps, concentrique au bord visible de la lunette : l'ouverture, rayon
                 // `r − recouvrement` sous une bordure élargie d'autant — soit `max(r, recouvrement)`
                 // plus la bordure moyenne du coin. Au-delà du recouvrement, le rayon de `plan_frame`.
+                // Portable et moniteur : la coque garde ses rayons (`device_shell_radius`), seule
+                // l'ouverture suit le slider.
                 let [bl, bt, _, bb] = cb.src_prev;
                 let (r, ov) = (cb.dst_prev[1], cb.dst_prev[2]);
-                assert!((cb.radius_px - (r.max(ov) + 0.5 * (bl + bt))).abs() < 1e-5, "{name} r{roundness}: haut");
-                assert!((cb.color[2] - (r.max(ov) + 0.5 * (bl + bb))).abs() < 1e-5, "{name} r{roundness}: bas");
+                let [top, bottom] = device_shell_radius(kind)
+                    .unwrap_or([r.max(ov) + 0.5 * (bl + bt), r.max(ov) + 0.5 * (bl + bb)]);
+                assert!((cb.radius_px - top).abs() < 1e-5, "{name} r{roundness}: haut");
+                assert!((cb.color[2] - bottom).abs() < 1e-5, "{name} r{roundness}: bas");
                 if r >= ov {
                     let wf = g.window_frame.expect("un cadre");
                     assert!((cb.radius_px * u - wf.radius[0]).abs() < 1e-2, "{name} r{roundness}: deux rayons du corps");
@@ -4377,11 +4397,12 @@ mod tests {
     /// * sans cadre, le slider en px de sortie, comme toujours ;
     /// * sous un cadre, sa course va de 0 au plafond du cadre (`frame_roundness_cap`), en unités du
     ///   cadre : 0, la moitié, le plafond, et rien au-delà ;
-    /// * le corps est CONCENTRIQUE au métrage, à toutes les positions : son rayon est celui du
-    ///   métrage plus la bordure (`concentric_radius`) ;
-    /// * les plafonds sont ceux d'objets réels : la fenêtre sous le tiers de sa barre, le portable
-    ///   retrouve au bout de la course son rayon industriel (2,5 % de sa largeur), le téléphone a
-    ///   de grands coins.
+    /// * fenêtre et téléphone : le corps est CONCENTRIQUE au métrage, à toutes les positions (son
+    ///   rayon est celui du métrage plus la bordure, `concentric_radius`) ;
+    /// * portable et moniteur : la coque garde ses rayons industriels à toutes les positions
+    ///   (`device_shell_radius`), seule l'ouverture suit le slider ;
+    /// * les plafonds se voient et restent beaux : la fenêtre sous la hauteur de sa barre, le
+    ///   portable et le moniteur à 0,04 u, le téléphone a de grands coins.
     #[test]
     fn roundness_spans_each_frames_own_range() {
         use crate::scene::SceneFrame as F;
@@ -4402,6 +4423,15 @@ mod tests {
             assert_eq!(beyond.s_radius, full.s_radius, "{frame}: le plafond est dépassé");
             for g in [&zero, &mid, &full] {
                 let wf = g.window_frame.expect("un cadre");
+                if let Some(shell) = device_shell_radius(kind) {
+                    let want = shell.map(|r| r * u);
+                    assert!(
+                        (wf.radius[0] - want[0]).abs() < 1e-3 && (wf.radius[1] - want[1]).abs() < 1e-3,
+                        "{frame}: la coque a bougé avec le slider, {:?} au lieu de {want:?}",
+                        wf.radius
+                    );
+                    continue;
+                }
                 let s_px = [g.s_dst[2] * RENDER[0], g.s_dst[3] * RENDER[1]];
                 let [l, t, b] = [wf.margins[0] * s_px[0], wf.margins[1] * s_px[1], wf.margins[3] * s_px[1]];
                 let top = if kind == F::Window { g.s_radius + l } else { g.s_radius + 0.5 * (l + t) };
@@ -4413,7 +4443,8 @@ mod tests {
             match kind {
                 F::Window => {
                     let bar = wf.margins[1] * s_px[1];
-                    assert!(wf.radius[0] < 0.4 * bar, "fenêtre : rayon {} pour une barre de {bar}", wf.radius[0]);
+                    assert!(wf.radius[0] < bar, "fenêtre : rayon {} pour une barre de {bar}", wf.radius[0]);
+                    assert!(cap > 0.03 * u, "fenêtre : course trop courte pour se voir ({cap} px)");
                 }
                 F::Laptop => {
                     let shell = s_px[0] * (1.0 + wf.margins[0] + wf.margins[2]);
@@ -4421,7 +4452,10 @@ mod tests {
                     assert!((frac - 0.025).abs() < 0.001, "portable : coque à {frac} de sa largeur");
                 }
                 F::Phone => assert!(cap > 0.07 * u, "téléphone : {cap} px"),
-                _ => assert!(cap < 0.01 * u, "moniteur : {cap} px"),
+                _ => {
+                    assert!(cap > 0.03 * u, "moniteur : course trop courte pour se voir ({cap} px)");
+                    assert!(wf.radius[0] < 0.02 * u, "moniteur : coque {} px", wf.radius[0]);
+                }
             }
             println!("{frame:<8} course 0 → {cap:.1} px (u = {u:.0}), corps {:.1?} px au bout", wf.radius);
         }

@@ -128,7 +128,8 @@
 		"frameThemeLight": "Chiaro",
 		"frameThemeDark": "Scuro",
 		"frameThemeHelp": "Corpo argento con cornice chiara, o grafite con cornice scura. Vale per tutte le cornici.",
-		"windowHelp": "Disegna una finestra, o un dispositivo modellato in 3D, attorno alla registrazione."
+		"windowHelp": "Disegna una finestra, o un dispositivo modellato in 3D, attorno alla registrazione.",
+		"roundnessFrameHelp": "L'intervallo si adatta alla cornice: 100 % è l'arrotondamento massimo che le sta bene."
 	},
 	"stylePresets": {
 		"button": "Preset",

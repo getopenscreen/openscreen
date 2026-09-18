@@ -128,7 +128,8 @@
 		"frameThemeLight": "Claro",
 		"frameThemeDark": "Oscuro",
 		"frameThemeHelp": "Cuerpo plateado con marco claro, o grafito con marco oscuro. Se aplica a todos los marcos.",
-		"windowHelp": "Dibuja una ventana, o un dispositivo modelado en 3D, alrededor de la grabación."
+		"windowHelp": "Dibuja una ventana, o un dispositivo modelado en 3D, alrededor de la grabación.",
+		"roundnessFrameHelp": "El rango se adapta al marco: 100 % es el redondeo máximo que le sienta bien."
 	},
 	"stylePresets": {
 		"button": "Preajustes",

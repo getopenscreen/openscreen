@@ -19,6 +19,15 @@
 export const NATIVE_SCREEN_BASE_RADIUS_PX = 24;
 
 /**
+ * The end of the Roundness slider, in output pixels. Without a frame the slider is
+ * that many pixels of corner; under a frame the native side reads its POSITION
+ * (`roundnessFrac` × the output's short side ÷ this) and maps it onto the range
+ * that frame wears well (`frame_roundness_cap`). Must match
+ * `ROUNDNESS_SLIDER_MAX_PX` in crates/compositor/src/frame_geometry.rs.
+ */
+export const ROUNDNESS_SLIDER_MAX_PX = 64;
+
+/**
  * The fixture's webcam width as a percentage of the frame (a_side = 320px @1920
  * ≈ 16.7%). `webcamSizePreset / this` is the native size scale, 1 meaning the
  * shipped default, so the slider reads as a direct multiplier.

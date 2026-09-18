@@ -128,7 +128,8 @@
 		"frameThemeLight": "Clair",
 		"frameThemeDark": "Sombre",
 		"frameThemeHelp": "Coque argent et chrome clair, ou graphite et sombre. Vaut pour tous les cadres.",
-		"windowHelp": "Dessine une fenêtre, ou un appareil modelé en 3D, autour de l'enregistrement."
+		"windowHelp": "Dessine une fenêtre, ou un appareil modelé en 3D, autour de l'enregistrement.",
+		"roundnessFrameHelp": "La course s'adapte au cadre : 100 % est son arrondi le plus prononcé qui reste beau."
 	},
 	"stylePresets": {
 		"button": "Préréglages",

@@ -128,7 +128,8 @@
 		"frameThemeLight": "Sáng",
 		"frameThemeDark": "Tối",
 		"frameThemeHelp": "Thân bạc với viền sáng, hoặc than chì với viền tối. Áp dụng cho mọi khung.",
-		"windowHelp": "Vẽ một cửa sổ, hoặc một thiết bị dựng 3D, quanh bản ghi."
+		"windowHelp": "Vẽ một cửa sổ, hoặc một thiết bị dựng 3D, quanh bản ghi.",
+		"roundnessFrameHelp": "Phạm vi thay đổi theo khung: 100% là độ bo tròn lớn nhất vẫn đẹp với khung đó."
 	},
 	"stylePresets": {
 		"button": "Cài đặt sẵn",

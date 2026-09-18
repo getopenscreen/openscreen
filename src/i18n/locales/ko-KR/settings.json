@@ -128,7 +128,8 @@
 		"frameThemeLight": "밝게",
 		"frameThemeDark": "어둡게",
 		"frameThemeHelp": "실버 본체에 밝은 테두리, 또는 그라파이트에 어두운 테두리. 모든 프레임에 적용됩니다.",
-		"windowHelp": "녹화 주위에 창 또는 3D로 모델링된 기기를 그립니다."
+		"windowHelp": "녹화 주위에 창 또는 3D로 모델링된 기기를 그립니다.",
+		"roundnessFrameHelp": "범위는 프레임에 맞춰 달라집니다. 100%는 그 프레임에 어울리는 가장 큰 둥글기입니다."
 	},
 	"stylePresets": {
 		"button": "프리셋",

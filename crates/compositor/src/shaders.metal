@@ -672,56 +672,66 @@ static float4 cursor_impact(float2 local, constant Layer &layer)
 // reconstruite comme au mode 15 (`regions::rotate_point` puis perspective P / (P − z)). Des
 // formes neutres que l'on dessine soi-même : aucune marque, aucun logo.
 //
-// Repère du MODÈLE : unité = largeur de la boîte écran, origine au CENTRE du plan, x à droite,
+// Repère du MODÈLE : unité = l'unité du cadre (`frame_geometry::frame_unit_px`, la même quel que
+// soit le ratio du clip), origine au CENTRE du plan, x à droite,
 // y vers le bas, z vers la caméra. L'écran occupe ±`layer.mb.xy`, le corps l'entoure de `src_prev` et
 // va de z = −`layer.fx.w` à 0 ; ce qui dépasse (socle, pied) sort vers +y et ±z.
 // Emplacements du cbuffer — miroir de `frame_geometry::device_frame_cb`, qui en fait foi :
 //   src       = (décalage px du rayon, P, unité du modèle en px)
-//   layer.radius_px = rayon extérieur du corps (unités du modèle)
+//   layer.radius_px = rayon extérieur du corps, coins HAUTS (unités du modèle)
 //   layer.color.r   = l'appareil (1 portable, 2 téléphone, 3 moniteur) ; layer.color.g = 1 si thème sombre ;
-//               layer.color.a = opacité
+//               layer.color.b = rayon extérieur du corps, coins BAS (unités) ; layer.color.a = opacité
 //   fx        = (rotation du plan X, Y, Z en rad ; épaisseur du corps)
 //   src_prev  = marges du corps (gauche, haut, droite, bas), unités du modèle
 //   mb        = (demi-taille de l'écran ; translation du plan dans le repère caméra, px)
 //   dst_prev  = (angle du socle du portable depuis le plan, rad ; rayon des coins de l'OUVERTURE,
 //               celui du métrage, unités ; recouvrement de la lunette sur le métrage, unités ;
 //               pénombre de l'OMBRE en px, 0 pour l'appareil lui-même)
+// Les deux rayons du corps sont CONCENTRIQUES à celui de l'ouverture (`concentric_radius`) : la
+// lunette garde son épaisseur tout autour de chaque coin. Ils viennent tout faits du cbuffer.
 // Constantes : miroir exact de `frame_geometry.rs` (DEV_*), sauf ce qui ne change jamais
 // l'encombrement — le micro-chanfrein, l'encoche du socle, les coins de la semelle — et n'existe
-// donc que côté shader. L'éclairage est celui du curseur modélisé (MODEL_LIGHT/AMBIENT/DIFFUSE), pour que
-// les deux objets d'une même frame soient vus sous la même lampe.
+// donc que côté shader. Toutes en unités du modèle. L'éclairage est celui du curseur modélisé
+// (MODEL_LIGHT/AMBIENT/DIFFUSE), pour que les deux objets d'une même frame soient vus sous la
+// même lampe.
 //
 // Le parti pris matière : ALUMINIUM MAT ET VERRE NOIR, pas de plastique. Un gros arrondi d'arête
 // et un reflet large font un objet gonflé ; un produit se lit à ses faces PLATES, à une arête
-// nette et à un filet de lumière d'un pixel. D'où : un chanfrein d'un millième d'unité — assez
+// nette et à un filet de lumière d'un pixel. D'où : un chanfrein de deux millièmes d'unité — assez
 // pour que l'arête ne coupe pas, trop peu pour arrondir la silhouette —, aucun lobe spéculaire
-// large, et un filet PEINT le long du contour (un chanfrein d'un millième fait moins d'un pixel
-// à l'écran : modelé, il ne s'antialiaserait pas).
-constant float DEV_CHAMFER = 0.0012;
-// Distance MINIMALE de l'œil qui voit le relief du modèle, en largeurs d'écran : celle d'un
-// bras devant un portable. Miroir de `frame_geometry::DEV_EYE_MIN`.
-constant float DEV_EYE_MIN = 5.4;
-// Socle et pied : en fractions de la LARGEUR DE COQUE, jamais de l'écran. Le métrage encadré peut
-// avoir n'importe quelle forme ; ce qui dépasse reste proportionnel à la coque qui le porte.
-constant float DEV_DECK_LEN = 0.70;
-// Le liseré d'aluminium qui borde la face avant (`DEV_RIM`, unités du modèle), le rayon des
-// coins avant de la semelle du moniteur (`DEV_FOOT_R`) et l'encoche du socle du portable, au
-// milieu de son arête avant (`DEV_SCOOP_*` : demi-largeur, profondeur, hauteur de l'ellipsoïde
-// retiré), en largeurs de coque sauf le liseré.
-constant float DEV_RIM = 0.003;
-constant float DEV_FOOT_R = 0.02;
-constant float DEV_SCOOP_W = 0.075;
-constant float DEV_SCOOP_D = 0.02;
-constant float DEV_SCOOP_H = 0.006;
-constant float DEV_DECK_THICK = 0.024;
-constant float DEV_DECK_THICK_FRONT = 0.021;
-constant float DEV_DECK_GAP = 0.005;
-constant float DEV_NECK_W = 0.14;
-constant float DEV_NECK_LEN = 0.097;
-constant float DEV_FOOT_W = 0.25;
-constant float DEV_FOOT_H = 0.025;
-constant float DEV_STAND_Z = 0.012;
-constant float DEV_FOOT_Z = 0.107;
+// large, et un filet PEINT le long du contour (un tel chanfrein fait moins de deux pixels à
+// l'écran : modelé, il ne s'antialiaserait pas).
+constant float DEV_CHAMFER = 0.0021;
+// Distance MINIMALE de l'œil qui voit le relief du modèle : celle d'un bras devant un portable.
+// Miroir de `frame_geometry::DEV_EYE_MIN`.
+constant float DEV_EYE_MIN = 9.6;
+// Le plan proche du modèle (`frame_geometry::device_near_plane`) : une fraction de la distance
+// de l'œil du modèle, rapprochée du travelling de la caméra réelle, et la bande de fondu. L'objectif
+// des présets, 1,6 petit côté (`regions::PERSPECTIVE_FACTOR`), sert de distance de repos.
+constant float DEV_NEAR = 0.16;
+constant float DEV_NEAR_BAND = 0.1;
+constant float DEV_LENS = 1.6;
+// Le socle a sa profondeur réelle ; c'est son ANGLE (`device_deck_angle`) qui le rend discret vu
+// de face. Il a la largeur de la coque ; tout le reste de ce qui dépasse est fixe, en unités du
+// modèle, quelle que soit la forme du métrage encadré.
+constant float DEV_DECK_LEN = 1.30;
+// Le liseré d'aluminium qui borde la face avant (`DEV_RIM`), le rayon des coins avant de la
+// semelle du moniteur (`DEV_FOOT_R`) et l'encoche du socle du portable, au milieu de son arête
+// avant (`DEV_SCOOP_*` : demi-largeur, profondeur, hauteur de l'ellipsoïde retiré).
+constant float DEV_RIM = 0.0053;
+constant float DEV_FOOT_R = 0.0365;
+constant float DEV_SCOOP_W = 0.14;
+constant float DEV_SCOOP_D = 0.0372;
+constant float DEV_SCOOP_H = 0.0112;
+constant float DEV_DECK_THICK = 0.0446;
+constant float DEV_DECK_THICK_FRONT = 0.0391;
+constant float DEV_DECK_GAP = 0.0093;
+constant float DEV_NECK_W = 0.255;
+constant float DEV_NECK_LEN = 0.177;
+constant float DEV_FOOT_W = 0.456;
+constant float DEV_FOOT_H = 0.0456;
+constant float DEV_STAND_Z = 0.0219;
+constant float DEV_FOOT_Z = 0.195;
 // Teintes (alpha droit). Deux thèmes, `layer.color.g` = 1 pour le sombre : aluminium argent ou
 // graphite, et le verre de la dalle qui va avec. Neutres — c'est ce qui fait un appareil
 // « schématique » et non une marque.
@@ -743,14 +753,24 @@ static inline float2 dev_body_c(constant Layer &layer) { return float2((layer.sr
 static inline float2 dev_body_h(constant Layer &layer) { return layer.mb.xy + float2((layer.src_prev.x + layer.src_prev.z) * 0.5, (layer.src_prev.y + layer.src_prev.w) * 0.5); }
 // Le chanfrein, borné par l'épaisseur : garde-fou, jamais atteint aux épaisseurs livrées.
 static inline float dev_chamfer(constant Layer &layer) { return min(DEV_CHAMFER, layer.fx.w * 0.3); }
-// La largeur de COQUE : l'unité de tout ce qui dépasse du corps.
-static inline float dev_shell_w(constant Layer &layer) { return 2.0 * dev_body_h(layer).x; }
-// Le socle a sa profondeur réelle ; c'est son ANGLE (`device_deck_angle`) qui le rend discret vu
-// de face.
-static inline float dev_deck_len(constant Layer &layer) { return DEV_DECK_LEN * dev_shell_w(layer); }
 static inline float dev_deck_angle(constant Layer &layer) { return layer.dst_prev.x; }
 // L'appareil : 1 = portable, 2 = téléphone, 3 = moniteur (`device_kind_id`).
 static inline bool dev_is(constant Layer &layer, float k) { return abs(layer.color.r - k) < 0.5; }
+
+// La hauteur du PLAN PROCHE devant l'écran (unités), pour la caméra RÉELLE en `eye` (repère du
+// plan, unités) qui regarde le long de `axis`. Cf. `dev_near_plane` (HLSL), qui fait foi ; miroir
+// de `frame_geometry::device_near_plane`.
+static inline float dev_near_plane(float3 eye, float3 axis, constant Layer &layer)
+{
+    float dist = eye.z / max(-axis.z, 1e-3);
+    return DEV_NEAR * DEV_EYE_MIN * dist / max(DEV_LENS * 2.0 * min(layer.mb.x, layer.mb.y), 1e-4);
+}
+
+// Ce qui reste d'un point `q` du modèle sous le plan proche `h_near` : un fondu, jamais une coupe.
+static inline float dev_near_fade(float3 q, float h_near)
+{
+    return 1.0 - smoothstep(h_near * (1.0 - DEV_NEAR_BAND), h_near, q.z);
+}
 
 // Boîte 3D à arêtes chanfreinées.
 static float sd_dev_box(float3 p, float3 h, float r)
@@ -786,14 +806,13 @@ static float sd_dev_slab(float3 p, constant Layer &layer)
     return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - ch;
 }
 
-// L'OUVERTURE dans le plan (<0 dedans) : le rect du métrage rentré du recouvrement `dst_prev.z`,
-// au rayon du MÉTRAGE `dst_prev.y` — la même fonction de coin que lui (`screen_corner_radius_px`),
-// à toutes les valeurs de Roundness. Rentrée d'un pixel et quart sous le même rayon, elle reste
-// DANS le métrage sur tout son contour : la lunette gagne partout hors d'elle.
+// L'OUVERTURE dans le plan (<0 dedans) : le contour du métrage (rayon `dst_prev.y`) rentré du
+// recouvrement `dst_prev.z` comme un décalage — mêmes centres d'arc, rayon diminué d'autant —, si
+// bien que la lunette mord le métrage de la même largeur aux coins que le long des bords (cf. HLSL).
 static float sd_dev_aperture(float2 p, constant Layer &layer)
 {
     float2 ah = layer.mb.xy - layer.dst_prev.z;
-    return sd_round_rect(p, ah, min(layer.dst_prev.y, min(ah.x, ah.y)));
+    return sd_round_rect(p, ah, clamp(layer.dst_prev.y - layer.dst_prev.z, 0.0, min(ah.x, ah.y)));
 }
 
 // Le CORPS : la dalle moins le creux de l'écran, ouvert vers la caméra et fermé au fond — un trou
@@ -821,18 +840,17 @@ static float3 dev_deck_local(float3 p, constant Layer &layer)
 static float sd_dev_deck(float3 p, constant Layer &layer)
 {
     float3 q = dev_deck_local(p, layer);
-    float w = dev_shell_w(layer);
-    float y0 = DEV_DECK_GAP * w;
-    float y1 = y0 + dev_deck_len(layer);
-    float tb = DEV_DECK_THICK * w;
+    float y0 = DEV_DECK_GAP;
+    float y1 = y0 + DEV_DECK_LEN;
+    float tb = DEV_DECK_THICK;
     float slab = sd_dev_box(q - float3(0.0, (y0 + y1) * 0.5, -tb * 0.5),
                             float3(dev_body_h(layer).x, (y1 - y0) * 0.5, tb * 0.5),
                             DEV_CHAMFER * 2.0);
     // Le dessous remonte vers l'avant : c'est lui, et non l'épaisseur, qui fait le profil en coin.
-    float k = (DEV_DECK_THICK - DEV_DECK_THICK_FRONT) * w / max(dev_deck_len(layer), 1e-5);
+    float k = (DEV_DECK_THICK - DEV_DECK_THICK_FRONT) / DEV_DECK_LEN;
     float under = (-tb + k * (q.y - y0) - q.z) * rsqrt(1.0 + k * k);
     // L'encoche au milieu de l'arête avant (cf. HLSL).
-    float scoop = sd_dev_ellipsoid(q - float3(0.0, y1, 0.0), float3(DEV_SCOOP_W, DEV_SCOOP_D, DEV_SCOOP_H) * w);
+    float scoop = sd_dev_ellipsoid(q - float3(0.0, y1, 0.0), float3(DEV_SCOOP_W, DEV_SCOOP_D, DEV_SCOOP_H));
     return max(max(slab, under), -scoop);
 }
 
@@ -841,13 +859,12 @@ static float dev_deck_hit(float3 ro, float3 rd, constant Layer &layer)
 {
     float3 q0 = dev_deck_local(ro, layer);
     float3 qd = dev_deck_local(ro + rd, layer) - q0;
-    float w = dev_shell_w(layer);
     float hw = dev_body_h(layer).x;
-    float y0 = DEV_DECK_GAP * w;
-    float len = dev_deck_len(layer);
-    float tb = DEV_DECK_THICK * w;
+    float y0 = DEV_DECK_GAP;
+    float len = DEV_DECK_LEN;
+    float tb = DEV_DECK_THICK;
     float2 tt = ray_box(q0, qd, float3(-hw, y0, -tb), float3(hw, y0 + len, 0.0));
-    float k = (DEV_DECK_THICK - DEV_DECK_THICK_FRONT) * w / max(len, 1e-5);
+    float k = (DEV_DECK_THICK - DEV_DECK_THICK_FRONT) / len;
     float g0 = -tb + k * (q0.y - y0) - q0.z;
     float gd = k * qd.y - qd.z;
     if (abs(gd) > 1e-9)
@@ -865,8 +882,8 @@ static float dev_deck_hit(float3 ro, float3 rd, constant Layer &layer)
     }
     // Entré par l'encoche, le rayon touche la matière à sa sortie de l'ellipsoïde.
     float t_in = max(tt.x, 0.0);
-    float3 o = (q0 - float3(0.0, y0 + len, 0.0)) / (float3(DEV_SCOOP_W, DEV_SCOOP_D, DEV_SCOOP_H) * w);
-    float3 e = qd / (float3(DEV_SCOOP_W, DEV_SCOOP_D, DEV_SCOOP_H) * w);
+    float3 o = (q0 - float3(0.0, y0 + len, 0.0)) / float3(DEV_SCOOP_W, DEV_SCOOP_D, DEV_SCOOP_H);
+    float3 e = qd / float3(DEV_SCOOP_W, DEV_SCOOP_D, DEV_SCOOP_H);
     float ea = dot(e, e);
     float eb = dot(o, e);
     float disc = eb * eb - ea * (dot(o, o) - 1.0);
@@ -884,14 +901,13 @@ static float sd_dev_stand(float3 p, constant Layer &layer)
 {
     float y0 = dev_body_c(layer).y + dev_body_h(layer).y;
     float zc = -layer.fx.w * 0.5;
-    float w = dev_shell_w(layer);
-    float neck = sd_dev_box(p - float3(0.0, y0 + DEV_NECK_LEN * w * 0.5 - 0.01, zc - DEV_STAND_Z * w * 0.5),
-                            float3(DEV_NECK_W * w, DEV_NECK_LEN * w * 0.5 + 0.01, DEV_STAND_Z * w * 0.5),
+    float neck = sd_dev_box(p - float3(0.0, y0 + DEV_NECK_LEN * 0.5 - 0.01, zc - DEV_STAND_Z * 0.5),
+                            float3(DEV_NECK_W, DEV_NECK_LEN * 0.5 + 0.01, DEV_STAND_Z * 0.5),
                             DEV_CHAMFER * 2.0);
     // La semelle : une plaque plate, coins arrondis dans son plan (xz), flancs droits.
-    float3 f = p - float3(0.0, y0 + (DEV_NECK_LEN + DEV_FOOT_H * 0.5) * w, zc - DEV_FOOT_Z * w * 0.5);
-    float2 fd = float2(sd_round_rect(f.xz, float2(DEV_FOOT_W, DEV_FOOT_Z * 0.5) * w, DEV_FOOT_R * w),
-                       abs(f.y) - DEV_FOOT_H * w * 0.5);
+    float3 f = p - float3(0.0, y0 + DEV_NECK_LEN + DEV_FOOT_H * 0.5, zc - DEV_FOOT_Z * 0.5);
+    float2 fd = float2(sd_round_rect(f.xz, float2(DEV_FOOT_W, DEV_FOOT_Z * 0.5), DEV_FOOT_R),
+                       abs(f.y) - DEV_FOOT_H * 0.5);
     float foot = min(max(fd.x, fd.y), 0.0) + length(max(fd, 0.0));
     return min(neck, foot);
 }
@@ -944,25 +960,24 @@ static float4 device_albedo(float3 p, float3 n, float aa, constant Layer &layer)
     float3 back = dev_shell_back(layer);
     if (sd_dev_body(p, layer) > sd_dev_extra(p, layer))
     {
-        float w = dev_shell_w(layer);
         if (!dev_is(layer, 1.0))
         {
             // Le pied du moniteur : de l'aluminium, un dégradé vertical doux.
-            float v = saturate((p.y - dev_body_c(layer).y - dev_body_h(layer).y) / ((DEV_NECK_LEN + DEV_FOOT_H) * w));
+            float v = saturate((p.y - dev_body_c(layer).y - dev_body_h(layer).y) / (DEV_NECK_LEN + DEV_FOOT_H));
             return float4(mix(metal, back, 0.15 + 0.45 * v), 1.0);
         }
         float3 q = dev_deck_local(p, layer);
         float hw = dev_body_h(layer).x;
-        float y0 = DEV_DECK_GAP * w;
-        float len = dev_deck_len(layer);
+        float y0 = DEV_DECK_GAP;
+        float len = DEV_DECK_LEN;
         // La tranche AVANT : une barre d'argent qui fonce doucement vers son arête basse.
         if (q.y > y0 + len - DEV_CHAMFER * 3.0)
         {
-            float s = saturate(-q.z / (DEV_DECK_THICK_FRONT * w));
+            float s = saturate(-q.z / DEV_DECK_THICK_FRONT);
             return float4(mix(metal, back, smoothstep(0.35, 1.0, s) * 0.8), 1.0);
         }
         // Le dessous, puis le dessus : clavier et pavé tactile.
-        if (q.z < -DEV_DECK_THICK * w * 0.25) { return float4(back, 1.0); }
+        if (q.z < -DEV_DECK_THICK * 0.25) { return float4(back, 1.0); }
         float3 top = metal;
         // Clavier : 0,75 de la largeur du socle, de 0,10 à 0,56 de sa profondeur.
         float key = sd_round_rect(q.xy - float2(0.0, y0 + len * 0.33),
@@ -993,14 +1008,13 @@ static float4 device_albedo(float3 p, float3 n, float aa, constant Layer &layer)
     {
         // Téléphone : un œil de caméra, rien d'autre — pas de fente de haut-parleur, qui date un
         // téléphone. Au milieu de la lunette du HAUT DU TÉLÉPHONE, pas du métrage : une ouverture
-        // paysage est un téléphone COUCHÉ, son haut vers la gauche de l'image. L'échelle suit le
-        // PETIT côté, comme l'épaisseur du corps.
+        // paysage est un téléphone COUCHÉ, son haut vers la gauche de l'image. Sa taille est fixe,
+        // comme l'épaisseur du corps.
         bool upright = layer.mb.y >= layer.mb.x;
         float2 e = upright ? p.xy : float2(-p.y, p.x);
         float2 hh = upright ? layer.mb.xy : float2(layer.mb.y, layer.mb.x);
         float bez = (upright ? layer.src_prev.y : layer.src_prev.x) - DEV_RIM;
-        float s = 2.0 * min(hh.x, hh.y);
-        c = mix(c, float3(0.086, 0.102, 0.133), dev_cov(length(e - float2(0.0, -hh.y - bez * 0.5)) - 0.004 * s, aa));
+        c = mix(c, float3(0.086, 0.102, 0.133), dev_cov(length(e - float2(0.0, -hh.y - bez * 0.5)) - 0.003, aa));
     }
     else
     {
@@ -1016,8 +1030,9 @@ static float4 device_albedo(float3 p, float3 n, float aa, constant Layer &layer)
 // L'OMBRE portée de l'appareil (même calque, `dst_prev.w` = pénombre en px) : la silhouette que
 // la caméra voit VRAIMENT du modèle, socle et pied compris. Cf. `device_shadow` (HLSL), qui fait
 // foi : le décalage est déjà dans `src.xy`, on marche le modèle PLEIN, et la plus courte approche
-// du rayon, en px, tient lieu de distance au contour, avec la pénombre du mode 2.
-static float4 device_shadow(float3 ro, float3 rd, float fpk, float3 lo, float3 hi, constant Layer &layer)
+// du rayon, en px, tient lieu de distance au contour, avec la pénombre du mode 2. Ce que le plan
+// proche `h_near` efface de l'appareil, il l'efface de son ombre.
+static float4 device_shadow(float3 ro, float3 rd, float fpk, float3 lo, float3 hi, float h_near, constant Layer &layer)
 {
     float spread = layer.dst_prev.w;
     float m = 2.0 * spread / layer.src.w;
@@ -1027,25 +1042,34 @@ static float4 device_shadow(float3 ro, float3 rd, float fpk, float3 lo, float3 h
         return float4(0.0, 0.0, 0.0, 0.0);
     }
     // Dans la silhouette pleine, à coup sûr : le rayon perce la face avant ou le socle.
-    if ((rd.z < -1e-5 && sd_dev_outline((ro + rd * (-ro.z / rd.z)).xy, layer) < 0.0) ||
-        (dev_is(layer, 1.0) && dev_deck_hit(ro, rd, layer) < 1e9))
+    if (rd.z < -1e-5 && sd_dev_outline((ro + rd * (-ro.z / rd.z)).xy, layer) < 0.0)
     {
         return float4(0.0, 0.0, 0.0, layer.color.a);
     }
+    float t_deck = dev_is(layer, 1.0) ? dev_deck_hit(ro, rd, layer) : 1e9;
+    if (t_deck < 1e9)
+    {
+        return float4(0.0, 0.0, 0.0, layer.color.a * dev_near_fade(ro + rd * t_deck, h_near));
+    }
     float t = max(tb.x, 0.0);
     float best = 1e9;
+    float t_best = t;
     for (int k = 0; k < 96; k++)
     {
         float d = sd_dev_solid(ro + rd * t, layer);
         float fp = t * fpk;
-        best = min(best, max(d, 0.0) / fp);
+        if (max(d, 0.0) / fp < best)
+        {
+            best = max(d, 0.0) / fp;
+            t_best = t;
+        }
         if (d < 0.08 * fp || t > tb.y)
         {
             break;
         }
         t += max(d, fp);
     }
-    float a = layer.color.a * (1.0 - smoothstep(0.0, spread, best));
+    float a = layer.color.a * (1.0 - smoothstep(0.0, spread, best)) * dev_near_fade(ro + rd * t_best, h_near);
     return float4(0.0, 0.0, 0.0, a); // noir prémultiplié
 }
 
@@ -1069,19 +1093,20 @@ static float4 device_frame(float2 local, constant Layer &layer)
     float3 rd = world_to_plane(dw / dlen, f);
     float3 l = world_to_plane(MODEL_LIGHT, f);
 
-    // L'ŒIL DU MODÈLE (`DeviceView::project`). Le plan garde l'objectif des présets — c'est lui
-    // qui fait lire l'inclinaison du métrage —, mais cet œil est à 0,9 largeur d'écran d'un
-    // paysage : un socle de profondeur réelle (0,7) viendrait à 0,2 de lui, et se projetterait en
-    // une dalle plus large que l'image. Le relief du modèle est donc vu d'un œil RECULÉ sur la même
-    // droite, à au moins `DEV_EYE_MIN` largeurs d'écran — la distance d'un bras. Chaque rayon passe
-    // par le MÊME point du plan que celui de l'objectif : la face écran reste exactement sur le
-    // métrage, seul ce qui sort du plan change de perspective. `fpk` = empreinte d'un pixel par
-    // unité de distance le long du nouveau rayon (celle du plan, rapportée à sa distance).
+    // Le plan proche (`DeviceView::near_plane`) : tiré de la caméra RÉELLE, avant qu'on la recule.
+    float h_near = dev_near_plane(ro, world_to_plane(float3(0.0, 0.0, -1.0), f), layer);
+
+    // L'ŒIL DU MODÈLE (`DeviceView::model_eye`, cf. HLSL) : celui du plan, reculé sur sa droite à
+    // au moins `DEV_EYE_MIN`, et jamais plus bas que la ligne du centre de l'écran — d'en dessous,
+    // le socle montrait sa face inférieure et couvrait le bas du métrage. Chaque rayon passe par le
+    // MÊME point du plan que celui de l'objectif. `fpk` = empreinte d'un pixel par unité de
+    // distance le long du nouveau rayon (celle du plan, rapportée à sa distance).
     float fpk = 1.0 / dlen;
     if (rd.z < -1e-5)
     {
         float ts = -ro.z / rd.z;
-        float3 eye = ro * max(1.0, DEV_EYE_MIN / max(length(ro), 1e-3));
+        float3 e = float3(ro.x, min(ro.y, 0.0), ro.z);
+        float3 eye = e * max(1.0, DEV_EYE_MIN / max(length(e), 1e-3));
         float3 v = ro + rd * ts - eye;
         float lv = length(v);
         fpk = ts / dlen / lv;
@@ -1095,15 +1120,14 @@ static float4 device_frame(float2 local, constant Layer &layer)
     float2 bh = dev_body_h(layer);
     float3 lo = float3(bc - bh, -layer.fx.w);
     float3 hi = float3(bc + bh, 0.0);
-    float sw = dev_shell_w(layer);
     if (dev_is(layer, 1.0))
     {
         // Les quatre coins du profil du socle, de la charnière au bord avant, dessus et dessous.
         float ca = cos(dev_deck_angle(layer));
         float sa = sin(dev_deck_angle(layer));
         float2 hinge = float2(bc.y + bh.y, -layer.fx.w * 0.5);
-        float2 qy = float2(DEV_DECK_GAP * sw, DEV_DECK_GAP * sw + dev_deck_len(layer));
-        float2 qz = float2(0.0, -DEV_DECK_THICK * sw);
+        float2 qy = float2(DEV_DECK_GAP, DEV_DECK_GAP + DEV_DECK_LEN);
+        float2 qz = float2(0.0, -DEV_DECK_THICK);
         for (int j = 0; j < 4; j++)
         {
             float a = qy[j & 1];
@@ -1115,13 +1139,13 @@ static float4 device_frame(float2 local, constant Layer &layer)
     }
     else if (dev_is(layer, 3.0))
     {
-        lo = float3(min(lo.x, -DEV_FOOT_W * sw), lo.y, lo.z - DEV_FOOT_Z * sw);
-        hi = float3(max(hi.x, DEV_FOOT_W * sw), hi.y + (DEV_NECK_LEN + DEV_FOOT_H) * sw, hi.z);
+        lo = float3(min(lo.x, -DEV_FOOT_W), lo.y, lo.z - DEV_FOOT_Z);
+        hi = float3(max(hi.x, DEV_FOOT_W), hi.y + DEV_NECK_LEN + DEV_FOOT_H, hi.z);
     }
 
     if (layer.dst_prev.w > 0.0)
     {
-        return device_shadow(ro, rd, fpk, lo, hi, layer);
+        return device_shadow(ro, rd, fpk, lo, hi, h_near, layer);
     }
 
     // Le plan du métrage occulte tout ce qui est derrière lui DANS l'ouverture ARRONDIE : la
@@ -1192,7 +1216,8 @@ static float4 device_frame(float2 local, constant Layer &layer)
     // voile directionnel étroit sur le métal, et le filet de lumière déjà peint dans l'albédo.
     float sheen = DEV_SHEEN * mat.a * pow(diffuse, 4.0);
     float3 rgb = mat.rgb * (MODEL_AMBIENT + MODEL_DIFFUSE * diffuse) + sheen;
-    float a = cov * layer.color.a;
+    // Au-delà du plan proche, l'appareil s'efface (le socle, quand la caméra en orbite avance).
+    float a = cov * layer.color.a * dev_near_fade(q, h_near);
     return float4(rgb * a, a); // prémultiplié
 }
 

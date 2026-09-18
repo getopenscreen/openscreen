@@ -253,9 +253,9 @@ struct Geo {
     s_px: [f32; 2],
     /// Rayon des coins du métrage (et de l'ouverture), px.
     radius: f32,
-    /// Corps : marges gauche, haut, droite, bas, et rayon extérieur, px.
+    /// Corps : marges gauche, haut, droite, bas, et rayons extérieurs (coins hauts, bas), px.
     body: [f32; 4],
-    body_radius: f32,
+    body_radius: [f32; 2],
     tilt: Option<TiltedQuad>,
     center: [f32; 2],
     origin: [f32; 2],
@@ -273,7 +273,7 @@ impl Geo {
                 let m = f.margins;
                 ([m[0] * s_px[0], m[1] * s_px[1], m[2] * s_px[0], m[3] * s_px[1]], f.radius)
             }
-            None => ([0.0; 4], g.s_radius),
+            None => ([0.0; 4], [g.s_radius; 2]),
         };
         Geo { s_px, radius: g.s_radius, body, body_radius, tilt: g.screen_tilt(s_px), center, origin }
     }
@@ -299,7 +299,8 @@ impl Geo {
         let [l, t, r, b] = self.body;
         let h = [(self.s_px[0] + l + r) * 0.5, (self.s_px[1] + t + b) * 0.5];
         let c = [-l + h[0], -t + h[1]];
-        sd_rr([p[0] - c[0], p[1] - c[1]], h, self.body_radius)
+        let r = if p[1] < c[1] { self.body_radius[0] } else { self.body_radius[1] };
+        sd_rr([p[0] - c[0], p[1] - c[1]], h, r)
     }
 
     /// Les sondes de couture : un point du bord du métrage, sa normale sortante, et jusqu'où
@@ -649,8 +650,8 @@ fn no_seam_lets_the_wallpaper_through() {
 /// Au Roundness MAXIMAL, la région du coin entre l'arc du métrage et le coin carré n'est JAMAIS du
 /// métrage (il changerait avec la teinte de la source), et là où elle est dans le corps du cadre,
 /// jamais du fond (vert) : de la lunette, pixel par pixel. C'est là que le métrage non borné et
-/// l'ouverture bornée traçaient deux coins différents. Pour le téléphone et la fenêtre, dont le
-/// corps suit le slider, concentrique, le coin carré lui-même est hors du corps : du fond, voulu.
+/// l'ouverture bornée traçaient deux coins différents. Le corps est concentrique au métrage : loin
+/// de l'arc, le coin carré lui-même est hors du corps — du fond, voulu.
 #[test]
 fn the_bezel_fills_the_corners_at_maximum_roundness() {
     let Some(gpu) = gpu() else { return };
@@ -698,9 +699,14 @@ fn the_bezel_fills_the_corners_at_maximum_roundness() {
                 }
             }
             println!("{frame:<8} {rotation:<16} {n:>6} px de coin dont {inside:>6} dans le corps, {} faux", bad.len());
-            assert!(n > 200, "{frame} {rotation} : région de coin vide ({n})");
-            // La fenetre n'a qu'un filet d'un pixel entre son arc et celui du metrage.
-            assert!(frame == "window" || inside > 200, "{frame} {rotation} : lunette de coin vide ({inside})");
+            // Le plafond de Roundness de la fenêtre, du portable et du moniteur est petit
+            // (`frame_roundness_cap`) : leur coin carré n'est qu'à quelques pixels de l'arc, en deçà
+            // de la frange sondée. Seul un grand rayon — le téléphone — laisse une région à compter.
+            if g.radius * (std::f32::consts::SQRT_2 - 1.0) > 8.0 {
+                assert!(n > 200, "{frame} {rotation} : région de coin vide ({n})");
+                // La fenetre n'a qu'un filet d'un pixel entre son arc et celui du metrage.
+                assert!(frame == "window" || inside > 200, "{frame} {rotation} : lunette de coin vide ({inside})");
+            }
             assert!(bad.is_empty(), "{frame} {rotation} : métrage ou fond dans le coin en {:?}", &bad[..bad.len().min(6)]);
         }
     }
@@ -1046,6 +1052,504 @@ fn orbit_clip_frames() {
         save(&dir, &format!("f{k:04}"), &rgba, (W, H));
     }
     println!("180 frames écrites dans {dir}");
+}
+
+// ============ Épaisseur des bordures, ratios, plan proche ============
+
+/// Le pixel en (x, y), interpolé entre ses quatre voisins : une mesure au dixième de pixel.
+fn bilinear(rgba: &[u8], out: (u32, u32), x: f32, y: f32) -> Option<[f32; 3]> {
+    let (x, y) = (x - 0.5, y - 0.5);
+    let (x0, y0) = (x.floor(), y.floor());
+    if x0 < 0.0 || y0 < 0.0 || x0 + 1.0 >= out.0 as f32 || y0 + 1.0 >= out.1 as f32 {
+        return None;
+    }
+    let (fx, fy) = (x - x0, y - y0);
+    let at = |i: f32, j: f32| {
+        let k = ((j as u32 * out.0 + i as u32) * 4) as usize;
+        [rgba[k] as f32, rgba[k + 1] as f32, rgba[k + 2] as f32]
+    };
+    let (a, b, c, d) = (at(x0, y0), at(x0 + 1.0, y0), at(x0, y0 + 1.0), at(x0 + 1.0, y0 + 1.0));
+    Some(std::array::from_fn(|k| {
+        (a[k] * (1.0 - fx) + b[k] * fx) * (1.0 - fy) + (c[k] * (1.0 - fx) + d[k] * fx) * fy
+    }))
+}
+
+/// Ce qu'un rayon du plan traverse, du métrage vers le dehors : la distance (px du plan) où le
+/// métrage finit, où le verre noir de la lunette finit (le liseré commence), et où le fond d'écran
+/// commence. Chacune au passage de mi-hauteur, interpolée entre deux échantillons.
+#[derive(Clone, Copy, Debug, Default)]
+struct Crossings {
+    footage: f32,
+    glass: Option<f32>,
+    wallpaper: Option<f32>,
+}
+
+/// Le vert du fond de `on_green`, en marge vert − max(rouge, bleu).
+const GREEN_MARGIN: f32 = 128.0;
+
+/// Marche le rayon `p0 + n·t` (px du plan, `n` unitaire), `p0` bien dans le métrage, sur les deux
+/// rendus `a` (teinte bleue) et `b` (orange) : le métrage est ce qui change entre les deux.
+fn crossings(g: &Geo, a: &[u8], b: &[u8], out: (u32, u32), p0: [f32; 2], n: [f32; 2], len: f32, dark: bool) -> Option<Crossings> {
+    let sample = |t: f32| {
+        let (x, y) = g.to_out([p0[0] + n[0] * t, p0[1] + n[1] * t]);
+        Some((bilinear(a, out, x, y)?, bilinear(b, out, x, y)?))
+    };
+    let diff = |pa: [f32; 3], pb: [f32; 3]| (0..3).map(|k| (pa[k] - pb[k]).abs()).sum::<f32>();
+    let (a0, b0) = sample(0.0)?;
+    let full = diff(a0, b0);
+    assert!(full > 60.0, "sonde hors du métrage ({full})");
+    // Verre : noir (~10) ; liseré : argent (~180) ou graphite (~55).
+    let glass_thr = if dark { 30.0 } else { 80.0 };
+    let (step, mut t) = (0.1f32, 0.0f32);
+    let mut prev = (1.0f32, 0.0f32, 0.0f32);
+    let mut c = Crossings::default();
+    let mut found_footage = false;
+    while t <= len {
+        let Some((pa, pb)) = sample(t) else { break };
+        let foot = diff(pa, pb) / full;
+        let lum = (pa[0] + pa[1] + pa[2]) / 3.0;
+        let green = ((pa[1] - pa[0].max(pa[2])) / GREEN_MARGIN).clamp(0.0, 1.0);
+        let cross = |v0: f32, v1: f32, thr: f32| t - step + (thr - v0) / (v1 - v0) * step;
+        if !found_footage {
+            if foot < 0.5 {
+                c.footage = cross(prev.0, foot, 0.5);
+                found_footage = true;
+            }
+        } else {
+            if c.glass.is_none() && c.wallpaper.is_none() && lum > glass_thr && prev.1 <= glass_thr {
+                c.glass = Some(cross(prev.1, lum, glass_thr));
+            }
+            if c.wallpaper.is_none() && green > 0.5 {
+                c.wallpaper = Some(cross(prev.2, green, 0.5));
+                break;
+            }
+        }
+        prev = (foot, lum, green);
+        t += step;
+    }
+    found_footage.then_some(c)
+}
+
+/// Une mesure de bordure en px du PLAN : (l'anneau jusqu'au fond, le verre jusqu'au liseré).
+type Border = (Option<f32>, Option<f32>);
+
+/// La bordure qu'un rayon du plan traverse, du métrage vers le dehors, en px du PLAN (la boîte
+/// droite) : la géométrie du cadre, qu'on veut concentrique. À plat, ce sont des px de sortie ; sous
+/// un angle fixe, la perspective raccourcit x, y et la diagonale différemment, et seule la mesure
+/// dans le plan compare un coin à ses bords.
+fn border(g: &Geo, a: &[u8], b: &[u8], out: (u32, u32), p0: [f32; 2], n: [f32; 2], len: f32, dark: bool) -> Border {
+    let Some(c) = crossings(g, a, b, out, p0, n, len, dark) else { return (None, None) };
+    (c.wallpaper.map(|t| t - c.footage), c.glass.map(|t| t - c.footage))
+}
+
+/// Un coin du cadre mesuré sur l'image : le long de sa diagonale à 45°, depuis le centre de l'arc
+/// du métrage, et à travers les deux bords qui s'y rejoignent, juste après l'arc du corps — à la
+/// même échelle de projection que le coin.
+struct CornerProbe {
+    diag: Border,
+    side: Border,
+    end: Border,
+    /// Px de sortie par px du plan, le long de la diagonale, au coin : 1 à plat. La tolérance d'un
+    /// pixel de SORTIE vaut `1 / scale` px du plan.
+    scale: f32,
+}
+
+/// Les quatre coins : haut-gauche, haut-droit, bas-droit, bas-gauche.
+fn measure_corners(g: &Geo, a: &[u8], b: &[u8], out: (u32, u32), dark: bool) -> [CornerProbe; 4] {
+    let [w, h] = g.s_px;
+    let r = g.radius;
+    let widest = g.body.iter().fold(0.0f32, |m, v| m.max(*v));
+    let reach = 4.0 * widest + 30.0;
+    // Assez loin du coin pour que le bord soit droit : au-delà de l'arc extérieur du corps.
+    let along = r + widest + 12.0;
+    let k = std::f32::consts::FRAC_1_SQRT_2;
+    [([0.0, 0.0], [-1.0f32, -1.0f32]), ([w, 0.0], [1.0, -1.0]), ([w, h], [1.0, 1.0]), ([0.0, h], [-1.0, 1.0])].map(
+        |(c, s)| {
+            let centre = [c[0] - s[0] * (r + 12.0 * k), c[1] - s[1] * (r + 12.0 * k)];
+            let apex = [c[0] - s[0] * r * (1.0 - k), c[1] - s[1] * r * (1.0 - k)];
+            let (p, q) = (g.to_out(apex), g.to_out([apex[0] + s[0] * k, apex[1] + s[1] * k]));
+            CornerProbe {
+                scale: (q.0 - p.0).hypot(q.1 - p.1),
+                diag: border(g, a, b, out, centre, [s[0] * k, s[1] * k], reach + r, dark),
+                // Le bord vertical (gauche ou droit), puis le bord horizontal (haut ou bas).
+                side: border(g, a, b, out, [c[0] - s[0] * 12.0, c[1] - s[1] * along], [s[0], 0.0], reach, dark),
+                end: border(g, a, b, out, [c[0] - s[0] * along, c[1] - s[1] * 12.0], [0.0, s[1]], reach, dark),
+            }
+        },
+    )
+}
+
+/// Le Roundness que l'app envoie à sa valeur par défaut (40 px de slider) dans une sortie 1080p.
+const DEFAULT_ROUND: f32 = 40.0 / 1080.0;
+
+/// La bordure de chaque cadre garde son épaisseur TOUT AUTOUR de chaque coin, à toutes les
+/// valeurs de Roundness : mesurée le long de la diagonale à 45° de chaque coin, elle vaut, au
+/// pixel près, celle des deux bords qui s'y rejoignent. Les deux contours sont concentriques
+/// (`concentric_radius`). Avant, la coque du portable et du moniteur gardait un rayon fixe : la
+/// lunette gonflait de moitié au coin sous un grand Roundness, et s'amincissait sous un petit.
+///
+/// Les épaisseurs se mesurent dans le PLAN (la géométrie du cadre) : sous un angle fixe, la
+/// perspective raccourcit x, y et la diagonale différemment. L'écart toléré, lui, est d'un pixel
+/// de SORTIE, converti au coin par l'échelle locale de la projection.
+///
+/// Fenêtre, portable, téléphone, moniteur ; Roundness 0, par défaut et maximal ; à plat et sous
+/// `iso` ; clair et sombre. À plat, l'anneau entier jusqu'au fond d'écran ; sous `iso`, où les
+/// flancs de l'appareil se voient, le verre de la lunette jusqu'à son liseré. Les coins HAUTS de
+/// la fenêtre sont sous la barre de titre, carrés par construction : on n'y mesure rien.
+#[test]
+fn the_border_keeps_its_thickness_around_every_corner() {
+    let Some(gpu) = gpu() else { return };
+    let out = (1920u32, 1080u32);
+    let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
+    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    let (mut worst, mut failures) = (0.0f32, Vec::new());
+    for frame in ["window", "laptop", "phone", "monitor"] {
+        for (rlabel, roundness) in [("r0", 0.0f32), ("rdef", DEFAULT_ROUND), ("rmax", MAX_ROUND)] {
+            for (cam, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
+                for theme in ["light", "dark"] {
+                    let dark = theme == "dark";
+                    let json = on_green(&with_roundness(
+                        &scene_json_themed(frame, theme, rotation, 0.0, NO_CURSOR, out),
+                        roundness,
+                    ));
+                    let (a, b) = (render(&comp, &blue, &json, None, T), render(&comp, &orange, &json, None, T));
+                    let g = Geo::new(&json, out, SRC);
+                    let probes = measure_corners(&g, &a, &b, out, dark);
+                    let case = format!("{frame} {rlabel} {cam} {theme}");
+                    // Deux mesures. Le VERRE de la lunette, du métrage à son liseré, pour les
+                    // appareils — à plat comme sous iso, où les flancs se voient. L'ANNEAU entier,
+                    // du métrage au fond d'écran, à plat — sauf au bas du portable, où la tranche du
+                    // socle prolonge le corps. La fenêtre n'a que son anneau : un filet.
+                    let device = frame != "window";
+                    for (what, pick) in [("verre", 1usize), ("anneau", 0usize)] {
+                        if (what == "verre" && !device) || (what == "anneau" && device && cam != "flat") {
+                            continue;
+                        }
+                        let get = |v: Border| if pick == 0 { v.0 } else { v.1 };
+                        let mut line = String::new();
+                        for (k, p) in probes.iter().enumerate() {
+                            // Les coins hauts de la fenêtre sont sa barre de titre ; le bas du
+                            // portable, à l'anneau, sa charnière et son socle.
+                            if (frame == "window" && k < 2) || (frame == "laptop" && what == "anneau" && k >= 2) {
+                                line.push_str("        -          ");
+                                continue;
+                            }
+                            let (Some(dg), Some(e0), Some(e1)) = (get(p.diag), get(p.side), get(p.end)) else {
+                                panic!("{case} {what}: coin {k} non mesuré");
+                            };
+                            let want = 0.5 * (e0 + e1);
+                            line.push_str(&format!(" {dg:5.1}/{e0:5.1}/{e1:5.1}  "));
+                            // L'écart, en px de SORTIE : c'est un pixel à l'image qu'on s'accorde.
+                            let off = (dg - want).abs() * p.scale;
+                            worst = worst.max(off);
+                            if off > 1.0 {
+                                failures.push(format!(
+                                    "{case} {what}: coin {k} {dg:.2} px au lieu de {want:.2} px (bords {e0:.2} / {e1:.2})"
+                                ));
+                            }
+                        }
+                        println!("{case:<26} {what:<6} diag/côté/bout HG HD BD BG :{line}");
+                    }
+                }
+            }
+        }
+    }
+    println!("écart maximal diagonale / bords : {worst:.2} px de sortie");
+    assert!(failures.is_empty(), "{} coins hors tolérance :\n{}", failures.len(), failures.join("\n"));
+}
+
+/// Un métrage de ratio `ar` contenu dans 80 % d'une sortie 16:9, comme l'app le contient dans la
+/// zone paddée : la même sortie, un autre clip.
+fn contained_rect(ar: f32) -> (f32, f32, f32, f32) {
+    let (w, h) = if ar >= 16.0 / 9.0 { (0.8, 0.8 * 16.0 / 9.0 / ar) } else { (0.8 * ar * 9.0 / 16.0, 0.8) };
+    (0.5 - w * 0.5, 0.5 - h * 0.5, w, h)
+}
+
+const RATIOS: [(&str, f32); 5] =
+    [("16x9", 16.0 / 9.0), ("9x16", 9.0 / 16.0), ("1x1", 1.0), ("4x3", 4.0 / 3.0), ("21x9", 21.0 / 9.0)];
+
+/// Le même cadre sur un clip 16:9, 9:16, 1:1, 4:3 et 21:9, dans la MÊME sortie : les mêmes
+/// bordures en px sur les quatre côtés, le même rayon de coin — seule l'ouverture change de
+/// forme. Mesuré sur l'image. Les bordures étaient en largeurs de la boîte : autour d'un clip
+/// portrait, la lunette tombait au tiers de celle d'un clip paysage.
+#[test]
+fn a_frame_looks_the_same_on_every_clip_ratio() {
+    let Some(gpu) = gpu() else { return };
+    let out = (1920u32, 1080u32);
+    let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
+    let (w0, h0) = (1280u32, 720u32);
+    for frame in ["window", "laptop", "phone", "monitor"] {
+        let mut first: Option<([f32; 4], f32, f32)> = None;
+        for (label, ar) in RATIOS {
+            // La source a le ratio du clip : rien n'est recadré, rien n'est étiré.
+            let src = if ar >= 1.0 { (w0, (w0 as f32 / ar).round() as u32) } else { ((h0 as f32 * ar).round() as u32, h0) };
+            let src = (src.0 & !1, src.1 & !1);
+            let blue = FakeFrame::new(&gpu, src, Tint::Blue);
+            let orange = FakeFrame::new(&gpu, src, Tint::Orange);
+            let json = on_green(&with_roundness(
+                &with_rect(&scene_json(frame, "null", 0.0, NO_CURSOR, out), contained_rect(ar)),
+                DEFAULT_ROUND,
+            ));
+            let (a, b) = (render(&comp, &blue, &json, None, T), render(&comp, &orange, &json, None, T));
+            let g = Geo::new(&json, out, src);
+            let p = measure_corners(&g, &a, &b, out, false);
+            // Les quatre bords (gauche, haut, droite, bas), mesurés près des coins haut-gauche et
+            // bas-droit : l'anneau de la fenêtre, le verre des appareils — sous eux, l'anneau
+            // traverserait le socle du portable ou le pied du moniteur.
+            let m = |v: Border| if frame == "window" { v.0 } else { v.1 };
+            let edges = [p[0].side, p[0].end, p[2].side, p[2].end].map(|e| m(e).expect("bord mesuré"));
+            // Le rayon extérieur du coin haut-droit : depuis le centre de l'arc du métrage, l'arc
+            // du corps est à R — concentriques — soit le rayon du métrage plus la bordure mesurée.
+            let outer = g.radius + m(p[1].diag).expect("coin mesuré");
+            let now = (edges, outer, g.radius);
+            println!(
+                "{frame:<8} {label:<5} bords {:5.1?} px, métrage r = {:5.1} px, extérieur R = {outer:5.1} px",
+                edges, g.radius
+            );
+            match first {
+                None => first = Some(now),
+                Some((e0, o0, r0)) => {
+                    for k in 0..4 {
+                        assert!((edges[k] - e0[k]).abs() <= 1.0, "{frame} {label}: bord {k} {} px au lieu de {} px", edges[k], e0[k]);
+                    }
+                    assert!((outer - o0).abs() <= 1.0, "{frame} {label}: rayon extérieur {outer} px au lieu de {o0} px");
+                    assert!((g.radius - r0).abs() <= 0.01, "{frame} {label}: rayon du métrage {} au lieu de {r0}", g.radius);
+                }
+            }
+        }
+    }
+}
+
+/// Une piste curseur garée en (x, y) de l'image pendant dix secondes.
+fn parked_track(name: &str, x: f32, y: f32) -> CursorTrack {
+    let samples: Vec<String> = (0..=100).map(|k| format!(r#"{{"timeMs":{},"cx":{x},"cy":{y}}}"#, k * 100)).collect();
+    let path = std::env::temp_dir().join(format!("os_device_parked_{name}.json"));
+    std::fs::write(&path, format!(r#"{{"samples":[{}]}}"#, samples.join(","))).expect("sidecar");
+    CursorTrack::load(path.to_str().unwrap(), 0.0, 10.0).expect("piste curseur")
+}
+
+/// Le curseur affiché (la caméra en orbite le suit), minuscule : il ne masque aucune sonde.
+const SHOWN_CURSOR: &str = r#"{"show":true,"size":0.2,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default","cursorSprites":{}}"#;
+
+/// La caméra en orbite qui zoome de `zoom` : la région de zoom de `scene_json`, sous
+/// `follow-cursor`, à l'échelle voulue.
+fn orbit_json(frame: &str, zoom: f32, out: (u32, u32)) -> String {
+    scene_json(frame, r#""follow-cursor""#, 0.6, SHOWN_CURSOR, out).replace(r#""scale":1,"#, &format!(r#""scale":{zoom},"#))
+}
+
+/// Le socle du portable ne couvre JAMAIS le métrage que le zoom montre : au plus fort zoom et aux
+/// angles extrêmes de l'orbite, toute la région de mise au point — le centre de l'image, où la
+/// caméra vise — est du métrage, pixel par pixel.
+///
+/// C'est ce qui cassait : zoomée sur le bas de l'image, la caméra en orbite visait sous le centre,
+/// l'œil du relief plongeait sous l'écran, et la face inférieure du socle couvrait tout le métrage,
+/// son bord avant énorme au premier plan. Au zoom 1, le pointeur en bas : l'ouverture entière.
+#[test]
+fn the_laptop_deck_never_covers_the_zoom_focus() {
+    let Some(gpu) = gpu() else { return };
+    let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
+    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    let pointers = [
+        ("bas", (0.5f32, 0.98f32)),
+        ("bas-gauche", (0.02, 0.98)),
+        ("bas-droite", (0.98, 0.98)),
+        ("haut-gauche", (0.02, 0.02)),
+        ("haut-droite", (0.98, 0.02)),
+    ];
+    for (name, (x, y)) in pointers {
+        let track = parked_track(name, x, y);
+        for zoom in [1.0f32, 2.2, 3.5, 5.0] {
+            let json = orbit_json("laptop", zoom, (W, H));
+            let a = render(&comp, &blue, &json, Some(&track), T);
+            let b = render(&comp, &orange, &json, Some(&track), T);
+            let (mut n, mut covered) = (0usize, Vec::new());
+            if zoom > 1.0 {
+                // La région de mise au point : le centre de l'image, 60 % de chaque côté.
+                for j in 0..40 {
+                    for i in 0..40 {
+                        let (px_x, px_y) = (W as f32 * (0.2 + 0.6 * i as f32 / 39.0), H as f32 * (0.2 + 0.6 * j as f32 / 39.0));
+                        let (Some(pa), Some(pb)) = (px(&a, (W, H), px_x, px_y), px(&b, (W, H), px_x, px_y)) else { continue };
+                        n += 1;
+                        if pa == pb {
+                            covered.push((px_x.round(), px_y.round(), pa));
+                        }
+                    }
+                }
+            } else {
+                // Au zoom 1 : l'ouverture entière, de 5 % à 95 % de chaque côté.
+                let (q, _) = aperture_tracked(&json, (W, H), &track);
+                for j in 1..=19 {
+                    for i in 1..=19 {
+                        let (px_x, px_y) = quad_at(&q, i as f32 / 20.0, j as f32 / 20.0);
+                        let (Some(pa), Some(pb)) = (px(&a, (W, H), px_x, px_y), px(&b, (W, H), px_x, px_y)) else { continue };
+                        n += 1;
+                        if pa == pb {
+                            covered.push((px_x.round(), px_y.round(), pa));
+                        }
+                    }
+                }
+            }
+            println!("{name:<12} zoom {zoom:<4} {n:>5} px sondés, {} couverts", covered.len());
+            assert!(n > 300, "{name} z{zoom}: trop peu de sondes ({n})");
+            assert!(covered.is_empty(), "{name} z{zoom}: le socle couvre le métrage en {:?}", &covered[..covered.len().min(6)]);
+        }
+    }
+}
+
+/// `aperture` sous une piste curseur : la caméra en orbite dépend du pointeur.
+fn aperture_tracked(json: &str, out: (u32, u32), track: &CursorTrack) -> ([(f32, f32); 4], [f32; 4]) {
+    let scene = Scene::from_json(json).expect("scène valide");
+    let cfg = cfg();
+    let mut live = live_params_from_scene(&scene);
+    live.has_webcam = false;
+    let src = [SRC.0 as f32, SRC.1 as f32];
+    let g = plan_frame(&FrameGeometryInput {
+        render_px: [out.0 as f32, out.1 as f32],
+        screen_tex_px: src,
+        screen_visible_px: src,
+        webcam_visible_px: src,
+        u_max: 1.0,
+        v_max: 1.0,
+        frame: 0.0,
+        cfg: &cfg,
+        live,
+        scene: Some(&scene),
+        cursor: Some(track),
+        timeline_t_override: Some(T),
+        programme_time: None,
+    });
+    let render_px = [out.0 as f32, out.1 as f32];
+    let s = g.s_dst;
+    let s_px = [s[2] * render_px[0], s[3] * render_px[1]];
+    let center = [(s[0] + s[2] * 0.5) * render_px[0], (s[1] + s[3] * 0.5) * render_px[1]];
+    let q = g.screen_tilt(s_px).expect("caméra en orbite");
+    let corners = std::array::from_fn(|i| {
+        let (fx, fy) = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)][i];
+        let (x, y) = q.point_px(fx, fy);
+        (center[0] + x, center[1] + y)
+    });
+    (corners, g.window_frame.map(|f| f.margins).unwrap_or([0.0; 4]))
+}
+
+/// Les rendus de la passe 4 (opt-in, `OPENSCREEN_DEVICE_V4`) :
+/// - `corners/` : les quatre coins de chaque cadre au Roundness maximal, clair et sombre, agrandis ;
+/// - `ratios/` : chaque cadre sur un clip 16:9, 9:16, 1:1, 4:3 et 21:9, dans la même sortie ;
+/// - `roundness/` : chaque cadre × slider 0, 50 et 100 % × clips 16:9, 9:16, 4:3 et 21:9.
+///
+/// Le plan proche a son propre rendu, `v4_near_clip`.
+#[test]
+fn v4_renders() {
+    let Some(dir) = out_dir("OPENSCREEN_DEVICE_V4") else {
+        eprintln!("OPENSCREEN_DEVICE_V4 absent - saute");
+        return;
+    };
+    let Some(gpu) = gpu() else { return };
+    let all: [&str; 4] = ["window", "laptop", "phone", "monitor"];
+    let out = (1920u32, 1080u32);
+    let big = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
+    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let img = |rgba: Vec<u8>, o: (u32, u32)| image::RgbaImage::from_raw(o.0, o.1, rgba).expect("readback");
+
+    // 1. Coins, au Roundness maximal : les quatre coins (les deux du bas pour la fenêtre, dont le
+    // haut est sa barre), 40 px de côté agrandis six fois, clair et sombre, à plat et sous iso.
+    for frame in all {
+        for theme in ["light", "dark"] {
+            for (cam, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
+                let json = with_roundness(&scene_json_themed(frame, theme, rotation, 0.6, NO_CURSOR, out), MAX_ROUND);
+                let rgba = render(&big, &screen, &json, None, T);
+                let g = Geo::new(&json, out, SRC);
+                let [w, h] = g.s_px;
+                let k = g.radius * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
+                let pts: Vec<[f32; 2]> = if frame == "window" {
+                    vec![[k, h - k], [w - k, h - k]]
+                } else {
+                    vec![[k, k], [w - k, k], [w - k, h - k], [k, h - k]]
+                };
+                let crops: Vec<_> = pts.iter().map(|&p| closeup(&rgba, out, g.to_out(p), 40, 6)).collect();
+                save_in(&dir, "corners", &format!("{frame}-rmax-{cam}-{theme}"), &strip(&crops));
+            }
+        }
+    }
+
+    // 2. Ratios : le même cadre autour de cinq clips, dans la même sortie 1080p.
+    for theme in ["light", "dark"] {
+        let mut sheet = image::RgbaImage::from_pixel(out.0 / 2 * 5 + 24, out.1 / 2 * 4 + 18, image::Rgba([255, 255, 255, 255]));
+        for (row, &frame) in all.iter().enumerate() {
+            for (col, (label, ar)) in RATIOS.iter().enumerate() {
+                let src = if *ar >= 1.0 { (1280u32, (1280.0 / ar).round() as u32 & !1) } else { ((720.0 * ar).round() as u32 & !1, 720u32) };
+                let f = FakeFrame::new(&gpu, src, Tint::Blue);
+                let json = with_rect(&scene_json_themed(frame, theme, "null", 0.6, NO_CURSOR, out), contained_rect(*ar));
+                let json = with_roundness(&json, DEFAULT_ROUND);
+                let i = img(render(&big, &f, &json, None, T), out);
+                save_in(&dir, "ratios", &format!("{frame}-{label}-{theme}"), &i);
+                let small = image::imageops::resize(&i, out.0 / 2, out.1 / 2, image::imageops::FilterType::Triangle);
+                image::imageops::overlay(&mut sheet, &small, (col as u32 * (out.0 / 2 + 6)) as i64, (row as u32 * (out.1 / 2 + 6)) as i64);
+            }
+        }
+        save_in(&dir, "ratios", &format!("sheet-{theme}"), &sheet);
+    }
+
+    // 3. La course de Roundness de chaque cadre : 0, 50 et 100 % du slider, sur quatre clips.
+    let ratios4 = [RATIOS[0], RATIOS[1], RATIOS[3], RATIOS[4]];
+    for frame in all {
+        let mut sheet = image::RgbaImage::from_pixel(out.0 / 2 * 4 + 18, out.1 / 2 * 3 + 12, image::Rgba([255, 255, 255, 255]));
+        for (row, pct) in [0.0f32, 0.5, 1.0].into_iter().enumerate() {
+            for (col, (label, ar)) in ratios4.iter().enumerate() {
+                let src = if *ar >= 1.0 { (1280u32, (1280.0 / ar).round() as u32 & !1) } else { ((720.0 * ar).round() as u32 & !1, 720u32) };
+                let f = FakeFrame::new(&gpu, src, Tint::Blue);
+                let json = with_rect(&scene_json(frame, "null", 0.6, NO_CURSOR, out), contained_rect(*ar));
+                let json = with_roundness(&json, pct * 64.0 / 1080.0);
+                let i = img(render(&big, &f, &json, None, T), out);
+                save_in(&dir, "roundness", &format!("{frame}-{}-{label}", (pct * 100.0) as u32), &i);
+                let small = image::imageops::resize(&i, out.0 / 2, out.1 / 2, image::imageops::FilterType::Triangle);
+                image::imageops::overlay(&mut sheet, &small, (col as u32 * (out.0 / 2 + 6)) as i64, (row as u32 * (out.1 / 2 + 6)) as i64);
+            }
+        }
+        save_in(&dir, "roundness", &format!("sheet-{frame}"), &sheet);
+    }
+
+    println!("rendus v4 écrits dans {dir}");
+}
+
+/// Le plan proche, en images (opt-in, `OPENSCREEN_DEVICE_V4`, dans `near-clip/`) : le portable
+/// sous la caméra en orbite, pointeur au bas de l'écran — là où le socle couvrait le métrage —,
+/// zoom avant de 1 à 3,5 puis retour, 6 s à 30 images/s (à assembler en MP4), et une planche de
+/// douze instants. Le métrage est plus petit que la sortie : l'appareil y tient entier au repos.
+#[test]
+fn v4_near_clip() {
+    let Some(dir) = out_dir("OPENSCREEN_DEVICE_V4") else {
+        eprintln!("OPENSCREEN_DEVICE_V4 absent - saute");
+        return;
+    };
+    let Some(gpu) = gpu() else { return };
+    let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
+    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let track = parked_track("near", 0.5, 0.97);
+    let json = with_rect(&scene_json("laptop", r#""follow-cursor""#, 0.6, SHOWN_CURSOR, (W, H)), CLIPS[0].1)
+        .replace(
+            r#""zoomRegions":[{"clipIndex":0,"startSec":0,"endSec":10,"scale":1,"#,
+            r#""zoomRegions":[{"clipIndex":0,"startSec":1.2,"endSec":4.4,"scale":3.5,"#,
+        );
+    std::fs::create_dir_all(format!("{dir}/near-clip/frames")).expect("dossier");
+    let mut sheet = Vec::new();
+    for k in 0..180 {
+        let t = k as f32 / 30.0;
+        let rgba = render(&comp, &screen, &json, Some(&track), t);
+        save(&format!("{dir}/near-clip/frames"), &format!("f{k:04}"), &rgba, (W, H));
+        if k % 15 == 0 {
+            let i = image::RgbaImage::from_raw(W, H, rgba).expect("readback");
+            sheet.push(image::imageops::resize(&i, W / 4, H / 4, image::imageops::FilterType::Triangle));
+        }
+    }
+    let (w4, h4) = (W / 4 + 6, H / 4 + 6);
+    let mut grid = image::RgbaImage::from_pixel(w4 * 6, h4 * 2, image::Rgba([255, 255, 255, 255]));
+    for (k, i) in sheet.iter().enumerate() {
+        image::imageops::overlay(&mut grid, i, ((k % 6) as u32 * w4) as i64, ((k / 6) as u32 * h4) as i64);
+    }
+    save_in(&dir, "near-clip", "sheet", &grid);
+    println!("180 images écrites dans {dir}/near-clip/frames");
 }
 
 /// Coût d'une frame 1080p, cadre d'appareil allumé contre éteint (opt-in, à lancer en release).

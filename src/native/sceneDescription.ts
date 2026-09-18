@@ -369,6 +369,10 @@ export interface SceneEffects {
 	 * wrong; the native side multiplies by whatever its reference measures right now.
 	 *
 	 * The slider itself stays in pixels for the user — the division happens here, once.
+	 *
+	 * Under a frame, the native side reads the slider's POSITION back from it (× the
+	 * output's short side ÷ `ROUNDNESS_SLIDER_MAX_PX`) and maps it onto the range that
+	 * frame wears well, in the frame's own unit — the same corner on every clip ratio.
 	 */
 	roundnessFrac: number;
 	/** 0..1 motion blur. */

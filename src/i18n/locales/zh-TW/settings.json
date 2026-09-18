@@ -128,7 +128,8 @@
 		"frameThemeLight": "淺色",
 		"frameThemeDark": "深色",
 		"frameThemeHelp": "銀色機身配淺色邊框，或石墨色配深色邊框。適用於所有邊框。",
-		"windowHelp": "在錄製內容周圍繪製視窗，或以 3D 建模的裝置。"
+		"windowHelp": "在錄製內容周圍繪製視窗，或以 3D 建模的裝置。",
+		"roundnessFrameHelp": "範圍隨外框而定：100% 是該外框仍然好看的最大圓角。"
 	},
 	"stylePresets": {
 		"button": "預設",

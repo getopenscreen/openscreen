@@ -128,7 +128,8 @@
 		"frameThemeLight": "Claro",
 		"frameThemeDark": "Escuro",
 		"frameThemeHelp": "Corpo prateado com moldura clara, ou grafite com moldura escura. Vale para todas as molduras.",
-		"windowHelp": "Desenha uma janela, ou um dispositivo modelado em 3D, ao redor da gravação."
+		"windowHelp": "Desenha uma janela, ou um dispositivo modelado em 3D, ao redor da gravação.",
+		"roundnessFrameHelp": "O intervalo se adapta à moldura: 100 % é o maior arredondamento que fica bem nela."
 	},
 	"stylePresets": {
 		"button": "Predefinições",

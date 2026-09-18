@@ -128,7 +128,8 @@
 		"frameThemeLight": "Hell",
 		"frameThemeDark": "Dunkel",
 		"frameThemeHelp": "Silbernes Gehäuse mit hellem Rahmen oder Graphit mit dunklem. Gilt für alle Rahmen.",
-		"windowHelp": "Zeichnet ein Fenster oder ein in 3D modelliertes Gerät um die Aufnahme."
+		"windowHelp": "Zeichnet ein Fenster oder ein in 3D modelliertes Gerät um die Aufnahme.",
+		"roundnessFrameHelp": "Der Bereich passt sich dem Rahmen an: 100 % ist die stärkste Rundung, die ihm steht."
 	},
 	"stylePresets": {
 		"button": "Vorgaben",

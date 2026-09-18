@@ -128,7 +128,8 @@
 		"frameThemeLight": "Light",
 		"frameThemeDark": "Dark",
 		"frameThemeHelp": "Silver body and light chrome, or graphite and dark. Applies to every frame.",
-		"windowHelp": "Draws a window, or a device modelled in 3D, around the recording."
+		"windowHelp": "Draws a window, or a device modelled in 3D, around the recording.",
+		"roundnessFrameHelp": "The range adapts to the frame: 100% is its roundest good look."
 	},
 	"stylePresets": {
 		"button": "Presets",

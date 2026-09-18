@@ -128,7 +128,8 @@
 		"frameThemeLight": "Açık",
 		"frameThemeDark": "Koyu",
 		"frameThemeHelp": "Gümüş gövde ve açık çerçeve ya da grafit ve koyu. Tüm çerçeveler için geçerlidir.",
-		"windowHelp": "Kaydın çevresine bir pencere ya da 3B modellenmiş bir cihaz çizer."
+		"windowHelp": "Kaydın çevresine bir pencere ya da 3B modellenmiş bir cihaz çizer.",
+		"roundnessFrameHelp": "Aralık çerçeveye uyum sağlar: %100, ona yakışan en belirgin yuvarlaklıktır."
 	},
 	"stylePresets": {
 		"button": "Ön ayarlar",

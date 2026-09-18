@@ -107,6 +107,7 @@ import {
 	WALLPAPER_THUMB_PATHS,
 } from "@/lib/wallpaper";
 import { isNativeCompositorActive, setNativeParam } from "@/native";
+import { ROUNDNESS_SLIDER_MAX_PX } from "@/native/paramUnits";
 import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
 import {
 	ASPECT_RATIO_PRESETS,
@@ -2429,6 +2430,9 @@ export function VideoEffectsPane() {
 	// valeur px de l'UI par ce même rayon de base fait que le coin natif ≈ les px affichés
 	// (au lieu de plafonner à ~24px comme avec /64).
 	const NATIVE_SCREEN_BASE_RADIUS_PX = 24;
+	// Sous un cadre, Roundness se lit en % de la course propre au cadre (cf. le slider).
+	const framed = settings.frame !== "none";
+	const roundnessScale = framed ? 100 / ROUNDNESS_SLIDER_MAX_PX : 1;
 	// La synchro initiale de ces params vit dans NativeCompositorOverlay
 	// (`pushAllNativeParams`) : l'inspecteur n'affiche qu'un panneau a la fois, donc
 	// un effet de montage ici ne poussait rien tant que ce panneau precis n'avait pas
@@ -2608,8 +2612,9 @@ export function VideoEffectsPane() {
 			</div>
 			{/* The frame drawn around the recording, and its theme. Two menus like Format above
 			    them, and for the same reason: each picks one project-wide look among a few. With a
-			    frame on, Roundness rounds the footage AND the window/phone body, and Shadow falls
-			    under the frame — both still move what they name. */}
+			    frame on, Roundness rounds the footage within that frame's own range, the body
+			    following concentric, and Shadow falls under the frame — both still move what
+			    they name. */}
 			<div className={styles.paneRow}>
 				<span className={styles.label} title={ts("effects.windowHelp")}>
 					{ts("effects.frameStyle")}
@@ -2724,18 +2729,23 @@ export function VideoEffectsPane() {
 					}}
 					onCommit={() => void commit()}
 				/>
+				{/* Under a frame the slider spans 0 → the most that frame wears well (the native
+				    `frame_roundness_cap`), so its travel reads as a share of that range, not as
+				    pixels it no longer draws. The stored value stays in pixels either way. */}
 				<SliderCell
 					label={ts("effects.roundness")}
-					value={settings.borderRadius}
+					hint={framed ? ts("effects.roundnessFrameHelp") : undefined}
+					value={settings.borderRadius * roundnessScale}
 					min={0}
-					max={64}
-					step={0.5}
-					suffix="px"
+					max={ROUNDNESS_SLIDER_MAX_PX * roundnessScale}
+					step={framed ? 1 : 0.5}
+					suffix={framed ? "%" : "px"}
 					disabled={!hasDocument}
 					onChange={(v) => {
-						setLive({ borderRadius: v });
+						const px = v / roundnessScale;
+						setLive({ borderRadius: px });
 						if (isNativeCompositorActive()) {
-							setNativeParam("roundness", v / NATIVE_SCREEN_BASE_RADIUS_PX);
+							setNativeParam("roundness", px / NATIVE_SCREEN_BASE_RADIUS_PX);
 						}
 					}}
 					onCommit={() => void commit()}
@@ -3696,6 +3706,7 @@ export function SliderCell({
 	onCommit,
 	showValue = true,
 	full = false,
+	hint,
 }: {
 	label: string;
 	value: number;
@@ -3711,12 +3722,17 @@ export function SliderCell({
 	 *  l'interpolent), sans quoi elle s'affiche deux fois. */
 	showValue?: boolean;
 	full?: boolean;
+	/** Une phrase qui dit ce que la course du slider signifie quand ce n'est pas l'évidence
+	 *  (Roundness sous un cadre) : l'infobulle du libellé et du slider. */
+	hint?: string;
 }) {
 	const pct = Math.max(0, Math.min(100, max > min ? ((value - min) / (max - min)) * 100 : 0));
 	return (
 		<div className={`${styles.sliderCell}${full ? ` ${styles.full}` : ""}`}>
 			<div className={styles.head}>
-				<span className={styles.label}>{label}</span>
+				<span className={styles.label} title={hint}>
+					{label}
+				</span>
 				{showValue ? (
 					<span className={styles.val}>
 						{value.toFixed(decimals)}
@@ -3736,6 +3752,7 @@ export function SliderCell({
 				step={step}
 				value={value}
 				disabled={disabled}
+				title={hint}
 				style={{ "--slider-pct": `${pct}%` } as CSSProperties}
 				onChange={(e) => onChange(Number(e.target.value))}
 				onMouseUp={onCommit}

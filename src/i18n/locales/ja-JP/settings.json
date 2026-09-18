@@ -128,7 +128,8 @@
 		"frameThemeLight": "ライト",
 		"frameThemeDark": "ダーク",
 		"frameThemeHelp": "シルバーの本体に明るい枠、またはグラファイトに暗い枠。すべてのフレームに適用されます。",
-		"windowHelp": "録画の周囲にウィンドウ、または 3D でモデリングされたデバイスを描画します。"
+		"windowHelp": "録画の周囲にウィンドウ、または 3D でモデリングされたデバイスを描画します。",
+		"roundnessFrameHelp": "範囲はフレームに合わせて変わります。100% はそのフレームに似合う最大の丸みです。"
 	},
 	"stylePresets": {
 		"button": "プリセット",

@@ -128,7 +128,8 @@
 		"frameThemeLight": "Světlý",
 		"frameThemeDark": "Tmavý",
 		"frameThemeHelp": "Stříbrné tělo se světlým rámem, nebo grafitové s tmavým. Platí pro všechny rámy.",
-		"windowHelp": "Nakreslí okno nebo zařízení modelované ve 3D kolem nahrávky."
+		"windowHelp": "Nakreslí okno nebo zařízení modelované ve 3D kolem nahrávky.",
+		"roundnessFrameHelp": "Rozsah se přizpůsobí rámu: 100 % je nejvýraznější zaoblení, které mu sluší."
 	},
 	"stylePresets": {
 		"button": "Předvolby",

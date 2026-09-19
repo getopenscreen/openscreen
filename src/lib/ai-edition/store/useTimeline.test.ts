@@ -1410,6 +1410,77 @@ describe("useTimeline undo history", () => {
 		}
 	});
 
+	// Rebase-review follow-up (unknown save × replacement): the refusal must not outlive
+	// its reason. Once an undo bumps the epoch, the stuck save can no longer install
+	// anything (`saveDocument` drops it), so it must stop blocking zoom writes — even if
+	// the bridge never answers. A project switch does NOT bump the epoch, so there the
+	// stuck save can still land and the refusal correctly stays.
+	it("stops refusing zoom writes once a replacement makes the unknown save unable to land", async () => {
+		seed(docWithZoom);
+		vi.useFakeTimers();
+		try {
+			let hungDoc: AxcutDocument | undefined;
+			let releaseHungSave: (result: { success: boolean; document: AxcutDocument }) => void = () => {
+				// replaced once the hung save registers
+			};
+			let saveCalls = 0;
+			bridgeMocks.save.mockImplementation((doc: AxcutDocument) => {
+				saveCalls += 1;
+				if (saveCalls === 2) {
+					// The write whose answer never comes; the test never releases it until
+					// the very end, and then only to prove the epoch guard drops it.
+					hungDoc = doc;
+					return new Promise((resolve) => {
+						releaseHungSave = resolve;
+					});
+				}
+				return Promise.resolve({ success: true, document: doc });
+			});
+			const { result } = renderTimeline();
+
+			// One settled write so the undo has a recorded state to restore.
+			await act(async () => {
+				await result.current.updateZoomDepth("zoom_a", 4);
+			});
+			expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(4);
+
+			let depthOk: boolean | undefined;
+			act(() => {
+				void result.current.updateZoomDepth("zoom_a", 5).then((ok) => {
+					depthOk = ok;
+				});
+			});
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(10_000);
+			});
+			expect(depthOk).toBe(false);
+
+			// The undo replaces the document; the stuck save can no longer install it.
+			let undid = false;
+			act(() => {
+				undid = undo();
+			});
+			expect(undid).toBe(true);
+
+			// Zoom writes must work again on the restored document.
+			await act(async () => {
+				const ok = await result.current.updateZoomDepth("zoom_a", 5);
+				expect(ok).toBe(true);
+			});
+			expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(5);
+
+			// When the stuck save finally settles, the epoch guard drops it — the restored
+			// (and since re-edited) document stands.
+			await act(async () => {
+				releaseHungSave({ success: true, document: hungDoc! });
+				for (let i = 0; i < 20; i++) await Promise.resolve();
+			});
+			expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(5);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("resolves a zoom-level write with whether the save took effect", async () => {
 		seed(docWithZoom);
 		const { result } = renderTimeline();

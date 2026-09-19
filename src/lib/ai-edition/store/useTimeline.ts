@@ -728,8 +728,11 @@ export function useTimeline() {
 	// that replaced its target. A save whose answer is unknown (`saveWithDeadline` timed out
 	// with the bridge still silent) may still land, so later zoom writes are refused until it
 	// settles instead of racing it — the same "a queued write racing a stuck one" the
-	// `waitForDocumentSaves` header calls out.
-	const unknownZoomSavesRef = useRef(0);
+	// `waitForDocumentSaves` header calls out. The block is keyed to the save's own epoch:
+	// once a replacement moves the epoch, that save can no longer install anything
+	// (`saveDocument` drops it) and must stop blocking; a project switch does not move the
+	// epoch, so there the stuck save can still land and the block correctly stays.
+	const unknownZoomSavesRef = useRef<Array<number>>([]);
 	const saveZoomPatch = useCallback(
 		(id: string, patch: Partial<AxcutDocument["zoomRanges"][number]>) => {
 			const epoch = currentWriteEpoch();
@@ -738,7 +741,9 @@ export function useTimeline() {
 				if (useProjectStore.getState().projectId !== projectId || currentWriteEpoch() !== epoch) {
 					return false;
 				}
-				if (unknownZoomSavesRef.current > 0) return false;
+				if (unknownZoomSavesRef.current.filter((stuck) => stuck === epoch).length > 0) {
+					return false;
+				}
 				const doc = useProjectStore.getState().document;
 				if (!doc) return false;
 				const save = saveDocument(
@@ -751,15 +756,18 @@ export function useTimeline() {
 				const outcome = await saveWithDeadline(save);
 				if (outcome !== "timeout") return outcome === true;
 				// Unknown, not failed: the write may still land. Report not-taken (the
-				// buttons retry) and refuse later zoom writes until the save settles.
-				unknownZoomSavesRef.current += 1;
+				// buttons retry) and refuse later writes into this same document generation
+				// until the save settles or the epoch moves past it.
+				unknownZoomSavesRef.current.push(epoch);
 				void save
 					.then(
 						() => undefined,
 						() => undefined,
 					)
 					.finally(() => {
-						unknownZoomSavesRef.current -= 1;
+						unknownZoomSavesRef.current = unknownZoomSavesRef.current.filter(
+							(stuck) => stuck !== epoch,
+						);
 					});
 				return false;
 			});

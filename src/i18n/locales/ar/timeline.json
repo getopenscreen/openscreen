@@ -73,6 +73,8 @@
 		"newAnnotation": "شرح",
 		"dragToReorderHint": "اسحب لإعادة الترتيب · انقر نقرًا مزدوجًا لتعديل نقطتي البداية والنهاية",
 		"editInOutPoints": "تعديل نقطتي البداية والنهاية",
+		"splitClip": "تقسيم المقطع عند مؤشر التشغيل",
+		"splitClipNothingToSplit": "ضع مؤشر التشغيل داخل مقطع، بعيدًا عن طرفيه.",
 		"deleteClip": "حذف المقطع",
 		"dropToAdd": "أفلت للإضافة إلى المخطط الزمني",
 		"importRecordingFirst": "استورد تسجيلاً أولاً",

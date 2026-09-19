@@ -516,6 +516,15 @@ export function NewEditorShell() {
 		[setSourceDuration, enqueueTimelineWrite],
 	);
 
+	// On the shared write queue, like every other read-modify-write of the document here.
+	// `splitClipAtPlayhead` reads the document and the playhead from the store when it runs,
+	// not when it is called, so queued behind a save in flight it cuts what that save
+	// committed instead of writing a pre-save snapshot over it.
+	const handleSplitClipAtPlayhead = useCallback(
+		() => enqueueTimelineWrite(() => tl.splitClipAtPlayhead()),
+		[tl, enqueueTimelineWrite],
+	);
+
 	const handleSeek = useCallback(
 		(timeSec: number) => {
 			setCurrentTime(timeSec);
@@ -1708,6 +1717,7 @@ export function NewEditorShell() {
 						onNextClip={handleNextClip}
 						onAddVoiceover={openVoiceoverFlow}
 						onEditClip={setEditClipTarget}
+						onSplitClipAtPlayhead={handleSplitClipAtPlayhead}
 					/>
 				</div>
 			) : null}

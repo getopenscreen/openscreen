@@ -134,6 +134,7 @@ function renderTimeline(
 				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
 				onAddVoiceover={vi.fn()}
+				onSplitClipAtPlayhead={vi.fn(async () => false)}
 			/>
 		</ShortcutsProvider>
 	);
@@ -611,6 +612,7 @@ describe("V4Timeline audio lane drag", () => {
 					onNextClip={vi.fn()}
 					onEditClip={vi.fn()}
 					onAddVoiceover={props.onAddVoiceover ?? vi.fn()}
+					onSplitClipAtPlayhead={vi.fn(async () => false)}
 				/>
 			</ShortcutsProvider>,
 		);

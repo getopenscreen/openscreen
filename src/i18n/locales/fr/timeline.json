@@ -73,6 +73,8 @@
 		"newAnnotation": "Annotation",
 		"dragToReorderHint": "Glissez pour réorganiser · double-cliquez pour modifier les points d'entrée/sortie",
 		"editInOutPoints": "Modifier les points d'entrée/sortie",
+		"splitClip": "Diviser le clip à la tête de lecture",
+		"splitClipNothingToSplit": "Placez la tête de lecture dans un clip, à distance de ses extrémités.",
 		"deleteClip": "Supprimer le clip",
 		"dropToAdd": "Déposez pour ajouter à la timeline",
 		"importRecordingFirst": "Importez d'abord un enregistrement",

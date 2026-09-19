@@ -295,4 +295,199 @@ describe("LinuxNativeCaptureSession", () => {
 
 		expect(session.grantedSourceKind).toBe("window");
 	});
+
+	/**
+	 * A capture-started event received before the wait is registered must
+	 * satisfy that wait: the helper emits it as soon as the first frame stages,
+	 * which can be before the caller awaits.
+	 */
+	it("resolves the capture wait immediately once the first frame already landed", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		session.arm();
+		helper.emitEvent({
+			event: "capture-started",
+			timestampMs: 1_200,
+			path: "/tmp/recording.mp4",
+			width: 800,
+			height: 600,
+			fps: 30,
+		});
+		await flushStdout();
+
+		// Callers must not have to race the event to observe it.
+		await expect(session.waitUntilCapturing()).resolves.toBeUndefined();
+	});
+
+	/**
+	 * Both events in one stdout chunk are handed to the session within one
+	 * `data` callback, so no caller can register a wait between them.
+	 */
+	it("resolves the capture wait when arming and the first frame share a stdout chunk", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		session.arm();
+		helper.stdout.write(
+			`${JSON.stringify({
+				schemaVersion: 1,
+				event: "source-selected",
+				timestampMs: 1_100,
+				nodeId: 42,
+				sourceKind: "window",
+			})}\n${JSON.stringify({
+				schemaVersion: 1,
+				event: "capture-started",
+				timestampMs: 1_200,
+				path: "/tmp/recording.mp4",
+				width: 800,
+				height: 600,
+				fps: 30,
+			})}\n`,
+		);
+		await flushStdout();
+
+		await expect(session.waitUntilCapturing()).resolves.toBeUndefined();
+	});
+
+	/**
+	 * A helper that died before any frame has nothing to report; the wait
+	 * rejects.
+	 */
+	it("still rejects the capture wait when the helper died before any frame", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		session.arm();
+		helper.emit("exit", 1, null);
+		await flushStdout();
+
+		await expect(session.waitUntilCapturing()).rejects.toThrow();
+	});
+
+	/**
+	 * A capture-started event received before the helper died must not answer
+	 * a later wait: the recording is no longer running.
+	 */
+	it("rejects the capture wait when the helper died after its first frame", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		session.arm();
+		helper.emitEvent({
+			event: "capture-started",
+			timestampMs: 1_200,
+			path: "/tmp/recording.mp4",
+			width: 800,
+			height: 600,
+			fps: 30,
+		});
+		await flushStdout();
+		helper.emit("exit", 1, null);
+		await flushStdout();
+
+		await expect(session.waitUntilCapturing()).rejects.toThrow();
+	});
+
+	/**
+	 * An undeferred session connects immediately, so the first frame can land
+	 * before the caller awaits; the same wait must still be satisfied.
+	 */
+	it("resolves the capture wait on an undeferred session whose first frame already landed", async () => {
+		const session = newSession();
+		await startReady(session);
+
+		helper.emitEvent({
+			event: "capture-started",
+			timestampMs: 1_200,
+			path: "/tmp/recording.mp4",
+			width: 800,
+			height: 600,
+			fps: 30,
+		});
+		await flushStdout();
+
+		await expect(session.waitUntilCapturing()).resolves.toBeUndefined();
+	});
+
+	/**
+	 * A running capture answers every wait, not only the first one registered
+	 * before the event.
+	 */
+	it("resolves a second capture wait after the first was answered by the event", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		session.arm();
+		const first = session.waitUntilCapturing();
+		helper.emitEvent({
+			event: "capture-started",
+			timestampMs: 1_200,
+			path: "/tmp/recording.mp4",
+			width: 800,
+			height: 600,
+			fps: 30,
+		});
+		await flushStdout();
+		await first;
+
+		await expect(session.waitUntilCapturing()).resolves.toBeUndefined();
+	});
+
+	/**
+	 * A non-fatal `error` event after the first frame does not end the capture;
+	 * a later wait is still satisfied.
+	 */
+	it("resolves the capture wait after a non-fatal error follows the first frame", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		session.arm();
+		helper.emitEvent({
+			event: "capture-started",
+			timestampMs: 1_200,
+			path: "/tmp/recording.mp4",
+			width: 800,
+			height: 600,
+			fps: 30,
+		});
+		helper.emitEvent({
+			event: "error",
+			timestampMs: 1_300,
+			code: "audio-unavailable",
+			message: "the system audio node vanished",
+		});
+		await flushStdout();
+
+		await expect(session.waitUntilCapturing()).resolves.toBeUndefined();
+	});
+
+	/**
+	 * A wait registered before the first frame stays pending until it lands.
+	 */
+	it("leaves the capture wait pending until the first frame lands", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		session.arm();
+		let settled = false;
+		const pending = session.waitUntilCapturing().then(() => {
+			settled = true;
+		});
+		await flushStdout();
+		expect(settled).toBe(false);
+
+		helper.emitEvent({
+			event: "capture-started",
+			timestampMs: 1_200,
+			path: "/tmp/recording.mp4",
+			width: 800,
+			height: 600,
+			fps: 30,
+		});
+		await flushStdout();
+		await pending;
+		expect(settled).toBe(true);
+	});
 });

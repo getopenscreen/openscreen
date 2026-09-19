@@ -76,6 +76,7 @@ export class LinuxNativeCaptureSession {
 	private readyReject: ((error: Error) => void) | null = null;
 	private readyTimer: NodeJS.Timeout | null = null;
 
+	private capturing = false;
 	private startedResolve: (() => void) | null = null;
 	private startedReject: ((error: Error) => void) | null = null;
 
@@ -228,6 +229,11 @@ export class LinuxNativeCaptureSession {
 	waitUntilCapturing(): Promise<void> {
 		if (!this.process) {
 			return Promise.reject(new Error("The Linux capture helper is not running."));
+		}
+		// A previously observed capture-started event must not bypass the helper
+		// liveness check above.
+		if (this.capturing) {
+			return Promise.resolve();
 		}
 		return new Promise<void>((resolve, reject) => {
 			this.startedResolve = resolve;
@@ -422,6 +428,7 @@ export class LinuxNativeCaptureSession {
 				// telemetry is re-based onto it and anything from during the
 				// picker is dropped rather than left pinned to the start.
 				this.cursor.rebase(payload.timestampMs);
+				this.capturing = true;
 				console.info(
 					"[capture-linux] capture started",
 					JSON.stringify({ width: payload.width, height: payload.height, fps: payload.fps }),

@@ -43,7 +43,8 @@ import {
 } from "../timeline/timelineMap";
 import { dropTrimPillsByIds, resolveTimelineSpanToTrim } from "../timeline/trim-mapping";
 import type { AutoZoomSuggestion } from "../timeline/zoom-suggestions";
-import { useProjectStore, waitForDocumentSaves } from "./projectStore";
+import { saveWithDeadline, useProjectStore, waitForDocumentSaves } from "./projectStore";
+import { currentWriteEpoch } from "./undoStack";
 import { useSequentialTimelineOps } from "./useSequentialTimelineOps";
 
 // How long a region lasts when the caller doesn't say. The timeline's toolbar
@@ -713,26 +714,56 @@ export function useTimeline() {
 		saveDocument,
 	});
 
-	// The zoom pane's one-field writes: level, 3D tilt, focus mode, cursor. Each is a
-	// whole-document save, so they share one chain and read the document INSIDE it. The level
-	// buttons step while the previous save is still out, and 3 -> 4 -> 5 built both saves from
-	// the render's depth-3 document: the main process does not order them, so the 4 could land
-	// last, and even in order one Ctrl+Z skipped a level. A neighbouring select changed while a
-	// level was pending rebuilt from that same document and put 3 back. Resolves
+	// The zoom pane's one-field writes: level, 3D tilt, focus mode, cursor, click impact. Each
+	// is a whole-document save, so they share one chain and read the document INSIDE it. The
+	// level buttons step while the previous save is still out, and 3 -> 4 -> 5 built both saves
+	// from the render's depth-3 document: the main process does not order them, so the 4 could
+	// land last, and even in order one Ctrl+Z skipped a level. A neighbouring select changed
+	// while a level was pending rebuilt from that same document and put 3 back. Resolves
 	// `saveDocument`'s answer, so the level buttons can retry a failed write.
+	//
+	// Each request is bound to the project and write epoch it was asked against — the same
+	// pair `addAsset` samples: an undo bumps the epoch, a project switch swaps both, and a
+	// queued patch that only STARTS after such a replacement must not apply to the document
+	// that replaced its target. A save whose answer is unknown (`saveWithDeadline` timed out
+	// with the bridge still silent) may still land, so later zoom writes are refused until it
+	// settles instead of racing it — the same "a queued write racing a stuck one" the
+	// `waitForDocumentSaves` header calls out.
+	const unknownZoomSavesRef = useRef(0);
 	const saveZoomPatch = useCallback(
-		(id: string, patch: Partial<AxcutDocument["zoomRanges"][number]>) =>
-			enqueueZoomWrite(async () => {
+		(id: string, patch: Partial<AxcutDocument["zoomRanges"][number]>) => {
+			const epoch = currentWriteEpoch();
+			const projectId = useProjectStore.getState().projectId;
+			return enqueueZoomWrite(async () => {
+				if (useProjectStore.getState().projectId !== projectId || currentWriteEpoch() !== epoch) {
+					return false;
+				}
+				if (unknownZoomSavesRef.current > 0) return false;
 				const doc = useProjectStore.getState().document;
 				if (!doc) return false;
-				return saveDocument(
+				const save = saveDocument(
 					{
 						...doc,
 						zoomRanges: patchPillById(doc.zoomRanges, id, patch) as AxcutDocument["zoomRanges"],
 					},
 					{ history: true },
 				);
-			}),
+				const outcome = await saveWithDeadline(save);
+				if (outcome !== "timeout") return outcome === true;
+				// Unknown, not failed: the write may still land. Report not-taken (the
+				// buttons retry) and refuse later zoom writes until the save settles.
+				unknownZoomSavesRef.current += 1;
+				void save
+					.then(
+						() => undefined,
+						() => undefined,
+					)
+					.finally(() => {
+						unknownZoomSavesRef.current -= 1;
+					});
+				return false;
+			});
+		},
 		[enqueueZoomWrite, saveDocument],
 	);
 

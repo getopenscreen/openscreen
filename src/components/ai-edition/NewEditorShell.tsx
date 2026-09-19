@@ -1698,6 +1698,19 @@ export function NewEditorShell() {
 					) : null}
 					<V4Timeline
 						tl={tl}
+						// Same queue the Edit modal's call site uses below: every document write
+						// is a read-modify-write of the whole document, so they all share one.
+						// The range is resolved inside the chain, against the document the
+						// previous write committed, for the reason the hook's `enqueue` gives.
+						// Returned rather than voided: the timeline keeps its preview up until the
+						// save lands, so the card does not snap back to its old length meanwhile.
+						onApplyClipEdit={(clipId, resolveRange) =>
+							enqueueTimelineWrite(async () => {
+								const doc = useProjectStore.getState().document;
+								const range = doc ? resolveRange(doc) : null;
+								if (range) await tl.applyClipEdit(clipId, range.start, range.end);
+							})
+						}
 						setCurrentTime={handleSeek}
 						variant={mode === "media" ? "media" : "edit"}
 						onDropAsset={handleDropAsset}

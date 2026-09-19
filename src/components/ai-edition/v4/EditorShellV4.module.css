@@ -1876,6 +1876,76 @@
    exactly that. Nothing fits inside it, so while it is SELECTED its controls step out to the
    right and float over whatever follows. Selection-only, so the timeline is never littered,
    and no layout above or below has to make room for them. */
+/* Trim grips. They sit INSIDE the card rather than straddling its edge, because
+   .tlClip is overflow:hidden and anything hanging outside would be cut off — and
+   because a grip that overhangs would cover the neighbouring clip's own grip in a
+   back-to-back row. 10px is the smallest that stays reliably hittable without
+   eating a narrow card whole, which is why they are hidden below NARROW_CLIP_PX
+   in the first place. */
+.tlClipEdge {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 10px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: ew-resize;
+	z-index: 3;
+	touch-action: none;
+}
+.tlClipEdge[data-edge="start"] {
+	left: 0;
+}
+.tlClipEdge[data-edge="end"] {
+	right: 0;
+}
+/* The grip is invisible until the pointer is on the card: a clip row is a dense
+   place, and two permanent bars per card would read as clip boundaries rather
+   than as controls. */
+.tlClipEdge::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 3px;
+	right: 3px;
+	height: min(60%, 26px);
+	transform: translateY(-50%);
+	border-radius: 2px;
+	background: var(--fg-emphasis);
+	opacity: 0;
+	transition: opacity var(--motion-fast) var(--ease);
+}
+.tlClip:hover .tlClipEdge::after {
+	opacity: 0.3;
+}
+.tlClipEdge:hover::after {
+	opacity: 0.75;
+}
+/* Keyboard focus is NOT the hover state. The shared ring the rest of the editor
+   uses sits at outline-offset 2px, which .tlClip's overflow:hidden would clip away
+   on a grip flush against the card edge — so the indicator is drawn inside the
+   grip instead: the accent colour rather than the neutral bar, full height, and
+   opaque. That is a change of hue, size and weight at once, none of which hover
+   does, which is what keeps the two states from reading alike. */
+.tlClipEdge:focus-visible {
+	outline: none;
+}
+.tlClipEdge:focus-visible::after {
+	opacity: 1;
+	height: 100%;
+	left: 2px;
+	right: 2px;
+	background: var(--accent);
+	box-shadow: var(--focus-ring);
+}
+/* The siblings a live trim pushes along have to track the pointer, not glide
+   150ms behind it. .tlClip's transform transition is right for a reorder, where
+   the neighbours settle into a gap; here it reads as rubber. */
+.tlClipRippling {
+	transition: none;
+}
+
 .tlClipNarrow .tlClipLabel {
 	display: none;
 }

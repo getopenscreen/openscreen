@@ -24,7 +24,7 @@ import { pipeline } from "node:stream/promises";
  * separate VAD model is required. See `technical-documentation/architecture/transcription-and-captions.md`.
  */
 
-export type SttModelId = "whisper";
+export type SttModelId = "whisper" | "silero-vad";
 
 export interface SttModelFile {
 	/** Relative path within the model directory (e.g. "ggml-small-q8_0.bin"). */
@@ -62,6 +62,10 @@ const MODEL_FILE = "ggml-small-q8_0.bin";
 // LFS oid for MODEL_FILE is exactly the digest below.
 const MODEL_REVISION = "5359861c739e955e79d9a303bcbc70fb988958b1";
 
+const VAD_REPO = "ggml-org/whisper-vad";
+const VAD_FILE = "ggml-silero-v6.2.0.bin";
+const VAD_REVISION = "9ffd54a1e1ee413ddf265af9913beaf518d1639b";
+
 export const STT_MODELS: Record<SttModelId, SttModelDescriptor> = {
 	whisper: {
 		cacheDir: "whisper-ggml",
@@ -75,22 +79,43 @@ export const STT_MODELS: Record<SttModelId, SttModelDescriptor> = {
 			},
 		],
 	},
+	"silero-vad": {
+		cacheDir: "whisper-ggml",
+		repoId: VAD_REPO,
+		files: [
+			{
+				name: VAD_FILE,
+				url: `${MODEL_BASE}/${VAD_REPO}/resolve/${VAD_REVISION}/${VAD_FILE}`,
+				expectedSha256: "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
+				approximateBytes: 885_098,
+			},
+		],
+	},
 };
 
 export function modelPaths(baseDir: string): Record<SttModelId, string> {
 	return {
 		whisper: path.join(baseDir, STT_MODELS.whisper.cacheDir, MODEL_FILE),
+		"silero-vad": path.join(baseDir, STT_MODELS["silero-vad"].cacheDir, VAD_FILE),
 	};
 }
 
 /**
- * True when the GGML model file exists and is non-empty.
+ * True when the GGML model files exist and are non-empty.
  */
-export async function areModelsPresent(baseDir: string): Promise<boolean> {
+export async function areModelsPresent(
+	baseDir: string,
+	only: SttModelId[] = ["whisper", "silero-vad"],
+): Promise<boolean> {
 	const paths = modelPaths(baseDir);
 	try {
-		const s = await stat(paths.whisper);
-		return s.isFile() && s.size > 0;
+		const results = await Promise.all(
+			only.map(async (id) => {
+				const s = await stat(paths[id]);
+				return s.isFile() && s.size > 0;
+			}),
+		);
+		return results.every(Boolean);
 	} catch {
 		return false;
 	}
@@ -217,7 +242,7 @@ async function ensureFile(
 
 export interface EnsureModelsOptions {
 	baseDir: string;
-	/** Models to ensure; defaults to all (currently just `whisper`). */
+	/** Models to ensure; defaults to all (`whisper`, `silero-vad`). */
 	only?: SttModelId[];
 	onProgress?: (event: {
 		id: SttModelId;
@@ -228,9 +253,9 @@ export interface EnsureModelsOptions {
 	fetcher?: typeof fetch;
 }
 
-/** Ensure the GGML model file is present locally; downloads with progress + retry. */
+/** Ensure the GGML model files are present locally; downloads with progress + retry. */
 export async function ensureModels(opts: EnsureModelsOptions): Promise<void> {
-	const targets = (opts.only ?? (["whisper"] as SttModelId[])).map((id) => ({
+	const targets = (opts.only ?? (["whisper", "silero-vad"] as SttModelId[])).map((id) => ({
 		id,
 		descriptor: STT_MODELS[id],
 		filePath: modelPaths(opts.baseDir)[id],

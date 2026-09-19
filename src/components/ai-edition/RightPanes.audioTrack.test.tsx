@@ -19,6 +19,51 @@ describe("AudioTrackPane reset button", () => {
 		localStorage.clear();
 	});
 
+	it("allows imported audio tracks to be lowered below -12 dB", () => {
+		const setAudioTrackGain = vi.fn();
+		const mockTrack: AxcutAudioTrack = {
+			id: "audio_track_1",
+			clipId: "clip_1",
+			assetId: "asset_audio_1",
+			trackId: "audio_track_1",
+			startMs: 1000,
+			endMs: 5000,
+			durationSec: 10,
+			offsetMs: 0,
+			gainDb: 0,
+			fadeInMs: 0,
+			fadeOutMs: 0,
+			muted: false,
+			loop: false,
+			kind: "music",
+			label: "bg-music.mp3",
+			origin: "user",
+		};
+
+		const tl = {
+			selectedAudioTrackId: "audio_track_1",
+			audioTracks: [mockTrack],
+			assets: [],
+			setAudioTrackGain,
+		} as unknown as TimelineApi;
+
+		render(
+			<I18nProvider>
+				<AudioTrackPane tl={tl} />
+			</I18nProvider>,
+		);
+
+		const gainSlider = screen.getByRole("slider", { name: "Output level" });
+		expect(gainSlider).toHaveAttribute("min", "-60");
+		expect(gainSlider).toHaveAttribute("max", "12");
+
+		fireEvent.change(gainSlider, { target: { value: "-24" } });
+		fireEvent.mouseUp(gainSlider);
+
+		expect(gainSlider).toHaveValue("-24");
+		expect(setAudioTrackGain).toHaveBeenCalledWith("audio_track_1", -24);
+	});
+
 	it("resets all track parameters (gain, fades, mute, loop) on reset click", () => {
 		const updateAudioTrack = vi.fn();
 		const mockTrack: AxcutAudioTrack = {

@@ -59,6 +59,8 @@ import type {
 } from "@/lib/ai-edition/schema";
 import {
 	AUDIO_GAIN_DB_LIMIT,
+	AUDIO_TRACK_GAIN_DB_MAX,
+	AUDIO_TRACK_GAIN_DB_MIN,
 	type EditorSettingsPatch,
 } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -3336,8 +3338,8 @@ export function AudioTrackPane({ tl, onClose }: { tl: TimelineApi; onClose?: () 
 				<SliderCell
 					label={ts("audio.outputGain")}
 					value={liveGain ?? track.gainDb}
-					min={-AUDIO_GAIN_DB_LIMIT}
-					max={AUDIO_GAIN_DB_LIMIT}
+					min={AUDIO_TRACK_GAIN_DB_MIN}
+					max={AUDIO_TRACK_GAIN_DB_MAX}
 					step={0.5}
 					decimals={1}
 					suffix=" dB"

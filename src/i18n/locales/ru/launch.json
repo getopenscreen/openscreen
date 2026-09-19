@@ -94,6 +94,12 @@
 		"previewUnavailable": "Предпросмотр недоступен",
 		"about": "О программе",
 		"version": "Версия {{version}}",
-		"checkingForUpdates": "Проверка…"
+		"checkingForUpdates": "Проверка…",
+		"storage": "Хранилище",
+		"storageHint": "Где записи кэшируются во время захвата и сохраняются при остановке.",
+		"chooseFolder": "Выбрать папку",
+		"resetToDefault": "Сбросить по умолчанию",
+		"changingFolder": "Переключение…",
+		"changeFolderFailed": "Не удалось переключиться на эту папку"
 	}
 }

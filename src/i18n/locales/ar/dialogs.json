@@ -87,6 +87,10 @@
 		"videoFiles": "ملفات فيديو",
 		"audioFiles": "ملفات الصوت",
 		"openscreenProject": "مشروع OpenScreen",
-		"allFiles": "جميع الملفات"
+		"allFiles": "جميع الملفات",
+		"selectRecordingsFolder": "اختر مجلد التسجيلات"
+	},
+	"recording": {
+		"lowDiskSpace": "لا توجد مساحة تخزين كافية لبدء التسجيل (لا يتوفر سوى {{availableMb}} ميجابايت). حرر بعض المساحة أو اختر مجلد تسجيلات آخر، ثم حاول مرة أخرى."
 	}
 }

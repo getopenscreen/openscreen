@@ -94,6 +94,12 @@
 		"previewUnavailable": "預覽無法使用",
 		"about": "關於",
 		"version": "版本 {{version}}",
-		"checkingForUpdates": "檢查中…"
+		"checkingForUpdates": "檢查中…",
+		"storage": "儲存位置",
+		"storageHint": "錄製期間快取的位置，以及停止後儲存的位置。",
+		"chooseFolder": "選擇資料夾",
+		"resetToDefault": "重設為預設值",
+		"changingFolder": "正在切換…",
+		"changeFolderFailed": "無法切換到該資料夾"
 	}
 }

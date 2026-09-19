@@ -94,6 +94,12 @@
 		"previewUnavailable": "Không thể xem trước",
 		"about": "Giới thiệu",
 		"version": "Phiên bản {{version}}",
-		"checkingForUpdates": "Đang kiểm tra…"
+		"checkingForUpdates": "Đang kiểm tra…",
+		"storage": "Lưu trữ",
+		"storageHint": "Nơi bản ghi được lưu tạm trong khi quay và được lưu khi dừng.",
+		"chooseFolder": "Chọn thư mục",
+		"resetToDefault": "Đặt lại về mặc định",
+		"changingFolder": "Đang chuyển…",
+		"changeFolderFailed": "Không thể chuyển sang thư mục đó"
 	}
 }

@@ -94,6 +94,12 @@
 		"previewUnavailable": "Önizleme kullanılamıyor",
 		"about": "Hakkında",
 		"version": "Sürüm {{version}}",
-		"checkingForUpdates": "Denetleniyor…"
+		"checkingForUpdates": "Denetleniyor…",
+		"storage": "Depolama",
+		"storageHint": "Kayıtların yakalama sırasında önbelleğe alındığı ve durdurulduğunda kaydedildiği yer.",
+		"chooseFolder": "Klasör seç",
+		"resetToDefault": "Varsayılana sıfırla",
+		"changingFolder": "Değiştiriliyor…",
+		"changeFolderFailed": "O klasöre geçilemedi"
 	}
 }

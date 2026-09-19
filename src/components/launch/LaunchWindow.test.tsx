@@ -180,6 +180,13 @@ vi.mock("@/contexts/I18nContext", () => ({
 			"deviceSettings.version": "Version {{version}}",
 			"actions.checkForUpdates": "Check for updates",
 			"deviceSettings.checkingForUpdates": "Checking…",
+			"deviceSettings.storage": "Storage",
+			"deviceSettings.storageHint":
+				"Where recordings are cached while capturing and saved when you stop.",
+			"deviceSettings.chooseFolder": "Choose folder",
+			"deviceSettings.resetToDefault": "Reset to default",
+			"deviceSettings.changingFolder": "Switching…",
+			"deviceSettings.changeFolderFailed": "Couldn't switch to that folder",
 			"audio.inputDevice": "Input device",
 			"webcam.cameraDevice": "Camera device",
 			"cursor.useEditableCursor": "Use editable cursor",
@@ -270,6 +277,9 @@ function stubElectronAPI(getSelectedSource: Window["electronAPI"]["getSelectedSo
 				);
 			};
 		}),
+		getRecordingsDir: vi.fn(async () => ({ path: "/default/recordings", isDefault: true })),
+		chooseRecordingsDir: vi.fn(async () => ({ success: true, path: "/chosen/recordings" })),
+		resetRecordingsDir: vi.fn(async () => ({ success: true, path: "/default/recordings" })),
 	} as typeof window.electronAPI;
 }
 
@@ -1468,6 +1478,91 @@ describe("LaunchWindow device settings", () => {
 
 		expect(button).toBeEnabled();
 		expect(button).toHaveTextContent("Check for updates");
+	});
+
+	it("shows the current recordings folder once the main process answers", async () => {
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+		const panel = await screen.findByTestId("hud-device-settings");
+
+		expect(await within(panel).findByText("/default/recordings")).toBeInTheDocument();
+		expect(
+			within(panel).queryByRole("button", { name: /reset to default/i }),
+		).not.toBeInTheDocument();
+	});
+
+	it("switches to a chosen folder and offers a reset once it is no longer the default", async () => {
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+		const panel = await screen.findByTestId("hud-device-settings");
+		await within(panel).findByText("/default/recordings");
+
+		fireEvent.click(within(panel).getByRole("button", { name: /choose folder/i }));
+
+		expect(await within(panel).findByText("/chosen/recordings")).toBeInTheDocument();
+		expect(
+			await within(panel).findByRole("button", { name: /reset to default/i }),
+		).toBeInTheDocument();
+	});
+
+	it("does nothing when the folder picker is canceled", async () => {
+		window.electronAPI.chooseRecordingsDir = vi.fn(async () => ({
+			success: false,
+			canceled: true,
+		})) as unknown as Window["electronAPI"]["chooseRecordingsDir"];
+
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+		const panel = await screen.findByTestId("hud-device-settings");
+		await within(panel).findByText("/default/recordings");
+
+		fireEvent.click(within(panel).getByRole("button", { name: /choose folder/i }));
+
+		await waitFor(() => {
+			expect(within(panel).getByRole("button", { name: /choose folder/i })).toBeEnabled();
+		});
+		expect(within(panel).getByText("/default/recordings")).toBeInTheDocument();
+	});
+
+	it("resets to the default folder and hides the reset control again", async () => {
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+		const panel = await screen.findByTestId("hud-device-settings");
+		await within(panel).findByText("/default/recordings");
+
+		fireEvent.click(within(panel).getByRole("button", { name: /choose folder/i }));
+		await within(panel).findByRole("button", { name: /reset to default/i });
+
+		fireEvent.click(within(panel).getByRole("button", { name: /reset to default/i }));
+
+		await waitFor(() => {
+			expect(
+				within(panel).queryByRole("button", { name: /reset to default/i }),
+			).not.toBeInTheDocument();
+		});
+		expect(within(panel).getByText("/default/recordings")).toBeInTheDocument();
+	});
+
+	it("reports a failure when switching to the chosen folder is refused", async () => {
+		window.electronAPI.chooseRecordingsDir = vi.fn(async () => ({
+			success: false,
+			message: "Cannot change the recordings folder while a recording is in progress.",
+		})) as unknown as Window["electronAPI"]["chooseRecordingsDir"];
+
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+		const panel = await screen.findByTestId("hud-device-settings");
+		await within(panel).findByText("/default/recordings");
+
+		fireEvent.click(within(panel).getByRole("button", { name: /choose folder/i }));
+
+		expect(await within(panel).findByText(/couldn.t switch to that folder/i)).toBeInTheDocument();
+		expect(within(panel).getByText("/default/recordings")).toBeInTheDocument();
 	});
 });
 

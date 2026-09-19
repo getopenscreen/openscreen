@@ -94,6 +94,12 @@
 		"previewUnavailable": "Pré-visualização indisponível",
 		"about": "Sobre",
 		"version": "Versão {{version}}",
-		"checkingForUpdates": "Verificando…"
+		"checkingForUpdates": "Verificando…",
+		"storage": "Armazenamento",
+		"storageHint": "Onde as gravações são armazenadas em cache durante a captura e salvas ao parar.",
+		"chooseFolder": "Escolher pasta",
+		"resetToDefault": "Redefinir para o padrão",
+		"changingFolder": "Alternando…",
+		"changeFolderFailed": "Não foi possível mudar para essa pasta"
 	}
 }

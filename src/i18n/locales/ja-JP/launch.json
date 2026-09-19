@@ -94,6 +94,12 @@
 		"previewUnavailable": "プレビューを利用できません",
 		"about": "情報",
 		"version": "バージョン {{version}}",
-		"checkingForUpdates": "確認中…"
+		"checkingForUpdates": "確認中…",
+		"storage": "保存先",
+		"storageHint": "キャプチャ中の録画のキャッシュ先と、停止時の保存先です。",
+		"chooseFolder": "フォルダーを選択",
+		"resetToDefault": "デフォルトに戻す",
+		"changingFolder": "切り替え中…",
+		"changeFolderFailed": "そのフォルダーに切り替えられませんでした"
 	}
 }

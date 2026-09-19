@@ -87,6 +87,10 @@
 		"videoFiles": "Видеофайлы",
 		"audioFiles": "Аудиофайлы",
 		"openscreenProject": "Проект OpenScreen",
-		"allFiles": "Все файлы"
+		"allFiles": "Все файлы",
+		"selectRecordingsFolder": "Выбрать папку для записей"
+	},
+	"recording": {
+		"lowDiskSpace": "Недостаточно места на диске для начала записи (доступно только {{availableMb}} МБ). Освободите место или выберите другую папку для записей и повторите попытку."
 	}
 }

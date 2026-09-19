@@ -375,6 +375,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		<ModalShell
 			open={open}
 			onClose={handleClose}
+			// Nothing here wants 960px: the widest row is three quality cards, and at the
+			// default each one got ~290px to hold "720p" over "1280 × 720". The choices
+			// were swimming in their own plates.
+			compact
 			title={t("exportDialog.title")}
 			subtitle={t("exportDialog.subtitle")}
 		>
@@ -723,8 +727,9 @@ function FormatToggle({
 				background: active ? "var(--accent-wash)" : "var(--surface)",
 				// Selection is conveyed by border + wash background (like the quality
 				// cards below), not by swapping text color -- `--accent-on` is meant
-				// for text on a SOLID accent fill, and paired with the near-transparent
-				// `--accent-wash` it read as near-invisible dark-on-dark text.
+				// for text on a SOLID `--accent-fill`, and paired with the
+				// near-transparent `--accent-wash` it disappears in one theme or the
+				// other (it was dark-on-dark before, it is white-on-white now).
 				color: "var(--fg)",
 				cursor: "pointer",
 				font: "600 14px/1 var(--font-body)",
@@ -890,7 +895,7 @@ function segStyle(active: boolean): React.CSSProperties {
 		padding: "8px 10px",
 		border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
 		borderRadius: 8,
-		background: active ? "var(--brand)" : "var(--bg)",
+		background: active ? "var(--accent-fill)" : "var(--bg)",
 		color: active ? "var(--accent-on)" : "var(--fg-2)",
 		cursor: "pointer",
 		font: "500 12px/1 var(--font-body)",

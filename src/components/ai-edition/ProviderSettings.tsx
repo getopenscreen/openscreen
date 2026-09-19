@@ -174,7 +174,7 @@ function ProviderSettings({ open, onClose }: ProviderSettingsProps) {
 			closeOnEscape={false}
 			title={te("providerSettings.title")}
 			subtitle={te("providerSettings.subtitle")}
-			wide
+			compact
 		>
 			{mode === "list" ? (
 				<ProviderList

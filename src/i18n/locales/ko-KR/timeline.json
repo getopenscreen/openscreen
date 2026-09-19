@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "이동",
 		"zoom": "줌",
+		"panHint": "{{modifier}} + 스크롤로 이동",
+		"zoomHint": "{{modifier}} + 스크롤로 줌",
 		"trim": "트림",
 		"speed": "속도",
 		"zoomItem": "줌 {{index}}",

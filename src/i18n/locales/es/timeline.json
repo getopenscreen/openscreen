@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "Desplazar",
 		"zoom": "Zoom",
+		"panHint": "{{modifier}} + rueda del ratón para desplazar",
+		"zoomHint": "{{modifier}} + rueda del ratón para hacer zoom",
 		"trim": "Recortar",
 		"speed": "Velocidad",
 		"zoomItem": "Zoom {{index}}",

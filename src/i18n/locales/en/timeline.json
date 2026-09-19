@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "Pan",
 		"zoom": "Zoom",
+		"panHint": "{{modifier}} + scroll to pan",
+		"zoomHint": "{{modifier}} + scroll to zoom",
 		"trim": "Trim",
 		"speed": "Speed",
 		"zoomItem": "Zoom {{index}}",

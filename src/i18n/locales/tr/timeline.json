@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "Kaydır",
 		"zoom": "Yakınlaştır",
+		"panHint": "Kaydırmak için {{modifier}} + fare tekerleği",
+		"zoomHint": "Yakınlaştırmak için {{modifier}} + fare tekerleği",
 		"trim": "Kırp",
 		"speed": "Hız",
 		"zoomItem": "Yakınlaştırma {{index}}",

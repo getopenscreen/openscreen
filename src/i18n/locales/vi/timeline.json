@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "Xoay",
 		"zoom": "Thu phóng",
+		"panHint": "{{modifier}} + cuộn chuột để di chuyển",
+		"zoomHint": "{{modifier}} + cuộn chuột để thu phóng",
 		"trim": "Cắt",
 		"speed": "Tốc độ",
 		"zoomItem": "Thu phóng {{index}}",

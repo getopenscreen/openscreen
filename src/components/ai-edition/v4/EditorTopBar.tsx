@@ -1,22 +1,35 @@
 import {
+	Check,
 	ChevronDown,
 	Download,
+	Film,
 	FolderOpen,
 	FolderPlus,
 	Info,
 	Keyboard,
 	Languages,
+	type LucideIcon,
+	MonitorSmartphone,
 	Moon,
 	PanelLeft,
 	RefreshCw,
 	Save,
+	Scissors,
 	Sparkles,
 	Sun,
 } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+	type KeyboardEvent as ReactKeyboardEvent,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import logoMark from "@/assets/openscreen-mark.png";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useTheme } from "@/hooks/useTheme";
+import type { Locale } from "@/i18n/config";
 import { getAvailableLocales, getLocaleName, getLocaleShort } from "@/i18n/loader";
 import { StylePresetsMenu } from "../StylePresetsMenu";
 import styles from "./EditorShellV4.module.css";
@@ -46,10 +59,14 @@ interface EditorTopBarProps {
 	actions: TopBarActions;
 }
 
-const MODES: Array<{ id: EditorMode; labelKey: string }> = [
-	{ id: "media", labelKey: "topbar.modes.media" },
-	{ id: "edit", labelKey: "topbar.modes.edit" },
-	{ id: "rec", labelKey: "topbar.modes.rec" },
+/* No tab invents a glyph: each wears the one its own stage already uses, so the
+   tab and the screen it opens name the same thing. Film is what MediaStage
+   stamps on every asset card, Scissors is V4Timeline's, and MonitorSmartphone is
+   the source picker RecStage opens with. */
+const MODES: Array<{ id: EditorMode; labelKey: string; Icon: LucideIcon }> = [
+	{ id: "media", labelKey: "topbar.modes.media", Icon: Film },
+	{ id: "edit", labelKey: "topbar.modes.edit", Icon: Scissors },
+	{ id: "rec", labelKey: "topbar.modes.rec", Icon: MonitorSmartphone },
 ];
 
 export function EditorTopBar({
@@ -91,7 +108,7 @@ export function EditorTopBar({
 			</span>
 			<AppMenu actions={actions} />
 			<span className={styles.sep} aria-hidden />
-			<ProjectNameField title={projectTitle} onRename={actions.renameProject} />
+			<ProjectNameField title={projectTitle} dirty={dirty} onRename={actions.renameProject} />
 			<span className={styles.sep} aria-hidden />
 			<button
 				type="button"
@@ -136,48 +153,40 @@ export function EditorTopBar({
 				) : null}
 			</button>
 			<span className={styles.sep} aria-hidden />
-			<LangButton />
-			{/* Both states are always rendered, stacked in one grid cell, so the slot
-			    keeps the width of the longer label and the bar doesn't twitch every
-			    time the document goes dirty. The inactive one is visibility:hidden,
-			    which also takes it out of the accessibility tree. */}
-			<span className={styles.saved} title={dirty ? t("topbar.unsaved") : t("topbar.saved")}>
-				<span className={styles.savedState} data-on={!dirty}>
-					<span className={styles.dot} aria-hidden />
-					<span className={styles.savedLabel}>{t("topbar.saved")}</span>
-				</span>
-				<span className={styles.savedState} data-on={dirty}>
-					<span
-						className={styles.dot}
-						aria-hidden
-						style={{ background: "var(--warn)", boxShadow: "0 0 0 3px var(--warn-soft)" }}
-					/>
-					<span className={styles.savedLabel}>{t("topbar.unsaved")}</span>
-				</span>
-			</span>
 
 			<div className={styles.modeSwitch} role="tablist" aria-label={t("topbar.editorMode")}>
-				{MODES.map((m) => (
+				{MODES.map(({ id, labelKey, Icon }) => (
 					<button
-						key={m.id}
+						key={id}
 						type="button"
 						role="tab"
-						aria-selected={mode === m.id}
-						title={t(m.labelKey)}
+						aria-selected={mode === id}
+						title={t(labelKey)}
+						// Under 960px the label is hidden and the tab is its glyph alone, so the
+						// name is spelled out here rather than left to fall back to `title` —
+						// what a tab is called must not depend on the window width.
+						aria-label={t(labelKey)}
 						// Feeds the hidden bold copy that reserves the selected width — see
 						// .modeSwitch button::before.
-						data-label={t(m.labelKey)}
-						onClick={() => onModeChange(m.id)}
+						data-label={t(labelKey)}
+						onClick={() => onModeChange(id)}
 					>
-						<span className={styles.modeLabel}>{t(m.labelKey)}</span>
+						<Icon size={13} className={styles.modeIcon} aria-hidden />
+						<span className={styles.modeLabel}>{t(labelKey)}</span>
 					</button>
 				))}
 			</div>
 
 			{/* A preset is the whole look the right panel's panes edit — Composition, camera,
 			    cursor — so its entry sits in the bar, reachable from every pane and mode,
-			    rather than in any one pane's header. */}
+			    rather than in any one pane's header. It stays on the project side of the
+			    bar, ahead of the two app-wide preferences. */}
 			<StylePresetsMenu />
+			{/* Language and theme are the two app-wide preferences in this bar, so they
+			    sit together at its right end rather than one of them being stranded
+			    among the per-project file actions. .langMenu is anchored right:0, so
+			    it opens leftwards from here and stays on screen. */}
+			<LangButton />
 			<button
 				type="button"
 				className={styles.iconBtn}
@@ -204,14 +213,17 @@ export function EditorTopBar({
 
 function ProjectNameField({
 	title,
+	dirty,
 	onRename,
 }: {
 	title: string | null;
+	dirty: boolean;
 	onRename: (title: string) => void;
 }) {
 	const t = useScopedT("editor");
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(title ?? "");
+	const unsavedId = useId();
 
 	const startEditing = () => {
 		setDraft(title ?? "");
@@ -245,19 +257,38 @@ function ProjectNameField({
 		);
 	}
 
+	// No project, nothing to be unsaved — and the button reads "No project" there,
+	// which a marker beside it would contradict.
+	const modified = dirty && title !== null;
+
 	return (
-		<button
-			type="button"
-			className={`${styles.ghostBtn} ${styles.projectNameBtn}`}
-			aria-label={t("topbar.renameProject")}
-			// The label is truncated to keep the slot fixed, so the full name has to
-			// stay reachable on hover.
-			title={title ?? undefined}
-			disabled={!title}
-			onClick={startEditing}
-		>
-			<span className={styles.projectNameLabel}>{title ?? t("topbar.noProject")}</span>
-		</button>
+		<>
+			<button
+				type="button"
+				className={`${styles.ghostBtn} ${styles.projectNameBtn}`}
+				aria-label={t("topbar.renameProject")}
+				// Tied to the button rather than left loose beside it: a detached sibling is
+				// read when the reader walks the bar and never when the button is focused,
+				// which is the one moment the state is worth knowing.
+				aria-describedby={modified ? unsavedId : undefined}
+				// The label is truncated to keep the slot fixed, so the full name has to
+				// stay reachable on hover.
+				title={title ?? undefined}
+				disabled={!title}
+				onClick={startEditing}
+			>
+				<span className={styles.projectNameLabel}>{title ?? t("topbar.noProject")}</span>
+				<span className={styles.projectDirtyDot} data-on={modified} aria-hidden />
+			</button>
+			{/* The marker above is decoration to a screen reader, and the button's
+			    aria-label swallows anything nested in it, so the state is spelled out
+			    here instead — the one piece of the old status badge worth keeping. */}
+			{modified ? (
+				<span id={unsavedId} className="sr-only">
+					{t("topbar.unsaved")}
+				</span>
+			) : null}
+		</>
 	);
 }
 
@@ -456,11 +487,28 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 	);
 }
 
+/** The bar's one settings menu that is not the app menu.
+ *
+ *  It was a click-only popover: no Escape, no arrow keys, no focus to return to, and
+ *  `aria-pressed` on a control that opens a menu rather than toggling a state. The
+ *  app menu twenty lines up already does all of this properly, so this follows it
+ *  rather than inventing a second set of manners for the same gesture.
+ *
+ *  The list is thirteen entries in eleven scripts, which shapes two decisions below:
+ *  the keyboard opens onto the language you are already in rather than the top of
+ *  the list, and typeahead matches the locale code as well as the native name —
+ *  nobody reaches 日本語 by typing its own name on a Latin keyboard. */
 function LangButton() {
 	const { locale, setLocale } = useI18n();
 	const t = useScopedT("editor");
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement | null>(null);
+	const menuRef = useRef<HTMLDivElement | null>(null);
+	const triggerRef = useRef<HTMLButtonElement | null>(null);
+	// Stable across renders so it can be a dependency below without re-firing.
+	const locales = useMemo(() => getAvailableLocales(), []);
+	const typeahead = useRef({ buffer: "", at: 0 });
+
 	useEffect(() => {
 		if (!open) return;
 		const onDocClick = (e: MouseEvent) => {
@@ -469,38 +517,141 @@ function LangButton() {
 		document.addEventListener("mousedown", onDocClick);
 		return () => document.removeEventListener("mousedown", onDocClick);
 	}, [open]);
+
+	// Land on the current language, not on the top of the list: opening the menu
+	// should show you where you are, and it makes escaping a mis-click free.
+	useEffect(() => {
+		if (!open) return;
+		const items = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]');
+		const at = locales.indexOf(locale);
+		items?.[at >= 0 ? at : 0]?.focus();
+	}, [open, locale, locales]);
+
+	const close = (restoreFocus: boolean) => {
+		setOpen(false);
+		// Escape and a pick hand focus back to the trigger; a click does not, because
+		// the pointer user did not come from there and a ring appearing under the
+		// cursor reads as a bug.
+		if (restoreFocus) triggerRef.current?.focus();
+	};
+
+	const itemsInMenu = () =>
+		Array.from(
+			menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [],
+		);
+
+	const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			close(true);
+			return;
+		}
+		// Tabbing out is a legitimate way to leave; closing without stealing focus
+		// back lets it land wherever Tab was going.
+		if (e.key === "Tab") {
+			setOpen(false);
+			return;
+		}
+		const list = itemsInMenu();
+		if (list.length === 0) return;
+		const at = list.indexOf(document.activeElement as HTMLButtonElement);
+		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+			e.preventDefault();
+			const next = e.key === "ArrowDown" ? at + 1 : at - 1;
+			// Wraps both ways; `at` is -1 when focus escaped the list, and ArrowDown
+			// then lands on 0.
+			list[(next + list.length) % list.length]?.focus();
+			return;
+		}
+		if (e.key === "Home" || e.key === "End") {
+			e.preventDefault();
+			(e.key === "Home" ? list[0] : list[list.length - 1])?.focus();
+			return;
+		}
+		if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) return;
+		const now = Date.now();
+		const buffer = now - typeahead.current.at < 600 ? typeahead.current.buffer + e.key : e.key;
+		typeahead.current = { buffer, at: now };
+		// The same key pressed again ("zz") is not a two-letter search, which would
+		// match nothing: it asks for the next row starting with that letter, so zh-CN
+		// steps on to zh-TW and wraps back. A new single letter also starts past the
+		// focused row, or pressing it on a match would go nowhere. A longer search
+		// still includes the focused row, which is what keeps "po" on Português.
+		const repeated = [...buffer].every((ch) => ch === buffer[0]);
+		const needle = (repeated ? buffer[0] : buffer).toLowerCase();
+		const from = at < 0 ? 0 : needle.length === 1 ? at + 1 : at;
+		// The code as well as the name: "Français" is reachable by typing it, 日本語
+		// is not, and "ja" is what a Latin keyboard can actually produce.
+		const matches = (code: Locale) =>
+			getLocaleName(code).toLowerCase().startsWith(needle) || code.toLowerCase().startsWith(needle);
+		for (let step = 0; step < locales.length; step++) {
+			const index = (from + step) % locales.length;
+			if (matches(locales[index])) {
+				e.preventDefault();
+				list[index]?.focus();
+				return;
+			}
+		}
+	};
+
+	const choose = (code: Locale) => {
+		setLocale(code);
+		close(true);
+	};
+
 	return (
 		<div ref={ref} className={styles.langAnchor}>
 			<button
+				ref={triggerRef}
 				type="button"
 				className={`${styles.iconBtn} ${styles.langBtn}`}
 				onClick={() => setOpen((v) => !v)}
+				onKeyDown={(e) => {
+					if (e.key === "ArrowDown" && !open) {
+						e.preventDefault();
+						setOpen(true);
+					}
+				}}
+				aria-haspopup="menu"
+				aria-expanded={open}
 				aria-label={t("topbar.changeLanguage")}
-				aria-pressed={open}
 			>
-				<Languages size={15} className={styles.langIcon} />
+				<Languages size={15} className={styles.langIcon} aria-hidden />
 				{/* Fixed-width, centred: the short labels run from "EN" to "PT-BR" to
 				    the CJK "简中", and letting the button size to them moved everything
 				    to its right on each language change. */}
 				<span className={styles.langShort}>{getLocaleShort(locale)}</span>
-				<ChevronDown size={9} className={styles.langChevron} />
+				<ChevronDown size={9} className={styles.langChevron} aria-hidden />
 			</button>
 			{open ? (
-				<div className={styles.langMenu}>
-					{getAvailableLocales().map((code) => (
-						<button
-							key={code}
-							type="button"
-							className={styles.langMenuItem}
-							data-active={code === locale}
-							onClick={() => {
-								setLocale(code);
-								setOpen(false);
-							}}
-						>
-							{getLocaleName(code)}
-						</button>
-					))}
+				<div
+					ref={menuRef}
+					className={styles.langMenu}
+					role="menu"
+					aria-label={t("topbar.changeLanguage")}
+					onKeyDown={onMenuKeyDown}
+				>
+					{locales.map((code) => {
+						const active = code === locale;
+						return (
+							<button
+								key={code}
+								type="button"
+								role="menuitemradio"
+								aria-checked={active}
+								className={styles.langMenuItem}
+								data-active={active}
+								onClick={() => choose(code)}
+							>
+								{/* The tick, not the colour, is what says "this one". The gutter is
+								    always there so the names stay on one left edge. */}
+								<span className={styles.langMenuCheck} aria-hidden>
+									{active ? <Check size={13} /> : null}
+								</span>
+								{getLocaleName(code)}
+							</button>
+						);
+					})}
 				</div>
 			) : null}
 		</div>

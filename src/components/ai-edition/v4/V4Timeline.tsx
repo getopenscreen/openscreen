@@ -6,6 +6,7 @@ import {
 	Maximize2,
 	MessageSquare,
 	Mic,
+	Mouse,
 	Music,
 	Pencil,
 	Scissors,
@@ -1999,12 +2000,35 @@ export function V4Timeline({
 							onNextClip={onNextClip}
 							onSeek={setCurrentTime}
 						/>
+						{/* The wheel handler tests e.shiftKey and e.ctrlKey literally, on every
+						    platform (a Mac trackpad pinch arrives as ctrl+wheel), so these are
+						    the real keys everywhere — this must NOT go through formatBinding,
+						    which maps "ctrl" to ⌘ because there it means the primary modifier.
+						    Only the engraving changes: a Mac keyboard says ⇧ and ⌃.
+						    The scroll half of the gesture is a glyph rather than the word
+						    "Scroll", which was hardcoded English in all 13 locales.
+						    A glyph says nothing to a screen reader, though, which heard
+						    "Shift Pan". So the painted hint is hidden from it and a
+						    visually hidden sentence names the key, the wheel and the
+						    action instead, with the key spelled out rather than engraved. */}
 						<div className={styles.tlHints}>
 							<span className={styles.tlHint}>
-								<span className={styles.tlKbd}>Shift+Scroll</span> {t("labels.pan")}
+								<kbd className={styles.tlKbd} aria-hidden>
+									{isMac ? "⇧" : "Shift"}
+								</kbd>
+								<Mouse size={12} aria-hidden />
+								<span aria-hidden>{t("labels.pan")}</span>
+								<span className="sr-only">{t("labels.panHint", { modifier: "Shift" })}</span>
 							</span>
 							<span className={styles.tlHint}>
-								<span className={styles.tlKbd}>Ctrl+Scroll</span> {t("labels.zoom")}
+								<kbd className={styles.tlKbd} aria-hidden>
+									{isMac ? "⌃" : "Ctrl"}
+								</kbd>
+								<Mouse size={12} aria-hidden />
+								<span aria-hidden>{t("labels.zoom")}</span>
+								<span className="sr-only">
+									{t("labels.zoomHint", { modifier: isMac ? "Control" : "Ctrl" })}
+								</span>
 							</span>
 						</div>
 					</>

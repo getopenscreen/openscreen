@@ -42,12 +42,13 @@ export function ModalShell({
 	closeOnEscape = true,
 	title,
 	subtitle,
-	wide,
+	compact,
 	children,
 }: BaseModalProps & {
 	title: string;
 	subtitle?: string;
-	wide?: boolean;
+	/** 720px instead of the 960px default — the ordinary dialog width. */
+	compact?: boolean;
 	/** Off for a dialog that handles Escape itself — two listeners both fire for one
 	 *  keypress, and this one's `onClose` wins whatever order they registered in. */
 	closeOnEscape?: boolean;
@@ -83,7 +84,7 @@ export function ModalShell({
 			aria-labelledby="modal-title"
 		>
 			<div className={styles.modalBackdrop} aria-hidden onClick={onClose} />
-			<div className={`${styles.modalCard} ${wide ? styles.wide : ""}`}>
+			<div className={`${styles.modalCard} ${compact ? styles.compact : ""}`}>
 				<header className={styles.modalHead}>
 					<div>
 						<h2 id="modal-title">{title}</h2>
@@ -145,7 +146,7 @@ export function OpenProjectModal({
 			onClose={onClose}
 			title={t("openProjectDialog.title")}
 			subtitle={t("openProjectDialog.subtitle")}
-			wide
+			compact
 		>
 			<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
 				<FolderOpen size={14} style={{ color: "var(--muted)" }} />
@@ -276,7 +277,8 @@ export function OpenProjectModal({
 											width: 36,
 											height: 36,
 											borderRadius: "var(--r-sm)",
-											background: "linear-gradient(135deg, var(--brand-lo), var(--brand))",
+											background:
+												"linear-gradient(135deg, var(--accent-fill-lo), var(--accent-fill))",
 											display: "grid",
 											placeItems: "center",
 											color: "var(--accent-on)",
@@ -537,7 +539,7 @@ function TemplateCell({
 					width: 36,
 					height: 36,
 					borderRadius: "var(--r-sm)",
-					background: active ? "var(--accent)" : "var(--surface-2)",
+					background: active ? "var(--accent-fill)" : "var(--surface-2)",
 					color: active ? "var(--accent-on)" : "var(--muted)",
 					display: "grid",
 					placeItems: "center",
@@ -1026,7 +1028,7 @@ export function EditClipModal({
 			onClose={onClose}
 			title={t("editClipDialog.title")}
 			subtitle={assetMeta?.label ?? undefined}
-			wide
+			compact
 		>
 			<div ref={cropFrameRef} style={previewBoxStyle(videoAspectRatio)}>
 				{cropPreviewSource ? (
@@ -1131,7 +1133,8 @@ export function EditClipModal({
 					style={{
 						display: "flex",
 						justifyContent: "space-between",
-						font: "500 10px/1.4 var(--font-mono)",
+						font: "500 10px/1.4 var(--font-body)",
+						fontVariantNumeric: "tabular-nums",
 						color: "var(--muted)",
 						marginBottom: 4,
 					}}
@@ -1361,7 +1364,15 @@ export function EditClipModal({
 function RangeStat({ label, value, testId }: { label: string; value: string; testId?: string }) {
 	return (
 		<div data-testid={testId} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-			<strong style={{ font: "600 15px/1.2 var(--font-mono)", color: "var(--fg)" }}>{value}</strong>
+			<strong
+				style={{
+					font: "600 15px/1.2 var(--font-body)",
+					fontVariantNumeric: "tabular-nums",
+					color: "var(--fg)",
+				}}
+			>
+				{value}
+			</strong>
 			<small style={{ font: "500 10px/1.4 var(--font-body)", color: "var(--muted)" }}>
 				{label}
 			</small>

@@ -446,6 +446,25 @@ describe("V4Timeline create-from-toolbar", () => {
 	});
 });
 
+describe("V4Timeline scroll hints", () => {
+	// The wheel half of each gesture is painted as a Mouse glyph, which a screen reader
+	// skips, so the hint used to read "Shift Pan". Each one now carries a sentence of its
+	// own naming the wheel, and everything painted beside it is hidden so the gesture is
+	// not announced twice.
+	it.each([
+		["labels.panHint", "labels.pan"],
+		["labels.zoomHint", "labels.zoom"],
+	])("speaks %s in place of the painted keycap, glyph and label", (spoken, painted) => {
+		renderTimeline();
+		const hint = screen.getByText(spoken).parentElement as HTMLElement;
+		expect(screen.getByText(spoken)).toHaveClass("sr-only");
+		expect(hint.querySelector("kbd")).toHaveAttribute("aria-hidden", "true");
+		expect(hint.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+		expect(screen.getByText(painted)).toHaveAttribute("aria-hidden", "true");
+		expect(screen.getByText(painted).parentElement).toBe(hint);
+	});
+});
+
 describe("V4Timeline clip row", () => {
 	// Three clips = two junctions. As a flex row with `gap: 6px`, each junction
 	// added 6px while every clip shrank proportionally to pay for it, so a clip's
@@ -644,8 +663,13 @@ describe("V4Timeline audio lane drag", () => {
 		// shortcuts dialog moves the menu with it instead of teaching a stale key.
 		renderAudio();
 		fireEvent.click(screen.getByLabelText("toolbar.addAudioTooltip"));
-		const keys = Array.from(document.querySelectorAll("kbd"), (k) => k.textContent);
-		expect(keys).toEqual([
+		// Scoped to each row rather than swept off the whole document: the toolbar
+		// teaches keys of its own (the scroll-gesture hints), and a document-wide
+		// kbd sweep makes this assertion fail whenever an unrelated key is added
+		// anywhere in the timeline.
+		const keyTaughtBy = (label: string) =>
+			screen.getByText(label).closest("button")?.querySelector("kbd")?.textContent;
+		expect([keyTaughtBy("audio.addVoiceover"), keyTaughtBy("audioTrack.add")]).toEqual([
 			formatBinding(DEFAULT_SHORTCUTS.addVoiceover, false),
 			formatBinding(DEFAULT_SHORTCUTS.addAudio, false),
 		]);

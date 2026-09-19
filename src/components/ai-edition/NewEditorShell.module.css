@@ -68,7 +68,7 @@
 	width: 18px;
 	height: 18px;
 	border-radius: 5px;
-	background: var(--accent);
+	background: var(--accent-fill);
 	display: grid;
 	place-items: center;
 	color: var(--accent-on);
@@ -472,7 +472,7 @@
 	gap: var(--sp-2);
 	padding: var(--sp-3) var(--sp-4);
 	border-radius: var(--r-sm);
-	background: var(--primary, #34B27B);
+	background: var(--accent-fill);
 	color: var(--accent-on);
 	border: none;
 	font-weight: 500;
@@ -759,11 +759,17 @@
 .transport .tbtn.play:hover {
 	background: var(--fg-2);
 }
+/* The UI face with tabular figures, not a monospace one — the same treatment
+   .tlDragTip and the HUD's recording timer already use. Monospace was doing one
+   job here, keeping the readout from twitching as digits change during playback,
+   and tabular-nums does that job without dressing a timecode up as source code.
+   No letter-spacing: that was loosening a mono face; a proportional one is
+   already spaced. min-width still carries the rest, since the string itself
+   grows a character at 10 minutes. */
 .transport .time {
-	font-family: var(--font-mono);
 	font-size: var(--fs-app-sm);
+	font-variant-numeric: tabular-nums;
 	color: var(--fg);
-	letter-spacing: 0.02em;
 	min-width: 96px;
 	text-align: center;
 	flex-shrink: 0;
@@ -887,7 +893,7 @@
 	padding: 6px;
 	border: 1px solid var(--border);
 	border-radius: 12px;
-	background: var(--surface-1);
+	background: var(--bg);
 	box-shadow: var(--elev-pop);
 	/* Ten shapes must cost no more room than two. */
 	max-height: min(var(--radix-popover-content-available-height, 60vh), 320px);
@@ -1102,7 +1108,7 @@
 	padding-top: 4px;
 	border: 1px solid var(--border);
 	border-radius: 12px;
-	background: var(--surface-1);
+	background: var(--bg);
 	box-shadow: var(--elev-pop);
 	/* Radix measures the room actually left below the trigger and publishes it here, so the
 	   picker uses the screen it has instead of a number guessed at authoring time. The second
@@ -1122,7 +1128,7 @@
 	flex-direction: column;
 	border: 1px solid var(--border);
 	border-radius: 14px;
-	background: var(--surface-1);
+	background: var(--bg);
 	box-shadow: var(--elev-pop);
 	backdrop-filter: blur(18px);
 	-webkit-backdrop-filter: blur(18px);
@@ -1131,12 +1137,21 @@
 }
 
 /* ─── toggle (switch) ──────────────────────────────────────────── */
+/* The knob must stand out from the track in both states and both themes
+   (WCAG 1.4.11, 3:1). No single knob colour clears a pale off track and a
+   mint on track at once, so the tracks do the work instead: the off track
+   is --muted, dark enough for a light knob in light theme and light enough
+   for a dark one in dark theme, and the on track is --accent-fill. The knob
+   is --accent-on, the colour made to sit on that fill, so it flips with the
+   theme exactly as the fill beneath it does. Light: 4.8:1 off, 5.5:1 on.
+   Dark: 6.4:1 off, 7.7:1 on. The off track also reads against the panel
+   now (4.6:1 light), where --border-hi all but vanished into it. */
 .toggle {
 	width: 36px;
 	height: 20px;
 	border: 0;
 	padding: 0;
-	background: var(--border-hi);
+	background: var(--muted);
 	border-radius: 9999px;
 	position: relative;
 	cursor: pointer;
@@ -1155,7 +1170,7 @@
 	box-shadow: 0 1px 3px rgba(22, 23, 29, 0.2);
 	transition: transform 150ms ease;
 }
-.toggle.isOn { background: var(--brand); }
+.toggle.isOn { background: var(--accent-fill); }
 .toggle.isOn::after { transform: translateX(16px); }
 .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -1274,24 +1289,53 @@
 	gap: var(--sp-2);
 	margin-bottom: 6px;
 }
-.ctxPill {
+/* No pill, no wash, no dot. The badge chrome made a passive readout look like a
+   status chip, and the dot was the only thing carrying the state — in a colour
+   that never changed. The row is now the meter plus its number. */
+.ctxMeter {
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
-	padding: 3px 9px 3px 7px;
+	gap: 7px;
+}
+/* Same-ramp track: the groove and the fill are two steps of one hue, so the bar
+   reads as "this much of that" rather than as two competing colours. */
+.ctxTrack {
+	width: 38px;
+	height: 4px;
 	border-radius: var(--r-pill);
-	background: var(--success-soft);
-	color: var(--success);
-	font-family: var(--font-mono);
+	background: var(--accent-soft);
+	overflow: hidden;
+	flex-shrink: 0;
+}
+.ctxFill {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--accent);
+	transition: width var(--motion-base) var(--ease), background var(--motion-base) var(--ease);
+}
+.ctxLabel {
 	font-size: 10.5px;
 	font-weight: 500;
-	letter-spacing: 0.02em;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
 }
-.ctxPill .d {
-	width: 5px;
-	height: 5px;
-	border-radius: 50%;
-	background: var(--success);
+/* --warn-fg, not --warn: the glyph is what makes the state legible, so it has to
+   clear 3:1 itself (4.8:1 on --bg in light theme, where --warn was 2.1:1). */
+.ctxWarnIcon {
+	color: var(--warn-fg);
+	flex-shrink: 0;
+}
+/* Past the threshold the ramp moves to the warning hue — and the glyph appears in
+   the same breath. The fill's --warn sits below 3:1 on this surface by design; the
+   icon is what makes the state legible without it, not a decoration beside it.
+   The label deliberately stays --muted: amber text would be the least readable
+   thing in the row, which is the trap the old mint pill fell into. */
+.ctxMeter[data-tight="true"] .ctxTrack {
+	background: var(--warn-soft);
+}
+.ctxMeter[data-tight="true"] .ctxFill {
+	background: var(--warn);
 }
 .stripActions {
 	margin-left: auto;
@@ -1410,16 +1454,29 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	padding: 5px 4px 5px 10px;
+	/* 4px on the right was cut for a trailing element this button no longer has, so
+	   the label ran into the edge of its own pill. The right side gets a little MORE
+	   than the left rather than matching it: the left edge is followed by a glyph,
+	   which carries its own whitespace, and a text edge needs more room than a mark
+	   to sit the same distance away. */
+	padding: 5px 12px 5px 10px;
 	border-radius: var(--r-pill);
 	background: var(--surface-2);
-	font-family: var(--font-mono);
 	font-size: 11px;
 	color: var(--fg-2);
-	letter-spacing: 0.01em;
 	cursor: pointer;
 	transition: background var(--motion-fast) var(--ease);
 	border: 0;
+}
+/* This button's label is two different kinds of string. With a provider set it
+   is a bare model id — "claude-opus-5", "gpt-4o-mini" — which is a machine
+   string and keeps the monospace the whole button used to wear. With none set
+   it is a sentence asking you to pick one, and prose in a monospace face reads
+   as a terminal transcript rather than as a button. The face follows the
+   content, not the slot. */
+.modelId {
+	font-family: var(--font-mono);
+	letter-spacing: 0.01em;
 }
 .modelPicker:hover { background: var(--surface-3); }
 .reasoningBtn {
@@ -1601,7 +1658,7 @@
 	top: -20px;
 	height: 18px;
 	padding: 0 8px;
-	background: var(--surface);
+	background: var(--bg);
 	border: 1px solid var(--border-soft);
 	border-radius: 9px;
 	color: var(--fg-2);
@@ -1885,7 +1942,11 @@
 	overflow: hidden;
 	color: var(--fg);
 }
-.modalCard.wide { width: min(720px, 92vw); }
+/* Named for what it does. It was `.wide`, which narrowed: the unmodified card is
+   960px and this modifier takes it DOWN to 720, so every dialog that wanted the
+   ordinary size had to ask for "wide" and the genuinely wide ones asked for
+   nothing. 720 is the house dialog width — three of them already sat here. */
+.modalCard.compact { width: min(720px, 92vw); }
 .modalHead {
 	display: flex;
 	align-items: flex-start;
@@ -1941,11 +2002,11 @@
 }
 .btnSecondary:hover { background: var(--surface-warm); border-color: var(--border-hi); }
 .btnPrimary {
-	background: var(--accent);
+	background: var(--accent-fill);
 	color: var(--accent-on);
-	border: 1px solid var(--accent);
+	border: 1px solid var(--accent-fill);
 }
-.btnPrimary:hover { background: var(--brand-lo); }
+.btnPrimary:hover { background: var(--accent-fill-lo); }
 .btnPrimary:disabled {
 	background: var(--surface-2);
 	border-color: var(--border);
@@ -2359,9 +2420,9 @@
   width: 100%;
   height: 34px;
   border-radius: var(--r-md);
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-on);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--accent-fill);
   font: 600 12.5px var(--font-body);
   cursor: pointer;
   transition: filter 120ms ease;

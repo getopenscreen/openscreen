@@ -775,19 +775,13 @@ export function useTimeline() {
 	);
 
 	// Per-region, like the preset it animates. `undefined` rather than `false` so the document
-	// keeps omitting the key when the option is off.
+	// keeps omitting the key when the option is off. Shares `saveZoomPatch` with the pane's
+	// other one-field writes: a toggle arriving while a level write is still pending must not
+	// rebuild the pill from the stale pre-level document and drop the level on the floor.
 	const updateZoomClickImpact = useCallback(
-		async (id: string, clickImpact: boolean) => {
-			if (!document) return;
-			const next: AxcutDocument = {
-				...document,
-				zoomRanges: patchPillById(document.zoomRanges, id, {
-					clickImpact: clickImpact ? true : undefined,
-				}) as AxcutDocument["zoomRanges"],
-			};
-			await saveDocument(next, { history: true });
-		},
-		[document, saveDocument],
+		(id: string, clickImpact: boolean) =>
+			saveZoomPatch(id, { clickImpact: clickImpact ? true : undefined }),
+		[saveZoomPatch],
 	);
 
 	const updateAnnotationSpan = useCallback(

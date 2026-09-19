@@ -294,7 +294,6 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedValue", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateTrim", "save", "gesture"),
-	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomClickImpact", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomFocusLive", "set", "automatic"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomSpan", "save", "gesture"),
 	// Source-dimension backfill for assets a migration left unprobed. On load, for

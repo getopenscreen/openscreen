@@ -1,9 +1,9 @@
 {
 	"scenario": "target-right-clip",
-	"provider": "openai-compatible",
+	"provider": "loopback",
 	"model": "workbench-loopback-fixture",
 	"resolvedModel": "workbench",
-	"recordedAt": "2026-09-14T02:50:31.133Z",
+	"recordedAt": "2026-09-20T14:21:39.456Z",
 	"rounds": [
 		{
 			"round": 0,

@@ -18,6 +18,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { containsSecret } from "./env";
 import type { CheckResult, ScoredRun } from "./score";
+import { undecidedAwareAxisMean } from "./score";
 import {
 	formatInterval,
 	formatPercent,
@@ -197,8 +198,11 @@ export function summarizeScenario(options: {
 
 	const mean = (values: number[]) =>
 		values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
-	const behaviourMean = mean(results.map((r) => r.scored.behaviour.score));
-	const dslMean = mean(results.map((r) => r.scored.dsl.score));
+	// Axis rates use the measurement rule (undecidedAwareAxisMean): a wholly
+	// indeterminate repetition must not contribute `runChecks`'s placeholder 1,
+	// or the report disagrees with the manifest and export fails its own check.
+	const behaviourAxis = undecidedAwareAxisMean(results.map((r) => r.scored.behaviour.results));
+	const dslAxis = undecidedAwareAxisMean(results.map((r) => r.scored.dsl.results));
 	const passes = results.filter((r) => r.scored.passed).length;
 
 	return {
@@ -209,8 +213,14 @@ export function summarizeScenario(options: {
 		reps: n,
 		// Axis scores are weighted means, not counts; Wilson is carried on the
 		// pass counts and the rate field holds the weighted mean.
-		behaviour: { ...wilson95(Math.round(behaviourMean * n), n), rate: behaviourMean },
-		dsl: { ...wilson95(Math.round(dslMean * n), n), rate: dslMean },
+		behaviour: {
+			...wilson95(Math.round(behaviourAxis.score * behaviourAxis.measured), behaviourAxis.measured),
+			rate: behaviourAxis.score,
+		},
+		dsl: {
+			...wilson95(Math.round(dslAxis.score * dslAxis.measured), dslAxis.measured),
+			rate: dslAxis.score,
+		},
 		gateScoreMean: mean(results.map((r) => r.scored.gateScore)),
 		passRate: wilson95(passes, n),
 		failureClasses,

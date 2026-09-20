@@ -2,13 +2,32 @@ import {
 	assertComparable,
 	boundBaselineFromMeasurement,
 	exportMeasurement,
+	type MeasurementCounts,
 	MeasurementError,
 	replayMeasurement,
 	verifyMeasurementId,
 	weightedAxisTrials,
 	writeBoundBaseline,
 } from "./lib/measurement";
-import { newcombeDelta } from "./lib/stats";
+import { type Delta, newcombeDelta } from "./lib/stats";
+
+/** A wholly unmeasured axis has no observations on at least one side: a zero-trial
+ *  Wilson interval would present "unknown" as a quantitative delta. */
+function compareTrials(
+	left: MeasurementCounts,
+	right: MeasurementCounts,
+	axis: "behaviour" | "dsl",
+): Delta {
+	const leftTrials = weightedAxisTrials(left, axis);
+	const rightTrials = weightedAxisTrials(right, axis);
+	if (leftTrials.n === 0 || rightTrials.n === 0) {
+		throw new MeasurementError(
+			"UNMEASURED_AXIS",
+			`${axis}: ${leftTrials.n === 0 ? "left" : "right"} side has no measured repetitions`,
+		);
+	}
+	return newcombeDelta(leftTrials, rightTrials);
+}
 
 type Command = "export" | "verify" | "replay" | "baseline" | "compare" | "help";
 
@@ -146,14 +165,8 @@ export async function runMeasurementCli(argv: string[]): Promise<number> {
 					comparable: true,
 					leftScores: left.manifest.results.axisScores,
 					rightScores: right.manifest.results.axisScores,
-					behaviour: newcombeDelta(
-						weightedAxisTrials(left.manifest.results, "behaviour"),
-						weightedAxisTrials(right.manifest.results, "behaviour"),
-					),
-					dsl: newcombeDelta(
-						weightedAxisTrials(left.manifest.results, "dsl"),
-						weightedAxisTrials(right.manifest.results, "dsl"),
-					),
+					behaviour: compareTrials(left.manifest.results, right.manifest.results, "behaviour"),
+					dsl: compareTrials(left.manifest.results, right.manifest.results, "dsl"),
 				});
 				return 0;
 			}

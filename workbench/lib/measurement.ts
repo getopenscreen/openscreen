@@ -32,7 +32,7 @@ import {
 import type { WorkbenchReport } from "./report";
 import { type RepetitionResult, runRepetition } from "./runner";
 import type { Scenario } from "./scenario";
-import { type ScoredRun, scoreRun } from "./score";
+import { type ScoredRun, scoreRun, undecidedAwareAxisMean } from "./score";
 import { measurementTransportSha256, type TransportIdentity } from "./transport";
 
 export const MEASUREMENTS_DIR = "workbench/measurements";
@@ -40,6 +40,7 @@ export const CANDIDATE_FILE = "measurement-candidate.json";
 export const MANIFEST_FILE = "measurement.json";
 
 export type MeasurementErrorCode =
+	| "UNMEASURED_AXIS"
 	| "ARGUMENT_ERROR"
 	| "ARTIFACT_HASH_MISMATCH"
 	| "ARTIFACT_NOT_REGULAR"
@@ -158,8 +159,13 @@ export interface AxisCounts {
 export interface MeasurementCounts {
 	repetitions: number;
 	axes: { behaviour: AxisCounts; dsl: AxisCounts };
-	/** Mean of each repetition's weighted axis score, matching report.ts. */
+	/** Mean of each repetition's weighted axis score, matching report.ts. Wholly
+	 *  indeterminate repetitions are excluded from the mean. */
 	axisScores: { behaviour: number; dsl: number };
+	/** Repetitions that decided at least one weighted check on the axis. The
+	 *  comparison trials use these, never the raw repetition count: an unknown
+	 *  repetition is not an implicit success. */
+	measuredRepetitions: { behaviour: number; dsl: number };
 	checks: CheckCounts[];
 }
 
@@ -535,37 +541,37 @@ export function recomputeMeasurementCounts(recorded: RecordedChecks): Measuremen
 				}),
 				{ passed: 0, decided: 0, indeterminate: 0, total: 0 },
 			);
-	const scoreFor = (
-		repetition: RecordedChecks["repetitions"][number],
-		name: "behaviour" | "dsl",
-	): number => {
-		const checks = repetition.checks.filter((check) => check.axis === name);
-		const decidedWeight = checks.reduce(
-			(sum, check) => sum + (check.indeterminate ? 0 : check.weight),
-			0,
+	const axisResults = (name: "behaviour" | "dsl") =>
+		recorded.repetitions.map((repetition) =>
+			repetition.checks.filter((check) => check.axis === name),
 		);
-		if (decidedWeight === 0) return 1;
-		const passedWeight = checks.reduce((sum, check) => sum + (check.ok ? check.weight : 0), 0);
-		return passedWeight / decidedWeight;
-	};
-	const meanScore = (name: "behaviour" | "dsl"): number =>
-		recorded.repetitions.reduce((sum, repetition) => sum + scoreFor(repetition, name), 0) /
-		recorded.repetitions.length;
+	// The measurement rule lives in one place (`undecidedAwareAxisMean`): a wholly
+	// indeterminate repetition-axis decides nothing and leaves the mean, and an
+	// axis with nothing decidable scores 0 — never `runChecks`'s placeholder 1.
+	const behaviourScore = undecidedAwareAxisMean(axisResults("behaviour"));
+	const dslScore = undecidedAwareAxisMean(axisResults("dsl"));
 	return {
 		repetitions: recorded.repetitions.length,
 		axes: { behaviour: axis("behaviour"), dsl: axis("dsl") },
-		axisScores: { behaviour: meanScore("behaviour"), dsl: meanScore("dsl") },
+		axisScores: { behaviour: behaviourScore.score, dsl: dslScore.score },
+		measuredRepetitions: { behaviour: behaviourScore.measured, dsl: dslScore.measured },
 		checks,
 	};
 }
 
-/** One independent trial per repetition, weighted the same way as `axisScores`. */
+/** One trial per measured repetition, weighted the same way as `axisScores`. The
+ *  trial count stays FRACTIONAL on purpose: weighted checks commonly produce means
+ *  like 0.625, and rounding k into whole successes before the Newcombe comparison
+ *  misstates the point estimate (0.625 over two repetitions would read as 0.5).
+ *  The Wilson arithmetic below holds for non-integer k, and only repetitions that
+ *  decided weighted checks count as trials — an unknown repetition is not an
+ *  implicit success. */
 export function weightedAxisTrials(
-	results: Pick<MeasurementCounts, "repetitions" | "axisScores">,
+	results: Pick<MeasurementCounts, "repetitions" | "axisScores" | "measuredRepetitions">,
 	axis: "behaviour" | "dsl",
 ): { k: number; n: number } {
-	const n = results.repetitions;
-	return { k: Math.round(results.axisScores[axis] * n), n };
+	const n = results.measuredRepetitions?.[axis] ?? results.repetitions;
+	return { k: results.axisScores[axis] * n, n };
 }
 
 export function boundMeasurementFingerprints(

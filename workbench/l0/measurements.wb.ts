@@ -32,7 +32,7 @@ import {
 	sha256Canonical,
 	sourceIdentityFromManifests,
 } from "../lib/provenance";
-import { wilson95 } from "../lib/stats";
+import { newcombeDelta, wilson95 } from "../lib/stats";
 import { runMeasurementCli } from "../measurement-cli";
 import { getScenario } from "../scenarios/registry";
 
@@ -256,6 +256,65 @@ afterEach(() => {
 });
 
 describe("versioned measurement export and verification", () => {
+	it("keeps fractional weighted scores exact through the comparison trials", () => {
+		const checks = (heavyPasses: boolean) => [
+			{ id: "beh.light", axis: "behaviour" as const, weight: 1, ok: true, indeterminate: false },
+			{
+				id: "beh.heavy",
+				axis: "behaviour" as const,
+				weight: 3,
+				ok: heavyPasses,
+				indeterminate: false,
+			},
+			{ id: "beh.unread", axis: "behaviour" as const, weight: 10, ok: false, indeterminate: true },
+			{ id: "dsl.complete", axis: "dsl" as const, weight: 2, ok: true, indeterminate: false },
+		];
+		const counts = recomputeMeasurementCounts({
+			schema: 1,
+			scenarioId: "fractional-probe",
+			complete: true,
+			repetitions: [
+				{ rep: 0, checks: checks(false) },
+				{ rep: 1, checks: checks(true) },
+			],
+		});
+		expect(counts.axisScores.behaviour).toBe(0.625);
+		const trials = weightedAxisTrials(counts, "behaviour");
+		expect(trials).toEqual({ k: 1.25, n: 2 });
+		// The comparison must read the real 0.625, not the rounded 0.5.
+		const delta = newcombeDelta({ k: 1, n: 2 }, trials);
+		expect(delta.point).toBeCloseTo(0.625 - 0.5, 12);
+	});
+
+	it("scores a wholly indeterminate repetition-axis as undecided, not perfect", () => {
+		const counts = recomputeMeasurementCounts({
+			schema: 1,
+			scenarioId: "undecided-probe",
+			complete: true,
+			repetitions: [
+				{
+					rep: 0,
+					checks: [
+						{ id: "beh.a", axis: "behaviour", weight: 1, ok: false, indeterminate: true },
+						{ id: "dsl.a", axis: "dsl", weight: 1, ok: false, indeterminate: true },
+					],
+				},
+				{
+					rep: 1,
+					checks: [
+						{ id: "beh.a", axis: "behaviour", weight: 1, ok: true, indeterminate: false },
+						{ id: "dsl.a", axis: "dsl", weight: 1, ok: false, indeterminate: true },
+					],
+				},
+			],
+		});
+		// rep 0 decided nothing: it must not contribute a placeholder perfect score.
+		expect(counts.axisScores.behaviour).toBe(1);
+		expect(counts.measuredRepetitions.behaviour).toBe(1);
+		// dsl decided nothing in either repetition: score 0, never a nominal 100%.
+		expect(counts.axisScores.dsl).toBe(0);
+		expect(counts.measuredRepetitions.dsl).toBe(0);
+	});
 	it("recomputes the existing weighted axis mean while excluding indeterminate weight", () => {
 		const checks = (heavyPasses: boolean) => [
 			{
@@ -306,7 +365,9 @@ describe("versioned measurement export and verification", () => {
 		});
 		expect(counts.axisScores.behaviour).toBe(0.625);
 		expect(counts.axisScores.dsl).toBe(1);
-		expect(weightedAxisTrials(counts, "behaviour")).toEqual({ k: 1, n: 2 });
+		// The trial stays fractional: rounding 0.625 x 2 into whole successes read a
+		// 0.625 mean as 0.5 in the Newcombe comparison.
+		expect(weightedAxisTrials(counts, "behaviour")).toEqual({ k: 1.25, n: 2 });
 		expect(weightedAxisTrials(counts, "dsl")).toEqual({ k: 2, n: 2 });
 	});
 

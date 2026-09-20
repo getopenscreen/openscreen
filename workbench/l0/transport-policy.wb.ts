@@ -57,6 +57,20 @@ function cloneIdentity(identity: TransportIdentity): TransportIdentity {
 }
 
 describe("workbench environment contract", () => {
+	it("lets the caller stamp the retry policy that actually ran, keeping the agent default intact", () => {
+		const agentDefault = transportIdentity({ wireApi: "chat-completions" });
+		expect(agentDefault.retryPolicy).toEqual({ sdkMaxRetries: "default", repetitionRetries: 2 });
+
+		// The judge issues one raw fetch per verdict — its identity must say so.
+		const judge = transportIdentity({
+			wireApi: "chat-completions",
+			retryPolicy: { sdkMaxRetries: 0, repetitionRetries: 0 },
+		});
+		expect(judge.retryPolicy).toEqual({ sdkMaxRetries: 0, repetitionRetries: 0 });
+		// Different policy -> different fingerprint: evidence cannot share identity
+		// with a transport that would have behaved differently.
+		expect(transportSha256(judge)).not.toBe(transportSha256(agentDefault));
+	});
 	it("uses the declared env fields and defaults to legacy Chat mode", () => {
 		expect(Object.keys(ENV_KEYS)).toEqual(envFields);
 

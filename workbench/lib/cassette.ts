@@ -362,6 +362,12 @@ export function validateCassette(cassette: Cassette): void {
 				: undefined,
 		limits: cassette.transport.limits,
 		publicHeadersSha256: cassette.transport.publicHeadersSha256,
+		// Reconstruct the policy that was RECORDED, not the factory default — a
+		// judge cassette stamped with its true zero-retry policy must survive
+		// replay instead of failing the identity check here.
+		...(declaredWireApi === "chat-completions"
+			? { retryPolicy: cassette.transport.retryPolicy }
+			: {}),
 	});
 	if (JSON.stringify(expected) !== JSON.stringify(cassette.transport)) {
 		throw new Error(`${declaredWireApi} cassette transport identity is invalid`);

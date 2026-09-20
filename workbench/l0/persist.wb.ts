@@ -139,6 +139,20 @@ function readTurn(file: string): PersistedTurn {
 }
 
 describe("persistRepetition", () => {
+	it("retains the full answer for the judge pass", () => {
+		const long = `${"x".repeat(MAX_FIELD_CHARS)} tail-after-cut`;
+		const turn = buildPersistedTurn({
+			label: "probe",
+			result: repetition({ answer: long }),
+			prompt: scenario.prompt,
+			allowAgentEdits: true,
+		});
+		// The judge scores turn.answer and replay regenerates the full text:
+		// a truncated answer would make the recorded verdict evaluate different
+		// text than the measured turn, and the strict replay hash diverge.
+		expect(turn.answer).toBe(long);
+		expect(turn.truncated.join(" ")).not.toContain("answer");
+	});
 	it("writes one self-contained file per repetition", () => {
 		const root = scratch();
 		const written = persistRepetition({

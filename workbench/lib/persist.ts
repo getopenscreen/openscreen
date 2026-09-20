@@ -190,7 +190,10 @@ export function buildPersistedTurn(options: BuildPersistedTurnOptions): Persiste
 			ms: result.run.ms,
 			failureClass: result.scored.failureClass,
 		},
-		answer: cut(result.run.answer, "answer", truncated),
+		// The judge scores this field and replay regenerates the FULL answer:
+		// truncating it here would make the recorded verdict evaluate different
+		// text than the measured turn, and the strict replay hash diverge.
+		answer: result.run.answer,
 		mutated: result.context.mutated,
 		wire: {
 			rounds: wire.rounds,

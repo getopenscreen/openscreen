@@ -79,7 +79,7 @@ sélectionner le client Responses natif ; un désaccord échoue avant tout trans
 Un run Responses borné nomme toujours ses deux plafonds :
 
 ```bash
-node workbench/.build/cli.cjs run --scenario target-right-clip --reps 1 \
+node --env-file=.env.workbench workbench/.build/cli.cjs run --scenario target-right-clip --reps 1 \
   --label <label> --record --timeout 180000 --max-requests 6 --max-output-tokens 2048
 ```
 

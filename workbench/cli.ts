@@ -510,6 +510,9 @@ async function commandJudge(options: Options): Promise<number> {
 		? transportIdentity({
 				wireApi: env.wireApi,
 				maxOutputTokens: options.maxOutputTokens ?? 2048,
+				// `askJudge` issues one raw fetch per verdict — no SDK, no retries.
+				// Stamp the policy that actually ran, never the agent's SDK default.
+				retryPolicy: { sdkMaxRetries: 0, repetitionRetries: 0 },
 				publicHeadersSha256: env.publicHeaders.sha256,
 				limits: {
 					maxRequests: options.maxRequests ?? 100,
@@ -559,9 +562,15 @@ async function commandJudge(options: Options): Promise<number> {
 		let replayHandle: ReplayHandle | null = null;
 		let endpoint: ModelServerHandle;
 		let judgeWireApi: "chat-completions" | "responses" = "chat-completions";
+		// The judge request hash covers the model: offline replay must send the
+		// model the cassette was RECORDED with, or every round looks stale and
+		// assertFresh() fails the replay against itself.
+		let replayModel: string | undefined;
 		try {
 			if (env === null) {
-				judgeWireApi = readCassette(cassetteFile).wireApi ?? "chat-completions";
+				const replayCassette = readCassette(cassetteFile);
+				judgeWireApi = replayCassette.wireApi ?? "chat-completions";
+				replayModel = replayCassette.model;
 				replayHandle = await startReplay({ file: cassetteFile });
 				endpoint = replayHandle;
 			} else {
@@ -615,7 +624,7 @@ async function commandJudge(options: Options): Promise<number> {
 					const reading = await askJudge({
 						endpoint: {
 							baseUrl: endpoint.url,
-							model: env?.model ?? "cassette",
+							model: env?.model ?? replayModel ?? "cassette",
 							...(env ? { apiKey: env.apiKey } : {}),
 							wireApi: judgeWireApi,
 						},

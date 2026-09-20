@@ -21,6 +21,7 @@ import {
 	startRecorder,
 	startReplay,
 	usageFromSse,
+	validateCassette,
 	writeCassette,
 } from "../lib/cassette";
 import { ENV_KEYS } from "../lib/env";
@@ -28,6 +29,7 @@ import { singleClip } from "../lib/fixtures";
 import { normalizeIds, runScenario } from "../lib/harness";
 import { startScriptedModel } from "../lib/model-server";
 import { adoptCassetteForRetainedAttempt } from "../lib/runner";
+import { transportIdentity } from "../lib/transport";
 
 const DIRECTORY = mkdtempSync(join(tmpdir(), "wb-cassette-"));
 const FILE = join(DIRECTORY, "wizard.json");
@@ -97,6 +99,80 @@ async function record() {
 }
 
 describe("record then replay", () => {
+	it("accepts a Chat cassette stamped with its true zero-retry judge policy", () => {
+		// A judge cassette records the policy that actually ran (one raw fetch per
+		// verdict). Reconstructing the identity from the recorded transport must use
+		// that policy, not the agent SDK default, or every judge recording fails.
+		const transport = transportIdentity({
+			wireApi: "chat-completions",
+			retryPolicy: { sdkMaxRetries: 0, repetitionRetries: 0 },
+		});
+		expect(() =>
+			validateCassette({
+				scenario: "judge-probe",
+				provider: "openai-compatible",
+				model: "workbench-loopback-fixture",
+				resolvedModel: "workbench",
+				recordedAt: "2026-09-19T00:00:00.000Z",
+				rounds: [
+					{
+						round: 0,
+						requestHash: "0".repeat(16),
+						digest: { systemChars: 1, toolCount: 0, roles: [], lastUserText: "" },
+						sse: 'data: {"model":"workbench"}\n\n',
+					},
+				],
+				attempts: [],
+				wireApi: "chat-completions",
+				transport,
+			} as never),
+		).not.toThrow();
+	});
+
+	it("replays a judge cassette only with the model it was recorded with", async () => {
+		// The judge request hash covers the model field. Offline replay that sends
+		// a placeholder model marks every round stale and fails against itself —
+		// the recorded model is the one the replay must send.
+		const DIRECTORY = mkdtempSync(join(tmpdir(), "wb-jmodel-"));
+		const file = join(DIRECTORY, "judge.json");
+		const upstream = await startScriptedModel([{ kind: "text", text: "ok" }]);
+		const recorder = await startRecorder({
+			upstream: upstream.url,
+			file,
+			scenario: "judge-model-probe",
+			provider: "loopback",
+			model: "recorded-model-x",
+			// Transport-bound: only then does the request hash cover the model —
+			// which is exactly how the CLI's live judge transport records.
+			wireApi: "chat-completions",
+			transport: transportIdentity({ wireApi: "chat-completions" }),
+		});
+		const ask = (url: string, model: string) =>
+			fetch(`${url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ model, messages: [{ role: "user", content: "v" }] }),
+			}).then((response) => response.text());
+		try {
+			await ask(recorder.url, "recorded-model-x");
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+		for (const [model, expectStale] of [
+			["recorded-model-x", false],
+			["cassette", true],
+		] as const) {
+			const replay = await startReplay({ file });
+			try {
+				await ask(replay.url, model);
+			} finally {
+				replay.close();
+			}
+			expect(replay.staleRounds.length > 0).toBe(expectStale);
+		}
+		rmSync(DIRECTORY, { recursive: true, force: true });
+	});
 	it("replaying reproduces the recorded document exactly", async () => {
 		const recorded = await record();
 		expect(recorded.ok).toBe(true);

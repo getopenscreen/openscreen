@@ -75,6 +75,10 @@ export function transportIdentity(options: {
 	maxOutputTokens?: number;
 	limits?: Partial<TransportLimits>;
 	publicHeadersSha256?: string;
+	/** The retry policy ACTUALLY executed by the caller, not the SDK default. The
+	 *  chat branch's fallback describes the agent's SDK path; a judge that issues
+	 *  one raw fetch per verdict must stamp zero retries instead. */
+	retryPolicy?: TransportIdentity["retryPolicy"];
 }): TransportIdentity {
 	const limits = { ...DEFAULT_TRANSPORT_LIMITS, ...options.limits };
 	if (options.publicHeadersSha256 && !/^[a-f0-9]{64}$/.test(options.publicHeadersSha256)) {
@@ -115,7 +119,7 @@ export function transportIdentity(options: {
 			maxOutputTokens: null,
 			reasoning: "unchanged",
 		},
-		retryPolicy: { sdkMaxRetries: "default", repetitionRetries: 2 },
+		retryPolicy: options.retryPolicy ?? { sdkMaxRetries: "default", repetitionRetries: 2 },
 		limits,
 		publicHeadersSha256: options.publicHeadersSha256 ?? sha256Bytes("[]"),
 	};

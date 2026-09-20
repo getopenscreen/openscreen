@@ -11,8 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readCassette } from "../lib/cassette";
 import {
 	type ArtifactReference,
+	assertCassettePrivacy,
 	assertComparable,
 	boundBaselineFromMeasurement,
 	boundMeasurementFingerprints,
@@ -256,6 +258,40 @@ afterEach(() => {
 });
 
 describe("versioned measurement export and verification", () => {
+	it("scans decoded Responses request bodies for private material", () => {
+		const base64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
+		const cassette = {
+			scenario: "privacy-probe",
+			provider: "openai-compatible",
+			model: "workbench-loopback-fixture",
+			resolvedModel: "workbench",
+			recordedAt: "2026-09-20T00:00:00.000Z",
+			rounds: [
+				{
+					round: 0,
+					requestHash: "0".repeat(64),
+					digest: { systemChars: 1, toolCount: 0, roles: [], lastUserText: "" },
+					sse: "",
+					requestBodyBase64: base64(JSON.stringify({ prompt: "look at /Users/alice/private.txt" })),
+				},
+			],
+			attempts: [],
+			wireApi: "responses",
+		} as unknown as ReturnType<typeof readCassette>;
+		expect(() => assertCassettePrivacy(cassette, [], "probe.json")).toThrow(
+			expect.objectContaining({ code: "PRIVACY_PRIVATE_PATH" }),
+		);
+		const clean = {
+			...cassette,
+			rounds: [
+				{
+					...cassette.rounds[0],
+					requestBodyBase64: base64(JSON.stringify({ prompt: "clean request" })),
+				},
+			],
+		} as unknown as ReturnType<typeof readCassette>;
+		expect(() => assertCassettePrivacy(clean, [], "probe.json")).not.toThrow();
+	});
 	it("keeps fractional weighted scores exact through the comparison trials", () => {
 		const checks = (heavyPasses: boolean) => [
 			{ id: "beh.light", axis: "behaviour" as const, weight: 1, ok: true, indeterminate: false },

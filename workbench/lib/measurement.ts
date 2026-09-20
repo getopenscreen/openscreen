@@ -1074,7 +1074,55 @@ function assertCountsAgainstReport(manifest: MeasurementManifest, report: Workbe
 	}
 }
 
-function assertCassettes(manifest: MeasurementManifest, root: string): void {
+/** The file-level privacy scan sees base64 request bodies as opaque text. A
+ *  Responses cassette stores the full request that way — the user prompt, tool
+ *  inputs, file paths — so decode every round's request and apply the complete
+ *  existing rule set (caller secrets, credentials, raw config, private paths,
+ *  transcripts) to what the request actually contains. Keys and string values are
+ *  inspected unescaped: the serialized form cannot be scanned as text, because
+ *  its own escape sequences read as drive paths to the private-path rule. */
+export function assertCassettePrivacy(
+	cassette: ReturnType<typeof readCassette>,
+	knownSecrets: string[],
+	label: string,
+): void {
+	for (const round of cassette.rounds) {
+		if (!round.requestBodyBase64) continue;
+		const decoded = Buffer.from(round.requestBodyBase64, "base64").toString("utf8");
+		let scannable: string;
+		try {
+			const fragments: string[] = [];
+			const collect = (node: unknown): void => {
+				if (typeof node === "string") {
+					fragments.push(node);
+					return;
+				}
+				if (Array.isArray(node)) {
+					for (const item of node) collect(item);
+					return;
+				}
+				if (node && typeof node === "object") {
+					for (const [key, value] of Object.entries(node)) {
+						fragments.push(`"${key}":`);
+						collect(value);
+					}
+				}
+			};
+			collect(JSON.parse(decoded));
+			scannable = fragments.join("\n");
+		} catch {
+			scannable = decoded;
+		}
+		const issue = privacyFailure(scannable, knownSecrets);
+		if (issue) throw new MeasurementError(issue.code, `${label}: ${issue.message}`);
+	}
+}
+
+function assertCassettes(
+	manifest: MeasurementManifest,
+	root: string,
+	knownSecrets: string[] = [],
+): void {
 	const assertOne = (ref: ArtifactReference, judged: boolean): void => {
 		let cassette: ReturnType<typeof readCassette>;
 		try {
@@ -1131,6 +1179,7 @@ function assertCassettes(manifest: MeasurementManifest, root: string): void {
 				`${ref.path} contains an unmatched rejected or failed Responses attempt`,
 			);
 		}
+		assertCassettePrivacy(cassette, knownSecrets, ref.path);
 	};
 	for (const ref of roleRefs(manifest, "main-cassette")) assertOne(ref, false);
 	for (const ref of roleRefs(manifest, "judge-cassette")) assertOne(ref, true);
@@ -1248,7 +1297,7 @@ export function verifyMeasurementDirectory(
 		assertPublicArtifact(file, options.knownSecrets);
 	}
 	assertFixture(manifest, root);
-	assertCassettes(manifest, root);
+	assertCassettes(manifest, root, options.knownSecrets ?? []);
 	assertTransportFingerprint(manifest, root);
 	assertObservedUsage(manifest, root);
 	if (roleRefs(manifest, "main-cassette").length !== manifest.results.repetitions) {

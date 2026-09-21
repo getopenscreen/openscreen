@@ -7,6 +7,7 @@ import { offlineStore } from "../lib/harness";
 import { askJudge } from "../lib/judge";
 import {
 	assertComparable,
+	assertPublicArtifact,
 	boundBaselineFromMeasurement,
 	exportMeasurement,
 	finalizeJudgedMeasurementCandidate,
@@ -150,20 +151,26 @@ describe("recorded measurement lifecycle", () => {
 		).toThrow(expect.objectContaining({ code: "CANDIDATE_INCOMPLETE" }));
 	});
 
-	it("binds, adopts, replays, and baselines a native Responses measurement", async () => {
+	it.each([
+		"clean",
+		"transcript",
+	])("adopts clean Responses evidence, rejects private text: %s", async (name) => {
+		const text = name === "transcript" ? 'Done. {"transcript": "synthetic private note"}' : null;
 		const scenario = getScenario("target-right-clip");
 		const currentSource = captureSourceIdentity();
 		const source = alternateProvenance(currentSource);
 		const script = (scenario.demoScript ?? []).map((turn, index) =>
 			turn.kind === "tools" && index === 0
 				? { ...turn, opaqueReasoning: "synthetic_measurement_opaque" }
-				: turn,
+				: turn.kind === "text" && text !== null
+					? { ...turn, text }
+					: turn,
 		);
 		const upstream = await startScriptedModel(script, {
 			wireApi: "responses",
 			model: "gpt-5-measurement",
 		});
-		const runDir = join(DIRECTORY, "responses-run");
+		const runDir = join(DIRECTORY, `responses-${name}-run`);
 		const cassetteFile = join(runDir, "main-cassette-rep-0.json");
 		const headers = publicHeaderProfile({});
 		const transport = transportIdentity({
@@ -198,6 +205,7 @@ describe("recorded measurement lifecycle", () => {
 			recorder.close();
 			upstream.close();
 		}
+		expect(result.run.ok, result.run.error).toBe(true);
 		const summary = summarizeScenario({
 			scenarioId: scenario.id,
 			title: scenario.title,
@@ -250,7 +258,21 @@ describe("recorded measurement lifecycle", () => {
 			})}\n`,
 			"utf8",
 		);
-		const measurementsDir = join(DIRECTORY, "responses-measurements");
+		const measurementsDir = join(DIRECTORY, `responses-${name}-measurements`);
+		if (text !== null) {
+			expect(result.run.answer).toBe(text);
+			const response = readCassette(cassetteFile).rounds.at(-1)?.response;
+			expect(response?.bodyBase64).toBeTruthy();
+			expect(Buffer.from(response!.bodyBase64, "base64").toString("utf8")).toContain(
+				JSON.stringify(text).slice(1, -1),
+			);
+			// The real recorder's serialized cassette hides the quoted field from the file scan.
+			expect(() => assertPublicArtifact(cassetteFile)).not.toThrow();
+			expect(() => exportMeasurement({ runDir, id, reviewFile: review, measurementsDir })).toThrow(
+				expect.objectContaining({ code: "PRIVACY_TRANSCRIPT" }),
+			);
+			return;
+		}
 		const adopted = exportMeasurement({ runDir, id, reviewFile: review, measurementsDir });
 		const verified = verifyMeasurementDirectory(adopted, { requireApprovedReview: true });
 		expect(await replayMeasurement(id, measurementsDir)).toEqual(candidate.manifest.results);

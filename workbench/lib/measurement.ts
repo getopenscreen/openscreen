@@ -1074,21 +1074,16 @@ function assertCountsAgainstReport(manifest: MeasurementManifest, report: Workbe
 	}
 }
 
-/** The file-level privacy scan sees base64 request bodies as opaque text. A
- *  Responses cassette stores the full request that way — the user prompt, tool
- *  inputs, file paths — so decode every round's request and apply the complete
- *  existing rule set (caller secrets, credentials, raw config, private paths,
- *  transcripts) to what the request actually contains. Keys and string values are
- *  inspected unescaped: the serialized form cannot be scanned as text, because
- *  its own escape sequences read as drive paths to the private-path rule. */
+/** Base64 bodies are opaque to the file-level scan. Inspect decoded request
+ *  documents and Responses SSE payloads with the existing privacy rules.
+ *  Scan keys and string values unescaped, not JSON serialization (whose escape
+ *  sequences can also look like drive paths). */
 export function assertCassettePrivacy(
 	cassette: ReturnType<typeof readCassette>,
 	knownSecrets: string[],
 	label: string,
 ): void {
-	for (const round of cassette.rounds) {
-		if (!round.requestBodyBase64) continue;
-		const decoded = Buffer.from(round.requestBodyBase64, "base64").toString("utf8");
+	const scan = (decoded: string): void => {
 		let scannable: string;
 		try {
 			const fragments: string[] = [];
@@ -1115,6 +1110,17 @@ export function assertCassettePrivacy(
 		}
 		const issue = privacyFailure(scannable, knownSecrets);
 		if (issue) throw new MeasurementError(issue.code, `${label}: ${issue.message}`);
+	};
+	for (const round of cassette.rounds) {
+		if (round.requestBodyBase64) {
+			scan(Buffer.from(round.requestBodyBase64, "base64").toString("utf8"));
+		}
+		if (cassette.wireApi === "responses" && round.response) {
+			const decoded = Buffer.from(round.response.bodyBase64, "base64").toString("utf8");
+			for (const line of decoded.split("\n")) {
+				if (line.startsWith("data:")) scan(line.slice(5).trim());
+			}
+		}
 	}
 }
 

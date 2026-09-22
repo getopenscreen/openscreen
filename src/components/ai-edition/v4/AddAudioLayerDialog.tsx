@@ -160,6 +160,11 @@ export function AddAudioLayerDialog({
 			return;
 		}
 		try {
+			const diskSpaceCheck = await window.electronAPI?.checkRecordingDiskSpace?.();
+			if (diskSpaceCheck && !diskSpaceCheck.success) {
+				toast.error(diskSpaceCheck.error);
+				return;
+			}
 			const stream = await navigator.mediaDevices.getUserMedia({
 				audio: { echoCancellation: true, noiseSuppression: true },
 			});

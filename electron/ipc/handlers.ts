@@ -62,7 +62,7 @@ import { AppSettingsStore } from "../app-settings";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
-import { RECORDINGS_DIR } from "../main";
+import { getRecordingsDirInfo, RECORDINGS_DIR, setRecordingsDir } from "../main";
 import { type AudioPeaksResult, getAudioPeaks } from "../media/audioPeaks";
 import {
 	readCursorRecordingFile as readCursorRecordingFileFrom,
@@ -84,6 +84,7 @@ import { findPipeWireCursorHelperPath } from "../native-bridge/cursor/recording/
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
 import { toHelperRect } from "../native-bridge/helperCoordinates";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
+import { checkDiskSpace } from "../recording/diskSpaceCheck";
 import {
 	describeSalvagedTake,
 	nativeMacSalvageTarget,
@@ -217,6 +218,23 @@ function buildDialogOptions<T extends Electron.OpenDialogOptions | Electron.Save
 
 function hasAllowedImportVideoExtension(filePath: string): boolean {
 	return ALLOWED_IMPORT_VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+/**
+ * Refuses to start a recording when the recordings directory's filesystem is
+ * critically low on space. Before this, low disk space was only discovered
+ * once the user tried to save — after the take was already lost. Returns
+ * `null` when there is enough room (or the check itself couldn't run, which
+ * must never block a recording that would otherwise have worked).
+ */
+async function lowDiskSpaceStartError(): Promise<{ success: false; error: string } | null> {
+	const status = await checkDiskSpace(RECORDINGS_DIR);
+	if (!status.low) return null;
+	const availableMb = Math.max(0, Math.floor(status.availableBytes / (1024 * 1024)));
+	return {
+		success: false,
+		error: mainT("dialogs", "recording.lowDiskSpace", { availableMb }),
+	};
 }
 
 // Imported audio (issue #350). Kept separate from the video set so the two
@@ -2097,6 +2115,53 @@ export function registerIpcHandlers(
 		BrowserWindow.getAllWindows(),
 	);
 
+	ipcMain.handle("get-recordings-dir", () => {
+		return getRecordingsDirInfo();
+	});
+
+	ipcMain.handle("check-recording-disk-space", async () => {
+		const diskSpaceError = await lowDiskSpaceStartError();
+		return diskSpaceError ?? { success: true };
+	});
+
+	ipcMain.handle("choose-recordings-dir", async () => {
+		const dialogOptions = buildDialogOptions(
+			{
+				title: mainT("dialogs", "fileDialogs.selectRecordingsFolder"),
+				defaultPath: RECORDINGS_DIR,
+				properties: ["openDirectory", "createDirectory"] as Array<
+					"openDirectory" | "createDirectory"
+				>,
+			},
+			getMainWindow(),
+		);
+		const result = await dialog.showOpenDialog(dialogOptions);
+		if (result.canceled || result.filePaths.length === 0) {
+			return { success: false, canceled: true };
+		}
+		try {
+			const resolved = await setRecordingsDir(result.filePaths[0]);
+			return { success: true, path: resolved };
+		} catch (error) {
+			console.error("Failed to switch recordings folder:", error);
+			return {
+				success: false,
+				message: "Failed to switch recordings folder",
+				error: String(error),
+			};
+		}
+	});
+
+	ipcMain.handle("reset-recordings-dir", async () => {
+		try {
+			const resolved = await setRecordingsDir(null);
+			return { success: true, path: resolved };
+		} catch (error) {
+			console.error("Failed to reset recordings folder:", error);
+			return { success: false, message: "Failed to reset recordings folder", error: String(error) };
+		}
+	});
+
 	ipcMain.handle("request-camera-access", async () => {
 		if (process.platform !== "darwin") {
 			return { success: true, granted: true, status: "granted" };
@@ -2442,6 +2507,8 @@ export function registerIpcHandlers(
 				if (!findPipeWireCursorHelperPath()) {
 					return { success: false, error: "Native Linux capture helper is not available." };
 				}
+				const diskSpaceError = await lowDiskSpaceStartError();
+				if (diskSpaceError) return diskSpaceError;
 
 				const recordingId =
 					typeof request?.recordingId === "number" && Number.isFinite(request.recordingId)
@@ -2640,6 +2707,8 @@ export function registerIpcHandlers(
 						error: "Native Windows capture request is missing a source.",
 					};
 				}
+				const diskSpaceError = await lowDiskSpaceStartError();
+				if (diskSpaceError) return diskSpaceError;
 
 				const recordingId =
 					typeof request.recordingId === "number" && Number.isFinite(request.recordingId)
@@ -2865,6 +2934,8 @@ export function registerIpcHandlers(
 			if (!request?.source?.sourceId) {
 				return { success: false, error: "Native macOS capture request is missing a source." };
 			}
+			const diskSpaceError = await lowDiskSpaceStartError();
+			if (diskSpaceError) return diskSpaceError;
 
 			const recordingId =
 				typeof request.recordingId === "number" && Number.isFinite(request.recordingId)
@@ -3490,7 +3561,12 @@ export function registerIpcHandlers(
 	// Declared here because both the webcam attach below and store-recorded-session
 	// finalize through the same registry.
 	const recordingStreams = new RecordingStreamRegistry();
-	registerRecordingStreamHandlers(ipcMain, recordingStreams, resolveRecordingOutputPath);
+	registerRecordingStreamHandlers(
+		ipcMain,
+		recordingStreams,
+		resolveRecordingOutputPath,
+		lowDiskSpaceStartError,
+	);
 
 	/**
 	 * Writes a browser-recorded webcam clip next to a natively-recorded screen

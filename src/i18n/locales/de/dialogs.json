@@ -87,6 +87,10 @@
 		"videoFiles": "Videodateien",
 		"audioFiles": "Audiodateien",
 		"openscreenProject": "OpenScreen-Projekt",
-		"allFiles": "Alle Dateien"
+		"allFiles": "Alle Dateien",
+		"selectRecordingsFolder": "Ordner für Aufnahmen auswählen"
+	},
+	"recording": {
+		"lowDiskSpace": "Nicht genügend Speicherplatz, um die Aufnahme zu starten (nur {{availableMb}} MB frei). Gib Speicherplatz frei oder wähle einen anderen Ordner für Aufnahmen und versuche es erneut."
 	}
 }

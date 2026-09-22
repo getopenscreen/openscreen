@@ -94,6 +94,12 @@
 		"previewUnavailable": "Vorschau nicht verfügbar",
 		"about": "Über",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Wird geprüft…"
+		"checkingForUpdates": "Wird geprüft…",
+		"storage": "Speicherort",
+		"storageHint": "Wo Aufnahmen während der Erfassung zwischengespeichert und beim Beenden gespeichert werden.",
+		"chooseFolder": "Ordner wählen",
+		"resetToDefault": "Auf Standard zurücksetzen",
+		"changingFolder": "Wird gewechselt…",
+		"changeFolderFailed": "Wechsel zu diesem Ordner fehlgeschlagen"
 	}
 }

@@ -1785,6 +1785,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
+			// The native paths above each run this same check before capture starts;
+			// the browser fallback needs its own, since it writes to RECORDINGS_DIR
+			// through open-recording-stream without going through a native handler.
+			const diskSpaceCheck = await window.electronAPI.checkRecordingDiskSpace();
+			if (!diskSpaceCheck.success) {
+				throw new Error(diskSpaceCheck.error);
+			}
+
 			// Capture screen + microphone in parallel: the gap between the two
 			// `getUserMedia` calls is the dominant source of the mic-vs-video lag at the
 			// start of the recording (issue #57).

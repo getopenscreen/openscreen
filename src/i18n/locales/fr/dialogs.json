@@ -87,6 +87,10 @@
 		"videoFiles": "Fichiers vidéo",
 		"audioFiles": "Fichiers audio",
 		"openscreenProject": "Projet OpenScreen",
-		"allFiles": "Tous les fichiers"
+		"allFiles": "Tous les fichiers",
+		"selectRecordingsFolder": "Sélectionner le dossier des enregistrements"
+	},
+	"recording": {
+		"lowDiskSpace": "Espace disque insuffisant pour démarrer l'enregistrement (seulement {{availableMb}} Mo disponibles). Libérez de l'espace ou choisissez un autre dossier d'enregistrements, puis réessayez."
 	}
 }

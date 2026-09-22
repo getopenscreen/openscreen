@@ -87,6 +87,10 @@
 		"videoFiles": "Video soubory",
 		"audioFiles": "Zvukové soubory",
 		"openscreenProject": "Projekt OpenScreen",
-		"allFiles": "Všechny soubory"
+		"allFiles": "Všechny soubory",
+		"selectRecordingsFolder": "Vybrat složku pro nahrávky"
+	},
+	"recording": {
+		"lowDiskSpace": "Nedostatek místa na disku pro zahájení nahrávání (volno pouze {{availableMb}} MB). Uvolněte místo nebo vyberte jinou složku pro nahrávky a zkuste to znovu."
 	}
 }

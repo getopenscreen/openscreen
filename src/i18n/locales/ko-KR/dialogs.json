@@ -87,6 +87,10 @@
 		"videoFiles": "비디오 파일",
 		"audioFiles": "오디오 파일",
 		"openscreenProject": "OpenScreen 프로젝트",
-		"allFiles": "모든 파일"
+		"allFiles": "모든 파일",
+		"selectRecordingsFolder": "녹화 폴더 선택"
+	},
+	"recording": {
+		"lowDiskSpace": "녹화를 시작할 디스크 공간이 부족합니다(사용 가능한 공간 {{availableMb}}MB). 공간을 확보하거나 다른 녹화 폴더를 선택한 후 다시 시도하세요."
 	}
 }

@@ -87,6 +87,10 @@
 		"videoFiles": "Archivos de video",
 		"audioFiles": "Archivos de audio",
 		"openscreenProject": "Proyecto OpenScreen",
-		"allFiles": "Todos los archivos"
+		"allFiles": "Todos los archivos",
+		"selectRecordingsFolder": "Seleccionar carpeta de grabaciones"
+	},
+	"recording": {
+		"lowDiskSpace": "No hay suficiente espacio en disco para iniciar la grabación (solo quedan {{availableMb}} MB libres). Libera espacio o elige otra carpeta de grabaciones e inténtalo de nuevo."
 	}
 }

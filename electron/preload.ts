@@ -410,6 +410,27 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	revealInFolder: (filePath: string) => {
 		return ipcRenderer.invoke("reveal-in-folder", filePath);
 	},
+	getRecordingsDir: () => {
+		return ipcRenderer.invoke("get-recordings-dir") as Promise<{
+			path: string;
+			isDefault: boolean;
+		}>;
+	},
+	chooseRecordingsDir: () => {
+		return ipcRenderer.invoke("choose-recordings-dir") as Promise<
+			{ success: true; path: string } | { success: false; canceled?: boolean; message?: string }
+		>;
+	},
+	resetRecordingsDir: () => {
+		return ipcRenderer.invoke("reset-recordings-dir") as Promise<
+			{ success: true; path: string } | { success: false; message?: string }
+		>;
+	},
+	checkRecordingDiskSpace: () => {
+		return ipcRenderer.invoke("check-recording-disk-space") as Promise<
+			{ success: true } | { success: false; error: string }
+		>;
+	},
 	getShortcuts: () => {
 		return ipcRenderer.invoke("get-shortcuts");
 	},

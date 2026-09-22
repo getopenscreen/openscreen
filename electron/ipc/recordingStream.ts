@@ -96,10 +96,13 @@ export function registerRecordingStreamHandlers(
 	ipcMain: IpcMain,
 	registry: RecordingStreamRegistry,
 	resolveRecordingOutputPath: (fileName: string) => string,
+	lowDiskSpaceStartError: () => Promise<{ success: false; error: string } | null>,
 ): void {
 	ipcMain.handle(
 		"open-recording-stream",
 		async (_, fileName: string): Promise<{ success: boolean; error?: string }> => {
+			const diskSpaceError = await lowDiskSpaceStartError();
+			if (diskSpaceError) return diskSpaceError;
 			try {
 				await registry.open(fileName, resolveRecordingOutputPath(fileName));
 				return { success: true };

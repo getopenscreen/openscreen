@@ -87,6 +87,10 @@
 		"videoFiles": "Tệp Video",
 		"audioFiles": "Tệp âm thanh",
 		"openscreenProject": "Dự án OpenScreen",
-		"allFiles": "Tất cả các tệp"
+		"allFiles": "Tất cả các tệp",
+		"selectRecordingsFolder": "Chọn thư mục bản ghi"
+	},
+	"recording": {
+		"lowDiskSpace": "Không đủ dung lượng ổ đĩa để bắt đầu quay (chỉ còn {{availableMb}} MB trống). Hãy giải phóng dung lượng hoặc chọn thư mục bản ghi khác rồi thử lại."
 	}
 }

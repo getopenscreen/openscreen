@@ -94,6 +94,12 @@
 		"previewUnavailable": "Náhled nedostupný",
 		"about": "O aplikaci",
 		"version": "Verze {{version}}",
-		"checkingForUpdates": "Kontrola…"
+		"checkingForUpdates": "Kontrola…",
+		"storage": "Úložiště",
+		"storageHint": "Kam se nahrávky ukládají během záznamu a po jeho zastavení.",
+		"chooseFolder": "Vybrat složku",
+		"resetToDefault": "Obnovit výchozí",
+		"changingFolder": "Přepíná se…",
+		"changeFolderFailed": "Přepnutí do této složky se nezdařilo"
 	}
 }

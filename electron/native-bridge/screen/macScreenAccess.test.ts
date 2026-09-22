@@ -163,6 +163,28 @@ describe("readMacScreenCaptureAccess", () => {
 		expect(isMacScreenProbeUnavailable(access.status)).toBe(true);
 	});
 
+	it("reports timeout and kills the helper when it never answers", async () => {
+		// A hung helper must neither stall the caller nor be read as a refusal, and must
+		// not outlive the read that spawned it.
+		vi.useFakeTimers();
+		try {
+			const pending = readMacScreenCaptureAccess();
+			await vi.advanceTimersByTimeAsync(3_000);
+			const access = await pending;
+
+			expect(access).toMatchObject({
+				success: false,
+				granted: false,
+				status: "timeout",
+				error: "Timed out reading the macOS screen recording permission",
+			});
+			expect(isMacScreenProbeUnavailable(access.status)).toBe(true);
+			expect(helper.killed).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("answers granted off-darwin without spawning anything", async () => {
 		Object.defineProperty(process, "platform", { value: "win32", configurable: true });
 

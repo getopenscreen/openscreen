@@ -30,6 +30,7 @@ function normalizeTelemetrySample(
 		timeMs: Math.max(0, Math.min(sample.timeMs, totalMs)),
 		cx: Math.max(0, Math.min(sample.cx, 1)),
 		cy: Math.max(0, Math.min(sample.cy, 1)),
+		visible: sample.visible,
 		interactionType: sample.interactionType,
 	};
 }
@@ -92,7 +93,13 @@ export function detectZoomDwellCandidates(
 		});
 	};
 
-	for (let index = 1; index < samples.length; index += 1) {
+	for (let index = 0; index < samples.length; index += 1) {
+		if (samples[index].visible === false) {
+			pushRunIfDwell(runStart, index);
+			runStart = index + 1;
+			continue;
+		}
+		if (index <= runStart) continue;
 		const prev = samples[index - 1];
 		const curr = samples[index];
 		const distance = Math.hypot(curr.cx - prev.cx, curr.cy - prev.cy);
@@ -122,7 +129,9 @@ function detectZoomClickCandidates(samples: CursorTelemetryPoint[]): ZoomDwellCa
 	return samples
 		.filter(
 			(sample) =>
-				sample.interactionType !== undefined && CLICK_INTERACTION_TYPES.has(sample.interactionType),
+				sample.visible !== false &&
+				sample.interactionType !== undefined &&
+				CLICK_INTERACTION_TYPES.has(sample.interactionType),
 		)
 		.map((sample) => ({
 			centerTimeMs: sample.timeMs,

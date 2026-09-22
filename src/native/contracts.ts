@@ -27,6 +27,7 @@ export interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
 	cy: number;
+	visible?: boolean;
 }
 
 export interface CursorRecordingSample extends CursorTelemetryPoint {

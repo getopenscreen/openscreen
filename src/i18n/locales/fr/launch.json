@@ -138,7 +138,7 @@
 			"screenSettings": "Dans Réglages Système, activez OpenScreen. Si macOS propose de le quitter et le rouvrir, acceptez : cette fenêtre reviendra.",
 			"screenNotListed": "OpenScreen n'apparaît pas dans la liste ? Cliquez sur +, puis choisissez OpenScreen dans Applications.",
 			"screenRestart": "Autorisé. OpenScreen doit redémarrer pour pouvoir l'utiliser.",
-			"screenRecurring": "macOS vous demandera de temps en temps de confirmer cet accès. C'est normal."
+			"screenRecurring": "À votre premier enregistrement, macOS vous demandera si OpenScreen peut accéder directement à votre écran, sans passer par le sélecteur du système. Cliquez sur Autoriser. macOS repose la question de temps en temps, c'est normal."
 		},
 		"footer": {
 			"screenRequired": "L'enregistrement de l'écran est nécessaire pour enregistrer.",

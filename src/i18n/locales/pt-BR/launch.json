@@ -138,7 +138,7 @@
 			"screenSettings": "Nos Ajustes do Sistema, ative o OpenScreen. Se o macOS oferecer encerrar e reabrir o app, aceite: esta janela voltará.",
 			"screenNotListed": "O OpenScreen não está na lista? Clique em + e escolha o OpenScreen em Aplicativos.",
 			"screenRestart": "Permitido. O OpenScreen precisa reiniciar para usá-la.",
-			"screenRecurring": "De vez em quando, o macOS pedirá que você confirme este acesso. Isso é normal."
+			"screenRecurring": "Na sua primeira gravação, o macOS perguntará se o OpenScreen pode acessar sua tela diretamente, sem o seletor do sistema. Clique em Permitir. O macOS pergunta de novo de vez em quando; isso é normal."
 		},
 		"footer": {
 			"screenRequired": "A gravação de tela é necessária para gravar.",

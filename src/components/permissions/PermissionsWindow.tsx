@@ -25,7 +25,14 @@ const ROWS: ReadonlyArray<{
 	{ kind: "camera", level: "optional", Icon: Video },
 ];
 
-/** macOS 15 re-confirms ScreenCaptureKit access periodically for every app that uses it. */
+/**
+ * From macOS 15, any app that uses ScreenCaptureKit outside Apple's system picker gets an
+ * alert asking whether it may "bypass the system private window picker", on top of the
+ * Screen Recording grant and again periodically. It cannot be raised on demand (replayd
+ * shows it on its own schedule, whatever the last answer was), and its approval cannot be
+ * read, so it cannot be a row with a status. What the window can do is say it is coming,
+ * and which button to press, before the first recording meets it.
+ */
 const RECURRING_SCREEN_ALERT_FROM_MACOS = 15;
 
 export function PermissionsWindow() {

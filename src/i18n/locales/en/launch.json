@@ -138,7 +138,7 @@
 			"screenSettings": "In System Settings, turn on OpenScreen. If macOS offers to quit and reopen it, accept: this window will come back.",
 			"screenNotListed": "OpenScreen isn't in the list? Click +, then choose OpenScreen in Applications.",
 			"screenRestart": "Allowed. OpenScreen needs to restart before it can use it.",
-			"screenRecurring": "macOS will occasionally ask you to confirm this access. That's expected."
+			"screenRecurring": "On your first recording, macOS will ask whether OpenScreen may access your screen directly, without the system picker. Click Allow. macOS asks again from time to time; that's expected."
 		},
 		"footer": {
 			"screenRequired": "Screen recording is needed to record.",

@@ -715,6 +715,25 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			return
 		}
 
+		// A take that ended before its first frame -- a start that failed after the writer
+		// was set up, or a stop right away -- never called `startWriting`. Finishing (or
+		// even marking inputs finished on) a writer in that state raises an Objective-C
+		// exception, which kills the process: here, in a picker session, that would take
+		// every later take and the user's pick down with it. There is nothing to finalise:
+		// drop whatever file the writer may have created and say the take produced none.
+		if writer.status == .unknown {
+			sampleQueue.sync {
+				audioTicker?.cancel()
+				audioTicker = nil
+			}
+			try? FileManager.default.removeItem(atPath: request.outputs.screenPath)
+			emitError(
+				code: "writer-failed",
+				message: "The recording stopped before its first frame was written."
+			)
+			return
+		}
+
 		// Capture has stopped, so nothing is in flight on the sample queue any more; hopping
 		// onto it once is what makes the mixer's final flush safe without a lock, and it is
 		// also where the ticker has to die, since that is the queue it fires on.

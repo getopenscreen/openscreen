@@ -103,6 +103,14 @@ enum HelperError: Error, CustomStringConvertible {
 	}
 }
 
+/// A source chosen in Apple's system picker, kept by `PickerSession` for the takes after it.
+struct PickedSource {
+	let filter: SCContentFilter
+	/// Global frame (points, top-left origin) of what was picked, for cursor mapping.
+	let frame: CGRect
+	let displayId: CGDirectDisplayID?
+}
+
 @available(macOS 13.0, *)
 final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private struct CaptureTarget {
@@ -146,19 +154,30 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var captureFrame = CGRect.zero
 	private let microphoneOutputTypeRawValue = 2
 	private let hostClock = CMClockGetHostTimeClock()
+	private let picked: PickedSource?
 
-	init(request: RecordingRequest) {
+	/// `picked` is a choice already made in Apple's system picker (`PickerSession`). The take
+	/// then records exactly that filter: no source lookup, and no Screen Recording check,
+	/// because the user's pick IS the consent -- asking for the grant here would put back
+	/// the very prompt the picker path exists to remove.
+	init(request: RecordingRequest, picked: PickedSource? = nil) {
 		self.request = request
+		self.picked = picked
 	}
 
 	func start() async throws {
-		try ensureRequestedPermissions()
+		try ensureRequestedPermissions(screen: picked == nil)
 
-		let content = try await SCShareableContent.excludingDesktopWindows(
-			false,
-			onScreenWindowsOnly: true
-		)
-		let target = try makeCaptureTarget(from: content)
+		let target: CaptureTarget
+		if let picked {
+			target = makeCaptureTarget(picked: picked)
+		} else {
+			let content = try await SCShareableContent.excludingDesktopWindows(
+				false,
+				onScreenWindowsOnly: true
+			)
+			target = try makeCaptureTarget(from: content)
+		}
 		outputWidth = target.width
 		outputHeight = target.height
 		captureFrame = target.captureFrame
@@ -401,8 +420,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		])
 	}
 
-	private func ensureRequestedPermissions() throws {
-		if !CGPreflightScreenCaptureAccess() {
+	private func ensureRequestedPermissions(screen: Bool) throws {
+		if screen && !CGPreflightScreenCaptureAccess() {
 			let granted = CGRequestScreenCaptureAccess()
 			if !granted {
 				throw HelperError.permissionDenied("Screen recording permission is required for ScreenCaptureKit capture.")
@@ -435,6 +454,20 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			"width": captureFrame.size.width,
 			"height": captureFrame.size.height,
 		]
+	}
+
+	private func makeCaptureTarget(picked: PickedSource) -> CaptureTarget {
+		let size = captureSize(
+			for: picked.filter,
+			fallbackPointSize: picked.frame.size,
+			fallbackDisplayId: picked.displayId ?? CGMainDisplayID()
+		)
+		return CaptureTarget(
+			filter: picked.filter,
+			width: size.width,
+			height: size.height,
+			captureFrame: picked.frame
+		)
 	}
 
 	private func makeCaptureTarget(from content: SCShareableContent) throws -> CaptureTarget {
@@ -935,6 +968,10 @@ struct OpenScreenScreenCaptureKitHelper {
 	/// screen", printed as the usual single JSON line and nothing else.
 	private static let screenAccessStatusFlag = "--screen-access-status"
 
+	/// The flag that turns this helper into a long-lived session around Apple's system
+	/// picker. See `PickerSession`.
+	private static let pickerSessionFlag = "--picker-session"
+
 	static func main() async {
 		do {
 			initializeCoreGraphicsWindowServerConnection()
@@ -958,6 +995,17 @@ struct OpenScreenScreenCaptureKitHelper {
 					"granted": CGPreflightScreenCaptureAccess(),
 				])
 				exit(0)
+			}
+
+			if CommandLine.arguments.count == 2, CommandLine.arguments[1] == pickerSessionFlag {
+				guard #available(macOS 15.2, *) else {
+					emitError(
+						code: "picker-session-unsupported",
+						message: "The system picker session needs macOS 15.2 or later."
+					)
+					exit(2)
+				}
+				PickerSession().run()
 			}
 
 			guard CommandLine.arguments.count == 2 else {

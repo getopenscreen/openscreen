@@ -2063,7 +2063,25 @@ export function registerIpcHandlers(
 		const appWindowSourceIds = [getMainWindow(), getNotesWindow()]
 			.filter((window): window is BrowserWindow => !!window && !window.isDestroyed())
 			.map((window) => window.getMediaSourceId());
-		const pick = await session.present(collectMacCaptureExcludedWindowIds(appWindowSourceIds));
+		const excludedWindowIds = collectMacCaptureExcludedWindowIds(appWindowSourceIds);
+		// Out of the way while the picker is up. The HUD window is far larger than the bar
+		// it draws (a transparent reserve above it), and Apple's picker targets windows by
+		// their frame, not by where clicks land -- so that invisible rectangle hid every
+		// window behind it from the picker. Its exclusion from the capture is by window id,
+		// so hiding it does not bring it back into a display pick.
+		const hud = getMainWindow();
+		const hideHud = !!hud && !hud.isDestroyed() && hud.isVisible();
+		if (hideHud) {
+			hud.hide();
+		}
+		let pick: MacPickerSelection | null;
+		try {
+			pick = await session.present(excludedWindowIds);
+		} finally {
+			if (hideHud && !hud.isDestroyed()) {
+				hud.showInactive();
+			}
+		}
 		if (!pick) {
 			// Same signal our own picker window sends when it closes without a choice: the HUD
 			// stops waiting to record after a selection.

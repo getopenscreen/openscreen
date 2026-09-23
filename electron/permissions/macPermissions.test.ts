@@ -9,6 +9,7 @@ import {
 
 function setup(overrides: Partial<MacPermissionsDeps> = {}) {
 	const requested = new Set<NotedKind>();
+	const completed = { value: false };
 	const deps: MacPermissionsDeps = {
 		platform: "darwin",
 		macosMajor: 26,
@@ -24,10 +25,14 @@ function setup(overrides: Partial<MacPermissionsDeps> = {}) {
 			markRequested: (kind) => {
 				requested.add(kind);
 			},
+			isCompleted: () => completed.value,
+			markCompleted: () => {
+				completed.value = true;
+			},
 		},
 		...overrides,
 	};
-	return { deps, requested, permissions: createMacPermissions(deps) };
+	return { deps, requested, completed, permissions: createMacPermissions(deps) };
 }
 
 describe("read", () => {
@@ -169,6 +174,46 @@ describe("request", () => {
 		expect(deps.raiseScreenPrompt).not.toHaveBeenCalled();
 		expect(deps.askForMedia).not.toHaveBeenCalled();
 		expect(deps.openExternal).not.toHaveBeenCalled();
+	});
+});
+
+describe("shouldShowAtLaunch", () => {
+	const granted = { probeScreen: async () => ({ answered: true, granted: true }) as const };
+
+	it("shows while Screen Recording is missing", async () => {
+		const { permissions } = setup();
+		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(true);
+	});
+
+	it("comes back after System Settings' Quit & Reopen, mid-onboarding", async () => {
+		// The grant is in and the app was relaunched by System Settings: the other rows are
+		// still waiting, and the window promised to return.
+		const { permissions, requested } = setup({ ...granted, appScreenGranted: () => true });
+		requested.add("screen");
+		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(true);
+	});
+
+	it("stays away once the window was closed with the grant in hand", async () => {
+		const { permissions, requested } = setup({ ...granted, appScreenGranted: () => true });
+		requested.add("screen");
+		permissions.noteWindowClosed(await permissions.read());
+		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(false);
+	});
+
+	it("does not count a close without the grant as finishing", async () => {
+		const { permissions, completed } = setup();
+		permissions.noteWindowClosed(await permissions.read());
+		expect(completed.value).toBe(false);
+	});
+
+	it("never shows to someone who held the grant before the window existed", async () => {
+		const { permissions } = setup({ ...granted, appScreenGranted: () => true });
+		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(false);
+	});
+
+	it("never shows off macOS", async () => {
+		const { permissions } = setup({ platform: "linux" });
+		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(false);
 	});
 });
 

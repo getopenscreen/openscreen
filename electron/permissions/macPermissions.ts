@@ -58,6 +58,9 @@ export type NotedKind = "screen" | "accessibility";
 export interface PermissionsStore {
 	hasRequested(kind: NotedKind): boolean;
 	markRequested(kind: NotedKind): void;
+	/** The window was closed with Screen Recording granted: the onboarding is over. */
+	isCompleted(): boolean;
+	markCompleted(): void;
 }
 
 export interface MacPermissionsDeps {
@@ -195,7 +198,34 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 		deps.store.markRequested(kind);
 	}
 
-	return { read, request, openSettings, noteRequested };
+	/**
+	 * Whether the permissions window belongs on screen at launch.
+	 *
+	 * While recording cannot work, obviously. But also after a relaunch in the middle of
+	 * the onboarding: System Settings offers "Quit & Reopen" the moment Screen Recording is
+	 * turned on, and the window has promised the user it comes back from that -- with
+	 * Accessibility, the microphone and the camera still to go. Someone who already held
+	 * the grant before this window existed never raised a prompt through it, so they do
+	 * not get it on the first launch after an update.
+	 */
+	function shouldShowAtLaunch(snapshot: PermissionsSnapshot): boolean {
+		if (!snapshot.supported) {
+			return false;
+		}
+		if (snapshot.screen !== "granted" || snapshot.screenRequiresRelaunch) {
+			return true;
+		}
+		return deps.store.hasRequested("screen") && !deps.store.isCompleted();
+	}
+
+	/** Called when the window closes: done once Screen Recording is in hand. */
+	function noteWindowClosed(snapshot: PermissionsSnapshot): void {
+		if (snapshot.screen === "granted") {
+			deps.store.markCompleted();
+		}
+	}
+
+	return { read, request, openSettings, noteRequested, shouldShowAtLaunch, noteWindowClosed };
 }
 
 export type MacPermissions = ReturnType<typeof createMacPermissions>;

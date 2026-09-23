@@ -32,31 +32,45 @@ const STORE_FILE = "permissions.json";
  * the System Settings pane instead, which still works. A lost one costs a request macOS
  * silently ignores. Both leave the user with something to act on.
  */
+interface StoreFile {
+	requested?: Partial<Record<NotedKind, string>>;
+	completedAt?: string;
+}
+
 function createFileStore(userData: string): PermissionsStore {
 	const file = path.join(userData, STORE_FILE);
-	let requested: Partial<Record<NotedKind, string>> = {};
+	let state: StoreFile = {};
 	try {
 		const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
-		if (parsed && typeof parsed === "object" && "requested" in parsed) {
-			requested = (parsed as { requested: typeof requested }).requested ?? {};
+		if (parsed && typeof parsed === "object") {
+			state = parsed as StoreFile;
 		}
 	} catch {
 		// Missing or unreadable: nothing has been asked yet.
 	}
 
+	const save = (next: StoreFile) => {
+		state = next;
+		const temporary = `${file}.${process.pid}.tmp`;
+		try {
+			writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+			renameSync(temporary, file);
+		} catch (error) {
+			// Best effort: the in-memory note still gets the rest of this launch right.
+			console.warn("[permissions] failed to persist the permissions note:", error);
+		} finally {
+			rmSync(temporary, { force: true });
+		}
+	};
+
 	return {
-		hasRequested: (kind) => typeof requested[kind] === "string",
-		markRequested: (kind) => {
-			requested = { ...requested, [kind]: new Date().toISOString() };
-			const temporary = `${file}.${process.pid}.tmp`;
-			try {
-				writeFileSync(temporary, `${JSON.stringify({ requested }, null, 2)}\n`, "utf8");
-				renameSync(temporary, file);
-			} catch (error) {
-				// Best effort: the in-memory note still gets the rest of this launch right.
-				console.warn("[permissions] failed to persist the request note:", error);
-			} finally {
-				rmSync(temporary, { force: true });
+		hasRequested: (kind) => typeof state.requested?.[kind] === "string",
+		markRequested: (kind) =>
+			save({ ...state, requested: { ...state.requested, [kind]: new Date().toISOString() } }),
+		isCompleted: () => typeof state.completedAt === "string",
+		markCompleted: () => {
+			if (typeof state.completedAt !== "string") {
+				save({ ...state, completedAt: new Date().toISOString() });
 			}
 		},
 	};
@@ -115,18 +129,23 @@ export function showPermissionsWindow(): void {
 	permissionsWindow = createPermissionsWindow();
 	permissionsWindow.on("closed", () => {
 		permissionsWindow = null;
+		const permissions = getMacPermissions();
+		void permissions
+			.read()
+			.then((snapshot) => permissions.noteWindowClosed(snapshot))
+			.catch(() => undefined);
 	});
 }
 
-/** Opens the permissions window when recording cannot work yet. For app launch. */
+/** Opens the permissions window at launch when it belongs there (see shouldShowAtLaunch). */
 export async function showPermissionsWindowIfNeeded(): Promise<void> {
 	// Not in the headless e2e runs either: there is no one to answer, and the probe would
 	// hold the window open behind every spec.
 	if (process.platform !== "darwin" || process.env["HEADLESS"] === "true") {
 		return;
 	}
-	const snapshot = await getMacPermissions().read();
-	if (snapshot.screen !== "granted" || snapshot.screenRequiresRelaunch) {
+	const permissions = getMacPermissions();
+	if (permissions.shouldShowAtLaunch(await permissions.read())) {
 		showPermissionsWindow();
 	}
 }

@@ -109,6 +109,10 @@
 				"name": "Ekran ve sistem sesi",
 				"description": "Ekranınızı ve Mac'inizin sesini kaydetmek için."
 			},
+			"systemAudio": {
+				"name": "Sistem sesi",
+				"description": "Mac'inizin sesini kaydetmek için. Ekran veya pencere seçmek için izin gerekmez."
+			},
 			"accessibility": {
 				"name": "Erişilebilirlik",
 				"description": "Kayıtlarınızda doğru imleci (ok, metin) göstermek için."

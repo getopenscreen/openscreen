@@ -15,6 +15,7 @@ type Snapshot = Awaited<ReturnType<PermissionsApi["get"]>>;
 const FIRST_RUN: Snapshot = {
 	supported: true,
 	macosMajor: 26,
+	screenRequired: true,
 	screen: "not-requested",
 	screenRequiresRelaunch: false,
 	accessibility: "not-requested",
@@ -110,6 +111,21 @@ describe("PermissionsWindow", () => {
 
 	it("says nothing about it on macOS 14", async () => {
 		await renderWith({ screen: "granted", macosMajor: 14 });
+		expect(screen.queryByText("permissions.help.screenRecurring")).not.toBeInTheDocument();
+	});
+
+	it("with Apple's picker, offers system audio as optional and lets the user start", async () => {
+		await renderWith({ screenRequired: false });
+
+		expect(screen.getByText("permissions.rows.systemAudio.name")).toBeInTheDocument();
+		expect(screen.queryByText("permissions.rows.screen.name")).not.toBeInTheDocument();
+		const row = screen.getByTestId("permission-screen");
+		expect(within(row).getByText("permissions.level.optional")).toBeInTheDocument();
+		expect(screen.getByTestId("permissions-start")).toBeEnabled();
+	});
+
+	it("with Apple's picker, never warns about the bypass alert, which it does not raise", async () => {
+		await renderWith({ screenRequired: false, screen: "granted", macosMajor: 26 });
 		expect(screen.queryByText("permissions.help.screenRecurring")).not.toBeInTheDocument();
 	});
 

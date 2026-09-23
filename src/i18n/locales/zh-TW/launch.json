@@ -109,6 +109,10 @@
 				"name": "螢幕與系統音訊",
 				"description": "用於錄製你的螢幕與 Mac 播放的聲音。"
 			},
+			"systemAudio": {
+				"name": "系統音訊",
+				"description": "用於錄製 Mac 播放的聲音。選擇螢幕或視窗不需要任何權限。"
+			},
 			"accessibility": {
 				"name": "輔助使用",
 				"description": "用於在錄製中顯示正確的游標（箭頭、文字）。"

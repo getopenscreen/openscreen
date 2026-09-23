@@ -83,6 +83,14 @@ import {
 import { findPipeWireCursorHelperPath } from "../native-bridge/cursor/recording/pipeWireCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
 import { toHelperRect } from "../native-bridge/helperCoordinates";
+import {
+	isMacPickerSourceId,
+	MAC_PICKER_SOURCE_PREFIX,
+	type MacPickerSelection,
+	MacPickerSession,
+	macSystemPickerEnabled,
+	markMacSystemPickerUnavailable,
+} from "../native-bridge/screen/macPickerSession";
 import { getMacPermissions, showPermissionsWindow } from "../permissions";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import {
@@ -781,6 +789,11 @@ async function removeNativeWindowsCaptureOutputs(
 	}
 }
 let nativeMacCaptureProcess: ChildProcessWithoutNullStreams | null = null;
+/**
+ * Apple's system picker session (macOS 15.2+), started on first use and kept for the app's
+ * life: the pick it holds cannot leave that process. See macPickerSession.ts.
+ */
+let macPickerSession: MacPickerSession | null = null;
 let nativeMacCaptureOutput = "";
 let nativeMacCaptureTargetPath: string | null = null;
 let nativeMacCaptureRecordingId: number | null = null;
@@ -1005,7 +1018,55 @@ function resolveAssetBasePath() {
 	}
 }
 
+/** Whether sources come from Apple's picker in this run. */
+function macPickerOwnsSources() {
+	return macSystemPickerEnabled();
+}
+
+async function getMacPickerSession(): Promise<MacPickerSession | null> {
+	if (!macPickerOwnsSources()) {
+		return null;
+	}
+	if (macPickerSession) {
+		return macPickerSession;
+	}
+	const helperPath = await findNativeMacCaptureHelperPath();
+	const session = helperPath ? new MacPickerSession(helperPath) : null;
+	if (!session || !(await session.start())) {
+		// A helper that predates `--picker-session`, or none at all: the app's own picker
+		// and the Screen Recording grant, for the rest of this run.
+		console.warn("[mac-picker] falling back to the app's own source picker");
+		markMacSystemPickerUnavailable();
+		return null;
+	}
+	macPickerSession = session;
+	return session;
+}
+
+function selectedSourceFromPick(pick: MacPickerSelection): SelectedSource {
+	const display =
+		pick.displayId !== null
+			? screen.getAllDisplays().find((candidate) => candidate.id === pick.displayId)
+			: undefined;
+	const name =
+		pick.kind === "window" ? pick.title || pick.appName || "Window" : display?.label || "Screen";
+	return {
+		id: `${MAC_PICKER_SOURCE_PREFIX}${pick.kind}:${pick.windowId ?? pick.displayId ?? 0}`,
+		name,
+		display_id: pick.displayId !== null ? String(pick.displayId) : "",
+	};
+}
+
 function getSelectedSourceBounds() {
+	// A pick from Apple's picker carries its own frame; there is no desktopCapturer
+	// display to look up for it.
+	if (isMacPickerSourceId(selectedSource?.id)) {
+		const pick = macPickerSession?.getSelection();
+		if (pick) {
+			return pick.bounds;
+		}
+	}
+
 	// Single-window capture records only the window's region, not the whole display.
 	// Normalizing the cursor against display bounds leaves a fixed offset in the export,
 	// so prefer the helper-reported window frame when capturing a window.
@@ -1996,6 +2057,36 @@ export function registerIpcHandlers(
 		},
 	);
 
+	async function presentMacSystemPicker(session: MacPickerSession) {
+		// The HUD and the notes window belong to this process, not to the helper, so a display
+		// pick would record them unless the picker is told to leave them out.
+		const appWindowSourceIds = [getMainWindow(), getNotesWindow()]
+			.filter((window): window is BrowserWindow => !!window && !window.isDestroyed())
+			.map((window) => window.getMediaSourceId());
+		const pick = await session.present(collectMacCaptureExcludedWindowIds(appWindowSourceIds));
+		if (!pick) {
+			// Same signal our own picker window sends when it closes without a choice: the HUD
+			// stops waiting to record after a selection.
+			for (const window of BrowserWindow.getAllWindows()) {
+				if (!window.isDestroyed()) {
+					window.webContents.send("source-selector-closed");
+				}
+			}
+			return;
+		}
+		selectedSource = selectedSourceFromPick(pick);
+		selectedDesktopSource = null;
+		broadcastSelectedSource(selectedSource);
+	}
+
+	app.on("will-quit", () => {
+		macPickerSession?.dispose();
+	});
+
+	// For the renderer's own source lists (the AI editor's recording stage): with Apple's
+	// picker they must hand the choice to `open-source-selector` rather than enumerate.
+	ipcMain.handle("uses-system-source-picker", () => macPickerOwnsSources());
+
 	ipcMain.handle("get-selected-source", async () => {
 		const previousSelectedSource = selectedSource;
 		if (process.platform === "linux" && findPipeWireCursorHelperPath()) {
@@ -2005,6 +2096,22 @@ export function registerIpcHandlers(
 				broadcastSelectedSource(null);
 			}
 			return null;
+		}
+		if (macPickerOwnsSources()) {
+			// Apple's picker owns the choice. A pick lives only as long as the helper session
+			// that holds it, so there is nothing to restore -- and enumerating here would ask
+			// for the very Screen Recording grant the picker makes unnecessary. A source the
+			// CLI selected by id in this run is still answered as it is: `record` picks by
+			// name, headless, and keeps the per-take helper.
+			if (!isMacPickerSourceId(selectedSource?.id)) {
+				return selectedDesktopSource ? selectedSource : null;
+			}
+			if (!macPickerSession?.getSelection()) {
+				selectedSource = null;
+				selectedDesktopSource = null;
+				broadcastSelectedSource(null);
+			}
+			return selectedSource;
 		}
 		const lastSource = appSettings.getSnapshot().lastSource;
 		const liveSelected =
@@ -2137,6 +2244,14 @@ export function registerIpcHandlers(
 		// that path could never start.
 		if (process.platform === "linux" && findPipeWireCursorHelperPath()) {
 			return { opened: false, reason: "portal-owns-selection" };
+		}
+
+		const pickerSession = await getMacPickerSession();
+		if (pickerSession) {
+			// Answered at once: the pick arrives later through `selected-source-changed`, which
+			// is how the HUD already learns about a choice made in our own picker window.
+			void presentMacSystemPicker(pickerSession);
+			return { opened: true };
 		}
 
 		// Chromium's picker can only list sources once THIS process can capture, which on
@@ -2801,13 +2916,40 @@ export function registerIpcHandlers(
 			const outputPath = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
 			const cursorCaptureMode =
 				normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
-			try {
-				await desktopCapturer.getSources({
-					types: ["screen"],
-					thumbnailSize: { width: 1, height: 1 },
-				});
-			} catch {
-				// The helper reports the final ScreenCaptureKit permission status.
+			// A source from Apple's picker records through the session that holds the pick,
+			// and needs no Screen Recording grant -- so nothing here may go near one.
+			const pickerSession = isMacPickerSourceId(request.source.sourceId) ? macPickerSession : null;
+			const pick = pickerSession?.getSelection() ?? null;
+			if (isMacPickerSourceId(request.source.sourceId) && !pick) {
+				selectedSource = null;
+				broadcastSelectedSource(null);
+				return {
+					success: false,
+					error: "The screen or window you picked is no longer available. Pick it again.",
+				};
+			}
+			if (!pickerSession) {
+				try {
+					await desktopCapturer.getSources({
+						types: ["screen"],
+						thumbnailSize: { width: 1, height: 1 },
+					});
+				} catch {
+					// The helper reports the final ScreenCaptureKit permission status.
+				}
+			}
+			// System audio is the one thing a pick does not cover: without the Screen Recording
+			// grant ScreenCaptureKit delivers it as silence (measured). Recording silence and
+			// calling it system audio would be worse than saying so, so the take goes ahead
+			// without it and the permissions window explains what would bring it back.
+			let systemAudioUnavailable = false;
+			if (pickerSession && request.audio?.system?.enabled) {
+				const permissions = await getMacPermissions().read();
+				if (permissions.screen !== "granted") {
+					systemAudioUnavailable = true;
+					request = { ...request, audio: { ...request.audio, system: { enabled: false } } };
+					showPermissionsWindow();
+				}
 			}
 			if (request.audio?.microphone?.enabled) {
 				const micStatus = systemPreferences.getMediaAccessStatus("microphone");
@@ -2820,7 +2962,8 @@ export function registerIpcHandlers(
 					? (screen.getAllDisplays().find((display) => display.id === request.source.displayId) ??
 						null)
 					: getSelectedDisplay();
-			const bounds = request.source.bounds ?? sourceDisplay?.bounds ?? getSelectedSourceBounds();
+			const bounds =
+				pick?.bounds ?? request.source.bounds ?? sourceDisplay?.bounds ?? getSelectedSourceBounds();
 			const captureExcludedWindowSourceIds: string[] = [];
 			if (request.source.type === "display") {
 				for (const window of [getMainWindow(), getNotesWindow()]) {
@@ -2890,10 +3033,12 @@ export function registerIpcHandlers(
 				pendingCursorRecordingData = null;
 			}
 
-			const proc = spawn(helperPath, [JSON.stringify(config)], {
-				cwd: RECORDINGS_DIR,
-				stdio: ["pipe", "pipe", "pipe"],
-			});
+			const proc = pickerSession
+				? pickerSession.startTake(config)
+				: spawn(helperPath, [JSON.stringify(config)], {
+						cwd: RECORDINGS_DIR,
+						stdio: ["pipe", "pipe", "pipe"],
+					});
 			nativeMacCaptureProcess = proc;
 			// When the take ends without the user — the helper reported an error or
 			// exited — this drives the renderer's own stop, the same one the tray's Stop
@@ -2931,6 +3076,7 @@ export function registerIpcHandlers(
 				path: outputPath,
 				helperPath,
 				microphoneDefaulted,
+				systemAudioUnavailable,
 			};
 		} catch (error) {
 			console.error("Failed to start native macOS recording:", error);

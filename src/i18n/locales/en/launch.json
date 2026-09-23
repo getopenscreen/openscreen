@@ -109,6 +109,10 @@
 				"name": "Screen & system audio",
 				"description": "To record your screen and the sound your Mac plays."
 			},
+			"systemAudio": {
+				"name": "System audio",
+				"description": "To record the sound your Mac plays. Choosing a screen or window needs no permission."
+			},
 			"accessibility": {
 				"name": "Accessibility",
 				"description": "To show the right cursor (pointer, text) in your recordings."

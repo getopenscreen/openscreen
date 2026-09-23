@@ -109,6 +109,10 @@
 				"name": "Bildschirm & Systemaudio",
 				"description": "Um deinen Bildschirm und den Ton deines Mac aufzunehmen."
 			},
+			"systemAudio": {
+				"name": "Systemaudio",
+				"description": "Um den Ton deines Mac aufzunehmen. Für die Auswahl eines Bildschirms oder Fensters ist keine Berechtigung nötig."
+			},
 			"accessibility": {
 				"name": "Bedienungshilfen",
 				"description": "Um in Aufnahmen den richtigen Zeiger (Pfeil, Text) anzuzeigen."

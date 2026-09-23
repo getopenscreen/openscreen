@@ -109,6 +109,10 @@
 				"name": "Màn hình & âm thanh hệ thống",
 				"description": "Để ghi màn hình và âm thanh của máy Mac."
 			},
+			"systemAudio": {
+				"name": "Âm thanh hệ thống",
+				"description": "Để ghi âm thanh của máy Mac. Chọn màn hình hoặc cửa sổ không cần quyền nào."
+			},
 			"accessibility": {
 				"name": "Trợ năng",
 				"description": "Để hiển thị đúng con trỏ (mũi tên, văn bản) trong bản ghi."

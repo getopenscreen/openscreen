@@ -109,6 +109,10 @@
 				"name": "Schermo e audio di sistema",
 				"description": "Per registrare lo schermo e l'audio del tuo Mac."
 			},
+			"systemAudio": {
+				"name": "Audio di sistema",
+				"description": "Per registrare l'audio del tuo Mac. Scegliere uno schermo o una finestra non richiede alcun permesso."
+			},
 			"accessibility": {
 				"name": "Accessibilità",
 				"description": "Per mostrare il cursore giusto (freccia, testo) nelle registrazioni."

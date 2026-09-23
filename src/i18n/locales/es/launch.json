@@ -109,6 +109,10 @@
 				"name": "Pantalla y audio del sistema",
 				"description": "Para grabar tu pantalla y el sonido de tu Mac."
 			},
+			"systemAudio": {
+				"name": "Audio del sistema",
+				"description": "Para grabar el sonido de tu Mac. Elegir una pantalla o una ventana no necesita ningún permiso."
+			},
 			"accessibility": {
 				"name": "Accesibilidad",
 				"description": "Para mostrar el cursor correcto (flecha, texto) en tus grabaciones."

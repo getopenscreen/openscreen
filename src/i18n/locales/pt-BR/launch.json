@@ -109,6 +109,10 @@
 				"name": "Tela e áudio do sistema",
 				"description": "Para gravar sua tela e o som do seu Mac."
 			},
+			"systemAudio": {
+				"name": "Áudio do sistema",
+				"description": "Para gravar o som do seu Mac. Escolher uma tela ou janela não precisa de permissão."
+			},
 			"accessibility": {
 				"name": "Acessibilidade",
 				"description": "Para mostrar o cursor certo (seta, texto) nas suas gravações."

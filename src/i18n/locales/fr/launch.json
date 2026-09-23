@@ -109,6 +109,10 @@
 				"name": "Écran et son du système",
 				"description": "Pour enregistrer votre écran et le son de votre Mac."
 			},
+			"systemAudio": {
+				"name": "Son du système",
+				"description": "Pour enregistrer le son de votre Mac. Choisir un écran ou une fenêtre ne demande aucune autorisation."
+			},
 			"accessibility": {
 				"name": "Accessibilité",
 				"description": "Pour afficher le bon curseur (flèche, texte) dans vos enregistrements."

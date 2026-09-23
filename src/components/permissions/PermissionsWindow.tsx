@@ -92,7 +92,10 @@ export function PermissionsWindow() {
 		return <div className="h-screen bg-[#0b0c0f]" />;
 	}
 
-	const screenReady = snapshot.screen === "granted" && !snapshot.screenRequiresRelaunch;
+	// With Apple's system picker (macOS 15.2+) a recording needs no Screen Recording grant;
+	// the grant only still gives it system audio, so the row says that and is optional.
+	const screenReady =
+		!snapshot.screenRequired || (snapshot.screen === "granted" && !snapshot.screenRequiresRelaunch);
 	const needsRelaunch = snapshot.screen === "granted" && snapshot.screenRequiresRelaunch;
 
 	return (
@@ -101,8 +104,11 @@ export function PermissionsWindow() {
 			<p className="mt-1.5 text-[12px] leading-5 text-[#8b93a1]">{t("permissions.subtitle")}</p>
 
 			<ul className="mt-5 flex flex-col gap-2.5">
-				{ROWS.map(({ kind, level, Icon }) => {
+				{ROWS.map(({ kind, level: requiredLevel, Icon }) => {
 					const status = snapshot[kind];
+					const systemAudioOnly = kind === "screen" && !snapshot.screenRequired;
+					const level = systemAudioOnly ? "optional" : requiredLevel;
+					const rowKey = systemAudioOnly ? "systemAudio" : kind;
 					return (
 						<li
 							key={kind}
@@ -115,14 +121,14 @@ export function PermissionsWindow() {
 								<div className="min-w-0 flex-1">
 									<div className="flex items-center gap-2">
 										<span className="text-[13px] font-medium">
-											{t(`permissions.rows.${kind}.name`)}
+											{t(`permissions.rows.${rowKey}.name`)}
 										</span>
 										<span className="rounded-full bg-[#1c1f26] px-2 py-px text-[10px] text-[#8b93a1]">
 											{t(`permissions.level.${level}`)}
 										</span>
 									</div>
 									<p className="mt-0.5 text-[11px] leading-4 text-[#8b93a1]">
-										{t(`permissions.rows.${kind}.description`)}
+										{t(`permissions.rows.${rowKey}.description`)}
 									</p>
 								</div>
 								<PermissionAction
@@ -240,7 +246,13 @@ function ScreenHelp({
 	} else if (snapshot.screen === "not-requested") {
 		lines.push(t("permissions.help.screenPrompt"));
 	}
-	if (snapshot.screen === "granted" && snapshot.macosMajor >= RECURRING_SCREEN_ALERT_FROM_MACOS) {
+	// Captures started from Apple's picker never raise that alert, so there is nothing to
+	// warn about when the picker owns the choice.
+	if (
+		snapshot.screenRequired &&
+		snapshot.screen === "granted" &&
+		snapshot.macosMajor >= RECURRING_SCREEN_ALERT_FROM_MACOS
+	) {
 		lines.push(t("permissions.help.screenRecurring"));
 	}
 	if (lines.length === 0) {

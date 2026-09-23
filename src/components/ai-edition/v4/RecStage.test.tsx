@@ -117,6 +117,25 @@ describe("RecStage controls", () => {
 		(window as unknown as { electronAPI?: unknown }).electronAPI = undefined;
 	});
 
+	it("hands the choice to Apple's picker instead of listing sources itself", async () => {
+		stubRecordingPrefs({ micEnabled: false });
+		const api = window.electronAPI as unknown as Record<string, unknown>;
+		const getSources = vi.fn(async () => []);
+		const openSourceSelector = vi.fn(async () => ({ opened: true }));
+		const usesSystemSourcePicker = vi.fn(async () => true);
+		Object.assign(api, { getSources, openSourceSelector, usesSystemSourcePicker });
+		renderRecStage();
+		await waitFor(() => expect(usesSystemSourcePicker).toHaveBeenCalled());
+
+		await act(async () => {
+			screen.getByRole("button", { name: "rec.selectSource" }).click();
+		});
+
+		// Enumerating would go through the Screen Recording grant the picker makes unnecessary.
+		await waitFor(() => expect(openSourceSelector).toHaveBeenCalled());
+		expect(getSources).not.toHaveBeenCalled();
+	});
+
 	it("does not render an auto-zoom toggle button (auto-zoom is systematic)", async () => {
 		const { getRecordingPrefs } = stubRecordingPrefs({
 			micEnabled: false,

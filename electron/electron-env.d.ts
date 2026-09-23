@@ -41,6 +41,8 @@ interface Window {
 			opened: boolean;
 			reason?: string;
 		}>;
+		/** Sources are picked in Apple's system picker (macOS 15.2+), not in an app list. */
+		usesSystemSourcePicker?: () => Promise<boolean>;
 		openNotes: () => Promise<{
 			opened: boolean;
 			reason?: string;

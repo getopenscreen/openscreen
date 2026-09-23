@@ -174,7 +174,29 @@ export function RecStage({
 	const [sourceTab, setSourceTab] = useState<"screen" | "window">("screen");
 	const [sources, setSources] = useState<ProcessedDesktopSource[]>([]);
 	const [loadingSources, setLoadingSources] = useState(false);
+	const [systemSourcePicker, setSystemSourcePicker] = useState(false);
+	useEffect(() => {
+		let active = true;
+		void window.electronAPI
+			?.usesSystemSourcePicker?.()
+			.then((uses) => {
+				if (active) {
+					setSystemSourcePicker(uses === true);
+				}
+			})
+			.catch(() => undefined);
+		return () => {
+			active = false;
+		};
+	}, []);
 	const openSourceModal = async () => {
+		// With Apple's system picker (macOS 15.2+) the choice is made there, and the pick
+		// comes back through `onSelectedSourceChanged` like any other. Listing sources here
+		// would go through the Screen Recording grant the picker makes unnecessary.
+		if (systemSourcePicker) {
+			await window.electronAPI?.openSourceSelector?.();
+			return;
+		}
 		setSourceModalOpen(true);
 		setLoadingSources(true);
 		try {

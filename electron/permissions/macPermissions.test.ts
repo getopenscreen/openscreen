@@ -13,6 +13,7 @@ function setup(overrides: Partial<MacPermissionsDeps> = {}) {
 	const deps: MacPermissionsDeps = {
 		platform: "darwin",
 		macosMajor: 26,
+		systemPickerOwnsScreen: () => false,
 		probeScreen: vi.fn(async (): Promise<ScreenProbe> => ({ answered: true, granted: false })),
 		appScreenGranted: vi.fn(() => false),
 		accessibilityTrusted: vi.fn(() => false),
@@ -213,6 +214,49 @@ describe("shouldShowAtLaunch", () => {
 
 	it("never shows off macOS", async () => {
 		const { permissions } = setup({ platform: "linux" });
+		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(false);
+	});
+});
+
+describe("with Apple's system picker", () => {
+	const picker = { systemPickerOwnsScreen: () => true };
+
+	it("does not require Screen Recording to record", async () => {
+		const { permissions } = setup(picker);
+		expect(await permissions.read()).toMatchObject({
+			screenRequired: false,
+			screen: "not-requested",
+		});
+	});
+
+	it("never offers a relaunch, since nothing reads the app's cached refusal", async () => {
+		const { permissions } = setup({
+			...picker,
+			probeScreen: async () => ({ answered: true, granted: true }),
+			appScreenGranted: () => false,
+		});
+		expect(await permissions.read()).toMatchObject({
+			screen: "granted",
+			screenRequiresRelaunch: false,
+		});
+	});
+
+	it("shows the window once, as an offer, while something is still unasked", async () => {
+		const { permissions } = setup(picker);
+		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(true);
+
+		permissions.noteWindowClosed(await permissions.read());
+		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(false);
+	});
+
+	it("stays away from someone who already answered everything", async () => {
+		const { permissions } = setup({
+			...picker,
+			probeScreen: async () => ({ answered: true, granted: true }),
+			appScreenGranted: () => true,
+			accessibilityTrusted: () => true,
+			mediaStatus: () => "denied",
+		});
 		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(false);
 	});
 });

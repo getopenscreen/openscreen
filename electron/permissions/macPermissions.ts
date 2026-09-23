@@ -38,6 +38,12 @@ export interface PermissionsSnapshot {
 	supported: boolean;
 	/** macOS major version (13, 14, 15, 26...), 0 when unknown or off macOS. */
 	macosMajor: number;
+	/**
+	 * Whether recording needs Screen Recording at all. Not when sources come from Apple's
+	 * system picker (macOS 15.2+): the pick is the consent, and the grant only still
+	 * matters for system audio.
+	 */
+	screenRequired: boolean;
 	screen: PermissionStatus;
 	/**
 	 * Screen Recording is granted, but this process still reads its cached refusal, so the
@@ -66,6 +72,8 @@ export interface PermissionsStore {
 export interface MacPermissionsDeps {
 	platform: NodeJS.Platform;
 	macosMajor: number;
+	/** Sources are picked in Apple's system picker, which needs no Screen Recording grant. */
+	systemPickerOwnsScreen(): boolean;
 	probeScreen(): Promise<ScreenProbe>;
 	/** The app's own, per-process cached Screen Recording read. */
 	appScreenGranted(): boolean;
@@ -112,6 +120,7 @@ function mediaPermissionStatus(status: string): PermissionStatus {
 const OFF_MACOS: PermissionsSnapshot = {
 	supported: false,
 	macosMajor: 0,
+	screenRequired: false,
 	screen: "granted",
 	screenRequiresRelaunch: false,
 	accessibility: "granted",
@@ -133,7 +142,12 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 		if (!granted) {
 			return { status: notedStatus("screen"), requiresRelaunch: false };
 		}
-		return { status: "granted", requiresRelaunch: !appGranted };
+		// The relaunch only ever mattered to Chromium's picker, which reads the app's cached
+		// refusal. With Apple's picker nothing reads it.
+		return {
+			status: "granted",
+			requiresRelaunch: !appGranted && !deps.systemPickerOwnsScreen(),
+		};
 	}
 
 	async function read(): Promise<PermissionsSnapshot> {
@@ -145,6 +159,7 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 		return {
 			supported: true,
 			macosMajor: deps.macosMajor,
+			screenRequired: !deps.systemPickerOwnsScreen(),
 			screen: screen.status,
 			screenRequiresRelaunch: screen.requiresRelaunch,
 			accessibility: deps.accessibilityTrusted(false) ? "granted" : notedStatus("accessibility"),
@@ -212,15 +227,24 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 		if (!snapshot.supported) {
 			return false;
 		}
+		if (!snapshot.screenRequired) {
+			// Nothing blocks a recording, so the window is an offer, made once: until it has
+			// been closed, and only while something in it is still unasked.
+			if (deps.store.isCompleted()) {
+				return false;
+			}
+			const rows = ["screen", "accessibility", "microphone", "camera"] as const;
+			return rows.some((kind) => snapshot[kind] === "not-requested");
+		}
 		if (snapshot.screen !== "granted" || snapshot.screenRequiresRelaunch) {
 			return true;
 		}
 		return deps.store.hasRequested("screen") && !deps.store.isCompleted();
 	}
 
-	/** Called when the window closes: done once Screen Recording is in hand. */
+	/** Called when the window closes: done once recording no longer waits on it. */
 	function noteWindowClosed(snapshot: PermissionsSnapshot): void {
-		if (snapshot.screen === "granted") {
+		if (snapshot.screen === "granted" || !snapshot.screenRequired) {
 			deps.store.markCompleted();
 		}
 	}

@@ -8,6 +8,7 @@ import {
 	shell,
 	systemPreferences,
 } from "electron";
+import { macSystemPickerEnabled } from "../native-bridge/screen/macPickerSession";
 import { readMacScreenCaptureAccess } from "../native-bridge/screen/macScreenAccess";
 import { createPermissionsWindow } from "../windows";
 import {
@@ -90,6 +91,7 @@ export function getMacPermissions(): MacPermissions {
 	permissions ??= createMacPermissions({
 		platform: process.platform,
 		macosMajor: macosMajor(),
+		systemPickerOwnsScreen: macSystemPickerEnabled,
 		probeScreen: async () => {
 			const probe = await readMacScreenCaptureAccess();
 			return probe.status === "granted" || probe.status === "denied"

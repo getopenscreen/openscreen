@@ -109,6 +109,10 @@
 				"name": "Obrazovka a zvuk systému",
 				"description": "K nahrávání obrazovky a zvuku z vašeho Macu."
 			},
+			"systemAudio": {
+				"name": "Zvuk systému",
+				"description": "K nahrávání zvuku z vašeho Macu. Výběr obrazovky nebo okna žádné oprávnění nepotřebuje."
+			},
 			"accessibility": {
 				"name": "Zpřístupnění",
 				"description": "Aby nahrávky zobrazovaly správný kurzor (šipka, text)."

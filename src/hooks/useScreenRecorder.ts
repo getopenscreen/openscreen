@@ -1415,6 +1415,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (result.microphoneDefaulted) {
 				toast.error(t("recording.microphoneDefaulted"));
 			}
+			if (result.systemAudioUnavailable) {
+				toast.error(t("recording.systemAudioUnavailable"));
+			}
 
 			// The IPC call above only resolves once the helper's stdout confirms its
 			// screen capture has truly started (see waitForNativeMacCaptureStart in

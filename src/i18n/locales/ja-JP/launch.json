@@ -109,6 +109,10 @@
 				"name": "画面とシステムオーディオ",
 				"description": "画面と Mac のサウンドを録画するため。"
 			},
+			"systemAudio": {
+				"name": "システムオーディオ",
+				"description": "Mac のサウンドを録音するため。画面やウインドウの選択には許可は不要です。"
+			},
 			"accessibility": {
 				"name": "アクセシビリティ",
 				"description": "録画に正しいカーソル（矢印、テキスト）を表示するため。"

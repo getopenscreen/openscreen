@@ -83,6 +83,7 @@ import {
 import { findPipeWireCursorHelperPath } from "../native-bridge/cursor/recording/pipeWireCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
 import { toHelperRect } from "../native-bridge/helperCoordinates";
+import { getMacPermissions, showPermissionsWindow } from "../permissions";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import {
 	describeSalvagedTake,
@@ -1864,43 +1865,6 @@ export function registerIpcHandlers(
 	const sameSelectedSource = (left: SelectedSource | null, right: SelectedSource | null) =>
 		left?.id === right?.id && left?.name === right?.name && left?.display_id === right?.display_id;
 
-	async function requestScreenAccess() {
-		if (process.platform !== "darwin") {
-			return { success: true, granted: true, status: "granted" };
-		}
-
-		try {
-			const status = systemPreferences.getMediaAccessStatus("screen");
-			if (status === "granted") {
-				return { success: true, granted: true, status };
-			}
-
-			// Screen recording has no askForMediaAccess equivalent, so trigger the
-			// TCC prompt without opening OpenScreen's source selector above it.
-			if (status === "not-determined") {
-				const mainWin = getMainWindow();
-				if (mainWin && !mainWin.isDestroyed()) {
-					if (!mainWin.isVisible()) {
-						mainWin.show();
-					}
-					mainWin.focus();
-				}
-				app.focus({ steal: true });
-				desktopCapturer
-					.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } })
-					.catch(() => {
-						// Permission probing failure is reported by the explicit status check below.
-					});
-				return { success: true, granted: false, status: "not-determined" };
-			}
-
-			return { success: true, granted: false, status };
-		} catch (error) {
-			console.error("Failed to request screen access:", error);
-			return { success: false, granted: false, status: "unknown", error: String(error) };
-		}
-	}
-
 	ipcMain.handle("get-sources", async (_, opts) => {
 		// desktopCapturer.getSources can never settle where the GL stack cannot be
 		// reached -- a container, a CI runner, a host whose ANGLE fails to
@@ -2129,10 +2093,6 @@ export function registerIpcHandlers(
 		}
 	});
 
-	ipcMain.handle("request-screen-access", async () => {
-		return requestScreenAccess();
-	});
-
 	ipcMain.handle("request-native-mac-cursor-access", async () => {
 		const access = await requestMacCursorAccessibilityAccess();
 
@@ -2154,26 +2114,12 @@ export function registerIpcHandlers(
 				return access;
 			}
 
-			const mainWin = getMainWindow();
-			const detail =
-				"Allow OpenScreen under System Settings → Privacy & Security → Accessibility, then press record again to start the countdown.";
-			const messageOptions = {
-				type: "warning",
-				buttons: ["Open Accessibility Settings", "Cancel"],
-				defaultId: 0,
-				cancelId: 1,
-				message: "Accessibility access is required for the editable cursor",
-				detail,
-			} satisfies Electron.MessageBoxOptions;
-			const result =
-				mainWin && !mainWin.isDestroyed()
-					? await dialog.showMessageBox(mainWin, messageOptions)
-					: await dialog.showMessageBox(messageOptions);
-			if (result.response === 0) {
-				await shell.openExternal(
-					"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-				);
-			}
+			// The helper that answered has just raised macOS' own Accessibility prompt on
+			// its way up, so the window must offer System Settings, not a second prompt. It
+			// explains what the grant is for and tracks it live, where a message box could
+			// only say "go to System Settings" in English.
+			getMacPermissions().noteRequested("accessibility");
+			showPermissionsWindow();
 		}
 
 		return access;
@@ -2193,34 +2139,16 @@ export function registerIpcHandlers(
 			return { opened: false, reason: "portal-owns-selection" };
 		}
 
-		const access = await requestScreenAccess();
-		if (!access.granted) {
-			if (process.platform === "darwin" && access.status !== "not-determined") {
-				const mainWin = getMainWindow();
-				const messageOptions = {
-					type: "warning",
-					buttons: ["Open System Settings", "Cancel"],
-					defaultId: 0,
-					cancelId: 1,
-					message: "Screen Recording permission is required",
-					detail:
-						"Allow OpenScreen in macOS System Settings, then come back and choose a screen or window.",
-				} satisfies Electron.MessageBoxOptions;
-				const result =
-					mainWin && !mainWin.isDestroyed()
-						? await dialog.showMessageBox(mainWin, messageOptions)
-						: await dialog.showMessageBox(messageOptions);
-				if (result.response === 0) {
-					await shell.openExternal(
-						"x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-					);
-				}
+		// Chromium's picker can only list sources once THIS process can capture, which on
+		// macOS means granted, and granted before launch: the app's own read is cached for
+		// the life of the process. Anything short of that belongs in the permissions
+		// window, which says what is missing and offers the relaunch when that is all.
+		if (process.platform === "darwin") {
+			const permissions = await getMacPermissions().read();
+			if (permissions.screen !== "granted" || permissions.screenRequiresRelaunch) {
+				showPermissionsWindow();
+				return { opened: false, reason: "screen-access-required" };
 			}
-			return {
-				opened: false,
-				reason: "screen-access-required",
-				access,
-			};
 		}
 
 		const sourceSelectorWin = getSourceSelectorWindow();

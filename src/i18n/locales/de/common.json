@@ -45,7 +45,8 @@
 		"hide": "OpenScreen ausblenden",
 		"hideOthers": "Andere ausblenden",
 		"unhide": "Alle einblenden",
-		"saveDiagnostics": "Diagnosedaten speichern"
+		"saveDiagnostics": "Diagnosedaten speichern",
+		"permissions": "Berechtigungen …"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} ist verfügbar. Du verwendest {{currentVersion}}.",

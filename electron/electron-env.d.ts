@@ -40,12 +40,6 @@ interface Window {
 		openSourceSelector: () => Promise<{
 			opened: boolean;
 			reason?: string;
-			access?: {
-				success: boolean;
-				granted: boolean;
-				status: string;
-				error?: string;
-			};
 		}>;
 		openNotes: () => Promise<{
 			opened: boolean;
@@ -77,12 +71,14 @@ interface Window {
 			status: string;
 			error?: string;
 		}>;
-		requestScreenAccess: () => Promise<{
-			success: boolean;
-			granted: boolean;
-			status: string;
-			error?: string;
-		}>;
+		/** macOS privacy permissions; see electron/permissions/macPermissions.ts. */
+		permissions: {
+			get: () => Promise<import("./permissions/macPermissions").PermissionsSnapshot>;
+			request: (kind: import("./permissions/macPermissions").PermissionKind) => Promise<void>;
+			openSettings: (kind: import("./permissions/macPermissions").PermissionKind) => Promise<void>;
+			relaunch: () => Promise<void>;
+			close: () => Promise<void>;
+		};
 		requestNativeMacCursorAccess: () => Promise<{
 			success: boolean;
 			granted: boolean;

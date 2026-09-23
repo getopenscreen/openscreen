@@ -12,7 +12,6 @@ import {
 	net,
 	session,
 	shell,
-	systemPreferences,
 	Tray,
 } from "electron";
 import { ShortcutBinding } from "../src/lib/shortcuts";
@@ -60,6 +59,11 @@ import {
 	registerIpcHandlers,
 } from "./ipc/handlers";
 import { installMainProcessErrorGuards } from "./main-process-errors";
+import {
+	registerPermissionsIpc,
+	showPermissionsWindow,
+	showPermissionsWindowIfNeeded,
+} from "./permissions";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
 import { loadUpdateMode, saveUpdateMode } from "./update-settings";
@@ -230,6 +234,10 @@ function setupApplicationMenu() {
 				{
 					role: "about",
 					label: mainT("common", "actions.about") || "About OpenScreen",
+				},
+				{
+					label: mainT("common", "actions.permissions") || "Permissions…",
+					click: showPermissionsWindow,
 				},
 				{ type: "separator" as const },
 				{
@@ -923,6 +931,14 @@ function updateTrayMenu(recording: boolean = false) {
 					label: mainT("common", "actions.saveDiagnostics") || "Save Diagnostics",
 					click: runSaveDiagnostics,
 				},
+				...(isMac
+					? [
+							{
+								label: mainT("common", "actions.permissions") || "Permissions…",
+								click: showPermissionsWindow,
+							},
+						]
+					: []),
 				{ type: "separator" as const },
 				{
 					label: mainT("common", "actions.quit") || "Quit",
@@ -1182,25 +1198,11 @@ appReady?.then(async () => {
 		});
 	}
 
-	// Request mic permission now. Screen Recording is requested lazily from the
-	// source-picker action so its prompt isn't hidden behind the selector window.
-	//
-	// NOT awaited, on purpose. `askForMediaAccess` resolves only once the user
-	// answers the modal TCC prompt, and `createWindow()` is 70 lines below this in
-	// the same async block — so on a Mac where the microphone is still
-	// `not-determined` (every first run, and every fresh dev machine) the app
-	// showed a permission dialog with NO window behind it and created the HUD only
-	// after it was dismissed. Nothing between here and `createWindow()` needs the
-	// answer: the recorder re-checks the status when the user actually arms the mic.
-	if (process.platform === "darwin") {
-		const micStatus = systemPreferences.getMediaAccessStatus("microphone");
-		if (micStatus !== "granted") {
-			systemPreferences
-				.askForMediaAccess("microphone")
-				.then((granted) => console.info(`[permissions] microphone granted=${granted}`))
-				.catch((error) => console.warn("[permissions] microphone request failed:", error));
-		}
-	}
+	// No permission is requested at launch. Screen Recording, Accessibility, the microphone
+	// and the camera are all gathered in the permissions window (electron/permissions),
+	// opened below when recording cannot work yet; the microphone and camera are also
+	// requested at the moment a take first uses them.
+	registerPermissionsIpc();
 
 	ipcMain.on("hud-overlay-close", () => {
 		app.quit();
@@ -1332,4 +1334,7 @@ appReady?.then(async () => {
 	}
 
 	createWindow();
+	void showPermissionsWindowIfNeeded().catch((error) =>
+		console.warn("[permissions] could not read the permissions at launch:", error),
+	);
 });

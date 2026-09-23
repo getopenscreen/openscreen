@@ -95,5 +95,54 @@
 		"about": "Sobre",
 		"version": "Versão {{version}}",
 		"checkingForUpdates": "Verificando…"
+	},
+	"permissions": {
+		"title": "O OpenScreen precisa de algumas permissões",
+		"subtitle": "O macOS pede que você conceda cada uma apenas uma vez. Você pode alterá-las a qualquer momento nos Ajustes do Sistema.",
+		"level": {
+			"required": "Obrigatória",
+			"recommended": "Recomendada",
+			"optional": "Opcional"
+		},
+		"rows": {
+			"screen": {
+				"name": "Tela e áudio do sistema",
+				"description": "Para gravar sua tela e o som do seu Mac."
+			},
+			"accessibility": {
+				"name": "Acessibilidade",
+				"description": "Para mostrar o cursor certo (seta, texto) nas suas gravações."
+			},
+			"microphone": {
+				"name": "Microfone",
+				"description": "Para gravar sua voz."
+			},
+			"camera": {
+				"name": "Câmera",
+				"description": "Para adicionar sua webcam às gravações."
+			}
+		},
+		"status": {
+			"granted": "Permitido",
+			"restricted": "Gerenciado pela sua organização"
+		},
+		"actions": {
+			"continue": "Continuar",
+			"allow": "Permitir",
+			"openSettings": "Abrir Ajustes",
+			"restart": "Reiniciar o OpenScreen",
+			"start": "Começar"
+		},
+		"help": {
+			"screenPrompt": "Em seguida, o macOS pedirá que você ative o OpenScreen nos Ajustes do Sistema.",
+			"screenSettings": "Nos Ajustes do Sistema, ative o OpenScreen. Se o macOS oferecer encerrar e reabrir o app, aceite: esta janela voltará.",
+			"screenNotListed": "O OpenScreen não está na lista? Clique em + e escolha o OpenScreen em Aplicativos.",
+			"screenRestart": "Permitido. O OpenScreen precisa reiniciar para usá-la.",
+			"screenRecurring": "De vez em quando, o macOS pedirá que você confirme este acesso. Isso é normal."
+		},
+		"footer": {
+			"screenRequired": "A gravação de tela é necessária para gravar.",
+			"ready": "Tudo pronto."
+		}
 	}
 }

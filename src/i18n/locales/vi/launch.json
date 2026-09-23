@@ -95,5 +95,54 @@
 		"about": "Giới thiệu",
 		"version": "Phiên bản {{version}}",
 		"checkingForUpdates": "Đang kiểm tra…"
+	},
+	"permissions": {
+		"title": "OpenScreen cần một vài quyền",
+		"subtitle": "macOS chỉ yêu cầu bạn cấp mỗi quyền một lần. Bạn có thể thay đổi bất cứ lúc nào trong Cài đặt hệ thống.",
+		"level": {
+			"required": "Bắt buộc",
+			"recommended": "Nên dùng",
+			"optional": "Tùy chọn"
+		},
+		"rows": {
+			"screen": {
+				"name": "Màn hình & âm thanh hệ thống",
+				"description": "Để ghi màn hình và âm thanh của máy Mac."
+			},
+			"accessibility": {
+				"name": "Trợ năng",
+				"description": "Để hiển thị đúng con trỏ (mũi tên, văn bản) trong bản ghi."
+			},
+			"microphone": {
+				"name": "Micrô",
+				"description": "Để ghi giọng nói của bạn."
+			},
+			"camera": {
+				"name": "Camera",
+				"description": "Để thêm webcam vào bản ghi."
+			}
+		},
+		"status": {
+			"granted": "Đã cho phép",
+			"restricted": "Do tổ chức của bạn quản lý"
+		},
+		"actions": {
+			"continue": "Tiếp tục",
+			"allow": "Cho phép",
+			"openSettings": "Mở Cài đặt",
+			"restart": "Khởi động lại OpenScreen",
+			"start": "Bắt đầu"
+		},
+		"help": {
+			"screenPrompt": "Sau đó macOS sẽ yêu cầu bạn bật OpenScreen trong Cài đặt hệ thống.",
+			"screenSettings": "Trong Cài đặt hệ thống, hãy bật OpenScreen. Nếu macOS đề nghị thoát và mở lại, hãy đồng ý: cửa sổ này sẽ quay lại.",
+			"screenNotListed": "Không thấy OpenScreen trong danh sách? Bấm +, rồi chọn OpenScreen trong Ứng dụng.",
+			"screenRestart": "Đã cho phép. OpenScreen cần khởi động lại để sử dụng quyền này.",
+			"screenRecurring": "Thỉnh thoảng macOS sẽ yêu cầu bạn xác nhận quyền truy cập này. Điều đó là bình thường."
+		},
+		"footer": {
+			"screenRequired": "Cần quyền ghi màn hình để ghi.",
+			"ready": "Mọi thứ đã sẵn sàng."
+		}
 	}
 }

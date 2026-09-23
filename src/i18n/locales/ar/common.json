@@ -45,7 +45,8 @@
 		"hide": "إخفاء OpenScreen",
 		"hideOthers": "إخفاء الآخرين",
 		"unhide": "إظهار الكل",
-		"saveDiagnostics": "حفظ التشخيصات"
+		"saveDiagnostics": "حفظ التشخيصات",
+		"permissions": "الأذونات…"
 	},
 	"updates": {
 		"available": "يتوفر OpenScreen {{latestVersion}}. الإصدار المثبت هو {{currentVersion}}.",

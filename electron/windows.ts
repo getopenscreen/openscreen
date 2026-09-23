@@ -654,6 +654,47 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 	return win;
 }
 
+/**
+ * The macOS permissions window: first run, the app menu, and wherever a missing permission
+ * would otherwise stop a recording. An ordinary opaque window on purpose -- it has to sit
+ * beside System Settings and macOS' own prompts, not float above them like the HUD.
+ */
+export function createPermissionsWindow(): BrowserWindow {
+	const win = new BrowserWindow({
+		width: 520,
+		height: 640,
+		resizable: false,
+		minimizable: false,
+		maximizable: false,
+		fullscreenable: false,
+		title: "OpenScreen",
+		backgroundColor: "#0b0c0f",
+		show: false,
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			additionalArguments: [ASSET_BASE_URL_ARG],
+			nodeIntegration: false,
+			contextIsolation: true,
+		},
+	});
+
+	win.once("ready-to-show", () => {
+		if (!HEADLESS) {
+			win.show();
+		}
+	});
+
+	if (VITE_DEV_SERVER_URL) {
+		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=permissions");
+	} else {
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: { windowType: "permissions" },
+		});
+	}
+
+	return win;
+}
+
 // Frameless Notes Window for taking notes during a recording.
 export function createNotesWindow(): BrowserWindow {
 	const win = new BrowserWindow({

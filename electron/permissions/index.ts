@@ -1,0 +1,154 @@
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import {
+	app,
+	type BrowserWindow,
+	desktopCapturer,
+	ipcMain,
+	shell,
+	systemPreferences,
+} from "electron";
+import { readMacScreenCaptureAccess } from "../native-bridge/screen/macScreenAccess";
+import { createPermissionsWindow } from "../windows";
+import {
+	createMacPermissions,
+	type MacPermissions,
+	type NotedKind,
+	type PermissionKind,
+	type PermissionsStore,
+} from "./macPermissions";
+
+export type { PermissionKind, PermissionsSnapshot } from "./macPermissions";
+
+const STORE_FILE = "permissions.json";
+
+/**
+ * The app's own note of which prompts it has raised on this Mac: the one thing macOS
+ * will not say. Only ever used to choose between raising a prompt and opening System
+ * Settings -- never as the answer to whether a permission is held, which is always
+ * read live.
+ *
+ * A stale note (the user reset TCC with `tccutil`) costs the prompt, and the user gets
+ * the System Settings pane instead, which still works. A lost one costs a request macOS
+ * silently ignores. Both leave the user with something to act on.
+ */
+function createFileStore(userData: string): PermissionsStore {
+	const file = path.join(userData, STORE_FILE);
+	let requested: Partial<Record<NotedKind, string>> = {};
+	try {
+		const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+		if (parsed && typeof parsed === "object" && "requested" in parsed) {
+			requested = (parsed as { requested: typeof requested }).requested ?? {};
+		}
+	} catch {
+		// Missing or unreadable: nothing has been asked yet.
+	}
+
+	return {
+		hasRequested: (kind) => typeof requested[kind] === "string",
+		markRequested: (kind) => {
+			requested = { ...requested, [kind]: new Date().toISOString() };
+			const temporary = `${file}.${process.pid}.tmp`;
+			try {
+				writeFileSync(temporary, `${JSON.stringify({ requested }, null, 2)}\n`, "utf8");
+				renameSync(temporary, file);
+			} catch (error) {
+				// Best effort: the in-memory note still gets the rest of this launch right.
+				console.warn("[permissions] failed to persist the request note:", error);
+			} finally {
+				rmSync(temporary, { force: true });
+			}
+		},
+	};
+}
+
+function macosMajor(): number {
+	if (process.platform !== "darwin") {
+		return 0;
+	}
+	const major = Number.parseInt(process.getSystemVersion().split(".")[0] ?? "", 10);
+	return Number.isFinite(major) ? major : 0;
+}
+
+let permissions: MacPermissions | null = null;
+
+export function getMacPermissions(): MacPermissions {
+	permissions ??= createMacPermissions({
+		platform: process.platform,
+		macosMajor: macosMajor(),
+		probeScreen: async () => {
+			const probe = await readMacScreenCaptureAccess();
+			return probe.status === "granted" || probe.status === "denied"
+				? { answered: true, granted: probe.granted }
+				: { answered: false };
+		},
+		appScreenGranted: () => systemPreferences.getMediaAccessStatus("screen") === "granted",
+		accessibilityTrusted: (prompt) => systemPreferences.isTrustedAccessibilityClient(prompt),
+		mediaStatus: (kind) => systemPreferences.getMediaAccessStatus(kind),
+		askForMedia: (kind) => systemPreferences.askForMediaAccess(kind),
+		// Raised from THIS process, through Chromium's own call to
+		// CGRequestScreenCaptureAccess, so TCC files the grant under the app bundle.
+		// The call rejects within milliseconds while the permission is missing, so nothing
+		// is learned from awaiting it; the answer is read back from a fresh process.
+		raiseScreenPrompt: () => {
+			desktopCapturer
+				.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } })
+				.catch(() => undefined);
+		},
+		openExternal: (url) => shell.openExternal(url),
+		store: createFileStore(app.getPath("userData")),
+	});
+	return permissions;
+}
+
+let permissionsWindow: BrowserWindow | null = null;
+
+export function showPermissionsWindow(): void {
+	if (process.platform !== "darwin") {
+		return;
+	}
+	if (permissionsWindow && !permissionsWindow.isDestroyed()) {
+		permissionsWindow.show();
+		permissionsWindow.focus();
+		return;
+	}
+	permissionsWindow = createPermissionsWindow();
+	permissionsWindow.on("closed", () => {
+		permissionsWindow = null;
+	});
+}
+
+/** Opens the permissions window when recording cannot work yet. For app launch. */
+export async function showPermissionsWindowIfNeeded(): Promise<void> {
+	// Not in the headless e2e runs either: there is no one to answer, and the probe would
+	// hold the window open behind every spec.
+	if (process.platform !== "darwin" || process.env["HEADLESS"] === "true") {
+		return;
+	}
+	const snapshot = await getMacPermissions().read();
+	if (snapshot.screen !== "granted" || snapshot.screenRequiresRelaunch) {
+		showPermissionsWindow();
+	}
+}
+
+const KINDS: readonly PermissionKind[] = ["screen", "accessibility", "microphone", "camera"];
+const isKind = (value: unknown): value is PermissionKind => KINDS.includes(value as PermissionKind);
+
+export function registerPermissionsIpc(): void {
+	ipcMain.handle("permissions:get", () => getMacPermissions().read());
+	ipcMain.handle("permissions:request", (_event, kind: unknown) =>
+		isKind(kind) ? getMacPermissions().request(kind) : undefined,
+	);
+	ipcMain.handle("permissions:open-settings", (_event, kind: unknown) =>
+		isKind(kind) ? getMacPermissions().openSettings(kind) : undefined,
+	);
+	ipcMain.handle("permissions:relaunch", () => {
+		app.relaunch();
+		app.quit();
+	});
+	ipcMain.handle("permissions:close", () => {
+		if (permissionsWindow && !permissionsWindow.isDestroyed()) {
+			permissionsWindow.close();
+		}
+	});
+}

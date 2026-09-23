@@ -95,5 +95,54 @@
 		"about": "关于",
 		"version": "版本 {{version}}",
 		"checkingForUpdates": "正在检查…"
+	},
+	"permissions": {
+		"title": "OpenScreen 需要一些权限",
+		"subtitle": "macOS 只会请求你授予一次。你可以随时在“系统设置”中更改。",
+		"level": {
+			"required": "必需",
+			"recommended": "推荐",
+			"optional": "可选"
+		},
+		"rows": {
+			"screen": {
+				"name": "屏幕与系统音频",
+				"description": "用于录制你的屏幕和 Mac 播放的声音。"
+			},
+			"accessibility": {
+				"name": "辅助功能",
+				"description": "用于在录制中显示正确的光标（箭头、文本）。"
+			},
+			"microphone": {
+				"name": "麦克风",
+				"description": "用于录制你的声音。"
+			},
+			"camera": {
+				"name": "摄像头",
+				"description": "用于在录制中加入你的网络摄像头。"
+			}
+		},
+		"status": {
+			"granted": "已允许",
+			"restricted": "由你的组织管理"
+		},
+		"actions": {
+			"continue": "继续",
+			"allow": "允许",
+			"openSettings": "打开设置",
+			"restart": "重新启动 OpenScreen",
+			"start": "开始使用"
+		},
+		"help": {
+			"screenPrompt": "接下来 macOS 会请你在“系统设置”中开启 OpenScreen。",
+			"screenSettings": "请在“系统设置”中开启 OpenScreen。如果 macOS 提示退出并重新打开，请同意：此窗口会重新出现。",
+			"screenNotListed": "列表中没有 OpenScreen？点按 +，然后在“应用程序”中选择 OpenScreen。",
+			"screenRestart": "已允许。OpenScreen 需要重新启动才能使用。",
+			"screenRecurring": "macOS 会不时请你确认此访问权限，这是正常现象。"
+		},
+		"footer": {
+			"screenRequired": "录制需要屏幕录制权限。",
+			"ready": "一切就绪。"
+		}
 	}
 }

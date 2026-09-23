@@ -95,5 +95,54 @@
 		"about": "O aplikaci",
 		"version": "Verze {{version}}",
 		"checkingForUpdates": "Kontrola…"
+	},
+	"permissions": {
+		"title": "OpenScreen potřebuje několik oprávnění",
+		"subtitle": "macOS vás o každé požádá jen jednou. Kdykoli je můžete změnit v Nastavení systému.",
+		"level": {
+			"required": "Povinné",
+			"recommended": "Doporučené",
+			"optional": "Volitelné"
+		},
+		"rows": {
+			"screen": {
+				"name": "Obrazovka a zvuk systému",
+				"description": "K nahrávání obrazovky a zvuku z vašeho Macu."
+			},
+			"accessibility": {
+				"name": "Zpřístupnění",
+				"description": "Aby nahrávky zobrazovaly správný kurzor (šipka, text)."
+			},
+			"microphone": {
+				"name": "Mikrofon",
+				"description": "K nahrávání vašeho hlasu."
+			},
+			"camera": {
+				"name": "Kamera",
+				"description": "K přidání webkamery do nahrávek."
+			}
+		},
+		"status": {
+			"granted": "Povoleno",
+			"restricted": "Spravováno vaší organizací"
+		},
+		"actions": {
+			"continue": "Pokračovat",
+			"allow": "Povolit",
+			"openSettings": "Otevřít Nastavení",
+			"restart": "Restartovat OpenScreen",
+			"start": "Začít"
+		},
+		"help": {
+			"screenPrompt": "macOS vás pak požádá, abyste OpenScreen zapnuli v Nastavení systému.",
+			"screenSettings": "V Nastavení systému zapněte OpenScreen. Pokud macOS nabídne aplikaci ukončit a znovu otevřít, přijměte: toto okno se vrátí.",
+			"screenNotListed": "OpenScreen v seznamu chybí? Klikněte na + a vyberte OpenScreen ve složce Aplikace.",
+			"screenRestart": "Povoleno. OpenScreen se musí restartovat, aby oprávnění mohl použít.",
+			"screenRecurring": "macOS vás občas požádá o potvrzení tohoto přístupu. To je v pořádku."
+		},
+		"footer": {
+			"screenRequired": "K nahrávání je potřeba nahrávání obrazovky.",
+			"ready": "Vše je připraveno."
+		}
 	}
 }

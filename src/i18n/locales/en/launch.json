@@ -95,5 +95,54 @@
 		"about": "About",
 		"version": "Version {{version}}",
 		"checkingForUpdates": "Checking…"
+	},
+	"permissions": {
+		"title": "OpenScreen needs a few permissions",
+		"subtitle": "macOS asks you to grant each one once. You can change them at any time in System Settings.",
+		"level": {
+			"required": "Required",
+			"recommended": "Recommended",
+			"optional": "Optional"
+		},
+		"rows": {
+			"screen": {
+				"name": "Screen & system audio",
+				"description": "To record your screen and the sound your Mac plays."
+			},
+			"accessibility": {
+				"name": "Accessibility",
+				"description": "To show the right cursor (pointer, text) in your recordings."
+			},
+			"microphone": {
+				"name": "Microphone",
+				"description": "To record your voice."
+			},
+			"camera": {
+				"name": "Camera",
+				"description": "To add your webcam to your recordings."
+			}
+		},
+		"status": {
+			"granted": "Allowed",
+			"restricted": "Managed by your organization"
+		},
+		"actions": {
+			"continue": "Continue",
+			"allow": "Allow",
+			"openSettings": "Open Settings",
+			"restart": "Restart OpenScreen",
+			"start": "Get started"
+		},
+		"help": {
+			"screenPrompt": "macOS will then ask you to turn on OpenScreen in System Settings.",
+			"screenSettings": "In System Settings, turn on OpenScreen. If macOS offers to quit and reopen it, accept: this window will come back.",
+			"screenNotListed": "OpenScreen isn't in the list? Click +, then choose OpenScreen in Applications.",
+			"screenRestart": "Allowed. OpenScreen needs to restart before it can use it.",
+			"screenRecurring": "macOS will occasionally ask you to confirm this access. That's expected."
+		},
+		"footer": {
+			"screenRequired": "Screen recording is needed to record.",
+			"ready": "You're all set."
+		}
 	}
 }

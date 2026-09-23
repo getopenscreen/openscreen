@@ -95,5 +95,54 @@
 		"about": "Über",
 		"version": "Version {{version}}",
 		"checkingForUpdates": "Wird geprüft…"
+	},
+	"permissions": {
+		"title": "OpenScreen benötigt einige Berechtigungen",
+		"subtitle": "macOS fragt jede Berechtigung nur einmal ab. Du kannst sie jederzeit in den Systemeinstellungen ändern.",
+		"level": {
+			"required": "Erforderlich",
+			"recommended": "Empfohlen",
+			"optional": "Optional"
+		},
+		"rows": {
+			"screen": {
+				"name": "Bildschirm & Systemaudio",
+				"description": "Um deinen Bildschirm und den Ton deines Mac aufzunehmen."
+			},
+			"accessibility": {
+				"name": "Bedienungshilfen",
+				"description": "Um in Aufnahmen den richtigen Zeiger (Pfeil, Text) anzuzeigen."
+			},
+			"microphone": {
+				"name": "Mikrofon",
+				"description": "Um deine Stimme aufzunehmen."
+			},
+			"camera": {
+				"name": "Kamera",
+				"description": "Um deine Webcam zu Aufnahmen hinzuzufügen."
+			}
+		},
+		"status": {
+			"granted": "Erlaubt",
+			"restricted": "Von deiner Organisation verwaltet"
+		},
+		"actions": {
+			"continue": "Weiter",
+			"allow": "Erlauben",
+			"openSettings": "Einstellungen öffnen",
+			"restart": "OpenScreen neu starten",
+			"start": "Los geht's"
+		},
+		"help": {
+			"screenPrompt": "macOS bittet dich anschließend, OpenScreen in den Systemeinstellungen zu aktivieren.",
+			"screenSettings": "Aktiviere OpenScreen in den Systemeinstellungen. Wenn macOS anbietet, die App zu beenden und neu zu öffnen, stimme zu: Dieses Fenster erscheint wieder.",
+			"screenNotListed": "OpenScreen fehlt in der Liste? Klicke auf + und wähle OpenScreen unter „Programme“.",
+			"screenRestart": "Erlaubt. OpenScreen muss neu starten, um die Berechtigung zu nutzen.",
+			"screenRecurring": "macOS bittet dich gelegentlich, diesen Zugriff zu bestätigen. Das ist normal."
+		},
+		"footer": {
+			"screenRequired": "Zum Aufnehmen ist die Bildschirmaufnahme erforderlich.",
+			"ready": "Alles bereit."
+		}
 	}
 }

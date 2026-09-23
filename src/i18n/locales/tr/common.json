@@ -45,7 +45,8 @@
 		"hide": "OpenScreen’i Gizle",
 		"hideOthers": "Diğerlerini Gizle",
 		"unhide": "Tümünü Göster",
-		"saveDiagnostics": "Teşhis Verilerini Kaydet"
+		"saveDiagnostics": "Teşhis Verilerini Kaydet",
+		"permissions": "İzinler…"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} kullanılabilir. Mevcut sürümünüz {{currentVersion}}.",

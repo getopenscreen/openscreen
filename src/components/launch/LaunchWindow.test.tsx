@@ -220,11 +220,6 @@ function stubElectronAPI(getSelectedSource: Window["electronAPI"]["getSelectedSo
 		...window.electronAPI,
 		getSelectedSource,
 		openSourceSelector: vi.fn(async () => ({ opened: true })),
-		requestScreenAccess: vi.fn(async () => ({
-			success: true,
-			granted: true,
-			status: "granted",
-		})),
 		// Follows the platform under test. Pinned to "darwin" before, which was
 		// invisible while only `nativeBridgeClient` was consulted for it — and
 		// silently wrong the moment anything read the platform through here.

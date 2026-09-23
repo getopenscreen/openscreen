@@ -9,6 +9,7 @@ import { CountdownOverlay } from "./components/launch/CountdownOverlay.tsx";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { NotesWindow } from "./components/launch/NotesWindow.tsx";
 import { SourceSelector } from "./components/launch/SourceSelector";
+import { PermissionsWindow } from "./components/permissions/PermissionsWindow";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { EditorDialogsProvider } from "./contexts/EditorDialogsContext";
@@ -86,6 +87,8 @@ export default function App() {
 				return <SourceSelector />;
 			case "countdown-overlay":
 				return <CountdownOverlay />;
+			case "permissions":
+				return <PermissionsWindow />;
 			case "cli-export":
 				return (
 					<Suspense fallback={null}>

@@ -95,5 +95,54 @@
 		"about": "情報",
 		"version": "バージョン {{version}}",
 		"checkingForUpdates": "確認中…"
+	},
+	"permissions": {
+		"title": "OpenScreen にはいくつかの許可が必要です",
+		"subtitle": "macOS ではそれぞれ一度だけ許可します。システム設定でいつでも変更できます。",
+		"level": {
+			"required": "必須",
+			"recommended": "推奨",
+			"optional": "任意"
+		},
+		"rows": {
+			"screen": {
+				"name": "画面とシステムオーディオ",
+				"description": "画面と Mac のサウンドを録画するため。"
+			},
+			"accessibility": {
+				"name": "アクセシビリティ",
+				"description": "録画に正しいカーソル（矢印、テキスト）を表示するため。"
+			},
+			"microphone": {
+				"name": "マイク",
+				"description": "声を録音するため。"
+			},
+			"camera": {
+				"name": "カメラ",
+				"description": "録画に Web カメラを追加するため。"
+			}
+		},
+		"status": {
+			"granted": "許可済み",
+			"restricted": "組織によって管理されています"
+		},
+		"actions": {
+			"continue": "続ける",
+			"allow": "許可",
+			"openSettings": "設定を開く",
+			"restart": "OpenScreen を再起動",
+			"start": "はじめる"
+		},
+		"help": {
+			"screenPrompt": "このあと macOS から、システム設定で OpenScreen をオンにするよう求められます。",
+			"screenSettings": "システム設定で OpenScreen をオンにしてください。macOS が終了して再度開くよう提案した場合は、そのまま進めてください。このウインドウが再び表示されます。",
+			"screenNotListed": "リストに OpenScreen がない場合は、＋をクリックして「アプリケーション」から OpenScreen を選んでください。",
+			"screenRestart": "許可済みです。使用するには OpenScreen の再起動が必要です。",
+			"screenRecurring": "macOS からときどきこのアクセスの確認を求められます。これは正常な動作です。"
+		},
+		"footer": {
+			"screenRequired": "録画には画面収録が必要です。",
+			"ready": "準備が整いました。"
+		}
 	}
 }

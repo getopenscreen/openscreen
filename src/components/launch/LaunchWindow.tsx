@@ -44,7 +44,6 @@ import {
 	HUD_STACK_GAP,
 } from "./hudGeometry";
 import styles from "./LaunchWindow.module.css";
-import { openSourceSelectorWithPermissionRetry } from "./openSourceSelectorFlow";
 
 // Locale list is computed once at module load; keeping the reference stable lets
 // the language menu sit behind a memo boundary.
@@ -717,11 +716,10 @@ export function LaunchWindow() {
 	}, [applySelectedSource, recording, startWhenDevicesReady]);
 
 	const openSourceSelector = useCallback(async () => {
+		// A missing macOS permission is handled on the main side: it opens the permissions
+		// window and answers `screen-access-required`, so there is nothing to retry here.
 		if (window.electronAPI) {
-			return await openSourceSelectorWithPermissionRetry({
-				openSourceSelector: () => window.electronAPI.openSourceSelector(),
-				requestScreenAccess: () => window.electronAPI.requestScreenAccess(),
-			});
+			return await window.electronAPI.openSourceSelector();
 		}
 
 		return { opened: false, reason: "electron-api-unavailable" };

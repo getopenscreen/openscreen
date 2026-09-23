@@ -95,5 +95,54 @@
 		"about": "حول",
 		"version": "الإصدار {{version}}",
 		"checkingForUpdates": "جارٍ التحقق…"
+	},
+	"permissions": {
+		"title": "يحتاج OpenScreen إلى بعض الأذونات",
+		"subtitle": "يطلب منك macOS منح كل إذن مرة واحدة فقط. يمكنك تغييرها في أي وقت من إعدادات النظام.",
+		"level": {
+			"required": "مطلوب",
+			"recommended": "مُوصى به",
+			"optional": "اختياري"
+		},
+		"rows": {
+			"screen": {
+				"name": "الشاشة وصوت النظام",
+				"description": "لتسجيل شاشتك والصوت الصادر من جهاز Mac."
+			},
+			"accessibility": {
+				"name": "تسهيلات الاستخدام",
+				"description": "لإظهار المؤشر الصحيح (سهم، نص) في تسجيلاتك."
+			},
+			"microphone": {
+				"name": "الميكروفون",
+				"description": "لتسجيل صوتك."
+			},
+			"camera": {
+				"name": "الكاميرا",
+				"description": "لإضافة كاميرا الويب إلى تسجيلاتك."
+			}
+		},
+		"status": {
+			"granted": "مسموح",
+			"restricted": "تتم إدارته من قِبل مؤسستك"
+		},
+		"actions": {
+			"continue": "متابعة",
+			"allow": "سماح",
+			"openSettings": "فتح الإعدادات",
+			"restart": "إعادة تشغيل OpenScreen",
+			"start": "ابدأ"
+		},
+		"help": {
+			"screenPrompt": "سيطلب منك macOS بعد ذلك تفعيل OpenScreen في إعدادات النظام.",
+			"screenSettings": "في إعدادات النظام، فعِّل OpenScreen. إذا عرض macOS إنهاء التطبيق وإعادة فتحه، فوافق: ستعود هذه النافذة.",
+			"screenNotListed": "لا يظهر OpenScreen في القائمة؟ انقر على +، ثم اختر OpenScreen من التطبيقات.",
+			"screenRestart": "مسموح. يجب إعادة تشغيل OpenScreen ليتمكن من استخدامه.",
+			"screenRecurring": "سيطلب منك macOS من حين لآخر تأكيد هذا الوصول. هذا أمر طبيعي."
+		},
+		"footer": {
+			"screenRequired": "تسجيل الشاشة مطلوب للتسجيل.",
+			"ready": "كل شيء جاهز."
+		}
 	}
 }

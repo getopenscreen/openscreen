@@ -157,8 +157,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	requestCameraAccess: () => {
 		return ipcRenderer.invoke("request-camera-access");
 	},
-	requestScreenAccess: () => {
-		return ipcRenderer.invoke("request-screen-access");
+	permissions: {
+		get: () => ipcRenderer.invoke("permissions:get"),
+		request: (kind: string) => ipcRenderer.invoke("permissions:request", kind),
+		openSettings: (kind: string) => ipcRenderer.invoke("permissions:open-settings", kind),
+		relaunch: () => ipcRenderer.invoke("permissions:relaunch"),
+		close: () => ipcRenderer.invoke("permissions:close"),
 	},
 	requestNativeMacCursorAccess: () => {
 		return ipcRenderer.invoke("request-native-mac-cursor-access");

@@ -95,5 +95,54 @@
 		"about": "Info",
 		"version": "Versione {{version}}",
 		"checkingForUpdates": "Controllo…"
+	},
+	"permissions": {
+		"title": "OpenScreen ha bisogno di alcuni permessi",
+		"subtitle": "macOS ti chiede di concederli una sola volta. Puoi modificarli in qualsiasi momento in Impostazioni di Sistema.",
+		"level": {
+			"required": "Obbligatorio",
+			"recommended": "Consigliato",
+			"optional": "Facoltativo"
+		},
+		"rows": {
+			"screen": {
+				"name": "Schermo e audio di sistema",
+				"description": "Per registrare lo schermo e l'audio del tuo Mac."
+			},
+			"accessibility": {
+				"name": "Accessibilità",
+				"description": "Per mostrare il cursore giusto (freccia, testo) nelle registrazioni."
+			},
+			"microphone": {
+				"name": "Microfono",
+				"description": "Per registrare la tua voce."
+			},
+			"camera": {
+				"name": "Fotocamera",
+				"description": "Per aggiungere la webcam alle registrazioni."
+			}
+		},
+		"status": {
+			"granted": "Consentito",
+			"restricted": "Gestito dalla tua organizzazione"
+		},
+		"actions": {
+			"continue": "Continua",
+			"allow": "Consenti",
+			"openSettings": "Apri Impostazioni",
+			"restart": "Riavvia OpenScreen",
+			"start": "Inizia"
+		},
+		"help": {
+			"screenPrompt": "Poi macOS ti chiederà di attivare OpenScreen in Impostazioni di Sistema.",
+			"screenSettings": "In Impostazioni di Sistema, attiva OpenScreen. Se macOS propone di chiuderlo e riaprirlo, accetta: questa finestra tornerà.",
+			"screenNotListed": "OpenScreen non è nell'elenco? Fai clic su +, poi scegli OpenScreen in Applicazioni.",
+			"screenRestart": "Consentito. OpenScreen deve riavviarsi per poterlo usare.",
+			"screenRecurring": "Di tanto in tanto macOS ti chiederà di confermare questo accesso. È normale."
+		},
+		"footer": {
+			"screenRequired": "Per registrare serve la registrazione dello schermo.",
+			"ready": "È tutto pronto."
+		}
 	}
 }

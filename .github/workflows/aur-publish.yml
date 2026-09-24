@@ -385,8 +385,9 @@ jobs:
 
             # Sans version dans le nom, paru et yay ressortent la copie de la
             # version précédente de leur cache. Sans conséquence tant que le
-            # contenu ne change pas, bloquant dès qu'il change.
-            if [[ "$name" != *"$VERSION"* ]]; then
+            # contenu ne change pas, bloquant dès qu'il change. La forme
+            # `${pkgver//./_}` (1_13_0) compte aussi comme versionnée.
+            if [[ "$name" != *"$VERSION"* && "$name" != *"${VERSION//./_}"* ]]; then
               OLD=${OLD_SUMS[$i]:-}
               NEW=${NEW_SUMS[$i]:-}
               if [[ "${#OLD_SUMS[@]}" -eq "${#NEW_SUMS[@]}" && -n "$OLD" && "$OLD" != "$NEW" ]]; then

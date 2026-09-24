@@ -976,10 +976,20 @@ jobs:
               # string or a commit SHA is an invalid argument, not a graceful
               # degradation. Without it GitHub falls back to its own choice of
               # previous release, which is exactly right when there isn't one.
+              # One line at the head of the body, stable only. `--notes` alongside
+              # `--generate-notes` PREPENDS rather than replaces: the create-release
+              # API documents body as "pre-pended to the automatically generated
+              # notes", and `gh release create --help` says the same. So the PR
+              # links and the New Contributors section below are untouched.
+              #
+              # Not on an RC: an RC goes to people who already follow the repo, and
+              # its body comes from --notes-file above, where a --notes would be a
+              # conflicting second source rather than a prefix.
+              STAR_LINE="If OpenScreen saves you time, a star on the repo helps others find it."
               if [[ -n "$NOTES_START_TAG" ]]; then
-                NOTES_ARGS=(--generate-notes --notes-start-tag "$NOTES_START_TAG")
+                NOTES_ARGS=(--generate-notes --notes-start-tag "$NOTES_START_TAG" --notes "$STAR_LINE")
               else
-                NOTES_ARGS=(--generate-notes)
+                NOTES_ARGS=(--generate-notes --notes "$STAR_LINE")
               fi
             fi
             # shellcheck disable=SC2086

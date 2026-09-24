@@ -353,7 +353,9 @@ export default async function createConfig(): Promise<Config> {
 		// Read back by src/pages/download.tsx, src/pages/index.tsx and
 		// src/components/AppLanguages.
 		// Serialized into the client bundle, so it stays plain JSON.
-		customFields: { latestRelease, appLanguages },
+		// `starCount` rides along with the navbar badge's own build-time lookup, so the
+		// /download star CTA can show a real number without a runtime call to the API.
+		customFields: { latestRelease, appLanguages, starCount },
 
 		// Translated: the landing page, /download/, the docs and the theme. The
 		// blog and the marketing pages stay English (src/lib/locale-routes.ts).

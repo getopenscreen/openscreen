@@ -110,6 +110,15 @@
   "download.preRelease.cta": {
     "message": "浏览所有版本"
   },
+  "download.started.title": {
+    "message": "下载已开始"
+  },
+  "download.started.blurb": {
+    "message": "OpenScreen 免费且采用 MIT 许可证。在 GitHub 上点个星标，能帮助更多人发现它。"
+  },
+  "download.started.cta": {
+    "message": "在 GitHub 上点星标"
+  },
   "home.meta.title": {
     "message": "免费开源的录屏与视频剪辑软件"
   },

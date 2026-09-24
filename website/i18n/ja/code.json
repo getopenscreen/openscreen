@@ -762,5 +762,14 @@
   "download.option.size": {
     "message": "{size} MB",
     "description": "{size} is a whole number of megabytes. Use your language's unit symbol (Mo in French)."
+  },
+  "download.started.title": {
+    "message": "ダウンロードを開始しました"
+  },
+  "download.started.blurb": {
+    "message": "OpenScreen は無料で、MIT ライセンスです。GitHub でスターを付けると、他の人が見つけやすくなります。"
+  },
+  "download.started.cta": {
+    "message": "GitHub でスターを付ける"
   }
 }

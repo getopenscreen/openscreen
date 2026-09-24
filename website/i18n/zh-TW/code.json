@@ -110,6 +110,15 @@
   "download.preRelease.cta": {
     "message": "瀏覽所有版本"
   },
+  "download.started.title": {
+    "message": "下載已開始"
+  },
+  "download.started.blurb": {
+    "message": "OpenScreen 免費且採用 MIT 授權。在 GitHub 上給顆星，能幫助更多人找到它。"
+  },
+  "download.started.cta": {
+    "message": "在 GitHub 上給星"
+  },
   "home.meta.title": {
     "message": "免費開源的螢幕錄影與影片剪輯軟體"
   },

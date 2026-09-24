@@ -11,9 +11,10 @@ import {
 	Download,
 	ExternalLink,
 	FlaskConical,
+	Star,
 	TerminalSquare,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import AppLanguages from "../components/AppLanguages";
 import { type AppLanguage, type AssetKind, findAsset, type LatestRelease } from "../lib/release";
@@ -189,10 +190,44 @@ function downloadPageLd(
 	);
 }
 
+/** Shown in a platform card once one of its file options has been clicked. The download is a
+ *  plain browser navigation to the asset — this renders *after* it, never in front of it, so
+ *  nothing here can delay or block getting the app. Stars are the project's only real
+ *  distribution signal and most visitors arrive from search without ever seeing the repo.
+ *
+ *  `starCount` comes from the same build-time lookup that feeds the navbar badge: asking the
+ *  GitHub API from the browser would cost a request per visitor and rate-limit shared IPs. */
+function StarPrompt({ starCount, locale }: { starCount: number | null; locale: string }) {
+	return (
+		<div className={styles.started} role="status">
+			<span className={styles.startedTitle}>
+				<Translate id="download.started.title">Download started</Translate>
+			</span>
+			<p className={styles.startedText}>
+				<Translate id="download.started.blurb">
+					OpenScreen is free and MIT licensed. A star on GitHub helps other people find it.
+				</Translate>
+			</p>
+			<a className={styles.startedCta} href={REPO_URL} target="_blank" rel="noopener noreferrer">
+				<Star size={14} />
+				<Translate id="download.started.cta">Star on GitHub</Translate>
+				{starCount !== null ? (
+					<span className={styles.startedCount}>{starCount.toLocaleString(locale)}</span>
+				) : null}
+			</a>
+		</div>
+	);
+}
+
 export default function DownloadPage() {
 	const { siteConfig, i18n } = useDocusaurusContext();
 	const release = (siteConfig.customFields?.latestRelease ?? null) as LatestRelease;
 	const languages = (siteConfig.customFields?.appLanguages ?? []) as AppLanguage[];
+	const starCount = (siteConfig.customFields?.starCount ?? null) as number | null;
+	// Which platform card has had a file option clicked. One at a time: the prompt belongs to
+	// the card the user just acted on, and a second click elsewhere moves it rather than
+	// leaving a trail of them down the grid.
+	const [startedId, setStartedId] = useState<string | null>(null);
 	const page = {
 		url: `${siteConfig.url}${useBaseUrl("/download/")}`,
 		title: translate({
@@ -287,6 +322,11 @@ export default function DownloadPage() {
 												key={kind ?? href}
 												className={styles.option}
 												href={href ?? asset?.url ?? LATEST_URL}
+												// No preventDefault: the click keeps its default navigation to the
+												// asset and the download starts as it always did. A set `href` is
+												// the Store listing, which leaves the site — prompting there would
+												// render behind a page the user has already left.
+												onClick={href ? undefined : () => setStartedId(id)}
 											>
 												<span className={styles.optionText}>
 													<span className={styles.optionLabel}>{label}</span>
@@ -297,6 +337,9 @@ export default function DownloadPage() {
 											</a>
 										);
 									})}
+									{startedId === id ? (
+										<StarPrompt starCount={starCount} locale={i18n.currentLocale} />
+									) : null}
 								</div>
 								{footnote ? <p className={styles.cardFoot}>{footnote}</p> : null}
 							</article>

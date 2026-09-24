@@ -10,6 +10,12 @@ on:
         required: true
         type: string
 
+# GITHUB_TOKEN ne sert qu'en lecture : l'action lit la release et télécharge
+# komac. Tout ce qui écrit (branche de la fork, PR sur winget-pkgs) passe par
+# WINGET_ACC_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: windows-latest
@@ -102,8 +108,14 @@ jobs:
           workflows_tree() {
             gh api "repos/$1/contents/.github?ref=master" --jq '.[] | select(.name == "workflows") | .sha'
           }
-          upstream=$(workflows_tree microsoft/winget-pkgs)
-          ours=$(workflows_tree "$fork")
+          # Comme les appels ci-dessus : sous `set -e`, une substitution qui échoue
+          # (404, limite de débit, réseau) terminerait l'étape sans annotation.
+          if ! upstream=$(workflows_tree microsoft/winget-pkgs 2>&1); then
+            fail "Could not read .github/workflows on microsoft/winget-pkgs, so this check cannot tell whether the workflow scope is needed: $(tail -n 1 <<< "$upstream")"
+          fi
+          if ! ours=$(workflows_tree "$fork" 2>&1); then
+            fail "Could not read .github/workflows on $fork, so this check cannot tell whether the workflow scope is needed: $(tail -n 1 <<< "$ours")"
+          fi
           if [[ "$upstream" != "$ours" ]]; then
             fail "WINGET_ACC_TOKEN lacks the workflow scope, and $fork is behind microsoft/winget-pkgs on .github/workflows. komac creates its branch at upstream master, and GitHub refuses that ref to a PAT without workflow; komac reports it as 'does not have the correct permissions to execute CreateRef' (#757). Add the workflow scope to this classic PAT at https://github.com/settings/tokens (its value does not change, so the secret stays as is), or press Sync fork on https://github.com/$fork, which only holds until upstream edits a workflow again."
           fi

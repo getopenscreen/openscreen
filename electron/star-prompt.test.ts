@@ -16,10 +16,10 @@ const state = (patch: Partial<StarPromptState> = {}): StarPromptState => ({
 });
 
 describe("star prompt policy", () => {
-	it("offers on the second successful export and on no other", () => {
-		expect(offersStarPrompt(state({ successfulExports: 1 }))).toBe(false);
-		expect(offersStarPrompt(state({ successfulExports: 2 }))).toBe(true);
-		expect(offersStarPrompt(state({ successfulExports: 3 }))).toBe(false);
+	it("offers on the first successful export and on no other", () => {
+		expect(offersStarPrompt(state({ successfulExports: 0 }))).toBe(false);
+		expect(offersStarPrompt(state({ successfulExports: 1 }))).toBe(true);
+		expect(offersStarPrompt(state({ successfulExports: 2 }))).toBe(false);
 		expect(offersStarPrompt(state({ successfulExports: 50 }))).toBe(false);
 	});
 
@@ -38,7 +38,7 @@ describe("star prompt policy", () => {
 	it("keeps every veto independent of the export count", () => {
 		// A veto that only held at the offer count would let the prompt through the moment the
 		// count moved past it, which is exactly when a regression would go unnoticed.
-		for (const count of [1, 2, 3]) {
+		for (const count of [0, 1, 2]) {
 			expect(offersStarPrompt(state({ successfulExports: count, dismissed: true }))).toBe(false);
 			expect(offersStarPrompt(state({ successfulExports: count, recording: true }))).toBe(false);
 			expect(offersStarPrompt(state({ successfulExports: count, headless: true }))).toBe(false);

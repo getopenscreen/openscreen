@@ -5,9 +5,10 @@
 // Everything in this file exists to make that ask happen AT MOST ONCE. Nothing here gates a
 // feature, and nothing here is reported anywhere: the counters below never leave the machine.
 
-/** The export that earns the ask. The first export is someone trying the app out; by the second
- *  they have chosen to use it, and the question is worth one line of their attention. */
-export const STAR_PROMPT_AT_EXPORT = 2;
+/** The export that earns the ask: the first one. A finished export is the moment the app has
+ *  just delivered what the user came for, and waiting for a second would simply never ask the
+ *  people who only ever export once — which is most of them. */
+export const STAR_PROMPT_AT_EXPORT = 1;
 
 export interface StarPromptState {
 	/** Successful exports on this installation, including the one that just finished. */

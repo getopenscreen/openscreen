@@ -284,6 +284,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			setError(null);
 			setSavedPath(null);
 			setCancelPending(false);
+			// This component stays mounted across `open`, so an unanswered prompt would otherwise
+			// survive the close and reappear on a later export's done panel — a second ask, which
+			// is the one thing the whole feature is built to avoid.
+			setStarPrompt(null);
 		}
 	}, [open]);
 
@@ -336,6 +340,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		setProgress(null);
 		setSavedPath(null);
 		setCancelPending(false);
+		setStarPrompt(null);
 
 		let pickedPath: string | undefined;
 		try {
@@ -439,6 +444,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				void window.electronAPI
 					?.starPromptExportFinished?.()
 					.then((result) => {
+						// The same generation guard the save picker uses: a close or a newer export
+						// invalidates this answer, and an IPC round trip is long enough for either to
+						// have happened. Without it a late "yes" lands on a dialog that has moved on.
+						if (generation !== pickerGeneration.current) return;
 						if (result?.offer) setStarPrompt({ store: result.store });
 					})
 					.catch((err) => console.warn("[export] star prompt check failed:", err));

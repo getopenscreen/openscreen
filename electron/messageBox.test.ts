@@ -1,9 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("electron", () => ({ dialog: { showMessageBox: vi.fn() } }));
+vi.mock("electron", () => ({
+	dialog: { showMessageBox: vi.fn(), showSaveDialog: vi.fn(), showOpenDialog: vi.fn() },
+}));
 
-import type { BrowserWindow } from "electron";
-import { markSheetless, messageBoxOwner } from "./messageBox";
+import { type BrowserWindow, dialog } from "electron";
+import {
+	markSheetless,
+	messageBoxOwner,
+	showOpenDialogOver,
+	showSaveDialogOver,
+} from "./messageBox";
 
 function fakeWindow(destroyed = false) {
 	return { isDestroyed: () => destroyed } as unknown as BrowserWindow;
@@ -34,5 +41,47 @@ describe("messageBoxOwner", () => {
 	it("never attaches to a missing or destroyed window", () => {
 		expect(messageBoxOwner(null, "win32")).toBeNull();
 		expect(messageBoxOwner(fakeWindow(true), "win32")).toBeNull();
+	});
+});
+
+describe("file dialogs (#743)", () => {
+	const realPlatform = process.platform;
+	const pinPlatform = (platform: NodeJS.Platform) =>
+		Object.defineProperty(process, "platform", { value: platform, configurable: true });
+
+	afterEach(() => {
+		pinPlatform(realPlatform);
+		vi.clearAllMocks();
+	});
+
+	it("attaches the export save panel to the editor on macOS, so it cannot fall behind it", async () => {
+		pinPlatform("darwin");
+		const editor = fakeWindow();
+		const options = { title: "Save Exported Video" };
+
+		await showSaveDialogOver(editor, options);
+
+		expect(dialog.showSaveDialog).toHaveBeenCalledWith(editor, options);
+	});
+
+	it("attaches open panels to their window on Windows and Linux too", async () => {
+		const editor = fakeWindow();
+		for (const platform of ["win32", "linux"] as const) {
+			pinPlatform(platform);
+			await showOpenDialogOver(editor, {});
+			expect(dialog.showOpenDialog).toHaveBeenLastCalledWith(editor, {});
+		}
+	});
+
+	it("shows the panel unowned for a sheetless overlay on macOS, or with no window", async () => {
+		pinPlatform("darwin");
+		const hud = fakeWindow();
+		markSheetless(hud);
+
+		await showOpenDialogOver(hud, {});
+		await showSaveDialogOver(null, {});
+
+		expect(dialog.showOpenDialog).toHaveBeenCalledWith({});
+		expect(dialog.showSaveDialog).toHaveBeenCalledWith({});
 	});
 });

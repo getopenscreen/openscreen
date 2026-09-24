@@ -374,6 +374,8 @@ jobs:
           mapfile -t NEW_SUMS < <(sums_of < PKGBUILD)
           mapfile -t OLD_SUMS < <(git show HEAD:PKGBUILD | sums_of)
 
+          VERSION_RE="(^|[^0-9])(${VERSION//./[.]}|${VERSION//./_})([^0-9]|\$)"
+
           for i in "${!NAMES[@]}"; do
             name=${NAMES[$i]}
 
@@ -385,9 +387,12 @@ jobs:
 
             # Sans version dans le nom, paru et yay ressortent la copie de la
             # version précédente de leur cache. Sans conséquence tant que le
-            # contenu ne change pas, bloquant dès qu'il change. La forme
-            # `${pkgver//./_}` (1_13_0) compte aussi comme versionnée.
-            if [[ "$name" != *"$VERSION"* && "$name" != *"${VERSION//./_}"* ]]; then
+            # contenu ne change pas, bloquant dès qu'il change. La version doit
+            # être un segment entier du nom (ni chiffre avant, ni chiffre après :
+            # 1.10.0 ne compte pas dans 1.10.01 ou 11.10.0), sous sa forme
+            # d'origine ou `${pkgver//./_}` (1_13_0). `[.]` plutôt qu'un `\.`,
+            # dont l'échappement varie selon la version de bash.
+            if [[ ! "$name" =~ $VERSION_RE ]]; then
               OLD=${OLD_SUMS[$i]:-}
               NEW=${NEW_SUMS[$i]:-}
               if [[ "${#OLD_SUMS[@]}" -eq "${#NEW_SUMS[@]}" && -n "$OLD" && "$OLD" != "$NEW" ]]; then

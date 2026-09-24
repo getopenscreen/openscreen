@@ -75,14 +75,22 @@ function toLegacyMedia(input: ProjectMedia | undefined): ProjectMedia | null {
 }
 
 /**
- * A v2 `editor.cropRegion` becomes the migrated clip's crop. Returns null for a
- * missing, malformed, or identity region so the clip stays lean (see clipSchema).
+ * A v2 `editor.cropRegion` becomes the migrated clip's crop. The region is
+ * normalised to the unit square: x/y clamp to [0, 1], width/height clamp so the
+ * region stays inside it. Returns null for a missing, non-finite, empty, or
+ * identity region so the clip stays lean (see clipSchema).
  */
 function toClipCropRegion(region: CropRegion | undefined): CropRegion | null {
 	if (!region) return null;
-	const { x, y, width, height } = region;
-	const finite = [x, y, width, height].every((v) => typeof v === "number" && Number.isFinite(v));
+	const finite = [region.x, region.y, region.width, region.height].every(
+		(v) => typeof v === "number" && Number.isFinite(v),
+	);
 	if (!finite) return null;
+	const x = Math.min(1, Math.max(0, region.x));
+	const y = Math.min(1, Math.max(0, region.y));
+	const width = Math.min(1 - x, Math.max(0, region.width));
+	const height = Math.min(1 - y, Math.max(0, region.height));
+	if (width <= 0 || height <= 0) return null;
 	if (x === 0 && y === 0 && width === 1 && height === 1) return null;
 	return { x, y, width, height };
 }

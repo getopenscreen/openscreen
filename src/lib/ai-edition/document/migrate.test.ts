@@ -190,6 +190,49 @@ describe("migrateProjectDataToAxcutDocument", () => {
 		expect(doc.timeline.clips[0]?.cropRegion).toBeUndefined();
 	});
 
+	it("leaves the migrated clip without a cropRegion when editor.cropRegion is missing", () => {
+		const v2 = makeV2Project();
+		delete (v2.editor as Partial<typeof v2.editor>).cropRegion;
+		const doc = migrateProjectDataToAxcutDocument(v2);
+		expect(doc.timeline.clips[0]?.cropRegion).toBeUndefined();
+	});
+
+	it.each([
+		["NaN", { x: Number.NaN, y: 0, width: 0.5, height: 0.5 }],
+		["Infinity", { x: 0, y: 0, width: Number.POSITIVE_INFINITY, height: 0.5 }],
+		["-Infinity", { x: 0, y: Number.NEGATIVE_INFINITY, width: 0.5, height: 0.5 }],
+	])("ignores a cropRegion with a %s component", (_label, cropRegion) => {
+		const v2 = makeV2Project();
+		v2.editor.cropRegion = cropRegion;
+		const doc = migrateProjectDataToAxcutDocument(v2);
+		expect(doc.timeline.clips[0]?.cropRegion).toBeUndefined();
+	});
+
+	it("clamps an out-of-range cropRegion into the unit square", () => {
+		const v2 = makeV2Project();
+		v2.editor.cropRegion = { x: -0.2, y: 0.5, width: 0.6, height: 0.8 };
+		const doc = migrateProjectDataToAxcutDocument(v2);
+		expect(doc.timeline.clips[0]?.cropRegion).toEqual({ x: 0, y: 0.5, width: 0.6, height: 0.5 });
+	});
+
+	it("drops a cropRegion that clamps back to the identity", () => {
+		const v2 = makeV2Project();
+		v2.editor.cropRegion = { x: -1, y: -1, width: 3, height: 3 };
+		const doc = migrateProjectDataToAxcutDocument(v2);
+		expect(doc.timeline.clips[0]?.cropRegion).toBeUndefined();
+	});
+
+	it.each([
+		["zero width", { x: 0.2, y: 0.2, width: 0, height: 0.5 }],
+		["negative height", { x: 0.2, y: 0.2, width: 0.5, height: -0.1 }],
+		["x at the right edge", { x: 1.5, y: 0.2, width: 0.5, height: 0.5 }],
+	])("ignores a cropRegion with %s", (_label, cropRegion) => {
+		const v2 = makeV2Project();
+		v2.editor.cropRegion = cropRegion;
+		const doc = migrateProjectDataToAxcutDocument(v2);
+		expect(doc.timeline.clips[0]?.cropRegion).toBeUndefined();
+	});
+
 	it("carries cursor tuning keys from a v2 editor into getEditorSettings", () => {
 		const v2 = makeV2Project();
 		v2.editor.cursorSize = 0.3;

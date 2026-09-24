@@ -421,11 +421,12 @@ const SPEED_PRESETS = [1, ...SPEED_OPTIONS.map((option) => option.speed)].sort((
 
 /**
  * Preset select + free numeric field, the speed UX this editor already had translations for
- * (`settings.speed.customPlaybackSpeed` / `maxSpeedError` / `previewFrameSteppingHint`, shipped
- * in all 13 locales) but no longer any control for: the V4 shell replaced the panel that hosted
- * it with a preset-only `<select>` capped at 3×, while the underlying capability goes to
- * `MAX_PLAYBACK_SPEED` (100×). Only the control was missing, so this rewires it rather than
- * adding anything new.
+ * (`settings.speed.customPlaybackSpeed` / `maxSpeedError`) but no longer any control for: the V4
+ * shell replaced the panel that hosted it with a preset-only `<select>` capped at 3×, while the
+ * underlying capability goes to `MAX_PLAYBACK_SPEED` (100×). Only the control was missing, so
+ * this rewires it rather than adding anything new. `previewFrameSteppingHint` is deliberately
+ * not rendered: it describes the legacy editor, while this preview caps at
+ * `MAX_NATIVE_PLAYBACK_RATE` (16×) without frame-stepping or muting (see the note below).
  */
 export function SpeedControl({
 	region,

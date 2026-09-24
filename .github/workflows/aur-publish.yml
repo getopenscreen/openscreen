@@ -346,17 +346,20 @@ jobs:
         working-directory: aur-repo
         env:
           VERSION: ${{ steps.meta.outputs.version }}
-          PACKAGE: ${{ vars.AUR_PACKAGE_NAME }}
         run: |
           set -euo pipefail
           FAILED=0
 
           # Nom local de chaque source, tel que makepkg le range : la partie
-          # avant `::` si elle existe, sinon le dernier segment de l'URL.
-          SRC_BLOCK=$(awk '/^source=\(/{f=1} f{print} f&&/\)[[:space:]]*$/{exit}' PKGBUILD)
-          mapfile -t ENTRIES < <(grep -oE '"[^"]*"' <<<"$SRC_BLOCK" | tr -d '"' \
-            | sed -e "s/\\\${pkgver}/${VERSION}/g" -e "s/\\\$pkgver/${VERSION}/g" \
-                  -e "s/\\\${pkgname}/${PACKAGE}/g" -e "s/\\\$pkgname/${PACKAGE}/g")
+          # avant `::` si elle existe, sinon le dernier segment de l'URL. On lit
+          # le .SRCINFO régénéré plus haut plutôt que le PKGBUILD : makepkg y a
+          # déjà développé chaque entrée (${pkgver}, ${_pkgname}…), dans l'ordre
+          # du tableau, donc dans l'ordre de sha256sums.
+          mapfile -t ENTRIES < <(sed -nE 's/^[[:space:]]*source = //p' .SRCINFO)
+          if [[ "${#ENTRIES[@]}" -eq 0 ]]; then
+            echo "::error::No source entries found in .SRCINFO"
+            exit 1
+          fi
           NAMES=()
           for entry in "${ENTRIES[@]}"; do
             if [[ "$entry" == *"::"* ]]; then

@@ -90,6 +90,10 @@
   "files": [
     "dist",
     "dist-electron",
+    // public/demo.gif and public/preview*.png are kept only so external pages that hotlink the
+    // old raw.githubusercontent.com URLs keep working; Vite copies them into dist/, so drop them.
+    "!dist/demo.gif",
+    "!dist/preview*.png",
     // Exclude assets already bundled into extraResources (saves ~17 MB duplicate in asar)
     "!dist/wallpapers/**",
     "!dist/cursors/**",

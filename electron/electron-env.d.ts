@@ -269,6 +269,10 @@ interface Window {
 		}>;
 		onStopRecordingFromTray: (callback: () => void) => () => void;
 		openExternalUrl: (url: string) => Promise<{ success: boolean; error?: string }>;
+		openRepoPage: () => Promise<void>;
+		starPromptExportFinished: () => Promise<{ offer: boolean; store: boolean }>;
+		dismissStarPrompt: () => Promise<void>;
+		openStoreReview: () => Promise<{ success: boolean }>;
 		pickExportSavePath: (
 			fileName: string,
 			exportFolder?: string,

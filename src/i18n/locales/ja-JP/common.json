@@ -46,6 +46,7 @@
 		"hideOthers": "ほかを隠す",
 		"unhide": "すべて表示",
 		"saveDiagnostics": "診断情報を保存",
+		"starOnGithub": "GitHub でスターを付ける",
 		"permissions": "アクセス許可…"
 	},
 	"updates": {

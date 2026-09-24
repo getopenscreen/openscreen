@@ -132,15 +132,24 @@ jobs:
   #   * `shaders.metal` is compiled AT RUNTIME by `new_library_with_source`, so a
   #     whole file of invalid MSL (HLSL's global `cbuffer`/`Texture2D` have no MSL
   #     equivalent) type-checks perfectly — `every_shader_entry_point_compiles`
-  #     catches it. macos-14 runners have a real Metal device, so it runs for real.
+  #     catches it. The arm64 runners have a real Metal device, so it runs for real.
   #   * `AVERROR(EAGAIN)` is -11 on Windows/Linux and -35 on macOS. A hardcoded -11
   #     compiles anywhere and silently decodes zero frames —
   #     `averror_constants_match_the_ffmpeg_macros` confronts it with shim.c.
   #   * pipeline-state creation rejects shader/attachment mismatches only at
   #     `newRenderPipelineState` time — `the_compositor_builds_on_the_system_device`.
+  #
+  # `macos-latest`, not a pinned image, and that is load-bearing: this job installs ffmpeg
+  # from homebrew-core at run time, and Homebrew only builds bottles for the macOS versions
+  # it still supports. Pinned to macos-14 it fell off that list, fell back to compiling x265
+  # from source, and died in libtool — failing every pull request, including ones that touch
+  # nothing but `website/`. What the job actually needs is an arm64 runner (a real Metal
+  # device for the tests below, `/opt/homebrew` paths, the aarch64 toolchain), and that is
+  # what `macos-latest` has been since macos-14. Re-pin it and this breaks again on
+  # Homebrew's schedule rather than on ours.
   rust-macos-compositor-check:
     name: Rust test (macOS compositor)
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
       - name: Install Rust toolchain

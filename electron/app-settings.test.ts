@@ -69,4 +69,39 @@ describe("app settings store", () => {
 		expect(() => missing.setRecordingPreferences({ micEnabled: true })).toThrow();
 		expect(missing.getSnapshot().recording.micEnabled).toBe(false);
 	});
+
+	it("counts exports until the user answers, then stops counting for good", () => {
+		const dir = temp();
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().starPrompt).toEqual({ successfulExports: 0, dismissed: false });
+		expect(store.recordSuccessfulExport().successfulExports).toBe(1);
+		expect(store.recordSuccessfulExport().successfulExports).toBe(2);
+		store.dismissStarPrompt();
+		// Past the answer the number cannot change any decision, so it stops moving rather than
+		// quietly becoming a lifetime usage count.
+		expect(store.recordSuccessfulExport()).toEqual({ successfulExports: 2, dismissed: true });
+		expect(store.getSnapshot().starPrompt).toEqual({ successfulExports: 2, dismissed: true });
+	});
+
+	it("survives a settings file that lies about the prompt state", () => {
+		const dir = temp();
+		const file = path.join(dir, "recording-settings.json");
+		// A hand-edited or truncated file must never turn into "ask on every export".
+		for (const bad of ['{"starPrompt":{"successfulExports":-4}}', '{"starPrompt":"nope"}']) {
+			writeFileSync(file, bad, "utf8");
+			expect(new AppSettingsStore(dir).getSnapshot().starPrompt).toEqual({
+				successfulExports: 0,
+				dismissed: false,
+			});
+		}
+	});
+
+	it("keeps the recording preferences untouched when the prompt state changes", () => {
+		const dir = temp();
+		const store = new AppSettingsStore(dir);
+		store.setRecordingPreferences({ micEnabled: true, micDeviceId: "mic" });
+		store.recordSuccessfulExport();
+		store.dismissStarPrompt();
+		expect(store.getSnapshot().recording).toMatchObject({ micEnabled: true, micDeviceId: "mic" });
+	});
 });

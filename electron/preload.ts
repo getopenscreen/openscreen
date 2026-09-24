@@ -281,6 +281,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	openExternalUrl: (url: string) => {
 		return ipcRenderer.invoke("open-external-url", url);
 	},
+	// The star ask. The renderer reports that an export finished and is told yes or no; the
+	// counters, the take flag and the install channel stay in the main process.
+	openRepoPage: () => {
+		return ipcRenderer.invoke("star-prompt:open-repo");
+	},
+	starPromptExportFinished: () => {
+		return ipcRenderer.invoke("star-prompt:export-finished");
+	},
+	dismissStarPrompt: () => {
+		return ipcRenderer.invoke("star-prompt:dismiss");
+	},
+	// No URL argument on purpose: main builds the `ms-windows-store:` link from a constant.
+	openStoreReview: () => {
+		return ipcRenderer.invoke("star-prompt:open-store-review");
+	},
 	pickExportSavePath: (fileName: string, exportFolder?: string) => {
 		return ipcRenderer.invoke("pick-export-save-path", fileName, exportFolder);
 	},

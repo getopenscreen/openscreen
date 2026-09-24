@@ -20,7 +20,13 @@ function releaseNotesArms() {
 	const block = buildWorkflow.slice(start, create);
 	const split = block.indexOf("\n            else\n");
 	expect(split).toBeGreaterThan(-1);
-	return { rc: block.slice(0, split), stable: block.slice(split) };
+	// The invocation comes back too: everything the arms decide is dead weight if the command
+	// stops expanding it, and that deletion would leave every assertion about NOTES_ARGS green.
+	// Ends at the `fi` that closes the prerelease branch, at its own indentation.
+	const end = buildWorkflow.indexOf("          fi", create);
+	expect(end).toBeGreaterThan(create);
+	const invocation = buildWorkflow.slice(create, end);
+	return { rc: block.slice(0, split), stable: block.slice(split), invocation };
 }
 
 describe("stable release notes", () => {
@@ -50,6 +56,14 @@ describe("stable release notes", () => {
 		expect(args[0]).toContain("--notes-file");
 		expect(args[0]).not.toContain("--generate-notes");
 		expect(args[0]).not.toContain("--notes ");
+	});
+
+	it("passes the chosen arguments to gh", () => {
+		// Without this, deleting "${NOTES_ARGS[@]}" from the command would publish every release
+		// with neither the star line nor the generated notes, and every other test in this file
+		// would still pass: they only ever look at how the array is built.
+		const { invocation } = releaseNotesArms();
+		expect(invocation).toContain('"${NOTES_ARGS[@]}"');
 	});
 
 	it("keeps the generated notes rather than replacing them", () => {

@@ -1,4 +1,4 @@
-import { ipcMain, shell } from "electron";
+import { BrowserWindow, ipcMain, shell } from "electron";
 import type { AiEditionChatEvent } from "../../src/native/contracts";
 import {
 	NATIVE_BRIDGE_CHANNEL,
@@ -33,8 +33,12 @@ export interface NativeBridgeContext {
 		projectData: unknown,
 		suggestedName?: string,
 		existingProjectPath?: string,
+		parent?: BrowserWindow | null,
 	) => Promise<ProjectFileResult>;
-	loadProjectFile: (projectFolder?: string) => Promise<ProjectFileResult>;
+	loadProjectFile: (
+		projectFolder?: string,
+		parent?: BrowserWindow | null,
+	) => Promise<ProjectFileResult>;
 	loadCurrentProjectFile: () => Promise<ProjectFileResult>;
 	loadProjectFileFromPath: (path: string) => Promise<ProjectFileResult>;
 	setCurrentVideoPath: (path: string) => ProjectPathResult | Promise<ProjectPathResult>;
@@ -283,12 +287,16 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 									request.payload.projectData,
 									request.payload.suggestedName,
 									request.payload.existingProjectPath,
+									BrowserWindow.fromWebContents(event.sender),
 								),
 							);
 						case "loadProjectFile":
 							return createSuccessResponse(
 								requestId,
-								await projectService.loadProjectFile(request.payload?.projectFolder),
+								await projectService.loadProjectFile(
+									request.payload?.projectFolder,
+									BrowserWindow.fromWebContents(event.sender),
+								),
 							);
 						case "loadCurrentProjectFile":
 							return createSuccessResponse(

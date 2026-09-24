@@ -16,6 +16,7 @@ import {
 	FIXED_SHORTCUTS,
 	findConflict,
 	formatBinding,
+	formatFixedShortcut,
 	SHORTCUT_ACTIONS,
 	type ShortcutAction,
 	type ShortcutBinding,
@@ -212,16 +213,16 @@ export function ShortcutsConfigDialog() {
 						<p className="text-[10px] text-[var(--muted)] mb-2 uppercase tracking-wide font-semibold">
 							{t("fixed")}
 						</p>
-						{FIXED_SHORTCUTS.map(({ i18nKey, label, display }) => (
+						{FIXED_SHORTCUTS.map((shortcut) => (
 							<div
-								key={i18nKey}
+								key={shortcut.i18nKey}
 								className="flex items-center justify-between py-1.5 px-1 border-b border-[var(--border-soft)] last:border-0"
 							>
 								<span className="text-sm text-[var(--muted)]">
-									{t(`fixedActions.${i18nKey}`, { defaultValue: label })}
+									{t(`fixedActions.${shortcut.i18nKey}`, { defaultValue: shortcut.label })}
 								</span>
 								<kbd className="px-2 py-1 bg-[var(--surface-2)] border border-[var(--border)] rounded text-xs font-mono text-[var(--muted)] min-w-[90px] text-center">
-									{display}
+									{formatFixedShortcut(shortcut, isMac)}
 								</kbd>
 							</div>
 						))}

@@ -71,6 +71,7 @@ import {
 } from "../media/cursorSidecar";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
+import { showOpenDialogOver, showSaveDialogOver } from "../messageBox";
 import {
 	type LinuxCaptureSourceKind,
 	LinuxNativeCaptureSession,
@@ -213,17 +214,6 @@ function resolveApprovedVideoPath(videoPath?: string | null): string | null {
 }
 
 // Attach the parent window only when valid, to avoid passing a destroyed BrowserWindow to dialogs.
-function buildDialogOptions<T extends Electron.OpenDialogOptions | Electron.SaveDialogOptions>(
-	baseOptions: T,
-	parentWindow: BrowserWindow | null,
-): T & { parent?: BrowserWindow } {
-	const mainWindow = parentWindow;
-	if (mainWindow && !mainWindow.isDestroyed()) {
-		return { ...baseOptions, parent: mainWindow };
-	}
-	return baseOptions;
-}
-
 function hasAllowedImportVideoExtension(filePath: string): boolean {
 	return ALLOWED_IMPORT_VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
@@ -3938,56 +3928,59 @@ export function registerIpcHandlers(
 		return resolveAssetBasePath();
 	});
 
-	ipcMain.handle("pick-export-save-path", async (_, fileName: string, exportFolder?: string) => {
-		try {
-			const isGif = fileName.toLowerCase().endsWith(".gif");
-			const filters = isGif
-				? [{ name: mainT("dialogs", "fileDialogs.gifImage"), extensions: ["gif"] }]
-				: [{ name: mainT("dialogs", "fileDialogs.mp4Video"), extensions: ["mp4"] }];
+	ipcMain.handle(
+		"pick-export-save-path",
+		async (event, fileName: string, exportFolder?: string) => {
+			try {
+				const isGif = fileName.toLowerCase().endsWith(".gif");
+				const filters = isGif
+					? [{ name: mainT("dialogs", "fileDialogs.gifImage"), extensions: ["gif"] }]
+					: [{ name: mainT("dialogs", "fileDialogs.mp4Video"), extensions: ["mp4"] }];
 
-			// Prefer the user's last export folder if it still exists, else ~/Downloads.
-			// Validate here because the renderer can't stat the filesystem.
-			let defaultDir = app.getPath("downloads");
-			if (exportFolder) {
-				try {
-					const stats = await fs.stat(exportFolder);
-					if (stats.isDirectory()) {
-						defaultDir = exportFolder;
+				// Prefer the user's last export folder if it still exists, else ~/Downloads.
+				// Validate here because the renderer can't stat the filesystem.
+				let defaultDir = app.getPath("downloads");
+				if (exportFolder) {
+					try {
+						const stats = await fs.stat(exportFolder);
+						if (stats.isDirectory()) {
+							defaultDir = exportFolder;
+						}
+					} catch (err) {
+						console.warn(
+							`Could not access remembered export folder "${exportFolder}", falling back to Downloads:`,
+							err,
+						);
 					}
-				} catch (err) {
-					console.warn(
-						`Could not access remembered export folder "${exportFolder}", falling back to Downloads:`,
-						err,
-					);
 				}
-			}
-			const dialogOptions = buildDialogOptions(
-				{
+				const dialogOptions: Electron.SaveDialogOptions = {
 					title: isGif
 						? mainT("dialogs", "fileDialogs.saveGif")
 						: mainT("dialogs", "fileDialogs.saveVideo"),
 					defaultPath: path.join(defaultDir, fileName),
 					filters,
 					properties: ["createDirectory", "showOverwriteConfirmation"],
-				},
-				getMainWindow(),
-			);
-			const result = await dialog.showSaveDialog(dialogOptions);
+				};
+				const result = await showSaveDialogOver(
+					BrowserWindow.fromWebContents(event.sender),
+					dialogOptions,
+				);
 
-			if (result.canceled || !result.filePath) {
-				return { success: false, canceled: true, message: "Export canceled" };
+				if (result.canceled || !result.filePath) {
+					return { success: false, canceled: true, message: "Export canceled" };
+				}
+
+				return { success: true, path: path.normalize(result.filePath) };
+			} catch (error) {
+				console.error("Failed to show save dialog:", error);
+				return {
+					success: false,
+					message: "Failed to show save dialog",
+					error: String(error),
+				};
 			}
-
-			return { success: true, path: path.normalize(result.filePath) };
-		} catch (error) {
-			console.error("Failed to show save dialog:", error);
-			return {
-				success: false,
-				message: "Failed to show save dialog",
-				error: String(error),
-			};
-		}
-	});
+		},
+	);
 
 	ipcMain.handle("write-export-to-path", async (_, videoData: ArrayBuffer, filePath: string) => {
 		try {
@@ -4022,24 +4015,24 @@ export function registerIpcHandlers(
 
 	// The media tab imports VIDEO (it arranges clips). Audio is imported from the
 	// timeline toolbar instead (issue #350) — see `open-audio-file-picker` below.
-	ipcMain.handle("open-video-file-picker", async () => {
+	ipcMain.handle("open-video-file-picker", async (event) => {
 		try {
-			const dialogOptions = buildDialogOptions(
-				{
-					title: mainT("dialogs", "fileDialogs.selectVideo"),
-					defaultPath: RECORDINGS_DIR,
-					filters: [
-						{
-							name: mainT("dialogs", "fileDialogs.videoFiles"),
-							extensions: ["webm", "mp4", "mov", "avi", "mkv", "m4v", "wmv", "flv", "ts"],
-						},
-						{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
-					],
-					properties: ["openFile"],
-				},
-				getMainWindow(),
+			const dialogOptions: Electron.OpenDialogOptions = {
+				title: mainT("dialogs", "fileDialogs.selectVideo"),
+				defaultPath: RECORDINGS_DIR,
+				filters: [
+					{
+						name: mainT("dialogs", "fileDialogs.videoFiles"),
+						extensions: ["webm", "mp4", "mov", "avi", "mkv", "m4v", "wmv", "flv", "ts"],
+					},
+					{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
+				],
+				properties: ["openFile"],
+			};
+			const result = await showOpenDialogOver(
+				BrowserWindow.fromWebContents(event.sender),
+				dialogOptions,
 			);
-			const result = await dialog.showOpenDialog(dialogOptions);
 
 			if (result.canceled || result.filePaths.length === 0) {
 				return { success: false, canceled: true };
@@ -4072,24 +4065,24 @@ export function registerIpcHandlers(
 	// the timeline's "Add audio" tool: audio is a timeline overlay (like an
 	// annotation), not a media-tab clip, so it has its own audio-only picker and the
 	// renderer adds it as a kind:"audio" asset + track at the playhead.
-	ipcMain.handle("open-audio-file-picker", async () => {
+	ipcMain.handle("open-audio-file-picker", async (event) => {
 		try {
-			const dialogOptions = buildDialogOptions(
-				{
-					title: mainT("dialogs", "fileDialogs.selectAudio"),
-					defaultPath: RECORDINGS_DIR,
-					filters: [
-						{
-							name: mainT("dialogs", "fileDialogs.audioFiles"),
-							extensions: ["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus"],
-						},
-						{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
-					],
-					properties: ["openFile"],
-				},
-				getMainWindow(),
+			const dialogOptions: Electron.OpenDialogOptions = {
+				title: mainT("dialogs", "fileDialogs.selectAudio"),
+				defaultPath: RECORDINGS_DIR,
+				filters: [
+					{
+						name: mainT("dialogs", "fileDialogs.audioFiles"),
+						extensions: ["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus"],
+					},
+					{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
+				],
+				properties: ["openFile"],
+			};
+			const result = await showOpenDialogOver(
+				BrowserWindow.fromWebContents(event.sender),
+				dialogOptions,
 			);
-			const result = await dialog.showOpenDialog(dialogOptions);
 
 			if (result.canceled || result.filePaths.length === 0) {
 				return { success: false, canceled: true };
@@ -4312,8 +4305,13 @@ export function registerIpcHandlers(
 
 	ipcMain.handle(
 		"save-project-file",
-		async (_, projectData: unknown, suggestedName?: string, existingProjectPath?: string) => {
-			return saveProjectFile(projectData, suggestedName, existingProjectPath);
+		async (event, projectData: unknown, suggestedName?: string, existingProjectPath?: string) => {
+			return saveProjectFile(
+				projectData,
+				suggestedName,
+				existingProjectPath,
+				BrowserWindow.fromWebContents(event.sender),
+			);
 		},
 	);
 
@@ -4321,6 +4319,7 @@ export function registerIpcHandlers(
 		projectData: unknown,
 		suggestedName?: string,
 		existingProjectPath?: string,
+		parent?: BrowserWindow | null,
 	): Promise<ProjectFileResult> {
 		try {
 			const trustedExistingProjectPath = isTrustedProjectPath(existingProjectPath)
@@ -4346,22 +4345,19 @@ export function registerIpcHandlers(
 				? safeName
 				: `${safeName}.${PROJECT_FILE_EXTENSION}`;
 
-			const dialogOptions = buildDialogOptions(
-				{
-					title: mainT("dialogs", "fileDialogs.saveProject"),
-					defaultPath: path.join(RECORDINGS_DIR, defaultName),
-					filters: [
-						{
-							name: mainT("dialogs", "fileDialogs.openscreenProject"),
-							extensions: [PROJECT_FILE_EXTENSION],
-						},
-						{ name: "JSON", extensions: ["json"] },
-					],
-					properties: ["createDirectory", "showOverwriteConfirmation"],
-				},
-				getMainWindow(),
-			);
-			const result = await dialog.showSaveDialog(dialogOptions);
+			const dialogOptions: Electron.SaveDialogOptions = {
+				title: mainT("dialogs", "fileDialogs.saveProject"),
+				defaultPath: path.join(RECORDINGS_DIR, defaultName),
+				filters: [
+					{
+						name: mainT("dialogs", "fileDialogs.openscreenProject"),
+						extensions: [PROJECT_FILE_EXTENSION],
+					},
+					{ name: "JSON", extensions: ["json"] },
+				],
+				properties: ["createDirectory", "showOverwriteConfirmation"],
+			};
+			const result = await showSaveDialogOver(parent, dialogOptions);
 
 			if (result.canceled || !result.filePath) {
 				return {
@@ -4389,11 +4385,14 @@ export function registerIpcHandlers(
 		}
 	}
 
-	ipcMain.handle("load-project-file", async (_, projectFolder?: string) => {
-		return loadProjectFile(projectFolder);
+	ipcMain.handle("load-project-file", async (event, projectFolder?: string) => {
+		return loadProjectFile(projectFolder, BrowserWindow.fromWebContents(event.sender));
 	});
 
-	async function loadProjectFile(projectFolder?: string): Promise<ProjectFileResult> {
+	async function loadProjectFile(
+		projectFolder?: string,
+		parent?: BrowserWindow | null,
+	): Promise<ProjectFileResult> {
 		try {
 			// Default to the projects directory, where the editor actually stores
 			// openable project files (one `.openscreen` per project). Prefer the user's
@@ -4423,25 +4422,22 @@ export function registerIpcHandlers(
 					);
 				}
 			}
-			const dialogOptions = buildDialogOptions(
-				{
-					title: mainT("dialogs", "fileDialogs.openProject"),
-					defaultPath: defaultDir,
-					filters: [
-						{
-							name: mainT("dialogs", "fileDialogs.openscreenProject"),
-							// All projects are `.openscreen`; `.axcut` is kept only so files
-							// written by older builds (pre-migration) still show up.
-							extensions: [PROJECT_FILE_EXTENSION, "axcut"],
-						},
-						{ name: "JSON", extensions: ["json"] },
-						{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
-					],
-					properties: ["openFile"],
-				},
-				getMainWindow(),
-			);
-			const result = await dialog.showOpenDialog(dialogOptions);
+			const dialogOptions: Electron.OpenDialogOptions = {
+				title: mainT("dialogs", "fileDialogs.openProject"),
+				defaultPath: defaultDir,
+				filters: [
+					{
+						name: mainT("dialogs", "fileDialogs.openscreenProject"),
+						// All projects are `.openscreen`; `.axcut` is kept only so files
+						// written by older builds (pre-migration) still show up.
+						extensions: [PROJECT_FILE_EXTENSION, "axcut"],
+					},
+					{ name: "JSON", extensions: ["json"] },
+					{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
+				],
+				properties: ["openFile"],
+			};
+			const result = await showOpenDialogOver(parent, dialogOptions);
 
 			if (result.canceled || result.filePaths.length === 0) {
 				return { success: false, canceled: true, message: "Open project canceled" };

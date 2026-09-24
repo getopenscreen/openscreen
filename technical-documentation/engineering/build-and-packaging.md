@@ -267,6 +267,8 @@ Because macOS `ElectronFramework` directory matching uses underscores (`pt_BR.lp
 
 Marketing and documentation assets (`demo.gif`, `preview*.png`) reside in `docs/assets/` rather than Vite's `public/` directory. This prevents Vite's dev server and build step from copying ~8 MB of documentation media into `dist/`.
 
+Copies of the same three files also remain at their old `public/` paths, because external pages (directories, articles, awesome lists) hotlink `https://raw.githubusercontent.com/getopenscreen/openscreen/main/public/demo.gif` and friends, and moving them broke those images. Vite still copies them into `dist/`, so `electron-builder.json5` excludes `dist/demo.gif` and `dist/preview*.png` from the package. Reference `docs/assets/` from anything new; do not delete the `public/` copies.
+
 ### Compression configuration
 
 `electron-builder.json5` declares `compression: "normal"`. For Windows NSIS installers, electron-builder's differential packaging options enforce normal, non-solid compression with a 1 MB dictionary (`dictSize = 1`, `solid = false`). Setting `"maximum"` has no effect on Windows installers and only increases build times for Linux AppImage targets without meaningful size reductions.

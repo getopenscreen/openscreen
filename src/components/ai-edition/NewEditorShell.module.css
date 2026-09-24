@@ -1953,6 +1953,46 @@
 	cursor: not-allowed;
 }
 
+/* The one-time star ask, inside the export-done panel. Separated from the panel's own actions
+   by a rule rather than a second box: it is an aside to a successful export, not a second
+   result. Shown at most once per installation — see electron/star-prompt.ts. */
+.starPrompt {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	margin-top: 4px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+
+.starPromptText {
+	color: var(--muted);
+	font: 400 var(--fs-app)/1.5 var(--font-body);
+}
+
+.starPromptActions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+/* Declining must be as reachable as accepting, so it is a real button with the same hit area —
+   but quiet, because nothing is lost by taking it. */
+.starPromptDecline {
+	height: 32px;
+	padding: 0 10px;
+	border: 1px solid transparent;
+	border-radius: var(--r-md);
+	background: none;
+	color: var(--muted);
+	font: 500 var(--fs-app)/1 var(--font-body);
+	cursor: pointer;
+}
+
+.starPromptDecline:hover { color: var(--fg); background: var(--surface-warm); }
+
 /* ─── Edit Clip modal — draggable source-range track ────────────── */
 .editClipRangeDragging {
 	box-shadow: 0 0 0 2px var(--accent-soft);

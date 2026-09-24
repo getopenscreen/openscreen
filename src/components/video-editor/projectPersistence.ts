@@ -100,6 +100,15 @@ export interface ProjectEditorState {
 	gifLoop: boolean;
 	gifSizePreset: GifSizePreset;
 	cursorTheme: string;
+	// Optional: the headless CLI export reads a v2 project through
+	// normalizeProjectEditor and then copies the editor into legacyEditor, where
+	// getEditorSettings reads these keys. A key missing here is a key the export
+	// silently drops back to its default.
+	cursorSize?: number;
+	cursorSmoothing?: number;
+	cursorMotionBlur?: number;
+	cursorClickBounce?: number;
+	cursorClipToBounds?: boolean;
 }
 
 export interface EditorProjectData {
@@ -475,6 +484,20 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 
 	return {
 		cursorTheme: normalizeCursorThemeId(editor.cursorTheme),
+		// Pass the cursor tuning keys through when present; the CLI export has no
+		// other path to them (the GUI edits the v7 document directly and never
+		// comes back through here).
+		...(isFiniteNumber(editor.cursorSize) ? { cursorSize: editor.cursorSize } : {}),
+		...(isFiniteNumber(editor.cursorSmoothing) ? { cursorSmoothing: editor.cursorSmoothing } : {}),
+		...(isFiniteNumber(editor.cursorMotionBlur)
+			? { cursorMotionBlur: editor.cursorMotionBlur }
+			: {}),
+		...(isFiniteNumber(editor.cursorClickBounce)
+			? { cursorClickBounce: editor.cursorClickBounce }
+			: {}),
+		...(typeof editor.cursorClipToBounds === "boolean"
+			? { cursorClipToBounds: editor.cursorClipToBounds }
+			: {}),
 		wallpaper:
 			typeof editor.wallpaper === "string"
 				? normalizeWallpaperValue(editor.wallpaper)

@@ -6,7 +6,7 @@
 // Format/quality/GIF options live in the dialog's local state. The
 // dialog uses the new shell's modal style.
 
-import { Download, FileVideo, FolderOpen, Loader2 } from "lucide-react";
+import { Download, FileVideo, FolderOpen, Loader2, Star } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -82,6 +82,15 @@ function formatHms(totalSeconds: number): string {
  *  and resolves `{ success: false }` when even the fallback failed. The export already
  *  succeeded — failing to open the folder is not worth a second error toast, but it is worth
  *  a line. */
+/** The URL itself lives in electron/star-prompt.ts and is never sent from here: main opens the
+ *  repo root for every surface that offers a star, so the app menu and this prompt cannot drift
+ *  to different links — and a Store copy cannot be walked towards Releases or an .exe. */
+function openRepoPage(): void {
+	void window.electronAPI
+		?.openRepoPage?.()
+		.catch((err) => console.warn("[export] could not open the repo page:", err));
+}
+
 function revealExportedFile(filePath: string): void {
 	void window.electronAPI
 		?.revealInFolder?.(filePath)
@@ -160,6 +169,9 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	const [progress, setProgress] = useState<ExportProgress | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [savedPath, setSavedPath] = useState<string | null>(null);
+	// Null until the main process says this export is the one that earns the ask, and null again
+	// the moment the user answers. The renderer never sees the counters behind that decision.
+	const [starPrompt, setStarPrompt] = useState<{ store: boolean } | null>(null);
 	const activeExport = useRef<ActiveExport | null>(null);
 	const [cancelPending, setCancelPending] = useState(false);
 	const pickerGeneration = useRef(0);
@@ -272,6 +284,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			setError(null);
 			setSavedPath(null);
 			setCancelPending(false);
+			// This component stays mounted across `open`, so an unanswered prompt would otherwise
+			// survive the close and reappear on a later export's done panel — a second ask, which
+			// is the one thing the whole feature is built to avoid.
+			setStarPrompt(null);
 		}
 	}, [open]);
 
@@ -324,6 +340,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		setProgress(null);
 		setSavedPath(null);
 		setCancelPending(false);
+		setStarPrompt(null);
 
 		let pickedPath: string | undefined;
 		try {
@@ -421,6 +438,19 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				if (activeExport.current !== job) return;
 				setSavedPath(pickedPath);
 				setPhase("done");
+				// Reported after the export succeeded, so a cancelled or failed run never counts.
+				// Main owns the whole decision; a failure here simply means no ask, which is the
+				// safe direction for something that may only ever happen once.
+				void window.electronAPI
+					?.starPromptExportFinished?.()
+					.then((result) => {
+						// The same generation guard the save picker uses: a close or a newer export
+						// invalidates this answer, and an IPC round trip is long enough for either to
+						// have happened. Without it a late "yes" lands on a dialog that has moved on.
+						if (generation !== pickerGeneration.current) return;
+						if (result?.offer) setStarPrompt({ store: result.store });
+					})
+					.catch((err) => console.warn("[export] star prompt check failed:", err));
 				toast.success(t("exportDialog.exportedVideo"), {
 					description: `${pickedPath} · ${formatHms(stats.videoDurationS)} ${t("exportDialog.exportedVideoOf")} ${formatHms(stats.wallS)}`,
 					action: {
@@ -716,6 +746,15 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					error={error}
 					pct={pct}
 					savedPath={savedPath}
+					starPrompt={starPrompt}
+					onAnswerStarPrompt={() => {
+						// Starring and declining are the same answer here: the ask is over. Cleared
+						// locally first so the block goes away on the click, not on the round trip.
+						setStarPrompt(null);
+						void window.electronAPI
+							?.dismissStarPrompt?.()
+							.catch((err) => console.warn("[export] could not record the star answer:", err));
+					}}
 				/>
 
 				{cpuCompositor && phase !== "done" && (
@@ -831,14 +870,22 @@ function ProgressBlock({
 	error,
 	pct,
 	savedPath,
+	starPrompt,
+	onAnswerStarPrompt,
 }: {
 	phase: Phase;
 	progress: ExportProgress | null;
 	error: string | null;
 	pct: number;
 	savedPath: string | null;
+	starPrompt: { store: boolean } | null;
+	onAnswerStarPrompt: () => void;
 }) {
 	const t = useScopedT("editor");
+	// Same string as the permanent app-menu entry and the native Help menu. It lives in `common`
+	// rather than in the orphaned `settings.support` block because the main process only bundles
+	// `common` and `dialogs`, and one label split across two namespaces is one label that drifts.
+	const tCommon = useScopedT("common");
 	if (phase === "idle" || phase === "configuring") {
 		return (
 			<div
@@ -886,6 +933,50 @@ function ProgressBlock({
 						<FolderOpen size={14} />
 						{t("exportDialog.showInFolder")}
 					</button>
+				) : null}
+				{starPrompt ? (
+					<div className={styles.starPrompt} data-testid="export-star-prompt">
+						<span className={styles.starPromptText}>{t("exportDialog.starPrompt")}</span>
+						<div className={styles.starPromptActions}>
+							<button
+								type="button"
+								data-testid="export-star-prompt-star"
+								className={`${styles.btn} ${styles.btnSecondary}`}
+								onClick={() => {
+									openRepoPage();
+									onAnswerStarPrompt();
+								}}
+							>
+								<Star size={14} />
+								{tCommon("actions.starOnGithub")}
+							</button>
+							{starPrompt.store ? (
+								// Deliberately NOT an answer: rating on the Store and starring the repo
+								// are different favours, and dismissing on the first would quietly cost
+								// the user the second.
+								<button
+									type="button"
+									data-testid="export-star-prompt-store"
+									className={`${styles.btn} ${styles.btnSecondary}`}
+									onClick={() => {
+										void window.electronAPI
+											?.openStoreReview?.()
+											.catch((err) => console.warn("[export] could not open the Store:", err));
+									}}
+								>
+									{t("exportDialog.rateOnStore")}
+								</button>
+							) : null}
+							<button
+								type="button"
+								data-testid="export-star-prompt-no"
+								className={styles.starPromptDecline}
+								onClick={onAnswerStarPrompt}
+							>
+								{t("exportDialog.starPromptNoThanks")}
+							</button>
+						</div>
+					</div>
 				) : null}
 			</div>
 		);

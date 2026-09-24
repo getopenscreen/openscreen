@@ -184,6 +184,15 @@ export function formatBinding(binding: ShortcutBinding, isMac: boolean): string 
 	return parts.join(" + ");
 }
 
+/**
+ * The label a fixed row shows. Rows bound to the primary modifier are built from their bindings,
+ * so macOS gets ⌘ like the configurable rows; the rest keep their hand-written `display`.
+ */
+export function formatFixedShortcut(shortcut: FixedShortcut, isMac: boolean): string {
+	if (!shortcut.bindings.some((binding) => binding.ctrl)) return shortcut.display;
+	return shortcut.bindings.map((binding) => formatBinding(binding, isMac)).join(" / ");
+}
+
 export function mergeWithDefaults(partial: Partial<ShortcutsConfig>): ShortcutsConfig {
 	const merged = { ...DEFAULT_SHORTCUTS };
 	for (const action of SHORTCUT_ACTIONS) {

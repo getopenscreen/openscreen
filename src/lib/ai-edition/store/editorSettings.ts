@@ -46,6 +46,8 @@ import type { AxcutDocument } from "../schema";
  *  stretched, concatenated timeline, so the same value meant different delays under a speed
  *  region, and near a cut the export pulls audio across the junction while the preview cannot. */
 export const AUDIO_GAIN_DB_LIMIT = 12;
+export const AUDIO_TRACK_GAIN_DB_MIN = -60;
+export const AUDIO_TRACK_GAIN_DB_MAX = 12;
 
 /** dB to the linear scalar every side of the boundary multiplies by.
  *

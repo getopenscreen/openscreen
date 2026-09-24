@@ -10,6 +10,12 @@ on:
         required: true
         type: string
 
+# GITHUB_TOKEN ne sert qu'en lecture : l'action lit la release et télécharge
+# komac. Tout ce qui écrit (branche de la fork, PR sur winget-pkgs) passe par
+# WINGET_ACC_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: windows-latest
@@ -30,17 +36,90 @@ jobs:
       # au niveau de l'étape — seul `env` l'est. D'où ce booléen-en-chaîne, qui expose
       # la présence du token sans jamais exposer sa valeur.
       HAS_TOKEN: ${{ secrets.WINGET_ACC_TOKEN != '' }}
+      # La fork de winget-pkgs où komac crée sa branche — getopenscreen/winget-pkgs,
+      # celle qui a publié 1.9.6 et 1.10.0. C'est déjà la valeur par défaut de
+      # `fork-user`, mais écrite ici elle est partagée : le contrôle ci-dessous vise
+      # la fork même où komac écrira, pas une supposition.
+      FORK_OWNER: ${{ github.repository_owner }}
     steps:
-      # Les deux pièges nommés ici sont documentés chez l'action et coûteraient chacun
-      # une release pour être découverts : un PAT fine-grained N'EST PAS supporté
-      # (vedantmgoyal9/winget-releaser#172), et l'action refuse de tourner tant qu'aucune
-      # version du paquet n'existe déjà dans winget-pkgs — elle part d'un manifeste
-      # existant pour écrire le suivant. La première soumission est donc manuelle,
-      # `wingetcreate new`, et l'automatisation ne prend le relais qu'ensuite.
+      # N'annonce que ce que cette étape teste — la variable et le secret — et ce que ce
+      # secret doit être. Un PAT fine-grained N'EST PAS supporté
+      # (vedantmgoyal9/winget-releaser#172) : komac sait committer avec, pas ouvrir la
+      # PR sur microsoft/winget-pkgs. Les deux autres prérequis sont en place et vérifiés
+      # ailleurs : la fork par l'étape suivante, et l'existence d'une première version
+      # dans winget-pkgs par l'action elle-même, qui part d'un manifeste existant pour
+      # écrire le suivant — 1.9.2 y est entrée à la main, via `wingetcreate`.
       - name: Report that winget publishing is not configured
         if: env.IDENTIFIER == '' || env.HAS_TOKEN != 'true'
         run: |
-          echo "::warning title=winget publishing skipped::Nothing was published to winget. Needs (1) the repository variable WINGET_IDENTIFIER, currently ${{ env.IDENTIFIER == '' && 'UNSET' || 'set' }}; (2) the secret WINGET_ACC_TOKEN, currently ${{ env.HAS_TOKEN == 'true' && 'set' || 'UNSET' }} — a CLASSIC PAT with public_repo scope, fine-grained tokens are not supported; (3) a fork of microsoft/winget-pkgs under getopenscreen; and (4) at least one version of the package already merged into winget-pkgs, since this action updates an existing manifest and refuses to create the first one. See https://github.com/getopenscreen/openscreen/issues/148"
+          echo "::warning title=winget publishing skipped::Nothing was published to winget. Needs (1) the repository variable WINGET_IDENTIFIER, currently ${{ env.IDENTIFIER == '' && 'UNSET' || 'set' }}; and (2) the secret WINGET_ACC_TOKEN, currently ${{ env.HAS_TOKEN == 'true' && 'set' || 'UNSET' }} — a CLASSIC PAT with the public_repo and workflow scopes, from an account that can push to ${{ env.FORK_OWNER }}/winget-pkgs; fine-grained tokens are not supported. See technical-documentation/engineering/release-and-secrets.md and https://github.com/getopenscreen/openscreen/issues/757"
+
+      # Le piège qui a coûté 1.11.0 à 1.13.0 (#757), et que ni l'action ni komac ne
+      # documentent : komac crée sa branche dans la fork à la pointe du master
+      # d'upstream, et GitHub refuse cette ref à un PAT sans le scope `workflow` dès
+      # qu'elle porte un fichier de .github/workflows qu'aucune branche de la fork n'a
+      # à l'identique. Upstream retouche ses workflows depuis le 26/08 — neuf commits
+      # en trois semaines — et la fork ne se resynchronise jamais seule. komac n'en dit
+      # que « does not have the correct permissions to execute CreateRef », qui accuse
+      # le compte, pourtant admin de la fork, au lieu du scope qui manque.
+      #
+      # D'où ce contrôle, en lecture seule, avant komac : les scopes classiques du
+      # token (l'en-tête X-OAuth-Scopes, qu'un PAT fine-grained ne porte pas), son
+      # droit de push sur la fork, puis `workflow` — exigé seulement si les workflows
+      # de la fork divergent de ceux d'upstream, puisqu'un « Sync fork » manuel suffit
+      # alors, jusqu'à la retouche suivante.
+      - name: Check that WINGET_ACC_TOKEN can create komac's branch in the fork
+        if: env.IDENTIFIER != '' && env.HAS_TOKEN == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_ACC_TOKEN }}
+        run: |
+          set -euo pipefail
+          fork="$FORK_OWNER/winget-pkgs"
+          fail() {
+            echo "::error title=WINGET_ACC_TOKEN cannot publish::$1"
+            exit 1
+          }
+
+          if ! response=$(gh api --include user 2>&1); then
+            fail "GitHub rejected WINGET_ACC_TOKEN: $(tail -n 1 <<< "$response")"
+          fi
+          # Le nom de l'en-tête seul est retiré : les scopes eux-mêmes contiennent des
+          # « : » (read:org, repo:status), et un découpage sur « : » lirait repo:status
+          # comme repo.
+          scopes=$(tr -d '\r' <<< "$response" | awk 'tolower($0) ~ /^x-oauth-scopes:/ { sub(/^[^:]*:[ \t]*/, ""); print }')
+          scopes=${scopes// /}
+          echo "WINGET_ACC_TOKEN classic scopes: ${scopes:-none}"
+          if [[ ",$scopes," != *,public_repo,* && ",$scopes," != *,repo,* ]]; then
+            fail "WINGET_ACC_TOKEN lacks the public_repo scope (classic scopes: ${scopes:-none}). It must be a classic PAT with public_repo to open the pull request on microsoft/winget-pkgs; a fine-grained PAT carries no classic scopes and is not supported."
+          fi
+
+          if ! push=$(gh api "repos/$fork" --jq '.permissions.push' 2>&1); then
+            fail "WINGET_ACC_TOKEN cannot read $fork, the fork komac creates its branch in: $(tail -n 1 <<< "$push")"
+          fi
+          if [[ "$push" != true ]]; then
+            fail "The account behind WINGET_ACC_TOKEN has no push access to $fork, the fork komac creates its branch in."
+          fi
+
+          if [[ ",$scopes," == *,workflow,* ]]; then
+            echo "OK: public_repo and workflow scopes, push access to $fork."
+            exit 0
+          fi
+          workflows_tree() {
+            gh api "repos/$1/contents/.github?ref=master" --jq '.[] | select(.name == "workflows") | .sha'
+          }
+          # Comme les appels ci-dessus : sous `set -e`, une substitution qui échoue
+          # (404, limite de débit, réseau) terminerait l'étape sans annotation.
+          if ! upstream=$(workflows_tree microsoft/winget-pkgs 2>&1); then
+            fail "Could not read .github/workflows on microsoft/winget-pkgs, so this check cannot tell whether the workflow scope is needed: $(tail -n 1 <<< "$upstream")"
+          fi
+          if ! ours=$(workflows_tree "$fork" 2>&1); then
+            fail "Could not read .github/workflows on $fork, so this check cannot tell whether the workflow scope is needed: $(tail -n 1 <<< "$ours")"
+          fi
+          if [[ "$upstream" != "$ours" ]]; then
+            fail "WINGET_ACC_TOKEN lacks the workflow scope, and $fork is behind microsoft/winget-pkgs on .github/workflows. komac creates its branch at upstream master, and GitHub refuses that ref to a PAT without workflow; komac reports it as 'does not have the correct permissions to execute CreateRef' (#757). Add the workflow scope to this classic PAT at https://github.com/settings/tokens (its value does not change, so the secret stays as is), or press Sync fork on https://github.com/$fork, which only holds until upstream edits a workflow again."
+          fi
+          echo "OK: public_repo scope, push access to $fork, and its .github/workflows match upstream's, so this run does not need the workflow scope."
 
       # Épinglé sur le SHA de v2 : un tag git est mutable, et cette action tierce
       # reçoit WINGET_ACC_TOKEN. Un tag repointé suffirait à exfiltrer le token
@@ -55,3 +134,4 @@ jobs:
           installers-regex: 'Setup\..*\.exe$'
           release-tag: ${{ inputs.tag || github.event.release.tag_name }}
           token: ${{ secrets.WINGET_ACC_TOKEN }}
+          fork-user: ${{ env.FORK_OWNER }}

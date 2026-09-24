@@ -124,7 +124,7 @@ At a high level, the RC workflow creates or reuses `release/vX.Y.Z`, tags its ti
 These workflows run for stable published releases and support manual replay with a tag:
 
 - `update-homebrew-cask.yml` waits for both macOS DMGs, hashes them, writes a cask, and pushes to the configured tap. Manual replay refuses any tag that is not a stable `vMAJOR.MINOR.PATCH`, because `workflow_dispatch` takes free text and the `prerelease` filter only covers the `release` event.
-- `publish-winget.yml` passes the matching NSIS release asset to `winget-releaser`.
+- `publish-winget.yml` passes the matching NSIS release asset to `winget-releaser`, after a read-only step checks that the token can create komac's branch in the `winget-pkgs` fork (#757).
 - `bump-nix-package.yml` computes `npmDepsHash`, updates `nix/package.nix`, and opens a PR.
 - `aur-publish.yml` hashes the pacman release asset, updates `PKGBUILD` and `.SRCINFO`, and pushes over SSH.
 

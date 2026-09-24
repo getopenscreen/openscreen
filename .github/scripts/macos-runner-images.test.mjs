@@ -36,9 +36,13 @@ describe("macOS runner images", () => {
 		// them, so a pinned arm64 image is a dated bomb with nothing to defuse it.
 		//
 		// Intel is the exception below, not an oversight: there is no floating Intel label.
+		//
+		// `-xlarge` counts. GitHub's larger runners spell arm64 that way (`macos-15-xlarge`),
+		// and a version-pinned xlarge carries exactly the same dated bottle problem as a bare
+		// `macos-15` — it just does not look like one. `-large`, confusingly, is Intel.
 		const pinned = workflows.flatMap((w) =>
 			macRunnerLabels(w)
-				.filter((label) => /^macos-\d+(\.\d+)?(-arm64)?$/.test(label))
+				.filter((label) => /^macos-\d+(\.\d+)?(-arm64|-xlarge)?$/.test(label))
 				.map((label) => `${w.name}: ${label}`),
 		);
 		expect(pinned).toEqual([]);
@@ -60,9 +64,14 @@ describe("macOS runner images", () => {
 		// Named explicitly: this job is the reason the rule exists, and it is the one with a
 		// hard arm64 requirement — a real Metal device, /opt/homebrew paths and the aarch64
 		// toolchain — so a future "just use macos-latest-intel" would break it differently.
+		//
+		// The whole value, not a substring: `macos-latest-large` starts with `macos-latest`
+		// and is Intel, so `toContain` would wave through the one substitution that silently
+		// breaks every hardcoded /opt/homebrew path in the steps below it.
 		const ci = workflows.find((w) => w.name === "ci.yml");
 		expect(ci).toBeDefined();
 		const job = ci.text.slice(ci.text.indexOf("rust-macos-compositor-check:"));
-		expect(job.slice(0, job.indexOf("steps:"))).toContain("runs-on: macos-latest");
+		const header = job.slice(0, job.indexOf("steps:"));
+		expect(header.match(/^\s*runs-on:\s*(\S+)\s*$/m)?.[1]).toBe("macos-latest");
 	});
 });

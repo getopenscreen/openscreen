@@ -323,10 +323,15 @@ export default function DownloadPage() {
 												className={styles.option}
 												href={href ?? asset?.url ?? LATEST_URL}
 												// No preventDefault: the click keeps its default navigation to the
-												// asset and the download starts as it always did. A set `href` is
-												// the Store listing, which leaves the site — prompting there would
-												// render behind a page the user has already left.
-												onClick={href ? undefined : () => setStartedId(id)}
+												// asset and the download starts as it always did.
+												//
+												// Two cases get no prompt, for the same reason: nothing downloaded
+												// and the page is gone. A set `href` is the Store listing, and a
+												// missing `asset?.url` means the build-time lookup came back empty
+												// and this link falls through to the releases page. Both navigate
+												// away, so the prompt would render behind a page the user has
+												// already left.
+												onClick={href || !asset?.url ? undefined : () => setStartedId(id)}
 											>
 												<span className={styles.optionText}>
 													<span className={styles.optionLabel}>{label}</span>

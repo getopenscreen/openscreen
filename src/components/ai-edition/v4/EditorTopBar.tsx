@@ -11,6 +11,7 @@ import {
 	RefreshCw,
 	Save,
 	Sparkles,
+	Star,
 	Sun,
 } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
@@ -449,6 +450,24 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 						<Info size={15} />
 						{tCommon("actions.about")}
 						{version ? <span className={styles.appMenuVersion}>{version}</span> : null}
+					</button>
+					{/* The permanent way to reach the repo, as opposed to the one-time ask after an
+					    export. Unconditional: unlike the update check above, a link to the repo root
+					    is safe on every channel, the Store included. Main opens the URL, so this row
+					    and the export prompt can never point at different pages. */}
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						data-testid="app-menu-star-on-github"
+						onClick={run(() => {
+							void window.electronAPI
+								?.openRepoPage?.()
+								.catch((err) => console.warn("[star] could not open the repo page:", err));
+						})}
+					>
+						<Star size={15} />
+						{tCommon("actions.starOnGithub")}
 					</button>
 				</div>
 			) : null}

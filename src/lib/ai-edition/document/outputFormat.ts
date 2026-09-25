@@ -18,6 +18,7 @@ import {
 	autoFrameAspect,
 	resolveWebcamLayoutPreset,
 	restingCompositionAspect,
+	type WebcamLayoutPreset,
 } from "@/lib/compositeLayout";
 import { calculateEffectiveSourceDimensions } from "@/lib/exporter/mp4ExportSettings";
 import {
@@ -193,13 +194,55 @@ function referenceClip(
 }
 
 /**
+ * The layout a clip actually gets: the project's preset, once the clip's own camera is
+ * resolved. Same predicate as the scene (`clipHasCamera`), so Auto and the render agree on
+ * which clips are laid out as a block.
+ */
+function clipLayoutPreset(
+	clip: AxcutClip,
+	assets: AxcutAsset[],
+	layoutPreset: WebcamLayoutPreset,
+): WebcamLayoutPreset {
+	const asset = assets.find((a) => a.id === clip.assetId);
+	return resolveWebcamLayoutPreset(layoutPreset, assetCameraSource(asset).path !== "");
+}
+
+/**
+ * Whether Auto is offered: every clip on the timeline has the same ratio, crop included, and the
+ * same layout once its own camera is resolved (picture-in-picture, a block layout, or no camera).
+ * Anything else is a timeline no single frame suits, and which clip should win is the user's
+ * call, made by picking a format, not a rule's.
+ *
+ * A clip without a camera counts as a different layout even under picture-in-picture, where the
+ * frame's shape would not change: the bubble is part of the look, and Auto only frames a timeline
+ * that looks the same throughout. Clips whose dimensions are not probed yet are skipped rather
+ * than counted as different.
+ */
+export function isAutoFormatAvailable(
+	document: AxcutDocument,
+	probedAssetDims: Record<string, Dims> = {},
+): boolean {
+	const { webcamLayoutPreset } = getEditorSettings(document);
+	const assetById = new Map(document.assets.map((a) => [a.id, a]));
+	const compositions = new Set<string>();
+	for (const clip of document.timeline.clips) {
+		const dims = clipEffectiveDims(clip, assetById, probedAssetDims);
+		if (!dims) continue;
+		const layout = clipLayoutPreset(clip, document.assets, webcamLayoutPreset);
+		compositions.add(`${toAspectRatioToken(dims.width, dims.height)}|${layout}`);
+	}
+	return compositions.size <= 1;
+}
+
+/**
  * What "Auto" resolves to: the frame shaped around the composition instead of the other way
  * round (`autoFrameAspect` over `restingCompositionAspect`).
  *
- * A video has one frame, so one clip has to answer for the timeline, and it is the clip that
- * already sets the output's size: `referenceClip`. Its cropped screen and its camera, laid out
- * with the project's camera layout, are the composition. Every other clip is contain-fitted into
- * that frame, exactly as it would be into a fixed format.
+ * Auto is only offered while the timeline holds one composition (`isAutoFormatAvailable`), so
+ * any clip describes it; `referenceClip`, the clip that sets the output size, is the one read.
+ * A project saved on Auto can still become mixed later, when a clip of another shape is added:
+ * the frame then stays on that same reference clip, so adding a smaller clip moves nothing, and
+ * the menu shows Auto as unavailable until the user picks a format.
  *
  * Zoom, device frames, shadow and captions are left out on purpose: they happen inside the
  * frame, in every format alike, and would make the shape move with the playhead.
@@ -207,11 +250,9 @@ function referenceClip(
 function autoAspectRatioValue(document: AxcutDocument, probedAssetDims: Record<string, Dims>) {
 	const settings = getEditorSettings(document);
 	const reference = referenceClip(document, probedAssetDims);
-	const asset = document.assets.find((a) => a.id === reference?.clip.assetId);
-	const preset = resolveWebcamLayoutPreset(
-		settings.webcamLayoutPreset,
-		assetCameraSource(asset).path !== "",
-	);
+	const preset = reference
+		? clipLayoutPreset(reference.clip, document.assets, settings.webcamLayoutPreset)
+		: "no-webcam";
 	const screen = reference?.dims ?? referenceClipDims(document, probedAssetDims);
 	return autoFrameAspect(restingCompositionAspect(screen, preset), settings.padding);
 }

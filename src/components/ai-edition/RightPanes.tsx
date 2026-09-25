@@ -49,7 +49,11 @@ import { WALLPAPER_MOTIONS, type WallpaperMotion } from "@/components/video-edit
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
-import { collectNativeFormats, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
+import {
+	collectNativeFormats,
+	isAutoFormatAvailable,
+	pickOutputDims,
+} from "@/lib/ai-edition/document/outputFormat";
 import type { InsertSide } from "@/lib/ai-edition/document/transcript";
 import type {
 	AxcutAsset,
@@ -2349,6 +2353,12 @@ export function VideoEffectsPane() {
 	// What Auto resolves to right now, shown on its row: the one entry whose shape moves with
 	// the project (padding, camera layout, crop) has to say where it currently stands.
 	const autoDims = useMemo(() => (document ? pickOutputDims(document, "auto") : null), [document]);
+	// Auto only frames a timeline of one composition. Mixed clips leave the choice to the user,
+	// so the row goes dead and says why instead of guessing which clip should win.
+	const autoAvailable = useMemo(
+		() => (document ? isAutoFormatAvailable(document) : true),
+		[document],
+	);
 	const hasTiltedZoom = (document?.zoomRanges ?? []).some((z) => z.rotationPreset != null);
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
 	const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
@@ -2497,13 +2507,16 @@ export function VideoEffectsPane() {
 								className={`${styles.actionMenuRow}${
 									settings.aspectRatio === "auto" ? ` ${styles.isActive}` : ""
 								}`}
+								disabled={!autoAvailable}
 								onClick={() => {
 									setRatioMenuOpen(false);
 									void set({ aspectRatio: "auto" });
 								}}
 							>
 								<span className={styles.actionMenuMain}>{ts("effects.formatAuto")}</span>
-								{autoDims ? (
+								{!autoAvailable ? (
+									<span className={styles.actionMenuCount}>{ts("effects.formatAutoMixed")}</span>
+								) : autoDims ? (
 									<span className={styles.actionMenuCount}>
 										{`${autoDims.width}×${autoDims.height}`}
 									</span>

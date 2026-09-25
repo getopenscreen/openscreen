@@ -106,6 +106,7 @@
 		"help": "錄製畫面的外框樣式：背景模糊、陰影、動態模糊、圓角半徑，以及影片四周的內距。",
 		"fitClipOne": "{{count}} 個片段",
 		"formatAuto": "自動",
+		"formatAutoMixed": "片段不一致",
 		"formatOriginal": "原始",
 		"fitClipMany": "{{count}} 個片段",
 		"frame": "外框",

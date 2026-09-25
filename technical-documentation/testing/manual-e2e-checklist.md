@@ -436,7 +436,7 @@ The percentage is computed in the renderer against a predicted frame total, and 
 - [ ] Open the top-bar language control by its `aria-label`, choose a non-English locale, and confirm visible UI strings change.
 - [ ] Switch back to English and confirm the top bar, transport, inspector, and export labels return to English.
 - [ ] Select a different aspect ratio from the timeline aspect-ratio menu and confirm the preview frame changes shape.
-- [ ] Pick **Auto** in the Format menu, drag padding from 0 to 100, and confirm the frame reshapes live with one border thickness on all four sides; switch the camera layout to side by side, then top / bottom, and confirm the frame widens, then turns portrait, with a square camera. Export and confirm the file has the preview frame's shape and the same even border.
+- [ ] Pick **Auto** in the Format menu, drag padding from 0 to 100, and confirm the frame reshapes live with one border thickness on all four sides; switch the camera layout to side by side, then top / bottom, and confirm the frame widens, then turns portrait, with a square camera. Export and confirm the file has the preview frame's shape and the same even border. Then add a clip of another shape, a differently cropped clip, or a clip without a camera, and confirm the Auto row is disabled with the reason shown and the frame does not move.
 - [ ] Press `Esc` or click outside an open menu, popover, or dialog and confirm it closes.
 
 ### App menu, About, and updates

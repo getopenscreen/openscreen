@@ -106,6 +106,7 @@
 		"help": "Mise en forme du cadre de l'enregistrement : flou d'arrière-plan, ombre portée, flou de mouvement, arrondi des coins et marge autour de la vidéo.",
 		"fitClipOne": "{{count}} clip",
 		"formatAuto": "Auto",
+		"formatAutoMixed": "Clips différents",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clips",
 		"frame": "Cadre",

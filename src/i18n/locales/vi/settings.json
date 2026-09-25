@@ -106,6 +106,7 @@
 		"help": "Kiểu khung của bản ghi: làm mờ nền, đổ bóng, mờ chuyển động, bo góc và khoảng đệm quanh video.",
 		"fitClipOne": "{{count}} clip",
 		"formatAuto": "Tự động",
+		"formatAutoMixed": "Các clip khác nhau",
 		"formatOriginal": "Gốc",
 		"fitClipMany": "{{count}} clip",
 		"frame": "Khung",

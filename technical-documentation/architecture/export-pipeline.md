@@ -138,7 +138,11 @@ and **one** encoder + muxer pair:
   plus an even padding border (`autoFrameAspect`). The preview and the scene
   pad an Auto frame with the matching border (`paddedContentSize`,
   `compositeLayout.ts`), so the composition fills it with the same margin on
-  all four sides.
+  all four sides. Auto is only offered while every clip has the same ratio,
+  crop included, and the same effective layout: picture-in-picture, a block
+  layout, or no camera (`isAutoFormatAvailable`). With mixed clips the menu
+  disables it, and a project already on Auto keeps the reference clip's frame
+  until the user picks a format.
 
 ## Output formats and codecs
 

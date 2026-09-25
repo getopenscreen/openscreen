@@ -106,6 +106,7 @@
 		"help": "Rahmengestaltung der Aufnahme: Hintergrund-Unschärfe, Schlagschatten, Bewegungsunschärfe, Eckenrundung und Abstand um das Video.",
 		"fitClipOne": "{{count}} Clip",
 		"formatAuto": "Auto",
+		"formatAutoMixed": "Clips unterschiedlich",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} Clips",
 		"frame": "Rahmen",

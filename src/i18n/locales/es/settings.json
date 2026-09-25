@@ -274,8 +274,7 @@
 		"help": "Cómo se compone la webcam con la pantalla: imagen en imagen, pila vertical, marco doble, forma, redondez, tamaño, posición y efecto espejo.",
 		"mirrorWebcam": "Reflejar cámara",
 		"webcamFraming": "Encuadre de cámara",
-		"webcamFramingDrag": "Arrastra el marco para elegir lo que muestra la cámara.",
-		"webcamFramingZoomFirst": "Acerca el zoom y arrastra el marco para elegir lo que muestra la cámara.",
+		"webcamFramingDrag": "Arrastra el marco para moverlo, o una esquina para hacer zoom.",
 		"shapes": {
 			"rectangle": "Rectángulo",
 			"square": "Cuadrado"

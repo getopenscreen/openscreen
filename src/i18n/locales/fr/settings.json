@@ -274,8 +274,7 @@
 		"help": "Composition de la webcam avec l'écran : incrustation, empilement vertical, double cadre, forme, arrondi, taille, position et effet miroir.",
 		"mirrorWebcam": "Inverser la webcam",
 		"webcamFraming": "Cadrage de la webcam",
-		"webcamFramingDrag": "Faites glisser le cadre pour choisir ce que montre la caméra.",
-		"webcamFramingZoomFirst": "Zoomez, puis faites glisser le cadre pour choisir ce que montre la caméra.",
+		"webcamFramingDrag": "Faites glisser le cadre pour le déplacer, ou un coin pour zoomer.",
 		"shapes": {
 			"rectangle": "Rectangle",
 			"square": "Carré"

@@ -274,8 +274,7 @@
 		"help": "웹캠과 화면을 합성하는 방식: PIP, 세로 배치, 이중 프레임, 모양, 모서리 둥글기, 크기, 위치, 좌우 반전.",
 		"mirrorWebcam": "웹캠 미러링",
 		"webcamFraming": "웹캠 구도",
-		"webcamFramingDrag": "프레임을 드래그해 카메라에 보일 부분을 고르세요.",
-		"webcamFramingZoomFirst": "확대한 다음 프레임을 드래그해 카메라에 보일 부분을 고르세요.",
+		"webcamFramingDrag": "프레임을 드래그해 옮기고, 모서리를 드래그해 확대/축소하세요.",
 		"shapes": {
 			"rectangle": "직사각형",
 			"square": "정사각형"

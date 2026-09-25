@@ -274,8 +274,7 @@
 		"help": "Como a webcam é composta com a tela: picture-in-picture, pilha vertical, quadro duplo, formato, arredondamento, tamanho, posição e espelhamento.",
 		"mirrorWebcam": "Espelhar Webcam",
 		"webcamFraming": "Enquadramento da webcam",
-		"webcamFramingDrag": "Arraste o quadro para escolher o que a câmera mostra.",
-		"webcamFramingZoomFirst": "Aumente o zoom e arraste o quadro para escolher o que a câmera mostra.",
+		"webcamFramingDrag": "Arraste o quadro para movê-lo, ou um canto para dar zoom.",
 		"shapes": {
 			"rectangle": "Retângulo",
 			"square": "Quadrado"

@@ -1192,15 +1192,54 @@ textarea.control {
 .framingCrop {
 	position: absolute;
 	box-sizing: border-box;
-	border: 2px solid #fff;
-	border-radius: 6px;
+	border: 1.5px solid rgb(255 255 255 / 0.9);
+	border-radius: 4px;
 	/* Dims everything outside the frame without a second element. */
 	box-shadow: 0 0 0 999px rgb(0 0 0 / 0.45);
 	touch-action: none;
 }
+/* A corner bracket, the shape every photo cropper uses: thick, white and shadowed so it reads on
+   a bright wall as on a dark one, and sitting in a 28px square that a pointer finds without aiming. */
+.framingHandle {
+	position: absolute;
+	width: 28px;
+	height: 28px;
+	touch-action: none;
+}
+.framingHandle::before {
+	content: "";
+	position: absolute;
+	width: 14px;
+	height: 14px;
+	border: 0 solid #fff;
+	filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 0.7));
+	transition: width var(--motion-fast) var(--ease), height var(--motion-fast) var(--ease);
+}
+.framingHandle:hover::before { width: 17px; height: 17px; }
+.framingHandle[data-corner="nw"] { top: -8px; left: -8px; cursor: nwse-resize; }
+.framingHandle[data-corner="ne"] { top: -8px; right: -8px; cursor: nesw-resize; }
+.framingHandle[data-corner="sw"] { bottom: -8px; left: -8px; cursor: nesw-resize; }
+.framingHandle[data-corner="se"] { bottom: -8px; right: -8px; cursor: nwse-resize; }
+.framingHandle[data-corner="nw"]::before { top: 8px; left: 8px; border-width: 3.5px 0 0 3.5px; border-top-left-radius: 5px; }
+.framingHandle[data-corner="ne"]::before { top: 8px; right: 8px; border-width: 3.5px 3.5px 0 0; border-top-right-radius: 5px; }
+.framingHandle[data-corner="sw"]::before { bottom: 8px; left: 8px; border-width: 0 0 3.5px 3.5px; border-bottom-left-radius: 5px; }
+.framingHandle[data-corner="se"]::before { bottom: 8px; right: 8px; border-width: 0 3.5px 3.5px 0; border-bottom-right-radius: 5px; }
+/* The zoom, on the picture it zooms. Its own dark ground, like any label over a photo. */
+.framingZoom {
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	padding: 3px 8px;
+	border-radius: 999px;
+	background: rgb(0 0 0 / 0.55);
+	color: #fff;
+	font: 600 11px/1.2 var(--font-body);
+	font-variant-numeric: tabular-nums;
+	pointer-events: none;
+}
 .framingCrop[data-movable="true"] { cursor: grab; }
 .framingCrop[data-movable="true"]:active { cursor: grabbing; }
-.framingCrop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.framingCrop:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .framingHint {
 	margin: 0;
 	font: 400 12px/1.5 var(--font-body);

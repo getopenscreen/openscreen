@@ -274,8 +274,7 @@
 		"help": "Jak je webkamera složena s obrazovkou: obraz v obrazu, svislé skládání, dvojitý rám, tvar, zaoblení, velikost, poloha a zrcadlení.",
 		"mirrorWebcam": "Zrcadlit webkameru",
 		"webcamFraming": "Oříznutí kamery",
-		"webcamFramingDrag": "Přetažením rámečku zvolte, co kamera ukáže.",
-		"webcamFramingZoomFirst": "Přibližte obraz a přetažením rámečku zvolte, co kamera ukáže.",
+		"webcamFramingDrag": "Přetažením rámečku jej posunete, přetažením rohu přiblížíte.",
 		"shapes": {
 			"rectangle": "Obdélník",
 			"square": "Čtverec"

@@ -274,8 +274,7 @@
 		"help": "Wie die Webcam mit dem Bildschirm komponiert wird: Bild in Bild, vertikal gestapelt, Doppelrahmen, Form, Rundung, Größe, Position und Spiegelung.",
 		"mirrorWebcam": "Webcam spiegeln",
 		"webcamFraming": "Webcam-Ausschnitt",
-		"webcamFramingDrag": "Ziehe den Rahmen, um den Bildausschnitt der Kamera zu wählen.",
-		"webcamFramingZoomFirst": "Zoome hinein und ziehe dann den Rahmen, um den Bildausschnitt der Kamera zu wählen.",
+		"webcamFramingDrag": "Ziehe den Rahmen, um ihn zu verschieben, oder eine Ecke, um zu zoomen.",
 		"shapes": {
 			"rectangle": "Rechteck",
 			"square": "Quadrat"

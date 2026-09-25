@@ -274,8 +274,7 @@
 		"help": "How the webcam is composed with the screen: picture-in-picture, vertical stack, dual frame, shape, roundness, size, position, and mirroring.",
 		"mirrorWebcam": "Mirror webcam",
 		"webcamFraming": "Webcam crop",
-		"webcamFramingDrag": "Drag the frame to choose what the camera shows.",
-		"webcamFramingZoomFirst": "Zoom in, then drag the frame to choose what the camera shows.",
+		"webcamFramingDrag": "Drag the frame to move it, or a corner to zoom.",
 		"shapes": {
 			"rectangle": "Rectangle",
 			"square": "Square"

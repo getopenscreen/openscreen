@@ -274,8 +274,7 @@
 		"help": "Web kamerasının ekranla birleştirilme biçimi: resim içinde resim, dikey yığın, çift çerçeve, şekil, yuvarlaklık, boyut, konum ve aynalama.",
 		"mirrorWebcam": "Web kamerasını aynala",
 		"webcamFraming": "Webcam kadrajı",
-		"webcamFramingDrag": "Kameranın ne göstereceğini seçmek için çerçeveyi sürükleyin.",
-		"webcamFramingZoomFirst": "Yakınlaştırın, ardından kameranın ne göstereceğini seçmek için çerçeveyi sürükleyin.",
+		"webcamFramingDrag": "Taşımak için çerçeveyi, yakınlaştırmak için bir köşesini sürükleyin.",
 		"shapes": {
 			"rectangle": "Dikdörtgen",
 			"square": "Kare"

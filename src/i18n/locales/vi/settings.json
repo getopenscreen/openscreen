@@ -274,8 +274,7 @@
 		"help": "Cách ghép webcam với màn hình: hình trong hình, xếp dọc, khung đôi, hình dạng, độ bo tròn, kích thước, vị trí và lật gương.",
 		"mirrorWebcam": "Lật webcam",
 		"webcamFraming": "Khung hình webcam",
-		"webcamFramingDrag": "Kéo khung để chọn phần camera hiển thị.",
-		"webcamFramingZoomFirst": "Phóng to, rồi kéo khung để chọn phần camera hiển thị.",
+		"webcamFramingDrag": "Kéo khung để di chuyển, hoặc kéo một góc để thu phóng.",
 		"shapes": {
 			"rectangle": "Chữ nhật",
 			"square": "Vuông"

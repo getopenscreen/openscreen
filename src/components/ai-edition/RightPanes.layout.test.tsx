@@ -7,7 +7,7 @@
 import "@testing-library/jest-dom";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
@@ -205,11 +205,9 @@ describe("LayoutPane picture-in-picture camera", () => {
 // zoom the crop IS the frame, so its offset is 0 for every pan the user could have chosen.
 // A trip down to 100% therefore erased the framing rather than suspending it.
 describe("LayoutPane webcam crop pan", () => {
-	const zoom = () => screen.getByRole("slider", { name: "Zoom" });
-	// The frame on the camera picture: dragged by pointer, moved 5% a step by the arrows.
+	// The frame on the camera picture: dragged by pointer, moved 5% a step by the arrows,
+	// zoomed 10% a step by + and -, and by its corners.
 	const frame = () => screen.getByRole("slider", { name: "Webcam crop" });
-	const set = (slider: HTMLElement, value: number) =>
-		fireEvent.change(slider, { target: { value: String(value) } });
 	const press = (key: string, times: number) => {
 		for (let i = 0; i < times; i++) fireEvent.keyDown(frame(), { key });
 	};
@@ -218,36 +216,44 @@ describe("LayoutPane webcam crop pan", () => {
 			webcamCropRegion: { x: number; y: number; width: number; height: number };
 			webcamCropPan: { x: number; y: number };
 		};
+	/** A project already framed at 200%, centred. */
+	const at200 = () => {
+		const doc = seedProject(true);
+		return {
+			...doc,
+			legacyEditor: {
+				...doc.legacyEditor,
+				webcamCropRegion: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+				webcamCropPan: { x: 0.5, y: 0.5 },
+			},
+		};
+	};
 
 	it("keeps the pan across a round trip through 100% zoom", () => {
-		renderLayout(seedProject(true));
+		renderLayout(at200());
 
-		set(zoom(), 200);
 		press("ArrowRight", 5);
 		expect(frame()).toHaveAttribute("aria-valuetext", "75%, 50%");
 
-		set(zoom(), 100);
-		// Nowhere to pan at full frame, so the frame is correctly out of reach, and says why...
-		expect(frame()).toHaveAttribute("aria-disabled", "true");
-		expect(screen.getByText(/zoom in, then drag the frame/i)).toBeInTheDocument();
+		press("-", 10);
+		expect(storedCrop().webcamCropRegion.width).toBe(1);
+		// Nowhere to pan at full frame, so the arrows do nothing there...
 		press("ArrowLeft", 3);
 		expect(storedCrop().webcamCropPan.x).toBeCloseTo(0.75);
 
-		set(zoom(), 200);
+		press("+", 8);
 		// ...but the intent survived the trip.
 		expect(frame()).toHaveAttribute("aria-valuetext", "75%, 50%");
 	});
 
-	it("does not move the pan while the zoom slider is dragged", () => {
+	it("does not move the pan while zooming", () => {
 		// The old clamp squeezed the rect's offset toward the near edge as the window grew,
 		// so the pan crept on its own while the picture stayed put.
-		renderLayout(seedProject(true));
-
-		set(zoom(), 200);
+		renderLayout(at200());
 		press("ArrowRight", 5);
 
-		for (const pct of [180, 150, 120, 110, 101]) {
-			set(zoom(), pct);
+		for (let i = 0; i < 6; i++) {
+			press("-", 1);
 			expect(frame()).toHaveAttribute("aria-valuetext", "75%, 50%");
 		}
 	});
@@ -255,9 +261,7 @@ describe("LayoutPane webcam crop pan", () => {
 	it("moves the frame on the axis each arrow names", () => {
 		// Up/down and left/right differ by one character in the handler. Without this, a
 		// vertical arrow wired to x would pass every other test in this block.
-		renderLayout(seedProject(true));
-
-		set(zoom(), 200);
+		renderLayout(at200());
 		press("ArrowDown", 6);
 
 		expect(storedCrop().webcamCropPan.y).toBeCloseTo(0.8);
@@ -268,18 +272,42 @@ describe("LayoutPane webcam crop pan", () => {
 	});
 
 	it("puts the crop where the pan says, at any zoom", () => {
-		renderLayout(seedProject(true));
-
-		set(zoom(), 200);
+		renderLayout(at200());
 		press("ArrowRight", 20);
 		// Hard against the right edge: a half-width window starts halfway across.
 		let crop = storedCrop().webcamCropRegion;
 		expect(crop.width).toBeCloseTo(0.5);
 		expect(crop.x).toBeCloseTo(0.5);
 
-		set(zoom(), 400);
-		// Clamped to the slider's 300% ceiling, so a third of the frame, still hard right.
+		press("+", 20);
+		// Held at 300%, so a third of the frame, still hard right.
 		crop = storedCrop().webcamCropRegion;
+		expect(crop.width).toBeCloseTo(1 / 3);
 		expect(crop.x).toBeCloseTo(1 - crop.width);
+	});
+
+	// A crop tool's contract: the corner you pull moves, the one across stays, and the frame
+	// keeps the camera's shape, so its size is the only thing a corner changes.
+	it("zooms by a corner, keeping the opposite corner and the shape", () => {
+		const box = { left: 0, top: 0, right: 200, bottom: 112.5, width: 200, height: 112.5 };
+		const spy = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({ ...box, x: 0, y: 0, toJSON: () => box } as DOMRect);
+		try {
+			renderLayout(at200());
+			const corner = document.querySelector('[data-corner="se"]') as HTMLElement;
+			fireEvent.pointerDown(corner, { clientX: 150, clientY: 84 });
+			fireEvent.pointerMove(corner, { clientX: 190, clientY: 84 });
+			fireEvent.pointerUp(corner, { clientX: 190, clientY: 84 });
+
+			const crop = storedCrop().webcamCropRegion;
+			expect(crop.x).toBeCloseTo(0.25);
+			expect(crop.y).toBeCloseTo(0.25);
+			expect(crop.width).toBeCloseTo(0.7);
+			expect(crop.height).toBeCloseTo(0.7);
+			expect(screen.getByText("143%")).toBeInTheDocument();
+		} finally {
+			spy.mockRestore();
+		}
 	});
 });

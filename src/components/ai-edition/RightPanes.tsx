@@ -2956,7 +2956,6 @@ export function LayoutPane() {
 		return null;
 	}, [document]);
 	const webcamCrop = settings.webcamCropRegion;
-	const cropZoomPct = Math.round(100 / webcamCrop.width);
 	// Read straight off the pan, not back out of the rect. The rect cannot answer at 100%
 	// zoom — it is the whole frame, so its offset is 0 whatever the user chose — and it gave
 	// a drifting answer on the way there, because the offset gets squeezed toward the near
@@ -2969,15 +2968,9 @@ export function LayoutPane() {
 		width: size,
 		height: size,
 	});
-	const setCropZoom = (zoomPct: number) => {
-		const size = 100 / Math.max(100, zoomPct);
-		// A pure function of (pan, size): the pan is never re-derived from the rect this
-		// writes, so dragging the zoom back and forth returns the framing it started from.
-		setLive({ webcamCropRegion: cropRegionFor(size, cropPan) });
-	};
-	const setCropPan = (pan: { x: number; y: number }) => {
+	const setCropFrame = (size: number, pan: { x: number; y: number }) => {
 		// One patch for both, so a half-written pair can never reach disk.
-		setLive({ webcamCropPan: pan, webcamCropRegion: cropRegionFor(webcamCrop.width, pan) });
+		setLive({ webcamCropPan: pan, webcamCropRegion: cropRegionFor(size, pan) });
 	};
 	return (
 		<Pane title={ts("layout.title")} icon={<Camera size={16} />} helpText={helpText}>
@@ -3215,88 +3208,121 @@ export function LayoutPane() {
 			<div className={styles.sectionLabel}>{ts("layout.webcamFraming")}</div>
 			<WebcamFraming
 				label={ts("layout.webcamFraming")}
+				zoomLabel={ts("layout.webcamCropZoom")}
 				src={cameraSrc}
 				crop={webcamCrop}
 				pan={cropPan}
 				disabled={layoutControlsDisabled}
-				hint={
-					webcamCrop.width < 0.999
-						? ts("layout.webcamFramingDrag")
-						: ts("layout.webcamFramingZoomFirst")
-				}
-				onPanLive={setCropPan}
+				hint={ts("layout.webcamFramingDrag")}
+				onFrameLive={setCropFrame}
 				onCommit={() => void commit()}
 			/>
-			<div className={styles.sliderGrid}>
-				<SliderCell
-					label={ts("layout.webcamCropZoom")}
-					value={cropZoomPct}
-					min={100}
-					max={300}
-					suffix="%"
-					disabled={layoutControlsDisabled}
-					onChange={setCropZoom}
-					onCommit={() => void commit()}
-				/>
-			</div>
 		</Pane>
 	);
 }
 
-/** Où la webcam cadre, réglé à la main : une vignette de la caméra, le cadre gardé posé dessus,
- *  et on glisse le cadre pour choisir ce qu'elle montre. Remplace deux curseurs de déplacement
- *  qui ne disaient pas où l'on était dans l'image, et qui à 100 % ne déplaçaient rien. Le zoom
- *  reste un curseur, sous la vignette : c'est lui qui donne au cadre la place de bouger.
+/** The tightest the frame gets: a third of the picture, 300% zoom, the old slider's end. */
+const MIN_CROP_SIZE = 1 / 3;
+const FRAME_CORNERS = ["nw", "ne", "sw", "se"] as const;
+type FrameCorner = (typeof FRAME_CORNERS)[number];
+
+/** Où la webcam cadre, réglé à la main : une vignette de la caméra, le cadre gardé posé dessus.
+ *  Le cadre EST le réglage : on le glisse pour choisir ce qu'il montre, on tire un coin pour
+ *  zoomer, comme n'importe quel outil de recadrage. Il garde la forme de la caméra, que la
+ *  forme choisie plus haut recoupe ensuite ; un coin ne change donc qu'une chose, la taille.
  *
  *  Le déplacement s'exprime en `pan` (0–1 par axe) et non en position du cadre, comme le reste
  *  du panneau (#412) : c'est ce qui garde le cadrage à travers un passage par 100 %. Les
- *  flèches déplacent de 5 % et enregistrent à chaque pas ; le glisser écrit en direct et
- *  enregistre au relâchement, comme un curseur. */
+ *  flèches déplacent de 5 %, + et − zooment de 10 %, et chaque pas enregistre ; les gestes
+ *  écrivent en direct et enregistrent au relâchement, comme un curseur. */
 function WebcamFraming({
 	label,
+	zoomLabel,
 	src,
 	crop,
 	pan,
 	disabled,
 	hint,
-	onPanLive,
+	onFrameLive,
 	onCommit,
 }: {
 	label: string;
+	zoomLabel: string;
 	src: string | null;
 	crop: { x: number; y: number; width: number; height: number };
 	pan: { x: number; y: number };
 	disabled: boolean;
 	hint: string;
-	onPanLive: (pan: { x: number; y: number }) => void;
+	onFrameLive: (size: number, pan: { x: number; y: number }) => void;
 	onCommit: () => void;
 }) {
 	const boxRef = useRef<HTMLDivElement | null>(null);
-	const dragRef = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
+	const gestureRef = useRef<
+		| { kind: "move"; x: number; y: number; pan: { x: number; y: number } }
+		| { kind: "resize"; anchor: { x: number; y: number }; corner: FrameCorner }
+		| null
+	>(null);
 	// The camera's own shape, read from ITS metadata: tied to the source it was read from, so
 	// another camera starts over at 16:9, and the picture stays hidden until its own shape is
 	// known rather than showing a frame in the previous one's.
 	const [metadata, setMetadata] = useState<{ src: string; aspect: number } | null>(null);
 	const ready = src !== null && metadata?.src === src;
 	const aspect = ready ? metadata.aspect : 16 / 9;
-	const movable = !disabled && crop.width < 0.999;
+	const size = crop.width;
+	const movable = !disabled && size < 0.999;
 	const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-	const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-		const drag = dragRef.current;
-		const box = boxRef.current?.getBoundingClientRect();
-		if (!drag || !box || box.width === 0 || box.height === 0) return;
-		// The frame travels over (1 - size) of the picture, so a pixel of drag is worth more pan
-		// the bigger the frame is.
-		const free = 1 - crop.width;
-		onPanLive({
-			x: clamp01(drag.pan.x + (e.clientX - drag.x) / (box.width * free)),
-			y: clamp01(drag.pan.y + (e.clientY - drag.y) / (box.height * free)),
-		});
+	/** A frame of `next` size at (x, y), kept inside the picture, written as size and pan. */
+	const place = (next: number, x: number, y: number) => {
+		const s = Math.min(1, Math.max(MIN_CROP_SIZE, next));
+		const free = 1 - s;
+		// At 100% there is no room to pan in, and the pan it had is what comes back.
+		const nextPan =
+			free < 0.001
+				? pan
+				: {
+						x: clamp01(Math.min(free, Math.max(0, x)) / free),
+						y: clamp01(Math.min(free, Math.max(0, y)) / free),
+					};
+		onFrameLive(s, nextPan);
 	};
-	const endDrag = () => {
-		if (!dragRef.current) return;
-		dragRef.current = null;
+	/** Keyboard zoom keeps the pan, like the slider it replaces (#412): out to 100% and back in
+	 *  returns the framing it started from, where zooming about the centre would reset it. */
+	const zoomBy = (factor: number) =>
+		onFrameLive(Math.min(1, Math.max(MIN_CROP_SIZE, size / factor)), pan);
+
+	const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
+		const gesture = gestureRef.current;
+		const box = boxRef.current?.getBoundingClientRect();
+		if (!gesture || !box || box.width === 0 || box.height === 0) return;
+		if (gesture.kind === "move") {
+			// The frame travels over (1 - size) of the picture, so a pixel of drag is worth more
+			// pan the bigger the frame is.
+			const free = 1 - size;
+			onFrameLive(size, {
+				x: clamp01(gesture.pan.x + (e.clientX - gesture.x) / (box.width * free)),
+				y: clamp01(gesture.pan.y + (e.clientY - gesture.y) / (box.height * free)),
+			});
+			return;
+		}
+		// The opposite corner stays put and the frame keeps the camera's shape: its size is
+		// the larger of the two distances from that corner to the pointer.
+		const { anchor, corner } = gesture;
+		const px = (e.clientX - box.left) / box.width;
+		const py = (e.clientY - box.top) / box.height;
+		const next = Math.min(
+			1,
+			Math.max(MIN_CROP_SIZE, Math.abs(px - anchor.x), Math.abs(py - anchor.y)),
+		);
+		place(
+			next,
+			corner.endsWith("w") ? anchor.x - next : anchor.x,
+			corner.startsWith("n") ? anchor.y - next : anchor.y,
+		);
+	};
+	const endGesture = () => {
+		if (!gestureRef.current) return;
+		gestureRef.current = null;
 		onCommit();
 	};
 
@@ -3332,23 +3358,32 @@ function WebcamFraming({
 					aria-valuemax={100}
 					aria-valuenow={Math.round(pan.x * 100)}
 					aria-valuetext={`${Math.round(pan.x * 100)}%, ${Math.round(pan.y * 100)}%`}
-					aria-disabled={!movable}
-					tabIndex={movable ? 0 : -1}
+					aria-disabled={disabled}
+					aria-keyshortcuts="+ -"
+					tabIndex={disabled ? -1 : 0}
 					style={{
 						left: `${crop.x * 100}%`,
 						top: `${crop.y * 100}%`,
-						width: `${crop.width * 100}%`,
+						width: `${size * 100}%`,
 						height: `${crop.height * 100}%`,
 					}}
 					onPointerDown={(e) => {
 						if (!movable) return;
 						e.currentTarget.setPointerCapture?.(e.pointerId);
-						dragRef.current = { x: e.clientX, y: e.clientY, pan };
+						gestureRef.current = { kind: "move", x: e.clientX, y: e.clientY, pan };
 					}}
 					onPointerMove={onPointerMove}
-					onPointerUp={endDrag}
-					onPointerCancel={endDrag}
+					onPointerUp={endGesture}
+					onPointerCancel={endGesture}
 					onKeyDown={(e) => {
+						if (disabled) return;
+						if (e.key === "+" || e.key === "=" || e.key === "-") {
+							e.preventDefault();
+							e.nativeEvent.stopPropagation();
+							zoomBy(e.key === "-" ? 1 / 1.1 : 1.1);
+							onCommit();
+							return;
+						}
 						if (!movable) return;
 						const step = 0.05;
 						const delta =
@@ -3365,10 +3400,40 @@ function WebcamFraming({
 						// The editor shell seeks on the arrows, from WINDOW: keep them here.
 						e.preventDefault();
 						e.nativeEvent.stopPropagation();
-						onPanLive({ x: clamp01(pan.x + delta.x), y: clamp01(pan.y + delta.y) });
+						onFrameLive(size, { x: clamp01(pan.x + delta.x), y: clamp01(pan.y + delta.y) });
 						onCommit();
 					}}
-				/>
+				>
+					{disabled
+						? null
+						: FRAME_CORNERS.map((corner) => (
+								<span
+									key={corner}
+									className={styles.framingHandle}
+									data-corner={corner}
+									aria-hidden="true"
+									onPointerDown={(e) => {
+										// Not a move: the frame's own handler would start one.
+										e.stopPropagation();
+										e.currentTarget.setPointerCapture?.(e.pointerId);
+										gestureRef.current = {
+											kind: "resize",
+											corner,
+											anchor: {
+												x: corner.endsWith("w") ? crop.x + size : crop.x,
+												y: corner.startsWith("n") ? crop.y + crop.height : crop.y,
+											},
+										};
+									}}
+									onPointerMove={onPointerMove}
+									onPointerUp={endGesture}
+									onPointerCancel={endGesture}
+								/>
+							))}
+				</div>
+				<span className={styles.framingZoom} title={zoomLabel}>
+					{Math.round(100 / size)}%
+				</span>
 			</div>
 			<p className={styles.framingHint}>{hint}</p>
 		</div>

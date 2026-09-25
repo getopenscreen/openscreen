@@ -274,8 +274,7 @@
 		"help": "ウェブカメラと画面の合成方法: ピクチャインピクチャ、縦積み、デュアルフレーム、形状、丸み、サイズ、位置、左右反転。",
 		"mirrorWebcam": "Webカメラを反転",
 		"webcamFraming": "ウェブカメラの構図",
-		"webcamFramingDrag": "枠をドラッグして、カメラに映す範囲を選びます。",
-		"webcamFramingZoomFirst": "ズームしてから枠をドラッグし、カメラに映す範囲を選びます。",
+		"webcamFramingDrag": "枠をドラッグして移動、角をドラッグしてズームします。",
 		"shapes": {
 			"rectangle": "長方形",
 			"square": "正方形"

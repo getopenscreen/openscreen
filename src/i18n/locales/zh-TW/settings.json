@@ -407,12 +407,10 @@
 		"model3dHint": "預設樣式：所有游標形狀都會變成 3D。其他樣式維持平面。",
 		"model3dNeedsCursor": "開啟「顯示游標」後才能使用 3D 游標。",
 		"help": "根據錄製的遙測資料繪製游標：主題、大小、平滑、動態模糊與點擊回彈。",
-		"clipToBoundsDescription": "讓游標保持在影片畫面內。關閉後游標可超出邊緣——在縮放或平移時很有用。",
 		"size": "大小",
 		"title": "游標",
 		"show": "顯示游標",
 		"themeDefault": "預設",
-		"clipToBounds": "裁切至畫布",
 		"motionBlur": "動態模糊",
 		"theme": "游標樣式",
 		"autoHide": "閒置時隱藏"

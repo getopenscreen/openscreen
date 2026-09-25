@@ -108,7 +108,6 @@ export interface ProjectEditorState {
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
-	cursorClipToBounds?: boolean;
 }
 
 export interface EditorProjectData {
@@ -494,9 +493,6 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			: {}),
 		...(isFiniteNumber(editor.cursorClickBounce)
 			? { cursorClickBounce: editor.cursorClickBounce }
-			: {}),
-		...(typeof editor.cursorClipToBounds === "boolean"
-			? { cursorClipToBounds: editor.cursorClipToBounds }
 			: {}),
 		wallpaper:
 			typeof editor.wallpaper === "string"

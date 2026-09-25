@@ -407,12 +407,10 @@
 		"model3dHint": "Varsayılan stil: tüm imleç şekilleri 3B olur. Diğer stiller düz kalır.",
 		"model3dNeedsCursor": "3B imleci kullanmak için «İmleci Göster»i açın.",
 		"help": "Kaydedilen telemetriden imleç çizimi: tema, boyut, yumuşatma, hareket bulanıklığı ve tıklama sıçraması.",
-		"clipToBoundsDescription": "İmleci video kare içinde tutar. İmlecin kenarları aşmasına izin vermek için kapatın — yakınlaştırma veya kaydırma yapılırken kullanışlıdır.",
 		"size": "Boyut",
 		"title": "İmleç",
 		"show": "İmleci Göster",
 		"themeDefault": "Varsayılan",
-		"clipToBounds": "Tuvale Kırp",
 		"motionBlur": "Hareket Bulanıklığı",
 		"theme": "İmleç Stili",
 		"autoHide": "Hareketsizken gizle"

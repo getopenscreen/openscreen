@@ -407,12 +407,10 @@
 		"model3dHint": "默认样式：所有光标形状都变为 3D。其他样式保持平面。",
 		"model3dNeedsCursor": "开启“显示光标”后才能使用 3D 光标。",
 		"help": "基于录制遥测数据的光标渲染：主题、大小、平滑、运动模糊和点击回弹。",
-		"clipToBoundsDescription": "将光标保持在视频画面内。关闭后光标可以超出边缘——在放大或平移时很有用。",
 		"size": "大小",
 		"title": "光标",
 		"show": "显示光标",
 		"themeDefault": "默认",
-		"clipToBounds": "裁剪到画布",
 		"motionBlur": "运动模糊",
 		"theme": "光标样式",
 		"autoHide": "闲置时隐藏"

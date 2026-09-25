@@ -295,7 +295,6 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 			clickBounce: readNumber(cursor, "clickBounce", CURSOR_NUMBER_RANGES.clickBounce, "cursor."),
 			// Presets written before the 3D cursor existed meant the flat one.
 			model3d: cursor.model3d === undefined ? false : readBoolean(cursor, "model3d", "cursor."),
-			clipToBounds: readBoolean(cursor, "clipToBounds", "cursor."),
 		},
 		cursorShow: readBoolean(value, "cursorShow"),
 		cursorAutoHide: readBoolean(value, "cursorAutoHide"),

@@ -87,14 +87,12 @@ describe("projectPersistence media compatibility", () => {
 			cursorSmoothing: 0.5,
 			cursorMotionBlur: 0.1,
 			cursorClickBounce: 1.5,
-			cursorClipToBounds: true,
 		});
 		expect(editor).toMatchObject({
 			cursorSize: 0.3,
 			cursorSmoothing: 0.5,
 			cursorMotionBlur: 0.1,
 			cursorClickBounce: 1.5,
-			cursorClipToBounds: true,
 		});
 	});
 
@@ -102,13 +100,11 @@ describe("projectPersistence media compatibility", () => {
 		const editor = normalizeProjectEditor({
 			cursorSize: Number.NaN,
 			cursorClickBounce: "big" as never,
-			cursorClipToBounds: "yes" as never,
 		});
 		expect("cursorSize" in editor).toBe(false);
 		expect("cursorSmoothing" in editor).toBe(false);
 		expect("cursorMotionBlur" in editor).toBe(false);
 		expect("cursorClickBounce" in editor).toBe(false);
-		expect("cursorClipToBounds" in editor).toBe(false);
 	});
 
 	it("normalizes webcam mask shape values safely", () => {

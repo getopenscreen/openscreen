@@ -3564,15 +3564,6 @@ export function CursorPane() {
 					}}
 				/>
 			</div>
-			<div className={styles.paneRow}>
-				<span className={styles.label}>{ts("cursor.clipToBounds")}</span>
-				<Toggle
-					ariaLabel={ts("cursor.clipToBounds")}
-					checked={settings.cursor.clipToBounds}
-					disabled={!hasDocument}
-					onChange={(v) => void set({ cursor: { clipToBounds: v } })}
-				/>
-			</div>
 			{/* One switch for the modelled cursor. A hidden cursor has nothing to model, so the
 			    row is disabled then and both its hint and its tooltip say why. */}
 			<div

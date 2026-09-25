@@ -39,7 +39,6 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 			motionBlur: 0.35,
 			clickBounce: 2.5,
 			model3d: false,
-			clipToBounds: false,
 		},
 		cursorShow: true,
 		cursorAutoHide: false,

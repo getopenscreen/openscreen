@@ -161,7 +161,6 @@ interface LegacyShape {
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
 	cursorModel3d?: boolean;
-	cursorClipToBounds?: boolean;
 	cursorShow?: boolean;
 	cursorAutoHide?: boolean;
 	cursorTheme?: string;
@@ -196,7 +195,6 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		clickBounce: num(legacy?.cursorClickBounce, DEFAULT_EDITOR_SETTINGS.cursor.clickBounce),
 		// Absent in every project saved before the setting existed: those keep the flat cursor.
 		model3d: bool(legacy?.cursorModel3d, DEFAULT_EDITOR_SETTINGS.cursor.model3d),
-		clipToBounds: bool(legacy?.cursorClipToBounds, DEFAULT_EDITOR_SETTINGS.cursor.clipToBounds),
 		autoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
 	};
 
@@ -317,7 +315,6 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 		if (c.motionBlur !== undefined) next.cursorMotionBlur = c.motionBlur;
 		if (c.clickBounce !== undefined) next.cursorClickBounce = c.clickBounce;
 		if (c.model3d !== undefined) next.cursorModel3d = c.model3d;
-		if (c.clipToBounds !== undefined) next.cursorClipToBounds = c.clipToBounds;
 		if (c.theme !== undefined) next.cursorTheme = c.theme;
 		if (c.show !== undefined) next.cursorShow = c.show;
 		if (c.autoHide !== undefined) next.cursorAutoHide = c.autoHide;

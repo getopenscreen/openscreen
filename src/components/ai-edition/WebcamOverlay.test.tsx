@@ -111,7 +111,6 @@ const baseLegacyEditor = {
 	cursorMotionBlur: 0,
 	cursorClickBounce: 0,
 	cursorTheme: "default",
-	cursorClipToBounds: false,
 };
 
 describe("WebcamOverlay (per-clip camera resolution)", () => {

@@ -49,7 +49,6 @@ function styledSettings(): EditorSettingsSnapshot {
 			motionBlur: 0.9,
 			clickBounce: 4,
 			model3d: true,
-			clipToBounds: true,
 		},
 		cursorShow: false,
 		cursorAutoHide: true,

@@ -4,6 +4,7 @@ import {
 	type ZoomScaleInput,
 } from "@/lib/ai-edition/timeline/zoom-scale";
 import type { WebcamLayoutPreset } from "@/lib/compositeLayout";
+import { DEFAULT_PROJECT_APPEARANCE, SETTING_BOUNDS } from "@/lib/projectDefaults";
 import { clamp01 } from "@/utils/math";
 
 export type { ZoomDepth, ZoomScaleInput };
@@ -280,13 +281,14 @@ export interface CursorVisualSettings {
 	autoHide?: boolean;
 }
 
-export const DEFAULT_CURSOR_SIZE = 3.0;
-export const DEFAULT_CURSOR_SMOOTHING = 0.67;
-export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
-export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
+// The project defaults, under the names the legacy editor reads: one value, not two to keep in sync.
+export const DEFAULT_CURSOR_SIZE = DEFAULT_PROJECT_APPEARANCE.cursor.size;
+export const DEFAULT_CURSOR_SMOOTHING = DEFAULT_PROJECT_APPEARANCE.cursor.smoothing;
+export const DEFAULT_CURSOR_MOTION_BLUR = DEFAULT_PROJECT_APPEARANCE.cursor.motionBlur;
+export const DEFAULT_CURSOR_CLICK_BOUNCE = DEFAULT_PROJECT_APPEARANCE.cursor.clickBounce;
 // Off: the flat sprite every existing project renders.
-export const DEFAULT_CURSOR_MODEL3D = false;
-export const DEFAULT_CURSOR_AUTO_HIDE = false;
+export const DEFAULT_CURSOR_MODEL3D = DEFAULT_PROJECT_APPEARANCE.cursor.model3d;
+export const DEFAULT_CURSOR_AUTO_HIDE = DEFAULT_PROJECT_APPEARANCE.cursor.autoHide;
 export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
 
 export interface TrimRegion {
@@ -461,8 +463,7 @@ export const DEFAULT_CROP_REGION: CropRegion = {
 
 export type PlaybackSpeed = number;
 
-export const MIN_PLAYBACK_SPEED = 0.1;
-export const MAX_PLAYBACK_SPEED = 100;
+export const [MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED] = SETTING_BOUNDS.playbackSpeed;
 // Chromium hard-caps HTMLMediaElement.playbackRate at 16 (setting more throws
 // NotSupportedError). At or below this, preview plays natively; above it, preview
 // frame-steps by seeking and audio export uses an offline pitch-preserved stretch.

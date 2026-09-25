@@ -20,17 +20,17 @@ describe("parseCustomPlaybackSpeedInput", () => {
 	});
 
 	it("allows sub-1 custom speeds down to the editor minimum", () => {
-		expect(parseCustomPlaybackSpeedInput("0.1")).toEqual({
+		expect(parseCustomPlaybackSpeedInput("0.25")).toEqual({
 			status: "valid",
-			draft: "0.1",
-			speed: 0.1,
+			draft: "0.25",
+			speed: 0.25,
 		});
 	});
 
 	it("rejects speeds below the editor minimum", () => {
-		expect(parseCustomPlaybackSpeedInput("0.09")).toEqual({
+		expect(parseCustomPlaybackSpeedInput("0.2")).toEqual({
 			status: "too-slow",
-			draft: "0.09",
+			draft: "0.2",
 		});
 	});
 
@@ -44,27 +44,19 @@ describe("parseCustomPlaybackSpeedInput", () => {
 		});
 	});
 
-	it("accepts the maximum editor speed", () => {
-		expect(parseCustomPlaybackSpeedInput("100")).toEqual({
+	it("accepts the maximum editor speed, the preview's own ceiling", () => {
+		expect(parseCustomPlaybackSpeedInput("16")).toEqual({
 			status: "valid",
-			draft: "100",
-			speed: 100,
-		});
-	});
-
-	it("accepts high speeds that exceed the native preview rate", () => {
-		// 16.1× was rejected under the old 16× cap; it must now be valid.
-		expect(parseCustomPlaybackSpeedInput("16.1")).toEqual({
-			status: "valid",
-			draft: "16.1",
-			speed: 16.1,
+			draft: "16",
+			speed: 16,
 		});
 	});
 
 	it("rejects speeds above the editor maximum", () => {
-		expect(parseCustomPlaybackSpeedInput("100.1")).toEqual({
+		// Past 16x the preview could not show what the export rendered.
+		expect(parseCustomPlaybackSpeedInput("16.1")).toEqual({
 			status: "too-fast",
-			draft: "100.1",
+			draft: "16.1",
 		});
 	});
 });

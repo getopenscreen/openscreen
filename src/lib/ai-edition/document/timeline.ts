@@ -3,6 +3,7 @@
 // (store, exporter, agent) feeds an AxcutDocument and gets back intervals
 // or a new document with updated clips.
 
+import { clampToBound } from "../../projectDefaults";
 import type { AxcutClip, AxcutDocument, AxcutTranscript, AxcutTrimRange } from "../schema";
 
 /**
@@ -230,6 +231,23 @@ export interface PlaybackSpeedRegion {
 	startMs: number;
 	endMs: number;
 	speed: number;
+}
+
+/**
+ * The project's speed regions as every reader should see them. They live on the legacy editor
+ * envelope, which no schema checks, so this is where their bound applies: a region without a
+ * usable speed is dropped, as the scene always did, and one past the bound plays at it. A
+ * hand-edited or agent-written 100x can no longer reach the export while the preview stops at 16x.
+ */
+export function readSpeedRegions<T extends PlaybackSpeedRegion = PlaybackSpeedRegion>(
+	document: Pick<AxcutDocument, "legacyEditor">,
+): T[] {
+	const stored = (document.legacyEditor as { speedRegions?: unknown } | null | undefined)
+		?.speedRegions;
+	if (!Array.isArray(stored)) return [];
+	return (stored as T[])
+		.filter((r) => typeof r?.speed === "number" && Number.isFinite(r.speed) && r.speed > 0)
+		.map((r) => ({ ...r, speed: clampToBound(r.speed, "playbackSpeed") }));
 }
 
 /**

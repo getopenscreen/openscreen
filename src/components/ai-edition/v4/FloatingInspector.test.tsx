@@ -67,7 +67,7 @@ vi.mock("../CaptionsPane", () => ({
 	CaptionsPane: () => <div data-testid="captions-pane">CaptionsPane</div>,
 }));
 
-import { FloatingInspector } from "./FloatingInspector";
+import { AnnotationSizeField, FloatingInspector } from "./FloatingInspector";
 
 describe("FloatingInspector", () => {
 	const defaultProps: React.ComponentProps<typeof FloatingInspector> = {
@@ -253,5 +253,28 @@ describe("FloatingInspector", () => {
 				editorSettings.cursorShow = true;
 			}
 		});
+	});
+});
+
+describe("AnnotationSizeField", () => {
+	const commitTyped = (typed: string) => {
+		const onCommit = vi.fn();
+		const view = render(<AnnotationSizeField label="Size" size={32} onCommit={onCommit} />);
+		const field = view.getByRole("textbox", { name: "Size" });
+		fireEvent.change(field, { target: { value: typed } });
+		fireEvent.blur(field);
+		view.unmount();
+		return onCommit;
+	};
+
+	it("keeps the size when the field is emptied or unreadable, instead of writing 0", () => {
+		expect(commitTyped("")).not.toHaveBeenCalled();
+		expect(commitTyped("big")).not.toHaveBeenCalled();
+	});
+
+	it("commits a typed size read into its bound", () => {
+		expect(commitTyped("0")).toHaveBeenCalledWith(8);
+		expect(commitTyped("48")).toHaveBeenCalledWith(48);
+		expect(commitTyped("900")).toHaveBeenCalledWith(200);
 	});
 });

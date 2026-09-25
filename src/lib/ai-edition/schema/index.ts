@@ -17,6 +17,7 @@ import { z } from "zod";
 // Relative, not `@/`: the Electron main bundle imports this module and
 // vite-plugin-electron builds it without the root resolve.alias.
 import { toAspectRatioToken } from "../../../utils/aspectRatioUtils";
+import { clampToBound } from "../../projectDefaults";
 // Cycle-safe: `document/ids` only pulls `uuid`, and `timeline/timelineMap`'s
 // transitive value-imports (region-ventilation, virtual-preview) import from this
 // module TYPE-ONLY, so requiring them here never re-enters schema at runtime.
@@ -421,7 +422,12 @@ const annotationStyleSchema = z.object({
 	// so the toggle is reversible. Nothing renders it: the paint path still reads `backgroundColor`
 	// alone.
 	lastBackgroundColor: z.string().optional(),
-	fontSize: z.number().nonnegative().default(32),
+	// Read into its bound rather than refused: a size of 0, which an emptied field used to store,
+	// must still open, as the smallest text instead of none.
+	fontSize: z
+		.number()
+		.default(32)
+		.transform((size) => clampToBound(size, "annotationFontSize")),
 	fontFamily: z.string().default("Inter"),
 	fontWeight: z.enum(["normal", "bold"]).default("bold"),
 	fontStyle: z.enum(["normal", "italic"]).default("normal"),

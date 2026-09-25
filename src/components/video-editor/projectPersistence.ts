@@ -43,10 +43,8 @@ import {
 	isWallpaperMotion,
 	MAX_BLUR_BLOCK_SIZE,
 	MAX_BLUR_INTENSITY,
-	MAX_PLAYBACK_SPEED,
 	MIN_BLUR_BLOCK_SIZE,
 	MIN_BLUR_INTENSITY,
-	MIN_PLAYBACK_SPEED,
 	type SpeedRegion,
 	type TrimRegion,
 	type WallpaperMotion,
@@ -345,10 +343,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
+					// Clamped, not reset: a 20x region written before the bound read as 16x, not 1.5x.
 					const speed =
-						isFiniteNumber(region.speed) &&
-						region.speed >= MIN_PLAYBACK_SPEED &&
-						region.speed <= MAX_PLAYBACK_SPEED
+						isFiniteNumber(region.speed) && region.speed > 0
 							? clampPlaybackSpeed(region.speed)
 							: DEFAULT_PLAYBACK_SPEED;
 

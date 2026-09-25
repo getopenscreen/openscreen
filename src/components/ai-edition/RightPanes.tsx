@@ -17,6 +17,7 @@ import {
 	Mic,
 	MousePointerClick,
 	Music,
+	RotateCcw,
 	Sliders,
 	Trash2,
 	Undo2,
@@ -67,6 +68,7 @@ import {
 	AUDIO_GAIN_DB_LIMIT,
 	AUDIO_TRACK_GAIN_DB_MAX,
 	AUDIO_TRACK_GAIN_DB_MIN,
+	DEFAULT_EDITOR_SETTINGS,
 	type EditorSettingsPatch,
 } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -106,6 +108,7 @@ import {
 	type FrameTheme,
 	RECORDING_FRAMES,
 	type RecordingFrame,
+	SETTING_BOUNDS,
 	WEBCAM_ANCHOR_GRID,
 	WEBCAM_SIZE_MAX,
 	WEBCAM_SIZE_MIN,
@@ -2679,6 +2682,7 @@ export function VideoEffectsPane() {
 					value={settings.shadowIntensity * 100}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.shadowIntensity * 100}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -2698,6 +2702,7 @@ export function VideoEffectsPane() {
 					value={settings.borderRadius * roundnessScale}
 					min={0}
 					max={ROUNDNESS_SLIDER_MAX_PX * roundnessScale}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.borderRadius * roundnessScale}
 					step={framed ? 1 : 0.5}
 					suffix={framed ? "%" : "px"}
 					disabled={!hasDocument}
@@ -2715,6 +2720,7 @@ export function VideoEffectsPane() {
 					value={settings.padding}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.padding}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -2737,6 +2743,7 @@ export function VideoEffectsPane() {
 					value={settings.motionBlurAmount * 100}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.motionBlurAmount * 100}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -3089,6 +3096,7 @@ export function LayoutPane() {
 							value={Math.round(settings.webcamRoundness * 100)}
 							min={0}
 							max={100}
+							defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamRoundness * 100)}
 							suffix="%"
 							disabled={layoutControlsDisabled}
 							onChange={(next) => setLive({ webcamRoundness: next / 100 })}
@@ -3100,6 +3108,7 @@ export function LayoutPane() {
 							value={settings.webcamSizePreset}
 							min={WEBCAM_SIZE_MIN}
 							max={WEBCAM_SIZE_MAX}
+							defaultValue={DEFAULT_EDITOR_SETTINGS.webcamSizePreset}
 							step={1}
 							suffix="%"
 							disabled={layoutControlsDisabled}
@@ -3190,6 +3199,7 @@ export function LayoutPane() {
 								value={Math.round(settings.webcamBlurIntensity * 100)}
 								min={0}
 								max={100}
+								defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamBlurIntensity * 100)}
 								suffix="%"
 								disabled={layoutControlsDisabled}
 								onChange={(next) => setLive({ webcamBlurIntensity: next / 100 })}
@@ -3461,6 +3471,7 @@ export function AudioPane() {
 					value={settings.audioGainDb}
 					min={-AUDIO_GAIN_DB_LIMIT}
 					max={AUDIO_GAIN_DB_LIMIT}
+					defaultValue={0}
 					step={0.5}
 					decimals={1}
 					suffix=" dB"
@@ -3829,8 +3840,9 @@ export function CursorPane() {
 				<SliderCell
 					label={ts("cursor.size")}
 					value={settings.cursor.size * 10}
-					min={5}
-					max={100}
+					min={SETTING_BOUNDS.cursorSize[0] * 10}
+					max={SETTING_BOUNDS.cursorSize[1] * 10}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.size * 10}
 					step={0.1}
 					decimals={1}
 					disabled={!hasDocument}
@@ -3847,6 +3859,7 @@ export function CursorPane() {
 					value={settings.cursor.smoothing * 100}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.smoothing * 100}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -3862,6 +3875,7 @@ export function CursorPane() {
 					value={settings.cursor.motionBlur * 100}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.motionBlur * 100}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -3875,8 +3889,9 @@ export function CursorPane() {
 				<SliderCell
 					label={ts("cursor.clickBounce")}
 					value={settings.cursor.clickBounce * 10}
-					min={0}
-					max={50}
+					min={SETTING_BOUNDS.cursorClickBounce[0] * 10}
+					max={SETTING_BOUNDS.cursorClickBounce[1] * 10}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.clickBounce * 10}
 					step={0.1}
 					decimals={1}
 					disabled={!hasDocument}
@@ -4038,9 +4053,12 @@ export function SliderCell({
 	disabled,
 	onChange,
 	onCommit,
-	showValue = true,
+	// A number with no unit ("30.0" for a cursor size) says nothing a user can act on: the
+	// track's position already shows where the value sits.
+	showValue = suffix !== "",
 	full = false,
 	hint,
+	defaultValue,
 }: {
 	label: string;
 	value: number;
@@ -4059,8 +4077,19 @@ export function SliderCell({
 	/** Une phrase qui dit ce que la course du slider signifie quand ce n'est pas l'évidence
 	 *  (Roundness sous un cadre) : l'infobulle du libellé et du slider. */
 	hint?: string;
+	/** The value a reset returns to, in the slider's own units. With it, a slider moved off it
+	 *  shows a reset button, and a double-click on the track does the same. */
+	defaultValue?: number;
 }) {
+	const tc = useScopedT("common");
 	const pct = Math.max(0, Math.min(100, max > min ? ((value - min) / (max - min)) * 100 : 0));
+	// Within a thousandth of a step: a stored value comes back through a unit conversion.
+	const modified = defaultValue !== undefined && Math.abs(value - defaultValue) > step / 1000;
+	const reset = () => {
+		if (!modified || disabled || defaultValue === undefined) return;
+		onChange(defaultValue);
+		onCommit();
+	};
 	return (
 		<div className={`${styles.sliderCell}${full ? ` ${styles.full}` : ""}`}>
 			<div className={styles.head}>
@@ -4072,6 +4101,19 @@ export function SliderCell({
 						{value.toFixed(decimals)}
 						{suffix}
 					</span>
+				) : null}
+				{/* Only once the value has moved: at the default there is nothing to go back to. */}
+				{modified ? (
+					<button
+						type="button"
+						className={styles.sliderReset}
+						aria-label={`${tc("actions.resetToDefault")}: ${label}`}
+						title={tc("actions.resetToDefault")}
+						disabled={disabled}
+						onClick={reset}
+					>
+						<RotateCcw size={12} aria-hidden="true" />
+					</button>
 				) : null}
 			</div>
 			{/* The visible label is a <span>, not a <label htmlFor>, so without this the
@@ -4092,6 +4134,7 @@ export function SliderCell({
 				onMouseUp={onCommit}
 				onTouchEnd={onCommit}
 				onKeyUp={onCommit}
+				onDoubleClick={reset}
 			/>
 		</div>
 	);

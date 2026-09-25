@@ -660,6 +660,17 @@ describe("executeAgentTool", () => {
 		expect(() => documentSchema.parse(result.document)).not.toThrow();
 	});
 
+	it("refuses a speed outside the range every reader plays", () => {
+		for (const speed of [100, 0.1]) {
+			const result = executeAgentTool(
+				fixtureDocument(),
+				"addSpeed",
+				JSON.stringify({ startSec: 5, endSec: 9, speed }),
+			);
+			expect(result.ok).toBe(false);
+		}
+	});
+
 	it("addAnnotation adds a schema-valid text annotation", () => {
 		const result = executeAgentTool(
 			fixtureDocument(),

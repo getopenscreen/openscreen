@@ -25,6 +25,7 @@ import {
 	moveClip as moveClipInDocument,
 	PLACEHOLDER_DURATION_SEC,
 	type RegionKind,
+	readSpeedRegions,
 	removeClip as removeClipInDocument,
 	removeRegion as removeRegionInDocument,
 	resequenceClips,
@@ -1414,12 +1415,7 @@ export function useTimeline() {
 	);
 
 	const speedRegions = hasDoc
-		? (((document.legacyEditor as Record<string, unknown> | null)?.speedRegions as Array<{
-				id: string;
-				startMs: number;
-				endMs: number;
-				speed: number;
-			}>) ?? [])
+		? readSpeedRegions<{ id: string; startMs: number; endMs: number; speed: number }>(document)
 		: [];
 
 	const cameraFullscreenRegions = hasDoc

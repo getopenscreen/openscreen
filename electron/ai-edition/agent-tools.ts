@@ -55,6 +55,7 @@ import {
 	effectiveZoomScale,
 	ZOOM_DEPTH_LEGEND,
 } from "../../src/lib/ai-edition/timeline/zoom-scale";
+import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
 
 export interface AgentToolExecution {
 	ok: boolean;
@@ -490,17 +491,24 @@ export const setZoomArgs = z.object({
 	focus: focusSchema.optional(),
 });
 
+// The bound every speed reader applies (`readSpeedRegions`): refused here, so the agent hears
+// why instead of seeing its 100x quietly play at 16x.
+const speedSchema = z
+	.number()
+	.min(SETTING_BOUNDS.playbackSpeed[0])
+	.max(SETTING_BOUNDS.playbackSpeed[1]);
+
 export const addSpeedArgs = z.object({
 	startSec: secondsSchema,
 	endSec: secondsSchema,
-	speed: z.number().positive().default(1.5),
+	speed: speedSchema.default(1.5),
 });
 
 export const setSpeedArgs = z.object({
 	speedId: z.string().min(1),
 	startSec: secondsSchema.optional(),
 	endSec: secondsSchema.optional(),
-	speed: z.number().positive().optional(),
+	speed: speedSchema.optional(),
 });
 
 export const addAnnotationArgs = z.object({

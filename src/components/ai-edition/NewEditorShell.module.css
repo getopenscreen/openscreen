@@ -1228,6 +1228,8 @@ textarea.control {
 .framingHandle[data-corner="ne"]::before { top: 8px; right: 8px; border-width: var(--bracket-w, 3.5px) var(--bracket-w, 3.5px) 0 0; border-top-right-radius: 5px; }
 .framingHandle[data-corner="sw"]::before { bottom: 8px; left: 8px; border-width: 0 0 var(--bracket-w, 3.5px) var(--bracket-w, 3.5px); border-bottom-left-radius: 5px; }
 .framingHandle[data-corner="se"]::before { bottom: 8px; right: 8px; border-width: 0 var(--bracket-w, 3.5px) var(--bracket-w, 3.5px) 0; border-bottom-right-radius: 5px; }
+/* Edit clip's crop region: focusable, since the arrows move it and Shift + the arrows resize it. */
+.cropRegion:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 /* A crop's sides: a short thick bar on the edge, in the brackets' white, and a grab area around it. */
 .cropEdge {
 	position: absolute;

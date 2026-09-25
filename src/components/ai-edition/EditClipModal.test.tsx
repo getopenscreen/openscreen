@@ -143,3 +143,36 @@ describe("EditClipModal trim duration readout (#558)", () => {
 		expect(screen.getByTestId("edit-clip-final-duration")).toHaveTextContent("1:20.0");
 	});
 });
+
+describe("EditClipModal crop from the keyboard", () => {
+	it("moves the crop with the arrows and resizes it with Shift + the arrows", () => {
+		const onApply = vi.fn();
+		renderWithI18n(
+			<EditClipModal
+				open
+				onClose={vi.fn()}
+				clip={CLIP}
+				assetMeta={ASSET}
+				videoSources={[]}
+				onApply={onApply}
+			/>,
+		);
+		// The editor shell seeks on the arrows from window: the crop must keep them.
+		const seek = vi.fn();
+		window.addEventListener("keydown", seek);
+		try {
+			const crop = screen.getByRole("slider", { name: "Crop" });
+			fireEvent.keyDown(crop, { key: "ArrowLeft", shiftKey: true });
+			fireEvent.keyDown(crop, { key: "ArrowRight" });
+			expect(seek).not.toHaveBeenCalled();
+		} finally {
+			window.removeEventListener("keydown", seek);
+		}
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		expect(onApply).toHaveBeenCalledWith(
+			20,
+			105,
+			expect.objectContaining({ x: 0.01, y: 0, width: 0.99 }),
+		);
+	});
+});

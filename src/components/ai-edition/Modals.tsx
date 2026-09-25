@@ -1,5 +1,6 @@
 import { AlertTriangle, Crop, FolderOpen, FolderPlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
+	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
 	useEffect,
@@ -563,6 +564,63 @@ const MIN_PCT = 4;
 const clampPct = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 type ResizeEdges = { left?: boolean; right?: boolean; top?: boolean; bottom?: boolean };
+type CropPct = { x: number; y: number; w: number; h: number };
+
+/** `start` with its `edges` moved by (dxPct, dyPct), kept inside the frame. With a locked
+ *  fraction-space ratio `fr`, the opposite dimension follows to keep width/height locked. */
+function resizeCropPct(
+	start: CropPct,
+	edges: ResizeEdges,
+	dxPct: number,
+	dyPct: number,
+	fr: number | null,
+): CropPct {
+	let { x, y, w, h } = start;
+	if (edges.left) {
+		const nx = clampPct(start.x + dxPct, 0, start.x + start.w - MIN_PCT);
+		w = start.w - (nx - start.x);
+		x = nx;
+	}
+	if (edges.right) {
+		w = clampPct(start.w + dxPct, MIN_PCT, 100 - start.x);
+	}
+	if (edges.top) {
+		const ny = clampPct(start.y + dyPct, 0, start.y + start.h - MIN_PCT);
+		h = start.h - (ny - start.y);
+		y = ny;
+	}
+	if (edges.bottom) {
+		h = clampPct(start.h + dyPct, MIN_PCT, 100 - start.y);
+	}
+	if (fr) {
+		// Locked ratio: the crop stays a fixed shape anchored at the corner the
+		// user isn't dragging. The dragged size is capped at the largest rect of
+		// this ratio that fits from that anchor — so it's simply sized to fit,
+		// never placed out of frame. (A crop can't leave the frame, so there is
+		// no out-of-bounds state to correct after the fact.)
+		const fixedLeft = !edges.left; // the x-edge that stays put
+		const fixedTop = !edges.top; // the y-edge that stays put
+		const anchorX = fixedLeft ? start.x : start.x + start.w;
+		const anchorY = fixedTop ? start.y : start.y + start.h;
+		const roomW = fixedLeft ? 100 - anchorX : anchorX;
+		const roomH = fixedTop ? 100 - anchorY : anchorY;
+		// Which axis the pointer drives; the other is derived from the ratio.
+		const drivenByHeight = (edges.top || edges.bottom) && !(edges.left || edges.right);
+		let nextW = Math.min(drivenByHeight ? h * fr : w, roomW, roomH * fr);
+		nextW = Math.max(MIN_PCT, nextW);
+		let nextH = nextW / fr;
+		if (nextH < MIN_PCT) {
+			nextH = MIN_PCT;
+			nextW = nextH * fr;
+		}
+		w = nextW;
+		h = nextH;
+		x = fixedLeft ? anchorX : anchorX - w;
+		y = fixedTop ? anchorY : anchorY - h;
+	}
+	return { x, y, w, h };
+}
+
 const CROP_CORNERS = ["nw", "ne", "sw", "se"] as const;
 const CROP_EDGES = ["n", "s", "w", "e"] as const;
 
@@ -777,6 +835,33 @@ export function EditClipModal({
 		window.addEventListener("pointerup", up);
 	};
 
+	const setCrop = (next: CropPct) => {
+		setCropXPct(next.x);
+		setCropYPct(next.y);
+		setCropWPct(next.w);
+		setCropHPct(next.h);
+	};
+
+	// The keyboard's way to the same two gestures: the arrows move the crop, Shift + the
+	// arrows resize it from its bottom-right corner, a locked ratio held as the handles hold it.
+	const onCropKeyDown = (e: ReactKeyboardEvent) => {
+		const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+		const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+		if (dx === 0 && dy === 0) return;
+		// The editor shell seeks on the arrows, from WINDOW: keep them here.
+		e.preventDefault();
+		e.nativeEvent.stopPropagation();
+		setCropTouched(true);
+		const start = { x: cropXPct, y: cropYPct, w: cropWPct, h: cropHPct };
+		if (e.shiftKey) {
+			const edges = { right: dx !== 0, bottom: dy !== 0 };
+			setCrop(resizeCropPct(start, edges, dx, dy, lockedFractionRatio));
+			return;
+		}
+		setCropXPct(clampPct(start.x + dx, 0, 100 - start.w));
+		setCropYPct(clampPct(start.y + dy, 0, 100 - start.h));
+	};
+
 	// Drag one of the 8 edge/corner handles to resize. When a fixed ratio is
 	// active, the opposite dimension follows to keep width/height locked.
 	const startCropResize = (edges: ResizeEdges) => (e: ReactPointerEvent) => {
@@ -794,53 +879,7 @@ export function EditClipModal({
 		const move = (ev: PointerEvent) => {
 			const dxPct = ((ev.clientX - startX) / r.width) * 100;
 			const dyPct = ((ev.clientY - startY) / r.height) * 100;
-			let { x, y, w, h } = start;
-			if (edges.left) {
-				const nx = clampPct(start.x + dxPct, 0, start.x + start.w - MIN_PCT);
-				w = start.w - (nx - start.x);
-				x = nx;
-			}
-			if (edges.right) {
-				w = clampPct(start.w + dxPct, MIN_PCT, 100 - start.x);
-			}
-			if (edges.top) {
-				const ny = clampPct(start.y + dyPct, 0, start.y + start.h - MIN_PCT);
-				h = start.h - (ny - start.y);
-				y = ny;
-			}
-			if (edges.bottom) {
-				h = clampPct(start.h + dyPct, MIN_PCT, 100 - start.y);
-			}
-			if (fr) {
-				// Locked ratio: the crop stays a fixed shape anchored at the corner the
-				// user isn't dragging. The dragged size is capped at the largest rect of
-				// this ratio that fits from that anchor — so it's simply sized to fit,
-				// never placed out of frame. (A crop can't leave the frame, so there is
-				// no out-of-bounds state to correct after the fact.)
-				const fixedLeft = !edges.left; // the x-edge that stays put
-				const fixedTop = !edges.top; // the y-edge that stays put
-				const anchorX = fixedLeft ? start.x : start.x + start.w;
-				const anchorY = fixedTop ? start.y : start.y + start.h;
-				const roomW = fixedLeft ? 100 - anchorX : anchorX;
-				const roomH = fixedTop ? 100 - anchorY : anchorY;
-				// Which axis the pointer drives; the other is derived from the ratio.
-				const drivenByHeight = (edges.top || edges.bottom) && !(edges.left || edges.right);
-				let nextW = Math.min(drivenByHeight ? h * fr : w, roomW, roomH * fr);
-				nextW = Math.max(MIN_PCT, nextW);
-				let nextH = nextW / fr;
-				if (nextH < MIN_PCT) {
-					nextH = MIN_PCT;
-					nextW = nextH * fr;
-				}
-				w = nextW;
-				h = nextH;
-				x = fixedLeft ? anchorX : anchorX - w;
-				y = fixedTop ? anchorY : anchorY - h;
-			}
-			setCropXPct(x);
-			setCropYPct(y);
-			setCropWPct(w);
-			setCropHPct(h);
+			setCrop(resizeCropPct(start, edges, dxPct, dyPct, fr));
 		};
 		const up = () => {
 			window.removeEventListener("pointermove", move);
@@ -901,6 +940,16 @@ export function EditClipModal({
 					/>
 				) : null}
 				<div
+					className={styles.cropRegion}
+					role="slider"
+					aria-label={ts("crop.title")}
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={Math.round(cropWPct)}
+					aria-valuetext={`${Math.round(cropXPct)}%, ${Math.round(cropYPct)}%, ${Math.round(cropWPct)}% × ${Math.round(cropHPct)}%`}
+					aria-keyshortcuts="Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown"
+					tabIndex={0}
+					onKeyDown={onCropKeyDown}
 					style={{
 						position: "absolute",
 						left: `${cropXPct}%`,

@@ -421,6 +421,8 @@
 		"title": "光标",
 		"show": "显示光标",
 		"themeDefault": "默认",
+		"alwaysArrow": "始终使用箭头光标",
+		"alwaysArrowHint": "在任何光标状态下都显示箭头，即使位于文本或链接上方。",
 		"motionBlur": "运动模糊",
 		"theme": "光标样式",
 		"autoHide": "闲置时隐藏"

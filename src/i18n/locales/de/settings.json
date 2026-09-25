@@ -421,6 +421,8 @@
 		"title": "Cursor",
 		"show": "Cursor anzeigen",
 		"themeDefault": "Standard",
+		"alwaysArrow": "Immer Pfeil-Cursor verwenden",
+		"alwaysArrowHint": "Zeigt den Pfeil für jeden Cursor-Zustand, auch über Text oder Links.",
 		"motionBlur": "Bewegungsunschärfe",
 		"theme": "Cursor-Stil",
 		"autoHide": "Bei Inaktivität ausblenden"

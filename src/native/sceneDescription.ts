@@ -414,6 +414,8 @@ export interface SceneCursor {
 	 * the default theme's arrow; any other cursor keeps its flat sprite.
 	 */
 	model3d: boolean;
+	/** Every cursor state drawn with the arrow sprite (resolved app-side, see compositorViewService). */
+	alwaysArrow: boolean;
 	clipToBounds: boolean;
 	/** Cursor theme id (sprite set). */
 	theme: string;
@@ -1107,6 +1109,7 @@ export function buildSceneDescription(
 			motionBlur: settings.cursor.motionBlur,
 			clickBounce: settings.cursor.clickBounce,
 			model3d: settings.cursor.model3d,
+			alwaysArrow: settings.cursor.alwaysArrow,
 			// The "Keep inside frame" option is gone: the cursor always overflows into the
 			// background. The field stays because the compositor's scene requires it.
 			clipToBounds: false,

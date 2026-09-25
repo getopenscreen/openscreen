@@ -456,6 +456,17 @@ describe("resolveSceneAssetPaths", () => {
 		expect(Object.keys(sprites).sort()).toEqual(Object.keys(DEFAULT_CURSOR_SPRITES).sort());
 	});
 
+	it("draws every cursor state with the arrow when alwaysArrow is on", () => {
+		const sprites = resolved({ cursor: { theme: "default", alwaysArrow: true } }).cursor
+			.cursorSprites;
+
+		expect(Object.keys(sprites).sort()).toEqual(Object.keys(DEFAULT_CURSOR_SPRITES).sort());
+		for (const [type, sprite] of Object.entries<ResolvedSprite>(sprites)) {
+			expect(sprite, type).toEqual(sprites.arrow);
+		}
+		expect(sprites.arrow.path).toBe(path.join(resources, "cursors", "default", "arrow.png"));
+	});
+
 	it("carries each sprite's hotspot as a fraction of its own image", () => {
 		const sprites = resolved({ cursor: { theme: "default" } }).cursor.cursorSprites;
 

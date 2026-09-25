@@ -421,6 +421,8 @@
 		"title": "커서",
 		"show": "커서 표시",
 		"themeDefault": "기본",
+		"alwaysArrow": "항상 화살표 커서 사용",
+		"alwaysArrowHint": "텍스트나 링크 위에서도 모든 커서 상태에 화살표를 표시합니다.",
 		"motionBlur": "모션 블러",
 		"theme": "커서 스타일",
 		"autoHide": "비활성 시 자동 숨김"

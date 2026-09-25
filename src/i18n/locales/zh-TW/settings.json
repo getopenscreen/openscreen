@@ -421,6 +421,8 @@
 		"title": "游標",
 		"show": "顯示游標",
 		"themeDefault": "預設",
+		"alwaysArrow": "一律使用箭頭游標",
+		"alwaysArrowHint": "在任何游標狀態下都顯示箭頭，即使位於文字或連結上方。",
 		"motionBlur": "動態模糊",
 		"theme": "游標樣式",
 		"autoHide": "閒置時隱藏"

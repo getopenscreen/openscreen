@@ -421,6 +421,8 @@
 		"title": "Kurzor",
 		"show": "Zobrazit kurzor",
 		"themeDefault": "Výchozí",
+		"alwaysArrow": "Vždy používat kurzor šipky",
+		"alwaysArrowHint": "Zobrazí šipku pro každý stav kurzoru, i nad textem nebo odkazy.",
 		"motionBlur": "Pohybové rozmazání",
 		"theme": "Styl kurzoru",
 		"autoHide": "Automaticky skrýt, když je neaktivní"

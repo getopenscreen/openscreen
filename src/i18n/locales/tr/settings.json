@@ -421,6 +421,8 @@
 		"title": "İmleç",
 		"show": "İmleci Göster",
 		"themeDefault": "Varsayılan",
+		"alwaysArrow": "Her zaman ok imlecini kullan",
+		"alwaysArrowHint": "Metin veya bağlantı üzerinde bile her imleç durumu için oku gösterir.",
 		"motionBlur": "Hareket Bulanıklığı",
 		"theme": "İmleç Stili",
 		"autoHide": "Hareketsizken gizle"

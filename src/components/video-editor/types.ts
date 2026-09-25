@@ -275,6 +275,8 @@ export interface CursorVisualSettings {
 	 * each click; pointing shapes also lean towards their motion. Other themes stay flat sprites.
 	 */
 	model3d: boolean;
+	/** Draws every cursor state (text, hand, resize…) with the theme's arrow sprite. */
+	alwaysArrow: boolean;
 	autoHide?: boolean;
 }
 

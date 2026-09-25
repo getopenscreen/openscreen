@@ -1422,6 +1422,8 @@ describe("buildSceneDescription.output", () => {
 					timelineEndSec: 2,
 				}),
 			],
+			// Size is the point here; a fixed 16:9 keeps Auto's padding out of the numbers.
+			legacyEditor: { aspectRatio: "16:9" },
 		});
 		const { output } = buildSceneDescription(doc);
 		expect(output).toEqual({ width: 3840, height: 2160, fps: null });
@@ -1441,6 +1443,8 @@ describe("buildSceneDescription.output", () => {
 					timelineEndSec: 1,
 				}),
 			],
+			// Size is the point here; a fixed 16:9 keeps Auto's padding out of the numbers.
+			legacyEditor: { aspectRatio: "16:9" },
 		});
 		const { output } = buildSceneDescription(doc);
 		expect(output).toEqual({ width: 1920, height: 1080, fps: null });
@@ -1465,6 +1469,8 @@ describe("buildSceneDescription.output", () => {
 					timelineEndSec: 1,
 				}),
 			],
+			// Size is the point here; a fixed 16:9 keeps Auto's padding out of the numbers.
+			legacyEditor: { aspectRatio: "16:9" },
 		});
 		const { output } = buildSceneDescription(doc);
 		expect(output).toEqual({ width: 2560, height: 1440, fps: null });
@@ -1500,6 +1506,43 @@ describe("buildSceneDescription.output", () => {
 		// derived from the 9:16 ratio — portrait, not the source's native 16:9.
 		expect(output.width).toBe(1080);
 		expect(output.height).toBe(1920);
+	});
+});
+
+describe("buildSceneDescription with the Auto format", () => {
+	// End to end through the scene the compositor draws: Auto shapes `output` around the
+	// recording, and the screen rect sits in it with one margin on all four sides.
+	it("frames the recording with an even border", () => {
+		const asset = makeAsset({
+			id: "a",
+			originalPath: "/a.mp4",
+			video: { codec: "h264", width: 1920, height: 1080, fps: 30 },
+		});
+		const clip = makeClip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 0,
+			sourceEndSec: 1,
+			timelineStartSec: 0,
+			timelineEndSec: 1,
+		});
+		const scene = buildSceneDescription(
+			makeDoc({
+				assets: [asset],
+				clips: [clip],
+				legacyEditor: { aspectRatio: "auto", padding: 50 },
+			}),
+		);
+		const { width, height } = scene.output;
+		expect({ width, height }).toEqual({ width: 1920, height: 1184 });
+		const r = scene.layout.screenRect;
+		if (!r) throw new Error("screenRect absent");
+		const left = r.x * width;
+		const top = r.y * height;
+		const right = width - (r.x + r.width) * width;
+		const bottom = height - (r.y + r.height) * height;
+		for (const side of [left, right, bottom]) expect(Math.abs(side - top)).toBeLessThanOrEqual(1.5);
+		expect(top).toBeCloseTo(0.1 * 1184, -1);
 	});
 });
 
@@ -1657,7 +1700,8 @@ describe("buildSceneDescription.layout.layoutByClip", () => {
 					timelineEndSec: 8,
 				}),
 			],
-			legacyEditor: { webcamLayoutPreset: preset },
+			// A fixed frame: under Auto the frame is shaped around the camera clip's block.
+			legacyEditor: { webcamLayoutPreset: preset, aspectRatio: "16:9" },
 		});
 	};
 
@@ -2040,7 +2084,12 @@ describe("buildSceneDescription.captions", () => {
 			const base = docWithCaptions(true);
 			const scene = buildSceneDescription({
 				...base,
-				legacyEditor: { ...(base.legacyEditor as Record<string, unknown>), padding },
+				// A fixed frame: under Auto the frame itself reshapes with the padding.
+				legacyEditor: {
+					...(base.legacyEditor as Record<string, unknown>),
+					padding,
+					aspectRatio: "16:9",
+				},
 			} as AxcutDocument);
 			const caption = scene.annotations[0];
 			return {

@@ -25,9 +25,11 @@ describe("parseAspectRatio", () => {
 });
 
 describe("isAspectRatio", () => {
-	it("accepts presets and free-form shapes", () => {
+	it("accepts presets, free-form shapes and Auto", () => {
 		expect(isAspectRatio("16:9")).toBe(true);
 		expect(isAspectRatio("64:27")).toBe(true);
+		// A style preset or a user preference saved on Auto must not reload as 16:9.
+		expect(isAspectRatio("auto")).toBe(true);
 	});
 
 	it("rejects anything a project file could hold that isn't a ratio", () => {

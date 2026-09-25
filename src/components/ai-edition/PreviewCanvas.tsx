@@ -49,13 +49,14 @@ import { locateVirtualPosition } from "@/lib/ai-edition/timeline/virtual-preview
 import {
 	computeCameraFullscreenRect,
 	computeCompositeLayout,
+	paddedContentSize,
 	resolveWebcamLayoutPreset,
 	type WebcamCompositeLayout,
 } from "@/lib/compositeLayout";
 import { classifyWallpaper, resolveImageWallpaperUrl } from "@/lib/wallpaper";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
 import { computeCameraFullscreenProgress } from "@/lib/zoomMath/cameraFullscreenUtils";
-import { clamp, clamp01 } from "@/utils/math";
+import { clamp01 } from "@/utils/math";
 import { AnnotationLayer } from "./AnnotationLayer";
 import { NativeCompositorOverlay } from "./NativeCompositorOverlay";
 import styles from "./NewEditorShell.module.css";
@@ -245,16 +246,13 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			activeClipHasCamera,
 		);
 		const mask = settings.webcamMaskShape as WebcamMaskShape;
-		// ponytail: padding shrinks the available content area for ALL layouts
-		// (PiP/dual/stack) so the screen doesn't fill the canvas edge-to-edge.
-		// In vertical-stack this caps the camera strip height: at padding=0 the
-		// camera reaches 40% of canvas; at padding=50 it falls to ~32%;
-		// at padding=100 the screen takes even more.
-		const paddingFit = clamp(1 - (clamp(settings.padding, 0, 100) / 100) * 0.4, 0.4, 1);
-		const maxContentSize = {
-			width: Math.round(frameSize.width * paddingFit),
-			height: Math.round(frameSize.height * paddingFit),
-		};
+		// Padding shrinks the available content area for ALL layouts (PiP/dual/stack),
+		// through the same `paddedContentSize` the scene description uses.
+		const maxContentSize = paddedContentSize(
+			frameSize,
+			settings.padding,
+			settings.aspectRatio === "auto",
+		);
 		// The screen box must be fit to the CROPPED aspect ratio, not the full
 		// source frame's — otherwise VirtualPreview's crop math (which assumes
 		// its container is already correctly proportioned for the crop) would
@@ -288,6 +286,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		settings.webcamSizePreset,
 		settings.webcamPosition,
 		settings.padding,
+		settings.aspectRatio,
 	]);
 
 	// Full Camera: during a cameraFullscreen region the webcam takes the whole

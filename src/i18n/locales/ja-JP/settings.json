@@ -106,6 +106,7 @@
 		"blurBg": "背景をぼかす",
 		"help": "録画フレームのスタイル設定: 背景ぼかし、ドロップシャドウ、モーションブラー、角丸、動画まわりの余白。",
 		"fitClipOne": "{{count}} クリップ",
+		"formatAuto": "自動",
 		"formatOriginal": "元のサイズ",
 		"fitClipMany": "{{count}} クリップ",
 		"frame": "フレーム",

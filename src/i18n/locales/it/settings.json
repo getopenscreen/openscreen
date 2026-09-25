@@ -106,6 +106,7 @@
 		"blurBg": "Sfuma sfondo",
 		"help": "Stile della cornice della registrazione: sfocatura dello sfondo, ombra, sfocatura di movimento, raggio degli angoli e margine attorno al video.",
 		"fitClipOne": "{{count}} clip",
+		"formatAuto": "Auto",
 		"formatOriginal": "Originale",
 		"fitClipMany": "{{count}} clip",
 		"frame": "Cornice",

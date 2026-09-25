@@ -106,6 +106,7 @@
 		"blurBg": "Desenfocar fondo",
 		"help": "Estilo del marco de la grabación: desenfoque de fondo, sombra, desenfoque de movimiento, radio de esquinas y margen alrededor del vídeo.",
 		"fitClipOne": "{{count}} clip",
+		"formatAuto": "Auto",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clips",
 		"frame": "Marco",

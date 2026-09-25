@@ -16,12 +16,17 @@ export type AspectRatioPreset = (typeof ASPECT_RATIO_PRESETS)[number];
  * offers the clips' own native shapes ("Original"), which are stored the same way and can be
  * anything (`"64:27"` for an ultrawide, `"683:384"` for an odd capture size).
  *
+ * `"auto"` is not a shape but a rule: the frame takes the shape of the composition plus an even
+ * padding border, recomputed from the document (`resolveAspectRatioValue`, in
+ * lib/ai-edition/document/outputFormat). The picker shows what it resolves to, so it adapts in
+ * the open, unlike `"native"`.
+ *
  * `"native"` is a LEGACY value kept only so projects saved before the shapes were enumerated
  * still open. It resolves to the timeline's reference asset (largest pixel area), which is
  * exactly the silent, drifting behaviour the enumeration replaced — nothing writes it any
  * more, so it can be dropped once old projects are assumed migrated.
  */
-export type AspectRatio = AspectRatioPreset | `${number}:${number}` | "native";
+export type AspectRatio = AspectRatioPreset | `${number}:${number}` | "auto" | "native";
 
 const NATIVE_ASPECT_RATIO_FALLBACK = 16 / 9;
 
@@ -40,7 +45,7 @@ export function parseAspectRatio(value: string): { width: number; height: number
 /** Validation gate for anything read back from disk (project files, user prefs). */
 export function isAspectRatio(value: unknown): value is AspectRatio {
 	if (typeof value !== "string") return false;
-	return value === "native" || parseAspectRatio(value) !== null;
+	return value === "auto" || value === "native" || parseAspectRatio(value) !== null;
 }
 
 function greatestCommonDivisor(a: number, b: number): number {
@@ -71,10 +76,10 @@ export function toAspectRatioToken(width: number, height: number): AspectRatio |
 }
 
 /**
- * Numeric value of an aspect ratio. Legacy `"native"` has no document context here so it
- * returns the 16/9 fallback — callers holding a document must resolve it through
+ * Numeric value of an aspect ratio. `"auto"` and legacy `"native"` have no document context
+ * here so they return the 16/9 fallback — callers holding a document must resolve them through
  * `resolveAspectRatioValue` (lib/ai-edition/document/outputFormat) instead, or preview and
- * output silently disagree on old projects.
+ * output silently disagree.
  */
 export function getAspectRatioValue(aspectRatio: AspectRatio): number {
 	if (aspectRatio === "native") return NATIVE_ASPECT_RATIO_FALLBACK;

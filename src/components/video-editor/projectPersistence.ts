@@ -126,16 +126,18 @@ function computeNormalizedWebcamLayoutPreset(
 	webcamLayoutPreset: Partial<ProjectEditorState>["webcamLayoutPreset"],
 	normalizedAspectRatio: AspectRatio,
 ): WebcamLayoutPreset {
+	// Auto takes its shape FROM the layout, so there is no orientation to gate the blocks on.
+	const auto = normalizedAspectRatio === "auto";
 	switch (webcamLayoutPreset) {
 		case "picture-in-picture":
 		case "no-webcam":
 			return webcamLayoutPreset;
 		case "vertical-stack":
-			return isPortraitAspectRatio(normalizedAspectRatio)
+			return auto || isPortraitAspectRatio(normalizedAspectRatio)
 				? webcamLayoutPreset
 				: DEFAULT_WEBCAM_SETTINGS.layoutPreset;
 		case "dual-frame":
-			return isPortraitAspectRatio(normalizedAspectRatio)
+			return !auto && isPortraitAspectRatio(normalizedAspectRatio)
 				? DEFAULT_WEBCAM_SETTINGS.layoutPreset
 				: webcamLayoutPreset;
 		default:

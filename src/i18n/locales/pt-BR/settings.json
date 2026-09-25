@@ -106,6 +106,7 @@
 		"blurBg": "Desfocar Fundo",
 		"help": "Estilo do quadro da gravação: desfoque de fundo, sombra, desfoque de movimento, raio dos cantos e margem em volta do vídeo.",
 		"fitClipOne": "{{count}} clipe",
+		"formatAuto": "Auto",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clipes",
 		"frame": "Moldura",

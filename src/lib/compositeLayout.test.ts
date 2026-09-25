@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+	autoFrameAspect,
 	computeCameraFullscreenRect,
 	computeCompositeLayout,
 	isWebcamBlockLayout,
+	paddedContentSize,
+	paddingFit,
 	resolveWebcamReactiveZoom,
+	restingCompositionAspect,
 	type StyledRenderRect,
 } from "./compositeLayout";
 
@@ -445,6 +449,94 @@ describe("computeCompositeLayout", () => {
 		);
 		expect(roundedLayout?.webcamRect?.maskShape).toBe("rounded");
 	});
+});
+
+describe("Auto frame", () => {
+	it("keeps the composition's shape at 0% padding and pulls it toward square as padding grows", () => {
+		expect(autoFrameAspect(16 / 9, 0)).toBeCloseTo(16 / 9, 10);
+		expect(autoFrameAspect(16 / 9, 50)).toBeCloseTo(0.8 * (16 / 9) + 0.2, 10);
+		// Symmetric, and never flips orientation.
+		expect(autoFrameAspect(9 / 16, 50)).toBeCloseTo(1 / (0.8 * (16 / 9) + 0.2), 10);
+		expect(autoFrameAspect(1, 100)).toBe(1);
+	});
+
+	it("frames the block layouts with their camera at rest, square", () => {
+		const screen = { width: 1920, height: 1080 };
+		const h = 1080 / 1920;
+		expect(restingCompositionAspect(screen, "picture-in-picture")).toBeCloseTo(16 / 9, 10);
+		expect(restingCompositionAspect(screen, "no-webcam")).toBeCloseTo(16 / 9, 10);
+		expect(restingCompositionAspect(screen, "dual-frame")).toBeCloseTo((1 + 0.02 + h) / h, 10);
+		expect(restingCompositionAspect(screen, "vertical-stack")).toBeCloseTo(1 / (h + 0.02 + 1), 10);
+	});
+
+	it("leaves the fixed formats' padding exactly as it was", () => {
+		expect(paddedContentSize({ width: 1920, height: 1080 }, 50, false)).toEqual({
+			width: 1536,
+			height: 864,
+		});
+		// The even border is the short axis' margin applied to all four sides …
+		expect(paddedContentSize({ width: 1920, height: 1080 }, 50, true)).toEqual({
+			width: 1704,
+			height: 864,
+		});
+		// … so on a square frame the two rules are one.
+		expect(paddedContentSize({ width: 1080, height: 1080 }, 50, true)).toEqual(
+			paddedContentSize({ width: 1080, height: 1080 }, 50, false),
+		);
+	});
+
+	// The whole contract: a frame shaped by `autoFrameAspect`, padded by `paddedContentSize`
+	// and laid out by `computeCompositeLayout` gives the composition back, unbent, with the
+	// same margin on all four sides. Preview and scene both go through exactly these three.
+	const CASES = [
+		{ label: "16:9 screen", screen: { width: 1920, height: 1080 }, preset: "no-webcam" },
+		{
+			label: "16:9 screen + PiP",
+			screen: { width: 1920, height: 1080 },
+			preset: "picture-in-picture",
+		},
+		{ label: "9:16 screen", screen: { width: 1080, height: 1920 }, preset: "no-webcam" },
+		{ label: "window crop", screen: { width: 1366, height: 911 }, preset: "no-webcam" },
+		{ label: "16:9 side by side", screen: { width: 1920, height: 1080 }, preset: "dual-frame" },
+		{ label: "16:9 top / bottom", screen: { width: 1920, height: 1080 }, preset: "vertical-stack" },
+		{ label: "9:16 side by side", screen: { width: 1080, height: 1920 }, preset: "dual-frame" },
+	] as const;
+	for (const c of CASES) {
+		for (const padding of [0, 30, 50, 100]) {
+			it(`${c.label}, padding ${padding}%: even border, nothing bent`, () => {
+				const aspect = autoFrameAspect(restingCompositionAspect(c.screen, c.preset), padding);
+				const canvas =
+					aspect >= 1
+						? { width: 1920, height: Math.round(1920 / aspect) }
+						: { width: Math.round(1920 * aspect), height: 1920 };
+				const layout = computeCompositeLayout({
+					canvasSize: canvas,
+					maxContentSize: paddedContentSize(canvas, padding, true),
+					screenSize: c.screen,
+					webcamSize: c.preset === "no-webcam" ? null : { width: 1280, height: 720 },
+					layoutPreset: c.preset,
+				})!;
+				const block = isWebcamBlockLayout(c.preset);
+				const rects = block ? [layout.screenRect, layout.webcamRect!] : [layout.screenRect];
+				const border = ((1 - paddingFit(padding)) / 2) * Math.min(canvas.width, canvas.height);
+				const sides = [
+					Math.min(...rects.map((r) => r.x)),
+					Math.min(...rects.map((r) => r.y)),
+					canvas.width - Math.max(...rects.map((r) => r.x + r.width)),
+					canvas.height - Math.max(...rects.map((r) => r.y + r.height)),
+				];
+				for (const side of sides) expect(Math.abs(side - border)).toBeLessThanOrEqual(1.5);
+				expect(layout.screenRect.width / layout.screenRect.height).toBeCloseTo(
+					c.screen.width / c.screen.height,
+					1,
+				);
+				if (block) {
+					const cam = layout.webcamRect!;
+					expect(cam.width / cam.height).toBeCloseTo(1, 1);
+				}
+			});
+		}
+	}
 });
 
 describe("computeCameraFullscreenRect", () => {

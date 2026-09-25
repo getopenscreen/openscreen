@@ -106,6 +106,7 @@
 		"blurBg": "Rozmazat pozadí",
 		"help": "Stylizace rámce pro nahrávku: rozmazání pozadí, vrhaný stín, pohybové rozmazání, zaoblení rohů a odsazení kolem videa.",
 		"fitClipOne": "{{count}} klip",
+		"formatAuto": "Auto",
 		"formatOriginal": "Původní",
 		"fitClipMany": "{{count}} klipů",
 		"frame": "Rám",

@@ -253,7 +253,7 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		throw new TypeError("Style preset appearance must be an object.");
 	}
 	if (!isAspectRatio(value.aspectRatio)) {
-		throw new TypeError('Style preset aspectRatio must be "W:H" or "native".');
+		throw new TypeError('Style preset aspectRatio must be "W:H", "auto" or "native".');
 	}
 	const cursor = value.cursor;
 	if (!isRecord(cursor)) {

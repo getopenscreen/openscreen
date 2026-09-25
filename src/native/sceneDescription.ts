@@ -48,6 +48,7 @@ import { takeProgramme } from "@/lib/ai-edition/timeline/take-programme";
 import { projectRegionsToSource } from "@/lib/ai-edition/timeline/timelineMap";
 import {
 	computeCompositeLayout,
+	paddedContentSize,
 	type RenderRect,
 	resolveWebcamLayoutPreset,
 	resolveWebcamReactiveZoom,
@@ -906,7 +907,11 @@ export function buildSceneDescription(
 	// padded content area the preview uses — `compositor.rs` consumes an app-provided
 	// `webcamRect` verbatim (it only scale_frame's the SCREEN by padding), so an
 	// unpadded rect here would leave the camera behind while the screen moved.
-	const paddingFit = 1 - (Math.min(100, Math.max(0, settings.padding)) / 100) * 0.4;
+	const maxContentSize = paddedContentSize(
+		outputDims,
+		settings.padding,
+		settings.aspectRatio === "auto",
+	);
 	/**
 	 * The screen source SHAPE of a clip = its recording's own dimensions × its crop.
 	 *
@@ -981,10 +986,7 @@ export function buildSceneDescription(
 		const preset = resolveWebcamLayoutPreset(settings.webcamLayoutPreset, hasCamera);
 		return computeCompositeLayout({
 			canvasSize: outputDims,
-			maxContentSize: {
-				width: Math.round(outputDims.width * paddingFit),
-				height: Math.round(outputDims.height * paddingFit),
-			},
+			maxContentSize,
 			screenSize,
 			webcamSize: preset === "no-webcam" ? null : camSize,
 			layoutPreset: preset,

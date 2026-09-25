@@ -298,3 +298,60 @@ describe("resolveAspectRatioValue", () => {
 		expect(resolveAspectRatioValue(d, "64:27")).toBeCloseTo(64 / 27, 6);
 	});
 });
+
+describe("Auto", () => {
+	const withEditor = (d: AxcutDocument, editor: Record<string, unknown>): AxcutDocument => ({
+		...d,
+		legacyEditor: { aspectRatio: "auto", ...editor },
+	});
+	const withCamera = (a: AxcutAsset): AxcutAsset => ({
+		...a,
+		cameraTrack: { sourcePath: "/tmp/cam.mp4", startMs: 0, offsetMs: 0, visible: true },
+	});
+	const auto = (d: AxcutDocument) => resolveAspectRatioValue(d, "auto");
+
+	it("is the reference clip's cropped shape at 0% padding", () => {
+		const d = withEditor(
+			doc([asset("a1", 1920, 1080)], [clip("c1", "a1", { x: 0.25, y: 0, width: 0.5, height: 1 })]),
+			{ padding: 0 },
+		);
+		expect(auto(d)).toBeCloseTo(960 / 1080, 6);
+	});
+
+	it("pulls toward square as padding grows, so the border stays even", () => {
+		const d = withEditor(doc([asset("a1", 1920, 1080)], [clip("c1", "a1")]), { padding: 50 });
+		expect(auto(d)).toBeCloseTo(0.8 * (16 / 9) + 0.2, 6);
+	});
+
+	it("widens for side by side only when the reference clip carries a camera", () => {
+		const editor = { padding: 0, webcamLayoutPreset: "dual-frame" };
+		const h = 1080 / 1920;
+		const withCam = withEditor(
+			doc([withCamera(asset("a1", 1920, 1080))], [clip("c1", "a1")]),
+			editor,
+		);
+		const without = withEditor(doc([asset("a1", 1920, 1080)], [clip("c1", "a1")]), editor);
+		expect(auto(withCam)).toBeCloseTo((1 + 0.02 + h) / h, 6);
+		expect(auto(without)).toBeCloseTo(16 / 9, 6);
+	});
+
+	it("lets the clip that sets the output size set its shape on a mixed timeline", () => {
+		const d = withEditor(
+			doc(
+				[asset("small", 1280, 720), asset("big", 1080, 1920)],
+				[clip("c1", "small"), clip("c2", "big")],
+			),
+			{ padding: 0 },
+		);
+		expect(auto(d)).toBeCloseTo(1080 / 1920, 6);
+	});
+
+	it("keeps the reference long side and even pixels for the output", () => {
+		const d = withEditor(doc([asset("a1", 1920, 1080)], [clip("c1", "a1")]), { padding: 50 });
+		expect(pickOutputDims(d, "auto")).toEqual({ width: 1920, height: 1184 });
+	});
+
+	it("falls back to 16:9 with no document to resolve against", () => {
+		expect(resolveAspectRatioValue(null, "auto")).toBeCloseTo(16 / 9, 6);
+	});
+});

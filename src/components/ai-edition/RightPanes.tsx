@@ -47,7 +47,7 @@ import { WALLPAPER_MOTIONS, type WallpaperMotion } from "@/components/video-edit
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
-import { collectNativeFormats } from "@/lib/ai-edition/document/outputFormat";
+import { collectNativeFormats, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
 import type { InsertSide } from "@/lib/ai-edition/document/transcript";
 import type {
 	AxcutAsset,
@@ -2420,6 +2420,9 @@ export function VideoEffectsPane() {
 	// can never disagree about what shape the footage is. Already sorted by clip count then by
 	// pixel area, so [0] is "the shape most of this timeline is in" with no heuristic of ours.
 	const nativeFormats = useMemo(() => (document ? collectNativeFormats(document) : []), [document]);
+	// What Auto resolves to right now, shown on its row: the one entry whose shape moves with
+	// the project (padding, camera layout, crop) has to say where it currently stands.
+	const autoDims = useMemo(() => (document ? pickOutputDims(document, "auto") : null), [document]);
 	const hasTiltedZoom = (document?.zoomRanges ?? []).some((z) => z.rotationPreset != null);
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
 	const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
@@ -2545,9 +2548,11 @@ export function VideoEffectsPane() {
 							    bakes it into a concrete token once clip dimensions are known, and
 							    leaves it alone until then. The group header below is localized, so
 							    without this the two would disagree in twelve locales. */}
-							{settings.aspectRatio === "native"
-								? ts("effects.formatOriginal")
-								: getAspectRatioLabel(settings.aspectRatio)}
+							{settings.aspectRatio === "auto"
+								? ts("effects.formatAuto")
+								: settings.aspectRatio === "native"
+									? ts("effects.formatOriginal")
+									: getAspectRatioLabel(settings.aspectRatio)}
 							<ChevronDown size={11} />
 						</button>
 					</PopoverTrigger>
@@ -2559,6 +2564,25 @@ export function VideoEffectsPane() {
 						className="w-auto border-0 bg-transparent p-0 shadow-none"
 					>
 						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.format")}>
+							{/* Auto leads: it is the one entry that is a rule rather than a shape. */}
+							<button
+								type="button"
+								role="menuitem"
+								className={`${styles.actionMenuRow}${
+									settings.aspectRatio === "auto" ? ` ${styles.isActive}` : ""
+								}`}
+								onClick={() => {
+									setRatioMenuOpen(false);
+									void set({ aspectRatio: "auto" });
+								}}
+							>
+								<span className={styles.actionMenuMain}>{ts("effects.formatAuto")}</span>
+								{autoDims ? (
+									<span className={styles.actionMenuCount}>
+										{`${autoDims.width}×${autoDims.height}`}
+									</span>
+								) : null}
+							</button>
 							{ASPECT_RATIO_PRESETS.map((ratio) => (
 								<button
 									type="button"

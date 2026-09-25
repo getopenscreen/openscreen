@@ -14,6 +14,11 @@
  * which is then stored as a concrete `"W:H"` token and can no longer drift.
  */
 
+import {
+	autoFrameAspect,
+	resolveWebcamLayoutPreset,
+	restingCompositionAspect,
+} from "@/lib/compositeLayout";
 import { calculateEffectiveSourceDimensions } from "@/lib/exporter/mp4ExportSettings";
 import {
 	type AspectRatio,
@@ -22,6 +27,8 @@ import {
 	toAspectRatioToken,
 } from "@/utils/aspectRatioUtils";
 import type { AxcutAsset, AxcutClip, AxcutDocument } from "../schema";
+import { getEditorSettings } from "../store/editorSettings";
+import { assetCameraSource } from "../timeline/camera";
 
 export interface Dims {
 	width: number;
@@ -162,9 +169,51 @@ export function referenceClipDims(
 	probedAssetDims: Record<string, Dims> = {},
 ): Dims {
 	return (
-		pickExtremeDims(collectEffectiveClipDims(document, probedAssetDims), "largest") ??
+		referenceClip(document, probedAssetDims)?.dims ??
+		pickExtremeDims(collectUsedAssetDims(document, probedAssetDims), "largest") ??
 		FALLBACK_OUTPUT_DIMS
 	);
+}
+
+/** The clip behind `referenceClipDims`, for the questions its dims alone can't answer
+ *  (does it carry a camera?). Same pick as `pickExtremeDims`: the first strictly largest. */
+function referenceClip(
+	document: AxcutDocument,
+	probedAssetDims: Record<string, Dims>,
+): { clip: AxcutClip; dims: Dims } | null {
+	const assetById = new Map(document.assets.map((a) => [a.id, a]));
+	let best: { clip: AxcutClip; dims: Dims } | null = null;
+	for (const clip of document.timeline.clips) {
+		const dims = clipEffectiveDims(clip, assetById, probedAssetDims);
+		if (dims && (!best || dims.width * dims.height > best.dims.width * best.dims.height)) {
+			best = { clip, dims };
+		}
+	}
+	return best;
+}
+
+/**
+ * What "Auto" resolves to: the frame shaped around the composition instead of the other way
+ * round (`autoFrameAspect` over `restingCompositionAspect`).
+ *
+ * A video has one frame, so one clip has to answer for the timeline, and it is the clip that
+ * already sets the output's size: `referenceClip`. Its cropped screen and its camera, laid out
+ * with the project's camera layout, are the composition. Every other clip is contain-fitted into
+ * that frame, exactly as it would be into a fixed format.
+ *
+ * Zoom, device frames, shadow and captions are left out on purpose: they happen inside the
+ * frame, in every format alike, and would make the shape move with the playhead.
+ */
+function autoAspectRatioValue(document: AxcutDocument, probedAssetDims: Record<string, Dims>) {
+	const settings = getEditorSettings(document);
+	const reference = referenceClip(document, probedAssetDims);
+	const asset = document.assets.find((a) => a.id === reference?.clip.assetId);
+	const preset = resolveWebcamLayoutPreset(
+		settings.webcamLayoutPreset,
+		assetCameraSource(asset).path !== "",
+	);
+	const screen = reference?.dims ?? referenceClipDims(document, probedAssetDims);
+	return autoFrameAspect(restingCompositionAspect(screen, preset), settings.padding);
 }
 
 /**
@@ -225,17 +274,18 @@ export function collectNativeFormats(
 }
 
 /**
- * Numeric ratio for a stored selection, with the document available to resolve the legacy
- * `"native"` value. Every consumer that frames or sizes the output must go through this rather
- * than bare `getAspectRatioValue`, which has no document and falls back to 16/9.
+ * Numeric ratio for a stored selection, with the document available to resolve `"auto"` and the
+ * legacy `"native"` value. Every consumer that frames or sizes the output must go through this
+ * rather than bare `getAspectRatioValue`, which has no document and falls back to 16/9.
  */
 export function resolveAspectRatioValue(
 	document: AxcutDocument | null | undefined,
 	aspectRatio: AspectRatio,
 	probedAssetDims: Record<string, Dims> = {},
 ): number {
-	if (aspectRatio !== "native") return getAspectRatioValue(aspectRatio);
-	if (!document) return getAspectRatioValue("native");
+	if (aspectRatio !== "native" && aspectRatio !== "auto") return getAspectRatioValue(aspectRatio);
+	if (!document) return getAspectRatioValue(aspectRatio);
+	if (aspectRatio === "auto") return autoAspectRatioValue(document, probedAssetDims);
 	const reference = referenceClipDims(document, probedAssetDims);
 	return getNativeAspectRatioValue(reference.width, reference.height);
 }

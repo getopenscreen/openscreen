@@ -284,6 +284,72 @@ export function getWebcamLayoutCssBoxShadow(
 		: "none";
 }
 
+/**
+ * A block's footprint in UNIT space, where the screen is exactly 1 wide: the screen, the
+ * gap, and a camera `cameraAlong` long on the split axis. One definition for the layout
+ * below and for the resting shape Auto frames, so the two cannot disagree on it.
+ */
+function blockUnitSize(screenAspect: number, block: BlockTransform, cameraAlong: number): Size {
+	const unitScreenHeight = 1 / screenAspect;
+	return block.direction === "row"
+		? { width: 1 + block.gapFraction + cameraAlong, height: unitScreenHeight }
+		: { width: 1, height: unitScreenHeight + block.gapFraction + cameraAlong };
+}
+
+/**
+ * The composition's own shape (width / height) before any frame constrains it — what the
+ * Auto format frames. Nothing is bent to fit: the screen keeps its ratio, and a block
+ * layout's camera takes its resting shape, square, beside or under it. A picture-in-picture
+ * bubble floats over the screen, so the composition is the screen alone.
+ */
+export function restingCompositionAspect(screenSize: Size, preset: WebcamLayoutPreset): number {
+	const screenAspect = screenSize.width / screenSize.height;
+	const transform = getWebcamLayoutPresetDefinition(preset).transform;
+	if (transform.type !== "block") return screenAspect;
+	const cameraCross = transform.direction === "row" ? 1 / screenAspect : 1;
+	const block = blockUnitSize(screenAspect, transform, cameraCross);
+	return block.width / block.height;
+}
+
+/** The share of the frame the composition keeps at `padding` (0–100): 1 at 0%, 0.6 at 100%. */
+export function paddingFit(padding: number): number {
+	return 1 - (Math.min(100, Math.max(0, padding)) / 100) * 0.4;
+}
+
+/**
+ * The box the composition is contain-fitted into: the frame minus its padding.
+ *
+ * A fixed format keeps `paddingFit` of each axis. An Auto frame (`evenBorder`) is shaped
+ * around the composition instead, so its padding is a border of one thickness on all four
+ * sides — `(1 - fit) / 2` of the short side, which is what a fixed format leaves on the
+ * short axis too. The two agree on a square frame, and on the short axis of any frame.
+ */
+export function paddedContentSize(canvas: Size, padding: number, evenBorder: boolean): Size {
+	const fit = paddingFit(padding);
+	if (!evenBorder) {
+		return { width: Math.round(canvas.width * fit), height: Math.round(canvas.height * fit) };
+	}
+	const border = ((1 - fit) / 2) * Math.min(canvas.width, canvas.height);
+	return {
+		width: Math.round(canvas.width - 2 * border),
+		height: Math.round(canvas.height - 2 * border),
+	};
+}
+
+/**
+ * The Auto frame's shape: the composition's resting shape plus an even padding border.
+ *
+ * With `paddedContentSize`'s border, the frame's elongation (long side / short side) is
+ * `fit · e + (1 − fit)` for a composition of elongation `e`: the composition's own at 0%
+ * padding, pulled toward square as the border grows. Orientation never flips.
+ */
+export function autoFrameAspect(compositionAspect: number, padding: number): number {
+	const fit = paddingFit(padding);
+	const elongation = Math.max(compositionAspect, 1 / compositionAspect);
+	const framed = fit * elongation + (1 - fit);
+	return compositionAspect >= 1 ? framed : 1 / framed;
+}
+
 export function computeCompositeLayout(params: {
 	canvasSize: Size;
 	maxContentSize?: Size;
@@ -358,17 +424,24 @@ export function computeCompositeLayout(params: {
 		// size ALONG the split axis is the one free dimension. Three constraints fix
 		// it, in order:
 		//   1. screen keeps its own aspect ratio      → screen is 1 × h, untouched;
-		//   2. the block contain-fits the scene        → pick `along` so the block's
-		//      aspect equals the scene's (fills it, no bars) — see `alongForFill`;
+		//   2. the block contain-fits the padded area → pick `along` so the block's
+		//      aspect equals that area's (fills it, no bars) — see `alongForFill`;
 		//   3. the camera tends toward square          → but clamp `along` so the
 		//      camera stays within `[1/T, T]` of square, so filling the scene only
 		//      nudges it slightly rectangular, never into a slice.
 		// Square is `along === cameraCross`; the clamp is symmetric in both layouts.
+		//
+		// The target is the PADDED area, not the canvas: the block is fitted into the
+		// former, so that is the shape it has to match. The two only differ under an
+		// Auto frame's even border (`paddedContentSize`), which is exactly the shape of
+		// the block at rest, so the camera comes out square there by construction.
+		const contentWidth = Math.min(canvasWidth, Math.max(1, maxContentSize.width));
+		const contentHeight = Math.min(canvasHeight, Math.max(1, maxContentSize.height));
 		const cameraCross = isRow ? unitScreenHeight : 1;
-		const sceneAspect = canvasWidth / canvasHeight;
+		const contentAspect = contentWidth / contentHeight;
 		const alongForFill = isRow
-			? sceneAspect * unitScreenHeight - 1 - gap // block width  = 1 + gap + along
-			: 1 / sceneAspect - unitScreenHeight - gap; // block height = h + gap + along
+			? contentAspect * unitScreenHeight - 1 - gap // block width  = 1 + gap + along
+			: 1 / contentAspect - unitScreenHeight - gap; // block height = h + gap + along
 		const cameraAlong = Math.min(
 			cameraCross * BLOCK_CAMERA_ASPECT_TOLERANCE,
 			Math.max(cameraCross / BLOCK_CAMERA_ASPECT_TOLERANCE, alongForFill),
@@ -376,15 +449,16 @@ export function computeCompositeLayout(params: {
 
 		const unitCameraWidth = isRow ? cameraAlong : 1;
 		const unitCameraHeight = isRow ? unitScreenHeight : cameraAlong;
-		const blockWidth = isRow ? 1 + gap + cameraAlong : 1;
-		const blockHeight = isRow ? unitScreenHeight : unitScreenHeight + gap + cameraAlong;
+		const { width: blockWidth, height: blockHeight } = blockUnitSize(
+			screenAspect,
+			block,
+			cameraAlong,
+		);
 
-		// Contain-fit the whole block into the padded content area. `maxContentSize`
-		// is `canvasSize × paddingFit`, so padding shrinks the BLOCK (not just the
-		// screen) and padding 0 leaves it flush against the two scene edges its own
-		// ratio makes it touch — bottom/top for a column, left/right for a row.
-		const contentWidth = Math.min(canvasWidth, Math.max(1, maxContentSize.width));
-		const contentHeight = Math.min(canvasHeight, Math.max(1, maxContentSize.height));
+		// Contain-fit the whole block into the padded content area, so padding
+		// shrinks the BLOCK (not just the screen) and padding 0 leaves it flush
+		// against the two scene edges its own ratio makes it touch — bottom/top for a
+		// column, left/right for a row.
 		const scale = Math.min(contentWidth / blockWidth, contentHeight / blockHeight);
 
 		const originX = (canvasWidth - blockWidth * scale) / 2;

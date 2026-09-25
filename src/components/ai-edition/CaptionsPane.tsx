@@ -16,6 +16,7 @@ import type { CaptionAnchorH, CaptionAnchorV } from "@/lib/ai-edition/captions";
 import {
 	CAPTION_INSET_X_MAX,
 	CAPTION_INSET_Y_MAX,
+	DEFAULT_CAPTION_SETTINGS,
 	untranslatedUnits,
 } from "@/lib/ai-edition/captions";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -454,6 +455,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 						value={settings.fontSize}
 						min={16}
 						max={140}
+						defaultValue={DEFAULT_CAPTION_SETTINGS.fontSize}
 						suffix="px"
 						disabled={disabled}
 						onChange={(v) => setLive({ fontSize: v })}
@@ -500,6 +502,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 							value={Math.round(settings.backgroundOpacity * 100)}
 							min={0}
 							max={100}
+							defaultValue={Math.round(DEFAULT_CAPTION_SETTINGS.backgroundOpacity * 100)}
 							suffix="%"
 							disabled={disabled}
 							onChange={(v) => setLive({ backgroundOpacity: v / 100 })}
@@ -546,6 +549,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 						value={settings.insetY}
 						min={0}
 						max={CAPTION_INSET_Y_MAX}
+						defaultValue={DEFAULT_CAPTION_SETTINGS.insetY}
 						step={0.5}
 						decimals={1}
 						suffix="%"
@@ -578,6 +582,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 							value={settings.insetX}
 							min={0}
 							max={CAPTION_INSET_X_MAX}
+							defaultValue={DEFAULT_CAPTION_SETTINGS.insetX}
 							step={0.5}
 							decimals={1}
 							suffix="%"

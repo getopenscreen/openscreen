@@ -35,8 +35,8 @@ import { createId } from "@/lib/ai-edition/document/ids";
 import { pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
 import {
 	type PlaybackSegment,
-	type PlaybackSpeedRegion,
 	projectRawTimelineSecToPlayback,
+	readSpeedRegions,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
 import type { AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
@@ -629,11 +629,7 @@ export function buildSceneDescription(
 	// after a speed region at the wrong second. The tracks themselves are never
 	// stretched — a voiceover should not chipmunk because the video under it was
 	// sped up.
-	const rawSpeedRegions = (
-		((document.legacyEditor as Record<string, unknown> | null)?.speedRegions as
-			| PlaybackSpeedRegion[]
-			| undefined) ?? []
-	).filter((r) => Number.isFinite(r.speed) && r.speed > 0);
+	const rawSpeedRegions = readSpeedRegions(document);
 	// The one removed set, hoisted out of the map: every voiceover asks it the same
 	// question, and it does not depend on the track.
 	// Placed once: the projection below counts them, so a track after a pause lands where
@@ -883,9 +879,7 @@ export function buildSceneDescription(
 	// every other field verbatim via `{...region}` — so the `speed` field passes through,
 	// and the splitting-across-clips semantics match zoomRegions / cameraFullscreenRegions.
 	const projectedSpeedRegions = projectRegionsToSource(
-		((document.legacyEditor as Record<string, unknown> | null)?.speedRegions as
-			| SpeedRegion[]
-			| undefined) ?? [],
+		readSpeedRegions<SpeedRegion>(document),
 		visibleClips,
 		document.timeline.clips,
 		() => createId("speed"),

@@ -180,6 +180,23 @@ describe("axcut-schema v8", () => {
 		expect(region.style.lastBackgroundColor).toBe("#3b82f6");
 	});
 
+	it("reads a text size into its bound instead of refusing the project", () => {
+		const sizeOf = (fontSize: number) =>
+			annotationRegionSchema.parse({
+				id: "ann_1",
+				startMs: 0,
+				endMs: 1500,
+				type: "text",
+				content: "hello",
+				position: { x: 4, y: 86 },
+				size: { width: 92, height: 12 },
+				style: { fontSize },
+				zIndex: 1,
+			}).style.fontSize;
+		// 0 is what an emptied size field used to store: it opens as the smallest text.
+		expect([sizeOf(0), sizeOf(24), sizeOf(500)]).toEqual([8, 24, 200]);
+	});
+
 	it("zoomRegionSchema rejects unknown depths", () => {
 		expect(() =>
 			zoomRegionSchema.parse({

@@ -58,6 +58,7 @@ import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
+import { clampToBound } from "@/lib/projectDefaults";
 import { ColorField } from "../ColorField";
 import shell from "../NewEditorShell.module.css";
 import {
@@ -648,6 +649,50 @@ export function SpeedControl({
 	);
 }
 
+/**
+ * The text size as a free field, committed on blur like the speed and zoom fields above it and
+ * read into `SETTING_BOUNDS.annotationFontSize`. It used to write every keystroke as typed, so an
+ * emptied field stored a size of 0 and the text vanished.
+ */
+export function AnnotationSizeField({
+	label,
+	size,
+	onCommit,
+}: {
+	label: string;
+	size: number;
+	onCommit: (size: number) => void;
+}) {
+	// "" means the field is idle and shows the live size as its placeholder.
+	const [draft, setDraft] = useState("");
+	const commitDraft = () => {
+		const text = draft.trim().replace(",", ".");
+		setDraft("");
+		// Empty or unparseable reverts to the live size rather than guessing at an intent.
+		if (text === "" || !Number.isFinite(Number(text))) return;
+		const next = Math.round(clampToBound(Number(text), "annotationFontSize"));
+		if (next !== size) onCommit(next);
+	};
+	return (
+		<input
+			type="text"
+			inputMode="numeric"
+			aria-label={label}
+			placeholder={String(size)}
+			value={draft}
+			onChange={(e) => setDraft(e.target.value)}
+			onBlur={commitDraft}
+			// Enter blurs, and the blur handler commits: one path, so a keyboard commit can't
+			// apply the same draft twice.
+			onKeyDown={(e) => {
+				if (e.key === "Enter") e.currentTarget.blur();
+			}}
+			className={shell.control}
+			style={{ width: 84, textAlign: "right" }}
+		/>
+	);
+}
+
 function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }) {
 	const ts = useScopedT("settings");
 	const tt = useScopedT("timeline");
@@ -995,6 +1040,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								value={region.figureData?.strokeWidth ?? 4}
 								min={1}
 								max={20}
+								// The schema's default (`figureDataSchema`), the width every new arrow starts at.
+								defaultValue={4}
 								onChange={(next) =>
 									tl.updateAnnotationLive(region.id, {
 										figureData: {
@@ -1065,23 +1112,16 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					{region.type === "text"
 						? paneRow(
 								ts("annotation.size"),
-								<input
-									type="number"
-									min={8}
-									max={200}
-									step={1}
-									// Le nombre saisi vaut « pixels à 1080 » (cf. annotationScale.ts) : preview et
-									// rendu le multiplient tous deux par la hauteur de leur boîte, donc ce champ
-									// veut dire la même chose des deux côtés.
-									value={region.style?.fontSize ?? 32}
-									onChange={(e) =>
-										tl.updateAnnotationLive(region.id, {
-											style: { ...region.style, fontSize: Number(e.target.value) },
-										})
-									}
-									onBlur={commitAnnotation}
-									className={shell.control}
-									style={{ width: 84, textAlign: "right" }}
+								// Le nombre saisi vaut « pixels à 1080 » (cf. annotationScale.ts) : preview et
+								// rendu le multiplient tous deux par la hauteur de leur boîte, donc ce champ
+								// veut dire la même chose des deux côtés.
+								<AnnotationSizeField
+									label={ts("annotation.size")}
+									size={region.style?.fontSize ?? 32}
+									onCommit={(fontSize) => {
+										tl.updateAnnotationLive(region.id, { style: { ...region.style, fontSize } });
+										commitAnnotation();
+									}}
 								/>,
 							)
 						: null}

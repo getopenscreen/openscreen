@@ -279,7 +279,7 @@ describe("buildSceneDescription.webcamEffect", () => {
 		expect(buildSceneDescription(doc).webcamEffect).toEqual({
 			mode: "blur",
 			blurIntensity: 0.85,
-			background: { kind: "image", path: "/wallpapers/wallpaper1.jpg" },
+			background: { kind: "image", path: "/wallpapers/wallpaper11.jpg" },
 		});
 	});
 

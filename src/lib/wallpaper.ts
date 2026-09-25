@@ -2,9 +2,12 @@ import { getAssetPath } from "@/lib/assetPath";
 
 export const WALLPAPER_COUNT = 18;
 
-export const WALLPAPER_PATHS: readonly string[] = Array.from(
-	{ length: WALLPAPER_COUNT },
-	(_, i) => `/wallpapers/wallpaper${i + 1}.jpg`,
+// Picker order, by file number. The first is the default; files keep their names so saved
+// projects still resolve. 2 sits away from 11, the two look almost alike side by side.
+const WALLPAPER_ORDER = [11, 1, 3, 4, 5, 6, 7, 8, 9, 10, 2, 12, 13, 14, 15, 16, 17, 18];
+
+export const WALLPAPER_PATHS: readonly string[] = WALLPAPER_ORDER.map(
+	(n) => `/wallpapers/wallpaper${n}.jpg`,
 );
 
 // Small (240x240, ~3-8KB) pre-generated copies used ONLY for the picker grid's swatches — the
@@ -12,9 +15,8 @@ export const WALLPAPER_PATHS: readonly string[] = Array.from(
 // what actually gets rendered/exported. Without this the grid was decoding all 18 originals
 // (~20MB combined) simultaneously just to paint a few dozen px each (reported: picker felt slow
 // to load).
-export const WALLPAPER_THUMB_PATHS: readonly string[] = Array.from(
-	{ length: WALLPAPER_COUNT },
-	(_, i) => `/wallpapers/thumbs/wallpaper${i + 1}.jpg`,
+export const WALLPAPER_THUMB_PATHS: readonly string[] = WALLPAPER_ORDER.map(
+	(n) => `/wallpapers/thumbs/wallpaper${n}.jpg`,
 );
 
 export const DEFAULT_WALLPAPER = WALLPAPER_PATHS[0];

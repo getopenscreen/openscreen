@@ -86,18 +86,118 @@ export const DEFAULT_CURSOR_SPRITES: Record<NativeCursorType, CursorSprite> = {
 };
 
 /**
- * Bundled cursor themes. Empty on purpose: every pack this list used to carry came from
- * sweezy-cursors.com, whose terms allow personal, non-commercial use and forbid
- * redistributing or repackaging the packs without written permission. Most of them also
- * drew characters owned by third parties. A pack comes back only under a licence that
- * allows redistribution inside an MIT app, recorded in THIRD-PARTY-NOTICES.md.
+ * Bundled cursor themes. These five packs are original OpenScreen artwork. Their editable
+ * SVGs live in design/cursors/ and are rasterized by scripts/generate-original-cursor-themes.mjs.
+ * The former Sweezy packs were removed
+ * because their terms forbid redistribution without written permission.
  *
  * To add one: drop arrow.png/pointer.png into public/cursors/<id>/ and add an entry here
  * with hotspots normalized to the 32-logical reference (divide a 128px-pack hotspot by 4).
  * No renderer changes needed. An id that leaves this list reads back as the default art
  * through `normalizeCursorThemeId`, so a project saved with it still opens.
  */
-export const CURSOR_THEMES: readonly CursorTheme[] = [];
+export const CURSOR_THEMES: readonly CursorTheme[] = [
+	{
+		id: "studio-ink",
+		name: "Studio Ink",
+		assets: {
+			arrow: {
+				assetPath: "cursors/studio-ink/arrow.png",
+				width: 32,
+				height: 32,
+				hotspotX: 3,
+				hotspotY: 2.5,
+			},
+			pointer: {
+				assetPath: "cursors/studio-ink/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 13.7,
+				hotspotY: 2.5,
+			},
+		},
+	},
+	{
+		id: "prism-glow",
+		name: "Prism Glow",
+		assets: {
+			arrow: {
+				assetPath: "cursors/prism-glow/arrow.png",
+				width: 32,
+				height: 32,
+				hotspotX: 3,
+				hotspotY: 2.5,
+			},
+			pointer: {
+				assetPath: "cursors/prism-glow/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 13.7,
+				hotspotY: 2.5,
+			},
+		},
+	},
+	{
+		id: "pop-coral",
+		name: "Pop Coral",
+		assets: {
+			arrow: {
+				assetPath: "cursors/pop-coral/arrow.png",
+				width: 32,
+				height: 32,
+				hotspotX: 3,
+				hotspotY: 2.5,
+			},
+			pointer: {
+				assetPath: "cursors/pop-coral/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 13.7,
+				hotspotY: 2.5,
+			},
+		},
+	},
+	{
+		id: "pixel-candy",
+		name: "Pixel Candy",
+		assets: {
+			arrow: {
+				assetPath: "cursors/pixel-candy/arrow.png",
+				width: 32,
+				height: 32,
+				hotspotX: 3,
+				hotspotY: 3,
+			},
+			pointer: {
+				assetPath: "cursors/pixel-candy/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 13.5,
+				hotspotY: 2,
+			},
+		},
+	},
+	{
+		id: "star-sprout",
+		name: "Star Sprout",
+		assets: {
+			arrow: {
+				assetPath: "cursors/star-sprout/arrow.png",
+				width: 32,
+				height: 32,
+				hotspotX: 3,
+				hotspotY: 2.5,
+			},
+			pointer: {
+				assetPath: "cursors/star-sprout/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 13.7,
+				hotspotY: 2.5,
+			},
+		},
+	},
+];
 
 /** All selectable theme ids, including the built-in default. */
 export const CURSOR_THEME_IDS: ReadonlySet<string> = new Set([

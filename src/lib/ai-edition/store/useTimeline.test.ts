@@ -1296,6 +1296,63 @@ describe("useTimeline undo history", () => {
 		});
 	});
 
+	// A resize built its save from the render's document, outside the zoom chain: whichever of
+	// the two saves landed last put the other's field back.
+	it("keeps a pending zoom level when the pill is resized before it lands", async () => {
+		seed(docWithZoom);
+		const gate = gateFirstSave();
+		const { result } = renderTimeline();
+
+		const pDepth = result.current.updateZoomDepth("zoom_a", 4);
+		const pSpan = result.current.updateZoomSpan("zoom_a", 1500, 3500);
+		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
+		await act(async () => {
+			gate.release?.();
+			await Promise.all([pDepth, pSpan]);
+		});
+
+		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
+			depth: 4,
+			startMs: 1500,
+			endMs: 3500,
+		});
+	});
+
+	// The inspector's "Reset focus point" is a live write and its commit in one click, next to
+	// the level buttons. The level landing first also takes the live focus off screen, so the
+	// commit has to put it back on top rather than save what it finds.
+	it("keeps a pending zoom level when a focus is committed before it lands", async () => {
+		seed(docWithZoom);
+		const gate = gateFirstSave();
+		const { result } = renderTimeline();
+
+		const pDepth = result.current.updateZoomDepth("zoom_a", 4);
+		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
+		act(() => result.current.updateZoomFocusLive("zoom_a", { cx: 0.8, cy: 0.2 }));
+		const pCommit = result.current.commitZoomFocus();
+		await act(async () => {
+			gate.release?.();
+			await Promise.all([pDepth, pCommit]);
+		});
+
+		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
+			depth: 4,
+			focus: { cx: 0.8, cy: 0.2 },
+		});
+		// One undo step each, the focus first.
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
+			depth: 4,
+			focus: { cx: 0.5, cy: 0.5 },
+		});
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(3);
+	});
+
 	// Rebase-review finding (queued zoom writes vs. document replacement): a zoom write
 	// queued behind a still-pending one starts AFTER an undo has restored the document,
 	// and must not apply its stale patch to the replacement. The in-flight write itself

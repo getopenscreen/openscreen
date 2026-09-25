@@ -852,17 +852,15 @@
 .paneSection.isActive { display: block; }
 
 /* ─── pane rows (label + control) ─────────────────────────────── */
-/* A soft fill, not a hairline box on the sunken --bg: the card reads as a surface. */
+/* Free rows, the way Screen Studio sets its settings: label and control on one line, flush with
+   the section labels, grouped by those labels and by space rather than each boxed in a card. */
 .paneRow {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 12px 14px;
+	padding: 12px 0;
 	margin: 8px var(--sp-4);
-	border: 0;
-	border-radius: 12px;
-	background: color-mix(in oklab, var(--fg) 5%, transparent);
 }
 .paneRow .label { font: 500 var(--fs-app) var(--font-body); color: var(--fg-2); }
 .paneRow .info {
@@ -1264,11 +1262,9 @@ textarea.control {
 	gap: 8px;
 	padding: 0 var(--sp-4) var(--sp-4);
 }
+/* A free row too, like .paneRow: no card around the label, value and track. */
 .sliderCell {
-	border: 0;
-	border-radius: 12px;
-	background: color-mix(in oklab, var(--fg) 5%, transparent);
-	padding: 12px 14px;
+	padding: 12px 0;
 	display: grid;
 	grid-template-rows: auto auto;
 	gap: 10px;

@@ -35,7 +35,6 @@ import {
 	MAX_PLAYBACK_SPEED,
 	MOVING_ROTATION_3D_PRESETS,
 	type Rotation3DPreset,
-	SPEED_OPTIONS,
 	ZOOM_DEPTH_SCALES,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -430,10 +429,10 @@ function convertAnnotationKind(
 }
 
 const ZOOM_DEPTHS = [1, 2, 3, 4, 5, 6] as const;
-// The ladder the shared editor already ships (`SPEED_OPTIONS`), plus 1× so the select can
-// express "back to normal". It stops at 5×; the free field in `SpeedControl` is what reaches
-// `MAX_PLAYBACK_SPEED`.
-const SPEED_PRESETS = [1, ...SPEED_OPTIONS.map((option) => option.speed)].sort((a, b) => a - b);
+// The speeds people actually reach for, one row of buttons: slow down, back to normal, and three
+// steps up. Every other speed (the shared ladder's 0.25×, 3×, 5×, anything up to
+// `MAX_PLAYBACK_SPEED`) is one entry in the free field below, which is why the row stays short.
+const SPEED_PRESETS = [0.5, 1, 1.5, 2, 4];
 
 /**
  * Preset select + free numeric field, the speed UX this editor already had translations for
@@ -470,13 +469,12 @@ export function SpeedControl({
 
 	return (
 		<>
-			{/* The presets as buttons, six to a row like the zoom levels. A custom speed presses
-			    none of them; the field below shows it as its placeholder. */}
+			{/* A speed outside the row presses no button; the field below shows it as its
+			    placeholder. */}
 			{paneStack(
 				ts("speed.playbackSpeed"),
 				<ChoiceRow<number>
 					label={ts("speed.playbackSpeed")}
-					columns={6}
 					options={SPEED_PRESETS.map((speed) => ({ value: speed, label: `${speed}×` }))}
 					value={region.speed}
 					onChange={(speed) => void tl.updateSpeedValue(region.id, speed)}

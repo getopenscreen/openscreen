@@ -182,20 +182,23 @@ const fmtTick = new Function(
 		.replace(/\): string/, ")")}; return fmtTick;`,
 )();
 
-/** ClipWaveform's three expressions, in its own words. */
-const waveBarCount = new Function(
+/** ClipWaveform's sample count, its height per sample and the shape it draws, in its own words. */
+const waveSampleCount = new Function(
 	"sourceStartSec",
 	"sourceEndSec",
-	`return ${lift(/const barCount = ([^;]+);/, "waveform barCount")};`,
+	`return ${lift(/const sampleCount = ([^;]+);/, "waveform sampleCount")};`,
 );
-const waveBarHeightPct = new Function(
-	"amplitude",
-	`return ${lift(/height: `\$\{([^}]+)\}%`/, "waveform bar height")};`,
+const waveHeightPct = new Function(
+	"h",
+	"gain",
+	`return ${lift(/levels\.map\(\(h\) => (.+)\),\n/, "waveform height")};`,
 );
-const waveBarOpacity = new Function(
-	"amplitude",
-	`return ${lift(/opacity: ([^,\n]+),\n/, "waveform bar opacity")};`,
-);
+const waveformPaths = new Function(
+	`${lift(/(function waveformPaths\([\s\S]*?\n\})/, "waveformPaths")
+		.replace(/\): \{ area: string; line: string \}/, ")")
+		.replace(/: readonly number\[\]/, "")
+		.replace(/: number/g, "")}; return waveformPaths;`,
+)();
 
 // ── the fixture ─────────────────────────────────────────────────────────
 if (ARGS.has("--vendor")) vendorFixture();
@@ -263,14 +266,14 @@ function vendorFixture() {
 }
 
 /**
- * The 320 bar amplitudes the app's clip card draws.
+ * The 320 amplitudes the app's clip card draws its waveform through.
  *
  * `audioPeaksWorker.ts` is a Web Worker whose only entry point is
  * `self.onmessage`, so it cannot be imported the way `format.ts` can. Its block
  * arithmetic is reproduced here — the one piece of app logic this file
  * duplicates rather than runs, and the reason it is written out in full instead
- * of summarised. Everything downstream of it (bar count, bar height, bar
- * opacity) is lifted from V4Timeline.tsx and evaluated, not retyped.
+ * of summarised. Everything downstream of it (sample count, height, the curve)
+ * is lifted from V4Timeline.tsx and evaluated, not retyped.
  */
 function decodePeaks(asset) {
 	const pcm = execFileSync(
@@ -302,16 +305,16 @@ function decodePeaks(asset) {
 		peaks[i * 2 + 1] = maxVal;
 	}
 
-	// V4Timeline.tsx ClipWaveform: reduce the blocks to one amplitude per bar.
+	// V4Timeline.tsx ClipWaveform: reduce the blocks to one amplitude per sample.
 	const durationSec = asset.durationSec;
-	const barCount = waveBarCount(0, durationSec);
+	const sampleCount = waveSampleCount(0, durationSec);
 	const blocksPerSec = N / durationSec;
 	const endBlock = Math.min(N, Math.ceil(durationSec * blocksPerSec));
 	const rangeBlocks = Math.max(1, endBlock);
 	const amps = [];
-	for (let i = 0; i < barCount; i++) {
-		const blockStart = Math.floor((i / barCount) * rangeBlocks);
-		const blockEnd = Math.max(blockStart + 1, Math.floor(((i + 1) / barCount) * rangeBlocks));
+	for (let i = 0; i < sampleCount; i++) {
+		const blockStart = Math.floor((i / sampleCount) * rangeBlocks);
+		const blockEnd = Math.max(blockStart + 1, Math.floor(((i + 1) / sampleCount) * rangeBlocks));
 		let amp = 0;
 		for (let b = blockStart; b < blockEnd && b < N; b++) {
 			amp = Math.max(amp, Math.abs(peaks[b * 2]), Math.abs(peaks[b * 2 + 1]));
@@ -323,7 +326,7 @@ function decodePeaks(asset) {
 		source: asset.originalPath.replace(/^.*\//, ""),
 		sampleRateHz: 48000,
 		blocks: N,
-		barCount,
+		sampleCount,
 		amps,
 	};
 }
@@ -485,41 +488,21 @@ const RULER = {
 };
 
 // ── waveform ────────────────────────────────────────────────────────────
-// 320 bars are 320 elements for a shape nobody can resolve at 2 px. They become
-// five <path>s, one per opacity bucket: the app's own `0.5 + amp*0.5` rounded
-// down to the nearest tenth, which is the whole of the declared quantisation.
-// Geometry is left in ruler units — one unit per bar slot, 100 units tall — so
-// the component can stretch it with `preserveAspectRatio="none"` and keep the
-// bars at the app's literal 2 px with `vector-effect: non-scaling-stroke`.
-const OPACITY_BUCKETS = [0.5, 0.6, 0.7, 0.8, 0.9];
-
+// The clip card's two paths, built by the app's own `waveformPaths`: a filled
+// area and the line along its top, one unit per sample and 100 units tall, which
+// the component stretches with `preserveAspectRatio="none"` as `.tlWave` does.
+// Gain 1: the document leaves the output gain at 0 dB.
 function buildWaveform() {
 	const amps = doc.vendoredWaveform.amps;
-	const buckets = OPACITY_BUCKETS.map(() => []);
-	for (let i = 0; i < amps.length; i++) {
-		const h = amps[i];
-		const exact = Number(waveBarOpacity(h));
-		const bucket = Math.min(OPACITY_BUCKETS.length - 1, Math.floor((exact - 0.5) / 0.1 + 1e-9));
-		const heightPct = waveBarHeightPct(h);
-		const y0 = (100 - heightPct) / 2;
-		const y1 = y0 + heightPct;
-		buckets[bucket].push(`M${i + 0.5} ${trimNum(y0)}V${trimNum(y1)}`);
-	}
+	const { area, line } = waveformPaths(amps.map((h) => waveHeightPct(h, 1)));
 	return {
-		viewBox: `0 0 ${amps.length} 100`,
-		barCount: amps.length,
-		strokeWidthPx: 2,
-		gapPx: 1,
-		note: "preserveAspectRatio=none; stroke-width 2 with vector-effect:non-scaling-stroke reproduces .tlWave span {max-width:2px}",
-		paths: buckets.map((segments, i) => ({
-			opacity: OPACITY_BUCKETS[i],
-			bars: segments.length,
-			d: segments.join(""),
-		})),
+		viewBox: `0 0 ${amps.length - 1} 100`,
+		sampleCount: amps.length,
+		area,
+		line,
 	};
 }
 
-const trimNum = (n) => String(Number(n.toFixed(1)));
 const WAVEFORM = buildWaveform();
 
 // ── chat ────────────────────────────────────────────────────────────────
@@ -1261,7 +1244,7 @@ export const PILLS: RecreationPill[] = ${litRows(PILLS)};
 /** The ruler, re-derived per breakpoint the way the app re-derives it per zoom. */
 export const RULER = ${litRuler(RULER)} as const;
 
-/** ${WAVEFORM.barCount} bars in five opacity buckets, five paths. */
+/** ${WAVEFORM.sampleCount} samples as one smooth area under a line, the clip card's two paths. */
 export const WAVEFORM = ${lit(WAVEFORM)} as const;
 
 /** The conversation. */
@@ -1323,7 +1306,7 @@ if (CHECK) {
 	console.log(
 		`wrote ${GENERATED}\n  ${WORDS.length} transcript entries (${INSPECTOR.wordCount} words, ${INSPECTOR.silenceCount} silences)\n` +
 			`  ${PILLS.length} pills, ${LANES.filter((l) => l.hint).length} hints, ${RULER.variants[0].labels.length}/${RULER.variants[1].labels.length} ruler labels\n` +
-			`  ${WAVEFORM.barCount} waveform bars in ${WAVEFORM.paths.length} paths, ${PROVENANCE.length} provenance entries`,
+			`  ${WAVEFORM.sampleCount} waveform samples, ${PROVENANCE.length} provenance entries`,
 	);
 }
 

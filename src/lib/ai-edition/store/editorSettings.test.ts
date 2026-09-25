@@ -5,6 +5,7 @@ import {
 	DEFAULT_WEBCAM_LAYOUT_PRESET,
 	DEFAULT_WEBCAM_MASK_SHAPE,
 } from "@/components/video-editor/types";
+import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
 import { DEFAULT_EDITOR_SETTINGS, getEditorSettings, patchEditorSettings } from "./editorSettings";
@@ -98,6 +99,14 @@ describe("getEditorSettings", () => {
 		expect(getEditorSettings(junk).depthOfField).toBe(true);
 		const off = patchEditorSettings(baseDoc, { depthOfField: false });
 		expect(getEditorSettings(off).depthOfField).toBe(false);
+	});
+
+	it("reads a cursor pack the app no longer ships as the default art", () => {
+		const doc: AxcutDocument = {
+			...baseDoc,
+			legacyEditor: { cursorTheme: "hello-kitty-watermelon" },
+		};
+		expect(getEditorSettings(doc).cursorTheme).toBe(DEFAULT_CURSOR_THEME_ID);
 	});
 });
 

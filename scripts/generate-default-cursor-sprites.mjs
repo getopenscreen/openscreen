@@ -7,7 +7,7 @@
 // default art and falls back to a math dot+ring, which is not what the OS cursor
 // looks like.
 //
-// The PNGs are cropped to the art's alpha bounds. The sweezy theme packs fill their
+// The PNGs are cropped to the art's alpha bounds. A theme pack typically fills its
 // 128x128 box edge to edge, while the built-in SVGs sit in the middle of a 32-unit
 // canvas using only ~55% of it — uncropped, every built-in cursor would render about
 // half the size of a themed one at the same size slider. Cropping puts both on the

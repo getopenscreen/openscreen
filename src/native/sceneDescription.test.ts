@@ -18,6 +18,7 @@ import type {
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
+import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
 import { buildSceneDescription, wallpaperAcceptsMotion } from "./sceneDescription";
@@ -1148,7 +1149,9 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(scene.layout.webcamMirror).toBe(true);
 		expect(scene.cursor.show).toBe(false);
 		expect(scene.cursor.autoHide).toBe(true);
-		expect(scene.cursor.theme).toBe("macos-dark");
+		// A theme the app does not ship reaches the compositor as the default, the only
+		// theme it builds the modelled cursor for.
+		expect(scene.cursor.theme).toBe(DEFAULT_CURSOR_THEME_ID);
 	});
 
 	it("populates layout.webcamRect with computeCompositeLayout's webcamRect, in fractions", () => {

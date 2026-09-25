@@ -133,16 +133,17 @@ and **one** encoder + muxer pair:
   width / height / bitrate, and passes `width` / `height` to `exportMulti`.
   Only "Source" quality targets those source dims; 720p / 1080p target a
   fixed short side regardless.
-  **Auto** resolves in that same function: the reference clip's cropped
-  screen, laid out with the camera layout at rest (`restingCompositionAspect`),
-  plus an even padding border (`autoFrameAspect`). The preview and the scene
-  pad an Auto frame with the matching border (`paddedContentSize`,
+  **Auto** resolves in that same function: the first clip's cropped screen,
+  laid out with the camera layout at rest (`restingCompositionAspect`), plus
+  an even padding border (`autoFrameAspect`). The preview and the scene pad an
+  Auto frame with the matching border (`paddedContentSize`,
   `compositeLayout.ts`), so the composition fills it with the same margin on
   all four sides. Auto is only offered while every clip has the same ratio,
   crop included, and the same effective layout: picture-in-picture, a block
   layout, or no camera (`isAutoFormatAvailable`). With mixed clips the menu
-  disables it, and a project already on Auto keeps the reference clip's frame
-  until the user picks a format.
+  leaves it out. A project already on Auto keeps it listed, disabled, and keeps
+  the first clip's frame, so a clip added after it moves nothing, until the
+  user picks a format. The output size still follows the largest clip.
 
 ## Output formats and codecs
 

@@ -170,27 +170,9 @@ export function referenceClipDims(
 	probedAssetDims: Record<string, Dims> = {},
 ): Dims {
 	return (
-		referenceClip(document, probedAssetDims)?.dims ??
-		pickExtremeDims(collectUsedAssetDims(document, probedAssetDims), "largest") ??
+		pickExtremeDims(collectEffectiveClipDims(document, probedAssetDims), "largest") ??
 		FALLBACK_OUTPUT_DIMS
 	);
-}
-
-/** The clip behind `referenceClipDims`, for the questions its dims alone can't answer
- *  (does it carry a camera?). Same pick as `pickExtremeDims`: the first strictly largest. */
-function referenceClip(
-	document: AxcutDocument,
-	probedAssetDims: Record<string, Dims>,
-): { clip: AxcutClip; dims: Dims } | null {
-	const assetById = new Map(document.assets.map((a) => [a.id, a]));
-	let best: { clip: AxcutClip; dims: Dims } | null = null;
-	for (const clip of document.timeline.clips) {
-		const dims = clipEffectiveDims(clip, assetById, probedAssetDims);
-		if (dims && (!best || dims.width * dims.height > best.dims.width * best.dims.height)) {
-			best = { clip, dims };
-		}
-	}
-	return best;
 }
 
 /**
@@ -235,25 +217,44 @@ export function isAutoFormatAvailable(
 }
 
 /**
+ * The clip that opens the timeline, among those whose dimensions are known: where Auto reads
+ * the composition it frames.
+ */
+function firstClip(
+	document: AxcutDocument,
+	probedAssetDims: Record<string, Dims>,
+): { clip: AxcutClip; dims: Dims } | null {
+	const assetById = new Map(document.assets.map((a) => [a.id, a]));
+	let first: { clip: AxcutClip; dims: Dims } | null = null;
+	for (const clip of document.timeline.clips) {
+		const dims = clipEffectiveDims(clip, assetById, probedAssetDims);
+		if (dims && (!first || clip.timelineStartSec < first.clip.timelineStartSec)) {
+			first = { clip, dims };
+		}
+	}
+	return first;
+}
+
+/**
  * What "Auto" resolves to: the frame shaped around the composition instead of the other way
  * round (`autoFrameAspect` over `restingCompositionAspect`).
  *
  * Auto is only offered while the timeline holds one composition (`isAutoFormatAvailable`), so
- * any clip describes it; `referenceClip`, the clip that sets the output size, is the one read.
- * A project saved on Auto can still become mixed later, when a clip of another shape is added:
- * the frame then stays on that same reference clip, so adding a smaller clip moves nothing, and
- * the menu shows Auto as unavailable until the user picks a format.
+ * any clip describes it, and the first one is read. That choice only matters for a project that
+ * was on Auto and then became mixed: its frame keeps the first clip's shape, so a clip added
+ * after it, larger or not, moves nothing until the user picks a format. The output's SIZE still
+ * follows the largest clip (`referenceClipDims`), so no clip is drawn past its own resolution.
  *
  * Zoom, device frames, shadow and captions are left out on purpose: they happen inside the
  * frame, in every format alike, and would make the shape move with the playhead.
  */
 function autoAspectRatioValue(document: AxcutDocument, probedAssetDims: Record<string, Dims>) {
 	const settings = getEditorSettings(document);
-	const reference = referenceClip(document, probedAssetDims);
-	const preset = reference
-		? clipLayoutPreset(reference.clip, document.assets, settings.webcamLayoutPreset)
+	const first = firstClip(document, probedAssetDims);
+	const preset = first
+		? clipLayoutPreset(first.clip, document.assets, settings.webcamLayoutPreset)
 		: "no-webcam";
-	const screen = reference?.dims ?? referenceClipDims(document, probedAssetDims);
+	const screen = first?.dims ?? referenceClipDims(document, probedAssetDims);
 	return autoFrameAspect(restingCompositionAspect(screen, preset), settings.padding);
 }
 

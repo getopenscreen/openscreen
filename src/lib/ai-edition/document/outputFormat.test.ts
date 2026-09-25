@@ -311,7 +311,7 @@ describe("Auto", () => {
 	});
 	const auto = (d: AxcutDocument) => resolveAspectRatioValue(d, "auto");
 
-	it("is the reference clip's cropped shape at 0% padding", () => {
+	it("is the clip's cropped shape at 0% padding", () => {
 		const d = withEditor(
 			doc([asset("a1", 1920, 1080)], [clip("c1", "a1", { x: 0.25, y: 0, width: 0.5, height: 1 })]),
 			{ padding: 0 },
@@ -324,7 +324,7 @@ describe("Auto", () => {
 		expect(auto(d)).toBeCloseTo(0.8 * (16 / 9) + 0.2, 6);
 	});
 
-	it("widens for side by side only when the reference clip carries a camera", () => {
+	it("widens for side by side only when the clip carries a camera", () => {
 		const editor = { padding: 0, webcamLayoutPreset: "dual-frame" };
 		const h = 1080 / 1920;
 		const withCam = withEditor(
@@ -336,18 +336,25 @@ describe("Auto", () => {
 		expect(auto(without)).toBeCloseTo(16 / 9, 6);
 	});
 
-	it("stays on the clip that sets the output size once the timeline turns mixed", () => {
-		// Auto is no longer offered here; a project saved on it keeps a stable frame until the
-		// user picks a format.
-		const d = withEditor(
+	it("keeps its frame when a larger clip of another shape is added after the first", () => {
+		// A project on Auto that turns mixed: Auto is no longer offered, and the frame must not
+		// jump to the new clip's shape. Only the output size follows the larger clip.
+		const before = withEditor(doc([asset("screen", 1280, 720)], [clip("c1", "screen")]), {
+			padding: 0,
+		});
+		const after = withEditor(
 			doc(
-				[asset("small", 1280, 720), asset("big", 1080, 1920)],
-				[clip("c1", "small"), clip("c2", "big")],
+				[asset("screen", 1280, 720), asset("phone", 1080, 1920)],
+				[
+					clip("c1", "screen"),
+					{ ...clip("c2", "phone"), timelineStartSec: 10, timelineEndSec: 20 },
+				],
 			),
 			{ padding: 0 },
 		);
-		expect(isAutoFormatAvailable(d)).toBe(false);
-		expect(auto(d)).toBeCloseTo(1080 / 1920, 6);
+		expect(isAutoFormatAvailable(after)).toBe(false);
+		expect(auto(after)).toBeCloseTo(auto(before), 6);
+		expect(pickOutputDims(after, "auto")).toEqual({ width: 1920, height: 1080 });
 	});
 
 	describe("is offered only for a timeline of one composition", () => {

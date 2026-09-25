@@ -572,14 +572,23 @@ fn ease_connected_pan(t: f32) -> f32 {
 /// alors que le plan était rendu en entier — mesuré au pixel sur un export 1920×1080 : bord droit
 /// à 1539, coin calculé à 1540, arrondis présents aux quatre coins.
 ///
-/// Chaque préset a donc maintenant ses trois composantes, choisies pour qu'aucune arête ne
-/// s'approche d'un axe à moins de 2° (cf. `no_preset_has_an_axis_aligned_edge`) tout en gardant
-/// l'identité du préset : left penche vers la gauche, right vers la droite, iso est le plus incliné.
+/// Aucune arête ne s'approche donc d'un axe à moins de 2° (cf.
+/// `no_preset_has_an_axis_aligned_edge`), et AUCUN préset ne roule : Z vaut 0. Le tilt entre avec
+/// le zoom, et une caméra qui bouge ne roule jamais le métrage — le roulis de −2°/±1° qui tenait
+/// la règle jusqu'ici penchait l'image pendant chaque zoom, et balayait 2° entre left et right.
+///
+/// Sans roulis, la règle ne laisse que deux bandes de tangage (X). Une rotation Y pure garde les
+/// verticales verticales, donc chaque préset tangue ; et entre 10° et 14° de tangage, le bord haut
+/// d'un écran tourné ressort à plat (la remontée du rotateX annulée par la perspective), à tout
+/// lacet. D'où left/right à 6,5° (un écran tourné, à peine vu d'en haut, arêtes à 2,5° au plus
+/// près) et iso à 23° (vu d'en haut franchement, le plus incliné, arêtes à 4,8°). Iso sort de la
+/// bande des 2° pendant son ease-in à 0,82 de force, avant que la parallaxe ne s'ouvre
+/// (`PARALLAX_GATE_START`). Le budget dynamique suit left/right (`DYNAMIC_TILT_BUDGET`).
 fn rotation3d_for(rotation: &Option<String>) -> [f32; 3] {
     match rotation.as_deref() {
-        Some("iso") => [-12.0, -18.0, -2.0],
-        Some("left") => [-8.0, -16.0, -1.0],
-        Some("right") => [-8.0, 16.0, 1.0],
+        Some("iso") => [-23.0, -25.0, 0.0],
+        Some("left") => [-6.5, -17.0, 0.0],
+        Some("right") => [-6.5, 17.0, 0.0],
         _ => [0.0, 0.0, 0.0],
     }
 }
@@ -992,10 +1001,10 @@ pub(crate) const PERSPECTIVE_FACTOR: f32 = 1.6;
 ///
 /// Réglé une fois, en unités de P : cet écart ne dépend ni de la résolution ni du zoom (la
 /// perspective se déduit de la taille du plan lui-même). Sur iso en 16:9, focus au centre, le
-/// coin lointain est à ~0.19 P, soit un flou de ~4.6 texels ; focus sur le coin proche, l'écart
-/// double et le shader plafonne (`DOF_MAX_LOD`, niveau 1.5 de la pyramide demi-résolution, soit
-/// ~5.7 texels). Un flou exprimé en texels suit le CONTENU : la même zone est aussi floue quel
-/// que soit le zoom qui l'affiche.
+/// coin lointain est à ~0.25 P, soit un flou de ~5.9 texels, au plafond du shader
+/// (`DOF_MAX_LOD`, niveau 1.5 de la pyramide demi-résolution, soit ~5.7 texels) ; focus sur le
+/// coin proche, l'écart double. Un flou exprimé en texels suit le CONTENU : la même zone est aussi
+/// floue quel que soit le zoom qui l'affiche.
 pub const DOF_COC_PER_DEPTH: f32 = 24.0;
 
 /// Les 4 coins d'un quad `width`×`height` réduit de `scale`, projetés. `None` si un coin part
@@ -1048,8 +1057,10 @@ pub struct TiltedQuad {
     /// Où tombe le centre du plan à l'image, en px relatifs au centre du rect d'origine.
     pub offset: [f32; 2],
     /// `true` : le plan se dessine par l'homographie EXACTE de ses coins ; `false` : par le warp
-    /// bilinéaire des angles fixes, inchangé à l'octet. La caméra réelle l'exige, et un cadre
-    /// d'appareil aussi (le mode 17 lance ses rayons dans la perspective exacte).
+    /// bilinéaire, qui penche le contenu d'un plan tourné ET tangué (sa verticale du milieu
+    /// suit les milieux des bords, pas la projection). Tout écran incliné passe au projectif
+    /// (`FrameGeometry::screen_tilt`) ; `rotated_quad_corners_px` rend `false`, la géométrie
+    /// seule.
     pub projective: bool,
     /// `true` : une lampe posée sur la caméra éclaire un peu plus le côté proche du plan
     /// (`CAMERA_LIGHT_GAIN`, cf. `tilted_screen_cb`). Elle appartient à la caméra RÉELLE, pas au
@@ -1160,14 +1171,18 @@ fn contain_scale(
 /// anime le plan (la parallaxe ici ; l'impact du clic ensuite) : les contributions s'ADDITIONNENT
 /// puis la somme est bornée par `clamp_dynamic_tilt`.
 ///
-/// - Z : 0. L'axe le plus étroit, à ~1° de casser la règle des 2°.
-/// - X : ±1,9°. La limite de `left`/`right`, les plus serrés sur cet axe.
-/// - Y : ±3°. Au-delà, `left` déborde sa boîte même à échelle gelée.
+/// - Z : 0. Jamais de roulis ; c'est aussi l'axe le plus étroit (0,6° en fait sortir `left`).
+/// - X : ±1,2°. La limite de `left`/`right` : leur tangage de 6,5° vit dans une bande étroite, sous
+///   laquelle les verticales se redressent et au-dessus de laquelle le bord haut s'aplatit.
+/// - Y : ±1,8°. Vers 2,1°, `left` rapproche une arête de son axe ou déborde sa boîte ; à ±1,9°,
+///   la fin d'une transition chaînée depuis `iso` en approche une à 0,002° de la règle.
 ///
-/// Reproduits par `the_budget_sweep_keeps_every_edge_off_axis` et
-/// `the_budget_sweep_stays_inside_the_original_rect` sur tout le balayage, pas seulement aux
-/// présets.
-pub const DYNAMIC_TILT_BUDGET: [f32; 3] = [1.9, 3.0, 0.0];
+/// C'était ±1,9° / ±3° tant que les présets roulaient : sans roulis, `left` n'en laisse que ça.
+/// Reproduits par `the_budget_sweep_keeps_every_edge_off_axis`,
+/// `the_budget_sweep_stays_inside_the_original_rect` et
+/// `the_chained_sweep_keeps_every_edge_off_axis_and_inside` sur tout le balayage, pas seulement
+/// aux présets.
+pub const DYNAMIC_TILT_BUDGET: [f32; 3] = [1.2, 1.8, 0.0];
 
 /// Borne une part dynamique au budget, axe par axe.
 pub fn clamp_dynamic_tilt(rot: [f32; 3]) -> [f32; 3] {
@@ -1177,10 +1192,10 @@ pub fn clamp_dynamic_tilt(rot: [f32; 3]) -> [f32; 3] {
 
 /// Force du préset sous laquelle la part dynamique est nulle ; elle s'installe en smoothstep
 /// jusqu'à 1. La spec disait 0,5 ; les maths de ce crate disent autrement : `left`/`right` ne
-/// sortent de la bande des 2° qu'à 0,635 de force, et le budget plein ne leur laisse que
-/// 0,034° de marge à force 1. Juste sous 1, la base perd plus d'angle que la porte n'en retire
-/// — il faut une porte raide. 0,78 passe encore sous 2° (de 0,001°), 0,8 tient ; 0,85 garde
-/// du jeu. Cf. `the_budget_sweep_keeps_every_edge_off_axis`.
+/// sortent de la bande des 2° qu'à 0,71 de force, et le budget plein ne leur laisse que 0,02° de
+/// marge à force 1. Juste sous 1, la base perd plus d'angle que la porte n'en retire — il faut une
+/// porte raide. `iso`, lui, traverse en montant le tangage où le bord haut ressort à plat, et n'en
+/// sort qu'à 0,82 : la porte doit s'ouvrir après. Cf. `the_budget_sweep_keeps_every_edge_off_axis`.
 const PARALLAX_GATE_START: f32 = 0.85;
 /// Degrés de parallaxe par unité de vitesse (largeurs — ou hauteurs — de coupe par seconde),
 /// avant saturation. Un balayage d'une demi-largeur par seconde penche d'environ 2° en Y, une
@@ -1250,7 +1265,7 @@ pub const CLICK_IMPACT_WINDOW_S: f32 = 0.26;
 /// autant sur les deux axes sans que X sature seul et ne tourne l'axe du pivot. Ce n'est PAS
 /// le réglage `clickBounce` du curseur (brut sur [0, 5], 2,5 par défaut) : il rendrait le plan
 /// 2,5 fois trop fort. Cf. `a_corner_click_moves_the_plane_visibly_at_a_frozen_scale`.
-pub const CLICK_IMPACT_DEG: f32 = 1.9;
+pub const CLICK_IMPACT_DEG: f32 = 1.2;
 /// Valeur du pic de `sin(2πe)·(1−e)²` (en e ≈ 0,1904), pour que le creux de `tap` vaille −1.
 const TAP_NORM: f32 = 0.610;
 
@@ -2002,7 +2017,7 @@ mod tilt_tests {
         };
         let centre = [0.5, 0.5];
         assert!(coc(1920.0, 1080.0, centre, 0.5, 0.5) < 1e-4);
-        // Coin lointain (BL) : ~0.19 P, donc ~4.6 texels, bien au-dessus du seuil net (0.5).
+        // Coin lointain (BL) : ~0.25 P, donc ~5.9 texels, bien au-dessus du seuil net (0.5).
         let far = coc(1920.0, 1080.0, centre, 0.0, 1.0);
         assert!((3.5..6.0).contains(&far), "coin lointain {far}");
         // Focus posé sur le coin proche (TR) : le lointain s'en éloigne encore.
@@ -2059,9 +2074,10 @@ mod tilt_tests {
 
     /// La règle des 2° tient sur TOUT le balayage du budget, et pas qu'aux présets : à force 1
     /// sur la boîte entière, et pendant l'ease-in, où la part dynamique ne doit jamais faire
-    /// passer une arête sous min(2°, ce que la base seule donne). Sous ~0,64 de force, `left`
-    /// et `right` sont DÉJÀ dans la bande (l'ease-in traverse 0°) ; on ne leur demande alors que
-    /// de ne pas empirer.
+    /// passer une arête sous min(2°, ce que la base seule donne). Sous ~0,71 de force, `left`
+    /// et `right` sont DÉJÀ dans la bande (l'ease-in traverse 0°), `iso` jusqu'à ~0,82 (il
+    /// traverse le tangage où son bord haut ressort à plat) ; on ne leur demande alors que de ne
+    /// pas empirer.
     #[test]
     fn the_budget_sweep_keeps_every_edge_off_axis() {
         let (w, h) = (1920.0f32, 1080.0f32);
@@ -2281,7 +2297,7 @@ mod tilt_tests {
             }
         }
         let fast = dynamic_tilt(1.0, Some(&swipe(1000.0, 9.0)), FULL_CUT, 1.0, [0.0; 3]);
-        assert!(fast[1] > 2.9, "saturation au budget : {fast:?}");
+        assert!(fast[1] > b[1] - 0.1, "saturation au budget : {fast:?}");
     }
 
     /// Pure fonction de `t` : l'ordre des appels (lecture, seek arrière) ne change rien.
@@ -2451,8 +2467,9 @@ mod tilt_tests {
                     worst = worst.max((a.0 - b.0).hypot(a.1 - b.1));
                 }
             }
-            // Mesuré : 24 px (iso), 25 (left), 27 (right) à 1080p pour un clic dans un coin.
-            assert!(worst > 15.0, "{name} : {worst:.1} px, invisible");
+            // Mesuré : 13 px (iso), 16 (left), 17 (right) à 1080p pour un clic dans un coin. C'était
+            // 24 à 27 px au budget de ±1,9° que le roulis des présets permettait.
+            assert!(worst > 12.0, "{name} : {worst:.1} px, invisible");
         }
     }
 
@@ -2832,7 +2849,7 @@ mod follow_camera_tests {
         assert_eq!((blind.aim, blind.orbit), ([0.5, 0.5], [0.5, 0.5]));
         // Un angle fixe garde exactement son état.
         let iso = zoom_state_in(&[region("iso", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
-        assert_eq!((iso.rotation, iso.camera, iso.click_impact), ([-12.0, -18.0, -2.0], 0.0, 1.0));
+        assert_eq!((iso.rotation, iso.camera, iso.click_impact), ([-23.0, -25.0, 0.0], 0.0, 1.0));
         let unknown = zoom_state_in(&[region("orbit", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((unknown.rotation, unknown.tilt, unknown.camera), ([0.0; 3], 0.0, 0.0));
     }

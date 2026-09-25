@@ -2003,6 +2003,7 @@ impl Compositor {
                     dof,
                     render_px,
                     g.screen_mask,
+                    g.tilt_trail(render_px),
                 ),
                 &sy,
                 &suv,

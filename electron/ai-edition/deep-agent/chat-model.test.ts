@@ -40,6 +40,39 @@ describe("createOpenScreenChatModel — provider aliases", () => {
 	});
 });
 
+describe("createOpenScreenChatModel (Requesty)", () => {
+	it("defaults to the Requesty router base URL", async () => {
+		const model = await createOpenScreenChatModel({
+			provider: "requesty",
+			model: "openai/gpt-4o-mini",
+			apiKey: "test-key",
+		});
+		expect(model.constructor.name).toBe("ChatOpenAI");
+		expect(clientConfig(model).baseURL).toBe("https://router.requesty.ai/v1");
+	});
+
+	it("keeps a user-supplied regional base URL", async () => {
+		const model = await createOpenScreenChatModel({
+			provider: "requesty",
+			model: "openai/gpt-4o-mini",
+			apiKey: "test-key",
+			baseUrl: "https://router.eu.requesty.ai/v1",
+		});
+		expect(clientConfig(model).baseURL).toBe("https://router.eu.requesty.ai/v1");
+	});
+
+	it("rejects a non-https base URL", async () => {
+		await expect(
+			createOpenScreenChatModel({
+				provider: "requesty",
+				model: "openai/gpt-4o-mini",
+				apiKey: "test-key",
+				baseUrl: "http://router.eu.requesty.ai/v1",
+			}),
+		).rejects.toThrow(/https/);
+	});
+});
+
 describe("createOpenScreenChatModel — Anthropic-wire output budget", () => {
 	// Regression for #181: ChatAnthropic's default maxTokens table only knows
 	// Claude slugs (16k); anything else — MiniMax-M3 included — falls back to

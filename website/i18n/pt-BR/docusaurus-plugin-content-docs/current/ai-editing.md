@@ -30,6 +30,7 @@ Abra a coluna de chat (o botão no canto esquerdo da barra superior, no modo **E
 | **Gemini API** (Google) | |
 | **Mistral API** | |
 | **OpenRouter API** | Uma chave, vários modelos. |
+| **Requesty API** | Uma chave, vários modelos. |
 | **MiniMax API** / **MiniMax Token Plan** | |
 | **OpenAI Compatible** | Qualquer endpoint no formato da OpenAI — você informa a URL base. |
 

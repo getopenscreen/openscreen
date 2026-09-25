@@ -39,7 +39,7 @@ A raw capture goes in and comes out ready to post — on X, Reddit, YouTube, a d
 - Auto or manual zooms with adjustable depth, duration, easing, and pixel-precise position; auto-zoom follows your cursor as you work.
 - Custom cursor size, smoothing, and click effects, with cursor themes and post-recording path smoothing.
 - Automatic captions for voiceovers, transcribed on-device with no upload (works offline), with an editable transcript you can cut from and optional subtitle translation.
-- AI editing assistant: describe the edit you want in chat and it applies to the timeline — cuts, zooms, speed ramps, annotations, camera framing. Bring your own key (Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax, or any OpenAI-compatible endpoint); nothing is enabled by default.
+- AI editing assistant: describe the edit you want in chat and it applies to the timeline — cuts, zooms, speed ramps, annotations, camera framing. Bring your own key (Claude, OpenAI, Gemini, Mistral, OpenRouter, Requesty, MiniMax, or any OpenAI-compatible endpoint); nothing is enabled by default.
 - Wallpapers, solid colors, gradients, or your own background image.
 - Motion blur.
 - Crop, trim, and per-segment speed control on the timeline.

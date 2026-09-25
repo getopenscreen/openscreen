@@ -20,6 +20,7 @@ import {
 	getProviderDefinition,
 	normalizeProviderId,
 	type ProviderDefinition,
+	resolveRequestyBaseUrl,
 } from "../provider-registry";
 
 // --- per-provider reasoning-effort capability table -----------------------
@@ -45,6 +46,7 @@ export interface ReasoningCapability {
 		| "anthropic-thinking"
 		| "minimax-thinking"
 		| "openrouter-reasoning"
+		| "requesty-reasoning"
 		| "google-thinking";
 }
 
@@ -66,6 +68,12 @@ const ANTHROPIC_REASONING_EFFORTS: readonly AgentReasoningEffort[] = [
 	"xhigh",
 ];
 const OPENROUTER_REASONING_EFFORTS: readonly AgentReasoningEffort[] = [
+	"none",
+	"low",
+	"medium",
+	"high",
+];
+const REQUESTY_REASONING_EFFORTS: readonly AgentReasoningEffort[] = [
 	"none",
 	"low",
 	"medium",
@@ -116,6 +124,14 @@ export function getReasoningCapability(provider: string, model?: string): Reason
 			efforts: OPENROUTER_REASONING_EFFORTS,
 			defaultEffort: "medium",
 			strategy: "openrouter-reasoning",
+		};
+	}
+	if (provider === "requesty" && isRequestyReasoningModel(normalizedModel)) {
+		return {
+			supported: true,
+			efforts: REQUESTY_REASONING_EFFORTS,
+			defaultEffort: "medium",
+			strategy: "requesty-reasoning",
 		};
 	}
 	if (provider === "google" && isGeminiThinkingModel(normalizedModel)) {
@@ -170,6 +186,10 @@ export function buildLangChainReasoningOptions(
 					reasoning: { effort: toOpenAIReasoningEffort(normalizedEffort) },
 					include_reasoning: true,
 				},
+			};
+		case "requesty-reasoning":
+			return {
+				modelKwargs: { reasoning_effort: toOpenAIReasoningEffort(normalizedEffort) },
 			};
 		case "google-thinking":
 			return {
@@ -234,6 +254,12 @@ function isOpenRouterReasoningModel(model: string): boolean {
 	if (isOpenAIReasoningModel(stripVendorPrefix(model, "openai/"))) return true;
 	if (isAnthropicReasoningModel(stripVendorPrefix(model, "anthropic/"))) return true;
 	return /deepseek-r1/i.test(model) || /qwen.*thinking/i.test(model) || /grok-4/i.test(model);
+}
+
+function isRequestyReasoningModel(model: string): boolean {
+	// Requesty accepts both `vendor/model` slugs and managed policy ids
+	// without a vendor prefix (`claude-sonnet-4-5`), so the same matchers apply.
+	return isOpenRouterReasoningModel(model);
 }
 
 function stripVendorPrefix(model: string, prefix: string): string {
@@ -408,13 +434,15 @@ export async function createOpenScreenChatModel(
 		});
 	}
 
-	// Default: OpenAI-compatible path (openai, google, openrouter, openai-compatible).
+	// Default: OpenAI-compatible path (openai, google, openrouter, requesty, openai-compatible).
 	const baseURL =
 		config.provider === "openrouter"
 			? config.baseUrl || "https://openrouter.ai/api/v1"
-			: config.provider === "google"
-				? config.baseUrl || "https://generativelanguage.googleapis.com/v1beta/openai"
-				: config.baseUrl;
+			: config.provider === "requesty"
+				? resolveRequestyBaseUrl(config.baseUrl)
+				: config.provider === "google"
+					? config.baseUrl || "https://generativelanguage.googleapis.com/v1beta/openai"
+					: config.baseUrl;
 	const apiKey = resolveOpenAIChatApiKey(config.provider, config.apiKey);
 	return new ChatOpenAI({
 		...(apiKey ? { apiKey } : {}),

@@ -30,6 +30,7 @@ Nichts davon ist erforderlich. Aufnahme, Bearbeitung, Transkription, Untertitel 
 | **Gemini API** (Google) | |
 | **Mistral API** | |
 | **OpenRouter API** | Ein Schlüssel, viele Modelle. |
+| **Requesty API** | Ein Schlüssel, viele Modelle. |
 | **MiniMax API** / **MiniMax Token Plan** | |
 | **OpenAI Compatible** | Jeder Endpunkt mit OpenAI-kompatibler API; die Basis-URL gibst du selbst an. |
 

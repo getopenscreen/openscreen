@@ -30,6 +30,7 @@ OpenScreen 內建一個選用的代理，可以從聊天面板剪輯你的專案
 | **Gemini API**（Google） | |
 | **Mistral API** | |
 | **OpenRouter API** | 一個金鑰，多種模型。 |
+| **Requesty API** | 一個金鑰，多種模型。 |
 | **MiniMax API**／**MiniMax Token Plan** | |
 | **OpenAI Compatible** | 任何 OpenAI 格式的端點，由你提供基礎 URL。 |
 

@@ -26,7 +26,7 @@ What ships today (each one opt-in, each one toggleable independently):
 - [x] **Captions as a derived layer (local)** — cues are a live view of the transcript, not generated text you then maintain; restyle or regroup them with no regeneration step. Optional translation into 15 languages, stored beside the transcript and never in it.
 - [x] **Edit by chat (requires BYO LLM key)** — describe an edit in plain language; the agent applies real, undoable timeline operations (trims, zooms, speed, annotations, clip ranges, reordering). Off until you connect a provider.
 - [x] **Non-destructive project document (always on)** — `.openscreen` projects keep every edit re-editable, and `Ctrl/Cmd + Z` covers agent edits exactly like manual ones.
-- [x] **Bring-your-own LLM (opt-in)** — Anthropic, OpenAI, Google, Mistral, OpenRouter, MiniMax, and any OpenAI-compatible endpoint. Keys live in your OS credential store via Electron `safeStorage`; requests go straight from your machine to the provider. We never see them, because there is no server to see them with.
+- [x] **Bring-your-own LLM (opt-in)** — Anthropic, OpenAI, Google, Mistral, OpenRouter, Requesty, MiniMax, and any OpenAI-compatible endpoint. Keys live in your OS credential store via Electron `safeStorage`; requests go straight from your machine to the provider. We never see them, because there is no server to see them with.
 
 Still open on this axis:
 

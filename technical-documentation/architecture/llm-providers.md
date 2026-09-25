@@ -38,6 +38,7 @@ Each `ProviderDefinition` carries a stable id and label, default model, `authKin
 | `google` | Gemini API | `gemini-3-flash-preview` | Google's OpenAI-compatible endpoint (`/v1beta/openai`) |
 | `mistral` | Mistral API | `mistral-large-latest` | First-party Mistral (`ChatMistralAI`) |
 | `openrouter` | OpenRouter API | `anthropic/claude-3.5-sonnet` | OpenAI-compatible |
+| `requesty` | Requesty API | `anthropic/claude-sonnet-4-5` | OpenAI-compatible at `https://router.requesty.ai/v1` (EU: `https://router.eu.requesty.ai/v1`) |
 | `minimax` | MiniMax API | `MiniMax-M3` | Anthropic-shaped, via `ChatAnthropic` at `https://api.minimax.io/anthropic` |
 | `minimax-token-plan` | MiniMax Token Plan | `MiniMax-M3` | Same as `minimax`, different env key |
 | `openai-compatible` | OpenAI Compatible | *(user-supplied)* | OpenAI-compatible at a required custom base URL |
@@ -50,7 +51,7 @@ MiniMax's `baseUrl` deliberately omits `/v1`: `ChatAnthropic` wraps `@anthropic-
 
 `openai-oauth` (ChatGPT) and `copilot-proxy` (GitHub Copilot) were deleted. Both reached a user's subscription by presenting GitHub's and OpenAI's own client IDs and an editor `User-Agent` against endpoints reserved for first-party clients (`api.github.com/copilot_internal`, `chatgpt.com/backend-api`) — from inside a signed installer. Both vendors expose a sanctioned surface instead: GitHub's Copilot SDK (register our own OAuth App, pass the user's `gho_` token) and `codex app-server` (drives the user's own `codex login`, ships no client ID at all). Those are separate integrations rather than a header swap, so they return in their own PR.
 
-The removal note lives at [`provider-registry.ts:92`](../../electron/ai-edition/provider-registry.ts). `authKind` is narrowed to the literal `"api-key"` so the type widens again only when one of those lands.
+The removal note lives at [`provider-registry.ts:103`](../../electron/ai-edition/provider-registry.ts). `authKind` is narrowed to the literal `"api-key"` so the type widens again only when one of those lands.
 
 ## Auth
 
@@ -78,7 +79,7 @@ Renderer snapshots expose connection summaries, never raw credential values.
 - `minimax` / `minimax-token-plan` → `ChatAnthropic` with `anthropicApiUrl` pointed at the MiniMax base and an explicit `maxTokens` (`ANTHROPIC_API_MAX_OUTPUT_TOKENS`, 16384). ChatAnthropic's default-output table only knows Claude slugs (16k) and falls back to 4096 for anything else — with adaptive thinking on, a cold-start MiniMax turn could spend that entire budget on reasoning and truncate before any text block (the "first call returns empty" bug, #181).
 - `anthropic` → `ChatAnthropic`, plus `thinking` / `outputConfig` when reasoning is on. Known `claude-*` slugs keep LangChain's per-model `maxTokens` default (overriding it would exceed legacy limits like claude-3-haiku's 4096); non-Claude model names — a self-hosted Anthropic-compatible endpoint behind `baseUrl` — get the same 16384 floor as MiniMax.
 - `mistral` → `ChatMistralAI`.
-- everything else (`openai`, `google`, `openrouter`, `openai-compatible`) → `ChatOpenAI`, with the base URL defaulted per provider and `disableStreaming` set for Gemini 3, whose OpenAI-compat path cannot stream and tool-call at the same time.
+- everything else (`openai`, `google`, `openrouter`, `requesty`, `openai-compatible`) → `ChatOpenAI`, with the base URL defaulted per provider and `disableStreaming` set for Gemini 3, whose OpenAI-compat path cannot stream and tool-call at the same time.
 
 The `maxTokens` floor is Anthropic-wire-only by design: the OpenAI-shaped transports send no `max_tokens` by default (the provider's own limit applies), so there is no 4096 fallback to fix — and adding a cap would truncate outputs that are uncapped today.
 
@@ -96,9 +97,9 @@ Three call sites share that factory:
 
 ## Reasoning effort
 
-`getReasoningCapability(provider, model)` decides whether the *model* supports reasoning at all, and by which strategy — `openai-responses`, `anthropic-thinking`, `minimax-thinking`, `openrouter-reasoning`, or `google-thinking`. The check is model-shaped, not just provider-shaped: `openai` only reports support for `o*`/`gpt-5*`, `anthropic` for `claude-{opus,sonnet,haiku}-4*`, `google` for `gemini-2.5*`/`gemini-3*`.
+`getReasoningCapability(provider, model)` decides whether the *model* supports reasoning at all, and by which strategy — `openai-responses`, `anthropic-thinking`, `minimax-thinking`, `openrouter-reasoning`, `requesty-reasoning`, or `google-thinking`. The check is model-shaped, not just provider-shaped: `openai` only reports support for `o*`/`gpt-5*`, `anthropic` for `claude-{opus,sonnet,haiku}-4*`, `google` for `gemini-2.5*`/`gemini-3*`.
 
-`buildLangChainReasoningOptions` then maps the effort onto that provider's wire field: `reasoning.effort` + `useResponsesApi` for OpenAI, `thinking` blocks (adaptive with `outputConfig.effort` on Claude 4.6/4.7, otherwise `budget_tokens`) for Anthropic, `modelKwargs.reasoning` for OpenRouter, `thinkingConfig` for Google.
+`buildLangChainReasoningOptions` then maps the effort onto that provider's wire field: `reasoning.effort` + `useResponsesApi` for OpenAI, `thinking` blocks (adaptive with `outputConfig.effort` on Claude 4.6/4.7, otherwise `budget_tokens`) for Anthropic, `modelKwargs.reasoning` for OpenRouter, `modelKwargs.reasoning_effort` for Requesty, `thinkingConfig` for Google.
 
 MiniMax's `thinking` block is binary (`{type: "adaptive"}` or absent), so `getReasoningEffortOptions` shows it only `none` / `medium` and `getReasoningEffortLabel` renders that `medium` as **On** — advertising six tiers would imply a granularity it doesn't have. Both helpers are the SSOT shared by `ProviderSettings.tsx` and the in-chat quick-pick in `LeftPanel.tsx`.
 
@@ -112,6 +113,7 @@ MiniMax's `thinking` block is binary (`{type: "adaptive"}` or absent), so `getRe
 | `google` | `GET /v1beta/openai/models`, filtered to `gemini-*` |
 | `mistral` | `GET /v1/models` |
 | `openrouter` | `GET /api/v1/models` (unauthenticated) |
+| `requesty` | `GET {baseUrl}/models/managed` (managed policies, unauthenticated) first, then `GET {baseUrl}/models` with the key (the org's approved catalog) |
 | `openai`, `openai-compatible` | `GET {baseUrl}/models` — errors with "Missing base URL" if unset |
 | `minimax`, `minimax-token-plan` | No list endpoint exists: probes nine known slugs with a `max_tokens: 1` completion and keeps the ones that answer |
 

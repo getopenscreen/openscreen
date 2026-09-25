@@ -36,6 +36,14 @@ describe("getReasoningCapability", () => {
 		expect(getReasoningCapability("openrouter", "openai/gpt-5").supported).toBe(true);
 	});
 
+	it("only supports Requesty reasoning for reasoning-capable slugs and managed ids", () => {
+		expect(getReasoningCapability("requesty", "openai/gpt-4o-mini").supported).toBe(false);
+		expect(getReasoningCapability("requesty", "openai/gpt-5-mini").strategy).toBe(
+			"requesty-reasoning",
+		);
+		expect(getReasoningCapability("requesty", "claude-sonnet-4-5").supported).toBe(true);
+	});
+
 	it("returns unsupported for unknown providers", () => {
 		expect(getReasoningCapability("nope", "x").supported).toBe(false);
 		expect(getReasoningCapability("").supported).toBe(false);
@@ -69,6 +77,12 @@ describe("buildLangChainReasoningOptions", () => {
 				reasoning: { effort: "medium" },
 				include_reasoning: true,
 			},
+		});
+	});
+
+	it("wires Requesty reasoning through reasoning_effort", () => {
+		expect(buildLangChainReasoningOptions("requesty", "openai/gpt-5-mini", "xhigh")).toEqual({
+			modelKwargs: { reasoning_effort: "high" },
 		});
 	});
 

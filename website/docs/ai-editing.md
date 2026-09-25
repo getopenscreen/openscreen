@@ -30,6 +30,7 @@ Open the chat column (the toggle at the far left of the top bar, in **Edit** mod
 | **Gemini API** (Google) | |
 | **Mistral API** | |
 | **OpenRouter API** | One key, many models. |
+| **Requesty API** | One key, many models. |
 | **MiniMax API** / **MiniMax Token Plan** | |
 | **OpenAI Compatible** | Any OpenAI-shaped endpoint — you supply the base URL. |
 

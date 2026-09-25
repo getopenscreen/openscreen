@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { probeMiniMaxModels } from "./llm-provider-auth";
+import { listRequestyModels, probeMiniMaxModels } from "./llm-provider-auth";
 
 const ORIGINAL_FETCH = globalThis.fetch;
 
@@ -113,5 +113,101 @@ describe("probeMiniMaxModels", () => {
 		await expect(
 			probeMiniMaxModels("sk-test", "https://api.minimax.io/anthropic/v1"),
 		).rejects.toThrow(/https:\/\/api\.minimax\.io .*HTTP 404/);
+	});
+});
+
+describe("listRequestyModels", () => {
+	function mockListFetch(byUrl: Record<string, { status: number; ids?: string[] }>) {
+		return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+			const entry = byUrl[String(input)] ?? { status: 404 };
+			const body = { data: (entry.ids ?? []).map((id) => ({ id })) };
+			return new Response(JSON.stringify(body), {
+				status: entry.status,
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+	}
+
+	it("lists managed policies first, then the rest of the catalog", async () => {
+		const fetchMock = mockListFetch({
+			"https://router.requesty.ai/v1/models/managed": {
+				status: 200,
+				ids: ["gpt-5.4-mini", "claude-sonnet-4-5"],
+			},
+			"https://router.requesty.ai/v1/models": {
+				status: 200,
+				ids: ["openai/gpt-4o-mini", "claude-sonnet-4-5", "anthropic/claude-sonnet-4-5"],
+			},
+		});
+
+		const models = await listRequestyModels("rqsty-test");
+
+		expect(models).toEqual([
+			"claude-sonnet-4-5",
+			"gpt-5.4-mini",
+			"anthropic/claude-sonnet-4-5",
+			"openai/gpt-4o-mini",
+		]);
+		const catalogCall = fetchMock.mock.calls.find(
+			([url]) => String(url) === "https://router.requesty.ai/v1/models",
+		);
+		const headers = (catalogCall?.[1] as RequestInit | undefined)?.headers as Record<
+			string,
+			string
+		>;
+		expect(headers.Authorization).toBe("Bearer rqsty-test");
+	});
+
+	it("sends the key on the managed call too", async () => {
+		const fetchMock = mockListFetch({
+			"https://router.requesty.ai/v1/models/managed": { status: 200, ids: ["claude-sonnet-4-5"] },
+			"https://router.requesty.ai/v1/models": { status: 200, ids: ["openai/gpt-4o-mini"] },
+		});
+
+		await listRequestyModels("rqsty-test");
+
+		const managedCall = fetchMock.mock.calls.find(
+			([url]) => String(url) === "https://router.requesty.ai/v1/models/managed",
+		);
+		const headers = (managedCall?.[1] as RequestInit | undefined)?.headers as Record<
+			string,
+			string
+		>;
+		expect(headers.Authorization).toBe("Bearer rqsty-test");
+	});
+
+	it("uses a regional base URL", async () => {
+		mockListFetch({
+			"https://router.eu.requesty.ai/v1/models/managed": { status: 200, ids: ["gpt-5-mini@eu"] },
+			"https://router.eu.requesty.ai/v1/models": { status: 200, ids: ["openai/gpt-5-mini"] },
+		});
+
+		const models = await listRequestyModels("rqsty-test", "https://router.eu.requesty.ai/v1/");
+		expect(models).toEqual(["gpt-5-mini@eu", "openai/gpt-5-mini"]);
+	});
+
+	it("does not fall back to managed ids when the keyed catalog fails", async () => {
+		mockListFetch({
+			"https://router.requesty.ai/v1/models/managed": { status: 200, ids: ["gpt-5-mini"] },
+			"https://router.requesty.ai/v1/models": { status: 403 },
+		});
+
+		await expect(listRequestyModels("rqsty-test")).rejects.toThrow(/HTTP 403/);
+	});
+
+	it("keeps the catalog when the managed list fails", async () => {
+		mockListFetch({
+			"https://router.requesty.ai/v1/models": { status: 200, ids: ["openai/gpt-4o-mini"] },
+		});
+
+		expect(await listRequestyModels("rqsty-test")).toEqual(["openai/gpt-4o-mini"]);
+	});
+
+	it("refuses a non-https base URL before sending the key", async () => {
+		const fetchMock = mockListFetch({});
+		await expect(listRequestyModels("rqsty-test", "http://router.requesty.ai/v1")).rejects.toThrow(
+			/https/,
+		);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 });

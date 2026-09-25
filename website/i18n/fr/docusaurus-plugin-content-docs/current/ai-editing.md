@@ -30,6 +30,7 @@ Ouvrez la colonne de discussion (le bouton tout à gauche de la barre supérieur
 | **Gemini API** (Google) | |
 | **Mistral API** | |
 | **OpenRouter API** | Une seule clé, de nombreux modèles. |
+| **Requesty API** | Une seule clé, de nombreux modèles. |
 | **MiniMax API** / **MiniMax Token Plan** | |
 | **OpenAI Compatible** | Tout point de terminaison au format OpenAI : c'est vous qui fournissez l'URL de base. |
 

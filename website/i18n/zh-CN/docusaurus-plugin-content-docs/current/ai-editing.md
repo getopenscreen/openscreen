@@ -30,6 +30,7 @@ OpenScreen 提供一个可选的 AI 代理，可以在聊天面板中编辑你�
 | **Gemini API**（Google） | |
 | **Mistral API** | |
 | **OpenRouter API** | 一个密钥，多种模型。 |
+| **Requesty API** | 一个密钥，多种模型。 |
 | **MiniMax API** / **MiniMax Token Plan** | |
 | **OpenAI Compatible** | 任何 OpenAI 格式的端点，由你提供基础 URL。 |
 

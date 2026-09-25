@@ -12,6 +12,8 @@
 //
 // Credentials still live in the `safeStorage` blob via `LlmConfigStore`.
 
+import { resolveRequestyBaseUrl } from "./provider-registry";
+
 /**
  * Generic `GET {url}` model-list fetch shared by the OpenAI-shaped
  * (`{data: [{id}]}`) and Anthropic-shaped (`{data: [{id}]}`) list endpoints.
@@ -61,6 +63,22 @@ export async function listMistralModels(apiKey: string): Promise<string[]> {
 
 export async function listOpenRouterModels(): Promise<string[]> {
 	return fetchModelIds("https://openrouter.ai/api/v1/models");
+}
+
+/**
+ * Requesty's managed policies (`/models/managed`, curated ids such as
+ * `claude-sonnet-4-5`) come first, followed by the full `vendor/model`
+ * catalog from `/models`. Both calls carry the key, and with a key `/models`
+ * returns only the models the key's organization allows. The keyed catalog is
+ * required: when it fails, this throws rather than offering managed ids the
+ * key was never checked against.
+ */
+export async function listRequestyModels(apiKey: string, baseUrl?: string): Promise<string[]> {
+	const root = resolveRequestyBaseUrl(baseUrl);
+	const catalog = await fetchModelIds(`${root}/models`, apiKey);
+	const managed = await fetchModelIds(`${root}/models/managed`, apiKey).catch((): string[] => []);
+	const seen = new Set(managed);
+	return [...managed, ...catalog.filter((id) => !seen.has(id))];
 }
 
 export async function listOpenAiCompatibleModels(

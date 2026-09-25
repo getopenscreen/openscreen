@@ -30,6 +30,7 @@ OpenScreen には、チャットパネルからプロジェクトを編集する
 | **Gemini API**（Google） | |
 | **Mistral API** | |
 | **OpenRouter API** | ひとつのキーで多数のモデルを利用可能。 |
+| **Requesty API** | ひとつのキーで多数のモデルを利用可能。 |
 | **MiniMax API** / **MiniMax Token Plan** | |
 | **OpenAI Compatible** | OpenAI 形式の任意のエンドポイント。ベース URL は自分で指定します。 |
 

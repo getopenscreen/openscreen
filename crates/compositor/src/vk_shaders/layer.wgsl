@@ -90,9 +90,32 @@ fn sample_yuv(uv: vec2<f32>) -> vec3<f32> {
 }
 
 // SDF rectangle à coins arrondis (< 0 dedans). Identique au HLSL.
+//
+// Coins CONTINUS : le quart de coin est une superellipse d'exposant n, pas un arc de cercle.
+// Un arc rejoint le bord droit sans angle, mais sa courbure y saute d'un coup de 0 à 1/r, et
+// l'œil lit ce saut comme une cassure ; ici elle monte en douceur depuis zéro (les coins
+// « continus » d'Apple). `r` garde son sens : l'étendue E = K(n)·r creuse le coin à 45° autant
+// qu'un cercle de rayon r, donc un réglage arrondit autant qu'avant, et deux contours
+// concentriques (r, et r + b autour) gardent une bordure d'épaisseur b à 2 % près. L'exposant
+// revient à 2 quand r approche le demi-petit-côté : à fond, un carré est un cercle et un
+// rectangle une pilule. La distance est divisée par la pente de la norme, donc l'antialiasing
+// garde sa largeur tout autour du coin. r <= 0 : le rectangle vif d'avant, à l'identique.
 fn sd_round_rect(p: vec2<f32>, halfsz: vec2<f32>, r: f32) -> f32 {
-    let q = abs(p) - halfsz + vec2<f32>(r);
-    return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - r;
+    let hmin = min(halfsz.x, halfsz.y);
+    if (r <= 0.0 || hmin <= 0.0) {
+        let q0 = abs(p) - halfsz;
+        return length(max(q0, vec2<f32>(0.0))) + min(max(q0.x, q0.y), 0.0);
+    }
+    let n = 3.0 - smoothstep(0.5, 1.0, r / hmin);
+    let e = min(r * 0.29289322 / (1.0 - exp2(-1.0 / n)), hmin);
+    let q = abs(p) - halfsz + vec2<f32>(e);
+    let m = max(q, vec2<f32>(0.0));
+    if (m.x > 0.0 && m.y > 0.0) {
+        let len = pow(pow(m.x, n) + pow(m.y, n), 1.0 / n);
+        let g = pow(m / len, vec2<f32>(n - 1.0));
+        return (len - e) / length(g);
+    }
+    return max(m.x, m.y) + min(max(q.x, q.y), 0.0) - e;
 }
 
 // L'ecran sous le chrome de FENETRE (modes 0 et 8) : coins HAUTS carres, rognes par l'arc du

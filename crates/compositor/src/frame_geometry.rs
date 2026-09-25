@@ -4223,7 +4223,8 @@ mod tests {
             assert!((wf.radius[1] - (g.s_radius + line)).abs() < 1e-3, "r{roundness}: bas pas concentrique");
             assert_eq!(wf.radius[0], wf.radius[1], "r{roundness}: le mode 14 n'a qu'un rayon");
             // Le rognage du haut du metrage est le contour INTERIEUR du cadre : son contour
-            // exterieur rentre du filet, rayon compris. Un seul arrondi, deux contours paralleles.
+            // exterieur rentre du filet, rayon compris. Un seul arrondi, deux contours paralleles
+            // -- a 2 % du filet pres depuis que les coins sont continus (`sd_round_rect`).
             let (sw, sh) = (s_px[0] * 0.5, s_px[1] * 0.5);
             for (x, y) in [(sw - 0.5, -sh + 0.5), (sw - 3.0, -sh + 2.0), (0.0, -sh + 0.5), (sw * 0.9, -sh * 0.9)] {
                 let inner = sd_round_rect_test([x, y + lift * 0.5], [sw, sh + lift * 0.5], g.s_radius);
@@ -4232,7 +4233,8 @@ mod tests {
                     [sw + line, sh + (bar + line) * 0.5],
                     wf.radius[0],
                 );
-                assert!((inner - (outer + line)).abs() < 1e-2, "r{roundness} ({x},{y}): {inner} vs {outer} + {line}");
+                let tol = 0.02 * line + 1e-2;
+                assert!((inner - (outer + line)).abs() < tol, "r{roundness} ({x},{y}): {inner} vs {outer} + {line}");
             }
             // Le plafond de la fenêtre tient dans la barre : le coin haut du métrage reste
             // entièrement carré, à toutes les positions du slider.
@@ -4711,11 +4713,53 @@ mod tests {
         }
     }
 
-    /// `sd_round_rect` du shader, côté CPU : <0 dedans.
+    /// `sd_round_rect` du shader, côté CPU : <0 dedans. Coins continus, cf. le commentaire du
+    /// shader.
     fn sd_round_rect_test(p: [f32; 2], half: [f32; 2], r: f32) -> f32 {
-        let q = [p[0].abs() - half[0] + r, p[1].abs() - half[1] + r];
+        let hmin = half[0].min(half[1]);
+        if r <= 0.0 || hmin <= 0.0 {
+            let q = [p[0].abs() - half[0], p[1].abs() - half[1]];
+            let m = [q[0].max(0.0), q[1].max(0.0)];
+            return (m[0] * m[0] + m[1] * m[1]).sqrt() + q[0].max(q[1]).min(0.0);
+        }
+        let u = ((r / hmin - 0.5) / 0.5).clamp(0.0, 1.0);
+        let n = 3.0 - u * u * (3.0 - 2.0 * u);
+        let e = (r * 0.292_893_22 / (1.0 - (-1.0 / n).exp2())).min(hmin);
+        let q = [p[0].abs() - half[0] + e, p[1].abs() - half[1] + e];
         let m = [q[0].max(0.0), q[1].max(0.0)];
-        (m[0] * m[0] + m[1] * m[1]).sqrt() + q[0].max(q[1]).min(0.0) - r
+        if m[0] > 0.0 && m[1] > 0.0 {
+            let len = (m[0].powf(n) + m[1].powf(n)).powf(1.0 / n);
+            let g = [(m[0] / len).powf(n - 1.0), (m[1] / len).powf(n - 1.0)];
+            return (len - e) / (g[0] * g[0] + g[1] * g[1]).sqrt();
+        }
+        m[0].max(m[1]) + q[0].max(q[1]).min(0.0) - e
+    }
+
+    /// Les coins continus tiennent leurs trois promesses : le coin se creuse à 45° autant qu'un
+    /// cercle de même rayon (un réglage arrondit autant qu'avant), un carré arrondi à fond reste
+    /// un cercle, et la distance garde une pente de 1 sur le contour (antialiasing régulier).
+    #[test]
+    fn continuous_corners_keep_the_depth_the_circle_and_the_edge_width() {
+        let half = [300.0f32, 200.0];
+        for r in [8.0f32, 24.0, 60.0] {
+            let c = [half[0] - r, half[1] - r];
+            let on_circle = [c[0] + r * std::f32::consts::FRAC_1_SQRT_2, c[1] + r * std::f32::consts::FRAC_1_SQRT_2];
+            let d = sd_round_rect_test(on_circle, half, r);
+            assert!(d.abs() < 0.02, "r {r}: le coin à 45° est à {d} px de celui du cercle");
+            // Pente de la distance sur le contour, par différences finies.
+            let (h, p) = (0.01f32, [c[0] + r * 0.9, half[1] - 0.2]);
+            let gx = (sd_round_rect_test([p[0] + h, p[1]], half, r) - sd_round_rect_test([p[0] - h, p[1]], half, r)) / (2.0 * h);
+            let gy = (sd_round_rect_test([p[0], p[1] + h], half, r) - sd_round_rect_test([p[0], p[1] - h], half, r)) / (2.0 * h);
+            let slope = (gx * gx + gy * gy).sqrt();
+            assert!((slope - 1.0).abs() < 0.05, "r {r}: pente {slope} sur le contour");
+        }
+        // À fond, un carré est un cercle.
+        let square = [100.0f32, 100.0];
+        for p in [[0.0f32, 99.0], [70.0, 70.0], [60.0, 90.0], [120.0, 20.0]] {
+            let circle = (p[0] * p[0] + p[1] * p[1]).sqrt() - 100.0;
+            let d = sd_round_rect_test(p, square, 100.0);
+            assert!((d - circle).abs() < 1e-2, "{p:?}: {d} au lieu de {circle}");
+        }
     }
 
     /// La même scène, zoomée ET inclinée par un préset de rotation 3D.

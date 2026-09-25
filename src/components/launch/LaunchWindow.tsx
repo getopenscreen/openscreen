@@ -83,9 +83,9 @@ export function LaunchWindow() {
 	} = useI18n();
 	const suggestedLanguageName = systemLocaleSuggestion ? getLocaleName(systemLocaleSuggestion) : "";
 	const activeLanguageLabel = getLocaleName(locale).split(/\s+/)[0] || locale.toUpperCase();
-	// Short mono-font code shown on the button itself (matches the design's
-	// "EN"/"FR" treatment) — activeLanguageLabel (the full localized name)
-	// stays as the tooltip/aria-label text.
+	// Short code shown on the button itself (matches the design's "EN"/"FR"
+	// treatment) — activeLanguageLabel (the full localized name) stays as the
+	// tooltip/aria-label text.
 	const languageCode = locale.split("-")[0].toUpperCase();
 
 	const {

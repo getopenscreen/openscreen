@@ -324,7 +324,7 @@ export function MediaStage({
 												: selectedTranscription.status === "ready"
 													? "var(--success)"
 													: "var(--accent)",
-										fontSize: 11.5,
+										fontSize: 12,
 										fontWeight: 600,
 									}}
 								>
@@ -347,7 +347,7 @@ export function MediaStage({
 											borderRadius: 9999,
 											background: "var(--success-soft)",
 											color: "var(--success)",
-											fontSize: 11.5,
+											fontSize: 12,
 											fontWeight: 600,
 										}}
 									>
@@ -365,7 +365,7 @@ export function MediaStage({
 								<p
 									style={{
 										margin: "-8px 0 16px",
-										fontSize: 11.5,
+										fontSize: 12,
 										lineHeight: 1.5,
 										color: "var(--muted)",
 									}}
@@ -379,7 +379,7 @@ export function MediaStage({
 							<div style={{ marginBottom: 12 }}>
 								<div
 									style={{
-										fontSize: 11.5,
+										fontSize: 12.5,
 										fontWeight: 600,
 										color: "var(--fg-2)",
 										marginBottom: 6,

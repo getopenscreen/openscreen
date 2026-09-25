@@ -35,11 +35,11 @@ export function ChatWelcome({ onOpenProviderSettings }: ChatWelcomeProps) {
 
 			<button type="button" className={styles.chatWelcomeCta} onClick={onOpenProviderSettings}>
 				{t("chat.welcome.cta")}
-				<ArrowRight size={14} />
+				<ArrowRight size={16} />
 			</button>
 
 			<p className={styles.chatWelcomeDisclaimer}>
-				<Info size={12} className={styles.chatWelcomeDisclaimerIcon} aria-hidden="true" />
+				<Info size={14} className={styles.chatWelcomeDisclaimerIcon} aria-hidden="true" />
 				<span>{t("chat.welcome.disclaimer")}</span>
 			</p>
 		</div>

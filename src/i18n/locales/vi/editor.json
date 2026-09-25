@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "Nguồn",
+		"selectSource": "Chọn nội dung để ghi",
 		"systemPicker": "Hệ thống sẽ hỏi bạn muốn chia sẻ gì",
 		"systemAudio": "Âm thanh hệ thống",
 		"microphone": "Micro",
@@ -115,6 +116,8 @@
 		"loading": "Đang tải…",
 		"noCameraFound": "Không tìm thấy máy ảnh",
 		"cameraAccessError": "Không thể truy cập máy ảnh này",
+		"noMicrophoneFound": "Không tìm thấy micro",
+		"microphoneUnavailable": "Không thể truy cập micro",
 		"startingCamera": "Đang khởi động máy ảnh…",
 		"turnOnCameraHint": "Bật máy ảnh để xem trước trực tiếp",
 		"entireScreen": "Toàn màn hình",

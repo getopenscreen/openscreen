@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "Sorgente",
+		"selectSource": "Scegli cosa registrare",
 		"systemPicker": "Il sistema ti chiederà cosa condividere",
 		"systemAudio": "Audio di sistema",
 		"microphone": "Microfono",
@@ -115,6 +116,8 @@
 		"loading": "Caricamento…",
 		"noCameraFound": "Nessuna fotocamera trovata",
 		"cameraAccessError": "Impossibile accedere a questa fotocamera",
+		"noMicrophoneFound": "Nessun microfono trovato",
+		"microphoneUnavailable": "Impossibile accedere al microfono",
 		"startingCamera": "Avvio fotocamera…",
 		"turnOnCameraHint": "Attiva la fotocamera per un'anteprima dal vivo",
 		"entireScreen": "Schermo intero",

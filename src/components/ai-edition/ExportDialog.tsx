@@ -521,17 +521,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 
 				{format === "mp4" ? (
 					<section>
-						<div
-							style={{
-								font: "500 11px/1 var(--font-body)",
-								textTransform: "uppercase",
-								letterSpacing: "0.06em",
-								color: "var(--muted)",
-								marginBottom: 8,
-							}}
-						>
-							{t("exportDialog.quality")}
-						</div>
+						<div className={styles.groupLabel}>{t("exportDialog.quality")}</div>
 						<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
 							{QUALITY_OPTIONS.map((q) => (
 								<button
@@ -544,9 +534,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 										flexDirection: "column",
 										gap: 2,
 										padding: "10px 12px",
-										border: `1px solid ${quality === q.value ? "var(--accent)" : "var(--border)"}`,
-										borderRadius: 10,
-										background: quality === q.value ? "var(--accent-wash)" : "var(--surface)",
+										...choiceStyle(quality === q.value),
 										color: "var(--fg-2)",
 										cursor: "pointer",
 										font: "500 13px/1 var(--font-body)",
@@ -569,7 +557,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 										return (
 											<span
 												style={{
-													font: "500 11px var(--font-body)",
+													font: "500 12px var(--font-body)",
+													fontVariantNumeric: "tabular-nums",
 													color: isUpscale ? "var(--warn)" : "var(--muted)",
 												}}
 											>
@@ -590,17 +579,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 							}}
 						>
 							<div>
-								<div
-									style={{
-										font: "500 11px/1 var(--font-body)",
-										textTransform: "uppercase",
-										letterSpacing: "0.06em",
-										color: "var(--muted)",
-										marginBottom: 8,
-									}}
-								>
-									{t("exportDialog.frameRate")}
-								</div>
+								<div className={styles.groupLabel}>{t("exportDialog.frameRate")}</div>
 								<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
 									{([24, 30, 60] as const).map((r) => (
 										<button
@@ -616,17 +595,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								</div>
 							</div>
 							<div>
-								<div
-									style={{
-										font: "500 11px/1 var(--font-body)",
-										textTransform: "uppercase",
-										letterSpacing: "0.06em",
-										color: "var(--muted)",
-										marginBottom: 8,
-									}}
-								>
-									{t("exportDialog.codec")}
-								</div>
+								<div className={styles.groupLabel}>{t("exportDialog.codec")}</div>
 								<div
 									style={{
 										display: "grid",
@@ -666,17 +635,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				) : (
 					<section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 						<div>
-							<div
-								style={{
-									font: "500 11px/1 var(--font-body)",
-									textTransform: "uppercase",
-									letterSpacing: "0.06em",
-									color: "var(--muted)",
-									marginBottom: 8,
-								}}
-							>
-								{t("exportDialog.frameRate")}
-							</div>
+							<div className={styles.groupLabel}>{t("exportDialog.frameRate")}</div>
 							<div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
 								{GIF_FRAME_RATES.map((r) => (
 									<button
@@ -692,17 +651,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 							</div>
 						</div>
 						<div>
-							<div
-								style={{
-									font: "500 11px/1 var(--font-body)",
-									textTransform: "uppercase",
-									letterSpacing: "0.06em",
-									color: "var(--muted)",
-									marginBottom: 8,
-								}}
-							>
-								{t("exportDialog.size")}
-							</div>
+							<div className={styles.groupLabel}>{t("exportDialog.size")}</div>
 							<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
 								{(Object.keys(GIF_SIZE_PRESETS) as GifSizePreset[]).map((s) => (
 									<button
@@ -729,9 +678,9 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 						</div>
 						<div
 							style={{
-								font: "500 11px/1.4 var(--font-mono)",
+								font: "500 12px/1.4 var(--font-body)",
+								fontVariantNumeric: "tabular-nums",
 								color: "var(--muted)",
-								letterSpacing: "0.04em",
 							}}
 						>
 							{gifFrameRate} FPS · {gifSizeLabel} ·{" "}
@@ -764,11 +713,15 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					// wait reads as a hang.
 					<p
 						data-testid="export-cpu-warning"
+						// Amber as a tint, not as the text colour: --warn text is ~2:1 on the light theme.
 						style={{
 							margin: "0 0 4px",
+							padding: "10px 12px",
+							borderRadius: 10,
+							background: "var(--warn-soft)",
 							fontSize: "0.8125rem",
 							lineHeight: 1.4,
-							color: "var(--text-muted, rgb(0 0 0 / 0.65))",
+							color: "var(--fg-2)",
 						}}
 					>
 						{t("cpuCompositor.exportWarning")}
@@ -846,13 +799,11 @@ function FormatToggle({
 				justifyContent: "center",
 				gap: 8,
 				padding: "12px 16px",
-				border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-				borderRadius: 10,
-				background: active ? "var(--accent-wash)" : "var(--surface)",
-				// Selection is conveyed by border + wash background (like the quality
+				...choiceStyle(active),
+				// Selection is conveyed by border + tinted background (like the quality
 				// cards below), not by swapping text color -- `--accent-on` is meant
-				// for text on a SOLID accent fill, and paired with the near-transparent
-				// `--accent-wash` it read as near-invisible dark-on-dark text.
+				// for text on a SOLID accent fill, and paired with a near-transparent
+				// tint it read as near-invisible dark-on-dark text.
 				color: "var(--fg)",
 				cursor: "pointer",
 				font: "600 14px/1 var(--font-body)",
@@ -891,11 +842,10 @@ function ProgressBlock({
 			<div
 				style={{
 					padding: "16px",
-					border: "1px solid var(--border)",
-					borderRadius: 10,
-					background: "var(--surface-1)",
+					borderRadius: 12,
+					background: "color-mix(in oklab, var(--fg) 5%, transparent)",
 					color: "var(--muted)",
-					font: "500 12px var(--font-body)",
+					font: "500 13px var(--font-body)",
 					textAlign: "center",
 				}}
 			>
@@ -909,7 +859,7 @@ function ProgressBlock({
 				style={{
 					padding: "16px",
 					border: "1px solid var(--brand)",
-					borderRadius: 10,
+					borderRadius: 12,
 					background: "var(--success-soft)",
 					color: "var(--fg-2)",
 					font: "500 12px var(--font-body)",
@@ -987,7 +937,7 @@ function ProgressBlock({
 				style={{
 					padding: "16px",
 					border: "1px solid var(--danger)",
-					borderRadius: 10,
+					borderRadius: 12,
 					background: "var(--danger-soft)",
 					color: "var(--danger)",
 					font: "500 12px var(--font-body)",
@@ -1004,9 +954,8 @@ function ProgressBlock({
 		<div
 			style={{
 				padding: "12px 14px",
-				border: "1px solid var(--border)",
-				borderRadius: 10,
-				background: "var(--surface-1)",
+				borderRadius: 12,
+				background: "color-mix(in oklab, var(--fg) 5%, transparent)",
 				display: "flex",
 				flexDirection: "column",
 				gap: 8,
@@ -1019,13 +968,14 @@ function ProgressBlock({
 					justifyContent: "space-between",
 				}}
 			>
-				<span style={{ font: "500 12px var(--font-body)", color: "var(--fg-2)" }}>
+				<span style={{ font: "500 13px var(--font-body)", color: "var(--fg-2)" }}>
 					{phase === "writing" ? t("exportDialog.writingFile") : t("exportDialog.renderingFrames")}
 				</span>
 				<span
 					style={{
-						font: "500 12px/1 var(--font-mono)",
-						color: "var(--brand)",
+						font: "600 13px/1 var(--font-body)",
+						fontVariantNumeric: "tabular-nums",
+						color: "var(--fg)",
 					}}
 				>
 					{Math.round(pct)}%
@@ -1052,9 +1002,9 @@ function ProgressBlock({
 			</div>
 			<div
 				style={{
-					font: "500 11px/1.4 var(--font-mono)",
+					font: "400 12px/1.4 var(--font-body)",
+					fontVariantNumeric: "tabular-nums",
 					color: "var(--muted)",
-					letterSpacing: "0.04em",
 				}}
 			>
 				{total > 0
@@ -1065,14 +1015,24 @@ function ProgressBlock({
 	);
 }
 
+/** The one selected look, shared by every choice in this dialog: accent border + accent-soft
+ *  fill when picked, a soft fill otherwise. The segments used to go solid mint while the cards
+ *  above them were tinted — two ways of saying "selected" on one screen. */
+function choiceStyle(active: boolean): React.CSSProperties {
+	return {
+		border: `1px solid ${active ? "var(--accent)" : "transparent"}`,
+		borderRadius: 10,
+		background: active ? "var(--accent-soft)" : "color-mix(in oklab, var(--fg) 5%, transparent)",
+	};
+}
+
 function segStyle(active: boolean): React.CSSProperties {
 	return {
-		padding: "8px 10px",
-		border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-		borderRadius: 8,
-		background: active ? "var(--brand)" : "var(--bg)",
-		color: active ? "var(--accent-on)" : "var(--fg-2)",
+		padding: "10px 12px",
+		...choiceStyle(active),
+		color: active ? "var(--fg)" : "var(--fg-2)",
 		cursor: "pointer",
-		font: "500 12px/1 var(--font-body)",
+		font: `${active ? 600 : 500} 13px/1 var(--font-body)`,
+		fontVariantNumeric: "tabular-nums",
 	};
 }

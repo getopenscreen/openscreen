@@ -23,7 +23,27 @@ vi.mock("../RightPanes", () => ({
 	CursorPane: () => <div data-testid="cursor-pane">CursorPane</div>,
 	LayoutPane: () => <div data-testid="layout-pane">LayoutPane</div>,
 	SliderCell: () => <div data-testid="slider-cell">SliderCell</div>,
-	Toggle: () => <div data-testid="toggle">Toggle</div>,
+	// The real switch contract (a button carrying aria-pressed), so the click-impact tests below
+	// can find, read and press it.
+	Toggle: ({
+		checked,
+		disabled,
+		ariaLabel,
+		onChange,
+	}: {
+		checked: boolean;
+		disabled?: boolean;
+		ariaLabel?: string;
+		onChange: (next: boolean) => void;
+	}) => (
+		<button
+			type="button"
+			aria-pressed={checked}
+			aria-label={ariaLabel}
+			disabled={disabled}
+			onClick={() => onChange(!checked)}
+		/>
+	),
 	TranscriptPane: () => <div data-testid="transcript-pane">TranscriptPane</div>,
 	VideoEffectsPane: () => <div data-testid="effects-pane">VideoEffectsPane</div>,
 }));
@@ -102,7 +122,7 @@ describe("FloatingInspector", () => {
 		expect(clearSelection).toHaveBeenCalledTimes(1);
 	});
 
-	describe("click impact checkbox", () => {
+	describe("click impact toggle", () => {
 		const zoomTl = (region: Record<string, unknown>) => {
 			const updateZoomClickImpact = vi.fn();
 			const tl = {
@@ -119,8 +139,8 @@ describe("FloatingInspector", () => {
 		it("is off by default and disabled with its reason when there is no 3D preset", () => {
 			const { tl } = zoomTl({});
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const box = screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" });
-			expect(box).not.toBeChecked();
+			const box = screen.getByRole("button", { name: "settings.zoom.clickImpact.title" });
+			expect(box).toHaveAttribute("aria-pressed", "false");
 			expect(box).toBeDisabled();
 			expect(screen.getByText("settings.zoom.clickImpact.needsRotation")).toBeInTheDocument();
 		});
@@ -129,7 +149,7 @@ describe("FloatingInspector", () => {
 			const { tl } = zoomTl({ rotationPreset: "iso", hideCursor: true });
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
 			expect(
-				screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" }),
+				screen.getByRole("button", { name: "settings.zoom.clickImpact.title" }),
 			).toBeDisabled();
 			expect(screen.getByText("settings.zoom.clickImpact.needsCursor")).toBeInTheDocument();
 		});
@@ -137,7 +157,7 @@ describe("FloatingInspector", () => {
 		it("says the orbiting camera recoils on a click, since its screen stays still", () => {
 			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "follow-cursor" });
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const box = screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" });
+			const box = screen.getByRole("button", { name: "settings.zoom.clickImpact.title" });
 			expect(box).toBeEnabled();
 			expect(screen.getByText("settings.zoom.clickImpact.descriptionCamera")).toBeInTheDocument();
 			fireEvent.click(box);
@@ -150,7 +170,7 @@ describe("FloatingInspector", () => {
 				const { tl } = zoomTl({ rotationPreset: "iso" });
 				render(<FloatingInspector {...defaultProps} tl={tl} />);
 				expect(
-					screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" }),
+					screen.getByRole("button", { name: "settings.zoom.clickImpact.title" }),
 				).toBeDisabled();
 				expect(screen.getByText("settings.zoom.clickImpact.needsCursor")).toBeInTheDocument();
 			} finally {
@@ -161,7 +181,7 @@ describe("FloatingInspector", () => {
 		it("toggles the region's clickImpact under a 3D preset", () => {
 			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "iso" });
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const box = screen.getByRole("checkbox", { name: "settings.zoom.clickImpact.title" });
+			const box = screen.getByRole("button", { name: "settings.zoom.clickImpact.title" });
 			expect(box).toBeEnabled();
 			expect(screen.getByText("settings.zoom.clickImpact.description")).toBeInTheDocument();
 			fireEvent.click(box);

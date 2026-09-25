@@ -154,17 +154,8 @@ export function OpenProjectModal({
 					placeholder={t("openProjectDialog.searchPlaceholder")}
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
-					style={{
-						flex: 1,
-						height: 36,
-						padding: "0 12px",
-						border: "1px solid var(--border)",
-						borderRadius: "var(--r-md)",
-						background: "var(--surface)",
-						color: "var(--fg)",
-						font: "400 13px/1 var(--font-body)",
-						outline: "none",
-					}}
+					className={styles.control}
+					style={{ flex: 1 }}
 				/>
 			</div>
 			<div
@@ -216,7 +207,7 @@ export function OpenProjectModal({
 										</div>
 										<div
 											style={{
-												font: "400 11px/1.4 var(--font-body)",
+												font: "400 12px/1.4 var(--font-body)",
 												color: "var(--muted)",
 												marginTop: 2,
 											}}
@@ -263,7 +254,7 @@ export function OpenProjectModal({
 										padding: "10px 12px",
 										border: "none",
 										borderRadius: "var(--r-md)",
-										background: isActive ? "var(--accent-wash)" : "transparent",
+										background: isActive ? "var(--accent-soft)" : "transparent",
 										boxShadow: isActive ? "inset 0 0 0 1px var(--accent)" : "none",
 										color: "var(--fg)",
 										cursor: "pointer",
@@ -307,8 +298,9 @@ export function OpenProjectModal({
 									</div>
 									<span
 										style={{
-											font: "400 11px/1 var(--font-mono)",
-											color: "var(--meta)",
+											font: "400 12px/1 var(--font-body)",
+											fontVariantNumeric: "tabular-nums",
+											color: "var(--muted)",
 											whiteSpace: "nowrap",
 										}}
 									>
@@ -403,15 +395,7 @@ export function NewProjectModal({ open, onClose, onCreate }: NewProjectModalProp
 		>
 			<div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 				<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-					<label
-						htmlFor="np-name"
-						style={{
-							font: "500 11px/1 var(--font-body)",
-							textTransform: "uppercase",
-							letterSpacing: "0.06em",
-							color: "var(--muted)",
-						}}
-					>
+					<label htmlFor="np-name" className={styles.groupLabel} style={{ margin: 0 }}>
 						{t("newProjectDialog.nameLabel")}
 					</label>
 					<input
@@ -419,27 +403,12 @@ export function NewProjectModal({ open, onClose, onCreate }: NewProjectModalProp
 						type="text"
 						value={title}
 						onChange={(e) => setTitle(e.target.value)}
-						style={{
-							height: 36,
-							padding: "0 12px",
-							border: "1px solid var(--border)",
-							borderRadius: "var(--r-md)",
-							background: "var(--surface)",
-							color: "var(--fg)",
-							font: "400 13px/1 var(--font-body)",
-						}}
+						className={styles.control}
 					/>
 				</div>
 
 				<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-					<label
-						style={{
-							font: "500 11px/1 var(--font-body)",
-							textTransform: "uppercase",
-							letterSpacing: "0.06em",
-							color: "var(--muted)",
-						}}
-					>
+					<label className={styles.groupLabel} style={{ margin: 0 }}>
 						{t("newProjectDialog.startingPointLabel")}
 					</label>
 					<div
@@ -522,10 +491,11 @@ function TemplateCell({
 				alignItems: "flex-start",
 				gap: 8,
 				padding: 12,
-				border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-				borderRadius: "var(--r-md)",
-				background: active ? "var(--accent-wash)" : "var(--surface)",
-				boxShadow: active ? "0 0 0 1px var(--accent)" : "none",
+				border: `1px solid ${active ? "var(--accent)" : "transparent"}`,
+				borderRadius: 12,
+				background: active
+					? "var(--accent-soft)"
+					: "color-mix(in oklab, var(--fg) 5%, transparent)",
 				color: "var(--fg)",
 				cursor: "pointer",
 				textAlign: "left",
@@ -546,7 +516,7 @@ function TemplateCell({
 				{icon}
 			</span>
 			<span style={{ font: "500 13px/1.3 var(--font-body)" }}>{title}</span>
-			<span style={{ font: "400 11px/1.4 var(--font-body)", color: "var(--muted)" }}>{desc}</span>
+			<span style={{ font: "400 12px/1.4 var(--font-body)", color: "var(--muted)" }}>{desc}</span>
 		</button>
 	);
 }
@@ -618,16 +588,7 @@ function CropField({
 	const [draft, setDraft] = useState<string | null>(null);
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-			<label
-				style={{
-					font: "600 10px/1 var(--font-mono)",
-					letterSpacing: "0.04em",
-					textTransform: "uppercase",
-					color: "var(--muted)",
-				}}
-			>
-				{label}
-			</label>
+			<label style={{ font: "600 12px/1.3 var(--font-body)", color: "var(--fg-2)" }}>{label}</label>
 			<input
 				type="number"
 				value={draft ?? displayPct(value)}
@@ -641,16 +602,8 @@ function CropField({
 					const parsed = Number(e.target.value);
 					if (e.target.value !== "" && Number.isFinite(parsed)) onChange(parsed);
 				}}
-				style={{
-					width: "100%",
-					padding: "8px 10px",
-					font: "500 14px/1 var(--font-mono)",
-					color: "var(--fg-2)",
-					background: "var(--surface)",
-					border: "1px solid var(--border)",
-					borderRadius: 6,
-					outline: "none",
-				}}
+				className={styles.control}
+				style={{ width: "100%", fontVariantNumeric: "tabular-nums" }}
 			/>
 		</div>
 	);
@@ -1131,7 +1084,8 @@ export function EditClipModal({
 					style={{
 						display: "flex",
 						justifyContent: "space-between",
-						font: "500 10px/1.4 var(--font-mono)",
+						font: "500 11px/1.4 var(--font-body)",
+						fontVariantNumeric: "tabular-nums",
 						color: "var(--muted)",
 						marginBottom: 4,
 					}}
@@ -1272,29 +1226,14 @@ export function EditClipModal({
 						onChange={applyCropH}
 					/>
 					<div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 110 }}>
-						<label
-							style={{
-								font: "600 10px/1 var(--font-mono)",
-								letterSpacing: "0.04em",
-								textTransform: "uppercase",
-								color: "var(--muted)",
-							}}
-						>
+						<label style={{ font: "600 12px/1.3 var(--font-body)", color: "var(--fg-2)" }}>
 							{ts("crop.ratio")}
 						</label>
 						<select
 							value={cropRatio}
 							onChange={(e) => handleCropRatioChange(e.target.value)}
-							style={{
-								width: "100%",
-								padding: "8px 10px",
-								font: "500 13px/1 var(--font-body)",
-								color: "var(--fg-2)",
-								background: "var(--surface)",
-								border: "1px solid var(--border)",
-								borderRadius: 6,
-								outline: "none",
-							}}
+							className={styles.control}
+							style={{ width: "100%" }}
 						>
 							{CROP_RATIOS.map((r) => (
 								<option key={r.value} value={r.value}>
@@ -1305,7 +1244,8 @@ export function EditClipModal({
 					</div>
 					<span
 						style={{
-							font: "500 11px/1 var(--font-mono)",
+							font: "500 12px/1 var(--font-body)",
+							fontVariantNumeric: "tabular-nums",
 							color: "var(--muted)",
 							alignSelf: "center",
 							whiteSpace: "nowrap",
@@ -1361,8 +1301,16 @@ export function EditClipModal({
 function RangeStat({ label, value, testId }: { label: string; value: string; testId?: string }) {
 	return (
 		<div data-testid={testId} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-			<strong style={{ font: "600 15px/1.2 var(--font-mono)", color: "var(--fg)" }}>{value}</strong>
-			<small style={{ font: "500 10px/1.4 var(--font-body)", color: "var(--muted)" }}>
+			<strong
+				style={{
+					font: "600 15px/1.2 var(--font-body)",
+					fontVariantNumeric: "tabular-nums",
+					color: "var(--fg)",
+				}}
+			>
+				{value}
+			</strong>
+			<small style={{ font: "500 12px/1.4 var(--font-body)", color: "var(--muted)" }}>
 				{label}
 			</small>
 		</div>
@@ -1387,14 +1335,17 @@ export function UnsavedChangesModal({
 	const td = useScopedT("dialogs");
 	const tc = useScopedT("common");
 	const titleKeys: Record<UnsavedChangesModalProps["action"], string> = {
-		close: "modal.closeTitle",
-		new: "modal.newTitle",
-		open: "modal.openTitle",
-		record: "modal.recordTitle",
+		close: "unsavedChanges.modal.closeTitle",
+		new: "unsavedChanges.modal.newTitle",
+		open: "unsavedChanges.modal.openTitle",
+		record: "unsavedChanges.modal.recordTitle",
 	};
 	const copy = {
 		title: td(titleKeys[action]),
-		body: action === "close" ? td("modal.closeBody") : td("modal.sharedBody"),
+		body:
+			action === "close"
+				? td("unsavedChanges.modal.closeBody")
+				: td("unsavedChanges.modal.sharedBody"),
 	};
 	return (
 		<ModalShell open={open} onClose={onClose} title={copy.title} subtitle={copy.body}>
@@ -1418,7 +1369,7 @@ export function UnsavedChangesModal({
 						color: "var(--fg-2)",
 					}}
 				>
-					{td("modal.notSavedYet")}
+					{td("unsavedChanges.modal.notSavedYet")}
 				</div>
 			</div>
 			<div
@@ -1444,7 +1395,7 @@ export function UnsavedChangesModal({
 					onClick={() => onChoose("discard")}
 					disabled={busy}
 				>
-					{td("modal.discard")}
+					{td("unsavedChanges.modal.discard")}
 				</button>
 				<button
 					type="button"
@@ -1452,7 +1403,7 @@ export function UnsavedChangesModal({
 					onClick={() => onChoose("save")}
 					disabled={busy}
 				>
-					{busy ? td("modal.saving") : td("modal.saveAndContinue")}
+					{busy ? td("unsavedChanges.modal.saving") : td("unsavedChanges.modal.saveAndContinue")}
 				</button>
 			</div>
 		</ModalShell>
@@ -1495,9 +1446,9 @@ export function InsertSourceModal({
 					onClick={onAddBefore}
 					style={{
 						padding: "12px 16px",
-						border: "1px solid var(--border)",
-						borderRadius: 10,
-						background: "var(--surface)",
+						border: "1px solid transparent",
+						borderRadius: 12,
+						background: "color-mix(in oklab, var(--fg) 5%, transparent)",
 						color: "var(--fg-2)",
 						font: "500 13px/1.2 var(--font-body)",
 						cursor: canAddBefore ? "pointer" : "not-allowed",
@@ -1506,7 +1457,7 @@ export function InsertSourceModal({
 					}}
 				>
 					<strong>{t("insertSourceDialog.addBefore")}</strong>
-					<div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+					<div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
 						{t("insertSourceDialog.addBeforeDesc")}
 					</div>
 				</button>
@@ -1516,9 +1467,9 @@ export function InsertSourceModal({
 					onClick={onAddAfter}
 					style={{
 						padding: "12px 16px",
-						border: "1px solid var(--border)",
-						borderRadius: 10,
-						background: "var(--surface)",
+						border: "1px solid transparent",
+						borderRadius: 12,
+						background: "color-mix(in oklab, var(--fg) 5%, transparent)",
 						color: "var(--fg-2)",
 						font: "500 13px/1.2 var(--font-body)",
 						cursor: canAddAfter ? "pointer" : "not-allowed",
@@ -1527,7 +1478,7 @@ export function InsertSourceModal({
 					}}
 				>
 					<strong>{t("insertSourceDialog.addAfter")}</strong>
-					<div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+					<div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
 						{t("insertSourceDialog.addAfterDesc")}
 					</div>
 				</button>
@@ -1537,9 +1488,9 @@ export function InsertSourceModal({
 					onClick={onSplit}
 					style={{
 						padding: "12px 16px",
-						border: "1px solid var(--border)",
-						borderRadius: 10,
-						background: "var(--surface)",
+						border: "1px solid transparent",
+						borderRadius: 12,
+						background: "color-mix(in oklab, var(--fg) 5%, transparent)",
 						color: "var(--fg-2)",
 						font: "500 13px/1.2 var(--font-body)",
 						cursor: canSplit ? "pointer" : "not-allowed",
@@ -1548,7 +1499,7 @@ export function InsertSourceModal({
 					}}
 				>
 					<strong>{t("insertSourceDialog.split")}</strong>
-					<div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+					<div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
 						{t("insertSourceDialog.splitDesc")}
 					</div>
 				</button>
@@ -1606,9 +1557,11 @@ export function ChatHistoryModal({
 									alignItems: "center",
 									justifyContent: "space-between",
 									padding: "10px 12px",
-									border: `1px solid ${isActive ? "var(--accent)" : "var(--border-soft)"}`,
-									borderRadius: 8,
-									background: isActive ? "var(--accent-wash)" : "var(--surface)",
+									border: `1px solid ${isActive ? "var(--accent)" : "transparent"}`,
+									borderRadius: 12,
+									background: isActive
+										? "var(--accent-soft)"
+										: "color-mix(in oklab, var(--fg) 5%, transparent)",
 									color: "var(--fg-2)",
 									cursor: "pointer",
 									font: "500 13px var(--font-body)",
@@ -1621,7 +1574,13 @@ export function ChatHistoryModal({
 								}}
 							>
 								<span style={{ fontWeight: isActive ? 600 : 500 }}>{s.title}</span>
-								<span style={{ font: "500 11px/1 var(--font-mono)", color: "var(--muted)" }}>
+								<span
+									style={{
+										font: "500 12px/1 var(--font-body)",
+										fontVariantNumeric: "tabular-nums",
+										color: "var(--muted)",
+									}}
+								>
 									{t("chat.historyDialog.msgsCount", {
 										count: s.messageCount,
 										date: new Date(s.createdAt).toLocaleDateString(),

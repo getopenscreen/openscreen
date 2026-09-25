@@ -144,7 +144,7 @@ function ModelQuickPopover({
 					flexDirection: "column",
 					background: "var(--surface)",
 					border: "1px solid var(--border)",
-					borderRadius: "var(--r-md)",
+					borderRadius: 12,
 					boxShadow: "var(--elev-pop)",
 					zIndex: 1000,
 					overflow: "hidden",
@@ -170,26 +170,20 @@ function ModelQuickPopover({
 							border: "none",
 							color: "var(--fg-2)",
 							cursor: "pointer",
-							fontSize: 12.5,
+							fontSize: 13,
 							padding: 0,
 						}}
 					>
-						<ArrowLeft size={14} />
+						<ArrowLeft size={16} />
 						{screen === "models" ? t("chat.changeProvider") : t("chat.back")}
 					</button>
 					<button
 						type="button"
 						onClick={onClose}
 						aria-label={tc("actions.close")}
-						style={{
-							background: "transparent",
-							border: "none",
-							color: "var(--muted)",
-							cursor: "pointer",
-							padding: 0,
-						}}
+						className={styles.iconBtn}
 					>
-						<X size={14} />
+						<X size={16} />
 					</button>
 				</div>
 				<div style={{ overflowY: "auto", padding: 10, minHeight: 0, flex: 1 }}>
@@ -199,7 +193,7 @@ function ModelQuickPopover({
 								<div style={{ fontWeight: 600, fontSize: 13 }}>
 									{browseDef?.label ?? browseProviderId}
 								</div>
-								<div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+								<div style={{ fontSize: 12, color: "var(--muted)" }}>
 									{t("chat.currentModel")}{" "}
 									{browseProviderId === llmConfig.provider
 										? llmConfig.model
@@ -211,15 +205,8 @@ function ModelQuickPopover({
 								onChange={(e) => setSearch(e.target.value)}
 								placeholder={modelsLoading ? t("chat.loadingModels") : t("chat.searchModels")}
 								disabled={modelsLoading || !models.length}
-								style={{
-									width: "100%",
-									padding: "6px 8px",
-									marginBottom: 8,
-									borderRadius: "var(--r-sm)",
-									border: "1px solid var(--border)",
-									background: "var(--bg)",
-									color: "var(--fg)",
-								}}
+								className={styles.control}
+								style={{ width: "100%", marginBottom: 8 }}
 							/>
 							{!models.length ? (
 								<div style={{ fontSize: 12, color: "var(--muted)", padding: "8px 0" }}>
@@ -247,11 +234,11 @@ function ModelQuickPopover({
 												borderRadius: "var(--r-sm)",
 												background:
 													candidate === llmConfig.model && browseProviderId === llmConfig.provider
-														? "var(--surface-3)"
+														? "var(--accent-soft)"
 														: "transparent",
 												color: "var(--fg)",
 												cursor: "pointer",
-												fontSize: 12.5,
+												fontSize: 13,
 												marginBottom: 2,
 											}}
 										>
@@ -291,14 +278,14 @@ function ModelQuickPopover({
 											border: "none",
 											borderRadius: "var(--r-sm)",
 											background:
-												providerId === browseProviderId ? "var(--surface-3)" : "transparent",
+												providerId === browseProviderId ? "var(--accent-soft)" : "transparent",
 											color: "var(--fg)",
 											cursor: "pointer",
 											marginBottom: 4,
 										}}
 									>
-										<strong style={{ fontSize: 12.5 }}>{def.label}</strong>
-										<span style={{ fontSize: 11, color: "var(--muted)" }}>
+										<strong style={{ fontSize: 13 }}>{def.label}</strong>
+										<span style={{ fontSize: 12, color: "var(--muted)" }}>
 											{providerId === llmConfig.provider ? llmConfig.model : def.defaultModel}
 										</span>
 									</button>
@@ -315,19 +302,8 @@ function ModelQuickPopover({
 									onClose();
 									onOpenFullSettings();
 								}}
-								style={{
-									display: "flex",
-									alignItems: "center",
-									gap: 6,
-									width: "100%",
-									padding: "8px 10px",
-									border: "1px solid var(--border-soft)",
-									borderRadius: "var(--r-sm)",
-									background: "transparent",
-									color: "var(--fg-2)",
-									cursor: "pointer",
-									marginTop: 6,
-								}}
+								className={`${styles.btn} ${styles.btnSecondary}`}
+								style={{ width: "100%", marginTop: 6 }}
 							>
 								{t("chat.providerSettings")}
 							</button>
@@ -378,7 +354,7 @@ function ThinkingBlock({
 				padding: "6px 8px",
 				marginBottom: 4,
 				color: expanded ? "var(--fg-2)" : "var(--muted)",
-				font: "400 11px/1.5 var(--font-body)",
+				font: "400 12px/1.5 var(--font-body)",
 				cursor: "pointer",
 			}}
 		>
@@ -389,7 +365,7 @@ function ThinkingBlock({
 					gap: 4,
 					marginBottom: expanded ? 4 : 0,
 					color: "var(--muted)",
-					font: "500 10px/1 var(--font-mono)",
+					font: "600 12px/1.3 var(--font-body)",
 				}}
 			>
 				<svg
@@ -419,7 +395,7 @@ function ThinkingBlock({
 						overflow: "auto",
 						whiteSpace: "pre-wrap",
 						wordBreak: "break-word",
-						font: "400 11px/1.5 var(--font-mono)",
+						font: "400 12px/1.5 var(--font-body)",
 					}}
 				>
 					{text}
@@ -1193,17 +1169,11 @@ export function ChatStripPanel() {
 								const current = sessions.find((s) => s.id === activeSessionId);
 								if (current) beginEditTitle(activeSessionId, current.title);
 							}}
-							style={{
-								background: "transparent",
-								border: 0,
-								color: "var(--meta)",
-								cursor: "pointer",
-								padding: 2,
-							}}
+							className={styles.iconBtn}
 						>
 							<svg
-								width={12}
-								height={12}
+								width={14}
+								height={14}
 								viewBox="0 0 24 24"
 								fill="none"
 								stroke="currentColor"
@@ -1226,17 +1196,11 @@ export function ChatStripPanel() {
 									void handleDelete(activeSessionId);
 								}
 							}}
-							style={{
-								background: "transparent",
-								border: 0,
-								color: "var(--meta)",
-								cursor: "pointer",
-								padding: 2,
-							}}
+							className={styles.iconBtn}
 						>
 							<svg
-								width={12}
-								height={12}
+								width={14}
+								height={14}
 								viewBox="0 0 24 24"
 								fill="none"
 								stroke="currentColor"
@@ -1281,7 +1245,11 @@ export function ChatStripPanel() {
 									{m.time ? (
 										<span
 											className="right"
-											style={{ font: "500 10px/1 var(--font-mono)", color: "var(--muted)" }}
+											style={{
+												font: "500 11px/1 var(--font-body)",
+												fontVariantNumeric: "tabular-nums",
+												color: "var(--muted)",
+											}}
 										>
 											{m.time}
 										</span>
@@ -1306,7 +1274,15 @@ export function ChatStripPanel() {
 										label={t("chat.thinking")}
 									/>
 								) : null}
-								<div className={styles.msgBubble}>{m.content}</div>
+								<div
+									className={
+										m.role === "user"
+											? `${styles.msgBubble} ${styles.msgBubbleUser}`
+											: styles.msgBubble
+									}
+								>
+									{m.content}
+								</div>
 								<div
 									style={{
 										display: "flex",
@@ -1333,22 +1309,11 @@ export function ChatStripPanel() {
 													},
 												});
 											}}
-											style={{
-												width: 22,
-												height: 22,
-												display: "inline-flex",
-												alignItems: "center",
-												justifyContent: "center",
-												background: "transparent",
-												border: "1px solid var(--border-soft)",
-												borderRadius: "var(--r-sm)",
-												color: "var(--fg-2)",
-												cursor: "pointer",
-											}}
+											className={styles.iconBtn}
 										>
 											<svg
-												width={12}
-												height={12}
+												width={14}
+												height={14}
 												viewBox="0 0 24 24"
 												fill="none"
 												stroke="currentColor"
@@ -1371,22 +1336,11 @@ export function ChatStripPanel() {
 												() => toast.error(t("chat.copyFailed")),
 											);
 										}}
-										style={{
-											width: 22,
-											height: 22,
-											display: "inline-flex",
-											alignItems: "center",
-											justifyContent: "center",
-											background: "transparent",
-											border: "1px solid var(--border-soft)",
-											borderRadius: "var(--r-sm)",
-											color: "var(--fg-2)",
-											cursor: "pointer",
-										}}
+										className={styles.iconBtn}
 									>
 										<svg
-											width={12}
-											height={12}
+											width={14}
+											height={14}
 											viewBox="0 0 24 24"
 											fill="none"
 											stroke="currentColor"
@@ -1405,7 +1359,7 @@ export function ChatStripPanel() {
 											<div
 												key={j}
 												style={{
-													font: "500 10px/1.5 var(--font-mono)",
+													font: "500 12px/1.5 var(--font-body)",
 													color: "var(--success)",
 												}}
 											>
@@ -1505,7 +1459,10 @@ export function ChatStripPanel() {
 							<line x1="3" y1="12" x2="21" y2="12" />
 							<line x1="3" y1="18" x2="21" y2="18" />
 						</svg>
-						<span>{modelLabel}</span>
+						{/* Mono is for the model ID; the "set one up" prompt is words. */}
+						<span style={llmConfig ? undefined : { fontFamily: "var(--font-body)" }}>
+							{modelLabel}
+						</span>
 					</button>
 					{reasoningLabel ? (
 						<button
@@ -1556,11 +1513,11 @@ export function ChatStripPanel() {
 												padding: "6px 10px",
 												border: "none",
 												background:
-													option === currentReasoningEffort ? "var(--surface-3)" : "transparent",
+													option === currentReasoningEffort ? "var(--accent-soft)" : "transparent",
 												color: "var(--fg)",
 												borderRadius: "var(--r-sm)",
 												cursor: "pointer",
-												fontSize: 12.5,
+												fontSize: 13,
 											}}
 										>
 											{getReasoningEffortLabel(llmConfig?.provider ?? "", option)}
@@ -1626,7 +1583,7 @@ export function ChatStripPanel() {
 								width: 260,
 								background: "var(--surface)",
 								border: "1px solid var(--border)",
-								borderRadius: "var(--r-md)",
+								borderRadius: 12,
 								boxShadow: "var(--elev-pop)",
 								padding: 12,
 								zIndex: 1000,
@@ -1648,30 +1605,14 @@ export function ChatStripPanel() {
 								<button
 									type="button"
 									onClick={() => setRewindFor(null)}
-									style={{
-										padding: "4px 10px",
-										background: "transparent",
-										border: "1px solid var(--border-soft)",
-										borderRadius: "var(--r-sm)",
-										color: "var(--fg-2)",
-										font: "500 12px var(--font-body)",
-										cursor: "pointer",
-									}}
+									className={`${styles.btn} ${styles.btnSecondary}`}
 								>
 									{tc("actions.cancel")}
 								</button>
 								<button
 									type="button"
 									onClick={() => void confirmRewind(rewindFor.messageId)}
-									style={{
-										padding: "4px 10px",
-										background: "var(--accent)",
-										border: "1px solid var(--accent)",
-										borderRadius: "var(--r-sm)",
-										color: "var(--accent-on)",
-										font: "500 12px var(--font-body)",
-										cursor: "pointer",
-									}}
+									className={`${styles.btn} ${styles.btnPrimary}`}
 								>
 									{t("chat.rewindConfirm")}
 								</button>

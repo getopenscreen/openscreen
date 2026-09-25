@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "Kaynak",
+		"selectSource": "Neyi kaydedeceğinizi seçin",
 		"systemPicker": "Sisteminiz neyi paylaşacağınızı soracak",
 		"systemAudio": "Sistem sesi",
 		"microphone": "Mikrofon",
@@ -115,6 +116,8 @@
 		"loading": "Yükleniyor…",
 		"noCameraFound": "Kamera bulunamadı",
 		"cameraAccessError": "Bu kameraya erişilemedi",
+		"noMicrophoneFound": "Mikrofon bulunamadı",
+		"microphoneUnavailable": "Mikrofona erişilemedi",
 		"startingCamera": "Kamera başlatılıyor…",
 		"turnOnCameraHint": "Canlı önizleme için kamerayı açın",
 		"entireScreen": "Tüm Ekran",

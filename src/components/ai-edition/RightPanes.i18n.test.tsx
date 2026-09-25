@@ -85,7 +85,7 @@ describe("right-rail panes are localized", () => {
 	it("falls back to English when the locale is English", () => {
 		renderIn("en", <VideoEffectsPane />);
 		expect(screen.getByRole("heading", { name: "Composition" })).toBeInTheDocument();
-		expect(screen.getByText("Blur BG")).toBeInTheDocument();
+		expect(screen.getByText("Blur background")).toBeInTheDocument();
 	});
 
 	it("renders the transcript pane title as 'Transcription' in French", () => {

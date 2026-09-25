@@ -7,7 +7,7 @@
 		"compilingGifProgress": "Compiling GIF... {{progress}}%",
 		"compilingGifWait": "Compiling GIF... This may take a while",
 		"takeMoment": "This may take a moment...",
-		"failed": "Export Failed",
+		"failed": "Export failed",
 		"tryAgain": "Please try again",
 		"finalizingVideoTitle": "Finalizing Video",
 		"compilingGif": "Compiling GIF",
@@ -76,17 +76,17 @@
 		}
 	},
 	"fileDialogs": {
-		"saveGif": "Save Exported GIF",
-		"saveVideo": "Save Exported Video",
-		"selectVideo": "Select Video File",
-		"selectAudio": "Select Audio File",
-		"saveProject": "Save OpenScreen Project",
-		"openProject": "Open OpenScreen Project",
-		"gifImage": "GIF Image",
-		"mp4Video": "MP4 Video",
-		"videoFiles": "Video Files",
-		"audioFiles": "Audio Files",
-		"openscreenProject": "OpenScreen Project",
-		"allFiles": "All Files"
+		"saveGif": "Save exported GIF",
+		"saveVideo": "Save exported video",
+		"selectVideo": "Choose a video file",
+		"selectAudio": "Choose an audio file",
+		"saveProject": "Save OpenScreen project",
+		"openProject": "Open OpenScreen project",
+		"gifImage": "GIF image",
+		"mp4Video": "MP4 video",
+		"videoFiles": "Video files",
+		"audioFiles": "Audio files",
+		"openscreenProject": "OpenScreen project",
+		"allFiles": "All files"
 	}
 }

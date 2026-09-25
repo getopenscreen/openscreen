@@ -378,7 +378,7 @@ describe("Preview shows the empty state only when there is nothing to show", () 
 		renderPreview({ videoSources: [], clips: [], hasProject: false, hasAsset: false });
 
 		expect(emptyState()).not.toBeInTheDocument();
-		expect(screen.getByText(/no project open/i)).toBeInTheDocument();
+		expect(screen.getByText(/start with a recording/i)).toBeInTheDocument();
 	});
 
 	// The guard for #395 itself: no failure, however reported, may reach the

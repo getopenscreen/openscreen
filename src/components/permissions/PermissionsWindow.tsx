@@ -101,7 +101,7 @@ export function PermissionsWindow() {
 	return (
 		<div className="flex h-screen flex-col bg-[#0b0c0f] px-7 pt-7 pb-6 text-white select-none">
 			<h1 className="text-[17px] font-semibold">{t("permissions.title")}</h1>
-			<p className="mt-1.5 text-[12px] leading-5 text-[#8b93a1]">{t("permissions.subtitle")}</p>
+			<p className="mt-1.5 text-[13px] leading-5 text-[#8b93a1]">{t("permissions.subtitle")}</p>
 
 			<ul className="mt-5 flex flex-col gap-2.5">
 				{ROWS.map(({ kind, level: requiredLevel, Icon }) => {
@@ -123,11 +123,11 @@ export function PermissionsWindow() {
 										<span className="text-[13px] font-medium">
 											{t(`permissions.rows.${rowKey}.name`)}
 										</span>
-										<span className="rounded-full bg-[#1c1f26] px-2 py-px text-[10px] text-[#8b93a1]">
+										<span className="rounded-full bg-[#1c1f26] px-2 py-px text-[11px] text-[#8b93a1]">
 											{t(`permissions.level.${level}`)}
 										</span>
 									</div>
-									<p className="mt-0.5 text-[11px] leading-4 text-[#8b93a1]">
+									<p className="mt-0.5 text-[12.5px] leading-[18px] text-[#8b93a1]">
 										{t(`permissions.rows.${rowKey}.description`)}
 									</p>
 								</div>
@@ -148,7 +148,7 @@ export function PermissionsWindow() {
 			</ul>
 
 			<div className="mt-auto flex items-center justify-between gap-4 pt-5">
-				<p className="text-[11px] leading-4 text-[#8b93a1]">
+				<p className="text-[12.5px] leading-[18px] text-[#8b93a1]">
 					{screenReady ? t("permissions.footer.ready") : t("permissions.footer.screenRequired")}
 				</p>
 				{needsRelaunch ? (
@@ -156,7 +156,7 @@ export function PermissionsWindow() {
 						type="button"
 						data-testid="permissions-relaunch"
 						onClick={() => void window.electronAPI.permissions.relaunch()}
-						className="h-9 shrink-0 rounded-[9px] bg-[#10b981] px-5 text-[12px] font-semibold text-[#08090d] hover:bg-[#10b981]/85"
+						className="h-9 shrink-0 rounded-[9px] bg-[#10b981] px-5 text-[13px] font-semibold text-[#08090d] hover:bg-[#10b981]/85"
 					>
 						{t("permissions.actions.restart")}
 					</button>
@@ -166,7 +166,7 @@ export function PermissionsWindow() {
 						data-testid="permissions-start"
 						disabled={!screenReady}
 						onClick={() => void window.electronAPI.permissions.close()}
-						className="h-9 shrink-0 rounded-[9px] bg-[#10b981] px-5 text-[12px] font-semibold text-[#08090d] hover:bg-[#10b981]/85 disabled:cursor-not-allowed disabled:opacity-40"
+						className="h-9 shrink-0 rounded-[9px] bg-[#10b981] px-5 text-[13px] font-semibold text-[#08090d] hover:bg-[#10b981]/85 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{t("permissions.actions.start")}
 					</button>
@@ -193,7 +193,7 @@ function PermissionAction({
 }) {
 	if (status === "granted") {
 		return (
-			<span className="flex shrink-0 items-center gap-1 text-[12px] font-medium text-[#10b981]">
+			<span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-[#10b981]">
 				<Check className="h-4 w-4" aria-hidden />
 				{t("permissions.status.granted")}
 			</span>
@@ -201,7 +201,7 @@ function PermissionAction({
 	}
 	if (status === "restricted") {
 		return (
-			<span className="max-w-[120px] shrink-0 text-right text-[11px] leading-4 text-[#8b93a1]">
+			<span className="max-w-[120px] shrink-0 text-right text-[12.5px] leading-[18px] text-[#8b93a1]">
 				{t("permissions.status.restricted")}
 			</span>
 		);
@@ -222,7 +222,7 @@ function PermissionAction({
 			data-testid={`permission-${kind}-action`}
 			disabled={busy}
 			onClick={onAct}
-			className="h-8 shrink-0 rounded-[8px] bg-[#1f232b] px-3.5 text-[12px] font-medium text-white hover:bg-[#2a2f39] disabled:opacity-50"
+			className="h-8 shrink-0 rounded-[8px] bg-[#1f232b] px-3.5 text-[13px] font-medium text-white hover:bg-[#2a2f39] disabled:opacity-50"
 		>
 			{label}
 		</button>
@@ -261,7 +261,7 @@ function ScreenHelp({
 	return (
 		<div className="mt-2.5 space-y-1 border-t border-[#20232a] pt-2.5 pl-8">
 			{lines.map((line) => (
-				<p key={line} className="text-[11px] leading-4 text-[#a9b0bc]">
+				<p key={line} className="text-[12.5px] leading-[18px] text-[#a9b0bc]">
 					{line}
 				</p>
 			))}

@@ -2,6 +2,7 @@ import * as Popover from "@radix-ui/react-popover";
 import Colorful from "@uiw/react-color-colorful";
 import { useEffect, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
+import styles from "./NewEditorShell.module.css";
 
 /**
  * Un champ de couleur : une pastille qui ouvre le sélecteur.
@@ -94,12 +95,12 @@ export function ColorField({
 					aria-label={label}
 					disabled={disabled}
 					style={{
-						width: 40,
-						height: 28,
-						padding: 3,
-						borderRadius: 8,
-						border: "1px solid var(--border-hi)",
-						background: "var(--surface)",
+						width: 44,
+						height: 34,
+						padding: 4,
+						borderRadius: 10,
+						border: "1px solid transparent",
+						background: "color-mix(in oklab, var(--fg) 7%, var(--surface-1))",
 						cursor: disabled ? "default" : "pointer",
 						opacity: disabled ? 0.5 : 1,
 					}}
@@ -109,7 +110,7 @@ export function ColorField({
 							display: "block",
 							width: "100%",
 							height: "100%",
-							borderRadius: 5,
+							borderRadius: 7,
 							background: value,
 							boxShadow: "inset 0 0 0 1px rgb(0 0 0 / 0.25)",
 						}}
@@ -156,16 +157,9 @@ export function ColorField({
 							if (HEX_COMPLETE.test(normalised)) onChange(normalised);
 						}}
 						onBlur={() => onCommit?.()}
-						style={{
-							height: 30,
-							padding: "0 8px",
-							borderRadius: 8,
-							border: "1px solid var(--border)",
-							background: "var(--surface)",
-							color: "var(--fg)",
-							font: "500 12px var(--font-mono, ui-monospace), monospace",
-							textTransform: "lowercase",
-						}}
+						className={styles.control}
+						// Mono stays: a hex code.
+						style={{ fontFamily: "var(--font-mono)", textTransform: "lowercase" }}
 					/>
 					<div
 						aria-label={ts("annotation.colorPalette")}
@@ -180,8 +174,8 @@ export function ColorField({
 								aria-pressed={value.toLowerCase() === preset.toLowerCase()}
 								onClick={() => pick(preset)}
 								style={{
-									height: 18,
-									borderRadius: 5,
+									height: 20,
+									borderRadius: 6,
 									background: preset,
 									border:
 										value.toLowerCase() === preset.toLowerCase()

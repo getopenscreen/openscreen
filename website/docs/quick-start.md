@@ -22,7 +22,7 @@ Launching OpenScreen shows a small floating pill (the HUD) docked at the bottom 
 
 ## 2. Pick what to record
 
-Click the source picker (screen icon) to open the source selector. It lists your **Screens** and **Windows** in two tabs — pick a thumbnail and hit **Share**.
+Click the source picker (screen icon) to open the source selector. It lists your **Screens** and **Windows** in two tabs — pick a thumbnail and hit **Select**.
 
 On Linux the HUD has no source picker. It reads *Your system will ask what to share*: when you press record, your desktop's own sharing dialog asks for the screen or window, before the countdown and again on every take.
 
@@ -55,7 +55,7 @@ Click **Open Studio** (or it opens automatically after stopping) to load your re
 That's the core loop. For the full editing toolset — zooms, speed changes, annotations, cursor styling, webcam layout — see [Editing & timeline](./editing-timeline.md). To assemble several takes into one video, see [Media library](./media-library.md).
 
 :::note
-The top bar switches the editor between three modes: **Media** (your clips), **Edit** (everything above), and **Rec** (set up the next recording without leaving the app).
+The top bar switches the editor between three modes: **Media** (your clips), **Edit** (everything above), and **Record** (set up the next recording without leaving the app).
 :::
 
 :::tip

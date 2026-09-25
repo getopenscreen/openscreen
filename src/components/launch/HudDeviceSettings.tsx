@@ -149,7 +149,7 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 					onClick={onClose}
 					className={styles.hudModalClose}
 				>
-					<X size={14} />
+					<X size={16} />
 				</button>
 			</div>
 
@@ -169,7 +169,7 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 							className={`${styles.languageMenuItem} ${isActive ? styles.languageMenuItemActive : ""}`}
 						>
 							<span className="truncate">{device.label}</span>
-							{isActive ? <Check size={11} className="text-white/85" /> : null}
+							{isActive ? <Check size={14} className="text-white/85" /> : null}
 						</button>
 					);
 				})
@@ -200,7 +200,7 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 							className={`${styles.languageMenuItem} ${isActive ? styles.languageMenuItemActive : ""}`}
 						>
 							<span className="truncate">{device.label}</span>
-							{isActive ? <Check size={11} className="text-white/85" /> : null}
+							{isActive ? <Check size={14} className="text-white/85" /> : null}
 						</button>
 					);
 				})

@@ -502,7 +502,7 @@ function LangButton() {
 				    the CJK "简中", and letting the button size to them moved everything
 				    to its right on each language change. */}
 				<span className={styles.langShort}>{getLocaleShort(locale)}</span>
-				<ChevronDown size={9} className={styles.langChevron} />
+				<ChevronDown size={12} className={styles.langChevron} />
 			</button>
 			{open ? (
 				<div className={styles.langMenu}>

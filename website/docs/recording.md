@@ -25,7 +25,7 @@ The source picker button shows the currently selected screen or window (truncate
 - **Screens** — one card per display.
 - **Windows** — one card per open window, with its app icon.
 
-Pick a thumbnail and hit **Share**. If no source is selected when you hit record, OpenScreen opens the picker first and starts recording automatically once you choose one.
+Pick a thumbnail and hit **Select**. If no source is selected when you hit record, OpenScreen opens the picker first and starts recording automatically once you choose one.
 
 There is no region capture: you record a whole screen or a window, and crop the frame afterwards, clip by clip, in the editor.
 
@@ -74,9 +74,9 @@ Hitting record triggers a 3‑2‑1 countdown, rendered as a full-desktop overla
 - **Language** — a locale picker (13 languages) that only affects the OpenScreen UI, not your recording.
 - Window controls to hide the HUD or quit the app.
 
-## Recording from the editor (Rec mode)
+## Recording from the editor (Record mode) {#recording-from-the-editor-rec-mode}
 
-You don't have to start from the HUD. In the editor, switch the top bar to **Rec** to get a full-size pre-flight page instead of a pill:
+You don't have to start from the HUD. In the editor, switch the top bar to **Record** to get a full-size pre-flight page instead of a pill:
 
 - **Source** — same screen/window picker, in a modal. On Linux this row also reads *Your system will ask what to share*, and the portal dialog does the choosing.
 - **System audio**, **Microphone**, **Camera** — each an on/off row; mic and camera expand to a device list, and the camera shows a live preview so you can frame yourself before going live.

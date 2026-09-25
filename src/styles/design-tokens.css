@@ -33,7 +33,7 @@
 	--fg-emphasis: #020617;
 	--muted: #64748b;
 	--muted-soft: #94a3b8;
-	--meta: #7c8aa0;
+	--meta: #6b7a90;
 	--dim: #b6c2d1;
 
 	/* mint brand */
@@ -140,8 +140,8 @@
 
 	/* radius */
 	--r-xs: 4px;
-	--r-sm: 6px;
-	--r-md: 8px;
+	--r-sm: 8px;
+	--r-md: 10px;
 	--r-lg: 12px;
 	--r-pill: 9999px;
 
@@ -170,7 +170,7 @@
 	--bg: #0a0d12;
 	--bg-grad: radial-gradient(ellipse at 50% 0%, #13171f 0%, #0a0d12 60%);
 	--surface: #14181f;
-	--surface-1: #14181f;
+	--surface-1: #191d26;
 	--surface-2: #1c2029;
 	--surface-3: #252a35;
 	--surface-hi: #2b313b;
@@ -185,7 +185,7 @@
 	--fg: #e6e9ef;
 	--fg-2: #f3f5f8;
 	--muted: #8b95a3;
-	--meta: #5b6470;
+	--meta: #7a8491;
 	--dim: #1c2029;
 
 	--brand: #10b981;

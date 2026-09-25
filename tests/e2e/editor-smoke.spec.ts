@@ -28,7 +28,7 @@ test("editor boots into the empty state with no project, and logs no console err
 	await expect(preview).toBeVisible();
 	await expect(preview).toHaveAttribute("data-current-time-sec", /^\d+(\.\d+)?$/);
 	await expect(preview).toHaveAttribute("data-is-playing", /^(true|false)$/);
-	await expect(preview).toContainText("No project open");
+	await expect(preview).toContainText("Start with a recording");
 
 	// Timeline mounts even with nothing on it (V4Timeline's tools toolbar).
 	await expect(page.getByRole("toolbar", { name: "Timeline tools" })).toBeVisible();

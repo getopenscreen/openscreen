@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "來源",
+		"selectSource": "選擇要錄製的內容",
 		"systemPicker": "系統將詢問要分享的內容",
 		"systemAudio": "系統音訊",
 		"microphone": "麥克風",
@@ -115,6 +116,8 @@
 		"loading": "載入中…",
 		"noCameraFound": "找不到攝影機",
 		"cameraAccessError": "無法存取此攝影機",
+		"noMicrophoneFound": "找不到麥克風",
+		"microphoneUnavailable": "無法存取麥克風",
 		"startingCamera": "正在啟動攝影機…",
 		"turnOnCameraHint": "開啟攝影機以檢視即時預覽",
 		"entireScreen": "整個螢幕",

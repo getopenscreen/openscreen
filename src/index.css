@@ -66,10 +66,19 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+		/* Every window — HUD, picker, permissions, notes, anything portaled to
+		   body — speaks the brand face, not just the editor shell. */
+		font-family: var(--font-body);
 		-webkit-user-select: none;
 		user-select: none;
 		overflow: hidden;
 		text-rendering: geometricPrecision;
+	}
+	/* Lucide's 2/24 stroke draws 1.33px lines at the 16px most of the chrome uses,
+	   which reads as delicate; a touch heavier reads as friendly. Overrides any
+	   per-icon strokeWidth on purpose. */
+	svg.lucide {
+		stroke-width: 2.25;
 	}
 }
 

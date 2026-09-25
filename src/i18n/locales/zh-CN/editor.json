@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "来源",
+		"selectSource": "选择要录制的内容",
 		"systemPicker": "系统将询问要共享的内容",
 		"systemAudio": "系统音频",
 		"microphone": "麦克风",
@@ -115,6 +116,8 @@
 		"loading": "加载中…",
 		"noCameraFound": "未找到摄像头",
 		"cameraAccessError": "无法访问该摄像头",
+		"noMicrophoneFound": "未找到麦克风",
+		"microphoneUnavailable": "无法访问麦克风",
 		"startingCamera": "正在启动摄像头…",
 		"turnOnCameraHint": "开启摄像头以查看实时预览",
 		"entireScreen": "整个屏幕",

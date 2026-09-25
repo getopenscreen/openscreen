@@ -165,7 +165,7 @@ function Pane({ title, icon, helpText, actions, onClose, children }: PaneProps) 
 						aria-expanded={helpOpen}
 						onClick={() => setHelpOpen((v) => !v)}
 					>
-						<HelpCircle size={14} />
+						<HelpCircle size={16} />
 					</button>
 					{onClose ? (
 						<button
@@ -175,7 +175,7 @@ function Pane({ title, icon, helpText, actions, onClose, children }: PaneProps) 
 							aria-label={tc("actions.close")}
 							onClick={onClose}
 						>
-							<X size={14} />
+							<X size={16} />
 						</button>
 					) : null}
 				</span>
@@ -575,15 +575,17 @@ function BackgroundColorTab({
 					onBlur={commitHex}
 					style={{
 						width: 48,
-						height: 36,
+						height: 34,
 						border: "1px solid var(--border)",
-						borderRadius: 8,
+						borderRadius: 10,
 						background: "var(--surface)",
 						padding: 0,
 					}}
 				/>
+				{/* Mono stays: a hex code. */}
 				<input
 					type="text"
+					className={styles.control}
 					value={hexDraft}
 					disabled={!hasDocument}
 					onChange={(e) => setHexDraft(e.target.value)}
@@ -591,16 +593,7 @@ function BackgroundColorTab({
 					onKeyDown={(e) => {
 						if (e.key === "Enter") commitHex();
 					}}
-					style={{
-						flex: 1,
-						height: 36,
-						border: "1px solid var(--border)",
-						borderRadius: 8,
-						background: "var(--surface)",
-						padding: "0 12px",
-						color: "var(--fg-2)",
-						font: "500 13px var(--font-mono)",
-					}}
+					style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)" }}
 				/>
 			</div>
 		</>
@@ -1025,7 +1018,7 @@ export function TranscriptPane({
 		return (
 			<Pane
 				title={ts("transcript.title")}
-				icon={<FileText size={14} />}
+				icon={<FileText size={16} />}
 				helpText={helpText}
 				actions={<CaptionSettingsButton />}
 			>
@@ -1042,7 +1035,8 @@ export function TranscriptPane({
 						textAlign: "center",
 					}}
 				>
-					<FileText size={28} style={{ color: "var(--dim)" }} />
+					{/* --muted, not --dim: dark --dim is the panel's own colour, so the icon vanished. */}
+					<FileText size={28} style={{ color: "var(--muted)" }} />
 					<p style={{ font: "500 13px var(--font-body)", color: "var(--fg-2)" }}>
 						{placements.length === 0
 							? ts("transcript.noClips")
@@ -1075,7 +1069,7 @@ export function TranscriptPane({
 	return (
 		<Pane
 			title={ts("transcript.title")}
-			icon={<FileText size={14} />}
+			icon={<FileText size={16} />}
 			helpText={helpText}
 			actions={<CaptionSettingsButton />}
 		>
@@ -1478,7 +1472,8 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 						background: "var(--accent-soft)",
 						color: "var(--accent)",
 						borderRadius: "var(--r-sm)",
-						font: "700 12px/1 var(--font-mono)",
+						font: "700 12px/1 var(--font-body)",
+						fontVariantNumeric: "tabular-nums",
 						flexShrink: 0,
 					}}
 				>
@@ -1500,7 +1495,8 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 					<span
 						style={{
 							display: "block",
-							font: "400 11px/1.3 var(--font-mono)",
+							font: "400 12px/1.3 var(--font-body)",
+							fontVariantNumeric: "tabular-nums",
 							color: "var(--muted)",
 							marginTop: 2,
 						}}
@@ -1517,7 +1513,7 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 							alignItems: "center",
 							gap: 5,
 							flexShrink: 0,
-							font: "500 11px/1 var(--font-body)",
+							font: "500 12px/1 var(--font-body)",
 							color: "var(--accent)",
 						}}
 					>
@@ -2453,7 +2449,7 @@ export function VideoEffectsPane() {
 	return (
 		<Pane
 			title={ts("effects.title")}
-			icon={<Sliders size={14} />}
+			icon={<Sliders size={16} />}
 			// Two complete sentences, one per merged half, rather than a third string to
 			// translate 13 times — both already exist in every locale and neither is a
 			// fragment of the other, so joining them survives translation and RTL alike.
@@ -2970,7 +2966,7 @@ export function LayoutPane() {
 		setLive({ webcamCropPan: pan, webcamCropRegion: cropRegionFor(webcamCrop.width, pan) });
 	};
 	return (
-		<Pane title={ts("layout.title")} icon={<Camera size={14} />} helpText={helpText}>
+		<Pane title={ts("layout.title")} icon={<Camera size={16} />} helpText={helpText}>
 			<div className={styles.sectionLabel}>{ts("layout.preset")}</div>
 			<div className={styles.field}>
 				<label htmlFor="layout-preset">{ts("layout.preset")}</label>
@@ -3067,7 +3063,7 @@ export function LayoutPane() {
 									>
 										{shape.icon}
 									</svg>
-									<span title={ts(shape.labelKey)} style={{ font: "500 11px/1 var(--font-body)" }}>
+									<span title={ts(shape.labelKey)} style={{ font: "500 12px/1 var(--font-body)" }}>
 										{ts(shape.labelKey)}
 									</span>
 								</button>
@@ -3144,7 +3140,7 @@ export function LayoutPane() {
 									>
 										{mode.icon}
 									</svg>
-									<span title={ts(mode.labelKey)} style={{ font: "500 11px/1 var(--font-body)" }}>
+									<span title={ts(mode.labelKey)} style={{ font: "500 12px/1 var(--font-body)" }}>
 										{ts(mode.labelKey)}
 									</span>
 								</button>
@@ -3224,7 +3220,7 @@ export function AudioPane() {
 	const ts = useScopedT("settings");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
 	return (
-		<Pane title={ts("audio.title")} icon={<AudioLines size={14} />} helpText={ts("audio.help")}>
+		<Pane title={ts("audio.title")} icon={<AudioLines size={16} />} helpText={ts("audio.help")}>
 			<div className={styles.sliderGrid}>
 				<SliderCell
 					label={ts("audio.outputGain")}
@@ -3316,7 +3312,7 @@ export function AudioTrackPane({ tl, onClose }: { tl: TimelineApi; onClose?: () 
 	return (
 		<Pane
 			title={ts("audioTrack.defaultLabel")}
-			icon={<Music size={14} />}
+			icon={<Music size={16} />}
 			helpText={ts("audioTrack.help")}
 			onClose={onClose ?? (() => tl.clearSelection())}
 		>
@@ -3490,7 +3486,7 @@ export function CursorPane() {
 	return (
 		<Pane
 			title={ts("cursor.title")}
-			icon={<MousePointerClick size={14} />}
+			icon={<MousePointerClick size={16} />}
 			helpText={ts("cursor.help")}
 		>
 			<div className={styles.paneRow}>

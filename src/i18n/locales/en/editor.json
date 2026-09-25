@@ -50,23 +50,23 @@
 		"microphoneDefaulted": "The chosen microphone could not be identified. Recording the default input.",
 		"permissionDenied": "Recording permission denied. Please allow screen recording.",
 		"accessibilityAllowAndRetry": "Allow Accessibility access for OpenScreen, then press record again to start the countdown.",
-		"selectSource": "Please select a source to record"
+		"selectSource": "Choose a screen or window to record"
 	},
 	"emptyState": {
-		"title": "No project open",
-		"description": "Create a new project or open an existing one.",
+		"title": "Start with a recording",
+		"description": "Import a video to start editing, or open a saved project.",
 		"titleHasAsset": "Add a video to get started",
 		"descriptionHasAsset": "Import a recording to begin editing.",
-		"newProjectButton": "New project + import video",
+		"newProjectButton": "Import a video",
 		"importVideoButton": "Import video",
 		"loadProjectButton": "Open project",
 		"supportedFormats": "Supported formats: MP4, MOV, WebM, MKV, AVI, M4V, WMV",
-		"dragDropHint": "or drag & drop a .openscreen project file here",
+		"dragDropHint": "or drop a saved project here",
 		"dropOverlay": "Drop project file to open",
 		"dropErrors": {
-			"unsupportedFormatTitle": "Unsupported Format",
-			"unsupportedFormatMessage": "Only .openscreen project files can be dropped here. To import a video file, use the \"Import Video File…\" button on this screen.",
-			"couldNotOpenTitle": "Could Not Open File",
+			"unsupportedFormatTitle": "Unsupported file",
+			"unsupportedFormatMessage": "Only saved projects (.openscreen) can be dropped here. To add a video, use the import button on this screen.",
+			"couldNotOpenTitle": "Couldn't open this project",
 			"couldNotOpenMessage": "The project file could not be opened. The video it references may have been moved or deleted."
 		}
 	},
@@ -100,11 +100,12 @@
 		"modes": {
 			"media": "Media",
 			"edit": "Edit",
-			"rec": "Rec"
+			"rec": "Record"
 		}
 	},
 	"rec": {
 		"source": "Source",
+		"selectSource": "Choose what to record",
 		"systemPicker": "Your system will ask what to share",
 		"systemAudio": "System audio",
 		"microphone": "Microphone",
@@ -115,16 +116,18 @@
 		"loading": "Loading…",
 		"noCameraFound": "No camera found",
 		"cameraAccessError": "Couldn't access this camera",
+		"noMicrophoneFound": "No microphone found",
+		"microphoneUnavailable": "Couldn't access the microphone",
 		"startingCamera": "Starting camera…",
 		"turnOnCameraHint": "Turn on the camera for a live preview",
 		"entireScreen": "Entire Screen",
 		"cancel": "Cancel",
 		"startRecording": "Start recording",
-		"startRecordingHint": "Opens the recording widget and closes this editor window.",
+		"startRecordingHint": "Opens the recording bar and closes this editor window.",
 		"sourceModal": {
 			"screens": "Screens ({{count}})",
 			"windows": "Windows ({{count}})",
-			"loadingSources": "Loading sources…",
+			"loadingSources": "Loading screens and windows…",
 			"noScreensFound": "No screens found",
 			"noWindowsFound": "No windows found",
 			"cancel": "Cancel"
@@ -140,7 +143,7 @@
 		"added": "Added {{label}}",
 		"addToTimeline": "Add to timeline",
 		"addedToTimeline": "Added {{label}} to the timeline",
-		"sourceTranscript": "Source Transcript",
+		"sourceTranscript": "Transcript",
 		"close": "Close",
 		"transcriptReady": "Transcript ready",
 		"transcribing": "Transcribing",
@@ -163,7 +166,7 @@
 	},
 	"exportDialog": {
 		"title": "Export",
-		"subtitle": "Render the timeline to a file",
+		"subtitle": "Save your edit as a video or a GIF",
 		"addVideoBeforeExporting": "Add a video before exporting.",
 		"quality": "Quality",
 		"qualityMatchRecording": "Match recording",
@@ -179,9 +182,9 @@
 		"savedTo": "Saved to",
 		"exportFailedGeneric": "Export failed.",
 		"writingFile": "Writing file…",
-		"renderingFrames": "Rendering frames",
-		"framesEta": "{{current}} / {{total}} frames · ETA {{eta}}s",
-		"preparingEncoder": "Preparing encoder…",
+		"renderingFrames": "Exporting your video",
+		"framesEta": "Frame {{current}} of {{total}} · about {{eta}}s left",
+		"preparingEncoder": "Getting ready…",
 		"close": "Close",
 		"cancel": "Cancel",
 		"rendering": "Rendering…",
@@ -205,7 +208,7 @@
 		"resetFocusPoint": "Reset focus point",
 		"setColor": "Set color {{color}}",
 		"trimHiddenDuration": "{{duration}}s of source media hidden from the edited timeline.",
-		"restoreDeleteTrim": "Restore (delete trim)",
+		"restoreDeleteTrim": "Bring this part back",
 		"collapseInspector": "Collapse inspector",
 		"captionsDescription": "Generate word-timed captions from the transcript and drop them onto the timeline.",
 		"generateCaptions": "Generate captions",
@@ -213,7 +216,7 @@
 		"openCrop": "Open crop…",
 		"cameraFullscreenDescription": "While this region plays, the camera takes the whole frame — no border, no rounding, no background — and eases back at the end. Drag the region's edges on the timeline to change when it starts and how long it lasts.",
 		"deleteRegion": "Delete region",
-		"freehandRendersAsBox": "In the export, a freehand shape is covered by its bounding box — over-covered, never under."
+		"freehandRendersAsBox": "In the export, the blur fills the rectangle around your freehand shape, so it may hide a little more than you drew."
 	},
 	"chat": {
 		"changeProvider": "Change provider",
@@ -372,7 +375,7 @@
 	},
 	"providerSettings": {
 		"title": "AI settings",
-		"subtitle": "Choose a provider. Credentials are stored in the OS keychain (safeStorage).",
+		"subtitle": "Choose a provider. Your keys are stored securely on this computer.",
 		"loadFailed": "Could not load AI settings",
 		"saved": "{{provider}} saved",
 		"connected": "{{provider}} connected",
@@ -391,7 +394,7 @@
 		"baseUrlHint": "Leave blank to use the provider's default.",
 		"reasoningEffortLabel": "Reasoning effort",
 		"apiKeyLabel": "API key",
-		"apiKeyHintStored": "Stored in safeStorage. Leave blank to keep the existing entry.",
+		"apiKeyHintStored": "Stored securely on this computer. Leave blank to keep the current key.",
 		"projectEditsLabel": "Project edits",
 		"projectEditsHint": "When off, the agent must ask before changing the timeline. Edits are always undoable.",
 		"allowAgentEdits": "Allow the agent to edit the project",

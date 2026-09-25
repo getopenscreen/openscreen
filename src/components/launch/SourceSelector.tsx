@@ -96,7 +96,7 @@ export function SourceSelector() {
 					</p>
 					<Button
 						onClick={() => void fetchSources()}
-						className="mt-4 h-8 rounded-[9px] bg-[#10b981] px-5 text-[11px] font-semibold text-[#08090d] transition-transform duration-150 hover:bg-[#10b981]/85 active:scale-95"
+						className="mt-4 h-9 rounded-[9px] bg-[#10b981] px-5 text-[13px] font-semibold text-[#08090d] transition-transform duration-150 hover:bg-[#10b981]/85 active:scale-95"
 					>
 						{tc("actions.reload")}
 					</Button>
@@ -182,7 +182,7 @@ export function SourceSelector() {
 					data-testid="source-selector-cancel-button"
 					variant="ghost"
 					onClick={() => window.close()}
-					className="h-9 rounded-[9px] border border-[#333a45] px-4 text-[13px] font-medium text-[#f5f7fa] transition-colors duration-150 hover:bg-[#1a1e25] hover:text-[#f5f7fa]"
+					className="h-9 rounded-[9px] border border-[#333a45] px-4 text-[13px] font-medium text-[#f5f7fa] transition-colors duration-150 hover:bg-white/[0.08] hover:text-[#f5f7fa]"
 				>
 					{tc("actions.cancel")}
 				</Button>

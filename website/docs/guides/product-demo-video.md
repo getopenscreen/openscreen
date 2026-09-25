@@ -28,7 +28,7 @@ On Windows and macOS, click **Open Notes** in the HUD. It opens a rich-text wind
 The Notes window doubles as a teleprompter. **Start auto-scroll** scrolls the text at a speed from 10 to 100. The font size goes from 14 to 48 px, and **Mirror horizontally** flips the text.
 
 :::caution
-On Windows, OpenScreen keeps the HUD and the Notes window out of the capture. On macOS it cannot guarantee that, so keep the Notes window on a display you are not recording. On macOS and Linux, use **Hide HUD** if the HUD sits on the recorded screen.
+On Windows, OpenScreen keeps the HUD and the Notes window out of the capture. On macOS it cannot guarantee that, so keep the Notes window on a display you are not recording. On macOS and Linux, use **Hide recording bar** if the HUD sits on the recorded screen.
 :::
 
 ## 2. Record the screen or a window
@@ -50,10 +50,10 @@ See [Recording](../recording.md) for every HUD control.
 
 The webcam is recorded to its own file, so its placement is an editing decision you can change at any time. Open the **Camera layout** facet in the editor's inspector:
 
-- **Picture in Picture**, **Vertical Stack**, **Dual Frame**, or **No Webcam**.
+- **Picture in picture**, **Vertical stack**, **Dual frame**, or **No webcam**.
 - For every layout: mirror, and a crop of the camera image.
-- For **Picture in Picture** only: **Camera Shape** (Rect, Circle, Square or Rounded), a size from 10 to 50% (25% by default), and **Shrink on Zoom**, on by default, which makes the camera smaller while a zoom plays so it does not cover the detail. Drag the camera on the canvas to move it.
-- **Camera Background**: Original, Blur, Cutout or Custom. Cutout removes the background without a green screen, using a segmentation model that runs on your CPU. This section only appears when the segmentation runtime loads on your machine.
+- For **Picture in picture** only: **Camera shape** (Rect, Circle, Square or Rounded), a size from 10 to 50% (25% by default), and **Shrink on zoom**, on by default, which makes the camera smaller while a zoom plays so it does not cover the detail. Drag the camera on the canvas to move it.
+- **Camera background**: Original, Blur, Cutout or Custom. Cutout removes the background without a green screen, using a segmentation model that runs on your CPU. This section only appears when the segmentation runtime loads on your machine.
 
 For an intro or outro, press `C` to add a **Full Camera** segment: the camera fills the whole frame for that span.
 
@@ -83,7 +83,7 @@ If you have connected your own LLM provider, **Auto-enhance → Smart cuts** han
 
 Press `A` to add an annotation, then pick its **Type**:
 
-- **Blur**: Gaussian or Mosaic, rectangle or oval. Place it over emails, API keys or customer names, stretch its region over every frame that shows them, then scrub through to check.
+- **Blur**: Smooth or Mosaic, rectangle or oval. Place it over emails, API keys or customer names, stretch its region over every frame that shows them, then scrub through to check.
 - **Text**: with an optional animation (Fade, Rise, Pop, Slide Left, Typewriter or Pulse).
 - **Arrow**: eight directions, adjustable stroke width and color.
 - **Image**: a JPG, PNG, GIF or WebP, such as a logo.

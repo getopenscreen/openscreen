@@ -537,7 +537,7 @@ const AudioLanePill = memo(function AudioLanePill({
 						)
 					: null}
 				<span className={styles.laneAudioLabel}>
-					<Music size={11} />
+					<Music size={12} />
 					{label}
 				</span>
 				<span
@@ -1385,15 +1385,15 @@ export function V4Timeline({
 						: styles.laneZoom;
 	const pillIcon = (kind: LanePill["kind"]) =>
 		kind === "annotation" ? (
-			<MessageSquare size={11} />
+			<MessageSquare size={12} />
 		) : kind === "speed" ? (
-			<Clock size={11} />
+			<Clock size={12} />
 		) : kind === "trim" ? (
-			<Scissors size={11} />
+			<Scissors size={12} />
 		) : kind === "cameraFullscreen" ? (
-			<Maximize2 size={11} />
+			<Maximize2 size={12} />
 		) : (
-			<ZoomIn size={11} />
+			<ZoomIn size={12} />
 		);
 
 	// Drag a clip left/right to reorder it relative to its neighbours. Pointer-
@@ -1493,9 +1493,9 @@ export function V4Timeline({
 	);
 
 	const tools: Array<{ id: ToolId; label: string; icon: React.ReactNode }> = [
-		{ id: "cut", label: t("buttons.addTrim"), icon: <SplitSquareHorizontal size={15} /> },
-		{ id: "comment", label: t("toolbar.comment"), icon: <MessageSquare size={15} /> },
-		{ id: "speed", label: t("buttons.addSpeed"), icon: <Clock size={15} /> },
+		{ id: "cut", label: t("buttons.addTrim"), icon: <SplitSquareHorizontal size={16} /> },
+		{ id: "comment", label: t("buttons.addAnnotation"), icon: <MessageSquare size={16} /> },
+		{ id: "speed", label: t("buttons.addSpeed"), icon: <Clock size={16} /> },
 	];
 
 	// Auto-enhance option 1 — the deterministic cursor-telemetry auto-zoom
@@ -1777,9 +1777,9 @@ export function V4Timeline({
 											disabled={autoBusy}
 										>
 											{autoBusy ? (
-												<Loader2 className="animate-spin" size={15} />
+												<Loader2 className="animate-spin" size={16} />
 											) : (
-												<Wand2 size={15} />
+												<Wand2 size={16} />
 											)}
 										</button>
 									</PopoverTrigger>
@@ -1799,10 +1799,10 @@ export function V4Timeline({
 											className={styles.recMenuRow}
 											onClick={() => void runAutoZooms()}
 										>
-											<ZoomIn size={15} style={{ flexShrink: 0 }} />
+											<ZoomIn size={16} style={{ flexShrink: 0 }} />
 											<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
 												<span style={{ fontWeight: 600 }}>{t("toolbar.automaticZooms")}</span>
-												<span style={{ fontSize: 11, color: "var(--muted)" }}>
+												<span style={{ fontSize: 12, color: "var(--muted)" }}>
 													{t("toolbar.automaticZoomsHint")}
 												</span>
 											</span>
@@ -1820,13 +1820,13 @@ export function V4Timeline({
 											}
 										>
 											{transcriptGate.state === "pending" ? (
-												<Loader2 size={15} className="animate-spin" style={{ flexShrink: 0 }} />
+												<Loader2 size={16} className="animate-spin" style={{ flexShrink: 0 }} />
 											) : (
-												<Sparkles size={15} style={{ flexShrink: 0 }} />
+												<Sparkles size={16} style={{ flexShrink: 0 }} />
 											)}
 											<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
 												<span style={{ fontWeight: 600 }}>{t("toolbar.smartZoomsAndCuts")}</span>
-												<span style={{ fontSize: 11, color: "var(--muted)" }}>{smartCutsHint}</span>
+												<span style={{ fontSize: 12, color: "var(--muted)" }}>{smartCutsHint}</span>
 											</span>
 										</button>
 									</div>
@@ -1867,7 +1867,7 @@ export function V4Timeline({
 														className={styles.tlToolBtn}
 														aria-label={t("toolbar.addAudioTooltip")}
 													>
-														<AudioLines size={15} />
+														<AudioLines size={16} />
 													</button>
 												</PopoverTrigger>
 											</Tooltip>
@@ -1889,10 +1889,10 @@ export function V4Timeline({
 															onAddVoiceover();
 														}}
 													>
-														<Mic size={15} style={{ flexShrink: 0 }} />
+														<Mic size={16} style={{ flexShrink: 0 }} />
 														<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
 															<span style={{ fontWeight: 600 }}>{t("audio.addVoiceover")}</span>
-															<span style={{ fontSize: 11, color: "var(--muted)" }}>
+															<span style={{ fontSize: 12, color: "var(--muted)" }}>
 																{t("audio.addVoiceoverHint")}
 															</span>
 														</span>
@@ -1908,10 +1908,10 @@ export function V4Timeline({
 															void tl.addAudio();
 														}}
 													>
-														<Music size={15} style={{ flexShrink: 0 }} />
+														<Music size={16} style={{ flexShrink: 0 }} />
 														<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
 															<span style={{ fontWeight: 600 }}>{ts("audioTrack.add")}</span>
-															<span style={{ fontSize: 11, color: "var(--muted)" }}>
+															<span style={{ fontSize: 12, color: "var(--muted)" }}>
 																{t("audio.importFileHint")}
 															</span>
 														</span>
@@ -1932,7 +1932,7 @@ export function V4Timeline({
 									aria-label={t("buttons.addZoom")}
 									onClick={() => void tl.addZoom(newRegionDurationSec())}
 								>
-									<ZoomIn size={15} />
+									<ZoomIn size={16} />
 								</button>
 							</Tooltip>
 							<Tooltip
@@ -1949,7 +1949,7 @@ export function V4Timeline({
 									)}
 									onClick={() => void setSettings({ autoFocusAll: !settings.autoFocusAll })}
 								>
-									<Crosshair size={15} />
+									<Crosshair size={16} />
 								</button>
 							</Tooltip>
 							<Tooltip content={t("buttons.addCameraFullscreen")}>
@@ -1961,7 +1961,7 @@ export function V4Timeline({
 									style={!hasAnyCamera ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
 									onClick={() => void tl.addCameraFullscreen(newRegionDurationSec())}
 								>
-									<Maximize2 size={15} />
+									<Maximize2 size={16} />
 								</button>
 							</Tooltip>
 						</div>
@@ -1983,7 +1983,7 @@ export function V4Timeline({
 						<span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fg-2)" }}>
 							{t("toolbar.arrangeClips")}
 						</span>
-						<span style={{ fontSize: 11.5, color: "var(--meta)" }}>
+						<span style={{ fontSize: 12, color: "var(--meta)" }}>
 							{t("toolbar.arrangeClipsHint")}
 						</span>
 					</div>
@@ -2260,7 +2260,7 @@ export function V4Timeline({
 													onEditClip(c);
 												}}
 											>
-												<Pencil size={9} />
+												<Pencil size={12} />
 											</span>
 											<span className={styles.tlClipName}>
 												{tl.assets.find((a) => a.id === c.assetId)?.label ?? c.assetId}
@@ -2282,7 +2282,7 @@ export function V4Timeline({
 													void tl.removeClip(c.id);
 												}}
 											>
-												<Trash2 size={13} />
+												<Trash2 size={14} />
 											</button>
 										) : null}
 									</div>

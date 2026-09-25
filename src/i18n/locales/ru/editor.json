@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "Источник",
+		"selectSource": "Выберите, что записывать",
 		"systemPicker": "Система спросит, чем поделиться",
 		"systemAudio": "Системный звук",
 		"microphone": "Микрофон",
@@ -115,6 +116,8 @@
 		"loading": "Загрузка…",
 		"noCameraFound": "Камера не найдена",
 		"cameraAccessError": "Не удалось получить доступ к этой камере",
+		"noMicrophoneFound": "Микрофон не найден",
+		"microphoneUnavailable": "Не удалось получить доступ к микрофону",
 		"startingCamera": "Запуск камеры…",
 		"turnOnCameraHint": "Включите камеру, чтобы увидеть предпросмотр в реальном времени",
 		"entireScreen": "Весь экран",

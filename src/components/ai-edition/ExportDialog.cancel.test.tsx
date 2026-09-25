@@ -193,7 +193,7 @@ describe("GIF export cancellation", () => {
 		await waitFor(() => expect(screen.getByText("cancel ipc failed")).toBeVisible());
 		expect(toast.error).toHaveBeenCalledWith("cancel ipc failed");
 		expect(toast.success).not.toHaveBeenCalled();
-		expect(screen.queryByText(/Rendering frames/i)).not.toBeInTheDocument();
+		expect(screen.queryByText(/Exporting your video/i)).not.toBeInTheDocument();
 	});
 
 	it("reports success when native publication wins the race", async () => {

@@ -288,7 +288,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 								}}
 							>
 								<Loader2 size={14} className="animate-spin" />
-								{busyLabel ?? t("captions.transcribing")}
+								{busyLabel ?? t("transcript.transcribing")}
 							</p>
 						) : null}
 					</div>

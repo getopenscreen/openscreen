@@ -20,7 +20,7 @@ The editor has three modes, switched from the segmented control in the top bar:
 |---|---|
 | **Media** | Your project's clips: import, search, inspect transcripts, drag onto the timeline. See [Media library](./media-library.md). |
 | **Edit** | The preview, the floating inspector, and the full timeline. This is where the project is actually edited. |
-| **Rec** | Pre-flight config for a new recording — mic, camera, system audio, cursor. See [Recording](./recording.md#recording-from-the-editor-rec-mode). |
+| **Record** | Pre-flight config for a new recording — mic, camera, system audio, cursor. See [Recording](./recording.md#recording-from-the-editor-rec-mode). |
 
 Everything below describes **Edit** mode: a resizable preview on top, a timeline underneath. Drag the handle between them to rebalance the split.
 
@@ -46,7 +46,7 @@ Selecting a region on the timeline (a zoom, trim, annotation, speed, or Full Cam
   - **Automatic zooms** — reads the recorded cursor movement and drops zoom regions on the moments where the cursor dwells. No network, no model. [Auto zoom](/features/auto-zoom/) explains how the moments are picked.
   - **Smart cuts** (marked *With AI*) — hands the job to the AI agent instead, which needs a [connected provider](./ai-editing.md).
 - **Speed** (`S`) — adds a speed-change region at the playhead.
-- **Comment** (`A`) — adds an annotation at the playhead.
+- **Annotation** (`A`) — adds an annotation at the playhead.
 - **Trim** (`T`) — drops a two-second cut ("trim region") at the playhead. Drag its edges to resize, like any other region.
 - **Add zoom** (`Z`) — drops an animated zoom region at the playhead.
 - **Auto focus** (crosshair) — toggle; when on, every zoom region follows the cursor and the per-zoom focus control locks.
@@ -85,7 +85,7 @@ Four types, switchable from the **Type** dropdown in the inspector. Switching ty
 - **Text** — content, size, background color with an on/off toggle, text color, and an appearance animation (None / Fade / Rise / Pop / Slide Left / Typewriter / Pulse).
 - **Image** — upload a JPG, PNG, GIF, or WebP.
 - **Arrow** — eight directions, stroke width (1–20), and color.
-- **Blur** — a privacy mask. Gaussian or Mosaic, rectangle or oval, with intensity (or mosaic block size). Drag and resize it over the preview like any other annotation.
+- **Blur** — a privacy mask. Smooth or Mosaic, rectangle or oval, with intensity (or mosaic block size). Drag and resize it over the preview like any other annotation.
 
 :::note
 Freehand blur shapes can no longer be drawn. Existing ones still render, but as their bounding box — deliberately over-covering rather than leaving something you marked private visible in the export. The inspector says so when it sees one.

@@ -1353,6 +1353,33 @@ describe("useTimeline undo history", () => {
 		expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(3);
 	});
 
+	// The commit's focus is put back only over a write of its own epoch. A drag abandoned
+	// (`ZoomFocusOverlay` unmounts when the focus mode flips to auto) and then undone must stay
+	// undone when a bare commit (`endDrag` with nothing in front of it) comes later.
+	it("does not put an abandoned drag's focus back after an undo", async () => {
+		seed(docWithZoom);
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.updateZoomDepth("zoom_a", 4);
+		});
+		act(() => result.current.updateZoomFocusLive("zoom_a", { cx: 0.8, cy: 0.2 }));
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(future).toHaveLength(1);
+
+		await act(async () => {
+			await result.current.commitZoomFocus();
+		});
+
+		expect(useProjectStore.getState().document?.zoomRanges[0]?.focus).toEqual({
+			cx: 0.5,
+			cy: 0.5,
+		});
+		expect(future).toHaveLength(1);
+	});
+
 	// Rebase-review finding (queued zoom writes vs. document replacement): a zoom write
 	// queued behind a still-pending one starts AFTER an undo has restored the document,
 	// and must not apply its stale patch to the replacement. The in-flight write itself

@@ -29,7 +29,7 @@ OpenScreen sort souvent de nouvelles versions. D'une version à l'autre, le form
 
 - [Enregistrer](./recording.md) une fenêtre précise ou tout votre écran, avec l'audio système, le micro et la webcam, depuis un HUD flottant ou depuis l'éditeur lui-même.
 - Construire un projet à partir de plusieurs sources : [importer, couper, recadrer, réordonner et diviser des clips](./media-library.md) sur une seule timeline.
-- [Monter](./editing-timeline.md) avec des zooms, des coupes, une vitesse par région, des segments Caméra plein écran, des annotations texte, image, flèche et flou, des thèmes de curseur, des dispositions de webcam, ainsi que des arrière-plans et des effets.
+- [Monter](./editing-timeline.md) avec des zooms, des coupes, une vitesse par région, des segments Caméra plein écran, des annotations texte, image, flèche et flou, des effets de curseur, des dispositions de webcam, ainsi que des arrière-plans et des effets.
 - Transcrire en local avec Whisper, puis [incruster des sous-titres](./captions.md) (mis en forme en direct, traduisibles en 15 langues via votre propre fournisseur de LLM), ou couper votre enregistrement en supprimant des mots de la transcription.
 - Connecter, si vous le souhaitez, votre propre clé LLM pour [monter par chat](./ai-editing.md). Cette fonction est désactivée par défaut et n'est jamais obligatoire.
 - [Exporter](./export.md) en MP4 (720p/1080p/source, H.264 ou H.265) ou en GIF animé.

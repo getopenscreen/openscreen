@@ -33,7 +33,7 @@ Uma barra flutuante de ícones fica sobre a pré-visualização. São cinco abas
 | **Composição** | Uma seção de fundo (imagem, cor sólida ou gradiente atrás da gravação; envie sua própria imagem ou escolha uma predefinição), depois desfoque do fundo, sombra, desfoque de movimento, arredondamento dos cantos e espaçamento. A linha **Formato** define a proporção de saída da pré-visualização e da exportação: **Auto** (o padrão para projetos novos), que ajusta o quadro em volta da gravação e do layout da câmera com uma borda de espaçamento uniforme, as proporções dos seus clipes em **Original**, além de 16:9, 9:16, 1:1, 4:3, 4:5, 16:10 e 10:16. |
 | **Layout da câmera** | Composição da webcam: picture-in-picture, empilhamento vertical, quadro duplo ou sem webcam. Espelhamento e "encolher ao ampliar". No picture-in-picture: formato da câmera (retângulo ou quadrado), arredondamento (toda arredondada, uma câmera quadrada vira um círculo), tamanho e posição: um de oito pontos junto à borda, sempre à mesma distância dela. Arraste a webcam no canvas e ela se encaixa no ponto mais próximo. |
 | **Áudio** | O nível de saída, aplicado da mesma forma na pré-visualização e na exportação. |
-| **Cursor** | Só faz sentido para gravações feitas no modo de cursor editável, no Windows, no macOS ou no Linux. Mostrar/ocultar, recortar à tela, uma faixa de temas de cursor e controles deslizantes de tamanho, suavização, desfoque de movimento e rebote ao clicar. |
+| **Cursor** | Só faz sentido para gravações feitas no modo de cursor editável, no Windows, no macOS ou no Linux. Mostrar/ocultar, recortar à tela e controles deslizantes de tamanho, suavização, desfoque de movimento e rebote ao clicar. |
 | **Transcrição** | A transcrição agregada de todos os clipes, editável — veja [Edição da transcrição](./captions.md#transcript-editing). O botão **Legendas** ativa as legendas, define o estilo delas e as traduz — veja [Legendas e transcrição](./captions.md#captions). |
 
 O botão de **lápis** na mesma barra abre a janela **Editar clipe** para o clipe selecionado: um retângulo de corte arrastável com campos numéricos X/Y/L/A e proporções predefinidas, além dos pontos de entrada/saída do clipe. O corte da imagem é por clipe, não por projeto.
@@ -93,7 +93,7 @@ Não é mais possível desenhar formas de desfoque à mão livre. As que já exi
 
 ## Estilo do cursor {#cursor-styling}
 
-Se a gravação tem dados de cursor editável (captura nativa no modo de cursor editável, no Windows, no macOS ou no Linux; [Modo do cursor](./recording.md#cursor-mode) lista o que cada plataforma grava), a aba Cursor permite escolher em uma biblioteca de temas de cursor e ajustar tamanho, suavização, desfoque de movimento e rebote ao clicar independentemente da captura bruta — o trajeto do cursor é suavizado de forma determinística, então o que você vê na pré-visualização corresponde à exportação final.
+Se a gravação tem dados de cursor editável (captura nativa no modo de cursor editável, no Windows, no macOS ou no Linux; [Modo do cursor](./recording.md#cursor-mode) lista o que cada plataforma grava), a aba Cursor permite ajustar tamanho, suavização, desfoque de movimento e rebote ao clicar independentemente da captura bruta — o trajeto do cursor é suavizado de forma determinística, então o que você vê na pré-visualização corresponde à exportação final.
 
 ## Atalhos de teclado {#keyboard-shortcuts}
 

@@ -151,7 +151,7 @@ sudo usermod -aG input $USER
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | 擷取管線 | 原生（ScreenCaptureKit） | 組建 19041 及更新版本為原生（Windows Graphics Capture）；較舊的組建或缺少輔助程式時，改用瀏覽器擷取備援 | 原生（透過 ScreenCast portal 的 PipeWire）；缺少輔助程式時改用瀏覽器擷取備援，但會失去硬體編碼與游標遙測資料 |
-| 自訂游標主題／點擊效果 | ✅，點擊與游標形狀需要「輔助使用」權限 | ✅ | ✅ 支援 Wayland，點擊擷取需要 `input` 群組（[詳細說明](#mouse-clicks-on-wayland)） |
+| 自訂游標／點擊效果 | ✅，點擊與游標形狀需要「輔助使用」權限 | ✅ | ✅ 支援 Wayland，點擊擷取需要 `input` 群組（[詳細說明](#mouse-clicks-on-wayland)） |
 | 網路攝影機 | 瀏覽器擷取，另存為獨立檔案（仍可作為子母畫面使用） | 原生擷取，另存為獨立檔案 | 瀏覽器擷取，另存為獨立檔案（仍可作為子母畫面使用） |
 | 系統音訊 | 開箱即用；macOS 14.2 以上會出現權限提示 | 開箱即用 | 需要以 PipeWire 作為音效伺服器（Ubuntu 22.10 以上、Fedora 34 以上的預設） |
 | MP4 匯出 | ✅ | ✅ | ✅，GPU 堆疊允許時，H.264 會透過 VAAPI 在 GPU 上編碼（見下方說明），否則使用軟體編碼；H.265 僅支援軟體編碼 |

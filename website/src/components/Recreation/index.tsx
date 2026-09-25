@@ -12,8 +12,8 @@
  * The chrome is the application's. `PANELS` carries the panel titles by locale
  * key, `CONTROLS` every slider at the vendored document's own setting — scaled
  * and suffixed the way `RightPanes.tsx` does it, which is where a hand-written
- * panel goes plausibly wrong — and `CURSORS` the ten packs the picker shows,
- * each with the hotspot the renderer actually uses.
+ * panel goes plausibly wrong — and `CURSORS` the default pack's sprites, each
+ * with the hotspot the renderer actually uses.
  *
  * The session is staged: the transcript, the trims, the zooms and the speed
  * ramp are a composed demonstration, not a recording. `generated.ts` carries the
@@ -61,7 +61,6 @@ import {
 	LANES,
 	PLAYHEAD,
 	SPEED,
-	shotCursorSrc,
 	TOKENS,
 	trims,
 	WALLPAPER_COUNT_SHOWN,
@@ -237,14 +236,16 @@ export default function Recreation() {
 			    custom property, so there is nowhere in the sheet to declare it.
 			    `release()` restores it from the same expression.
 
-			    The driver overwrites all three per frame. */}
+			    The driver overwrites the reader's pointer and the wallpaper per
+			    frame. The recorded pointer keeps the default arrow for the whole
+			    take: the app ships no other pack. */}
 			<div
 				className={styles.stage}
 				ref={root}
 				data-bg={String(REST.bg)}
 				style={
 					{
-						"--shot-cursor": `url("${shotCursorSrc(REST)}")`,
+						"--shot-cursor": `url("${CURSORS.themes[0].src}")`,
 						"--ui-cursor": `url("${CURSORS.themes[0].src}")`,
 					} as React.CSSProperties
 				}
@@ -367,18 +368,6 @@ export default function Recreation() {
 							{/* ── Cursor ── */}
 							<div className={styles.pane} data-pane="cursor">
 								<Toggle label={CONTROLS.cursorShow.label} on={CONTROLS.cursorShow.on} />
-								<span className={styles.controlLabel}>{CONTROLS.cursorTheme.label}</span>
-								<span className={styles.cursorStyles}>
-									{CURSORS.themes.map((theme, i) => (
-										<span
-											key={theme.id}
-											className={styles.cursorStyle}
-											data-t={`cur-${i}`}
-											data-i={i}
-											style={{ backgroundImage: `url(${theme.src})` }}
-										/>
-									))}
-								</span>
 								<span className={`${styles.control} ${styles.controlLive}`}>
 									<span className={styles.controlHead}>
 										<span className={styles.controlLabel}>{CONTROLS.cursorSize.label}</span>

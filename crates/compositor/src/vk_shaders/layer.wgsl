@@ -28,6 +28,9 @@ struct Layer {
     src_prev: vec4<f32>,  // modes 8/12/13/14 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque ; mode 15 : (hotspot du dessus, repere du plan en px ; lacet) ; mode 17 : marges du corps (gauche, haut, droite, bas ; unites du modele)
     dst_prev: vec4<f32>,  // mode 8 : .xy = taille du plan en px AVANT projection (le rayon y vit), .z = 1 si coins hauts carres (sous un cadre), .w = 1 si warp projectif ; mode 14 : .xy = taille du plan du cadre, .z = hauteur de la barre, .w = epaisseur du filet (px du plan) ; modes 13 et 15 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque ; mode 17 : (angle du socle depuis le plan en rad, rayon de l'ouverture et recouvrement de la lunette en unites du modele, penombre de l'ombre ou 0)
     mb: vec4<f32>,        // mode 8 : [gx, gy, z_focus, k], profondeur du plan et flou (texels source) par px d'ecart, k = 0 coupe ; mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné, mb.w = 1 si son warp est projectif ; mode 13 : mb.x = 1 si warp projectif ; mode 14 : couleur du filet (alpha droit) ; modes 15 et 17 : .xy = demi-taille du plan dans son repere (px pour le 15, unites pour le 17), .zw = translation du plan (repere camera, px)
+    trail_a: vec4<f32>,   // mode 8 : coins TL, TR du plan a la frame precedente (px locaux, comme fx)
+    trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev)
+    trail_mb: vec4<f32>,  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -330,13 +333,27 @@ fn quad_inverse_projective(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: ve
     return vec3<f32>(s, t, ok);
 }
 
-// Warp inverse d'un calque pose sur le plan : projectif sous la camera reelle (`projective` = 1),
-// bilineaire sous un angle fixe, inchange.
+// Warp inverse d'un calque pose sur le plan : projectif (`projective` = 1, que tout ecran incline
+// porte), bilineaire sinon.
 fn quad_inverse(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: vec2<f32>, c01: vec2<f32>, projective: f32) -> vec3<f32> {
     if projective > 0.5 {
         return quad_inverse_projective(P, c00, c10, c11, c01);
     }
     return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
+// Un echantillon de l'ecran incline (mode 8) : la video nette, fondue vers la pyramide de
+// profondeur de champ (binding 4, a la place du masque webcam) au-dela d'un demi-texel de cercle
+// de confusion `coc`. Sous ce seuil, l'echantillon net d'avant, a l'octet. Miroir de
+// `tilted_sample` (HLSL). LOD explicite : pas de derivees dans cette branche.
+fn tilted_sample(uv: vec2<f32>, coc: f32) -> vec3<f32> {
+    var rgb = sample_yuv(uv);
+    if coc > 0.5 {
+        let lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
+        let far_rgb = textureSampleLevel(texMask, samp, uv, lod).rgb;
+        rgb = mix(rgb, far_rgb, clamp((coc - 0.5) / 1.5, 0.0, 1.0));
+    }
+    return rgb;
 }
 
 // Hash 2D -> [0,1) sans sin(). Miroir de `hash12` cote HLSL.
@@ -1376,8 +1393,8 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
     } else if layer.mode > 7.5 && layer.mode < 8.5 {
         // Mode 8 -- ecran tilte (rotation 3D des zoom regions). Le quad projete est
         // dessine dans sa BBOX (le VS ne sait tracer qu'un rect) et chaque fragment
-        // remonte au (s,t) du plan par warp inverse : bilineaire sous un angle fixe, projectif exact
-        // sous la camera reelle (dst_prev.w = 1), qui eclaire aussi le plan (color.xy).
+        // remonte au (s,t) du plan par warp inverse : projectif exact (dst_prev.w = 1, tout ecran
+        // incline), bilineaire sinon ; la camera reelle eclaire aussi le plan (color.xy).
         //
         // PAS de test de clip sur `dst_prev` : en mode 8 `dst_prev.xy` porte
         // `plane_px`, la taille du plan en PIXELS (~1600), la ou `i.pout` vit dans
@@ -1415,15 +1432,33 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Profondeur de champ (cf. HLSL) : net sous un demi-texel de flou, l'echantillon
         // d'avant a l'octet ; au-dela, fondu vers la pyramide demi-resolution liee en binding 4
         // (a la place du masque webcam, que ce mode ne lit pas), au niveau `log2(coc) - 1`,
-        // plafonne. LOD explicite : pas de derivees dans cette branche.
-        var tilt_rgb = sample_yuv(uv);
+        // plafonne. LOD explicite : pas de derivees dans cette branche (`tilted_sample`).
         let rs = clamp(vec2<f32>(r.x, r.y), vec2<f32>(0.0), vec2<f32>(1.0));
         let z = (rs.x - 0.5) * layer.mb.x + (rs.y - 0.5) * layer.mb.y;
         let coc = layer.mb.w * abs(z - layer.mb.z);
-        if coc > 0.5 {
-            let lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
-            let far_rgb = textureSampleLevel(texMask, samp, uv, lod).rgb;
-            tilt_rgb = mix(tilt_rgb, far_rgb, clamp((coc - 0.5) / 1.5, 0.0, 1.0));
+        var tilt_rgb = tilted_sample(uv, coc);
+        // Flou de mouvement, celui du mode 0 (cf. HLSL) : l'UV que CE pixel montrait a la frame
+        // precedente, par le meme warp inverse sur les coins d'avant (`trail_a`/`trail_b`), puis
+        // `taps` echantillons de celui-la a celui-ci, raccourcis de la force. Borne a une frame.
+        let trail_taps = i32(layer.trail_mb.x);
+        if trail_taps > 1 && layer.trail_mb.y > 0.001 {
+            let rp = quad_inverse(
+                i.local, layer.trail_a.xy, layer.trail_a.zw, layer.trail_b.xy, layer.trail_b.zw, layer.dst_prev.w,
+            );
+            let uv_prev = vec2<f32>(
+                mix(layer.src.x, layer.src.z, rp.x),
+                mix(layer.src.y, layer.src.w, rp.y),
+            );
+            let duv = (uv - uv_prev) * clamp(layer.trail_mb.y, 0.0, 1.0);
+            if dot(duv, duv) >= 1e-9 {
+                var acc = vec3<f32>(0.0);
+                let step = 1.0 / f32(trail_taps - 1);
+                for (var k: i32 = 0; k < 16; k = k + 1) {
+                    if k >= trail_taps { break; }
+                    acc = acc + tilted_sample(uv - duv * (1.0 - f32(k) * step), coc);
+                }
+                tilt_rgb = acc / f32(trail_taps);
+            }
         }
         if layer.dst_prev.w > 0.5 {
             // La lampe de la camera reelle : le cote proche un peu plus clair.

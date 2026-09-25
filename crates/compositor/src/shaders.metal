@@ -42,7 +42,7 @@ using namespace metal;
 // =================================================================================
 //
 // Le moteur côté CPU upload ce buffer via `setVertexBytes` (vertex stage) et
-// `setFragmentBytes` (fragment stage) avant chaque draw — la copie est de 128 octets,
+// `setFragmentBytes` (fragment stage) avant chaque draw — la copie est de 176 octets,
 // ce qui est sous le seuil d'alignement 4K de Metal pour le mode « immediate ».
 
 struct Layer
@@ -57,6 +57,9 @@ struct Layer
     float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet ; mode 17 : marges du corps (unités du modèle)
     float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip ; mode 17 : angle du socle, rayon et recouvrement de l'ouverture, pénombre de l'ombre
     float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation
+    float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx)
+    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev)
+    float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
 // de la section « Curseur modélisé » (`cursor_model_cb`). Mode 17 (appareil modelé) : en tête de
@@ -298,8 +301,8 @@ inline float3 quad_inverse_projective(float2 P, float2 c00, float2 c10, float2 c
     return float3(s, t, ok);
 }
 
-// Warp inverse d'un calque posé sur le plan : projectif sous la caméra réelle (`projective` = 1),
-// bilinéaire sous un angle fixe, inchangé.
+// Warp inverse d'un calque posé sur le plan : projectif (`projective` = 1, que tout écran incliné
+// porte), bilinéaire sinon.
 inline float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, float projective)
 {
     if (projective > 0.5)
@@ -307,6 +310,24 @@ inline float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 
         return quad_inverse_projective(P, c00, c10, c11, c01);
     }
     return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
+// Un échantillon de l'écran incliné (mode 8) : la vidéo nette, fondue vers la pyramide de
+// profondeur de champ (texture(2)) au-delà d'un demi-texel de cercle de confusion `coc`. Sous ce
+// seuil, l'échantillon net d'avant, à l'octet. Miroir de `tilted_sample` (HLSL).
+inline float3 tilted_sample(float2 uv, float coc,
+                            texture2d<float, access::sample> texY,
+                            texture2d<float, access::sample> texUV,
+                            texture2d<float, access::sample> texImg)
+{
+    float3 rgb = sample_yuv(uv, texY, texUV);
+    if (coc > 0.5)
+    {
+        float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
+        float3 far_rgb = texImg.sample(samp, uv, level(lod)).rgb;
+        rgb = mix(rgb, far_rgb, clamp((coc - 0.5) / 1.5, 0.0, 1.0));
+    }
+    return rgb;
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -1435,7 +1456,7 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     }
 
     // mode 8 : écran tilté (zoom regions "rotation") ou vu par la caméra réelle. Warp inverse :
-    // bilinéaire sous un angle fixe, projectif exact sous la caméra réelle (dst_prev.w = 1), qui
+    // projectif exact (dst_prev.w = 1, tout écran incliné), bilinéaire sinon ; la caméra réelle
     // éclaire aussi le plan (color.xy : 1 + color.x·(s − 0.5) + color.y·(t − 0.5)).
     // mb = [gx, gy, z_focus, k] : profondeur du point r du plan = (r.x - 0.5)*gx + (r.y - 0.5)*gy
     // en px, positive vers la caméra ; z_focus = celle du focus du zoom (`TiltedQuad::depth_mb`) ;
@@ -1478,15 +1499,31 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         // Profondeur de champ : net sous un demi-texel de flou (l'échantillon d'avant, à
         // l'octet), fondu au-delà vers la pyramide au niveau `log2(coc) - 1`, plafonné.
         // `level(lod)` exige `mip_filter::linear` sur `samp` : sans lui, niveau 0 partout.
-        float3 rgb = sample_yuv(uv, texY, texUV);
         float2 rs = clamp(float2(r.x, r.y), 0.0, 1.0);
         float z = (rs.x - 0.5) * layer.mb.x + (rs.y - 0.5) * layer.mb.y;
         float coc = layer.mb.w * abs(z - layer.mb.z);
-        if (coc > 0.5)
+        float3 rgb = tilted_sample(uv, coc, texY, texUV, texImg);
+        // Flou de mouvement, celui du mode 0 : l'UV que CE pixel montrait à la frame précédente,
+        // par le même warp inverse sur les coins d'avant (`trail_a`/`trail_b`), puis `taps`
+        // échantillons de celui-là à celui-ci, raccourcis de la force. Borné à une frame.
+        int taps = int(layer.trail_mb.x);
+        if (taps > 1 && layer.trail_mb.y > 0.001)
         {
-            float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
-            float3 far_rgb = texImg.sample(samp, uv, level(lod)).rgb;
-            rgb = mix(rgb, far_rgb, clamp((coc - 0.5) / 1.5, 0.0, 1.0));
+            float3 rp = quad_inverse(i.local, layer.trail_a.xy, layer.trail_a.zw,
+                                     layer.trail_b.xy, layer.trail_b.zw, layer.dst_prev.w);
+            float2 uv_prev = float2(mix(layer.src.x, layer.src.z, rp.x), mix(layer.src.y, layer.src.w, rp.y));
+            float2 duv = (uv - uv_prev) * clamp(layer.trail_mb.y, 0.0, 1.0);
+            if (dot(duv, duv) >= 1e-9)
+            {
+                float3 acc = float3(0.0);
+                for (int k = 0; k < 16; k++)
+                {
+                    if (k >= taps) break;
+                    float t = float(k) / float(taps - 1);
+                    acc += tilted_sample(uv - duv * (1.0 - t), coc, texY, texUV, texImg);
+                }
+                rgb = acc / float(taps);
+            }
         }
         if (layer.dst_prev.w > 0.5)
         {

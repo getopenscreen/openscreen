@@ -101,12 +101,13 @@ export function isRotation3DPreset(value: unknown): value is Rotation3DPreset {
 	return typeof value === "string" && (ROTATION_3D_PRESET_ORDER as string[]).includes(value);
 }
 
-// Every preset carries all three components on purpose. With a single-axis rotation the projected
-// quad keeps an edge exactly parallel to the frame — both vertical edges for a pure Y rotation,
-// which is geometry rather than a setting — and a perfectly vertical edge cutting through text is
-// indistinguishable from `overflow: hidden`. That is what got reported three times as "the
-// recording is truncated" while the plane was in fact drawn whole. `regions.rs` holds the same
-// numbers and a test asserting no edge comes within 2° of an axis.
+// No preset rolls (Z is 0): the tilt enters with the zoom, and a camera that moves never rolls the
+// footage. X and Y are chosen so that no edge of the projected quad comes within 2° of an axis — a
+// perfectly vertical edge cutting through text is indistinguishable from `overflow: hidden`, which
+// got reported three times as "the recording is truncated". A pure Y rotation keeps both vertical
+// edges vertical, so every preset also pitches; and between 10° and 14° of pitch the top edge of a
+// turned screen reads level, so a preset pitches either less or more than that. `regions.rs` holds
+// the same numbers and the tests.
 //
 // A moving camera has no single pose. Its entry is its resting angle (`ELEVATION_DEG` in
 // `camera.rs`: cursor centred, the camera 4° above the screen, facing it), what a renderer without
@@ -114,9 +115,9 @@ export function isRotation3DPreset(value: unknown): value is Rotation3DPreset {
 // rotation of the screen. It is a camera angle, not a screen rotation, so this is the nearest
 // equivalent rather than the same picture.
 export const ROTATION_3D_PRESETS: Record<Rotation3DPreset, Rotation3D> = {
-	iso: { rotationX: -12, rotationY: -18, rotationZ: -2 },
-	left: { rotationX: -8, rotationY: -16, rotationZ: -1 },
-	right: { rotationX: -8, rotationY: 16, rotationZ: 1 },
+	iso: { rotationX: -23, rotationY: -25, rotationZ: 0 },
+	left: { rotationX: -6.5, rotationY: -17, rotationZ: 0 },
+	right: { rotationX: -6.5, rotationY: 17, rotationZ: 0 },
 	"follow-cursor": { rotationX: -4, rotationY: 0, rotationZ: 0 },
 };
 

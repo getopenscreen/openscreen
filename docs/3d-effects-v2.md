@@ -17,7 +17,8 @@ Ce document tranche les décisions que la v1 laissait ouvertes et découpe les P
 
 Un zoom porte **une attitude figée** (`rotationPreset` : `iso`, `left`, `right`), animée par
 deux effets qui partagent un unique budget d'angle dynamique (`DYNAMIC_TILT_BUDGET`
-= ±1,9° X, ±3,0° Y, 0° Z, `clamp_dynamic_tilt`) :
+= ±1,2° X, ±1,8° Y, 0° Z, `clamp_dynamic_tilt` ; ±1,9° X et ±3° Y tant que les angles fixes
+roulaient) :
 
 - **la parallaxe** (`dynamic_tilt`, PR 1) : pilotée par la **vitesse** lissée du curseur ;
 - **l'impact du clic** (PR 2b) : piloté par la **position** du clic, `regions::tap`.

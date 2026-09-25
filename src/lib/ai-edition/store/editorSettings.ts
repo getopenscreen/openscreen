@@ -27,16 +27,14 @@ import {
 	type FrameTheme,
 	isFrameTheme,
 	type RecordingFrame,
+	readBounded,
 	readRecordingFrame,
 	readWebcamAnchor,
 	readWebcamMask,
-	WEBCAM_SIZE_MAX,
-	WEBCAM_SIZE_MIN,
 	type WebcamAnchor,
 	type WebcamMask,
 } from "@/lib/projectDefaults";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
-import { clamp, clamp01 } from "@/utils/math";
 import type { AxcutDocument } from "../schema";
 
 // ponytail: avoid dragging in lib/exporter full surface here — we only
@@ -202,11 +200,20 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 	// `window-light` / `window-dark` were the frame AND its theme; they split here.
 	const stored = readRecordingFrame(legacy?.frame);
 
+	const defaults = DEFAULT_EDITOR_SETTINGS;
 	const cursor: CursorVisualSettings = {
-		size: num(legacy?.cursorSize, DEFAULT_EDITOR_SETTINGS.cursor.size),
-		smoothing: num(legacy?.cursorSmoothing, DEFAULT_EDITOR_SETTINGS.cursor.smoothing),
-		motionBlur: num(legacy?.cursorMotionBlur, DEFAULT_EDITOR_SETTINGS.cursor.motionBlur),
-		clickBounce: num(legacy?.cursorClickBounce, DEFAULT_EDITOR_SETTINGS.cursor.clickBounce),
+		size: readBounded(legacy?.cursorSize, "cursorSize", defaults.cursor.size),
+		smoothing: readBounded(legacy?.cursorSmoothing, "cursorSmoothing", defaults.cursor.smoothing),
+		motionBlur: readBounded(
+			legacy?.cursorMotionBlur,
+			"cursorMotionBlur",
+			defaults.cursor.motionBlur,
+		),
+		clickBounce: readBounded(
+			legacy?.cursorClickBounce,
+			"cursorClickBounce",
+			defaults.cursor.clickBounce,
+		),
 		// Absent in every project saved before the setting existed: those keep the flat cursor.
 		model3d: bool(legacy?.cursorModel3d, DEFAULT_EDITOR_SETTINGS.cursor.model3d),
 		alwaysArrow: bool(legacy?.cursorAlwaysArrow, DEFAULT_EDITOR_SETTINGS.cursor.alwaysArrow),
@@ -241,12 +248,22 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			? legacy.frameTheme
 			: (stored?.theme ?? DEFAULT_EDITOR_SETTINGS.frameTheme),
 		aspectRatio: legacy?.aspectRatio ?? DEFAULT_EDITOR_SETTINGS.aspectRatio,
-		shadowIntensity: num(legacy?.shadowIntensity, DEFAULT_EDITOR_SETTINGS.shadowIntensity),
+		// Every number below is read into its `SETTING_BOUNDS` range: the slider's range, and the
+		// one a preset and the agent are held to. A stored value past it plays at the bound.
+		shadowIntensity: readBounded(
+			legacy?.shadowIntensity,
+			"shadowIntensity",
+			defaults.shadowIntensity,
+		),
 		showBlur: bool(legacy?.showBlur, DEFAULT_EDITOR_SETTINGS.showBlur),
-		motionBlurAmount: num(legacy?.motionBlurAmount, DEFAULT_EDITOR_SETTINGS.motionBlurAmount),
+		motionBlurAmount: readBounded(
+			legacy?.motionBlurAmount,
+			"motionBlurAmount",
+			defaults.motionBlurAmount,
+		),
 		depthOfField: bool(legacy?.depthOfField, DEFAULT_EDITOR_SETTINGS.depthOfField),
-		borderRadius: num(legacy?.borderRadius, DEFAULT_EDITOR_SETTINGS.borderRadius),
-		padding: num(legacy?.padding, DEFAULT_EDITOR_SETTINGS.padding),
+		borderRadius: readBounded(legacy?.borderRadius, "borderRadius", defaults.borderRadius),
+		padding: readBounded(legacy?.padding, "padding", defaults.padding),
 		cropRegion: legacy?.cropRegion ?? DEFAULT_EDITOR_SETTINGS.cropRegion,
 		webcamLayoutPreset: legacy?.webcamLayoutPreset ?? DEFAULT_EDITOR_SETTINGS.webcamLayoutPreset,
 		webcamMaskShape: webcamMask.shape,
@@ -256,10 +273,10 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			legacy?.webcamReactiveZoom,
 			DEFAULT_EDITOR_SETTINGS.webcamReactiveZoom,
 		),
-		webcamSizePreset: clamp(
-			num(legacy?.webcamSizePreset, DEFAULT_EDITOR_SETTINGS.webcamSizePreset),
-			WEBCAM_SIZE_MIN,
-			WEBCAM_SIZE_MAX,
+		webcamSizePreset: readBounded(
+			legacy?.webcamSizePreset,
+			"webcamSizePreset",
+			defaults.webcamSizePreset,
 		),
 		webcamAnchor: readWebcamAnchor(legacy?.webcamAnchor, legacy?.webcamPosition),
 		webcamCropRegion: webcamCrop,
@@ -275,10 +292,12 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			? legacy.webcamBackgroundMode
 			: DEFAULT_EDITOR_SETTINGS.webcamBackgroundMode,
 		webcamWallpaper: str(legacy?.webcamWallpaper, DEFAULT_EDITOR_SETTINGS.webcamWallpaper),
-		// Same 0-1 range the slider offers; unclamped, a stored 1000 reaches
-		// `blur(25000px)` on the preview canvas and wedges the compositing thread.
-		webcamBlurIntensity: clamp01(
-			num(legacy?.webcamBlurIntensity, DEFAULT_EDITOR_SETTINGS.webcamBlurIntensity),
+		// Unclamped, a stored 1000 reached `blur(25000px)` on the preview canvas and wedged the
+		// compositing thread.
+		webcamBlurIntensity: readBounded(
+			legacy?.webcamBlurIntensity,
+			"webcamBlurIntensity",
+			defaults.webcamBlurIntensity,
 		),
 		cursor,
 		cursorShow: bool(legacy?.cursorShow, DEFAULT_EDITOR_SETTINGS.cursorShow),

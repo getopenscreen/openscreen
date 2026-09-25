@@ -38,7 +38,7 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 			size: 3,
 			smoothing: 0.67,
 			motionBlur: 0.35,
-			clickBounce: 2.5,
+			clickBounce: 1,
 			model3d: false,
 			alwaysArrow: false,
 		},
@@ -80,9 +80,9 @@ describe("parseStylePresetAppearance", () => {
 		expect(read("circle")).toEqual(["square", 1]);
 		expect(read("rounded")).toEqual(["rectangle", 0.6]);
 		expect(read("rectangle")).toEqual(["rectangle", 0.3]);
-		expect(() => parseStylePresetAppearance({ ...appearance(), webcamRoundness: 2 })).toThrow(
-			/webcamRoundness/,
-		);
+		expect(
+			parseStylePresetAppearance({ ...appearance(), webcamRoundness: 2 }).webcamRoundness,
+		).toBe(1);
 	});
 
 	it("keeps depth of field on for a preset saved before the setting existed", () => {
@@ -96,14 +96,18 @@ describe("parseStylePresetAppearance", () => {
 		);
 	});
 
-	it("rejects out-of-range numbers, wrong types and unknown enum values", () => {
-		expect(() => parseStylePresetAppearance(appearance({ padding: 101 }))).toThrow(TypeError);
-		expect(() => parseStylePresetAppearance(appearance({ borderRadius: -1 }))).toThrow(
-			/borderRadius/,
-		);
-		expect(() => parseStylePresetAppearance(appearance({ webcamSizePreset: 5 }))).toThrow(
-			/webcamSizePreset/,
-		);
+	it("reads out-of-range numbers into the editor's bounds", () => {
+		const read = (patch: Record<string, unknown>) =>
+			parseStylePresetAppearance({ ...appearance(), ...patch });
+		expect(read({ padding: 101 }).padding).toBe(100);
+		expect(read({ borderRadius: -1 }).borderRadius).toBe(0);
+		expect(read({ webcamSizePreset: 50 }).webcamSizePreset).toBe(35);
+		// Every preset saved with the old defaults carries a 2.5 bounce: it still applies.
+		const cursor = read({ cursor: { ...appearance().cursor, size: 10, clickBounce: 2.5 } }).cursor;
+		expect([cursor.size, cursor.clickBounce]).toEqual([3, 2]);
+	});
+
+	it("rejects non-numbers, wrong types and unknown enum values", () => {
 		expect(() =>
 			parseStylePresetAppearance({ ...appearance(), shadowIntensity: Number.NaN }),
 		).toThrow(/shadowIntensity/);
@@ -119,7 +123,7 @@ describe("parseStylePresetAppearance", () => {
 		expect(() =>
 			parseStylePresetAppearance({
 				...appearance(),
-				cursor: { ...appearance().cursor, size: 11 },
+				cursor: { ...appearance().cursor, size: "11" },
 			}),
 		).toThrow(/cursor\.size/);
 	});

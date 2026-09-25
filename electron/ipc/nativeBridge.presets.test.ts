@@ -50,7 +50,7 @@ const APPEARANCE: StylePresetAppearance = {
 		size: 3,
 		smoothing: 0.67,
 		motionBlur: 0.35,
-		clickBounce: 2.5,
+		clickBounce: 1,
 		model3d: false,
 		alwaysArrow: false,
 	},

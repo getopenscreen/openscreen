@@ -21,6 +21,7 @@ import {
 	type WebcamPosition,
 	type WebcamSizePreset,
 } from "@/components/video-editor/types";
+import { normalizeCursorThemeId } from "@/lib/cursor/cursorThemes";
 import {
 	DEFAULT_PROJECT_APPEARANCE,
 	type FrameTheme,
@@ -282,7 +283,10 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		cursor,
 		cursorShow: bool(legacy?.cursorShow, DEFAULT_EDITOR_SETTINGS.cursorShow),
 		cursorAutoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
-		cursorTheme: str(legacy?.cursorTheme, DEFAULT_EDITOR_SETTINGS.cursorTheme),
+		// A pack the app no longer ships reads as the default art, which is what the renderer
+		// draws for it anyway. Left raw, the id would also switch off the modelled cursor: the
+		// compositor only builds it for the default theme.
+		cursorTheme: normalizeCursorThemeId(legacy?.cursorTheme),
 		autoFocusAll: bool(legacy?.autoFocusAll, DEFAULT_EDITOR_SETTINGS.autoFocusAll),
 	};
 }

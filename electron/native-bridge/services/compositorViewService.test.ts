@@ -449,8 +449,8 @@ describe("resolveSceneAssetPaths", () => {
 		if (!themed) return;
 		const sprites = resolved({ cursor: { theme: themed.id } }).cursor.cursorSprites;
 
-		// The sweezy packs only carry an arrow and a pointer, but a recording walks through
-		// far more states than that — each one still has to get its own sprite.
+		// A pack may carry only an arrow and a pointer, but a recording walks through far
+		// more states than that — each one still has to get its own sprite.
 		expect(sprites.text.path).toBe(path.join(resources, "cursors", "default", "text.png"));
 		expect(sprites["resize-ew"].path).toContain(path.join("cursors", "default"));
 		expect(Object.keys(sprites).sort()).toEqual(Object.keys(DEFAULT_CURSOR_SPRITES).sort());

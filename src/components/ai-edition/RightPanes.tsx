@@ -3787,38 +3787,44 @@ export function CursorPane() {
 					onChange={(v) => void set({ cursor: { alwaysArrow: v } })}
 				/>
 			</div>
-			<div className={styles.sectionLabel}>{ts("cursor.theme")}</div>
-			<div className={styles.cursorGrid}>
-				{cursorThemeOptions.map((option) => {
-					const isActive = settings.cursorTheme === option.id;
-					return (
-						<button
-							type="button"
-							key={option.id}
-							className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
-							title={option.name}
-							aria-label={option.name}
-							aria-pressed={isActive}
-							disabled={!hasDocument}
-							onClick={() => void set({ cursor: { theme: option.id } })}
-						>
-							<span className={styles.cursorCellPreviews}>
-								{option.previewUrls.map((url) => (
-									<img
-										key={url}
-										src={url}
-										alt=""
-										width={option.previewUrls.length > 1 ? 14 : 20}
-										height={option.previewUrls.length > 1 ? 14 : 20}
-										draggable={false}
-										style={{ objectFit: "contain", pointerEvents: "none" }}
-									/>
-								))}
-							</span>
-						</button>
-					);
-				})}
-			</div>
+			{/* One option is not a choice: the picker shows once a pack ships beside the
+			    default art (see CURSOR_THEMES). */}
+			{cursorThemeOptions.length > 1 ? (
+				<>
+					<div className={styles.sectionLabel}>{ts("cursor.theme")}</div>
+					<div className={styles.cursorGrid}>
+						{cursorThemeOptions.map((option) => {
+							const isActive = settings.cursorTheme === option.id;
+							return (
+								<button
+									type="button"
+									key={option.id}
+									className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
+									title={option.name}
+									aria-label={option.name}
+									aria-pressed={isActive}
+									disabled={!hasDocument}
+									onClick={() => void set({ cursor: { theme: option.id } })}
+								>
+									<span className={styles.cursorCellPreviews}>
+										{option.previewUrls.map((url) => (
+											<img
+												key={url}
+												src={url}
+												alt=""
+												width={option.previewUrls.length > 1 ? 14 : 20}
+												height={option.previewUrls.length > 1 ? 14 : 20}
+												draggable={false}
+												style={{ objectFit: "contain", pointerEvents: "none" }}
+											/>
+										))}
+									</span>
+								</button>
+							);
+						})}
+					</div>
+				</>
+			) : null}
 			<div className={styles.sliderGrid}>
 				<SliderCell
 					label={ts("cursor.size")}

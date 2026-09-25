@@ -934,9 +934,60 @@ function dropAudioAnchoredTrims(raw: unknown): unknown {
 	return { ...doc, timeline: { ...timeline, trimRanges: kept } };
 }
 
+/**
+ * Raise to its start the end of every transcript segment or word stored BEFORE its start.
+ *
+ * The transcription core before a9fdd97ff (transformers.js, removed 2026-07-05) clamped a
+ * timestamp's end to the audio length but not its start, so a Whisper hallucination past the
+ * end of the audio ("very good" at 13.5 s in 6.76 s of sound) was written as [13.5, 6.76].
+ * The schema rejects that, and a single such word made the whole project unreadable: it
+ * vanished from the project list.
+ *
+ * Raising the end loses nothing: the text, any edit made to it, and every id a segment or a
+ * caption refers to all survive. The word becomes a zero-length point at its start, which in
+ * the known case lies past the media, so it plays and shows nowhere.
+ *
+ * No `schemaVersion` bump, like `dropAudioAnchoredTrims`: the document comes back untouched
+ * when there is nothing to repair. Runs on RAW, untrusted input, so every read is guarded.
+ */
+function raiseInvertedTranscriptEnds(raw: unknown): unknown {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+	const doc = raw as Record<string, unknown>;
+	let repaired = false;
+	const repairSpans = (spans: unknown): unknown => {
+		if (!Array.isArray(spans)) return spans;
+		return spans.map((entry) => {
+			if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+			const span = entry as Record<string, unknown>;
+			if (typeof span.startSec !== "number" || typeof span.endSec !== "number") return entry;
+			if (span.endSec >= span.startSec) return entry;
+			repaired = true;
+			return { ...span, endSec: span.startSec };
+		});
+	};
+	const repairTranscript = (value: unknown): unknown => {
+		if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+		const transcript = value as Record<string, unknown>;
+		return {
+			...transcript,
+			segments: repairSpans(transcript.segments),
+			words: repairSpans(transcript.words),
+		};
+	};
+	const transcript = repairTranscript(doc.transcript);
+	const transcripts = Array.isArray(doc.transcripts)
+		? doc.transcripts.map(repairTranscript)
+		: doc.transcripts;
+	return repaired ? { ...doc, transcript, transcripts } : raw;
+}
+
 export function migrateRawDocumentToCurrent(raw: unknown): unknown {
-	return dropAudioAnchoredTrims(
-		upgradeV6DocumentToV7(upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw)))),
+	return raiseInvertedTranscriptEnds(
+		dropAudioAnchoredTrims(
+			upgradeV6DocumentToV7(
+				upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+			),
+		),
 	);
 }
 

@@ -407,12 +407,10 @@
 		"model3dHint": "Kiểu mặc định: mọi hình dạng con trỏ đều thành 3D. Các kiểu khác vẫn phẳng.",
 		"model3dNeedsCursor": "Bật “Hiện con trỏ” để dùng con trỏ 3D.",
 		"help": "Cách vẽ con trỏ từ dữ liệu đã ghi: chủ đề, kích thước, làm mượt, mờ chuyển động và hiệu ứng nảy khi nhấp.",
-		"clipToBoundsDescription": "Giữ con trỏ bên trong khung hình video. Tắt để cho phép con trỏ vượt ra ngoài mép — hữu ích khi phóng to hoặc lia máy.",
 		"size": "Kích thước",
 		"title": "Con trỏ",
 		"show": "Hiện con trỏ",
 		"themeDefault": "Mặc định",
-		"clipToBounds": "Cắt theo khung",
 		"motionBlur": "Làm mờ chuyển động",
 		"theme": "Kiểu con trỏ",
 		"autoHide": "Ẩn khi không hoạt động"

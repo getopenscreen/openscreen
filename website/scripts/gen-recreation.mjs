@@ -791,13 +791,9 @@ const CONTROLS = {
 		"px",
 		`${le.borderRadius}px`,
 	),
-	// RightPanes.tsx:1755, :1771 — Cursor. `show` and `clipToBounds` are not in
-	// this document, so they are the app's own defaults rather than a guess.
+	// RightPanes.tsx:1755 — Cursor. `show` is not in this document, so it is the
+	// app's own default rather than a guess.
 	cursorShow: { label: t("settings:cursor.show"), on: defaultBool("cursorShow") },
-	clipToBounds: {
-		label: t("settings:cursor.clipToBounds"),
-		on: defaultBool("DEFAULT_CURSOR_CLIP_TO_BOUNDS"),
-	},
 	cursorTheme: { label: t("settings:cursor.theme"), value: le.cursorTheme },
 	cursorSize: slider(
 		t("settings:cursor.size"),
@@ -908,7 +904,6 @@ const PANELS = {
 	cursor: {
 		title: t("settings:cursor.title"),
 		show: t("settings:cursor.show"),
-		clipToBounds: t("settings:cursor.clipToBounds"),
 		theme: t("settings:cursor.theme"),
 		size: t("settings:cursor.size"),
 		smoothing: t("settings:cursor.smoothing"),
@@ -1098,10 +1093,6 @@ const PROVENANCE = [
 	},
 	{ shown: PANELS.cursor.title, source: "src/i18n/locales/en/settings.json → cursor.title" },
 	{ shown: PANELS.cursor.show, source: "src/i18n/locales/en/settings.json → cursor.show" },
-	{
-		shown: PANELS.cursor.clipToBounds,
-		source: "src/i18n/locales/en/settings.json → cursor.clipToBounds",
-	},
 	{ shown: PANELS.cursor.theme, source: "src/i18n/locales/en/settings.json → cursor.theme" },
 	{ shown: PANELS.cursor.size, source: "src/i18n/locales/en/settings.json → cursor.size" },
 	{

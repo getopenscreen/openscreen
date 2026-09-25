@@ -407,12 +407,10 @@
 		"model3dHint": "Estilo predeterminado: todas las formas del cursor pasan a 3D. Los demás estilos siguen planos.",
 		"model3dNeedsCursor": "Activa «Mostrar cursor» para usar el cursor 3D.",
 		"help": "Representación del cursor a partir de la telemetría grabada: tema, tamaño, suavizado, desenfoque de movimiento y rebote al hacer clic.",
-		"clipToBoundsDescription": "Mantiene el cursor dentro del cuadro del vídeo. Desactívalo para dejar que el cursor sobrepase los bordes; útil al hacer zoom o desplazar la imagen.",
 		"size": "Tamaño",
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Predeterminado",
-		"clipToBounds": "Recortar al lienzo",
 		"motionBlur": "Desenfoque de movimiento",
 		"theme": "Estilo del cursor",
 		"autoHide": "Ocultar si está inactivo"

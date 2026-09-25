@@ -367,7 +367,6 @@ export default function Recreation() {
 							{/* ── Cursor ── */}
 							<div className={styles.pane} data-pane="cursor">
 								<Toggle label={CONTROLS.cursorShow.label} on={CONTROLS.cursorShow.on} />
-								<Toggle label={CONTROLS.clipToBounds.label} on={CONTROLS.clipToBounds.on} />
 								<span className={styles.controlLabel}>{CONTROLS.cursorTheme.label}</span>
 								<span className={styles.cursorStyles}>
 									{CURSORS.themes.map((theme, i) => (

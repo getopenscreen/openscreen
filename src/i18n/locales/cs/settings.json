@@ -407,12 +407,10 @@
 		"model3dHint": "Výchozí styl: všechny tvary kurzoru budou 3D. Ostatní styly zůstanou ploché.",
 		"model3dNeedsCursor": "Zapněte „Zobrazit kurzor“, abyste mohli použít 3D kurzor.",
 		"help": "Renderování kurzoru ze zaznamenané telemetrie: motiv, velikost, vyhlazení, pohybové rozmazání a zdůraznění odrazu při kliknutí.",
-		"clipToBoundsDescription": "Udržuje kurzor uvnitř rámce videa. Vypněte, pokud chcete, aby kurzor přesahoval okraje, což se hodí při přiblížení nebo posunu.",
 		"size": "Velikost",
 		"title": "Kurzor",
 		"show": "Zobrazit kurzor",
 		"themeDefault": "Výchozí",
-		"clipToBounds": "Oříznout na plátno",
 		"motionBlur": "Pohybové rozmazání",
 		"theme": "Styl kurzoru",
 		"autoHide": "Automaticky skrýt, když je neaktivní"

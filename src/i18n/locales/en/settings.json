@@ -407,12 +407,10 @@
 		"model3dHint": "Default style: every cursor shape turns 3D. Other styles stay flat.",
 		"model3dNeedsCursor": "Turn on “Show cursor” to use the 3D cursor.",
 		"help": "How the recorded cursor is drawn: style, size, smoothing, motion blur and click bounce.",
-		"clipToBoundsDescription": "Keeps the cursor inside the video frame. Turn off to let the cursor extend past the edges - useful when zoomed in or panned.",
 		"size": "Size",
 		"title": "Cursor",
 		"show": "Show cursor",
 		"themeDefault": "Default",
-		"clipToBounds": "Keep inside frame",
 		"motionBlur": "Motion blur",
 		"theme": "Cursor style",
 		"autoHide": "Auto-hide when inactive"

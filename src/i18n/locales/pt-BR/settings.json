@@ -407,12 +407,10 @@
 		"model3dHint": "Estilo padrão: todas as formas do cursor ficam em 3D. Os outros estilos continuam planos.",
 		"model3dNeedsCursor": "Ative “Mostrar cursor” para usar o cursor 3D.",
 		"help": "Renderização do cursor a partir da telemetria gravada: tema, tamanho, suavização, desfoque de movimento e salto ao clicar.",
-		"clipToBoundsDescription": "Mantém o cursor dentro do quadro do vídeo. Desative para permitir que o cursor ultrapasse as bordas — útil ao aplicar zoom ou ao deslocar.",
 		"size": "Tamanho",
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Padrão",
-		"clipToBounds": "Recortar à tela",
 		"motionBlur": "Desfoque de movimento",
 		"theme": "Estilo do cursor",
 		"autoHide": "Ocultar quando inativo"

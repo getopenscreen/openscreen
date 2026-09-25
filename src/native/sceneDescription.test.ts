@@ -1126,7 +1126,8 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(cursor.smoothing).toBe(0.9);
 		expect(cursor.motionBlur).toBe(0.5);
 		expect(cursor.clickBounce).toBe(1.5);
-		expect(cursor.clipToBounds).toBe(true);
+		// The option is gone: a project that had it on now overflows like every other one.
+		expect(cursor.clipToBounds).toBe(false);
 	});
 
 	it("maps show / theme / shape / mirror through to layout+cursor", () => {

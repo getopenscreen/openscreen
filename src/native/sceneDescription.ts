@@ -1097,7 +1097,9 @@ export function buildSceneDescription(
 			motionBlur: settings.cursor.motionBlur,
 			clickBounce: settings.cursor.clickBounce,
 			model3d: settings.cursor.model3d,
-			clipToBounds: settings.cursor.clipToBounds,
+			// The "Keep inside frame" option is gone: the cursor always overflows into the
+			// background. The field stays because the compositor's scene requires it.
+			clipToBounds: false,
 			theme: settings.cursorTheme,
 		},
 		audio: {

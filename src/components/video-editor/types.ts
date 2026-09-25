@@ -275,7 +275,6 @@ export interface CursorVisualSettings {
 	 * each click; pointing shapes also lean towards their motion. Other themes stay flat sprites.
 	 */
 	model3d: boolean;
-	clipToBounds: boolean;
 	autoHide?: boolean;
 }
 
@@ -285,8 +284,6 @@ export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
 export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
 // Off: the flat sprite every existing project renders.
 export const DEFAULT_CURSOR_MODEL3D = false;
-// false lets the cursor overflow into the background; true clips it to the canvas bounds.
-export const DEFAULT_CURSOR_CLIP_TO_BOUNDS = false;
 export const DEFAULT_CURSOR_AUTO_HIDE = false;
 export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
 

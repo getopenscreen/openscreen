@@ -554,7 +554,6 @@ export const PANELS = {
 	cursor: {
 		title: "Cursor",
 		show: "Show cursor",
-		clipToBounds: "Keep inside frame",
 		theme: "Cursor style",
 		size: "Size",
 		smoothing: "Smoothing",
@@ -612,10 +611,6 @@ export const CONTROLS = {
 	cursorShow: {
 		label: "Show cursor",
 		on: true,
-	},
-	clipToBounds: {
-		label: "Keep inside frame",
-		on: false,
 	},
 	cursorTheme: {
 		label: "Cursor style",
@@ -810,7 +805,6 @@ export const PROVENANCE: ProvenanceEntry[] = [
 	{ shown: "Roundness", source: "src/i18n/locales/en/settings.json → effects.roundness" },
 	{ shown: "Cursor", source: "src/i18n/locales/en/settings.json → cursor.title" },
 	{ shown: "Show cursor", source: "src/i18n/locales/en/settings.json → cursor.show" },
-	{ shown: "Keep inside frame", source: "src/i18n/locales/en/settings.json → cursor.clipToBounds" },
 	{ shown: "Cursor style", source: "src/i18n/locales/en/settings.json → cursor.theme" },
 	{ shown: "Size", source: "src/i18n/locales/en/settings.json → cursor.size" },
 	{ shown: "Smoothing", source: "src/i18n/locales/en/settings.json → cursor.smoothing" },

@@ -9,6 +9,7 @@ import {
 } from "@/components/video-editor/projectPersistence";
 import { useScreenRecorder } from "@/hooks/useScreenRecorder";
 import type { CliRecordRequest } from "@/lib/cliContracts";
+import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
 
 type Phase = "init" | "recording" | "stopping" | "done";
 
@@ -91,7 +92,8 @@ function buildDefaultProject(session: {
 			...(session.webcamVideoPath ? { webcamVideoPath: session.webcamVideoPath } : {}),
 			...(session.cursorCaptureMode ? { cursorCaptureMode: session.cursorCaptureMode } : {}),
 		},
-		editor: normalizeProjectEditor({}),
+		// A new project: it takes the current default format rather than the v2 reading of none.
+		editor: normalizeProjectEditor({ aspectRatio: DEFAULT_PROJECT_APPEARANCE.aspectRatio }),
 	};
 }
 

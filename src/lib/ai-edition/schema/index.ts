@@ -38,7 +38,10 @@ import { anchorRegionsWithDerivedMs } from "../timeline/timelineMap";
 //      made them AMBIGUOUS the moment two clips drew from the same asset (a
 //      duplicated clip): every reader either matched both clips or picked the
 //      first. See `upgradeV6DocumentToV7`.
-export const axcutSchemaVersion = 7;
+//   7. v8 — Auto becomes the default AspectRatio. A document that never chose a
+//      ratio stores none and reads the default, so the upgrader pins the one it
+//      has always shown, 16:9. See `upgradeV7DocumentToV8`.
+export const axcutSchemaVersion = 8;
 
 // ponytail: every region schema shares the same monotonicity rule
 // (end >= start) with the same error shape. Factor the refine so the
@@ -875,6 +878,31 @@ export function upgradeV6DocumentToV7(raw: unknown): unknown {
 }
 
 /**
+ * v7 → v8 — Auto becomes the default AspectRatio, and older documents keep their frame.
+ *
+ * A project whose user never opened the ratio menu stores no `aspectRatio` at all: every
+ * reader falls back to the default (`getEditorSettings`). Changing that default would
+ * therefore reshape every such project on its next open, which is the silent drift v6
+ * removed for `"native"`. So the value those documents have always shown, 16:9, is written
+ * down; only documents created from v8 on take the new default.
+ *
+ * Mirrors the read: `getEditorSettings` takes any stored value as is, so only a missing one
+ * (no envelope, or no key) is pinned.
+ */
+export function upgradeV7DocumentToV8(raw: unknown): unknown {
+	if (!raw || typeof raw !== "object") return raw;
+	const doc = raw as Record<string, unknown>;
+	if (doc.schemaVersion !== 7) return raw;
+
+	const legacy =
+		doc.legacyEditor && typeof doc.legacyEditor === "object" && !Array.isArray(doc.legacyEditor)
+			? (doc.legacyEditor as Record<string, unknown>)
+			: null;
+	if (legacy?.aspectRatio != null) return { ...doc, schemaVersion: 8 };
+	return { ...doc, schemaVersion: 8, legacyEditor: { ...legacy, aspectRatio: "16:9" } };
+}
+
+/**
  * Runs the whole upgrade chain on a raw, untrusted value. Idempotent: each step
  * is gated on an exact `schemaVersion`, so an already-current document passes
  * through untouched.
@@ -984,20 +1012,22 @@ function raiseInvertedTranscriptEnds(raw: unknown): unknown {
 export function migrateRawDocumentToCurrent(raw: unknown): unknown {
 	return raiseInvertedTranscriptEnds(
 		dropAudioAnchoredTrims(
-			upgradeV6DocumentToV7(
-				upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+			upgradeV7DocumentToV8(
+				upgradeV6DocumentToV7(
+					upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+				),
 			),
 		),
 	);
 }
 
-// PURE v7 validation. Callers that read a document from disk (or any other
+// PURE v8 validation. Callers that read a document from disk (or any other
 // source that might carry an older `schemaVersion`) MUST run
 // `migrateRawDocumentToCurrent` on the raw value first. The previous
 // implementation wrapped this schema in a `z.preprocess` that re-ran the whole
-// v3→…→v7 chain on EVERY parse, including in-memory parses of documents that
+// v3→…→v8 chain on EVERY parse, including in-memory parses of documents that
 // were already current. Hoisting it to load time makes the in-memory parse a
-// single `z.literal(7)` + shape check.
+// single `z.literal(8)` + shape check.
 export const documentSchema = documentSchemaShape;
 
 export const createProjectInputSchema = z.object({

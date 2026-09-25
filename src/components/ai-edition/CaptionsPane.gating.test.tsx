@@ -23,7 +23,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 function documentWith(asset: AxcutAsset): AxcutDocument {
 	return {
-		schemaVersion: 7,
+		schemaVersion: 8,
 		project: {
 			id: "proj_1",
 			title: "Test",

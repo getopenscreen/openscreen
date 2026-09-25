@@ -96,7 +96,7 @@ function mount(audioTracks: AxcutAudioTrack[]) {
 	useProjectStore.setState({
 		projectId: "proj_1",
 		document: {
-			schemaVersion: 7,
+			schemaVersion: 8,
 			project: {
 				id: "proj_1",
 				title: "T",

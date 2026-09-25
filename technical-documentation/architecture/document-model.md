@@ -11,15 +11,15 @@ the contract.
 
 ## `schemaVersion` and top-level shape
 
-`axcutSchemaVersion` is **7** — exported as a literal at the top of
+`axcutSchemaVersion` is **8** — exported as a literal at the top of
 `src/lib/ai-edition/schema/index.ts`. Every document on disk carries
-`schemaVersion: 7`; anything older is upgraded on parse (see [Migrations](#migrations))
+`schemaVersion: 8`; anything older is upgraded on parse (see [Migrations](#migrations))
 and anything unknown is rejected by the `z.literal(axcutSchemaVersion)` check in
 `documentSchemaShape`.
 
 | Field | Holds | Notes |
 |---|---|---|
-| `schemaVersion` | `7` | Bumping requires a migration; see the chain below. |
+| `schemaVersion` | `8` | Bumping requires a migration; see the chain below. |
 | `project` | `{ id, title, createdAt, updatedAt, primaryAssetId? }` | One project per file. |
 | `assets[]` | `AxcutAsset` (one per recorded/imported media file) | Carries `originalPath`, `cameraTrack`, `durationSec` (renderer probes). |
 | `transcript` | `AxcutTranscript \| null` | Legacy primary transcript; left for back-compat, no longer the source of truth. |
@@ -40,14 +40,14 @@ Migrations are **one-way and forward-only**. There is no version downgrade path:
 newer document that lands on an older build is rejected by the `schemaVersion`
 literal, not silently truncated. The chain runs **at load time** through
 `migrateRawDocumentToCurrent` (`src/lib/ai-edition/document/migrate.ts`) — the
-upgraders compose the chain and `documentSchema.parse` is a pure v7 validator.
+upgraders compose the chain and `documentSchema.parse` is a pure v8 validator.
 Every JSON-read site (`DocumentService`, the browser shim, the renderer's
 `handleBrowseProject` / `openLoadedProject` disk-load paths) must call the
 helper before `documentSchema.parse`. The pre-hoist implementation wrapped this
 chain in a `z.preprocess`, so it ran on every `setDocument` / `saveDocument` /
 `loadProject` parse — measurable per-parse overhead on documents that were
 already current. Hoisting it to load time makes the in-memory parse a single
-`z.literal(7)` + shape check on already-upgraded data.
+`z.literal(8)` + shape check on already-upgraded data.
 
 ### v3 → v4 (`upgradeV3DocumentToV4`, `schema/index.ts`)
 
@@ -119,6 +119,21 @@ dropped (`replaceTimeline` mints exactly those: the complement of the kept
 intervals, outside every clip by construction), and an unprobed clip has no real
 window to clamp against so its trims stay un-anchored. Un-anchored trims keep the
 pre-v7 asset-wide meaning, which is what makes the fallback lossless.
+
+### v7 → v8 (`upgradeV7DocumentToV8`, `schema/index.ts`)
+
+v8 makes **Auto** the default AspectRatio. A document whose user never opened the
+ratio menu stores no `legacyEditor.aspectRatio`: every reader falls back to the
+default (`getEditorSettings`). Changing the default alone would reshape all of those
+projects on their next open, so the upgrader writes down the frame they have always
+shown, `"16:9"`. It pins only a **missing** value (no envelope, or no key), which is
+exactly what the read would have defaulted; any stored ratio, `"native"` included, is
+left alone. Documents created from v8 on store none and read Auto.
+
+The legacy v2 format keeps the same reading: `normalizeProjectEditor` fills a missing
+ratio with `"16:9"` (`DEFAULT_EDITOR_LAYOUT_SETTINGS`), since every v2 file predates
+Auto. The one producer of new v2 files, `openscreen record --project`, states Auto
+explicitly.
 
 ### Legacy v2 → current (`migrateProjectDataToAxcutDocument`, `document/migrate.ts`)
 

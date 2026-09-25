@@ -53,7 +53,7 @@ const sampleDoc = {
 	// LITERAL 7, and an unannotated object literal widens it to `number` — so
 	// every `document: sampleDoc` below fails to type-check for a fixture that
 	// is, in fact, exactly right.
-	schemaVersion: 7 as const,
+	schemaVersion: 8 as const,
 	project: {
 		id: "proj_test",
 		title: "Test",

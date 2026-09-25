@@ -70,7 +70,7 @@ export interface ProjectAppearanceDefaults {
 	frame: RecordingFrame;
 	/** Light or dark, for whichever frame is on. Inert with `frame: "none"`. */
 	frameTheme: FrameTheme;
-	aspectRatio: `${number}:${number}` | "native";
+	aspectRatio: `${number}:${number}` | "auto" | "native";
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
@@ -108,7 +108,9 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	wallpaperMotion: "none",
 	frame: "none",
 	frameTheme: "light",
-	aspectRatio: "16:9",
+	// Auto: the frame follows the recording, its crop, the camera layout and the padding.
+	// Documents from before it stored no ratio and read 16:9; the v8 upgrader pins that.
+	aspectRatio: "auto",
 	shadowIntensity: 0.2,
 	showBlur: false,
 	motionBlurAmount: 0.2,

@@ -53,6 +53,9 @@ export const DEFAULT_EDITOR_LAYOUT_SETTINGS: {
 	wallpaper: string;
 } = {
 	padding: 50,
+	// What a v2 project file means when it states no ratio. Every such file predates Auto, so
+	// the answer stays 16:9 for good, as the v8 upgrader pins it for documents. New projects
+	// state their ratio instead (see CliRecordRunner).
 	aspectRatio: "16:9",
 	cropRegion: DEFAULT_CROP_REGION,
 	wallpaper: DEFAULT_WALLPAPER,

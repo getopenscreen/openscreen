@@ -29,6 +29,7 @@ import {
 	removeRegion as removeRegionInDocument,
 	resequenceClips,
 	setClipSourceRange,
+	splitClipAt,
 	withClipsChanged,
 } from "../document/timeline";
 import type { AxcutAudioTrack, AxcutClipCropRegion, AxcutDocument } from "../schema";
@@ -1045,6 +1046,39 @@ export function useTimeline() {
 		setSelectedAudioTrackId(null);
 	}, [setSelectedAudioTrackId]);
 
+	/** Cut the clip under the playhead in two, there.
+	 *
+	 *  The playhead runs on TIMELINE time and a clip is cut in its own MEDIA time, so the
+	 *  carrier has to be found by containment and the instant mapped through it. Not
+	 *  `resolveTimelineSpanToTrim`, which is the same projection but falls back to the
+	 *  nearest clip when nothing contains the point — right for a trim dragged onto the
+	 *  ruler, wrong here, where it would cut a clip the playhead is not even on.
+	 *
+	 *  Returns whether it split, so a caller can say nothing happened rather than leave a
+	 *  control that looks broken when the playhead sits on a boundary.
+	 *
+	 *  The document and the playhead are read from the store when this runs, not off the
+	 *  render closure, so the shell can queue it on `useSequentialTimelineOps` behind a save
+	 *  in flight and have it cut what that save committed. */
+	const splitClipAtPlayhead = useCallback(async (): Promise<boolean> => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return false;
+		const at = playheadSec();
+		const carrier = doc.timeline.clips.find(
+			(c) => at >= c.timelineStartSec && at <= c.timelineEndSec,
+		);
+		if (!carrier) return false;
+		const sourceSec = carrier.sourceStartSec + (at - carrier.timelineStartSec);
+		const next = splitClipAt(doc, carrier.id, sourceSec);
+		// splitClipAt is a no-op on a cut it refuses — on a boundary, or too close to one.
+		// Identity means nothing to save and nothing to report.
+		if (next === doc) return false;
+		// The write's own verdict, not an optimistic one: `saveDocument` returns false on a
+		// superseded or failed write and leaves the store alone, and a control that reports
+		// a cut the document never took is worse than one that says nothing.
+		return await saveDocument(next, { history: true });
+	}, [saveDocument]);
+
 	// The Edit Clip dialog's Apply, as ONE document and ONE save.
 	//
 	// Source range and crop are two edits made in a single user action, and they used to
@@ -1528,6 +1562,7 @@ export function useTimeline() {
 		selectRegion,
 		clearSelection,
 		applyClipEdit,
+		splitClipAtPlayhead,
 		insertClipAt,
 		moveClip,
 		duplicateClip,

@@ -73,6 +73,8 @@
 		"newAnnotation": "Anotação",
 		"dragToReorderHint": "Arraste para reordenar · clique duas vezes para editar os pontos de entrada/saída",
 		"editInOutPoints": "Editar pontos de entrada/saída",
+		"splitClip": "Dividir o clipe no cursor de reprodução",
+		"splitClipNothingToSplit": "Posicione o cursor dentro de um clipe, longe das extremidades.",
 		"deleteClip": "Excluir clipe",
 		"dropToAdd": "Solte para adicionar à linha do tempo",
 		"importRecordingFirst": "Importe uma gravação primeiro",

@@ -192,8 +192,13 @@ export function insertGeneratedClip(
 		const cutsHere = atRuler > clip.timelineStartSec + EPS && atRuler < clip.timelineEndSec - EPS;
 		if (!placed && cutsHere) {
 			const cut = clip.sourceStartSec + (atRuler - clip.timelineStartSec);
+			// The right piece is this cut's own, not one a person asked for, so it must not
+			// inherit `splitFromPrevious` from a clip that was itself a split's tail: the flag
+			// would stop the join from healing the two pieces once the word is taken out again.
+			// The left piece keeps whatever the clip had, since it still starts where that did.
+			const { splitFromPrevious: _inherited, ...unflagged } = clip;
 			const right = {
-				...clip,
+				...unflagged,
 				id: createId("clip"),
 				sourceStartSec: cut,
 				timelineStartSec: atRuler,

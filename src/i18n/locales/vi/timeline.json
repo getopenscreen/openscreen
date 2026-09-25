@@ -73,6 +73,8 @@
 		"newAnnotation": "Chú thích",
 		"dragToReorderHint": "Kéo để sắp xếp lại · nhấp đúp để chỉnh sửa điểm vào/ra",
 		"editInOutPoints": "Chỉnh sửa điểm vào/ra",
+		"splitClip": "Tách đôi clip tại đầu phát",
+		"splitClipNothingToSplit": "Đặt đầu phát vào bên trong một clip, cách xa hai đầu.",
 		"deleteClip": "Xóa clip",
 		"dropToAdd": "Thả để thêm vào dòng thời gian",
 		"importRecordingFirst": "Hãy nhập một bản ghi trước",

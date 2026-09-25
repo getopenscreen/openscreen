@@ -73,6 +73,8 @@
 		"newAnnotation": "Anotace",
 		"dragToReorderHint": "Přetáhněte pro změnu pořadí · dvojklik pro úpravu vstupních/výstupních bodů",
 		"editInOutPoints": "Upravit vstupní/výstupní body",
+		"splitClip": "Rozdělit klip na pozici přehrávací hlavice",
+		"splitClipNothingToSplit": "Umístěte přehrávací hlavici dovnitř klipu, mimo jeho okraje.",
 		"deleteClip": "Smazat klip",
 		"dropToAdd": "Přetáhněte pro přidání na časovou osu",
 		"importRecordingFirst": "Nejprve importujte nahrávku",

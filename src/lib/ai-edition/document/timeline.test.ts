@@ -22,6 +22,7 @@ import {
 	resolvePlaybackSegments,
 	restoreFullTimeline,
 	setClipSourceRange,
+	splitClipAt,
 	subtractInterval,
 	timelineIntervals,
 } from "./timeline";
@@ -1738,5 +1739,434 @@ describe("projectRawTimelineSecToPlayback with speed regions", () => {
 	it("ignores a nonsense rate rather than dividing by it", () => {
 		const speed = [{ startMs: 0, endMs: 4000, speed: 0 }];
 		expect(projectRawTimelineSecToPlayback([clip], [], 4, speed)).toBeCloseTo(4, 6);
+	});
+});
+
+// Cutting a clip in two at a point in its own media. The pair a split produces is
+// joinable BY CONSTRUCTION — same asset, timecodes that meet, same crop — so the
+// whole of this feature rests on `splitFromPrevious` surviving withClipsChanged.
+// The first test is the one that would have caught shipping a silent no-op.
+describe("splitClipAt", () => {
+	const oneClip = (overrides: Partial<AxcutClip> = {}) =>
+		makeDoc({
+			timeline: {
+				clips: [
+					makeClip({
+						id: "clip_1",
+						sourceStartSec: 0,
+						sourceEndSec: 10,
+						timelineEndSec: 10,
+						...overrides,
+					}),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+
+	it("leaves two clips behind, meeting at the cut", () => {
+		const out = splitClipAt(oneClip(), "clip_1", 4);
+		expect(out.timeline.clips).toHaveLength(2);
+		expect(out.timeline.clips[0]).toMatchObject({ sourceStartSec: 0, sourceEndSec: 4 });
+		expect(out.timeline.clips[1]).toMatchObject({ sourceStartSec: 4, sourceEndSec: 10 });
+	});
+
+	it("marks the tail so the contiguity fold cannot undo the cut", () => {
+		const out = splitClipAt(oneClip(), "clip_1", 4);
+		expect(out.timeline.clips[1].splitFromPrevious).toBe(true);
+		// And it holds through a LATER structural edit, not just the one that made it —
+		// every edit ends in withClipsChanged, so one that re-folded would lose the cut
+		// the next time anything moved.
+		const again = resequenceClips(out.timeline.clips);
+		expect(
+			rederiveRegionMs({ ...out, timeline: { ...out.timeline, clips: again } }, again).timeline
+				.clips,
+		).toHaveLength(2);
+	});
+
+	it("lays the halves back-to-back with no gap and no change in total length", () => {
+		const out = splitClipAt(oneClip(), "clip_1", 4);
+		const [a, b] = out.timeline.clips;
+		expect(a.timelineStartSec).toBe(0);
+		expect(a.timelineEndSec).toBe(4);
+		expect(b.timelineStartSec).toBe(4);
+		expect(b.timelineEndSec).toBe(10);
+	});
+
+	it("keeps the original's id on the head, so what was anchored to it stays anchored", () => {
+		const out = splitClipAt(oneClip(), "clip_1", 4);
+		expect(out.timeline.clips[0].id).toBe("clip_1");
+		expect(out.timeline.clips[1].id).not.toBe("clip_1");
+	});
+
+	// A split control is pressed with the playhead parked wherever it happens to be.
+	it("is a no-op on an unknown clip, outside the clip, or too close to either end", () => {
+		const doc = oneClip();
+		expect(splitClipAt(doc, "nope", 4)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 0)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 10)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 0.01)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 9.99)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 40)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", Number.NaN)).toBe(doc);
+	});
+
+	it("gives each half only the trim that still falls inside it", () => {
+		const doc = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 10, timelineEndSec: 10 }),
+				],
+				gaps: [],
+				trimRanges: [
+					makeTrim({ id: "t_head", clipId: "clip_1", startSec: 1, endSec: 2 }),
+					makeTrim({ id: "t_tail", clipId: "clip_1", startSec: 7, endSec: 8 }),
+				],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const out = splitClipAt(doc, "clip_1", 4);
+		const [head, tail] = out.timeline.clips;
+		const windowsOf = (clipId: string) =>
+			out.timeline.trimRanges.filter((t) => t.clipId === clipId).map((t) => [t.startSec, t.endSec]);
+		expect(windowsOf(head.id)).toEqual([[1, 2]]);
+		expect(windowsOf(tail.id)).toEqual([[7, 8]]);
+	});
+
+	it("cuts a trim that straddles the split down to each side of it", () => {
+		const doc = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 10, timelineEndSec: 10 }),
+				],
+				gaps: [],
+				trimRanges: [makeTrim({ id: "t_across", clipId: "clip_1", startSec: 3, endSec: 6 })],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const out = splitClipAt(doc, "clip_1", 4);
+		const [head, tail] = out.timeline.clips;
+		const windowsOf = (clipId: string) =>
+			out.timeline.trimRanges.filter((t) => t.clipId === clipId).map((t) => [t.startSec, t.endSec]);
+		// The same span, still covered end to end — just carried by two rows now,
+		// because a trim names one clip and there are two of them here.
+		expect(windowsOf(head.id)).toEqual([[3, 4]]);
+		expect(windowsOf(tail.id)).toEqual([[4, 6]]);
+	});
+
+	// A trim is not the only thing anchored to a clip, and it was the only thing the
+	// cut used to divide. Everything else still named the original id, which the head
+	// now carries, so the clamp in `withClipsChanged` shaved a straddling row back to
+	// the head and deleted outright anything living entirely in the tail. A cut is not
+	// an edit to what the user placed.
+	const withRegions = () =>
+		makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 10, timelineEndSec: 10 }),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+			zoomRanges: [
+				{
+					id: "zoom_tail",
+					startMs: 6000,
+					endMs: 8000,
+					depth: 3,
+					focus: { cx: 0.5, cy: 0.5 },
+					clipId: "clip_1",
+					sourceStartSec: 6,
+					sourceEndSec: 8,
+				},
+			] as unknown as AxcutDocument["zoomRanges"],
+			annotations: [
+				{
+					id: "ann_across",
+					startMs: 3000,
+					endMs: 6000,
+					clipId: "clip_1",
+					sourceStartSec: 3,
+					sourceEndSec: 6,
+					kind: "text",
+					text: "hi",
+				},
+			] as unknown as AxcutDocument["annotations"],
+			legacyEditor: {
+				speedRegions: [
+					{
+						id: "speed_tail",
+						startMs: 7000,
+						endMs: 9000,
+						speed: 2,
+						clipId: "clip_1",
+						sourceStartSec: 7,
+						sourceEndSec: 9,
+					},
+				],
+			} as unknown as AxcutDocument["legacyEditor"],
+		});
+
+	it("hands a zoom that lives past the cut to the tail clip instead of deleting it", () => {
+		const out = splitClipAt(withRegions(), "clip_1", 4);
+		const tail = out.timeline.clips[1];
+		expect(out.zoomRanges).toHaveLength(1);
+		// A fresh id on the tail side, as the trims already do: the head kept the original
+		// clip's id, so only rows that moved to the new clip need a new one.
+		expect(out.zoomRanges[0]).toMatchObject({
+			clipId: tail.id,
+			sourceStartSec: 6,
+			sourceEndSec: 8,
+		});
+		expect(out.zoomRanges[0].id).not.toBe("zoom_tail");
+		// Same place on the ruler: a cut moves no content, so nothing it touches moves.
+		expect([out.zoomRanges[0].startMs, out.zoomRanges[0].endMs]).toEqual([6000, 8000]);
+	});
+
+	it("divides an annotation that straddles the cut instead of shaving its tail off", () => {
+		const out = splitClipAt(withRegions(), "clip_1", 4);
+		const [head, tail] = out.timeline.clips;
+		const spans = out.annotations.map((a) => [a.clipId, a.sourceStartSec, a.sourceEndSec]);
+		expect(spans).toEqual([
+			[head.id, 3, 4],
+			[tail.id, 4, 6],
+		]);
+		// Two rows, one unbroken 3s–6s on the ruler.
+		expect(out.annotations.map((a) => [a.startMs, a.endMs])).toEqual([
+			[3000, 4000],
+			[4000, 6000],
+		]);
+	});
+
+	it("carries a legacy speed region over the cut too", () => {
+		const out = splitClipAt(withRegions(), "clip_1", 4);
+		const tail = out.timeline.clips[1];
+		const speeds = (out.legacyEditor as { speedRegions: Array<Record<string, unknown>> })
+			.speedRegions;
+		expect(speeds).toHaveLength(1);
+		expect(speeds[0]).toMatchObject({ clipId: tail.id, sourceStartSec: 7, sourceEndSec: 9 });
+	});
+
+	// Audio is the one kind with a grouping rule: the fragments of one user-visible take
+	// share `trackId`, and a take divided into two rows that did NOT would come back as
+	// two pills in the lane, with the second restarting the file from the top.
+	it("keeps a take that spans the cut playing as one continuous track", () => {
+		const doc = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 10, timelineEndSec: 10 }),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+			audioTracks: [
+				{
+					id: "audio_1",
+					startMs: 2000,
+					endMs: 8000,
+					clipId: "clip_1",
+					sourceStartSec: 2,
+					sourceEndSec: 8,
+					assetId: "music_1",
+					kind: "music",
+					durationSec: 30,
+					offsetMs: 0,
+					gainDb: 0,
+					loop: false,
+					fadeInMs: 0,
+					fadeOutMs: 0,
+					muted: false,
+					label: "bed",
+					origin: "user",
+				},
+			] as unknown as AxcutDocument["audioTracks"],
+		});
+		const out = splitClipAt(doc, "clip_1", 4);
+		const [head, tail] = out.timeline.clips;
+		expect(out.audioTracks.map((a) => a.clipId)).toEqual([head.id, tail.id]);
+		// One pill still: both fragments name the same group.
+		expect(new Set(out.audioTracks.map((a) => a.trackId ?? a.id)).size).toBe(1);
+		// Unbroken 2s–8s, and the second fragment picks the file up where the first left
+		// off rather than restarting it at the cut.
+		expect(out.audioTracks.map((a) => [a.startMs, a.endMs])).toEqual([
+			[2000, 4000],
+			[4000, 8000],
+		]);
+		expect(out.audioTracks.map((a) => a.offsetMs)).toEqual([0, 2000]);
+	});
+
+	// Transcripts are stored per asset; the split control cuts whatever clip the playhead
+	// is on. Reading the primary transcript gave a clip of an imported asset word ids
+	// belonging to a different recording.
+	it("recomputes word refs from the transcript of the clip's own asset", () => {
+		const doc = makeDoc({
+			assets: [
+				{
+					id: "asset_1",
+					kind: "video",
+					label: "screen.mp4",
+					originalPath: "/tmp/screen.mp4",
+					durationSec: 60,
+					cameraTrack: null,
+				},
+				{
+					id: "asset_2",
+					kind: "video",
+					label: "b-roll.mp4",
+					originalPath: "/tmp/b-roll.mp4",
+					durationSec: 60,
+					cameraTrack: null,
+				},
+			] as unknown as AxcutDocument["assets"],
+			transcript: {
+				assetId: "asset_1",
+				language: "en",
+				segments: [],
+				words: [{ id: "w_primary", startSec: 0, endSec: 9, text: "primary", speaker: null }],
+			} as unknown as AxcutDocument["transcript"],
+			transcripts: [
+				{
+					assetId: "asset_1",
+					language: "en",
+					segments: [],
+					words: [{ id: "w_primary", startSec: 0, endSec: 9, text: "primary", speaker: null }],
+				},
+				{
+					assetId: "asset_2",
+					language: "en",
+					segments: [],
+					words: [
+						{ id: "w_head", startSec: 1, endSec: 2, text: "head", speaker: null },
+						{ id: "w_tail", startSec: 6, endSec: 7, text: "tail", speaker: null },
+					],
+				},
+			] as unknown as AxcutDocument["transcripts"],
+			timeline: {
+				clips: [
+					makeClip({
+						id: "clip_1",
+						assetId: "asset_2",
+						sourceStartSec: 0,
+						sourceEndSec: 10,
+						timelineEndSec: 10,
+					}),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const out = splitClipAt(doc, "clip_1", 4);
+		expect(out.timeline.clips[0].wordRefs).toEqual(["w_head"]);
+		expect(out.timeline.clips[1].wordRefs).toEqual(["w_tail"]);
+	});
+
+	// The flag travels with the clip, and a move re-runs the fold over the whole list. So a
+	// round trip is the edit that would show a flag lost on the way: whichever half goes
+	// away and comes back, the two land next to each other again with timecodes that meet,
+	// and only the flag is left to say the cut was asked for.
+	it("holds through moving either half away and back again", () => {
+		const doc = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 10, timelineEndSec: 10 }),
+					makeClip({
+						id: "other",
+						sourceStartSec: 30,
+						sourceEndSec: 40,
+						timelineStartSec: 10,
+						timelineEndSec: 20,
+					}),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const split = splitClipAt(doc, "clip_1", 4);
+		const tailId = split.timeline.clips[1].id;
+		const windows = (d: AxcutDocument) =>
+			d.timeline.clips.map((c) => [c.id, c.sourceStartSec, c.sourceEndSec]);
+
+		const tailAway = moveClip(split, tailId, 2);
+		expect(windows(tailAway)).toEqual([
+			["clip_1", 0, 4],
+			["other", 30, 40],
+			[tailId, 4, 10],
+		]);
+		const tailBack = moveClip(tailAway, tailId, 1);
+		expect(windows(tailBack)).toEqual([
+			["clip_1", 0, 4],
+			[tailId, 4, 10],
+			["other", 30, 40],
+		]);
+		expect(tailBack.timeline.clips[1].splitFromPrevious).toBe(true);
+
+		const headAway = moveClip(split, "clip_1", 2);
+		const headBack = moveClip(headAway, "clip_1", 0);
+		expect(windows(headBack)).toEqual([
+			["clip_1", 0, 4],
+			[tailId, 4, 10],
+			["other", 30, 40],
+		]);
+	});
+
+	// `replaceTimeline` keeps a clip whose source window a kept interval reproduces, and it
+	// used to keep it field by field: id, origin, reason, word refs, and not the flag. The
+	// agent's `replace_timeline` and `drop_range` both land there, so a split went through
+	// them looking intact and came apart on the next structural edit, which folds the halves
+	// back into one clip.
+	it("survives an agent rebuild that keeps both halves, and the edit after it", () => {
+		const whole = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 60, timelineEndSec: 60 }),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const once = splitClipAt(whole, "clip_1", 20);
+		const split = splitClipAt(once, once.timeline.clips[1].id, 40);
+		const rebuilt = replaceTimeline(
+			split,
+			[
+				{ startSec: 0, endSec: 20 },
+				{ startSec: 20, endSec: 40 },
+				{ startSec: 40, endSec: 60 },
+			],
+			"agent rebuild",
+			"agent",
+		);
+		expect(rebuilt.timeline.clips.map((c) => c.splitFromPrevious)).toEqual([undefined, true, true]);
+		// The edit that used to undo it: moving the last piece to the front makes the other
+		// two neighbours again, which is exactly what the fold looks for.
+		const lastId = rebuilt.timeline.clips[2].id;
+		const moved = moveClip(rebuilt, lastId, 0);
+		expect(moved.timeline.clips.map((c) => [c.sourceStartSec, c.sourceEndSec])).toEqual([
+			[40, 60],
+			[0, 20],
+			[20, 40],
+		]);
 	});
 });

@@ -73,6 +73,8 @@
 		"newAnnotation": "注釈",
 		"dragToReorderHint": "ドラッグして並べ替え・ダブルクリックでイン/アウトポイントを編集",
 		"editInOutPoints": "イン/アウトポイントを編集",
+		"splitClip": "再生ヘッドの位置でクリップを分割",
+		"splitClipNothingToSplit": "再生ヘッドを、クリップの端から離れた内側に置いてください。",
 		"deleteClip": "クリップを削除",
 		"dropToAdd": "ドロップしてタイムラインに追加",
 		"importRecordingFirst": "先に録画をインポートしてください",

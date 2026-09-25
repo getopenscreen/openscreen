@@ -21,8 +21,11 @@ import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "../schema";
 import { isGeneratedAssetId } from "../timeline/clip-parts";
 import { anchorRegionsWithDerivedMs, clampSpanAgainstNeighbours } from "../timeline/timelineMap";
 
-/** Every fragment of one user-visible track shares this key. */
-export function trackGroupId(track: AxcutAudioTrack): string {
+/** Every fragment of one user-visible track shares this key. Typed on the two fields it
+ *  reads rather than on `AxcutAudioTrack`, so the generic region walk in
+ *  `document/timeline.ts` — which sees a track as the anchored row it also is — can ask
+ *  the same question without knowing it is holding audio. */
+export function trackGroupId(track: { id: string; trackId?: string }): string {
 	return track.trackId ?? track.id;
 }
 

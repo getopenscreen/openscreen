@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type { AxcutDocument } from "../schema";
 import { insertGeneratedClip, removeGeneratedClips, retextGeneratedClip } from "./insertion";
-import { moveClip, removeClip, resolvePlaybackSegments } from "./timeline";
+import { moveClip, removeClip, resolvePlaybackSegments, splitClipAt } from "./timeline";
 import { setDocumentWordText } from "./transcript";
 
 const doc = (over: Partial<AxcutDocument> = {}): AxcutDocument =>
@@ -171,6 +171,29 @@ describe("removeGeneratedClips", () => {
 		const moved = moveClip(next, "ext:synth_1", 2, "user", "");
 		expect(moved.timeline.clips.map((c) => c.assetId)).toEqual(["a1", "ext:synth_1"]);
 		expect(moved.timeline.clips[0]).toMatchObject({ sourceStartSec: 0, sourceEndSec: 10 });
+	});
+
+	it("rejoins the halves of a split's tail, and leaves the split itself standing", () => {
+		// The insertion cuts whatever clip the word sits in, and a split's tail carries
+		// `splitFromPrevious`. The piece to the right of the insertion is not a cut anyone asked
+		// for, so it must not inherit the flag: with it, removing the word left the tail in two
+		// pieces the join refused to heal. The tail itself keeps its flag, since that cut was
+		// asked for.
+		const split = splitClipAt(doc(), "c1", 5);
+		const inserted = insertGeneratedClip(split, "a1", "w2", "after", "hi");
+		expect(inserted.timeline.clips.map((c) => [c.sourceStartSec, c.splitFromPrevious])).toEqual([
+			[0, undefined],
+			[5, true],
+			[0, undefined],
+			[6, undefined],
+		]);
+		const back = removeClip(inserted, "ext:synth_1");
+		expect(
+			back.timeline.clips.map((c) => [c.sourceStartSec, c.sourceEndSec, c.splitFromPrevious]),
+		).toEqual([
+			[0, 5, undefined],
+			[5, 10, true],
+		]);
 	});
 
 	it("is a no-op for a word that has no clip", () => {

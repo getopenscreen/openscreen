@@ -486,7 +486,9 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 		titleBarStyle: "hidden",
 		...(isMac
 			? { trafficLightPosition: { x: 18, y: 21 } }
-			: { titleBarOverlay: { color: "#09090b", symbolColor: "#a1a1aa", height: 58 } }),
+			: // One pixel short of the 58px topbar, so its bottom rule runs on under the controls
+				// instead of stopping where the overlay starts.
+				{ titleBarOverlay: { color: "#09090b", symbolColor: "#a1a1aa", height: 57 } }),
 		transparent: false,
 		resizable: true,
 		alwaysOnTop: false,

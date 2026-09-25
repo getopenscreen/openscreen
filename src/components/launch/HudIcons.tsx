@@ -38,7 +38,7 @@ const HUD_SVG_PROPS = {
 	viewBox: "0 0 24 24",
 	fill: "none",
 	stroke: "currentColor",
-	strokeWidth: 1.6,
+	strokeWidth: 2.25,
 	strokeLinecap: "round",
 	strokeLinejoin: "round",
 } as const;

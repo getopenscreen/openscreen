@@ -996,19 +996,17 @@ export function VirtualPreview({
 	useEffect(() => {
 		const frame = videoFrameRef.current;
 		if (!frame) return;
-		// ponytail: scale the zoom-in/out transition windows by the current
-		// playback rate so the transition stays wall-clock constant inside
-		// speed regions. The cursor still flies through (ruler + playhead
-		// read source-time), only the easing duration is decoupled.
-		const activeSpeedRegion = findActiveSpeedRegion(
-			speedRegionsRef.current,
-			Math.round(virtualTimeSec * 1000),
-		);
-		const playbackRate = activeSpeedRegion?.speed ?? 1;
+		// Speed regions speed the footage up, not the zoom transitions: they are timed on
+		// screen time, like the compositor that draws the picture this box stands in for.
 		const transform =
 			zoomRegions.length === 0
 				? IDENTITY_ZOOM_TRANSFORM
-				: computeZoomPreviewTransform(zoomRegions, virtualTimeSec * 1000, undefined, playbackRate);
+				: computeZoomPreviewTransform(
+						zoomRegions,
+						virtualTimeSec * 1000,
+						undefined,
+						speedRegionsRef.current,
+					);
 		frame.style.transform = `translate(${transform.translateXPercent}%, ${transform.translateYPercent}%) scale(${transform.scale})`;
 	}, [zoomRegions, virtualTimeSec]);
 

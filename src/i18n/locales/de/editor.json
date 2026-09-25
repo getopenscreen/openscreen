@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "Quelle",
+		"selectSource": "Wähle aus, was du aufnehmen möchtest",
 		"systemPicker": "Dein System fragt gleich, was du teilen möchtest",
 		"systemAudio": "Systemton",
 		"microphone": "Mikrofon",
@@ -115,6 +116,8 @@
 		"loading": "Wird geladen…",
 		"noCameraFound": "Keine Kamera gefunden",
 		"cameraAccessError": "Auf diese Kamera konnte nicht zugegriffen werden",
+		"noMicrophoneFound": "Kein Mikrofon gefunden",
+		"microphoneUnavailable": "Auf das Mikrofon konnte nicht zugegriffen werden",
 		"startingCamera": "Kamera wird gestartet…",
 		"turnOnCameraHint": "Schalte die Kamera ein, um eine Live-Vorschau zu sehen",
 		"entireScreen": "Ganzer Bildschirm",

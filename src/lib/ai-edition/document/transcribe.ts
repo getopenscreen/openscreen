@@ -126,7 +126,10 @@ export async function transcribeAsset(
 		const tokens = seg.text.trim().split(/\s+/).filter(Boolean);
 		if (tokens.length === 0) continue;
 
-		const wordDuration = (seg.endSec - seg.startSec) / tokens.length;
+		// Never end before the start: the schema rejects it, and one such word made the whole
+		// project unreadable (see `raiseInvertedTranscriptEnds`, which repairs old files).
+		const segEndSec = Math.max(seg.endSec, seg.startSec);
+		const wordDuration = (segEndSec - seg.startSec) / tokens.length;
 		for (let w = 0; w < tokens.length; w++) {
 			const wordId = `word_${words.length + 1}`;
 			const startSec = seg.startSec + w * wordDuration;
@@ -145,7 +148,7 @@ export async function transcribeAsset(
 			id: segId,
 			kind: "speech" as const,
 			startSec: seg.startSec,
-			endSec: seg.endSec,
+			endSec: segEndSec,
 			text: seg.text,
 			wordIds,
 		});

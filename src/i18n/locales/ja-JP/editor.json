@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "ソース",
+		"selectSource": "録画する対象を選択",
 		"systemPicker": "共有する対象はシステムが確認します",
 		"systemAudio": "システム音声",
 		"microphone": "マイク",
@@ -115,6 +116,8 @@
 		"loading": "読み込み中…",
 		"noCameraFound": "カメラが見つかりません",
 		"cameraAccessError": "このカメラにアクセスできませんでした",
+		"noMicrophoneFound": "マイクが見つかりません",
+		"microphoneUnavailable": "マイクにアクセスできませんでした",
 		"startingCamera": "カメラを起動中…",
 		"turnOnCameraHint": "カメラをオンにするとライブプレビューが表示されます",
 		"entireScreen": "画面全体",

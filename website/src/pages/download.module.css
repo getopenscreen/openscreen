@@ -309,3 +309,59 @@
 		text-align: center;
 	}
 }
+
+/* Shown inside a card after one of its file options was clicked. Sits on the accent wash so it
+   reads as a confirmation rather than a fourth download row, and uses the same tokens as the
+   options above it, so dark mode needs no separate rule. */
+.started {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 2px;
+	padding: 12px;
+	border-radius: 10px;
+	border: 1px solid var(--os-accent-border);
+	background: var(--os-accent-wash);
+}
+
+.startedTitle {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--os-fg-emphasis);
+}
+
+.startedText {
+	margin: 0;
+	font-size: 11.5px;
+	line-height: 1.5;
+	color: var(--os-muted);
+}
+
+.startedCta {
+	display: inline-flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 7px;
+	padding: 7px 11px;
+	border-radius: 8px;
+	border: 1px solid var(--os-accent-border);
+	background: var(--os-surface-1);
+	color: var(--os-fg-2);
+	font-size: 12.5px;
+	font-weight: 500;
+}
+
+.startedCta:hover {
+	border-color: var(--os-accent);
+	background: var(--os-accent-soft);
+	color: var(--os-fg-emphasis);
+	text-decoration: none;
+}
+
+/* The count is evidence, not the action: it must not out-weigh the label next to it. */
+.startedCount {
+	padding-left: 7px;
+	border-left: 1px solid var(--os-border-soft);
+	color: var(--os-meta);
+	font-variant-numeric: tabular-nums;
+}

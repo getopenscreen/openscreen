@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "Source",
+		"selectSource": "Choisissez quoi enregistrer",
 		"systemPicker": "Le système vous demandera quoi partager",
 		"systemAudio": "Audio système",
 		"microphone": "Microphone",
@@ -115,6 +116,8 @@
 		"loading": "Chargement…",
 		"noCameraFound": "Aucune caméra trouvée",
 		"cameraAccessError": "Impossible d'accéder à cette caméra",
+		"noMicrophoneFound": "Aucun microphone trouvé",
+		"microphoneUnavailable": "Impossible d'accéder au microphone",
 		"startingCamera": "Démarrage de la caméra…",
 		"turnOnCameraHint": "Activez la caméra pour voir un aperçu en direct",
 		"entireScreen": "Écran entier",

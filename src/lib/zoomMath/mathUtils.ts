@@ -51,6 +51,24 @@ export function easeOutScreenStudio(t: number) {
 	return cubicBezier(0.16, 1, 0.3, 1, t);
 }
 
+const SPRING_OMEGA_T = 7;
+const SPRING_END = 1 - (1 + SPRING_OMEGA_T) * Math.exp(-SPRING_OMEGA_T);
+
+/**
+ * Critically damped spring rise, scaled to land exactly on 1 at the end of the window: it
+ * leaves at zero velocity and settles without overshoot. Mirror of `ease_spring` (Rust).
+ */
+export function easeSpring(t: number) {
+	const x = SPRING_OMEGA_T * clamp01(t);
+	return (1 - (1 + x) * Math.exp(-x)) / SPRING_END;
+}
+
+/** Zoom scale between `a` and `b`, interpolated in log space — the way a zoom is perceived. */
+export function scaleLerp(a: number, b: number, t: number) {
+	const from = Math.max(a, 1e-3);
+	return from * (Math.max(b, 1e-3) / from) ** t;
+}
+
 /**
  * Ease-out cubic. Used for zoom-out transitions so strength eases to zero.
  */

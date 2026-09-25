@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "../../../../electron/stt/transcriptionContract";
-import { type AxcutDocument, axcutSchemaVersion } from "../schema";
+import { type AxcutDocument, axcutSchemaVersion, transcriptSchema } from "../schema";
 import { transcribeAsset } from "./transcribe";
 
 vi.mock("@/components/video-editor/projectPersistence", () => ({
@@ -222,5 +222,27 @@ describe("transcribeAsset native extraction", () => {
 		await expect(transcribeAsset(makeDoc(), "asset_1")).rejects.toThrow("No decodable audio");
 		expect(extractMock).not.toHaveBeenCalled();
 		expect(rendererMock).not.toHaveBeenCalled();
+	});
+});
+
+describe("transcribeAsset timing", () => {
+	it("never writes a segment or word that ends before it starts", async () => {
+		// The shape an end clamped to the audio length but not its start produced: a
+		// hallucination at 13.5 s in 6.76 s of sound. Stored as is, it made the whole
+		// project unreadable.
+		transcribeMock.mockResolvedValueOnce({
+			segments: [
+				{ startSec: 13.5, endSec: 6.7626875, text: "very" },
+				{ startSec: 13.5, endSec: 6.7626875, text: "good" },
+			],
+			granularity: "word",
+			detectedLanguage: "en",
+		});
+		const transcript = await transcribeAsset(makeDoc(), "asset_1");
+		expect(() => transcriptSchema.parse(transcript)).not.toThrow();
+		expect(transcript.words.map((w) => [w.text, w.startSec, w.endSec])).toEqual([
+			["very", 13.5, 13.5],
+			["good", 13.5, 13.5],
+		]);
 	});
 });

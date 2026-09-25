@@ -4,6 +4,8 @@
 // no callers and went with the Pixi export path. What is left is the geometry
 // the overlay still needs, and it depends on nothing but arithmetic.
 
+import { scaleLerp } from "./mathUtils";
+
 interface AppliedTransform {
 	scale: number;
 	x: number;
@@ -42,13 +44,13 @@ export function computeZoomTransform({
 	const focusStagePxY = focusY * stageSize.height;
 	const stageCenterX = stageSize.width / 2;
 	const stageCenterY = stageSize.height / 2;
-	const scale = 1 + (zoomScale - 1) * progress;
-	const finalX = stageCenterX - focusStagePxX * zoomScale;
-	const finalY = stageCenterY - focusStagePxY * zoomScale;
+	// Log-space scale (`scaleLerp`), while the focus point still travels to the centre linearly
+	// on screen — the compositor's trajectory (`zoom_state_in`, crates/compositor/src/regions.rs).
+	const scale = scaleLerp(1, zoomScale, progress);
 
 	return {
 		scale,
-		x: finalX * progress,
-		y: finalY * progress,
+		x: focusStagePxX + (stageCenterX - focusStagePxX) * progress - focusStagePxX * scale,
+		y: focusStagePxY + (stageCenterY - focusStagePxY) * progress - focusStagePxY * scale,
 	};
 }

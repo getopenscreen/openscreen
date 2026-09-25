@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The layout preset is a global setting but the camera is per clip, so a project can
 // hold no camera at all (#248). These pin what the pane shows in that case: the
-// controls go dead, the preset reads "No Webcam", and — the part that is easy to break —
+// controls go dead, the preset reads "No webcam", and — the part that is easy to break —
 // the saved preference is left untouched on disk and the help popover says so.
 
 import "@testing-library/jest-dom";
@@ -91,10 +91,10 @@ describe("LayoutPane camera availability", () => {
 		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
 			webcamLayoutPreset: "picture-in-picture",
 		});
-		expect(screen.queryByText("Camera Shape")).not.toBeInTheDocument();
-		expect(screen.queryByText("Shrink on Zoom")).not.toBeInTheDocument();
-		expect(screen.queryByText("Webcam Size")).not.toBeInTheDocument();
-		const mirrorRow = screen.getByText("Mirror Webcam").closest("div");
+		expect(screen.queryByText("Camera shape")).not.toBeInTheDocument();
+		expect(screen.queryByText("Shrink on zoom")).not.toBeInTheDocument();
+		expect(screen.queryByText("Webcam size")).not.toBeInTheDocument();
+		const mirrorRow = screen.getByText("Mirror webcam").closest("div");
 		expect(mirrorRow).not.toBeNull();
 		expect(within(mirrorRow as HTMLElement).getByRole("button")).toBeDisabled();
 	});
@@ -114,13 +114,13 @@ describe("LayoutPane camera availability", () => {
 		const preset = screen.getByRole("combobox", { name: "Preset" });
 		expect(preset).toBeEnabled();
 		expect(preset).toHaveValue("picture-in-picture");
-		expect(screen.getByText("Camera Shape")).toBeInTheDocument();
-		expect(screen.getByText("Shrink on Zoom")).toBeInTheDocument();
-		expect(screen.getByText("Webcam Size")).toBeInTheDocument();
+		expect(screen.getByText("Camera shape")).toBeInTheDocument();
+		expect(screen.getByText("Shrink on zoom")).toBeInTheDocument();
+		expect(screen.getByText("Webcam size")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Rounded" })).toBeEnabled();
 		// Named, because the pane holds four sliders now — webcam size plus the three
 		// webcam-framing ones. This one is the size slider the line above just found.
-		expect(screen.getByRole("slider", { name: "Webcam Size" })).toBeEnabled();
+		expect(screen.getByRole("slider", { name: "Webcam size" })).toBeEnabled();
 
 		// The camera-less hint must not leak into the normal case.
 		await user.click(screen.getByRole("button", { name: "Help" }));

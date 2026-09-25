@@ -150,7 +150,7 @@ export const TransportBar = memo(function TransportBar({
 				data-playing={playing}
 				onClick={onTogglePlay}
 			>
-				{playing ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
+				{playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
 			</button>
 			<button
 				type="button"
@@ -159,7 +159,7 @@ export const TransportBar = memo(function TransportBar({
 				aria-label={te("transport.previousClip")}
 				onClick={onPrevClip}
 			>
-				<SkipBack size={13} />
+				<SkipBack size={16} />
 			</button>
 			<button
 				type="button"
@@ -168,7 +168,7 @@ export const TransportBar = memo(function TransportBar({
 				aria-label={te("transport.nextClip")}
 				onClick={onNextClip}
 			>
-				<SkipForward size={13} />
+				<SkipForward size={16} />
 			</button>
 			<span className={styles.time}>
 				<span>{formatSec(currentTimeSec)}</span>

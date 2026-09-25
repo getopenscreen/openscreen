@@ -110,6 +110,15 @@
   "download.preRelease.cta": {
     "message": "Alle Releases ansehen"
   },
+  "download.started.title": {
+    "message": "Download gestartet"
+  },
+  "download.started.blurb": {
+    "message": "OpenScreen ist kostenlos und MIT-lizenziert. Ein Stern auf GitHub hilft anderen, es zu finden."
+  },
+  "download.started.cta": {
+    "message": "Stern auf GitHub geben"
+  },
   "home.meta.title": {
     "message": "Kostenloser Open-Source-Bildschirmrekorder und Videoeditor"
   },

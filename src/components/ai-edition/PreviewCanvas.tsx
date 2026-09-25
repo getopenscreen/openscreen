@@ -298,8 +298,9 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			computeCameraFullscreenProgress(
 				props.cameraFullscreenRegions ?? [],
 				Math.round(props.currentTimeSec * 1000),
+				props.speedRegions,
 			),
-		[props.cameraFullscreenRegions, props.currentTimeSec],
+		[props.cameraFullscreenRegions, props.currentTimeSec, props.speedRegions],
 	);
 	const effectiveLayout = useMemo<WebcamCompositeLayout | null>(() => {
 		if (!layout?.webcamRect || cameraFullscreenProgress <= 0) return layout;

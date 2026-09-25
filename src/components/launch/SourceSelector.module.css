@@ -50,21 +50,20 @@
 	overflow: hidden;
 }
 
+/* App icons keep their own shape: a circle crop clipped their corners. */
 .icon {
-	width: 15px;
-	height: 15px;
-	border-radius: 9999px;
+	width: 16px;
+	height: 16px;
+	border-radius: 4px;
 	object-fit: cover;
 	flex-shrink: 0;
-	border: 1px solid #333a45;
 }
 
 .iconFallback {
-	width: 15px;
-	height: 15px;
-	border-radius: 9999px;
+	width: 16px;
+	height: 16px;
+	border-radius: 4px;
 	background: #232830;
-	border: 1px solid #333a45;
 	color: #828c99;
 	display: flex;
 	align-items: center;

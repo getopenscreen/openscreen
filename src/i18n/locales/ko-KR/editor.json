@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "소스",
+		"selectSource": "녹화할 대상을 선택하세요",
 		"systemPicker": "공유할 대상을 시스템이 묻습니다",
 		"systemAudio": "시스템 오디오",
 		"microphone": "마이크",
@@ -115,6 +116,8 @@
 		"loading": "로딩 중…",
 		"noCameraFound": "카메라를 찾을 수 없음",
 		"cameraAccessError": "이 카메라에 액세스할 수 없습니다",
+		"noMicrophoneFound": "마이크를 찾을 수 없음",
+		"microphoneUnavailable": "마이크에 액세스할 수 없습니다",
 		"startingCamera": "카메라 시작 중…",
 		"turnOnCameraHint": "카메라를 켜면 실시간 미리보기가 표시됩니다",
 		"entireScreen": "전체 화면",

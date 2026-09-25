@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Validates that all locale translation files have identical key structures.
- * Compares all locale folders (except en) against the en baseline for every namespace.
+ * Compares all locale folders (except en) against the en baseline for every namespace,
+ * and checks that every literal key the code in src/ asks for exists in en.
  *
  * Usage: node scripts/i18n-check.mjs
  */
@@ -182,13 +183,74 @@ assertListsMatch(appxLanguages, expectedAppxLanguages, "appx.languages");
 const expectedElectronLanguages = supportedLocales.flatMap((l) => getPackagingTags(l).electron);
 assertListsMatch(electronLanguages, expectedElectronLanguages, "electronLanguages");
 
+// 4. Check every literal key the renderer calls exists in en. Everything above compares
+// files with each other, so a t("rec.selectSource") that no locale defines passes it.
+// On a miss, translate() (src/i18n/loader.ts) renders the raw "editor.rec.selectSource"
+// marker, and component tests mock t to echo the key, so nothing else catches it either.
+// A key counts when it resolves to a string (or to i18next's _one/_other plural forms) in the
+// namespace of the translator that asks for it: the nearest `const <name> = useScopedT("ns")`
+// above the call, since one file often holds several components binding the same name to
+// different namespaces. A name the file binds only further down counts against every namespace
+// it binds; one it never binds (a prop, a parameter) against every namespace the file scopes.
+// Dynamic keys (template literals, variables) can't be read statically and are skipped.
+const SRC_DIR = path.resolve("src");
+const baseByNamespace = Object.fromEntries(
+	namespaces.map((ns) => [
+		ns,
+		JSON.parse(fs.readFileSync(path.join(baseDir, `${ns}.json`), "utf-8")),
+	]),
+);
+
+function resolvesToString(tree, key) {
+	const parts = key.split(".");
+	const leaf = parts.pop();
+	let node = tree;
+	for (const part of parts) {
+		node = node?.[part];
+		if (!node || typeof node !== "object") return false;
+	}
+	return [leaf, `${leaf}_one`, `${leaf}_other`].some((k) => typeof node[k] === "string");
+}
+
+let checkedKeyCount = 0;
+const sourceFiles = fs
+	.readdirSync(SRC_DIR, { recursive: true })
+	.filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file));
+for (const file of sourceFiles) {
+	const source = fs.readFileSync(path.join(SRC_DIR, file), "utf-8");
+	const scopes = [
+		...new Set([...source.matchAll(/useScopedT\(\s*"(\w+)"\s*\)/g)].map((m) => m[1])),
+	];
+	if (scopes.length === 0) continue;
+	const bindings = [
+		...source.matchAll(/\b(?:const|let|var)\s+(\w+)\s*=\s*useScopedT\(\s*"(\w+)"\s*\)/g),
+	].map((m) => ({ name: m[1], ns: m[2], at: m.index }));
+	for (const match of source.matchAll(/\b(t[A-Z]?\w*)\(\s*"([\w.-]+)"/g)) {
+		const [, callee, key] = match;
+		checkedKeyCount++;
+		const own = bindings.filter((b) => b.name === callee);
+		const nearest = own.filter((b) => b.at < match.index).at(-1);
+		const candidates = nearest ? [nearest.ns] : own.length > 0 ? own.map((b) => b.ns) : scopes;
+		if (
+			candidates.some((ns) => baseByNamespace[ns] && resolvesToString(baseByNamespace[ns], key))
+		) {
+			continue;
+		}
+		const line = source.slice(0, match.index).split("\n").length;
+		const where = path.join("src", file).split(path.sep).join("/");
+		const tried = [...new Set(candidates)].join(", ");
+		console.error(`MISSING in ${BASE_LOCALE}: ${where}:${line} ${callee}("${key}") [${tried}]`);
+		hasErrors = true;
+	}
+}
+
 if (hasErrors) {
 	console.error(
-		"\ni18n check FAILED — translation files or packaging locale lists are out of sync.",
+		"\ni18n check FAILED — translation files, keys used in src/ or packaging locale lists are out of sync.",
 	);
 	process.exit(1);
 } else {
 	console.log(
-		`i18n check PASSED — all ${compareLocales.length} locales match ${BASE_LOCALE} across ${namespaces.length} namespaces, and all ${supportedLocales.length} SUPPORTED_LOCALES align with appx.languages and electronLanguages.`,
+		`i18n check PASSED — all ${compareLocales.length} locales match ${BASE_LOCALE} across ${namespaces.length} namespaces, all ${checkedKeyCount} literal keys in src/ resolve in ${BASE_LOCALE}, and all ${supportedLocales.length} SUPPORTED_LOCALES align with appx.languages and electronLanguages.`,
 	);
 }

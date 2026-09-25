@@ -127,10 +127,8 @@ describe("EditorEmptyState (new editor)", () => {
 	it("shows both import + open-project buttons when no project is loaded", () => {
 		renderWithI18n(<EditorEmptyState hasProject={false} />);
 
-		expect(screen.getByText(/no project open/i)).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: /new project \+ import video/i }),
-		).toBeInTheDocument();
+		expect(screen.getByText(/start with a recording/i)).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /import a video/i })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: /open project/i })).toBeInTheDocument();
 	});
 
@@ -197,7 +195,7 @@ describe("EditorEmptyState (new editor)", () => {
 		renderWithI18n(<EditorEmptyState hasProject={false} />);
 
 		await act(async () => {
-			fireEvent.click(screen.getByRole("button", { name: /new project \+ import video/i }));
+			fireEvent.click(screen.getByRole("button", { name: /import a video/i }));
 		});
 
 		await waitFor(() => {
@@ -233,7 +231,7 @@ describe("EditorEmptyState (new editor)", () => {
 		renderWithI18n(<EditorEmptyState hasProject={false} />);
 
 		const file = new File([new Uint8Array([0, 1, 2])], "recording.mp4", { type: "video/mp4" });
-		const dropZone = screen.getByText(/no project open/i).parentElement?.parentElement
+		const dropZone = screen.getByText(/start with a recording/i).parentElement?.parentElement
 			?.parentElement as HTMLElement;
 		expect(dropZone).toBeTruthy();
 
@@ -245,7 +243,7 @@ describe("EditorEmptyState (new editor)", () => {
 		});
 
 		await waitFor(() => {
-			expect(screen.getByText(/unsupported format/i)).toBeInTheDocument();
+			expect(screen.getByText(/unsupported file/i)).toBeInTheDocument();
 		});
 	});
 });

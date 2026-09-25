@@ -698,3 +698,84 @@ describe("dropping trims anchored to audio", () => {
 		).not.toThrow();
 	});
 });
+
+// ─── Transcripts written end-before-start ────────────────────────────────────
+// The transcription core before a9fdd97ff clamped an end to the audio length but not its
+// start, so a hallucination past the end of the audio was stored inverted. One such word
+// failed the schema and hid the whole project from the list.
+
+describe("repairing inverted transcript timings", () => {
+	const createdAt = "2024-01-01T00:00:00.000Z";
+	const inverted = { startSec: 13.5, endSec: 6.7626875 };
+
+	function docWith(start: number, end: number) {
+		const transcript = {
+			assetId: "vid",
+			language: "auto",
+			segments: [
+				{
+					id: "seg_1",
+					kind: "speech",
+					startSec: start,
+					endSec: end,
+					text: "very",
+					wordIds: ["word_1"],
+				},
+				{
+					id: "seg_2",
+					kind: "speech",
+					startSec: start,
+					endSec: end,
+					text: "good",
+					wordIds: ["word_2"],
+				},
+			],
+			words: [
+				{ id: "word_1", segmentId: "seg_1", startSec: start, endSec: end, text: "very" },
+				{ id: "word_2", segmentId: "seg_2", startSec: start, endSec: end, text: "good" },
+			],
+		};
+		return {
+			schemaVersion: 7,
+			project: { id: "p", title: "t", createdAt, updatedAt: createdAt },
+			assets: [{ id: "vid", kind: "video", label: "v", originalPath: "/v.mp4", cameraTrack: null }],
+			transcript,
+			transcripts: [transcript],
+			timeline: {
+				clips: [],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+			annotations: [],
+			zoomRanges: [],
+			audioTracks: [],
+			legacyEditor: null,
+		};
+	}
+
+	it("raises the end to the start, keeps every word, and parses again", () => {
+		const broken = docWith(inverted.startSec, inverted.endSec);
+		expect(() => documentSchema.parse(broken)).toThrow("endSec must be greater than or equal");
+		const doc = documentSchema.parse(migrateRawDocumentToCurrent(broken));
+		for (const transcript of [doc.transcript, ...doc.transcripts]) {
+			expect(transcript?.words.map((w) => [w.id, w.text, w.startSec, w.endSec])).toEqual([
+				["word_1", "very", 13.5, 13.5],
+				["word_2", "good", 13.5, 13.5],
+			]);
+			expect(transcript?.segments.map((s) => [s.wordIds, s.endSec])).toEqual([
+				[["word_1"], 13.5],
+				[["word_2"], 13.5],
+			]);
+		}
+	});
+
+	it("is idempotent, and returns the document untouched when nothing is inverted", () => {
+		const clean = docWith(1, 2);
+		expect(migrateRawDocumentToCurrent(clean)).toBe(clean);
+		const repaired = migrateRawDocumentToCurrent(docWith(inverted.startSec, inverted.endSec));
+		expect(migrateRawDocumentToCurrent(repaired)).toBe(repaired);
+	});
+});

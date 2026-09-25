@@ -9,6 +9,7 @@ import {
 	Scissors,
 	SlidersHorizontal,
 	Trash2,
+	Undo2,
 	X,
 	ZoomIn,
 } from "lucide-react";
@@ -43,6 +44,7 @@ import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
 import { ColorField } from "../ColorField";
+import shell from "../NewEditorShell.module.css";
 import {
 	AudioPane,
 	AudioTrackPane,
@@ -200,11 +202,8 @@ export function FloatingInspector({
 							<p
 								style={{
 									margin: "4px 8px 6px",
-									fontSize: 11,
-									fontWeight: 600,
-									textTransform: "uppercase",
-									letterSpacing: "0.04em",
-									color: "var(--muted)",
+									font: "600 12px/1.3 var(--font-body)",
+									color: "var(--fg-2)",
 								}}
 							>
 								{te("editClipDialog.pickClipTitle")}
@@ -232,10 +231,16 @@ export function FloatingInspector({
 										textAlign: "left",
 									}}
 								>
-									<span style={{ font: "600 12.5px var(--font-display)" }}>
+									<span style={{ font: "600 13px var(--font-display)" }}>
 										{te("editClipDialog.clipLabel", { index: index + 1 })}
 									</span>
-									<span style={{ font: "500 11px var(--font-mono)", color: "var(--muted)" }}>
+									<span
+										style={{
+											font: "500 12px var(--font-body)",
+											fontVariantNumeric: "tabular-nums",
+											color: "var(--muted)",
+										}}
+									>
 										{formatSeconds(clip.timelineStartSec)}–{formatSeconds(clip.timelineEndSec)}
 									</span>
 								</button>
@@ -281,11 +286,11 @@ function paneHeader(icon: React.ReactNode, title: string, onClose: () => void, c
 				aria-label={closeLabel}
 				onClick={onClose}
 				style={{
-					width: 28,
-					height: 28,
+					width: 30,
+					height: 30,
 				}}
 			>
-				<X size={15} />
+				<X size={16} />
 			</button>
 		</header>
 	);
@@ -301,7 +306,7 @@ function paneRow(label: string, control: React.ReactNode) {
 				gap: 10,
 			}}
 		>
-			<span style={{ fontSize: 12.5, color: "var(--fg-2)", fontWeight: 500 }}>{label}</span>
+			<span style={{ fontSize: 13, color: "var(--fg-2)", fontWeight: 500 }}>{label}</span>
 			{control}
 		</div>
 	);
@@ -315,8 +320,8 @@ const CAMERA_KEYS: Record<Rotation3DPreset, string> = {
 	"follow-cursor": "followCursor",
 };
 
-/** « Click impact » : une case à cocher, et dessous ce qu'elle fait — ou pourquoi elle ne peut
- *  rien faire ici. */
+/** « Click impact » : la bascule des panneaux, et dessous ce qu'elle fait — ou pourquoi elle ne
+ *  peut rien faire ici. */
 function ClickImpactToggle({
 	checked,
 	blocker,
@@ -333,27 +338,11 @@ function ClickImpactToggle({
 	const disabled = blocker !== null;
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-			<label
-				style={{
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "space-between",
-					gap: 10,
-					opacity: disabled ? 0.5 : 1,
-					cursor: disabled ? "not-allowed" : "pointer",
-				}}
-			>
-				<span style={{ fontSize: 12.5, color: "var(--fg-2)", fontWeight: 500 }}>{label}</span>
-				<input
-					type="checkbox"
-					checked={checked}
-					disabled={disabled}
-					onChange={(e) => onChange(e.target.checked)}
-				/>
-			</label>
-			<p style={{ margin: 0, font: "400 11px/1.45 var(--font-sans)", color: "var(--fg-2)" }}>
-				{blocker ?? description}
-			</p>
+			{paneRow(
+				label,
+				<Toggle checked={checked} disabled={disabled} ariaLabel={label} onChange={onChange} />,
+			)}
+			<p className={shell.hint}>{blocker ?? description}</p>
 		</div>
 	);
 }
@@ -361,16 +350,18 @@ function ClickImpactToggle({
 type AnnotationKind = AxcutAnnotationRegion["type"];
 type ArrowDirectionKind = NonNullable<AxcutAnnotationRegion["figureData"]>["arrowDirection"];
 
-/** Les huit directions de `ArrowSvgs.tsx`, dans l'ordre où elles y sont définies. */
-const ARROW_DIRECTIONS: ArrowDirectionKind[] = [
-	"up",
-	"down",
-	"left",
-	"right",
-	"up-right",
-	"up-left",
-	"down-right",
-	"down-left",
+/** Les huit directions de `ArrowSvgs.tsx`, dans l'ordre où elles y sont définies, chacune avec
+ *  la flèche qui la montre : aucune langue n'a de libellé pour elles, et la valeur brute
+ *  (« up-right ») s'affichait telle quelle. */
+const ARROW_DIRECTIONS: Array<[ArrowDirectionKind, string]> = [
+	["up", "↑"],
+	["down", "↓"],
+	["left", "←"],
+	["right", "→"],
+	["up-right", "↗"],
+	["up-left", "↖"],
+	["down-right", "↘"],
+	["down-left", "↙"],
 ];
 
 /** Défauts du schéma, pour compléter un `blurData` absent sans écraser ce qui existe. */
@@ -465,7 +456,7 @@ export function SpeedControl({
 				<select
 					value={region.speed}
 					onChange={(e) => void tl.updateSpeedValue(region.id, Number(e.target.value))}
-					style={selectStyle}
+					className={shell.control}
 				>
 					{options.map((speed) => (
 						<option key={speed} value={speed}>
@@ -488,7 +479,8 @@ export function SpeedControl({
 					onKeyDown={(e) => {
 						if (e.key === "Enter") e.currentTarget.blur();
 					}}
-					style={{ ...selectStyle, width: 84, textAlign: "right" }}
+					className={shell.control}
+					style={{ width: 84, textAlign: "right" }}
 				/>,
 			)}
 			{/* No hint past 16×. There is nothing for the user to do about it and nothing that
@@ -554,26 +546,13 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		scrollbarWidth: "thin",
 		scrollbarColor: "var(--border) transparent",
 	};
-	const deleteBtnStyle: React.CSSProperties = {
-		display: "inline-flex",
-		alignItems: "center",
-		justifyContent: "center",
-		gap: 7,
-		padding: "9px 14px",
-		borderRadius: 10,
-		border: "1px solid var(--danger)",
-		background: "var(--danger-soft)",
-		color: "var(--danger)",
-		font: "600 13px var(--font-display)",
-		cursor: "pointer",
-	};
 
 	if (selection.kind === "zoom") {
 		const region = tl.zoomRegions.find((z) => z.id === selection.id);
 		if (!region) return null;
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-				{paneHeader(<ZoomIn size={15} />, tt("labels.zoom"), onClose, tc("actions.close"))}
+				{paneHeader(<ZoomIn size={16} />, tt("labels.zoom"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
 					{paneRow(
 						ts("zoom.level"),
@@ -582,7 +561,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							onChange={(e) =>
 								void tl.updateZoomDepth(region.id, Number(e.target.value) as 1 | 2 | 3 | 4 | 5 | 6)
 							}
-							style={selectStyle}
+							className={shell.control}
 						>
 							{ZOOM_DEPTHS.map((d) => (
 								<option key={d} value={d}>
@@ -609,7 +588,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 										isRotation3DPreset(e.target.value) ? e.target.value : undefined,
 									)
 								}
-								style={selectStyle}
+								className={shell.control}
 							>
 								<option value="off">{ts("zoom.camera.off")}</option>
 								<optgroup label={ts("zoom.camera.fixed")}>
@@ -628,7 +607,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								</optgroup>
 							</select>,
 						)}
-						<p style={{ margin: 0, font: "400 11px/1.45 var(--font-sans)", color: "var(--fg-2)" }}>
+						<p className={shell.hint}>
 							{
 								// A moving camera reads the cursor track, which the export only loads while the
 								// cursor is shown: say so rather than offer a camera that silently holds still.
@@ -673,9 +652,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							onChange={(e) =>
 								void tl.updateZoomFocusMode(region.id, e.target.value as "manual" | "auto")
 							}
-							style={
-								autoFocusAll ? { ...selectStyle, opacity: 0.5, cursor: "not-allowed" } : selectStyle
-							}
+							className={shell.control}
 						>
 							<option value="manual">{ts("zoom.focusMode.manual")}</option>
 							<option value="auto">{ts("zoom.focusMode.auto")}</option>
@@ -687,7 +664,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							aria-label={ts("zoom.cursor.title")}
 							value={region.hideCursor ? "hide" : "show"}
 							onChange={(e) => void tl.updateZoomHideCursor(region.id, e.target.value === "hide")}
-							style={selectStyle}
+							className={shell.control}
 						>
 							<option value="show">{ts("zoom.cursor.show")}</option>
 							<option value="hide">{ts("zoom.cursor.hide")}</option>
@@ -698,7 +675,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 						// point to reset and no gimbal on the canvas (ZoomFocusOverlay bows out) — the
 						// reset button would be a no-op. When the global toggle is what forced auto, say
 						// so, and say where to turn it off.
-						<p style={{ margin: 0, font: "400 11px/1.45 var(--font-sans)", color: "var(--fg-2)" }}>
+						<p className={shell.hint}>
 							{ts(
 								autoFocusAll ? "zoom.focusMode.lockedDisclaimer" : "zoom.focusMode.autoDescription",
 							)}
@@ -710,13 +687,13 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								tl.updateZoomFocusLive(region.id, { cx: 0.5, cy: 0.5 });
 								void tl.commitZoomFocus();
 							}}
-							style={secondaryBtnStyle}
+							className={PANE_BUTTON}
 						>
 							{te("inspector.resetFocusPoint")}
 						</button>
 					)}
-					<button type="button" onClick={deleteAndClose} style={deleteBtnStyle}>
-						<Trash2 size={14} />
+					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
+						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{ts("zoom.deleteZoom")}
 					</button>
 				</div>
@@ -729,11 +706,11 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		if (!region) return null;
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-				{paneHeader(<ZoomIn size={15} />, tt("labels.speed"), onClose, tc("actions.close"))}
+				{paneHeader(<ZoomIn size={16} />, tt("labels.speed"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
 					<SpeedControl region={region} tl={tl} />
-					<button type="button" onClick={deleteAndClose} style={deleteBtnStyle}>
-						<Trash2 size={14} />
+					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
+						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{ts("speed.deleteRegion")}
 					</button>
 				</div>
@@ -748,7 +725,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 				{paneHeader(
-					<FileText size={15} />,
+					<FileText size={16} />,
 					tt("labels.annotationItem"),
 					onClose,
 					tc("actions.close"),
@@ -769,7 +746,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								);
 								void tl.commitAnnotationChange();
 							}}
-							style={selectStyle}
+							className={shell.control}
 						>
 							<option value="text">{ts("annotation.typeText")}</option>
 							<option value="image">{ts("annotation.typeImage")}</option>
@@ -779,7 +756,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					)}
 					{region.type === "text" ? (
 						<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-							<span style={{ fontSize: 12.5, color: "var(--fg-2)", fontWeight: 500 }}>
+							<span style={{ fontSize: 13, color: "var(--fg-2)", fontWeight: 500 }}>
 								{ts("annotation.textContent")}
 							</span>
 							<textarea
@@ -788,15 +765,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								onChange={(e) => tl.updateAnnotationLive(region.id, { content: e.target.value })}
 								onBlur={commitAnnotation}
 								rows={2}
-								style={{
-									resize: "vertical",
-									padding: "8px 10px",
-									borderRadius: 9,
-									border: "1px solid var(--border)",
-									background: "var(--surface)",
-									color: "var(--fg)",
-									font: "500 13px var(--font-display)",
-								}}
+								className={shell.control}
 							/>
 						</div>
 					) : null}
@@ -805,10 +774,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							{/* Read as a data URL, which is what the renderer expects: `content` holds
 							    "Separate storage for image data URL" (types.ts) and both the preview
 							    overlay and the compositor read it from there. */}
-							<label
-								style={{ ...secondaryBtnStyle, textAlign: "center", cursor: "pointer" }}
-								htmlFor={`ann-img-${region.id}`}
-							>
+							<label className={PANE_BUTTON} htmlFor={`ann-img-${region.id}`}>
 								{ts("annotation.uploadImage")}
 							</label>
 							<input
@@ -832,9 +798,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 									reader.readAsDataURL(file);
 								}}
 							/>
-							<span style={{ font: "400 11px/1.4 var(--font-sans)", color: "var(--fg-2)" }}>
-								{ts("annotation.supportedFormats")}
-							</span>
+							<span className={shell.hint}>{ts("annotation.supportedFormats")}</span>
 						</div>
 					) : null}
 					{region.type === "figure" ? (
@@ -852,11 +816,12 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 										});
 										void tl.commitAnnotationChange();
 									}}
-									style={selectStyle}
+									aria-label={ts("annotation.arrowDirection")}
+									className={shell.control}
 								>
-									{ARROW_DIRECTIONS.map((d) => (
+									{ARROW_DIRECTIONS.map(([d, glyph]) => (
 										<option key={d} value={d}>
-											{d}
+											{glyph}
 										</option>
 									))}
 								</select>,
@@ -913,7 +878,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 										});
 										void tl.commitAnnotationChange();
 									}}
-									style={selectStyle}
+									className={shell.control}
 								>
 									<option value="blur">{ts("annotation.blurTypeBlur")}</option>
 									<option value="mosaic">{ts("annotation.blurTypeMosaic")}</option>
@@ -932,7 +897,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 										});
 										void tl.commitAnnotationChange();
 									}}
-									style={selectStyle}
+									className={shell.control}
 								>
 									<option value="rectangle">{ts("annotation.blurShapeRectangle")}</option>
 									<option value="oval">{ts("annotation.blurShapeOval")}</option>
@@ -951,15 +916,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								// Say it rather than let the user discover it: the compositor masks the
 								// bounding box for a freehand shape, deliberately over-covering instead
 								// of leaving anything the user marked private visible in the export.
-								<p
-									style={{
-										margin: 0,
-										font: "400 11px/1.45 var(--font-sans)",
-										color: "var(--fg-2)",
-									}}
-								>
-									{te("inspector.freehandRendersAsBox")}
-								</p>
+								<p className={shell.hint}>{te("inspector.freehandRendersAsBox")}</p>
 							) : null}
 						</>
 					) : null}
@@ -981,7 +938,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 										})
 									}
 									onBlur={commitAnnotation}
-									style={{ ...selectStyle, width: 84, textAlign: "right" }}
+									className={shell.control}
+									style={{ width: 84, textAlign: "right" }}
 								/>,
 							)
 						: null}
@@ -1034,7 +992,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 										});
 										void tl.commitAnnotationChange();
 									}}
-									style={selectStyle}
+									className={shell.control}
 								>
 									{TEXT_ANIMATION_VALUES.map((value) => (
 										<option key={value} value={value}>
@@ -1059,8 +1017,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								/>,
 							)
 						: null}
-					<button type="button" onClick={deleteAndClose} style={deleteBtnStyle}>
-						<Trash2 size={14} />
+					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
+						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{ts("annotation.deleteAnnotation")}
 					</button>
 				</div>
@@ -1074,17 +1032,15 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 				{paneHeader(
-					<Maximize2 size={15} />,
+					<Maximize2 size={16} />,
 					tt("labels.cameraFullscreen"),
 					onClose,
 					tc("actions.close"),
 				)}
 				<div style={bodyStyle}>
-					<p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--muted)" }}>
-						{te("inspector.cameraFullscreenDescription")}
-					</p>
-					<button type="button" onClick={deleteAndClose} style={deleteBtnStyle}>
-						<Trash2 size={14} />
+					<p className={shell.hint}>{te("inspector.cameraFullscreenDescription")}</p>
+					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
+						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{te("inspector.deleteRegion")}
 					</button>
 				</div>
@@ -1108,13 +1064,14 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	};
 	return (
 		<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-			{paneHeader(<Scissors size={15} />, tt("labels.trim"), onClose, tc("actions.close"))}
+			{paneHeader(<Scissors size={16} />, tt("labels.trim"), onClose, tc("actions.close"))}
 			<div style={bodyStyle}>
-				<p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--muted)" }}>
+				<p className={shell.hint}>
 					{te("inspector.trimHiddenDuration", { duration: durationSec.toFixed(1) })}
 				</p>
-				<button type="button" onClick={deleteTrimGroup} style={deleteBtnStyle}>
-					<Trash2 size={14} />
+				{/* Deleting the trim restores the footage, so it reads as an undo, not a delete. */}
+				<button type="button" onClick={deleteTrimGroup} className={PANE_BUTTON}>
+					<Undo2 size={16} />
 					{te("inspector.restoreDeleteTrim")}
 				</button>
 			</div>
@@ -1122,25 +1079,9 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	);
 }
 
-const selectStyle: React.CSSProperties = {
-	height: 32,
-	padding: "0 8px",
-	borderRadius: 8,
-	border: "1px solid var(--border)",
-	background: "var(--surface)",
-	color: "var(--fg)",
-	font: "500 12.5px var(--font-display)",
-};
-
-const secondaryBtnStyle: React.CSSProperties = {
-	padding: "9px 14px",
-	borderRadius: 10,
-	border: "1px solid var(--border-hi)",
-	background: "var(--surface-2)",
-	color: "var(--fg-2)",
-	font: "600 13px var(--font-display)",
-	cursor: "pointer",
-};
+/** Every action of the selection pane, delete included: the red icon says it destroys; a red
+ *  slab outshouted every setting above it. */
+const PANE_BUTTON = `${shell.btn} ${shell.btnSecondary}`;
 
 function FacetBody({
 	facet,
@@ -1163,11 +1104,11 @@ function FacetBody({
 				position: "absolute",
 				top: 12,
 				right: 12,
-				width: 26,
-				height: 26,
+				width: 30,
+				height: 30,
 				display: "grid",
 				placeItems: "center",
-				borderRadius: 8,
+				borderRadius: 10,
 				color: "var(--muted)",
 				background: "var(--surface-1)",
 				border: 0,
@@ -1175,7 +1116,7 @@ function FacetBody({
 				zIndex: 5,
 			}}
 		>
-			<ChevronRight size={15} />
+			<ChevronRight size={16} />
 		</button>
 	);
 

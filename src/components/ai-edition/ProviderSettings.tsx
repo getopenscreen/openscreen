@@ -16,7 +16,7 @@
 // `ProviderSettingsDialog` at the bottom is the only mount, and the only caller of the
 // `open` / `onClose` component above it. Internal state is local-only.
 
-import { AlertCircle, Check, Loader2, Unplug, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, Loader2, Unplug } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useEditorDialogActions, useEditorDialogSection } from "@/contexts/EditorDialogsContext";
@@ -247,7 +247,7 @@ function ProviderList({
 							<span className={styles.label}>{def.label}</span>
 							{isConnected ? (
 								<span className={`${styles.statusPill} ${styles.ready}`}>
-									<Check size={10} />
+									<Check size={12} />
 									{te("providerSettings.pillConnected")}
 								</span>
 							) : (
@@ -360,13 +360,13 @@ function ProviderForm({
 					title={te("providerSettings.back")}
 					aria-label={te("providerSettings.back")}
 				>
-					<X size={14} />
+					<ArrowLeft size={16} />
 					{te("providerSettings.back")}
 				</button>
 				<h3>{def.label}</h3>
 				{isConnected ? (
 					<span className={`${styles.statusPill} ${styles.ready}`}>
-						<Check size={10} />
+						<Check size={12} />
 						{te("providerSettings.pillConnected")}{" "}
 						{credentialKind && credentialKind !== "api-key" ? `· ${credentialKind}` : ""}
 					</span>
@@ -429,18 +429,10 @@ function ProviderForm({
 				)}
 				{modelsLoading ? (
 					<span
-						style={{
-							display: "inline-flex",
-							alignItems: "center",
-							gap: 4,
-							marginTop: 4,
-							font: "500 10px var(--font-mono)",
-							color: "var(--muted)",
-							letterSpacing: "0.04em",
-							textTransform: "uppercase",
-						}}
+						className={styles.hint}
+						style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
 					>
-						<Loader2 size={10} className="animate-spin" />
+						<Loader2 size={12} className="animate-spin" />
 						{te("providerSettings.loadingModels")}
 					</span>
 				) : null}
@@ -504,24 +496,26 @@ function ProviderForm({
 				label={te("providerSettings.projectEditsLabel")}
 				hint={te("providerSettings.projectEditsHint")}
 			>
+				{/* The panes' switch, not a system checkbox. Inside the label, so the text toggles it too. */}
 				<label
 					style={{
 						display: "flex",
 						alignItems: "center",
-						gap: 8,
-						font: "500 12px var(--font-body)",
+						gap: 10,
+						font: "500 13px var(--font-body)",
 						color: "var(--fg-2)",
 						cursor: "pointer",
 					}}
 				>
-					<input
-						type="checkbox"
-						checked={config?.allowAgentEdits !== false}
+					<button
+						type="button"
+						className={`${styles.toggle} ${config?.allowAgentEdits !== false ? styles.isOn : ""}`}
+						aria-pressed={config?.allowAgentEdits !== false}
 						disabled={busy}
-						onChange={(e) =>
+						onClick={() =>
 							setConfig({
 								...(config ?? { provider: def.id, model: def.defaultModel }),
-								allowAgentEdits: e.target.checked,
+								allowAgentEdits: config?.allowAgentEdits === false,
 							})
 						}
 					/>
@@ -595,24 +589,10 @@ function Field({
 }) {
 	return (
 		<div className={styles.field}>
-			<label>
-				{label}
-				{hint ? (
-					<span
-						style={{
-							display: "block",
-							font: "500 10px/1.2 var(--font-mono)",
-							color: "var(--muted)",
-							letterSpacing: "0.04em",
-							textTransform: "uppercase",
-							marginTop: 2,
-						}}
-					>
-						{hint}
-					</span>
-				) : null}
-			</label>
+			<label>{label}</label>
 			{children}
+			{/* A sentence, so it goes under the control across the row — not in the 96px label column. */}
+			{hint ? <p className={styles.hint}>{hint}</p> : null}
 		</div>
 	);
 }

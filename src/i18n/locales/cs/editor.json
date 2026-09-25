@@ -105,6 +105,7 @@
 	},
 	"rec": {
 		"source": "Zdroj",
+		"selectSource": "Vyberte, co nahrávat",
 		"systemPicker": "Systém se zeptá, co sdílet",
 		"systemAudio": "Systémový zvuk",
 		"microphone": "Mikrofon",
@@ -115,6 +116,8 @@
 		"loading": "Načítání…",
 		"noCameraFound": "Kamera nenalezena",
 		"cameraAccessError": "K této kameře nelze získat přístup",
+		"noMicrophoneFound": "Mikrofon nenalezen",
+		"microphoneUnavailable": "K mikrofonu nelze získat přístup",
 		"startingCamera": "Spouštění kamery…",
 		"turnOnCameraHint": "Zapněte kameru pro živý náhled",
 		"entireScreen": "Celá obrazovka",

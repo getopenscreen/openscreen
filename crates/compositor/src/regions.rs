@@ -159,6 +159,80 @@ impl ProgrammeClock {
     }
 }
 
+/// Le temps que le spectateur voit passer, en fonction du temps source du clip : ∫ dt / vitesse,
+/// à une constante près. Les transitions de zoom et de Full Camera se mesurent sur cette horloge :
+/// une speed region accélère le contenu, pas le mouvement de caméra, donc un zoom dure autant à
+/// l'écran à 1× qu'à 4× (issue #683). Le palier d'une région reste en temps source : il couvre ce
+/// qu'elle montre et défile avec.
+///
+/// Continue, contrairement à `ProgrammeClock` qui compte des frames entières : une enveloppe ne
+/// doit pas marcher d'escalier. Seules les différences servent, d'où l'origine libre. Les
+/// recouvrements sont tranchés comme dans `speed_segments_for_window` : la région qui commence
+/// d'abord garde la portion commune.
+#[derive(Debug, Clone, Default)]
+pub struct ScreenClock {
+    /// `(début, fin, vitesse)` en temps source, triés et disjoints.
+    spans: Vec<(f64, f64, f64)>,
+}
+
+impl ScreenClock {
+    /// L'horloge du clip `clip_index`, avec la même appartenance que `speed_at`.
+    pub fn new(regions: &[SceneSpeedRegion], clip_index: usize) -> Self {
+        let mut spans: Vec<(f64, f64, f64)> = regions
+            .iter()
+            .filter(|r| r.clip_index.map(|i| i == clip_index).unwrap_or(true))
+            .map(|r| {
+                let speed = if r.speed.is_finite() && r.speed > 0.0 { r.speed } else { 1.0 };
+                (r.start_sec, r.end_sec, speed)
+            })
+            .collect();
+        spans.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        let mut covered_to = f64::NEG_INFINITY;
+        spans.retain_mut(|(start, end, _)| {
+            *start = start.max(covered_to);
+            let keep = *end > *start;
+            if keep {
+                covered_to = *end;
+            }
+            keep
+        });
+        Self { spans }
+    }
+
+    /// Temps écran au temps source `t`, en secondes.
+    pub fn at(&self, t: f32) -> f32 {
+        let t = t as f64;
+        let mut screen = t;
+        for &(start, end, speed) in &self.spans {
+            if t <= start {
+                break;
+            }
+            screen -= (t.min(end) - start) * (1.0 - 1.0 / speed);
+        }
+        screen as f32
+    }
+
+    /// L'inverse de `at` : le temps source affiché à l'instant écran `screen`. C'est ce qui donne
+    /// la frame précédente d'une frontière de vitesse, où la vitesse courante ne dit rien du pas.
+    pub fn source_at(&self, screen: f32) -> f32 {
+        let screen = screen as f64;
+        // Avance de la source sur l'écran, cumulée sur les spans déjà franchis.
+        let mut lead = 0.0;
+        for &(start, end, speed) in &self.spans {
+            let screen_start = start - lead;
+            if screen <= screen_start {
+                break;
+            }
+            let screen_end = screen_start + (end - start) / speed;
+            if screen < screen_end {
+                return (start + (screen - screen_start) * speed) as f32;
+            }
+            lead += (end - start) * (1.0 - 1.0 / speed);
+        }
+        (screen + lead) as f32
+    }
+}
+
 fn push_speed_segment(
     spans: &mut Vec<SpeedSegment>,
     start_sec: f64,
@@ -178,9 +252,14 @@ fn push_speed_segment(
 
 // mêmes fenêtres de transition que le web (TRANSITION_WINDOW_MS etc., converties en secondes).
 const TRANSITION_WINDOW_S: f32 = 1.01505;
-const ZOOM_IN_TRANSITION_WINDOW_S: f32 = TRANSITION_WINDOW_S * 1.5;
-const ZOOM_IN_OVERLAP_S: f32 = 0.5;
 const FULLSCREEN_LEAD_OUT_WINDOW_S: f32 = TRANSITION_WINDOW_S * 1.5;
+// Durée d'un zoom à l'écran selon l'échelle visée, cf. `zoom_transition_s` ; miroir de
+// `ZOOM_TRANSITION_BASE_MS` / `ZOOM_TRANSITION_PER_LN_MS` (TS).
+const ZOOM_TRANSITION_BASE_S: f32 = 0.6;
+const ZOOM_TRANSITION_PER_LN_S: f32 = 0.55;
+// ω·T du ressort de `ease_spring` : assez haut pour que la fin de fenêtre soit à l'arrêt (1,5 %
+// du pic), assez bas pour ne pas figer la seconde moitié.
+const SPRING_OMEGA_T: f32 = 7.0;
 // port de `CHAINED_ZOOM_PAN_GAP_MS` / `CONNECTED_ZOOM_PAN_DURATION_MS` (TS).
 const CHAINED_ZOOM_PAN_GAP_S: f32 = 1.5;
 const CONNECTED_ZOOM_PAN_DURATION_S: f32 = 1.0;
@@ -237,64 +316,80 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
-/// Port de `computeRegionStrength` (TS, `zoomRegionUtils.ts`) : 0 hors fenêtre, ease-in avant
-/// `startSec` (le zoom anticipe légèrement), plein régime pendant la région, ease-out après
-/// `endSec`. Les temps reçus sont les temps source échantillonnés par le pipeline, donc ces
-/// enveloppes restent alignées quand une speed region répète ou saute des frames.
-///
-/// `under_trim` coupe les enveloppes : la région vit sous une coupe, donc pleine force sur son
-/// span et rien en dehors. Sans ça son ease-in (1,5 s AVANT `start_sec`) et son ease-out
-/// déborderaient sur les frames GARDÉES de part et d'autre du trim — un zoom que l'export ne
-/// rendra jamais, visible dans la preview juste à côté de la coupe. Cf. `SceneZoomRegion`.
-/// L'instant où la région commence à entrer (sa force quitte 0).
-fn lead_in_start(region: &SceneZoomRegion) -> f32 {
-    let start = region.start_sec as f32;
-    if region.under_trim {
-        return start;
-    }
-    let zoom_in_end = start + ZOOM_IN_OVERLAP_S;
-    zoom_in_end - ZOOM_IN_TRANSITION_WINDOW_S
+/// L'échelle entre `a` et `b`, interpolée en log : un zoom se perçoit en rapport (passer de 1× à
+/// 2× se lit comme de 2× à 4×), donc le rythme d'une transition ne dépend plus du niveau visé.
+/// Linéaire, 1× → 5× faisait les trois quarts du chemin perçu dans le premier quart du trajet.
+fn scale_lerp(a: f32, b: f32, t: f32) -> f32 {
+    let a = a.max(1e-3);
+    a * (b.max(1e-3) / a).powf(t)
 }
 
-fn zoom_region_strength(region: &SceneZoomRegion, t: f32) -> f32 {
+/// Montée d'un ressort critique (sans rebond), ramenée pile sur [0, 1] à la fin de la fenêtre :
+/// vitesse nulle au départ, donc pas d'à-coup, et arrivée amortie. L'ancienne courbe du zoom
+/// (cubic-bezier(0.16, 1, 0.3, 1)) partait à pleine vitesse dès la première frame.
+fn ease_spring(t: f32) -> f32 {
+    let x = SPRING_OMEGA_T * clamp01(t);
+    let end = 1.0 - (1.0 + SPRING_OMEGA_T) * (-SPRING_OMEGA_T).exp();
+    (1.0 - (1.0 + x) * (-x).exp()) / end
+}
+
+/// Durée d'une transition de zoom à l'écran vers `scale` : ~0,7 s pour 1,25×, ~0,9 s pour 1,8×
+/// (le défaut), ~1,5 s pour 5×. Elle croît avec le log de l'échelle, comme la distance perçue, en
+/// gardant un plancher pour qu'un petit zoom ne passe pas en coup de vent. Pic de vitesse perçue :
+/// 0,8 à 2,9 e-folds/s selon le niveau, contre 1 à 16 avec l'ancienne fenêtre fixe (issue #683).
+fn zoom_transition_s(scale: f32) -> f32 {
+    ZOOM_TRANSITION_BASE_S + ZOOM_TRANSITION_PER_LN_S * scale.max(1.0).ln()
+}
+
+/// Port de `computeRegionStrength` (TS, `zoomRegionUtils.ts`) : 0 hors fenêtre, ease-in qui
+/// arrive pile à `startSec` (le zoom est en place quand la région commence), plein régime pendant
+/// la région, ease-out qui part de `endSec`. Les deux transitions durent `zoom_transition_s`.
+/// `t` est le temps source échantillonné par le pipeline, donc l'enveloppe reste alignée quand
+/// une speed region répète ou saute des frames ; ses fenêtres, elles, se mesurent sur l'horloge
+/// écran (`ScreenClock`).
+///
+/// `under_trim` coupe les enveloppes : la région vit sous une coupe, donc pleine force sur son
+/// span et rien en dehors. Sans ça son ease-in (jusqu'à 1,5 s AVANT `start_sec`) et son ease-out
+/// déborderaient sur les frames GARDÉES de part et d'autre du trim — un zoom que l'export ne
+/// rendra jamais, visible dans la preview juste à côté de la coupe. Cf. `SceneZoomRegion`.
+fn zoom_region_strength(region: &SceneZoomRegion, t: f32, clock: &ScreenClock) -> f32 {
     let start = region.start_sec as f32;
     let end = region.end_sec as f32;
     if region.under_trim {
         return if t >= start && t < end { 1.0 } else { 0.0 };
     }
-    let zoom_in_end = start + ZOOM_IN_OVERLAP_S;
-    let lead_in_start = lead_in_start(region);
-    let lead_out_end = end + TRANSITION_WINDOW_S;
-    if t < lead_in_start || t > lead_out_end {
+    let (start, end, t) = (clock.at(start), clock.at(end), clock.at(t));
+    let window = zoom_transition_s(region.scale);
+    if t < start - window || t > end + window {
         return 0.0;
     }
-    if t < zoom_in_end {
-        let progress = (t - lead_in_start) / ZOOM_IN_TRANSITION_WINDOW_S;
-        return ease_out_screen_studio(progress);
+    if t < start {
+        return ease_spring((t - (start - window)) / window);
     }
     if t <= end {
         return 1.0;
     }
-    let progress = clamp01((t - end) / TRANSITION_WINDOW_S);
-    1.0 - ease_out_screen_studio(progress)
+    1.0 - ease_spring((t - end) / window)
 }
 
 /// Facteur d'opacité du curseur (0.0..1.0) induit par les régions de zoom ayant `hide_cursor = true`.
 /// Si aucune région masquant le curseur n'est active, retourne 1.0.
 /// S'estompe avec l'ease-in du zoom (1.0 -> 0.0) et réapparaît avec l'ease-out (0.0 -> 1.0).
 /// En cas de transition chaînée (connected pan), suit le même enchaînement que `zoom_state_at`.
-pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32) -> f32 {
+pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32, clock: &ScreenClock) -> f32 {
     if regions.is_empty() || !regions.iter().any(|r| r.hide_cursor) {
         return 1.0;
     }
-    let pairs = connected_pairs(regions);
+    let pairs = connected_pairs(regions, clock);
+    let screen_t = clock.at(t);
 
     // 1) transition chaînée : pan lissé de la région courante vers la suivante.
     for &(ci, ni, t_start, t_end) in &pairs {
-        if t < t_start || t > t_end {
+        if screen_t < t_start || screen_t > t_end {
             continue;
         }
-        let progress = ease_connected_pan(clamp01((t - t_start) / (t_end - t_start).max(1e-3)));
+        let progress =
+            ease_connected_pan(clamp01((screen_t - t_start) / (t_end - t_start).max(1e-3)));
         let cur_alpha = if regions[ci].hide_cursor { 0.0 } else { 1.0 };
         let next_alpha = if regions[ni].hide_cursor { 0.0 } else { 1.0 };
         return lerp(cur_alpha, next_alpha, progress).clamp(0.0, 1.0);
@@ -304,7 +399,7 @@ pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32) -> f32 {
     // suivante, celle-ci est déjà pleinement active (anticipe son propre ease-in).
     for &(_, ni, _, t_end) in &pairs {
         let next = &regions[ni];
-        if t > t_end && t < next.start_sec as f32 {
+        if screen_t > t_end && t < next.start_sec as f32 {
             return if next.hide_cursor { 0.0 } else { 1.0 };
         }
     }
@@ -316,11 +411,11 @@ pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32) -> f32 {
         let outgoing_past_end =
             pairs.iter().any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
         let incoming_before_transition_end =
-            pairs.iter().any(|&(_, ni, _, t_end)| ni == i && t < t_end);
+            pairs.iter().any(|&(_, ni, _, t_end)| ni == i && screen_t < t_end);
         if outgoing_past_end || incoming_before_transition_end {
             continue;
         }
-        let s = zoom_region_strength(r, t);
+        let s = zoom_region_strength(r, t, clock);
         if s <= 0.0 {
             continue;
         }
@@ -567,7 +662,8 @@ fn resolve_focus(region: &SceneZoomRegion, t: f32, cursor: Option<&CursorTrack>)
 
 /// Paires de régions adjacentes assez proches pour être chaînées (port de
 /// `getConnectedRegionPairs`, TS) : (index courant, index suivant, début transition, fin
-/// transition), en secondes. Indices dans `regions` (pas d'id nécessaire — contrairement au
+/// transition), en secondes ÉCRAN (`ScreenClock`) — l'écart et le pan se mesurent à l'écran.
+/// Indices dans `regions` (pas d'id nécessaire — contrairement au
 /// web qui matche par `region.id` car il travaille sur des objets isolés, ici tout vient du
 /// même slice donc les positions suffisent).
 ///
@@ -575,19 +671,25 @@ fn resolve_focus(region: &SceneZoomRegion, t: f32, cursor: Option<&CursorTrack>)
 /// rendu, donc un pan lissé vers (ou depuis) l'une d'elles ferait bouger des frames gardées au
 /// nom d'une région que l'export ne joue pas. Elles restent des régions dominantes indépendantes,
 /// sèches sur leur propre span (cf. `zoom_region_strength`).
-fn connected_pairs(regions: &[SceneZoomRegion]) -> Vec<(usize, usize, f32, f32)> {
+fn connected_pairs(regions: &[SceneZoomRegion], clock: &ScreenClock) -> Vec<(usize, usize, f32, f32)> {
     let mut order: Vec<usize> = (0..regions.len()).filter(|&i| !regions[i].under_trim).collect();
     order.sort_by(|&a, &b| regions[a].start_sec.partial_cmp(&regions[b].start_sec).unwrap());
     let mut pairs = Vec::new();
     for w in order.windows(2) {
         let (ci, ni) = (w[0], w[1]);
-        let gap = regions[ni].start_sec as f32 - regions[ci].end_sec as f32;
+        let transition_start = clock.at(regions[ci].end_sec as f32);
+        let gap = clock.at(regions[ni].start_sec as f32) - transition_start;
         if gap <= CHAINED_ZOOM_PAN_GAP_S {
-            let transition_start = regions[ci].end_sec as f32;
             pairs.push((ci, ni, transition_start, transition_start + CONNECTED_ZOOM_PAN_DURATION_S));
         }
     }
     pairs
+}
+
+/// `zoom_state_in` sans speed region ni caméra `follow-cursor` : ce que les tests comparent.
+#[cfg(test)]
+pub fn zoom_state_at(regions: &[SceneZoomRegion], t: f32, cursor: Option<&CursorTrack>) -> ZoomState {
+    zoom_state_in(regions, t, cursor, &CameraFrame::NONE, &ScreenClock::default())
 }
 
 /// État de zoom au temps `t` (secondes source du clip actif). Port de
@@ -595,30 +697,28 @@ fn connected_pairs(regions: &[SceneZoomRegion]) -> Vec<(usize, usize, f32, f32)>
 /// hold), sinon la région "dominante" indépendante la plus forte (ties → la plus récente).
 /// Hors de toute région → identité (échelle 1, focus centre, tilt nul).
 ///
-/// Sans piste, `follow-cursor` vise le centre. Le rendu passe par `zoom_state_in`, qui lui donne
-/// la piste, le recadrage et la fenêtre du clip.
-pub fn zoom_state_at(regions: &[SceneZoomRegion], t: f32, cursor: Option<&CursorTrack>) -> ZoomState {
-    zoom_state_in(regions, t, cursor, &CameraFrame::NONE)
-}
-
-/// `zoom_state_at`, avec ce que lit la caméra `follow-cursor` (`CameraFrame`).
+/// `frame` est ce que lit la caméra `follow-cursor` (sans piste, elle vise le centre) ; `clock`
+/// mesure les transitions à l'écran, cf. `ScreenClock`.
 pub fn zoom_state_in(
     regions: &[SceneZoomRegion],
     t: f32,
     cursor: Option<&CursorTrack>,
     frame: &CameraFrame,
+    clock: &ScreenClock,
 ) -> ZoomState {
     if regions.is_empty() {
         return IDENTITY_ZOOM;
     }
-    let pairs = connected_pairs(regions);
+    let pairs = connected_pairs(regions, clock);
+    let screen_t = clock.at(t);
 
     // 1) transition chaînée : pan lissé de la région courante vers la suivante.
     for &(ci, ni, t_start, t_end) in &pairs {
-        if t < t_start || t > t_end {
+        if screen_t < t_start || screen_t > t_end {
             continue;
         }
-        let progress = ease_connected_pan(clamp01((t - t_start) / (t_end - t_start).max(1e-3)));
+        let progress =
+            ease_connected_pan(clamp01((screen_t - t_start) / (t_end - t_start).max(1e-3)));
         let (cur, next) = (&regions[ci], &regions[ni]);
         let cur_focus = resolve_focus(cur, t, cursor);
         let next_focus = resolve_focus(next, t, cursor);
@@ -651,7 +751,7 @@ pub fn zoom_state_in(
         let (a, b) = (follow_at(cur, t, frame), follow_at(next, t, frame));
         let mix = |p: [f32; 2], q: [f32; 2]| [lerp(p[0], q[0], progress), lerp(p[1], q[1], progress)];
         return ZoomState {
-            scale: lerp(cur.scale, next.scale, progress),
+            scale: scale_lerp(cur.scale, next.scale, progress),
             focus: [lerp(cur_focus[0], next_focus[0], progress), lerp(cur_focus[1], next_focus[1], progress)],
             rotation,
             tilt: lerp(fixed_flag(cur), fixed_flag(next), progress) * crossing,
@@ -666,7 +766,7 @@ pub fn zoom_state_in(
     // suivante, celle-ci est déjà pleinement active (anticipe son propre ease-in).
     for &(_, ni, _, t_end) in &pairs {
         let next = &regions[ni];
-        if t > t_end && t < next.start_sec as f32 {
+        if screen_t > t_end && t < next.start_sec as f32 {
             let camera = follow_flag(next);
             let seen = follow_at(next, t, frame);
             return ZoomState {
@@ -688,11 +788,12 @@ pub fn zoom_state_in(
     for (i, r) in regions.iter().enumerate() {
         let outgoing_past_end =
             pairs.iter().any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
-        let incoming_before_transition_end = pairs.iter().any(|&(_, ni, _, t_end)| ni == i && t < t_end);
+        let incoming_before_transition_end =
+            pairs.iter().any(|&(_, ni, _, t_end)| ni == i && screen_t < t_end);
         if outgoing_past_end || incoming_before_transition_end {
             continue;
         }
-        let s = zoom_region_strength(r, t);
+        let s = zoom_region_strength(r, t, clock);
         if s <= 0.0 {
             continue;
         }
@@ -708,7 +809,7 @@ pub fn zoom_state_in(
         Some((i, strength)) => {
             let r = &regions[i];
             let focus = resolve_focus(r, t, cursor);
-            let scale = lerp(1.0, r.scale, strength);
+            let scale = scale_lerp(1.0, r.scale, strength);
             // La référence (`zoomTransform.ts`) fait converger le point de focus vers le centre
             // de l'écran LINÉAIREMENT : screen(f) = 0.5 + (f - 0.5)(1 - strength). Passer
             // `lerp(0.5, f, strength)` comme centre de crop ne donne pas ça — le crop mappant
@@ -739,13 +840,18 @@ pub fn zoom_state_in(
 /// [startSec, endSec] (contrairement au zoom, qui anticipe avant `startSec`) — ease-in depuis
 /// 0 pile à `startSec`, plein régime, ease-out jusqu'à 0 pile à `endSec`. Fenêtres bornées à la
 /// moitié de la durée de la région pour que les régions courtes s'animent pleinement sans
-/// déborder.
-fn camera_fullscreen_region_strength(region: &SceneCameraFullscreenRegion, t: f32) -> f32 {
+/// déborder. Fenêtres mesurées à l'écran, comme celles du zoom (`ScreenClock`).
+fn camera_fullscreen_region_strength(
+    region: &SceneCameraFullscreenRegion,
+    t: f32,
+    clock: &ScreenClock,
+) -> f32 {
     let start = region.start_sec as f32;
     let end = region.end_sec as f32;
     if t <= start || t >= end {
         return 0.0;
     }
+    let (start, end, t) = (clock.at(start), clock.at(end), clock.at(t));
     let half = (end - start) * 0.5;
     let lead_in = TRANSITION_WINDOW_S.min(half);
     let lead_out = FULLSCREEN_LEAD_OUT_WINDOW_S.min(half);
@@ -765,10 +871,14 @@ fn camera_fullscreen_region_strength(region: &SceneCameraFullscreenRegion, t: f3
 /// Progrès Full Camera (0..1) au temps `t` : 0 = webcam à sa taille normale, 1 = plein cadre.
 /// Régions superposées (ne devrait pas arriver, gardé défensif comme le web) → la plus forte
 /// gagne.
-pub fn camera_fullscreen_progress_at(regions: &[SceneCameraFullscreenRegion], t: f32) -> f32 {
+pub fn camera_fullscreen_progress_at(
+    regions: &[SceneCameraFullscreenRegion],
+    t: f32,
+    clock: &ScreenClock,
+) -> f32 {
     let mut strongest = 0.0f32;
     for r in regions {
-        let s = camera_fullscreen_region_strength(r, t);
+        let s = camera_fullscreen_region_strength(r, t, clock);
         if s > strongest {
             strongest = s;
         }
@@ -1348,13 +1458,13 @@ mod zoom_focus_tests {
         let regions = vec![r];
 
         // Bien avant le zoom (t=0.0) -> pleine opacité
-        assert_eq!(zoom_cursor_alpha(&regions, 0.0), 1.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 0.0, &ScreenClock::default()), 1.0);
 
         // Plein milieu du zoom (t=4.5) -> complètement masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 4.5), 0.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 4.5, &ScreenClock::default()), 0.0);
 
         // Bien après le zoom (t=10.0) -> pleine opacité
-        assert_eq!(zoom_cursor_alpha(&regions, 10.0), 1.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 10.0, &ScreenClock::default()), 1.0);
     }
 
     #[test]
@@ -1372,13 +1482,13 @@ mod zoom_focus_tests {
         let regions = vec![r1, r2];
 
         // Pendant la région 1 (t=3.0) -> masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 3.0), 0.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 3.0, &ScreenClock::default()), 0.0);
         // Pendant la transition chaînée (connected pan entre t=4.0 et t=4.3) -> reste masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 4.15), 0.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 4.15, &ScreenClock::default()), 0.0);
         // Pendant le palier chaîné (t=4.4) -> reste masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 4.4), 0.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 4.4, &ScreenClock::default()), 0.0);
         // Pendant la région 2 (t=5.5) -> masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 5.5), 0.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 5.5, &ScreenClock::default()), 0.0);
     }
 
     #[test]
@@ -1396,9 +1506,9 @@ mod zoom_focus_tests {
         let regions = vec![r1, r2];
 
         // Avant la transition (r1 actif) -> 0.0
-        assert_eq!(zoom_cursor_alpha(&regions, 3.0), 0.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 3.0, &ScreenClock::default()), 0.0);
         // Après la transition (r2 actif avec hide_cursor=false) -> 1.0
-        assert_eq!(zoom_cursor_alpha(&regions, 5.5), 1.0);
+        assert_eq!(zoom_cursor_alpha(&regions, 5.5, &ScreenClock::default()), 1.0);
     }
 
     /// Où le point source `f` atterrit à l'écran (0..1) : le crop est centré sur `focus` et
@@ -1420,14 +1530,37 @@ mod zoom_focus_tests {
         for step in 0..=20 {
             let t = 1.0 + step as f32 * 0.15;
             let state = zoom_state_at(&regions, t, None);
-            // `progress` déduit du scale rendu, pour ne pas ré-implémenter l'easing dans le test.
-            let progress = (state.scale - 1.0) / (target_scale - 1.0);
+            // `progress` déduit du scale rendu (interpolé en log), pour ne pas ré-implémenter
+            // l'easing dans le test.
+            let progress = state.scale.ln() / target_scale.ln();
             let expected = 0.5 + (f - 0.5) * (1.0 - progress);
             assert!(
                 (screen_x(&state, f) - expected).abs() < 1e-4,
                 "t={t} progress={progress} screen={} attendu={expected}",
                 screen_x(&state, f)
             );
+        }
+    }
+
+    /// Le rythme ne dépend plus du niveau (issue #683). À chaque échelle du sélecteur, le zoom part
+    /// et repart à l'arrêt, ne dépasse pas 3 e-folds/s de vitesse perçue (|d ln échelle / dt|) et
+    /// est en place pile au début de la région. L'ancienne fenêtre fixe montait à 16 à 5×, et dès
+    /// la première frame.
+    #[test]
+    fn a_zoom_moves_at_a_comfortable_pace_at_every_level() {
+        let dt = 1.0f32 / 240.0;
+        for scale in [1.25f32, 1.5, 1.8, 2.2, 3.5, 5.0] {
+            let r = [region(scale, 0.5)];
+            let ln_scale = |t: f32| zoom_state_at(&r, t, None).scale.ln();
+            let speed = |t: f32| (ln_scale(t + dt) - ln_scale(t)).abs() / dt;
+            let lead_in = 2.0 - zoom_transition_s(scale);
+            let peak = (0..=(zoom_transition_s(scale) / dt) as usize)
+                .map(|i| speed(lead_in + i as f32 * dt))
+                .fold(0.0f32, f32::max);
+            assert!(peak < 3.0, "{scale}× : pic à {peak}/s");
+            assert!(speed(lead_in) < 0.1 * peak, "{scale}× : départ à {}/s", speed(lead_in));
+            assert!(speed(8.0) < 0.1 * peak, "{scale}× : retour à {}/s", speed(8.0));
+            assert_eq!(zoom_state_at(&r, 2.0, None).scale, scale, "{scale}× en place au début");
         }
     }
 
@@ -1473,7 +1606,89 @@ mod zoom_focus_tests {
         cut.start_sec = 9.0;
         cut.end_sec = 10.0;
         // Sans le filtre, l'écart de 1 s < CHAINED_ZOOM_PAN_GAP_S apparierait [2,8] et [9,10].
-        assert!(connected_pairs(&[region(2.0, 0.5), cut]).is_empty());
+        assert!(connected_pairs(&[region(2.0, 0.5), cut], &ScreenClock::default()).is_empty());
+    }
+
+    fn speed(clip_index: Option<usize>, start_sec: f64, end_sec: f64, speed: f64) -> SceneSpeedRegion {
+        SceneSpeedRegion { clip_index, start_sec, end_sec, speed }
+    }
+
+    #[test]
+    fn the_screen_clock_runs_slower_than_the_source_inside_a_speed_region() {
+        let clock = ScreenClock::new(&[speed(None, 2.0, 6.0, 4.0)], 0);
+        assert_eq!(clock.at(1.0), 1.0);
+        assert_eq!(clock.at(4.0), 2.5);
+        assert_eq!(clock.at(8.0), 5.0);
+        for t in [0.5f32, 2.0, 3.3, 6.0, 7.25] {
+            assert!((clock.source_at(clock.at(t)) - t).abs() < 1e-5, "aller-retour à t = {t}");
+        }
+        // Une frame d'écran en arrière depuis une frontière : le pas est celui du span d'AVANT.
+        let back = |t: f32| clock.source_at(clock.at(t) - 1.0 / 60.0);
+        assert!((back(2.0) - (2.0 - 1.0 / 60.0)).abs() < 1e-5, "entrée du 4× : {}", back(2.0));
+        assert!((back(6.0) - (6.0 - 4.0 / 60.0)).abs() < 1e-5, "sortie du 4× : {}", back(6.0));
+        // Autre clip ignoré ; recouvrement : la première région garde [4, 6), la seconde ne
+        // compte que sur [6, 8). 2 + 1 + 1 à t = 8.
+        let clock = ScreenClock::new(
+            &[speed(Some(1), 0.0, 10.0, 2.0), speed(Some(0), 2.0, 6.0, 4.0), speed(Some(0), 4.0, 8.0, 2.0)],
+            0,
+        );
+        assert_eq!(clock.at(8.0), 4.0);
+    }
+
+    /// Un 4× uniforme est un pur changement d'échelle du temps POUR LE CONTENU : vu à l'écran, tout
+    /// doit bouger exactement comme des régions quatre fois plus courtes à 1× — zooms chaînés
+    /// (1 s d'écart à l'écran, foyers différents) et Full Camera compris.
+    #[test]
+    fn a_speed_region_scales_the_footage_not_the_camera_move() {
+        let clock = ScreenClock::new(&[speed(None, 0.0, 1000.0, 4.0)], 0);
+        let zooms = |k: f64| {
+            let (mut a, mut b) = (region(2.5, 0.8), region(1.8, 0.3));
+            (a.start_sec, a.end_sec, b.start_sec, b.end_sec) = (5.0 * k, 10.0 * k, 11.0 * k, 15.0 * k);
+            [a, b]
+        };
+        let full_camera =
+            |k: f64| [SceneCameraFullscreenRegion { clip_index: None, start_sec: 18.0 * k, end_sec: 22.0 * k }];
+        let (sped, plain) = (zooms(4.0), zooms(1.0));
+        assert_eq!(connected_pairs(&sped, &clock).len(), 1, "la paire doit se chaîner");
+        for step in 0..=1000 {
+            let t = step as f32 * 0.1;
+            let a = zoom_state_in(&sped, t, None, &CameraFrame::NONE, &clock);
+            let b = zoom_state_at(&plain, t / 4.0, None);
+            assert!((a.scale - b.scale).abs() < 1e-4, "t={t} : {} vs {}", a.scale, b.scale);
+            assert!((a.focus[0] - b.focus[0]).abs() < 1e-4, "t={t}");
+            let a = camera_fullscreen_progress_at(&full_camera(4.0), t, &clock);
+            let b = camera_fullscreen_progress_at(&full_camera(1.0), t / 4.0, &ScreenClock::default());
+            assert!((a - b).abs() < 1e-4, "Full Camera t={t} : {a} vs {b}");
+        }
+    }
+
+    /// Le cas réel : la speed region commence au milieu de l'ease-in. Le zoom doit durer autant de
+    /// frames de sortie qu'à 1× (l'export avance de `vitesse / fps` de source par frame), sans saut.
+    #[test]
+    fn a_zoom_straddling_a_speed_region_lasts_as_many_frames_as_at_1x() {
+        let mut r = region(2.0, 0.5);
+        (r.start_sec, r.end_sec) = (10.0, 12.0);
+        let walk = |speeds: &[SceneSpeedRegion]| {
+            let clock = ScreenClock::new(speeds, 0);
+            let (mut frames, mut prev, mut worst_step) = (0usize, 1.0f32, 0.0f32);
+            // Les instants que l'export compose : `début + k·vitesse/fps` dans chaque span.
+            for seg in speed_segments_for_window(speeds, 0.0, 20.0, 60.0) {
+                for k in 0..seg.frame_count {
+                    let t = (seg.start_sec + k as f64 * seg.speed / 60.0) as f32;
+                    let scale = zoom_state_in(&[r.clone()], t, None, &CameraFrame::NONE, &clock).scale;
+                    if scale > 1.0 && scale < 2.0 {
+                        frames += 1;
+                    }
+                    worst_step = worst_step.max((scale - prev).abs());
+                    prev = scale;
+                }
+            }
+            (frames, worst_step)
+        };
+        let (plain_frames, plain_step) = walk(&[]);
+        let (sped_frames, sped_step) = walk(&[speed(None, 9.5, 11.0, 8.0)]);
+        assert!(plain_frames.abs_diff(sped_frames) <= 2, "{plain_frames} vs {sped_frames} frames");
+        assert!(sped_step <= plain_step + 0.01, "saut de {sped_step} (1× : {plain_step})");
     }
 }
 
@@ -2600,25 +2815,25 @@ mod follow_camera_tests {
         let tr = track(|_| (0.85, 0.5));
         let f = whole(&tr);
         let r = [region("follow-cursor", 2.0, 8.0)];
-        let full = zoom_state_in(&r, 5.0, Some(&tr), &f);
+        let full = zoom_state_in(&r, 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((full.rotation, full.tilt, full.click_impact, full.camera), ([0.0; 3], 0.0, 1.0, 1.0));
         assert_eq!((full.scale, full.focus), (2.0, [0.5, 0.5]));
         assert!(full.aim[0] > 0.7 && (full.aim[1] - 0.5).abs() < 1e-3, "{:?}", full.aim);
         assert!((full.orbit[0] - 0.85).abs() < 1e-3 && (full.orbit[1] - 0.5).abs() < 1e-3, "{:?}", full.orbit);
-        let easing = zoom_state_in(&r, 1.5, Some(&tr), &f);
+        let easing = zoom_state_in(&r, 1.5, Some(&tr), &f, &ScreenClock::default());
         assert!(easing.camera > 0.0 && easing.camera < 1.0, "{}", easing.camera);
         let raw = follow_at(&r[0], 1.5, &f);
         assert_eq!((easing.aim, easing.orbit), (weighted(raw.aim, easing.camera), weighted(raw.orbit, easing.camera)));
         assert_eq!(easing.focus, [0.5, 0.5]);
-        let out = zoom_state_in(&r, 0.0, Some(&tr), &f);
+        let out = zoom_state_in(&r, 0.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((out.scale, out.rotation, out.camera, out.aim, out.orbit), (1.0, [0.0; 3], 0.0, [0.5; 2], [0.5; 2]));
         // Sans piste, la caméra vise le centre, au repos.
         let blind = zoom_state_at(&r, 5.0, None);
         assert_eq!((blind.aim, blind.orbit), ([0.5, 0.5], [0.5, 0.5]));
         // Un angle fixe garde exactement son état.
-        let iso = zoom_state_in(&[region("iso", 2.0, 8.0)], 5.0, Some(&tr), &f);
+        let iso = zoom_state_in(&[region("iso", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((iso.rotation, iso.camera, iso.click_impact), ([-12.0, -18.0, -2.0], 0.0, 1.0));
-        let unknown = zoom_state_in(&[region("orbit", 2.0, 8.0)], 5.0, Some(&tr), &f);
+        let unknown = zoom_state_in(&[region("orbit", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((unknown.rotation, unknown.tilt, unknown.camera), ([0.0; 3], 0.0, 0.0));
     }
 
@@ -2629,8 +2844,8 @@ mod follow_camera_tests {
         let mut auto = region("follow-cursor", 2.0, 8.0);
         auto.focus_mode = Some("auto".into());
         let manual = region("follow-cursor", 2.0, 8.0);
-        let a = zoom_state_in(&[auto], 5.0, Some(&tr), &whole(&tr));
-        let m = zoom_state_in(&[manual], 5.0, Some(&tr), &whole(&tr));
+        let a = zoom_state_in(&[auto], 5.0, Some(&tr), &whole(&tr), &ScreenClock::default());
+        let m = zoom_state_in(&[manual], 5.0, Some(&tr), &whole(&tr), &ScreenClock::default());
         assert_eq!((a.aim, a.focus), (m.aim, m.focus));
         assert!(a.aim[0] > 0.7 && a.aim[1] < 0.35, "{:?}", a.aim);
     }
@@ -2651,7 +2866,7 @@ mod follow_camera_tests {
             for k in 0..=400 {
                 // La transition chaînée couvre [4, 5] s, le palier la suit jusqu'à 4,5 s.
                 let t = 3.9 + k as f32 * 1.3 / 400.0;
-                let s = zoom_state_in(&regions, t, Some(&tr), &f);
+                let s = zoom_state_in(&regions, t, Some(&tr), &f, &ScreenClock::default());
                 assert!(s.camera == 0.0 || is_identity_rotation(s.rotation), "t {t} : {s:?}", s = (s.camera, s.rotation));
                 if both {
                     assert_eq!(s.camera, 1.0, "t {t}");
@@ -2674,7 +2889,7 @@ mod follow_camera_tests {
         let f = whole(&tr);
         let r = [region("follow-cursor", 2.0, 8.0)];
         let at = |i: usize| {
-            let s = zoom_state_in(&r, 1.0 + i as f32 / 30.0, Some(&tr), &f);
+            let s = zoom_state_in(&r, 1.0 + i as f32 / 30.0, Some(&tr), &f, &ScreenClock::default());
             (s.camera, s.aim, s.orbit, s.scale)
         };
         let forward: Vec<_> = (0..240).map(at).collect();

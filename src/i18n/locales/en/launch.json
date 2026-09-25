@@ -1,13 +1,13 @@
 {
 	"tooltips": {
-		"hideHUD": "Hide HUD",
-		"closeApp": "Close App",
+		"hideHUD": "Hide recording bar",
+		"closeApp": "Quit OpenScreen",
 		"restartRecording": "Restart recording",
 		"cancelRecording": "Cancel recording",
 		"pauseRecording": "Pause recording",
 		"resumeRecording": "Resume recording",
-		"useVerticalTray": "Use vertical tray",
-		"useHorizontalTray": "Use horizontal tray",
+		"useVerticalTray": "Switch to vertical bar",
+		"useHorizontalTray": "Switch to horizontal bar",
 		"openStudio": "Open Studio",
 		"openNotes": "Open Notes",
 		"openNotesPlaceholder": "Take notes here...",
@@ -57,16 +57,16 @@
 		"useSystemCursor": "Use system cursor"
 	},
 	"sourceSelector": {
-		"loading": "Loading sources...",
+		"loading": "Loading screens and windows...",
 		"screens": "Screens ({{count}})",
 		"windows": "Windows ({{count}})",
 		"emptyTitle": "No screens or windows found",
 		"emptyDescription": "If you just granted screen recording permission, reload this picker. On macOS you may need to reopen OpenScreen.",
-		"loadFailedDescription": "OpenScreen could not load capture sources. Reload this picker and try again.",
+		"loadFailedDescription": "OpenScreen couldn't load your screens and windows. Reload this picker and try again.",
 		"defaultSourceName": "Screen"
 	},
 	"recording": {
-		"selectSource": "Please select a source to record",
+		"selectSource": "Choose a screen or window to record",
 		"systemPicker": "Your system will ask what to share",
 		"inProgress": "Recording",
 		"saving": "Saving..."
@@ -79,8 +79,8 @@
 		"keepDefault": "Keep current language"
 	},
 	"softwareEncoderFallback": {
-		"title": "Switched to software encoding",
-		"description": "The default GPU encoder failed to start, so OpenScreen fell back to software H.264 encoding. Recording should continue as normal, but CPU usage may be higher.",
+		"title": "Switched to a backup encoder",
+		"description": "Your graphics card's encoder didn't start, so OpenScreen switched to a backup. Your recording is fine, though your computer may work a little harder.",
 		"dismiss": "Got it",
 		"dontShowAgain": "Don't show again"
 	},

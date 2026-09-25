@@ -23,6 +23,13 @@
 }
 /* rows set inline per mode (topbar / body / timeline) */
 
+/* One visible keyboard focus for the whole shell: most controls here reset the
+   outline and put nothing back. */
+.app :focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
 /* ─── TOP BAR ──────────────────────────────────────────────────────── */
 /* Every slot on the left half is width-STABLE by construction: the chat toggle
    reserves its box even in the modes that don't have one, the project name and
@@ -277,8 +284,7 @@
 	grid-template-areas: "state";
 	align-items: center;
 	justify-items: start;
-	font-family: var(--font-mono);
-	font-size: 11px;
+	font-size: 12px;
 	color: var(--muted);
 	flex-shrink: 0;
 }
@@ -360,8 +366,7 @@
 .langShort {
 	width: var(--topbar-lang-label-w);
 	text-align: center;
-	font-family: var(--font-mono);
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 600;
 	white-space: nowrap;
 }
@@ -381,18 +386,18 @@
 	padding: 3px;
 	background: var(--surface-1);
 	border: 1px solid var(--border);
-	border-radius: 11px;
+	border-radius: 12px;
 	flex-shrink: 0;
 	min-width: fit-content;
 }
 .modeSwitch button {
-	padding: 5px 14px;
+	padding: 5px 16px;
 	white-space: nowrap;
 	border: 0;
-	border-radius: 7px;
+	border-radius: 9px;
 	background: transparent;
 	color: var(--muted);
-	font-size: 11.5px;
+	font-size: 13px;
 	font-weight: 500;
 	cursor: pointer;
 	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
@@ -440,7 +445,7 @@
 	gap: 7px;
 	height: var(--topbar-icon);
 	padding: 0 14px;
-	border-radius: 9px;
+	border-radius: 10px;
 	background: var(--accent);
 	color: var(--accent-on);
 	border: 1px solid var(--accent);
@@ -448,7 +453,7 @@
 	font-weight: 600;
 	cursor: pointer;
 	flex-shrink: 0;
-	box-shadow: 0 2px 10px -3px var(--accent-soft);
+	box-shadow: 0 4px 14px -4px var(--brand-glow);
 	transition: background var(--motion-fast) var(--ease);
 }
 .exportBtn:hover {
@@ -496,7 +501,7 @@
 	}
 	.modeSwitch button {
 		padding: 4px 8px;
-		font-size: 11px;
+		font-size: 12px;
 		max-width: 90px;
 	}
 	.exportBtn {
@@ -536,7 +541,7 @@
 	}
 	.langShort {
 		width: auto;
-		font-size: 11px;
+		font-size: 12px;
 	}
 }
 
@@ -547,7 +552,7 @@
 	}
 	.modeSwitch button {
 		padding: 3px 6px;
-		font-size: 10.5px;
+		font-size: 11px;
 		max-width: 70px;
 	}
 	.exportLabel {
@@ -562,7 +567,7 @@
 		padding: 0 4px;
 	}
 	.langShort {
-		font-size: 10px;
+		font-size: 11px;
 	}
 }
 
@@ -770,10 +775,13 @@
 	overflow: hidden;
 	cursor: grab;
 	text-align: left;
-	transition: border-color var(--motion-fast) var(--ease);
+	transition: border-color var(--motion-fast) var(--ease), transform var(--motion-base) var(--ease),
+		box-shadow var(--motion-base) var(--ease);
 }
 .mediaCard:hover {
 	border-color: var(--border-hi);
+	transform: translateY(-2px);
+	box-shadow: var(--elev-pop);
 }
 .mediaCard.selected {
 	border-color: var(--accent);
@@ -809,13 +817,13 @@
 	gap: 8px;
 }
 .mediaCardStats .dur {
-	font-family: var(--font-mono);
-	font-size: 10.5px;
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
 	color: var(--muted);
 }
 .mediaCardStats .size {
-	font-family: var(--font-mono);
-	font-size: 10.5px;
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
 	color: var(--muted);
 }
 .mediaHint {
@@ -825,7 +833,7 @@
 	gap: 7px;
 	padding: 7px 0 3px;
 	color: var(--meta);
-	font-size: 11.5px;
+	font-size: 12px;
 }
 .importBtn {
 	display: flex;
@@ -918,13 +926,13 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 8px;
-	color: rgba(255, 255, 255, 0.45);
+	color: rgba(255, 255, 255, 0.7);
 	font-size: 13px;
 	font-weight: 500;
 }
 .recPreviewHint {
-	color: rgba(255, 255, 255, 0.3);
-	font-size: 11.5px;
+	color: rgba(255, 255, 255, 0.55);
+	font-size: 12.5px;
 	font-weight: 400;
 }
 .recBadge {
@@ -941,8 +949,8 @@
 	-webkit-backdrop-filter: blur(12px);
 	border: 1px solid rgba(255, 255, 255, 0.14);
 	color: #fff;
-	font-family: var(--font-mono);
-	font-size: 11px;
+	font-size: 12px;
+	font-weight: 500;
 }
 .recDot {
 	width: 7px;
@@ -1036,7 +1044,7 @@
 	padding: 0 12px;
 	border-radius: 9px;
 	border: 1px solid var(--border);
-	background: var(--surface);
+	background: var(--surface-hi);
 	color: var(--fg);
 	font-size: 12.5px;
 	font-weight: 500;
@@ -1064,7 +1072,7 @@
 	padding: 0 8px;
 	border-radius: 9px;
 	border: 1px solid var(--border);
-	background: var(--surface);
+	background: var(--surface-hi);
 	color: var(--fg);
 	font-size: 12.5px;
 	cursor: pointer;
@@ -1081,11 +1089,11 @@
 	/* The toggle keeps its size; the device dropdown yields space instead, so the
 	   On/Off control is always fully visible (issue #624). */
 	flex-shrink: 0;
-	height: 28px;
-	padding: 0 10px;
-	border-radius: 8px;
+	height: 32px;
+	padding: 0 12px;
+	border-radius: 9px;
 	border: 1px solid var(--border);
-	background: var(--surface);
+	background: var(--surface-hi);
 	color: var(--muted);
 	font-size: 12px;
 	font-weight: 600;
@@ -1112,7 +1120,7 @@
 	flex-shrink: 0;
 	text-align: center;
 	color: var(--muted);
-	font-size: 11.5px;
+	font-size: 12px;
 	margin: -6px 0 0;
 }
 .recCancelBtn {
@@ -1165,7 +1173,7 @@
 	border: 1px solid var(--border-soft);
 	background: var(--surface-2);
 	color: var(--muted);
-	font-size: 10.5px;
+	font-size: 11px;
 	font-weight: 600;
 	line-height: 1.4;
 }
@@ -1393,17 +1401,17 @@
 .tlTools {
 	display: flex;
 	align-items: center;
-	gap: 1px;
+	gap: 4px;
 }
 .tlToolBtn {
-	width: 28px;
-	height: 28px;
+	width: 32px;
+	height: 32px;
 	display: grid;
 	place-items: center;
 	border: 0;
 	background: transparent;
 	color: var(--muted);
-	border-radius: 6px;
+	border-radius: 9px;
 	cursor: pointer;
 	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
@@ -1428,17 +1436,13 @@
 	align-items: center;
 	gap: 7px;
 	height: 26px;
-	padding: 0 10px;
-	background: var(--surface-1);
-	border: 1px solid var(--border);
-	border-radius: 7px;
-	font-size: 11px;
+	padding: 0 2px;
+	font-size: 12px;
 	font-weight: 500;
-	color: var(--muted);
+	color: var(--meta);
 }
 .tlKbd {
-	font-family: var(--font-mono);
-	font-size: 10.5px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--fg-2);
 }
@@ -1591,11 +1595,11 @@
 }
 .tlTickLabel {
 	position: absolute;
-	top: 12px;
+	top: 11px;
 	left: 50%;
 	transform: translateX(-50%);
-	font-family: var(--font-mono);
-	font-size: 10px;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
 	color: var(--meta);
 	white-space: nowrap;
 	pointer-events: none;
@@ -1604,7 +1608,7 @@
 	position: relative;
 	height: 24px;
 	margin-bottom: 5px;
-	border-radius: 6px;
+	border-radius: 8px;
 	background: var(--surface-1);
 }
 .laneEmpty {
@@ -1616,7 +1620,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 500;
 	/* Deliberately quieter than lane content: it's a standing hint on every empty
 	   lane, so at --muted five of them shout over the clips. */
@@ -1637,11 +1641,11 @@
 	align-items: center;
 	gap: 5px;
 	padding: 0 8px 0 7px;
-	border-radius: 6px;
+	border-radius: 8px;
 	border: 1.5px solid var(--accent);
 	background: var(--accent-soft);
 	color: var(--fg);
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 600;
 	white-space: nowrap;
 	overflow: hidden;
@@ -1714,7 +1718,7 @@
 	position: absolute;
 	min-width: 1px;
 	overflow: hidden;
-	border-radius: 6px;
+	border-radius: 8px;
 	/* Faint enough to read as "not the pill". Louder than this and it draws the eye to
 	   the part you are NOT editing — and on a long file it spans the whole ruler. */
 	border: 1px dashed color-mix(in oklch, var(--accent) 18%, transparent);
@@ -1736,7 +1740,7 @@
 	border: 1px solid var(--border-hi);
 	background: var(--bg);
 	color: var(--fg);
-	font-size: 11px;
+	font-size: 12px;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 	pointer-events: none;
@@ -1954,17 +1958,17 @@
 	-webkit-backdrop-filter: blur(8px);
 }
 .tlClipIcon {
-	width: 16px;
-	height: 16px;
+	width: 20px;
+	height: 20px;
 	display: grid;
 	place-items: center;
-	border-radius: 5px;
+	border-radius: 6px;
 	background: var(--surface);
 	color: var(--fg);
 	flex-shrink: 0;
 }
 .tlClipName {
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 500;
 	color: #fff;
 	white-space: nowrap;
@@ -1972,8 +1976,9 @@
 	text-overflow: ellipsis;
 }
 .tlClipDuration {
-	font: 500 10px/1.2 var(--font-mono);
-	color: rgba(255, 255, 255, 0.7);
+	font: 500 11px/1.2 var(--font-body);
+	font-variant-numeric: tabular-nums;
+	color: rgba(255, 255, 255, 0.75);
 	white-space: nowrap;
 	flex-shrink: 0;
 }
@@ -1986,7 +1991,7 @@
 	height: 26px;
 	display: grid;
 	place-items: center;
-	border-radius: 7px;
+	border-radius: 8px;
 	/* The chip itself is a fixed dark frosted-glass overlay regardless of
 	   theme (it sits on top of an arbitrary video thumbnail), so its icon
 	   needs the "light text on a dark overlay" token, not --muted — which
@@ -2098,7 +2103,7 @@
 	border: 0;
 	background: transparent;
 	color: var(--fg-2);
-	font-size: 11.5px;
+	font-size: 12px;
 	font-weight: 500;
 	border-radius: 7px;
 	cursor: pointer;
@@ -2156,7 +2161,7 @@
 	color: var(--fg);
 }
 .voiceoverBarTitle span {
-	font-size: 11px;
+	font-size: 12px;
 	color: var(--muted);
 }
 

@@ -211,6 +211,29 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 	if (probed.durationMs > 0) {
 		axcutDocument = applyProbedDuration(axcutDocument, primaryAssetId, probed.durationMs / 1000);
 	}
+	// The screen's dimensions, for the same reason as the camera's below: the pure migration
+	// cannot know them, and the scene's screen box, the output frame and Auto all read them off
+	// `asset.video`. Without them the CLI laid every recording out as 1920x1080 while sizing the
+	// export from the probe, two answers to one question.
+	if (probed.width > 0 && probed.height > 0) {
+		axcutDocument = {
+			...axcutDocument,
+			assets: axcutDocument.assets.map((asset) =>
+				asset.id === primaryAssetId
+					? {
+							...asset,
+							video: {
+								codec: "unknown",
+								fps: 0,
+								...asset.video,
+								width: probed.width,
+								height: probed.height,
+							},
+						}
+					: asset,
+			),
+		};
+	}
 
 	// The camera's dimensions decide the PiP's layout box, and this is the one caller the
 	// document cannot answer for: there is no editor session here to have probed and saved
@@ -247,11 +270,8 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 
 	// Output sizing mirrors the ExportDialog: crop-aware smallest clip on the
 	// timeline, normalized to the document's aspect ratio.
-	const probedAssetDims: Record<string, Dims> = {
-		[primaryAssetId]: { width: probed.width, height: probed.height },
-	};
 	const smallestSource =
-		pickExtremeDims(collectEffectiveClipDims(axcutDocument, probedAssetDims), "smallest") ??
+		pickExtremeDims(collectEffectiveClipDims(axcutDocument), "smallest") ??
 		({ width: probed.width, height: probed.height } as Dims);
 	const aspectRatioValue = resolveAspectRatioValue(
 		axcutDocument,

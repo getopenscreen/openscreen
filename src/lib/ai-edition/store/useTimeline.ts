@@ -661,7 +661,7 @@ export function useTimeline() {
 	// epoch, so there the stuck save can still land and the block correctly stays.
 	const unknownZoomSavesRef = useRef<Array<number>>([]);
 	const queueZoomWrite = useCallback(
-		(write: (doc: AxcutDocument) => Promise<boolean>) => {
+		(write: (doc: AxcutDocument, historyBase: AxcutDocument | undefined) => Promise<boolean>) => {
 			const epoch = currentWriteEpoch();
 			const projectId = useProjectStore.getState().projectId;
 			return enqueueZoomWrite(async () => {
@@ -673,7 +673,14 @@ export function useTimeline() {
 				}
 				const doc = useProjectStore.getState().document;
 				if (!doc) return false;
-				const save = write(doc);
+				// A focus drag not yet committed is on screen, so this write saves it too, and the
+				// commit will find nothing left to record. Its undo step reaches back to before
+				// the drag instead, or the drag could never be undone.
+				const historyBase =
+					doc === zoomFocusLiveRef.current
+						? (zoomFocusRollbackRef.current ?? undefined)
+						: undefined;
+				const save = write(doc, historyBase);
 				const outcome = await saveWithDeadline(save);
 				if (outcome === "timeout") {
 					// Unknown, not failed: the write may still land. Refuse later writes into
@@ -700,13 +707,13 @@ export function useTimeline() {
 	// Reports not-taken for an unknown answer too, so the buttons retry.
 	const saveZoomPatch = useCallback(
 		(id: string, patch: Partial<AxcutDocument["zoomRanges"][number]>) =>
-			queueZoomWrite((doc) =>
+			queueZoomWrite((doc, historyBase) =>
 				saveDocument(
 					{
 						...doc,
 						zoomRanges: patchPillById(doc.zoomRanges, id, patch) as AxcutDocument["zoomRanges"],
 					},
-					{ history: true },
+					{ history: true, historyBase },
 				),
 			).then((outcome) => outcome === true),
 		[queueZoomWrite, saveDocument],
@@ -720,7 +727,7 @@ export function useTimeline() {
 		(id: string, startMs: number, endMs: number) => {
 			const s = finiteMs(startMs);
 			const e = finiteMs(endMs);
-			return queueZoomWrite((doc) =>
+			return queueZoomWrite((doc, historyBase) =>
 				saveDocument(
 					{
 						...doc,
@@ -733,7 +740,7 @@ export function useTimeline() {
 							() => createId("zoom"),
 						) as AxcutDocument["zoomRanges"],
 					},
-					{ history: true },
+					{ history: true, historyBase },
 				),
 			);
 		},

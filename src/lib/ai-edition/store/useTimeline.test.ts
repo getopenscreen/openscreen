@@ -1380,6 +1380,30 @@ describe("useTimeline undo history", () => {
 		expect(future).toHaveLength(1);
 	});
 
+	// A zoom write that runs while a focus drag is on screen saves the dragged focus too, so the
+	// commit finds nothing left to record. That write's undo step has to reach back to before
+	// the drag, or no Ctrl+Z could ever bring the old focus back.
+	it("undoes a focus drag with the zoom write that saved it", async () => {
+		seed(docWithZoom);
+		const { result } = renderTimeline();
+
+		act(() => result.current.updateZoomFocusLive("zoom_a", { cx: 0.8, cy: 0.2 }));
+		await act(async () => {
+			await result.current.updateZoomDepth("zoom_a", 4);
+		});
+		await act(async () => {
+			await result.current.commitZoomFocus();
+		});
+
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
+			depth: 3,
+			focus: { cx: 0.5, cy: 0.5 },
+		});
+	});
+
 	// Rebase-review finding (queued zoom writes vs. document replacement): a zoom write
 	// queued behind a still-pending one starts AFTER an undo has restored the document,
 	// and must not apply its stale patch to the replacement. The in-flight write itself

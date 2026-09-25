@@ -92,6 +92,7 @@ import {
 	macSystemPickerEnabled,
 	markMacSystemPickerUnavailable,
 } from "../native-bridge/screen/macPickerSession";
+import { CompositorViewService } from "../native-bridge/services/compositorViewService";
 import { getMacPermissions, showPermissionsWindow } from "../permissions";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import {
@@ -4236,6 +4237,33 @@ export function registerIpcHandlers(
 				// A clip with no audio track lands here. Degrade quietly: the renderer
 				// draws no waveform, which is correct, and logs its own warning.
 				return { success: false, message: String(error) };
+			}
+		},
+	);
+
+	// The loudness-normalisation gain the export applies to a voice file, measured by the
+	// compositor over the whole file and cached there, so the preview plays the voice at the
+	// level the export writes it. `gainDb: 0` whenever there is nothing to apply — no addon, a
+	// file with no audio, a failed read — which is the preview as it played before.
+	const loudnessService = new CompositorViewService();
+	ipcMain.handle(
+		"get-loudness-gain",
+		async (
+			_,
+			filePath: string,
+		): Promise<{ success: boolean; gainDb: number; message?: string }> => {
+			try {
+				// Same approval gate as every other read of a renderer-supplied path.
+				const normalizedPath = readableApprovedPath(filePath);
+				if (!normalizedPath) {
+					return { success: false, gainDb: 0, message: "File path is not approved" };
+				}
+				return {
+					success: true,
+					gainDb: (await loudnessService.loudnessGainDb(normalizedPath)) ?? 0,
+				};
+			} catch (error) {
+				return { success: false, gainDb: 0, message: String(error) };
 			}
 		},
 	);

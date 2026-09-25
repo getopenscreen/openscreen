@@ -2214,7 +2214,24 @@ describe("buildSceneDescription.audioTracks", () => {
 				trimEndSec: 12,
 				fadeInSec: 0,
 				fadeOutSec: 0,
+				kind: "music",
 			},
+		]);
+	});
+
+	it("tells the mixer which tracks are voice, so a voiceover is levelled and a bed is not", () => {
+		// `mix_external_tracks` brings a voiceover to the loudness target like the recording's
+		// own audio and leaves music at the level the user set; the kind is how it knows.
+		const doc = makeDoc({
+			assets: [audioAsset],
+			audioTracks: [
+				track,
+				{ ...track, id: "vo1", kind: "voiceover" as const, startMs: 20_000, endMs: 25_000 },
+			],
+		});
+		expect(buildSceneDescription(doc).audioTracks.map((entry) => entry.kind)).toEqual([
+			"music",
+			"voiceover",
 		]);
 	});
 
@@ -2322,6 +2339,7 @@ describe("buildSceneDescription.audioTracks", () => {
 				trimEndSec: 8,
 				fadeInSec: 0,
 				fadeOutSec: 0,
+				kind: "music",
 			},
 		]);
 	});

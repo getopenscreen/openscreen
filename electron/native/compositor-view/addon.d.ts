@@ -205,6 +205,14 @@ export interface CompositorViewAddon {
 	 *  (dev trees keep a stale binary until the next `build-linux-compositor-addon.mjs`),
 	 *  and the caller degrades to "leave the file alone" rather than failing the save. */
 	remuxSeekable?(inputPath: string, outputPath: string): Promise<RemuxStats>;
+
+	/** Loudness-normalisation gain in dB that the export applies to this voice file (the
+	 *  recording's own audio, or a voiceover take), measured over the whole file. The
+	 *  preview applies the same number so it plays the voice at the exported level.
+	 *  0 for a file with no audio, only silence, or that cannot be read.
+	 *
+	 *  Optional for the same reason as `remuxSeekable`: a stale `.node` predates it. */
+	loudnessGainDb?(path: string): Promise<number>;
 }
 
 /**

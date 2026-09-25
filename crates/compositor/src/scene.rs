@@ -598,6 +598,20 @@ pub struct SceneAudioTrack {
     pub fade_in_sec: f64,
     #[serde(default)]
     pub fade_out_sec: f64,
+    /// A voiceover is voice: it is loudness-normalised like the recording's own audio.
+    /// A music bed is not. `#[serde(default)]` reads an older payload as music, which is
+    /// what every imported file was before voiceovers were recorded in the app.
+    #[serde(default)]
+    pub kind: SceneAudioTrackKind,
+}
+
+/// `AxcutAudioTrack["kind"]` on the app side.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SceneAudioTrackKind {
+    #[default]
+    Music,
+    Voiceover,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]

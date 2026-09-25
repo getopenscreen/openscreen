@@ -9,11 +9,12 @@ import {
 	timelineAudioFadeAt,
 } from "./VirtualPreview";
 
-/** Minimal stand-in: the function only ever touches `gain.gain.value`. */
+/** Minimal stand-in: the function only ever touches the two nodes' `gain.value`. */
 function fakeGraph(): PreviewAudioGraph {
 	return {
 		context: {} as AudioContext,
 		gain: { gain: { value: Number.NaN } } as GainNode,
+		voice: { gain: { value: Number.NaN } } as GainNode,
 	};
 }
 
@@ -82,6 +83,27 @@ describe("applyPreviewAudioSettings", () => {
 		applyPreviewAudioSettings(graph, [element], -6.0206);
 		expect(element.volume).toBe(0.25);
 		expect(graph.gain.gain.value).toBeCloseTo(0.5, 4);
+	});
+
+	it("levels the recording with the export's loudness gain, under the output trim", () => {
+		// The export multiplies each clip by `loudness_gain_db` of its file, then the whole
+		// mix by the trim. The preview has to play the same product, or the voice is heard
+		// at one level while editing and another in the file.
+		const graph = fakeGraph();
+		applyPreviewAudioSettings(graph, [], -6.0206, 9.5424);
+		expect(graph.voice.gain.value).toBeCloseTo(3, 3);
+		expect(graph.gain.gain.value).toBeCloseTo(0.5, 4);
+		// No measurement yet (or nothing to correct): unity, the file as recorded.
+		applyPreviewAudioSettings(graph, [], 0);
+		expect(graph.voice.gain.value).toBe(1);
+	});
+
+	it("folds the loudness gain into the element-volume fallback, still capped at unity", () => {
+		const element = { volume: Number.NaN } as HTMLAudioElement;
+		applyPreviewAudioSettings(null, [element], -12.0412, 6.0206);
+		expect(element.volume).toBeCloseTo(0.5, 4);
+		applyPreviewAudioSettings(null, [element], 0, 6.0206);
+		expect(element.volume).toBe(1);
 	});
 });
 

@@ -660,10 +660,12 @@ fn resolve_focus(region: &SceneZoomRegion, t: f32, cursor: Option<&CursorTrack>)
     }
     if region.focus_mode.as_deref() == Some("auto") {
         if let Some(track) = cursor {
-            // `follow_at`, pas `at` : la caméra suit la piste LISSÉE. Suivre la télémétrie brute
-            // donne un pan nerveux — l'étage de lissage de `cursorFollowUtils.ts` manquait au
-            // portage.
-            if let Some((cx, cy)) = track.follow_at(t) {
+            // La piste LISSÉE, avec une zone morte au centre de la vue zoomée (`follow_in_view`) :
+            // la vue ne bouge que quand le pointeur en sort. Suivre la télémétrie brute, ou chaque
+            // petit geste, donne un pan nerveux. Le filtre part du début de l'ease-in de la région,
+            // un instant fixe : preview et export rejouent la même chose.
+            let t0 = region.start_sec as f32 - zoom_transition_s(region.scale);
+            if let Some((cx, cy)) = track.follow_in_view(t0, t, region.scale) {
                 return [cx, cy];
             }
         }
@@ -1454,11 +1456,12 @@ mod zoom_focus_tests {
         let track = CursorTrack::new(vec![(3.0, 0.8, 0.2), (4.0, 0.9, 0.1)], Vec::new(), Vec::new());
         let mut r = region(1.5, 0.1);
         r.focus_mode = Some("auto".into());
-        let last = track.follow_at(4.0).unwrap();
+        let t0 = r.start_sec as f32 - zoom_transition_s(r.scale);
+        let last = track.follow_in_view(t0, 4.0, r.scale).unwrap();
         for t in [4.5f32, 6.0, 7.9] {
             assert_eq!(resolve_focus(&r, t, Some(&track)), [last.0, last.1], "t = {t}");
         }
-        let first = track.follow_at(3.0).unwrap();
+        let first = track.follow_in_view(t0, 2.1, r.scale).unwrap();
         assert_eq!(resolve_focus(&r, 2.1, Some(&track)), [first.0, first.1]);
     }
 

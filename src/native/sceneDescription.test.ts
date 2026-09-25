@@ -1207,6 +1207,15 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(buildSceneDescription(high).layout.webcamSize).toBeCloseTo(0.35, 5);
 	});
 
+	it("carries the camera's anchor, the point its zoom-time shrink keeps fixed", () => {
+		expect(buildSceneDescription(makeDoc({})).layout.webcamAnchor).toBe("bottom-right");
+		const top = makeDoc({ legacyEditor: { webcamAnchor: "top" } });
+		expect(buildSceneDescription(top).layout.webcamAnchor).toBe("top");
+		// An older project stored a free position: it reads as the anchor nearest to it.
+		const legacy = makeDoc({ legacyEditor: { webcamPosition: { cx: 0.1, cy: 0.9 } } });
+		expect(buildSceneDescription(legacy).layout.webcamAnchor).toBe("bottom-left");
+	});
+
 	it("keeps the flat cursor for an older project and carries the 3D cursor switch", () => {
 		expect(buildSceneDescription(makeDoc({ legacyEditor: {} })).cursor.model3d).toBe(false);
 		const on = makeDoc({ legacyEditor: { cursorModel3d: true } });

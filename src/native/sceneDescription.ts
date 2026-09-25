@@ -60,7 +60,7 @@ import {
 	webcamSizeToFraction,
 } from "@/lib/compositeLayout";
 import { parseCssGradient, resolveLinearGradientAngle } from "@/lib/exporter/gradientParser";
-import type { FrameTheme, RecordingFrame } from "@/lib/projectDefaults";
+import type { FrameTheme, RecordingFrame, WebcamAnchor } from "@/lib/projectDefaults";
 import { resolveTextFontFamily } from "@/lib/textFonts";
 import type { CompositorClipInput } from "./contracts";
 import { ROUNDNESS_REFERENCE_PX } from "./paramUnits";
@@ -278,6 +278,12 @@ export interface SceneLayout {
 	webcamPosition: { cx: number; cy: number } | null;
 	/** Webcam shrinks while a zoom region is active. */
 	webcamReactiveZoom: boolean;
+	/**
+	 * Picture-in-picture: the corner or edge middle the camera is anchored to, at a constant
+	 * margin from the border (`computeCompositeLayout`). The zoom-time shrink keeps that anchor
+	 * fixed, so a corner camera keeps its margin to both edges.
+	 */
+	webcamAnchor: WebcamAnchor;
 	/** User-authored webcam framing, as fractions of the camera source. */
 	webcamCrop: { x: number; y: number; width: number; height: number };
 	/**
@@ -1158,6 +1164,7 @@ export function buildSceneDescription(
 				settings.webcamLayoutPreset,
 				settings.webcamReactiveZoom,
 			),
+			webcamAnchor: settings.webcamAnchor,
 			webcamCrop: settings.webcamCropRegion,
 			webcamRect,
 			screenRect,

@@ -102,7 +102,7 @@ As legendas são embutidas no vídeo. O OpenScreen não grava nenhum arquivo `.s
 
 ## 8. Exporte {#8-export}
 
-**Escolha o formato.** O controle **Formato** na aba **Composição** oferece 16:9 (o padrão), 9:16, 1:1, 4:3, 4:5, 16:10, 10:16 ou a proporção original dos seus clipes.
+**Escolha o formato.** O controle **Formato** na aba **Composição** oferece **Auto** (o padrão), que ajusta o quadro à gravação, ao layout da câmera e ao espaçamento, depois 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16 ou a proporção original dos seus clipes.
 
 **Exporte.** Clique em **Exportar** na barra superior:
 

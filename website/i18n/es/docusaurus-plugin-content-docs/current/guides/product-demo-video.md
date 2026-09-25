@@ -102,7 +102,7 @@ Los subtítulos se incrustan en el video. OpenScreen no escribe ningún archivo 
 
 ## 8. Exporta {#8-export}
 
-**Elige la proporción.** El control **Formato** del panel **Composición** ofrece 16:9 (la predeterminada), 9:16, 1:1, 4:3, 4:5, 16:10, 10:16 o la forma original de tus clips.
+**Elige la proporción.** El control **Formato** del panel **Composición** ofrece **Auto** (la predeterminada), que adapta el cuadro a tu grabación, a la disposición de cámara y al relleno, luego 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16 o la forma original de tus clips.
 
 **Exporta.** Haz clic en **Exportar** en la barra superior:
 

@@ -42,7 +42,7 @@ Os clipes são sempre contíguos — sem lacunas, sem sobreposições. Remover o
 
 ## Tamanho de saída {#output-size}
 
-O controle **Formato** na aba **Composição** define a proporção do quadro; **Original** lista as proporções reais dos clipes do projeto. Cada clipe é encaixado nesse quadro, então misturar uma gravação de tela 16:9 com uma captura de celular 9:16 na mesma linha do tempo funciona — a resolução gerada está em [Exportação](./export.md#resolution).
+O controle **Formato** na aba **Composição** define a proporção do quadro; **Original** lista as proporções reais dos clipes do projeto, e **Auto** molda o quadro em volta do maior deles. Cada clipe é encaixado nesse quadro, então misturar uma gravação de tela 16:9 com uma captura de celular 9:16 na mesma linha do tempo funciona — a resolução gerada está em [Exportação](./export.md#resolution).
 
 ## Como começar um projeto {#starting-a-project}
 

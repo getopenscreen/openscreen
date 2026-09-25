@@ -102,7 +102,7 @@ Untertitel werden ins Video eingebrannt. OpenScreen schreibt keine `.srt`- oder 
 
 ## 8. Exportieren {#8-export}
 
-**Format wählen.** Die Einstellung **Format** im Tab **Composition** bietet 16:9 (Standard), 9:16, 1:1, 4:3, 4:5, 16:10, 10:16 oder die ursprüngliche Form deiner Clips.
+**Format wählen.** Die Einstellung **Format** im Tab **Composition** bietet **Auto** (Standard), bei dem sich das Bild an deine Aufnahme, das Webcam-Layout und den Innenabstand anpasst, dann 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16 oder die ursprüngliche Form deiner Clips.
 
 **Exportieren.** Klicke in der oberen Leiste auf **Export**:
 

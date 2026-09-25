@@ -30,7 +30,7 @@ A floating icon rail sits over the preview. Five facets:
 
 | Facet | What it controls |
 |---|---|
-| **Composition** | A background section (image, solid color, or gradient behind your recording; upload your own image or pick from presets), then background blur, shadow, motion blur, corner roundness, and padding. Its **Format** row sets the output shape for preview and export: your clips' own shapes under **Original**, plus 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, and 10:16. |
+| **Composition** | A background section (image, solid color, or gradient behind your recording; upload your own image or pick from presets), then background blur, shadow, motion blur, corner roundness, and padding. Its **Format** row sets the output shape for preview and export: **Auto** (the default), which wraps the frame around your recording and camera layout with an even padding border, your clips' own shapes under **Original**, plus 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, and 10:16. |
 | **Camera layout** | Webcam composite: picture-in-picture, vertical stack, dual frame, or no webcam. Mirror, "shrink on zoom," camera shape (rectangle/circle/square/rounded), and size. Drag the webcam bubble directly on the canvas to reposition it. |
 | **Audio** | The output level, applied the same way in the preview and the export. |
 | **Cursor** | Only meaningful for recordings made in the editable cursor mode, on Windows, macOS, or Linux. Show/hide, clip-to-canvas, a strip of cursor themes, and sliders for size, smoothing, motion blur, and click bounce. |

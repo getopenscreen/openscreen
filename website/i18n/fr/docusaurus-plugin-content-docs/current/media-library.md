@@ -42,7 +42,7 @@ Les clips sont toujours contigus : ni trous, ni chevauchements. Si vous en supp
 
 ## Taille de sortie {#output-size}
 
-Le réglage **Format** de l'onglet **Composition** définit la forme du cadre ; **Original** liste les formes réelles des clips de votre projet. Chaque clip est ajusté dans ce cadre : vous pouvez donc mélanger un enregistrement d'écran 16:9 et une capture de téléphone 9:16 dans une même timeline. Voir [Export](./export.md#resolution) pour la résolution obtenue.
+Le réglage **Format** de l'onglet **Composition** définit la forme du cadre ; **Original** liste les formes réelles des clips de votre projet, et **Auto** ajuste le cadre autour du plus grand. Chaque clip est ajusté dans ce cadre : vous pouvez donc mélanger un enregistrement d'écran 16:9 et une capture de téléphone 9:16 dans une même timeline. Voir [Export](./export.md#resolution) pour la résolution obtenue.
 
 ## Démarrer un projet {#starting-a-project}
 

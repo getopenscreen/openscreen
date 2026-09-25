@@ -187,9 +187,12 @@ assertListsMatch(electronLanguages, expectedElectronLanguages, "electronLanguage
 // files with each other, so a t("rec.selectSource") that no locale defines passes it.
 // On a miss, translate() (src/i18n/loader.ts) renders the raw "editor.rec.selectSource"
 // marker, and component tests mock t to echo the key, so nothing else catches it either.
-// A key counts when it resolves, in one of the namespaces its file scopes with useScopedT,
-// to a string (or to i18next's _one/_other plural forms). Dynamic keys (template literals,
-// variables) can't be read statically and are skipped.
+// A key counts when it resolves to a string (or to i18next's _one/_other plural forms) in the
+// namespace of the translator that asks for it: the nearest `const <name> = useScopedT("ns")`
+// above the call, since one file often holds several components binding the same name to
+// different namespaces. A name the file binds only further down counts against every namespace
+// it binds; one it never binds (a prop, a parameter) against every namespace the file scopes.
+// Dynamic keys (template literals, variables) can't be read statically and are skipped.
 const SRC_DIR = path.resolve("src");
 const baseByNamespace = Object.fromEntries(
 	namespaces.map((ns) => [
@@ -219,15 +222,24 @@ for (const file of sourceFiles) {
 		...new Set([...source.matchAll(/useScopedT\(\s*"(\w+)"\s*\)/g)].map((m) => m[1])),
 	];
 	if (scopes.length === 0) continue;
-	for (const match of source.matchAll(/\bt[A-Z]?\w*\(\s*"([\w.-]+)"/g)) {
-		const key = match[1];
+	const bindings = [
+		...source.matchAll(/\b(?:const|let|var)\s+(\w+)\s*=\s*useScopedT\(\s*"(\w+)"\s*\)/g),
+	].map((m) => ({ name: m[1], ns: m[2], at: m.index }));
+	for (const match of source.matchAll(/\b(t[A-Z]?\w*)\(\s*"([\w.-]+)"/g)) {
+		const [, callee, key] = match;
 		checkedKeyCount++;
-		if (scopes.some((ns) => baseByNamespace[ns] && resolvesToString(baseByNamespace[ns], key))) {
+		const own = bindings.filter((b) => b.name === callee);
+		const nearest = own.filter((b) => b.at < match.index).at(-1);
+		const candidates = nearest ? [nearest.ns] : own.length > 0 ? own.map((b) => b.ns) : scopes;
+		if (
+			candidates.some((ns) => baseByNamespace[ns] && resolvesToString(baseByNamespace[ns], key))
+		) {
 			continue;
 		}
 		const line = source.slice(0, match.index).split("\n").length;
 		const where = path.join("src", file).split(path.sep).join("/");
-		console.error(`MISSING in ${BASE_LOCALE}: ${where}:${line} ${key} [${scopes.join(", ")}]`);
+		const tried = [...new Set(candidates)].join(", ");
+		console.error(`MISSING in ${BASE_LOCALE}: ${where}:${line} ${callee}("${key}") [${tried}]`);
 		hasErrors = true;
 	}
 }

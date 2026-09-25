@@ -32,7 +32,7 @@ struct Layer {
 
 @group(0) @binding(0) var<uniform> layer: Layer;
 @group(0) @binding(1) var texY:  texture_2d<f32>;   // R8Unorm, sample .r ; modes 7, 13 et 15 : le sprite RGBA
-@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r ; mode 15 : le champ R16F du sprite
+@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r ; mode 15 : distance + relief RG16F
 @group(0) @binding(3) var samp:  sampler;
 // Masque de segmentation du sujet webcam, R8. Une vue 1x1 est liee quand aucun masque
 // n'existe : la branche n'est de toute facon prise que si layer.fx.z > 0.5.
@@ -447,10 +447,10 @@ fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<
 // le plan de l'ecran. Constantes : miroir exact de `frame_geometry.rs` (MODEL_*), emplacements du
 // cbuffer : `cursor_model_cb`.
 // Textures : le sprite RGBA (alpha droit) au binding 1 (`texY`, comme aux modes 7 et 13), son
-// champ R16F au binding 2 (`texU`), sur le meme rect ; `color.rg` = coin du sprite dans le repere
-// du modele, `sprite_size()` = sa taille (w/h dans `radius_px`), `color.b` = un texel du sprite (unites
-// du modele).
+// champ RG16F au binding 2 (`texU`), sur le meme rect ; `color.rg` = coin du sprite dans le repere
+// du modele, `sprite_size()` = sa taille (w/h dans `radius_px`), `color.b` = l'ecrasement au clic.
 const MODEL_THICK: f32 = 0.19;
+const MODEL_RELIEF_MAX: f32 = 0.12;
 const MODEL_BEVEL: f32 = 0.045;
 const MODEL_LIGHT = vec3<f32>(-0.4194, -0.5792, 0.6990);
 const MODEL_AMBIENT: f32 = 0.36;
@@ -491,9 +491,19 @@ fn sd_sprite2(p: vec2<f32>) -> f32 {
     return select(d, sqrt(out2 + e * e), out2 > 0.0);
 }
 
+fn model_top_height(p: vec2<f32>) -> f32 {
+    let lo = layer.color.rg;
+    let c = clamp(p, lo, lo + sprite_size());
+    let relief = textureSampleLevel(texU, samp, (c - lo) / sprite_size(), 0.0).g;
+    return clamp(relief * layer.color.b, 0.0, MODEL_RELIEF_MAX);
+}
+
 fn sd_model(p: vec3<f32>) -> f32 {
-    let half_t = model_thick() * 0.5;
-    let w = vec2<f32>(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z + half_t) - (half_t - MODEL_BEVEL));
+    let top = model_top_height(p.xy);
+    let thick = model_thick();
+    let half_t = (top + thick) * 0.5;
+    let center_z = (top - thick) * 0.5;
+    let w = vec2<f32>(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z - center_z) - (half_t - MODEL_BEVEL));
     return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0))) - MODEL_BEVEL;
 }
 
@@ -594,7 +604,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     let unit = layer.src.w;
     let tip = layer.src_prev.xyz;
     let lo = vec3<f32>(layer.color.rg, -model_thick());
-    let hi = vec3<f32>(layer.color.rg + sprite_size(), 0.0);
+    let hi = vec3<f32>(layer.color.rg + sprite_size(), MODEL_RELIEF_MAX);
 
     let dw = vec3<f32>(local + layer.src.xy, -persp);
     let dlen = length(dw);

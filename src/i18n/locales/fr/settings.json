@@ -414,7 +414,7 @@
 		"smoothing": "Lissage",
 		"clickBounce": "Rebond au clic",
 		"model3d": "Curseur 3D",
-		"model3dHint": "Style par défaut : toutes les formes du curseur passent en 3D. Les autres styles restent plats.",
+		"model3dHint": "Chaque style de curseur adopte un volume 3D adapté à son design.",
 		"model3dNeedsCursor": "Activez « Afficher le curseur » pour utiliser le curseur 3D.",
 		"help": "Rendu du curseur à partir de la télémétrie enregistrée : thème, taille, lissage, flou de mouvement et rebond au clic.",
 		"size": "Taille",

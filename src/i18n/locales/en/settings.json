@@ -373,7 +373,8 @@
 		},
 		"level": "Zoom level",
 		"previewHold": "Hold to preview zoom effect",
-		"customScale": "Custom Zoom",
+		"customScale": "Custom zoom",
+		"customScaleRange": "Zoom goes from {{min}}× to {{max}}×",
 		"selectRegion": "Select a zoom region to adjust",
 		"cursor": {
 			"title": "Cursor",

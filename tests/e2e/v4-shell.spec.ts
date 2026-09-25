@@ -287,7 +287,7 @@ test.describe("v4 editor shell", () => {
 		await page.locator('[class*="lanePill"][title="1.80×"]').first().click();
 
 		const levels = page.getByRole("group", { name: "Zoom Level" }).getByRole("button");
-		await expect(levels).toHaveCount(6);
+		await expect(levels).toHaveCount(4);
 
 		// One row inside the 300px pane, with every label intact: the reason this control
 		// stacks its own label instead of sitting in a `paneRow` like its neighbours.
@@ -312,21 +312,28 @@ test.describe("v4 editor shell", () => {
 			);
 		expect(await depth()).toBe(3);
 
-		await levels.nth(3).focus(); // 2.2×, depth 4
+		await levels.nth(2).focus(); // 2.2×, depth 4
 		await page.keyboard.press("Space");
 		await expect.poll(depth).toBe(4);
-		await expect(levels.nth(3)).toBeFocused();
+		await expect(levels.nth(2)).toBeFocused();
 
 		// Arrows step from the focused level, not from the selected one: every level is a
-		// Tab stop, so ArrowRight on the last button has nowhere to go — and must not throw
+		// Tab stop, so ArrowLeft on the first button has nowhere to go — and must not throw
 		// focus back across the row to wherever the selection happens to be.
-		await levels.nth(5).focus();
-		await page.keyboard.press("ArrowRight");
-		await expect(levels.nth(5)).toBeFocused();
-		expect(await depth()).toBe(4);
+		await levels.nth(0).focus();
 		await page.keyboard.press("ArrowLeft");
-		await expect.poll(depth).toBe(5);
-		await expect(levels.nth(4)).toBeFocused();
+		await expect(levels.nth(0)).toBeFocused();
+		expect(await depth()).toBe(4);
+		await page.keyboard.press("ArrowRight");
+		await expect.poll(depth).toBe(3);
+		await expect(levels.nth(1)).toBeFocused();
+
+		// Any other level goes through the free field, and then no preset is pressed.
+		const custom = page.getByRole("textbox", { name: "Custom zoom" });
+		await custom.fill("2.5");
+		await custom.press("Enter");
+		await expect(page.locator('[class*="lanePill"][title="2.50×"]')).toHaveCount(1);
+		await expect(levels.and(page.locator('[aria-pressed="true"]'))).toHaveCount(0);
 	});
 
 	test("clicking outside the clip picker popover closes it", async ({ page }) => {

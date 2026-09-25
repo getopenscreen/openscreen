@@ -374,6 +374,7 @@
 		"level": "Yakınlaştırma Seviyesi",
 		"previewHold": "Yakınlaştırma efektini önizlemek için basılı tutun",
 		"customScale": "Özel Yakınlaştırma",
+		"customScaleRange": "Yakınlaştırma {{min}}× ile {{max}}× arasında olabilir",
 		"selectRegion": "Ayarlamak için bir yakınlaştırma bölgesi seçin",
 		"cursor": {
 			"title": "İmleç",

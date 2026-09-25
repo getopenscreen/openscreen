@@ -374,6 +374,7 @@
 		"level": "缩放级别",
 		"previewHold": "按住预览放大效果",
 		"customScale": "自定义缩放",
+		"customScaleRange": "缩放范围为 {{min}}× 到 {{max}}×",
 		"selectRegion": "选择要调整的缩放区域",
 		"cursor": {
 			"title": "光标",

@@ -10,6 +10,7 @@ vi.mock("@/contexts/I18nContext", () => ({
 
 vi.mock("../RightPanes", () => ({
 	AudioPane: () => <div data-testid="audio-pane">AudioPane</div>,
+	ChoiceRow: () => <div data-testid="choice-row">ChoiceRow</div>,
 	AudioTrackPane: ({ onClose }: { onClose?: () => void }) => (
 		<div data-testid="audio-track-pane">
 			AudioTrackPane

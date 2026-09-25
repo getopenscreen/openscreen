@@ -393,7 +393,7 @@
 	},
 	"audio": {
 		"outputGain": "Çıkış seviyesi",
-		"help": "Ses çıkış seviyesini ayarlayın. Önizlemede ve dışa aktarmada aynı şekilde uygulanır.",
+		"help": "Sesler otomatik olarak standart bir ses yüksekliğine getirilir. Çıkış seviyesini buradan ayarlayın; önizlemede ve dışa aktarmada aynı şekilde uygulanır.",
 		"reset": "Sesi sıfırla",
 		"title": "Ses"
 	},

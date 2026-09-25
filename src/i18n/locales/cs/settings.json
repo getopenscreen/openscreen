@@ -393,7 +393,7 @@
 	},
 	"audio": {
 		"outputGain": "Výstupní úroveň",
-		"help": "Upravte výstupní úroveň zvuku. Aplikuje se stejně v náhledu i při exportu.",
+		"help": "Hlas se automaticky vyrovná na standardní hlasitost. Výstupní úroveň upravte od ní; aplikuje se stejně v náhledu i při exportu.",
 		"reset": "Obnovit zvuk",
 		"title": "Zvuk"
 	},

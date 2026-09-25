@@ -373,6 +373,11 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		getLoudnessGain: (filePath: string) => Promise<{
+			success: boolean;
+			gainDb: number;
+			message?: string;
+		}>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
 		saveProjectFile: (
 			projectData: unknown,

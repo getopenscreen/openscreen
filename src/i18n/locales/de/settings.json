@@ -393,7 +393,7 @@
 	},
 	"audio": {
 		"outputGain": "Ausgangspegel",
-		"help": "Passe den Audio-Ausgangspegel an. Er gilt in der Vorschau und im Export identisch.",
+		"help": "Stimmen werden automatisch auf eine Standardlautheit gebracht. Passe den Ausgangspegel davon ausgehend an; er gilt in der Vorschau und im Export identisch.",
 		"reset": "Audio zurücksetzen",
 		"title": "Audio"
 	},

@@ -39,7 +39,7 @@ import {
 	readSpeedRegions,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
-import type { AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
+import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
@@ -457,17 +457,19 @@ export interface SceneDescription {
 	speedRegions: SceneSpeedRegion[];
 	cursor: SceneCursor;
 	/**
-	 * Audio finishing, applied identically by the preview and by `finish_audio` (Rust).
+	 * Audio finishing: the output trim, applied identically by the preview and by
+	 * `finish_audio` (Rust).
 	 *
 	 * One field, and it takes some resisting to keep it that way. The preview plays the
 	 * untouched SOURCE file, seeked; the export runs on the assembled timeline — trimmed,
 	 * speed-adjusted, concatenated. A linear gain is the only operation that means the same
-	 * thing on both. Anything with memory (a filter, a compressor) diverges across cuts;
-	 * anything measured over the whole programme (a loudness normaliser) cannot be computed
-	 * preview-side at all; and even a plain delay diverges, because the preview would apply
-	 * it in source seconds while this applies it in timeline seconds — a 2x speed region
-	 * halves it, and near a cut the export pulls audio across the junction while the preview
-	 * only has the active asset. A sync offset shipped here and was removed for exactly that.
+	 * thing on both. That is why the loudness normalisation is not a field here: it is a gain
+	 * per voice FILE, measured over the whole file by the compositor, which the export and
+	 * the preview both ask for (`loudness_gain_db`). Anything with memory diverges across
+	 * cuts — the export's peak limiter is the one such stage, and it runs at export only —
+	 * and even a plain delay diverges, because the preview would apply it in source seconds
+	 * while this applies it in timeline seconds. A sync offset shipped here and was removed
+	 * for exactly that.
 	 */
 	audio: {
 		gainDb: number;
@@ -496,6 +498,8 @@ export interface SceneDescription {
 		 *  start and end, so it fades once rather than at every cut or repeat. */
 		fadeInSec: number;
 		fadeOutSec: number;
+		/** A voiceover is voice: the export levels it like the recording's own audio. */
+		kind: AxcutAudioTrack["kind"];
 	}>;
 	/**
 	 * Per-clip screen crop (fractions of the frame), or null for the identity
@@ -682,6 +686,7 @@ export function buildSceneDescription(
 			gainDb: track.gainDb,
 			fadeInSec: track.fadeInMs / 1000,
 			fadeOutSec: track.fadeOutMs / 1000,
+			kind: track.kind,
 		};
 		// The window the file has left after the offset. Without a probed duration
 		// there is nothing to loop over and nothing to cap the tail with, so the

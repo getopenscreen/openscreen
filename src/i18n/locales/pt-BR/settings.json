@@ -393,7 +393,7 @@
 	},
 	"audio": {
 		"outputGain": "Nível de saída",
-		"help": "Ajuste o nível de saída do áudio. Ele se aplica da mesma forma na prévia e na exportação.",
+		"help": "As vozes são niveladas automaticamente a uma loudness padrão. Ajuste o nível de saída a partir daí; ele se aplica da mesma forma na prévia e na exportação.",
 		"reset": "Redefinir áudio",
 		"title": "Áudio"
 	},

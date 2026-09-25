@@ -824,3 +824,32 @@ pub fn remux_seekable(input_path: String, output_path: String) -> AsyncTask<Remu
         output_path,
     })
 }
+
+pub struct LoudnessGainTask {
+    path: String,
+}
+
+impl Task for LoudnessGainTask {
+    type Output = f64;
+    type JsValue = f64;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        Ok(f64::from(openscreen_compositor::audio::loudness_gain_db(&self.path)))
+    }
+
+    fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out)
+    }
+}
+
+/// Le gain de normalisation de loudness (dB) que l'export applique à ce fichier voix — le
+/// même nombre, par la même fonction, pour que la preview de l'éditeur joue la voix au
+/// niveau où l'export l'écrira. Voir `openscreen_compositor::audio::loudness_gain_db`.
+///
+/// `AsyncTask` : la mesure décode tout l'audio du fichier, ce qui se compte en secondes sur
+/// un long enregistrement. Le résultat est mis en cache dans le processus, donc l'export qui
+/// suit ne le refait pas.
+#[napi]
+pub fn loudness_gain_db(path: String) -> AsyncTask<LoudnessGainTask> {
+    AsyncTask::new(LoudnessGainTask { path })
+}

@@ -135,8 +135,13 @@ export function useTimeline() {
 	// was never written.
 	const zoomFocusRollbackRef = useRef<AxcutDocument | null>(null);
 	const zoomFocusLiveRef = useRef<AxcutDocument | null>(null);
-	// And the focus drag's last value, which its commit puts back if a zoom write lands over it.
-	const zoomFocusEditRef = useRef<{ id: string; focus: { cx: number; cy: number } } | null>(null);
+	// And the focus drag's last value, which its commit puts back if a zoom write lands over it,
+	// with the write epoch it was made in.
+	const zoomFocusEditRef = useRef<{
+		id: string;
+		focus: { cx: number; cy: number };
+		epoch: number;
+	} | null>(null);
 	const annotationRollbackRef = useRef<AxcutDocument | null>(null);
 	const annotationLiveRef = useRef<AxcutDocument | null>(null);
 
@@ -752,7 +757,11 @@ export function useTimeline() {
 			// behind when the commit failed and rolled the document back to that very
 			// document — a Ctrl+Z that visibly did nothing, with `future` already wiped.
 			if (zoomFocusLiveRef.current !== doc) zoomFocusRollbackRef.current = doc;
-			const edit = { id, focus: { cx: finiteFraction(focus.cx), cy: finiteFraction(focus.cy) } };
+			const edit = {
+				id,
+				focus: { cx: finiteFraction(focus.cx), cy: finiteFraction(focus.cy) },
+				epoch: currentWriteEpoch(),
+			};
 			const next: AxcutDocument = {
 				...doc,
 				zoomRanges: patchPillById(doc.zoomRanges, id, {
@@ -774,7 +783,10 @@ export function useTimeline() {
 		// place of the dragged one.
 		const live = zoomFocusLiveRef.current;
 		const rollback = zoomFocusRollbackRef.current;
-		const edit = zoomFocusEditRef.current;
+		// A drag abandoned before an undo or a replacement is not this commit's to put back: the
+		// document it was made on is gone, and restoring its focus would undo the undo.
+		const pendingEdit = zoomFocusEditRef.current;
+		const edit = pendingEdit?.epoch === currentWriteEpoch() ? pendingEdit : null;
 		zoomFocusRollbackRef.current = null;
 		zoomFocusLiveRef.current = null;
 		zoomFocusEditRef.current = null;

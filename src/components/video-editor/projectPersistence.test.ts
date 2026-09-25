@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
+import { DEFAULT_WALLPAPER } from "@/lib/wallpaper";
 import {
 	createProjectData,
 	createProjectSnapshot,
@@ -320,6 +321,6 @@ describe("wallpaper legacy normalization", () => {
 		const normalized = normalizeProjectEditor({
 			wallpaper: "file:///opt/Openscreen/resources/wallpapers/wallpaper99.jpg",
 		});
-		expect(normalized.wallpaper).toBe("/wallpapers/wallpaper1.jpg");
+		expect(normalized.wallpaper).toBe(DEFAULT_WALLPAPER);
 	});
 });

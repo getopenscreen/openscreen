@@ -205,7 +205,7 @@ export interface ProjectAppearanceDefaults {
 
 /** The factory appearance every new project starts from. */
 export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
-	wallpaper: "/wallpapers/wallpaper1.jpg",
+	wallpaper: "/wallpapers/wallpaper11.jpg",
 	wallpaperMotion: "none",
 	frame: "none",
 	frameTheme: "light",
@@ -227,7 +227,7 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamSizePreset: 25,
 	webcamAnchor: "bottom-right",
 	webcamBackgroundMode: "none",
-	webcamWallpaper: "/wallpapers/wallpaper1.jpg",
+	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
 	webcamBlurIntensity: 0.5,
 	cursor: {
 		size: 3,

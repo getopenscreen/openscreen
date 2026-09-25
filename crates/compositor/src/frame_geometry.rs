@@ -1816,6 +1816,21 @@ impl FrameGeometry {
         }
     }
 
+    /// `mb.w` du mode 0 de l'écran droit : `screen_square_top`, ou -1 quand les BORDS du cadre
+    /// suivent le flou de mouvement. Le quad s'étend alors à la trace (`dst_prev`) et la
+    /// couverture des coins est moyennée sur les taps comme l'image : sans ça, sur un zoom avec
+    /// padding, le contenu file dans un cadre aux bords nets. Pas sous un masque de bloc (la case
+    /// ne bouge pas, seul le métrage bouge dedans) ni sous le chrome de fenêtre, qui est un calque
+    /// à part et resterait net.
+    pub fn screen_mb_w(&self) -> f32 {
+        let square_top = self.screen_square_top();
+        if square_top > 0.0 || self.screen_mask.is_some() {
+            square_top
+        } else {
+            -1.0
+        }
+    }
+
     /// Sous le chrome de fenêtre, de combien son contour INTÉRIEUR remonte au-dessus du bord haut
     /// de l'écran, en px de l'écran droit : la barre de titre moins le filet. 0 ailleurs.
     ///
@@ -3965,6 +3980,8 @@ mod tests {
             assert!(none.window_frame.is_none());
             assert!(none.window_frame_cb(RENDER).is_none());
             assert_eq!(none.screen_square_top(), 0.0);
+            // Sans cadre ni masque, les bords de l'écran suivent le flou de mouvement.
+            assert_eq!(none.screen_mb_w(), -1.0);
             let s_px = [none.s_dst[2] * RENDER[0], none.s_dst[3] * RENDER[1]];
             let expected = match none.screen_tilt_in(RENDER) {
                 None => ShadowCaster::Upright { dst: none.s_dst, size_px: s_px, radius: none.s_radius },
@@ -4024,6 +4041,7 @@ mod tests {
                 let wf = g.window_frame.expect("un cadre");
                 assert_eq!(wf.dark, dark);
                 assert_eq!(g.screen_square_top(), 1.0);
+                assert_eq!(g.screen_mb_w(), 1.0, "sous le chrome, les bords restent nets");
                 assert_eq!(g.s_dst.map(f32::to_bits), old.s_dst.map(f32::to_bits), "le cadre a touché au métrage");
                 assert_eq!(g.cut, old.cut, "le cadre a recadré la source");
                 let ShadowCaster::Upright { dst: outer, size_px, radius } = g.shadow_caster(RENDER) else {

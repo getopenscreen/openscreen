@@ -2220,7 +2220,6 @@ impl Compositor {
         if let Some(cb) = g.window_frame_cb([rw, rh]) {
             self.draw_solid(enc, &cb);
         }
-        let square_top = g.screen_square_top();
         let top_lift = g.screen_top_lift_px([rw, rh]);
         let [su0, sv0, su1, sv1] = g.cut;
         // Sous le masque d'un layout en bloc, rogné au slot (`FrameGeometry::mask_flat_screen`).
@@ -2238,7 +2237,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0, sv0, su1, sv1],
                     dst_prev: g.s_dst_prev,
-                    mb: [g.mb_taps, g.mb_amount, top_lift, square_top],
+                    mb: [g.mb_taps, g.mb_amount, top_lift, g.screen_mb_w()],
                     ..Default::default()
                 },
                 &sy,

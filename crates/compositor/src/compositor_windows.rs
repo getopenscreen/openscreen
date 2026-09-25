@@ -1956,7 +1956,6 @@ impl Compositor {
         if let Some(cb) = g.window_frame_cb(render_px) {
             self.draw_solid(&cb);
         }
-        let square_top = g.screen_square_top();
         // Sous le chrome de fenetre, la remontee de son contour interieur au-dessus de l'ecran :
         // l'arrondi du haut se fait par le cadre (`screen_top_lift_px`). 0 sans fenetre.
         let top_lift = g.screen_top_lift_px(render_px);
@@ -2006,7 +2005,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
                     dst_prev: s_dst_prev,
-                    mb: [mb_taps, mb_amount, top_lift, square_top],
+                    mb: [mb_taps, mb_amount, top_lift, g.screen_mb_w()],
                     ..Default::default()
                 },
                 &sy,

@@ -5,7 +5,6 @@
 		"motionDrift": "Dérive",
 		"motionAurora": "Aurore",
 		"motionWaves": "Vagues",
-		"motionGradientOnly": "L'animation ne s'applique qu'aux fonds dégradés. Choisissez un dégradé pour l'animer.",
 		"gradientLabel": "Dégradé {{index}}",
 		"uploadCustom": "Téléverser une image",
 		"unsupportedImage": "Image non prise en charge. Utilisez un fichier JPG ou PNG.",

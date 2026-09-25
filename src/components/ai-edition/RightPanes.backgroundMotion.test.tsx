@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // The background animation control moves only what the compositor draws as a gradient. On any
-// other wallpaper it must be dead and say why, not hold a choice that changes nothing on screen.
+// other wallpaper it is not shown at all, rather than holding a choice that changes nothing on
+// screen, and the stored choice waits for the next gradient.
 
 import "@testing-library/jest-dom";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -10,8 +11,6 @@ import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { createEmptyDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { VideoEffectsPane } from "./RightPanes";
-
-const REASON = /applies to gradient backgrounds only/i;
 
 function renderWith(legacyEditor: Record<string, unknown>) {
 	const base = createEmptyDocument({ projectId: "project_motion", title: "Motion" });
@@ -47,7 +46,6 @@ describe("background animation control", () => {
 		renderWith({ wallpaper: "linear-gradient(135deg, #2b3a67, #b8577f)" });
 		expect(choice("Aurora")).toBeEnabled();
 		expect(choice("None")).toHaveAttribute("aria-pressed", "true");
-		expect(screen.queryByText(REASON)).not.toBeInTheDocument();
 
 		fireEvent.click(choice("Aurora"));
 		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
@@ -55,13 +53,9 @@ describe("background animation control", () => {
 		});
 	});
 
-	it("is disabled with its reason on an image, and keeps the stored choice", () => {
+	it("is not shown on an image, and keeps the stored choice for the next gradient", () => {
 		renderWith({ wallpaper: "/wallpapers/wallpaper1.jpg", wallpaperMotion: "waves" });
-		for (const button of within(control()).getAllByRole("button")) {
-			expect(button).toBeDisabled();
-		}
-		expect(choice("None")).toHaveAttribute("aria-pressed", "true");
-		expect(screen.getByText(REASON)).toBeInTheDocument();
+		expect(screen.queryByRole("group", { name: "Animation" })).not.toBeInTheDocument();
 		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
 			wallpaperMotion: "waves",
 		});

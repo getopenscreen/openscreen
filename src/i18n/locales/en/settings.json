@@ -5,7 +5,6 @@
 		"motionDrift": "Drift",
 		"motionAurora": "Aurora",
 		"motionWaves": "Waves",
-		"motionGradientOnly": "Animation applies to gradient backgrounds only. Pick a gradient to animate it.",
 		"gradientLabel": "Gradient {{index}}",
 		"uploadCustom": "Upload image",
 		"unsupportedImage": "Unsupported image. Use a JPG or PNG file.",

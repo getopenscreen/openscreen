@@ -12,6 +12,7 @@ import {
 	ChevronDown,
 	FileText,
 	HelpCircle,
+	ImagePlus,
 	Loader2,
 	Mic,
 	MousePointerClick,
@@ -357,94 +358,42 @@ const WALLPAPER_MOTION_LABEL_KEYS: Record<WallpaperMotion, string> = {
 function BackgroundSection() {
 	const ts = useScopedT("settings");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
-	const [pickerOpen, setPickerOpen] = useState(false);
 	const { pick: handlePickFile, input: fileInput } = useWallpaperFileInput((dataUrl) =>
 		set({ wallpaper: dataUrl }),
 	);
-	const motionApplies = wallpaperAcceptsMotion(settings.wallpaper);
 
 	return (
 		<>
 			<div className={styles.sectionLabel}>{ts("background.title")}</div>
-			{/* The picker FLOATS instead of sitting inline. Inline, the 18-swatch grid was
-			    ~300px of the pane on its own and pushed padding/roundness/shadow — the
-			    controls #84 is actually about — below the fold on a laptop window. A user
-			    who opened the one appearance tab saw wallpapers and nothing else, which is
-			    the same failure the facet merge set out to fix, one level down. Same
-			    trade the aspect-ratio menu makes in the timeline toolbar: big choice,
-			    small trigger. */}
-			<Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-				<PopoverTrigger asChild>
-					<button
-						type="button"
-						className={styles.bgTrigger}
-						style={backgroundSwatchStyle(settings.wallpaper)}
-						// Deliberately NOT gated on hasDocument: opening the picker mutates
-						// nothing, and the swatches inside carry their own gate. The inline grid
-						// was browsable with no project open; collapsing it should not take that
-						// away, only the space it used.
-						aria-label={ts("background.title")}
-					>
-						<span className={styles.bgTriggerChip}>
-							{ts(`background.${classifyWallpaper(settings.wallpaper).kind}`)}
-							<ChevronDown size={11} />
-						</span>
-					</button>
-				</PopoverTrigger>
-				<PopoverContent
-					align="start"
-					sideOffset={6}
-					// Keeps the picker off the window edge, and the same padding is what Radix
-					// subtracts from `--radix-popover-content-available-height`, which sizes it.
-					collisionPadding={12}
-					animated={false}
-					className="w-auto border-0 bg-transparent p-0 shadow-none"
-				>
-					<div className={styles.bgPopover}>
-						<WallpaperPicker
-							value={settings.wallpaper}
-							hasDocument={hasDocument}
-							onChange={(url) => void set({ wallpaper: url })}
-							onLiveChange={(url) => setLive({ wallpaper: url })}
-							onCommit={commit}
-							onPickFile={handlePickFile}
-						/>
-					</div>
-				</PopoverContent>
-			</Popover>
-			{/* Stays mounted OUTSIDE the popover: opening the OS file dialog takes focus,
-			    which closes the popover and would unmount the input mid-pick, dropping the
-			    file. It has no layout to cost us here. */}
+			{/* Inline, the way Screen Studio sets it: the choice sits on the pane at a glance
+			    instead of behind a trigger. Small swatches, eight to a row, are what keep it
+			    from pushing the rest of the pane below the fold. */}
+			<WallpaperPicker
+				value={settings.wallpaper}
+				hasDocument={hasDocument}
+				onChange={(url) => void set({ wallpaper: url })}
+				onLiveChange={(url) => setLive({ wallpaper: url })}
+				onCommit={commit}
+				onPickFile={handlePickFile}
+			/>
 			{fileInput}
-			{/* Beside the picker because it moves what the picker chose. Only the compositor's own
-			    gradient can move; on anything else the control says so instead of holding a
-			    choice that changes nothing on screen. The stored choice is kept and comes back
-			    with the next gradient. */}
-			<div className={`${styles.field} ${styles.fieldStack}`}>
-				<span className={styles.fieldLabel}>{ts("background.motion")}</span>
-				<ChoiceRow<WallpaperMotion>
-					label={ts("background.motion")}
-					options={WALLPAPER_MOTIONS.map((motion) => ({
-						value: motion,
-						label: ts(WALLPAPER_MOTION_LABEL_KEYS[motion]),
-					}))}
-					value={motionApplies ? settings.wallpaperMotion : "none"}
-					disabled={!hasDocument || !motionApplies}
-					onChange={(motion) => void set({ wallpaperMotion: motion })}
-				/>
-			</div>
-			{motionApplies ? null : (
-				<p
-					style={{
-						margin: 0,
-						padding: "0 var(--sp-4) 8px",
-						font: "400 var(--fs-app-sm) var(--font-body)",
-						color: "var(--muted)",
-					}}
-				>
-					{ts("background.motionGradientOnly")}
-				</p>
-			)}
+			{/* Only a gradient can move, so the row comes with one instead of sitting greyed out
+			    under a photo. The stored choice is kept and comes back with the next gradient. */}
+			{wallpaperAcceptsMotion(settings.wallpaper) ? (
+				<div className={`${styles.field} ${styles.fieldStack}`}>
+					<span className={styles.fieldLabel}>{ts("background.motion")}</span>
+					<ChoiceRow<WallpaperMotion>
+						label={ts("background.motion")}
+						options={WALLPAPER_MOTIONS.map((motion) => ({
+							value: motion,
+							label: ts(WALLPAPER_MOTION_LABEL_KEYS[motion]),
+						}))}
+						value={settings.wallpaperMotion}
+						disabled={!hasDocument}
+						onChange={(motion) => void set({ wallpaperMotion: motion })}
+					/>
+				</div>
+			) : null}
 			{/* Reads in the order it acts: pick a background, then blur it. Lived under
 			    "Effects" while that was a separate facet, which is how a control named
 			    "Blur BG" ended up in the tab that doesn't say background. */}
@@ -463,32 +412,6 @@ function BackgroundSection() {
 			</div>
 		</>
 	);
-}
-
-/**
- * The CSS `background` shorthand that paints a wallpaper value as a swatch — the same
- * painting the grid thumbs do, hoisted out so the collapsed trigger shows exactly what the
- * grid would show as selected. Bundled wallpapers resolve to their small pre-generated
- * thumbnail; colours and gradients are their own literal; a custom `data:` URL passes
- * through `resolveImageWallpaperUrl` untouched.
- */
-function backgroundSwatchStyle(value: string): CSSProperties {
-	const classified = classifyWallpaper(value);
-	if (classified.kind !== "image") return { background: classified.value };
-	const bundled = WALLPAPER_PATHS.indexOf(classified.path);
-	try {
-		const url = resolveImageWallpaperUrl(
-			bundled >= 0 ? WALLPAPER_THUMB_PATHS[bundled] : classified.path,
-		);
-		return { background: `center/cover no-repeat url(${url})` };
-	} catch {
-		// resolveImageWallpaperUrl THROWS for an image path outside /wallpapers/ — a guard
-		// that exists to stop the app loading arbitrary files. The swatch grid only ever
-		// feeds it constants, but this call site feeds it whatever the document holds, and a
-		// throw here happens during render: one project saved by an older build with a path
-		// we no longer allow would take the whole pane down instead of drawing a dull square.
-		return { background: "var(--surface-2)" };
-	}
 }
 
 // keep the user's last data: URL after they switch tabs so the Image
@@ -631,6 +554,9 @@ export function WallpaperPicker({
 	const [tab, setTab] = useState<"image" | "color" | "gradient">(
 		() => classifyWallpaper(value).kind,
 	);
+	// The editor is a colour wheel and two stops, taller than the rest of the tab together:
+	// shown on demand, so the presets stay in view.
+	const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
 	const customUrls = useMemoCustomWallpapers(value);
 
 	const gradientCommitTimer = useRef<number | null>(null);
@@ -659,83 +585,70 @@ export function WallpaperPicker({
 	);
 
 	const isSelected = (candidate: string) => value === candidate;
-
-	const handleTabChange = (next: "image" | "color" | "gradient") => {
-		setTab(next);
-	};
+	const tabs = [
+		{ id: "image", label: ts("background.image") },
+		{ id: "gradient", label: ts("background.gradient") },
+		{ id: "color", label: ts("background.color") },
+	] as const;
 
 	return (
 		<>
 			{/* role="tab" + aria-selected are what make the tablist mean anything: without
 			    them a screen reader announces three plain buttons and never says which one
-			    is current. */}
+			    is current. Browsing a tab changes nothing; a swatch does. */}
 			<div className={styles.paneTabs} role="tablist">
-				<button
-					type="button"
-					role="tab"
-					aria-selected={tab === "image"}
-					className={tab === "image" ? styles.isActive : ""}
-					onClick={() => handleTabChange("image")}
-				>
-					{ts("background.image")}
-				</button>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={tab === "color"}
-					className={tab === "color" ? styles.isActive : ""}
-					onClick={() => handleTabChange("color")}
-				>
-					{ts("background.color")}
-				</button>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={tab === "gradient"}
-					className={tab === "gradient" ? styles.isActive : ""}
-					onClick={() => handleTabChange("gradient")}
-				>
-					{ts("background.gradient")}
-				</button>
+				{tabs.map(({ id, label }) => (
+					<button
+						key={id}
+						type="button"
+						role="tab"
+						aria-selected={tab === id}
+						className={tab === id ? styles.isActive : ""}
+						onClick={() => setTab(id)}
+					>
+						{label}
+					</button>
+				))}
 			</div>
 			{tab === "image" ? (
-				<>
+				<div className={styles.bgGrid}>
+					{/* First, so it is found without scrolling past the bundled set. */}
 					<button
 						type="button"
-						className={styles.uploadBtn}
+						className={`${styles.bgThumb} ${styles.bgAdd}`}
+						aria-label={ts("background.uploadCustom")}
+						title={ts("background.uploadCustom")}
 						disabled={!hasDocument}
 						onClick={onPickFile}
 					>
-						{ts("background.uploadCustom")}
+						<ImagePlus size={15} />
 					</button>
-					<div className={styles.bgGrid}>
-						{customUrls.map((url) => (
+					{customUrls.map((url) => (
+						<button
+							type="button"
+							key={`custom-${url.slice(-32)}`}
+							className={`${styles.bgThumb} ${isSelected(url) ? styles.isActive : ""}`}
+							style={{ background: `center/cover no-repeat url(${url})` }}
+							aria-label={ts("background.customWallpaper")}
+							disabled={!hasDocument}
+							onClick={() => onChange(url)}
+						/>
+					))}
+					{WALLPAPER_PATHS.map((path, i) => {
+						const previewUrl = resolveImageWallpaperUrl(WALLPAPER_THUMB_PATHS[i]);
+						return (
 							<button
 								type="button"
-								key={`custom-${url.slice(-32)}`}
-								className={`${styles.bgThumb} ${isSelected(url) ? styles.isActive : ""}`}
-								style={{ background: `center/cover no-repeat url(${url})` }}
-								aria-label={ts("background.customWallpaper")}
+								key={path}
+								className={`${styles.bgThumb} ${isSelected(path) ? styles.isActive : ""}`}
+								style={{ background: `center/cover no-repeat url(${previewUrl})` }}
+								aria-label={ts("background.imageLabel", { index: i + 1 })}
 								disabled={!hasDocument}
-								onClick={() => onChange(url)}
+								onClick={() => onChange(path)}
 							/>
-						))}
-						{WALLPAPER_PATHS.map((path, i) => {
-							const previewUrl = resolveImageWallpaperUrl(WALLPAPER_THUMB_PATHS[i]);
-							return (
-								<button
-									type="button"
-									key={path}
-									className={`${styles.bgThumb} ${isSelected(path) ? styles.isActive : ""}`}
-									style={{ background: `center/cover no-repeat url(${previewUrl})` }}
-									aria-label={ts("background.imageLabel", { index: i + 1 })}
-									disabled={!hasDocument}
-									onClick={() => onChange(path)}
-								/>
-							);
-						})}
-					</div>
-				</>
+						);
+					})}
+				</div>
 			) : tab === "color" ? (
 				<BackgroundColorTab
 					value={value}
@@ -759,7 +672,20 @@ export function WallpaperPicker({
 							/>
 						))}
 					</div>
-					{hasDocument ? <GradientEditor onChange={handleGradientChange} /> : null}
+					{hasDocument ? (
+						<>
+							<button
+								type="button"
+								className={styles.bgDisclosure}
+								aria-expanded={gradientEditorOpen}
+								onClick={() => setGradientEditorOpen((open) => !open)}
+							>
+								{ts("background.custom")}
+								<ChevronDown size={14} />
+							</button>
+							{gradientEditorOpen ? <GradientEditor onChange={handleGradientChange} /> : null}
+						</>
+					) : null}
 				</>
 			)}
 		</>

@@ -172,9 +172,8 @@ test.describe("v4 editor shell", () => {
 	test("inspector facet header opens a contextual help popover", async ({ page }) => {
 		await seedAndOpen(page);
 
-		// The inspector opens on the "effects" facet; the rail buttons are labelled
-		// from settings.<facet>.title (FloatingInspector's FACETS).
-		await page.getByRole("button", { name: "Background" }).click();
+		// The inspector opens on the Composition facet, whose help covers the background
+		// section. Clicking its rail button again would collapse the inspector.
 		const help = page.getByRole("button", { name: "Help" });
 		await help.click();
 

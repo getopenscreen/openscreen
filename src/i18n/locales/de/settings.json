@@ -5,7 +5,6 @@
 		"motionDrift": "Treiben",
 		"motionAurora": "Polarlicht",
 		"motionWaves": "Wellen",
-		"motionGradientOnly": "Animation gilt nur für Verlaufshintergründe. Wähle einen Verlauf, um ihn zu animieren.",
 		"gradientLabel": "Verlauf {{index}}",
 		"uploadCustom": "Eigenes hochladen",
 		"unsupportedImage": "Nicht unterstütztes Bild. Verwende eine JPG- oder PNG-Datei.",

@@ -1215,72 +1215,54 @@ textarea.control {
 }
 
 /* ─── bg thumb grid ────────────────────────────────────────────── */
+/* Eight to a row, as small as Screen Studio's: the whole bundled set fits in three rows, and
+   the colours and gradients in two. */
 .bgGrid {
 	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 8px;
-	padding: 0 var(--sp-4) var(--sp-4);
+	grid-template-columns: repeat(8, minmax(0, 1fr));
+	gap: 5px;
+	padding: 0 var(--sp-4) 12px;
 }
 .bgThumb {
 	aspect-ratio: 1/1;
-	border-radius: 10px;
+	min-width: 0;
+	padding: 0;
+	border-radius: 8px;
 	border: 1px solid transparent;
 	cursor: pointer;
 	transition: transform 150ms ease, border-color 150ms ease;
 	background: var(--surface-2);
 }
+.bgAdd {
+	display: grid;
+	place-items: center;
+	border: 1px dashed var(--border-hi);
+	background: transparent;
+	color: var(--muted);
+}
+.bgAdd:hover:not(:disabled) {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+.bgDisclosure {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0 var(--sp-4) 12px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--fg-2);
+	font: 500 13px/1.2 var(--font-body);
+	cursor: pointer;
+}
+.bgDisclosure:hover { color: var(--fg); }
+.bgDisclosure svg { transition: transform var(--motion-fast) var(--ease); }
+.bgDisclosure[aria-expanded="true"] svg { transform: rotate(180deg); }
 .bgThumb:hover { transform: translateY(-1px); }
 .bgThumb.isActive {
 	border-color: var(--brand);
 	box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand), transparent 70%);
-}
-
-/* ─── background picker (collapsed trigger + floating panel) ───── */
-/* The trigger paints the CURRENT background as its own surface, so the pane shows what is
-   selected without spending the ~300px the inline swatch grid used to cost. */
-.bgTrigger {
-	display: flex;
-	align-items: flex-end;
-	justify-content: flex-end;
-	height: 52px;
-	margin: 0 var(--sp-4) 12px;
-	padding: 6px;
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	background: var(--surface-2);
-	cursor: pointer;
-	overflow: hidden;
-	transition: border-color 150ms ease;
-}
-.bgTrigger:hover { border-color: var(--brand); }
-/* Sits ON an arbitrary photo, so it carries its own ground rather than trusting contrast. */
-.bgTriggerChip {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	padding: 3px 7px;
-	border-radius: 999px;
-	background: color-mix(in oklab, var(--bg), transparent 10%);
-	color: var(--fg);
-	font: 500 var(--fs-app-sm)/1 var(--font-body);
-}
-.bgPopover {
-	width: 300px;
-	padding-top: 4px;
-	border: 1px solid var(--border);
-	border-radius: 12px;
-	background: var(--surface-1);
-	box-shadow: var(--elev-pop);
-	/* Radix measures the room actually left below the trigger and publishes it here, so the
-	   picker uses the screen it has instead of a number guessed at authoring time. The second
-	   term is the tallest it ever needs: the gradient tab is ~640px (tabs + preset grid + the
-	   240px-wide editor, whose wheel is square). A fixed 460px cap cut that editor in half and
-	   read as "the gradient panel is gone" — the content was there, below the fold, behind a
-	   scroll nobody could see. Beyond 680px there is nothing left to reveal. */
-	max-height: min(var(--radix-popover-content-available-height, 80vh), 680px);
-	overflow-y: auto;
-	scrollbar-width: thin;
-	scrollbar-color: var(--border) transparent;
 }
 
 .captionsPopover {

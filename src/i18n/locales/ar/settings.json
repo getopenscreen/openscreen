@@ -5,7 +5,6 @@
 		"motionDrift": "انجراف",
 		"motionAurora": "شفق",
 		"motionWaves": "أمواج",
-		"motionGradientOnly": "ينطبق التحريك على الخلفيات المتدرجة فقط. اختر تدرجًا لتحريكه.",
 		"gradientLabel": "تدرج لوني {{index}}",
 		"uploadCustom": "رفع صورة مخصصة",
 		"unsupportedImage": "صورة غير مدعومة. استخدم ملف JPG أو PNG.",

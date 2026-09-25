@@ -130,7 +130,7 @@ This section is the *mechanics*. **What to actually run is [`technical-documenta
 
 **End-to-end flow (record → edit)**
 
-1. On the HUD: click the **webcam** toggle to enable the camera, then the **source** button → pick the *Screens*/*Windows* tab → select a thumbnail → **Share**.
+1. On the HUD: click the **webcam** toggle to enable the camera, then the **source** button → pick the *Screens*/*Windows* tab → select a thumbnail → **Select**.
 2. Click **record**; the HUD switches to a red stop button with a running timer (a countdown overlay may show first).
 3. Stop via the HUD's red button (or tray → *Stop Recording*). The **editor window opens** with the screen recording and the webcam PiP.
 4. Exercise the feature in the editor (e.g. Full Camera: press **C** to add a segment on the timeline, scrub to see the webcam grow to fullscreen and ease back; **Ctrl+Z** / **Ctrl+Shift+Z** undo/redo).

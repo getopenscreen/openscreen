@@ -50,7 +50,10 @@ globalThis.ResizeObserver = class {
 /** A canvas with a stubbed 2D context — jsdom has none, and the pull loop bails without it. */
 function stubCanvasRef(): RefObject<HTMLCanvasElement> {
 	const canvas = document.createElement("canvas");
-	canvas.getContext = vi.fn(() => ({})) as unknown as HTMLCanvasElement["getContext"];
+	canvas.getContext = vi.fn(() => ({
+		drawImage: vi.fn(),
+		putImageData: vi.fn(),
+	})) as unknown as HTMLCanvasElement["getContext"];
 	return { current: canvas };
 }
 
@@ -100,6 +103,42 @@ describe("useNativeCompositorView", () => {
 
 		await waitFor(() => expect(mocks.readCompositorFrame).toHaveBeenCalled());
 		expect(result.current.error).toBeNull();
+		// No frame yet: the card keeps its placeholder background.
+		expect(ref.current?.dataset.painted).toBeUndefined();
+	});
+
+	// The preview card paints a placeholder wallpaper until the canvas has pixels; left under
+	// the same rounded clip afterwards, it showed through the anti-aliased corners. The canvas
+	// says when it has painted, and the card's CSS drops the placeholder then.
+	it("marks the canvas painted once a frame lands", async () => {
+		vi.stubGlobal(
+			"ImageData",
+			class {
+				constructor(
+					public data: Uint8ClampedArray,
+					public width: number,
+					public height: number,
+				) {}
+			},
+		);
+		vi.stubGlobal(
+			"createImageBitmap",
+			vi.fn(async () => ({ close: vi.fn() })),
+		);
+		try {
+			mocks.createCompositorView.mockResolvedValue({ id: 1 });
+			mocks.readCompositorFrame.mockResolvedValue({
+				gen: 1,
+				width: 2,
+				height: 1,
+				data: new Uint8Array(8),
+			});
+			const ref = stubCanvasRef();
+			renderHook(() => useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }));
+			await waitFor(() => expect(ref.current?.dataset.painted).toBe("true"));
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 
 	it("stays quiet without an Electron bridge — no view id, so nothing is ever polled", async () => {

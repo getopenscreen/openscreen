@@ -362,6 +362,16 @@
 	display: grid;
 	place-items: center;
 }
+/* Once the native canvas has painted, it covers the whole card, and anything painted UNDER the
+   same rounded clip leaks through its anti-aliased edge: the wallpaper placeholder and the inset
+   hairline showed as a fringe of background around each corner. So the card keeps only what lies
+   outside it, its drop shadow. `!important` because the placeholder wallpaper is an inline style. */
+.previewFrame:has(> canvas[data-painted]) {
+	background: none !important;
+	box-shadow:
+		0 40px 90px -30px rgba(0, 0, 0, 0.75),
+		0 12px 28px -12px rgba(0, 0, 0, 0.5);
+}
 .videoStage {
 	position: relative;
 	display: grid;

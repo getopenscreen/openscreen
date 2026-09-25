@@ -244,6 +244,10 @@ export function useNativeCompositorView(
 					// Advance only after a successful, validated frame — so a dropped/
 					// malformed packet is retried rather than silently skipped.
 					lastGen = gen;
+					// From here the canvas is the card's only pixels: the card drops its
+					// placeholder background (see `.previewFrame`), which would otherwise show
+					// through the anti-aliased rounded clip as a fringe around each corner.
+					canvas.dataset.painted = "true";
 					// Sonde de fluidité : signale qu'une frame a réellement été livrée, pour
 					// que les intervalles rAF soient rangés dans l'état « preview active »
 					// plutôt que moyennés avec des périodes de repos.

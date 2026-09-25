@@ -486,9 +486,11 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 		titleBarStyle: "hidden",
 		...(isMac
 			? { trafficLightPosition: { x: 18, y: 21 } }
-			: // One pixel short of the 58px topbar, so its bottom rule runs on under the controls
-				// instead of stopping where the overlay starts.
-				{ titleBarOverlay: { color: "#09090b", symbolColor: "#a1a1aa", height: 57 } }),
+			: // Windows fixes the width of its caption buttons (46px) and leaves us the height: at
+				// 46px each hover area is a square in the top-right corner, as in Chrome or Explorer,
+				// instead of a 58px-tall slab, and the top bar's bottom rule runs on under it.
+				// Native, so Snap Layouts stays on the maximise button.
+				{ titleBarOverlay: { color: "#09090b", symbolColor: "#a1a1aa", height: 46 } }),
 		transparent: false,
 		resizable: true,
 		alwaysOnTop: false,

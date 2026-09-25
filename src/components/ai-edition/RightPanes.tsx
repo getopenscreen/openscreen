@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
 import GradientEditor, { type GradientEditorState } from "@/components/ui/gradient-editor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { WALLPAPER_MOTIONS, type WallpaperMotion } from "@/components/video-editor/types";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
@@ -80,7 +81,7 @@ import {
 	type TrimRun,
 	voiceoverPlacements,
 } from "@/lib/ai-edition/timeline/aggregated-transcript";
-import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
+import { assetCameraSource, hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatMs } from "@/lib/ai-edition/timeline/format";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import type {
@@ -2967,6 +2968,16 @@ export function LayoutPane() {
 	// still on disk. Say so, otherwise the only signal the user gets is their setting
 	// apparently having been thrown away.
 	const helpText = hasDocument && !hasAnyCamera ? ts("layout.helpNoWebcam") : ts("layout.help");
+	// The first camera on the timeline, as a URL the thumbnail can load. `assetCameraSource`
+	// rather than the raw track, for the same reason every other camera consumer uses it.
+	const cameraSrc = useMemo(() => {
+		if (!document) return null;
+		for (const clip of document.timeline.clips) {
+			const { path } = assetCameraSource(document.assets.find((a) => a.id === clip.assetId));
+			if (path) return /^(https?|blob|data):/.test(path) ? path : toFileUrl(path);
+		}
+		return null;
+	}, [document]);
 	const webcamCrop = settings.webcamCropRegion;
 	const cropZoomPct = Math.round(100 / webcamCrop.width);
 	// Read straight off the pan, not back out of the rect. The rect cannot answer at 100%
@@ -2974,8 +2985,6 @@ export function LayoutPane() {
 	// a drifting answer on the way there, because the offset gets squeezed toward the near
 	// edge as the window grows while the picture itself does not move.
 	const cropPan = settings.webcamCropPan;
-	const cropPanX = cropPan.x * 100;
-	const cropPanY = cropPan.y * 100;
 	/** Rect from zoom and pan. `pan * (1 - size)` cannot leave the frame, so nothing clamps. */
 	const cropRegionFor = (size: number, pan: { x: number; y: number }) => ({
 		x: pan.x * (1 - size),
@@ -2989,8 +2998,7 @@ export function LayoutPane() {
 		// writes, so dragging the zoom back and forth returns the framing it started from.
 		setLive({ webcamCropRegion: cropRegionFor(size, cropPan) });
 	};
-	const setCropPan = (axis: "x" | "y", valuePct: number) => {
-		const pan = { ...cropPan, [axis]: valuePct / 100 };
+	const setCropPan = (pan: { x: number; y: number }) => {
 		// One patch for both, so a half-written pair can never reach disk.
 		setLive({ webcamCropPan: pan, webcamCropRegion: cropRegionFor(webcamCrop.width, pan) });
 	};
@@ -3225,6 +3233,20 @@ export function LayoutPane() {
 				</>
 			) : null}
 			<div className={styles.sectionLabel}>{ts("layout.webcamFraming")}</div>
+			<WebcamFraming
+				label={ts("layout.webcamFraming")}
+				src={cameraSrc}
+				crop={webcamCrop}
+				pan={cropPan}
+				disabled={layoutControlsDisabled}
+				hint={
+					webcamCrop.width < 0.999
+						? ts("layout.webcamFramingDrag")
+						: ts("layout.webcamFramingZoomFirst")
+				}
+				onPanLive={setCropPan}
+				onCommit={() => void commit()}
+			/>
 			<div className={styles.sliderGrid}>
 				<SliderCell
 					label={ts("layout.webcamCropZoom")}
@@ -3236,28 +3258,135 @@ export function LayoutPane() {
 					onChange={setCropZoom}
 					onCommit={() => void commit()}
 				/>
-				<SliderCell
-					label={ts("layout.webcamCropX")}
-					value={cropPanX}
-					min={0}
-					max={100}
-					suffix="%"
-					disabled={layoutControlsDisabled || webcamCrop.width >= 0.999}
-					onChange={(value) => setCropPan("x", value)}
-					onCommit={() => void commit()}
-				/>
-				<SliderCell
-					label={ts("layout.webcamCropY")}
-					value={cropPanY}
-					min={0}
-					max={100}
-					suffix="%"
-					disabled={layoutControlsDisabled || webcamCrop.height >= 0.999}
-					onChange={(value) => setCropPan("y", value)}
-					onCommit={() => void commit()}
-				/>
 			</div>
 		</Pane>
+	);
+}
+
+/** Où la webcam cadre, réglé à la main : une vignette de la caméra, le cadre gardé posé dessus,
+ *  et on glisse le cadre pour choisir ce qu'elle montre. Remplace deux curseurs de déplacement
+ *  qui ne disaient pas où l'on était dans l'image, et qui à 100 % ne déplaçaient rien. Le zoom
+ *  reste un curseur, sous la vignette : c'est lui qui donne au cadre la place de bouger.
+ *
+ *  Le déplacement s'exprime en `pan` (0–1 par axe) et non en position du cadre, comme le reste
+ *  du panneau (#412) : c'est ce qui garde le cadrage à travers un passage par 100 %. Les
+ *  flèches déplacent de 5 % et enregistrent à chaque pas ; le glisser écrit en direct et
+ *  enregistre au relâchement, comme un curseur. */
+function WebcamFraming({
+	label,
+	src,
+	crop,
+	pan,
+	disabled,
+	hint,
+	onPanLive,
+	onCommit,
+}: {
+	label: string;
+	src: string | null;
+	crop: { x: number; y: number; width: number; height: number };
+	pan: { x: number; y: number };
+	disabled: boolean;
+	hint: string;
+	onPanLive: (pan: { x: number; y: number }) => void;
+	onCommit: () => void;
+}) {
+	const boxRef = useRef<HTMLDivElement | null>(null);
+	const dragRef = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
+	// The camera's own shape, once its metadata says; 16:9 until then.
+	const [aspect, setAspect] = useState(16 / 9);
+	const movable = !disabled && crop.width < 0.999;
+	const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+	const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+		const drag = dragRef.current;
+		const box = boxRef.current?.getBoundingClientRect();
+		if (!drag || !box || box.width === 0 || box.height === 0) return;
+		// The frame travels over (1 - size) of the picture, so a pixel of drag is worth more pan
+		// the bigger the frame is.
+		const free = 1 - crop.width;
+		onPanLive({
+			x: clamp01(drag.pan.x + (e.clientX - drag.x) / (box.width * free)),
+			y: clamp01(drag.pan.y + (e.clientY - drag.y) / (box.height * free)),
+		});
+	};
+	const endDrag = () => {
+		if (!dragRef.current) return;
+		dragRef.current = null;
+		onCommit();
+	};
+
+	return (
+		<div className={styles.framing}>
+			<div ref={boxRef} className={styles.framingBox} style={{ aspectRatio: aspect }}>
+				{src ? (
+					<video
+						className={styles.framingVideo}
+						src={src}
+						muted
+						playsInline
+						preload="metadata"
+						aria-hidden="true"
+						onLoadedMetadata={(e) => {
+							const video = e.currentTarget;
+							if (video.videoWidth > 0 && video.videoHeight > 0) {
+								setAspect(video.videoWidth / video.videoHeight);
+							}
+							// A frame from the take rather than its first one, which is often black.
+							video.currentTime = Math.min(1, (video.duration || 0) / 2);
+						}}
+					/>
+				) : null}
+				<div
+					className={styles.framingCrop}
+					data-movable={movable}
+					role="slider"
+					aria-label={label}
+					aria-orientation="horizontal"
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={Math.round(pan.x * 100)}
+					aria-valuetext={`${Math.round(pan.x * 100)}%, ${Math.round(pan.y * 100)}%`}
+					aria-disabled={!movable}
+					tabIndex={movable ? 0 : -1}
+					style={{
+						left: `${crop.x * 100}%`,
+						top: `${crop.y * 100}%`,
+						width: `${crop.width * 100}%`,
+						height: `${crop.height * 100}%`,
+					}}
+					onPointerDown={(e) => {
+						if (!movable) return;
+						e.currentTarget.setPointerCapture?.(e.pointerId);
+						dragRef.current = { x: e.clientX, y: e.clientY, pan };
+					}}
+					onPointerMove={onPointerMove}
+					onPointerUp={endDrag}
+					onPointerCancel={endDrag}
+					onKeyDown={(e) => {
+						if (!movable) return;
+						const step = 0.05;
+						const delta =
+							e.key === "ArrowLeft"
+								? { x: -step, y: 0 }
+								: e.key === "ArrowRight"
+									? { x: step, y: 0 }
+									: e.key === "ArrowUp"
+										? { x: 0, y: -step }
+										: e.key === "ArrowDown"
+											? { x: 0, y: step }
+											: null;
+						if (!delta) return;
+						// The editor shell seeks on the arrows, from WINDOW: keep them here.
+						e.preventDefault();
+						e.nativeEvent.stopPropagation();
+						onPanLive({ x: clamp01(pan.x + delta.x), y: clamp01(pan.y + delta.y) });
+						onCommit();
+					}}
+				/>
+			</div>
+			<p className={styles.framingHint}>{hint}</p>
+		</div>
 	);
 }
 

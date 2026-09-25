@@ -143,10 +143,13 @@ describe("LayoutPane camera availability", () => {
 // A trip down to 100% therefore erased the framing rather than suspending it.
 describe("LayoutPane webcam crop pan", () => {
 	const zoom = () => screen.getByRole("slider", { name: "Zoom" });
-	const panX = () => screen.getByRole("slider", { name: "Pan horizontally" });
-	const panY = () => screen.getByRole("slider", { name: "Pan vertically" });
+	// The frame on the camera picture: dragged by pointer, moved 5% a step by the arrows.
+	const frame = () => screen.getByRole("slider", { name: "Webcam crop" });
 	const set = (slider: HTMLElement, value: number) =>
 		fireEvent.change(slider, { target: { value: String(value) } });
+	const press = (key: string, times: number) => {
+		for (let i = 0; i < times; i++) fireEvent.keyDown(frame(), { key });
+	};
 	const storedCrop = () =>
 		useProjectStore.getState().document?.legacyEditor as unknown as {
 			webcamCropRegion: { x: number; y: number; width: number; height: number };
@@ -157,45 +160,47 @@ describe("LayoutPane webcam crop pan", () => {
 		renderLayout(seedProject(true));
 
 		set(zoom(), 200);
-		set(panX(), 75);
-		expect(panX()).toHaveValue("75");
+		press("ArrowRight", 5);
+		expect(frame()).toHaveAttribute("aria-valuetext", "75%, 50%");
 
 		set(zoom(), 100);
-		// Nowhere to pan at full frame, so the control is correctly out of reach...
-		expect(panX()).toBeDisabled();
+		// Nowhere to pan at full frame, so the frame is correctly out of reach, and says why...
+		expect(frame()).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByText(/zoom in, then drag the frame/i)).toBeInTheDocument();
+		press("ArrowLeft", 3);
+		expect(storedCrop().webcamCropPan.x).toBeCloseTo(0.75);
 
 		set(zoom(), 200);
 		// ...but the intent survived the trip.
-		expect(panX()).toHaveValue("75");
+		expect(frame()).toHaveAttribute("aria-valuetext", "75%, 50%");
 	});
 
 	it("does not move the pan while the zoom slider is dragged", () => {
 		// The old clamp squeezed the rect's offset toward the near edge as the window grew,
-		// so the pan slider crept upward on its own while the picture stayed put.
+		// so the pan crept on its own while the picture stayed put.
 		renderLayout(seedProject(true));
 
 		set(zoom(), 200);
-		set(panX(), 75);
+		press("ArrowRight", 5);
 
 		for (const pct of [180, 150, 120, 110, 101]) {
 			set(zoom(), pct);
-			expect(panX()).toHaveValue("75");
+			expect(frame()).toHaveAttribute("aria-valuetext", "75%, 50%");
 		}
 	});
 
-	it("wires the vertical slider to the vertical axis", () => {
-		// The two sliders differ by one character in the handler they call. Without this,
-		// a Y slider wired to "x" would pass every other test in this block.
+	it("moves the frame on the axis each arrow names", () => {
+		// Up/down and left/right differ by one character in the handler. Without this, a
+		// vertical arrow wired to x would pass every other test in this block.
 		renderLayout(seedProject(true));
 
 		set(zoom(), 200);
-		set(panY(), 80);
+		press("ArrowDown", 6);
 
-		expect(panY()).toHaveValue("80");
 		expect(storedCrop().webcamCropPan.y).toBeCloseTo(0.8);
 		expect(storedCrop().webcamCropRegion.y).toBeCloseTo(0.4);
 		// ...and it left the horizontal axis alone.
-		expect(panX()).toHaveValue("50");
+		expect(storedCrop().webcamCropPan.x).toBeCloseTo(0.5);
 		expect(storedCrop().webcamCropRegion.x).toBeCloseTo(0.25);
 	});
 
@@ -203,21 +208,15 @@ describe("LayoutPane webcam crop pan", () => {
 		renderLayout(seedProject(true));
 
 		set(zoom(), 200);
-		set(panX(), 100);
+		press("ArrowRight", 20);
 		// Hard against the right edge: a half-width window starts halfway across.
-		let crop = useProjectStore.getState().document?.legacyEditor?.webcamCropRegion as unknown as {
-			x: number;
-			width: number;
-		};
+		let crop = storedCrop().webcamCropRegion;
 		expect(crop.width).toBeCloseTo(0.5);
 		expect(crop.x).toBeCloseTo(0.5);
 
 		set(zoom(), 400);
 		// Clamped to the slider's 300% ceiling, so a third of the frame, still hard right.
-		crop = useProjectStore.getState().document?.legacyEditor?.webcamCropRegion as unknown as {
-			x: number;
-			width: number;
-		};
+		crop = storedCrop().webcamCropRegion;
 		expect(crop.x).toBeCloseTo(1 - crop.width);
 	});
 });

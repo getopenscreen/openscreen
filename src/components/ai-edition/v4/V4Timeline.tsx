@@ -18,6 +18,7 @@ import {
 import {
 	Fragment,
 	memo,
+	type KeyboardEvent as ReactKeyboardEvent,
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
 	useEffect,
@@ -151,20 +152,19 @@ const PILL_SNAP_PX = 8;
  *  clips that follow — which is what a flex `gap` did, once per junction. */
 /** Below this a clip cannot show a label and a delete button inside itself. */
 const NARROW_CLIP_PX = 120;
-// Whether a card can also carry its edited duration. The label pill is capped at
-// `calc(100% - 50px)` so it clears the delete button, and everything inside it
-// but the name is incompressible: 15px of pill padding (`3px 9px 3px 6px`), the
-// pencil and two 8px gaps — 47px. The timecode is the part that varies —
-// `formatSec` never prints an hour field, so a clip past ten minutes reads
-// `16:40.0` and one past a hundred `100:00.0` — so its width is measured with
-// canvas `measureText` in the face `.tlClipDuration` actually renders, rather
-// than guessed from a per-character average. Only where canvas is unavailable
-// (jsdom) does the gate fall back to the first cut's estimate: 6px per
-// character at 10px in the mono face.
+// Whether a card can also carry its edited duration. The label row is capped at
+// `calc(100% - 50px)` so it clears the delete button, and everything in it but
+// the duration is incompressible: the 30px edit button and the 8px gap after it.
+// The timecode is the part that varies — `formatSec` never prints an hour field,
+// so a clip past ten minutes reads `16:40.0` and one past a hundred `100:00.0` —
+// so its width is measured with canvas `measureText` in the face
+// `.tlClipDuration` actually renders, rather than guessed from a per-character
+// average. Only where canvas is unavailable (jsdom) does the gate fall back to an
+// estimate: 7px per character at 12px.
 const CLIP_LABEL_RESERVE_PX = 50;
-const CLIP_LABEL_FIXED_PX = 47;
-const CLIP_LABEL_FALLBACK_CHAR_PX = 6;
-// `.tlClipDuration` renders `500 10px/1.2 var(--font-mono)`; canvas wants the
+const CLIP_LABEL_FIXED_PX = 38;
+const CLIP_LABEL_FALLBACK_CHAR_PX = 7;
+// `.tlClipDuration` renders `500 12px/1.2 var(--font-body)`; canvas wants the
 // same face without the line height, so the family comes from the token itself.
 let durationMeasureCtx: CanvasRenderingContext2D | null | undefined;
 function durationTextPx(text: string): number | undefined {
@@ -173,8 +173,8 @@ function durationTextPx(text: string): number | undefined {
 	}
 	const ctx = durationMeasureCtx;
 	if (ctx === null) return undefined;
-	const family = getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim();
-	ctx.font = `500 10px ${family || "monospace"}`;
+	const family = getComputedStyle(document.documentElement).getPropertyValue("--font-body").trim();
+	ctx.font = `500 12px ${family || "sans-serif"}`;
 	return ctx.measureText(text).width;
 }
 function cardFitsDuration(cardPx: number, text: string): boolean {
@@ -183,6 +183,13 @@ function cardFitsDuration(cardPx: number, text: string): boolean {
 }
 
 const CLIP_GUTTER_PX = 6;
+
+/** Enter and Space belong to the focused button. The shell's play/pause shortcut is Space on
+ *  WINDOW and `preventDefault()`s it, which cancels the button's own activation, so the
+ *  keystroke stops here, natively, and is not prevented. */
+function keepActivationKey(e: ReactKeyboardEvent) {
+	if (e.key === "Enter" || e.key === " ") e.nativeEvent.stopPropagation();
+}
 /**
  * Shortest region a resize may leave behind — the storage grid itself (regions
  * are `Math.round`ed to whole ms, and coalesceRegionsForRuler's epsilon is 1 ms),
@@ -297,9 +304,37 @@ const PlayheadOverlay = memo(function PlayheadOverlay({
 	);
 });
 
-// Waveform preview bars inside a timeline clip. Derived from peaks data;
-// asset only decode once. Renders nothing while decoding or if the source has
-// no audio track, so the clip pill just shows its label until peaks arrive.
+/**
+ * A clip's loudness as one smooth shape standing on its bottom edge, the way Screen Studio
+ * draws it: a filled area under a line, not a row of 2px bars, which read as a barcode.
+ *
+ * `heights` are percentages of the wave box, one per sample, spread evenly across it. The
+ * curve is a Catmull-Rom spline through the samples, so each sample is a point ON the line:
+ * the shape is smoothed between them, never moved at them. Control points are held inside
+ * the box, and a Bézier stays within its control points, so no stretch of it can poke above
+ * full scale or below the baseline.
+ */
+function waveformPaths(heights: readonly number[]): { area: string; line: string } {
+	const n = heights.length;
+	const y = (i: number) => 100 - (heights[Math.min(n - 1, Math.max(0, i))] ?? 0);
+	const r = (v: number) => Math.round(v * 100) / 100;
+	const inBox = (v: number) => r(Math.min(100, Math.max(0, v)));
+	let curve = "";
+	for (let i = 0; i < n - 1; i++) {
+		const c1 = inBox(y(i) + (y(i + 1) - y(i - 1)) / 6);
+		const c2 = inBox(y(i + 1) - (y(i + 2) - y(i)) / 6);
+		curve += ` C${r(i + 1 / 6)},${c1} ${r(i + 1 - 1 / 6)},${c2} ${i + 1},${r(y(i + 1))}`;
+	}
+	const start = `0,${r(y(0))}`;
+	return {
+		area: `M0,100 L${start}${curve} L${n - 1},100 Z`,
+		line: `M${start}${curve}`,
+	};
+}
+
+// The waveform inside a timeline clip. Derived from peaks data; each asset only
+// decodes once. Renders nothing while decoding or if the source has no audio
+// track, so the clip pill just shows its label until peaks arrive.
 const ClipWaveform = memo(function ClipWaveform({
 	videoUrl,
 	assetDurationSec,
@@ -321,7 +356,7 @@ const ClipWaveform = memo(function ClipWaveform({
 	// The duration is what tells `useAudioPeaks` whether this recording is small
 	// enough to decode whole — the file's byte size does not, on compressed video.
 	const peaks = useAudioPeaks(videoUrl, assetDurationSec);
-	const bars = useMemo(() => {
+	const levels = useMemo(() => {
 		if (!peaks || peaks.length === 0 || !assetDurationSec) return null;
 		const totalBlocks = Math.floor(peaks.length / 2);
 		if (totalBlocks === 0) return null;
@@ -329,17 +364,19 @@ const ClipWaveform = memo(function ClipWaveform({
 		const startBlock = Math.max(0, Math.floor(sourceStartSec * blocksPerSec));
 		const endBlock = Math.min(totalBlocks, Math.ceil(sourceEndSec * blocksPerSec));
 		const rangeBlocks = Math.max(1, endBlock - startBlock);
-		// One bar per ~120ms of clip duration — dense enough to read as a
-		// continuous waveform — but capped so a long recording doesn't spawn
-		// thousands of DOM nodes in a single clip (a clip is at most ~the timeline
-		// width on screen, so beyond a few hundred bars they're sub-pixel anyway).
-		const barCount = Math.min(400, Math.max(20, Math.round((sourceEndSec - sourceStartSec) * 8)));
+		// One sample per ~120ms of clip duration — dense enough to follow speech —
+		// but capped so a long recording doesn't build a path of thousands of
+		// points for a clip that is at most ~the timeline width on screen.
+		const sampleCount = Math.min(
+			400,
+			Math.max(20, Math.round((sourceEndSec - sourceStartSec) * 8)),
+		);
 		const result: number[] = [];
-		for (let i = 0; i < barCount; i++) {
-			const blockStart = startBlock + Math.floor((i / barCount) * rangeBlocks);
+		for (let i = 0; i < sampleCount; i++) {
+			const blockStart = startBlock + Math.floor((i / sampleCount) * rangeBlocks);
 			const blockEnd = Math.max(
 				blockStart + 1,
-				startBlock + Math.floor(((i + 1) / barCount) * rangeBlocks),
+				startBlock + Math.floor(((i + 1) / sampleCount) * rangeBlocks),
 			);
 			let amp = 0;
 			for (let b = blockStart; b < blockEnd && b < totalBlocks; b++) {
@@ -352,42 +389,38 @@ const ClipWaveform = memo(function ClipWaveform({
 		return result;
 	}, [peaks, assetDurationSec, sourceStartSec, sourceEndSec]);
 
-	if (!bars) return null;
+	if (!levels) return null;
+	// Gain is applied HERE and not inside the memo above, which scans the whole
+	// asset's blocks: a slider drag fires one setLive per pointer move, so this
+	// keeps a tick at one multiply per sample instead of re-folding the peaks.
+	//
+	// Clamped because `finish_audio` clamps: it does `(sample * trim).clamp(-1, 1)`
+	// per sample, and a sample here is `max|sample|` over its bucket. Gain is positive
+	// and clamping is monotonic, so `clamp(max(|s|) * g)` IS the peak of the gained,
+	// clipped signal — the shape is exact at every sample, not an impression.
+	//
+	// The 8% floor is deliberately NOT scaled: it exists so an empty clip still
+	// reads as a clip, and it is not amplitude.
+	const { area, line } = waveformPaths(
+		levels.map((h) => Math.max(8, Math.round(Math.min(1, h * gain) * 100))),
+	);
 	return (
-		<div aria-hidden className={styles.tlWave}>
-			{bars.map((h, bi) => {
-				// Gain is applied HERE and not inside the memo above, which scans the whole
-				// asset's blocks: a slider drag fires one setLive per pointer move, so this
-				// keeps a tick at `barCount` multiplies instead of re-folding the peaks.
-				//
-				// Clamped because `finish_audio` clamps: it does `(sample * trim).clamp(-1, 1)`
-				// per sample, and this bar is `max|sample|` over its bucket. Gain is positive
-				// and clamping is monotonic, so `clamp(max(|s|) * g)` IS the peak of the gained,
-				// clipped signal — the bar is exact, not an impression. Without the clamp a
-				// 0.5 peak at +12 dB computes `height: 199%` and is merely hidden by the clip's
-				// `overflow`, which draws a signal the export will never write.
-				//
-				// The 8% floor is deliberately NOT scaled: it exists so an empty clip still
-				// reads as a clip, and it is not amplitude.
-				const amplitude = Math.min(1, h * gain);
-				return (
-					<span
-						key={bi}
-						style={{
-							height: `${Math.max(8, Math.round(amplitude * 100))}%`,
-							opacity: (0.5 + amplitude * 0.5).toFixed(2),
-						}}
-					/>
-				);
-			})}
-		</div>
+		<svg
+			aria-hidden
+			className={styles.tlWave}
+			viewBox={`0 0 ${levels.length - 1} 100`}
+			preserveAspectRatio="none"
+		>
+			<path className={styles.tlWaveArea} d={area} />
+			<path className={styles.tlWaveLine} d={line} />
+		</svg>
 	);
 });
 
 // One imported audio track on its lane (issue #350). Grab the body to move it,
 // the edge handles to trim (left = in-point, which moves the head too; right =
-// out-point). The waveform reuses ClipWaveform (its `.tlWave` is inset:0, so it
-// paints behind the label here just as it does inside a clip), windowed to the
+// out-point). The waveform reuses ClipWaveform (its `.tlWave` stands on the pill's
+// bottom edge, behind the label, just as it does inside a clip), windowed to the
 // track's trim and scaled by the track's own gain. `leftPct`/`widthPct` are
 // precomputed by the parent — during a drag they carry the live preview geometry
 // — so this stays memoisable: a doc edit that doesn't touch this track, and a
@@ -2241,7 +2274,9 @@ export function V4Timeline({
 											e.stopPropagation();
 											onEditClip(c);
 										}}
-										title={t("toolbar.dragToReorderHint")}
+										// The file name is here rather than on the card: which file a clip
+										// comes from matters less than what can be done with it.
+										title={`${asset?.label ?? c.assetId}\n${t("toolbar.dragToReorderHint")}`}
 									>
 										<ClipWaveform
 											videoUrl={clipVideoUrl}
@@ -2251,20 +2286,20 @@ export function V4Timeline({
 											gain={audioGainScalar(settings.audioGainDb)}
 										/>
 										<div className={styles.tlClipLabel}>
-											<span
-												className={styles.tlClipIcon}
+											<button
+												type="button"
+												className={styles.tlClipEdit}
 												data-no-clip-drag
 												title={t("toolbar.editInOutPoints")}
+												aria-label={t("toolbar.editInOutPoints")}
 												onClick={(e) => {
 													e.stopPropagation();
 													onEditClip(c);
 												}}
+												onKeyDown={keepActivationKey}
 											>
-												<Pencil size={12} />
-											</span>
-											<span className={styles.tlClipName}>
-												{tl.assets.find((a) => a.id === c.assetId)?.label ?? c.assetId}
-											</span>
+												<Pencil size={15} />
+											</button>
 											{cardFitsDuration(boxLen * pxPerSec - CLIP_GUTTER_PX, durText) ? (
 												<span className={styles.tlClipDuration}>{durText}</span>
 											) : null}
@@ -2281,8 +2316,9 @@ export function V4Timeline({
 													e.stopPropagation();
 													void tl.removeClip(c.id);
 												}}
+												onKeyDown={keepActivationKey}
 											>
-												<Trash2 size={14} />
+												<Trash2 size={15} />
 											</button>
 										) : null}
 									</div>

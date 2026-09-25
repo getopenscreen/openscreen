@@ -1394,7 +1394,8 @@
 	align-items: center;
 	gap: 8px;
 	padding: 0 16px;
-	height: 40px;
+	/* Room above AND below the 34px play button: at 40px it sat on the bottom rule. */
+	height: 48px;
 	flex-shrink: 0;
 	border-bottom: 1px solid var(--border-soft);
 }
@@ -1857,13 +1858,14 @@
 	/* px, like .lanePill's: the gutter is subtracted from the clip's width, so a
 	   clip narrower than 6px would otherwise compute to nothing. */
 	min-width: 1px;
-	border-radius: 11px;
-	border: 1.5px solid var(--border);
-	background: var(--surface-1);
+	/* A soft mint card rather than a dark slab: the recording is the one thing on the
+	   timeline everything else hangs off, and it should look like it, gently. */
+	border-radius: 12px;
+	border: 1px solid var(--accent-border);
+	background: color-mix(in oklab, var(--accent) 8%, var(--surface-1));
 	overflow: hidden;
 	cursor: grab;
 	box-sizing: border-box;
-	box-shadow: inset 0 1px 8px rgba(255, 255, 255, 0.06);
 	/* pointer-driven reorder: suppress native touch scroll + text selection */
 	touch-action: none;
 	user-select: none;
@@ -1872,6 +1874,7 @@
 }
 .tlClipSel {
 	border-color: var(--accent);
+	box-shadow: 0 0 0 1px var(--accent);
 }
 /* A generated clip: the media behind an inserted word, which nobody shot. Amber on the box
    itself rather than a badge inside it, so it stays legible at the zoom levels where a clip
@@ -1895,16 +1898,11 @@
 	top: 50%;
 	transform: translateY(-50%);
 	max-width: none;
-	padding: 3px 6px;
-	cursor: pointer;
 }
-.tlClipSel.tlClipNarrow .tlClipName {
-	display: none;
-}
-/* Clear of the pencil chip beside it. */
+/* Clear of the edit button beside it. */
 .tlClipDelete[data-narrow] {
 	right: auto;
-	left: calc(100% + 43px);
+	left: calc(100% + 42px);
 	top: 50%;
 	transform: translateY(-50%);
 }
@@ -1920,65 +1918,68 @@
 	opacity: 0.9;
 	z-index: 5;
 	border-color: var(--accent);
-	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), inset 0 1px 8px rgba(255, 255, 255, 0.06);
+	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
 	transition: box-shadow var(--motion-fast) var(--ease), opacity var(--motion-fast) var(--ease);
 }
+/* Stands on the bottom edge and takes a little over half the height: the top of the card
+   is the controls' row. Stretched to the box (`preserveAspectRatio="none"`), while the line
+   keeps its width however wide the clip is. */
 .tlWave {
 	position: absolute;
-	inset: 0;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 1px;
-	padding: 0 2px;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	height: 58%;
 	pointer-events: none;
 }
-.tlWave span {
-	flex: 1 1 0;
-	align-self: center;
-	min-height: 2px;
-	max-width: 2px;
-	border-radius: 2px;
-	background: var(--accent);
+.tlWaveArea {
+	fill: color-mix(in oklab, var(--accent) 24%, transparent);
+}
+.tlWaveLine {
+	fill: none;
+	stroke: color-mix(in oklab, var(--accent) 70%, transparent);
+	stroke-width: 1.5px;
+	stroke-linejoin: round;
+	vector-effect: non-scaling-stroke;
 }
 .tlClipLabel {
 	position: absolute;
-	left: 10px;
+	left: 8px;
 	top: 8px;
 	z-index: 2;
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
 	max-width: calc(100% - 50px);
-	padding: 3px 9px 3px 6px;
-	border-radius: 8px;
-	background: color-mix(in srgb, #080a0d 55%, transparent);
-	border: 1px solid rgba(255, 255, 255, 0.08);
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
 }
-.tlClipIcon {
-	width: 20px;
-	height: 20px;
+/* Round, raised and a size a pointer finds without aiming: the clip's main action. */
+.tlClipEdit,
+.tlClipDelete {
+	width: 30px;
+	height: 30px;
+	flex-shrink: 0;
 	display: grid;
 	place-items: center;
-	border-radius: 6px;
-	background: var(--surface);
+	padding: 0;
+	border-radius: 999px;
+	border: 1px solid var(--border);
+	background: var(--surface-hi);
 	color: var(--fg);
-	flex-shrink: 0;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+	cursor: pointer;
+	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease),
+		border-color var(--motion-fast) var(--ease);
 }
-.tlClipName {
-	font-size: 12px;
-	font-weight: 500;
-	color: #fff;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+.tlClipEdit:hover {
+	border-color: var(--accent-border);
+	background: var(--accent-soft);
+	color: var(--accent);
 }
 .tlClipDuration {
-	font: 500 11px/1.2 var(--font-body);
+	font: 500 12px/1.2 var(--font-body);
 	font-variant-numeric: tabular-nums;
-	color: rgba(255, 255, 255, 0.75);
+	color: var(--fg-2);
 	white-space: nowrap;
 	flex-shrink: 0;
 }
@@ -1987,25 +1988,9 @@
 	right: 8px;
 	top: 8px;
 	z-index: 2;
-	width: 26px;
-	height: 26px;
-	display: grid;
-	place-items: center;
-	border-radius: 8px;
-	/* The chip itself is a fixed dark frosted-glass overlay regardless of
-	   theme (it sits on top of an arbitrary video thumbnail), so its icon
-	   needs the "light text on a dark overlay" token, not --muted — which
-	   is tuned for the app's own light/dark surfaces and reads as
-	   near-invisible against this chip in light theme. */
-	color: var(--overlay-text);
-	background: color-mix(in srgb, #080a0d 55%, transparent);
-	border: 1px solid rgba(255, 255, 255, 0.08);
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
-	cursor: pointer;
-	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
 .tlClipDelete:hover {
+	border-color: var(--danger-soft);
 	background: var(--danger-soft);
 	color: var(--danger);
 }

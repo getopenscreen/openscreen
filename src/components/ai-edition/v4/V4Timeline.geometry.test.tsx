@@ -487,7 +487,7 @@ describe("V4Timeline clip row", () => {
 
 	it("withholds the duration from a card too small to hold it", () => {
 		// 250s at this zoom is a 125px card: past the narrow gate, so it still shows
-		// its name and pencil, but not wide enough for the timecode — which would
+		// its edit button, but not wide enough for the timecode — which would
 		// otherwise escape the label pill and sit on the delete button. Measured in
 		// the running window, not derived here.
 		renderTimeline([clip(0, 250), clip(250, TOTAL_SEC)]);
@@ -498,26 +498,27 @@ describe("V4Timeline clip row", () => {
 	});
 
 	it("asks for the room this card's own timecode needs, not the shortest one", () => {
-		// 600s of 3965s is a ~130px card. `0:12.0` would fit there; `10:00.0` is a
-		// character wider and does not, and `formatSec` has no hour field to stop
-		// the string growing — a clip past a hundred minutes reads `100:00.0`. A
-		// single fixed width would have let those through onto the delete button.
-		renderTimeline([clip(0, 600), clip(600, 3965)]);
+		// 600s of 4000s is a 129px card. `0:12.0` would fit there (50 + 38 + 6×6 =
+		// 124); `10:00.0` is a character wider and does not (130), and `formatSec`
+		// has no hour field to stop the string growing — a clip past a hundred
+		// minutes reads `100:00.0`. A single fixed width would have let those
+		// through onto the delete button.
+		renderTimeline([clip(0, 600), clip(600, 4000)]);
 
 		expect(screen.queryByText("10:00.0")).not.toBeInTheDocument();
-		expect(screen.getByText("56:05.0")).toBeInTheDocument();
+		expect(screen.getByText("56:40.0")).toBeInTheDocument();
 	});
 
 	it("measures the timecode where a canvas exists, rather than averaging its length", () => {
-		// The stubbed face costs 9px a character against the 6px the jsdom fallback
-		// assumes. A 700s clip of this 3965s span is a ~159px card — roomy enough
-		// by the count (50 + 47 + 7×6 = 139) and too tight once the face is read
-		// (50 + 47 + 7×9 = 160) — so only a measured gate withholds it.
+		// The stubbed face costs 9px a character against the 6px the default stub
+		// charges. A 700s clip of this 4315s span is a 140px card — roomy enough by
+		// the count (50 + 38 + 7×6 = 130) and too tight once the face is read
+		// (50 + 38 + 7×9 = 151) — so only a measured gate withholds it.
 		measureText.mockImplementation((text: string) => ({ width: text.length * 9 }));
-		renderTimeline([clip(0, 700), clip(700, 3965)]);
+		renderTimeline([clip(0, 700), clip(700, 4315)]);
 
 		expect(screen.queryByText("11:40.0")).not.toBeInTheDocument();
-		expect(screen.getByText("54:25.0")).toBeInTheDocument();
+		expect(screen.getByText("60:15.0")).toBeInTheDocument();
 	});
 
 	it("takes the card gutter out of each clip's own width", () => {

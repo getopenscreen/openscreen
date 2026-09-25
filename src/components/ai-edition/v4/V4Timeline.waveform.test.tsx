@@ -15,7 +15,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 const VIEWPORT_PX = 900;
 const CLIP_SEC = 10;
-/** ClipWaveform's own rule: one bar per ~125ms, floored at 20 and capped at 400. */
+/** ClipWaveform's own rule: one sample per ~125ms, floored at 20 and capped at 400. */
 const BAR_COUNT = Math.min(400, Math.max(20, Math.round(CLIP_SEC * 8)));
 
 const LOUD = 0.5;
@@ -93,7 +93,14 @@ beforeAll(() => {
 	});
 });
 
-/** Bar heights as the DOM carries them, in document order. */
+/** Every coordinate pair of the wave's line, as the DOM carries it. */
+let lastWavePoints: Array<[number, number]> = [];
+
+/**
+ * The wave's height at each sample, left to right, as a percentage of the wave box. The line
+ * is a spline THROUGH the samples, so each one is the end point of a curve segment: the pair
+ * after the segment's two control points.
+ */
 function renderBars(atGainDb: number): string[] {
 	gainDb = atGainDb;
 	const tl = {
@@ -142,12 +149,14 @@ function renderBars(atGainDb: number): string[] {
 			/>
 		</ShortcutsProvider>,
 	);
-	const bars = Array.from(
-		document.querySelectorAll<HTMLElement>('[class*="tlWave"] span'),
-		(span) => span.style.height,
-	);
+	const d = document.querySelector('[class*="tlWaveLine"]')?.getAttribute("d") ?? "";
 	view.unmount();
-	return bars;
+	lastWavePoints = [...d.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => [
+		Number(m[1]),
+		Number(m[2]),
+	]);
+	const onCurve = [lastWavePoints[0], ...lastWavePoints.slice(1).filter((_, i) => i % 3 === 2)];
+	return onCurve.map((point) => `${Math.round(100 - (point?.[1] ?? 100))}%`);
 }
 
 describe("ClipWaveform output gain", () => {
@@ -167,6 +176,12 @@ describe("ClipWaveform output gain", () => {
 		const bars = renderBars(12);
 		expect(bars[0]).toBe("100%");
 		expect(bars[BAR_COUNT - 1]).toBe("40%");
+		// Smoothed, but never past full scale or under the baseline: the curve stays inside
+		// its control points, and those are held inside the box.
+		for (const [, y] of lastWavePoints) {
+			expect(y).toBeGreaterThanOrEqual(0);
+			expect(y).toBeLessThanOrEqual(100);
+		}
 	});
 
 	it("shrinks the bars when the gain is cut, down to the empty-clip floor", () => {

@@ -61,8 +61,8 @@ describe("right-rail panes are localized", () => {
 	it("renders the layout pane in Japanese", () => {
 		renderIn("ja-JP", <LayoutPane />);
 		expect(screen.getByRole("heading", { name: "カメラレイアウト" })).toBeInTheDocument();
-		// the preset <option> labels come from the shared layout.* catalog
-		expect(screen.getByRole("option", { name: "ピクチャーインピクチャ" })).toBeInTheDocument();
+		// the preset tiles are named from the shared layout.* catalog
+		expect(screen.getByRole("button", { name: "ピクチャーインピクチャ" })).toBeInTheDocument();
 	});
 
 	it("renders the cursor pane in French", () => {

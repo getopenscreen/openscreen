@@ -413,21 +413,18 @@ function BackgroundSection() {
 			    gradient can move; on anything else the control says so instead of holding a
 			    choice that changes nothing on screen. The stored choice is kept and comes back
 			    with the next gradient. */}
-			<div className={styles.field}>
-				<label htmlFor="background-motion">{ts("background.motion")}</label>
-				<select
-					id="background-motion"
+			<div className={`${styles.field} ${styles.fieldStack}`}>
+				<span className={styles.fieldLabel}>{ts("background.motion")}</span>
+				<ChoiceRow<WallpaperMotion>
+					label={ts("background.motion")}
+					options={WALLPAPER_MOTIONS.map((motion) => ({
+						value: motion,
+						label: ts(WALLPAPER_MOTION_LABEL_KEYS[motion]),
+					}))}
 					value={motionApplies ? settings.wallpaperMotion : "none"}
 					disabled={!hasDocument || !motionApplies}
-					title={motionApplies ? undefined : ts("background.motionGradientOnly")}
-					onChange={(e) => void set({ wallpaperMotion: e.target.value as WallpaperMotion })}
-				>
-					{WALLPAPER_MOTIONS.map((motion) => (
-						<option key={motion} value={motion}>
-							{ts(WALLPAPER_MOTION_LABEL_KEYS[motion])}
-						</option>
-					))}
-				</select>
+					onChange={(motion) => void set({ wallpaperMotion: motion })}
+				/>
 			</div>
 			{motionApplies ? null : (
 				<p
@@ -2809,11 +2806,43 @@ export function VideoEffectsPane() {
 
 // ─── Layout (webcam)──────────────────────────────────────────────
 
+// Each preset draws itself (viewBox 0 0 32 22): the recording as an outline, the camera filled.
 const WEBCAM_PRESETS = [
-	{ value: "picture-in-picture", labelKey: "layout.pictureInPicture" },
-	{ value: "dual-frame", labelKey: "layout.dualFrame" },
-	{ value: "vertical-stack", labelKey: "layout.verticalStack" },
-	{ value: "no-webcam", labelKey: "layout.noWebcam" },
+	{
+		value: "picture-in-picture",
+		labelKey: "layout.pictureInPicture",
+		icon: (
+			<>
+				<rect x="1.5" y="1.5" width="29" height="19" rx="3" />
+				<rect x="19.5" y="11" width="8.5" height="6.5" rx="1.5" fill="currentColor" stroke="none" />
+			</>
+		),
+	},
+	{
+		value: "dual-frame",
+		labelKey: "layout.dualFrame",
+		icon: (
+			<>
+				<rect x="1.5" y="3.5" width="18" height="15" rx="2.5" />
+				<rect x="21.5" y="3.5" width="9" height="15" rx="2.5" fill="currentColor" stroke="none" />
+			</>
+		),
+	},
+	{
+		value: "vertical-stack",
+		labelKey: "layout.verticalStack",
+		icon: (
+			<>
+				<rect x="6.5" y="1.5" width="19" height="11" rx="2" />
+				<rect x="6.5" y="14" width="19" height="6.5" rx="2" fill="currentColor" stroke="none" />
+			</>
+		),
+	},
+	{
+		value: "no-webcam",
+		labelKey: "layout.noWebcam",
+		icon: <rect x="1.5" y="1.5" width="29" height="19" rx="3" />,
+	},
 ] as const;
 
 // Webcam size (% of frame width) that maps to the native compositor's default PiP webcam
@@ -2967,23 +2996,41 @@ export function LayoutPane() {
 	};
 	return (
 		<Pane title={ts("layout.title")} icon={<Camera size={16} />} helpText={helpText}>
-			<div className={styles.sectionLabel}>{ts("layout.preset")}</div>
-			<div className={styles.field}>
-				<label htmlFor="layout-preset">{ts("layout.preset")}</label>
-				<select
-					id="layout-preset"
+			{/* The heading names the current layout: the tiles below only draw theirs. */}
+			<div className={styles.sectionLabel}>
+				{ts("layout.preset")}
+				<span className={styles.sectionLabelValue}>
+					{ts(
+						WEBCAM_PRESETS.find((p) => p.value === effectiveLayoutPreset)?.labelKey ??
+							"layout.noWebcam",
+					)}
+				</span>
+			</div>
+			<div style={{ padding: "0 var(--sp-4) 12px" }}>
+				<ChoiceRow<(typeof WEBCAM_PRESETS)[number]["value"]>
+					label={ts("layout.preset")}
+					tiles
+					options={WEBCAM_PRESETS.map((p) => ({
+						value: p.value,
+						label: ts(p.labelKey),
+						icon: (
+							<svg
+								viewBox="0 0 32 22"
+								width={32}
+								height={22}
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="1.75"
+								aria-hidden="true"
+							>
+								{p.icon}
+							</svg>
+						),
+					}))}
 					value={effectiveLayoutPreset}
 					disabled={layoutControlsDisabled}
-					onChange={(e) =>
-						void set({ webcamLayoutPreset: e.target.value as typeof settings.webcamLayoutPreset })
-					}
-				>
-					{WEBCAM_PRESETS.map((p) => (
-						<option key={p.value} value={p.value}>
-							{ts(p.labelKey)}
-						</option>
-					))}
-				</select>
+					onChange={(preset) => void set({ webcamLayoutPreset: preset })}
+				/>
 			</div>
 			<div className={styles.paneRow}>
 				<span className={styles.label}>{ts("layout.mirrorWebcam")}</span>
@@ -3685,6 +3732,102 @@ export function Toggle({
 			disabled={disabled}
 			onClick={() => onChange(!checked)}
 		/>
+	);
+}
+
+/** Un choix parmi quelques valeurs fixes, en une rangée de boutons : tout est visible et un clic
+ *  suffit, là où un `<select>` demandait d'ouvrir puis de choisir (même motif que le niveau de
+ *  zoom, #694). Des boutons `aria-pressed` dans un `role="group"` nommé, comme
+ *  `TranscriptLaneSwitch`, donc chaque choix reste un arrêt de tabulation. Les flèches passent
+ *  d'un choix au voisin depuis le bouton qui a le focus. Ni elles ni Espace/Entrée ne remontent
+ *  jusqu'aux raccourcis de l'éditeur, qui écoutent sur `window` : Espace y lance la lecture (et
+ *  son `preventDefault` tuait l'activation du bouton), les flèches y déplacent la tête. */
+export function ChoiceRow<T extends string | number>({
+	label,
+	options,
+	value,
+	onChange,
+	disabled,
+	columns,
+	tiles,
+	display,
+}: {
+	label: string;
+	options: ReadonlyArray<{ value: T; label: string; icon?: ReactNode }>;
+	value: T;
+	onChange: (next: T) => void;
+	disabled?: boolean;
+	/** Colonnes de la grille ; par défaut, toutes les options sur une rangée. */
+	columns?: number;
+	/** Des vignettes plus hautes, pour des icônes qui dessinent le choix. */
+	tiles?: boolean;
+	/** Ce que montre un bouton. Par défaut l'icône s'il y en a une, et alors `label` lui sert de
+	 *  nom ; sinon le texte. */
+	display?: "text" | "icon" | "both";
+}) {
+	const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
+	const mode = display ?? (options.some((o) => o.icon) ? "icon" : "text");
+	return (
+		<div
+			role="group"
+			aria-label={label}
+			className={`${styles.choiceRow} ${tiles ? styles.choiceRowTiles : ""}`}
+			style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}
+			onKeyDown={(e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.nativeEvent.stopPropagation();
+					return;
+				}
+				const step =
+					e.key === "ArrowRight" || e.key === "ArrowDown"
+						? 1
+						: e.key === "ArrowLeft" || e.key === "ArrowUp"
+							? -1
+							: 0;
+				if (step === 0) return;
+				e.preventDefault();
+				e.nativeEvent.stopPropagation();
+				const focused = buttonsRef.current.findIndex((b) => b === document.activeElement);
+				const from = focused >= 0 ? focused : options.findIndex((o) => o.value === value);
+				const next = options[from + step];
+				if (!next) return;
+				buttonsRef.current[from + step]?.focus();
+				if (next.value !== value) onChange(next.value);
+			}}
+		>
+			{options.map((option, i) => {
+				const pressed = option.value === value;
+				return (
+					<button
+						key={String(option.value)}
+						ref={(el) => {
+							buttonsRef.current[i] = el;
+						}}
+						type="button"
+						className={`${styles.choiceBtn} ${pressed ? styles.isActive : ""}`}
+						aria-pressed={pressed}
+						aria-label={mode === "icon" ? option.label : undefined}
+						// Always: a label cut short by a narrow pane still reads in full on hover.
+						title={option.label}
+						disabled={disabled}
+						// Re-choisir la valeur en place n'est pas une modification : ni sauvegarde ni
+						// entrée d'annulation.
+						onClick={() => {
+							if (!pressed) onChange(option.value);
+						}}
+					>
+						{mode === "text" ? option.label : null}
+						{mode === "icon" ? option.icon : null}
+						{mode === "both" ? (
+							<>
+								{option.icon}
+								<span className={styles.choiceBtnLabel}>{option.label}</span>
+							</>
+						) : null}
+					</button>
+				);
+			})}
+		</div>
 	);
 }
 

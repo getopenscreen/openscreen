@@ -1,14 +1,26 @@
 import {
+	ArrowDown,
+	ArrowDownLeft,
+	ArrowDownRight,
+	ArrowLeft,
+	ArrowRight,
+	ArrowUp,
+	ArrowUpLeft,
+	ArrowUpRight,
 	AudioLines,
 	Camera,
 	ChevronRight,
+	EyeOff,
 	FileText,
+	ImageIcon,
+	type LucideIcon,
 	Maximize2,
 	MousePointer2,
 	Pencil,
 	Scissors,
 	SlidersHorizontal,
 	Trash2,
+	Type,
 	Undo2,
 	X,
 	ZoomIn,
@@ -48,6 +60,7 @@ import shell from "../NewEditorShell.module.css";
 import {
 	AudioPane,
 	AudioTrackPane,
+	ChoiceRow,
 	CursorPane,
 	LayoutPane,
 	SliderCell,
@@ -312,6 +325,17 @@ function paneRow(label: string, control: React.ReactNode) {
 	);
 }
 
+/** Un libellé au-dessus de son contrôle, pour ceux qui prennent toute la largeur du panneau
+ *  (une `ChoiceRow`) : à côté d'un libellé, ils n'auraient plus la place de montrer leurs choix. */
+function paneStack(label: string, control: React.ReactNode) {
+	return (
+		<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+			<span style={{ fontSize: 13, color: "var(--fg-2)", fontWeight: 500 }}>{label}</span>
+			{control}
+		</div>
+	);
+}
+
 /** Clé i18n (`zoom.camera.preset.*` / `zoom.camera.description.*`) de chaque caméra 3D. */
 const CAMERA_KEYS: Record<Rotation3DPreset, string> = {
 	iso: "iso",
@@ -350,18 +374,19 @@ function ClickImpactToggle({
 type AnnotationKind = AxcutAnnotationRegion["type"];
 type ArrowDirectionKind = NonNullable<AxcutAnnotationRegion["figureData"]>["arrowDirection"];
 
-/** Les huit directions de `ArrowSvgs.tsx`, dans l'ordre où elles y sont définies, chacune avec
- *  la flèche qui la montre : aucune langue n'a de libellé pour elles, et la valeur brute
- *  (« up-right ») s'affichait telle quelle. */
-const ARROW_DIRECTIONS: Array<[ArrowDirectionKind, string]> = [
-	["up", "↑"],
-	["down", "↓"],
-	["left", "←"],
-	["right", "→"],
-	["up-right", "↗"],
-	["up-left", "↖"],
-	["down-right", "↘"],
-	["down-left", "↙"],
+/** Les huit directions de `ArrowSvgs.tsx`, dans l'ordre d'une boussole (du haut, dans le sens
+ *  des aiguilles d'une montre), chacune avec la flèche qui la montre. Aucune langue n'a de
+ *  libellé pour elles, et la valeur brute (« up-right ») s'affichait telle quelle : le caractère
+ *  fléché sert de nom accessible. */
+const ARROW_DIRECTIONS: Array<{ value: ArrowDirectionKind; glyph: string; Icon: LucideIcon }> = [
+	{ value: "up", glyph: "↑", Icon: ArrowUp },
+	{ value: "up-right", glyph: "↗", Icon: ArrowUpRight },
+	{ value: "right", glyph: "→", Icon: ArrowRight },
+	{ value: "down-right", glyph: "↘", Icon: ArrowDownRight },
+	{ value: "down", glyph: "↓", Icon: ArrowDown },
+	{ value: "down-left", glyph: "↙", Icon: ArrowDownLeft },
+	{ value: "left", glyph: "←", Icon: ArrowLeft },
+	{ value: "up-left", glyph: "↖", Icon: ArrowUpLeft },
 ];
 
 /** Défauts du schéma, pour compléter un `blurData` absent sans écraser ce qui existe. */
@@ -443,27 +468,19 @@ export function SpeedControl({
 		setDraft("");
 	};
 
-	// A custom speed matches no preset, so surface it as its own option — otherwise the select
-	// would fall back to rendering its first entry and misreport the region.
-	const options = SPEED_PRESETS.includes(region.speed)
-		? SPEED_PRESETS
-		: [...SPEED_PRESETS, region.speed].sort((a, b) => a - b);
-
 	return (
 		<>
-			{paneRow(
+			{/* The presets as buttons, six to a row like the zoom levels. A custom speed presses
+			    none of them; the field below shows it as its placeholder. */}
+			{paneStack(
 				ts("speed.playbackSpeed"),
-				<select
+				<ChoiceRow<number>
+					label={ts("speed.playbackSpeed")}
+					columns={6}
+					options={SPEED_PRESETS.map((speed) => ({ value: speed, label: `${speed}×` }))}
 					value={region.speed}
-					onChange={(e) => void tl.updateSpeedValue(region.id, Number(e.target.value))}
-					className={shell.control}
-				>
-					{options.map((speed) => (
-						<option key={speed} value={speed}>
-							{speed}×
-						</option>
-					))}
-				</select>,
+					onChange={(speed) => void tl.updateSpeedValue(region.id, speed)}
+				/>,
 			)}
 			{paneRow(
 				ts("speed.customPlaybackSpeed"),
@@ -735,24 +752,32 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					    blur were unreachable even though the compositor renders all four and every
 					    label here already shipped translated. Converting keeps the span and box, so
 					    a mistake costs one more click rather than redrawing the region. */}
-					{paneRow(
+					{paneStack(
 						ts("annotation.type"),
-						<select
+						<ChoiceRow<AnnotationKind>
+							label={ts("annotation.type")}
+							display="both"
+							tiles
+							options={[
+								{ value: "text", label: ts("annotation.typeText"), icon: <Type size={16} /> },
+								{
+									value: "image",
+									label: ts("annotation.typeImage"),
+									icon: <ImageIcon size={16} />,
+								},
+								{
+									value: "figure",
+									label: ts("annotation.typeArrow"),
+									icon: <ArrowUpRight size={16} />,
+								},
+								{ value: "blur", label: ts("annotation.typeBlur"), icon: <EyeOff size={16} /> },
+							]}
 							value={region.type}
-							onChange={(e) => {
-								tl.updateAnnotationLive(
-									region.id,
-									convertAnnotationKind(region, e.target.value as AnnotationKind),
-								);
+							onChange={(kind) => {
+								tl.updateAnnotationLive(region.id, convertAnnotationKind(region, kind));
 								void tl.commitAnnotationChange();
 							}}
-							className={shell.control}
-						>
-							<option value="text">{ts("annotation.typeText")}</option>
-							<option value="image">{ts("annotation.typeImage")}</option>
-							<option value="figure">{ts("annotation.typeArrow")}</option>
-							<option value="blur">{ts("annotation.typeBlur")}</option>
-						</select>,
+						/>,
 					)}
 					{region.type === "text" ? (
 						<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -803,28 +828,26 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					) : null}
 					{region.type === "figure" ? (
 						<>
-							{paneRow(
+							{paneStack(
 								ts("annotation.arrowDirection"),
-								<select
+								<ChoiceRow<ArrowDirectionKind>
+									label={ts("annotation.arrowDirection")}
+									options={ARROW_DIRECTIONS.map(({ value, glyph, Icon }) => ({
+										value,
+										label: glyph,
+										icon: <Icon size={16} />,
+									}))}
 									value={region.figureData?.arrowDirection ?? "right"}
-									onChange={(e) => {
+									onChange={(arrowDirection) => {
 										tl.updateAnnotationLive(region.id, {
 											figureData: {
 												...(region.figureData ?? { color: "#34B27B", strokeWidth: 4 }),
-												arrowDirection: e.target.value as ArrowDirectionKind,
+												arrowDirection,
 											},
 										});
 										void tl.commitAnnotationChange();
 									}}
-									aria-label={ts("annotation.arrowDirection")}
-									className={shell.control}
-								>
-									{ARROW_DIRECTIONS.map(([d, glyph]) => (
-										<option key={d} value={d}>
-											{glyph}
-										</option>
-									))}
-								</select>,
+								/>,
 							)}
 							{paneRow(
 								ts("annotation.arrowColor"),
@@ -865,52 +888,48 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					) : null}
 					{region.type === "blur" ? (
 						<>
-							{paneRow(
+							{paneStack(
 								ts("annotation.blurType"),
-								<select
+								<ChoiceRow<"blur" | "mosaic">
+									label={ts("annotation.blurType")}
+									options={[
+										{ value: "blur", label: ts("annotation.blurTypeBlur") },
+										{ value: "mosaic", label: ts("annotation.blurTypeMosaic") },
+									]}
 									value={region.blurData?.type ?? "mosaic"}
-									onChange={(e) => {
+									onChange={(type) => {
 										tl.updateAnnotationLive(region.id, {
-											blurData: {
-												...(region.blurData ?? BLUR_DEFAULTS),
-												type: e.target.value as "blur" | "mosaic",
-											},
+											blurData: { ...(region.blurData ?? BLUR_DEFAULTS), type },
 										});
 										void tl.commitAnnotationChange();
 									}}
-									className={shell.control}
-								>
-									<option value="blur">{ts("annotation.blurTypeBlur")}</option>
-									<option value="mosaic">{ts("annotation.blurTypeMosaic")}</option>
-								</select>,
+								/>,
 							)}
-							{paneRow(
+							{paneStack(
 								ts("annotation.blurShape"),
-								<select
+								<ChoiceRow<"rectangle" | "oval" | "freehand">
+									label={ts("annotation.blurShape")}
+									options={[
+										{ value: "rectangle", label: ts("annotation.blurShapeRectangle") },
+										{ value: "oval", label: ts("annotation.blurShapeOval") },
+										// Le tracé libre n'est plus proposé à la création : sa saisie était cassée et
+										// le rendu ne couvrait que la boîte englobante. Un outil de confidentialité
+										// à moitié fiable vaut moins que pas d'outil, parce qu'on lui fait confiance.
+										// Le choix reste visible pour une annotation qui l'utilise déjà, avec la
+										// phrase qui dit ce que le rendu en fait — plutôt que de le faire disparaître
+										// d'un projet existant.
+										...(region.blurData?.shape === "freehand"
+											? [{ value: "freehand" as const, label: ts("annotation.blurShapeFreehand") }]
+											: []),
+									]}
 									value={region.blurData?.shape ?? "rectangle"}
-									onChange={(e) => {
+									onChange={(shape) => {
 										tl.updateAnnotationLive(region.id, {
-											blurData: {
-												...(region.blurData ?? BLUR_DEFAULTS),
-												shape: e.target.value as "rectangle" | "oval" | "freehand",
-											},
+											blurData: { ...(region.blurData ?? BLUR_DEFAULTS), shape },
 										});
 										void tl.commitAnnotationChange();
 									}}
-									className={shell.control}
-								>
-									<option value="rectangle">{ts("annotation.blurShapeRectangle")}</option>
-									<option value="oval">{ts("annotation.blurShapeOval")}</option>
-									{/* Le tracé libre n'est plus proposé à la création : sa saisie était cassée et
-									    le rendu ne couvrait que la boîte englobante. Un outil de confidentialité
-									    à moitié fiable vaut moins que pas d'outil, parce qu'on lui fait confiance.
-									    L'option reste visible pour une annotation qui l'utilise déjà, avec la
-									    phrase qui dit ce que le rendu en fait — plutôt que de la faire disparaître
-									    d'un projet existant. */}
-									{region.blurData?.shape === "freehand" ? (
-										<option value="freehand">{ts("annotation.blurShapeFreehand")}</option>
-									) : null}
-								</select>,
+								/>,
 							)}
 							{region.blurData?.shape === "freehand" ? (
 								// Say it rather than let the user discover it: the compositor masks the
@@ -975,31 +994,26 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							)
 						: null}
 					{region.type === "text"
-						? paneRow(
+						? paneStack(
 								ts("textAnimation.title"),
 								// Les sept animations existaient : nommées dans le schéma, traduites dans les
 								// treize langues, transportées jusqu'au compositeur — et injouables, faute de
-								// ce sélecteur.
-								<select
-									aria-label={ts("textAnimation.selectAnimation")}
+								// ce sélecteur. Trois par rangée : « Typewriter » et ses traductions tiennent.
+								<ChoiceRow<AnnotationTextAnimation>
+									label={ts("textAnimation.selectAnimation")}
+									columns={3}
+									options={TEXT_ANIMATION_VALUES.map((value) => ({
+										value,
+										label: ts(`textAnimation.${value === "slide-left" ? "slideLeft" : value}`),
+									}))}
 									value={region.style?.textAnimation ?? "none"}
-									onChange={(e) => {
+									onChange={(textAnimation) => {
 										tl.updateAnnotationLive(region.id, {
-											style: {
-												...region.style,
-												textAnimation: e.target.value as AnnotationTextAnimation,
-											},
+											style: { ...region.style, textAnimation },
 										});
 										void tl.commitAnnotationChange();
 									}}
-									className={shell.control}
-								>
-									{TEXT_ANIMATION_VALUES.map((value) => (
-										<option key={value} value={value}>
-											{ts(`textAnimation.${value === "slide-left" ? "slideLeft" : value}`)}
-										</option>
-									))}
-								</select>,
+								/>,
 							)
 						: null}
 					{region.type === "text"

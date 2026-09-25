@@ -79,6 +79,9 @@ pub struct SceneLayout {
     /// remplir le slot — d'autant plus visible sur un clip recadré, le crop éloignant encore le
     /// ratio de la source de celui du slot.
     ///
+    /// Le slot MASQUE aussi l'écran : zoom et 3D y restent, rognés au lieu de déborder sur la
+    /// caméra (`frame_geometry::ScreenMask`).
+    ///
     /// `#[serde(default)]` : absent → `false` → comportement "contain" historique.
     #[serde(default)]
     pub screen_cover: bool,

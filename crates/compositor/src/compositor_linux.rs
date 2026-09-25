@@ -1125,11 +1125,14 @@ impl Compositor {
     /// `LayerCB` de l'ombre d'un ecran INCLINE (mode 12) : la penombre suit le
     /// quadrilatere projete, pas son rect englobant. Port de
     /// `compositor_macos::draw_quad_shadow`.
+    #[allow(clippy::too_many_arguments)]
     fn quad_shadow_cb(
         &self,
         corners: &[(f32, f32); 4],
         center_px: [f32; 2],
         radius: f32,
+        // Le slot d'un layout en bloc, qui rogne le plan (`shadow_mask_fields`).
+        mask: Option<crate::frame_geometry::ScreenMask>,
         spread: f32,
         offset_px: [f32; 2],
         opacity: f32,
@@ -1147,6 +1150,11 @@ impl Compositor {
         let [tr0, tr1] = local(corners[1]);
         let [br0, br1] = local(corners[2]);
         let [bl0, bl1] = local(corners[3]);
+        let (mask_rect, mask_radius) = crate::frame_geometry::shadow_mask_fields(
+            mask,
+            [center_px[0] + min_x - spread, center_px[1] + min_y - spread],
+            [rw, rh],
+        );
         LayerCB {
             dst: [
                 (center_px[0] + min_x - spread + offset_px[0]) / rw,
@@ -1160,8 +1168,9 @@ impl Compositor {
             color: [0.0, 0.0, 0.0, opacity],
             fx: [tl0, tl1, tr0, tr1],
             src_prev: [br0, br1, bl0, bl1],
+            dst_prev: mask_rect,
             // Le spread vit ici et NON dans `fx.x` : `fx` porte deja les coins.
-            mb: [0.0, spread, 1.0, 0.0],
+            mb: [0.0, spread, 1.0, mask_radius],
             ..Default::default()
         }
     }
@@ -2067,18 +2076,23 @@ impl Compositor {
         // `color.z` au mode 8) : l'arrondi du haut se fait par le cadre. 0 sans fenetre.
         let top_lift = g.screen_top_lift_px([rw, rh]);
         let screen_layer = match tilt.as_ref() {
-            None => LayerCB {
-                dst: g.s_dst,
-                src: g.cut,
-                quad_px: s_px,
-                radius_px: g.s_radius,
-                mode: 0.0,
-                color: [1.0, 1.0, 1.0, 1.0],
-                src_prev: g.cut,
-                dst_prev: g.s_dst_prev,
-                mb: [g.mb_taps, g.mb_amount, top_lift, square_top],
-                ..Default::default()
-            },
+            None => {
+                // Sous le masque d'un layout en bloc, rogne au slot (`mask_flat_screen`).
+                let (dst, src, quad_px, radius_px) =
+                    g.mask_flat_screen(g.s_dst, g.cut, s_px, g.s_radius, [rw, rh]);
+                LayerCB {
+                    dst,
+                    src,
+                    quad_px,
+                    radius_px,
+                    mode: 0.0,
+                    color: [1.0, 1.0, 1.0, 1.0],
+                    src_prev: g.cut,
+                    dst_prev: g.s_dst_prev,
+                    mb: [g.mb_taps, g.mb_amount, top_lift, square_top],
+                    ..Default::default()
+                }
+            }
             // Mode 8, partage avec Windows et macOS (`tilted_screen_cb`).
             Some(quad) => tilted_screen_cb(
                 quad,
@@ -2090,6 +2104,7 @@ impl Compositor {
                 top_lift,
                 dof,
                 [rw, rh],
+                g.screen_mask,
             ),
         };
         // Bind group construit AVANT le pass (doit vivre pendant tout le pass) ;
@@ -2145,9 +2160,8 @@ impl Compositor {
                     ShadowCaster::Upright { dst, size_px, radius } => {
                         self.shadow_cb(dst, size_px, radius, spread, offset, opacity)
                     }
-                    ShadowCaster::Tilted { corners, center_px, radius } => {
-                        self.quad_shadow_cb(&corners, center_px, radius, spread, offset, opacity)
-                    }
+                    ShadowCaster::Tilted { corners, center_px, radius, mask } => self
+                        .quad_shadow_cb(&corners, center_px, radius, mask, spread, offset, opacity),
                 },
             };
             self.make_bind(&cb, None, &dummy)

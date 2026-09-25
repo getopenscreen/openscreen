@@ -8,7 +8,9 @@ import {
 	paddingFit,
 	resolveWebcamReactiveZoom,
 	restingCompositionAspect,
+	type Size,
 	type StyledRenderRect,
+	type WebcamLayoutPreset,
 } from "./compositeLayout";
 import type { WebcamAnchor } from "./projectDefaults";
 
@@ -405,6 +407,25 @@ describe("computeCompositeLayout", () => {
 		expect(layout?.webcamRect).toBeNull();
 		// Contain-fit into the padded area, like every other preset.
 		expect(layout?.screenRect).toEqual({ x: 192, y: 108, width: 1536, height: 864 });
+	});
+
+	it("masks the screen with its box for the two block presets only", () => {
+		// `screenCover` is what the native compositor reads to crop a zoom or a 3D tilt to the
+		// screen box instead of letting it spill over the camera (`ScreenMask`).
+		const args = {
+			canvasSize: { width: 1920, height: 1080 },
+			screenSize: { width: 1920, height: 1080 },
+			webcamSize: { width: 960, height: 720 },
+		};
+		const cover = (layoutPreset: WebcamLayoutPreset, webcamSize: Size | null = args.webcamSize) =>
+			computeCompositeLayout({ ...args, webcamSize, layoutPreset })?.screenCover ?? false;
+
+		expect(cover("dual-frame")).toBe(true);
+		expect(cover("vertical-stack")).toBe(true);
+		expect(cover("picture-in-picture")).toBe(false);
+		expect(cover("no-webcam")).toBe(false);
+		// Without a camera the block falls back to the screen alone, which zooms like any other.
+		expect(cover("dual-frame", null)).toBe(false);
 	});
 
 	it("forces circular and square masks to use square dimensions", () => {

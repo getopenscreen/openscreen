@@ -295,6 +295,9 @@ export interface SceneLayout {
 	 * honours on the web path; shipping it here is what lets the native compositor agree.
 	 * Without it native stretched the source to fill the slot — most visible on a cropped
 	 * clip, the crop pushing the source aspect further from the slot's.
+	 *
+	 * The slot also MASKS the screen: a zoom or a 3D tilt stays inside it, cropped, instead of
+	 * spilling over the camera (`ScreenMask` in `frame_geometry.rs`).
 	 */
 	screenCover?: boolean;
 	/**

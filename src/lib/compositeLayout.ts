@@ -175,7 +175,10 @@ export interface WebcamCompositeLayout {
 	screenRect: RenderRect;
 	webcamRect: StyledRenderRect | null;
 	screenBorderRadius?: number;
-	/** When true, the video should be scaled to cover screenRect (cropping overflow). */
+	/**
+	 * When true, the video should be scaled to cover screenRect (cropping overflow), and
+	 * screenRect masks it: a zoom or a 3D tilt stays inside instead of growing past it.
+	 */
 	screenCover?: boolean;
 }
 

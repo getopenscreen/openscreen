@@ -526,7 +526,6 @@ export const PANELS = {
 	cursor: {
 		title: "Cursor",
 		show: "Show cursor",
-		theme: "Cursor style",
 		size: "Size",
 		smoothing: "Smoothing",
 	},
@@ -709,7 +708,6 @@ export const PROVENANCE: ProvenanceEntry[] = [
 	{ shown: "Roundness", source: "src/i18n/locales/en/settings.json → effects.roundness" },
 	{ shown: "Cursor", source: "src/i18n/locales/en/settings.json → cursor.title" },
 	{ shown: "Show cursor", source: "src/i18n/locales/en/settings.json → cursor.show" },
-	{ shown: "Cursor style", source: "src/i18n/locales/en/settings.json → cursor.theme" },
 	{ shown: "Size", source: "src/i18n/locales/en/settings.json → cursor.size" },
 	{ shown: "Smoothing", source: "src/i18n/locales/en/settings.json → cursor.smoothing" },
 ];

@@ -3293,8 +3293,12 @@ function WebcamFraming({
 }) {
 	const boxRef = useRef<HTMLDivElement | null>(null);
 	const dragRef = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
-	// The camera's own shape, once its metadata says; 16:9 until then.
-	const [aspect, setAspect] = useState(16 / 9);
+	// The camera's own shape, read from ITS metadata: tied to the source it was read from, so
+	// another camera starts over at 16:9, and the picture stays hidden until its own shape is
+	// known rather than showing a frame in the previous one's.
+	const [metadata, setMetadata] = useState<{ src: string; aspect: number } | null>(null);
+	const ready = src !== null && metadata?.src === src;
+	const aspect = ready ? metadata.aspect : 16 / 9;
 	const movable = !disabled && crop.width < 0.999;
 	const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -3323,6 +3327,7 @@ function WebcamFraming({
 					<video
 						className={styles.framingVideo}
 						src={src}
+						style={{ visibility: ready ? "visible" : "hidden" }}
 						muted
 						playsInline
 						preload="metadata"
@@ -3330,7 +3335,7 @@ function WebcamFraming({
 						onLoadedMetadata={(e) => {
 							const video = e.currentTarget;
 							if (video.videoWidth > 0 && video.videoHeight > 0) {
-								setAspect(video.videoWidth / video.videoHeight);
+								setMetadata({ src, aspect: video.videoWidth / video.videoHeight });
 							}
 							// A frame from the take rather than its first one, which is often black.
 							video.currentTime = Math.min(1, (video.duration || 0) / 2);

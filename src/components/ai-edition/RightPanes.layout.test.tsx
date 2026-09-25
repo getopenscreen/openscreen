@@ -138,6 +138,22 @@ describe("LayoutPane camera availability", () => {
 	});
 });
 
+describe("LayoutPane webcam framing picture", () => {
+	// Shown in the camera's own shape only: before its metadata the box is a 16:9 guess, and a
+	// picture drawn in it would be stretched.
+	it("shows the camera once its own shape is known", () => {
+		renderLayout(seedProject(true));
+		const video = document.querySelector('[class*="framingVideo"]') as HTMLVideoElement;
+		expect(video.style.visibility).toBe("hidden");
+
+		Object.defineProperty(video, "videoWidth", { configurable: true, value: 640 });
+		Object.defineProperty(video, "videoHeight", { configurable: true, value: 480 });
+		fireEvent.loadedMetadata(video);
+
+		expect(video.style.visibility).toBe("visible");
+	});
+});
+
 // #412. The pan used to be read back out of the crop rect, which cannot hold it: at 100%
 // zoom the crop IS the frame, so its offset is 0 for every pan the user could have chosen.
 // A trip down to 100% therefore erased the framing rather than suspending it.

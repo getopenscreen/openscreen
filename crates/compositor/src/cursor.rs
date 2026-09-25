@@ -12,6 +12,11 @@ const AUTO_FOLLOW_MAX_FACTOR: f32 = 0.25;
 const AUTO_FOLLOW_RAMP_DISTANCE: f32 = 0.15;
 const AUTO_FOLLOW_REFERENCE_MS: f32 = 1000.0 / 40.0;
 
+/// Part de la vue zoomée, par axe, où le pointeur bouge sans que la vue le suive : sa moitié
+/// centrale (`follow_in_view`). Au-delà, la vue le rattrape juste assez pour le ramener au bord de
+/// cette zone. Sans elle, la vue suivait chaque petit geste et le cadrage paraissait nerveux.
+const FOLLOW_DEAD_ZONE: f32 = 0.5;
+
 // Convergence du curseur dessiné sur le point cliqué (`pinned_at`). La tenue couvre le contact du
 // curseur modélisé (27 à 74 ms après le clic), plus une image à 24 i/s.
 const PIN_APPROACH_S: f32 = 0.25;
@@ -92,16 +97,22 @@ fn smooth_follow_samples(samples: &[(f32, f32, f32)]) -> Vec<(f32, f32, f32)> {
             prev = Some((t, px, py));
             continue;
         }
-        let (dx, dy) = (x - px, y - py);
-        let distance = (dx * dx + dy * dy).sqrt();
-        let ramp = (distance / AUTO_FOLLOW_RAMP_DISTANCE).min(1.0);
-        let base = AUTO_FOLLOW_MIN_FACTOR + (AUTO_FOLLOW_MAX_FACTOR - AUTO_FOLLOW_MIN_FACTOR) * ramp;
-        let factor = 1.0 - (1.0 - base).powf(dt_ms / AUTO_FOLLOW_REFERENCE_MS);
-        let (nx, ny) = (px + dx * factor, py + dy * factor);
+        let (nx, ny) = follow_step((px, py), (x, y), dt_ms);
         smoothed.push((t, nx, ny));
         prev = Some((t, nx, ny));
     }
     smoothed
+}
+
+/// Un pas du lissage de suivi : `from` avance vers `to` d'un facteur qui croît avec la distance
+/// (loin = rattrape vite, près = décélère), corrigé en temps sur `dt_ms`.
+fn follow_step(from: (f32, f32), to: (f32, f32), dt_ms: f32) -> (f32, f32) {
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    let distance = (dx * dx + dy * dy).sqrt();
+    let ramp = (distance / AUTO_FOLLOW_RAMP_DISTANCE).min(1.0);
+    let base = AUTO_FOLLOW_MIN_FACTOR + (AUTO_FOLLOW_MAX_FACTOR - AUTO_FOLLOW_MIN_FACTOR) * ramp;
+    let factor = 1.0 - (1.0 - base).powf(dt_ms / AUTO_FOLLOW_REFERENCE_MS);
+    (from.0 + dx * factor, from.1 + dy * factor)
 }
 
 impl CursorTrack {
@@ -173,6 +184,37 @@ impl CursorTrack {
     /// près donne un pan nerveux. Voir `smooth_follow_samples`.
     pub fn follow_at(&self, t: f32) -> Option<(f32, f32)> {
         sample_at(&self.follow_samples, t)
+    }
+
+    /// Le centre de la vue d'un zoom auto d'échelle `scale` à `t`, parti de `follow_at(t0)` en
+    /// `t0` : `follow_at` avec une zone morte. La vue ne bouge pas tant que le pointeur reste dans
+    /// la part `FOLLOW_DEAD_ZONE` de sa largeur autour de son centre ; il en sort, elle le
+    /// rattrape avec le même lissage, juste assez pour le ramener au bord de la zone. Bornée à ce
+    /// qu'une vue de `1/scale` peut atteindre, pour que la zone se mesure contre la vue affichée.
+    ///
+    /// Rejouée depuis `t0` à chaque appel, sur les échantillons BRUTS : une pure fonction de
+    /// `(t0, t)`, donc la même en preview et à l'export, en lecture comme après un seek. Le coût
+    /// suit la durée de la région, pas celle de la piste.
+    pub fn follow_in_view(&self, t0: f32, t: f32, scale: f32) -> Option<(f32, f32)> {
+        let half = 0.5 / scale.max(1.0);
+        let dead = half * FOLLOW_DEAD_ZONE;
+        let reach = |v: f32| v.clamp(half, 1.0 - half);
+        // La cible : le point qui ramène le pointeur au bord de la zone, la vue elle-même dedans.
+        let pull = |cursor: f32, view: f32| cursor - (cursor - view).clamp(-dead, dead);
+        let (x0, y0) = self.follow_at(t0)?;
+        let (mut at, mut view) = (t0, (reach(x0), reach(y0)));
+        let first = self.samples.partition_point(|s| s.0 <= t0);
+        for &(ts, x, y) in &self.samples[first..] {
+            let (nx, ny) = follow_step(view, (pull(x, view.0), pull(y, view.1)), (ts - at) * 1000.0);
+            let next = (reach(nx), reach(ny));
+            if ts >= t {
+                // Entre deux échantillons, linéaire, comme `follow_at`.
+                let f = if ts > at { ((t - at) / (ts - at)).clamp(0.0, 1.0) } else { 1.0 };
+                return Some((view.0 + (next.0 - view.0) * f, view.1 + (next.1 - view.1) * f));
+            }
+            (at, view) = (ts, next);
+        }
+        Some(view)
     }
 
     /// Position (cx, cy) au temps `t` (interpolation linéaire), ou None si hors piste. Brute, sauf
@@ -411,6 +453,33 @@ fn cursor_spring_config(smoothing_factor: f32) -> (f32, f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Zone morte du suivi auto : un pointeur qui tremble au centre de la vue ne la bouge pas ;
+    /// un pointeur qui part loin est rattrapé, jusqu'au bord de la zone et pas au-delà.
+    #[test]
+    fn the_auto_follow_holds_still_inside_its_dead_zone() {
+        // ×2 : vue de 0,5, zone morte de ±0,125 autour de son centre.
+        let track = |f: fn(f32) -> f32| {
+            CursorTrack::new((0..=300).map(|i| { let t = i as f32 / 30.0; (t, f(t), 0.5) }).collect(), vec![], vec![])
+        };
+        let jitter = track(|t| 0.5 + 0.08 * (t * 7.0).sin());
+        for i in 0..=90 {
+            let (x, y) = jitter.follow_in_view(0.0, i as f32 / 10.0, 2.0).unwrap();
+            assert!((x - 0.5).abs() < 1e-6 && (y - 0.5).abs() < 1e-6, "t {} : {x}", i as f32 / 10.0);
+        }
+        // Sans zone morte, le suivi lissé, lui, tremble.
+        let swing = (0..=90).map(|i| jitter.follow_at(i as f32 / 10.0).unwrap().0).fold(0.0f32, |m, x| m.max((x - 0.5).abs()));
+        assert!(swing > 0.02, "{swing}");
+
+        // Un saut à 0,8 à 2 s : la vue rattrape jusqu'à laisser le pointeur au bord de la zone.
+        let jump = track(|t| if t < 2.0 { 0.5 } else { 0.8 });
+        let settled = jump.follow_in_view(0.0, 9.0, 2.0).unwrap().0;
+        assert!((settled - (0.8 - 0.125)).abs() < 1e-3, "{settled}");
+        let early = jump.follow_in_view(0.0, 2.1, 2.0).unwrap().0;
+        assert!(early > 0.5 && early < settled, "rattrapage progressif : {early}");
+        // Une pure fonction de (t0, t) : l'ordre des appels ne change rien.
+        assert_eq!(jump.follow_in_view(0.0, 2.1, 2.0).unwrap().0, early);
+    }
 
     /// L'état du curseur est une fonction en escalier : il tient jusqu'à la transition
     /// suivante, il n'est pas interpolé, et avant la première il n'y en a pas.

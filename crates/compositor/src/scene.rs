@@ -45,6 +45,11 @@ pub struct SceneLayout {
     pub webcam_position: Option<WebcamPosition>,
     /// la webcam rétrécit pendant un zoom actif.
     pub webcam_reactive_zoom: bool,
+    /// Picture-in-picture : le coin ou le milieu de bord où la caméra est ancrée, à marge
+    /// constante du bord (`WEBCAM_ANCHORS`, TS : "top-left", "top", …, "bottom-right"). Le
+    /// rétrécissement du zoom réactif se fait vers lui (`anchor_fractions`). Absent : le centre.
+    #[serde(default)]
+    pub webcam_anchor: Option<String>,
     /// User-authored source crop for the camera. Absent keeps the full frame.
     #[serde(default)]
     pub webcam_crop: Option<SceneCrop>,
@@ -109,6 +114,19 @@ pub struct SceneLayout {
     /// `#[serde(default)]` : ancien payload / tests → None → table Rust historique.
     #[serde(default)]
     pub webcam_radius_frac: Option<f32>,
+}
+
+impl SceneLayout {
+    /// L'ancre de la caméra en fractions de sa boîte, par axe : 0, 0,5 ou 1, la part de la place
+    /// libre qu'elle laisse d'un côté (`webcamAnchorFractions`, TS). Le centre sans ancre.
+    pub fn webcam_anchor_fractions(&self) -> [f32; 2] {
+        let Some(anchor) = self.webcam_anchor.as_deref() else { return [0.5, 0.5] };
+        let side = |low: bool, high: bool| if low { 0.0 } else if high { 1.0 } else { 0.5 };
+        [
+            side(anchor.ends_with("left"), anchor.ends_with("right")),
+            side(anchor.starts_with("top"), anchor.starts_with("bottom")),
+        ]
+    }
 }
 
 /// La moitié du layout qui dépend de la FORME de la source, résolue pour un clip.

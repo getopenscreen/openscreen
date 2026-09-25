@@ -83,7 +83,7 @@ export type FixedRotation3DPreset = (typeof FIXED_ROTATION_3D_PRESETS)[number];
  * A moving 3D camera. `follow-cursor` keeps the screen still and moves a real camera around it:
  * the camera orbits to the side the cursor is on and rises or dips with it, always level. The
  * native compositor renders it (`crates/compositor/src/camera.rs`). It needs the cursor track,
- * which the export only loads while the cursor is shown.
+ * which only drives it while the cursor is shown.
  */
 export const MOVING_ROTATION_3D_PRESETS = ["follow-cursor"] as const;
 export type MovingRotation3DPreset = (typeof MOVING_ROTATION_3D_PRESETS)[number];

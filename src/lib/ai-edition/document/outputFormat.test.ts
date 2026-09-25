@@ -13,6 +13,7 @@ import {
 import {
 	collectEffectiveClipDims,
 	collectNativeFormats,
+	isAutoFormatAvailable,
 	pickOutputDims,
 	referenceClipDims,
 	resolveAspectRatioValue,
@@ -335,7 +336,9 @@ describe("Auto", () => {
 		expect(auto(without)).toBeCloseTo(16 / 9, 6);
 	});
 
-	it("lets the clip that sets the output size set its shape on a mixed timeline", () => {
+	it("stays on the clip that sets the output size once the timeline turns mixed", () => {
+		// Auto is no longer offered here; a project saved on it keeps a stable frame until the
+		// user picks a format.
 		const d = withEditor(
 			doc(
 				[asset("small", 1280, 720), asset("big", 1080, 1920)],
@@ -343,7 +346,61 @@ describe("Auto", () => {
 			),
 			{ padding: 0 },
 		);
+		expect(isAutoFormatAvailable(d)).toBe(false);
 		expect(auto(d)).toBeCloseTo(1080 / 1920, 6);
+	});
+
+	describe("is offered only for a timeline of one composition", () => {
+		const offered = (d: AxcutDocument) => isAutoFormatAvailable(d);
+		const block = { webcamLayoutPreset: "vertical-stack" };
+		const pip = { webcamLayoutPreset: "picture-in-picture" };
+
+		it("offers it for one clip, and for clips of one shape at different sizes", () => {
+			expect(offered(withEditor(doc([asset("a1", 1920, 1080)], [clip("c1", "a1")]), {}))).toBe(
+				true,
+			);
+			const sizes = doc(
+				[asset("hd", 1920, 1080), asset("uhd", 3840, 2160)],
+				[clip("c1", "hd"), clip("c2", "uhd")],
+			);
+			expect(offered(withEditor(sizes, {}))).toBe(true);
+		});
+
+		it("withholds it when the recordings have different shapes", () => {
+			const d = doc(
+				[asset("wide", 1920, 1080), asset("mac", 1440, 900)],
+				[clip("c1", "wide"), clip("c2", "mac")],
+			);
+			expect(offered(withEditor(d, {}))).toBe(false);
+		});
+
+		it("withholds it when one clip of the same recording is cropped differently", () => {
+			const d = doc(
+				[asset("a1", 1920, 1080)],
+				[clip("c1", "a1"), clip("c2", "a1", { x: 0, y: 0, width: 0.5, height: 1 })],
+			);
+			expect(offered(withEditor(d, {}))).toBe(false);
+		});
+
+		it("withholds it when a clip has no camera, whatever the layout that shows the others", () => {
+			const d = doc(
+				[withCamera(asset("cam", 1920, 1080)), asset("nocam", 1920, 1080)],
+				[clip("c1", "cam"), clip("c2", "nocam")],
+			);
+			expect(offered(withEditor(d, block))).toBe(false);
+			// Same frame shape under picture-in-picture, but not the same look: still withheld.
+			expect(offered(withEditor(d, pip))).toBe(false);
+			// With the camera turned off for the whole project, every clip is laid out alike.
+			expect(offered(withEditor(d, { webcamLayoutPreset: "no-webcam" }))).toBe(true);
+		});
+
+		it("ignores a clip whose dimensions are not probed yet", () => {
+			const d = doc(
+				[asset("a1", 1920, 1080), asset("pending", 0, 0)],
+				[clip("c1", "a1"), clip("c2", "pending")],
+			);
+			expect(offered(withEditor(d, {}))).toBe(true);
+		});
 	});
 
 	it("keeps the reference long side and even pixels for the output", () => {

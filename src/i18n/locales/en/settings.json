@@ -106,6 +106,7 @@
 		"help": "Frame styling for the recording: background blur, drop shadow, motion blur, corner radius, and padding around the video.",
 		"fitClipOne": "{{count}} clip",
 		"formatAuto": "Auto",
+		"formatAutoMixed": "Clips differ",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clips",
 		"frame": "Frame",

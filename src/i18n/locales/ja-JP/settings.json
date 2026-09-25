@@ -106,6 +106,7 @@
 		"help": "録画フレームのスタイル設定: 背景ぼかし、ドロップシャドウ、モーションブラー、角丸、動画まわりの余白。",
 		"fitClipOne": "{{count}} クリップ",
 		"formatAuto": "自動",
+		"formatAutoMixed": "クリップが不揃い",
 		"formatOriginal": "元のサイズ",
 		"fitClipMany": "{{count}} クリップ",
 		"frame": "フレーム",

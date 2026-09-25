@@ -106,6 +106,7 @@
 		"help": "Kayıt çerçevesinin biçimi: arka plan bulanıklığı, gölge, hareket bulanıklığı, köşe yuvarlaklığı ve videonun çevresindeki boşluk.",
 		"fitClipOne": "{{count}} klip",
 		"formatAuto": "Otomatik",
+		"formatAutoMixed": "Klipler farklı",
 		"formatOriginal": "Orijinal",
 		"fitClipMany": "{{count}} klip",
 		"frame": "Çerçeve",

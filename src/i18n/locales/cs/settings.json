@@ -106,6 +106,7 @@
 		"help": "Stylizace rámce pro nahrávku: rozmazání pozadí, vrhaný stín, pohybové rozmazání, zaoblení rohů a odsazení kolem videa.",
 		"fitClipOne": "{{count}} klip",
 		"formatAuto": "Auto",
+		"formatAutoMixed": "Klipy se liší",
 		"formatOriginal": "Původní",
 		"fitClipMany": "{{count}} klipů",
 		"frame": "Rám",

@@ -91,7 +91,6 @@ import type {
 } from "@/lib/ai-edition/transcription/status";
 import { getAssetPath } from "@/lib/assetPath";
 import { resolveWebcamLayoutPreset, supportsWebcamReactiveZoom } from "@/lib/compositeLayout";
-import { supportsCursorClickEffects } from "@/lib/cursor/cursorCapabilities";
 import {
 	CURSOR_THEMES,
 	DEFAULT_CURSOR_THEME_ID,
@@ -3846,29 +3845,22 @@ export function CursorPane() {
 					}}
 					onCommit={() => void commit()}
 				/>
-				{/* Wayland gives an unprivileged process no way to observe mouse
-				    buttons, so on Linux this slider provably cannot change a pixel
-				    at any value — see `supportsCursorClickEffects`. Dropped rather
-				    than shown as a control that does nothing, exactly as
-				    "Shrink on zoom" is above. */}
-				{supportsCursorClickEffects() ? (
-					<SliderCell
-						label={ts("cursor.clickBounce")}
-						value={settings.cursor.clickBounce * 10}
-						min={0}
-						max={50}
-						step={0.1}
-						decimals={1}
-						disabled={!hasDocument}
-						onChange={(v) => {
-							setLive({ cursor: { clickBounce: v / 10 } });
-							if (isNativeCompositorActive()) {
-								setNativeParam("cursorClickBounce", v / 10);
-							}
-						}}
-						onCommit={() => void commit()}
-					/>
-				) : null}
+				<SliderCell
+					label={ts("cursor.clickBounce")}
+					value={settings.cursor.clickBounce * 10}
+					min={0}
+					max={50}
+					step={0.1}
+					decimals={1}
+					disabled={!hasDocument}
+					onChange={(v) => {
+						setLive({ cursor: { clickBounce: v / 10 } });
+						if (isNativeCompositorActive()) {
+							setNativeParam("cursorClickBounce", v / 10);
+						}
+					}}
+					onCommit={() => void commit()}
+				/>
 			</div>
 		</Pane>
 	);

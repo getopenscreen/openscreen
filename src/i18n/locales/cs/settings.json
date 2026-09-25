@@ -384,6 +384,7 @@
 		"level": "Úroveň přiblížení",
 		"previewHold": "Podržte pro náhled efektu přiblížení",
 		"customScale": "Vlastní přiblížení",
+		"customScaleRange": "Přiblížení může být od {{min}}× do {{max}}×",
 		"selectRegion": "Vyberte oblast přiblížení pro úpravu",
 		"cursor": {
 			"title": "Kurzor",

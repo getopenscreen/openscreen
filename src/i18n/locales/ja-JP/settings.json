@@ -384,6 +384,7 @@
 		"level": "ズーム倍率",
 		"previewHold": "押している間ズーム効果をプレビュー",
 		"customScale": "カスタムズーム",
+		"customScaleRange": "ズーム倍率は{{min}}×から{{max}}×までです",
 		"selectRegion": "ズーム範囲を選択して調整",
 		"cursor": {
 			"title": "カーソル",

@@ -384,6 +384,7 @@
 		"level": "縮放級別",
 		"previewHold": "按住預覽放大效果",
 		"customScale": "自訂縮放",
+		"customScaleRange": "縮放範圍為 {{min}}× 到 {{max}}×",
 		"selectRegion": "選擇要調整的縮放區域",
 		"cursor": {
 			"title": "游標",

@@ -1233,6 +1233,25 @@ describe("useTimeline undo history", () => {
 		expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(4);
 	});
 
+	// A custom scale overrides the depth, so a preset that left it in place would change a
+	// field the render never reads.
+	it("clamps a custom zoom level to the renderer's range, and a preset clears it", async () => {
+		seed(docWithZoom);
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.updateZoomCustomScale("zoom_a", 9);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges[0]?.customScale).toBe(5);
+
+		await act(async () => {
+			await result.current.updateZoomDepth("zoom_a", 4);
+		});
+		const zoom = useProjectStore.getState().document?.zoomRanges[0];
+		expect(zoom?.depth).toBe(4);
+		expect(zoom?.customScale).toBeUndefined();
+	});
+
 	it("keeps a pending zoom level when the 3D tilt is changed before it lands", async () => {
 		seed(docWithZoom);
 		const gate = gateFirstSave();

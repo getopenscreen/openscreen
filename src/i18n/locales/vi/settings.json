@@ -384,6 +384,7 @@
 		"level": "Mức độ thu phóng",
 		"previewHold": "Giữ để xem trước hiệu ứng phóng to",
 		"customScale": "Thu phóng tùy chỉnh",
+		"customScaleRange": "Mức thu phóng từ {{min}}× đến {{max}}×",
 		"selectRegion": "Chọn vùng thu phóng để điều chỉnh",
 		"cursor": {
 			"title": "Con trỏ",

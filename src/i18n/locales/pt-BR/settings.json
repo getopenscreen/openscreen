@@ -384,6 +384,7 @@
 		"level": "Nível de Zoom",
 		"previewHold": "Mantenha pressionado para pré-visualizar o efeito de zoom",
 		"customScale": "Zoom Personalizado",
+		"customScaleRange": "O zoom vai de {{min}}× a {{max}}×",
 		"selectRegion": "Selecione uma região de zoom para ajustar",
 		"cursor": {
 			"title": "Cursor",

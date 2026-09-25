@@ -42,6 +42,7 @@ import {
 	resolvePillIds,
 } from "../timeline/timelineMap";
 import { dropTrimPillsByIds, resolveTimelineSpanToTrim } from "../timeline/trim-mapping";
+import { MAX_ZOOM_SCALE, MIN_ZOOM_SCALE } from "../timeline/zoom-scale";
 import type { AutoZoomSuggestion } from "../timeline/zoom-suggestions";
 import { saveWithDeadline, useProjectStore, waitForDocumentSaves } from "./projectStore";
 import { currentWriteEpoch } from "./undoStack";
@@ -775,11 +776,19 @@ export function useTimeline() {
 		[enqueueZoomWrite, saveDocument],
 	);
 
-	// Zoom-level control for the region-settings panel (1-6, matches
-	// zoomRegionSchema's depth literal union — 1.0x..3.5x in 0.5x steps per
-	// the `depth/2 + 0.5` label formula used throughout the timeline UI).
+	// A preset level (`ZOOM_DEPTH_SCALES`, 1.25×–5×). It clears any custom scale, which
+	// would otherwise keep overriding the depth: the level picked is the level rendered.
 	const updateZoomDepth = useCallback(
-		(id: string, depth: 1 | 2 | 3 | 4 | 5 | 6) => saveZoomPatch(id, { depth }),
+		(id: string, depth: 1 | 2 | 3 | 4 | 5 | 6) =>
+			saveZoomPatch(id, { depth, customScale: undefined }),
+		[saveZoomPatch],
+	);
+
+	// Any other level, from the pane's free field. Clamped to the renderer's range here, so no
+	// caller can store a scale that `effectiveZoomScale` would then read differently.
+	const updateZoomCustomScale = useCallback(
+		(id: string, scale: number) =>
+			saveZoomPatch(id, { customScale: Math.min(MAX_ZOOM_SCALE, Math.max(MIN_ZOOM_SCALE, scale)) }),
 		[saveZoomPatch],
 	);
 
@@ -1569,6 +1578,7 @@ export function useTimeline() {
 		updateZoomFocusLive,
 		commitZoomFocus,
 		updateZoomDepth,
+		updateZoomCustomScale,
 		updateZoomRotation,
 		updateZoomFocusMode,
 		updateZoomHideCursor,

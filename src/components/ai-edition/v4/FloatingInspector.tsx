@@ -30,9 +30,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { parseCustomPlaybackSpeedInput } from "@/components/video-editor/customPlaybackSpeed";
 import {
+	effectiveZoomScale,
 	FIXED_ROTATION_3D_PRESETS,
 	isRotation3DPreset,
 	MAX_PLAYBACK_SPEED,
+	MAX_ZOOM_SCALE,
+	MIN_ZOOM_SCALE,
 	MOVING_ROTATION_3D_PRESETS,
 	type Rotation3DPreset,
 	ZOOM_DEPTH_SCALES,
@@ -431,137 +434,140 @@ function convertAnnotationKind(
 
 const ZOOM_DEPTHS: readonly ZoomDepth[] = [1, 2, 3, 4, 5, 6];
 
+// The row: the default and one step either side, plus a strong close-up. The two ends of the
+// table (1.25×, 5×) and every level between are one entry in the free field below, which is
+// why the row stays short. Labels read the table, not a formula: a formula once announced
+// "2.0×" where the timeline pill showed "1.80×" and the render applied 1.8.
+const ZOOM_PRESETS = ([2, 3, 4, 5] as const).map((depth) => ({
+	value: ZOOM_DEPTH_SCALES[depth],
+	label: `${ZOOM_DEPTH_SCALES[depth]}×`,
+}));
+
 /**
- * The six zoom levels as one row of buttons, so a level is one click away instead of two
- * (open the select, then pick). Six short labels fit the 300px pane on their own line, which
- * is why this is a stacked label/row rather than a `paneRow`.
+ * The zoom level as a row of presets plus a free field, the same pair as the speed control
+ * below. A level is one click away instead of two (open the select, then pick): that is
+ * My-Denia's change (#694), and so is everything that keeps rapid clicks and arrow steps in
+ * order, below.
  *
- * `aria-pressed` buttons inside a labelled `role="group"` is `TranscriptLaneSwitch`'s pattern
- * (the facet rail is the same buttons without the wrapper, since its own label carries), so
- * every level stays in the Tab order and reads like its neighbours. Arrow keys step through
- * the levels, which is what the `<select>` this replaces did once focused — and the one
- * keyboard path that survives the editor shell's Tab binding (it cycles annotations whenever
- * any exist, from any focused element).
+ * The control speaks in scales, not depths: a preset and a typed level are the same kind of
+ * value, and a typed level the table has (1.8, or 1.25 which is not in the row) is written as
+ * its depth, so a document keeps naming its presets. Anything else is a `customScale`.
  */
 export function ZoomLevelControl({
 	region,
 	tl,
 }: {
-	region: { id: string; depth: ZoomDepth };
-	tl: Pick<TimelineApi, "updateZoomDepth">;
+	region: { id: string; depth: ZoomDepth; customScale?: number };
+	tl: Pick<TimelineApi, "updateZoomDepth" | "updateZoomCustomScale">;
 }) {
 	const ts = useScopedT("settings");
-	const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
-	// Last depth this instance asked for, and the generation of that request.
-	// Depth values repeat (only 1–6), so a Set of depths cannot tell "our older
-	// 4 landed" from "the latest request is 4" or from an undo that happens to
-	// land on 4. Each click/key gets a new gen. Every gen belonging to this
-	// region epoch is removed from `pending` when it settles — a superseded 4
-	// must still drain, or `pending` stays non-empty and undo/redo can never
-	// overwrite `requestedRef`. Only the latest gen may change `requestedRef`.
-	const requestedRef = useRef<ZoomDepth>(region.depth);
+	const current = effectiveZoomScale(region);
+	// Last level this instance asked for, and the generation of that request. Levels repeat,
+	// so a set of levels cannot tell "our older 2.2 landed" from "the latest request is 2.2" or
+	// from an undo that happens to land on 2.2. Each click/key gets a new gen. Every gen
+	// belonging to this region epoch is removed from `pending` when it settles: a superseded
+	// request must still drain, or `pending` stays non-empty and undo/redo can never overwrite
+	// the request. Only the latest gen may change it.
+	//
+	// The row shows the request, not the document: its no-op guard compares against the value
+	// it is given, and against a document still saying 1.8 while a 2.2 is in flight, stepping
+	// back to 1.8 would be dropped as a re-press.
+	const requestedRef = useRef(current);
+	const [requested, setRequested] = useState(current);
 	const genRef = useRef(0);
 	const pendingRef = useRef(new Set<number>());
-	const regionRef = useRef(region);
-	regionRef.current = region;
+	const currentRef = useRef(current);
+	currentRef.current = current;
+	// "" means the field is idle and shows the live level as its placeholder.
+	const [draft, setDraft] = useState("");
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: region.id is the trigger, not a read — the body resets request state; depth is taken from the render's ref so a same-depth other pill still clears the previous pill's pending gen.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: region.id is the trigger, not a read — the body resets request state; the level is taken from the render's ref so a same-level other pill still clears the previous pill's pending gen.
 	useEffect(() => {
 		genRef.current += 1;
 		pendingRef.current.clear();
-		requestedRef.current = regionRef.current.depth;
+		requestedRef.current = currentRef.current;
+		setRequested(currentRef.current);
 	}, [region.id]);
 
 	useEffect(() => {
 		if (pendingRef.current.size > 0) return;
-		requestedRef.current = region.depth;
-	}, [region.depth]);
+		requestedRef.current = current;
+		setRequested(current);
+	}, [current]);
 
-	const setDepth = (depth: ZoomDepth) => {
-		// Re-pressing the current level is not an edit: no save, no undo entry.
-		if (depth === requestedRef.current) return;
-		requestedRef.current = depth;
+	const setScale = (scale: number) => {
+		// Re-choosing the current level is not an edit: no save, no undo entry.
+		if (scale === requestedRef.current) return;
+		requestedRef.current = scale;
+		setRequested(scale);
 		const gen = ++genRef.current;
 		pendingRef.current.add(gen);
-		const regionId = region.id;
-		void Promise.resolve(tl.updateZoomDepth(regionId, depth)).then(
-			(ok) => {
-				pendingRef.current.delete(gen);
-				if (gen !== genRef.current) return;
-				if (ok === false) requestedRef.current = regionRef.current.depth;
-			},
-			() => {
-				pendingRef.current.delete(gen);
-				if (gen !== genRef.current) return;
-				requestedRef.current = regionRef.current.depth;
-			},
+		const depth = ZOOM_DEPTHS.find((d) => ZOOM_DEPTH_SCALES[d] === scale);
+		const write =
+			depth === undefined
+				? tl.updateZoomCustomScale(region.id, scale)
+				: tl.updateZoomDepth(region.id, depth);
+		// A refused write hands the level back to the document, so the same one can be retried.
+		const settle = (ok: boolean) => {
+			pendingRef.current.delete(gen);
+			if (ok || gen !== genRef.current) return;
+			requestedRef.current = currentRef.current;
+			setRequested(currentRef.current);
+		};
+		void Promise.resolve(write).then(
+			(ok) => settle(ok !== false),
+			() => settle(false),
 		);
 	};
 
+	const commitDraft = () => {
+		const text = draft
+			.trim()
+			.replace(",", ".")
+			.replace(/\s*[×x]$/i, "");
+		setDraft("");
+		// Empty or unparseable reverts to the live level rather than guessing at an intent.
+		if (text === "" || !Number.isFinite(Number(text))) return;
+		const scale = Math.round(Number(text) * 100) / 100;
+		if (scale < MIN_ZOOM_SCALE || scale > MAX_ZOOM_SCALE) {
+			toast.error(ts("zoom.customScaleRange", { min: MIN_ZOOM_SCALE, max: MAX_ZOOM_SCALE }));
+			return;
+		}
+		setScale(scale);
+	};
+
 	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-			<span style={{ fontSize: 12.5, color: "var(--fg-2)", fontWeight: 500 }}>
-				{ts("zoom.level")}
-			</span>
-			<div
-				role="group"
-				aria-label={ts("zoom.level")}
-				style={{ display: "flex", gap: 4 }}
-				onKeyDown={(e) => {
-					// A button activates on Enter and Space by itself — but the shell's play/pause
-					// shortcut is Space on WINDOW, and it `preventDefault()`s the keydown, which
-					// cancels that activation. Unstopped, Space on a level changed nothing and
-					// started playback instead. Stop the keystroke here so the button keeps its own
-					// key, and do NOT `preventDefault()` it, or the activation dies the same way.
-					if (e.key === "Enter" || e.key === " ") {
-						e.nativeEvent.stopPropagation();
-						return;
-					}
-					const step =
-						e.key === "ArrowRight" || e.key === "ArrowDown"
-							? 1
-							: e.key === "ArrowLeft" || e.key === "ArrowUp"
-								? -1
-								: 0;
-					if (step === 0) return;
-					// `nativeEvent.stopPropagation()`, not just the synthetic one: the editor shell
-					// listens on WINDOW, above React's root container, and ArrowLeft/ArrowRight seek
-					// the playhead there. Same reason as the pill's own keydown in V4Timeline.
-					e.preventDefault();
-					e.nativeEvent.stopPropagation();
-					// Step from the FOCUSED button, not from the selected level. Every level is a Tab
-					// stop, so the two can part company — and stepping from the selection then threw
-					// focus across the row (ArrowRight on the last button landed it in the middle).
-					// Focus moves one place and the level follows it; at either end neither moves.
-					const focused = buttonsRef.current.findIndex((b) => b === document.activeElement);
-					const from = focused >= 0 ? focused : ZOOM_DEPTHS.indexOf(requestedRef.current);
-					const next = ZOOM_DEPTHS[from + step];
-					if (next === undefined) return;
-					buttonsRef.current[next - 1]?.focus();
-					setDepth(next);
-				}}
-			>
-				{ZOOM_DEPTHS.map((d) => {
-					const pressed = d === region.depth;
-					return (
-						<button
-							key={d}
-							ref={(el) => {
-								buttonsRef.current[d - 1] = el;
-							}}
-							type="button"
-							aria-pressed={pressed}
-							onClick={() => setDepth(d)}
-							style={pressed ? zoomLevelPressedStyle : zoomLevelBtnStyle}
-						>
-							{/* La table, pas une formule : ce libellé annonçait « 2.0× » là où la pastille de la
-							    timeline affiche « 1.80× » et où le rendu applique 1.8. */}
-							{ZOOM_DEPTH_SCALES[d]}×
-						</button>
-					);
-				})}
-			</div>
-		</div>
+		<>
+			{/* A level outside the row presses no button; the field below shows it. */}
+			{paneStack(
+				ts("zoom.level"),
+				<ChoiceRow<number>
+					label={ts("zoom.level")}
+					options={ZOOM_PRESETS}
+					value={requested}
+					onChange={setScale}
+				/>,
+			)}
+			{paneRow(
+				ts("zoom.customScale"),
+				<input
+					type="text"
+					inputMode="decimal"
+					aria-label={ts("zoom.customScale")}
+					placeholder={`${requested}×`}
+					value={draft}
+					onChange={(e) => setDraft(e.target.value)}
+					onBlur={commitDraft}
+					// Enter blurs, and the blur handler commits: one path, so a keyboard commit
+					// can't apply the same draft twice.
+					onKeyDown={(e) => {
+						if (e.key === "Enter") e.currentTarget.blur();
+					}}
+					className={shell.control}
+					style={{ width: 84, textAlign: "right" }}
+				/>,
+			)}
+		</>
 	);
 }
 
@@ -1213,30 +1219,6 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 /** Every action of the selection pane, delete included: the red icon says it destroys; a red
  *  slab outshouted every setting above it. */
 const PANE_BUTTON = `${shell.btn} ${shell.btnSecondary}`;
-
-// Six of these share the pane's 266px of content width, so each gets ~41px: enough for
-// "1.25×" at 12px with room either side, and no horizontal padding to lose.
-const zoomLevelBtnStyle: React.CSSProperties = {
-	flex: "1 1 0",
-	minWidth: 0,
-	height: 28,
-	padding: 0,
-	borderRadius: 8,
-	border: "1px solid var(--border)",
-	background: "var(--surface)",
-	color: "var(--fg-2)",
-	font: "500 12px var(--font-display)",
-	cursor: "pointer",
-};
-
-// Same signal as the pressed facet-rail button: accent text on the soft accent fill.
-const zoomLevelPressedStyle: React.CSSProperties = {
-	...zoomLevelBtnStyle,
-	border: "1px solid var(--accent)",
-	background: "var(--accent-soft)",
-	color: "var(--accent)",
-	fontWeight: 600,
-};
 
 function FacetBody({
 	facet,

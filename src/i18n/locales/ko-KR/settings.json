@@ -384,6 +384,7 @@
 		"level": "줌 레벨",
 		"previewHold": "누르고 있으면 줌 효과 미리보기",
 		"customScale": "커스텀 줌",
+		"customScaleRange": "줌은 {{min}}×에서 {{max}}×까지 가능합니다",
 		"selectRegion": "조정할 줌 구간을 선택하세요",
 		"cursor": {
 			"title": "커서",

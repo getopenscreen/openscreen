@@ -67,10 +67,13 @@ import {
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
 import { formatBinding } from "@/lib/shortcuts";
+import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native/client";
+import { ChoiceRow } from "../RightPanes";
 import { TransportBar } from "../TransportBar";
 import type { VideoSource } from "../VirtualPreview";
 import styles from "./EditorShellV4.module.css";
+import { ZOOM_PRESETS } from "./FloatingInspector";
 
 // The AI option's prompt — sent straight to the chat agent via the prompt-bus.
 //
@@ -636,6 +639,9 @@ export function V4Timeline({
 	const [autoEnhanceOpen, setAutoEnhanceOpen] = useState(false);
 	const [audioMenuOpen, setAudioMenuOpen] = useState(false);
 	const [autoBusy, setAutoBusy] = useState(false);
+	// The level "Automatic zooms" gives the zooms it adds (#683). A creation setting: zooms
+	// already on the timeline keep theirs, their inspector is what changes them.
+	const [autoZoomScale, setAutoZoomScale] = useState(() => loadUserPreferences().autoZoomScale);
 	// The AI cut pass reads the transcript, and the transcript is produced in the
 	// background (see transcriptionStore). Until it is there, the entry says why
 	// rather than handing the agent a prompt it cannot honour — the failure mode
@@ -1534,7 +1540,7 @@ export function V4Timeline({
 				});
 				return;
 			}
-			const added = await tl.addZoomsBulk(suggestions);
+			const added = await tl.addZoomsBulk(suggestions, autoZoomScale);
 			// A failed write returns 0 and has already toasted why. Without this the user
 			// got "Added 0 automatic zooms" stacked on top of "Failed to save project",
 			// with no zoom anywhere -- a success message for something that did not happen.
@@ -1549,7 +1555,7 @@ export function V4Timeline({
 		} finally {
 			setAutoBusy(false);
 		}
-	}, [tl, t]);
+	}, [tl, t, autoZoomScale]);
 
 	// Auto-enhance option 2 — hand a generic prompt to the AI agent (smart
 	// zooms + cuts) via the chat prompt-bus. The chat panel owns the outcome
@@ -1807,6 +1813,22 @@ export function V4Timeline({
 												</span>
 											</span>
 										</button>
+										{/* The level of the zooms the row above adds. Picking one runs nothing:
+										    it is remembered, and every automatic zoom from then on takes it. */}
+										<div style={{ display: "grid", gap: 6, padding: "0 10px 8px 34px" }}>
+											<span style={{ fontSize: 12, color: "var(--muted)" }}>
+												{ts("zoom.level")}
+											</span>
+											<ChoiceRow<number>
+												label={ts("zoom.level")}
+												options={ZOOM_PRESETS}
+												value={autoZoomScale}
+												onChange={(scale) => {
+													setAutoZoomScale(scale);
+													saveUserPreferences({ autoZoomScale: scale });
+												}}
+											/>
+										</div>
 										<button
 											type="button"
 											className={styles.recMenuRow}

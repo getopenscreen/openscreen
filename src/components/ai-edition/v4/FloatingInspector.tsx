@@ -438,7 +438,7 @@ const ZOOM_DEPTHS: readonly ZoomDepth[] = [1, 2, 3, 4, 5, 6];
 // table (1.25×, 5×) and every level between are one entry in the free field below, which is
 // why the row stays short. Labels read the table, not a formula: a formula once announced
 // "2.0×" where the timeline pill showed "1.80×" and the render applied 1.8.
-const ZOOM_PRESETS = ([2, 3, 4, 5] as const).map((depth) => ({
+export const ZOOM_PRESETS = ([2, 3, 4, 5] as const).map((depth) => ({
 	value: ZOOM_DEPTH_SCALES[depth],
 	label: `${ZOOM_DEPTH_SCALES[depth]}×`,
 }));

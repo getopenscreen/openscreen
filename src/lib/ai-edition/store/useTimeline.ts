@@ -352,7 +352,7 @@ export function useTimeline() {
 	// existing zoom spans, so no extra overlap filtering is needed here.
 	// Returns the count actually added (0 when there's no doc/suggestions).
 	const addZoomsBulk = useCallback(
-		async (suggestions: AutoZoomSuggestion[]) => {
+		async (suggestions: AutoZoomSuggestion[], scale?: number) => {
 			// Read from the store, not off the render closure. Unlike its `add*` siblings,
 			// which compute and save in the same tick, this one is reached from the wand
 			// AFTER a multi-second cursor-telemetry IPC: the closure document is the one
@@ -373,7 +373,7 @@ export function useTimeline() {
 			// import cannot drift apart. It anchors against the SAME document the write is
 			// built from: anchoring on stale clips and saving the fresh document would
 			// place the regions against a timeline that no longer exists.
-			const next = appendAutoZoomSuggestions(doc, suggestions);
+			const next = appendAutoZoomSuggestions(doc, suggestions, undefined, scale);
 			if (!(await saveDocument(next, { history: true }))) return 0;
 			return suggestions.length;
 		},

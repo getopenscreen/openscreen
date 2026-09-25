@@ -6,6 +6,7 @@ import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "../document/ids";
 import type { AxcutAsset, AxcutDocument } from "../schema";
 import { anchorRegionsWithDerivedMs } from "./timelineMap";
+import { DEFAULT_ZOOM_DEPTH, ZOOM_DEPTH_SCALES } from "./zoom-scale";
 import { type AutoZoomSuggestion, buildAutoZoomSuggestionsForClips } from "./zoom-suggestions";
 
 export const AUTO_ZOOM_DEFAULT_DURATION_MS = 2000;
@@ -97,12 +98,22 @@ export async function collectAutoZoomSuggestionsForLatestDocument(
 	};
 }
 
+/**
+ * `scale` is the level the user picked for automatic zooms (`autoZoomScale` in the user
+ * preferences). It only applies here, when the zooms are created: a zoom already on the
+ * timeline keeps its level, and its own inspector stays the one place that changes it.
+ */
 export function appendAutoZoomSuggestions(
 	document: AxcutDocument,
 	suggestions: AutoZoomSuggestion[],
 	makeId: (prefix: string) => string = createId,
+	scale: number = ZOOM_DEPTH_SCALES[DEFAULT_ZOOM_DEPTH],
 ): AxcutDocument {
 	if (suggestions.length === 0) return document;
+	// A level the table has is stored as its depth, as the inspector stores it, so the document
+	// keeps naming its presets; anything else is a `customScale`.
+	const depth = ([1, 2, 3, 4, 5, 6] as const).find((d) => ZOOM_DEPTH_SCALES[d] === scale);
+	const level = depth === undefined ? { depth: DEFAULT_ZOOM_DEPTH, customScale: scale } : { depth };
 	const anchored = suggestions.flatMap((suggestion) =>
 		anchorRegionsWithDerivedMs(
 			[
@@ -110,7 +121,7 @@ export function appendAutoZoomSuggestions(
 					id: makeId("zoom"),
 					startMs: Math.round(suggestion.span.start),
 					endMs: Math.round(suggestion.span.end),
-					depth: 3 as const,
+					...level,
 					focus: { cx: suggestion.focus.cx, cy: suggestion.focus.cy },
 					focusMode: "auto" as const,
 				},

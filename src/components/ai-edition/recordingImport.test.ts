@@ -350,6 +350,16 @@ describe("fresh-recording auto-zoom", () => {
 		expect(await applyPendingFreshRecordingAutoZooms(next)).toBe(next);
 	});
 
+	it("gives a fresh take's zooms the level picked for automatic zooms", async () => {
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		const next = await applyPendingFreshRecordingAutoZooms(documentWithClip(), {
+			getTelemetry: async () => dwell(4000, 0.4, 0.6),
+			createId: (prefix) => `${prefix}_test`,
+			scale: 1.5,
+		});
+		expect(next.zoomRanges[0]).toMatchObject({ depth: 2 });
+	});
+
 	it("applies cursor-dwell zooms by default without requiring an enabled flag", async () => {
 		markFreshRecordingAutoZoomPending(RECORDING_PATH);
 		const document = documentWithClip();

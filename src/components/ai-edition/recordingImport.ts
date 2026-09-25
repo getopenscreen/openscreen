@@ -28,6 +28,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native/client";
 
 // Fresh recordings used to get cursor-dwell zooms on load (legacy editor
@@ -71,6 +72,8 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
 	enabled?: boolean;
 	getTelemetry?: (videoPath: string) => Promise<CursorTelemetryPoint[] | null | undefined>;
 	createId?: (prefix: string) => string;
+	/** Level of the zooms added. Defaults to the user's pick for automatic zooms. */
+	scale?: number;
 	/** Deadline for this path's own write. Tests use a short one. */
 	saveTimeoutMs?: number;
 	/** Deadline for waiting on writes somebody else started. Tests shorten it. */
@@ -198,6 +201,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 		collected.document,
 		collected.suggestions,
 		deps.createId ?? createId,
+		deps.scale ?? loadUserPreferences().autoZoomScale,
 	);
 }
 

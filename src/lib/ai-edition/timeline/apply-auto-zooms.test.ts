@@ -110,6 +110,18 @@ describe("appendAutoZoomSuggestions", () => {
 			clipId: "clip_1",
 		});
 	});
+
+	it("gives every zoom the level picked for automatic zooms", () => {
+		const suggestions = [{ span: { start: 3000, end: 5000 }, focus: { cx: 0.4, cy: 0.6 } }];
+		const zoomAt = (scale: number) =>
+			appendAutoZoomSuggestions(documentWithClip(), suggestions, (p) => `${p}_fixed`, scale)
+				.zoomRanges[0];
+		// A preset is stored as its depth, as the inspector stores it; any other level is a
+		// `customScale`, so the renderer draws exactly what was picked.
+		expect(zoomAt(1.5)).toMatchObject({ depth: 2 });
+		expect(zoomAt(1.5)).not.toHaveProperty("customScale");
+		expect(zoomAt(2.5)).toMatchObject({ depth: 3, customScale: 2.5 });
+	});
 });
 
 describe("collectAutoZoomSuggestionsForLatestDocument", () => {

@@ -2,6 +2,12 @@ import {
 	DEFAULT_EDITOR_LAYOUT_SETTINGS,
 	DEFAULT_EXPORT_SETTINGS,
 } from "@/components/video-editor/editorDefaults";
+import {
+	DEFAULT_ZOOM_DEPTH,
+	MAX_ZOOM_SCALE,
+	MIN_ZOOM_SCALE,
+	ZOOM_DEPTH_SCALES,
+} from "@/lib/ai-edition/timeline/zoom-scale";
 import type { ExportFormat, ExportQuality } from "@/lib/exporter";
 import { type AspectRatio, isAspectRatio } from "@/utils/aspectRatioUtils";
 
@@ -26,6 +32,8 @@ export interface UserPreferences {
 	preferSoftwareEncoder: boolean;
 	/** Stop showing the notice that recording fell back to software encoding */
 	hideSoftwareEncoderFallbackNotice: boolean;
+	/** Level of the zooms "Automatic zooms" adds, from the wand or on a fresh recording (1.8 = 1.8×) */
+	autoZoomScale: number;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -38,6 +46,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	trayLayout: "horizontal",
 	preferSoftwareEncoder: false,
 	hideSoftwareEncoderFallbackNotice: false,
+	autoZoomScale: ZOOM_DEPTH_SCALES[DEFAULT_ZOOM_DEPTH],
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -99,6 +108,12 @@ export function loadUserPreferences(): UserPreferences {
 			typeof raw.hideSoftwareEncoderFallbackNotice === "boolean"
 				? raw.hideSoftwareEncoderFallbackNotice
 				: DEFAULT_PREFS.hideSoftwareEncoderFallbackNotice,
+		autoZoomScale:
+			typeof raw.autoZoomScale === "number" &&
+			raw.autoZoomScale >= MIN_ZOOM_SCALE &&
+			raw.autoZoomScale <= MAX_ZOOM_SCALE
+				? raw.autoZoomScale
+				: DEFAULT_PREFS.autoZoomScale,
 	};
 }
 

@@ -133,4 +133,19 @@ describe("user preferences", () => {
 
 		expect(loadUserPreferences().hideSoftwareEncoderFallbackNotice).toBe(false);
 	});
+
+	it("persists the level picked for automatic zooms, 1.8× until one is picked", () => {
+		expect(loadUserPreferences().autoZoomScale).toBe(1.8);
+		saveUserPreferences({ autoZoomScale: 1.5 });
+
+		expect(loadUserPreferences().autoZoomScale).toBe(1.5);
+	});
+
+	it("falls back to 1.8× for a stored level the renderer cannot draw", () => {
+		for (const autoZoomScale of [0.5, 9, "2"]) {
+			localStorage.setItem("openscreen_user_preferences", JSON.stringify({ autoZoomScale }));
+
+			expect(loadUserPreferences().autoZoomScale).toBe(1.8);
+		}
+	});
 });

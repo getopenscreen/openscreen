@@ -175,7 +175,12 @@ function durationTextPx(text: string): number | undefined {
 	if (ctx === null) return undefined;
 	const family = getComputedStyle(document.documentElement).getPropertyValue("--font-body").trim();
 	ctx.font = `500 12px ${family || "sans-serif"}`;
-	return ctx.measureText(text).width;
+	// `.tlClipDuration` sets tabular numerals, which canvas cannot: there, every digit takes the
+	// advance of the widest one, so count each digit at that width rather than at its own.
+	let digitPx = 0;
+	for (const digit of "0123456789") digitPx = Math.max(digitPx, ctx.measureText(digit).width);
+	const others = text.replace(/[0-9]/g, "");
+	return ctx.measureText(others).width + digitPx * (text.length - others.length);
 }
 function cardFitsDuration(cardPx: number, text: string): boolean {
 	const textPx = durationTextPx(text) ?? text.length * CLIP_LABEL_FALLBACK_CHAR_PX;

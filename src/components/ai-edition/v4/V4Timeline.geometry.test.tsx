@@ -521,6 +521,20 @@ describe("V4Timeline clip row", () => {
 		expect(screen.getByText("60:15.0")).toBeInTheDocument();
 	});
 
+	it("counts every digit at the widest digit's width, as tabular numerals render", () => {
+		// The card shows its timecode in tabular numerals, where a "1" is as wide as a "0"; canvas
+		// measures proportional ones. Here "1" is a third of the other digits: measured as drawn,
+		// `1:11.1` would seem to fit this ~118px card (50 + 38 + 18) and then overflow it
+		// (50 + 38 + 42 once each digit takes the widest advance).
+		measureText.mockImplementation((text: string) => ({
+			width: [...text].reduce((w, ch) => w + ("1:.".includes(ch) ? 3 : 9), 0),
+		}));
+		renderTimeline([clip(0, 71.1), clip(71.1, 516)]);
+
+		expect(screen.queryByText("1:11.1")).not.toBeInTheDocument();
+		expect(screen.getByText("7:24.9")).toBeInTheDocument();
+	});
+
 	it("takes the card gutter out of each clip's own width", () => {
 		// The 6px is what separates two cards. Taken off the clip's width it stays
 		// local to that clip; inserted between them (a flex gap) it displaced every

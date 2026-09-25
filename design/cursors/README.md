@@ -1,8 +1,8 @@
 # Original OpenScreen cursor themes
 
-These five themes replace the removed Sweezy packs. Their SVG shapes and palettes were
-drawn for OpenScreen. Image generation was used for visual exploration; no generated
-bitmap or third-party cursor file is shipped. The SVGs here are the editable masters.
+These five themes replace the removed Sweezy packs. The artwork was created for
+OpenScreen as transparent raster images. The PNGs in this directory are the
+original high-resolution masters; there is no SVG conversion step.
 
 | Theme | Intent |
 | --- | --- |
@@ -12,14 +12,19 @@ bitmap or third-party cursor file is shipped. The SVGs here are the editable mas
 | Pixel Candy | A small retro option for people who liked pixel packs |
 | Star Sprout | An original tiny character for people who liked mascot packs |
 
-Each theme has `arrow.svg` and `pointer.svg`. The matching transparent 128×128 PNGs
-are in `public/cursors/<theme>/`. Run `node scripts/generate-original-cursor-themes.mjs`
-after editing an SVG to regenerate its PNG. The script creates an SVG only if it does
-not exist, so edits to the masters are preserved.
+Each `source.png` contains an arrow on the left and a hand on the right. Run
+`node scripts/generate-original-cursor-themes.mjs` to crop, remove low-alpha
+fringe pixels, and resize them into transparent 128 × 128 PNGs under
+`public/cursors/<theme>/`. The script prints the normalized tip hotspots;
+copy them into `src/lib/cursor/cursorThemes.ts` after changing a master.
 
-Hotspots are expressed in the SVG's 32×32 coordinate system in
-`src/lib/cursor/cursorThemes.ts`. Keep a hotspot on the arrow's tip or the hand's
-raised fingertip when changing a shape. Other cursor states use the built-in art.
+Pop Coral has an additional `source-3d.png` without its decorative offset
+layer or floating rays. Its `arrow-3d.png` and `pointer-3d.png` are prepared
+surface art for a future 3D model, not a finished model. The current compositor
+still limits its simple 3D extrusion to the built-in default theme. Cursor
+states not supplied by a theme use the built-in art.
 
 `contact-sheet.png` shows the sprites enlarged on a light background;
 `dark-32px.png` shows them at their 32-pixel reference size on a dark background.
+The separate 3D modeling direction and concept image are in `3d-direction.md`
+and `3d-concept.png`.

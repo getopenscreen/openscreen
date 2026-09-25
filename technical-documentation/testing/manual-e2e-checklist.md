@@ -431,7 +431,7 @@ The percentage is computed in the renderer against a predicted frame total, and 
 - [ ] Open the Layout facet and choose each available webcam layout; confirm the preview arrangement changes.
 - [ ] Change webcam mirror, reactive zoom when supported, shape, and size; confirm each change is visible.
 - [ ] Open the Cursor facet and toggle cursor visibility and clip-to-bounds; confirm the preview changes.
-- [ ] Change cursor theme, size, smoothing, motion blur, and click bounce; confirm each committed value remains visible.
+- [ ] Change cursor size, smoothing, motion blur, and click bounce; confirm each committed value remains visible.
 - [ ] Toggle the theme control by its `aria-label` and confirm the editor switches between dark and light themes.
 - [ ] Open the top-bar language control by its `aria-label`, choose a non-English locale, and confirm visible UI strings change.
 - [ ] Switch back to English and confirm the top bar, transport, inspector, and export labels return to English.

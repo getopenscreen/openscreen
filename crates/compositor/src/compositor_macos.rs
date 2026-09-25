@@ -282,8 +282,8 @@ pub struct Compositor {
     /// Valeur de `img_tick` au début de la frame en cours. Tout ce qui a été touché depuis
     /// appartient au jeu actif et ne peut pas être évincé — voir `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
-    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
-    /// Pas d'éviction : seuls les seize sprites du thème par défaut y passent (~2,6 Mo en tout).
+    /// Champs et reliefs des sprites de curseur (mode 15), RG16F, par chemin, avec leur forme.
+    /// Pas d'éviction : l'ensemble des cartes livrées reste inférieur à quelques dizaines de Mo.
     sdf_cache: RefCell<
         std::collections::HashMap<String, (metal::Texture, crate::frame_geometry::SpriteShape)>,
     >,
@@ -895,21 +895,23 @@ impl Compositor {
         Ok((tex, w, h))
     }
 
-    /// Champ de distance du sprite `path` (texture(4) du mode 15) et sa forme, calculés au
-    /// premier appel. Parité `compositor_windows::cursor_sdf`. R16Float : filtrable sur tous
+    /// Champ et relief du sprite `path` (texture(4) du mode 15) et sa forme, calculés au
+    /// premier appel. Parité `compositor_windows::cursor_sdf`. RG16Float : filtrable sur tous
     /// les GPU Apple, contrairement au R32Float.
     fn cursor_sdf(
         &self,
         path: &str,
+        depth_path: Option<&str>,
     ) -> Result<(metal::Texture, crate::frame_geometry::SpriteShape)> {
-        if let Some(hit) = self.sdf_cache.borrow().get(path) {
+        let cache_key = format!("{path}\0{}", depth_path.unwrap_or_default());
+        if let Some(hit) = self.sdf_cache.borrow().get(&cache_key) {
             return Ok(hit.clone());
         }
-        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
-        let texels = sdf.f16_bytes();
+        let sdf = crate::cursor_sdf::CursorSdf::load_with_depth(path, depth_path)?;
+        let texels = sdf.rg16_bytes();
         let tex = make_texture(
             &self.gpu.device,
-            metal::MTLPixelFormat::R16Float,
+            metal::MTLPixelFormat::RG16Float,
             sdf.width,
             sdf.height,
             metal::MTLStorageMode::Shared,
@@ -922,10 +924,10 @@ impl Compositor {
             },
             0,
             texels.as_ptr() as *const std::ffi::c_void,
-            (sdf.width * 2) as u64,
+            (sdf.width * 4) as u64,
         );
         let entry = (tex, sdf.shape);
-        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
+        self.sdf_cache.borrow_mut().insert(cache_key, entry.clone());
         Ok(entry)
     }
 
@@ -1963,7 +1965,7 @@ impl Compositor {
         let (tex, iw, ih) = self.cached_image(sprite.path.as_str())?;
         // Sans champ de distance, repli sur le sprite plat plutôt qu'aucun curseur. Parité Linux.
         if let Some(pose) = model {
-            match self.cursor_sdf(sprite.path.as_str()) {
+            match self.cursor_sdf(sprite.path.as_str(), sprite.model_depth_path.as_deref()) {
                 Ok((sdf, shape)) => {
                     let shape = crate::frame_geometry::SpriteShape {
                         hotspot: [sprite.hotspot_x, sprite.hotspot_y],

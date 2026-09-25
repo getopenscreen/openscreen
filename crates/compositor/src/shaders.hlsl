@@ -46,9 +46,9 @@ Texture2D<float4> texImg : register(t2); // wallpaper image RGBA (fond, mode 6) 
 // resolution du modele (256x144) ; l'upscale vers la resolution webcam est fait par le sampler
 // lineaire, ce qui est exactement le filtrage qu'on veut sur un masque.
 Texture2D<float> texMask : register(t3);
-// Champ de distance signé du sprite de curseur (mode 15 seulement), R16F, cf. `cursor_sdf.rs`.
+// Champ signé et hauteur du sprite de curseur (mode 15 seulement), RG16F, cf. `cursor_sdf.rs`.
 // Le sprite lui-même est en t2 (texImg), comme aux modes 7 et 13.
-Texture2D<float> texSdf : register(t4);
+Texture2D<float2> texSdf : register(t4);
 SamplerState samp : register(s0);
 
 // Plafond de la profondeur de champ du mode 8, en niveau de la pyramide demi-résolution (1.5 =
@@ -389,12 +389,14 @@ float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px)
 // du cbuffer.
 //
 // Repère du MODÈLE : unité = plus grand côté du sprite, origine au hotspot de la face du dessus,
-// x à droite, y vers le bas, z vers la caméra ; le modèle occupe z de -MODEL_THICK à 0. Le rect
-// du sprite y commence en `color.rg` et mesure `sprite_size()` (rapport w/h dans `radius_px`).
-// Textures : t2 (texImg) = le sprite, RGBA en alpha droit ; t4 (texSdf) = son champ, R16F, en
+// x à droite, y vers le bas, z vers la caméra ; le dessous reste à -MODEL_THICK, le dessus peut
+// monter jusqu'à MODEL_RELIEF_MAX. Le rect du sprite y commence en `color.rg` et mesure
+// `sprite_size()` (rapport w/h dans `radius_px`). Textures : t2 (texImg) = le sprite, RGBA ;
+// t4 (texSdf) = champ signé en R et relief en G, RG16F, en
 // unités du modèle, négatif dedans, sur le même rect.
 // Constantes : miroir exact de `frame_geometry.rs` (MODEL_*).
 static const float MODEL_THICK = 0.19;
+static const float MODEL_RELIEF_MAX = 0.12;
 
 // Taille du sprite, repère du modèle : son plus grand côté vaut 1, `radius_px` porte w/h.
 float2 sprite_size()
@@ -443,19 +445,30 @@ static const float MODEL_CONTACT_ALPHA = 0.5;
 float sd_sprite2(float2 p)
 {
     float2 c = clamp(p, color.rg, color.rg + sprite_size());
-    float d = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0);
+    float d = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0).r;
     float2 o = p - c;
     float out2 = dot(o, o);
     float e = max(d, 0.0);
     return out2 > 0.0 ? sqrt(out2 + e * e) : d;
 }
 
+// Hauteur du dessus : zéro pour un sprite sans carte, model-specific pour un modèle sculpté.
+float model_top_height(float2 p)
+{
+    float2 c = clamp(p, color.rg, color.rg + sprite_size());
+    float relief = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0).g;
+    return clamp(relief * color.b, 0.0, MODEL_RELIEF_MAX);
+}
+
 // Distance signée au modèle : le contour rentré du chanfrein, épaisseur rentrée du chanfrein, puis
 // regonflé : les arêtes du dessus et du dessous sont arrondies de MODEL_BEVEL.
 float sd_model(float3 p)
 {
-    float half_t = model_thick() * 0.5;
-    float2 w = float2(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z + half_t) - (half_t - MODEL_BEVEL));
+    float top = model_top_height(p.xy);
+    float thick = model_thick();
+    float half_t = (top + thick) * 0.5;
+    float center_z = (top - thick) * 0.5;
+    float2 w = float2(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z - center_z) - (half_t - MODEL_BEVEL));
     return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - MODEL_BEVEL;
 }
 
@@ -584,7 +597,7 @@ float4 cursor_model(float2 local)
     float3 tip = src_prev.xyz;
     // La boîte du modèle : le rect du sprite, sur toute l'épaisseur.
     float3 lo = float3(color.rg, -model_thick());
-    float3 hi = float3(color.rg + sprite_size(), 0.0);
+    float3 hi = float3(color.rg + sprite_size(), MODEL_RELIEF_MAX);
 
     // Le rayon de ce pixel : de la caméra (0, 0, P) à travers le pixel sur le plan image z = 0.
     // Le plan est translaté de mb.zw dans le repère caméra (caméra réelle, 0 sous un angle fixe).

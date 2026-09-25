@@ -111,7 +111,7 @@ constant float DOF_MAX_LOD = 1.5;
 
 // Slots de texture, tenus par les paramètres des entry points :
 //   ps_main      : 0 = texY (Y, R8), 1 = texUV (CbCr, RG8), 2 = texImg (RGBA), 3 = texMask (R8),
-//                  4 = texSdf (champ du sprite de curseur, R16F, mode 15)
+//                  4 = texSdf (champ + hauteur du sprite de curseur, RG16F, mode 15)
 //   ps_fs_*      : 0 = rgbTex (RGBA)
 
 // =================================================================================
@@ -430,10 +430,11 @@ inline float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, flo
 // ============ Curseur MODÉLISÉ (mode 15) ============
 // Port ligne pour ligne de `cursor_model` (HLSL), dont les commentaires font foi ; seules
 // différences : `layer` et les textures arrivent en paramètres (le sprite en texture(2), son
-// champ R16F en texture(4)), `saturate` s'écrit `clamp`, `lerp` s'écrit `mix`, `SampleLevel`
+// champ RG16F en texture(4)), `saturate` s'écrit `clamp`, `lerp` s'écrit `mix`, `SampleLevel`
 // s'écrit `sample(…, level(0.0))`.
 // Constantes : miroir exact de `frame_geometry.rs` (MODEL_*).
 constant float MODEL_THICK = 0.19;
+constant float MODEL_RELIEF_MAX = 0.12;
 constant float MODEL_BEVEL = 0.045;
 constant float3 MODEL_LIGHT = float3(-0.4194, -0.5792, 0.6990);
 constant float MODEL_AMBIENT = 0.36;
@@ -476,11 +477,22 @@ static float sd_sprite2(float2 p, constant Layer &layer, texture2d<float, access
     return out2 > 0.0 ? sqrt(out2 + e * e) : d;
 }
 
+static float model_top_height(float2 p, constant Layer &layer, texture2d<float, access::sample> texSdf)
+{
+    float2 lo = layer.color.rg;
+    float2 c = clamp(p, lo, lo + sprite_size(layer));
+    float relief = texSdf.sample(samp, (c - lo) / sprite_size(layer), level(0.0)).g;
+    return clamp(relief * layer.color.b, 0.0, MODEL_RELIEF_MAX);
+}
+
 static float sd_model(float3 p, constant Layer &layer, texture2d<float, access::sample> texSdf)
 {
-    float half_t = model_thick(layer) * 0.5;
+    float top = model_top_height(p.xy, layer, texSdf);
+    float thick = model_thick(layer);
+    float half_t = (top + thick) * 0.5;
+    float center_z = (top - thick) * 0.5;
     float2 w = float2(sd_sprite2(p.xy, layer, texSdf) + MODEL_BEVEL,
-                      abs(p.z + half_t) - (half_t - MODEL_BEVEL));
+                      abs(p.z - center_z) - (half_t - MODEL_BEVEL));
     return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - MODEL_BEVEL;
 }
 
@@ -601,7 +613,7 @@ static float4 cursor_model(float2 local, constant Layer &layer,
     float unit = layer.src.w;
     float3 tip = layer.src_prev.xyz;
     float3 lo = float3(layer.color.rg, -model_thick(layer));
-    float3 hi = float3(layer.color.rg + sprite_size(layer), 0.0);
+    float3 hi = float3(layer.color.rg + sprite_size(layer), MODEL_RELIEF_MAX);
 
     float3 dw = float3(local + layer.src.xy, -persp);
     float dlen = length(dw);
@@ -1255,7 +1267,7 @@ fragment float4 ps_main(VSOut i [[stage_in]],
                         // masque n'existe : Metal rend alors 0, ce qui est sans effet
                         // puisque la branche n'est prise que si layer.fx.z > 0.5.
                         texture2d<float, access::sample> texMask [[texture(3)]],
-                        // Champ de distance du sprite de curseur (mode 15 seulement), R16F, cf.
+                        // Champ et relief du sprite de curseur (mode 15 seulement), RG16F, cf.
                         // `cursor_sdf.rs`. Le sprite lui-même est en texture(2), comme aux
                         // modes 7 et 13.
                         texture2d<float, access::sample> texSdf [[texture(4)]])

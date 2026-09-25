@@ -333,8 +333,8 @@ pub struct Compositor {
     /// touche depuis appartient au jeu actif et ne peut pas etre evince -- voir
     /// `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
-    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
-    /// Pas d'eviction : seuls les seize sprites du theme par defaut y passent (~2,6 Mo en tout).
+    /// Champs et reliefs des sprites de curseur (mode 15), RG16F, par chemin, avec leur forme.
+    /// Pas d'eviction : l'ensemble des cartes livrees reste inferieur a quelques dizaines de Mo.
     sdf_cache: RefCell<std::collections::HashMap<String, (wgpu::Texture, SpriteShape)>>,
 
     /// Copie mipmappee de la frame composee, lue par les annotations « flou »
@@ -1285,13 +1285,19 @@ impl Compositor {
         Ok((tex, w, h))
     }
 
-    /// Champ de distance du sprite `path` (binding 2 du mode 15) et sa forme, calcules au
+    /// Champ et relief du sprite `path` (binding 2 du mode 15) et sa forme, calcules au
     /// premier appel. Parite `compositor_windows::cursor_sdf`.
-    fn cursor_sdf(&self, path: &str) -> Result<(wgpu::Texture, SpriteShape)> {
-        if let Some(hit) = self.sdf_cache.borrow().get(path) {
+    fn cursor_sdf(
+        &self,
+        path: &str,
+        depth_path: Option<&str>,
+    ) -> Result<(wgpu::Texture, SpriteShape)> {
+        let cache_key = format!("{path}\0{}", depth_path.unwrap_or_default());
+        if let Some(hit) = self.sdf_cache.borrow().get(&cache_key) {
             return Ok(hit.clone());
         }
-        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
+        let sdf = crate::cursor_sdf::CursorSdf::load_with_depth(path, depth_path)?;
+        let texels = sdf.rg16_bytes();
         let size = wgpu::Extent3d { width: sdf.width, height: sdf.height, depth_or_array_layers: 1 };
         let tex = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("cursor-sdf"),
@@ -1299,7 +1305,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R16Float,
+            format: wgpu::TextureFormat::Rg16Float,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -1310,16 +1316,16 @@ impl Compositor {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &sdf.f16_bytes(),
+            &texels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(sdf.width * 2),
+                bytes_per_row: Some(sdf.width * 4),
                 rows_per_image: Some(sdf.height),
             },
             size,
         );
         let entry = (tex, sdf.shape);
-        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
+        self.sdf_cache.borrow_mut().insert(cache_key, entry.clone());
         Ok(entry)
     }
 
@@ -2789,7 +2795,7 @@ impl Compositor {
             // Curseur modelise (mode 15) : ce meme sprite extrude, `plan_cursor` en a tire la
             // pose. Sprite au binding 1 (texY), champ au binding 2 (texU). Parite Windows/macOS.
             if let Some(pose) = plan.model {
-                match self.cursor_sdf(&sprite.path) {
+                match self.cursor_sdf(&sprite.path, sprite.model_depth_path.as_deref()) {
                     Ok((sdf, shape)) => {
                         let shape = SpriteShape { hotspot, ..shape };
                         let sdf_view = sdf.create_view(&wgpu::TextureViewDescriptor::default());

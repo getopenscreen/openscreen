@@ -16,6 +16,7 @@
 // described are gone (see `MUTATING_TOOL_NAMES`).
 
 import { z } from "zod";
+import { DEFAULT_TEXT_PLATE } from "../../src/lib/ai-edition/annotations/background";
 import {
 	collapseTracksToPills,
 	patchAudioTrack,
@@ -511,6 +512,9 @@ export const setSpeedArgs = z.object({
 	endSec: secondsSchema.optional(),
 	speed: speedSchema.optional(),
 });
+
+/** A new text annotation's box, in frame percentages: the editor's own size for one. */
+const ANNOTATION_BOX = { width: 30, height: 20 } as const;
 
 export const addAnnotationArgs = z.object({
 	startSec: secondsSchema,
@@ -1919,11 +1923,23 @@ export function executeAgentTool(
 				type: "text" as const,
 				content: parsed.data.text,
 				textContent: parsed.data.text,
-				position: { x: parsed.data.x, y: parsed.data.y },
-				size: { width: 30, height: 20 },
+				// x/y name the text's centre, which is what "default centre" always promised: the
+				// position is the box's top-left corner, so {50, 50} dropped the text into the
+				// bottom-right quarter. Kept whole inside the frame.
+				position: {
+					x: Math.min(
+						100 - ANNOTATION_BOX.width,
+						Math.max(0, parsed.data.x - ANNOTATION_BOX.width / 2),
+					),
+					y: Math.min(
+						100 - ANNOTATION_BOX.height,
+						Math.max(0, parsed.data.y - ANNOTATION_BOX.height / 2),
+					),
+				},
+				size: { ...ANNOTATION_BOX },
 				style: {
 					color: "#ffffff",
-					backgroundColor: "transparent",
+					backgroundColor: DEFAULT_TEXT_PLATE,
 					fontSize: 32,
 					fontFamily: "Inter",
 					fontWeight: "bold" as const,

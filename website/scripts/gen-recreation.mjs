@@ -875,7 +875,6 @@ const PANELS = {
 	cursor: {
 		title: t("settings:cursor.title"),
 		show: t("settings:cursor.show"),
-		theme: t("settings:cursor.theme"),
 		size: t("settings:cursor.size"),
 		smoothing: t("settings:cursor.smoothing"),
 	},
@@ -1064,7 +1063,6 @@ const PROVENANCE = [
 	},
 	{ shown: PANELS.cursor.title, source: "src/i18n/locales/en/settings.json → cursor.title" },
 	{ shown: PANELS.cursor.show, source: "src/i18n/locales/en/settings.json → cursor.show" },
-	{ shown: PANELS.cursor.theme, source: "src/i18n/locales/en/settings.json → cursor.theme" },
 	{ shown: PANELS.cursor.size, source: "src/i18n/locales/en/settings.json → cursor.size" },
 	{
 		shown: PANELS.cursor.smoothing,

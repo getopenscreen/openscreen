@@ -102,7 +102,7 @@ Les sous-titres sont incrustés dans la vidéo. OpenScreen n'écrit pas de fichi
 
 ## 8. Exporter {#8-export}
 
-**Choisissez le format.** Le réglage **Format** de l'onglet **Composition** propose **Auto** (par défaut), qui adapte le cadre à votre enregistrement, à la disposition caméra et à la marge, puis 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, ou la forme d'origine de vos clips.
+**Choisissez le format.** Le réglage **Format** de l'onglet **Composition** propose **Auto** (par défaut pour les nouveaux projets), qui adapte le cadre à votre enregistrement, à la disposition caméra et à la marge, puis 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, ou la forme d'origine de vos clips.
 
 **Exportez.** Cliquez sur **Exporter** dans la barre supérieure :
 

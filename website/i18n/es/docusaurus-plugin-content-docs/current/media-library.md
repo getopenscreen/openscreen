@@ -42,7 +42,7 @@ Los clips siempre son contiguos: sin huecos ni superposiciones. Al quitar o reor
 
 ## Tamaño de salida {#output-size}
 
-El control **Formato** del panel **Composición** define la forma del cuadro; **Original** muestra las formas reales de los clips de tu proyecto, y **Auto** da forma al cuadro alrededor del más grande. Cada clip se ajusta dentro de ese cuadro, así que funciona mezclar en una misma línea de tiempo una grabación de pantalla 16:9 con una captura de teléfono 9:16. Consulta [Exportación](./export.md#resolution) para saber qué resolución se obtiene.
+El control **Formato** del panel **Composición** define la forma del cuadro; **Original** muestra las formas reales de los clips de tu proyecto, y **Auto** da forma al cuadro alrededor del más grande, de su disposición de cámara y del relleno. Cada clip se ajusta dentro de ese cuadro, así que funciona mezclar en una misma línea de tiempo una grabación de pantalla 16:9 con una captura de teléfono 9:16. Consulta [Exportación](./export.md#resolution) para saber qué resolución se obtiene.
 
 ## Empezar un proyecto {#starting-a-project}
 

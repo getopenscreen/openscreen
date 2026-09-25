@@ -42,7 +42,7 @@ Clips are always contiguous — no gaps, no overlaps. Removing or reordering one
 
 ## Output size
 
-The **Format** control in the **Composition** facet sets the shape of the frame; **Original** lists the actual shapes of the clips in your project, and **Auto** shapes the frame around the largest one. Every clip gets fitted into that frame, so mixing a 16:9 screen recording with a 9:16 phone capture in one timeline works — see [Export](./export.md#resolution) for what resolution comes out.
+The **Format** control in the **Composition** facet sets the shape of the frame; **Original** lists the actual shapes of the clips in your project, and **Auto** wraps the frame around the largest one, its camera layout and the padding. Every clip gets fitted into that frame, so mixing a 16:9 screen recording with a 9:16 phone capture in one timeline works — see [Export](./export.md#resolution) for what resolution comes out.
 
 ## Starting a project
 

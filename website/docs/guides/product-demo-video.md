@@ -102,7 +102,7 @@ Captions are burned into the video. OpenScreen does not write an `.srt` or `.vtt
 
 ## 8. Export
 
-**Pick the shape.** The **Format** control in the **Composition** facet offers **Auto** (the default), which fits the frame to your recording, camera layout and padding, then 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, or the original shape of your clips.
+**Pick the shape.** The **Format** control in the **Composition** facet offers **Auto** (the default for new projects), which fits the frame to your recording, camera layout and padding, then 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, or the original shape of your clips.
 
 **Export.** Click **Export** in the top bar:
 

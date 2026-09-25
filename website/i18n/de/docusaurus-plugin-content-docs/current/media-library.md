@@ -42,7 +42,7 @@ Clips schließen immer direkt aneinander an: keine Lücken, keine Überlappungen
 
 ## Ausgabegröße {#output-size}
 
-Die Einstellung **Format** im Tab **Composition** legt die Form des Bildes fest; unter **Original** stehen die tatsächlichen Formen der Clips in deinem Projekt, und **Auto** richtet das Bild nach dem größten Clip aus. Jeder Clip wird in dieses Bild eingepasst. Eine Bildschirmaufnahme in 16:9 und eine Handyaufnahme in 9:16 lassen sich deshalb auf einer Zeitleiste mischen. Welche Auflösung dabei herauskommt, steht unter [Export](./export.md#resolution).
+Die Einstellung **Format** im Tab **Composition** legt die Form des Bildes fest; unter **Original** stehen die tatsächlichen Formen der Clips in deinem Projekt, und **Auto** richtet das Bild nach dem größten Clip, seinem Webcam-Layout und dem Innenabstand aus. Jeder Clip wird in dieses Bild eingepasst. Eine Bildschirmaufnahme in 16:9 und eine Handyaufnahme in 9:16 lassen sich deshalb auf einer Zeitleiste mischen. Welche Auflösung dabei herauskommt, steht unter [Export](./export.md#resolution).
 
 ## Ein Projekt beginnen {#starting-a-project}
 

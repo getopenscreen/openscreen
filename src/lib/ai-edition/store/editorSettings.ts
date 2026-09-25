@@ -12,7 +12,6 @@ import {
 	type CropRegion,
 	type CursorVisualSettings,
 	DEFAULT_CROP_REGION,
-	DEFAULT_WEBCAM_POSITION,
 	isWallpaperMotion,
 	isWebcamBackgroundMode,
 	type WallpaperMotion,
@@ -28,9 +27,15 @@ import {
 	isFrameTheme,
 	type RecordingFrame,
 	readRecordingFrame,
+	readWebcamAnchor,
+	readWebcamMask,
+	WEBCAM_SIZE_MAX,
+	WEBCAM_SIZE_MIN,
+	type WebcamAnchor,
+	type WebcamMask,
 } from "@/lib/projectDefaults";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
-import { clamp01 } from "@/utils/math";
+import { clamp, clamp01 } from "@/utils/math";
 import type { AxcutDocument } from "../schema";
 
 // ponytail: avoid dragging in lib/exporter full surface here — we only
@@ -97,11 +102,15 @@ export interface EditorSettingsSnapshot {
 	padding: number;
 	cropRegion: CropRegion;
 	webcamLayoutPreset: WebcamLayoutPreset;
-	webcamMaskShape: WebcamMaskShape;
+	/** The camera's proportions. `circle` and `rounded` are read as a roundness: see `readWebcamMask`. */
+	webcamMaskShape: WebcamMask;
+	/** 0 square corners to 1 fully round, a fraction of half the camera's short side. */
+	webcamRoundness: number;
 	webcamMirrored: boolean;
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: WebcamSizePreset;
-	webcamPosition: WebcamPosition | null;
+	/** Where the picture-in-picture camera sits, at a constant distance from the border. */
+	webcamAnchor: WebcamAnchor;
 	webcamCropRegion: CropRegion;
 	/** Where the crop window sits in the room the zoom leaves it, 0..1 per axis.
 	 *  Authoritative: `webcamCropRegion.x/y` are rebuilt from it on read. */
@@ -146,9 +155,12 @@ interface LegacyShape {
 	cropRegion?: CropRegion;
 	webcamLayoutPreset?: WebcamLayoutPreset;
 	webcamMaskShape?: WebcamMaskShape;
+	webcamRoundness?: number;
 	webcamMirrored?: boolean;
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
+	webcamAnchor?: WebcamAnchor;
+	/** Written by builds that let the camera be dragged anywhere; read as the nearest anchor. */
 	webcamPosition?: WebcamPosition | null;
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;
@@ -202,6 +214,9 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 	// drift apart — on disk, or in a patch that wrote one and not the other. Only the SIZE
 	// survives from the stored rect; `pan * (1 - size)` is a position that cannot leave the
 	// frame, which is why nothing here clamps it.
+	// `circle` and `rounded` were a proportion and a rounding in one value; they split here.
+	const webcamMask = readWebcamMask(legacy?.webcamMaskShape, legacy?.webcamRoundness);
+
 	const storedCrop = normaliseCropRegion(legacy?.webcamCropRegion);
 	const webcamCropPan = normaliseCropPan(legacy?.webcamCropPan, storedCrop);
 	const webcamCrop: CropRegion = {
@@ -231,14 +246,19 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		padding: num(legacy?.padding, DEFAULT_EDITOR_SETTINGS.padding),
 		cropRegion: legacy?.cropRegion ?? DEFAULT_EDITOR_SETTINGS.cropRegion,
 		webcamLayoutPreset: legacy?.webcamLayoutPreset ?? DEFAULT_EDITOR_SETTINGS.webcamLayoutPreset,
-		webcamMaskShape: legacy?.webcamMaskShape ?? DEFAULT_EDITOR_SETTINGS.webcamMaskShape,
+		webcamMaskShape: webcamMask.shape,
+		webcamRoundness: webcamMask.roundness,
 		webcamMirrored: bool(legacy?.webcamMirrored, DEFAULT_EDITOR_SETTINGS.webcamMirrored),
 		webcamReactiveZoom: bool(
 			legacy?.webcamReactiveZoom,
 			DEFAULT_EDITOR_SETTINGS.webcamReactiveZoom,
 		),
-		webcamSizePreset: num(legacy?.webcamSizePreset, DEFAULT_EDITOR_SETTINGS.webcamSizePreset),
-		webcamPosition: normaliseWebcamPosition(legacy?.webcamPosition),
+		webcamSizePreset: clamp(
+			num(legacy?.webcamSizePreset, DEFAULT_EDITOR_SETTINGS.webcamSizePreset),
+			WEBCAM_SIZE_MIN,
+			WEBCAM_SIZE_MAX,
+		),
+		webcamAnchor: readWebcamAnchor(legacy?.webcamAnchor, legacy?.webcamPosition),
 		webcamCropRegion: webcamCrop,
 		webcamCropPan: webcamCropPan,
 		// Same bound the slider offers and the native `finish_audio` clamps to. Two
@@ -278,11 +298,12 @@ export interface EditorSettingsPatch {
 	padding?: number;
 	cropRegion?: CropRegion;
 	webcamLayoutPreset?: WebcamLayoutPreset;
-	webcamMaskShape?: WebcamMaskShape;
+	webcamMaskShape?: WebcamMask;
+	webcamRoundness?: number;
 	webcamMirrored?: boolean;
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
-	webcamPosition?: WebcamPosition | null;
+	webcamAnchor?: WebcamAnchor;
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;
 	audioGainDb?: number;
@@ -328,20 +349,6 @@ export function patchEditorSettings(doc: AxcutDocument, patch: EditorSettingsPat
 	return {
 		...doc,
 		legacyEditor: nextLegacy(current, patch) as Record<string, unknown>,
-	};
-}
-
-// Normalise a webcam position from legacy storage. Anything outside 0-1 is
-// clamped so a malformed `legacyEditor` doesn't seed the drag with bad coords.
-function normaliseWebcamPosition(value: unknown): WebcamPosition | null {
-	if (!value || typeof value !== "object") return DEFAULT_WEBCAM_POSITION;
-	const candidate = value as Record<string, unknown>;
-	const cxRaw = candidate.cx;
-	const cyRaw = candidate.cy;
-	if (typeof cxRaw !== "number" || typeof cyRaw !== "number") return DEFAULT_WEBCAM_POSITION;
-	return {
-		cx: Math.min(1, Math.max(0, cxRaw)),
-		cy: Math.min(1, Math.max(0, cyRaw)),
 	};
 }
 

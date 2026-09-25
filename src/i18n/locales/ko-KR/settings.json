@@ -272,16 +272,25 @@
 		"mute": "음소거"
 	},
 	"layout": {
-		"help": "웹캠과 화면을 합성하는 방식: PIP, 세로 배치, 이중 프레임, 마스크 모양, 크기, 좌우 반전.",
+		"help": "웹캠과 화면을 합성하는 방식: PIP, 세로 배치, 이중 프레임, 모양, 모서리 둥글기, 크기, 위치, 좌우 반전.",
 		"mirrorWebcam": "웹캠 미러링",
 		"webcamFraming": "웹캠 구도",
 		"webcamFramingDrag": "프레임을 드래그해 카메라에 보일 부분을 고르세요.",
 		"webcamFramingZoomFirst": "확대한 다음 프레임을 드래그해 카메라에 보일 부분을 고르세요.",
 		"shapes": {
 			"rectangle": "직사각형",
-			"rounded": "둥근 모서리",
-			"circle": "원형",
 			"square": "정사각형"
+		},
+		"webcamPosition": "위치",
+		"anchors": {
+			"topLeft": "왼쪽 위",
+			"top": "위",
+			"topRight": "오른쪽 위",
+			"left": "왼쪽",
+			"right": "오른쪽",
+			"bottomLeft": "왼쪽 아래",
+			"bottom": "아래",
+			"bottomRight": "오른쪽 아래"
 		},
 		"selectPreset": "프리셋 선택",
 		"bgModes": {

@@ -272,16 +272,25 @@
 		"mute": "Muto"
 	},
 	"layout": {
-		"help": "Come la webcam viene composta con lo schermo: picture-in-picture, pila verticale, doppio riquadro, forma della maschera, dimensione e effetto specchio.",
+		"help": "Come la webcam viene composta con lo schermo: picture-in-picture, pila verticale, doppio riquadro, forma, arrotondamento, dimensione, posizione e effetto specchio.",
 		"mirrorWebcam": "Specchia webcam",
 		"webcamFraming": "Inquadratura webcam",
 		"webcamFramingDrag": "Trascina il riquadro per scegliere cosa mostra la fotocamera.",
 		"webcamFramingZoomFirst": "Aumenta lo zoom, poi trascina il riquadro per scegliere cosa mostra la fotocamera.",
 		"shapes": {
-			"rectangle": "Rett.",
-			"rounded": "Arrotondato",
-			"circle": "Cerchio",
+			"rectangle": "Rettangolo",
 			"square": "Quadrato"
+		},
+		"webcamPosition": "Posizione",
+		"anchors": {
+			"topLeft": "In alto a sinistra",
+			"top": "In alto",
+			"topRight": "In alto a destra",
+			"left": "A sinistra",
+			"right": "A destra",
+			"bottomLeft": "In basso a sinistra",
+			"bottom": "In basso",
+			"bottomRight": "In basso a destra"
 		},
 		"selectPreset": "Seleziona predefinito",
 		"bgModes": {

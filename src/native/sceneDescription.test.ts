@@ -1092,11 +1092,11 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(buildSceneDescription(doc).layout.webcamSize).toBeCloseTo(0.334, 5);
 	});
 
-	it("webcamSize clamps below 10 and above 50", () => {
+	it("webcamSize clamps below 10 and above 35", () => {
 		const low = makeDoc({ legacyEditor: { webcamSizePreset: 2 } });
 		const high = makeDoc({ legacyEditor: { webcamSizePreset: 90 } });
 		expect(buildSceneDescription(low).layout.webcamSize).toBeCloseTo(0.1, 5);
-		expect(buildSceneDescription(high).layout.webcamSize).toBeCloseTo(0.5, 5);
+		expect(buildSceneDescription(high).layout.webcamSize).toBeCloseTo(0.35, 5);
 	});
 
 	it("keeps the flat cursor for an older project and carries the 3D cursor switch", () => {
@@ -1141,7 +1141,8 @@ describe("buildSceneDescription.settings mapping", () => {
 			},
 		});
 		const scene = buildSceneDescription(doc);
-		expect(scene.layout.webcamShape).toBe("circle");
+		// An old circle is a square camera, fully round.
+		expect(scene.layout.webcamShape).toBe("square");
 		expect(scene.layout.webcamMirror).toBe(true);
 		expect(scene.cursor.show).toBe(false);
 		expect(scene.cursor.autoHide).toBe(true);
@@ -1372,11 +1373,15 @@ describe("buildSceneDescription.settings mapping", () => {
 		);
 	});
 
-	it("still honours the shape picker under picture-in-picture", () => {
+	it("still honours the shape and roundness under picture-in-picture", () => {
 		const scene = buildSceneDescription(
-			docWithCamera({ webcamLayoutPreset: "picture-in-picture", webcamMaskShape: "circle" }),
+			docWithCamera({
+				webcamLayoutPreset: "picture-in-picture",
+				webcamMaskShape: "square",
+				webcamRoundness: 1,
+			}),
 		);
-		expect(scene.layout.webcamShape).toBe("circle");
+		expect(scene.layout.webcamShape).toBe("square");
 		// A circle is a rounded rect whose radius is HALF its (square) box — that exact
 		// fraction is what makes the native rounded-box SDF draw a disc rather than a
 		// blob, at any render size.

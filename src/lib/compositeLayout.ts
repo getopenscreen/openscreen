@@ -1,3 +1,12 @@
+import {
+	DEFAULT_WEBCAM_ROUNDNESS,
+	WEBCAM_SIZE_MAX,
+	WEBCAM_SIZE_MIN,
+	type WebcamAnchor,
+	webcamAnchorFractions,
+} from "@/lib/projectDefaults";
+import { clamp01 } from "@/utils/math";
+
 export interface RenderRect {
 	x: number;
 	y: number;
@@ -170,15 +179,17 @@ export interface WebcamCompositeLayout {
 	screenCover?: boolean;
 }
 
-/** Convert a webcam size percentage (10–50) to a fraction (0..1) of the reference dimension. */
+/** Convert a webcam size percentage (10–35) to a fraction (0..1) of the reference dimension. */
 export function webcamSizeToFraction(percent: number): number {
 	const safe = Number.isFinite(percent) ? percent : 25;
-	const clamped = Math.max(10, Math.min(50, safe));
+	const clamped = Math.max(WEBCAM_SIZE_MIN, Math.min(WEBCAM_SIZE_MAX, safe));
 	return clamped / 100;
 }
 
 const MARGIN_FRACTION = 0.02;
 const MAX_BORDER_RADIUS = 24;
+/** Picture-in-picture rounds by the user's `webcamRoundness`, and no-webcam draws no camera. */
+const NO_PRESET_ROUNDING = { max: 0, min: 0, fraction: 0 };
 /**
  * Breathing room between the screen box and the camera box inside a block layout,
  * as a fraction of the screen's own width. Expressed against the screen (not the
@@ -205,11 +216,7 @@ const WEBCAM_LAYOUT_PRESET_MAP: Record<WebcamLayoutPreset, WebcamLayoutPresetDef
 			minMargin: 0,
 			minSize: 0,
 		},
-		borderRadius: {
-			max: MAX_BORDER_RADIUS,
-			min: 12,
-			fraction: 0.12,
-		},
+		borderRadius: NO_PRESET_ROUNDING,
 		shadow: {
 			color: "rgba(0,0,0,0.35)",
 			blur: 24,
@@ -253,11 +260,7 @@ const WEBCAM_LAYOUT_PRESET_MAP: Record<WebcamLayoutPreset, WebcamLayoutPresetDef
 			minMargin: 0,
 			minSize: 0,
 		},
-		borderRadius: {
-			max: 0,
-			min: 0,
-			fraction: 0,
-		},
+		borderRadius: NO_PRESET_ROUNDING,
 		shadow: null,
 	},
 };
@@ -357,8 +360,11 @@ export function computeCompositeLayout(params: {
 	webcamSize?: Size | null;
 	layoutPreset?: WebcamLayoutPreset;
 	webcamSizePreset?: WebcamSizePreset;
-	webcamPosition?: { cx: number; cy: number } | null;
+	/** Picture-in-picture only: where the camera sits. The block layouts place their own. */
+	webcamAnchor?: WebcamAnchor;
 	webcamMaskShape?: import("@/components/video-editor/types").WebcamMaskShape;
+	/** Picture-in-picture only: 0 square corners to 1 fully round. */
+	webcamRoundness?: number;
 }): WebcamCompositeLayout | null {
 	const {
 		canvasSize,
@@ -367,8 +373,9 @@ export function computeCompositeLayout(params: {
 		webcamSize,
 		layoutPreset = "picture-in-picture",
 		webcamSizePreset = 25,
-		webcamPosition,
+		webcamAnchor = "bottom-right",
 		webcamMaskShape = "rectangle",
+		webcamRoundness = DEFAULT_WEBCAM_ROUNDNESS,
 	} = params;
 	const { width: canvasWidth, height: canvasHeight } = canvasSize;
 	const { width: screenWidth, height: screenHeight } = screenSize;
@@ -535,37 +542,15 @@ export function computeCompositeLayout(params: {
 		height = side;
 	}
 
-	let webcamX: number;
-	let webcamY: number;
+	// The anchor's corner or edge middle, the same margin from the border whatever the
+	// camera's size: the camera takes 0, a half or all of the room it leaves on each axis.
+	const [fx, fy] = webcamAnchorFractions(webcamAnchor);
+	const webcamX = Math.max(0, Math.round(margin + fx * (canvasWidth - 2 * margin - width)));
+	const webcamY = Math.max(0, Math.round(margin + fy * (canvasHeight - 2 * margin - height)));
 
-	if (webcamPosition) {
-		// cx/cy are the webcam center as a fraction of the canvas.
-		webcamX = Math.round(webcamPosition.cx * canvasWidth - width / 2);
-		webcamY = Math.round(webcamPosition.cy * canvasHeight - height / 2);
-		// Clamp inside canvas bounds.
-		webcamX = Math.max(0, Math.min(canvasWidth - width, webcamX));
-		webcamY = Math.max(0, Math.min(canvasHeight - height, webcamY));
-	} else {
-		// Default: bottom-right with margin
-		webcamX = Math.max(0, Math.round(canvasWidth - margin - width));
-		webcamY = Math.max(0, Math.round(canvasHeight - margin - height));
-	}
-
-	// Shape-specific border radius
-	let borderRadius: number;
-	if (webcamMaskShape === "rounded") {
-		borderRadius = Math.round(Math.min(width, height) * 0.3);
-	} else if (webcamMaskShape === "circle") {
-		borderRadius = Math.round(Math.min(width, height) / 2);
-	} else {
-		borderRadius = Math.min(
-			preset.borderRadius.max,
-			Math.max(
-				preset.borderRadius.min,
-				Math.round(Math.min(width, height) * preset.borderRadius.fraction),
-			),
-		);
-	}
+	// A fraction of half the short side, so the shape holds at any size and resolution:
+	// at 1 a square camera is a circle, a rectangular one a pill.
+	const borderRadius = Math.round((clamp01(webcamRoundness) * Math.min(width, height)) / 2);
 
 	return {
 		screenRect,

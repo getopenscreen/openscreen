@@ -102,6 +102,12 @@ import {
 	type FrameTheme,
 	RECORDING_FRAMES,
 	type RecordingFrame,
+	WEBCAM_ANCHOR_GRID,
+	WEBCAM_SIZE_MAX,
+	WEBCAM_SIZE_MIN,
+	type WebcamAnchor,
+	type WebcamMask,
+	webcamAnchorFractions,
 } from "@/lib/projectDefaults";
 import {
 	classifyWallpaper,
@@ -2875,28 +2881,49 @@ const WEBCAM_PRESETS = [
 // (1 = fixture default), so the slider reads as a direct multiplier on the shipped webcam.
 const NATIVE_WEBCAM_BASE_PCT = 16.7;
 
-const CAMERA_SHAPES: Array<{
-	value: "rectangle" | "circle" | "square" | "rounded";
-	labelKey: string;
-	icon: ReactNode;
-}> = [
-	{
-		value: "rectangle",
-		labelKey: "layout.shapes.rectangle",
-		icon: <rect x="3" y="6" width="18" height="12" rx="1" />,
-	},
-	{ value: "circle", labelKey: "layout.shapes.circle", icon: <circle cx="12" cy="12" r="9" /> },
-	{
-		value: "square",
-		labelKey: "layout.shapes.square",
-		icon: <rect x="4" y="4" width="16" height="16" rx="1" />,
-	},
-	{
-		value: "rounded",
-		labelKey: "layout.shapes.rounded",
-		icon: <rect x="3" y="6" width="18" height="12" rx="6" />,
-	},
-];
+// The camera's two proportions. Its rounding is the slider under them, and each icon draws it.
+const CAMERA_SHAPES = [
+	{ value: "rectangle", labelKey: "layout.shapes.rectangle", x: 3, y: 6, w: 18, h: 12 },
+	{ value: "square", labelKey: "layout.shapes.square", x: 4, y: 4, w: 16, h: 16 },
+] as const satisfies ReadonlyArray<{ value: WebcamMask } & Record<string, unknown>>;
+
+const ANCHOR_KEYS: Record<WebcamAnchor, string> = {
+	"top-left": "layout.anchors.topLeft",
+	top: "layout.anchors.top",
+	"top-right": "layout.anchors.topRight",
+	left: "layout.anchors.left",
+	right: "layout.anchors.right",
+	"bottom-left": "layout.anchors.bottomLeft",
+	bottom: "layout.anchors.bottom",
+	"bottom-right": "layout.anchors.bottomRight",
+};
+
+/** The frame, with the camera where this anchor puts it (viewBox 0 0 32 22, as the presets). */
+function anchorIcon(anchor: WebcamAnchor) {
+	const [fx, fy] = webcamAnchorFractions(anchor);
+	return (
+		<svg
+			viewBox="0 0 32 22"
+			width={32}
+			height={22}
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.75"
+			aria-hidden="true"
+		>
+			<rect x="1.5" y="1.5" width="29" height="19" rx="3" />
+			<rect
+				x={4 + fx * 16}
+				y={4 + fy * 8}
+				width="8"
+				height="6"
+				rx="1.5"
+				fill="currentColor"
+				stroke="none"
+			/>
+		</svg>
+	);
+}
 
 // The camera-background control used to be gated on the platform: the mask is produced by the
 // native compositor, and Linux carried the shader branch with nothing feeding it, so `fx.z`
@@ -3090,87 +3117,90 @@ export function LayoutPane() {
 			{isPip ? (
 				<>
 					<div className={styles.sectionLabel}>{ts("layout.webcamShape")}</div>
-					<div
-						style={{
-							display: "grid",
-							// `minmax(0, 1fr)` et non `1fr`. `1fr` vaut `minmax(auto, 1fr)`,
-							// donc la taille MINIMALE de la piste est `auto`, ce qui resout
-							// pour chaque bouton a son minimum de contenu -- et « Rounded »
-							// est un mot insecable. Quatre boutons a 64,83 px plus trois
-							// gouttieres de 8 px reclamaient 283,3 px la ou le panneau n'en
-							// offre que 234 : les pistes refusaient de retrecir et la grille
-							// debordait, en coupant le dernier bouton. `minmax(0, ...)`
-							// autorise la piste a passer sous son contenu.
-							gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-							gap: 8,
-							padding: "0 var(--sp-4) 12px",
-						}}
-					>
-						{CAMERA_SHAPES.map((shape) => {
-							const isActive = settings.webcamMaskShape === shape.value;
-							return (
-								<button
-									type="button"
-									key={shape.value}
-									className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
-									style={{
-										flexDirection: "column",
-										gap: 4,
-										padding: "8px 4px",
-										display: "flex",
-										alignItems: "center",
-										// Sans `minWidth: 0` le bouton garde son minimum de
-										// contenu et rouvre le debordement que `minmax(0, 1fr)`
-										// vient de fermer sur la piste.
-										minWidth: 0,
-									}}
-									disabled={layoutControlsDisabled}
-									onClick={() => {
-										void set({ webcamMaskShape: shape.value });
-										if (isNativeCompositorActive()) {
-											setNativeParam("webcamShape", shape.value);
-										}
-									}}
-								>
+					<div style={{ padding: "0 var(--sp-4) 12px" }}>
+						<ChoiceRow<WebcamMask>
+							label={ts("layout.webcamShape")}
+							display="both"
+							tiles
+							options={CAMERA_SHAPES.map((shape) => ({
+								value: shape.value,
+								label: ts(shape.labelKey),
+								icon: (
 									<svg
 										viewBox="0 0 24 24"
+										width={22}
+										height={22}
 										fill="none"
 										stroke="currentColor"
 										strokeWidth="2"
-										width={22}
-										height={22}
+										aria-hidden="true"
 									>
-										{shape.icon}
+										<rect
+											x={shape.x}
+											y={shape.y}
+											width={shape.w}
+											height={shape.h}
+											rx={(settings.webcamRoundness * Math.min(shape.w, shape.h)) / 2}
+										/>
 									</svg>
-									<span title={ts(shape.labelKey)} style={{ font: "500 12px/1 var(--font-body)" }}>
-										{ts(shape.labelKey)}
-									</span>
-								</button>
-							);
-						})}
+								),
+							}))}
+							value={settings.webcamMaskShape}
+							disabled={layoutControlsDisabled}
+							onChange={(shape) => {
+								void set({ webcamMaskShape: shape });
+								if (isNativeCompositorActive()) {
+									setNativeParam("webcamShape", shape);
+								}
+							}}
+						/>
+					</div>
+					<div className={styles.sliderGrid}>
+						<SliderCell
+							full
+							label={ts("effects.roundness")}
+							value={Math.round(settings.webcamRoundness * 100)}
+							min={0}
+							max={100}
+							suffix="%"
+							disabled={layoutControlsDisabled}
+							onChange={(next) => setLive({ webcamRoundness: next / 100 })}
+							onCommit={() => void commit()}
+						/>
+						<SliderCell
+							full
+							label={ts("layout.webcamSize")}
+							value={settings.webcamSizePreset}
+							min={WEBCAM_SIZE_MIN}
+							max={WEBCAM_SIZE_MAX}
+							step={1}
+							suffix="%"
+							disabled={layoutControlsDisabled}
+							onChange={(next) => {
+								setLive({ webcamSizePreset: next });
+								if (isNativeCompositorActive()) {
+									setNativeParam("webcamSize", next / NATIVE_WEBCAM_BASE_PCT);
+								}
+							}}
+							onCommit={() => void commit()}
+						/>
+					</div>
+					<div className={styles.sectionLabel}>{ts("layout.webcamPosition")}</div>
+					<div style={{ padding: "0 var(--sp-4) 12px" }}>
+						<ChoiceRow<WebcamAnchor>
+							label={ts("layout.webcamPosition")}
+							columns={3}
+							options={WEBCAM_ANCHOR_GRID.flat().map((anchor) =>
+								anchor === null
+									? null
+									: { value: anchor, label: ts(ANCHOR_KEYS[anchor]), icon: anchorIcon(anchor) },
+							)}
+							value={settings.webcamAnchor}
+							disabled={layoutControlsDisabled}
+							onChange={(anchor) => void set({ webcamAnchor: anchor })}
+						/>
 					</div>
 				</>
-			) : null}
-			{isPip ? (
-				<div className={styles.sliderGrid}>
-					<SliderCell
-						full
-						label={ts("layout.webcamSize")}
-						value={settings.webcamSizePreset}
-						min={10}
-						max={50}
-						step={1}
-						suffix="%"
-						disabled={layoutControlsDisabled}
-						onChange={(next) => {
-							setLive({ webcamSizePreset: next });
-							if (isNativeCompositorActive()) {
-								setNativeParam("webcamSize", next / NATIVE_WEBCAM_BASE_PCT);
-							}
-						}}
-						onCommit={() => void commit()}
-					/>
-				</div>
 			) : null}
 			{/* Le seul contrôle de l'éditeur dont l'effet dépend d'un binaire optionnel : sans la
 			    bibliothèque ONNX Runtime, le compositeur dessine la webcam telle quelle et le réglage
@@ -3902,7 +3932,8 @@ export function ChoiceRow<T extends string | number>({
 	display,
 }: {
 	label: string;
-	options: ReadonlyArray<{ value: T; label: string; icon?: ReactNode }>;
+	/** `null` leaves a hole in the grid: the middle of the camera's position grid. */
+	options: ReadonlyArray<{ value: T; label: string; icon?: ReactNode } | null>;
 	value: T;
 	onChange: (next: T) => void;
 	disabled?: boolean;
@@ -3915,7 +3946,7 @@ export function ChoiceRow<T extends string | number>({
 	display?: "text" | "icon" | "both";
 }) {
 	const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
-	const mode = display ?? (options.some((o) => o.icon) ? "icon" : "text");
+	const mode = display ?? (options.some((o) => o?.icon) ? "icon" : "text");
 	return (
 		<div
 			role="group"
@@ -3937,14 +3968,17 @@ export function ChoiceRow<T extends string | number>({
 				e.preventDefault();
 				e.nativeEvent.stopPropagation();
 				const focused = buttonsRef.current.findIndex((b) => b === document.activeElement);
-				const from = focused >= 0 ? focused : options.findIndex((o) => o.value === value);
-				const next = options[from + step];
+				const from = focused >= 0 ? focused : options.findIndex((o) => o?.value === value);
+				// A hole is stepped over, not landed on.
+				const to = options[from + step] === null ? from + 2 * step : from + step;
+				const next = options[to];
 				if (!next) return;
-				buttonsRef.current[from + step]?.focus();
+				buttonsRef.current[to]?.focus();
 				if (next.value !== value) onChange(next.value);
 			}}
 		>
 			{options.map((option, i) => {
+				if (option === null) return <span key={`hole-${i}`} aria-hidden="true" />;
 				const pressed = option.value === value;
 				return (
 					<button

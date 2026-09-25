@@ -52,7 +52,7 @@ La cámara web se graba en su propio archivo, así que su ubicación es una deci
 
 - **Imagen en imagen**, **Apilado vertical**, **Marco dual** o **Sin cámara**.
 - En todas las disposiciones: reflejo y un encuadre de la imagen de la cámara.
-- Solo en **Imagen en imagen**: **Forma de cámara** (Rect., Círculo, Cuadrado o Redondeado), un tamaño del 10 al 50 % (25 % por defecto) y **Reducir al ampliar**, activado por defecto, que hace más pequeña la cámara mientras se reproduce un zoom para que no tape el detalle. Arrastra la cámara sobre el lienzo para moverla.
+- Solo en **Imagen en imagen**: **Forma de cámara** (Rectángulo o Cuadrado), **Redondez** (al 100 % una cámara cuadrada es un círculo), un tamaño del 10 al 35 % (25 % por defecto), **Posición** (una esquina o el centro de un borde, abajo a la derecha por defecto) y **Reducir al ampliar**, activado por defecto, que hace más pequeña la cámara mientras se reproduce un zoom para que no tape el detalle. Arrastra la cámara sobre el lienzo y se ajusta a la posición más cercana.
 - **Fondo de la cámara**: Original, Desenfocado, Recortado o Personalizado. Recortado quita el fondo sin pantalla verde, con un modelo de segmentación que se ejecuta en tu CPU. Esta sección solo aparece cuando el entorno de ejecución de segmentación se carga en tu equipo.
 
 Para una introducción o un cierre, presiona `C` para agregar un segmento de **Cámara a pantalla completa**: la cámara llena todo el cuadro durante ese tramo.

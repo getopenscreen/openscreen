@@ -272,16 +272,25 @@
 		"mute": "Silenciar"
 	},
 	"layout": {
-		"help": "Cómo se compone la webcam con la pantalla: imagen en imagen, pila vertical, marco doble, forma de máscara, tamaño y efecto espejo.",
+		"help": "Cómo se compone la webcam con la pantalla: imagen en imagen, pila vertical, marco doble, forma, redondez, tamaño, posición y efecto espejo.",
 		"mirrorWebcam": "Reflejar cámara",
 		"webcamFraming": "Encuadre de cámara",
 		"webcamFramingDrag": "Arrastra el marco para elegir lo que muestra la cámara.",
 		"webcamFramingZoomFirst": "Acerca el zoom y arrastra el marco para elegir lo que muestra la cámara.",
 		"shapes": {
-			"rectangle": "Rect.",
-			"rounded": "Redondeado",
-			"circle": "Círculo",
+			"rectangle": "Rectángulo",
 			"square": "Cuadrado"
+		},
+		"webcamPosition": "Posición",
+		"anchors": {
+			"topLeft": "Arriba a la izquierda",
+			"top": "Arriba",
+			"topRight": "Arriba a la derecha",
+			"left": "Izquierda",
+			"right": "Derecha",
+			"bottomLeft": "Abajo a la izquierda",
+			"bottom": "Abajo",
+			"bottomRight": "Abajo a la derecha"
 		},
 		"selectPreset": "Seleccionar predefinido",
 		"bgModes": {

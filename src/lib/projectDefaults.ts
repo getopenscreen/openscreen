@@ -64,6 +64,104 @@ export function readRecordingFrame(
 	return isRecordingFrame(value) ? { frame: value } : null;
 }
 
+/**
+ * Where the picture-in-picture camera sits: a corner or the middle of an edge, always the
+ * same distance from the border of the frame. Never a free position: a camera dropped
+ * anywhere else ended up against an edge or over the middle of the screen.
+ */
+export const WEBCAM_ANCHORS = [
+	"top-left",
+	"top",
+	"top-right",
+	"left",
+	"right",
+	"bottom-left",
+	"bottom",
+	"bottom-right",
+] as const;
+
+export type WebcamAnchor = (typeof WEBCAM_ANCHORS)[number];
+
+export function isWebcamAnchor(value: unknown): value is WebcamAnchor {
+	return (WEBCAM_ANCHORS as readonly unknown[]).includes(value);
+}
+
+/** The anchor grid, row by row. The middle cell is no place for a camera. */
+export const WEBCAM_ANCHOR_GRID = [
+	["top-left", "top", "top-right"],
+	["left", null, "right"],
+	["bottom-left", "bottom", "bottom-right"],
+] as const satisfies readonly (readonly (WebcamAnchor | null)[])[];
+
+/**
+ * The anchor nearest a point of the frame, in fractions of it: the cell of a 3x3 grid, and
+ * from the middle cell the nearer edge. What the camera snaps to when it is dragged, and what
+ * a free position stored by an older build reads as.
+ */
+export function webcamAnchorAt(cx: number, cy: number): WebcamAnchor {
+	const cell = (v: number) => (v < 1 / 3 ? 0 : v > 2 / 3 ? 2 : 1);
+	let col = cell(cx);
+	let row = cell(cy);
+	if (col === 1 && row === 1) {
+		if (Math.abs(cy - 0.5) >= Math.abs(cx - 0.5)) row = cy < 0.5 ? 0 : 2;
+		else col = cx < 0.5 ? 0 : 2;
+	}
+	return WEBCAM_ANCHOR_GRID[row][col] ?? "bottom-right";
+}
+
+/** An anchor as the share of the free room the camera leaves it, per axis: 0, 0.5 or 1. */
+export function webcamAnchorFractions(anchor: WebcamAnchor): [number, number] {
+	const fx = anchor.endsWith("left") ? 0 : anchor.endsWith("right") ? 1 : 0.5;
+	const fy = anchor.startsWith("top") ? 0 : anchor.startsWith("bottom") ? 1 : 0.5;
+	return [fx, fy];
+}
+
+/** Reads a stored anchor, falling back to the free `{ cx, cy }` position older builds stored. */
+export function readWebcamAnchor(anchor: unknown, legacyPosition: unknown): WebcamAnchor {
+	if (isWebcamAnchor(anchor)) return anchor;
+	const p = legacyPosition as { cx?: unknown; cy?: unknown } | null | undefined;
+	if (p && typeof p.cx === "number" && typeof p.cy === "number") {
+		return webcamAnchorAt(p.cx, p.cy);
+	}
+	return "bottom-right";
+}
+
+/** The camera's proportions. Its roundness is a setting of its own, `webcamRoundness`. */
+export type WebcamMask = "rectangle" | "square";
+
+/**
+ * The camera's corner rounding, 0 square to 1 fully round, as a fraction of half the camera's
+ * short side. A fraction, so the same value draws the same shape at any size and resolution;
+ * at 1 a square camera is a circle.
+ */
+export const DEFAULT_WEBCAM_ROUNDNESS = 0.3;
+
+/**
+ * The picture-in-picture camera's size, in percent of the frame's short side. Past 35 it
+ * covers the screen it is there to accompany; older builds allowed 50, read back as 35.
+ */
+export const WEBCAM_SIZE_MIN = 10;
+export const WEBCAM_SIZE_MAX = 35;
+
+/**
+ * Reads a stored camera shape and roundness. `circle` and `rounded` were a proportion and a
+ * rounding folded into one value; they split here into the two settings, the way
+ * `readRecordingFrame` splits the old window themes. A stored roundness wins.
+ */
+export function readWebcamMask(
+	shape: unknown,
+	roundness: unknown,
+): { shape: WebcamMask; roundness: number } {
+	const fromShape = shape === "circle" ? 1 : shape === "rounded" ? 0.6 : DEFAULT_WEBCAM_ROUNDNESS;
+	return {
+		shape: shape === "square" || shape === "circle" ? "square" : "rectangle",
+		roundness:
+			typeof roundness === "number" && Number.isFinite(roundness)
+				? Math.min(1, Math.max(0, roundness))
+				: fromShape,
+	};
+}
+
 export interface ProjectAppearanceDefaults {
 	wallpaper: string;
 	wallpaperMotion: "none" | "drift" | "aurora" | "waves";
@@ -79,11 +177,14 @@ export interface ProjectAppearanceDefaults {
 	borderRadius: number;
 	padding: number;
 	webcamLayoutPreset: "picture-in-picture" | "vertical-stack" | "dual-frame" | "no-webcam";
-	webcamMaskShape: "rectangle" | "circle" | "square" | "rounded";
+	/** The camera's proportions: its own ("rectangle") or cropped square. See `readWebcamMask`. */
+	webcamMaskShape: WebcamMask;
+	/** 0 square corners to 1 fully round. See `DEFAULT_WEBCAM_ROUNDNESS`. */
+	webcamRoundness: number;
 	webcamMirrored: boolean;
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: number;
-	webcamPosition: { cx: number; cy: number } | null;
+	webcamAnchor: WebcamAnchor;
 	webcamBackgroundMode: "none" | "transparent" | "blur" | "custom";
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
@@ -119,10 +220,11 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	padding: 50,
 	webcamLayoutPreset: "picture-in-picture",
 	webcamMaskShape: "rectangle",
+	webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS,
 	webcamMirrored: false,
 	webcamReactiveZoom: true,
 	webcamSizePreset: 25,
-	webcamPosition: null,
+	webcamAnchor: "bottom-right",
 	webcamBackgroundMode: "none",
 	webcamWallpaper: "/wallpapers/wallpaper1.jpg",
 	webcamBlurIntensity: 0.5,

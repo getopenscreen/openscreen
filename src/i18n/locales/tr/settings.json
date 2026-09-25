@@ -272,16 +272,25 @@
 		"mute": "Sessiz"
 	},
 	"layout": {
-		"help": "Web kamerasının ekranla birleştirilme biçimi: resim içinde resim, dikey yığın, çift çerçeve, maske şekli, boyut ve aynalama.",
+		"help": "Web kamerasının ekranla birleştirilme biçimi: resim içinde resim, dikey yığın, çift çerçeve, şekil, yuvarlaklık, boyut, konum ve aynalama.",
 		"mirrorWebcam": "Web kamerasını aynala",
 		"webcamFraming": "Webcam kadrajı",
 		"webcamFramingDrag": "Kameranın ne göstereceğini seçmek için çerçeveyi sürükleyin.",
 		"webcamFramingZoomFirst": "Yakınlaştırın, ardından kameranın ne göstereceğini seçmek için çerçeveyi sürükleyin.",
 		"shapes": {
 			"rectangle": "Dikdörtgen",
-			"rounded": "Yuvarlatılmış",
-			"circle": "Daire",
 			"square": "Kare"
+		},
+		"webcamPosition": "Konum",
+		"anchors": {
+			"topLeft": "Sol üst",
+			"top": "Üst",
+			"topRight": "Sağ üst",
+			"left": "Sol",
+			"right": "Sağ",
+			"bottomLeft": "Sol alt",
+			"bottom": "Alt",
+			"bottomRight": "Sağ alt"
 		},
 		"selectPreset": "Ön ayar seçin",
 		"bgModes": {

@@ -35,7 +35,7 @@ A raw capture goes in and comes out ready to post — on X, Reddit, YouTube, a d
 ## Core Features
 - Record a specific window, or your whole screen.
 - Record microphone and system audio.
-- Webcam overlay with picture-in-picture, drag-to-position, mirroring, and shape options.
+- Webcam overlay with picture-in-picture, eight snap positions, adjustable roundness, mirroring, and shape options.
 - Auto or manual zooms with adjustable depth, duration, easing, and pixel-precise position; auto-zoom follows your cursor as you work.
 - Custom cursor size, smoothing, and click effects, with cursor themes and post-recording path smoothing.
 - Automatic captions for voiceovers, transcribed on-device with no upload (works offline), with an editable transcript you can cut from and optional subtitle translation.

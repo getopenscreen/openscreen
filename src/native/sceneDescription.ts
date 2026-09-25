@@ -991,8 +991,9 @@ export function buildSceneDescription(
 			webcamSize: preset === "no-webcam" ? null : camSize,
 			layoutPreset: preset,
 			webcamSizePreset: settings.webcamSizePreset,
-			webcamPosition: preset === "picture-in-picture" ? settings.webcamPosition : null,
+			webcamAnchor: settings.webcamAnchor,
 			webcamMaskShape: settings.webcamMaskShape,
+			webcamRoundness: settings.webcamRoundness,
 		});
 	};
 	const toFrameFractions = (r: RenderRect) => ({
@@ -1053,7 +1054,11 @@ export function buildSceneDescription(
 			// rectangle, whatever shape the user last picked under picture-in-picture.
 			webcamShape: computedLayout?.webcamRect?.maskShape ?? settings.webcamMaskShape,
 			webcamMirror: settings.webcamMirrored,
-			webcamPosition: settings.webcamPosition,
+			// The centre of the rect the anchor resolved to. Native places the camera from
+			// `webcamRect`; this only keeps the field's meaning for anything that reads it.
+			webcamPosition: webcamRect
+				? { cx: webcamRect.x + webcamRect.width / 2, cy: webcamRect.y + webcamRect.height / 2 }
+				: null,
 			// Gated by the preset: the block layouts size their camera off the screen
 			// box, so it must never shrink mid-zoom (the UI hides the toggle too).
 			webcamReactiveZoom: resolveWebcamReactiveZoom(

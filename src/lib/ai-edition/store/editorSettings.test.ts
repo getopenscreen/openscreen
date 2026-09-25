@@ -73,7 +73,9 @@ describe("getEditorSettings", () => {
 		expect(snap.shadowIntensity).toBe(0.5);
 		expect(snap.showBlur).toBe(true);
 		expect(snap.webcamLayoutPreset).toBe("side-by-side");
-		expect(snap.webcamMaskShape).toBe("circle");
+		// An old circle: a square camera, fully round.
+		expect(snap.webcamMaskShape).toBe("square");
+		expect(snap.webcamRoundness).toBe(1);
 		expect(snap.cursor.size).toBe(5);
 		expect(snap.cursor.smoothing).toBe(0.8);
 	});
@@ -163,21 +165,40 @@ describe("patchEditorSettings", () => {
 		expect(after).toEqual(before);
 	});
 
-	it("round-trips webcamPosition through legacyEditor", () => {
-		const dragged = patchEditorSettings(baseDoc, {
-			webcamPosition: { cx: 0.32, cy: 0.71 },
-		});
-		const snap = getEditorSettings(dragged);
-		expect(snap.webcamPosition).toEqual({ cx: 0.32, cy: 0.71 });
+	it("round-trips webcamAnchor through legacyEditor", () => {
+		const dragged = patchEditorSettings(baseDoc, { webcamAnchor: "top-left" });
+		expect(getEditorSettings(dragged).webcamAnchor).toBe("top-left");
 	});
 
-	it("clamps out-of-range webcamPosition when reading", () => {
-		const doc: AxcutDocument = {
-			...baseDoc,
-			legacyEditor: { webcamPosition: { cx: 1.7, cy: -0.4 } },
+	// Older builds let the camera be dropped anywhere and stored its centre.
+	it("reads a free position stored by an older build as the nearest anchor", () => {
+		const anchorOf = (cx: number, cy: number) =>
+			getEditorSettings({ ...baseDoc, legacyEditor: { webcamPosition: { cx, cy } } }).webcamAnchor;
+		expect(anchorOf(0.1, 0.9)).toBe("bottom-left");
+		expect(anchorOf(0.5, 0.1)).toBe("top");
+		expect(anchorOf(1.7, -0.4)).toBe("top-right");
+		// From the middle of the frame, the nearer edge.
+		expect(anchorOf(0.52, 0.6)).toBe("bottom");
+		expect(anchorOf(0.4, 0.48)).toBe("left");
+		expect(getEditorSettings(baseDoc).webcamAnchor).toBe("bottom-right");
+	});
+
+	it("splits the old circle and rounded shapes into a proportion and a roundness", () => {
+		const read = (legacyEditor: Record<string, unknown>) => {
+			const snap = getEditorSettings({ ...baseDoc, legacyEditor });
+			return [snap.webcamMaskShape, snap.webcamRoundness];
 		};
-		const snap = getEditorSettings(doc);
-		expect(snap.webcamPosition).toEqual({ cx: 1, cy: 0 });
+		expect(read({ webcamMaskShape: "circle" })).toEqual(["square", 1]);
+		expect(read({ webcamMaskShape: "rounded" })).toEqual(["rectangle", 0.6]);
+		expect(read({ webcamMaskShape: "square" })).toEqual(["square", 0.3]);
+		// A stored roundness wins over the one the shape implied, and stays in 0..1.
+		expect(read({ webcamMaskShape: "circle", webcamRoundness: 0.2 })).toEqual(["square", 0.2]);
+		expect(read({ webcamRoundness: 4 })).toEqual(["rectangle", 1]);
+	});
+
+	it("reads a camera size past the slider's 35% as 35%", () => {
+		const doc: AxcutDocument = { ...baseDoc, legacyEditor: { webcamSizePreset: 50 } };
+		expect(getEditorSettings(doc).webcamSizePreset).toBe(35);
 	});
 
 	it("preserves a non-zero crop at the bottom-right edge", () => {

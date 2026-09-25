@@ -52,7 +52,7 @@ La webcam est enregistrée dans son propre fichier : son placement est donc une
 
 - **Incrustation d'image**, **Empilement vertical**, **Double cadre** ou **Sans webcam**.
 - Pour toutes les dispositions : miroir, et recadrage de l'image de la caméra.
-- Pour **Incrustation d'image** uniquement : **Forme de la caméra** (Rect., Cercle, Carré ou Arrondi), une taille de 10 à 50 % (25 % par défaut), et **Réduire au zoom**, activé par défaut, qui réduit la caméra pendant un zoom pour qu'elle ne cache pas le détail. Faites glisser la caméra sur le canevas pour la déplacer.
+- Pour **Incrustation d'image** uniquement : **Forme de la caméra** (Rectangle ou Carré), **Arrondi** (à 100 % une caméra carrée devient un cercle), une taille de 10 à 35 % (25 % par défaut), **Position** (un coin ou le milieu d'un bord, en bas à droite par défaut), et **Réduire au zoom**, activé par défaut, qui réduit la caméra pendant un zoom pour qu'elle ne cache pas le détail. Faites glisser la caméra sur le canevas : elle se cale sur la position la plus proche.
 - **Arrière-plan de la caméra** : Original, Flouté, Détouré ou Personnalisé. Détouré retire l'arrière-plan sans fond vert, grâce à un modèle de segmentation qui tourne sur votre CPU. Cette section n'apparaît que si le moteur de segmentation se charge sur votre machine.
 
 Pour une introduction ou une conclusion, appuyez sur `C` pour ajouter un segment **Caméra plein écran** : la caméra remplit tout le cadre pendant ce passage.

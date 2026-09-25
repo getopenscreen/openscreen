@@ -272,16 +272,25 @@
 		"mute": "Muet"
 	},
 	"layout": {
-		"help": "Composition de la webcam avec l'écran : incrustation, empilement vertical, double cadre, forme du masque, taille et effet miroir.",
+		"help": "Composition de la webcam avec l'écran : incrustation, empilement vertical, double cadre, forme, arrondi, taille, position et effet miroir.",
 		"mirrorWebcam": "Inverser la webcam",
 		"webcamFraming": "Cadrage de la webcam",
 		"webcamFramingDrag": "Faites glisser le cadre pour choisir ce que montre la caméra.",
 		"webcamFramingZoomFirst": "Zoomez, puis faites glisser le cadre pour choisir ce que montre la caméra.",
 		"shapes": {
-			"rectangle": "Rect.",
-			"rounded": "Arrondi",
-			"circle": "Cercle",
+			"rectangle": "Rectangle",
 			"square": "Carré"
+		},
+		"webcamPosition": "Position",
+		"anchors": {
+			"topLeft": "En haut à gauche",
+			"top": "En haut",
+			"topRight": "En haut à droite",
+			"left": "À gauche",
+			"right": "À droite",
+			"bottomLeft": "En bas à gauche",
+			"bottom": "En bas",
+			"bottomRight": "En bas à droite"
 		},
 		"selectPreset": "Choisir un préréglage",
 		"bgModes": {

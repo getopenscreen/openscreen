@@ -127,9 +127,9 @@ describe("LayoutPane camera availability", () => {
 		expect(screen.getByText("Camera shape")).toBeInTheDocument();
 		expect(screen.getByText("Shrink on zoom")).toBeInTheDocument();
 		expect(screen.getByText("Webcam size")).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "Rounded" })).toBeEnabled();
-		// Named, because the pane holds four sliders now — webcam size plus the three
-		// webcam-framing ones. This one is the size slider the line above just found.
+		expect(screen.getByRole("button", { name: "Square" })).toBeEnabled();
+		// Named, because the pane holds several sliders. This one is the size slider the
+		// line above just found.
 		expect(screen.getByRole("slider", { name: "Webcam size" })).toBeEnabled();
 
 		// The camera-less hint must not leak into the normal case.
@@ -151,6 +151,53 @@ describe("LayoutPane webcam framing picture", () => {
 		fireEvent.loadedMetadata(video);
 
 		expect(video.style.visibility).toBe("visible");
+	});
+});
+
+describe("LayoutPane picture-in-picture camera", () => {
+	const stored = () => useProjectStore.getState().document?.legacyEditor as Record<string, unknown>;
+
+	it("sets the shape and its roundness as two separate settings", () => {
+		renderLayout(seedProject(true));
+		const shapes = within(screen.getByRole("group", { name: "Camera shape" })).getAllByRole(
+			"button",
+		);
+		expect(shapes.map((b) => b.textContent)).toEqual(["Rectangle", "Square"]);
+		fireEvent.click(screen.getByRole("button", { name: "Square" }));
+		expect(stored()).toMatchObject({ webcamMaskShape: "square" });
+		fireEvent.change(screen.getByRole("slider", { name: "Roundness" }), {
+			target: { value: "100" },
+		});
+		// Each control moves its own axis only: full roundness leaves the shape a square.
+		expect(stored()).toMatchObject({ webcamMaskShape: "square", webcamRoundness: 1 });
+	});
+
+	it("places the camera on one of eight anchors, bottom right by default", () => {
+		renderLayout(seedProject(true));
+		const grid = screen.getByRole("group", { name: "Position" });
+		expect(within(grid).getAllByRole("button")).toHaveLength(8);
+		expect(within(grid).getByRole("button", { name: "Bottom right" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		fireEvent.click(within(grid).getByRole("button", { name: "Top left" }));
+		expect(stored()).toMatchObject({ webcamAnchor: "top-left" });
+	});
+
+	// The middle of the frame is a hole in the grid, not a ninth place to land.
+	it("steps over the middle of the grid with the arrow keys", () => {
+		renderLayout(seedProject(true));
+		const grid = screen.getByRole("group", { name: "Position" });
+		const left = within(grid).getByRole("button", { name: "Left" });
+		left.focus();
+		fireEvent.keyDown(left, { key: "ArrowRight" });
+		expect(within(grid).getByRole("button", { name: "Right" })).toHaveFocus();
+		expect(stored()).toMatchObject({ webcamAnchor: "right" });
+	});
+
+	it("keeps the camera under 35% of the frame", () => {
+		renderLayout(seedProject(true));
+		expect(screen.getByRole("slider", { name: "Webcam size" })).toHaveAttribute("max", "35");
 	});
 });
 

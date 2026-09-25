@@ -26,7 +26,8 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 		borderRadius: 40,
 		padding: 50,
 		webcamLayoutPreset: "picture-in-picture",
-		webcamMaskShape: "circle",
+		webcamMaskShape: "square",
+		webcamRoundness: 1,
 		webcamMirrored: true,
 		webcamReactiveZoom: true,
 		webcamSizePreset: 25,
@@ -66,6 +67,21 @@ describe("parseStylePresetAppearance", () => {
 		expect(() =>
 			parseStylePresetAppearance({ ...appearance(), wallpaperMotion: "plasma" }),
 		).toThrow(/wallpaperMotion/);
+	});
+
+	// `circle` and `rounded` were a proportion and a rounding in one value.
+	it("reads a preset saved before the camera roundness existed", () => {
+		const { webcamRoundness: _roundness, ...older } = appearance();
+		const read = (webcamMaskShape: string) => {
+			const parsed = parseStylePresetAppearance({ ...older, webcamMaskShape });
+			return [parsed.webcamMaskShape, parsed.webcamRoundness];
+		};
+		expect(read("circle")).toEqual(["square", 1]);
+		expect(read("rounded")).toEqual(["rectangle", 0.6]);
+		expect(read("rectangle")).toEqual(["rectangle", 0.3]);
+		expect(() => parseStylePresetAppearance({ ...appearance(), webcamRoundness: 2 })).toThrow(
+			/webcamRoundness/,
+		);
 	});
 
 	it("keeps depth of field on for a preset saved before the setting existed", () => {

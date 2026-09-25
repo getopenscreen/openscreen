@@ -272,16 +272,25 @@
 		"mute": "Stumm"
 	},
 	"layout": {
-		"help": "Wie die Webcam mit dem Bildschirm komponiert wird: Bild in Bild, vertikal gestapelt, Doppelrahmen, Maskenform, Größe und Spiegelung.",
+		"help": "Wie die Webcam mit dem Bildschirm komponiert wird: Bild in Bild, vertikal gestapelt, Doppelrahmen, Form, Rundung, Größe, Position und Spiegelung.",
 		"mirrorWebcam": "Webcam spiegeln",
 		"webcamFraming": "Webcam-Ausschnitt",
 		"webcamFramingDrag": "Ziehe den Rahmen, um den Bildausschnitt der Kamera zu wählen.",
 		"webcamFramingZoomFirst": "Zoome hinein und ziehe dann den Rahmen, um den Bildausschnitt der Kamera zu wählen.",
 		"shapes": {
 			"rectangle": "Rechteck",
-			"rounded": "Gerundet",
-			"circle": "Kreis",
 			"square": "Quadrat"
+		},
+		"webcamPosition": "Position",
+		"anchors": {
+			"topLeft": "Oben links",
+			"top": "Oben",
+			"topRight": "Oben rechts",
+			"left": "Links",
+			"right": "Rechts",
+			"bottomLeft": "Unten links",
+			"bottom": "Unten",
+			"bottomRight": "Unten rechts"
 		},
 		"selectPreset": "Vorgabe auswählen",
 		"bgModes": {

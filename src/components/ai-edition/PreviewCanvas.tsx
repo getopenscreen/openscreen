@@ -53,10 +53,10 @@ import {
 	resolveWebcamLayoutPreset,
 	type WebcamCompositeLayout,
 } from "@/lib/compositeLayout";
+import { webcamAnchorAt } from "@/lib/projectDefaults";
 import { classifyWallpaper, resolveImageWallpaperUrl } from "@/lib/wallpaper";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
 import { computeCameraFullscreenProgress } from "@/lib/zoomMath/cameraFullscreenUtils";
-import { clamp01 } from "@/utils/math";
 import { AnnotationLayer } from "./AnnotationLayer";
 import { NativeCompositorOverlay } from "./NativeCompositorOverlay";
 import styles from "./NewEditorShell.module.css";
@@ -269,12 +269,10 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			webcamSize: preset === "no-webcam" ? null : WEBCAM_SOURCE_SIZE,
 			layoutPreset: preset,
 			webcamSizePreset: settings.webcamSizePreset,
-			// ponytail: PiP webcam is grabbable. Pass through the user's
-			// position so the layout math places it at the dragged spot, not
-			// the legacy default. Dual-frame / vertical-stack / no-webcam ignore
-			// it (their preset definitions hardcode their own placement).
-			webcamPosition: preset === "picture-in-picture" ? settings.webcamPosition : null,
+			// Picture-in-picture only: the block layouts place and round their own camera.
+			webcamAnchor: settings.webcamAnchor,
 			webcamMaskShape: mask,
+			webcamRoundness: settings.webcamRoundness,
 		});
 	}, [
 		frameSize,
@@ -284,7 +282,8 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		settings.webcamLayoutPreset,
 		settings.webcamMaskShape,
 		settings.webcamSizePreset,
-		settings.webcamPosition,
+		settings.webcamAnchor,
+		settings.webcamRoundness,
 		settings.padding,
 		settings.aspectRatio,
 	]);
@@ -373,12 +372,19 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		const offsetY = event.clientY - (slotRect.top + slotRect.height / 2);
 		slot.setPointerCapture(event.pointerId);
 
+		// The camera snaps to the anchor nearest where it would sit if it followed the pointer,
+		// so it is always somewhere it can be left: a corner or an edge middle.
+		let anchor = settings.webcamAnchor;
 		const handleMove = (e: PointerEvent) => {
 			const frameNow = frameRef.current?.getBoundingClientRect();
 			if (!frameNow) return;
-			const cx = clamp01((e.clientX - offsetX - frameNow.left) / frameNow.width);
-			const cy = clamp01((e.clientY - offsetY - frameNow.top) / frameNow.height);
-			setLive({ webcamPosition: { cx, cy } });
+			const next = webcamAnchorAt(
+				(e.clientX - offsetX - frameNow.left) / frameNow.width,
+				(e.clientY - offsetY - frameNow.top) / frameNow.height,
+			);
+			if (next === anchor) return;
+			anchor = next;
+			setLive({ webcamAnchor: next });
 		};
 		const handleUp = () => {
 			slot.removeEventListener("pointermove", handleMove);

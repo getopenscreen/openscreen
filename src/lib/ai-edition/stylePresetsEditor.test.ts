@@ -17,7 +17,7 @@ const EXCLUDED_KEYS = [
 	"cropRegion",
 	"webcamCropRegion",
 	"webcamCropPan",
-	"webcamPosition",
+	"webcamAnchor",
 	"audioGainDb",
 	"autoFocusAll",
 ] as const;
@@ -36,10 +36,11 @@ function styledSettings(): EditorSettingsSnapshot {
 		borderRadius: 12,
 		padding: 20,
 		webcamLayoutPreset: "dual-frame",
-		webcamMaskShape: "rounded",
+		webcamMaskShape: "square",
+		webcamRoundness: 0.45,
 		webcamMirrored: true,
 		webcamReactiveZoom: false,
-		webcamSizePreset: 40,
+		webcamSizePreset: 30,
 		webcamBackgroundMode: "custom",
 		webcamWallpaper: "#123456",
 		webcamBlurIntensity: 0.9,
@@ -79,7 +80,7 @@ describe("stylePresetsEditor", () => {
 		// A project with its own footage-dependent state, still on the factory look.
 		const base = patchEditorSettings(createEmptyDocument({ projectId: "proj_a", title: "A" }), {
 			cropRegion: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 },
-			webcamPosition: { cx: 0.2, cy: 0.8 },
+			webcamAnchor: "bottom-left",
 			audioGainDb: 6,
 			autoFocusAll: true,
 		});

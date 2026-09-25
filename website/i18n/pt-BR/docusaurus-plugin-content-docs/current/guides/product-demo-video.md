@@ -52,7 +52,7 @@ A webcam é gravada em um arquivo próprio, então a posição dela é uma decis
 
 - **Picture in Picture**, **Empilhamento Vertical**, **Quadro Duplo** ou **Sem Webcam**.
 - Em todos os layouts: espelhamento e um enquadramento da imagem da câmera.
-- Só em **Picture in Picture**: **Formato da Câmera** (Ret., Círculo, Quadrado ou Arredondado), um tamanho de 10 a 50% (25% por padrão) e **Encolher ao ampliar**, ativado por padrão, que deixa a câmera menor enquanto um zoom é exibido, para que ela não cubra o detalhe. Arraste a câmera no canvas para movê-la.
+- Só em **Picture in Picture**: **Formato da Câmera** (Retângulo ou Quadrado), **Arredondamento** (a 100% uma câmera quadrada vira um círculo), um tamanho de 10 a 35% (25% por padrão), **Posição** (um canto ou o meio de uma borda, embaixo à direita por padrão) e **Encolher ao ampliar**, ativado por padrão, que deixa a câmera menor enquanto um zoom é exibido, para que ela não cubra o detalhe. Arraste a câmera no canvas e ela se encaixa na posição mais próxima.
 - **Plano de fundo da câmera**: Original, Desfocado, Recorte ou Personalizado. Recorte remove o fundo sem tela verde, usando um modelo de segmentação que roda na sua CPU. Esta seção só aparece quando o runtime de segmentação carrega no seu computador.
 
 Para uma introdução ou um encerramento, pressione `C` para adicionar um segmento de **Câmera em Tela Cheia**: a câmera preenche o quadro inteiro nesse trecho.

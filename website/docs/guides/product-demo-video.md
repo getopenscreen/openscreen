@@ -52,7 +52,7 @@ The webcam is recorded to its own file, so its placement is an editing decision 
 
 - **Picture in picture**, **Vertical stack**, **Dual frame**, or **No webcam**.
 - For every layout: mirror, and a crop of the camera image.
-- For **Picture in picture** only: **Camera shape** (Rect, Circle, Square or Rounded), a size from 10 to 50% (25% by default), and **Shrink on zoom**, on by default, which makes the camera smaller while a zoom plays so it does not cover the detail. Drag the camera on the canvas to move it.
+- For **Picture in picture** only: **Camera shape** (Rectangle or Square), **Roundness** (at 100% a square camera is a circle), a size from 10 to 35% (25% by default), **Position** (a corner or the middle of an edge, bottom right by default), and **Shrink on zoom**, on by default, which makes the camera smaller while a zoom plays so it does not cover the detail. Drag the camera on the canvas and it snaps to the nearest position.
 - **Camera background**: Original, Blur, Cutout or Custom. Cutout removes the background without a green screen, using a segmentation model that runs on your CPU. This section only appears when the segmentation runtime loads on your machine.
 
 For an intro or outro, press `C` to add a **Full Camera** segment: the camera fills the whole frame for that span.

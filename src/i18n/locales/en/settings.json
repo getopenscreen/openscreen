@@ -272,16 +272,25 @@
 		"mute": "Mute"
 	},
 	"layout": {
-		"help": "How the webcam is composed with the screen: picture-in-picture, vertical stack, dual frame, mask shape, size, and mirroring.",
+		"help": "How the webcam is composed with the screen: picture-in-picture, vertical stack, dual frame, shape, roundness, size, position, and mirroring.",
 		"mirrorWebcam": "Mirror webcam",
 		"webcamFraming": "Webcam crop",
 		"webcamFramingDrag": "Drag the frame to choose what the camera shows.",
 		"webcamFramingZoomFirst": "Zoom in, then drag the frame to choose what the camera shows.",
 		"shapes": {
-			"rectangle": "Rect",
-			"rounded": "Rounded",
-			"circle": "Circle",
+			"rectangle": "Rectangle",
 			"square": "Square"
+		},
+		"webcamPosition": "Position",
+		"anchors": {
+			"topLeft": "Top left",
+			"top": "Top",
+			"topRight": "Top right",
+			"left": "Left",
+			"right": "Right",
+			"bottomLeft": "Bottom left",
+			"bottom": "Bottom",
+			"bottomRight": "Bottom right"
 		},
 		"selectPreset": "Select preset",
 		"bgModes": {

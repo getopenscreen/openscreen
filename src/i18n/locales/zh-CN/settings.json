@@ -272,16 +272,25 @@
 		"mute": "静音"
 	},
 	"layout": {
-		"help": "摄像头与屏幕的合成方式：画中画、垂直堆叠、双画面、遮罩形状、大小和镜像。",
+		"help": "摄像头与屏幕的合成方式：画中画、垂直堆叠、双画面、形状、圆角、大小、位置和镜像。",
 		"mirrorWebcam": "镜像摄像头",
 		"webcamFraming": "摄像头构图",
 		"webcamFramingDrag": "拖动取景框，选择摄像头显示的范围。",
 		"webcamFramingZoomFirst": "先放大，再拖动取景框，选择摄像头显示的范围。",
 		"shapes": {
 			"rectangle": "矩形",
-			"rounded": "圆角",
-			"circle": "圆形",
 			"square": "正方形"
+		},
+		"webcamPosition": "位置",
+		"anchors": {
+			"topLeft": "左上",
+			"top": "上方",
+			"topRight": "右上",
+			"left": "左侧",
+			"right": "右侧",
+			"bottomLeft": "左下",
+			"bottom": "下方",
+			"bottomRight": "右下"
 		},
 		"selectPreset": "选择预设",
 		"bgModes": {

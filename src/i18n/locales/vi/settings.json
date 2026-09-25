@@ -272,16 +272,25 @@
 		"mute": "Tắt tiếng"
 	},
 	"layout": {
-		"help": "Cách ghép webcam với màn hình: hình trong hình, xếp dọc, khung đôi, hình dạng mặt nạ, kích thước và lật gương.",
+		"help": "Cách ghép webcam với màn hình: hình trong hình, xếp dọc, khung đôi, hình dạng, độ bo tròn, kích thước, vị trí và lật gương.",
 		"mirrorWebcam": "Lật webcam",
 		"webcamFraming": "Khung hình webcam",
 		"webcamFramingDrag": "Kéo khung để chọn phần camera hiển thị.",
 		"webcamFramingZoomFirst": "Phóng to, rồi kéo khung để chọn phần camera hiển thị.",
 		"shapes": {
 			"rectangle": "Chữ nhật",
-			"rounded": "Bo góc",
-			"circle": "Tròn",
 			"square": "Vuông"
+		},
+		"webcamPosition": "Vị trí",
+		"anchors": {
+			"topLeft": "Trên cùng bên trái",
+			"top": "Trên cùng",
+			"topRight": "Trên cùng bên phải",
+			"left": "Bên trái",
+			"right": "Bên phải",
+			"bottomLeft": "Dưới cùng bên trái",
+			"bottom": "Dưới cùng",
+			"bottomRight": "Dưới cùng bên phải"
 		},
 		"selectPreset": "Chọn cài đặt sẵn",
 		"bgModes": {

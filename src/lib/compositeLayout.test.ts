@@ -10,6 +10,7 @@ import {
 	restingCompositionAspect,
 	type StyledRenderRect,
 } from "./compositeLayout";
+import type { WebcamAnchor } from "./projectDefaults";
 
 describe("resolveWebcamReactiveZoom", () => {
 	it("honours the stored setting for picture-in-picture", () => {
@@ -428,26 +429,50 @@ describe("computeCompositeLayout", () => {
 		expect(squareLayout?.webcamRect?.maskShape).toBe("square");
 	});
 
-	it("applies larger rounding for the rounded webcam mask", () => {
-		const roundedLayout = computeCompositeLayout({
+	const pipAt = (over: Partial<Parameters<typeof computeCompositeLayout>[0]>) =>
+		computeCompositeLayout({
 			canvasSize: { width: 1920, height: 1080 },
 			screenSize: { width: 1920, height: 1080 },
 			webcamSize: { width: 1280, height: 720 },
-			webcamMaskShape: "rounded",
-		});
-		const rectangleLayout = computeCompositeLayout({
-			canvasSize: { width: 1920, height: 1080 },
-			screenSize: { width: 1920, height: 1080 },
-			webcamSize: { width: 1280, height: 720 },
-			webcamMaskShape: "rectangle",
-		});
+			...over,
+		})!.webcamRect!;
 
-		expect(roundedLayout?.webcamRect).not.toBeNull();
-		expect(rectangleLayout?.webcamRect).not.toBeNull();
-		expect(roundedLayout?.webcamRect?.borderRadius).toBeGreaterThan(
-			rectangleLayout?.webcamRect?.borderRadius ?? 0,
-		);
-		expect(roundedLayout?.webcamRect?.maskShape).toBe("rounded");
+	// A fraction of half the short side: the same value is the same shape at any size.
+	it("rounds by the roundness, and a fully round square is a circle", () => {
+		const circle = pipAt({ webcamMaskShape: "square", webcamRoundness: 1 });
+		expect(circle.width).toBe(circle.height);
+		expect(circle.borderRadius).toBe(circle.width / 2);
+		expect(pipAt({ webcamRoundness: 0 }).borderRadius).toBe(0);
+		const pill = pipAt({ webcamRoundness: 1 });
+		expect(pill.borderRadius).toBe(Math.round(Math.min(pill.width, pill.height) / 2));
+		const small = pipAt({ webcamRoundness: 0.5, webcamSizePreset: 10 });
+		const large = pipAt({ webcamRoundness: 0.5, webcamSizePreset: 35 });
+		expect(small.borderRadius / small.height).toBeCloseTo(large.borderRadius / large.height, 2);
+	});
+
+	// The camera never ends up against an edge or over the middle of the screen: every anchor
+	// keeps the same distance from the border, whatever the camera's size.
+	it("keeps the same margin from the border at every anchor", () => {
+		const margin = Math.round(1080 * 0.02);
+		for (const size of [10, 35]) {
+			const at = (webcamAnchor: WebcamAnchor) => pipAt({ webcamAnchor, webcamSizePreset: size });
+			expect(at("top-left")).toMatchObject({ x: margin, y: margin });
+			const br = at("bottom-right");
+			expect(br.x + br.width).toBe(1920 - margin);
+			expect(br.y + br.height).toBe(1080 - margin);
+			const top = at("top");
+			expect(top.y).toBe(margin);
+			expect(Math.abs(top.x + top.width / 2 - 960)).toBeLessThanOrEqual(1);
+			const left = at("left");
+			expect(left.x).toBe(margin);
+			expect(Math.abs(left.y + left.height / 2 - 540)).toBeLessThanOrEqual(1);
+			expect(at("bottom").y + at("bottom").height).toBe(1080 - margin);
+			expect(at("right").x + at("right").width).toBe(1920 - margin);
+		}
+	});
+
+	it("caps the camera at 35% of the short side", () => {
+		expect(pipAt({ webcamSizePreset: 50 }).height).toBe(pipAt({ webcamSizePreset: 35 }).height);
 	});
 });
 

@@ -272,16 +272,25 @@
 		"mute": "Silenciar"
 	},
 	"layout": {
-		"help": "Como a webcam é composta com a tela: picture-in-picture, pilha vertical, quadro duplo, formato da máscara, tamanho e espelhamento.",
+		"help": "Como a webcam é composta com a tela: picture-in-picture, pilha vertical, quadro duplo, formato, arredondamento, tamanho, posição e espelhamento.",
 		"mirrorWebcam": "Espelhar Webcam",
 		"webcamFraming": "Enquadramento da webcam",
 		"webcamFramingDrag": "Arraste o quadro para escolher o que a câmera mostra.",
 		"webcamFramingZoomFirst": "Aumente o zoom e arraste o quadro para escolher o que a câmera mostra.",
 		"shapes": {
-			"rectangle": "Ret.",
-			"rounded": "Arredondado",
-			"circle": "Círculo",
+			"rectangle": "Retângulo",
 			"square": "Quadrado"
+		},
+		"webcamPosition": "Posição",
+		"anchors": {
+			"topLeft": "Superior esquerdo",
+			"top": "Superior",
+			"topRight": "Superior direito",
+			"left": "Esquerda",
+			"right": "Direita",
+			"bottomLeft": "Inferior esquerdo",
+			"bottom": "Inferior",
+			"bottomRight": "Inferior direito"
 		},
 		"selectPreset": "Selecionar predefinição",
 		"bgModes": {

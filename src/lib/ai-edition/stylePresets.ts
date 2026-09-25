@@ -25,6 +25,8 @@ import {
 	isFrameTheme,
 	type RecordingFrame,
 	readRecordingFrame,
+	readWebcamMask,
+	type WebcamMask,
 } from "../projectDefaults";
 
 export const STYLE_PRESET_FILE_EXTENSION = ".openscreenpreset";
@@ -52,7 +54,8 @@ export interface StylePresetAppearance {
 	borderRadius: number;
 	padding: number;
 	webcamLayoutPreset: WebcamLayoutPreset;
-	webcamMaskShape: WebcamMaskShape;
+	webcamMaskShape: WebcamMask;
+	webcamRoundness: number;
 	webcamMirrored: boolean;
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: WebcamSizePreset;
@@ -118,7 +121,10 @@ const NUMBER_RANGES = {
 	motionBlurAmount: [0, 1],
 	borderRadius: [0, 64],
 	padding: [0, 100],
+	// Wider than the slider's 10-35: presets saved when it reached 50 still apply, and the
+	// editor reads anything past 35 as 35.
 	webcamSizePreset: [10, 50],
+	webcamRoundness: [0, 1],
 	webcamBlurIntensity: [0, 1],
 } as const;
 const CURSOR_NUMBER_RANGES = {
@@ -161,6 +167,21 @@ function readEnum<T extends string>(source: Fields, key: string, allowed: readon
 		throw new TypeError(`Style preset ${key} must be one of: ${allowed.join(", ")}.`);
 	}
 	return value as T;
+}
+
+/**
+ * The camera's proportions and roundness. A preset saved before the roundness existed carries
+ * `circle` or `rounded`, a proportion and a rounding in one value: `readWebcamMask` splits it
+ * the way the editor reads an old project.
+ */
+function readWebcamShape(source: Fields): { webcamMaskShape: WebcamMask; webcamRoundness: number } {
+	const shape = readEnum(source, "webcamMaskShape", WEBCAM_MASK_SHAPES);
+	const roundness =
+		source.webcamRoundness === undefined
+			? undefined
+			: readNumber(source, "webcamRoundness", NUMBER_RANGES.webcamRoundness);
+	const mask = readWebcamMask(shape, roundness);
+	return { webcamMaskShape: mask.shape, webcamRoundness: mask.roundness };
 }
 
 /**
@@ -277,7 +298,7 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		borderRadius: readNumber(value, "borderRadius", NUMBER_RANGES.borderRadius),
 		padding: readNumber(value, "padding", NUMBER_RANGES.padding),
 		webcamLayoutPreset: readEnum(value, "webcamLayoutPreset", WEBCAM_LAYOUT_PRESETS),
-		webcamMaskShape: readEnum(value, "webcamMaskShape", WEBCAM_MASK_SHAPES),
+		...readWebcamShape(value),
 		webcamMirrored: readBoolean(value, "webcamMirrored"),
 		webcamReactiveZoom: readBoolean(value, "webcamReactiveZoom"),
 		webcamSizePreset: readNumber(value, "webcamSizePreset", NUMBER_RANGES.webcamSizePreset),

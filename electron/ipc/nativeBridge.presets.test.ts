@@ -39,6 +39,7 @@ const APPEARANCE: StylePresetAppearance = {
 	padding: 50,
 	webcamLayoutPreset: "picture-in-picture",
 	webcamMaskShape: "rectangle",
+	webcamRoundness: 0.3,
 	webcamMirrored: false,
 	webcamReactiveZoom: true,
 	webcamSizePreset: 25,

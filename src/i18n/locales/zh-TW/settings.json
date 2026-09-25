@@ -272,16 +272,25 @@
 		"mute": "靜音"
 	},
 	"layout": {
-		"help": "攝影機與螢幕的合成方式：子母畫面、垂直堆疊、雙畫面、遮罩形狀、大小與鏡像。",
+		"help": "攝影機與螢幕的合成方式：子母畫面、垂直堆疊、雙畫面、形狀、圓角、大小、位置與鏡像。",
 		"mirrorWebcam": "鏡像攝影機",
 		"webcamFraming": "攝影機構圖",
 		"webcamFramingDrag": "拖曳取景框，選擇攝影機顯示的範圍。",
 		"webcamFramingZoomFirst": "先放大，再拖曳取景框，選擇攝影機顯示的範圍。",
 		"shapes": {
 			"rectangle": "矩形",
-			"rounded": "圓角",
-			"circle": "圓形",
 			"square": "正方形"
+		},
+		"webcamPosition": "位置",
+		"anchors": {
+			"topLeft": "左上",
+			"top": "上方",
+			"topRight": "右上",
+			"left": "左側",
+			"right": "右側",
+			"bottomLeft": "左下",
+			"bottom": "下方",
+			"bottomRight": "右下"
 		},
 		"selectPreset": "選擇預設",
 		"bgModes": {

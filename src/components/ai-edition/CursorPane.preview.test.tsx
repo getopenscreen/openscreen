@@ -37,15 +37,17 @@ afterEach(() => {
 });
 
 describe("CursorPane theme picker", () => {
-	it("is hidden while the default art is the only choice", () => {
-		// Fails on purpose once a pack ships: the picker then has something to offer.
-		expect(CURSOR_THEMES).toHaveLength(0);
+	it("shows the original cursor themes beside the default", () => {
+		expect(CURSOR_THEMES).toHaveLength(5);
 		render(
 			<I18nProvider>
 				<CursorPane />
 			</I18nProvider>,
 		);
-		expect(screen.queryByText("Cursor Style")).toBeNull();
-		expect(screen.queryByRole("button", { name: "Default" })).toBeNull();
+		expect(screen.getByRole("button", { name: "Default" })).toBeTruthy();
+		for (const theme of CURSOR_THEMES) {
+			const button = screen.getByRole("button", { name: theme.name });
+			expect(button.querySelectorAll("img")).toHaveLength(2);
+		}
 	});
 });

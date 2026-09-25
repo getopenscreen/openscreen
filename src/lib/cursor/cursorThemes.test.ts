@@ -1,9 +1,13 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	CURSOR_THEMES,
 	type CursorTheme,
 	DEFAULT_CURSOR_SPRITES,
 	DEFAULT_CURSOR_THEME_ID,
 	normalizeCursorThemeId,
+	resolveCursorSprites,
 	themePickerPreviewAssets,
 } from "./cursorThemes";
 
@@ -38,6 +42,23 @@ describe("normalizeCursorThemeId", () => {
 		expect(normalizeCursorThemeId(DEFAULT_CURSOR_THEME_ID)).toBe(DEFAULT_CURSOR_THEME_ID);
 		expect(normalizeCursorThemeId(undefined)).toBe(DEFAULT_CURSOR_THEME_ID);
 		expect(normalizeCursorThemeId(42)).toBe(DEFAULT_CURSOR_THEME_ID);
+	});
+
+	it.each(CURSOR_THEMES)("keeps the original $name theme", (theme) => {
+		expect(normalizeCursorThemeId(theme.id)).toBe(theme.id);
+		const sprites = resolveCursorSprites(theme.id);
+		expect(sprites.arrow.assetPath).toBe(theme.assets.arrow?.assetPath);
+		expect(sprites.pointer.assetPath).toBe(theme.assets.pointer?.assetPath);
+		expect(sprites.text).toBe(DEFAULT_CURSOR_SPRITES.text);
+		expect(sprites.arrow.hotspotX).toBeCloseTo((theme.assets.arrow?.hotspotX ?? 0) / 32);
+		expect(sprites.pointer.hotspotY).toBeCloseTo((theme.assets.pointer?.hotspotY ?? 0) / 32);
+		for (const asset of [theme.assets.arrow, theme.assets.pointer]) {
+			if (!asset) throw new Error(`${theme.id} needs both cursor states`);
+			const png = readFileSync(join(process.cwd(), "public", asset.assetPath));
+			expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+			expect(png.readUInt32BE(16)).toBe(128);
+			expect(png.readUInt32BE(20)).toBe(128);
+		}
 	});
 });
 

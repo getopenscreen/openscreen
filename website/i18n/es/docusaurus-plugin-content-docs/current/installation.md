@@ -151,7 +151,7 @@ Las herramientas de edición son las mismas en todas partes: zooms, fondos, encu
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | Flujo de captura | Nativo (ScreenCaptureKit) | Nativo (Windows Graphics Capture) en la compilación 19041 y posteriores; respaldo por navegador en compilaciones anteriores o sin el módulo auxiliar | Nativo (PipeWire mediante el portal ScreenCast); respaldo por navegador sin el módulo auxiliar, con lo que se pierden la codificación por hardware y la telemetría del cursor |
-| Temas de cursor personalizados / efectos de clic | ✅ (los clics y la forma del cursor necesitan el permiso de Accesibilidad) | ✅ | ✅ en Wayland (la captura de clics necesita el grupo `input`, [detalles](#mouse-clicks-on-wayland)) |
+| Cursor personalizado / efectos de clic | ✅ (los clics y la forma del cursor necesitan el permiso de Accesibilidad) | ✅ | ✅ en Wayland (la captura de clics necesita el grupo `input`, [detalles](#mouse-clicks-on-wayland)) |
 | Cámara web | Captura por navegador, guardada como archivo aparte (sigue funcionando como PiP) | Captura nativa, guardada como archivo aparte | Captura por navegador, guardada como archivo aparte (sigue funcionando como PiP) |
 | Audio del sistema | Funciona sin configurar nada; aviso de permiso en macOS 14.2+ | Funciona sin configurar nada | Necesita PipeWire como servidor de sonido (predeterminado en Ubuntu 22.10+, Fedora 34+) |
 | Exportación MP4 | ✅ | ✅ | ✅: H.264 en la GPU mediante VAAPI cuando la pila gráfica lo permite (consulta la nota más abajo), por software en caso contrario; H.265 solo por software |

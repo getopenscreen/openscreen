@@ -54,9 +54,10 @@
 	},
 	"emptyState": {
 		"title": "Start with a recording",
-		"description": "Import a video to start editing, or open a saved project.",
+		"description": "Record your screen or import a video to start editing.",
 		"titleHasAsset": "Add a video to get started",
 		"descriptionHasAsset": "Import a recording to begin editing.",
+		"recordButton": "Record your screen",
 		"newProjectButton": "Import a video",
 		"importVideoButton": "Import video",
 		"loadProjectButton": "Open project",

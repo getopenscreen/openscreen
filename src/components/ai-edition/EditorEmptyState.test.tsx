@@ -132,6 +132,24 @@ describe("EditorEmptyState (new editor)", () => {
 		expect(screen.getByRole("button", { name: /open project/i })).toBeInTheDocument();
 	});
 
+	it("leads with recording on a first run, and keeps import and open beside it", () => {
+		const onRecord = vi.fn();
+		renderWithI18n(<EditorEmptyState hasProject={false} onRecord={onRecord} />);
+
+		const buttons = screen.getAllByRole("button");
+		// The first action on the screen is the recorder's own.
+		expect(buttons[0]).toHaveAccessibleName(/record your screen/i);
+		fireEvent.click(buttons[0]);
+		expect(onRecord).toHaveBeenCalledTimes(1);
+		expect(screen.getByRole("button", { name: /import a video/i })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /open project/i })).toBeInTheDocument();
+	});
+
+	it("does not offer to record into a project that only lacks media", () => {
+		renderWithI18n(<EditorEmptyState hasProject={true} onRecord={vi.fn()} />);
+		expect(screen.queryByRole("button", { name: /record your screen/i })).not.toBeInTheDocument();
+	});
+
 	it("imports a video: file picker → addAsset on the existing project", async () => {
 		useProjectStore.setState({
 			projectId: "proj_test",

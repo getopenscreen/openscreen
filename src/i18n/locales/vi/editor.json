@@ -57,6 +57,7 @@
 		"description": "Tạo dự án mới hoặc mở một dự án hiện có.",
 		"titleHasAsset": "Thêm video để bắt đầu",
 		"descriptionHasAsset": "Nhập một bản ghi để bắt đầu chỉnh sửa.",
+		"recordButton": "Ghi màn hình",
 		"newProjectButton": "Dự án mới + nhập video",
 		"importVideoButton": "Nhập video",
 		"loadProjectButton": "Mở dự án",

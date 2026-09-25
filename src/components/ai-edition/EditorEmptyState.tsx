@@ -10,7 +10,7 @@
 // deprecated editor and its own `EditorEmptyState` were deleted in 1320121d,
 // so this is the single render path for the feature.
 
-import { AlertCircle, Film, FolderOpen, Upload, X } from "lucide-react";
+import { AlertCircle, Circle, Film, FolderOpen, Upload, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -30,11 +30,15 @@ interface EditorEmptyStateProps {
 	hasProject: boolean;
 	/** Show the file dialog (Open Video) and a Load Project button when no project is loaded. */
 	showLoadProjectButton?: boolean;
+	/** Switches the editor to its Record mode. With it, recording leads the first-run screen, the
+	 *  way it does in a screen recorder; without it (a project that only lacks media), import does. */
+	onRecord?: () => void;
 }
 
 export function EditorEmptyState({
 	hasProject,
 	showLoadProjectButton = true,
+	onRecord,
 }: EditorEmptyStateProps) {
 	const t = useScopedT("editor");
 	const tc = useScopedT("common");
@@ -45,6 +49,7 @@ export function EditorEmptyState({
 		lastDropErrorRef.current = dropError;
 	}
 
+	const recordLeads = !hasProject && onRecord !== undefined;
 	const createProject = useProjectStore((s) => s.createProject);
 	const addAsset = useProjectStore((s) => s.addAsset);
 	const loadProject = useProjectStore((s) => s.loadProject);
@@ -218,19 +223,30 @@ export function EditorEmptyState({
 					</p>
 				</div>
 				<div className={styles.previewEmptyActions}>
+					{recordLeads ? (
+						<button type="button" onClick={onRecord} className={styles.previewEmptyPrimaryButton}>
+							<Circle className={styles.previewEmptyButtonIcon} fill="currentColor" />
+							{t("emptyState.recordButton")}
+						</button>
+					) : null}
 					<button
 						type="button"
 						onClick={() => void handleImportVideo()}
-						className={styles.previewEmptyPrimaryButton}
+						className={
+							recordLeads ? styles.previewEmptySecondaryButton : styles.previewEmptyPrimaryButton
+						}
 					>
 						<Film className={styles.previewEmptyButtonIcon} />
 						{hasProject ? t("emptyState.importVideoButton") : t("emptyState.newProjectButton")}
 					</button>
 					{showLoadProjectButton && !hasProject ? (
+						// A link once recording leads: the third way in, and the rarest on a first run.
 						<button
 							type="button"
 							onClick={() => void handleLoadProject()}
-							className={styles.previewEmptySecondaryButton}
+							className={
+								recordLeads ? styles.previewEmptyLinkButton : styles.previewEmptySecondaryButton
+							}
 						>
 							<FolderOpen className={styles.previewEmptyButtonIcon} />
 							{t("emptyState.loadProjectButton")}

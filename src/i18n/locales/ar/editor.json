@@ -57,6 +57,7 @@
 		"description": "أنشئ مشروعًا جديدًا أو افتح مشروعًا موجودًا.",
 		"titleHasAsset": "أضف فيديو للبدء",
 		"descriptionHasAsset": "استورد تسجيلاً لبدء التحرير.",
+		"recordButton": "سجّل شاشتك",
 		"newProjectButton": "مشروع جديد + استيراد فيديو",
 		"importVideoButton": "استيراد فيديو",
 		"loadProjectButton": "فتح مشروع",

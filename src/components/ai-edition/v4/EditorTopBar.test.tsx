@@ -11,20 +11,29 @@ vi.mock("@/contexts/I18nContext", () => ({
 	useScopedT: () => (key: string) => key,
 }));
 
+const { toggleTheme } = vi.hoisted(() => ({ toggleTheme: vi.fn() }));
 vi.mock("@/hooks/useTheme", () => ({
-	useTheme: () => ({ theme: "dark", toggle: () => {} }),
+	useTheme: () => ({ theme: "dark", toggle: toggleTheme }),
 }));
 
 import { EditorTopBar } from "./EditorTopBar";
 
 const noop = () => {};
 
-function renderTopBar(projectTitle: string | null) {
+function renderTopBar(
+	projectTitle: string | null,
+	history: { canUndo?: boolean; canRedo?: boolean } = {},
+) {
 	const onRename = vi.fn();
 	const onShowAbout = vi.fn();
 	const onCheckForUpdates = vi.fn();
 	const onOpenSettings = vi.fn();
 	const onOpenProviderSettings = vi.fn();
+	const onNewProject = vi.fn();
+	const onOpenProject = vi.fn();
+	const onSave = vi.fn();
+	const onUndo = vi.fn();
+	const onRedo = vi.fn();
 	render(
 		<EditorTopBar
 			mode="edit"
@@ -32,11 +41,13 @@ function renderTopBar(projectTitle: string | null) {
 			projectTitle={projectTitle}
 			dirty={false}
 			canExport={false}
+			canUndo={history.canUndo ?? false}
+			canRedo={history.canRedo ?? false}
 			chatOpen={false}
 			actions={{
-				openProject: noop,
-				newProject: noop,
-				save: noop,
+				openProject: onOpenProject,
+				newProject: onNewProject,
+				save: onSave,
 				export: noop,
 				openSettings: onOpenSettings,
 				renameProject: onRename,
@@ -44,10 +55,23 @@ function renderTopBar(projectTitle: string | null) {
 				openProviderSettings: onOpenProviderSettings,
 				showAbout: onShowAbout,
 				checkForUpdates: onCheckForUpdates,
+				undo: onUndo,
+				redo: onRedo,
 			}}
 		/>,
 	);
-	return { onRename, onShowAbout, onCheckForUpdates, onOpenSettings, onOpenProviderSettings };
+	return {
+		onRename,
+		onShowAbout,
+		onCheckForUpdates,
+		onOpenSettings,
+		onOpenProviderSettings,
+		onNewProject,
+		onOpenProject,
+		onSave,
+		onUndo,
+		onRedo,
+	};
 }
 
 /** The menu reads two separate channels, and they answer different questions: `getAppInfo` for
@@ -218,6 +242,44 @@ describe("AppMenu", () => {
 		}
 	});
 
+	it("carries the file actions the bar used to show as three icons", () => {
+		const { onNewProject, onOpenProject, onSave } = renderTopBar("Demo Project");
+		// Not in the bar any more: only the menu reaches them (and Ctrl+N / Ctrl+O / Ctrl+S).
+		expect(screen.queryByRole("button", { name: "topbar.openProject" })).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "topbar.newProject" }));
+		expect(onNewProject).toHaveBeenCalledTimes(1);
+		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "topbar.openProject" }));
+		expect(onOpenProject).toHaveBeenCalledTimes(1);
+		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "topbar.saveProject" }));
+		expect(onSave).toHaveBeenCalledTimes(1);
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+	});
+
+	it("switches the theme from the menu", () => {
+		toggleTheme.mockClear();
+		renderTopBar("Demo Project");
+		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+		// Dark now, so the row offers the way out of it.
+		fireEvent.click(screen.getByRole("menuitem", { name: "topbar.switchToLightTheme" }));
+		expect(toggleTheme).toHaveBeenCalledTimes(1);
+	});
+
+	it("unfolds the languages inside the menu and marks the current one", () => {
+		renderTopBar("Demo Project");
+		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+		const row = screen.getByRole("menuitem", { name: /topbar\.changeLanguage/ });
+		expect(row).toHaveAttribute("aria-expanded", "false");
+		fireEvent.click(row);
+		expect(row).toHaveAttribute("aria-expanded", "true");
+		expect(screen.getByRole("menuitemradio", { name: "English" })).toHaveAttribute(
+			"aria-checked",
+			"true",
+		);
+	});
+
 	it("closes on Escape", () => {
 		renderTopBar("Demo Project");
 		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
@@ -278,11 +340,21 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		expect(tabs[2]).toHaveAttribute("title", "topbar.modes.rec");
 	});
 
-	it("provides title tooltips on the saved status indicator", () => {
+	it("says the saved state beside the project name, to the eye and to a screen reader", () => {
 		renderTopBar("Demo Project");
 		const savedIndicator = screen.getByTitle("topbar.saved");
 		expect(savedIndicator).toBeInTheDocument();
 		expect(savedIndicator).toHaveTextContent("topbar.saved");
+	});
+
+	it("steps through history from the bar, and says when there is nothing to step to", () => {
+		const { onUndo, onRedo } = renderTopBar("Demo Project", { canUndo: true, canRedo: false });
+		fireEvent.click(screen.getByRole("button", { name: "fixedActions.undo" }));
+		expect(onUndo).toHaveBeenCalledTimes(1);
+		const redo = screen.getByRole("button", { name: "fixedActions.redo" });
+		expect(redo).toBeDisabled();
+		fireEvent.click(redo);
+		expect(onRedo).not.toHaveBeenCalled();
 	});
 
 	it("keeps the brand trigger accessible by label and title even when text collapses", () => {
@@ -292,12 +364,8 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		expect(brandBtn).toHaveAttribute("aria-label", "OpenScreen");
 	});
 
-	it("provides accessible language toggle with short code and options", () => {
+	it("leaves the language to the menu, out of the bar", () => {
 		renderTopBar("Demo Project");
-		const langBtn = screen.getByRole("button", { name: "topbar.changeLanguage" });
-		expect(langBtn).toBeInTheDocument();
-		expect(langBtn).toHaveTextContent("EN");
-		fireEvent.click(langBtn);
-		expect(screen.getByText("English")).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "topbar.changeLanguage" })).not.toBeInTheDocument();
 	});
 });

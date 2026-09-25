@@ -97,7 +97,7 @@ If your recording has editable cursor data (native capture in the editable curso
 
 ## Keyboard shortcuts
 
-The gear icon in the top bar opens the shortcuts dialog, where the configurable ones can be rebound.
+**Keyboard Shortcuts**, in the OpenScreen menu (the logo at the top left), opens the shortcuts dialog, where the configurable ones can be rebound.
 
 | Action | Default |
 |---|---|
@@ -128,12 +128,12 @@ Fixed (not reassignable):
 
 ## Saving your work
 
-Edits live in a `.openscreen` project file — separate from any exported video, and fully re-editable:
+Edits live in a `.openscreen` project file — separate from any exported video, and fully re-editable. All three actions are in the OpenScreen menu, and on the keyboard:
 
 - **Save Project** (`Ctrl/Cmd + S`) — saves in place, or prompts for a location the first time.
 - **Load Project** (`Ctrl/Cmd + O`) — opens an existing `.openscreen` file.
 - **New Project** (`Ctrl/Cmd + N`) — clears the current project.
 
-The top bar shows a **Saved** / **Unsaved** indicator, and closing with unsaved changes prompts you to save, discard, or cancel.
+A dot after the project name shows whether it is saved (green) or has unsaved changes (amber), and closing with unsaved changes prompts you to save, discard, or cancel. Undo and redo sit at the top right, beside **Presets**.
 
 When you're ready, head to [Export](./export.md).

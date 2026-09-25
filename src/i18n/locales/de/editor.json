@@ -57,6 +57,7 @@
 		"description": "Erstelle ein neues Projekt oder öffne ein vorhandenes.",
 		"titleHasAsset": "Füge ein Video hinzu, um loszulegen",
 		"descriptionHasAsset": "Importiere eine Aufnahme, um mit dem Bearbeiten zu beginnen.",
+		"recordButton": "Bildschirm aufnehmen",
 		"newProjectButton": "Neues Projekt + Video importieren",
 		"importVideoButton": "Video importieren",
 		"loadProjectButton": "Projekt öffnen",

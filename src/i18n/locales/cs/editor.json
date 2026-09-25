@@ -57,6 +57,7 @@
 		"description": "Vytvořte nový projekt nebo otevřete existující.",
 		"titleHasAsset": "Přidejte video pro začátek",
 		"descriptionHasAsset": "Importujte nahrávku pro zahájení úprav.",
+		"recordButton": "Nahrát obrazovku",
 		"newProjectButton": "Nový projekt + importovat video",
 		"importVideoButton": "Importovat video",
 		"loadProjectButton": "Otevřít projekt",

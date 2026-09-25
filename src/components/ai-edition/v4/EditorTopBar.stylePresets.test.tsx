@@ -98,6 +98,8 @@ function renderPane() {
 				projectTitle="Project"
 				dirty={false}
 				canExport={false}
+				canUndo={false}
+				canRedo={false}
 				chatOpen={false}
 				actions={{
 					openProject: noop,
@@ -110,6 +112,8 @@ function renderPane() {
 					openProviderSettings: noop,
 					showAbout: noop,
 					checkForUpdates: noop,
+					undo: noop,
+					redo: noop,
 				}}
 			/>
 		</I18nProvider>,

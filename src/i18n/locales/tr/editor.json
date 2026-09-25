@@ -57,6 +57,7 @@
 		"description": "Yeni bir proje oluşturun veya mevcut birini açın.",
 		"titleHasAsset": "Başlamak için bir video ekleyin",
 		"descriptionHasAsset": "Düzenlemeye başlamak için bir kayıt içe aktarın.",
+		"recordButton": "Ekranını kaydet",
 		"newProjectButton": "Yeni proje + video içe aktar",
 		"importVideoButton": "Video içe aktar",
 		"loadProjectButton": "Proje aç",

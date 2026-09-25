@@ -57,6 +57,7 @@
 		"description": "Créez un nouveau projet ou ouvrez-en un existant.",
 		"titleHasAsset": "Ajoutez une vidéo pour commencer",
 		"descriptionHasAsset": "Importez un enregistrement pour commencer à éditer.",
+		"recordButton": "Enregistrer votre écran",
 		"newProjectButton": "Nouveau projet + importer une vidéo",
 		"importVideoButton": "Importer une vidéo",
 		"loadProjectButton": "Ouvrir un projet",

@@ -8,17 +8,19 @@ import {
 	Languages,
 	Moon,
 	PanelLeft,
+	Redo2,
 	RefreshCw,
 	Save,
 	Sparkles,
 	Star,
 	Sun,
+	Undo2,
 } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
 import logoMark from "@/assets/openscreen-mark.png";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useTheme } from "@/hooks/useTheme";
-import { getAvailableLocales, getLocaleName, getLocaleShort } from "@/i18n/loader";
+import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
 import { StylePresetsMenu } from "../StylePresetsMenu";
 import styles from "./EditorShellV4.module.css";
 
@@ -35,6 +37,8 @@ export interface TopBarActions {
 	openProviderSettings: () => void;
 	showAbout: () => void;
 	checkForUpdates: () => void;
+	undo: () => void;
+	redo: () => void;
 }
 
 interface EditorTopBarProps {
@@ -43,6 +47,8 @@ interface EditorTopBarProps {
 	projectTitle: string | null;
 	dirty: boolean;
 	canExport: boolean;
+	canUndo: boolean;
+	canRedo: boolean;
 	chatOpen: boolean;
 	actions: TopBarActions;
 }
@@ -59,11 +65,14 @@ export function EditorTopBar({
 	projectTitle,
 	dirty,
 	canExport,
+	canUndo,
+	canRedo,
 	chatOpen,
 	actions,
 }: EditorTopBarProps) {
-	const { theme, toggle: toggleTheme } = useTheme();
 	const t = useScopedT("editor");
+	const tShortcuts = useScopedT("shortcuts");
+	const savedLabel = dirty ? t("topbar.unsaved") : t("topbar.saved");
 
 	// ponytail: the left side panel only renders in "edit" mode (see
 	// NewEditorShell body), so its toggle is meaningless in Media/Rec —
@@ -92,68 +101,18 @@ export function EditorTopBar({
 			</span>
 			<AppMenu actions={actions} />
 			<span className={styles.sep} aria-hidden />
-			<ProjectNameField title={projectTitle} onRename={actions.renameProject} />
-			<span className={styles.sep} aria-hidden />
-			<button
-				type="button"
-				className={styles.iconBtn}
-				title={t("topbar.openProject")}
-				aria-label={t("topbar.openProject")}
-				onClick={actions.openProject}
-			>
-				<FolderOpen size={16} />
-			</button>
-			<button
-				type="button"
-				className={styles.iconBtn}
-				title={t("topbar.newProject")}
-				aria-label={t("topbar.newProject")}
-				onClick={actions.newProject}
-			>
-				<FolderPlus size={16} />
-			</button>
-			<button
-				type="button"
-				className={styles.iconBtn}
-				title={t("topbar.saveProject")}
-				aria-label={t("topbar.saveProject")}
-				onClick={actions.save}
-				style={{ position: "relative" }}
-			>
-				<Save size={16} />
-				{dirty ? (
-					<span
-						aria-hidden
-						style={{
-							position: "absolute",
-							top: 5,
-							right: 5,
-							width: 6,
-							height: 6,
-							borderRadius: "50%",
-							background: "var(--warn)",
-						}}
-					/>
-				) : null}
-			</button>
-			<span className={styles.sep} aria-hidden />
-			<LangButton />
-			{/* Both states are always rendered, stacked in one grid cell, so the slot
-			    keeps the width of the longer label and the bar doesn't twitch every
-			    time the document goes dirty. The inactive one is visibility:hidden,
-			    which also takes it out of the accessibility tree. */}
-			<span className={styles.saved} title={dirty ? t("topbar.unsaved") : t("topbar.saved")}>
-				<span className={styles.savedState} data-on={!dirty}>
-					<span className={styles.dot} aria-hidden />
-					<span className={styles.savedLabel}>{t("topbar.saved")}</span>
-				</span>
-				<span className={styles.savedState} data-on={dirty}>
-					<span
-						className={styles.dot}
-						aria-hidden
-						style={{ background: "var(--warn)", boxShadow: "0 0 0 3px var(--warn-soft)" }}
-					/>
-					<span className={styles.savedLabel}>{t("topbar.unsaved")}</span>
+			<span className={styles.projectSlot}>
+				<ProjectNameField title={projectTitle} onRename={actions.renameProject} />
+				{/* The saved state, as one dot right after the name it is about. Mounted with no
+				    project too, hidden, so loading one moves nothing. Save itself is in the
+				    OpenScreen menu, and on Ctrl+S. */}
+				<span
+					className={styles.saveDot}
+					data-dirty={dirty}
+					data-hidden={!projectTitle}
+					title={savedLabel}
+				>
+					<span className="sr-only">{savedLabel}</span>
 				</span>
 			</span>
 
@@ -178,16 +137,29 @@ export function EditorTopBar({
 			{/* A preset is the whole look the right panel's panes edit — Composition, camera,
 			    cursor — so its entry sits in the bar, reachable from every pane and mode,
 			    rather than in any one pane's header. */}
-			<StylePresetsMenu />
+			{/* Always mounted, disabled when there is nothing to step to: the bar keeps its width
+			    and the pair reads as the history it is. Same handlers as Ctrl+Z / Ctrl+Shift+Z. */}
 			<button
 				type="button"
 				className={styles.iconBtn}
-				title={theme === "dark" ? t("topbar.switchToLightTheme") : t("topbar.switchToDarkTheme")}
-				aria-label={t("topbar.toggleTheme")}
-				onClick={toggleTheme}
+				title={tShortcuts("fixedActions.undo")}
+				aria-label={tShortcuts("fixedActions.undo")}
+				onClick={actions.undo}
+				disabled={!canUndo}
 			>
-				{theme === "dark" ? <Moon size={16} /> : <Sun size={16} />}
+				<Undo2 size={16} />
 			</button>
+			<button
+				type="button"
+				className={styles.iconBtn}
+				title={tShortcuts("fixedActions.redo")}
+				aria-label={tShortcuts("fixedActions.redo")}
+				onClick={actions.redo}
+				disabled={!canRedo}
+			>
+				<Redo2 size={16} />
+			</button>
+			<StylePresetsMenu />
 			<button
 				type="button"
 				className={styles.exportBtn}
@@ -297,7 +269,12 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 	const tCommon = useScopedT("common");
 	const tEditor = useScopedT("editor");
 	const tShortcuts = useScopedT("shortcuts");
+	const { theme, toggle: toggleTheme } = useTheme();
+	const { locale, setLocale } = useI18n();
 	const [open, setOpen] = useState(false);
+	// The language list unfolds inside the menu rather than in a second popover: the menu is
+	// anchored inline for the no-drag reason above, and a nested surface would need the same.
+	const [languagesOpen, setLanguagesOpen] = useState(false);
 	const [version, setVersion] = useState<string | null>(null);
 	const [canUpdate, setCanUpdate] = useState(false);
 	const ref = useRef<HTMLDivElement | null>(null);
@@ -337,6 +314,10 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 	}, [open]);
 
 	useEffect(() => {
+		if (!open) setLanguagesOpen(false);
+	}, [open]);
+
+	useEffect(() => {
 		if (!open) return;
 		const onDocMouseDown = (e: MouseEvent) => {
 			if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -369,7 +350,9 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 		if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
 		e.preventDefault();
 		const items = Array.from(
-			menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+			menuRef.current?.querySelectorAll<HTMLButtonElement>(
+				'[role="menuitem"], [role="menuitemradio"]',
+			) ?? [],
 		);
 		if (items.length === 0) return;
 		const at = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -403,6 +386,37 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 			</button>
 			{open ? (
 				<div ref={menuRef} className={styles.appMenu} role="menu" onKeyDown={onMenuKeyDown}>
+					{/* The file actions that used to be three icons in the bar. Their labels are the
+					    keys those icons carried as tooltips; Ctrl+N / Ctrl+O / Ctrl+S still reach them
+					    through the native menu's accelerators. */}
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						onClick={run(actions.newProject)}
+					>
+						<FolderPlus size={15} />
+						{tEditor("topbar.newProject")}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						onClick={run(actions.openProject)}
+					>
+						<FolderOpen size={15} />
+						{tEditor("topbar.openProject")}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						onClick={run(actions.save)}
+					>
+						<Save size={15} />
+						{tEditor("topbar.saveProject")}
+					</button>
+					<div className={styles.appMenuSep} aria-hidden />
 					<button
 						type="button"
 						role="menuitem"
@@ -425,6 +439,49 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 						<Sparkles size={15} />
 						{tEditor("providerSettings.title")}
 					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						onClick={run(toggleTheme)}
+					>
+						{theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+						{theme === "dark"
+							? tEditor("topbar.switchToLightTheme")
+							: tEditor("topbar.switchToDarkTheme")}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						aria-expanded={languagesOpen}
+						onClick={() => setLanguagesOpen((v) => !v)}
+					>
+						<Languages size={15} />
+						{tEditor("topbar.changeLanguage")}
+						<span className={styles.appMenuVersion}>{getLocaleName(locale)}</span>
+						<ChevronDown size={14} className={styles.appMenuChevron} aria-hidden />
+					</button>
+					{languagesOpen ? (
+						<div
+							className={styles.appMenuSub}
+							role="group"
+							aria-label={tEditor("topbar.changeLanguage")}
+						>
+							{getAvailableLocales().map((code) => (
+								<button
+									key={code}
+									type="button"
+									role="menuitemradio"
+									aria-checked={code === locale}
+									className={styles.appMenuRow}
+									onClick={run(() => setLocale(code))}
+								>
+									{getLocaleName(code)}
+								</button>
+							))}
+						</div>
+					) : null}
 					<div className={styles.appMenuSep} aria-hidden />
 					{/* Only the PERMANENT half of the veto is applied here. A Store/Flathub/Snap/Nix
 					    copy never offers the check at all; the transient half — not during a take —
@@ -469,57 +526,6 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 						<Star size={15} />
 						{tCommon("actions.starOnGithub")}
 					</button>
-				</div>
-			) : null}
-		</div>
-	);
-}
-
-function LangButton() {
-	const { locale, setLocale } = useI18n();
-	const t = useScopedT("editor");
-	const [open, setOpen] = useState(false);
-	const ref = useRef<HTMLDivElement | null>(null);
-	useEffect(() => {
-		if (!open) return;
-		const onDocClick = (e: MouseEvent) => {
-			if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-		};
-		document.addEventListener("mousedown", onDocClick);
-		return () => document.removeEventListener("mousedown", onDocClick);
-	}, [open]);
-	return (
-		<div ref={ref} className={styles.langAnchor}>
-			<button
-				type="button"
-				className={`${styles.iconBtn} ${styles.langBtn}`}
-				onClick={() => setOpen((v) => !v)}
-				aria-label={t("topbar.changeLanguage")}
-				aria-pressed={open}
-			>
-				<Languages size={15} className={styles.langIcon} />
-				{/* Fixed-width, centred: the short labels run from "EN" to "PT-BR" to
-				    the CJK "简中", and letting the button size to them moved everything
-				    to its right on each language change. */}
-				<span className={styles.langShort}>{getLocaleShort(locale)}</span>
-				<ChevronDown size={12} className={styles.langChevron} />
-			</button>
-			{open ? (
-				<div className={styles.langMenu}>
-					{getAvailableLocales().map((code) => (
-						<button
-							key={code}
-							type="button"
-							className={styles.langMenuItem}
-							data-active={code === locale}
-							onClick={() => {
-								setLocale(code);
-								setOpen(false);
-							}}
-						>
-							{getLocaleName(code)}
-						</button>
-					))}
 				</div>
 			) : null}
 		</div>

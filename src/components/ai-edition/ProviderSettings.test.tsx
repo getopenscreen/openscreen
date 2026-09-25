@@ -47,6 +47,8 @@ function TopBar({ mode }: { mode: EditorMode }) {
 			projectTitle="Demo Project"
 			dirty={false}
 			canExport={false}
+			canUndo={false}
+			canRedo={false}
 			chatOpen={false}
 			actions={{
 				openProject: noop,
@@ -59,6 +61,8 @@ function TopBar({ mode }: { mode: EditorMode }) {
 				openProviderSettings: () => openDialog("providers"),
 				showAbout: noop,
 				checkForUpdates: noop,
+				undo: noop,
+				redo: noop,
 			}}
 		/>
 	);

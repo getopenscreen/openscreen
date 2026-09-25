@@ -506,6 +506,25 @@
 .previewEmptySecondaryButton:hover {
 	background: color-mix(in oklab, var(--fg) 13%, transparent);
 }
+/* The third way in, once recording leads: text, not a third button. */
+.previewEmptyLinkButton {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-2);
+	padding: var(--sp-2);
+	border: 0;
+	background: transparent;
+	color: var(--muted);
+	font: 500 0.875rem var(--font-body);
+	cursor: pointer;
+	transition: color var(--motion-fast) var(--ease);
+}
+.previewEmptyLinkButton:hover {
+	color: var(--fg);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
 .previewEmptyButtonIcon {
 	width: 16px;
 	height: 16px;

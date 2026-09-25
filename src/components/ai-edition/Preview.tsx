@@ -21,6 +21,8 @@ type BlurData = NonNullable<AxcutAnnotationRegion["blurData"]>;
 
 interface PreviewProps {
 	hasProject: boolean;
+	/** Handed to the empty state, whose first action becomes "Record your screen". */
+	onRecord?: () => void;
 	hasAsset: boolean;
 	videoSources: VideoSource[];
 	/** `document.project.primaryAssetId`, when the project has one. Read only while
@@ -62,6 +64,7 @@ interface PreviewProps {
 
 export function Preview({
 	hasProject,
+	onRecord,
 	hasAsset,
 	videoSources,
 	primaryAssetId,
@@ -244,7 +247,7 @@ export function Preview({
 					{failure ? <PreviewErrorCard detail={failure.detail} onRetry={handleRetry} /> : null}
 				</>
 			) : (
-				<EditorEmptyState hasProject={hasProject} />
+				<EditorEmptyState hasProject={hasProject} onRecord={onRecord} />
 			)}
 		</section>
 	);

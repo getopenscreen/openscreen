@@ -44,8 +44,6 @@
 	--topbar-gap: 14px;
 	--topbar-icon: 32px;
 	--topbar-project-w: 180px;
-	/* Widest of the short locale labels — "PT-BR", and the CJK "简中". */
-	--topbar-lang-label-w: 38px;
 	/* The topbar doubles as the window titlebar, so it keeps clear of the native
 	   window controls: the macOS traffic lights (--titlebar-inset-left, injected
 	   per-platform by the main process) on the left, and the Windows/Linux Window
@@ -194,6 +192,27 @@
 	font-variant-numeric: tabular-nums;
 	font-size: 11.5px;
 }
+/* The language row's chevron turns to show its list is open. */
+.appMenuChevron {
+	color: var(--muted);
+	flex-shrink: 0;
+	transition: transform var(--motion-fast) var(--ease);
+}
+.appMenuRow[aria-expanded="true"] .appMenuChevron {
+	transform: rotate(180deg);
+}
+/* The languages, unfolded under their row: indented to read as its children, and capped so
+   fifteen of them scroll inside the menu instead of running off the window. */
+.appMenuSub {
+	max-height: 220px;
+	overflow-y: auto;
+	padding-left: 25px;
+	scrollbar-width: thin;
+}
+.appMenuSub .appMenuRow[aria-checked="true"] {
+	color: var(--accent);
+	font-weight: 600;
+}
 .appMenuSep {
 	height: 1px;
 	margin: 5px 7px;
@@ -251,8 +270,19 @@
 /* The project name keeps one width whatever it is called — and the read view and
    the edit input keep the SAME width, so clicking to rename doesn't nudge the
    bar either. A long title truncates rather than pushing its neighbours. */
-.projectNameBtn {
+/* The name and its saved dot share one fixed-width slot: the dot follows a short name instead
+   of waiting at the far end, and the slot keeps the bar still when the name or its state changes. */
+.projectSlot {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 	width: var(--topbar-project-w);
+	min-width: 0;
+	flex-shrink: 0;
+}
+.projectNameBtn {
+	/* Room for the 7px dot and the slot's gap. */
+	max-width: calc(100% - 11px);
 	justify-content: flex-start;
 	box-sizing: border-box;
 }
@@ -264,7 +294,7 @@
 }
 .projectNameInput {
 	height: 30px;
-	width: var(--topbar-project-w);
+	width: 100%;
 	box-sizing: border-box;
 	padding: 0 10px;
 	border-radius: 9px;
@@ -274,101 +304,23 @@
 	font: 500 13px var(--font-display);
 	outline: none;
 }
-/* Both states are rendered into the SAME grid cell, so the slot is as wide as
-   the longer of the two and never resizes when the document goes dirty — which
-   happens on every keystroke. Sizing to the longer string beats guessing a width:
-   "Saved"/"Unsaved" differ by 2 characters in English and by 4 in French, and a
-   hard-coded width would clip somewhere among the 13 locales. */
-.saved {
-	display: inline-grid;
-	grid-template-areas: "state";
-	align-items: center;
-	justify-items: start;
-	font-size: 12px;
-	color: var(--muted);
-	flex-shrink: 0;
-}
-.savedState {
-	grid-area: state;
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	white-space: nowrap;
-}
-/* visibility (not display) so the hidden state still contributes its width —
-   and stays out of the accessibility tree. */
-.savedState[data-on="false"] {
-	visibility: hidden;
-}
-.saved .dot {
-	width: 6px;
-	height: 6px;
+/* The saved state, one dot beside the project name (EditorTopBar). Mint when the file on
+   disk matches the screen, amber when it does not; visibility, not display, with no project,
+   so loading one moves nothing in the bar. */
+.saveDot {
+	width: 7px;
+	height: 7px;
 	border-radius: 50%;
+	flex-shrink: 0;
 	background: var(--accent);
 	box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
-.langAnchor {
-	position: relative;
-	flex-shrink: 0;
+.saveDot[data-dirty="true"] {
+	background: var(--warn);
+	box-shadow: 0 0 0 3px var(--warn-soft);
 }
-.langBtn {
-	width: auto;
-	padding: 0 8px;
-	gap: 6px;
-	display: inline-flex;
-	align-items: center;
-}
-.langIcon {
-	flex-shrink: 0;
-}
-.langChevron {
-	color: var(--muted);
-	flex-shrink: 0;
-}
-.langMenu {
-	position: absolute;
-	top: calc(100% + 4px);
-	right: 0;
-	min-width: 160px;
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--r-md);
-	box-shadow: var(--elev-pop);
-	padding: 4px;
-	z-index: 60;
-}
-.langMenuItem {
-	display: block;
-	width: 100%;
-	text-align: left;
-	padding: 6px 10px;
-	border: 0;
-	background: transparent;
-	color: var(--fg-2);
-	border-radius: var(--r-sm);
-	cursor: pointer;
-	font: 500 12px var(--font-body);
-	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
-}
-.langMenuItem:hover {
-	background: var(--surface-2);
-	color: var(--fg);
-}
-.langMenuItem[data-active="true"] {
-	background: var(--accent-wash);
-	color: var(--accent);
-}
-
-/* One box for every short locale label — see --topbar-lang-label-w. Without it
-   the language button resized between "EN", "PT-BR" and the CJK "简中", moving
-   everything to its right. */
-.langShort {
-	width: var(--topbar-lang-label-w);
-	text-align: center;
-	font-size: 12px;
-	font-weight: 600;
-	white-space: nowrap;
+.saveDot[data-hidden="true"] {
+	visibility: hidden;
 }
 
 /* mode switch (Media / Edit / Rec) */
@@ -492,13 +444,6 @@
 		margin: 0;
 		padding: 4px;
 	}
-	.langBtn {
-		padding: 0 5px;
-		gap: 4px;
-	}
-	.langChevron {
-		display: none;
-	}
 	.modeSwitch button {
 		padding: 4px 8px;
 		font-size: 12px;
@@ -527,22 +472,6 @@
 		width: var(--topbar-icon);
 		gap: 0;
 	}
-	.savedLabel {
-		display: none;
-	}
-	.saved {
-		width: auto;
-	}
-	.savedState {
-		gap: 0;
-	}
-	.langIcon {
-		display: none;
-	}
-	.langShort {
-		width: auto;
-		font-size: 12px;
-	}
 }
 
 @media (max-width: 850px) {
@@ -562,12 +491,6 @@
 		padding: 0;
 		width: var(--topbar-icon);
 		justify-content: center;
-	}
-	.langBtn {
-		padding: 0 4px;
-	}
-	.langShort {
-		font-size: 11px;
 	}
 }
 

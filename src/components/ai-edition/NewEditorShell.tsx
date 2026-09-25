@@ -39,6 +39,7 @@ import {
 	useTranscriptionStore,
 } from "@/lib/ai-edition/store/transcriptionStore";
 import { useUndoRedoShortcuts } from "@/lib/ai-edition/store/undo";
+import { future as redoStack, past as undoStack } from "@/lib/ai-edition/store/undoStack";
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { useSequentialTimelineOps } from "@/lib/ai-edition/store/useSequentialTimelineOps";
 import { useTimeline } from "@/lib/ai-edition/store/useTimeline";
@@ -1540,6 +1541,10 @@ export function NewEditorShell() {
 				projectTitle={project?.title ?? null}
 				dirty={dirty}
 				canExport={hasAsset}
+				// The stacks are plain arrays, not state; every push or pop comes with a document
+				// write, which re-renders this shell, so reading them here is never stale.
+				canUndo={undoStack.length > 0}
+				canRedo={redoStack.length > 0}
 				chatOpen={chatOpen}
 				actions={{
 					openProject: () => setOpenProjectOpen(true),
@@ -1552,6 +1557,8 @@ export function NewEditorShell() {
 					openProviderSettings: () => openDialog("providers"),
 					showAbout: handleShowAbout,
 					checkForUpdates: handleCheckForUpdates,
+					undo: runUndo,
+					redo: runRedo,
 				}}
 			/>
 
@@ -1601,6 +1608,7 @@ export function NewEditorShell() {
 							>
 								<Preview
 									hasProject={hasProject}
+									onRecord={() => setMode("rec")}
 									hasAsset={hasAsset}
 									videoSources={videoSources}
 									// While the timeline is empty the preview mounts this asset rather

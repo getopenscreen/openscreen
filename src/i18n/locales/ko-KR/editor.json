@@ -57,6 +57,7 @@
 		"description": "새 프로젝트를 만들거나 기존 프로젝트를 여세요.",
 		"titleHasAsset": "시작하려면 동영상을 추가하세요",
 		"descriptionHasAsset": "녹화 파일을 가져와서 편집을 시작하세요.",
+		"recordButton": "화면 녹화하기",
 		"newProjectButton": "새 프로젝트 + 동영상 가져오기",
 		"importVideoButton": "동영상 가져오기",
 		"loadProjectButton": "프로젝트 열기",

@@ -57,6 +57,7 @@
 		"description": "Crie um novo projeto ou abra um existente.",
 		"titleHasAsset": "Adicione um vídeo para começar",
 		"descriptionHasAsset": "Importe uma gravação para começar a editar.",
+		"recordButton": "Grave sua tela",
 		"newProjectButton": "Novo projeto + importar vídeo",
 		"importVideoButton": "Importar vídeo",
 		"loadProjectButton": "Abrir projeto",

@@ -57,6 +57,7 @@
 		"description": "创建新项目或打开现有项目。",
 		"titleHasAsset": "添加视频以开始",
 		"descriptionHasAsset": "导入录制内容以开始编辑。",
+		"recordButton": "录制屏幕",
 		"newProjectButton": "新建项目并导入视频",
 		"importVideoButton": "导入视频",
 		"loadProjectButton": "打开项目",

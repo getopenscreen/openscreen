@@ -57,6 +57,7 @@
 		"description": "Создайте новый проект или откройте существующий.",
 		"titleHasAsset": "Добавьте видео, чтобы начать",
 		"descriptionHasAsset": "Импортируйте запись, чтобы начать редактирование.",
+		"recordButton": "Записать экран",
 		"newProjectButton": "Новый проект + импорт видео",
 		"importVideoButton": "Импортировать видео",
 		"loadProjectButton": "Открыть проект",

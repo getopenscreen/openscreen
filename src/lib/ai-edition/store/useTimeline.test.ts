@@ -2,6 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
+import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
 import { useProjectStore } from "./projectStore";
@@ -717,6 +718,20 @@ describe("useTimeline.addAnnotation", () => {
 			id: (annotations[0] as { id: string }).id,
 		});
 	});
+
+	it("centres the new text box and puts it on a dark plate that reads on any page", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		const [annotation] = useProjectStore.getState().document?.annotations ?? [];
+		const { position, size } = annotation as {
+			position: { x: number; y: number };
+			size: { width: number; height: number };
+		};
+		expect([position.x + size.width / 2, position.y + size.height / 2]).toEqual([50, 50]);
+		expect(annotation.style.backgroundColor).toBe(DEFAULT_TEXT_PLATE);
+	});
 });
 
 describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
@@ -959,6 +974,8 @@ describe("useTimeline is not re-rendered by playhead ticks", () => {
 		expect(useProjectStore.getState().document?.zoomRanges.at(-1)).toMatchObject({
 			startMs: 4200,
 			endMs: 6200,
+			// Framing what the pointer does, not the middle of the screen.
+			focusMode: "auto",
 		});
 	});
 

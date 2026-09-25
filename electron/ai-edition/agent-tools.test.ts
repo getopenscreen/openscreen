@@ -684,9 +684,28 @@ describe("executeAgentTool", () => {
 			endMs: 3000,
 			type: "text",
 			textContent: "Look here",
-			position: { x: 20, y: 80 },
+			// x/y are the text's centre: a 30x20 box centred on (20, 80).
+			position: { x: 5, y: 70 },
 		});
 		expect(() => documentSchema.parse(result.document)).not.toThrow();
+	});
+
+	it("addAnnotation centres the text on a dark plate by default, and keeps it in frame", () => {
+		const centred = executeAgentTool(
+			fixtureDocument(),
+			"addAnnotation",
+			JSON.stringify({ startSec: 1, endSec: 3, text: "Hi" }),
+		).document?.annotations.at(-1);
+		expect(centred).toMatchObject({
+			position: { x: 35, y: 40 },
+			style: { backgroundColor: "rgba(0, 0, 0, 0.7)" },
+		});
+		const corner = executeAgentTool(
+			fixtureDocument(),
+			"addAnnotation",
+			JSON.stringify({ startSec: 1, endSec: 3, text: "Hi", x: 100, y: 0 }),
+		).document?.annotations.at(-1);
+		expect(corner).toMatchObject({ position: { x: 70, y: 0 } });
 	});
 
 	it("snapshot exposes clips/trims/effects as virtual-time groups with a time-base note", () => {

@@ -10,8 +10,16 @@ import type { AxcutAnnotationRegion } from "@/lib/ai-edition/schema";
 
 type AnnotationStyle = AxcutAnnotationRegion["style"];
 
-/** Couleur d'un premier allumage, quand l'annotation n'a jamais eu de fond. */
-export const DEFAULT_TEXT_BACKGROUND = "#000000";
+/**
+ * La plaque d'une annotation neuve : noire à 70 %. Un texte blanc sans plaque ni contour
+ * disparaissait sur toute page claire, soit la moitié des enregistrements d'écran. `rgba()` et
+ * non un hex à 8 chiffres : c'est la forme que le compositeur lit (`parse_hex`), comme pour les
+ * sous-titres.
+ */
+export const DEFAULT_TEXT_PLATE = "rgba(0, 0, 0, 0.7)";
+
+/** Couleur d'un premier allumage, quand l'annotation n'a jamais eu de fond : la plaque par défaut. */
+export const DEFAULT_TEXT_BACKGROUND = DEFAULT_TEXT_PLATE;
 
 export function hasTextBackground(style: AnnotationStyle): boolean {
 	const color = style.backgroundColor;

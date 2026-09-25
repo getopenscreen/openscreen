@@ -172,7 +172,7 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 	setSpeed:
 		"Move, resize, or change the multiplier of an existing speed region by id (virtual-timeline seconds). Only the fields you pass are changed.",
 	addAnnotation:
-		"Add a text annotation over a span of the edited timeline (virtual seconds). x/y are frame percentages (0–100, default centre). Use for callouts and labels.",
+		"Add a text annotation over a span of the edited timeline (virtual seconds). x/y place the text's centre, in frame percentages (0–100, default the frame's centre); the box stays inside the frame. It is drawn on a dark plate so it reads on any footage. Use for callouts and labels.",
 	setAnnotation:
 		"Move, resize, or edit the text of an existing annotation by id (virtual-timeline seconds). Only the fields you pass are changed.",
 	addCameraFullscreen:

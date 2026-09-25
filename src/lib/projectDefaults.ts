@@ -212,7 +212,9 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	// Auto: the frame follows the recording, its crop, the camera layout and the padding.
 	// Documents from before it stored no ratio and read 16:9; the v8 upgrader pins that.
 	aspectRatio: "auto",
-	shadowIntensity: 0.2,
+	// 0.2 peaked at 9% opacity: a shadow nobody could see. 0.6 is 27%, the card lifts off the
+	// wallpaper without a halo.
+	shadowIntensity: 0.6,
 	showBlur: false,
 	motionBlurAmount: 0.2,
 	// On: it only acts on tilted zooms, where the blur already scales with the real angle.
@@ -230,7 +232,9 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
 	webcamBlurIntensity: 0.5,
 	cursor: {
-		size: 3,
+		// 1.5 draws a 41 px arrow in a 1080p export, about twice the system one, which reads at a
+		// glance. 3 drew it at 82 px, a quarter of the screen's height at the top of its range.
+		size: 1.5,
 		smoothing: 0.67,
 		motionBlur: 0.35,
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.

@@ -4746,12 +4746,26 @@ mod tests {
             let on_circle = [c[0] + r * std::f32::consts::FRAC_1_SQRT_2, c[1] + r * std::f32::consts::FRAC_1_SQRT_2];
             let d = sd_round_rect_test(on_circle, half, r);
             assert!(d.abs() < 0.02, "r {r}: le coin à 45° est à {d} px de celui du cercle");
-            // Pente de la distance sur le contour, par différences finies.
-            let (h, p) = (0.01f32, [c[0] + r * 0.9, half[1] - 0.2]);
-            let gx = (sd_round_rect_test([p[0] + h, p[1]], half, r) - sd_round_rect_test([p[0] - h, p[1]], half, r)) / (2.0 * h);
-            let gy = (sd_round_rect_test([p[0], p[1] + h], half, r) - sd_round_rect_test([p[0], p[1] - h], half, r)) / (2.0 * h);
-            let slope = (gx * gx + gy * gy).sqrt();
-            assert!((slope - 1.0).abs() < 0.05, "r {r}: pente {slope} sur le contour");
+            // Pente de la distance SUR le contour, à plusieurs angles du coin : chaque point est
+            // trouvé par dichotomie le long d'un rayon partant de l'intérieur du coin, donc sans
+            // recopier la forme que le test vérifie.
+            let inside = [half[0] - 2.0 * r, half[1] - 2.0 * r];
+            for deg in [15.0f32, 45.0, 75.0] {
+                let dir = [deg.to_radians().cos(), deg.to_radians().sin()];
+                let (mut lo, mut hi) = (0.0f32, 4.0 * r);
+                for _ in 0..60 {
+                    let mid = 0.5 * (lo + hi);
+                    let q = [inside[0] + dir[0] * mid, inside[1] + dir[1] * mid];
+                    if sd_round_rect_test(q, half, r) < 0.0 { lo = mid } else { hi = mid }
+                }
+                let p = [inside[0] + dir[0] * lo, inside[1] + dir[1] * lo];
+                assert!(sd_round_rect_test(p, half, r).abs() < 1e-3, "r {r} à {deg}°: point hors du contour");
+                let h = 0.01f32;
+                let gx = (sd_round_rect_test([p[0] + h, p[1]], half, r) - sd_round_rect_test([p[0] - h, p[1]], half, r)) / (2.0 * h);
+                let gy = (sd_round_rect_test([p[0], p[1] + h], half, r) - sd_round_rect_test([p[0], p[1] - h], half, r)) / (2.0 * h);
+                let slope = (gx * gx + gy * gy).sqrt();
+                assert!((slope - 1.0).abs() < 0.05, "r {r} à {deg}°: pente {slope} sur le contour");
+            }
         }
         // À fond, un carré est un cercle.
         let square = [100.0f32, 100.0];

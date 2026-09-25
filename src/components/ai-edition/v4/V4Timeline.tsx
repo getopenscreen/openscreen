@@ -2239,6 +2239,9 @@ export function V4Timeline({
 								// The gutter is taken out of the card's own width below, so the
 								// room the label actually has is that much less than the span.
 								const durText = formatSec(dur);
+								// The gutter separates two cards; the last one has nothing after it and
+								// reaches the end of the timeline.
+								const gutterPx = i === clips.length - 1 ? 0 : CLIP_GUTTER_PX;
 								return (
 									<div
 										key={c.id}
@@ -2256,7 +2259,9 @@ export function V4Timeline({
 											// flex row's `gap`). A clip shorter than the gutter lands on
 											// .tlClip's 1px min-width instead of collapsing — same rule as
 											// the lane pills above.
-											width: `calc(${pctOf(boxLen)}% - ${CLIP_GUTTER_PX}px)`,
+											width: gutterPx
+												? `calc(${pctOf(boxLen)}% - ${gutterPx}px)`
+												: `${pctOf(boxLen)}%`,
 											transform: clipTransform,
 										}}
 										onPointerDown={(e) => startClipDrag(e, c)}
@@ -2300,7 +2305,7 @@ export function V4Timeline({
 											>
 												<Pencil size={15} />
 											</button>
-											{cardFitsDuration(boxLen * pxPerSec - CLIP_GUTTER_PX, durText) ? (
+											{cardFitsDuration(boxLen * pxPerSec - gutterPx, durText) ? (
 												<span className={styles.tlClipDuration}>{durText}</span>
 											) : null}
 										</div>
@@ -2353,28 +2358,43 @@ export function V4Timeline({
 			    on screen at once, and there is nothing to zoom INTO without lanes. */}
 			{showLanes ? (
 				<div ref={navRef} className={styles.tlNav}>
-					<div className={styles.tlNavTrack} />
+					{/* The whole timeline in miniature: where the footage is, so the window reads as
+					    a view onto it rather than as a bare scrollbar. */}
+					<div className={styles.tlNavTrack} aria-hidden>
+						{clips.map((c) => (
+							<span
+								key={c.id}
+								className={styles.tlNavClip}
+								style={{
+									left: `${pctOf(c.timelineStartSec).toFixed(2)}%`,
+									width: `${pctOf(c.timelineEndSec - c.timelineStartSec).toFixed(2)}%`,
+								}}
+							/>
+						))}
+					</div>
 					<div
 						className={styles.tlNavWindow}
+						title={t("labels.pan")}
 						style={{
 							left: `${(nav.start * 100).toFixed(2)}%`,
 							width: `${((nav.end - nav.start) * 100).toFixed(2)}%`,
 						}}
 						onPointerDown={(e) => startNavDrag("pan", e)}
-					/>
-					<div
-						className={styles.tlNavHandle}
-						style={{ left: `calc(${(nav.start * 100).toFixed(2)}% - 6px)` }}
-						onPointerDown={(e) => startNavDrag("left", e)}
 					>
-						<span />
-					</div>
-					<div
-						className={styles.tlNavHandle}
-						style={{ left: `calc(${(nav.end * 100).toFixed(2)}% - 6px)` }}
-						onPointerDown={(e) => startNavDrag("right", e)}
-					>
-						<span />
+						{/* Grips on the window's own edges: pulling one zooms, as a range slider's
+						    thumbs would. */}
+						<span
+							className={styles.tlNavGrip}
+							data-edge="start"
+							title={t("labels.zoom")}
+							onPointerDown={(e) => startNavDrag("left", e)}
+						/>
+						<span
+							className={styles.tlNavGrip}
+							data-edge="end"
+							title={t("labels.zoom")}
+							onPointerDown={(e) => startNavDrag("right", e)}
+						/>
 					</div>
 				</div>
 			) : null}

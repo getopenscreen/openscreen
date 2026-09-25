@@ -529,9 +529,10 @@ describe("V4Timeline clip row", () => {
 		const { clipEls } = renderTimeline(CLIPS);
 		const widths = clipEls.map((el) => el.style.width);
 		// (jsdom re-serialises the percentage to 4 decimals, hence the numeric read)
-		expect(widths.map((w) => w.endsWith("- 6px)"))).toEqual([true, true, true]);
+		// The last card has nothing to be separated from, so it reaches the end.
+		expect(widths.map((w) => w.endsWith("- 6px)"))).toEqual([true, true, false]);
 		for (const [i, durSec] of [600, 300, 900].entries()) {
-			expect(Number.parseFloat(widths[i].slice("calc(".length))).toBeCloseTo(
+			expect(Number.parseFloat(widths[i].replace("calc(", ""))).toBeCloseTo(
 				(durSec / TOTAL_SEC) * 100,
 				3,
 			);

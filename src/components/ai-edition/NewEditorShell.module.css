@@ -1334,6 +1334,27 @@ textarea.control {
 	box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand), transparent 70%);
 }
 
+/* Remove Chromium's built-in inset so the selected colour fills the rounded control. */
+.bgColorInput {
+	box-sizing: border-box;
+	width: 48px;
+	height: 34px;
+	padding: 0;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface);
+	cursor: pointer;
+}
+.bgColorInput::-webkit-color-swatch-wrapper { padding: 0; }
+.bgColorInput::-webkit-color-swatch {
+	border: 0;
+	border-radius: 9px;
+}
+.bgColorInput::-moz-color-swatch {
+	border: 0;
+	border-radius: 9px;
+}
+
 .captionsPopover {
 	width: 310px;
 	display: flex;

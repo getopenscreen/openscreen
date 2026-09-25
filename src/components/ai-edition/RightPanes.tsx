@@ -500,18 +500,11 @@ function BackgroundColorTab({
 			>
 				<input
 					type="color"
+					className={styles.bgColorInput}
 					value={hexDraft}
 					disabled={!hasDocument}
 					onChange={(e) => setHexDraft(e.target.value)}
 					onBlur={commitHex}
-					style={{
-						width: 48,
-						height: 34,
-						border: "1px solid var(--border)",
-						borderRadius: 10,
-						background: "var(--surface)",
-						padding: 0,
-					}}
 				/>
 				{/* Mono stays: a hex code. */}
 				<input

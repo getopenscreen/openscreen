@@ -2354,7 +2354,8 @@ export function VideoEffectsPane() {
 	// the project (padding, camera layout, crop) has to say where it currently stands.
 	const autoDims = useMemo(() => (document ? pickOutputDims(document, "auto") : null), [document]);
 	// Auto only frames a timeline of one composition. Mixed clips leave the choice to the user,
-	// so the row goes dead and says why instead of guessing which clip should win.
+	// so the row is not offered at all; it only stays listed, dead and saying why, while it is
+	// still the project's format, or the button would name an entry the menu does not have.
 	const autoAvailable = useMemo(
 		() => (document ? isAutoFormatAvailable(document) : true),
 		[document],
@@ -2501,27 +2502,29 @@ export function VideoEffectsPane() {
 					>
 						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.format")}>
 							{/* Auto leads: it is the one entry that is a rule rather than a shape. */}
-							<button
-								type="button"
-								role="menuitem"
-								className={`${styles.actionMenuRow}${
-									settings.aspectRatio === "auto" ? ` ${styles.isActive}` : ""
-								}`}
-								disabled={!autoAvailable}
-								onClick={() => {
-									setRatioMenuOpen(false);
-									void set({ aspectRatio: "auto" });
-								}}
-							>
-								<span className={styles.actionMenuMain}>{ts("effects.formatAuto")}</span>
-								{!autoAvailable ? (
-									<span className={styles.actionMenuCount}>{ts("effects.formatAutoMixed")}</span>
-								) : autoDims ? (
-									<span className={styles.actionMenuCount}>
-										{`${autoDims.width}×${autoDims.height}`}
-									</span>
-								) : null}
-							</button>
+							{autoAvailable || settings.aspectRatio === "auto" ? (
+								<button
+									type="button"
+									role="menuitem"
+									className={`${styles.actionMenuRow}${
+										settings.aspectRatio === "auto" ? ` ${styles.isActive}` : ""
+									}`}
+									disabled={!autoAvailable}
+									onClick={() => {
+										setRatioMenuOpen(false);
+										void set({ aspectRatio: "auto" });
+									}}
+								>
+									<span className={styles.actionMenuMain}>{ts("effects.formatAuto")}</span>
+									{!autoAvailable ? (
+										<span className={styles.actionMenuCount}>{ts("effects.formatAutoMixed")}</span>
+									) : autoDims ? (
+										<span className={styles.actionMenuCount}>
+											{`${autoDims.width}×${autoDims.height}`}
+										</span>
+									) : null}
+								</button>
+							) : null}
 							{ASPECT_RATIO_PRESETS.map((ratio) => (
 								<button
 									type="button"

@@ -1600,9 +1600,10 @@ export function NewEditorShell() {
 									// design lets the translucent panel float over the video, but the
 									// preview is now a plain in-DOM <canvas> (no OS window/airspace
 									// issue) — still reserve the inspector's real footprint (right:20 +
-									// rail:50 + gap:10 + panel:300 ≈ 380, +a small gap) so it doesn't
-									// draw its own translucent panel flush against the canvas edge.
-									padding: `16px ${inspectorOpen ? 400 : 74}px 16px 16px`,
+									// rail:50 + gap:10 + panel ≈ 80 + panel, +a small gap) so it doesn't
+									// draw its own translucent panel flush against the canvas edge. The
+									// panel's width is `--inspector-w` (see .stage), so the room follows it.
+									padding: `16px ${inspectorOpen ? "calc(var(--inspector-w, 300px) + 100px)" : "74px"} 16px 16px`,
 									boxSizing: "border-box",
 								}}
 							>

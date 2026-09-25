@@ -546,6 +546,10 @@
 	min-width: 0;
 	min-height: 0;
 	overflow: hidden;
+	/* The inspector takes a little more of a wide stage and never less than 300px, which is what
+	   its rows are laid out for. One value for the panel and for the room the preview leaves it. */
+	container-type: inline-size;
+	--inspector-w: clamp(300px, 22cqw, 380px);
 	background: radial-gradient(ellipse 68% 54% at 52% 32%, var(--surface-1) 0%, var(--bg) 66%);
 }
 
@@ -566,7 +570,7 @@
 }
 .inspector {
 	pointer-events: auto;
-	width: 300px;
+	width: var(--inspector-w, 300px);
 	max-height: 100%;
 	display: flex;
 	flex-direction: column;

@@ -412,6 +412,8 @@
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Padrão",
+		"alwaysArrow": "Sempre usar o cursor de seta",
+		"alwaysArrowHint": "Mostra a seta em todos os estados do cursor, mesmo sobre texto ou links.",
 		"motionBlur": "Desfoque de movimento",
 		"theme": "Estilo do cursor",
 		"autoHide": "Ocultar quando inativo"

@@ -412,6 +412,8 @@
 		"title": "カーソル",
 		"show": "カーソルを表示",
 		"themeDefault": "デフォルト",
+		"alwaysArrow": "常に矢印カーソルを使用",
+		"alwaysArrowHint": "テキストやリンクの上でも、すべてのカーソル状態で矢印を表示します。",
 		"motionBlur": "モーションブラー",
 		"theme": "カーソルのスタイル",
 		"autoHide": "非アクティブ時に非表示"

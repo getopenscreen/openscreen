@@ -412,6 +412,8 @@
 		"title": "Cursor",
 		"show": "Show cursor",
 		"themeDefault": "Default",
+		"alwaysArrow": "Always use arrow cursor",
+		"alwaysArrowHint": "Shows the arrow for every cursor state, even over text or links.",
 		"motionBlur": "Motion blur",
 		"theme": "Cursor style",
 		"autoHide": "Auto-hide when inactive"

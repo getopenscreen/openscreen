@@ -412,6 +412,8 @@
 		"title": "Cursore",
 		"show": "Mostra cursore",
 		"themeDefault": "Predefinito",
+		"alwaysArrow": "Usa sempre il cursore a freccia",
+		"alwaysArrowHint": "Mostra la freccia per ogni stato del cursore, anche sopra testo o link.",
 		"motionBlur": "Sfocatura movimento",
 		"theme": "Stile del cursore",
 		"autoHide": "Nascondi se inattivo"

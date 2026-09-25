@@ -1119,6 +1119,7 @@ describe("buildSceneDescription.settings mapping", () => {
 				cursorMotionBlur: 0.5,
 				cursorClickBounce: 1.5,
 				cursorClipToBounds: true,
+				cursorAlwaysArrow: true,
 			},
 		});
 		const cursor = buildSceneDescription(doc).cursor;
@@ -1128,6 +1129,7 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(cursor.clickBounce).toBe(1.5);
 		// The option is gone: a project that had it on now overflows like every other one.
 		expect(cursor.clipToBounds).toBe(false);
+		expect(cursor.alwaysArrow).toBe(true);
 	});
 
 	it("maps show / theme / shape / mirror through to layout+cursor", () => {

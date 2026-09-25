@@ -507,14 +507,10 @@ export function normalizeCursorThemeId(id: unknown): string {
  */
 export function resolveCursorSprites(
 	themeId: string | null | undefined,
+	alwaysArrow = false,
 ): Record<NativeCursorType, CursorSprite> {
-	const theme = getCursorTheme(themeId);
-	if (!theme) {
-		return DEFAULT_CURSOR_SPRITES;
-	}
-
 	const sprites = { ...DEFAULT_CURSOR_SPRITES };
-	for (const [type, asset] of Object.entries(theme.assets)) {
+	for (const [type, asset] of Object.entries(getCursorTheme(themeId)?.assets ?? {})) {
 		if (asset.width <= 0 || asset.height <= 0) {
 			continue;
 		}
@@ -525,6 +521,13 @@ export function resolveCursorSprites(
 			hotspotX: asset.hotspotX / asset.width,
 			hotspotY: asset.hotspotY / asset.height,
 		};
+	}
+	// "Always use arrow": one consistent pointer for the whole recording, the I-beam and the
+	// hand included. Done on the table the compositor reads, so it needs no mode of its own.
+	if (alwaysArrow) {
+		for (const type of Object.keys(sprites) as NativeCursorType[]) {
+			sprites[type] = sprites.arrow;
+		}
 	}
 	return sprites;
 }

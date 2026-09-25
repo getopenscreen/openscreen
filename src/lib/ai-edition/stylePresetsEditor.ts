@@ -39,6 +39,7 @@ export function stylePresetAppearanceFromSettings(
 			motionBlur: settings.cursor.motionBlur,
 			clickBounce: settings.cursor.clickBounce,
 			model3d: settings.cursor.model3d,
+			alwaysArrow: settings.cursor.alwaysArrow,
 		},
 		cursorShow: settings.cursorShow,
 		cursorAutoHide: settings.cursorAutoHide,

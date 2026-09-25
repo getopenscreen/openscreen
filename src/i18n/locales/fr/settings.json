@@ -412,6 +412,8 @@
 		"title": "Curseur",
 		"show": "Afficher le curseur",
 		"themeDefault": "Par défaut",
+		"alwaysArrow": "Toujours utiliser la flèche",
+		"alwaysArrowHint": "Affiche la flèche pour tous les états du curseur, même sur du texte ou des liens.",
 		"motionBlur": "Flou de mouvement",
 		"theme": "Style du curseur",
 		"autoHide": "Masquer si inactif"

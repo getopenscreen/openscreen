@@ -3746,6 +3746,18 @@ export function CursorPane() {
 					}}
 				/>
 			</div>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>
+					{ts("cursor.alwaysArrow")}
+					<span className={styles.info}>{ts("cursor.alwaysArrowHint")}</span>
+				</span>
+				<Toggle
+					ariaLabel={ts("cursor.alwaysArrow")}
+					checked={settings.cursor.alwaysArrow}
+					disabled={!hasDocument || !settings.cursorShow}
+					onChange={(v) => void set({ cursor: { alwaysArrow: v } })}
+				/>
+			</div>
 			<div className={styles.sectionLabel}>{ts("cursor.theme")}</div>
 			<div className={styles.cursorGrid}>
 				{cursorThemeOptions.map((option) => {

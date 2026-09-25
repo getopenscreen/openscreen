@@ -412,6 +412,8 @@
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Predeterminado",
+		"alwaysArrow": "Usar siempre el cursor de flecha",
+		"alwaysArrowHint": "Muestra la flecha en todos los estados del cursor, incluso sobre texto o enlaces.",
 		"motionBlur": "Desenfoque de movimiento",
 		"theme": "Estilo del cursor",
 		"autoHide": "Ocultar si está inactivo"

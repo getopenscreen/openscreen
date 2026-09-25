@@ -101,9 +101,10 @@ export function resolveSceneAssetPath(relativePath: string): string | null {
  */
 function resolveCursorSpritePaths(
 	themeId: string,
+	alwaysArrow: boolean,
 ): Record<string, { path: string; hotspotX: number; hotspotY: number }> {
 	const resolved: Record<string, { path: string; hotspotX: number; hotspotY: number }> = {};
-	for (const [type, sprite] of Object.entries(resolveCursorSprites(themeId))) {
+	for (const [type, sprite] of Object.entries(resolveCursorSprites(themeId, alwaysArrow))) {
 		const absolute = resolveSceneAssetPath(sprite.assetPath);
 		if (absolute) {
 			resolved[type] = {
@@ -127,6 +128,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 			background?: { kind?: string; path?: string };
 			cursor?: {
 				theme?: string;
+				alwaysArrow?: boolean;
 				cursorSprites?: Record<string, { path: string; hotspotX: number; hotspotY: number }>;
 			};
 			webcamEffect?: {
@@ -159,7 +161,10 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 		changed = resolveBackgroundImage(scene.background) || changed;
 		changed = resolveBackgroundImage(scene.webcamEffect?.background) || changed;
 		if (scene.cursor && typeof scene.cursor.theme === "string") {
-			scene.cursor.cursorSprites = resolveCursorSpritePaths(scene.cursor.theme);
+			scene.cursor.cursorSprites = resolveCursorSpritePaths(
+				scene.cursor.theme,
+				scene.cursor.alwaysArrow === true,
+			);
 			changed = true;
 		}
 		// The scene asks for an effect; this process says where the model is. A model that

@@ -2323,18 +2323,13 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             scene.map(|s| &s.camera_fullscreen_regions).unwrap_or(&empty_cam);
         let webcam_reactive = scene.map(|s| s.layout.webcam_reactive_zoom).unwrap_or(false);
         let source_t = input.timeline_t_override.unwrap_or(frame / FPS);
-        // Les transitions se mesurent à l'écran (`ScreenClock`), la frame précédente aussi : sous
-        // une speed region, une frame couvre `vitesse / FPS` de source, et c'est ce pas qui donne
-        // au flou de mouvement du zoom la même traînée qu'à 1×.
+        // Les transitions se mesurent à l'écran (`ScreenClock`), la frame précédente aussi : une
+        // frame d'écran plus tôt, ce qui donne au flou de mouvement du zoom la même traînée qu'à 1×,
+        // y compris sur la première frame après une frontière de vitesse.
         let clock = scene
             .map(|s| crate::regions::ScreenClock::new(&s.speed_regions, s.active_clip_index))
             .unwrap_or_default();
-        let speed = scene
-            .map(|s| {
-                crate::regions::speed_at(&s.speed_regions, s.active_clip_index, source_t as f64)
-            })
-            .unwrap_or(1.0);
-        let source_t_prev = source_t - speed as f32 / FPS;
+        let source_t_prev = clock.source_at(clock.at(source_t) - 1.0 / FPS);
         // le focus "auto" (suivi curseur) réutilise la même piste que le rendu du curseur.
         let cursor_for_zoom = cursor;
         // La rotation 3D (mode 8, pas de motion blur dans ce chemin — cf. le commentaire au

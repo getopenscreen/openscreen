@@ -211,6 +211,26 @@ impl ScreenClock {
         }
         screen as f32
     }
+
+    /// L'inverse de `at` : le temps source affiché à l'instant écran `screen`. C'est ce qui donne
+    /// la frame précédente d'une frontière de vitesse, où la vitesse courante ne dit rien du pas.
+    pub fn source_at(&self, screen: f32) -> f32 {
+        let screen = screen as f64;
+        // Avance de la source sur l'écran, cumulée sur les spans déjà franchis.
+        let mut lead = 0.0;
+        for &(start, end, speed) in &self.spans {
+            let screen_start = start - lead;
+            if screen <= screen_start {
+                break;
+            }
+            let screen_end = screen_start + (end - start) / speed;
+            if screen < screen_end {
+                return (start + (screen - screen_start) * speed) as f32;
+            }
+            lead += (end - start) * (1.0 - 1.0 / speed);
+        }
+        (screen + lead) as f32
+    }
 }
 
 fn push_speed_segment(
@@ -1599,6 +1619,13 @@ mod zoom_focus_tests {
         assert_eq!(clock.at(1.0), 1.0);
         assert_eq!(clock.at(4.0), 2.5);
         assert_eq!(clock.at(8.0), 5.0);
+        for t in [0.5f32, 2.0, 3.3, 6.0, 7.25] {
+            assert!((clock.source_at(clock.at(t)) - t).abs() < 1e-5, "aller-retour à t = {t}");
+        }
+        // Une frame d'écran en arrière depuis une frontière : le pas est celui du span d'AVANT.
+        let back = |t: f32| clock.source_at(clock.at(t) - 1.0 / 60.0);
+        assert!((back(2.0) - (2.0 - 1.0 / 60.0)).abs() < 1e-5, "entrée du 4× : {}", back(2.0));
+        assert!((back(6.0) - (6.0 - 4.0 / 60.0)).abs() < 1e-5, "sortie du 4× : {}", back(6.0));
         // Autre clip ignoré ; recouvrement : la première région garde [4, 6), la seconde ne
         // compte que sur [6, 8). 2 + 1 + 1 à t = 8.
         let clock = ScreenClock::new(

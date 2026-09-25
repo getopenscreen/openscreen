@@ -6,7 +6,7 @@
 // no accessible name (the timeline's tracks + nav window).
 //
 // Needs a dev server: `npm run dev` (default 5173, override with E2E_BASE_URL).
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const EDITOR_URL = `${BASE_URL}/?windowType=editor`;
@@ -346,5 +346,94 @@ test.describe("v4 editor shell", () => {
 		// stable target the other tests already click on.
 		await page.locator('[class*="tlTracks"]').click({ position: { x: 10, y: 10 } });
 		await expect(picker).toBeHidden();
+	});
+
+	// Issue #739: the shell and body set user-select: none, which used to
+	// swallow drag selection on chat message text too — leaving Ctrl+C and
+	// Edit → Copy nothing to act on. The bubble opts back in with
+	// user-select: text; the surrounding chrome must stay non-selectable.
+	test("chat message text drag-selects and is copyable; panel chrome stays non-selectable", async ({
+		page,
+	}) => {
+		// A connected provider enables the chat composer; the shim's chat
+		// assistant replies with a canned message, which is the assistant
+		// selection target below.
+		await page.addInitScript(() => {
+			localStorage.setItem(
+				"browser-shim-llm",
+				JSON.stringify({
+					config: { provider: "openai-compatible", model: "shim-model" },
+					credentials: { "openai-compatible": { apiKey: "e2e-stub" } },
+				}),
+			);
+		});
+		await seedAndOpen(page);
+
+		await page.getByRole("button", { name: "Toggle chat panel" }).click();
+		const composer = page.getByRole("textbox", { name: "Describe the edit you want." });
+		await expect(composer).toBeVisible();
+		await composer.fill("selectable user turn text");
+		await composer.press("Enter");
+		const userText = page.getByText("selectable user turn text", { exact: true });
+		await expect(userText).toBeVisible({ timeout: 15_000 });
+		const assistantBubble = page
+			.locator('[class*="msgBubble"]', { hasText: "browser-shim" })
+			.last();
+		await expect(assistantBubble).toBeVisible({ timeout: 15_000 });
+
+		// Real-mouse drags across both turns must produce a selection whose
+		// text is bubble content — what Ctrl+C / Edit → Copy would put on the
+		// clipboard. The transcript pins itself to the bottom on every render,
+		// so scroll each target into view before measuring its box, and accept
+		// any visible fragment of it.
+		const dragSelectText = async (target: Locator) => {
+			await target.scrollIntoViewIfNeeded();
+			// The transcript re-pins itself to the bottom with a smooth scroll on
+			// every render; a box measured mid-animation is stale and the drag
+			// lands off the text. Wait for the target to stop moving.
+			let previousY: number | undefined;
+			await expect
+				.poll(async () => {
+					const y = (await target.boundingBox())?.y ?? -1;
+					const settled = y === previousY && y >= 0;
+					previousY = y;
+					return settled;
+				})
+				.toBe(true);
+			const box = await target.boundingBox();
+			expect(box).not.toBeNull();
+			await page.mouse.move(box!.x + 4, box!.y + box!.height / 2);
+			await page.mouse.down();
+			await page.mouse.move(box!.x + box!.width - 8, box!.y + box!.height / 2, { steps: 12 });
+			await page.mouse.up();
+			const selected = await page.evaluate(() => window.getSelection()?.toString() ?? "");
+			const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
+			expect(normalize(selected).length).toBeGreaterThan(0);
+			expect(normalize((await target.textContent()) ?? "")).toContain(normalize(selected));
+		};
+		await dragSelectText(userText);
+		await dragSelectText(assistantBubble);
+
+		// Scoped to the bubble: the surrounding chrome must still resolve to
+		// user-select: none.
+		const chromeUserSelect = await page.evaluate(() => {
+			const pick = (selector: string) => {
+				const el = document.querySelector(selector);
+				return el ? getComputedStyle(el).userSelect : "missing";
+			};
+			return {
+				sessionHeader: pick('[class*="panelHeader"]'),
+				timelineTrack: pick("[data-clip-id]"),
+				// FloatingInspector is the only element whose class contains
+				// "inspector"; the chat panel's class contains "panel_", which
+				// must not shadow it here.
+				inspectorFound: Boolean(document.querySelector('[class*="inspector"]')),
+				inspectorPane: pick('[class*="inspector"]'),
+			};
+		});
+		expect(chromeUserSelect.sessionHeader).toBe("none");
+		expect(chromeUserSelect.timelineTrack).toBe("none");
+		expect(chromeUserSelect.inspectorFound).toBe(true);
+		expect(chromeUserSelect.inspectorPane).toBe("none");
 	});
 });

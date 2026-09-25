@@ -1513,6 +1513,47 @@ describe("useTimeline undo history", () => {
 		}
 	});
 
+	// A focus commit out of time leaves the zoom chain, but its save can still fail. The drag
+	// must come off screen then, as for any failed commit, or a later save persists it.
+	it("rolls a focus drag back when its commit fails after the deadline", async () => {
+		seed(docWithZoom);
+		vi.useFakeTimers();
+		try {
+			let failHungSave: () => void;
+			bridgeMocks.save.mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						failHungSave = () => resolve({ success: false, error: "disk full" });
+					}),
+			);
+			const { result } = renderTimeline();
+
+			act(() => result.current.updateZoomFocusLive("zoom_a", { cx: 0.8, cy: 0.2 }));
+			act(() => {
+				void result.current.commitZoomFocus();
+			});
+			// No answer by the deadline: the save may still land, so the drag stays.
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(10_000);
+			});
+			expect(useProjectStore.getState().document?.zoomRanges[0]?.focus).toEqual({
+				cx: 0.8,
+				cy: 0.2,
+			});
+
+			await act(async () => {
+				failHungSave();
+				for (let i = 0; i < 20; i++) await Promise.resolve();
+			});
+			expect(useProjectStore.getState().document?.zoomRanges[0]?.focus).toEqual({
+				cx: 0.5,
+				cy: 0.5,
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	// Rebase-review follow-up (unknown save × replacement): the refusal must not outlive
 	// its reason. Once an undo bumps the epoch, the stuck save can no longer install
 	// anything (`saveDocument` drops it), so it must stop blocking zoom writes — even if

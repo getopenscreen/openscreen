@@ -783,13 +783,15 @@ export function useTimeline() {
 		// place of the dragged one.
 		const live = zoomFocusLiveRef.current;
 		const rollback = zoomFocusRollbackRef.current;
+		const epoch = currentWriteEpoch();
 		// A drag abandoned before an undo or a replacement is not this commit's to put back: the
 		// document it was made on is gone, and restoring its focus would undo the undo.
 		const pendingEdit = zoomFocusEditRef.current;
-		const edit = pendingEdit?.epoch === currentWriteEpoch() ? pendingEdit : null;
+		const edit = pendingEdit?.epoch === epoch ? pendingEdit : null;
 		zoomFocusRollbackRef.current = null;
 		zoomFocusLiveRef.current = null;
 		zoomFocusEditRef.current = null;
+		const pending: { save?: Promise<boolean> } = {};
 		const outcome = await queueZoomWrite((doc) => {
 			// The snapshot counts only while the document on screen is still the one this
 			// hook's last live write produced -- `updateZoomFocusLive`'s own identity test,
@@ -824,18 +826,24 @@ export function useTimeline() {
 				};
 				historyBase = doc;
 			}
-			return saveDocument(next, { history: true, historyBase });
+			pending.save = saveDocument(next, { history: true, historyBase });
+			return pending.save;
 		});
-		if (outcome === false && rollback) {
+		// A save out of time has left the chain, but it can still fail: its answer, whenever it
+		// comes, decides the rollback, or the dragged focus stays on screen for a later save.
+		const saved = outcome === "timeout" && pending.save ? await pending.save : outcome;
+		if (saved === false && rollback) {
 			useProjectStore.setState((state) =>
-				// Only while the dragged document is still the one on screen: anything else
-				// there was put by a write that landed. `dirty` is deliberately NOT cleared. The
-				// rollback target is the last document this drag started from, which is not the
-				// same as the last SAVED one: with two commits in flight the first one's unsaved
-				// document is what we restore. Saying "clean" there tells `beforeunload` and
-				// `setHasUnsavedChanges` there is nothing to save, and the window closes on real
-				// work without prompting.
-				state.document === live ? { document: rollback, revision: state.revision + 1 } : {},
+				// Only while the dragged document is still the one on screen, in the epoch it was
+				// committed in: anything else there was put by a write that landed, or by an undo.
+				// `dirty` is deliberately NOT cleared. The rollback target is the last document
+				// this drag started from, which is not the same as the last SAVED one: with two
+				// commits in flight the first one's unsaved document is what we restore. Saying
+				// "clean" there tells `beforeunload` and `setHasUnsavedChanges` there is nothing
+				// to save, and the window closes on real work without prompting.
+				state.document === live && currentWriteEpoch() === epoch
+					? { document: rollback, revision: state.revision + 1 }
+					: {},
 			);
 		}
 	}, [queueZoomWrite, saveDocument]);

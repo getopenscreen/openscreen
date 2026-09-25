@@ -338,11 +338,7 @@
 		"splitDesc": "Divise le clip cible au point de dépose et insère la source entre les deux."
 	},
 	"cropDialog": {
-		"subtitle": "Faites glisser la zone ou ses poignées pour ajuster la zone de recadrage",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "L",
-		"fieldH": "H"
+		"subtitle": "Faites glisser la zone ou ses poignées pour ajuster la zone de recadrage"
 	},
 	"transport": {
 		"playbackControls": "Contrôles de lecture",

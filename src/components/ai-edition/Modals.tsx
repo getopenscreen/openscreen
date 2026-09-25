@@ -10,14 +10,9 @@ import type { CropRegion } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
-import {
-	cropDraftFromRegion,
-	cropDraftToPct,
-	displayPct,
-	previewBoxStyle,
-	stepPct,
-} from "./cropDraft";
+import { cropDraftFromRegion, cropDraftToPct, previewBoxStyle } from "./cropDraft";
 import styles from "./NewEditorShell.module.css";
+import { ChoiceRow } from "./RightPanes";
 import type { VideoSource } from "./VirtualPreview";
 
 interface BaseModalProps {
@@ -568,46 +563,8 @@ const MIN_PCT = 4;
 const clampPct = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 type ResizeEdges = { left?: boolean; right?: boolean; top?: boolean; bottom?: boolean };
-
-function CropField({
-	label,
-	value,
-	onChange,
-	step,
-}: {
-	label: string;
-	value: number;
-	onChange: (n: number) => void;
-	step: number;
-}) {
-	// While the field is focused the user's raw text is the value: rendering
-	// `displayPct(value)` on a controlled input would rewrite "25." to "25" on
-	// every keystroke, making decimals untypable. The buffer seeds from the
-	// UNROUNDED stored value so native stepper arrows step from the exact
-	// state, not the rounded display; two-decimal formatting happens on blur.
-	const [draft, setDraft] = useState<string | null>(null);
-	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-			<label style={{ font: "600 12px/1.3 var(--font-body)", color: "var(--fg-2)" }}>{label}</label>
-			<input
-				type="number"
-				value={draft ?? displayPct(value)}
-				min={0}
-				max={100}
-				step={step}
-				onFocus={() => setDraft(String(value))}
-				onBlur={() => setDraft(null)}
-				onChange={(e) => {
-					setDraft(e.target.value);
-					const parsed = Number(e.target.value);
-					if (e.target.value !== "" && Number.isFinite(parsed)) onChange(parsed);
-				}}
-				className={styles.control}
-				style={{ width: "100%", fontVariantNumeric: "tabular-nums" }}
-			/>
-		</div>
-	);
-}
+const CROP_CORNERS = ["nw", "ne", "sw", "se"] as const;
+const CROP_EDGES = ["n", "s", "w", "e"] as const;
 
 export interface AssetMeta {
 	label: string;
@@ -662,7 +619,6 @@ export function EditClipModal({
 	// fraction-of-frame width/height. 16/9 is just a placeholder until the
 	// crop <video>'s real metadata loads (see the effect below).
 	const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
-	const [frameSizePx, setFrameSizePx] = useState({ width: 0, height: 0 });
 	const cropFrameRef = useRef<HTMLDivElement | null>(null);
 	const cropVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -706,7 +662,6 @@ export function EditClipModal({
 		// below refills them (immediately, when this clip's metadata is already
 		// loaded).
 		setVideoAspectRatio(16 / 9);
-		setFrameSizePx({ width: 0, height: 0 });
 		const v = cropVideoRef.current;
 		if (!v) return;
 		const seek = () => {
@@ -714,7 +669,6 @@ export function EditClipModal({
 			if (Number.isFinite(clip.sourceStartSec)) v.currentTime = clip.sourceStartSec;
 			if (v.videoWidth > 0 && v.videoHeight > 0) {
 				setVideoAspectRatio(v.videoWidth / v.videoHeight);
-				setFrameSizePx({ width: v.videoWidth, height: v.videoHeight });
 			}
 		};
 		if (v.readyState >= 1) seek();
@@ -793,52 +747,10 @@ export function EditClipModal({
 	};
 
 	// Fraction-space width/height ratio the crop is locked to while a preset is
-	// active (null for "Free"). Numeric fields and resize handles both honor it so
-	// the user can move/scale the crop but never change its aspect ratio.
+	// active (null for "Free"). The resize handles honor it, so the user can
+	// move/scale the crop but never change its aspect ratio.
 	const activePresetRatio = CROP_RATIOS.find((c) => c.value === cropRatio)?.ratio ?? null;
 	const lockedFractionRatio = activePresetRatio ? activePresetRatio / videoAspectRatio : null;
-
-	// Ratio-aware numeric field setters. With a preset active, changing one side
-	// derives the other (and clamps both to the frame); "Free" edits each axis
-	// independently. All keep the rectangle inside the frame.
-	const applyCropX = (v: number) => {
-		setCropTouched(true);
-		setCropXPct(clampPct(v, 0, 100 - cropWPct));
-	};
-	const applyCropY = (v: number) => {
-		setCropTouched(true);
-		setCropYPct(clampPct(v, 0, 100 - cropHPct));
-	};
-	const applyCropW = (v: number) => {
-		setCropTouched(true);
-		if (lockedFractionRatio) {
-			let w = clampPct(v, MIN_PCT, 100 - cropXPct);
-			let h = w / lockedFractionRatio;
-			if (h > 100 - cropYPct) {
-				h = 100 - cropYPct;
-				w = h * lockedFractionRatio;
-			}
-			setCropWPct(w);
-			setCropHPct(h);
-		} else {
-			setCropWPct(clampPct(v, MIN_PCT, 100 - cropXPct));
-		}
-	};
-	const applyCropH = (v: number) => {
-		setCropTouched(true);
-		if (lockedFractionRatio) {
-			let h = clampPct(v, MIN_PCT, 100 - cropYPct);
-			let w = h * lockedFractionRatio;
-			if (w > 100 - cropXPct) {
-				w = 100 - cropXPct;
-				h = w / lockedFractionRatio;
-			}
-			setCropWPct(w);
-			setCropHPct(h);
-		} else {
-			setCropHPct(clampPct(v, MIN_PCT, 100 - cropYPct));
-		}
-	};
 
 	// Drag the whole crop region (keeps size, moves x/y).
 	const startCropMove = (e: ReactPointerEvent) => {
@@ -938,16 +850,6 @@ export function EditClipModal({
 		window.addEventListener("pointerup", up);
 	};
 
-	const cropHandleStyle = (pos: React.CSSProperties): React.CSSProperties => ({
-		position: "absolute",
-		width: 10,
-		height: 10,
-		borderRadius: 3,
-		background: "var(--fg)",
-		border: "1px solid var(--overlay-dark)",
-		...pos,
-	});
-
 	const handleReset = () => {
 		setDraftStart(clip.sourceStartSec);
 		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
@@ -1005,55 +907,46 @@ export function EditClipModal({
 						top: `${cropYPct}%`,
 						width: `${cropWPct}%`,
 						height: `${cropHPct}%`,
-						border: "1.5px solid var(--fg)",
+						// White on any footage, like the brackets: `--fg` went dark in the light theme.
+						border: "1.5px solid rgb(255 255 255 / 0.9)",
 						borderRadius: 4,
 						boxShadow: "0 0 0 9999px var(--overlay-dark)",
 						cursor: "move",
+						touchAction: "none",
+						// Bigger brackets for a bigger picture than the webcam thumbnail's.
+						...({ "--bracket": "22px", "--bracket-w": "4px" } as React.CSSProperties),
 					}}
 					onPointerDown={startCropMove}
 				>
-					<div
-						onPointerDown={startCropResize({ left: true, top: true })}
-						style={cropHandleStyle({ left: -5, top: -5, cursor: "nwse-resize" })}
-					/>
-					<div
-						onPointerDown={startCropResize({ right: true, top: true })}
-						style={cropHandleStyle({ right: -5, top: -5, cursor: "nesw-resize" })}
-					/>
-					<div
-						onPointerDown={startCropResize({ left: true, bottom: true })}
-						style={cropHandleStyle({ left: -5, bottom: -5, cursor: "nesw-resize" })}
-					/>
-					<div
-						onPointerDown={startCropResize({ right: true, bottom: true })}
-						style={cropHandleStyle({ right: -5, bottom: -5, cursor: "nwse-resize" })}
-					/>
-					<div
-						onPointerDown={startCropResize({ top: true })}
-						style={cropHandleStyle({ left: "50%", top: -5, marginLeft: -5, cursor: "ns-resize" })}
-					/>
-					<div
-						onPointerDown={startCropResize({ bottom: true })}
-						style={cropHandleStyle({
-							left: "50%",
-							bottom: -5,
-							marginLeft: -5,
-							cursor: "ns-resize",
-						})}
-					/>
-					<div
-						onPointerDown={startCropResize({ left: true })}
-						style={cropHandleStyle({ top: "50%", left: -5, marginTop: -5, cursor: "ew-resize" })}
-					/>
-					<div
-						onPointerDown={startCropResize({ right: true })}
-						style={cropHandleStyle({
-							top: "50%",
-							right: -5,
-							marginTop: -5,
-							cursor: "ew-resize",
-						})}
-					/>
+					{/* The webcam frame's brackets on the corners, and a bar on each side for the
+					    one-axis resize a free crop needs. Both in grab areas a pointer finds without
+					    aiming. */}
+					{CROP_CORNERS.map((corner) => (
+						<span
+							key={corner}
+							className={styles.framingHandle}
+							data-corner={corner}
+							onPointerDown={startCropResize({
+								top: corner.startsWith("n"),
+								bottom: corner.startsWith("s"),
+								left: corner.endsWith("w"),
+								right: corner.endsWith("e"),
+							})}
+						/>
+					))}
+					{CROP_EDGES.map((edge) => (
+						<span
+							key={edge}
+							className={styles.cropEdge}
+							data-edge={edge}
+							onPointerDown={startCropResize({
+								top: edge === "n",
+								bottom: edge === "s",
+								left: edge === "w",
+								right: edge === "e",
+							})}
+						/>
+					))}
 				</div>
 			</div>
 
@@ -1193,66 +1086,19 @@ export function EditClipModal({
 					borderTop: "1px solid var(--border-soft)",
 				}}
 			>
-				<div
-					style={{
-						display: "grid",
-						gridTemplateColumns: "repeat(4, 1fr) 1.2fr auto",
-						gap: 10,
-						alignItems: "end",
-					}}
-				>
-					<CropField
-						label={t("cropDialog.fieldX")}
-						value={cropXPct}
-						step={stepPct(frameSizePx.width)}
-						onChange={applyCropX}
-					/>
-					<CropField
-						label={t("cropDialog.fieldY")}
-						value={cropYPct}
-						step={stepPct(frameSizePx.height)}
-						onChange={applyCropY}
-					/>
-					<CropField
-						label={t("cropDialog.fieldW")}
-						value={cropWPct}
-						step={stepPct(frameSizePx.width)}
-						onChange={applyCropW}
-					/>
-					<CropField
-						label={t("cropDialog.fieldH")}
-						value={cropHPct}
-						step={stepPct(frameSizePx.height)}
-						onChange={applyCropH}
-					/>
-					<div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 110 }}>
-						<label style={{ font: "600 12px/1.3 var(--font-body)", color: "var(--fg-2)" }}>
-							{ts("crop.ratio")}
-						</label>
-						<select
+				<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+					<span className={styles.fieldLabel}>{ts("crop.ratio")}</span>
+					<div style={{ flex: 1, minWidth: 0 }}>
+						<ChoiceRow<string>
+							label={ts("crop.ratio")}
+							options={CROP_RATIOS.map((r) => ({
+								value: r.value,
+								label: r.value === "free" ? ts("crop.free") : r.label,
+							}))}
 							value={cropRatio}
-							onChange={(e) => handleCropRatioChange(e.target.value)}
-							className={styles.control}
-							style={{ width: "100%" }}
-						>
-							{CROP_RATIOS.map((r) => (
-								<option key={r.value} value={r.value}>
-									{r.value === "free" ? ts("crop.free") : r.label}
-								</option>
-							))}
-						</select>
+							onChange={handleCropRatioChange}
+						/>
 					</div>
-					<span
-						style={{
-							font: "500 12px/1 var(--font-body)",
-							fontVariantNumeric: "tabular-nums",
-							color: "var(--muted)",
-							alignSelf: "center",
-							whiteSpace: "nowrap",
-						}}
-					>
-						{displayPct(cropWPct)}% × {displayPct(cropHPct)}%
-					</span>
 				</div>
 			</div>
 

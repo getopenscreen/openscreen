@@ -338,11 +338,7 @@
 		"splitDesc": "드롭 지점에서 대상 클립을 분할하고 그 사이에 소스를 삽입합니다."
 	},
 	"cropDialog": {
-		"subtitle": "영역이나 핸들을 드래그하여 자르기 영역을 조정하세요",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "너비",
-		"fieldH": "높이"
+		"subtitle": "영역이나 핸들을 드래그하여 자르기 영역을 조정하세요"
 	},
 	"transport": {
 		"playbackControls": "재생 컨트롤",

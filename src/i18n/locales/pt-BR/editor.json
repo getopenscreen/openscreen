@@ -338,11 +338,7 @@
 		"splitDesc": "Divide o clipe de destino no ponto de soltura e insere a fonte no meio."
 	},
 	"cropDialog": {
-		"subtitle": "Arraste a região ou suas alças para ajustar a área de corte",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "L",
-		"fieldH": "A"
+		"subtitle": "Arraste a região ou suas alças para ajustar a área de corte"
 	},
 	"transport": {
 		"playbackControls": "Controles de reprodução",

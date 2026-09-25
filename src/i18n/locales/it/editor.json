@@ -338,11 +338,7 @@
 		"splitDesc": "Divide la clip di destinazione nel punto di rilascio e inserisce la sorgente in mezzo."
 	},
 	"cropDialog": {
-		"subtitle": "Trascina l'area o le sue maniglie per regolare l'area di ritaglio",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "L",
-		"fieldH": "A"
+		"subtitle": "Trascina l'area o le sue maniglie per regolare l'area di ritaglio"
 	},
 	"transport": {
 		"playbackControls": "Controlli di riproduzione",

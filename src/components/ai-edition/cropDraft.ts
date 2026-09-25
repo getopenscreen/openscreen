@@ -1,6 +1,5 @@
 // Pure crop-draft helpers for Edit Clip. The modal stores the rectangle as
-// frame fractions (0–1), not rounded integer percents, so a 1px nudge is
-// representable once the source size is known.
+// frame fractions (0–1), not rounded integer percents.
 
 export interface CropDraft {
 	x: number;
@@ -20,23 +19,6 @@ export function cropDraftToPct(draft: CropDraft): { x: number; y: number; w: num
 		w: draft.width * 100,
 		h: draft.height * 100,
 	};
-}
-
-/** Percent step for a numeric field: one source pixel when the frame size is known. */
-export function stepPct(frameSizePx: number): number {
-	return frameSizePx > 0 ? 100 / frameSizePx : 0.1;
-}
-
-/**
- * What the numeric fields DISPLAY. The draft itself stays unrounded (that is
- * the point of pixel-precision crops), but a drag leaves values like
- * 33.33333333333333 behind, and eight digits of float noise in a percent
- * field reads as a bug. Two decimals is 0.01% — under a fifth of a pixel on
- * a 1920-wide source — so the display can never be visibly off from the
- * stored value. Typing writes the exact typed number; this only formats.
- */
-export function displayPct(value: number): number {
-	return Math.round(value * 100) / 100;
 }
 
 export const PREVIEW_MAX_HEIGHT_PX = 360;

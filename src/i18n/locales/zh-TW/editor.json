@@ -338,11 +338,7 @@
 		"splitDesc": "在放置點分割目標片段，並將來源插入其中。"
 	},
 	"cropDialog": {
-		"subtitle": "拖曳區域或其控點以調整裁切區域",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "寬",
-		"fieldH": "高"
+		"subtitle": "拖曳區域或其控點以調整裁切區域"
 	},
 	"transport": {
 		"playbackControls": "播放控制項",

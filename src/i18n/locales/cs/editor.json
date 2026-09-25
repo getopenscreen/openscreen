@@ -338,11 +338,7 @@
 		"splitDesc": "Rozdělit cílový klip v místě přetažení a vložit zdroj mezi ně."
 	},
 	"cropDialog": {
-		"subtitle": "Přetáhněte oblast nebo její úchyty pro úpravu plochy oříznutí",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "Š",
-		"fieldH": "V"
+		"subtitle": "Přetáhněte oblast nebo její úchyty pro úpravu plochy oříznutí"
 	},
 	"transport": {
 		"playbackControls": "Ovládání přehrávání",

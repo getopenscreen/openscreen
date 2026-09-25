@@ -1206,24 +1206,52 @@ textarea.control {
 	height: 28px;
 	touch-action: none;
 }
+/* `--bracket` and `--bracket-w` size the bracket to its picture: a large preview sets them bigger. */
 .framingHandle::before {
 	content: "";
 	position: absolute;
-	width: 14px;
-	height: 14px;
+	width: var(--bracket, 14px);
+	height: var(--bracket, 14px);
 	border: 0 solid #fff;
 	filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 0.7));
 	transition: width var(--motion-fast) var(--ease), height var(--motion-fast) var(--ease);
 }
-.framingHandle:hover::before { width: 17px; height: 17px; }
+.framingHandle:hover::before {
+	width: calc(var(--bracket, 14px) + 3px);
+	height: calc(var(--bracket, 14px) + 3px);
+}
 .framingHandle[data-corner="nw"] { top: -8px; left: -8px; cursor: nwse-resize; }
 .framingHandle[data-corner="ne"] { top: -8px; right: -8px; cursor: nesw-resize; }
 .framingHandle[data-corner="sw"] { bottom: -8px; left: -8px; cursor: nesw-resize; }
 .framingHandle[data-corner="se"] { bottom: -8px; right: -8px; cursor: nwse-resize; }
-.framingHandle[data-corner="nw"]::before { top: 8px; left: 8px; border-width: 3.5px 0 0 3.5px; border-top-left-radius: 5px; }
-.framingHandle[data-corner="ne"]::before { top: 8px; right: 8px; border-width: 3.5px 3.5px 0 0; border-top-right-radius: 5px; }
-.framingHandle[data-corner="sw"]::before { bottom: 8px; left: 8px; border-width: 0 0 3.5px 3.5px; border-bottom-left-radius: 5px; }
-.framingHandle[data-corner="se"]::before { bottom: 8px; right: 8px; border-width: 0 3.5px 3.5px 0; border-bottom-right-radius: 5px; }
+.framingHandle[data-corner="nw"]::before { top: 8px; left: 8px; border-width: var(--bracket-w, 3.5px) 0 0 var(--bracket-w, 3.5px); border-top-left-radius: 5px; }
+.framingHandle[data-corner="ne"]::before { top: 8px; right: 8px; border-width: var(--bracket-w, 3.5px) var(--bracket-w, 3.5px) 0 0; border-top-right-radius: 5px; }
+.framingHandle[data-corner="sw"]::before { bottom: 8px; left: 8px; border-width: 0 0 var(--bracket-w, 3.5px) var(--bracket-w, 3.5px); border-bottom-left-radius: 5px; }
+.framingHandle[data-corner="se"]::before { bottom: 8px; right: 8px; border-width: 0 var(--bracket-w, 3.5px) var(--bracket-w, 3.5px) 0; border-bottom-right-radius: 5px; }
+/* A crop's sides: a short thick bar on the edge, in the brackets' white, and a grab area around it. */
+.cropEdge {
+	position: absolute;
+	touch-action: none;
+}
+.cropEdge::before {
+	content: "";
+	position: absolute;
+	border-radius: 2px;
+	background: #fff;
+	filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 0.7));
+}
+.cropEdge[data-edge="n"],
+.cropEdge[data-edge="s"] { left: 50%; width: 56px; height: 28px; margin-left: -28px; cursor: ns-resize; }
+.cropEdge[data-edge="n"] { top: -12px; }
+.cropEdge[data-edge="s"] { bottom: -12px; }
+.cropEdge[data-edge="w"],
+.cropEdge[data-edge="e"] { top: 50%; width: 28px; height: 56px; margin-top: -28px; cursor: ew-resize; }
+.cropEdge[data-edge="w"] { left: -12px; }
+.cropEdge[data-edge="e"] { right: -12px; }
+.cropEdge[data-edge="n"]::before { top: 12px; left: 12px; right: 12px; height: var(--bracket-w, 3.5px); }
+.cropEdge[data-edge="s"]::before { bottom: 12px; left: 12px; right: 12px; height: var(--bracket-w, 3.5px); }
+.cropEdge[data-edge="w"]::before { left: 12px; top: 12px; bottom: 12px; width: var(--bracket-w, 3.5px); }
+.cropEdge[data-edge="e"]::before { right: 12px; top: 12px; bottom: 12px; width: var(--bracket-w, 3.5px); }
 /* The zoom, on the picture it zooms. Its own dark ground, like any label over a photo. */
 .framingZoom {
 	position: absolute;

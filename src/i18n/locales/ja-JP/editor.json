@@ -338,11 +338,7 @@
 		"splitDesc": "ドロップ位置で対象クリップを分割し、その間にソースを挿入します。"
 	},
 	"cropDialog": {
-		"subtitle": "領域またはハンドルをドラッグして切り抜き範囲を調整します",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "幅",
-		"fieldH": "高さ"
+		"subtitle": "領域またはハンドルをドラッグして切り抜き範囲を調整します"
 	},
 	"transport": {
 		"playbackControls": "再生コントロール",

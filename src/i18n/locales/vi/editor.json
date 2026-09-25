@@ -338,11 +338,7 @@
 		"splitDesc": "Cắt clip mục tiêu tại điểm thả và chèn nguồn vào giữa."
 	},
 	"cropDialog": {
-		"subtitle": "Kéo vùng hoặc các điểm điều khiển để điều chỉnh vùng cắt",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "R",
-		"fieldH": "C"
+		"subtitle": "Kéo vùng hoặc các điểm điều khiển để điều chỉnh vùng cắt"
 	},
 	"transport": {
 		"playbackControls": "Điều khiển phát lại",

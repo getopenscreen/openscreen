@@ -338,11 +338,7 @@
 		"splitDesc": "Hedef klibi bırakma noktasında böler ve kaynağı arasına ekler."
 	},
 	"cropDialog": {
-		"subtitle": "Kırpma alanını ayarlamak için bölgeyi veya tutamaçlarını sürükleyin",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "G",
-		"fieldH": "Y"
+		"subtitle": "Kırpma alanını ayarlamak için bölgeyi veya tutamaçlarını sürükleyin"
 	},
 	"transport": {
 		"playbackControls": "Oynatma denetimleri",

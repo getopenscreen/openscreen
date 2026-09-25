@@ -338,11 +338,7 @@
 		"splitDesc": "Split the target clip at the drop point and insert the source in between."
 	},
 	"cropDialog": {
-		"subtitle": "Drag the region or its handles to adjust the crop area",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "W",
-		"fieldH": "H"
+		"subtitle": "Drag the region or its handles to adjust the crop area"
 	},
 	"transport": {
 		"playbackControls": "Playback controls",

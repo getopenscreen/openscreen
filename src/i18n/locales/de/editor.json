@@ -338,11 +338,7 @@
 		"splitDesc": "Den Ziel-Clip am Ablagepunkt teilen und die Quelle dazwischen einfügen."
 	},
 	"cropDialog": {
-		"subtitle": "Zieh den Bereich oder seine Griffe, um den Ausschnitt anzupassen",
-		"fieldX": "X",
-		"fieldY": "Y",
-		"fieldW": "B",
-		"fieldH": "H"
+		"subtitle": "Zieh den Bereich oder seine Griffe, um den Ausschnitt anzupassen"
 	},
 	"transport": {
 		"playbackControls": "Wiedergabesteuerung",

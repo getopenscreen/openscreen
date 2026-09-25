@@ -27,21 +27,21 @@
 use crate::config::Cfg;
 use crate::scene::{Scene, SceneCrop};
 
-/// Constant buffer d'un calque : **128 octets**, un par draw.
+/// Constant buffer d'un calque : **176 octets**, un par draw.
 ///
 /// C'est le contrat partagé par les trois côtés — `cbuffer Layer` dans `shaders.hlsl`,
-/// `struct Layer` dans `shaders.metal`, et ce struct. Les trois doivent s'accorder champ
-/// pour champ ET octet pour octet : un décalage ne produit pas d'erreur, il produit un
-/// shader qui lit `color` là où on a écrit `fx`.
+/// `struct Layer` dans `shaders.metal` et `vk_shaders/layer.wgsl`, et ce struct. Ils doivent
+/// s'accorder champ pour champ ET octet pour octet : un décalage ne produit pas d'erreur, il
+/// produit un shader qui lit `color` là où on a écrit `fx`.
 ///
 /// `align(16)` vient de la version macOS ; sous `repr(C)` seul, les offsets sont déjà
-/// 0/16/32/40/44/48/64/80/96/112 des deux côtés — l'alignement Rust ne change que
+/// 0/16/32/40/44/48/64/80/96/112/128/144/160 des deux côtés — l'alignement Rust ne change que
 /// l'adresse du struct, pas son contenu, et Windows le `copy_nonoverlapping` dans un
 /// constant buffer mappé où l'alignement source est sans effet. Les deux formes étaient
 /// donc compatibles ; les unifier évite qu'elles cessent de l'être.
 ///
 /// (Le commentaire d'origine annonçait « 64 octets ». Il n'a jamais été juste : dix champs,
-/// trente-deux `f32`.)
+/// trente-deux `f32`. Les trois derniers, le flou de mouvement de l'écran incliné, en font 176.)
 #[repr(C, align(16))]
 #[derive(Clone, Copy, Default)]
 pub struct LayerCB {
@@ -55,6 +55,12 @@ pub struct LayerCB {
     pub src_prev: [f32; 4],
     pub dst_prev: [f32; 4],
     pub mb: [f32; 4], // mb[0] = nombre de taps de motion blur
+    /// Mode 8 : le plan à la frame PRÉCÉDENTE, coins TL, TR (`trail_a`) puis BR, BL (`trail_b`)
+    /// en px locaux comme `fx`/`src_prev`, et `trail_mb` = `[taps, force, 0, 0]` de son flou de
+    /// mouvement, ceux du mode 0 (`mb.xy`). `trail_mb` nul ailleurs : aucun tap, rien n'est lu.
+    pub trail_a: [f32; 4],
+    pub trail_b: [f32; 4],
+    pub trail_mb: [f32; 4],
 }
 
 pub const OUT_W: u32 = 1920;
@@ -1135,7 +1141,7 @@ pub fn cursor_sprite_cb(
                 src_prev: [br0, br1, bl0, bl1],
                 // Le clip vit ici et NON dans `fx` (mode 7) : `fx` porte les coins.
                 dst_prev: clip,
-                // `mb.x` : 1 = warp projectif (caméra réelle).
+                // `mb.x` : 1 = warp projectif (tout écran incliné, cf. `screen_tilt`).
                 mb: [quad.warp_flag(), 0.0, 0.0, 0.0],
                 ..Default::default()
             }
@@ -1149,9 +1155,19 @@ pub fn cursor_sprite_cb(
 /// à l'autre vaut `0,42·gain` en 16:9, soit ±4 % ici.
 pub const CAMERA_LIGHT_GAIN: f32 = 0.2;
 
+/// Le plan incliné une frame plus tôt, et le réglage du flou : ce que le mode 8 floute
+/// (`FrameGeometry::tilt_trail`, `tilted_screen_cb`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TiltTrail {
+    /// Coins TL, TR, BR, BL du quad à la frame précédente, en px relatifs au centre de la boîte
+    /// COURANTE — le repère de `TiltedQuad::corners`.
+    pub corners: [(f32, f32); 4],
+    /// `[taps, force]` : ceux du mode 0 (`FrameGeometry::mb_taps`, `mb_amount`).
+    pub mb: [f32; 2],
+}
+
 /// `LayerCB` de l'écran incliné (mode 8), pour les trois backends : le quad projeté est dessiné
-/// dans sa BBOX et le fragment remonte au (s, t) du plan par le warp inverse. Pas de flou de
-/// mouvement sur ce chemin : `src_prev`/`dst_prev` y portent déjà les coins et le plan.
+/// dans sa BBOX et le fragment remonte au (s, t) du plan par le warp inverse.
 ///
 /// - `src` : la coupe source en UV texture ; `center_px` : le centre du rect `s_px` à l'écran ;
 /// - `radius` : le rayon de l'écran droit, que le plan réduit de `quad.scale` ;
@@ -1161,14 +1177,18 @@ pub const CAMERA_LIGHT_GAIN: f32 = 0.2;
 ///   du cadre quand le rayon dépasse la barre (`color.z` = la même hauteur, px du plan) ;
 /// - `dof` : la profondeur de champ tourne (`FrameGeometry::depth_of_field_on`).
 ///
-/// Sous la caméra réelle (`quad.projective`) : `dst_prev.w` = 1 (warp projectif), et `color.xy`
-/// porte l'éclairage, `1 + color.x·(s − 0,5) + color.y·(t − 0,5)` : la lampe de la caméra, fixe
-/// dans le monde comme l'œil, éclaire un peu plus le côté proche. Nuls sous un angle fixe, dont le
-/// rendu reste celui d'avant à l'octet.
+/// `quad.projective` : `dst_prev.w` = 1 (warp projectif). Sous la caméra réelle (`quad.lamp`),
+/// `color.xy` porte l'éclairage, `1 + color.x·(s − 0,5) + color.y·(t − 0,5)` : la lampe de la
+/// caméra, fixe dans le monde comme l'œil, éclaire un peu plus le côté proche. Nuls sous un angle
+/// fixe, dont l'exposition reste celle d'avant.
 ///
 /// Sous le masque d'un layout en bloc (`mask`) : le plan penche DANS le slot, qui le rogne. Il est
 /// dessiné dans le rect du slot au lieu de sa bbox, et `color.w` porte le rayon des coins du slot,
 /// que le shader applique à ce rect. Nul sans masque, comme avant.
+///
+/// `trail` : le plan à la frame précédente. Le shader floute le contenu le long du chemin qu'a
+/// parcouru chaque pixel depuis, borné à une frame et réglé comme le mode 0 (`trail_a`, `trail_b`,
+/// `trail_mb`). `None`, ou un seul tap : l'échantillon net, le rendu d'avant à l'octet.
 #[allow(clippy::too_many_arguments)]
 pub fn tilted_screen_cb(
     quad: &crate::regions::TiltedQuad,
@@ -1181,6 +1201,7 @@ pub fn tilted_screen_cb(
     dof: bool,
     render_px: [f32; 2],
     mask: Option<ScreenMask>,
+    trail: Option<TiltTrail>,
 ) -> LayerCB {
     let [rw, rh] = render_px;
     let corners = quad.corners;
@@ -1231,6 +1252,17 @@ pub fn tilted_screen_cb(
         mb: quad.depth_mb(s_px, focus_plane, dof),
         ..Default::default()
     };
+    if let Some(trail) = trail {
+        // Même repère local que les coins courants : sans mouvement, les deux quads coïncident
+        // au bit près et le shader garde son échantillon net.
+        let [a0, a1] = local(trail.corners[0]);
+        let [b0, b1] = local(trail.corners[1]);
+        let [c0, c1] = local(trail.corners[2]);
+        let [d0, d1] = local(trail.corners[3]);
+        cb.trail_a = [a0, a1, b0, b1];
+        cb.trail_b = [c0, c1, d0, d1];
+        cb.trail_mb = [trail.mb[0], trail.mb[1], 0.0, 0.0];
+    }
     if let Some(mask) = mask {
         reframe_warped(&mut cb, mask.rect, render_px);
         cb.color[3] = mask.radius_px;
@@ -1656,6 +1688,11 @@ pub struct FrameGeometry {
     /// Caméra réelle de `follow-cursor` (`camera.rs`), `None` sans elle. Jamais en même temps
     /// qu'une `zoom_rotation` non nulle.
     pub camera: Option<crate::camera::CameraPose>,
+    /// La rotation de base une frame d'écran plus tôt : avec `s_dst_prev` et `camera_prev`, le
+    /// zoom d'AVANT, que le mode 8 floute (`tilt_trail`).
+    pub zoom_rotation_prev: [f32; 3],
+    /// La caméra réelle une frame plus tôt : son poids et son zoom d'avant, sa visée d'à présent.
+    pub camera_prev: Option<crate::camera::CameraPose>,
     pub padding_scale: f32,
     /// Coupe source de l'écran en UV texture (crop utilisateur + zoom).
     pub cut: [f32; 4],
@@ -1729,12 +1766,20 @@ impl ScreenMask {
 }
 
 /// Redessine un calque WARPÉ (modes 8 et 16 : coins TL/TR dans `fx`, BR/BL dans `src_prev`, en px
-/// locaux à `dst`) dans une autre boîte `dst`. Le warp ne dépend pas de la boîte de dessin, qui ne
-/// fait que borner les pixels rastérisés : il suffit de reporter les coins dans son repère.
+/// locaux à `dst` ; au mode 8, ceux de la frame d'avant dans `trail_a`/`trail_b`) dans une autre
+/// boîte `dst`. Le warp ne dépend pas de la boîte de dessin, qui ne fait que borner les pixels
+/// rastérisés : il suffit de reporter les coins dans son repère.
 fn reframe_warped(cb: &mut LayerCB, dst: [f32; 4], render_px: [f32; 2]) {
     let shift = [(dst[0] - cb.dst[0]) * render_px[0], (dst[1] - cb.dst[1]) * render_px[1]];
-    for c in [&mut cb.fx, &mut cb.src_prev] {
+    let reframe = |c: &mut [f32; 4]| {
         *c = [c[0] - shift[0], c[1] - shift[1], c[2] - shift[0], c[3] - shift[1]];
+    };
+    reframe(&mut cb.fx);
+    reframe(&mut cb.src_prev);
+    // La traînée, seulement s'il y en a une : sans elle, ses champs restent nuls.
+    if cb.trail_mb[0] > 0.0 {
+        reframe(&mut cb.trail_a);
+        reframe(&mut cb.trail_b);
     }
     cb.dst = dst;
     cb.quad_px = [dst[2] * render_px[0], dst[3] * render_px[1]];
@@ -1780,18 +1825,51 @@ impl FrameGeometry {
                 self.zoom_rotation,
                 self.zoom_rotation_dyn,
             );
-            // Sous un cadre d'APPAREIL, l'écran passe au warp PROJECTIF même sous un angle fixe.
-            // Le mode 17 lance ses rayons dans la perspective exacte ; le warp bilinéaire s'en
-            // écarte de ~8 % de la largeur au milieu des bords (mesuré par
-            // `the_device_screen_face_lands_on_the_footage_plane`), soit une lunette à cent
-            // pixels du bord de l'image. Les quatre coins sont les mêmes des deux côtés, donc
-            // l'homographie qu'ils définissent EST cette projection exacte : passer le drapeau
-            // recolle l'image sur le modèle, partout et pas seulement aux coins. Sans appareil —
-            // sans cadre ou sous le chrome plat — rien ne change, à l'octet.
-            if self.window_frame.as_ref().is_some_and(|f| f.kind.is_device()) {
-                quad.projective = true;
-            }
+            // Un angle fixe se dessine au warp PROJECTIF, comme la caméra réelle. Les quatre coins
+            // sont ceux de la projection exacte, donc l'homographie qu'ils définissent EST cette
+            // projection, partout et pas seulement aux coins. Le warp bilinéaire s'en écartait de
+            // ~8 % de la largeur au milieu des bords (mesuré par
+            // `the_device_screen_face_lands_on_the_footage_plane`), et surtout il PENCHAIT le
+            // contenu : la verticale du milieu de l'écran, droite sous une caméra sans roulis,
+            // tombait de 2,9° sous `iso` et de 0,8° sous `left`/`right`, et ce roulis-là entrait
+            // avec le zoom. Le mode 17 (appareil) en dépend aussi : il lance ses rayons dans la
+            // perspective exacte.
+            quad.projective = true;
             quad
+        })
+    }
+
+    /// Le plan incliné une frame d'écran plus tôt, avec le réglage du flou : ce que le mode 8
+    /// floute (`tilted_screen_cb`). `None` quand l'écran est droit ou le flou coupé.
+    ///
+    /// La frame d'avant est celle du mode 0 : la boîte au zoom d'avant (`s_dst_prev`), et ici la
+    /// rotation de base d'avant (un angle fixe entre avec le zoom) ou le poids de la caméra réelle.
+    /// Parallaxe, impact et visée restent ceux de la frame, comme le focus du mode 0 : le flou suit
+    /// le zoom, borné à une frame.
+    pub fn tilt_trail(&self, render_px: [f32; 2]) -> Option<TiltTrail> {
+        if !self.tilted() || self.mb_taps < 2.0 || self.mb_amount <= 0.001 {
+            return None;
+        }
+        let d = self.s_dst_prev;
+        let px = [d[2] * render_px[0], d[3] * render_px[1]];
+        let quad = match self.camera_prev {
+            Some(pose) => crate::camera::View::new(px, pose).quad(px),
+            None => crate::regions::rotated_quad_corners_px(
+                px[0],
+                px[1],
+                self.zoom_rotation_prev,
+                self.zoom_rotation_dyn,
+            ),
+        };
+        // Les coins d'avant, reportés au centre de la boîte COURANTE (le repère des siens).
+        let now = self.screen_center_px(render_px);
+        let shift = [
+            (d[0] + d[2] * 0.5) * render_px[0] - now[0],
+            (d[1] + d[3] * 0.5) * render_px[1] - now[1],
+        ];
+        Some(TiltTrail {
+            corners: quad.corners.map(|(x, y)| (x + shift[0], y + shift[1])),
+            mb: [self.mb_taps, self.mb_amount],
         })
     }
 
@@ -2532,13 +2610,14 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let source_t_prev = clock.source_at(clock.at(source_t) - 1.0 / FPS);
         // le focus "auto" (suivi curseur) réutilise la même piste que le rendu du curseur.
         let cursor_for_zoom = cursor;
-        // La rotation 3D (mode 8, pas de motion blur dans ce chemin — cf. le commentaire au
-        // point d'appel) n'est calculée QUE pour la frame courante ; `pp` ne sert qu'au zoom
-        // écran normal (vélocité pour le motion blur du chemin non-tilté).
+        // `pp` porte le zoom de la frame précédente, pour le flou de mouvement ; celui du plan
+        // incliné y ajoute sa rotation de base et le poids de la caméra réelle (`tilt_trail`).
         let mut zoom_rotation = [0.0f32; 3];
+        let mut zoom_rotation_prev = [0.0f32; 3];
         let mut zoom_tilt = 0.0f32;
         let mut zoom_click_impact = 0.0f32;
         let mut zoom_camera = 0.0f32;
+        let mut zoom_camera_prev = 0.0f32;
         let mut zoom_aim = [0.5f32; 2];
         let mut zoom_orbit = [0.5f32; 2];
         // Curseur masqué → pas de piste pour ce qui anime le plan (parallaxe, impact, caméra
@@ -2579,6 +2658,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             );
             pp.zoom = zs_p.scale;
             pp.focus = zs_p.focus;
+            zoom_rotation_prev = zs_p.rotation;
+            zoom_camera_prev = zs_p.camera;
         }
         // Full Camera ignore le rétrécissement réactif de la webcam (design web : mélanger
         // "rétrécit pour le zoom" et "grandit en plein cadre" dans la même frame n'a pas de sens).
@@ -2791,6 +2872,11 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             zoom: p.zoom,
             press,
         });
+        let camera_prev = camera.map(|pose| crate::camera::CameraPose {
+            weight: zoom_camera_prev,
+            zoom: pp.zoom,
+            ..pose
+        });
         let focus_plane = match camera {
             Some(pose) => pose.orbit,
             None => focus_in_cut(u_max, v_max, active_crop, p.focus, cut),
@@ -2981,6 +3067,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         zoom_rotation,
         zoom_rotation_dyn,
         camera,
+        zoom_rotation_prev,
+        camera_prev,
         padding_scale,
         cut,
         focus_plane,
@@ -3804,6 +3892,7 @@ fn cursor_impact_cb(
         src_prev: [br0, br1, bl0, bl1],
         dst_prev: [x0, y0, 2.0 * hx, 2.0 * hy],
         mb: [quad.warp_flag(), impact.spot_r, impact.spot_a, 0.0],
+        ..Default::default()
     })
 }
 
@@ -4425,6 +4514,7 @@ mod tests {
                 false,
                 RENDER,
                 g.screen_mask,
+                None,
             )
         };
         for (name, _) in DEVICES {
@@ -4432,10 +4522,10 @@ mod tests {
             assert_eq!(cb.dst_prev[3], 1.0, "{name}: l'écran est resté au warp bilinéaire");
             assert_eq!(cb.color, [0.0; 4], "{name}: la lampe de la caméra s'est allumée");
         }
-        // Sans appareil, l'angle fixe garde son warp bilinéaire ET son absence de lampe ; la
-        // caméra réelle, elle, garde les deux.
+        // Sans appareil, l'angle fixe a le même warp exact (`screen_tilt`) et toujours pas de
+        // lampe ; la caméra réelle, elle, a les deux.
         let plain = flat_cb(&framed_plan(&framed_scene("", r#""iso""#, 1.0, false)));
-        assert_eq!((plain.dst_prev[3], plain.color), (0.0, [0.0; 4]));
+        assert_eq!((plain.dst_prev[3], plain.color), (1.0, [0.0; 4]));
         let orbit = flat_cb(&framed_plan(&framed_scene("", r#""follow-cursor""#, 1.0, false)));
         assert_eq!(orbit.dst_prev[3], 1.0);
         assert!(orbit.color[0] != 0.0 || orbit.color[1] != 0.0, "la caméra réelle n'éclaire plus");
@@ -5423,7 +5513,7 @@ mod tests {
             assert!(hx > slot_px[0] * 0.5 && hy > slot_px[1] * 0.5, "{rotation} : garde, le plan zoomé déborde du slot");
 
             let centre = g.screen_center_px(RENDER);
-            let draw = |m| tilted_screen_cb(&quad, s_px, centre, g.cut, g.focus_plane, g.s_radius, 0.0, false, RENDER, m);
+            let draw = |m| tilted_screen_cb(&quad, s_px, centre, g.cut, g.focus_plane, g.s_radius, 0.0, false, RENDER, m, None);
             let (cb, bare) = (draw(g.screen_mask), draw(None));
             assert_eq!(cb.dst, SLOT, "{rotation} : dessiné dans le slot");
             assert_eq!(cb.color[3], mask.radius_px);
@@ -5583,6 +5673,77 @@ mod tests {
         assert_eq!(flat.zoom_rotation_dyn, [0.0; 3], "sans préset");
     }
 
+    /// Le plan incliné a son flou de mouvement, borné à une frame comme celui du mode 0 : sa
+    /// traînée est le plan une frame d'écran plus tôt, boîte ET rotation de base — un angle fixe
+    /// entre avec le zoom.
+    #[test]
+    fn the_tilted_screen_trails_its_previous_frame() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let render = [1170.0, 658.0];
+        // La région démarre à 2 s : à 1,6 s, sa rampe d'entrée est en cours.
+        let ramp = |json: &str| json.replace(r#""startSec":0.0"#, r#""startSec":2.0"#);
+        let tilted = ramp(zoomed_golden_scene_json()).replace(r#""rotation":"none""#, r#""rotation":"iso""#);
+        let at = |json: &str, t: f32| {
+            let scene = Scene::from_json(json).expect("scène");
+            plan_frame(&FrameGeometryInput { timeline_t_override: Some(t), ..golden_input(&scene, &cfg) })
+        };
+        let quad_of = |g: &FrameGeometry| {
+            g.screen_tilt([g.s_dst[2] * render[0], g.s_dst[3] * render[1]]).expect("incliné")
+        };
+        let width = |c: &[(f32, f32); 4]| {
+            c.iter().map(|p| p.0).fold(f32::MIN, f32::max) - c.iter().map(|p| p.0).fold(f32::MAX, f32::min)
+        };
+
+        let g = at(&tilted, 1.6);
+        let trail = g.tilt_trail(render).expect("flou sur le plan incliné");
+        assert_eq!(trail.mb, [g.mb_taps, g.mb_amount]);
+        assert_ne!(g.zoom_rotation_prev, g.zoom_rotation, "le préset entre avec le zoom");
+        let (now, before) = (width(&quad_of(&g).corners), width(&trail.corners));
+        // Zoom avant : le plan d'une frame plus tôt est plus petit, de quelques pour cent.
+        assert!(before < now && before > now * 0.9, "traînée {before} px, plan {now} px");
+
+        // Au palier, rien ne bouge : la traînée EST le plan, au bit près, et le shader garde son
+        // échantillon net.
+        let hold = at(&tilted, 3.0);
+        assert_eq!(hold.tilt_trail(render).expect("incliné").corners, quad_of(&hold).corners);
+
+        // Flou coupé, ou écran droit (le mode 0 a le sien) : pas de traînée.
+        let off = tilted.replace(r#""roundnessFrac":0.0255,"motionBlur":0.35"#, r#""roundnessFrac":0.0255,"motionBlur":0"#);
+        assert_ne!(off, tilted, "la substitution doit couper le flou");
+        assert_eq!(at(&off, 1.6).tilt_trail(render), None);
+        assert_eq!(at(&ramp(zoomed_golden_scene_json()), 1.6).tilt_trail(render), None);
+    }
+
+    /// Le calque du mode 8 porte la traînée dans le repère de ses propres coins, y compris
+    /// reporté dans le slot d'un layout en bloc ; sans elle, rien de ce qu'il portait ne change.
+    #[test]
+    fn the_tilted_screen_cb_carries_its_trail_in_its_own_frame() {
+        let quad = crate::regions::rotated_quad_corners_px(800.0, 450.0, [-23.0, -25.0, 0.0], [0.0; 3]);
+        let moved = TiltTrail { corners: quad.corners.map(|(x, y)| (x * 0.9 + 3.0, y * 0.9 - 2.0)), mb: [6.0, 0.35] };
+        let mask = ScreenMask { rect: [0.1, 0.1, 0.6, 0.6], radius_px: 8.0 };
+        let cb = |mask, trail| {
+            tilted_screen_cb(&quad, [800.0, 450.0], [600.0, 400.0], [0.0, 0.0, 1.0, 1.0], [0.5, 0.5], 12.0, 0.0, false, [1200.0, 800.0], mask, trail)
+        };
+        let corner = |c: [f32; 4], i: usize| [c[2 * i], c[2 * i + 1]];
+        for m in [None, Some(mask)] {
+            let (bare, with) = (cb(m, None), cb(m, Some(moved)));
+            assert_eq!((bare.trail_a, bare.trail_b, bare.trail_mb), ([0.0; 4], [0.0; 4], [0.0; 4]), "{m:?}");
+            assert_eq!((with.dst, with.fx, with.src_prev, with.dst_prev, with.mb), (bare.dst, bare.fx, bare.src_prev, bare.dst_prev, bare.mb));
+            assert_eq!(with.trail_mb, [6.0, 0.35, 0.0, 0.0]);
+            // Chaque coin de la traînée garde son écart au coin courant : même repère local.
+            let now = [corner(with.fx, 0), corner(with.fx, 1), corner(with.src_prev, 0), corner(with.src_prev, 1)];
+            let then = [corner(with.trail_a, 0), corner(with.trail_a, 1), corner(with.trail_b, 0), corner(with.trail_b, 1)];
+            for i in 0..4 {
+                let want = [moved.corners[i].0 - quad.corners[i].0, moved.corners[i].1 - quad.corners[i].1];
+                let got = [then[i][0] - now[i][0], then[i][1] - now[i][1]];
+                assert!((got[0] - want[0]).abs() < 1e-3 && (got[1] - want[1]).abs() < 1e-3, "{m:?} coin {i} : {got:?} != {want:?}");
+            }
+        }
+        // Sans mouvement, les deux quads coïncident au bit près.
+        let still = cb(None, Some(TiltTrail { corners: quad.corners, mb: [6.0, 0.35] }));
+        assert_eq!((still.trail_a, still.trail_b), (still.fx, still.src_prev));
+    }
+
     /// La vitesse se mesure dans la coupe VISIBLE, zoom compris : sous un x2, le même geste
     /// traverse deux fois plus d'écran et penche donc plus le plan (hors saturation).
     #[test]
@@ -5634,7 +5795,7 @@ mod tests {
         };
         let same = |s: String| s;
         let on = dyn_of(&same, on_edge);
-        assert!(on[1] > 1.5, "clic à droite → +Y : {on:?}");
+        assert!(on[1] > 0.75 * crate::regions::CLICK_IMPACT_DEG, "clic à droite → +Y : {on:?}");
 
         let insert = |field: &'static str| {
             move |s: String| s.replace(r#""cursor":"#, &format!(r#"{field},"cursor":"#))
@@ -5942,7 +6103,7 @@ mod tests {
     #[test]
     fn layer_cb_matches_the_shader_constant_buffer() {
         use std::mem::{align_of, offset_of, size_of};
-        assert_eq!(size_of::<LayerCB>(), 128);
+        assert_eq!(size_of::<LayerCB>(), 176);
         assert_eq!(align_of::<LayerCB>(), 16);
         for (name, got, want) in [
             ("dst", offset_of!(LayerCB, dst), 0),
@@ -5955,6 +6116,9 @@ mod tests {
             ("src_prev", offset_of!(LayerCB, src_prev), 80),
             ("dst_prev", offset_of!(LayerCB, dst_prev), 96),
             ("mb", offset_of!(LayerCB, mb), 112),
+            ("trail_a", offset_of!(LayerCB, trail_a), 128),
+            ("trail_b", offset_of!(LayerCB, trail_b), 144),
+            ("trail_mb", offset_of!(LayerCB, trail_mb), 160),
         ] {
             assert_eq!(got, want, "offset de `{name}`");
         }
@@ -6350,6 +6514,8 @@ mod tests {
             zoom_rotation: [0.0, 0.0, 0.0],
             zoom_rotation_dyn: [0.0, 0.0, 0.0],
             camera: None,
+            zoom_rotation_prev: [0.0, 0.0, 0.0],
+            camera_prev: None,
             padding_scale: 1.0,
             cut: [0.0, 0.0, 1.0, 1.0],
             focus_plane: [0.5, 0.5],
@@ -6500,8 +6666,8 @@ mod tests {
         .expect("plan cursor")
     }
 
-    const ISO: [f32; 3] = [-12.0, -18.0, -2.0];
-    const LEFT: [f32; 3] = [-8.0, -16.0, -1.0];
+    const ISO: [f32; 3] = [-23.0, -25.0, 0.0];
+    const LEFT: [f32; 3] = [-6.5, -17.0, 0.0];
 
     /// Le `LayerCB` du sprite incliné est, octet pour octet, celui que chaque backend construisait
     /// avant de le partager. La référence est le corps d'origine de `draw_cursor_sprite`.
@@ -6548,14 +6714,18 @@ mod tests {
                 fx: [tl0, tl1, tr0, tr1],
                 src_prev: [br0, br1, bl0, bl1],
                 dst_prev: clip,
+                // Le drapeau du warp : un angle fixe est maintenant projectif (`screen_tilt`),
+                // comme la caméra réelle l'était déjà.
+                mb: [quad.warp_flag(), 0.0, 0.0, 0.0],
                 ..Default::default()
             }
         }
         let bytes = |cb: &LayerCB| -> Vec<u8> {
-            // SAFETY: `LayerCB` est `repr(C)`, 128 octets de f32 sans padding (test d'offsets).
-            unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, 128) }.to_vec()
+            // SAFETY: `LayerCB` est `repr(C)`, des f32 sans padding (test d'offsets).
+            let len = std::mem::size_of::<LayerCB>();
+            unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, len) }.to_vec()
         };
-        for rot in [ISO, LEFT, [-8.0, 16.0, 1.0]] {
+        for rot in [ISO, LEFT, [-6.5, 17.0, 0.0]] {
             let plan = plan_with(rot);
             let clip = [0.1, 0.2, 0.7, 0.6];
             let got = cursor_sprite_cb(
@@ -6812,7 +6982,7 @@ mod tests {
         let scene = model_scene();
         for key in MODEL_STATES {
             let (sdf, shape) = sprite_model(key);
-            for rot in [[0.0; 3], [-12.0, -18.0, -2.0]] {
+            for rot in [[0.0; 3], [-23.0, -25.0, 0.0]] {
                 let track = still_track_as(Some(key), vec![0.5]);
                 for (t, want) in [(0.3, MODEL_HOVER), (0.5 + CONTACT_S, 0.0)] {
                     let plan = model_plan(rot, &scene, &track, t, true).expect("plan");
@@ -6936,8 +7106,8 @@ mod tests {
         assert!(model_plan([0.0; 3], &bare, &track, 0.3, true).expect("plan").model.is_none());
     }
 
-    const LEFT_ROT: [f32; 3] = [-8.0, -16.0, -1.0];
-    const ISO_ROT: [f32; 3] = [-12.0, -18.0, -2.0];
+    const LEFT_ROT: [f32; 3] = [-6.5, -17.0, 0.0];
+    const ISO_ROT: [f32; 3] = [-23.0, -25.0, 0.0];
 
     /// Les poses d'essai, pour chaque état de `MODEL_STATES` : au repos, posé, tourné.
     fn model_cases() -> Vec<(String, CursorPlan, SpriteShape, crate::cursor_sdf::CursorSdf)> {
@@ -6950,7 +7120,7 @@ mod tests {
                 vec![],
                 vec![(0.0, key.to_string())],
             );
-            for (name, rot) in [("flat", [0.0; 3]), ("iso", ISO_ROT), ("left", LEFT_ROT), ("right", [-8.0, 16.0, 1.0])] {
+            for (name, rot) in [("flat", [0.0; 3]), ("iso", ISO_ROT), ("left", LEFT_ROT), ("right", [-6.5, 17.0, 0.0])] {
                 for (pose, track, t) in [("hover", &clicked, 0.3), ("touch", &clicked, 0.5 + CONTACT_S), ("yaw", &moving, 1.0)] {
                     let plan = model_plan(rot, &scene, track, t, true).expect("plan");
                     let (sdf, shape) = sprite_model(key);

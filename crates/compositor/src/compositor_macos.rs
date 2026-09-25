@@ -1290,6 +1290,8 @@ impl Compositor {
         top_lift: f32,
         // Le slot d'un layout en bloc, qui rogne le plan (`FrameGeometry::screen_mask`).
         mask: Option<crate::frame_geometry::ScreenMask>,
+        // Le plan à la frame d'avant, pour son flou de mouvement (`FrameGeometry::tilt_trail`).
+        trail: Option<crate::frame_geometry::TiltTrail>,
         y: &metal::Texture,
         uv: &metal::Texture,
         dof_pyramid: Option<&metal::Texture>,
@@ -1310,6 +1312,7 @@ impl Compositor {
             dof_pyramid.is_some(),
             render_px,
             mask,
+            trail,
         );
         self.draw_video(enc, &cb, y, uv);
     }
@@ -2282,6 +2285,7 @@ impl Compositor {
                 g.s_radius,
                 top_lift,
                 g.screen_mask,
+                g.tilt_trail([rw, rh]),
                 &sy,
                 &suv,
                 dof_pyramid.as_ref(),

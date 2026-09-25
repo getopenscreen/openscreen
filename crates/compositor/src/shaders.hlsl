@@ -13,6 +13,9 @@ cbuffer Layer : register(b0)
     float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet ; mode 17 : marges du corps (unités du modèle)
     float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip ; mode 17 : angle du socle, rayon et recouvrement de l'ouverture, pénombre de l'ombre
     float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation
+    float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx)
+    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev)
+    float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
 // de la section « Curseur modélisé » (`cursor_model_cb`). Mode 17 (appareil modelé) : en tête de
@@ -250,8 +253,8 @@ float3 quad_inverse_projective(float2 P, float2 c00, float2 c10, float2 c11, flo
     return float3(s, t, ok);
 }
 
-// Le warp inverse d'un calque posé sur le plan : projectif sous la caméra réelle (`projective` =
-// 1, cf. `TiltedQuad::warp_flag`), bilinéaire sous un angle fixe, inchangé.
+// Le warp inverse d'un calque posé sur le plan : projectif (`projective` = 1, cf.
+// `TiltedQuad::warp_flag`, que tout écran incliné porte), bilinéaire sinon.
 float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, float projective)
 {
     if (projective > 0.5)
@@ -259,6 +262,21 @@ float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, fl
         return quad_inverse_projective(P, c00, c10, c11, c01);
     }
     return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
+// Un échantillon de l'écran incliné (mode 8) : la vidéo nette, fondue vers la pyramide de
+// profondeur de champ (t2) au-delà d'un demi-texel de cercle de confusion `coc`. Sous ce seuil,
+// l'échantillon net d'avant, à l'octet.
+float3 tilted_sample(float2 uv, float coc)
+{
+    float3 rgb = sample_yuv(uv);
+    if (coc > 0.5)
+    {
+        float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
+        float3 far_rgb = texImg.SampleLevel(samp, uv, lod).rgb;
+        rgb = lerp(rgb, far_rgb, saturate((coc - 0.5) / 1.5));
+    }
+    return rgb;
 }
 
 // Hash 2D -> [0,1) sans sin() : le hash `frac(sin(x) * 43758)` dépend de la précision du GPU,
@@ -1424,8 +1442,8 @@ float4 ps_main(VSOut i) : SV_Target
     // mode 8 : écran tilté en 3D (zoom regions "rotation" : iso/left/right) ou vu par la caméra
     // réelle (`follow-cursor`). `dst`/`quad_px` couvrent la BOUNDING BOX des 4 coins projetés
     // (`frame_geometry::tilted_screen_cb`) ; ce shader retrouve où tombe chaque pixel DANS le quad
-    // (warp inverse : bilinéaire sous un angle fixe, projectif exact sous la caméra réelle,
-    // dst_prev.w = 1) et échantillonne la vidéo à l'UV correspondant, sinon transparent.
+    // (warp inverse : projectif exact quand dst_prev.w = 1, ce que porte tout écran incliné,
+    // bilinéaire sinon) et échantillonne la vidéo à l'UV correspondant, sinon transparent.
     // fx.xy/fx.zw = coins TL/TR (px locaux, 0..quad_px) ; src_prev.xy/.zw = coins BR/BL.
     // color.xy (caméra réelle) : éclairage 1 + color.x·(s − 0.5) + color.y·(t − 0.5).
     // mb = [gx, gy, z_focus, k] : profondeur du point r du plan = (r.x - 0.5)*gx + (r.y - 0.5)*gy
@@ -1433,6 +1451,8 @@ float4 ps_main(VSOut i) : SV_Target
     // k = texels source de flou par px d'écart de profondeur (0 = profondeur de champ coupée).
     // t2 (texImg) = pyramide demi-résolution de la vidéo, 5 niveaux, mêmes UV que t0/t1 ; liée
     // explicitement à chaque draw du mode 8 (`draw_video` ne lie que t0/t1).
+    // trail_a/trail_b = coins du plan à la frame précédente, trail_mb = [taps, force] : son flou
+    // de mouvement (`FrameGeometry::tilt_trail`).
     // mode 11 : texte d'annotation, rastérisé par Direct2D (voir text.rs). D2D écrit sur une
     // surface DXGI en alpha PRÉMULTIPLIÉ, donc contrairement au mode 7 (sprite curseur, alpha
     // droit) il ne faut SURTOUT pas re-multiplier ici : les bords adoucis des glyphes
@@ -1613,16 +1633,32 @@ float4 ps_main(VSOut i) : SV_Target
         // jamais par le RGBA de la pyramide, et `k = 0` (réglage coupé) ne quitte jamais cette
         // voie. Au-delà, fondu vers la pyramide demi-résolution (t2) au niveau `log2(coc) - 1`
         // (son niveau 0 est déjà une moyenne 2x2), plafonné à DOF_MAX_LOD : au niveau 2, un
-        // bloc 4x4 soude les jambages d'un « m » en 1080p.
-        float3 rgb = sample_yuv(uv);
+        // bloc 4x4 soude les jambages d'un « m » en 1080p (`tilted_sample`).
         float2 rs = saturate(float2(r.x, r.y));
         float z = (rs.x - 0.5) * mb.x + (rs.y - 0.5) * mb.y;
         float coc = mb.w * abs(z - mb.z);
-        if (coc > 0.5)
+        float3 rgb = tilted_sample(uv, coc);
+        // Flou de mouvement, celui du mode 0 : l'UV que CE pixel montrait à la frame précédente,
+        // par le même warp inverse sur les coins d'avant (`trail_a`/`trail_b`), puis `taps`
+        // échantillons de celui-là à celui-ci, raccourcis de la force. Borné à une frame. Hors du
+        // plan d'avant, le warp prolongé donne encore le bon point (sa racine proche).
+        int taps = (int) trail_mb.x;
+        if (taps > 1 && trail_mb.y > 0.001)
         {
-            float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
-            float3 far_rgb = texImg.SampleLevel(samp, uv, lod).rgb;
-            rgb = lerp(rgb, far_rgb, saturate((coc - 0.5) / 1.5));
+            float3 rp = quad_inverse(i.local, trail_a.xy, trail_a.zw, trail_b.xy, trail_b.zw, dst_prev.w);
+            float2 uv_prev = float2(lerp(src.x, src.z, rp.x), lerp(src.y, src.w, rp.y));
+            float2 duv = (uv - uv_prev) * saturate(trail_mb.y);
+            if (dot(duv, duv) >= 1e-9)
+            {
+                float3 acc = 0.0;
+                [loop] for (int k = 0; k < 16; k++)
+                {
+                    if (k >= taps) break;
+                    float t = (float) k / (float) (taps - 1);
+                    acc += tilted_sample(uv - duv * (1.0 - t), coc);
+                }
+                rgb = acc / (float) taps;
+            }
         }
         if (dst_prev.w > 0.5)
         {

@@ -61,10 +61,14 @@ const BLUR_WGSL: &str = include_str!("vk_shaders/blur.wgsl");
 /// en parcourant les 18 wallpapers livres) en laissant le jeu actif resident.
 const IMG_CACHE_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
-/// `&LayerCB` -> `&[u8; 128]`. `LayerCB` est `#[repr(C, align(16))]`, son layout
-/// EST le buffer uniforme WGSL (16 vec4 + 1 vec2 + 2 f32 = 128 octets).
+/// Taille du buffer uniforme d'un calque : `LayerCB` entier (176 octets), le `struct Layer` de
+/// `layer.wgsl`. `blur.wgsl` n'en lit que les 128 premiers.
+const LAYER_BYTES: u64 = std::mem::size_of::<LayerCB>() as u64;
+
+/// `&LayerCB` -> ses octets. `LayerCB` est `#[repr(C, align(16))]`, son layout EST le buffer
+/// uniforme WGSL (dix vec4 et un vec2 + 2 f32 = 176 octets).
 fn layer_bytes(cb: &LayerCB) -> &[u8] {
-    unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, 128) }
+    unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, LAYER_BYTES as usize) }
 }
 
 /// Un calque de fond deja lie, en attente de son `draw`. `_buf`/`_tex`/`_view`
@@ -444,7 +448,7 @@ impl Compositor {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(128),
+                            min_binding_size: wgpu::BufferSize::new(LAYER_BYTES),
                         },
                         count: None,
                     },
@@ -2093,20 +2097,18 @@ impl Compositor {
         // sinon. Place par plan_frame (cover-fit + coins arrondis) ;
         // `src = g.cut` (crop utilisateur + zoom en UV texture) dans les deux cas.
         //
-        // FLOU DE VELOCITE, ET POURQUOI SEULEMENT SUR LE MODE 0. `src_prev`/
-        // `dst_prev` decrivent le MEME calque a la frame precedente ; le shader
-        // remappe chaque pixel de sortie par ce couple pour retrouver l'UV qu'il
-        // occupait alors, et floute le long du segment. `src_prev = g.cut` et non
-        // un `cut` d'avant : la coupe est identique aux deux frames (`plan_frame`
-        // ne fait varier que le rect de DESTINATION entre `s_dst` et
-        // `s_dst_prev`), ce que Windows documente aussi. Le mouvement vient donc
-        // entierement de `dst_prev`.
+        // FLOU DE VELOCITE. Au mode 0, `src_prev`/`dst_prev` decrivent le MEME
+        // calque a la frame precedente ; le shader remappe chaque pixel de sortie
+        // par ce couple pour retrouver l'UV qu'il occupait alors, et floute le long
+        // du segment. `src_prev = g.cut` et non un `cut` d'avant : la coupe est
+        // identique aux deux frames (`plan_frame` ne fait varier que le rect de
+        // DESTINATION entre `s_dst` et `s_dst_prev`), ce que Windows documente
+        // aussi. Le mouvement vient donc entierement de `dst_prev`.
         //
-        // Le mode 8 n'en recoit PAS, et ce n'est pas un oubli : ces deux champs y
-        // portent deja les coins projetes du quad (BR/BL dans `src_prev`,
-        // `plane_px` dans `dst_prev`). Les deux sens ne peuvent pas cohabiter dans
-        // un meme draw. macOS et Windows sautent egalement le flou sur le chemin
-        // incline, pour la meme raison.
+        // Au mode 8, ces deux champs portent deja les coins projetes du quad
+        // (BR/BL dans `src_prev`, `plane_px` dans `dst_prev`) : le plan d'avant
+        // arrive dans ses propres champs (`trail_a`/`trail_b`/`trail_mb`,
+        // `FrameGeometry::tilt_trail`), meme flou borne a une frame.
         // Sous un cadre de fenetre, l'ecran garde ses coins HAUTS carres (`mb.w` au mode 0,
         // `dst_prev.z` au mode 8) ; 0 sans cadre, soit le rendu d'avant.
         let square_top = g.screen_square_top();
@@ -2143,6 +2145,7 @@ impl Compositor {
                 dof,
                 [rw, rh],
                 g.screen_mask,
+                g.tilt_trail([rw, rh]),
             ),
         };
         // Bind group construit AVANT le pass (doit vivre pendant tout le pass) ;

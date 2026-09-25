@@ -938,7 +938,24 @@ pub enum ShadowCaster {
     /// Rect droit (mode 2) : `dst` en fractions de sortie, `size_px` sa taille, `radius` en px.
     Upright { dst: [f32; 4], size_px: [f32; 2], radius: f32 },
     /// Quad incliné (mode 12) : coins TL, TR, BR, BL relatifs à `center_px`, rayon du plan.
-    Tilted { corners: [(f32, f32); 4], center_px: [f32; 2], radius: f32 },
+    /// `mask` : le slot d'un layout en bloc, qui rogne le plan — l'ombre est alors celle de
+    /// leur intersection, ce qu'on voit (`shadow_mask_fields`).
+    Tilted { corners: [(f32, f32); 4], center_px: [f32; 2], radius: f32, mask: Option<ScreenMask> },
+}
+
+/// Les champs du mode 12 qui rognent l'ombre d'un plan incliné au slot qui le masque : `dst_prev`
+/// = le slot en px LOCAUX à la boîte de l'ombre (x0, y0, x1, y1), `mb.w` = le rayon de ses coins.
+/// `origin_px` : l'origine de ce repère local, en px de sortie, décalage de l'ombre NON compris —
+/// le slot et le plan portent le même. Des zéros sans masque : le shader n'en fait rien.
+pub fn shadow_mask_fields(
+    mask: Option<ScreenMask>,
+    origin_px: [f32; 2],
+    render_px: [f32; 2],
+) -> ([f32; 4], f32) {
+    let Some(m) = mask else { return ([0.0; 4], 0.0) };
+    let [x, y, w, h] = m.rect;
+    let (x0, y0) = (x * render_px[0] - origin_px[0], y * render_px[1] - origin_px[1]);
+    ([x0, y0, x0 + w * render_px[0], y0 + h * render_px[1]], m.radius_px)
 }
 /// Rect [x,y,w,h] normalisé d'un sprite de curseur de taille `w`×`h` dont le pivot `hotspot`
 /// (fraction 0..1 de l'image) doit tomber exactement sur `center`.
@@ -1129,6 +1146,10 @@ pub const CAMERA_LIGHT_GAIN: f32 = 0.2;
 /// porte l'éclairage, `1 + color.x·(s − 0,5) + color.y·(t − 0,5)` : la lampe de la caméra, fixe
 /// dans le monde comme l'œil, éclaire un peu plus le côté proche. Nuls sous un angle fixe, dont le
 /// rendu reste celui d'avant à l'octet.
+///
+/// Sous le masque d'un layout en bloc (`mask`) : le plan penche DANS le slot, qui le rogne. Il est
+/// dessiné dans le rect du slot au lieu de sa bbox, et `color.w` porte le rayon des coins du slot,
+/// que le shader applique à ce rect. Nul sans masque, comme avant.
 #[allow(clippy::too_many_arguments)]
 pub fn tilted_screen_cb(
     quad: &crate::regions::TiltedQuad,
@@ -1140,6 +1161,7 @@ pub fn tilted_screen_cb(
     top_lift_px: f32,
     dof: bool,
     render_px: [f32; 2],
+    mask: Option<ScreenMask>,
 ) -> LayerCB {
     let [rw, rh] = render_px;
     let corners = quad.corners;
@@ -1172,7 +1194,7 @@ pub fn tilted_screen_cb(
     } else {
         [0.0; 4]
     };
-    LayerCB {
+    let mut cb = LayerCB {
         dst: [(center_px[0] + min_x) / rw, (center_px[1] + min_y) / rh, bbox_w / rw, bbox_h / rh],
         src,
         quad_px: [bbox_w, bbox_h],
@@ -1189,7 +1211,12 @@ pub fn tilted_screen_cb(
         // Gradient de profondeur du plan, profondeur du focus et `k` (`depth_mb`).
         mb: quad.depth_mb(s_px, focus_plane, dof),
         ..Default::default()
+    };
+    if let Some(mask) = mask {
+        reframe_warped(&mut cb, mask.rect, render_px);
+        cb.color[3] = mask.radius_px;
     }
+    cb
 }
 
 /// `LayerCB` d'une ombre portée par un quadrilatère (mode 12). `corners` (TL, TR, BR, BL) en px
@@ -1647,6 +1674,48 @@ pub struct FrameGeometry {
     /// déjà la boîte rétrécie, et `s_radius` le rayon des coins de l'écran — des seuls coins BAS
     /// sous une barre de titre (fenêtre, navigateur), des quatre pour les autres appareils.
     pub window_frame: Option<WindowFrame>,
+    /// Layouts en bloc : le slot de l'écran, un conteneur qui le MASQUE (cf. `ScreenMask`).
+    /// `None` ailleurs, et le rendu est celui d'avant, à l'octet.
+    pub screen_mask: Option<ScreenMask>,
+}
+
+/// Le conteneur d'un layout en bloc (côte à côte, haut/bas) : un masque fixe, overflow hidden.
+///
+/// L'écran y garde la géométrie de tous les layouts — le zoom dans la boîte (#179), la 3D sur le
+/// métrage — et seul son DESSIN est rogné au slot. Sans lui, la boîte zoomée débordait sur la
+/// caméra et dans l'espace qui les sépare, et le bloc ne tenait plus. Le masque, lui, ne zoome
+/// ni ne penche jamais : le layout garde son rect et ses coins, et son ombre est la sienne.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScreenMask {
+    /// Le slot, en fractions de la sortie : `layout.screenRect`, que le zoom ne touche pas.
+    pub rect: [f32; 4],
+    /// Le rayon de ses coins, en px du render target : celui de l'écran au repos.
+    pub radius_px: f32,
+}
+
+impl ScreenMask {
+    /// `dst` rogné au slot, en fractions de la sortie. `None` s'il n'en reste rien ; `dst` tel
+    /// quel, à l'octet, s'il y tient déjà (une intersection recalculée en différerait d'un ulp).
+    fn clip(&self, dst: [f32; 4]) -> Option<[f32; 4]> {
+        let [x, y, w, h] = self.rect;
+        if dst[0] >= x && dst[1] >= y && dst[0] + dst[2] <= x + w && dst[1] + dst[3] <= y + h {
+            return Some(dst);
+        }
+        let r = intersect_rect(dst, self.rect);
+        (r[2] > 0.0 && r[3] > 0.0).then_some(r)
+    }
+}
+
+/// Redessine un calque WARPÉ (modes 8 et 16 : coins TL/TR dans `fx`, BR/BL dans `src_prev`, en px
+/// locaux à `dst`) dans une autre boîte `dst`. Le warp ne dépend pas de la boîte de dessin, qui ne
+/// fait que borner les pixels rastérisés : il suffit de reporter les coins dans son repère.
+fn reframe_warped(cb: &mut LayerCB, dst: [f32; 4], render_px: [f32; 2]) {
+    let shift = [(dst[0] - cb.dst[0]) * render_px[0], (dst[1] - cb.dst[1]) * render_px[1]];
+    for c in [&mut cb.fx, &mut cb.src_prev] {
+        *c = [c[0] - shift[0], c[1] - shift[1], c[2] - shift[0], c[3] - shift[1]];
+    }
+    cb.dst = dst;
+    cb.quad_px = [dst[2] * render_px[0], dst[3] * render_px[1]];
 }
 
 /// Rect de destination d'une annotation dans un rect d'ancrage, en fractions de la sortie.
@@ -1820,7 +1889,16 @@ impl FrameGeometry {
     /// qu'un quad plat ne sait pas porter.
     pub fn shadow_caster(&self, render_px: [f32; 2]) -> ShadowCaster {
         let center_px = self.screen_center_px(render_px);
-        match (&self.window_frame, self.screen_tilt_in(render_px)) {
+        let tilt = self.screen_tilt_in(render_px);
+        // Sous le masque d'un layout en bloc, l'ombre est celle de ce qu'on voit. Droite, la boîte
+        // zoomée couvre tout le slot : c'est le slot, qui ne zoome pas. Inclinée, le plan rogné
+        // par le slot (`mask` du quad, plus bas).
+        if let (Some(mask), None) = (self.screen_mask, &tilt) {
+            let dst = mask.rect;
+            let size_px = [dst[2] * render_px[0], dst[3] * render_px[1]];
+            return ShadowCaster::Upright { dst, size_px, radius: mask.radius_px };
+        }
+        match (&self.window_frame, tilt) {
             (None, None) => ShadowCaster::Upright {
                 dst: self.s_dst,
                 size_px: [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]],
@@ -1830,6 +1908,7 @@ impl FrameGeometry {
                 corners: quad.corners,
                 center_px,
                 radius: self.s_radius * quad.scale,
+                mask: self.screen_mask,
             },
             (Some(frame), None) => {
                 let [ml, mt, mr, mb] = frame.margins;
@@ -1848,17 +1927,46 @@ impl FrameGeometry {
             }
             (Some(frame), Some(_)) => {
                 let (corners, scale, _) = self.window_frame_corners(frame.margins, render_px);
-                ShadowCaster::Tilted { corners, center_px, radius: frame.radius[0] * scale }
+                ShadowCaster::Tilted { corners, center_px, radius: frame.radius[0] * scale, mask: None }
             }
         }
+    }
+
+    /// L'écran droit (mode 0) sous le masque d'un layout en bloc : `dst` rogné au slot, `src`
+    /// d'autant (même mapping image→écran), et les coins du slot. Sans masque, les valeurs du
+    /// backend repartent telles quelles, à l'octet. Le flou de mouvement n'a rien à suivre : il
+    /// lit la frame précédente par `dst_prev`/`src_prev`, que le masque ne touche pas.
+    pub fn mask_flat_screen(
+        &self,
+        dst: [f32; 4],
+        src: [f32; 4],
+        quad_px: [f32; 2],
+        radius_px: f32,
+        render_px: [f32; 2],
+    ) -> ([f32; 4], [f32; 4], [f32; 2], f32) {
+        let Some(mask) = self.screen_mask else { return (dst, src, quad_px, radius_px) };
+        let clipped = intersect_rect(dst, mask.rect);
+        let u = |x: f32| src[0] + (x - dst[0]) / dst[2] * (src[2] - src[0]);
+        let v = |y: f32| src[1] + (y - dst[1]) / dst[3] * (src[3] - src[1]);
+        let [x0, y0, w, h] = clipped;
+        (
+            clipped,
+            [u(x0), v(y0), u(x0 + w), v(y0 + h)],
+            [w * render_px[0], h * render_px[1]],
+            mask.radius_px,
+        )
     }
 
     /// Décalage de l'ombre portée de l'écran, en px de sortie : vers le bas sous un écran droit
     /// ou un angle fixe (inchangé) ; sous la caméra réelle, le long de la lumière qui éclaire aussi
     /// la flèche modélisée (`MODEL_LIGHT`), pour que les deux ombres tombent du même côté. La
-    /// direction glisse avec le poids de la caméra : aucun saut à l'entrée du zoom.
+    /// direction glisse avec le poids de la caméra : aucun saut à l'entrée du zoom. Sous le masque
+    /// d'un layout en bloc, l'ombre est celle du slot, que la caméra ne fait pas tourner.
     pub fn screen_shadow_offset(&self) -> [f32; 2] {
         let off = SCREEN_SHADOW_OFFSET_FRAC * self.frame_min_px;
+        if self.screen_mask.is_some() {
+            return [0.0, off];
+        }
         let Some(pose) = self.camera else { return [0.0, off] };
         let (lx, ly) = (-MODEL_LIGHT[0], -MODEL_LIGHT[1]);
         let n = lx.hypot(ly);
@@ -2121,11 +2229,21 @@ impl FrameGeometry {
                 upright
             };
             let dst = pad_rect(rect, render_px, PRIVACY_MASK_PAD_PX * zoom_k);
+            // Sous le masque d'un layout en bloc, rien n'est dessiné hors du slot : rien à y
+            // cacher, et un masque y flouterait la caméra.
+            let (dst, clipped) = match self.screen_mask {
+                Some(m) => {
+                    let c = m.clip(dst)?;
+                    (c, c != dst)
+                }
+                None => (dst, false),
+            };
             let mut mask = PrivacyMask::upright(dst, render_px, zoom_k);
             // Un ovale inscrit dans la boîte ÉLARGIE ne contient plus l'ovale courant dès que
             // les deux centres diffèrent : son bord laisserait passer une frange du secret. On
-            // retombe alors sur le rectangle, comme le tracé libre.
-            mask.oval_ok = !trail;
+            // retombe alors sur le rectangle, comme le tracé libre. Même chose dans la boîte
+            // ROGNÉE par le slot.
+            mask.oval_ok = !trail && !clipped;
             return Some(mask);
         }
 
@@ -2159,8 +2277,18 @@ impl FrameGeometry {
             max_y = max_y.max(py);
         }
         // Plancher d'un pixel : un masque très fin ferait diverger le warp inverse.
-        let quad_px = [(max_x - min_x).max(1.0), (max_y - min_y).max(1.0)];
-        let local = pts.map(|[px, py]| [px - min_x, py - min_y]);
+        let mut quad_px = [(max_x - min_x).max(1.0), (max_y - min_y).max(1.0)];
+        let mut local = pts.map(|[px, py]| [px - min_x, py - min_y]);
+        let mut dst = [min_x / rw, min_y / rh, quad_px[0] / rw, quad_px[1] / rh];
+        // Sous le masque d'un layout en bloc, dessiné dans la part du slot qu'il couvre : les
+        // coins passent dans le repère de cette boîte, le warp (et son ovale) ne bouge pas.
+        if let Some(m) = self.screen_mask {
+            let c = m.clip(dst)?;
+            let shift = [(c[0] - dst[0]) * rw, (c[1] - dst[1]) * rh];
+            local = local.map(|[px, py]| [px - shift[0], py - shift[1]]);
+            quad_px = [c[2] * rw, c[3] * rh];
+            dst = c;
+        }
         // La perspective grossit localement le côté proche : la force suit l'arête la plus
         // agrandie par rapport au rect droit zoomé, pour que nulle part le masque ne soit plus
         // fin, rapporté au contenu, qu'au repos.
@@ -2171,7 +2299,7 @@ impl FrameGeometry {
             .max(len(pts[0], pts[3]) / eh)
             .max(len(pts[1], pts[2]) / eh);
         Some(PrivacyMask {
-            dst: [min_x / rw, min_y / rh, quad_px[0] / rw, quad_px[1] / rh],
+            dst,
             quad_px,
             warp: Some(local),
             projective: quad.projective,
@@ -2239,6 +2367,13 @@ fn union_rect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
     let (x0, y0) = (a[0].min(b[0]), a[1].min(b[1]));
     let (x1, y1) = ((a[0] + a[2]).max(b[0] + b[2]), (a[1] + a[3]).max(b[1] + b[3]));
     [x0, y0, x1 - x0, y1 - y0]
+}
+
+/// Vide (largeur ou hauteur nulle) quand les deux rects ne se touchent pas.
+fn intersect_rect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    let (x0, y0) = (a[0].max(b[0]), a[1].max(b[1]));
+    let (x1, y1) = ((a[0] + a[2]).min(b[0] + b[2]), (a[1] + a[3]).min(b[1] + b[3]));
+    [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
 }
 
 fn pad_rect(r: [f32; 4], render_px: [f32; 2], pad_px: f32) -> [f32; 4] {
@@ -2676,7 +2811,6 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // la boîte, pas suivre le cadre.
         let frame_min_px = rw.min(rh);
         let s_px = [s_dst[2] * rw, s_dst[3] * rh];
-        let s_min_px = s_px[0].min(s_px[1]);
         let app_screen_radius_frac = scene.and_then(|s| s.layout.screen_radius_frac);
         let scene_roundness_frac = scene.map(|s| s.effects.roundness_frac);
         // ---- Le rayon des coins, en UN seul endroit ----
@@ -2695,20 +2829,33 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // chaque bordure garde son épaisseur tout autour de chaque coin. Sous le chrome de
         // fenêtre, les coins HAUTS du métrage restent carrés, à ras de la barre : l'arrondi du
         // haut se fait une seule fois, par le cadre (`screen_square_top`, `screen_top_lift_px`).
-        let outer_radius = match (cfg.rounded, app_screen_radius_frac, scene_roundness_frac) {
+        let outer_radius_of = |s_px: [f32; 2]| match (cfg.rounded, app_screen_radius_frac, scene_roundness_frac) {
             (false, _, _) => 0.0,
             (true, _, _) if frame_kind != crate::scene::SceneFrame::None => {
                 let t = scene.map(roundness_slider_position).unwrap_or(0.0);
                 t * frame_roundness_cap(frame_kind) * frame_unit_px(s_px, [rw, rh])
             }
             // Preset en bloc : le rayon appartient à la boîte écran (parité exacte avec la caméra).
-            (true, Some(f), _) => f * s_min_px,
+            (true, Some(f), _) => f * s_px[0].min(s_px[1]),
             // Scène sans rayon imposé : slider Roundness, relatif au cadre.
             (true, None, Some(f)) => f * frame_min_px,
             // Fixture/bench (pas de scène) : chemin inspector historique, inchangé.
             (true, None, None) => p.screen.radius * lp.radius_scale,
         };
-        let s_radius = screen_corner_radius_px(outer_radius, s_px);
+        let s_radius = screen_corner_radius_px(outer_radius_of(s_px), s_px);
+        // Layouts en bloc : le slot masque l'écran (`ScreenMask`), avec les coins de l'écran AU
+        // REPOS — la boîte, elle, grandit avec le zoom. `screen_cover` est le drapeau du slot :
+        // l'app ne le lève que pour ces deux layouts, et seulement sur un clip qui a une caméra.
+        // Pas sous un cadre : il déborde du slot au repos, le masque le couperait.
+        let screen_mask = (scene.is_some_and(|s| s.layout.screen_cover)
+            && frame_kind == crate::scene::SceneFrame::None)
+            .then(|| {
+                let slot_px = [s_base[2] * rw, s_base[3] * rh];
+                ScreenMask {
+                    rect: s_base,
+                    radius_px: screen_corner_radius_px(outer_radius_of(slot_px), slot_px),
+                }
+            });
         let window_frame = frame_margins.map(|margins| {
             let (l, t, b) = (margins[0] * s_px[0], margins[1] * s_px[1], margins[3] * s_px[1]);
             // La fenêtre n'a qu'un rayon (mode 14) : celui de ses coins BAS, où le métrage s'arrondit
@@ -2781,6 +2928,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         w_radius,
         shape_fade,
         window_frame,
+        screen_mask,
     }
 }
 
@@ -3047,6 +3195,11 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         Some(s) if s.cursor.clip_to_bounds => cursor_bounds,
         _ => [-1.0, -1.0, 3.0, 3.0],
     };
+    // Le curseur est sur le métrage : sous le masque d'un layout en bloc, le slot le rogne aussi.
+    let clip = match g.screen_mask {
+        Some(m) => intersect_rect(clip, m.rect),
+        None => clip,
+    };
 
     // L'impact : un anneau par clic récent, centré sur son point BRUT, là où la pointe se pose.
     let strength = (lp.cursor_bounce_scale / MODEL_CLICK_BOUNCE_REF).clamp(0.0, 2.0);
@@ -3057,7 +3210,12 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
             .clicks_with_points(input.t - IMPACT_DELAY_S - IMPACT_S, input.t - IMPACT_DELAY_S)
             .filter_map(|(tc, p)| {
                 let impact = impact_at(input.t - tc, strength)?;
-                cursor_impact_cb(place(Some(p), g.s_dst)?, half_px, impact, alpha)
+                let mut cb = cursor_impact_cb(place(Some(p), g.s_dst)?, half_px, impact, alpha)?;
+                if let Some(m) = g.screen_mask {
+                    let dst = m.clip(cb.dst)?;
+                    reframe_warped(&mut cb, dst, [rw, rh]);
+                }
+                Some(cb)
             })
             .collect()
     } else {
@@ -3814,6 +3972,7 @@ mod tests {
                     corners: q.corners,
                     center_px: none.screen_center_px(RENDER),
                     radius: none.s_radius * q.scale,
+                    mask: None,
                 },
             };
             assert_eq!(none.shadow_caster(RENDER), expected);
@@ -3899,7 +4058,7 @@ mod tests {
             let g = framed_plan(&framed_scene(r#","frame":"window-light""#, preset, 1.0, false));
             let wf = g.window_frame.expect("un cadre");
             let quad = g.screen_tilt_in(RENDER).expect("incliné");
-            let ShadowCaster::Tilted { corners: frame, center_px, radius } = g.shadow_caster(RENDER) else {
+            let ShadowCaster::Tilted { corners: frame, center_px, radius, .. } = g.shadow_caster(RENDER) else {
                 panic!("un cadre incliné porte une ombre inclinée");
             };
             assert_eq!(center_px, g.screen_center_px(RENDER));
@@ -4100,6 +4259,7 @@ mod tests {
                 g.screen_top_lift_px(RENDER),
                 false,
                 RENDER,
+                g.screen_mask,
             )
         };
         for (name, _) in DEVICES {
@@ -4987,6 +5147,213 @@ mod tests {
         assert!((m.strength - 2.0).abs() < 1e-3, "force {} au lieu de 2", m.strength);
     }
 
+    /// Le bloc « côte à côte » tel que `computeCompositeLayout` le résout : l'écran dans un slot
+    /// au ratio de la capture, la caméra à côté, `screenCover`. Zoom `zoom` sous `rotation`, focus
+    /// décentré (0.3, 0.6). `cover: false` rend le même bloc sans slot, comme les autres layouts.
+    fn slot_scene(rotation: &str, zoom: f32, cover: bool) -> Scene {
+        Scene::from_json(&format!(
+            r##"{{
+            "clips":[{{"screenPath":"/s.mp4","webcamPath":"/w.mp4","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+            "layout":{{"preset":"dual-frame","webcamSize":0.25,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,
+                      "webcamReactiveZoom":false,"screenRect":{{"x":0.1,"y":0.25,"width":0.55,"height":0.55}},
+                      "webcamRect":{{"x":0.666,"y":0.25,"width":0.234,"height":0.55}},
+                      "screenRadiusFrac":0.04,"webcamRadiusFrac":0.04,"screenCover":{cover}}},
+            "effects":{{"padding":0.5,"blur":false,"shadow":0.5,"roundnessFrac":0.03,"motionBlur":0}},
+            "background":{{"kind":"color","color":"#1e1e2e"}},
+            "zoomRegions":[{{"clipIndex":0,"startSec":0.0,"endSec":5.0,"scale":{zoom},"focusX":0.3,"focusY":0.6,"rotation":{rotation}}}],
+            "cursor":{{"show":true,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":1,"clipToBounds":false,"theme":"default"}},
+            "cropByClip":[null],
+            "output":{{"width":1920,"height":1080,"fps":60}}
+        }}"##
+        ))
+        .expect("scène côte à côte")
+    }
+
+    /// Le `screenRect` de `slot_scene`.
+    const SLOT: [f32; 4] = [0.1, 0.25, 0.55, 0.55];
+
+    /// Une piste où le pointeur reste garé en (x, y).
+    fn parked_track(x: f32, y: f32) -> &'static crate::cursor::CursorTrack {
+        Box::leak(Box::new(crate::cursor::CursorTrack::new(
+            (0..=150).map(|i| (i as f32 / 30.0, x, y)).collect(),
+            vec![],
+            vec![],
+        )))
+    }
+
+    /// `slot_scene` à 1,5 s (zoom tenu), pointeur garé en `pointer` (la caméra en orbite le suit).
+    fn slot_plan(scene: &Scene, pointer: Option<(f32, f32)>) -> FrameGeometry {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let mut input = golden_input(scene, &cfg);
+        input.render_px = RENDER;
+        input.cursor = pointer.map(|(x, y)| parked_track(x, y));
+        plan_frame(&input)
+    }
+
+    /// Côte à côte et haut/bas : le slot MASQUE l'écran (overflow hidden). L'écran garde la
+    /// géométrie de tous les layouts — sa boîte zoomée déborde — et seul son dessin est rogné au
+    /// slot, coins du slot compris, sans déplacer un pixel. L'ombre est celle du slot.
+    #[test]
+    fn a_block_layout_masks_its_screen_with_the_slot() {
+        let rest = slot_plan(&slot_scene("null", 1.0, true), None);
+        let g = slot_plan(&slot_scene("null", 2.0, true), None);
+        let free = slot_plan(&slot_scene("null", 2.0, false), None);
+        assert_eq!(free.screen_mask, None, "sans slot, pas de masque");
+        let mask = g.screen_mask.expect("un layout en bloc masque son écran");
+        assert_eq!(mask.rect, SLOT);
+        assert!((mask.radius_px - rest.s_radius).abs() < 1e-3, "coins {} au lieu de {}", mask.radius_px, rest.s_radius);
+
+        // La géométrie de partout : la boîte zoomée est celle du même bloc sans slot, et déborde.
+        for k in 0..4 {
+            assert!((g.s_dst[k] - free.s_dst[k]).abs() < 1e-3, "{:?} au lieu de {:?}", g.s_dst, free.s_dst);
+        }
+        assert!(!contains(SLOT, g.s_dst, 1e-3), "garde : la boîte zoomée doit déborder, {:?}", g.s_dst);
+
+        // Le dessin, lui, est rogné au slot, avec ses coins.
+        let s_px = [g.s_dst[2] * RENDER[0], g.s_dst[3] * RENDER[1]];
+        let (dst, src, quad_px, radius) = g.mask_flat_screen(g.s_dst, g.cut, s_px, g.s_radius, RENDER);
+        for k in 0..4 {
+            assert!((dst[k] - SLOT[k]).abs() < 1e-6, "dessin {dst:?} au lieu du slot");
+        }
+        assert_eq!(quad_px, [dst[2] * RENDER[0], dst[3] * RENDER[1]]);
+        assert_eq!(radius, mask.radius_px);
+        // Rogner ne déplace aucun pixel : même mapping image→écran, coins du slot compris.
+        let uv = |d: [f32; 4], s: [f32; 4], x: f32, y: f32| {
+            [s[0] + (x - d[0]) / d[2] * (s[2] - s[0]), s[1] + (y - d[1]) / d[3] * (s[3] - s[1])]
+        };
+        for (x, y) in [(0.1, 0.25), (0.65, 0.8), (0.3, 0.5)] {
+            let (a, b) = (uv(dst, src, x, y), uv(g.s_dst, g.cut, x, y));
+            assert!((a[0] - b[0]).abs() < 1e-5 && (a[1] - b[1]).abs() < 1e-5, "({x}, {y}) : {a:?} au lieu de {b:?}");
+        }
+
+        let size_px = [SLOT[2] * RENDER[0], SLOT[3] * RENDER[1]];
+        assert_eq!(g.shadow_caster(RENDER), ShadowCaster::Upright { dst: SLOT, size_px, radius: mask.radius_px });
+        // Sans masque, les valeurs du backend repartent telles quelles, à l'octet.
+        let free_px = [free.s_dst[2] * RENDER[0], free.s_dst[3] * RENDER[1]];
+        assert_eq!(
+            free.mask_flat_screen(free.s_dst, free.cut, free_px, free.s_radius, RENDER),
+            (free.s_dst, free.cut, free_px, free.s_radius)
+        );
+    }
+
+    /// Incliné, angle fixe ou caméra en orbite : c'est le MÉTRAGE qui penche, avec le plan de tous
+    /// les layouts, et le slot le rogne — le conteneur, lui, ne penche jamais. Le plan est dessiné
+    /// dans le rect du slot (coins arrondis par le shader, `color.w`), et son ombre est celle de
+    /// ce qu'on voit, le plan rogné par le slot.
+    #[test]
+    fn a_tilted_zoom_tilts_the_footage_inside_its_slot() {
+        for rotation in [r#""iso""#, r#""right""#, r#""follow-cursor""#] {
+            let g = slot_plan(&slot_scene(rotation, 2.0, true), Some((0.8, 0.3)));
+            let free = slot_plan(&slot_scene(rotation, 2.0, false), Some((0.8, 0.3)));
+            let mask = g.screen_mask.expect("masque");
+            assert!(g.tilted(), "{rotation} : garde, l'écran doit pencher");
+            let s_px = [g.s_dst[2] * RENDER[0], g.s_dst[3] * RENDER[1]];
+            let quad = g.screen_tilt(s_px).expect("incliné");
+            let free_px = [free.s_dst[2] * RENDER[0], free.s_dst[3] * RENDER[1]];
+            for (a, b) in quad.corners.iter().zip(free.screen_tilt(free_px).expect("incliné").corners.iter()) {
+                assert!((a.0 - b.0).abs() < 0.5 && (a.1 - b.1).abs() < 0.5, "{rotation} : {a:?} au lieu de {b:?}");
+            }
+            let (hx, hy) = quad.half_extents_px();
+            let slot_px = [SLOT[2] * RENDER[0], SLOT[3] * RENDER[1]];
+            assert!(hx > slot_px[0] * 0.5 && hy > slot_px[1] * 0.5, "{rotation} : garde, le plan zoomé déborde du slot");
+
+            let centre = g.screen_center_px(RENDER);
+            let draw = |m| tilted_screen_cb(&quad, s_px, centre, g.cut, g.focus_plane, g.s_radius, 0.0, false, RENDER, m);
+            let (cb, bare) = (draw(g.screen_mask), draw(None));
+            assert_eq!(cb.dst, SLOT, "{rotation} : dessiné dans le slot");
+            assert_eq!(cb.color[3], mask.radius_px);
+            assert_eq!(bare.color[3], 0.0, "sans masque, rien ne change");
+            // Les coins reportés dans le repère du slot : le même plan, au centième de pixel.
+            let corners = |c: &LayerCB| {
+                [[c.fx[0], c.fx[1]], [c.fx[2], c.fx[3]], [c.src_prev[0], c.src_prev[1]], [c.src_prev[2], c.src_prev[3]]]
+                    .map(|[x, y]| [c.dst[0] * RENDER[0] + x, c.dst[1] * RENDER[1] + y])
+            };
+            for (a, b) in corners(&cb).iter().zip(corners(&bare).iter()) {
+                assert!((a[0] - b[0]).abs() < 1e-2 && (a[1] - b[1]).abs() < 1e-2, "{rotation} : coin {a:?} au lieu de {b:?}");
+            }
+            match g.shadow_caster(RENDER) {
+                ShadowCaster::Tilted { mask: m, .. } => assert_eq!(m, Some(mask), "{rotation}"),
+                other => panic!("{rotation} : {other:?}"),
+            }
+        }
+        // Le slot passé à l'ombre, en px locaux à sa boîte : décalé de l'origine de celle-ci.
+        let mask = ScreenMask { rect: SLOT, radius_px: 12.0 };
+        let (rect, r) = shadow_mask_fields(Some(mask), [100.0, 50.0], RENDER);
+        let want = [0.1 * 1920.0 - 100.0, 0.25 * 1080.0 - 50.0, 0.65 * 1920.0 - 100.0, 0.8 * 1080.0 - 50.0];
+        for k in 0..4 {
+            assert!((rect[k] - want[k]).abs() < 1e-3, "{rect:?} au lieu de {want:?}");
+        }
+        assert_eq!(r, 12.0);
+        assert_eq!(shadow_mask_fields(None, [100.0, 50.0], RENDER), ([0.0; 4], 0.0));
+    }
+
+    /// Le flou de confidentialité suit le métrage comme ailleurs, et le slot le rogne : ce qui en
+    /// sort n'est pas dessiné, rien à y cacher, et un masque y flouterait la caméra.
+    #[test]
+    fn a_privacy_mask_stays_inside_the_slot() {
+        let g = slot_plan(&slot_scene("null", 2.0, true), None);
+        let free = slot_plan(&slot_scene("null", 2.0, false), None);
+        let mut a = blur_annotation("");
+        // La vue x2 autour de (0.3, 0.6) : [0.05, 0.55] × [0.35, 0.85] de l'écran.
+        (a.x, a.y) = (0.2, 0.5);
+        let (m, f) = (g.privacy_mask(&a, RENDER).expect("masque"), free.privacy_mask(&a, RENDER).expect("masque"));
+        for k in 0..4 {
+            assert!((m.dst[k] - f.dst[k]).abs() < 1e-4, "dedans : {:?} au lieu de {:?}", m.dst, f.dst);
+        }
+        assert!(m.oval_ok, "dedans, l'ovale tient");
+        // À cheval sur le bord droit de la vue.
+        (a.x, a.y) = (0.45, 0.5);
+        let (m, f) = (g.privacy_mask(&a, RENDER).expect("masque"), free.privacy_mask(&a, RENDER).expect("masque"));
+        assert!(!contains(SLOT, f.dst, 1e-4), "garde : sans slot, le masque sort du slot, {:?}", f.dst);
+        assert!(contains(SLOT, m.dst, 1e-6), "{:?} sort du slot", m.dst);
+        let want = intersect_rect(f.dst, SLOT);
+        for k in 0..4 {
+            assert!((m.dst[k] - want[k]).abs() < 1e-5, "rogné, pas déplacé : {:?} au lieu de {want:?}", m.dst);
+        }
+        assert!(!m.oval_ok, "rogné, l'ovale inscrit ne couvrirait plus le secret");
+        // Hors de la vue.
+        (a.x, a.y) = (0.62, 0.18);
+        assert!(g.privacy_mask(&a, RENDER).is_none(), "hors du slot : rien à masquer");
+
+        // Incliné : dessiné dans la part du slot qu'il couvre, le warp au même endroit.
+        let t = slot_plan(&slot_scene(r#""iso""#, 2.0, true), None);
+        let tf = slot_plan(&slot_scene(r#""iso""#, 2.0, false), None);
+        (a.x, a.y) = (0.45, 0.5);
+        let (m, f) = (t.privacy_mask(&a, RENDER).expect("masque incliné"), tf.privacy_mask(&a, RENDER).expect("masque"));
+        assert!(contains(SLOT, m.dst, 1e-6), "incliné : {:?} sort du slot", m.dst);
+        let abs = |p: &PrivacyMask| p.warp.expect("incliné").map(|[x, y]| [p.dst[0] * RENDER[0] + x, p.dst[1] * RENDER[1] + y]);
+        for (x, y) in abs(&m).iter().zip(abs(&f).iter()) {
+            assert!((x[0] - y[0]).abs() < 0.5 && (x[1] - y[1]).abs() < 0.5, "incliné : coin {x:?} au lieu de {y:?}");
+        }
+    }
+
+    /// Le curseur est sur le métrage : le slot le rogne aussi.
+    #[test]
+    fn the_cursor_is_clipped_to_the_slot() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        for (cover, want) in [(true, SLOT), (false, [-1.0, -1.0, 3.0, 3.0])] {
+            let scene = slot_scene("null", 2.0, cover);
+            let g = slot_plan(&scene, Some((0.3, 0.6)));
+            let plan = plan_cursor(
+                &g,
+                &CursorPlanInput {
+                    render_px: RENDER,
+                    u_max: 1.0,
+                    v_max: 1080.0 / 1088.0,
+                    cfg: &cfg,
+                    live: live_params_from_scene(&scene),
+                    scene: Some(&scene),
+                    track: parked_track(0.3, 0.6),
+                    t: 1.5,
+                },
+            )
+            .expect("un curseur dans la vue");
+            for k in 0..4 {
+                assert!((plan.clip[k] - want[k]).abs() < 1e-6, "slot {cover} : clip {:?} au lieu de {want:?}", plan.clip);
+            }
+        }
+    }
+
     /// La parallaxe (`regions::dynamic_tilt`) passe par `plan_frame` une seule fois, et le
     /// curseur la porte comme l'écran : même quad, même échelle gelée. Curseur masqué ou
     /// région sans préset → rien ne bouge.
@@ -5833,6 +6200,7 @@ mod tests {
             w_radius: 0.0,
             shape_fade: 0.0,
             window_frame: None,
+            screen_mask: None,
         }
     }
 

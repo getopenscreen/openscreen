@@ -1378,6 +1378,13 @@ fragment float4 ps_main(VSOut i [[stage_in]],
             v[k] = line_cross(np, dot(quad[(k + 3) & 3], np) - r, nc, dot(quad[k], nc) - r);
         }
         float d = sd_convex_quad(i.local, v[0], v[1], v[2], v[3]) - r;
+        // Slot d'un layout en bloc (`dst_prev` = le slot en px locaux, `mb.w` = son rayon ; nul
+        // ailleurs) : l'ombre est celle de ce qu'on voit, le plan rogné par le slot (cf. HLSL).
+        if (layer.dst_prev.z > layer.dst_prev.x)
+        {
+            float2 h = (layer.dst_prev.zw - layer.dst_prev.xy) * 0.5;
+            d = max(d, sd_round_rect(i.local - layer.dst_prev.xy - h, h, layer.mb.w));
+        }
         float spread = max(layer.mb.y, 1e-3);
         float a = layer.color.a * (1.0 - smoothstep(0.0, spread, d));
         return float4(layer.color.rgb * a, a);
@@ -1421,6 +1428,9 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         float d = (layer.dst_prev.z > 0.5) ? sd_screen_under_bar(p, plane_px * 0.5, rad, layer.color.z)
                                            : sd_round_rect(p, plane_px * 0.5, rad);
         float tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
+        // Slot d'un layout en bloc (`color.w` = rayon de ses coins, px ; 0 ailleurs, sans effet) :
+        // `dst` EST le slot, dont le rect arrondi rogne le plan (`ScreenMask`, cf. HLSL).
+        tilt_a *= quad_round_alpha(i.local, layer.quad_px, layer.color.w);
         // Profondeur de champ : net sous un demi-texel de flou (l'échantillon d'avant, à
         // l'octet), fondu au-delà vers la pyramide au niveau `log2(coc) - 1`, plafonné.
         // `level(lod)` exige `mip_filter::linear` sur `samp` : sans lui, niveau 0 partout.

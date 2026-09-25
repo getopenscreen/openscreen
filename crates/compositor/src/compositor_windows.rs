@@ -1694,11 +1694,14 @@ impl Compositor {
     /// `radius` est le rayon des coins du PLAN, réutilisé tel quel : la projection l'étire de
     /// ±10 % selon l'endroit du bord, écart invisible sur une ombre floue, alors qu'une ombre à
     /// coins vifs derrière un écran arrondi dépasse en pointe et se voit tout de suite.
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn draw_quad_shadow(
         &self,
         corners: &[(f32, f32); 4],
         center_px: [f32; 2],
         radius: f32,
+        // Le slot d'un layout en bloc, qui rogne le plan (`shadow_mask_fields`).
+        mask: Option<crate::frame_geometry::ScreenMask>,
         spread: f32,
         offset_px: [f32; 2],
         opacity: f32,
@@ -1719,6 +1722,11 @@ impl Compositor {
         let [tr0, tr1] = local(corners[1]);
         let [br0, br1] = local(corners[2]);
         let [bl0, bl1] = local(corners[3]);
+        let (mask_rect, mask_radius) = crate::frame_geometry::shadow_mask_fields(
+            mask,
+            [center_px[0] + min_x - spread, center_px[1] + min_y - spread],
+            [self.rw(), self.rh()],
+        );
         self.draw_solid(&LayerCB {
             dst: [
                 origin_x / self.rw(),
@@ -1732,7 +1740,8 @@ impl Compositor {
             color: [0.0, 0.0, 0.0, opacity],
             fx: [tl0, tl1, tr0, tr1],
             src_prev: [br0, br1, bl0, bl1],
-            mb: [0.0, spread, 1.0, 0.0],
+            dst_prev: mask_rect,
+            mb: [0.0, spread, 1.0, mask_radius],
             ..Default::default()
         });
     }
@@ -1937,9 +1946,8 @@ impl Compositor {
                         self.draw_shadow(dst, size_px, radius, spread, offset, opacity)
                     }
                     // Même rayon que le plan incliné lui-même (cf. le dessin du mode 8).
-                    ShadowCaster::Tilted { corners, center_px, radius } => {
-                        self.draw_quad_shadow(&corners, center_px, radius, spread, offset, opacity)
-                    }
+                    ShadowCaster::Tilted { corners, center_px, radius, mask } => self
+                        .draw_quad_shadow(&corners, center_px, radius, mask, spread, offset, opacity),
                 }
             }
         }
@@ -1973,18 +1981,27 @@ impl Compositor {
                     top_lift,
                     dof,
                     render_px,
+                    g.screen_mask,
                 ),
                 &sy,
                 &suv,
             );
             self.ctx.PSSetShaderResources(2, Some(&[None]));
         } else {
+            // Sous le masque d'un layout en bloc, rogné au slot (`FrameGeometry::mask_flat_screen`).
+            let (dst, src, quad_px, radius_px) = g.mask_flat_screen(
+                s_dst,
+                [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
+                s_px,
+                s_radius,
+                render_px,
+            );
             self.draw_video(
                 &LayerCB {
-                    dst: s_dst,
-                    src: [su0, sv0, su0 + 2.0 * hu, sv0 + 2.0 * hv],
-                    quad_px: s_px,
-                    radius_px: s_radius,
+                    dst,
+                    src,
+                    quad_px,
+                    radius_px,
                     mode: 0.0,
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],

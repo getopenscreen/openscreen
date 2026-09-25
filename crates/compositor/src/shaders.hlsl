@@ -1420,6 +1420,13 @@ float4 ps_main(VSOut i) : SV_Target
             v[k] = line_cross(np, dot(quad[(k + 3) & 3], np) - r, nc, dot(quad[k], nc) - r);
         }
         float d = sd_convex_quad(i.local, v[0], v[1], v[2], v[3]) - r;
+        // Slot d'un layout en bloc (`dst_prev` = le slot en px locaux x0 y0 x1 y1, `mb.w` = son
+        // rayon ; nul ailleurs) : l'ombre est celle de ce qu'on voit, le plan rogné par le slot.
+        if (dst_prev.z > dst_prev.x)
+        {
+            float2 h = (dst_prev.zw - dst_prev.xy) * 0.5;
+            d = max(d, sd_round_rect(i.local - dst_prev.xy - h, h, mb.w));
+        }
         float spread = max(mb.y, 1e-3);
         float a = color.a * (1.0 - smoothstep(0.0, spread, d));
         return float4(color.rgb * a, a);
@@ -1551,6 +1558,10 @@ float4 ps_main(VSOut i) : SV_Target
         float d = (dst_prev.z > 0.5) ? sd_screen_under_bar(p, plane_px * 0.5, rad, color.z)
                                      : sd_round_rect(p, plane_px * 0.5, rad);
         float tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
+        // Slot d'un layout en bloc (`color.w` = rayon de ses coins, px ; 0 ailleurs, sans effet) :
+        // `dst` EST le slot, dont le rect arrondi rogne le plan. Le conteneur masque, le métrage
+        // penche dedans (`ScreenMask`).
+        tilt_a *= quad_round_alpha(i.local, quad_px, color.w);
         // Profondeur de champ : cercle de confusion en texels source, nul au focus du zoom.
         // Sous un demi-texel, l'échantillon net d'avant, à l'octet : le texte net ne passe
         // jamais par le RGBA de la pyramide, et `k = 0` (réglage coupé) ne quitte jamais cette

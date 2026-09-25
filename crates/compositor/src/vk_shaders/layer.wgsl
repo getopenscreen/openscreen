@@ -1354,7 +1354,10 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         let d = select(sd_round_rect(p, plane_px * 0.5, rad),
                        sd_screen_under_bar(p, plane_px * 0.5, rad, layer.color.z),
                        layer.dst_prev.z > 0.5);
-        let tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
+        // Slot d'un layout en bloc (`color.w` = rayon de ses coins, px ; 0 ailleurs, sans effet) :
+        // `dst` EST le slot, dont le rect arrondi rogne le plan (`ScreenMask`, cf. HLSL).
+        let tilt_a = (1.0 - smoothstep(0.0, 1.5, d))
+            * quad_round_alpha(i.local, layer.quad_px, layer.color.w);
         // Profondeur de champ (cf. HLSL) : net sous un demi-texel de flou, l'echantillon
         // d'avant a l'octet ; au-dela, fondu vers la pyramide demi-resolution liee en binding 4
         // (a la place du masque webcam, que ce mode ne lit pas), au niveau `log2(coc) - 1`,
@@ -1394,7 +1397,13 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         let v1 = inset_corner(tl, tr, br, r);
         let v2 = inset_corner(tr, br, bl, r);
         let v3 = inset_corner(br, bl, tl, r);
-        let d = sd_convex_quad(i.local, v0, v1, v2, v3) - r;
+        var d = sd_convex_quad(i.local, v0, v1, v2, v3) - r;
+        // Slot d'un layout en bloc (`dst_prev` = le slot en px locaux, `mb.w` = son rayon ; nul
+        // ailleurs) : l'ombre est celle de ce qu'on voit, le plan rogne par le slot (cf. HLSL).
+        if layer.dst_prev.z > layer.dst_prev.x {
+            let h = (layer.dst_prev.zw - layer.dst_prev.xy) * 0.5;
+            d = max(d, sd_round_rect(i.local - layer.dst_prev.xy - h, h, layer.mb.w));
+        }
         let spread = max(layer.mb.y, 1e-3);
         let a = layer.color.a * (1.0 - smoothstep(0.0, spread, d));
         return vec4<f32>(layer.color.rgb * a, a);

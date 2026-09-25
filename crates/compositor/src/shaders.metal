@@ -79,11 +79,26 @@ struct VSOut
     float2 pout  [[user(TEXCOORD2)]]; // position 0..1 sortie (pour la vélocité par pixel)
 };
 
+// Mode 0, mb.w = -1 (`FrameGeometry::screen_mb_w`) : les bords du cadre suivent le flou de mouvement.
+inline bool edges_trail(constant Layer &layer)
+{
+    return layer.mode < 0.5 && layer.mb.w < -0.5 && layer.mb.x > 1.5 && layer.mb.y > 0.001
+        && layer.dst_prev.z > 0.0 && layer.dst_prev.w > 0.0;
+}
+
 vertex VSOut vs_main(uint vid [[vertex_id]],
                      constant Layer &layer [[buffer(0)]])
 {
     float2 c = float2(vid & 1, (vid >> 1) & 1); // strip: (0,0)(1,0)(0,1)(1,1)
     float2 p = layer.dst.xy + c * layer.dst.zw; // 0..1 sortie
+    if (edges_trail(layer))
+    {
+        // Le quad couvre aussi la position précédente (parité HLSL `vs_main`).
+        float2 lo = min(layer.dst.xy, layer.dst_prev.xy);
+        float2 hi = max(layer.dst.xy + layer.dst.zw, layer.dst_prev.xy + layer.dst_prev.zw);
+        p = lo + c * (hi - lo);
+        c = (p - layer.dst.xy) / layer.dst.zw;
+    }
     float2 ndc = float2(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0);
     VSOut o;
     o.pos = float4(ndc, 0.0, 1.0);
@@ -182,6 +197,13 @@ inline float sd_round_rect(float2 p, float2 halfsz, float r)
         return (len - e) / length(g);
     }
     return max(m.x, m.y) + min(max(q.x, q.y), 0.0) - e;
+}
+
+// Couverture du quad arrondi en `local` (px du quad courant), feather ~1.5 px.
+inline float quad_cov(float2 local, constant Layer &layer)
+{
+    float2 h = layer.quad_px * 0.5;
+    return 1.0 - smoothstep(0.0, 1.5, sd_round_rect(local - h, h, layer.radius_px));
 }
 
 // L'écran sous le chrome de FENÊTRE (modes 0 et 8) : coins HAUTS carrés, rognés par l'arc du
@@ -1655,20 +1677,29 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         float mb_scale = saturate(layer.mb.y);
         float2 duv_blur = duv * mb_scale;
         int taps = int(layer.mb.x);
+        // Bords qui suivent : couverture du cadre moyennée sur les taps (parité HLSL).
+        bool trail = edges_trail(layer);
+        float2 duv_to_px = layer.quad_px / (layer.src.zw - layer.src.xy);
         if (taps <= 1 || mb_scale <= 0.001 || dot(duv_blur, duv_blur) < 1e-9)
         {
             rgb = sample_yuv(uv_now, texY, texUV);
+            if (trail) alpha_mask = quad_cov(i.local, layer);
         }
         else
         {
             float3 acc = float3(0.0);
+            float cov = 0.0;
             for (int k = 0; k < 16; k++)
             {
                 if (k >= taps) break;
                 float t = float(k) / float(taps - 1);
-                acc += sample_yuv(uv_now - duv_blur * (1.0 - t), texY, texUV);
+                float2 d = duv_blur * (1.0 - t);
+                float w = trail ? quad_cov(i.local - d * duv_to_px, layer) : 1.0;
+                acc += sample_yuv(uv_now - d, texY, texUV) * w;
+                cov += w;
             }
-            rgb = acc / float(taps);
+            rgb = acc / max(cov, 1e-6);
+            if (trail) alpha_mask = cov / float(taps);
         }
 
         // Effet d'arriere-plan webcam. Miroir exact de la branche HLSL : fx.z porte le mode
@@ -1699,7 +1730,7 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     }
 
     float alpha = layer.color.a * alpha_mask;
-    if (layer.radius_px > 0.0)
+    if (layer.radius_px > 0.0 && !edges_trail(layer)) // sinon déjà dans alpha_mask
     {
         // mb.w = 1 : écran sous le chrome de fenêtre, coins HAUTS carrés et rognés par l'arc du
         // cadre (`sd_screen_under_bar`, `mb.z` = la remontée du contour intérieur, px).

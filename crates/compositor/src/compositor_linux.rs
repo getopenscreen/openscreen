@@ -2069,10 +2069,7 @@ impl Compositor {
         // `plane_px` dans `dst_prev`). Les deux sens ne peuvent pas cohabiter dans
         // un meme draw. macOS et Windows sautent egalement le flou sur le chemin
         // incline, pour la meme raison.
-        // Sous un cadre de fenetre, l'ecran garde ses coins HAUTS carres (`mb.w` au mode 0,
-        // `dst_prev.z` au mode 8) ; 0 sans cadre, soit le rendu d'avant.
-        let square_top = g.screen_square_top();
-        // Et la remontee du contour interieur du chrome au-dessus de l'ecran (`mb.z` au mode 0,
+        // La remontee du contour interieur du chrome au-dessus de l'ecran (`mb.z` au mode 0,
         // `color.z` au mode 8) : l'arrondi du haut se fait par le cadre. 0 sans fenetre.
         let top_lift = g.screen_top_lift_px([rw, rh]);
         let screen_layer = match tilt.as_ref() {
@@ -2089,7 +2086,7 @@ impl Compositor {
                     color: [1.0, 1.0, 1.0, 1.0],
                     src_prev: g.cut,
                     dst_prev: g.s_dst_prev,
-                    mb: [g.mb_taps, g.mb_amount, top_lift, square_top],
+                    mb: [g.mb_taps, g.mb_amount, top_lift, g.screen_mb_w()],
                     ..Default::default()
                 }
             }

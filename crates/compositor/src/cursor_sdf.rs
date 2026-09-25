@@ -14,9 +14,8 @@
 //!    en tiraient des stries sur les flancs. Le flou efface l'escalier ; il laisse en place un bord
 //!    droit (le champ y est affine) et n'arrondit un coin que d'un demi-texel source.
 //!
-//! La texture (R16F, même rect que le sprite) garde les distances telles quelles : un demi-flottant
-//! est exact au millième près autour de zéro, là où la silhouette se joue, et il est filtrable sur
-//! les trois backends (D3D11, Metal, wgpu), contrairement au R32F.
+//! La texture RG16F, même rect que le sprite, stocke le champ de distance dans R et le relief de la
+//! face dans G. Le relief vient d'une carte PNG en niveaux de gris, étirée sur le même suréchantillon.
 
 use anyhow::{anyhow, Result};
 
@@ -35,6 +34,8 @@ pub struct CursorSdf {
     /// Distances signées (unités du modèle, négatives dedans), ligne par ligne, texels centrés
     /// comme ceux du sprite : la texture couvre exactement son rect.
     pub texels: Vec<f32>,
+    /// Hauteur du dessus au même point, en unités du modèle.
+    pub heights: Vec<f32>,
     /// La forme, hotspot nul : l'appelant pose celui de la scène.
     pub shape: SpriteShape,
 }
@@ -42,6 +43,11 @@ pub struct CursorSdf {
 impl CursorSdf {
     /// Décode `path` (chemin ou data URI, comme les sprites) et en tire le champ.
     pub fn load(path: &str) -> Result<CursorSdf> {
+        Self::load_with_depth(path, None)
+    }
+
+    /// Décode le sprite et une éventuelle carte de relief PNG alignée sur lui.
+    pub fn load_with_depth(path: &str, depth_path: Option<&str>) -> Result<CursorSdf> {
         let img = if let Some(bytes) = crate::frame_geometry::decode_data_uri(path) {
             image::load_from_memory(&bytes)
         } else {
@@ -50,11 +56,27 @@ impl CursorSdf {
         .map_err(|e| anyhow!("sprite {path} : {e}"))?
         .to_rgba8();
         let (w, h) = img.dimensions();
-        Ok(CursorSdf::from_rgba(img.as_raw(), w, h))
+        let heights = if let Some(depth_path) = depth_path {
+            let depth = image::open(depth_path)
+                .map_err(|e| anyhow!("relief {depth_path} : {e}"))?
+                .to_luma8();
+            if depth.dimensions() != (w, h) {
+                return Err(anyhow!("relief {depth_path} : taille différente du sprite {path}"));
+            }
+            Some(depth.into_raw())
+        } else {
+            None
+        };
+        Ok(CursorSdf::from_rgba_with_height(img.as_raw(), w, h, heights.as_deref()))
     }
 
     /// `rgba` : `w`×`h` texels RGBA8, alpha droit.
     pub fn from_rgba(rgba: &[u8], w: u32, h: u32) -> CursorSdf {
+        Self::from_rgba_with_height(rgba, w, h, None)
+    }
+
+    /// `heights`, quand présent, est une image grise `w`×`h` (255 = relief maximal).
+    fn from_rgba_with_height(rgba: &[u8], w: u32, h: u32, heights: Option<&[u8]>) -> CursorSdf {
         const K: usize = SDF_UPSAMPLE;
         // Une marge de texels transparents : un texel intérieur collé au bord du sprite trouve
         // ainsi son voisin extérieur, qui n'existe pas dans le rect.
@@ -86,6 +108,8 @@ impl CursorSdf {
 
         let scale = 1.0 / (K * w.max(h)) as f32;
         let mut texels = Vec::with_capacity(fw * fh);
+        let mut relief = Vec::with_capacity(fw * fh);
+        let mut max_height = 0.0f32;
         let mut top_row = fh;
         for fy in 0..fh {
             for fx in 0..fw {
@@ -98,6 +122,25 @@ impl CursorSdf {
                     to_inside[g].sqrt().min((gw + gh) as f64) - 0.5
                 };
                 texels.push(d as f32 * scale);
+
+                let height = if let Some(heights) = heights {
+                    let sx = (fx as f32 + 0.5) / K as f32 - 0.5;
+                    let sy = (fy as f32 + 0.5) / K as f32 - 0.5;
+                    let (x0, y0) = (sx.floor(), sy.floor());
+                    let (tx, ty) = (sx - x0, sy - y0);
+                    let (x0, y0) = (x0 as isize, y0 as isize);
+                    let at = |x: isize, y: isize| {
+                        let (x, y) = (x.clamp(0, w as isize - 1) as usize, y.clamp(0, h as isize - 1) as usize);
+                        heights[y * w as usize + x] as f32 / 255.0
+                    };
+                    let top = at(x0, y0) * (1.0 - tx) + at(x0 + 1, y0) * tx;
+                    let bottom = at(x0, y0 + 1) * (1.0 - tx) + at(x0 + 1, y0 + 1) * tx;
+                    (top * (1.0 - ty) + bottom * ty) * crate::frame_geometry::MODEL_RELIEF_MAX
+                } else {
+                    0.0
+                };
+                relief.push(height);
+                max_height = max_height.max(height);
             }
         }
         for _ in 0..2 {
@@ -108,17 +151,30 @@ impl CursorSdf {
             width: fw as u32,
             height: fh as u32,
             texels,
+            heights: relief,
             shape: SpriteShape {
                 size: [w as f32 / long, h as f32 / long],
                 hotspot: [0.0; 2],
                 top: top_row as f32 / fh as f32,
+                max_height,
             },
         }
     }
 
-    /// Les texels en demi-flottants petit-boutistes, pour une texture R16F.
+    /// Le champ de distance seul en demi-flottants petit-boutistes, pour les tests mono-canal.
     pub fn f16_bytes(&self) -> Vec<u8> {
         self.texels.iter().flat_map(|&d| f16_bits(d).to_le_bytes()).collect()
+    }
+
+    /// Le champ et le relief intercalés en demi-flottants petit-boutistes, pour une texture RG16F.
+    pub fn rg16_bytes(&self) -> Vec<u8> {
+        self.texels
+            .iter()
+            .zip(&self.heights)
+            .flat_map(|(&distance, &height)| {
+                f16_bits(distance).to_le_bytes().into_iter().chain(f16_bits(height).to_le_bytes())
+            })
+            .collect()
     }
 
     /// Le champ en `uv` (0..1 sur le rect du sprite), filtré comme le sampler des shaders :
@@ -409,5 +465,23 @@ mod tests {
         assert!(sdf.sample([0.119, 0.0874]) < 0.0);
         assert!(sdf.sample([0.9, 0.1]) > 0.0);
         assert_eq!(sdf.f16_bytes().len(), sdf.texels.len() * 2);
+    }
+
+    #[test]
+    fn each_original_theme_loads_its_aligned_sculpted_faces() {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../public/cursors/");
+        for theme in ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"] {
+            for state in ["arrow", "pointer"] {
+                let face = format!("{root}{theme}/model-{state}.png");
+                let depth = format!("{root}{theme}/model-{state}-depth.png");
+                let sdf = CursorSdf::load_with_depth(&face, Some(&depth))
+                    .unwrap_or_else(|error| panic!("{theme}/{state}: {error}"));
+                assert_eq!(sdf.width, 128 * SDF_UPSAMPLE as u32, "{theme}/{state}");
+                assert_eq!(sdf.height, 128 * SDF_UPSAMPLE as u32, "{theme}/{state}");
+                assert!(sdf.shape.max_height > 0.02, "{theme}/{state} has no sculpted relief");
+                assert_eq!(sdf.shape.max_height, crate::frame_geometry::MODEL_RELIEF_MAX);
+                assert_eq!(sdf.rg16_bytes().len(), sdf.texels.len() * 4, "{theme}/{state}");
+            }
+        }
     }
 }

@@ -414,7 +414,7 @@
 		"smoothing": "Smussatura",
 		"clickBounce": "Rimbalzo clic",
 		"model3d": "Cursore 3D",
-		"model3dHint": "Stile predefinito: tutte le forme del cursore diventano 3D. Gli altri stili restano piatti.",
+		"model3dHint": "Ogni stile di cursore assume una forma 3D adatta al suo design.",
 		"model3dNeedsCursor": "Attiva «Mostra cursore» per usare il cursore 3D.",
 		"help": "Resa del cursore dalla telemetria registrata: tema, dimensione, smussatura, sfocatura di movimento e rimbalzo al clic.",
 		"size": "Dimensione",

@@ -506,9 +506,9 @@ pub struct SceneCursor {
     pub smoothing: f32,
     pub motion_blur: f32,
     pub click_bounce: f32,
-    /// Curseur MODÉLISÉ en 3D (mode 15) : le sprite de chaque état du thème par défaut, extrudé,
-    /// à la place du sprite plat. Les autres thèmes restent plats. `#[serde(default)]` : absent
-    /// des projets et des JSON écrits avant le réglage, qui gardent donc le curseur plat.
+    /// Curseur MODÉLISÉ en 3D (mode 15) : face raster et relief dédiés lorsqu'un état du thème en
+    /// fournit, sinon le sprite de cet état est extrudé. `#[serde(default)]` : absent des projets
+    /// et des JSON écrits avant le réglage, qui gardent donc le curseur plat.
     #[serde(default)]
     pub model3d: bool,
     pub clip_to_bounds: bool,
@@ -539,6 +539,10 @@ pub struct SceneCursorSprite {
     /// que le curseur était agrandi — le bug que ce champ corrige.
     pub hotspot_x: f32,
     pub hotspot_y: f32,
+    /// Carte PNG en niveaux de gris, alignée sur la face du modèle (255 = relief maximal).
+    /// Les états sans carte gardent une face plate au sommet de leur extrusion.
+    #[serde(default)]
+    pub model_depth_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]

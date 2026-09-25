@@ -102,15 +102,23 @@ export function resolveSceneAssetPath(relativePath: string): string | null {
 function resolveCursorSpritePaths(
 	themeId: string,
 	alwaysArrow: boolean,
-): Record<string, { path: string; hotspotX: number; hotspotY: number }> {
-	const resolved: Record<string, { path: string; hotspotX: number; hotspotY: number }> = {};
-	for (const [type, sprite] of Object.entries(resolveCursorSprites(themeId, alwaysArrow))) {
+	model3d = false,
+): Record<string, { path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }> {
+	const resolved: Record<
+		string,
+		{ path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }
+	> = {};
+	for (const [type, sprite] of Object.entries(
+		resolveCursorSprites(themeId, alwaysArrow, model3d),
+	)) {
 		const absolute = resolveSceneAssetPath(sprite.assetPath);
 		if (absolute) {
+			const depthPath = sprite.modelDepthPath ? resolveSceneAssetPath(sprite.modelDepthPath) : null;
 			resolved[type] = {
 				path: absolute,
 				hotspotX: sprite.hotspotX,
 				hotspotY: sprite.hotspotY,
+				...(depthPath ? { modelDepthPath: depthPath } : {}),
 			};
 		}
 	}
@@ -129,7 +137,11 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 			cursor?: {
 				theme?: string;
 				alwaysArrow?: boolean;
-				cursorSprites?: Record<string, { path: string; hotspotX: number; hotspotY: number }>;
+				model3d?: boolean;
+				cursorSprites?: Record<
+					string,
+					{ path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }
+				>;
 			};
 			webcamEffect?: {
 				mode?: string;
@@ -164,6 +176,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 			scene.cursor.cursorSprites = resolveCursorSpritePaths(
 				scene.cursor.theme,
 				scene.cursor.alwaysArrow === true,
+				scene.cursor.model3d === true,
 			);
 			changed = true;
 		}

@@ -414,7 +414,7 @@
 		"smoothing": "Glättung",
 		"clickBounce": "Klick-Federung",
 		"model3d": "3D-Cursor",
-		"model3dHint": "Standardstil: Jede Cursorform wird 3D. Andere Stile bleiben flach.",
+		"model3dHint": "Jeder Cursorstil erhält eine an sein Design angepasste 3D-Form.",
 		"model3dNeedsCursor": "Aktiviere „Cursor anzeigen“, um den 3D-Cursor zu verwenden.",
 		"help": "Cursor-Darstellung aus der aufgezeichneten Telemetrie: Stil, Größe, Glättung, Bewegungsunschärfe und Klick-Federung.",
 		"size": "Größe",

@@ -414,7 +414,7 @@
 		"smoothing": "Suavizado",
 		"clickBounce": "Rebote al clic",
 		"model3d": "Cursor 3D",
-		"model3dHint": "Estilo predeterminado: todas las formas del cursor pasan a 3D. Los demás estilos siguen planos.",
+		"model3dHint": "Cada estilo de cursor adopta una forma 3D acorde con su diseño.",
 		"model3dNeedsCursor": "Activa «Mostrar cursor» para usar el cursor 3D.",
 		"help": "Representación del cursor a partir de la telemetría grabada: tema, tamaño, suavizado, desenfoque de movimiento y rebote al hacer clic.",
 		"size": "Tamaño",

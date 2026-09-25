@@ -311,7 +311,10 @@ describe("resolveSceneAssetPaths", () => {
 		fs.mkdirSync(modelDir, { recursive: true });
 		fs.writeFileSync(path.join(modelDir, "selfie_segmentation_landscape.onnx"), "onnx");
 		const assetPaths = [
-			...Object.values(themed?.assets ?? {}).map((a) => a.assetPath),
+			...Object.values(themed?.assets ?? {}).flatMap((asset) => [
+				asset.assetPath,
+				...(asset.model3d ? [asset.model3d.assetPath, asset.model3d.depthPath] : []),
+			]),
 			...Object.values(DEFAULT_CURSOR_SPRITES).map((s) => s.assetPath),
 		];
 		for (const assetPath of assetPaths) {
@@ -348,7 +351,12 @@ describe("resolveSceneAssetPaths", () => {
 
 	/** What `resolveSceneAssetPaths` writes into `cursor.cursorSprites` — same shape the
 	 *  service declares for the sprite map it builds. */
-	type ResolvedSprite = { path: string; hotspotX: number; hotspotY: number };
+	type ResolvedSprite = {
+		path: string;
+		hotspotX: number;
+		hotspotY: number;
+		modelDepthPath?: string;
+	};
 
 	// The renderer asks for an effect and knows nothing about the disk; this process answers
 	// where the model is. Same division as the wallpaper and the cursor sprites above.
@@ -443,6 +451,18 @@ describe("resolveSceneAssetPaths", () => {
 
 		expect(arrow.path).toBe(path.join(resources, themed.assets.arrow!.assetPath));
 		expect(fs.existsSync(arrow.path)).toBe(true);
+	});
+
+	it("resolves a themed 3D face and its relief map to paths that exist on disk", () => {
+		const model3d = themed?.assets.arrow?.model3d;
+		if (!themed || !model3d) throw new Error("a bundled theme needs a 3D arrow face");
+		const arrow = resolved({ cursor: { theme: themed.id, model3d: true } }).cursor.cursorSprites
+			.arrow;
+
+		expect(arrow.path).toBe(path.join(resources, model3d.assetPath));
+		expect(arrow.modelDepthPath).toBe(path.join(resources, model3d.depthPath));
+		expect(fs.existsSync(arrow.path)).toBe(true);
+		expect(fs.existsSync(arrow.modelDepthPath!)).toBe(true);
 	});
 
 	it("fills the states a theme doesn't ship with the built-in art", () => {

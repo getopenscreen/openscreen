@@ -414,7 +414,7 @@
 		"smoothing": "Làm mượt",
 		"clickBounce": "Nảy khi nhấp",
 		"model3d": "Con trỏ 3D",
-		"model3dHint": "Kiểu mặc định: mọi hình dạng con trỏ đều thành 3D. Các kiểu khác vẫn phẳng.",
+		"model3dHint": "Mỗi kiểu con trỏ có hình khối 3D phù hợp với thiết kế.",
 		"model3dNeedsCursor": "Bật “Hiện con trỏ” để dùng con trỏ 3D.",
 		"help": "Cách vẽ con trỏ từ dữ liệu đã ghi: chủ đề, kích thước, làm mượt, mờ chuyển động và hiệu ứng nảy khi nhấp.",
 		"size": "Kích thước",

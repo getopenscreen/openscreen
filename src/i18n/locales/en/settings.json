@@ -414,7 +414,7 @@
 		"smoothing": "Smoothing",
 		"clickBounce": "Click bounce",
 		"model3d": "3D cursor",
-		"model3dHint": "Default style: every cursor shape turns 3D. Other styles stay flat.",
+		"model3dHint": "Every cursor style uses a 3D shape suited to its design.",
 		"model3dNeedsCursor": "Turn on “Show cursor” to use the 3D cursor.",
 		"help": "How the recorded cursor is drawn: style, size, smoothing, motion blur and click bounce.",
 		"size": "Size",

@@ -33,7 +33,7 @@ A floating icon rail sits over the preview. Five facets:
 | **Composition** | A background section (image, solid color, or gradient behind your recording; upload your own image or pick from presets), then background blur, shadow, motion blur, corner roundness, and padding. Its **Format** row sets the output shape for preview and export: **Auto** (the default for new projects), which wraps the frame around your recording and camera layout with an even padding border, your clips' own shapes under **Original**, plus 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, and 10:16. |
 | **Camera layout** | Webcam composite: picture-in-picture, vertical stack, dual frame, or no webcam. Mirror and "shrink on zoom." For picture-in-picture: camera shape (rectangle or square), roundness (fully round, a square camera is a circle), size, and position: one of eight spots along the edge, always the same distance from it. Drag the webcam on the canvas and it snaps to the nearest one. |
 | **Audio** | The output level, applied the same way in the preview and the export. |
-| **Cursor** | Only meaningful for recordings made in the editable cursor mode, on Windows, macOS, or Linux. Show/hide, clip-to-canvas, a strip of cursor themes, and sliders for size, smoothing, motion blur, and click bounce. |
+| **Cursor** | Only meaningful for recordings made in the editable cursor mode, on Windows, macOS, or Linux. Show/hide, clip-to-canvas, and sliders for size, smoothing, motion blur, and click bounce. |
 | **Transcript** | The aggregated transcript across every clip, editable — see [Transcript editing](./captions.md#transcript-editing). Its **Captions** button turns captions on, styles them, and translates them — see [Captions & transcript](./captions.md#captions). |
 
 The **pencil** button on the same rail opens the **Edit clip** modal for the selected clip: a draggable crop rectangle with numeric X/Y/W/H inputs and aspect-ratio presets, plus the clip's in/out points. Crop is per clip, not per project.
@@ -93,7 +93,7 @@ Freehand blur shapes can no longer be drawn. Existing ones still render, but as 
 
 ## Cursor styling
 
-If your recording has editable cursor data (native capture in the editable cursor mode, on Windows, macOS, or Linux; [Cursor mode](./recording.md#cursor-mode) lists what each platform records), the Cursor facet lets you pick from a library of cursor themes and tune size, smoothing, motion blur, and click bounce independently of the raw capture — the underlying cursor path is smoothed deterministically, so what you see in preview matches the final export.
+If your recording has editable cursor data (native capture in the editable cursor mode, on Windows, macOS, or Linux; [Cursor mode](./recording.md#cursor-mode) lists what each platform records), the Cursor facet lets you tune size, smoothing, motion blur, and click bounce independently of the raw capture — the underlying cursor path is smoothed deterministically, so what you see in preview matches the final export.
 
 ## Keyboard shortcuts
 

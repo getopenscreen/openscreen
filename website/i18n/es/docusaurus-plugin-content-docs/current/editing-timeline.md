@@ -33,7 +33,7 @@ Sobre la vista previa hay una barra flotante de íconos con cinco paneles:
 | **Composición** | Una sección de fondo (imagen, color sólido o degradado detrás de tu grabación; sube tu propia imagen o elige un preajuste) y luego desenfoque de fondo, sombra, desenfoque de movimiento, redondez de las esquinas y relleno. Su fila **Formato** define la forma de salida para la vista previa y la exportación: **Auto** (la predeterminada en los proyectos nuevos), que ajusta el cuadro alrededor de tu grabación y de la disposición de cámara con un borde de relleno uniforme, las formas propias de tus clips en **Original**, más 16:9, 9:16, 1:1, 4:3, 4:5, 16:10 y 10:16. |
 | **Disposición de cámara** | Composición de la cámara web: imagen en imagen, apilado vertical, marco dual o sin cámara. Reflejo y "reducir al ampliar". En imagen en imagen: forma de la cámara (rectángulo o cuadrado), redondez (del todo redonda, una cámara cuadrada es un círculo), tamaño y posición: uno de ocho puntos junto al borde, siempre a la misma distancia de él. Arrastra la cámara web sobre el lienzo y se ajusta al punto más cercano. |
 | **Audio** | El nivel de salida, que se aplica igual en la vista previa y en la exportación. |
-| **Cursor** | Solo tiene sentido en grabaciones hechas en el modo de cursor editable, en Windows, macOS o Linux. Mostrar/ocultar, recortar al lienzo, una tira de temas de cursor y controles deslizantes de tamaño, suavizado, desenfoque de movimiento y rebote al clic. |
+| **Cursor** | Solo tiene sentido en grabaciones hechas en el modo de cursor editable, en Windows, macOS o Linux. Mostrar/ocultar, recortar al lienzo y controles deslizantes de tamaño, suavizado, desenfoque de movimiento y rebote al clic. |
 | **Transcripción** | La transcripción conjunta de todos los clips, editable: consulta [Edición de la transcripción](./captions.md#transcript-editing). Su botón **Subtítulos** activa los subtítulos, les da estilo y los traduce: consulta [Subtítulos y transcripción](./captions.md#captions). |
 
 El botón del **lápiz** de la misma barra abre la ventana **Editar clip** del clip seleccionado: un rectángulo de recorte arrastrable con campos numéricos X/Y/A/Al y proporciones predefinidas, más los puntos de entrada y salida del clip. El recorte de imagen es por clip, no por proyecto.
@@ -93,7 +93,7 @@ Ya no se pueden dibujar formas de desenfoque a mano alzada. Las que ya existen s
 
 ## Estilo del cursor {#cursor-styling}
 
-Si tu grabación tiene datos de cursor editables (captura nativa en el modo de cursor editable, en Windows, macOS o Linux; [Modo de cursor](./recording.md#cursor-mode) indica lo que graba cada plataforma), el panel Cursor te permite elegir en una biblioteca de temas de cursor y ajustar el tamaño, el suavizado, el desenfoque de movimiento y el rebote al clic con independencia de la captura original. La trayectoria subyacente del cursor se suaviza de forma determinista, así que lo que ves en la vista previa coincide con la exportación final.
+Si tu grabación tiene datos de cursor editables (captura nativa en el modo de cursor editable, en Windows, macOS o Linux; [Modo de cursor](./recording.md#cursor-mode) indica lo que graba cada plataforma), el panel Cursor te permite ajustar el tamaño, el suavizado, el desenfoque de movimiento y el rebote al clic con independencia de la captura original. La trayectoria subyacente del cursor se suaviza de forma determinista, así que lo que ves en la vista previa coincide con la exportación final.
 
 ## Atajos de teclado {#keyboard-shortcuts}
 

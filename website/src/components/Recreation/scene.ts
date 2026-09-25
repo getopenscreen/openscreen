@@ -13,7 +13,7 @@
  * ── WHAT IS DERIVED AND WHAT IS STAGED ───────────────────────────────────────
  *
  * The editor's *chrome* is the application's: panel titles, every slider's
- * range, scaling and suffix, the wallpapers, and the cursor packs with their
+ * range, scaling and suffix, the wallpapers, and the cursor sprites with their
  * real hotspots all come out of `generated.ts`, which the generator emits by
  * reading the app's locale files and source.
  *
@@ -26,7 +26,7 @@
  * which is which rather than implying the whole thing is a recording.
  */
 
-import { CONTROLS, CURSORS, EFFECTS } from "./generated";
+import { CONTROLS, EFFECTS } from "./generated";
 
 export const T_TOTAL = 26.0;
 
@@ -306,7 +306,7 @@ export const footageTime = (t: number) =>
 /** Clicks in the recording, for the recorded pointer's bounce. */
 const FOOTAGE_CLICKS = [8.2, 11.6, 15.1, 16.5, 17.9, 21.9, 23.8];
 /** Clicks the reader makes on the editor, for the demonstration pointer's. */
-const UI_CLICKS = [2.0, 3.95, 5.8, 7.95, 11.45, 12.55, 12.7, 16.08, 18.25, 20.05, 21.25, 22.3];
+const UI_CLICKS = [2.0, 3.95, 5.8, 7.95, 12.7, 16.08, 18.25, 20.05, 21.25, 22.3];
 
 /**
  * Click bounce, at parity with the renderer's own `cursor.rs`: the press is a
@@ -425,20 +425,9 @@ const ease = (v: number) => {
 
 /* ── sub-beat moments ─────────────────────────────────────────────────────── */
 
-/** The three background picks, and the two cursor picks. */
+/** The three background picks. The cursor beat picks no pack: the app ships
+ *  only the default one, so the recorded pointer wears it for the whole take. */
 const BG_PICKS = [2.0, 3.95, 5.8];
-const CURSOR_PICKS = [11.45, 12.55];
-/** Which pack each pick selects, as an index into `CURSORS.themes`: the default
- *  arrow, then the pink one, then the green.
- *
- *  The order is the page's, not the take's. Green is the site's accent, and the
- *  pack chosen last is the one the recorded pointer wears for the eleven seconds
- *  of timeline and transcript that follow — so the take ends on it and the pink
- *  is spent early, while the panel it is being picked in is still the subject.
- *
- *  Exported because the pointer has to be on the swatch whose pack the frame
- *  selects, and the path in `driver.ts` reads this rather than repeating it. */
-export const CURSOR_CHOICE = [0, 1, 2];
 
 export const WALLPAPER_COUNT_SHOWN = 12;
 
@@ -466,8 +455,6 @@ export interface Frame {
 	cursorSizePct: number;
 	/** The size drag as 0-1, which is what the recorded cursor scales on. */
 	cursorSizeU: number;
-	/** Index into `CURSORS.themes` of the selected pack. */
-	cursorTheme: number;
 	zoom: number;
 	zoomOrigin: string;
 	zoomLabel: string;
@@ -528,8 +515,6 @@ export function frameAt(p: number): Frame {
 	const sizeU = clamp01((t - 12.7) / 0.5);
 	const cursorSize = 40 + sizeU * 23.2;
 
-	const cursorTheme = CURSOR_CHOICE[CURSOR_PICKS.reduce((n, at) => (t >= at ? n + 1 : n), 0)] ?? 0;
-
 	const live = ZOOMS.slice(1).find((z) => t >= z.from && t <= z.to);
 	const zoomsPlaced = ZOOMS.filter((z) => t >= z.placedAt).length;
 
@@ -571,7 +556,6 @@ export function frameAt(p: number): Frame {
 			((cursorSize - CONTROLS.cursorSize.min) /
 				(CONTROLS.cursorSize.max - CONTROLS.cursorSize.min)) *
 			100,
-		cursorTheme,
 		zoom: live ? live.scale : 1,
 		zoomOrigin: live ? live.origin : "52% 58%",
 		zoomLabel: live ? live.label : ZOOMS[1].label,
@@ -590,6 +574,3 @@ export function frameAt(p: number): Frame {
 		comment: t >= 17.3 && t < 19.2 && t >= 17.3 + (19.2 - 17.3) * 0.5 ? 1 : 0,
 	};
 }
-
-/** The pack the recorded pointer is currently drawn with. */
-export const shotCursorSrc = (f: Frame) => CURSORS.themes[f.cursorTheme].src;

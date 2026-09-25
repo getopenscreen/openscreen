@@ -151,7 +151,7 @@ sudo usermod -aG input $USER
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | 采集管线 | 原生（ScreenCaptureKit） | 内部版本 19041 及更高为原生（Windows Graphics Capture）；更早的内部版本或缺少辅助程序时回退到浏览器采集 | 原生（经由 ScreenCast 门户的 PipeWire）；缺少辅助程序时回退到浏览器采集，并失去硬件编码和光标遥测 |
-| 自定义光标主题 / 点击效果 | ✅：点击和光标形状需要“辅助功能”权限 | ✅ | ✅ Wayland 上可用：点击采集需要 `input` 组（[详情](#mouse-clicks-on-wayland)） |
+| 自定义光标 / 点击效果 | ✅：点击和光标形状需要“辅助功能”权限 | ✅ | ✅ Wayland 上可用：点击采集需要 `input` 组（[详情](#mouse-clicks-on-wayland)） |
 | 摄像头 | 浏览器采集，保存为单独的文件（仍可用作画中画） | 原生采集，保存为单独的文件 | 浏览器采集，保存为单独的文件（仍可用作画中画） |
 | 系统音频 | 开箱即用；macOS 14.2+ 会弹出权限提示 | 开箱即用 | 需要以 PipeWire 作为声音服务器（Ubuntu 22.10+、Fedora 34+ 的默认设置） |
 | MP4 导出 | ✅ | ✅ | ✅：GPU 栈条件允许时，通过 VAAPI 在 GPU 上进行 H.264 编码（见下方说明），否则使用软件编码；H.265 仅支持软件编码 |

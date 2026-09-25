@@ -1134,6 +1134,49 @@ textarea.control {
 }
 .choiceBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 .choiceRowTiles .choiceBtn { min-height: 44px; }
+
+/* ─── webcam framing (LayoutPane) ─────────────────────────────── */
+/* A picture of the camera with the kept frame on it: outside the frame is dimmed, the frame is
+   what the webcam will show, and it is dragged to choose that. */
+.framing {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0 var(--sp-4) 4px;
+}
+.framingBox {
+	position: relative;
+	width: 100%;
+	max-width: 100%;
+	overflow: hidden;
+	border-radius: var(--r-md);
+	background: linear-gradient(135deg, color-mix(in oklab, var(--fg) 10%, transparent), color-mix(in oklab, var(--fg) 4%, transparent));
+}
+.framingVideo {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	pointer-events: none;
+}
+.framingCrop {
+	position: absolute;
+	box-sizing: border-box;
+	border: 2px solid #fff;
+	border-radius: 6px;
+	/* Dims everything outside the frame without a second element. */
+	box-shadow: 0 0 0 999px rgb(0 0 0 / 0.45);
+	touch-action: none;
+}
+.framingCrop[data-movable="true"] { cursor: grab; }
+.framingCrop[data-movable="true"]:active { cursor: grabbing; }
+.framingCrop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.framingHint {
+	margin: 0;
+	font: 400 12px/1.5 var(--font-body);
+	color: var(--muted);
+}
 /* Under an icon, the name shrinks to one line and ellipsises rather than widening the column. */
 .choiceBtnLabel {
 	max-width: 100%;

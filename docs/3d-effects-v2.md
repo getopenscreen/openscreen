@@ -384,8 +384,7 @@ de la pastille ; plus rien après sa fenêtre.
 
 ### B.7 Limites
 
-- Seul le thème par défaut est modélisé ; les thèmes sweezy (art de 128 px, bords non
-  détourés) restent plats.
+- Seul le thème par défaut est modélisé ; un thème de curseur ajouté plus tard resterait plat.
 - Un pointeur basculé montre le flanc de sa queue, de la couleur de son bord : la main qui
   pointe gagne un liseré noir au bas de la paume. C'est la 3D, pas un défaut.
 - Un dessus plat (curseur centré) reçoit 0,88 de la lumière : son blanc sort gris clair (226),

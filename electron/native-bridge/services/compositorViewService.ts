@@ -737,4 +737,15 @@ export class CompositorViewService {
 		}
 		return addon.remuxSeekable(inputPath, outputPath);
 	}
+
+	/** The loudness-normalisation gain (dB) the export applies to this voice file, so the
+	 *  preview can play it at the same level. Null when the addon is absent or predates it:
+	 *  the preview then plays the file as recorded, the export still normalises. */
+	async loudnessGainDb(filePath: string): Promise<number | null> {
+		const addon = this.ensureAddon();
+		if (!addon?.loudnessGainDb) {
+			return null;
+		}
+		return addon.loudnessGainDb(filePath);
+	}
 }

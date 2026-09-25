@@ -393,7 +393,7 @@
 	},
 	"audio": {
 		"outputGain": "Niveau de sortie",
-		"help": "Ajustez le niveau de sortie audio. Il s’applique à l’identique dans l’aperçu et à l’export.",
+		"help": "Les voix sont automatiquement ramenées à une sonie standard. Ajustez le niveau de sortie à partir de là ; il s’applique à l’identique dans l’aperçu et à l’export.",
 		"reset": "Réinitialiser l’audio",
 		"title": "Audio"
 	},

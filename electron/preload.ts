@@ -349,6 +349,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	preparePreviewAudioTrack: (filePath: string) => {
 		return ipcRenderer.invoke("prepare-preview-audio-track", filePath);
 	},
+	/** Loudness-normalisation gain the export applies to a voice file. See the handler. */
+	getLoudnessGain: (filePath: string) => {
+		return ipcRenderer.invoke("get-loudness-gain", filePath);
+	},
 	clearCurrentVideoPath: () => {
 		return ipcRenderer.invoke("clear-current-video-path");
 	},

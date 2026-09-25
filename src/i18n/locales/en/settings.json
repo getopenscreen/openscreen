@@ -393,7 +393,7 @@
 	},
 	"audio": {
 		"outputGain": "Output level",
-		"help": "Adjust the audio output level. It applies identically in the preview and the export.",
+		"help": "Voices are levelled to a standard loudness automatically. Adjust the output level from there; it applies identically in the preview and the export.",
 		"reset": "Reset audio",
 		"title": "Audio"
 	},

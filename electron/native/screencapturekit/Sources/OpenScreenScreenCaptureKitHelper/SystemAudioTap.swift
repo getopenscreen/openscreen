@@ -43,7 +43,17 @@ final class SystemAudioTap {
 	}
 
 	/// Starts the tap. Blocks while macOS' permission prompt is on screen.
+	///
+	/// All or nothing: a failure part-way releases whatever was already created, so a tap
+	/// that never started holds no Core Audio objects, whoever does or does not stop it later.
 	func start() throws {
+		var didStart = false
+		defer {
+			if !didStart {
+				stop()
+			}
+		}
+
 		// Nothing to exclude: the helper plays no sound, which is all ScreenCaptureKit's
 		// `excludesCurrentProcessAudio` ever took out.
 		let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
@@ -80,6 +90,7 @@ final class SystemAudioTap {
 			"AudioDeviceCreateIOProcIDWithBlock"
 		)
 		try Self.check(AudioDeviceStart(aggregateID, procID), "AudioDeviceStart")
+		didStart = true
 	}
 
 	func stop() {

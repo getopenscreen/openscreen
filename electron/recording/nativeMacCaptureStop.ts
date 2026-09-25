@@ -55,6 +55,9 @@ const INTERRUPTION_ERROR_CODES = new Set([
 	"capture-stopped-with-error",
 ]);
 
+/** Shown when a finished take could not capture the system audio it was asked for. */
+export const SYSTEM_AUDIO_LOST_WARNING = "System audio could not be recorded for this take.";
+
 type HelperEvent = Record<string, unknown>;
 
 function parseHelperEvent(line: string): HelperEvent | null {
@@ -136,6 +139,12 @@ export function readNativeMacStopOutcome(
 	const errors = events.filter((event) => event.event === "error");
 	const interruption = errors.find(isInterruption);
 	const failure = lastWhere(errors, (event) => !isInterruption(event));
+	// Not a failure of the take: the video and every other track are fine. But the system
+	// audio the user asked for is silence, and a finished take with no word about it would
+	// only be found out on playback.
+	const systemAudioLost = events.some(
+		(event) => event.event === "warning" && event.code === "system-audio-unavailable",
+	);
 	const exited = exit !== null;
 
 	// A finalized file outranks anything said before it: this is the take the
@@ -152,15 +161,17 @@ export function readNativeMacStopOutcome(
 				exited,
 			};
 		}
-		if (!interruption) {
-			return { ok: true, screenVideoPath };
+		const warnings: string[] = [];
+		if (interruption) {
+			const reason = messageOf(interruption).replace(/[.\s]+$/, "");
+			warnings.push(`Recording ended early (${reason}). The part recorded until then was saved.`);
 		}
-		const reason = messageOf(interruption).replace(/[.\s]+$/, "");
-		return {
-			ok: true,
-			screenVideoPath,
-			warning: `Recording ended early (${reason}). The part recorded until then was saved.`,
-		};
+		if (systemAudioLost) {
+			warnings.push(SYSTEM_AUDIO_LOST_WARNING);
+		}
+		return warnings.length > 0
+			? { ok: true, screenVideoPath, warning: warnings.join(" ") }
+			: { ok: true, screenVideoPath };
 	}
 
 	if (failure) {

@@ -7,6 +7,7 @@ import {
 	nativeMacDiscardTargets,
 	readNativeMacHelperEvents,
 	readNativeMacStopOutcome,
+	SYSTEM_AUDIO_LOST_WARNING,
 	sendNativeMacStopCommand,
 	waitForNativeMacCaptureStop,
 } from "./nativeMacCaptureStop";
@@ -141,6 +142,31 @@ describe("readNativeMacStopOutcome", () => {
 			screenVideoPath: TARGET,
 			warning: `Recording ended early (${CAPTURE_STOPPED_MESSAGE}). The part recorded until then was saved.`,
 		});
+	});
+
+	it("tells the user when the system audio they asked for could not be recorded", () => {
+		const tapFailed = line({
+			event: "warning",
+			code: "system-audio-unavailable",
+			message: "System audio could not be captured: AudioDeviceStart failed (OSStatus -1)",
+		});
+		expect(readNativeMacStopOutcome(started + tapFailed + stopped, null, TARGET)).toEqual({
+			ok: true,
+			screenVideoPath: TARGET,
+			warning: SYSTEM_AUDIO_LOST_WARNING,
+		});
+	});
+
+	it("keeps both the early end and the lost system audio in one warning", () => {
+		const tapFailed = line({ event: "warning", code: "system-audio-unavailable" });
+		const outcome = readNativeMacStopOutcome(
+			started + tapFailed + captureStopped + stopped,
+			null,
+			TARGET,
+		);
+		expect(outcome).toMatchObject({ ok: true, screenVideoPath: TARGET });
+		expect(outcome?.ok && outcome.warning).toContain("Recording ended early");
+		expect(outcome?.ok && outcome.warning).toContain(SYSTEM_AUDIO_LOST_WARNING);
 	});
 
 	it("says why the take ended rather than quoting the raw writer error", () => {

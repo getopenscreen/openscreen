@@ -9,6 +9,7 @@ import type { DesktopCapturerSource, Rectangle } from "electron";
 import {
 	app,
 	BrowserWindow,
+	clipboard,
 	desktopCapturer,
 	dialog,
 	ipcMain,
@@ -1928,6 +1929,19 @@ export function registerIpcHandlers(
 	};
 	const sameSelectedSource = (left: SelectedSource | null, right: SelectedSource | null) =>
 		left?.id === right?.id && left?.name === right?.name && left?.display_id === right?.display_id;
+
+	// Issue #738: the renderer's `navigator.clipboard.writeText` is always denied
+	// here (NotAllowedError: Write permission denied — Electron withholds the
+	// clipboard-sanitized-write permission from the renderer), so chat's
+	// "Copy message" fell to its error toast and the clipboard kept its old
+	// content. Main's `clipboard` module has no such permission gate; the
+	// preload exposes this as `copyToClipboard`.
+	ipcMain.handle("clipboard:write-text", (_event, text: unknown) => {
+		if (typeof text !== "string") {
+			throw new TypeError("clipboard:write-text expects a string");
+		}
+		clipboard.writeText(text);
+	});
 
 	ipcMain.handle("get-sources", async (_, opts) => {
 		// desktopCapturer.getSources can never settle where the GL stack cannot be

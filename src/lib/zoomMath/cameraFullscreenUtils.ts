@@ -1,4 +1,5 @@
 import type { CameraFullscreenRegion } from "@/components/video-editor/types";
+import { type SpeedRegion, screenTimeMs } from "@/lib/ai-edition/timeline/speed";
 import { TRANSITION_WINDOW_MS } from "./constants";
 import { easeOutScreenStudio } from "./mathUtils";
 
@@ -15,32 +16,36 @@ const LEAD_OUT_WINDOW_MS = TRANSITION_WINDOW_MS * 1.5;
  * window than the lead-in). Outside [startMs, endMs] progress is always 0. The
  * transition windows are clamped to at most half the region's duration so short
  * regions still ease in/out fully within their own bounds instead of overlapping.
+ * Windows are measured on screen time (`screenTimeMs`), like zoom's.
  */
 function computeCameraFullscreenRegionStrength(
 	region: CameraFullscreenRegion,
 	timeMs: number,
+	speedRegions: readonly SpeedRegion[],
 ): number {
 	if (timeMs <= region.startMs || timeMs >= region.endMs) {
 		return 0;
 	}
 
-	const duration = region.endMs - region.startMs;
-	const halfDuration = duration / 2;
+	const start = screenTimeMs(speedRegions, region.startMs);
+	const end = screenTimeMs(speedRegions, region.endMs);
+	const t = screenTimeMs(speedRegions, timeMs);
+	const halfDuration = (end - start) / 2;
 	const leadInWindow = Math.min(TRANSITION_WINDOW_MS, halfDuration);
 	const leadOutWindow = Math.min(LEAD_OUT_WINDOW_MS, halfDuration);
-	const leadInEnd = region.startMs + leadInWindow;
-	const leadOutStart = region.endMs - leadOutWindow;
+	const leadInEnd = start + leadInWindow;
+	const leadOutStart = end - leadOutWindow;
 
-	if (timeMs < leadInEnd) {
-		const progress = leadInWindow > 0 ? (timeMs - region.startMs) / leadInWindow : 1;
+	if (t < leadInEnd) {
+		const progress = leadInWindow > 0 ? (t - start) / leadInWindow : 1;
 		return easeOutScreenStudio(progress);
 	}
 
-	if (timeMs <= leadOutStart) {
+	if (t <= leadOutStart) {
 		return 1;
 	}
 
-	const progress = leadOutWindow > 0 ? (region.endMs - timeMs) / leadOutWindow : 0;
+	const progress = leadOutWindow > 0 ? (end - t) / leadOutWindow : 0;
 	return easeOutScreenStudio(progress);
 }
 
@@ -54,10 +59,11 @@ function computeCameraFullscreenRegionStrength(
 export function computeCameraFullscreenProgress(
 	regions: CameraFullscreenRegion[],
 	timeMs: number,
+	speedRegions: readonly SpeedRegion[] = [],
 ): number {
 	let strongest = 0;
 	for (const region of regions) {
-		const strength = computeCameraFullscreenRegionStrength(region, timeMs);
+		const strength = computeCameraFullscreenRegionStrength(region, timeMs, speedRegions);
 		if (strength > strongest) {
 			strongest = strength;
 		}

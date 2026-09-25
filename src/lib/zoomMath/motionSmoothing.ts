@@ -137,13 +137,3 @@ export function getCursorSpringConfig(smoothingFactor: number): SpringConfig {
 		restSpeed: 0.01,
 	};
 }
-
-export function getZoomSpringConfig(): SpringConfig {
-	return {
-		stiffness: 320,
-		damping: 40,
-		mass: 0.92,
-		restDelta: 0.0005,
-		restSpeed: 0.015,
-	};
-}

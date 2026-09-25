@@ -2323,7 +2323,18 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             scene.map(|s| &s.camera_fullscreen_regions).unwrap_or(&empty_cam);
         let webcam_reactive = scene.map(|s| s.layout.webcam_reactive_zoom).unwrap_or(false);
         let source_t = input.timeline_t_override.unwrap_or(frame / FPS);
-        let source_t_prev = source_t - 1.0 / FPS;
+        // Les transitions se mesurent à l'écran (`ScreenClock`), la frame précédente aussi : sous
+        // une speed region, une frame couvre `vitesse / FPS` de source, et c'est ce pas qui donne
+        // au flou de mouvement du zoom la même traînée qu'à 1×.
+        let clock = scene
+            .map(|s| crate::regions::ScreenClock::new(&s.speed_regions, s.active_clip_index))
+            .unwrap_or_default();
+        let speed = scene
+            .map(|s| {
+                crate::regions::speed_at(&s.speed_regions, s.active_clip_index, source_t as f64)
+            })
+            .unwrap_or(1.0);
+        let source_t_prev = source_t - speed as f32 / FPS;
         // le focus "auto" (suivi curseur) réutilise la même piste que le rendu du curseur.
         let cursor_for_zoom = cursor;
         // La rotation 3D (mode 8, pas de motion blur dans ce chemin — cf. le commentaire au
@@ -2354,7 +2365,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
                     .map(|c| [c.source_start_sec as f32, c.source_end_sec as f32])
                     .unwrap_or([f32::NEG_INFINITY, f32::INFINITY]),
             };
-            let zs = crate::regions::zoom_state_in(zoom_regions, source_t, cursor_for_zoom, &camera);
+            let zs =
+                crate::regions::zoom_state_in(zoom_regions, source_t, cursor_for_zoom, &camera, &clock);
             p.zoom = zs.scale;
             p.focus = zs.focus;
             zoom_rotation = zs.rotation;
@@ -2363,15 +2375,22 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             zoom_camera = zs.camera;
             zoom_aim = zs.aim;
             zoom_orbit = zs.orbit;
-            let zs_p = crate::regions::zoom_state_at(zoom_regions, source_t_prev, cursor_for_zoom);
+            let zs_p = crate::regions::zoom_state_in(
+                zoom_regions,
+                source_t_prev,
+                cursor_for_zoom,
+                &crate::regions::CameraFrame::NONE,
+                &clock,
+            );
             pp.zoom = zs_p.scale;
             pp.focus = zs_p.focus;
         }
         // Full Camera ignore le rétrécissement réactif de la webcam (design web : mélanger
         // "rétrécit pour le zoom" et "grandit en plein cadre" dans la même frame n'a pas de sens).
-        let cam_progress = crate::regions::camera_fullscreen_progress_at(cam_regions, source_t);
+        let cam_progress =
+            crate::regions::camera_fullscreen_progress_at(cam_regions, source_t, &clock);
         let cam_progress_prev =
-            crate::regions::camera_fullscreen_progress_at(cam_regions, source_t_prev);
+            crate::regions::camera_fullscreen_progress_at(cam_regions, source_t_prev, &clock);
         // rétrécissement réactif : la webcam rétrécit pendant un zoom actif (1/zoom, plancher
         // 0.35 — parité `reactiveWebcamScale`, TS). Ignoré pendant Full Camera (voir ci-dessus).
         let reactive_scale = |zoom: f32, progress: f32| -> f32 {
@@ -2842,7 +2861,10 @@ pub fn cursor_alpha(
     }
     let idle_alpha = track.opacity_at(t, live.cursor_auto_hide);
     let zoom_alpha = match scene {
-        Some(s) => crate::regions::zoom_cursor_alpha(&s.zoom_regions, t),
+        Some(s) => {
+            let clock = crate::regions::ScreenClock::new(&s.speed_regions, s.active_clip_index);
+            crate::regions::zoom_cursor_alpha(&s.zoom_regions, t, &clock)
+        }
         None => 1.0,
     };
     idle_alpha * zoom_alpha

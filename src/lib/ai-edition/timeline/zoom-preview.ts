@@ -18,6 +18,7 @@ import { getZoomScale } from "@/components/video-editor/types";
 import type { AxcutZoomRegion } from "@/lib/ai-edition/schema";
 import { findDominantRegion } from "@/lib/zoomMath/zoomRegionUtils";
 import { computeZoomTransform } from "@/lib/zoomMath/zoomTransform";
+import type { SpeedRegion } from "./speed";
 
 export interface ZoomPreviewTransform {
 	scale: number;
@@ -54,22 +55,21 @@ function toLegacyZoomRegion(region: AxcutZoomRegion): LegacyZoomRegion {
  * coordinate space as `zoomRegion.startMs`/`endMs` (the timeline shown in
  * the ruler, not raw source-media time).
  *
- * `playbackRate` scales the zoom-in/out transition windows in source-time
- * so the transition keeps its authored wall-clock duration inside speed
- * regions. Defaults to 1 (no scaling).
+ * `speedRegions` (same time space) keep the zoom-in/out transitions at their
+ * on-screen duration while the footage under them is sped up.
  */
 export function computeZoomPreviewTransform(
 	zoomRegions: AxcutZoomRegion[],
 	virtualTimeMs: number,
 	cursorTelemetry?: CursorTelemetryPoint[],
-	playbackRate = 1,
+	speedRegions?: SpeedRegion[],
 ): ZoomPreviewTransform {
 	if (zoomRegions.length === 0) return IDENTITY_ZOOM_TRANSFORM;
 
 	const legacyRegions = zoomRegions.map(toLegacyZoomRegion);
 	const dominant = findDominantRegion(legacyRegions, virtualTimeMs, {
 		cursorTelemetry,
-		playbackRate,
+		speedRegions,
 	});
 	if (!dominant.region || dominant.strength <= 0) return IDENTITY_ZOOM_TRANSFORM;
 

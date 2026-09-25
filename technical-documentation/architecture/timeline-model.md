@@ -215,7 +215,7 @@ the contract a reviewer can grade against. Each is asserted in
   the region hard on its own span: full strength inside, nothing outside, no ease-in/out
   window and no chaining with a neighbouring zoom. An export never composes a frame at
   those source times, so the entry is inert there — without the gate a zoom's ease-in
-  (1.5 s before its start) would reach the kept frames beside the cut and the preview
+  (up to 1.5 s before its start) would reach the kept frames beside the cut and the preview
   would show what the export does not.
 - **A named clip beats anything inferred from (assetId, sourceTime), and clip ORDER is
   never an input.** Asserted in

@@ -3,7 +3,7 @@
 // other wallpaper it must be dead and say why, not hold a choice that changes nothing on screen.
 
 import "@testing-library/jest-dom";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { LOCALE_STORAGE_KEY } from "@/i18n/config";
@@ -28,7 +28,8 @@ function renderWith(legacyEditor: Record<string, unknown>) {
 	);
 }
 
-const control = () => screen.getByRole("combobox", { name: "Animation" });
+const control = () => screen.getByRole("group", { name: "Animation" });
+const choice = (name: string) => within(control()).getByRole("button", { name });
 
 beforeEach(() => {
 	localStorage.clear();
@@ -44,11 +45,11 @@ afterEach(() => {
 describe("background animation control", () => {
 	it("animates a gradient wallpaper", () => {
 		renderWith({ wallpaper: "linear-gradient(135deg, #2b3a67, #b8577f)" });
-		expect(control()).toBeEnabled();
-		expect(control()).toHaveValue("none");
+		expect(choice("Aurora")).toBeEnabled();
+		expect(choice("None")).toHaveAttribute("aria-pressed", "true");
 		expect(screen.queryByText(REASON)).not.toBeInTheDocument();
 
-		fireEvent.change(control(), { target: { value: "aurora" } });
+		fireEvent.click(choice("Aurora"));
 		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
 			wallpaperMotion: "aurora",
 		});
@@ -56,8 +57,10 @@ describe("background animation control", () => {
 
 	it("is disabled with its reason on an image, and keeps the stored choice", () => {
 		renderWith({ wallpaper: "/wallpapers/wallpaper1.jpg", wallpaperMotion: "waves" });
-		expect(control()).toBeDisabled();
-		expect(control()).toHaveValue("none");
+		for (const button of within(control()).getAllByRole("button")) {
+			expect(button).toBeDisabled();
+		}
+		expect(choice("None")).toHaveAttribute("aria-pressed", "true");
 		expect(screen.getByText(REASON)).toBeInTheDocument();
 		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
 			wallpaperMotion: "waves",

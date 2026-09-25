@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "移動",
 		"zoom": "ズーム",
+		"panHint": "{{modifier}} + スクロールで移動",
+		"zoomHint": "{{modifier}} + スクロールでズーム",
 		"trim": "トリム",
 		"speed": "再生速度",
 		"zoomItem": "ズーム {{index}}",

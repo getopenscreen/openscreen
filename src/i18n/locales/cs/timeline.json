@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "Posun",
 		"zoom": "Přiblížení",
+		"panHint": "{{modifier}} + kolečko myši pro posun",
+		"zoomHint": "{{modifier}} + kolečko myši pro přiblížení",
 		"trim": "Oříznutí",
 		"speed": "Rychlost",
 		"zoomItem": "Přiblížení {{index}}",

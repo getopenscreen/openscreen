@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Loader2, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ import {
 } from "../../../electron/ai-edition/provider-registry";
 import { ChatWelcome } from "./ChatWelcome";
 import { canSendChat } from "./chatAvailability";
+import type { ChatBudget } from "./chatBudget";
 import { ChatHistoryModal } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 import { useChatBudget } from "./useChatBudget";
@@ -1019,16 +1020,7 @@ export function ChatStripPanel() {
 			<div className={styles.panelHeader}>
 				<div className={styles.chatStrip}>
 					<div className={styles.chatStripRow}>
-						<span
-							className={styles.ctxPill}
-							title={t("chat.contextTooltip", {
-								usedTokens: budget.usedTokens,
-								budgetTokens: budget.budgetTokens,
-							})}
-						>
-							<span className={styles.d} aria-hidden />
-							{t("chat.contextPercent", { percent: Math.min(100, Math.round(budget.ratio * 100)) })}
-						</span>
+						<ContextMeter budget={budget} t={t} />
 						<span className={styles.stripActions}>
 							<button
 								type="button"
@@ -1486,26 +1478,21 @@ export function ChatStripPanel() {
 						ref={modelButtonRef}
 						type="button"
 						className={styles.modelPicker}
-						aria-label={t("chat.modelLabel")}
+						// Unconfigured, the visible text IS the instruction, so naming the
+						// button again would talk over it. Configured, the text is a bare
+						// model id, which needs saying what it is — `currentModel` already
+						// carries that sentence, and its own punctuation with it.
+						aria-label={llmConfig ? `${t("chat.currentModel")} ${modelLabel}` : undefined}
 						aria-haspopup="menu"
 						aria-expanded={modelPopoverOpen}
 						onClick={toggleModelPopoverOpen}
 					>
-						<svg
-							width={12}
-							height={12}
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						>
-							<line x1="3" y1="6" x2="21" y2="6" />
-							<line x1="3" y1="12" x2="21" y2="12" />
-							<line x1="3" y1="18" x2="21" y2="18" />
-						</svg>
-						<span>{modelLabel}</span>
+						{/* Sparkles is what the app menu and the timeline already put on AI,
+						    and it is what this button configures. The three stacked lines it
+						    replaces are a navigation hamburger — they said "menu", which is
+						    the mechanism, not the subject. */}
+						<Sparkles size={12} aria-hidden />
+						<span className={llmConfig ? styles.modelId : undefined}>{modelLabel}</span>
 					</button>
 					{reasoningLabel ? (
 						<button
@@ -1665,8 +1652,8 @@ export function ChatStripPanel() {
 									onClick={() => void confirmRewind(rewindFor.messageId)}
 									style={{
 										padding: "4px 10px",
-										background: "var(--accent)",
-										border: "1px solid var(--accent)",
+										background: "var(--accent-fill)",
+										border: "1px solid var(--accent-fill)",
 										borderRadius: "var(--r-sm)",
 										color: "var(--accent-on)",
 										font: "500 12px var(--font-body)",
@@ -1681,5 +1668,60 @@ export function ChatStripPanel() {
 					)
 				: null}
 		</aside>
+	);
+}
+
+/** How full the chat's context window is.
+ *
+ *  This was a mint pill: a dot, a percentage, and a --success wash. Three things were
+ *  wrong with it. The colour never moved — the class was static, so it was the same
+ *  green at 0% as it would be at 99%, which is a status signal that reports no status.
+ *  Its text sat at 2.4:1 on its own background. And a percentage is a ratio against a
+ *  ceiling, which is a quantity a bar shows at a glance and a number only shows to
+ *  someone who stops to read it.
+ *
+ *  So: a meter, with the number kept beside it for the precision the bar cannot give.
+ *  The fill and its track come from one ramp, and the colour now means something —
+ *  mint while there is room, --warn past the point where the next few turns will start
+ *  evicting history. Never colour alone: crossing the threshold also puts a glyph in
+ *  the row, because the amber fill is below 3:1 on this surface by design and the
+ *  glyph, in the darker --warn-fg, is what makes it legible. The glyph is decorative to
+ *  a screen reader, so the same moment also adds the state in words ahead of the number.
+ *
+ *  It stops at --warn rather than escalating to red: this design system reserves red
+ *  for REC, cut, skip and trim, and a fourth meaning would blunt it. */
+const CONTEXT_TIGHT_RATIO = 0.8;
+
+export function ContextMeter({
+	budget,
+	t,
+}: {
+	budget: ChatBudget;
+	t: ReturnType<typeof useScopedT>;
+}) {
+	const percent = Math.min(100, Math.round(budget.ratio * 100));
+	const tight = budget.ratio >= CONTEXT_TIGHT_RATIO;
+	return (
+		<span
+			className={styles.ctxMeter}
+			data-tight={tight}
+			title={t("chat.contextTooltip", {
+				usedTokens: budget.usedTokens,
+				budgetTokens: budget.budgetTokens,
+			})}
+		>
+			{/* Decorative: the label beside it already states the number, and announcing
+			    the same ratio twice is noise rather than access. */}
+			<span className={styles.ctxTrack} aria-hidden>
+				<span className={styles.ctxFill} style={{ width: `${percent}%` }} />
+			</span>
+			{tight ? (
+				<>
+					<TriangleAlert size={11} className={styles.ctxWarnIcon} aria-hidden />
+					<span className="sr-only">{t("chat.contextTight")}</span>
+				</>
+			) : null}
+			<span className={styles.ctxLabel}>{t("chat.contextPercent", { percent })}</span>
+		</span>
 	);
 }

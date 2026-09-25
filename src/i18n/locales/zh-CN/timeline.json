@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "平移",
 		"zoom": "缩放",
+		"panHint": "{{modifier}} + 滚轮平移",
+		"zoomHint": "{{modifier}} + 滚轮缩放",
 		"trim": "剪辑",
 		"speed": "速度",
 		"zoomItem": "缩放 {{index}}",

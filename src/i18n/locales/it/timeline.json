@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "Panoramica",
 		"zoom": "Zoom",
+		"panHint": "{{modifier}} + rotellina per la panoramica",
+		"zoomHint": "{{modifier}} + rotellina per lo zoom",
 		"trim": "Taglio",
 		"speed": "Velocità",
 		"zoomItem": "Zoom {{index}}",

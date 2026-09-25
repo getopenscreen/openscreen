@@ -59,7 +59,7 @@
 }
 
 .iconButton:hover:not(:disabled) {
-	background: var(--accent);
+	background: var(--accent-fill);
 	color: var(--accent-on);
 }
 

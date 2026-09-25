@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "Panoramique",
 		"zoom": "Zoom",
+		"panHint": "{{modifier}} + molette pour le panoramique",
+		"zoomHint": "{{modifier}} + molette pour zoomer",
 		"trim": "Couper",
 		"speed": "Vitesse",
 		"zoomItem": "Zoom {{index}}",

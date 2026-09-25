@@ -128,9 +128,7 @@ describe("EditorEmptyState (new editor)", () => {
 		renderWithI18n(<EditorEmptyState hasProject={false} />);
 
 		expect(screen.getByText(/no project open/i)).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: /new project \+ import video/i }),
-		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /^new project$/i })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: /open project/i })).toBeInTheDocument();
 	});
 
@@ -197,7 +195,7 @@ describe("EditorEmptyState (new editor)", () => {
 		renderWithI18n(<EditorEmptyState hasProject={false} />);
 
 		await act(async () => {
-			fireEvent.click(screen.getByRole("button", { name: /new project \+ import video/i }));
+			fireEvent.click(screen.getByRole("button", { name: /^new project$/i }));
 		});
 
 		await waitFor(() => {

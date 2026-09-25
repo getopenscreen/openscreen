@@ -12,6 +12,14 @@
  * depending on import order. */
 :root:root {
 	/* canvas */
+	/* --bg is also the ground every FLOATING layer stands on — menus, popovers,
+	   tooltips, the modal card, the floating inspector. What makes those read as
+	   a layer above the page is their border and --elev-pop, not a lighter fill,
+	   so they take the same ground as the shell and the left dock rather than a
+	   --surface step. The surface scale is for things IN the flow: cards, tracks,
+	   inputs, hover fills. Reaching for --surface on a popover is the drift this
+	   note exists to stop; it also inverts between themes, where --surface sits
+	   above --bg in light and --surface-1 collapses onto --surface in dark. */
 	--bg: #f8fafc;
 	--bg-grad: radial-gradient(ellipse 1200px 800px at 50% -200px, #ffffff 0%, #f1f5f9 80%);
 	--surface: #ffffff;
@@ -42,7 +50,16 @@
 	--brand-glow: rgba(16, 185, 129, 0.35);
 	--brand-soft: rgba(16, 185, 129, 0.10);
 	--accent: #10b981;
-	--accent-on: #04221a;
+	/* Filled accent surfaces (buttons, active segments, badges) do NOT use
+	   --accent: mint is a border/glow/wash colour, and no readable text sits
+	   on it in light theme -- white is 2.5:1 against it and the near-black it
+	   used to carry was 6.6:1 but muddy at 13px. --accent-fill is the mint
+	   darkened until white text clears AA on it (5.5:1); --accent-fill-lo is
+	   its hover, darker again so hover never *loses* contrast. In dark theme
+	   the pair collapses back onto mint, where dark-on-mint reads at 7.7:1. */
+	--accent-fill: #047857;
+	--accent-fill-lo: #065f46;
+	--accent-on: #ffffff;
 	--accent-soft: rgba(16, 185, 129, 0.10);
 	--accent-wash: rgba(16, 185, 129, 0.06);
 	--accent-border: rgba(16, 185, 129, 0.26);
@@ -76,6 +93,11 @@
 	--danger-wash: rgba(239, 68, 68, 0.06);
 	--danger-hatch: rgba(239, 68, 68, 0.32);
 	--warn: #f59e0b;
+	/* --warn is a fill and wash hue: amber is 2.1:1 on --bg in light theme, so a
+	   glyph or a word that has to carry the warning on its own takes --warn-fg,
+	   the same amber darkened until it clears 3:1 for graphics and AA for text
+	   (4.8:1 on --bg). Dark theme needs no darker step and keeps --warn. */
+	--warn-fg: #b45309;
 	--warn-soft: rgba(245, 158, 11, 0.12);
 
 	/* timeline pills */
@@ -193,6 +215,8 @@
 	--brand-glow: rgba(16, 185, 129, 0.40);
 	--brand-soft: rgba(16, 185, 129, 0.14);
 	--accent: #10b981;
+	--accent-fill: #10b981;
+	--accent-fill-lo: #34d399;
 	--accent-on: #0a0d12;
 	--accent-soft: rgba(16, 185, 129, 0.14);
 	--accent-wash: rgba(16, 185, 129, 0.06);
@@ -207,6 +231,7 @@
 	--danger-hatch: rgba(248, 113, 113, 0.40);
 
 	--warn: #fbbf24;
+	--warn-fg: #fbbf24;
 	--warn-soft: rgba(251, 191, 36, 0.14);
 
 	--annotation: #fbbf24;

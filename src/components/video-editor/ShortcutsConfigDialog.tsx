@@ -247,7 +247,7 @@ export function ShortcutsConfigDialog() {
 						</Button>
 						<Button
 							size="sm"
-							className="bg-[var(--brand)] hover:bg-[var(--brand-lo)] text-[var(--accent-on)]"
+							className="bg-[var(--accent-fill)] hover:bg-[var(--accent-fill-lo)] text-[var(--accent-on)]"
 							onClick={handleSave}
 						>
 							{tc("actions.save")}

@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ProjectNameField is a private helper inside EditorTopBar, so reach it through
 // the public topbar instead. The translator echoes keys; assertions read better
 // against keys than against prose that drifts with copy edits.
+//
+// The locale is settable rather than pinned to "en": "en" sorts first among the
+// thirteen, so with it fixed there is no way to tell "opens on the language you
+// are in" apart from "opens on the first row".
+const i18n = vi.hoisted(() => ({ locale: "en", setLocale: vi.fn() }));
 vi.mock("@/contexts/I18nContext", () => ({
-	useI18n: () => ({ locale: "en", setLocale: () => {} }),
+	useI18n: () => ({ locale: i18n.locale, setLocale: i18n.setLocale }),
 	useScopedT: () => (key: string) => key,
 }));
 
@@ -15,11 +20,25 @@ vi.mock("@/hooks/useTheme", () => ({
 	useTheme: () => ({ theme: "dark", toggle: () => {} }),
 }));
 
+import { getAvailableLocales } from "@/i18n/loader";
 import { EditorTopBar } from "./EditorTopBar";
+
+/** Row order is the loader's, not this file's guess at it. */
+const getLocaleIndex = (code: string) => getAvailableLocales().indexOf(code);
+
+beforeEach(() => {
+	i18n.locale = "en";
+	i18n.setLocale.mockClear();
+});
+afterEach(cleanup);
 
 const noop = () => {};
 
-function renderTopBar(projectTitle: string | null) {
+/** The project-name / rename button, named by its aria-label rather than by the
+ *  title it paints — the title is what changes between these cases. */
+const nameButton = () => screen.getByRole("button", { name: "topbar.renameProject" });
+
+function renderTopBar(projectTitle: string | null, dirty = false) {
 	const onRename = vi.fn();
 	const onShowAbout = vi.fn();
 	const onCheckForUpdates = vi.fn();
@@ -30,7 +49,7 @@ function renderTopBar(projectTitle: string | null) {
 			mode="edit"
 			onModeChange={noop}
 			projectTitle={projectTitle}
-			dirty={false}
+			dirty={dirty}
 			canExport={false}
 			chatOpen={false}
 			actions={{
@@ -278,11 +297,51 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		expect(tabs[2]).toHaveAttribute("title", "topbar.modes.rec");
 	});
 
-	it("provides title tooltips on the saved status indicator", () => {
+	// The "Saved"/"Unsaved" badge is gone: unsaved work is marked on the document
+	// name instead. What has to survive that is the announcement -- the marker
+	// itself is decoration, and the rename button's aria-label swallows anything
+	// nested inside it, so a silent dot would drop the state out of the a11y tree
+	// altogether.
+	it("says nothing about saving while the document is clean", () => {
 		renderTopBar("Demo Project");
-		const savedIndicator = screen.getByTitle("topbar.saved");
-		expect(savedIndicator).toBeInTheDocument();
-		expect(savedIndicator).toHaveTextContent("topbar.saved");
+		expect(screen.queryByText("topbar.unsaved")).not.toBeInTheDocument();
+		expect(screen.queryByText("topbar.saved")).not.toBeInTheDocument();
+		// Not "no description at all": the hover title describes the button on every
+		// bar. What has to be absent is the unsaved state.
+		expect(nameButton()).not.toHaveAccessibleDescription("topbar.unsaved");
+	});
+
+	// The accessible DESCRIPTION, not the mere presence of the text: a span sitting
+	// loose beside the button is announced when a reader walks past it and stays
+	// silent on the focus that matters, which is indistinguishable from the bug.
+	it("announces the unsaved state once the document is modified", () => {
+		renderTopBar("Demo Project", true);
+		expect(nameButton()).toHaveAccessibleDescription("topbar.unsaved");
+	});
+
+	// A project-less bar reads "No project", which an unsaved marker beside it
+	// would contradict.
+	it("keeps the unsaved marker off a bar with no project", () => {
+		renderTopBar(null, true);
+		expect(screen.queryByText("topbar.unsaved")).not.toBeInTheDocument();
+		expect(nameButton()).not.toHaveAccessibleDescription();
+	});
+
+	it("names every mode tab independently of the width its label is painted at", () => {
+		renderTopBar("Demo Project");
+		const tabs = screen.getAllByRole("tab");
+		expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual([
+			"topbar.modes.media",
+			"topbar.modes.edit",
+			"topbar.modes.rec",
+		]);
+		// Each tab carries exactly one glyph, which is decorative: the name above
+		// is what a screen reader reads.
+		for (const tab of tabs) {
+			const icons = tab.querySelectorAll("svg");
+			expect(icons).toHaveLength(1);
+			expect(icons[0]).toHaveAttribute("aria-hidden");
+		}
 	});
 
 	it("keeps the brand trigger accessible by label and title even when text collapses", () => {
@@ -299,5 +358,139 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		expect(langBtn).toHaveTextContent("EN");
 		fireEvent.click(langBtn);
 		expect(screen.getByText("English")).toBeInTheDocument();
+	});
+});
+
+describe("EditorTopBar language menu", () => {
+	const openMenu = () => {
+		renderTopBar("Demo Project");
+		const trigger = screen.getByRole("button", { name: "topbar.changeLanguage" });
+		fireEvent.click(trigger);
+		return { trigger, items: () => screen.getAllByRole("menuitemradio") };
+	};
+
+	// It announced itself with aria-pressed, which says "this control is a toggle
+	// that is currently on" — it opens a menu.
+	it("announces itself as a menu trigger, not as a pressed toggle", () => {
+		renderTopBar("Demo Project");
+		const trigger = screen.getByRole("button", { name: "topbar.changeLanguage" });
+		expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+		expect(trigger).toHaveAttribute("aria-expanded", "false");
+		expect(trigger).not.toHaveAttribute("aria-pressed");
+		fireEvent.click(trigger);
+		expect(trigger).toHaveAttribute("aria-expanded", "true");
+	});
+
+	// The chosen language used to be marked by colour alone, which does not reach
+	// a screen reader and did not survive the contrast fix either.
+	it("marks the current language to something other than the eye", () => {
+		i18n.locale = "fr";
+		const { items } = openMenu();
+		const checked = items().filter((i) => i.getAttribute("aria-checked") === "true");
+		expect(checked).toHaveLength(1);
+		expect(checked[0]).toHaveTextContent("Français");
+	});
+
+	it("opens onto the language in use rather than the top of the list", () => {
+		i18n.locale = "fr";
+		const { items } = openMenu();
+		expect(document.activeElement).toBe(items()[getLocaleIndex("fr")]);
+		expect(document.activeElement).toHaveTextContent("Français");
+	});
+
+	it("closes on Escape and hands focus back to the trigger", () => {
+		const { trigger } = openMenu();
+		fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+		expect(document.activeElement).toBe(trigger);
+	});
+
+	it("walks the list with the arrow keys, wrapping at both ends", () => {
+		const { items } = openMenu();
+		const menu = screen.getByRole("menu");
+		const all = items();
+		expect(document.activeElement).toBe(all[0]);
+		fireEvent.keyDown(menu, { key: "ArrowDown" });
+		expect(document.activeElement).toBe(all[1]);
+		fireEvent.keyDown(menu, { key: "ArrowUp" });
+		fireEvent.keyDown(menu, { key: "ArrowUp" });
+		expect(document.activeElement).toBe(all[all.length - 1]);
+		fireEvent.keyDown(menu, { key: "Home" });
+		expect(document.activeElement).toBe(all[0]);
+		fireEvent.keyDown(menu, { key: "End" });
+		expect(document.activeElement).toBe(all[all.length - 1]);
+	});
+
+	it("jumps to a language by its typed name", () => {
+		openMenu();
+		fireEvent.keyDown(screen.getByRole("menu"), { key: "f" });
+		expect(document.activeElement).toHaveTextContent("Français");
+	});
+
+	// Typing the native name only reaches the ones a Latin keyboard can produce,
+	// so the locale code has to match too or 日本語 is unreachable by keyboard.
+	it("jumps by locale code for the names a keyboard cannot type", () => {
+		const { items } = openMenu();
+		fireEvent.keyDown(screen.getByRole("menu"), { key: "j" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("ja-JP")]);
+	});
+
+	// Consecutive keys inside the window accumulate, which is what makes "po"
+	// reach Português instead of stopping at the first p.
+	it("accumulates consecutive keystrokes into one search", () => {
+		const { items } = openMenu();
+		const menu = screen.getByRole("menu");
+		fireEvent.keyDown(menu, { key: "p" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("pt-BR")]);
+		fireEvent.keyDown(menu, { key: "o" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("pt-BR")]);
+	});
+
+	// Two locales share the "z" code prefix. Accumulating "zz" matched nothing, so the
+	// second one could not be reached by typing at all; the repeated key has to step to
+	// the next match instead, and wrap back to the first.
+	it("cycles through the matches when the same key is pressed again", () => {
+		const { items } = openMenu();
+		const menu = screen.getByRole("menu");
+		fireEvent.keyDown(menu, { key: "z" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("zh-CN")]);
+		fireEvent.keyDown(menu, { key: "z" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("zh-TW")]);
+		fireEvent.keyDown(menu, { key: "z" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("zh-CN")]);
+	});
+
+	// A fresh letter searches past the row you are on, or typing the initial of the
+	// language already focused would leave you where you are.
+	it("moves past the focused row when its own initial is typed", () => {
+		const { items } = openMenu();
+		const menu = screen.getByRole("menu");
+		expect(document.activeElement).toBe(items()[getLocaleIndex("en")]);
+		fireEvent.keyDown(menu, { key: "e" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("es")]);
+	});
+
+	it("picks a language and closes, returning focus to the trigger", () => {
+		const { trigger, items } = openMenu();
+		fireEvent.click(items()[getLocaleIndex("fr")]);
+		expect(i18n.setLocale).toHaveBeenCalledWith("fr");
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+		expect(document.activeElement).toBe(trigger);
+	});
+
+	// Language and theme are the bar's two app-wide preferences, and they are meant
+	// to read as one pair at its right end. Nothing about either button says where it
+	// belongs, so without this the language selector drifts back among the file
+	// actions the first time someone reorders the header.
+	it("seats the language selector immediately before the theme toggle", () => {
+		renderTopBar("Demo Project");
+		const langBtn = screen.getByRole("button", { name: "topbar.changeLanguage" });
+		const themeBtn = screen.getByRole("button", { name: "topbar.toggleTheme" });
+		// The selector is wrapped in its own popover anchor, so the sibling that
+		// precedes the theme button is that anchor, not the button itself.
+		expect(themeBtn.previousElementSibling).toBe(langBtn.closest("div"));
+		expect(
+			langBtn.compareDocumentPosition(themeBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
 	});
 });

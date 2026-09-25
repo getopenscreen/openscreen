@@ -22,6 +22,8 @@
 	"labels": {
 		"pan": "تحريك",
 		"zoom": "تكبير",
+		"panHint": "{{modifier}} + عجلة الماوس للتحريك",
+		"zoomHint": "{{modifier}} + عجلة الماوس للتكبير",
 		"trim": "قص",
 		"speed": "سرعة",
 		"zoomItem": "تكبير {{index}}",

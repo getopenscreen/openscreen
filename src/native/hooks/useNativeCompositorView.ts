@@ -115,6 +115,19 @@ export function useNativeCompositorView(
 		// says nothing about this one.
 		setError(null);
 
+		// `data-painted` tells the preview card the canvas holds pixels, so it can drop its
+		// placeholder background (see `.previewFrame`), which would otherwise show through the
+		// anti-aliased rounded clip. It is set once a frame is really drawn, and cleared
+		// whenever the bitmap is emptied — a fresh view, or a resize — so the placeholder covers
+		// the gap instead of the card going transparent.
+		const markPainted = () => {
+			canvas.dataset.painted = "true";
+		};
+		const clearPainted = () => {
+			delete canvas.dataset.painted;
+		};
+		clearPainted();
+
 		/** Resize the canvas's DRAWING BUFFER to match the offscreen render
 		 *  target's pixel dimensions. Setting `canvas.width` / `canvas.height`
 		 *  is destructive (clears the bitmap), so we only do it on genuine
@@ -122,9 +135,11 @@ export function useNativeCompositorView(
 		const syncCanvasSize = (rect: CompositorViewRect) => {
 			if (canvas.width !== rect.width) {
 				canvas.width = rect.width;
+				clearPainted();
 			}
 			if (canvas.height !== rect.height) {
 				canvas.height = rect.height;
+				clearPainted();
 			}
 		};
 
@@ -211,9 +226,11 @@ export function useNativeCompositorView(
 					// the whole frame right after). CSS scales it to the canvas box.
 					if (canvas.width !== width) {
 						canvas.width = width;
+						clearPainted();
 					}
 					if (canvas.height !== height) {
 						canvas.height = height;
+						clearPainted();
 					}
 					// Wrap the received buffer DIRECTLY — no intermediate copy. `data` is a
 					// fresh per-frame Buffer from IPC (never pooled or reused across frames),
@@ -233,21 +250,19 @@ export function useNativeCompositorView(
 						.then((bitmap) => {
 							if (!disposed && ctx) {
 								ctx.drawImage(bitmap, 0, 0);
+								markPainted();
 							}
 							bitmap.close();
 						})
 						.catch(() => {
 							if (!disposed && ctx) {
 								ctx.putImageData(image, 0, 0);
+								markPainted();
 							}
 						});
 					// Advance only after a successful, validated frame — so a dropped/
 					// malformed packet is retried rather than silently skipped.
 					lastGen = gen;
-					// From here the canvas is the card's only pixels: the card drops its
-					// placeholder background (see `.previewFrame`), which would otherwise show
-					// through the anti-aliased rounded clip as a fringe around each corner.
-					canvas.dataset.painted = "true";
 					// Sonde de fluidité : signale qu'une frame a réellement été livrée, pour
 					// que les intervalles rAF soient rangés dans l'état « preview active »
 					// plutôt que moyennés avec des périodes de repos.

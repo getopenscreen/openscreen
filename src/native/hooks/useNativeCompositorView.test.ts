@@ -141,6 +141,46 @@ describe("useNativeCompositorView", () => {
 		}
 	});
 
+	it("clears the mark for a fresh view until that view paints", async () => {
+		vi.stubGlobal(
+			"ImageData",
+			class {
+				constructor(
+					public data: Uint8ClampedArray,
+					public width: number,
+					public height: number,
+				) {}
+			},
+		);
+		vi.stubGlobal(
+			"createImageBitmap",
+			vi.fn(async () => ({ close: vi.fn() })),
+		);
+		try {
+			mocks.createCompositorView.mockResolvedValue({ id: 1 });
+			mocks.readCompositorFrame.mockResolvedValue({
+				gen: 1,
+				width: 2,
+				height: 1,
+				data: new Uint8Array(8),
+			});
+			const ref = stubCanvasRef();
+			const { rerender } = renderHook(
+				({ path }: { path: string }) =>
+					useNativeCompositorView(ref, { sources: { screenPath: path } }),
+				{ initialProps: { path: "a.mp4" } },
+			);
+			await waitFor(() => expect(ref.current?.dataset.painted).toBe("true"));
+
+			// Another recording: its view has painted nothing yet.
+			mocks.readCompositorFrame.mockResolvedValue(null);
+			rerender({ path: "b.mp4" });
+			await waitFor(() => expect(ref.current?.dataset.painted).toBeUndefined());
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("stays quiet without an Electron bridge — no view id, so nothing is ever polled", async () => {
 		mocks.createCompositorView.mockRejectedValue(new Error("Native bridge unavailable."));
 		mocks.readCompositorFrame.mockResolvedValue(null);

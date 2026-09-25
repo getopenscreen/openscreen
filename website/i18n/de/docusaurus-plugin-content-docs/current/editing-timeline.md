@@ -33,7 +33,7 @@ Alles Folgende beschreibt den Modus **Edit**: oben eine Vorschau mit anpassbarer
 | **Composition** | Ein Abschnitt für den Hintergrund (Bild, Volltonfarbe oder Verlauf hinter deiner Aufnahme; eigenes Bild hochladen oder eine Vorlage wählen), dann Hintergrundunschärfe, Schatten, Bewegungsunschärfe, Eckenrundung und Innenabstand. Die Zeile **Format** legt die Ausgabeform für Vorschau und Export fest: **Auto** (Standard für neue Projekte), bei dem sich das Bild mit einem gleichmäßigen Innenabstand als Rand um deine Aufnahme und das Webcam-Layout legt, die eigenen Formen deiner Clips unter **Original**, dazu 16:9, 9:16, 1:1, 4:3, 4:5, 16:10 und 10:16. |
 | **Camera layout** | Webcam-Komposition: Bild-im-Bild, vertikal gestapelt, Doppelrahmen oder keine Webcam. Spiegeln und „Shrink on Zoom“. Für Bild-im-Bild: Kameraform (Rechteck oder Quadrat), Rundung (ganz rund wird eine quadratische Kamera zum Kreis), Größe und Position: einer von acht Plätzen am Rand, immer im gleichen Abstand dazu. Zieh die Webcam auf der Arbeitsfläche, und sie rastet am nächsten Platz ein. |
 | **Audio** | Der Ausgabepegel, in Vorschau und Export gleich angewendet. |
-| **Cursor** | Nur sinnvoll für Aufnahmen im bearbeitbaren Cursormodus, unter Windows, macOS oder Linux. Ein-/Ausblenden, auf die Arbeitsfläche begrenzen, eine Leiste mit Cursor-Themes und Regler für Größe, Glättung, Bewegungsunschärfe und Klick-Bounce. |
+| **Cursor** | Nur sinnvoll für Aufnahmen im bearbeitbaren Cursormodus, unter Windows, macOS oder Linux. Ein-/Ausblenden, auf die Arbeitsfläche begrenzen und Regler für Größe, Glättung, Bewegungsunschärfe und Klick-Bounce. |
 | **Transcript** | Das zusammengeführte Transkript aller Clips, bearbeitbar, siehe [Bearbeitung über das Transkript](./captions.md#transcript-editing). Die Schaltfläche **Captions** darin schaltet Untertitel ein, gestaltet und übersetzt sie, siehe [Untertitel & Transkript](./captions.md#captions). |
 
 Die **Stift**-Schaltfläche in derselben Leiste öffnet den Dialog **Edit clip** für den ausgewählten Clip: ein ziehbares Zuschnittrechteck mit Eingabefeldern für X/Y/W/H und Seitenverhältnis-Vorgaben, dazu Start- und Endpunkt des Clips. Der Zuschnitt gilt pro Clip, nicht pro Projekt.
@@ -93,7 +93,7 @@ Freihand-Unschärfeformen lassen sich nicht mehr zeichnen. Vorhandene werden wei
 
 ## Cursorgestaltung {#cursor-styling}
 
-Hat deine Aufnahme bearbeitbare Cursordaten (native Aufnahme im bearbeitbaren Cursormodus, unter Windows, macOS oder Linux; unter [Cursormodus](./recording.md#cursor-mode) steht, was jede Plattform aufzeichnet), kannst du im Tab **Cursor** aus einer Sammlung von Cursor-Themes wählen und Größe, Glättung, Bewegungsunschärfe und Klick-Bounce unabhängig von der Rohaufnahme einstellen. Der zugrunde liegende Cursorpfad wird deterministisch geglättet, die Vorschau entspricht also dem finalen Export.
+Hat deine Aufnahme bearbeitbare Cursordaten (native Aufnahme im bearbeitbaren Cursormodus, unter Windows, macOS oder Linux; unter [Cursormodus](./recording.md#cursor-mode) steht, was jede Plattform aufzeichnet), kannst du im Tab **Cursor** Größe, Glättung, Bewegungsunschärfe und Klick-Bounce unabhängig von der Rohaufnahme einstellen. Der zugrunde liegende Cursorpfad wird deterministisch geglättet, die Vorschau entspricht also dem finalen Export.
 
 ## Tastenkürzel {#keyboard-shortcuts}
 

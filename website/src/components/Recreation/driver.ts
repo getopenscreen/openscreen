@@ -25,7 +25,6 @@
 import { CURSORS } from "./generated";
 import {
 	BEATS,
-	CURSOR_CHOICE,
 	CUT_INDEX,
 	type Frame,
 	frameAt,
@@ -85,9 +84,6 @@ const WRITTEN = [
 	"--shot-x",
 	"--shot-y",
 	"--shot-bounce",
-	"--shot-cursor",
-	"--shot-hx",
-	"--shot-hy",
 	"--page-y",
 	"--ui-x",
 	"--ui-y",
@@ -143,8 +139,8 @@ const inAny = (t: number, w: number[][]) => w.some(([a, b]) => t >= a && t < b);
 /**
  * Hands the scene back to the stylesheet.
  *
- * Not only the custom properties: `apply` also selects the wallpaper, the
- * cursor pack and the pointer art with attributes, writes each trim's opacity
+ * Not only the custom properties: `apply` also selects the wallpaper and the
+ * pointer art with attributes, writes each trim's opacity
  * inline, and strikes words with a class. A driver that stops — the reader
  * crossed a breakpoint, or turned reduced motion on mid-ride — has to give all
  * of it back, or the still it hands over is a frozen frame of the ride rather
@@ -159,7 +155,6 @@ function release(refs: DriverRefs, cls: DriverClasses): void {
 	for (const name of WRITTEN) root.style.removeProperty(name);
 	delete root.dataset.beat;
 	delete root.dataset.cur;
-	delete root.dataset.curSel;
 	root.dataset.bg = String(frameAt(1).bg);
 	for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-trim]"))) {
 		el.style.removeProperty("opacity");
@@ -443,10 +438,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		   while the cut landed somewhere else. CUT_INDEX is derived from the
 		   tokens' own `cut` field, so this cannot drift again. */
 		const [c0, c1, c2, c3, c4] = CUT_INDEX;
-		/* Same trap, same fix: the swatch the pointer presses and the pack the
-		   frame selects were two literals that had to agree, and reordering the
-		   picks silently left the hand on the wrong one. */
-		const [, cur1, cur2] = CURSOR_CHOICE;
 		return [
 			[0.4, 58, 66],
 			[1.45, ...at("th-1")],
@@ -459,10 +450,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 			[7.95, ...pad()],
 			[9.0, ...pad()],
 			[10.3, ...pad()],
-			[11.0, ...at(`cur-${cur1}`)],
-			[11.9, ...at(`cur-${cur1}`)],
-			[12.15, ...at(`cur-${cur2}`)],
-			[12.63, ...at(`cur-${cur2}`)],
+			[11.0, ...sz()],
 			[12.7, ...sz()],
 			[13.2, ...sz()],
 			[14.3, ...sz()],
@@ -565,7 +553,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	let lastPad = "";
 	let lastSize = "";
 	let lastArt = "";
-	let lastTheme = -1;
 	const struck = new Set<number>();
 	let trimEls: HTMLElement[] = [];
 
@@ -611,16 +598,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 			const el = trimEls[i];
 			if (el) el.style.opacity = c.placed ? "1" : "0";
 		});
-
-		// The pointer inside the recording wears the pack the picker selected.
-		if (f.cursorTheme !== lastTheme) {
-			lastTheme = f.cursorTheme;
-			root.dataset.curSel = String(f.cursorTheme);
-			const theme = CURSORS.themes[f.cursorTheme];
-			root.style.setProperty("--shot-cursor", `url(${theme.src})`);
-			num("--shot-hx", theme.hotspotX * 100, 2);
-			num("--shot-hy", theme.hotspotY * 100, 2);
-		}
 
 		// The reader's pointer: arrow, pointer over a control, caret over text.
 		// The hotspot is the app's own, which is why the tip lands on the target

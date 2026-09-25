@@ -151,7 +151,7 @@ Les outils de montage sont les mêmes partout : zooms, arrière-plans, recadrag
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | Chaîne de capture | Native (ScreenCaptureKit) | Native (Windows Graphics Capture) à partir de la build 19041 ; repli sur le navigateur sur les builds antérieures ou sans le module | Native (PipeWire via le portail ScreenCast) ; repli sur le navigateur sans le module, avec perte de l'encodage matériel et de la télémétrie du curseur |
-| Thèmes de curseur personnalisés / effets de clic | ✅ : les clics et la forme du curseur exigent l'autorisation Accessibilité | ✅ | ✅ sous Wayland : la capture des clics exige le groupe `input` ([détails](#mouse-clicks-on-wayland)) |
+| Curseur personnalisé / effets de clic | ✅ : les clics et la forme du curseur exigent l'autorisation Accessibilité | ✅ | ✅ sous Wayland : la capture des clics exige le groupe `input` ([détails](#mouse-clicks-on-wayland)) |
 | Webcam | Capture par le navigateur, enregistrée dans un fichier séparé (reste utilisable en incrustation d'image) | Capture native, enregistrée dans un fichier séparé | Capture par le navigateur, enregistrée dans un fichier séparé (reste utilisable en incrustation d'image) |
 | Audio système | Fonctionne sans configuration ; invite d'autorisation sur macOS 14.2+ | Fonctionne sans configuration | Exige PipeWire comme serveur son (par défaut sur Ubuntu 22.10+, Fedora 34+) |
 | Export MP4 | ✅ | ✅ | ✅ : H.264 sur le GPU via VAAPI quand la pile graphique le permet (voir la note ci-dessous), en logiciel sinon ; H.265 uniquement en logiciel |

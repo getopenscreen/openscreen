@@ -542,7 +542,7 @@ The radius change is ~free — it draws inside a pass that already exists (M5 re
 
 ## The fix, and what it bought
 
-> The Canvas2D/Pixi compositor this rebuilt is no longer on the MP4 path — `crates/compositor/` replaced it. `src/lib/exporter/frameRenderer.ts` still carries the work, and still serves **GIF export**, which has no native encoder yet. So the caches and the byte-identical parity gate below are live for GIF and history for MP4.
+> The Canvas2D/Pixi compositor this rebuilt no longer exists. `crates/compositor/` replaced it on the MP4 path first, then on the GIF path, when GIF export moved to the native exporter and `src/lib/exporter/frameRenderer.ts` was deleted. The caches and the byte-identical parity gate below are history.
 
 ### The change
 

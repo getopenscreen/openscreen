@@ -1,6 +1,6 @@
 # Cursor pipeline
 
-The cursor feature records system-cursor position and, where the native provider is available, cursor assets separately from the screen video, then re-renders the cursor as a themed, smoothed overlay instead of baking it into the capture. Its shared rendering and asset code lives in `src/lib/cursor/`; native capture and IPC adapters live under `electron/native/` and `electron/native-bridge/cursor/`; the editor overlay is `src/components/ai-edition/CursorPreviewLayer.tsx`.
+The cursor feature records system-cursor position and, where the native provider is available, cursor assets separately from the screen video, then re-renders the cursor as a themed, smoothed sprite instead of baking it into the capture. Its shared smoothing and asset code lives in `src/lib/cursor/`; native capture and IPC adapters live under `electron/native/` and `electron/native-bridge/cursor/`; the native compositor draws it (`crates/compositor/src/cursor.rs`).
 
 ## Capture
 
@@ -12,18 +12,19 @@ Position telemetry is represented by `CursorTelemetryPoint` in `src/lib/cursorTe
 
 ## Rendering
 
-`CursorPreviewLayer` is mounted above the video and loads both native recording data and telemetry through `useCursorRecordingData` and `useCursorTelemetry` (`src/components/ai-edition/CursorPreviewLayer.tsx:42-50`). Its animation loop updates the Pixi telemetry overlay and the native-cursor DOM image from the current playback time (`CursorPreviewLayer.tsx:187-255`). The shared cursor library supplies path smoothing, native asset selection, click bounce, and directional motion blur. The native compositor in `crates/compositor/src/cursor.rs` interpolates raw samples, applies the same 240 Hz spring-style smoothing, and computes click-bounce timing (`cursor.rs:126-196`). Preview and export therefore consume the same telemetry and cursor rules rather than maintaining independent cursor tracks.
+The native compositor draws the cursor in the preview and in the export alike. There is no preview overlay: the recorded cursor is part of the composited frame, read from the same cursor sidecar the export uses. The compositor in `crates/compositor/src/cursor.rs` interpolates raw samples, applies the same 240 Hz spring-style smoothing, and computes click-bounce timing (`cursor.rs:126-196`). Preview and export therefore consume the same telemetry and cursor rules rather than maintaining independent cursor tracks.
 
 ```mermaid
 flowchart LR
     C["Native capture<br/>position, type, clicks, assets"] --> T["Telemetry and<br/>recording sidecars"]
-    T --> P["Preview overlay<br/>Pixi + native image"]
-    T --> E["Native compositor<br/>export"]
+    T --> N["Native compositor"]
+    N --> P["Preview"]
+    N --> E["Export"]
 ```
 
 ## Settings
 
-The cursor settings pane is `CursorPane` in `src/components/ai-edition/RightPanes.tsx`; the current v4 inspector exposes it through the cursor facet in `src/components/ai-edition/v4/FloatingInspector.tsx:57-63,1073`. It controls showing the cursor, clipping it to the canvas, theme, size, smoothing, motion blur, and click bounce. `RightPanes.tsx:1592-1692` binds those controls to editor settings and forwards the rendering parameters to the native compositor. The shared preview reads the same values from `useEditorSettings` (`CursorPreviewLayer.tsx:47,192-202`), so live changes affect both rendering paths.
+The cursor settings pane is `CursorPane` in `src/components/ai-edition/RightPanes.tsx`; the current v4 inspector exposes it through the cursor facet in `src/components/ai-edition/v4/FloatingInspector.tsx:57-63,1073`. It controls showing the cursor, clipping it to the canvas, theme, size, smoothing, motion blur, and click bounce. `RightPanes.tsx:1592-1692` binds those controls to editor settings and forwards the rendering parameters to the native compositor. Preview and export both render through that compositor, so a change shows in both.
 
 ## Auto-follow
 

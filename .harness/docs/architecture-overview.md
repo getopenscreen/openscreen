@@ -7,7 +7,7 @@ Quick map of how the app fits together, for the Mavis reins. For deeper details,
 OpenScreen is a three-process Electron app:
 
 1. **Main process** (`electron/main.ts` + siblings) — owns window lifecycle, IPC handlers, the recording orchestrator, and child-process management for the native helpers.
-2. **Renderer** (`src/`) — React 18 + Vite app. The UI, the editor, the timeline, the Pixi.js composition surface, and the i18n layer. Runs with `contextIsolation: true`.
+2. **Renderer** (`src/`) — React 18 + Vite app. The UI, the editor, the timeline, and the i18n layer. Runs with `contextIsolation: true`.
 3. **Native capture helpers** — small, privileged child processes that own the platform-specific screen/audio/webcam capture APIs:
    - macOS: Swift binary using ScreenCaptureKit (`electron/macos-helper/`)
    - Windows: C++/Win32 binary using Windows Graphics Capture (`electron/windows-helper/`)
@@ -25,7 +25,7 @@ Renderer (React)  --IPC-->  Main process  --spawn-->  Native helper
         +--<-- frame chunks / audio chunks / metadata --<--+
 ```
 
-The native helper writes raw chunks; the main process multiplexes them with the timeline metadata; the renderer pulls the composed stream onto the Pixi.js canvas for live preview and final export.
+The native helper writes raw chunks; the main process multiplexes them with the timeline metadata; preview and export are both rendered by the native Rust compositor (`crates/compositor/`, a napi addon loaded by the main process), and the renderer paints the preview frames it pulls onto a `<canvas>`. See `../technical-documentation/architecture/native-compositor.md`.
 
 ## Why the split
 

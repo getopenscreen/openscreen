@@ -21,7 +21,7 @@ who reads and writes the project document.
 | [timeline-model.md](architecture/timeline-model.md) | Time reference frames, clip-anchored modifiers, and the invariants that keep preview and render agreeing |
 | [editor-shell.md](architecture/editor-shell.md) | The editor UI: surfaces, modes, facets, and how to add a region kind |
 | [preview.md](architecture/preview.md) | Showing the frame at the playhead: scene description, frame delivery, playback sync |
-| [native-compositor.md](architecture/native-compositor.md) | The Rust + D3D11 engine that composites and encodes, for both preview and export |
+| [native-compositor.md](architecture/native-compositor.md) | The Rust engine (D3D11, Metal, wgpu) that composites and encodes, for both preview and export |
 | [export-pipeline.md](architecture/export-pipeline.md) | Document to file: render plan, segment loop, audio junctions, output formats |
 | [recording.md](architecture/recording.md) | Capture on Windows, macOS and Linux: the HUD, the native helpers, what lands on disk |
 | [cursor.md](architecture/cursor.md) | Cursor capture, telemetry, rendering and auto-follow |

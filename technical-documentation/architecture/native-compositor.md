@@ -1,7 +1,7 @@
 # Native compositor
 
-`crates/compositor/` is the Rust + Direct3D 11 crate behind both the live preview and the MP4
-export. It exposes its compositor and pipeline to Electron through a small
+`crates/compositor/` is the Rust crate behind both the live preview and the export: Direct3D 11
+on Windows, Metal on macOS, wgpu on Linux. It exposes its compositor and pipeline to Electron through a small
 napi-rs addon (`compositor-view-napi/`) loaded by
 [`compositorViewService`](../../electron/native-bridge/services/compositorViewService.ts).
 The whole GPU-resident path lives here — `demux → decode → composite → encode → mux`,

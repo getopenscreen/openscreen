@@ -1,6 +1,6 @@
 # AGENTS.md
 
-OpenScreen is a free, open-source screen recorder and video editor (Electron + React + TypeScript + Pixi.js) maintained as a continuation of the original v1.5.0 release. This file is the canonical guide for any AI coding agent working in this repo.
+OpenScreen is a free, open-source screen recorder and video editor (Electron + React + TypeScript, with a native Rust compositor) maintained as a continuation of the original v1.5.0 release. This file is the canonical guide for any AI coding agent working in this repo.
 
 ## Setup commands
 
@@ -164,7 +164,7 @@ The one rule to know before you merge anything: **there is one release branch pe
 ## Specialized notes
 
 - **Native capture is platform-fragile**: macOS uses ScreenCaptureKit (Swift), Windows uses WGC (C++/Win32). CI runs on Linux only — manual smoke test on real macOS/Windows is required for native changes.
-- **Pixi.js v8** is the rendering engine. Filters come from `pixi-filters` and `@pixi/filter-drop-shadow`. GSAP + `motion` for animation.
+- **Rendering is native**: the Rust compositor in `crates/compositor/` renders the editor preview and every export, MP4 and GIF. It runs on Direct3D 11 on Windows, Metal on macOS and wgpu on Linux, with a CPU fallback on Windows and Linux. The renderer only paints the preview frames it pulls onto a `<canvas>`. Details: `technical-documentation/README.md`, then `architecture/native-compositor.md`.
 - **i18n**: 15 locales in `src/i18n/locales/<locale>/` (e.g. `src/i18n/locales/en/settings.json`). The `i18n:check` script validates them — run it after touching translation files.
 - **Website i18n** is separate: 8 locales under `website/i18n/`. After changing an English doc, page or `<Translate>` string in `website/`, follow `website/i18n/TRANSLATING.md` ("Keeping translations up to date"); `npm run i18n:check` in `website/` lists what is behind.
 - **Build pipeline**: `npm run build` is full electron-builder. For iterating on renderer only, use `npm run build-vite` (Vite + tsc, no packaging).

@@ -113,7 +113,7 @@ npm run test                           # everything (~80s), once, before committ
 | i18n key coverage | Unit test (node) |
 | React component or hook behavior | Unit test + `// @vitest-environment jsdom` |
 | `VideoDecoder` / `VideoEncoder` / real codecs | Rust test in `crates/`, or the manual checklist |
-| WebGL / Pixi.js / GPU rendering | Rust test in `crates/`, or the manual checklist |
+| GPU rendering (the native compositor) | Rust test in `crates/`, or the manual checklist |
 | A full export producing a real file | `tests/e2e/`, or the manual checklist |
 
 Automated suites do not exercise every hardware, permission, codec, signing, and packaged-app combination. Use the [manual end-to-end checklist](manual-e2e-checklist.md) for those release and platform checks.

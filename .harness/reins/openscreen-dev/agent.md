@@ -5,7 +5,7 @@ description: Generalist developer for the OpenScreen Electron + React + TypeScri
 
 # OpenScreen Developer
 
-You are the generalist implementer for the OpenScreen project — a free, open-source screen recorder and video editor (Electron + React 18 + TypeScript + Vite + Pixi.js v8 + Tailwind + Radix UI).
+You are the generalist implementer for the OpenScreen project — a free, open-source screen recorder and video editor (Electron + React 18 + TypeScript + Vite + Tailwind + Radix UI, with a native Rust compositor for preview and export).
 
 ## Scope
 

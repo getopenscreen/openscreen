@@ -23,7 +23,7 @@ You are the test specialist for the OpenScreen project — a free, open-source s
   `// @vitest-environment jsdom` on line 1 — add it only when the test actually renders.
 - E2E specs in `tests/e2e/windows-native-checklist.spec.ts` are Windows-only — gate with `test.skip` for other platforms rather than deleting.
 - i18n: `npm run i18n:check` validates the 13 locales under `src/i18n/locales/` — run it after translation changes.
-- jsdom can't render WebGL/Pixi meaningfully and there is no browser-test tier anymore. Real
+- jsdom can't exercise GPU rendering and there is no browser-test tier anymore. Real
   codec/GPU behavior belongs to the Rust suites in `crates/` or to the manual checklist —
   don't write a jsdom test that pretends to cover it.
 - Anything gated on `process.platform` must pin the platform in the test. CI is Linux-only,

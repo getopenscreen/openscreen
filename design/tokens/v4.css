@@ -91,6 +91,9 @@
 	   so it colours the timeline without competing with either. Same value in both
 	   themes: the clip is a solid card with white text on it. */
 	--clip: #2563eb;
+	/* strength of the coloured glow under candy pills and clips: on a light surface
+	   a glow reads as an outline, so it is much fainter there than on dark. */
+	--candy-glow: 12%;
 
 	--success: #10b981;
 	--success-soft: rgba(16, 185, 129, 0.10);
@@ -221,6 +224,7 @@
 	--speed: #fb923c;
 	--speed-soft: rgba(251, 146, 60, 0.16);
 	--speed-wash: rgba(251, 146, 60, 0.16);
+	--candy-glow: 35%;
 
 	--success: #10b981;
 	--success-soft: rgba(16, 185, 129, 0.14);

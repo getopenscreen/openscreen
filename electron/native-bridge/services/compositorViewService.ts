@@ -422,6 +422,23 @@ function ensureOnnxRuntimeOnPath(appRoot: string): void {
 	}
 }
 
+/**
+ * Points `OPENSCREEN_FONTS_DIR` at the font files the compositor draws captions and annotations
+ * with (`public/fonts`, shipped through `extraResources` like the wallpapers). The compositor
+ * registers them privately when it builds its text rasterizer and never reads the machine's
+ * installed fonts, so without this every family falls back to a system face. Best-effort like
+ * `ensureOnnxRuntimeOnPath`: unresolved, text still draws, in system fonts.
+ */
+function ensureTextFontsDir(): void {
+	if (process.env.OPENSCREEN_FONTS_DIR) {
+		return;
+	}
+	const dir = resolveSceneAssetPath("fonts");
+	if (dir) {
+		process.env.OPENSCREEN_FONTS_DIR = dir;
+	}
+}
+
 function tryLoadAddon(candidates: string[]): CompositorViewAddon | null {
 	for (const candidate of candidates) {
 		try {
@@ -471,6 +488,7 @@ export class CompositorViewService {
 
 		ensureFfmpegSharedDllsOnPath(appRoot);
 		ensureOnnxRuntimeOnPath(appRoot);
+		ensureTextFontsDir();
 		const candidates = buildCandidatePaths(appRoot, isPackaged, envOverride);
 		const loaded = tryLoadAddon(candidates);
 		if (!loaded) {

@@ -61,6 +61,7 @@ import {
 } from "@/lib/compositeLayout";
 import { parseCssGradient, resolveLinearGradientAngle } from "@/lib/exporter/gradientParser";
 import type { FrameTheme, RecordingFrame } from "@/lib/projectDefaults";
+import { resolveTextFontFamily } from "@/lib/textFonts";
 import type { CompositorClipInput } from "./contracts";
 import { ROUNDNESS_REFERENCE_PX } from "./paramUnits";
 
@@ -1284,7 +1285,10 @@ export function buildSceneDescription(
 							color: style.color,
 							backgroundColor: style.backgroundColor,
 							fontSizeRel: annotationFontSizeFraction(style.fontSize),
-							fontFamily: style.fontFamily,
+							// The one place every drawn text passes: a family that does not ship
+							// (a project saved with any other name) draws in the default rather
+							// than in whatever the machine falls back to.
+							fontFamily: resolveTextFontFamily(style.fontFamily),
 							fontWeight: style.fontWeight,
 							fontStyle: style.fontStyle,
 							textDecoration: style.textDecoration,

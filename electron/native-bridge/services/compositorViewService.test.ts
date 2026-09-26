@@ -294,6 +294,69 @@ describe("CompositorViewService ffmpeg PATH prepend", () => {
 	});
 });
 
+describe("CompositorViewService text fonts", () => {
+	// The compositor reads the font directory off OPENSCREEN_FONTS_DIR when it builds its text
+	// rasterizer. Unset, it draws every family in a system fallback, which is the bug this pins.
+	let tmpRoot: string;
+	let resources: string;
+	let originalResourcesPath: PropertyDescriptor | undefined;
+	let originalVitePublic: string | undefined;
+	let originalFontsDir: string | undefined;
+
+	beforeEach(() => {
+		tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-fonts-root-"));
+		resources = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-fonts-res-"));
+		originalResourcesPath = Object.getOwnPropertyDescriptor(process, "resourcesPath");
+		Object.defineProperty(process, "resourcesPath", { value: resources, configurable: true });
+		originalVitePublic = process.env.VITE_PUBLIC;
+		// Packaged layout: VITE_PUBLIC points into the asar, which the addon cannot read.
+		process.env.VITE_PUBLIC = path.join(resources, "app.asar", "dist");
+		originalFontsDir = process.env.OPENSCREEN_FONTS_DIR;
+		Reflect.deleteProperty(process.env, "OPENSCREEN_FONTS_DIR");
+	});
+
+	afterEach(() => {
+		if (originalResourcesPath) {
+			Object.defineProperty(process, "resourcesPath", originalResourcesPath);
+		}
+		if (originalVitePublic === undefined) {
+			Reflect.deleteProperty(process.env, "VITE_PUBLIC");
+		} else {
+			process.env.VITE_PUBLIC = originalVitePublic;
+		}
+		if (originalFontsDir === undefined) {
+			Reflect.deleteProperty(process.env, "OPENSCREEN_FONTS_DIR");
+		} else {
+			process.env.OPENSCREEN_FONTS_DIR = originalFontsDir;
+		}
+		fs.rmSync(tmpRoot, { recursive: true, force: true });
+		fs.rmSync(resources, { recursive: true, force: true });
+	});
+
+	it("points the compositor at the extraResources copy before the addon loads", () => {
+		fs.mkdirSync(path.join(resources, "fonts"));
+
+		new CompositorViewService({ appRoot: tmpRoot, isPackaged: true }).hasAddon();
+
+		expect(process.env.OPENSCREEN_FONTS_DIR).toBe(path.join(resources, "fonts"));
+	});
+
+	it("leaves the variable unset when no fonts ship, so text falls back instead of failing", () => {
+		new CompositorViewService({ appRoot: tmpRoot, isPackaged: true }).hasAddon();
+
+		expect(process.env.OPENSCREEN_FONTS_DIR).toBeUndefined();
+	});
+
+	it("keeps a directory set by the environment", () => {
+		fs.mkdirSync(path.join(resources, "fonts"));
+		process.env.OPENSCREEN_FONTS_DIR = "/explicit/fonts";
+
+		new CompositorViewService({ appRoot: tmpRoot, isPackaged: true }).hasAddon();
+
+		expect(process.env.OPENSCREEN_FONTS_DIR).toBe("/explicit/fonts");
+	});
+});
+
 describe("resolveSceneAssetPaths", () => {
 	// A packaged install: `wallpapers/` and `cursors/` exist as real files under
 	// resourcesPath (extraResources), while VITE_PUBLIC points into the asar, where

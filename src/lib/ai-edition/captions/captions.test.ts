@@ -140,6 +140,17 @@ describe("caption settings", () => {
 		expect(getCaptionSettings(next)).toMatchObject({ minWordsPerLine: 3, maxWordsPerLine: 9 });
 	});
 
+	it("reads a stored font that no longer ships as the default, and keeps one that does", () => {
+		// Saved while the picker offered 17 Google families the compositor never had: the
+		// project must still render, and the picker must still show a real entry.
+		const stored = (fontFamily: string) =>
+			getCaptionSettings(
+				doc({ legacyEditor: { captions: { fontFamily } } } as Partial<AxcutDocument>),
+			).fontFamily;
+		expect(stored("Bebas Neue")).toBe("Inter");
+		expect(stored("Caveat")).toBe("Caveat");
+	});
+
 	it("folds the opacity into the background colour, and reports 'transparent' when off", () => {
 		expect(
 			captionBackgroundCss({ ...ON, backgroundColor: "#10b981", backgroundOpacity: 0.5 }),

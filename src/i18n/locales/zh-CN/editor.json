@@ -166,6 +166,12 @@
 		"noSpeechDetected": "未检测到语音"
 	},
 	"exportDialog": {
+		"destination": "导出用途",
+		"destinationWeb": "网页 / YouTube",
+		"destinationSocial": "社交媒体",
+		"destinationStudio": "工作室",
+		"destinationReadmeGif": "README GIF",
+		"advanced": "高级",
 		"title": "导出",
 		"subtitle": "将时间轴渲染为文件",
 		"addVideoBeforeExporting": "导出前请先添加视频。",

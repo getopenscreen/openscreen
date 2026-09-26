@@ -98,7 +98,7 @@ async function start() {
 			<ExportDialog open onClose={onClose} document={DOC} />
 		</I18nProvider>,
 	);
-	fireEvent.click(screen.getByRole("button", { name: "GIF" }));
+	fireEvent.click(screen.getByRole("button", { name: /README GIF/ }));
 	fireEvent.click(screen.getByRole("button", { name: "Export GIF" }));
 	await waitFor(() => expect(exportGifNative).toHaveBeenCalledOnce());
 	const id = vi.mocked(exportGifNative).mock.calls[0][4];
@@ -240,7 +240,7 @@ describe("GIF export cancellation", () => {
 				<ExportDialog open onClose={onClose} document={DOC} />
 			</I18nProvider>,
 		);
-		fireEvent.click(screen.getByRole("button", { name: "GIF" }));
+		fireEvent.click(screen.getByRole("button", { name: /README GIF/ }));
 		fireEvent.click(screen.getByRole("button", { name: "Export GIF" }));
 		view.unmount();
 		await act(async () => choose({ success: true, path: "/tmp/late.gif" }));

@@ -166,6 +166,12 @@
 		"noSpeechDetected": "音声が検出されませんでした"
 	},
 	"exportDialog": {
+		"destination": "書き出し先",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "SNS",
+		"destinationStudio": "スタジオ",
+		"destinationReadmeGif": "README 用 GIF",
+		"advanced": "詳細設定",
 		"title": "エクスポート",
 		"subtitle": "タイムラインをファイルに書き出します",
 		"addVideoBeforeExporting": "エクスポートする前に動画を追加してください。",

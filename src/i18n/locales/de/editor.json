@@ -166,6 +166,12 @@
 		"noSpeechDetected": "Keine Sprache erkannt"
 	},
 	"exportDialog": {
+		"destination": "Ziel",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Social Media",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "README-GIF",
+		"advanced": "Erweitert",
 		"title": "Export",
 		"subtitle": "Die Timeline in eine Datei rendern",
 		"addVideoBeforeExporting": "Füge vor dem Export ein Video hinzu.",

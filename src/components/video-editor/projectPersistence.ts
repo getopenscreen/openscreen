@@ -2,7 +2,13 @@ import { normalizeTextAnimation } from "@/lib/annotationTextAnimation";
 import { normalizeBlurColor, normalizeBlurType } from "@/lib/blurEffects";
 import { normalizeCursorThemeId } from "@/lib/cursor/cursorThemes";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
-import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
+import {
+	DEFAULT_PROJECT_APPEARANCE,
+	type FrameTheme,
+	isFrameTheme,
+	type RecordingFrame,
+	readRecordingFrame,
+} from "@/lib/projectDefaults";
 import type { ProjectMedia } from "@/lib/recordingSession";
 import { normalizeProjectMedia } from "@/lib/recordingSession";
 import { DEFAULT_WALLPAPER, WALLPAPER_PATHS } from "@/lib/wallpaper";
@@ -109,6 +115,10 @@ export interface ProjectEditorState {
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
 	cursorAlwaysArrow?: boolean;
+	// Same reason as the cursor keys above. `window-light` / `window-dark` are kept as stored:
+	// `getEditorSettings` splits them into a frame and a theme (`readRecordingFrame`).
+	frame?: RecordingFrame | "window-light" | "window-dark";
+	frameTheme?: FrameTheme;
 }
 
 export interface EditorProjectData {
@@ -500,6 +510,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		...(typeof editor.cursorAlwaysArrow === "boolean"
 			? { cursorAlwaysArrow: editor.cursorAlwaysArrow }
 			: {}),
+		...(readRecordingFrame(editor.frame) ? { frame: editor.frame } : {}),
+		...(isFrameTheme(editor.frameTheme) ? { frameTheme: editor.frameTheme } : {}),
 		wallpaper:
 			typeof editor.wallpaper === "string"
 				? normalizeWallpaperValue(editor.wallpaper)

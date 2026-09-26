@@ -87,6 +87,10 @@
 	--speed: #f97316;
 	--speed-soft: rgba(249, 115, 22, 0.14);
 	--speed-wash: rgba(249, 115, 22, 0.14);
+	/* the recording clip: blue sits between the mint accent and the violet playhead,
+	   so it colours the timeline without competing with either. Same value in both
+	   themes: the clip is a solid card with white text on it. */
+	--clip: #2563eb;
 
 	--success: #10b981;
 	--success-soft: rgba(16, 185, 129, 0.10);

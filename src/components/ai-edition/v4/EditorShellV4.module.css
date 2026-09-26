@@ -1569,10 +1569,16 @@
 	align-items: center;
 	gap: 5px;
 	padding: 0 8px 0 7px;
+	/* "Candy": a saturated gradient in the lane's colour (--_c, set per lane below), a
+	   gloss line on top and a glow under it — the same recipe as the clip card. Dark ink
+	   on every colour: the light ones (mint, yellow, orange, teal) cannot carry white. */
+	--_c: var(--accent);
 	border-radius: 8px;
-	border: 1.5px solid var(--accent);
-	background: var(--accent-soft);
-	color: var(--fg);
+	border: 1px solid color-mix(in oklab, var(--_c) 70%, black);
+	background: linear-gradient(180deg, color-mix(in oklab, var(--_c) 72%, white), var(--_c));
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4),
+		0 2px 6px color-mix(in oklab, var(--_c) 35%, transparent);
+	color: #0b1220;
 	font-size: 12px;
 	font-weight: 600;
 	white-space: nowrap;
@@ -1585,7 +1591,7 @@
 	cursor: grabbing;
 }
 .lanePillSel {
-	box-shadow: 0 0 0 3px var(--accent-ring);
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 0 0 2px var(--bg), 0 0 0 3.5px var(--_c);
 }
 /* Narrower than its own chrome (PILL_HANDLES_MIN_PX): the handles mount OUTSIDE
    the box instead of inside it, so overflow must not clip them away — there is
@@ -1613,26 +1619,21 @@
 	text-overflow: ellipsis;
 }
 .laneAnnotation {
-	border-color: var(--annotation);
-	background: var(--annotation-wash);
+	--_c: var(--annotation);
 }
 .laneSpeed {
-	border-color: var(--speed);
-	background: var(--speed-wash);
+	--_c: var(--speed);
 }
 .laneTrim {
-	border-color: var(--danger);
-	background: var(--danger-soft);
+	--_c: var(--danger);
 }
 .laneZoom {
-	border-color: var(--accent);
-	background: var(--accent-soft);
+	--_c: var(--accent);
 }
 .laneCameraFullscreen {
-	border-color: #a855f7;
-	background: rgba(168, 85, 247, 0.14);
+	--_c: #a855f7;
 }
-/* Imported audio tracks (issue #350). A distinct teal so a BGM/voiceover track
+/* Imported audio tracks (issue #350). A distinct pink so a BGM/voiceover track
    reads apart from the effect pills, and taller than a lane pill so the waveform
    inside it is legible. */
 /* The rest of an audio pill's tape (audioGhostExtent): where its file's content still
@@ -1674,8 +1675,8 @@
 	pointer-events: none;
 }
 .laneAudio {
-	border-color: #14b8a6;
-	background: rgba(20, 184, 166, 0.16);
+	/* Pink, not teal: teal sat next to the mint zoom pills and read as the same. */
+	--_c: #f472b6;
 	height: 30px;
 	top: 1px;
 	cursor: pointer;
@@ -1785,11 +1786,14 @@
 	/* px, like .lanePill's: the gutter is subtracted from the clip's width, so a
 	   clip narrower than 6px would otherwise compute to nothing. */
 	min-width: 1px;
-	/* A soft mint card rather than a dark slab: the recording is the one thing on the
-	   timeline everything else hangs off, and it should look like it, gently. */
+	/* Blue (--clip), not mint: the accent belongs to what the user ADDED (zoom pills).
+	   A solid "candy" card: saturated gradient, a gloss line on top, a coloured glow
+	   under it. Text on it is white (.tlClipDuration), in both themes. */
 	border-radius: 12px;
-	border: 1px solid var(--accent-border);
-	background: color-mix(in oklab, var(--accent) 8%, var(--surface-1));
+	border: 1px solid color-mix(in oklab, var(--clip) 75%, black);
+	background: linear-gradient(180deg, color-mix(in oklab, var(--clip) 78%, white), var(--clip));
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35),
+		0 3px 10px color-mix(in oklab, var(--clip) 35%, transparent);
 	overflow: hidden;
 	cursor: grab;
 	box-sizing: border-box;
@@ -1799,9 +1803,11 @@
 	transition: box-shadow var(--motion-fast) var(--ease), opacity var(--motion-fast) var(--ease),
 		transform 150ms var(--ease);
 }
+/* A halo ring set off by a gap in the panel colour: a border alone does not show on a
+   card that is already solid blue. */
 .tlClipSel {
-	border-color: var(--accent);
-	box-shadow: 0 0 0 1px var(--accent);
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 0 0 2px var(--bg),
+		0 0 0 4px var(--clip);
 }
 /* A generated clip: the media behind an inserted word, which nobody shot. Amber on the box
    itself rather than a badge inside it, so it stays legible at the zoom levels where a clip
@@ -1834,8 +1840,10 @@
 	transform: translateY(-50%);
 }
 .tlClipGenerated {
-	border-color: var(--warn);
-	background: color-mix(in srgb, var(--warn) 18%, var(--surface-1));
+	border-color: color-mix(in oklab, var(--warn) 75%, black);
+	background: linear-gradient(180deg, color-mix(in oklab, var(--warn) 78%, white), var(--warn));
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35),
+		0 3px 10px color-mix(in oklab, var(--warn) 35%, transparent);
 }
 /* The clip being carried during a reorder drag — follows the pointer 1:1
    (no transition lag) while its siblings slide out of the way with the
@@ -1844,7 +1852,7 @@
 	cursor: grabbing;
 	opacity: 0.9;
 	z-index: 5;
-	border-color: var(--accent);
+	border-color: var(--clip);
 	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
 	transition: box-shadow var(--motion-fast) var(--ease), opacity var(--motion-fast) var(--ease);
 }
@@ -1869,6 +1877,20 @@
 	stroke-width: 1.5px;
 	stroke-linejoin: round;
 	vector-effect: non-scaling-stroke;
+}
+/* Inside an audio pill it is dark ink, like the label on the candy. */
+.lanePill .tlWaveArea {
+	fill: rgb(11 18 32 / 0.16);
+}
+.lanePill .tlWaveLine {
+	stroke: rgb(11 18 32 / 0.5);
+}
+/* On the solid clip card the waveform is white, like the text on it. */
+.tlClip .tlWaveArea {
+	fill: rgb(255 255 255 / 0.22);
+}
+.tlClip .tlWaveLine {
+	stroke: rgb(255 255 255 / 0.75);
 }
 .tlClipLabel {
 	position: absolute;
@@ -1906,7 +1928,8 @@
 .tlClipDuration {
 	font: 500 12px/1.2 var(--font-body);
 	font-variant-numeric: tabular-nums;
-	color: var(--fg-2);
+	color: #fff;
+	text-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
 	white-space: nowrap;
 	flex-shrink: 0;
 }
@@ -1950,62 +1973,61 @@
 	   of the panel, and this bar is meant to sit ON TOP of it, not be crossed. */
 	z-index: 7;
 }
+/* A scrollbar and nothing more: a faint groove and one candy thumb, violet like the
+   playhead and the transport's progress bar (violet = navigation). */
 .tlNavTrack {
 	position: absolute;
-	inset: 0;
+	top: 5px;
+	bottom: 5px;
+	left: 0;
+	right: 0;
 	border-radius: 999px;
-	background: color-mix(in oklab, var(--fg) 6%, transparent);
-	overflow: hidden;
+	background: color-mix(in oklab, var(--fg) 8%, transparent);
 }
-.tlNavClip {
-	position: absolute;
-	top: 4px;
-	bottom: 4px;
-	border-radius: 999px;
-	background: color-mix(in oklab, var(--accent) 40%, transparent);
-}
-/* The visible stretch: a lit frame over the miniature. */
 .tlNavWindow {
 	position: absolute;
 	top: 0;
 	bottom: 0;
 	border-radius: 999px;
-	border: 1.5px solid color-mix(in oklab, var(--fg) 38%, transparent);
-	background: color-mix(in oklab, var(--fg) 7%, transparent);
+	border: 1px solid color-mix(in oklab, var(--playhead) 70%, black);
+	background: linear-gradient(180deg, color-mix(in oklab, var(--playhead) 72%, white), var(--playhead));
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 2px 6px var(--playhead-shadow);
 	box-sizing: border-box;
 	cursor: grab;
-	transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
-}
-.tlNavWindow:hover {
-	border-color: var(--accent);
-	background: var(--accent-soft);
 }
 .tlNavWindow:active {
 	cursor: grabbing;
 }
-/* A grip on each edge, the shape of a slider thumb: white, shadowed, a 16px grab area. */
+/* Nothing zoomed: the same thumb, just toned down, so a full-width bar that does
+   nothing yet is not the loudest thing on screen. */
+.tlNavWindow[data-full] {
+	filter: saturate(0.45);
+}
+/* Grips INSIDE the thumb's ends, a short notch each: they say "pull me" without the
+   thumb growing handles that stick out of the bar. 10px each, so the
+   narrowest thumb (2% of the bar) still leaves room to grab it by the middle. */
 .tlNavGrip {
 	position: absolute;
-	top: -4px;
-	bottom: -4px;
-	width: 16px;
+	top: 0;
+	bottom: 0;
+	width: 10px;
 	display: grid;
 	place-items: center;
 	cursor: ew-resize;
 	z-index: 1;
 }
-.tlNavGrip[data-edge="start"] { left: -8px; }
-.tlNavGrip[data-edge="end"] { right: -8px; }
+.tlNavGrip[data-edge="start"] { left: 0; }
+.tlNavGrip[data-edge="end"] { right: 0; }
 .tlNavGrip::before {
 	content: "";
-	width: 6px;
-	height: 16px;
-	border-radius: 999px;
+	width: 3px;
+	height: 8px;
+	border-radius: 2px;
 	background: #fff;
-	box-shadow: 0 0 0 1px rgb(0 0 0 / 0.18), 0 1px 3px rgb(0 0 0 / 0.3);
+	box-shadow: 0 0 2px rgb(0 0 0 / 0.35);
 	transition: transform var(--motion-fast) var(--ease);
 }
-.tlNavGrip:hover::before { transform: scaleY(1.15); }
+.tlNavGrip:hover::before { transform: scaleY(1.25); }
 
 /* V4Timeline — region resize handles, toolbar aspect control */
 .lanePillHandle {

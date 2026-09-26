@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
+import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEFAULT_WALLPAPER } from "@/lib/wallpaper";
 import {
@@ -7,6 +9,7 @@ import {
 	hasProjectUnsavedChanges,
 	normalizeProjectEditor,
 	PROJECT_VERSION,
+	type ProjectEditorState,
 	resolveProjectMedia,
 	validateProjectData,
 } from "./projectPersistence";
@@ -106,6 +109,12 @@ describe("projectPersistence media compatibility", () => {
 		expect("cursorSmoothing" in editor).toBe(false);
 		expect("cursorMotionBlur" in editor).toBe(false);
 		expect("cursorClickBounce" in editor).toBe(false);
+	});
+
+	it("omits a frame or frame theme it does not know", () => {
+		const editor = normalizeProjectEditor({ frame: "holo-visor", frameTheme: "neon" } as never);
+		expect("frame" in editor).toBe(false);
+		expect("frameTheme" in editor).toBe(false);
 	});
 
 	it("normalizes webcam mask shape values safely", () => {
@@ -322,5 +331,36 @@ describe("wallpaper legacy normalization", () => {
 			wallpaper: "file:///opt/Openscreen/resources/wallpapers/wallpaper99.jpg",
 		});
 		expect(normalized.wallpaper).toBe(DEFAULT_WALLPAPER);
+	});
+});
+
+// The CLI export's own path: normalize the v2 editor, migrate it into `legacyEditor`, then read
+// it back the way the editor and the scene builder do. A key dropped on the way is a frame the
+// project asks for and the export does not draw.
+describe("recording frame through the CLI export path", () => {
+	const migrate = (editor: Partial<ProjectEditorState>) =>
+		migrateProjectDataToAxcutDocument({
+			version: PROJECT_VERSION,
+			media: { screenVideoPath: "/tmp/screen.mp4" },
+			editor: normalizeProjectEditor(editor),
+		});
+
+	it("carries the frame and its theme into legacyEditor", () => {
+		for (const frame of ["window", "laptop", "phone", "monitor"] as const) {
+			const doc = migrate({ frame, frameTheme: "dark" });
+			expect(doc.legacyEditor).toMatchObject({ frame, frameTheme: "dark" });
+			expect(getEditorSettings(doc)).toMatchObject({ frame, frameTheme: "dark" });
+		}
+	});
+
+	it("keeps the old window-light / window-dark for the editor to split", () => {
+		const doc = migrate({ frame: "window-dark" });
+		expect(doc.legacyEditor?.frame).toBe("window-dark");
+		expect(getEditorSettings(doc)).toMatchObject({ frame: "window", frameTheme: "dark" });
+	});
+
+	it("exports no frame when the project names none, or one this build does not know", () => {
+		expect(getEditorSettings(migrate({})).frame).toBe("none");
+		expect(getEditorSettings(migrate({ frame: "holo-visor" } as never)).frame).toBe("none");
 	});
 });

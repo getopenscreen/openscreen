@@ -40,6 +40,28 @@ describe("app settings store", () => {
 		}
 	});
 
+	// getopenscreen/openscreen#723 — the auto-zoom choice has to survive a restart, and a
+	// file written before the preference existed must read as on rather than as off.
+	it("persists the auto-zoom choice and reads a missing key as on", () => {
+		const dir = temp();
+		const file = path.join(dir, "recording-settings.json");
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().recording.autoZoomEnabled).toBe(true);
+		expect(
+			store.setRecordingPreferences({ autoZoomEnabled: false }).recording.autoZoomEnabled,
+		).toBe(false);
+		expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ autoZoomEnabled: false });
+		expect(new AppSettingsStore(dir).getSnapshot().recording.autoZoomEnabled).toBe(false);
+
+		writeFileSync(file, JSON.stringify({ micEnabled: true }), "utf8");
+		expect(store.getSnapshot().recording.autoZoomEnabled).toBe(true);
+		writeFileSync(file, JSON.stringify({ autoZoomEnabled: "false" }), "utf8");
+		expect(store.getSnapshot().recording.autoZoomEnabled).toBe(true);
+		expect(() => store.setRecordingPreferences({ autoZoomEnabled: "no" as never })).toThrow(
+			TypeError,
+		);
+	});
+
 	it("stores the last source beside the recording preferences", () => {
 		const dir = temp();
 		const store = new AppSettingsStore(dir);

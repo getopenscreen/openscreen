@@ -77,6 +77,23 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
 	waitTimeoutMs?: number;
 };
 
+/**
+ * The user's standing answer, read fresh rather than cached: the toggle lives in the
+ * editor's rec panel and the HUD publishes prefs changes across windows, so the value
+ * can change between one take and the next within a single renderer.
+ *
+ * An unreachable or throwing bridge reads as ON, which is what every installation did
+ * before the preference existed — a failed IPC call must not silently turn a feature off.
+ */
+async function readAutoZoomPref(): Promise<boolean> {
+	try {
+		const prefs = await window.electronAPI?.getRecordingPrefs?.();
+		return prefs?.autoZoomEnabled !== false;
+	} catch {
+		return true;
+	}
+}
+
 function isPendingFreshRecordingAsset(asset: { originalPath?: string | null }): boolean {
 	return asset.originalPath === pendingFreshRecordingAutoZoomPath;
 }
@@ -143,7 +160,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 		clearFreshRecordingAutoZoomPending();
 		return document;
 	}
-	const enabled = deps.enabled ?? true;
+	const enabled = deps.enabled ?? (await readAutoZoomPref());
 	if (!enabled) {
 		clearFreshRecordingAutoZoomPending();
 		return liveDocument(document);

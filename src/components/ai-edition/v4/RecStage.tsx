@@ -9,6 +9,7 @@ import {
 	MousePointer2,
 	Volume2,
 	VolumeX,
+	ZoomIn,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AudioLevelMeter } from "@/components/ui/audio-level-meter";
@@ -29,6 +30,7 @@ interface RecordingPrefsState {
 	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
+	autoZoomEnabled: boolean;
 }
 
 const DEFAULT_PREFS: RecordingPrefsState = {
@@ -40,6 +42,7 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	autoZoomEnabled: true,
 };
 
 function normalizedRecordingPrefs(prefs: Partial<RecordingPrefsState>): RecordingPrefsState {
@@ -220,6 +223,7 @@ export function RecStage({
 	const visibleSources = sourceTab === "screen" ? screenSources : windowSources;
 
 	const cursorHighlight = prefs.cursorCaptureMode === "editable-overlay";
+	const autoZoom = prefs.autoZoomEnabled && cursorHighlight;
 	// Same answer as the HUD, from the same place. This stage used to decide for
 	// itself and always showed a picker, so the same build hid the choice on the
 	// HUD and demanded it here.
@@ -441,6 +445,27 @@ export function RecStage({
 							}
 						>
 							{cursorHighlight ? t("rec.on") : t("rec.off")}
+						</button>
+					</div>
+
+					{/* Auto-zoom rides on the cursor telemetry the editable-overlay mode writes,
+					    so the system cursor leaves nothing to place zooms from — the row reads
+					    Off and is inert there rather than promising a choice that cannot apply. */}
+					<div className={styles.recRow}>
+						<div className={styles.recRowLabel}>
+							<ZoomIn size={15} />
+							{t("rec.autoZoom")}
+						</div>
+						<button
+							type="button"
+							data-testid="rec-auto-zoom-button"
+							className={`${styles.recToggleBtn}${autoZoom ? ` ${styles.on}` : ""}`}
+							aria-pressed={autoZoom}
+							disabled={!cursorHighlight}
+							title={cursorHighlight ? undefined : t("rec.autoZoomNeedsEditableCursor")}
+							onClick={() => updatePrefs({ autoZoomEnabled: !prefs.autoZoomEnabled })}
+						>
+							{autoZoom ? t("rec.on") : t("rec.off")}
 						</button>
 					</div>
 				</div>

@@ -11,6 +11,14 @@ export interface RecordingPreferences {
 	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: CursorCaptureMode;
+	/**
+	 * Whether the editor decorates a fresh take with cursor-dwell zooms when it imports it.
+	 *
+	 * Absent from a settings file written before this preference existed, which is why
+	 * `parseRecording` reads a missing key as the default rather than as "off": the
+	 * behaviour it gates has been on for every such installation.
+	 */
+	autoZoomEnabled: boolean;
 }
 
 export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
@@ -22,6 +30,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	autoZoomEnabled: true,
 };
 
 export interface RecordingSourceDescriptor {
@@ -96,6 +105,7 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 			raw.cursorCaptureMode === "system" || raw.cursorCaptureMode === "editable-overlay"
 				? raw.cursorCaptureMode
 				: DEFAULT_RECORDING_PREFERENCES.cursorCaptureMode,
+		autoZoomEnabled: bool(raw.autoZoomEnabled, DEFAULT_RECORDING_PREFERENCES.autoZoomEnabled),
 	};
 }
 

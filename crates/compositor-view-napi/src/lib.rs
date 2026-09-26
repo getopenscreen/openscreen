@@ -442,6 +442,9 @@ pub struct ExportParamsInput {
     /// "h264" | "h265". Toute autre valeur (ex. "vp9", pas d'équivalent matériel AMF) fait
     /// échouer l'export avec un message clair plutôt que de silencieusement retomber sur h264.
     pub codec: Option<String>,
+    /// Débit vidéo visé, en bits/s, calculé par l'app d'après la taille et la cadence.
+    /// Absent ou nul → le repli du pipeline, qui ignore la cadence.
+    pub bitrate: Option<u32>,
 }
 
 /// Export multiclip mesuré (worker libuv). Rend la vraie timeline (clips + trims) en un MP4.
@@ -496,6 +499,7 @@ impl Task for ExportMultiTask {
         export_params.height = height;
         if let Some(p) = &self.params {
             export_params.fps = p.fps;
+            export_params.bit_rate = p.bitrate.filter(|&b| b > 0).map(i64::from);
             if let Some(codec) = &p.codec {
                 export_params.codec = match codec.as_str() {
                     "h264" => pipeline::ExportCodec::H264,
@@ -579,11 +583,9 @@ pub fn export_multi(
 }
 
 /// Sortie GIF native (slice 1) — taille, cadence, compteur de loop, dithering.
-/// Tout optionnel : absent → 854×480, 12 fps, boucle infinie, pas de
-/// dithering. Les défauts sont choisis pour un export « petit / net » :
-/// GIF est un format 256-couleurs, 12 fps est la cadence historique de
-/// `gif.js` côté renderer, et 854×480 tient confortablement dans la
-/// palette 8 bits sans banding visible sur du contenu de présentation.
+/// Tout optionnel : absent → 854×480, 12 fps, boucle infinie, dithering
+/// Floyd-Steinberg. GIF est un format 256-couleurs et 12 fps est la cadence
+/// historique de `gif.js` côté renderer.
 #[napi(object)]
 pub struct GifParamsInput {
     pub width: Option<u32>,
@@ -591,9 +593,8 @@ pub struct GifParamsInput {
     pub fps: Option<u32>,
     /// Compteur de loop GIF : `None` ou `0` = infini, sinon `n` boucles.
     pub loop_count: Option<u16>,
-    /// Floyd-Steinberg error diffusion avant quantification. Off par
-    /// défaut (qualité acceptable sans, et ça double تقريبًا le coût
-    /// CPU du quantize par frame).
+    /// Floyd-Steinberg error diffusion à la quantification. Actif par défaut :
+    /// sans lui, un fond en dégradé se découpe en bandes (cf. `GifExportParams`).
     pub dither: Option<bool>,
 }
 
@@ -759,7 +760,7 @@ pub fn export_gif(
             height: p.height,
             fps: p.fps,
             loop_count: p.loop_count,
-            dither: p.dither.unwrap_or(false),
+            dither: p.dither.unwrap_or(GifExportParams::default().dither),
         })
         .unwrap_or_default();
     Ok(AsyncTask::new(ExportGifTask {

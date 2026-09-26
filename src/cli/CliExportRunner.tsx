@@ -304,6 +304,7 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 		sourceWidth: smallestSource.width,
 		sourceHeight: smallestSource.height,
 		aspectRatioValue,
+		frameRate: MP4_EXPORT_FPS,
 	});
 
 	const builtClips = buildNativeClipList(axcutDocument);
@@ -360,6 +361,7 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 			height: outDims.height,
 			fps: MP4_EXPORT_FPS,
 			codec: "h264",
+			bitrate: outDims.bitrate,
 		});
 
 		if (request.audioPath) {

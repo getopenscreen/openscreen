@@ -2207,9 +2207,58 @@ textarea.control {
 .starPromptDecline:hover { color: var(--fg); background: var(--surface-warm); }
 
 /* ─── Edit Clip modal — draggable source-range track ────────────── */
-.editClipRangeDragging {
-	box-shadow: 0 0 0 2px var(--accent-soft);
+/* The pan/zoom bar's shape in the clip's colour: a faint groove for the whole source and,
+   on it, the timeline's clip card (.tlClip's candy recipe) for the range the trim keeps. */
+.editClipTrack {
+	position: relative;
+	height: 32px;
+	flex-shrink: 0;
+	border-radius: var(--r-sm);
+	background: color-mix(in oklab, var(--fg) 8%, transparent);
 }
+.editClipRange {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	box-sizing: border-box;
+	border-radius: var(--r-sm);
+	border: 1px solid transparent;
+	background: linear-gradient(180deg, color-mix(in oklab, var(--clip) 78%, white), var(--clip)) border-box;
+	box-shadow: 0 3px 10px color-mix(in oklab, var(--clip) var(--candy-glow), transparent);
+}
+/* The selected clip's halo ring, its gap in the card's colour. */
+.editClipRangeDragging {
+	box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--clip);
+}
+/* A 12px grab area centred on each end, overhanging the range by 6px: a range dragged down
+   to its 0.05s minimum still leaves each grip a side of its own to grab. The notch in it sits
+   inside the card, like the pan/zoom bar's grips, in the card's dark ink. */
+.editClipGrip {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 12px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: ew-resize;
+}
+.editClipGrip[data-edge="start"] { left: -6px; }
+.editClipGrip[data-edge="end"] { right: -6px; }
+.editClipGrip::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	width: 3px;
+	height: 14px;
+	margin-top: -7px;
+	border-radius: 2px;
+	background: rgb(11 18 32 / 0.55);
+	transition: transform var(--motion-fast) var(--ease);
+}
+.editClipGrip[data-edge="start"]::before { left: 9px; }
+.editClipGrip[data-edge="end"]::before { right: 9px; }
+.editClipGrip:hover::before { transform: scaleY(1.25); }
 
 .scrubBar {
 	flex: 1;

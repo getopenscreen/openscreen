@@ -1263,8 +1263,8 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     // mode 18 : l'écran CADRÉ (ombre, cadre, métrage, appareil) flouté comme UN objet rigide
     // (`FrameGeometry::screen_trail`), port 1:1 du HLSL. texImg = son rendu isolé, prémultiplié,
     // à la taille de la sortie ; sa boîte va de `dst_prev` (frame précédente) à `fx` (courante).
-    // Hors de la sortie rien n'a été rendu : dans l'écran on relit le métrage (`src` = la coupe),
-    // hors de l'écran (un bout de cadre hors champ) le tap est écarté.
+    // Hors de la sortie rien n'a été rendu : dans l'ouverture arrondie de l'écran (`quad_px`,
+    // `radius_px`, 2 px en retrait) on relit le métrage (`src` = la coupe), ailleurs le tap est écarté.
     if (layer.mode > 17.5)
     {
         int taps = int(layer.mb.x);
@@ -1282,7 +1282,8 @@ fragment float4 ps_main(VSOut i [[stage_in]],
                 acc += texImg.sample(samp, q, level(0.0));
                 n += 1.0;
             }
-            else if (all(f >= 0.0) && all(f <= 1.0))
+            else if (sd_round_rect(f * layer.quad_px - layer.quad_px * 0.5, layer.quad_px * 0.5,
+                                   layer.radius_px) < -2.0)
             {
                 acc += float4(sample_yuv(mix(layer.src.xy, layer.src.zw, f), texY, texUV), 1.0);
                 n += 1.0;

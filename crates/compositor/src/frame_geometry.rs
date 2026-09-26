@@ -1841,12 +1841,15 @@ impl FrameGeometry {
 
     /// Le calque du mode 18 : le rendu isolé de l'écran cadré (t2), recomposé le long de sa
     /// trajectoire. `fx` = la boîte courante, `dst_prev` = la précédente, `src` = la coupe (le
-    /// métrage relu directement là où le rendu isolé s'arrête au bord de la sortie).
+    /// métrage relu directement là où le rendu isolé s'arrête au bord de la sortie), `quad_px` et
+    /// `radius_px` = la boîte courante en px et ses coins : ce repli ne lit le métrage que dans
+    /// l'ouverture arrondie, jamais sous la lunette d'un appareil.
     pub fn screen_trail_cb(&self, render_px: [f32; 2]) -> LayerCB {
         LayerCB {
             dst: [0.0, 0.0, 1.0, 1.0],
             src: self.cut,
-            quad_px: render_px,
+            quad_px: [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]],
+            radius_px: self.s_radius,
             mode: 18.0,
             color: [1.0, 1.0, 1.0, 1.0],
             fx: self.s_dst,

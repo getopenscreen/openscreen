@@ -65,3 +65,29 @@ describe("Roundness under a frame", () => {
 		await waitFor(() => expect(storedRadius()).toBe(64));
 	});
 });
+
+describe("Roundness at zero padding", () => {
+	const padding = () => screen.getByRole("slider", { name: "Padding" });
+	const roundness = () => screen.queryByRole("slider", { name: "Roundness" });
+
+	it("keeps its row through a drag to 0 and leaves on release", () => {
+		// Dropped mid-drag, the row shrank a pane scrolled to its end, whose scroll then
+		// clamped and slid the padding slider away from the pointer dragging it.
+		mount({ padding: 30, borderRadius: 20 });
+		fireEvent.change(padding(), { target: { value: "0" } });
+		expect(roundness()).toBeInTheDocument();
+		fireEvent.mouseUp(padding());
+		expect(roundness()).not.toBeInTheDocument();
+	});
+
+	it("comes back with its value once the padding does", () => {
+		mount({ padding: 30, borderRadius: 20 });
+		fireEvent.change(padding(), { target: { value: "0" } });
+		fireEvent.mouseUp(padding());
+		expect(storedRadius()).toBe(20);
+
+		fireEvent.change(padding(), { target: { value: "10" } });
+		fireEvent.mouseUp(padding());
+		expect(roundness()).toHaveValue("20");
+	});
+});

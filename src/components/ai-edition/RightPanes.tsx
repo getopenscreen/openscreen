@@ -2375,6 +2375,10 @@ export function VideoEffectsPane() {
 	// keeps showing its recording whole until the user says otherwise.
 	const fillDefault = settings.formatFollowCursor === null ? { formatFollowCursor: true } : {};
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
+	// Held from a padding drag's first move to its release. A drag through 0 would otherwise
+	// drop the Roundness row mid-gesture, and a pane scrolled to its end then clamps its
+	// scroll: the slider slides away under the pointer that is dragging it.
+	const [paddingScrubbing, setPaddingScrubbing] = useState(false);
 	const { locale } = useI18n();
 	const clipCountLabel = (count: number) => ts(pluralKey(locale, count), { count });
 
@@ -2633,16 +2637,20 @@ export function VideoEffectsPane() {
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
-						// No padding, no background to round against: roundness follows to 0.
-						setLive(v === 0 ? { padding: 0, borderRadius: 0 } : { padding: v });
+						setPaddingScrubbing(true);
+						// Roundness is left as stored: at 0 the scene squares the corners, and the
+						// value is back when the padding is (`buildSceneDescription`).
+						setLive({ padding: v });
 						if (isNativeCompositorActive()) {
 							setNativeParam("padding", v / 100);
-							if (v === 0) setNativeParam("roundness", 0);
 						}
 					}}
-					onCommit={() => void commit()}
+					onCommit={() => {
+						setPaddingScrubbing(false);
+						void commit();
+					}}
 				/>
-				{settings.padding > 0 ? (
+				{settings.padding > 0 || paddingScrubbing ? (
 					<>
 						{/* Under a frame the slider spans 0 → the most that frame wears well (the native
 				    `frame_roundness_cap`), so its travel reads as a share of that range, not as

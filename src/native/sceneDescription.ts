@@ -1193,8 +1193,9 @@ export function buildSceneDescription(
 			blur: settings.showBlur,
 			shadow: settings.shadowIntensity,
 			// The slider is in pixels of a 1080 reference, whatever the source resolution —
-			// see `roundnessFrac`.
-			roundnessFrac: settings.borderRadius / ROUNDNESS_REFERENCE_PX,
+			// see `roundnessFrac`. No padding, no background to round against: the corners go
+			// square, and the stored value waits for the padding to come back.
+			roundnessFrac: settings.padding > 0 ? settings.borderRadius / ROUNDNESS_REFERENCE_PX : 0,
 			motionBlur: settings.motionBlurAmount,
 			// Omitted at their defaults, like `webcamEffect`: the Rust side defaults both fields,
 			// so a project with no frame serializes exactly as it did before they existed.

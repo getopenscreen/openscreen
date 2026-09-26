@@ -1214,6 +1214,16 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(scene.effects.roundnessFrac).toBeCloseTo(12 / 1080, 10);
 	});
 
+	it("squares the corners at zero padding, from a roundness it does not erase", () => {
+		// No background to round against. The document keeps the value, so the corners come
+		// back as they were once the padding does.
+		const at = (padding: number) =>
+			buildSceneDescription(makeDoc({ legacyEditor: { padding, borderRadius: 12 } })).effects
+				.roundnessFrac;
+		expect(at(0)).toBe(0);
+		expect(at(1)).toBeCloseTo(12 / 1080, 10);
+	});
+
 	it("gives a 4K take the same roundness as a 1080p one", () => {
 		// The fraction used to be taken off the output's short side, which follows the
 		// source: a 2160p take got half the corner of a 1080p one. The native side scales

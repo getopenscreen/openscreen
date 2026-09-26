@@ -10,7 +10,7 @@
 // settings at all — and it really does open the pane, not a rebuilt stub of it.
 
 import "@testing-library/jest-dom";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
@@ -102,18 +102,20 @@ describe("caption settings on the transcript tab", () => {
 		await user.click(screen.getByRole("button", { name: "Captions" }));
 		// A control that only the actual CaptionsPane renders — proof the pane was
 		// mounted whole rather than reimplemented into the popover.
-		expect(await screen.findByText("Show captions")).toBeInTheDocument();
+		const settings = await screen.findByRole("dialog");
+		expect(within(settings).getByText("Show captions")).toBeInTheDocument();
 	});
 
 	it("renders a close button and closes the popover when clicked", async () => {
 		const user = userEvent.setup();
 		mount([TRANSCRIPT]);
 		await user.click(screen.getByRole("button", { name: "Captions" }));
-		expect(await screen.findByText("Show captions")).toBeInTheDocument();
+		const settings = await screen.findByRole("dialog");
+		expect(within(settings).getByText("Show captions")).toBeInTheDocument();
 
-		const closeBtn = screen.getByRole("button", { name: "Close" });
+		const closeBtn = within(settings).getByRole("button", { name: "Close" });
 		expect(closeBtn).toBeInTheDocument();
 		await user.click(closeBtn);
-		expect(screen.queryByText("Show captions")).not.toBeInTheDocument();
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 });

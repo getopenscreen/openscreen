@@ -606,8 +606,6 @@ export function V4Timeline({
 	videoSources = [],
 	playing,
 	onTogglePlay,
-	onPrevClip,
-	onNextClip,
 	onEditClip,
 	onAddVoiceover,
 }: {
@@ -618,8 +616,6 @@ export function V4Timeline({
 	videoSources?: VideoSource[];
 	playing: boolean;
 	onTogglePlay: () => void;
-	onPrevClip: () => void;
-	onNextClip: () => void;
 	/** Opens the (now single, shell-level) EditClipModal for this clip —
 	 * trim in/out and crop both live there per-clip. */
 	onEditClip: (clip: AxcutClip) => void;
@@ -2033,8 +2029,6 @@ export function V4Timeline({
 							overrideTimeSec={scrubbingTimeSec}
 							clips={clips}
 							onTogglePlay={onTogglePlay}
-							onPrevClip={onPrevClip}
-							onNextClip={onNextClip}
 							onSeek={setCurrentTime}
 						/>
 						<div className={styles.tlHints}>

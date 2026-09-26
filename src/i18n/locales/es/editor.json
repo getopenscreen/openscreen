@@ -352,8 +352,6 @@
 		"playbackControls": "Controles de reproducción",
 		"playPause": "Reproducir / Pausar",
 		"playPauseTitle": "Reproducir / Pausar (Espacio)",
-		"previousClip": "Clip anterior",
-		"nextClip": "Clip siguiente",
 		"loop": "Bucle",
 		"seekVideo": "Desplazarse por el vídeo"
 	},

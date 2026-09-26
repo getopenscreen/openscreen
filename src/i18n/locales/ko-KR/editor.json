@@ -352,8 +352,6 @@
 		"playbackControls": "재생 컨트롤",
 		"playPause": "재생 / 일시정지",
 		"playPauseTitle": "재생 / 일시정지 (Space)",
-		"previousClip": "이전 클립",
-		"nextClip": "다음 클립",
 		"loop": "반복",
 		"seekVideo": "영상 탐색"
 	},

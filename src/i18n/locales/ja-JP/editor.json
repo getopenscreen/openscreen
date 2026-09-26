@@ -352,8 +352,6 @@
 		"playbackControls": "再生コントロール",
 		"playPause": "再生 / 一時停止",
 		"playPauseTitle": "再生 / 一時停止（スペース）",
-		"previousClip": "前のクリップ",
-		"nextClip": "次のクリップ",
 		"loop": "ループ",
 		"seekVideo": "動画をシーク"
 	},

@@ -595,7 +595,7 @@ export function NewEditorShell() {
 		// événement, indépendamment). Deux endroits qui décident chacun de leur côté si
 		// la lecture doit s'arrêter = exactement le genre de duplication qui casse selon
 		// le chemin UX emprunté. On applique ici le même critère "y a-t-il un clip
-		// suivant ?" déjà utilisé par handleNextClip juste au-dessus — seul point de
+		// suivant ?" que VirtualPreview — seul point de
 		// vérité pour "y a-t-il encore de la timeline à jouer".
 		const onEnded = () => {
 			const playhead = useProjectStore.getState().currentTimeSec;
@@ -629,31 +629,6 @@ export function NewEditorShell() {
 			videoElement.pause();
 		}
 	}, [videoElement]);
-
-	const handlePrevClip = useCallback(() => {
-		if (clips.length === 0) return;
-		// ponytail: navigate in virtual timeline space, not source-media time.
-		const playhead = useProjectStore.getState().currentTimeSec;
-		let prevStart = 0;
-		for (let i = clips.length - 1; i >= 0; i--) {
-			const c = clips[i];
-			if (c.timelineEndSec <= playhead - 0.1) {
-				prevStart = c.timelineStartSec;
-				break;
-			}
-		}
-		handleSeek(prevStart);
-		handleTimeChange(prevStart);
-	}, [clips, handleSeek, handleTimeChange]);
-
-	const handleNextClip = useCallback(() => {
-		if (clips.length === 0) return;
-		const playhead = useProjectStore.getState().currentTimeSec;
-		const next = clips.find((c) => c.timelineStartSec > playhead + 0.1);
-		if (!next) return;
-		handleSeek(next.timelineStartSec);
-		handleTimeChange(next.timelineStartSec);
-	}, [clips, handleSeek, handleTimeChange]);
 
 	// "Transcribe now" from the transcript pane. The run itself belongs to the
 	// transcription store (it owns the queue, the toasts and the failure
@@ -1724,8 +1699,6 @@ export function NewEditorShell() {
 						videoSources={videoSources}
 						playing={playing}
 						onTogglePlay={togglePlay}
-						onPrevClip={handlePrevClip}
-						onNextClip={handleNextClip}
 						onAddVoiceover={openVoiceoverFlow}
 						onEditClip={setEditClipTarget}
 					/>

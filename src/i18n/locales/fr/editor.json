@@ -352,8 +352,6 @@
 		"playbackControls": "Contrôles de lecture",
 		"playPause": "Lecture / Pause",
 		"playPauseTitle": "Lecture / Pause (Espace)",
-		"previousClip": "Clip précédent",
-		"nextClip": "Clip suivant",
 		"loop": "Boucle",
 		"seekVideo": "Naviguer dans la vidéo"
 	},

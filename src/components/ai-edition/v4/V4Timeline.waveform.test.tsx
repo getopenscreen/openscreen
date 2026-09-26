@@ -142,8 +142,6 @@ function renderBars(atGainDb: number): string[] {
 				setCurrentTime={vi.fn()}
 				playing={false}
 				onTogglePlay={vi.fn()}
-				onPrevClip={vi.fn()}
-				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
 				onAddVoiceover={vi.fn()}
 			/>

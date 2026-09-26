@@ -352,8 +352,6 @@
 		"playbackControls": "Playback controls",
 		"playPause": "Play / Pause",
 		"playPauseTitle": "Play / Pause (Space)",
-		"previousClip": "Previous clip",
-		"nextClip": "Next clip",
 		"loop": "Loop",
 		"seekVideo": "Seek video"
 	},

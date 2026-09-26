@@ -352,8 +352,6 @@
 		"playbackControls": "عناصر التحكم في التشغيل",
 		"playPause": "تشغيل / إيقاف مؤقت",
 		"playPauseTitle": "تشغيل / إيقاف مؤقت (مسافة)",
-		"previousClip": "المقطع السابق",
-		"nextClip": "المقطع التالي",
 		"loop": "تكرار",
 		"seekVideo": "التنقل في الفيديو"
 	},

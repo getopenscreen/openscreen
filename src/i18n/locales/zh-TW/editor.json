@@ -352,8 +352,6 @@
 		"playbackControls": "播放控制項",
 		"playPause": "播放 / 暫停",
 		"playPauseTitle": "播放 / 暫停（空白鍵）",
-		"previousClip": "上一個片段",
-		"nextClip": "下一個片段",
 		"loop": "循環",
 		"seekVideo": "拖曳影片進度"
 	},

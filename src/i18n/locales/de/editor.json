@@ -352,8 +352,6 @@
 		"playbackControls": "Wiedergabesteuerung",
 		"playPause": "Wiedergabe / Pause",
 		"playPauseTitle": "Wiedergabe / Pause (Leertaste)",
-		"previousClip": "Vorheriger Clip",
-		"nextClip": "Nächster Clip",
 		"loop": "Wiederholen",
 		"seekVideo": "Videoposition"
 	},

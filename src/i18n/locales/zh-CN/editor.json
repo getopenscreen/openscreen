@@ -352,8 +352,6 @@
 		"playbackControls": "播放控件",
 		"playPause": "播放 / 暂停",
 		"playPauseTitle": "播放 / 暂停（空格）",
-		"previousClip": "上一个片段",
-		"nextClip": "下一个片段",
 		"loop": "循环",
 		"seekVideo": "拖动视频进度"
 	},

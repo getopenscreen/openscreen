@@ -50,8 +50,6 @@ describe("TransportBar reads the playhead from the store", () => {
 					overrideTimeSec={null}
 					clips={clips}
 					onTogglePlay={noop}
-					onPrevClip={noop}
-					onNextClip={noop}
 					onSeek={noop}
 				/>
 			);
@@ -84,8 +82,6 @@ describe("TransportBar reads the playhead from the store", () => {
 					overrideTimeSec={4.5}
 					clips={clips}
 					onTogglePlay={noop}
-					onPrevClip={noop}
-					onNextClip={noop}
 					onSeek={noop}
 				/>
 			</I18nProvider>,
@@ -137,8 +133,6 @@ describe("le drag de la barre de progression est coalescé en rAF", () => {
 					overrideTimeSec={null}
 					clips={clips}
 					onTogglePlay={noop}
-					onPrevClip={noop}
-					onNextClip={noop}
 					onSeek={onSeek}
 				/>
 			</I18nProvider>,
@@ -174,8 +168,6 @@ describe("le drag de la barre de progression est coalescé en rAF", () => {
 					overrideTimeSec={null}
 					clips={clips}
 					onTogglePlay={noop}
-					onPrevClip={noop}
-					onNextClip={noop}
 					onSeek={onSeek}
 				/>
 			</I18nProvider>,
@@ -202,8 +194,6 @@ describe("le drag de la barre de progression est coalescé en rAF", () => {
 					overrideTimeSec={null}
 					clips={clips}
 					onTogglePlay={noop}
-					onPrevClip={noop}
-					onNextClip={noop}
 					onSeek={onSeek}
 				/>
 			</I18nProvider>,
@@ -231,8 +221,6 @@ describe("le drag de la barre de progression est coalescé en rAF", () => {
 					overrideTimeSec={null}
 					clips={clips}
 					onTogglePlay={noop}
-					onPrevClip={noop}
-					onNextClip={noop}
 					onSeek={onSeek}
 				/>
 			</I18nProvider>,

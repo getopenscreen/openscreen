@@ -352,8 +352,7 @@
 		"playbackControls": "Controlli di riproduzione",
 		"playPause": "Riproduci / Pausa",
 		"playPauseTitle": "Riproduci / Pausa (Spazio)",
-		"loop": "Ripeti",
-		"seekVideo": "Scorri il video"
+		"loop": "Ripeti"
 	},
 	"shell": {
 		"aiEditor": "Editor IA",

@@ -352,8 +352,7 @@
 		"playbackControls": "재생 컨트롤",
 		"playPause": "재생 / 일시정지",
 		"playPauseTitle": "재생 / 일시정지 (Space)",
-		"loop": "반복",
-		"seekVideo": "영상 탐색"
+		"loop": "반복"
 	},
 	"shell": {
 		"aiEditor": "AI 편집기",

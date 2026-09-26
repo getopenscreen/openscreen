@@ -352,8 +352,7 @@
 		"playbackControls": "播放控件",
 		"playPause": "播放 / 暂停",
 		"playPauseTitle": "播放 / 暂停（空格）",
-		"loop": "循环",
-		"seekVideo": "拖动视频进度"
+		"loop": "循环"
 	},
 	"shell": {
 		"aiEditor": "AI 编辑器",

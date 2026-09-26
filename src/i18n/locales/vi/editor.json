@@ -352,8 +352,7 @@
 		"playbackControls": "Điều khiển phát lại",
 		"playPause": "Phát / Tạm dừng",
 		"playPauseTitle": "Phát / Tạm dừng (Phím cách)",
-		"loop": "Lặp lại",
-		"seekVideo": "Tua video"
+		"loop": "Lặp lại"
 	},
 	"shell": {
 		"aiEditor": "Trình biên tập AI",

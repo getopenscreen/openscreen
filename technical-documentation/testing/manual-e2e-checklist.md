@@ -89,7 +89,6 @@ Sections marked **post-1.10.0** cover what has landed on `main` since the v1.10.
 - [ ] Activate play/pause again and confirm playback stops and the preview reports `data-is-playing="false"`.
 - [ ] Confirm the transport time readout advances while playback is running.
 - [ ] Confirm the playhead advances with the video instead of remaining at its starting position.
-- [ ] Drag the transport seek range control with the `aria-label` for seeking and confirm `[data-testid="preview"]` reports the new current time.
 - [ ] Seek while paused and confirm the preview frame changes to the selected time.
 - [ ] Seek while playing and confirm playback continues from the new time without a visible stuck frame.
 - [ ] Activate the loop control and confirm its pressed state changes.

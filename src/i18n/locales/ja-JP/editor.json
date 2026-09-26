@@ -352,8 +352,7 @@
 		"playbackControls": "再生コントロール",
 		"playPause": "再生 / 一時停止",
 		"playPauseTitle": "再生 / 一時停止（スペース）",
-		"loop": "ループ",
-		"seekVideo": "動画をシーク"
+		"loop": "ループ"
 	},
 	"shell": {
 		"aiEditor": "AI エディター",

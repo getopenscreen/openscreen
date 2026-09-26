@@ -352,8 +352,7 @@
 		"playbackControls": "Contrôles de lecture",
 		"playPause": "Lecture / Pause",
 		"playPauseTitle": "Lecture / Pause (Espace)",
-		"loop": "Boucle",
-		"seekVideo": "Naviguer dans la vidéo"
+		"loop": "Boucle"
 	},
 	"shell": {
 		"aiEditor": "Éditeur IA",

@@ -352,8 +352,7 @@
 		"playbackControls": "Playback controls",
 		"playPause": "Play / Pause",
 		"playPauseTitle": "Play / Pause (Space)",
-		"loop": "Loop",
-		"seekVideo": "Seek video"
+		"loop": "Loop"
 	},
 	"shell": {
 		"aiEditor": "AI editor",

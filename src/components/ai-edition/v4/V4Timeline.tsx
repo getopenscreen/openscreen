@@ -2029,7 +2029,6 @@ export function V4Timeline({
 							overrideTimeSec={scrubbingTimeSec}
 							clips={clips}
 							onTogglePlay={onTogglePlay}
-							onSeek={setCurrentTime}
 						/>
 						<div className={styles.tlHints}>
 							<span className={styles.tlHint}>

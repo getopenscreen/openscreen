@@ -352,8 +352,7 @@
 		"playbackControls": "Oynatma denetimleri",
 		"playPause": "Oynat / Duraklat",
 		"playPauseTitle": "Oynat / Duraklat (Boşluk)",
-		"loop": "Döngü",
-		"seekVideo": "Videoda gezin"
+		"loop": "Döngü"
 	},
 	"shell": {
 		"aiEditor": "Yapay zekâ düzenleyici",

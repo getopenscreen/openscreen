@@ -352,8 +352,7 @@
 		"playbackControls": "Wiedergabesteuerung",
 		"playPause": "Wiedergabe / Pause",
 		"playPauseTitle": "Wiedergabe / Pause (Leertaste)",
-		"loop": "Wiederholen",
-		"seekVideo": "Videoposition"
+		"loop": "Wiederholen"
 	},
 	"shell": {
 		"aiEditor": "KI-Editor",

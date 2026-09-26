@@ -352,8 +352,7 @@
 		"playbackControls": "Controles de reproducción",
 		"playPause": "Reproducir / Pausar",
 		"playPauseTitle": "Reproducir / Pausar (Espacio)",
-		"loop": "Bucle",
-		"seekVideo": "Desplazarse por el vídeo"
+		"loop": "Bucle"
 	},
 	"shell": {
 		"aiEditor": "Editor de IA",

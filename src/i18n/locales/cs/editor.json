@@ -352,8 +352,7 @@
 		"playbackControls": "Ovládání přehrávání",
 		"playPause": "Přehrát / Pozastavit",
 		"playPauseTitle": "Přehrát / Pozastavit (mezerník)",
-		"loop": "Opakovat",
-		"seekVideo": "Vyhledat ve videu"
+		"loop": "Opakovat"
 	},
 	"shell": {
 		"aiEditor": "AI editor",

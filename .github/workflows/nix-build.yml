@@ -322,9 +322,37 @@ jobs:
           # makes the rates comparable across runs; reading them unlabelled is the
           # mistake this counter exists to prevent.
           RUN_CLI_N=0
+          # Each invocation gets a fresh Xvfb, allocated by `xvfb-run -a` to a
+          # display number this script never learns, and when an enumeration
+          # call hangs (#462) the open question is which allocation it hung
+          # on. Neither the number nor the server's own output is observable
+          # today: xvfb-run's default error file is /dev/null. So record both,
+          # keyed by the invocation counter above. `-e` is xvfb-run's own
+          # error-file channel -- it appends the Xvfb server's output there
+          # from the moment the server spawns, which is why an empty file is
+          # still a valid result. The display is recorded from inside the
+          # environment xvfb-run actually exported to the command: a shim
+          # writes $DISPLAY and execs the CLI, leaving its argv, environment
+          # and post-exec process tree as they were. Both files are written
+          # before the CLI can hang, so a timeout kill cannot lose them.
+          XVFB_DIAG=/tmp/xvfb-diag
+          mkdir -p "$XVFB_DIAG"
           run_cli() {
             RUN_CLI_N=$((RUN_CLI_N + 1))
-            timeout --signal=TERM --kill-after=10s "${CLI_TIMEOUT:-120}" xvfb-run -a -s "$XVFB_SCREEN" ./result/bin/openscreen "$@"
+            local rc=0
+            # `|| rc=$?`, not a bare call: errexit is live inside the function
+            # at the one unguarded call site below, and a bare failing timeout
+            # kills the step before the mapping line gets to print -- the two
+            # files survive either way, but the line is the part the step log
+            # keeps. Same shape the guarded callers already use for RC.
+            timeout --signal=TERM --kill-after=10s "${CLI_TIMEOUT:-120}" \
+              xvfb-run -a -s "$XVFB_SCREEN" -e "$XVFB_DIAG/run-cli-$RUN_CLI_N.xvfb.log" \
+              sh -c 'printf "%s\n" "$DISPLAY" >"$1"; shift; exec "$@"' \
+              xvfb-diag "$XVFB_DIAG/run-cli-$RUN_CLI_N.display" ./result/bin/openscreen "$@" || rc=$?
+            # The status that reaches the caller must stay the command's own,
+            # or the HUNG/OK/FAILED accounting above would read the echo's.
+            echo "run_cli #$RUN_CLI_N: DISPLAY=$(cat "$XVFB_DIAG/run-cli-$RUN_CLI_N.display" 2>/dev/null || echo unknown), Xvfb output in $XVFB_DIAG/run-cli-$RUN_CLI_N.xvfb.log"
+            return "$rc"
           }
 
           SANDBOX=""
@@ -544,6 +572,20 @@ jobs:
             fi
           fi
 
+          # The allocations the invocations above actually got, in one place:
+          # most callers redirect run_cli's stdout into per-attempt files, so
+          # the per-invocation echo above lands there rather than here. An
+          # invocation number plus these two files is the whole mapping #462
+          # asks for, and the artifact step after this one keeps the files
+          # once the runner is gone.
+          echo "--- Xvfb allocations (run_cli -> display -> server output) ---"
+          for d in "$XVFB_DIAG"/*.display; do
+            [ -e "$d" ] || break
+            n=${d##*/run-cli-}; n=${n%.display}
+            printf 'run_cli #%s: DISPLAY=%s, server output: run-cli-%s.xvfb.log (%s bytes)\n' \
+              "$n" "$(cat "$d")" "$n" "$(wc -c <"$XVFB_DIAG/run-cli-$n.xvfb.log" 2>/dev/null || echo 0)"
+          done
+
           # One verdict, after both questions have been asked. Enumeration being
           # flaky must not hide whether export works, which is the whole point of
           # having packaged the compositor addon.
@@ -565,3 +607,18 @@ jobs:
           if [ "$EXPORT_OK" -ne 1 ] || [ "$OK" -eq 0 ]; then
             exit 1
           fi
+
+      # The Xvfb allocation files the smoke step records per run_cli
+      # invocation, and nothing else: #462's open question is below the
+      # Electron API, so this evidence has to outlive the runner. always(),
+      # because the run that hangs is exactly the one where the smoke step
+      # has already failed. Warn rather than error when absent: a job whose
+      # build died before the smoke step has no allocations to keep.
+      - name: Upload Xvfb diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xvfb-diagnostics
+          path: /tmp/xvfb-diag/
+          if-no-files-found: warn
+          retention-days: 14

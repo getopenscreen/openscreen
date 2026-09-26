@@ -1331,7 +1331,15 @@ export function ChatStripPanel() {
 										title={t("chat.copyMessage")}
 										aria-label={t("chat.copyMessage")}
 										onClick={() => {
-											void navigator.clipboard.writeText(m.content).then(
+											// Electron denies the renderer's navigator clipboard write
+											// (issue #738), so the write crosses to main when the
+											// bridge offers it; the navigator path remains for
+											// shim/web contexts without the bridge.
+											const bridge = window.electronAPI?.copyToClipboard;
+											const write = bridge
+												? bridge(m.content)
+												: navigator.clipboard.writeText(m.content);
+											void write.then(
 												() => toast.success(t("chat.copiedToClipboard")),
 												() => toast.error(t("chat.copyFailed")),
 											);

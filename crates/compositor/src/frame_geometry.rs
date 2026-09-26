@@ -369,6 +369,23 @@ pub(crate) fn cover_uv_rect(uv: [f32; 4], tex: [f32; 2], box_ar: f32) -> [f32; 4
     let (cx, cy) = (uv[0] + w_uv * 0.5, uv[1] + h_uv * 0.5);
     [cx - new_w * 0.5, cy - new_h * 0.5, cx + new_w * 0.5, cy + new_h * 0.5]
 }
+/// `cover_uv_rect`, la fenêtre centrée sur `at` (UV) au lieu du centre de `uv`, et bornée à `uv` :
+/// le remplissage du format, qui suit le curseur lissé dans l'enregistrement. Même taille que la
+/// fenêtre centrée, donc même grossissement ; seule sa position change.
+pub(crate) fn follow_cover_uv_rect(
+    uv: [f32; 4],
+    tex: [f32; 2],
+    box_ar: f32,
+    at: [f32; 2],
+) -> [f32; 4] {
+    let c = cover_uv_rect(uv, tex, box_ar);
+    let (hw, hh) = (0.5 * (c[2] - c[0]), 0.5 * (c[3] - c[1]));
+    // `max` puis `min`, pas `clamp` : à la précision flottante près la fenêtre peut dépasser `uv`
+    // d'un epsilon, et `clamp` panique quand sa borne basse passe la haute.
+    let cx = at[0].max(uv[0] + hw).min(uv[2] - hw);
+    let cy = at[1].max(uv[1] + hh).min(uv[3] - hh);
+    [cx - hw, cy - hh, cx + hw, cy + hh]
+}
 pub const HALF_W: u32 = OUT_W / 2;
 pub const HALF_H: u32 = OUT_H / 2;
 pub const FIXTURE_FRAMES: u32 = 360;
@@ -2933,23 +2950,39 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
                 .screen_cover
                 .then_some((s_base[2] * rw) / (s_base[3] * rh).max(0.0001))
         });
-        let cover = |uv: [f32; 4]| -> [f32; 4] {
-            match cover_box_ar {
-                Some(ar) => cover_uv_rect(uv, [stw as f32, sth as f32], ar),
-                None => uv,
+        // Remplissage du format (`screen_follow`) : la fenêtre du cover suit le curseur lissé,
+        // en UV. Sans piste, elle reste centrée.
+        let follow = cover_box_ar.is_some() && scene.is_some_and(|s| s.layout.screen_follow);
+        let follow_at = |t: f32| -> Option<[f32; 2]> {
+            let (x, y) = cursor.filter(|_| follow)?.follow_at(t)?;
+            Some([x * u_max, y * v_max])
+        };
+        let cover = |uv: [f32; 4], at: Option<[f32; 2]>| -> [f32; 4] {
+            match (cover_box_ar, at) {
+                (Some(ar), Some(at)) => follow_cover_uv_rect(uv, [stw as f32, sth as f32], ar, at),
+                (Some(ar), None) => cover_uv_rect(uv, [stw as f32, sth as f32], ar),
+                (None, _) => uv,
             }
         };
         // La coupe RÉFÉRENCE (zoom entier) est celle qui remplissait la boîte paddée avant
         // ce correctif ; la coupe DESSINÉE ne porte plus que le crop. `remap_box` reporte la
         // seconde à travers le mapping de la première, ce qui conserve le cadrage exact.
         // Le focus courant reste volontairement utilisé pour la frame précédente, comme avant.
-        let cut_ref = cover(screen_source_rect(u_max, v_max, active_crop, p.zoom, p.focus));
-        let cut_ref_prev = cover(screen_source_rect(u_max, v_max, active_crop, pp.zoom, p.focus));
+        let cut_ref =
+            cover(screen_source_rect(u_max, v_max, active_crop, p.zoom, p.focus), follow_at(source_t));
+        let cut_ref_prev = cover(
+            screen_source_rect(u_max, v_max, active_crop, pp.zoom, p.focus),
+            follow_at(source_t_prev),
+        );
+        // Sous le remplissage, la coupe dessinée est le crop ENTIER : la fenêtre bouge, et une
+        // coupe dessinée qui ne la contiendrait plus laisserait un trou dans le slot. Le masque du
+        // slot (`screen_mask`) rogne le reste.
         let crop_cut = screen_source_rect(u_max, v_max, active_crop, 1.0, p.focus);
-        let cut = cover(crop_cut);
-        // L'enregistrement affiché au repos, en entier : le `cover` d'un slot en rogne une partie,
-        // on la rajoute (même échelle px/UV que la boîte).
-        let shown = |i: usize| (crop_cut[i + 2] - crop_cut[i]) / (cut[i + 2] - cut[i]).max(1e-6);
+        let cut = if follow { crop_cut } else { cover(crop_cut, None) };
+        // Ce que l'écran montre au repos : la fenêtre couverte, suivie ou non. Le curseur, les coins
+        // et l'ombre se mesurent sur elle, pas sur la coupe entière que le remplissage dessine.
+        let window = cover(crop_cut, follow_at(source_t));
+        let shown = |i: usize| (crop_cut[i + 2] - crop_cut[i]) / (window[i + 2] - window[i]).max(1e-6);
         let screen_unit_px =
             screen_unit_px([s_base[2] * rw * shown(0), s_base[3] * rh * shown(1)], padding_scale);
         // Impact du clic : mêmes piste, coupe, porte et budget que la parallaxe sous un angle fixe ;
@@ -5542,6 +5575,69 @@ mod tests {
             vec![],
             vec![],
         )))
+    }
+
+    /// Un clip 16:9 dans une sortie 9:16 remplie (`screenCover` + `screenFollow`) : la boîte écran
+    /// est la zone paddée entière, `follow` décide si la fenêtre suit le pointeur.
+    fn fill_plan(follow: bool, pointer: Option<(f32, f32)>) -> FrameGeometry {
+        let scene = Scene::from_json(&format!(
+            r##"{{
+            "clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+            "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,
+                      "webcamReactiveZoom":false,"screenRect":{{"x":0.1,"y":0.1,"width":0.8,"height":0.8}},
+                      "screenCover":true,"screenFollow":{follow}}},
+            "effects":{{"padding":0.5,"blur":false,"shadow":0.5,"roundnessFrac":0.02,"motionBlur":0}},
+            "background":{{"kind":"color","color":"#1e1e2e"}},
+            "zoomRegions":[],
+            "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":1,"clipToBounds":false,"theme":"default"}},
+            "cropByClip":[null],
+            "output":{{"width":1080,"height":1920,"fps":60}}
+        }}"##
+        ))
+        .expect("scène remplie");
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let mut input = golden_input(&scene, &cfg);
+        input.render_px = [1080.0, 1920.0];
+        input.cursor = pointer.map(|(x, y)| parked_track(x, y));
+        plan_frame(&input)
+    }
+
+    /// Le remplissage du format : un clip 16:9 remplit une sortie 9:16, et la fenêtre 9:16 qu'il
+    /// y montre suit le pointeur lissé, bornée à l'enregistrement.
+    ///
+    /// * la fenêtre a le ratio de la boîte, toute la hauteur de l'enregistrement ;
+    /// * elle se centre sur le pointeur, et bute sur le bord quand il s'en approche ;
+    /// * sans `screenFollow`, ou sans piste, elle reste centrée ;
+    /// * la coupe DESSINÉE est l'enregistrement entier, et sa boîte couvre le slot : la fenêtre
+    ///   peut bouger sans jamais laisser de trou.
+    #[test]
+    fn a_filled_format_follows_the_pointer_inside_the_recording() {
+        let (u, v) = (1.0f32, 1080.0f32 / 1088.0);
+        // Ce que le slot montre de l'enregistrement, en 0..1 : le slot reporté par s_dst → cut.
+        let seen = |g: &FrameGeometry| -> [f32; 4] {
+            let (s, d, c) = (g.s_ann, g.s_dst, g.cut);
+            let x = |f: f32| (c[0] + (f - d[0]) / d[2] * (c[2] - c[0])) / u;
+            let y = |f: f32| (c[1] + (f - d[1]) / d[3] * (c[3] - c[1])) / v;
+            [x(s[0]), y(s[1]), x(s[0] + s[2]), y(s[1] + s[3])]
+        };
+
+        let at = fill_plan(true, Some((0.7, 0.5)));
+        let w = seen(&at);
+        assert!((0.5 * (w[0] + w[2]) - 0.7).abs() < 1e-3, "fenêtre {w:?}, pointeur en 0.7");
+        assert!(w[1].abs() < 1e-3 && (w[3] - 1.0).abs() < 1e-3, "toute la hauteur : {w:?}");
+        let shown_ar = ((w[2] - w[0]) * 1920.0) / ((w[3] - w[1]) * 1080.0);
+        assert!((shown_ar - 864.0 / 1536.0).abs() < 1e-3, "ratio montré {shown_ar}");
+        assert!(contains(at.s_dst, at.s_ann, 1e-5), "la boîte dessinée ne couvre pas le slot");
+
+        // Au bord : la fenêtre bute sur l'enregistrement.
+        let edge = seen(&fill_plan(true, Some((0.98, 0.5))));
+        assert!((edge[2] - 1.0).abs() < 1e-3, "fenêtre {edge:?}");
+
+        // Sans suivi, ou sans piste : centrée.
+        for g in [fill_plan(false, Some((0.7, 0.5))), fill_plan(true, None)] {
+            let w = seen(&g);
+            assert!((0.5 * (w[0] + w[2]) - 0.5).abs() < 1e-3, "fenêtre centrée attendue, {w:?}");
+        }
     }
 
     /// `slot_scene` à 1,5 s (zoom tenu), pointeur garé en `pointer` (la caméra en orbite le suit).

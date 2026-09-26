@@ -117,6 +117,7 @@ export interface ProjectEditorState {
 	// `getEditorSettings` splits them into a frame and a theme (`readRecordingFrame`).
 	frame?: RecordingFrame | "window-light" | "window-dark";
 	frameTheme?: FrameTheme;
+	formatFollowCursor?: boolean;
 }
 
 export interface EditorProjectData {
@@ -508,6 +509,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			: {}),
 		...(readRecordingFrame(editor.frame) ? { frame: editor.frame } : {}),
 		...(isFrameTheme(editor.frameTheme) ? { frameTheme: editor.frameTheme } : {}),
+		...(typeof editor.formatFollowCursor === "boolean"
+			? { formatFollowCursor: editor.formatFollowCursor }
+			: {}),
 		wallpaper:
 			typeof editor.wallpaper === "string"
 				? normalizeWallpaperValue(editor.wallpaper)

@@ -93,6 +93,13 @@ export interface EditorSettingsSnapshot {
 	/** Light or dark, for whichever frame is on. Inert with `frame: "none"`. */
 	frameTheme: FrameTheme;
 	aspectRatio: AspectRatio;
+	/**
+	 * Under a fixed format that is not the recording's shape: fill the frame with a window of
+	 * the recording that follows the smoothed cursor (true), or show it whole (false). `null`
+	 * until the user picks a format or this option: projects from before it keep showing the
+	 * recording whole. See `formatFillAvailability`.
+	 */
+	formatFollowCursor: boolean | null;
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
@@ -136,6 +143,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	webcamCropRegion: DEFAULT_CROP_REGION,
 	webcamCropPan: DEFAULT_CROP_PAN,
 	audioGainDb: 0,
+	formatFollowCursor: null,
 };
 
 interface LegacyShape {
@@ -145,6 +153,7 @@ interface LegacyShape {
 	frame?: unknown;
 	frameTheme?: FrameTheme;
 	aspectRatio?: AspectRatio;
+	formatFollowCursor?: boolean;
 	shadowIntensity?: number;
 	showBlur?: boolean;
 	motionBlurAmount?: number;
@@ -248,6 +257,8 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			? legacy.frameTheme
 			: (stored?.theme ?? DEFAULT_EDITOR_SETTINGS.frameTheme),
 		aspectRatio: legacy?.aspectRatio ?? DEFAULT_EDITOR_SETTINGS.aspectRatio,
+		formatFollowCursor:
+			typeof legacy?.formatFollowCursor === "boolean" ? legacy.formatFollowCursor : null,
 		// Every number below is read into its `SETTING_BOUNDS` range: the slider's range, and the
 		// one a preset and the agent are held to. A stored value past it plays at the bound.
 		shadowIntensity: readBounded(
@@ -315,6 +326,7 @@ export interface EditorSettingsPatch {
 	frame?: RecordingFrame;
 	frameTheme?: FrameTheme;
 	aspectRatio?: AspectRatio;
+	formatFollowCursor?: boolean;
 	shadowIntensity?: number;
 	showBlur?: boolean;
 	motionBlurAmount?: number;

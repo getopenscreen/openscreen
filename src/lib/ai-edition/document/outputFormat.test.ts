@@ -13,7 +13,9 @@ import {
 import {
 	collectEffectiveClipDims,
 	collectNativeFormats,
+	formatFillAvailability,
 	isAutoFormatAvailable,
+	isFormatFillActive,
 	pickOutputDims,
 	referenceClipDims,
 	resolveAspectRatioValue,
@@ -417,5 +419,45 @@ describe("Auto", () => {
 
 	it("falls back to 16:9 with no document to resolve against", () => {
 		expect(resolveAspectRatioValue(null, "auto")).toBeCloseTo(16 / 9, 6);
+	});
+});
+
+describe("formatFillAvailability", () => {
+	const at = (d: AxcutDocument, editor: Record<string, unknown>): AxcutDocument => ({
+		...d,
+		legacyEditor: { aspectRatio: "9:16", ...editor },
+	});
+	const hd = doc([asset("a1", 1920, 1080)], [clip("c1", "a1")]);
+
+	it("is only offered when a fixed format differs from the recording", () => {
+		expect(formatFillAvailability(at(hd, {}))).toBe("available");
+		expect(formatFillAvailability(at(hd, { aspectRatio: "16:9" }))).toBe("none");
+		expect(formatFillAvailability(at(hd, { aspectRatio: "auto" }))).toBe("none");
+		// 1366×768 is 16:9 to within 0.1 %: nothing worth a window.
+		const laptop = doc([asset("a1", 1366, 768)], [clip("c1", "a1")]);
+		expect(formatFillAvailability(at(laptop, { aspectRatio: "16:9" }))).toBe("none");
+	});
+
+	it("says why it is unavailable instead of picking a clip", () => {
+		const mixed = doc(
+			[asset("wide", 1920, 1080), asset("mac", 1440, 900)],
+			[clip("c1", "wide"), clip("c2", "mac")],
+		);
+		expect(formatFillAvailability(at(mixed, {}))).toBe("mixed");
+		const camera = { sourcePath: "/c.mp4", startMs: 0, offsetMs: 0, visible: true };
+		const cam = doc([{ ...asset("a1", 1920, 1080), cameraTrack: camera }], [clip("c1", "a1")]);
+		expect(formatFillAvailability(at(cam, { webcamLayoutPreset: "vertical-stack" }))).toBe(
+			"layout",
+		);
+		expect(formatFillAvailability(at(cam, { webcamLayoutPreset: "picture-in-picture" }))).toBe(
+			"available",
+		);
+		expect(formatFillAvailability(at(hd, { frame: "laptop" }))).toBe("frame");
+	});
+
+	it("is drawn only when asked for and available", () => {
+		expect(isFormatFillActive(at(hd, {}))).toBe(false);
+		expect(isFormatFillActive(at(hd, { formatFollowCursor: true }))).toBe(true);
+		expect(isFormatFillActive(at(hd, { formatFollowCursor: true, frame: "phone" }))).toBe(false);
 	});
 });

@@ -53,8 +53,8 @@
 		"cameraDevice": "카메라 장치"
 	},
 	"cursor": {
-		"useEditableCursor": "편집 가능한 커서 사용",
-		"useSystemCursor": "시스템 커서 사용"
+		"useEditableCursorHint": "편집 가능한 커서 사용: 자동 줌과 커서 효과가 다시 켜집니다",
+		"useSystemCursorHint": "시스템 커서 사용: 자동 줌과 커서 효과가 꺼집니다"
 	},
 	"sourceSelector": {
 		"loading": "소스 불러오는 중...",

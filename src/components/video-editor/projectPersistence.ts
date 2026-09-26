@@ -39,14 +39,12 @@ import {
 	DEFAULT_WEBCAM_REACTIVE_ZOOM,
 	DEFAULT_ZOOM_DEPTH,
 	DEFAULT_ZOOM_MOTION_BLUR,
-	isRotation3DPreset,
 	isWallpaperMotion,
 	MAX_BLUR_BLOCK_SIZE,
 	MAX_BLUR_INTENSITY,
-	MAX_PLAYBACK_SPEED,
 	MIN_BLUR_BLOCK_SIZE,
 	MIN_BLUR_INTENSITY,
-	MIN_PLAYBACK_SPEED,
+	readRotation3DPreset,
 	type SpeedRegion,
 	type TrimRegion,
 	type WallpaperMotion,
@@ -119,6 +117,7 @@ export interface ProjectEditorState {
 	// `getEditorSettings` splits them into a frame and a theme (`readRecordingFrame`).
 	frame?: RecordingFrame | "window-light" | "window-dark";
 	frameTheme?: FrameTheme;
+	formatFollowCursor?: boolean;
 }
 
 export interface EditorProjectData {
@@ -280,9 +279,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
-					const validPreset = isRotation3DPreset(region.rotationPreset)
-						? region.rotationPreset
-						: undefined;
+					// A retired angle reads as the one that kept its look (`iso` → Left).
+					const validPreset = readRotation3DPreset(region.rotationPreset);
 					return {
 						id: region.id,
 						startMs,
@@ -345,10 +343,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
+					// Clamped, not reset: a 20x region written before the bound read as 16x, not 1.5x.
 					const speed =
-						isFiniteNumber(region.speed) &&
-						region.speed >= MIN_PLAYBACK_SPEED &&
-						region.speed <= MAX_PLAYBACK_SPEED
+						isFiniteNumber(region.speed) && region.speed > 0
 							? clampPlaybackSpeed(region.speed)
 							: DEFAULT_PLAYBACK_SPEED;
 
@@ -512,6 +509,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			: {}),
 		...(readRecordingFrame(editor.frame) ? { frame: editor.frame } : {}),
 		...(isFrameTheme(editor.frameTheme) ? { frameTheme: editor.frameTheme } : {}),
+		...(typeof editor.formatFollowCursor === "boolean"
+			? { formatFollowCursor: editor.formatFollowCursor }
+			: {}),
 		wallpaper:
 			typeof editor.wallpaper === "string"
 				? normalizeWallpaperValue(editor.wallpaper)

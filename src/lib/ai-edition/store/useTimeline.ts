@@ -12,6 +12,7 @@ import type {
 	Rotation3DPreset,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import {
 	collapseTracksToPills,
 	patchAudioTrack,
@@ -25,6 +26,7 @@ import {
 	moveClip as moveClipInDocument,
 	PLACEHOLDER_DURATION_SEC,
 	type RegionKind,
+	readSpeedRegions,
 	removeClip as removeClipInDocument,
 	removeRegion as removeRegionInDocument,
 	resequenceClips,
@@ -339,8 +341,10 @@ export function useTimeline() {
 						startMs: timeMs,
 						endMs,
 						depth: 3,
+						// Auto: a zoom added with Z frames what the pointer is doing, like the ones
+						// placed at import. The centre is its fallback where no pointer was recorded.
 						focus: { cx: 0.5, cy: 0.5 },
-						focusMode: "manual" as const,
+						focusMode: "auto" as const,
 					},
 				],
 				document.timeline.clips,
@@ -445,11 +449,13 @@ export function useTimeline() {
 				// `content || textContent` and seeding both would just duplicate it.
 				content: ts("annotation.defaultText"),
 				textContent: "",
-				position: { x: 50, y: 50 },
+				// Centred: the position is the box's top-left corner, so {50, 50} dropped the text
+				// into the bottom-right quarter.
+				position: { x: 35, y: 40 },
 				size: { width: 30, height: 20 },
 				style: {
 					color: "#ffffff",
-					backgroundColor: "transparent",
+					backgroundColor: DEFAULT_TEXT_PLATE,
 					fontSize: 32,
 					fontFamily: "Inter",
 					fontWeight: "bold",
@@ -1414,12 +1420,7 @@ export function useTimeline() {
 	);
 
 	const speedRegions = hasDoc
-		? (((document.legacyEditor as Record<string, unknown> | null)?.speedRegions as Array<{
-				id: string;
-				startMs: number;
-				endMs: number;
-				speed: number;
-			}>) ?? [])
+		? readSpeedRegions<{ id: string; startMs: number; endMs: number; speed: number }>(document)
 		: [];
 
 	const cameraFullscreenRegions = hasDoc

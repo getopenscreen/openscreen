@@ -61,10 +61,14 @@ const BLUR_WGSL: &str = include_str!("vk_shaders/blur.wgsl");
 /// en parcourant les 18 wallpapers livres) en laissant le jeu actif resident.
 const IMG_CACHE_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
-/// `&LayerCB` -> `&[u8; 128]`. `LayerCB` est `#[repr(C, align(16))]`, son layout
-/// EST le buffer uniforme WGSL (16 vec4 + 1 vec2 + 2 f32 = 128 octets).
+/// Taille du buffer uniforme d'un calque : `LayerCB` entier (176 octets), le `struct Layer` de
+/// `layer.wgsl`. `blur.wgsl` n'en lit que les 128 premiers.
+const LAYER_BYTES: u64 = std::mem::size_of::<LayerCB>() as u64;
+
+/// `&LayerCB` -> ses octets. `LayerCB` est `#[repr(C, align(16))]`, son layout EST le buffer
+/// uniforme WGSL (dix vec4 et un vec2 + 2 f32 = 176 octets).
 fn layer_bytes(cb: &LayerCB) -> &[u8] {
-    unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, 128) }
+    unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, LAYER_BYTES as usize) }
 }
 
 /// Un calque de fond deja lie, en attente de son `draw`. `_buf`/`_tex`/`_view`
@@ -337,8 +341,8 @@ pub struct Compositor {
     /// touche depuis appartient au jeu actif et ne peut pas etre evince -- voir
     /// `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
-    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
-    /// Pas d'eviction : seuls les seize sprites du theme par defaut y passent (~2,6 Mo en tout).
+    /// Champs et reliefs des sprites de curseur (mode 15), RG16F, par chemin, avec leur forme.
+    /// Pas d'eviction : l'ensemble des cartes livrees reste inferieur a quelques dizaines de Mo.
     sdf_cache: RefCell<std::collections::HashMap<String, (wgpu::Texture, SpriteShape)>>,
 
     /// Copie mipmappee de la frame composee, lue par les annotations « flou »
@@ -444,7 +448,7 @@ impl Compositor {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(128),
+                            min_binding_size: wgpu::BufferSize::new(LAYER_BYTES),
                         },
                         count: None,
                     },
@@ -1317,13 +1321,19 @@ impl Compositor {
         Ok((tex, w, h))
     }
 
-    /// Champ de distance du sprite `path` (binding 2 du mode 15) et sa forme, calcules au
+    /// Champ et relief du sprite `path` (binding 2 du mode 15) et sa forme, calcules au
     /// premier appel. Parite `compositor_windows::cursor_sdf`.
-    fn cursor_sdf(&self, path: &str) -> Result<(wgpu::Texture, SpriteShape)> {
-        if let Some(hit) = self.sdf_cache.borrow().get(path) {
+    fn cursor_sdf(
+        &self,
+        path: &str,
+        depth_path: Option<&str>,
+    ) -> Result<(wgpu::Texture, SpriteShape)> {
+        let cache_key = format!("{path}\0{}", depth_path.unwrap_or_default());
+        if let Some(hit) = self.sdf_cache.borrow().get(&cache_key) {
             return Ok(hit.clone());
         }
-        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
+        let sdf = crate::cursor_sdf::CursorSdf::load_with_depth(path, depth_path)?;
+        let texels = sdf.rg16_bytes();
         let size = wgpu::Extent3d { width: sdf.width, height: sdf.height, depth_or_array_layers: 1 };
         let tex = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("cursor-sdf"),
@@ -1331,7 +1341,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R16Float,
+            format: wgpu::TextureFormat::Rg16Float,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -1342,16 +1352,16 @@ impl Compositor {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &sdf.f16_bytes(),
+            &texels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(sdf.width * 2),
+                bytes_per_row: Some(sdf.width * 4),
                 rows_per_image: Some(sdf.height),
             },
             size,
         );
         let entry = (tex, sdf.shape);
-        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
+        self.sdf_cache.borrow_mut().insert(cache_key, entry.clone());
         Ok(entry)
     }
 
@@ -1483,22 +1493,17 @@ impl Compositor {
                 flat(solid(parse_hex(color).unwrap_or(BLACK)))
             }
             // Le mouvement ne vaut que pour le fond d'ecran : la bulle garde son degrade immobile.
-            Some(SceneBackground::Gradient { angle_deg, stops, .. }) => {
-                let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(BLACK);
-                let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+            Some(SceneBackground::Gradient { angle_deg, stops, offsets, .. }) => {
                 // angle CSS -> direction unitaire, meme convention que le fond
                 // d'ecran (dont la direction se lit en espace SORTIE : le degrade
                 // traverse le cadre, la bulle n'en montre que sa tranche).
                 let a = angle_deg.to_radians();
                 flat(LayerCB {
                     dst,
-                    src: [c1[0], c1[1], c1[2], c1[3]],
                     quad_px,
                     radius_px,
-                    mode: 5.0,
-                    color: c0,
                     fx: [a.sin(), -a.cos(), 0.0, 0.0],
-                    ..Default::default()
+                    ..crate::frame_geometry::gradient_layer(stops, offsets, BLACK)
                 })
             }
             Some(SceneBackground::Image { path }) => {
@@ -2038,21 +2043,16 @@ impl Compositor {
             Some(SceneBackground::Color { color }) => {
                 (parse_hex(&color).unwrap_or(lp.bg_color), None)
             }
-            Some(SceneBackground::Gradient { angle_deg, stops, motion }) => {
-                let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(lp.bg_color);
-                let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+            Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
                 let a = angle_deg.to_radians();
                 let (anim, mb) =
                     crate::frame_geometry::gradient_motion_slots(motion, g.programme_t, rw / rh);
                 let cb = LayerCB {
                     dst: [0.0, 0.0, 1.0, 1.0],
-                    src: [c1[0], c1[1], c1[2], c1[3]],
                     quad_px: [rw, rh],
-                    mode: 5.0,
-                    color: c0,
                     fx: [a.sin(), -a.cos(), anim[0], anim[1]],
                     mb,
-                    ..Default::default()
+                    ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
                 };
                 ([0.0, 0.0, 0.0, 1.0], Some(BgLayer::Gradient(cb)))
             }
@@ -2087,20 +2087,18 @@ impl Compositor {
         // sinon. Place par plan_frame (cover-fit + coins arrondis) ;
         // `src = g.cut` (crop utilisateur + zoom en UV texture) dans les deux cas.
         //
-        // FLOU DE VELOCITE, ET POURQUOI SEULEMENT SUR LE MODE 0. `src_prev`/
-        // `dst_prev` decrivent le MEME calque a la frame precedente ; le shader
-        // remappe chaque pixel de sortie par ce couple pour retrouver l'UV qu'il
-        // occupait alors, et floute le long du segment. `src_prev = g.cut` et non
-        // un `cut` d'avant : la coupe est identique aux deux frames (`plan_frame`
-        // ne fait varier que le rect de DESTINATION entre `s_dst` et
-        // `s_dst_prev`), ce que Windows documente aussi. Le mouvement vient donc
-        // entierement de `dst_prev`.
+        // FLOU DE VELOCITE. Au mode 0, `src_prev`/`dst_prev` decrivent le MEME
+        // calque a la frame precedente ; le shader remappe chaque pixel de sortie
+        // par ce couple pour retrouver l'UV qu'il occupait alors, et floute le long
+        // du segment. `src_prev = g.cut` et non un `cut` d'avant : la coupe est
+        // identique aux deux frames (`plan_frame` ne fait varier que le rect de
+        // DESTINATION entre `s_dst` et `s_dst_prev`), ce que Windows documente
+        // aussi. Le mouvement vient donc entierement de `dst_prev`.
         //
-        // Le mode 8 n'en recoit PAS, et ce n'est pas un oubli : ces deux champs y
-        // portent deja les coins projetes du quad (BR/BL dans `src_prev`,
-        // `plane_px` dans `dst_prev`). Les deux sens ne peuvent pas cohabiter dans
-        // un meme draw. macOS et Windows sautent egalement le flou sur le chemin
-        // incline, pour la meme raison.
+        // Au mode 8, ces deux champs portent deja les coins projetes du quad
+        // (BR/BL dans `src_prev`, `plane_px` dans `dst_prev`) : le plan d'avant
+        // arrive dans ses propres champs (`trail_a`/`trail_b`/`trail_mb`,
+        // `FrameGeometry::tilt_trail`), meme flou borne a une frame.
         // Sous un cadre de fenetre, l'ecran garde ses coins HAUTS carres (`mb.w` au mode 0,
         // `dst_prev.z` au mode 8) ; 0 sans cadre, soit le rendu d'avant.
         let square_top = g.screen_square_top();
@@ -2137,6 +2135,7 @@ impl Compositor {
                 dof,
                 [rw, rh],
                 g.screen_mask,
+                g.tilt_trail([rw, rh]),
             ),
         };
         // Bind group construit AVANT le pass (doit vivre pendant tout le pass) ;
@@ -2182,7 +2181,7 @@ impl Compositor {
         // cadre de fenetre, c'est le CADRE qui la porte (`shadow_caster`), sinon la barre de
         // titre flotterait au-dessus de l'ombre.
         let screen_shadow = cfg.shadow.then(|| {
-            let spread = crate::frame_geometry::SCREEN_SHADOW_SPREAD_FRAC * g.frame_min_px;
+            let spread = crate::frame_geometry::SCREEN_SHADOW_SPREAD_FRAC * g.screen_unit_px;
             let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
             // Un appareil porte l'ombre de sa silhouette 3D (mode 17), pas celle d'un quad.
@@ -2625,6 +2624,7 @@ impl Compositor {
                         let anim = crate::text_anim::text_animation_state(
                             text.animation.as_deref(),
                             (g.source_t - a.start_sec as f32) * 1000.0,
+                            ((a.end_sec - a.start_sec) * 1000.0) as f32,
                         );
                         let anim_px = rh / crate::text_anim::ANIMATION_REFERENCE_HEIGHT;
                         let (mut ax, mut ay, mut aw, mut ah) = (
@@ -2832,7 +2832,7 @@ impl Compositor {
             // Curseur modelise (mode 15) : ce meme sprite extrude, `plan_cursor` en a tire la
             // pose. Sprite au binding 1 (texY), champ au binding 2 (texU). Parite Windows/macOS.
             if let Some(pose) = plan.model {
-                match self.cursor_sdf(&sprite.path) {
+                match self.cursor_sdf(&sprite.path, sprite.model_depth_path.as_deref()) {
                     Ok((sdf, shape)) => {
                         let shape = SpriteShape { hotspot, ..shape };
                         let sdf_view = sdf.create_view(&wgpu::TextureViewDescriptor::default());
@@ -4907,6 +4907,57 @@ mod tests {
         assert!(best > 0.05, "la barre de titre reste nette pendant le zoom (au mieux {best:.3})");
     }
 
+    /// Un degrade de fond est opaque et montre chacun de ses stops, meme quand le premier est a
+    /// 0. `gradient_layer` range la position du premier stop dans `color.a` ; la queue commune
+    /// du WGSL la prenait pour une opacite, et le fond disparaissait sous la couleur de clear
+    /// (#807). Rouge / vert / bleu a 0, 0.5, 1 de gauche a droite : chaque tiers doit porter sa
+    /// couleur, pas le noir du clear.
+    #[test]
+    fn a_gradient_whose_first_stop_is_at_zero_stays_opaque() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let json = r##"{"clips":[{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}],
+            "layout":{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded",
+                      "webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false,
+                      "screenRect":{"x":0.3,"y":0.3,"width":0.4,"height":0.4}},
+            "effects":{"padding":0.4,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0},
+            "background":{"kind":"gradient","angleDeg":90,
+                          "stops":["rgb(255, 0, 0)","rgb(0, 255, 0)","rgb(0, 0, 255)"],
+                          "offsets":[0,0.5,1]},
+            "zoomRegions":[],"annotations":[],
+            "cursor":{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,
+                      "clipToBounds":false,"theme":"default"},
+            "cropByClip":[null],
+            "output":{"width":1280,"height":720,"fps":30}}"##;
+        let scene = Scene::from_json(json).expect("scene json");
+        comp.set_live_params(live_params_from_scene(&scene));
+        comp.set_has_webcam(false);
+        comp.set_scene(Some(scene));
+        let screen = FakeFrame::new(&gpu, 640, 360, |_, _| 60);
+        let webcam = FakeFrame::new(&gpu, 64, 64, |_, _| 60);
+        let mut cfg = Cfg::c8();
+        cfg.bg_blur = false;
+        cfg.zoom = false;
+        cfg.layout_anim = false;
+        cfg.cursor = false;
+        cfg.shadow = false;
+        cfg.mblur_n = 1;
+        let rgba = unsafe {
+            comp.compose_frame(screen.as_ptr(), webcam.as_ptr(), 0.0, &cfg)
+                .expect("compose_frame");
+            comp.readback_direct().expect("readback_direct").2
+        };
+        // Rangee du haut, hors de l'ecran : que du fond.
+        let px = |x: usize| {
+            let i = (4 * 1280 + x) * 4;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let (left, mid, right) = (px(8), px(640), px(1271));
+        assert!(left[0] > 200 && left[1] < 60 && left[2] < 60, "gauche {left:?} : rouge attendu");
+        assert!(mid[1] > 200 && mid[0] < 60 && mid[2] < 60, "milieu {mid:?} : vert attendu");
+        assert!(right[2] > 200 && right[0] < 60 && right[1] < 60, "droite {right:?} : bleu attendu");
+    }
+
     /// Le cadre de fenetre (mode 14) se dessine sur Linux comme ailleurs : `"none"` rend
     /// l'image d'avant a l'octet, le theme clair ajoute une barre claire, droite comme
     /// inclinee, et les deux themes different. `OPENSCREEN_FRAME_OUT` recoit les PNG.
@@ -5024,11 +5075,11 @@ mod tests {
     /// Les états que le rendu passe en revue (hotspots de `DEFAULT_CURSOR_SPRITES`), et s'ils
     /// sont centrés : ni tangage ni lacet.
     const MODEL_STATES: [(&str, [f32; 2], bool); 6] = [
-        ("arrow", [0.119, 0.0874], false),
-        ("pointer", [0.3893, 0.0032], false),
-        ("text", [0.4375, 0.5333], true),
-        ("open-hand", [0.4375, 0.1781], false),
-        ("resize-ew", [0.4881, 0.4706], true),
+        ("arrow", [0.1205, 0.0881], false),
+        ("pointer", [0.3874, 0.0032], false),
+        ("text", [0.4355, 0.5369], true),
+        ("open-hand", [0.4375, 0.1724], false),
+        ("resize-ew", [0.485, 0.4706], true),
         ("not-allowed", [0.5, 0.5], true),
     ];
 
@@ -5243,8 +5294,9 @@ mod tests {
             let touch = compose_model(&comp, &screen, &json(Some(true), "default", true), &clicked);
             model_save(&format!("{name}-hover"), &hover);
             model_save(&format!("{name}-touch"), &touch);
-            assert!(absent == off && absent == other, "{name}: le chemin plat a change");
+            assert!(absent == off, "{name}: le chemin plat a change");
             assert!(absent != hover, "{name}: le reglage allume ne change rien");
+            assert!(other == hover, "{name}: le libelle du theme a change le rendu natif");
             let (a, b) = (model_split(&hover, &bare), model_split(&touch, &bare));
             println!(
                 "{name} : blanc {}, noir {}, ombre {} (apex a {:.1} px, posee {:.1} px), centroides {:?} / {:?}",
@@ -5261,7 +5313,7 @@ mod tests {
 
     /// Chaque état garde son art et sa silhouette : posé au centre de l'écran (vu de face), le
     /// modèle couvre ce que couvre le sprite plat, avec ses couleurs ; il porte une ombre en
-    /// l'air, suit l'inclinaison du plan, et un autre thème (ou le réglage éteint) reste plat.
+    /// l'air et suit l'inclinaison du plan. Le réglage éteint garde le sprite plat.
     #[test]
     fn every_modelled_state_keeps_its_art_footprint_and_shadow() {
         let Some(gpu) = gpu() else { return };
@@ -5287,8 +5339,11 @@ mod tests {
             let other = compose_model(&comp, &blue, &json("null", Some(true), "other", true), &still);
             model_save(&format!("art-{key}-touch"), &touch);
             model_save(&format!("art-{key}-iso"), &tilted);
-            if absent != sprite || other != sprite {
+            if absent != sprite {
                 failures.push(format!("{key}: le sprite plat a change"));
+            }
+            if other != hover {
+                failures.push(format!("{key}: le libelle du theme a change le rendu natif"));
             }
 
             let (m3d, m2d) = (model_opaque(&touch, &touch_b, &bare), model_opaque(&sprite, &sprite_b, &bare));
@@ -5420,7 +5475,13 @@ mod tests {
             };
             let (up, left) = (peak(0, -1), peak(-1, 0));
             println!("{rotation} : pastille en {m:?}, anneau haut {up:?}, gauche {left:?}");
-            assert!(up.0 > 60 && left.0 > 60, "{rotation}: anneau absent ({up:?} {left:?})");
+            // Le preset incliné projette le trait plus obliquement sur un bord; son contraste
+            // mesuré est inférieur à celui du cas plat, sans que l'anneau disparaisse.
+            let min_delta = if rotation == "null" { 60 } else { 40 };
+            assert!(
+                up.0 > min_delta && left.0 > min_delta,
+                "{rotation}: anneau absent ({up:?} {left:?})"
+            );
             let tol = if rotation == "null" { 1 } else { 2 };
             assert!((up.1 - left.1).abs() <= tol, "{rotation}: anneau decentre ({up:?} {left:?})");
         }

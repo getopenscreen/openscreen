@@ -27,21 +27,21 @@
 use crate::config::Cfg;
 use crate::scene::{Scene, SceneCrop};
 
-/// Constant buffer d'un calque : **128 octets**, un par draw.
+/// Constant buffer d'un calque : **176 octets**, un par draw.
 ///
 /// C'est le contrat partagé par les trois côtés — `cbuffer Layer` dans `shaders.hlsl`,
-/// `struct Layer` dans `shaders.metal`, et ce struct. Les trois doivent s'accorder champ
-/// pour champ ET octet pour octet : un décalage ne produit pas d'erreur, il produit un
-/// shader qui lit `color` là où on a écrit `fx`.
+/// `struct Layer` dans `shaders.metal` et `vk_shaders/layer.wgsl`, et ce struct. Ils doivent
+/// s'accorder champ pour champ ET octet pour octet : un décalage ne produit pas d'erreur, il
+/// produit un shader qui lit `color` là où on a écrit `fx`.
 ///
 /// `align(16)` vient de la version macOS ; sous `repr(C)` seul, les offsets sont déjà
-/// 0/16/32/40/44/48/64/80/96/112 des deux côtés — l'alignement Rust ne change que
+/// 0/16/32/40/44/48/64/80/96/112/128/144/160 des deux côtés — l'alignement Rust ne change que
 /// l'adresse du struct, pas son contenu, et Windows le `copy_nonoverlapping` dans un
 /// constant buffer mappé où l'alignement source est sans effet. Les deux formes étaient
 /// donc compatibles ; les unifier évite qu'elles cessent de l'être.
 ///
 /// (Le commentaire d'origine annonçait « 64 octets ». Il n'a jamais été juste : dix champs,
-/// trente-deux `f32`.)
+/// trente-deux `f32`. Les trois derniers, le flou de mouvement de l'écran incliné, en font 176.)
 #[repr(C, align(16))]
 #[derive(Clone, Copy, Default)]
 pub struct LayerCB {
@@ -55,6 +55,12 @@ pub struct LayerCB {
     pub src_prev: [f32; 4],
     pub dst_prev: [f32; 4],
     pub mb: [f32; 4], // mb[0] = nombre de taps de motion blur
+    /// Mode 8 : le plan à la frame PRÉCÉDENTE, coins TL, TR (`trail_a`) puis BR, BL (`trail_b`)
+    /// en px locaux comme `fx`/`src_prev`, et `trail_mb` = `[taps, force, 0, 0]` de son flou de
+    /// mouvement, ceux du mode 0 (`mb.xy`). `trail_mb` nul ailleurs : aucun tap, rien n'est lu.
+    pub trail_a: [f32; 4],
+    pub trail_b: [f32; 4],
+    pub trail_mb: [f32; 4],
 }
 
 pub const OUT_W: u32 = 1920;
@@ -363,6 +369,23 @@ pub(crate) fn cover_uv_rect(uv: [f32; 4], tex: [f32; 2], box_ar: f32) -> [f32; 4
     let (cx, cy) = (uv[0] + w_uv * 0.5, uv[1] + h_uv * 0.5);
     [cx - new_w * 0.5, cy - new_h * 0.5, cx + new_w * 0.5, cy + new_h * 0.5]
 }
+/// `cover_uv_rect`, la fenêtre centrée sur `at` (UV) au lieu du centre de `uv`, et bornée à `uv` :
+/// le remplissage du format, qui suit le curseur lissé dans l'enregistrement. Même taille que la
+/// fenêtre centrée, donc même grossissement ; seule sa position change.
+pub(crate) fn follow_cover_uv_rect(
+    uv: [f32; 4],
+    tex: [f32; 2],
+    box_ar: f32,
+    at: [f32; 2],
+) -> [f32; 4] {
+    let c = cover_uv_rect(uv, tex, box_ar);
+    let (hw, hh) = (0.5 * (c[2] - c[0]), 0.5 * (c[3] - c[1]));
+    // `max` puis `min`, pas `clamp` : à la précision flottante près la fenêtre peut dépasser `uv`
+    // d'un epsilon, et `clamp` panique quand sa borne basse passe la haute.
+    let cx = at[0].max(uv[0] + hw).min(uv[2] - hw);
+    let cy = at[1].max(uv[1] + hh).min(uv[3] - hh);
+    [cx - hw, cy - hh, cx + hw, cy + hh]
+}
 pub const HALF_W: u32 = OUT_W / 2;
 pub const HALF_H: u32 = OUT_H / 2;
 pub const FIXTURE_FRAMES: u32 = 360;
@@ -476,13 +499,32 @@ pub(crate) fn concentric_radius(r: f32, bx: f32, by: f32) -> f32 {
 }
 
 /// Position du slider Roundness sur sa course, 0..1, lue dans la scène : `roundnessFrac` est la
-/// valeur du slider (px de sortie) sur le petit côté de la sortie (`sceneDescription.ts`).
-/// `ROUNDNESS_SLIDER_MAX_PX` est le miroir du maximum du slider (`paramUnits.ts`).
+/// valeur du slider (px) sur la référence FIXE de 1080 px (`sceneDescription.ts`), et non plus
+/// sur le petit côté de la sortie — qui suit la source, si bien qu'une prise 4K recevait des
+/// coins deux fois moins ronds qu'une prise 1080p. `ROUNDNESS_SLIDER_MAX_PX` est le miroir du
+/// maximum du slider (`paramUnits.ts`).
 pub(crate) const ROUNDNESS_SLIDER_MAX_PX: f32 = 64.0;
 
 pub(crate) fn roundness_slider_position(scene: &crate::scene::Scene) -> f32 {
-    let out_min = scene.output.width.min(scene.output.height).max(1) as f32;
-    (scene.effects.roundness_frac * out_min / ROUNDNESS_SLIDER_MAX_PX).clamp(0.0, 1.0)
+    (scene.effects.roundness_frac * SHADOW_TUNING_REF_PX / ROUNDNESS_SLIDER_MAX_PX).clamp(0.0, 1.0)
+}
+
+/// L'UNITÉ DE L'ÉCRAN, px : le petit côté du cadre qu'aurait cet écran dans une sortie à SON ratio.
+///
+/// `content_px` est l'enregistrement affiché au repos (crop compris, zoom exclu, en entier même
+/// quand un slot en `cover` en rogne une partie). Divisé par `padding_scale`, il vaut exactement le
+/// petit côté du cadre (`frame_min_px`) quand la sortie a le ratio de l'enregistrement — Auto, ou
+/// un format fixe qui lui correspond : le rendu y est inchangé. Quand le format diffère (un clip
+/// 16:9 dans une sortie 9:16), l'écran n'occupe plus qu'une bande du cadre et l'unité rétrécit
+/// avec lui : le curseur, l'ombre et les coins gardent leur proportion À L'ÉCRAN au lieu de
+/// grossir de 1,8× à côté de lui.
+///
+/// Ce n'est pas `frame_unit_px` : celle-ci est faite pour qu'un cadre d'appareil ait la même
+/// épaisseur autour de n'importe quel clip d'une sortie, donc elle vaut `frame_min_px ×
+/// padding_scale` pour tout clip contenu dans la zone paddée — y compris la bande 16:9 d'une
+/// sortie 9:16, où elle ne corrigerait rien.
+pub(crate) fn screen_unit_px(content_px: [f32; 2], padding_scale: f32) -> f32 {
+    content_px[0].min(content_px[1]) / padding_scale.max(1e-3)
 }
 
 /// Le rayon des coins du métrage au BOUT de la course de Roundness sous chaque cadre, en unités
@@ -1116,7 +1158,7 @@ pub fn cursor_sprite_cb(
                 src_prev: [br0, br1, bl0, bl1],
                 // Le clip vit ici et NON dans `fx` (mode 7) : `fx` porte les coins.
                 dst_prev: clip,
-                // `mb.x` : 1 = warp projectif (caméra réelle).
+                // `mb.x` : 1 = warp projectif (tout écran incliné, cf. `screen_tilt`).
                 mb: [quad.warp_flag(), 0.0, 0.0, 0.0],
                 ..Default::default()
             }
@@ -1130,9 +1172,19 @@ pub fn cursor_sprite_cb(
 /// à l'autre vaut `0,42·gain` en 16:9, soit ±4 % ici.
 pub const CAMERA_LIGHT_GAIN: f32 = 0.2;
 
+/// Le plan incliné une frame plus tôt, et le réglage du flou : ce que le mode 8 floute
+/// (`FrameGeometry::tilt_trail`, `tilted_screen_cb`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TiltTrail {
+    /// Coins TL, TR, BR, BL du quad à la frame précédente, en px relatifs au centre de la boîte
+    /// COURANTE — le repère de `TiltedQuad::corners`.
+    pub corners: [(f32, f32); 4],
+    /// `[taps, force]` : ceux du mode 0 (`FrameGeometry::mb_taps`, `mb_amount`).
+    pub mb: [f32; 2],
+}
+
 /// `LayerCB` de l'écran incliné (mode 8), pour les trois backends : le quad projeté est dessiné
-/// dans sa BBOX et le fragment remonte au (s, t) du plan par le warp inverse. Pas de flou de
-/// mouvement sur ce chemin : `src_prev`/`dst_prev` y portent déjà les coins et le plan.
+/// dans sa BBOX et le fragment remonte au (s, t) du plan par le warp inverse.
 ///
 /// - `src` : la coupe source en UV texture ; `center_px` : le centre du rect `s_px` à l'écran ;
 /// - `radius` : le rayon de l'écran droit, que le plan réduit de `quad.scale` ;
@@ -1142,14 +1194,18 @@ pub const CAMERA_LIGHT_GAIN: f32 = 0.2;
 ///   du cadre quand le rayon dépasse la barre (`color.z` = la même hauteur, px du plan) ;
 /// - `dof` : la profondeur de champ tourne (`FrameGeometry::depth_of_field_on`).
 ///
-/// Sous la caméra réelle (`quad.projective`) : `dst_prev.w` = 1 (warp projectif), et `color.xy`
-/// porte l'éclairage, `1 + color.x·(s − 0,5) + color.y·(t − 0,5)` : la lampe de la caméra, fixe
-/// dans le monde comme l'œil, éclaire un peu plus le côté proche. Nuls sous un angle fixe, dont le
-/// rendu reste celui d'avant à l'octet.
+/// `quad.projective` : `dst_prev.w` = 1 (warp projectif). Sous la caméra réelle (`quad.lamp`),
+/// `color.xy` porte l'éclairage, `1 + color.x·(s − 0,5) + color.y·(t − 0,5)` : la lampe de la
+/// caméra, fixe dans le monde comme l'œil, éclaire un peu plus le côté proche. Nuls sous un angle
+/// fixe, dont l'exposition reste celle d'avant.
 ///
 /// Sous le masque d'un layout en bloc (`mask`) : le plan penche DANS le slot, qui le rogne. Il est
 /// dessiné dans le rect du slot au lieu de sa bbox, et `color.w` porte le rayon des coins du slot,
 /// que le shader applique à ce rect. Nul sans masque, comme avant.
+///
+/// `trail` : le plan à la frame précédente. Le shader floute le contenu le long du chemin qu'a
+/// parcouru chaque pixel depuis, borné à une frame et réglé comme le mode 0 (`trail_a`, `trail_b`,
+/// `trail_mb`). `None`, ou un seul tap : l'échantillon net, le rendu d'avant à l'octet.
 #[allow(clippy::too_many_arguments)]
 pub fn tilted_screen_cb(
     quad: &crate::regions::TiltedQuad,
@@ -1162,6 +1218,7 @@ pub fn tilted_screen_cb(
     dof: bool,
     render_px: [f32; 2],
     mask: Option<ScreenMask>,
+    trail: Option<TiltTrail>,
 ) -> LayerCB {
     let [rw, rh] = render_px;
     let corners = quad.corners;
@@ -1212,6 +1269,17 @@ pub fn tilted_screen_cb(
         mb: quad.depth_mb(s_px, focus_plane, dof),
         ..Default::default()
     };
+    if let Some(trail) = trail {
+        // Même repère local que les coins courants : sans mouvement, les deux quads coïncident
+        // au bit près et le shader garde son échantillon net.
+        let [a0, a1] = local(trail.corners[0]);
+        let [b0, b1] = local(trail.corners[1]);
+        let [c0, c1] = local(trail.corners[2]);
+        let [d0, d1] = local(trail.corners[3]);
+        cb.trail_a = [a0, a1, b0, b1];
+        cb.trail_b = [c0, c1, d0, d1];
+        cb.trail_mb = [trail.mb[0], trail.mb[1], 0.0, 0.0];
+    }
     if let Some(mask) = mask {
         reframe_warped(&mut cb, mask.rect, render_px);
         cb.color[3] = mask.radius_px;
@@ -1510,6 +1578,71 @@ pub fn gradient_motion_slots(
     )
 }
 
+/// Un dégradé linéaire en calque du mode 5, stops compris : quatre nœuds `[r, g, b, position]`
+/// dans `color`, `src_prev`, `dst_prev` puis `src`, dans l'ordre du dégradé. Le shader va de nœud
+/// en nœud comme CSS, donc un stop du milieu est peint là où la vignette le montre. Avant, seuls
+/// le premier et le dernier stop arrivaient au shader, et le milieu d'un dégradé à trois stops
+/// (celui de l'ancien éditeur) disparaissait du rendu.
+///
+/// Positions : celles de l'app quand il y en a une par stop, sinon réparties à égale distance
+/// (scène plus ancienne). Bornées à 0..1 et jamais en recul sur la précédente, comme en CSS. Un
+/// stop illisible est sauté ; sans aucun stop lisible, `fallback` remplit tout. Moins de quatre
+/// stops : le dernier se répète, en segments de longueur nulle qui ne peignent rien. Deux stops
+/// à 0 et 1 rendent donc exactement l'ancien `lerp(c0, c1, t)`.
+pub fn gradient_layer(stops: &[String], offsets: &[f32], fallback: [f32; 4]) -> LayerCB {
+    let mut knots: Vec<[f32; 4]> = Vec::with_capacity(stops.len().max(4));
+    let mut floor = 0.0f32;
+    for (i, stop) in stops.iter().enumerate() {
+        let Some(c) = parse_hex(stop) else { continue };
+        let raw = if offsets.len() == stops.len() {
+            offsets[i]
+        } else if stops.len() > 1 {
+            i as f32 / (stops.len() - 1) as f32
+        } else {
+            0.0
+        };
+        let at = if raw.is_finite() { raw.clamp(0.0, 1.0) } else { floor }.max(floor);
+        floor = at;
+        // Un stop translucide (le preset v1.5 `rgba(235,230,44,0.55)` vit dans des projets
+        // enregistrés) est prémultiplié : le fond est la couche du dessous, posée sur le clear
+        // noir, donc honorer son alpha revient exactement à `rgb · a`. CSS interpole aussi en
+        // prémultiplié, d'où la rampe juste entre deux stops d'alphas différents. Le nœud n'a
+        // pas de place pour l'alpha (w = position), et le shader rend le mode 5 opaque.
+        knots.push([c[0] * c[3], c[1] * c[3], c[2] * c[3], at]);
+    }
+    if knots.is_empty() {
+        knots.push([fallback[0], fallback[1], fallback[2], 0.0]);
+    }
+    // ponytail: quatre nœuds, les emplacements libres du mode 5. Au-delà (les presets v1.5 en
+    // avaient jusqu'à sept), on retire tour à tour le stop intérieur que ses voisins reproduisent
+    // le mieux. Une rampe en texture lèverait la limite si un dégradé plus riche devenait courant.
+    while knots.len() > 4 {
+        let miss = |i: usize| {
+            let (p, k, n) = (knots[i - 1], knots[i], knots[i + 1]);
+            let span = n[3] - p[3];
+            if span <= 1e-6 {
+                return 0.0; // stop de largeur nulle : il ne peint rien
+            }
+            let f = (k[3] - p[3]) / span;
+            (0..3).map(|c| (k[c] - (p[c] + (n[c] - p[c]) * f)).abs()).sum::<f32>()
+        };
+        let drop = (1..knots.len() - 1).min_by(|&a, &b| miss(a).total_cmp(&miss(b))).unwrap_or(1);
+        knots.remove(drop);
+    }
+    while knots.len() < 4 {
+        let last = knots[knots.len() - 1];
+        knots.push(last);
+    }
+    LayerCB {
+        mode: 5.0,
+        color: knots[0],
+        src_prev: knots[1],
+        dst_prev: knots[2],
+        src: knots[3],
+        ..Default::default()
+    }
+}
+
 /// True when this clip really has a camera to draw.
 ///
 /// TWO ways the app says "no camera", and both must be caught here, because the
@@ -1637,6 +1770,12 @@ pub struct FrameGeometry {
     /// Caméra réelle de `follow-cursor` (`camera.rs`), `None` sans elle. Jamais en même temps
     /// qu'une `zoom_rotation` non nulle.
     pub camera: Option<crate::camera::CameraPose>,
+    /// La rotation de base une frame d'écran plus tôt : avec `s_dst_prev` et `camera_prev`, le
+    /// zoom d'AVANT, que le mode 8 floute (`tilt_trail`).
+    pub zoom_rotation_prev: [f32; 3],
+    /// La caméra réelle une frame plus tôt (poids, visée, orbite, zoom), `None` si elle n'y était
+    /// pas active — même quand elle l'est à cette frame-ci, ou l'inverse.
+    pub camera_prev: Option<crate::camera::CameraPose>,
     pub padding_scale: f32,
     /// Coupe source de l'écran en UV texture (crop utilisateur + zoom).
     pub cut: [f32; 4],
@@ -1664,6 +1803,9 @@ pub struct FrameGeometry {
     pub s_ann: [f32; 4],
     pub s_radius: f32,
     pub frame_min_px: f32,
+    /// L'unité de l'ÉCRAN (`screen_unit_px`) : ce que mesurent le curseur, l'ombre de l'écran et
+    /// ses coins sans cadre.
+    pub screen_unit_px: f32,
     pub w_dst: [f32; 4],
     pub w_dst_prev: [f32; 4],
     pub w_px: [f32; 2],
@@ -1707,12 +1849,20 @@ impl ScreenMask {
 }
 
 /// Redessine un calque WARPÉ (modes 8 et 16 : coins TL/TR dans `fx`, BR/BL dans `src_prev`, en px
-/// locaux à `dst`) dans une autre boîte `dst`. Le warp ne dépend pas de la boîte de dessin, qui ne
-/// fait que borner les pixels rastérisés : il suffit de reporter les coins dans son repère.
+/// locaux à `dst` ; au mode 8, ceux de la frame d'avant dans `trail_a`/`trail_b`) dans une autre
+/// boîte `dst`. Le warp ne dépend pas de la boîte de dessin, qui ne fait que borner les pixels
+/// rastérisés : il suffit de reporter les coins dans son repère.
 fn reframe_warped(cb: &mut LayerCB, dst: [f32; 4], render_px: [f32; 2]) {
     let shift = [(dst[0] - cb.dst[0]) * render_px[0], (dst[1] - cb.dst[1]) * render_px[1]];
-    for c in [&mut cb.fx, &mut cb.src_prev] {
+    let reframe = |c: &mut [f32; 4]| {
         *c = [c[0] - shift[0], c[1] - shift[1], c[2] - shift[0], c[3] - shift[1]];
+    };
+    reframe(&mut cb.fx);
+    reframe(&mut cb.src_prev);
+    // La traînée, seulement s'il y en a une : sans elle, ses champs restent nuls.
+    if cb.trail_mb[0] > 0.0 {
+        reframe(&mut cb.trail_a);
+        reframe(&mut cb.trail_b);
     }
     cb.dst = dst;
     cb.quad_px = [dst[2] * render_px[0], dst[3] * render_px[1]];
@@ -1758,18 +1908,51 @@ impl FrameGeometry {
                 self.zoom_rotation,
                 self.zoom_rotation_dyn,
             );
-            // Sous un cadre d'APPAREIL, l'écran passe au warp PROJECTIF même sous un angle fixe.
-            // Le mode 17 lance ses rayons dans la perspective exacte ; le warp bilinéaire s'en
-            // écarte de ~8 % de la largeur au milieu des bords (mesuré par
-            // `the_device_screen_face_lands_on_the_footage_plane`), soit une lunette à cent
-            // pixels du bord de l'image. Les quatre coins sont les mêmes des deux côtés, donc
-            // l'homographie qu'ils définissent EST cette projection exacte : passer le drapeau
-            // recolle l'image sur le modèle, partout et pas seulement aux coins. Sans appareil —
-            // sans cadre ou sous le chrome plat — rien ne change, à l'octet.
-            if self.window_frame.as_ref().is_some_and(|f| f.kind.is_device()) {
-                quad.projective = true;
-            }
+            // Un angle fixe se dessine au warp PROJECTIF, comme la caméra réelle. Les quatre coins
+            // sont ceux de la projection exacte, donc l'homographie qu'ils définissent EST cette
+            // projection, partout et pas seulement aux coins. Le warp bilinéaire s'en écartait de
+            // ~8 % de la largeur au milieu des bords (mesuré par
+            // `the_device_screen_face_lands_on_the_footage_plane`), et surtout il PENCHAIT le
+            // contenu : la verticale du milieu de l'écran, droite sous une caméra sans roulis,
+            // tombait de 2,9° sous `iso` et de 0,8° sous `left`/`right`, et ce roulis-là entrait
+            // avec le zoom. Le mode 17 (appareil) en dépend aussi : il lance ses rayons dans la
+            // perspective exacte.
+            quad.projective = true;
             quad
+        })
+    }
+
+    /// Le plan incliné une frame d'écran plus tôt, avec le réglage du flou : ce que le mode 8
+    /// floute (`tilted_screen_cb`). `None` quand l'écran est droit ou le flou coupé.
+    ///
+    /// La frame d'avant est celle du mode 0 : la boîte au zoom d'avant (`s_dst_prev`), et ici la
+    /// rotation de base d'avant (un angle fixe entre avec le zoom) ou la caméra réelle d'avant
+    /// (`camera_prev`). Parallaxe et impact restent ceux de la frame, comme le focus du mode 0 : le
+    /// flou suit le zoom et la caméra, borné à une frame.
+    pub fn tilt_trail(&self, render_px: [f32; 2]) -> Option<TiltTrail> {
+        if !self.tilted() || self.mb_taps < 2.0 || self.mb_amount <= 0.001 {
+            return None;
+        }
+        let d = self.s_dst_prev;
+        let px = [d[2] * render_px[0], d[3] * render_px[1]];
+        let quad = match self.camera_prev {
+            Some(pose) => crate::camera::View::new(px, pose).quad(px),
+            None => crate::regions::rotated_quad_corners_px(
+                px[0],
+                px[1],
+                self.zoom_rotation_prev,
+                self.zoom_rotation_dyn,
+            ),
+        };
+        // Les coins d'avant, reportés au centre de la boîte COURANTE (le repère des siens).
+        let now = self.screen_center_px(render_px);
+        let shift = [
+            (d[0] + d[2] * 0.5) * render_px[0] - now[0],
+            (d[1] + d[3] * 0.5) * render_px[1] - now[1],
+        ];
+        Some(TiltTrail {
+            corners: quad.corners.map(|(x, y)| (x + shift[0], y + shift[1])),
+            mb: [self.mb_taps, self.mb_amount],
         })
     }
 
@@ -2006,7 +2189,7 @@ impl FrameGeometry {
     /// direction glisse avec le poids de la caméra : aucun saut à l'entrée du zoom. Sous le masque
     /// d'un layout en bloc, l'ombre est celle du slot, que la caméra ne fait pas tourner.
     pub fn screen_shadow_offset(&self) -> [f32; 2] {
-        let off = SCREEN_SHADOW_OFFSET_FRAC * self.frame_min_px;
+        let off = SCREEN_SHADOW_OFFSET_FRAC * self.screen_unit_px;
         if self.screen_mask.is_some() {
             return [0.0, off];
         }
@@ -2290,8 +2473,7 @@ impl FrameGeometry {
             return Some(mask);
         }
 
-        // Écran incliné (le mode 8 n'a pas de flou de mouvement : pas de trace à couvrir).
-        // Même quad et même centre que le dessin de l'écran et que `plan_cursor`.
+        // Écran incliné. Même quad et même centre que le dessin de l'écran et que `plan_cursor`.
         let s_px = [self.s_dst[2] * rw, self.s_dst[3] * rh];
         let quad = self.screen_tilt(s_px)?;
         let centre = [
@@ -2311,6 +2493,42 @@ impl FrameGeometry {
             [centre[0] + px, centre[1] + py]
         };
         let pts = [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)];
+        // Le mode 8 étale aussi chaque pixel vers là où le plan était une frame plus tôt
+        // (`tilt_trail`) : une copie traînée du secret sort du quad courant. Le masque couvre alors
+        // la boîte englobante du secret aux deux frames, en rect droit, comme le chemin droit.
+        // Même warp que le shader sur les coins d'avant (le drapeau projectif est celui du plan).
+        // La perspective grossit localement le côté proche : la force suit l'arête la plus
+        // agrandie par rapport au rect droit zoomé, pour que nulle part le masque ne soit plus
+        // fin, rapporté au contenu, qu'au repos.
+        let (ew, eh) = ((x1 - x0) * s_px[0], (y1 - y0) * s_px[1]);
+        let len = |a: [f32; 2], b: [f32; 2]| (b[0] - a[0]).hypot(b[1] - a[1]);
+        let tilt_k = (len(pts[0], pts[1]) / ew)
+            .max(len(pts[3], pts[2]) / ew)
+            .max(len(pts[0], pts[3]) / eh)
+            .max(len(pts[1], pts[2]) / eh);
+        let strength = (zoom_k * tilt_k).max(1.0);
+        // Sans mouvement, la traînée EST le quad (au bit près) : rien de plus à couvrir.
+        if let Some(trail) = self.tilt_trail(render_px).filter(|t| t.corners != quad.corners) {
+            let before = crate::regions::TiltedQuad { corners: trail.corners, ..quad };
+            let then = |fx: f32, fy: f32| {
+                let (px, py) = before.point_px(fx, fy);
+                [centre[0] + px, centre[1] + py]
+            };
+            let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+            for [px, py] in pts.into_iter().chain([then(x0, y0), then(x1, y0), then(x1, y1), then(x0, y1)]) {
+                (lo, hi) = ([lo[0].min(px), lo[1].min(py)], [hi[0].max(px), hi[1].max(py)]);
+            }
+            let rect =
+                [lo[0] / rw, lo[1] / rh, (hi[0] - lo[0]).max(1.0) / rw, (hi[1] - lo[1]).max(1.0) / rh];
+            let rect = match self.screen_mask {
+                Some(m) => m.clip(rect)?,
+                None => rect,
+            };
+            let mut mask = PrivacyMask::upright(rect, render_px, strength);
+            // Un ovale inscrit dans la boîte élargie ne couvrirait plus l'ovale courant.
+            mask.oval_ok = false;
+            return Some(mask);
+        }
         let (mut min_x, mut min_y) = (f32::MAX, f32::MAX);
         let (mut max_x, mut max_y) = (f32::MIN, f32::MIN);
         for [px, py] in pts {
@@ -2332,21 +2550,12 @@ impl FrameGeometry {
             quad_px = [c[2] * rw, c[3] * rh];
             dst = c;
         }
-        // La perspective grossit localement le côté proche : la force suit l'arête la plus
-        // agrandie par rapport au rect droit zoomé, pour que nulle part le masque ne soit plus
-        // fin, rapporté au contenu, qu'au repos.
-        let (ew, eh) = ((x1 - x0) * s_px[0], (y1 - y0) * s_px[1]);
-        let len = |a: [f32; 2], b: [f32; 2]| (b[0] - a[0]).hypot(b[1] - a[1]);
-        let tilt_k = (len(pts[0], pts[1]) / ew)
-            .max(len(pts[3], pts[2]) / ew)
-            .max(len(pts[0], pts[3]) / eh)
-            .max(len(pts[1], pts[2]) / eh);
         Some(PrivacyMask {
             dst,
             quad_px,
             warp: Some(local),
             projective: quad.projective,
-            strength: (zoom_k * tilt_k).max(1.0),
+            strength,
             oval_ok: true,
         })
     }
@@ -2510,19 +2719,20 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let source_t_prev = clock.source_at(clock.at(source_t) - 1.0 / FPS);
         // le focus "auto" (suivi curseur) réutilise la même piste que le rendu du curseur.
         let cursor_for_zoom = cursor;
-        // La rotation 3D (mode 8, pas de motion blur dans ce chemin — cf. le commentaire au
-        // point d'appel) n'est calculée QUE pour la frame courante ; `pp` ne sert qu'au zoom
-        // écran normal (vélocité pour le motion blur du chemin non-tilté).
+        // `pp` porte le zoom de la frame précédente, pour le flou de mouvement ; celui du plan
+        // incliné y ajoute sa rotation de base et le poids de la caméra réelle (`tilt_trail`).
         let mut zoom_rotation = [0.0f32; 3];
+        let mut zoom_rotation_prev = [0.0f32; 3];
         let mut zoom_tilt = 0.0f32;
         let mut zoom_click_impact = 0.0f32;
         let mut zoom_camera = 0.0f32;
+        let mut zoom_camera_prev = 0.0f32;
         let mut zoom_aim = [0.5f32; 2];
         let mut zoom_orbit = [0.5f32; 2];
+        let (mut zoom_aim_prev, mut zoom_orbit_prev) = ([0.5f32; 2], [0.5f32; 2]);
         // Curseur masqué → pas de piste pour ce qui anime le plan (parallaxe, impact, caméra
-        // `follow-cursor`) : l'export ne charge la piste que si le curseur est affiché
-        // (`timeline_walk`), la preview toujours. Sans cette porte, la preview pencherait un
-        // plan que l'export laisse immobile.
+        // `follow-cursor`) : un plan ne bouge que sous un pointeur qu'on voit. Preview et export
+        // chargent la piste dans tous les cas (le focus auto la suit), cette porte fait le reste.
         let parallax_track = cursor_for_zoom.filter(|_| scene.is_some_and(|s| s.cursor.show));
         let active_crop = scene.and_then(|scene| {
             scene.crop_by_clip.get(scene.active_clip_index).copied().flatten()
@@ -2548,15 +2758,21 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             zoom_camera = zs.camera;
             zoom_aim = zs.aim;
             zoom_orbit = zs.orbit;
+            // Même `CameraFrame` qu'à la frame courante : la caméra réelle d'avant (poids, visée,
+            // orbite) sert au flou du mode 8. Échelle et focus n'en dépendent pas.
             let zs_p = crate::regions::zoom_state_in(
                 zoom_regions,
                 source_t_prev,
                 cursor_for_zoom,
-                &crate::regions::CameraFrame::NONE,
+                &camera,
                 &clock,
             );
             pp.zoom = zs_p.scale;
             pp.focus = zs_p.focus;
+            zoom_rotation_prev = zs_p.rotation;
+            zoom_camera_prev = zs_p.camera;
+            zoom_aim_prev = zs_p.aim;
+            zoom_orbit_prev = zs_p.orbit;
         }
         // Full Camera ignore le rétrécissement réactif de la webcam (design web : mélanger
         // "rétrécit pour le zoom" et "grandit en plein cadre" dans la même frame n'a pas de sens).
@@ -2612,21 +2828,25 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             let (brx, bry) = (dst[0] + dst[2], dst[1] + dst[3]);
             [brx - nw, bry - nh, nw, nh]
         };
-        // Variantes ancrées au CENTRE (au lieu du coin bas-droite) de `dst`, pour le cas où
-        // `dst` vient de `app_webcam_rect` : ce rect est déjà la position que l'utilisateur a
-        // choisie/déplacée (résolue côté app via `computeCompositeLayout`, même convention
-        // centre-fraction que `cx`/`cy` dans `compositeLayout.ts`) — l'ancrer au coin bas-droite
-        // comme le fait `fit_cam_aspect` (pensé pour le placement par DÉFAUT, ancré à ce coin
-        // avec une marge fixe) réancre silencieusement la webcam glissée n'importe où d'autre à
-        // ce coin, ignorant la position réelle choisie par l'utilisateur — le bug rapporté
-        // (webcam glissée au coin bas-gauche, DOM/JSON envoyé au natif confirmant une position
-        // flush, mais rendu natif visiblement décalé). Le centre est le point fixe qui a un sens
-        // pour un rect DÉJÀ positionné par l'app ; le coin bas-droite n'a de sens que pour le
-        // placement par défaut, qui grandit depuis ce coin faute de position explicite.
-        let scale_center = |dst: [f32; 4], s: f32| -> [f32; 4] {
-            let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
+        // Variante ancrée à l'ANCRE de la caméra (au lieu du coin bas-droite) de `dst`, pour le cas
+        // où `dst` vient de `app_webcam_rect` : ce rect est déjà la position que l'utilisateur a
+        // choisie (résolue côté app via `computeCompositeLayout`) — l'ancrer au coin bas-droite
+        // comme le fait `fit_cam_aspect` (pensé pour le placement par DÉFAUT) réancrerait la
+        // webcam posée n'importe où d'autre à ce coin (bug rapporté : webcam au coin bas-gauche,
+        // rendu natif décalé).
+        //
+        // L'app pose la caméra à marge constante de son ancre (un coin ou un milieu de bord) :
+        // `x = marge + fx·(W − 2·marge − w)`, donc le point de la boîte à la fraction `fx` vaut
+        // `marge + fx·(W − 2·marge)` quelle que soit sa largeur. Rétrécir autour de ce point-là,
+        // c'est exactement la mise en page de l'app à la taille réduite : une caméra de coin garde
+        // sa marge aux deux bords, une caméra de milieu de bord reste centrée sur lui. Rétrécir
+        // vers son propre centre l'arrachait de son coin pendant chaque zoom. Sans ancre (vieux
+        // payload), le centre.
+        let anchor = scene.map(|s| s.layout.webcam_anchor_fractions()).unwrap_or([0.5, 0.5]);
+        let scale_anchored = |dst: [f32; 4], s: f32| -> [f32; 4] {
+            let (ax, ay) = (dst[0] + dst[2] * anchor[0], dst[1] + dst[3] * anchor[1]);
             let (nw, nh) = (dst[2] * s, dst[3] * s);
-            [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
+            [ax - nw * anchor[0], ay - nh * anchor[1], nw, nh]
         };
         // Le ratio de sortie réel (peut différer du canvas interne 16:9 fixe) et le facteur
         // d'étirement non uniforme que `blit_resized` appliquera en fin de pipeline — nécessaires
@@ -2730,19 +2950,41 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
                 .screen_cover
                 .then_some((s_base[2] * rw) / (s_base[3] * rh).max(0.0001))
         });
-        let cover = |uv: [f32; 4]| -> [f32; 4] {
-            match cover_box_ar {
-                Some(ar) => cover_uv_rect(uv, [stw as f32, sth as f32], ar),
-                None => uv,
+        // Remplissage du format (`screen_follow`) : la fenêtre du cover suit le curseur lissé,
+        // en UV. Sans piste, elle reste centrée.
+        let follow = cover_box_ar.is_some() && scene.is_some_and(|s| s.layout.screen_follow);
+        let follow_at = |t: f32| -> Option<[f32; 2]> {
+            let (x, y) = cursor.filter(|_| follow)?.follow_at(t)?;
+            Some([x * u_max, y * v_max])
+        };
+        let cover = |uv: [f32; 4], at: Option<[f32; 2]>| -> [f32; 4] {
+            match (cover_box_ar, at) {
+                (Some(ar), Some(at)) => follow_cover_uv_rect(uv, [stw as f32, sth as f32], ar, at),
+                (Some(ar), None) => cover_uv_rect(uv, [stw as f32, sth as f32], ar),
+                (None, _) => uv,
             }
         };
         // La coupe RÉFÉRENCE (zoom entier) est celle qui remplissait la boîte paddée avant
         // ce correctif ; la coupe DESSINÉE ne porte plus que le crop. `remap_box` reporte la
         // seconde à travers le mapping de la première, ce qui conserve le cadrage exact.
         // Le focus courant reste volontairement utilisé pour la frame précédente, comme avant.
-        let cut_ref = cover(screen_source_rect(u_max, v_max, active_crop, p.zoom, p.focus));
-        let cut_ref_prev = cover(screen_source_rect(u_max, v_max, active_crop, pp.zoom, p.focus));
-        let cut = cover(screen_source_rect(u_max, v_max, active_crop, 1.0, p.focus));
+        let cut_ref =
+            cover(screen_source_rect(u_max, v_max, active_crop, p.zoom, p.focus), follow_at(source_t));
+        let cut_ref_prev = cover(
+            screen_source_rect(u_max, v_max, active_crop, pp.zoom, p.focus),
+            follow_at(source_t_prev),
+        );
+        // Sous le remplissage, la coupe dessinée est le crop ENTIER : la fenêtre bouge, et une
+        // coupe dessinée qui ne la contiendrait plus laisserait un trou dans le slot. Le masque du
+        // slot (`screen_mask`) rogne le reste.
+        let crop_cut = screen_source_rect(u_max, v_max, active_crop, 1.0, p.focus);
+        let cut = if follow { crop_cut } else { cover(crop_cut, None) };
+        // Ce que l'écran montre au repos : la fenêtre couverte, suivie ou non. Le curseur, les coins
+        // et l'ombre se mesurent sur elle, pas sur la coupe entière que le remplissage dessine.
+        let window = cover(crop_cut, follow_at(source_t));
+        let shown = |i: usize| (crop_cut[i + 2] - crop_cut[i]) / (window[i + 2] - window[i]).max(1e-6);
+        let screen_unit_px =
+            screen_unit_px([s_base[2] * rw * shown(0), s_base[3] * rh * shown(1)], padding_scale);
         // Impact du clic : mêmes piste, coupe, porte et budget que la parallaxe sous un angle fixe ;
         // sous la caméra réelle, les mêmes clics font reculer l'œil.
         let (impact, press) = match (scene, parallax_track) {
@@ -2761,6 +3003,16 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             aim: focus_in_cut(u_max, v_max, active_crop, zoom_aim, cut),
             orbit: focus_in_cut(u_max, v_max, active_crop, zoom_orbit, cut),
             zoom: p.zoom,
+            press,
+        });
+        // La caméra réelle de la frame d'avant, dès qu'elle y était active — y compris quand elle
+        // ne l'est plus à celle-ci (fin de sa moitié d'une transition vers un angle fixe) ; `None`
+        // quand elle ne l'était pas, et le mode 8 reprend alors la rotation d'avant.
+        let camera_prev = (zoom_camera_prev > 0.0).then(|| crate::camera::CameraPose {
+            weight: zoom_camera_prev,
+            aim: focus_in_cut(u_max, v_max, active_crop, zoom_aim_prev, cut),
+            orbit: focus_in_cut(u_max, v_max, active_crop, zoom_orbit_prev, cut),
+            zoom: pp.zoom,
             press,
         });
         let focus_plane = match camera {
@@ -2797,17 +3049,17 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // (`OUT_W`×`OUT_H`), une référence différente du vrai output dès que la sortie n'est pas
         // 16:9 (rapport utilisateur : webcam glissée au coin bas-gauche en 9:16, JSON envoyé au
         // natif confirmant une position flush, mais rendu native visiblement décalé ET trop
-        // petit). On garde seulement `scale_center` (zoom réactif, préserve position+aspect) puis
-        // on pré-compense par `inverse_undistort` pour annuler le `undistort()` générique
+        // petit). On garde seulement `scale_anchored` (zoom réactif, préserve l'ancre et l'aspect)
+        // puis on pré-compense par `inverse_undistort` pour annuler le `undistort()` générique
         // appliqué plus bas à tous les calques (écran compris) — sans quoi ce rect déjà correct
         // se ferait déformer une seconde fois par cet undistort partagé.
         let mut w_dst = if app_webcam_rect.is_some() {
-            scale_center(p.webcam.dst, webcam_size_scale)
+            scale_anchored(p.webcam.dst, webcam_size_scale)
         } else {
             fit_cam_aspect(scale_corner_br(p.webcam.dst, webcam_size_scale))
         };
         let mut w_dst_prev = if app_webcam_rect.is_some() {
-            scale_center(pp.webcam.dst, webcam_size_scale_prev)
+            scale_anchored(pp.webcam.dst, webcam_size_scale_prev)
         } else {
             fit_cam_aspect(scale_corner_br(pp.webcam.dst, webcam_size_scale_prev))
         };
@@ -2880,8 +3132,9 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             }
             // Preset en bloc : le rayon appartient à la boîte écran (parité exacte avec la caméra).
             (true, Some(f), _) => f * s_px[0].min(s_px[1]),
-            // Scène sans rayon imposé : slider Roundness, relatif au cadre.
-            (true, None, Some(f)) => f * frame_min_px,
+            // Scène sans rayon imposé : slider Roundness, en px d'une référence 1080 rapportée à
+            // l'écran (`screen_unit_px`) — ni à la source, ni au cadre.
+            (true, None, Some(f)) => f * screen_unit_px,
             // Fixture/bench (pas de scène) : chemin inspector historique, inchangé.
             (true, None, None) => p.screen.radius * lp.radius_scale,
         };
@@ -2952,6 +3205,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         zoom_rotation,
         zoom_rotation_dyn,
         camera,
+        zoom_rotation_prev,
+        camera_prev,
         padding_scale,
         cut,
         focus_plane,
@@ -2965,6 +3220,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         s_ann: s_base,
         s_radius,
         frame_min_px,
+        screen_unit_px,
         w_dst,
         w_dst_prev,
         w_px,
@@ -3071,8 +3327,8 @@ pub fn cursor_plane_point(cut: [f32; 4], uv_max: [f32; 2], p: (f32, f32)) -> Opt
 /// multiplier encore par le poids des régions (`ZoomState::click_impact`) ; la porte du préset
 /// vient ensuite, dans `dynamic_tilt`.
 ///
-/// - curseur visible (`cursor_alpha`) : `cursor.show` explicite, parce que l'export ne charge la
-///   piste que si le curseur est affiché alors que la preview la charge toujours ;
+/// - curseur visible (`cursor_alpha`) : `cursor.show` explicite, la piste étant chargée même
+///   curseur masqué (le focus auto la suit) ;
 /// - clics dans la fenêtre source du clip actif seulement (cf. `click_impact`) ;
 /// - vitesse : poids `clamp(2 − vitesse, 0, 1)`. À 100× une frame couvre 3,3 s de source, la
 ///   courbe serait échantillonnée une fois, au hasard : une secousse d'une frame ;
@@ -3181,7 +3437,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         (1.0 + (input.track.bounce(input.t) - 1.0) * lp.cursor_bounce_scale).max(0.0)
     };
     let size_px =
-        CURSOR_BASE_SIZE_FRAC * g.frame_min_px * lp.cursor_size_scale * bounce * g.padding_scale;
+        CURSOR_BASE_SIZE_FRAC * g.screen_unit_px * lp.cursor_size_scale * bounce * g.padding_scale;
     // Taille nulle = rien à dessiner, et surtout rien à projeter : sur un plan incliné les quatre
     // coins du sprite se confondent, et le warp inverse du mode 13 résout alors 0/0. Son rejet
     // ne tiendrait qu'à des comparaisons avec NaN, que Metal (fast-math) ne garantit pas.
@@ -3283,16 +3539,15 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
 
 // ============ Curseur modélisé (mode 15) ============
 //
-// Le sprite de l'état courant (thème par défaut) devient un OBJET : sa silhouette extrudée, lancée
-// de rayons par pixel dans le shader, éclairée, et qui porte une vraie ombre sur l'écran. La
-// silhouette est le champ de distance signé que `cursor_sdf` tire de l'alpha du sprite ; le dessus
-// porte l'art du sprite, les flancs et le chanfrein la couleur de son bord. Rust ne fait ici que la
-// pose (fonction pure de `t`), la caméra et la boîte de dessin ; les trois shaders font le reste
-// avec les MÊMES constantes.
+// Le sprite de l'état courant devient un OBJET : sa silhouette et son relief rasterisé sont lancés
+// de rayons par pixel dans le shader, éclairés, et portent une vraie ombre sur l'écran. Le champ de
+// distance vient de l'alpha ; le second canal porte la hauteur de face propre au modèle. Le dessus
+// garde son art, et les flancs prennent sa matière de bord. Rust calcule la pose, la caméra et la
+// boîte de dessin ; les trois shaders font le reste avec les MÊMES constantes.
 //
 // Repère du MODÈLE : unité = plus grand côté du sprite (`size_px`, la taille du curseur), origine
-// au hotspot de la face du dessus, x à droite, y vers le bas, z vers la caméra ; le modèle occupe
-// z de -MODEL_THICK à 0.
+// au hotspot de la face du dessus, x à droite, y vers le bas, z vers la caméra ; le dessous reste
+// en z = -MODEL_THICK, l'arête est en z = 0 et le relief monte jusqu'à MODEL_RELIEF_MAX.
 //
 // Emplacements du `LayerCB` au mode 15 (128 octets, inchangés) :
 //   dst           rect de dessin (sortie 0..1) : boîte du modèle ET de son ombre
@@ -3312,12 +3567,14 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
 //   mb.zw         translation du plan dans le repère caméra (px, `TiltedQuad::offset`) : le
 //                 plan vaut `R·p + (mb.zw, 0)`, œil en (0, 0, P). Nulle sous un angle fixe.
 //   radius_px     rapport w/h du sprite : sa taille (unités) en découle, plus grand côté = 1
-// Textures : le sprite RGBA (alpha droit) et son champ R16F (`cursor_sdf`), sur le même rect.
+// Textures : le sprite RGBA (alpha droit) et le champ RG16F (`cursor_sdf`, distance + hauteur), sur le même rect.
 //   Windows et macOS : sprite en t2/texture(2) (`texImg`), champ en t4/texture(4) (`texSdf`).
 //   Linux : sprite au binding 1 (`texY`), champ au binding 2 (`texU`).
 
-/// Épaisseur du modèle : la face du dessus est en z = 0, celle du dessous en z = -épaisseur.
+/// Épaisseur du modèle : l'arête est à z = 0, celle du dessous à z = -épaisseur.
 pub const MODEL_THICK: f32 = 0.19;
+/// Relief maximal des faces sculptées, en unités du modèle.
+pub const MODEL_RELIEF_MAX: f32 = 0.12;
 /// Rayon du chanfrein arrondi des arêtes du dessus et du dessous.
 pub const MODEL_BEVEL: f32 = 0.045;
 /// Direction VERS la lumière, repère caméra (x droite, y bas, z vers le spectateur) : en haut à
@@ -3367,6 +3624,8 @@ pub struct SpriteShape {
     pub hotspot: [f32; 2],
     /// Haut de la silhouette (alpha 0,5), fraction de la hauteur du sprite.
     pub top: f32,
+    /// Hauteur maximale de la face au-dessus de l'arête du sprite, en unités du modèle.
+    pub max_height: f32,
 }
 
 impl SpriteShape {
@@ -3378,7 +3637,10 @@ impl SpriteShape {
     /// La boîte englobante du modèle écrasé à `squash` : le rect du sprite, sur toute l'épaisseur.
     fn model_box(&self, squash: f32) -> ([f32; 3], [f32; 3]) {
         let [x, y] = self.origin();
-        ([x, y, -MODEL_THICK * squash], [x + self.size[0], y + self.size[1], 0.0])
+        (
+            [x, y, -MODEL_THICK * squash],
+            [x + self.size[0], y + self.size[1], self.max_height],
+        )
     }
 
     /// Hauteur du hotspot du dessus quand le point le plus bas du modèle basculé de `pitch` (≥ 0)
@@ -3472,14 +3734,13 @@ pub fn cursor_pose(
     CursorPose { clearance, pitch, yaw, squash }
 }
 
-/// Le sprite du thème par défaut que les backends résoudraient pour `cursor_type`, s'il y en a
-/// un : c'est lui que le mode 15 extrude. Même résolution qu'eux : l'état s'il a un sprite, sinon
-/// la flèche. Les autres thèmes restent plats.
+/// Le sprite que les backends résoudraient pour `cursor_type` : c'est lui que le mode 15 modèle.
+/// Même résolution qu'eux : l'état s'il a un sprite, sinon la flèche.
 fn modelled_sprite<'a>(
     scene: Option<&'a Scene>,
     cursor_type: Option<&str>,
 ) -> Option<&'a crate::scene::SceneCursorSprite> {
-    let s = scene.filter(|s| s.cursor.theme == "default")?;
+    let s = scene?;
     let sprites = &s.cursor.cursor_sprites;
     cursor_type.and_then(|k| sprites.get(k)).or_else(|| sprites.get("arrow"))
 }
@@ -3607,7 +3868,10 @@ impl ModelView {
             ])
         });
         let top = corners.iter().fold(0.0f32, |m, p| m.max(p[2])) / self.unit;
-        let penumbra = (top / lz / MODEL_SOFTNESS).min(MODEL_SHADOW_PAD);
+        // La marche du shader court jusqu'à la sortie de la boîte ÉLARGIE de `MODEL_SHADOW_PAD` :
+        // sous une lumière rasante (`right`, `lz` ≈ 0,2), le rayon y va bien au-delà de `top / lz`,
+        // et la pénombre avec lui.
+        let penumbra = ((top + MODEL_SHADOW_PAD) / lz / MODEL_SOFTNESS).min(MODEL_SHADOW_PAD);
         let reach = (penumbra / lz + MODEL_CONTACT_RADIUS) * self.unit;
         let mut b = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
         let mut add = |p: [f32; 2]| {
@@ -3769,6 +4033,7 @@ fn cursor_impact_cb(
         src_prev: [br0, br1, bl0, bl1],
         dst_prev: [x0, y0, 2.0 * hx, 2.0 * hy],
         mb: [quad.warp_flag(), impact.spot_r, impact.spot_a, 0.0],
+        ..Default::default()
     })
 }
 
@@ -4027,8 +4292,70 @@ mod tests {
             let want: [f32; 4] = [0.1, 0.1, 0.8, 0.8];
             assert_eq!(rest.s_dst.map(f32::to_bits), want.map(f32::to_bits));
             assert_eq!(rest.s_ann.map(f32::to_bits), want.map(f32::to_bits));
-            assert_eq!(rest.s_radius.to_bits(), (0.03f32 * 1080.0).to_bits());
+            assert_eq!(rest.s_radius.to_bits(), (0.03f32 * rest.screen_unit_px).to_bits());
         }
+    }
+
+    /// Une scène sans cadre, écran 16:9 (texture 1920×1080) posé par l'app dans `rect`, rendue
+    /// dans `render` au padding 50 % (`padding_scale` 0,8) avec un Roundness de 24 px.
+    fn unit_plan(rect: [f32; 4], render: [f32; 2]) -> FrameGeometry {
+        let scene = Scene::from_json(&format!(
+            r##"{{
+            "clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+            "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,
+                      "webcamReactiveZoom":false,"screenRect":{{"x":{},"y":{},"width":{},"height":{}}},"screenCover":false}},
+            "effects":{{"padding":0.5,"blur":false,"shadow":0.5,"roundnessFrac":{},"motionBlur":0}},
+            "background":{{"kind":"color","color":"#1e1e2e"}},
+            "zoomRegions":[],
+            "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":1,"clipToBounds":false,"theme":"default"}},
+            "cropByClip":[null],
+            "output":{{"width":{},"height":{},"fps":60}}
+        }}"##,
+            rect[0], rect[1], rect[2], rect[3], 24.0 / 1080.0, render[0], render[1]
+        ))
+        .expect("scène");
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let mut input = golden_input(&scene, &cfg);
+        input.render_px = render;
+        input.u_max = 1.0;
+        input.v_max = 1.0;
+        input.screen_tex_px = [1920.0, 1080.0];
+        input.screen_visible_px = [1920.0, 1080.0];
+        plan_frame(&input)
+    }
+
+    /// Le curseur, l'ombre et les coins se mesurent sur l'ÉCRAN (`screen_unit_px`), plus sur le
+    /// cadre ni sur la source.
+    ///
+    /// * sortie au ratio du clip : l'unité est le petit côté du cadre, le rendu d'avant ;
+    /// * clip 16:9 dans une sortie 9:16 : l'écran est une bande de 864×486, et l'unité rétrécit
+    ///   avec lui (× 9/16) au lieu de rester à 1080 — la proportion curseur / écran est celle
+    ///   du 16:9 ;
+    /// * sortie 4K (prise 2160p) : l'unité double avec l'écran, et 24 px de Roundness font
+    ///   48 px, la même part de l'écran qu'en 1080p.
+    #[test]
+    fn style_lengths_follow_the_screen_not_the_frame_or_the_source() {
+        let (w, h) = (1920.0f32, 1080.0f32);
+        let landscape = unit_plan([0.1, 0.1, 0.8, 0.8], [w, h]);
+        assert!((landscape.screen_unit_px - 1080.0).abs() < 0.01, "{}", landscape.screen_unit_px);
+        assert!((landscape.s_radius - 24.0).abs() < 0.01, "{}", landscape.s_radius);
+
+        let band_h = 0.8 * h * 9.0 / 16.0 / w; // 486 px sur 1920
+        let portrait = unit_plan([0.1, 0.5 - band_h / 2.0, 0.8, band_h], [h, w]);
+        assert!(
+            (portrait.screen_unit_px - 1080.0 * 9.0 / 16.0).abs() < 0.01,
+            "{}",
+            portrait.screen_unit_px
+        );
+        // Même part de l'écran : rayon / petit côté de l'écran.
+        let share = |g: &FrameGeometry, px: [f32; 2]| {
+            g.s_radius / (g.s_dst[2] * px[0]).min(g.s_dst[3] * px[1])
+        };
+        assert!((share(&portrait, [h, w]) - share(&landscape, [w, h])).abs() < 1e-4);
+
+        let uhd = unit_plan([0.1, 0.1, 0.8, 0.8], [2.0 * w, 2.0 * h]);
+        assert!((uhd.s_radius - 48.0).abs() < 0.02, "{}", uhd.s_radius);
+        assert!((share(&uhd, [2.0 * w, 2.0 * h]) - share(&landscape, [w, h])).abs() < 1e-4);
     }
 
     /// Sous un cadre, le masque de confidentialité couvre le rect que l'overlay web montre à
@@ -4328,6 +4655,7 @@ mod tests {
                 false,
                 RENDER,
                 g.screen_mask,
+                None,
             )
         };
         for (name, _) in DEVICES {
@@ -4335,10 +4663,10 @@ mod tests {
             assert_eq!(cb.dst_prev[3], 1.0, "{name}: l'écran est resté au warp bilinéaire");
             assert_eq!(cb.color, [0.0; 4], "{name}: la lampe de la caméra s'est allumée");
         }
-        // Sans appareil, l'angle fixe garde son warp bilinéaire ET son absence de lampe ; la
-        // caméra réelle, elle, garde les deux.
+        // Sans appareil, l'angle fixe a le même warp exact (`screen_tilt`) et toujours pas de
+        // lampe ; la caméra réelle, elle, a les deux.
         let plain = flat_cb(&framed_plan(&framed_scene("", r#""iso""#, 1.0, false)));
-        assert_eq!((plain.dst_prev[3], plain.color), (0.0, [0.0; 4]));
+        assert_eq!((plain.dst_prev[3], plain.color), (1.0, [0.0; 4]));
         let orbit = flat_cb(&framed_plan(&framed_scene("", r#""follow-cursor""#, 1.0, false)));
         assert_eq!(orbit.dst_prev[3], 1.0);
         assert!(orbit.color[0] != 0.0 || orbit.color[1] != 0.0, "la caméra réelle n'éclaire plus");
@@ -4655,7 +4983,7 @@ mod tests {
         use crate::scene::SceneFrame as F;
         // Sans cadre : rien ne change, 0,03 × 1080 px.
         let bare = framed_plan_round("", 0.03);
-        assert_eq!(bare.s_radius.to_bits(), (0.03f32 * 1080.0).to_bits());
+        assert_eq!(bare.s_radius.to_bits(), (0.03f32 * bare.screen_unit_px).to_bits());
         // Les trois points de la course : 0, la moitié (32 px de slider), le bout (64 px) et au-delà.
         let half = 32.0 / 1080.0;
         for (frame, kind) in [("window", F::Window), ("laptop", F::Laptop), ("phone", F::Phone), ("monitor", F::Monitor)] {
@@ -5249,6 +5577,69 @@ mod tests {
         )))
     }
 
+    /// Un clip 16:9 dans une sortie 9:16 remplie (`screenCover` + `screenFollow`) : la boîte écran
+    /// est la zone paddée entière, `follow` décide si la fenêtre suit le pointeur.
+    fn fill_plan(follow: bool, pointer: Option<(f32, f32)>) -> FrameGeometry {
+        let scene = Scene::from_json(&format!(
+            r##"{{
+            "clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+            "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,
+                      "webcamReactiveZoom":false,"screenRect":{{"x":0.1,"y":0.1,"width":0.8,"height":0.8}},
+                      "screenCover":true,"screenFollow":{follow}}},
+            "effects":{{"padding":0.5,"blur":false,"shadow":0.5,"roundnessFrac":0.02,"motionBlur":0}},
+            "background":{{"kind":"color","color":"#1e1e2e"}},
+            "zoomRegions":[],
+            "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":1,"clipToBounds":false,"theme":"default"}},
+            "cropByClip":[null],
+            "output":{{"width":1080,"height":1920,"fps":60}}
+        }}"##
+        ))
+        .expect("scène remplie");
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let mut input = golden_input(&scene, &cfg);
+        input.render_px = [1080.0, 1920.0];
+        input.cursor = pointer.map(|(x, y)| parked_track(x, y));
+        plan_frame(&input)
+    }
+
+    /// Le remplissage du format : un clip 16:9 remplit une sortie 9:16, et la fenêtre 9:16 qu'il
+    /// y montre suit le pointeur lissé, bornée à l'enregistrement.
+    ///
+    /// * la fenêtre a le ratio de la boîte, toute la hauteur de l'enregistrement ;
+    /// * elle se centre sur le pointeur, et bute sur le bord quand il s'en approche ;
+    /// * sans `screenFollow`, ou sans piste, elle reste centrée ;
+    /// * la coupe DESSINÉE est l'enregistrement entier, et sa boîte couvre le slot : la fenêtre
+    ///   peut bouger sans jamais laisser de trou.
+    #[test]
+    fn a_filled_format_follows_the_pointer_inside_the_recording() {
+        let (u, v) = (1.0f32, 1080.0f32 / 1088.0);
+        // Ce que le slot montre de l'enregistrement, en 0..1 : le slot reporté par s_dst → cut.
+        let seen = |g: &FrameGeometry| -> [f32; 4] {
+            let (s, d, c) = (g.s_ann, g.s_dst, g.cut);
+            let x = |f: f32| (c[0] + (f - d[0]) / d[2] * (c[2] - c[0])) / u;
+            let y = |f: f32| (c[1] + (f - d[1]) / d[3] * (c[3] - c[1])) / v;
+            [x(s[0]), y(s[1]), x(s[0] + s[2]), y(s[1] + s[3])]
+        };
+
+        let at = fill_plan(true, Some((0.7, 0.5)));
+        let w = seen(&at);
+        assert!((0.5 * (w[0] + w[2]) - 0.7).abs() < 1e-3, "fenêtre {w:?}, pointeur en 0.7");
+        assert!(w[1].abs() < 1e-3 && (w[3] - 1.0).abs() < 1e-3, "toute la hauteur : {w:?}");
+        let shown_ar = ((w[2] - w[0]) * 1920.0) / ((w[3] - w[1]) * 1080.0);
+        assert!((shown_ar - 864.0 / 1536.0).abs() < 1e-3, "ratio montré {shown_ar}");
+        assert!(contains(at.s_dst, at.s_ann, 1e-5), "la boîte dessinée ne couvre pas le slot");
+
+        // Au bord : la fenêtre bute sur l'enregistrement.
+        let edge = seen(&fill_plan(true, Some((0.98, 0.5))));
+        assert!((edge[2] - 1.0).abs() < 1e-3, "fenêtre {edge:?}");
+
+        // Sans suivi, ou sans piste : centrée.
+        for g in [fill_plan(false, Some((0.7, 0.5))), fill_plan(true, None)] {
+            let w = seen(&g);
+            assert!((0.5 * (w[0] + w[2]) - 0.5).abs() < 1e-3, "fenêtre centrée attendue, {w:?}");
+        }
+    }
+
     /// `slot_scene` à 1,5 s (zoom tenu), pointeur garé en `pointer` (la caméra en orbite le suit).
     fn slot_plan(scene: &Scene, pointer: Option<(f32, f32)>) -> FrameGeometry {
         let cfg = crate::config::all().pop().expect("au moins une config");
@@ -5326,7 +5717,7 @@ mod tests {
             assert!(hx > slot_px[0] * 0.5 && hy > slot_px[1] * 0.5, "{rotation} : garde, le plan zoomé déborde du slot");
 
             let centre = g.screen_center_px(RENDER);
-            let draw = |m| tilted_screen_cb(&quad, s_px, centre, g.cut, g.focus_plane, g.s_radius, 0.0, false, RENDER, m);
+            let draw = |m| tilted_screen_cb(&quad, s_px, centre, g.cut, g.focus_plane, g.s_radius, 0.0, false, RENDER, m, None);
             let (cb, bare) = (draw(g.screen_mask), draw(None));
             assert_eq!(cb.dst, SLOT, "{rotation} : dessiné dans le slot");
             assert_eq!(cb.color[3], mask.radius_px);
@@ -5486,6 +5877,145 @@ mod tests {
         assert_eq!(flat.zoom_rotation_dyn, [0.0; 3], "sans préset");
     }
 
+    /// Le plan incliné a son flou de mouvement, borné à une frame comme celui du mode 0 : sa
+    /// traînée est le plan une frame d'écran plus tôt, boîte ET rotation de base — un angle fixe
+    /// entre avec le zoom.
+    #[test]
+    fn the_tilted_screen_trails_its_previous_frame() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let render = [1170.0, 658.0];
+        // La région démarre à 2 s : à 1,6 s, sa rampe d'entrée est en cours.
+        let ramp = |json: &str| json.replace(r#""startSec":0.0"#, r#""startSec":2.0"#);
+        let tilted = ramp(zoomed_golden_scene_json()).replace(r#""rotation":"none""#, r#""rotation":"iso""#);
+        let at = |json: &str, t: f32| {
+            let scene = Scene::from_json(json).expect("scène");
+            plan_frame(&FrameGeometryInput { timeline_t_override: Some(t), ..golden_input(&scene, &cfg) })
+        };
+        let quad_of = |g: &FrameGeometry| {
+            g.screen_tilt([g.s_dst[2] * render[0], g.s_dst[3] * render[1]]).expect("incliné")
+        };
+        let width = |c: &[(f32, f32); 4]| {
+            c.iter().map(|p| p.0).fold(f32::MIN, f32::max) - c.iter().map(|p| p.0).fold(f32::MAX, f32::min)
+        };
+
+        let g = at(&tilted, 1.6);
+        let trail = g.tilt_trail(render).expect("flou sur le plan incliné");
+        assert_eq!(trail.mb, [g.mb_taps, g.mb_amount]);
+        assert_ne!(g.zoom_rotation_prev, g.zoom_rotation, "le préset entre avec le zoom");
+        let (now, before) = (width(&quad_of(&g).corners), width(&trail.corners));
+        // Zoom avant : le plan d'une frame plus tôt est plus petit, de quelques pour cent.
+        assert!(before < now && before > now * 0.9, "traînée {before} px, plan {now} px");
+
+        // Au palier, rien ne bouge : la traînée EST le plan, au bit près, et le shader garde son
+        // échantillon net.
+        let hold = at(&tilted, 3.0);
+        assert_eq!(hold.tilt_trail(render).expect("incliné").corners, quad_of(&hold).corners);
+
+        // Flou coupé, ou écran droit (le mode 0 a le sien) : pas de traînée.
+        let off = tilted.replace(r#""roundnessFrac":0.0255,"motionBlur":0.35"#, r#""roundnessFrac":0.0255,"motionBlur":0"#);
+        assert_ne!(off, tilted, "la substitution doit couper le flou");
+        assert_eq!(at(&off, 1.6).tilt_trail(render), None);
+        assert_eq!(at(&ramp(zoomed_golden_scene_json()), 1.6).tilt_trail(render), None);
+    }
+
+    /// Transition chaînée caméra réelle → angle fixe : la frame d'avant peut encore être dans la
+    /// moitié `follow-cursor` quand celle-ci est dans la moitié fixe. La traînée doit alors partir
+    /// du plan vu par la caméra d'AVANT, pas d'un plan droit.
+    #[test]
+    fn the_trail_keeps_the_previous_camera_across_a_follow_to_fixed_handover() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let render = [1170.0, 658.0];
+        let track: &'static crate::cursor::CursorTrack = Box::leak(Box::new(
+            crate::cursor::CursorTrack::new((0..=300).map(|i| (i as f32 / 30.0, 0.8, 0.3)).collect(), vec![], vec![]),
+        ));
+        let json = zoomed_golden_scene_json().replace(
+            r#"[{"clipIndex":0,"startSec":0.0,"endSec":5.0,"scale":2.0,"focusX":0.5,"focusY":0.3,"rotation":"none"}]"#,
+            r#"[{"clipIndex":0,"startSec":1.0,"endSec":4.0,"scale":2.0,"focusX":0.5,"focusY":0.5,"rotation":"follow-cursor"},
+                {"clipIndex":0,"startSec":4.5,"endSec":8.0,"scale":2.0,"focusX":0.5,"focusY":0.5,"rotation":"iso"}]"#,
+        );
+        assert_ne!(json, zoomed_golden_scene_json(), "la substitution doit poser les deux régions");
+        let scene = Scene::from_json(&json).expect("scène");
+        let mut handover = None;
+        for k in 0..=600 {
+            let t = 4.0 + k as f32 / 600.0;
+            let g = plan_frame(&FrameGeometryInput { cursor: Some(track), timeline_t_override: Some(t), ..golden_input(&scene, &cfg) });
+            assert_eq!(g.camera_prev.is_some(), g.camera_prev.is_some_and(|p| p.weight > 0.0));
+            if g.camera.is_none() && g.camera_prev.is_some() {
+                handover = Some(g);
+                break;
+            }
+        }
+        let g = handover.expect("une frame où seule la frame d'avant a la caméra");
+        let trail = g.tilt_trail(render).expect("traînée");
+        let d = g.s_dst_prev;
+        let px = [d[2] * render[0], d[3] * render[1]];
+        let seen = crate::camera::View::new(px, g.camera_prev.unwrap()).quad(px);
+        let upright = crate::regions::rotated_quad_corners_px(px[0], px[1], g.zoom_rotation_prev, g.zoom_rotation_dyn);
+        let shape = |c: [(f32, f32); 4]| c.map(|(x, y)| (x - c[0].0, y - c[0].1));
+        let close = |a: [(f32, f32); 4], b: [(f32, f32); 4]| a.iter().zip(b).all(|(p, q)| (p.0 - q.0).abs() < 1e-3 && (p.1 - q.1).abs() < 1e-3);
+        assert!(close(shape(trail.corners), shape(seen.corners)), "la traînée n'est pas le plan de la caméra d'avant");
+        assert!(!close(shape(trail.corners), shape(upright.corners)), "la traînée est retombée sur un plan droit");
+    }
+
+    /// Le calque du mode 8 porte la traînée dans le repère de ses propres coins, y compris
+    /// reporté dans le slot d'un layout en bloc ; sans elle, rien de ce qu'il portait ne change.
+    #[test]
+    fn the_tilted_screen_cb_carries_its_trail_in_its_own_frame() {
+        let quad = crate::regions::rotated_quad_corners_px(800.0, 450.0, [-23.0, -25.0, 0.0], [0.0; 3]);
+        let moved = TiltTrail { corners: quad.corners.map(|(x, y)| (x * 0.9 + 3.0, y * 0.9 - 2.0)), mb: [6.0, 0.35] };
+        let mask = ScreenMask { rect: [0.1, 0.1, 0.6, 0.6], radius_px: 8.0 };
+        let cb = |mask, trail| {
+            tilted_screen_cb(&quad, [800.0, 450.0], [600.0, 400.0], [0.0, 0.0, 1.0, 1.0], [0.5, 0.5], 12.0, 0.0, false, [1200.0, 800.0], mask, trail)
+        };
+        let corner = |c: [f32; 4], i: usize| [c[2 * i], c[2 * i + 1]];
+        for m in [None, Some(mask)] {
+            let (bare, with) = (cb(m, None), cb(m, Some(moved)));
+            assert_eq!((bare.trail_a, bare.trail_b, bare.trail_mb), ([0.0; 4], [0.0; 4], [0.0; 4]), "{m:?}");
+            assert_eq!((with.dst, with.fx, with.src_prev, with.dst_prev, with.mb), (bare.dst, bare.fx, bare.src_prev, bare.dst_prev, bare.mb));
+            assert_eq!(with.trail_mb, [6.0, 0.35, 0.0, 0.0]);
+            // Chaque coin de la traînée garde son écart au coin courant : même repère local.
+            let now = [corner(with.fx, 0), corner(with.fx, 1), corner(with.src_prev, 0), corner(with.src_prev, 1)];
+            let then = [corner(with.trail_a, 0), corner(with.trail_a, 1), corner(with.trail_b, 0), corner(with.trail_b, 1)];
+            for i in 0..4 {
+                let want = [moved.corners[i].0 - quad.corners[i].0, moved.corners[i].1 - quad.corners[i].1];
+                let got = [then[i][0] - now[i][0], then[i][1] - now[i][1]];
+                assert!((got[0] - want[0]).abs() < 1e-3 && (got[1] - want[1]).abs() < 1e-3, "{m:?} coin {i} : {got:?} != {want:?}");
+            }
+        }
+        // Sans mouvement, les deux quads coïncident au bit près.
+        let still = cb(None, Some(TiltTrail { corners: quad.corners, mb: [6.0, 0.35] }));
+        assert_eq!((still.trail_a, still.trail_b), (still.fx, still.src_prev));
+    }
+
+    /// Le zoom réactif rétrécit la caméra vers son ANCRE : une caméra de coin garde sa marge aux
+    /// deux bords, une caméra de milieu de bord reste centrée sur lui. Sans ancre, le centre.
+    #[test]
+    fn the_reactive_zoom_shrinks_the_camera_toward_its_anchor() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        // Caméra de 0,2 de côté posée par l'app, marge 0,03 ; zoom ×2 à 1,5 s → échelle 0,5.
+        let camera_at = |anchor: Option<&str>, x: f32, y: f32| {
+            let anchor = anchor.map(|a| format!(r#","webcamAnchor":"{a}""#)).unwrap_or_default();
+            let layout = format!(
+                r#""webcamReactiveZoom":true{anchor},"webcamRect":{{"x":{x},"y":{y},"width":0.2,"height":0.2}}}}"#
+            );
+            let json = zoomed_golden_scene_json().replace(r#""webcamReactiveZoom":false}"#, &layout);
+            let scene = Scene::from_json(&json).expect("scène");
+            plan_frame(&golden_input(&scene, &cfg)).w_dst
+        };
+        for (anchor, x, y, want) in [
+            (Some("bottom-right"), 0.77, 0.77, [0.87, 0.87]),
+            (Some("top-left"), 0.03, 0.03, [0.03, 0.03]),
+            (Some("bottom"), 0.4, 0.77, [0.45, 0.87]),
+            (Some("left"), 0.03, 0.4, [0.03, 0.45]),
+            (None, 0.77, 0.77, [0.82, 0.82]),
+        ] {
+            let w = camera_at(anchor, x, y);
+            let got = [w[0], w[1], w[2], w[3]];
+            let want = [want[0], want[1], 0.1, 0.1];
+            assert!(got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-5), "{anchor:?} : {got:?} au lieu de {want:?}");
+        }
+    }
+
     /// La vitesse se mesure dans la coupe VISIBLE, zoom compris : sous un x2, le même geste
     /// traverse deux fois plus d'écran et penche donc plus le plan (hors saturation).
     #[test]
@@ -5537,7 +6067,7 @@ mod tests {
         };
         let same = |s: String| s;
         let on = dyn_of(&same, on_edge);
-        assert!(on[1] > 1.5, "clic à droite → +Y : {on:?}");
+        assert!(on[1] > 0.75 * crate::regions::CLICK_IMPACT_DEG, "clic à droite → +Y : {on:?}");
 
         let insert = |field: &'static str| {
             move |s: String| s.replace(r#""cursor":"#, &format!(r#"{field},"cursor":"#))
@@ -5840,12 +6370,85 @@ mod tests {
         }
     }
 
+    const BLACK_TEST: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
+    fn knots(cb: &LayerCB) -> [[f32; 4]; 4] {
+        [cb.color, cb.src_prev, cb.dst_prev, cb.src]
+    }
+
+    #[test]
+    fn gradient_layer_keeps_the_middle_stop_where_css_puts_it() {
+        // Le dégradé de l'ancien éditeur : trois stops rgb(), le milieu à 50 %.
+        let stops = ["rgb(255, 0, 0)", "rgb(0, 255, 0)", "rgb(0, 0, 255)"].map(String::from);
+        let cb = gradient_layer(&stops, &[0.0, 0.5, 1.0], BLACK_TEST);
+        assert_eq!(cb.mode, 5.0);
+        let k = knots(&cb);
+        assert_eq!(k[0], [1.0, 0.0, 0.0, 0.0]);
+        assert_eq!(k[1], [0.0, 1.0, 0.0, 0.5]);
+        assert_eq!(k[2], [0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(k[3], [0.0, 0.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn gradient_layer_premultiplies_a_translucent_stop() {
+        // Un stop à alpha 0 ne peint rien : le noir du dessous, pas un rouge opaque.
+        let stops = ["rgba(255, 0, 0, 0)", "rgba(0, 0, 255, 0.5)"].map(String::from);
+        let k = knots(&gradient_layer(&stops, &[0.0, 1.0], BLACK_TEST));
+        assert_eq!(k[0], [0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(k[1], [0.0, 0.0, 0.5, 1.0]);
+        // Opaque : inchangé.
+        let k = knots(&gradient_layer(&["#ff0000".into()], &[0.0], BLACK_TEST));
+        assert_eq!(k[0], [1.0, 0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn gradient_layer_two_stops_render_the_old_ramp() {
+        // Scène d'avant les offsets : les stops se répartissent à 0 et 1, le reste répète la fin.
+        let cb = gradient_layer(&["#000000".into(), "#ffffff".into()], &[], BLACK_TEST);
+        let k = knots(&cb);
+        assert_eq!(k[0], [0.0, 0.0, 0.0, 0.0]);
+        for knot in &k[1..] {
+            assert_eq!(*knot, [1.0, 1.0, 1.0, 1.0]);
+        }
+    }
+
+    #[test]
+    fn gradient_layer_bounds_and_orders_offsets_and_skips_bad_stops() {
+        let stops = ["#ff0000", "nope", "#00ff00", "#0000ff"].map(String::from);
+        let cb = gradient_layer(&stops, &[-0.2, 0.3, 0.6, 0.4], BLACK_TEST);
+        let at: Vec<f32> = knots(&cb).iter().map(|k| k[3]).collect();
+        // -0.2 borné à 0 ; 0.4 derrière 0.6 ramené à 0.6 ; "nope" sauté.
+        assert_eq!(at, vec![0.0, 0.6, 0.6, 0.6]);
+        assert_eq!(knots(&cb)[1][1], 1.0, "le vert suit le rouge, le stop illisible est sauté");
+        let empty = gradient_layer(&[], &[], [0.2, 0.3, 0.4, 1.0]);
+        assert!(knots(&empty).iter().all(|k| *k == [0.2, 0.3, 0.4, 0.0]));
+    }
+
+    #[test]
+    fn gradient_layer_folds_a_long_preset_into_four_knots() {
+        // Un preset v1.5 à sept stops : les extrémités restent, les positions restent en ordre,
+        // et le stop retiré est celui que ses voisins reproduisaient déjà.
+        let stops = ["#fcc5e4", "#fda34b", "#ff7882", "#c8699e", "#7046aa", "#0c1db8", "#020f75"]
+            .map(String::from);
+        let offsets = [0.0, 0.15, 0.35, 0.52, 0.71, 0.87, 1.0];
+        let k = knots(&gradient_layer(&stops, &offsets, BLACK_TEST));
+        assert_eq!(k[0][3], 0.0);
+        assert_eq!(k[3][3], 1.0);
+        assert_eq!(&k[0][..3], &parse_hex("#fcc5e4").unwrap()[..3]);
+        assert_eq!(&k[3][..3], &parse_hex("#020f75").unwrap()[..3]);
+        assert!(k.windows(2).all(|w| w[0][3] <= w[1][3]));
+        // Un stop parfaitement sur la droite de ses voisins part en premier.
+        let straight = ["#000000", "#404040", "#808080", "#ff0000", "#ffffff"].map(String::from);
+        let k = knots(&gradient_layer(&straight, &[0.0, 0.25, 0.5, 0.75, 1.0], BLACK_TEST));
+        assert_eq!(k.iter().map(|k| k[3]).collect::<Vec<_>>(), vec![0.0, 0.5, 0.75, 1.0]);
+    }
+
     /// Le contrat cross-backend, verrouillé octet par octet. Un shader qui lit un champ
     /// décalé ne lève rien : il rend faux, en silence.
     #[test]
     fn layer_cb_matches_the_shader_constant_buffer() {
         use std::mem::{align_of, offset_of, size_of};
-        assert_eq!(size_of::<LayerCB>(), 128);
+        assert_eq!(size_of::<LayerCB>(), 176);
         assert_eq!(align_of::<LayerCB>(), 16);
         for (name, got, want) in [
             ("dst", offset_of!(LayerCB, dst), 0),
@@ -5858,6 +6461,9 @@ mod tests {
             ("src_prev", offset_of!(LayerCB, src_prev), 80),
             ("dst_prev", offset_of!(LayerCB, dst_prev), 96),
             ("mb", offset_of!(LayerCB, mb), 112),
+            ("trail_a", offset_of!(LayerCB, trail_a), 128),
+            ("trail_b", offset_of!(LayerCB, trail_b), 144),
+            ("trail_mb", offset_of!(LayerCB, trail_mb), 160),
         ] {
             assert_eq!(got, want, "offset de `{name}`");
         }
@@ -5870,7 +6476,7 @@ mod tests {
     #[test]
     fn sprite_hotspot_stays_on_target_at_any_size() {
         let center = [0.4, 0.6];
-        let hotspot = [0.119, 0.0874]; // flèche intégrée : la pointe, près du coin haut-gauche
+        let hotspot = [0.1205, 0.0881]; // flèche intégrée : la pointe, près du coin haut-gauche
 
         for (w, h) in [(0.02, 0.04), (0.08, 0.16)] {
             let dst = cursor_sprite_dst(center, w, h, hotspot);
@@ -6253,6 +6859,8 @@ mod tests {
             zoom_rotation: [0.0, 0.0, 0.0],
             zoom_rotation_dyn: [0.0, 0.0, 0.0],
             camera: None,
+            zoom_rotation_prev: [0.0, 0.0, 0.0],
+            camera_prev: None,
             padding_scale: 1.0,
             cut: [0.0, 0.0, 1.0, 1.0],
             focus_plane: [0.5, 0.5],
@@ -6262,6 +6870,7 @@ mod tests {
             s_ann: [0.0, 0.0, 1.0, 1.0],
             s_radius: 0.0,
             frame_min_px: 1080.0,
+            screen_unit_px: 1080.0,
             w_dst: [0.0, 0.0, 0.0, 0.0],
             w_dst_prev: [0.0, 0.0, 0.0, 0.0],
             w_px: [0.0, 0.0],
@@ -6402,8 +7011,8 @@ mod tests {
         .expect("plan cursor")
     }
 
-    const ISO: [f32; 3] = [-12.0, -18.0, -2.0];
-    const LEFT: [f32; 3] = [-8.0, -16.0, -1.0];
+    const ISO: [f32; 3] = [-23.0, -25.0, 0.0];
+    const LEFT: [f32; 3] = [-23.0, -25.0, 0.0];
 
     /// Le `LayerCB` du sprite incliné est, octet pour octet, celui que chaque backend construisait
     /// avant de le partager. La référence est le corps d'origine de `draw_cursor_sprite`.
@@ -6450,14 +7059,18 @@ mod tests {
                 fx: [tl0, tl1, tr0, tr1],
                 src_prev: [br0, br1, bl0, bl1],
                 dst_prev: clip,
+                // Le drapeau du warp : un angle fixe est maintenant projectif (`screen_tilt`),
+                // comme la caméra réelle l'était déjà.
+                mb: [quad.warp_flag(), 0.0, 0.0, 0.0],
                 ..Default::default()
             }
         }
         let bytes = |cb: &LayerCB| -> Vec<u8> {
-            // SAFETY: `LayerCB` est `repr(C)`, 128 octets de f32 sans padding (test d'offsets).
-            unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, 128) }.to_vec()
+            // SAFETY: `LayerCB` est `repr(C)`, des f32 sans padding (test d'offsets).
+            let len = std::mem::size_of::<LayerCB>();
+            unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, len) }.to_vec()
         };
-        for rot in [ISO, LEFT, [-8.0, 16.0, 1.0]] {
+        for rot in [ISO, LEFT, [-23.0, 25.0, 0.0]] {
             let plan = plan_with(rot);
             let clip = [0.1, 0.2, 0.7, 0.6];
             let got = cursor_sprite_cb(
@@ -6478,17 +7091,17 @@ mod tests {
     /// Les seize états du thème par défaut et leurs hotspots (`DEFAULT_CURSOR_SPRITES`,
     /// `src/lib/cursor/cursorThemes.ts`).
     const DEFAULT_SPRITES: [(&str, [f32; 2]); 16] = [
-        ("arrow", [0.119, 0.0874]),
-        ("text", [0.4375, 0.5333]),
-        ("pointer", [0.3893, 0.0032]),
+        ("arrow", [0.1205, 0.0881]),
+        ("text", [0.4355, 0.5369]),
+        ("pointer", [0.3874, 0.0032]),
         ("crosshair", [0.4667, 0.4667]),
-        ("open-hand", [0.4375, 0.1781]),
-        ("closed-hand", [0.3889, 0.451]),
-        ("resize-ew", [0.4881, 0.4706]),
+        ("open-hand", [0.4375, 0.1724]),
+        ("closed-hand", [0.3889, 0.4455]),
+        ("resize-ew", [0.485, 0.4706]),
         ("resize-ns", [0.5, 0.5]),
         ("resize-nesw", [0.5, 0.5]),
         ("resize-nwse", [0.5, 0.5]),
-        ("move", [0.4444, 0.4444]),
+        ("move", [0.4437, 0.4437]),
         ("not-allowed", [0.5, 0.5]),
         ("wait", [0.5, 0.5]),
         ("app-starting", [0.05, 0.0537]),
@@ -6605,7 +7218,12 @@ mod tests {
         for (key, [hx, hy]) in DEFAULT_SPRITES {
             scene.cursor.cursor_sprites.insert(
                 key.into(),
-                crate::scene::SceneCursorSprite { path: sprite_path(key), hotspot_x: hx, hotspot_y: hy },
+                crate::scene::SceneCursorSprite {
+                    path: sprite_path(key),
+                    hotspot_x: hx,
+                    hotspot_y: hy,
+                    model_depth_path: None,
+                },
             );
         }
         scene
@@ -6709,7 +7327,7 @@ mod tests {
         let scene = model_scene();
         for key in MODEL_STATES {
             let (sdf, shape) = sprite_model(key);
-            for rot in [[0.0; 3], [-12.0, -18.0, -2.0]] {
+            for rot in [[0.0; 3], [-23.0, -25.0, 0.0]] {
                 let track = still_track_as(Some(key), vec![0.5]);
                 for (t, want) in [(0.3, MODEL_HOVER), (0.5 + CONTACT_S, 0.0)] {
                     let plan = model_plan(rot, &scene, &track, t, true).expect("plan");
@@ -6808,16 +7426,33 @@ mod tests {
             model_plan([0.0; 3], &scene, &unknown, 0.3, true).expect("plan").model,
             Some(cursor_pose(&unknown, 0.3, 2.5, 1.0))
         );
-        // Un autre thème, ou pas de sprite du tout : le sprite plat.
+        // Les faces propres à un thème autre que `default` ont aussi accès au mode 3D.
         let mut themed = model_scene();
-        themed.cursor.theme = "black-pixel".into();
-        assert!(model_plan([0.0; 3], &themed, &track, 0.3, true).expect("plan").model.is_none());
+        themed.cursor.theme = "studio-ink".into();
+        let themed_arrow = crate::scene::SceneCursorSprite {
+            path: "studio-ink/model-arrow.png".into(),
+            hotspot_x: 0.1977,
+            hotspot_y: 0.0635,
+            model_depth_path: Some("studio-ink/model-arrow-depth.png".into()),
+        };
+        themed.cursor.cursor_sprites.insert("arrow".into(), themed_arrow.clone());
+        assert_eq!(
+            modelled_sprite(Some(&themed), None).map(|sprite| sprite.path.as_str()),
+            Some("studio-ink/model-arrow.png")
+        );
+        assert_eq!(
+            modelled_sprite(Some(&themed), None).and_then(|sprite| sprite.model_depth_path.as_deref()),
+            Some("studio-ink/model-arrow-depth.png")
+        );
+        assert!(model_plan([0.0; 3], &themed, &track, 0.3, true).expect("plan").model.is_some());
+
+        // Sans aucun sprite résolu, il n'y a pas de modèle à dessiner.
         let bare = zoomed_golden_scene();
         assert!(model_plan([0.0; 3], &bare, &track, 0.3, true).expect("plan").model.is_none());
     }
 
-    const LEFT_ROT: [f32; 3] = [-8.0, -16.0, -1.0];
-    const ISO_ROT: [f32; 3] = [-12.0, -18.0, -2.0];
+    const LEFT_ROT: [f32; 3] = [-23.0, -25.0, 0.0];
+    const ISO_ROT: [f32; 3] = [-23.0, -25.0, 0.0];
 
     /// Les poses d'essai, pour chaque état de `MODEL_STATES` : au repos, posé, tourné.
     fn model_cases() -> Vec<(String, CursorPlan, SpriteShape, crate::cursor_sdf::CursorSdf)> {
@@ -6830,7 +7465,7 @@ mod tests {
                 vec![],
                 vec![(0.0, key.to_string())],
             );
-            for (name, rot) in [("flat", [0.0; 3]), ("iso", ISO_ROT), ("left", LEFT_ROT), ("right", [-8.0, 16.0, 1.0])] {
+            for (name, rot) in [("flat", [0.0; 3]), ("iso", ISO_ROT), ("left", LEFT_ROT), ("right", [-23.0, 25.0, 0.0])] {
                 for (pose, track, t) in [("hover", &clicked, 0.3), ("touch", &clicked, 0.5 + CONTACT_S), ("yaw", &moving, 1.0)] {
                     let plan = model_plan(rot, &scene, track, t, true).expect("plan");
                     let (sdf, shape) = sprite_model(key);

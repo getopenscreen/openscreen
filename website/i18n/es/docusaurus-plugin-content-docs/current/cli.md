@@ -158,7 +158,7 @@ openscreen captions demo.openscreen --min-words 2 --max-words 7
 openscreen export demo.openscreen -o demo.mp4   # captions are burned into the video
 ```
 
-- `--min-words` y `--max-words` definen las palabras por subtítulo. Valores predeterminados: 2 y 7.
+- `--min-words` y `--max-words` definen las palabras por subtítulo. Cada uno admite de 1 a 12, el rango del editor. Valores predeterminados: 2 y 7.
 - Volver a ejecutarlo reemplaza los subtítulos que agregó antes. Las anotaciones que agregaste tú se conservan.
 - El video de pantalla del proyecto debe tener una pista de audio, por ejemplo de `record --mic`.
 - Los subtítulos se incrustan en la exportación. No se genera ningún archivo de subtítulos. Consulta [Subtítulos](./captions.md).

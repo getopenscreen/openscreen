@@ -260,15 +260,15 @@ fn run_gif_bench(
     let out_path = Path::new(out).join("gif.gif");
     std::fs::create_dir_all(out).ok();
 
-    // The bench defaults to 854×480 / 12 fps / no dithering — exactly
+    // The bench defaults to 854×480 / 12 fps / dithering — exactly
     // what `GifExportParams::default()` produces, which is the slice-1
     // target. The user can override via `--gif-width`, `--gif-height`,
     // `--gif-fps` flags if they want to probe the readback cost at
-    // different sizes.
+    // different sizes, and `--gif-dither 0` to price the dithering.
     let width: u32 = get("--gif-width", "854").parse().unwrap_or(854);
     let height: u32 = get("--gif-height", "480").parse().unwrap_or(480);
     let fps: u32 = get("--gif-fps", "12").parse().unwrap_or(12);
-    let dither: bool = get("--gif-dither", "0") == "1";
+    let dither: bool = get("--gif-dither", "1") == "1";
     let params = GifExportParams {
         width: Some(width),
         height: Some(height),

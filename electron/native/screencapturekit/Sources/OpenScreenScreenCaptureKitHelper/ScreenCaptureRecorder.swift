@@ -66,6 +66,8 @@ struct RecordingRequest: Decodable {
 	let schemaVersion: Int?
 	let recordingId: Int?
 	let excludedWindowIds: [UInt32]?
+	/// Display captures only. Absent in requests from apps that predate the option.
+	let hideDesktopIcons: Bool?
 	let source: Source
 	let video: Video
 	let audio: Audio
@@ -143,6 +145,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	/// the command loop exits the process as soon as `stop()` returns, which would cut
 	/// `finishWriter()` off before its terminal event.
 	private var shutdownTask: Task<Void, Never>?
+	/// Direct display captures only. See `startExclusionRefresh`.
+	private var exclusionRefreshTask: Task<Void, Never>?
 	private var isPaused = false
 	private var pauseStartedAt: CMTime?
 	private var totalPausedDuration = CMTime.zero
@@ -204,6 +208,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			"schemaVersion": 1,
 		])
 		try await stream.startCapture()
+		if picked == nil, request.source.type == "display", let displayID = request.source.displayId {
+			startExclusionRefresh(displayID: displayID)
+		}
 	}
 
 	func stop() async {
@@ -221,6 +228,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	}
 
 	private func performStop() async {
+		exclusionRefreshTask?.cancel()
 		do {
 			try await stream?.stopCapture()
 		} catch {
@@ -470,6 +478,68 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		)
 	}
 
+	/// The app's own windows (HUD, notes) plus the system ones a demo never wants.
+	private func excludedWindowIDs(in content: SCShareableContent) -> [UInt32] {
+		let candidates = content.windows.map {
+			CaptureWindowCandidate(
+				windowID: $0.windowID,
+				bundleID: $0.owningApplication?.bundleIdentifier,
+				layer: $0.windowLayer
+			)
+		}
+		return resolveCaptureExcludedWindowIDs(
+			requestedWindowIDs: (request.excludedWindowIds ?? [])
+				+ systemCaptureExcludedWindowIDs(
+					candidates,
+					hideDesktopIcons: request.hideDesktopIcons ?? false
+				),
+			availableWindowIDs: content.windows.map(\.windowID)
+		)
+	}
+
+	private func displayFilter(
+		_ display: SCDisplay,
+		in content: SCShareableContent,
+		excluding windowIDs: [UInt32]
+	) -> SCContentFilter {
+		let excluded = Set(windowIDs)
+		return SCContentFilter(
+			display: display,
+			excludingWindows: content.windows.filter { excluded.contains($0.windowID) }
+		)
+	}
+
+	/// A filter excludes windows, not apps, and a notification banner is a window that did
+	/// not exist when the take started. So the exclusion is re-read while recording and the
+	/// filter swapped whenever it changes. ponytail: a 250 ms poll, so a banner can show for
+	/// up to a quarter second as it slides in; the picker path excludes Notification Center
+	/// by bundle id and has no such gap.
+	private func startExclusionRefresh(displayID: CGDirectDisplayID) {
+		exclusionRefreshTask = Task { [weak self] in
+			var current: [UInt32] = []
+			while !Task.isCancelled {
+				try? await Task.sleep(nanoseconds: 250_000_000)
+				guard let self, let stream = self.stream,
+					let content = try? await SCShareableContent.excludingDesktopWindows(
+						false,
+						onScreenWindowsOnly: true
+					),
+					let display = content.displays.first(where: { $0.displayID == displayID })
+				else {
+					continue
+				}
+				let next = self.excludedWindowIDs(in: content)
+				guard Set(next) != Set(current) else {
+					continue
+				}
+				current = next
+				try? await stream.updateContentFilter(
+					self.displayFilter(display, in: content, excluding: next)
+				)
+			}
+		}
+	}
+
 	private func makeCaptureTarget(from content: SCShareableContent) throws -> CaptureTarget {
 		switch request.source.type {
 		case "display":
@@ -480,20 +550,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				throw HelperError.sourceNotFound("No ScreenCaptureKit display found for id \(displayId).")
 			}
 			let requestedWindowIDs = request.excludedWindowIds ?? []
-			let resolvedWindowIDs = resolveCaptureExcludedWindowIDs(
-				requestedWindowIDs: requestedWindowIDs,
-				availableWindowIDs: content.windows.map(\.windowID)
-			)
-			let resolvedWindowIDSet = Set(resolvedWindowIDs)
-			let excludedWindows = content.windows.filter {
-				resolvedWindowIDSet.contains($0.windowID)
-			}
-			let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
+			let resolvedWindowIDs = excludedWindowIDs(in: content)
+			let filter = displayFilter(display, in: content, excluding: resolvedWindowIDs)
 			emit([
 				"event": "capture-window-exclusion",
 				"requestedWindowIds": requestedWindowIDs,
 				"resolvedWindowIds": resolvedWindowIDs,
-				"excludedWindowCount": excludedWindows.count,
+				"excludedWindowCount": resolvedWindowIDs.count,
 			])
 			let size = captureSize(
 				for: filter,

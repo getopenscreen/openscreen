@@ -151,7 +151,7 @@ Die Bearbeitungswerkzeuge sind überall gleich: Zooms, Hintergründe, Zuschneide
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | Aufnahme-Pipeline | Nativ (ScreenCaptureKit) | Nativ (Windows Graphics Capture) ab Build 19041; Browser-Fallback auf älteren Builds oder ohne das Hilfsprogramm | Nativ (PipeWire über das ScreenCast-Portal); Browser-Fallback ohne das Hilfsprogramm, dann ohne Hardware-Encoding und ohne Cursor-Telemetrie |
-| Eigene Cursor-Themes / Klickeffekte | ✅, Klicks und Cursorform brauchen die Berechtigung „Bedienungshilfen“ | ✅ | ✅ unter Wayland, die Klickerfassung braucht die Gruppe `input` ([Details](#mouse-clicks-on-wayland)) |
+| Eigener Cursor / Klickeffekte | ✅, Klicks und Cursorform brauchen die Berechtigung „Bedienungshilfen“ | ✅ | ✅ unter Wayland, die Klickerfassung braucht die Gruppe `input` ([Details](#mouse-clicks-on-wayland)) |
 | Webcam | Browser-Aufnahme, als separate Datei gespeichert (funktioniert trotzdem als Bild-im-Bild) | Native Aufnahme, als separate Datei gespeichert | Browser-Aufnahme, als separate Datei gespeichert (funktioniert trotzdem als Bild-im-Bild) |
 | Systemaudio | Funktioniert ohne Einrichtung; Berechtigungsabfrage ab macOS 14.2 | Funktioniert ohne Einrichtung | Braucht PipeWire als Soundserver (Standard ab Ubuntu 22.10, Fedora 34) |
 | MP4-Export | ✅ | ✅ | ✅, H.264 auf der GPU über VAAPI, wenn der Grafik-Stack es zulässt (siehe Hinweis unten), sonst in Software; H.265 nur in Software |

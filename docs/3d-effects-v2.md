@@ -15,9 +15,9 @@ Ce document tranche les décisions que la v1 laissait ouvertes et découpe les P
 
 ### A.1 Ce qui existe
 
-Un zoom porte **une attitude figée** (`rotationPreset` : `iso`, `left`, `right`), animée par
+Un zoom porte **une attitude figée** (`rotationPreset` : `left`, `right`), animée par
 deux effets qui partagent un unique budget d'angle dynamique (`DYNAMIC_TILT_BUDGET`
-= ±1,9° X, ±3,0° Y, 0° Z, `clamp_dynamic_tilt`) :
+= ±1,9° X, ±3° Y, 0° Z, `clamp_dynamic_tilt`) :
 
 - **la parallaxe** (`dynamic_tilt`, PR 1) : pilotée par la **vitesse** lissée du curseur ;
 - **l'impact du clic** (PR 2b) : piloté par la **position** du clic, `regions::tap`.
@@ -39,21 +39,26 @@ mobile, qui tourne autour de l'écran.
 | groupe | valeur | libellé (EN) | ce que ça fait |
 |---|---|---|---|
 | — | absent | Off | écran droit |
-| Angle fixe | `iso` | Angled from above | tourné vers la gauche, plongée marquée |
-| Angle fixe | `left` | Turned left | tourné vers la gauche |
-| Angle fixe | `right` | Turned right | tourné vers la droite |
+| Angle fixe | `left` | Screen turned left | tourné vers la gauche, vu d'en haut |
+| Angle fixe | `right` | Screen turned right | tourné vers la droite, vu d'en haut |
 | Caméra mobile | `follow-cursor` | Orbits with the cursor | l'écran est immobile, une vraie caméra tourne autour de lui avec le curseur |
 
 `swing-clicks` et `orbit` sont retirés (jamais livrés). La caméra mobile qui reste est l'orbite
 ci-dessous, sous l'identifiant `follow-cursor`. Un projet qui les porte encore s'ouvre à plat
 (valeur inconnue).
 
-Les trois angles fixes gardent leurs valeurs et leur rendu **à l'octet** (vérifié contre le
-commit de base : présets, cadre, flou de confidentialité, profondeur de champ, parallaxe, impact
-du clic, flèche modélisée), avec la parallaxe de vitesse et l'impact du clic.
+Les angles fixes ne roulent plus : Z vaut 0, parce que le tilt entre avec le zoom et qu'une
+caméra qui bouge ne roule jamais le métrage (l'ancien roulis de −2°/±1° penchait l'image pendant
+chaque zoom). Sans roulis, la règle des 2° ne laisse que deux bandes de tangage, ≤ 9° ou ≥ 15°.
+Les deux angles prennent la bande haute, le regard de l'ancien `iso` : `left` [−23, −25, 0] et son
+miroir `right` [−23, 25, 0] (`regions::rotation3d_for`), qui rendent au budget dynamique ses
+±1,9° / ±3°. `iso` n'est plus proposé : c'était déjà ce regard, tourné à gauche, et un projet qui
+le porte se lit comme `left` (`readRotation3DPreset` et le schéma du document). Ils se dessinent
+au warp **projectif** exact, comme la caméra réelle : le warp bilinéaire penchait à lui seul la
+verticale du milieu de l'écran.
 
-« Turned right » veut dire que la face de l'écran regarde vers la droite : le bord droit
-recule. C'est ce que fait `right` [−8, 16, 1] depuis toujours.
+« Screen turned right » veut dire que la face de l'écran regarde vers la droite : le bord droit
+recule. C'est ce que fait `right` [−23, 25, 0], vu d'en haut.
 
 ### A.3 `follow-cursor` : une caméra en orbite
 
@@ -123,10 +128,10 @@ Chaînée à un angle fixe, une région `follow-cursor` ne mélange jamais les d
 transition passe par l'écran droit à mi-course. Entre deux régions `follow-cursor`, le cadreur ne
 dépend pas de la région : l'orbite continue sans à-coup pendant que le zoom change.
 
-**Rendu exact.** Le warp bilinéaire des angles fixes s'écarte de la projection de cette caméra de
+**Rendu exact.** Le warp bilinéaire s'écarte de la projection de cette caméra de
 plusieurs centaines de px au pire pixel visible (703 px sur l'enveloppe, 264 px sur la grille
 rendue). Les modes 8, 10, 13 et 14 prennent donc un warp
-**projectif** exact sous cette caméra : l'homographie des quatre coins (forme de Heckbert) résolue à
+**projectif** exact sous cette caméra, et depuis sous les angles fixes aussi : l'homographie des quatre coins (forme de Heckbert) résolue à
 l'envers dans le shader, drapeau par mode (`TiltedQuad::warp_flag` : `dst_prev.w` au mode 8, `mb.w`
 au 10, `mb.x` au 13, `src.x` au 14). Mesuré sur une grille rendue par D3D11, caméra tournée vers un
 coin au zoom 2,2 : 0,07 px d'écart à la projection. `TiltedQuad` porte la caméra complète :
@@ -162,8 +167,10 @@ lointain.
 - **`swing-clicks`** : à refaire sur `camera.rs`, l'orbite en donne la mécanique.
 - **`dolly`** (vertigo) : la distance de l'œil par frame, que `TiltedQuad::perspective` sait
   déjà transporter.
-- **Flou de mouvement sous la caméra** : le mode 8 n'en a pas. Le lissage borne le mouvement (voir
-  les mesures ci-dessus), sans limite de vitesse explicite.
+- **Flou de mouvement de la visée** : le mode 8 a le flou du mode 0, borné à une frame, sur le plan
+  d'une frame plus tôt (boîte du zoom, rotation de base, caméra réelle d'avant ;
+  `FrameGeometry::tilt_trail`, `LayerCB::trail_*`). La parallaxe et l'impact n'y entrent pas,
+  comme le focus au mode 0. Un masque de confidentialité couvre alors le secret aux deux frames.
 - **Lumière du curseur modélisé** : elle reste fixée à la caméra ; l'œil en orbite la déplace avec
   lui. À fixer au monde avec le propriétaire du mode 15.
 
@@ -258,10 +265,9 @@ Deux décisions :
 
 1. **Le hotspot est sur le rayon de vue** du point de contenu visé, à sa hauteur. Il ne glisse
    donc jamais à l'écran quand le modèle monte ou descend : seule l'ombre dit la hauteur.
-2. **Ancrage** : sous un angle fixe, la vidéo est dessinée par un warp **bilinéaire** des coins
-   projetés, qui s'écarte de la perspective exacte de quelques pixels. Tout le rendu est décalé
-   de `point_px(plane_pt) − projection exacte`, pour que le hotspot tombe sur le pixel que
-   l'écran montre. Sous la caméra réelle le warp est exact et ce décalage est nul.
+2. **Ancrage** : tout le rendu est décalé de `point_px(plane_pt) − projection exacte`, pour que
+   le hotspot tombe sur le pixel que l'écran montre. Le warp de l'écran étant exact (projectif),
+   sous un angle fixe comme sous la caméra réelle, ce décalage est nul.
 
 ### B.5 La pose (fonction pure de `t`)
 
@@ -350,7 +356,7 @@ Seulement quand `model3d` est allumé (un curseur sans modèle n'a pas de contac
 
 **Rendu** : un carré du plan centré sur le point, dont les coins passent par la projection du
 contenu (`TiltedQuad::point_px`), comme le sprite du mode 13 ; le shader inverse le warp
-(bilinéaire sous un angle fixe, projectif sous la caméra réelle) et dessine un disque dans le
+(projectif, celui de l'écran) et dessine un disque dans le
 carré. L'anneau est donc posé sur le plan : ellipse sous `iso`, perspective exacte sous
 `follow-cursor`. Rien n'est dessiné hors de l'écran. Rust porte la courbe dans le temps
 (`impact_at`) ; les trois shaders ne dessinent que la forme de l'instant (`cursor_impact`).
@@ -376,7 +382,7 @@ de la pastille ; plus rien après sa fenêtre.
   dans les mêmes conditions. Une lecture de texture coûte moins que les dix arêtes du polygone.
 - **Mémoire** : un champ par sprite chargé, sans éviction ; les seize sprites du thème pèsent
   ~2,6 Mo de R16F.
-- **`LayerCB`** reste à 128 octets ; l'emploi des emplacements aux modes 15 et 16 est documenté
+- **`LayerCB`** fait 176 octets (les trois derniers vec4 portent la traînée du mode 8) ; l'emploi des emplacements aux modes 15 et 16 est documenté
   en tête des sections « Curseur modélisé » et « Impact du clic » de `frame_geometry.rs` et dans
   les trois structs de shader.
 - **Traînée au contact** : elle lit la position convergée (B.5.1), donc se replie sur une seule
@@ -384,8 +390,7 @@ de la pastille ; plus rien après sa fenêtre.
 
 ### B.7 Limites
 
-- Seul le thème par défaut est modélisé ; les thèmes sweezy (art de 128 px, bords non
-  détourés) restent plats.
+- Seul le thème par défaut est modélisé ; un thème de curseur ajouté plus tard resterait plat.
 - Un pointeur basculé montre le flanc de sa queue, de la couleur de son bord : la main qui
   pointe gagne un liseré noir au bas de la paume. C'est la 3D, pas un défaut.
 - Un dessus plat (curseur centré) reçoit 0,88 de la lumière : son blanc sort gris clair (226),
@@ -682,8 +687,8 @@ dans la boîte de dessin.
 - **Emplacements du cbuffer** : en tête de `device_frame_cb` (`frame_geometry.rs`), qui fait foi.
   `radius_px` / `color.b` = rayons des coins hauts / bas, concentriques, calculés côté Rust ;
   `dst_prev` = (angle du socle, rayon de l'ouverture, recouvrement, pénombre de l'ombre). Le plan
-  proche n'a pas d'emplacement : les shaders le tirent de `src.z / src.w` et de `mb.xy`. `LayerCB`
-  reste à 128 octets.
+  proche n'a pas d'emplacement : les shaders le tirent de `src.z / src.w` et de `mb.xy`.
+  (`LayerCB` n'y gagne rien.)
 
 ### C.8 Limites
 

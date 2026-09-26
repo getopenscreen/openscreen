@@ -53,8 +53,8 @@
 		"cameraDevice": "Kamera cihazı"
 	},
 	"cursor": {
-		"useEditableCursor": "Düzenlenebilir imleci kullan",
-		"useSystemCursor": "Sistem imlecini kullan"
+		"useEditableCursorHint": "Düzenlenebilir imleci kullan: otomatik yakınlaştırmayı ve imleç efektlerini yeniden açar",
+		"useSystemCursorHint": "Sistem imlecini kullan: otomatik yakınlaştırmayı ve imleç efektlerini kapatır"
 	},
 	"sourceSelector": {
 		"loading": "Kaynaklar yükleniyor...",

@@ -112,6 +112,9 @@
 		"microphone": "麦克风",
 		"camera": "摄像头",
 		"cursorHighlight": "光标高亮",
+		"hideDesktopIcons": "隐藏桌面图标",
+		"hideDesktopIconsHintMac": "在屏幕录制中去掉桌面图标。它们仍保留在你的桌面上。",
+		"hideDesktopIconsHintWindows": "录制屏幕时用壁纸遮住桌面图标。停止录制后会恢复。",
 		"on": "开",
 		"off": "关",
 		"loading": "加载中…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "未检测到语音"
 	},
 	"exportDialog": {
+		"destination": "导出用途",
+		"destinationWeb": "网页 / YouTube",
+		"destinationSocial": "社交媒体",
+		"destinationStudio": "工作室",
+		"destinationReadmeGif": "README GIF",
+		"advanced": "高级",
 		"title": "导出",
 		"subtitle": "将时间轴渲染为文件",
 		"addVideoBeforeExporting": "导出前请先添加视频。",
@@ -215,7 +224,6 @@
 		"generateCaptions": "生成字幕",
 		"cropDescription": "重新构图录制内容 — 选择宽高比并缩放到要保留的区域。",
 		"openCrop": "打开裁剪…",
-		"cameraFullscreenDescription": "该区间播放时，摄像头会占满整个画面 — 没有边框、圆角和背景 — 并在结束时平滑还原。在时间轴上拖动区间边缘可调整其起始位置和时长。",
 		"deleteRegion": "删除区间",
 		"freehandRendersAsBox": "导出时，手绘形状会以其外接矩形遮挡——宁可多遮，绝不少遮。"
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "播放控件",
 		"playPause": "播放 / 暂停",
 		"playPauseTitle": "播放 / 暂停（空格）",
-		"previousClip": "上一个片段",
-		"nextClip": "下一个片段",
 		"loop": "循环",
 		"seekVideo": "拖动视频进度"
 	},

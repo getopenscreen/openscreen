@@ -123,11 +123,12 @@ describe("MacPickerSession", () => {
 	it("presents the picker with the app's windows excluded, and keeps the pick", async () => {
 		const { helper, session } = await readySession();
 
-		const pick = session.present([7, 8]);
+		const pick = session.present([7, 8], true);
 		await flush();
 		expect(JSON.parse(helper.commands[0] ?? "{}")).toMatchObject({
 			command: "present",
 			excludedWindowIds: [7, 8],
+			hideDesktopIcons: true,
 		});
 
 		helper.say(DISPLAY_PICK);

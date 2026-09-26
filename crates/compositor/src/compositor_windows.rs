@@ -179,8 +179,8 @@ pub struct Compositor {
     /// Valeur de `img_tick` au début de la frame en cours. Tout ce qui a été touché depuis
     /// appartient au jeu actif et ne peut pas être évincé — voir `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
-    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
-    /// Pas d'éviction : seuls les seize sprites du thème par défaut y passent (~2,6 Mo en tout).
+    /// Champs et reliefs des sprites de curseur (mode 15), RG16F, par chemin, avec leur forme.
+    /// Pas d'éviction : l'ensemble des cartes livrées reste inférieur à quelques dizaines de Mo.
     sdf_cache: RefCell<HashMap<String, (ID3D11ShaderResourceView, SpriteShape)>>,
     /// Masque de segmentation du sujet webcam, R8 à la résolution du modèle. Écrit par
     /// `set_webcam_mask` depuis le thread d'inférence, lu au moment de dessiner la webcam.
@@ -1020,9 +1020,7 @@ impl Compositor {
                 self.draw_solid(&solid(parse_hex(color).unwrap_or(BLACK)));
             }
             // Le mouvement ne vaut que pour le fond d'écran : la bulle garde son dégradé immobile.
-            Some(SceneBackground::Gradient { angle_deg, stops, .. }) => {
-                let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(BLACK);
-                let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+            Some(SceneBackground::Gradient { angle_deg, stops, offsets, .. }) => {
                 // angle CSS → direction unitaire, même convention que le fond d'écran.
                 let a = angle_deg.to_radians();
                 let dir = [a.sin(), -a.cos()];
@@ -1030,11 +1028,8 @@ impl Compositor {
                     dst,
                     quad_px,
                     radius_px,
-                    src: [c1[0], c1[1], c1[2], c1[3]],
-                    mode: 5.0,
-                    color: c0,
                     fx: [dir[0], dir[1], 0.0, 0.0],
-                    ..Default::default()
+                    ..crate::frame_geometry::gradient_layer(stops, offsets, BLACK)
                 });
             }
             Some(SceneBackground::Image { path }) => {
@@ -1093,19 +1088,24 @@ impl Compositor {
         Ok((srv.unwrap(), w, h))
     }
 
-    /// Champ de distance du sprite `path` (t4 du mode 15) et sa forme, calculés au premier appel.
-    unsafe fn cursor_sdf(&self, path: &str) -> Result<(ID3D11ShaderResourceView, SpriteShape)> {
-        if let Some(hit) = self.sdf_cache.borrow().get(path) {
+    /// Champ et carte de relief du sprite `path` (t4 du mode 15) et sa forme, calculés au premier appel.
+    unsafe fn cursor_sdf(
+        &self,
+        path: &str,
+        depth_path: Option<&str>,
+    ) -> Result<(ID3D11ShaderResourceView, SpriteShape)> {
+        let cache_key = format!("{path}\0{}", depth_path.unwrap_or_default());
+        if let Some(hit) = self.sdf_cache.borrow().get(&cache_key) {
             return Ok(hit.clone());
         }
-        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
-        let texels = sdf.f16_bytes();
+        let sdf = crate::cursor_sdf::CursorSdf::load_with_depth(path, depth_path)?;
+        let texels = sdf.rg16_bytes();
         let td = D3D11_TEXTURE2D_DESC {
             Width: sdf.width,
             Height: sdf.height,
             MipLevels: 1,
             ArraySize: 1,
-            Format: DXGI_FORMAT_R16_FLOAT,
+            Format: DXGI_FORMAT_R16G16_FLOAT,
             SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             Usage: D3D11_USAGE_IMMUTABLE,
             BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
@@ -1114,7 +1114,7 @@ impl Compositor {
         };
         let init = D3D11_SUBRESOURCE_DATA {
             pSysMem: texels.as_ptr() as *const c_void,
-            SysMemPitch: sdf.width * 2,
+            SysMemPitch: sdf.width * 4,
             SysMemSlicePitch: 0,
         };
         let mut tex: Option<ID3D11Texture2D> = None;
@@ -1122,7 +1122,7 @@ impl Compositor {
         let mut srv: Option<ID3D11ShaderResourceView> = None;
         self.dev.CreateShaderResourceView(&tex.unwrap(), None, Some(&mut srv))?;
         let entry = (srv.unwrap(), sdf.shape);
-        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
+        self.sdf_cache.borrow_mut().insert(cache_key, entry.clone());
         Ok(entry)
     }
 
@@ -1535,7 +1535,7 @@ impl Compositor {
         // Sans champ de distance, repli sur le sprite plat plutôt que sur le curseur math.
         // Parité Linux.
         if let Some(pose) = model {
-            match self.cursor_sdf(path) {
+            match self.cursor_sdf(path, sprite.model_depth_path.as_deref()) {
                 Ok((sdf, shape)) => {
                     let shape =
                         SpriteShape { hotspot: [sprite.hotspot_x, sprite.hotspot_y], ..shape };
@@ -1782,9 +1782,7 @@ impl Compositor {
                         ..Default::default()
                     });
                 }
-                SceneBackground::Gradient { angle_deg, stops, motion } => {
-                    let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(lp.bg_color);
-                    let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+                SceneBackground::Gradient { angle_deg, stops, offsets, motion } => {
                     // angle CSS → direction unitaire (espace sortie, y vers le bas) :
                     // 0° = vers le haut, 90° = vers la droite.
                     let a = angle_deg.to_radians();
@@ -1796,12 +1794,9 @@ impl Compositor {
                     );
                     self.draw_solid(&LayerCB {
                         dst: [0.0, 0.0, 1.0, 1.0],
-                        src: [c1[0], c1[1], c1[2], c1[3]],
-                        mode: 5.0,
-                        color: c0,
                         fx: [dir[0], dir[1], anim[0], anim[1]],
                         mb,
-                        ..Default::default()
+                        ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
                     });
                 }
                 SceneBackground::Image { path } => {
@@ -1892,7 +1887,7 @@ impl Compositor {
             self.ctx.ClearRenderTargetView(&self.trail_rtv, &[0.0, 0.0, 0.0, 0.0]);
         }
         if cfg.shadow {
-            let spread = SCREEN_SHADOW_SPREAD_FRAC * frame_min_px;
+            let spread = SCREEN_SHADOW_SPREAD_FRAC * g.screen_unit_px;
             let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
             // Un appareil porte l'ombre de sa silhouette 3D (mode 17), pas celle d'un quad.
@@ -1940,6 +1935,7 @@ impl Compositor {
                     dof,
                     render_px,
                     g.screen_mask,
+                    g.tilt_trail(render_px),
                 ),
                 &sy,
                 &suv,
@@ -2428,6 +2424,7 @@ impl Compositor {
                     let anim = crate::text_anim::text_animation_state(
                         text.animation.as_deref(),
                         (t - annotation.start_sec as f32) * 1000.0,
+                        ((annotation.end_sec - annotation.start_sec) * 1000.0) as f32,
                     );
                     // Les décalages sont donnés à la hauteur de référence : on les ramène à la
                     // sortie, comme la taille de police, pour que l'animation ait la même

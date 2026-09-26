@@ -2,6 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
+import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
 import { useProjectStore } from "./projectStore";
@@ -717,6 +718,20 @@ describe("useTimeline.addAnnotation", () => {
 			id: (annotations[0] as { id: string }).id,
 		});
 	});
+
+	it("centres the new text box and puts it on a dark plate that reads on any page", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		const [annotation] = useProjectStore.getState().document?.annotations ?? [];
+		const { position, size } = annotation as {
+			position: { x: number; y: number };
+			size: { width: number; height: number };
+		};
+		expect([position.x + size.width / 2, position.y + size.height / 2]).toEqual([50, 50]);
+		expect(annotation.style.backgroundColor).toBe(DEFAULT_TEXT_PLATE);
+	});
 });
 
 describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
@@ -764,11 +779,11 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 	it("sets a 3D rotation preset on the region", async () => {
 		const { result } = renderTimeline();
 		await act(async () => {
-			await result.current.updateZoomRotation("zoom_a", "iso");
+			await result.current.updateZoomRotation("zoom_a", "left");
 		});
 		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
 			id: "zoom_a",
-			rotationPreset: "iso",
+			rotationPreset: "left",
 		});
 	});
 
@@ -777,7 +792,7 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 		// optional and the native side treats anything unrecognised as zero rotation.
 		const { result } = renderTimeline();
 		await act(async () => {
-			await result.current.updateZoomRotation("zoom_a", "iso");
+			await result.current.updateZoomRotation("zoom_a", "left");
 		});
 		await act(async () => {
 			await result.current.updateZoomRotation("zoom_a", undefined);
@@ -803,7 +818,7 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 		// One control, one field: a moving camera replaces a fixed angle instead of stacking on it.
 		const { result } = renderTimeline();
 		await act(async () => {
-			await result.current.updateZoomRotation("zoom_a", "iso");
+			await result.current.updateZoomRotation("zoom_a", "left");
 		});
 		await act(async () => {
 			await result.current.updateZoomRotation("zoom_a", "follow-cursor");
@@ -959,6 +974,8 @@ describe("useTimeline is not re-rendered by playhead ticks", () => {
 		expect(useProjectStore.getState().document?.zoomRanges.at(-1)).toMatchObject({
 			startMs: 4200,
 			endMs: 6200,
+			// Framing what the pointer does, not the middle of the screen.
+			focusMode: "auto",
 		});
 	});
 
@@ -1258,7 +1275,7 @@ describe("useTimeline undo history", () => {
 		const { result } = renderTimeline();
 
 		const pDepth = result.current.updateZoomDepth("zoom_a", 4);
-		const pRotation = result.current.updateZoomRotation("zoom_a", "iso");
+		const pRotation = result.current.updateZoomRotation("zoom_a", "left");
 		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
 		await act(async () => {
 			gate.release?.();
@@ -1267,7 +1284,7 @@ describe("useTimeline undo history", () => {
 
 		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
 			depth: 4,
-			rotationPreset: "iso",
+			rotationPreset: "left",
 		});
 	});
 
@@ -1418,7 +1435,7 @@ describe("useTimeline undo history", () => {
 		expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(4);
 
 		const gate = gateFirstSave();
-		const pRotation = result.current.updateZoomRotation("zoom_a", "iso");
+		const pRotation = result.current.updateZoomRotation("zoom_a", "left");
 		const pCursor = result.current.updateZoomHideCursor("zoom_a", true);
 		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
 		let undid = false;
@@ -1452,7 +1469,7 @@ describe("useTimeline undo history", () => {
 		};
 
 		const gate = gateFirstSave();
-		const pRotation = result.current.updateZoomRotation("zoom_a", "iso");
+		const pRotation = result.current.updateZoomRotation("zoom_a", "left");
 		const pCursor = result.current.updateZoomHideCursor("zoom_a", true);
 		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
 		bridgeMocks.get.mockResolvedValue({ success: true, document: projectB });
@@ -1518,7 +1535,7 @@ describe("useTimeline undo history", () => {
 			// A later zoom write is refused while that save is still unknown.
 			let rotationOk: boolean | undefined;
 			await act(async () => {
-				rotationOk = await result.current.updateZoomRotation("zoom_a", "iso");
+				rotationOk = await result.current.updateZoomRotation("zoom_a", "left");
 			});
 			expect(rotationOk).toBe(false);
 			expect(useProjectStore.getState().document?.zoomRanges[0]?.rotationPreset).toBeUndefined();
@@ -2021,7 +2038,8 @@ describe("useTimeline audio tracks", () => {
 		act(() => {
 			expect(undo()).toBe(true);
 		});
-		expect(useProjectStore.getState().document?.audioTracks[0]?.gainDb).toBe(0);
+		// Back to the level a new music bed is placed at.
+		expect(useProjectStore.getState().document?.audioTracks[0]?.gainDb).toBe(-18);
 	});
 
 	it("clamps a track to the content under it, like every other anchored region", async () => {

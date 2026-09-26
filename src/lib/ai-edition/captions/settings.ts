@@ -9,9 +9,12 @@
 // `legacyEditor` passthrough blob), so caption settings round-trip through save
 // / load / undo with every other appearance setting and need no schema bump.
 
+import { DEFAULT_TEXT_FONT_FAMILY, resolveTextFontFamily } from "@/lib/textFonts";
 import { clamp } from "@/utils/math";
 import type { AxcutDocument } from "../schema";
+import { textForPlate } from "../textContrast";
 import { type TranscriptLane, voiceoverPlacements } from "../timeline/aggregated-transcript";
+import { CAPTION_WORDS_PER_LINE_MAX, CAPTION_WORDS_PER_LINE_MIN } from "./wordsPerLine";
 
 /**
  * Which frame edge the caption block is pinned to. The block grows AWAY from it:
@@ -106,7 +109,7 @@ export const DEFAULT_CAPTION_SETTINGS: CaptionSettings = {
 	language: null,
 	captionLane: "recording",
 	fontSize: 48,
-	fontFamily: "Inter",
+	fontFamily: DEFAULT_TEXT_FONT_FAMILY,
 	fontWeight: "bold",
 	color: "#ffffff",
 	backgroundEnabled: true,
@@ -122,6 +125,133 @@ export const DEFAULT_CAPTION_SETTINGS: CaptionSettings = {
 	minWordsPerLine: 2,
 	maxWordsPerLine: 7,
 };
+
+/**
+ * Plate opacity bounds. The on/off state belongs to the plate choice alone: an opacity
+ * that reached 0 was a second way to switch the plate off, and one past 90% hid the plate's
+ * edge against a dark frame for no gain in legibility.
+ */
+export const CAPTION_PLATE_OPACITY_MIN = 0.4;
+export const CAPTION_PLATE_OPACITY_MAX = 0.9;
+
+/** The named caption plates. Colour only: the opacity is its own bounded slider. */
+export const CAPTION_PLATES = { dark: "#000000", light: "#ffffff" } as const;
+
+export type CaptionPlate = "none" | keyof typeof CAPTION_PLATES;
+
+/** The named plate these settings carry, or `"custom"` for an older free colour. */
+export function captionPlateOf(settings: CaptionSettings): CaptionPlate | "custom" {
+	if (!settings.backgroundEnabled) return "none";
+	const color = settings.backgroundColor.toLowerCase();
+	if (color === CAPTION_PLATES.dark) return "dark";
+	if (color === CAPTION_PLATES.light) return "light";
+	return "custom";
+}
+
+/** Choosing a plate turns it on (or off), and moves text that would vanish on it. */
+export function captionPlatePatch(
+	settings: CaptionSettings,
+	plate: CaptionPlate,
+): CaptionSettingsPatch {
+	if (plate === "none") return { backgroundEnabled: false };
+	const backgroundColor = CAPTION_PLATES[plate];
+	return {
+		backgroundEnabled: true,
+		backgroundColor,
+		color: textForPlate(settings.color, backgroundColor),
+	};
+}
+
+/** The look fields a named style sets together. Placement and line length are not look. */
+type CaptionLook = Pick<
+	CaptionSettings,
+	| "fontFamily"
+	| "fontWeight"
+	| "fontSize"
+	| "color"
+	| "backgroundEnabled"
+	| "backgroundColor"
+	| "backgroundOpacity"
+>;
+
+/**
+ * Named caption styles, first in the pane. Each is a readable pair by construction (the
+ * test asserts it); the detailed controls below them stay available for everything else.
+ * Classic is the default look, so a fresh project opens with it selected.
+ */
+export const CAPTION_STYLES = {
+	classic: {
+		fontFamily: "Inter",
+		fontWeight: "bold",
+		fontSize: 48,
+		color: "#ffffff",
+		backgroundEnabled: true,
+		backgroundColor: CAPTION_PLATES.dark,
+		backgroundOpacity: 0.55,
+	},
+	bold: {
+		fontFamily: "Oswald",
+		fontWeight: "bold",
+		fontSize: 60,
+		color: "#fde047",
+		backgroundEnabled: true,
+		backgroundColor: CAPTION_PLATES.dark,
+		backgroundOpacity: 0.85,
+	},
+	minimal: {
+		fontFamily: "Inter",
+		fontWeight: "normal",
+		fontSize: 40,
+		color: "#ffffff",
+		backgroundEnabled: true,
+		backgroundColor: CAPTION_PLATES.dark,
+		backgroundOpacity: 0.4,
+	},
+	light: {
+		fontFamily: "Inter",
+		fontWeight: "bold",
+		fontSize: 48,
+		color: "#111111",
+		backgroundEnabled: true,
+		backgroundColor: CAPTION_PLATES.light,
+		backgroundOpacity: 0.9,
+	},
+} as const satisfies Record<string, CaptionLook>;
+
+export type CaptionStyleId = keyof typeof CAPTION_STYLES;
+
+/** The named style these settings match exactly, or `null` once anything was tuned. */
+export function captionStyleOf(settings: CaptionSettings): CaptionStyleId | null {
+	for (const [id, look] of Object.entries(CAPTION_STYLES) as [CaptionStyleId, CaptionLook][]) {
+		const matches = (Object.keys(look) as (keyof CaptionLook)[]).every((key) =>
+			typeof look[key] === "string"
+				? String(settings[key]).toLowerCase() === String(look[key]).toLowerCase()
+				: settings[key] === look[key],
+		);
+		if (matches) return id;
+	}
+	return null;
+}
+
+/**
+ * A stored opacity read into the bounded range. Below 20% the plate was all but invisible,
+ * which is what "off" draws; between 20 and 40% the nearest valid value is 40%.
+ */
+function readPlate(
+	enabled: boolean,
+	opacity: number,
+): Pick<CaptionSettings, "backgroundEnabled" | "backgroundOpacity"> {
+	if (enabled && opacity < 0.2) {
+		return {
+			backgroundEnabled: false,
+			backgroundOpacity: DEFAULT_CAPTION_SETTINGS.backgroundOpacity,
+		};
+	}
+	return {
+		backgroundEnabled: enabled,
+		backgroundOpacity: clamp(opacity, CAPTION_PLATE_OPACITY_MIN, CAPTION_PLATE_OPACITY_MAX),
+	};
+}
 
 /** Reference frame height the px-valued settings are authored against, matching
  *  `annotationScale.ts` — `fontSize` is "pixels at a 1080-high frame". */
@@ -434,10 +564,28 @@ export function getCaptionSettings(
 	const defaultInsetY = defaultCaptionInsetY(aspectValue);
 	if (!raw) return { ...d, insetY: defaultInsetY, insetX: defaultCaptionInsetX(aspectValue) };
 
-	const minWords = Math.round(readNumber(raw.minWordsPerLine, d.minWordsPerLine, 1, 12));
-	const maxWords = Math.round(readNumber(raw.maxWordsPerLine, d.maxWordsPerLine, 1, 12));
+	const minWords = Math.round(
+		readNumber(
+			raw.minWordsPerLine,
+			d.minWordsPerLine,
+			CAPTION_WORDS_PER_LINE_MIN,
+			CAPTION_WORDS_PER_LINE_MAX,
+		),
+	);
+	const maxWords = Math.round(
+		readNumber(
+			raw.maxWordsPerLine,
+			d.maxWordsPerLine,
+			CAPTION_WORDS_PER_LINE_MIN,
+			CAPTION_WORDS_PER_LINE_MAX,
+		),
+	);
 	const fontSize = readNumber(raw.fontSize, d.fontSize, 12, 200);
-	const backgroundEnabled = readBoolean(raw.backgroundEnabled, d.backgroundEnabled);
+	const plate = readPlate(
+		readBoolean(raw.backgroundEnabled, d.backgroundEnabled),
+		readNumber(raw.backgroundOpacity, d.backgroundOpacity, 0, 1),
+	);
+	const { backgroundEnabled } = plate;
 
 	// New fields win whenever they are present, so the migration runs once and is inert
 	// afterwards; it only speaks for a document that still carries the old ones.
@@ -463,12 +611,13 @@ export function getCaptionSettings(
 		// that `lanePlacements` would not recognise.
 		captionLane: readEnum(raw.captionLane, CAPTION_LANES, d.captionLane),
 		fontSize,
-		fontFamily: readString(raw.fontFamily, d.fontFamily),
+		// A family that no longer ships reads as the default: the compositor could not draw it,
+		// and the picker has no entry to show for it.
+		fontFamily: resolveTextFontFamily(raw.fontFamily),
 		fontWeight: readEnum(raw.fontWeight, ["normal", "bold"] as const, d.fontWeight),
 		color: readString(raw.color, d.color),
-		backgroundEnabled,
+		...plate,
 		backgroundColor: readString(raw.backgroundColor, d.backgroundColor),
-		backgroundOpacity: readNumber(raw.backgroundOpacity, d.backgroundOpacity, 0, 1),
 		...placement,
 		minWordsPerLine: Math.min(minWords, maxWords),
 		maxWordsPerLine: Math.max(minWords, maxWords),
@@ -518,6 +667,11 @@ export function patchCaptionSettings(
 	const next: CaptionSettings = { ...getCaptionSettings(doc, aspectValue), ...patch };
 	next.insetY = clamp(next.insetY, 0, CAPTION_INSET_Y_MAX);
 	next.insetX = clamp(next.insetX, 0, CAPTION_INSET_X_MAX);
+	next.backgroundOpacity = clamp(
+		next.backgroundOpacity,
+		CAPTION_PLATE_OPACITY_MIN,
+		CAPTION_PLATE_OPACITY_MAX,
+	);
 	return {
 		...doc,
 		legacyEditor: {

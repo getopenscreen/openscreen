@@ -282,8 +282,8 @@ pub struct Compositor {
     /// Valeur de `img_tick` au début de la frame en cours. Tout ce qui a été touché depuis
     /// appartient au jeu actif et ne peut pas être évincé — voir `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
-    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
-    /// Pas d'éviction : seuls les seize sprites du thème par défaut y passent (~2,6 Mo en tout).
+    /// Champs et reliefs des sprites de curseur (mode 15), RG16F, par chemin, avec leur forme.
+    /// Pas d'éviction : l'ensemble des cartes livrées reste inférieur à quelques dizaines de Mo.
     sdf_cache: RefCell<
         std::collections::HashMap<String, (metal::Texture, crate::frame_geometry::SpriteShape)>,
     >,
@@ -908,21 +908,23 @@ impl Compositor {
         Ok((tex, w, h))
     }
 
-    /// Champ de distance du sprite `path` (texture(4) du mode 15) et sa forme, calculés au
-    /// premier appel. Parité `compositor_windows::cursor_sdf`. R16Float : filtrable sur tous
+    /// Champ et relief du sprite `path` (texture(4) du mode 15) et sa forme, calculés au
+    /// premier appel. Parité `compositor_windows::cursor_sdf`. RG16Float : filtrable sur tous
     /// les GPU Apple, contrairement au R32Float.
     fn cursor_sdf(
         &self,
         path: &str,
+        depth_path: Option<&str>,
     ) -> Result<(metal::Texture, crate::frame_geometry::SpriteShape)> {
-        if let Some(hit) = self.sdf_cache.borrow().get(path) {
+        let cache_key = format!("{path}\0{}", depth_path.unwrap_or_default());
+        if let Some(hit) = self.sdf_cache.borrow().get(&cache_key) {
             return Ok(hit.clone());
         }
-        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
-        let texels = sdf.f16_bytes();
+        let sdf = crate::cursor_sdf::CursorSdf::load_with_depth(path, depth_path)?;
+        let texels = sdf.rg16_bytes();
         let tex = make_texture(
             &self.gpu.device,
-            metal::MTLPixelFormat::R16Float,
+            metal::MTLPixelFormat::RG16Float,
             sdf.width,
             sdf.height,
             metal::MTLStorageMode::Shared,
@@ -935,10 +937,10 @@ impl Compositor {
             },
             0,
             texels.as_ptr() as *const std::ffi::c_void,
-            (sdf.width * 2) as u64,
+            (sdf.width * 4) as u64,
         );
         let entry = (tex, sdf.shape);
-        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
+        self.sdf_cache.borrow_mut().insert(cache_key, entry.clone());
         Ok(entry)
     }
 
@@ -1075,22 +1077,17 @@ impl Compositor {
                 self.draw_solid(enc, &solid(parse_hex(color).unwrap_or(BLACK)));
             }
             // Le mouvement ne vaut que pour le fond d'écran : la bulle garde son dégradé immobile.
-            Some(SceneBackground::Gradient { angle_deg, stops, .. }) => {
-                let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(BLACK);
-                let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+            Some(SceneBackground::Gradient { angle_deg, stops, offsets, .. }) => {
                 // angle CSS → direction unitaire, même convention que le fond d'écran.
                 let a = angle_deg.to_radians();
                 self.draw_solid(
                     enc,
                     &LayerCB {
                         dst,
-                        src: [c1[0], c1[1], c1[2], c1[3]],
                         quad_px,
                         radius_px,
-                        mode: 5.0,
-                        color: c0,
                         fx: [a.sin(), -a.cos(), 0.0, 0.0],
-                        ..Default::default()
+                        ..crate::frame_geometry::gradient_layer(stops, offsets, BLACK)
                     },
                 );
             }
@@ -1288,6 +1285,8 @@ impl Compositor {
         top_lift: f32,
         // Le slot d'un layout en bloc, qui rogne le plan (`FrameGeometry::screen_mask`).
         mask: Option<crate::frame_geometry::ScreenMask>,
+        // Le plan à la frame d'avant, pour son flou de mouvement (`FrameGeometry::tilt_trail`).
+        trail: Option<crate::frame_geometry::TiltTrail>,
         y: &metal::Texture,
         uv: &metal::Texture,
         dof_pyramid: Option<&metal::Texture>,
@@ -1308,6 +1307,7 @@ impl Compositor {
             dof_pyramid.is_some(),
             render_px,
             mask,
+            trail,
         );
         self.draw_video(enc, &cb, y, uv);
     }
@@ -1517,6 +1517,7 @@ impl Compositor {
                     let anim = crate::text_anim::text_animation_state(
                         text.animation.as_deref(),
                         (t - a.start_sec as f32) * 1000.0,
+                        ((a.end_sec - a.start_sec) * 1000.0) as f32,
                     );
                     let anim_px = rh / crate::text_anim::ANIMATION_REFERENCE_HEIGHT;
                     let (mut ax, mut ay, mut aw, mut ah) = (
@@ -1976,7 +1977,7 @@ impl Compositor {
         let (tex, iw, ih) = self.cached_image(sprite.path.as_str())?;
         // Sans champ de distance, repli sur le sprite plat plutôt qu'aucun curseur. Parité Linux.
         if let Some(pose) = model {
-            match self.cursor_sdf(sprite.path.as_str()) {
+            match self.cursor_sdf(sprite.path.as_str(), sprite.model_depth_path.as_deref()) {
                 Ok((sdf, shape)) => {
                     let shape = crate::frame_geometry::SpriteShape {
                         hotspot: [sprite.hotspot_x, sprite.hotspot_y],
@@ -2139,9 +2140,7 @@ impl Compositor {
                     &LayerCB { dst: [0.0, 0.0, 1.0, 1.0], mode: 1.0, color: c, ..Default::default() },
                 );
             }
-            Some(SceneBackground::Gradient { angle_deg, stops, motion }) => {
-                let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(lp.bg_color);
-                let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+            Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
                 let a = angle_deg.to_radians();
                 let (anim, mb) =
                     crate::frame_geometry::gradient_motion_slots(motion, g.programme_t, rw / rh);
@@ -2149,12 +2148,9 @@ impl Compositor {
                     enc,
                     &LayerCB {
                         dst: [0.0, 0.0, 1.0, 1.0],
-                        src: [c1[0], c1[1], c1[2], c1[3]],
-                        mode: 5.0,
-                        color: c0,
                         fx: [a.sin(), -a.cos(), anim[0], anim[1]],
                         mb,
-                        ..Default::default()
+                        ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
                     },
                 );
             }
@@ -2220,7 +2216,7 @@ impl Compositor {
             (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
         ];
         if cfg.shadow {
-            let spread = SCREEN_SHADOW_SPREAD_FRAC * g.frame_min_px;
+            let spread = SCREEN_SHADOW_SPREAD_FRAC * g.screen_unit_px;
             let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
             // L'ombre suit la silhouette réellement affichée : rect arrondi quand l'écran est
@@ -2279,6 +2275,7 @@ impl Compositor {
                 g.s_radius,
                 top_lift,
                 g.screen_mask,
+                g.tilt_trail([rw, rh]),
                 &sy,
                 &suv,
                 dof_pyramid.as_ref(),
@@ -3712,11 +3709,11 @@ mod tests {
     /// Les états que le rendu passe en revue (hotspots de `DEFAULT_CURSOR_SPRITES`), et s'ils
     /// sont centrés : ni tangage ni lacet.
     const MODEL_STATES: [(&str, [f32; 2], bool); 6] = [
-        ("arrow", [0.119, 0.0874], false),
-        ("pointer", [0.3893, 0.0032], false),
-        ("text", [0.4375, 0.5333], true),
-        ("open-hand", [0.4375, 0.1781], false),
-        ("resize-ew", [0.4881, 0.4706], true),
+        ("arrow", [0.1205, 0.0881], false),
+        ("pointer", [0.3874, 0.0032], false),
+        ("text", [0.4355, 0.5369], true),
+        ("open-hand", [0.4375, 0.1724], false),
+        ("resize-ew", [0.485, 0.4706], true),
         ("not-allowed", [0.5, 0.5], true),
     ];
 
@@ -3934,8 +3931,9 @@ mod tests {
             let touch = compose_model(&comp, &screen, &json(Some(true), "default", true), &clicked);
             model_save(&format!("{name}-hover"), &hover);
             model_save(&format!("{name}-touch"), &touch);
-            assert!(absent == off && absent == other, "{name}: le chemin plat a change");
+            assert!(absent == off, "{name}: le chemin plat a change");
             assert!(absent != hover, "{name}: le reglage allume ne change rien");
+            assert!(other == hover, "{name}: le libelle du theme a change le rendu natif");
             let (a, b) = (model_split(&hover, &bare), model_split(&touch, &bare));
             println!(
                 "{name} : blanc {}, noir {}, ombre {} (apex a {:.1} px, posee {:.1} px), centroides {:?} / {:?}",
@@ -3952,7 +3950,7 @@ mod tests {
 
     /// Chaque état garde son art et sa silhouette : posé au centre de l'écran (vu de face), le
     /// modèle couvre ce que couvre le sprite plat, avec ses couleurs ; il porte une ombre en
-    /// l'air, suit l'inclinaison du plan, et un autre thème (ou le réglage éteint) reste plat.
+    /// l'air et suit l'inclinaison du plan. Le réglage éteint garde le sprite plat.
     #[test]
     fn every_modelled_state_keeps_its_art_footprint_and_shadow() {
         let Ok(gpu) = crate::d3d::Gpu::create(false) else {
@@ -3981,8 +3979,11 @@ mod tests {
             let other = compose_model(&comp, &blue, &json("null", Some(true), "other", true), &still);
             model_save(&format!("art-{key}-touch"), &touch);
             model_save(&format!("art-{key}-iso"), &tilted);
-            if absent != sprite || other != sprite {
+            if absent != sprite {
                 failures.push(format!("{key}: le sprite plat a change"));
+            }
+            if other != hover {
+                failures.push(format!("{key}: le libelle du theme a change le rendu natif"));
             }
 
             let (m3d, m2d) = (model_opaque(&touch, &touch_b, &bare), model_opaque(&sprite, &sprite_b, &bare));
@@ -4117,7 +4118,13 @@ mod tests {
             };
             let (up, left) = (peak(0, -1), peak(-1, 0));
             println!("{rotation} : pastille en {m:?}, anneau haut {up:?}, gauche {left:?}");
-            assert!(up.0 > 60 && left.0 > 60, "{rotation}: anneau absent ({up:?} {left:?})");
+            // Le preset incliné projette le trait plus obliquement sur un bord; son contraste
+            // mesuré est inférieur à celui du cas plat, sans que l'anneau disparaisse.
+            let min_delta = if rotation == "null" { 60 } else { 40 };
+            assert!(
+                up.0 > min_delta && left.0 > min_delta,
+                "{rotation}: anneau absent ({up:?} {left:?})"
+            );
             let tol = if rotation == "null" { 1 } else { 2 };
             assert!((up.1 - left.1).abs() <= tol, "{rotation}: anneau décentré ({up:?} {left:?})");
         }

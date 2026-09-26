@@ -58,6 +58,12 @@ async function renameWithRetry(from: string, to: string): Promise<void> {
 	}
 }
 
+/**
+ * Names the preset new projects start from: one line, the preset's id. It sits in the presets
+ * folder so it travels with them, and has no preset extension so `list` never reads it.
+ */
+const NEW_PROJECT_MARKER_FILE = ".new-project-preset";
+
 function isMissing(error: unknown): boolean {
 	return (error as NodeJS.ErrnoException)?.code === "ENOENT";
 }
@@ -108,7 +114,34 @@ export class StylePresetService {
 
 	async list(): Promise<StylePreset[]> {
 		await this.ensureDirectory();
-		return (await this.readEntries()).presets;
+		const [{ presets }, marked] = await Promise.all([this.readEntries(), this.readMarker()]);
+		return presets.map((preset) =>
+			preset.id === marked ? { ...preset, forNewProjects: true } : preset,
+		);
+	}
+
+	/** Marks the preset new projects start from, or clears the mark with `null`. */
+	setForNewProjects(id: string | null): Promise<void> {
+		return this.serialise(async () => {
+			if (id === null) {
+				await this.clearMarker();
+				return;
+			}
+			await this.read(id); // NOT_FOUND rather than marking a preset that is not there.
+			await this.writeMarker(id);
+		});
+	}
+
+	/** The marked preset's look, or `null` when none is marked or it no longer reads. */
+	async newProjectAppearance(): Promise<StylePresetAppearance | null> {
+		const id = await this.readMarker();
+		if (id === null) return null;
+		try {
+			return (await this.read(id)).appearance;
+		} catch (error) {
+			console.warn(`[style-presets] preset for new projects unavailable (${id}):`, error);
+			return null;
+		}
 	}
 
 	create(name: string, appearance: StylePresetAppearance): Promise<StylePreset> {
@@ -152,6 +185,7 @@ export class StylePresetService {
 					if (!isMissing(error)) throw error;
 				}
 			}
+			if ((await this.readMarker()) === id) await this.writeMarker(nextId);
 			return this.read(nextId);
 		});
 	}
@@ -172,6 +206,7 @@ export class StylePresetService {
 			await fs.unlink(this.pathFor(id)).catch((error) => {
 				if (!isMissing(error)) throw error;
 			});
+			if ((await this.readMarker()) === id) await this.clearMarker();
 		});
 	}
 
@@ -186,6 +221,30 @@ export class StylePresetService {
 			await this.ensureDirectory();
 			return { kind: "folder", path: this.directory };
 		}
+	}
+
+	private get markerPath(): string {
+		return path.join(this.directory, NEW_PROJECT_MARKER_FILE);
+	}
+
+	private async readMarker(): Promise<string | null> {
+		try {
+			return (await fs.readFile(this.markerPath, "utf8")).trim() || null;
+		} catch (error) {
+			if (isMissing(error)) return null;
+			throw error;
+		}
+	}
+
+	private async writeMarker(id: string): Promise<void> {
+		await this.ensureDirectory();
+		await this.writeAtomic(this.markerPath, `${id}\n`);
+	}
+
+	private async clearMarker(): Promise<void> {
+		await fs.unlink(this.markerPath).catch((error) => {
+			if (!isMissing(error)) throw error;
+		});
 	}
 
 	private async read(id: string): Promise<StylePreset> {

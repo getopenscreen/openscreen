@@ -7,11 +7,20 @@
 // réversible sans donner un second sens à `backgroundColor`.
 
 import type { AxcutAnnotationRegion } from "@/lib/ai-edition/schema";
+import { textForPlate } from "../textContrast";
 
 type AnnotationStyle = AxcutAnnotationRegion["style"];
 
-/** Couleur d'un premier allumage, quand l'annotation n'a jamais eu de fond. */
-export const DEFAULT_TEXT_BACKGROUND = "#000000";
+/**
+ * La plaque d'une annotation neuve : noire à 70 %. Un texte blanc sans plaque ni contour
+ * disparaissait sur toute page claire, soit la moitié des enregistrements d'écran. `rgba()` et
+ * non un hex à 8 chiffres : c'est la forme que le compositeur lit (`parse_hex`), comme pour les
+ * sous-titres.
+ */
+export const DEFAULT_TEXT_PLATE = "rgba(0, 0, 0, 0.7)";
+
+/** Couleur d'un premier allumage, quand l'annotation n'a jamais eu de fond : la plaque par défaut. */
+export const DEFAULT_TEXT_BACKGROUND = DEFAULT_TEXT_PLATE;
 
 export function hasTextBackground(style: AnnotationStyle): boolean {
 	const color = style.backgroundColor;
@@ -44,4 +53,42 @@ export function toggleTextBackground(style: AnnotationStyle, next: boolean): Ann
  */
 export function setTextBackgroundColor(style: AnnotationStyle, color: string): AnnotationStyle {
 	return { ...style, backgroundColor: color, lastBackgroundColor: color };
+}
+
+/**
+ * Les plaques nommées d'une annotation : aucune, sombre, claire. Trois états qu'on voit, au lieu
+ * d'une roue qui laissait choisir une plaque de la couleur même du texte. `rgba()` et non un hex
+ * à 8 chiffres, la forme que lit le compositeur (`parse_hex`). La sombre est celle que #793 donne
+ * à toute annotation neuve.
+ */
+export const TEXT_PLATES = {
+	none: "transparent",
+	dark: "rgba(0, 0, 0, 0.7)",
+	light: "rgba(255, 255, 255, 0.85)",
+} as const;
+
+export type TextPlate = keyof typeof TEXT_PLATES;
+
+const compact = (css: string) => css.replace(/\s+/g, "").toLowerCase();
+
+/**
+ * La plaque nommée que porte ce style, ou `"custom"` pour une couleur libre d'un projet plus
+ * ancien : elle s'ouvre inchangée, et le choix reste montré tant qu'elle est là.
+ */
+export function textPlateOf(style: AnnotationStyle): TextPlate | "custom" {
+	if (!hasTextBackground(style)) return "none";
+	const color = compact(style.backgroundColor);
+	if (color === compact(TEXT_PLATES.dark)) return "dark";
+	if (color === compact(TEXT_PLATES.light)) return "light";
+	return "custom";
+}
+
+/** Style résultant du choix d'une plaque : un texte devenu illisible dessus change avec elle. */
+export function setTextPlate(style: AnnotationStyle, plate: TextPlate): AnnotationStyle {
+	const backgroundColor = TEXT_PLATES[plate];
+	return {
+		...style,
+		backgroundColor,
+		color: textForPlate(style.color ?? "#ffffff", backgroundColor),
+	};
 }

@@ -695,13 +695,14 @@ The slice-1 bench lives at `--cfg GIF` on the existing
 mode). It drives `compositor::export_gif` end-to-end on the fixture
 (`fixture/screen.mp4` + `fixture/webcam.mp4` + `fixture/screen.cursor.json`,
 360 frames at 60 fps = 6 s source), defaulting to 854×480 / 12 fps /
-infinite loop / no dithering, and reports wall time, frame count, FPS,
-file size, ms/frame, and spread across `--repeat` runs.
+infinite loop / Floyd-Steinberg dithering (the app's default), and reports
+wall time, frame count, FPS, file size, ms/frame, and spread across
+`--repeat` runs.
 
 ```bash
 # from crates/
 x.bat run --release -- --cfg GIF --repeat 3 --out out/
-# optional overrides: --gif-width 1920 --gif-height 1080 --gif-fps 24 --gif-dither 1
+# optional overrides: --gif-width 1920 --gif-height 1080 --gif-fps 24 --gif-dither 0
 ```
 
 Per the brief: "**the readback is the dominant per-frame cost**." That

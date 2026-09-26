@@ -14,6 +14,7 @@ import {
 	planTimelineReplacement,
 	primaryAssetDuration,
 	projectRawTimelineSecToPlayback,
+	readSpeedRegions,
 	rederiveRegionMs,
 	removeClip,
 	removeRegion,
@@ -1738,5 +1739,25 @@ describe("projectRawTimelineSecToPlayback with speed regions", () => {
 	it("ignores a nonsense rate rather than dividing by it", () => {
 		const speed = [{ startMs: 0, endMs: 4000, speed: 0 }];
 		expect(projectRawTimelineSecToPlayback([clip], [], 4, speed)).toBeCloseTo(4, 6);
+	});
+});
+
+describe("readSpeedRegions", () => {
+	const read = (speedRegions: unknown) => readSpeedRegions({ legacyEditor: { speedRegions } });
+
+	it("plays a stored speed past the bound at the bound", () => {
+		const regions = read([
+			{ id: "a", startMs: 0, endMs: 1000, speed: 100 },
+			{ id: "b", startMs: 1000, endMs: 2000, speed: 0.1 },
+			{ id: "c", startMs: 2000, endMs: 3000, speed: 2 },
+		]);
+		expect(regions.map((r) => r.speed)).toEqual([16, 0.25, 2]);
+	});
+
+	it("drops a region with no usable speed, and reads no regions from nothing", () => {
+		expect(read([{ id: "a", startMs: 0, endMs: 1000, speed: 0 }])).toEqual([]);
+		expect(read([{ id: "a", startMs: 0, endMs: 1000, speed: "fast" }])).toEqual([]);
+		expect(read(undefined)).toEqual([]);
+		expect(readSpeedRegions({ legacyEditor: null })).toEqual([]);
 	});
 });

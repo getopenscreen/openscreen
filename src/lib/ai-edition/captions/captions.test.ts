@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { insertGeneratedClip } from "../document/insertion";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
+import { contrastRatio, MIN_TEXT_CONTRAST } from "../textContrast";
 import { captionCuesToTextRegions, deriveCaptionCues } from "./cues";
 import type { CaptionSettings } from "./settings";
 import {
+	CAPTION_PLATE_OPACITY_MAX,
+	CAPTION_PLATE_OPACITY_MIN,
+	CAPTION_STYLES,
 	captionBackgroundCss,
 	captionBoxRect,
+	captionPlateOf,
+	captionPlatePatch,
 	captionSafeColumn,
+	captionStyleOf,
 	DEFAULT_CAPTION_SETTINGS,
 	defaultCaptionInsetX,
 	defaultCaptionInsetY,
@@ -140,11 +147,73 @@ describe("caption settings", () => {
 		expect(getCaptionSettings(next)).toMatchObject({ minWordsPerLine: 3, maxWordsPerLine: 9 });
 	});
 
+	it("reads a stored font that no longer ships as the default, and keeps one that does", () => {
+		// Saved while the picker offered 17 Google families the compositor never had: the
+		// project must still render, and the picker must still show a real entry.
+		const stored = (fontFamily: string) =>
+			getCaptionSettings(
+				doc({ legacyEditor: { captions: { fontFamily } } } as Partial<AxcutDocument>),
+			).fontFamily;
+		expect(stored("Bebas Neue")).toBe("Inter");
+		expect(stored("Caveat")).toBe("Caveat");
+	});
+
 	it("folds the opacity into the background colour, and reports 'transparent' when off", () => {
 		expect(
 			captionBackgroundCss({ ...ON, backgroundColor: "#10b981", backgroundOpacity: 0.5 }),
 		).toBe("rgba(16, 185, 129, 0.5)");
 		expect(captionBackgroundCss({ ...ON, backgroundEnabled: false })).toBe("transparent");
+	});
+});
+
+describe("caption styles and plates", () => {
+	const stored = (captions: Record<string, unknown>) =>
+		getCaptionSettings(doc({ legacyEditor: { captions } } as Partial<AxcutDocument>));
+
+	it("opens a fresh project on the Classic style", () => {
+		expect(captionStyleOf(getCaptionSettings(doc()))).toBe("classic");
+	});
+
+	it("names a style only while every look field still matches it", () => {
+		expect(captionStyleOf({ ...ON, ...CAPTION_STYLES.bold })).toBe("bold");
+		expect(captionStyleOf({ ...ON, ...CAPTION_STYLES.bold, fontSize: 61 })).toBeNull();
+	});
+
+	it("every named style is a readable pair within the opacity bounds", () => {
+		for (const look of Object.values(CAPTION_STYLES)) {
+			expect(contrastRatio(look.color, look.backgroundColor)).toBeGreaterThanOrEqual(
+				MIN_TEXT_CONTRAST,
+			);
+			expect(look.backgroundOpacity).toBeGreaterThanOrEqual(CAPTION_PLATE_OPACITY_MIN);
+			expect(look.backgroundOpacity).toBeLessThanOrEqual(CAPTION_PLATE_OPACITY_MAX);
+		}
+	});
+
+	it("choosing a plate turns it on and moves text that would vanish on it", () => {
+		const off = { ...ON, backgroundEnabled: false, color: "#ffffff" };
+		expect(captionPlatePatch(off, "light")).toEqual({
+			backgroundEnabled: true,
+			backgroundColor: "#ffffff",
+			color: "#111111",
+		});
+		expect(captionPlatePatch(ON, "none")).toEqual({ backgroundEnabled: false });
+		expect(captionPlateOf({ ...ON, backgroundColor: "#16171d" })).toBe("custom");
+	});
+
+	it("reads a stored opacity into the bounded range, a near-zero one as no plate", () => {
+		expect(stored({ backgroundEnabled: true, backgroundOpacity: 0 })).toMatchObject({
+			backgroundEnabled: false,
+		});
+		expect(stored({ backgroundEnabled: true, backgroundOpacity: 0.25 }).backgroundOpacity).toBe(
+			0.4,
+		);
+		expect(stored({ backgroundEnabled: true, backgroundOpacity: 1 }).backgroundOpacity).toBe(0.9);
+		expect(stored({ backgroundEnabled: true, backgroundOpacity: 0.7 }).backgroundOpacity).toBe(0.7);
+	});
+
+	it("keeps a patched opacity inside the bounds", () => {
+		const next = patchCaptionSettings(doc(), { backgroundOpacity: 0.1 });
+		expect(getCaptionSettings(next).backgroundOpacity).toBe(CAPTION_PLATE_OPACITY_MIN);
 	});
 });
 

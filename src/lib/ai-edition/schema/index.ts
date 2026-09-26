@@ -17,6 +17,7 @@ import { z } from "zod";
 // Relative, not `@/`: the Electron main bundle imports this module and
 // vite-plugin-electron builds it without the root resolve.alias.
 import { toAspectRatioToken } from "../../../utils/aspectRatioUtils";
+import { clampToBound } from "../../projectDefaults";
 // Cycle-safe: `document/ids` only pulls `uuid`, and `timeline/timelineMap`'s
 // transitive value-imports (region-ventilation, virtual-preview) import from this
 // module TYPE-ONLY, so requiring them here never re-enters schema at runtime.
@@ -421,7 +422,12 @@ const annotationStyleSchema = z.object({
 	// so the toggle is reversible. Nothing renders it: the paint path still reads `backgroundColor`
 	// alone.
 	lastBackgroundColor: z.string().optional(),
-	fontSize: z.number().nonnegative().default(32),
+	// Read into its bound rather than refused: a size of 0, which an emptied field used to store,
+	// must still open, as the smallest text instead of none.
+	fontSize: z
+		.number()
+		.default(32)
+		.transform((size) => clampToBound(size, "annotationFontSize")),
 	fontFamily: z.string().default("Inter"),
 	fontWeight: z.enum(["normal", "bold"]).default("bold"),
 	fontStyle: z.enum(["normal", "italic"]).default("normal"),
@@ -493,8 +499,13 @@ export const zoomRegionSchema = endGteStart(
 		focusMode: z.enum(["manual", "auto"]).optional(),
 		/** The zoom's 3D camera (`Rotation3DPreset` in `components/video-editor/types.ts` — same
 		 *  literal list, duplicated here): a fixed angle, or the camera that turns to the cursor
-		 *  (`crates/compositor/src/camera.rs`). Absent means a flat screen. */
-		rotationPreset: z.enum(["iso", "left", "right", "follow-cursor"]).optional(),
+		 *  (`crates/compositor/src/camera.rs`). Absent means a flat screen. A stored `iso`, the
+		 *  retired "turned left, seen from above" angle, reads as `left`, which kept its look
+		 *  (`readRotation3DPreset`): every document load goes through this parse. */
+		rotationPreset: z
+			.enum(["iso", "left", "right", "follow-cursor"])
+			.transform((preset) => (preset === "iso" ? "left" : preset))
+			.optional(),
 		customScale: z.number().positive().optional(),
 		source: z.enum(["auto", "manual"]).optional(),
 		hideCursor: z.boolean().optional(),
@@ -1224,13 +1235,31 @@ export function ensureDocument(value: unknown): AxcutDocument {
 }
 
 /**
+ * The level and ramps a track starts with. A music bed sits UNDER the voice, at −18 dB,
+ * and eases in and out over a second instead of cutting in; a voiceover is voice, levelled
+ * by the export like the recording itself, so it starts flat.
+ *
+ * Applied when a track is created, and by the inspector's reset. Deliberately NOT the
+ * schema's parse defaults above: a track saved before these existed keeps the level its
+ * author set.
+ */
+export function audioTrackDefaults(
+	kind: AxcutAudioTrack["kind"],
+): Pick<AxcutAudioTrack, "gainDb" | "fadeInMs" | "fadeOutMs"> {
+	return kind === "music"
+		? { gainDb: -18, fadeInMs: 1000, fadeOutMs: 1000 }
+		: { gainDb: 0, fadeInMs: 0, fadeOutMs: 0 };
+}
+
+/**
  * Build a timeline audio track for an imported or recorded audio asset
  * (issue #350). The head is placed at `timelineStartSec` (RAW/document timeline
  * seconds — the same clock the ruler, playhead and clip `timelineStartSec` use,
  * NOT the trim-compressed output programme; the export projects it with
  * `projectRawTimelineSecToPlayback`) and the track spans the whole source file
- * unless the caller asks for a shorter `spanSec`. Parsed through the schema so
- * every default (gain, fades, loop) is applied in one place.
+ * unless the caller asks for a shorter `spanSec`. Starts at its kind's
+ * `audioTrackDefaults`, then parsed through the schema so every other default
+ * (loop, mute) is applied in one place.
  *
  * The result is UNANCHORED — `clipId` is absent. Callers place it through
  * `anchorAudioTrackFragments`, which ventilates it across the clips it covers.
@@ -1249,10 +1278,12 @@ export function createAudioTrack(input: {
 	// A track with no measurable source still needs a visible span, or the pill
 	// is zero-width and cannot be grabbed to fix.
 	const spanMs = Math.max(1, Math.round((input.spanSec ?? input.durationSec) * 1000));
+	const kind = input.kind ?? "music";
 	return audioTrackSchema.parse({
 		id: createId("audio"),
 		assetId: input.assetId,
-		kind: input.kind ?? "music",
+		kind,
+		...audioTrackDefaults(kind),
 		durationSec: input.durationSec,
 		startMs,
 		endMs: startMs + spanMs,

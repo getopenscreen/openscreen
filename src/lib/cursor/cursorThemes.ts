@@ -9,12 +9,20 @@ import type { NativeCursorType } from "@/native/contracts";
  * and is downscaled at draw time for crisper retina output.
  */
 export interface CursorThemeAsset {
-	/** Path relative to the public asset root, e.g. "cursors/hello-kitty-watermelon/arrow.png". */
+	/** Path relative to the public asset root, e.g. "cursors/<id>/arrow.png". */
 	assetPath: string;
 	width: number;
 	height: number;
 	hotspotX: number;
 	hotspotY: number;
+	/** Face and grayscale relief map for the optional modelled cursor. Hotspots use the same
+	 *  32-logical-pixel reference as the flat asset above. */
+	model3d?: {
+		assetPath: string;
+		depthPath: string;
+		hotspotX: number;
+		hotspotY: number;
+	};
 }
 
 export interface CursorTheme {
@@ -24,8 +32,8 @@ export interface CursorTheme {
 	/** Attribution / origin for the artwork. */
 	source?: string;
 	/**
-	 * Per-cursor-type overrides. Missing types fall back to the built-in default art.
-	 * Sweezy packs only ship "arrow" and "pointer".
+	 * Per-cursor-type overrides. Missing types fall back to the built-in default art,
+	 * so a pack that only ships "arrow" and "pointer" is complete.
 	 */
 	assets: Partial<Record<NativeCursorType, CursorThemeAsset>>;
 }
@@ -48,6 +56,8 @@ export interface CursorSprite {
 	/** Hotspot as a fraction of the image width / height. */
 	hotspotX: number;
 	hotspotY: number;
+	/** Optional per-pixel top-surface height map used by the 3D cursor model. */
+	modelDepthPath?: string;
 }
 
 /**
@@ -59,21 +69,21 @@ export interface CursorSprite {
  * hand-editing, so the PNGs and these hotspots can't drift apart.
  */
 export const DEFAULT_CURSOR_SPRITES: Record<NativeCursorType, CursorSprite> = {
-	arrow: { assetPath: "cursors/default/arrow.png", hotspotX: 0.119, hotspotY: 0.0874 },
-	text: { assetPath: "cursors/default/text.png", hotspotX: 0.4375, hotspotY: 0.5333 },
-	pointer: { assetPath: "cursors/default/pointer.png", hotspotX: 0.3893, hotspotY: 0.0032 },
+	arrow: { assetPath: "cursors/default/arrow.png", hotspotX: 0.1205, hotspotY: 0.0881 },
+	text: { assetPath: "cursors/default/text.png", hotspotX: 0.4355, hotspotY: 0.5369 },
+	pointer: { assetPath: "cursors/default/pointer.png", hotspotX: 0.3874, hotspotY: 0.0032 },
 	crosshair: { assetPath: "cursors/default/crosshair.png", hotspotX: 0.4667, hotspotY: 0.4667 },
-	"open-hand": { assetPath: "cursors/default/open-hand.png", hotspotX: 0.4375, hotspotY: 0.1781 },
+	"open-hand": { assetPath: "cursors/default/open-hand.png", hotspotX: 0.4375, hotspotY: 0.1724 },
 	"closed-hand": {
 		assetPath: "cursors/default/closed-hand.png",
 		hotspotX: 0.3889,
-		hotspotY: 0.451,
+		hotspotY: 0.4455,
 	},
-	"resize-ew": { assetPath: "cursors/default/resize-ew.png", hotspotX: 0.4881, hotspotY: 0.4706 },
+	"resize-ew": { assetPath: "cursors/default/resize-ew.png", hotspotX: 0.485, hotspotY: 0.4706 },
 	"resize-ns": { assetPath: "cursors/default/resize-ns.png", hotspotX: 0.5, hotspotY: 0.5 },
 	"resize-nesw": { assetPath: "cursors/default/resize-nesw.png", hotspotX: 0.5, hotspotY: 0.5 },
 	"resize-nwse": { assetPath: "cursors/default/resize-nwse.png", hotspotX: 0.5, hotspotY: 0.5 },
-	move: { assetPath: "cursors/default/move.png", hotspotX: 0.4444, hotspotY: 0.4444 },
+	move: { assetPath: "cursors/default/move.png", hotspotX: 0.4437, hotspotY: 0.4437 },
 	"not-allowed": { assetPath: "cursors/default/not-allowed.png", hotspotX: 0.5, hotspotY: 0.5 },
 	wait: { assetPath: "cursors/default/wait.png", hotspotX: 0.5, hotspotY: 0.5 },
 	"app-starting": {
@@ -86,369 +96,174 @@ export const DEFAULT_CURSOR_SPRITES: Record<NativeCursorType, CursorSprite> = {
 };
 
 /**
- * Bundled cursor themes. To add a pack: drop arrow.png/pointer.png into
- * public/cursors/<id>/ and add an entry here with hotspots normalized to the
- * 32-logical reference (divide a 128px-pack hotspot by 4). No renderer changes needed.
+ * Bundled cursor themes. These five packs are original OpenScreen artwork. Their raster
+ * masters live in design/cursors/ and are prepared by scripts/generate-original-cursor-themes.mjs.
+ * The former Sweezy packs were removed
+ * because their terms forbid redistribution without written permission.
+ *
+ * To add one: drop arrow.png/pointer.png into public/cursors/<id>/ and add an entry here
+ * with hotspots normalized to the 32-logical reference (divide a 128px-pack hotspot by 4).
+ * Add a model3d face and depth map when the theme has its own 3D treatment. An id that leaves this list reads back as the default art
+ * through `normalizeCursorThemeId`, so a project saved with it still opens.
  */
 export const CURSOR_THEMES: readonly CursorTheme[] = [
 	{
-		id: "hello-kitty-watermelon",
-		name: "Hello Kitty & Watermelon",
-		source: "sweezy-cursors.com",
+		id: "studio-ink",
+		name: "Studio Ink",
 		assets: {
 			arrow: {
-				assetPath: "cursors/hello-kitty-watermelon/arrow.png",
+				assetPath: "cursors/studio-ink/arrow.png",
 				width: 32,
 				height: 32,
-				hotspotX: 1.5,
-				hotspotY: 0.5,
+				hotspotX: 6.2304,
+				hotspotY: 2.0992,
+				model3d: {
+					assetPath: "cursors/studio-ink/model-arrow.png",
+					depthPath: "cursors/studio-ink/model-arrow-depth.png",
+					hotspotX: 6.3264,
+					hotspotY: 2.032,
+				},
 			},
 			pointer: {
-				assetPath: "cursors/hello-kitty-watermelon/pointer.png",
+				assetPath: "cursors/studio-ink/pointer.png",
 				width: 32,
 				height: 32,
-				hotspotX: 4,
+				hotspotX: 12.848,
+				hotspotY: 2.0704,
+				model3d: {
+					assetPath: "cursors/studio-ink/model-pointer.png",
+					depthPath: "cursors/studio-ink/model-pointer-depth.png",
+					hotspotX: 12.2304,
+					hotspotY: 1.9232,
+				},
+			},
+		},
+	},
+	{
+		id: "prism-glow",
+		name: "Prism Glow",
+		assets: {
+			arrow: {
+				assetPath: "cursors/prism-glow/arrow.png",
+				width: 32,
+				height: 32,
+				hotspotX: 6.3456,
+				hotspotY: 2.0672,
+				model3d: {
+					assetPath: "cursors/prism-glow/model-arrow.png",
+					depthPath: "cursors/prism-glow/model-arrow-depth.png",
+					hotspotX: 6.5728,
+					hotspotY: 1.9296,
+				},
+			},
+			pointer: {
+				assetPath: "cursors/prism-glow/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 11.968,
+				hotspotY: 2.0352,
+				model3d: {
+					assetPath: "cursors/prism-glow/model-pointer.png",
+					depthPath: "cursors/prism-glow/model-pointer-depth.png",
+					hotspotX: 11.4816,
+					hotspotY: 2.0,
+				},
+			},
+		},
+	},
+	{
+		id: "pop-coral",
+		name: "Pop Coral",
+		assets: {
+			arrow: {
+				assetPath: "cursors/pop-coral/arrow.png",
+				width: 32,
+				height: 32,
+				hotspotX: 10.4768,
+				hotspotY: 2.1792,
+				model3d: {
+					assetPath: "cursors/pop-coral/model-arrow.png",
+					depthPath: "cursors/pop-coral/model-arrow-depth.png",
+					hotspotX: 7.2224,
+					hotspotY: 1.9648,
+				},
+			},
+			pointer: {
+				assetPath: "cursors/pop-coral/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 12.3456,
 				hotspotY: 2,
+				model3d: {
+					assetPath: "cursors/pop-coral/model-pointer.png",
+					depthPath: "cursors/pop-coral/model-pointer-depth.png",
+					hotspotX: 12.1152,
+					hotspotY: 1.9616,
+				},
 			},
 		},
 	},
 	{
-		id: "among-us-sus-knife-and-red-animated",
-		name: "Among Us Sus Knife & Red Animated",
-		source: "sweezy-cursors.com",
+		id: "pixel-candy",
+		name: "Pixel Candy",
 		assets: {
 			arrow: {
-				assetPath: "cursors/among-us-sus-knife-and-red-animated/arrow.png",
+				assetPath: "cursors/pixel-candy/arrow.png",
 				width: 32,
 				height: 32,
-				// Measured off the artwork, not copied from the packs that draw their arrow
-				// into the image's corner: this blade starts 18px in and 13px down in the
-				// 128px source, so the (1.6, 0.96) it used to carry sat in empty space
-				// diagonally up-left of the point — a visible miss at any decent cursor size.
-				hotspotX: 4.9,
-				hotspotY: 3.25,
-			},
-			pointer: {
-				assetPath: "cursors/among-us-sus-knife-and-red-animated/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 12,
+				hotspotX: 7.3664,
 				hotspotY: 2,
+				model3d: {
+					assetPath: "cursors/pixel-candy/model-arrow.png",
+					depthPath: "cursors/pixel-candy/model-arrow-depth.png",
+					hotspotX: 7.8176,
+					hotspotY: 1.9616,
+				},
+			},
+			pointer: {
+				assetPath: "cursors/pixel-candy/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 13.376,
+				hotspotY: 1.9264,
+				model3d: {
+					assetPath: "cursors/pixel-candy/model-pointer.png",
+					depthPath: "cursors/pixel-candy/model-pointer-depth.png",
+					hotspotX: 13.6256,
+					hotspotY: 1.92,
+				},
 			},
 		},
 	},
 	{
-		id: "black-and-rainbow-stroke-gradient-animated",
-		name: "Black & Rainbow Stroke Gradient Animated",
-		source: "sweezy-cursors.com",
+		id: "star-sprout",
+		name: "Star Sprout",
 		assets: {
 			arrow: {
-				assetPath: "cursors/black-and-rainbow-stroke-gradient-animated/arrow.png",
+				assetPath: "cursors/star-sprout/arrow.png",
 				width: 32,
 				height: 32,
-				hotspotX: 1.6,
-				hotspotY: 0.96,
+				hotspotX: 4.7232,
+				hotspotY: 2.1152,
+				model3d: {
+					assetPath: "cursors/star-sprout/model-arrow.png",
+					depthPath: "cursors/star-sprout/model-arrow-depth.png",
+					hotspotX: 3.7824,
+					hotspotY: 1.9136,
+				},
 			},
 			pointer: {
-				assetPath: "cursors/black-and-rainbow-stroke-gradient-animated/pointer.png",
+				assetPath: "cursors/star-sprout/pointer.png",
 				width: 32,
 				height: 32,
-				hotspotX: 8,
-				hotspotY: 1.5,
-			},
-		},
-	},
-	{
-		id: "black-pixel",
-		name: "Black Pixel",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/black-pixel/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 2,
-				hotspotY: 3.5,
-			},
-			pointer: {
-				assetPath: "cursors/black-pixel/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 8,
-				hotspotY: 1.5,
-			},
-		},
-	},
-	{
-		id: "christmas-miles-morales",
-		name: "Christmas Miles Morales",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/christmas-miles-morales/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 1,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/christmas-miles-morales/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 5.5,
-				hotspotY: 3,
-			},
-		},
-	},
-	{
-		id: "hollow-knight-and-game-arrow",
-		name: "Hollow Knight & Game Arrow",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/hollow-knight-and-game-arrow/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 0.5,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/hollow-knight-and-game-arrow/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 5,
-				hotspotY: 0.5,
-			},
-		},
-	},
-	{
-		id: "hollow-knight-nail-sword-and-mask",
-		name: "Hollow Knight Nail Sword & Mask",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/hollow-knight-nail-sword-and-mask/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 0.5,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/hollow-knight-nail-sword-and-mask/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 3.5,
-				hotspotY: 2,
-			},
-		},
-	},
-	{
-		id: "naruto-akatsuki-cloud-arrow",
-		name: "Naruto Akatsuki Cloud Arrow",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/naruto-akatsuki-cloud-arrow/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 0.5,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/naruto-akatsuki-cloud-arrow/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 1,
-				hotspotY: 1,
-			},
-		},
-	},
-	{
-		id: "old-roblox",
-		name: "Old Roblox",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/old-roblox/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 2.5,
-				hotspotY: 1.5,
-			},
-			pointer: {
-				assetPath: "cursors/old-roblox/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 3.5,
-				hotspotY: 1.5,
-			},
-		},
-	},
-	{
-		id: "pink-glossy-arrow-and-hand-3d",
-		name: "Pink Glossy Arrow & Hand 3D",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/pink-glossy-arrow-and-hand-3d/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 1.5,
-				hotspotY: 1.5,
-			},
-			pointer: {
-				assetPath: "cursors/pink-glossy-arrow-and-hand-3d/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 3,
-				hotspotY: 1,
-			},
-		},
-	},
-	{
-		id: "pinky-pixel",
-		name: "Pinky Pixel",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/pinky-pixel/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 0.5,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/pinky-pixel/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 7,
-				hotspotY: 1,
-			},
-		},
-	},
-	{
-		id: "pokemon-neon-gengar",
-		name: "Pokemon Neon Gengar",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/pokemon-neon-gengar/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 1,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/pokemon-neon-gengar/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 2,
-				hotspotY: 2.5,
-			},
-		},
-	},
-	{
-		id: "sanrio-gudetama-and-arrow-kawaii",
-		name: "Sanrio Gudetama & Arrow Kawaii",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/sanrio-gudetama-and-arrow-kawaii/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 0.5,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/sanrio-gudetama-and-arrow-kawaii/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 8,
-				hotspotY: 4,
-			},
-		},
-	},
-	{
-		id: "spring-gradient",
-		name: "Spring Gradient",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/spring-gradient/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 1.5,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/spring-gradient/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 8,
-				hotspotY: 0.5,
-			},
-		},
-	},
-	{
-		id: "mickey-mouse-black-hand-inflated-glove",
-		name: "Mickey Mouse Black Hand Inflated Glove",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/mickey-mouse-black-hand-inflated-glove/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 2.5,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/mickey-mouse-black-hand-inflated-glove/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 10,
-				hotspotY: 0.5,
-			},
-		},
-	},
-	{
-		id: "sanrio-kuromi-skull-arrow",
-		name: "Sanrio Kuromi Skull Arrow",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/sanrio-kuromi-skull-arrow/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 1.5,
-				hotspotY: 0.5,
-			},
-			pointer: {
-				assetPath: "cursors/sanrio-kuromi-skull-arrow/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 9.5,
-				hotspotY: 1,
-			},
-		},
-	},
-	{
-		id: "solo-leveling-sung-jinwoo-dark-flames",
-		name: "Solo Leveling Sung Jinwoo Dark Flames",
-		source: "sweezy-cursors.com",
-		assets: {
-			arrow: {
-				assetPath: "cursors/solo-leveling-sung-jinwoo-dark-flames/arrow.png",
-				width: 32,
-				height: 32,
-				hotspotX: 2,
-				hotspotY: 1,
-			},
-			pointer: {
-				assetPath: "cursors/solo-leveling-sung-jinwoo-dark-flames/pointer.png",
-				width: 32,
-				height: 32,
-				hotspotX: 7,
-				hotspotY: 4.5,
+				hotspotX: 13.1712,
+				hotspotY: 2.0384,
+				model3d: {
+					assetPath: "cursors/star-sprout/model-pointer.png",
+					depthPath: "cursors/star-sprout/model-pointer-depth.png",
+					hotspotX: 12.8352,
+					hotspotY: 2.0,
+				},
 			},
 		},
 	},
@@ -462,8 +277,7 @@ export const CURSOR_THEME_IDS: ReadonlySet<string> = new Set([
 
 /**
  * Paths the theme picker should show. `pointer` is set only when that artwork
- * differs from `arrow`, so a pack like Hello Kitty / Watermelon is not previewed
- * as arrow-only.
+ * differs from `arrow`, so a pack with its own hand is not previewed as arrow-only.
  */
 export function themePickerPreviewAssets(theme: CursorTheme | null): {
 	arrow: string;
@@ -499,7 +313,7 @@ export function normalizeCursorThemeId(id: unknown): string {
  * The full sprite set for a theme: its own art where it has any, the built-in art for
  * every other cursor state.
  *
- * The packs only ship an arrow and a pointer, but a recording moves through a dozen OS
+ * A pack may ship only an arrow and a pointer, but a recording moves through a dozen OS
  * states — text, resize, wait, grab. Serving the theme's arrow for all of them (what the
  * native path used to do) shows a resize handle as an arrow; serving nothing shows a
  * placeholder. Mixing in the built-in art per state keeps the pointer honest about what
@@ -508,6 +322,7 @@ export function normalizeCursorThemeId(id: unknown): string {
 export function resolveCursorSprites(
 	themeId: string | null | undefined,
 	alwaysArrow = false,
+	model3d = false,
 ): Record<NativeCursorType, CursorSprite> {
 	const sprites = { ...DEFAULT_CURSOR_SPRITES };
 	for (const [type, asset] of Object.entries(getCursorTheme(themeId)?.assets ?? {})) {
@@ -515,11 +330,12 @@ export function resolveCursorSprites(
 			continue;
 		}
 		sprites[type as NativeCursorType] = {
-			assetPath: asset.assetPath,
+			assetPath: model3d && asset.model3d ? asset.model3d.assetPath : asset.assetPath,
 			// Theme hotspots are authored against the asset's own 32-logical reference;
 			// the contract is a fraction of the image. See CursorSprite.
-			hotspotX: asset.hotspotX / asset.width,
-			hotspotY: asset.hotspotY / asset.height,
+			hotspotX: (model3d && asset.model3d ? asset.model3d.hotspotX : asset.hotspotX) / asset.width,
+			hotspotY: (model3d && asset.model3d ? asset.model3d.hotspotY : asset.hotspotY) / asset.height,
+			...(model3d && asset.model3d ? { modelDepthPath: asset.model3d.depthPath } : {}),
 		};
 	}
 	// "Always use arrow": one consistent pointer for the whole recording, the I-beam and the

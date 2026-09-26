@@ -372,6 +372,10 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							return createSuccessResponse(requestId, {
 								support: compositorViewService.probeSegmentation(),
 							});
+						case "segmentFrame":
+							return createSuccessResponse(requestId, {
+								mask: await compositorViewService.segmentFrame(request.payload.rgba),
+							});
 						case "setRect":
 							compositorViewService.setRect(request.payload.id, request.payload.rect);
 							return createSuccessResponse(requestId, { ok: true });
@@ -708,6 +712,9 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							);
 						case "delete":
 							await presets.delete(request.payload.id);
+							return createSuccessResponse(requestId, { success: true });
+						case "setForNewProjects":
+							await presets.setForNewProjects(request.payload.id);
 							return createSuccessResponse(requestId, { success: true });
 						case "reveal": {
 							// The path is built here from the id, never taken from the renderer.

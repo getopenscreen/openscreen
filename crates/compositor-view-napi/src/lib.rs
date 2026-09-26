@@ -87,6 +87,56 @@ pub fn segmentation_runtime_available() -> bool {
     openscreen_compositor::segmentation::runtime_available()
 }
 
+pub struct SegmentFrameTask {
+    model_path: String,
+    rgba: Vec<u8>,
+}
+
+impl Task for SegmentFrameTask {
+    type Output = Vec<u8>;
+    type JsValue = Buffer;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let rgb: Vec<u8> = self
+            .rgba
+            .chunks_exact(4)
+            .flat_map(|p| [p[0], p[1], p[2]])
+            .collect();
+        // ponytail: une session ONNX chargée par appel (quelques dizaines de ms), parce qu'il
+        // n'y a qu'un appel par caméra et par ouverture du panneau. À garder en cache si un
+        // appelant se met à segmenter en continu.
+        let mut segmenter = openscreen_compositor::segmentation::Segmenter::load(
+            std::path::Path::new(&self.model_path),
+        )
+        .map_err(|e| Error::from_reason(format!("{e:#}")))?;
+        segmenter
+            .run(&rgb)
+            .map(<[u8]>::to_vec)
+            .map_err(|e| Error::from_reason(format!("{e:#}")))
+    }
+
+    fn resolve(&mut self, _env: Env, mask: Self::Output) -> Result<Self::JsValue> {
+        Ok(mask.into())
+    }
+}
+
+/// Masque du sujet pour UNE image, sans vue : la vignette de recadrage du panneau caméra s'en
+/// sert pour montrer le fond choisi sur sa propre frame.
+///
+/// `rgba` est une frame RGBA8 déjà réduite à la taille du modèle (`segmentation::MODEL_WIDTH` x
+/// `MODEL_HEIGHT`), soit le `getImageData` d'un canvas tel quel. Le retour a le format de
+/// `Segmenter::run` : un octet par pixel, 0 = fond, 255 = sujet.
+///
+/// `AsyncTask`, comme `remux_seekable` : charger la session prend plus longtemps que l'inférence,
+/// et ce temps n'a rien à faire sur le thread principal de Node.
+#[napi]
+pub fn segment_frame(model_path: String, rgba: Buffer) -> AsyncTask<SegmentFrameTask> {
+    AsyncTask::new(SegmentFrameTask {
+        model_path,
+        rgba: rgba.to_vec(),
+    })
+}
+
 #[napi]
 pub fn create_view(
     rect: CompositorViewRect,
@@ -442,6 +492,9 @@ pub struct ExportParamsInput {
     /// "h264" | "h265". Toute autre valeur (ex. "vp9", pas d'équivalent matériel AMF) fait
     /// échouer l'export avec un message clair plutôt que de silencieusement retomber sur h264.
     pub codec: Option<String>,
+    /// Débit vidéo visé, en bits/s, calculé par l'app d'après la taille et la cadence.
+    /// Absent ou nul → le repli du pipeline, qui ignore la cadence.
+    pub bitrate: Option<u32>,
 }
 
 /// Export multiclip mesuré (worker libuv). Rend la vraie timeline (clips + trims) en un MP4.
@@ -496,6 +549,7 @@ impl Task for ExportMultiTask {
         export_params.height = height;
         if let Some(p) = &self.params {
             export_params.fps = p.fps;
+            export_params.bit_rate = p.bitrate.filter(|&b| b > 0).map(i64::from);
             if let Some(codec) = &p.codec {
                 export_params.codec = match codec.as_str() {
                     "h264" => pipeline::ExportCodec::H264,
@@ -579,11 +633,9 @@ pub fn export_multi(
 }
 
 /// Sortie GIF native (slice 1) — taille, cadence, compteur de loop, dithering.
-/// Tout optionnel : absent → 854×480, 12 fps, boucle infinie, pas de
-/// dithering. Les défauts sont choisis pour un export « petit / net » :
-/// GIF est un format 256-couleurs, 12 fps est la cadence historique de
-/// `gif.js` côté renderer, et 854×480 tient confortablement dans la
-/// palette 8 bits sans banding visible sur du contenu de présentation.
+/// Tout optionnel : absent → 854×480, 12 fps, boucle infinie, dithering
+/// Floyd-Steinberg. GIF est un format 256-couleurs et 12 fps est la cadence
+/// historique de `gif.js` côté renderer.
 #[napi(object)]
 pub struct GifParamsInput {
     pub width: Option<u32>,
@@ -591,9 +643,8 @@ pub struct GifParamsInput {
     pub fps: Option<u32>,
     /// Compteur de loop GIF : `None` ou `0` = infini, sinon `n` boucles.
     pub loop_count: Option<u16>,
-    /// Floyd-Steinberg error diffusion avant quantification. Off par
-    /// défaut (qualité acceptable sans, et ça double تقريبًا le coût
-    /// CPU du quantize par frame).
+    /// Floyd-Steinberg error diffusion à la quantification. Actif par défaut :
+    /// sans lui, un fond en dégradé se découpe en bandes (cf. `GifExportParams`).
     pub dither: Option<bool>,
 }
 
@@ -759,7 +810,7 @@ pub fn export_gif(
             height: p.height,
             fps: p.fps,
             loop_count: p.loop_count,
-            dither: p.dither.unwrap_or(false),
+            dither: p.dither.unwrap_or(GifExportParams::default().dither),
         })
         .unwrap_or_default();
     Ok(AsyncTask::new(ExportGifTask {
@@ -823,4 +874,33 @@ pub fn remux_seekable(input_path: String, output_path: String) -> AsyncTask<Remu
         input_path,
         output_path,
     })
+}
+
+pub struct LoudnessGainTask {
+    path: String,
+}
+
+impl Task for LoudnessGainTask {
+    type Output = f64;
+    type JsValue = f64;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        Ok(f64::from(openscreen_compositor::audio::loudness_gain_db(&self.path)))
+    }
+
+    fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out)
+    }
+}
+
+/// Le gain de normalisation de loudness (dB) que l'export applique à ce fichier voix — le
+/// même nombre, par la même fonction, pour que la preview de l'éditeur joue la voix au
+/// niveau où l'export l'écrira. Voir `openscreen_compositor::audio::loudness_gain_db`.
+///
+/// `AsyncTask` : la mesure décode tout l'audio du fichier, ce qui se compte en secondes sur
+/// un long enregistrement. Le résultat est mis en cache dans le processus, donc l'export qui
+/// suit ne le refait pas.
+#[napi]
+pub fn loudness_gain_db(path: String) -> AsyncTask<LoudnessGainTask> {
+    AsyncTask::new(LoudnessGainTask { path })
 }

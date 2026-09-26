@@ -11,6 +11,8 @@
 		"title": "Fundo",
 		"imageLabel": "Fundo {{index}}",
 		"custom": "Personalizado",
+		"customColor": "Cor personalizada",
+		"customGradient": "Gradiente a partir de uma cor",
 		"help": "Escolha o que aparece atrás da gravação: um papel de parede incluído, uma cor sólida, um gradiente ou uma imagem sua do disco.",
 		"gradient": "Gradiente",
 		"colorLabel": "Cor {{color}}",
@@ -107,6 +109,9 @@
 		"fitClipOne": "{{count}} clipe",
 		"formatAuto": "Auto",
 		"formatAutoMixed": "Clipes diferentes",
+		"formatFill": "Gravação",
+		"formatFillFit": "Inteira",
+		"formatFillFollow": "Seguir o cursor",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clipes",
 		"frame": "Moldura",
@@ -116,8 +121,6 @@
 		"fitClip": "Ajustar",
 		"motionBlur": "Desfoque de Movimento",
 		"depthOfField": "Profundidade de campo",
-		"depthOfFieldHint": "Zooms 3D",
-		"depthOfFieldNoTilt": "Nenhum zoom 3D neste projeto",
 		"roundness": "Arredondamento",
 		"frameStyle": "Estilo",
 		"windowNone": "Nenhuma",
@@ -130,7 +133,11 @@
 		"frameThemeDark": "Escuro",
 		"frameThemeHelp": "Corpo prateado com moldura clara, ou grafite com moldura escura. Vale para todas as molduras.",
 		"windowHelp": "Desenha uma janela, ou um dispositivo modelado em 3D, ao redor da gravação.",
-		"roundnessFrameHelp": "O intervalo se adapta à moldura: 100 % é o maior arredondamento que fica bem nela."
+		"roundnessFrameHelp": "O intervalo se adapta à moldura: 100 % é o maior arredondamento que fica bem nela.",
+		"shadowNone": "Nenhuma",
+		"shadowLight": "Leve",
+		"shadowMedium": "Média",
+		"shadowStrong": "Forte"
 	},
 	"stylePresets": {
 		"button": "Predefinições",
@@ -147,6 +154,9 @@
 		"revealLinux": "Mostrar na pasta",
 		"rename": "Renomear",
 		"update": "Atualizar com o projeto atual",
+		"useForNewProjects": "Usar em novos projetos",
+		"stopForNewProjects": "Parar de usar em novos projetos",
+		"newProjectsBadge": "Novos projetos",
 		"delete": "Excluir",
 		"confirmDelete": "Excluir “{{name}}”?",
 		"applied": "“{{name}}” aplicada",
@@ -201,15 +211,12 @@
 		"legacyAnnotations": "Este projeto ainda contém anotações de legenda do recurso antigo ({{count}}). Elas são desenhadas sobre a camada de legendas.",
 		"backgroundOpacity": "Opacidade",
 		"backgroundColor": "Cor do fundo",
-		"alignCenter": "Centro",
 		"translationIsNonDestructive": "As traduções são guardadas ao lado da transcrição, nunca dentro dela — o texto original e seus tempos permanecem intactos.",
 		"distanceFromRight": "Distância da direita",
 		"language": "Idioma",
 		"text": "Texto",
-		"anchorHintBottom": "Legendas longas crescem para cima — a borda inferior não se move.",
 		"distanceFromTop": "Distância do topo",
 		"translateFailed": "A tradução falhou.",
-		"alignLeft": "Esquerda",
 		"distanceFromBottom": "Distância da base",
 		"derivedFromTranscript": "{{count}} linhas de legenda, derivadas ao vivo da transcrição.",
 		"translate": "Traduzir",
@@ -218,14 +225,10 @@
 		"hiddenHint": "As legendas vêm da transcrição desta mídia. Ative-as para vê-las na prévia e nas exportações.",
 		"noTranscript": "As legendas são lidas da transcrição da mídia. Transcreva este vídeo para ativá-las.",
 		"distanceFromLeft": "Distância da esquerda",
-		"anchorBottom": "Base",
 		"transcribe": "Transcrever vídeo",
 		"bold": "Negrito",
-		"alignRight": "Direita",
-		"anchorTop": "Topo",
 		"minWords": "Mín. de palavras por linha",
 		"translateHint": "Traduzir a transcrição com o provedor de IA configurado",
-		"anchorHintTop": "Legendas longas crescem para baixo — a borda superior não se move.",
 		"displayLanguage": "Exibição",
 		"removeLegacyAnnotations": "Remover anotações de legenda antigas",
 		"background": "Fundo",
@@ -235,7 +238,15 @@
 		"font": "Fonte",
 		"translating": "Traduzindo…",
 		"show": "Mostrar legendas",
-		"textColor": "Cor do texto"
+		"textColor": "Cor do texto",
+		"style": "Estilo",
+		"styles": {
+			"classic": "Clássico",
+			"bold": "Negrito",
+			"minimal": "Minimalista",
+			"light": "Claro"
+		},
+		"customize": "Personalizar"
 	},
 	"panes": {
 		"help": "Ajuda"
@@ -267,7 +278,7 @@
 		"remove": "Excluir faixa",
 		"loop": "Repetir",
 		"slipHint": "Alt + arrastar para deslizar o áudio dentro",
-		"help": "Volume, fades e repetição desta faixa de áudio. Ela é mixada sobre a gravação na visualização e na exportação. Arraste a faixa na linha do tempo para movê-la ou redimensioná-la, ou segure Alt e arraste para deslizar o áudio dentro dela.",
+		"help": "Volume, fades e repetição desta faixa de áudio. Ela é mixada sobre a gravação na visualização e na exportação. Uma faixa de música abaixa sozinha enquanto alguém fala. Arraste a faixa na linha do tempo para movê-la ou redimensioná-la, ou segure Alt e arraste para deslizar o áudio dentro dela.",
 		"add": "Adicionar faixa de áudio",
 		"mute": "Silenciar"
 	},
@@ -350,35 +361,19 @@
 			"lockedDisclaimer": "Controlado pelo interruptor global de Foco Automático na linha do tempo. Desative-o para definir o modo de foco por zoom.",
 			"auto": "Automático",
 			"manual": "Manual",
-			"autoDescription": "A câmera segue a posição do cursor gravado",
 			"title": "Modo de Foco"
 		},
 		"camera": {
 			"title": "Câmera 3D",
 			"off": "Desativada",
-			"fixed": "Ângulo fixo",
-			"moving": "Câmera em movimento",
 			"preset": {
-				"iso": "De cima, na diagonal",
 				"left": "Tela virada para a esquerda",
 				"right": "Tela virada para a direita",
 				"followCursor": "Gira com o cursor"
-			},
-			"description": {
-				"off": "A tela fica plana.",
-				"iso": "Mantém uma única pose: virada para a esquerda e vista de cima.",
-				"left": "Mantém uma única pose: a tela olha para a esquerda e a borda direita avança.",
-				"right": "Mantém uma única pose: a tela olha para a direita e a borda esquerda avança.",
-				"followCursor": "A tela fica parada; a câmera gira ao redor dela, para o lado do cursor, e sobe ou desce com ele."
-			},
-			"needsCursor": "O cursor está oculto: esta câmera não tem o que seguir e mantém seu ângulo inicial."
+			}
 		},
 		"clickImpact": {
-			"title": "Impacto do clique",
-			"description": "Cada clique pressiona a tela inclinada: o lado clicado afunda e depois volta.",
-			"needsRotation": "Escolha primeiro uma câmera 3D: só uma tela inclinada pode ser pressionada.",
-			"needsCursor": "O cursor está oculto: a tela só reage a cliques visíveis.",
-			"descriptionCamera": "Cada clique faz a câmera recuar um pouco e depois voltar."
+			"title": "Impacto do clique"
 		},
 		"level": "Nível de Zoom",
 		"previewHold": "Mantenha pressionado para pré-visualizar o efeito de zoom",
@@ -393,7 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Nível de saída",
-		"help": "Ajuste o nível de saída do áudio. Ele se aplica da mesma forma na prévia e na exportação.",
+		"help": "As vozes são niveladas automaticamente a uma loudness padrão. Ajuste o nível de saída a partir daí; ele se aplica da mesma forma na prévia e na exportação.",
 		"reset": "Redefinir áudio",
 		"title": "Áudio"
 	},
@@ -414,18 +409,18 @@
 		"smoothing": "Suavização",
 		"clickBounce": "Rebote ao clicar",
 		"model3d": "Cursor 3D",
-		"model3dHint": "Estilo padrão: todas as formas do cursor ficam em 3D. Os outros estilos continuam planos.",
-		"model3dNeedsCursor": "Ative “Mostrar cursor” para usar o cursor 3D.",
 		"help": "Renderização do cursor a partir da telemetria gravada: tema, tamanho, suavização, desfoque de movimento e salto ao clicar.",
 		"size": "Tamanho",
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Padrão",
 		"alwaysArrow": "Sempre usar o cursor de seta",
-		"alwaysArrowHint": "Mostra a seta em todos os estados do cursor, mesmo sobre texto ou links.",
 		"motionBlur": "Desfoque de movimento",
 		"theme": "Estilo do cursor",
-		"autoHide": "Ocultar quando inativo"
+		"autoHide": "Ocultar quando inativo",
+		"bounceNone": "Nenhum",
+		"bounceLight": "Leve",
+		"bounceStrong": "Forte"
 	},
 	"export": {
 		"gifButton": "Exportar GIF",
@@ -434,5 +429,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Excluir Região de Recorte"
+	},
+	"textPlate": {
+		"none": "Nenhuma",
+		"dark": "Escura",
+		"light": "Clara",
+		"custom": "Personalizada"
 	}
 }

@@ -1,4 +1,4 @@
-import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import { memo, useCallback, useEffect, useRef } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { setUiProbeScrubbing } from "@/lib/ai-edition/perf/uiFrameProbe";
@@ -13,8 +13,6 @@ interface TransportBarProps {
 	overrideTimeSec: number | null;
 	clips: AxcutClip[];
 	onTogglePlay: () => void;
-	onPrevClip: () => void;
-	onNextClip: () => void;
 	onSeek: (sec: number) => void;
 }
 
@@ -25,8 +23,6 @@ export const TransportBar = memo(function TransportBar({
 	overrideTimeSec,
 	clips,
 	onTogglePlay,
-	onPrevClip,
-	onNextClip,
 	onSeek,
 }: TransportBarProps) {
 	const te = useScopedT("editor");
@@ -151,24 +147,6 @@ export const TransportBar = memo(function TransportBar({
 				onClick={onTogglePlay}
 			>
 				{playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
-			</button>
-			<button
-				type="button"
-				className={styles.tbtn}
-				title={te("transport.previousClip")}
-				aria-label={te("transport.previousClip")}
-				onClick={onPrevClip}
-			>
-				<SkipBack size={16} />
-			</button>
-			<button
-				type="button"
-				className={styles.tbtn}
-				title={te("transport.nextClip")}
-				aria-label={te("transport.nextClip")}
-				onClick={onNextClip}
-			>
-				<SkipForward size={16} />
 			</button>
 			<span className={styles.time}>
 				<span>{formatSec(currentTimeSec)}</span>

@@ -45,6 +45,11 @@ pub struct SceneLayout {
     pub webcam_position: Option<WebcamPosition>,
     /// la webcam rétrécit pendant un zoom actif.
     pub webcam_reactive_zoom: bool,
+    /// Picture-in-picture : le coin ou le milieu de bord où la caméra est ancrée, à marge
+    /// constante du bord (`WEBCAM_ANCHORS`, TS : "top-left", "top", …, "bottom-right"). Le
+    /// rétrécissement du zoom réactif se fait vers lui (`anchor_fractions`). Absent : le centre.
+    #[serde(default)]
+    pub webcam_anchor: Option<String>,
     /// User-authored source crop for the camera. Absent keeps the full frame.
     #[serde(default)]
     pub webcam_crop: Option<SceneCrop>,
@@ -85,6 +90,13 @@ pub struct SceneLayout {
     /// `#[serde(default)]` : absent → `false` → comportement "contain" historique.
     #[serde(default)]
     pub screen_cover: bool,
+    /// Remplissage du format : la boîte écran est la zone paddée entière, et la fenêtre que le
+    /// `cover` y découpe SUIT le curseur lissé au lieu de rester centrée
+    /// (`frame_geometry::follow_cover`). Sans effet si `screen_cover` est faux.
+    ///
+    /// `#[serde(default)]` : absent → `false` → fenêtre centrée, comme avant.
+    #[serde(default)]
+    pub screen_follow: bool,
     /// Un layout résolu PAR CLIP visible, aligné par index sur `Scene::clips` / `crop_by_clip`.
     /// Les champs scalaires ci-dessus sont ceux du PREMIER clip (repli pour un payload sans ce
     /// tableau, et valeur de départ tant qu'aucun clip n'est actif).
@@ -109,6 +121,19 @@ pub struct SceneLayout {
     /// `#[serde(default)]` : ancien payload / tests → None → table Rust historique.
     #[serde(default)]
     pub webcam_radius_frac: Option<f32>,
+}
+
+impl SceneLayout {
+    /// L'ancre de la caméra en fractions de sa boîte, par axe : 0, 0,5 ou 1, la part de la place
+    /// libre qu'elle laisse d'un côté (`webcamAnchorFractions`, TS). Le centre sans ancre.
+    pub fn webcam_anchor_fractions(&self) -> [f32; 2] {
+        let Some(anchor) = self.webcam_anchor.as_deref() else { return [0.5, 0.5] };
+        let side = |low: bool, high: bool| if low { 0.0 } else if high { 1.0 } else { 0.5 };
+        [
+            side(anchor.ends_with("left"), anchor.ends_with("right")),
+            side(anchor.starts_with("top"), anchor.starts_with("bottom")),
+        ]
+    }
 }
 
 /// La moitié du layout qui dépend de la FORME de la source, résolue pour un clip.
@@ -258,6 +283,10 @@ pub enum SceneBackground {
         #[serde(rename = "angleDeg")]
         angle_deg: f32,
         stops: Vec<String>,
+        /// Position 0..1 de chaque stop le long du dégradé, telle que CSS la résout. Absente d'une
+        /// scène plus ancienne : les stops se répartissent alors à égale distance, comme en CSS.
+        #[serde(default)]
+        offsets: Vec<f32>,
         /// Absent pour un fond immobile : l'app n'émet la clé que si un mouvement est choisi,
         /// donc la scène d'un projet sans animation ne bouge pas d'un octet.
         #[serde(default)]
@@ -506,9 +535,9 @@ pub struct SceneCursor {
     pub smoothing: f32,
     pub motion_blur: f32,
     pub click_bounce: f32,
-    /// Curseur MODÉLISÉ en 3D (mode 15) : le sprite de chaque état du thème par défaut, extrudé,
-    /// à la place du sprite plat. Les autres thèmes restent plats. `#[serde(default)]` : absent
-    /// des projets et des JSON écrits avant le réglage, qui gardent donc le curseur plat.
+    /// Curseur MODÉLISÉ en 3D (mode 15) : face raster et relief dédiés lorsqu'un état du thème en
+    /// fournit, sinon le sprite de cet état est extrudé. `#[serde(default)]` : absent des projets
+    /// et des JSON écrits avant le réglage, qui gardent donc le curseur plat.
     #[serde(default)]
     pub model3d: bool,
     pub clip_to_bounds: bool,
@@ -539,6 +568,10 @@ pub struct SceneCursorSprite {
     /// que le curseur était agrandi — le bug que ce champ corrige.
     pub hotspot_x: f32,
     pub hotspot_y: f32,
+    /// Carte PNG en niveaux de gris, alignée sur la face du modèle (255 = relief maximal).
+    /// Les états sans carte gardent une face plate au sommet de leur extrusion.
+    #[serde(default)]
+    pub model_depth_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -594,6 +627,20 @@ pub struct SceneAudioTrack {
     pub fade_in_sec: f64,
     #[serde(default)]
     pub fade_out_sec: f64,
+    /// A voiceover is voice: it is loudness-normalised like the recording's own audio.
+    /// A music bed is not. `#[serde(default)]` reads an older payload as music, which is
+    /// what every imported file was before voiceovers were recorded in the app.
+    #[serde(default)]
+    pub kind: SceneAudioTrackKind,
+}
+
+/// `AxcutAudioTrack["kind"]` on the app side.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SceneAudioTrackKind {
+    #[default]
+    Music,
+    Voiceover,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -767,9 +814,10 @@ mod tests {
         assert!(scene.layout.webcam_mirror);
         assert!((scene.effects.roundness_frac - 0.0222).abs() < 1e-6);
         match scene.background {
-            SceneBackground::Gradient { angle_deg, ref stops, motion } => {
+            SceneBackground::Gradient { angle_deg, ref stops, ref offsets, motion } => {
                 assert_eq!(angle_deg, 135.0);
                 assert_eq!(stops.len(), 2);
+                assert!(offsets.is_empty(), "une scène sans offsets reste lisible");
                 assert_eq!(motion, GradientMotion::None);
             }
             _ => panic!("expected gradient"),

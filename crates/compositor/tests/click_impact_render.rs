@@ -135,9 +135,9 @@ fn a_click_presses_the_clicked_side_of_the_tilted_plane() {
     ];
     let probe = |rgba: &[u8]| {
         let (l, r) = left_and_right_edges(rgba);
-        // Colonnes fixes, à l'intérieur du plan à tous les instants (bords mesurés : ~430 et
-        // ~1660) : on compare la même tranche du plan d'une frame à l'autre.
-        (l, r, plane_height_at(rgba, 1600), plane_height_at(rgba, 480))
+        // Colonnes fixes, à l'intérieur du plan à tous les instants (bords mesurés à mi-hauteur :
+        // ~525 et ~1590) : on compare la même tranche du plan d'une frame à l'autre.
+        (l, r, plane_height_at(rgba, 1400), plane_height_at(rgba, 560))
     };
     let mut frames = Vec::new();
     for (name, t) in instants {
@@ -166,9 +166,10 @@ fn a_click_presses_the_clicked_side_of_the_tilted_plane() {
     assert_eq!(unchanged, 0, "sans l'option, le clic ne doit rien changer");
     assert_eq!(settled, 0, "le plan n'est pas revenu à sa pose");
     assert!(pressed > 1_000, "{pressed} px : le contact ne se voit pas");
-    // Au contact, le bord droit (cliqué) recule : il se rapproche du centre et rétrécit, le
-    // bord gauche avance et grandit.
-    assert!(contact.1 < rest.1, "bord droit {} au repos {}", contact.1, rest.1);
+    // Au contact, le côté droit (cliqué) recule et rétrécit, le côté gauche avance : il grandit
+    // et son bord s'écarte du centre. Sous `iso` (tourné ET vu d'en haut), le bord droit ne bouge
+    // presque pas à mi-hauteur : le pivot de l'impact passe près de lui.
+    assert!(contact.0 < rest.0, "bord gauche {} au repos {}", contact.0, rest.0);
     assert!(contact.2 < rest.2, "hauteur droite {} au repos {}", contact.2, rest.2);
     assert!(contact.3 > rest.3, "hauteur gauche {} au repos {}", contact.3, rest.3);
 }

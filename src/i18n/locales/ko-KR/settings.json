@@ -11,6 +11,8 @@
 		"title": "배경",
 		"imageLabel": "배경 {{index}}",
 		"custom": "사용자 지정",
+		"customColor": "사용자 지정 색상",
+		"customGradient": "한 가지 색상으로 만든 그라데이션",
 		"help": "녹화 뒤에 표시할 항목을 선택하세요. 기본 제공 배경 이미지, 단색, 그라데이션 또는 디스크의 사용자 이미지를 사용할 수 있습니다.",
 		"gradient": "그라디언트",
 		"colorLabel": "색상 {{color}}",
@@ -107,6 +109,9 @@
 		"fitClipOne": "{{count}}개 클립",
 		"formatAuto": "자동",
 		"formatAutoMixed": "클립이 서로 다름",
+		"formatFill": "녹화",
+		"formatFillFit": "전체",
+		"formatFillFollow": "커서 따라가기",
 		"formatOriginal": "원본",
 		"fitClipMany": "{{count}}개 클립",
 		"frame": "프레임",
@@ -116,8 +121,6 @@
 		"fitClip": "맞추기",
 		"motionBlur": "모션 블러",
 		"depthOfField": "피사계 심도",
-		"depthOfFieldHint": "3D 확대",
-		"depthOfFieldNoTilt": "이 프로젝트에 3D 확대가 없습니다",
 		"roundness": "모서리 둥글기",
 		"frameStyle": "스타일",
 		"windowNone": "없음",
@@ -130,7 +133,11 @@
 		"frameThemeDark": "어둡게",
 		"frameThemeHelp": "실버 본체에 밝은 테두리, 또는 그라파이트에 어두운 테두리. 모든 프레임에 적용됩니다.",
 		"windowHelp": "녹화 주위에 창 또는 3D로 모델링된 기기를 그립니다.",
-		"roundnessFrameHelp": "범위는 프레임에 맞춰 달라집니다. 100%는 그 프레임에 어울리는 가장 큰 둥글기입니다."
+		"roundnessFrameHelp": "범위는 프레임에 맞춰 달라집니다. 100%는 그 프레임에 어울리는 가장 큰 둥글기입니다.",
+		"shadowNone": "없음",
+		"shadowLight": "약하게",
+		"shadowMedium": "보통",
+		"shadowStrong": "강하게"
 	},
 	"stylePresets": {
 		"button": "프리셋",
@@ -147,6 +154,9 @@
 		"revealLinux": "폴더에 표시",
 		"rename": "이름 변경",
 		"update": "현재 프로젝트로 업데이트",
+		"useForNewProjects": "새 프로젝트에 사용",
+		"stopForNewProjects": "새 프로젝트에 사용 안 함",
+		"newProjectsBadge": "새 프로젝트",
 		"delete": "삭제",
 		"confirmDelete": "“{{name}}”을(를) 삭제할까요?",
 		"applied": "“{{name}}” 적용됨",
@@ -201,15 +211,12 @@
 		"legacyAnnotations": "이 프로젝트에는 이전 자막 기능의 주석이 남아 있습니다({{count}}개). 자막 레이어 위에 그려집니다.",
 		"backgroundOpacity": "불투명도",
 		"backgroundColor": "배경 색",
-		"alignCenter": "가운데",
 		"translationIsNonDestructive": "번역은 전사 안이 아니라 옆에 저장됩니다 — 원본 텍스트와 타이밍은 그대로 유지됩니다.",
 		"distanceFromRight": "오른쪽에서의 거리",
 		"language": "언어",
 		"text": "텍스트",
-		"anchorHintBottom": "긴 자막은 위로 늘어납니다 — 아래쪽 가장자리는 그대로입니다.",
 		"distanceFromTop": "위에서의 거리",
 		"translateFailed": "번역에 실패했습니다.",
-		"alignLeft": "왼쪽",
 		"distanceFromBottom": "아래에서의 거리",
 		"derivedFromTranscript": "전사에서 실시간으로 생성된 자막 {{count}}줄.",
 		"translate": "번역",
@@ -218,14 +225,10 @@
 		"hiddenHint": "자막은 이 미디어의 전사에서 만들어집니다. 켜면 미리보기와 내보내기에서 볼 수 있습니다.",
 		"noTranscript": "자막은 미디어 전사에서 읽어옵니다. 켜려면 이 동영상을 전사하세요.",
 		"distanceFromLeft": "왼쪽에서의 거리",
-		"anchorBottom": "아래",
 		"transcribe": "동영상 전사하기",
 		"bold": "굵게",
-		"alignRight": "오른쪽",
-		"anchorTop": "위",
 		"minWords": "줄당 최소 단어 수",
 		"translateHint": "설정된 AI 제공자로 전사를 번역합니다",
-		"anchorHintTop": "긴 자막은 아래로 늘어납니다 — 위쪽 가장자리는 그대로입니다.",
 		"displayLanguage": "표시",
 		"removeLegacyAnnotations": "이전 자막 주석 제거",
 		"background": "배경",
@@ -235,7 +238,15 @@
 		"font": "글꼴",
 		"translating": "번역 중…",
 		"show": "자막 표시",
-		"textColor": "글자 색"
+		"textColor": "글자 색",
+		"style": "스타일",
+		"styles": {
+			"classic": "클래식",
+			"bold": "굵게",
+			"minimal": "미니멀",
+			"light": "밝게"
+		},
+		"customize": "사용자 지정"
 	},
 	"panes": {
 		"help": "도움말"
@@ -267,7 +278,7 @@
 		"remove": "트랙 삭제",
 		"loop": "반복",
 		"slipHint": "Alt를 누른 채 드래그하면 안의 오디오가 이동합니다",
-		"help": "이 오디오 트랙의 볼륨, 페이드, 반복 설정입니다. 미리보기와 내보내기에서 녹화 위에 믹스됩니다. 타임라인에서 드래그하면 이동하거나 크기를 바꾸고, Alt를 누른 채 드래그하면 안의 오디오가 이동합니다.",
+		"help": "이 오디오 트랙의 볼륨, 페이드, 반복 설정입니다. 미리보기와 내보내기에서 녹화 위에 믹스됩니다. 음악 트랙은 누군가 말하는 동안 자동으로 작아집니다. 타임라인에서 드래그하면 이동하거나 크기를 바꾸고, Alt를 누른 채 드래그하면 안의 오디오가 이동합니다.",
 		"add": "오디오 트랙 추가",
 		"mute": "음소거"
 	},
@@ -350,35 +361,19 @@
 			"lockedDisclaimer": "타임라인의 전역 자동 포커스 스위치로 제어됩니다. 줌마다 포커스 모드를 설정하려면 이 옵션을 꺼주세요.",
 			"auto": "자동",
 			"manual": "수동",
-			"autoDescription": "녹화된 커서 위치를 따라 카메라가 이동합니다",
 			"title": "포커스 모드"
 		},
 		"camera": {
 			"title": "3D 카메라",
 			"off": "끔",
-			"fixed": "고정 각도",
-			"moving": "움직이는 카메라",
 			"preset": {
-				"iso": "위에서 비스듬히",
 				"left": "화면 왼쪽으로 돌림",
 				"right": "화면 오른쪽으로 돌림",
 				"followCursor": "커서를 따라 회전"
-			},
-			"description": {
-				"off": "화면이 평평하게 유지됩니다.",
-				"iso": "한 자세를 유지합니다: 왼쪽으로 돌아가 있고 위에서 내려다봅니다.",
-				"left": "한 자세를 유지합니다: 화면이 왼쪽을 향하고 오른쪽 가장자리가 앞으로 나옵니다.",
-				"right": "한 자세를 유지합니다: 화면이 오른쪽을 향하고 왼쪽 가장자리가 앞으로 나옵니다.",
-				"followCursor": "화면은 고정된 채, 카메라가 화면 주위를 돌아 커서가 있는 쪽으로 가고 커서를 따라 오르내립니다."
-			},
-			"needsCursor": "커서가 숨겨져 있습니다. 이 카메라는 따라갈 대상이 없어 시작 각도를 유지합니다."
+			}
 		},
 		"clickImpact": {
-			"title": "클릭 눌림",
-			"description": "클릭할 때마다 기울어진 화면이 눌려 클릭한 쪽이 내려갔다가 돌아옵니다.",
-			"needsRotation": "먼저 3D 카메라를 선택하세요. 기울어진 화면만 누를 수 있습니다.",
-			"needsCursor": "커서가 숨겨져 있습니다. 화면은 보이는 클릭에만 반응합니다.",
-			"descriptionCamera": "클릭할 때마다 카메라가 살짝 뒤로 물러났다가 돌아옵니다."
+			"title": "클릭 눌림"
 		},
 		"level": "줌 레벨",
 		"previewHold": "누르고 있으면 줌 효과 미리보기",
@@ -393,7 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "출력 레벨",
-		"help": "오디오 출력 레벨을 조정합니다. 미리보기와 내보내기에 동일하게 적용됩니다.",
+		"help": "음성은 표준 라우드니스로 자동 조정됩니다. 거기서부터 출력 레벨을 조정하세요. 미리보기와 내보내기에 동일하게 적용됩니다.",
 		"reset": "오디오 재설정",
 		"title": "오디오"
 	},
@@ -414,18 +409,18 @@
 		"smoothing": "부드러움",
 		"clickBounce": "클릭 바운스",
 		"model3d": "3D 커서",
-		"model3dHint": "기본 스타일: 모든 커서 모양이 3D로 바뀝니다. 다른 스타일은 평면으로 유지됩니다.",
-		"model3dNeedsCursor": "3D 커서를 사용하려면 '커서 표시'를 켜세요.",
 		"help": "기록된 텔레메트리를 기반으로 한 커서 렌더링: 테마, 크기, 스무딩, 모션 블러, 클릭 바운스.",
 		"size": "크기",
 		"title": "커서",
 		"show": "커서 표시",
 		"themeDefault": "기본",
 		"alwaysArrow": "항상 화살표 커서 사용",
-		"alwaysArrowHint": "텍스트나 링크 위에서도 모든 커서 상태에 화살표를 표시합니다.",
 		"motionBlur": "모션 블러",
 		"theme": "커서 스타일",
-		"autoHide": "비활성 시 자동 숨김"
+		"autoHide": "비활성 시 자동 숨김",
+		"bounceNone": "없음",
+		"bounceLight": "약하게",
+		"bounceStrong": "강하게"
 	},
 	"export": {
 		"gifButton": "GIF 내보내기",
@@ -434,5 +429,11 @@
 	},
 	"trim": {
 		"deleteRegion": "트림 구간 삭제"
+	},
+	"textPlate": {
+		"none": "없음",
+		"dark": "어둡게",
+		"light": "밝게",
+		"custom": "사용자 지정"
 	}
 }

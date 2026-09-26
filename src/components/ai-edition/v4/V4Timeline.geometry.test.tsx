@@ -130,8 +130,6 @@ function renderTimeline(
 				setCurrentTime={setCurrentTime}
 				playing={false}
 				onTogglePlay={vi.fn()}
-				onPrevClip={vi.fn()}
-				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
 				onAddVoiceover={vi.fn()}
 			/>
@@ -623,8 +621,6 @@ describe("V4Timeline audio lane drag", () => {
 					setCurrentTime={vi.fn()}
 					playing={false}
 					onTogglePlay={vi.fn()}
-					onPrevClip={vi.fn()}
-					onNextClip={vi.fn()}
 					onEditClip={vi.fn()}
 					onAddVoiceover={props.onAddVoiceover ?? vi.fn()}
 				/>

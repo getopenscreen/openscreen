@@ -41,17 +41,17 @@ const CONTACT_S: f32 = 0.0495;
 /// Les seize états du thème par défaut et leurs hotspots (`DEFAULT_CURSOR_SPRITES`,
 /// `src/lib/cursor/cursorThemes.ts`).
 const STATES: [(&str, [f32; 2]); 16] = [
-    ("arrow", [0.119, 0.0874]),
-    ("text", [0.4375, 0.5333]),
-    ("pointer", [0.3893, 0.0032]),
+    ("arrow", [0.1205, 0.0881]),
+    ("text", [0.4355, 0.5369]),
+    ("pointer", [0.3874, 0.0032]),
     ("crosshair", [0.4667, 0.4667]),
-    ("open-hand", [0.4375, 0.1781]),
-    ("closed-hand", [0.3889, 0.451]),
-    ("resize-ew", [0.4881, 0.4706]),
+    ("open-hand", [0.4375, 0.1724]),
+    ("closed-hand", [0.3889, 0.4455]),
+    ("resize-ew", [0.485, 0.4706]),
     ("resize-ns", [0.5, 0.5]),
     ("resize-nesw", [0.5, 0.5]),
     ("resize-nwse", [0.5, 0.5]),
-    ("move", [0.4444, 0.4444]),
+    ("move", [0.4437, 0.4437]),
     ("not-allowed", [0.5, 0.5]),
     ("wait", [0.5, 0.5]),
     ("app-starting", [0.05, 0.0537]),
@@ -611,8 +611,8 @@ fn the_tilt_turns_every_state_with_the_screen() {
     }
 }
 
-/// Réglage éteint : la frame est celle du sprite plat, quelle que soit la façon de le dire (clé
-/// absente, `false`, ou allumé sur un autre thème), et quel que soit l'état.
+/// Le réglage éteint garde le sprite plat. Activé, le mode 3D dépend du sprite fourni au natif,
+/// pas du libellé du thème.
 #[test]
 fn without_the_model_the_cursor_renders_the_flat_sprite() {
     let Some(gpu) = gpu() else { return };
@@ -641,13 +641,13 @@ fn without_the_model_the_cursor_renders_the_flat_sprite() {
             }
         }
         assert!(absent == off, "{rotation}: model3d=false a changé la frame");
-        assert!(absent == other, "{rotation}: un thème sans modèle a changé la frame");
+        assert!(other == on, "{rotation}: le libellé du thème a changé le rendu natif");
         assert!(absent != on, "{rotation}: le réglage allumé ne change rien");
         let text_off = render(&comp, &screen, &scene_json(rotation, Some(false), "default", 0.0, 3.0), &text).0;
         let text_other = render(&comp, &screen, &scene_json(rotation, Some(true), "other", 0.0, 3.0), &text).0;
         let text_on = render(&comp, &screen, &scene_json(rotation, Some(true), "default", 0.0, 3.0), &text).0;
-        assert!(text_off == text_other, "{rotation}: le I d'un autre thème n'est plus plat");
-        assert!(text_off != text_on, "{rotation}: le I du thème par défaut reste plat");
+        assert!(text_other == text_on, "{rotation}: le libellé du thème a changé le rendu natif du I");
+        assert!(text_off != text_on, "{rotation}: le I ne passe pas en 3D");
         assert!(text_off != off, "{rotation}: l'état n'a pas changé le sprite");
     }
 }

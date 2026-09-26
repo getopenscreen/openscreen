@@ -112,6 +112,9 @@
 		"microphone": "Microphone",
 		"camera": "Camera",
 		"cursorHighlight": "Cursor highlight",
+		"hideDesktopIcons": "Hide desktop icons",
+		"hideDesktopIconsHintMac": "Leaves the desktop icons out of screen recordings. They stay on your desktop.",
+		"hideDesktopIconsHintWindows": "Covers the desktop icons with your wallpaper while a screen is recording. They come back when recording stops.",
 		"on": "On",
 		"off": "Off",
 		"loading": "Loading…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "No speech detected"
 	},
 	"exportDialog": {
+		"destination": "Destination",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Social",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "README GIF",
+		"advanced": "Advanced",
 		"title": "Export",
 		"subtitle": "Save your edit as a video or a GIF",
 		"addVideoBeforeExporting": "Add a video before exporting.",
@@ -215,7 +224,6 @@
 		"generateCaptions": "Generate captions",
 		"cropDescription": "Reframe the recording — pick an aspect ratio and zoom into the region you want to keep.",
 		"openCrop": "Open crop…",
-		"cameraFullscreenDescription": "While this region plays, the camera takes the whole frame — no border, no rounding, no background — and eases back at the end. Drag the region's edges on the timeline to change when it starts and how long it lasts.",
 		"deleteRegion": "Delete region",
 		"freehandRendersAsBox": "In the export, the blur fills the rectangle around your freehand shape, so it may hide a little more than you drew."
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "Playback controls",
 		"playPause": "Play / Pause",
 		"playPauseTitle": "Play / Pause (Space)",
-		"previousClip": "Previous clip",
-		"nextClip": "Next clip",
 		"loop": "Loop",
 		"seekVideo": "Seek video"
 	},

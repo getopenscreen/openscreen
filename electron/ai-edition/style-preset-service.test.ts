@@ -30,7 +30,7 @@ const APPEARANCE: StylePresetAppearance = {
 		size: 3,
 		smoothing: 0.67,
 		motionBlur: 0.35,
-		clickBounce: 2.5,
+		clickBounce: 1,
 		model3d: false,
 		alwaysArrow: false,
 	},
@@ -230,6 +230,58 @@ describe("StylePresetService", () => {
 		]) {
 			expect(() => service.pathFor(id)).toThrow(StylePresetError);
 		}
+	});
+
+	describe("preset for new projects", () => {
+		it("marks one preset, lists it, and clears it", async () => {
+			const a = await service.create("A", APPEARANCE);
+			await service.create("B", { ...APPEARANCE, padding: 10 });
+			expect(await service.newProjectAppearance()).toBeNull();
+
+			await service.setForNewProjects(a.id);
+			expect((await service.list()).map((p) => [p.id, p.forNewProjects ?? false])).toEqual([
+				["A", true],
+				["B", false],
+			]);
+			expect(await service.newProjectAppearance()).toEqual(APPEARANCE);
+
+			await service.setForNewProjects(null);
+			expect((await service.list()).some((p) => p.forNewProjects)).toBe(false);
+			expect(await service.newProjectAppearance()).toBeNull();
+		});
+
+		it("refuses to mark a preset that does not exist", async () => {
+			await expectCode(service.setForNewProjects("Nope"), "NOT_FOUND");
+		});
+
+		it("follows its preset through a rename, case-only included", async () => {
+			const a = await service.create("Look", APPEARANCE);
+			await service.setForNewProjects(a.id);
+			const renamed = await service.rename(a.id, "Brand");
+			expect((await service.list()).find((p) => p.forNewProjects)?.id).toBe(renamed.id);
+			const recased = await service.rename(renamed.id, "BRAND");
+			expect((await service.list()).find((p) => p.forNewProjects)?.id).toBe(recased.id);
+			expect(await service.newProjectAppearance()).toEqual(APPEARANCE);
+		});
+
+		it("is cleared when its preset is deleted, and kept when another one is", async () => {
+			const a = await service.create("A", APPEARANCE);
+			const b = await service.create("B", APPEARANCE);
+			await service.setForNewProjects(a.id);
+			await service.delete(b.id);
+			expect(await service.newProjectAppearance()).toEqual(APPEARANCE);
+			await service.delete(a.id);
+			expect(await service.newProjectAppearance()).toBeNull();
+			await expect(fs.readdir(dir)).resolves.toEqual([]);
+		});
+
+		it("reads as none when its file was removed behind the app's back", async () => {
+			const a = await service.create("A", APPEARANCE);
+			await service.setForNewProjects(a.id);
+			await fs.unlink(service.pathFor(a.id));
+			vi.spyOn(console, "warn").mockImplementation(() => undefined);
+			expect(await service.newProjectAppearance()).toBeNull();
+		});
 	});
 
 	it("reveals the file when it exists and the folder otherwise", async () => {

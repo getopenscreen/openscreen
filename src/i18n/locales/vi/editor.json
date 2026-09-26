@@ -112,6 +112,9 @@
 		"microphone": "Micro",
 		"camera": "Máy ảnh",
 		"cursorHighlight": "Làm nổi bật con trỏ",
+		"hideDesktopIcons": "Ẩn biểu tượng màn hình nền",
+		"hideDesktopIconsHintMac": "Loại các biểu tượng màn hình nền khỏi bản ghi màn hình. Chúng vẫn ở trên màn hình nền của bạn.",
+		"hideDesktopIconsHintWindows": "Che các biểu tượng màn hình nền bằng hình nền trong khi ghi màn hình. Chúng sẽ trở lại khi dừng ghi.",
 		"on": "Bật",
 		"off": "Tắt",
 		"loading": "Đang tải…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "Không phát hiện giọng nói"
 	},
 	"exportDialog": {
+		"destination": "Đích đến",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Mạng xã hội",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "GIF cho README",
+		"advanced": "Nâng cao",
 		"title": "Xuất",
 		"subtitle": "Kết xuất dòng thời gian thành tệp",
 		"addVideoBeforeExporting": "Thêm video trước khi xuất.",
@@ -215,7 +224,6 @@
 		"generateCaptions": "Tạo phụ đề",
 		"cropDescription": "Đóng khung lại bản ghi — chọn tỷ lệ khung hình và phóng to vào vùng bạn muốn giữ lại.",
 		"openCrop": "Mở cắt…",
-		"cameraFullscreenDescription": "Khi vùng này phát, máy quay chiếm trọn khung hình — không viền, không bo góc, không nền — rồi trở lại mượt mà ở cuối. Kéo hai mép của vùng trên dòng thời gian để thay đổi thời điểm bắt đầu và độ dài.",
 		"deleteRegion": "Xóa vùng",
 		"freehandRendersAsBox": "Khi xuất, hình vẽ tay được che bằng khung bao của nó — che dư, không bao giờ che thiếu."
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "Điều khiển phát lại",
 		"playPause": "Phát / Tạm dừng",
 		"playPauseTitle": "Phát / Tạm dừng (Phím cách)",
-		"previousClip": "Clip trước",
-		"nextClip": "Clip tiếp theo",
 		"loop": "Lặp lại",
 		"seekVideo": "Tua video"
 	},

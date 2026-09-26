@@ -212,7 +212,9 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	// Auto: the frame follows the recording, its crop, the camera layout and the padding.
 	// Documents from before it stored no ratio and read 16:9; the v8 upgrader pins that.
 	aspectRatio: "auto",
-	shadowIntensity: 0.2,
+	// 0.2 peaked at 9% opacity: a shadow nobody could see. 0.6 is 27%, the card lifts off the
+	// wallpaper without a halo.
+	shadowIntensity: 0.6,
 	showBlur: false,
 	motionBlurAmount: 0.2,
 	// On: it only acts on tilted zooms, where the blur already scales with the real angle.
@@ -230,10 +232,13 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
 	webcamBlurIntensity: 0.5,
 	cursor: {
-		size: 3,
+		// 1.5 draws a 41 px arrow in a 1080p export, about twice the system one, which reads at a
+		// glance. 3 drew it at 82 px, a quarter of the screen's height at the top of its range.
+		size: 1.5,
 		smoothing: 0.67,
 		motionBlur: 0.35,
-		clickBounce: 2.5,
+		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.
+		clickBounce: 1,
 		model3d: false,
 		alwaysArrow: false,
 		autoHide: false,
@@ -243,3 +248,50 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	cursorTheme: "default",
 	autoFocusAll: false,
 };
+
+/**
+ * The range of every number a project stores for its look and its speed regions, in stored
+ * units. One table, and everything that takes such a value in reads it: `getEditorSettings`
+ * clamps a stored value into it, a style preset is clamped by it, the AI agent is held to it, and
+ * the sliders offer exactly these ranges. A bound that lived only in a slider was one the agent,
+ * a preset or a hand-edited project went straight past.
+ *
+ * Import-free on purpose, like the rest of this module: the main process reads it too.
+ */
+export const SETTING_BOUNDS = {
+	shadowIntensity: [0, 1],
+	motionBlurAmount: [0, 1],
+	// `ROUNDNESS_SLIDER_MAX_PX` (src/native/paramUnits.ts); a test holds the two together.
+	borderRadius: [0, 64],
+	padding: [0, 100],
+	webcamSizePreset: [WEBCAM_SIZE_MIN, WEBCAM_SIZE_MAX],
+	webcamRoundness: [0, 1],
+	webcamBlurIntensity: [0, 1],
+	// 1.5 is the default: nothing smaller reads in a demo. At 6 the arrow is 164 px tall in a
+	// 1080p export, eight times the system one.
+	cursorSize: [1.5, 6],
+	cursorSmoothing: [0, 1],
+	cursorMotionBlur: [0, 1],
+	// Past about 4.2 the arrow shrank to nothing on every click.
+	cursorClickBounce: [0, 2],
+	// 16 is Chromium's `playbackRate` ceiling: past it the preview could not show what the
+	// export rendered.
+	playbackSpeed: [0.25, 16],
+	// Text annotations, in pixels at 1080 (see annotationScale.ts).
+	annotationFontSize: [8, 200],
+} as const satisfies Record<string, readonly [number, number]>;
+
+export type SettingBound = keyof typeof SETTING_BOUNDS;
+
+/** A value clamped into its bound. */
+export function clampToBound(value: number, bound: SettingBound): number {
+	const [min, max] = SETTING_BOUNDS[bound];
+	return Math.min(max, Math.max(min, value));
+}
+
+/** A stored value read into its bound: anything but a finite number reads as `fallback`. */
+export function readBounded(value: unknown, bound: SettingBound, fallback: number): number {
+	return typeof value === "number" && Number.isFinite(value)
+		? clampToBound(value, bound)
+		: fallback;
+}

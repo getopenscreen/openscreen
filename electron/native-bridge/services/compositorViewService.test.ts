@@ -294,6 +294,73 @@ describe("CompositorViewService ffmpeg PATH prepend", () => {
 	});
 });
 
+describe("CompositorViewService text fonts", () => {
+	// The compositor reads the font directory off OPENSCREEN_FONTS_DIR when it builds its text
+	// rasterizer. Unset, it draws every family in a system fallback, which is the bug this pins.
+	let tmpRoot: string;
+	let resources: string;
+	let originalResourcesPath: PropertyDescriptor | undefined;
+	let originalVitePublic: string | undefined;
+	let originalFontsDir: string | undefined;
+
+	beforeEach(() => {
+		tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-fonts-root-"));
+		resources = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-fonts-res-"));
+		originalResourcesPath = Object.getOwnPropertyDescriptor(process, "resourcesPath");
+		Object.defineProperty(process, "resourcesPath", { value: resources, configurable: true });
+		originalVitePublic = process.env.VITE_PUBLIC;
+		// Packaged layout: VITE_PUBLIC points into the asar, which the addon cannot read.
+		process.env.VITE_PUBLIC = path.join(resources, "app.asar", "dist");
+		originalFontsDir = process.env.OPENSCREEN_FONTS_DIR;
+		Reflect.deleteProperty(process.env, "OPENSCREEN_FONTS_DIR");
+	});
+
+	afterEach(() => {
+		if (originalResourcesPath) {
+			Object.defineProperty(process, "resourcesPath", originalResourcesPath);
+		} else {
+			// Absent before the test (plain Node): leaving the temp dir set would point later
+			// tests at a directory this hook is about to delete.
+			Reflect.deleteProperty(process, "resourcesPath");
+		}
+		if (originalVitePublic === undefined) {
+			Reflect.deleteProperty(process.env, "VITE_PUBLIC");
+		} else {
+			process.env.VITE_PUBLIC = originalVitePublic;
+		}
+		if (originalFontsDir === undefined) {
+			Reflect.deleteProperty(process.env, "OPENSCREEN_FONTS_DIR");
+		} else {
+			process.env.OPENSCREEN_FONTS_DIR = originalFontsDir;
+		}
+		fs.rmSync(tmpRoot, { recursive: true, force: true });
+		fs.rmSync(resources, { recursive: true, force: true });
+	});
+
+	it("points the compositor at the extraResources copy before the addon loads", () => {
+		fs.mkdirSync(path.join(resources, "fonts"));
+
+		new CompositorViewService({ appRoot: tmpRoot, isPackaged: true }).hasAddon();
+
+		expect(process.env.OPENSCREEN_FONTS_DIR).toBe(path.join(resources, "fonts"));
+	});
+
+	it("leaves the variable unset when no fonts ship, so text falls back instead of failing", () => {
+		new CompositorViewService({ appRoot: tmpRoot, isPackaged: true }).hasAddon();
+
+		expect(process.env.OPENSCREEN_FONTS_DIR).toBeUndefined();
+	});
+
+	it("keeps a directory set by the environment", () => {
+		fs.mkdirSync(path.join(resources, "fonts"));
+		process.env.OPENSCREEN_FONTS_DIR = "/explicit/fonts";
+
+		new CompositorViewService({ appRoot: tmpRoot, isPackaged: true }).hasAddon();
+
+		expect(process.env.OPENSCREEN_FONTS_DIR).toBe("/explicit/fonts");
+	});
+});
+
 describe("resolveSceneAssetPaths", () => {
 	// A packaged install: `wallpapers/` and `cursors/` exist as real files under
 	// resourcesPath (extraResources), while VITE_PUBLIC points into the asar, where
@@ -311,7 +378,10 @@ describe("resolveSceneAssetPaths", () => {
 		fs.mkdirSync(modelDir, { recursive: true });
 		fs.writeFileSync(path.join(modelDir, "selfie_segmentation_landscape.onnx"), "onnx");
 		const assetPaths = [
-			...Object.values(themed?.assets ?? {}).map((a) => a.assetPath),
+			...Object.values(themed?.assets ?? {}).flatMap((asset) => [
+				asset.assetPath,
+				...(asset.model3d ? [asset.model3d.assetPath, asset.model3d.depthPath] : []),
+			]),
 			...Object.values(DEFAULT_CURSOR_SPRITES).map((s) => s.assetPath),
 		];
 		for (const assetPath of assetPaths) {
@@ -348,7 +418,12 @@ describe("resolveSceneAssetPaths", () => {
 
 	/** What `resolveSceneAssetPaths` writes into `cursor.cursorSprites` — same shape the
 	 *  service declares for the sprite map it builds. */
-	type ResolvedSprite = { path: string; hotspotX: number; hotspotY: number };
+	type ResolvedSprite = {
+		path: string;
+		hotspotX: number;
+		hotspotY: number;
+		modelDepthPath?: string;
+	};
 
 	// The renderer asks for an effect and knows nothing about the disk; this process answers
 	// where the model is. Same division as the wallpaper and the cursor sprites above.
@@ -445,12 +520,24 @@ describe("resolveSceneAssetPaths", () => {
 		expect(fs.existsSync(arrow.path)).toBe(true);
 	});
 
+	it("resolves a themed 3D face and its relief map to paths that exist on disk", () => {
+		const model3d = themed?.assets.arrow?.model3d;
+		if (!themed || !model3d) throw new Error("a bundled theme needs a 3D arrow face");
+		const arrow = resolved({ cursor: { theme: themed.id, model3d: true } }).cursor.cursorSprites
+			.arrow;
+
+		expect(arrow.path).toBe(path.join(resources, model3d.assetPath));
+		expect(arrow.modelDepthPath).toBe(path.join(resources, model3d.depthPath));
+		expect(fs.existsSync(arrow.path)).toBe(true);
+		expect(fs.existsSync(arrow.modelDepthPath!)).toBe(true);
+	});
+
 	it("fills the states a theme doesn't ship with the built-in art", () => {
 		if (!themed) return;
 		const sprites = resolved({ cursor: { theme: themed.id } }).cursor.cursorSprites;
 
-		// The sweezy packs only carry an arrow and a pointer, but a recording walks through
-		// far more states than that — each one still has to get its own sprite.
+		// A pack may carry only an arrow and a pointer, but a recording walks through far
+		// more states than that — each one still has to get its own sprite.
 		expect(sprites.text.path).toBe(path.join(resources, "cursors", "default", "text.png"));
 		expect(sprites["resize-ew"].path).toContain(path.join("cursors", "default"));
 		expect(Object.keys(sprites).sort()).toEqual(Object.keys(DEFAULT_CURSOR_SPRITES).sort());

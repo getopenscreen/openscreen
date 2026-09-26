@@ -75,8 +75,8 @@
 		"keepDefault": "Giữ ngôn ngữ hiện tại"
 	},
 	"cursor": {
-		"useEditableCursor": "Dùng con trỏ có thể chỉnh sửa",
-		"useSystemCursor": "Dùng con trỏ hệ thống"
+		"useEditableCursorHint": "Dùng con trỏ có thể chỉnh sửa: bật lại thu phóng tự động và hiệu ứng con trỏ",
+		"useSystemCursorHint": "Dùng con trỏ hệ thống: tắt thu phóng tự động và hiệu ứng con trỏ"
 	},
 	"softwareEncoderFallback": {
 		"title": "Đã chuyển sang mã hóa bằng phần mềm",

@@ -21,7 +21,9 @@
 //! n'a pas d'état partagé entre contextes, et le décodeur vidéo du parcours en a un autre
 //! sur le même chemin, en lecture seule lui aussi.
 
-use crate::audio::{decode_clip_audio, stretch_clip_pcm_by_speed, PlanarPcm};
+use crate::audio::{
+    apply_gain_db, decode_clip_audio, loudness_gain_db, stretch_clip_pcm_by_speed, PlanarPcm,
+};
 use crate::regions::SpeedSegment;
 use std::collections::VecDeque;
 use std::thread::JoinHandle;
@@ -34,7 +36,9 @@ use std::thread::JoinHandle;
 /// est tout ce qu'on cherche ici.
 const MAX_INFLIGHT_AUDIO_JOBS: usize = 4;
 
-/// Le corps d'un job : décode la fenêtre gardée du clip et l'étire sur ses spans de vitesse.
+/// Le corps d'un job : décode la fenêtre gardée du clip, l'étire sur ses spans de vitesse et
+/// l'amène au niveau de loudness cible avec le gain mesuré sur le fichier entier
+/// (`loudness_gain_db`, celui que la preview applique aussi).
 ///
 /// Rend `None` quand le clip se déclare audio mais n'a pas de flux décodable, ou quand le
 /// décodage échoue — dans les deux cas l'export continue et le clip sort muet, comme avant
@@ -49,7 +53,11 @@ pub fn decode_and_stretch_clip_audio(
     out_fps: f64,
 ) -> Option<PlanarPcm> {
     match decode_clip_audio(screen_path, source_start_sec, source_end_sec) {
-        Ok(Some(pcm)) => Some(stretch_clip_pcm_by_speed(&pcm, speed_segments, out_fps)),
+        Ok(Some(pcm)) => {
+            let mut pcm = stretch_clip_pcm_by_speed(&pcm, speed_segments, out_fps);
+            apply_gain_db(&mut pcm, loudness_gain_db(screen_path));
+            Some(pcm)
+        }
         Ok(None) => {
             eprintln!(
                 "[pipeline] warning: clip #{clip_index} déclaré audio mais sans flux décodable; silence conservé"

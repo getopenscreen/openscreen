@@ -180,6 +180,23 @@ describe("axcut-schema v8", () => {
 		expect(region.style.lastBackgroundColor).toBe("#3b82f6");
 	});
 
+	it("reads a text size into its bound instead of refusing the project", () => {
+		const sizeOf = (fontSize: number) =>
+			annotationRegionSchema.parse({
+				id: "ann_1",
+				startMs: 0,
+				endMs: 1500,
+				type: "text",
+				content: "hello",
+				position: { x: 4, y: 86 },
+				size: { width: 92, height: 12 },
+				style: { fontSize },
+				zIndex: 1,
+			}).style.fontSize;
+		// 0 is what an emptied size field used to store: it opens as the smallest text.
+		expect([sizeOf(0), sizeOf(24), sizeOf(500)]).toEqual([8, 24, 200]);
+	});
+
 	it("zoomRegionSchema rejects unknown depths", () => {
 		expect(() =>
 			zoomRegionSchema.parse({
@@ -1057,6 +1074,33 @@ describe("audio tracks (issue #350)", () => {
 	it("createAudioTrack still gives a grabbable span to a zero-duration source", () => {
 		const track = createAudioTrack({ assetId: "asset_1", durationSec: 0 });
 		expect(track.endMs).toBeGreaterThan(track.startMs);
+	});
+
+	it("lays a new music bed down under the voice, eased in and out", () => {
+		// Imported music at 0 dB with hard edges is what buried the narration; a new bed
+		// starts at -18 dB with one-second ramps.
+		const bed = createAudioTrack({ assetId: "asset_1", durationSec: 60 });
+		expect(bed.kind).toBe("music");
+		expect([bed.gainDb, bed.fadeInMs, bed.fadeOutMs]).toEqual([-18, 1000, 1000]);
+		// A voiceover is voice: the export levels it, so it starts flat.
+		const take = createAudioTrack({ assetId: "asset_1", durationSec: 5, kind: "voiceover" });
+		expect([take.gainDb, take.fadeInMs, take.fadeOutMs]).toEqual([0, 0, 0]);
+	});
+
+	it("leaves a stored bed at the level its author set", () => {
+		// The new defaults are for NEW tracks. A track saved before them, even one that
+		// omits the fields, parses exactly as it did.
+		const {
+			gainDb: _gain,
+			fadeInMs: _in,
+			fadeOutMs: _out,
+			...stored
+		} = createAudioTrack({
+			assetId: "asset_1",
+			durationSec: 60,
+		});
+		expect(audioTrackSchema.parse(stored)).toMatchObject({ gainDb: 0, fadeInMs: 0, fadeOutMs: 0 });
+		expect(audioTrackSchema.parse({ ...stored, gainDb: -3 }).gainDb).toBe(-3);
 	});
 
 	it("defaults audioTracks to [] when a stored document omits the key", () => {

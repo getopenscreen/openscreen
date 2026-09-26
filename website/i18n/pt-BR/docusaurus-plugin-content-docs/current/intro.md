@@ -29,7 +29,7 @@ O OpenScreen lança versões com frequência. De uma versão para outra, o forma
 
 - [Gravar](./recording.md) uma janela específica ou a tela inteira, com áudio do sistema, microfone e webcam — a partir de um HUD flutuante ou do próprio editor.
 - Montar um projeto com várias fontes: [importar, recortar, cortar a imagem, reordenar e dividir clipes](./media-library.md) em uma única linha do tempo.
-- [Editar](./editing-timeline.md) com zooms, recortes, velocidade por região, segmentos de Câmera em Tela Cheia, anotações de texto/imagem/seta/desfoque, temas de cursor, layouts de webcam e fundo/efeitos.
+- [Editar](./editing-timeline.md) com zooms, recortes, velocidade por região, segmentos de Câmera em Tela Cheia, anotações de texto/imagem/seta/desfoque, efeitos de cursor, layouts de webcam e fundo/efeitos.
 - Transcrever no seu computador com o Whisper e depois [embutir legendas](./captions.md) — com estilo ajustado ao vivo e traduzíveis para 15 idiomas pelo seu próprio provedor de LLM — ou cortar a gravação apagando palavras da transcrição.
 - Conectar, se quiser, sua própria chave de LLM para [editar por chat](./ai-editing.md) — desativado por padrão, nunca obrigatório.
 - [Exportar](./export.md) para MP4 (720p/1080p/resolução de origem, H.264 ou H.265) ou GIF animado.

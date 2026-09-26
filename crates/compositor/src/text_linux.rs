@@ -111,10 +111,53 @@ pub struct TextRasterizer {
     swash_cache: RefCell<SwashCache>,
 }
 
+/// Ajoute `files` (`crate::text_fonts`) a `db`, sans rien installer sur la machine, et
+/// retire de `db` toute autre face qui porte le nom d'une famille embarquee.
+///
+/// Le retrait est ce qui fait gagner nos fichiers. Une police installee du meme nom (Inter
+/// est courante sous Linux) passait devant la notre : `fontdb` ne documente aucune priorite
+/// entre deux faces egales, et en pratique la premiere chargee, celle du systeme, l'emportait.
+/// Le rendu dependait alors a nouveau de la machine. Sans face concurrente, il n'y a plus
+/// d'ordre dont dependre. Les autres familles du systeme restent, pour le repli des
+/// ecritures que nos polices ne couvrent pas.
+///
+/// Un fichier illisible ne coute que sa police : sa famille retombe sur celles du systeme.
+fn with_embedded_fonts(
+    mut db: cosmic_text::fontdb::Database,
+    files: &[std::path::PathBuf],
+) -> cosmic_text::fontdb::Database {
+    let before: std::collections::HashSet<_> = db.faces().map(|f| f.id).collect();
+    for path in files {
+        if let Err(e) = db.load_font_file(path) {
+            eprintln!("[text] police non chargee ({e}) : {}", path.display());
+        }
+    }
+    let shipped: std::collections::HashSet<String> = db
+        .faces()
+        .filter(|f| !before.contains(&f.id))
+        .flat_map(|f| f.families.iter().map(|(name, _)| name.to_lowercase()))
+        .collect();
+    let shadowed: Vec<_> = db
+        .faces()
+        .filter(|f| before.contains(&f.id))
+        .filter(|f| f.families.iter().any(|(name, _)| shipped.contains(&name.to_lowercase())))
+        .map(|f| f.id)
+        .collect();
+    for id in shadowed {
+        db.remove_face(id);
+    }
+    db
+}
+
 impl TextRasterizer {
     pub fn new() -> Result<TextRasterizer> {
+        // Reconstruit le `FontSystem` sur la base modifiee, plutot que de la retoucher en
+        // place : il indexe ses faces (monospace, repli) a la construction.
+        let (locale, db) = FontSystem::new().into_locale_and_db();
+        let db = with_embedded_fonts(db, &crate::text_fonts::embedded_font_files());
+        let font_system = FontSystem::new_with_locale_and_db(locale, db);
         Ok(TextRasterizer {
-            font_system: RefCell::new(FontSystem::new()),
+            font_system: RefCell::new(font_system),
             swash_cache: RefCell::new(SwashCache::new()),
         })
     }
@@ -434,6 +477,77 @@ mod tests {
         (0..w)
             .filter(|x| (0..h).any(|y| atlas[y * w + x] > 16))
             .collect()
+    }
+
+    /// Chaque famille embarquee est celle que cosmic-text dessine, dans les deux graisses
+    /// qu'un controle peut produire, et deux familles ne se confondent jamais a l'ecran.
+    #[test]
+    fn every_shipped_family_draws_from_its_own_files() {
+        use cosmic_text::fontdb::{Database, Family, Query, Source, Stretch, Style, Weight};
+        let repo = crate::text_fonts::repo_fonts_dir();
+        let files = crate::text_fonts::font_files_in(&repo);
+
+        // La collision : une police « installee » qui porte EXACTEMENT les memes familles,
+        // graisses et styles, chargee AVANT les notres comme `FontSystem::new` le fait des
+        // polices du systeme. Ce sont nos fichiers, copies ailleurs : seul le chemin distingue
+        // le gagnant.
+        let system =
+            std::env::temp_dir().join(format!("openscreen-sysfonts-{}", std::process::id()));
+        std::fs::create_dir_all(&system).unwrap();
+        let mut db = Database::new();
+        db.load_system_fonts();
+        for file in &files {
+            let copy = system.join(file.file_name().unwrap());
+            std::fs::copy(file, &copy).unwrap();
+            db.load_font_file(&copy).unwrap();
+        }
+        let db = with_embedded_fonts(db, &files);
+        let font_system = FontSystem::new_with_locale_and_db("en-US".into(), db);
+        std::fs::remove_dir_all(&system).ok();
+
+        let repo = std::fs::canonicalize(&repo).unwrap();
+        for family in crate::text_fonts::SHIPPED_FAMILIES {
+            for weight in [Weight::NORMAL, Weight::BOLD] {
+                let query = Query {
+                    families: &[Family::Name(family)],
+                    weight,
+                    stretch: Stretch::Normal,
+                    style: Style::Normal,
+                };
+                let id = font_system
+                    .db()
+                    .query(&query)
+                    .unwrap_or_else(|| panic!("{family} introuvable"));
+                let face = font_system.db().face(id).unwrap();
+                // Un vrai fichier de cette graisse, pas le regulier epaissi ou non.
+                assert_eq!(face.weight, weight, "{family}");
+                // Et c'est NOTRE fichier, pas la face du systeme qui porte le meme nom.
+                let path = match &face.source {
+                    Source::File(p) | Source::SharedFile(p, _) => p.clone(),
+                    Source::Binary(_) => panic!("{family} : face sans fichier"),
+                };
+                let path = std::fs::canonicalize(&path).unwrap_or(path);
+                let from = path.display();
+                assert!(path.starts_with(&repo), "{family} {weight:?} tire de {from}");
+            }
+        }
+
+        let raster = TextRasterizer {
+            font_system: RefCell::new(font_system),
+            swash_cache: RefCell::new(SwashCache::new()),
+        };
+        let mut blocks = Vec::new();
+        for family in crate::text_fonts::SHIPPED_FAMILIES {
+            let mut s = spec("Hamburgefonstiv", "left");
+            s.font_family = family.to_owned();
+            s.font_size_px = 100.0;
+            s.box_px = [1600, 200];
+            let atlas = raster.build_atlas(&s).expect("atlas").pixels;
+            let (cols, rows) = (ink_cols(&atlas, 1600), ink_rows(&atlas, 1600, 0, 1600));
+            let (w, h) = (cols[cols.len() - 1] - cols[0] + 1, rows[rows.len() - 1] - rows[0] + 1);
+            blocks.push((family, w as f32, h as f32));
+        }
+        crate::text_fonts::assert_distinct_blocks(&blocks);
     }
 
     #[test]

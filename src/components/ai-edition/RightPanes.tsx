@@ -6,18 +6,24 @@
 // self-sufficient).
 
 import {
+	AppWindow,
 	AudioLines,
 	Camera,
 	Captions as CaptionsIcon,
-	ChevronDown,
 	FileText,
 	HelpCircle,
 	ImagePlus,
+	Laptop,
 	Loader2,
+	type LucideIcon,
 	Mic,
+	Monitor,
 	MousePointerClick,
 	Music,
+	RotateCcw,
 	Sliders,
+	Smartphone,
+	SquareDashed,
 	Trash2,
 	Undo2,
 	Video,
@@ -35,6 +41,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
 	useEffect,
+	useId,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -42,31 +49,37 @@ import {
 } from "react";
 import { toast } from "sonner";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
-import GradientEditor, { type GradientEditorState } from "@/components/ui/gradient-editor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
-import { WALLPAPER_MOTIONS, type WallpaperMotion } from "@/components/video-editor/types";
+import {
+	WALLPAPER_MOTIONS,
+	type WallpaperMotion,
+	type WebcamBackgroundMode,
+} from "@/components/video-editor/types";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import {
 	collectNativeFormats,
+	formatFillAvailability,
 	isAutoFormatAvailable,
 	pickOutputDims,
 } from "@/lib/ai-edition/document/outputFormat";
 import type { InsertSide } from "@/lib/ai-edition/document/transcript";
-import type {
-	AxcutAsset,
-	AxcutAudioTrack,
-	AxcutClip,
-	AxcutTranscript,
-	AxcutTrimRange,
-	AxcutWord,
+import {
+	type AxcutAsset,
+	type AxcutAudioTrack,
+	type AxcutClip,
+	type AxcutTranscript,
+	type AxcutTrimRange,
+	type AxcutWord,
+	audioTrackDefaults,
 } from "@/lib/ai-edition/schema";
 import {
 	AUDIO_GAIN_DB_LIMIT,
 	AUDIO_TRACK_GAIN_DB_MAX,
 	AUDIO_TRACK_GAIN_DB_MIN,
+	DEFAULT_EDITOR_SETTINGS,
 	type EditorSettingsPatch,
 } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -87,11 +100,12 @@ import {
 	voiceoverPlacements,
 } from "@/lib/ai-edition/timeline/aggregated-transcript";
 import { assetCameraSource, hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
+import { breatheCut } from "@/lib/ai-edition/timeline/cut-breath";
 import { formatMs } from "@/lib/ai-edition/timeline/format";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
-import type {
-	AssetTranscriptionView,
-	TranscriptGateReason,
+import {
+	type AssetTranscriptionView,
+	type TranscriptGateReason,
 } from "@/lib/ai-edition/transcription/status";
 import { getAssetPath } from "@/lib/assetPath";
 import { resolveWebcamLayoutPreset, supportsWebcamReactiveZoom } from "@/lib/compositeLayout";
@@ -100,12 +114,13 @@ import {
 	DEFAULT_CURSOR_THEME_ID,
 	themePickerPreviewAssets,
 } from "@/lib/cursor/cursorThemes";
-import { buildGradientFromEditor } from "@/lib/gradientBuilder";
+import { gradientSeedColor, oneColorGradient } from "@/lib/gradientBuilder";
 import {
 	FRAME_THEMES,
 	type FrameTheme,
 	RECORDING_FRAMES,
 	type RecordingFrame,
+	SETTING_BOUNDS,
 	WEBCAM_ANCHOR_GRID,
 	WEBCAM_SIZE_MAX,
 	WEBCAM_SIZE_MIN,
@@ -118,17 +133,20 @@ import {
 	resolveImageWallpaperUrl,
 	WALLPAPER_PATHS,
 	WALLPAPER_THUMB_PATHS,
+	wallpaperStyle,
 } from "@/lib/wallpaper";
 import { isNativeCompositorActive, setNativeParam } from "@/native";
+import {
+	SEGMENTATION_HEIGHT,
+	SEGMENTATION_WIDTH,
+	segmentCameraFrame,
+} from "@/native/compositorViewClient";
 import { ROUNDNESS_SLIDER_MAX_PX } from "@/native/paramUnits";
 import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
-import {
-	ASPECT_RATIO_PRESETS,
-	type AspectRatio,
-	getAspectRatioLabel,
-} from "@/utils/aspectRatioUtils";
+import { ASPECT_RATIO_PRESETS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
 import { CaptionsPane } from "./CaptionsPane";
+import { ColorField } from "./ColorField";
 import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
@@ -434,12 +452,49 @@ function useMemoCustomWallpapers(current: string): string[] {
 	return cached;
 }
 
-function normaliseHex(raw: string): string | null {
-	const trimmed = raw.trim();
-	if (!trimmed) return null;
-	const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
-	if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(withHash)) return null;
-	return withHash.toLowerCase();
+/** The seed the one-colour gradient starts from when the wallpaper is not one of its own. */
+const GRADIENT_SEED_FALLBACK = "#3b82f6";
+const FULL_HEX = /^#[0-9a-f]{6}$/i;
+
+/**
+ * The free choice, folded behind the curated set: a "Custom" row under the swatches whose
+ * picker holds the wheel, the hex value and the shared presets, like every other colour in
+ * the inspector. Reachable in one click, never the first thing offered.
+ */
+function CustomBackgroundRow({
+	label,
+	value,
+	swatch,
+	hasDocument,
+	onChange,
+	onCommit,
+}: {
+	label: string;
+	value: string;
+	swatch?: string;
+	hasDocument: boolean;
+	onChange: (hex: string) => void;
+	onCommit: () => void;
+}) {
+	const ts = useScopedT("settings");
+	return (
+		<div className={styles.paneRow}>
+			<span className={styles.label}>{ts("background.custom")}</span>
+			<ColorField
+				label={label}
+				value={value}
+				swatch={swatch}
+				disabled={!hasDocument}
+				// Only a complete #rrggbb goes out. ColorField also emits "#abc" while the hex is
+				// being typed; forwarding it wrote a value that came back normalised and replaced
+				// the draft under the user's fingers.
+				onChange={(hex) => {
+					if (FULL_HEX.test(hex)) onChange(hex.toLowerCase());
+				}}
+				onCommit={onCommit}
+			/>
+		</div>
+	);
 }
 
 function BackgroundColorTab({
@@ -447,28 +502,25 @@ function BackgroundColorTab({
 	hasDocument,
 	isSelected,
 	onPick,
+	onLive,
+	onCommit,
 	updateNative = true,
 }: {
 	value: string;
 	hasDocument: boolean;
 	isSelected: (v: string) => boolean;
 	onPick: (next: string) => void;
+	onLive: (next: string) => void;
+	onCommit: () => void;
 	updateNative?: boolean;
 }) {
 	const ts = useScopedT("settings");
-	const [hexDraft, setHexDraft] = useState(value.startsWith("#") ? value : "#000000");
-	useEffect(() => {
-		if (value.startsWith("#")) setHexDraft(value);
-	}, [value]);
-	const commitHex = () => {
-		const next = normaliseHex(hexDraft);
-		if (next) {
-			onPick(next);
-			if (updateNative && isNativeCompositorActive()) {
-				setNativeParam("backgroundColor", next);
-			}
+	const pushNative = (color: string) => {
+		if (updateNative && isNativeCompositorActive()) {
+			setNativeParam("backgroundColor", color);
 		}
 	};
+	const current = /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
 	return (
 		<>
 			<div className={styles.bgGrid} style={{ margin: "0 var(--sp-4) 12px" }}>
@@ -482,43 +534,21 @@ function BackgroundColorTab({
 						disabled={!hasDocument}
 						onClick={() => {
 							onPick(c);
-							if (updateNative && isNativeCompositorActive()) {
-								setNativeParam("backgroundColor", c);
-							}
+							pushNative(c);
 						}}
 					/>
 				))}
 			</div>
-			<div
-				style={{
-					margin: "0 var(--sp-4) 12px",
-					display: "flex",
-					alignItems: "center",
-					gap: 8,
+			<CustomBackgroundRow
+				label={ts("background.customColor")}
+				value={current}
+				hasDocument={hasDocument}
+				onChange={onLive}
+				onCommit={() => {
+					onCommit();
+					if (value.startsWith("#")) pushNative(value);
 				}}
-			>
-				<input
-					type="color"
-					className={styles.bgColorInput}
-					value={hexDraft}
-					disabled={!hasDocument}
-					onChange={(e) => setHexDraft(e.target.value)}
-					onBlur={commitHex}
-				/>
-				{/* Mono stays: a hex code. */}
-				<input
-					type="text"
-					className={styles.control}
-					value={hexDraft}
-					disabled={!hasDocument}
-					onChange={(e) => setHexDraft(e.target.value)}
-					onBlur={commitHex}
-					onKeyDown={(e) => {
-						if (e.key === "Enter") commitHex();
-					}}
-					style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)" }}
-				/>
-			</div>
+			/>
 		</>
 	);
 }
@@ -550,35 +580,18 @@ export function WallpaperPicker({
 	const [tab, setTab] = useState<"image" | "color" | "gradient">(
 		() => classifyWallpaper(value).kind,
 	);
-	// The editor is a colour wheel and two stops, taller than the rest of the tab together:
-	// shown on demand, so the presets stay in view.
-	const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
+	// A drag in the colour wheel previews live; the write happens when the picker closes.
+	const live = onLiveChange ?? onChange;
+	const commit = () => void onCommit?.();
 	const customUrls = useMemoCustomWallpapers(value);
-
-	const gradientCommitTimer = useRef<number | null>(null);
-	const handleGradientChange = useCallback(
-		(state: GradientEditorState) => {
-			const grad = buildGradientFromEditor(state);
-			if (onLiveChange) onLiveChange(grad);
-			else onChange(grad);
-			if (gradientCommitTimer.current !== null) {
-				window.clearTimeout(gradientCommitTimer.current);
-			}
-			gradientCommitTimer.current = window.setTimeout(() => {
-				gradientCommitTimer.current = null;
-				if (onCommit) void onCommit();
-			}, 400);
-		},
-		[onChange, onLiveChange, onCommit],
-	);
-	useEffect(
-		() => () => {
-			if (gradientCommitTimer.current !== null) {
-				window.clearTimeout(gradientCommitTimer.current);
-			}
-		},
-		[],
-	);
+	// The colour the user picked, kept as picked: the gradient's first stop is that colour held
+	// inside 35–85% lightness, so reading it back would move a dark pick under the user. It only
+	// stands while the wallpaper is still the gradient it made; a preset or undo replaces it.
+	const [picked, setPicked] = useState<string | null>(null);
+	const seed =
+		picked && oneColorGradient(picked) === value
+			? picked
+			: (gradientSeedColor(value) ?? GRADIENT_SEED_FALLBACK);
 
 	const isSelected = (candidate: string) => value === candidate;
 	const tabs = [
@@ -651,6 +664,8 @@ export function WallpaperPicker({
 					hasDocument={hasDocument}
 					isSelected={isSelected}
 					onPick={(color) => onChange(color)}
+					onLive={live}
+					onCommit={commit}
 					updateNative={updateNativeBackground}
 				/>
 			) : (
@@ -668,20 +683,17 @@ export function WallpaperPicker({
 							/>
 						))}
 					</div>
-					{hasDocument ? (
-						<>
-							<button
-								type="button"
-								className={styles.bgDisclosure}
-								aria-expanded={gradientEditorOpen}
-								onClick={() => setGradientEditorOpen((open) => !open)}
-							>
-								{ts("background.custom")}
-								<ChevronDown size={14} />
-							</button>
-							{gradientEditorOpen ? <GradientEditor onChange={handleGradientChange} /> : null}
-						</>
-					) : null}
+					<CustomBackgroundRow
+						label={ts("background.customGradient")}
+						value={seed}
+						swatch={oneColorGradient(seed)}
+						hasDocument={hasDocument}
+						onChange={(hex) => {
+							setPicked(hex);
+							live(oneColorGradient(hex));
+						}}
+						onCommit={commit}
+					/>
 				</>
 			)}
 		</>
@@ -767,42 +779,17 @@ function TranscriptLaneSwitch({
 }
 
 /**
- * Caption settings, reached from the transcript tab (issue #560).
- *
- * The pane is reused VERBATIM rather than rebuilt into a popover body: it is ~600
- * lines of settings that already work, and "make it a popover" is a question about
- * where it is mounted, not about what it contains. Rebuilding it would have been the
- * one reliable way to arrive at a popover that is not at parity with the tab it
- * replaces.
- *
- * Safe inside a Popover specifically because nothing in it takes focus away — no file
- * input, no OS dialog. That is the trap `useWallpaperFileInput` documents above, and
- * it is worth re-checking if a picker is ever added to captions.
+ * Caption settings, reached from the transcript tab (issue #560). Opening them swaps
+ * the transcript pane for `CaptionsPane` in the same inspector card, so the settings
+ * take the transcript's place and size instead of floating beside it.
  */
-function CaptionSettingsButton() {
+function CaptionSettingsButton({ onOpen }: { onOpen: () => void }) {
 	const ts = useScopedT("settings");
-	const [open, setOpen] = useState(false);
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger asChild>
-				<button type="button" className={styles.paneHeadBtn} aria-expanded={open}>
-					<CaptionsIcon size={14} />
-					{ts("facets.captions")}
-				</button>
-			</PopoverTrigger>
-			<PopoverContent
-				align="end"
-				side="bottom"
-				sideOffset={8}
-				collisionPadding={16}
-				animated={false}
-				className="w-auto border-0 bg-transparent p-0 shadow-none z-50"
-			>
-				<div className={styles.captionsPopover}>
-					<CaptionsPane onClose={() => setOpen(false)} />
-				</div>
-			</PopoverContent>
-		</Popover>
+		<button type="button" className={styles.paneHeadBtn} onClick={onOpen}>
+			<CaptionsIcon size={14} />
+			{ts("facets.captions")}
+		</button>
 	);
 }
 
@@ -927,6 +914,7 @@ export function TranscriptPane({
 	// engine, nothing attempted) leaves the button worth pressing.
 	const silentMedia = blocked?.reason === "no-audio";
 	const transcriptionLabel = useTranscriptionLabel();
+	const [captionsOpen, setCaptionsOpen] = useState(false);
 	const paneBusyLabel = transcriptionBusyLabel(
 		busyView ??
 			(isTranscribing ? { assetId: "", status: "running", phase: "loading-model" } : undefined),
@@ -940,13 +928,15 @@ export function TranscriptPane({
 		insertionsEnabled() ? "transcript.editingHintDev" : "transcript.editingHint",
 	);
 
+	if (captionsOpen) return <CaptionsPane onClose={() => setCaptionsOpen(false)} />;
+
 	if (placements.length === 0 || !hasAnyTranscript) {
 		return (
 			<Pane
 				title={ts("transcript.title")}
 				icon={<FileText size={16} />}
 				helpText={helpText}
-				actions={<CaptionSettingsButton />}
+				actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
 			>
 				{laneSwitch}
 				<div
@@ -997,7 +987,7 @@ export function TranscriptPane({
 			title={ts("transcript.title")}
 			icon={<FileText size={16} />}
 			helpText={helpText}
-			actions={<CaptionSettingsButton />}
+			actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
 		>
 			{laneSwitch}
 			{/* The gestures are invisible until tried: nothing on a plain word stream says
@@ -1170,12 +1160,19 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 			pendingCaretWordIdRef.current = keptRange[0].id;
 			const startSec = Math.min(...keptRange.map((w) => w.word.startSec));
 			const endSec = Math.max(...keptRange.map((w) => w.word.endSec));
+			// Breath next to the speech that stays, so a cut silence does not glue two words.
+			const breathed = breatheCut(
+				{ startSec, endSec },
+				words
+					.filter((cw) => !isSilenceWord(cw.word) && !isInsertedWord(cw.word))
+					.map((cw) => ({ startSec: cw.word.startSec, endSec: cw.word.endSec, kept: cw.kept })),
+			);
 			onTrimTimelineSpan(
-				...toRawSpan(startSec, endSec),
+				...toRawSpan(breathed.startSec, breathed.endSec),
 				`Skip ${formatMs(startSec * 1000)}-${formatMs(endSec * 1000)} from ${clip.assetId}.`,
 			);
 		},
-		[busy, clip.assetId, toRawSpan, onTrimTimelineSpan, onRemoveWords],
+		[busy, clip.assetId, words, toRawSpan, onTrimTimelineSpan, onRemoveWords],
 	);
 
 	const removeTrimRun = useCallback(
@@ -2315,6 +2312,15 @@ const RECORDING_FRAME_LABEL_KEYS: Record<RecordingFrame, string> = {
 	monitor: "effects.frameScreen",
 };
 
+// "None" is dashed like the camera's "no background": the outline of something not drawn.
+const RECORDING_FRAME_ICONS: Record<RecordingFrame, LucideIcon> = {
+	none: SquareDashed,
+	window: AppWindow,
+	laptop: Laptop,
+	phone: Smartphone,
+	monitor: Monitor,
+};
+
 const FRAME_THEME_LABEL_KEYS: Record<FrameTheme, string> = {
 	light: "effects.frameThemeLight",
 	dark: "effects.frameThemeDark",
@@ -2352,11 +2358,23 @@ export function VideoEffectsPane() {
 		() => (document ? isAutoFormatAvailable(document) : true),
 		[document],
 	);
+	// What Auto stands at, or why it cannot: shown beside the label while Auto is the format.
+	const autoState = !autoAvailable
+		? ts("effects.formatAutoMixed")
+		: autoDims
+			? `${autoDims.width}×${autoDims.height}`
+			: null;
+	const autoStateId = useId();
 	const hasTiltedZoom = (document?.zoomRanges ?? []).some((z) => z.rotationPreset != null);
+	const fillAvailability = useMemo(
+		() => (document ? formatFillAvailability(document) : "none"),
+		[document],
+	);
+	const fillActive = settings.formatFollowCursor === true && fillAvailability === "available";
+	// Filling is the default for a format picked from now on; a project that already had one
+	// keeps showing its recording whole until the user says otherwise.
+	const fillDefault = settings.formatFollowCursor === null ? { formatFollowCursor: true } : {};
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
-	const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
-	const [frameMenuOpen, setFrameMenuOpen] = useState(false);
-	const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 	const { locale } = useI18n();
 	const clipCountLabel = (count: number) => ts(pluralKey(locale, count), { count });
 
@@ -2462,269 +2480,194 @@ export function VideoEffectsPane() {
 			    control rather than as the shape of what gets exported. Its old placement was
 			    incidental: it arrived inside 1f25410b, a commit about per-clip crop export and
 			    a HUD redesign, and no decision record ever argued for it. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label}>{ts("effects.format")}</span>
-				<Popover open={ratioMenuOpen} onOpenChange={setRatioMenuOpen}>
-					<PopoverTrigger asChild>
-						<button
-							type="button"
-							className={styles.rowAction}
-							disabled={!hasDocument}
-							aria-label={ts("effects.format")}
-						>
-							{/* `getAspectRatioLabel` hardcodes English "Original" for the legacy
-							    `"native"` value, which is still reachable: the v5→v6 migration only
-							    bakes it into a concrete token once clip dimensions are known, and
-							    leaves it alone until then. The group header below is localized, so
-							    without this the two would disagree in twelve locales. */}
-							{settings.aspectRatio === "auto"
-								? ts("effects.formatAuto")
-								: settings.aspectRatio === "native"
-									? ts("effects.formatOriginal")
-									: getAspectRatioLabel(settings.aspectRatio)}
-							<ChevronDown size={11} />
-						</button>
-					</PopoverTrigger>
-					<PopoverContent
-						align="end"
-						sideOffset={6}
-						collisionPadding={12}
-						animated={false}
-						className="w-auto border-0 bg-transparent p-0 shadow-none"
-					>
-						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.format")}>
-							{/* Auto leads: it is the one entry that is a rule rather than a shape. */}
-							{autoAvailable || settings.aspectRatio === "auto" ? (
-								<button
-									type="button"
-									role="menuitem"
-									className={`${styles.actionMenuRow}${
-										settings.aspectRatio === "auto" ? ` ${styles.isActive}` : ""
-									}`}
-									disabled={!autoAvailable}
-									onClick={() => {
-										setRatioMenuOpen(false);
-										void set({ aspectRatio: "auto" });
-									}}
-								>
-									<span className={styles.actionMenuMain}>{ts("effects.formatAuto")}</span>
-									{!autoAvailable ? (
-										<span className={styles.actionMenuCount}>{ts("effects.formatAutoMixed")}</span>
-									) : autoDims ? (
-										<span className={styles.actionMenuCount}>
-											{`${autoDims.width}×${autoDims.height}`}
-										</span>
-									) : null}
-								</button>
-							) : null}
-							{ASPECT_RATIO_PRESETS.map((ratio) => (
-								<button
-									type="button"
-									role="menuitem"
-									key={ratio}
-									className={`${styles.actionMenuRow}${
-										ratio === settings.aspectRatio ? ` ${styles.isActive}` : ""
-									}`}
-									onClick={() => {
-										setRatioMenuOpen(false);
-										void set({ aspectRatio: ratio });
-									}}
-								>
-									<span className={styles.actionMenuMain}>{ratio}</span>
-								</button>
-							))}
-							{/* The timeline's own shapes stay listed here, and NOT only behind "fit":
-							    that action also zeroes the frame styling, so without these rows there
-							    would be no way to export at the footage's native shape while keeping a
-							    padded, rounded look. */}
-							{nativeFormats.length > 0 ? (
-								<>
-									<div className={styles.actionMenuGroup}>{ts("effects.formatOriginal")}</div>
-									{nativeFormats.map((format) => (
-										<button
-											type="button"
-											role="menuitem"
-											key={`native-${format.token}`}
-											className={`${styles.actionMenuRow}${
-												format.token === settings.aspectRatio ? ` ${styles.isActive}` : ""
-											}`}
-											onClick={() => {
-												setRatioMenuOpen(false);
-												void set({ aspectRatio: format.token });
-											}}
-										>
-											{/* Token leads and the pixel size rides on the right, exactly as this
-											    menu read in the timeline toolbar — here the row names an output
-											    FORMAT, so the ratio is the identity. (The "fit" menu leads with
-											    the resolution instead, because there a row names a clip.) */}
-											<span className={styles.actionMenuMain}>{format.token}</span>
-											<span className={styles.actionMenuCount}>
-												{`${format.width}×${format.height}`}
-												{nativeFormats.length > 1 ? ` · ${format.clipCount}` : ""}
-											</span>
-										</button>
-									))}
-								</>
-							) : null}
-						</div>
-					</PopoverContent>
-				</Popover>
-			</div>
-			{/* The frame drawn around the recording, and its theme. Two menus like Format above
-			    them, and for the same reason: each picks one project-wide look among a few. With a
-			    frame on, Roundness rounds the footage within that frame's own range, the body
-			    following concentric, and Shadow falls under the frame — both still move what
-			    they name. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label} title={ts("effects.windowHelp")}>
-					{ts("effects.frameStyle")}
+			<div className={`${styles.field} ${styles.fieldStack}`}>
+				<span className={styles.fieldLabel}>
+					{ts("effects.format")}
+					{/* Auto is the one entry whose shape moves with the project (padding, camera
+					    layout, crop), so while it is the format the label says where it stands. The
+					    legacy `"native"` value presses no button: it only survives until the clip
+					    dimensions are known, and until then there is no Original row either. */}
+					{settings.aspectRatio === "auto" && autoState ? (
+						<span id={autoStateId} className={styles.sectionLabelValue}>
+							{autoState}
+						</span>
+					) : null}
 				</span>
-				<Popover open={frameMenuOpen} onOpenChange={setFrameMenuOpen}>
-					<PopoverTrigger asChild>
-						<button
-							type="button"
-							className={styles.rowAction}
+				<ChoiceRow<AspectRatio>
+					label={ts("effects.format")}
+					columns={4}
+					options={[
+						// Auto leads: it is the one entry that is a rule rather than a shape.
+						...(autoAvailable || settings.aspectRatio === "auto"
+							? [
+									{
+										value: "auto" as const,
+										label: ts("effects.formatAuto"),
+										disabled: !autoAvailable,
+										title: autoState ? `${ts("effects.formatAuto")} · ${autoState}` : undefined,
+									},
+								]
+							: []),
+						...ASPECT_RATIO_PRESETS.map((ratio) => ({ value: ratio, label: ratio })),
+					]}
+					value={settings.aspectRatio}
+					disabled={!hasDocument}
+					describedBy={settings.aspectRatio === "auto" && !autoAvailable ? autoStateId : undefined}
+					onChange={(aspectRatio) =>
+						void set(aspectRatio === "auto" ? { aspectRatio } : { aspectRatio, ...fillDefault })
+					}
+				/>
+				{/* The timeline's own shapes stay listed here, and NOT only behind "fit": that action
+				    also zeroes the frame styling, so without this row there would be no way to export
+				    at the footage's native shape while keeping a padded, rounded look. Token first,
+				    then the pixel size: here a button names an output FORMAT, so the ratio is the
+				    identity. (The "fit" menu leads with the resolution, because there a row names a
+				    clip.) */}
+				{nativeFormats.length > 0 ? (
+					<>
+						<span className={styles.fieldLabel}>{ts("effects.formatOriginal")}</span>
+						<ChoiceRow<AspectRatio>
+							label={ts("effects.formatOriginal")}
+							columns={Math.min(nativeFormats.length, 2)}
+							options={nativeFormats.map((format) => {
+								const label = `${format.token} · ${format.width}×${format.height}`;
+								return {
+									value: format.token,
+									label,
+									title:
+										nativeFormats.length > 1
+											? `${label} · ${clipCountLabel(format.clipCount)}`
+											: undefined,
+								};
+							})}
+							value={settings.aspectRatio}
 							disabled={!hasDocument}
-							aria-label={ts("effects.frameStyle")}
-							title={ts("effects.windowHelp")}
-						>
-							{ts(RECORDING_FRAME_LABEL_KEYS[settings.frame])}
-							<ChevronDown size={11} />
-						</button>
-					</PopoverTrigger>
-					<PopoverContent
-						align="end"
-						sideOffset={6}
-						collisionPadding={12}
-						animated={false}
-						className="w-auto border-0 bg-transparent p-0 shadow-none"
-					>
-						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.frameStyle")}>
-							{RECORDING_FRAMES.map((frame) => (
-								<button
-									type="button"
-									role="menuitem"
-									key={frame}
-									className={`${styles.actionMenuRow}${
-										frame === settings.frame ? ` ${styles.isActive}` : ""
-									}`}
-									onClick={() => {
-										setFrameMenuOpen(false);
-										void set({ frame });
-									}}
-								>
-									<span className={styles.actionMenuMain}>
-										{ts(RECORDING_FRAME_LABEL_KEYS[frame])}
-									</span>
-								</button>
-							))}
-						</div>
-					</PopoverContent>
-				</Popover>
+							onChange={(aspectRatio) => void set({ aspectRatio, ...fillDefault })}
+						/>
+					</>
+				) : null}
+			</div>
+			{/* How a recording of another shape sits in a fixed format: whole, or filling it with a
+			    window that follows the cursor. Only listed when the two shapes differ and the timeline
+			    has a single rule it could follow. */}
+			{fillAvailability === "available" ? (
+				<div className={`${styles.field} ${styles.fieldStack}`}>
+					<span className={styles.fieldLabel}>{ts("effects.formatFill")}</span>
+					<ChoiceRow<"fit" | "follow">
+						label={ts("effects.formatFill")}
+						options={[
+							{ value: "fit", label: ts("effects.formatFillFit") },
+							{ value: "follow", label: ts("effects.formatFillFollow") },
+						]}
+						value={fillActive ? "follow" : "fit"}
+						disabled={!hasDocument}
+						onChange={(v) => void set({ formatFollowCursor: v === "follow" })}
+					/>
+				</div>
+			) : null}
+			{/* The frame drawn around the recording, and its theme. Rows of buttons like Format
+			    above them, and for the same reason: each picks one project-wide look among a few.
+			    With a frame on, Roundness rounds the footage within that frame's own range, the
+			    body following concentric, and Shadow falls under the frame — both still move what
+			    they name. */}
+			<div className={`${styles.field} ${styles.fieldStack}`}>
+				{/* The tiles only draw their frame, so the label names the current one. */}
+				<span className={styles.fieldLabel} title={ts("effects.windowHelp")}>
+					{ts("effects.frameStyle")}
+					<span className={styles.sectionLabelValue}>
+						{ts(RECORDING_FRAME_LABEL_KEYS[settings.frame])}
+					</span>
+				</span>
+				<ChoiceRow<RecordingFrame>
+					label={ts("effects.frameStyle")}
+					tiles
+					options={RECORDING_FRAMES.map((frame) => {
+						const Icon = RECORDING_FRAME_ICONS[frame];
+						return {
+							value: frame,
+							label: ts(RECORDING_FRAME_LABEL_KEYS[frame]),
+							icon: <Icon size={20} aria-hidden="true" />,
+						};
+					})}
+					value={settings.frame}
+					disabled={!hasDocument}
+					onChange={(frame) => void set({ frame })}
+				/>
 			</div>
 			{/* The theme rides WITH the frame: it only exists once there is a body to colour, so it
 			    appears next to the frame it recolours rather than sitting there inert. */}
 			{settings.frame !== "none" ? (
-				<div className={styles.paneRow}>
-					<span className={styles.label} title={ts("effects.frameThemeHelp")}>
+				<div className={`${styles.field} ${styles.fieldStack}`}>
+					<span className={styles.fieldLabel} title={ts("effects.frameThemeHelp")}>
 						{ts("effects.frameTheme")}
 					</span>
-					<Popover open={themeMenuOpen} onOpenChange={setThemeMenuOpen}>
-						<PopoverTrigger asChild>
-							<button
-								type="button"
-								className={styles.rowAction}
-								disabled={!hasDocument}
-								aria-label={ts("effects.frameTheme")}
-								title={ts("effects.frameThemeHelp")}
-							>
-								{ts(FRAME_THEME_LABEL_KEYS[settings.frameTheme])}
-								<ChevronDown size={11} />
-							</button>
-						</PopoverTrigger>
-						<PopoverContent
-							align="end"
-							sideOffset={6}
-							collisionPadding={12}
-							animated={false}
-							className="w-auto border-0 bg-transparent p-0 shadow-none"
-						>
-							<div className={styles.actionMenu} role="menu" aria-label={ts("effects.frameTheme")}>
-								{FRAME_THEMES.map((frameTheme) => (
-									<button
-										type="button"
-										role="menuitem"
-										key={frameTheme}
-										className={`${styles.actionMenuRow}${
-											frameTheme === settings.frameTheme ? ` ${styles.isActive}` : ""
-										}`}
-										onClick={() => {
-											setThemeMenuOpen(false);
-											void set({ frameTheme });
-										}}
-									>
-										<span className={styles.actionMenuMain}>
-											{ts(FRAME_THEME_LABEL_KEYS[frameTheme])}
-										</span>
-									</button>
-								))}
-							</div>
-						</PopoverContent>
-					</Popover>
+					<ChoiceRow<FrameTheme>
+						label={ts("effects.frameTheme")}
+						options={FRAME_THEMES.map((frameTheme) => ({
+							value: frameTheme,
+							label: ts(FRAME_THEME_LABEL_KEYS[frameTheme]),
+						}))}
+						value={settings.frameTheme}
+						disabled={!hasDocument}
+						onChange={(frameTheme) => void set({ frameTheme })}
+					/>
 				</div>
 			) : null}
+			{namedLevelRow(
+				ts("effects.shadow"),
+				SHADOW_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
+				settings.shadowIntensity,
+				!hasDocument,
+				(shadowIntensity) => {
+					void set({ shadowIntensity });
+					if (isNativeCompositorActive()) setNativeParam("shadow", shadowIntensity);
+				},
+			)}
 			<div className={styles.sliderGrid}>
-				<SliderCell
-					label={ts("effects.shadow")}
-					value={settings.shadowIntensity * 100}
-					min={0}
-					max={100}
-					suffix="%"
-					disabled={!hasDocument}
-					onChange={(v) => {
-						setLive({ shadowIntensity: v / 100 });
-						if (isNativeCompositorActive()) {
-							setNativeParam("shadow", v / 100);
-						}
-					}}
-					onCommit={() => void commit()}
-				/>
-				{/* Under a frame the slider spans 0 → the most that frame wears well (the native
-				    `frame_roundness_cap`), so its travel reads as a share of that range, not as
-				    pixels it no longer draws. The stored value stays in pixels either way. */}
-				<SliderCell
-					label={ts("effects.roundness")}
-					hint={framed ? ts("effects.roundnessFrameHelp") : undefined}
-					value={settings.borderRadius * roundnessScale}
-					min={0}
-					max={ROUNDNESS_SLIDER_MAX_PX * roundnessScale}
-					step={framed ? 1 : 0.5}
-					suffix={framed ? "%" : "px"}
-					disabled={!hasDocument}
-					onChange={(v) => {
-						const px = v / roundnessScale;
-						setLive({ borderRadius: px });
-						if (isNativeCompositorActive()) {
-							setNativeParam("roundness", px / NATIVE_SCREEN_BASE_RADIUS_PX);
-						}
-					}}
-					onCommit={() => void commit()}
-				/>
 				<SliderCell
 					label={ts("effects.padding")}
 					value={settings.padding}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.padding}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
-						setLive({ padding: v });
+						// No padding, no background to round against: roundness follows to 0.
+						setLive(v === 0 ? { padding: 0, borderRadius: 0 } : { padding: v });
 						if (isNativeCompositorActive()) {
 							setNativeParam("padding", v / 100);
+							if (v === 0) setNativeParam("roundness", 0);
 						}
 					}}
 					onCommit={() => void commit()}
 				/>
+				{settings.padding > 0 ? (
+					<>
+						{/* Under a frame the slider spans 0 → the most that frame wears well (the native
+				    `frame_roundness_cap`), so its travel reads as a share of that range, not as
+				    pixels it no longer draws. The stored value stays in pixels either way. */}
+						<SliderCell
+							label={ts("effects.roundness")}
+							hint={framed ? ts("effects.roundnessFrameHelp") : undefined}
+							value={settings.borderRadius * roundnessScale}
+							min={0}
+							max={ROUNDNESS_SLIDER_MAX_PX * roundnessScale}
+							defaultValue={DEFAULT_EDITOR_SETTINGS.borderRadius * roundnessScale}
+							step={framed ? 1 : 0.5}
+							suffix={framed ? "%" : "px"}
+							disabled={!hasDocument}
+							onChange={(v) => {
+								const px = v / roundnessScale;
+								setLive({ borderRadius: px });
+								if (isNativeCompositorActive()) {
+									setNativeParam("roundness", px / NATIVE_SCREEN_BASE_RADIUS_PX);
+								}
+							}}
+							onCommit={() => void commit()}
+						/>
+					</>
+				) : null}
 			</div>
 			{/* Alone in its section, and correctly so: this blurs the RECORDING as it moves
 			    (zooms, layout changes) — see `effects.motion_blur` driving the tap count in
@@ -2737,6 +2680,7 @@ export function VideoEffectsPane() {
 					value={settings.motionBlurAmount * 100}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.motionBlurAmount * 100}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -2749,22 +2693,18 @@ export function VideoEffectsPane() {
 				/>
 			</div>
 			{/* Next to motion blur because it is the other blur of the RECORDING. It only ever
-			    acts on a 3D-tilted zoom, so with none in the project the switch would move
-			    nothing on screen: it is disabled then, and the row says why. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label}>
-					{ts("effects.depthOfField")}
-					<span className={styles.info}>
-						{hasTiltedZoom ? ts("effects.depthOfFieldHint") : ts("effects.depthOfFieldNoTilt")}
-					</span>
-				</span>
-				<Toggle
-					checked={settings.depthOfField}
-					ariaLabel={ts("effects.depthOfField")}
-					disabled={!hasDocument || !hasTiltedZoom}
-					onChange={(v) => void set({ depthOfField: v })}
-				/>
-			</div>
+			    acts on a 3D-tilted zoom, so with none in the project it is not offered. */}
+			{hasTiltedZoom ? (
+				<div className={styles.paneRow}>
+					<span className={styles.label}>{ts("effects.depthOfField")}</span>
+					<Toggle
+						checked={settings.depthOfField}
+						ariaLabel={ts("effects.depthOfField")}
+						disabled={!hasDocument}
+						onChange={(v) => void set({ depthOfField: v })}
+					/>
+				</div>
+			) : null}
 		</Pane>
 	);
 }
@@ -3089,6 +3029,7 @@ export function LayoutPane() {
 							value={Math.round(settings.webcamRoundness * 100)}
 							min={0}
 							max={100}
+							defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamRoundness * 100)}
 							suffix="%"
 							disabled={layoutControlsDisabled}
 							onChange={(next) => setLive({ webcamRoundness: next / 100 })}
@@ -3100,6 +3041,7 @@ export function LayoutPane() {
 							value={settings.webcamSizePreset}
 							min={WEBCAM_SIZE_MIN}
 							max={WEBCAM_SIZE_MAX}
+							defaultValue={DEFAULT_EDITOR_SETTINGS.webcamSizePreset}
 							step={1}
 							suffix="%"
 							disabled={layoutControlsDisabled}
@@ -3190,6 +3132,7 @@ export function LayoutPane() {
 								value={Math.round(settings.webcamBlurIntensity * 100)}
 								min={0}
 								max={100}
+								defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamBlurIntensity * 100)}
 								suffix="%"
 								disabled={layoutControlsDisabled}
 								onChange={(next) => setLive({ webcamBlurIntensity: next / 100 })}
@@ -3220,6 +3163,15 @@ export function LayoutPane() {
 				src={cameraSrc}
 				crop={webcamCrop}
 				pan={cropPan}
+				background={
+					canSegmentCamera && settings.webcamBackgroundMode !== "none"
+						? {
+								mode: settings.webcamBackgroundMode,
+								blurIntensity: settings.webcamBlurIntensity,
+								wallpaper: settings.webcamWallpaper,
+							}
+						: null
+				}
 				disabled={layoutControlsDisabled}
 				hint={ts("layout.webcamFramingDrag")}
 				onFrameLive={setCropFrame}
@@ -3233,6 +3185,35 @@ export function LayoutPane() {
 const MIN_CROP_SIZE = 1 / 3;
 const FRAME_CORNERS = ["nw", "ne", "sw", "se"] as const;
 type FrameCorner = (typeof FRAME_CORNERS)[number];
+
+/** The thumbnail's frame, cut out once: a subject mask to lay over the video, and a small copy
+ *  of the frame for the blur mode to blur. `null` when this machine cannot segment. */
+async function cutOutSubject(
+	video: HTMLVideoElement,
+): Promise<{ mask: string; backdrop: string } | null> {
+	const canvas = document.createElement("canvas");
+	const ctx = canvas.getContext("2d");
+	if (!ctx || video.videoWidth === 0) return null;
+	// Blurred, a small copy is as good as the full frame. It keeps the camera's shape.
+	canvas.width = SEGMENTATION_WIDTH;
+	canvas.height = Math.round((SEGMENTATION_WIDTH * video.videoHeight) / video.videoWidth);
+	ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+	const backdrop = canvas.toDataURL("image/jpeg");
+	// The model sees the whole frame squeezed to its input size, as the compositor feeds it.
+	canvas.width = SEGMENTATION_WIDTH;
+	canvas.height = SEGMENTATION_HEIGHT;
+	ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+	const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+	const mask = await segmentCameraFrame(new Uint8Array(pixels.buffer));
+	if (!mask) return null;
+	// Stretched back over the video by `mask-size: 100% 100%`, as the shader samples it.
+	const alpha = ctx.createImageData(canvas.width, canvas.height);
+	mask.forEach((value, i) => {
+		alpha.data[i * 4 + 3] = value;
+	});
+	ctx.putImageData(alpha, 0, 0);
+	return { mask: canvas.toDataURL(), backdrop };
+}
 
 /** Où la webcam cadre, réglé à la main : une vignette de la caméra, le cadre gardé posé dessus.
  *  Le cadre EST le réglage : on le glisse pour choisir ce qu'il montre, on tire un coin pour
@@ -3249,6 +3230,7 @@ function WebcamFraming({
 	src,
 	crop,
 	pan,
+	background,
 	disabled,
 	hint,
 	onFrameLive,
@@ -3259,12 +3241,45 @@ function WebcamFraming({
 	src: string | null;
 	crop: { x: number; y: number; width: number; height: number };
 	pan: { x: number; y: number };
+	/** The camera background to show on the thumbnail, `null` for the raw camera. */
+	background: {
+		mode: Exclude<WebcamBackgroundMode, "none">;
+		blurIntensity: number;
+		wallpaper: string;
+	} | null;
 	disabled: boolean;
 	hint: string;
 	onFrameLive: (size: number, pan: { x: number; y: number }) => void;
 	onCommit: () => void;
 }) {
 	const boxRef = useRef<HTMLDivElement | null>(null);
+	const videoRef = useRef<HTMLVideoElement | null>(null);
+	// The source whose chosen frame is on screen, the one the cutout is taken from.
+	const [seekedSrc, setSeekedSrc] = useState<string | null>(null);
+	// Segmented once per source: the mask depends on the picture alone, so changing the mode,
+	// the blur or the wallpaper afterwards is plain CSS over it. Nothing runs while the
+	// background is "none".
+	const [cutout, setCutout] = useState<{ src: string; mask: string; backdrop: string } | null>(
+		null,
+	);
+	const wantsCutout = background !== null;
+	useEffect(() => {
+		const video = videoRef.current;
+		if (!wantsCutout || !video || src === null || seekedSrc !== src) return;
+		let current = true;
+		cutOutSubject(video)
+			.then((result) => {
+				if (current && result) setCutout({ src, ...result });
+			})
+			.catch((err) => console.warn("[webcam-framing] segmentation failed:", err));
+		return () => {
+			current = false;
+		};
+	}, [wantsCutout, src, seekedSrc]);
+	const shown = background && cutout?.src === src ? cutout : null;
+	// The shader's blur radius (`blur_webcam_bg`) as a CSS deviation, at the scale of a typical
+	// PiP bubble: the thumbnail cannot know the real one, so this is close, not exact.
+	const blurPx = background ? (background.blurIntensity * 22 + 1.5) / 4 : 0;
 	const gestureRef = useRef<
 		| { kind: "move"; x: number; y: number; pan: { x: number; y: number } }
 		| { kind: "resize"; anchor: { x: number; y: number }; corner: FrameCorner }
@@ -3337,11 +3352,32 @@ function WebcamFraming({
 	return (
 		<div className={styles.framing}>
 			<div ref={boxRef} className={styles.framingBox} style={{ aspectRatio: aspect }}>
+				{shown && background?.mode === "blur" ? (
+					// Oversized by the blur's reach, so its faded edge falls outside the box.
+					<div
+						aria-hidden="true"
+						style={{
+							position: "absolute",
+							inset: -2 * blurPx,
+							background: `center / cover no-repeat url(${shown.backdrop})`,
+							filter: `blur(${blurPx}px)`,
+						}}
+					/>
+				) : shown && background?.mode === "custom" ? (
+					<div
+						aria-hidden="true"
+						style={{ position: "absolute", inset: 0, ...wallpaperStyle(background.wallpaper) }}
+					/>
+				) : null}
 				{src ? (
 					<video
+						ref={videoRef}
 						className={styles.framingVideo}
 						src={src}
-						style={{ visibility: ready ? "visible" : "hidden" }}
+						style={{
+							visibility: ready ? "visible" : "hidden",
+							...(shown ? { maskImage: `url(${shown.mask})`, maskSize: "100% 100%" } : {}),
+						}}
 						muted
 						playsInline
 						preload="metadata"
@@ -3354,6 +3390,7 @@ function WebcamFraming({
 							// A frame from the take rather than its first one, which is often black.
 							video.currentTime = Math.min(1, (video.duration || 0) / 2);
 						}}
+						onSeeked={() => setSeekedSrc(src)}
 					/>
 				) : null}
 				<div
@@ -3461,6 +3498,7 @@ export function AudioPane() {
 					value={settings.audioGainDb}
 					min={-AUDIO_GAIN_DB_LIMIT}
 					max={AUDIO_GAIN_DB_LIMIT}
+					defaultValue={0}
 					step={0.5}
 					decimals={1}
 					suffix=" dB"
@@ -3651,10 +3689,10 @@ export function AudioTrackPane({ tl, onClose }: { tl: TimelineApi; onClose?: () 
 					setLiveGain(null);
 					setLiveFadeIn(null);
 					setLiveFadeOut(null);
+					// Back to what a new track of this kind starts at: a bed returns UNDER the
+					// voice, not to a 0 dB level that buries it.
 					void tl.updateAudioTrack(track.id, {
-						gainDb: 0,
-						fadeInMs: 0,
-						fadeOutMs: 0,
+						...audioTrackDefaults(track.kind),
 						muted: false,
 						loop: false,
 					});
@@ -3692,25 +3730,20 @@ export function CursorPane() {
 	// handlers below push diffs live. Sizes are sent as direct scales (1 = fixture default).
 	// Synchro initiale : cf. NativeCompositorOverlay (`pushAllNativeParams`).
 
-	// Built-in "Default" plus each bundled theme. When arrow and pointer art
-	// differ, both sprites are shown so a pack is not previewed as arrow-only.
+	// Built-in "Default" plus each bundled theme, previewed by its main arrow only.
 	const cursorThemeOptions = useMemo(
 		() => [
 			{
 				id: DEFAULT_CURSOR_THEME_ID,
 				name: ts("cursor.themeDefault"),
-				previewUrls: [defaultCursorPreviewUrl],
+				previewUrl: defaultCursorPreviewUrl,
 			},
 			...CURSOR_THEMES.map((theme) => {
-				const preview = themePickerPreviewAssets(theme);
-				const urls = [
-					preview.arrow ? safeAssetUrl(preview.arrow) : defaultCursorPreviewUrl,
-					...(preview.pointer ? [safeAssetUrl(preview.pointer)] : []),
-				];
+				const { arrow } = themePickerPreviewAssets(theme);
 				return {
 					id: theme.id,
 					name: theme.name,
-					previewUrls: urls,
+					previewUrl: arrow ? safeAssetUrl(arrow) : defaultCursorPreviewUrl,
 				};
 			}),
 		],
@@ -3751,88 +3784,81 @@ export function CursorPane() {
 					}}
 				/>
 			</div>
-			{/* One switch for the modelled cursor. A hidden cursor has nothing to model, so the
-			    row is disabled then and both its hint and its tooltip say why. */}
-			<div
-				className={styles.paneRow}
-				title={settings.cursorShow ? undefined : ts("cursor.model3dNeedsCursor")}
-			>
-				<span className={styles.label}>
-					{ts("cursor.model3d")}
-					<span className={styles.info}>
-						{settings.cursorShow ? ts("cursor.model3dHint") : ts("cursor.model3dNeedsCursor")}
-					</span>
-				</span>
-				<Toggle
-					ariaLabel={ts("cursor.model3d")}
-					checked={settings.cursor.model3d}
-					disabled={!hasDocument || !settings.cursorShow}
-					onChange={(v) => {
-						void set({ cursor: { model3d: v } });
-						if (isNativeCompositorActive()) {
-							setNativeParam("cursorModel3d", v);
-						}
-					}}
-				/>
-			</div>
-			<div className={styles.paneRow}>
-				<span className={styles.label}>
-					{ts("cursor.alwaysArrow")}
-					<span className={styles.info}>{ts("cursor.alwaysArrowHint")}</span>
-				</span>
-				<Toggle
-					ariaLabel={ts("cursor.alwaysArrow")}
-					checked={settings.cursor.alwaysArrow}
-					disabled={!hasDocument || !settings.cursorShow}
-					onChange={(v) => void set({ cursor: { alwaysArrow: v } })}
-				/>
-			</div>
-			<div className={styles.sectionLabel}>{ts("cursor.theme")}</div>
-			<div className={styles.cursorGrid}>
-				{cursorThemeOptions.map((option) => {
-					const isActive = settings.cursorTheme === option.id;
-					return (
-						<button
-							type="button"
-							key={option.id}
-							className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
-							title={option.name}
-							aria-label={option.name}
-							aria-pressed={isActive}
+			{/* A hidden cursor has nothing to model or restyle, so these rows are not offered then. */}
+			{settings.cursorShow ? (
+				<>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("cursor.model3d")}</span>
+						<Toggle
+							ariaLabel={ts("cursor.model3d")}
+							checked={settings.cursor.model3d}
 							disabled={!hasDocument}
-							onClick={() => void set({ cursor: { theme: option.id } })}
-						>
-							<span className={styles.cursorCellPreviews}>
-								{option.previewUrls.map((url) => (
+							onChange={(v) => {
+								void set({ cursor: { model3d: v } });
+								if (isNativeCompositorActive()) {
+									setNativeParam("cursorModel3d", v);
+								}
+							}}
+						/>
+					</div>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("cursor.alwaysArrow")}</span>
+						<Toggle
+							ariaLabel={ts("cursor.alwaysArrow")}
+							checked={settings.cursor.alwaysArrow}
+							disabled={!hasDocument}
+							onChange={(v) => void set({ cursor: { alwaysArrow: v } })}
+						/>
+					</div>
+				</>
+			) : null}
+			{/* One option is not a choice: the picker shows once a pack ships beside the
+			    default art (see CURSOR_THEMES). */}
+			{cursorThemeOptions.length > 1 ? (
+				<>
+					<div className={styles.sectionLabel}>{ts("cursor.theme")}</div>
+					<div className={styles.cursorGrid}>
+						{cursorThemeOptions.map((option) => {
+							const isActive = settings.cursorTheme === option.id;
+							return (
+								<button
+									type="button"
+									key={option.id}
+									className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
+									title={option.name}
+									aria-label={option.name}
+									aria-pressed={isActive}
+									disabled={!hasDocument}
+									onClick={() => void set({ cursor: { theme: option.id } })}
+								>
 									<img
-										key={url}
-										src={url}
+										src={option.previewUrl}
 										alt=""
-										width={option.previewUrls.length > 1 ? 14 : 20}
-										height={option.previewUrls.length > 1 ? 14 : 20}
+										width={20}
+										height={20}
 										draggable={false}
 										style={{ objectFit: "contain", pointerEvents: "none" }}
 									/>
-								))}
-							</span>
-						</button>
-					);
-				})}
-			</div>
+								</button>
+							);
+						})}
+					</div>
+				</>
+			) : null}
 			<div className={styles.sliderGrid}>
+				{/* A slider, not named steps: "a bit bigger" is a size between two of them.
+				    `SETTING_BOUNDS` keeps both ends sane. */}
 				<SliderCell
 					label={ts("cursor.size")}
-					value={settings.cursor.size * 10}
-					min={5}
-					max={100}
-					step={0.1}
-					decimals={1}
+					value={settings.cursor.size}
+					min={SETTING_BOUNDS.cursorSize[0]}
+					max={SETTING_BOUNDS.cursorSize[1]}
+					step={0.05}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.size}
 					disabled={!hasDocument}
 					onChange={(v) => {
-						setLive({ cursor: { size: v / 10 } });
-						if (isNativeCompositorActive()) {
-							setNativeParam("cursorSize", v / 10);
-						}
+						setLive({ cursor: { size: v } });
+						if (isNativeCompositorActive()) setNativeParam("cursorSize", v);
 					}}
 					onCommit={() => void commit()}
 				/>
@@ -3841,6 +3867,7 @@ export function CursorPane() {
 					value={settings.cursor.smoothing * 100}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.smoothing * 100}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -3856,6 +3883,7 @@ export function CursorPane() {
 					value={settings.cursor.motionBlur * 100}
 					min={0}
 					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.motionBlur * 100}
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -3866,23 +3894,17 @@ export function CursorPane() {
 					}}
 					onCommit={() => void commit()}
 				/>
-				<SliderCell
-					label={ts("cursor.clickBounce")}
-					value={settings.cursor.clickBounce * 10}
-					min={0}
-					max={50}
-					step={0.1}
-					decimals={1}
-					disabled={!hasDocument}
-					onChange={(v) => {
-						setLive({ cursor: { clickBounce: v / 10 } });
-						if (isNativeCompositorActive()) {
-							setNativeParam("cursorClickBounce", v / 10);
-						}
-					}}
-					onCommit={() => void commit()}
-				/>
 			</div>
+			{namedLevelRow(
+				ts("cursor.clickBounce"),
+				CLICK_BOUNCE_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
+				settings.cursor.clickBounce,
+				!hasDocument,
+				(clickBounce) => {
+					void set({ cursor: { clickBounce } });
+					if (isNativeCompositorActive()) setNativeParam("cursorClickBounce", clickBounce);
+				},
+			)}
 		</Pane>
 	);
 }
@@ -3934,10 +3956,19 @@ export function ChoiceRow<T extends string | number>({
 	columns,
 	tiles,
 	display,
+	describedBy,
 }: {
 	label: string;
-	/** `null` leaves a hole in the grid: the middle of the camera's position grid. */
-	options: ReadonlyArray<{ value: T; label: string; icon?: ReactNode } | null>;
+	/** `null` leaves a hole in the grid: the middle of the camera's position grid. An option
+	 *  can be `disabled` on its own: a disabled button takes no focus, so its `title` is only a
+	 *  mouse hint, and the reason must also be visible text the row points at (`describedBy`). */
+	options: ReadonlyArray<{
+		value: T;
+		label: string;
+		icon?: ReactNode;
+		disabled?: boolean;
+		title?: string;
+	} | null>;
 	value: T;
 	onChange: (next: T) => void;
 	disabled?: boolean;
@@ -3948,6 +3979,8 @@ export function ChoiceRow<T extends string | number>({
 	/** Ce que montre un bouton. Par défaut l'icône s'il y en a une, et alors `label` lui sert de
 	 *  nom ; sinon le texte. */
 	display?: "text" | "icon" | "both";
+	/** Id of the visible text that explains the row, typically why some options are disabled. */
+	describedBy?: string;
 }) {
 	const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
 	const mode = display ?? (options.some((o) => o?.icon) ? "icon" : "text");
@@ -3955,6 +3988,7 @@ export function ChoiceRow<T extends string | number>({
 		<div
 			role="group"
 			aria-label={label}
+			aria-describedby={describedBy}
 			className={`${styles.choiceRow} ${tiles ? styles.choiceRowTiles : ""}`}
 			style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}
 			onKeyDown={(e) => {
@@ -3973,8 +4007,11 @@ export function ChoiceRow<T extends string | number>({
 				e.nativeEvent.stopPropagation();
 				const focused = buttonsRef.current.findIndex((b) => b === document.activeElement);
 				const from = focused >= 0 ? focused : options.findIndex((o) => o?.value === value);
-				// A hole is stepped over, not landed on.
-				const to = options[from + step] === null ? from + 2 * step : from + step;
+				// Holes and disabled options are stepped over, not landed on.
+				let to = from + step;
+				while (to >= 0 && to < options.length && (options[to] ?? { disabled: true }).disabled) {
+					to += step;
+				}
 				const next = options[to];
 				if (!next) return;
 				buttonsRef.current[to]?.focus();
@@ -3995,8 +4032,8 @@ export function ChoiceRow<T extends string | number>({
 						aria-pressed={pressed}
 						aria-label={mode === "icon" ? option.label : undefined}
 						// Always: a label cut short by a narrow pane still reads in full on hover.
-						title={option.label}
-						disabled={disabled}
+						title={option.title ?? option.label}
+						disabled={disabled || option.disabled}
 						// Re-choisir la valeur en place n'est pas une modification : ni sauvegarde ni
 						// entrée d'annulation.
 						onClick={() => {
@@ -4018,6 +4055,46 @@ export function ChoiceRow<T extends string | number>({
 	);
 }
 
+/**
+ * The named levels that replace a slider for a value whose number means nothing to a user.
+ * Screen Studio's rule: a style is chosen by what it looks like, never by "30.0". Each list
+ * holds the default (`DEFAULT_PROJECT_APPEARANCE`) and stays inside `SETTING_BOUNDS`.
+ */
+const CLICK_BOUNCE_LEVELS = [
+	{ value: 0, labelKey: "cursor.bounceNone" },
+	{ value: 1, labelKey: "cursor.bounceLight" },
+	{ value: 2, labelKey: "cursor.bounceStrong" },
+] as const;
+const SHADOW_LEVELS = [
+	{ value: 0, labelKey: "effects.shadowNone" },
+	{ value: 0.3, labelKey: "effects.shadowLight" },
+	{ value: 0.6, labelKey: "effects.shadowMedium" },
+	{ value: 0.9, labelKey: "effects.shadowStrong" },
+] as const;
+
+/** A labelled row of named levels. A stored value between two levels (an older project, a
+ *  preset) presses no button, the way a speed outside the row does. */
+function namedLevelRow(
+	label: string,
+	options: ReadonlyArray<{ value: number; label: string }>,
+	value: number,
+	disabled: boolean,
+	onChange: (next: number) => void,
+) {
+	return (
+		<div className={`${styles.field} ${styles.fieldStack}`}>
+			<span className={styles.fieldLabel}>{label}</span>
+			<ChoiceRow<number>
+				label={label}
+				options={options}
+				value={value}
+				disabled={disabled}
+				onChange={onChange}
+			/>
+		</div>
+	);
+}
+
 /** Le slider commun des panneaux — exporté pour que l'inspecteur V4 s'en serve au lieu de
  *  restyler un `<input type="range">` isolé qui ne ressemblait à rien de l'app. Il porte aussi
  *  la bonne cadence : `onChange` en direct, `onCommit` à la fin du geste. */
@@ -4032,9 +4109,12 @@ export function SliderCell({
 	disabled,
 	onChange,
 	onCommit,
-	showValue = true,
+	// A number with no unit ("30.0" for a cursor size) says nothing a user can act on: the
+	// track's position already shows where the value sits.
+	showValue = suffix !== "",
 	full = false,
 	hint,
+	defaultValue,
 }: {
 	label: string;
 	value: number;
@@ -4053,8 +4133,20 @@ export function SliderCell({
 	/** Une phrase qui dit ce que la course du slider signifie quand ce n'est pas l'évidence
 	 *  (Roundness sous un cadre) : l'infobulle du libellé et du slider. */
 	hint?: string;
+	/** The value a reset returns to, in the slider's own units. With it, a slider moved off it
+	 *  shows a reset button. Not a double-click on the track: its two mouse-ups would each
+	 *  commit, leaving intermediate values in the undo history before the reset. */
+	defaultValue?: number;
 }) {
+	const tc = useScopedT("common");
 	const pct = Math.max(0, Math.min(100, max > min ? ((value - min) / (max - min)) * 100 : 0));
+	// Within a thousandth of a step: a stored value comes back through a unit conversion.
+	const modified = defaultValue !== undefined && Math.abs(value - defaultValue) > step / 1000;
+	const reset = () => {
+		if (!modified || disabled || defaultValue === undefined) return;
+		onChange(defaultValue);
+		onCommit();
+	};
 	return (
 		<div className={`${styles.sliderCell}${full ? ` ${styles.full}` : ""}`}>
 			<div className={styles.head}>
@@ -4066,6 +4158,19 @@ export function SliderCell({
 						{value.toFixed(decimals)}
 						{suffix}
 					</span>
+				) : null}
+				{/* Only once the value has moved: at the default there is nothing to go back to. */}
+				{modified ? (
+					<button
+						type="button"
+						className={styles.sliderReset}
+						aria-label={`${tc("actions.resetToDefault")}: ${label}`}
+						title={tc("actions.resetToDefault")}
+						disabled={disabled}
+						onClick={reset}
+					>
+						<RotateCcw size={12} aria-hidden="true" />
+					</button>
 				) : null}
 			</div>
 			{/* The visible label is a <span>, not a <label htmlFor>, so without this the

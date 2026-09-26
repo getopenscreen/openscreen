@@ -17,10 +17,12 @@ keywords:
 
 Clique em **Exportar** na barra superior para abrir a caixa de diálogo de exportação.
 
+Escolha primeiro um **destino**: **Web / YouTube** (MP4, 1080p, 60 fps), **Redes sociais** (o mesmo a 30 fps, com uma taxa de bits menor), **Estúdio** (MP4 na resolução do menor clipe, ajustada à proporção do projeto, 60 fps) ou **GIF para README** (um GIF de 480p a 15 fps). Um destino nunca muda a proporção do projeto. Tudo o que vem a seguir fica em **Avançado**.
+
 ## Formatos {#formats}
 
 - **MP4** — qualidade **Baixa** (720p), **Média** (1080p) ou **Alta** (resolução de origem); taxa de quadros de 24 / 30 / 60 fps; codec **H.264** (o padrão, e o aceito por mais players) ou **H.265**.
-- **GIF** — taxa de quadros de 15 / 20 / 25 / 30 fps, tamanho Medium / Large / Original e a opção **Repetir GIF**.
+- **GIF** — taxa de quadros de 15 / 20 / 25 / 30 fps, tamanho Small / Medium / Large / Original e a opção **Repetir GIF**.
 
 :::note
 O VP9 foi removido. Não há codificador VP9 por hardware nas GPUs para as quais o pipeline nativo foi feito, e a alternativa por software era lenta demais para ser oferecida como uma opção aparentemente equivalente às outras.

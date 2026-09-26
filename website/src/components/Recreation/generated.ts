@@ -526,7 +526,6 @@ export const PANELS = {
 	cursor: {
 		title: "Cursor",
 		show: "Show cursor",
-		theme: "Cursor style",
 		size: "Size",
 		smoothing: "Smoothing",
 	},
@@ -584,10 +583,6 @@ export const CONTROLS = {
 		label: "Show cursor",
 		on: true,
 	},
-	cursorTheme: {
-		label: "Cursor style",
-		value: "default",
-	},
 	cursorSize: {
 		label: "Size",
 		value: 45,
@@ -606,10 +601,9 @@ export const CONTROLS = {
 	},
 } as const;
 
-/** The cursor packs the picker shows, each with the application's own hotspot,
- *  normalised to a fraction of the sprite. */
+/** The cursor art the page draws, each sprite with the application's own
+ *  hotspot, normalised to a fraction of the sprite. */
 export const CURSORS = {
-	themeCount: 18,
 	themes: [
 		{
 			id: "default",
@@ -617,69 +611,6 @@ export const CURSORS = {
 			hotspotX: 0.119,
 			hotspotY: 0.0874,
 			src: "/img/cursors/00-arrow.png",
-		},
-		{
-			id: "pink-glossy-arrow-and-hand-3d",
-			name: "Pink Glossy Arrow & Hand 3D",
-			hotspotX: 0.0469,
-			hotspotY: 0.0469,
-			src: "/img/cursors/01-arrow.png",
-		},
-		{
-			id: "spring-gradient",
-			name: "Spring Gradient",
-			hotspotX: 0.0469,
-			hotspotY: 0.0156,
-			src: "/img/cursors/02-arrow.png",
-		},
-		{
-			id: "black-and-rainbow-stroke-gradient-animated",
-			name: "Black & Rainbow Stroke Gradient Animated",
-			hotspotX: 0.05,
-			hotspotY: 0.03,
-			src: "/img/cursors/03-arrow.png",
-		},
-		{
-			id: "among-us-sus-knife-and-red-animated",
-			name: "Among Us Sus Knife & Red Animated",
-			hotspotX: 0.1531,
-			hotspotY: 0.1016,
-			src: "/img/cursors/04-arrow.png",
-		},
-		{
-			id: "hollow-knight-and-game-arrow",
-			name: "Hollow Knight & Game Arrow",
-			hotspotX: 0.0156,
-			hotspotY: 0.0156,
-			src: "/img/cursors/05-arrow.png",
-		},
-		{
-			id: "mickey-mouse-black-hand-inflated-glove",
-			name: "Mickey Mouse Black Hand Inflated Glove",
-			hotspotX: 0.0781,
-			hotspotY: 0.0156,
-			src: "/img/cursors/06-arrow.png",
-		},
-		{
-			id: "sanrio-kuromi-skull-arrow",
-			name: "Sanrio Kuromi Skull Arrow",
-			hotspotX: 0.0469,
-			hotspotY: 0.0156,
-			src: "/img/cursors/07-arrow.png",
-		},
-		{
-			id: "old-roblox",
-			name: "Old Roblox",
-			hotspotX: 0.0781,
-			hotspotY: 0.0469,
-			src: "/img/cursors/08-arrow.png",
-		},
-		{
-			id: "pokemon-neon-gengar",
-			name: "Pokemon Neon Gengar",
-			hotspotX: 0.0313,
-			hotspotY: 0.0156,
-			src: "/img/cursors/09-arrow.png",
 		},
 	],
 	pointer: {
@@ -777,7 +708,6 @@ export const PROVENANCE: ProvenanceEntry[] = [
 	{ shown: "Roundness", source: "src/i18n/locales/en/settings.json → effects.roundness" },
 	{ shown: "Cursor", source: "src/i18n/locales/en/settings.json → cursor.title" },
 	{ shown: "Show cursor", source: "src/i18n/locales/en/settings.json → cursor.show" },
-	{ shown: "Cursor style", source: "src/i18n/locales/en/settings.json → cursor.theme" },
 	{ shown: "Size", source: "src/i18n/locales/en/settings.json → cursor.size" },
 	{ shown: "Smoothing", source: "src/i18n/locales/en/settings.json → cursor.smoothing" },
 ];

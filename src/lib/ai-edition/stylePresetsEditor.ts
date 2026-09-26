@@ -48,6 +48,25 @@ export function stylePresetAppearanceFromSettings(
 	};
 }
 
+/** Whether two appearances look the same. The format is not part of the look (see
+ *  `stylePresetPatch`), so a preset stays active whatever the project's ratio. */
+export function sameStylePresetLook(a: StylePresetAppearance, b: StylePresetAppearance): boolean {
+	return sameValue({ ...a, aspectRatio: null }, { ...b, aspectRatio: null });
+}
+
+/** Structural equality over plain JSON-shaped values. A preset read from disk carries its
+ *  keys in file order, so a key-order-sensitive comparison would never light a row. */
+function sameValue(a: unknown, b: unknown): boolean {
+	if (a === b) return true;
+	if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+	const aKeys = Object.keys(a);
+	const bKeys = Object.keys(b);
+	if (aKeys.length !== bKeys.length) return false;
+	return aKeys.every((key) =>
+		sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+	);
+}
+
 export function factoryStylePresetAppearance(): StylePresetAppearance {
 	return stylePresetAppearanceFromSettings(DEFAULT_EDITOR_SETTINGS);
 }
@@ -59,6 +78,9 @@ export function factoryStylePresetAppearance(): StylePresetAppearance {
  * `EditorSettingsPatch` has no top-level `cursorTheme` or `cursorShow`: both travel inside
  * `cursor` as `theme` and `show`. Auto-hide is written both ways (`cursor.autoHide` and
  * `cursorAutoHide`) because `nextLegacy` accepts either and they land on the same key.
+ *
+ * `aspectRatio` is left out: the format belongs to the project, so applying a look to a 9:16
+ * take keeps it 9:16. The file still carries it, because format version 1 requires it.
  */
 export function stylePresetPatch(appearance: StylePresetAppearance): EditorSettingsPatch {
 	return {
@@ -66,7 +88,6 @@ export function stylePresetPatch(appearance: StylePresetAppearance): EditorSetti
 		wallpaperMotion: appearance.wallpaperMotion,
 		frame: appearance.frame,
 		frameTheme: appearance.frameTheme,
-		aspectRatio: appearance.aspectRatio,
 		shadowIntensity: appearance.shadowIntensity,
 		showBlur: appearance.showBlur,
 		motionBlurAmount: appearance.motionBlurAmount,

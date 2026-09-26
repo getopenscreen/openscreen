@@ -13,6 +13,9 @@ cbuffer Layer : register(b0)
     float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet ; mode 17 : marges du corps (unités du modèle)
     float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip ; mode 17 : angle du socle, rayon et recouvrement de l'ouverture, pénombre de l'ombre
     float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation
+    float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx)
+    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev)
+    float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
 // de la section « Curseur modélisé » (`cursor_model_cb`). Mode 17 (appareil modelé) : en tête de
@@ -46,9 +49,9 @@ Texture2D<float4> texImg : register(t2); // wallpaper image RGBA (fond, mode 6) 
 // resolution du modele (256x144) ; l'upscale vers la resolution webcam est fait par le sampler
 // lineaire, ce qui est exactement le filtrage qu'on veut sur un masque.
 Texture2D<float> texMask : register(t3);
-// Champ de distance signé du sprite de curseur (mode 15 seulement), R16F, cf. `cursor_sdf.rs`.
+// Champ signé et hauteur du sprite de curseur (mode 15 seulement), RG16F, cf. `cursor_sdf.rs`.
 // Le sprite lui-même est en t2 (texImg), comme aux modes 7 et 13.
-Texture2D<float> texSdf : register(t4);
+Texture2D<float2> texSdf : register(t4);
 SamplerState samp : register(s0);
 
 // Plafond de la profondeur de champ du mode 8, en niveau de la pyramide demi-résolution (1.5 =
@@ -250,8 +253,8 @@ float3 quad_inverse_projective(float2 P, float2 c00, float2 c10, float2 c11, flo
     return float3(s, t, ok);
 }
 
-// Le warp inverse d'un calque posé sur le plan : projectif sous la caméra réelle (`projective` =
-// 1, cf. `TiltedQuad::warp_flag`), bilinéaire sous un angle fixe, inchangé.
+// Le warp inverse d'un calque posé sur le plan : projectif (`projective` = 1, cf.
+// `TiltedQuad::warp_flag`, que tout écran incliné porte), bilinéaire sinon.
 float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, float projective)
 {
     if (projective > 0.5)
@@ -259,6 +262,21 @@ float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, fl
         return quad_inverse_projective(P, c00, c10, c11, c01);
     }
     return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
+// Un échantillon de l'écran incliné (mode 8) : la vidéo nette, fondue vers la pyramide de
+// profondeur de champ (t2) au-delà d'un demi-texel de cercle de confusion `coc`. Sous ce seuil,
+// l'échantillon net d'avant, à l'octet.
+float3 tilted_sample(float2 uv, float coc)
+{
+    float3 rgb = sample_yuv(uv);
+    if (coc > 0.5)
+    {
+        float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
+        float3 far_rgb = texImg.SampleLevel(samp, uv, lod).rgb;
+        rgb = lerp(rgb, far_rgb, saturate((coc - 0.5) / 1.5));
+    }
+    return rgb;
 }
 
 // Hash 2D -> [0,1) sans sin() : le hash `frac(sin(x) * 43758)` dépend de la précision du GPU,
@@ -283,12 +301,25 @@ float value_noise(float2 q)
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
-// Mouvements 2 (aurore) et 3 (vagues) du mode 5, dans les deux couleurs des stops seulement.
+// Rampe du mode 5 : quatre nœuds `rgb + position (w)`, dans l'ordre du dégradé, interpolés de
+// nœud en nœud comme CSS (avant le premier : sa couleur ; après le dernier : la sienne). Un
+// segment de longueur nulle est une marche nette. Deux stops à 0 et 1 suivis de deux copies du
+// dernier rendent exactement `lerp(c0, c1, t)`. `frame_geometry::gradient_layer` les remplit.
+float3 ramp4(float t, float4 k0, float4 k1, float4 k2, float4 k3)
+{
+    float3 c = k0.rgb;
+    c = lerp(c, k1.rgb, saturate((t - k0.w) / max(k1.w - k0.w, 1e-5)));
+    c = lerp(c, k2.rgb, saturate((t - k1.w) / max(k2.w - k1.w, 1e-5)));
+    c = lerp(c, k3.rgb, saturate((t - k2.w) / max(k3.w - k2.w, 1e-5)));
+    return c;
+}
+
+// Mouvements 2 (aurore) et 3 (vagues) du mode 5, sur la rampe de ses stops.
 // `gp` 0..1 sur le quad, `dir`/`denom` ceux du dégradé, `time` = temps programme replié sur
 // 120 s (toutes les périodes ci-dessous le divisent), `aspect` = w/h de la sortie. Périodes
 // longues et contraste bas : le fond ne doit jamais prendre l'attention.
-float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, float3 c1, float time,
-                       float motion, float aspect)
+float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1, float4 k2,
+                       float4 k3, float time, float motion, float aspect)
 {
     const float TAU = 6.2831853;
     float u = dot(gp - 0.5, dir) / denom; // position le long de l'axe, -0.5..0.5
@@ -300,20 +331,20 @@ float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, float3 c1,
         float2 p = float2((gp.x - 0.5) * aspect, gp.y - 0.5);
         float ph = TAU * time / 120.0;
         float n = value_noise(p * 2.5 + 1.5 * float2(cos(ph), sin(ph)));
-        float3 g = lerp(c0, c1, saturate(0.5 + u + 0.3 * (n - 0.5)));
+        float3 g = ramp4(saturate(0.5 + u + 0.3 * (n - 0.5)), k0, k1, k2, k3);
         float2 b0 = float2(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
         float2 b1 = float2(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
         float2 b2 = float2(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
-        g = lerp(g, c1, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
-        g = lerp(g, c0, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
-        g = lerp(g, c1, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        g = lerp(g, k3.rgb, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
+        g = lerp(g, k0.rgb, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
+        g = lerp(g, k3.rgb, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
         return g;
     }
     // Vagues : trois bandes sinus perpendiculaires à l'axe, qui avancent d'une bande en 12 s,
     // légèrement ondulées le long des bandes (20 s). Elles décalent la rampe, rien d'autre.
     float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
     float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
-    return lerp(c0, c1, saturate(0.5 + u + 0.07 * w));
+    return ramp4(saturate(0.5 + u + 0.07 * w), k0, k1, k2, k3);
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -389,12 +420,14 @@ float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px)
 // du cbuffer.
 //
 // Repère du MODÈLE : unité = plus grand côté du sprite, origine au hotspot de la face du dessus,
-// x à droite, y vers le bas, z vers la caméra ; le modèle occupe z de -MODEL_THICK à 0. Le rect
-// du sprite y commence en `color.rg` et mesure `sprite_size()` (rapport w/h dans `radius_px`).
-// Textures : t2 (texImg) = le sprite, RGBA en alpha droit ; t4 (texSdf) = son champ, R16F, en
+// x à droite, y vers le bas, z vers la caméra ; le dessous reste à -MODEL_THICK, le dessus peut
+// monter jusqu'à MODEL_RELIEF_MAX. Le rect du sprite y commence en `color.rg` et mesure
+// `sprite_size()` (rapport w/h dans `radius_px`). Textures : t2 (texImg) = le sprite, RGBA ;
+// t4 (texSdf) = champ signé en R et relief en G, RG16F, en
 // unités du modèle, négatif dedans, sur le même rect.
 // Constantes : miroir exact de `frame_geometry.rs` (MODEL_*).
 static const float MODEL_THICK = 0.19;
+static const float MODEL_RELIEF_MAX = 0.12;
 
 // Taille du sprite, repère du modèle : son plus grand côté vaut 1, `radius_px` porte w/h.
 float2 sprite_size()
@@ -443,19 +476,30 @@ static const float MODEL_CONTACT_ALPHA = 0.5;
 float sd_sprite2(float2 p)
 {
     float2 c = clamp(p, color.rg, color.rg + sprite_size());
-    float d = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0);
+    float d = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0).r;
     float2 o = p - c;
     float out2 = dot(o, o);
     float e = max(d, 0.0);
     return out2 > 0.0 ? sqrt(out2 + e * e) : d;
 }
 
+// Hauteur du dessus : zéro pour un sprite sans carte, model-specific pour un modèle sculpté.
+float model_top_height(float2 p)
+{
+    float2 c = clamp(p, color.rg, color.rg + sprite_size());
+    float relief = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0).g;
+    return clamp(relief * color.b, 0.0, MODEL_RELIEF_MAX);
+}
+
 // Distance signée au modèle : le contour rentré du chanfrein, épaisseur rentrée du chanfrein, puis
 // regonflé : les arêtes du dessus et du dessous sont arrondies de MODEL_BEVEL.
 float sd_model(float3 p)
 {
-    float half_t = model_thick() * 0.5;
-    float2 w = float2(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z + half_t) - (half_t - MODEL_BEVEL));
+    float top = model_top_height(p.xy);
+    float thick = model_thick();
+    float half_t = (top + thick) * 0.5;
+    float center_z = (top - thick) * 0.5;
+    float2 w = float2(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z - center_z) - (half_t - MODEL_BEVEL));
     return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - MODEL_BEVEL;
 }
 
@@ -584,7 +628,7 @@ float4 cursor_model(float2 local)
     float3 tip = src_prev.xyz;
     // La boîte du modèle : le rect du sprite, sur toute l'épaisseur.
     float3 lo = float3(color.rg, -model_thick());
-    float3 hi = float3(color.rg + sprite_size(), 0.0);
+    float3 hi = float3(color.rg + sprite_size(), MODEL_RELIEF_MAX);
 
     // Le rayon de ce pixel : de la caméra (0, 0, P) à travers le pixel sur le plan image z = 0.
     // Le plan est translaté de mb.zw dans le repère caméra (caméra réelle, 0 sous un angle fixe).
@@ -1411,8 +1455,8 @@ float4 ps_main(VSOut i) : SV_Target
     // mode 8 : écran tilté en 3D (zoom regions "rotation" : iso/left/right) ou vu par la caméra
     // réelle (`follow-cursor`). `dst`/`quad_px` couvrent la BOUNDING BOX des 4 coins projetés
     // (`frame_geometry::tilted_screen_cb`) ; ce shader retrouve où tombe chaque pixel DANS le quad
-    // (warp inverse : bilinéaire sous un angle fixe, projectif exact sous la caméra réelle,
-    // dst_prev.w = 1) et échantillonne la vidéo à l'UV correspondant, sinon transparent.
+    // (warp inverse : projectif exact quand dst_prev.w = 1, ce que porte tout écran incliné,
+    // bilinéaire sinon) et échantillonne la vidéo à l'UV correspondant, sinon transparent.
     // fx.xy/fx.zw = coins TL/TR (px locaux, 0..quad_px) ; src_prev.xy/.zw = coins BR/BL.
     // color.xy (caméra réelle) : éclairage 1 + color.x·(s − 0.5) + color.y·(t − 0.5).
     // mb = [gx, gy, z_focus, k] : profondeur du point r du plan = (r.x - 0.5)*gx + (r.y - 0.5)*gy
@@ -1420,6 +1464,8 @@ float4 ps_main(VSOut i) : SV_Target
     // k = texels source de flou par px d'écart de profondeur (0 = profondeur de champ coupée).
     // t2 (texImg) = pyramide demi-résolution de la vidéo, 5 niveaux, mêmes UV que t0/t1 ; liée
     // explicitement à chaque draw du mode 8 (`draw_video` ne lie que t0/t1).
+    // trail_a/trail_b = coins du plan à la frame précédente, trail_mb = [taps, force] : son flou
+    // de mouvement (`FrameGeometry::tilt_trail`).
     // mode 11 : texte d'annotation, rastérisé par Direct2D (voir text.rs). D2D écrit sur une
     // surface DXGI en alpha PRÉMULTIPLIÉ, donc contrairement au mode 7 (sprite curseur, alpha
     // droit) il ne faut SURTOUT pas re-multiplier ici : les bords adoucis des glyphes
@@ -1600,16 +1646,32 @@ float4 ps_main(VSOut i) : SV_Target
         // jamais par le RGBA de la pyramide, et `k = 0` (réglage coupé) ne quitte jamais cette
         // voie. Au-delà, fondu vers la pyramide demi-résolution (t2) au niveau `log2(coc) - 1`
         // (son niveau 0 est déjà une moyenne 2x2), plafonné à DOF_MAX_LOD : au niveau 2, un
-        // bloc 4x4 soude les jambages d'un « m » en 1080p.
-        float3 rgb = sample_yuv(uv);
+        // bloc 4x4 soude les jambages d'un « m » en 1080p (`tilted_sample`).
         float2 rs = saturate(float2(r.x, r.y));
         float z = (rs.x - 0.5) * mb.x + (rs.y - 0.5) * mb.y;
         float coc = mb.w * abs(z - mb.z);
-        if (coc > 0.5)
+        float3 rgb = tilted_sample(uv, coc);
+        // Flou de mouvement, celui du mode 0 : l'UV que CE pixel montrait à la frame précédente,
+        // par le même warp inverse sur les coins d'avant (`trail_a`/`trail_b`), puis `taps`
+        // échantillons de celui-là à celui-ci, raccourcis de la force. Borné à une frame. Hors du
+        // plan d'avant, le warp prolongé donne encore le bon point (sa racine proche).
+        int taps = (int) trail_mb.x;
+        if (taps > 1 && trail_mb.y > 0.001)
         {
-            float lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
-            float3 far_rgb = texImg.SampleLevel(samp, uv, lod).rgb;
-            rgb = lerp(rgb, far_rgb, saturate((coc - 0.5) / 1.5));
+            float3 rp = quad_inverse(i.local, trail_a.xy, trail_a.zw, trail_b.xy, trail_b.zw, dst_prev.w);
+            float2 uv_prev = float2(lerp(src.x, src.z, rp.x), lerp(src.y, src.w, rp.y));
+            float2 duv = (uv - uv_prev) * saturate(trail_mb.y);
+            if (dot(duv, duv) >= 1e-9)
+            {
+                float3 acc = 0.0;
+                [loop] for (int k = 0; k < 16; k++)
+                {
+                    if (k >= taps) break;
+                    float t = (float) k / (float) (taps - 1);
+                    acc += tilted_sample(uv - duv * (1.0 - t), coc);
+                }
+                rgb = acc / (float) taps;
+            }
         }
         if (dst_prev.w > 0.5)
         {
@@ -1642,8 +1704,8 @@ float4 ps_main(VSOut i) : SV_Target
         return float4(texImg.Sample(samp, i.uv).rgb * a, a); // prémultiplié
     }
 
-    // mode 5 : gradient linéaire 2 stops (parité web wallpaper dégradé). color = stop0,
-    // src.xyz = stop1, fx.xy = direction unitaire (espace sortie, y vers le bas). t est
+    // mode 5 : gradient linéaire jusqu'à 4 stops (parité web wallpaper dégradé). Nœuds
+    // `rgb + position` dans color, src_prev, dst_prev, src (cf. `ramp4`), fx.xy = direction unitaire (espace sortie, y vers le bas). t est
     // normalisé coin-à-coin (dénominateur = |dx|+|dy|) pour couvrir toute la diagonale.
     // Fond animé : fx.z = temps programme (s, replié sur 120), fx.w = mouvement (0 immobile,
     // 1 dérive, 2 aurore, 3 vagues), mb.x = aspect w/h. 0 rend le dégradé d'avant à l'octet.
@@ -1665,10 +1727,10 @@ float4 ps_main(VSOut i) : SV_Target
         // le sélecteur affiche.
         float2 gp = (quad_px.x > 0.0 && quad_px.y > 0.0) ? (i.local / quad_px) : i.pout;
         float t = saturate(0.5 + dot(gp - 0.5, dir) / denom);
-        float3 g = lerp(color.rgb, src.xyz, t);
+        float3 g = ramp4(t, color, src_prev, dst_prev, src);
         if (fx.w > 1.5)
         {
-            g = gradient_motion(gp, dir, denom, color.rgb, src.xyz, fx.z, fx.w, mb.x);
+            g = gradient_motion(gp, dir, denom, color, src_prev, dst_prev, src, fx.z, fx.w, mb.x);
         }
         float a = quad_round_alpha(i.local, quad_px, radius_px);
         return float4(g * a, a); // prémultiplié

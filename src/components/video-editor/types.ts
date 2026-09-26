@@ -4,6 +4,7 @@ import {
 	type ZoomScaleInput,
 } from "@/lib/ai-edition/timeline/zoom-scale";
 import type { WebcamLayoutPreset } from "@/lib/compositeLayout";
+import { DEFAULT_PROJECT_APPEARANCE, SETTING_BOUNDS } from "@/lib/projectDefaults";
 import { clamp01 } from "@/utils/math";
 
 export type { ZoomDepth, ZoomScaleInput };
@@ -76,14 +77,14 @@ export const DEFAULT_ROTATION_3D: Rotation3D = {
 };
 
 /** A fixed 3D angle: the screen holds one pose for the whole zoom. */
-export const FIXED_ROTATION_3D_PRESETS = ["iso", "left", "right"] as const;
+export const FIXED_ROTATION_3D_PRESETS = ["left", "right"] as const;
 export type FixedRotation3DPreset = (typeof FIXED_ROTATION_3D_PRESETS)[number];
 
 /**
  * A moving 3D camera. `follow-cursor` keeps the screen still and moves a real camera around it:
  * the camera orbits to the side the cursor is on and rises or dips with it, always level. The
  * native compositor renders it (`crates/compositor/src/camera.rs`). It needs the cursor track,
- * which the export only loads while the cursor is shown.
+ * which only drives it while the cursor is shown.
  */
 export const MOVING_ROTATION_3D_PRESETS = ["follow-cursor"] as const;
 export type MovingRotation3DPreset = (typeof MOVING_ROTATION_3D_PRESETS)[number];
@@ -100,12 +101,22 @@ export function isRotation3DPreset(value: unknown): value is Rotation3DPreset {
 	return typeof value === "string" && (ROTATION_3D_PRESET_ORDER as string[]).includes(value);
 }
 
-// Every preset carries all three components on purpose. With a single-axis rotation the projected
-// quad keeps an edge exactly parallel to the frame — both vertical edges for a pure Y rotation,
-// which is geometry rather than a setting — and a perfectly vertical edge cutting through text is
-// indistinguishable from `overflow: hidden`. That is what got reported three times as "the
-// recording is truncated" while the plane was in fact drawn whole. `regions.rs` holds the same
-// numbers and a test asserting no edge comes within 2° of an axis.
+/**
+ * A stored 3D camera, read: the presets that no longer exist map to the one that kept their look.
+ * `iso` (turned left, seen from above) became Left. Anything else unknown reads as a flat screen.
+ */
+export function readRotation3DPreset(value: unknown): Rotation3DPreset | undefined {
+	if (value === "iso") return "left";
+	return isRotation3DPreset(value) ? value : undefined;
+}
+
+// No preset rolls (Z is 0): the tilt enters with the zoom, and a camera that moves never rolls the
+// footage. X and Y are chosen so that no edge of the projected quad comes within 2° of an axis — a
+// perfectly vertical edge cutting through text is indistinguishable from `overflow: hidden`, which
+// got reported three times as "the recording is truncated". A pure Y rotation keeps both vertical
+// edges vertical, so every preset also pitches; and between 10° and 14° of pitch the top edge of a
+// turned screen reads level, so both presets pitch well beyond it: turned and seen from above,
+// the old `iso` look. `regions.rs` holds the same numbers and the tests.
 //
 // A moving camera has no single pose. Its entry is its resting angle (`ELEVATION_DEG` in
 // `camera.rs`: cursor centred, the camera 4° above the screen, facing it), what a renderer without
@@ -113,9 +124,8 @@ export function isRotation3DPreset(value: unknown): value is Rotation3DPreset {
 // rotation of the screen. It is a camera angle, not a screen rotation, so this is the nearest
 // equivalent rather than the same picture.
 export const ROTATION_3D_PRESETS: Record<Rotation3DPreset, Rotation3D> = {
-	iso: { rotationX: -12, rotationY: -18, rotationZ: -2 },
-	left: { rotationX: -8, rotationY: -16, rotationZ: -1 },
-	right: { rotationX: -8, rotationY: 16, rotationZ: 1 },
+	left: { rotationX: -23, rotationY: -25, rotationZ: 0 },
+	right: { rotationX: -23, rotationY: 25, rotationZ: 0 },
 	"follow-cursor": { rotationX: -4, rotationY: 0, rotationZ: 0 },
 };
 
@@ -280,13 +290,14 @@ export interface CursorVisualSettings {
 	autoHide?: boolean;
 }
 
-export const DEFAULT_CURSOR_SIZE = 3.0;
-export const DEFAULT_CURSOR_SMOOTHING = 0.67;
-export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
-export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
+// The project defaults, under the names the legacy editor reads: one value, not two to keep in sync.
+export const DEFAULT_CURSOR_SIZE = DEFAULT_PROJECT_APPEARANCE.cursor.size;
+export const DEFAULT_CURSOR_SMOOTHING = DEFAULT_PROJECT_APPEARANCE.cursor.smoothing;
+export const DEFAULT_CURSOR_MOTION_BLUR = DEFAULT_PROJECT_APPEARANCE.cursor.motionBlur;
+export const DEFAULT_CURSOR_CLICK_BOUNCE = DEFAULT_PROJECT_APPEARANCE.cursor.clickBounce;
 // Off: the flat sprite every existing project renders.
-export const DEFAULT_CURSOR_MODEL3D = false;
-export const DEFAULT_CURSOR_AUTO_HIDE = false;
+export const DEFAULT_CURSOR_MODEL3D = DEFAULT_PROJECT_APPEARANCE.cursor.model3d;
+export const DEFAULT_CURSOR_AUTO_HIDE = DEFAULT_PROJECT_APPEARANCE.cursor.autoHide;
 export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
 
 export interface TrimRegion {
@@ -461,8 +472,7 @@ export const DEFAULT_CROP_REGION: CropRegion = {
 
 export type PlaybackSpeed = number;
 
-export const MIN_PLAYBACK_SPEED = 0.1;
-export const MAX_PLAYBACK_SPEED = 100;
+export const [MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED] = SETTING_BOUNDS.playbackSpeed;
 // Chromium hard-caps HTMLMediaElement.playbackRate at 16 (setting more throws
 // NotSupportedError). At or below this, preview plays natively; above it, preview
 // frame-steps by seeking and audio export uses an offline pitch-preserved stretch.

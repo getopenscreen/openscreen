@@ -11,6 +11,8 @@
 		"title": "Arka Plan",
 		"imageLabel": "Arka plan {{index}}",
 		"custom": "Özel",
+		"customColor": "Özel renk",
+		"customGradient": "Tek renkten gradyan",
 		"help": "Kaydın arkasında ne görüneceğini seçin: yerleşik bir duvar kâğıdı, düz renk, gradyan veya diskinizdeki özel bir görsel.",
 		"gradient": "Gradyan",
 		"colorLabel": "Renk {{color}}",
@@ -107,6 +109,9 @@
 		"fitClipOne": "{{count}} klip",
 		"formatAuto": "Otomatik",
 		"formatAutoMixed": "Klipler farklı",
+		"formatFill": "Kayıt",
+		"formatFillFit": "Tamamı",
+		"formatFillFollow": "İmleci takip et",
 		"formatOriginal": "Orijinal",
 		"fitClipMany": "{{count}} klip",
 		"frame": "Çerçeve",
@@ -116,8 +121,6 @@
 		"fitClip": "Sığdır",
 		"motionBlur": "Hareket Bulanıklığı",
 		"depthOfField": "Alan derinliği",
-		"depthOfFieldHint": "3D yakınlaştırmalar",
-		"depthOfFieldNoTilt": "Bu projede 3D yakınlaştırma yok",
 		"roundness": "Yuvarlaklık",
 		"frameStyle": "Stil",
 		"windowNone": "Yok",
@@ -130,7 +133,11 @@
 		"frameThemeDark": "Koyu",
 		"frameThemeHelp": "Gümüş gövde ve açık çerçeve ya da grafit ve koyu. Tüm çerçeveler için geçerlidir.",
 		"windowHelp": "Kaydın çevresine bir pencere ya da 3B modellenmiş bir cihaz çizer.",
-		"roundnessFrameHelp": "Aralık çerçeveye uyum sağlar: %100, ona yakışan en belirgin yuvarlaklıktır."
+		"roundnessFrameHelp": "Aralık çerçeveye uyum sağlar: %100, ona yakışan en belirgin yuvarlaklıktır.",
+		"shadowNone": "Yok",
+		"shadowLight": "Hafif",
+		"shadowMedium": "Orta",
+		"shadowStrong": "Güçlü"
 	},
 	"stylePresets": {
 		"button": "Ön ayarlar",
@@ -147,6 +154,9 @@
 		"revealLinux": "Klasörde göster",
 		"rename": "Yeniden adlandır",
 		"update": "Mevcut projeden güncelle",
+		"useForNewProjects": "Yeni projelerde kullan",
+		"stopForNewProjects": "Yeni projelerde kullanmayı bırak",
+		"newProjectsBadge": "Yeni projeler",
 		"delete": "Sil",
 		"confirmDelete": "“{{name}}” silinsin mi?",
 		"applied": "“{{name}}” uygulandı",
@@ -201,15 +211,12 @@
 		"legacyAnnotations": "Bu proje hâlâ eski altyazı özelliğinden kalan altyazı açıklamaları içeriyor ({{count}}). Altyazı katmanının üstünde çizilirler.",
 		"backgroundOpacity": "Saydamlık",
 		"backgroundColor": "Arka plan rengi",
-		"alignCenter": "Orta",
 		"translationIsNonDestructive": "Çeviriler dökümün içine değil yanına kaydedilir — özgün metin ve zamanlamaları olduğu gibi kalır.",
 		"distanceFromRight": "Sağdan uzaklık",
 		"language": "Dil",
 		"text": "Metin",
-		"anchorHintBottom": "Uzun altyazılar yukarı doğru büyür — alt kenar yerinde kalır.",
 		"distanceFromTop": "Üstten uzaklık",
 		"translateFailed": "Çeviri başarısız oldu.",
-		"alignLeft": "Sol",
 		"distanceFromBottom": "Alttan uzaklık",
 		"derivedFromTranscript": "{{count}} altyazı satırı, dökümden canlı olarak türetildi.",
 		"translate": "Çevir",
@@ -218,14 +225,10 @@
 		"hiddenHint": "Altyazılar bu medyanın dökümünden gelir. Önizlemede ve dışa aktarımlarda görmek için açın.",
 		"noTranscript": "Altyazılar medyanın dökümünden okunur. Açmak için bu videonun dökümünü çıkarın.",
 		"distanceFromLeft": "Soldan uzaklık",
-		"anchorBottom": "Alt",
 		"transcribe": "Videonun dökümünü çıkar",
 		"bold": "Kalın",
-		"alignRight": "Sağ",
-		"anchorTop": "Üst",
 		"minWords": "Satır başına en az kelime",
 		"translateHint": "Dökümü yapılandırılmış yapay zekâ sağlayıcısıyla çevir",
-		"anchorHintTop": "Uzun altyazılar aşağı doğru büyür — üst kenar yerinde kalır.",
 		"displayLanguage": "Görüntüleme",
 		"removeLegacyAnnotations": "Eski altyazı açıklamalarını kaldır",
 		"background": "Arka plan",
@@ -235,7 +238,15 @@
 		"font": "Yazı tipi",
 		"translating": "Çevriliyor…",
 		"show": "Altyazıları göster",
-		"textColor": "Metin rengi"
+		"textColor": "Metin rengi",
+		"style": "Stil",
+		"styles": {
+			"classic": "Klasik",
+			"bold": "Kalın",
+			"minimal": "Minimal",
+			"light": "Açık"
+		},
+		"customize": "Özelleştir"
 	},
 	"panes": {
 		"help": "Yardım"
@@ -267,7 +278,7 @@
 		"remove": "Parçayı sil",
 		"loop": "Döngü",
 		"slipHint": "İçindeki sesi kaydırmak için Alt ile sürükleyin",
-		"help": "Bu ses kanalının seviyesi, geçişleri ve döngüsü. Önizlemede ve dışa aktarımda kaydın üzerine miksleniyor. Kanalı taşımak veya yeniden boyutlandırmak için zaman çizelgesinde sürükleyin; içindeki sesi kaydırmak için Alt tuşunu basılı tutarak sürükleyin.",
+		"help": "Bu ses kanalının seviyesi, geçişleri ve döngüsü. Önizlemede ve dışa aktarımda kaydın üzerine miksleniyor. Müzik kanalı, biri konuşurken kendiliğinden kısılır. Kanalı taşımak veya yeniden boyutlandırmak için zaman çizelgesinde sürükleyin; içindeki sesi kaydırmak için Alt tuşunu basılı tutarak sürükleyin.",
 		"add": "Ses parçası ekle",
 		"mute": "Sessiz"
 	},
@@ -350,35 +361,19 @@
 			"lockedDisclaimer": "Zaman çizelgesindeki genel Otomatik Odak anahtarı tarafından kontrol edilir. Odak modunu yakınlaştırma başına ayarlamak için kapatın.",
 			"auto": "Otomatik",
 			"manual": "Manuel",
-			"autoDescription": "Kamera kaydedilen imleç konumunu takip eder",
 			"title": "Odak Modu"
 		},
 		"camera": {
 			"title": "3D kamera",
 			"off": "Kapalı",
-			"fixed": "Sabit açı",
-			"moving": "Hareketli kamera",
 			"preset": {
-				"iso": "Yukarıdan çapraz",
 				"left": "Ekran sola dönük",
 				"right": "Ekran sağa dönük",
 				"followCursor": "İmleçle birlikte döner"
-			},
-			"description": {
-				"off": "Ekran düz kalır.",
-				"iso": "Tek bir pozda kalır: sola dönük ve yukarıdan görünür.",
-				"left": "Tek bir pozda kalır: ekran sola bakar, sağ kenarı öne çıkar.",
-				"right": "Tek bir pozda kalır: ekran sağa bakar, sol kenarı öne çıkar.",
-				"followCursor": "Ekran sabit kalır; kamera etrafında imlecin olduğu tarafa döner ve imleçle birlikte yükselip alçalır."
-			},
-			"needsCursor": "İmleç gizli: bu kameranın izleyecek bir şeyi yok ve başlangıç açısında kalır."
+			}
 		},
 		"clickImpact": {
-			"title": "Tıklama etkisi",
-			"description": "Her tıklama eğik ekranı bastırır: tıklanan taraf çöker, sonra geri döner.",
-			"needsRotation": "Önce bir 3D kamera seçin: yalnızca eğik bir ekran bastırılabilir.",
-			"needsCursor": "İmleç gizli: ekran yalnızca görünen tıklamalara tepki verir.",
-			"descriptionCamera": "Her tıklama kamerayı biraz geri iter, ardından kamera geri gelir."
+			"title": "Tıklama etkisi"
 		},
 		"level": "Yakınlaştırma Seviyesi",
 		"previewHold": "Yakınlaştırma efektini önizlemek için basılı tutun",
@@ -393,7 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Çıkış seviyesi",
-		"help": "Ses çıkış seviyesini ayarlayın. Önizlemede ve dışa aktarmada aynı şekilde uygulanır.",
+		"help": "Sesler otomatik olarak standart bir ses yüksekliğine getirilir. Çıkış seviyesini buradan ayarlayın; önizlemede ve dışa aktarmada aynı şekilde uygulanır.",
 		"reset": "Sesi sıfırla",
 		"title": "Ses"
 	},
@@ -414,18 +409,18 @@
 		"smoothing": "Yumuşatma",
 		"clickBounce": "Tıklama Sıçraması",
 		"model3d": "3B imleç",
-		"model3dHint": "Varsayılan stil: tüm imleç şekilleri 3B olur. Diğer stiller düz kalır.",
-		"model3dNeedsCursor": "3B imleci kullanmak için «İmleci Göster»i açın.",
 		"help": "Kaydedilen telemetriden imleç çizimi: tema, boyut, yumuşatma, hareket bulanıklığı ve tıklama sıçraması.",
 		"size": "Boyut",
 		"title": "İmleç",
 		"show": "İmleci Göster",
 		"themeDefault": "Varsayılan",
 		"alwaysArrow": "Her zaman ok imlecini kullan",
-		"alwaysArrowHint": "Metin veya bağlantı üzerinde bile her imleç durumu için oku gösterir.",
 		"motionBlur": "Hareket Bulanıklığı",
 		"theme": "İmleç Stili",
-		"autoHide": "Hareketsizken gizle"
+		"autoHide": "Hareketsizken gizle",
+		"bounceNone": "Yok",
+		"bounceLight": "Hafif",
+		"bounceStrong": "Belirgin"
 	},
 	"export": {
 		"gifButton": "GIF Olarak Dışa Aktar",
@@ -434,5 +429,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Kırpma Bölgesini Sil"
+	},
+	"textPlate": {
+		"none": "Yok",
+		"dark": "Koyu",
+		"light": "Açık",
+		"custom": "Özel"
 	}
 }

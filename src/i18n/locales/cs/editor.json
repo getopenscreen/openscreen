@@ -112,6 +112,9 @@
 		"microphone": "Mikrofon",
 		"camera": "Kamera",
 		"cursorHighlight": "Zvýraznění kurzoru",
+		"hideDesktopIcons": "Skrýt ikony na ploše",
+		"hideDesktopIconsHintMac": "Vynechá ikony na ploše ze záznamů obrazovky. Na ploše vám zůstanou.",
+		"hideDesktopIconsHintWindows": "Během nahrávání obrazovky zakryje ikony na ploše tapetou. Po skončení nahrávání se vrátí.",
 		"on": "Zapnuto",
 		"off": "Vypnuto",
 		"loading": "Načítání…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "Žádná řeč nezjištěna"
 	},
 	"exportDialog": {
+		"destination": "Cíl",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Sociální sítě",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "GIF do README",
+		"advanced": "Pokročilé",
 		"title": "Export",
 		"subtitle": "Vykreslení časové osy do souboru",
 		"addVideoBeforeExporting": "Před exportem přidejte video.",
@@ -215,7 +224,6 @@
 		"generateCaptions": "Generovat titulky",
 		"cropDescription": "Přeformátujte nahrávku: vyberte poměr stran a přibližte oblast, kterou chcete zachovat.",
 		"openCrop": "Otevřít oříznutí…",
-		"cameraFullscreenDescription": "Během přehrávání této oblasti kamera zabírá celý snímek (bez okraje, bez zaoblení, bez pozadí) a na konci se vrátí. Přetáhněte okraje oblasti na časové ose pro změnu začátku a délky trvání.",
 		"deleteRegion": "Smazat oblast",
 		"freehandRendersAsBox": "Při exportu je volně kreslený tvar pokryt svým ohraničujícím rámečkem: vždy překrytý, nikdy nepokrytý."
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "Ovládání přehrávání",
 		"playPause": "Přehrát / Pozastavit",
 		"playPauseTitle": "Přehrát / Pozastavit (mezerník)",
-		"previousClip": "Předchozí klip",
-		"nextClip": "Další klip",
 		"loop": "Opakovat",
 		"seekVideo": "Vyhledat ve videu"
 	},

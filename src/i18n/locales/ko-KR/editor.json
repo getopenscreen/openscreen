@@ -112,6 +112,9 @@
 		"microphone": "마이크",
 		"camera": "카메라",
 		"cursorHighlight": "커서 강조",
+		"hideDesktopIcons": "바탕화면 아이콘 숨기기",
+		"hideDesktopIconsHintMac": "화면 녹화에서 바탕화면 아이콘을 제외합니다. 바탕화면에는 그대로 남아 있습니다.",
+		"hideDesktopIconsHintWindows": "화면을 녹화하는 동안 바탕화면 아이콘을 배경 화면으로 가립니다. 녹화를 멈추면 다시 나타납니다.",
 		"on": "켜짐",
 		"off": "꺼짐",
 		"loading": "로딩 중…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "음성이 감지되지 않음"
 	},
 	"exportDialog": {
+		"destination": "내보낼 곳",
+		"destinationWeb": "웹 / YouTube",
+		"destinationSocial": "소셜 미디어",
+		"destinationStudio": "스튜디오",
+		"destinationReadmeGif": "README용 GIF",
+		"advanced": "고급",
 		"title": "내보내기",
 		"subtitle": "타임라인을 파일로 렌더링합니다",
 		"addVideoBeforeExporting": "내보내기 전에 동영상을 추가하세요.",
@@ -215,7 +224,6 @@
 		"generateCaptions": "자막 생성",
 		"cropDescription": "녹화 화면을 다시 프레이밍 — 화면 비율을 선택하고 유지할 영역으로 확대합니다.",
 		"openCrop": "자르기 열기…",
-		"cameraFullscreenDescription": "이 구간이 재생되는 동안 카메라가 화면 전체를 채웁니다. 테두리, 둥근 모서리, 배경이 없으며 끝에서 부드럽게 돌아옵니다. 타임라인에서 구간의 가장자리를 끌어 시작 위치와 길이를 조정하세요.",
 		"deleteRegion": "구간 삭제",
 		"freehandRendersAsBox": "내보내기에서 자유형 도형은 외곽 사각형으로 덮입니다. 더 많이 덮되, 부족하게 덮지는 않습니다."
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "재생 컨트롤",
 		"playPause": "재생 / 일시정지",
 		"playPauseTitle": "재생 / 일시정지 (Space)",
-		"previousClip": "이전 클립",
-		"nextClip": "다음 클립",
 		"loop": "반복",
 		"seekVideo": "영상 탐색"
 	},

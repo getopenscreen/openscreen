@@ -21,11 +21,13 @@ import type {
 import { type AspectRatio, isAspectRatio } from "../../utils/aspectRatioUtils";
 import { CURSOR_THEME_IDS, DEFAULT_CURSOR_THEME_ID } from "../cursor/cursorThemes";
 import {
+	clampToBound,
 	type FrameTheme,
 	isFrameTheme,
 	type RecordingFrame,
 	readRecordingFrame,
 	readWebcamMask,
+	type SettingBound,
 	type WebcamMask,
 } from "../projectDefaults";
 
@@ -76,6 +78,8 @@ export interface StylePreset {
 	/** ISO timestamp of the file's last modification. */
 	updatedAt: string;
 	appearance: StylePresetAppearance;
+	/** Set by `list` on the preset a new project starts from. */
+	forNewProjects?: boolean;
 }
 
 export interface StylePresetFile {
@@ -113,26 +117,13 @@ const WALLPAPER_MOTIONS = [
 	"waves",
 ] as const satisfies readonly WallpaperMotion[];
 
-// Bounds are the editor sliders' (RightPanes.tsx), in stored units. `getEditorSettings`
-// only clamps two of these, so a preset is the stricter gate: a value no slider can
-// produce is a hand-edited file, and it is refused rather than applied.
-const NUMBER_RANGES = {
-	shadowIntensity: [0, 1],
-	motionBlurAmount: [0, 1],
-	borderRadius: [0, 64],
-	padding: [0, 100],
-	// Wider than the slider's 10-35: presets saved when it reached 50 still apply, and the
-	// editor reads anything past 35 as 35.
-	webcamSizePreset: [10, 50],
-	webcamRoundness: [0, 1],
-	webcamBlurIntensity: [0, 1],
-} as const;
-const CURSOR_NUMBER_RANGES = {
-	size: [0.5, 10],
-	smoothing: [0, 1],
-	motionBlur: [0, 1],
-	clickBounce: [0, 5],
-} as const;
+// The preset's cursor numbers, by the name `SETTING_BOUNDS` gives them.
+const CURSOR_BOUNDS = {
+	size: "cursorSize",
+	smoothing: "cursorSmoothing",
+	motionBlur: "cursorMotionBlur",
+	clickBounce: "cursorClickBounce",
+} as const satisfies Record<string, SettingBound>;
 
 type Fields = Record<string, unknown>;
 
@@ -140,17 +131,18 @@ function isRecord(value: unknown): value is Fields {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readNumber(
-	source: Fields,
-	key: string,
-	[min, max]: readonly [number, number],
-	at = "",
-): number {
+/**
+ * A number, read into the bound the editor reads it into (`SETTING_BOUNDS`). Clamped rather than
+ * refused: the bounds have narrowed since presets were first saved (the cursor stopped at 10, the
+ * click bounce at 5 and was 2.5 by default), and a preset that applied yesterday must still apply,
+ * with the value the editor would show for it. Anything that is not a finite number is refused.
+ */
+function readNumber(source: Fields, key: string, bound: SettingBound, at = ""): number {
 	const value = source[key];
-	if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
-		throw new TypeError(`Style preset ${at}${key} must be a number between ${min} and ${max}.`);
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		throw new TypeError(`Style preset ${at}${key} must be a number.`);
 	}
-	return value;
+	return clampToBound(value, bound);
 }
 
 function readBoolean(source: Fields, key: string, at = ""): boolean {
@@ -179,7 +171,7 @@ function readWebcamShape(source: Fields): { webcamMaskShape: WebcamMask; webcamR
 	const roundness =
 		source.webcamRoundness === undefined
 			? undefined
-			: readNumber(source, "webcamRoundness", NUMBER_RANGES.webcamRoundness);
+			: readNumber(source, "webcamRoundness", "webcamRoundness");
 	const mask = readWebcamMask(shape, roundness);
 	return { webcamMaskShape: mask.shape, webcamRoundness: mask.roundness };
 }
@@ -291,29 +283,25 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 				: readEnum(value, "wallpaperMotion", WALLPAPER_MOTIONS),
 		...readFrame(value),
 		aspectRatio: value.aspectRatio,
-		shadowIntensity: readNumber(value, "shadowIntensity", NUMBER_RANGES.shadowIntensity),
+		shadowIntensity: readNumber(value, "shadowIntensity", "shadowIntensity"),
 		showBlur: readBoolean(value, "showBlur"),
-		motionBlurAmount: readNumber(value, "motionBlurAmount", NUMBER_RANGES.motionBlurAmount),
+		motionBlurAmount: readNumber(value, "motionBlurAmount", "motionBlurAmount"),
 		depthOfField: value.depthOfField === undefined ? true : readBoolean(value, "depthOfField"),
-		borderRadius: readNumber(value, "borderRadius", NUMBER_RANGES.borderRadius),
-		padding: readNumber(value, "padding", NUMBER_RANGES.padding),
+		borderRadius: readNumber(value, "borderRadius", "borderRadius"),
+		padding: readNumber(value, "padding", "padding"),
 		webcamLayoutPreset: readEnum(value, "webcamLayoutPreset", WEBCAM_LAYOUT_PRESETS),
 		...readWebcamShape(value),
 		webcamMirrored: readBoolean(value, "webcamMirrored"),
 		webcamReactiveZoom: readBoolean(value, "webcamReactiveZoom"),
-		webcamSizePreset: readNumber(value, "webcamSizePreset", NUMBER_RANGES.webcamSizePreset),
+		webcamSizePreset: readNumber(value, "webcamSizePreset", "webcamSizePreset"),
 		webcamBackgroundMode: readEnum(value, "webcamBackgroundMode", WEBCAM_BACKGROUND_MODES),
 		webcamWallpaper: parseStylePresetWallpaper(value.webcamWallpaper, "webcamWallpaper"),
-		webcamBlurIntensity: readNumber(
-			value,
-			"webcamBlurIntensity",
-			NUMBER_RANGES.webcamBlurIntensity,
-		),
+		webcamBlurIntensity: readNumber(value, "webcamBlurIntensity", "webcamBlurIntensity"),
 		cursor: {
-			size: readNumber(cursor, "size", CURSOR_NUMBER_RANGES.size, "cursor."),
-			smoothing: readNumber(cursor, "smoothing", CURSOR_NUMBER_RANGES.smoothing, "cursor."),
-			motionBlur: readNumber(cursor, "motionBlur", CURSOR_NUMBER_RANGES.motionBlur, "cursor."),
-			clickBounce: readNumber(cursor, "clickBounce", CURSOR_NUMBER_RANGES.clickBounce, "cursor."),
+			size: readNumber(cursor, "size", CURSOR_BOUNDS.size, "cursor."),
+			smoothing: readNumber(cursor, "smoothing", CURSOR_BOUNDS.smoothing, "cursor."),
+			motionBlur: readNumber(cursor, "motionBlur", CURSOR_BOUNDS.motionBlur, "cursor."),
+			clickBounce: readNumber(cursor, "clickBounce", CURSOR_BOUNDS.clickBounce, "cursor."),
 			// Presets written before the 3D cursor existed meant the flat one.
 			model3d: cursor.model3d === undefined ? false : readBoolean(cursor, "model3d", "cursor."),
 			// Presets written before the option existed kept every cursor state.
@@ -377,6 +365,69 @@ export function serializeStylePresetFile(input: {
 		appearance: parseStylePresetAppearance(input.appearance),
 	};
 	return `${JSON.stringify(file, null, 2)}\n`;
+}
+
+// ---- The look a new project starts from ---------------------------------------------
+// Written by the main process straight into `document.legacyEditor`, so these use the
+// legacy key names `nextLegacy` (store/editorSettings.ts) writes. `aspectRatio` is never
+// one of them: the format belongs to the project, and a new project keeps Auto.
+
+/** The `legacyEditor` keys that make up a project's look: the preset fields, renamed. */
+export const LOOK_LEGACY_EDITOR_KEYS = [
+	"wallpaper",
+	"wallpaperMotion",
+	"frame",
+	"frameTheme",
+	"shadowIntensity",
+	"showBlur",
+	"motionBlurAmount",
+	"depthOfField",
+	"borderRadius",
+	"padding",
+	"webcamLayoutPreset",
+	"webcamMaskShape",
+	"webcamRoundness",
+	"webcamMirrored",
+	"webcamReactiveZoom",
+	"webcamSizePreset",
+	"webcamBackgroundMode",
+	"webcamWallpaper",
+	"webcamBlurIntensity",
+	"cursorSize",
+	"cursorSmoothing",
+	"cursorMotionBlur",
+	"cursorClickBounce",
+	"cursorModel3d",
+	"cursorAlwaysArrow",
+	"cursorShow",
+	"cursorAutoHide",
+	"cursorTheme",
+] as const;
+
+/** A preset's appearance as `legacyEditor` fields, format left out. */
+export function stylePresetLegacyEditor(appearance: StylePresetAppearance): Fields {
+	const { aspectRatio: _format, cursor, ...rest } = appearance;
+	return {
+		...rest,
+		cursorSize: cursor.size,
+		cursorSmoothing: cursor.smoothing,
+		cursorMotionBlur: cursor.motionBlur,
+		cursorClickBounce: cursor.clickBounce,
+		cursorModel3d: cursor.model3d,
+		cursorAlwaysArrow: cursor.alwaysArrow,
+	};
+}
+
+/** The look out of another project's `legacyEditor`: crop, camera framing and position,
+ *  audio, format and everything else that belongs to that footage stay behind. */
+export function lookFromLegacyEditor(legacyEditor: unknown): Fields {
+	if (!isRecord(legacyEditor)) return {};
+	return Object.fromEntries(
+		LOOK_LEGACY_EDITOR_KEYS.filter((key) => legacyEditor[key] !== undefined).map((key) => [
+			key,
+			legacyEditor[key],
+		]),
+	);
 }
 
 /** Validates a parsed preset file (the JSON value, not the text). */

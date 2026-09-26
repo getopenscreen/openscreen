@@ -112,6 +112,9 @@
 		"microphone": "麥克風",
 		"camera": "攝影機",
 		"cursorHighlight": "游標醒目提示",
+		"hideDesktopIcons": "隱藏桌面圖示",
+		"hideDesktopIconsHintMac": "在螢幕錄製中略去桌面圖示。它們仍會留在你的桌面上。",
+		"hideDesktopIconsHintWindows": "錄製螢幕時以桌布遮住桌面圖示。停止錄製後就會恢復。",
 		"on": "開",
 		"off": "關",
 		"loading": "載入中…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "未偵測到語音"
 	},
 	"exportDialog": {
+		"destination": "匯出用途",
+		"destinationWeb": "網頁 / YouTube",
+		"destinationSocial": "社群媒體",
+		"destinationStudio": "工作室",
+		"destinationReadmeGif": "README GIF",
+		"advanced": "進階",
 		"title": "匯出",
 		"subtitle": "將時間軸轉譯為檔案",
 		"addVideoBeforeExporting": "匯出前請先新增影片。",
@@ -215,7 +224,6 @@
 		"generateCaptions": "產生字幕",
 		"cropDescription": "重新構圖錄製內容 — 選擇長寬比並縮放至想保留的區域。",
 		"openCrop": "開啟裁切…",
-		"cameraFullscreenDescription": "此區間播放時，攝影機會佔滿整個畫面 — 沒有邊框、圓角與背景 — 並在結束時平順還原。在時間軸上拖曳區間邊緣，即可調整開始位置與長度。",
 		"deleteRegion": "刪除區間",
 		"freehandRendersAsBox": "匯出時，手繪形狀會以其外接矩形遮蔽——寧可多遮，絕不少遮。"
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "播放控制項",
 		"playPause": "播放 / 暫停",
 		"playPauseTitle": "播放 / 暫停（空白鍵）",
-		"previousClip": "上一個片段",
-		"nextClip": "下一個片段",
 		"loop": "循環",
 		"seekVideo": "拖曳影片進度"
 	},

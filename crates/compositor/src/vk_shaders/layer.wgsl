@@ -28,11 +28,14 @@ struct Layer {
     src_prev: vec4<f32>,  // modes 8/12/13/14 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque ; mode 15 : (hotspot du dessus, repere du plan en px ; lacet) ; mode 17 : marges du corps (gauche, haut, droite, bas ; unites du modele)
     dst_prev: vec4<f32>,  // mode 8 : .xy = taille du plan en px AVANT projection (le rayon y vit), .z = 1 si coins hauts carres (sous un cadre), .w = 1 si warp projectif ; mode 14 : .xy = taille du plan du cadre, .z = hauteur de la barre, .w = epaisseur du filet (px du plan) ; modes 13 et 15 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque ; mode 17 : (angle du socle depuis le plan en rad, rayon de l'ouverture et recouvrement de la lunette en unites du modele, penombre de l'ombre ou 0)
     mb: vec4<f32>,        // mode 8 : [gx, gy, z_focus, k], profondeur du plan et flou (texels source) par px d'ecart, k = 0 coupe ; mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné, mb.w = 1 si son warp est projectif ; mode 13 : mb.x = 1 si warp projectif ; mode 14 : couleur du filet (alpha droit) ; modes 15 et 17 : .xy = demi-taille du plan dans son repere (px pour le 15, unites pour le 17), .zw = translation du plan (repere camera, px)
+    trail_a: vec4<f32>,   // mode 8 : coins TL, TR du plan a la frame precedente (px locaux, comme fx)
+    trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev)
+    trail_mb: vec4<f32>,  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
 @group(0) @binding(1) var texY:  texture_2d<f32>;   // R8Unorm, sample .r ; modes 7, 13 et 15 : le sprite RGBA
-@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r ; mode 15 : le champ R16F du sprite
+@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r ; mode 15 : distance + relief RG16F
 @group(0) @binding(3) var samp:  sampler;
 // Masque de segmentation du sujet webcam, R8. Une vue 1x1 est liee quand aucun masque
 // n'existe : la branche n'est de toute facon prise que si layer.fx.z > 0.5.
@@ -330,13 +333,27 @@ fn quad_inverse_projective(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: ve
     return vec3<f32>(s, t, ok);
 }
 
-// Warp inverse d'un calque pose sur le plan : projectif sous la camera reelle (`projective` = 1),
-// bilineaire sous un angle fixe, inchange.
+// Warp inverse d'un calque pose sur le plan : projectif (`projective` = 1, que tout ecran incline
+// porte), bilineaire sinon.
 fn quad_inverse(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: vec2<f32>, c01: vec2<f32>, projective: f32) -> vec3<f32> {
     if projective > 0.5 {
         return quad_inverse_projective(P, c00, c10, c11, c01);
     }
     return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
+// Un echantillon de l'ecran incline (mode 8) : la video nette, fondue vers la pyramide de
+// profondeur de champ (binding 4, a la place du masque webcam) au-dela d'un demi-texel de cercle
+// de confusion `coc`. Sous ce seuil, l'echantillon net d'avant, a l'octet. Miroir de
+// `tilted_sample` (HLSL). LOD explicite : pas de derivees dans cette branche.
+fn tilted_sample(uv: vec2<f32>, coc: f32) -> vec3<f32> {
+    var rgb = sample_yuv(uv);
+    if coc > 0.5 {
+        let lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
+        let far_rgb = textureSampleLevel(texMask, samp, uv, lod).rgb;
+        rgb = mix(rgb, far_rgb, clamp((coc - 0.5) / 1.5, 0.0, 1.0));
+    }
+    return rgb;
 }
 
 // Hash 2D -> [0,1) sans sin(). Miroir de `hash12` cote HLSL.
@@ -358,10 +375,19 @@ fn value_noise(q: vec2<f32>) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// Rampe du mode 5 a quatre noeuds. Miroir de `ramp4` cote HLSL (commentaires complets la-bas).
+fn ramp4(t: f32, k0: vec4<f32>, k1: vec4<f32>, k2: vec4<f32>, k3: vec4<f32>) -> vec3<f32> {
+    var c = k0.rgb;
+    c = mix(c, k1.rgb, clamp((t - k0.w) / max(k1.w - k0.w, 1e-5), 0.0, 1.0));
+    c = mix(c, k2.rgb, clamp((t - k1.w) / max(k2.w - k1.w, 1e-5), 0.0, 1.0));
+    c = mix(c, k3.rgb, clamp((t - k2.w) / max(k3.w - k2.w, 1e-5), 0.0, 1.0));
+    return c;
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
 // `gradient_motion` cote HLSL (commentaires complets la-bas).
-fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, c0: vec3<f32>, c1: vec3<f32>,
-                   time: f32, motion: f32, aspect: f32) -> vec3<f32> {
+fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, k0: vec4<f32>, k1: vec4<f32>,
+                   k2: vec4<f32>, k3: vec4<f32>, time: f32, motion: f32, aspect: f32) -> vec3<f32> {
     let TAU = 6.2831853;
     let u = dot(gp - vec2<f32>(0.5), dir) / denom; // position le long de l'axe, -0.5..0.5
     if motion < 2.5 {
@@ -369,19 +395,19 @@ fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, c0: vec3<f32>, c1:
         let p = vec2<f32>((gp.x - 0.5) * aspect, gp.y - 0.5);
         let ph = TAU * time / 120.0;
         let n = value_noise(p * 2.5 + 1.5 * vec2<f32>(cos(ph), sin(ph)));
-        var g = mix(c0, c1, clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0));
+        var g = ramp4(clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
         let b0 = vec2<f32>(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
         let b1 = vec2<f32>(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
         let b2 = vec2<f32>(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
-        g = mix(g, c1, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
-        g = mix(g, c0, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
-        g = mix(g, c1, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        g = mix(g, k3.rgb, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
+        g = mix(g, k0.rgb, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
+        g = mix(g, k3.rgb, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
         return g;
     }
     // Vagues : trois bandes sinus perpendiculaires a l'axe (12 s), ondulees (20 s).
     let v = dot(gp - vec2<f32>(0.5), vec2<f32>(-dir.y, dir.x)) / denom;
     let w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
-    return mix(c0, c1, clamp(0.5 + u + 0.07 * w, 0.0, 1.0));
+    return ramp4(clamp(0.5 + u + 0.07 * w, 0.0, 1.0), k0, k1, k2, k3);
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -447,10 +473,10 @@ fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<
 // le plan de l'ecran. Constantes : miroir exact de `frame_geometry.rs` (MODEL_*), emplacements du
 // cbuffer : `cursor_model_cb`.
 // Textures : le sprite RGBA (alpha droit) au binding 1 (`texY`, comme aux modes 7 et 13), son
-// champ R16F au binding 2 (`texU`), sur le meme rect ; `color.rg` = coin du sprite dans le repere
-// du modele, `sprite_size()` = sa taille (w/h dans `radius_px`), `color.b` = un texel du sprite (unites
-// du modele).
+// champ RG16F au binding 2 (`texU`), sur le meme rect ; `color.rg` = coin du sprite dans le repere
+// du modele, `sprite_size()` = sa taille (w/h dans `radius_px`), `color.b` = l'ecrasement au clic.
 const MODEL_THICK: f32 = 0.19;
+const MODEL_RELIEF_MAX: f32 = 0.12;
 const MODEL_BEVEL: f32 = 0.045;
 const MODEL_LIGHT = vec3<f32>(-0.4194, -0.5792, 0.6990);
 const MODEL_AMBIENT: f32 = 0.36;
@@ -491,9 +517,19 @@ fn sd_sprite2(p: vec2<f32>) -> f32 {
     return select(d, sqrt(out2 + e * e), out2 > 0.0);
 }
 
+fn model_top_height(p: vec2<f32>) -> f32 {
+    let lo = layer.color.rg;
+    let c = clamp(p, lo, lo + sprite_size());
+    let relief = textureSampleLevel(texU, samp, (c - lo) / sprite_size(), 0.0).g;
+    return clamp(relief * layer.color.b, 0.0, MODEL_RELIEF_MAX);
+}
+
 fn sd_model(p: vec3<f32>) -> f32 {
-    let half_t = model_thick() * 0.5;
-    let w = vec2<f32>(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z + half_t) - (half_t - MODEL_BEVEL));
+    let top = model_top_height(p.xy);
+    let thick = model_thick();
+    let half_t = (top + thick) * 0.5;
+    let center_z = (top - thick) * 0.5;
+    let w = vec2<f32>(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z - center_z) - (half_t - MODEL_BEVEL));
     return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0))) - MODEL_BEVEL;
 }
 
@@ -594,7 +630,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     let unit = layer.src.w;
     let tip = layer.src_prev.xyz;
     let lo = vec3<f32>(layer.color.rg, -model_thick());
-    let hi = vec3<f32>(layer.color.rg + sprite_size(), 0.0);
+    let hi = vec3<f32>(layer.color.rg + sprite_size(), MODEL_RELIEF_MAX);
 
     let dw = vec3<f32>(local + layer.src.xy, -persp);
     let dlen = length(dw);
@@ -1221,8 +1257,9 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Mode 1 — couleur pleine.
         rgb = layer.color.rgb;
     } else if layer.mode > 4.5 && layer.mode < 5.5 {
-        // Mode 5 -- gradient lineaire : color (c0) -> src.rgb (c1) le long de
-        // la direction fx.xy (sin, -cos de l'angle). Parite avec le HLSL/MSL.
+        // Mode 5 -- gradient lineaire jusqu'a 4 stops : noeuds `rgb + position` dans color,
+        // src_prev, dst_prev, src (cf. `ramp4`), le long de la direction fx.xy (sin, -cos de
+        // l'angle). Parite avec le HLSL/MSL.
         // `denom` : HLSL et MSL normalisent coin-a-coin (|dx|+|dy|) pour couvrir toute la
         // diagonale. Il manquait ici, donc le meme degrade ne rendait pas pareil sur Linux.
         // Fond anime : fx.z = temps programme (s, replie sur 120), fx.w = mouvement (0 immobile,
@@ -1244,10 +1281,10 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
             gp = i.local / layer.quad_px;
         }
         let t = clamp(0.5 + dot(gp - vec2<f32>(0.5), dir) / denom, 0.0, 1.0);
-        rgb = mix(layer.color.rgb, layer.src.rgb, t);
+        rgb = ramp4(t, layer.color, layer.src_prev, layer.dst_prev, layer.src);
         if layer.fx.w > 1.5 {
-            rgb = gradient_motion(gp, dir, denom, layer.color.rgb, layer.src.rgb, layer.fx.z,
-                                  layer.fx.w, layer.mb.x);
+            rgb = gradient_motion(gp, dir, denom, layer.color, layer.src_prev, layer.dst_prev,
+                                  layer.src, layer.fx.z, layer.fx.w, layer.mb.x);
         }
     } else if layer.mode > 10.5 && layer.mode < 11.5 {
         // Mode 11 : texte. texY est l'atlas R8 (couverture alpha au canal .r,
@@ -1366,8 +1403,8 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
     } else if layer.mode > 7.5 && layer.mode < 8.5 {
         // Mode 8 -- ecran tilte (rotation 3D des zoom regions). Le quad projete est
         // dessine dans sa BBOX (le VS ne sait tracer qu'un rect) et chaque fragment
-        // remonte au (s,t) du plan par warp inverse : bilineaire sous un angle fixe, projectif exact
-        // sous la camera reelle (dst_prev.w = 1), qui eclaire aussi le plan (color.xy).
+        // remonte au (s,t) du plan par warp inverse : projectif exact (dst_prev.w = 1, tout ecran
+        // incline), bilineaire sinon ; la camera reelle eclaire aussi le plan (color.xy).
         //
         // PAS de test de clip sur `dst_prev` : en mode 8 `dst_prev.xy` porte
         // `plane_px`, la taille du plan en PIXELS (~1600), la ou `i.pout` vit dans
@@ -1405,15 +1442,33 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Profondeur de champ (cf. HLSL) : net sous un demi-texel de flou, l'echantillon
         // d'avant a l'octet ; au-dela, fondu vers la pyramide demi-resolution liee en binding 4
         // (a la place du masque webcam, que ce mode ne lit pas), au niveau `log2(coc) - 1`,
-        // plafonne. LOD explicite : pas de derivees dans cette branche.
-        var tilt_rgb = sample_yuv(uv);
+        // plafonne. LOD explicite : pas de derivees dans cette branche (`tilted_sample`).
         let rs = clamp(vec2<f32>(r.x, r.y), vec2<f32>(0.0), vec2<f32>(1.0));
         let z = (rs.x - 0.5) * layer.mb.x + (rs.y - 0.5) * layer.mb.y;
         let coc = layer.mb.w * abs(z - layer.mb.z);
-        if coc > 0.5 {
-            let lod = clamp(log2(coc) - 1.0, 0.0, DOF_MAX_LOD);
-            let far_rgb = textureSampleLevel(texMask, samp, uv, lod).rgb;
-            tilt_rgb = mix(tilt_rgb, far_rgb, clamp((coc - 0.5) / 1.5, 0.0, 1.0));
+        var tilt_rgb = tilted_sample(uv, coc);
+        // Flou de mouvement, celui du mode 0 (cf. HLSL) : l'UV que CE pixel montrait a la frame
+        // precedente, par le meme warp inverse sur les coins d'avant (`trail_a`/`trail_b`), puis
+        // `taps` echantillons de celui-la a celui-ci, raccourcis de la force. Borne a une frame.
+        let trail_taps = i32(layer.trail_mb.x);
+        if trail_taps > 1 && layer.trail_mb.y > 0.001 {
+            let rp = quad_inverse(
+                i.local, layer.trail_a.xy, layer.trail_a.zw, layer.trail_b.xy, layer.trail_b.zw, layer.dst_prev.w,
+            );
+            let uv_prev = vec2<f32>(
+                mix(layer.src.x, layer.src.z, rp.x),
+                mix(layer.src.y, layer.src.w, rp.y),
+            );
+            let duv = (uv - uv_prev) * clamp(layer.trail_mb.y, 0.0, 1.0);
+            if dot(duv, duv) >= 1e-9 {
+                var acc = vec3<f32>(0.0);
+                let step = 1.0 / f32(trail_taps - 1);
+                for (var k: i32 = 0; k < 16; k = k + 1) {
+                    if k >= trail_taps { break; }
+                    acc = acc + tilted_sample(uv - duv * (1.0 - f32(k) * step), coc);
+                }
+                tilt_rgb = acc / f32(trail_taps);
+            }
         }
         if layer.dst_prev.w > 0.5 {
             // La lampe de la camera reelle : le cote proche un peu plus clair.
@@ -1538,7 +1593,14 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         return vec4<f32>(layer.color.rgb * a, a);
     }
 
-    alpha = layer.color.a * alpha_mask;
+    // Le mode 5 range la POSITION de son premier stop dans color.a (`gradient_layer`), pas une
+    // opacite : un degrade est opaque, comme dans le HLSL et le MSL, qui ne lisent pas color.a.
+    // Le lire ici rendait transparent tout degrade dont le premier stop est a 0.
+    var base_alpha = layer.color.a;
+    if layer.mode > 4.5 && layer.mode < 5.5 {
+        base_alpha = 1.0;
+    }
+    alpha = base_alpha * alpha_mask;
 
     if layer.radius_px > 0.0 {
         // Feather ~1.5 px sur le bord du quad — parité exacte avec le HLSL

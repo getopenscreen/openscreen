@@ -50,7 +50,7 @@ const APPEARANCE: StylePresetAppearance = {
 		size: 3,
 		smoothing: 0.67,
 		motionBlur: 0.35,
-		clickBounce: 2.5,
+		clickBounce: 1,
 		model3d: false,
 		alwaysArrow: false,
 	},
@@ -133,6 +133,28 @@ describe("native bridge presets domain", () => {
 			payload: { id: "nope", appearance: APPEARANCE },
 		});
 		expect(missing).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+	});
+
+	it("marks and clears the preset for new projects", async () => {
+		await invoke({
+			domain: "presets",
+			action: "create",
+			payload: { name: "Studio", appearance: APPEARANCE },
+		});
+		const mark = (id: unknown) =>
+			invoke({ domain: "presets", action: "setForNewProjects", payload: { id } });
+		const marked = async () => {
+			const listed = await invoke({ domain: "presets", action: "list" });
+			return (listed.ok ? (listed.data as { forNewProjects?: boolean }[]) : [])[0]?.forNewProjects;
+		};
+		expect(await mark("Studio")).toMatchObject({ ok: true });
+		expect(await marked()).toBe(true);
+		expect(await mark(null)).toMatchObject({ ok: true });
+		expect(await marked()).toBeUndefined();
+
+		vi.spyOn(console, "error").mockImplementation(() => undefined);
+		expect(await mark("../x")).toMatchObject({ ok: false, error: { code: "INVALID_REQUEST" } });
+		expect(await mark("Gone")).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
 	});
 
 	it("reveals the preset file, or opens the folder when the file is gone", async () => {

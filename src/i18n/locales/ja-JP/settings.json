@@ -11,6 +11,8 @@
 		"title": "背景",
 		"imageLabel": "背景 {{index}}",
 		"custom": "カスタム",
+		"customColor": "カスタムカラー",
+		"customGradient": "1色から作るグラデーション",
 		"help": "録画の背景に表示するものを選びます。同梱の壁紙画像、単色、グラデーション、またはディスク上の任意の画像から選べます。",
 		"gradient": "グラデーション",
 		"colorLabel": "色 {{color}}",
@@ -107,6 +109,9 @@
 		"fitClipOne": "{{count}} クリップ",
 		"formatAuto": "自動",
 		"formatAutoMixed": "クリップが不揃い",
+		"formatFill": "録画",
+		"formatFillFit": "全体",
+		"formatFillFollow": "カーソルを追う",
 		"formatOriginal": "元のサイズ",
 		"fitClipMany": "{{count}} クリップ",
 		"frame": "フレーム",
@@ -116,8 +121,6 @@
 		"fitClip": "合わせる",
 		"motionBlur": "モーションブラー",
 		"depthOfField": "被写界深度",
-		"depthOfFieldHint": "3D ズーム",
-		"depthOfFieldNoTilt": "このプロジェクトに 3D ズームはありません",
 		"roundness": "丸み",
 		"frameStyle": "スタイル",
 		"windowNone": "なし",
@@ -130,7 +133,11 @@
 		"frameThemeDark": "ダーク",
 		"frameThemeHelp": "シルバーの本体に明るい枠、またはグラファイトに暗い枠。すべてのフレームに適用されます。",
 		"windowHelp": "録画の周囲にウィンドウ、または 3D でモデリングされたデバイスを描画します。",
-		"roundnessFrameHelp": "範囲はフレームに合わせて変わります。100% はそのフレームに似合う最大の丸みです。"
+		"roundnessFrameHelp": "範囲はフレームに合わせて変わります。100% はそのフレームに似合う最大の丸みです。",
+		"shadowNone": "なし",
+		"shadowLight": "弱",
+		"shadowMedium": "中",
+		"shadowStrong": "強"
 	},
 	"stylePresets": {
 		"button": "プリセット",
@@ -147,6 +154,9 @@
 		"revealLinux": "フォルダに表示",
 		"rename": "名前を変更",
 		"update": "現在のプロジェクトから更新",
+		"useForNewProjects": "新規プロジェクトに使用",
+		"stopForNewProjects": "新規プロジェクトへの使用をやめる",
+		"newProjectsBadge": "新規プロジェクト",
 		"delete": "削除",
 		"confirmDelete": "「{{name}}」を削除しますか？",
 		"applied": "「{{name}}」を適用しました",
@@ -201,15 +211,12 @@
 		"legacyAnnotations": "このプロジェクトには旧字幕機能の注釈が残っています（{{count}}）。字幕レイヤーの上に描画されます。",
 		"backgroundOpacity": "不透明度",
 		"backgroundColor": "背景色",
-		"alignCenter": "中央",
 		"translationIsNonDestructive": "翻訳は文字起こしの中ではなく横に保存されます。元のテキストとタイミングはそのまま残ります。",
 		"distanceFromRight": "右端からの距離",
 		"language": "言語",
 		"text": "テキスト",
-		"anchorHintBottom": "長い字幕は上に伸びます（下端は動きません）。",
 		"distanceFromTop": "上端からの距離",
 		"translateFailed": "翻訳に失敗しました。",
-		"alignLeft": "左",
 		"distanceFromBottom": "下端からの距離",
 		"derivedFromTranscript": "文字起こしからリアルタイムに生成された字幕 {{count}} 行。",
 		"translate": "翻訳",
@@ -218,14 +225,10 @@
 		"hiddenHint": "字幕はこのメディアの文字起こしから生成されます。オンにするとプレビューと書き出しに表示されます。",
 		"noTranscript": "字幕はメディアの文字起こしから読み込まれます。有効にするにはこの動画を文字起こししてください。",
 		"distanceFromLeft": "左端からの距離",
-		"anchorBottom": "下",
 		"transcribe": "動画を文字起こし",
 		"bold": "太字",
-		"alignRight": "右",
-		"anchorTop": "上",
 		"minWords": "1 行の最小単語数",
 		"translateHint": "設定した AI プロバイダーで文字起こしを翻訳します",
-		"anchorHintTop": "長い字幕は下に伸びます（上端は動きません）。",
 		"displayLanguage": "表示",
 		"removeLegacyAnnotations": "古い字幕の注釈を削除",
 		"background": "背景",
@@ -235,7 +238,15 @@
 		"font": "フォント",
 		"translating": "翻訳中…",
 		"show": "字幕を表示",
-		"textColor": "文字色"
+		"textColor": "文字色",
+		"style": "スタイル",
+		"styles": {
+			"classic": "クラシック",
+			"bold": "太字",
+			"minimal": "ミニマル",
+			"light": "ライト"
+		},
+		"customize": "カスタマイズ"
 	},
 	"panes": {
 		"help": "ヘルプ"
@@ -267,7 +278,7 @@
 		"remove": "トラックを削除",
 		"loop": "ループ",
 		"slipHint": "Alt を押しながらドラッグで中の音声をずらす",
-		"help": "このオーディオトラックの音量・フェード・ループ。プレビューでも書き出しでも録画に重ねてミックスされます。タイムライン上でドラッグすると移動やサイズ変更、Alt を押しながらドラッグすると中の音声がずれます。",
+		"help": "このオーディオトラックの音量・フェード・ループ。プレビューでも書き出しでも録画に重ねてミックスされます。音楽トラックは話している間、自動で音量が下がります。タイムライン上でドラッグすると移動やサイズ変更、Alt を押しながらドラッグすると中の音声がずれます。",
 		"add": "オーディオトラックを追加",
 		"mute": "ミュート"
 	},
@@ -350,35 +361,19 @@
 			"lockedDisclaimer": "タイムラインの全体オートフォーカス切り替えによって制御されます。オフにすると、ズームごとにフォーカスモードを設定できます。",
 			"auto": "自動",
 			"manual": "手動",
-			"autoDescription": "表示範囲が録画中のカーソル位置に追従します",
 			"title": "フォーカスモード"
 		},
 		"camera": {
 			"title": "3Dカメラ",
 			"off": "オフ",
-			"fixed": "固定アングル",
-			"moving": "動くカメラ",
 			"preset": {
-				"iso": "斜め上から",
 				"left": "画面を左向きに",
 				"right": "画面を右向きに",
 				"followCursor": "カーソルに合わせて回り込む"
-			},
-			"description": {
-				"off": "画面は平らなままです。",
-				"iso": "1つの姿勢を保ちます：左向きで、上から見下ろします。",
-				"left": "1つの姿勢を保ちます：画面が左を向き、右端が手前に出ます。",
-				"right": "1つの姿勢を保ちます：画面が右を向き、左端が手前に出ます。",
-				"followCursor": "画面は動かず、カメラが画面の周りを回ってカーソルのある側へ移り、カーソルに合わせて上下します。"
-			},
-			"needsCursor": "カーソルが非表示です：このカメラは追う対象がなく、最初のアングルのままです。"
+			}
 		},
 		"clickImpact": {
-			"title": "クリックの押し込み",
-			"description": "クリックするたびに傾いた画面が押され、クリックした側が沈んでから戻ります。",
-			"needsRotation": "先に3Dカメラを選んでください。押し込めるのは傾いた画面だけです。",
-			"needsCursor": "カーソルが非表示です。画面は見えているクリックにだけ反応します。",
-			"descriptionCamera": "クリックのたびにカメラが少し後ろへ下がり、また戻ります。"
+			"title": "クリックの押し込み"
 		},
 		"level": "ズーム倍率",
 		"previewHold": "押している間ズーム効果をプレビュー",
@@ -393,7 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "出力レベル",
-		"help": "音声の出力レベルを調整します。プレビューと書き出しで同じように適用されます。",
+		"help": "音声は標準のラウドネスに自動で揃えられます。そこから出力レベルを調整してください。プレビューと書き出しで同じように適用されます。",
 		"reset": "オーディオをリセット",
 		"title": "オーディオ"
 	},
@@ -414,18 +409,18 @@
 		"smoothing": "スムージング",
 		"clickBounce": "クリックバウンス",
 		"model3d": "3D カーソル",
-		"model3dHint": "デフォルトのスタイル：すべてのカーソル形状が 3D になります。その他のスタイルは平面のままです。",
-		"model3dNeedsCursor": "3D カーソルを使うには「カーソルを表示」をオンにしてください。",
 		"help": "記録されたテレメトリからのカーソル描画: テーマ、サイズ、スムージング、モーションブラー、クリック時のバウンス。",
 		"size": "サイズ",
 		"title": "カーソル",
 		"show": "カーソルを表示",
 		"themeDefault": "デフォルト",
 		"alwaysArrow": "常に矢印カーソルを使用",
-		"alwaysArrowHint": "テキストやリンクの上でも、すべてのカーソル状態で矢印を表示します。",
 		"motionBlur": "モーションブラー",
 		"theme": "カーソルのスタイル",
-		"autoHide": "非アクティブ時に非表示"
+		"autoHide": "非アクティブ時に非表示",
+		"bounceNone": "なし",
+		"bounceLight": "弱",
+		"bounceStrong": "強"
 	},
 	"export": {
 		"gifButton": "GIF をエクスポート",
@@ -434,5 +429,11 @@
 	},
 	"trim": {
 		"deleteRegion": "トリム範囲を削除"
+	},
+	"textPlate": {
+		"none": "なし",
+		"dark": "ダーク",
+		"light": "ライト",
+		"custom": "カスタム"
 	}
 }

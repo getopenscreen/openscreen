@@ -112,6 +112,9 @@
 		"microphone": "マイク",
 		"camera": "カメラ",
 		"cursorHighlight": "カーソルの強調表示",
+		"hideDesktopIcons": "デスクトップアイコンを隠す",
+		"hideDesktopIconsHintMac": "画面収録からデスクトップアイコンを除外します。デスクトップ上には残ります。",
+		"hideDesktopIconsHintWindows": "画面の収録中、デスクトップアイコンを壁紙で覆います。収録を止めると元に戻ります。",
 		"on": "オン",
 		"off": "オフ",
 		"loading": "読み込み中…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "音声が検出されませんでした"
 	},
 	"exportDialog": {
+		"destination": "書き出し先",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "SNS",
+		"destinationStudio": "スタジオ",
+		"destinationReadmeGif": "README 用 GIF",
+		"advanced": "詳細設定",
 		"title": "エクスポート",
 		"subtitle": "タイムラインをファイルに書き出します",
 		"addVideoBeforeExporting": "エクスポートする前に動画を追加してください。",
@@ -215,7 +224,6 @@
 		"generateCaptions": "キャプションを生成",
 		"cropDescription": "録画をリフレーム — アスペクト比を選び、保持したい範囲にズームします。",
 		"openCrop": "切り抜きを開く…",
-		"cameraFullscreenDescription": "この区間の再生中は、カメラが画面全体を占めます（枠・角丸・背景なし）。終わりでは滑らかに元に戻ります。タイムライン上で区間の端をドラッグすると、開始位置と長さを変更できます。",
 		"deleteRegion": "区間を削除",
 		"freehandRendersAsBox": "書き出しでは、フリーハンドの形は外接する矩形で覆われます。覆いすぎることはあっても、足りないことはありません。"
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "再生コントロール",
 		"playPause": "再生 / 一時停止",
 		"playPauseTitle": "再生 / 一時停止（スペース）",
-		"previousClip": "前のクリップ",
-		"nextClip": "次のクリップ",
 		"loop": "ループ",
 		"seekVideo": "動画をシーク"
 	},

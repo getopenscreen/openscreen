@@ -96,24 +96,23 @@ describe("caption settings on the transcript tab", () => {
 		expect(screen.getByRole("button", { name: "Captions" })).toBeInTheDocument();
 	});
 
-	it("opens the real caption settings rather than a stub", async () => {
+	it("opens the real caption settings in place of the transcript", async () => {
 		const user = userEvent.setup();
 		mount([TRANSCRIPT]);
 		await user.click(screen.getByRole("button", { name: "Captions" }));
 		// A control that only the actual CaptionsPane renders — proof the pane was
-		// mounted whole rather than reimplemented into the popover.
-		expect(await screen.findByText("Show captions")).toBeInTheDocument();
+		// mounted whole rather than reimplemented.
+		expect(screen.getByText("Show captions")).toBeInTheDocument();
+		// It takes the transcript's slot in the inspector, not a spot beside it.
+		expect(screen.queryByRole("heading", { name: "Transcript" })).not.toBeInTheDocument();
 	});
 
-	it("renders a close button and closes the popover when clicked", async () => {
+	it("goes back to the transcript when closed", async () => {
 		const user = userEvent.setup();
 		mount([TRANSCRIPT]);
 		await user.click(screen.getByRole("button", { name: "Captions" }));
-		expect(await screen.findByText("Show captions")).toBeInTheDocument();
-
-		const closeBtn = screen.getByRole("button", { name: "Close" });
-		expect(closeBtn).toBeInTheDocument();
-		await user.click(closeBtn);
+		await user.click(screen.getByRole("button", { name: "Close" }));
 		expect(screen.queryByText("Show captions")).not.toBeInTheDocument();
+		expect(screen.getByRole("heading", { name: "Transcript" })).toBeInTheDocument();
 	});
 });

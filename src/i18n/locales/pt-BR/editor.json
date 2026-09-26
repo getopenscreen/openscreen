@@ -112,6 +112,9 @@
 		"microphone": "Microfone",
 		"camera": "Câmera",
 		"cursorHighlight": "Destaque do cursor",
+		"hideDesktopIcons": "Ocultar ícones da área de trabalho",
+		"hideDesktopIconsHintMac": "Deixa os ícones da área de trabalho fora das gravações de tela. Eles continuam na sua área de trabalho.",
+		"hideDesktopIconsHintWindows": "Cobre os ícones da área de trabalho com o seu papel de parede enquanto uma tela é gravada. Eles voltam quando a gravação termina.",
 		"on": "Ativado",
 		"off": "Desativado",
 		"loading": "Carregando…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "Nenhuma fala detectada"
 	},
 	"exportDialog": {
+		"destination": "Destino",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Redes sociais",
+		"destinationStudio": "Estúdio",
+		"destinationReadmeGif": "GIF para README",
+		"advanced": "Avançado",
 		"title": "Exportar",
 		"subtitle": "Renderizar a linha do tempo para um arquivo",
 		"addVideoBeforeExporting": "Adicione um vídeo antes de exportar.",
@@ -215,7 +224,6 @@
 		"generateCaptions": "Gerar legendas",
 		"cropDescription": "Reenquadre a gravação — escolha uma proporção e dê zoom na região que deseja manter.",
 		"openCrop": "Abrir corte…",
-		"cameraFullscreenDescription": "Enquanto esta região é reproduzida, a câmera ocupa o quadro inteiro — sem borda, sem arredondamento, sem fundo — e volta suavemente no fim. Arraste as bordas da região na linha do tempo para mudar quando ela começa e quanto dura.",
 		"deleteRegion": "Excluir região",
 		"freehandRendersAsBox": "Na exportação, uma forma livre é coberta pela sua caixa delimitadora — cobre demais, nunca de menos."
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "Controles de reprodução",
 		"playPause": "Reproduzir / Pausar",
 		"playPauseTitle": "Reproduzir / Pausar (Espaço)",
-		"previousClip": "Clipe anterior",
-		"nextClip": "Próximo clipe",
 		"loop": "Repetir",
 		"seekVideo": "Navegar no vídeo"
 	},

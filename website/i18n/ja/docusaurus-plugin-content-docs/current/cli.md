@@ -158,7 +158,7 @@ openscreen captions demo.openscreen --min-words 2 --max-words 7
 openscreen export demo.openscreen -o demo.mp4   # captions are burned into the video
 ```
 
-- `--min-words` と `--max-words` で、字幕 1 つあたりの単語数を設定します。既定値は 2 と 7 です。
+- `--min-words` と `--max-words` で、字幕 1 つあたりの単語数を設定します。どちらもエディターと同じ 1〜12 を指定できます。既定値は 2 と 7 です。
 - もう一度実行すると、以前に追加した字幕が置き換えられます。自分で追加した注釈は保持されます。
 - プロジェクトの画面動画には、音声トラックが必要です（たとえば `record --mic` で録音したもの）。
 - 字幕はエクスポートに焼き込まれます。字幕ファイルは出力されません。[字幕と文字起こし](./captions.md)を参照してください。

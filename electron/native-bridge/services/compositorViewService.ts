@@ -102,15 +102,23 @@ export function resolveSceneAssetPath(relativePath: string): string | null {
 function resolveCursorSpritePaths(
 	themeId: string,
 	alwaysArrow: boolean,
-): Record<string, { path: string; hotspotX: number; hotspotY: number }> {
-	const resolved: Record<string, { path: string; hotspotX: number; hotspotY: number }> = {};
-	for (const [type, sprite] of Object.entries(resolveCursorSprites(themeId, alwaysArrow))) {
+	model3d = false,
+): Record<string, { path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }> {
+	const resolved: Record<
+		string,
+		{ path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }
+	> = {};
+	for (const [type, sprite] of Object.entries(
+		resolveCursorSprites(themeId, alwaysArrow, model3d),
+	)) {
 		const absolute = resolveSceneAssetPath(sprite.assetPath);
 		if (absolute) {
+			const depthPath = sprite.modelDepthPath ? resolveSceneAssetPath(sprite.modelDepthPath) : null;
 			resolved[type] = {
 				path: absolute,
 				hotspotX: sprite.hotspotX,
 				hotspotY: sprite.hotspotY,
+				...(depthPath ? { modelDepthPath: depthPath } : {}),
 			};
 		}
 	}
@@ -129,7 +137,11 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 			cursor?: {
 				theme?: string;
 				alwaysArrow?: boolean;
-				cursorSprites?: Record<string, { path: string; hotspotX: number; hotspotY: number }>;
+				model3d?: boolean;
+				cursorSprites?: Record<
+					string,
+					{ path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }
+				>;
 			};
 			webcamEffect?: {
 				mode?: string;
@@ -164,6 +176,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 			scene.cursor.cursorSprites = resolveCursorSpritePaths(
 				scene.cursor.theme,
 				scene.cursor.alwaysArrow === true,
+				scene.cursor.model3d === true,
 			);
 			changed = true;
 		}
@@ -409,6 +422,23 @@ function ensureOnnxRuntimeOnPath(appRoot: string): void {
 	}
 }
 
+/**
+ * Points `OPENSCREEN_FONTS_DIR` at the font files the compositor draws captions and annotations
+ * with (`public/fonts`, shipped through `extraResources` like the wallpapers). The compositor
+ * registers them privately when it builds its text rasterizer and never reads the machine's
+ * installed fonts, so without this every family falls back to a system face. Best-effort like
+ * `ensureOnnxRuntimeOnPath`: unresolved, text still draws, in system fonts.
+ */
+function ensureTextFontsDir(): void {
+	if (process.env.OPENSCREEN_FONTS_DIR) {
+		return;
+	}
+	const dir = resolveSceneAssetPath("fonts");
+	if (dir) {
+		process.env.OPENSCREEN_FONTS_DIR = dir;
+	}
+}
+
 function tryLoadAddon(candidates: string[]): CompositorViewAddon | null {
 	for (const candidate of candidates) {
 		try {
@@ -458,6 +488,7 @@ export class CompositorViewService {
 
 		ensureFfmpegSharedDllsOnPath(appRoot);
 		ensureOnnxRuntimeOnPath(appRoot);
+		ensureTextFontsDir();
 		const candidates = buildCandidatePaths(appRoot, isPackaged, envOverride);
 		const loaded = tryLoadAddon(candidates);
 		if (!loaded) {
@@ -523,6 +554,20 @@ export class CompositorViewService {
 		// The model is resolved by this process, not the addon, so it is checked here — and it
 		// is the same lookup `resolveSceneAssetPaths` performs, so the two cannot disagree.
 		return resolveSceneAssetPath(SEGMENTATION_MODEL_ASSET) ? "ready" : "no-model";
+	}
+
+	/** Subject mask for one camera frame, no view needed — see `segmentFrame` in the addon.
+	 *  `null` when the addon (or this version of it) or the model is missing. */
+	async segmentFrame(rgba: Uint8Array): Promise<Uint8Array | null> {
+		const addon = this.ensureAddon();
+		const modelPath = resolveSceneAssetPath(SEGMENTATION_MODEL_ASSET);
+		if (!addon?.segmentFrame || !modelPath) {
+			return null;
+		}
+		return addon.segmentFrame(
+			modelPath,
+			Buffer.from(rgba.buffer, rgba.byteOffset, rgba.byteLength),
+		);
 	}
 
 	/** Allocates an offscreen compositor view sized to `rect.width`x`rect.height`.
@@ -723,5 +768,16 @@ export class CompositorViewService {
 			return null;
 		}
 		return addon.remuxSeekable(inputPath, outputPath);
+	}
+
+	/** The loudness-normalisation gain (dB) the export applies to this voice file, so the
+	 *  preview can play it at the same level. Null when the addon is absent or predates it:
+	 *  the preview then plays the file as recorded, the export still normalises. */
+	async loudnessGainDb(filePath: string): Promise<number | null> {
+		const addon = this.ensureAddon();
+		if (!addon?.loudnessGainDb) {
+			return null;
+		}
+		return addon.loudnessGainDb(filePath);
 	}
 }

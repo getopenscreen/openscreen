@@ -16,6 +16,7 @@
 // described are gone (see `MUTATING_TOOL_NAMES`).
 
 import { z } from "zod";
+import { DEFAULT_TEXT_PLATE } from "../../src/lib/ai-edition/annotations/background";
 import {
 	collapseTracksToPills,
 	patchAudioTrack,
@@ -40,6 +41,7 @@ import {
 	buildCursorTrack,
 	type CursorTrackSample,
 } from "../../src/lib/ai-edition/timeline/cursor-track";
+import { breatheCut, mergeCloseCuts } from "../../src/lib/ai-edition/timeline/cut-breath";
 import {
 	anchorRegionsWithDerivedMs,
 	coalesceRegionsForRuler,
@@ -55,6 +57,7 @@ import {
 	effectiveZoomScale,
 	ZOOM_DEPTH_LEGEND,
 } from "../../src/lib/ai-edition/timeline/zoom-scale";
+import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
 
 export interface AgentToolExecution {
 	ok: boolean;
@@ -490,18 +493,28 @@ export const setZoomArgs = z.object({
 	focus: focusSchema.optional(),
 });
 
+// The bound every speed reader applies (`readSpeedRegions`): refused here, so the agent hears
+// why instead of seeing its 100x quietly play at 16x.
+const speedSchema = z
+	.number()
+	.min(SETTING_BOUNDS.playbackSpeed[0])
+	.max(SETTING_BOUNDS.playbackSpeed[1]);
+
 export const addSpeedArgs = z.object({
 	startSec: secondsSchema,
 	endSec: secondsSchema,
-	speed: z.number().positive().default(1.5),
+	speed: speedSchema.default(1.5),
 });
 
 export const setSpeedArgs = z.object({
 	speedId: z.string().min(1),
 	startSec: secondsSchema.optional(),
 	endSec: secondsSchema.optional(),
-	speed: z.number().positive().optional(),
+	speed: speedSchema.optional(),
 });
+
+/** A new text annotation's box, in frame percentages: the editor's own size for one. */
+const ANNOTATION_BOX = { width: 30, height: 20 } as const;
 
 export const addAnnotationArgs = z.object({
 	startSec: secondsSchema,
@@ -1415,8 +1428,8 @@ export function executeAgentTool(
 			if (!document.assets.some((a) => a.id === assetId)) {
 				return failure(`Unknown asset: ${assetId}`);
 			}
-			const startSec = Math.min(parsed.data.startSec, parsed.data.endSec);
-			const endSec = Math.max(parsed.data.startSec, parsed.data.endSec);
+			let startSec = Math.min(parsed.data.startSec, parsed.data.endSec);
+			let endSec = Math.max(parsed.data.startSec, parsed.data.endSec);
 
 			// Which clip the cut sits on. Named explicitly when the model says so; otherwise
 			// inferred from the source range — but only when the answer is unique. Two clips
@@ -1444,6 +1457,30 @@ export function executeAgentTool(
 					)} (${covering.map((c) => c.id).join(", ")}). Pass clipId to say which one to trim.`,
 				);
 			}
+
+			// Breath next to the speech that stays, and no one-frame flash against a cut
+			// already on the same clip — the same shaping the transcript pane applies.
+			const clip = document.timeline.clips.find((c) => c.id === clipId);
+			const siblings = document.timeline.trimRanges.filter((t) =>
+				clip ? trimAppliesToClip(t, clip) : t.assetId === assetId,
+			);
+			const transcript =
+				document.transcripts.find((t) => t.assetId === assetId) ??
+				(document.transcript?.assetId === assetId ? document.transcript : null);
+			const words = (transcript?.words ?? [])
+				.filter((w) => w.source !== "synth")
+				.map((w) => {
+					const mid = (w.startSec + w.endSec) / 2;
+					const inClip =
+						!clip || (mid >= clip.sourceStartSec && mid < (clip.sourceEndSec ?? Infinity));
+					const cut = siblings.some((t) => mid >= t.startSec && mid < t.endSec);
+					return { startSec: w.startSec, endSec: w.endSec, kept: inClip && !cut };
+				});
+			({ startSec, endSec } = mergeCloseCuts(
+				breatheCut({ startSec, endSec }, words),
+				siblings,
+				document.assets.find((a) => a.id === assetId)?.video?.fps,
+			));
 
 			const trim = {
 				id: createId("trim"),
@@ -1886,11 +1923,23 @@ export function executeAgentTool(
 				type: "text" as const,
 				content: parsed.data.text,
 				textContent: parsed.data.text,
-				position: { x: parsed.data.x, y: parsed.data.y },
-				size: { width: 30, height: 20 },
+				// x/y name the text's centre, which is what "default centre" always promised: the
+				// position is the box's top-left corner, so {50, 50} dropped the text into the
+				// bottom-right quarter. Kept whole inside the frame.
+				position: {
+					x: Math.min(
+						100 - ANNOTATION_BOX.width,
+						Math.max(0, parsed.data.x - ANNOTATION_BOX.width / 2),
+					),
+					y: Math.min(
+						100 - ANNOTATION_BOX.height,
+						Math.max(0, parsed.data.y - ANNOTATION_BOX.height / 2),
+					),
+				},
+				size: { ...ANNOTATION_BOX },
 				style: {
 					color: "#ffffff",
-					backgroundColor: "transparent",
+					backgroundColor: DEFAULT_TEXT_PLATE,
 					fontSize: 32,
 					fontFamily: "Inter",
 					fontWeight: "bold" as const,

@@ -12,12 +12,28 @@
 import { Captions as CaptionsIcon, Languages, Loader2, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
-import type { CaptionAnchorH, CaptionAnchorV } from "@/lib/ai-edition/captions";
+import type {
+	CaptionAnchorH,
+	CaptionAnchorV,
+	CaptionPlate,
+	CaptionStyleId,
+} from "@/lib/ai-edition/captions";
 import {
 	CAPTION_INSET_X_MAX,
 	CAPTION_INSET_Y_MAX,
+	CAPTION_PLATE_OPACITY_MAX,
+	CAPTION_PLATE_OPACITY_MIN,
+	CAPTION_STYLES,
+	captionPlateOf,
+	captionPlatePatch,
+	captionStyleOf,
+	DEFAULT_CAPTION_SETTINGS,
 	untranslatedUnits,
 } from "@/lib/ai-edition/captions";
+import {
+	CAPTION_WORDS_PER_LINE_MAX,
+	CAPTION_WORDS_PER_LINE_MIN,
+} from "@/lib/ai-edition/captions/wordsPerLine";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
@@ -25,34 +41,13 @@ import {
 } from "@/lib/ai-edition/store/transcriptionStore";
 import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
+import { TEXT_FONT_FAMILIES } from "@/lib/textFonts";
 import { nativeBridgeClient } from "@/native";
-import { ColorField } from "./ColorField";
 import styles from "./NewEditorShell.module.css";
-import { SliderCell, Toggle } from "./RightPanes";
+import { ChoiceRow, SliderCell, Toggle } from "./RightPanes";
+import { TextColorField } from "./TextColorField";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
-
-/** The families `src/index.css` already loads for on-canvas text — anything else
- *  would render in the preview but fall back to a default in the export canvas. */
-const CAPTION_FONTS = [
-	"Inter",
-	"Geist",
-	"DM Sans",
-	"Plus Jakarta Sans",
-	"Manrope",
-	"Space Grotesk",
-	"Sora",
-	"IBM Plex Sans",
-	"Oswald",
-	"Bebas Neue",
-	"Lora",
-	"Merriweather",
-	"Playfair Display",
-	"Caveat",
-	"Permanent Marker",
-	"Fira Code",
-	"IBM Plex Mono",
-] as const;
 
 /** Offered as translation targets. Codes double as the storage key. */
 const TRANSLATION_LANGUAGES: ReadonlyArray<{ code: string; label: string }> = [
@@ -72,6 +67,46 @@ const TRANSLATION_LANGUAGES: ReadonlyArray<{ code: string; label: string }> = [
 	{ code: "ko", label: "한국어" },
 	{ code: "zh", label: "中文" },
 ];
+
+const CAPTION_ANCHORS = (["top", "bottom"] as const).flatMap((v) =>
+	(["left", "center", "right"] as const).map((h) => [v, h] as const),
+);
+
+const CAPTION_ANCHOR_KEYS: Record<string, string> = {
+	"top-left": "layout.anchors.topLeft",
+	"top-center": "layout.anchors.top",
+	"top-right": "layout.anchors.topRight",
+	"bottom-left": "layout.anchors.bottomLeft",
+	"bottom-center": "layout.anchors.bottom",
+	"bottom-right": "layout.anchors.bottomRight",
+};
+
+/** The frame with a caption line where this anchor puts it (same viewBox as the camera icons). */
+function captionAnchorIcon(v: CaptionAnchorV, h: CaptionAnchorH) {
+	const fx = h === "left" ? 0 : h === "center" ? 0.5 : 1;
+	return (
+		<svg
+			viewBox="0 0 32 22"
+			width={32}
+			height={22}
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.75"
+			aria-hidden="true"
+		>
+			<rect x="1.5" y="1.5" width="29" height="19" rx="3" />
+			<rect
+				x={5 + fx * 10}
+				y={v === "top" ? 5 : 14}
+				width="12"
+				height="3"
+				rx="1.5"
+				fill="currentColor"
+				stroke="none"
+			/>
+		</svg>
+	);
+}
 
 export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 	const t = useScopedT("settings");
@@ -129,6 +164,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 	);
 
 	const disabled = !hasDocument;
+	const plate = captionPlateOf(settings);
 	const languageOptions = useMemo(() => Object.values(translations), [translations]);
 
 	const handleTranslate = async () => {
@@ -202,7 +238,6 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 				className={styles.paneHead}
 				style={{
 					position: "relative",
-					paddingRight: "var(--sp-4)",
 					flexShrink: 0,
 				}}
 			>
@@ -339,24 +374,46 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 					</div>
 				) : null}
 
+				{/* ── Style ──────────────────────────────────────────────── */}
+				{/* Named looks first: each sets font, size, colour and plate together, and is a
+				    readable pair by construction. Tuning anything below leaves none selected. */}
+				<div className={styles.sectionLabel}>{t("captions.style")}</div>
+				<div style={{ margin: "0 var(--sp-4) 12px" }}>
+					<ChoiceRow<CaptionStyleId | "custom">
+						label={t("captions.style")}
+						disabled={disabled}
+						columns={2}
+						options={CAPTION_STYLE_IDS.map((id) => ({
+							value: id,
+							label: t(`captions.styles.${id}`),
+						}))}
+						value={captionStyleOf(settings) ?? "custom"}
+						onChange={(id) => {
+							if (id !== "custom") void set(CAPTION_STYLES[id]);
+						}}
+					/>
+				</div>
+
 				{/* ── Language ───────────────────────────────────────────── */}
 				<div className={styles.sectionLabel}>{t("captions.language")}</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.displayLanguage")}</span>
-					<select
-						value={settings.language ?? ""}
-						disabled={disabled}
-						onChange={(e) => void set({ language: e.target.value || null })}
-						style={selectStyle}
-					>
-						<option value="">{t("captions.original")}</option>
-						{languageOptions.map((entry) => (
-							<option key={entry.language} value={entry.language}>
-								{entry.label}
-							</option>
-						))}
-					</select>
-				</div>
+				{/* Only once there is a translation to switch to: alone, "Original" would be a
+				    button that changes nothing. */}
+				{languageOptions.length > 0 ? (
+					<div className={`${styles.field} ${styles.fieldStack}`}>
+						<span className={styles.fieldLabel}>{t("captions.displayLanguage")}</span>
+						<ChoiceRow<string>
+							label={t("captions.displayLanguage")}
+							columns={2}
+							options={[
+								{ value: "", label: t("captions.original") },
+								...languageOptions.map((entry) => ({ value: entry.language, label: entry.label })),
+							]}
+							value={settings.language ?? ""}
+							disabled={disabled}
+							onChange={(language) => void set({ language: language || null })}
+						/>
+					</div>
+				) : null}
 
 				<div
 					style={{
@@ -423,90 +480,104 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 					{t("captions.translationIsNonDestructive")}
 				</p>
 
-				{/* ── Text ───────────────────────────────────────────────── */}
-				<div className={styles.sectionLabel}>{t("captions.text")}</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.font")}</span>
-					<select
-						value={settings.fontFamily}
-						disabled={disabled}
-						onChange={(e) => void set({ fontFamily: e.target.value })}
-						style={selectStyle}
-					>
-						{CAPTION_FONTS.map((font) => (
-							<option key={font} value={font} style={{ fontFamily: font }}>
-								{font}
-							</option>
-						))}
-					</select>
-				</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.bold")}</span>
-					<Toggle
-						checked={settings.fontWeight === "bold"}
-						disabled={disabled}
-						onChange={(next) => void set({ fontWeight: next ? "bold" : "normal" })}
-					/>
-				</div>
-				<div className={styles.sliderGrid}>
-					<SliderCell
-						label={t("captions.fontSize")}
-						value={settings.fontSize}
-						min={16}
-						max={140}
-						suffix="px"
-						disabled={disabled}
-						onChange={(v) => setLive({ fontSize: v })}
-						onCommit={() => void commit()}
-					/>
-				</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.textColor")}</span>
-					<ColorField
-						label={t("captions.textColor")}
-						value={settings.color}
-						disabled={disabled}
-						onChange={(color) => setLive({ color })}
-						onCommit={() => void commit()}
-					/>
-				</div>
-
-				{/* ── Background ─────────────────────────────────────────── */}
-				<div className={styles.sectionLabel}>{t("captions.background")}</div>
-				{/* Colour + switch on one row, exactly like the annotation pane's text
-				    background: the swatch keeps showing the remembered colour while the
-				    plate is off, because that is what turning it back on will draw. */}
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.background")}</span>
-					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-						<ColorField
-							label={t("captions.backgroundColor")}
-							value={settings.backgroundColor}
+				{/* ── Customise ─────────────────────────────────────────── */}
+				{/* The detailed look controls, folded behind the named styles above: still one
+				    click away, never the first thing to read. */}
+				<details>
+					<summary className={styles.sectionLabel} style={{ cursor: "pointer" }}>
+						{t("captions.customize")}
+					</summary>
+					<div className={styles.sectionLabel}>{t("captions.text")}</div>
+					<div className={`${styles.field} ${styles.fieldStack}`}>
+						<span className={styles.fieldLabel}>{t("captions.font")}</span>
+						{/* Only the families the compositor ships: it never reads the machine's
+						    installed fonts, so any other name would draw a fallback. Each button is a
+						    specimen, in the face it picks. */}
+						<ChoiceRow<string>
+							label={t("captions.font")}
+							columns={2}
+							options={TEXT_FONT_FAMILIES.map((font) => ({
+								value: font,
+								label: font,
+								icon: <span style={{ fontFamily: font }}>{font}</span>,
+							}))}
+							value={settings.fontFamily}
 							disabled={disabled}
-							onChange={(backgroundColor) => setLive({ backgroundColor })}
-							onCommit={() => void commit()}
-						/>
-						<Toggle
-							checked={settings.backgroundEnabled}
-							disabled={disabled}
-							onChange={(next) => void set({ backgroundEnabled: next })}
+							onChange={(fontFamily) => void set({ fontFamily })}
 						/>
 					</div>
-				</div>
-				{settings.backgroundEnabled ? (
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{t("captions.bold")}</span>
+						<Toggle
+							checked={settings.fontWeight === "bold"}
+							disabled={disabled}
+							onChange={(next) => void set({ fontWeight: next ? "bold" : "normal" })}
+						/>
+					</div>
 					<div className={styles.sliderGrid}>
 						<SliderCell
-							label={t("captions.backgroundOpacity")}
-							value={Math.round(settings.backgroundOpacity * 100)}
-							min={0}
-							max={100}
-							suffix="%"
+							label={t("captions.fontSize")}
+							value={settings.fontSize}
+							min={16}
+							max={140}
+							defaultValue={DEFAULT_CAPTION_SETTINGS.fontSize}
+							suffix="px"
 							disabled={disabled}
-							onChange={(v) => setLive({ backgroundOpacity: v / 100 })}
+							onChange={(v) => setLive({ fontSize: v })}
 							onCommit={() => void commit()}
 						/>
 					</div>
-				) : null}
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{t("captions.textColor")}</span>
+						<TextColorField
+							label={t("captions.textColor")}
+							value={settings.color}
+							plate={settings.backgroundEnabled ? settings.backgroundColor : "transparent"}
+							disabled={disabled}
+							onChange={(color) => setLive({ color })}
+							onCommit={() => void commit()}
+						/>
+					</div>
+
+					{/* ── Background ─────────────────────────────────────────── */}
+					{/* Named plates, like the annotation pane's: the plate choice alone turns it on
+				    or off, and choosing one moves text that would vanish on it. An older free
+				    colour stays shown while the project carries it. */}
+					<div className={styles.sectionLabel}>{t("captions.background")}</div>
+					<div style={{ margin: "0 var(--sp-4) 10px" }}>
+						<ChoiceRow<CaptionPlate | "custom">
+							label={t("captions.background")}
+							disabled={disabled}
+							options={[
+								{ value: "none", label: t("textPlate.none") },
+								{ value: "dark", label: t("textPlate.dark") },
+								{ value: "light", label: t("textPlate.light") },
+								...(plate === "custom"
+									? [{ value: "custom" as const, label: t("textPlate.custom") }]
+									: []),
+							]}
+							value={plate}
+							onChange={(next) => {
+								if (next !== "custom") void set(captionPlatePatch(settings, next));
+							}}
+						/>
+					</div>
+					{settings.backgroundEnabled ? (
+						<div className={styles.sliderGrid}>
+							<SliderCell
+								label={t("captions.backgroundOpacity")}
+								value={Math.round(settings.backgroundOpacity * 100)}
+								min={CAPTION_PLATE_OPACITY_MIN * 100}
+								max={CAPTION_PLATE_OPACITY_MAX * 100}
+								defaultValue={Math.round(DEFAULT_CAPTION_SETTINGS.backgroundOpacity * 100)}
+								suffix="%"
+								disabled={disabled}
+								onChange={(v) => setLive({ backgroundOpacity: v / 100 })}
+								onCommit={() => void commit()}
+							/>
+						</div>
+					) : null}
+				</details>
 
 				{/* ── Placement ──────────────────────────────────────────── */}
 				{/* One control per axis, each naming the edge it measures from. The old pane
@@ -514,28 +585,25 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 				    against that invisible band, and a text alignment fighting the offset for
 				    the same visual outcome. */}
 				<div className={styles.sectionLabel}>{t("captions.position")}</div>
-				<Segmented<CaptionAnchorV>
-					value={settings.anchorV}
-					disabled={disabled}
-					options={[
-						{ value: "bottom", label: t("captions.anchorBottom") },
-						{ value: "top", label: t("captions.anchorTop") },
-					]}
-					// No offset to reset: the inset means the same thing on both anchors, so
-					// flipping mirrors the caption to the same distance from the opposite edge.
-					onChange={(anchorV) => void set({ anchorV })}
-				/>
-				<p
-					style={{
-						margin: "6px var(--sp-4) 10px",
-						font: "400 11px/1.5 var(--font-body)",
-						color: "var(--muted)",
-					}}
-				>
-					{settings.anchorV === "bottom"
-						? t("captions.anchorHintBottom")
-						: t("captions.anchorHintTop")}
-				</p>
+				{/* Same 3-column picker as the camera position, minus the middle row: a
+				    caption is anchored to the top or bottom edge, never the centre. */}
+				<div style={{ padding: "0 var(--sp-4) 12px" }}>
+					<ChoiceRow<string>
+						label={t("captions.position")}
+						columns={3}
+						options={CAPTION_ANCHORS.map(([v, h]) => ({
+							value: `${v}-${h}`,
+							label: t(CAPTION_ANCHOR_KEYS[`${v}-${h}`]),
+							icon: captionAnchorIcon(v, h),
+						}))}
+						value={`${settings.anchorV}-${settings.anchorH}`}
+						disabled={disabled}
+						onChange={(key) => {
+							const [anchorV, anchorH] = key.split("-") as [CaptionAnchorV, CaptionAnchorH];
+							void set({ anchorV, anchorH });
+						}}
+					/>
+				</div>
 				<div className={styles.sliderGrid}>
 					<SliderCell
 						label={
@@ -546,6 +614,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 						value={settings.insetY}
 						min={0}
 						max={CAPTION_INSET_Y_MAX}
+						defaultValue={DEFAULT_CAPTION_SETTINGS.insetY}
 						step={0.5}
 						decimals={1}
 						suffix="%"
@@ -555,16 +624,6 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 					/>
 				</div>
 
-				<Segmented<CaptionAnchorH>
-					value={settings.anchorH}
-					disabled={disabled}
-					options={[
-						{ value: "left", label: t("captions.alignLeft") },
-						{ value: "center", label: t("captions.alignCenter") },
-						{ value: "right", label: t("captions.alignRight") },
-					]}
-					onChange={(anchorH) => void set({ anchorH })}
-				/>
 				{/* Centre has no edge to measure from, so the control is ABSENT rather than
 				    disabled — a dead slider reads as a bug. */}
 				{settings.anchorH === "center" ? null : (
@@ -578,6 +637,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 							value={settings.insetX}
 							min={0}
 							max={CAPTION_INSET_X_MAX}
+							defaultValue={DEFAULT_CAPTION_SETTINGS.insetX}
 							step={0.5}
 							decimals={1}
 							suffix="%"
@@ -589,43 +649,39 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 				)}
 
 				{/* ── Line length ────────────────────────────────────────── */}
+				{/* Two counts on one scale, so two sliders; each stops at the other, so the
+				    minimum never passes the maximum. */}
 				<div className={styles.sectionLabel}>{t("captions.lineLength")}</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.minWords")}</span>
-					<select
+				<div className={styles.sliderGrid}>
+					<SliderCell
+						label={t("captions.minWords")}
 						value={settings.minWordsPerLine}
+						min={CAPTION_WORDS_PER_LINE_MIN}
+						max={CAPTION_WORDS_PER_LINE_MAX}
+						defaultValue={DEFAULT_CAPTION_SETTINGS.minWordsPerLine}
+						showValue
 						disabled={disabled}
-						onChange={(e) => void set({ minWordsPerLine: Number(e.target.value) })}
-						style={selectStyle}
-					>
-						{WORD_COUNTS.map((n) => (
-							<option key={n} value={n}>
-								{n}
-							</option>
-						))}
-					</select>
-				</div>
-				<div className={styles.paneRow} style={{ marginBottom: 16 }}>
-					<span className={styles.label}>{t("captions.maxWords")}</span>
-					<select
+						onChange={(v) => setLive({ minWordsPerLine: Math.min(v, settings.maxWordsPerLine) })}
+						onCommit={() => void commit()}
+					/>
+					<SliderCell
+						label={t("captions.maxWords")}
 						value={settings.maxWordsPerLine}
+						min={CAPTION_WORDS_PER_LINE_MIN}
+						max={CAPTION_WORDS_PER_LINE_MAX}
+						defaultValue={DEFAULT_CAPTION_SETTINGS.maxWordsPerLine}
+						showValue
 						disabled={disabled}
-						onChange={(e) => void set({ maxWordsPerLine: Number(e.target.value) })}
-						style={selectStyle}
-					>
-						{WORD_COUNTS.map((n) => (
-							<option key={n} value={n} disabled={n < settings.minWordsPerLine}>
-								{n}
-							</option>
-						))}
-					</select>
+						onChange={(v) => setLive({ maxWordsPerLine: Math.max(v, settings.minWordsPerLine) })}
+						onCommit={() => void commit()}
+					/>
 				</div>
 			</div>
 		</div>
 	);
 }
 
-const WORD_COUNTS = Array.from({ length: 12 }, (_, i) => i + 1);
+const CAPTION_STYLE_IDS = Object.keys(CAPTION_STYLES) as CaptionStyleId[];
 
 const selectStyle: React.CSSProperties = {
 	height: 32,
@@ -638,41 +694,3 @@ const selectStyle: React.CSSProperties = {
 	minWidth: 120,
 	cursor: "pointer",
 };
-
-/**
- * One "label + swatch" row that opens the app's standard `ColorPicker` (wheel /
- * palette / hex) in a popover.
- *
- * The pane used to carry its own hard-coded caption swatches. That was a third
- * private palette in the app, and it meant the caption colours behaved unlike
- * every other colour surface — so it's gone: this defers to the shared
- * `COLOR_PALETTE` and the shared picker instead.
- */
-function Segmented<T extends string>({
-	value,
-	options,
-	disabled,
-	onChange,
-}: {
-	value: T;
-	options: ReadonlyArray<{ value: T; label: string }>;
-	disabled?: boolean;
-	onChange: (next: T) => void;
-}) {
-	return (
-		<div className={styles.paneTabs}>
-			{options.map((option) => (
-				<button
-					type="button"
-					key={option.value}
-					className={value === option.value ? styles.isActive : ""}
-					aria-pressed={value === option.value}
-					disabled={disabled}
-					onClick={() => onChange(option.value)}
-				>
-					{option.label}
-				</button>
-			))}
-		</div>
-	);
-}

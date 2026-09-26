@@ -193,23 +193,23 @@ export interface CompositorExportParams {
 	fps?: number;
 	/** "h264" | "h265" — pas de vp9 (aucun équivalent matériel AMF côté natif). */
 	codec?: string;
+	/** Débit vidéo visé (bits/s), d'après la taille ET la cadence
+	 *  (`calculateMp4ExportSettings`). Omis → 8 Mb/s à 1080p quelle que soit la cadence. */
+	bitrate?: number;
 }
 
 /** Sortie GIF native (le seul chemin GIF de l'app).
- *  Tout omis → 854×480, 12 fps, boucle infinie, pas de dithering —
- *  défauts choisis pour un GIF 8-bit-indexed lisible : 12 fps est la
- *  cadence historique de `gif.js` côté renderer, 854×480 tient
- *  confortablement dans la palette 256-couleurs sans banding visible
- *  sur du contenu de présentation. Le dithering Floyd-Steinberg est off
- *  par défaut (qualité acceptable sans, et double تقريبًا le coût CPU
- *  du quantize par frame). */
+ *  Tout omis → 854×480, 12 fps, boucle infinie, dithering Floyd-Steinberg :
+ *  12 fps est la cadence historique de `gif.js` côté renderer, et le
+ *  dithering empêche un fond en dégradé de se découper en bandes sur la
+ *  palette de 256 couleurs. */
 export interface CompositorExportGifParams {
 	width?: number;
 	height?: number;
 	fps?: number;
 	/** Compteur de loop GIF : `0` ou omis = infini, sinon `n` boucles finies. */
 	loopCount?: number;
-	/** Floyd-Steinberg error diffusion avant quantification. `false` par défaut. */
+	/** Floyd-Steinberg error diffusion à la quantification. `true` par défaut. */
 	dither?: boolean;
 }
 
@@ -721,6 +721,13 @@ export type NativeBridgeRequest =
 	  }
 	| {
 			domain: "compositor";
+			action: "segmentFrame";
+			/** One camera frame, 256x144 RGBA8 — the segmentation model's input size. */
+			payload: { rgba: Uint8Array };
+			requestId?: string;
+	  }
+	| {
+			domain: "compositor";
 			action: "setRect";
 			payload: { id: number; rect: CompositorViewRect };
 			requestId?: string;
@@ -843,6 +850,13 @@ export type NativeBridgeRequest =
 			domain: "presets";
 			action: "delete";
 			payload: { id: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "presets";
+			action: "setForNewProjects";
+			/** `null` clears the mark: new projects then start from the last project's look. */
+			payload: { id: string | null };
 			requestId?: string;
 	  }
 	| {

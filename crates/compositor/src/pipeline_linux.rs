@@ -63,12 +63,13 @@ pub enum ExportCodec {
     H265,
 }
 
-/// Params d'export. Memes champs que `pipeline_macos::ExportParams`.
+/// Params d'export. Memes champs que `pipeline_macos::ExportParams`, `bit_rate` compris.
 pub struct ExportParams {
     pub width: u32,
     pub height: u32,
     pub fps: Option<u32>,
     pub codec: ExportCodec,
+    pub bit_rate: Option<i64>,
 }
 
 impl Default for ExportParams {
@@ -78,6 +79,7 @@ impl Default for ExportParams {
             height: 1080,
             fps: None,
             codec: ExportCodec::H264,
+            bit_rate: None,
         }
     }
 }
@@ -848,9 +850,10 @@ pub fn run_composited_multi(
     }
     let (out_w, out_h) = (params.width, params.height);
     let out_fps = params.fps.unwrap_or(30) as i32;
-    // bitrate proportionnel a la surface (reference : 8 Mbps @ 1920x1080). Formule
-    // IDENTIQUE a celle de `pipeline_macos.rs` et `pipeline_windows.rs` : la garder
-    // alignee est ce qui fait que les trois plateformes exportent au meme poids.
+    // Debit fourni par l'app, calcule d'apres la taille ET la cadence : c'est lui qui fait
+    // que les trois plateformes exportent au meme poids. Le repli (8 Mbps @ 1920x1080 quelle
+    // que soit la cadence) est IDENTIQUE a celui de `pipeline_macos.rs` et
+    // `pipeline_windows.rs`, et ne sert plus qu'au banc et aux tests.
     //
     // Sur `libopenh264` ce nombre n'est qu'indicatif : c'est une entree d'un modele
     // complexite -> QP, pas un contrat. Il agit comme un plafond APPROXIMATIF sur du
@@ -858,7 +861,9 @@ pub fn run_composited_multi(
     // 0,97 produit, 2 -> 1,72, 4 -> 2,86, 8 -> 3,85) et n'a aucun effet sur un ecran
     // statique, ou l'encodeur sature son plancher de QP. Voir
     // `VideoEncoder::tune_openh264` pour le pourquoi et ce qui a ete tente.
-    let bit_rate = ((out_w as i64 * out_h as i64 * 8_000_000) / (1920 * 1080)).max(2_000_000);
+    let bit_rate = params.bit_rate.unwrap_or_else(|| {
+        ((out_w as i64 * out_h as i64 * 8_000_000) / (1920 * 1080)).max(2_000_000)
+    });
     let t0 = std::time::Instant::now();
 
     // L'ENCODEUR SE CHOISIT AVANT LE MUXER, parce que c'est lui qui decrit le

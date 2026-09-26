@@ -7,7 +7,7 @@
 // default art and falls back to a math dot+ring, which is not what the OS cursor
 // looks like.
 //
-// The PNGs are cropped to the art's alpha bounds. The sweezy theme packs fill their
+// The PNGs are cropped to the art's alpha bounds. A theme pack typically fills its
 // 128x128 box edge to edge, while the built-in SVGs sit in the middle of a 32-unit
 // canvas using only ~55% of it — uncropped, every built-in cursor would render about
 // half the size of a themed one at the same size slider. Cropping puts both on the
@@ -25,7 +25,10 @@ import { chromium } from "playwright";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SRC_DIR = path.join(ROOT, "src", "assets", "cursors");
 const OUT_DIR = path.join(ROOT, "public", "cursors", "default");
-const OUT_SIZE = 128;
+// The arrow comes out 139 px tall: sharp up to the top of the size slider (164 px in a 1080p
+// export), where a 128 box (70 px) was stretched 2.3x and blurred. No mipmaps, so not more:
+// at the default size a bigger master would alias.
+const OUT_SIZE = 256;
 
 /**
  * cursorType -> { file, hotspotX, hotspotY } in the 32-logical reference.

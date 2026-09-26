@@ -167,8 +167,8 @@ fn scene_json(rotation: &str, hide: bool, click_bounce: f32) -> String {
             "zoomRegions":[{{"clipIndex":0,"startSec":0,"endSec":10,"scale":1,"focusX":0.5,"focusY":0.5,"focusMode":"manual","rotation":{rotation},"hideCursor":{hide}}}],
             "annotations":[],
             "cursor":{{"show":true,"size":4,"smoothing":0.5,"motionBlur":0.5,"clickBounce":{click_bounce},"model3d":true,"clipToBounds":false,"theme":"default",
-                       "cursorSprites":{{"arrow":{{"path":"{dir}/arrow.png","hotspotX":0.119,"hotspotY":0.0874}},
-                                        "pointer":{{"path":"{dir}/pointer.png","hotspotX":0.3893,"hotspotY":0.0032}}}}}},
+                       "cursorSprites":{{"arrow":{{"path":"{dir}/arrow.png","hotspotX":0.1205,"hotspotY":0.0881}},
+                                        "pointer":{{"path":"{dir}/pointer.png","hotspotX":0.3874,"hotspotY":0.0032}}}}}},
             "cropByClip":[null],
             "output":{{"width":1280,"height":720,"fps":30}}}}"##
     )

@@ -66,14 +66,14 @@ export interface RemuxStats {
 }
 
 /** Sortie GIF native : taille, cadence, loop, dither. Tout optionnel —
- *  absent → 854×480, 12 fps, boucle infinie, pas de dithering. */
+ *  absent → 854×480, 12 fps, boucle infinie, dithering Floyd-Steinberg. */
 export interface GifParamsInput {
 	width?: number;
 	height?: number;
 	fps?: number;
 	/** GIF loop count: `0` or omitted = infinite, else `n` finite loops. */
 	loopCount?: number;
-	/** Floyd-Steinberg error diffusion before quantization. Off by default. */
+	/** Floyd-Steinberg error diffusion at quantization. On by default. */
 	dither?: boolean;
 }
 
@@ -86,6 +86,9 @@ export interface ExportParamsInput {
 	/** "h264" | "h265". Anything else (e.g. "vp9", no AMF hardware equivalent) fails the export
 	 *  with a clear error instead of silently falling back to h264. */
 	codec?: string;
+	/** Target video bitrate in bits/s, from the output size and frame rate. Omitted or 0 → the
+	 *  pipeline's own fallback, which ignores the frame rate (8 Mb/s at 1080p). */
+	bitrate?: number;
 }
 
 /** One timeline clip for the native multiclip export (screen + webcam files + source trim). */
@@ -119,6 +122,11 @@ export interface CompositorViewAddon {
 	 *  the platform: upstream publishes no ONNX build for Intel Macs, and a dev checkout or a
 	 *  `--dir` build has none either. */
 	segmentationRuntimeAvailable(): boolean;
+
+	/** Subject mask for ONE frame, outside any view — the crop thumbnail shows the camera
+	 *  background with it. `rgba` is already at the model's size (256x144 RGBA8); resolves one
+	 *  byte per pixel, 0 = background, 255 = subject. Optional: an older `.node` predates it. */
+	segmentFrame?(modelPath: string, rgba: Buffer): Promise<Buffer>;
 
 	/** Allocates an offscreen compositor view sized to `rect.width`x`rect.height` (the
 	 *  target preview resolution; `rect.x` / `rect.y` are vestigial and ignored native-side).
@@ -183,7 +191,7 @@ export interface CompositorViewAddon {
 	 *  in the compositor crate and differ only in the encoder. Cursor, background,
 	 *  layout and webcam all come from the scene, so there is no GIF-specific
 	 *  input. No codec pick: GIF is one codec. `params` defaults to 854×480,
-	 *  12 fps, infinite loop, no dithering (`GifExportParams::default`).
+	 *  12 fps, infinite loop, dithered (`GifExportParams::default`).
 	 *  `onProgress(frames)` is throttled to ~10/s like the MP4 path. */
 	exportGif(
 		clips: ClipInput[],
@@ -205,6 +213,14 @@ export interface CompositorViewAddon {
 	 *  (dev trees keep a stale binary until the next `build-linux-compositor-addon.mjs`),
 	 *  and the caller degrades to "leave the file alone" rather than failing the save. */
 	remuxSeekable?(inputPath: string, outputPath: string): Promise<RemuxStats>;
+
+	/** Loudness-normalisation gain in dB that the export applies to this voice file (the
+	 *  recording's own audio, or a voiceover take), measured over the whole file. The
+	 *  preview applies the same number so it plays the voice at the exported level.
+	 *  0 for a file with no audio, only silence, or that cannot be read.
+	 *
+	 *  Optional for the same reason as `remuxSeekable`: a stale `.node` predates it. */
+	loudnessGainDb?(path: string): Promise<number>;
 }
 
 /**

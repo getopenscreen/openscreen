@@ -11,6 +11,8 @@
 		"title": "Nền",
 		"imageLabel": "Nền {{index}}",
 		"custom": "Tùy chỉnh",
+		"customColor": "Màu tùy chỉnh",
+		"customGradient": "Chuyển sắc từ một màu",
 		"help": "Chọn nội dung hiển thị phía sau bản ghi: ảnh nền có sẵn, màu đơn sắc, dải màu chuyển sắc, hoặc ảnh riêng của bạn từ ổ đĩa.",
 		"gradient": "Dải màu",
 		"colorLabel": "Màu {{color}}",
@@ -107,6 +109,9 @@
 		"fitClipOne": "{{count}} clip",
 		"formatAuto": "Tự động",
 		"formatAutoMixed": "Các clip khác nhau",
+		"formatFill": "Bản ghi",
+		"formatFillFit": "Toàn bộ",
+		"formatFillFollow": "Theo con trỏ",
 		"formatOriginal": "Gốc",
 		"fitClipMany": "{{count}} clip",
 		"frame": "Khung",
@@ -116,8 +121,6 @@
 		"fitClip": "Vừa khít",
 		"motionBlur": "Làm mờ chuyển động",
 		"depthOfField": "Độ sâu trường ảnh",
-		"depthOfFieldHint": "Thu phóng 3D",
-		"depthOfFieldNoTilt": "Dự án chưa có thu phóng 3D",
 		"roundness": "Độ bo tròn",
 		"frameStyle": "Kiểu",
 		"windowNone": "Không",
@@ -130,7 +133,11 @@
 		"frameThemeDark": "Tối",
 		"frameThemeHelp": "Thân bạc với viền sáng, hoặc than chì với viền tối. Áp dụng cho mọi khung.",
 		"windowHelp": "Vẽ một cửa sổ, hoặc một thiết bị dựng 3D, quanh bản ghi.",
-		"roundnessFrameHelp": "Phạm vi thay đổi theo khung: 100% là độ bo tròn lớn nhất vẫn đẹp với khung đó."
+		"roundnessFrameHelp": "Phạm vi thay đổi theo khung: 100% là độ bo tròn lớn nhất vẫn đẹp với khung đó.",
+		"shadowNone": "Không",
+		"shadowLight": "Nhẹ",
+		"shadowMedium": "Vừa",
+		"shadowStrong": "Đậm"
 	},
 	"stylePresets": {
 		"button": "Cài đặt sẵn",
@@ -147,6 +154,9 @@
 		"revealLinux": "Hiển thị trong thư mục",
 		"rename": "Đổi tên",
 		"update": "Cập nhật từ dự án hiện tại",
+		"useForNewProjects": "Dùng cho dự án mới",
+		"stopForNewProjects": "Ngừng dùng cho dự án mới",
+		"newProjectsBadge": "Dự án mới",
 		"delete": "Xóa",
 		"confirmDelete": "Xóa “{{name}}”?",
 		"applied": "Đã áp dụng “{{name}}”",
@@ -201,15 +211,12 @@
 		"legacyAnnotations": "Dự án này vẫn còn chú thích phụ đề từ tính năng phụ đề cũ ({{count}}). Chúng hiển thị đè lên lớp phụ đề.",
 		"backgroundOpacity": "Độ mờ",
 		"backgroundColor": "Màu nền",
-		"alignCenter": "Giữa",
 		"translationIsNonDestructive": "Bản dịch được lưu bên cạnh bản chép lời, không bao giờ ghi vào trong đó — văn bản gốc và mốc thời gian giữ nguyên.",
 		"distanceFromRight": "Khoảng cách từ phải",
 		"language": "Ngôn ngữ",
 		"text": "Văn bản",
-		"anchorHintBottom": "Phụ đề dài sẽ cao dần lên trên — cạnh dưới không đổi.",
 		"distanceFromTop": "Khoảng cách từ trên",
 		"translateFailed": "Dịch thất bại.",
-		"alignLeft": "Trái",
 		"distanceFromBottom": "Khoảng cách từ dưới",
 		"derivedFromTranscript": "{{count}} dòng phụ đề, được tạo trực tiếp từ bản chép lời.",
 		"translate": "Dịch",
@@ -218,14 +225,10 @@
 		"hiddenHint": "Phụ đề đến từ bản chép lời của media này. Bật lên để thấy chúng trong bản xem trước và khi xuất.",
 		"noTranscript": "Phụ đề được lấy từ bản chép lời của media. Hãy chép lời video này để bật phụ đề.",
 		"distanceFromLeft": "Khoảng cách từ trái",
-		"anchorBottom": "Dưới",
 		"transcribe": "Chép lời video",
 		"bold": "Đậm",
-		"alignRight": "Phải",
-		"anchorTop": "Trên",
 		"minWords": "Số từ tối thiểu mỗi dòng",
 		"translateHint": "Dịch bản chép lời bằng nhà cung cấp AI đã cấu hình",
-		"anchorHintTop": "Phụ đề dài sẽ dài dần xuống dưới — cạnh trên không đổi.",
 		"displayLanguage": "Hiển thị",
 		"removeLegacyAnnotations": "Xóa chú thích phụ đề cũ",
 		"background": "Nền",
@@ -235,7 +238,15 @@
 		"font": "Phông chữ",
 		"translating": "Đang dịch…",
 		"show": "Hiện phụ đề",
-		"textColor": "Màu chữ"
+		"textColor": "Màu chữ",
+		"style": "Kiểu",
+		"styles": {
+			"classic": "Cổ điển",
+			"bold": "Đậm",
+			"minimal": "Tối giản",
+			"light": "Sáng"
+		},
+		"customize": "Tùy chỉnh"
 	},
 	"panes": {
 		"help": "Trợ giúp"
@@ -267,7 +278,7 @@
 		"remove": "Xóa bản nhạc",
 		"loop": "Lặp",
 		"slipHint": "Giữ Alt và kéo để trượt âm thanh bên trong",
-		"help": "Âm lượng, fade và lặp của rãnh âm thanh này. Nó được trộn lên trên bản ghi trong xem trước và khi xuất. Kéo rãnh trên dòng thời gian để di chuyển hoặc đổi kích thước, hoặc giữ Alt và kéo để trượt âm thanh bên trong.",
+		"help": "Âm lượng, fade và lặp của rãnh âm thanh này. Nó được trộn lên trên bản ghi trong xem trước và khi xuất. Rãnh nhạc tự động nhỏ lại khi có người nói. Kéo rãnh trên dòng thời gian để di chuyển hoặc đổi kích thước, hoặc giữ Alt và kéo để trượt âm thanh bên trong.",
 		"add": "Thêm bản âm thanh",
 		"mute": "Tắt tiếng"
 	},
@@ -350,35 +361,19 @@
 			"lockedDisclaimer": "Được điều khiển bởi công tắc Lấy nét tự động chung trên dòng thời gian. Tắt để đặt chế độ lấy nét riêng cho từng lần thu phóng.",
 			"auto": "Tự động",
 			"manual": "Thủ công",
-			"autoDescription": "Máy ảnh đi theo vị trí con trỏ đã ghi",
 			"title": "Chế độ lấy nét"
 		},
 		"camera": {
 			"title": "Camera 3D",
 			"off": "Tắt",
-			"fixed": "Góc cố định",
-			"moving": "Camera chuyển động",
 			"preset": {
-				"iso": "Chéo từ trên xuống",
 				"left": "Màn hình xoay sang trái",
 				"right": "Màn hình xoay sang phải",
 				"followCursor": "Xoay quanh theo con trỏ"
-			},
-			"description": {
-				"off": "Màn hình giữ phẳng.",
-				"iso": "Giữ một tư thế: xoay sang trái và nhìn từ trên xuống.",
-				"left": "Giữ một tư thế: màn hình hướng sang trái, cạnh phải nhô về phía trước.",
-				"right": "Giữ một tư thế: màn hình hướng sang phải, cạnh trái nhô về phía trước.",
-				"followCursor": "Màn hình đứng yên; máy quay bay vòng quanh, sang phía có con trỏ và nâng lên hay hạ xuống theo nó."
-			},
-			"needsCursor": "Con trỏ đang bị ẩn: máy quay này không có gì để theo dõi và giữ nguyên góc ban đầu."
+			}
 		},
 		"clickImpact": {
-			"title": "Hiệu ứng nhấp",
-			"description": "Mỗi lần nhấp sẽ ấn màn hình nghiêng: phía được nhấp lún xuống rồi bật lại.",
-			"needsRotation": "Hãy chọn camera 3D trước: chỉ màn hình nghiêng mới ấn được.",
-			"needsCursor": "Con trỏ đang ẩn: màn hình chỉ phản ứng với các lần nhấp nhìn thấy được.",
-			"descriptionCamera": "Mỗi cú nhấp đẩy máy quay lùi lại một chút rồi trở về."
+			"title": "Hiệu ứng nhấp"
 		},
 		"level": "Mức độ thu phóng",
 		"previewHold": "Giữ để xem trước hiệu ứng phóng to",
@@ -393,7 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Mức đầu ra",
-		"help": "Điều chỉnh mức đầu ra của âm thanh. Nó được áp dụng giống hệt nhau trong bản xem trước và khi xuất.",
+		"help": "Giọng nói được tự động cân bằng về độ lớn tiêu chuẩn. Hãy điều chỉnh mức đầu ra từ đó; nó được áp dụng giống hệt nhau trong bản xem trước và khi xuất.",
 		"reset": "Đặt lại âm thanh",
 		"title": "Âm thanh"
 	},
@@ -414,18 +409,18 @@
 		"smoothing": "Làm mượt",
 		"clickBounce": "Nảy khi nhấp",
 		"model3d": "Con trỏ 3D",
-		"model3dHint": "Kiểu mặc định: mọi hình dạng con trỏ đều thành 3D. Các kiểu khác vẫn phẳng.",
-		"model3dNeedsCursor": "Bật “Hiện con trỏ” để dùng con trỏ 3D.",
 		"help": "Cách vẽ con trỏ từ dữ liệu đã ghi: chủ đề, kích thước, làm mượt, mờ chuyển động và hiệu ứng nảy khi nhấp.",
 		"size": "Kích thước",
 		"title": "Con trỏ",
 		"show": "Hiện con trỏ",
 		"themeDefault": "Mặc định",
 		"alwaysArrow": "Luôn dùng con trỏ mũi tên",
-		"alwaysArrowHint": "Hiển thị mũi tên cho mọi trạng thái con trỏ, kể cả trên văn bản hoặc liên kết.",
 		"motionBlur": "Làm mờ chuyển động",
 		"theme": "Kiểu con trỏ",
-		"autoHide": "Ẩn khi không hoạt động"
+		"autoHide": "Ẩn khi không hoạt động",
+		"bounceNone": "Không",
+		"bounceLight": "Nhẹ",
+		"bounceStrong": "Mạnh"
 	},
 	"export": {
 		"gifButton": "Xuất GIF",
@@ -434,5 +429,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Xóa vùng cắt"
+	},
+	"textPlate": {
+		"none": "Không",
+		"dark": "Tối",
+		"light": "Sáng",
+		"custom": "Tùy chỉnh"
 	}
 }

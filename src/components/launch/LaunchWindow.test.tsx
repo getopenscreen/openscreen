@@ -182,8 +182,9 @@ vi.mock("@/contexts/I18nContext", () => ({
 			"deviceSettings.checkingForUpdates": "Checking…",
 			"audio.inputDevice": "Input device",
 			"webcam.cameraDevice": "Camera device",
-			"cursor.useEditableCursor": "Use editable cursor",
-			"cursor.useSystemCursor": "Use system cursor",
+			"cursor.useEditableCursorHint":
+				"Use editable cursor: turns auto zoom and cursor effects back on",
+			"cursor.useSystemCursorHint": "Use system cursor: turns off auto zoom and cursor effects",
 			"tooltips.openStudio": "Open Studio",
 			"tooltips.hideHUD": "Hide HUD",
 			"tooltips.closeApp": "Close App",
@@ -407,7 +408,7 @@ describe("LaunchWindow record button", () => {
 		);
 		expect(screen.getByTestId("launch-cursor-mode-button")).toHaveAttribute(
 			"aria-label",
-			"Use system cursor",
+			"Use system cursor: turns off auto zoom and cursor effects",
 		);
 		expect(screen.getByTestId("launch-open-studio-button")).toHaveAttribute(
 			"aria-label",
@@ -415,6 +416,34 @@ describe("LaunchWindow record button", () => {
 		);
 		expect(screen.getByTitle("Hide HUD")).toHaveAttribute("aria-label", "Hide HUD");
 		expect(screen.getByTitle("Close App")).toHaveAttribute("aria-label", "Close App");
+	});
+
+	it("says what the system cursor costs, and what switching back restores", async () => {
+		recorderState.value.cursorCaptureMode = "system";
+		renderLaunchWindow();
+
+		// The tooltip is the only place the HUD can say it: a system-cursor take writes no
+		// cursor track, so auto zoom and every cursor effect are off for it.
+		expect(await screen.findByTestId("launch-cursor-mode-button")).toHaveAttribute(
+			"title",
+			"Use editable cursor: turns auto zoom and cursor effects back on",
+		);
+	});
+
+	it("never promises the editable cursor's effects when capture falls back to the browser", async () => {
+		// Linux without its PipeWire helper records through the browser, which always bakes the
+		// system cursor in: switching to the editable cursor would restore nothing.
+		platformState.value = "linux";
+		linuxHelperAvailable.value = false;
+		recorderState.value.cursorCaptureMode = "system";
+		renderLaunchWindow();
+
+		await waitFor(() =>
+			expect(screen.getByTestId("launch-cursor-mode-button")).toHaveAttribute(
+				"title",
+				"Use system cursor: turns off auto zoom and cursor effects",
+			),
+		);
 	});
 
 	it("names the recording-state HUD controls for assistive technology", async () => {

@@ -112,6 +112,9 @@
 		"microphone": "Mikrofon",
 		"camera": "Kamera",
 		"cursorHighlight": "Cursor hervorheben",
+		"hideDesktopIcons": "Schreibtischsymbole ausblenden",
+		"hideDesktopIconsHintMac": "Lässt die Schreibtischsymbole in Bildschirmaufnahmen weg. Auf deinem Schreibtisch bleiben sie.",
+		"hideDesktopIconsHintWindows": "Deckt die Desktopsymbole während einer Bildschirmaufnahme mit deinem Hintergrundbild ab. Nach der Aufnahme sind sie wieder da.",
 		"on": "An",
 		"off": "Aus",
 		"loading": "Wird geladen…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "Keine Sprache erkannt"
 	},
 	"exportDialog": {
+		"destination": "Ziel",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Social Media",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "README-GIF",
+		"advanced": "Erweitert",
 		"title": "Export",
 		"subtitle": "Die Timeline in eine Datei rendern",
 		"addVideoBeforeExporting": "Füge vor dem Export ein Video hinzu.",
@@ -215,7 +224,6 @@
 		"generateCaptions": "Untertitel erzeugen",
 		"cropDescription": "Rahme die Aufnahme neu — wähle ein Seitenverhältnis und zoome auf den Bereich, den du behalten willst.",
 		"openCrop": "Zuschneiden öffnen…",
-		"cameraFullscreenDescription": "Während dieser Bereich läuft, füllt die Kamera das ganze Bild — ohne Rahmen, ohne Rundung, ohne Hintergrund — und fährt am Ende sanft zurück. Zieh die Ränder des Bereichs auf der Timeline, um Start und Dauer zu ändern.",
 		"deleteRegion": "Bereich löschen",
 		"freehandRendersAsBox": "Im Export wird eine Freihandform von ihrem umschließenden Rechteck abgedeckt — eher zu viel als zu wenig."
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "Wiedergabesteuerung",
 		"playPause": "Wiedergabe / Pause",
 		"playPauseTitle": "Wiedergabe / Pause (Leertaste)",
-		"previousClip": "Vorheriger Clip",
-		"nextClip": "Nächster Clip",
 		"loop": "Wiederholen",
 		"seekVideo": "Videoposition"
 	},

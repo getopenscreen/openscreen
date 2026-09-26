@@ -112,6 +112,9 @@
 		"microphone": "الميكروفون",
 		"camera": "الكاميرا",
 		"cursorHighlight": "إبراز المؤشر",
+		"hideDesktopIcons": "إخفاء أيقونات سطح المكتب",
+		"hideDesktopIconsHintMac": "يستبعد أيقونات سطح المكتب من تسجيلات الشاشة. تبقى على سطح المكتب لديك.",
+		"hideDesktopIconsHintWindows": "يغطي أيقونات سطح المكتب بخلفية الشاشة أثناء تسجيل الشاشة. تعود عند انتهاء التسجيل.",
 		"on": "تشغيل",
 		"off": "إيقاف",
 		"loading": "جارٍ التحميل...",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "لم يتم اكتشاف كلام"
 	},
 	"exportDialog": {
+		"destination": "الوجهة",
+		"destinationWeb": "الويب / YouTube",
+		"destinationSocial": "وسائل التواصل",
+		"destinationStudio": "استوديو",
+		"destinationReadmeGif": "GIF لملف README",
+		"advanced": "متقدّم",
 		"title": "تصدير",
 		"subtitle": "عرض المخطط الزمني إلى ملف",
 		"addVideoBeforeExporting": "أضف فيديو قبل التصدير.",
@@ -215,7 +224,6 @@
 		"generateCaptions": "إنشاء ترجمات",
 		"cropDescription": "أعد تأطير التسجيل — اختر نسبة العرض إلى الارتفاع وقم بالتكبير على المنطقة التي تريد الاحتفاظ بها.",
 		"openCrop": "فتح القص…",
-		"cameraFullscreenDescription": "أثناء تشغيل هذه المنطقة تملأ الكاميرا الإطار بالكامل — بلا حدود ولا استدارة ولا خلفية — ثم تعود بسلاسة في النهاية. اسحب حواف المنطقة على المخطط الزمني لتغيير وقت بدايتها ومدتها.",
 		"deleteRegion": "حذف المنطقة",
 		"freehandRendersAsBox": "الشكل الحر يُغطى بمستطيله المحيط في التصدير — تغطية زائدة، وليست ناقصة."
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "عناصر التحكم في التشغيل",
 		"playPause": "تشغيل / إيقاف مؤقت",
 		"playPauseTitle": "تشغيل / إيقاف مؤقت (مسافة)",
-		"previousClip": "المقطع السابق",
-		"nextClip": "المقطع التالي",
 		"loop": "تكرار",
 		"seekVideo": "التنقل في الفيديو"
 	},

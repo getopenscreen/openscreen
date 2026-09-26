@@ -158,7 +158,7 @@ openscreen captions demo.openscreen --min-words 2 --max-words 7
 openscreen export demo.openscreen -o demo.mp4   # captions are burned into the video
 ```
 
-- `--min-words` 與 `--max-words` 設定每則字幕的字數。預設值：2 與 7。
+- `--min-words` 與 `--max-words` 設定每則字幕的字數。兩者皆可設為 1 到 12，與編輯器相同。預設值：2 與 7。
 - 再次執行會取代它先前加入的字幕。你自己加入的標註會保留。
 - 專案的螢幕影片必須有音軌，例如用 `record --mic` 錄製的影片。
 - 字幕會燒錄進匯出的影片，不會輸出字幕檔。請參閱[字幕](./captions.md)。

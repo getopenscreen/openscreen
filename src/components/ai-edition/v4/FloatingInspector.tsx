@@ -26,13 +26,12 @@ import {
 	ZoomIn,
 } from "lucide-react";
 import type { ComponentProps } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { parseCustomPlaybackSpeedInput } from "@/components/video-editor/customPlaybackSpeed";
 import {
 	effectiveZoomScale,
 	FIXED_ROTATION_3D_PRESETS,
-	isRotation3DPreset,
 	MAX_PLAYBACK_SPEED,
 	MAX_ZOOM_SCALE,
 	MIN_ZOOM_SCALE,
@@ -42,22 +41,20 @@ import {
 	type ZoomDepth,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
-import {
-	hasTextBackground,
-	setTextBackgroundColor,
-	textBackgroundColor,
-	toggleTextBackground,
-} from "@/lib/ai-edition/annotations/background";
+import { setTextPlate, type TextPlate, textPlateOf } from "@/lib/ai-edition/annotations/background";
 import {
 	type AnnotationTextAnimation,
 	TEXT_ANIMATION_VALUES,
 } from "@/lib/ai-edition/annotations/textAnimation";
 import type { AxcutAnnotationRegion, AxcutClip } from "@/lib/ai-edition/schema";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { rafCoalesce } from "@/lib/ai-edition/store/rafCoalesce";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
+import { clampToBound } from "@/lib/projectDefaults";
+import { zoomScaleLimit } from "@/native/sceneDescription";
 import { ColorField } from "../ColorField";
 import shell from "../NewEditorShell.module.css";
 import {
@@ -71,6 +68,7 @@ import {
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
+import { TextColorField } from "../TextColorField";
 import styles from "./EditorShellV4.module.css";
 
 type TimelineApi = ReturnType<typeof useTimeline>;
@@ -329,50 +327,41 @@ function paneRow(label: string, control: React.ReactNode) {
 }
 
 /** Un libellé au-dessus de son contrôle, pour ceux qui prennent toute la largeur du panneau
- *  (une `ChoiceRow`) : à côté d'un libellé, ils n'auraient plus la place de montrer leurs choix. */
-function paneStack(label: string, control: React.ReactNode) {
+ *  (une `ChoiceRow`) : à côté d'un libellé, ils n'auraient plus la place de montrer leurs choix.
+ *  `value` nomme le choix courant quand les boutons ne font que le dessiner. */
+function paneStack(label: string, control: React.ReactNode, value?: string) {
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-			<span style={{ fontSize: 13, color: "var(--fg-2)", fontWeight: 500 }}>{label}</span>
+			<span style={{ fontSize: 13, color: "var(--fg-2)", fontWeight: 500 }}>
+				{label}
+				{value ? <span className={shell.sectionLabelValue}>{value}</span> : null}
+			</span>
 			{control}
 		</div>
 	);
 }
 
-/** Clé i18n (`zoom.camera.preset.*` / `zoom.camera.description.*`) de chaque caméra 3D. */
+/** Clé i18n (`zoom.camera.preset.*`) de chaque caméra 3D. */
 const CAMERA_KEYS: Record<Rotation3DPreset, string> = {
-	iso: "iso",
 	left: "left",
 	right: "right",
 	"follow-cursor": "followCursor",
 };
 
-/** « Click impact » : la bascule des panneaux, et dessous ce qu'elle fait — ou pourquoi elle ne
- *  peut rien faire ici. */
-function ClickImpactToggle({
-	checked,
-	blocker,
-	label,
-	description,
-	onChange,
-}: {
-	checked: boolean;
-	blocker: string | null;
-	label: string;
-	description: string;
-	onChange: (on: boolean) => void;
-}) {
-	const disabled = blocker !== null;
-	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-			{paneRow(
-				label,
-				<Toggle checked={checked} disabled={disabled} ariaLabel={label} onChange={onChange} />,
-			)}
-			<p className={shell.hint}>{blocker ?? description}</p>
-		</div>
-	);
-}
+/** What each camera does to the screen (viewBox 0 0 32 22, as the camera layout tiles). A fixed
+ *  angle is the outline of its pose: `ROTATION_3D_PRESETS` projected with the shipped
+ *  perspective and centred. The moving camera leaves the screen flat and circles it. */
+const CAMERA_ICONS: Record<Rotation3DPreset | "off", React.ReactNode> = {
+	off: <rect x="6.5" y="5.5" width="19" height="11" rx="1.5" />,
+	left: <polygon points="5.6,4.5 26.4,5.3 22.9,17.5 7,12.9" />,
+	right: <polygon points="5.6,5.3 26.4,4.5 25,12.9 9.1,17.5" />,
+	"follow-cursor": (
+		<>
+			<rect x="10.5" y="7.5" width="11" height="7" rx="1" />
+			<ellipse cx="16" cy="11" rx="14" ry="7.5" strokeDasharray="2 2.5" />
+		</>
+	),
+};
 
 type AnnotationKind = AxcutAnnotationRegion["type"];
 type ArrowDirectionKind = NonNullable<AxcutAnnotationRegion["figureData"]>["arrowDirection"];
@@ -456,9 +445,13 @@ const ZOOM_PRESETS = ([2, 3, 4, 5] as const).map((depth) => ({
 export function ZoomLevelControl({
 	region,
 	tl,
+	maxScale = MAX_ZOOM_SCALE,
 }: {
 	region: { id: string; depth: ZoomDepth; customScale?: number };
 	tl: Pick<TimelineApi, "updateZoomDepth" | "updateZoomCustomScale">;
+	/** The deepest level this region's clip takes before its recording blurs
+	 *  (`zoomScaleLimit`). Deeper presets are not offered. */
+	maxScale?: number;
 }) {
 	const ts = useScopedT("settings");
 	const current = effectiveZoomScale(region);
@@ -529,43 +522,49 @@ export function ZoomLevelControl({
 		// Empty or unparseable reverts to the live level rather than guessing at an intent.
 		if (text === "" || !Number.isFinite(Number(text))) return;
 		const scale = Math.round(Number(text) * 100) / 100;
-		if (scale < MIN_ZOOM_SCALE || scale > MAX_ZOOM_SCALE) {
-			toast.error(ts("zoom.customScaleRange", { min: MIN_ZOOM_SCALE, max: MAX_ZOOM_SCALE }));
+		if (scale < MIN_ZOOM_SCALE || scale > maxScale) {
+			toast.error(ts("zoom.customScaleRange", { min: MIN_ZOOM_SCALE, max: maxScale }));
 			return;
 		}
 		setScale(scale);
 	};
 
+	const presets = ZOOM_PRESETS.filter((preset) => preset.value <= maxScale);
+
 	return (
 		<>
-			{/* A level outside the row presses no button; the field below shows it. */}
+			{/* A level outside the row presses no button; the field beside it shows it. With no
+			    preset within reach, the field alone remains. */}
 			{paneStack(
 				ts("zoom.level"),
-				<ChoiceRow<number>
-					label={ts("zoom.level")}
-					options={ZOOM_PRESETS}
-					value={requested}
-					onChange={setScale}
-				/>,
-			)}
-			{paneRow(
-				ts("zoom.customScale"),
-				<input
-					type="text"
-					inputMode="decimal"
-					aria-label={ts("zoom.customScale")}
-					placeholder={`${requested}×`}
-					value={draft}
-					onChange={(e) => setDraft(e.target.value)}
-					onBlur={commitDraft}
-					// Enter blurs, and the blur handler commits: one path, so a keyboard commit
-					// can't apply the same draft twice.
-					onKeyDown={(e) => {
-						if (e.key === "Enter") e.currentTarget.blur();
-					}}
-					className={shell.control}
-					style={{ width: 84, textAlign: "right" }}
-				/>,
+				<div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+					{presets.length > 0 ? (
+						<div style={{ flex: 1, minWidth: 0 }}>
+							<ChoiceRow<number>
+								label={ts("zoom.level")}
+								options={presets}
+								value={requested}
+								onChange={setScale}
+							/>
+						</div>
+					) : null}
+					<input
+						type="text"
+						inputMode="decimal"
+						aria-label={ts("zoom.customScale")}
+						placeholder={`${requested}×`}
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						onBlur={commitDraft}
+						// Enter blurs, and the blur handler commits: one path, so a keyboard commit
+						// can't apply the same draft twice.
+						onKeyDown={(e) => {
+							if (e.key === "Enter") e.currentTarget.blur();
+						}}
+						className={shell.control}
+						style={{ width: 56, textAlign: "right" }}
+					/>
+				</div>,
 			)}
 		</>
 	);
@@ -648,6 +647,67 @@ export function SpeedControl({
 	);
 }
 
+/**
+ * The text size as a free field, committed on blur like the speed and zoom fields above it and
+ * read into `SETTING_BOUNDS.annotationFontSize`. It used to write every keystroke as typed, so an
+ * emptied field stored a size of 0 and the text vanished.
+ */
+export function AnnotationSizeField({
+	label,
+	size,
+	onCommit,
+}: {
+	label: string;
+	size: number;
+	onCommit: (size: number) => void;
+}) {
+	// "" means the field is idle and shows the live size as its placeholder.
+	const [draft, setDraft] = useState("");
+	/** The committed size a draft reads as, or null when it names none. */
+	const sizeOf = (text: string) => {
+		const typed = text.trim().replace(",", ".");
+		// Empty or unparseable reverts to the live size rather than guessing at an intent.
+		if (typed === "" || !Number.isFinite(Number(typed))) return null;
+		return Math.round(clampToBound(Number(typed), "annotationFontSize"));
+	};
+	const commitDraft = () => {
+		const next = sizeOf(draft);
+		setDraft("");
+		if (next !== null && next !== size) onCommit(next);
+	};
+	// A click on the timeline clears the selection on pointerdown, which unmounts this field
+	// before its blur can fire. A size typed and never blurred is committed on the way out.
+	const pendingRef = useRef({ draft, size, onCommit });
+	pendingRef.current = { draft, size, onCommit };
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs once, on unmount; the ref carries the latest draft.
+	useEffect(
+		() => () => {
+			const { draft: left, size: live, onCommit: commit } = pendingRef.current;
+			const next = sizeOf(left);
+			if (next !== null && next !== live) commit(next);
+		},
+		[],
+	);
+	return (
+		<input
+			type="text"
+			inputMode="numeric"
+			aria-label={label}
+			placeholder={String(size)}
+			value={draft}
+			onChange={(e) => setDraft(e.target.value)}
+			onBlur={commitDraft}
+			// Enter blurs, and the blur handler commits: one path, so a keyboard commit can't
+			// apply the same draft twice.
+			onKeyDown={(e) => {
+				if (e.key === "Enter") e.currentTarget.blur();
+			}}
+			className={shell.control}
+			style={{ width: 84, textAlign: "right" }}
+		/>
+	);
+}
+
 function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }) {
 	const ts = useScopedT("settings");
 	const tt = useScopedT("timeline");
@@ -657,6 +717,13 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	// toggle that writes it lives in the timeline toolbar, not on this component's path.
 	const { settings } = useEditorSettings();
 	const autoFocusAll = settings.autoFocusAll;
+	const focusHintId = useId();
+	const doc = useProjectStore((s) => s.document);
+	const zoomId = tl.selection?.kind === "zoom" ? tl.selection.id : null;
+	const zoomMaxScale = useMemo(
+		() => (doc && zoomId ? zoomScaleLimit(doc, zoomId) : MAX_ZOOM_SCALE),
+		[doc, zoomId],
+	);
 	// Mise à jour en direct regroupée à une par frame. `updateAnnotationLive` remplace le document
 	// dans le store, donc chaque appel fait reconstruire et re-sérialiser toute la scène avant de
 	// la pousser au natif : c'est le juste prix une fois par image, mais un `<input type="color">`
@@ -707,119 +774,114 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	if (selection.kind === "zoom") {
 		const region = tl.zoomRegions.find((z) => z.id === selection.id);
 		if (!region) return null;
+		const cameraLabel = (preset: Rotation3DPreset | "off") =>
+			ts(preset === "off" ? "zoom.camera.off" : `zoom.camera.preset.${CAMERA_KEYS[preset]}`);
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 				{paneHeader(<ZoomIn size={16} />, tt("labels.zoom"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
-					<ZoomLevelControl key={region.id} region={region} tl={tl} />
+					<ZoomLevelControl key={region.id} region={region} tl={tl} maxScale={zoomMaxScale} />
 					<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-						{paneRow(
+						{paneStack(
 							ts("zoom.camera.title"),
 							// ONE control for the whole 3D camera: a fixed angle and a moving camera are
-							// alternatives, not two settings to combine.
-							<select
-								aria-label={ts("zoom.camera.title")}
+							// alternatives, not two settings to combine. Each tile draws what it does to
+							// the screen, so the label names the one picked.
+							<ChoiceRow<Rotation3DPreset | "off">
+								label={ts("zoom.camera.title")}
+								tiles
+								options={[
+									"off" as const,
+									...FIXED_ROTATION_3D_PRESETS,
+									// A moving camera reads the cursor track, which the export only loads while
+									// the cursor is shown: not offered then, rather than a camera that silently
+									// holds still. Still listed once picked, so the row can show it.
+									...(settings.cursorShow || region.rotationPreset === "follow-cursor"
+										? MOVING_ROTATION_3D_PRESETS
+										: []),
+								].map((preset) => ({
+									value: preset,
+									label: cameraLabel(preset),
+									icon: (
+										<svg
+											viewBox="0 0 32 22"
+											width={32}
+											height={22}
+											fill="none"
+											stroke="currentColor"
+											strokeWidth="1.75"
+											strokeLinejoin="round"
+											aria-hidden="true"
+										>
+											{CAMERA_ICONS[preset]}
+										</svg>
+									),
+								}))}
 								value={region.rotationPreset ?? "off"}
-								onChange={(e) =>
-									void tl.updateZoomRotation(
-										region.id,
-										// "off" is the absence of a preset — the schema field is optional and
-										// `migrate.ts` drops it when falsy.
-										isRotation3DPreset(e.target.value) ? e.target.value : undefined,
-									)
+								// "off" is the absence of a preset — the schema field is optional and
+								// `migrate.ts` drops it when falsy.
+								onChange={(preset) =>
+									void tl.updateZoomRotation(region.id, preset === "off" ? undefined : preset)
 								}
-								className={shell.control}
-							>
-								<option value="off">{ts("zoom.camera.off")}</option>
-								<optgroup label={ts("zoom.camera.fixed")}>
-									{FIXED_ROTATION_3D_PRESETS.map((preset) => (
-										<option key={preset} value={preset}>
-											{ts(`zoom.camera.preset.${CAMERA_KEYS[preset]}`)}
-										</option>
-									))}
-								</optgroup>
-								<optgroup label={ts("zoom.camera.moving")}>
-									{MOVING_ROTATION_3D_PRESETS.map((preset) => (
-										<option key={preset} value={preset}>
-											{ts(`zoom.camera.preset.${CAMERA_KEYS[preset]}`)}
-										</option>
-									))}
-								</optgroup>
-							</select>,
+							/>,
+							cameraLabel(region.rotationPreset ?? "off"),
 						)}
-						<p className={shell.hint}>
-							{
-								// A moving camera reads the cursor track, which the export only loads while the
-								// cursor is shown: say so rather than offer a camera that silently holds still.
-								!settings.cursorShow && region.rotationPreset === "follow-cursor"
-									? ts("zoom.camera.needsCursor")
-									: ts(
-											`zoom.camera.description.${region.rotationPreset ? CAMERA_KEYS[region.rotationPreset] : "off"}`,
-										)
-							}
-						</p>
 					</div>
-					<ClickImpactToggle
-						checked={region.clickImpact === true}
+					{
 						// The click follows the visible pointer: without a preset, or with the cursor
-						// hidden, the checkbox would move nothing. A fixed angle presses the tilted
-						// screen; the orbiting camera keeps the screen still and recoils instead.
-						blocker={
-							!region.rotationPreset
-								? ts("zoom.clickImpact.needsRotation")
-								: !settings.cursorShow || region.hideCursor
-									? ts("zoom.clickImpact.needsCursor")
-									: null
-						}
-						label={ts("zoom.clickImpact.title")}
-						description={ts(
-							region.rotationPreset === "follow-cursor"
-								? "zoom.clickImpact.descriptionCamera"
-								: "zoom.clickImpact.description",
-						)}
-						onChange={(on) => void tl.updateZoomClickImpact(region.id, on)}
-					/>
-					{paneRow(
+						// hidden, the switch would move nothing, so it is not offered.
+						region.rotationPreset && settings.cursorShow && !region.hideCursor
+							? paneRow(
+									ts("zoom.clickImpact.title"),
+									<Toggle
+										checked={region.clickImpact === true}
+										ariaLabel={ts("zoom.clickImpact.title")}
+										onChange={(on) => void tl.updateZoomClickImpact(region.id, on)}
+									/>,
+								)
+							: null
+					}
+					{paneStack(
 						ts("zoom.focusMode.title"),
 						// While the global toggle is on it OVERRIDES every region, so the control shows
 						// the effective mode ("auto") and goes read-only rather than lying about a
 						// per-region value that currently has no effect. The region's own `focusMode` is
 						// never written by the toggle — that is what makes each zoom snap back to its
 						// previous value the moment the toggle goes off.
-						<select
+						<ChoiceRow<"manual" | "auto">
+							label={ts("zoom.focusMode.title")}
+							options={[
+								{ value: "manual", label: ts("zoom.focusMode.manual") },
+								{ value: "auto", label: ts("zoom.focusMode.auto") },
+							]}
 							value={autoFocusAll ? "auto" : (region.focusMode ?? "manual")}
 							disabled={autoFocusAll}
-							onChange={(e) =>
-								void tl.updateZoomFocusMode(region.id, e.target.value as "manual" | "auto")
-							}
-							className={shell.control}
-						>
-							<option value="manual">{ts("zoom.focusMode.manual")}</option>
-							<option value="auto">{ts("zoom.focusMode.auto")}</option>
-						</select>,
+							describedBy={autoFocusAll ? focusHintId : undefined}
+							onChange={(mode) => void tl.updateZoomFocusMode(region.id, mode)}
+						/>,
 					)}
-					{paneRow(
+					{paneStack(
 						ts("zoom.cursor.title"),
-						<select
-							aria-label={ts("zoom.cursor.title")}
+						<ChoiceRow<"show" | "hide">
+							label={ts("zoom.cursor.title")}
+							options={[
+								{ value: "show", label: ts("zoom.cursor.show") },
+								{ value: "hide", label: ts("zoom.cursor.hide") },
+							]}
 							value={region.hideCursor ? "hide" : "show"}
-							onChange={(e) => void tl.updateZoomHideCursor(region.id, e.target.value === "hide")}
-							className={shell.control}
-						>
-							<option value="show">{ts("zoom.cursor.show")}</option>
-							<option value="hide">{ts("zoom.cursor.hide")}</option>
-						</select>,
+							onChange={(v) => void tl.updateZoomHideCursor(region.id, v === "hide")}
+						/>,
 					)}
 					{autoFocusAll || region.focusMode === "auto" ? (
 						// Auto resamples the focus from cursor telemetry every frame, so there is no fixed
 						// point to reset and no gimbal on the canvas (ZoomFocusOverlay bows out) — the
 						// reset button would be a no-op. When the global toggle is what forced auto, say
-						// so, and say where to turn it off.
-						<p className={shell.hint}>
-							{ts(
-								autoFocusAll ? "zoom.focusMode.lockedDisclaimer" : "zoom.focusMode.autoDescription",
-							)}
-						</p>
+						// where to turn it off.
+						autoFocusAll ? (
+							<p id={focusHintId} className={shell.hint}>
+								{ts("zoom.focusMode.lockedDisclaimer")}
+							</p>
+						) : null
 					) : (
 						<button
 							type="button"
@@ -861,7 +923,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	if (selection.kind === "annotation") {
 		const region = tl.annotationRegions.find((a) => a.id === selection.id);
 		if (!region) return null;
-		const hasBackground = hasTextBackground(region.style);
+		const plate = textPlateOf(region.style);
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 				{paneHeader(
@@ -995,6 +1057,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								value={region.figureData?.strokeWidth ?? 4}
 								min={1}
 								max={20}
+								// The schema's default (`figureDataSchema`), the width every new arrow starts at.
+								defaultValue={4}
 								onChange={(next) =>
 									tl.updateAnnotationLive(region.id, {
 										figureData: {
@@ -1065,55 +1129,61 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					{region.type === "text"
 						? paneRow(
 								ts("annotation.size"),
-								<input
-									type="number"
-									min={8}
-									max={200}
-									step={1}
-									// Le nombre saisi vaut « pixels à 1080 » (cf. annotationScale.ts) : preview et
-									// rendu le multiplient tous deux par la hauteur de leur boîte, donc ce champ
-									// veut dire la même chose des deux côtés.
-									value={region.style?.fontSize ?? 32}
-									onChange={(e) =>
-										tl.updateAnnotationLive(region.id, {
-											style: { ...region.style, fontSize: Number(e.target.value) },
-										})
-									}
-									onBlur={commitAnnotation}
-									className={shell.control}
-									style={{ width: 84, textAlign: "right" }}
+								// Le nombre saisi vaut « pixels à 1080 » (cf. annotationScale.ts) : preview et
+								// rendu le multiplient tous deux par la hauteur de leur boîte, donc ce champ
+								// veut dire la même chose des deux côtés.
+								<AnnotationSizeField
+									label={ts("annotation.size")}
+									size={region.style?.fontSize ?? 32}
+									onCommit={(fontSize) => {
+										tl.updateAnnotationLive(region.id, { style: { ...region.style, fontSize } });
+										commitAnnotation();
+									}}
 								/>,
 							)
 						: null}
 					{region.type === "text"
-						? paneRow(
+						? paneStack(
 								ts("annotation.background"),
-								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-									{/* La pastille montre la couleur mémorisée même fond éteint : c'est celle que
-									    le rallumage rendra, et un noir affiché à la place mentirait. Choisir une
-									    couleur allume le fond, sinon le sélecteur n'aurait aucun effet visible. */}
-									<ColorField
-										label={ts("annotation.background")}
-										value={textBackgroundColor(region.style)}
-										onChange={(next) =>
-											liveUpdate(region.id, {
-												style: setTextBackgroundColor(region.style, next),
-											})
-										}
-										onCommit={commitAnnotation}
-									/>
-									{/* Une bascule plutôt qu'un bouton « effacer » : avoir un fond ou non est un
-									    état, pas une action. La pilule des panneaux, pas une case système. */}
-									<Toggle
-										checked={hasBackground}
-										onChange={(next) => {
-											tl.updateAnnotationLive(region.id, {
-												style: toggleTextBackground(region.style, next),
-											});
-											void tl.commitAnnotationChange();
-										}}
-									/>
-								</div>,
+								// Trois plaques nommées : la plaque porte seule l'état allumé/éteint, et en
+								// choisir une ajuste un texte qui y deviendrait illisible. Une couleur libre
+								// d'un projet plus ancien reste montrée tant qu'elle est là, comme le tracé
+								// libre du flou.
+								<ChoiceRow<TextPlate | "custom">
+									label={ts("annotation.background")}
+									options={[
+										{ value: "none", label: ts("textPlate.none") },
+										{ value: "dark", label: ts("textPlate.dark") },
+										{ value: "light", label: ts("textPlate.light") },
+										...(plate === "custom"
+											? [{ value: "custom" as const, label: ts("textPlate.custom") }]
+											: []),
+									]}
+									value={plate}
+									onChange={(next) => {
+										if (next === "custom") return;
+										tl.updateAnnotationLive(region.id, {
+											style: setTextPlate(region.style, next),
+										});
+										void tl.commitAnnotationChange();
+									}}
+								/>,
+							)
+						: null}
+					{region.type === "text"
+						? paneStack(
+								ts("annotation.color"),
+								<TextColorField
+									label={ts("annotation.color")}
+									value={region.style?.color ?? "#ffffff"}
+									plate={region.style?.backgroundColor ?? "transparent"}
+									onChange={(next) =>
+										liveUpdate(region.id, {
+											style: { ...region.style, color: next },
+										})
+									}
+									onCommit={commitAnnotation}
+								/>,
 							)
 						: null}
 					{region.type === "text"
@@ -1139,21 +1209,6 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								/>,
 							)
 						: null}
-					{region.type === "text"
-						? paneRow(
-								ts("annotation.color"),
-								<ColorField
-									label={ts("annotation.color")}
-									value={region.style?.color ?? "#ffffff"}
-									onChange={(next) =>
-										liveUpdate(region.id, {
-											style: { ...region.style, color: next },
-										})
-									}
-									onCommit={commitAnnotation}
-								/>,
-							)
-						: null}
 					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
 						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{ts("annotation.deleteAnnotation")}
@@ -1175,7 +1230,6 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					tc("actions.close"),
 				)}
 				<div style={bodyStyle}>
-					<p className={shell.hint}>{te("inspector.cameraFullscreenDescription")}</p>
 					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
 						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{te("inspector.deleteRegion")}

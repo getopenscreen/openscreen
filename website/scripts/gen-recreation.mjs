@@ -777,7 +777,6 @@ const CONTROLS = {
 	// RightPanes.tsx:1755 — Cursor. `show` is not in this document, so it is the
 	// app's own default rather than a guess.
 	cursorShow: { label: t("settings:cursor.show"), on: defaultBool("cursorShow") },
-	cursorTheme: { label: t("settings:cursor.theme"), value: le.cursorTheme },
 	cursorSize: slider(
 		t("settings:cursor.size"),
 		le.cursorSize * 10,
@@ -797,8 +796,9 @@ const CONTROLS = {
 };
 
 /**
- * The cursor packs the Cursor panel's picker shows, and the two macOS shapes the
- * demonstration pointer swaps to.
+ * The cursor art the page draws: the application's default pack, and the two
+ * macOS shapes the demonstration pointer swaps to. The editor shows no theme
+ * picker while the default is the only pack it ships, so the page shows none.
  *
  * Every one is a pack the application actually ships in `public/cursors/`, with
  * the hotspot the application actually uses — which is the whole reason to read
@@ -810,18 +810,7 @@ const CONTROLS = {
  * arrow tip, and reads as the sprite's right edge if taken for a fraction — so
  * the application's own `resolveCursorSprites` does the conversion here too.
  */
-const CURSOR_PICKER = [
-	DEFAULT_CURSOR_THEME_ID,
-	"pink-glossy-arrow-and-hand-3d",
-	"spring-gradient",
-	"black-and-rainbow-stroke-gradient-animated",
-	"among-us-sus-knife-and-red-animated",
-	"hollow-knight-and-game-arrow",
-	"mickey-mouse-black-hand-inflated-glove",
-	"sanrio-kuromi-skull-arrow",
-	"old-roblox",
-	"pokemon-neon-gengar",
-];
+const CURSOR_PACKS = [DEFAULT_CURSOR_THEME_ID];
 
 const round4 = (v) => Number(v.toFixed(4));
 
@@ -847,8 +836,7 @@ function cursorSprite(id, kind) {
 }
 
 const CURSORS = {
-	themeCount: CURSOR_THEMES.length + 1,
-	themes: CURSOR_PICKER.map((id, i) => ({
+	themes: CURSOR_PACKS.map((id, i) => ({
 		id,
 		...cursorSprite(id, "arrow"),
 		src: `/img/cursors/${String(i).padStart(2, "0")}-arrow.png`,
@@ -887,7 +875,6 @@ const PANELS = {
 	cursor: {
 		title: t("settings:cursor.title"),
 		show: t("settings:cursor.show"),
-		theme: t("settings:cursor.theme"),
 		size: t("settings:cursor.size"),
 		smoothing: t("settings:cursor.smoothing"),
 	},
@@ -1076,7 +1063,6 @@ const PROVENANCE = [
 	},
 	{ shown: PANELS.cursor.title, source: "src/i18n/locales/en/settings.json → cursor.title" },
 	{ shown: PANELS.cursor.show, source: "src/i18n/locales/en/settings.json → cursor.show" },
-	{ shown: PANELS.cursor.theme, source: "src/i18n/locales/en/settings.json → cursor.theme" },
 	{ shown: PANELS.cursor.size, source: "src/i18n/locales/en/settings.json → cursor.size" },
 	{
 		shown: PANELS.cursor.smoothing,
@@ -1266,8 +1252,8 @@ export const EFFECTS = ${lit(EFFECTS)} as const;
  *  and suffixed the way RightPanes.tsx scales and suffixes it. */
 export const CONTROLS = ${lit(CONTROLS)} as const;
 
-/** The cursor packs the picker shows, each with the application's own hotspot,
- *  normalised to a fraction of the sprite. */
+/** The cursor art the page draws, each sprite with the application's own
+ *  hotspot, normalised to a fraction of the sprite. */
 export const CURSORS = ${lit(CURSORS)} as const;
 
 export const TRANSPORT = ${lit(TRANSPORT)} as const;

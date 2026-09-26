@@ -17,10 +17,12 @@ keywords:
 
 Haz clic en **Exportar** en la barra superior para abrir el cuadro de diálogo de exportación.
 
+Elige primero un **destino**: **Web / YouTube** (MP4, 1080p, 60 fps), **Redes sociales** (lo mismo a 30 fps, con una tasa de bits menor), **Estudio** (MP4 a la resolución del clip más pequeño, ajustada a la relación de aspecto del proyecto, 60 fps) o **GIF para README** (un GIF de 480p a 15 fps). Un destino nunca cambia la relación de aspecto del proyecto. Todo lo que sigue está en **Avanzado**.
+
 ## Formatos {#formats}
 
 - **MP4**: calidad **720p**, **1080p** o **Source**; 24 / 30 / 60 fotogramas por segundo; códec **H.264** (el predeterminado, y el que admiten más reproductores) o **H.265**.
-- **GIF**: 15 / 20 / 25 / 30 fotogramas por segundo, tamaño Medium / Large / Original y un interruptor **Bucle de GIF**.
+- **GIF**: 15 / 20 / 25 / 30 fotogramas por segundo, tamaño Small / Medium / Large / Original y un interruptor **Bucle de GIF**.
 
 :::note
 Se eliminó VP9. Las GPU a las que apunta el flujo nativo no tienen codificador VP9 por hardware, y el respaldo por software era excesivamente lento para ofrecerlo como una opción con el mismo aspecto que las demás.

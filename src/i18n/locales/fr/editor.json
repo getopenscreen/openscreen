@@ -112,6 +112,9 @@
 		"microphone": "Microphone",
 		"camera": "Caméra",
 		"cursorHighlight": "Curseur en surbrillance",
+		"hideDesktopIcons": "Masquer les icônes du bureau",
+		"hideDesktopIconsHintMac": "Retire les icônes du bureau des enregistrements d'écran. Elles restent sur votre bureau.",
+		"hideDesktopIconsHintWindows": "Recouvre les icônes du bureau avec votre fond d'écran pendant l'enregistrement d'un écran. Elles reviennent à la fin de l'enregistrement.",
 		"on": "Activé",
 		"off": "Désactivé",
 		"loading": "Chargement…",
@@ -166,6 +169,12 @@
 		"noSpeechDetected": "Aucune parole détectée"
 	},
 	"exportDialog": {
+		"destination": "Destination",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Réseaux sociaux",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "GIF pour README",
+		"advanced": "Avancé",
 		"title": "Exporter",
 		"subtitle": "Rendre la timeline dans un fichier",
 		"addVideoBeforeExporting": "Ajoutez une vidéo avant d'exporter.",
@@ -215,7 +224,6 @@
 		"generateCaptions": "Générer les sous-titres",
 		"cropDescription": "Recadrer l'enregistrement — choisissez un format et zoomez sur la région à conserver.",
 		"openCrop": "Ouvrir le recadrage…",
-		"cameraFullscreenDescription": "Pendant cette zone, la caméra occupe tout le cadre — sans bordure, sans arrondi, sans arrière-plan — puis revient en douceur à la fin. Faites glisser les bords de la zone sur la timeline pour changer son début et sa durée.",
 		"deleteRegion": "Supprimer la zone",
 		"freehandRendersAsBox": "À l'export, un tracé libre est couvert par sa boîte englobante — on couvre trop, jamais trop peu."
 	},
@@ -344,8 +352,6 @@
 		"playbackControls": "Contrôles de lecture",
 		"playPause": "Lecture / Pause",
 		"playPauseTitle": "Lecture / Pause (Espace)",
-		"previousClip": "Clip précédent",
-		"nextClip": "Clip suivant",
 		"loop": "Boucle",
 		"seekVideo": "Naviguer dans la vidéo"
 	},

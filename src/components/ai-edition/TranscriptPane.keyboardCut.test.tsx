@@ -72,13 +72,14 @@ function renderPane(
 	trimRanges: AxcutTrimRange[],
 	onTrimTimelineSpan = vi.fn(),
 	busyAssetIds: string[] = [],
+	transcript: AxcutTranscript = TRANSCRIPT,
 ) {
 	const view = render(
 		<I18nProvider>
 			<TranscriptPane
 				clips={[CLIP]}
 				audioTracks={[]}
-				transcripts={[TRANSCRIPT]}
+				transcripts={[transcript]}
 				assets={[ASSET]}
 				trimRanges={trimRanges}
 				busyAssetIds={busyAssetIds}
@@ -264,5 +265,39 @@ describe("keyboard cut with the caret between words", () => {
 			.map((el) => el.dataset.wordId);
 		// The third press is the one that used to be swallowed: without it "un" survives.
 		expect(struck).toEqual(["clip_1:w1", "clip_1:w2", "clip_1:w3", "clip_1:w4"]);
+	});
+});
+
+// Cutting a silence must leave air next to the speech that stays, or the last syllable is
+// glued to the next word. With 500 ms gaps, each side keeps 70 ms.
+describe("a cut silence breathes", () => {
+	const GAPPED: AxcutTranscript = {
+		...TRANSCRIPT,
+		words: [
+			{ id: "w1", segmentId: "s", startSec: 0, endSec: 1, text: "un" },
+			{ id: "w2", segmentId: "s", startSec: 1.5, endSec: 2.5, text: "deux" },
+			{ id: "w3", segmentId: "s", startSec: 3, endSec: 4, text: "trois" },
+		],
+	};
+	// un, [silence], deux, [silence], trois
+	const BEFORE_TROIS = 4;
+
+	it("keeps breath on both sides of a silence between two kept words", () => {
+		const { editor, onTrimTimelineSpan } = renderPane([], vi.fn(), [], GAPPED);
+		caretBeforeWordAt(editor, BEFORE_TROIS);
+		fireEvent.keyDown(editor, { key: "Backspace" });
+		const cut = cutRange(onTrimTimelineSpan);
+		expect(cut?.[0]).toBeCloseTo(2.57);
+		expect(cut?.[1]).toBeCloseTo(2.93);
+	});
+
+	it("does not breathe next to a word that is already cut", () => {
+		const deuxCut = { ...W2_TRIMMED, startSec: 1.5, endSec: 2.5 };
+		const { editor, onTrimTimelineSpan } = renderPane([deuxCut], vi.fn(), [], GAPPED);
+		caretBeforeWordAt(editor, BEFORE_TROIS);
+		fireEvent.keyDown(editor, { key: "Backspace" });
+		const cut = cutRange(onTrimTimelineSpan);
+		expect(cut?.[0]).toBe(2.5);
+		expect(cut?.[1]).toBeCloseTo(2.93);
 	});
 });

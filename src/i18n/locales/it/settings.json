@@ -11,6 +11,8 @@
 		"title": "Sfondo",
 		"imageLabel": "Sfondo {{index}}",
 		"custom": "Personalizzato",
+		"customColor": "Colore personalizzato",
+		"customGradient": "Sfumatura da un colore",
 		"help": "Scegli cosa appare dietro la registrazione: uno sfondo incluso, un colore pieno, un gradiente o un'immagine personale dal disco.",
 		"gradient": "Sfumatura",
 		"colorLabel": "Colore {{color}}",
@@ -107,6 +109,9 @@
 		"fitClipOne": "{{count}} clip",
 		"formatAuto": "Auto",
 		"formatAutoMixed": "Clip diversi",
+		"formatFill": "Registrazione",
+		"formatFillFit": "Intera",
+		"formatFillFollow": "Segui il cursore",
 		"formatOriginal": "Originale",
 		"fitClipMany": "{{count}} clip",
 		"frame": "Cornice",
@@ -116,8 +121,6 @@
 		"fitClip": "Adatta",
 		"motionBlur": "Sfocatura movimento",
 		"depthOfField": "Profondità di campo",
-		"depthOfFieldHint": "Zoom 3D",
-		"depthOfFieldNoTilt": "Nessuno zoom 3D in questo progetto",
 		"roundness": "Arrotondamento",
 		"frameStyle": "Stile",
 		"windowNone": "Nessuna",
@@ -130,7 +133,11 @@
 		"frameThemeDark": "Scuro",
 		"frameThemeHelp": "Corpo argento con cornice chiara, o grafite con cornice scura. Vale per tutte le cornici.",
 		"windowHelp": "Disegna una finestra, o un dispositivo modellato in 3D, attorno alla registrazione.",
-		"roundnessFrameHelp": "L'intervallo si adatta alla cornice: 100 % è l'arrotondamento massimo che le sta bene."
+		"roundnessFrameHelp": "L'intervallo si adatta alla cornice: 100 % è l'arrotondamento massimo che le sta bene.",
+		"shadowNone": "Nessuna",
+		"shadowLight": "Leggera",
+		"shadowMedium": "Media",
+		"shadowStrong": "Forte"
 	},
 	"stylePresets": {
 		"button": "Preset",
@@ -147,6 +154,9 @@
 		"revealLinux": "Mostra nella cartella",
 		"rename": "Rinomina",
 		"update": "Aggiorna dal progetto corrente",
+		"useForNewProjects": "Usa per i nuovi progetti",
+		"stopForNewProjects": "Non usare più per i nuovi progetti",
+		"newProjectsBadge": "Nuovi progetti",
 		"delete": "Elimina",
 		"confirmDelete": "Eliminare «{{name}}»?",
 		"applied": "«{{name}}» applicato",
@@ -201,15 +211,12 @@
 		"legacyAnnotations": "Questo progetto contiene ancora annotazioni di sottotitoli della vecchia funzione ({{count}}). Vengono disegnate sopra il livello dei sottotitoli.",
 		"backgroundOpacity": "Opacità",
 		"backgroundColor": "Colore dello sfondo",
-		"alignCenter": "Centro",
 		"translationIsNonDestructive": "Le traduzioni vengono salvate accanto alla trascrizione, mai al suo interno: il testo originale e i suoi tempi restano intatti.",
 		"distanceFromRight": "Distanza da destra",
 		"language": "Lingua",
 		"text": "Testo",
-		"anchorHintBottom": "I sottotitoli lunghi crescono verso l'alto: il bordo inferiore non si sposta.",
 		"distanceFromTop": "Distanza dall'alto",
 		"translateFailed": "Traduzione non riuscita.",
-		"alignLeft": "Sinistra",
 		"distanceFromBottom": "Distanza dal basso",
 		"derivedFromTranscript": "{{count}} righe di sottotitoli, derivate dal vivo dalla trascrizione.",
 		"translate": "Traduci",
@@ -218,14 +225,10 @@
 		"hiddenHint": "I sottotitoli provengono dalla trascrizione di questo media. Attivali per vederli nell'anteprima e nelle esportazioni.",
 		"noTranscript": "I sottotitoli vengono letti dalla trascrizione del media. Trascrivi questo video per attivarli.",
 		"distanceFromLeft": "Distanza da sinistra",
-		"anchorBottom": "Basso",
 		"transcribe": "Trascrivi video",
 		"bold": "Grassetto",
-		"alignRight": "Destra",
-		"anchorTop": "Alto",
 		"minWords": "Parole min. per riga",
 		"translateHint": "Traduci la trascrizione con il provider IA configurato",
-		"anchorHintTop": "I sottotitoli lunghi crescono verso il basso: il bordo superiore non si sposta.",
 		"displayLanguage": "Visualizzazione",
 		"removeLegacyAnnotations": "Rimuovi le vecchie annotazioni dei sottotitoli",
 		"background": "Sfondo",
@@ -235,7 +238,15 @@
 		"font": "Carattere",
 		"translating": "Traduzione…",
 		"show": "Mostra sottotitoli",
-		"textColor": "Colore del testo"
+		"textColor": "Colore del testo",
+		"style": "Stile",
+		"styles": {
+			"classic": "Classico",
+			"bold": "Grassetto",
+			"minimal": "Minimale",
+			"light": "Chiaro"
+		},
+		"customize": "Personalizza"
 	},
 	"panes": {
 		"help": "Aiuto"
@@ -267,7 +278,7 @@
 		"remove": "Elimina traccia",
 		"loop": "Ripeti",
 		"slipHint": "Alt + trascina per far scorrere l’audio all’interno",
-		"help": "Volume, dissolvenze e loop di questa traccia audio. Viene mixata sopra la registrazione nell’anteprima e nell’esportazione. Trascina la traccia sulla timeline per spostarla o ridimensionarla, oppure tieni premuto Alt e trascina per far scorrere l’audio all’interno.",
+		"help": "Volume, dissolvenze e loop di questa traccia audio. Viene mixata sopra la registrazione nell’anteprima e nell’esportazione. Una traccia musicale si abbassa da sola mentre qualcuno parla. Trascina la traccia sulla timeline per spostarla o ridimensionarla, oppure tieni premuto Alt e trascina per far scorrere l’audio all’interno.",
 		"add": "Aggiungi traccia audio",
 		"mute": "Muto"
 	},
@@ -350,35 +361,19 @@
 			"lockedDisclaimer": "Controllato dall'interruttore globale di messa a fuoco automatica nella timeline. Disattivalo per impostare la modalità di messa a fuoco per ogni zoom.",
 			"auto": "Automatico",
 			"manual": "Manuale",
-			"autoDescription": "La fotocamera segue la posizione del cursore registrato",
 			"title": "Modalità messa a fuoco"
 		},
 		"camera": {
 			"title": "Camera 3D",
 			"off": "Disattivata",
-			"fixed": "Angolo fisso",
-			"moving": "Camera in movimento",
 			"preset": {
-				"iso": "Dall'alto di sbieco",
 				"left": "Schermo ruotato a sinistra",
 				"right": "Schermo ruotato a destra",
 				"followCursor": "Ruota con il cursore"
-			},
-			"description": {
-				"off": "Lo schermo resta piatto.",
-				"iso": "Mantiene una sola posa: ruotato a sinistra e visto dall'alto.",
-				"left": "Mantiene una sola posa: lo schermo guarda a sinistra e il bordo destro avanza.",
-				"right": "Mantiene una sola posa: lo schermo guarda a destra e il bordo sinistro avanza.",
-				"followCursor": "Lo schermo resta fermo; la telecamera gli gira intorno dal lato del cursore e sale o scende con esso."
-			},
-			"needsCursor": "Il cursore è nascosto: questa telecamera non ha nulla da seguire e mantiene l'angolo iniziale."
+			}
 		},
 		"clickImpact": {
-			"title": "Impatto del clic",
-			"description": "Ogni clic preme lo schermo inclinato: il lato cliccato si abbassa, poi torna.",
-			"needsRotation": "Scegli prima una camera 3D: si può premere solo uno schermo inclinato.",
-			"needsCursor": "Il cursore è nascosto: lo schermo reagisce solo ai clic visibili.",
-			"descriptionCamera": "Ogni clic fa arretrare un po' la telecamera, che poi torna avanti."
+			"title": "Impatto del clic"
 		},
 		"level": "Livello zoom",
 		"previewHold": "Tieni premuto per vedere l'anteprima dell'effetto zoom",
@@ -393,7 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Livello di uscita",
-		"help": "Regola il livello di uscita audio. Si applica allo stesso modo nell’anteprima e nell’esportazione.",
+		"help": "Le voci vengono livellate automaticamente a un volume percepito standard. Regola il livello di uscita a partire da lì; si applica allo stesso modo nell’anteprima e nell’esportazione.",
 		"reset": "Reimposta audio",
 		"title": "Audio"
 	},
@@ -414,18 +409,18 @@
 		"smoothing": "Smussatura",
 		"clickBounce": "Rimbalzo clic",
 		"model3d": "Cursore 3D",
-		"model3dHint": "Stile predefinito: tutte le forme del cursore diventano 3D. Gli altri stili restano piatti.",
-		"model3dNeedsCursor": "Attiva «Mostra cursore» per usare il cursore 3D.",
 		"help": "Resa del cursore dalla telemetria registrata: tema, dimensione, smussatura, sfocatura di movimento e rimbalzo al clic.",
 		"size": "Dimensione",
 		"title": "Cursore",
 		"show": "Mostra cursore",
 		"themeDefault": "Predefinito",
 		"alwaysArrow": "Usa sempre il cursore a freccia",
-		"alwaysArrowHint": "Mostra la freccia per ogni stato del cursore, anche sopra testo o link.",
 		"motionBlur": "Sfocatura movimento",
 		"theme": "Stile del cursore",
-		"autoHide": "Nascondi se inattivo"
+		"autoHide": "Nascondi se inattivo",
+		"bounceNone": "Nessuno",
+		"bounceLight": "Leggero",
+		"bounceStrong": "Marcato"
 	},
 	"export": {
 		"gifButton": "Esporta GIF",
@@ -434,5 +429,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Elimina regione taglio"
+	},
+	"textPlate": {
+		"none": "Nessuna",
+		"dark": "Scura",
+		"light": "Chiara",
+		"custom": "Personalizzata"
 	}
 }

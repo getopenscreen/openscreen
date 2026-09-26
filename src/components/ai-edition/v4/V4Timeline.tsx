@@ -606,8 +606,6 @@ export function V4Timeline({
 	videoSources = [],
 	playing,
 	onTogglePlay,
-	onPrevClip,
-	onNextClip,
 	onEditClip,
 	onAddVoiceover,
 }: {
@@ -618,8 +616,6 @@ export function V4Timeline({
 	videoSources?: VideoSource[];
 	playing: boolean;
 	onTogglePlay: () => void;
-	onPrevClip: () => void;
-	onNextClip: () => void;
 	/** Opens the (now single, shell-level) EditClipModal for this clip —
 	 * trim in/out and crop both live there per-clip. */
 	onEditClip: (clip: AxcutClip) => void;
@@ -2033,8 +2029,6 @@ export function V4Timeline({
 							overrideTimeSec={scrubbingTimeSec}
 							clips={clips}
 							onTogglePlay={onTogglePlay}
-							onPrevClip={onPrevClip}
-							onNextClip={onNextClip}
 							onSeek={setCurrentTime}
 						/>
 						<div className={styles.tlHints}>
@@ -2363,22 +2357,11 @@ export function V4Timeline({
 			    on screen at once, and there is nothing to zoom INTO without lanes. */}
 			{showLanes ? (
 				<div ref={navRef} className={styles.tlNav}>
-					{/* The whole timeline in miniature: where the footage is, so the window reads as
-					    a view onto it rather than as a bare scrollbar. */}
-					<div className={styles.tlNavTrack} aria-hidden>
-						{clips.map((c) => (
-							<span
-								key={c.id}
-								className={styles.tlNavClip}
-								style={{
-									left: `${pctOf(c.timelineStartSec).toFixed(2)}%`,
-									width: `${pctOf(c.timelineEndSec - c.timelineStartSec).toFixed(2)}%`,
-								}}
-							/>
-						))}
-					</div>
+					<div className={styles.tlNavTrack} aria-hidden />
 					<div
 						className={styles.tlNavWindow}
+						// Whole timeline in view: the thumb goes quiet (see .tlNavWindow[data-full]).
+						data-full={navSpan >= 0.999 || undefined}
 						title={t("labels.pan")}
 						style={{
 							left: `${(nav.start * 100).toFixed(2)}%`,

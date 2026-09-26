@@ -110,7 +110,7 @@ describe("migrateProjectDataToAxcutDocument", () => {
 							depth: 4,
 							focus: { cx: 1.5, cy: -0.5 },
 							focusMode: "manual",
-							rotationPreset: "iso",
+							rotationPreset: "iso" as never,
 							customScale: 2.5,
 							source: "manual",
 							hideCursor: true,
@@ -128,7 +128,8 @@ describe("migrateProjectDataToAxcutDocument", () => {
 		expect(z.startMs).toBe(0);
 		expect(z.endMs).toBe(2000);
 		expect(z.customScale).toBe(2.5);
-		expect(z.rotationPreset).toBe("iso");
+		// `iso`, retired, reads as Left: the angle that kept its look.
+		expect(z.rotationPreset).toBe("left");
 		expect(z.hideCursor).toBe(true);
 		expect(z.clickImpact).toBe(true);
 	});
@@ -235,10 +236,10 @@ describe("migrateProjectDataToAxcutDocument", () => {
 
 	it("carries cursor tuning keys from a v2 editor into getEditorSettings", () => {
 		const v2 = makeV2Project();
-		v2.editor.cursorSize = 0.3;
+		v2.editor.cursorSize = 2.5;
 		v2.editor.cursorClickBounce = 0;
 		const settings = getEditorSettings(migrateProjectDataToAxcutDocument(v2));
-		expect(settings.cursor.size).toBe(0.3);
+		expect(settings.cursor.size).toBe(2.5);
 		expect(settings.cursor.clickBounce).toBe(0);
 	});
 

@@ -11,6 +11,8 @@
 		"title": "背景",
 		"imageLabel": "背景 {{index}}",
 		"custom": "自訂",
+		"customColor": "自訂顏色",
+		"customGradient": "單色漸層",
 		"help": "選擇錄製內容背後顯示的元素：內建桌布圖片、純色、漸層，或來自磁碟的自訂圖片。",
 		"gradient": "漸層",
 		"colorLabel": "顏色 {{color}}",
@@ -107,6 +109,9 @@
 		"fitClipOne": "{{count}} 個片段",
 		"formatAuto": "自動",
 		"formatAutoMixed": "片段不一致",
+		"formatFill": "錄製內容",
+		"formatFillFit": "完整",
+		"formatFillFollow": "跟隨游標",
 		"formatOriginal": "原始",
 		"fitClipMany": "{{count}} 個片段",
 		"frame": "外框",
@@ -116,8 +121,6 @@
 		"fitClip": "符合",
 		"motionBlur": "動態模糊",
 		"depthOfField": "景深",
-		"depthOfFieldHint": "3D 縮放",
-		"depthOfFieldNoTilt": "此專案沒有 3D 縮放",
 		"roundness": "圓角",
 		"frameStyle": "樣式",
 		"windowNone": "無",
@@ -130,7 +133,11 @@
 		"frameThemeDark": "深色",
 		"frameThemeHelp": "銀色機身配淺色邊框，或石墨色配深色邊框。適用於所有邊框。",
 		"windowHelp": "在錄製內容周圍繪製視窗，或以 3D 建模的裝置。",
-		"roundnessFrameHelp": "範圍隨外框而定：100% 是該外框仍然好看的最大圓角。"
+		"roundnessFrameHelp": "範圍隨外框而定：100% 是該外框仍然好看的最大圓角。",
+		"shadowNone": "無",
+		"shadowLight": "輕",
+		"shadowMedium": "中",
+		"shadowStrong": "強"
 	},
 	"stylePresets": {
 		"button": "預設",
@@ -147,6 +154,9 @@
 		"revealLinux": "在資料夾中顯示",
 		"rename": "重新命名",
 		"update": "從目前專案更新",
+		"useForNewProjects": "用於新專案",
+		"stopForNewProjects": "不再用於新專案",
+		"newProjectsBadge": "新專案",
 		"delete": "刪除",
 		"confirmDelete": "要刪除「{{name}}」嗎？",
 		"applied": "已套用「{{name}}」",
@@ -201,15 +211,12 @@
 		"legacyAnnotations": "此專案仍含有舊字幕功能留下的字幕註解（{{count}} 個）。它們會繪製在字幕圖層之上。",
 		"backgroundOpacity": "不透明度",
 		"backgroundColor": "背景顏色",
-		"alignCenter": "置中",
 		"translationIsNonDestructive": "翻譯會存放在逐字稿旁邊，絕不寫入其中——原文與時間軸維持不變。",
 		"distanceFromRight": "距右緣",
 		"language": "語言",
 		"text": "文字",
-		"anchorHintBottom": "較長的字幕會向上延伸——下緣維持不動。",
 		"distanceFromTop": "距上緣",
 		"translateFailed": "翻譯失敗。",
-		"alignLeft": "靠左",
 		"distanceFromBottom": "距下緣",
 		"derivedFromTranscript": "{{count}} 行字幕，即時由逐字稿產生。",
 		"translate": "翻譯",
@@ -218,14 +225,10 @@
 		"hiddenHint": "字幕來自這個媒體的逐字稿。開啟後即可在預覽與匯出中看到。",
 		"noTranscript": "字幕取自媒體的逐字稿。請先為這部影片產生逐字稿以啟用字幕。",
 		"distanceFromLeft": "距左緣",
-		"anchorBottom": "下",
 		"transcribe": "為影片產生逐字稿",
 		"bold": "粗體",
-		"alignRight": "靠右",
-		"anchorTop": "上",
 		"minWords": "每行最少字數",
 		"translateHint": "使用已設定的 AI 供應商翻譯逐字稿",
-		"anchorHintTop": "較長的字幕會向下延伸——上緣維持不動。",
 		"displayLanguage": "顯示",
 		"removeLegacyAnnotations": "移除舊的字幕註解",
 		"background": "背景",
@@ -235,7 +238,15 @@
 		"font": "字型",
 		"translating": "翻譯中…",
 		"show": "顯示字幕",
-		"textColor": "文字顏色"
+		"textColor": "文字顏色",
+		"style": "樣式",
+		"styles": {
+			"classic": "經典",
+			"bold": "粗體",
+			"minimal": "簡約",
+			"light": "淺色"
+		},
+		"customize": "自訂"
 	},
 	"panes": {
 		"help": "說明"
@@ -267,7 +278,7 @@
 		"remove": "刪除軌道",
 		"loop": "循環",
 		"slipHint": "按住 Alt 拖曳可在其中滑動音訊",
-		"help": "此音訊軌道的音量、淡入淡出與循環。在預覽與匯出時都會混合到錄影之上。在時間軸上拖曳可移動或調整大小，按住 Alt 拖曳則可在其中滑動音訊。",
+		"help": "此音訊軌道的音量、淡入淡出與循環。在預覽與匯出時都會混合到錄影之上。有人說話時，音樂軌道會自動降低音量。在時間軸上拖曳可移動或調整大小，按住 Alt 拖曳則可在其中滑動音訊。",
 		"add": "新增音訊軌道",
 		"mute": "靜音"
 	},
@@ -350,35 +361,19 @@
 			"lockedDisclaimer": "由時間軸中的全域自動對焦開關控制。關閉後可為每個縮放個別設定對焦模式。",
 			"auto": "自動",
 			"manual": "手動",
-			"autoDescription": "攝影機跟隨錄製時的游標位置",
 			"title": "對焦模式"
 		},
 		"camera": {
 			"title": "3D 鏡頭",
 			"off": "關閉",
-			"fixed": "固定角度",
-			"moving": "運動鏡頭",
 			"preset": {
-				"iso": "斜上方俯視",
 				"left": "畫面向左轉",
 				"right": "畫面向右轉",
 				"followCursor": "隨游標環繞"
-			},
-			"description": {
-				"off": "畫面保持平整。",
-				"iso": "保持單一姿態：向左轉，並從上方俯視。",
-				"left": "保持單一姿態：畫面朝向左側，右邊緣向前。",
-				"right": "保持單一姿態：畫面朝向右側，左邊緣向前。",
-				"followCursor": "螢幕保持不動，鏡頭繞著螢幕轉到游標所在的一側，並隨游標升降。"
-			},
-			"needsCursor": "游標已隱藏：此鏡頭沒有可跟隨的對象，維持初始角度。"
+			}
 		},
 		"clickImpact": {
-			"title": "點擊按壓",
-			"description": "每次點擊都會按壓傾斜的畫面：被點擊的一側下沉，然後彈回。",
-			"needsRotation": "請先選擇 3D 鏡頭：只有傾斜的畫面才能被按壓。",
-			"needsCursor": "游標已隱藏：畫面只對看得見的點擊做出反應。",
-			"descriptionCamera": "每次點擊，鏡頭都會稍微後退，然後回位。"
+			"title": "點擊按壓"
 		},
 		"level": "縮放級別",
 		"previewHold": "按住預覽放大效果",
@@ -393,7 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "輸出音量",
-		"help": "調整音訊輸出電平。它在預覽與匯出中的效果完全一致。",
+		"help": "人聲會自動統一到標準響度。在此基礎上調整輸出音量；它在預覽與匯出中的效果完全一致。",
 		"reset": "重設音訊",
 		"title": "音訊"
 	},
@@ -414,18 +409,18 @@
 		"smoothing": "平滑",
 		"clickBounce": "點擊彈跳",
 		"model3d": "3D 游標",
-		"model3dHint": "預設樣式：所有游標形狀都會變成 3D。其他樣式維持平面。",
-		"model3dNeedsCursor": "開啟「顯示游標」後才能使用 3D 游標。",
 		"help": "根據錄製的遙測資料繪製游標：主題、大小、平滑、動態模糊與點擊回彈。",
 		"size": "大小",
 		"title": "游標",
 		"show": "顯示游標",
 		"themeDefault": "預設",
 		"alwaysArrow": "一律使用箭頭游標",
-		"alwaysArrowHint": "在任何游標狀態下都顯示箭頭，即使位於文字或連結上方。",
 		"motionBlur": "動態模糊",
 		"theme": "游標樣式",
-		"autoHide": "閒置時隱藏"
+		"autoHide": "閒置時隱藏",
+		"bounceNone": "無",
+		"bounceLight": "輕",
+		"bounceStrong": "強"
 	},
 	"export": {
 		"gifButton": "匯出 GIF",
@@ -434,5 +429,11 @@
 	},
 	"trim": {
 		"deleteRegion": "刪除剪輯區域"
+	},
+	"textPlate": {
+		"none": "無",
+		"dark": "深色",
+		"light": "淺色",
+		"custom": "自訂"
 	}
 }

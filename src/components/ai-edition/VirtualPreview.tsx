@@ -156,35 +156,75 @@ export function timelineAudioFadeAt(
 	return v;
 }
 
+/**
+ * The export's music ducking (`duck_curve` in audio.rs), mirrored for the preview: the same
+ * depth, speech threshold, hold and release. One difference is structural: the export holds
+ * the whole voice and looks ahead, so its dip is already complete when a word starts, while
+ * the preview only hears the voice once it plays, so here the same ramp ends `attackSec`
+ * into the word.
+ */
+export const MUSIC_DUCK = {
+	depthDb: -10,
+	thresholdDbfs: -35,
+	holdSec: 0.5,
+	attackSec: 0.25,
+	releaseSec: 0.6,
+} as const;
+
+/** A music bed's ducking gain in dB, one preview frame of `frameSec` later, when the voice
+ *  was last heard `sinceVoiceSec` ago. Straight ramps in dB, like the export's. */
+export function nextMusicDuckDb(
+	currentDb: number,
+	sinceVoiceSec: number,
+	frameSec: number,
+): number {
+	const { depthDb, holdSec, attackSec, releaseSec } = MUSIC_DUCK;
+	return sinceVoiceSec <= holdSec
+		? Math.max(depthDb, currentDb + (depthDb / attackSec) * frameSec)
+		: Math.min(0, currentDb - (depthDb / releaseSec) * frameSec);
+}
+
 export interface PreviewAudioGraph {
 	context: AudioContext;
+	/** Output trim: everything the preview plays goes through it. */
 	gain: GainNode;
+	/** The recording's own audio (primary + supplemental elements), on its way to `gain`. */
+	voice: GainNode;
+	/** Listens to the voice — the recording and every voiceover — to duck the music. */
+	analyser: AnalyserNode;
 }
 
 /**
- * The preview's ONLY audio processing is the output trim, and that is deliberate: it is
- * the same `10 ** (dB / 20)` scalar `finish_audio` applies natively, so what the editor
- * plays is what the export writes.
+ * The preview's audio processing is static gains only, and that is deliberate: each is the
+ * same `10 ** (dB / 20)` scalar the export applies natively, so what the editor plays is
+ * what the export writes.
+ *
+ * - `gainDb` is the output trim, `finish_audio`'s gain.
+ * - `voiceGainDb` is the loudness normalisation of the recording being played. The
+ *   compositor measures it over the whole file and applies it to every clip cut from that
+ *   file at export (`loudness_gain_db`); the preview asks for the same number.
  *
  * Nothing with state belongs here. The export runs on the assembled timeline (trimmed,
- * speed-adjusted, concatenated); the preview runs on the untouched source file, seeked.
- * A filter or a compressor would see a different signal on each side and drift — and an
- * offline stage measured over the whole programme (a loudness normaliser) cannot exist
- * here at all, because the preview never holds that programme.
+ * speed-adjusted, concatenated); the preview runs on the untouched source file, seeked. A
+ * filter or a compressor would see a different signal on each side and drift. That is why
+ * the export's peak limiter, which only acts above −1.5 dBFS, has no counterpart here.
  */
 export function applyPreviewAudioSettings(
 	graph: PreviewAudioGraph | null,
 	elements: Array<HTMLAudioElement | null>,
 	gainDb: number,
+	voiceGainDb = 0,
 ): void {
 	const outputGain = audioGainScalar(gainDb);
+	const voiceGain = audioGainScalar(voiceGainDb);
 	if (!graph) {
 		for (const element of elements) {
-			if (element) element.volume = Math.min(1, outputGain);
+			if (element) element.volume = Math.min(1, outputGain * voiceGain);
 		}
 		return;
 	}
 	graph.gain.gain.value = outputGain;
+	graph.voice.gain.value = voiceGain;
 }
 
 /** First clip (by timeline order) starting strictly after `afterTimelineStartSec` —
@@ -375,6 +415,63 @@ export function VirtualPreview({
 		};
 	}, [activeSource?.filePath]);
 
+	// Loudness normalisation of every voice file the preview plays: the recording mounted now
+	// and each voiceover take. The export levels them to −16 LUFS with a gain the compositor
+	// measures over the whole file (`loudness_gain_db`), so asking it for that gain is what
+	// makes the preview play the voice at the exported level. Keyed by path: the gain belongs
+	// to the file, and the compositor caches it for the export that follows. Until it arrives
+	// the file plays as recorded — the first second or two after a recording is opened.
+	const [loudnessGainDbByPath, setLoudnessGainDbByPath] = useState<ReadonlyMap<string, number>>(
+		() => new Map(),
+	);
+	const loudnessGainDbByPathRef = useRef(loudnessGainDbByPath);
+	loudnessGainDbByPathRef.current = loudnessGainDbByPath;
+	const requestedLoudnessRef = useRef(new Set<string>());
+	const voicePathsKey = [
+		activeSource?.filePath,
+		...audioTracks
+			.filter((track) => track.kind === "voiceover")
+			.map((track) => audioSources.find((source) => source.id === track.assetId)?.filePath),
+	]
+		.filter((path): path is string => Boolean(path))
+		.join("\n");
+	const activeVoicePath = activeSource?.filePath;
+	const measuredForRetryRef = useRef(retryToken);
+	useEffect(() => {
+		const getLoudnessGain = window.electronAPI?.getLoudnessGain;
+		if (!getLoudnessGain) return;
+		// Retry reloads the file after it was unavailable, and its first measurement may have
+		// failed with it. Forget that answer and ask again; it plays at 0 dB until the new one.
+		if (retryToken !== measuredForRetryRef.current) {
+			measuredForRetryRef.current = retryToken;
+			if (activeVoicePath) {
+				requestedLoudnessRef.current.delete(activeVoicePath);
+				setLoudnessGainDbByPath((previous) => {
+					if (!previous.has(activeVoicePath)) return previous;
+					const next = new Map(previous);
+					next.delete(activeVoicePath);
+					return next;
+				});
+			}
+		}
+		for (const path of voicePathsKey.split("\n")) {
+			if (!path || requestedLoudnessRef.current.has(path)) continue;
+			requestedLoudnessRef.current.add(path);
+			void getLoudnessGain(path).then(
+				(result) =>
+					setLoudnessGainDbByPath((previous) =>
+						new Map(previous).set(path, result.success ? result.gainDb : 0),
+					),
+				() => undefined,
+			);
+		}
+	}, [voicePathsKey, retryToken, activeVoicePath]);
+	const voiceGainDb = activeSource?.filePath
+		? (loudnessGainDbByPath.get(activeSource.filePath) ?? 0)
+		: 0;
+	const voiceGainDbRef = useRef(voiceGainDb);
+	voiceGainDbRef.current = voiceGainDb;
+
 	// Which imported-track elements are actually mounted (a track is rendered only once its
 	// asset URL resolves — see the JSX). Re-routing the graph is keyed on this set, NOT on the
 	// tracks' gains: a level change is applied live on the existing node by the rAF, so it must
@@ -406,7 +503,13 @@ export function VirtualPreview({
 				}
 				const gain = context.createGain();
 				gain.connect(context.destination);
-				return { context, gain };
+				const voice = context.createGain();
+				voice.connect(gain);
+				// 1024 samples: about 21 ms of voice per reading, one reading per frame.
+				const analyser = context.createAnalyser();
+				analyser.fftSize = 1024;
+				voice.connect(analyser);
+				return { context, gain, voice, analyser };
 			} catch {
 				return null;
 			}
@@ -414,7 +517,7 @@ export function VirtualPreview({
 		if (!graph) {
 			// WebAudio can be unavailable in unit tests or under a denied audio policy. No source
 			// node was created, so `volume` still reaches the output — capped at 0 dB.
-			applyPreviewAudioSettings(null, elements, audioGainDbRef.current);
+			applyPreviewAudioSettings(null, elements, audioGainDbRef.current, voiceGainDbRef.current);
 			return;
 		}
 
@@ -427,7 +530,7 @@ export function VirtualPreview({
 					audioSourceNodesRef.current.set(element, source);
 				}
 				source.disconnect();
-				source.connect(graph.gain);
+				source.connect(graph.voice);
 				connectedSources.push(source);
 			} catch {
 				// Routing THIS element failed; leave the others alone. Once
@@ -453,6 +556,10 @@ export function VirtualPreview({
 				const trackGain = graph.context.createGain();
 				source.connect(trackGain);
 				trackGain.connect(graph.gain);
+				// A voiceover is voice: the music ducks under it as under the recording.
+				if (audioTracksRef.current.find((track) => track.id === trackId)?.kind === "voiceover") {
+					trackGain.connect(graph.analyser);
+				}
 				audioTrackGainNodesRef.current.set(trackId, trackGain);
 				connectedSources.push(source);
 				trackGainNodes.push(trackGain);
@@ -463,12 +570,14 @@ export function VirtualPreview({
 			}
 		}
 		audioGraphRef.current = graph;
-		applyPreviewAudioSettings(graph, elements, audioGainDbRef.current);
+		applyPreviewAudioSettings(graph, elements, audioGainDbRef.current, voiceGainDbRef.current);
 		return () => {
 			audioGraphRef.current = null;
 			for (const source of connectedSources) source.disconnect();
 			for (const trackGain of trackGainNodes) trackGain.disconnect();
 			audioTrackGainNodesRef.current = new Map();
+			graph.voice.disconnect();
+			graph.analyser.disconnect();
 			graph.gain.disconnect();
 		};
 	}, [
@@ -511,8 +620,9 @@ export function VirtualPreview({
 			audioGraphRef.current,
 			[primaryAudioRef.current, supplementalAudioRef.current],
 			settings.audioGainDb,
+			voiceGainDb,
 		);
-	}, [settings.audioGainDb]);
+	}, [settings.audioGainDb, voiceGainDb]);
 
 	const setPrimaryAudioElement = useCallback((element: HTMLAudioElement | null) => {
 		primaryAudioRef.current = element;
@@ -610,6 +720,16 @@ export function VirtualPreview({
 	// <audio> element (registered by the ref callback on render).
 	const audioTracksRef = useRef(audioTracks);
 	audioTracksRef.current = audioTracks;
+	const audioSourcesRef = useRef(audioSources);
+	audioSourcesRef.current = audioSources;
+	// Live state of the music ducking (see MUSIC_DUCK): the gain, when the voice was last
+	// heard, and the analyser's reading buffer, reused every frame.
+	const musicDuckRef = useRef({
+		db: 0,
+		voiceAt: Number.NEGATIVE_INFINITY,
+		tickAt: 0,
+		reading: new Float32Array(1024),
+	});
 	const audioTrackElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 	const registerAudioTrackEl = useCallback((trackId: string, element: HTMLAudioElement | null) => {
 		if (element) audioTrackElsRef.current.set(trackId, element);
@@ -681,6 +801,21 @@ export function VirtualPreview({
 				virtualTimeSecRef.current,
 				speedRegionsRef.current,
 			);
+			// Music ducking, heard live: one reading of the voice per frame (see MUSIC_DUCK).
+			const duck = musicDuckRef.current;
+			const now = performance.now();
+			const frameSec = Math.min(0.1, Math.max(0, (now - duck.tickAt) / 1000));
+			duck.tickAt = now;
+			const analyser = audioGraphRef.current?.analyser;
+			if (analyser && !v.paused) {
+				analyser.getFloatTimeDomainData(duck.reading);
+				let energy = 0;
+				for (const sample of duck.reading) energy += sample * sample;
+				if (10 * Math.log10(energy / duck.reading.length) > MUSIC_DUCK.thresholdDbfs) {
+					duck.voiceAt = now;
+				}
+			}
+			duck.db = nextMusicDuckDb(duck.db, (now - duck.voiceAt) / 1000, frameSec);
 			for (const track of audioTracksRef.current) {
 				const el = audioTrackElsRef.current.get(track.id);
 				if (!el) continue;
@@ -745,12 +880,24 @@ export function VirtualPreview({
 				// never the imported track — so following `v.playbackRate` would pitch a
 				// voiceover up under a 2× region and finish it early, diverging from export.
 				if (el.playbackRate !== 1) el.playbackRate = 1;
+				// A voiceover is voice: levelled like the recording, its own gain trimming from
+				// there — the sum `mix_external_tracks` applies. A music bed is not levelled; it
+				// ducks under the voice instead.
+				let trackGainDb = track.gainDb;
+				if (track.kind === "voiceover") {
+					const path = audioSourcesRef.current.find(
+						(source) => source.id === track.assetId,
+					)?.filePath;
+					trackGainDb += path ? (loudnessGainDbByPathRef.current.get(path) ?? 0) : 0;
+				} else {
+					trackGainDb += duck.db;
+				}
 				const trackGainNode = audioTrackGainNodesRef.current.get(track.id);
 				if (trackGainNode) {
-					trackGainNode.gain.value = audioGainScalar(track.gainDb) * fade;
+					trackGainNode.gain.value = audioGainScalar(trackGainDb) * fade;
 					if (el.volume !== 1) el.volume = 1;
 				} else {
-					el.volume = Math.min(1, audioGainScalar(track.gainDb) * globalGain * fade);
+					el.volume = Math.min(1, audioGainScalar(trackGainDb) * globalGain * fade);
 				}
 				// Only re-seek on a real discontinuity (a scrub, a trim jump, a first
 				// play), NOT on the sub-frame drift of normal playback. The primary audio

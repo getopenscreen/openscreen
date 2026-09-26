@@ -54,6 +54,8 @@ interface ColorFieldProps {
 	label: string;
 	disabled?: boolean;
 	presets?: readonly string[];
+	/** What the closed swatch shows, when it is not the colour itself (a gradient made from it). */
+	swatch?: string;
 }
 
 export function ColorField({
@@ -63,6 +65,7 @@ export function ColorField({
 	label,
 	disabled,
 	presets = COLOR_PRESETS,
+	swatch = value,
 }: ColorFieldProps) {
 	const ts = useScopedT("settings");
 	const te = useScopedT("editor");
@@ -111,7 +114,7 @@ export function ColorField({
 							width: "100%",
 							height: "100%",
 							borderRadius: 7,
-							background: value,
+							background: swatch,
 							boxShadow: "inset 0 0 0 1px rgb(0 0 0 / 0.25)",
 						}}
 					/>

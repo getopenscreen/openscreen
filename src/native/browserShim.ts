@@ -408,6 +408,23 @@ function createShimBridgeClient() {
 			});
 		}
 	};
+	// The preset new projects start from; the shim creates no project, so it is only shown.
+	const presetMarkerKey = "browser-shim-style-preset-new-projects-v1";
+	const readPresetMarker = (): string | null => {
+		try {
+			return localStorage.getItem(presetMarkerKey);
+		} catch {
+			return null;
+		}
+	};
+	const writePresetMarker = (id: string | null) => {
+		try {
+			if (id === null) localStorage.removeItem(presetMarkerKey);
+			else localStorage.setItem(presetMarkerKey, id);
+		} catch {
+			// Only the mark is lost; the presets themselves are untouched.
+		}
+	};
 	const presetError = (code: "NAME_TAKEN" | "NOT_FOUND" | "INVALID_REQUEST", message: string) =>
 		new NativeBridgeRequestError({ code, message, retryable: false });
 	const toPreset = (id: string, record: ShimPresetRecord): StylePreset => ({ id, ...record });
@@ -744,7 +761,8 @@ function createShimBridgeClient() {
 						.flatMap(([id, record]) => {
 							try {
 								const appearance = parseStylePresetAppearance(record.appearance);
-								return [toPreset(id, { ...record, appearance })];
+								const preset = toPreset(id, { ...record, appearance });
+								return [id === readPresetMarker() ? { ...preset, forNewProjects: true } : preset];
 							} catch {
 								return [];
 							}
@@ -775,6 +793,7 @@ function createShimBridgeClient() {
 					const { [id]: _previous, ...rest } = records;
 					const record = { ...current, name: cleanName, updatedAt: new Date().toISOString() };
 					writePresets({ ...rest, [nextId]: record });
+					if (readPresetMarker() === id) writePresetMarker(nextId);
 					return toPreset(nextId, record);
 				}),
 			update: (id: string, appearance: StylePresetAppearance) =>
@@ -793,6 +812,13 @@ function createShimBridgeClient() {
 				presetCall(() => {
 					const { [id]: _removed, ...rest } = readPresets();
 					writePresets(rest);
+					if (readPresetMarker() === id) writePresetMarker(null);
+					return { success: true as const };
+				}),
+			setForNewProjects: (id: string | null) =>
+				presetCall(() => {
+					if (id !== null) requirePreset(readPresets(), id);
+					writePresetMarker(id);
 					return { success: true as const };
 				}),
 			// No folder to open in a browser tab.

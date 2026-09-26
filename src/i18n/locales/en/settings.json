@@ -11,6 +11,8 @@
 		"title": "Background",
 		"imageLabel": "Background {{index}}",
 		"custom": "Custom",
+		"customColor": "Custom color",
+		"customGradient": "Gradient from one color",
 		"help": "Choose what appears behind the recording: a bundled wallpaper image, a solid color, a gradient, or a custom image from disk.",
 		"gradient": "Gradient",
 		"colorLabel": "Color {{color}}",
@@ -107,6 +109,9 @@
 		"fitClipOne": "{{count}} clip",
 		"formatAuto": "Auto",
 		"formatAutoMixed": "Clips differ",
+		"formatFill": "Recording",
+		"formatFillFit": "Whole",
+		"formatFillFollow": "Follow cursor",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clips",
 		"frame": "Frame",
@@ -116,8 +121,6 @@
 		"fitClip": "Fit",
 		"motionBlur": "Motion blur",
 		"depthOfField": "Depth of field",
-		"depthOfFieldHint": "3D zooms",
-		"depthOfFieldNoTilt": "No 3D zoom in this project",
 		"roundness": "Roundness",
 		"frameStyle": "Style",
 		"windowNone": "None",
@@ -130,7 +133,11 @@
 		"frameThemeDark": "Dark",
 		"frameThemeHelp": "Silver body and light chrome, or graphite and dark. Applies to every frame.",
 		"windowHelp": "Draws a window, or a device modelled in 3D, around the recording.",
-		"roundnessFrameHelp": "The range adapts to the frame: 100% is its roundest good look."
+		"roundnessFrameHelp": "The range adapts to the frame: 100% is its roundest good look.",
+		"shadowNone": "None",
+		"shadowLight": "Light",
+		"shadowMedium": "Medium",
+		"shadowStrong": "Strong"
 	},
 	"stylePresets": {
 		"button": "Presets",
@@ -147,6 +154,9 @@
 		"revealLinux": "Show in folder",
 		"rename": "Rename",
 		"update": "Update from current project",
+		"useForNewProjects": "Use for new projects",
+		"stopForNewProjects": "Stop using for new projects",
+		"newProjectsBadge": "New projects",
 		"delete": "Delete",
 		"confirmDelete": "Delete “{{name}}”?",
 		"applied": "Applied “{{name}}”",
@@ -201,15 +211,12 @@
 		"legacyAnnotations": "This project still contains caption annotations from the old captions feature ({{count}}). They render on top of the caption layer.",
 		"backgroundOpacity": "Opacity",
 		"backgroundColor": "Background color",
-		"alignCenter": "Center",
 		"translationIsNonDestructive": "Translations are stored beside the transcript, never in it — the original text and its timings stay untouched.",
 		"distanceFromRight": "Distance from right",
 		"language": "Language",
 		"text": "Text",
-		"anchorHintBottom": "Long captions grow upward — the bottom edge stays put.",
 		"distanceFromTop": "Distance from top",
 		"translateFailed": "Translation failed.",
-		"alignLeft": "Left",
 		"distanceFromBottom": "Distance from bottom",
 		"derivedFromTranscript": "{{count}} caption lines, derived live from the transcript.",
 		"translate": "Translate",
@@ -218,14 +225,10 @@
 		"hiddenHint": "Captions come from this media's transcript. Turn them on to see them in the preview and in exports.",
 		"noTranscript": "Captions are read from the media transcript. Transcribe this video to turn them on.",
 		"distanceFromLeft": "Distance from left",
-		"anchorBottom": "Bottom",
 		"transcribe": "Transcribe video",
 		"bold": "Bold",
-		"alignRight": "Right",
-		"anchorTop": "Top",
 		"minWords": "Min words per line",
 		"translateHint": "Translate the transcript with the configured AI provider",
-		"anchorHintTop": "Long captions grow downward — the top edge stays put.",
 		"displayLanguage": "Display",
 		"removeLegacyAnnotations": "Remove old caption annotations",
 		"background": "Background",
@@ -235,7 +238,15 @@
 		"font": "Font",
 		"translating": "Translating…",
 		"show": "Show captions",
-		"textColor": "Text color"
+		"textColor": "Text color",
+		"style": "Style",
+		"styles": {
+			"classic": "Classic",
+			"bold": "Bold",
+			"minimal": "Minimal",
+			"light": "Light"
+		},
+		"customize": "Customize"
 	},
 	"panes": {
 		"help": "Help"
@@ -267,7 +278,7 @@
 		"remove": "Delete track",
 		"loop": "Loop",
 		"slipHint": "Alt-drag to slide the audio inside it",
-		"help": "Volume, fades and looping for this audio track. It mixes over the recording in the preview and the export. Drag the track on the timeline to move or resize it, or hold Alt and drag to slide the audio inside it.",
+		"help": "Volume, fades and looping for this audio track. It mixes over the recording in the preview and the export. A music track dips on its own while someone speaks. Drag the track on the timeline to move or resize it, or hold Alt and drag to slide the audio inside it.",
 		"add": "Add audio track",
 		"mute": "Mute"
 	},
@@ -350,35 +361,19 @@
 			"lockedDisclaimer": "Set by the Auto-Focus button in the timeline. Turn it off to choose the focus mode of each zoom.",
 			"auto": "Auto",
 			"manual": "Manual",
-			"autoDescription": "Camera follows the recorded cursor position",
 			"title": "Focus mode"
 		},
 		"camera": {
 			"title": "3D camera",
 			"off": "Off",
-			"fixed": "Fixed angle",
-			"moving": "Moving camera",
 			"preset": {
-				"iso": "Angled from above",
 				"left": "Screen turned left",
 				"right": "Screen turned right",
 				"followCursor": "Orbits with the cursor"
-			},
-			"description": {
-				"off": "The screen stays flat.",
-				"iso": "Holds one pose: turned left and seen from above.",
-				"left": "Holds one pose: the screen faces left, its right edge comes forward.",
-				"right": "Holds one pose: the screen faces right, its left edge comes forward.",
-				"followCursor": "The screen stays still; the camera circles it, swinging to the cursor's side and rising or dipping with it."
-			},
-			"needsCursor": "The cursor is hidden: this camera has nothing to follow and holds its starting angle."
+			}
 		},
 		"clickImpact": {
-			"title": "Click impact",
-			"description": "Each click presses the tilted screen: the clicked side dips, then springs back.",
-			"needsRotation": "Pick a 3D camera first: only a tilted screen can be pressed.",
-			"needsCursor": "The cursor is hidden: the screen only reacts to clicks you can see.",
-			"descriptionCamera": "Each click pushes the camera back a little, then it springs forward."
+			"title": "Click impact"
 		},
 		"level": "Zoom level",
 		"previewHold": "Hold to preview zoom effect",
@@ -393,7 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Output level",
-		"help": "Adjust the audio output level. It applies identically in the preview and the export.",
+		"help": "Voices are levelled to a standard loudness automatically. Adjust the output level from there; it applies identically in the preview and the export.",
 		"reset": "Reset audio",
 		"title": "Audio"
 	},
@@ -414,18 +409,18 @@
 		"smoothing": "Smoothing",
 		"clickBounce": "Click bounce",
 		"model3d": "3D cursor",
-		"model3dHint": "Default style: every cursor shape turns 3D. Other styles stay flat.",
-		"model3dNeedsCursor": "Turn on “Show cursor” to use the 3D cursor.",
 		"help": "How the recorded cursor is drawn: style, size, smoothing, motion blur and click bounce.",
 		"size": "Size",
 		"title": "Cursor",
 		"show": "Show cursor",
 		"themeDefault": "Default",
 		"alwaysArrow": "Always use arrow cursor",
-		"alwaysArrowHint": "Shows the arrow for every cursor state, even over text or links.",
 		"motionBlur": "Motion blur",
 		"theme": "Cursor style",
-		"autoHide": "Auto-hide when inactive"
+		"autoHide": "Auto-hide when inactive",
+		"bounceNone": "None",
+		"bounceLight": "Light",
+		"bounceStrong": "Strong"
 	},
 	"export": {
 		"gifButton": "Export GIF",
@@ -434,5 +429,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Delete Trim Region"
+	},
+	"textPlate": {
+		"none": "None",
+		"dark": "Dark",
+		"light": "Light",
+		"custom": "Custom"
 	}
 }

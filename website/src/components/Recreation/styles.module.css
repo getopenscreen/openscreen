@@ -200,13 +200,15 @@
 	   index.tsx, not here. Webpack inlines a small url() referenced from a
 	   stylesheet as a data URI, and these two sprites came to 9,139 gzipped
 	   bytes — a quarter of the site's only render-blocking resource, carried
-	   by every docs page, none of which has a .stage on it. The driver writes
-	   both properties to this same element's inline style anyway. */
+	   by every docs page, none of which has a .stage on it. The driver rewrites
+	   --ui-cursor there per frame; --shot-cursor keeps the default arrow. */
 	--shot-x: 48;
 	--shot-y: 56;
 	--shot-bounce: 1;
-	--shot-hx: 4.69;
-	--shot-hy: 4.69;
+	/* The default arrow's hotspot, CURSORS.themes[0] as a percentage: the
+	   recorded pointer wears no other pack. */
+	--shot-hx: 11.9;
+	--shot-hy: 8.74;
 	--page-y: -8;
 	--ui-x: 20;
 	--ui-y: 45;
@@ -667,43 +669,6 @@
 	left: auto;
 	right: 2px;
 	background: var(--ost-thumb-on);
-}
-
-/* ── cursor pane ── */
-
-.cursorStyles {
-	display: grid;
-	grid-template-columns: repeat(5, 1fr);
-	gap: 7px;
-	margin: 8px 0 11px;
-}
-
-/* The real packs, drawn from their own sprites. */
-.cursorStyle {
-	position: relative;
-	aspect-ratio: 1;
-	border-radius: 9px;
-	background-color: color-mix(in srgb, var(--ost-surface-2) 55%, transparent);
-	background-repeat: no-repeat;
-	background-position: center;
-	background-size: auto 56%;
-	box-shadow: inset 0 0 0 1px var(--ost-border-soft);
-}
-
-.cursorStyle::after {
-	content: "";
-	position: absolute;
-	inset: -2.5px;
-	border-radius: 11px;
-	border: 2px solid var(--ost-accent);
-	opacity: 0;
-	transition: opacity 0.25s var(--ease);
-}
-
-.stage[data-cur-sel="0"] .cursorStyle[data-i="0"]::after,
-.stage[data-cur-sel="1"] .cursorStyle[data-i="1"]::after,
-.stage[data-cur-sel="2"] .cursorStyle[data-i="2"]::after {
-	opacity: 1;
 }
 
 /* ── transcript pane ── */

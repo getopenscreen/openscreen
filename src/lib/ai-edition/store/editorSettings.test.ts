@@ -5,6 +5,9 @@ import {
 	DEFAULT_WEBCAM_LAYOUT_PRESET,
 	DEFAULT_WEBCAM_MASK_SHAPE,
 } from "@/components/video-editor/types";
+import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
+import { SETTING_BOUNDS } from "@/lib/projectDefaults";
+import { ROUNDNESS_SLIDER_MAX_PX } from "@/native/paramUnits";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
 import { DEFAULT_EDITOR_SETTINGS, getEditorSettings, patchEditorSettings } from "./editorSettings";
@@ -48,6 +51,28 @@ describe("getEditorSettings", () => {
 		expect(snap.cursor.size).toBe(DEFAULT_CURSOR_SIZE);
 	});
 
+	it("reads every appearance number into its bound, whatever wrote it", () => {
+		const snap = getEditorSettings({
+			...baseDoc,
+			legacyEditor: {
+				cursorSize: 10,
+				cursorClickBounce: 5,
+				cursorSmoothing: -1,
+				shadowIntensity: 5,
+				padding: -3,
+				borderRadius: 999,
+				motionBlurAmount: "a lot",
+			},
+		});
+		expect([snap.cursor.size, snap.cursor.clickBounce, snap.cursor.smoothing]).toEqual([6, 2, 0]);
+		expect([snap.shadowIntensity, snap.padding, snap.borderRadius]).toEqual([1, 0, 64]);
+		expect(snap.motionBlurAmount).toBe(DEFAULT_EDITOR_SETTINGS.motionBlurAmount);
+	});
+
+	it("keeps the roundness bound on the slider's own maximum", () => {
+		expect(SETTING_BOUNDS.borderRadius[1]).toBe(ROUNDNESS_SLIDER_MAX_PX);
+	});
+
 	it("returns the defaults when the document is null", () => {
 		const snap = getEditorSettings(null);
 		expect(snap).toEqual(DEFAULT_EDITOR_SETTINGS);
@@ -63,7 +88,7 @@ describe("getEditorSettings", () => {
 				showBlur: true,
 				webcamLayoutPreset: "side-by-side",
 				webcamMaskShape: "circle",
-				cursorSize: 5,
+				cursorSize: 2.5,
 				cursorSmoothing: 0.8,
 			},
 		};
@@ -76,7 +101,7 @@ describe("getEditorSettings", () => {
 		// An old circle: a square camera, fully round.
 		expect(snap.webcamMaskShape).toBe("square");
 		expect(snap.webcamRoundness).toBe(1);
-		expect(snap.cursor.size).toBe(5);
+		expect(snap.cursor.size).toBe(2.5);
 		expect(snap.cursor.smoothing).toBe(0.8);
 	});
 
@@ -98,6 +123,14 @@ describe("getEditorSettings", () => {
 		expect(getEditorSettings(junk).depthOfField).toBe(true);
 		const off = patchEditorSettings(baseDoc, { depthOfField: false });
 		expect(getEditorSettings(off).depthOfField).toBe(false);
+	});
+
+	it("reads a cursor pack the app no longer ships as the default art", () => {
+		const doc: AxcutDocument = {
+			...baseDoc,
+			legacyEditor: { cursorTheme: "hello-kitty-watermelon" },
+		};
+		expect(getEditorSettings(doc).cursorTheme).toBe(DEFAULT_CURSOR_THEME_ID);
 	});
 });
 
@@ -128,19 +161,19 @@ describe("patchEditorSettings", () => {
 	});
 
 	it("patches nested cursor settings without clobbering siblings", () => {
-		const seed = patchEditorSettings(baseDoc, { cursor: { size: 4 } });
+		const seed = patchEditorSettings(baseDoc, { cursor: { size: 2 } });
 		const next = patchEditorSettings(seed, { cursor: { smoothing: 0.9 } });
 		const snap = getEditorSettings(next);
-		expect(snap.cursor.size).toBe(4);
+		expect(snap.cursor.size).toBe(2);
 		expect(snap.cursor.smoothing).toBe(0.9);
 	});
 
 	it("switches the 3D cursor without clobbering its siblings, off by default", () => {
 		expect(getEditorSettings(baseDoc).cursor.model3d).toBe(false);
-		const seed = patchEditorSettings(baseDoc, { cursor: { size: 4 } });
+		const seed = patchEditorSettings(baseDoc, { cursor: { size: 2 } });
 		const on = getEditorSettings(patchEditorSettings(seed, { cursor: { model3d: true } }));
 		expect(on.cursor.model3d).toBe(true);
-		expect(on.cursor.size).toBe(4);
+		expect(on.cursor.size).toBe(2);
 	});
 
 	it("toggles cursorAutoHide on and off via patch", () => {

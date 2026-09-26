@@ -64,6 +64,9 @@ describe("app settings store", () => {
 		const store = new AppSettingsStore(dir);
 		store.setRecordingPreferences({ micEnabled: true });
 		expect(() => store.setRecordingPreferences({ micEnabled: "yes" as never })).toThrow(TypeError);
+		expect(() => store.setRecordingPreferences({ hideDesktopIcons: 1 as never })).toThrow(
+			TypeError,
+		);
 		expect(store.getSnapshot().recording.micEnabled).toBe(true);
 		const missing = new AppSettingsStore(path.join(dir, "missing"));
 		expect(() => missing.setRecordingPreferences({ micEnabled: true })).toThrow();

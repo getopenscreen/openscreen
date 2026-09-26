@@ -11,6 +11,8 @@
 		"title": "Arka Plan",
 		"imageLabel": "Arka plan {{index}}",
 		"custom": "Özel",
+		"customColor": "Özel renk",
+		"customGradient": "Tek renkten gradyan",
 		"help": "Kaydın arkasında ne görüneceğini seçin: yerleşik bir duvar kâğıdı, düz renk, gradyan veya diskinizdeki özel bir görsel.",
 		"gradient": "Gradyan",
 		"colorLabel": "Renk {{color}}",

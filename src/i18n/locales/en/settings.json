@@ -11,6 +11,8 @@
 		"title": "Background",
 		"imageLabel": "Background {{index}}",
 		"custom": "Custom",
+		"customColor": "Custom color",
+		"customGradient": "Gradient from one color",
 		"help": "Choose what appears behind the recording: a bundled wallpaper image, a solid color, a gradient, or a custom image from disk.",
 		"gradient": "Gradient",
 		"colorLabel": "Color {{color}}",

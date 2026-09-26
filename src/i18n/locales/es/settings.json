@@ -11,6 +11,8 @@
 		"title": "Fondo",
 		"imageLabel": "Fondo {{index}}",
 		"custom": "Personalizado",
+		"customColor": "Color personalizado",
+		"customGradient": "Degradado a partir de un color",
 		"help": "Elige qué aparece detrás de la grabación: un fondo incluido, un color sólido, un degradado o una imagen propia del disco.",
 		"gradient": "Degradado",
 		"colorLabel": "Color {{color}}",

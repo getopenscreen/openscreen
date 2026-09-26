@@ -1313,21 +1313,6 @@ textarea.control {
 	border-color: var(--accent);
 	color: var(--accent);
 }
-.bgDisclosure {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	margin: 0 var(--sp-4) 12px;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: var(--fg-2);
-	font: 500 13px/1.2 var(--font-body);
-	cursor: pointer;
-}
-.bgDisclosure:hover { color: var(--fg); }
-.bgDisclosure svg { transition: transform var(--motion-fast) var(--ease); }
-.bgDisclosure[aria-expanded="true"] svg { transform: rotate(180deg); }
 /* The export dialog's "Advanced" disclosure. Its own class: it must not ride on a pane's. */
 .exportAdvanced {
 	display: inline-flex;
@@ -1348,27 +1333,6 @@ textarea.control {
 .bgThumb.isActive {
 	border-color: var(--brand);
 	box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand), transparent 70%);
-}
-
-/* Remove Chromium's built-in inset so the selected colour fills the rounded control. */
-.bgColorInput {
-	box-sizing: border-box;
-	width: 48px;
-	height: 34px;
-	padding: 0;
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	background: var(--surface);
-	cursor: pointer;
-}
-.bgColorInput::-webkit-color-swatch-wrapper { padding: 0; }
-.bgColorInput::-webkit-color-swatch {
-	border: 0;
-	border-radius: 9px;
-}
-.bgColorInput::-moz-color-swatch {
-	border: 0;
-	border-radius: 9px;
 }
 
 .captionsPopover {

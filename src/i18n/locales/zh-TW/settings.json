@@ -11,6 +11,8 @@
 		"title": "背景",
 		"imageLabel": "背景 {{index}}",
 		"custom": "自訂",
+		"customColor": "自訂顏色",
+		"customGradient": "單色漸層",
 		"help": "選擇錄製內容背後顯示的元素：內建桌布圖片、純色、漸層，或來自磁碟的自訂圖片。",
 		"gradient": "漸層",
 		"colorLabel": "顏色 {{color}}",

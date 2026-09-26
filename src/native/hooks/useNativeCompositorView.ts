@@ -6,7 +6,7 @@
  *      — the exact same sync machinery as before, repurposed: it now drives
  *      the offscreen render-target resolution instead of a window position).
  *   2. Polls `readCompositorFrame` on every other rAF tick (~30fps), passing the
- *      generation it last painted. Native returns a self-describing packet
+ *      generation it last received. Native returns a self-describing packet
  *      (`{ gen, width, height, data }`) ONLY when a newer frame exists — otherwise
  *      `null`, and the canvas is left untouched. So while the preview sits still
  *      (paused editing) nothing is cloned, sent over IPC, or repainted. The canvas
@@ -174,16 +174,19 @@ export function useNativeCompositorView(
 			rectRafHandle = requestAnimationFrame(applyRectNow);
 		};
 
-		// Generation of the last frame we painted. The native side only publishes a
+		// Generation of the last frame we received. The native side only publishes a
 		// NEW generation when it actually composed a new frame (it never republishes
 		// an identical one), so passing this back as `sinceGen` means an unchanged
 		// frame is never re-delivered: no clone, no IPC, no canvas copy while the
-		// preview sits still (paused editing — the dominant case). `0` = "painted
+		// preview sits still (paused editing — the dominant case). `0` = "received
 		// nothing yet", which forces delivery of the first frame.
 		let lastGen = 0;
+		// Bitmap creation finishes independently of frame delivery. An older frame may
+		// finish after a newer one, but it must never rewind the visible canvas.
+		let lastPaintedGen = 0;
 		// Only one readFrame in flight at a time. Skipping while pending both avoids
 		// redundant IPC and removes any chance of two responses landing out of order
-		// and rewinding `lastGen` (which would re-deliver an already-painted frame).
+		// and rewinding `lastGen` (which would re-deliver an already-received frame).
 		let inFlight = false;
 
 		/** rAF pull loop: throttle to ~30fps and repaint ONLY when native reports a
@@ -248,15 +251,17 @@ export function useNativeCompositorView(
 					// is the synchronous fallback if bitmap creation is unavailable.
 					createImageBitmap(image)
 						.then((bitmap) => {
-							if (!disposed && ctx) {
+							if (!disposed && gen > lastPaintedGen) {
 								ctx.drawImage(bitmap, 0, 0);
+								lastPaintedGen = gen;
 								markPainted();
 							}
 							bitmap.close();
 						})
 						.catch(() => {
-							if (!disposed && ctx) {
+							if (!disposed && gen > lastPaintedGen) {
 								ctx.putImageData(image, 0, 0);
+								lastPaintedGen = gen;
 								markPainted();
 							}
 						});

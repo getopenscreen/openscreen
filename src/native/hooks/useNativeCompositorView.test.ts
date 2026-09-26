@@ -12,7 +12,7 @@
  * normal no-op, not a failure. Neither may raise the banner.
  */
 
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { RefObject } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,10 +50,11 @@ globalThis.ResizeObserver = class {
 /** A canvas with a stubbed 2D context — jsdom has none, and the pull loop bails without it. */
 function stubCanvasRef(): RefObject<HTMLCanvasElement> {
 	const canvas = document.createElement("canvas");
-	canvas.getContext = vi.fn(() => ({
+	const context = {
 		drawImage: vi.fn(),
 		putImageData: vi.fn(),
-	})) as unknown as HTMLCanvasElement["getContext"];
+	};
+	canvas.getContext = vi.fn(() => context) as unknown as HTMLCanvasElement["getContext"];
 	return { current: canvas };
 }
 
@@ -136,6 +137,61 @@ describe("useNativeCompositorView", () => {
 			const ref = stubCanvasRef();
 			renderHook(() => useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }));
 			await waitFor(() => expect(ref.current?.dataset.painted).toBe("true"));
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("does not paint an older bitmap after a newer frame", async () => {
+		vi.stubGlobal(
+			"ImageData",
+			class {
+				constructor(
+					public data: Uint8ClampedArray,
+					public width: number,
+					public height: number,
+				) {}
+			},
+		);
+		const pending = new Map<number, (bitmap: { marker: number; close: () => void }) => void>();
+		vi.stubGlobal(
+			"createImageBitmap",
+			vi.fn(
+				(image: ImageData) =>
+					new Promise<{ marker: number; close: () => void }>((resolve) => {
+						pending.set(image.data[0], resolve);
+					}),
+			),
+		);
+		try {
+			mocks.createCompositorView.mockResolvedValue({ id: 1 });
+			mocks.readCompositorFrame
+				.mockResolvedValueOnce({
+					gen: 1,
+					width: 2,
+					height: 1,
+					data: new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0]),
+				})
+				.mockResolvedValueOnce({
+					gen: 2,
+					width: 2,
+					height: 1,
+					data: new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0]),
+				})
+				.mockResolvedValue(null);
+			const ref = stubCanvasRef();
+			renderHook(() => useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }));
+			await waitFor(() => expect(pending.size).toBe(2));
+			const drawImage = ref.current?.getContext("2d")?.drawImage;
+
+			await act(async () => {
+				pending.get(2)?.({ marker: 2, close: vi.fn() });
+			});
+			expect(drawImage).toHaveBeenCalledWith(expect.objectContaining({ marker: 2 }), 0, 0);
+			await act(async () => {
+				pending.get(1)?.({ marker: 1, close: vi.fn() });
+			});
+			expect(drawImage).toHaveBeenCalledTimes(1);
 		} finally {
 			vi.unstubAllGlobals();
 		}

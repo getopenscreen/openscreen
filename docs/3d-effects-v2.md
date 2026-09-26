@@ -201,24 +201,25 @@ inconnues sont ignorées).
 
 ### B.2 Le réglage
 
-**Un seul interrupteur**, `cursor.model3d` (« 3D cursor », **éteint par défaut**) : il remplace
-**chaque état** du thème par défaut (les seize de `DEFAULT_CURSOR_SPRITES` : flèche, I, main,
-croix, mains ouverte et fermée, redimensionnements, déplacement, interdit, attente…) par son
-sprite extrudé. Les autres thèmes gardent leur sprite plat ; l'indice du panneau le dit
-(« Default style: every cursor shape turns 3D »). Curseur masqué, l'interrupteur est grisé et
+**Un seul interrupteur**, `cursor.model3d` (« 3D cursor », **éteint par défaut**) : il passe
+**chaque état** du curseur en 3D. La flèche et la main des cinq thèmes d'origine deviennent leur
+modèle sculpté (B.3 bis) ; les autres états, et tous ceux du thème par défaut (les seize de
+`DEFAULT_CURSOR_SPRITES` : flèche, I, main, croix, mains ouverte et fermée, redimensionnements,
+déplacement, interdit, attente…), leur sprite extrudé. Curseur masqué, l'interrupteur est grisé et
 son info-bulle dit pourquoi. Éteint, la frame est celle d'avant **à l'octet** (vérifié à plat et
 incliné contre le commit de base).
 
 Tuyauterie : `CursorVisualSettings.model3d`, clé legacy `cursorModel3d`, préréglages (absent →
 éteint), `SceneCursor.model3d` (`serde(default)`), `LiveParams.cursor_model3d`, paramètre live
-`cursorModel3d`. Le contrat de scène ne gagne que ce champ optionnel, sans donnée de sprite
-neuve : le modèle se tire du sprite que la scène transporte déjà.
+`cursorModel3d`. Le contrat de scène gagne ce champ optionnel et, par sprite, le nom de son
+modèle sculpté (`SceneCursorSprite::sculpt`, `"<thème>/<état>"`, posé par `resolveCursorSprites`) ;
+un sprite sans ce nom est extrudé.
 
 ### B.3 Le modèle (mode 15)
 
 Un seul mode de shader, identique en HLSL, MSL et WGSL (`cursor_model`), lancé de rayons par
-pixel dans la boîte de dessin. **Aucune forme n'est modélisée à la main** : le modèle est la
-silhouette du sprite de l'état courant.
+pixel dans la boîte de dessin. Deux sortes de modèles : le curseur sculpté d'un thème d'origine
+(B.3 bis), sinon la silhouette du sprite de l'état courant, extrudée comme suit.
 
 - **Forme** : un champ de distance signé tiré de l'alpha du PNG, une fois au chargement
   (`cursor_sdf.rs`) : alpha suréchantillonné ×4 (bilinéaire), seuil 0,5, transformée de
@@ -237,8 +238,8 @@ silhouette du sprite de l'état courant.
 - **Matières** : celles du sprite. Le dessus porte son art (alpha droit, comme aux modes 7 et 13) ;
   le chanfrein, les flancs et le dessous lisent l'art à 1,5 texel à l'intérieur de la silhouette,
   le long du gradient du champ : la couleur du bord de CE sprite (filet blanc de la flèche, trait
-  noir des mains), jamais la frange mêlée au transparent. Lumière fixée à la **caméra**
-  (haut-gauche, devant), ambiante 0,36, diffuse 0,75, reflet sur les arrondis seulement.
+  noir des mains), jamais la frange mêlée au transparent. Éclairage : celui des curseurs sculptés
+  (B.3 bis), le reflet restant sur les arrondis.
 - **Ombre** : un rayon qui rate le modèle tombe sur le plan de l'écran. De là, marche vers la
   lumière (pénombre `k·d/t`, k = 6, bornée à 0,45 unité) et ombre de contact (0,12 unité autour
   du modèle). Opacité 0,5 chacune, et seulement à l'intérieur de l'écran.
@@ -252,6 +253,27 @@ polygone à 10 sommets était trop courte et trop droite). Sur les seize sprites
 coïncide avec l'alpha seuillé (IoU ≥ 0,9997 hors frange) ; sur un disque et un rectangle
 synthétiques, l'écart au champ exact reste sous 0,5 texel source dans la bande de 3 texels autour
 du bord (0,48 au pire), sous 1 texel au-delà (le flou arrondit les crêtes).
+
+### B.3 bis Les curseurs sculptés
+
+La flèche et la main des cinq thèmes d'origine sont **modélisées à la main**, en fonctions de
+distance signée écrites dans les trois shaders (`sculpt_proto`, `sculpt_material`) : capsules et
+unions lissées pour les gants, extrusion arrondie et bombée pour les flèches, voxels biseautés
+pour Pixel Candy, polyèdres taillés pour le cristal de Prism Glow. Le PNG du thème reste l'art en
+2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient la boîte, qui pose le hotspot (pointe
+de la flèche, bout de l'index), règle la garde au sol et borne la boîte de dessin. Emplacement du
+cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur au-dessus, 0] (`cursor_model_cb`).
+
+- **Éclairage**, sprites extrudés compris : une lampe proche en haut à gauche, qui met un dégradé
+  et un reflet même sur une face plane ; une lumière d'appoint faible ; le côté ombré teinté par
+  la matière ; occlusion ambiante, ombre propre douce vers la lampe, studio dans les reflets,
+  liseré de Fresnel ; tone map Khronos PBR Neutral.
+- **Ombre sur l'écran** : celle de B.3. Le cristal et les voxels donnent de mauvaises distances
+  loin de leur surface (bornes de plans, champ de grille) : l'ombre prend la forme lisse de Pop
+  Coral pour le cristal et le contour extrudé pour les voxels.
+- **Coût de compilation** : FXC recopie chaque appel. La marche, les normales, l'occlusion et les
+  ombres forment donc une seule boucle à étapes avec un seul appel au modèle, et l'étoile de Star
+  Sprout un seul appel pour les deux formes.
 
 ### B.4 La caméra et l'ancrage
 

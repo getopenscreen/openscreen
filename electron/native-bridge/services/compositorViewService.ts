@@ -103,22 +103,21 @@ function resolveCursorSpritePaths(
 	themeId: string,
 	alwaysArrow: boolean,
 	model3d = false,
-): Record<string, { path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }> {
+): Record<string, { path: string; hotspotX: number; hotspotY: number; sculpt?: string }> {
 	const resolved: Record<
 		string,
-		{ path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }
+		{ path: string; hotspotX: number; hotspotY: number; sculpt?: string }
 	> = {};
 	for (const [type, sprite] of Object.entries(
 		resolveCursorSprites(themeId, alwaysArrow, model3d),
 	)) {
 		const absolute = resolveSceneAssetPath(sprite.assetPath);
 		if (absolute) {
-			const depthPath = sprite.modelDepthPath ? resolveSceneAssetPath(sprite.modelDepthPath) : null;
 			resolved[type] = {
 				path: absolute,
 				hotspotX: sprite.hotspotX,
 				hotspotY: sprite.hotspotY,
-				...(depthPath ? { modelDepthPath: depthPath } : {}),
+				...(sprite.sculpt ? { sculpt: sprite.sculpt } : {}),
 			};
 		}
 	}
@@ -140,7 +139,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 				model3d?: boolean;
 				cursorSprites?: Record<
 					string,
-					{ path: string; hotspotX: number; hotspotY: number; modelDepthPath?: string }
+					{ path: string; hotspotX: number; hotspotY: number; sculpt?: string }
 				>;
 			};
 			webcamEffect?: {

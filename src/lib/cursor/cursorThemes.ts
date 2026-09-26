@@ -15,14 +15,9 @@ export interface CursorThemeAsset {
 	height: number;
 	hotspotX: number;
 	hotspotY: number;
-	/** Face and grayscale relief map for the optional modelled cursor. Hotspots use the same
-	 *  32-logical-pixel reference as the flat asset above. */
-	model3d?: {
-		assetPath: string;
-		depthPath: string;
-		hotspotX: number;
-		hotspotY: number;
-	};
+	/** The compositor models this state in 3D (`crates/compositor/src/sculpt.rs`) instead of
+	 *  extruding the flat asset, which stays the 2D art. */
+	sculpted?: boolean;
 }
 
 export interface CursorTheme {
@@ -56,8 +51,9 @@ export interface CursorSprite {
 	/** Hotspot as a fraction of the image width / height. */
 	hotspotX: number;
 	hotspotY: number;
-	/** Optional per-pixel top-surface height map used by the 3D cursor model. */
-	modelDepthPath?: string;
+	/** The compositor's sculpted model for this state in 3D, `"<theme>/<state>"`
+	 *  (`crates/compositor/src/sculpt.rs`). Without it, 3D extrudes the sprite. */
+	sculpt?: string;
 }
 
 /**
@@ -103,7 +99,8 @@ export const DEFAULT_CURSOR_SPRITES: Record<NativeCursorType, CursorSprite> = {
  *
  * To add one: drop arrow.png/pointer.png into public/cursors/<id>/ and add an entry here
  * with hotspots normalized to the 32-logical reference (divide a 128px-pack hotspot by 4).
- * Add a model3d face and depth map when the theme has its own 3D treatment. An id that leaves this list reads back as the default art
+ * Mark an asset `sculpted` when the compositor has a 3D model for it (`sculpt.rs`); other states
+ * are extruded from their sprite in 3D. An id that leaves this list reads back as the default art
  * through `normalizeCursorThemeId`, so a project saved with it still opens.
  */
 export const CURSOR_THEMES: readonly CursorTheme[] = [
@@ -117,12 +114,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 6.2304,
 				hotspotY: 2.0992,
-				model3d: {
-					assetPath: "cursors/studio-ink/model-arrow.png",
-					depthPath: "cursors/studio-ink/model-arrow-depth.png",
-					hotspotX: 6.3264,
-					hotspotY: 2.032,
-				},
+				sculpted: true,
 			},
 			pointer: {
 				assetPath: "cursors/studio-ink/pointer.png",
@@ -130,12 +122,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 12.848,
 				hotspotY: 2.0704,
-				model3d: {
-					assetPath: "cursors/studio-ink/model-pointer.png",
-					depthPath: "cursors/studio-ink/model-pointer-depth.png",
-					hotspotX: 12.2304,
-					hotspotY: 1.9232,
-				},
+				sculpted: true,
 			},
 		},
 	},
@@ -149,12 +136,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 6.3456,
 				hotspotY: 2.0672,
-				model3d: {
-					assetPath: "cursors/prism-glow/model-arrow.png",
-					depthPath: "cursors/prism-glow/model-arrow-depth.png",
-					hotspotX: 6.5728,
-					hotspotY: 1.9296,
-				},
+				sculpted: true,
 			},
 			pointer: {
 				assetPath: "cursors/prism-glow/pointer.png",
@@ -162,12 +144,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 11.968,
 				hotspotY: 2.0352,
-				model3d: {
-					assetPath: "cursors/prism-glow/model-pointer.png",
-					depthPath: "cursors/prism-glow/model-pointer-depth.png",
-					hotspotX: 11.4816,
-					hotspotY: 2.0,
-				},
+				sculpted: true,
 			},
 		},
 	},
@@ -181,12 +158,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 10.4768,
 				hotspotY: 2.1792,
-				model3d: {
-					assetPath: "cursors/pop-coral/model-arrow.png",
-					depthPath: "cursors/pop-coral/model-arrow-depth.png",
-					hotspotX: 7.2224,
-					hotspotY: 1.9648,
-				},
+				sculpted: true,
 			},
 			pointer: {
 				assetPath: "cursors/pop-coral/pointer.png",
@@ -194,12 +166,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 12.3456,
 				hotspotY: 2,
-				model3d: {
-					assetPath: "cursors/pop-coral/model-pointer.png",
-					depthPath: "cursors/pop-coral/model-pointer-depth.png",
-					hotspotX: 12.1152,
-					hotspotY: 1.9616,
-				},
+				sculpted: true,
 			},
 		},
 	},
@@ -213,12 +180,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 7.3664,
 				hotspotY: 2,
-				model3d: {
-					assetPath: "cursors/pixel-candy/model-arrow.png",
-					depthPath: "cursors/pixel-candy/model-arrow-depth.png",
-					hotspotX: 7.8176,
-					hotspotY: 1.9616,
-				},
+				sculpted: true,
 			},
 			pointer: {
 				assetPath: "cursors/pixel-candy/pointer.png",
@@ -226,12 +188,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 13.376,
 				hotspotY: 1.9264,
-				model3d: {
-					assetPath: "cursors/pixel-candy/model-pointer.png",
-					depthPath: "cursors/pixel-candy/model-pointer-depth.png",
-					hotspotX: 13.6256,
-					hotspotY: 1.92,
-				},
+				sculpted: true,
 			},
 		},
 	},
@@ -245,12 +202,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 4.7232,
 				hotspotY: 2.1152,
-				model3d: {
-					assetPath: "cursors/star-sprout/model-arrow.png",
-					depthPath: "cursors/star-sprout/model-arrow-depth.png",
-					hotspotX: 3.7824,
-					hotspotY: 1.9136,
-				},
+				sculpted: true,
 			},
 			pointer: {
 				assetPath: "cursors/star-sprout/pointer.png",
@@ -258,12 +210,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 13.1712,
 				hotspotY: 2.0384,
-				model3d: {
-					assetPath: "cursors/star-sprout/model-pointer.png",
-					depthPath: "cursors/star-sprout/model-pointer-depth.png",
-					hotspotX: 12.8352,
-					hotspotY: 2.0,
-				},
+				sculpted: true,
 			},
 		},
 	},
@@ -330,12 +277,12 @@ export function resolveCursorSprites(
 			continue;
 		}
 		sprites[type as NativeCursorType] = {
-			assetPath: model3d && asset.model3d ? asset.model3d.assetPath : asset.assetPath,
+			assetPath: asset.assetPath,
 			// Theme hotspots are authored against the asset's own 32-logical reference;
 			// the contract is a fraction of the image. See CursorSprite.
-			hotspotX: (model3d && asset.model3d ? asset.model3d.hotspotX : asset.hotspotX) / asset.width,
-			hotspotY: (model3d && asset.model3d ? asset.model3d.hotspotY : asset.hotspotY) / asset.height,
-			...(model3d && asset.model3d ? { modelDepthPath: asset.model3d.depthPath } : {}),
+			hotspotX: asset.hotspotX / asset.width,
+			hotspotY: asset.hotspotY / asset.height,
+			...(model3d && asset.sculpted ? { sculpt: `${themeId}/${type}` } : {}),
 		};
 	}
 	// "Always use arrow": one consistent pointer for the whole recording, the I-beam and the

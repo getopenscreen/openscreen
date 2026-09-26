@@ -21,13 +21,14 @@ their 3D models.
 
 - Every replacement theme and supported cursor state must work with the
   existing 3D cursor option.
-- Every replacement arrow and hand has its own PNG face and aligned grayscale
-  relief map. The compositor ray-marches the varying top surface so lighting,
-  normals and contact shadows respond to cursor tilt and rotation.
+- Every replacement arrow and hand is a real volume, sculpted in the
+  compositor's shaders (`crates/compositor/src/sculpt.rs`): lighting, normals,
+  self shadows and contact shadows respond to cursor tilt and rotation. A PNG
+  face or a height map is not a model.
 - A rounded extrusion of the PNG silhouette remains the fallback for cursor
   states that do not have a dedicated theme model. The five replacement packs
-  add style-specific volume: a convex palm and separate finger ridges, faceted
-  crystal faces, puffy rubber, stepped voxel heights, and ceramic accents.
+  add style-specific volume: a glove with separate fingers, cut crystal facets,
+  puffy rubber, beveled voxels, and ceramic accents.
 - Model the arrow and hand separately for every theme. Do not apply one
   contour, material, or roundness rule to all designs.
 - Preserve the cursor hotspot through hover, tilt, yaw, click, and size changes.
@@ -39,7 +40,7 @@ their 3D models.
 
 | Theme | Arrow | Hand |
 | --- | --- | --- |
-| Studio Ink | Matte black sculpted body; ivory mark becomes an inset groove. | Ivory glove with a convex palm and separate fingers; remove the dark outline. |
+| Studio Ink | Matte black sculpted body; ivory mark becomes a piping set in from the edge. | Ivory glove with a convex palm and separate fingers; remove the dark outline. |
 | Prism Glow | Translucent faceted crystal; no navy ink contour. | Crystal palm and distinct faceted fingers; no navy ink contour. |
 | Pop Coral | Rounded coral rubber; omit the yellow offset and navy rim. | Plump yellow rubber glove; no navy outline, accents become physical details. |
 | Pixel Candy | Keep the stepped voxel form; purple is side/back blocks, not a flat outline. | Stepped voxel fingers and palm; preserve purple as physical side/back blocks. |

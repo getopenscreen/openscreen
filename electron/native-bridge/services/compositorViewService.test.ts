@@ -378,10 +378,7 @@ describe("resolveSceneAssetPaths", () => {
 		fs.mkdirSync(modelDir, { recursive: true });
 		fs.writeFileSync(path.join(modelDir, "selfie_segmentation_landscape.onnx"), "onnx");
 		const assetPaths = [
-			...Object.values(themed?.assets ?? {}).flatMap((asset) => [
-				asset.assetPath,
-				...(asset.model3d ? [asset.model3d.assetPath, asset.model3d.depthPath] : []),
-			]),
+			...Object.values(themed?.assets ?? {}).map((asset) => asset.assetPath),
 			...Object.values(DEFAULT_CURSOR_SPRITES).map((s) => s.assetPath),
 		];
 		for (const assetPath of assetPaths) {
@@ -422,7 +419,7 @@ describe("resolveSceneAssetPaths", () => {
 		path: string;
 		hotspotX: number;
 		hotspotY: number;
-		modelDepthPath?: string;
+		sculpt?: string;
 	};
 
 	// The renderer asks for an effect and knows nothing about the disk; this process answers
@@ -520,16 +517,16 @@ describe("resolveSceneAssetPaths", () => {
 		expect(fs.existsSync(arrow.path)).toBe(true);
 	});
 
-	it("resolves a themed 3D face and its relief map to paths that exist on disk", () => {
-		const model3d = themed?.assets.arrow?.model3d;
-		if (!themed || !model3d) throw new Error("a bundled theme needs a 3D arrow face");
-		const arrow = resolved({ cursor: { theme: themed.id, model3d: true } }).cursor.cursorSprites
-			.arrow;
+	// In 3D the compositor draws the theme's own sculpted arrow; the flat sprite still has to
+	// resolve, since the state falls back to it when the model is unknown.
+	it("names a themed arrow's sculpted 3D model next to its flat sprite", () => {
+		if (!themed) throw new Error("a bundled theme needs an arrow");
+		const arrow: ResolvedSprite = resolved({ cursor: { theme: themed.id, model3d: true } }).cursor
+			.cursorSprites.arrow;
 
-		expect(arrow.path).toBe(path.join(resources, model3d.assetPath));
-		expect(arrow.modelDepthPath).toBe(path.join(resources, model3d.depthPath));
+		expect(arrow.path).toBe(path.join(resources, themed.assets.arrow!.assetPath));
+		expect(arrow.sculpt).toBe(`${themed.id}/arrow`);
 		expect(fs.existsSync(arrow.path)).toBe(true);
-		expect(fs.existsSync(arrow.modelDepthPath!)).toBe(true);
 	});
 
 	it("fills the states a theme doesn't ship with the built-in art", () => {

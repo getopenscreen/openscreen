@@ -61,23 +61,24 @@ describe("normalizeCursorThemeId", () => {
 		}
 	});
 
-	it.each(CURSOR_THEMES)("ships aligned 3D arrow and hand assets for $name", (theme) => {
+	// The compositor models these two states itself (`crates/compositor/src/sculpt.rs`, which
+	// knows the same names): in 3D the scene names the model, and the sprite stays the flat art.
+	it.each(CURSOR_THEMES)("names the sculpted 3D arrow and hand of $name", (theme) => {
+		const flat = resolveCursorSprites(theme.id);
 		const sprites = resolveCursorSprites(theme.id, false, true);
 		for (const state of ["arrow", "pointer"] as const) {
-			const asset = theme.assets[state];
-			if (!asset?.model3d) throw new Error(`${theme.id}/${state} needs a 3D face and relief map`);
+			expect(theme.assets[state]?.sculpted).toBe(true);
+			expect(sprites[state]).toEqual({ ...flat[state], sculpt: `${theme.id}/${state}` });
+			expect(flat[state].sculpt).toBeUndefined();
+		}
+		expect(sprites.text).toBe(DEFAULT_CURSOR_SPRITES.text);
+	});
 
-			expect(sprites[state].assetPath).toBe(asset.model3d.assetPath);
-			expect(sprites[state].modelDepthPath).toBe(asset.model3d.depthPath);
-			expect(sprites[state].hotspotX).toBeCloseTo(asset.model3d.hotspotX / 32);
-			expect(sprites[state].hotspotY).toBeCloseTo(asset.model3d.hotspotY / 32);
-
-			for (const path of [asset.model3d.assetPath, asset.model3d.depthPath]) {
-				const png = readFileSync(join(process.cwd(), "public", path));
-				expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
-				expect(png.readUInt32BE(16)).toBe(128);
-				expect(png.readUInt32BE(20)).toBe(128);
-			}
+	it("leaves the default art to the extruded sprite in 3D", () => {
+		for (const sprite of Object.values(
+			resolveCursorSprites(DEFAULT_CURSOR_THEME_ID, false, true),
+		)) {
+			expect(sprite.sculpt).toBeUndefined();
 		}
 	});
 });

@@ -650,6 +650,7 @@ export interface RecordingPrefs {
 	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: CursorCaptureMode;
+	hideDesktopIcons: boolean;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -660,6 +661,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	hideDesktopIcons: false,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -2094,7 +2096,10 @@ export function registerIpcHandlers(
 		}
 		let pick: MacPickerSelection | null;
 		try {
-			pick = await session.present(excludedWindowIds);
+			pick = await session.present(
+				excludedWindowIds,
+				appSettings.getSnapshot().recording.hideDesktopIcons,
+			);
 		} finally {
 			if (hideHud && !hud.isDestroyed()) {
 				hud.showInactive();
@@ -2200,8 +2205,22 @@ export function registerIpcHandlers(
 		return selectedSource;
 	});
 
-	registerRecordingPrefsHandlers(defaultRecordingPrefs, getMainWindow, () =>
-		BrowserWindow.getAllWindows(),
+	registerRecordingPrefsHandlers(
+		defaultRecordingPrefs,
+		getMainWindow,
+		() => BrowserWindow.getAllWindows(),
+		(previous, next) => {
+			// Apple's picker bakes the exclusions into the filter it hands back, so a pick made
+			// before "Hide desktop icons" changed would still record the desktop the old way.
+			// Dropping it makes the HUD ask for a new pick instead of ignoring the toggle.
+			if (
+				previous.hideDesktopIcons !== next.hideDesktopIcons &&
+				isMacPickerSourceId(selectedSource?.id)
+			) {
+				selectedSource = null;
+				broadcastSelectedSource(null);
+			}
+		},
 	);
 
 	ipcMain.handle("request-camera-access", async () => {
@@ -2787,6 +2806,9 @@ export function registerIpcHandlers(
 					webcamFps: request.webcam.fps,
 					captureCursor: cursorCaptureMode === "system",
 					cursorCaptureMode,
+					hideDesktopIcons:
+						request.source.type === "display" &&
+						appSettings.getSnapshot().recording.hideDesktopIcons,
 					outputs: {
 						screenPath: outputPath,
 						webcamPath: webcamOutputPath,
@@ -3013,6 +3035,8 @@ export function registerIpcHandlers(
 				schemaVersion: 1,
 				recordingId,
 				excludedWindowIds: collectMacCaptureExcludedWindowIds(captureExcludedWindowSourceIds),
+				hideDesktopIcons:
+					request.source.type === "display" && appSettings.getSnapshot().recording.hideDesktopIcons,
 				source: {
 					...request.source,
 					bounds,

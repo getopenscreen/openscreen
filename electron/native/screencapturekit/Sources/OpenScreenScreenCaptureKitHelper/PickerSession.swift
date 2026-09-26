@@ -66,8 +66,8 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 
 	private func handle(_ command: PickerSessionCommand) {
 		switch command {
-		case .present(let excludedWindowIDs, let modes):
-			present(excludedWindowIDs: excludedWindowIDs, modes: modes)
+		case .present(let excludedWindowIDs, let modes, let hideDesktopIcons):
+			present(excludedWindowIDs: excludedWindowIDs, modes: modes, hideDesktopIcons: hideDesktopIcons)
 		case .start(let request):
 			startTake(request)
 		case .pause:
@@ -83,7 +83,7 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 
 	// MARK: - Picker
 
-	private func present(excludedWindowIDs: [Int], modes: [PickerMode]) {
+	private func present(excludedWindowIDs: [Int], modes: [PickerMode], hideDesktopIcons: Bool) {
 		var configuration = SCContentSharingPickerConfiguration()
 		var allowed: SCContentSharingPickerMode = []
 		if modes.contains(.display) { allowed.insert(.singleDisplay) }
@@ -95,7 +95,11 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 		// A picked display filter hides this process's own windows, but not the app's:
 		// the HUD and the notes window belong to Electron. Measured: a window owned by the
 		// parent app shows in the capture unless it is listed here.
-		configuration.excludedWindowIDs = excludedWindowIDs
+		configuration.excludedWindowIDs =
+			excludedWindowIDs + Self.desktopIconWindowIDs(hideDesktopIcons: hideDesktopIcons)
+		// By app, not by window: a banner is a window created after the pick, so no id
+		// list taken now could name it.
+		configuration.excludedBundleIDs = [notificationCenterBundleID]
 
 		let picker = SCContentSharingPicker.shared
 		picker.defaultConfiguration = configuration
@@ -164,6 +168,32 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 			event["appName"] = window.owningApplication?.applicationName ?? ""
 		}
 		emit(event)
+	}
+
+	/// Finder's desktop-icon windows, read from the window server: `SCShareableContent` would
+	/// need the Screen Recording grant the picker exists to avoid. Owner and level are
+	/// readable without it. The icons stay put for the whole session, so ids taken at pick
+	/// time hold -- unless Finder relaunches, which gives them new ones.
+	private static func desktopIconWindowIDs(hideDesktopIcons: Bool) -> [Int] {
+		guard hideDesktopIcons,
+			let entries = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
+				as? [[String: Any]]
+		else {
+			return []
+		}
+		let candidates = entries.compactMap { entry -> CaptureWindowCandidate? in
+			guard let number = entry[kCGWindowNumber as String] as? Int,
+				let pid = entry[kCGWindowOwnerPID as String] as? Int32
+			else {
+				return nil
+			}
+			return CaptureWindowCandidate(
+				windowID: UInt32(number),
+				bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+				layer: entry[kCGWindowLayer as String] as? Int ?? 0
+			)
+		}
+		return desktopIconWindowIDs(candidates).map { Int($0) }
 	}
 
 	private static func display(containing frame: CGRect) -> CGDirectDisplayID? {

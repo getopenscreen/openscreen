@@ -15,8 +15,9 @@ public enum PickerMode: String, Equatable {
 public enum PickerSessionCommand: Equatable {
 	/// Show Apple's picker. `excludedWindowIDs` keeps OpenScreen's own HUD and notes out of
 	/// a display capture: the filter the picker hands back cannot be edited afterwards, so
-	/// the exclusion has to be part of the picker's configuration.
-	case present(excludedWindowIDs: [Int], modes: [PickerMode])
+	/// the exclusion has to be part of the picker's configuration. For the same reason
+	/// "Hide desktop icons" travels here and not with the take.
+	case present(excludedWindowIDs: [Int], modes: [PickerMode], hideDesktopIcons: Bool)
 	/// Start a take from the retained choice. The request JSON is kept raw for the
 	/// recorder's own decoder.
 	case start(request: Data)
@@ -49,7 +50,8 @@ public func parsePickerSessionCommand(_ line: String) -> PickerSessionCommand? {
 		let requestedModes = (object["modes"] as? [String] ?? []).compactMap(PickerMode.init(rawValue:))
 		return .present(
 			excludedWindowIDs: excluded,
-			modes: requestedModes.isEmpty ? [.display, .window] : requestedModes
+			modes: requestedModes.isEmpty ? [.display, .window] : requestedModes,
+			hideDesktopIcons: object["hideDesktopIcons"] as? Bool ?? false
 		)
 	case "start":
 		guard let request = object["request"],

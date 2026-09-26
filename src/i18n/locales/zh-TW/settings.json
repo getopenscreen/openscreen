@@ -253,8 +253,7 @@
 			"minimal": "簡約",
 			"light": "淺色"
 		},
-		"customize": "自訂",
-		"turnOn": "顯示字幕"
+		"customize": "自訂"
 	},
 	"panes": {
 		"help": "說明"

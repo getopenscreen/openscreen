@@ -253,8 +253,7 @@
 			"minimal": "Minimal",
 			"light": "Hell"
 		},
-		"customize": "Anpassen",
-		"turnOn": "Untertitel anzeigen"
+		"customize": "Anpassen"
 	},
 	"panes": {
 		"help": "Hilfe"

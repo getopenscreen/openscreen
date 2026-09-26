@@ -253,8 +253,7 @@
 			"minimal": "简约",
 			"light": "浅色"
 		},
-		"customize": "自定义",
-		"turnOn": "显示字幕"
+		"customize": "自定义"
 	},
 	"panes": {
 		"help": "帮助"

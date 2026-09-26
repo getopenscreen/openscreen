@@ -2705,28 +2705,6 @@ export function VideoEffectsPane() {
 				},
 			)}
 			<div className={styles.sliderGrid}>
-				{/* Under a frame the slider spans 0 → the most that frame wears well (the native
-				    `frame_roundness_cap`), so its travel reads as a share of that range, not as
-				    pixels it no longer draws. The stored value stays in pixels either way. */}
-				<SliderCell
-					label={ts("effects.roundness")}
-					hint={framed ? ts("effects.roundnessFrameHelp") : undefined}
-					value={settings.borderRadius * roundnessScale}
-					min={0}
-					max={ROUNDNESS_SLIDER_MAX_PX * roundnessScale}
-					defaultValue={DEFAULT_EDITOR_SETTINGS.borderRadius * roundnessScale}
-					step={framed ? 1 : 0.5}
-					suffix={framed ? "%" : "px"}
-					disabled={!hasDocument}
-					onChange={(v) => {
-						const px = v / roundnessScale;
-						setLive({ borderRadius: px });
-						if (isNativeCompositorActive()) {
-							setNativeParam("roundness", px / NATIVE_SCREEN_BASE_RADIUS_PX);
-						}
-					}}
-					onCommit={() => void commit()}
-				/>
 				<SliderCell
 					label={ts("effects.padding")}
 					value={settings.padding}
@@ -2736,13 +2714,41 @@ export function VideoEffectsPane() {
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
-						setLive({ padding: v });
+						// No padding, no background to round against: roundness follows to 0.
+						setLive(v === 0 ? { padding: 0, borderRadius: 0 } : { padding: v });
 						if (isNativeCompositorActive()) {
 							setNativeParam("padding", v / 100);
+							if (v === 0) setNativeParam("roundness", 0);
 						}
 					}}
 					onCommit={() => void commit()}
 				/>
+				{settings.padding > 0 ? (
+					<>
+						{/* Under a frame the slider spans 0 → the most that frame wears well (the native
+				    `frame_roundness_cap`), so its travel reads as a share of that range, not as
+				    pixels it no longer draws. The stored value stays in pixels either way. */}
+						<SliderCell
+							label={ts("effects.roundness")}
+							hint={framed ? ts("effects.roundnessFrameHelp") : undefined}
+							value={settings.borderRadius * roundnessScale}
+							min={0}
+							max={ROUNDNESS_SLIDER_MAX_PX * roundnessScale}
+							defaultValue={DEFAULT_EDITOR_SETTINGS.borderRadius * roundnessScale}
+							step={framed ? 1 : 0.5}
+							suffix={framed ? "%" : "px"}
+							disabled={!hasDocument}
+							onChange={(v) => {
+								const px = v / roundnessScale;
+								setLive({ borderRadius: px });
+								if (isNativeCompositorActive()) {
+									setNativeParam("roundness", px / NATIVE_SCREEN_BASE_RADIUS_PX);
+								}
+							}}
+							onCommit={() => void commit()}
+						/>
+					</>
+				) : null}
 			</div>
 			{/* Alone in its section, and correctly so: this blurs the RECORDING as it moves
 			    (zooms, layout changes) — see `effects.motion_blur` driving the tap count in

@@ -387,6 +387,7 @@
 		"previewHold": "按住預覽放大效果",
 		"customScale": "自訂縮放",
 		"customScaleRange": "縮放範圍為 {{min}}× 到 {{max}}×",
+		"levelBlurs": "超過 {{max}}× 後，此錄製內容會被放大 2 倍以上而變得模糊。",
 		"selectRegion": "選擇要調整的縮放區域",
 		"cursor": {
 			"title": "游標",

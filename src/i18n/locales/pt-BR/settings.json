@@ -387,6 +387,7 @@
 		"previewHold": "Mantenha pressionado para pré-visualizar o efeito de zoom",
 		"customScale": "Zoom Personalizado",
 		"customScaleRange": "O zoom vai de {{min}}× a {{max}}×",
+		"levelBlurs": "Acima de {{max}}×, esta gravação seria ampliada mais de 2× e ficaria borrada.",
 		"selectRegion": "Selecione uma região de zoom para ajustar",
 		"cursor": {
 			"title": "Cursor",

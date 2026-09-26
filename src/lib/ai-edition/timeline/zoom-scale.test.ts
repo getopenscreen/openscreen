@@ -9,6 +9,7 @@ import {
 	effectiveZoomScale,
 	MAX_ZOOM_SCALE,
 	MIN_ZOOM_SCALE,
+	maxZoomScaleFor,
 	ZOOM_DEPTH_LEGEND,
 } from "./zoom-scale";
 
@@ -61,5 +62,20 @@ describe("ZOOM_DEPTH_LEGEND", () => {
 		for (const depth of [1, 2, 3, 4, 5, 6] as const) {
 			expect(ZOOM_DEPTH_LEGEND).toContain(`${depth}=${ZOOM_DEPTH_SCALES[depth].toFixed(2)}×`);
 		}
+	});
+});
+
+describe("maxZoomScaleFor", () => {
+	it("keeps rest magnification × zoom at or under 2", () => {
+		expect(maxZoomScaleFor(0.8)).toBe(2.5); // 1080p take, 50 % padding
+		expect(maxZoomScaleFor(0.4)).toBe(MAX_ZOOM_SCALE); // 2160p take
+		expect(maxZoomScaleFor(1.6)).toBe(1.25); // half of a 1080p take
+		expect(maxZoomScaleFor(0.9) * 0.9).toBeLessThanOrEqual(2);
+	});
+
+	it("never goes below 1 and ignores a missing magnification", () => {
+		expect(maxZoomScaleFor(3)).toBe(MIN_ZOOM_SCALE);
+		expect(maxZoomScaleFor(0)).toBe(MAX_ZOOM_SCALE);
+		expect(maxZoomScaleFor(Number.NaN)).toBe(MAX_ZOOM_SCALE);
 	});
 });

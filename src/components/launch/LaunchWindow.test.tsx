@@ -430,6 +430,22 @@ describe("LaunchWindow record button", () => {
 		);
 	});
 
+	it("never promises the editable cursor's effects when capture falls back to the browser", async () => {
+		// Linux without its PipeWire helper records through the browser, which always bakes the
+		// system cursor in: switching to the editable cursor would restore nothing.
+		platformState.value = "linux";
+		linuxHelperAvailable.value = false;
+		recorderState.value.cursorCaptureMode = "system";
+		renderLaunchWindow();
+
+		await waitFor(() =>
+			expect(screen.getByTestId("launch-cursor-mode-button")).toHaveAttribute(
+				"title",
+				"Use system cursor: turns off auto zoom and cursor effects",
+			),
+		);
+	});
+
 	it("names the recording-state HUD controls for assistive technology", async () => {
 		recorderState.value.recording = true;
 		recorderState.value.canPauseRecording = true;

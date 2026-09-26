@@ -3391,7 +3391,8 @@ pub struct CursorPlan {
     pub placement: CursorPlacement,
     /// Placement à `t - trail_frames/FPS`, pour la traînée. `placement` quand il n'y en a pas.
     pub prev_placement: CursorPlacement,
-    /// Côté du sprite en px de sortie (bounce et padding déjà appliqués).
+    /// Côté du sprite en px de sortie (bounce et padding déjà appliqués). Sous un angle fixe, le
+    /// côté sur le plan qui donne cette taille au point de focus.
     pub size_px: f32,
     /// Nombre d'échantillons de la traînée. 1 = curseur net, pas d'accumulation.
     pub taps: u32,
@@ -3588,6 +3589,18 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     };
     let size_px =
         CURSOR_BASE_SIZE_FRAC * g.screen_unit_px * lp.cursor_size_scale * bounce * g.padding_scale;
+    // Sous un angle fixe, le plan tourne autour du centre de sa boîte ZOOMÉE, réduit de son
+    // containment : au point de focus, un px du plan vaut `scale·P/(P − z)` px de sortie, ~0,84 au
+    // zoom doré. Le curseur y rapetissait donc pendant que le zoom grossissait l'image. Il est
+    // taillé pour faire `size_px` au focus ; ailleurs, seule la perspective le change. La caméra
+    // réelle n'en a pas besoin : elle vise déjà le point regardé.
+    let size_px = match (tilt.as_ref(), g.camera) {
+        (Some(quad), None) => {
+            let z = quad.depth_mb(s_px, g.focus_plane, false)[2];
+            size_px * (quad.perspective - z) / (quad.perspective * quad.scale)
+        }
+        _ => size_px,
+    };
     // Taille nulle = rien à dessiner, et surtout rien à projeter : sur un plan incliné les quatre
     // coins du sprite se confondent, et le warp inverse du mode 13 résout alors 0/0. Son rejet
     // ne tiendrait qu'à des comparaisons avec NaN, que Metal (fast-math) ne garantit pas.
@@ -8216,5 +8229,64 @@ mod tests {
         assert_eq!(cpu.taps, 1);
         assert_eq!(cpu.prev_placement.upright_center(), cpu.placement.upright_center());
         assert_eq!(plan(false).for_backend(true).taps, plan(false).taps, "le sprite plat garde sa traînée");
+    }
+
+    /// Sous un angle fixe, l'écran tourne autour du centre de sa boîte ZOOMÉE, réduit de son
+    /// containment : le curseur y perdait ~18 % au point de focus même, pendant que le zoom
+    /// grossissait l'image. Il y garde sa taille à plat, à la perspective de biais près ; ailleurs,
+    /// seule la perspective le change : plus grand du côté proche, plus petit du côté lointain.
+    #[test]
+    fn a_fixed_angle_keeps_the_cursor_size_at_the_zoom_focus() {
+        let cfg = crate::config::all().pop().expect("cfg");
+        // Taille apparente du modèle posé en `at` (repère du curseur) : différences centrées de sa
+        // projection autour de la pointe, en px de sortie par unité du modèle.
+        let size = |rotation: &str, zoom: f32, at: (f32, f32)| -> f32 {
+            let json = zoomed_golden_scene_json()
+                .replace(r#""rotation":"none""#, &format!(r#""rotation":"{rotation}""#))
+                .replace(r#""scale":2.0"#, &format!(r#""scale":{zoom}"#));
+            let mut scene = Scene::from_json(&json).expect("scène");
+            scene.cursor.theme = "default".into();
+            scene.cursor.cursor_sprites = model_scene().cursor.cursor_sprites;
+            let live = LiveParams { cursor_model3d: true, ..live_params_from_scene(&scene) };
+            let track: &'static crate::cursor::CursorTrack = Box::leak(Box::new(
+                crate::cursor::CursorTrack::new(vec![(0.0, at.0, at.1), (6.0, at.0, at.1)], vec![], vec![]),
+            ));
+            let g = plan_frame(&FrameGeometryInput { cursor: Some(track), live, ..golden_input(&scene, &cfg) });
+            let input = CursorPlanInput {
+                render_px: [1170.0, 658.0],
+                u_max: 1.0,
+                v_max: 1080.0 / 1088.0,
+                cfg: &cfg,
+                live,
+                scene: Some(&scene),
+                track,
+                t: 1.5,
+            };
+            let plan = plan_cursor(&g, &input).expect("plan");
+            let (_, shape) = sprite_model("arrow");
+            let view = ModelView::new(plan.placement, plan.size_px, plan.model.expect("modèle"), shape).expect("vue");
+            let e = 0.05 * view.unit;
+            let span = |d: [f32; 3]| {
+                let p = |k: f32| view.project([0, 1, 2].map(|i| view.tip[i] + k * d[i])).expect("projection");
+                let (a, b) = (p(e), p(-e));
+                (a[0] - b[0]).hypot(a[1] - b[1]) / (2.0 * e) * view.unit
+            };
+            (span([1.0, 0.0, 0.0]) * span([0.0, 1.0, 0.0])).sqrt()
+        };
+        // Le focus du zoom doré, (0,5 ; 0,3) du recadrage 0,61 : c'est là que regarde le zoom.
+        let focus = (0.305, 0.183);
+        for zoom in [1.25f32, 2.0, 3.5] {
+            let flat = size("none", zoom, focus);
+            for rotation in ["left", "right"] {
+                let ratio = size(rotation, zoom, focus) / flat;
+                println!("{rotation} ×{zoom} : {ratio:.3} de la taille à plat, au focus");
+                assert!((0.93..1.02).contains(&ratio), "{rotation} ×{zoom} : {ratio}");
+            }
+        }
+        // `left` amène le bord droit vers la caméra, `right` le bord gauche.
+        let at_focus = size("left", 2.0, focus);
+        let (near, far) = (size("left", 2.0, (0.43, 0.183)), size("left", 2.0, (0.18, 0.183)));
+        println!("left ×2 : {:.3} côté proche, {:.3} côté lointain", near / at_focus, far / at_focus);
+        assert!(near > 1.04 * at_focus && far < 0.96 * at_focus, "{near} {at_focus} {far}");
     }
 }

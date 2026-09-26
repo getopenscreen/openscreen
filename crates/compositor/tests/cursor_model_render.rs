@@ -625,15 +625,18 @@ fn every_state_keeps_its_art_and_its_footprint() {
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
-/// Incliné et à plat, le modèle n'a pas la même silhouette : le plan l'emporte avec lui.
+/// Incliné et à plat, le modèle n'a pas la même silhouette : le plan l'emporte avec lui. Au focus,
+/// l'angle fixe lui garde sa taille (`plan_cursor`) : seule son orientation sépare les deux
+/// silhouettes, et un demi-pixel de décalage en changerait autant de pixels. Les deux rendus
+/// posent donc la pointe sur le même point, fraction de pixel comprise.
 #[test]
 fn the_tilt_turns_every_state_with_the_screen() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
     let screen = FakeFrame::new(&gpu, Tint::Blue);
     for key in TESTED {
-        let still = resting_as(&format!("tilt-{key}"), Some(key), false);
-        let mask = |rotation: &str| -> (Vec<bool>, Probe) {
+        let mask = |rotation: &str, x: f32, y: f32| -> (Vec<bool>, Probe) {
+            let still = track_as(&format!("tilt-{key}"), Some(key), &[(0.0, x, y, false), (9.0, x, y, false)]);
             let (rgba, p) = render(&comp, &screen, &scene_json(rotation, Some(true), "default", 0.0, 3.0), &still);
             // Silhouette relative au hotspot, sur une fenêtre de ±1,1 unité.
             let r = (1.1 * p.unit) as i32;
@@ -646,12 +649,20 @@ fn the_tilt_turns_every_state_with_the_screen() {
             }
             (m, p)
         };
-        let (flat, pf) = mask("null");
-        let (iso, pi) = mask(r#""iso""#);
+        let (iso, pi) = mask(r#""iso""#, 0.45, 0.45);
+        // À plat, l'écran couvre 1024 × 576 px depuis (128, 72) (`screenRect`) : la pointe s'y pose
+        // sur celle du rendu incliné.
+        let (flat, pf) = mask("null", (pi.tip[0] - 128.0) / 1024.0, (pi.tip[1] - 72.0) / 576.0);
+        assert!(
+            (pf.tip[0] - pi.tip[0]).abs() < 0.01 && (pf.tip[1] - pi.tip[1]).abs() < 0.01,
+            "{key}: pointes {:?} et {:?}",
+            pf.tip,
+            pi.tip
+        );
         let n = flat.len().min(iso.len());
         let differ = (0..n).filter(|&k| flat[k] != iso[k]).count();
         println!("{key} : {differ} px diffèrent (unités {:.1} / {:.1})", pf.unit, pi.unit);
-        assert!(differ as f32 > 0.05 * pf.unit * pf.unit, "{key}: le modèle ne suit pas l'inclinaison ({differ})");
+        assert!(differ as f32 > 0.02 * pf.unit * pf.unit, "{key}: le modèle ne suit pas l'inclinaison ({differ})");
     }
 }
 

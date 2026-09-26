@@ -2631,6 +2631,7 @@ impl Compositor {
                         let anim = crate::text_anim::text_animation_state(
                             text.animation.as_deref(),
                             (g.source_t - a.start_sec as f32) * 1000.0,
+                            ((a.end_sec - a.start_sec) * 1000.0) as f32,
                         );
                         let anim_px = rh / crate::text_anim::ANIMATION_REFERENCE_HEIGHT;
                         let (mut ax, mut ay, mut aw, mut ah) = (

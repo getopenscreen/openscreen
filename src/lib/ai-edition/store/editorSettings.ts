@@ -94,6 +94,13 @@ export interface EditorSettingsSnapshot {
 	/** Light or dark, for whichever frame is on. Inert with `frame: "none"`. */
 	frameTheme: FrameTheme;
 	aspectRatio: AspectRatio;
+	/**
+	 * Under a fixed format that is not the recording's shape: fill the frame with a window of
+	 * the recording that follows the smoothed cursor (true), or show it whole (false). `null`
+	 * until the user picks a format or this option: projects from before it keep showing the
+	 * recording whole. See `formatFillAvailability`.
+	 */
+	formatFollowCursor: boolean | null;
 	shadowIntensity: number;
 	showBlur: boolean;
 	motionBlurAmount: number;
@@ -137,6 +144,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	webcamCropRegion: DEFAULT_CROP_REGION,
 	webcamCropPan: DEFAULT_CROP_PAN,
 	audioGainDb: 0,
+	formatFollowCursor: null,
 };
 
 interface LegacyShape {
@@ -146,6 +154,7 @@ interface LegacyShape {
 	frame?: unknown;
 	frameTheme?: FrameTheme;
 	aspectRatio?: AspectRatio;
+	formatFollowCursor?: boolean;
 	shadowIntensity?: number;
 	showBlur?: boolean;
 	motionBlurAmount?: number;
@@ -240,6 +249,8 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			? legacy.frameTheme
 			: (stored?.theme ?? DEFAULT_EDITOR_SETTINGS.frameTheme),
 		aspectRatio: legacy?.aspectRatio ?? DEFAULT_EDITOR_SETTINGS.aspectRatio,
+		formatFollowCursor:
+			typeof legacy?.formatFollowCursor === "boolean" ? legacy.formatFollowCursor : null,
 		shadowIntensity: num(legacy?.shadowIntensity, DEFAULT_EDITOR_SETTINGS.shadowIntensity),
 		showBlur: bool(legacy?.showBlur, DEFAULT_EDITOR_SETTINGS.showBlur),
 		motionBlurAmount: num(legacy?.motionBlurAmount, DEFAULT_EDITOR_SETTINGS.motionBlurAmount),
@@ -292,6 +303,7 @@ export interface EditorSettingsPatch {
 	frame?: RecordingFrame;
 	frameTheme?: FrameTheme;
 	aspectRatio?: AspectRatio;
+	formatFollowCursor?: boolean;
 	shadowIntensity?: number;
 	showBlur?: boolean;
 	motionBlurAmount?: number;

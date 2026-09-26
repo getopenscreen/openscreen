@@ -158,7 +158,10 @@ pub(crate) unsafe fn walk_composited_timeline(
     on_frame: &mut dyn FnMut(u64) -> Result<()>,
     on_clip_end: &mut dyn FnMut(usize, f64, u64, &[SpeedSegment]) -> Result<()>,
 ) -> Result<u64> {
-    let cursor_enabled = scene.as_ref().map(|s| s.cursor.show).unwrap_or(false);
+    // La piste sert aussi au remplissage du format, qui la suit même curseur masqué : le dessin
+    // du curseur reste gardé par `cursor.show` (`plan_cursor`).
+    let cursor_enabled =
+        scene.as_ref().map(|s| s.cursor.show || s.layout.screen_follow).unwrap_or(false);
     let cursor_smoothing = scene.as_ref().map(|s| s.cursor.smoothing).unwrap_or(0.0);
     let mut cursor_tracks: HashMap<String, CursorTrack> = HashMap::new();
     let mut cursor_active_path: Option<String> = None;

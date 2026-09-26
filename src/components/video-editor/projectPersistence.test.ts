@@ -100,6 +100,12 @@ describe("projectPersistence media compatibility", () => {
 		});
 	});
 
+	it("passes the format fill choice through, and leaves it unset when absent", () => {
+		expect(normalizeProjectEditor({ formatFollowCursor: true }).formatFollowCursor).toBe(true);
+		expect(normalizeProjectEditor({ formatFollowCursor: false }).formatFollowCursor).toBe(false);
+		expect("formatFollowCursor" in normalizeProjectEditor({})).toBe(false);
+	});
+
 	it("omits cursor tuning keys that are absent or malformed", () => {
 		const editor = normalizeProjectEditor({
 			cursorSize: Number.NaN,

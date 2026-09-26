@@ -32,7 +32,7 @@ import {
 } from "@/lib/ai-edition/captions";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import { createId } from "@/lib/ai-edition/document/ids";
-import { pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
+import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
 import {
 	type PlaybackSegment,
 	type PlaybackSpeedRegion,
@@ -300,6 +300,12 @@ export interface SceneLayout {
 	 * spilling over the camera (`ScreenMask` in `frame_geometry.rs`).
 	 */
 	screenCover?: boolean;
+	/**
+	 * The format is filled (`isFormatFillActive`): the screen box is the whole padded area,
+	 * `screenCover` is on, and the window the cover cuts out follows the smoothed cursor
+	 * instead of staying centred. Omitted when off, so other payloads are unchanged.
+	 */
+	screenFollow?: true;
 	/**
 	 * One resolved layout per visible clip, index-aligned with `SceneDescription.clips`
 	 * and `cropByClip`. The scalar fields above are the FIRST clip's entry (fallback for
@@ -912,6 +918,7 @@ export function buildSceneDescription(
 	// padded content area the preview uses — `compositor.rs` consumes an app-provided
 	// `webcamRect` verbatim (it only scale_frame's the SCREEN by padding), so an
 	// unpadded rect here would leave the camera behind while the screen moved.
+	const formatFill = isFormatFillActive(document);
 	const maxContentSize = paddedContentSize(
 		outputDims,
 		settings.padding,
@@ -992,7 +999,8 @@ export function buildSceneDescription(
 		return computeCompositeLayout({
 			canvasSize: outputDims,
 			maxContentSize,
-			screenSize,
+			// Filled, the screen takes the whole padded area; the compositor cuts the window.
+			screenSize: formatFill ? maxContentSize : screenSize,
 			webcamSize: preset === "no-webcam" ? null : camSize,
 			layoutPreset: preset,
 			webcamSizePreset: settings.webcamSizePreset,
@@ -1023,7 +1031,7 @@ export function buildSceneDescription(
 					screenRadiusFrac: radiusFractionOf(layout.screenRect, layout.screenBorderRadius),
 					webcamRadiusFrac: radiusFractionOf(layout.webcamRect, layout.webcamRect?.borderRadius),
 					webcamShape: layout.webcamRect?.maskShape ?? settings.webcamMaskShape,
-					screenCover: layout.screenCover ?? false,
+					screenCover: formatFill || (layout.screenCover ?? false),
 				}
 			: null;
 	// One resolved layout per visible clip, index-aligned with `clips` / `cropByClip`.
@@ -1077,7 +1085,8 @@ export function buildSceneDescription(
 				computedLayout?.screenRect,
 				computedLayout?.screenBorderRadius,
 			),
-			screenCover: computedLayout?.screenCover ?? false,
+			screenCover: formatFill || (computedLayout?.screenCover ?? false),
+			...(formatFill ? { screenFollow: true as const } : {}),
 			webcamRadiusFrac: radiusFractionOf(
 				computedLayout?.webcamRect,
 				computedLayout?.webcamRect?.borderRadius,

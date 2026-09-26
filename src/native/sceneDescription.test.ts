@@ -1040,6 +1040,55 @@ describe("buildSceneDescription.audio", () => {
 
 // --- settings mapping ------------------------------------------------------
 
+describe("buildSceneDescription format fill", () => {
+	const doc = (editor: Record<string, unknown>) =>
+		makeDoc({
+			assets: [
+				makeAsset({
+					id: "a",
+					originalPath: "/a.mp4",
+					durationSec: 5,
+					video: { codec: "h264", width: 1920, height: 1080, fps: 30 },
+				}),
+			],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 5,
+					timelineStartSec: 0,
+					timelineEndSec: 5,
+				}),
+			],
+			legacyEditor: { aspectRatio: "9:16", padding: 50, ...editor },
+		});
+
+	it("gives a 16:9 take the whole padded 9:16 area, covered and following the cursor", () => {
+		const { layout } = buildSceneDescription(doc({ formatFollowCursor: true }));
+		const zone = { x: 0.1, y: 0.1, width: 0.8, height: 0.8 };
+		for (const rect of [layout.screenRect, layout.layoutByClip?.[0]?.screenRect]) {
+			expect(rect?.x).toBeCloseTo(zone.x, 3);
+			expect(rect?.y).toBeCloseTo(zone.y, 3);
+			expect(rect?.width).toBeCloseTo(zone.width, 3);
+			expect(rect?.height).toBeCloseTo(zone.height, 3);
+		}
+		expect(layout.screenCover).toBe(true);
+		expect(layout.layoutByClip?.[0]?.screenCover).toBe(true);
+		expect(layout.screenFollow).toBe(true);
+	});
+
+	it("keeps the recording whole, and the payload unchanged, when not asked for", () => {
+		for (const editor of [{}, { formatFollowCursor: false }]) {
+			const { layout } = buildSceneDescription(doc(editor));
+			// The 16:9 band inside the 9:16 frame: 864×486 of 1080×1920.
+			expect(layout.screenRect?.height).toBeCloseTo(486 / 1920, 3);
+			expect(layout.screenCover).toBe(false);
+			expect("screenFollow" in layout).toBe(false);
+		}
+	});
+});
+
 describe("buildSceneDescription.settings mapping", () => {
 	it("divides padding by 100", () => {
 		const doc = makeDoc({ legacyEditor: { padding: 50 } });

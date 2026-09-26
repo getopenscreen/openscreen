@@ -51,6 +51,8 @@ import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import {
 	collectNativeFormats,
+	type FormatFillAvailability,
+	formatFillAvailability,
 	isAutoFormatAvailable,
 	pickOutputDims,
 } from "@/lib/ai-edition/document/outputFormat";
@@ -2316,6 +2318,14 @@ const RECORDING_FRAME_LABEL_KEYS: Record<RecordingFrame, string> = {
 	monitor: "effects.frameScreen",
 };
 
+/** What the fill row says under itself: what "follow" does, or why it cannot. */
+const FORMAT_FILL_HINT_KEYS: Record<Exclude<FormatFillAvailability, "none">, string> = {
+	available: "effects.formatFillHelp",
+	mixed: "effects.formatFillMixed",
+	layout: "effects.formatFillLayout",
+	frame: "effects.formatFillFrame",
+};
+
 const FRAME_THEME_LABEL_KEYS: Record<FrameTheme, string> = {
 	light: "effects.frameThemeLight",
 	dark: "effects.frameThemeDark",
@@ -2354,6 +2364,14 @@ export function VideoEffectsPane() {
 		[document],
 	);
 	const hasTiltedZoom = (document?.zoomRanges ?? []).some((z) => z.rotationPreset != null);
+	const fillAvailability = useMemo(
+		() => (document ? formatFillAvailability(document) : "none"),
+		[document],
+	);
+	const fillActive = settings.formatFollowCursor === true && fillAvailability === "available";
+	// Filling is the default for a format picked from now on; a project that already had one
+	// keeps showing its recording whole until the user says otherwise.
+	const fillDefault = settings.formatFollowCursor === null ? { formatFollowCursor: true } : {};
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
 	const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
 	const [frameMenuOpen, setFrameMenuOpen] = useState(false);
@@ -2528,7 +2546,7 @@ export function VideoEffectsPane() {
 									}`}
 									onClick={() => {
 										setRatioMenuOpen(false);
-										void set({ aspectRatio: ratio });
+										void set({ aspectRatio: ratio, ...fillDefault });
 									}}
 								>
 									<span className={styles.actionMenuMain}>{ratio}</span>
@@ -2551,7 +2569,7 @@ export function VideoEffectsPane() {
 											}`}
 											onClick={() => {
 												setRatioMenuOpen(false);
-												void set({ aspectRatio: format.token });
+												void set({ aspectRatio: format.token, ...fillDefault });
 											}}
 										>
 											{/* Token leads and the pixel size rides on the right, exactly as this
@@ -2571,6 +2589,25 @@ export function VideoEffectsPane() {
 					</PopoverContent>
 				</Popover>
 			</div>
+			{/* How a recording of another shape sits in a fixed format: whole, or filling it with a
+			    window that follows the cursor. Only listed when the two shapes differ; greyed out,
+			    saying why, when the timeline has no single rule it could follow. */}
+			{fillAvailability !== "none" ? (
+				<div className={`${styles.field} ${styles.fieldStack}`}>
+					<span className={styles.fieldLabel}>{ts("effects.formatFill")}</span>
+					<ChoiceRow<"fit" | "follow">
+						label={ts("effects.formatFill")}
+						options={[
+							{ value: "fit", label: ts("effects.formatFillFit") },
+							{ value: "follow", label: ts("effects.formatFillFollow") },
+						]}
+						value={fillActive ? "follow" : "fit"}
+						disabled={!hasDocument || fillAvailability !== "available"}
+						onChange={(v) => void set({ formatFollowCursor: v === "follow" })}
+					/>
+					<p className={styles.hint}>{ts(FORMAT_FILL_HINT_KEYS[fillAvailability])}</p>
+				</div>
+			) : null}
 			{/* The frame drawn around the recording, and its theme. Two menus like Format above
 			    them, and for the same reason: each picks one project-wide look among a few. With a
 			    frame on, Roundness rounds the footage within that frame's own range, the body

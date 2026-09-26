@@ -31,7 +31,10 @@ import {
 	type ZoomFocus,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
-import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat";
+import {
+	isFormatFillActive,
+	resolveAspectRatioValue,
+} from "@/lib/ai-edition/document/outputFormat";
 import type {
 	AxcutAnnotationRegion,
 	AxcutAudioTrack,
@@ -237,6 +240,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 	);
 	const activeClipHasCamera = Boolean(activeCameraTrack?.visible && activeCameraTrack.sourcePath);
 
+	const formatFill = useMemo(() => (document ? isFormatFillActive(document) : false), [document]);
 	const layout = useMemo(() => {
 		// A clip with no camera lays out as "no-webcam", whatever the panel says. Hiding
 		// only the webcam slot is not enough: the block presets size the SCREEN off the
@@ -265,7 +269,8 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		return computeCompositeLayout({
 			canvasSize: frameSize,
 			maxContentSize,
-			screenSize: croppedScreenSize,
+			// Same box as the scene: a filled format gives the screen the whole padded area.
+			screenSize: formatFill ? maxContentSize : croppedScreenSize,
 			webcamSize: preset === "no-webcam" ? null : WEBCAM_SOURCE_SIZE,
 			layoutPreset: preset,
 			webcamSizePreset: settings.webcamSizePreset,
@@ -286,6 +291,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		settings.webcamRoundness,
 		settings.padding,
 		settings.aspectRatio,
+		formatFill,
 	]);
 
 	// Full Camera: during a cameraFullscreen region the webcam takes the whole

@@ -4907,6 +4907,57 @@ mod tests {
         assert!(best > 0.05, "la barre de titre reste nette pendant le zoom (au mieux {best:.3})");
     }
 
+    /// Un degrade de fond est opaque et montre chacun de ses stops, meme quand le premier est a
+    /// 0. `gradient_layer` range la position du premier stop dans `color.a` ; la queue commune
+    /// du WGSL la prenait pour une opacite, et le fond disparaissait sous la couleur de clear
+    /// (#807). Rouge / vert / bleu a 0, 0.5, 1 de gauche a droite : chaque tiers doit porter sa
+    /// couleur, pas le noir du clear.
+    #[test]
+    fn a_gradient_whose_first_stop_is_at_zero_stays_opaque() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let json = r##"{"clips":[{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}],
+            "layout":{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded",
+                      "webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false,
+                      "screenRect":{"x":0.3,"y":0.3,"width":0.4,"height":0.4}},
+            "effects":{"padding":0.4,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0},
+            "background":{"kind":"gradient","angleDeg":90,
+                          "stops":["rgb(255, 0, 0)","rgb(0, 255, 0)","rgb(0, 0, 255)"],
+                          "offsets":[0,0.5,1]},
+            "zoomRegions":[],"annotations":[],
+            "cursor":{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,
+                      "clipToBounds":false,"theme":"default"},
+            "cropByClip":[null],
+            "output":{"width":1280,"height":720,"fps":30}}"##;
+        let scene = Scene::from_json(json).expect("scene json");
+        comp.set_live_params(live_params_from_scene(&scene));
+        comp.set_has_webcam(false);
+        comp.set_scene(Some(scene));
+        let screen = FakeFrame::new(&gpu, 640, 360, |_, _| 60);
+        let webcam = FakeFrame::new(&gpu, 64, 64, |_, _| 60);
+        let mut cfg = Cfg::c8();
+        cfg.bg_blur = false;
+        cfg.zoom = false;
+        cfg.layout_anim = false;
+        cfg.cursor = false;
+        cfg.shadow = false;
+        cfg.mblur_n = 1;
+        let rgba = unsafe {
+            comp.compose_frame(screen.as_ptr(), webcam.as_ptr(), 0.0, &cfg)
+                .expect("compose_frame");
+            comp.readback_direct().expect("readback_direct").2
+        };
+        // Rangee du haut, hors de l'ecran : que du fond.
+        let px = |x: usize| {
+            let i = (4 * 1280 + x) * 4;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let (left, mid, right) = (px(8), px(640), px(1271));
+        assert!(left[0] > 200 && left[1] < 60 && left[2] < 60, "gauche {left:?} : rouge attendu");
+        assert!(mid[1] > 200 && mid[0] < 60 && mid[2] < 60, "milieu {mid:?} : vert attendu");
+        assert!(right[2] > 200 && right[0] < 60 && right[1] < 60, "droite {right:?} : bleu attendu");
+    }
+
     /// Le cadre de fenetre (mode 14) se dessine sur Linux comme ailleurs : `"none"` rend
     /// l'image d'avant a l'octet, le theme clair ajoute une barre claire, droite comme
     /// inclinee, et les deux themes different. `OPENSCREEN_FRAME_OUT` recoit les PNG.

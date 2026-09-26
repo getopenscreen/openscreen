@@ -142,6 +142,18 @@ describe("ZoomLevelControl", () => {
 		expect(updateZoomDepth).not.toHaveBeenCalled();
 	});
 
+	it("drops the row when no preset is within reach", () => {
+		render(
+			<ZoomLevelControl
+				region={{ id: "z1", depth: 1 }}
+				tl={{ updateZoomDepth: vi.fn(), updateZoomCustomScale }}
+				maxScale={1.3}
+			/>,
+		);
+		expect(screen.queryByRole("group", { name: "zoom.level" })).toBeNull();
+		expect(screen.getByRole("textbox", { name: "zoom.customScale" })).toBeInTheDocument();
+	});
+
 	it("offers every level when all are within reach", () => {
 		renderControl(3);
 		expect(screen.getAllByRole("button")).toHaveLength(4);

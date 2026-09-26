@@ -465,3 +465,31 @@ describe("VirtualPreview media-error recovery (issue #395)", () => {
 		expect(video.loadCalls).toBe(0);
 	});
 });
+
+describe("VirtualPreview loudness measurement across a Retry", () => {
+	it("measures the recording again when Retry reloads it", async () => {
+		// The first request came back failed while the file was missing; without a fresh
+		// one after Retry the voice would stay unlevelled (0 dB) for the whole session.
+		const getLoudnessGain = vi
+			.fn<(path: string) => Promise<{ success: boolean; gainDb: number }>>()
+			.mockResolvedValueOnce({ success: false, gainDb: 0 })
+			.mockResolvedValueOnce({ success: true, gainDb: 6 });
+		vi.stubGlobal("electronAPI", { getLoudnessGain });
+		const sources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", filePath: "/tmp/a1.mp4", label: "a1" },
+		];
+		const { bumpRetryToken } = mount([clip("clip_1", "a1", 0)], sources);
+		await act(async () => {});
+		expect(getLoudnessGain).toHaveBeenCalledTimes(1);
+
+		// A re-render with the same token must not ask again.
+		bumpRetryToken(0);
+		await act(async () => {});
+		expect(getLoudnessGain).toHaveBeenCalledTimes(1);
+
+		bumpRetryToken(1);
+		await act(async () => {});
+		expect(getLoudnessGain).toHaveBeenCalledTimes(2);
+		expect(getLoudnessGain).toHaveBeenLastCalledWith("/tmp/a1.mp4");
+	});
+});

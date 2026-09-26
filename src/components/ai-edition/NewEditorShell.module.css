@@ -952,7 +952,7 @@
 	border-radius: 12px;
 	background: var(--surface-1);
 	box-shadow: var(--elev-pop);
-	/* Ten shapes must cost no more room than two. */
+	/* Ten presets must cost no more room than two. */
 	max-height: min(var(--radix-popover-content-available-height, 60vh), 320px);
 	overflow-y: auto;
 	scrollbar-width: thin;
@@ -983,10 +983,7 @@
 	font: 600 12px/1.3 var(--font-body);
 	color: var(--fg-2);
 }
-/* Resolution leads: it is the thing a user recognises about their own footage. */
 .actionMenuMain { font: 600 13px var(--font-display); font-variant-numeric: tabular-nums; }
-/* The ratio token second, for whoever does read them — `64:27` means nothing alone. */
-.actionMenuMeta { font: 400 12px var(--font-body); color: var(--muted); }
 .actionMenuCount {
 	margin-left: auto;
 	font: 500 12px var(--font-body);
@@ -1026,34 +1023,6 @@
 .presetConfirm { font: 500 13px var(--font-body); color: var(--fg); }
 .presetError { font: 400 12px var(--font-body); color: var(--danger); }
 
-/* A section title that carries an action on its right. */
-.sectionHead {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin: 4px var(--sp-4) 8px;
-}
-.sectionHead .sectionLabel { margin: 0; }
-/* Deliberately quieter than the settings it overwrites: it is reached on purpose, not
-   stumbled into, and it must not read as a fifth control in the group. */
-.sectionAction {
-	padding: 3px 8px;
-	border: 1px solid transparent;
-	border-radius: 999px;
-	background: var(--surface-2);
-	color: var(--muted);
-	font: 500 var(--fs-app-sm)/1.4 var(--font-body);
-	white-space: nowrap;
-	cursor: pointer;
-	transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
-}
-.sectionAction:hover:not(:disabled) {
-	border-color: var(--brand);
-	background: var(--bg);
-	color: var(--fg);
-}
-.sectionAction:disabled { cursor: default; opacity: 0.45; }
 .uploadBtn {
 	display: flex;
 	align-items: center;

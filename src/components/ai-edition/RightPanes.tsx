@@ -49,7 +49,6 @@ import {
 } from "react";
 import { toast } from "sonner";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import {
 	WALLPAPER_MOTIONS,
@@ -80,7 +79,6 @@ import {
 	AUDIO_TRACK_GAIN_DB_MAX,
 	AUDIO_TRACK_GAIN_DB_MIN,
 	DEFAULT_EDITOR_SETTINGS,
-	type EditorSettingsPatch,
 } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
@@ -2266,20 +2264,6 @@ function restoreCaretBeforeWord(editor: HTMLElement | null, wordId: string): voi
 // pulling the schema into the helpers block.
 export type { AxcutWord };
 
-// ─── Fit a clip ────────────────────────────────────────────────────
-
-/**
- * The patch behind the action.
- *
- * There is no inverse. It was a toggle once, and the OFF branch restored the shipped defaults
- * — which was already a guess dressed as a memory, since nothing stored what the user had
- * before. Undo does that job properly, and the three sliders it writes sit directly below the
- * button, so "put it back" was never missing; it was being modelled twice.
- */
-export function fitClipPatch(nativeToken: AspectRatio): EditorSettingsPatch {
-	return { padding: 0, borderRadius: 0, shadowIntensity: 0, aspectRatio: nativeToken };
-}
-
 /**
  * The catalog key for a count, by CLDR plural category.
  *
@@ -2344,9 +2328,7 @@ export function VideoEffectsPane() {
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
 	const document = useProjectStore((s) => s.document);
 
-	// Same source the ratio picker reads, so "fill frame" and the ORIGINAL section of that menu
-	// can never disagree about what shape the footage is. Already sorted by clip count then by
-	// pixel area, so [0] is "the shape most of this timeline is in" with no heuristic of ours.
+	// The footage's own shapes for the Original row, the one most clips are in first.
 	const nativeFormats = useMemo(() => (document ? collectNativeFormats(document) : []), [document]);
 	// What Auto resolves to right now, shown on its row: the one entry whose shape moves with
 	// the project (padding, camera layout, crop) has to say where it currently stands.
@@ -2374,7 +2356,6 @@ export function VideoEffectsPane() {
 	// Filling is the default for a format picked from now on; a project that already had one
 	// keeps showing its recording whole until the user says otherwise.
 	const fillDefault = settings.formatFollowCursor === null ? { formatFollowCursor: true } : {};
-	const [fitMenuOpen, setFitMenuOpen] = useState(false);
 	// Held from a padding drag's first move to its release. A drag through 0 would otherwise
 	// drop the Roundness row mid-gesture, and a pane scrolled to its end then clamps its
 	// scroll: the slider slides away under the pointer that is dragging it.
@@ -2394,16 +2375,6 @@ export function VideoEffectsPane() {
 	// un effet de montage ici ne poussait rien tant que ce panneau precis n'avait pas
 	// ete ouvert. Les handlers par controle ci-dessous poussent toujours leurs diffs.
 
-	const applyFitClip = (token: AspectRatio) => {
-		const patch = fitClipPatch(token);
-		void set(patch);
-		if (isNativeCompositorActive()) {
-			setNativeParam("padding", 0);
-			setNativeParam("roundness", 0);
-			setNativeParam("shadow", 0);
-		}
-	};
-
 	return (
 		<Pane
 			title={ts("effects.title")}
@@ -2414,70 +2385,12 @@ export function VideoEffectsPane() {
 			helpText={`${ts("background.help")} ${ts("effects.help")}`}
 		>
 			<BackgroundSection />
-			<div className={styles.sectionHead}>
-				<span className={styles.sectionLabel}>{ts("effects.frame")}</span>
-				{/* #84: "how do I turn the background off". The honest answer was four settings
-				    in three places, so nobody found it. This is that answer as one control.
-
-				    An ACTION, not a state, and not one setting among the four below either — it
-				    overwrites all of them at once, which is why it rides the section header
-				    instead of joining the list. The nearest thing it has to a peer is a reset
-				    button, except it resets to a TARGET state rather than to the initial one.
-
-				    It was a switch first, and a switch has room for one outcome while a timeline
-				    with several shapes has one per shape — so it took the majority silently.
-				    Making the choice explicit as a row of chips then failed on its own terms:
-				    the chips read `683:384` and `64:27`, and ten of them do not fit. So: a
-				    button that does the thing, and a list to pick from when there is more than
-				    one thing it could do. Rows lead with the RESOLUTION, which is what a user
-				    recognises about their own footage. */}
-				<Popover open={fitMenuOpen} onOpenChange={setFitMenuOpen}>
-					<PopoverTrigger asChild>
-						<button
-							type="button"
-							className={styles.sectionAction}
-							disabled={!hasDocument || nativeFormats.length === 0}
-							onClick={(e) => {
-								// One shape means no decision to delegate: act, do not ask.
-								if (nativeFormats.length <= 1) {
-									e.preventDefault();
-									applyFitClip(nativeFormats[0].token);
-								}
-							}}
-						>
-							{ts("effects.fitClip")}
-						</button>
-					</PopoverTrigger>
-					<PopoverContent
-						align="center"
-						sideOffset={6}
-						collisionPadding={12}
-						animated={false}
-						className="w-auto border-0 bg-transparent p-0 shadow-none"
-					>
-						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.fitClip")}>
-							{nativeFormats.map((format) => (
-								<button
-									type="button"
-									role="menuitem"
-									key={format.token}
-									className={styles.actionMenuRow}
-									onClick={() => {
-										setFitMenuOpen(false);
-										applyFitClip(format.token);
-									}}
-								>
-									<span className={styles.actionMenuMain}>
-										{format.width} × {format.height}
-									</span>
-									<span className={styles.actionMenuMeta}>{format.token}</span>
-									<span className={styles.actionMenuCount}>{clipCountLabel(format.clipCount)}</span>
-								</button>
-							))}
-						</div>
-					</PopoverContent>
-				</Popover>
-			</div>
+			{/* #84, "how do I turn the background off", has no button of its own: Padding at 0
+			    under Auto or an Original format frames the recording alone, and the corners go
+			    square with it (see `roundnessFrac`). A "Fit" action did the same in one click,
+			    but it rewrote four settings while naming none, and its menu repeated the
+			    Original row. */}
+			<div className={styles.sectionLabel}>{ts("effects.frame")}</div>
 			{/* The output shape moved here from the timeline toolbar. It is the one setting the
 			    other three depend on — padding, roundness and shadow only mean anything against
 			    a known frame — and among Trim / Speed / Zoom / transport it read as a playback
@@ -2521,12 +2434,8 @@ export function VideoEffectsPane() {
 						void set(aspectRatio === "auto" ? { aspectRatio } : { aspectRatio, ...fillDefault })
 					}
 				/>
-				{/* The timeline's own shapes stay listed here, and NOT only behind "fit": that action
-				    also zeroes the frame styling, so without this row there would be no way to export
-				    at the footage's native shape while keeping a padded, rounded look. Token first,
-				    then the pixel size: here a button names an output FORMAT, so the ratio is the
-				    identity. (The "fit" menu leads with the resolution, because there a row names a
-				    clip.) */}
+				{/* The timeline's own shapes. Token first, then the pixel size: here a button names
+				    an output FORMAT, so the ratio is the identity. */}
 				{nativeFormats.length > 0 ? (
 					<>
 						<span className={styles.fieldLabel}>{ts("effects.formatOriginal")}</span>

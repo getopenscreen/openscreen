@@ -132,7 +132,11 @@
 		"frameThemeDark": "Sombre",
 		"frameThemeHelp": "Coque argent et chrome clair, ou graphite et sombre. Vaut pour tous les cadres.",
 		"windowHelp": "Dessine une fenêtre, ou un appareil modelé en 3D, autour de l'enregistrement.",
-		"roundnessFrameHelp": "La course s'adapte au cadre : 100 % est son arrondi le plus prononcé qui reste beau."
+		"roundnessFrameHelp": "La course s'adapte au cadre : 100 % est son arrondi le plus prononcé qui reste beau.",
+		"shadowNone": "Aucune",
+		"shadowLight": "Légère",
+		"shadowMedium": "Moyenne",
+		"shadowStrong": "Forte"
 	},
 	"stylePresets": {
 		"button": "Préréglages",
@@ -438,7 +442,13 @@
 		"alwaysArrowHint": "Affiche la flèche pour tous les états du curseur, même sur du texte ou des liens.",
 		"motionBlur": "Flou de mouvement",
 		"theme": "Style du curseur",
-		"autoHide": "Masquer si inactif"
+		"autoHide": "Masquer si inactif",
+		"sizeNormal": "Normale",
+		"sizeLarge": "Grande",
+		"sizeExtraLarge": "Très grande",
+		"bounceNone": "Aucun",
+		"bounceLight": "Léger",
+		"bounceStrong": "Marqué"
 	},
 	"export": {
 		"gifButton": "Exporter le GIF",

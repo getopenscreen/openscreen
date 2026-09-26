@@ -3309,8 +3309,8 @@ mod orbit_camera_tests {
         for t in [3.0f32, 5.0, 7.0] {
             let m = zoom_state_in(std::slice::from_ref(&manual), t, Some(&tr), &whole(&tr), &ScreenClock::default());
             assert_eq!((m.camera, m.focus), (1.0, [0.5, 0.5]), "t {t}");
-            // Zoom 2 : la visée reste dans [0,275 ; 0,725].
-            assert!(near(m.orbit, [0.2, 0.7]) && near(m.aim, [0.275, 0.7]), "t {t} : {:?} {:?}", m.orbit, m.aim);
+            // Zoom 2 : la visée reste dans [0,25 ; 0,75], la portée du gimbal.
+            assert!(near(m.orbit, [0.2, 0.7]) && near(m.aim, [0.25, 0.7]), "t {t} : {:?} {:?}", m.orbit, m.aim);
             let p = zoom_state_in(&[region("orbit", 2.0, 8.0)], t, Some(&parked), &whole(&parked), &ScreenClock::default());
             assert!(near(m.orbit, p.orbit) && near(m.aim, p.aim), "t {t} : {:?} {:?}", p.orbit, p.aim);
             let blind = zoom_state_at(std::slice::from_ref(&manual), t, None);

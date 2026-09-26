@@ -246,8 +246,6 @@ const FOLLOW_LOOKAHEAD_S: f32 = 0.25;
 /// Pas et longueur du noyau : ω·τ va jusqu'à 10, la queue coupée pèse 5·10⁻⁴.
 const FOLLOW_STEP_S: f32 = 1.0 / 60.0;
 const FOLLOW_TAPS: usize = 120;
-/// La vue comptée plus large que `1/zoom` de l'écran, pour la portée du point visé.
-const VIEW_MARGIN: f32 = 1.1;
 
 /// Ce que le cadreur rend pour une frame, en fractions de l'écran recadré : le point visé et le
 /// pointeur lissé.
@@ -261,10 +259,13 @@ impl Follow {
     pub const CENTRE: Follow = Follow { aim: [0.5; 2], orbit: [0.5; 2] };
 }
 
-/// Portée du point visé au zoom `zoom` : il reste dans `0,5 ± reach`, là où la vue reste dans
-/// l'écran ; au zoom 1, le centre.
+/// Portée du point visé au zoom `zoom` : il reste dans `0,5 ± reach`, la portée du focus d'un
+/// zoom à plat (le gimbal de l'aperçu). Comme sous les autres caméras, la vue va jusqu'au bord de
+/// l'écran et le padding montre ce qu'il y a au-delà. Visé en butée, le bord de l'écran tombe au
+/// plus à 3 % de la boîte au-delà de celui d'un zoom à plat : la perspective agrandit le côté
+/// proche. Au zoom 1, le centre.
 fn reach(zoom: f32) -> f32 {
-    (0.5 - 0.5 * VIEW_MARGIN / zoom.max(1.0)).max(0.0)
+    (0.5 - 0.5 / zoom.max(1.0)).max(0.0)
 }
 
 /// L'orbite en focus manuel, posée par le point de focus de la région (`point`, fractions de
@@ -286,8 +287,7 @@ pub fn fixed(point: [f32; 2], zoom: f32) -> Follow {
 /// région. Pas de zone morte : la caméra vit avec le pointeur, le lissage la garde calme.
 ///
 /// - `orbit` : le pointeur lissé, sur tout l'écran.
-/// - `aim` : le même, borné avant lissage à `0,5 ± (0,5 − 0,5·VIEW_MARGIN/zoom)`, là où la vue
-///   reste dans l'écran ; au zoom 1, le centre.
+/// - `aim` : le même, borné avant lissage à la portée du zoom (`reach`) ; au zoom 1, le centre.
 pub fn follow(frame: &CameraFrame, t: f32, zoom: f32) -> Follow {
     let Some(track) = frame.track else { return Follow::CENTRE };
     let reach = reach(zoom);
@@ -317,7 +317,7 @@ mod tests {
     const BOX: [f32; 2] = [1536.0, 864.0];
 
     fn pose(orbit: [f32; 2], zoom: f32) -> CameraPose {
-        let reach = (0.5 - 0.5 * VIEW_MARGIN / zoom).max(0.0);
+        let reach = reach(zoom);
         let aim = orbit.map(|o| o.clamp(0.5 - reach, 0.5 + reach));
         CameraPose { weight: 1.0, aim, orbit, zoom, press: 0.0 }
     }
@@ -333,7 +333,7 @@ mod tests {
     fn envelope() -> Vec<(f32, f32, [f32; 2], View, [f32; 2])> {
         let mut out = Vec::new();
         for zoom in [1.0f32, 1.25, 1.5, 1.8, 2.2, 3.5, 5.0] {
-            let reach = (0.5 - 0.5 * VIEW_MARGIN / zoom).max(0.0);
+            let reach = reach(zoom);
             for k in [2, 5, 8, 10] {
                 let weight = k as f32 / 10.0;
                 let z = 1.0 + (zoom - 1.0) * weight;
@@ -639,20 +639,35 @@ mod tests {
         let settled = settled.expect("jamais posée");
         println!("95 % du saut {settled:.2} s après lui");
         assert!((0.6..=1.0).contains(&settled), "{settled}");
-        // Le point visé : borné à 0,5 ± 0,225 au zoom 2.
+        // Le point visé : borné à 0,5 ± 0,25 au zoom 2.
         let posed = at(8.0);
-        assert!((posed.aim[0] - 0.725).abs() < 1e-3 && (posed.aim[1] - 0.275).abs() < 1e-3, "{posed:?}");
+        assert!((posed.aim[0] - 0.75).abs() < 1e-3 && (posed.aim[1] - 0.25).abs() < 1e-3, "{posed:?}");
         assert!((posed.orbit[0] - 0.8).abs() < 1e-3);
     }
 
-    /// Le point visé reste là où la vue reste dans l'écran (au centre au zoom 1), l'orbite lit
-    /// tout l'écran. Recadrage compris ; sans piste, le centre.
+    /// Visé en butée, comme un zoom à plat au bord du gimbal, la vue va jusqu'au bord de l'écran :
+    /// le bord tombe au plus à 3,5 % de la boîte au-delà de celui du zoom à plat, et le padding
+    /// montre ce qu'il y a derrière. Les coins du métrage se voient, comme sous les autres caméras.
     #[test]
-    fn the_aim_keeps_the_view_on_the_screen() {
+    fn at_its_limit_the_view_reaches_the_screen_edge() {
+        for zoom in [1.5f32, 1.8, 2.2, 3.5, 5.0] {
+            let (bx, edge) = (BOX.map(|b| b * zoom), 0.5 - reach(zoom));
+            let pose = CameraPose { weight: 1.0, aim: [edge, 0.5], orbit: [edge, 0.5], zoom, press: 0.0 };
+            let x = View::new(bx, pose).project([-bx[0] * 0.5, 0.0, 0.0]).unwrap()[0];
+            let past = (-BOX[0] * 0.5 - x) / BOX[0];
+            println!("zoom {zoom} : le bord de l'écran à {past:+.3} boîte au-delà d'un zoom à plat");
+            assert!(past < 0.035, "zoom {zoom} : {past}");
+        }
+    }
+
+    /// Le point visé va aussi loin que le focus d'un zoom à plat (au centre au zoom 1), l'orbite
+    /// lit tout l'écran. Recadrage compris ; sans piste, le centre.
+    #[test]
+    fn the_aim_goes_as_far_as_a_flat_zoom() {
         let corner = track(|_| (0.99, 0.01));
         for zoom in [1.0f32, 1.5, 2.0, 3.0] {
             let got = follow(&whole(&corner), 5.0, zoom);
-            let reach = (0.5 - 0.5 * VIEW_MARGIN / zoom).max(0.0);
+            let reach = reach(zoom);
             assert!(
                 (got.aim[0] - (0.5 + reach)).abs() < 1e-3 && (got.aim[1] - (0.5 - reach)).abs() < 1e-3,
                 "{zoom} {got:?}"

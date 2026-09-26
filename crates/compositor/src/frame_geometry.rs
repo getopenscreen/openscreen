@@ -6558,8 +6558,8 @@ mod tests {
         let left = plan(&scene, parked(0.05, vec![]));
         let (cr, cl) = (right.camera.expect("caméra"), left.camera.expect("caméra"));
         assert_eq!(cr.weight, 1.0);
-        // Zoom 2 : la vue reste dans l'écran tant que la visée reste dans [0,275 ; 0,725].
-        assert!(cr.aim[0] > 0.72 && cl.aim[0] < 0.28, "{:?} {:?}", cr.aim, cl.aim);
+        // Zoom 2 : la visée va jusqu'à [0,25 ; 0,75], la portée du gimbal.
+        assert!(cr.aim[0] > 0.74 && cl.aim[0] < 0.26, "{:?} {:?}", cr.aim, cl.aim);
         // L'orbite lit tout le recadrage, sans la borne du zoom : 0,55 y tombe à 0,9.
         assert!(cr.orbit[0] > 0.89 && cl.orbit[0] < 0.1, "{:?} {:?}", cr.orbit, cl.orbit);
         assert_eq!((cr.zoom, cr.press), (2.0, 0.0));
@@ -6611,7 +6611,7 @@ mod tests {
         let cfg = crate::config::all().pop().expect("au moins une config");
         let json = zoomed_golden_scene_json().replace(
             r#""focusX":0.5,"focusY":0.3,"rotation":"none""#,
-            r#""focusX":0.74,"focusY":0.3,"rotation":"orbit","focusMode":"manual""#,
+            r#""focusX":0.8,"focusY":0.3,"rotation":"orbit","focusMode":"manual""#,
         );
         assert_ne!(json, zoomed_golden_scene_json(), "la substitution doit poser l'orbite");
         let scene = Scene::from_json(&json).expect("scène");
@@ -6630,9 +6630,9 @@ mod tests {
         };
         for p in [pose(&scene, 0.55), pose(&scene, 0.05), pose(&hidden, 0.55)] {
             assert_eq!(p.weight, 1.0);
-            // Zoom 2 : l'œil sur l'orbite du point, la visée bornée à 0,725.
-            assert!((p.orbit[0] - 0.74).abs() < 1e-3 && (p.orbit[1] - 0.3).abs() < 1e-3, "{:?}", p.orbit);
-            assert!((p.aim[0] - 0.725).abs() < 1e-3 && (p.aim[1] - 0.3).abs() < 1e-3, "{:?}", p.aim);
+            // Zoom 2 : l'œil sur l'orbite du point, la visée bornée à 0,75, la portée du gimbal.
+            assert!((p.orbit[0] - 0.8).abs() < 1e-3 && (p.orbit[1] - 0.3).abs() < 1e-3, "{:?}", p.orbit);
+            assert!((p.aim[0] - 0.75).abs() < 1e-3 && (p.aim[1] - 0.3).abs() < 1e-3, "{:?}", p.aim);
         }
     }
 

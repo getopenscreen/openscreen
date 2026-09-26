@@ -16,6 +16,7 @@ import { EditorDialogsProvider } from "./contexts/EditorDialogsContext";
 import { useScopedT } from "./contexts/I18nContext";
 import { ShortcutsProvider } from "./contexts/ShortcutsContext";
 import { loadAllCustomFonts } from "./lib/customFonts";
+import { registerTextFontFaces } from "./lib/textFonts";
 
 const VideoEditorEntry = lazy(() =>
 	import("./components/ai-edition/AiEditionShell").then((module) => ({
@@ -77,6 +78,7 @@ export default function App() {
 		loadAllCustomFonts().catch((error) => {
 			console.error("Failed to load custom fonts:", error);
 		});
+		registerTextFontFaces();
 	}, []);
 
 	const content = (() => {

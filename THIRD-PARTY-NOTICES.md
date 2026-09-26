@@ -123,6 +123,30 @@ distributed by their own registries, not redistributed inside our binaries.
   so nothing of PipeWire's ships inside our installers beyond the compiled
   result of its headers (inline functions and struct layouts).
 
+## Fonts — Inter, Lora, Oswald, Caveat, IBM Plex Mono
+
+- **Components**: the Regular and Bold `.ttf` of each family, under
+  `resources/fonts/`.
+- **Used by**: the native compositor, which draws captions and annotations with
+  these files and nothing else (it registers them privately at start and never
+  reads the fonts installed on the machine), and the editor's font picker.
+- **License**: **SIL Open Font License 1.1** — <https://openfontlicense.org>.
+  Each family's copyright notice and licence text ship beside its files as
+  `<Family>-OFL.txt`, as the licence requires.
+- **Unmodified**: every file is redistributed exactly as upstream publishes it,
+  which is also why the Reserved Font Names "Lora" and "Plex" are kept.
+- **Upstream**:
+  - Inter — Copyright 2016 The Inter Project Authors. `extras/ttf/` of the v4.1
+    release, <https://github.com/rsms/inter/releases/tag/v4.1>.
+  - Lora 3.021 — Copyright 2011 The Lora Project Authors. `fonts/ttf/` of
+    <https://github.com/cyrealtype/Lora-Cyrillic> at `2d53b449b6`.
+  - Oswald 4.103 — Copyright 2016 The Oswald Project Authors. `fonts/ttf/` of
+    <https://github.com/googlefonts/OswaldFont> at `89795261ac`.
+  - Caveat 2.000 — Copyright 2014 The Caveat Project Authors. `fonts/ttf/` of
+    <https://github.com/googlefonts/caveat> at `59745e818e`.
+  - IBM Plex Mono 2.3 — Copyright © 2017 IBM Corp. `ofl/ibmplexmono/` of
+    <https://github.com/google/fonts> at `23e54b51dd`.
+
 ## OpenScreen native helpers
 
 `wgc-capture` (Windows Graphics Capture), the ScreenCaptureKit helper (macOS),

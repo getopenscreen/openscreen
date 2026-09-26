@@ -9,6 +9,7 @@
 // `legacyEditor` passthrough blob), so caption settings round-trip through save
 // / load / undo with every other appearance setting and need no schema bump.
 
+import { DEFAULT_TEXT_FONT_FAMILY, resolveTextFontFamily } from "@/lib/textFonts";
 import { clamp } from "@/utils/math";
 import type { AxcutDocument } from "../schema";
 import { type TranscriptLane, voiceoverPlacements } from "../timeline/aggregated-transcript";
@@ -107,7 +108,7 @@ export const DEFAULT_CAPTION_SETTINGS: CaptionSettings = {
 	language: null,
 	captionLane: "recording",
 	fontSize: 48,
-	fontFamily: "Inter",
+	fontFamily: DEFAULT_TEXT_FONT_FAMILY,
 	fontWeight: "bold",
 	color: "#ffffff",
 	backgroundEnabled: true,
@@ -478,7 +479,9 @@ export function getCaptionSettings(
 		// that `lanePlacements` would not recognise.
 		captionLane: readEnum(raw.captionLane, CAPTION_LANES, d.captionLane),
 		fontSize,
-		fontFamily: readString(raw.fontFamily, d.fontFamily),
+		// A family that no longer ships reads as the default: the compositor could not draw it,
+		// and the picker has no entry to show for it.
+		fontFamily: resolveTextFontFamily(raw.fontFamily),
 		fontWeight: readEnum(raw.fontWeight, ["normal", "bold"] as const, d.fontWeight),
 		color: readString(raw.color, d.color),
 		backgroundEnabled,

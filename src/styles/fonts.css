@@ -5,9 +5,8 @@
  *
  * Self-hosted rather than pulled from Google Fonts on purpose: this is a
  * desktop app that has to start with no network, and the whole UI chrome
- * hangs off these two families. (index.css does @import Google Fonts, but
- * that set is the on-canvas caption picker — cosmetic, and already only
- * meaningful for a user who went looking for those faces.)
+ * hangs off these two families. (The on-canvas caption/annotation families
+ * are separate: public/fonts, registered by lib/textFonts.ts.)
  *
  * One variable file per family covers weights 100-900, so the pair costs
  * ~138 KB instead of the ~19 static cuts it replaces. Upstream:

@@ -98,6 +98,7 @@
     "!dist/wallpapers/**",
     "!dist/cursors/**",
     "!dist/mediapipe/**",
+    "!dist/fonts/**",
     // Exclude dead-weight node_modules: all frontend and electron code is pre-bundled by Vite (saves ~238 MB)
     "!node_modules/**",
     "!*.png",
@@ -145,6 +146,15 @@
     {
       "from": "public/mediapipe",
       "to": "mediapipe"
+    },
+    // The only fonts captions and annotations are drawn in: the compositor registers them
+    // privately (OPENSCREEN_FONTS_DIR, compositorViewService.ts) and never reads the machine's
+    // installed fonts. Out of the asar for the same raw-path reason as the model above; the
+    // renderer's picker specimens load the same copy through the asset base URL. 2.3 MB, with
+    // each family's OFL text beside it as the licence requires.
+    {
+      "from": "public/fonts",
+      "to": "fonts"
     }
   ],
 

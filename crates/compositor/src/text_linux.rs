@@ -111,10 +111,23 @@ pub struct TextRasterizer {
     swash_cache: RefCell<SwashCache>,
 }
 
+/// Ajoute `files` (`crate::text_fonts`) a la base `fontdb` de ce rasteriseur, sans rien
+/// installer sur la machine. Un fichier illisible ne coute que sa police : le texte retombe
+/// sur celles du systeme.
+fn load_fonts(font_system: &mut FontSystem, files: &[std::path::PathBuf]) {
+    for path in files {
+        if let Err(e) = font_system.db_mut().load_font_file(path) {
+            eprintln!("[text] police non chargee ({e}) : {}", path.display());
+        }
+    }
+}
+
 impl TextRasterizer {
     pub fn new() -> Result<TextRasterizer> {
+        let mut font_system = FontSystem::new();
+        load_fonts(&mut font_system, &crate::text_fonts::embedded_font_files());
         Ok(TextRasterizer {
-            font_system: RefCell::new(FontSystem::new()),
+            font_system: RefCell::new(font_system),
             swash_cache: RefCell::new(SwashCache::new()),
         })
     }
@@ -434,6 +447,49 @@ mod tests {
         (0..w)
             .filter(|x| (0..h).any(|y| atlas[y * w + x] > 16))
             .collect()
+    }
+
+    /// Chaque famille embarquee est celle que cosmic-text dessine, dans les deux graisses
+    /// qu'un controle peut produire, et deux familles ne se confondent jamais a l'ecran.
+    #[test]
+    fn every_shipped_family_draws_from_its_own_files() {
+        use cosmic_text::fontdb::{Family, Query, Stretch, Style, Weight};
+        let mut font_system = FontSystem::new();
+        let files = crate::text_fonts::font_files_in(&crate::text_fonts::repo_fonts_dir());
+        load_fonts(&mut font_system, &files);
+        for family in crate::text_fonts::SHIPPED_FAMILIES {
+            for weight in [Weight::NORMAL, Weight::BOLD] {
+                let query = Query {
+                    families: &[Family::Name(family)],
+                    weight,
+                    stretch: Stretch::Normal,
+                    style: Style::Normal,
+                };
+                let id = font_system
+                    .db()
+                    .query(&query)
+                    .unwrap_or_else(|| panic!("{family} introuvable"));
+                // Un vrai fichier de cette graisse, pas le regulier epaissi ou non.
+                assert_eq!(font_system.db().face(id).unwrap().weight, weight, "{family}");
+            }
+        }
+
+        let raster = TextRasterizer {
+            font_system: RefCell::new(font_system),
+            swash_cache: RefCell::new(SwashCache::new()),
+        };
+        let mut blocks = Vec::new();
+        for family in crate::text_fonts::SHIPPED_FAMILIES {
+            let mut s = spec("Hamburgefonstiv", "left");
+            s.font_family = family.to_owned();
+            s.font_size_px = 100.0;
+            s.box_px = [1600, 200];
+            let atlas = raster.build_atlas(&s).expect("atlas").pixels;
+            let (cols, rows) = (ink_cols(&atlas, 1600), ink_rows(&atlas, 1600, 0, 1600));
+            let (w, h) = (cols[cols.len() - 1] - cols[0] + 1, rows[rows.len() - 1] - rows[0] + 1);
+            blocks.push((family, w as f32, h as f32));
+        }
+        crate::text_fonts::assert_distinct_blocks(&blocks);
     }
 
     #[test]

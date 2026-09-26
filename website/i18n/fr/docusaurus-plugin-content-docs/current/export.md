@@ -17,7 +17,7 @@ keywords:
 
 Cliquez sur **Exporter** dans la barre supérieure pour ouvrir la fenêtre d'export.
 
-Choisissez d'abord une **destination** : **Web / YouTube** (MP4, 1080p, 60 fps), **Réseaux sociaux** (la même chose à 30 fps, un fichier deux fois plus léger), **Studio** (MP4 à la résolution de l'enregistrement, 60 fps) ou **GIF pour README** (un GIF 480p à 15 fps). Une destination ne change jamais le ratio du projet. Tout ce qui suit se trouve sous **Avancé**.
+Choisissez d'abord une **destination** : **Web / YouTube** (MP4, 1080p, 60 fps), **Réseaux sociaux** (la même chose à 30 fps, à un débit plus faible), **Studio** (MP4 à la résolution du plus petit clip, ajustée au ratio du projet, 60 fps) ou **GIF pour README** (un GIF 480p à 15 fps). Une destination ne change jamais le ratio du projet. Tout ce qui suit se trouve sous **Avancé**.
 
 ## Formats {#formats}
 

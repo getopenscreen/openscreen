@@ -469,6 +469,17 @@ inline float3 lighten(float3 c, float k)
     return k > 0.0 ? c + (1.0 - c) * k : c * (1.0 + k);
 }
 
+// Les trois nappes de l'aurore. Miroir de `aurora_blobs` côté HLSL.
+inline float3 aurora_blobs(float2 p, float time, float aspect)
+{
+    const float TAU = 6.2831853;
+    float2 b0 = float2(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
+    float2 b1 = float2(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
+    float2 b2 = float2(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+    return float3(exp(-dot(p - b0, p - b0) / 0.176), exp(-dot(p - b1, p - b1) / 0.132),
+                  exp(-dot(p - b2, p - b2) / 0.11));
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
 // `gradient_motion` côté HLSL (commentaires complets là-bas).
 inline float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1,
@@ -483,19 +494,47 @@ inline float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, flo
         float ph = TAU * time / 30.0;
         float n = value_noise(p * 1.8 + 1.5 * float2(cos(ph), sin(ph)));
         float3 g = ramp4(clamp(0.5 + u + 0.6 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
-        float2 b0 = float2(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
-        float2 b1 = float2(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
-        float2 b2 = float2(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+        float3 blobs = aurora_blobs(p, time, aspect);
         float3 light = lighten(k3.rgb, 0.15);
-        g = mix(g, light, 0.7 * exp(-dot(p - b0, p - b0) / 0.176));
-        g = mix(g, lighten(k0.rgb, -0.15), 0.7 * exp(-dot(p - b1, p - b1) / 0.132));
-        g = mix(g, light, 0.6 * exp(-dot(p - b2, p - b2) / 0.11));
+        g = mix(g, light, 0.7 * blobs.x);
+        g = mix(g, lighten(k0.rgb, -0.15), 0.7 * blobs.y);
+        g = mix(g, light, 0.6 * blobs.z);
         return g;
     }
     // Vagues : trois bandes sinus perpendiculaires à l'axe (6 s), ondulées (10 s), crêtes éclairées.
     float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
     float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
     return lighten(ramp4(clamp(0.5 + u + 0.18 * w, 0.0, 1.0), k0, k1, k2, k3), 0.07 * w);
+}
+
+// Les mêmes mouvements sur une image (mode 6). Miroir ligne pour ligne de `image_motion` côté
+// HLSL (commentaires complets là-bas) : rend `q` déplacé (xy) et l'éclairage (z).
+inline float3 image_motion(float2 q, float time, float motion, float aspect)
+{
+    const float TAU = 6.2831853;
+    if (motion < 1.5)
+    {
+        // Dérive : zoom lent entre 8 et 22 % (20 s), panoramique dans sa marge (15 et 24 s).
+        float z = 1.15 + 0.07 * sin(TAU * time / 20.0);
+        float m = 0.375 * (1.0 - 1.0 / z);
+        return float3(q / z + m * float2(sin(TAU * time / 15.0), cos(TAU * time / 24.0)), 0.0);
+    }
+    if (motion < 2.5)
+    {
+        // Aurore : écoulement sous un bruit de ±3 %, éclairé par les nappes.
+        float2 p = float2(q.x * aspect, q.y);
+        float ph = TAU * time / 30.0;
+        float2 c = p * 1.6 + 1.5 * float2(cos(ph), sin(ph));
+        float2 flow = float2(value_noise(c), value_noise(c + float2(5.2, 1.3))) - 0.5;
+        float3 blobs = aurora_blobs(p, time, aspect);
+        return float3(q / 1.08 + 0.06 * flow, 0.12 * (blobs.x - blobs.y + 0.85 * blobs.z));
+    }
+    // Vagues : bandes à 135° qui ondulent l'image de ±0,85 % et éclairent leurs crêtes.
+    float2 d = float2(0.7071068, 0.7071068);
+    float u = dot(q, d) / 1.4142136;
+    float v = dot(q, float2(-d.y, d.x)) / 1.4142136;
+    float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
+    return float3(q / 1.06 + 0.012 * w * d, 0.07 * w);
 }
 
 // ============ Curseur MODÉLISÉ (mode 15) ============
@@ -2263,10 +2302,23 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     // l'alpha valait 0 et le fond image était rigoureusement invisible : un fond noir,
     // qu'on lit comme « le compositeur ne dessine pas le wallpaper » plutôt que comme
     // « le wallpaper est dessiné avec alpha 0 ».
+    //
+    // Fond animé : mêmes emplacements qu'au mode 5 (fx.z temps, fx.w mouvement, mb.x aspect).
+    // fx.w = 0 lit l'image telle quelle, à l'octet près.
     if (layer.mode > 5.5 && layer.mode < 6.5)
     {
+        float2 uv = i.uv;
+        float light = 0.0;
+        if (layer.fx.w > 0.5)
+        {
+            float2 size = layer.src.zw - layer.src.xy;
+            float3 m = image_motion((i.uv - layer.src.xy) / size - 0.5, layer.fx.z, layer.fx.w,
+                                    layer.mb.x);
+            uv = layer.src.xy + (m.xy + 0.5) * size;
+            light = m.z;
+        }
         float a = quad_round_alpha(i.local, layer.quad_px, layer.radius_px);
-        return float4(texImg.sample(samp, i.uv).rgb * a, a); // prémultiplié
+        return float4(lighten(texImg.sample(samp, uv).rgb, light) * a, a); // prémultiplié
     }
 
     // mode 5 : gradient linéaire jusqu'à 4 stops (parité web wallpaper dégradé). Nœuds

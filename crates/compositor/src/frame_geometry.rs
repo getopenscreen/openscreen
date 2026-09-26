@@ -1568,21 +1568,22 @@ fn same_source_path(a: &str, b: &str) -> bool {
 /// Période commune des mouvements de fond (s). Chaque période du shader (6, 10, 12, 15, 20,
 /// 30 s) la divise, donc replier le temps dessus ne crée aucun raccord visible — et garde au
 /// shader un temps borné, là où un `f32` de plusieurs heures perdrait la finesse du bruit.
-pub const GRADIENT_MOTION_PERIOD_S: f32 = 120.0;
+pub const WALLPAPER_MOTION_PERIOD_S: f32 = 120.0;
 
-/// Emplacements libres du mode 5 pour le fond animé : `fx.zw` = (temps programme replié, indice
-/// du mouvement), `mb.x` = aspect w/h de la sortie (les nappes de l'aurore restent rondes).
+/// Emplacements libres des modes 5 (dégradé) et 6 (image) pour le fond animé : `fx.zw` = (temps
+/// programme replié, indice du mouvement), `mb.x` = aspect w/h du rect rempli (les nappes de
+/// l'aurore restent rondes).
 ///
-/// `GradientMotion::None` rend les zéros d'avant l'animation, emplacement pour emplacement : le
-/// dégradé immobile reste celui d'aujourd'hui, octet pour octet. Fonction pure du temps
+/// `WallpaperMotion::None` rend les zéros d'avant l'animation, emplacement pour emplacement : le
+/// fond immobile reste celui d'aujourd'hui, octet pour octet. Fonction pure du temps
 /// programme, jamais d'un état porté de frame en frame — preview et export, lecture et seek
 /// tombent sur la même image.
-pub fn gradient_motion_slots(
-    motion: crate::scene::GradientMotion,
+pub fn wallpaper_motion_slots(
+    motion: crate::scene::WallpaperMotion,
     programme_t: f32,
     aspect: f32,
 ) -> ([f32; 2], [f32; 4]) {
-    use crate::scene::GradientMotion as M;
+    use crate::scene::WallpaperMotion as M;
     let index = match motion {
         M::None => return ([0.0, 0.0], [0.0; 4]),
         M::Drift => 1.0,
@@ -1590,7 +1591,7 @@ pub fn gradient_motion_slots(
         M::Waves => 3.0,
     };
     (
-        [programme_t.rem_euclid(GRADIENT_MOTION_PERIOD_S), index],
+        [programme_t.rem_euclid(WALLPAPER_MOTION_PERIOD_S), index],
         [aspect, 0.0, 0.0, 0.0],
     )
 }
@@ -6743,17 +6744,17 @@ mod tests {
     /// Sans mouvement, les emplacements restent les zéros d'avant (dégradé inchangé) ; avec,
     /// le temps est replié sur la période commune et l'indice suit l'ordre du shader.
     #[test]
-    fn gradient_motion_slots_are_zero_when_still_and_wrap_the_clock() {
-        use crate::scene::GradientMotion as M;
-        assert_eq!(gradient_motion_slots(M::None, 37.5, 16.0 / 9.0), ([0.0, 0.0], [0.0; 4]));
-        let (fx, mb) = gradient_motion_slots(M::Drift, 125.0, 2.0);
+    fn wallpaper_motion_slots_are_zero_when_still_and_wrap_the_clock() {
+        use crate::scene::WallpaperMotion as M;
+        assert_eq!(wallpaper_motion_slots(M::None, 37.5, 16.0 / 9.0), ([0.0, 0.0], [0.0; 4]));
+        let (fx, mb) = wallpaper_motion_slots(M::Drift, 125.0, 2.0);
         assert_eq!(fx, [5.0, 1.0]);
         assert_eq!(mb, [2.0, 0.0, 0.0, 0.0]);
-        assert_eq!(gradient_motion_slots(M::Aurora, 0.0, 1.0).0[1], 2.0);
-        assert_eq!(gradient_motion_slots(M::Waves, 240.0, 1.0).0, [0.0, 3.0]);
+        assert_eq!(wallpaper_motion_slots(M::Aurora, 0.0, 1.0).0[1], 2.0);
+        assert_eq!(wallpaper_motion_slots(M::Waves, 240.0, 1.0).0, [0.0, 3.0]);
         // Chaque période du shader divise la période de repli : pas de raccord au bouclage.
         for p in [6.0, 10.0, 12.0, 15.0, 20.0, 30.0] {
-            assert_eq!(GRADIENT_MOTION_PERIOD_S % p, 0.0, "période {p}");
+            assert_eq!(WALLPAPER_MOTION_PERIOD_S % p, 0.0, "période {p}");
         }
     }
 

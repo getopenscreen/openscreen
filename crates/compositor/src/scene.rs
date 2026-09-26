@@ -290,18 +290,24 @@ pub enum SceneBackground {
         /// Absent pour un fond immobile : l'app n'émet la clé que si un mouvement est choisi,
         /// donc la scène d'un projet sans animation ne bouge pas d'un octet.
         #[serde(default)]
-        motion: GradientMotion,
+        motion: WallpaperMotion,
     },
-    Image { path: String },
+    Image {
+        path: String,
+        /// Comme pour le dégradé : absent pour un fond immobile.
+        #[serde(default)]
+        motion: WallpaperMotion,
+    },
 }
 
-/// Mouvement lent d'un fond dégradé (`settings.wallpaperMotion`), lu par le mode 5 dans `fx.w`.
+/// Mouvement du fond d'écran (`settings.wallpaperMotion`), lu dans `fx.w` par le mode 5 (dégradé)
+/// et le mode 6 (image). Une couleur unie n'en porte pas : rien n'y bougerait.
 ///
 /// Une valeur inconnue (projet ouvert par une version plus ancienne que celle qui l'a écrit)
 /// retombe sur `None` au lieu de faire échouer le parse de toute la scène.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum GradientMotion {
+pub enum WallpaperMotion {
     Drift,
     Aurora,
     Waves,
@@ -819,7 +825,7 @@ mod tests {
                 assert_eq!(angle_deg, 135.0);
                 assert_eq!(stops.len(), 2);
                 assert!(offsets.is_empty(), "une scène sans offsets reste lisible");
-                assert_eq!(motion, GradientMotion::None);
+                assert_eq!(motion, WallpaperMotion::None);
             }
             _ => panic!("expected gradient"),
         }
@@ -895,17 +901,23 @@ mod tests {
     }
 
     #[test]
-    fn gradient_motion_parses_and_tolerates_an_unknown_value() {
+    fn wallpaper_motion_parses_and_tolerates_an_unknown_value() {
         let motion_of = |json: &str| match serde_json::from_str::<SceneBackground>(json).expect("parse") {
-            SceneBackground::Gradient { motion, .. } => motion,
-            _ => panic!("expected gradient"),
+            SceneBackground::Gradient { motion, .. }
+            | SceneBackground::Image { motion, .. } => motion,
+            _ => panic!("expected gradient or image"),
         };
-        let g = |m: &str| format!(r##"{{"kind":"gradient","angleDeg":90,"stops":["#000","#fff"]{m}}}"##);
-        assert_eq!(motion_of(&g("")), GradientMotion::None);
-        assert_eq!(motion_of(&g(r#","motion":"drift""#)), GradientMotion::Drift);
-        assert_eq!(motion_of(&g(r#","motion":"aurora""#)), GradientMotion::Aurora);
-        assert_eq!(motion_of(&g(r#","motion":"waves""#)), GradientMotion::Waves);
-        assert_eq!(motion_of(&g(r#","motion":"plasma""#)), GradientMotion::None);
+        let g: fn(&str) -> String =
+            |m| format!(r##"{{"kind":"gradient","angleDeg":90,"stops":["#000","#fff"]{m}}}"##);
+        let i: fn(&str) -> String =
+            |m| format!(r#"{{"kind":"image","path":"/wallpapers/wallpaper1.jpg"{m}}}"#);
+        for bg in [g, i] {
+            assert_eq!(motion_of(&bg("")), WallpaperMotion::None);
+            assert_eq!(motion_of(&bg(r#","motion":"drift""#)), WallpaperMotion::Drift);
+            assert_eq!(motion_of(&bg(r#","motion":"aurora""#)), WallpaperMotion::Aurora);
+            assert_eq!(motion_of(&bg(r#","motion":"waves""#)), WallpaperMotion::Waves);
+            assert_eq!(motion_of(&bg(r#","motion":"plasma""#)), WallpaperMotion::None);
+        }
     }
 
     #[test]

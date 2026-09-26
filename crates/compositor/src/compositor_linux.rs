@@ -47,7 +47,7 @@ use crate::frame_geometry::{
     tilted_screen_cb, CursorPlacement, CursorPlanInput, FrameGeometryInput, ShadowCaster,
     SpriteShape,
 };
-use crate::scene::{Scene, SceneBackground};
+use crate::scene::{Scene, SceneBackground, WallpaperMotion};
 
 const LAYER_WGSL: &str = include_str!("vk_shaders/layer.wgsl");
 const BLUR_WGSL: &str = include_str!("vk_shaders/blur.wgsl");
@@ -1472,6 +1472,10 @@ impl Compositor {
     ///
     /// Err plutot qu'un repli maison : chaque appelant a son propre message et
     /// son propre repli, et un echec silencieux redonnerait le noir qu'on corrige.
+    ///
+    /// `motion` anime l'image au temps programme `programme_t` ; la bulle webcam
+    /// passe `WallpaperMotion::None`.
+    #[allow(clippy::too_many_arguments)]
     fn image_bg_draw(
         &self,
         path: &str,
@@ -1479,6 +1483,8 @@ impl Compositor {
         quad_px: [f32; 2],
         radius_px: f32,
         aspect: f32,
+        motion: WallpaperMotion,
+        programme_t: f32,
         dummy: &wgpu::TextureView,
     ) -> Result<BgDraw> {
         let (tex, iw, ih) = self.cached_image(path)?;
@@ -1491,12 +1497,15 @@ impl Compositor {
             let vis = ai / aspect;
             [0.0, (1.0 - vis) * 0.5, 1.0, 1.0 - (1.0 - vis) * 0.5]
         };
+        let (anim, mb) = crate::frame_geometry::wallpaper_motion_slots(motion, programme_t, aspect);
         let cb = LayerCB {
             dst,
             src,
             quad_px,
             radius_px,
             mode: 6.0,
+            fx: [0.0, 0.0, anim[0], anim[1]],
+            mb,
             ..Default::default()
         };
         let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
@@ -1556,11 +1565,12 @@ impl Compositor {
                     ..crate::frame_geometry::gradient_layer(stops, offsets, BLACK)
                 })
             }
-            Some(SceneBackground::Image { path }) => {
+            Some(SceneBackground::Image { path, .. }) => {
                 // Le cover-fit se mesure sur la BULLE, pas sur la sortie : c'est
                 // elle que l'image doit remplir sans etirement.
                 let aspect = if quad_px[1] > 0.0 { quad_px[0] / quad_px[1] } else { 1.0 };
-                match self.image_bg_draw(path, dst, quad_px, radius_px, aspect, dummy) {
+                let still = WallpaperMotion::None;
+                match self.image_bg_draw(path, dst, quad_px, radius_px, aspect, still, 0.0, dummy) {
                     Ok(d) => d,
                     Err(e) => {
                         // Meme contrat que le fond d'ecran : un chemin casse est
@@ -2087,7 +2097,7 @@ impl Compositor {
         // cfg.bg_blur) floute ensuite ce fond, avant l'ecran.
         enum BgLayer {
             Gradient(LayerCB),
-            Image(String),
+            Image(String, WallpaperMotion),
         }
         let (bg_clear, bg_layer) = match scene_ref.as_ref().map(|s| s.background.clone()) {
             Some(SceneBackground::Color { color }) => {
@@ -2096,7 +2106,7 @@ impl Compositor {
             Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
                 let a = angle_deg.to_radians();
                 let (anim, mb) =
-                    crate::frame_geometry::gradient_motion_slots(motion, g.programme_t, rw / rh);
+                    crate::frame_geometry::wallpaper_motion_slots(motion, g.programme_t, rw / rh);
                 let cb = LayerCB {
                     dst: [0.0, 0.0, 1.0, 1.0],
                     quad_px: [rw, rh],
@@ -2106,8 +2116,8 @@ impl Compositor {
                 };
                 ([0.0, 0.0, 0.0, 1.0], Some(BgLayer::Gradient(cb)))
             }
-            Some(SceneBackground::Image { path }) => {
-                ([0.0, 0.0, 0.0, 1.0], Some(BgLayer::Image(path)))
+            Some(SceneBackground::Image { path, motion }) => {
+                ([0.0, 0.0, 0.0, 1.0], Some(BgLayer::Image(path, motion)))
             }
             None => (lp.bg_color, None),
         };
@@ -2277,10 +2287,10 @@ impl Compositor {
             }
             // Le wallpaper couvre tout le cadre, donc dst plein et pas de coins :
             // `image_bg_draw` sert aussi la bulle webcam, qui elle en a.
-            BgLayer::Image(path) => {
-                match self
-                    .image_bg_draw(&path, [0.0, 0.0, 1.0, 1.0], [0.0, 0.0], 0.0, rw / rh, &dummy)
-                {
+            BgLayer::Image(path, motion) => {
+                let full = [0.0, 0.0, 1.0, 1.0];
+                let t = g.programme_t;
+                match self.image_bg_draw(&path, full, [0.0, 0.0], 0.0, rw / rh, motion, t, &dummy) {
                     Ok(d) => Some(d),
                     Err(e) => {
                         eprintln!("[fond image] \"{path}\" : {e:#}");

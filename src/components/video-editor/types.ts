@@ -37,8 +37,8 @@ export function isWebcamBackgroundMode(value: unknown): value is WebcamBackgroun
 
 export const DEFAULT_WEBCAM_BACKGROUND_MODE: WebcamBackgroundMode = "none";
 
-/** Slow motion of a gradient wallpaper, rendered by the native compositor from programme
- *  time. Only a `linear-gradient(...)` wallpaper moves; any other keeps its value and ignores it. */
+/** Motion of a gradient or image wallpaper, rendered by the native compositor from programme
+ *  time. A solid colour keeps the value and ignores it: nothing on it could move. */
 export const WALLPAPER_MOTIONS = ["none", "drift", "aurora", "waves"] as const;
 
 export type WallpaperMotion = (typeof WALLPAPER_MOTIONS)[number];

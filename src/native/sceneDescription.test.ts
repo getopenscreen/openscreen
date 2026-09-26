@@ -229,7 +229,7 @@ describe("buildSceneDescription.background motion", () => {
 		}
 	});
 
-	it("never moves a colour, an image or the webcam's own gradient", () => {
+	it("attaches the chosen motion to an image, and never to the webcam's own background", () => {
 		const doc = makeDoc({
 			legacyEditor: {
 				wallpaper: "/wallpapers/wallpaper1.jpg",
@@ -239,17 +239,28 @@ describe("buildSceneDescription.background motion", () => {
 			},
 		});
 		const scene = buildSceneDescription(doc);
-		expect(scene.background).toEqual({ kind: "image", path: "/wallpapers/wallpaper1.jpg" });
+		expect(scene.background).toEqual({
+			kind: "image",
+			path: "/wallpapers/wallpaper1.jpg",
+			motion: "waves",
+		});
 		expect(scene.webcamEffect?.background).not.toHaveProperty("motion");
+	});
+
+	it("never moves a colour, or a string the compositor cannot load as an image", () => {
 		const colour = makeDoc({ legacyEditor: { wallpaper: "#123456", wallpaperMotion: "drift" } });
 		expect(buildSceneDescription(colour).background).toEqual({ kind: "color", color: "#123456" });
+		const radial = "radial-gradient(#fff, #000)";
+		const doc = makeDoc({ legacyEditor: { wallpaper: radial, wallpaperMotion: "drift" } });
+		expect(buildSceneDescription(doc).background).toEqual({ kind: "image", path: radial });
 	});
 
 	it("enables the control exactly for the wallpapers the compositor animates", () => {
 		expect(wallpaperAcceptsMotion(gradient)).toBe(true);
+		expect(wallpaperAcceptsMotion("/wallpapers/wallpaper1.jpg")).toBe(true);
+		expect(wallpaperAcceptsMotion("data:image/png;base64,AAAA")).toBe(true);
 		expect(wallpaperAcceptsMotion("#123456")).toBe(false);
-		expect(wallpaperAcceptsMotion("/wallpapers/wallpaper1.jpg")).toBe(false);
-		// Drawn by the web preview only; the compositor paints it as an image path.
+		// Drawn by the web preview only; the compositor gets it as an image path it cannot load.
 		expect(wallpaperAcceptsMotion("radial-gradient(#fff, #000)")).toBe(false);
 	});
 });

@@ -37,7 +37,7 @@ pub use crate::frame_geometry::{
 use crate::frame_geometry::{parse_hex, FrameGeometryInput, ShadowCaster,
     SCREEN_SHADOW_SPREAD_FRAC, WEBCAM_SHADOW_OFFSET_FRAC, WEBCAM_SHADOW_OPACITY,
     WEBCAM_SHADOW_SPREAD_FRAC};
-use crate::scene::{Scene, SceneBackground};
+use crate::scene::{Scene, SceneBackground, WallpaperMotion};
 use anyhow::{anyhow, Result};
 use metal::foreign_types::ForeignType;
 use std::cell::RefCell;
@@ -1083,13 +1083,17 @@ impl Compositor {
         enc: &metal::RenderCommandEncoderRef,
         path: &str,
         output_aspect: f32,
+        motion: WallpaperMotion,
+        programme_t: f32,
     ) -> Result<()> {
-        self.draw_image_in(enc, path, [0.0, 0.0, 1.0, 1.0], [0.0, 0.0], 0.0, output_aspect)
+        let full = [0.0, 0.0, 1.0, 1.0];
+        self.draw_image_in(enc, path, full, [0.0, 0.0], 0.0, output_aspect, motion, programme_t)
     }
 
     /// `draw_image_bg` pour un rect quelconque — la bulle webcam s'en sert avec ses coins
     /// arrondis. `output_aspect` est le ratio du RECT visé, pas celui de la sortie : le crop
-    /// « cover » se calcule contre la zone qu'on remplit.
+    /// « cover » se calcule contre la zone qu'on remplit. `motion` anime l'image au temps
+    /// programme `programme_t` ; la bulle passe `WallpaperMotion::None`.
     #[allow(clippy::too_many_arguments)]
     unsafe fn draw_image_in(
         &self,
@@ -1099,6 +1103,8 @@ impl Compositor {
         quad_px: [f32; 2],
         radius_px: f32,
         output_aspect: f32,
+        motion: WallpaperMotion,
+        programme_t: f32,
     ) -> Result<()> {
         let (tex, iw, ih) = self.cached_image(path)?;
         let ai = iw as f32 / ih.max(1) as f32;
@@ -1110,6 +1116,7 @@ impl Compositor {
             let vis = ai / ao; // rogne verticalement
             (0.0, (1.0 - vis) * 0.5, 1.0, 1.0 - (1.0 - vis) * 0.5)
         };
+        let (anim, mb) = crate::frame_geometry::wallpaper_motion_slots(motion, programme_t, ao);
         enc.set_fragment_texture(2, Some(&tex));
         self.draw_solid(
             enc,
@@ -1119,6 +1126,8 @@ impl Compositor {
                 quad_px,
                 radius_px,
                 mode: 6.0,
+                fx: [0.0, 0.0, anim[0], anim[1]],
+                mb,
                 ..Default::default()
             },
         );
@@ -1173,11 +1182,14 @@ impl Compositor {
                     },
                 );
             }
-            Some(SceneBackground::Image { path }) => {
+            Some(SceneBackground::Image { path, .. }) => {
                 // Même contrat que le fond d'écran : un chemin cassé est loggé puis remplacé par
                 // du noir. Un fallback silencieux redonnerait le bug qu'on corrige.
                 let aspect = if quad_px[1] > 0.0 { quad_px[0] / quad_px[1] } else { 1.0 };
-                if let Err(e) = self.draw_image_in(enc, path, dst, quad_px, radius_px, aspect) {
+                let still = WallpaperMotion::None;
+                if let Err(e) =
+                    self.draw_image_in(enc, path, dst, quad_px, radius_px, aspect, still, 0.0)
+                {
                     eprintln!("[compositor] fond webcam \"{path}\" : {e:#}");
                     self.draw_solid(enc, &solid(BLACK));
                 }
@@ -2222,7 +2234,7 @@ impl Compositor {
             Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
                 let a = angle_deg.to_radians();
                 let (anim, mb) =
-                    crate::frame_geometry::gradient_motion_slots(motion, g.programme_t, rw / rh);
+                    crate::frame_geometry::wallpaper_motion_slots(motion, g.programme_t, rw / rh);
                 self.draw_solid(
                     enc,
                     &LayerCB {
@@ -2233,10 +2245,10 @@ impl Compositor {
                     },
                 );
             }
-            Some(SceneBackground::Image { path }) => {
+            Some(SceneBackground::Image { path, motion }) => {
                 // Repli couleur en cas d'échec, mais LOGGÉ : un fallback silencieux masquerait
                 // un chemin cassé.
-                if let Err(e) = self.draw_image_bg(enc, &path, rw / rh) {
+                if let Err(e) = self.draw_image_bg(enc, &path, rw / rh, motion, g.programme_t) {
                     eprintln!("[compositor] wallpaper image \"{path}\" : {e:#}");
                     self.draw_solid(
                         enc,

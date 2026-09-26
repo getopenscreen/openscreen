@@ -355,6 +355,19 @@ float3 lighten(float3 c, float k)
     return k > 0.0 ? c + (1.0 - c) * k : c * (1.0 + k);
 }
 
+// Les trois nappes de l'aurore : leur poids gaussien (1 au centre) en `p`, position centrée et
+// corrigée de l'aspect, sur des Lissajous de 10 à 20 s. Le dégradé et l'image en partagent la
+// course.
+float3 aurora_blobs(float2 p, float time, float aspect)
+{
+    const float TAU = 6.2831853;
+    float2 b0 = float2(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
+    float2 b1 = float2(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
+    float2 b2 = float2(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+    return float3(exp(-dot(p - b0, p - b0) / 0.176), exp(-dot(p - b1, p - b1) / 0.132),
+                  exp(-dot(p - b2, p - b2) / 0.11));
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5, sur la rampe de ses stops.
 // `gp` 0..1 sur le quad, `dir`/`denom` ceux du dégradé, `time` = temps programme replié sur
 // 120 s (toutes les périodes ci-dessous le divisent), `aspect` = w/h de la sortie. Amples et
@@ -376,13 +389,11 @@ float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1,
         float ph = TAU * time / 30.0;
         float n = value_noise(p * 1.8 + 1.5 * float2(cos(ph), sin(ph)));
         float3 g = ramp4(saturate(0.5 + u + 0.6 * (n - 0.5)), k0, k1, k2, k3);
-        float2 b0 = float2(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
-        float2 b1 = float2(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
-        float2 b2 = float2(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+        float3 blobs = aurora_blobs(p, time, aspect);
         float3 light = lighten(k3.rgb, 0.15);
-        g = lerp(g, light, 0.7 * exp(-dot(p - b0, p - b0) / 0.176));
-        g = lerp(g, lighten(k0.rgb, -0.15), 0.7 * exp(-dot(p - b1, p - b1) / 0.132));
-        g = lerp(g, light, 0.6 * exp(-dot(p - b2, p - b2) / 0.11));
+        g = lerp(g, light, 0.7 * blobs.x);
+        g = lerp(g, lighten(k0.rgb, -0.15), 0.7 * blobs.y);
+        g = lerp(g, light, 0.6 * blobs.z);
         return g;
     }
     // Vagues : trois bandes sinus perpendiculaires à l'axe, qui avancent d'une bande en 6 s,
@@ -390,6 +401,42 @@ float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1,
     float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
     float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
     return lighten(ramp4(saturate(0.5 + u + 0.18 * w), k0, k1, k2, k3), 0.07 * w);
+}
+
+// Les mêmes mouvements sur une image (mode 6). `q` = position -0.5..0.5 dans le cadre, donc dans
+// le rect « cover » de l'image ; `time`, `motion`, `aspect` comme au mode 5. Rend `q` déplacé
+// (xy) et l'éclairage à appliquer à la couleur lue (z, cf. `lighten`). Chaque mouvement zoome
+// l'image d'au moins 6 % et ne déplace jamais la lecture de plus que la marge ainsi gagnée : il
+// ne lit rien hors de l'image.
+float3 image_motion(float2 q, float time, float motion, float aspect)
+{
+    const float TAU = 6.2831853;
+    if (motion < 1.5)
+    {
+        // Dérive : zoom lent entre 8 et 22 % (20 s), panoramique sur les trois quarts de la marge
+        // qu'il laisse (15 et 24 s). Sûre sur une photo, elle ne déforme rien.
+        float z = 1.15 + 0.07 * sin(TAU * time / 20.0);
+        float m = 0.375 * (1.0 - 1.0 / z);
+        return float3(q / z + m * float2(sin(TAU * time / 15.0), cos(TAU * time / 24.0)), 0.0);
+    }
+    if (motion < 2.5)
+    {
+        // Aurore : l'image s'écoule sous un bruit de ±3 % (marge 3,7 %, origine qui tourne en
+        // 30 s), et les nappes de l'aurore l'éclairent ou l'assombrissent au passage.
+        float2 p = float2(q.x * aspect, q.y);
+        float ph = TAU * time / 30.0;
+        float2 c = p * 1.6 + 1.5 * float2(cos(ph), sin(ph));
+        float2 flow = float2(value_noise(c), value_noise(c + float2(5.2, 1.3))) - 0.5;
+        float3 blobs = aurora_blobs(p, time, aspect);
+        return float3(q / 1.08 + 0.06 * flow, 0.12 * (blobs.x - blobs.y + 0.85 * blobs.z));
+    }
+    // Vagues : les bandes du dégradé, sur la diagonale à 135° des dégradés proposés, ondulent
+    // l'image de ±0,85 % (marge 2,8 %) et éclairent leurs crêtes.
+    float2 d = float2(0.7071068, 0.7071068);
+    float u = dot(q, d) / 1.4142136;
+    float v = dot(q, float2(-d.y, d.x)) / 1.4142136;
+    float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
+    return float3(q / 1.06 + 0.012 * w * d, 0.07 * w);
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -2489,10 +2536,21 @@ float4 ps_main(VSOut i) : SV_Target
 
     // mode 6 : wallpaper image RGBA (cover-fit). src = rect uv déjà calculé (crop de
     // recouvrement), i.uv l'interpole. Opaque.
+    // Fond animé : mêmes emplacements qu'au mode 5 (fx.z temps, fx.w mouvement, mb.x aspect).
+    // fx.w = 0 lit l'image telle quelle, à l'octet près.
     if (mode > 5.5)
     {
+        float2 uv = i.uv;
+        float light = 0.0;
+        if (fx.w > 0.5)
+        {
+            float2 size = src.zw - src.xy;
+            float3 m = image_motion((i.uv - src.xy) / size - 0.5, fx.z, fx.w, mb.x);
+            uv = src.xy + (m.xy + 0.5) * size;
+            light = m.z;
+        }
         float a = quad_round_alpha(i.local, quad_px, radius_px);
-        return float4(texImg.Sample(samp, i.uv).rgb * a, a); // prémultiplié
+        return float4(lighten(texImg.Sample(samp, uv).rgb, light) * a, a); // prémultiplié
     }
 
     // mode 5 : gradient linéaire jusqu'à 4 stops (parité web wallpaper dégradé). Nœuds

@@ -62,6 +62,7 @@ import {
 import { parseCssGradient, resolveLinearGradientAngle } from "@/lib/exporter/gradientParser";
 import type { FrameTheme, RecordingFrame, WebcamAnchor } from "@/lib/projectDefaults";
 import { resolveTextFontFamily } from "@/lib/textFonts";
+import { classifyWallpaper } from "@/lib/wallpaper";
 import type { CompositorClipInput } from "./contracts";
 import { ROUNDNESS_REFERENCE_PX } from "./paramUnits";
 
@@ -79,7 +80,8 @@ export type SceneBackground =
 			offsets: number[];
 			motion?: Exclude<WallpaperMotion, "none">;
 	  }
-	| { kind: "image"; path: string }; // "/wallpapers/…" or a data: URL
+	// "/wallpapers/…" or a data: URL. `motion` as for the gradient: omitted when still.
+	| { kind: "image"; path: string; motion?: Exclude<WallpaperMotion, "none"> };
 
 /** A timeline zoom region (from `document.zoomRanges`). Times in seconds. */
 export interface SceneZoomRegion {
@@ -584,20 +586,25 @@ function parseWallpaper(wallpaper: string) {
 }
 
 /**
- * True when `settings.wallpaperMotion` has something to move: the compositor animates only
- * the gradient it draws itself. The motion control asks this, not its own guess at what a
- * gradient is, so it is enabled exactly when the export would show the motion.
+ * True when `settings.wallpaperMotion` has something to move: a linear gradient the compositor
+ * draws itself, or an image it loads. A colour has nothing to move, and any other string (a
+ * radial gradient, a colour function) reaches the compositor as an image path that does not
+ * load. The motion control asks this, not its own guess, so it is shown exactly when the export
+ * would move.
  */
 export function wallpaperAcceptsMotion(wallpaper: string): boolean {
-	return parseWallpaper(wallpaper).kind === "gradient";
+	return (
+		parseWallpaper(wallpaper).kind === "gradient" || classifyWallpaper(wallpaper).kind === "image"
+	);
 }
 
 /** The screen background with the chosen motion attached, when there is one to attach. */
 function sceneBackground(wallpaper: string, motion: WallpaperMotion): SceneBackground {
 	const background = parseWallpaper(wallpaper);
-	return background.kind === "gradient" && motion !== "none"
-		? { ...background, motion }
-		: background;
+	if (motion === "none" || background.kind === "color" || !wallpaperAcceptsMotion(wallpaper)) {
+		return background;
+	}
+	return { ...background, motion };
 }
 
 /**

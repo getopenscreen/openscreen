@@ -396,8 +396,9 @@ function BackgroundSection() {
 				onPickFile={handlePickFile}
 			/>
 			{fileInput}
-			{/* Only a gradient can move, so the row comes with one instead of sitting greyed out
-			    under a photo. The stored choice is kept and comes back with the next gradient. */}
+			{/* Only a gradient or an image can move, so the row comes with one instead of sitting
+			    greyed out under a solid colour. The stored choice is kept and comes back with the
+			    next wallpaper that moves. */}
 			{wallpaperAcceptsMotion(settings.wallpaper) ? (
 				<div className={`${styles.field} ${styles.fieldStack}`}>
 					<span className={styles.fieldLabel}>{ts("background.motion")}</span>

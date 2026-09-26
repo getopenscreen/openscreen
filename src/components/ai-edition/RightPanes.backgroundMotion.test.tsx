@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// The background animation control moves only what the compositor draws as a gradient. On any
-// other wallpaper it is not shown at all, rather than holding a choice that changes nothing on
-// screen, and the stored choice waits for the next gradient.
+// The background animation control moves a gradient or an image wallpaper. On a solid colour it
+// is not shown at all, rather than holding a choice that changes nothing on screen, and the stored
+// choice waits for the next wallpaper that moves.
 
 import "@testing-library/jest-dom";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -53,8 +53,16 @@ describe("background animation control", () => {
 		});
 	});
 
-	it("is not shown on an image, and keeps the stored choice for the next gradient", () => {
-		renderWith({ wallpaper: "/wallpapers/wallpaper1.jpg", wallpaperMotion: "waves" });
+	it("animates an image wallpaper", () => {
+		renderWith({ wallpaper: "/wallpapers/wallpaper1.jpg" });
+		fireEvent.click(choice("Drift"));
+		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
+			wallpaperMotion: "drift",
+		});
+	});
+
+	it("is not shown on a solid colour, and keeps the stored choice for the next one", () => {
+		renderWith({ wallpaper: "#123456", wallpaperMotion: "waves" });
 		expect(screen.queryByRole("group", { name: "Animation" })).not.toBeInTheDocument();
 		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
 			wallpaperMotion: "waves",

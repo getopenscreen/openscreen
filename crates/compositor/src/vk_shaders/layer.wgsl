@@ -429,6 +429,16 @@ fn lighten(c: vec3<f32>, k: f32) -> vec3<f32> {
     return select(c * (1.0 + k), c + (vec3<f32>(1.0) - c) * k, k > 0.0);
 }
 
+// Les trois nappes de l'aurore. Miroir de `aurora_blobs` cote HLSL.
+fn aurora_blobs(p: vec2<f32>, time: f32, aspect: f32) -> vec3<f32> {
+    let TAU = 6.2831853;
+    let b0 = vec2<f32>(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
+    let b1 = vec2<f32>(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
+    let b2 = vec2<f32>(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+    return vec3<f32>(exp(-dot(p - b0, p - b0) / 0.176), exp(-dot(p - b1, p - b1) / 0.132),
+                     exp(-dot(p - b2, p - b2) / 0.11));
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
 // `gradient_motion` cote HLSL (commentaires complets la-bas).
 fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, k0: vec4<f32>, k1: vec4<f32>,
@@ -441,19 +451,44 @@ fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, k0: vec4<f32>, k1:
         let ph = TAU * time / 30.0;
         let n = value_noise(p * 1.8 + 1.5 * vec2<f32>(cos(ph), sin(ph)));
         var g = ramp4(clamp(0.5 + u + 0.6 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
-        let b0 = vec2<f32>(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
-        let b1 = vec2<f32>(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
-        let b2 = vec2<f32>(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+        let blobs = aurora_blobs(p, time, aspect);
         let light = lighten(k3.rgb, 0.15);
-        g = mix(g, light, 0.7 * exp(-dot(p - b0, p - b0) / 0.176));
-        g = mix(g, lighten(k0.rgb, -0.15), 0.7 * exp(-dot(p - b1, p - b1) / 0.132));
-        g = mix(g, light, 0.6 * exp(-dot(p - b2, p - b2) / 0.11));
+        g = mix(g, light, 0.7 * blobs.x);
+        g = mix(g, lighten(k0.rgb, -0.15), 0.7 * blobs.y);
+        g = mix(g, light, 0.6 * blobs.z);
         return g;
     }
     // Vagues : trois bandes sinus perpendiculaires a l'axe (6 s), ondulees (10 s), cretes eclairees.
     let v = dot(gp - vec2<f32>(0.5), vec2<f32>(-dir.y, dir.x)) / denom;
     let w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
     return lighten(ramp4(clamp(0.5 + u + 0.18 * w, 0.0, 1.0), k0, k1, k2, k3), 0.07 * w);
+}
+
+// Les memes mouvements sur une image (mode 6). Miroir ligne pour ligne de `image_motion` cote
+// HLSL (commentaires complets la-bas) : rend `q` deplace (xy) et l'eclairage (z).
+fn image_motion(q: vec2<f32>, time: f32, motion: f32, aspect: f32) -> vec3<f32> {
+    let TAU = 6.2831853;
+    if motion < 1.5 {
+        // Derive : zoom lent entre 8 et 22 % (20 s), panoramique dans sa marge (15 et 24 s).
+        let z = 1.15 + 0.07 * sin(TAU * time / 20.0);
+        let m = 0.375 * (1.0 - 1.0 / z);
+        return vec3<f32>(q / z + m * vec2<f32>(sin(TAU * time / 15.0), cos(TAU * time / 24.0)), 0.0);
+    }
+    if motion < 2.5 {
+        // Aurore : ecoulement sous un bruit de +-3 %, eclaire par les nappes.
+        let p = vec2<f32>(q.x * aspect, q.y);
+        let ph = TAU * time / 30.0;
+        let c = p * 1.6 + 1.5 * vec2<f32>(cos(ph), sin(ph));
+        let flow = vec2<f32>(value_noise(c), value_noise(c + vec2<f32>(5.2, 1.3))) - vec2<f32>(0.5);
+        let blobs = aurora_blobs(p, time, aspect);
+        return vec3<f32>(q / 1.08 + 0.06 * flow, 0.12 * (blobs.x - blobs.y + 0.85 * blobs.z));
+    }
+    // Vagues : bandes a 135 deg qui ondulent l'image de +-0,85 % et eclairent leurs cretes.
+    let d = vec2<f32>(0.7071068, 0.7071068);
+    let u = dot(q, d) / 1.4142136;
+    let v = dot(q, vec2<f32>(-d.y, d.x)) / 1.4142136;
+    let w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
+    return vec3<f32>(q / 1.06 + 0.012 * w * d, 0.07 * w);
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -2011,8 +2046,19 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Mode 6 -- fond image (wallpaper RGBA) cover-fit, echantillonne sur
         // texY. `src` porte le rect UV cover-fit (calcule cote Rust). Opaque :
         // le fond couvre tout le cadre.
+        // Fond anime : memes emplacements qu'au mode 5 (fx.z temps, fx.w mouvement,
+        // mb.x aspect). fx.w = 0 lit l'image telle quelle, a l'octet pres.
+        var uv = i.uv;
+        var light = 0.0;
+        if layer.fx.w > 0.5 {
+            let size = layer.src.zw - layer.src.xy;
+            let m = image_motion((i.uv - layer.src.xy) / size - vec2<f32>(0.5), layer.fx.z,
+                                 layer.fx.w, layer.mb.x);
+            uv = layer.src.xy + (m.xy + vec2<f32>(0.5)) * size;
+            light = m.z;
+        }
         let bg_a = quad_round_alpha(i.local, layer.quad_px, layer.radius_px);
-        return vec4<f32>(textureSample(texY, samp, i.uv).rgb * bg_a, bg_a); // premultiplie
+        return vec4<f32>(lighten(textureSample(texY, samp, uv).rgb, light) * bg_a, bg_a); // premultiplie
     } else if layer.mode > 7.5 && layer.mode < 8.5 {
         // Mode 8 -- ecran tilte (rotation 3D des zoom regions). Le quad projete est
         // dessine dans sa BBOX (le VS ne sait tracer qu'un rect) et chaque fragment

@@ -847,6 +847,13 @@ export type NativeBridgeRequest =
 	  }
 	| {
 			domain: "presets";
+			action: "setForNewProjects";
+			/** `null` clears the mark: new projects then start from the last project's look. */
+			payload: { id: string | null };
+			requestId?: string;
+	  }
+	| {
+			domain: "presets";
 			action: "reveal";
 			payload: { id: string };
 			requestId?: string;

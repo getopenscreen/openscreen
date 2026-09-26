@@ -4762,6 +4762,7 @@ export function registerIpcHandlers(
 		path.join(app.getPath("userData"), "projects"),
 		RECORDINGS_DIR,
 		approveDocumentMedia,
+		() => stylePresets.newProjectAppearance(),
 	);
 
 	// LlmConfigStore is single-instance for a duller reason — its constructor does

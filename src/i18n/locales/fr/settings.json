@@ -11,6 +11,8 @@
 		"title": "Arrière-plan",
 		"imageLabel": "Fond {{index}}",
 		"custom": "Personnalisé",
+		"customColor": "Couleur personnalisée",
+		"customGradient": "Dégradé à partir d'une couleur",
 		"help": "Choisissez ce qui apparaît derrière l'enregistrement : un fond d'écran fourni, une couleur unie, un dégradé, ou une image personnelle depuis le disque.",
 		"gradient": "Dégradé",
 		"colorLabel": "Couleur {{color}}",

@@ -11,6 +11,8 @@
 		"title": "背景",
 		"imageLabel": "背景 {{index}}",
 		"custom": "カスタム",
+		"customColor": "カスタムカラー",
+		"customGradient": "1色から作るグラデーション",
 		"help": "録画の背景に表示するものを選びます。同梱の壁紙画像、単色、グラデーション、またはディスク上の任意の画像から選べます。",
 		"gradient": "グラデーション",
 		"colorLabel": "色 {{color}}",

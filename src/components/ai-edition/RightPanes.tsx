@@ -43,7 +43,6 @@ import {
 } from "react";
 import { toast } from "sonner";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
-import GradientEditor, { type GradientEditorState } from "@/components/ui/gradient-editor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { WALLPAPER_MOTIONS, type WallpaperMotion } from "@/components/video-editor/types";
@@ -105,7 +104,7 @@ import {
 	DEFAULT_CURSOR_THEME_ID,
 	themePickerPreviewAssets,
 } from "@/lib/cursor/cursorThemes";
-import { buildGradientFromEditor } from "@/lib/gradientBuilder";
+import { gradientSeedColor, oneColorGradient } from "@/lib/gradientBuilder";
 import {
 	FRAME_THEMES,
 	type FrameTheme,
@@ -135,6 +134,7 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
 import { CaptionsPane } from "./CaptionsPane";
+import { ColorField } from "./ColorField";
 import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
@@ -440,12 +440,43 @@ function useMemoCustomWallpapers(current: string): string[] {
 	return cached;
 }
 
-function normaliseHex(raw: string): string | null {
-	const trimmed = raw.trim();
-	if (!trimmed) return null;
-	const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
-	if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(withHash)) return null;
-	return withHash.toLowerCase();
+/** The seed the one-colour gradient starts from when the wallpaper is not one of its own. */
+const GRADIENT_SEED_FALLBACK = "#3b82f6";
+
+/**
+ * The free choice, folded behind the curated set: a "Custom" row under the swatches whose
+ * picker holds the wheel, the hex value and the shared presets, like every other colour in
+ * the inspector. Reachable in one click, never the first thing offered.
+ */
+function CustomBackgroundRow({
+	label,
+	value,
+	swatch,
+	hasDocument,
+	onChange,
+	onCommit,
+}: {
+	label: string;
+	value: string;
+	swatch?: string;
+	hasDocument: boolean;
+	onChange: (hex: string) => void;
+	onCommit: () => void;
+}) {
+	const ts = useScopedT("settings");
+	return (
+		<div className={styles.paneRow}>
+			<span className={styles.label}>{ts("background.custom")}</span>
+			<ColorField
+				label={label}
+				value={value}
+				swatch={swatch}
+				disabled={!hasDocument}
+				onChange={onChange}
+				onCommit={onCommit}
+			/>
+		</div>
+	);
 }
 
 function BackgroundColorTab({
@@ -453,28 +484,25 @@ function BackgroundColorTab({
 	hasDocument,
 	isSelected,
 	onPick,
+	onLive,
+	onCommit,
 	updateNative = true,
 }: {
 	value: string;
 	hasDocument: boolean;
 	isSelected: (v: string) => boolean;
 	onPick: (next: string) => void;
+	onLive: (next: string) => void;
+	onCommit: () => void;
 	updateNative?: boolean;
 }) {
 	const ts = useScopedT("settings");
-	const [hexDraft, setHexDraft] = useState(value.startsWith("#") ? value : "#000000");
-	useEffect(() => {
-		if (value.startsWith("#")) setHexDraft(value);
-	}, [value]);
-	const commitHex = () => {
-		const next = normaliseHex(hexDraft);
-		if (next) {
-			onPick(next);
-			if (updateNative && isNativeCompositorActive()) {
-				setNativeParam("backgroundColor", next);
-			}
+	const pushNative = (color: string) => {
+		if (updateNative && isNativeCompositorActive()) {
+			setNativeParam("backgroundColor", color);
 		}
 	};
+	const current = /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
 	return (
 		<>
 			<div className={styles.bgGrid} style={{ margin: "0 var(--sp-4) 12px" }}>
@@ -488,43 +516,21 @@ function BackgroundColorTab({
 						disabled={!hasDocument}
 						onClick={() => {
 							onPick(c);
-							if (updateNative && isNativeCompositorActive()) {
-								setNativeParam("backgroundColor", c);
-							}
+							pushNative(c);
 						}}
 					/>
 				))}
 			</div>
-			<div
-				style={{
-					margin: "0 var(--sp-4) 12px",
-					display: "flex",
-					alignItems: "center",
-					gap: 8,
+			<CustomBackgroundRow
+				label={ts("background.customColor")}
+				value={current}
+				hasDocument={hasDocument}
+				onChange={onLive}
+				onCommit={() => {
+					onCommit();
+					if (value.startsWith("#")) pushNative(value);
 				}}
-			>
-				<input
-					type="color"
-					className={styles.bgColorInput}
-					value={hexDraft}
-					disabled={!hasDocument}
-					onChange={(e) => setHexDraft(e.target.value)}
-					onBlur={commitHex}
-				/>
-				{/* Mono stays: a hex code. */}
-				<input
-					type="text"
-					className={styles.control}
-					value={hexDraft}
-					disabled={!hasDocument}
-					onChange={(e) => setHexDraft(e.target.value)}
-					onBlur={commitHex}
-					onKeyDown={(e) => {
-						if (e.key === "Enter") commitHex();
-					}}
-					style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)" }}
-				/>
-			</div>
+			/>
 		</>
 	);
 }
@@ -556,35 +562,11 @@ export function WallpaperPicker({
 	const [tab, setTab] = useState<"image" | "color" | "gradient">(
 		() => classifyWallpaper(value).kind,
 	);
-	// The editor is a colour wheel and two stops, taller than the rest of the tab together:
-	// shown on demand, so the presets stay in view.
-	const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
+	// A drag in the colour wheel previews live; the write happens when the picker closes.
+	const live = onLiveChange ?? onChange;
+	const commit = () => void onCommit?.();
 	const customUrls = useMemoCustomWallpapers(value);
-
-	const gradientCommitTimer = useRef<number | null>(null);
-	const handleGradientChange = useCallback(
-		(state: GradientEditorState) => {
-			const grad = buildGradientFromEditor(state);
-			if (onLiveChange) onLiveChange(grad);
-			else onChange(grad);
-			if (gradientCommitTimer.current !== null) {
-				window.clearTimeout(gradientCommitTimer.current);
-			}
-			gradientCommitTimer.current = window.setTimeout(() => {
-				gradientCommitTimer.current = null;
-				if (onCommit) void onCommit();
-			}, 400);
-		},
-		[onChange, onLiveChange, onCommit],
-	);
-	useEffect(
-		() => () => {
-			if (gradientCommitTimer.current !== null) {
-				window.clearTimeout(gradientCommitTimer.current);
-			}
-		},
-		[],
-	);
+	const seed = gradientSeedColor(value) ?? GRADIENT_SEED_FALLBACK;
 
 	const isSelected = (candidate: string) => value === candidate;
 	const tabs = [
@@ -657,6 +639,8 @@ export function WallpaperPicker({
 					hasDocument={hasDocument}
 					isSelected={isSelected}
 					onPick={(color) => onChange(color)}
+					onLive={live}
+					onCommit={commit}
 					updateNative={updateNativeBackground}
 				/>
 			) : (
@@ -674,20 +658,14 @@ export function WallpaperPicker({
 							/>
 						))}
 					</div>
-					{hasDocument ? (
-						<>
-							<button
-								type="button"
-								className={styles.bgDisclosure}
-								aria-expanded={gradientEditorOpen}
-								onClick={() => setGradientEditorOpen((open) => !open)}
-							>
-								{ts("background.custom")}
-								<ChevronDown size={14} />
-							</button>
-							{gradientEditorOpen ? <GradientEditor onChange={handleGradientChange} /> : null}
-						</>
-					) : null}
+					<CustomBackgroundRow
+						label={ts("background.customGradient")}
+						value={seed}
+						swatch={oneColorGradient(seed)}
+						hasDocument={hasDocument}
+						onChange={(hex) => live(oneColorGradient(hex))}
+						onCommit={commit}
+					/>
 				</>
 			)}
 		</>

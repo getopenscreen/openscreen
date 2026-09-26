@@ -11,6 +11,8 @@
 		"title": "Hintergrund",
 		"imageLabel": "Hintergrund {{index}}",
 		"custom": "Eigenes",
+		"customColor": "Eigene Farbe",
+		"customGradient": "Verlauf aus einer Farbe",
 		"help": "Wähle, was hinter der Aufnahme zu sehen ist: ein mitgeliefertes Hintergrundbild, eine Volltonfarbe, einen Verlauf oder ein eigenes Bild von der Festplatte.",
 		"gradient": "Verlauf",
 		"colorLabel": "Farbe {{color}}",

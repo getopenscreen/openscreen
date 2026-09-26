@@ -11,6 +11,8 @@
 		"title": "Fundo",
 		"imageLabel": "Fundo {{index}}",
 		"custom": "Personalizado",
+		"customColor": "Cor personalizada",
+		"customGradient": "Gradiente a partir de uma cor",
 		"help": "Escolha o que aparece atrás da gravação: um papel de parede incluído, uma cor sólida, um gradiente ou uma imagem sua do disco.",
 		"gradient": "Gradiente",
 		"colorLabel": "Cor {{color}}",

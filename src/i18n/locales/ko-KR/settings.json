@@ -11,6 +11,8 @@
 		"title": "배경",
 		"imageLabel": "배경 {{index}}",
 		"custom": "사용자 지정",
+		"customColor": "사용자 지정 색상",
+		"customGradient": "한 가지 색상으로 만든 그라데이션",
 		"help": "녹화 뒤에 표시할 항목을 선택하세요. 기본 제공 배경 이미지, 단색, 그라데이션 또는 디스크의 사용자 이미지를 사용할 수 있습니다.",
 		"gradient": "그라디언트",
 		"colorLabel": "색상 {{color}}",

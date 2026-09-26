@@ -58,6 +58,21 @@ export async function probeSegmentationSupport(): Promise<SegmentationSupport> {
 	}
 }
 
+/** The segmentation model's input size (`segmentation::MODEL_WIDTH` x `MODEL_HEIGHT`). */
+export const SEGMENTATION_WIDTH = 256;
+export const SEGMENTATION_HEIGHT = 144;
+
+/** Subject mask for one camera frame: `rgba` is SEGMENTATION_WIDTH x SEGMENTATION_HEIGHT
+ *  RGBA8, the mask one byte per pixel, 255 = subject. `null` when the addon cannot do it. */
+export async function segmentCameraFrame(rgba: Uint8Array): Promise<Uint8Array | null> {
+	const { mask } = await requireNativeBridgeData<{ mask: Uint8Array | null }>({
+		domain: "compositor",
+		action: "segmentFrame",
+		payload: { rgba },
+	});
+	return mask;
+}
+
 export function createCompositorView(
 	rect: CompositorViewRect,
 	sources?: { screenPath?: string; webcamPath?: string; cursorPath?: string },

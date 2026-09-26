@@ -123,6 +123,11 @@ export interface CompositorViewAddon {
 	 *  `--dir` build has none either. */
 	segmentationRuntimeAvailable(): boolean;
 
+	/** Subject mask for ONE frame, outside any view — the crop thumbnail shows the camera
+	 *  background with it. `rgba` is already at the model's size (256x144 RGBA8); resolves one
+	 *  byte per pixel, 0 = background, 255 = subject. Optional: an older `.node` predates it. */
+	segmentFrame?(modelPath: string, rgba: Buffer): Promise<Buffer>;
+
 	/** Allocates an offscreen compositor view sized to `rect.width`x`rect.height` (the
 	 *  target preview resolution; `rect.x` / `rect.y` are vestigial and ignored native-side).
 	 *  No HWND/native-window-handle is passed: there's no OS window to parent to. The

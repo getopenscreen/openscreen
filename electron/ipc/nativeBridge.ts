@@ -372,6 +372,10 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							return createSuccessResponse(requestId, {
 								support: compositorViewService.probeSegmentation(),
 							});
+						case "segmentFrame":
+							return createSuccessResponse(requestId, {
+								mask: await compositorViewService.segmentFrame(request.payload.rgba),
+							});
 						case "setRect":
 							compositorViewService.setRect(request.payload.id, request.payload.rect);
 							return createSuccessResponse(requestId, { ok: true });

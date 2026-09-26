@@ -350,7 +350,7 @@
 			var(--scene-foliage-d) 100%);
 	/* ponytail: the wallpaper card is a floating, rounded surface (per the v4
 	   design's preview frame) — rounded corners + a layered drop shadow lift it
-	   off the scene gradient. The custom background (buildFrameStyle) fills this
+	   off the scene gradient. The custom background (wallpaperStyle) fills this
 	   card; the video sits on top with its own padding so the wallpaper shows
 	   around it. */
 	border-radius: 16px;

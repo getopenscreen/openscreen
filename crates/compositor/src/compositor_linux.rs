@@ -2188,7 +2188,7 @@ impl Compositor {
         // cadre de fenetre, c'est le CADRE qui la porte (`shadow_caster`), sinon la barre de
         // titre flotterait au-dessus de l'ombre.
         let screen_shadow = cfg.shadow.then(|| {
-            let spread = crate::frame_geometry::SCREEN_SHADOW_SPREAD_FRAC * g.frame_min_px;
+            let spread = crate::frame_geometry::SCREEN_SHADOW_SPREAD_FRAC * g.screen_unit_px;
             let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
             // Un appareil porte l'ombre de sa silhouette 3D (mode 17), pas celle d'un quad.

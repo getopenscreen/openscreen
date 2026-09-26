@@ -30,34 +30,13 @@ import {
 } from "@/lib/ai-edition/store/transcriptionStore";
 import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
+import { TEXT_FONT_FAMILIES } from "@/lib/textFonts";
 import { nativeBridgeClient } from "@/native";
 import { ColorField } from "./ColorField";
 import styles from "./NewEditorShell.module.css";
 import { SliderCell, Toggle } from "./RightPanes";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
-
-/** The families `src/index.css` already loads for on-canvas text — anything else
- *  would render in the preview but fall back to a default in the export canvas. */
-const CAPTION_FONTS = [
-	"Inter",
-	"Geist",
-	"DM Sans",
-	"Plus Jakarta Sans",
-	"Manrope",
-	"Space Grotesk",
-	"Sora",
-	"IBM Plex Sans",
-	"Oswald",
-	"Bebas Neue",
-	"Lora",
-	"Merriweather",
-	"Playfair Display",
-	"Caveat",
-	"Permanent Marker",
-	"Fira Code",
-	"IBM Plex Mono",
-] as const;
 
 /** Offered as translation targets. Codes double as the storage key. */
 const TRANSLATION_LANGUAGES: ReadonlyArray<{ code: string; label: string }> = [
@@ -438,7 +417,9 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 						onChange={(e) => void set({ fontFamily: e.target.value })}
 						style={selectStyle}
 					>
-						{CAPTION_FONTS.map((font) => (
+						{/* Only the families the compositor ships: it never reads the machine's
+						    installed fonts, so any other name would draw a fallback. */}
+						{TEXT_FONT_FAMILIES.map((font) => (
 							<option key={font} value={font} style={{ fontFamily: font }}>
 								{font}
 							</option>

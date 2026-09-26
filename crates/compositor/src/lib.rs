@@ -50,6 +50,7 @@ pub mod scene;
 // indépendant du choix de packaging d'ONNX Runtime.
 pub mod segmentation;
 pub mod text_anim;
+pub mod text_fonts;
 pub mod text_plate;
 pub(crate) mod timeline_walk;
 

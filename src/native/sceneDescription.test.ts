@@ -1896,6 +1896,28 @@ describe("buildSceneDescription.annotations", () => {
 		});
 	});
 
+	it("draws a font that does not ship in the default, and keeps one that does", () => {
+		// The compositor only has the embedded families: an annotation saved with any other
+		// name would draw whatever the machine falls back to.
+		const annotation = (id: string, fontFamily: string) => ({
+			id,
+			startMs: 0,
+			endMs: 1000,
+			type: "text" as const,
+			content: "Hello",
+			position: { x: 10, y: 10 },
+			size: { width: 40, height: 10 },
+			style: { ...style, fontFamily },
+			zIndex: 0,
+		});
+		const scene = buildSceneDescription(
+			docWithAnnotations([annotation("old", "Permanent Marker"), annotation("new", "Lora")]),
+		);
+		const family = (id: string) => scene.annotations.find((a) => a.id === id)?.text?.fontFamily;
+		expect(family("old")).toBe("Inter");
+		expect(family("new")).toBe("Lora");
+	});
+
 	it("carries the text payload, reading the field the inspector actually writes", () => {
 		const scene = buildSceneDescription(
 			docWithAnnotations([

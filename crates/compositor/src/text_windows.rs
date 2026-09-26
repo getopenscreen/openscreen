@@ -16,6 +16,8 @@
 //! re-rastériser (c'est l'affaire du vertex shader).
 
 use anyhow::{bail, Result};
+use std::os::windows::ffi::OsStrExt;
+use std::path::PathBuf;
 use windows::core::Interface;
 use windows::Win32::Graphics::Direct2D::Common::{
     D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT, D2D_POINT_2F, D2D_RECT_F,
@@ -30,8 +32,9 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_SHADER_RESOURCE, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
 };
 use windows::Win32::Graphics::DirectWrite::{
-    DWriteCreateFactory, IDWriteFactory, DWRITE_FACTORY_TYPE_SHARED,
-    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_ITALIC, DWRITE_FONT_STYLE_NORMAL,
+    DWriteCreateFactory, IDWriteFactory, IDWriteFactory5, IDWriteFontCollection1,
+    DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_ITALIC,
+    DWRITE_FONT_STYLE_NORMAL,
     DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
     DWRITE_PARAGRAPH_ALIGNMENT_FAR, DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_TEXT_ALIGNMENT_CENTER,
     DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_TEXT_METRICS,
@@ -133,9 +136,38 @@ fn plate_rect(metrics: [f32; 4], box_px: [f32; 2], pad_x: f32, pad_y: f32) -> [f
     ]
 }
 
+/// Une collection DirectWrite faite des seuls `files` (`crate::text_fonts`), sans rien installer
+/// sur la machine. `None` quand il n'y a rien à charger.
+///
+/// PRIVÉE, et c'est voulu : une famille absente n'y tombe pas sur une police installée du même
+/// nom, donc le rendu ne dépend plus de la machine. Les caractères qu'aucune police embarquée
+/// ne couvre (CJK, arabe…) passent toujours par le repli du système, que la mise en page
+/// applique quelle que soit la collection de base.
+unsafe fn private_font_collection(
+    dwrite: &IDWriteFactory,
+    files: &[PathBuf],
+) -> windows::core::Result<Option<IDWriteFontCollection1>> {
+    if files.is_empty() {
+        return Ok(None);
+    }
+    // `IDWriteFactory5` : Windows 10 1703 et après. Plus ancien, le `cast` échoue et
+    // l'appelant retombe sur les polices du système.
+    let factory: IDWriteFactory5 = dwrite.cast()?;
+    let builder = factory.CreateFontSetBuilder()?;
+    for path in files {
+        let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let file =
+            factory.CreateFontFileReference(windows::core::PCWSTR(wide_path.as_ptr()), None)?;
+        builder.AddFontFile(&file)?;
+    }
+    Ok(Some(factory.CreateFontCollectionFromFontSet(&builder.CreateFontSet()?)?))
+}
+
 pub struct TextRasterizer {
     d2d: ID2D1Factory,
     dwrite: IDWriteFactory,
+    /// Les polices embarquées, cf. `private_font_collection`. `None` : collection du système.
+    fonts: Option<IDWriteFontCollection1>,
 }
 
 impl TextRasterizer {
@@ -146,7 +178,14 @@ impl TextRasterizer {
             let d2d: ID2D1Factory =
                 D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)?;
             let dwrite: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
-            Ok(TextRasterizer { d2d, dwrite })
+            // Un échec ne coûte que les polices embarquées, pas le texte : on le dit et on
+            // continue sur celles du système.
+            let fonts = private_font_collection(&dwrite, &crate::text_fonts::embedded_font_files())
+                .unwrap_or_else(|e| {
+                    eprintln!("[text] polices embarquées non chargées ({e}) : polices du système");
+                    None
+                });
+            Ok(TextRasterizer { d2d, dwrite, fonts })
         }
     }
 
@@ -204,7 +243,7 @@ impl TextRasterizer {
         let locale = wide("");
         let format = self.dwrite.CreateTextFormat(
             windows::core::PCWSTR(family.as_ptr()),
-            None,
+            self.fonts.as_deref(),
             if spec.bold { DWRITE_FONT_WEIGHT_BOLD } else { DWRITE_FONT_WEIGHT_NORMAL },
             if spec.italic { DWRITE_FONT_STYLE_ITALIC } else { DWRITE_FONT_STYLE_NORMAL },
             DWRITE_FONT_STRETCH_NORMAL,
@@ -396,6 +435,77 @@ mod tests {
             let [l, t, r, b] = plate_rect(m, [box_w, box_h], 9.6, 4.8);
             assert!(l >= 0.0 && t >= 0.0, "{valign} : coin haut-gauche hors boîte ({l}, {t})");
             assert!(r <= box_w + 0.01 && b <= box_h + 0.01, "{valign} : plaque hors boîte");
+        }
+    }
+
+    /// Bloc mis en page de « Hamburgefonstiv » à 100 px, `(largeur, hauteur de ligne)`. Pas de
+    /// device D3D : la mise en page DirectWrite suffit pour savoir quelle police a été prise.
+    unsafe fn laid_out_block(
+        dwrite: &IDWriteFactory,
+        fonts: &IDWriteFontCollection1,
+        family: &str,
+    ) -> (f32, f32) {
+        let (family, locale) = (wide(family), wide("en-us"));
+        let format = dwrite
+            .CreateTextFormat(
+                windows::core::PCWSTR(family.as_ptr()),
+                Some(&**fonts),
+                DWRITE_FONT_WEIGHT_NORMAL,
+                DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL,
+                100.0,
+                windows::core::PCWSTR(locale.as_ptr()),
+            )
+            .unwrap();
+        let text: Vec<u16> = "Hamburgefonstiv".encode_utf16().collect();
+        let layout = dwrite.CreateTextLayout(&text, &format, 10_000.0, 1_000.0).unwrap();
+        let mut m = DWRITE_TEXT_METRICS::default();
+        layout.GetMetrics(&mut m).unwrap();
+        (m.width, m.height)
+    }
+
+    /// L'index de `family` dans `fonts`, ou `None` si elle n'y est pas.
+    unsafe fn family_index(fonts: &IDWriteFontCollection1, family: &str) -> Option<u32> {
+        let name = wide(family);
+        let (mut index, mut exists) = (0u32, windows::Win32::Foundation::BOOL(0));
+        fonts
+            .FindFamilyName(windows::core::PCWSTR(name.as_ptr()), &mut index, &mut exists)
+            .unwrap();
+        exists.as_bool().then_some(index)
+    }
+
+    #[test]
+    fn every_shipped_family_draws_from_its_own_files_never_from_the_system() {
+        use windows::Win32::Graphics::DirectWrite::DWRITE_FONT_SIMULATIONS_NONE;
+        unsafe {
+            let dwrite: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED).unwrap();
+            let files = crate::text_fonts::font_files_in(&crate::text_fonts::repo_fonts_dir());
+            let fonts = private_font_collection(&dwrite, &files).unwrap().expect("collection");
+            // Privée : une police installée n'y est pas, donc aucun nom ne s'y résout en douce
+            // vers ce que la machine se trouve avoir.
+            assert!(family_index(&fonts, "Arial").is_none(), "la collection voit le système");
+
+            let mut blocks = Vec::new();
+            for family in crate::text_fonts::SHIPPED_FAMILIES {
+                let index = family_index(&fonts, family)
+                    .unwrap_or_else(|| panic!("{family} absente de la collection embarquée"));
+                // Le réglage Gras prend un VRAI fichier gras, pas une simulation : DirectWrite
+                // épaissit, CoreText et cosmic-text non, et le rendu divergerait.
+                let bold = fonts
+                    .GetFontFamily(index)
+                    .unwrap()
+                    .GetFirstMatchingFont(
+                        DWRITE_FONT_WEIGHT_BOLD,
+                        DWRITE_FONT_STRETCH_NORMAL,
+                        DWRITE_FONT_STYLE_NORMAL,
+                    )
+                    .unwrap();
+                assert_eq!(bold.GetWeight(), DWRITE_FONT_WEIGHT_BOLD, "{family} : pas de gras");
+                assert_eq!(bold.GetSimulations(), DWRITE_FONT_SIMULATIONS_NONE, "{family}");
+                let (w, h) = laid_out_block(&dwrite, &fonts, family);
+                blocks.push((family, w, h));
+            }
+            crate::text_fonts::assert_distinct_blocks(&blocks);
         }
     }
 

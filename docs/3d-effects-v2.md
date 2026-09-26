@@ -113,9 +113,9 @@ ne se lit que si l'œil se déplace autour de l'écran.
   delà, le point visé tombe au centre de l'image, grossi exactement du zoom. Le point visé va aussi
   loin que le focus d'un zoom à plat (le gimbal) : `0,5 ± max(0, 0,5 − 0,5/max(zoom, 1))`, au centre
   au zoom 1. La vue atteint donc le bord de l'écran et le padding montre ce qu'il y a au-delà, comme
-  sous les autres caméras. En butée, la perspective agrandit le côté proche : le bord tombe au plus
-  à 3 % de la boîte au-delà de celui d'un zoom à plat (27/09 ; avant, une marge de 10 % gardait la
-  vue dans l'écran et cachait ses coins).
+  sous les autres caméras. En butée sur un coin, la perspective agrandit le côté proche : le coin
+  tombe à moins de 5 % de la boîte de celui d'un zoom à plat (27/09 ; avant, une marge de 10 %
+  gardait la vue dans l'écran et cachait ses coins).
 - **Force 0** = le rendu plat, par le même chemin (mode 0).
 
 **Le cadreur** (`camera::follow`), pure fonction de `t`, sans zone morte : le pointeur, lu dans

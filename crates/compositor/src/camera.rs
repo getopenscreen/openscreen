@@ -261,8 +261,8 @@ impl Follow {
 
 /// Portée du point visé au zoom `zoom` : il reste dans `0,5 ± reach`, la portée du focus d'un
 /// zoom à plat (le gimbal de l'aperçu). Comme sous les autres caméras, la vue va jusqu'au bord de
-/// l'écran et le padding montre ce qu'il y a au-delà. Visé en butée, le bord de l'écran tombe au
-/// plus à 3 % de la boîte au-delà de celui d'un zoom à plat : la perspective agrandit le côté
+/// l'écran et le padding montre ce qu'il y a au-delà. Visé en butée sur un coin, le coin de l'écran
+/// tombe à moins de 5 % de la boîte de celui d'un zoom à plat : la perspective agrandit le côté
 /// proche. Au zoom 1, le centre.
 fn reach(zoom: f32) -> f32 {
     (0.5 - 0.5 / zoom.max(1.0)).max(0.0)
@@ -645,18 +645,22 @@ mod tests {
         assert!((posed.orbit[0] - 0.8).abs() < 1e-3);
     }
 
-    /// Visé en butée, comme un zoom à plat au bord du gimbal, la vue va jusqu'au bord de l'écran :
-    /// le bord tombe au plus à 3,5 % de la boîte au-delà de celui du zoom à plat, et le padding
-    /// montre ce qu'il y a derrière. Les coins du métrage se voient, comme sous les autres caméras.
+    /// Visé en butée sur un coin, comme un zoom à plat au bord du gimbal, la vue cadre le coin de
+    /// l'écran : il tombe à moins de 5 % de la boîte de là où le zoom à plat le met, sur les deux
+    /// axes, et le padding montre ce qu'il y a derrière. Plus loin dehors, le coin resterait hors
+    /// champ (près de 10 % avec l'ancienne marge) ; plus loin dedans, la vue montrerait plus que le
+    /// zoom à plat.
     #[test]
-    fn at_its_limit_the_view_reaches_the_screen_edge() {
+    fn at_its_limit_the_view_frames_the_screen_corner() {
         for zoom in [1.5f32, 1.8, 2.2, 3.5, 5.0] {
             let (bx, edge) = (BOX.map(|b| b * zoom), 0.5 - reach(zoom));
-            let pose = CameraPose { weight: 1.0, aim: [edge, 0.5], orbit: [edge, 0.5], zoom, press: 0.0 };
-            let x = View::new(bx, pose).project([-bx[0] * 0.5, 0.0, 0.0]).unwrap()[0];
-            let past = (-BOX[0] * 0.5 - x) / BOX[0];
-            println!("zoom {zoom} : le bord de l'écran à {past:+.3} boîte au-delà d'un zoom à plat");
-            assert!(past < 0.035, "zoom {zoom} : {past}");
+            let corner = [edge, 1.0 - edge];
+            let pose = CameraPose { weight: 1.0, aim: corner, orbit: corner, zoom, press: 0.0 };
+            let [x, y] = View::new(bx, pose).project([-bx[0] * 0.5, bx[1] * 0.5, 0.0]).unwrap();
+            // Au-delà du coin bas-gauche de la boîte, en boîtes : positif = hors de la boîte.
+            let past = [(-BOX[0] * 0.5 - x) / BOX[0], (y - BOX[1] * 0.5) / BOX[1]];
+            println!("zoom {zoom} : coin de l'écran à {past:.3?} boîte de celui d'un zoom à plat");
+            assert!(past.iter().all(|p| p.abs() < 0.05), "zoom {zoom} : {past:?}");
         }
     }
 

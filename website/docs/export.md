@@ -17,10 +17,12 @@ keywords:
 
 Click **Export** in the top bar to open the export dialog.
 
+Pick a **destination** first: **Web / YouTube** (MP4, 1080p, 60 fps), **Social** (the same at 30 fps, half the file size), **Studio** (MP4 at the recording's own resolution, 60 fps) or **README GIF** (a 480p GIF at 15 fps). A destination never changes the project's aspect ratio. Everything below sits under **Advanced**.
+
 ## Formats
 
 - **MP4** — quality **720p**, **1080p**, or **Source**; frame rate 24 / 30 / 60 fps; codec **H.264** (the default, and the one more players accept) or **H.265**.
-- **GIF** — frame rate 15 / 20 / 25 / 30 fps, size Medium / Large / Original, and a **Loop** toggle.
+- **GIF** — frame rate 15 / 20 / 25 / 30 fps, size Small / Medium / Large / Original, and a **Loop** toggle.
 
 :::note
 VP9 was removed. There's no hardware VP9 encoder on the GPUs the native pipeline targets, and the software fallback was far too slow to ship as an option that looks like the others.

@@ -17,10 +17,12 @@ keywords:
 
 Cliquez sur **Exporter** dans la barre supérieure pour ouvrir la fenêtre d'export.
 
+Choisissez d'abord une **destination** : **Web / YouTube** (MP4, 1080p, 60 fps), **Réseaux sociaux** (la même chose à 30 fps, un fichier deux fois plus léger), **Studio** (MP4 à la résolution de l'enregistrement, 60 fps) ou **GIF pour README** (un GIF 480p à 15 fps). Une destination ne change jamais le ratio du projet. Tout ce qui suit se trouve sous **Avancé**.
+
 ## Formats {#formats}
 
 - **MP4** : qualité **720p**, **1080p** ou **Source** ; fréquence d'images 24 / 30 / 60 fps ; codec **H.264** (celui par défaut, et celui qu'acceptent le plus de lecteurs) ou **H.265**.
-- **GIF** : fréquence d'images 15 / 20 / 25 / 30 fps, taille Medium / Large / Original, et un interrupteur **Boucle**.
+- **GIF** : fréquence d'images 15 / 20 / 25 / 30 fps, taille Small / Medium / Large / Original, et un interrupteur **Boucle**.
 
 :::note
 VP9 a été retiré. Il n'existe aucun encodeur VP9 matériel sur les GPU que vise le pipeline natif, et le repli logiciel était bien trop lent pour être proposé comme une option en apparence équivalente aux autres.

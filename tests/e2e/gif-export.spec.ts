@@ -163,6 +163,8 @@ async function exportFromLoadedVideo(
 		const dialog = editorWindow.getByRole("dialog");
 		await expect(dialog.getByRole("heading", { name: "Export" })).toBeVisible();
 
+		// The format toggle sits under Advanced, behind the named destinations.
+		await dialog.getByRole("button", { name: "Advanced", exact: true }).click();
 		await dialog
 			.getByRole("button", { name: format === "gif" ? "GIF" : "MP4", exact: true })
 			.click();

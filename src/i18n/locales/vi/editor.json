@@ -166,6 +166,12 @@
 		"noSpeechDetected": "Không phát hiện giọng nói"
 	},
 	"exportDialog": {
+		"destination": "Đích đến",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Mạng xã hội",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "GIF cho README",
+		"advanced": "Nâng cao",
 		"title": "Xuất",
 		"subtitle": "Kết xuất dòng thời gian thành tệp",
 		"addVideoBeforeExporting": "Thêm video trước khi xuất.",

@@ -166,6 +166,12 @@
 		"noSpeechDetected": "No speech detected"
 	},
 	"exportDialog": {
+		"destination": "Destination",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Social",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "README GIF",
+		"advanced": "Advanced",
 		"title": "Export",
 		"subtitle": "Save your edit as a video or a GIF",
 		"addVideoBeforeExporting": "Add a video before exporting.",

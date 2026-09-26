@@ -166,6 +166,12 @@
 		"noSpeechDetected": "未偵測到語音"
 	},
 	"exportDialog": {
+		"destination": "匯出用途",
+		"destinationWeb": "網頁 / YouTube",
+		"destinationSocial": "社群媒體",
+		"destinationStudio": "工作室",
+		"destinationReadmeGif": "README GIF",
+		"advanced": "進階",
 		"title": "匯出",
 		"subtitle": "將時間軸轉譯為檔案",
 		"addVideoBeforeExporting": "匯出前請先新增影片。",

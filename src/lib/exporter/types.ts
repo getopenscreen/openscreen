@@ -41,7 +41,7 @@ export type ExportVideoCodec = "h264" | "h265" | "vp9";
 
 export type GifFrameRate = 15 | 20 | 25 | 30;
 
-export type GifSizePreset = "medium" | "large" | "original";
+export type GifSizePreset = "small" | "medium" | "large" | "original";
 
 export interface GifExportConfig {
 	frameRate: GifFrameRate;
@@ -60,6 +60,8 @@ export interface ExportSettings {
 }
 
 export const GIF_SIZE_PRESETS: Record<GifSizePreset, { maxHeight: number; label: string }> = {
+	// A README column is about 880 px wide: 854x480 fills it, and weighs a third of 720p.
+	small: { maxHeight: 480, label: "Small (480p)" },
 	medium: { maxHeight: 720, label: "Medium (720p)" },
 	large: { maxHeight: 1080, label: "Large (1080p)" },
 	original: { maxHeight: Infinity, label: "Original" },

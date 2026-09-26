@@ -515,37 +515,38 @@ export function ZoomLevelControl({
 
 	return (
 		<>
-			{/* A level outside the row presses no button; the field below shows it. With no
-			    preset within reach, the row goes and the field alone remains. */}
-			{presets.length > 0
-				? paneStack(
-						ts("zoom.level"),
-						<ChoiceRow<number>
-							label={ts("zoom.level")}
-							options={presets}
-							value={requested}
-							onChange={setScale}
-						/>,
-					)
-				: null}
-			{paneRow(
-				ts("zoom.customScale"),
-				<input
-					type="text"
-					inputMode="decimal"
-					aria-label={ts("zoom.customScale")}
-					placeholder={`${requested}×`}
-					value={draft}
-					onChange={(e) => setDraft(e.target.value)}
-					onBlur={commitDraft}
-					// Enter blurs, and the blur handler commits: one path, so a keyboard commit
-					// can't apply the same draft twice.
-					onKeyDown={(e) => {
-						if (e.key === "Enter") e.currentTarget.blur();
-					}}
-					className={shell.control}
-					style={{ width: 84, textAlign: "right" }}
-				/>,
+			{/* A level outside the row presses no button; the field beside it shows it. With no
+			    preset within reach, the field alone remains. */}
+			{paneStack(
+				ts("zoom.level"),
+				<div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+					{presets.length > 0 ? (
+						<div style={{ flex: 1, minWidth: 0 }}>
+							<ChoiceRow<number>
+								label={ts("zoom.level")}
+								options={presets}
+								value={requested}
+								onChange={setScale}
+							/>
+						</div>
+					) : null}
+					<input
+						type="text"
+						inputMode="decimal"
+						aria-label={ts("zoom.customScale")}
+						placeholder={`${requested}×`}
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						onBlur={commitDraft}
+						// Enter blurs, and the blur handler commits: one path, so a keyboard commit
+						// can't apply the same draft twice.
+						onKeyDown={(e) => {
+							if (e.key === "Enter") e.currentTarget.blur();
+						}}
+						className={shell.control}
+						style={{ width: 56, textAlign: "right" }}
+					/>
+				</div>,
 			)}
 		</>
 	);

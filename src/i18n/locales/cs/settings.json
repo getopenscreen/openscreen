@@ -267,7 +267,7 @@
 		"remove": "Smazat stopu",
 		"loop": "Opakovat",
 		"slipHint": "Alt-přetažením posuňte zvuk uvnitř",
-		"help": "Hlasitost, přechody a opakování pro tuto zvukovou stopu. Mixuje se s nahrávkou v náhledu i při exportu. Přetáhněte stopu na časové ose pro přesunutí nebo změnu velikosti, nebo podržte Alt a přetáhněte pro posun zvuku uvnitř.",
+		"help": "Hlasitost, přechody a opakování pro tuto zvukovou stopu. Mixuje se s nahrávkou v náhledu i při exportu. Hudební stopa se při mluvení sama ztiší. Přetáhněte stopu na časové ose pro přesunutí nebo změnu velikosti, nebo podržte Alt a přetáhněte pro posun zvuku uvnitř.",
 		"add": "Přidat zvukovou stopu",
 		"mute": "Ztlumit"
 	},

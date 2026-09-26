@@ -156,12 +156,42 @@ export function timelineAudioFadeAt(
 	return v;
 }
 
+/**
+ * The export's music ducking (`duck_curve` in audio.rs), mirrored for the preview: the same
+ * depth, speech threshold, hold and release. One difference is structural: the export holds
+ * the whole voice and looks ahead, so its dip is already complete when a word starts, while
+ * the preview only hears the voice once it plays, so here the same ramp ends `attackSec`
+ * into the word.
+ */
+export const MUSIC_DUCK = {
+	depthDb: -10,
+	thresholdDbfs: -35,
+	holdSec: 0.5,
+	attackSec: 0.25,
+	releaseSec: 0.6,
+} as const;
+
+/** A music bed's ducking gain in dB, one preview frame of `frameSec` later, when the voice
+ *  was last heard `sinceVoiceSec` ago. Straight ramps in dB, like the export's. */
+export function nextMusicDuckDb(
+	currentDb: number,
+	sinceVoiceSec: number,
+	frameSec: number,
+): number {
+	const { depthDb, holdSec, attackSec, releaseSec } = MUSIC_DUCK;
+	return sinceVoiceSec <= holdSec
+		? Math.max(depthDb, currentDb + (depthDb / attackSec) * frameSec)
+		: Math.min(0, currentDb - (depthDb / releaseSec) * frameSec);
+}
+
 export interface PreviewAudioGraph {
 	context: AudioContext;
 	/** Output trim: everything the preview plays goes through it. */
 	gain: GainNode;
 	/** The recording's own audio (primary + supplemental elements), on its way to `gain`. */
 	voice: GainNode;
+	/** Listens to the voice — the recording and every voiceover — to duck the music. */
+	analyser: AnalyserNode;
 }
 
 /**
@@ -475,7 +505,11 @@ export function VirtualPreview({
 				gain.connect(context.destination);
 				const voice = context.createGain();
 				voice.connect(gain);
-				return { context, gain, voice };
+				// 1024 samples: about 21 ms of voice per reading, one reading per frame.
+				const analyser = context.createAnalyser();
+				analyser.fftSize = 1024;
+				voice.connect(analyser);
+				return { context, gain, voice, analyser };
 			} catch {
 				return null;
 			}
@@ -522,6 +556,10 @@ export function VirtualPreview({
 				const trackGain = graph.context.createGain();
 				source.connect(trackGain);
 				trackGain.connect(graph.gain);
+				// A voiceover is voice: the music ducks under it as under the recording.
+				if (audioTracksRef.current.find((track) => track.id === trackId)?.kind === "voiceover") {
+					trackGain.connect(graph.analyser);
+				}
 				audioTrackGainNodesRef.current.set(trackId, trackGain);
 				connectedSources.push(source);
 				trackGainNodes.push(trackGain);
@@ -539,6 +577,7 @@ export function VirtualPreview({
 			for (const trackGain of trackGainNodes) trackGain.disconnect();
 			audioTrackGainNodesRef.current = new Map();
 			graph.voice.disconnect();
+			graph.analyser.disconnect();
 			graph.gain.disconnect();
 		};
 	}, [
@@ -683,6 +722,14 @@ export function VirtualPreview({
 	audioTracksRef.current = audioTracks;
 	const audioSourcesRef = useRef(audioSources);
 	audioSourcesRef.current = audioSources;
+	// Live state of the music ducking (see MUSIC_DUCK): the gain, when the voice was last
+	// heard, and the analyser's reading buffer, reused every frame.
+	const musicDuckRef = useRef({
+		db: 0,
+		voiceAt: Number.NEGATIVE_INFINITY,
+		tickAt: 0,
+		reading: new Float32Array(1024),
+	});
 	const audioTrackElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 	const registerAudioTrackEl = useCallback((trackId: string, element: HTMLAudioElement | null) => {
 		if (element) audioTrackElsRef.current.set(trackId, element);
@@ -754,6 +801,21 @@ export function VirtualPreview({
 				virtualTimeSecRef.current,
 				speedRegionsRef.current,
 			);
+			// Music ducking, heard live: one reading of the voice per frame (see MUSIC_DUCK).
+			const duck = musicDuckRef.current;
+			const now = performance.now();
+			const frameSec = Math.min(0.1, Math.max(0, (now - duck.tickAt) / 1000));
+			duck.tickAt = now;
+			const analyser = audioGraphRef.current?.analyser;
+			if (analyser && !v.paused) {
+				analyser.getFloatTimeDomainData(duck.reading);
+				let energy = 0;
+				for (const sample of duck.reading) energy += sample * sample;
+				if (10 * Math.log10(energy / duck.reading.length) > MUSIC_DUCK.thresholdDbfs) {
+					duck.voiceAt = now;
+				}
+			}
+			duck.db = nextMusicDuckDb(duck.db, (now - duck.voiceAt) / 1000, frameSec);
 			for (const track of audioTracksRef.current) {
 				const el = audioTrackElsRef.current.get(track.id);
 				if (!el) continue;
@@ -819,14 +881,17 @@ export function VirtualPreview({
 				// voiceover up under a 2× region and finish it early, diverging from export.
 				if (el.playbackRate !== 1) el.playbackRate = 1;
 				// A voiceover is voice: levelled like the recording, its own gain trimming from
-				// there — the sum `mix_external_tracks` applies. A music bed is not levelled.
-				const voiceoverPath =
-					track.kind === "voiceover"
-						? audioSourcesRef.current.find((source) => source.id === track.assetId)?.filePath
-						: undefined;
-				const trackGainDb =
-					track.gainDb +
-					(voiceoverPath ? (loudnessGainDbByPathRef.current.get(voiceoverPath) ?? 0) : 0);
+				// there — the sum `mix_external_tracks` applies. A music bed is not levelled; it
+				// ducks under the voice instead.
+				let trackGainDb = track.gainDb;
+				if (track.kind === "voiceover") {
+					const path = audioSourcesRef.current.find(
+						(source) => source.id === track.assetId,
+					)?.filePath;
+					trackGainDb += path ? (loudnessGainDbByPathRef.current.get(path) ?? 0) : 0;
+				} else {
+					trackGainDb += duck.db;
+				}
 				const trackGainNode = audioTrackGainNodesRef.current.get(track.id);
 				if (trackGainNode) {
 					trackGainNode.gain.value = audioGainScalar(trackGainDb) * fade;

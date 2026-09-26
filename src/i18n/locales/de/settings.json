@@ -267,7 +267,7 @@
 		"remove": "Spur löschen",
 		"loop": "Wiederholen",
 		"slipHint": "Mit Alt ziehen, um das Audio darin zu verschieben",
-		"help": "Lautstärke, Blenden und Wiederholung für diese Audiospur. Sie wird in der Vorschau und im Export über die Aufnahme gemischt. Zieh die Spur auf der Timeline, um sie zu verschieben oder ihre Länge zu ändern, oder halte Alt und zieh, um das Audio darin zu verschieben.",
+		"help": "Lautstärke, Blenden und Wiederholung für diese Audiospur. Sie wird in der Vorschau und im Export über die Aufnahme gemischt. Eine Musikspur wird automatisch leiser, während jemand spricht. Zieh die Spur auf der Timeline, um sie zu verschieben oder ihre Länge zu ändern, oder halte Alt und zieh, um das Audio darin zu verschieben.",
 		"add": "Audiospur hinzufügen",
 		"mute": "Stumm"
 	},

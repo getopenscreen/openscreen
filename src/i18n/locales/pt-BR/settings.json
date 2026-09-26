@@ -267,7 +267,7 @@
 		"remove": "Excluir faixa",
 		"loop": "Repetir",
 		"slipHint": "Alt + arrastar para deslizar o áudio dentro",
-		"help": "Volume, fades e repetição desta faixa de áudio. Ela é mixada sobre a gravação na visualização e na exportação. Arraste a faixa na linha do tempo para movê-la ou redimensioná-la, ou segure Alt e arraste para deslizar o áudio dentro dela.",
+		"help": "Volume, fades e repetição desta faixa de áudio. Ela é mixada sobre a gravação na visualização e na exportação. Uma faixa de música abaixa sozinha enquanto alguém fala. Arraste a faixa na linha do tempo para movê-la ou redimensioná-la, ou segure Alt e arraste para deslizar o áudio dentro dela.",
 		"add": "Adicionar faixa de áudio",
 		"mute": "Silenciar"
 	},

@@ -2021,7 +2021,8 @@ describe("useTimeline audio tracks", () => {
 		act(() => {
 			expect(undo()).toBe(true);
 		});
-		expect(useProjectStore.getState().document?.audioTracks[0]?.gainDb).toBe(0);
+		// Back to the level a new music bed is placed at.
+		expect(useProjectStore.getState().document?.audioTracks[0]?.gainDb).toBe(-18);
 	});
 
 	it("clamps a track to the content under it, like every other anchored region", async () => {

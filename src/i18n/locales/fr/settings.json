@@ -267,7 +267,7 @@
 		"remove": "Supprimer la piste",
 		"loop": "Boucle",
 		"slipHint": "Alt + glisser pour déplacer l’audio à l’intérieur",
-		"help": "Volume, fondus et boucle de cette piste audio. Elle se mixe par-dessus l’enregistrement dans l’aperçu et à l’export. Faites glisser la piste sur la timeline pour la déplacer ou la redimensionner, ou maintenez Alt en glissant pour déplacer l’audio à l’intérieur.",
+		"help": "Volume, fondus et boucle de cette piste audio. Elle se mixe par-dessus l’enregistrement dans l’aperçu et à l’export. Une piste de musique baisse d’elle-même quand quelqu’un parle. Faites glisser la piste sur la timeline pour la déplacer ou la redimensionner, ou maintenez Alt en glissant pour déplacer l’audio à l’intérieur.",
 		"add": "Ajouter une piste audio",
 		"mute": "Muet"
 	},

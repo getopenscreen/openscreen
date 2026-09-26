@@ -267,7 +267,7 @@
 		"remove": "Delete track",
 		"loop": "Loop",
 		"slipHint": "Alt-drag to slide the audio inside it",
-		"help": "Volume, fades and looping for this audio track. It mixes over the recording in the preview and the export. Drag the track on the timeline to move or resize it, or hold Alt and drag to slide the audio inside it.",
+		"help": "Volume, fades and looping for this audio track. It mixes over the recording in the preview and the export. A music track dips on its own while someone speaks. Drag the track on the timeline to move or resize it, or hold Alt and drag to slide the audio inside it.",
 		"add": "Add audio track",
 		"mute": "Mute"
 	},

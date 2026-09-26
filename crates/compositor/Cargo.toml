@@ -2,7 +2,7 @@
 name = "openscreen-compositor"
 version.workspace = true
 edition.workspace = true
-description = "Compositeur natif multiplateforme d'OpenScreen : décodage, pipeline, effets, scène, curseur, audio, et la vue live embarquable. Code de production — l'addon Electron (compositor-view-napi) s'y lie, le POC (poc-d3d) le consomme aussi.\n\nWindows : D3D11 + D3D11VA + shaders HLSL compilés à l'exécution. macOS : Metal + VideoToolbox + shaders MSL (port de ce PR)."
+description = "Compositeur natif multiplateforme d'OpenScreen : décodage, pipeline, effets, scène, curseur, audio, et la vue live embarquable. Code de production — l'addon Electron (compositor-view-napi) s'y lie, le POC (poc-d3d) le consomme aussi.\n\nWindows : D3D11 + D3D11VA + shaders HLSL compilés au build (build.rs). macOS : Metal + VideoToolbox + shaders MSL (port de ce PR)."
 
 [lib]
 name = "openscreen_compositor"
@@ -11,6 +11,11 @@ path = "src/lib.rs"
 [build-dependencies]
 bindgen = "0.70"
 cc = "1"
+
+# D3DCompile, pour compiler `shaders.hlsl` au build (`compile_hlsl` dans build.rs). La version
+# est celle du workspace ; les features, les deux seules dont le build a besoin.
+[target.'cfg(windows)'.build-dependencies]
+windows = { version = "0.58", features = ["Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D_Fxc"] }
 
 [features]
 default = ["segmentation"]

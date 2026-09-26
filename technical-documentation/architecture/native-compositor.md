@@ -37,7 +37,7 @@ and without that flag the runtime corruption is silent.
 | [`crates/compositor/src/text_anim.rs`](../../crates/compositor/src/text_anim.rs) | text-annotation appearance animations (port of the TS animation curves, in fractions of the output short side) |
 | [`crates/compositor/src/config.rs`](../../crates/compositor/src/config.rs) | cumulative bench configs C0..C8 (each adds one layer: composite, rounded corners, shadow, background blur, zoom, layout animation, cursor, motion blur) |
 | [`crates/compositor/src/live.rs`](../../crates/compositor/src/live.rs) | off-screen view: `Player` + `Compositor::compose_frame` → RGBA8 staging texture, pulled by the napi addon |
-| [`crates/compositor/src/shaders.hlsl`](../../crates/compositor/src/shaders.hlsl) | all GPU effects (modes 0/1/5/8/9/10/12 — see pipeline below), compiled at runtime via Fxc |
+| [`crates/compositor/src/shaders.hlsl`](../../crates/compositor/src/shaders.hlsl) | all GPU effects (modes 0/1/5/8/9/10/12 — see pipeline below), compiled at build time via Fxc (`build.rs`) and embedded as bytecode |
 
 Six of those modules exist twice, once per platform, and `lib.rs` cfg-re-exports the pair
 under one name — so `crate::d3d`, `crate::compositor`, `crate::pipeline` and `crate::text`

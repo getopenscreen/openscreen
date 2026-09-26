@@ -390,6 +390,21 @@ describe("fresh-recording auto-zoom", () => {
 		expect(consumeFreshRecordingAutoZoomPending()).toBe(false);
 	});
 
+	// The invoke is accepted and never answered — the shape `catch` cannot see. Left
+	// unbounded this held `freshRecordingAutoZoomSaveChain`, and therefore the metadata
+	// write queue awaiting it, for the life of the renderer.
+	it("gives up on a prefs read that never settles and applies zooms anyway", async () => {
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		// Never resolves, never rejects — the invoke the main process simply does not answer.
+		stubRecordingPrefsBridge(() => new Promise(() => undefined));
+		const next = await applyPendingFreshRecordingAutoZooms(documentWithClip(), {
+			prefsTimeoutMs: 10,
+			getTelemetry: async () => dwell(4000, 0.5, 0.5),
+			createId: (prefix) => `${prefix}_test`,
+		});
+		expect(next.zoomRanges).toHaveLength(1);
+	});
+
 	// A bridge that is missing or throwing says nothing about what the user chose, and
 	// the answer every installation had before the preference existed is "on".
 	it("treats an unreadable prefs bridge as on", async () => {

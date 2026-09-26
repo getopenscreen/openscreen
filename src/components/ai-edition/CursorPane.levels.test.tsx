@@ -203,6 +203,16 @@ describe("CursorPane click impact", () => {
 		});
 	});
 
+	it("sits right under the click bounce levels", () => {
+		renderWithCursor({});
+		const controls = [...document.querySelectorAll("button, input")];
+		const levels = within(screen.getByRole("group", { name: "Click bounce" })).getAllByRole(
+			"button",
+		);
+		const last = controls.indexOf(levels[levels.length - 1]);
+		expect(controls.indexOf(toggle() as HTMLElement)).toBe(last + 1);
+	});
+
 	// The impact follows the pointer you see: with the cursor hidden it has nothing to show.
 	it("is not offered while the cursor is hidden", () => {
 		renderWithCursor({ cursorShow: false });

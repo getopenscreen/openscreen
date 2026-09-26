@@ -3726,18 +3726,6 @@ export function CursorPane() {
 					}}
 				/>
 			</div>
-			{/* A hidden cursor has nothing to click with, so this row is not offered then. */}
-			{settings.cursorShow ? (
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{ts("cursor.clickImpact")}</span>
-					<Toggle
-						ariaLabel={ts("cursor.clickImpact")}
-						checked={settings.cursor.clickImpact}
-						disabled={!hasDocument}
-						onChange={(v) => void set({ cursor: { clickImpact: v } })}
-					/>
-				</div>
-			) : null}
 			{/* One option is not a choice: the picker shows once a pack ships beside the
 			    default art (see CURSOR_THEMES). */}
 			{cursorThemeOptions.length > 1 ? (
@@ -3910,6 +3898,19 @@ export function CursorPane() {
 					if (isNativeCompositorActive()) setNativeParam("cursorClickBounce", clickBounce);
 				},
 			)}
+			{/* What the screen does on the click the bounce animates, so right under it. A hidden
+			    cursor has nothing to click with, so the row is not offered then. */}
+			{settings.cursorShow ? (
+				<div className={styles.paneRow}>
+					<span className={styles.label}>{ts("cursor.clickImpact")}</span>
+					<Toggle
+						ariaLabel={ts("cursor.clickImpact")}
+						checked={settings.cursor.clickImpact}
+						disabled={!hasDocument}
+						onChange={(v) => void set({ cursor: { clickImpact: v } })}
+					/>
+				</div>
+			) : null}
 		</Pane>
 	);
 }

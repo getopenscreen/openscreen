@@ -62,9 +62,11 @@ bool DesktopIconCover::show(HMONITOR monitor) {
         return false;
     }
 
-    std::promise<bool> placed;
-    std::future<bool> placedResult = placed.get_future();
-    thread_ = std::thread([this, rect = info.rcMonitor, &placed]() {
+    // Moved into the thread, not captured by reference: `get()` can return before
+    // `set_value` has finished with the promise, and this frame is gone by then.
+    std::promise<bool> promise;
+    std::future<bool> placedResult = promise.get_future();
+    thread_ = std::thread([this, rect = info.rcMonitor, placed = std::move(promise)]() mutable {
         threadId_ = GetCurrentThreadId();
         HINSTANCE instance = GetModuleHandleW(nullptr);
         WNDCLASSEXW windowClass{sizeof(windowClass)};

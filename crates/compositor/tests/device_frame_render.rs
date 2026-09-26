@@ -574,6 +574,53 @@ fn the_device_follows_the_tilt_and_the_orbit_camera() {
     }
 }
 
+/// Le flou de mouvement prend l'écran CADRÉ en bloc, à plat comme sous une caméra 3D : pendant la
+/// rampe du zoom, l'appareil et son ombre filent avec le métrage, donc des pixels HORS du métrage
+/// changent avec le flou. Au palier, le rendu flou est le rendu net, à l'octet. Sous un angle fixe
+/// ou la caméra en orbite, seul le métrage était flouté : l'appareil restait net autour de lui.
+#[test]
+fn the_device_trails_with_the_screen_under_motion_blur() {
+    let Some(gpu) = gpu() else { return };
+    let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
+    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    // Zoom ×1,6 de 2 à 6 s : sa rampe d'entrée court de 1,14 à 2 s, vitesse au plus fort vers 1,26 s.
+    // Le petit rect garde l'appareil dans l'image pendant la rampe.
+    let json = |device: &str, rotation: &str, blur: f32| {
+        let json = with_rect(&scene_json(device, rotation, 0.6, NO_CURSOR, (W, H)), CLIPS[0].1)
+            .replace(r#""startSec":0,"endSec":10,"scale":1,"#, r#""startSec":2,"endSec":6,"scale":1.6,"#)
+            .replace(r#""roundnessFrac":0.02,"motionBlur":0"#, &format!(r#""roundnessFrac":0.02,"motionBlur":{blur}"#));
+        assert!(json.contains(r#""scale":1.6"#), "la substitution doit poser la rampe");
+        json
+    };
+    for device in ["laptop", "window"] {
+        for rotation in ["null", r#""iso""#, r#""follow-cursor""#] {
+            let case = format!("{device} {rotation}");
+            let still = |blur| render(&comp, &blue, &json(device, rotation, blur), None, 4.0);
+            assert!(still(0.0) == still(1.0), "{case} : immobile, le flou ne doit rien changer");
+            let t = 1.3;
+            let sharp = render(&comp, &blue, &json(device, rotation, 0.0), None, t);
+            let tint = render(&comp, &orange, &json(device, rotation, 0.0), None, t);
+            let blurred = render(&comp, &blue, &json(device, rotation, 1.0), None, t);
+            // Hors du métrage (le pixel net ne dépend pas de la teinte de la source) : ce qui change
+            // avec le flou est l'appareil, son ombre, ou le fond qu'ils découvrent en filant.
+            let smeared = (0..(W * H) as usize)
+                .filter(|&i| {
+                    let p = |b: &[u8]| [b[i * 4], b[i * 4 + 1], b[i * 4 + 2]];
+                    p(&sharp) == p(&tint) && p(&sharp).iter().zip(p(&blurred)).any(|(a, b)| a.abs_diff(b) > 8)
+                })
+                .count();
+            println!("{case:<24} {smeared:>7} px hors du métrage changent avec le flou");
+            if let Some(dir) = out_dir("OPENSCREEN_DEVICE_OUT") {
+                let name = format!("trail-{device}-{}", rotation.trim_matches('"'));
+                save(&dir, &format!("{name}-sharp"), &sharp, (W, H));
+                save(&dir, &format!("{name}-blurred"), &blurred, (W, H));
+            }
+            assert!(smeared > (W * H) as usize / 200, "{case} : le cadre reste net pendant le zoom ({smeared} px)");
+        }
+    }
+}
+
 /// Le cadre porte l'ombre, pas l'écran : avec l'ombre allumée, le fond s'assombrit AUTOUR de
 /// l'appareil, y compris sous le socle du portable, qui descend plus bas que l'écran.
 #[test]

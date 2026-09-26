@@ -2098,7 +2098,9 @@ impl Compositor {
         // Au mode 8, ces deux champs portent deja les coins projetes du quad
         // (BR/BL dans `src_prev`, `plane_px` dans `dst_prev`) : le plan d'avant
         // arrive dans ses propres champs (`trail_a`/`trail_b`/`trail_mb`,
-        // `FrameGeometry::tilt_trail`), meme flou borne a une frame.
+        // `FrameGeometry::tilt_pixel_trail`), meme flou borne a une frame.
+        // Dans les deux modes, ce flou par pixel s'efface quand l'ecran CADRE est
+        // floute en bloc (mode 18, `trail` plus bas).
         // Sous un cadre de fenetre, l'ecran garde ses coins HAUTS carres (`mb.w` au mode 0,
         // `dst_prev.z` au mode 8) ; 0 sans cadre, soit le rendu d'avant.
         let square_top = g.screen_square_top();
@@ -2119,7 +2121,7 @@ impl Compositor {
                     color: [1.0, 1.0, 1.0, 1.0],
                     src_prev: g.cut,
                     dst_prev: g.s_dst_prev,
-                    mb: [g.screen_pixel_taps(), g.mb_amount, top_lift, square_top],
+                    mb: [g.screen_pixel_taps([rw, rh]), g.mb_amount, top_lift, square_top],
                     ..Default::default()
                 }
             }
@@ -2135,7 +2137,7 @@ impl Compositor {
                 dof,
                 [rw, rh],
                 g.screen_mask,
-                g.tilt_trail([rw, rh]),
+                g.tilt_pixel_trail([rw, rh]),
             ),
         };
         // Bind group construit AVANT le pass (doit vivre pendant tout le pass) ;
@@ -2206,8 +2208,9 @@ impl Compositor {
         let device_frame = g.device_frame_cb([rw, rh]).map(|cb| self.make_bind(&cb, None, &dummy));
         // Flou de mouvement de l'ecran CADRE (`FrameGeometry::screen_trail`) : l'ombre, le cadre,
         // le metrage et l'appareil ci-dessus passent dans un rendu isole (`trail_view`), que le
-        // mode 18 recompose sur le fond ; binding 4 = ce rendu, les plans = le metrage.
-        let trail = (tilt.is_none() && g.screen_trail()).then(|| {
+        // mode 18 recompose sur le fond, droit ou incline ; binding 4 = ce rendu, les plans = le
+        // metrage.
+        let trail = g.screen_trail([rw, rh]).then(|| {
             self.make_bind_b4(
                 &g.screen_trail_cb([rw, rh]),
                 Some((&sy, &su, &sv)),
@@ -4824,9 +4827,9 @@ mod tests {
         }
     }
 
-    /// Ecran sous chrome de fenetre clair, zoome x1,3 de 1 s a 6 s, a l'instant `t` de la
-    /// timeline, avec le flou de mouvement `blur` (0..1).
-    fn compose_zooming_window(comp: &Compositor, gpu: &Gpu, t: f32, blur: f32) -> Vec<u8> {
+    /// Ecran sous chrome de fenetre clair, zoome x1,3 de 1 s a 6 s sous `rotation` (JSON), a
+    /// l'instant `t` de la timeline, avec le flou de mouvement `blur` (0..1).
+    fn compose_zooming_window(comp: &Compositor, gpu: &Gpu, rotation: &str, t: f32, blur: f32) -> Vec<u8> {
         let json = format!(
             r##"{{"clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
                 "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded",
@@ -4834,7 +4837,7 @@ mod tests {
                            "screenRect":{{"x":0.1,"y":0.1,"width":0.8,"height":0.8}}}},
                 "effects":{{"padding":0.3,"blur":false,"shadow":0.6,"roundnessFrac":0.03,"motionBlur":{blur},"frame":"window-light"}},
                 "background":{{"kind":"color","color":"#6070a0"}},
-                "zoomRegions":[{{"clipIndex":0,"startSec":1,"endSec":6,"scale":1.3,"focusX":0.5,"focusY":0.5}}],
+                "zoomRegions":[{{"clipIndex":0,"startSec":1,"endSec":6,"scale":1.3,"focusX":0.5,"focusY":0.5,"rotation":{rotation}}}],
                 "annotations":[],
                 "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,
                            "clipToBounds":false,"theme":"default"}},
@@ -4861,9 +4864,10 @@ mod tests {
         }
     }
 
-    /// Le flou de mouvement prend l'ecran CADRE en bloc : pendant la rampe du zoom, la barre de
-    /// titre claire file avec le metrage au lieu de rester nette (elle perd des pixels francs,
-    /// etales sur le fond et l'ecran). Immobile, le rendu flou est celui du rendu net, a l'octet.
+    /// Le flou de mouvement prend l'ecran CADRE en bloc, droit comme incline : pendant la rampe
+    /// du zoom, la barre de titre claire file avec le metrage au lieu de rester nette (elle perd
+    /// des pixels francs, etales sur le fond et l'ecran). Immobile, au palier du zoom comme
+    /// apres lui, le rendu flou est celui du rendu net, a l'octet.
     #[test]
     fn the_window_frame_trails_with_the_screen_under_motion_blur() {
         let Some(gpu) = gpu() else { return };
@@ -4871,40 +4875,43 @@ mod tests {
         let bright = |rgba: &[u8]| {
             rgba.chunks_exact(4).filter(|p| p[0] > 215 && p[1] > 215 && p[2] > 215).count()
         };
-        let still = 9.0;
-        assert!(
-            compose_zooming_window(&comp, &gpu, still, 0.0)
-                == compose_zooming_window(&comp, &gpu, still, 1.0),
-            "immobile, le flou ne doit rien changer"
-        );
         let out_dir = std::env::var("OPENSCREEN_FRAME_OUT").ok();
-        let mut best = (0.0f32, 0.0f32);
-        // La rampe de sortie du zoom, ~6,0 s -> 6,8 s.
-        for k in 0..=9 {
-            let t = 5.9 + k as f32 * 0.1;
-            let sharp = compose_zooming_window(&comp, &gpu, t, 0.0);
-            let blurred = compose_zooming_window(&comp, &gpu, t, 1.0);
-            // Encore zoome, la barre est hors champ : rien a mesurer a cet instant.
-            if bright(&sharp) < 1000 {
-                continue;
+        for (label, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
+            for still in [3.5, 9.0] {
+                assert!(
+                    compose_zooming_window(&comp, &gpu, rotation, still, 0.0)
+                        == compose_zooming_window(&comp, &gpu, rotation, still, 1.0),
+                    "{label} a t={still} : immobile, le flou ne doit rien changer"
+                );
             }
-            let drop = 1.0 - bright(&blurred) as f32 / bright(&sharp) as f32;
-            if drop > best.0 {
-                best = (drop, t);
-                if let Some(dir) = &out_dir {
-                    for (name, rgba) in [("sharp", sharp), ("blurred", blurred)] {
-                        let path = format!("{dir}/linux-trail-{name}.png");
-                        image::RgbaImage::from_raw(1280, 720, rgba)
-                            .expect("dimensions du readback")
-                            .save(&path)
-                            .unwrap_or_else(|e| panic!("ecriture {path} : {e}"));
+            let mut best = (0.0f32, 0.0f32);
+            // La rampe de sortie du zoom, ~6,0 s -> 6,8 s.
+            for k in 0..=9 {
+                let t = 5.9 + k as f32 * 0.1;
+                let sharp = compose_zooming_window(&comp, &gpu, rotation, t, 0.0);
+                let blurred = compose_zooming_window(&comp, &gpu, rotation, t, 1.0);
+                // Encore zoome, la barre est hors champ : rien a mesurer a cet instant.
+                if bright(&sharp) < 1000 {
+                    continue;
+                }
+                let drop = 1.0 - bright(&blurred) as f32 / bright(&sharp) as f32;
+                if drop > best.0 {
+                    best = (drop, t);
+                    if let Some(dir) = &out_dir {
+                        for (name, rgba) in [("sharp", sharp), ("blurred", blurred)] {
+                            let path = format!("{dir}/linux-trail-{label}-{name}.png");
+                            image::RgbaImage::from_raw(1280, 720, rgba)
+                                .expect("dimensions du readback")
+                                .save(&path)
+                                .unwrap_or_else(|e| panic!("ecriture {path} : {e}"));
+                        }
                     }
                 }
             }
+            eprintln!("{label} : barre de titre -{:.1} % de pixels francs a t={}", best.0 * 100.0, best.1);
+            let best = best.0;
+            assert!(best > 0.05, "{label} : la barre de titre reste nette pendant le zoom (au mieux {best:.3})");
         }
-        eprintln!("barre de titre : -{:.1} % de pixels francs a t={}", best.0 * 100.0, best.1);
-        let best = best.0;
-        assert!(best > 0.05, "la barre de titre reste nette pendant le zoom (au mieux {best:.3})");
     }
 
     /// Un degrade de fond est opaque et montre chacun de ses stops, meme quand le premier est a

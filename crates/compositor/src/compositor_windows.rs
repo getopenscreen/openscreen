@@ -1880,8 +1880,8 @@ impl Compositor {
         let render_px = [self.rw(), self.rh()];
         // Flou de mouvement de l'écran CADRÉ (`FrameGeometry::screen_trail`) : ombre, cadre,
         // métrage et appareil se dessinent dans un rendu isolé et transparent, que le mode 18
-        // recompose ensuite sur le fond le long de la trajectoire de la boîte.
-        let trail = tilt.is_none() && g.screen_trail();
+        // recompose ensuite sur le fond le long de la trajectoire de la boîte, ou du plan incliné.
+        let trail = g.screen_trail(render_px);
         if trail {
             self.ctx.OMSetRenderTargets(Some(&[Some(self.trail_rtv.clone())]), None);
             self.ctx.ClearRenderTargetView(&self.trail_rtv, &[0.0, 0.0, 0.0, 0.0]);
@@ -1935,7 +1935,7 @@ impl Compositor {
                     dof,
                     render_px,
                     g.screen_mask,
-                    g.tilt_trail(render_px),
+                    g.tilt_pixel_trail(render_px),
                 ),
                 &sy,
                 &suv,
@@ -1960,7 +1960,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
                     dst_prev: s_dst_prev,
-                    mb: [g.screen_pixel_taps(), mb_amount, top_lift, square_top],
+                    mb: [g.screen_pixel_taps(render_px), mb_amount, top_lift, square_top],
                     ..Default::default()
                 },
                 &sy,

@@ -27,9 +27,9 @@ struct Layer {
     fx: vec4<f32>,        // mode 2 : spread ombre en px ; mode 5 : (direction xy, temps programme replie, mouvement 0..3) ; modes 8/12/13/14 : coins TL,TR du quad projeté ; mode 9 : hampe de la flèche ; mode 10 : (flou?, rayon/bloc px, ovale?, teinté?) ; mode 15 : (rotation du plan X, Y, Z en rad, tangage) ; mode 17 : (rotation du plan X, Y, Z en rad, epaisseur du corps)
     src_prev: vec4<f32>,  // modes 8/12/13/14 : coins BR,BL du quad projeté ; mode 9 : barbe 1 ; mode 10 incliné : coins BR,BL du masque ; mode 15 : (hotspot du dessus, repere du plan en px ; lacet) ; mode 17 : marges du corps (gauche, haut, droite, bas ; unites du modele)
     dst_prev: vec4<f32>,  // mode 8 : .xy = taille du plan en px AVANT projection (le rayon y vit), .z = 1 si coins hauts carres (sous un cadre), .w = 1 si warp projectif ; mode 14 : .xy = taille du plan du cadre, .z = hauteur de la barre, .w = epaisseur du filet (px du plan) ; modes 13 et 15 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque ; mode 17 : (angle du socle depuis le plan en rad, rayon de l'ouverture et recouvrement de la lunette en unites du modele, penombre de l'ombre ou 0)
-    mb: vec4<f32>,        // mode 8 : [gx, gy, z_focus, k], profondeur du plan et flou (texels source) par px d'ecart, k = 0 coupe ; mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné, mb.w = 1 si son warp est projectif ; mode 13 : mb.x = 1 si warp projectif ; mode 14 : couleur du filet (alpha droit) ; modes 15 et 17 : .xy = demi-taille du plan dans son repere (px pour le 15, unites pour le 17), .zw = translation du plan (repere camera, px)
-    trail_a: vec4<f32>,   // mode 8 : coins TL, TR du plan a la frame precedente (px locaux, comme fx)
-    trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev)
+    mb: vec4<f32>,        // mode 8 : [gx, gy, z_focus, k], profondeur du plan et flou (texels source) par px d'ecart, k = 0 coupe ; mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné, mb.w = 1 si son warp est projectif ; mode 13 : mb.x = 1 si warp projectif ; mode 14 : couleur du filet (alpha droit) ; modes 15 et 17 : .xy = demi-taille du plan dans son repere (px pour le 15, unites pour le 17), .zw = translation du plan (repere camera, px) ; mode 18 : .z = 1 si le plan est incline, .w = 1 si son warp est projectif
+    trail_a: vec4<f32>,   // mode 8 : coins TL, TR du plan a la frame precedente (px locaux, comme fx) ; mode 18 incline : en fractions de sortie
+    trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev) ; mode 18 incline : en fractions de sortie
     trail_mb: vec4<f32>,  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 }
 
@@ -104,9 +104,11 @@ fn sample_yuv_level(uv: vec2<f32>) -> vec3<f32> {
 
 // Mode 18 -- l'ecran CADRE (ombre, cadre, metrage, appareil) floute comme UN objet rigide
 // (`FrameGeometry::screen_trail`), port 1:1 du HLSL. Binding 4 = son rendu isole, premultiplie,
-// a la taille de la sortie ; sa boite va de `dst_prev` (frame precedente) a `fx` (courante).
-// Chaque tap relit, dans le rendu courant, le point de l'objet qui couvrait ce pixel plus tot sur
-// la trajectoire. Hors de la sortie rien n'a ete rendu : dans l'ouverture arrondie de l'ecran
+// a la taille de la sortie. Chaque tap retrouve le point de l'objet qui couvrait ce pixel plus tot
+// sur la trajectoire (`f`) et le relit la ou il est dessine maintenant (`q`). A plat, sa boite va
+// de `dst_prev` (frame precedente) a `fx` (courante) ; incline (`mb.z` = 1), les coins du plan
+// vont de `trail_a`/`trail_b` a `fx`/`src_prev`, et le warp du plan (`mb.w`, celui du mode 8) fait
+// l'aller et le retour. Hors de la sortie rien n'a ete rendu : dans l'ouverture arrondie de l'ecran
 // (`quad_px`, `radius_px`, 2 px en retrait) on relit le metrage (`src` = la coupe), ailleurs le
 // tap est ecarte.
 fn screen_trail(pout: vec2<f32>) -> vec4<f32> {
@@ -116,9 +118,18 @@ fn screen_trail(pout: vec2<f32>) -> vec4<f32> {
     for (var k: i32 = 0; k < 16; k = k + 1) {
         if k >= taps { break; }
         let a = clamp(layer.mb.y, 0.0, 1.0) * (1.0 - f32(k) / f32(taps - 1));
-        let r = mix(layer.fx, layer.dst_prev, a);
-        let f = (pout - r.xy) / r.zw;
-        let q = layer.fx.xy + f * layer.fx.zw;
+        var f: vec2<f32>;
+        var q: vec2<f32>;
+        if layer.mb.z > 0.5 {
+            let ta = mix(layer.fx, layer.trail_a, a);
+            let tb = mix(layer.src_prev, layer.trail_b, a);
+            f = quad_inverse(pout, ta.xy, ta.zw, tb.xy, tb.zw, layer.mb.w).xy;
+            q = quad_forward(f, layer.fx.xy, layer.fx.zw, layer.src_prev.xy, layer.src_prev.zw, layer.mb.w);
+        } else {
+            let r = mix(layer.fx, layer.dst_prev, a);
+            f = (pout - r.xy) / r.zw;
+            q = layer.fx.xy + f * layer.fx.zw;
+        }
         let rendered = all(q >= vec2<f32>(0.0)) && all(q <= vec2<f32>(1.0));
         // Un `if`, pas un `select` : `select` evalue ses deux branches, soit trois lectures du
         // metrage et une SDF par tap pour rien. Parite HLSL / MSL.
@@ -340,6 +351,24 @@ fn quad_inverse(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: vec2<f32>, c0
         return quad_inverse_projective(P, c00, c10, c11, c01);
     }
     return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
+// Le point (s, t) du plan dans le quad : le warp de `quad_inverse` dans le sens direct, prolonge
+// hors du carre unite. Miroir du HLSL et de `TiltedQuad::point_px`.
+fn quad_forward(st: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: vec2<f32>, c01: vec2<f32>, projective: f32) -> vec2<f32> {
+    if projective > 0.5 {
+        let p1 = c10 - c00;
+        let p2 = c11 - c00;
+        let p3 = c01 - c00;
+        let d1 = p1 - p2;
+        let d2 = p3 - p2;
+        let d3 = p2 - p1 - p3;
+        let den = d1.x * d2.y - d2.x * d1.y;
+        let g = (d3.x * d2.y - d2.x * d3.y) / den;
+        let h = (d1.x * d3.y - d3.x * d1.y) / den;
+        return c00 + (p1 * (1.0 + g) * st.x + p3 * (1.0 + h) * st.y) / (g * st.x + h * st.y + 1.0);
+    }
+    return c00 + st.x * (c10 - c00) + st.y * (c01 - c00) + st.x * st.y * (c00 - c10 - c01 + c11);
 }
 
 // Un echantillon de l'ecran incline (mode 8) : la video nette, fondue vers la pyramide de
@@ -1450,17 +1479,14 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         var tilt_rgb = tilted_sample(uv, coc);
         // Flou de mouvement, celui du mode 0 (cf. HLSL) : l'UV que CE pixel montrait a la frame
         // precedente, par le meme warp inverse sur les coins d'avant (`trail_a`/`trail_b`), puis
-        // `taps` echantillons de celui-la a celui-ci, raccourcis de la force. Borne a une frame.
+        // `taps` echantillons de celui-la a celui-ci, raccourcis de la force. Borne a une frame. Le
+        // mouvement se mesure entre les deux points NON bornes (cf. HLSL).
         let trail_taps = i32(layer.trail_mb.x);
         if trail_taps > 1 && layer.trail_mb.y > 0.001 {
             let rp = quad_inverse(
                 i.local, layer.trail_a.xy, layer.trail_a.zw, layer.trail_b.xy, layer.trail_b.zw, layer.dst_prev.w,
             );
-            let uv_prev = vec2<f32>(
-                mix(layer.src.x, layer.src.z, rp.x),
-                mix(layer.src.y, layer.src.w, rp.y),
-            );
-            let duv = (uv - uv_prev) * clamp(layer.trail_mb.y, 0.0, 1.0);
+            let duv = (r.xy - rp.xy) * (layer.src.zw - layer.src.xy) * clamp(layer.trail_mb.y, 0.0, 1.0);
             if dot(duv, duv) >= 1e-9 {
                 var acc = vec3<f32>(0.0);
                 let step = 1.0 / f32(trail_taps - 1);

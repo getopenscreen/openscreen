@@ -12,9 +12,9 @@ cbuffer Layer : register(b0)
     float4 fx;        // fx.x = spread ombre (px), fx.y,fx.z libres ; mode 15 : rotation du plan (rad), tangage ; mode 17 : rotation du plan (rad), épaisseur
     float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet ; mode 17 : marges du corps (unités du modèle)
     float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip ; mode 17 : angle du socle, rayon et recouvrement de l'ouverture, pénombre de l'ombre
-    float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation
-    float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx)
-    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev)
+    float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation ; mode 18 : .z = 1 si le plan est incliné, .w = 1 si son warp est projectif
+    float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx) ; mode 18 incliné : en fractions de sortie
+    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev) ; mode 18 incliné : en fractions de sortie
     float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
@@ -262,6 +262,27 @@ float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, fl
         return quad_inverse_projective(P, c00, c10, c11, c01);
     }
     return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
+// Le point (s, t) du plan dans le quad c00->c10->c11->c01 : le warp de `quad_inverse` dans le
+// sens direct, prolongé hors du carré unité. Miroir de `TiltedQuad::point_px` (l'homographie de
+// `regions::square_to_quad`, ou le bilinéaire des coins).
+float2 quad_forward(float2 st, float2 c00, float2 c10, float2 c11, float2 c01, float projective)
+{
+    if (projective > 0.5)
+    {
+        float2 p1 = c10 - c00;
+        float2 p2 = c11 - c00;
+        float2 p3 = c01 - c00;
+        float2 d1 = p1 - p2;
+        float2 d2 = p3 - p2;
+        float2 d3 = p2 - p1 - p3;
+        float den = d1.x * d2.y - d2.x * d1.y;
+        float g = (d3.x * d2.y - d2.x * d3.y) / den;
+        float h = (d1.x * d3.y - d3.x * d1.y) / den;
+        return c00 + (p1 * (1.0 + g) * st.x + p3 * (1.0 + h) * st.y) / (g * st.x + h * st.y + 1.0);
+    }
+    return c00 + st.x * (c10 - c00) + st.y * (c01 - c00) + st.x * st.y * (c00 - c10 - c01 + c11);
 }
 
 // Un échantillon de l'écran incliné (mode 8) : la vidéo nette, fondue vers la pyramide de
@@ -1326,11 +1347,15 @@ float4 ps_main(VSOut i) : SV_Target
 {
     // mode 18 : l'écran CADRÉ (ombre, cadre, métrage, appareil) flouté comme UN objet rigide
     // (`FrameGeometry::screen_trail`). t2 = son rendu isolé, prémultiplié, à la taille de la
-    // sortie ; sa boîte va de `dst_prev` (frame précédente) à `fx` (courante), fractions de sortie.
-    // Chaque tap relit, dans le rendu courant, le point de l'objet qui couvrait ce pixel plus tôt
-    // sur la trajectoire. Un point hors de la sortie n'a pas été rendu : dans l'ouverture arrondie
-    // de l'écran (`quad_px`, `radius_px`, 2 px en retrait : la lunette mord dessus), on relit le
-    // métrage (`src` = la coupe) ; ailleurs (un bout de cadre hors champ), le tap est écarté.
+    // sortie. Chaque tap retrouve le point de l'objet qui couvrait ce pixel plus tôt sur la
+    // trajectoire (`f`, fractions de l'écran) et le relit là où il est dessiné maintenant (`q`,
+    // fractions de sortie). À plat, la boîte va de `dst_prev` (frame précédente) à `fx`
+    // (courante). Incliné (`mb.z` = 1), le plan : ses coins TL, TR / BR, BL courants dans
+    // `fx`/`src_prev`, ceux d'avant dans `trail_a`/`trail_b` ; le tap interpole les coins, et le
+    // warp du plan (`mb.w`, celui du mode 8) fait l'aller (le pixel vers le plan) et le retour (le
+    // plan vers le rendu courant). Un point hors de la sortie n'a pas été rendu : dans l'ouverture
+    // arrondie de l'écran (`quad_px`, `radius_px`, 2 px en retrait : la lunette mord dessus), on
+    // relit le métrage (`src` = la coupe) ; ailleurs (un bout de cadre hors champ), le tap est écarté.
     if (mode > 17.5)
     {
         int taps = (int) mb.x;
@@ -1340,9 +1365,21 @@ float4 ps_main(VSOut i) : SV_Target
         {
             if (k >= taps) break;
             float a = saturate(mb.y) * (1.0 - (float) k / (float) (taps - 1));
-            float4 r = lerp(fx, dst_prev, a);
-            float2 f = (i.pout - r.xy) / r.zw;
-            float2 q = fx.xy + f * fx.zw;
+            float2 f;
+            float2 q;
+            if (mb.z > 0.5)
+            {
+                float4 ta = lerp(fx, trail_a, a);
+                float4 tb = lerp(src_prev, trail_b, a);
+                f = quad_inverse(i.pout, ta.xy, ta.zw, tb.xy, tb.zw, mb.w).xy;
+                q = quad_forward(f, fx.xy, fx.zw, src_prev.xy, src_prev.zw, mb.w);
+            }
+            else
+            {
+                float4 r = lerp(fx, dst_prev, a);
+                f = (i.pout - r.xy) / r.zw;
+                q = fx.xy + f * fx.zw;
+            }
             if (all(q >= 0.0) && all(q <= 1.0))
             {
                 acc += texImg.SampleLevel(samp, q, 0.0);
@@ -1654,13 +1691,14 @@ float4 ps_main(VSOut i) : SV_Target
         // Flou de mouvement, celui du mode 0 : l'UV que CE pixel montrait à la frame précédente,
         // par le même warp inverse sur les coins d'avant (`trail_a`/`trail_b`), puis `taps`
         // échantillons de celui-là à celui-ci, raccourcis de la force. Borné à une frame. Hors du
-        // plan d'avant, le warp prolongé donne encore le bon point (sa racine proche).
+        // plan d'avant, le warp prolongé donne encore le bon point (sa racine proche). Le
+        // mouvement se mesure entre les deux points NON bornés : `uv` l'est, et sur le bord d'un
+        // plan immobile, `uv − uv_prev` aurait flouté la frange.
         int taps = (int) trail_mb.x;
         if (taps > 1 && trail_mb.y > 0.001)
         {
             float3 rp = quad_inverse(i.local, trail_a.xy, trail_a.zw, trail_b.xy, trail_b.zw, dst_prev.w);
-            float2 uv_prev = float2(lerp(src.x, src.z, rp.x), lerp(src.y, src.w, rp.y));
-            float2 duv = (uv - uv_prev) * saturate(trail_mb.y);
+            float2 duv = (r.xy - rp.xy) * (src.zw - src.xy) * saturate(trail_mb.y);
             if (dot(duv, duv) >= 1e-9)
             {
                 float3 acc = 0.0;

@@ -58,6 +58,7 @@ pub struct LayerCB {
     /// Mode 8 : le plan à la frame PRÉCÉDENTE, coins TL, TR (`trail_a`) puis BR, BL (`trail_b`)
     /// en px locaux comme `fx`/`src_prev`, et `trail_mb` = `[taps, force, 0, 0]` de son flou de
     /// mouvement, ceux du mode 0 (`mb.xy`). `trail_mb` nul ailleurs : aucun tap, rien n'est lu.
+    /// Mode 18 incliné : les mêmes coins d'avant, en fractions de la sortie (`screen_trail_cb`).
     pub trail_a: [f32; 4],
     pub trail_b: [f32; 4],
     pub trail_mb: [f32; 4],
@@ -1203,9 +1204,10 @@ pub struct TiltTrail {
 /// dessiné dans le rect du slot au lieu de sa bbox, et `color.w` porte le rayon des coins du slot,
 /// que le shader applique à ce rect. Nul sans masque, comme avant.
 ///
-/// `trail` : le plan à la frame précédente. Le shader floute le contenu le long du chemin qu'a
-/// parcouru chaque pixel depuis, borné à une frame et réglé comme le mode 0 (`trail_a`, `trail_b`,
-/// `trail_mb`). `None`, ou un seul tap : l'échantillon net, le rendu d'avant à l'octet.
+/// `trail` : le plan à la frame précédente (`FrameGeometry::tilt_pixel_trail`). Le shader floute
+/// le contenu le long du chemin qu'a parcouru chaque pixel depuis, borné à une frame et réglé comme
+/// le mode 0 (`trail_a`, `trail_b`, `trail_mb`). `None`, ou un seul tap : l'échantillon net, le
+/// rendu d'avant à l'octet.
 #[allow(clippy::too_many_arguments)]
 pub fn tilted_screen_cb(
     quad: &crate::regions::TiltedQuad,
@@ -1922,8 +1924,9 @@ impl FrameGeometry {
         })
     }
 
-    /// Le plan incliné une frame d'écran plus tôt, avec le réglage du flou : ce que le mode 8
-    /// floute (`tilted_screen_cb`). `None` quand l'écran est droit ou le flou coupé.
+    /// Le plan incliné une frame d'écran plus tôt, avec le réglage du flou : d'où part la
+    /// traînée de l'écran cadré (`screen_trail_cb`), ou celle du seul métrage sous un masque de
+    /// bloc (`tilt_pixel_trail`). `None` quand l'écran est droit ou le flou coupé.
     ///
     /// La frame d'avant est celle du mode 0 : la boîte au zoom d'avant (`s_dst_prev`), et ici la
     /// rotation de base d'avant (un angle fixe entre avec le zoom) ou la caméra réelle d'avant
@@ -1999,36 +2002,57 @@ impl FrameGeometry {
         }
     }
 
-    /// L'écran droit se déplace-t-il EN BLOC sous le flou de mouvement sur cette frame ?
+    /// L'écran cadré se déplace-t-il EN BLOC sous le flou de mouvement sur cette frame ?
     ///
     /// La coupe est la même aux deux frames : tout le mouvement de l'écran vient de sa boîte,
-    /// `s_dst_prev` → `s_dst`, et l'ombre, le cadre et l'appareil sont taillés dans cette même
-    /// boîte. C'est donc un objet rigide, et on le floute comme tel (mode 18, `screen_trail_cb`) :
-    /// flouter le seul métrage laissait un contenu qui file dans un cadre aux bords nets.
+    /// `s_dst_prev` → `s_dst`, et incliné, du plan qui la montre (`tilt_trail`). L'ombre, le cadre
+    /// et l'appareil sont taillés dans cette boîte et posés sur ce plan. C'est donc un objet
+    /// rigide, et on le floute comme tel (mode 18, `screen_trail_cb`) : flouter le seul métrage
+    /// laissait un contenu qui file dans un cadre aux bords nets, et sous une caméra 3D, c'était
+    /// le cas de tout zoom.
+    ///
+    /// Incliné, le plan a bougé quand ses coins ont bougé : sans mouvement, ceux de `tilt_trail`
+    /// sont les siens au bit près, et le rendu reste celui d'avant, à l'octet.
     ///
     /// Pas sous un masque de bloc : la case ne bouge pas, seul le métrage bouge dedans, et le
-    /// flou par pixel du mode 0 reste le bon. Le chemin incliné n'a pas de flou (l'appelant ne
-    /// demande que sur écran droit).
-    pub fn screen_trail(&self) -> bool {
-        self.mb_taps >= 2.0
-            && self.mb_amount > 0.001
-            && self.s_dst != self.s_dst_prev
-            && self.screen_mask.is_none()
+    /// flou par pixel (modes 0 et 8) reste le bon.
+    pub fn screen_trail(&self, render_px: [f32; 2]) -> bool {
+        if self.mb_taps < 2.0 || self.mb_amount <= 0.001 || self.screen_mask.is_some() {
+            return false;
+        }
+        match self.screen_tilt_in(render_px) {
+            None => self.s_dst != self.s_dst_prev,
+            Some(quad) => self.tilt_trail(render_px).is_some_and(|t| t.corners != quad.corners),
+        }
     }
 
     /// Taps du flou PAR PIXEL du mode 0 de l'écran : un seul quand `screen_trail` floute déjà
     /// l'objet entier, sinon le métrage serait flouté deux fois.
-    pub fn screen_pixel_taps(&self) -> f32 {
-        if self.screen_trail() { 1.0 } else { self.mb_taps }
+    pub fn screen_pixel_taps(&self, render_px: [f32; 2]) -> f32 {
+        if self.screen_trail(render_px) { 1.0 } else { self.mb_taps }
+    }
+
+    /// La traînée PAR PIXEL du mode 8 : `tilt_trail`, sauf quand `screen_trail` floute déjà
+    /// l'objet entier. Le masque de confidentialité, lui, lit toujours `tilt_trail` : les deux
+    /// flous étalent le secret sur le même chemin.
+    pub fn tilt_pixel_trail(&self, render_px: [f32; 2]) -> Option<TiltTrail> {
+        self.tilt_trail(render_px).filter(|_| !self.screen_trail(render_px))
     }
 
     /// Le calque du mode 18 : le rendu isolé de l'écran cadré (t2), recomposé le long de sa
-    /// trajectoire. `fx` = la boîte courante, `dst_prev` = la précédente, `src` = la coupe (le
-    /// métrage relu directement là où le rendu isolé s'arrête au bord de la sortie), `quad_px` et
-    /// `radius_px` = la boîte courante en px et ses coins : ce repli ne lit le métrage que dans
-    /// l'ouverture arrondie, jamais sous la lunette d'un appareil.
+    /// trajectoire. `src` = la coupe (le métrage relu directement là où le rendu isolé s'arrête
+    /// au bord de la sortie), `quad_px` et `radius_px` = l'écran et ses coins : ce repli ne lit le
+    /// métrage que dans l'ouverture arrondie, jamais sous la lunette d'un appareil.
+    ///
+    /// À plat, la trajectoire est celle de la boîte : `fx` = la courante, `dst_prev` = la
+    /// précédente. Incliné (`mb.z` = 1), celle du plan : ses coins TL, TR, BR, BL courants dans
+    /// `fx`/`src_prev` et ceux de `tilt_trail` dans `trail_a`/`trail_b`, en fractions de la
+    /// sortie comme la boîte ; `quad_px` et `radius_px` sont alors pris dans le plan, comme au
+    /// mode 8. `mb.w` = le warp du plan (`TiltedQuad::warp_flag`, bilinéaire sous un angle fixe,
+    /// projectif sous la caméra réelle ou un appareil) : le shader passe par lui dans les deux
+    /// sens, comme le mode 8 qui a dessiné le métrage.
     pub fn screen_trail_cb(&self, render_px: [f32; 2]) -> LayerCB {
-        LayerCB {
+        let flat = LayerCB {
             dst: [0.0, 0.0, 1.0, 1.0],
             src: self.cut,
             quad_px: [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]],
@@ -2039,6 +2063,24 @@ impl FrameGeometry {
             dst_prev: self.s_dst_prev,
             mb: [self.mb_taps, self.mb_amount, 0.0, 0.0],
             ..Default::default()
+        };
+        let (Some(quad), Some(trail)) = (self.screen_tilt_in(render_px), self.tilt_trail(render_px))
+        else {
+            return flat;
+        };
+        let c = self.screen_center_px(render_px);
+        let out = |(x, y): (f32, f32)| [(c[0] + x) / render_px[0], (c[1] + y) / render_px[1]];
+        let [tl, tr, br, bl] = quad.corners.map(out);
+        let [ptl, ptr, pbr, pbl] = trail.corners.map(out);
+        LayerCB {
+            quad_px: flat.quad_px.map(|v| v * quad.scale),
+            radius_px: self.s_radius * quad.scale,
+            fx: [tl[0], tl[1], tr[0], tr[1]],
+            src_prev: [br[0], br[1], bl[0], bl[1]],
+            trail_a: [ptl[0], ptl[1], ptr[0], ptr[1]],
+            trail_b: [pbr[0], pbr[1], pbl[0], pbl[1]],
+            mb: [self.mb_taps, self.mb_amount, 1.0, quad.warp_flag()],
+            ..flat
         }
     }
 
@@ -4391,19 +4433,76 @@ mod tests {
             let mut g = framed_plan(&framed_scene(frame, "null", 1.5, false));
             (g.mb_taps, g.mb_amount) = (16.0, 1.0);
             g.s_dst_prev = g.s_dst;
-            assert!(!g.screen_trail(), "{frame}: boîte immobile");
-            assert_eq!(g.screen_pixel_taps(), 16.0);
+            assert!(!g.screen_trail(RENDER), "{frame}: boîte immobile");
+            assert_eq!(g.screen_pixel_taps(RENDER), 16.0);
             g.s_dst_prev[2] *= 0.9;
-            assert!(g.screen_trail(), "{frame}: boîte qui bouge");
-            assert_eq!(g.screen_pixel_taps(), 1.0, "{frame}: flou compté deux fois");
+            assert!(g.screen_trail(RENDER), "{frame}: boîte qui bouge");
+            assert_eq!(g.screen_pixel_taps(RENDER), 1.0, "{frame}: flou compté deux fois");
             let cb = g.screen_trail_cb(RENDER);
             assert_eq!((cb.fx, cb.dst_prev, cb.src), (g.s_dst, g.s_dst_prev, g.cut));
+            assert_eq!(cb.mb, [16.0, 1.0, 0.0, 0.0], "{frame}: la boîte, pas le plan");
             g.mb_amount = 0.0;
-            assert!(!g.screen_trail(), "{frame}: flou coupé");
+            assert!(!g.screen_trail(RENDER), "{frame}: flou coupé");
             g.mb_amount = 1.0;
             g.screen_mask = Some(ScreenMask { rect: [0.0, 0.0, 0.5, 1.0], radius_px: 0.0 });
-            assert!(!g.screen_trail(), "{frame}: la case d'un bloc ne bouge pas");
-            assert_eq!(g.screen_pixel_taps(), 16.0);
+            assert!(!g.screen_trail(RENDER), "{frame}: la case d'un bloc ne bouge pas");
+            assert_eq!(g.screen_pixel_taps(RENDER), 16.0);
+        }
+    }
+
+    /// Sous une caméra 3D aussi (angle fixe ou caméra réelle), l'écran cadré est flouté en bloc :
+    /// pendant la rampe du zoom, son PLAN bouge, et le mode 8 lâche alors sa traînée par pixel,
+    /// sinon le métrage serait flouté deux fois. Le calque porte les coins du plan en fractions de
+    /// la sortie : ceux que le mode 8 dessine, et ceux de `tilt_trail`. Au palier, rien ne bouge.
+    #[test]
+    fn a_moving_tilted_screen_is_motion_blurred_as_one_object() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        for rotation in [r#""iso""#, r#""follow-cursor""#] {
+            for frame in ["", r#","frame":"laptop""#] {
+                let mut scene = framed_scene(frame, rotation, 1.5, false);
+                scene.effects.motion_blur = 1.0;
+                // La région démarre à 2 s : à 1,6 s, sa rampe d'entrée est en cours.
+                scene.zoom_regions[0].start_sec = 2.0;
+                let at = |t: f32| {
+                    let input = golden_input(&scene, &cfg);
+                    plan_frame(&FrameGeometryInput { render_px: RENDER, timeline_t_override: Some(t), ..input })
+                };
+                let case = format!("{rotation}{frame}");
+
+                let hold = at(3.0);
+                assert!(hold.tilted(), "{case}: le palier doit être incliné");
+                assert!(!hold.screen_trail(RENDER), "{case}: au palier, rien ne bouge");
+                assert!(hold.tilt_pixel_trail(RENDER).is_some(), "{case}: le mode 8 garde sa traînée");
+
+                let g = at(1.6);
+                let quad = g.screen_tilt_in(RENDER).expect("incliné");
+                let trail = g.tilt_trail(RENDER).expect("traînée");
+                assert_ne!(trail.corners, quad.corners, "{case}: le plan doit bouger à 1,6 s");
+                assert!(g.screen_trail(RENDER), "{case}: le plan bouge, le cadre doit suivre");
+                assert_eq!(g.tilt_pixel_trail(RENDER), None, "{case}: flou compté deux fois");
+
+                let cb = g.screen_trail_cb(RENDER);
+                // Le warp du plan, celui du mode 8 : bilinéaire sous un angle fixe nu, projectif
+                // sous la caméra réelle ou un appareil.
+                let warp = if rotation == r#""iso""# && frame.is_empty() { 0.0 } else { 1.0 };
+                assert_eq!(quad.warp_flag(), warp, "{case}: warp du plan");
+                assert_eq!((cb.mode, cb.mb, cb.src), (18.0, [g.mb_taps, g.mb_amount, 1.0, warp], g.cut));
+                let c = g.screen_center_px(RENDER);
+                let out = |(x, y): (f32, f32)| [(c[0] + x) / RENDER[0], (c[1] + y) / RENDER[1]];
+                let pairs = |a: [f32; 4], b: [f32; 4]| [[a[0], a[1]], [a[2], a[3]], [b[0], b[1]], [b[2], b[3]]];
+                assert_eq!(pairs(cb.fx, cb.src_prev), quad.corners.map(out), "{case}: coins courants");
+                assert_eq!(pairs(cb.trail_a, cb.trail_b), trail.corners.map(out), "{case}: coins d'avant");
+                // L'ouverture du repli se mesure dans le plan, comme au mode 8.
+                let s_px = [g.s_dst[2] * RENDER[0], g.s_dst[3] * RENDER[1]];
+                assert_eq!(cb.quad_px, s_px.map(|v| v * quad.scale));
+                assert_eq!(cb.radius_px, g.s_radius * quad.scale);
+
+                // Sous un masque de bloc, la case ne bouge pas : retour au flou par pixel.
+                let mut masked = g;
+                masked.screen_mask = Some(ScreenMask { rect: [0.0, 0.0, 0.5, 1.0], radius_px: 0.0 });
+                assert!(!masked.screen_trail(RENDER), "{case}: la case d'un bloc ne bouge pas");
+                assert_eq!(masked.tilt_pixel_trail(RENDER), Some(trail));
+            }
         }
     }
 

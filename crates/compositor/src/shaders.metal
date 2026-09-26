@@ -56,9 +56,9 @@ struct Layer
     float4 fx;        // fx.x = spread ombre (px), fx.y,fx.z libres ; mode 15 : rotation du plan (rad), tangage ; mode 17 : rotation du plan (rad), épaisseur
     float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet ; mode 17 : marges du corps (unités du modèle)
     float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip ; mode 17 : angle du socle, rayon et recouvrement de l'ouverture, pénombre de l'ombre
-    float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation
-    float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx)
-    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev)
+    float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation ; mode 18 : .z = 1 si le plan est incliné, .w = 1 si son warp est projectif
+    float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx) ; mode 18 incliné : en fractions de sortie
+    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev) ; mode 18 incliné : en fractions de sortie
     float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
@@ -310,6 +310,26 @@ inline float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 
         return quad_inverse_projective(P, c00, c10, c11, c01);
     }
     return quad_inverse_bilinear(P, c00, c10, c11, c01);
+}
+
+// Le point (s, t) du plan dans le quad : le warp de `quad_inverse` dans le sens direct, prolongé
+// hors du carré unité. Miroir du HLSL et de `TiltedQuad::point_px`.
+inline float2 quad_forward(float2 st, float2 c00, float2 c10, float2 c11, float2 c01, float projective)
+{
+    if (projective > 0.5)
+    {
+        float2 p1 = c10 - c00;
+        float2 p2 = c11 - c00;
+        float2 p3 = c01 - c00;
+        float2 d1 = p1 - p2;
+        float2 d2 = p3 - p2;
+        float2 d3 = p2 - p1 - p3;
+        float den = d1.x * d2.y - d2.x * d1.y;
+        float g = (d3.x * d2.y - d2.x * d3.y) / den;
+        float h = (d1.x * d3.y - d3.x * d1.y) / den;
+        return c00 + (p1 * (1.0 + g) * st.x + p3 * (1.0 + h) * st.y) / (g * st.x + h * st.y + 1.0);
+    }
+    return c00 + st.x * (c10 - c00) + st.y * (c01 - c00) + st.x * st.y * (c00 - c10 - c01 + c11);
 }
 
 // Un échantillon de l'écran incliné (mode 8) : la vidéo nette, fondue vers la pyramide de
@@ -1305,7 +1325,9 @@ fragment float4 ps_main(VSOut i [[stage_in]],
 {
     // mode 18 : l'écran CADRÉ (ombre, cadre, métrage, appareil) flouté comme UN objet rigide
     // (`FrameGeometry::screen_trail`), port 1:1 du HLSL. texImg = son rendu isolé, prémultiplié,
-    // à la taille de la sortie ; sa boîte va de `dst_prev` (frame précédente) à `fx` (courante).
+    // à la taille de la sortie. À plat, sa boîte va de `dst_prev` (frame précédente) à `fx`
+    // (courante) ; incliné (`mb.z` = 1), les coins du plan vont de `trail_a`/`trail_b` à
+    // `fx`/`src_prev`, et le warp du plan (`mb.w`, celui du mode 8) fait l'aller et le retour.
     // Hors de la sortie rien n'a été rendu : dans l'ouverture arrondie de l'écran (`quad_px`,
     // `radius_px`, 2 px en retrait) on relit le métrage (`src` = la coupe), ailleurs le tap est écarté.
     if (layer.mode > 17.5)
@@ -1317,9 +1339,22 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         {
             if (k >= taps) break;
             float a = saturate(layer.mb.y) * (1.0 - float(k) / float(taps - 1));
-            float4 r = mix(layer.fx, layer.dst_prev, a);
-            float2 f = (i.pout - r.xy) / r.zw;
-            float2 q = layer.fx.xy + f * layer.fx.zw;
+            float2 f;
+            float2 q;
+            if (layer.mb.z > 0.5)
+            {
+                float4 ta = mix(layer.fx, layer.trail_a, a);
+                float4 tb = mix(layer.src_prev, layer.trail_b, a);
+                f = quad_inverse(i.pout, ta.xy, ta.zw, tb.xy, tb.zw, layer.mb.w).xy;
+                q = quad_forward(f, layer.fx.xy, layer.fx.zw,
+                                 layer.src_prev.xy, layer.src_prev.zw, layer.mb.w);
+            }
+            else
+            {
+                float4 r = mix(layer.fx, layer.dst_prev, a);
+                f = (i.pout - r.xy) / r.zw;
+                q = layer.fx.xy + f * layer.fx.zw;
+            }
             if (all(q >= 0.0) && all(q <= 1.0))
             {
                 acc += texImg.sample(samp, q, level(0.0));
@@ -1516,14 +1551,15 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         float3 rgb = tilted_sample(uv, coc, texY, texUV, texImg);
         // Flou de mouvement, celui du mode 0 : l'UV que CE pixel montrait à la frame précédente,
         // par le même warp inverse sur les coins d'avant (`trail_a`/`trail_b`), puis `taps`
-        // échantillons de celui-là à celui-ci, raccourcis de la force. Borné à une frame.
+        // échantillons de celui-là à celui-ci, raccourcis de la force. Borné à une frame. Le
+        // mouvement se mesure entre les deux points NON bornés (cf. HLSL).
         int taps = int(layer.trail_mb.x);
         if (taps > 1 && layer.trail_mb.y > 0.001)
         {
             float3 rp = quad_inverse(i.local, layer.trail_a.xy, layer.trail_a.zw,
                                      layer.trail_b.xy, layer.trail_b.zw, layer.dst_prev.w);
-            float2 uv_prev = float2(mix(layer.src.x, layer.src.z, rp.x), mix(layer.src.y, layer.src.w, rp.y));
-            float2 duv = (uv - uv_prev) * clamp(layer.trail_mb.y, 0.0, 1.0);
+            float2 duv = (r.xy - rp.xy) * (layer.src.zw - layer.src.xy)
+                       * clamp(layer.trail_mb.y, 0.0, 1.0);
             if (dot(duv, duv) >= 1e-9)
             {
                 float3 acc = float3(0.0);

@@ -1285,7 +1285,7 @@ impl Compositor {
         top_lift: f32,
         // Le slot d'un layout en bloc, qui rogne le plan (`FrameGeometry::screen_mask`).
         mask: Option<crate::frame_geometry::ScreenMask>,
-        // Le plan à la frame d'avant, pour son flou de mouvement (`FrameGeometry::tilt_trail`).
+        // Le plan à la frame d'avant, pour son flou de mouvement (`FrameGeometry::tilt_pixel_trail`).
         trail: Option<crate::frame_geometry::TiltTrail>,
         y: &metal::Texture,
         uv: &metal::Texture,
@@ -2197,8 +2197,8 @@ impl Compositor {
         let tilt = g.screen_tilt(s_px);
         // Flou de mouvement de l'écran CADRÉ (`FrameGeometry::screen_trail`) : ombre, cadre,
         // métrage et appareil se dessinent dans un rendu isolé et transparent, que le mode 18
-        // recompose ensuite sur le fond le long de la trajectoire de la boîte.
-        let trail = tilt.is_none() && g.screen_trail();
+        // recompose ensuite sur le fond le long de la trajectoire de la boîte, ou du plan incliné.
+        let trail = g.screen_trail([rw, rh]);
         let mut enc = if trail {
             self.begin_pass(
                 cmd_buf,
@@ -2259,7 +2259,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0, sv0, su1, sv1],
                     dst_prev: g.s_dst_prev,
-                    mb: [g.screen_pixel_taps(), g.mb_amount, top_lift, square_top],
+                    mb: [g.screen_pixel_taps([rw, rh]), g.mb_amount, top_lift, square_top],
                     ..Default::default()
                 },
                 &sy,
@@ -2275,7 +2275,7 @@ impl Compositor {
                 g.s_radius,
                 top_lift,
                 g.screen_mask,
-                g.tilt_trail([rw, rh]),
+                g.tilt_pixel_trail([rw, rh]),
                 &sy,
                 &suv,
                 dof_pyramid.as_ref(),

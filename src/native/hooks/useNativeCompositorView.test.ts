@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 	createCompositorView: vi.fn(),
 	readCompositorFrame: vi.fn(),
 	destroyCompositorView: vi.fn(),
+	setCompositorRect: vi.fn(async () => undefined),
 }));
 
 vi.mock("../compositorViewClient", () => ({
@@ -28,7 +29,7 @@ vi.mock("../compositorViewClient", () => ({
 	destroyCompositorView: mocks.destroyCompositorView,
 	setCompositorParam: vi.fn(),
 	setCompositorPlaying: vi.fn(),
-	setCompositorRect: vi.fn(),
+	setCompositorRect: mocks.setCompositorRect,
 }));
 
 import { useNativeCompositorView } from "./useNativeCompositorView";
@@ -176,6 +177,56 @@ describe("useNativeCompositorView", () => {
 			mocks.readCompositorFrame.mockResolvedValue(null);
 			rerender({ path: "b.mp4" });
 			await waitFor(() => expect(ref.current?.dataset.painted).toBeUndefined());
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	// An Auto format reshapes the preview box on every padding tick. Resizing the drawing buffer
+	// then, rather than with the next draw, emptied it until native answered at the new size:
+	// the footage blinked out and back while the slider moved.
+	it("keeps the last frame up when the canvas box changes, until a frame at the new size lands", async () => {
+		vi.stubGlobal(
+			"ImageData",
+			class {
+				constructor(
+					public data: Uint8ClampedArray,
+					public width: number,
+					public height: number,
+				) {}
+			},
+		);
+		vi.stubGlobal(
+			"createImageBitmap",
+			vi.fn(async () => ({ close: vi.fn() })),
+		);
+		try {
+			mocks.createCompositorView.mockResolvedValue({ id: 1 });
+			mocks.readCompositorFrame
+				.mockResolvedValueOnce({ gen: 1, width: 4, height: 2, data: new Uint8Array(32) })
+				.mockResolvedValue(null);
+			const ref = stubCanvasRef();
+			const canvas = ref.current as HTMLCanvasElement;
+			let box = { width: 4, height: 2 };
+			canvas.getBoundingClientRect = () => ({ left: 0, top: 0, ...box }) as DOMRect;
+			renderHook(() => useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }));
+			await waitFor(() => expect(canvas.dataset.painted).toBe("true"));
+
+			box = { width: 4, height: 3 };
+			window.dispatchEvent(new Event("resize"));
+			await waitFor(() => expect(mocks.setCompositorRect).toHaveBeenCalled());
+			// Untouched buffer: the bitmap still holds the last frame.
+			expect(canvas.height).toBe(2);
+			expect(canvas.dataset.painted).toBe("true");
+
+			mocks.readCompositorFrame.mockResolvedValueOnce({
+				gen: 2,
+				width: 4,
+				height: 3,
+				data: new Uint8Array(48),
+			});
+			await waitFor(() => expect(canvas.height).toBe(3));
+			expect(canvas.dataset.painted).toBe("true");
 		} finally {
 			vi.unstubAllGlobals();
 		}

@@ -117,29 +117,22 @@ export function useNativeCompositorView(
 
 		// `data-painted` tells the preview card the canvas holds pixels, so it can drop its
 		// placeholder background (see `.previewFrame`), which would otherwise show through the
-		// anti-aliased rounded clip. It is set once a frame is really drawn, and cleared
-		// whenever the bitmap is emptied — a fresh view, or a resize — so the placeholder covers
-		// the gap instead of the card going transparent.
+		// anti-aliased rounded clip. It is set once a frame is really drawn, and cleared for a
+		// fresh view, whose bitmap stays empty until that view paints.
 		const markPainted = () => {
 			canvas.dataset.painted = "true";
 		};
-		const clearPainted = () => {
-			delete canvas.dataset.painted;
-		};
-		clearPainted();
+		delete canvas.dataset.painted;
 
-		/** Resize the canvas's DRAWING BUFFER to match the offscreen render
-		 *  target's pixel dimensions. Setting `canvas.width` / `canvas.height`
-		 *  is destructive (clears the bitmap), so we only do it on genuine
-		 *  rect changes — handled together with the setRect push below. */
-		const syncCanvasSize = (rect: CompositorViewRect) => {
-			if (canvas.width !== rect.width) {
-				canvas.width = rect.width;
-				clearPainted();
+		/** Size the canvas's DRAWING BUFFER. Destructive: assigning `canvas.width` or
+		 *  `canvas.height` empties the bitmap, so past the mount it only happens in the same
+		 *  task as the draw that refills it (see `paint` in the pull loop). */
+		const setBufferSize = (width: number, height: number) => {
+			if (canvas.width !== width) {
+				canvas.width = width;
 			}
-			if (canvas.height !== rect.height) {
-				canvas.height = rect.height;
-				clearPainted();
+			if (canvas.height !== height) {
+				canvas.height = height;
 			}
 		};
 
@@ -163,7 +156,6 @@ export function useNativeCompositorView(
 			if (id == null) {
 				return;
 			}
-			syncCanvasSize(next);
 			safelyCall("setRect", () => setCompositorRect(id, next));
 		};
 
@@ -222,16 +214,6 @@ export function useNativeCompositorView(
 					if (data.byteLength !== width * height * 4 || width === 0 || height === 0) {
 						return;
 					}
-					// Size the drawing buffer to the packet (destructive, but we repaint
-					// the whole frame right after). CSS scales it to the canvas box.
-					if (canvas.width !== width) {
-						canvas.width = width;
-						clearPainted();
-					}
-					if (canvas.height !== height) {
-						canvas.height = height;
-						clearPainted();
-					}
 					// Wrap the received buffer DIRECTLY — no intermediate copy. `data` is a
 					// fresh per-frame Buffer from IPC (never pooled or reused across frames),
 					// so a view over it is valid for the lifetime of this paint, and nothing
@@ -243,23 +225,29 @@ export function useNativeCompositorView(
 						data.byteLength,
 					);
 					const image = new ImageData(pixels, width, height);
+					// The buffer takes the packet's size HERE, in the same task as the draw that
+					// refills it, never when the canvas box changes: anything awaited between the
+					// two (the rect's trip to native, `createImageBitmap`) is a frame the browser
+					// presents empty. Meanwhile CSS stretches the previous frame over the new box.
+					// An Auto format reshapes that box on every padding tick, so an early resize
+					// blinked the footage out and back while the slider moved.
+					const paint = (draw: () => void) => {
+						if (disposed) {
+							return;
+						}
+						setBufferSize(width, height);
+						draw();
+						markPainted();
+					};
 					// `createImageBitmap` decodes off the main thread (keeps UI at 60/120fps)
 					// and snapshots `image`, so the view can be released after; `putImageData`
 					// is the synchronous fallback if bitmap creation is unavailable.
 					createImageBitmap(image)
 						.then((bitmap) => {
-							if (!disposed && ctx) {
-								ctx.drawImage(bitmap, 0, 0);
-								markPainted();
-							}
+							paint(() => ctx.drawImage(bitmap, 0, 0));
 							bitmap.close();
 						})
-						.catch(() => {
-							if (!disposed && ctx) {
-								ctx.putImageData(image, 0, 0);
-								markPainted();
-							}
-						});
+						.catch(() => paint(() => ctx.putImageData(image, 0, 0)));
 					// Advance only after a successful, validated frame — so a dropped/
 					// malformed packet is retried rather than silently skipped.
 					lastGen = gen;
@@ -294,7 +282,7 @@ export function useNativeCompositorView(
 		// Prime the canvas drawing buffer to the resolution we expect the
 		// first pulled frame to have; avoids a 300x150 flash before the
 		// first readFrame resolves.
-		syncCanvasSize(initialRect);
+		setBufferSize(initialRect.width, initialRect.height);
 
 		safelyCall("createView", async () => {
 			const result = await createCompositorView(initialRect, opts.sources);

@@ -3811,25 +3811,20 @@ export function CursorPane() {
 	// handlers below push diffs live. Sizes are sent as direct scales (1 = fixture default).
 	// Synchro initiale : cf. NativeCompositorOverlay (`pushAllNativeParams`).
 
-	// Built-in "Default" plus each bundled theme. When arrow and pointer art
-	// differ, both sprites are shown so a pack is not previewed as arrow-only.
+	// Built-in "Default" plus each bundled theme, previewed by its main arrow only.
 	const cursorThemeOptions = useMemo(
 		() => [
 			{
 				id: DEFAULT_CURSOR_THEME_ID,
 				name: ts("cursor.themeDefault"),
-				previewUrls: [defaultCursorPreviewUrl],
+				previewUrl: defaultCursorPreviewUrl,
 			},
 			...CURSOR_THEMES.map((theme) => {
-				const preview = themePickerPreviewAssets(theme);
-				const urls = [
-					preview.arrow ? safeAssetUrl(preview.arrow) : defaultCursorPreviewUrl,
-					...(preview.pointer ? [safeAssetUrl(preview.pointer)] : []),
-				];
+				const { arrow } = themePickerPreviewAssets(theme);
 				return {
 					id: theme.id,
 					name: theme.name,
-					previewUrls: urls,
+					previewUrl: arrow ? safeAssetUrl(arrow) : defaultCursorPreviewUrl,
 				};
 			}),
 		],
@@ -3917,19 +3912,14 @@ export function CursorPane() {
 									disabled={!hasDocument}
 									onClick={() => void set({ cursor: { theme: option.id } })}
 								>
-									<span className={styles.cursorCellPreviews}>
-										{option.previewUrls.map((url) => (
-											<img
-												key={url}
-												src={url}
-												alt=""
-												width={option.previewUrls.length > 1 ? 14 : 20}
-												height={option.previewUrls.length > 1 ? 14 : 20}
-												draggable={false}
-												style={{ objectFit: "contain", pointerEvents: "none" }}
-											/>
-										))}
-									</span>
+									<img
+										src={option.previewUrl}
+										alt=""
+										width={20}
+										height={20}
+										draggable={false}
+										style={{ objectFit: "contain", pointerEvents: "none" }}
+									/>
 								</button>
 							);
 						})}

@@ -47,7 +47,7 @@ describe("CursorPane theme picker", () => {
 		expect(screen.getByRole("button", { name: "Default" })).toBeTruthy();
 		for (const theme of CURSOR_THEMES) {
 			const button = screen.getByRole("button", { name: theme.name });
-			expect(button.querySelectorAll("img")).toHaveLength(2);
+			expect(button.querySelectorAll("img")).toHaveLength(1);
 		}
 	});
 });

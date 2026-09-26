@@ -8,11 +8,18 @@ name: CI
 # #169 — 30k+ lines of deletion and refactor — merged into release/1.8.0 with
 # every one of those jobs skipped, because a release branch matched neither
 # pattern. A release branch is the LAST place to run a build unguarded.
+#
+# integration/** is the glob feat/ai-edition should have been, and it cost a
+# third time: #817 merged into integration/demo-never-ugly with every job here
+# skipped, because that branch matched none of the three patterns above. The
+# nix-* workflows filter on paths rather than base branch, so they kept running
+# and made the PR look checked. A named branch only helps the branch that was
+# named, so this one is a glob.
 on:
   pull_request:
-    branches: [main, feat/ai-edition, "release/**"]
+    branches: [main, feat/ai-edition, "integration/**", "release/**"]
   push:
-    branches: [main, feat/ai-edition, "release/**"]
+    branches: [main, feat/ai-edition, "integration/**", "release/**"]
 
 jobs:
   lint:

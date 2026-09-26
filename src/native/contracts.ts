@@ -721,6 +721,13 @@ export type NativeBridgeRequest =
 	  }
 	| {
 			domain: "compositor";
+			action: "segmentFrame";
+			/** One camera frame, 256x144 RGBA8 — the segmentation model's input size. */
+			payload: { rgba: Uint8Array };
+			requestId?: string;
+	  }
+	| {
+			domain: "compositor";
 			action: "setRect";
 			payload: { id: number; rect: CompositorViewRect };
 			requestId?: string;

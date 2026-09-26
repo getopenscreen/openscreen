@@ -556,6 +556,20 @@ export class CompositorViewService {
 		return resolveSceneAssetPath(SEGMENTATION_MODEL_ASSET) ? "ready" : "no-model";
 	}
 
+	/** Subject mask for one camera frame, no view needed — see `segmentFrame` in the addon.
+	 *  `null` when the addon (or this version of it) or the model is missing. */
+	async segmentFrame(rgba: Uint8Array): Promise<Uint8Array | null> {
+		const addon = this.ensureAddon();
+		const modelPath = resolveSceneAssetPath(SEGMENTATION_MODEL_ASSET);
+		if (!addon?.segmentFrame || !modelPath) {
+			return null;
+		}
+		return addon.segmentFrame(
+			modelPath,
+			Buffer.from(rgba.buffer, rgba.byteOffset, rgba.byteLength),
+		);
+	}
+
 	/** Allocates an offscreen compositor view sized to `rect.width`x`rect.height`.
 	 *  `rect.x` / `rect.y` are vestigial (ignored native-side) — the renderer
 	 *  keeps them on the wire so the existing `CompositorViewRect` shape stays

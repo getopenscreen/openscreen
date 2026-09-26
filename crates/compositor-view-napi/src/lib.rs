@@ -87,6 +87,56 @@ pub fn segmentation_runtime_available() -> bool {
     openscreen_compositor::segmentation::runtime_available()
 }
 
+pub struct SegmentFrameTask {
+    model_path: String,
+    rgba: Vec<u8>,
+}
+
+impl Task for SegmentFrameTask {
+    type Output = Vec<u8>;
+    type JsValue = Buffer;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let rgb: Vec<u8> = self
+            .rgba
+            .chunks_exact(4)
+            .flat_map(|p| [p[0], p[1], p[2]])
+            .collect();
+        // ponytail: une session ONNX chargée par appel (quelques dizaines de ms), parce qu'il
+        // n'y a qu'un appel par caméra et par ouverture du panneau. À garder en cache si un
+        // appelant se met à segmenter en continu.
+        let mut segmenter = openscreen_compositor::segmentation::Segmenter::load(
+            std::path::Path::new(&self.model_path),
+        )
+        .map_err(|e| Error::from_reason(format!("{e:#}")))?;
+        segmenter
+            .run(&rgb)
+            .map(<[u8]>::to_vec)
+            .map_err(|e| Error::from_reason(format!("{e:#}")))
+    }
+
+    fn resolve(&mut self, _env: Env, mask: Self::Output) -> Result<Self::JsValue> {
+        Ok(mask.into())
+    }
+}
+
+/// Masque du sujet pour UNE image, sans vue : la vignette de recadrage du panneau caméra s'en
+/// sert pour montrer le fond choisi sur sa propre frame.
+///
+/// `rgba` est une frame RGBA8 déjà réduite à la taille du modèle (`segmentation::MODEL_WIDTH` x
+/// `MODEL_HEIGHT`), soit le `getImageData` d'un canvas tel quel. Le retour a le format de
+/// `Segmenter::run` : un octet par pixel, 0 = fond, 255 = sujet.
+///
+/// `AsyncTask`, comme `remux_seekable` : charger la session prend plus longtemps que l'inférence,
+/// et ce temps n'a rien à faire sur le thread principal de Node.
+#[napi]
+pub fn segment_frame(model_path: String, rgba: Buffer) -> AsyncTask<SegmentFrameTask> {
+    AsyncTask::new(SegmentFrameTask {
+        model_path,
+        rgba: rgba.to_vec(),
+    })
+}
+
 #[napi]
 pub fn create_view(
     rect: CompositorViewRect,

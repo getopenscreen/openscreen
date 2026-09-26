@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { getAssetPath } from "@/lib/assetPath";
 
 export const WALLPAPER_COUNT = 18;
@@ -53,6 +54,31 @@ export function classifyWallpaper(value: string): WallpaperClassification {
 		return { kind: "image", path: trimmed };
 	}
 	return { kind: "color", value: trimmed };
+}
+
+/**
+ * `value` as a CSS background that fills its box, for the preview frame and the camera crop
+ * thumbnail. Image wallpapers must go through `resolveImageWallpaperUrl` (→ getAssetPath): in
+ * the packaged Electron app the renderer loads over file://, where a bare `/wallpapers/foo.jpg`
+ * points at the filesystem root and 404s, so the background silently failed to paint (worked in
+ * the http dev server only). An image that does not resolve paints nothing.
+ */
+export function wallpaperStyle(value: string): CSSProperties {
+	const w = classifyWallpaper(value);
+	if (w.kind === "color") return { backgroundColor: w.value };
+	if (w.kind === "gradient") return { backgroundImage: w.value, backgroundSize: "cover" };
+	let url: string;
+	try {
+		url = resolveImageWallpaperUrl(w.path);
+	} catch {
+		return {};
+	}
+	return {
+		backgroundImage: `url(${url})`,
+		backgroundSize: "cover",
+		backgroundPosition: "center",
+		backgroundRepeat: "no-repeat",
+	};
 }
 
 function extractTrailingGradient(value: string): string | null {

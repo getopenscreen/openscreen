@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CAPTION_SETTINGS } from "@/lib/ai-edition/captions/settings";
 import type { CaptionSegment } from "@/lib/captioning/transcribe";
-import { CAPTION_PLATE_HEIGHT, captionSegmentsToAnnotationRegions } from "./captionAnnotations";
+import { captionSegmentsToAnnotationRegions } from "./captionAnnotations";
 
 const words = (...texts: string[]): CaptionSegment[] =>
 	texts.map((text, i) => ({ text, startSec: i * 0.5, endSec: i * 0.5 + 0.4 }));
@@ -42,13 +42,12 @@ describe("captionSegmentsToAnnotationRegions", () => {
 			color: DEFAULT_CAPTION_SETTINGS.color,
 			backgroundColor: "rgba(0, 0, 0, 0.55)",
 		});
-		// Inside the 16:9 safe column.
+		// The editor's caption box: 16:9 safe column, bottom edge 1.5% off the frame's, room for
+		// a caption that wraps. The text is bottom-anchored in it (see sceneDescription).
 		expect(region.position.x).toBe(16);
 		expect(region.size.width).toBe(68);
-		// The PLATE, centred in the region, ends 1.5% off the frame's bottom edge, like the
-		// editor's inset. The region itself extends below it.
-		const plateBottom = region.position.y + region.size.height / 2 + CAPTION_PLATE_HEIGHT / 2;
-		expect(plateBottom).toBeCloseTo(98.5);
-		expect(region.position.y + region.size.height).toBeGreaterThan(98.5);
+		expect(region.position.y + region.size.height).toBeCloseTo(98.5);
+		// Three 48 px lines of 1.5 em plus the plate padding: a wrapped caption is not clipped.
+		expect(region.size.height).toBeCloseTo(((48 * (3 * 1.5 + 0.2)) / 1080) * 100);
 	});
 });

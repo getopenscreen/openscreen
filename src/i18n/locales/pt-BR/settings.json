@@ -130,7 +130,11 @@
 		"frameThemeDark": "Escuro",
 		"frameThemeHelp": "Corpo prateado com moldura clara, ou grafite com moldura escura. Vale para todas as molduras.",
 		"windowHelp": "Desenha uma janela, ou um dispositivo modelado em 3D, ao redor da gravação.",
-		"roundnessFrameHelp": "O intervalo se adapta à moldura: 100 % é o maior arredondamento que fica bem nela."
+		"roundnessFrameHelp": "O intervalo se adapta à moldura: 100 % é o maior arredondamento que fica bem nela.",
+		"shadowNone": "Nenhuma",
+		"shadowLight": "Leve",
+		"shadowMedium": "Média",
+		"shadowStrong": "Forte"
 	},
 	"stylePresets": {
 		"button": "Predefinições",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "Mostra a seta em todos os estados do cursor, mesmo sobre texto ou links.",
 		"motionBlur": "Desfoque de movimento",
 		"theme": "Estilo do cursor",
-		"autoHide": "Ocultar quando inativo"
+		"autoHide": "Ocultar quando inativo",
+		"sizeNormal": "Normal",
+		"sizeLarge": "Grande",
+		"sizeExtraLarge": "Muito grande",
+		"bounceNone": "Nenhum",
+		"bounceLight": "Leve",
+		"bounceStrong": "Forte"
 	},
 	"export": {
 		"gifButton": "Exportar GIF",

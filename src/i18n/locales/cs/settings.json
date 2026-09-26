@@ -130,7 +130,11 @@
 		"frameThemeDark": "Tmavý",
 		"frameThemeHelp": "Stříbrné tělo se světlým rámem, nebo grafitové s tmavým. Platí pro všechny rámy.",
 		"windowHelp": "Nakreslí okno nebo zařízení modelované ve 3D kolem nahrávky.",
-		"roundnessFrameHelp": "Rozsah se přizpůsobí rámu: 100 % je nejvýraznější zaoblení, které mu sluší."
+		"roundnessFrameHelp": "Rozsah se přizpůsobí rámu: 100 % je nejvýraznější zaoblení, které mu sluší.",
+		"shadowNone": "Žádný",
+		"shadowLight": "Lehký",
+		"shadowMedium": "Střední",
+		"shadowStrong": "Silný"
 	},
 	"stylePresets": {
 		"button": "Předvolby",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "Zobrazí šipku pro každý stav kurzoru, i nad textem nebo odkazy.",
 		"motionBlur": "Pohybové rozmazání",
 		"theme": "Styl kurzoru",
-		"autoHide": "Automaticky skrýt, když je neaktivní"
+		"autoHide": "Automaticky skrýt, když je neaktivní",
+		"sizeNormal": "Normální",
+		"sizeLarge": "Velký",
+		"sizeExtraLarge": "Velmi velký",
+		"bounceNone": "Žádný",
+		"bounceLight": "Lehký",
+		"bounceStrong": "Výrazný"
 	},
 	"export": {
 		"gifButton": "Exportovat GIF",

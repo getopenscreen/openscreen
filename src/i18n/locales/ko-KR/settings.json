@@ -130,7 +130,11 @@
 		"frameThemeDark": "어둡게",
 		"frameThemeHelp": "실버 본체에 밝은 테두리, 또는 그라파이트에 어두운 테두리. 모든 프레임에 적용됩니다.",
 		"windowHelp": "녹화 주위에 창 또는 3D로 모델링된 기기를 그립니다.",
-		"roundnessFrameHelp": "범위는 프레임에 맞춰 달라집니다. 100%는 그 프레임에 어울리는 가장 큰 둥글기입니다."
+		"roundnessFrameHelp": "범위는 프레임에 맞춰 달라집니다. 100%는 그 프레임에 어울리는 가장 큰 둥글기입니다.",
+		"shadowNone": "없음",
+		"shadowLight": "약하게",
+		"shadowMedium": "보통",
+		"shadowStrong": "강하게"
 	},
 	"stylePresets": {
 		"button": "프리셋",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "텍스트나 링크 위에서도 모든 커서 상태에 화살표를 표시합니다.",
 		"motionBlur": "모션 블러",
 		"theme": "커서 스타일",
-		"autoHide": "비활성 시 자동 숨김"
+		"autoHide": "비활성 시 자동 숨김",
+		"sizeNormal": "보통",
+		"sizeLarge": "크게",
+		"sizeExtraLarge": "아주 크게",
+		"bounceNone": "없음",
+		"bounceLight": "약하게",
+		"bounceStrong": "강하게"
 	},
 	"export": {
 		"gifButton": "GIF 내보내기",

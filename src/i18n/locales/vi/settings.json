@@ -130,7 +130,11 @@
 		"frameThemeDark": "Tối",
 		"frameThemeHelp": "Thân bạc với viền sáng, hoặc than chì với viền tối. Áp dụng cho mọi khung.",
 		"windowHelp": "Vẽ một cửa sổ, hoặc một thiết bị dựng 3D, quanh bản ghi.",
-		"roundnessFrameHelp": "Phạm vi thay đổi theo khung: 100% là độ bo tròn lớn nhất vẫn đẹp với khung đó."
+		"roundnessFrameHelp": "Phạm vi thay đổi theo khung: 100% là độ bo tròn lớn nhất vẫn đẹp với khung đó.",
+		"shadowNone": "Không",
+		"shadowLight": "Nhẹ",
+		"shadowMedium": "Vừa",
+		"shadowStrong": "Đậm"
 	},
 	"stylePresets": {
 		"button": "Cài đặt sẵn",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "Hiển thị mũi tên cho mọi trạng thái con trỏ, kể cả trên văn bản hoặc liên kết.",
 		"motionBlur": "Làm mờ chuyển động",
 		"theme": "Kiểu con trỏ",
-		"autoHide": "Ẩn khi không hoạt động"
+		"autoHide": "Ẩn khi không hoạt động",
+		"sizeNormal": "Thường",
+		"sizeLarge": "Lớn",
+		"sizeExtraLarge": "Rất lớn",
+		"bounceNone": "Không",
+		"bounceLight": "Nhẹ",
+		"bounceStrong": "Mạnh"
 	},
 	"export": {
 		"gifButton": "Xuất GIF",

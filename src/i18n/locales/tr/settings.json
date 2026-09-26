@@ -130,7 +130,11 @@
 		"frameThemeDark": "Koyu",
 		"frameThemeHelp": "Gümüş gövde ve açık çerçeve ya da grafit ve koyu. Tüm çerçeveler için geçerlidir.",
 		"windowHelp": "Kaydın çevresine bir pencere ya da 3B modellenmiş bir cihaz çizer.",
-		"roundnessFrameHelp": "Aralık çerçeveye uyum sağlar: %100, ona yakışan en belirgin yuvarlaklıktır."
+		"roundnessFrameHelp": "Aralık çerçeveye uyum sağlar: %100, ona yakışan en belirgin yuvarlaklıktır.",
+		"shadowNone": "Yok",
+		"shadowLight": "Hafif",
+		"shadowMedium": "Orta",
+		"shadowStrong": "Güçlü"
 	},
 	"stylePresets": {
 		"button": "Ön ayarlar",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "Metin veya bağlantı üzerinde bile her imleç durumu için oku gösterir.",
 		"motionBlur": "Hareket Bulanıklığı",
 		"theme": "İmleç Stili",
-		"autoHide": "Hareketsizken gizle"
+		"autoHide": "Hareketsizken gizle",
+		"sizeNormal": "Normal",
+		"sizeLarge": "Büyük",
+		"sizeExtraLarge": "Çok büyük",
+		"bounceNone": "Yok",
+		"bounceLight": "Hafif",
+		"bounceStrong": "Belirgin"
 	},
 	"export": {
 		"gifButton": "GIF Olarak Dışa Aktar",

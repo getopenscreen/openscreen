@@ -130,7 +130,11 @@
 		"frameThemeDark": "深色",
 		"frameThemeHelp": "银色机身配浅色边框，或石墨色配深色边框。适用于所有边框。",
 		"windowHelp": "在录制内容周围绘制窗口，或以 3D 建模的设备。",
-		"roundnessFrameHelp": "范围随画框而定：100% 是该画框仍然好看的最大圆角。"
+		"roundnessFrameHelp": "范围随画框而定：100% 是该画框仍然好看的最大圆角。",
+		"shadowNone": "无",
+		"shadowLight": "轻",
+		"shadowMedium": "中",
+		"shadowStrong": "强"
 	},
 	"stylePresets": {
 		"button": "预设",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "在任何光标状态下都显示箭头，即使位于文本或链接上方。",
 		"motionBlur": "运动模糊",
 		"theme": "光标样式",
-		"autoHide": "闲置时隐藏"
+		"autoHide": "闲置时隐藏",
+		"sizeNormal": "标准",
+		"sizeLarge": "大",
+		"sizeExtraLarge": "特大",
+		"bounceNone": "无",
+		"bounceLight": "轻",
+		"bounceStrong": "强"
 	},
 	"export": {
 		"gifButton": "导出 GIF",

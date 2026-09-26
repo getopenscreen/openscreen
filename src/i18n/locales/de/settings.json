@@ -130,7 +130,11 @@
 		"frameThemeDark": "Dunkel",
 		"frameThemeHelp": "Silbernes Gehäuse mit hellem Rahmen oder Graphit mit dunklem. Gilt für alle Rahmen.",
 		"windowHelp": "Zeichnet ein Fenster oder ein in 3D modelliertes Gerät um die Aufnahme.",
-		"roundnessFrameHelp": "Der Bereich passt sich dem Rahmen an: 100 % ist die stärkste Rundung, die ihm steht."
+		"roundnessFrameHelp": "Der Bereich passt sich dem Rahmen an: 100 % ist die stärkste Rundung, die ihm steht.",
+		"shadowNone": "Keiner",
+		"shadowLight": "Leicht",
+		"shadowMedium": "Mittel",
+		"shadowStrong": "Stark"
 	},
 	"stylePresets": {
 		"button": "Vorgaben",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "Zeigt den Pfeil für jeden Cursor-Zustand, auch über Text oder Links.",
 		"motionBlur": "Bewegungsunschärfe",
 		"theme": "Cursor-Stil",
-		"autoHide": "Bei Inaktivität ausblenden"
+		"autoHide": "Bei Inaktivität ausblenden",
+		"sizeNormal": "Normal",
+		"sizeLarge": "Groß",
+		"sizeExtraLarge": "Sehr groß",
+		"bounceNone": "Keiner",
+		"bounceLight": "Leicht",
+		"bounceStrong": "Stark"
 	},
 	"export": {
 		"gifButton": "GIF exportieren",

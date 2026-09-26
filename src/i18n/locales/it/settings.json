@@ -130,7 +130,11 @@
 		"frameThemeDark": "Scuro",
 		"frameThemeHelp": "Corpo argento con cornice chiara, o grafite con cornice scura. Vale per tutte le cornici.",
 		"windowHelp": "Disegna una finestra, o un dispositivo modellato in 3D, attorno alla registrazione.",
-		"roundnessFrameHelp": "L'intervallo si adatta alla cornice: 100 % è l'arrotondamento massimo che le sta bene."
+		"roundnessFrameHelp": "L'intervallo si adatta alla cornice: 100 % è l'arrotondamento massimo che le sta bene.",
+		"shadowNone": "Nessuna",
+		"shadowLight": "Leggera",
+		"shadowMedium": "Media",
+		"shadowStrong": "Forte"
 	},
 	"stylePresets": {
 		"button": "Preset",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "Mostra la freccia per ogni stato del cursore, anche sopra testo o link.",
 		"motionBlur": "Sfocatura movimento",
 		"theme": "Stile del cursore",
-		"autoHide": "Nascondi se inattivo"
+		"autoHide": "Nascondi se inattivo",
+		"sizeNormal": "Normale",
+		"sizeLarge": "Grande",
+		"sizeExtraLarge": "Molto grande",
+		"bounceNone": "Nessuno",
+		"bounceLight": "Leggero",
+		"bounceStrong": "Marcato"
 	},
 	"export": {
 		"gifButton": "Esporta GIF",

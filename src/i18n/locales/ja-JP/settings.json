@@ -130,7 +130,11 @@
 		"frameThemeDark": "ダーク",
 		"frameThemeHelp": "シルバーの本体に明るい枠、またはグラファイトに暗い枠。すべてのフレームに適用されます。",
 		"windowHelp": "録画の周囲にウィンドウ、または 3D でモデリングされたデバイスを描画します。",
-		"roundnessFrameHelp": "範囲はフレームに合わせて変わります。100% はそのフレームに似合う最大の丸みです。"
+		"roundnessFrameHelp": "範囲はフレームに合わせて変わります。100% はそのフレームに似合う最大の丸みです。",
+		"shadowNone": "なし",
+		"shadowLight": "弱",
+		"shadowMedium": "中",
+		"shadowStrong": "強"
 	},
 	"stylePresets": {
 		"button": "プリセット",
@@ -429,7 +433,13 @@
 		"alwaysArrowHint": "テキストやリンクの上でも、すべてのカーソル状態で矢印を表示します。",
 		"motionBlur": "モーションブラー",
 		"theme": "カーソルのスタイル",
-		"autoHide": "非アクティブ時に非表示"
+		"autoHide": "非アクティブ時に非表示",
+		"sizeNormal": "標準",
+		"sizeLarge": "大",
+		"sizeExtraLarge": "特大",
+		"bounceNone": "なし",
+		"bounceLight": "弱",
+		"bounceStrong": "強"
 	},
 	"export": {
 		"gifButton": "GIF をエクスポート",

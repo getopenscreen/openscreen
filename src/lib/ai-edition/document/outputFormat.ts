@@ -16,6 +16,7 @@
 
 import {
 	autoFrameAspect,
+	getWebcamLayoutPresetDefinition,
 	resolveWebcamLayoutPreset,
 	restingCompositionAspect,
 	type WebcamLayoutPreset,
@@ -214,6 +215,57 @@ export function isAutoFormatAvailable(
 		compositions.add(`${toAspectRatioToken(dims.width, dims.height)}|${layout}`);
 	}
 	return compositions.size <= 1;
+}
+
+/**
+ * Whether the format can be filled with a window that follows the cursor, and if not, why.
+ *
+ * - `"none"`: nothing to fill. The format is Auto or has the recording's own shape, so the
+ *   recording already fills it; the option is not shown.
+ * - `"mixed"`: clips differ in shape, crop included. One window rule cannot suit them all.
+ * - `"layout"`: a side-by-side or stacked camera layout already fills its own slot.
+ * - `"frame"`: a device frame is drawn around the whole recording.
+ * - `"available"`: one shape, not the format's, alone in its frame.
+ */
+export type FormatFillAvailability = "none" | "mixed" | "layout" | "frame" | "available";
+
+export function formatFillAvailability(
+	document: AxcutDocument,
+	probedAssetDims: Record<string, Dims> = {},
+): FormatFillAvailability {
+	const settings = getEditorSettings(document);
+	if (settings.aspectRatio === "auto" || settings.aspectRatio === "native") return "none";
+	const assetById = new Map(document.assets.map((a) => [a.id, a]));
+	const shapes = new Set<string>();
+	let blockLayout = false;
+	for (const clip of document.timeline.clips) {
+		const dims = clipEffectiveDims(clip, assetById, probedAssetDims);
+		if (!dims) continue;
+		shapes.add(toAspectRatioToken(dims.width, dims.height) ?? "");
+		const preset = clipLayoutPreset(clip, document.assets, settings.webcamLayoutPreset);
+		blockLayout ||= getWebcamLayoutPresetDefinition(preset).transform.type === "block";
+	}
+	if (shapes.size > 1) return "mixed";
+	const [shape] = shapes;
+	// Within 1 %: a 1366×768 take is 16:9 to the eye, and a window would crop 3 px of it.
+	const format = getAspectRatioValue(settings.aspectRatio);
+	if (!shape || Math.abs(getAspectRatioValue(shape as AspectRatio) / format - 1) < 0.01) {
+		return "none";
+	}
+	if (blockLayout) return "layout";
+	if (settings.frame !== "none") return "frame";
+	return "available";
+}
+
+/** The fill is drawn: the user asked for it and the timeline allows it. */
+export function isFormatFillActive(
+	document: AxcutDocument,
+	probedAssetDims: Record<string, Dims> = {},
+): boolean {
+	return (
+		getEditorSettings(document).formatFollowCursor === true &&
+		formatFillAvailability(document, probedAssetDims) === "available"
+	);
 }
 
 /**

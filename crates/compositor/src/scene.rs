@@ -90,6 +90,13 @@ pub struct SceneLayout {
     /// `#[serde(default)]` : absent → `false` → comportement "contain" historique.
     #[serde(default)]
     pub screen_cover: bool,
+    /// Remplissage du format : la boîte écran est la zone paddée entière, et la fenêtre que le
+    /// `cover` y découpe SUIT le curseur lissé au lieu de rester centrée
+    /// (`frame_geometry::follow_cover`). Sans effet si `screen_cover` est faux.
+    ///
+    /// `#[serde(default)]` : absent → `false` → fenêtre centrée, comme avant.
+    #[serde(default)]
+    pub screen_follow: bool,
     /// Un layout résolu PAR CLIP visible, aligné par index sur `Scene::clips` / `crop_by_clip`.
     /// Les champs scalaires ci-dessus sont ceux du PREMIER clip (repli pour un payload sans ce
     /// tableau, et valeur de départ tant qu'aucun clip n'est actif).

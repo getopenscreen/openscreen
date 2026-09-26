@@ -4086,7 +4086,8 @@ export function SliderCell({
 	 *  (Roundness sous un cadre) : l'infobulle du libellé et du slider. */
 	hint?: string;
 	/** The value a reset returns to, in the slider's own units. With it, a slider moved off it
-	 *  shows a reset button, and a double-click on the track does the same. */
+	 *  shows a reset button. Not a double-click on the track: its two mouse-ups would each
+	 *  commit, leaving intermediate values in the undo history before the reset. */
 	defaultValue?: number;
 }) {
 	const tc = useScopedT("common");
@@ -4142,7 +4143,6 @@ export function SliderCell({
 				onMouseUp={onCommit}
 				onTouchEnd={onCommit}
 				onKeyUp={onCommit}
-				onDoubleClick={reset}
 			/>
 		</div>
 	);

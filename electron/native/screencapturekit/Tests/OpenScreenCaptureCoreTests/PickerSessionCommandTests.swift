@@ -11,15 +11,17 @@ final class PickerSessionCommandTests: XCTestCase {
 
 	func testPresentCarriesTheWindowsToKeepOutOfTheCapture() {
 		XCTAssertEqual(
-			parsePickerSessionCommand(#"{"command":"present","excludedWindowIds":[12,34],"modes":["display"]}"#),
-			.present(excludedWindowIDs: [12, 34], modes: [.display])
+			parsePickerSessionCommand(
+				#"{"command":"present","excludedWindowIds":[12,34],"modes":["display"],"hideDesktopIcons":true}"#
+			),
+			.present(excludedWindowIDs: [12, 34], modes: [.display], hideDesktopIcons: true)
 		)
 	}
 
 	func testPresentOffersScreensAndWindowsByDefault() {
 		XCTAssertEqual(
 			parsePickerSessionCommand(#"{"command":"present"}"#),
-			.present(excludedWindowIDs: [], modes: [.display, .window])
+			.present(excludedWindowIDs: [], modes: [.display, .window], hideDesktopIcons: false)
 		)
 	}
 

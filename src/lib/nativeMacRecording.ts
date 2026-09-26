@@ -8,6 +8,8 @@ export type NativeMacRecordingRequest = {
 	recordingId?: number;
 	/** Main-process injected native BrowserWindow IDs excluded from display capture. */
 	excludedWindowIds?: number[];
+	/** Display captures: leave Finder's desktop icons out. Notifications are always left out. */
+	hideDesktopIcons?: boolean;
 	source: {
 		type: NativeMacSourceType;
 		sourceId: string;

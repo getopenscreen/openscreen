@@ -21,6 +21,7 @@ const defaults: RecordingPrefs = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	hideDesktopIcons: false,
 };
 let dir: string;
 beforeEach(() => {
@@ -33,9 +34,10 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 function start(
 	getWindow: () => BrowserWindow | null = () => null,
 	getAppWindows?: () => BrowserWindow[],
+	onChange?: (previous: RecordingPrefs, next: RecordingPrefs) => void,
 ) {
 	electron.handle.mockClear();
-	registerRecordingPrefsHandlers(defaults, getWindow, getAppWindows);
+	registerRecordingPrefsHandlers(defaults, getWindow, getAppWindows, onChange);
 	const get = electron.handle.mock.calls.find(
 		([name]) => name === "get-recording-prefs",
 	)?.[1] as () => RecordingPrefs;
@@ -98,6 +100,16 @@ describe("recording preferences IPC", () => {
 		expect(secondSend).toHaveBeenCalledWith("recording-prefs-changed", updated);
 		expect(firstSend).toHaveBeenCalledTimes(1);
 		expect(destroyedSend).not.toHaveBeenCalled();
+	});
+
+	it("reports each saved change with the value it replaced", () => {
+		const onChange = vi.fn();
+		const session = start(undefined, undefined, onChange);
+		session.set({ hideDesktopIcons: true });
+		expect(onChange).toHaveBeenCalledWith(
+			expect.objectContaining({ hideDesktopIcons: false }),
+			expect.objectContaining({ hideDesktopIcons: true }),
+		);
 	});
 
 	it("does not publish an invalid or failed preference write", () => {

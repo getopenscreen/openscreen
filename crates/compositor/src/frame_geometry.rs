@@ -1816,17 +1816,43 @@ impl FrameGeometry {
         }
     }
 
-    /// `mb.w` du mode 0 de l'écran droit : `screen_square_top`, ou -1 quand les BORDS du cadre
-    /// suivent le flou de mouvement. Le quad s'étend alors à la trace (`dst_prev`) et la
-    /// couverture des coins est moyennée sur les taps comme l'image : sans ça, sur un zoom avec
-    /// padding, le contenu file dans un cadre aux bords nets. Pas sous un masque de bloc (la case
-    /// ne bouge pas, seul le métrage bouge dedans) ni sous un cadre : le chrome de fenêtre
-    /// resterait net, et un appareil ne rogne pas l'écran, la traînée sortirait de sa coque.
-    pub fn screen_mb_w(&self) -> f32 {
-        if self.window_frame.is_none() && self.screen_mask.is_none() {
-            -1.0
-        } else {
-            self.screen_square_top()
+    /// L'écran droit se déplace-t-il EN BLOC sous le flou de mouvement sur cette frame ?
+    ///
+    /// La coupe est la même aux deux frames : tout le mouvement de l'écran vient de sa boîte,
+    /// `s_dst_prev` → `s_dst`, et l'ombre, le cadre et l'appareil sont taillés dans cette même
+    /// boîte. C'est donc un objet rigide, et on le floute comme tel (mode 18, `screen_trail_cb`) :
+    /// flouter le seul métrage laissait un contenu qui file dans un cadre aux bords nets.
+    ///
+    /// Pas sous un masque de bloc : la case ne bouge pas, seul le métrage bouge dedans, et le
+    /// flou par pixel du mode 0 reste le bon. Le chemin incliné n'a pas de flou (l'appelant ne
+    /// demande que sur écran droit).
+    pub fn screen_trail(&self) -> bool {
+        self.mb_taps >= 2.0
+            && self.mb_amount > 0.001
+            && self.s_dst != self.s_dst_prev
+            && self.screen_mask.is_none()
+    }
+
+    /// Taps du flou PAR PIXEL du mode 0 de l'écran : un seul quand `screen_trail` floute déjà
+    /// l'objet entier, sinon le métrage serait flouté deux fois.
+    pub fn screen_pixel_taps(&self) -> f32 {
+        if self.screen_trail() { 1.0 } else { self.mb_taps }
+    }
+
+    /// Le calque du mode 18 : le rendu isolé de l'écran cadré (t2), recomposé le long de sa
+    /// trajectoire. `fx` = la boîte courante, `dst_prev` = la précédente, `src` = la coupe (le
+    /// métrage relu directement là où le rendu isolé s'arrête au bord de la sortie).
+    pub fn screen_trail_cb(&self, render_px: [f32; 2]) -> LayerCB {
+        LayerCB {
+            dst: [0.0, 0.0, 1.0, 1.0],
+            src: self.cut,
+            quad_px: render_px,
+            mode: 18.0,
+            color: [1.0, 1.0, 1.0, 1.0],
+            fx: self.s_dst,
+            dst_prev: self.s_dst_prev,
+            mb: [self.mb_taps, self.mb_amount, 0.0, 0.0],
+            ..Default::default()
         }
     }
 
@@ -3979,8 +4005,6 @@ mod tests {
             assert!(none.window_frame.is_none());
             assert!(none.window_frame_cb(RENDER).is_none());
             assert_eq!(none.screen_square_top(), 0.0);
-            // Sans cadre ni masque, les bords de l'écran suivent le flou de mouvement.
-            assert_eq!(none.screen_mb_w(), -1.0);
             let s_px = [none.s_dst[2] * RENDER[0], none.s_dst[3] * RENDER[1]];
             let expected = match none.screen_tilt_in(RENDER) {
                 None => ShadowCaster::Upright { dst: none.s_dst, size_px: s_px, radius: none.s_radius },
@@ -4028,13 +4052,28 @@ mod tests {
         }
     }
 
-    /// Un appareil ne rogne pas l'écran : si ses bords suivaient le flou de mouvement, la traînée
-    /// sortirait de la coque (constaté au rendu D3D11, téléphone sous un zoom 3,5x, #794).
+    /// Le flou de mouvement prend l'écran cadré EN BLOC (ombre, cadre, appareil compris) dès que
+    /// sa boîte bouge, et rend alors la main au flou par pixel du seul métrage ; jamais sous un
+    /// masque de bloc, dont la case reste fixe.
     #[test]
-    fn a_device_frame_keeps_the_screen_edges_out_of_the_motion_blur() {
-        for frame in [r#","frame":"laptop""#, r#","frame":"phone""#, r#","frame":"monitor""#] {
-            let g = framed_plan(&framed_scene(frame, "null", 3.5, false));
-            assert_eq!(g.screen_mb_w(), 0.0, "{frame}");
+    fn a_moving_screen_box_is_motion_blurred_as_one_object() {
+        for frame in ["", r#","frame":"window""#, r#","frame":"phone""#] {
+            let mut g = framed_plan(&framed_scene(frame, "null", 1.5, false));
+            (g.mb_taps, g.mb_amount) = (16.0, 1.0);
+            g.s_dst_prev = g.s_dst;
+            assert!(!g.screen_trail(), "{frame}: boîte immobile");
+            assert_eq!(g.screen_pixel_taps(), 16.0);
+            g.s_dst_prev[2] *= 0.9;
+            assert!(g.screen_trail(), "{frame}: boîte qui bouge");
+            assert_eq!(g.screen_pixel_taps(), 1.0, "{frame}: flou compté deux fois");
+            let cb = g.screen_trail_cb(RENDER);
+            assert_eq!((cb.fx, cb.dst_prev, cb.src), (g.s_dst, g.s_dst_prev, g.cut));
+            g.mb_amount = 0.0;
+            assert!(!g.screen_trail(), "{frame}: flou coupé");
+            g.mb_amount = 1.0;
+            g.screen_mask = Some(ScreenMask { rect: [0.0, 0.0, 0.5, 1.0], radius_px: 0.0 });
+            assert!(!g.screen_trail(), "{frame}: la case d'un bloc ne bouge pas");
+            assert_eq!(g.screen_pixel_taps(), 16.0);
         }
     }
 
@@ -4050,7 +4089,6 @@ mod tests {
                 let wf = g.window_frame.expect("un cadre");
                 assert_eq!(wf.dark, dark);
                 assert_eq!(g.screen_square_top(), 1.0);
-                assert_eq!(g.screen_mb_w(), 1.0, "sous le chrome, les bords restent nets");
                 assert_eq!(g.s_dst.map(f32::to_bits), old.s_dst.map(f32::to_bits), "le cadre a touché au métrage");
                 assert_eq!(g.cut, old.cut, "le cadre a recadré la source");
                 let ShadowCaster::Upright { dst: outer, size_px, radius } = g.shadow_caster(RENDER) else {

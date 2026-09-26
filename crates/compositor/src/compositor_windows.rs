@@ -129,6 +129,11 @@ pub struct Compositor {
     accum_rtv: ID3D11RenderTargetView,
     accum_srv: ID3D11ShaderResourceView,
     blend_add: ID3D11BlendState,
+    /// Rendu isolé de l'écran cadré (ombre, cadre, métrage, appareil), transparent autour, que le
+    /// mode 18 recompose le long de sa trajectoire (`FrameGeometry::screen_trail`). Distinct de
+    /// `accum`, que le curseur et `compose_frame_mb` remplissent dans la même frame.
+    trail_rtv: ID3D11RenderTargetView,
+    trail_srv: ID3D11ShaderResourceView,
     /// RefCell (pas un simple champ) pour que `set_cursor` reste `&self`, comme `set_scene` /
     /// `set_live_params` — nécessaire pour le rebrancher par clip dans l'export multiclip, qui
     /// n'a qu'une référence partagée au `Compositor`.
@@ -534,6 +539,7 @@ impl Compositor {
         let (half_b_rtv, half_b_srv) = mk_rgba(half_w, half_h)?;
         let (q_rtv, q_srv) = mk_rgba((half_w / 2).max(1), (half_h / 2).max(1))?;
         let (e_rtv, e_srv) = mk_rgba((half_w / 4).max(1), (half_h / 4).max(1))?;
+        let (trail_rtv, trail_srv) = mk_rgba(out_w, out_h)?;
 
         // accumulateur pleine réso (RGBA) + blend additif pondéré (facteur = 1/N)
         let ad = D3D11_TEXTURE2D_DESC {
@@ -623,6 +629,8 @@ impl Compositor {
             accum_rtv: accum_rtv.unwrap(),
             accum_srv: accum_srv.unwrap(),
             blend_add: blend_add.unwrap(),
+            trail_rtv,
+            trail_srv,
             cursor: RefCell::new(None),
             cursor_t_override: RefCell::new(None),
             timeline_t_override: RefCell::new(None),
@@ -1933,6 +1941,14 @@ impl Compositor {
         // Avec un cadre de fenêtre, c'est le CADRE qui porte l'ombre (`shadow_caster`), sinon
         // elle tomberait sous l'écran seul et la barre de titre flotterait au-dessus.
         let render_px = [self.rw(), self.rh()];
+        // Flou de mouvement de l'écran CADRÉ (`FrameGeometry::screen_trail`) : ombre, cadre,
+        // métrage et appareil se dessinent dans un rendu isolé et transparent, que le mode 18
+        // recompose ensuite sur le fond le long de la trajectoire de la boîte.
+        let trail = tilt.is_none() && g.screen_trail();
+        if trail {
+            self.ctx.OMSetRenderTargets(Some(&[Some(self.trail_rtv.clone())]), None);
+            self.ctx.ClearRenderTargetView(&self.trail_rtv, &[0.0, 0.0, 0.0, 0.0]);
+        }
         if cfg.shadow {
             let spread = SCREEN_SHADOW_SPREAD_FRAC * frame_min_px;
             let offset = g.screen_shadow_offset();
@@ -1956,6 +1972,7 @@ impl Compositor {
         if let Some(cb) = g.window_frame_cb(render_px) {
             self.draw_solid(&cb);
         }
+        let square_top = g.screen_square_top();
         // Sous le chrome de fenetre, la remontee de son contour interieur au-dessus de l'ecran :
         // l'arrondi du haut se fait par le cadre (`screen_top_lift_px`). 0 sans fenetre.
         let top_lift = g.screen_top_lift_px(render_px);
@@ -2005,7 +2022,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0_p, sv0_p, su0_p + 2.0 * hu_p, sv0_p + 2.0 * hv_p],
                     dst_prev: s_dst_prev,
-                    mb: [mb_taps, mb_amount, top_lift, g.screen_mb_w()],
+                    mb: [g.screen_pixel_taps(), mb_amount, top_lift, square_top],
                     ..Default::default()
                 },
                 &sy,
@@ -2017,6 +2034,12 @@ impl Compositor {
         // au plan du métrage dans l'ouverture, donc il ne recouvre jamais l'image.
         if let Some(cb) = g.device_frame_cb(render_px) {
             self.draw_solid(&cb);
+        }
+        if trail {
+            self.ctx.OMSetRenderTargets(Some(&[Some(self.rtv.clone())]), None);
+            self.ctx.PSSetShaderResources(2, Some(&[Some(self.trail_srv.clone())]));
+            self.draw_video(&g.screen_trail_cb(render_px), &sy, &suv);
+            self.ctx.PSSetShaderResources(2, Some(&[None]));
         }
 
         // --- curseur custom : suit le mapping src/dst (zoom+layout), click bounce,

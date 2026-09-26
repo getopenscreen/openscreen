@@ -7,7 +7,7 @@ cbuffer Layer : register(b0)
     float4 src;       // u0,v0,u1,v1 dans l'espace source 0..1 ; modes 15 et 17 : décalage px du rayon, P, U
     float2 quad_px;   // taille du quad en pixels (pour les SDF)
     float  radius_px; // rayon des coins arrondis en px (0 = aucun) ; mode 17 : rayon des coins hauts du corps (unités du modèle)
-    float  mode;      // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre portée, 4 = curseur, 15 = curseur 3D, 16 = impact du clic, 17 = appareil modelé
+    float  mode;      // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre portée, 4 = curseur, 15 = curseur 3D, 16 = impact du clic, 17 = appareil modelé, 18 = écran cadré flouté en bloc
     float4 color;     // couleur pleine / teinte (ombre : rgb + opacité dans a) ; mode 15 : coin du sprite, écrasement, opacité ; mode 17 : .r = l'appareil (1 portable, 2 téléphone, 3 moniteur), .g = thème sombre, .b = rayon des coins bas du corps, .a = opacité
     float4 fx;        // fx.x = spread ombre (px), fx.y,fx.z libres ; mode 15 : rotation du plan (rad), tangage ; mode 17 : rotation du plan (rad), épaisseur
     float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet ; mode 17 : marges du corps (unités du modèle)
@@ -26,25 +26,10 @@ struct VSOut
     float2 pout  : TEXCOORD2; // position 0..1 sortie (pour la vélocité par pixel)
 };
 
-// Mode 0, mb.w = -1 (`FrameGeometry::screen_mb_w`) : les bords du cadre suivent le flou de mouvement.
-bool edges_trail()
-{
-    return mode < 0.5 && mb.w < -0.5 && mb.x > 1.5 && mb.y > 0.001 && dst_prev.z > 0.0 && dst_prev.w > 0.0;
-}
-
 VSOut vs_main(uint vid : SV_VertexID)
 {
     float2 c = float2(vid & 1, (vid >> 1) & 1); // strip: (0,0)(1,0)(0,1)(1,1)
     float2 p = dst.xy + c * dst.zw;             // 0..1 sortie
-    if (edges_trail())
-    {
-        // Le quad couvre aussi la position précédente : la traînée des bords sort du rect courant.
-        // `c` sort alors de 0..1, uv et local s'extrapolent linéairement.
-        float2 lo = min(dst.xy, dst_prev.xy);
-        float2 hi = max(dst.xy + dst.zw, dst_prev.xy + dst_prev.zw);
-        p = lo + c * (hi - lo);
-        c = (p - dst.xy) / dst.zw;
-    }
     float2 ndc = float2(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0);
     VSOut o;
     o.pos = float4(ndc, 0.0, 1.0);
@@ -130,13 +115,6 @@ float sd_round_rect(float2 p, float2 halfsz, float r)
         return (len - e) / length(g);
     }
     return max(m.x, m.y) + min(max(q.x, q.y), 0.0) - e;
-}
-
-// Couverture du quad arrondi en `local` (px du quad courant), feather ~1.5 px.
-float quad_cov(float2 local)
-{
-    float2 h = quad_px * 0.5;
-    return 1.0 - smoothstep(0.0, 1.5, sd_round_rect(local - h, h, radius_px));
 }
 
 // L'écran sous le chrome de FENÊTRE (modes 0 et 8) : coins HAUTS carrés, à ras de la barre de
@@ -1302,6 +1280,38 @@ float4 device_frame(float2 local)
 
 float4 ps_main(VSOut i) : SV_Target
 {
+    // mode 18 : l'écran CADRÉ (ombre, cadre, métrage, appareil) flouté comme UN objet rigide
+    // (`FrameGeometry::screen_trail`). t2 = son rendu isolé, prémultiplié, à la taille de la
+    // sortie ; sa boîte va de `dst_prev` (frame précédente) à `fx` (courante), fractions de sortie.
+    // Chaque tap relit, dans le rendu courant, le point de l'objet qui couvrait ce pixel plus tôt
+    // sur la trajectoire. Un point hors de la sortie n'a pas été rendu : dans l'écran, on relit le
+    // métrage (`src` = la coupe) ; hors de l'écran (un bout de cadre hors champ), le tap est écarté.
+    if (mode > 17.5)
+    {
+        int taps = (int) mb.x;
+        float4 acc = 0.0;
+        float n = 0.0;
+        [loop] for (int k = 0; k < 16; k++)
+        {
+            if (k >= taps) break;
+            float a = saturate(mb.y) * (1.0 - (float) k / (float) (taps - 1));
+            float4 r = lerp(fx, dst_prev, a);
+            float2 f = (i.pout - r.xy) / r.zw;
+            float2 q = fx.xy + f * fx.zw;
+            if (all(q >= 0.0) && all(q <= 1.0))
+            {
+                acc += texImg.SampleLevel(samp, q, 0.0);
+                n += 1.0;
+            }
+            else if (all(f >= 0.0) && all(f <= 1.0))
+            {
+                acc += float4(sample_yuv(lerp(src.xy, src.zw, f)), 1.0);
+                n += 1.0;
+            }
+        }
+        return acc / max(n, 1.0);
+    }
+
     // mode 17 : CADRE D'APPAREIL MODELÉ (cf. `device_frame`). Testé en premier, comme le 16.
     if (mode > 16.5)
     {
@@ -1720,30 +1730,20 @@ float4 ps_main(VSOut i) : SV_Target
         float mb_scale = saturate(mb.y);
         float2 duv_blur = duv * mb_scale;
         int taps = (int) mb.x;
-        // Bords qui suivent (`edges_trail`) : chaque tap porte aussi la couverture du cadre au
-        // point qu'il échantillonne, ramenée en px du quad courant par l'inverse du mapping src.
-        bool trail = edges_trail();
-        float2 duv_to_px = quad_px / (src.zw - src.xy);
         if (taps <= 1 || mb_scale <= 0.001 || dot(duv_blur, duv_blur) < 1e-9)
         {
             rgb = sample_yuv(uv_now);
-            if (trail) alpha_mask = quad_cov(i.local);
         }
         else
         {
             float3 acc = 0.0;
-            float cov = 0.0;
             [loop] for (int k = 0; k < 16; k++)
             {
                 if (k >= taps) break;
                 float t = (float) k / (float) (taps - 1);
-                float2 d = duv_blur * (1.0 - t);
-                float w = trail ? quad_cov(i.local - d * duv_to_px) : 1.0;
-                acc += sample_yuv(uv_now - d) * w;
-                cov += w;
+                acc += sample_yuv(uv_now - duv_blur * (1.0 - t));
             }
-            rgb = acc / max(cov, 1e-6);
-            if (trail) alpha_mask = cov / (float) taps;
+            rgb = acc / (float) taps;
         }
 
         // Effet d'arriere-plan webcam. fx.z : 1 = detourage, 2 = flou, 3 = fond personnalise.
@@ -1780,7 +1780,7 @@ float4 ps_main(VSOut i) : SV_Target
     }
 
     float alpha = color.a * alpha_mask;
-    if (radius_px > 0.0 && !edges_trail()) // sinon déjà dans alpha_mask
+    if (radius_px > 0.0)
     {
         // `quad_px` est en px de SORTIE (le render target porte la géométrie de sortie) et
         // `radius_px` est un rayon réel en px de sortie : la SDF isotrope les compare dans le

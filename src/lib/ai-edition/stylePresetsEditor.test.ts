@@ -45,10 +45,10 @@ function styledSettings(): EditorSettingsSnapshot {
 		webcamWallpaper: "#123456",
 		webcamBlurIntensity: 0.9,
 		cursor: {
-			size: 5,
+			size: 2.5,
 			smoothing: 0.1,
 			motionBlur: 0.9,
-			clickBounce: 4,
+			clickBounce: 1.5,
 			model3d: true,
 			alwaysArrow: false,
 		},
@@ -69,8 +69,8 @@ describe("stylePresetsEditor", () => {
 	it("copies the cursor rather than sharing it", () => {
 		const settings = styledSettings();
 		const appearance = stylePresetAppearanceFromSettings(settings);
-		appearance.cursor.size = 9;
-		expect(settings.cursor.size).toBe(5);
+		appearance.cursor.size = 3;
+		expect(settings.cursor.size).toBe(2.5);
 		expect(appearance.cursor).not.toHaveProperty("autoHide");
 	});
 

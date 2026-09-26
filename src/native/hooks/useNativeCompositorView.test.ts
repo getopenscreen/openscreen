@@ -232,6 +232,51 @@ describe("useNativeCompositorView", () => {
 		}
 	});
 
+	// `inFlight` orders the reads, not the bitmap decodes: an older frame's bitmap can land after
+	// a newer one's. Painting it would bring back its pixels and its buffer size.
+	it("drops a frame whose bitmap lands after a newer one's", async () => {
+		vi.stubGlobal(
+			"ImageData",
+			class {
+				constructor(
+					public data: Uint8ClampedArray,
+					public width: number,
+					public height: number,
+				) {}
+			},
+		);
+		const decodes: Array<(bitmap: { close: () => void }) => void> = [];
+		vi.stubGlobal(
+			"createImageBitmap",
+			vi.fn(
+				() =>
+					new Promise<{ close: () => void }>((resolve) => {
+						decodes.push(resolve);
+					}),
+			),
+		);
+		try {
+			mocks.createCompositorView.mockResolvedValue({ id: 1 });
+			mocks.readCompositorFrame
+				.mockResolvedValueOnce({ gen: 1, width: 4, height: 2, data: new Uint8Array(32) })
+				.mockResolvedValueOnce({ gen: 2, width: 4, height: 3, data: new Uint8Array(48) })
+				.mockResolvedValue(null);
+			const ref = stubCanvasRef();
+			const canvas = ref.current as HTMLCanvasElement;
+			renderHook(() => useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }));
+			await waitFor(() => expect(decodes).toHaveLength(2));
+
+			decodes[1]({ close: vi.fn() });
+			await waitFor(() => expect(canvas.height).toBe(3));
+			decodes[0]({ close: vi.fn() });
+			await new Promise((resolve) => setTimeout(resolve, 20));
+
+			expect(canvas.height).toBe(3);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("stays quiet without an Electron bridge — no view id, so nothing is ever polled", async () => {
 		mocks.createCompositorView.mockRejectedValue(new Error("Native bridge unavailable."));
 		mocks.readCompositorFrame.mockResolvedValue(null);

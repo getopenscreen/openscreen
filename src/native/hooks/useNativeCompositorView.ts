@@ -177,6 +177,10 @@ export function useNativeCompositorView(
 		// redundant IPC and removes any chance of two responses landing out of order
 		// and rewinding `lastGen` (which would re-deliver an already-painted frame).
 		let inFlight = false;
+		// `inFlight` orders the reads, not the paints: a bitmap still decoding can finish after
+		// the next frame's. The generation actually on the canvas lets an older one be dropped,
+		// instead of bringing back its pixels and its buffer size until native sends another.
+		let paintedGen = 0;
 
 		/** rAF pull loop: throttle to ~30fps and repaint ONLY when native reports a
 		 *  newer generation. The returned packet is self-describing (`gen` + dims +
@@ -232,11 +236,12 @@ export function useNativeCompositorView(
 					// An Auto format reshapes that box on every padding tick, so an early resize
 					// blinked the footage out and back while the slider moved.
 					const paint = (draw: () => void) => {
-						if (disposed) {
+						if (disposed || gen < paintedGen) {
 							return;
 						}
 						setBufferSize(width, height);
 						draw();
+						paintedGen = gen;
 						markPainted();
 					};
 					// `createImageBitmap` decodes off the main thread (keeps UI at 60/120fps)

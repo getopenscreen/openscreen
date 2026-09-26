@@ -11,6 +11,8 @@
 		"title": "Sfondo",
 		"imageLabel": "Sfondo {{index}}",
 		"custom": "Personalizzato",
+		"customColor": "Colore personalizzato",
+		"customGradient": "Sfumatura da un colore",
 		"help": "Scegli cosa appare dietro la registrazione: uno sfondo incluso, un colore pieno, un gradiente o un'immagine personale dal disco.",
 		"gradient": "Sfumatura",
 		"colorLabel": "Colore {{color}}",

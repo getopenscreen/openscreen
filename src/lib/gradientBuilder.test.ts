@@ -1,69 +1,57 @@
 import { describe, expect, it } from "vitest";
-import type { GradientEditorState } from "@/components/ui/gradient-editor";
-import { buildGradientFromEditor } from "./gradientBuilder";
+import { parseCssGradient } from "@/lib/exporter/gradientParser";
+import { gradientSeedColor, oneColorGradient } from "./gradientBuilder";
 
-const baseState = (overrides: Partial<GradientEditorState> = {}): GradientEditorState => ({
-	points: [{ id: "main", x: 30, y: 40, color: "rgb(255, 0, 0)" }],
-	mainX: 30,
-	mainY: 40,
-	mainColor: "rgb(255, 0, 0)",
-	brightness: 100,
-	angle: 135,
-	harmonyType: "splitComplementary",
-	...overrides,
+function lightness(hex: string): number {
+	const n = Number.parseInt(hex.slice(1), 16);
+	const channels = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => c / 255);
+	return ((Math.max(...channels) + Math.min(...channels)) / 2) * 100;
+}
+
+function stopsOf(css: string): string[] {
+	return parseCssGradient(css)?.stops.map((s) => s.color) ?? [];
+}
+
+describe("oneColorGradient", () => {
+	it("makes two hex stops, the shape the compositor and the presets share", () => {
+		const css = oneColorGradient("#3b82f6");
+		expect(css).toMatch(/^linear-gradient\(135deg, #[0-9a-f]{6}, #[0-9a-f]{6}\)$/);
+		expect(stopsOf(css)).toHaveLength(2);
+	});
+
+	it("keeps a mid-tone colour as the first stop", () => {
+		expect(stopsOf(oneColorGradient("#3b82f6"))[0]).toBe("#3b82f6");
+	});
+
+	it("holds both ends between 35% and 85% lightness, whatever is picked", () => {
+		for (const pick of ["#000000", "#ffffff", "#ff0000", "#0a0a2a", "#fffde0", "#777", "#10b981"]) {
+			for (const stop of stopsOf(oneColorGradient(pick))) {
+				const l = lightness(stop);
+				// One unit of slack for the rounding to 8-bit channels.
+				expect(l).toBeGreaterThanOrEqual(34.5);
+				expect(l).toBeLessThanOrEqual(85.5);
+			}
+		}
+	});
+
+	it("gives two different stops, so the gradient is visible", () => {
+		for (const pick of ["#000000", "#ffffff", "#3b82f6"]) {
+			const [a, b] = stopsOf(oneColorGradient(pick));
+			expect(a).not.toBe(b);
+		}
+	});
 });
 
-const threePoints = (brightness: number): GradientEditorState =>
-	baseState({
-		brightness,
-		points: [
-			{ id: "main", x: 30, y: 40, color: "rgb(255, 0, 0)" },
-			{ id: "o1", x: 70, y: 20, color: "rgb(0, 255, 0)" },
-			{ id: "o2", x: 50, y: 80, color: "rgb(0, 0, 255)" },
-		],
+describe("gradientSeedColor", () => {
+	it("reads the first stop back from a gradient it made", () => {
+		expect(gradientSeedColor(oneColorGradient("#3b82f6"))).toBe("#3b82f6");
 	});
 
-describe("buildGradientFromEditor", () => {
-	it("emits a 3-stop linear gradient at 135deg", () => {
-		const css = buildGradientFromEditor(threePoints(100));
-		expect(css).toBe(
-			"linear-gradient(135deg, rgb(255, 0, 0) 0%, rgb(0, 255, 0) 50%, rgb(0, 0, 255) 100%)",
-		);
-	});
-
-	it("scales every stop's color with the brightness slider", () => {
-		const full = buildGradientFromEditor(threePoints(100));
-		const half = buildGradientFromEditor(threePoints(50));
-		expect(half).toBe(
-			"linear-gradient(135deg, rgb(128, 0, 0) 0%, rgb(0, 128, 0) 50%, rgb(0, 0, 128) 100%)",
-		);
-		expect(full).not.toBe(half);
-	});
-
-	it("handles one and two point states", () => {
-		const one = buildGradientFromEditor(baseState({ brightness: 100 }));
-		expect(one).toBe("linear-gradient(135deg, rgb(255, 0, 0) 0%, rgb(255, 0, 0) 100%)");
-
-		const two = buildGradientFromEditor(
-			baseState({
-				brightness: 100,
-				points: [
-					{ id: "main", x: 30, y: 40, color: "rgb(10, 20, 30)" },
-					{ id: "o1", x: 70, y: 20, color: "rgb(40, 50, 60)" },
-				],
-			}),
-		);
-		expect(two).toBe(
-			"linear-gradient(135deg, rgb(10, 20, 30) 0%, rgb(40, 50, 60) 50%, rgb(40, 50, 60) 100%)",
-		);
-	});
-
-	it("falls back to a brightness-driven base color when there are no points", () => {
-		expect(buildGradientFromEditor(baseState({ points: [], brightness: 0 }))).toBe(
-			"hsl(0, 0%, 0%)",
-		);
-		expect(buildGradientFromEditor(baseState({ points: [], brightness: 100 }))).toBe(
-			"hsl(0, 0%, 18%)",
-		);
+	it("has nothing to offer for a colour, an image or an rgb() stop", () => {
+		expect(gradientSeedColor("#3b82f6")).toBeNull();
+		expect(gradientSeedColor("/wallpapers/wallpaper1.jpg")).toBeNull();
+		expect(
+			gradientSeedColor("linear-gradient(135deg, rgb(1, 2, 3) 0%, rgb(4, 5, 6) 100%)"),
+		).toBeNull();
 	});
 });

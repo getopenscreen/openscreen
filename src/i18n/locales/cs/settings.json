@@ -11,6 +11,8 @@
 		"title": "Pozadí",
 		"imageLabel": "Pozadí {{index}}",
 		"custom": "Vlastní",
+		"customColor": "Vlastní barva",
+		"customGradient": "Přechod z jedné barvy",
 		"help": "Vyberte, co se zobrazí za nahrávkou: přibalený obrázek pozadí, plná barva, přechod nebo vlastní obrázek z disku.",
 		"gradient": "Přechod",
 		"colorLabel": "Barva {{color}}",

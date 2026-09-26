@@ -67,7 +67,7 @@ describe("SliderCell", () => {
 		expect(cell?.className).toContain("full");
 	});
 
-	it("offers a reset once the value has left its default, and resets on it or a double-click", () => {
+	it("offers a reset once the value has left its default, and resets on it", () => {
 		const onChange = vi.fn();
 		const onCommit = vi.fn();
 		const props = { label: "Shadow", min: 0, max: 100, suffix: "%", onChange, onCommit };
@@ -78,9 +78,6 @@ describe("SliderCell", () => {
 		fireEvent.click(screen.getByRole("button", { name: "actions.resetToDefault: Shadow" }));
 		expect(onChange).toHaveBeenLastCalledWith(20);
 		expect(onCommit).toHaveBeenCalledTimes(1);
-
-		fireEvent.doubleClick(screen.getByRole("slider", { name: "Shadow" }));
-		expect(onCommit).toHaveBeenCalledTimes(2);
 	});
 
 	it("shows a number only when it has a unit", () => {

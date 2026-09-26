@@ -272,6 +272,14 @@ describe("AnnotationSizeField", () => {
 		expect(commitTyped("big")).not.toHaveBeenCalled();
 	});
 
+	it("commits a typed size when the field unmounts before its blur", () => {
+		const onCommit = vi.fn();
+		const view = render(<AnnotationSizeField label="Size" size={32} onCommit={onCommit} />);
+		fireEvent.change(view.getByRole("textbox", { name: "Size" }), { target: { value: "64" } });
+		view.unmount();
+		expect(onCommit).toHaveBeenCalledWith(64);
+	});
+
 	it("commits a typed size read into its bound", () => {
 		expect(commitTyped("0")).toHaveBeenCalledWith(8);
 		expect(commitTyped("48")).toHaveBeenCalledWith(48);

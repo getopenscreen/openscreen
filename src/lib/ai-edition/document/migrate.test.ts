@@ -235,10 +235,10 @@ describe("migrateProjectDataToAxcutDocument", () => {
 
 	it("carries cursor tuning keys from a v2 editor into getEditorSettings", () => {
 		const v2 = makeV2Project();
-		v2.editor.cursorSize = 0.3;
+		v2.editor.cursorSize = 2.5;
 		v2.editor.cursorClickBounce = 0;
 		const settings = getEditorSettings(migrateProjectDataToAxcutDocument(v2));
-		expect(settings.cursor.size).toBe(0.3);
+		expect(settings.cursor.size).toBe(2.5);
 		expect(settings.cursor.clickBounce).toBe(0);
 	});
 

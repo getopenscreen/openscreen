@@ -1393,7 +1393,8 @@ textarea.control {
 	grid-template-rows: auto auto;
 	gap: 10px;
 }
-.sliderCell .head { display: flex; align-items: center; gap: 6px; }
+/* min-height = the reset button's 20px, so the row keeps its height whether it shows or not. */
+.sliderCell .head { display: flex; align-items: center; gap: 6px; min-height: 20px; }
 /* The label takes the free room, so the value and the reset button sit right, with or without
    each other. */
 .sliderCell .label { font: 500 13px/1.3 var(--font-body); color: var(--fg-2); margin-right: auto; }

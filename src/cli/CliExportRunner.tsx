@@ -13,7 +13,6 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "@/components/video-editor/projectPersistence";
-import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
 import {
 	collectEffectiveClipDims,
@@ -23,10 +22,12 @@ import {
 import { applyProbedDuration } from "@/lib/ai-edition/document/timeline";
 import { type AxcutDocument, isAxcutDocumentFile } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
+import {
+	appendAutoZoomSuggestions,
+	collectAutoZoomSuggestionsForDocument,
+} from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
-import { DEFAULT_ZOOM_DEPTH, ZOOM_DEPTH_SCALES } from "@/lib/ai-edition/timeline/zoom-scale";
-import { buildAutoZoomSuggestions } from "@/lib/ai-edition/timeline/zoom-suggestions";
 import type { CliDoneResult, CliExportRequest } from "@/lib/cliContracts";
 import { GIF_SIZE_PRESETS, type GifSizePreset } from "@/lib/exporter";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
@@ -36,7 +37,6 @@ import { exportGifNative, exportMultiNative, nativeBridgeClient } from "@/native
 import type { CompositorClipInput } from "@/native/contracts";
 import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescription";
 import { type ExportProject, loadDocumentProject } from "./exportProject";
-import { clampZoomFocus } from "./vendor/zoomHelpers";
 
 const MP4_EXPORT_FPS = 60;
 
@@ -114,33 +114,6 @@ function gifOutputDims(
 	const scale = maxHeight / tierDims.height;
 	const even = (n: number) => Math.max(2, Math.round(n * scale) & ~1);
 	return { width: even(tierDims.width), height: even(tierDims.height) };
-}
-
-function appendAutoZoomRanges(
-	axcutDocument: AxcutDocument,
-	cursorTelemetry: CursorTelemetryPoint[],
-	totalMs: number,
-): number {
-	const suggestions = buildAutoZoomSuggestions({
-		cursorTelemetry,
-		totalMs,
-		existingRegions: axcutDocument.zoomRanges,
-		defaultDurationMs: Math.max(1000, Math.round(totalMs * 0.05)),
-	});
-	let nextId = 1;
-	for (const suggestion of suggestions) {
-		axcutDocument.zoomRanges.push({
-			id: `cli-auto-zoom-${nextId++}`,
-			startMs: Math.round(suggestion.span.start),
-			endMs: Math.round(suggestion.span.end),
-			depth: DEFAULT_ZOOM_DEPTH,
-			customScale: ZOOM_DEPTH_SCALES[DEFAULT_ZOOM_DEPTH],
-			focus: clampZoomFocus(suggestion.focus),
-			focusMode: "auto",
-			source: "auto",
-		});
-	}
-	return suggestions.length;
 }
 
 /**
@@ -237,7 +210,6 @@ async function loadLegacyProject(project: EditorProjectData): Promise<ExportProj
 			};
 		}
 	}
-
 	return {
 		document: axcutDocument,
 		editor,
@@ -262,7 +234,8 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 	} else {
 		throw new Error("Project file is not a valid .openscreen project");
 	}
-	const { editor, document: axcutDocument } = project;
+	const { editor } = project;
+	let axcutDocument = project.document;
 
 	const format = request.format ?? editor.exportFormat;
 	if (request.audioPath && format === "gif") {
@@ -275,20 +248,17 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 	const gifSizePreset = request.gifSizePreset ?? editor.gifSizePreset;
 	const outPath =
 		request.outPath ?? replaceExtension(request.projectPath, format === "gif" ? ".gif" : ".mp4");
-	// Cursor telemetry: only needed to compute --auto-zoom suggestions. The
-	// native compositor discovers the `<video>.cursor.json` sidecar itself.
-	let cursorTelemetry: CursorTelemetryPoint[] = [];
+	// Use the same per-clip auto-zoom suggestions as the editor, including its default span and
+	// anchoring behavior.
 	if (request.autoZoom) {
-		try {
-			cursorTelemetry = await nativeBridgeClient.cursor.getTelemetry(project.screenVideoPath);
-		} catch {
-			cursorTelemetry = [];
-		}
-	}
-
-	if (request.autoZoom) {
-		const added = appendAutoZoomRanges(axcutDocument, cursorTelemetry, project.durationMs);
-		window.electronAPI.cliLog("info", `Auto-zoom: added ${added} region(s) from cursor telemetry`);
+		const suggestions = await collectAutoZoomSuggestionsForDocument(axcutDocument, (videoPath) =>
+			nativeBridgeClient.cursor.getTelemetry(videoPath).catch(() => []),
+		);
+		axcutDocument = appendAutoZoomSuggestions(axcutDocument, suggestions);
+		window.electronAPI.cliLog(
+			"info",
+			`Auto-zoom: added ${suggestions.length} region(s) from cursor telemetry`,
+		);
 	}
 
 	// Output sizing mirrors the ExportDialog: crop-aware smallest clip on the

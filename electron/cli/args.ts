@@ -2,6 +2,10 @@
 // unit-tested under plain vitest.
 
 import path from "node:path";
+import {
+	CAPTION_WORDS_PER_LINE_MAX,
+	CAPTION_WORDS_PER_LINE_MIN,
+} from "../../src/lib/ai-edition/captions/wordsPerLine";
 import type { CliExportRequest, CliRecordRequest, CliRequest } from "../../src/lib/cliContracts";
 
 export interface CliInfoCommand {
@@ -69,7 +73,7 @@ Usage:
   openscreen sources [--json] [-o <file>]            List displays, windows and microphones
   openscreen pack <project.openscreen> --out <dir>   Copy project + media into one portable folder
   openscreen captions <project.openscreen>           Add auto-captions (on-device Whisper) to a project
-                     [--min-words <n>] [--max-words <n>]
+                     [--min-words <1-12>] [--max-words <1-12>]
   openscreen info <project.openscreen> [--json]      Inspect a project file
   openscreen help                                    Show this help
 
@@ -430,8 +434,16 @@ function parseCaptions(args: string[], cwd: string): CliCommand {
 		if (arg === "--min-words" || arg === "--max-words") {
 			const [value, next] = takeValue(args, i, arg);
 			const count = Number(value);
-			if (!Number.isInteger(count) || count < 1) {
-				throw new Error(`${arg} must be a positive integer, got "${value}"`);
+			// The editor's caption settings clamp to the same range, so a larger value would
+			// write a project the editor then shows differently.
+			if (
+				!Number.isInteger(count) ||
+				count < CAPTION_WORDS_PER_LINE_MIN ||
+				count > CAPTION_WORDS_PER_LINE_MAX
+			) {
+				throw new Error(
+					`${arg} must be an integer from ${CAPTION_WORDS_PER_LINE_MIN} to ${CAPTION_WORDS_PER_LINE_MAX}, got "${value}"`,
+				);
 			}
 			if (arg === "--min-words") minWordsPerCaption = count;
 			else maxWordsPerCaption = count;

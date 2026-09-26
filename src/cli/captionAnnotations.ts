@@ -5,6 +5,12 @@
 
 import type { AnnotationRegion, AnnotationTextStyle } from "@/components/video-editor/types";
 import {
+	captionBackgroundCss,
+	captionSafeColumn,
+	DEFAULT_CAPTION_SETTINGS,
+	defaultCaptionInsetY,
+} from "@/lib/ai-edition/captions/settings";
+import {
 	type CaptionSegmentLayoutOptions,
 	dedupeAdjacentCaptionRepeats,
 	finalizeCaptionSegmentsForPlayback,
@@ -13,24 +19,28 @@ import {
 } from "@/lib/captioning/annotationsFromCaptions";
 import type { CaptionSegment } from "@/lib/captioning/transcribe";
 
-/** Wide lower-third bar; `position.x` is top-left as % of container, so center with (100 - width) / 2. */
-const CAPTION_WIDTH = 92;
+// The look and place of the editor's own captions (`DEFAULT_CAPTION_SETTINGS`): bold 48 px
+// white on a 55% black plate, in the landscape safe column, just off the bottom edge. The CLI
+// used to write 24 px regular text on no plate, which read as faint over any bright frame.
+// `.openscreen` projects carry no transcript, so the CLI cannot write the editor's transcript-
+// driven captions; matching their appearance is what keeps the two from looking different.
+const LANDSCAPE = 16 / 9;
 const CAPTION_HEIGHT = 12;
-const CAPTION_BOTTOM_MARGIN = 2;
+const CAPTION_COLUMN = captionSafeColumn(LANDSCAPE);
 
 const CAPTION_POSITION = {
-	x: (100 - CAPTION_WIDTH) / 2,
-	y: 100 - CAPTION_HEIGHT - CAPTION_BOTTOM_MARGIN,
+	x: CAPTION_COLUMN.x,
+	y: 100 - CAPTION_HEIGHT - defaultCaptionInsetY(LANDSCAPE),
 };
 
-const CAPTION_SIZE = { width: CAPTION_WIDTH, height: CAPTION_HEIGHT };
+const CAPTION_SIZE = { width: CAPTION_COLUMN.width, height: CAPTION_HEIGHT };
 
 const CAPTION_STYLE: AnnotationTextStyle = {
-	color: "#ffffff",
-	backgroundColor: "rgba(255, 255, 255, 0)",
-	fontSize: 24,
-	fontFamily: "Inter",
-	fontWeight: "normal",
+	color: DEFAULT_CAPTION_SETTINGS.color,
+	backgroundColor: captionBackgroundCss(DEFAULT_CAPTION_SETTINGS),
+	fontSize: DEFAULT_CAPTION_SETTINGS.fontSize,
+	fontFamily: DEFAULT_CAPTION_SETTINGS.fontFamily,
+	fontWeight: DEFAULT_CAPTION_SETTINGS.fontWeight,
 	fontStyle: "normal",
 	textDecoration: "none",
 	textAlign: "center",
@@ -44,8 +54,8 @@ export function captionSegmentsToAnnotationRegions(
 ): AnnotationRegion[] {
 	// Don't echo-collapse raw word tokens before grouping: repeated words ("I … I") share a
 	// normalized key and would merge spans while keeping only the first token's text.
-	const minW = layout?.minWordsPerCaption ?? 2;
-	const maxW = layout?.maxWordsPerCaption ?? 7;
+	const minW = layout?.minWordsPerCaption ?? DEFAULT_CAPTION_SETTINGS.minWordsPerLine;
+	const maxW = layout?.maxWordsPerCaption ?? DEFAULT_CAPTION_SETTINGS.maxWordsPerLine;
 	const granularity = layout?.timestampGranularity ?? "word";
 
 	const grouped =

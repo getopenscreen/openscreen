@@ -158,7 +158,7 @@ openscreen captions demo.openscreen --min-words 2 --max-words 7
 openscreen export demo.openscreen -o demo.mp4   # captions are burned into the video
 ```
 
-- `--min-words` and `--max-words` set the words per caption. Defaults: 2 and 7.
+- `--min-words` and `--max-words` set the words per caption. Each takes 1 to 12, the range the editor offers. Defaults: 2 and 7.
 - Running it again replaces the captions it added before. Annotations you added yourself are kept.
 - The project's screen video must have an audio track, for example from `record --mic`.
 - Captions are burned into the export. There is no subtitle file output. See [Captions](./captions.md).

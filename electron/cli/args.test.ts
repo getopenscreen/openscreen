@@ -217,6 +217,19 @@ describe("parseCliArgs", () => {
 		).toMatchObject({ kind: "error" });
 	});
 
+	it("bounds caption word counts to what the editor's caption settings allow", () => {
+		expect(parse(["captions", "a.openscreen", "--max-words", "12"])).toMatchObject({
+			maxWordsPerCaption: 12,
+		});
+		expect(parse(["captions", "a.openscreen", "--max-words", "13"])).toMatchObject({
+			kind: "error",
+			message: expect.stringContaining("from 1 to 12"),
+		});
+		expect(parse(["captions", "a.openscreen", "--min-words", "0"])).toMatchObject({
+			kind: "error",
+		});
+	});
+
 	it("parses info and help", () => {
 		expect(parse(["info", "demo.openscreen", "--json"])).toMatchObject({
 			kind: "info",

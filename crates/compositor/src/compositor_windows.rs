@@ -23,10 +23,9 @@ use anyhow::{bail, Result};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::c_void;
-use windows::core::{Interface, PCSTR};
-use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
+use windows::core::Interface;
 use windows::Win32::Graphics::Direct3D::{
-    ID3DBlob, D3D11_SRV_DIMENSION_TEXTURE2DARRAY, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
+    D3D11_SRV_DIMENSION_TEXTURE2DARRAY, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
 };
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
@@ -269,33 +268,12 @@ struct ResizeTarget {
 
 
 
-unsafe fn compile(src: &[u8], entry: &[u8], target: &[u8]) -> Result<ID3DBlob> {
-    let mut code: Option<ID3DBlob> = None;
-    let mut err: Option<ID3DBlob> = None;
-    let r = D3DCompile(
-        src.as_ptr() as *const c_void,
-        src.len(),
-        PCSTR::null(),
-        None,
-        None,
-        PCSTR(entry.as_ptr()),
-        PCSTR(target.as_ptr()),
-        D3DCOMPILE_OPTIMIZATION_LEVEL3,
-        0,
-        &mut code,
-        Some(&mut err),
-    );
-    if r.is_err() {
-        if let Some(e) = err {
-            let msg = std::slice::from_raw_parts(
-                e.GetBufferPointer() as *const u8,
-                e.GetBufferSize(),
-            );
-            bail!("D3DCompile {}: {}", String::from_utf8_lossy(entry), String::from_utf8_lossy(msg));
-        }
-        bail!("D3DCompile a échoué");
-    }
-    Ok(code.unwrap())
+/// Bytecode d'un point d'entrée de `shaders.hlsl`, compilé par `build.rs` (`compile_hlsl`) :
+/// aucun `D3DCompile` à l'exécution, donc rien à payer quand le compositeur se construit.
+macro_rules! shader {
+    ($entry:literal) => {
+        include_bytes!(concat!(env!("OUT_DIR"), "/", $entry, ".cso"))
+    };
 }
 
 impl Compositor {
@@ -370,34 +348,18 @@ impl Compositor {
         dev.CreateTexture2D(&td, None, Some(&mut staging))?;
 
         // --- shaders ---
-        let hlsl = include_bytes!("shaders.hlsl");
-        let vsb = compile(hlsl, b"vs_main\0", b"vs_5_0\0")?;
-        let psb = compile(hlsl, b"ps_main\0", b"ps_5_0\0")?;
-        let vs_bytes =
-            std::slice::from_raw_parts(vsb.GetBufferPointer() as *const u8, vsb.GetBufferSize());
-        let ps_bytes =
-            std::slice::from_raw_parts(psb.GetBufferPointer() as *const u8, psb.GetBufferSize());
         let mut vs: Option<ID3D11VertexShader> = None;
-        dev.CreateVertexShader(vs_bytes, None, Some(&mut vs))?;
+        dev.CreateVertexShader(shader!("vs_main"), None, Some(&mut vs))?;
         let mut ps: Option<ID3D11PixelShader> = None;
-        dev.CreatePixelShader(ps_bytes, None, Some(&mut ps))?;
+        dev.CreatePixelShader(shader!("ps_main"), None, Some(&mut ps))?;
 
         // shaders RGB->NV12
-        let fsb = compile(hlsl, b"vs_fs\0", b"vs_5_0\0")?;
-        let yb = compile(hlsl, b"ps_y\0", b"ps_5_0\0")?;
-        let uvb = compile(hlsl, b"ps_uv\0", b"ps_5_0\0")?;
-        let fs_bytes =
-            std::slice::from_raw_parts(fsb.GetBufferPointer() as *const u8, fsb.GetBufferSize());
-        let y_bytes =
-            std::slice::from_raw_parts(yb.GetBufferPointer() as *const u8, yb.GetBufferSize());
-        let uv_bytes =
-            std::slice::from_raw_parts(uvb.GetBufferPointer() as *const u8, uvb.GetBufferSize());
         let mut vs_fs: Option<ID3D11VertexShader> = None;
-        dev.CreateVertexShader(fs_bytes, None, Some(&mut vs_fs))?;
+        dev.CreateVertexShader(shader!("vs_fs"), None, Some(&mut vs_fs))?;
         let mut ps_y: Option<ID3D11PixelShader> = None;
-        dev.CreatePixelShader(y_bytes, None, Some(&mut ps_y))?;
+        dev.CreatePixelShader(shader!("ps_y"), None, Some(&mut ps_y))?;
         let mut ps_uv: Option<ID3D11PixelShader> = None;
-        dev.CreatePixelShader(uv_bytes, None, Some(&mut ps_uv))?;
+        dev.CreatePixelShader(shader!("ps_uv"), None, Some(&mut ps_uv))?;
 
         // --- sampler bilinéaire clamp ---
         let sd = D3D11_SAMPLER_DESC {
@@ -477,36 +439,16 @@ impl Compositor {
         let rtv_uv = mk_rtv(DXGI_FORMAT_R8G8_UNORM)?;
 
         // shaders de flou + copie
-        let blurb = compile(hlsl, b"ps_blur\0", b"ps_5_0\0")?;
-        let texb = compile(hlsl, b"ps_tex\0", b"ps_5_0\0")?;
         let mut ps_blur: Option<ID3D11PixelShader> = None;
-        dev.CreatePixelShader(
-            std::slice::from_raw_parts(blurb.GetBufferPointer() as *const u8, blurb.GetBufferSize()),
-            None,
-            Some(&mut ps_blur),
-        )?;
+        dev.CreatePixelShader(shader!("ps_blur"), None, Some(&mut ps_blur))?;
         let mut ps_tex: Option<ID3D11PixelShader> = None;
-        dev.CreatePixelShader(
-            std::slice::from_raw_parts(texb.GetBufferPointer() as *const u8, texb.GetBufferSize()),
-            None,
-            Some(&mut ps_tex),
-        )?;
+        dev.CreatePixelShader(shader!("ps_tex"), None, Some(&mut ps_tex))?;
 
         // shaders dual-Kawase
-        let kdb = compile(hlsl, b"ps_kawase_down\0", b"ps_5_0\0")?;
-        let kub = compile(hlsl, b"ps_kawase_up\0", b"ps_5_0\0")?;
         let mut ps_kdown: Option<ID3D11PixelShader> = None;
-        dev.CreatePixelShader(
-            std::slice::from_raw_parts(kdb.GetBufferPointer() as *const u8, kdb.GetBufferSize()),
-            None,
-            Some(&mut ps_kdown),
-        )?;
+        dev.CreatePixelShader(shader!("ps_kawase_down"), None, Some(&mut ps_kdown))?;
         let mut ps_kup: Option<ID3D11PixelShader> = None;
-        dev.CreatePixelShader(
-            std::slice::from_raw_parts(kub.GetBufferPointer() as *const u8, kub.GetBufferSize()),
-            None,
-            Some(&mut ps_kup),
-        )?;
+        dev.CreatePixelShader(shader!("ps_kawase_up"), None, Some(&mut ps_kup))?;
 
         // textures RGBA RT+SRV à une taille donnée (chaîne de flou)
         let mk_rgba = |w: u32, h: u32| -> Result<(ID3D11RenderTargetView, ID3D11ShaderResourceView)> {
@@ -3155,30 +3097,4 @@ mod tests {
             cumule / 1048576
         );
     }
-
-
-    /// Le HLSL est compilé au démarrage du compositeur : jusqu'ici une faute dedans ne se voyait
-    /// qu'à l'exécution, donc après un rebuild du natif ET un relancement de l'app. `D3DCompile`
-    /// ne demande aucun device — le compilateur seul suffit, et ça tient en quelques
-    /// millisecondes.
-    #[test]
-    fn every_shader_entry_point_compiles() {
-        let hlsl = include_bytes!("shaders.hlsl");
-        for (entry, target) in [
-            (&b"vs_main\0"[..], &b"vs_5_0\0"[..]),
-            (&b"ps_main\0"[..], &b"ps_5_0\0"[..]),
-            (&b"vs_fs\0"[..], &b"vs_5_0\0"[..]),
-            (&b"ps_y\0"[..], &b"ps_5_0\0"[..]),
-            (&b"ps_uv\0"[..], &b"ps_5_0\0"[..]),
-            (&b"ps_blur\0"[..], &b"ps_5_0\0"[..]),
-            (&b"ps_tex\0"[..], &b"ps_5_0\0"[..]),
-            (&b"ps_kawase_down\0"[..], &b"ps_5_0\0"[..]),
-            (&b"ps_kawase_up\0"[..], &b"ps_5_0\0"[..]),
-        ] {
-            let name = String::from_utf8_lossy(&entry[..entry.len() - 1]).to_string();
-            unsafe { compile(hlsl, entry, target) }
-                .unwrap_or_else(|e| panic!("{name} ne compile pas : {e}"));
-        }
-    }
-
 }

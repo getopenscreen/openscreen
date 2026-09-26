@@ -171,6 +171,73 @@ fn main() {
     if let Ok(prefix) = env::var("OPENSCREEN_FFMPEG_SYMBOL_PREFIX") {
         prefix_ffmpeg_symbols(&ffi_path, &prefix);
     }
+
+    // `cfg(windows)` = l'HÔTE : d3dcompiler n'existe que là, et la cible Windows ne se
+    // construit que depuis Windows (MSVC, import libs ffmpeg).
+    if target_os == "windows" {
+        #[cfg(windows)]
+        compile_hlsl(&out);
+    }
+}
+
+/// Les shaders du compositeur Windows (`src/shaders.hlsl`), compilés ICI et embarqués en
+/// bytecode (`shader!` dans `compositor_windows.rs`), plutôt qu'à chaque construction d'un
+/// `Compositor`. À l'exécution, FXC y passait plusieurs secondes sur l'uber-shader (0,5 s à la
+/// mi-septembre 2026, 4 à 16 s selon la charge dix jours plus tard), payées deux fois à
+/// l'ouverture d'un projet et une fois à chaque changement de taille de rendu : autant de temps
+/// sans image dans la preview. Une faute dans le HLSL fait maintenant échouer `cargo check`, au
+/// lieu de l'exécution.
+#[cfg(windows)]
+fn compile_hlsl(out: &Path) {
+    use windows::core::PCSTR;
+    use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
+    use windows::Win32::Graphics::Direct3D::ID3DBlob;
+
+    fn blob_bytes(blob: &ID3DBlob) -> Vec<u8> {
+        unsafe {
+            std::slice::from_raw_parts(blob.GetBufferPointer() as *const u8, blob.GetBufferSize())
+                .to_vec()
+        }
+    }
+
+    const SRC: &str = "src/shaders.hlsl";
+    println!("cargo:rerun-if-changed={SRC}");
+    let hlsl = std::fs::read(SRC).expect(SRC);
+    // Tous les points d'entrée que `Compositor::new_inner` instancie, avec leur profil.
+    for (entry, profile) in [
+        ("vs_main", "vs_5_0"),
+        ("ps_main", "ps_5_0"),
+        ("vs_fs", "vs_5_0"),
+        ("ps_y", "ps_5_0"),
+        ("ps_uv", "ps_5_0"),
+        ("ps_blur", "ps_5_0"),
+        ("ps_tex", "ps_5_0"),
+        ("ps_kawase_down", "ps_5_0"),
+        ("ps_kawase_up", "ps_5_0"),
+    ] {
+        let (entry_z, profile_z) = (format!("{entry}\0"), format!("{profile}\0"));
+        let (mut code, mut errors): (Option<ID3DBlob>, Option<ID3DBlob>) = (None, None);
+        let compiled = unsafe {
+            D3DCompile(
+                hlsl.as_ptr().cast(),
+                hlsl.len(),
+                PCSTR(b"shaders.hlsl\0".as_ptr()),
+                None,
+                None,
+                PCSTR(entry_z.as_ptr()),
+                PCSTR(profile_z.as_ptr()),
+                D3DCOMPILE_OPTIMIZATION_LEVEL3,
+                0,
+                &mut code,
+                Some(&mut errors),
+            )
+        };
+        if let Err(e) = compiled {
+            let log = errors.as_ref().map(blob_bytes).unwrap_or_default();
+            panic!("{SRC} : {entry} ne compile pas ({e})\n{}", String::from_utf8_lossy(&log));
+        }
+        std::fs::write(out.join(format!("{entry}.cso")), blob_bytes(&code.unwrap())).expect(entry);
+    }
 }
 
 /// Flags `-I` supplémentaires pour que clang trouve les en-têtes « freestanding » qu'il

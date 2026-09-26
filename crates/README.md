@@ -49,7 +49,7 @@ compositeur (WGSL natif à l'identique) + la carte des coûts.
 - **ffmpeg (libav\*)** LGPL pour demux / décode D3D11VA / encode `h264_amf` / mux. Bindings
   générés par `bindgen` (choix vs `ffmpeg-next` : suit ffmpeg 8.x — voir [`technical-documentation/architecture/native-compositor.md`](../technical-documentation/architecture/native-compositor.md)),
   shim C (`shim.c`) pour les structs opaques.
-- Compositeur HLSL (`src/shaders.hlsl`) compilé au runtime.
+- Compositeur HLSL (`src/shaders.hlsl`) compilé au build (`build.rs`), embarqué en bytecode.
 
 ## Prérequis
 

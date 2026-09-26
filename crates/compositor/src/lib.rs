@@ -9,7 +9,7 @@
 //! # Backends
 //!
 //! - Windows : `d3d_windows::Gpu` (D3D11 + D3D11VA), shaders HLSL compilés via `D3DCompile`
-//!   à l'exécution, `cpu_frames_windows.rs` pour l'axe décodage logiciel du backend CPU.
+//!   au build (`build.rs`), `cpu_frames_windows.rs` pour l'axe décodage logiciel du backend CPU.
 //!   Le moteur est dans `compositor_windows.rs` et le rastériseur de texte dans `text_windows.rs`.
 //!
 //! - macOS : `d3d_macos::Gpu` (Metal + VideoToolbox), shaders MSL compilés via

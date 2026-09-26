@@ -1565,8 +1565,8 @@ fn same_source_path(a: &str, b: &str) -> bool {
     a.eq_ignore_ascii_case(b)
 }
 
-/// Période commune des mouvements de fond (s). Chaque période du shader (20, 24, 30, 40, 12,
-/// 120 s) la divise, donc replier le temps dessus ne crée aucun raccord visible — et garde au
+/// Période commune des mouvements de fond (s). Chaque période du shader (6, 10, 12, 15, 20,
+/// 30 s) la divise, donc replier le temps dessus ne crée aucun raccord visible — et garde au
 /// shader un temps borné, là où un `f32` de plusieurs heures perdrait la finesse du bruit.
 pub const GRADIENT_MOTION_PERIOD_S: f32 = 120.0;
 
@@ -6722,7 +6722,7 @@ mod tests {
         assert_eq!(gradient_motion_slots(M::Aurora, 0.0, 1.0).0[1], 2.0);
         assert_eq!(gradient_motion_slots(M::Waves, 240.0, 1.0).0, [0.0, 3.0]);
         // Chaque période du shader divise la période de repli : pas de raccord au bouclage.
-        for p in [20.0, 24.0, 30.0, 40.0, 12.0, 120.0] {
+        for p in [6.0, 10.0, 12.0, 15.0, 20.0, 30.0] {
             assert_eq!(GRADIENT_MOTION_PERIOD_S % p, 0.0, "période {p}");
         }
     }

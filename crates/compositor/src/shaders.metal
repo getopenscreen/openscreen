@@ -463,6 +463,12 @@ inline float3 ramp4(float t, float4 k0, float4 k1, float4 k2, float4 k3)
     return c;
 }
 
+// Éclaircit vers le blanc (k > 0) ou assombrit vers le noir (k < 0) d'une fraction |k|.
+inline float3 lighten(float3 c, float k)
+{
+    return k > 0.0 ? c + (1.0 - c) * k : c * (1.0 + k);
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
 // `gradient_motion` côté HLSL (commentaires complets là-bas).
 inline float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1,
@@ -472,23 +478,24 @@ inline float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, flo
     float u = dot(gp - 0.5, dir) / denom; // position le long de l'axe, -0.5..0.5
     if (motion < 2.5)
     {
-        // Aurore : rampe perturbée par un bruit lent, puis trois nappes gaussiennes.
+        // Aurore : rampe perturbée par un bruit, puis trois larges nappes gaussiennes.
         float2 p = float2((gp.x - 0.5) * aspect, gp.y - 0.5);
-        float ph = TAU * time / 120.0;
-        float n = value_noise(p * 2.5 + 1.5 * float2(cos(ph), sin(ph)));
-        float3 g = ramp4(clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
-        float2 b0 = float2(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
-        float2 b1 = float2(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
-        float2 b2 = float2(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
-        g = mix(g, k3.rgb, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
-        g = mix(g, k0.rgb, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
-        g = mix(g, k3.rgb, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        float ph = TAU * time / 30.0;
+        float n = value_noise(p * 1.8 + 1.5 * float2(cos(ph), sin(ph)));
+        float3 g = ramp4(clamp(0.5 + u + 0.6 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
+        float2 b0 = float2(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
+        float2 b1 = float2(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
+        float2 b2 = float2(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+        float3 light = lighten(k3.rgb, 0.15);
+        g = mix(g, light, 0.7 * exp(-dot(p - b0, p - b0) / 0.176));
+        g = mix(g, lighten(k0.rgb, -0.15), 0.7 * exp(-dot(p - b1, p - b1) / 0.132));
+        g = mix(g, light, 0.6 * exp(-dot(p - b2, p - b2) / 0.11));
         return g;
     }
-    // Vagues : trois bandes sinus perpendiculaires à l'axe (12 s), ondulées (20 s).
+    // Vagues : trois bandes sinus perpendiculaires à l'axe (6 s), ondulées (10 s), crêtes éclairées.
     float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
-    float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
-    return ramp4(clamp(0.5 + u + 0.07 * w, 0.0, 1.0), k0, k1, k2, k3);
+    float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
+    return lighten(ramp4(clamp(0.5 + u + 0.18 * w, 0.0, 1.0), k0, k1, k2, k3), 0.07 * w);
 }
 
 // ============ Curseur MODÉLISÉ (mode 15) ============
@@ -2274,13 +2281,16 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     if (layer.mode > 4.5 && layer.mode < 5.5)
     {
         float2 dir = layer.fx.xy;
+        float slide = 0.0;
         if (layer.fx.w > 0.5 && layer.fx.w < 1.5)
         {
-            // Dérive : l'axe respire de ±15° (0.2617994 rad) en 20 s.
-            float da = 0.2617994 * sin(6.2831853 * layer.fx.z / 20.0);
+            // Dérive : l'axe balance de ±30° (0.5235988 rad) en 20 s, le dégradé glisse le long
+            // de lui de ±20 % en 15 s.
+            float da = 0.5235988 * sin(6.2831853 * layer.fx.z / 20.0);
             float sa = sin(da);
             float ca = cos(da);
             dir = float2(dir.x * ca - dir.y * sa, dir.x * sa + dir.y * ca);
+            slide = 0.2 * sin(6.2831853 * layer.fx.z / 15.0);
         }
         float denom = max(abs(dir.x) + abs(dir.y), 1e-4);
         // Paramétré sur le QUAD dès qu'il en a un (la bulle webcam), sinon sur la sortie. Pour le
@@ -2290,7 +2300,7 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         float2 gp = (layer.quad_px.x > 0.0 && layer.quad_px.y > 0.0)
             ? (i.local / layer.quad_px)
             : i.pout;
-        float t = clamp(0.5 + dot(gp - 0.5, dir) / denom, 0.0, 1.0);
+        float t = clamp(0.5 + dot(gp - 0.5, dir) / denom + slide, 0.0, 1.0);
         float3 g = ramp4(t, layer.color, layer.src_prev, layer.dst_prev, layer.src);
         if (layer.fx.w > 1.5)
         {

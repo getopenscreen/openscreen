@@ -424,6 +424,11 @@ fn ramp4(t: f32, k0: vec4<f32>, k1: vec4<f32>, k2: vec4<f32>, k3: vec4<f32>) -> 
     return c;
 }
 
+// Eclaircit vers le blanc (k > 0) ou assombrit vers le noir (k < 0) d'une fraction |k|.
+fn lighten(c: vec3<f32>, k: f32) -> vec3<f32> {
+    return select(c * (1.0 + k), c + (vec3<f32>(1.0) - c) * k, k > 0.0);
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
 // `gradient_motion` cote HLSL (commentaires complets la-bas).
 fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, k0: vec4<f32>, k1: vec4<f32>,
@@ -431,23 +436,24 @@ fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, k0: vec4<f32>, k1:
     let TAU = 6.2831853;
     let u = dot(gp - vec2<f32>(0.5), dir) / denom; // position le long de l'axe, -0.5..0.5
     if motion < 2.5 {
-        // Aurore : rampe perturbee par un bruit lent, puis trois nappes gaussiennes.
+        // Aurore : rampe perturbee par un bruit, puis trois larges nappes gaussiennes.
         let p = vec2<f32>((gp.x - 0.5) * aspect, gp.y - 0.5);
-        let ph = TAU * time / 120.0;
-        let n = value_noise(p * 2.5 + 1.5 * vec2<f32>(cos(ph), sin(ph)));
-        var g = ramp4(clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
-        let b0 = vec2<f32>(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
-        let b1 = vec2<f32>(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
-        let b2 = vec2<f32>(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
-        g = mix(g, k3.rgb, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
-        g = mix(g, k0.rgb, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
-        g = mix(g, k3.rgb, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        let ph = TAU * time / 30.0;
+        let n = value_noise(p * 1.8 + 1.5 * vec2<f32>(cos(ph), sin(ph)));
+        var g = ramp4(clamp(0.5 + u + 0.6 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
+        let b0 = vec2<f32>(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
+        let b1 = vec2<f32>(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
+        let b2 = vec2<f32>(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+        let light = lighten(k3.rgb, 0.15);
+        g = mix(g, light, 0.7 * exp(-dot(p - b0, p - b0) / 0.176));
+        g = mix(g, lighten(k0.rgb, -0.15), 0.7 * exp(-dot(p - b1, p - b1) / 0.132));
+        g = mix(g, light, 0.6 * exp(-dot(p - b2, p - b2) / 0.11));
         return g;
     }
-    // Vagues : trois bandes sinus perpendiculaires a l'axe (12 s), ondulees (20 s).
+    // Vagues : trois bandes sinus perpendiculaires a l'axe (6 s), ondulees (10 s), cretes eclairees.
     let v = dot(gp - vec2<f32>(0.5), vec2<f32>(-dir.y, dir.x)) / denom;
-    let w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
-    return ramp4(clamp(0.5 + u + 0.07 * w, 0.0, 1.0), k0, k1, k2, k3);
+    let w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
+    return lighten(ramp4(clamp(0.5 + u + 0.18 * w, 0.0, 1.0), k0, k1, k2, k3), 0.07 * w);
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -1869,12 +1875,15 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Fond anime : fx.z = temps programme (s, replie sur 120), fx.w = mouvement (0 immobile,
         // 1 derive, 2 aurore, 3 vagues), mb.x = aspect w/h. 0 rend le degrade d'avant a l'octet.
         var dir = layer.fx.xy;
+        var slide = 0.0;
         if layer.fx.w > 0.5 && layer.fx.w < 1.5 {
-            // Derive : l'axe respire de +-15 deg (0.2617994 rad) en 20 s.
-            let da = 0.2617994 * sin(6.2831853 * layer.fx.z / 20.0);
+            // Derive : l'axe balance de +-30 deg (0.5235988 rad) en 20 s, le degrade glisse le
+            // long de lui de +-20 % en 15 s.
+            let da = 0.5235988 * sin(6.2831853 * layer.fx.z / 20.0);
             let sa = sin(da);
             let ca = cos(da);
             dir = vec2<f32>(dir.x * ca - dir.y * sa, dir.x * sa + dir.y * ca);
+            slide = 0.2 * sin(6.2831853 * layer.fx.z / 15.0);
         }
         let denom = max(abs(dir.x) + abs(dir.y), 1e-4);
         // Parametre sur le QUAD des qu'il en a un (la bulle webcam), sinon sur la sortie. Pour
@@ -1884,7 +1893,7 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         if layer.quad_px.x > 0.0 && layer.quad_px.y > 0.0 {
             gp = i.local / layer.quad_px;
         }
-        let t = clamp(0.5 + dot(gp - vec2<f32>(0.5), dir) / denom, 0.0, 1.0);
+        let t = clamp(0.5 + dot(gp - vec2<f32>(0.5), dir) / denom + slide, 0.0, 1.0);
         rgb = ramp4(t, layer.color, layer.src_prev, layer.dst_prev, layer.src);
         if layer.fx.w > 1.5 {
             rgb = gradient_motion(gp, dir, denom, layer.color, layer.src_prev, layer.dst_prev,

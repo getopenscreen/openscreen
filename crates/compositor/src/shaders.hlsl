@@ -349,10 +349,18 @@ float3 ramp4(float t, float4 k0, float4 k1, float4 k2, float4 k3)
     return c;
 }
 
+// Éclaircit vers le blanc (k > 0) ou assombrit vers le noir (k < 0) d'une fraction |k|.
+float3 lighten(float3 c, float k)
+{
+    return k > 0.0 ? c + (1.0 - c) * k : c * (1.0 + k);
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5, sur la rampe de ses stops.
 // `gp` 0..1 sur le quad, `dir`/`denom` ceux du dégradé, `time` = temps programme replié sur
-// 120 s (toutes les périodes ci-dessous le divisent), `aspect` = w/h de la sortie. Périodes
-// longues et contraste bas : le fond ne doit jamais prendre l'attention.
+// 120 s (toutes les périodes ci-dessous le divisent), `aspect` = w/h de la sortie. Amples et
+// rapides assez pour se voir d'un coup d'œil : réglés plus bas, ils ne se voyaient qu'en
+// comparant deux images, et la plupart des dégradés proposés n'ont que deux teintes voisines,
+// d'où la lumière que chacun ajoute en plus de déplacer la rampe.
 float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1, float4 k2,
                        float4 k3, float time, float motion, float aspect)
 {
@@ -360,26 +368,28 @@ float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1,
     float u = dot(gp - 0.5, dir) / denom; // position le long de l'axe, -0.5..0.5
     if (motion < 2.5)
     {
-        // Aurore : rampe perturbée par un bruit lent (dont l'origine tourne en 120 s), puis
-        // trois nappes gaussiennes sur des Lissajous de 20 à 40 s. Coordonnées corrigées de
-        // l'aspect pour que les nappes restent rondes.
+        // Aurore : rampe perturbée par un bruit (dont l'origine tourne en 30 s), puis trois
+        // larges nappes gaussiennes sur des Lissajous de 10 à 20 s. Deux portent la couleur de
+        // fin éclaircie, une celle du début assombrie. Coordonnées corrigées de l'aspect pour
+        // que les nappes restent rondes.
         float2 p = float2((gp.x - 0.5) * aspect, gp.y - 0.5);
-        float ph = TAU * time / 120.0;
-        float n = value_noise(p * 2.5 + 1.5 * float2(cos(ph), sin(ph)));
-        float3 g = ramp4(saturate(0.5 + u + 0.3 * (n - 0.5)), k0, k1, k2, k3);
-        float2 b0 = float2(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
-        float2 b1 = float2(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
-        float2 b2 = float2(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
-        g = lerp(g, k3.rgb, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
-        g = lerp(g, k0.rgb, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
-        g = lerp(g, k3.rgb, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        float ph = TAU * time / 30.0;
+        float n = value_noise(p * 1.8 + 1.5 * float2(cos(ph), sin(ph)));
+        float3 g = ramp4(saturate(0.5 + u + 0.6 * (n - 0.5)), k0, k1, k2, k3);
+        float2 b0 = float2(0.35 * aspect * sin(TAU * time / 10.0), 0.25 * sin(TAU * time / 15.0 + 1.0));
+        float2 b1 = float2(0.30 * aspect * sin(TAU * time / 12.0 + 2.0), 0.22 * cos(TAU * time / 20.0));
+        float2 b2 = float2(0.25 * aspect * cos(TAU * time / 15.0 + 4.0), 0.28 * sin(TAU * time / 12.0 + 3.0));
+        float3 light = lighten(k3.rgb, 0.15);
+        g = lerp(g, light, 0.7 * exp(-dot(p - b0, p - b0) / 0.176));
+        g = lerp(g, lighten(k0.rgb, -0.15), 0.7 * exp(-dot(p - b1, p - b1) / 0.132));
+        g = lerp(g, light, 0.6 * exp(-dot(p - b2, p - b2) / 0.11));
         return g;
     }
-    // Vagues : trois bandes sinus perpendiculaires à l'axe, qui avancent d'une bande en 12 s,
-    // légèrement ondulées le long des bandes (20 s). Elles décalent la rampe, rien d'autre.
+    // Vagues : trois bandes sinus perpendiculaires à l'axe, qui avancent d'une bande en 6 s,
+    // ondulées le long des bandes (10 s). Elles décalent la rampe et éclairent leurs crêtes.
     float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
-    float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
-    return ramp4(saturate(0.5 + u + 0.07 * w), k0, k1, k2, k3);
+    float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 10.0)) - time / 6.0));
+    return lighten(ramp4(saturate(0.5 + u + 0.18 * w), k0, k1, k2, k3), 0.07 * w);
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -2493,13 +2503,16 @@ float4 ps_main(VSOut i) : SV_Target
     if (mode > 4.5)
     {
         float2 dir = fx.xy;
+        float slide = 0.0;
         if (fx.w > 0.5 && fx.w < 1.5)
         {
-            // Dérive : l'axe respire de ±15° (0.2617994 rad) en 20 s.
-            float da = 0.2617994 * sin(6.2831853 * fx.z / 20.0);
+            // Dérive : l'axe balance de ±30° (0.5235988 rad) en 20 s, et le dégradé glisse le
+            // long de lui de ±20 % en 15 s. Une rotation seule laisse le centre immobile.
+            float da = 0.5235988 * sin(6.2831853 * fx.z / 20.0);
             float sa = sin(da);
             float ca = cos(da);
             dir = float2(dir.x * ca - dir.y * sa, dir.x * sa + dir.y * ca);
+            slide = 0.2 * sin(6.2831853 * fx.z / 15.0);
         }
         float denom = max(abs(dir.x) + abs(dir.y), 1e-4);
         // Paramétré sur le QUAD dès qu'il en a un (la bulle webcam), sinon sur la sortie. Pour le
@@ -2507,7 +2520,7 @@ float4 ps_main(VSOut i) : SV_Target
         // que la tranche du dégradé plein cadre qui passe dessous, jamais la rampe complète que
         // le sélecteur affiche.
         float2 gp = (quad_px.x > 0.0 && quad_px.y > 0.0) ? (i.local / quad_px) : i.pout;
-        float t = saturate(0.5 + dot(gp - 0.5, dir) / denom);
+        float t = saturate(0.5 + dot(gp - 0.5, dir) / denom + slide);
         float3 g = ramp4(t, color, src_prev, dst_prev, src);
         if (fx.w > 1.5)
         {

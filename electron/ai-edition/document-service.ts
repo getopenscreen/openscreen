@@ -21,6 +21,11 @@ import {
 	documentSchema,
 	migrateRawDocumentToCurrent,
 } from "../../src/lib/ai-edition/schema";
+import {
+	lookFromLegacyEditor,
+	type StylePresetAppearance,
+	stylePresetLegacyEditor,
+} from "../../src/lib/ai-edition/stylePresets";
 import { ensureDocumentExtensions } from "../media/extensionClip";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 
@@ -165,15 +170,19 @@ export class DocumentService {
 	 * `electron` import. Optional so the tests and the CLI construct it as they always did.
 	 */
 	private readonly onProjectRead?: (document: AxcutDocument) => void;
+	/** The look of the preset marked for new projects, if any (see `newProjectLook`). */
+	private readonly newProjectPreset?: () => Promise<StylePresetAppearance | null>;
 
 	constructor(
 		projectsRoot: string,
 		mediaRegistryDir: string,
 		onProjectRead?: (document: AxcutDocument) => void,
+		newProjectPreset?: () => Promise<StylePresetAppearance | null>,
 	) {
 		this.projectsRoot = projectsRoot;
 		this.mediaRegistryDir = mediaRegistryDir;
 		this.onProjectRead = onProjectRead;
+		this.newProjectPreset = newProjectPreset;
 	}
 
 	async ensureProjectsDir(): Promise<void> {
@@ -227,30 +236,53 @@ export class DocumentService {
 	}
 
 	async listProjects(): Promise<ProjectSummary[]> {
+		const summaries = (await this.readAllProjects()).map((parsed) => ({
+			id: parsed.project.id,
+			title: parsed.project.title,
+			updatedAt: parsed.project.updatedAt,
+			assetCount: parsed.assets.length,
+		}));
+		summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+		return summaries;
+	}
+
+	/** Every project that parses, unrelinked and unannounced: a listing, not an open. */
+	private async readAllProjects(): Promise<AxcutDocument[]> {
 		await this.ensureProjectsDir();
 		const entries = await fs.readdir(this.projectsRoot);
 		// ensureProjectsDir (above) already migrated any legacy `.axcut` files.
 		const projectFiles = entries.filter((name) => name.endsWith(PROJECT_FILE_EXTENSION));
-		const summaries: ProjectSummary[] = [];
+		const documents: AxcutDocument[] = [];
 		for (const name of projectFiles) {
 			const filePath = path.join(this.projectsRoot, name);
 			try {
-				const raw = await fs.readFile(filePath, "utf8");
-				const parsed = parseLoadedDocument(raw);
-				summaries.push({
-					id: parsed.project.id,
-					title: parsed.project.title,
-					updatedAt: parsed.project.updatedAt,
-					assetCount: parsed.assets.length,
-				});
+				documents.push(parseLoadedDocument(await fs.readFile(filePath, "utf8")));
 			} catch (error) {
 				// ponytail: skip unreadable files rather than failing the whole list.
 				// A future migration pass can recover them.
 				console.warn(`[ai-edition] failed to read ${filePath}:`, error);
 			}
 		}
-		summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-		return summaries;
+		return documents;
+	}
+
+	/**
+	 * The look a new project starts from, as `legacyEditor` fields: the preset marked for new
+	 * projects, else the most recently edited project's look, else nothing (factory defaults).
+	 * Never the format — a new project keeps Auto — and never anything tied to footage.
+	 */
+	private async newProjectLook(): Promise<Record<string, unknown> | null> {
+		const preset = await this.newProjectPreset?.().catch((error) => {
+			console.warn("[ai-edition] could not read the preset for new projects:", error);
+			return null;
+		});
+		if (preset) return stylePresetLegacyEditor(preset);
+		const latest = (await this.readAllProjects()).reduce<AxcutDocument | null>(
+			(best, doc) => (!best || doc.project.updatedAt > best.project.updatedAt ? doc : best),
+			null,
+		);
+		const look = lookFromLegacyEditor(latest?.legacyEditor);
+		return Object.keys(look).length > 0 ? look : null;
 	}
 
 	async getProject(projectId: string): Promise<AxcutDocument> {
@@ -299,10 +331,12 @@ export class DocumentService {
 	async createProject(title: string): Promise<AxcutDocument> {
 		await this.ensureProjectsDir();
 		const projectId = createId("proj");
-		const doc = createEmptyDocument({
-			projectId,
-			title: title?.trim() || "Untitled Project",
-		});
+		// Every new project comes through here — the New dialog, the empty state and a finished
+		// recording alike — so this is the one place it takes the user's look.
+		const doc: AxcutDocument = {
+			...createEmptyDocument({ projectId, title: title?.trim() || "Untitled Project" }),
+			legacyEditor: await this.newProjectLook(),
+		};
 		await this.writeProject(doc);
 		return doc;
 	}

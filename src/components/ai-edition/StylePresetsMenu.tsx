@@ -24,6 +24,7 @@ import {
 } from "@/lib/ai-edition/stylePresets";
 import {
 	factoryStylePresetAppearance,
+	sameStylePresetLook,
 	stylePresetAppearanceFromSettings,
 	stylePresetPatch,
 } from "@/lib/ai-edition/stylePresetsEditor";
@@ -36,19 +37,6 @@ import {
 import { getPlatform } from "@/utils/platformUtils";
 import styles from "./NewEditorShell.module.css";
 import topbarStyles from "./v4/EditorShellV4.module.css";
-
-/** Structural equality over plain JSON-shaped values. A preset read from disk carries its
- *  keys in file order, so a key-order-sensitive comparison would never light a row. */
-function sameValue(a: unknown, b: unknown): boolean {
-	if (a === b) return true;
-	if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
-	const aKeys = Object.keys(a);
-	const bKeys = Object.keys(b);
-	if (aKeys.length !== bKeys.length) return false;
-	return aKeys.every((key) =>
-		sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
-	);
-}
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -275,6 +263,20 @@ export function StylePresetsMenu() {
 		}
 	};
 
+	const runSetForNewProjects = async (id: string | null) => {
+		setActionError(null);
+		setBusy(true);
+		try {
+			await nativeBridgeClient.presets.setForNewProjects(id);
+			setExpandedId(null);
+			await refresh();
+		} catch (error) {
+			setActionError(errorMessage(error));
+		} finally {
+			setBusy(false);
+		}
+	};
+
 	const runReveal = async (id: string) => {
 		setActionError(null);
 		try {
@@ -300,7 +302,7 @@ export function StylePresetsMenu() {
 	);
 
 	const renderUserPreset = (preset: StylePreset) => {
-		const active = sameValue(preset.appearance, current);
+		const active = sameStylePresetLook(preset.appearance, current);
 		const expanded = expandedId === preset.id;
 		const renaming = mode.kind === "rename" && mode.id === preset.id;
 		const confirmingDelete = mode.kind === "confirmDelete" && mode.id === preset.id;
@@ -330,6 +332,11 @@ export function StylePresetsMenu() {
 								{active ? <Check size={12} /> : null}
 							</span>
 							<span className={styles.actionMenuMain}>{preset.name}</span>
+							{preset.forNewProjects ? (
+								<span className={styles.actionMenuCount}>
+									{ts("stylePresets.newProjectsBadge")}
+								</span>
+							) : null}
 						</button>
 						<button
 							type="button"
@@ -375,6 +382,15 @@ export function StylePresetsMenu() {
 									setMode({ kind: "rename", id: preset.id });
 								})}
 								{actionRow(ts("stylePresets.update"), () => void runUpdate(preset.id))}
+								{preset.forNewProjects
+									? actionRow(
+											ts("stylePresets.stopForNewProjects"),
+											() => void runSetForNewProjects(null),
+										)
+									: actionRow(
+											ts("stylePresets.useForNewProjects"),
+											() => void runSetForNewProjects(preset.id),
+										)}
 								{actionRow(ts("stylePresets.delete"), () => {
 									resetInline();
 									setMode({ kind: "confirmDelete", id: preset.id });
@@ -392,7 +408,7 @@ export function StylePresetsMenu() {
 		);
 	};
 
-	const factoryActive = sameValue(factory, current);
+	const factoryActive = sameStylePresetLook(factory, current);
 
 	return (
 		<Popover open={open} onOpenChange={onOpenChange}>

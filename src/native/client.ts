@@ -379,6 +379,12 @@ export const nativeBridgeClient = {
 				action: "delete",
 				payload: { id },
 			}),
+		setForNewProjects: (id: string | null) =>
+			requireNativeBridgeData<{ success: true }>({
+				domain: "presets",
+				action: "setForNewProjects",
+				payload: { id },
+			}),
 		reveal: (id: string) =>
 			requireNativeBridgeData<StylePresetRevealResult>({
 				domain: "presets",

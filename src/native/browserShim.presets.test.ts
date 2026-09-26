@@ -75,6 +75,17 @@ describe("browserShim presets", () => {
 		expect(await presets.reveal(a.id)).toEqual({ success: true });
 	});
 
+	it("marks the preset for new projects, follows a rename and clears on delete", async () => {
+		const a = await presets.create("Alpha", APPEARANCE);
+		await presets.setForNewProjects(a.id);
+		expect((await presets.list())[0]?.forNewProjects).toBe(true);
+		const renamed = await presets.rename(a.id, "Brand");
+		expect((await presets.list()).find((p) => p.forNewProjects)?.id).toBe(renamed.id);
+		await presets.delete(renamed.id);
+		await presets.create("Brand", APPEARANCE);
+		expect((await presets.list())[0]?.forNewProjects).toBeUndefined();
+	});
+
 	it("rejects a taken name with NAME_TAKEN on create and rename", async () => {
 		const one = await presets.create("One", APPEARANCE);
 		await presets.create("Two", APPEARANCE);

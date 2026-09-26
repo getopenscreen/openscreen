@@ -333,8 +333,8 @@ fn quad_inverse_projective(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: ve
     return vec3<f32>(s, t, ok);
 }
 
-// Warp inverse d'un calque pose sur le plan : projectif (`projective` = 1, que tout ecran incline
-// porte), bilineaire sinon.
+// Warp inverse d'un calque pose sur le plan : projectif sous la camera reelle ou un appareil
+// (`projective` = 1), bilineaire sous un angle fixe, inchange.
 fn quad_inverse(P: vec2<f32>, c00: vec2<f32>, c10: vec2<f32>, c11: vec2<f32>, c01: vec2<f32>, projective: f32) -> vec3<f32> {
     if projective > 0.5 {
         return quad_inverse_projective(P, c00, c10, c11, c01);
@@ -1403,8 +1403,9 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
     } else if layer.mode > 7.5 && layer.mode < 8.5 {
         // Mode 8 -- ecran tilte (rotation 3D des zoom regions). Le quad projete est
         // dessine dans sa BBOX (le VS ne sait tracer qu'un rect) et chaque fragment
-        // remonte au (s,t) du plan par warp inverse : projectif exact (dst_prev.w = 1, tout ecran
-        // incline), bilineaire sinon ; la camera reelle eclaire aussi le plan (color.xy).
+        // remonte au (s,t) du plan par warp inverse : bilineaire sous un angle fixe, projectif
+        // exact sous la camera reelle ou un appareil (dst_prev.w = 1) ; la camera reelle eclaire
+        // aussi le plan (color.xy).
         //
         // PAS de test de clip sur `dst_prev` : en mode 8 `dst_prev.xy` porte
         // `plane_px`, la taille du plan en PIXELS (~1600), la ou `i.pout` vit dans

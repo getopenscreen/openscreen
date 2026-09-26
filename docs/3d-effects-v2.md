@@ -33,7 +33,7 @@ deuxième fusionnait tout en un sélecteur avec trois caméras mobiles (`follow-
 `swing-clicks`, `orbit`) qui faisaient tourner **l'écran** sur un chemin de poses à roulis
 permanent (5,5 à 8,5°). Rejetées : « pour chacune, le métrage est de travers ». La troisième,
 une caméra pan-tilt-zoom sur un œil fixe, paraissait figée. Il reste **un** champ,
-`rotationPreset`, et **un** sélecteur « 3D camera » : les trois angles fixes et **une** caméra
+`rotationPreset`, et **un** sélecteur « 3D camera » : les deux angles fixes et **une** caméra
 mobile, qui tourne autour de l'écran.
 
 | groupe | valeur | libellé (EN) | ce que ça fait |
@@ -47,18 +47,18 @@ mobile, qui tourne autour de l'écran.
 ci-dessous, sous l'identifiant `follow-cursor`. Un projet qui les porte encore s'ouvre à plat
 (valeur inconnue).
 
-Les angles fixes ne roulent plus : Z vaut 0, parce que le tilt entre avec le zoom et qu'une
-caméra qui bouge ne roule jamais le métrage (l'ancien roulis de −2°/±1° penchait l'image pendant
-chaque zoom). Sans roulis, la règle des 2° ne laisse que deux bandes de tangage, ≤ 9° ou ≥ 15°.
-Les deux angles prennent la bande haute, le regard de l'ancien `iso` : `left` [−23, −25, 0] et son
-miroir `right` [−23, 25, 0] (`regions::rotation3d_for`), qui rendent au budget dynamique ses
-±1,9° / ±3°. `iso` n'est plus proposé : c'était déjà ce regard, tourné à gauche, et un projet qui
-le porte se lit comme `left` (`readRotation3DPreset` et le schéma du document). Ils se dessinent
-au warp **projectif** exact, comme la caméra réelle : le warp bilinéaire penchait à lui seul la
-verticale du milieu de l'écran.
+`left` est l'`iso` de la v1.13.0, à l'identique : [−12, −18, −2], tourné vers la gauche et vu
+d'en haut, dessiné comme alors au warp **bilinéaire** de ses coins. `right` en est le miroir,
+[−12, 18, 2] (`regions::rotation3d_for`). `iso` n'est plus proposé, et un projet qui le porte se
+lit comme `left` (`readRotation3DPreset` et le schéma du document) : il rend exactement comme
+avant. Le budget dynamique (±1,9° / ±3°), la porte de la parallaxe et l'impact du clic sont
+ceux de la v1.13.0.
+
+Un essai du 25/09 (sans roulis, warp projectif, puis [−23, ±25, 0]) a été retiré : il n'avait
+plus rien de l'ancien `iso`.
 
 « Screen turned right » veut dire que la face de l'écran regarde vers la droite : le bord droit
-recule. C'est ce que fait `right` [−23, 25, 0], vu d'en haut.
+recule. C'est ce que fait `right` [−12, 18, 2], vu d'en haut.
 
 ### A.3 `follow-cursor` : une caméra en orbite
 
@@ -131,7 +131,7 @@ dépend pas de la région : l'orbite continue sans à-coup pendant que le zoom c
 **Rendu exact.** Le warp bilinéaire s'écarte de la projection de cette caméra de
 plusieurs centaines de px au pire pixel visible (703 px sur l'enveloppe, 264 px sur la grille
 rendue). Les modes 8, 10, 13 et 14 prennent donc un warp
-**projectif** exact sous cette caméra, et depuis sous les angles fixes aussi : l'homographie des quatre coins (forme de Heckbert) résolue à
+**projectif** exact sous cette caméra : l'homographie des quatre coins (forme de Heckbert) résolue à
 l'envers dans le shader, drapeau par mode (`TiltedQuad::warp_flag` : `dst_prev.w` au mode 8, `mb.w`
 au 10, `mb.x` au 13, `src.x` au 14). Mesuré sur une grille rendue par D3D11, caméra tournée vers un
 coin au zoom 2,2 : 0,07 px d'écart à la projection. `TiltedQuad` porte la caméra complète :
@@ -265,9 +265,10 @@ Deux décisions :
 
 1. **Le hotspot est sur le rayon de vue** du point de contenu visé, à sa hauteur. Il ne glisse
    donc jamais à l'écran quand le modèle monte ou descend : seule l'ombre dit la hauteur.
-2. **Ancrage** : tout le rendu est décalé de `point_px(plane_pt) − projection exacte`, pour que
-   le hotspot tombe sur le pixel que l'écran montre. Le warp de l'écran étant exact (projectif),
-   sous un angle fixe comme sous la caméra réelle, ce décalage est nul.
+2. **Ancrage** : sous un angle fixe, la vidéo est dessinée par un warp **bilinéaire** des coins
+   projetés, qui s'écarte de la perspective exacte de quelques pixels. Tout le rendu est décalé
+   de `point_px(plane_pt) − projection exacte`, pour que le hotspot tombe sur le pixel que
+   l'écran montre. Sous la caméra réelle le warp est exact et ce décalage est nul.
 
 ### B.5 La pose (fonction pure de `t`)
 
@@ -356,7 +357,7 @@ Seulement quand `model3d` est allumé (un curseur sans modèle n'a pas de contac
 
 **Rendu** : un carré du plan centré sur le point, dont les coins passent par la projection du
 contenu (`TiltedQuad::point_px`), comme le sprite du mode 13 ; le shader inverse le warp
-(projectif, celui de l'écran) et dessine un disque dans le
+(bilinéaire sous un angle fixe, projectif sous la caméra réelle) et dessine un disque dans le
 carré. L'anneau est donc posé sur le plan : ellipse sous `iso`, perspective exacte sous
 `follow-cursor`. Rien n'est dessiné hors de l'écran. Rust porte la courbe dans le temps
 (`impact_at`) ; les trois shaders ne dessinent que la forme de l'instant (`cursor_impact`).

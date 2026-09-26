@@ -450,9 +450,6 @@
 		"motionBlur": "Desfoque de movimento",
 		"theme": "Estilo do cursor",
 		"autoHide": "Ocultar quando inativo",
-		"sizeNormal": "Normal",
-		"sizeLarge": "Grande",
-		"sizeExtraLarge": "Muito grande",
 		"bounceNone": "Nenhum",
 		"bounceLight": "Leve",
 		"bounceStrong": "Forte"

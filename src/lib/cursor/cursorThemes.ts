@@ -69,21 +69,21 @@ export interface CursorSprite {
  * hand-editing, so the PNGs and these hotspots can't drift apart.
  */
 export const DEFAULT_CURSOR_SPRITES: Record<NativeCursorType, CursorSprite> = {
-	arrow: { assetPath: "cursors/default/arrow.png", hotspotX: 0.119, hotspotY: 0.0874 },
-	text: { assetPath: "cursors/default/text.png", hotspotX: 0.4375, hotspotY: 0.5333 },
-	pointer: { assetPath: "cursors/default/pointer.png", hotspotX: 0.3893, hotspotY: 0.0032 },
+	arrow: { assetPath: "cursors/default/arrow.png", hotspotX: 0.1205, hotspotY: 0.0881 },
+	text: { assetPath: "cursors/default/text.png", hotspotX: 0.4355, hotspotY: 0.5369 },
+	pointer: { assetPath: "cursors/default/pointer.png", hotspotX: 0.3874, hotspotY: 0.0032 },
 	crosshair: { assetPath: "cursors/default/crosshair.png", hotspotX: 0.4667, hotspotY: 0.4667 },
-	"open-hand": { assetPath: "cursors/default/open-hand.png", hotspotX: 0.4375, hotspotY: 0.1781 },
+	"open-hand": { assetPath: "cursors/default/open-hand.png", hotspotX: 0.4375, hotspotY: 0.1724 },
 	"closed-hand": {
 		assetPath: "cursors/default/closed-hand.png",
 		hotspotX: 0.3889,
-		hotspotY: 0.451,
+		hotspotY: 0.4455,
 	},
-	"resize-ew": { assetPath: "cursors/default/resize-ew.png", hotspotX: 0.4881, hotspotY: 0.4706 },
+	"resize-ew": { assetPath: "cursors/default/resize-ew.png", hotspotX: 0.485, hotspotY: 0.4706 },
 	"resize-ns": { assetPath: "cursors/default/resize-ns.png", hotspotX: 0.5, hotspotY: 0.5 },
 	"resize-nesw": { assetPath: "cursors/default/resize-nesw.png", hotspotX: 0.5, hotspotY: 0.5 },
 	"resize-nwse": { assetPath: "cursors/default/resize-nwse.png", hotspotX: 0.5, hotspotY: 0.5 },
-	move: { assetPath: "cursors/default/move.png", hotspotX: 0.4444, hotspotY: 0.4444 },
+	move: { assetPath: "cursors/default/move.png", hotspotX: 0.4437, hotspotY: 0.4437 },
 	"not-allowed": { assetPath: "cursors/default/not-allowed.png", hotspotX: 0.5, hotspotY: 0.5 },
 	wait: { assetPath: "cursors/default/wait.png", hotspotX: 0.5, hotspotY: 0.5 },
 	"app-starting": {

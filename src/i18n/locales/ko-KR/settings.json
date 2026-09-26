@@ -450,9 +450,6 @@
 		"motionBlur": "모션 블러",
 		"theme": "커서 스타일",
 		"autoHide": "비활성 시 자동 숨김",
-		"sizeNormal": "보통",
-		"sizeLarge": "크게",
-		"sizeExtraLarge": "아주 크게",
 		"bounceNone": "없음",
 		"bounceLight": "약하게",
 		"bounceStrong": "강하게"

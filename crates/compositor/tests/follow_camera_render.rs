@@ -381,7 +381,7 @@ fn orbit_scene(source: &str, regions: &str, (w, h): (u32, u32)) -> Scene {
             "zoomRegions":[{regions}],
             "annotations":[],
             "cursor":{{"show":true,"size":2.2,"smoothing":0,"motionBlur":0,"clickBounce":2.5,"model3d":true,"clipToBounds":false,"theme":"default",
-                       "cursorSprites":{{"arrow":{{"path":"{arrow}","hotspotX":0.119,"hotspotY":0.0874}}}}}},
+                       "cursorSprites":{{"arrow":{{"path":"{arrow}","hotspotX":0.1205,"hotspotY":0.0881}}}}}},
             "cropByClip":[null],
             "output":{{"width":{w},"height":{h},"fps":30}}}}"##
     ))

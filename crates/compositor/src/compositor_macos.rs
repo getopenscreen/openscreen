@@ -3709,11 +3709,11 @@ mod tests {
     /// Les états que le rendu passe en revue (hotspots de `DEFAULT_CURSOR_SPRITES`), et s'ils
     /// sont centrés : ni tangage ni lacet.
     const MODEL_STATES: [(&str, [f32; 2], bool); 6] = [
-        ("arrow", [0.119, 0.0874], false),
-        ("pointer", [0.3893, 0.0032], false),
-        ("text", [0.4375, 0.5333], true),
-        ("open-hand", [0.4375, 0.1781], false),
-        ("resize-ew", [0.4881, 0.4706], true),
+        ("arrow", [0.1205, 0.0881], false),
+        ("pointer", [0.3874, 0.0032], false),
+        ("text", [0.4355, 0.5369], true),
+        ("open-hand", [0.4375, 0.1724], false),
+        ("resize-ew", [0.485, 0.4706], true),
         ("not-allowed", [0.5, 0.5], true),
     ];
 

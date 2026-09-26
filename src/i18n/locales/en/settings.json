@@ -450,9 +450,6 @@
 		"motionBlur": "Motion blur",
 		"theme": "Cursor style",
 		"autoHide": "Auto-hide when inactive",
-		"sizeNormal": "Normal",
-		"sizeLarge": "Large",
-		"sizeExtraLarge": "Extra large",
 		"bounceNone": "None",
 		"bounceLight": "Light",
 		"bounceStrong": "Strong"

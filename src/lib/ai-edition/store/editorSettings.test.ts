@@ -64,7 +64,7 @@ describe("getEditorSettings", () => {
 				motionBlurAmount: "a lot",
 			},
 		});
-		expect([snap.cursor.size, snap.cursor.clickBounce, snap.cursor.smoothing]).toEqual([3, 2, 0]);
+		expect([snap.cursor.size, snap.cursor.clickBounce, snap.cursor.smoothing]).toEqual([6, 2, 0]);
 		expect([snap.shadowIntensity, snap.padding, snap.borderRadius]).toEqual([1, 0, 64]);
 		expect(snap.motionBlurAmount).toBe(DEFAULT_EDITOR_SETTINGS.motionBlurAmount);
 	});

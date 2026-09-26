@@ -112,6 +112,7 @@ import {
 	type FrameTheme,
 	RECORDING_FRAMES,
 	type RecordingFrame,
+	SETTING_BOUNDS,
 	WEBCAM_ANCHOR_GRID,
 	WEBCAM_SIZE_MAX,
 	WEBCAM_SIZE_MIN,
@@ -3889,17 +3890,23 @@ export function CursorPane() {
 					</div>
 				</>
 			) : null}
-			{namedLevelRow(
-				ts("cursor.size"),
-				CURSOR_SIZE_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
-				settings.cursor.size,
-				!hasDocument,
-				(size) => {
-					void set({ cursor: { size } });
-					if (isNativeCompositorActive()) setNativeParam("cursorSize", size);
-				},
-			)}
 			<div className={styles.sliderGrid}>
+				{/* A slider, not named steps: "a bit bigger" is a size between two of them.
+				    `SETTING_BOUNDS` keeps both ends sane. */}
+				<SliderCell
+					label={ts("cursor.size")}
+					value={settings.cursor.size}
+					min={SETTING_BOUNDS.cursorSize[0]}
+					max={SETTING_BOUNDS.cursorSize[1]}
+					step={0.05}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.size}
+					disabled={!hasDocument}
+					onChange={(v) => {
+						setLive({ cursor: { size: v } });
+						if (isNativeCompositorActive()) setNativeParam("cursorSize", v);
+					}}
+					onCommit={() => void commit()}
+				/>
 				<SliderCell
 					label={ts("cursor.smoothing")}
 					value={settings.cursor.smoothing * 100}
@@ -4098,11 +4105,6 @@ export function ChoiceRow<T extends string | number>({
  * Screen Studio's rule: a style is chosen by what it looks like, never by "30.0". Each list
  * holds the default (`DEFAULT_PROJECT_APPEARANCE`) and stays inside `SETTING_BOUNDS`.
  */
-const CURSOR_SIZE_LEVELS = [
-	{ value: 1.5, labelKey: "cursor.sizeNormal" },
-	{ value: 2, labelKey: "cursor.sizeLarge" },
-	{ value: 2.75, labelKey: "cursor.sizeExtraLarge" },
-] as const;
 const CLICK_BOUNCE_LEVELS = [
 	{ value: 0, labelKey: "cursor.bounceNone" },
 	{ value: 1, labelKey: "cursor.bounceLight" },

@@ -450,9 +450,6 @@
 		"motionBlur": "動態模糊",
 		"theme": "游標樣式",
 		"autoHide": "閒置時隱藏",
-		"sizeNormal": "標準",
-		"sizeLarge": "大",
-		"sizeExtraLarge": "特大",
 		"bounceNone": "無",
 		"bounceLight": "輕",
 		"bounceStrong": "強"

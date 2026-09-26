@@ -450,9 +450,6 @@
 		"motionBlur": "Pohybové rozmazání",
 		"theme": "Styl kurzoru",
 		"autoHide": "Automaticky skrýt, když je neaktivní",
-		"sizeNormal": "Normální",
-		"sizeLarge": "Velký",
-		"sizeExtraLarge": "Velmi velký",
 		"bounceNone": "Žádný",
 		"bounceLight": "Lehký",
 		"bounceStrong": "Výrazný"

@@ -267,8 +267,9 @@ export const SETTING_BOUNDS = {
 	webcamSizePreset: [WEBCAM_SIZE_MIN, WEBCAM_SIZE_MAX],
 	webcamRoundness: [0, 1],
 	webcamBlurIntensity: [0, 1],
-	// At 3 the arrow is 82 px tall in a 1080p export, four times the system one.
-	cursorSize: [1, 3],
+	// 1.5 is the default: nothing smaller reads in a demo. At 6 the arrow is 164 px tall in a
+	// 1080p export, eight times the system one.
+	cursorSize: [1.5, 6],
 	cursorSmoothing: [0, 1],
 	cursorMotionBlur: [0, 1],
 	// Past about 4.2 the arrow shrank to nothing on every click.

@@ -76,10 +76,10 @@ describe("pushAllNativeParams", () => {
 	});
 
 	it("sends cursor values RAW, not in slider space", async () => {
-		// SliderCell displays cursor.size * 10 and divides by 10 on the way out;
-		// smoothing and motionBlur use * 100. Pushing a slider-space value from
-		// here would scale the preview by 10 or 100 on load — a regression that
-		// would look like "the cursor is enormous when I open a project".
+		// The smoothing and motion blur sliders display their value * 100 and divide
+		// on the way out. Pushing a slider-space value from here would scale the
+		// preview by 100 on load — a regression that would look like "the cursor
+		// trails forever when I open a project".
 		const pushed = await pushWith({
 			cursor: {
 				size: 3,

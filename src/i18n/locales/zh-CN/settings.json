@@ -450,9 +450,6 @@
 		"motionBlur": "运动模糊",
 		"theme": "光标样式",
 		"autoHide": "闲置时隐藏",
-		"sizeNormal": "标准",
-		"sizeLarge": "大",
-		"sizeExtraLarge": "特大",
 		"bounceNone": "无",
 		"bounceLight": "轻",
 		"bounceStrong": "强"

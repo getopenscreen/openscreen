@@ -627,6 +627,50 @@ describe("buildSceneDescription.zoomRegions", () => {
 		});
 	});
 
+	it("limits a zoom straddling two clips by the tighter of the two", () => {
+		const video = (width: number, height: number) => ({ codec: "h264", width, height, fps: 30 });
+		const doc = makeDoc({
+			assets: [
+				makeAsset({
+					id: "uhd",
+					originalPath: "/uhd.mp4",
+					durationSec: 5,
+					video: video(3840, 2160),
+				}),
+				makeAsset({ id: "hd", originalPath: "/hd.mp4", durationSec: 5, video: video(1920, 1080) }),
+			],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "uhd",
+					sourceStartSec: 0,
+					sourceEndSec: 5,
+					timelineStartSec: 0,
+					timelineEndSec: 5,
+				}),
+				makeClip({
+					id: "c2",
+					assetId: "hd",
+					sourceStartSec: 0,
+					sourceEndSec: 5,
+					timelineStartSec: 5,
+					timelineEndSec: 10,
+				}),
+			],
+			// Starts on the 2160p clip (limit 5×) and ends on the 1080p one (limit 2.5×).
+			zoomRanges: [
+				makeZoom({ id: "z", startMs: 3000, endMs: 7000, depth: 6, focus: { cx: 0.5, cy: 0.5 } }),
+			],
+			legacyEditor: { padding: 50, aspectRatio: "16:9" },
+		});
+		const pieces = buildSceneDescription(doc).zoomRegions;
+		expect(pieces.map((z) => [z.clipIndex, z.scale])).toEqual([
+			[0, 5],
+			[1, 2.5],
+		]);
+		expect(zoomScaleLimit(doc, "z")).toBe(2.5);
+	});
+
 	it("customScale overrides the depth-derived value", () => {
 		const z = makeZoom({
 			id: "z",

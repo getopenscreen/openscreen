@@ -4010,10 +4010,13 @@ export function ChoiceRow<T extends string | number>({
 				e.nativeEvent.stopPropagation();
 				const focused = buttonsRef.current.findIndex((b) => b === document.activeElement);
 				const from = focused >= 0 ? focused : options.findIndex((o) => o?.value === value);
-				// A hole is stepped over, not landed on.
-				const to = options[from + step] === null ? from + 2 * step : from + step;
+				// Holes and disabled options are stepped over, not landed on.
+				let to = from + step;
+				while (to >= 0 && to < options.length && (options[to] ?? { disabled: true }).disabled) {
+					to += step;
+				}
 				const next = options[to];
-				if (!next || next.disabled) return;
+				if (!next) return;
 				buttonsRef.current[to]?.focus();
 				if (next.value !== value) onChange(next.value);
 			}}

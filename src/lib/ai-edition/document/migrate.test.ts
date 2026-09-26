@@ -132,6 +132,27 @@ describe("migrateProjectDataToAxcutDocument", () => {
 		expect(z.hideCursor).toBe(true);
 	});
 
+	// Up to v1.13.0 the click impact was a zoom option; it is the cursor setting now.
+	it("turns a zoom's click impact into the cursor setting", () => {
+		const zoom = {
+			id: "z_1",
+			startMs: 0,
+			endMs: 2000,
+			depth: 3 as const,
+			focus: { cx: 0.5, cy: 0.5 },
+		};
+		const doc = migrateProjectDataToAxcutDocument(
+			makeV2Project({
+				editor: {
+					...makeV2Project().editor,
+					zoomRegions: [{ ...zoom, clickImpact: true } as never],
+				},
+			}),
+		);
+		expect(getEditorSettings(doc).cursor.clickImpact).toBe(true);
+		expect("clickImpact" in doc.zoomRanges[0]).toBe(false);
+	});
+
 	it("converts annotationRegions to seconds with type and content preserved", () => {
 		const doc = migrateProjectDataToAxcutDocument(
 			makeV2Project({

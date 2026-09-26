@@ -221,6 +221,9 @@ export function migrateProjectDataToAxcutDocument(
 			...(typeof region.customScale === "number" ? { customScale: region.customScale } : {}),
 			...(region.source === "auto" || region.source === "manual" ? { source: region.source } : {}),
 			...(region.hideCursor ? { hideCursor: true } : {}),
+			// Up to v1.13.0 a zoom stored its click impact; it is a cursor setting now. Carried on
+			// the draft so `migrateRawDocumentToCurrent` lifts it there, as for a stored document.
+			...("clickImpact" in region && region.clickImpact === true ? { clickImpact: true } : {}),
 		}));
 
 	const migratedAnnotations: AxcutAnnotationRegion[] = annotationRegions

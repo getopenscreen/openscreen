@@ -110,7 +110,7 @@ describe("migrateProjectDataToAxcutDocument", () => {
 							depth: 4,
 							focus: { cx: 1.5, cy: -0.5 },
 							focusMode: "manual",
-							rotationPreset: "iso",
+							rotationPreset: "iso" as never,
 							customScale: 2.5,
 							source: "manual",
 							hideCursor: true,
@@ -128,7 +128,8 @@ describe("migrateProjectDataToAxcutDocument", () => {
 		expect(z.startMs).toBe(0);
 		expect(z.endMs).toBe(2000);
 		expect(z.customScale).toBe(2.5);
-		expect(z.rotationPreset).toBe("iso");
+		// `iso`, retired, reads as Left: the angle that kept its look.
+		expect(z.rotationPreset).toBe("left");
 		expect(z.hideCursor).toBe(true);
 		expect(z.clickImpact).toBe(true);
 	});

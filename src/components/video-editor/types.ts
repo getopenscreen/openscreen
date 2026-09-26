@@ -77,7 +77,7 @@ export const DEFAULT_ROTATION_3D: Rotation3D = {
 };
 
 /** A fixed 3D angle: the screen holds one pose for the whole zoom. */
-export const FIXED_ROTATION_3D_PRESETS = ["iso", "left", "right"] as const;
+export const FIXED_ROTATION_3D_PRESETS = ["left", "right"] as const;
 export type FixedRotation3DPreset = (typeof FIXED_ROTATION_3D_PRESETS)[number];
 
 /**
@@ -101,13 +101,22 @@ export function isRotation3DPreset(value: unknown): value is Rotation3DPreset {
 	return typeof value === "string" && (ROTATION_3D_PRESET_ORDER as string[]).includes(value);
 }
 
+/**
+ * A stored 3D camera, read: the presets that no longer exist map to the one that kept their look.
+ * `iso` (turned left, seen from above) became Left. Anything else unknown reads as a flat screen.
+ */
+export function readRotation3DPreset(value: unknown): Rotation3DPreset | undefined {
+	if (value === "iso") return "left";
+	return isRotation3DPreset(value) ? value : undefined;
+}
+
 // No preset rolls (Z is 0): the tilt enters with the zoom, and a camera that moves never rolls the
 // footage. X and Y are chosen so that no edge of the projected quad comes within 2° of an axis — a
 // perfectly vertical edge cutting through text is indistinguishable from `overflow: hidden`, which
 // got reported three times as "the recording is truncated". A pure Y rotation keeps both vertical
 // edges vertical, so every preset also pitches; and between 10° and 14° of pitch the top edge of a
-// turned screen reads level, so a preset pitches either less or more than that. `regions.rs` holds
-// the same numbers and the tests.
+// turned screen reads level, so both presets pitch well beyond it: turned and seen from above,
+// the old `iso` look. `regions.rs` holds the same numbers and the tests.
 //
 // A moving camera has no single pose. Its entry is its resting angle (`ELEVATION_DEG` in
 // `camera.rs`: cursor centred, the camera 4° above the screen, facing it), what a renderer without
@@ -115,9 +124,8 @@ export function isRotation3DPreset(value: unknown): value is Rotation3DPreset {
 // rotation of the screen. It is a camera angle, not a screen rotation, so this is the nearest
 // equivalent rather than the same picture.
 export const ROTATION_3D_PRESETS: Record<Rotation3DPreset, Rotation3D> = {
-	iso: { rotationX: -23, rotationY: -25, rotationZ: 0 },
-	left: { rotationX: -6.5, rotationY: -17, rotationZ: 0 },
-	right: { rotationX: -6.5, rotationY: 17, rotationZ: 0 },
+	left: { rotationX: -23, rotationY: -25, rotationZ: 0 },
+	right: { rotationX: -23, rotationY: 25, rotationZ: 0 },
 	"follow-cursor": { rotationX: -4, rotationY: 0, rotationZ: 0 },
 };
 

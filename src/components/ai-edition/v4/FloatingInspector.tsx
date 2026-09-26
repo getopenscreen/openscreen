@@ -344,7 +344,6 @@ function paneStack(label: string, control: React.ReactNode) {
 
 /** Clé i18n (`zoom.camera.preset.*` / `zoom.camera.description.*`) de chaque caméra 3D. */
 const CAMERA_KEYS: Record<Rotation3DPreset, string> = {
-	iso: "iso",
 	left: "left",
 	right: "right",
 	"follow-cursor": "followCursor",

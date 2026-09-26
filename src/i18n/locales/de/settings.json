@@ -362,16 +362,14 @@
 			"fixed": "Fester Winkel",
 			"moving": "Bewegte Kamera",
 			"preset": {
-				"iso": "Schräg von oben",
 				"left": "Bildschirm nach links gedreht",
 				"right": "Bildschirm nach rechts gedreht",
 				"followCursor": "Kreist mit dem Cursor"
 			},
 			"description": {
 				"off": "Der Bildschirm bleibt flach.",
-				"iso": "Hält eine Pose: nach links gedreht und von oben gesehen.",
-				"left": "Hält eine Pose: Der Bildschirm zeigt nach links, seine rechte Kante kommt nach vorn.",
-				"right": "Hält eine Pose: Der Bildschirm zeigt nach rechts, seine linke Kante kommt nach vorn.",
+				"left": "Hält eine Pose: nach links gedreht und von oben gesehen.",
+				"right": "Hält eine Pose: nach rechts gedreht und von oben gesehen.",
 				"followCursor": "Der Bildschirm bleibt stehen; die Kamera kreist um ihn, schwenkt zur Seite des Cursors und hebt oder senkt sich mit ihm."
 			},
 			"needsCursor": "Der Cursor ist ausgeblendet: Diese Kamera hat nichts zu folgen und hält ihren Startwinkel."

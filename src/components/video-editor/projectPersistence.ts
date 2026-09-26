@@ -39,12 +39,12 @@ import {
 	DEFAULT_WEBCAM_REACTIVE_ZOOM,
 	DEFAULT_ZOOM_DEPTH,
 	DEFAULT_ZOOM_MOTION_BLUR,
-	isRotation3DPreset,
 	isWallpaperMotion,
 	MAX_BLUR_BLOCK_SIZE,
 	MAX_BLUR_INTENSITY,
 	MIN_BLUR_BLOCK_SIZE,
 	MIN_BLUR_INTENSITY,
+	readRotation3DPreset,
 	type SpeedRegion,
 	type TrimRegion,
 	type WallpaperMotion,
@@ -278,9 +278,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
-					const validPreset = isRotation3DPreset(region.rotationPreset)
-						? region.rotationPreset
-						: undefined;
+					// A retired angle reads as the one that kept its look (`iso` → Left).
+					const validPreset = readRotation3DPreset(region.rotationPreset);
 					return {
 						id: region.id,
 						startMs,

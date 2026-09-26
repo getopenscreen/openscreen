@@ -362,16 +362,14 @@
 			"fixed": "Ângulo fixo",
 			"moving": "Câmera em movimento",
 			"preset": {
-				"iso": "De cima, na diagonal",
 				"left": "Tela virada para a esquerda",
 				"right": "Tela virada para a direita",
 				"followCursor": "Gira com o cursor"
 			},
 			"description": {
 				"off": "A tela fica plana.",
-				"iso": "Mantém uma única pose: virada para a esquerda e vista de cima.",
-				"left": "Mantém uma única pose: a tela olha para a esquerda e a borda direita avança.",
-				"right": "Mantém uma única pose: a tela olha para a direita e a borda esquerda avança.",
+				"left": "Mantém uma única pose: virada para a esquerda e vista de cima.",
+				"right": "Mantém uma única pose: virada para a direita e vista de cima.",
 				"followCursor": "A tela fica parada; a câmera gira ao redor dela, para o lado do cursor, e sobe ou desce com ele."
 			},
 			"needsCursor": "O cursor está oculto: esta câmera não tem o que seguir e mantém seu ângulo inicial."

@@ -111,7 +111,6 @@ import {
 	type FrameTheme,
 	RECORDING_FRAMES,
 	type RecordingFrame,
-	SETTING_BOUNDS,
 	WEBCAM_ANCHOR_GRID,
 	WEBCAM_SIZE_MAX,
 	WEBCAM_SIZE_MIN,
@@ -2700,23 +2699,17 @@ export function VideoEffectsPane() {
 					</Popover>
 				</div>
 			) : null}
+			{namedLevelRow(
+				ts("effects.shadow"),
+				SHADOW_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
+				settings.shadowIntensity,
+				!hasDocument,
+				(shadowIntensity) => {
+					void set({ shadowIntensity });
+					if (isNativeCompositorActive()) setNativeParam("shadow", shadowIntensity);
+				},
+			)}
 			<div className={styles.sliderGrid}>
-				<SliderCell
-					label={ts("effects.shadow")}
-					value={settings.shadowIntensity * 100}
-					min={0}
-					max={100}
-					defaultValue={DEFAULT_EDITOR_SETTINGS.shadowIntensity * 100}
-					suffix="%"
-					disabled={!hasDocument}
-					onChange={(v) => {
-						setLive({ shadowIntensity: v / 100 });
-						if (isNativeCompositorActive()) {
-							setNativeParam("shadow", v / 100);
-						}
-					}}
-					onCommit={() => void commit()}
-				/>
 				{/* Under a frame the slider spans 0 → the most that frame wears well (the native
 				    `frame_roundness_cap`), so its travel reads as a share of that range, not as
 				    pixels it no longer draws. The stored value stays in pixels either way. */}
@@ -3860,24 +3853,17 @@ export function CursorPane() {
 					</div>
 				</>
 			) : null}
+			{namedLevelRow(
+				ts("cursor.size"),
+				CURSOR_SIZE_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
+				settings.cursor.size,
+				!hasDocument,
+				(size) => {
+					void set({ cursor: { size } });
+					if (isNativeCompositorActive()) setNativeParam("cursorSize", size);
+				},
+			)}
 			<div className={styles.sliderGrid}>
-				<SliderCell
-					label={ts("cursor.size")}
-					value={settings.cursor.size * 10}
-					min={SETTING_BOUNDS.cursorSize[0] * 10}
-					max={SETTING_BOUNDS.cursorSize[1] * 10}
-					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.size * 10}
-					step={0.1}
-					decimals={1}
-					disabled={!hasDocument}
-					onChange={(v) => {
-						setLive({ cursor: { size: v / 10 } });
-						if (isNativeCompositorActive()) {
-							setNativeParam("cursorSize", v / 10);
-						}
-					}}
-					onCommit={() => void commit()}
-				/>
 				<SliderCell
 					label={ts("cursor.smoothing")}
 					value={settings.cursor.smoothing * 100}
@@ -3910,31 +3896,19 @@ export function CursorPane() {
 					}}
 					onCommit={() => void commit()}
 				/>
-				{/* Wayland gives an unprivileged process no way to observe mouse
-				    buttons, so on Linux this slider provably cannot change a pixel
-				    at any value — see `supportsCursorClickEffects`. Dropped rather
-				    than shown as a control that does nothing, exactly as
-				    "Shrink on zoom" is above. */}
-				{supportsCursorClickEffects() ? (
-					<SliderCell
-						label={ts("cursor.clickBounce")}
-						value={settings.cursor.clickBounce * 10}
-						min={SETTING_BOUNDS.cursorClickBounce[0] * 10}
-						max={SETTING_BOUNDS.cursorClickBounce[1] * 10}
-						defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.clickBounce * 10}
-						step={0.1}
-						decimals={1}
-						disabled={!hasDocument}
-						onChange={(v) => {
-							setLive({ cursor: { clickBounce: v / 10 } });
-							if (isNativeCompositorActive()) {
-								setNativeParam("cursorClickBounce", v / 10);
-							}
-						}}
-						onCommit={() => void commit()}
-					/>
-				) : null}
 			</div>
+			{supportsCursorClickEffects()
+				? namedLevelRow(
+						ts("cursor.clickBounce"),
+						CLICK_BOUNCE_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
+						settings.cursor.clickBounce,
+						!hasDocument,
+						(clickBounce) => {
+							void set({ cursor: { clickBounce } });
+							if (isNativeCompositorActive()) setNativeParam("cursorClickBounce", clickBounce);
+						},
+					)
+				: null}
 		</Pane>
 	);
 }
@@ -4081,6 +4055,51 @@ export function ChoiceRow<T extends string | number>({
 					</button>
 				);
 			})}
+		</div>
+	);
+}
+
+/**
+ * The named levels that replace a slider for a value whose number means nothing to a user.
+ * Screen Studio's rule: a style is chosen by what it looks like, never by "30.0". Each list
+ * holds the default (`DEFAULT_PROJECT_APPEARANCE`) and stays inside `SETTING_BOUNDS`.
+ */
+const CURSOR_SIZE_LEVELS = [
+	{ value: 1.5, labelKey: "cursor.sizeNormal" },
+	{ value: 2, labelKey: "cursor.sizeLarge" },
+	{ value: 2.75, labelKey: "cursor.sizeExtraLarge" },
+] as const;
+const CLICK_BOUNCE_LEVELS = [
+	{ value: 0, labelKey: "cursor.bounceNone" },
+	{ value: 1, labelKey: "cursor.bounceLight" },
+	{ value: 2, labelKey: "cursor.bounceStrong" },
+] as const;
+const SHADOW_LEVELS = [
+	{ value: 0, labelKey: "effects.shadowNone" },
+	{ value: 0.3, labelKey: "effects.shadowLight" },
+	{ value: 0.6, labelKey: "effects.shadowMedium" },
+	{ value: 0.9, labelKey: "effects.shadowStrong" },
+] as const;
+
+/** A labelled row of named levels. A stored value between two levels (an older project, a
+ *  preset) presses no button, the way a speed outside the row does. */
+function namedLevelRow(
+	label: string,
+	options: ReadonlyArray<{ value: number; label: string }>,
+	value: number,
+	disabled: boolean,
+	onChange: (next: number) => void,
+) {
+	return (
+		<div className={`${styles.field} ${styles.fieldStack}`}>
+			<span className={styles.fieldLabel}>{label}</span>
+			<ChoiceRow<number>
+				label={label}
+				options={options}
+				value={value}
+				disabled={disabled}
+				onChange={onChange}
+			/>
 		</div>
 	);
 }

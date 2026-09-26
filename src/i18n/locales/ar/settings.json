@@ -132,7 +132,11 @@
 		"frameThemeDark": "داكن",
 		"frameThemeHelp": "هيكل فضي بإطار فاتح، أو غرافيت بإطار داكن. ينطبق على جميع الإطارات.",
 		"windowHelp": "يرسم نافذة أو جهازًا مجسمًا ثلاثي الأبعاد حول التسجيل.",
-		"roundnessFrameHelp": "يتكيّف النطاق مع الإطار: 100٪ هي أقصى استدارة تليق به."
+		"roundnessFrameHelp": "يتكيّف النطاق مع الإطار: 100٪ هي أقصى استدارة تليق به.",
+		"shadowNone": "بلا",
+		"shadowLight": "خفيف",
+		"shadowMedium": "متوسط",
+		"shadowStrong": "قوي"
 	},
 	"stylePresets": {
 		"button": "الإعدادات المسبقة",
@@ -438,7 +442,13 @@
 		"alwaysArrowHint": "يعرض السهم لكل حالات المؤشر، حتى فوق النص أو الروابط.",
 		"motionBlur": "ضبابية الحركة",
 		"theme": "نمط المؤشر",
-		"autoHide": "إخفاء عند عدم النشاط"
+		"autoHide": "إخفاء عند عدم النشاط",
+		"sizeNormal": "عادي",
+		"sizeLarge": "كبير",
+		"sizeExtraLarge": "كبير جدًا",
+		"bounceNone": "بلا",
+		"bounceLight": "خفيف",
+		"bounceStrong": "قوي"
 	},
 	"export": {
 		"gifButton": "تصدير GIF",

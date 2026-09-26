@@ -132,7 +132,11 @@
 		"frameThemeDark": "Dark",
 		"frameThemeHelp": "Silver body and light chrome, or graphite and dark. Applies to every frame.",
 		"windowHelp": "Draws a window, or a device modelled in 3D, around the recording.",
-		"roundnessFrameHelp": "The range adapts to the frame: 100% is its roundest good look."
+		"roundnessFrameHelp": "The range adapts to the frame: 100% is its roundest good look.",
+		"shadowNone": "None",
+		"shadowLight": "Light",
+		"shadowMedium": "Medium",
+		"shadowStrong": "Strong"
 	},
 	"stylePresets": {
 		"button": "Presets",
@@ -438,7 +442,13 @@
 		"alwaysArrowHint": "Shows the arrow for every cursor state, even over text or links.",
 		"motionBlur": "Motion blur",
 		"theme": "Cursor style",
-		"autoHide": "Auto-hide when inactive"
+		"autoHide": "Auto-hide when inactive",
+		"sizeNormal": "Normal",
+		"sizeLarge": "Large",
+		"sizeExtraLarge": "Extra large",
+		"bounceNone": "None",
+		"bounceLight": "Light",
+		"bounceStrong": "Strong"
 	},
 	"export": {
 		"gifButton": "Export GIF",

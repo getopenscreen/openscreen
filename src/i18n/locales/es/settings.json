@@ -132,7 +132,11 @@
 		"frameThemeDark": "Oscuro",
 		"frameThemeHelp": "Cuerpo plateado con marco claro, o grafito con marco oscuro. Se aplica a todos los marcos.",
 		"windowHelp": "Dibuja una ventana, o un dispositivo modelado en 3D, alrededor de la grabación.",
-		"roundnessFrameHelp": "El rango se adapta al marco: 100 % es el redondeo máximo que le sienta bien."
+		"roundnessFrameHelp": "El rango se adapta al marco: 100 % es el redondeo máximo que le sienta bien.",
+		"shadowNone": "Ninguna",
+		"shadowLight": "Suave",
+		"shadowMedium": "Media",
+		"shadowStrong": "Fuerte"
 	},
 	"stylePresets": {
 		"button": "Preajustes",
@@ -438,7 +442,13 @@
 		"alwaysArrowHint": "Muestra la flecha en todos los estados del cursor, incluso sobre texto o enlaces.",
 		"motionBlur": "Desenfoque de movimiento",
 		"theme": "Estilo del cursor",
-		"autoHide": "Ocultar si está inactivo"
+		"autoHide": "Ocultar si está inactivo",
+		"sizeNormal": "Normal",
+		"sizeLarge": "Grande",
+		"sizeExtraLarge": "Muy grande",
+		"bounceNone": "Ninguno",
+		"bounceLight": "Suave",
+		"bounceStrong": "Marcado"
 	},
 	"export": {
 		"gifButton": "Exportar GIF",

@@ -318,6 +318,10 @@ describe("CompositorViewService text fonts", () => {
 	afterEach(() => {
 		if (originalResourcesPath) {
 			Object.defineProperty(process, "resourcesPath", originalResourcesPath);
+		} else {
+			// Absent before the test (plain Node): leaving the temp dir set would point later
+			// tests at a directory this hook is about to delete.
+			Reflect.deleteProperty(process, "resourcesPath");
 		}
 		if (originalVitePublic === undefined) {
 			Reflect.deleteProperty(process.env, "VITE_PUBLIC");

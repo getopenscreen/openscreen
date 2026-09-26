@@ -1610,9 +1610,11 @@
 	inset: 0 -4px;
 }
 /* An outside handle sits on bare lane background, where a transparent grab strip
-   is undiscoverable — on hover it shows itself as a bar flanking the pill. */
+   is undiscoverable — on hover it shows itself as a bar flanking the pill. In the
+   lane's colour, not currentColor: the label ink is dark, which vanishes on the dark
+   theme's lanes. */
 .lanePillCompact:hover .lanePillHandle {
-	background: color-mix(in oklch, currentColor 35%, transparent);
+	background: color-mix(in oklab, var(--_c) 70%, transparent);
 	border-radius: 2px;
 }
 .lanePillLabel {

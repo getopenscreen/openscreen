@@ -2356,10 +2356,11 @@ export function VideoEffectsPane() {
 	// Filling is the default for a format picked from now on; a project that already had one
 	// keeps showing its recording whole until the user says otherwise.
 	const fillDefault = settings.formatFollowCursor === null ? { formatFollowCursor: true } : {};
-	// Held from a padding drag's first move to its release. A drag through 0 would otherwise
-	// drop the Roundness row mid-gesture, and a pane scrolled to its end then clamps its
-	// scroll: the slider slides away under the pointer that is dragging it.
-	const [paddingScrubbing, setPaddingScrubbing] = useState(false);
+	// The padding a drag started from, held until its release: the Roundness row follows it and
+	// not the live value. Added or dropped mid-drag, the row reflowed the pane under the pointer
+	// dragging the slider: a clamped scroll on the way to 0, a scrollbar appearing on the way
+	// out of it.
+	const [scrubStartPadding, setScrubStartPadding] = useState<number | null>(null);
 	const { locale } = useI18n();
 	const clipCountLabel = (count: number) => ts(pluralKey(locale, count), { count });
 
@@ -2546,7 +2547,7 @@ export function VideoEffectsPane() {
 					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
-						setPaddingScrubbing(true);
+						setScrubStartPadding((start) => start ?? settings.padding);
 						// Roundness is left as stored: at 0 the scene squares the corners, and the
 						// value is back when the padding is (`buildSceneDescription`).
 						setLive({ padding: v });
@@ -2555,11 +2556,11 @@ export function VideoEffectsPane() {
 						}
 					}}
 					onCommit={() => {
-						setPaddingScrubbing(false);
+						setScrubStartPadding(null);
 						void commit();
 					}}
 				/>
-				{settings.padding > 0 || paddingScrubbing ? (
+				{(scrubStartPadding ?? settings.padding) > 0 ? (
 					<>
 						{/* Under a frame the slider spans 0 → the most that frame wears well (the native
 				    `frame_roundness_cap`), so its travel reads as a share of that range, not as

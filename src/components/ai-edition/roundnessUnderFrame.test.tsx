@@ -80,13 +80,16 @@ describe("Roundness at zero padding", () => {
 		expect(roundness()).not.toBeInTheDocument();
 	});
 
-	it("comes back with its value once the padding does", () => {
+	it("comes back with its value, on the release of a drag up from 0", () => {
+		// Added mid-drag, the row could tip the pane into overflow, and the scrollbar that came
+		// with it narrowed the pane and moved the slider under the pointer.
 		mount({ padding: 30, borderRadius: 20 });
 		fireEvent.change(padding(), { target: { value: "0" } });
 		fireEvent.mouseUp(padding());
 		expect(storedRadius()).toBe(20);
 
 		fireEvent.change(padding(), { target: { value: "10" } });
+		expect(roundness()).not.toBeInTheDocument();
 		fireEvent.mouseUp(padding());
 		expect(roundness()).toHaveValue("20");
 	});

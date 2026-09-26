@@ -114,6 +114,7 @@ describe("buildSceneDescription.background", () => {
 			kind: "gradient",
 			angleDeg: 135,
 			stops: ["#eaebed", "#bcc0c6"],
+			offsets: [0, 1],
 		});
 	});
 
@@ -123,6 +124,7 @@ describe("buildSceneDescription.background", () => {
 			kind: "gradient",
 			angleDeg: 180,
 			stops: ["#a1b2c3", "#d4e5f6"],
+			offsets: [0, 1],
 		});
 	});
 
@@ -139,6 +141,7 @@ describe("buildSceneDescription.background", () => {
 			kind: "gradient",
 			angleDeg: 90,
 			stops: ["rgba(1,2,3,0.5)", "#fff"],
+			offsets: [0, 1],
 		});
 	});
 
@@ -150,6 +153,7 @@ describe("buildSceneDescription.background", () => {
 			kind: "gradient",
 			angleDeg: 135,
 			stops: ["#a1b2c3", "#d4e5f6"],
+			offsets: [0, 1],
 		});
 	});
 
@@ -160,6 +164,24 @@ describe("buildSceneDescription.background", () => {
 			kind: "gradient",
 			angleDeg: 180,
 			stops: [],
+			offsets: [],
+		});
+	});
+
+	// The gradient editor wrote 3-stop gradients and older presets up to 7: the compositor
+	// draws each stop at its offset, so the offsets travel with the colours.
+	it("sends every stop with its offset", () => {
+		const doc = makeDoc({
+			legacyEditor: {
+				wallpaper:
+					"linear-gradient(135deg, rgb(255, 0, 0) 0%, rgb(0, 255, 0) 50%, rgb(0, 0, 255) 100%)",
+			},
+		});
+		expect(buildSceneDescription(doc).background).toEqual({
+			kind: "gradient",
+			angleDeg: 135,
+			stops: ["rgb(255, 0, 0)", "rgb(0, 255, 0)", "rgb(0, 0, 255)"],
+			offsets: [0, 0.5, 1],
 		});
 	});
 
@@ -189,6 +211,7 @@ describe("buildSceneDescription.background motion", () => {
 			kind: "gradient",
 			angleDeg: 135,
 			stops: ["#eaebed", "#bcc0c6"],
+			offsets: [0, 1],
 			motion: "aurora",
 		});
 	});

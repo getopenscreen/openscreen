@@ -301,12 +301,25 @@ float value_noise(float2 q)
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
-// Mouvements 2 (aurore) et 3 (vagues) du mode 5, dans les deux couleurs des stops seulement.
+// Rampe du mode 5 : quatre nœuds `rgb + position (w)`, dans l'ordre du dégradé, interpolés de
+// nœud en nœud comme CSS (avant le premier : sa couleur ; après le dernier : la sienne). Un
+// segment de longueur nulle est une marche nette. Deux stops à 0 et 1 suivis de deux copies du
+// dernier rendent exactement `lerp(c0, c1, t)`. `frame_geometry::gradient_layer` les remplit.
+float3 ramp4(float t, float4 k0, float4 k1, float4 k2, float4 k3)
+{
+    float3 c = k0.rgb;
+    c = lerp(c, k1.rgb, saturate((t - k0.w) / max(k1.w - k0.w, 1e-5)));
+    c = lerp(c, k2.rgb, saturate((t - k1.w) / max(k2.w - k1.w, 1e-5)));
+    c = lerp(c, k3.rgb, saturate((t - k2.w) / max(k3.w - k2.w, 1e-5)));
+    return c;
+}
+
+// Mouvements 2 (aurore) et 3 (vagues) du mode 5, sur la rampe de ses stops.
 // `gp` 0..1 sur le quad, `dir`/`denom` ceux du dégradé, `time` = temps programme replié sur
 // 120 s (toutes les périodes ci-dessous le divisent), `aspect` = w/h de la sortie. Périodes
 // longues et contraste bas : le fond ne doit jamais prendre l'attention.
-float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, float3 c1, float time,
-                       float motion, float aspect)
+float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1, float4 k2,
+                       float4 k3, float time, float motion, float aspect)
 {
     const float TAU = 6.2831853;
     float u = dot(gp - 0.5, dir) / denom; // position le long de l'axe, -0.5..0.5
@@ -318,20 +331,20 @@ float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, float3 c1,
         float2 p = float2((gp.x - 0.5) * aspect, gp.y - 0.5);
         float ph = TAU * time / 120.0;
         float n = value_noise(p * 2.5 + 1.5 * float2(cos(ph), sin(ph)));
-        float3 g = lerp(c0, c1, saturate(0.5 + u + 0.3 * (n - 0.5)));
+        float3 g = ramp4(saturate(0.5 + u + 0.3 * (n - 0.5)), k0, k1, k2, k3);
         float2 b0 = float2(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
         float2 b1 = float2(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
         float2 b2 = float2(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
-        g = lerp(g, c1, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
-        g = lerp(g, c0, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
-        g = lerp(g, c1, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        g = lerp(g, k3.rgb, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
+        g = lerp(g, k0.rgb, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
+        g = lerp(g, k3.rgb, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
         return g;
     }
     // Vagues : trois bandes sinus perpendiculaires à l'axe, qui avancent d'une bande en 12 s,
     // légèrement ondulées le long des bandes (20 s). Elles décalent la rampe, rien d'autre.
     float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
     float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
-    return lerp(c0, c1, saturate(0.5 + u + 0.07 * w));
+    return ramp4(saturate(0.5 + u + 0.07 * w), k0, k1, k2, k3);
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -1691,8 +1704,8 @@ float4 ps_main(VSOut i) : SV_Target
         return float4(texImg.Sample(samp, i.uv).rgb * a, a); // prémultiplié
     }
 
-    // mode 5 : gradient linéaire 2 stops (parité web wallpaper dégradé). color = stop0,
-    // src.xyz = stop1, fx.xy = direction unitaire (espace sortie, y vers le bas). t est
+    // mode 5 : gradient linéaire jusqu'à 4 stops (parité web wallpaper dégradé). Nœuds
+    // `rgb + position` dans color, src_prev, dst_prev, src (cf. `ramp4`), fx.xy = direction unitaire (espace sortie, y vers le bas). t est
     // normalisé coin-à-coin (dénominateur = |dx|+|dy|) pour couvrir toute la diagonale.
     // Fond animé : fx.z = temps programme (s, replié sur 120), fx.w = mouvement (0 immobile,
     // 1 dérive, 2 aurore, 3 vagues), mb.x = aspect w/h. 0 rend le dégradé d'avant à l'octet.
@@ -1714,10 +1727,10 @@ float4 ps_main(VSOut i) : SV_Target
         // le sélecteur affiche.
         float2 gp = (quad_px.x > 0.0 && quad_px.y > 0.0) ? (i.local / quad_px) : i.pout;
         float t = saturate(0.5 + dot(gp - 0.5, dir) / denom);
-        float3 g = lerp(color.rgb, src.xyz, t);
+        float3 g = ramp4(t, color, src_prev, dst_prev, src);
         if (fx.w > 1.5)
         {
-            g = gradient_motion(gp, dir, denom, color.rgb, src.xyz, fx.z, fx.w, mb.x);
+            g = gradient_motion(gp, dir, denom, color, src_prev, dst_prev, src, fx.z, fx.w, mb.x);
         }
         float a = quad_round_alpha(i.local, quad_px, radius_px);
         return float4(g * a, a); // prémultiplié

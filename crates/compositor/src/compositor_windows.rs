@@ -1078,9 +1078,7 @@ impl Compositor {
                 self.draw_solid(&solid(parse_hex(color).unwrap_or(BLACK)));
             }
             // Le mouvement ne vaut que pour le fond d'écran : la bulle garde son dégradé immobile.
-            Some(SceneBackground::Gradient { angle_deg, stops, .. }) => {
-                let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(BLACK);
-                let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+            Some(SceneBackground::Gradient { angle_deg, stops, offsets, .. }) => {
                 // angle CSS → direction unitaire, même convention que le fond d'écran.
                 let a = angle_deg.to_radians();
                 let dir = [a.sin(), -a.cos()];
@@ -1088,11 +1086,8 @@ impl Compositor {
                     dst,
                     quad_px,
                     radius_px,
-                    src: [c1[0], c1[1], c1[2], c1[3]],
-                    mode: 5.0,
-                    color: c0,
                     fx: [dir[0], dir[1], 0.0, 0.0],
-                    ..Default::default()
+                    ..crate::frame_geometry::gradient_layer(stops, offsets, BLACK)
                 });
             }
             Some(SceneBackground::Image { path }) => {
@@ -1845,9 +1840,7 @@ impl Compositor {
                         ..Default::default()
                     });
                 }
-                SceneBackground::Gradient { angle_deg, stops, motion } => {
-                    let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(lp.bg_color);
-                    let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+                SceneBackground::Gradient { angle_deg, stops, offsets, motion } => {
                     // angle CSS → direction unitaire (espace sortie, y vers le bas) :
                     // 0° = vers le haut, 90° = vers la droite.
                     let a = angle_deg.to_radians();
@@ -1859,12 +1852,9 @@ impl Compositor {
                     );
                     self.draw_solid(&LayerCB {
                         dst: [0.0, 0.0, 1.0, 1.0],
-                        src: [c1[0], c1[1], c1[2], c1[3]],
-                        mode: 5.0,
-                        color: c0,
                         fx: [dir[0], dir[1], anim[0], anim[1]],
                         mb,
-                        ..Default::default()
+                        ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
                     });
                 }
                 SceneBackground::Image { path } => {

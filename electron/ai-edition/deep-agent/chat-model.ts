@@ -283,6 +283,8 @@ export interface OpenScreenChatModelConfig {
 	apiKey?: string;
 	baseUrl?: string;
 	reasoningEffort?: string;
+	/** Runtime-only retry override. Omitted callers keep LangChain's default. */
+	maxRetries?: number;
 }
 
 // ponytail: placeholder API key for self-hosted OpenAI-compatible endpoints
@@ -422,6 +424,7 @@ export async function createOpenScreenChatModel(
 		...(reasoningOptions.reasoning ? { reasoning: reasoningOptions.reasoning } : {}),
 		...(reasoningOptions.useResponsesApi ? { useResponsesApi: true } : {}),
 		...(reasoningOptions.modelKwargs ? { modelKwargs: reasoningOptions.modelKwargs } : {}),
+		...(config.maxRetries !== undefined ? { maxRetries: config.maxRetries } : {}),
 		// ponytail: Gemini's OpenAI-compat path can't stream + tool-call at once
 		// — disable streaming so the ChatOpenAI compat layer buffers and returns
 		// cleanly. axcut does the same.

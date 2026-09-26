@@ -1,0 +1,8 @@
+{
+	"schema": 1,
+	"kind": "public-synthetic",
+	"scenarioId": "target-right-clip",
+	"generator": "workbench/scenarios/target-right-clip.scn.ts",
+	"documentSha256": "346ce20607134919f2f18318a7ee5b95c68a0130cce8b3bde101aed1db835fa8",
+	"telemetrySha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+}

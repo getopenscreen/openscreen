@@ -121,6 +121,7 @@ poc/out/
 workbench/reports/
 workbench/.build/
 workbench/runs/
+workbench/.agent-evidence/
 
 # Fixture d'évaluation — enregistrement réel de l'utilisateur, jamais versionné
 workbench/fixtures/

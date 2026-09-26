@@ -2,10 +2,11 @@
 // path, so it is tested against hand-built request logs that reproduce the
 // shapes the provider actually sees.
 
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { modelFromSse } from "../lib/cassette";
 import type { CapturedRequest } from "../lib/model-server";
-import { transcriptFromSse, wireFromRequests } from "../lib/wire";
+import { systemTextOf, transcriptFromSse, wireFromRequests } from "../lib/wire";
 
 function request(round: number, body: unknown): CapturedRequest {
 	return { round, systemChars: 0, toolNames: [], messages: [], raw: body };
@@ -39,6 +40,69 @@ describe("wireFromRequests", () => {
 		]);
 		expect(wire.systemBlocks).toEqual(["flat"]);
 		expect(wire.systemChars).toBe(4);
+		expect(wire.instructionMessages).toEqual([{ role: "system", blocks: ["flat"] }]);
+		expect(systemTextOf(wire)).toBe("flat");
+		expect(wire.systemSha256).toBe(createHash("sha256").update("flat").digest("hex"));
+	});
+
+	it("fingerprints and persists a developer-only high-priority prompt", () => {
+		const prompt = "d".repeat(3_840);
+		const wire = wireFromRequests([
+			request(0, {
+				messages: [
+					{ role: "developer", content: prompt },
+					{ role: "user", content: "preview this request" },
+				],
+				tools: [],
+			}),
+		]);
+		expect(wire.systemBlocks).toEqual([prompt]);
+		expect(wire.instructionMessages).toEqual([{ role: "developer", blocks: [prompt] }]);
+		expect(wire.systemChars).toBe(3_840);
+		expect(systemTextOf(wire)).toBe(`[developer]\n${prompt}`);
+		expect(wire.systemSha256).toBe(
+			createHash("sha256").update(`[developer]\n${prompt}`).digest("hex"),
+		);
+		expect(wire.systemSha256).not.toBe(createHash("sha256").update("").digest("hex"));
+	});
+
+	it("binds mixed system/developer order, roles, blocks, and content changes", () => {
+		const mixed = (developerText: string) =>
+			wireFromRequests([
+				request(0, {
+					messages: [
+						{ role: "system", content: "system root" },
+						{ role: "user", content: "ignored for this fingerprint" },
+						{
+							role: "developer",
+							content: [
+								{ type: "text", text: developerText },
+								{ type: "text", text: "second block" },
+							],
+						},
+					],
+					tools: [],
+				}),
+			]);
+		const first = mixed("developer rules");
+		const changed = mixed("changed developer rules");
+		expect(first.systemBlocks).toEqual([
+			"system root",
+			{ type: "text", text: "developer rules" },
+			{ type: "text", text: "second block" },
+		]);
+		expect(first.systemChars).toBe("system root\ndeveloper rules\nsecond block".length);
+		expect(systemTextOf(first)).toBe(
+			"[system]\nsystem root\n[developer]\ndeveloper rules\nsecond block",
+		);
+		expect(changed.systemSha256).not.toBe(first.systemSha256);
+		const sameTextAsSystem = wireFromRequests([
+			request(0, { messages: [{ role: "system", content: "developer rules" }], tools: [] }),
+		]);
+		const sameTextAsDeveloper = wireFromRequests([
+			request(0, { messages: [{ role: "developer", content: "developer rules" }], tools: [] }),
+		]);
+		expect(sameTextAsDeveloper.systemSha256).not.toBe(sameTextAsSystem.systemSha256);
 	});
 
 	it("records the whole tool surface verbatim, whatever is on it", () => {

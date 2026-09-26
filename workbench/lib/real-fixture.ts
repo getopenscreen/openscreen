@@ -20,7 +20,7 @@
 // belongs to the assertions; a scenario that let it reach the model would be
 // grading a dictation.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CursorTelemetryReader } from "../../electron/ai-edition/deep-agent/service";
 import {
@@ -49,6 +49,32 @@ const PROJECT_FILE = resolve(FIXTURES_DIR, "real-screencast.openscreen");
  */
 export const REAL_SCREENCAST_VIDEO_PATH = resolve(FIXTURES_DIR, "real-screencast.mp4");
 
+export const ORIGINAL_FIXTURE_REQUIRED_FILES = [
+	"workbench/fixtures/real-screencast.openscreen",
+	"workbench/fixtures/real-screencast.mp4.cursor.json",
+] as const;
+
+export class OriginalFixtureUnavailableError extends Error {
+	readonly code = "ORIGINAL_FIXTURE_UNAVAILABLE";
+
+	constructor(cause?: unknown) {
+		super(
+			"ORIGINAL_FIXTURE_UNAVAILABLE: the original 66.154-second French take is unavailable; " +
+				`required files: ${ORIGINAL_FIXTURE_REQUIRED_FILES.join(", ")}. ` +
+				"It cannot be reconstructed from the 129-word/1521-sample summary or replaced under the original scenario ids." +
+				(cause === undefined
+					? ""
+					: ` Cause: ${cause instanceof Error ? cause.message : String(cause)}`),
+		);
+		this.name = "OriginalFixtureUnavailableError";
+	}
+}
+
+export function assertOriginalFixtureAvailable(): void {
+	const required = [PROJECT_FILE, `${REAL_SCREENCAST_VIDEO_PATH}.cursor.json`];
+	if (required.some((file) => !existsSync(file))) throw new OriginalFixtureUnavailableError();
+}
+
 /**
  * What the fixture is, stated once so scenarios and tests can assert against it
  * instead of each re-deriving it from the file.
@@ -71,16 +97,11 @@ export const REAL_SCREENCAST = {
 } as const;
 
 function readProjectFile(): unknown {
+	assertOriginalFixtureAvailable();
 	try {
 		return JSON.parse(readFileSync(PROJECT_FILE, "utf8"));
 	} catch (error) {
-		// Named, because the two ways this fails — run from the wrong directory,
-		// or the fixture never landed — look identical in a stack trace.
-		throw new Error(
-			`Fixture réelle introuvable ou illisible : ${PROJECT_FILE}\n` +
-				"Le banc se lance depuis la racine du dépôt (`npm run wb`).\n" +
-				`Cause : ${error instanceof Error ? error.message : String(error)}`,
-		);
+		throw new OriginalFixtureUnavailableError(error);
 	}
 }
 
@@ -102,5 +123,6 @@ export function realScreencastDocument(): AxcutDocument {
 /** A reader wired to the fixture's own sidecar — `getCursorTrack` answers
  *  `available: true` with the real trajectory. */
 export function realScreencastCursorReader(): CursorTelemetryReader {
+	assertOriginalFixtureAvailable();
 	return sidecarCursorReader({ [REAL_SCREENCAST.assetId]: REAL_SCREENCAST_VIDEO_PATH });
 }

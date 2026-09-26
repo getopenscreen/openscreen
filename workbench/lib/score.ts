@@ -103,6 +103,31 @@ export const STRUCTURAL_CHECKS: Check[] = [
 	},
 ];
 
+/** Weighted mean of each repetition's axis score with the measurement rule: a
+ *  wholly indeterminate repetition decides nothing and leaves the mean, and an
+ *  axis with nothing decidable scores 0. Shared by the manifest recompute and
+ *  the report summary so the two can never disagree — `runChecks`'s `score: 1`
+ *  placeholder for zero decided weight is a placeholder, never a measurement. */
+export function undecidedAwareAxisMean(
+	perRep: ReadonlyArray<ReadonlyArray<Pick<CheckResult, "ok" | "indeterminate" | "weight">>>,
+): { score: number; measured: number } {
+	const scores: number[] = [];
+	for (const results of perRep) {
+		const decidedWeight = results.reduce(
+			(sum, check) => sum + (check.indeterminate ? 0 : check.weight),
+			0,
+		);
+		if (decidedWeight === 0) continue;
+		const passedWeight = results.reduce((sum, check) => sum + (check.ok ? check.weight : 0), 0);
+		scores.push(passedWeight / decidedWeight);
+	}
+	if (scores.length === 0) return { score: 0, measured: 0 };
+	return {
+		score: scores.reduce((sum, score) => sum + score, 0) / scores.length,
+		measured: scores.length,
+	};
+}
+
 export function runChecks(
 	checks: Check[],
 	context: EvalContext,

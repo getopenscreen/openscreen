@@ -1238,6 +1238,7 @@ unsafe fn advance_to_next_scene_clip(
     active_webcam_offset_sec: &mut f64,
     active_clip_index: &mut usize,
     raw_cursor: &mut Option<CursorTrack>,
+    loaded_cursor_path: &mut String,
     last_smoothing: &mut f32,
 ) {
     if scene.clips.len() <= 1 {
@@ -1304,13 +1305,15 @@ unsafe fn advance_to_next_scene_clip(
             // Réutilise le curseur préchargé s'il est disponible (voir plus haut) — sinon
             // (préchargement pas encore prêt / raté) on retombe sur la lecture synchrone
             // habituelle, comme avant cette optimisation.
+            let cursor_path = format!("{}.cursor.json", active_screen_path);
             *raw_cursor = match prefetched_cursor {
                 Some(track) => track,
-                None => {
-                    let cursor_path = format!("{}.cursor.json", active_screen_path);
-                    CursorTrack::load(&cursor_path, 0.0, 24.0 * 3600.0).ok()
-                }
+                None => CursorTrack::load(&cursor_path, 0.0, 24.0 * 3600.0).ok(),
             };
+            // Le fichier est noté avec la piste. Sinon une requête de clip qui revient sur le
+            // fichier d'avant le croit encore chargé, ne relit rien, et dessine sur ce clip la
+            // télémétrie de celui qu'on vient de quitter.
+            *loaded_cursor_path = cursor_path;
             match raw_cursor {
                 Some(track) => comp.set_cursor(track.smoothed(0.0)),
                 None => comp.clear_cursor(),
@@ -1719,6 +1722,7 @@ unsafe fn render_thread(
                                 &mut active_webcam_offset_sec,
                                 &mut active_clip_index,
                                 &mut raw_cursor,
+                                &mut loaded_cursor_path,
                                 &mut last_smoothing,
                             );
                         }
@@ -1746,6 +1750,7 @@ unsafe fn render_thread(
                             &mut active_webcam_offset_sec,
                             &mut active_clip_index,
                             &mut raw_cursor,
+                            &mut loaded_cursor_path,
                             &mut last_smoothing,
                         );
                     }

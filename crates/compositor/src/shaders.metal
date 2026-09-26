@@ -301,8 +301,8 @@ inline float3 quad_inverse_projective(float2 P, float2 c00, float2 c10, float2 c
     return float3(s, t, ok);
 }
 
-// Warp inverse d'un calque posé sur le plan : projectif (`projective` = 1, que tout écran incliné
-// porte), bilinéaire sinon.
+// Warp inverse d'un calque posé sur le plan : projectif sous la caméra réelle ou un appareil
+// (`projective` = 1), bilinéaire sous un angle fixe, inchangé.
 inline float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, float projective)
 {
     if (projective > 0.5)
@@ -1466,8 +1466,9 @@ fragment float4 ps_main(VSOut i [[stage_in]],
     }
 
     // mode 8 : écran tilté (zoom regions "rotation") ou vu par la caméra réelle. Warp inverse :
-    // projectif exact (dst_prev.w = 1, tout écran incliné), bilinéaire sinon ; la caméra réelle
-    // éclaire aussi le plan (color.xy : 1 + color.x·(s − 0.5) + color.y·(t − 0.5)).
+    // bilinéaire sous un angle fixe, projectif exact sous la caméra réelle ou un appareil
+    // (dst_prev.w = 1) ; la caméra réelle éclaire aussi le plan (color.xy : 1 + color.x·(s − 0.5)
+    // + color.y·(t − 0.5)).
     // mb = [gx, gy, z_focus, k] : profondeur du point r du plan = (r.x - 0.5)*gx + (r.y - 0.5)*gy
     // en px, positive vers la caméra ; z_focus = celle du focus du zoom (`TiltedQuad::depth_mb`) ;
     // k = texels source de flou par px d'écart de profondeur (0 = profondeur de champ coupée).

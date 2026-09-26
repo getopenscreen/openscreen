@@ -602,25 +602,17 @@ fn ease_connected_pan(t: f32) -> f32 {
 /// alors que le plan était rendu en entier — mesuré au pixel sur un export 1920×1080 : bord droit
 /// à 1539, coin calculé à 1540, arrondis présents aux quatre coins.
 ///
-/// Aucune arête ne s'approche donc d'un axe à moins de 2° (cf.
-/// `no_preset_has_an_axis_aligned_edge`), et AUCUN préset ne roule : Z vaut 0. Le tilt entre avec
-/// le zoom, et une caméra qui bouge ne roule jamais le métrage — le roulis de −2°/±1° qui tenait
-/// la règle jusqu'ici penchait l'image pendant chaque zoom, et balayait 2° entre left et right.
+/// Chaque préset a donc ses trois composantes, choisies pour qu'aucune arête ne s'approche d'un
+/// axe à moins de 2° (cf. `no_preset_has_an_axis_aligned_edge`).
 ///
-/// Sans roulis, la règle ne laisse que deux bandes de tangage (X). Une rotation Y pure garde les
-/// verticales verticales, donc chaque préset tangue ; et entre 10° et 14° de tangage, le bord haut
-/// d'un écran tourné ressort à plat (la remontée du rotateX annulée par la perspective), à tout
-/// lacet. Les deux présets prennent donc la bande haute, le regard de l'ancien `iso` : tourné et
-/// vu d'en haut franchement, arêtes à 4,8° au plus près. Ils sortent de la bande des 2° pendant
-/// leur ease-in à 0,82 de force, avant que la parallaxe ne s'ouvre (`PARALLAX_GATE_START`), et
-/// laissent au budget dynamique ses ±1,9° / ±3° d'origine (`DYNAMIC_TILT_BUDGET`).
-///
-/// `iso` n'est plus proposé : c'était déjà ce regard-là, tourné à gauche. Un projet qui le porte
-/// encore se lit donc comme `left` (côté app : `readRotation3DPreset`, et ici par sécurité).
+/// `left` EST l'`iso` de la v1.13.0, à la valeur près : tourné vers la gauche et vu d'en haut, avec
+/// son léger roulis. `right` en est le miroir (lacet et roulis inversés). `iso` n'est plus proposé
+/// et se lit comme `left` (côté app : `readRotation3DPreset`, et ici par sécurité), donc un projet
+/// qui le porte rend exactement comme avant.
 fn rotation3d_for(rotation: &Option<String>) -> [f32; 3] {
     match rotation.as_deref() {
-        Some("left" | "iso") => [-23.0, -25.0, 0.0],
-        Some("right") => [-23.0, 25.0, 0.0],
+        Some("left" | "iso") => [-12.0, -18.0, -2.0],
+        Some("right") => [-12.0, 18.0, 2.0],
         _ => [0.0, 0.0, 0.0],
     }
 }
@@ -1149,11 +1141,11 @@ pub(crate) const PERSPECTIVE_FACTOR: f32 = 1.6;
 /// profondeur rapporté à la distance de fuite (`|z − z_focus| / P`).
 ///
 /// Réglé une fois, en unités de P : cet écart ne dépend ni de la résolution ni du zoom (la
-/// perspective se déduit de la taille du plan lui-même). Sur iso en 16:9, focus au centre, le
-/// coin lointain est à ~0.25 P, soit un flou de ~5.9 texels, au plafond du shader
-/// (`DOF_MAX_LOD`, niveau 1.5 de la pyramide demi-résolution, soit ~5.7 texels) ; focus sur le
-/// coin proche, l'écart double. Un flou exprimé en texels suit le CONTENU : la même zone est aussi
-/// floue quel que soit le zoom qui l'affiche.
+/// perspective se déduit de la taille du plan lui-même). Sur `left` en 16:9, focus au centre, le
+/// coin lointain est à ~0.19 P, soit un flou de ~4.6 texels ; focus sur le coin proche, l'écart
+/// double et le shader plafonne (`DOF_MAX_LOD`, niveau 1.5 de la pyramide demi-résolution, soit
+/// ~5.7 texels). Un flou exprimé en texels suit le CONTENU : la même zone est aussi floue quel
+/// que soit le zoom qui l'affiche.
 pub const DOF_COC_PER_DEPTH: f32 = 24.0;
 
 /// Les 4 coins d'un quad `width`×`height` réduit de `scale`, projetés. `None` si un coin part
@@ -1208,10 +1200,9 @@ pub struct TiltedQuad {
     /// Où tombe le centre du plan à l'image, en px relatifs au centre du rect d'origine.
     pub offset: [f32; 2],
     /// `true` : le plan se dessine par l'homographie EXACTE de ses coins ; `false` : par le warp
-    /// bilinéaire, qui penche le contenu d'un plan tourné ET tangué (sa verticale du milieu
-    /// suit les milieux des bords, pas la projection). Tout écran incliné passe au projectif
-    /// (`FrameGeometry::screen_tilt`) ; `rotated_quad_corners_px` rend `false`, la géométrie
-    /// seule.
+    /// bilinéaire des angles fixes, le rendu de la v1.13.0. La caméra réelle l'exige, et un cadre
+    /// d'appareil aussi (le mode 17 lance ses rayons dans la perspective exacte,
+    /// `FrameGeometry::screen_tilt`).
     pub projective: bool,
     /// `true` : une lampe posée sur la caméra éclaire un peu plus le côté proche du plan
     /// (`CAMERA_LIGHT_GAIN`, cf. `tilted_screen_cb`). Elle appartient à la caméra RÉELLE, pas au
@@ -1332,9 +1323,10 @@ fn contain_scale(
 /// puis la somme est bornée par `clamp_dynamic_tilt`.
 ///
 /// - Z : 0. Jamais de roulis : une caméra qui bouge ne roule pas le métrage.
-/// - X : ±1,9°, Y : ±3°. Ensemble, à 1,15 fois ces valeurs, `left` sort d'une des deux règles
-///   (arête à moins de 2° d'un axe, ou débordement de sa boîte) ; seul, Y y arrive vers 3,3°, X
-///   laisse plus de marge (`the_budget_is_close_to_what_left_allows`).
+/// - X : ±1,9°, Y : ±3°. Les valeurs de la v1.13.0, au ras de son `left` [−8, −16, −1] : le
+///   `left` d'aujourd'hui, son `iso`, garde ainsi sa parallaxe et son impact à l'identique. Il ne
+///   sortirait d'une des deux règles (arête à moins de 2° d'un axe, ou débordement de sa boîte)
+///   qu'à 1,46 fois ce balayage.
 ///
 /// Reproduits par `the_budget_sweep_keeps_every_edge_off_axis`,
 /// `the_budget_sweep_stays_inside_the_original_rect` et
@@ -1353,10 +1345,10 @@ pub fn clamp_dynamic_tilt(rot: [f32; 3]) -> [f32; 3] {
 }
 
 /// Force du préset sous laquelle la part dynamique est nulle ; elle s'installe en smoothstep
-/// jusqu'à 1. La spec disait 0,5 ; les maths de ce crate disent autrement : en montant,
-/// `left`/`right` traversent le tangage où leur bord haut ressort à plat, et ne sortent de la
-/// bande des 2° qu'à 0,82 de force : la porte doit s'ouvrir après, et raide. Cf.
-/// `the_budget_sweep_keeps_every_edge_off_axis`.
+/// jusqu'à 1. La spec disait 0,5 ; les maths de ce crate disent autrement : l'ease-in part de
+/// l'écran droit, dont les arêtes longent les axes, et `left`/`right` ne sortent de la bande des
+/// 2° qu'à 0,48 de force. 0,85 est la porte de la v1.13.0, réglée pour son `left` plus serré
+/// (sorti de la bande à 0,635 seulement). Cf. `the_budget_sweep_keeps_every_edge_off_axis`.
 const PARALLAX_GATE_START: f32 = 0.85;
 /// Degrés de parallaxe par unité de vitesse (largeurs — ou hauteurs — de coupe par seconde),
 /// avant saturation. Un balayage d'une demi-largeur par seconde penche d'environ 2° en Y, une
@@ -2232,13 +2224,14 @@ mod tilt_tests {
         }
     }
 
-    /// `iso` n'est plus proposé : il se lit comme `left`, qui a gardé son regard, et `right` en est
-    /// le miroir exact.
+    /// `left` est l'`iso` de la v1.13.0 à la valeur près, `iso` se lit comme lui, et `right` en est
+    /// le miroir exact : lacet et roulis inversés.
     #[test]
     fn iso_reads_as_left_and_right_mirrors_it() {
         let left = rotation3d_for(&Some("left".into()));
+        assert_eq!(left, [-12.0, -18.0, -2.0], "l'iso de la v1.13.0");
         assert_eq!(rotation3d_for(&Some("iso".into())), left);
-        assert_eq!(rotation3d_for(&Some("right".into())), [left[0], -left[1], 0.0]);
+        assert_eq!(rotation3d_for(&Some("right".into())), [left[0], -left[1], -left[2]]);
     }
 
     /// Aucune arête d'un préset ne doit longer un axe de l'image. C'est LE critère qui distingue
@@ -2374,7 +2367,7 @@ mod tilt_tests {
         };
         let centre = [0.5, 0.5];
         assert!(coc(1920.0, 1080.0, centre, 0.5, 0.5) < 1e-4);
-        // Coin lointain (BL) : ~0.25 P, donc ~5.9 texels, bien au-dessus du seuil net (0.5).
+        // Coin lointain (BL) : ~0.19 P, donc ~4.6 texels, bien au-dessus du seuil net (0.5).
         let far = coc(1920.0, 1080.0, centre, 0.0, 1.0);
         assert!((3.5..6.0).contains(&far), "coin lointain {far}");
         // Focus posé sur le coin proche (TR) : le lointain s'en éloigne encore.
@@ -2417,12 +2410,6 @@ mod tilt_tests {
             .min(v(c[1], c[2]))
     }
 
-    /// Débordement relatif du quad hors du rect d'origine (> 0 = déborde).
-    fn overflow(c: &[(f32, f32); 4], w: f32, h: f32) -> f32 {
-        let (mx, my) = projected_extents(c);
-        (mx / (w * 0.5)).max(my / (h * 0.5)) - 1.0
-    }
-
     /// Toutes les parts dynamiques d'un budget réduit de `g`, sur une grille qui inclut les
     /// coins de la boîte (le pire cas combine les deux axes).
     fn budget_sweep(g: f32) -> impl Iterator<Item = [f32; 3]> {
@@ -2441,9 +2428,9 @@ mod tilt_tests {
 
     /// La règle des 2° tient sur TOUT le balayage du budget, et pas qu'aux présets : à force 1
     /// sur la boîte entière, et pendant l'ease-in, où la part dynamique ne doit jamais faire
-    /// passer une arête sous min(2°, ce que la base seule donne). Sous ~0,82 de force, `left`
-    /// et `right` sont DÉJÀ dans la bande (l'ease-in traverse 0°, puis le tangage où leur bord
-    /// haut ressort à plat) ; on ne leur demande alors que de ne pas empirer.
+    /// passer une arête sous min(2°, ce que la base seule donne). Sous ~0,48 de force, `left`
+    /// et `right` sont DÉJÀ dans la bande (l'ease-in traverse 0°) ; on ne leur demande alors que
+    /// de ne pas empirer.
     #[test]
     fn the_budget_sweep_keeps_every_edge_off_axis() {
         let (w, h) = (1920.0f32, 1080.0f32);
@@ -2463,26 +2450,6 @@ mod tilt_tests {
                 }
             }
         }
-    }
-
-    /// Les chiffres du budget sont ceux des maths du crate, à peu près au ras : le balayage à 15 %
-    /// de plus sur X et Y ensemble fait casser à `left` une des deux règles, arête à moins de 2°
-    /// d'un axe (16:9) ou débordement de sa boîte (les trois formes), et Y seul aussi. X seul a
-    /// plus de marge : c'est avec Y qu'il la consomme. Z n'a pas de budget, c'est la règle produit.
-    #[test]
-    fn the_budget_is_close_to_what_left_allows() {
-        let base = preset("left");
-        let breaks = |d: [f32; 3]| {
-            [(1920.0f32, 1080.0f32), (1080.0, 1920.0), (800.0, 800.0)].into_iter().any(|(w, h)| {
-                let c = rotated_quad_corners_px(w, h, base, d).corners;
-                (w > h && min_edge_angle(&c) < 2.0) || overflow(&c, w, h) > 0.0
-            })
-        };
-        let b = DYNAMIC_TILT_BUDGET;
-        assert!(!budget_sweep(1.0).any(|d| breaks(d)), "le budget lui-même doit tenir");
-        assert!(budget_sweep(1.15).any(|d| breaks(d)), "X et Y");
-        assert!(breaks([0.0, b[1] * 1.15, 0.0]) || breaks([0.0, -b[1] * 1.15, 0.0]), "Y");
-        assert_eq!(b[2], 0.0, "Z n'a pas de budget");
     }
 
     /// Échelle gelée : la part dynamique ne fait que re-projeter les coins, et le quad ne
@@ -3359,7 +3326,7 @@ mod follow_camera_tests {
         assert_eq!((blind.aim, blind.orbit), ([0.5, 0.5], [0.5, 0.5]));
         // Un angle fixe garde exactement son état.
         let left = zoom_state_in(&[region("left", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
-        assert_eq!((left.rotation, left.camera, left.click_impact), ([-23.0, -25.0, 0.0], 0.0, 1.0));
+        assert_eq!((left.rotation, left.camera, left.click_impact), ([-12.0, -18.0, -2.0], 0.0, 1.0));
         let unknown = zoom_state_in(&[region("orbit", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((unknown.rotation, unknown.tilt, unknown.camera), ([0.0; 3], 0.0, 0.0));
     }

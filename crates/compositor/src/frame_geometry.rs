@@ -1158,7 +1158,7 @@ pub fn cursor_sprite_cb(
                 src_prev: [br0, br1, bl0, bl1],
                 // Le clip vit ici et NON dans `fx` (mode 7) : `fx` porte les coins.
                 dst_prev: clip,
-                // `mb.x` : 1 = warp projectif (tout écran incliné, cf. `screen_tilt`).
+                // `mb.x` : 1 = warp projectif (caméra réelle ou appareil, cf. `screen_tilt`).
                 mb: [quad.warp_flag(), 0.0, 0.0, 0.0],
                 ..Default::default()
             }
@@ -1908,16 +1908,16 @@ impl FrameGeometry {
                 self.zoom_rotation,
                 self.zoom_rotation_dyn,
             );
-            // Un angle fixe se dessine au warp PROJECTIF, comme la caméra réelle. Les quatre coins
-            // sont ceux de la projection exacte, donc l'homographie qu'ils définissent EST cette
-            // projection, partout et pas seulement aux coins. Le warp bilinéaire s'en écartait de
-            // ~8 % de la largeur au milieu des bords (mesuré par
-            // `the_device_screen_face_lands_on_the_footage_plane`), et surtout il PENCHAIT le
-            // contenu : la verticale du milieu de l'écran, droite sous une caméra sans roulis,
-            // tombait de 2,9° sous `iso` et de 0,8° sous `left`/`right`, et ce roulis-là entrait
-            // avec le zoom. Le mode 17 (appareil) en dépend aussi : il lance ses rayons dans la
-            // perspective exacte.
-            quad.projective = true;
+            // Un angle fixe se dessine au warp BILINÉAIRE de ses coins : le rendu des angles fixes
+            // de la v1.13.0, à l'octet. Sous un cadre d'APPAREIL seulement, l'écran passe au warp
+            // PROJECTIF : le mode 17 lance ses rayons dans la perspective exacte, et le warp
+            // bilinéaire s'en écarte de ~8 % de la largeur au milieu des bords (mesuré par
+            // `the_device_screen_face_lands_on_the_footage_plane`), soit une lunette à cent pixels
+            // du bord de l'image. Les quatre coins sont les mêmes des deux côtés, donc
+            // l'homographie qu'ils définissent EST cette projection exacte.
+            if self.window_frame.as_ref().is_some_and(|f| f.kind.is_device()) {
+                quad.projective = true;
+            }
             quad
         })
     }
@@ -4663,10 +4663,10 @@ mod tests {
             assert_eq!(cb.dst_prev[3], 1.0, "{name}: l'écran est resté au warp bilinéaire");
             assert_eq!(cb.color, [0.0; 4], "{name}: la lampe de la caméra s'est allumée");
         }
-        // Sans appareil, l'angle fixe a le même warp exact (`screen_tilt`) et toujours pas de
-        // lampe ; la caméra réelle, elle, a les deux.
+        // Sans appareil, l'angle fixe garde son warp bilinéaire ET son absence de lampe ; la
+        // caméra réelle, elle, garde les deux.
         let plain = flat_cb(&framed_plan(&framed_scene("", r#""iso""#, 1.0, false)));
-        assert_eq!((plain.dst_prev[3], plain.color), (1.0, [0.0; 4]));
+        assert_eq!((plain.dst_prev[3], plain.color), (0.0, [0.0; 4]));
         let orbit = flat_cb(&framed_plan(&framed_scene("", r#""follow-cursor""#, 1.0, false)));
         assert_eq!(orbit.dst_prev[3], 1.0);
         assert!(orbit.color[0] != 0.0 || orbit.color[1] != 0.0, "la caméra réelle n'éclaire plus");
@@ -5961,7 +5961,7 @@ mod tests {
     /// reporté dans le slot d'un layout en bloc ; sans elle, rien de ce qu'il portait ne change.
     #[test]
     fn the_tilted_screen_cb_carries_its_trail_in_its_own_frame() {
-        let quad = crate::regions::rotated_quad_corners_px(800.0, 450.0, [-23.0, -25.0, 0.0], [0.0; 3]);
+        let quad = crate::regions::rotated_quad_corners_px(800.0, 450.0, [-12.0, -18.0, -2.0], [0.0; 3]);
         let moved = TiltTrail { corners: quad.corners.map(|(x, y)| (x * 0.9 + 3.0, y * 0.9 - 2.0)), mb: [6.0, 0.35] };
         let mask = ScreenMask { rect: [0.1, 0.1, 0.6, 0.6], radius_px: 8.0 };
         let cb = |mask, trail| {
@@ -7011,8 +7011,8 @@ mod tests {
         .expect("plan cursor")
     }
 
-    const ISO: [f32; 3] = [-23.0, -25.0, 0.0];
-    const LEFT: [f32; 3] = [-23.0, -25.0, 0.0];
+    const LEFT: [f32; 3] = [-12.0, -18.0, -2.0];
+    const RIGHT: [f32; 3] = [-12.0, 18.0, 2.0];
 
     /// Le `LayerCB` du sprite incliné est, octet pour octet, celui que chaque backend construisait
     /// avant de le partager. La référence est le corps d'origine de `draw_cursor_sprite`.
@@ -7070,7 +7070,7 @@ mod tests {
             let len = std::mem::size_of::<LayerCB>();
             unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, len) }.to_vec()
         };
-        for rot in [ISO, LEFT, [-23.0, 25.0, 0.0]] {
+        for rot in [LEFT, RIGHT] {
             let plan = plan_with(rot);
             let clip = [0.1, 0.2, 0.7, 0.6];
             let got = cursor_sprite_cb(
@@ -7327,7 +7327,7 @@ mod tests {
         let scene = model_scene();
         for key in MODEL_STATES {
             let (sdf, shape) = sprite_model(key);
-            for rot in [[0.0; 3], [-23.0, -25.0, 0.0]] {
+            for rot in [[0.0; 3], LEFT] {
                 let track = still_track_as(Some(key), vec![0.5]);
                 for (t, want) in [(0.3, MODEL_HOVER), (0.5 + CONTACT_S, 0.0)] {
                     let plan = model_plan(rot, &scene, &track, t, true).expect("plan");
@@ -7451,9 +7451,6 @@ mod tests {
         assert!(model_plan([0.0; 3], &bare, &track, 0.3, true).expect("plan").model.is_none());
     }
 
-    const LEFT_ROT: [f32; 3] = [-23.0, -25.0, 0.0];
-    const ISO_ROT: [f32; 3] = [-23.0, -25.0, 0.0];
-
     /// Les poses d'essai, pour chaque état de `MODEL_STATES` : au repos, posé, tourné.
     fn model_cases() -> Vec<(String, CursorPlan, SpriteShape, crate::cursor_sdf::CursorSdf)> {
         let scene = model_scene();
@@ -7465,7 +7462,7 @@ mod tests {
                 vec![],
                 vec![(0.0, key.to_string())],
             );
-            for (name, rot) in [("flat", [0.0; 3]), ("iso", ISO_ROT), ("left", LEFT_ROT), ("right", [-23.0, 25.0, 0.0])] {
+            for (name, rot) in [("flat", [0.0; 3]), ("left", LEFT), ("right", RIGHT)] {
                 for (pose, track, t) in [("hover", &clicked, 0.3), ("touch", &clicked, 0.5 + CONTACT_S), ("yaw", &moving, 1.0)] {
                     let plan = model_plan(rot, &scene, track, t, true).expect("plan");
                     let (sdf, shape) = sprite_model(key);

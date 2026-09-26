@@ -253,8 +253,8 @@ float3 quad_inverse_projective(float2 P, float2 c00, float2 c10, float2 c11, flo
     return float3(s, t, ok);
 }
 
-// Le warp inverse d'un calque posé sur le plan : projectif (`projective` = 1, cf.
-// `TiltedQuad::warp_flag`, que tout écran incliné porte), bilinéaire sinon.
+// Le warp inverse d'un calque posé sur le plan : projectif sous la caméra réelle ou un appareil
+// (`projective` = 1, cf. `TiltedQuad::warp_flag`), bilinéaire sous un angle fixe, inchangé.
 float3 quad_inverse(float2 P, float2 c00, float2 c10, float2 c11, float2 c01, float projective)
 {
     if (projective > 0.5)
@@ -1455,8 +1455,8 @@ float4 ps_main(VSOut i) : SV_Target
     // mode 8 : écran tilté en 3D (zoom regions "rotation" : iso/left/right) ou vu par la caméra
     // réelle (`follow-cursor`). `dst`/`quad_px` couvrent la BOUNDING BOX des 4 coins projetés
     // (`frame_geometry::tilted_screen_cb`) ; ce shader retrouve où tombe chaque pixel DANS le quad
-    // (warp inverse : projectif exact quand dst_prev.w = 1, ce que porte tout écran incliné,
-    // bilinéaire sinon) et échantillonne la vidéo à l'UV correspondant, sinon transparent.
+    // (warp inverse : bilinéaire sous un angle fixe, projectif exact sous la caméra réelle ou un
+    // appareil, dst_prev.w = 1) et échantillonne la vidéo à l'UV correspondant, sinon transparent.
     // fx.xy/fx.zw = coins TL/TR (px locaux, 0..quad_px) ; src_prev.xy/.zw = coins BR/BL.
     // color.xy (caméra réelle) : éclairage 1 + color.x·(s − 0.5) + color.y·(t − 0.5).
     // mb = [gx, gy, z_focus, k] : profondeur du point r du plan = (r.x - 0.5)*gx + (r.y - 0.5)*gy

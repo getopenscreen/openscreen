@@ -353,8 +353,8 @@ const CAMERA_KEYS: Record<Rotation3DPreset, string> = {
  *  perspective and centred. The moving camera leaves the screen flat and circles it. */
 const CAMERA_ICONS: Record<Rotation3DPreset | "off", React.ReactNode> = {
 	off: <rect x="6.5" y="5.5" width="19" height="11" rx="1.5" />,
-	left: <polygon points="5.6,4.5 26.4,5.3 22.9,17.5 7,12.9" />,
-	right: <polygon points="5.6,5.3 26.4,4.5 25,12.9 9.1,17.5" />,
+	left: <polygon points="6.1,6.2 25.9,4.7 24.7,17.3 7.2,15.1" />,
+	right: <polygon points="6.1,4.7 25.9,6.2 24.8,15.1 7.3,17.3" />,
 	"follow-cursor": (
 		<>
 			<rect x="10.5" y="7.5" width="11" height="7" rx="1" />

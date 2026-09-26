@@ -117,12 +117,18 @@ fn screen_trail(pout: vec2<f32>) -> vec4<f32> {
         let f = (pout - r.xy) / r.zw;
         let q = layer.fx.xy + f * layer.fx.zw;
         let rendered = all(q >= vec2<f32>(0.0)) && all(q <= vec2<f32>(1.0));
-        let hs = layer.quad_px * 0.5;
-        let in_screen = sd_round_rect(f * layer.quad_px - hs, hs, layer.radius_px) < -2.0;
-        let group = textureSampleLevel(texMask, samp, q, 0.0);
-        let footage = vec4<f32>(sample_yuv_level(mix(layer.src.xy, layer.src.zw, f)), 1.0);
-        acc = acc + select(select(vec4<f32>(0.0), footage, in_screen), group, rendered);
-        n = n + select(select(0.0, 1.0, in_screen), 1.0, rendered);
+        // Un `if`, pas un `select` : `select` evalue ses deux branches, soit trois lectures du
+        // metrage et une SDF par tap pour rien. Parite HLSL / MSL.
+        if rendered {
+            acc = acc + textureSampleLevel(texMask, samp, q, 0.0);
+            n = n + 1.0;
+        } else {
+            let hs = layer.quad_px * 0.5;
+            if sd_round_rect(f * layer.quad_px - hs, hs, layer.radius_px) < -2.0 {
+                acc = acc + vec4<f32>(sample_yuv_level(mix(layer.src.xy, layer.src.zw, f)), 1.0);
+                n = n + 1.0;
+            }
+        }
     }
     return acc / max(n, 1.0);
 }

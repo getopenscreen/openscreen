@@ -166,6 +166,12 @@
 		"noSpeechDetected": "Речь не обнаружена"
 	},
 	"exportDialog": {
+		"destination": "Назначение",
+		"destinationWeb": "Веб / YouTube",
+		"destinationSocial": "Соцсети",
+		"destinationStudio": "Студия",
+		"destinationReadmeGif": "GIF для README",
+		"advanced": "Дополнительно",
 		"title": "Экспорт",
 		"subtitle": "Рендеринг таймлайна в файл",
 		"addVideoBeforeExporting": "Добавьте видео перед экспортом.",

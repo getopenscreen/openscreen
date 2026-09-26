@@ -166,6 +166,12 @@
 		"noSpeechDetected": "Aucune parole détectée"
 	},
 	"exportDialog": {
+		"destination": "Destination",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Réseaux sociaux",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "GIF pour README",
+		"advanced": "Avancé",
 		"title": "Exporter",
 		"subtitle": "Rendre la timeline dans un fichier",
 		"addVideoBeforeExporting": "Ajoutez une vidéo avant d'exporter.",

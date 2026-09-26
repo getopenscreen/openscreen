@@ -166,6 +166,12 @@
 		"noSpeechDetected": "음성이 감지되지 않음"
 	},
 	"exportDialog": {
+		"destination": "내보낼 곳",
+		"destinationWeb": "웹 / YouTube",
+		"destinationSocial": "소셜 미디어",
+		"destinationStudio": "스튜디오",
+		"destinationReadmeGif": "README용 GIF",
+		"advanced": "고급",
 		"title": "내보내기",
 		"subtitle": "타임라인을 파일로 렌더링합니다",
 		"addVideoBeforeExporting": "내보내기 전에 동영상을 추가하세요.",

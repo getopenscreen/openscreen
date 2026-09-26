@@ -166,6 +166,12 @@
 		"noSpeechDetected": "Konuşma algılanmadı"
 	},
 	"exportDialog": {
+		"destination": "Hedef",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Sosyal medya",
+		"destinationStudio": "Stüdyo",
+		"destinationReadmeGif": "README GIF'i",
+		"advanced": "Gelişmiş",
 		"title": "Dışa Aktar",
 		"subtitle": "Zaman çizelgesini bir dosyaya işleyin",
 		"addVideoBeforeExporting": "Dışa aktarmadan önce bir video ekleyin.",

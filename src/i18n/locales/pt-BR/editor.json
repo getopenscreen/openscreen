@@ -166,6 +166,12 @@
 		"noSpeechDetected": "Nenhuma fala detectada"
 	},
 	"exportDialog": {
+		"destination": "Destino",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Redes sociais",
+		"destinationStudio": "Estúdio",
+		"destinationReadmeGif": "GIF para README",
+		"advanced": "Avançado",
 		"title": "Exportar",
 		"subtitle": "Renderizar a linha do tempo para um arquivo",
 		"addVideoBeforeExporting": "Adicione um vídeo antes de exportar.",

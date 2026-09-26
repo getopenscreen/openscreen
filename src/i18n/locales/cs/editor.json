@@ -166,6 +166,12 @@
 		"noSpeechDetected": "Žádná řeč nezjištěna"
 	},
 	"exportDialog": {
+		"destination": "Cíl",
+		"destinationWeb": "Web / YouTube",
+		"destinationSocial": "Sociální sítě",
+		"destinationStudio": "Studio",
+		"destinationReadmeGif": "GIF do README",
+		"advanced": "Pokročilé",
 		"title": "Export",
 		"subtitle": "Vykreslení časové osy do souboru",
 		"addVideoBeforeExporting": "Před exportem přidejte video.",

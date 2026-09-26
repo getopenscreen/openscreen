@@ -166,6 +166,12 @@
 		"noSpeechDetected": "لم يتم اكتشاف كلام"
 	},
 	"exportDialog": {
+		"destination": "الوجهة",
+		"destinationWeb": "الويب / YouTube",
+		"destinationSocial": "وسائل التواصل",
+		"destinationStudio": "استوديو",
+		"destinationReadmeGif": "GIF لملف README",
+		"advanced": "متقدّم",
 		"title": "تصدير",
 		"subtitle": "عرض المخطط الزمني إلى ملف",
 		"addVideoBeforeExporting": "أضف فيديو قبل التصدير.",

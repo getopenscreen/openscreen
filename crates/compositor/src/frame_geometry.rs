@@ -3045,6 +3045,9 @@ pub fn cursor_alpha(
     if !scene.map(|s| s.cursor.show).unwrap_or(cfg.cursor) {
         return 0.0;
     }
+    if !track.visible_at(t) {
+        return 0.0;
+    }
     let idle_alpha = track.opacity_at(t, live.cursor_auto_hide);
     let zoom_alpha = match scene {
         Some(s) => {

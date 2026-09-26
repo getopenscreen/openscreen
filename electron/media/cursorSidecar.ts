@@ -242,6 +242,7 @@ export async function readCursorTelemetryFile(
 				timeMs: sample.timeMs,
 				cx: sample.cx,
 				cy: sample.cy,
+				visible: sample.visible,
 				interactionType: sample.interactionType,
 			})),
 		};

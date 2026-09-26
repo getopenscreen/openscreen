@@ -52,6 +52,133 @@ describe("detectZoomDwellCandidates", () => {
 });
 
 describe("buildAutoZoomSuggestions", () => {
+	it("ignores a click made while the cursor is hidden", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [{ ...click(2000, 0.5, 0.5), visible: false }],
+			totalMs: 5000,
+			existingRegions: [],
+			defaultDurationMs: 2000,
+		});
+		expect(suggestions).toEqual([]);
+	});
+
+	it("ignores a visible mouse-down when the cursor hides during that drag", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [
+				{ ...click(1000, 0.5, 0.5), visible: true },
+				{ timeMs: 1016, cx: 0.5, cy: 0.5, visible: false, interactionType: "move" },
+				{ timeMs: 1600, cx: 0.7, cy: 0.5, visible: false, interactionType: "mouseup" },
+			],
+			totalMs: 5000,
+			existingRegions: [],
+			defaultDurationMs: 2000,
+		});
+		expect(suggestions).toEqual([]);
+	});
+
+	it("keeps a click released before the cursor later hides", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [
+				{ ...click(1000, 0.5, 0.5), visible: true },
+				{ timeMs: 1050, cx: 0.5, cy: 0.5, visible: true, interactionType: "mouseup" },
+				{ timeMs: 1400, cx: 0.5, cy: 0.5, visible: false, interactionType: "move" },
+			],
+			totalMs: 5000,
+			existingRegions: [],
+			defaultDurationMs: 2000,
+		});
+		expect(suggestions).toHaveLength(1);
+		expect(suggestions[0].focus).toEqual({ cx: 0.5, cy: 0.5 });
+	});
+
+	it("keeps a later visible click after a hidden drag", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [
+				{ ...click(1000, 0.5, 0.5), visible: true },
+				{ timeMs: 1100, cx: 0.6, cy: 0.5, visible: false, interactionType: "move" },
+				{ timeMs: 1600, cx: 0.7, cy: 0.5, visible: true, interactionType: "mouseup" },
+				{ ...click(4000, 0.2, 0.8), visible: true },
+			],
+			totalMs: 6000,
+			existingRegions: [],
+			defaultDurationMs: 2000,
+		});
+		expect(suggestions).toHaveLength(1);
+		expect(suggestions[0].focus).toEqual({ cx: 0.2, cy: 0.8 });
+	});
+
+	it("keeps a legacy click without mouseup when the cursor hides much later", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [
+				{ ...click(1000, 0.2, 0.8), visible: true },
+				{ timeMs: 1050, cx: 0.3, cy: 0.7, visible: true, interactionType: "move" },
+				{ timeMs: 2000, cx: 0.7, cy: 0.3, visible: false, interactionType: "move" },
+			],
+			totalMs: 4000,
+			existingRegions: [],
+			defaultDurationMs: 1000,
+		});
+		expect(suggestions).toHaveLength(1);
+		expect(suggestions[0].focus).toEqual({ cx: 0.2, cy: 0.8 });
+	});
+
+	it("rejects a legacy click when the cursor hides on the next sampler tick", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [
+				{ ...click(1000, 0.2, 0.8), visible: true },
+				{ timeMs: 1033, cx: 0.25, cy: 0.75, visible: false, interactionType: "move" },
+			],
+			totalMs: 4000,
+			existingRegions: [],
+			defaultDurationMs: 1000,
+		});
+		expect(suggestions).toEqual([]);
+	});
+
+	it("does not join visible samples across a hidden interval into a dwell", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [
+				{ timeMs: 1000, cx: 0.5, cy: 0.5, visible: true },
+				{ timeMs: 1200, cx: 0.5, cy: 0.5, visible: true },
+				{ timeMs: 1400, cx: 0.5, cy: 0.5, visible: false },
+				{ timeMs: 1800, cx: 0.5, cy: 0.5, visible: true },
+				{ timeMs: 2000, cx: 0.5, cy: 0.5, visible: true },
+			],
+			totalMs: 5000,
+			existingRegions: [],
+			defaultDurationMs: 2000,
+		});
+		expect(suggestions).toEqual([]);
+	});
+
+	it("ignores a dwell recorded while the cursor is hidden", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: dwell(2000, 0.5, 0.5).map((sample) => ({
+				...sample,
+				visible: false,
+			})),
+			totalMs: 5000,
+			existingRegions: [],
+			defaultDurationMs: 2000,
+		});
+		expect(suggestions).toEqual([]);
+	});
+
+	it("keeps a visible dwell beside hidden cursor samples", () => {
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [
+				...dwell(1000, 0.2, 0.8),
+				{ timeMs: 2000, cx: 0.2, cy: 0.8, visible: false },
+			],
+			totalMs: 5000,
+			existingRegions: [],
+			defaultDurationMs: 2000,
+		});
+		expect(suggestions).toHaveLength(1);
+		expect(suggestions[0].focus.cx).toBeCloseTo(0.2);
+		expect(suggestions[0].focus.cy).toBeCloseTo(0.8);
+	});
+
 	it("returns a centered span around each accepted dwell", () => {
 		const telemetry = dwell(2000, 0.5, 0.5);
 		const suggestions = buildAutoZoomSuggestions({

@@ -37,6 +37,9 @@ pub struct CursorTrack {
     /// réellement cliqué. `smoothed()` la garde telle quelle, alors que la piste lissée passe
     /// ailleurs à cet instant (cf. `pinned_at`).
     click_points: Vec<(f32, f32)>,
+    /// CHANGEMENTS de visibilité : `(instant, visible)`, triés. Comme `types`, c'est une
+    /// fonction en escalier. Une piste ancienne sans champ `visible` reste visible.
+    visibility: Vec<(f32, bool)>,
     /// CHANGEMENTS d'état du curseur : (instant, `"arrow"` / `"text"` / `"pointer"` / …), triés.
     /// Une fonction en escalier, pas une valeur par échantillon : l'état tient sur des secondes
     /// entières alors que la position est échantillonnée toutes les 33 ms (~30 Hz, cf.
@@ -109,10 +112,26 @@ impl CursorTrack {
     /// échantillons courants. Une piste re-lissée (`smoothed`) recalcule donc aussi son suivi,
     /// pour que la caméra suive la trajectoire que l'utilisateur voit réellement.
     pub(crate) fn new(samples: Vec<(f32, f32, f32)>, clicks: Vec<f32>, types: Vec<(f32, String)>) -> CursorTrack {
+        CursorTrack::new_with_visibility(samples, clicks, types, Vec::new())
+    }
+
+    fn new_with_visibility(
+        samples: Vec<(f32, f32, f32)>,
+        clicks: Vec<f32>,
+        types: Vec<(f32, String)>,
+        visibility: Vec<(f32, bool)>,
+    ) -> CursorTrack {
         let follow_samples = smooth_follow_samples(&samples);
         let click_points =
             clicks.iter().map(|&tc| sample_at(&samples, tc).unwrap_or((0.0, 0.0))).collect();
-        CursorTrack { samples, follow_samples, clicks, click_points, types }
+        CursorTrack { samples, follow_samples, clicks, click_points, visibility, types }
+    }
+
+    /// Visibilité enregistrée au temps `t`. Les anciens sidecars qui n'ont pas ce champ sont
+    /// visibles par défaut, comme les lecteurs TypeScript.
+    pub fn visible_at(&self, t: f32) -> bool {
+        let i = self.visibility.partition_point(|(tc, _)| *tc <= t);
+        if i == 0 { true } else { self.visibility[i - 1].1 }
     }
 
     /// État du curseur au temps `t` : la dernière transition à `t` ou avant. `None` avant la
@@ -135,6 +154,19 @@ impl CursorTrack {
         let mut samples = Vec::new();
         let mut clicks = Vec::new();
         let mut types: Vec<(f32, String)> = Vec::new();
+        let mut visibility_at_offset = true;
+        let mut visibility_sample_time = f64::NEG_INFINITY;
+        // A clipped track inherits the last recorded state at its source offset. Using the first
+        // later sample would reveal a cursor early when that sample is the transition to visible.
+        for s in arr {
+            let tm = s["timeMs"].as_f64().unwrap_or(-1.0);
+            if tm >= 0.0 && tm <= offset_ms && tm >= visibility_sample_time {
+                visibility_sample_time = tm;
+                visibility_at_offset =
+                    s.get("visible").and_then(|value| value.as_bool()).unwrap_or(true);
+            }
+        }
+        let mut visibility = vec![(0.0, visibility_at_offset)];
         let end = offset_ms + dur_s * 1000.0;
         for s in arr {
             let tm = s["timeMs"].as_f64().unwrap_or(-1.0);
@@ -145,7 +177,11 @@ impl CursorTrack {
             let cx = s["cx"].as_f64().unwrap_or(0.0) as f32;
             let cy = s["cy"].as_f64().unwrap_or(0.0) as f32;
             samples.push((t, cx, cy));
-            if s["interactionType"].as_str() == Some("click") {
+            let visible = s.get("visible").and_then(|value| value.as_bool()).unwrap_or(true);
+            if visibility.last().map(|(_, previous)| *previous) != Some(visible) {
+                visibility.push((t, visible));
+            }
+            if visible && s["interactionType"].as_str() == Some("click") {
                 clicks.push(t);
             }
             // Seules les TRANSITIONS sont retenues — voir `types`. Le helper
@@ -165,7 +201,8 @@ impl CursorTrack {
         samples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         clicks.sort_by(|a, b| a.partial_cmp(b).unwrap());
         types.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        Ok(CursorTrack::new(samples, clicks, types))
+        visibility.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        Ok(CursorTrack::new_with_visibility(samples, clicks, types, visibility))
     }
 
     /// Position lissée au temps `t`, pour le suivi auto du zoom. La télémétrie brute est
@@ -265,7 +302,9 @@ impl CursorTrack {
     /// bruts (le bounce est temporel, pas positionnel — ne doit pas suivre le lissage).
     pub fn smoothed(&self, factor: f32) -> CursorTrack {
         if self.samples.len() < 2 || factor <= 0.0 {
-            return CursorTrack::new(self.samples.clone(), self.clicks.clone(), self.types.clone());
+            return CursorTrack::new_with_visibility(
+                self.samples.clone(), self.clicks.clone(), self.types.clone(), self.visibility.clone(),
+            );
         }
         const STEP_S: f32 = 1.0 / 240.0;
         let start = self.samples[0].0;
@@ -283,15 +322,30 @@ impl CursorTrack {
             raw_y.push(cy);
         }
         let (stiffness, damping, mass) = cursor_spring_config(factor);
-        let xs = spring_smooth(&raw_x, stiffness, damping, mass, STEP_S);
-        let ys = spring_smooth(&raw_y, stiffness, damping, mass, STEP_S);
+        // Une phase masquée coupe le ressort. Au retour, le curseur repart du premier point
+        // réellement visible au lieu de traverser la trajectoire cachée avec du retard.
+        let mut xs = Vec::with_capacity(n);
+        let mut ys = Vec::with_capacity(n);
+        let mut run_start = 0;
+        while run_start < n {
+            let visible = self.visible_at(times[run_start]);
+            let mut run_end = run_start + 1;
+            while run_end < n && self.visible_at(times[run_end]) == visible {
+                run_end += 1;
+            }
+            xs.extend(spring_smooth(&raw_x[run_start..run_end], stiffness, damping, mass, STEP_S));
+            ys.extend(spring_smooth(&raw_y[run_start..run_end], stiffness, damping, mass, STEP_S));
+            run_start = run_end;
+        }
         let samples = times.into_iter().zip(xs).zip(ys).map(|((t, x), y)| (t, x, y)).collect();
         // Comme les clics, les changements d'état gardent leurs instants bruts : le lissage
         // déplace la trajectoire, pas la chronologie de ce que faisait l'utilisateur. Les points
         // cliqués restent ceux de la piste brute.
         CursorTrack {
             click_points: self.click_points.clone(),
-            ..CursorTrack::new(samples, self.clicks.clone(), self.types.clone())
+            ..CursorTrack::new_with_visibility(
+                samples, self.clicks.clone(), self.types.clone(), self.visibility.clone(),
+            )
         }
     }
 
@@ -442,6 +496,56 @@ mod tests {
         let smoothed = track.smoothed(0.4);
         assert_eq!(smoothed.type_at(0.1), Some("arrow"));
         assert_eq!(smoothed.type_at(0.7), Some("text"));
+    }
+
+    #[test]
+    fn load_preserves_hidden_intervals_and_ignores_hidden_clicks() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let path = std::env::temp_dir().join(format!(
+            "openscreen-cursor-visibility-{}-{}.json", std::process::id(), unique
+        ));
+        std::fs::write(
+            &path,
+            r#"{"samples":[
+                {"timeMs":0,"cx":0.1,"cy":0.1,"visible":true},
+                {"timeMs":100,"cx":0.2,"cy":0.2,"visible":false,"interactionType":"click"},
+                {"timeMs":600,"cx":0.9,"cy":0.9,"visible":true,"interactionType":"click"}
+            ]}"#,
+        )
+        .expect("write temp sidecar");
+        let path_str = path.to_str().expect("utf-8 temp path");
+        let track = CursorTrack::load(path_str, 0.0, 1.0).expect("load sidecar");
+        let clipped = CursorTrack::load(path_str, 200.0, 0.5).expect("load clipped sidecar");
+        let _ = std::fs::remove_file(&path);
+
+        assert!(track.visible_at(0.0));
+        assert!(!track.visible_at(0.1));
+        assert!(!track.visible_at(0.59));
+        assert!(track.visible_at(0.6));
+        assert_eq!(track.clicks, vec![0.6], "le clic masqué ne doit pas animer le curseur");
+        assert!(!clipped.visible_at(0.0), "la fenêtre commence dans la phase masquée");
+        assert!(!clipped.visible_at(0.39), "l'état masqué tient jusqu'à la transition");
+        assert!(clipped.visible_at(0.4), "la transition visible garde son temps relatif");
+
+        let smoothed = track.smoothed(0.5);
+        assert!(!smoothed.visible_at(0.3), "le lissage garde la phase masquée");
+        assert!(smoothed.visible_at(0.6));
+        let reappeared = smoothed.at(0.6).expect("position at reappearance");
+        assert!(
+            (reappeared.0 - 0.9).abs() < 0.02 && (reappeared.1 - 0.9).abs() < 0.02,
+            "le ressort redémarre au point visible, sans traîne: {reappeared:?}"
+        );
+    }
+
+    #[test]
+    fn legacy_tracks_without_visibility_stay_visible() {
+        let track = CursorTrack::new(vec![(0.0, 0.1, 0.1), (1.0, 0.9, 0.9)], vec![], vec![]);
+        assert!(track.visible_at(0.0));
+        assert!(track.visible_at(0.5));
+        assert!(track.visible_at(10.0));
     }
 
     /// JSON null et une clé `cursorType` absente resetent vers la flèche,

@@ -149,13 +149,27 @@ describe("readCursorTelemetryFile", () => {
 		const result = await readCursorTelemetryFile(video, {});
 
 		expect(result.success).toBe(true);
-		expect(result.samples).toEqual([{ timeMs: 10, cx: 0.5, cy: 0.5, interactionType: "click" }]);
+		expect(result.samples).toEqual([
+			{ timeMs: 10, cx: 0.5, cy: 0.5, visible: true, interactionType: "click" },
+		]);
 		// This projection feeds the ai-edition auto-zoom detector, whose click
 		// candidates ARE the recorded interactions (issue #699). It used to strip
 		// the field — locked by a test, even — and the detector never saw a click
 		// however many the take recorded; the digest reads `readCursorSidecar`
 		// directly, which is how it kept working. Positions-only consumers ignore
 		// the extra field.
+	});
+
+	it("keeps hidden cursor state for auto-zoom", async () => {
+		const video = path.join(dir, "hidden.mp4");
+		await writeSidecar(video, {
+			samples: [{ timeMs: 10, cx: 0.5, cy: 0.5, visible: false, interactionType: "click" }],
+		});
+
+		const result = await readCursorTelemetryFile(video, {});
+
+		expect(result.success).toBe(true);
+		expect(result.samples[0].visible).toBe(false);
 	});
 
 	it("keeps every click kind, not only the plain left click", async () => {

@@ -112,10 +112,6 @@
 		"formatFill": "録画",
 		"formatFillFit": "全体",
 		"formatFillFollow": "カーソルを追う",
-		"formatFillHelp": "カーソルを追う録画の一部でフォーマットを埋めます。",
-		"formatFillMixed": "利用不可：クリップの形が異なります。",
-		"formatFillLayout": "利用不可：横並びと縦積みのレイアウトはすでに枠を埋めています。",
-		"formatFillFrame": "デバイスフレームとは併用できません。",
 		"formatOriginal": "元のサイズ",
 		"fitClipMany": "{{count}} クリップ",
 		"frame": "フレーム",
@@ -125,8 +121,6 @@
 		"fitClip": "合わせる",
 		"motionBlur": "モーションブラー",
 		"depthOfField": "被写界深度",
-		"depthOfFieldHint": "3D ズーム",
-		"depthOfFieldNoTilt": "このプロジェクトに 3D ズームはありません",
 		"roundness": "丸み",
 		"frameStyle": "スタイル",
 		"windowNone": "なし",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "タイムラインの全体オートフォーカス切り替えによって制御されます。オフにすると、ズームごとにフォーカスモードを設定できます。",
 			"auto": "自動",
 			"manual": "手動",
-			"autoDescription": "表示範囲が録画中のカーソル位置に追従します",
 			"title": "フォーカスモード"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "画面を左向きに",
 				"right": "画面を右向きに",
 				"followCursor": "カーソルに合わせて回り込む"
-			},
-			"description": {
-				"off": "画面は平らなままです。",
-				"left": "1つの姿勢を保ちます：左向きで、上から見下ろします。",
-				"right": "1つの姿勢を保ちます：右向きで、上から見下ろします。",
-				"followCursor": "画面は動かず、カメラが画面の周りを回ってカーソルのある側へ移り、カーソルに合わせて上下します。"
-			},
-			"needsCursor": "カーソルが非表示です：このカメラは追う対象がなく、最初のアングルのままです。"
+			}
 		},
 		"clickImpact": {
-			"title": "クリックの押し込み",
-			"description": "クリックするたびに傾いた画面が押され、クリックした側が沈んでから戻ります。",
-			"needsRotation": "先に3Dカメラを選んでください。押し込めるのは傾いた画面だけです。",
-			"needsCursor": "カーソルが非表示です。画面は見えているクリックにだけ反応します。",
-			"descriptionCamera": "クリックのたびにカメラが少し後ろへ下がり、また戻ります。"
+			"title": "クリックの押し込み"
 		},
 		"level": "ズーム倍率",
 		"previewHold": "押している間ズーム効果をプレビュー",
@@ -438,15 +420,12 @@
 		"smoothing": "スムージング",
 		"clickBounce": "クリックバウンス",
 		"model3d": "3D カーソル",
-		"model3dHint": "各カーソルスタイルのデザインに合わせた3D形状を表示します。",
-		"model3dNeedsCursor": "3D カーソルを使うには「カーソルを表示」をオンにしてください。",
 		"help": "記録されたテレメトリからのカーソル描画: テーマ、サイズ、スムージング、モーションブラー、クリック時のバウンス。",
 		"size": "サイズ",
 		"title": "カーソル",
 		"show": "カーソルを表示",
 		"themeDefault": "デフォルト",
 		"alwaysArrow": "常に矢印カーソルを使用",
-		"alwaysArrowHint": "テキストやリンクの上でも、すべてのカーソル状態で矢印を表示します。",
 		"motionBlur": "モーションブラー",
 		"theme": "カーソルのスタイル",
 		"autoHide": "非アクティブ時に非表示",

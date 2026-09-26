@@ -112,10 +112,6 @@
 		"formatFill": "Bản ghi",
 		"formatFillFit": "Toàn bộ",
 		"formatFillFollow": "Theo con trỏ",
-		"formatFillHelp": "Lấp đầy định dạng bằng một khung của bản ghi đi theo con trỏ.",
-		"formatFillMixed": "Không khả dụng: các clip có hình dạng khác nhau.",
-		"formatFillLayout": "Không khả dụng: bố cục cạnh nhau và xếp chồng đã lấp đầy vị trí của chúng.",
-		"formatFillFrame": "Không khả dụng khi có khung thiết bị.",
 		"formatOriginal": "Gốc",
 		"fitClipMany": "{{count}} clip",
 		"frame": "Khung",
@@ -125,8 +121,6 @@
 		"fitClip": "Vừa khít",
 		"motionBlur": "Làm mờ chuyển động",
 		"depthOfField": "Độ sâu trường ảnh",
-		"depthOfFieldHint": "Thu phóng 3D",
-		"depthOfFieldNoTilt": "Dự án chưa có thu phóng 3D",
 		"roundness": "Độ bo tròn",
 		"frameStyle": "Kiểu",
 		"windowNone": "Không",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "Được điều khiển bởi công tắc Lấy nét tự động chung trên dòng thời gian. Tắt để đặt chế độ lấy nét riêng cho từng lần thu phóng.",
 			"auto": "Tự động",
 			"manual": "Thủ công",
-			"autoDescription": "Máy ảnh đi theo vị trí con trỏ đã ghi",
 			"title": "Chế độ lấy nét"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "Màn hình xoay sang trái",
 				"right": "Màn hình xoay sang phải",
 				"followCursor": "Xoay quanh theo con trỏ"
-			},
-			"description": {
-				"off": "Màn hình giữ phẳng.",
-				"left": "Giữ một tư thế: xoay sang trái và nhìn từ trên xuống.",
-				"right": "Giữ một tư thế: xoay sang phải và nhìn từ trên xuống.",
-				"followCursor": "Màn hình đứng yên; máy quay bay vòng quanh, sang phía có con trỏ và nâng lên hay hạ xuống theo nó."
-			},
-			"needsCursor": "Con trỏ đang bị ẩn: máy quay này không có gì để theo dõi và giữ nguyên góc ban đầu."
+			}
 		},
 		"clickImpact": {
-			"title": "Hiệu ứng nhấp",
-			"description": "Mỗi lần nhấp sẽ ấn màn hình nghiêng: phía được nhấp lún xuống rồi bật lại.",
-			"needsRotation": "Hãy chọn camera 3D trước: chỉ màn hình nghiêng mới ấn được.",
-			"needsCursor": "Con trỏ đang ẩn: màn hình chỉ phản ứng với các lần nhấp nhìn thấy được.",
-			"descriptionCamera": "Mỗi cú nhấp đẩy máy quay lùi lại một chút rồi trở về."
+			"title": "Hiệu ứng nhấp"
 		},
 		"level": "Mức độ thu phóng",
 		"previewHold": "Giữ để xem trước hiệu ứng phóng to",
@@ -438,15 +420,12 @@
 		"smoothing": "Làm mượt",
 		"clickBounce": "Nảy khi nhấp",
 		"model3d": "Con trỏ 3D",
-		"model3dHint": "Mỗi kiểu con trỏ có hình khối 3D phù hợp với thiết kế.",
-		"model3dNeedsCursor": "Bật “Hiện con trỏ” để dùng con trỏ 3D.",
 		"help": "Cách vẽ con trỏ từ dữ liệu đã ghi: chủ đề, kích thước, làm mượt, mờ chuyển động và hiệu ứng nảy khi nhấp.",
 		"size": "Kích thước",
 		"title": "Con trỏ",
 		"show": "Hiện con trỏ",
 		"themeDefault": "Mặc định",
 		"alwaysArrow": "Luôn dùng con trỏ mũi tên",
-		"alwaysArrowHint": "Hiển thị mũi tên cho mọi trạng thái con trỏ, kể cả trên văn bản hoặc liên kết.",
 		"motionBlur": "Làm mờ chuyển động",
 		"theme": "Kiểu con trỏ",
 		"autoHide": "Ẩn khi không hoạt động",

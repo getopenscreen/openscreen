@@ -51,7 +51,6 @@ import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import {
 	collectNativeFormats,
-	type FormatFillAvailability,
 	formatFillAvailability,
 	isAutoFormatAvailable,
 	pickOutputDims,
@@ -2343,13 +2342,6 @@ const RECORDING_FRAME_LABEL_KEYS: Record<RecordingFrame, string> = {
 };
 
 /** What the fill row says under itself: what "follow" does, or why it cannot. */
-const FORMAT_FILL_HINT_KEYS: Record<Exclude<FormatFillAvailability, "none">, string> = {
-	available: "effects.formatFillHelp",
-	mixed: "effects.formatFillMixed",
-	layout: "effects.formatFillLayout",
-	frame: "effects.formatFillFrame",
-};
-
 const FRAME_THEME_LABEL_KEYS: Record<FrameTheme, string> = {
 	light: "effects.frameThemeLight",
 	dark: "effects.frameThemeDark",
@@ -2614,9 +2606,9 @@ export function VideoEffectsPane() {
 				</Popover>
 			</div>
 			{/* How a recording of another shape sits in a fixed format: whole, or filling it with a
-			    window that follows the cursor. Only listed when the two shapes differ; greyed out,
-			    saying why, when the timeline has no single rule it could follow. */}
-			{fillAvailability !== "none" ? (
+			    window that follows the cursor. Only listed when the two shapes differ and the timeline
+			    has a single rule it could follow. */}
+			{fillAvailability === "available" ? (
 				<div className={`${styles.field} ${styles.fieldStack}`}>
 					<span className={styles.fieldLabel}>{ts("effects.formatFill")}</span>
 					<ChoiceRow<"fit" | "follow">
@@ -2626,10 +2618,9 @@ export function VideoEffectsPane() {
 							{ value: "follow", label: ts("effects.formatFillFollow") },
 						]}
 						value={fillActive ? "follow" : "fit"}
-						disabled={!hasDocument || fillAvailability !== "available"}
+						disabled={!hasDocument}
 						onChange={(v) => void set({ formatFollowCursor: v === "follow" })}
 					/>
-					<p className={styles.hint}>{ts(FORMAT_FILL_HINT_KEYS[fillAvailability])}</p>
 				</div>
 			) : null}
 			{/* The frame drawn around the recording, and its theme. Two menus like Format above
@@ -2809,22 +2800,18 @@ export function VideoEffectsPane() {
 				/>
 			</div>
 			{/* Next to motion blur because it is the other blur of the RECORDING. It only ever
-			    acts on a 3D-tilted zoom, so with none in the project the switch would move
-			    nothing on screen: it is disabled then, and the row says why. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label}>
-					{ts("effects.depthOfField")}
-					<span className={styles.info}>
-						{hasTiltedZoom ? ts("effects.depthOfFieldHint") : ts("effects.depthOfFieldNoTilt")}
-					</span>
-				</span>
-				<Toggle
-					checked={settings.depthOfField}
-					ariaLabel={ts("effects.depthOfField")}
-					disabled={!hasDocument || !hasTiltedZoom}
-					onChange={(v) => void set({ depthOfField: v })}
-				/>
-			</div>
+			    acts on a 3D-tilted zoom, so with none in the project it is not offered. */}
+			{hasTiltedZoom ? (
+				<div className={styles.paneRow}>
+					<span className={styles.label}>{ts("effects.depthOfField")}</span>
+					<Toggle
+						checked={settings.depthOfField}
+						ariaLabel={ts("effects.depthOfField")}
+						disabled={!hasDocument}
+						onChange={(v) => void set({ depthOfField: v })}
+					/>
+				</div>
+			) : null}
 		</Pane>
 	);
 }
@@ -3815,42 +3802,34 @@ export function CursorPane() {
 					}}
 				/>
 			</div>
-			{/* One switch for the modelled cursor. A hidden cursor has nothing to model, so the
-			    row is disabled then and both its hint and its tooltip say why. */}
-			<div
-				className={styles.paneRow}
-				title={settings.cursorShow ? undefined : ts("cursor.model3dNeedsCursor")}
-			>
-				<span className={styles.label}>
-					{ts("cursor.model3d")}
-					<span className={styles.info}>
-						{settings.cursorShow ? ts("cursor.model3dHint") : ts("cursor.model3dNeedsCursor")}
-					</span>
-				</span>
-				<Toggle
-					ariaLabel={ts("cursor.model3d")}
-					checked={settings.cursor.model3d}
-					disabled={!hasDocument || !settings.cursorShow}
-					onChange={(v) => {
-						void set({ cursor: { model3d: v } });
-						if (isNativeCompositorActive()) {
-							setNativeParam("cursorModel3d", v);
-						}
-					}}
-				/>
-			</div>
-			<div className={styles.paneRow}>
-				<span className={styles.label}>
-					{ts("cursor.alwaysArrow")}
-					<span className={styles.info}>{ts("cursor.alwaysArrowHint")}</span>
-				</span>
-				<Toggle
-					ariaLabel={ts("cursor.alwaysArrow")}
-					checked={settings.cursor.alwaysArrow}
-					disabled={!hasDocument || !settings.cursorShow}
-					onChange={(v) => void set({ cursor: { alwaysArrow: v } })}
-				/>
-			</div>
+			{/* A hidden cursor has nothing to model or restyle, so these rows are not offered then. */}
+			{settings.cursorShow ? (
+				<>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("cursor.model3d")}</span>
+						<Toggle
+							ariaLabel={ts("cursor.model3d")}
+							checked={settings.cursor.model3d}
+							disabled={!hasDocument}
+							onChange={(v) => {
+								void set({ cursor: { model3d: v } });
+								if (isNativeCompositorActive()) {
+									setNativeParam("cursorModel3d", v);
+								}
+							}}
+						/>
+					</div>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("cursor.alwaysArrow")}</span>
+						<Toggle
+							ariaLabel={ts("cursor.alwaysArrow")}
+							checked={settings.cursor.alwaysArrow}
+							disabled={!hasDocument}
+							onChange={(v) => void set({ cursor: { alwaysArrow: v } })}
+						/>
+					</div>
+				</>
+			) : null}
 			{/* One option is not a choice: the picker shows once a pack ships beside the
 			    default art (see CURSOR_THEMES). */}
 			{cursorThemeOptions.length > 1 ? (

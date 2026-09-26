@@ -92,9 +92,10 @@ import { assetCameraSource, hasAnyClipWithCamera } from "@/lib/ai-edition/timeli
 import { breatheCut } from "@/lib/ai-edition/timeline/cut-breath";
 import { formatMs } from "@/lib/ai-edition/timeline/format";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
-import type {
-	AssetTranscriptionView,
-	TranscriptGateReason,
+import {
+	type AssetTranscriptionView,
+	type TranscriptGateReason,
+	transcriptHasSpeech,
 } from "@/lib/ai-edition/transcription/status";
 import { getAssetPath } from "@/lib/assetPath";
 import { resolveWebcamLayoutPreset, supportsWebcamReactiveZoom } from "@/lib/compositeLayout";
@@ -1000,7 +1001,8 @@ export function TranscriptPane({
 		);
 	}
 
-	const hasSpeech = sections.some((section) => (section.transcript?.segments.length ?? 0) > 0);
+	// Speech, not just segments: a silence-only transcript has nothing to caption.
+	const hasSpeech = sections.some((section) => transcriptHasSpeech(section.transcript ?? null));
 	return (
 		<Pane
 			title={ts("transcript.title")}

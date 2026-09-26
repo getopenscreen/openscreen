@@ -60,6 +60,27 @@ export function effectiveZoomScale(region: ZoomScaleInput): number {
 }
 
 /**
+ * How far a recording may be blown up on the finished frame before it visibly blurs: output
+ * pixels per source pixel. Crop and zoom multiply, so the zoom a clip can take depends on
+ * how big it already is at rest (`maxZoomScaleFor`).
+ */
+export const MAX_SOURCE_MAGNIFICATION = 2;
+
+/** The frame magnification is measured on: the short side of the default export (Good, 1080p). */
+export const MAGNIFICATION_REFERENCE_PX = 1080;
+
+/**
+ * The deepest zoom that keeps a clip at or under `MAX_SOURCE_MAGNIFICATION`, given its
+ * magnification at rest (screen box px ÷ source px, crop included). Never below 1: a clip
+ * already past the limit at rest cannot zoom at all, rather than zoom out.
+ */
+export function maxZoomScaleFor(restMagnification: number): number {
+	if (!(restMagnification > 0)) return MAX_ZOOM_SCALE;
+	const scale = Math.floor((MAX_SOURCE_MAGNIFICATION / restMagnification) * 100) / 100;
+	return Math.max(MIN_ZOOM_SCALE, Math.min(MAX_ZOOM_SCALE, scale));
+}
+
+/**
  * The depth→scale table as one line of prose, for the tool descriptions handed
  * to the model.
  *

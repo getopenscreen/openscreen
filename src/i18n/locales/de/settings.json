@@ -387,6 +387,7 @@
 		"previewHold": "Gedrückt halten für die Zoom-Vorschau",
 		"customScale": "Eigener Zoom",
 		"customScaleRange": "Der Zoom reicht von {{min}}× bis {{max}}×",
+		"levelBlurs": "Über {{max}}× würde diese Aufnahme mehr als 2× vergrößert und unscharf.",
 		"selectRegion": "Wähle einen Zoom-Bereich zum Anpassen",
 		"cursor": {
 			"title": "Cursor",

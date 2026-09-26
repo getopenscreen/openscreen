@@ -21,7 +21,7 @@ import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
 import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
-import { buildSceneDescription, wallpaperAcceptsMotion } from "./sceneDescription";
+import { buildSceneDescription, wallpaperAcceptsMotion, zoomScaleLimit } from "./sceneDescription";
 
 // --- Fixture helpers --------------------------------------------------------
 // Keep fixtures minimal & deterministic — every field the serializer consults is filled in;
@@ -583,6 +583,48 @@ describe("buildSceneDescription.zoomRegions", () => {
 			expect(bounds.minX - halfWindow).toBeCloseTo(0, 10);
 			expect(bounds.minY - halfWindow).toBeCloseTo(0, 10);
 		}
+	});
+
+	it("bounds each clip's zoom so its recording is never blown up past 2× at 1080p", () => {
+		// Crop and zoom multiply: at 50 % padding a 1080p take already sits at 0.8, a 2160p
+		// take at 0.4 and half a 1080p take at 1.6 of the default 1080p export.
+		const at = (width: number, height: number, crop?: AxcutClip["cropRegion"]) => {
+			const doc = makeDoc({
+				assets: [
+					makeAsset({
+						id: "a",
+						originalPath: "/a.mp4",
+						durationSec: 5,
+						video: { codec: "h264", width, height, fps: 30 },
+					}),
+				],
+				clips: [
+					makeClip({
+						id: "c1",
+						assetId: "a",
+						sourceStartSec: 0,
+						sourceEndSec: 5,
+						timelineStartSec: 0,
+						timelineEndSec: 5,
+						cropRegion: crop,
+					}),
+				],
+				zoomRanges: [
+					makeZoom({ id: "z", startMs: 0, endMs: 1000, depth: 6, focus: { cx: 0.5, cy: 0.5 } }),
+				],
+				legacyEditor: { padding: 50, aspectRatio: "16:9" },
+			});
+			return {
+				scale: buildSceneDescription(doc).zoomRegions[0].scale,
+				limit: zoomScaleLimit(doc, "z"),
+			};
+		};
+		expect(at(1920, 1080)).toEqual({ scale: 2.5, limit: 2.5 });
+		expect(at(3840, 2160)).toEqual({ scale: 5, limit: 5 });
+		expect(at(1920, 1080, { x: 0.25, y: 0.25, width: 0.5, height: 0.5 })).toEqual({
+			scale: 1.25,
+			limit: 1.25,
+		});
 	});
 
 	it("customScale overrides the depth-derived value", () => {

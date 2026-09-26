@@ -1569,15 +1569,16 @@
 	align-items: center;
 	gap: 5px;
 	padding: 0 8px 0 7px;
-	/* "Candy": a saturated gradient in the lane's colour (--_c, set per lane below), a
-	   gloss line on top and a glow under it — the same recipe as the clip card. Dark ink
-	   on every colour: the light ones (mint, yellow, orange, teal) cannot carry white. */
+	/* "Candy": a saturated gradient in the lane's colour (--_c, set per lane below)
+	   and a glow under it, the same recipe as the clip card. No border and no gloss line:
+	   on the light theme either one reads as an outline. Dark ink on every colour: the
+	   light ones (mint, yellow, orange, pink) cannot carry white. */
 	--_c: var(--accent);
 	border-radius: 8px;
-	border: 1px solid var(--_c);
-	background: linear-gradient(180deg, color-mix(in oklab, var(--_c) 72%, white), var(--_c));
-	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4),
-		0 2px 6px color-mix(in oklab, var(--_c) var(--candy-glow), transparent);
+	/* Transparent, gradient painted under it (border-box): kept at 1px so sizes don't move. */
+	border: 1px solid transparent;
+	background: linear-gradient(180deg, color-mix(in oklab, var(--_c) 72%, white), var(--_c)) border-box;
+	box-shadow: 0 2px 6px color-mix(in oklab, var(--_c) var(--candy-glow), transparent);
 	color: #0b1220;
 	font-size: 12px;
 	font-weight: 600;
@@ -1591,7 +1592,7 @@
 	cursor: grabbing;
 }
 .lanePillSel {
-	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 0 0 2px var(--bg), 0 0 0 3.5px var(--_c);
+	box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--_c);
 }
 /* Narrower than its own chrome (PILL_HANDLES_MIN_PX): the handles mount OUTSIDE
    the box instead of inside it, so overflow must not clip them away — there is
@@ -1787,13 +1788,12 @@
 	   clip narrower than 6px would otherwise compute to nothing. */
 	min-width: 1px;
 	/* Blue (--clip), not mint: the accent belongs to what the user ADDED (zoom pills).
-	   A solid "candy" card: saturated gradient, a gloss line on top, a coloured glow
-	   under it. Text on it is white (.tlClipDuration), in both themes. */
+	   A solid "candy" card, same recipe as .lanePill. Text on it is white
+	   (.tlClipDuration), in both themes. */
 	border-radius: 12px;
-	border: 1px solid var(--clip);
-	background: linear-gradient(180deg, color-mix(in oklab, var(--clip) 78%, white), var(--clip));
-	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35),
-		0 3px 10px color-mix(in oklab, var(--clip) var(--candy-glow), transparent);
+	border: 1px solid transparent;
+	background: linear-gradient(180deg, color-mix(in oklab, var(--clip) 78%, white), var(--clip)) border-box;
+	box-shadow: 0 3px 10px color-mix(in oklab, var(--clip) var(--candy-glow), transparent);
 	overflow: hidden;
 	cursor: grab;
 	box-sizing: border-box;
@@ -1806,7 +1806,7 @@
 /* A halo ring set off by a gap in the panel colour: a border alone does not show on a
    card that is already solid blue. */
 .tlClipSel {
-	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 0 0 2px var(--bg),
+	box-shadow: 0 0 0 2px var(--bg),
 		0 0 0 4px var(--clip);
 }
 /* A generated clip: the media behind an inserted word, which nobody shot. Amber on the box
@@ -1840,10 +1840,8 @@
 	transform: translateY(-50%);
 }
 .tlClipGenerated {
-	border-color: var(--warn);
-	background: linear-gradient(180deg, color-mix(in oklab, var(--warn) 78%, white), var(--warn));
-	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35),
-		0 3px 10px color-mix(in oklab, var(--warn) var(--candy-glow), transparent);
+	background: linear-gradient(180deg, color-mix(in oklab, var(--warn) 78%, white), var(--warn)) border-box;
+	box-shadow: 0 3px 10px color-mix(in oklab, var(--warn) var(--candy-glow), transparent);
 }
 /* The clip being carried during a reorder drag — follows the pointer 1:1
    (no transition lag) while its siblings slide out of the way with the
@@ -1852,7 +1850,6 @@
 	cursor: grabbing;
 	opacity: 0.9;
 	z-index: 5;
-	border-color: var(--clip);
 	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
 	transition: box-shadow var(--motion-fast) var(--ease), opacity var(--motion-fast) var(--ease);
 }
@@ -1989,10 +1986,9 @@
 	top: 0;
 	bottom: 0;
 	border-radius: 999px;
-	border: 1px solid var(--playhead);
-	background: linear-gradient(180deg, color-mix(in oklab, var(--playhead) 72%, white), var(--playhead));
-	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35),
-		0 2px 6px color-mix(in oklab, var(--playhead) var(--candy-glow), transparent);
+	border: 1px solid transparent;
+	background: linear-gradient(180deg, color-mix(in oklab, var(--playhead) 72%, white), var(--playhead)) border-box;
+	box-shadow: 0 2px 6px color-mix(in oklab, var(--playhead) var(--candy-glow), transparent);
 	box-sizing: border-box;
 	cursor: grab;
 }

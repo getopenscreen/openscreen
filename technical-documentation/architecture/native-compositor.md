@@ -103,7 +103,9 @@ what `shaders.hlsl` actually implements:
    and the 3D tilt act on the footage and are cropped to the slot. Under a window
    or device frame, the frame is that container, drawn at rest around the slot and
    never zoomed or tilted, and `computeCompositeLayout` makes room for it beside the
-   camera. Everywhere else the frame zooms and tilts with the screen.
+   camera. Everywhere else the frame zooms and tilts with the screen. In every layout
+   the padding is measured from the frame's outer edge, so at rest the whole frame
+   stays on the canvas and is what gets centred.
 4. **Cursor.** A sprite picked from `cursor.cursorSprites` by the OS cursor state
    recorded in the `.cursor.json` track (`arrow`, `text`, `pointer`, the resize
    handles…), anchored so the sprite's hotspot — a 0..1 fraction of its own image,

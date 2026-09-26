@@ -488,19 +488,29 @@ lisent encore, et se dédoublent en `window` + le thème qu'ils nommaient : côt
 un projet écrit par une version antérieure s'ouvre avec le cadre ET le thème qu'il avait, et une
 valeur qu'aucune de ces deux familles ne connaît se lit « aucun cadre » des deux côtés.
 
-### C.2 Le métrage ne bouge pas
+### C.2 Le compositeur ne touche pas au métrage, le layout fait place au cadre
 
-**Le métrage a la même boîte et la même coupe avec et sans cadre**, quel qu'il soit. Son rayon, lui,
-suit la course de Roundness propre au cadre (C.5).
-Le cadre pousse vers l'EXTÉRIEUR : dans le padding, et au-delà du canevas s'il le faut, où la sortie
-le coupe. Il n'y a plus de `fit_in_window_frame` ni de `fit_in_device_frame` : rétrécir l'image
-pour loger un objet décoratif, c'était l'inverse de ce qu'on veut. Tout ce qui s'ancre sur `s_dst`
-— ombre de l'écran, masques de confidentialité, annotations, curseurs — n'a donc rien à rattraper,
-et l'overlay de l'éditeur pose ses poignées sur `layout.screenRect` tel quel (le portage TS
-`fitInWindowFrame` a disparu avec lui).
+**Le compositeur donne au métrage la même boîte et la même coupe avec et sans cadre**, quel qu'il
+soit. Son rayon, lui, suit la course de Roundness propre au cadre (C.5). Le cadre pousse vers
+l'EXTÉRIEUR de la boîte qu'il reçoit : il n'y a plus de `fit_in_window_frame` ni de
+`fit_in_device_frame`. Tout ce qui s'ancre sur `s_dst` (ombre de l'écran, masques de
+confidentialité, annotations, curseurs) n'a donc rien à rattraper, et l'overlay de l'éditeur pose
+ses poignées sur `layout.screenRect` tel quel.
 
-Épinglé par `the_footage_box_is_the_same_under_every_frame` (chaque cadre × plat, iso, orbite ×
-zoom 1 et 2, au bit près) et `a_framed_privacy_mask_covers_what_the_overlay_shows`.
+**C'est le layout de l'app qui fait place au cadre, dans tous les layouts** (27/09/2026). Le padding
+se mesure depuis le bord extérieur de tout ce que le cadre dessine : barre de fenêtre, socle du
+portable, pied du moniteur (`centerScreen`, `compositeLayout.ts`). L'ensemble tient dans la zone
+paddée et c'est lui qui est centré. Avant, le cadre débordait dans le padding et au-delà du canevas :
+à padding 0 aucun cadre n'était visible, au padding par défaut le pied du moniteur était coupé à
+moitié, et un cadre asymétrique décentrait l'ensemble (moniteur 96 px trop bas en 1080p). Le prix est
+assumé : sous un cadre, le métrage est plus petit (clip 16:9 en sortie 16:9 : −4 % sous la fenêtre
+et le téléphone, −17 % sous le portable, −21 % sous le moniteur). Auto épouse l'appareil de la même
+façon (`autoFormatAspect`).
+
+Épinglé côté compositeur par `the_footage_box_is_the_same_under_every_frame` (chaque cadre × plat,
+iso, orbite × zoom 1 et 2, au bit près) et `a_framed_privacy_mask_covers_what_the_overlay_shows` ;
+côté layout par les tests « the whole frame fits and centres » et « even border around every
+frame » de `compositeLayout.test.ts`.
 
 ### C.2 bis L'unité du cadre
 

@@ -136,9 +136,12 @@ and **one** encoder + muxer pair:
   1080p, whatever its frame rate.
   Only "Source" quality targets those source dims; 720p / 1080p target a
   fixed short side regardless.
-  **Auto** resolves in that same function: the first clip's cropped screen,
-  laid out with the camera layout at rest (`restingCompositionAspect`), plus
-  an even padding border (`autoFrameAspect`). The preview and the scene pad an
+  **Auto** resolves in that same function: the first clip's cropped screen
+  inside its device frame, laid out with the camera layout at rest
+  (`restingCompositionAspect`), plus an even padding border
+  (`autoFrameAspect`). A device's thickness follows the output's shape, which
+  Auto shapes around the device, so `autoFormatAspect` settles the two in a
+  few passes. The preview and the scene pad an
   Auto frame with the matching border (`paddedContentSize`,
   `compositeLayout.ts`), so the composition fills it with the same margin on
   all four sides. Auto is only offered while every clip has the same ratio,

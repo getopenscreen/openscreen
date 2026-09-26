@@ -11,10 +11,10 @@ export type Insets = [number, number, number, number];
 /**
  * What a frame draws around the screen AT REST (flat, unzoomed), as insets from the screen box.
  *
- * The native compositor draws the frames (`frame_geometry.rs`); this only measures them, for the
- * one layout family that must keep them clear of something: the block layouts, where the frame
- * is the screen's fixed container and sits next to the camera (`ScreenMask`). Everywhere else a
- * frame grows outward into the padding and zooms with the screen, and nothing lays out around it.
+ * The native compositor draws the frames (`frame_geometry.rs`) outward from the screen box it is
+ * given; this only measures them, for the layout that makes room for them: every layout measures
+ * the padding from what the frame draws, and the block layouts line the camera up with its body
+ * (`ScreenMask`).
  */
 export interface FrameFootprint {
 	/** The frame's body: the window chrome, or a device's front face around its screen. */

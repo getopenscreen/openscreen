@@ -968,10 +968,10 @@ pub(crate) fn screen_corner_radius_px(r: f32, s_px: [f32; 2]) -> f32 {
 /// unité du cadre `u` (px) : le filet à gauche, à droite et en bas, la barre de titre en haut (cf.
 /// `WindowFrame::margins`).
 ///
-/// L'écran ne rétrécit plus pour faire place au cadre : **le métrage a la même taille avec et sans
-/// cadre**, et c'est le cadre qui pousse vers l'extérieur — dans le padding, et au-delà du canvas
-/// s'il le faut, où la sortie le coupe. Rétrécir l'image pour loger un objet décoratif, c'était
-/// l'inverse de ce qu'on veut : le métrage est le sujet, le cadre son écrin.
+/// Le compositeur ne rétrécit jamais la boîte écran qu'il reçoit pour loger le cadre : le cadre
+/// pousse vers l'extérieur. C'est le layout de l'app qui lui fait place : le padding se mesure
+/// depuis le bord extérieur de tout ce que le cadre dessine (`computeCompositeLayout`), si bien
+/// qu'au repos il ne sort jamais du canvas, et c'est l'ensemble qui est centré.
 pub(crate) fn window_frame_margins(s_px: [f32; 2], u: f32) -> [f32; 4] {
     let (bar, line) = (WINDOW_FRAME_BAR_FRAC * u, WINDOW_FRAME_LINE_FRAC * u);
     let (sw, sh) = (s_px[0].max(1.0), s_px[1].max(1.0));
@@ -3042,10 +3042,10 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // déborde le padding — c'est la géométrie de `applyZoomTransform` (TS).
         let s_box = fit_screen(p.screen.dst);
         let s_box_prev = fit_screen(pp.screen.dst);
-        // Le cadre ne touche PAS à la boîte écran : le métrage a la même taille avec et sans
-        // cadre, et le cadre pousse vers l'extérieur — dans le padding, et au-delà du canvas s'il
-        // le faut, où la sortie le coupe. Ombre, masques, annotations et curseurs, ancrés sur
-        // `s_dst`, n'ont donc rien à rattraper.
+        // Le cadre ne touche PAS à la boîte écran : il pousse vers l'extérieur, dans la place que
+        // le layout de l'app lui a faite (le padding se mesure depuis son bord extérieur,
+        // `computeCompositeLayout`). Ombre, masques, annotations et curseurs, ancrés sur `s_dst`,
+        // n'ont donc rien à rattraper.
         // Le cadre et son thème. `resolved` ramène les anciennes valeurs `window-light` /
         // `window-dark` au chrome de fenêtre, et `theme_override` leur rend le thème qu'elles
         // nommaient : un projet qui les porte encore rend exactement ce qu'il rendait, sans que

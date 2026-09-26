@@ -305,17 +305,50 @@ function blockUnitSize(element: Size, block: BlockTransform, cameraAlong: number
 }
 
 /**
+ * The screen and its frame at rest, in UNIT space where the screen is exactly 1 wide: the
+ * frame's body, everything it draws, and the box of the whole (`element`). The frame's thickness
+ * follows the scene it is drawn in (`frameUnit`), of which only the shape counts. Without a
+ * frame every inset is 0 and the element is the screen.
+ */
+function framedScreen(screenAspect: number, canvas: Size, frame: RecordingFrame) {
+	const screen = { width: 1, height: 1 / screenAspect };
+	const { body, outer } = frameFootprint(frame, screen, frameUnit(screen, canvas));
+	const element = {
+		width: outer[0] + screen.width + outer[2],
+		height: outer[1] + screen.height + outer[3],
+	};
+	return { screen, body, outer, element };
+}
+
+/**
  * The composition's own shape (width / height) before any frame constrains it — what the
  * Auto format frames. Nothing is bent to fit: the screen keeps its ratio, and a block
  * layout's camera takes its resting shape, square, beside or under it. A picture-in-picture
  * bubble floats over the screen, so the composition is the screen alone.
+ *
+ * The screen wears its device frame: every layout measures the padding from what that frame
+ * draws, so it is part of the shape. Its thickness follows the scene's shape, `canvas`, which
+ * `autoFormatAspect` settles.
  */
-export function restingCompositionAspect(screenSize: Size, preset: WebcamLayoutPreset): number {
-	const screenAspect = screenSize.width / screenSize.height;
+export function restingCompositionAspect(
+	screenSize: Size,
+	preset: WebcamLayoutPreset,
+	frame: RecordingFrame = "none",
+	canvas: Size = screenSize,
+): number {
+	const { screen, body, element } = framedScreen(
+		screenSize.width / screenSize.height,
+		canvas,
+		frame,
+	);
 	const transform = getWebcamLayoutPresetDefinition(preset).transform;
-	if (transform.type !== "block") return screenAspect;
-	const cameraCross = transform.direction === "row" ? 1 / screenAspect : 1;
-	const block = blockUnitSize({ width: 1, height: 1 / screenAspect }, transform, cameraCross);
+	if (transform.type !== "block") return element.width / element.height;
+	// Square, lined up with the frame's body, as `computeCompositeLayout` lays it at rest.
+	const cameraCross =
+		transform.direction === "row"
+			? body[1] + screen.height + body[3]
+			: body[0] + screen.width + body[2];
+	const block = blockUnitSize(element, transform, cameraCross);
 	return block.width / block.height;
 }
 
@@ -358,6 +391,30 @@ export function autoFrameAspect(compositionAspect: number, padding: number): num
 	return compositionAspect >= 1 ? framed : 1 / framed;
 }
 
+/**
+ * What the Auto format resolves to: `autoFrameAspect` over `restingCompositionAspect`.
+ *
+ * Under a device frame the two depend on each other: the device's thickness follows the shape of
+ * the scene it is drawn in (`frameUnit`), and Auto shapes that scene around the device. Each pass
+ * lays the device out in the scene the previous one gave. A device is thin next to its screen, so
+ * each pass moves the shape by a small fraction of the one before, and a few leave nothing a pixel
+ * could show.
+ */
+export function autoFormatAspect(
+	screenSize: Size,
+	preset: WebcamLayoutPreset,
+	frame: RecordingFrame,
+	padding: number,
+): number {
+	let aspect = autoFrameAspect(restingCompositionAspect(screenSize, preset), padding);
+	if (frame === "none") return aspect;
+	for (let pass = 0; pass < 8; pass++) {
+		const canvas = { width: aspect, height: 1 };
+		aspect = autoFrameAspect(restingCompositionAspect(screenSize, preset, frame, canvas), padding);
+	}
+	return aspect;
+}
+
 export function computeCompositeLayout(params: {
 	canvasSize: Size;
 	maxContentSize?: Size;
@@ -371,8 +428,9 @@ export function computeCompositeLayout(params: {
 	/** Picture-in-picture only: 0 square corners to 1 fully round. */
 	webcamRoundness?: number;
 	/**
-	 * Block layouts only: the frame around the screen. There it is the screen's fixed container,
-	 * so the block makes room for it; everywhere else it grows into the padding.
+	 * The frame around the screen. Every layout makes room for everything it draws: the padding
+	 * is measured from its outer edge. In the block layouts it is also the screen's fixed
+	 * container, and the camera lines up with its body.
 	 */
 	frame?: RecordingFrame;
 }): WebcamCompositeLayout | null {
@@ -393,11 +451,7 @@ export function computeCompositeLayout(params: {
 
 	// no-webcam: hide the webcam, screen fills the canvas normally.
 	if (layoutPreset === "no-webcam") {
-		const screenRect = centerRect({
-			canvasSize,
-			size: screenSize,
-			maxSize: maxContentSize,
-		});
+		const screenRect = centerScreen(canvasSize, screenSize, maxContentSize, frame);
 		return { screenRect, webcamRect: null };
 	}
 
@@ -418,7 +472,7 @@ export function computeCompositeLayout(params: {
 			// No camera on this clip: the block degenerates to the screen alone, which
 			// contain-fits the padded area like every other preset does.
 			return {
-				screenRect: centerRect({ canvasSize, size: screenSize, maxSize: maxContentSize }),
+				screenRect: centerScreen(canvasSize, screenSize, maxContentSize, frame),
 				webcamRect: null,
 			};
 		}
@@ -442,12 +496,7 @@ export function computeCompositeLayout(params: {
 		// the screen itself. Its BODY is what the camera lines up with; what sticks out of the
 		// body (a laptop's deck, a monitor's stand) keeps the gap to the camera. Without a frame
 		// every inset is 0 and the arithmetic below is the frameless one, term for term.
-		const unitScreen = { width: 1, height: unitScreenHeight };
-		const { body, outer } = frameFootprint(frame, unitScreen, frameUnit(unitScreen, canvasSize));
-		const element = {
-			width: outer[0] + 1 + outer[2],
-			height: outer[1] + unitScreenHeight + outer[3],
-		};
+		const { body, outer, element } = framedScreen(screenAspect, canvasSize, frame);
 
 		// The camera shares the screen's cross-edge (same height beside it, same
 		// width under it — the aligned edge that makes them one solid block), so its
@@ -530,11 +579,7 @@ export function computeCompositeLayout(params: {
 	}
 
 	const transform = preset.transform;
-	const screenRect = centerRect({
-		canvasSize,
-		size: screenSize,
-		maxSize: maxContentSize,
-	});
+	const screenRect = centerScreen(canvasSize, screenSize, maxContentSize, frame);
 
 	if (!webcamWidth || !webcamHeight || webcamWidth <= 0 || webcamHeight <= 0) {
 		return { screenRect, webcamRect: null };
@@ -605,6 +650,42 @@ function snapRect(x: number, y: number, width: number, height: number): RenderRe
 		width: Math.max(1, Math.round(x + width) - left),
 		height: Math.max(1, Math.round(y + height) - top),
 	};
+}
+
+/**
+ * The screen with nothing welded to it, contain-fitted into the padded area and centred.
+ *
+ * Under a frame, what fits and centres is everything the frame draws: a window's bar, a laptop's
+ * deck, a monitor's stand. The padding is measured from the frame's outer edge, so at 0% the frame
+ * touches the scene and never goes past it, and a lopsided frame sits in the middle as a whole.
+ * The screen pays for it: it is smaller under a frame than without one.
+ */
+function centerScreen(
+	canvasSize: Size,
+	screenSize: Size,
+	maxContentSize: Size,
+	frame: RecordingFrame,
+): RenderRect {
+	if (frame === "none") {
+		return centerRect({ canvasSize, size: screenSize, maxSize: maxContentSize });
+	}
+	const { screen, outer, element } = framedScreen(
+		screenSize.width / screenSize.height,
+		canvasSize,
+		frame,
+	);
+	const scale = Math.min(
+		maxContentSize.width / element.width,
+		maxContentSize.height / element.height,
+	);
+	const originX = (canvasSize.width - element.width * scale) / 2;
+	const originY = (canvasSize.height - element.height * scale) / 2;
+	return snapRect(
+		originX + outer[0] * scale,
+		originY + outer[1] * scale,
+		scale,
+		screen.height * scale,
+	);
 }
 
 function centerRect(params: { canvasSize: Size; size: Size; maxSize: Size }): RenderRect {

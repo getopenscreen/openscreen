@@ -15,10 +15,9 @@
  */
 
 import {
-	autoFrameAspect,
+	autoFormatAspect,
 	getWebcamLayoutPresetDefinition,
 	resolveWebcamLayoutPreset,
-	restingCompositionAspect,
 	type WebcamLayoutPreset,
 } from "@/lib/compositeLayout";
 import { calculateEffectiveSourceDimensions } from "@/lib/exporter/mp4ExportSettings";
@@ -289,7 +288,7 @@ function firstClip(
 
 /**
  * What "Auto" resolves to: the frame shaped around the composition instead of the other way
- * round (`autoFrameAspect` over `restingCompositionAspect`).
+ * round (`autoFormatAspect`).
  *
  * Auto is only offered while the timeline holds one composition (`isAutoFormatAvailable`), so
  * any clip describes it, and the first one is read. That choice only matters for a project that
@@ -297,8 +296,9 @@ function firstClip(
  * after it, larger or not, moves nothing until the user picks a format. The output's SIZE still
  * follows the largest clip (`referenceClipDims`), so no clip is drawn past its own resolution.
  *
- * Zoom, device frames, shadow and captions are left out on purpose: they happen inside the
- * frame, in every format alike, and would make the shape move with the playhead.
+ * Zoom, shadow and captions are left out on purpose: they happen inside the frame, in every
+ * format alike, and would make the shape move with the playhead. A device frame is in: every
+ * format measures the padding from its outer edge, so Auto wraps the whole device.
  */
 function autoAspectRatioValue(document: AxcutDocument, probedAssetDims: Record<string, Dims>) {
 	const settings = getEditorSettings(document);
@@ -307,7 +307,7 @@ function autoAspectRatioValue(document: AxcutDocument, probedAssetDims: Record<s
 		? clipLayoutPreset(first.clip, document.assets, settings.webcamLayoutPreset)
 		: "no-webcam";
 	const screen = first?.dims ?? referenceClipDims(document, probedAssetDims);
-	return autoFrameAspect(restingCompositionAspect(screen, preset), settings.padding);
+	return autoFormatAspect(screen, preset, settings.frame, settings.padding);
 }
 
 /**

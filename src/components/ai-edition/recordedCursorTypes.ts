@@ -41,7 +41,8 @@ export function cursorStatesBetween(
 	return states.add(atStart);
 }
 
-// A recording's cursor file does not change once written: each is read once per session.
+// A recording's cursor file does not change once written: each is read once per session. A
+// recording without one reads as empty, and that answer is kept.
 const changesByPath = new Map<string, Promise<CursorStateChange[]>>();
 
 function stateChangesOf(videoPath: string): Promise<CursorStateChange[]> {
@@ -50,8 +51,12 @@ function stateChangesOf(videoPath: string): Promise<CursorStateChange[]> {
 		changes = Promise.resolve()
 			.then(() => nativeBridgeClient.cursor.getRecordingData(videoPath))
 			.then((data) => cursorStateChanges(data.samples))
-			// No cursor file, or no bridge: nothing but the arrow.
-			.catch(() => []);
+			// A read that failed (no bridge yet, a file still being written) shows nothing but the
+			// arrow for now, and is tried again the next time rather than never.
+			.catch(() => {
+				changesByPath.delete(videoPath);
+				return [];
+			});
 		changesByPath.set(videoPath, changes);
 	}
 	return changes;

@@ -61,14 +61,21 @@ describe("CursorPane cursor types", () => {
 		legacyEditor: Record<string, unknown>,
 		states: Array<NativeCursorType | null>,
 	) {
+		mockRecording(states);
 		// A path per test: the pane reads each recording once per session.
-		const originalPath = `/recordings/${crypto.randomUUID()}.mp4`;
-		vi.spyOn(nativeBridgeClient.cursor, "getRecordingData").mockResolvedValue({
+		renderProject(legacyEditor, `/recordings/${crypto.randomUUID()}.mp4`);
+	}
+
+	function mockRecording(states: Array<NativeCursorType | null>) {
+		return vi.spyOn(nativeBridgeClient.cursor, "getRecordingData").mockResolvedValue({
 			version: 2,
 			provider: "native",
 			assets: [],
 			samples: states.map((cursorType, i) => ({ timeMs: i * 100, cx: 0.5, cy: 0.5, cursorType })),
 		});
+	}
+
+	function renderProject(legacyEditor: Record<string, unknown>, originalPath: string) {
 		vi.spyOn(nativeBridgeClient.aiEdition, "save").mockImplementation(async (document) => ({
 			success: true,
 			document,
@@ -148,6 +155,22 @@ describe("CursorPane cursor types", () => {
 		renderWithRecording({}, ["arrow", null]);
 		await waitFor(() => expect(nativeBridgeClient.cursor.getRecordingData).toHaveBeenCalled());
 		expect(screen.queryByRole("group", { name: "Cursor types" })).toBeNull();
+	});
+
+	// A cursor file still being written right after a take must not hide the row all session.
+	it("reads a recording again after a read that failed", async () => {
+		const originalPath = `/recordings/${crypto.randomUUID()}.mp4`;
+		const read = mockRecording(["arrow", "pointer"]).mockRejectedValueOnce(new Error("busy"));
+		renderProject({}, originalPath);
+		await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+		// Let the failed read settle before the pane opens again.
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(screen.queryByRole("group", { name: "Cursor types" })).toBeNull();
+
+		cleanup();
+		renderProject({}, originalPath);
+		expect(await screen.findByRole("button", { name: "Hand" })).toBeTruthy();
+		expect(read).toHaveBeenCalledTimes(2);
 	});
 
 	// The 3D switch changes how the chosen style looks, so it sits right under the styles.

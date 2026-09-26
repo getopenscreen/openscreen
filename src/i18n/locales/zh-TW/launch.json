@@ -53,8 +53,8 @@
 		"cameraDevice": "攝影機裝置"
 	},
 	"cursor": {
-		"useEditableCursor": "使用可編輯游標",
-		"useSystemCursor": "使用系統游標"
+		"useEditableCursorHint": "使用可編輯游標：將重新開啟自動縮放與游標效果",
+		"useSystemCursorHint": "使用系統游標：將關閉自動縮放與游標效果"
 	},
 	"sourceSelector": {
 		"loading": "正在載入來源...",

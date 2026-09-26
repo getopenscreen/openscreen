@@ -53,8 +53,8 @@
 		"cameraDevice": "Zařízení kamery"
 	},
 	"cursor": {
-		"useEditableCursor": "Použít upravitelný kurzor",
-		"useSystemCursor": "Použít systémový kurzor"
+		"useEditableCursorHint": "Použít upravitelný kurzor: znovu zapne automatické přiblížení a efekty kurzoru",
+		"useSystemCursorHint": "Použít systémový kurzor: vypne automatické přiblížení a efekty kurzoru"
 	},
 	"sourceSelector": {
 		"loading": "Načítání zdrojů...",

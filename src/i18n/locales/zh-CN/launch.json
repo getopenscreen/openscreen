@@ -53,8 +53,8 @@
 		"cameraDevice": "摄像头设备"
 	},
 	"cursor": {
-		"useEditableCursor": "使用可编辑光标",
-		"useSystemCursor": "使用系统光标"
+		"useEditableCursorHint": "使用可编辑光标：将重新开启自动缩放和光标效果",
+		"useSystemCursorHint": "使用系统光标：将关闭自动缩放和光标效果"
 	},
 	"sourceSelector": {
 		"loading": "正在加载源...",

@@ -53,8 +53,8 @@
 		"cameraDevice": "Périphérique caméra"
 	},
 	"cursor": {
-		"useEditableCursor": "Utiliser le curseur éditable",
-		"useSystemCursor": "Utiliser le curseur système"
+		"useEditableCursorHint": "Utiliser le curseur éditable : réactive le zoom automatique et les effets de curseur",
+		"useSystemCursorHint": "Utiliser le curseur système : désactive le zoom automatique et les effets de curseur"
 	},
 	"sourceSelector": {
 		"loading": "Chargement des sources...",

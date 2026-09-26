@@ -53,8 +53,8 @@
 		"cameraDevice": "Kameragerät"
 	},
 	"cursor": {
-		"useEditableCursor": "Bearbeitbaren Cursor verwenden",
-		"useSystemCursor": "System-Cursor verwenden"
+		"useEditableCursorHint": "Bearbeitbaren Cursor verwenden: schaltet Auto-Zoom und Cursor-Effekte wieder ein",
+		"useSystemCursorHint": "System-Cursor verwenden: schaltet Auto-Zoom und Cursor-Effekte aus"
 	},
 	"sourceSelector": {
 		"loading": "Quellen werden geladen…",

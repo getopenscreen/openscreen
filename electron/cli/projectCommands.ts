@@ -5,6 +5,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isAxcutDocumentFile, parseDocumentFile } from "../../src/lib/ai-edition/schema";
 
 /** Writes one already-newline-terminated chunk of CLI output. */
 export type CliWriter = (text: string) => void;
@@ -34,7 +35,16 @@ export async function runPackCommand(
 	};
 
 	const raw = await fs.readFile(projectPath, "utf8");
-	const data = JSON.parse(raw) as PackedProjectData;
+	const parsed: unknown = JSON.parse(raw);
+	// A document can hold several assets, a camera track and imported audio, each with its own
+	// path, and the loader's sibling fallback only covers the v2 shape. Say so rather than
+	// report that it has no video.
+	if (isAxcutDocumentFile(parsed)) {
+		throw new Error(
+			"pack does not support projects saved by the editor yet, only legacy v2 project files",
+		);
+	}
+	const data = parsed as PackedProjectData;
 	const media = data.media ?? (data.videoPath ? { screenVideoPath: data.videoPath } : undefined);
 	const screenVideoPath = media?.screenVideoPath;
 	if (!screenVideoPath) {
@@ -128,11 +138,11 @@ export async function runInfoCommand(
 	out: CliWriter,
 ): Promise<number> {
 	const raw = await fs.readFile(projectPath, "utf8");
-	const data = JSON.parse(raw) as PackedProjectData;
-	const editor = data.editor ?? {};
-	const count = (key: string) =>
-		Array.isArray(editor[key]) ? (editor[key] as unknown[]).length : 0;
-	const screenVideoPath = data.media?.screenVideoPath ?? data.videoPath ?? null;
+	const parsed: unknown = JSON.parse(raw);
+	const fields = isAxcutDocumentFile(parsed)
+		? documentInfoFields(parseDocumentFile(parsed))
+		: legacyInfoFields(parsed as PackedProjectData);
+	const screenVideoPath = fields.screenVideoPath;
 	const mediaExists = screenVideoPath
 		? await fs
 				.access(screenVideoPath)
@@ -142,18 +152,18 @@ export async function runInfoCommand(
 
 	const summary = {
 		projectPath,
-		version: data.version ?? null,
+		version: fields.version,
 		screenVideoPath,
 		screenVideoExists: mediaExists,
-		webcamVideoPath: data.media?.webcamVideoPath ?? null,
-		cursorCaptureMode: data.media?.cursorCaptureMode ?? null,
-		exportFormat: (editor.exportFormat as string) ?? null,
-		exportQuality: (editor.exportQuality as string) ?? null,
-		aspectRatio: (editor.aspectRatio as string) ?? null,
-		zoomRegions: count("zoomRegions"),
-		trimRegions: count("trimRegions"),
-		speedRegions: count("speedRegions"),
-		annotationRegions: count("annotationRegions"),
+		webcamVideoPath: fields.webcamVideoPath,
+		cursorCaptureMode: fields.cursorCaptureMode,
+		exportFormat: fields.exportFormat,
+		exportQuality: fields.exportQuality,
+		aspectRatio: fields.aspectRatio,
+		zoomRegions: fields.zoomRegions,
+		trimRegions: fields.trimRegions,
+		speedRegions: fields.speedRegions,
+		annotationRegions: fields.annotationRegions,
 	};
 
 	if (json) {
@@ -171,4 +181,66 @@ export async function runInfoCommand(
 		);
 	}
 	return summary.screenVideoPath && !mediaExists ? 1 : 0;
+}
+
+/** What `openscreen info` reports, read off either shape of project file. */
+interface ProjectInfoFields {
+	/** The v2 `version`, or a document's `schemaVersion`. */
+	version: number | null;
+	screenVideoPath: string | null;
+	webcamVideoPath: string | null;
+	cursorCaptureMode: string | null;
+	exportFormat: string | null;
+	exportQuality: string | null;
+	aspectRatio: string | null;
+	zoomRegions: number;
+	trimRegions: number;
+	speedRegions: number;
+	annotationRegions: number;
+}
+
+const stringOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
+
+function legacyInfoFields(data: PackedProjectData): ProjectInfoFields {
+	const editor = data.editor ?? {};
+	const count = (key: string) =>
+		Array.isArray(editor[key]) ? (editor[key] as unknown[]).length : 0;
+	return {
+		version: data.version ?? null,
+		screenVideoPath: data.media?.screenVideoPath ?? data.videoPath ?? null,
+		webcamVideoPath: data.media?.webcamVideoPath ?? null,
+		cursorCaptureMode: data.media?.cursorCaptureMode ?? null,
+		exportFormat: stringOrNull(editor.exportFormat),
+		exportQuality: stringOrNull(editor.exportQuality),
+		aspectRatio: stringOrNull(editor.aspectRatio),
+		zoomRegions: count("zoomRegions"),
+		trimRegions: count("trimRegions"),
+		speedRegions: count("speedRegions"),
+		annotationRegions: count("annotationRegions"),
+	};
+}
+
+/**
+ * A project the editor saved. Its media is the primary asset; the export settings are only
+ * there when a migrated v2 project left them in `legacyEditor` (the ExportDialog keeps its own).
+ * Speed regions live in `legacyEditor.speedRegions`, not `timeline.speedRanges`: that is where
+ * the editor writes them and where the scene reads them (`sceneDescription.ts`).
+ */
+function documentInfoFields(doc: ReturnType<typeof parseDocumentFile>): ProjectInfoFields {
+	const primary =
+		doc.assets.find((asset) => asset.id === doc.project.primaryAssetId) ?? doc.assets[0];
+	const editor = doc.legacyEditor ?? {};
+	return {
+		version: doc.schemaVersion,
+		screenVideoPath: primary?.originalPath ?? null,
+		webcamVideoPath: primary?.cameraTrack?.sourcePath ?? null,
+		cursorCaptureMode: null,
+		exportFormat: stringOrNull(editor.exportFormat),
+		exportQuality: stringOrNull(editor.exportQuality),
+		aspectRatio: stringOrNull(editor.aspectRatio),
+		zoomRegions: doc.zoomRanges.length,
+		trimRegions: doc.timeline.trimRanges.length,
+		speedRegions: Array.isArray(editor.speedRegions) ? editor.speedRegions.length : 0,
+		annotationRegions: doc.annotations.length,
+	};
 }

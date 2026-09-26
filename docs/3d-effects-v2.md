@@ -49,12 +49,15 @@ mobile, qui tourne autour de l'écran.
 ci-dessous, sous l'identifiant `follow-cursor`. Un projet qui les porte encore s'ouvre à plat
 (valeur inconnue).
 
-Les trois angles fixes gardent leurs valeurs et leur rendu **à l'octet** (vérifié contre le
-commit de base : présets, cadre, flou de confidentialité, profondeur de champ, parallaxe, impact
-du clic, flèche modélisée), avec la parallaxe de vitesse et l'impact du clic.
+Les trois angles fixes ne roulent plus : Z vaut 0, parce que le tilt entre avec le zoom et qu'une
+caméra qui bouge ne roule jamais le métrage (l'ancien roulis de −2°/±1° penchait l'image pendant
+chaque zoom). Sans roulis, la règle des 2° ne laisse que deux bandes de tangage, ≤ 9° ou ≥ 15° :
+`left` [−6,5, −17, 0], `right` [−6,5, 17, 0], `iso` [−23, −25, 0] (`regions::rotation3d_for`). Ils
+se dessinent au warp **projectif** exact, comme la caméra réelle : le warp bilinéaire penchait à
+lui seul la verticale du milieu de l'écran.
 
 « Turned right » veut dire que la face de l'écran regarde vers la droite : le bord droit
-recule. C'est ce que fait `right` [−8, 16, 1] depuis toujours.
+recule. C'est ce que fait `right` [−6,5, 17, 0].
 
 ### A.3 `follow-cursor` : une caméra en orbite
 
@@ -124,10 +127,10 @@ Chaînée à un angle fixe, une région `follow-cursor` ne mélange jamais les d
 transition passe par l'écran droit à mi-course. Entre deux régions `follow-cursor`, le cadreur ne
 dépend pas de la région : l'orbite continue sans à-coup pendant que le zoom change.
 
-**Rendu exact.** Le warp bilinéaire des angles fixes s'écarte de la projection de cette caméra de
+**Rendu exact.** Le warp bilinéaire s'écarte de la projection de cette caméra de
 plusieurs centaines de px au pire pixel visible (703 px sur l'enveloppe, 264 px sur la grille
 rendue). Les modes 8, 10, 13 et 14 prennent donc un warp
-**projectif** exact sous cette caméra : l'homographie des quatre coins (forme de Heckbert) résolue à
+**projectif** exact sous cette caméra, et depuis sous les angles fixes aussi : l'homographie des quatre coins (forme de Heckbert) résolue à
 l'envers dans le shader, drapeau par mode (`TiltedQuad::warp_flag` : `dst_prev.w` au mode 8, `mb.w`
 au 10, `mb.x` au 13, `src.x` au 14). Mesuré sur une grille rendue par D3D11, caméra tournée vers un
 coin au zoom 2,2 : 0,07 px d'écart à la projection. `TiltedQuad` porte la caméra complète :
@@ -163,8 +166,10 @@ lointain.
 - **`swing-clicks`** : à refaire sur `camera.rs`, l'orbite en donne la mécanique.
 - **`dolly`** (vertigo) : la distance de l'œil par frame, que `TiltedQuad::perspective` sait
   déjà transporter.
-- **Flou de mouvement sous la caméra** : le mode 8 n'en a pas. Le lissage borne le mouvement (voir
-  les mesures ci-dessus), sans limite de vitesse explicite.
+- **Flou de mouvement de la visée** : le mode 8 a le flou du mode 0, borné à une frame, sur le plan
+  d'une frame plus tôt (boîte du zoom, rotation de base, caméra réelle d'avant ;
+  `FrameGeometry::tilt_trail`, `LayerCB::trail_*`). La parallaxe et l'impact n'y entrent pas,
+  comme le focus au mode 0. Un masque de confidentialité couvre alors le secret aux deux frames.
 - **Lumière du curseur modélisé** : elle reste fixée à la caméra ; l'œil en orbite la déplace avec
   lui. À fixer au monde avec le propriétaire du mode 15.
 
@@ -259,10 +264,9 @@ Deux décisions :
 
 1. **Le hotspot est sur le rayon de vue** du point de contenu visé, à sa hauteur. Il ne glisse
    donc jamais à l'écran quand le modèle monte ou descend : seule l'ombre dit la hauteur.
-2. **Ancrage** : sous un angle fixe, la vidéo est dessinée par un warp **bilinéaire** des coins
-   projetés, qui s'écarte de la perspective exacte de quelques pixels. Tout le rendu est décalé
-   de `point_px(plane_pt) − projection exacte`, pour que le hotspot tombe sur le pixel que
-   l'écran montre. Sous la caméra réelle le warp est exact et ce décalage est nul.
+2. **Ancrage** : tout le rendu est décalé de `point_px(plane_pt) − projection exacte`, pour que
+   le hotspot tombe sur le pixel que l'écran montre. Le warp de l'écran étant exact (projectif),
+   sous un angle fixe comme sous la caméra réelle, ce décalage est nul.
 
 ### B.5 La pose (fonction pure de `t`)
 
@@ -351,7 +355,7 @@ Seulement quand `model3d` est allumé (un curseur sans modèle n'a pas de contac
 
 **Rendu** : un carré du plan centré sur le point, dont les coins passent par la projection du
 contenu (`TiltedQuad::point_px`), comme le sprite du mode 13 ; le shader inverse le warp
-(bilinéaire sous un angle fixe, projectif sous la caméra réelle) et dessine un disque dans le
+(projectif, celui de l'écran) et dessine un disque dans le
 carré. L'anneau est donc posé sur le plan : ellipse sous `iso`, perspective exacte sous
 `follow-cursor`. Rien n'est dessiné hors de l'écran. Rust porte la courbe dans le temps
 (`impact_at`) ; les trois shaders ne dessinent que la forme de l'instant (`cursor_impact`).
@@ -377,7 +381,7 @@ de la pastille ; plus rien après sa fenêtre.
   dans les mêmes conditions. Une lecture de texture coûte moins que les dix arêtes du polygone.
 - **Mémoire** : un champ par sprite chargé, sans éviction ; les seize sprites du thème pèsent
   ~2,6 Mo de R16F.
-- **`LayerCB`** reste à 128 octets ; l'emploi des emplacements aux modes 15 et 16 est documenté
+- **`LayerCB`** fait 176 octets (les trois derniers vec4 portent la traînée du mode 8) ; l'emploi des emplacements aux modes 15 et 16 est documenté
   en tête des sections « Curseur modélisé » et « Impact du clic » de `frame_geometry.rs` et dans
   les trois structs de shader.
 - **Traînée au contact** : elle lit la position convergée (B.5.1), donc se replie sur une seule
@@ -682,8 +686,8 @@ dans la boîte de dessin.
 - **Emplacements du cbuffer** : en tête de `device_frame_cb` (`frame_geometry.rs`), qui fait foi.
   `radius_px` / `color.b` = rayons des coins hauts / bas, concentriques, calculés côté Rust ;
   `dst_prev` = (angle du socle, rayon de l'ouverture, recouvrement, pénombre de l'ombre). Le plan
-  proche n'a pas d'emplacement : les shaders le tirent de `src.z / src.w` et de `mb.xy`. `LayerCB`
-  reste à 128 octets.
+  proche n'a pas d'emplacement : les shaders le tirent de `src.z / src.w` et de `mb.xy`.
+  (`LayerCB` n'y gagne rien.)
 
 ### C.8 Limites
 

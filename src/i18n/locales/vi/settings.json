@@ -362,16 +362,14 @@
 			"fixed": "Góc cố định",
 			"moving": "Camera chuyển động",
 			"preset": {
-				"iso": "Chéo từ trên xuống",
 				"left": "Màn hình xoay sang trái",
 				"right": "Màn hình xoay sang phải",
 				"followCursor": "Xoay quanh theo con trỏ"
 			},
 			"description": {
 				"off": "Màn hình giữ phẳng.",
-				"iso": "Giữ một tư thế: xoay sang trái và nhìn từ trên xuống.",
-				"left": "Giữ một tư thế: màn hình hướng sang trái, cạnh phải nhô về phía trước.",
-				"right": "Giữ một tư thế: màn hình hướng sang phải, cạnh trái nhô về phía trước.",
+				"left": "Giữ một tư thế: xoay sang trái và nhìn từ trên xuống.",
+				"right": "Giữ một tư thế: xoay sang phải và nhìn từ trên xuống.",
 				"followCursor": "Màn hình đứng yên; máy quay bay vòng quanh, sang phía có con trỏ và nâng lên hay hạ xuống theo nó."
 			},
 			"needsCursor": "Con trỏ đang bị ẩn: máy quay này không có gì để theo dõi và giữ nguyên góc ban đầu."

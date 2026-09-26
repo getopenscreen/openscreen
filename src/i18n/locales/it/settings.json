@@ -362,16 +362,14 @@
 			"fixed": "Angolo fisso",
 			"moving": "Camera in movimento",
 			"preset": {
-				"iso": "Dall'alto di sbieco",
 				"left": "Schermo ruotato a sinistra",
 				"right": "Schermo ruotato a destra",
 				"followCursor": "Ruota con il cursore"
 			},
 			"description": {
 				"off": "Lo schermo resta piatto.",
-				"iso": "Mantiene una sola posa: ruotato a sinistra e visto dall'alto.",
-				"left": "Mantiene una sola posa: lo schermo guarda a sinistra e il bordo destro avanza.",
-				"right": "Mantiene una sola posa: lo schermo guarda a destra e il bordo sinistro avanza.",
+				"left": "Mantiene una sola posa: ruotato a sinistra e visto dall'alto.",
+				"right": "Mantiene una sola posa: ruotato a destra e visto dall'alto.",
 				"followCursor": "Lo schermo resta fermo; la telecamera gli gira intorno dal lato del cursore e sale o scende con esso."
 			},
 			"needsCursor": "Il cursore è nascosto: questa telecamera non ha nulla da seguire e mantiene l'angolo iniziale."

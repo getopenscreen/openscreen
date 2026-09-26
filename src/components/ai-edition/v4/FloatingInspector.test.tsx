@@ -147,7 +147,7 @@ describe("FloatingInspector", () => {
 		});
 
 		it("is disabled with its reason when the region hides the cursor", () => {
-			const { tl } = zoomTl({ rotationPreset: "iso", hideCursor: true });
+			const { tl } = zoomTl({ rotationPreset: "left", hideCursor: true });
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
 			expect(
 				screen.getByRole("button", { name: "settings.zoom.clickImpact.title" }),
@@ -168,7 +168,7 @@ describe("FloatingInspector", () => {
 		it("is disabled with its reason when the cursor is hidden globally", () => {
 			editorSettings.cursorShow = false;
 			try {
-				const { tl } = zoomTl({ rotationPreset: "iso" });
+				const { tl } = zoomTl({ rotationPreset: "left" });
 				render(<FloatingInspector {...defaultProps} tl={tl} />);
 				expect(
 					screen.getByRole("button", { name: "settings.zoom.clickImpact.title" }),
@@ -180,7 +180,7 @@ describe("FloatingInspector", () => {
 		});
 
 		it("toggles the region's clickImpact under a 3D preset", () => {
-			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "iso" });
+			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "left" });
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
 			const box = screen.getByRole("button", { name: "settings.zoom.clickImpact.title" });
 			expect(box).toBeEnabled();
@@ -226,7 +226,7 @@ describe("FloatingInspector", () => {
 				[...g.querySelectorAll("option")].map((o) => o.value),
 			]);
 			expect(groups).toEqual([
-				["settings.zoom.camera.fixed", ["iso", "left", "right"]],
+				["settings.zoom.camera.fixed", ["left", "right"]],
 				["settings.zoom.camera.moving", ["follow-cursor"]],
 			]);
 		});
@@ -237,8 +237,8 @@ describe("FloatingInspector", () => {
 			const select = screen.getByRole("combobox", { name: "settings.zoom.camera.title" });
 			expect(select).toHaveValue("follow-cursor");
 			expect(screen.getByText("settings.zoom.camera.description.followCursor")).toBeInTheDocument();
-			fireEvent.change(select, { target: { value: "iso" } });
-			expect(updateZoomRotation).toHaveBeenCalledWith("z", "iso");
+			fireEvent.change(select, { target: { value: "left" } });
+			expect(updateZoomRotation).toHaveBeenCalledWith("z", "left");
 			fireEvent.change(select, { target: { value: "off" } });
 			expect(updateZoomRotation).toHaveBeenLastCalledWith("z", undefined);
 		});

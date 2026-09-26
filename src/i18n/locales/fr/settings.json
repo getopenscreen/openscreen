@@ -362,16 +362,14 @@
 			"fixed": "Angle fixe",
 			"moving": "Caméra mobile",
 			"preset": {
-				"iso": "Plongée de biais",
 				"left": "Écran tourné à gauche",
 				"right": "Écran tourné à droite",
 				"followCursor": "Tourne avec le curseur"
 			},
 			"description": {
 				"off": "L'écran reste à plat.",
-				"iso": "Garde une seule pose : tourné vers la gauche et vu d'en haut.",
-				"left": "Garde une seule pose : l'écran regarde vers la gauche, son bord droit avance.",
-				"right": "Garde une seule pose : l'écran regarde vers la droite, son bord gauche avance.",
+				"left": "Garde une seule pose : tourné vers la gauche et vu d'en haut.",
+				"right": "Garde une seule pose : tourné vers la droite et vu d'en haut.",
 				"followCursor": "L'écran reste immobile ; la caméra tourne autour, du côté du curseur, et monte ou descend avec lui."
 			},
 			"needsCursor": "Le curseur est masqué : cette caméra n'a rien à suivre et garde son angle de départ."

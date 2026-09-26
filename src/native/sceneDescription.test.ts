@@ -692,14 +692,14 @@ describe("buildSceneDescription.zoomRegions", () => {
 			endMs: 5000,
 			depth: 4,
 			focus: { cx: 0.25, cy: 0.75 },
-			rotationPreset: "iso",
+			rotationPreset: "left",
 			hideCursor: true,
 		});
 		const doc = makeDoc({ zoomRanges: [z] });
 		const { zoomRegions } = buildSceneDescription(doc);
 		expect(zoomRegions[0].focusX).toBe(0.25);
 		expect(zoomRegions[0].focusY).toBe(0.75);
-		expect(zoomRegions[0].rotation).toBe("iso");
+		expect(zoomRegions[0].rotation).toBe("left");
 		expect(zoomRegions[0].hideCursor).toBe(true);
 	});
 
@@ -709,7 +709,7 @@ describe("buildSceneDescription.zoomRegions", () => {
 			endMs: 1000,
 			depth: 3 as const,
 			focus: { cx: 0.5, cy: 0.5 },
-			rotationPreset: "iso" as const,
+			rotationPreset: "left" as const,
 		};
 		const doc = makeDoc({
 			zoomRanges: [

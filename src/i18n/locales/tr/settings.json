@@ -362,16 +362,14 @@
 			"fixed": "Sabit açı",
 			"moving": "Hareketli kamera",
 			"preset": {
-				"iso": "Yukarıdan çapraz",
 				"left": "Ekran sola dönük",
 				"right": "Ekran sağa dönük",
 				"followCursor": "İmleçle birlikte döner"
 			},
 			"description": {
 				"off": "Ekran düz kalır.",
-				"iso": "Tek bir pozda kalır: sola dönük ve yukarıdan görünür.",
-				"left": "Tek bir pozda kalır: ekran sola bakar, sağ kenarı öne çıkar.",
-				"right": "Tek bir pozda kalır: ekran sağa bakar, sol kenarı öne çıkar.",
+				"left": "Tek bir pozda kalır: sola dönük ve yukarıdan görünür.",
+				"right": "Tek bir pozda kalır: sağa dönük ve yukarıdan görünür.",
 				"followCursor": "Ekran sabit kalır; kamera etrafında imlecin olduğu tarafa döner ve imleçle birlikte yükselip alçalır."
 			},
 			"needsCursor": "İmleç gizli: bu kameranın izleyecek bir şeyi yok ve başlangıç açısında kalır."

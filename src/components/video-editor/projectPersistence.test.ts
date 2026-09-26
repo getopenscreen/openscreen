@@ -203,7 +203,7 @@ describe("projectPersistence media compatibility", () => {
 		const zoom = { startMs: 0, endMs: 1000, depth: 3 as const, focus: { cx: 0.5, cy: 0.5 } };
 		const [on, off, junk] = normalizeProjectEditor({
 			zoomRegions: [
-				{ ...zoom, id: "on", rotationPreset: "iso", clickImpact: true },
+				{ ...zoom, id: "on", rotationPreset: "left", clickImpact: true },
 				{ ...zoom, id: "off" },
 				{ ...zoom, id: "junk", clickImpact: "yes" as never },
 			],
@@ -211,6 +211,18 @@ describe("projectPersistence media compatibility", () => {
 		expect(on.clickImpact).toBe(true);
 		expect("clickImpact" in off).toBe(false);
 		expect("clickImpact" in junk).toBe(false);
+	});
+
+	it("reads the retired iso camera as Left, which kept its look", () => {
+		const zoom = { startMs: 0, endMs: 1000, depth: 3 as const, focus: { cx: 0.5, cy: 0.5 } };
+		const [iso, unknown] = normalizeProjectEditor({
+			zoomRegions: [
+				{ ...zoom, id: "iso", rotationPreset: "iso" as never },
+				{ ...zoom, id: "unknown", rotationPreset: "orbit" as never },
+			],
+		}).zoomRegions;
+		expect(iso.rotationPreset).toBe("left");
+		expect("rotationPreset" in unknown).toBe(false);
 	});
 
 	it("accepts the dual frame webcam layout preset", () => {

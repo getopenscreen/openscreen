@@ -580,15 +580,17 @@ fn ease_connected_pan(t: f32) -> f32 {
 /// Sans roulis, la règle ne laisse que deux bandes de tangage (X). Une rotation Y pure garde les
 /// verticales verticales, donc chaque préset tangue ; et entre 10° et 14° de tangage, le bord haut
 /// d'un écran tourné ressort à plat (la remontée du rotateX annulée par la perspective), à tout
-/// lacet. D'où left/right à 6,5° (un écran tourné, à peine vu d'en haut, arêtes à 2,5° au plus
-/// près) et iso à 23° (vu d'en haut franchement, le plus incliné, arêtes à 4,8°). Iso sort de la
-/// bande des 2° pendant son ease-in à 0,82 de force, avant que la parallaxe ne s'ouvre
-/// (`PARALLAX_GATE_START`). Le budget dynamique suit left/right (`DYNAMIC_TILT_BUDGET`).
+/// lacet. Les deux présets prennent donc la bande haute, le regard de l'ancien `iso` : tourné et
+/// vu d'en haut franchement, arêtes à 4,8° au plus près. Ils sortent de la bande des 2° pendant
+/// leur ease-in à 0,82 de force, avant que la parallaxe ne s'ouvre (`PARALLAX_GATE_START`), et
+/// laissent au budget dynamique ses ±1,9° / ±3° d'origine (`DYNAMIC_TILT_BUDGET`).
+///
+/// `iso` n'est plus proposé : c'était déjà ce regard-là, tourné à gauche. Un projet qui le porte
+/// encore se lit donc comme `left` (côté app : `readRotation3DPreset`, et ici par sécurité).
 fn rotation3d_for(rotation: &Option<String>) -> [f32; 3] {
     match rotation.as_deref() {
-        Some("iso") => [-23.0, -25.0, 0.0],
-        Some("left") => [-6.5, -17.0, 0.0],
-        Some("right") => [-6.5, 17.0, 0.0],
+        Some("left" | "iso") => [-23.0, -25.0, 0.0],
+        Some("right") => [-23.0, 25.0, 0.0],
         _ => [0.0, 0.0, 0.0],
     }
 }
@@ -1171,18 +1173,16 @@ fn contain_scale(
 /// anime le plan (la parallaxe ici ; l'impact du clic ensuite) : les contributions s'ADDITIONNENT
 /// puis la somme est bornée par `clamp_dynamic_tilt`.
 ///
-/// - Z : 0. Jamais de roulis ; c'est aussi l'axe le plus étroit (0,6° en fait sortir `left`).
-/// - X : ±1,2°. La limite de `left`/`right` : leur tangage de 6,5° vit dans une bande étroite, sous
-///   laquelle les verticales se redressent et au-dessus de laquelle le bord haut s'aplatit.
-/// - Y : ±1,8°. Vers 2,1°, `left` rapproche une arête de son axe ou déborde sa boîte ; à ±1,9°,
-///   la fin d'une transition chaînée depuis `iso` en approche une à 0,002° de la règle.
+/// - Z : 0. Jamais de roulis : une caméra qui bouge ne roule pas le métrage.
+/// - X : ±1,9°, Y : ±3°. Ensemble, à 1,15 fois ces valeurs, `left` sort d'une des deux règles
+///   (arête à moins de 2° d'un axe, ou débordement de sa boîte) ; seul, Y y arrive vers 3,3°, X
+///   laisse plus de marge (`the_budget_is_close_to_what_left_allows`).
 ///
-/// C'était ±1,9° / ±3° tant que les présets roulaient : sans roulis, `left` n'en laisse que ça.
 /// Reproduits par `the_budget_sweep_keeps_every_edge_off_axis`,
 /// `the_budget_sweep_stays_inside_the_original_rect` et
 /// `the_chained_sweep_keeps_every_edge_off_axis_and_inside` sur tout le balayage, pas seulement
 /// aux présets.
-pub const DYNAMIC_TILT_BUDGET: [f32; 3] = [1.2, 1.8, 0.0];
+pub const DYNAMIC_TILT_BUDGET: [f32; 3] = [1.9, 3.0, 0.0];
 
 /// Borne une part dynamique au budget, axe par axe.
 pub fn clamp_dynamic_tilt(rot: [f32; 3]) -> [f32; 3] {
@@ -1191,11 +1191,10 @@ pub fn clamp_dynamic_tilt(rot: [f32; 3]) -> [f32; 3] {
 }
 
 /// Force du préset sous laquelle la part dynamique est nulle ; elle s'installe en smoothstep
-/// jusqu'à 1. La spec disait 0,5 ; les maths de ce crate disent autrement : `left`/`right` ne
-/// sortent de la bande des 2° qu'à 0,71 de force, et le budget plein ne leur laisse que 0,02° de
-/// marge à force 1. Juste sous 1, la base perd plus d'angle que la porte n'en retire — il faut une
-/// porte raide. `iso`, lui, traverse en montant le tangage où le bord haut ressort à plat, et n'en
-/// sort qu'à 0,82 : la porte doit s'ouvrir après. Cf. `the_budget_sweep_keeps_every_edge_off_axis`.
+/// jusqu'à 1. La spec disait 0,5 ; les maths de ce crate disent autrement : en montant,
+/// `left`/`right` traversent le tangage où leur bord haut ressort à plat, et ne sortent de la
+/// bande des 2° qu'à 0,82 de force : la porte doit s'ouvrir après, et raide. Cf.
+/// `the_budget_sweep_keeps_every_edge_off_axis`.
 const PARALLAX_GATE_START: f32 = 0.85;
 /// Degrés de parallaxe par unité de vitesse (largeurs — ou hauteurs — de coupe par seconde),
 /// avant saturation. Un balayage d'une demi-largeur par seconde penche d'environ 2° en Y, une
@@ -1265,7 +1264,7 @@ pub const CLICK_IMPACT_WINDOW_S: f32 = 0.26;
 /// autant sur les deux axes sans que X sature seul et ne tourne l'axe du pivot. Ce n'est PAS
 /// le réglage `clickBounce` du curseur (brut sur [0, 5], 2,5 par défaut) : il rendrait le plan
 /// 2,5 fois trop fort. Cf. `a_corner_click_moves_the_plane_visibly_at_a_frozen_scale`.
-pub const CLICK_IMPACT_DEG: f32 = 1.2;
+pub const CLICK_IMPACT_DEG: f32 = 1.9;
 /// Valeur du pic de `sin(2πe)·(1−e)²` (en e ≈ 0,1904), pour que le creux de `tap` vaille −1.
 const TAP_NORM: f32 = 0.610;
 
@@ -1829,7 +1828,7 @@ mod tilt_tests {
     /// pose dessus (le curseur) se décale par rapport à l'image que le shader y a dessinée.
     #[test]
     fn the_plane_corners_map_to_the_projected_corners() {
-        let quad = rotated_quad_corners_px(1920.0, 1080.0, preset("iso"), [0.0; 3]);
+        let quad = rotated_quad_corners_px(1920.0, 1080.0, preset("left"), [0.0; 3]);
         for (i, (fx, fy)) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].into_iter().enumerate()
         {
             let (x, y) = quad.point_px(fx, fy);
@@ -1855,7 +1854,7 @@ mod tilt_tests {
     #[test]
     fn a_tilted_plane_moves_the_cursor_off_the_upright_rect() {
         let (w, h) = (1920.0f32, 1080.0f32);
-        let quad = rotated_quad_corners_px(w, h, rotation3d_for(&Some("iso".into())), [0.0; 3]);
+        let quad = rotated_quad_corners_px(w, h, rotation3d_for(&Some("left".into())), [0.0; 3]);
         let mut worst: f32 = 0.0;
         for (fx, fy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.0)] {
             let (x, y) = quad.point_px(fx, fy);
@@ -1871,7 +1870,6 @@ mod tilt_tests {
     #[test]
     fn every_preset_stays_inside_the_original_rect() {
         for (name, rot) in [
-            ("iso", rotation3d_for(&Some("iso".into()))),
             ("left", rotation3d_for(&Some("left".into()))),
             ("right", rotation3d_for(&Some("right".into()))),
         ] {
@@ -1890,13 +1888,21 @@ mod tilt_tests {
         }
     }
 
+    /// `iso` n'est plus proposé : il se lit comme `left`, qui a gardé son regard, et `right` en est
+    /// le miroir exact.
+    #[test]
+    fn iso_reads_as_left_and_right_mirrors_it() {
+        let left = rotation3d_for(&Some("left".into()));
+        assert_eq!(rotation3d_for(&Some("iso".into())), left);
+        assert_eq!(rotation3d_for(&Some("right".into())), [left[0], -left[1], 0.0]);
+    }
+
     /// Aucune arête d'un préset ne doit longer un axe de l'image. C'est LE critère qui distingue
     /// « un écran incliné » d'« un enregistrement tronqué » : un bord parfaitement vertical qui
     /// coupe une phrase se lit comme un `overflow: hidden`, quelle que soit la justesse du reste.
     #[test]
     fn no_preset_has_an_axis_aligned_edge() {
         for (name, rot) in [
-            ("iso", rotation3d_for(&Some("iso".into()))),
             ("left", rotation3d_for(&Some("left".into()))),
             ("right", rotation3d_for(&Some("right".into()))),
         ] {
@@ -1919,9 +1925,8 @@ mod tilt_tests {
         }
     }
 
-    fn presets() -> [(&'static str, [f32; 3]); 3] {
+    fn presets() -> [(&'static str, [f32; 3]); 2] {
         [
-            ("iso", rotation3d_for(&Some("iso".into()))),
             ("left", rotation3d_for(&Some("left".into()))),
             ("right", rotation3d_for(&Some("right".into()))),
         ]
@@ -1970,7 +1975,7 @@ mod tilt_tests {
     #[test]
     fn iso_depth_rises_towards_the_corner_drawn_larger() {
         let (w, h) = (1920.0f32, 1080.0f32);
-        let rot = rotation3d_for(&Some("iso".into()));
+        let rot = rotation3d_for(&Some("left".into()));
         let quad = rotated_quad_corners_px(w, h, rot, [0.0; 3]);
         let mb = quad.depth_mb([w, h], [0.5, 0.5], false);
         let (z_tr, z_bl) = (depth_at(mb, 1.0, 0.0), depth_at(mb, 0.0, 1.0));
@@ -2009,7 +2014,7 @@ mod tilt_tests {
     /// unités de la distance de fuite, pas en pixels de sortie.
     #[test]
     fn the_circle_of_confusion_grows_away_from_the_focus_and_ignores_resolution() {
-        let rot = rotation3d_for(&Some("iso".into()));
+        let rot = rotation3d_for(&Some("left".into()));
         let coc = |w: f32, h: f32, focus: [f32; 2], s: f32, t: f32| {
             let quad = rotated_quad_corners_px(w, h, rot, [0.0; 3]);
             let mb = quad.depth_mb([w, h], focus, true);
@@ -2038,7 +2043,7 @@ mod tilt_tests {
     fn the_tilt_actually_tilts() {
         // Garde-fou contre un containment trop zélé qui aplatirait l'effet : les quatre coins
         // d'un quad incliné ne peuvent pas rester alignés deux à deux comme un rectangle droit.
-        let corners = rotated_quad_corners_px(1920.0, 1080.0, preset("iso"), [0.0; 3]).corners;
+        let corners = rotated_quad_corners_px(1920.0, 1080.0, preset("left"), [0.0; 3]).corners;
         let top_edge_slope = (corners[1].1 - corners[0].1).abs();
         assert!(top_edge_slope > 1.0, "arête supérieure horizontale : le tilt a disparu");
     }
@@ -2074,14 +2079,13 @@ mod tilt_tests {
 
     /// La règle des 2° tient sur TOUT le balayage du budget, et pas qu'aux présets : à force 1
     /// sur la boîte entière, et pendant l'ease-in, où la part dynamique ne doit jamais faire
-    /// passer une arête sous min(2°, ce que la base seule donne). Sous ~0,71 de force, `left`
-    /// et `right` sont DÉJÀ dans la bande (l'ease-in traverse 0°), `iso` jusqu'à ~0,82 (il
-    /// traverse le tangage où son bord haut ressort à plat) ; on ne leur demande alors que de ne
-    /// pas empirer.
+    /// passer une arête sous min(2°, ce que la base seule donne). Sous ~0,82 de force, `left`
+    /// et `right` sont DÉJÀ dans la bande (l'ease-in traverse 0°, puis le tangage où leur bord
+    /// haut ressort à plat) ; on ne leur demande alors que de ne pas empirer.
     #[test]
     fn the_budget_sweep_keeps_every_edge_off_axis() {
         let (w, h) = (1920.0f32, 1080.0f32);
-        for name in ["iso", "left", "right"] {
+        for name in ["left", "right"] {
             for k in 0..=400 {
                 let strength = k as f32 / 400.0;
                 let base = lerp_rotation3d([0.0; 3], preset(name), strength);
@@ -2099,20 +2103,23 @@ mod tilt_tests {
         }
     }
 
-    /// Les chiffres du budget sont ceux des maths du crate, à peu près au ras : 15 % de plus
-    /// sur X ou Y, ou 1,2° sur Z, et `left` casse une des deux règles.
+    /// Les chiffres du budget sont ceux des maths du crate, à peu près au ras : le balayage à 15 %
+    /// de plus sur X et Y ensemble fait casser à `left` une des deux règles, arête à moins de 2°
+    /// d'un axe (16:9) ou débordement de sa boîte (les trois formes), et Y seul aussi. X seul a
+    /// plus de marge : c'est avec Y qu'il la consomme. Z n'a pas de budget, c'est la règle produit.
     #[test]
     fn the_budget_is_close_to_what_left_allows() {
-        let (w, h) = (1920.0f32, 1080.0f32);
         let base = preset("left");
         let breaks = |d: [f32; 3]| {
-            let c = rotated_quad_corners_px(w, h, base, d).corners;
-            min_edge_angle(&c) < 2.0 || overflow(&c, w, h) > 0.0
+            [(1920.0f32, 1080.0f32), (1080.0, 1920.0), (800.0, 800.0)].into_iter().any(|(w, h)| {
+                let c = rotated_quad_corners_px(w, h, base, d).corners;
+                (w > h && min_edge_angle(&c) < 2.0) || overflow(&c, w, h) > 0.0
+            })
         };
         let b = DYNAMIC_TILT_BUDGET;
-        assert!(breaks([b[0] * 1.15, 0.0, 0.0]) || breaks([-b[0] * 1.15, 0.0, 0.0]), "X");
+        assert!(!budget_sweep(1.0).any(|d| breaks(d)), "le budget lui-même doit tenir");
+        assert!(budget_sweep(1.15).any(|d| breaks(d)), "X et Y");
         assert!(breaks([0.0, b[1] * 1.15, 0.0]) || breaks([0.0, -b[1] * 1.15, 0.0]), "Y");
-        assert!(breaks([0.0, 0.0, 1.2]) && breaks([0.0, 0.0, -1.2]), "Z");
         assert_eq!(b[2], 0.0, "Z n'a pas de budget");
     }
 
@@ -2121,7 +2128,7 @@ mod tilt_tests {
     /// `every_preset_stays_inside_the_original_rect`.
     #[test]
     fn the_budget_sweep_stays_inside_the_original_rect() {
-        for name in ["iso", "left", "right"] {
+        for name in ["left", "right"] {
             for (w, h) in [(1920.0f32, 1080.0f32), (1080.0, 1920.0), (800.0, 800.0)] {
                 for k in 0..=40 {
                     let strength = k as f32 / 40.0;
@@ -2162,7 +2169,7 @@ mod tilt_tests {
         };
         // `follow-cursor` n'incline pas l'écran (caméra réelle, `camera.rs`) : chaînée à un angle
         // fixe, la transition passe par l'écran droit, que ce balayage couvre aussi.
-        let presets = [None, Some("iso"), Some("left"), Some("right"), Some("follow-cursor")];
+        let presets = [None, Some("left"), Some("right"), Some("follow-cursor")];
         for a in presets {
             for b in presets {
                 // Transition chaînée sur [4, 5] s.
@@ -2215,7 +2222,7 @@ mod tilt_tests {
     /// son ombre) ne respire pas avec la parallaxe.
     #[test]
     fn the_scale_is_frozen_while_only_the_dynamic_part_moves() {
-        for name in ["iso", "left", "right"] {
+        for name in ["left", "right"] {
             let base = preset(name);
             let frozen = rotated_quad_corners_px(1920.0, 1080.0, base, [0.0; 3]);
             for d in budget_sweep(1.0) {
@@ -2367,7 +2374,7 @@ mod tilt_tests {
         assert!((bottom[0] + CLICK_IMPACT_DEG).abs() < 1e-2 && bottom[1].abs() < 1e-6, "{bottom:?}");
 
         let z = |x: f32, y: f32, rot: [f32; 3]| rotate_corner(x, y, rot).2;
-        for name in ["iso", "left", "right"] {
+        for name in ["left", "right"] {
             let base = preset(name);
             let with = |d: [f32; 3]| [base[0] + d[0], base[1] + d[1], base[2] + d[2]];
             // Milieu du bord droit / du bord bas, et le bord opposé qui avance.
@@ -2456,7 +2463,7 @@ mod tilt_tests {
     #[test]
     fn a_corner_click_moves_the_plane_visibly_at_a_frozen_scale() {
         let track = still(1.0, 1.0, vec![1.0]);
-        for name in ["iso", "left", "right"] {
+        for name in ["left", "right"] {
             let base = rotated_quad_corners_px(1920.0, 1080.0, preset(name), [0.0; 3]);
             let mut worst = 0.0f32;
             for i in 0..=26 {
@@ -2467,9 +2474,8 @@ mod tilt_tests {
                     worst = worst.max((a.0 - b.0).hypot(a.1 - b.1));
                 }
             }
-            // Mesuré : 13 px (iso), 16 (left), 17 (right) à 1080p pour un clic dans un coin. C'était
-            // 24 à 27 px au budget de ±1,9° que le roulis des présets permettait.
-            assert!(worst > 12.0, "{name} : {worst:.1} px, invisible");
+            // Mesuré à 1080p pour un clic dans un coin : voir la sortie en cas d'échec.
+            assert!(worst > 15.0, "{name} : {worst:.1} px, invisible");
         }
     }
 
@@ -2484,7 +2490,7 @@ mod tilt_tests {
             focus_x: 0.5,
             focus_y: 0.5,
             focus_mode: None,
-            rotation: Some("iso".into()),
+            rotation: Some("left".into()),
             under_trim: false,
             hide_cursor: false,
             click_impact,
@@ -2511,7 +2517,7 @@ mod tilt_tests {
             hide_cursor: false,
             click_impact: false,
         };
-        assert_eq!(zoom_state_at(&[region(Some("iso"))], 5.0, None).tilt, 1.0);
+        assert_eq!(zoom_state_at(&[region(Some("left"))], 5.0, None).tilt, 1.0);
         assert_eq!(zoom_state_at(&[region(None)], 5.0, None).tilt, 0.0);
         let easing = zoom_state_at(&[region(Some("left"))], 1.2, None);
         assert!(easing.tilt > 0.0 && easing.tilt < 1.0, "{}", easing.tilt);
@@ -2596,7 +2602,6 @@ mod tilt_tests {
         // mapping inverse perd des pixels pourtant intérieurs au quad, le trou a exactement cette
         // allure — un bord net, sans rapport avec la géométrie visible.
         for (name, rot) in [
-            ("iso", rotation3d_for(&Some("iso".into()))),
             ("left", rotation3d_for(&Some("left".into()))),
             ("right", rotation3d_for(&Some("right".into()))),
         ] {
@@ -2848,7 +2853,7 @@ mod follow_camera_tests {
         let blind = zoom_state_at(&r, 5.0, None);
         assert_eq!((blind.aim, blind.orbit), ([0.5, 0.5], [0.5, 0.5]));
         // Un angle fixe garde exactement son état.
-        let iso = zoom_state_in(&[region("iso", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
+        let iso = zoom_state_in(&[region("left", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((iso.rotation, iso.camera, iso.click_impact), ([-23.0, -25.0, 0.0], 0.0, 1.0));
         let unknown = zoom_state_in(&[region("orbit", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((unknown.rotation, unknown.tilt, unknown.camera), ([0.0; 3], 0.0, 0.0));
@@ -2874,7 +2879,7 @@ mod follow_camera_tests {
         let tr = track(|t| (0.2 + 0.05 * t, 0.5));
         let f = whole(&tr);
         for regions in [
-            [region("iso", 1.0, 4.0), region("follow-cursor", 4.5, 8.0)],
+            [region("left", 1.0, 4.0), region("follow-cursor", 4.5, 8.0)],
             [region("follow-cursor", 1.0, 4.0), region("right", 4.5, 8.0)],
             [region("follow-cursor", 1.0, 4.0), region("follow-cursor", 4.5, 8.0)],
         ] {

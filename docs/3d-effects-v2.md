@@ -15,10 +15,9 @@ Ce document tranche les décisions que la v1 laissait ouvertes et découpe les P
 
 ### A.1 Ce qui existe
 
-Un zoom porte **une attitude figée** (`rotationPreset` : `iso`, `left`, `right`), animée par
+Un zoom porte **une attitude figée** (`rotationPreset` : `left`, `right`), animée par
 deux effets qui partagent un unique budget d'angle dynamique (`DYNAMIC_TILT_BUDGET`
-= ±1,2° X, ±1,8° Y, 0° Z, `clamp_dynamic_tilt` ; ±1,9° X et ±3° Y tant que les angles fixes
-roulaient) :
+= ±1,9° X, ±3° Y, 0° Z, `clamp_dynamic_tilt`) :
 
 - **la parallaxe** (`dynamic_tilt`, PR 1) : pilotée par la **vitesse** lissée du curseur ;
 - **l'impact du clic** (PR 2b) : piloté par la **position** du clic, `regions::tap`.
@@ -40,24 +39,26 @@ mobile, qui tourne autour de l'écran.
 | groupe | valeur | libellé (EN) | ce que ça fait |
 |---|---|---|---|
 | — | absent | Off | écran droit |
-| Angle fixe | `iso` | Angled from above | tourné vers la gauche, plongée marquée |
-| Angle fixe | `left` | Turned left | tourné vers la gauche |
-| Angle fixe | `right` | Turned right | tourné vers la droite |
+| Angle fixe | `left` | Screen turned left | tourné vers la gauche, vu d'en haut |
+| Angle fixe | `right` | Screen turned right | tourné vers la droite, vu d'en haut |
 | Caméra mobile | `follow-cursor` | Orbits with the cursor | l'écran est immobile, une vraie caméra tourne autour de lui avec le curseur |
 
 `swing-clicks` et `orbit` sont retirés (jamais livrés). La caméra mobile qui reste est l'orbite
 ci-dessous, sous l'identifiant `follow-cursor`. Un projet qui les porte encore s'ouvre à plat
 (valeur inconnue).
 
-Les trois angles fixes ne roulent plus : Z vaut 0, parce que le tilt entre avec le zoom et qu'une
+Les angles fixes ne roulent plus : Z vaut 0, parce que le tilt entre avec le zoom et qu'une
 caméra qui bouge ne roule jamais le métrage (l'ancien roulis de −2°/±1° penchait l'image pendant
-chaque zoom). Sans roulis, la règle des 2° ne laisse que deux bandes de tangage, ≤ 9° ou ≥ 15° :
-`left` [−6,5, −17, 0], `right` [−6,5, 17, 0], `iso` [−23, −25, 0] (`regions::rotation3d_for`). Ils
-se dessinent au warp **projectif** exact, comme la caméra réelle : le warp bilinéaire penchait à
-lui seul la verticale du milieu de l'écran.
+chaque zoom). Sans roulis, la règle des 2° ne laisse que deux bandes de tangage, ≤ 9° ou ≥ 15°.
+Les deux angles prennent la bande haute, le regard de l'ancien `iso` : `left` [−23, −25, 0] et son
+miroir `right` [−23, 25, 0] (`regions::rotation3d_for`), qui rendent au budget dynamique ses
+±1,9° / ±3°. `iso` n'est plus proposé : c'était déjà ce regard, tourné à gauche, et un projet qui
+le porte se lit comme `left` (`readRotation3DPreset` et le schéma du document). Ils se dessinent
+au warp **projectif** exact, comme la caméra réelle : le warp bilinéaire penchait à lui seul la
+verticale du milieu de l'écran.
 
-« Turned right » veut dire que la face de l'écran regarde vers la droite : le bord droit
-recule. C'est ce que fait `right` [−6,5, 17, 0].
+« Screen turned right » veut dire que la face de l'écran regarde vers la droite : le bord droit
+recule. C'est ce que fait `right` [−23, 25, 0], vu d'en haut.
 
 ### A.3 `follow-cursor` : une caméra en orbite
 

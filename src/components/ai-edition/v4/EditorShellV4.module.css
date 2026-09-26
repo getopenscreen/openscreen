@@ -1574,7 +1574,7 @@
 	   on every colour: the light ones (mint, yellow, orange, teal) cannot carry white. */
 	--_c: var(--accent);
 	border-radius: 8px;
-	border: 1px solid color-mix(in oklab, var(--_c) 70%, black);
+	border: 1px solid var(--_c);
 	background: linear-gradient(180deg, color-mix(in oklab, var(--_c) 72%, white), var(--_c));
 	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4),
 		0 2px 6px color-mix(in oklab, var(--_c) 35%, transparent);
@@ -1790,7 +1790,7 @@
 	   A solid "candy" card: saturated gradient, a gloss line on top, a coloured glow
 	   under it. Text on it is white (.tlClipDuration), in both themes. */
 	border-radius: 12px;
-	border: 1px solid color-mix(in oklab, var(--clip) 75%, black);
+	border: 1px solid var(--clip);
 	background: linear-gradient(180deg, color-mix(in oklab, var(--clip) 78%, white), var(--clip));
 	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35),
 		0 3px 10px color-mix(in oklab, var(--clip) 35%, transparent);
@@ -1840,7 +1840,7 @@
 	transform: translateY(-50%);
 }
 .tlClipGenerated {
-	border-color: color-mix(in oklab, var(--warn) 75%, black);
+	border-color: var(--warn);
 	background: linear-gradient(180deg, color-mix(in oklab, var(--warn) 78%, white), var(--warn));
 	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35),
 		0 3px 10px color-mix(in oklab, var(--warn) 35%, transparent);
@@ -1989,7 +1989,7 @@
 	top: 0;
 	bottom: 0;
 	border-radius: 999px;
-	border: 1px solid color-mix(in oklab, var(--playhead) 70%, black);
+	border: 1px solid var(--playhead);
 	background: linear-gradient(180deg, color-mix(in oklab, var(--playhead) 72%, white), var(--playhead));
 	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 2px 6px var(--playhead-shadow);
 	box-sizing: border-box;

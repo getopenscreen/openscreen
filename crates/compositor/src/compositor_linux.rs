@@ -632,30 +632,7 @@ impl Compositor {
             multiview: None,
             cache: None,
         });
-        let mk_pyr = |dw: u32, dh: u32, label: &str| {
-            gpu.device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width: dw.max(1),
-                        height: dh.max(1),
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                })
-                .create_view(&wgpu::TextureViewDescriptor::default())
-        };
-        let blur_half = mk_pyr(w / 2, h / 2, "blur-half");
-        let blur_qtr = mk_pyr(w / 4, h / 4, "blur-qtr");
-        let blur_oct = mk_pyr(w / 8, h / 8, "blur-oct");
-        let trail_view = mk_pyr(w, h, "screen-trail");
-
+        let (blur_half, blur_qtr, blur_oct, trail_view) = Self::make_blur_targets(&gpu, w, h);
         let (rt, rt_view, accum, accum_view, readback_bpr) = Self::make_targets(&gpu, w, h);
         let (ann_copy, ann_copy_view, ann_copy_mips) = Self::make_ann_copy(&gpu, w, h);
         // Profondeur 1 par defaut = chemin synchrone historique, a l'octet et a
@@ -724,6 +701,87 @@ impl Compositor {
             seg_scratch: RefCell::new(Vec::new()),
             seg_failed: RefCell::new(false),
         })
+    }
+
+    /// Le meme compositeur, rasterisant a `w`x`h` : seules les cibles qui ont la taille du
+    /// rendu sont reallouees. Cf. `compositor_windows::Compositor::resized`. Ici, reconstruire
+    /// le compositeur entier refaisait en plus tous les shaders et pipelines wgpu.
+    ///
+    /// Les rings de relecture repartent vides a leur profondeur : leurs buffers ont l'ancienne
+    /// taille, comme les cibles YUV, reconstruites a la premiere demande. Une copie encore en
+    /// vol est perdue, comme avec la reconstruction ; la preview n'en laisse aucune
+    /// (`readback_direct` draine).
+    pub fn resized(self, w: u32, h: u32) -> Result<Compositor> {
+        let (w, h) = Self::normalize_render_size(w, h);
+        let gpu = &self.gpu;
+        let (blur_half, blur_qtr, blur_oct, trail_view) = Self::make_blur_targets(gpu, w, h);
+        let (rt, rt_view, accum, accum_view, readback_bpr) = Self::make_targets(gpu, w, h);
+        let (ann_copy, ann_copy_view, ann_copy_mips) = Self::make_ann_copy(gpu, w, h);
+        let depth = self.readback.borrow().depth;
+        let readback = RefCell::new(ReadbackRing {
+            depth,
+            free: (0..depth).map(|_| Self::make_staging(gpu, readback_bpr, h)).collect(),
+            pending: std::collections::VecDeque::new(),
+        });
+        let readback_yuv = RefCell::new(ReadbackRing {
+            depth: self.readback_yuv.borrow().depth,
+            free: Vec::new(),
+            pending: std::collections::VecDeque::new(),
+        });
+        Ok(Compositor {
+            render_w: w,
+            render_h: h,
+            blur_half,
+            blur_qtr,
+            blur_oct,
+            trail_view,
+            rt,
+            rt_view,
+            _accum: accum,
+            accum_view,
+            readback_bpr,
+            readback,
+            yuv: RefCell::new(None),
+            readback_yuv,
+            ann_copy,
+            ann_copy_view,
+            ann_copy_mips,
+            ..self
+        })
+    }
+
+    /// Pyramide du blur Kawase du fond (1/2, 1/4, 1/8 du rendu) et cible de la
+    /// trainee de l'ecran (pleine taille), dans cet ordre.
+    fn make_blur_targets(
+        gpu: &Gpu,
+        w: u32,
+        h: u32,
+    ) -> (wgpu::TextureView, wgpu::TextureView, wgpu::TextureView, wgpu::TextureView) {
+        let mk = |dw: u32, dh: u32, label: &str| {
+            gpu.device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: wgpu::Extent3d {
+                        width: dw.max(1),
+                        height: dh.max(1),
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })
+                .create_view(&wgpu::TextureViewDescriptor::default())
+        };
+        (
+            mk(w / 2, h / 2, "blur-half"),
+            mk(w / 4, h / 4, "blur-qtr"),
+            mk(w / 8, h / 8, "blur-oct"),
+            mk(w, h, "screen-trail"),
+        )
     }
 
     /// RT RGBA8, cible d'accumulation de meme geometrie, et `bytes_per_row` de
@@ -914,12 +972,9 @@ impl Compositor {
 
     /// Un buffer de staging de la ring. La taille depend de `bpr` (donc de la
     /// largeur de rendu) et de la hauteur : changer la geometrie de rendu impose
-    /// de les reallouer -- ce que fait `new_sized`, puisque la preview
-    /// RECONSTRUIT le compositeur au resize (`live.rs`) au lieu de le
-    /// redimensionner a chaud. Aucune copie ne peut donc etre en vol au moment
-    /// ou la taille change : l'ancien compositeur (et sa ring) est detruit
-    /// entier, wgpu gardant ses buffers vivants jusqu'a la fin des soumissions
-    /// qui les referencent.
+    /// de les reallouer -- ce que fait `resized`, qui remplace la ring entiere.
+    /// L'ancienne est detruite avec ses buffers, wgpu les gardant vivants
+    /// jusqu'a la fin des soumissions qui les referencent.
     fn make_staging(gpu: &Gpu, bpr: u32, h: u32) -> wgpu::Buffer {
         gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback"),
@@ -3902,6 +3957,29 @@ mod tests {
         let got = st.read_back().expect("read_back");
         assert_eq!(got.len(), N as usize);
         assert_eq!(got, pattern, "la memoire exportee ne porte pas ce que wgpu y a ecrit");
+    }
+
+    /// Un cran de padding en format Auto change la taille de rendu de la preview. `resized`
+    /// realloue les cibles et garde le reste : le masque webcam, et la boite aux lettres ou le
+    /// worker de segmentation depose les suivants.
+    #[test]
+    fn resizing_keeps_the_segmentation_and_reads_back_at_the_new_size() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("Compositor::new_sized");
+        let (w, h) = (crate::segmentation::MODEL_WIDTH, crate::segmentation::MODEL_HEIGHT);
+        comp.set_webcam_mask(&vec![255u8; (w * h) as usize], w, h).expect("masque");
+        let inbox = std::sync::Arc::clone(&comp.seg_inbox);
+
+        let comp = comp.resized(181, 321).expect("resized");
+
+        assert_eq!(comp.render_size(), (182, 322), "arrondi au pair, comme new_sized");
+        assert!(comp.webcam_mask.borrow().is_some(), "le masque webcam s'est perdu");
+        assert!(
+            std::sync::Arc::ptr_eq(&inbox, &comp.seg_inbox),
+            "le worker deposerait ses masques dans une boite que plus personne ne lit",
+        );
+        let (rw, rh, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+        assert_eq!((rw, rh, rgba.len()), (182, 322, 182 * 322 * 4));
     }
 
     /// La disposition NV12 doit etre EXACTEMENT celle que le pilote produit pour

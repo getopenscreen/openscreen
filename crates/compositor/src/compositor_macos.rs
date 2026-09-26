@@ -393,6 +393,138 @@ fn make_texture(
     device.new_texture(&desc)
 }
 
+/// Tout ce qui a la taille du rendu, et rien d'autre : ce que `new_sized` alloue et que
+/// `resized` réalloue. Cf. `compositor_windows::Targets`.
+struct Targets {
+    rt: metal::Texture,
+    rt_read: metal::Texture,
+    nv12_y: metal::Texture,
+    nv12_uv: metal::Texture,
+    nv12_read_y: metal::Texture,
+    nv12_read_uv: metal::Texture,
+    accum: metal::Texture,
+    trail: metal::Texture,
+    blur_half: metal::Texture,
+    blur_quarter: metal::Texture,
+    blur_eighth: metal::Texture,
+    ann_copy: metal::Texture,
+}
+
+fn make_targets(device: &metal::Device, rw: u32, rh: u32) -> Targets {
+    let rt_usage = metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead;
+
+    let rt = make_texture(
+        device,
+        metal::MTLPixelFormat::RGBA8Unorm,
+        rw,
+        rh,
+        metal::MTLStorageMode::Private,
+        rt_usage,
+    );
+    let rt_read = make_texture(
+        device,
+        metal::MTLPixelFormat::RGBA8Unorm,
+        rw,
+        rh,
+        metal::MTLStorageMode::Shared,
+        metal::MTLTextureUsage::ShaderRead,
+    );
+    let nv12_y = make_texture(
+        device,
+        metal::MTLPixelFormat::R8Unorm,
+        rw,
+        rh,
+        metal::MTLStorageMode::Private,
+        rt_usage,
+    );
+    // NV12 : le plan chroma est entrelacé ET demi-résolution dans les deux axes.
+    // Le dimensionner comme le plan luma — ce que faisait la première version —
+    // produisait un UV 4x trop grand, donc un `read_nv12_scaled` qui lit au-delà
+    // de ce que la passe a écrit.
+    let nv12_uv = make_texture(
+        device,
+        metal::MTLPixelFormat::RG8Unorm,
+        rw / 2,
+        rh / 2,
+        metal::MTLStorageMode::Private,
+        rt_usage,
+    );
+    let nv12_read_y = make_texture(
+        device,
+        metal::MTLPixelFormat::R8Unorm,
+        rw,
+        rh,
+        metal::MTLStorageMode::Shared,
+        metal::MTLTextureUsage::ShaderRead,
+    );
+    let nv12_read_uv = make_texture(
+        device,
+        metal::MTLPixelFormat::RG8Unorm,
+        rw / 2,
+        rh / 2,
+        metal::MTLStorageMode::Shared,
+        metal::MTLTextureUsage::ShaderRead,
+    );
+    let accum = make_texture(
+        device,
+        metal::MTLPixelFormat::RGBA8Unorm,
+        rw,
+        rh,
+        metal::MTLStorageMode::Private,
+        rt_usage,
+    );
+    let trail = make_texture(
+        device,
+        metal::MTLPixelFormat::RGBA8Unorm,
+        rw,
+        rh,
+        metal::MTLStorageMode::Private,
+        rt_usage,
+    );
+    let mut pyramid = [2u32, 4, 8].map(|d| {
+        make_texture(
+            device,
+            metal::MTLPixelFormat::RGBA8Unorm,
+            (rw / d).max(1),
+            (rh / d).max(1),
+            metal::MTLStorageMode::Private,
+            rt_usage,
+        )
+    });
+    let blur_eighth = pyramid[2].clone();
+    let blur_quarter = pyramid[1].clone();
+    let blur_half = std::mem::replace(&mut pyramid[0], blur_quarter.clone());
+    let ann_copy = {
+        let d = metal::TextureDescriptor::new();
+        d.set_texture_type(metal::MTLTextureType::D2);
+        d.set_pixel_format(metal::MTLPixelFormat::RGBA8Unorm);
+        d.set_width(rw as u64);
+        d.set_height(rh as u64);
+        d.set_storage_mode(metal::MTLStorageMode::Private);
+        d.set_usage(rt_usage);
+        // Assez de niveaux pour que `log2(rayon)` du mode 10 en trouve toujours un.
+        d.set_mipmap_level_count(
+            (32 - rw.max(rh).max(1).leading_zeros()).max(1) as u64,
+        );
+        device.new_texture(&d)
+    };
+
+    Targets {
+        rt,
+        rt_read,
+        nv12_y,
+        nv12_uv,
+        nv12_read_y,
+        nv12_read_uv,
+        accum,
+        trail,
+        blur_half,
+        blur_quarter,
+        blur_eighth,
+        ann_copy,
+    }
+}
+
 /// Comment un draw se mélange à ce qui est déjà dans la cible.
 #[derive(Clone, Copy, PartialEq)]
 enum Blend {
@@ -468,60 +600,20 @@ impl Compositor {
         let cache = CVMetalTextureCache::new(gpu.device.as_ptr() as *const std::ffi::c_void)?;
 
         let device = &gpu.device;
-        let rt_usage = metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead;
-
-        let rt = make_texture(
-            device,
-            metal::MTLPixelFormat::RGBA8Unorm,
-            rw,
-            rh,
-            metal::MTLStorageMode::Private,
-            rt_usage,
-        );
-        let rt_read = make_texture(
-            device,
-            metal::MTLPixelFormat::RGBA8Unorm,
-            rw,
-            rh,
-            metal::MTLStorageMode::Shared,
-            metal::MTLTextureUsage::ShaderRead,
-        );
-        let nv12_y = make_texture(
-            device,
-            metal::MTLPixelFormat::R8Unorm,
-            rw,
-            rh,
-            metal::MTLStorageMode::Private,
-            rt_usage,
-        );
-        // NV12 : le plan chroma est entrelacé ET demi-résolution dans les deux axes.
-        // Le dimensionner comme le plan luma — ce que faisait la première version —
-        // produisait un UV 4x trop grand, donc un `read_nv12_scaled` qui lit au-delà
-        // de ce que la passe a écrit.
-        let nv12_uv = make_texture(
-            device,
-            metal::MTLPixelFormat::RG8Unorm,
-            rw / 2,
-            rh / 2,
-            metal::MTLStorageMode::Private,
-            rt_usage,
-        );
-        let nv12_read_y = make_texture(
-            device,
-            metal::MTLPixelFormat::R8Unorm,
-            rw,
-            rh,
-            metal::MTLStorageMode::Shared,
-            metal::MTLTextureUsage::ShaderRead,
-        );
-        let nv12_read_uv = make_texture(
-            device,
-            metal::MTLPixelFormat::RG8Unorm,
-            rw / 2,
-            rh / 2,
-            metal::MTLStorageMode::Shared,
-            metal::MTLTextureUsage::ShaderRead,
-        );
+        let Targets {
+            rt,
+            rt_read,
+            nv12_y,
+            nv12_uv,
+            nv12_read_y,
+            nv12_read_uv,
+            accum,
+            trail,
+            blur_half,
+            blur_quarter,
+            blur_eighth,
+            ann_copy,
+        } = make_targets(device, rw, rh);
 
         // --- Compilation MSL ---
         let msl_source = include_str!("shaders.metal");
@@ -569,35 +661,6 @@ impl Compositor {
             metal::MTLPixelFormat::RGBA8Unorm,
             Blend::Add,
         )?;
-        let accum = make_texture(
-            device,
-            metal::MTLPixelFormat::RGBA8Unorm,
-            rw,
-            rh,
-            metal::MTLStorageMode::Private,
-            rt_usage,
-        );
-        let trail = make_texture(
-            device,
-            metal::MTLPixelFormat::RGBA8Unorm,
-            rw,
-            rh,
-            metal::MTLStorageMode::Private,
-            rt_usage,
-        );
-        let mut pyramid = [2u32, 4, 8].map(|d| {
-            make_texture(
-                device,
-                metal::MTLPixelFormat::RGBA8Unorm,
-                (rw / d).max(1),
-                (rh / d).max(1),
-                metal::MTLStorageMode::Private,
-                rt_usage,
-            )
-        });
-        let blur_eighth = pyramid[2].clone();
-        let blur_quarter = pyramid[1].clone();
-        let blur_half = std::mem::replace(&mut pyramid[0], blur_quarter.clone());
         let pipeline_kdown = make_pipeline(
             device, &library, "vs_fs", "ps_kawase_down",
             metal::MTLPixelFormat::RGBA8Unorm, Blend::Replace,
@@ -606,20 +669,6 @@ impl Compositor {
             device, &library, "vs_fs", "ps_kawase_up",
             metal::MTLPixelFormat::RGBA8Unorm, Blend::Replace,
         )?;
-        let ann_copy = {
-            let d = metal::TextureDescriptor::new();
-            d.set_texture_type(metal::MTLTextureType::D2);
-            d.set_pixel_format(metal::MTLPixelFormat::RGBA8Unorm);
-            d.set_width(rw as u64);
-            d.set_height(rh as u64);
-            d.set_storage_mode(metal::MTLStorageMode::Private);
-            d.set_usage(rt_usage);
-            // Assez de niveaux pour que `log2(rayon)` du mode 10 en trouve toujours un.
-            d.set_mipmap_level_count(
-                (32 - rw.max(rh).max(1).leading_zeros()).max(1) as u64,
-            );
-            device.new_texture(&d)
-        };
 
         Ok(Compositor {
             gpu: Gpu {
@@ -675,6 +724,44 @@ impl Compositor {
             seg_rate: RefCell::new(crate::segmentation::RateLimiter::new(SEGMENTATION_HZ)),
             seg_scratch: RefCell::new(Vec::new()),
             seg_failed: RefCell::new(false),
+        })
+    }
+
+    /// Le même compositeur, rastérisant à `w`×`h` : seules les cibles (`Targets`) sont
+    /// réallouées. Cf. `compositor_windows::Compositor::resized`. Ici, reconstruire le
+    /// compositeur entier recompilait en plus `shaders.metal`.
+    pub fn resized(self, w: u32, h: u32) -> Result<Compositor> {
+        let (rw, rh) = Self::normalize_render_size(w, h);
+        let Targets {
+            rt,
+            rt_read,
+            nv12_y,
+            nv12_uv,
+            nv12_read_y,
+            nv12_read_uv,
+            accum,
+            trail,
+            blur_half,
+            blur_quarter,
+            blur_eighth,
+            ann_copy,
+        } = make_targets(&self.gpu.device, rw, rh);
+        Ok(Compositor {
+            render_w: rw,
+            render_h: rh,
+            rt,
+            rt_read,
+            nv12_y,
+            nv12_uv,
+            nv12_read_y,
+            nv12_read_uv,
+            accum,
+            trail,
+            blur_half,
+            blur_quarter,
+            blur_eighth,
+            ann_copy,
+            ..self
         })
     }
 
@@ -4177,5 +4264,31 @@ mod tests {
         };
         let comp = super::Compositor::new_sized(&gpu, 640, 360).expect("Compositor::new_sized");
         assert_eq!(comp.render_size(), (640, 360));
+    }
+
+    /// Un cran de padding en format Auto change la taille de rendu de la preview. `resized`
+    /// réalloue les cibles et garde le reste : le masque webcam, et la boîte aux lettres où le
+    /// worker de segmentation dépose les suivants.
+    #[test]
+    fn resizing_keeps_the_segmentation_and_reads_back_at_the_new_size() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let comp = super::Compositor::new_sized(&gpu, 320, 180).expect("Compositor::new_sized");
+        let (w, h) = (crate::segmentation::MODEL_WIDTH, crate::segmentation::MODEL_HEIGHT);
+        comp.set_webcam_mask(&vec![255u8; (w * h) as usize], w, h).expect("masque");
+        let inbox = std::sync::Arc::clone(&comp.seg_inbox);
+
+        let comp = comp.resized(181, 321).expect("resized");
+
+        assert_eq!(comp.render_size(), (182, 322), "arrondi au pair, comme new_sized");
+        assert!(comp.webcam_mask.borrow().is_some(), "le masque webcam s'est perdu");
+        assert!(
+            std::sync::Arc::ptr_eq(&inbox, &comp.seg_inbox),
+            "le worker déposerait ses masques dans une boîte que plus personne ne lit",
+        );
+        let (rw, rh, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+        assert_eq!((rw, rh, rgba.len()), (182, 322, 182 * 322 * 4));
     }
 }

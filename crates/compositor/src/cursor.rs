@@ -48,13 +48,13 @@ pub struct CursorTrack {
     /// `CURSOR_SAMPLE_INTERVAL_MS` côté Electron), donc n'enregistrer que les
     /// transitions garde cette liste minuscule et rend `type_at` trivial.
     types: Vec<(f32, String)>,
-    /// Les vues du suivi à zone morte déjà rejouées, par `(t0, échelle)` : une par région auto
+    /// Les vues du suivi à zone morte déjà rejouées, par `(t0, fin, échelle)` : une par région auto
     /// (`follow_in_view`). Partagé entre clones, qui ont les mêmes échantillons.
     view_cache:
         std::sync::Arc<std::sync::Mutex<Vec<(ViewKey, std::sync::Arc<Vec<(f32, f32, f32)>>)>>>,
 }
 
-type ViewKey = (u32, u32);
+type ViewKey = (u32, u32, u32);
 /// Assez pour toutes les régions auto d'un clip ; au-delà, la plus ancienne est rejouée.
 const VIEW_CACHE_LEN: usize = 32;
 
@@ -220,11 +220,13 @@ impl CursorTrack {
     /// rattrape avec le même lissage, juste assez pour le ramener au bord de la zone. Bornée à ce
     /// qu'une vue de `1/scale` peut atteindre, pour que la zone se mesure contre la vue affichée.
     ///
-    /// Rejouée depuis `t0` à chaque appel, sur les échantillons BRUTS : une pure fonction de
-    /// `(t0, t)`, donc la même en preview et à l'export, en lecture comme après un seek. Le coût
-    /// suit la durée de la région, pas celle de la piste.
-    pub fn follow_in_view(&self, t0: f32, t: f32, scale: f32) -> Option<(f32, f32)> {
-        let states = self.view_states(t0, scale)?;
+    /// Rejouée depuis `t0` sur les échantillons BRUTS, puis mise en cache jusqu'à `t_end` : une
+    /// fonction pure de `(t0, t, t_end)`, donc la même en preview et à l'export, après un seek
+    /// comme en lecture. Le cache ne garde rien après la fenêtre de la région.
+    pub fn follow_in_view(&self, t0: f32, t: f32, t_end: f32, scale: f32) -> Option<(f32, f32)> {
+        let t_end = t_end.max(t0);
+        let t = t.clamp(t0, t_end);
+        let states = self.view_states(t0, t_end, scale)?;
         let half = 0.5 / scale.max(1.0);
         let reach = |v: f32| v.clamp(half, 1.0 - half);
         // Après le dernier échantillon, la vue continue de rattraper le pointeur resté immobile
@@ -251,11 +253,16 @@ impl CursorTrack {
         Some((a.1 + (b.1 - a.1) * f, a.2 + (b.2 - a.2) * f))
     }
 
-    /// Les états de la vue `(t, x, y)` depuis `t0` : l'état de départ, puis un par échantillon
-    /// après `t0`. Rejoués une fois par `(t0, échelle)` et gardés : une région en demande un par
-    /// frame, et les rejouer depuis `t0` à chaque fois coûtait la longueur de la région.
-    fn view_states(&self, t0: f32, scale: f32) -> Option<std::sync::Arc<Vec<(f32, f32, f32)>>> {
-        let key = (t0.to_bits(), scale.to_bits());
+    /// Les états `(t, x, y)` de `t0` à la fin de la fenêtre d'une région. Le dernier point est
+    /// interpolé à `t_end` si le curseur a encore des échantillons après cette fenêtre.
+    fn view_states(
+        &self,
+        t0: f32,
+        t_end: f32,
+        scale: f32,
+    ) -> Option<std::sync::Arc<Vec<(f32, f32, f32)>>> {
+        let t_end = t_end.max(t0);
+        let key = (t0.to_bits(), t_end.to_bits(), scale.to_bits());
         if let Some((_, v)) = self.view_cache.lock().ok()?.iter().find(|(k, _)| *k == key) {
             return Some(v.clone());
         }
@@ -268,12 +275,26 @@ impl CursorTrack {
         let mut view = (reach(x0), reach(y0));
         let mut states = vec![(t0, view.0, view.1)];
         let first = self.samples.partition_point(|s| s.0 <= t0);
-        for &(ts, x, y) in &self.samples[first..] {
+        let end = self.samples.partition_point(|s| s.0 <= t_end);
+        for &(ts, x, y) in &self.samples[first..end] {
             let at = states.last().map_or(t0, |s| s.0);
             let (nx, ny) =
                 follow_step(view, (pull(x, view.0), pull(y, view.1)), (ts - at) * 1000.0);
             view = (reach(nx), reach(ny));
             states.push((ts, view.0, view.1));
+        }
+        let at = states.last().map_or(t0, |s| s.0);
+        if at < t_end {
+            if let Some(&(ts, x, y)) = self.samples.get(end) {
+                let (nx, ny) =
+                    follow_step(view, (pull(x, view.0), pull(y, view.1)), (ts - at) * 1000.0);
+                let f = ((t_end - at) / (ts - at)).clamp(0.0, 1.0);
+                states.push((
+                    t_end,
+                    view.0 + (nx - view.0) * f,
+                    view.1 + (ny - view.1) * f,
+                ));
+            }
         }
         let states = std::sync::Arc::new(states);
         let mut cache = self.view_cache.lock().ok()?;
@@ -580,20 +601,42 @@ mod tests {
         };
         let (cached, times) = (make(), [4.9f32, 0.2, 3.3, 0.0, 2.71, 4.0]);
         for t in times {
-            let _ = cached.follow_in_view(0.4, t, 2.0);
+            let _ = cached.follow_in_view(0.4, t, 5.0, 2.0);
         }
         for t in times {
             assert_eq!(
-                cached.follow_in_view(0.4, t, 2.0),
-                make().follow_in_view(0.4, t, 2.0),
+                cached.follow_in_view(0.4, t, 5.0, 2.0),
+                make().follow_in_view(0.4, t, 5.0, 2.0),
                 "t {t}"
             );
         }
         // Une autre région (autre départ, autre échelle) a ses propres vues.
         assert_ne!(
-            cached.follow_in_view(1.0, 3.0, 3.0),
-            cached.follow_in_view(0.4, 3.0, 2.0)
+            cached.follow_in_view(1.0, 3.0, 5.0, 3.0),
+            cached.follow_in_view(0.4, 3.0, 5.0, 2.0)
         );
+    }
+
+    #[test]
+    fn the_follow_view_cache_stops_at_its_region_end() {
+        let track = CursorTrack::new(
+            (0..=300)
+                .map(|i| {
+                    let t = i as f32 / 30.0;
+                    (t, 0.5 + 0.2 * (t * 0.7).sin(), 0.5)
+                })
+                .collect(),
+            vec![],
+            vec![],
+        );
+
+        let at_end = track.follow_in_view(0.0, 2.0, 2.0, 2.0).unwrap();
+        assert_eq!(track.follow_in_view(0.0, 8.0, 2.0, 2.0), Some(at_end));
+
+        let cache = track.view_cache.lock().unwrap();
+        let states = &cache[0].1;
+        assert!(states.iter().all(|(t, _, _)| *t <= 2.0));
+        assert_eq!(states.last().unwrap().0, 2.0);
     }
 
     /// Après le dernier échantillon, la vue continue de rattraper un pointeur immobile hors de la
@@ -608,7 +651,7 @@ mod tests {
             vec![],
             vec![],
         );
-        let at = |t: f32| track.follow_in_view(0.0, t, 2.0).unwrap().0;
+        let at = |t: f32| track.follow_in_view(0.0, t, 9.0, 2.0).unwrap().0;
         assert!(
             at(2.0) < at(2.5) && at(2.5) < at(4.0),
             "{} {} {}",
@@ -636,7 +679,9 @@ mod tests {
         };
         let jitter = track(|t| 0.5 + 0.08 * (t * 7.0).sin());
         for i in 0..=90 {
-            let (x, y) = jitter.follow_in_view(0.0, i as f32 / 10.0, 2.0).unwrap();
+            let (x, y) = jitter
+                .follow_in_view(0.0, i as f32 / 10.0, 9.0, 2.0)
+                .unwrap();
             assert!(
                 (x - 0.5).abs() < 1e-6 && (y - 0.5).abs() < 1e-6,
                 "t {} : {x}",
@@ -651,15 +696,15 @@ mod tests {
 
         // Un saut à 0,8 à 2 s : la vue rattrape jusqu'à laisser le pointeur au bord de la zone.
         let jump = track(|t| if t < 2.0 { 0.5 } else { 0.8 });
-        let settled = jump.follow_in_view(0.0, 9.0, 2.0).unwrap().0;
+        let settled = jump.follow_in_view(0.0, 9.0, 9.0, 2.0).unwrap().0;
         assert!((settled - (0.8 - 0.125)).abs() < 1e-3, "{settled}");
-        let early = jump.follow_in_view(0.0, 2.1, 2.0).unwrap().0;
+        let early = jump.follow_in_view(0.0, 2.1, 9.0, 2.0).unwrap().0;
         assert!(
             early > 0.5 && early < settled,
             "rattrapage progressif : {early}"
         );
-        // Une pure fonction de (t0, t) : l'ordre des appels ne change rien.
-        assert_eq!(jump.follow_in_view(0.0, 2.1, 2.0).unwrap().0, early);
+        // Une pure fonction de (t0, t, t_end) : l'ordre des appels ne change rien.
+        assert_eq!(jump.follow_in_view(0.0, 2.1, 9.0, 2.0).unwrap().0, early);
     }
 
     /// L'état du curseur est une fonction en escalier : il tient jusqu'à la transition

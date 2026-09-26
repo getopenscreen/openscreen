@@ -744,7 +744,12 @@ fn resolve_focus(
             // l'écran (`zoom_region_strength`), son début se ramène donc à la source par l'horloge.
             let window = zoom_transition_s(region.scale);
             let t0 = clock.source_at(clock.at(region.start_sec as f32) - window);
-            if let Some((cx, cy)) = track.follow_in_view(t0, t, region.scale) {
+            let t_end = if region.under_trim {
+                region.end_sec as f32
+            } else {
+                clock.source_at(clock.at(region.end_sec as f32) + window)
+            };
+            if let Some((cx, cy)) = track.follow_in_view(t0, t, t_end, region.scale) {
                 return [cx, cy];
             }
         }
@@ -1652,7 +1657,8 @@ mod zoom_focus_tests {
             t0 > r.start_sec as f32 - window + 0.1,
             "garde : le ralenti doit déplacer le départ ({t0})"
         );
-        let (x, y) = track.follow_in_view(t0, 3.0, r.scale).unwrap();
+        let t_end = clock.source_at(clock.at(r.end_sec as f32) + window);
+        let (x, y) = track.follow_in_view(t0, 3.0, t_end, r.scale).unwrap();
         assert_eq!(resolve_focus(&r, 3.0, Some(&track), &clock), [x, y]);
     }
 
@@ -1666,17 +1672,19 @@ mod zoom_focus_tests {
         let mut r = region(1.5, 0.1);
         r.focus_mode = Some("auto".into());
         let t0 = r.start_sec as f32 - zoom_transition_s(r.scale);
-        let last = track.follow_in_view(t0, 4.0, r.scale).unwrap();
+        let clock = ScreenClock::default();
+        let t_end = clock.source_at(clock.at(r.end_sec as f32) + zoom_transition_s(r.scale));
+        let last = track.follow_in_view(t0, t_end, t_end, r.scale).unwrap();
         for t in [4.5f32, 6.0, 7.9] {
             assert_eq!(
-                resolve_focus(&r, t, Some(&track), &ScreenClock::default()),
+                resolve_focus(&r, t, Some(&track), &clock),
                 [last.0, last.1],
                 "t = {t}"
             );
         }
-        let first = track.follow_in_view(t0, 2.1, r.scale).unwrap();
+        let first = track.follow_in_view(t0, 2.1, t_end, r.scale).unwrap();
         assert_eq!(
-            resolve_focus(&r, 2.1, Some(&track), &ScreenClock::default()),
+            resolve_focus(&r, 2.1, Some(&track), &clock),
             [first.0, first.1]
         );
     }

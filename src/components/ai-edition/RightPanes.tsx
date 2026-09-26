@@ -4106,8 +4106,11 @@ export function SliderCell({
 				title={hint}
 				style={{ "--slider-pct": `${pct}%` } as CSSProperties}
 				onChange={(e) => onChange(Number(e.target.value))}
+				// A mouse released off the slider needs nothing more: the browser captures a range
+				// drag, so its mouseup still lands here. A touch the system cancels ends it too.
 				onMouseUp={onCommit}
 				onTouchEnd={onCommit}
+				onTouchCancel={onCommit}
 				onKeyUp={onCommit}
 			/>
 		</div>

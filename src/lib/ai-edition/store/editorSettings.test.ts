@@ -184,6 +184,16 @@ describe("patchEditorSettings", () => {
 		expect(getEditorSettings(next).cursor.clickImpact).toBe(true);
 	});
 
+	it("stores the cursor kinds drawn as the arrow, and drops the switch they replace", () => {
+		expect(getEditorSettings(baseDoc).cursor.asArrow).toEqual([]);
+		const old = patchEditorSettings(baseDoc, {});
+		old.legacyEditor = { ...old.legacyEditor, cursorAlwaysArrow: true };
+		expect(getEditorSettings(old).cursor.asArrow).toHaveLength(9);
+		const picked = patchEditorSettings(old, { cursor: { asArrow: ["text"] } });
+		expect(getEditorSettings(picked).cursor.asArrow).toEqual(["text"]);
+		expect(picked.legacyEditor).not.toHaveProperty("cursorAlwaysArrow");
+	});
+
 	it("toggles cursorAutoHide on and off via patch", () => {
 		const enabled = patchEditorSettings(baseDoc, { cursorAutoHide: true });
 		expect(getEditorSettings(enabled).cursorAutoHide).toBe(true);

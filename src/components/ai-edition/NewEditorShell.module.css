@@ -1446,6 +1446,13 @@ textarea.control {
 	background: var(--accent-soft);
 	color: var(--fg);
 }
+/* The cursor types (CursorPane): a dimmed type is drawn as the arrow. The arrow's own cell is not
+   a control, it is what the others become. */
+.cursorCellOff img { opacity: 0.35; transition: opacity 150ms ease; }
+.cursorCellOff:hover:not(:disabled) img { opacity: 0.7; }
+.cursorCellFixed { cursor: default; }
+/* A row that belongs to the grid right above it: the 3D switch under the cursor style. */
+.paneRowTight { margin-top: calc(-1 * var(--sp-2)); }
 /* Same cell, reused for the icon+label rows (camera shape, camera background).
    `minmax(0, 1fr)` stopped a long label from pushing the grid, but the text still
    spilled over the button's own border and crowded its neighbour -- « Personnalisé »,

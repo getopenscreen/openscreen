@@ -1,6 +1,10 @@
 import { normalizeTextAnimation } from "@/lib/annotationTextAnimation";
 import { normalizeBlurColor, normalizeBlurType } from "@/lib/blurEffects";
-import { normalizeCursorThemeId } from "@/lib/cursor/cursorThemes";
+import {
+	type CursorKind,
+	normalizeCursorThemeId,
+	readCursorAsArrow,
+} from "@/lib/cursor/cursorThemes";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import {
 	DEFAULT_PROJECT_APPEARANCE,
@@ -112,6 +116,8 @@ export interface ProjectEditorState {
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
+	cursorAsArrow?: CursorKind[];
+	/** The one switch before `cursorAsArrow`; `getEditorSettings` reads it as every kind. */
 	cursorAlwaysArrow?: boolean;
 	// Same reason as the cursor keys above. `window-light` / `window-dark` are kept as stored:
 	// `getEditorSettings` splits them into a frame and a theme (`readRecordingFrame`).
@@ -502,6 +508,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			: {}),
 		...(isFiniteNumber(editor.cursorClickBounce)
 			? { cursorClickBounce: editor.cursorClickBounce }
+			: {}),
+		...(editor.cursorAsArrow !== undefined
+			? { cursorAsArrow: readCursorAsArrow(editor.cursorAsArrow) }
 			: {}),
 		...(typeof editor.cursorAlwaysArrow === "boolean"
 			? { cursorAlwaysArrow: editor.cursorAlwaysArrow }

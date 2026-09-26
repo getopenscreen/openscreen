@@ -540,15 +540,24 @@ describe("resolveSceneAssetPaths", () => {
 		expect(Object.keys(sprites).sort()).toEqual(Object.keys(DEFAULT_CURSOR_SPRITES).sort());
 	});
 
-	it("draws every cursor state with the arrow when alwaysArrow is on", () => {
-		const sprites = resolved({ cursor: { theme: "default", alwaysArrow: true } }).cursor
+	it("draws the kinds the scene names with the arrow, and only those", () => {
+		const sprites = resolved({ cursor: { theme: "default", asArrow: ["text", "resize"] } }).cursor
 			.cursorSprites;
 
 		expect(Object.keys(sprites).sort()).toEqual(Object.keys(DEFAULT_CURSOR_SPRITES).sort());
-		for (const [type, sprite] of Object.entries<ResolvedSprite>(sprites)) {
-			expect(sprite, type).toEqual(sprites.arrow);
+		for (const type of ["text", "resize-ew", "resize-ns", "resize-nwse", "resize-nesw", "move"]) {
+			expect(sprites[type], type).toEqual(sprites.arrow);
 		}
+		expect(sprites.pointer.path).toBe(path.join(resources, "cursors", "default", "pointer.png"));
 		expect(sprites.arrow.path).toBe(path.join(resources, "cursors", "default", "arrow.png"));
+	});
+
+	// The scene is JSON from the renderer: a kind this build does not know changes nothing.
+	it("ignores a cursor kind it does not know", () => {
+		const sprites = resolved({ cursor: { theme: "default", asArrow: ["sparkles", 3] } }).cursor
+			.cursorSprites;
+
+		expect(sprites.text.path).toBe(path.join(resources, "cursors", "default", "text.png"));
 	});
 
 	it("carries each sprite's hotspot as a fraction of its own image", () => {

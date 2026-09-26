@@ -108,8 +108,12 @@ import {
 import { getAssetPath } from "@/lib/assetPath";
 import { resolveWebcamLayoutPreset, supportsWebcamReactiveZoom } from "@/lib/compositeLayout";
 import {
+	CURSOR_KIND_IDS,
+	CURSOR_KINDS,
 	CURSOR_THEMES,
+	type CursorKind,
 	DEFAULT_CURSOR_THEME_ID,
+	resolveCursorSprites,
 	themePickerPreviewAssets,
 } from "@/lib/cursor/cursorThemes";
 import { gradientSeedColor, oneColorGradient } from "@/lib/gradientBuilder";
@@ -147,6 +151,7 @@ import { CaptionsPane } from "./CaptionsPane";
 import { ColorField } from "./ColorField";
 import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
+import { useRecordedCursorTypes } from "./recordedCursorTypes";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
 
@@ -3668,6 +3673,29 @@ export function CursorPane() {
 		[ts],
 	);
 
+	// What the preview draws for each state: the theme's art, the built-in art where it has none.
+	const cursorSprites = useMemo(
+		() => resolveCursorSprites(settings.cursorTheme),
+		[settings.cursorTheme],
+	);
+	const recordedTypes = useRecordedCursorTypes();
+	// Each kind the video shows, pictured by the first of its states it shows.
+	const recordedKinds = CURSOR_KIND_IDS.flatMap((kind) => {
+		const type = CURSOR_KINDS[kind].find((state) => recordedTypes?.has(state));
+		return type ? [{ kind, type }] : [];
+	});
+	const cursorKindLabels: Record<CursorKind, string> = {
+		pointer: ts("cursor.typePointer"),
+		text: ts("cursor.typeText"),
+		grab: ts("cursor.typeGrab"),
+		resize: ts("cursor.typeResize"),
+		busy: ts("cursor.typeBusy"),
+		crosshair: ts("cursor.typeCrosshair"),
+		"not-allowed": ts("cursor.typeNotAllowed"),
+		help: ts("cursor.typeHelp"),
+		"up-arrow": ts("cursor.typeUpArrow"),
+	};
+
 	return (
 		<Pane
 			title={ts("cursor.title")}
@@ -3702,43 +3730,17 @@ export function CursorPane() {
 					}}
 				/>
 			</div>
-			{/* A hidden cursor has nothing to model, restyle or click with, so these rows are not
-			    offered then. */}
+			{/* A hidden cursor has nothing to click with, so this row is not offered then. */}
 			{settings.cursorShow ? (
-				<>
-					<div className={styles.paneRow}>
-						<span className={styles.label}>{ts("cursor.model3d")}</span>
-						<Toggle
-							ariaLabel={ts("cursor.model3d")}
-							checked={settings.cursor.model3d}
-							disabled={!hasDocument}
-							onChange={(v) => {
-								void set({ cursor: { model3d: v } });
-								if (isNativeCompositorActive()) {
-									setNativeParam("cursorModel3d", v);
-								}
-							}}
-						/>
-					</div>
-					<div className={styles.paneRow}>
-						<span className={styles.label}>{ts("cursor.alwaysArrow")}</span>
-						<Toggle
-							ariaLabel={ts("cursor.alwaysArrow")}
-							checked={settings.cursor.alwaysArrow}
-							disabled={!hasDocument}
-							onChange={(v) => void set({ cursor: { alwaysArrow: v } })}
-						/>
-					</div>
-					<div className={styles.paneRow}>
-						<span className={styles.label}>{ts("cursor.clickImpact")}</span>
-						<Toggle
-							ariaLabel={ts("cursor.clickImpact")}
-							checked={settings.cursor.clickImpact}
-							disabled={!hasDocument}
-							onChange={(v) => void set({ cursor: { clickImpact: v } })}
-						/>
-					</div>
-				</>
+				<div className={styles.paneRow}>
+					<span className={styles.label}>{ts("cursor.clickImpact")}</span>
+					<Toggle
+						ariaLabel={ts("cursor.clickImpact")}
+						checked={settings.cursor.clickImpact}
+						disabled={!hasDocument}
+						onChange={(v) => void set({ cursor: { clickImpact: v } })}
+					/>
+				</div>
 			) : null}
 			{/* One option is not a choice: the picker shows once a pack ships beside the
 			    default art (see CURSOR_THEMES). */}
@@ -3771,6 +3773,91 @@ export function CursorPane() {
 							);
 						})}
 					</div>
+				</>
+			) : null}
+			{/* A hidden cursor has nothing to model or redraw, so these rows are not offered then. */}
+			{settings.cursorShow ? (
+				<>
+					<div className={`${styles.paneRow} ${styles.paneRowTight}`}>
+						<span className={styles.label}>{ts("cursor.model3d")}</span>
+						<Toggle
+							ariaLabel={ts("cursor.model3d")}
+							checked={settings.cursor.model3d}
+							disabled={!hasDocument}
+							onChange={(v) => {
+								void set({ cursor: { model3d: v } });
+								if (isNativeCompositorActive()) {
+									setNativeParam("cursorModel3d", v);
+								}
+							}}
+						/>
+					</div>
+					{recordedKinds.length > 0 ? (
+						<>
+							<div className={styles.sectionLabel}>{ts("cursor.types")}</div>
+							{/* The cursors the video shows, each drawn as recorded (lit) or as the arrow
+							    (dimmed). The arrow's own cell is not a control: it is what the others
+							    become. Space and Enter toggle the focused cell and stop there: the
+							    editor's shortcuts on `window` would also play the video. */}
+							<div
+								role="group"
+								aria-label={ts("cursor.types")}
+								className={styles.cursorGrid}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") e.nativeEvent.stopPropagation();
+								}}
+							>
+								<span
+									role="img"
+									aria-label={ts("cursor.typeArrow")}
+									title={ts("cursor.typeArrow")}
+									className={`${styles.cursorCell} ${styles.isActive} ${styles.cursorCellFixed}`}
+								>
+									<img
+										src={safeAssetUrl(cursorSprites.arrow.assetPath)}
+										alt=""
+										width={20}
+										height={20}
+										draggable={false}
+										style={{ objectFit: "contain", pointerEvents: "none" }}
+									/>
+								</span>
+								{recordedKinds.map(({ kind, type }) => {
+									const shown = !settings.cursor.asArrow.includes(kind);
+									const label = cursorKindLabels[kind];
+									return (
+										<button
+											type="button"
+											key={kind}
+											className={`${styles.cursorCell} ${shown ? styles.isActive : styles.cursorCellOff}`}
+											title={shown ? label : ts("cursor.typeAsArrow", { type: label })}
+											aria-label={label}
+											aria-pressed={shown}
+											disabled={!hasDocument}
+											onClick={() =>
+												void set({
+													cursor: {
+														asArrow: CURSOR_KIND_IDS.filter((k) =>
+															k === kind ? shown : settings.cursor.asArrow.includes(k),
+														),
+													},
+												})
+											}
+										>
+											<img
+												src={safeAssetUrl(cursorSprites[type].assetPath)}
+												alt=""
+												width={20}
+												height={20}
+												draggable={false}
+												style={{ objectFit: "contain", pointerEvents: "none" }}
+											/>
+										</button>
+									);
+								})}
+							</div>
+						</>
+					) : null}
 				</>
 			) : null}
 			<div className={styles.sliderGrid}>

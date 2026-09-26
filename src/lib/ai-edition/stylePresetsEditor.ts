@@ -40,7 +40,7 @@ export function stylePresetAppearanceFromSettings(
 			motionBlur: settings.cursor.motionBlur,
 			clickBounce: settings.cursor.clickBounce,
 			model3d: settings.cursor.model3d,
-			alwaysArrow: settings.cursor.alwaysArrow,
+			asArrow: [...settings.cursor.asArrow],
 			clickImpact: settings.cursor.clickImpact,
 		},
 		cursorShow: settings.cursorShow,

@@ -32,7 +32,7 @@ const APPEARANCE: StylePresetAppearance = {
 		motionBlur: 0.35,
 		clickBounce: 1,
 		model3d: false,
-		alwaysArrow: false,
+		asArrow: [],
 		clickImpact: false,
 	},
 	cursorShow: true,

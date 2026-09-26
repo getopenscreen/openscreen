@@ -59,6 +59,7 @@ import {
 	resolveWebcamReactiveZoom,
 	webcamSizeToFraction,
 } from "@/lib/compositeLayout";
+import type { CursorKind } from "@/lib/cursor/cursorThemes";
 import { parseCssGradient, resolveLinearGradientAngle } from "@/lib/exporter/gradientParser";
 import type { FrameTheme, RecordingFrame, WebcamAnchor } from "@/lib/projectDefaults";
 import { resolveTextFontFamily } from "@/lib/textFonts";
@@ -440,8 +441,9 @@ export interface SceneCursor {
 	 * the default theme's arrow; any other cursor keeps its flat sprite.
 	 */
 	model3d: boolean;
-	/** Every cursor state drawn with the arrow sprite (resolved app-side, see compositorViewService). */
-	alwaysArrow: boolean;
+	/** The kinds drawn with the arrow sprite (`CURSOR_KINDS`, resolved app-side, see
+	 *  compositorViewService). */
+	asArrow: CursorKind[];
 	/** Each click gives the screen an impact, under every camera (`scene.rs`
 	 *  `SceneCursor::click_impact`). Omitted (not `false`) when off. */
 	clickImpact?: true;
@@ -1242,7 +1244,7 @@ export function buildSceneDescription(
 			motionBlur: settings.cursor.motionBlur,
 			clickBounce: settings.cursor.clickBounce,
 			model3d: settings.cursor.model3d,
-			alwaysArrow: settings.cursor.alwaysArrow,
+			asArrow: settings.cursor.asArrow,
 			...(settings.cursor.clickImpact ? { clickImpact: true as const } : {}),
 			// The "Keep inside frame" option is gone: the cursor always overflows into the
 			// background. The field stays because the compositor's scene requires it.

@@ -19,7 +19,12 @@ import type {
 	WebcamSizePreset,
 } from "../../components/video-editor/types";
 import { type AspectRatio, isAspectRatio } from "../../utils/aspectRatioUtils";
-import { CURSOR_THEME_IDS, DEFAULT_CURSOR_THEME_ID } from "../cursor/cursorThemes";
+import {
+	CURSOR_THEME_IDS,
+	type CursorKind,
+	DEFAULT_CURSOR_THEME_ID,
+	readCursorAsArrow,
+} from "../cursor/cursorThemes";
 import {
 	clampToBound,
 	type FrameTheme,
@@ -197,6 +202,24 @@ function readFrame(source: Fields): { frame: RecordingFrame; frameTheme: FrameTh
 	return { frame: stored.frame, frameTheme: theme ?? stored.theme ?? "light" };
 }
 
+/**
+ * The cursor kinds drawn as the arrow. A kind this build does not know (a newer build's) is
+ * dropped, the way an unknown theme falls back to the default. A preset written before the kinds
+ * could be picked carries the one switch there was, or nothing: every cursor as recorded.
+ */
+function readAsArrow(cursor: Fields): CursorKind[] {
+	const value = cursor.asArrow;
+	if (value === undefined) {
+		const always =
+			cursor.alwaysArrow === undefined ? false : readBoolean(cursor, "alwaysArrow", "cursor.");
+		return readCursorAsArrow(undefined, always);
+	}
+	if (!Array.isArray(value) || value.some((kind) => typeof kind !== "string")) {
+		throw new TypeError("Style preset cursor.asArrow must be a list of cursor kinds.");
+	}
+	return readCursorAsArrow(value);
+}
+
 const HEX_COLOR_RE = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 const COLOR_FUNCTION_RE = /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(.*\)$/i;
 const GRADIENT_RE = /^(?:repeating-)?(?:linear|radial|conic)-gradient\(.*\)$/i;
@@ -257,7 +280,8 @@ export function parseStylePresetWallpaper(value: unknown, key = "wallpaper"): st
  * otherwise sound (the editor does the same when it renders one). The others postdate the
  * first version-1 files, so a preset saved before one of them existed carries no choice about
  * it and gets the value that means "unchanged": `cursor.model3d` may be absent (the flat
- * cursor), `wallpaperMotion` too (a still wallpaper, which is exactly what "none" means),
+ * cursor), `cursor.asArrow` too (every cursor as recorded, see `readAsArrow`),
+ * `wallpaperMotion` too (a still wallpaper, which is exactly what "none" means),
  * `frame` as well (no frame, see `readFrame`), and `depthOfField` keeps the factory
  * value (on). A present but ill-typed value is still refused. Unknown extra keys are dropped.
  */
@@ -304,9 +328,7 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 			clickBounce: readNumber(cursor, "clickBounce", CURSOR_BOUNDS.clickBounce, "cursor."),
 			// Presets written before the 3D cursor existed meant the flat one.
 			model3d: cursor.model3d === undefined ? false : readBoolean(cursor, "model3d", "cursor."),
-			// Presets written before the option existed kept every cursor state.
-			alwaysArrow:
-				cursor.alwaysArrow === undefined ? false : readBoolean(cursor, "alwaysArrow", "cursor."),
+			asArrow: readAsArrow(cursor),
 			// Presets written before the option existed gave clicks no impact.
 			clickImpact:
 				cursor.clickImpact === undefined ? false : readBoolean(cursor, "clickImpact", "cursor."),
@@ -401,6 +423,8 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	"cursorMotionBlur",
 	"cursorClickBounce",
 	"cursorModel3d",
+	"cursorAsArrow",
+	// A project saved before the kinds could be picked holds its look here instead.
 	"cursorAlwaysArrow",
 	"cursorClickImpact",
 	"cursorShow",
@@ -418,7 +442,7 @@ export function stylePresetLegacyEditor(appearance: StylePresetAppearance): Fiel
 		cursorMotionBlur: cursor.motionBlur,
 		cursorClickBounce: cursor.clickBounce,
 		cursorModel3d: cursor.model3d,
-		cursorAlwaysArrow: cursor.alwaysArrow,
+		cursorAsArrow: cursor.asArrow,
 		cursorClickImpact: cursor.clickImpact,
 	};
 }

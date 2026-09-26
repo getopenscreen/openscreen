@@ -4,6 +4,7 @@ import {
 	type ZoomScaleInput,
 } from "@/lib/ai-edition/timeline/zoom-scale";
 import type { WebcamLayoutPreset } from "@/lib/compositeLayout";
+import type { CursorKind } from "@/lib/cursor/cursorThemes";
 import { DEFAULT_PROJECT_APPEARANCE, SETTING_BOUNDS } from "@/lib/projectDefaults";
 import { clamp01 } from "@/utils/math";
 
@@ -286,8 +287,8 @@ export interface CursorVisualSettings {
 	 * each click; pointing shapes also lean towards their motion. Other themes stay flat sprites.
 	 */
 	model3d: boolean;
-	/** Draws every cursor state (text, hand, resize…) with the theme's arrow sprite. */
-	alwaysArrow: boolean;
+	/** The kinds drawn with the theme's arrow instead of their own sprite (`CURSOR_KINDS`). */
+	asArrow: CursorKind[];
 	/**
 	 * Each click gives the screen an impact, whatever the zoom's camera: a fixed angle rocks the
 	 * tilted screen toward the clicked side, the moving camera recoils, a flat screen is pushed

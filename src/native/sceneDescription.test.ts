@@ -18,7 +18,7 @@ import type {
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
-import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
+import { CURSOR_KIND_IDS, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
 import {
@@ -1288,7 +1288,7 @@ describe("buildSceneDescription.settings mapping", () => {
 				cursorMotionBlur: 0.5,
 				cursorClickBounce: 1.5,
 				cursorClipToBounds: true,
-				cursorAlwaysArrow: true,
+				cursorAsArrow: ["text", "pointer"],
 			},
 		});
 		const cursor = buildSceneDescription(doc).cursor;
@@ -1298,7 +1298,14 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(cursor.clickBounce).toBe(1.5);
 		// The option is gone: a project that had it on now overflows like every other one.
 		expect(cursor.clipToBounds).toBe(false);
-		expect(cursor.alwaysArrow).toBe(true);
+		expect(cursor.asArrow).toEqual(["pointer", "text"]);
+	});
+
+	// The single switch that came before the kinds: on drew every one of them as the arrow.
+	it("reads the old always-arrow switch as every cursor kind", () => {
+		const on = makeDoc({ legacyEditor: { cursorAlwaysArrow: true } });
+		expect(buildSceneDescription(on).cursor.asArrow).toEqual(CURSOR_KIND_IDS);
+		expect(buildSceneDescription(makeDoc({})).cursor.asArrow).toEqual([]);
 	});
 
 	it("maps show / theme / shape / mirror through to layout+cursor", () => {

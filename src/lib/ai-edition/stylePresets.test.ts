@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CURSOR_KIND_IDS } from "../cursor/cursorThemes";
 import {
 	parseStylePresetAppearance,
 	parseStylePresetFile,
@@ -40,7 +41,7 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 			motionBlur: 0.35,
 			clickBounce: 1,
 			model3d: false,
-			alwaysArrow: false,
+			asArrow: [],
 			clickImpact: false,
 		},
 		cursorShow: true,
@@ -163,6 +164,27 @@ describe("parseStylePresetAppearance", () => {
 		expect(read(older).clickImpact).toBe(false);
 		expect(read({ ...older, clickImpact: true }).clickImpact).toBe(true);
 		expect(() => read({ ...older, clickImpact: "yes" })).toThrow(/cursor\.clickImpact/);
+	});
+
+	it("reads the cursor kinds drawn as the arrow, and type-checks them", () => {
+		const read = (cursor: Record<string, unknown>) =>
+			parseStylePresetAppearance({ ...appearance(), cursor: { ...appearance().cursor, ...cursor } })
+				.cursor.asArrow;
+		// A newer build's kind is dropped, the way an unknown theme falls back to the default.
+		expect(read({ asArrow: ["text", "sparkles", "pointer"] })).toEqual(["pointer", "text"]);
+		expect(() => read({ asArrow: "text" })).toThrow(/cursor\.asArrow/);
+		expect(() => read({ asArrow: [1] })).toThrow(/cursor\.asArrow/);
+	});
+
+	// Before the kinds, one switch drew every cursor as the arrow; before that, nothing did.
+	it("reads a preset saved before the cursor kinds from its always-arrow switch", () => {
+		const { asArrow: _asArrow, ...older } = appearance().cursor;
+		const read = (cursor: Record<string, unknown>) =>
+			parseStylePresetAppearance({ ...appearance(), cursor }).cursor.asArrow;
+		expect(read(older)).toEqual([]);
+		expect(read({ ...older, alwaysArrow: false })).toEqual([]);
+		expect(read({ ...older, alwaysArrow: true })).toEqual(CURSOR_KIND_IDS);
+		expect(() => read({ ...older, alwaysArrow: "yes" })).toThrow(/cursor\.alwaysArrow/);
 	});
 
 	it("reads a preset saved before the frame existed as frameless, and rejects an unknown frame", () => {

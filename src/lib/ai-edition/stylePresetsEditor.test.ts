@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CURSOR_KIND_IDS } from "../cursor/cursorThemes";
 import { createEmptyDocument } from "./schema";
 import {
 	DEFAULT_EDITOR_SETTINGS,
@@ -56,7 +57,7 @@ function styledSettings(): EditorSettingsSnapshot {
 			motionBlur: 0.9,
 			clickBounce: 1.5,
 			model3d: true,
-			alwaysArrow: false,
+			asArrow: ["text"],
 			clickImpact: true,
 		},
 		cursorShow: false,
@@ -135,7 +136,11 @@ describe("new-project look (main-process side)", () => {
 	it("writes a preset's look under the keys the editor reads, without the format", () => {
 		const appearance = stylePresetAppearanceFromSettings(styledSettings());
 		const legacy = stylePresetLegacyEditor(appearance);
-		expect(Object.keys(legacy).sort()).toEqual([...LOOK_LEGACY_EDITOR_KEYS].sort());
+		// Every look key but the old always-arrow switch: only a project saved before the cursor
+		// kinds holds that one.
+		expect(Object.keys(legacy).sort()).toEqual(
+			LOOK_LEGACY_EDITOR_KEYS.filter((key) => key !== "cursorAlwaysArrow").sort(),
+		);
 		const read = getEditorSettings(docWith(legacy));
 		expect(stylePresetAppearanceFromSettings(read)).toEqual({
 			...appearance,
@@ -162,5 +167,10 @@ describe("new-project look (main-process side)", () => {
 			expect(read[key]).toEqual(DEFAULT_EDITOR_SETTINGS[key]);
 		}
 		expect(lookFromLegacyEditor(null)).toEqual({});
+	});
+
+	it("carries the old always-arrow switch of a project saved before the cursor kinds", () => {
+		const look = lookFromLegacyEditor({ cursorAlwaysArrow: true, cropRegion: { x: 0.2 } });
+		expect(getEditorSettings(docWith(look)).cursor.asArrow).toEqual(CURSOR_KIND_IDS);
 	});
 });

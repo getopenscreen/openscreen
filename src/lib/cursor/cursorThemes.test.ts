@@ -2,11 +2,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	CURSOR_KIND_IDS,
+	CURSOR_KINDS,
 	CURSOR_THEMES,
 	type CursorTheme,
 	DEFAULT_CURSOR_SPRITES,
 	DEFAULT_CURSOR_THEME_ID,
 	normalizeCursorThemeId,
+	readCursorAsArrow,
 	resolveCursorSprites,
 	themePickerPreviewAssets,
 } from "./cursorThemes";
@@ -65,7 +68,7 @@ describe("normalizeCursorThemeId", () => {
 	// knows the same names): in 3D the scene names the model, and the sprite stays the flat art.
 	it.each(CURSOR_THEMES)("names the sculpted 3D arrow and hand of $name", (theme) => {
 		const flat = resolveCursorSprites(theme.id);
-		const sprites = resolveCursorSprites(theme.id, false, true);
+		const sprites = resolveCursorSprites(theme.id, [], true);
 		for (const state of ["arrow", "pointer"] as const) {
 			expect(theme.assets[state]?.sculpted).toBe(true);
 			expect(sprites[state]).toEqual({ ...flat[state], sculpt: `${theme.id}/${state}` });
@@ -75,11 +78,54 @@ describe("normalizeCursorThemeId", () => {
 	});
 
 	it("leaves the default art to the extruded sprite in 3D", () => {
-		for (const sprite of Object.values(
-			resolveCursorSprites(DEFAULT_CURSOR_THEME_ID, false, true),
-		)) {
+		for (const sprite of Object.values(resolveCursorSprites(DEFAULT_CURSOR_THEME_ID, [], true))) {
 			expect(sprite.sculpt).toBeUndefined();
 		}
+	});
+});
+
+describe("cursor kinds", () => {
+	// "Arrow only" must leave nothing but the arrow: a state outside every kind would keep its
+	// own sprite whatever the user picks.
+	it("puts every cursor state but the arrow in exactly one kind", () => {
+		const grouped = Object.values(CURSOR_KINDS).flat();
+		expect(new Set(grouped).size).toBe(grouped.length);
+		expect([...grouped, "arrow"].sort()).toEqual(Object.keys(DEFAULT_CURSOR_SPRITES).sort());
+	});
+
+	it("draws the kinds it is given with the theme's arrow, and every other state as itself", () => {
+		const theme = CURSOR_THEMES[0];
+		const flat = resolveCursorSprites(theme.id);
+		const sprites = resolveCursorSprites(theme.id, ["pointer", "resize"]);
+		for (const type of ["pointer", ...CURSOR_KINDS.resize] as const) {
+			expect(sprites[type], type).toEqual(flat.arrow);
+		}
+		expect(sprites.text).toBe(DEFAULT_CURSOR_SPRITES.text);
+		expect(sprites["open-hand"]).toBe(DEFAULT_CURSOR_SPRITES["open-hand"]);
+	});
+
+	it("gives a kind drawn as the arrow the arrow's 3D model", () => {
+		const theme = CURSOR_THEMES[0];
+		const sprites = resolveCursorSprites(theme.id, ["text"], true);
+		expect(sprites.text.sculpt).toBe(`${theme.id}/arrow`);
+	});
+});
+
+describe("readCursorAsArrow", () => {
+	it("keeps the known kinds, once each, in the order of CURSOR_KINDS", () => {
+		expect(readCursorAsArrow(["text", "sparkles", "pointer", "text", 7])).toEqual([
+			"pointer",
+			"text",
+		]);
+		expect(readCursorAsArrow("text")).toEqual([]);
+	});
+
+	// The single switch the kinds replaced: on meant every one of them, off or absent none.
+	it("reads the old always-arrow switch when there is no list", () => {
+		expect(readCursorAsArrow(undefined, true)).toEqual(CURSOR_KIND_IDS);
+		expect(readCursorAsArrow(undefined, false)).toEqual([]);
+		expect(readCursorAsArrow(undefined)).toEqual([]);
+		expect(readCursorAsArrow(["busy"], true)).toEqual(["busy"]);
 	});
 });
 

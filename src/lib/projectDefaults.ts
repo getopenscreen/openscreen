@@ -1,3 +1,5 @@
+import type { CursorKind } from "./cursor/cursorThemes";
+
 /**
  * The frame drawn around the recording, a project setting like the wallpaper. "none" draws
  * nothing and renders exactly as before the setting existed.
@@ -194,7 +196,7 @@ export interface ProjectAppearanceDefaults {
 		motionBlur: number;
 		clickBounce: number;
 		model3d: boolean;
-		alwaysArrow: boolean;
+		asArrow: CursorKind[];
 		clickImpact: boolean;
 		autoHide: boolean;
 	};
@@ -241,7 +243,8 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.
 		clickBounce: 1,
 		model3d: false,
-		alwaysArrow: false,
+		// Every cursor as recorded.
+		asArrow: [],
 		clickImpact: false,
 		autoHide: false,
 	},

@@ -3,7 +3,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
-import { resolveCursorSprites } from "../../../src/lib/cursor/cursorThemes";
+import {
+	type CursorKind,
+	readCursorAsArrow,
+	resolveCursorSprites,
+} from "../../../src/lib/cursor/cursorThemes";
 import type { GifExportJob } from "../../ipc/gifExportJobs";
 import type {
 	ClipInput,
@@ -101,16 +105,14 @@ export function resolveSceneAssetPath(relativePath: string): string | null {
  */
 function resolveCursorSpritePaths(
 	themeId: string,
-	alwaysArrow: boolean,
+	asArrow: readonly CursorKind[],
 	model3d = false,
 ): Record<string, { path: string; hotspotX: number; hotspotY: number; sculpt?: string }> {
 	const resolved: Record<
 		string,
 		{ path: string; hotspotX: number; hotspotY: number; sculpt?: string }
 	> = {};
-	for (const [type, sprite] of Object.entries(
-		resolveCursorSprites(themeId, alwaysArrow, model3d),
-	)) {
+	for (const [type, sprite] of Object.entries(resolveCursorSprites(themeId, asArrow, model3d))) {
 		const absolute = resolveSceneAssetPath(sprite.assetPath);
 		if (absolute) {
 			resolved[type] = {
@@ -135,7 +137,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 			background?: { kind?: string; path?: string };
 			cursor?: {
 				theme?: string;
-				alwaysArrow?: boolean;
+				asArrow?: unknown;
 				model3d?: boolean;
 				cursorSprites?: Record<
 					string,
@@ -174,7 +176,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 		if (scene.cursor && typeof scene.cursor.theme === "string") {
 			scene.cursor.cursorSprites = resolveCursorSpritePaths(
 				scene.cursor.theme,
-				scene.cursor.alwaysArrow === true,
+				readCursorAsArrow(scene.cursor.asArrow),
 				scene.cursor.model3d === true,
 			);
 			changed = true;

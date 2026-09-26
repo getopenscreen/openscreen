@@ -92,6 +92,37 @@ export const DEFAULT_CURSOR_SPRITES: Record<NativeCursorType, CursorSprite> = {
 };
 
 /**
+ * The cursors a project can draw as recorded or as the arrow, grouped the way they read on
+ * screen: the four resize directions and the move cross are one "resize", the open and closed
+ * hands one "grab". The arrow is not one of them: it is what the others turn into.
+ */
+export const CURSOR_KINDS = {
+	pointer: ["pointer"],
+	text: ["text"],
+	grab: ["open-hand", "closed-hand"],
+	resize: ["resize-ew", "resize-ns", "resize-nwse", "resize-nesw", "move"],
+	busy: ["wait", "app-starting"],
+	crosshair: ["crosshair"],
+	"not-allowed": ["not-allowed"],
+	help: ["help"],
+	"up-arrow": ["up-arrow"],
+} as const satisfies Record<string, readonly Exclude<NativeCursorType, "arrow">[]>;
+
+export type CursorKind = keyof typeof CURSOR_KINDS;
+
+export const CURSOR_KIND_IDS = Object.keys(CURSOR_KINDS) as CursorKind[];
+
+/**
+ * The kinds a project draws as the arrow, from what it stored: known ids only, once each, in
+ * `CURSOR_KINDS` order. `alwaysArrow` is the single switch that came before the kinds could be
+ * picked: on meant all of them.
+ */
+export function readCursorAsArrow(asArrow: unknown, alwaysArrow?: unknown): CursorKind[] {
+	if (asArrow === undefined) return alwaysArrow === true ? [...CURSOR_KIND_IDS] : [];
+	return Array.isArray(asArrow) ? CURSOR_KIND_IDS.filter((kind) => asArrow.includes(kind)) : [];
+}
+
+/**
  * Bundled cursor themes. These five packs are original OpenScreen artwork. Their raster
  * masters live in design/cursors/ and are prepared by scripts/generate-original-cursor-themes.mjs.
  * The former Sweezy packs were removed
@@ -268,7 +299,7 @@ export function normalizeCursorThemeId(id: unknown): string {
  */
 export function resolveCursorSprites(
 	themeId: string | null | undefined,
-	alwaysArrow = false,
+	asArrow: readonly CursorKind[] = [],
 	model3d = false,
 ): Record<NativeCursorType, CursorSprite> {
 	const sprites = { ...DEFAULT_CURSOR_SPRITES };
@@ -285,10 +316,10 @@ export function resolveCursorSprites(
 			...(model3d && asset.sculpted ? { sculpt: `${themeId}/${type}` } : {}),
 		};
 	}
-	// "Always use arrow": one consistent pointer for the whole recording, the I-beam and the
-	// hand included. Done on the table the compositor reads, so it needs no mode of its own.
-	if (alwaysArrow) {
-		for (const type of Object.keys(sprites) as NativeCursorType[]) {
+	// A kind drawn as the arrow takes the arrow's sprite, with the theme's art and its 3D model.
+	// Done on the table the compositor reads, so it needs no mode of its own.
+	for (const kind of asArrow) {
+		for (const type of CURSOR_KINDS[kind]) {
 			sprites[type] = sprites.arrow;
 		}
 	}

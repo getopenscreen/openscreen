@@ -92,11 +92,7 @@ export type NativeMacRecordingStartResult = {
 	helperPath?: string;
 	/** The helper could not resolve the selected device and is using the system default. */
 	microphoneDefaulted?: boolean;
-	/**
-	 * System audio was asked for but left out: recording from Apple's picker needs no Screen
-	 * Recording grant, but system audio still does, and the grant is missing.
-	 */
-	systemAudioUnavailable?: boolean;
+
 	error?: string;
 };
 

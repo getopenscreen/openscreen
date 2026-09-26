@@ -14,6 +14,7 @@ function setup(overrides: Partial<MacPermissionsDeps> = {}) {
 		platform: "darwin",
 		macosMajor: 26,
 		systemPickerOwnsScreen: () => false,
+		requestSystemAudio: vi.fn(async () => undefined),
 		probeScreen: vi.fn(async (): Promise<ScreenProbe> => ({ answered: true, granted: false })),
 		appScreenGranted: vi.fn(() => false),
 		accessibilityTrusted: vi.fn(() => false),
@@ -101,6 +102,11 @@ describe("read", () => {
 		});
 
 		expect(await permissions.read()).toMatchObject({ microphone: "restricted", camera: "denied" });
+	});
+
+	it("reads system audio as granted with the app's own picker, where Screen Recording covers it", async () => {
+		const { permissions } = setup();
+		expect((await permissions.read()).systemAudio).toBe("granted");
 	});
 
 	it("reads everything as granted off macOS without touching the helper", async () => {
@@ -250,14 +256,47 @@ describe("with Apple's system picker", () => {
 	});
 
 	it("stays away from someone who already answered everything", async () => {
-		const { permissions } = setup({
+		const { permissions, requested } = setup({
 			...picker,
 			probeScreen: async () => ({ answered: true, granted: true }),
 			appScreenGranted: () => true,
 			accessibilityTrusted: () => true,
 			mediaStatus: () => "denied",
 		});
+		requested.add("systemAudio");
 		expect(permissions.shouldShowAtLaunch(await permissions.read())).toBe(false);
+	});
+
+	it("reports system audio as its own permission, never read, only asked", async () => {
+		const { permissions, requested } = setup(picker);
+		expect((await permissions.read()).systemAudio).toBe("not-requested");
+
+		requested.add("systemAudio");
+		// macOS exposes no public read of this grant: asked is all the app can know.
+		expect((await permissions.read()).systemAudio).toBe("requested");
+	});
+
+	it("raises the system-audio prompt once, then opens its pane", async () => {
+		const { permissions, deps } = setup(picker);
+
+		await permissions.request("systemAudio");
+		expect(deps.requestSystemAudio).toHaveBeenCalledTimes(1);
+
+		await permissions.request("systemAudio");
+		expect(deps.requestSystemAudio).toHaveBeenCalledTimes(1);
+		expect(deps.openExternal).toHaveBeenCalledWith(
+			"x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture",
+		);
+	});
+
+	it("asks for system audio from the HUD toggle without ever sending anyone to Settings", async () => {
+		const { permissions, deps } = setup(picker);
+
+		await permissions.askForSystemAudioOnce();
+		await permissions.askForSystemAudioOnce();
+
+		expect(deps.requestSystemAudio).toHaveBeenCalledTimes(1);
+		expect(deps.openExternal).not.toHaveBeenCalled();
 	});
 });
 

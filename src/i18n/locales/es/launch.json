@@ -142,7 +142,9 @@
 			"screenSettings": "En Ajustes del Sistema, activa OpenScreen. Si macOS ofrece cerrarlo y volver a abrirlo, acepta: esta ventana volverá.",
 			"screenNotListed": "¿OpenScreen no aparece en la lista? Haz clic en + y elige OpenScreen en Aplicaciones.",
 			"screenRestart": "Permitido. OpenScreen debe reiniciarse para poder usarlo.",
-			"screenRecurring": "En tu primera grabación, macOS te preguntará si OpenScreen puede acceder directamente a tu pantalla, sin el selector del sistema. Haz clic en Permitir. macOS vuelve a preguntar de vez en cuando; es normal."
+			"screenRecurring": "En tu primera grabación, macOS te preguntará si OpenScreen puede acceder directamente a tu pantalla, sin el selector del sistema. Haz clic en Permitir. macOS vuelve a preguntar de vez en cuando; es normal.",
+			"systemAudioPrompt": "macOS te pedirá que permitas a OpenScreen grabar el sonido de tu Mac.",
+			"systemAudioRequested": "Si lo rechazaste, activa OpenScreen en «Solo grabación del audio del sistema» en Ajustes del Sistema."
 		},
 		"footer": {
 			"screenRequired": "Se necesita la grabación de pantalla para grabar.",

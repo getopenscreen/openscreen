@@ -24,14 +24,17 @@
  * Accessibility has the same bool-only read, and the same note is kept for it.
  */
 
-export type PermissionKind = "screen" | "accessibility" | "microphone" | "camera";
+export type PermissionKind = "screen" | "accessibility" | "microphone" | "camera" | "systemAudio";
 
 /**
  * - `not-requested`: nothing has been asked yet, so a request can raise macOS' prompt.
  * - `denied`: asked and not granted. Only System Settings can change it now.
  * - `restricted`: forbidden by policy (MDM, Screen Time). Nothing the user can do here.
+ * - `requested`: asked, and the answer cannot be read. Only system audio: macOS exposes no
+ *   public read of the "System Audio Recording Only" grant, and a refused tap simply records
+ *   silence, so the most the app knows is that it asked.
  */
-export type PermissionStatus = "granted" | "not-requested" | "denied" | "restricted";
+export type PermissionStatus = "granted" | "not-requested" | "denied" | "restricted" | "requested";
 
 export interface PermissionsSnapshot {
 	/** False off macOS, where none of this applies and every permission reads granted. */
@@ -54,12 +57,19 @@ export interface PermissionsSnapshot {
 	accessibility: PermissionStatus;
 	microphone: PermissionStatus;
 	camera: PermissionStatus;
+	/**
+	 * System audio for a source from Apple's picker, captured by a Core Audio process tap
+	 * under its own "System Audio Recording Only" grant. Meaningful only while
+	 * `screenRequired` is false; with the app's own picker, system audio rides on Screen
+	 * Recording and this reads granted.
+	 */
+	systemAudio: PermissionStatus;
 }
 
 /** What a fresh-process read of the Screen Recording grant answered. */
 export type ScreenProbe = { answered: true; granted: boolean } | { answered: false };
 
-export type NotedKind = "screen" | "accessibility";
+export type NotedKind = "screen" | "accessibility" | "systemAudio";
 
 export interface PermissionsStore {
 	hasRequested(kind: NotedKind): boolean;
@@ -74,6 +84,8 @@ export interface MacPermissionsDeps {
 	macosMajor: number;
 	/** Sources are picked in Apple's system picker, which needs no Screen Recording grant. */
 	systemPickerOwnsScreen(): boolean;
+	/** Raises macOS' "record system audio" prompt; resolves once it is answered. */
+	requestSystemAudio(): Promise<void>;
 	probeScreen(): Promise<ScreenProbe>;
 	/** The app's own, per-process cached Screen Recording read. */
 	appScreenGranted(): boolean;
@@ -98,6 +110,8 @@ const SETTINGS_ANCHOR: Record<PermissionKind, string> = {
 	accessibility: "Privacy_Accessibility",
 	microphone: "Privacy_Microphone",
 	camera: "Privacy_Camera",
+	// "System Audio Recording Only", in the Screen & System Audio Recording pane (14.2+).
+	systemAudio: "Privacy_AudioCapture",
 };
 
 export function permissionSettingsUrl(kind: PermissionKind): string {
@@ -126,6 +140,7 @@ const OFF_MACOS: PermissionsSnapshot = {
 	accessibility: "granted",
 	microphone: "granted",
 	camera: "granted",
+	systemAudio: "granted",
 };
 
 export function createMacPermissions(deps: MacPermissionsDeps) {
@@ -165,6 +180,11 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 			accessibility: deps.accessibilityTrusted(false) ? "granted" : notedStatus("accessibility"),
 			microphone: mediaPermissionStatus(deps.mediaStatus("microphone")),
 			camera: mediaPermissionStatus(deps.mediaStatus("camera")),
+			systemAudio: !deps.systemPickerOwnsScreen()
+				? "granted"
+				: deps.store.hasRequested("systemAudio")
+					? "requested"
+					: "not-requested",
 		};
 	}
 
@@ -185,7 +205,7 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 		if (status === "granted" || status === "restricted") {
 			return;
 		}
-		if (status === "denied") {
+		if (status === "denied" || status === "requested") {
 			await openSettings(kind);
 			return;
 		}
@@ -205,6 +225,22 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 			case "camera":
 				await deps.askForMedia(kind);
 				return;
+			case "systemAudio":
+				deps.store.markRequested("systemAudio");
+				await deps.requestSystemAudio();
+				return;
+		}
+	}
+
+	/**
+	 * Raises the system-audio prompt if it was never raised, and does nothing otherwise --
+	 * for the HUD's system-audio toggle, which must never send anyone to System Settings.
+	 * Turning system audio on is the moment the grant becomes wanted; asking then keeps the
+	 * prompt off the first take, which a pending prompt would otherwise hold up.
+	 */
+	async function askForSystemAudioOnce(): Promise<void> {
+		if ((await read()).systemAudio === "not-requested") {
+			await request("systemAudio");
 		}
 	}
 
@@ -233,7 +269,7 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 			if (deps.store.isCompleted()) {
 				return false;
 			}
-			const rows = ["screen", "accessibility", "microphone", "camera"] as const;
+			const rows = ["systemAudio", "accessibility", "microphone", "camera"] as const;
 			return rows.some((kind) => snapshot[kind] === "not-requested");
 		}
 		if (snapshot.screen !== "granted" || snapshot.screenRequiresRelaunch) {
@@ -249,7 +285,15 @@ export function createMacPermissions(deps: MacPermissionsDeps) {
 		}
 	}
 
-	return { read, request, openSettings, noteRequested, shouldShowAtLaunch, noteWindowClosed };
+	return {
+		read,
+		request,
+		openSettings,
+		noteRequested,
+		askForSystemAudioOnce,
+		shouldShowAtLaunch,
+		noteWindowClosed,
+	};
 }
 
 export type MacPermissions = ReturnType<typeof createMacPermissions>;

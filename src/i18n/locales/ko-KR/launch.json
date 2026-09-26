@@ -142,7 +142,9 @@
 			"screenSettings": "시스템 설정에서 OpenScreen을 켜세요. macOS가 종료 후 다시 열기를 제안하면 수락하세요. 이 창이 다시 표시됩니다.",
 			"screenNotListed": "목록에 OpenScreen이 없나요? +를 클릭한 다음 응용 프로그램에서 OpenScreen을 선택하세요.",
 			"screenRestart": "허용되었습니다. 이 권한을 사용하려면 OpenScreen을 재시작해야 합니다.",
-			"screenRecurring": "처음 녹화할 때 macOS가 OpenScreen이 시스템 선택기 없이 화면에 직접 접근해도 되는지 묻습니다. 허용을 클릭하세요. macOS는 가끔 다시 묻습니다. 정상적인 동작입니다."
+			"screenRecurring": "처음 녹화할 때 macOS가 OpenScreen이 시스템 선택기 없이 화면에 직접 접근해도 되는지 묻습니다. 허용을 클릭하세요. macOS는 가끔 다시 묻습니다. 정상적인 동작입니다.",
+			"systemAudioPrompt": "macOS가 OpenScreen이 Mac의 소리를 녹음하도록 허용할지 묻습니다.",
+			"systemAudioRequested": "거부했다면 시스템 설정의 ‘시스템 오디오 녹음만’에서 OpenScreen을 켜세요."
 		},
 		"footer": {
 			"screenRequired": "녹화하려면 화면 기록 권한이 필요합니다.",

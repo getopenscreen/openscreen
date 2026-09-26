@@ -155,6 +155,12 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private let microphoneOutputTypeRawValue = 2
 	private let hostClock = CMClockGetHostTimeClock()
 	private let picked: PickedSource?
+	/// A `SystemAudioTap` (macOS 14.2+), held untyped so this class keeps its macOS 13 floor.
+	private var systemAudioTap: AnyObject?
+	/// Sample queue only. Cleared before the writer is finalised: a tap stops on its own
+	/// queue, and a buffer it had in flight must not reach a finished writer input.
+	private var acceptsTappedAudio = true
+	private let tapControlQueue = DispatchQueue(label: "app.openscreen.sck-helper.system-audio-control")
 
 	/// `picked` is a choice already made in Apple's system picker (`PickerSession`). The take
 	/// then records exactly that filter: no source lookup, and no Screen Recording check,
@@ -163,6 +169,21 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	init(request: RecordingRequest, picked: PickedSource? = nil) {
 		self.request = request
 		self.picked = picked
+	}
+
+	/// Whether this take's system audio comes from a Core Audio tap instead of ScreenCaptureKit.
+	///
+	/// Only for a source from Apple's picker: that capture holds no Screen Recording grant,
+	/// and ScreenCaptureKit hands a grantless capture its system audio as silence. Every other
+	/// source keeps ScreenCaptureKit's audio, which its grant already covers.
+	private var tapsSystemAudio: Bool {
+		guard picked != nil, request.audio.system.enabled else {
+			return false
+		}
+		if #available(macOS 14.2, *) {
+			return true
+		}
+		return false
 	}
 
 	func start() async throws {
@@ -185,7 +206,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let stream = SCStream(filter: target.filter, configuration: configuration, delegate: self)
 
 		try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
-		if request.audio.system.enabled {
+		if request.audio.system.enabled && !tapsSystemAudio {
 			try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
 		}
 		if nativeMicrophoneEnabled {
@@ -197,6 +218,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			try stream.addStreamOutput(self, type: microphoneOutputType, sampleHandlerQueue: sampleQueue)
 		}
 		try setupWriter()
+		startSystemAudioTapIfNeeded()
 
 		self.stream = stream
 		emit([
@@ -230,8 +252,73 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				"message": "\(error)",
 			])
 		}
+		stopSystemAudioTap()
 
 		await finishWriter()
+	}
+
+	private func startSystemAudioTapIfNeeded() {
+		guard tapsSystemAudio, #available(macOS 14.2, *) else {
+			return
+		}
+		let tap = SystemAudioTap { [weak self] sampleBuffer in
+			guard let self else {
+				return
+			}
+			self.sampleQueue.async {
+				self.ingestTappedSystemAudio(sampleBuffer)
+			}
+		}
+		systemAudioTap = tap
+		// Off the start path: the first time, starting a tap blocks until the user answers
+		// macOS' prompt, and the app gives a take only seconds to report it has started.
+		// Audio that arrives late lands where it belongs, with silence in front of it.
+		tapControlQueue.async {
+			do {
+				try tap.start()
+			} catch {
+				emit([
+					"event": "warning",
+					"code": "system-audio-unavailable",
+					"message": "System audio could not be captured: \(error)",
+				])
+			}
+		}
+	}
+
+	/// Queued behind the start rather than run beside it: a tap stopped while its start is
+	/// still inside AudioDeviceStart is torn down under its own feet. Not awaited, so a
+	/// prompt left unanswered cannot hold the recording's stop hostage; what the tap still
+	/// delivers is dropped by `acceptsTappedAudio`.
+	private func stopSystemAudioTap() {
+		sampleQueue.sync {
+			acceptsTappedAudio = false
+		}
+		guard let tap = systemAudioTap else {
+			return
+		}
+		systemAudioTap = nil
+		tapControlQueue.async {
+			if #available(macOS 14.2, *), let tap = tap as? SystemAudioTap {
+				tap.stop()
+			}
+		}
+	}
+
+	/// Sample queue. The tap's audio takes the same pause and retime path ScreenCaptureKit's
+	/// system audio took in `stream(_:didOutputSampleBuffer:of:)`.
+	private func ingestTappedSystemAudio(_ sampleBuffer: CMSampleBuffer) {
+		guard acceptsTappedAudio else {
+			return
+		}
+		let pauseState = currentPauseState()
+		if pauseState.paused {
+			return
+		}
+		guard let sampleBuffer = retimedSampleBuffer(sampleBuffer, subtracting: pauseState.offset) else {
+			return
+		}
+		audioMixer?.ingest(sampleBuffer, from: .system)
 	}
 
 	func pause() {
@@ -555,7 +642,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		configuration.sampleRate = 48_000
 		configuration.channelCount = 2
 		configuration.excludesCurrentProcessAudio = true
-		configuration.capturesAudio = request.audio.system.enabled
+		configuration.capturesAudio = request.audio.system.enabled && !tapsSystemAudio
 
 		if request.audio.microphone.enabled {
 			guard supportsNativeMicrophoneCapture(streamConfig: configuration) else {
@@ -991,6 +1078,10 @@ struct OpenScreenScreenCaptureKitHelper {
 	/// picker. See `PickerSession`.
 	private static let pickerSessionFlag = "--picker-session"
 
+	/// The flag that raises macOS' "record system audio" prompt and exits once it is
+	/// answered. See `SystemAudioTap.requestAccess`.
+	private static let requestSystemAudioFlag = "--request-system-audio"
+
 	static func main() async {
 		do {
 			initializeCoreGraphicsWindowServerConnection()
@@ -1014,6 +1105,24 @@ struct OpenScreenScreenCaptureKitHelper {
 					"granted": CGPreflightScreenCaptureAccess(),
 				])
 				exit(0)
+			}
+
+			if CommandLine.arguments.count == 2, CommandLine.arguments[1] == requestSystemAudioFlag {
+				guard #available(macOS 14.2, *) else {
+					emitError(
+						code: "system-audio-unsupported",
+						message: "Core Audio process taps need macOS 14.2 or later."
+					)
+					exit(2)
+				}
+				do {
+					try SystemAudioTap.requestAccess()
+					emit(["event": "system-audio-access-requested"])
+					exit(0)
+				} catch {
+					emitError(code: "system-audio-request-failed", message: "\(error)")
+					exit(1)
+				}
 			}
 
 			if CommandLine.arguments.count == 2, CommandLine.arguments[1] == pickerSessionFlag {

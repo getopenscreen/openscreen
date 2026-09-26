@@ -21,6 +21,7 @@ const FIRST_RUN: Snapshot = {
 	accessibility: "not-requested",
 	microphone: "not-requested",
 	camera: "not-requested",
+	systemAudio: "granted",
 };
 
 let current: Snapshot;
@@ -48,7 +49,7 @@ afterEach(() => {
 async function renderWith(snapshot: Partial<Snapshot>) {
 	current = { ...FIRST_RUN, ...snapshot };
 	render(<PermissionsWindow />);
-	await screen.findByTestId("permission-screen");
+	await screen.findByTestId("permission-accessibility");
 }
 
 describe("PermissionsWindow", () => {
@@ -115,13 +116,29 @@ describe("PermissionsWindow", () => {
 	});
 
 	it("with Apple's picker, offers system audio as optional and lets the user start", async () => {
-		await renderWith({ screenRequired: false });
+		await renderWith({ screenRequired: false, systemAudio: "not-requested" });
 
-		expect(screen.getByText("permissions.rows.systemAudio.name")).toBeInTheDocument();
-		expect(screen.queryByText("permissions.rows.screen.name")).not.toBeInTheDocument();
-		const row = screen.getByTestId("permission-screen");
+		expect(screen.queryByTestId("permission-screen")).not.toBeInTheDocument();
+		const row = screen.getByTestId("permission-systemAudio");
+		expect(within(row).getByText("permissions.rows.systemAudio.name")).toBeInTheDocument();
 		expect(within(row).getByText("permissions.level.optional")).toBeInTheDocument();
+		expect(within(row).getByText("permissions.help.systemAudioPrompt")).toBeInTheDocument();
 		expect(screen.getByTestId("permissions-start")).toBeEnabled();
+
+		fireEvent.click(screen.getByTestId("permission-systemAudio-action"));
+		await waitFor(() => expect(api.request).toHaveBeenCalledWith("systemAudio"));
+	});
+
+	it("once system audio was asked, offers only its pane, since the answer cannot be read", async () => {
+		await renderWith({ screenRequired: false, systemAudio: "requested" });
+
+		const button = screen.getByTestId("permission-systemAudio-action");
+		expect(button).toHaveTextContent("permissions.actions.openSettings");
+		expect(screen.getByText("permissions.help.systemAudioRequested")).toBeInTheDocument();
+
+		fireEvent.click(button);
+		await waitFor(() => expect(api.openSettings).toHaveBeenCalledWith("systemAudio"));
+		expect(api.request).not.toHaveBeenCalled();
 	});
 
 	it("with Apple's picker, never warns about the bypass alert, which it does not raise", async () => {

@@ -142,7 +142,9 @@
 			"screenSettings": "Sistem Ayarları'nda OpenScreen'i açın. macOS uygulamayı kapatıp yeniden açmayı önerirse kabul edin: bu pencere geri gelecek.",
 			"screenNotListed": "OpenScreen listede yok mu? + düğmesine tıklayın ve Uygulamalar'dan OpenScreen'i seçin.",
 			"screenRestart": "İzin verildi. OpenScreen'in bunu kullanabilmesi için yeniden başlatılması gerekiyor.",
-			"screenRecurring": "İlk kaydınızda macOS, OpenScreen'in sistem seçicisi olmadan ekranınıza doğrudan erişip erişemeyeceğini soracak. İzin Ver'e tıklayın. macOS bunu zaman zaman yeniden sorar; bu normaldir."
+			"screenRecurring": "İlk kaydınızda macOS, OpenScreen'in sistem seçicisi olmadan ekranınıza doğrudan erişip erişemeyeceğini soracak. İzin Ver'e tıklayın. macOS bunu zaman zaman yeniden sorar; bu normaldir.",
+			"systemAudioPrompt": "macOS, OpenScreen'in Mac'inizin sesini kaydetmesine izin vermenizi isteyecek.",
+			"systemAudioRequested": "Reddettiyseniz, Sistem Ayarları'nda “Yalnızca Sistem Sesi Kaydı” altında OpenScreen'i açın."
 		},
 		"footer": {
 			"screenRequired": "Kayıt için ekran kaydı gereklidir.",

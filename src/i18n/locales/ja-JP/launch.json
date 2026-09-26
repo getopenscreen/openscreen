@@ -142,7 +142,9 @@
 			"screenSettings": "システム設定で OpenScreen をオンにしてください。macOS が終了して再度開くよう提案した場合は、そのまま進めてください。このウインドウが再び表示されます。",
 			"screenNotListed": "リストに OpenScreen がない場合は、＋をクリックして「アプリケーション」から OpenScreen を選んでください。",
 			"screenRestart": "許可済みです。使用するには OpenScreen の再起動が必要です。",
-			"screenRecurring": "最初の録画時に、macOS から OpenScreen がシステムのピッカーを使わずに画面へ直接アクセスしてよいか確認されます。「許可」をクリックしてください。macOS はときどき再確認します。これは正常な動作です。"
+			"screenRecurring": "最初の録画時に、macOS から OpenScreen がシステムのピッカーを使わずに画面へ直接アクセスしてよいか確認されます。「許可」をクリックしてください。macOS はときどき再確認します。これは正常な動作です。",
+			"systemAudioPrompt": "macOS から、OpenScreen に Mac のサウンドの録音を許可するか確認されます。",
+			"systemAudioRequested": "拒否した場合は、システム設定の「システムオーディオ録音のみ」で OpenScreen をオンにしてください。"
 		},
 		"footer": {
 			"screenRequired": "録画には画面収録が必要です。",

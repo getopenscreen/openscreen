@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -9,7 +10,10 @@ import {
 	systemPreferences,
 } from "electron";
 import { macSystemPickerEnabled } from "../native-bridge/screen/macPickerSession";
-import { readMacScreenCaptureAccess } from "../native-bridge/screen/macScreenAccess";
+import {
+	findMacScreenAccessHelperPath,
+	readMacScreenCaptureAccess,
+} from "../native-bridge/screen/macScreenAccess";
 import { createPermissionsWindow } from "../windows";
 import {
 	createMacPermissions,
@@ -77,6 +81,41 @@ function createFileStore(userData: string): PermissionsStore {
 	};
 }
 
+/**
+ * How long to wait on the system-audio prompt. A person is reading it; this only bounds a
+ * helper that hung, so a stuck request cannot pin the permissions window's button forever.
+ */
+const SYSTEM_AUDIO_REQUEST_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Raises macOS' "record system audio" prompt from the capture helper, which the app spawns
+ * and TCC therefore attributes to the app. Resolves once the helper exits -- when the prompt
+ * was answered, or at once when it had been already.
+ */
+function requestSystemAudioAccess(): Promise<void> {
+	const helperPath = findMacScreenAccessHelperPath();
+	if (!helperPath) {
+		console.warn("[permissions] no capture helper to request system audio with");
+		return Promise.resolve();
+	}
+	return new Promise((resolve) => {
+		const child = spawn(helperPath, ["--request-system-audio"], { stdio: "ignore" });
+		const timer = setTimeout(() => {
+			child.kill();
+			resolve();
+		}, SYSTEM_AUDIO_REQUEST_TIMEOUT_MS);
+		const done = () => {
+			clearTimeout(timer);
+			resolve();
+		};
+		child.once("error", (error) => {
+			console.warn("[permissions] system audio request failed:", error);
+			done();
+		});
+		child.once("close", done);
+	});
+}
+
 function macosMajor(): number {
 	if (process.platform !== "darwin") {
 		return 0;
@@ -92,6 +131,7 @@ export function getMacPermissions(): MacPermissions {
 		platform: process.platform,
 		macosMajor: macosMajor(),
 		systemPickerOwnsScreen: macSystemPickerEnabled,
+		requestSystemAudio: requestSystemAudioAccess,
 		probeScreen: async () => {
 			const probe = await readMacScreenCaptureAccess();
 			return probe.status === "granted" || probe.status === "denied"
@@ -152,7 +192,13 @@ export async function showPermissionsWindowIfNeeded(): Promise<void> {
 	}
 }
 
-const KINDS: readonly PermissionKind[] = ["screen", "accessibility", "microphone", "camera"];
+const KINDS: readonly PermissionKind[] = [
+	"screen",
+	"accessibility",
+	"microphone",
+	"camera",
+	"systemAudio",
+];
 const isKind = (value: unknown): value is PermissionKind => KINDS.includes(value as PermissionKind);
 
 export function registerPermissionsIpc(): void {

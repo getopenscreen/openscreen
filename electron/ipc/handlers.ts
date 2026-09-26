@@ -2172,8 +2172,19 @@ export function registerIpcHandlers(
 		return selectedSource;
 	});
 
-	registerRecordingPrefsHandlers(defaultRecordingPrefs, getMainWindow, () =>
-		BrowserWindow.getAllWindows(),
+	registerRecordingPrefsHandlers(
+		defaultRecordingPrefs,
+		getMainWindow,
+		() => BrowserWindow.getAllWindows(),
+		(previous, next) => {
+			// Turning system audio on is when its grant becomes wanted: ask now, so the prompt
+			// never lands on a take that is already counting down.
+			if (!previous.systemAudioEnabled && next.systemAudioEnabled && macPickerOwnsSources()) {
+				void getMacPermissions()
+					.askForSystemAudioOnce()
+					.catch((error) => console.warn("[permissions] system audio request failed:", error));
+			}
+		},
 	);
 
 	ipcMain.handle("request-camera-access", async () => {
@@ -2946,18 +2957,12 @@ export function registerIpcHandlers(
 					// The helper reports the final ScreenCaptureKit permission status.
 				}
 			}
-			// System audio is the one thing a pick does not cover: without the Screen Recording
-			// grant ScreenCaptureKit delivers it as silence (measured). Recording silence and
-			// calling it system audio would be worse than saying so, so the take goes ahead
-			// without it and the permissions window explains what would bring it back.
-			let systemAudioUnavailable = false;
+			// A picked take records system audio from a Core Audio tap, under its own "System
+			// Audio Recording Only" grant (see SystemAudioTap.swift). The helper raises that
+			// prompt itself if it was never answered, so note it: the permissions window then
+			// offers System Settings rather than a prompt macOS will not show again.
 			if (pickerSession && request.audio?.system?.enabled) {
-				const permissions = await getMacPermissions().read();
-				if (permissions.screen !== "granted") {
-					systemAudioUnavailable = true;
-					request = { ...request, audio: { ...request.audio, system: { enabled: false } } };
-					showPermissionsWindow();
-				}
+				getMacPermissions().noteRequested("systemAudio");
 			}
 			if (request.audio?.microphone?.enabled) {
 				const micStatus = systemPreferences.getMediaAccessStatus("microphone");
@@ -3084,7 +3089,6 @@ export function registerIpcHandlers(
 				path: outputPath,
 				helperPath,
 				microphoneDefaulted,
-				systemAudioUnavailable,
 			};
 		} catch (error) {
 			console.error("Failed to start native macOS recording:", error);

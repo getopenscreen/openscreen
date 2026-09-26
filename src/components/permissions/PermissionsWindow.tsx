@@ -1,4 +1,4 @@
-import { Accessibility, Check, Mic, MonitorPlay, Video } from "lucide-react";
+import { Accessibility, Check, Mic, MonitorPlay, Video, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 
@@ -14,16 +14,29 @@ type Status = Snapshot["screen"];
  */
 export const PERMISSIONS_POLL_MS = 500;
 
-const ROWS: ReadonlyArray<{
+type Row = {
 	kind: Kind;
 	level: "required" | "recommended" | "optional";
 	Icon: typeof MonitorPlay;
-}> = [
-	{ kind: "screen", level: "required", Icon: MonitorPlay },
+};
+
+const OTHER_ROWS: readonly Row[] = [
 	{ kind: "accessibility", level: "recommended", Icon: Accessibility },
 	{ kind: "microphone", level: "optional", Icon: Mic },
 	{ kind: "camera", level: "optional", Icon: Video },
 ];
+
+/**
+ * With the app's own picker, Screen Recording is required and also covers system audio.
+ * With Apple's picker (macOS 15.2+) nothing is required: the pick is the consent, and
+ * system audio comes from a Core Audio tap under its own, optional grant.
+ */
+function rowsFor(snapshot: Snapshot): readonly Row[] {
+	const first: Row = snapshot.screenRequired
+		? { kind: "screen", level: "required", Icon: MonitorPlay }
+		: { kind: "systemAudio", level: "optional", Icon: Volume2 };
+	return [first, ...OTHER_ROWS];
+}
 
 /**
  * From macOS 15, any app that uses ScreenCaptureKit outside Apple's system picker gets an
@@ -73,7 +86,7 @@ export function PermissionsWindow() {
 		async (kind: Kind, status: Status) => {
 			setBusy(kind);
 			try {
-				if (status === "denied") {
+				if (status === "denied" || status === "requested") {
 					await window.electronAPI.permissions.openSettings(kind);
 				} else {
 					await window.electronAPI.permissions.request(kind);
@@ -92,8 +105,6 @@ export function PermissionsWindow() {
 		return <div className="h-screen bg-[#0b0c0f]" />;
 	}
 
-	// With Apple's system picker (macOS 15.2+) a recording needs no Screen Recording grant;
-	// the grant only still gives it system audio, so the row says that and is optional.
 	const screenReady =
 		!snapshot.screenRequired || (snapshot.screen === "granted" && !snapshot.screenRequiresRelaunch);
 	const needsRelaunch = snapshot.screen === "granted" && snapshot.screenRequiresRelaunch;
@@ -104,11 +115,8 @@ export function PermissionsWindow() {
 			<p className="mt-1.5 text-[13px] leading-5 text-[#8b93a1]">{t("permissions.subtitle")}</p>
 
 			<ul className="mt-5 flex flex-col gap-2.5">
-				{ROWS.map(({ kind, level: requiredLevel, Icon }) => {
+				{rowsFor(snapshot).map(({ kind, level, Icon }) => {
 					const status = snapshot[kind];
-					const systemAudioOnly = kind === "screen" && !snapshot.screenRequired;
-					const level = systemAudioOnly ? "optional" : requiredLevel;
-					const rowKey = systemAudioOnly ? "systemAudio" : kind;
 					return (
 						<li
 							key={kind}
@@ -121,14 +129,14 @@ export function PermissionsWindow() {
 								<div className="min-w-0 flex-1">
 									<div className="flex items-center gap-2">
 										<span className="text-[13px] font-medium">
-											{t(`permissions.rows.${rowKey}.name`)}
+											{t(`permissions.rows.${kind}.name`)}
 										</span>
 										<span className="rounded-full bg-[#1c1f26] px-2 py-px text-[11px] text-[#8b93a1]">
 											{t(`permissions.level.${level}`)}
 										</span>
 									</div>
 									<p className="mt-0.5 text-[12.5px] leading-[18px] text-[#8b93a1]">
-										{t(`permissions.rows.${rowKey}.description`)}
+										{t(`permissions.rows.${kind}.description`)}
 									</p>
 								</div>
 								<PermissionAction
@@ -142,6 +150,7 @@ export function PermissionsWindow() {
 							{kind === "screen" && (
 								<ScreenHelp snapshot={snapshot} needsRelaunch={needsRelaunch} t={t} />
 							)}
+							{kind === "systemAudio" && <SystemAudioHelp status={status} t={t} />}
 						</li>
 					);
 				})}
@@ -209,8 +218,10 @@ function PermissionAction({
 
 	// Screen Recording's first step says "Continue", not "Allow": macOS' own prompt has no
 	// Allow button, only a way into System Settings, and the label must not promise one.
+	// `requested` is system audio's "asked, answer unknown": all that is left to offer is the
+	// pane where the answer can be changed.
 	const label =
-		status === "denied"
+		status === "denied" || status === "requested"
 			? t("permissions.actions.openSettings")
 			: kind === "screen"
 				? t("permissions.actions.continue")
@@ -265,6 +276,23 @@ function ScreenHelp({
 					{line}
 				</p>
 			))}
+		</div>
+	);
+}
+
+function SystemAudioHelp({ status, t }: { status: Status; t: T }) {
+	const line =
+		status === "not-requested"
+			? t("permissions.help.systemAudioPrompt")
+			: status === "requested"
+				? t("permissions.help.systemAudioRequested")
+				: null;
+	if (!line) {
+		return null;
+	}
+	return (
+		<div className="mt-2.5 border-t border-[#20232a] pt-2.5 pl-8">
+			<p className="text-[12.5px] leading-[18px] text-[#a9b0bc]">{line}</p>
 		</div>
 	);
 }

@@ -10,6 +10,8 @@ export function registerRecordingPrefsHandlers(
 		const mainWindow = getMainWindow();
 		return mainWindow ? [mainWindow] : [];
 	},
+	/** Called after a change is persisted and published, with the snapshots on both sides. */
+	onChanged?: (previous: RecordingPrefs, next: RecordingPrefs) => void,
 ): void {
 	const userData = app.getPath("userData");
 	const settings = new AppSettingsStore(userData);
@@ -26,8 +28,10 @@ export function registerRecordingPrefsHandlers(
 	ipcMain.handle("set-recording-prefs", (_, prefs: Partial<RecordingPrefs>) => {
 		// Persist every validated field first. A failed save must leave both the
 		// durable value and the main-process published snapshot unchanged.
+		const previous = recordingPrefs;
 		recordingPrefs = settings.setRecordingPreferences(prefs).recording;
 		publish();
+		onChanged?.(previous, recordingPrefs);
 		return recordingPrefs;
 	});
 }

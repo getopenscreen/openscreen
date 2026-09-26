@@ -142,7 +142,9 @@
 			"screenSettings": "Trong Cài đặt hệ thống, hãy bật OpenScreen. Nếu macOS đề nghị thoát và mở lại, hãy đồng ý: cửa sổ này sẽ quay lại.",
 			"screenNotListed": "Không thấy OpenScreen trong danh sách? Bấm +, rồi chọn OpenScreen trong Ứng dụng.",
 			"screenRestart": "Đã cho phép. OpenScreen cần khởi động lại để sử dụng quyền này.",
-			"screenRecurring": "Ở lần ghi đầu tiên, macOS sẽ hỏi OpenScreen có được truy cập trực tiếp màn hình mà không qua bộ chọn của hệ thống hay không. Hãy bấm Cho phép. Thỉnh thoảng macOS sẽ hỏi lại; điều đó là bình thường."
+			"screenRecurring": "Ở lần ghi đầu tiên, macOS sẽ hỏi OpenScreen có được truy cập trực tiếp màn hình mà không qua bộ chọn của hệ thống hay không. Hãy bấm Cho phép. Thỉnh thoảng macOS sẽ hỏi lại; điều đó là bình thường.",
+			"systemAudioPrompt": "macOS sẽ hỏi bạn có cho phép OpenScreen ghi âm thanh của máy Mac không.",
+			"systemAudioRequested": "Nếu bạn đã từ chối, hãy bật OpenScreen trong mục “Chỉ bản ghi âm thanh hệ thống” ở Cài đặt hệ thống."
 		},
 		"footer": {
 			"screenRequired": "Cần quyền ghi màn hình để ghi.",

@@ -142,7 +142,9 @@
 			"screenSettings": "V Nastavení systému zapněte OpenScreen. Pokud macOS nabídne aplikaci ukončit a znovu otevřít, přijměte: toto okno se vrátí.",
 			"screenNotListed": "OpenScreen v seznamu chybí? Klikněte na + a vyberte OpenScreen ve složce Aplikace.",
 			"screenRestart": "Povoleno. OpenScreen se musí restartovat, aby oprávnění mohl použít.",
-			"screenRecurring": "Při prvním nahrávání se vás macOS zeptá, zda smí OpenScreen přistupovat k obrazovce přímo, bez systémového výběru. Klikněte na Povolit. macOS se čas od času zeptá znovu, to je v pořádku."
+			"screenRecurring": "Při prvním nahrávání se vás macOS zeptá, zda smí OpenScreen přistupovat k obrazovce přímo, bez systémového výběru. Klikněte na Povolit. macOS se čas od času zeptá znovu, to je v pořádku.",
+			"systemAudioPrompt": "macOS se vás zeptá, zda smí OpenScreen nahrávat zvuk z vašeho Macu.",
+			"systemAudioRequested": "Pokud jste odmítli, zapněte OpenScreen v části „Jen záznam systémového zvuku“ v Nastavení systému."
 		},
 		"footer": {
 			"screenRequired": "K nahrávání je potřeba nahrávání obrazovky.",

@@ -33,9 +33,10 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 function start(
 	getWindow: () => BrowserWindow | null = () => null,
 	getAppWindows?: () => BrowserWindow[],
+	onChanged?: (previous: RecordingPrefs, next: RecordingPrefs) => void,
 ) {
 	electron.handle.mockClear();
-	registerRecordingPrefsHandlers(defaults, getWindow, getAppWindows);
+	registerRecordingPrefsHandlers(defaults, getWindow, getAppWindows, onChanged);
 	const get = electron.handle.mock.calls.find(
 		([name]) => name === "get-recording-prefs",
 	)?.[1] as () => RecordingPrefs;
@@ -50,6 +51,18 @@ function start(
 }
 
 describe("recording preferences IPC", () => {
+	it("reports each persisted change with the snapshot it replaced", () => {
+		const onChanged = vi.fn();
+		const prefs = start(undefined, undefined, onChanged);
+
+		prefs.set({ systemAudioEnabled: true });
+
+		expect(onChanged).toHaveBeenCalledTimes(1);
+		const [previous, next] = onChanged.mock.calls[0] ?? [];
+		expect(previous?.systemAudioEnabled).toBe(false);
+		expect(next?.systemAudioEnabled).toBe(true);
+	});
+
 	it("restores toggles and device preferences on restart", () => {
 		const first = start();
 		expect(first.get().micEnabled).toBe(false);

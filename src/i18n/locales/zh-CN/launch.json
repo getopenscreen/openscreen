@@ -142,7 +142,9 @@
 			"screenSettings": "请在“系统设置”中开启 OpenScreen。如果 macOS 提示退出并重新打开，请同意：此窗口会重新出现。",
 			"screenNotListed": "列表中没有 OpenScreen？点按 +，然后在“应用程序”中选择 OpenScreen。",
 			"screenRestart": "已允许。OpenScreen 需要重新启动才能使用。",
-			"screenRecurring": "首次录制时，macOS 会询问是否允许 OpenScreen 不通过系统选择器直接访问你的屏幕。请点按“允许”。macOS 会不时再次询问，这是正常现象。"
+			"screenRecurring": "首次录制时，macOS 会询问是否允许 OpenScreen 不通过系统选择器直接访问你的屏幕。请点按“允许”。macOS 会不时再次询问，这是正常现象。",
+			"systemAudioPrompt": "macOS 会请你允许 OpenScreen 录制 Mac 播放的声音。",
+			"systemAudioRequested": "如果你拒绝了，请在“系统设置”的“仅系统录音”中开启 OpenScreen。"
 		},
 		"footer": {
 			"screenRequired": "录制需要屏幕录制权限。",

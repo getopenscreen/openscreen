@@ -142,7 +142,9 @@
 			"screenSettings": "Aktiviere OpenScreen in den Systemeinstellungen. Wenn macOS anbietet, die App zu beenden und neu zu öffnen, stimme zu: Dieses Fenster erscheint wieder.",
 			"screenNotListed": "OpenScreen fehlt in der Liste? Klicke auf + und wähle OpenScreen unter „Programme“.",
 			"screenRestart": "Erlaubt. OpenScreen muss neu starten, um die Berechtigung zu nutzen.",
-			"screenRecurring": "Bei deiner ersten Aufnahme fragt macOS, ob OpenScreen ohne die Systemauswahl direkt auf deinen Bildschirm zugreifen darf. Klicke auf „Erlauben“. macOS fragt von Zeit zu Zeit erneut – das ist normal."
+			"screenRecurring": "Bei deiner ersten Aufnahme fragt macOS, ob OpenScreen ohne die Systemauswahl direkt auf deinen Bildschirm zugreifen darf. Klicke auf „Erlauben“. macOS fragt von Zeit zu Zeit erneut – das ist normal.",
+			"systemAudioPrompt": "macOS fragt dich, ob OpenScreen den Ton deines Mac aufnehmen darf.",
+			"systemAudioRequested": "Falls du abgelehnt hast, aktiviere OpenScreen unter „Nur Aufnahme von Systemaudio“ in den Systemeinstellungen."
 		},
 		"footer": {
 			"screenRequired": "Zum Aufnehmen ist die Bildschirmaufnahme erforderlich.",

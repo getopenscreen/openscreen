@@ -3964,10 +3964,12 @@ export function ChoiceRow<T extends string | number>({
 	columns,
 	tiles,
 	display,
+	describedBy,
 }: {
 	label: string;
 	/** `null` leaves a hole in the grid: the middle of the camera's position grid. An option
-	 *  can be `disabled` on its own, with the reason as its `title`. */
+	 *  can be `disabled` on its own: a disabled button takes no focus, so its `title` is only a
+	 *  mouse hint, and the reason must also be visible text the row points at (`describedBy`). */
 	options: ReadonlyArray<{
 		value: T;
 		label: string;
@@ -3985,6 +3987,8 @@ export function ChoiceRow<T extends string | number>({
 	/** Ce que montre un bouton. Par défaut l'icône s'il y en a une, et alors `label` lui sert de
 	 *  nom ; sinon le texte. */
 	display?: "text" | "icon" | "both";
+	/** Id of the visible text that explains the row, typically why some options are disabled. */
+	describedBy?: string;
 }) {
 	const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
 	const mode = display ?? (options.some((o) => o?.icon) ? "icon" : "text");
@@ -3992,6 +3996,7 @@ export function ChoiceRow<T extends string | number>({
 		<div
 			role="group"
 			aria-label={label}
+			aria-describedby={describedBy}
 			className={`${styles.choiceRow} ${tiles ? styles.choiceRowTiles : ""}`}
 			style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}
 			onKeyDown={(e) => {

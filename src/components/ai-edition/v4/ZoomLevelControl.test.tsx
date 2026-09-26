@@ -135,7 +135,14 @@ describe("ZoomLevelControl", () => {
 		const buttons = screen.getAllByRole("button") as HTMLButtonElement[];
 		expect(buttons.map((b) => b.disabled)).toEqual([false, false, false, true]);
 		expect(buttons[3]).toHaveAttribute("title", "zoom.levelBlurs:2.5");
-		expect(screen.getByText("zoom.levelBlurs:2.5")).toBeInTheDocument();
+		// The reason is visible text the row points at, not only a title on a button that a
+		// keyboard can never focus.
+		const hint = screen.getByText("zoom.levelBlurs:2.5");
+		expect(screen.getByRole("group", { name: "zoom.level" })).toHaveAttribute(
+			"aria-describedby",
+			hint.id,
+		);
+		expect(hint.id).not.toBe("");
 
 		const field = screen.getByRole("textbox", { name: "zoom.customScale" });
 		fireEvent.change(field, { target: { value: "3" } });
@@ -148,6 +155,9 @@ describe("ZoomLevelControl", () => {
 	it("says nothing when every level is within reach", () => {
 		renderControl(3);
 		expect(screen.queryByText(/zoom\.levelBlurs/)).not.toBeInTheDocument();
+		expect(screen.getByRole("group", { name: "zoom.level" })).not.toHaveAttribute(
+			"aria-describedby",
+		);
 	});
 
 	it("ignores an unparseable draft without touching the region", () => {

@@ -1631,7 +1631,7 @@
 	--_c: var(--danger);
 }
 .laneZoom {
-	--_c: var(--accent);
+	--_c: var(--zoom);
 }
 .laneCameraFullscreen {
 	--_c: #a855f7;
@@ -1789,9 +1789,9 @@
 	/* px, like .lanePill's: the gutter is subtracted from the clip's width, so a
 	   clip narrower than 6px would otherwise compute to nothing. */
 	min-width: 1px;
-	/* Blue (--clip), not mint: the accent belongs to what the user ADDED (zoom pills).
-	   A solid "candy" card, same recipe as .lanePill. Text on it is white
-	   (.tlClipDuration), in both themes. */
+	/* The brand's green (--clip): the recording is the main object, and the zoom pills
+	   are blue so they never read as it. A solid "candy" card, same recipe as .lanePill,
+	   with the pills' dark ink on it (.tlClipDuration, the waveform), in both themes. */
 	border-radius: 12px;
 	border: 1px solid transparent;
 	background: linear-gradient(180deg, color-mix(in oklab, var(--clip) 78%, white), var(--clip)) border-box;
@@ -1806,7 +1806,7 @@
 		transform 150ms var(--ease);
 }
 /* A halo ring set off by a gap in the panel colour: a border alone does not show on a
-   card that is already solid blue. */
+   card that is already solid colour. */
 .tlClipSel {
 	box-shadow: 0 0 0 2px var(--bg),
 		0 0 0 4px var(--clip);
@@ -1877,19 +1877,14 @@
 	stroke-linejoin: round;
 	vector-effect: non-scaling-stroke;
 }
-/* Inside an audio pill it is dark ink, like the label on the candy. */
-.lanePill .tlWaveArea {
+/* Inside an audio pill or on the clip card it is dark ink, like the label on the candy. */
+.lanePill .tlWaveArea,
+.tlClip .tlWaveArea {
 	fill: rgb(11 18 32 / 0.16);
 }
-.lanePill .tlWaveLine {
-	stroke: rgb(11 18 32 / 0.5);
-}
-/* On the solid clip card the waveform is white, like the text on it. */
-.tlClip .tlWaveArea {
-	fill: rgb(255 255 255 / 0.22);
-}
+.lanePill .tlWaveLine,
 .tlClip .tlWaveLine {
-	stroke: rgb(255 255 255 / 0.75);
+	stroke: rgb(11 18 32 / 0.5);
 }
 .tlClipLabel {
 	position: absolute;
@@ -1928,8 +1923,7 @@
 .tlClipDuration {
 	font: 500 12px/1.2 var(--font-body);
 	font-variant-numeric: tabular-nums;
-	color: #fff;
-	text-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+	color: #0b1220;
 	white-space: nowrap;
 	flex-shrink: 0;
 }

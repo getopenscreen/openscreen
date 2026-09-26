@@ -85,10 +85,12 @@
 	--speed: #f97316;
 	--speed-soft: rgba(249, 115, 22, 0.14);
 	--speed-wash: rgba(249, 115, 22, 0.14);
-	/* the recording clip: blue sits between the mint accent and the violet playhead,
-	   so it colours the timeline without competing with either. Same value in both
-	   themes: the clip is a solid card with white text on it. */
-	--clip: #2563eb;
+	/* the recording clip: the brand's green, on the main object of the timeline. A solid
+	   candy card with dark ink on it (mint cannot carry white), in both themes. */
+	--clip: var(--accent);
+	/* zoom pills: blue, so the most common effect never reads as the clip under it.
+	   Light enough to carry the pills' dark ink. */
+	--zoom: #3b82f6;
 	/* strength of the coloured glow under candy pills and clips: on a light surface
 	   a glow reads as an outline, so it is much fainter there than on dark. */
 	--candy-glow: 12%;

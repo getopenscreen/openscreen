@@ -240,7 +240,16 @@
 		"font": "Font",
 		"translating": "Translating…",
 		"show": "Show captions",
-		"textColor": "Text color"
+		"textColor": "Text color",
+		"style": "Style",
+		"styles": {
+			"classic": "Classic",
+			"bold": "Bold",
+			"minimal": "Minimal",
+			"light": "Light"
+		},
+		"customize": "Customize",
+		"turnOn": "Show captions"
 	},
 	"panes": {
 		"help": "Help"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Delete Trim Region"
+	},
+	"textPlate": {
+		"none": "None",
+		"dark": "Dark",
+		"light": "Light",
+		"custom": "Custom"
 	}
 }

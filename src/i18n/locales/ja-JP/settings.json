@@ -240,7 +240,16 @@
 		"font": "フォント",
 		"translating": "翻訳中…",
 		"show": "字幕を表示",
-		"textColor": "文字色"
+		"textColor": "文字色",
+		"style": "スタイル",
+		"styles": {
+			"classic": "クラシック",
+			"bold": "太字",
+			"minimal": "ミニマル",
+			"light": "ライト"
+		},
+		"customize": "カスタマイズ",
+		"turnOn": "字幕を表示"
 	},
 	"panes": {
 		"help": "ヘルプ"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "トリム範囲を削除"
+	},
+	"textPlate": {
+		"none": "なし",
+		"dark": "ダーク",
+		"light": "ライト",
+		"custom": "カスタム"
 	}
 }

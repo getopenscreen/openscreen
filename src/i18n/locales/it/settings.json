@@ -240,7 +240,16 @@
 		"font": "Carattere",
 		"translating": "Traduzione…",
 		"show": "Mostra sottotitoli",
-		"textColor": "Colore del testo"
+		"textColor": "Colore del testo",
+		"style": "Stile",
+		"styles": {
+			"classic": "Classico",
+			"bold": "Grassetto",
+			"minimal": "Minimale",
+			"light": "Chiaro"
+		},
+		"customize": "Personalizza",
+		"turnOn": "Mostra sottotitoli"
 	},
 	"panes": {
 		"help": "Aiuto"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Elimina regione taglio"
+	},
+	"textPlate": {
+		"none": "Nessuna",
+		"dark": "Scura",
+		"light": "Chiara",
+		"custom": "Personalizzata"
 	}
 }

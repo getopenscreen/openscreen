@@ -240,7 +240,16 @@
 		"font": "Písmo",
 		"translating": "Překládání…",
 		"show": "Zobrazit titulky",
-		"textColor": "Barva textu"
+		"textColor": "Barva textu",
+		"style": "Styl",
+		"styles": {
+			"classic": "Klasický",
+			"bold": "Tučný",
+			"minimal": "Minimální",
+			"light": "Světlý"
+		},
+		"customize": "Upravit",
+		"turnOn": "Zobrazit titulky"
 	},
 	"panes": {
 		"help": "Nápověda"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Smazat oblast oříznutí"
+	},
+	"textPlate": {
+		"none": "Žádný",
+		"dark": "Tmavý",
+		"light": "Světlý",
+		"custom": "Vlastní"
 	}
 }

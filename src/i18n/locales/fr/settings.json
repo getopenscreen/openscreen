@@ -240,7 +240,16 @@
 		"font": "Police",
 		"translating": "Traduction…",
 		"show": "Afficher les sous-titres",
-		"textColor": "Couleur du texte"
+		"textColor": "Couleur du texte",
+		"style": "Style",
+		"styles": {
+			"classic": "Classique",
+			"bold": "Gras",
+			"minimal": "Minimal",
+			"light": "Clair"
+		},
+		"customize": "Personnaliser",
+		"turnOn": "Afficher les sous-titres"
 	},
 	"panes": {
 		"help": "Aide"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Supprimer la région de coupe"
+	},
+	"textPlate": {
+		"none": "Aucune",
+		"dark": "Sombre",
+		"light": "Claire",
+		"custom": "Personnalisée"
 	}
 }

@@ -240,7 +240,16 @@
 		"font": "الخط",
 		"translating": "جارٍ الترجمة…",
 		"show": "إظهار الترجمة",
-		"textColor": "لون النص"
+		"textColor": "لون النص",
+		"style": "النمط",
+		"styles": {
+			"classic": "كلاسيكي",
+			"bold": "عريض",
+			"minimal": "بسيط",
+			"light": "فاتح"
+		},
+		"customize": "تخصيص",
+		"turnOn": "إظهار الترجمة"
 	},
 	"panes": {
 		"help": "مساعدة"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "حذف منطقة القص"
+	},
+	"textPlate": {
+		"none": "بلا",
+		"dark": "داكنة",
+		"light": "فاتحة",
+		"custom": "مخصصة"
 	}
 }

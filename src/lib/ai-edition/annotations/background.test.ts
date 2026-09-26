@@ -5,7 +5,10 @@ import {
 	DEFAULT_TEXT_BACKGROUND,
 	hasTextBackground,
 	setTextBackgroundColor,
+	setTextPlate,
+	TEXT_PLATES,
 	textBackgroundColor,
+	textPlateOf,
 	toggleTextBackground,
 } from "./background";
 
@@ -71,5 +74,25 @@ describe("text background", () => {
 		const toggled = toggleTextBackground(style, true);
 		expect(toggled.color).toBe("#ffffff");
 		expect(toggled.fontSize).toBe(48);
+	});
+});
+
+describe("named text plates", () => {
+	it("names the three plates and keeps an older free colour as custom", () => {
+		expect(textPlateOf(styleWith({ backgroundColor: "transparent" }))).toBe("none");
+		expect(textPlateOf(styleWith({ backgroundColor: TEXT_PLATES.dark }))).toBe("dark");
+		expect(textPlateOf(styleWith({ backgroundColor: "rgba(0,0,0,0.7)" }))).toBe("dark");
+		expect(textPlateOf(styleWith({ backgroundColor: TEXT_PLATES.light }))).toBe("light");
+		expect(textPlateOf(styleWith({ backgroundColor: "#3b82f6" }))).toBe("custom");
+	});
+
+	it("choosing a plate adjusts text that would vanish on it, and keeps text that reads", () => {
+		const white = styleWith({ color: "#ffffff", backgroundColor: "transparent" });
+		expect(setTextPlate(white, "light")).toMatchObject({
+			backgroundColor: TEXT_PLATES.light,
+			color: "#111111",
+		});
+		expect(setTextPlate(white, "dark").color).toBe("#ffffff");
+		expect(setTextPlate(white, "none").backgroundColor).toBe("transparent");
 	});
 });

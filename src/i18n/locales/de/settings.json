@@ -374,8 +374,6 @@
 		"camera": {
 			"title": "3D-Kamera",
 			"off": "Aus",
-			"fixed": "Fester Winkel",
-			"moving": "Bewegte Kamera",
 			"preset": {
 				"left": "Bildschirm nach links gedreht",
 				"right": "Bildschirm nach rechts gedreht",

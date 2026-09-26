@@ -374,8 +374,6 @@
 		"camera": {
 			"title": "3D camera",
 			"off": "Off",
-			"fixed": "Fixed angle",
-			"moving": "Moving camera",
 			"preset": {
 				"left": "Screen turned left",
 				"right": "Screen turned right",

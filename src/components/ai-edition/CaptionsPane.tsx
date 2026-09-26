@@ -357,22 +357,24 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 
 				{/* ── Language ───────────────────────────────────────────── */}
 				<div className={styles.sectionLabel}>{t("captions.language")}</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.displayLanguage")}</span>
-					<select
-						value={settings.language ?? ""}
-						disabled={disabled}
-						onChange={(e) => void set({ language: e.target.value || null })}
-						style={selectStyle}
-					>
-						<option value="">{t("captions.original")}</option>
-						{languageOptions.map((entry) => (
-							<option key={entry.language} value={entry.language}>
-								{entry.label}
-							</option>
-						))}
-					</select>
-				</div>
+				{/* Only once there is a translation to switch to: alone, "Original" would be a
+				    button that changes nothing. */}
+				{languageOptions.length > 0 ? (
+					<div className={`${styles.field} ${styles.fieldStack}`}>
+						<span className={styles.fieldLabel}>{t("captions.displayLanguage")}</span>
+						<ChoiceRow<string>
+							label={t("captions.displayLanguage")}
+							columns={2}
+							options={[
+								{ value: "", label: t("captions.original") },
+								...languageOptions.map((entry) => ({ value: entry.language, label: entry.label })),
+							]}
+							value={settings.language ?? ""}
+							disabled={disabled}
+							onChange={(language) => void set({ language: language || null })}
+						/>
+					</div>
+				) : null}
 
 				<div
 					style={{
@@ -447,22 +449,23 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 						{t("captions.customize")}
 					</summary>
 					<div className={styles.sectionLabel}>{t("captions.text")}</div>
-					<div className={styles.paneRow}>
-						<span className={styles.label}>{t("captions.font")}</span>
-						<select
+					<div className={`${styles.field} ${styles.fieldStack}`}>
+						<span className={styles.fieldLabel}>{t("captions.font")}</span>
+						{/* Only the families the compositor ships: it never reads the machine's
+						    installed fonts, so any other name would draw a fallback. Each button is a
+						    specimen, in the face it picks. */}
+						<ChoiceRow<string>
+							label={t("captions.font")}
+							columns={2}
+							options={TEXT_FONT_FAMILIES.map((font) => ({
+								value: font,
+								label: font,
+								icon: <span style={{ fontFamily: font }}>{font}</span>,
+							}))}
 							value={settings.fontFamily}
 							disabled={disabled}
-							onChange={(e) => void set({ fontFamily: e.target.value })}
-							style={selectStyle}
-						>
-							{/* Only the families the compositor ships: it never reads the machine's
-						    installed fonts, so any other name would draw a fallback. */}
-							{TEXT_FONT_FAMILIES.map((font) => (
-								<option key={font} value={font} style={{ fontFamily: font }}>
-									{font}
-								</option>
-							))}
-						</select>
+							onChange={(fontFamily) => void set({ fontFamily })}
+						/>
 					</div>
 					<div className={styles.paneRow}>
 						<span className={styles.label}>{t("captions.bold")}</span>
@@ -620,46 +623,37 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 				)}
 
 				{/* ── Line length ────────────────────────────────────────── */}
+				{/* Two counts on one scale, so two sliders; each stops at the other, so the
+				    minimum never passes the maximum. */}
 				<div className={styles.sectionLabel}>{t("captions.lineLength")}</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.minWords")}</span>
-					<select
+				<div className={styles.sliderGrid}>
+					<SliderCell
+						label={t("captions.minWords")}
 						value={settings.minWordsPerLine}
+						min={CAPTION_WORDS_PER_LINE_MIN}
+						max={CAPTION_WORDS_PER_LINE_MAX}
+						defaultValue={DEFAULT_CAPTION_SETTINGS.minWordsPerLine}
+						showValue
 						disabled={disabled}
-						onChange={(e) => void set({ minWordsPerLine: Number(e.target.value) })}
-						style={selectStyle}
-					>
-						{WORD_COUNTS.map((n) => (
-							<option key={n} value={n}>
-								{n}
-							</option>
-						))}
-					</select>
-				</div>
-				<div className={styles.paneRow} style={{ marginBottom: 16 }}>
-					<span className={styles.label}>{t("captions.maxWords")}</span>
-					<select
+						onChange={(v) => setLive({ minWordsPerLine: Math.min(v, settings.maxWordsPerLine) })}
+						onCommit={() => void commit()}
+					/>
+					<SliderCell
+						label={t("captions.maxWords")}
 						value={settings.maxWordsPerLine}
+						min={CAPTION_WORDS_PER_LINE_MIN}
+						max={CAPTION_WORDS_PER_LINE_MAX}
+						defaultValue={DEFAULT_CAPTION_SETTINGS.maxWordsPerLine}
+						showValue
 						disabled={disabled}
-						onChange={(e) => void set({ maxWordsPerLine: Number(e.target.value) })}
-						style={selectStyle}
-					>
-						{WORD_COUNTS.map((n) => (
-							<option key={n} value={n} disabled={n < settings.minWordsPerLine}>
-								{n}
-							</option>
-						))}
-					</select>
+						onChange={(v) => setLive({ maxWordsPerLine: Math.max(v, settings.minWordsPerLine) })}
+						onCommit={() => void commit()}
+					/>
 				</div>
 			</div>
 		</div>
 	);
 }
-
-const WORD_COUNTS = Array.from(
-	{ length: CAPTION_WORDS_PER_LINE_MAX - CAPTION_WORDS_PER_LINE_MIN + 1 },
-	(_, i) => i + CAPTION_WORDS_PER_LINE_MIN,
-);
 
 const CAPTION_STYLE_IDS = Object.keys(CAPTION_STYLES) as CaptionStyleId[];
 

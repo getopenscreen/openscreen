@@ -6,19 +6,24 @@
 // self-sufficient).
 
 import {
+	AppWindow,
 	AudioLines,
 	Camera,
 	Captions as CaptionsIcon,
-	ChevronDown,
 	FileText,
 	HelpCircle,
 	ImagePlus,
+	Laptop,
 	Loader2,
+	type LucideIcon,
 	Mic,
+	Monitor,
 	MousePointerClick,
 	Music,
 	RotateCcw,
 	Sliders,
+	Smartphone,
+	SquareDashed,
 	Trash2,
 	Undo2,
 	Video,
@@ -36,6 +41,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
 	useEffect,
+	useId,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -127,11 +133,7 @@ import {
 import { isNativeCompositorActive, setNativeParam } from "@/native";
 import { ROUNDNESS_SLIDER_MAX_PX } from "@/native/paramUnits";
 import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
-import {
-	ASPECT_RATIO_PRESETS,
-	type AspectRatio,
-	getAspectRatioLabel,
-} from "@/utils/aspectRatioUtils";
+import { ASPECT_RATIO_PRESETS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
 import { CaptionsPane } from "./CaptionsPane";
 import { ColorField } from "./ColorField";
@@ -2341,7 +2343,15 @@ const RECORDING_FRAME_LABEL_KEYS: Record<RecordingFrame, string> = {
 	monitor: "effects.frameScreen",
 };
 
-/** What the fill row says under itself: what "follow" does, or why it cannot. */
+// "None" is dashed like the camera's "no background": the outline of something not drawn.
+const RECORDING_FRAME_ICONS: Record<RecordingFrame, LucideIcon> = {
+	none: SquareDashed,
+	window: AppWindow,
+	laptop: Laptop,
+	phone: Smartphone,
+	monitor: Monitor,
+};
+
 const FRAME_THEME_LABEL_KEYS: Record<FrameTheme, string> = {
 	light: "effects.frameThemeLight",
 	dark: "effects.frameThemeDark",
@@ -2379,6 +2389,13 @@ export function VideoEffectsPane() {
 		() => (document ? isAutoFormatAvailable(document) : true),
 		[document],
 	);
+	// What Auto stands at, or why it cannot: shown beside the label while Auto is the format.
+	const autoState = !autoAvailable
+		? ts("effects.formatAutoMixed")
+		: autoDims
+			? `${autoDims.width}×${autoDims.height}`
+			: null;
+	const autoStateId = useId();
 	const hasTiltedZoom = (document?.zoomRanges ?? []).some((z) => z.rotationPreset != null);
 	const fillAvailability = useMemo(
 		() => (document ? formatFillAvailability(document) : "none"),
@@ -2389,9 +2406,6 @@ export function VideoEffectsPane() {
 	// keeps showing its recording whole until the user says otherwise.
 	const fillDefault = settings.formatFollowCursor === null ? { formatFollowCursor: true } : {};
 	const [fitMenuOpen, setFitMenuOpen] = useState(false);
-	const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
-	const [frameMenuOpen, setFrameMenuOpen] = useState(false);
-	const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 	const { locale } = useI18n();
 	const clipCountLabel = (count: number) => ts(pluralKey(locale, count), { count });
 
@@ -2497,113 +2511,72 @@ export function VideoEffectsPane() {
 			    control rather than as the shape of what gets exported. Its old placement was
 			    incidental: it arrived inside 1f25410b, a commit about per-clip crop export and
 			    a HUD redesign, and no decision record ever argued for it. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label}>{ts("effects.format")}</span>
-				<Popover open={ratioMenuOpen} onOpenChange={setRatioMenuOpen}>
-					<PopoverTrigger asChild>
-						<button
-							type="button"
-							className={styles.rowAction}
+			<div className={`${styles.field} ${styles.fieldStack}`}>
+				<span className={styles.fieldLabel}>
+					{ts("effects.format")}
+					{/* Auto is the one entry whose shape moves with the project (padding, camera
+					    layout, crop), so while it is the format the label says where it stands. The
+					    legacy `"native"` value presses no button: it only survives until the clip
+					    dimensions are known, and until then there is no Original row either. */}
+					{settings.aspectRatio === "auto" && autoState ? (
+						<span id={autoStateId} className={styles.sectionLabelValue}>
+							{autoState}
+						</span>
+					) : null}
+				</span>
+				<ChoiceRow<AspectRatio>
+					label={ts("effects.format")}
+					columns={4}
+					options={[
+						// Auto leads: it is the one entry that is a rule rather than a shape.
+						...(autoAvailable || settings.aspectRatio === "auto"
+							? [
+									{
+										value: "auto" as const,
+										label: ts("effects.formatAuto"),
+										disabled: !autoAvailable,
+										title: autoState ? `${ts("effects.formatAuto")} · ${autoState}` : undefined,
+									},
+								]
+							: []),
+						...ASPECT_RATIO_PRESETS.map((ratio) => ({ value: ratio, label: ratio })),
+					]}
+					value={settings.aspectRatio}
+					disabled={!hasDocument}
+					describedBy={settings.aspectRatio === "auto" && !autoAvailable ? autoStateId : undefined}
+					onChange={(aspectRatio) =>
+						void set(aspectRatio === "auto" ? { aspectRatio } : { aspectRatio, ...fillDefault })
+					}
+				/>
+				{/* The timeline's own shapes stay listed here, and NOT only behind "fit": that action
+				    also zeroes the frame styling, so without this row there would be no way to export
+				    at the footage's native shape while keeping a padded, rounded look. Token first,
+				    then the pixel size: here a button names an output FORMAT, so the ratio is the
+				    identity. (The "fit" menu leads with the resolution, because there a row names a
+				    clip.) */}
+				{nativeFormats.length > 0 ? (
+					<>
+						<span className={styles.fieldLabel}>{ts("effects.formatOriginal")}</span>
+						<ChoiceRow<AspectRatio>
+							label={ts("effects.formatOriginal")}
+							columns={Math.min(nativeFormats.length, 2)}
+							options={nativeFormats.map((format) => {
+								const label = `${format.token} · ${format.width}×${format.height}`;
+								return {
+									value: format.token,
+									label,
+									title:
+										nativeFormats.length > 1
+											? `${label} · ${clipCountLabel(format.clipCount)}`
+											: undefined,
+								};
+							})}
+							value={settings.aspectRatio}
 							disabled={!hasDocument}
-							aria-label={ts("effects.format")}
-						>
-							{/* `getAspectRatioLabel` hardcodes English "Original" for the legacy
-							    `"native"` value, which is still reachable: the v5→v6 migration only
-							    bakes it into a concrete token once clip dimensions are known, and
-							    leaves it alone until then. The group header below is localized, so
-							    without this the two would disagree in twelve locales. */}
-							{settings.aspectRatio === "auto"
-								? ts("effects.formatAuto")
-								: settings.aspectRatio === "native"
-									? ts("effects.formatOriginal")
-									: getAspectRatioLabel(settings.aspectRatio)}
-							<ChevronDown size={11} />
-						</button>
-					</PopoverTrigger>
-					<PopoverContent
-						align="end"
-						sideOffset={6}
-						collisionPadding={12}
-						animated={false}
-						className="w-auto border-0 bg-transparent p-0 shadow-none"
-					>
-						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.format")}>
-							{/* Auto leads: it is the one entry that is a rule rather than a shape. */}
-							{autoAvailable || settings.aspectRatio === "auto" ? (
-								<button
-									type="button"
-									role="menuitem"
-									className={`${styles.actionMenuRow}${
-										settings.aspectRatio === "auto" ? ` ${styles.isActive}` : ""
-									}`}
-									disabled={!autoAvailable}
-									onClick={() => {
-										setRatioMenuOpen(false);
-										void set({ aspectRatio: "auto" });
-									}}
-								>
-									<span className={styles.actionMenuMain}>{ts("effects.formatAuto")}</span>
-									{!autoAvailable ? (
-										<span className={styles.actionMenuCount}>{ts("effects.formatAutoMixed")}</span>
-									) : autoDims ? (
-										<span className={styles.actionMenuCount}>
-											{`${autoDims.width}×${autoDims.height}`}
-										</span>
-									) : null}
-								</button>
-							) : null}
-							{ASPECT_RATIO_PRESETS.map((ratio) => (
-								<button
-									type="button"
-									role="menuitem"
-									key={ratio}
-									className={`${styles.actionMenuRow}${
-										ratio === settings.aspectRatio ? ` ${styles.isActive}` : ""
-									}`}
-									onClick={() => {
-										setRatioMenuOpen(false);
-										void set({ aspectRatio: ratio, ...fillDefault });
-									}}
-								>
-									<span className={styles.actionMenuMain}>{ratio}</span>
-								</button>
-							))}
-							{/* The timeline's own shapes stay listed here, and NOT only behind "fit":
-							    that action also zeroes the frame styling, so without these rows there
-							    would be no way to export at the footage's native shape while keeping a
-							    padded, rounded look. */}
-							{nativeFormats.length > 0 ? (
-								<>
-									<div className={styles.actionMenuGroup}>{ts("effects.formatOriginal")}</div>
-									{nativeFormats.map((format) => (
-										<button
-											type="button"
-											role="menuitem"
-											key={`native-${format.token}`}
-											className={`${styles.actionMenuRow}${
-												format.token === settings.aspectRatio ? ` ${styles.isActive}` : ""
-											}`}
-											onClick={() => {
-												setRatioMenuOpen(false);
-												void set({ aspectRatio: format.token, ...fillDefault });
-											}}
-										>
-											{/* Token leads and the pixel size rides on the right, exactly as this
-											    menu read in the timeline toolbar — here the row names an output
-											    FORMAT, so the ratio is the identity. (The "fit" menu leads with
-											    the resolution instead, because there a row names a clip.) */}
-											<span className={styles.actionMenuMain}>{format.token}</span>
-											<span className={styles.actionMenuCount}>
-												{`${format.width}×${format.height}`}
-												{nativeFormats.length > 1 ? ` · ${format.clipCount}` : ""}
-											</span>
-										</button>
-									))}
-								</>
-							) : null}
-						</div>
-					</PopoverContent>
-				</Popover>
+							onChange={(aspectRatio) => void set({ aspectRatio, ...fillDefault })}
+						/>
+					</>
+				) : null}
 			</div>
 			{/* How a recording of another shape sits in a fixed format: whole, or filling it with a
 			    window that follows the cursor. Only listed when the two shapes differ and the timeline
@@ -2623,107 +2596,52 @@ export function VideoEffectsPane() {
 					/>
 				</div>
 			) : null}
-			{/* The frame drawn around the recording, and its theme. Two menus like Format above
-			    them, and for the same reason: each picks one project-wide look among a few. With a
-			    frame on, Roundness rounds the footage within that frame's own range, the body
-			    following concentric, and Shadow falls under the frame — both still move what
+			{/* The frame drawn around the recording, and its theme. Rows of buttons like Format
+			    above them, and for the same reason: each picks one project-wide look among a few.
+			    With a frame on, Roundness rounds the footage within that frame's own range, the
+			    body following concentric, and Shadow falls under the frame — both still move what
 			    they name. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label} title={ts("effects.windowHelp")}>
+			<div className={`${styles.field} ${styles.fieldStack}`}>
+				{/* The tiles only draw their frame, so the label names the current one. */}
+				<span className={styles.fieldLabel} title={ts("effects.windowHelp")}>
 					{ts("effects.frameStyle")}
+					<span className={styles.sectionLabelValue}>
+						{ts(RECORDING_FRAME_LABEL_KEYS[settings.frame])}
+					</span>
 				</span>
-				<Popover open={frameMenuOpen} onOpenChange={setFrameMenuOpen}>
-					<PopoverTrigger asChild>
-						<button
-							type="button"
-							className={styles.rowAction}
-							disabled={!hasDocument}
-							aria-label={ts("effects.frameStyle")}
-							title={ts("effects.windowHelp")}
-						>
-							{ts(RECORDING_FRAME_LABEL_KEYS[settings.frame])}
-							<ChevronDown size={11} />
-						</button>
-					</PopoverTrigger>
-					<PopoverContent
-						align="end"
-						sideOffset={6}
-						collisionPadding={12}
-						animated={false}
-						className="w-auto border-0 bg-transparent p-0 shadow-none"
-					>
-						<div className={styles.actionMenu} role="menu" aria-label={ts("effects.frameStyle")}>
-							{RECORDING_FRAMES.map((frame) => (
-								<button
-									type="button"
-									role="menuitem"
-									key={frame}
-									className={`${styles.actionMenuRow}${
-										frame === settings.frame ? ` ${styles.isActive}` : ""
-									}`}
-									onClick={() => {
-										setFrameMenuOpen(false);
-										void set({ frame });
-									}}
-								>
-									<span className={styles.actionMenuMain}>
-										{ts(RECORDING_FRAME_LABEL_KEYS[frame])}
-									</span>
-								</button>
-							))}
-						</div>
-					</PopoverContent>
-				</Popover>
+				<ChoiceRow<RecordingFrame>
+					label={ts("effects.frameStyle")}
+					tiles
+					options={RECORDING_FRAMES.map((frame) => {
+						const Icon = RECORDING_FRAME_ICONS[frame];
+						return {
+							value: frame,
+							label: ts(RECORDING_FRAME_LABEL_KEYS[frame]),
+							icon: <Icon size={20} aria-hidden="true" />,
+						};
+					})}
+					value={settings.frame}
+					disabled={!hasDocument}
+					onChange={(frame) => void set({ frame })}
+				/>
 			</div>
 			{/* The theme rides WITH the frame: it only exists once there is a body to colour, so it
 			    appears next to the frame it recolours rather than sitting there inert. */}
 			{settings.frame !== "none" ? (
-				<div className={styles.paneRow}>
-					<span className={styles.label} title={ts("effects.frameThemeHelp")}>
+				<div className={`${styles.field} ${styles.fieldStack}`}>
+					<span className={styles.fieldLabel} title={ts("effects.frameThemeHelp")}>
 						{ts("effects.frameTheme")}
 					</span>
-					<Popover open={themeMenuOpen} onOpenChange={setThemeMenuOpen}>
-						<PopoverTrigger asChild>
-							<button
-								type="button"
-								className={styles.rowAction}
-								disabled={!hasDocument}
-								aria-label={ts("effects.frameTheme")}
-								title={ts("effects.frameThemeHelp")}
-							>
-								{ts(FRAME_THEME_LABEL_KEYS[settings.frameTheme])}
-								<ChevronDown size={11} />
-							</button>
-						</PopoverTrigger>
-						<PopoverContent
-							align="end"
-							sideOffset={6}
-							collisionPadding={12}
-							animated={false}
-							className="w-auto border-0 bg-transparent p-0 shadow-none"
-						>
-							<div className={styles.actionMenu} role="menu" aria-label={ts("effects.frameTheme")}>
-								{FRAME_THEMES.map((frameTheme) => (
-									<button
-										type="button"
-										role="menuitem"
-										key={frameTheme}
-										className={`${styles.actionMenuRow}${
-											frameTheme === settings.frameTheme ? ` ${styles.isActive}` : ""
-										}`}
-										onClick={() => {
-											setThemeMenuOpen(false);
-											void set({ frameTheme });
-										}}
-									>
-										<span className={styles.actionMenuMain}>
-											{ts(FRAME_THEME_LABEL_KEYS[frameTheme])}
-										</span>
-									</button>
-								))}
-							</div>
-						</PopoverContent>
-					</Popover>
+					<ChoiceRow<FrameTheme>
+						label={ts("effects.frameTheme")}
+						options={FRAME_THEMES.map((frameTheme) => ({
+							value: frameTheme,
+							label: ts(FRAME_THEME_LABEL_KEYS[frameTheme]),
+						}))}
+						value={settings.frameTheme}
+						disabled={!hasDocument}
+						onChange={(frameTheme) => void set({ frameTheme })}
+					/>
 				</div>
 			) : null}
 			{namedLevelRow(

@@ -374,8 +374,6 @@
 		"camera": {
 			"title": "3Dカメラ",
 			"off": "オフ",
-			"fixed": "固定アングル",
-			"moving": "動くカメラ",
 			"preset": {
 				"left": "画面を左向きに",
 				"right": "画面を右向きに",

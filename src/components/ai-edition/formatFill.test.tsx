@@ -3,7 +3,7 @@
 // why when it cannot act, and writes the project setting the scene reads.
 
 import "@testing-library/jest-dom";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
@@ -85,15 +85,17 @@ describe("format fill", () => {
 	});
 
 	it("fills a format picked from now on, and leaves an earlier project whole", async () => {
+		const pickFormat = (ratio: string) =>
+			fireEvent.click(
+				within(screen.getByRole("group", { name: "Format" })).getByRole("button", { name: ratio }),
+			);
 		mount(hdTake({ aspectRatio: "16:9" }));
-		fireEvent.click(screen.getByRole("button", { name: "Format" }));
-		fireEvent.click(await screen.findByRole("menuitem", { name: "9:16" }));
+		pickFormat("9:16");
 		await waitFor(() => expect(stored()).toBe(true));
 		cleanup();
 
 		mount(hdTake({ aspectRatio: "16:9", formatFollowCursor: false }));
-		fireEvent.click(screen.getByRole("button", { name: "Format" }));
-		fireEvent.click(await screen.findByRole("menuitem", { name: "9:16" }));
+		pickFormat("9:16");
 		await waitFor(() =>
 			expect(
 				(useProjectStore.getState().document?.legacyEditor as Record<string, unknown>).aspectRatio,

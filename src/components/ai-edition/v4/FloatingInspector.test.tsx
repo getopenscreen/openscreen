@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 
@@ -8,9 +8,10 @@ vi.mock("@/contexts/I18nContext", () => ({
 	useScopedT: (scope: string) => (key: string) => `${scope}.${key}`,
 }));
 
-vi.mock("../RightPanes", () => ({
+vi.mock("../RightPanes", async (importOriginal) => ({
 	AudioPane: () => <div data-testid="audio-pane">AudioPane</div>,
-	ChoiceRow: () => <div data-testid="choice-row">ChoiceRow</div>,
+	// The real row: the zoom pane's choices are read and pressed below.
+	ChoiceRow: (await importOriginal<typeof import("../RightPanes")>()).ChoiceRow,
 	AudioTrackPane: ({ onClose }: { onClose?: () => void }) => (
 		<div data-testid="audio-track-pane">
 			AudioTrackPane
@@ -49,7 +50,7 @@ vi.mock("../RightPanes", () => ({
 	VideoEffectsPane: () => <div data-testid="effects-pane">VideoEffectsPane</div>,
 }));
 
-const editorSettings = vi.hoisted(() => ({ cursorShow: true }));
+const editorSettings = vi.hoisted(() => ({ cursorShow: true, autoFocusAll: false }));
 vi.mock("@/lib/ai-edition/store/useEditorSettings", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/ai-edition/store/useEditorSettings")>();
 	return {
@@ -57,7 +58,7 @@ vi.mock("@/lib/ai-edition/store/useEditorSettings", async (importOriginal) => {
 			const result = actual.useEditorSettings();
 			return {
 				...result,
-				settings: { ...result.settings, cursorShow: editorSettings.cursorShow },
+				settings: { ...result.settings, ...editorSettings },
 			};
 		},
 	};
@@ -172,7 +173,7 @@ describe("FloatingInspector", () => {
 		});
 	});
 
-	describe("3D camera select", () => {
+	describe("zoom pane rows", () => {
 		const zoomTl = (region: Record<string, unknown>) => {
 			const updateZoomRotation = vi.fn();
 			const tl = {
@@ -185,49 +186,87 @@ describe("FloatingInspector", () => {
 			} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"];
 			return { tl, updateZoomRotation };
 		};
+		const cameraButtons = () =>
+			within(screen.getByRole("group", { name: "settings.zoom.camera.title" })).getAllByRole(
+				"button",
+			);
 
 		afterEach(() => {
 			useProjectStore.setState({ document: null });
 		});
 
-		it("is the only 3D select, off by default", () => {
+		it("is one row, off by default, its label naming the pick the tiles only draw", () => {
 			const { tl } = zoomTl({});
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const select = screen.getByRole("combobox", { name: "settings.zoom.camera.title" });
-			expect(select).toHaveValue("off");
-			expect(screen.queryByRole("combobox", { name: /cameraMotion|threeD/ })).toBeNull();
+			const off = screen.getByRole("button", { name: "settings.zoom.camera.off" });
+			expect(off).toHaveAttribute("aria-pressed", "true");
+			expect(screen.getByText("settings.zoom.camera.off")).toBeInTheDocument();
+			expect(screen.queryByRole("group", { name: /cameraMotion|threeD/ })).toBeNull();
 		});
 
-		it("groups the fixed angles apart from the moving cameras", () => {
+		it("lists off, then the fixed angles, then the moving camera", () => {
 			const { tl } = zoomTl({});
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const select = screen.getByRole("combobox", { name: "settings.zoom.camera.title" });
-			const groups = [...select.querySelectorAll("optgroup")].map((g) => [
-				g.label,
-				[...g.querySelectorAll("option")].map((o) => o.value),
-			]);
-			expect(groups).toEqual([
-				["settings.zoom.camera.fixed", ["left", "right"]],
-				["settings.zoom.camera.moving", ["follow-cursor"]],
+			expect(cameraButtons().map((b) => b.getAttribute("aria-label"))).toEqual([
+				"settings.zoom.camera.off",
+				"settings.zoom.camera.preset.left",
+				"settings.zoom.camera.preset.right",
+				"settings.zoom.camera.preset.followCursor",
 			]);
 		});
 
 		it("writes the camera into rotationPreset, and off by absence", () => {
 			const { tl, updateZoomRotation } = zoomTl({ rotationPreset: "follow-cursor" });
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const select = screen.getByRole("combobox", { name: "settings.zoom.camera.title" });
-			expect(select).toHaveValue("follow-cursor");
-			fireEvent.change(select, { target: { value: "left" } });
+			expect(
+				screen.getByRole("button", { name: "settings.zoom.camera.preset.followCursor" }),
+			).toHaveAttribute("aria-pressed", "true");
+			fireEvent.click(screen.getByRole("button", { name: "settings.zoom.camera.preset.left" }));
 			expect(updateZoomRotation).toHaveBeenCalledWith("z", "left");
-			fireEvent.change(select, { target: { value: "off" } });
+			fireEvent.click(screen.getByRole("button", { name: "settings.zoom.camera.off" }));
 			expect(updateZoomRotation).toHaveBeenLastCalledWith("z", undefined);
+		});
+
+		it("picks the focus mode and the cursor with one click each", () => {
+			const updateZoomFocusMode = vi.fn();
+			const updateZoomHideCursor = vi.fn();
+			const { tl } = zoomTl({});
+			render(
+				<FloatingInspector
+					{...defaultProps}
+					tl={{ ...tl, updateZoomFocusMode, updateZoomHideCursor }}
+				/>,
+			);
+			expect(
+				screen.getByRole("button", { name: "settings.zoom.focusMode.manual" }),
+			).toHaveAttribute("aria-pressed", "true");
+			fireEvent.click(screen.getByRole("button", { name: "settings.zoom.focusMode.auto" }));
+			expect(updateZoomFocusMode).toHaveBeenCalledWith("z", "auto");
+			fireEvent.click(screen.getByRole("button", { name: "settings.zoom.cursor.hide" }));
+			expect(updateZoomHideCursor).toHaveBeenCalledWith("z", true);
+		});
+
+		it("locks the focus mode on Auto while the timeline's Auto-Focus holds it, and says why", () => {
+			editorSettings.autoFocusAll = true;
+			try {
+				const { tl } = zoomTl({ focusMode: "manual" });
+				render(<FloatingInspector {...defaultProps} tl={tl} />);
+				const row = screen.getByRole("group", { name: "settings.zoom.focusMode.title" });
+				expect(
+					within(row).getByRole("button", { name: "settings.zoom.focusMode.auto" }),
+				).toHaveAttribute("aria-pressed", "true");
+				for (const button of within(row).getAllByRole("button")) expect(button).toBeDisabled();
+				expect(row).toHaveAccessibleDescription("settings.zoom.focusMode.lockedDisclaimer");
+			} finally {
+				editorSettings.autoFocusAll = false;
+			}
 		});
 
 		it("offers no cursor-driven camera while the cursor is hidden, unless already picked", () => {
 			editorSettings.cursorShow = false;
 			try {
 				const moving = () =>
-					screen.queryByRole("option", { name: "settings.zoom.camera.preset.followCursor" });
+					screen.queryByRole("button", { name: "settings.zoom.camera.preset.followCursor" });
 				const { tl } = zoomTl({});
 				const { unmount } = render(<FloatingInspector {...defaultProps} tl={tl} />);
 				expect(moving()).toBeNull();

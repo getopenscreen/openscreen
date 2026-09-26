@@ -665,14 +665,31 @@ export function AnnotationSizeField({
 }) {
 	// "" means the field is idle and shows the live size as its placeholder.
 	const [draft, setDraft] = useState("");
-	const commitDraft = () => {
-		const text = draft.trim().replace(",", ".");
-		setDraft("");
+	/** The committed size a draft reads as, or null when it names none. */
+	const sizeOf = (text: string) => {
+		const typed = text.trim().replace(",", ".");
 		// Empty or unparseable reverts to the live size rather than guessing at an intent.
-		if (text === "" || !Number.isFinite(Number(text))) return;
-		const next = Math.round(clampToBound(Number(text), "annotationFontSize"));
-		if (next !== size) onCommit(next);
+		if (typed === "" || !Number.isFinite(Number(typed))) return null;
+		return Math.round(clampToBound(Number(typed), "annotationFontSize"));
 	};
+	const commitDraft = () => {
+		const next = sizeOf(draft);
+		setDraft("");
+		if (next !== null && next !== size) onCommit(next);
+	};
+	// A click on the timeline clears the selection on pointerdown, which unmounts this field
+	// before its blur can fire. A size typed and never blurred is committed on the way out.
+	const pendingRef = useRef({ draft, size, onCommit });
+	pendingRef.current = { draft, size, onCommit };
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs once, on unmount; the ref carries the latest draft.
+	useEffect(
+		() => () => {
+			const { draft: left, size: live, onCommit: commit } = pendingRef.current;
+			const next = sizeOf(left);
+			if (next !== null && next !== live) commit(next);
+		},
+		[],
+	);
 	return (
 		<input
 			type="text"

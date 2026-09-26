@@ -779,30 +779,39 @@ function TranscriptLaneSwitch({
  * input, no OS dialog. That is the trap `useWallpaperFileInput` documents above, and
  * it is worth re-checking if a picker is ever added to captions.
  */
-function CaptionSettingsButton() {
+function CaptionSettingsButton({ onShowCaptions }: { onShowCaptions?: () => void }) {
 	const ts = useScopedT("settings");
 	const [open, setOpen] = useState(false);
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger asChild>
-				<button type="button" className={styles.paneHeadBtn} aria-expanded={open}>
-					<CaptionsIcon size={14} />
-					{ts("facets.captions")}
+		<>
+			{/* Captions are off by default: once there is speech to caption, offer them where
+			    the transcript is, rather than leaving them behind the settings popover. */}
+			{onShowCaptions ? (
+				<button type="button" className={styles.paneHeadBtn} onClick={onShowCaptions}>
+					{ts("captions.turnOn")}
 				</button>
-			</PopoverTrigger>
-			<PopoverContent
-				align="end"
-				side="bottom"
-				sideOffset={8}
-				collisionPadding={16}
-				animated={false}
-				className="w-auto border-0 bg-transparent p-0 shadow-none z-50"
-			>
-				<div className={styles.captionsPopover}>
-					<CaptionsPane onClose={() => setOpen(false)} />
-				</div>
-			</PopoverContent>
-		</Popover>
+			) : null}
+			<Popover open={open} onOpenChange={setOpen}>
+				<PopoverTrigger asChild>
+					<button type="button" className={styles.paneHeadBtn} aria-expanded={open}>
+						<CaptionsIcon size={14} />
+						{ts("facets.captions")}
+					</button>
+				</PopoverTrigger>
+				<PopoverContent
+					align="end"
+					side="bottom"
+					sideOffset={8}
+					collisionPadding={16}
+					animated={false}
+					className="w-auto border-0 bg-transparent p-0 shadow-none z-50"
+				>
+					<div className={styles.captionsPopover}>
+						<CaptionsPane onClose={() => setOpen(false)} />
+					</div>
+				</PopoverContent>
+			</Popover>
+		</>
 	);
 }
 
@@ -992,12 +1001,21 @@ export function TranscriptPane({
 		);
 	}
 
+	const hasSpeech = sections.some((section) => (section.transcript?.segments.length ?? 0) > 0);
 	return (
 		<Pane
 			title={ts("transcript.title")}
 			icon={<FileText size={16} />}
 			helpText={helpText}
-			actions={<CaptionSettingsButton />}
+			actions={
+				<CaptionSettingsButton
+					onShowCaptions={
+						hasSpeech && !captionSettings.enabled
+							? () => void setCaptionSettings({ enabled: true })
+							: undefined
+					}
+				/>
+			}
 		>
 			{laneSwitch}
 			{/* The gestures are invisible until tried: nothing on a plain word stream says

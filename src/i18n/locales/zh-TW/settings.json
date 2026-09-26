@@ -240,7 +240,16 @@
 		"font": "字型",
 		"translating": "翻譯中…",
 		"show": "顯示字幕",
-		"textColor": "文字顏色"
+		"textColor": "文字顏色",
+		"style": "樣式",
+		"styles": {
+			"classic": "經典",
+			"bold": "粗體",
+			"minimal": "簡約",
+			"light": "淺色"
+		},
+		"customize": "自訂",
+		"turnOn": "顯示字幕"
 	},
 	"panes": {
 		"help": "說明"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "刪除剪輯區域"
+	},
+	"textPlate": {
+		"none": "無",
+		"dark": "深色",
+		"light": "淺色",
+		"custom": "自訂"
 	}
 }

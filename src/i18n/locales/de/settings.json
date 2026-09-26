@@ -240,7 +240,16 @@
 		"font": "Schrift",
 		"translating": "Übersetzung läuft…",
 		"show": "Untertitel anzeigen",
-		"textColor": "Textfarbe"
+		"textColor": "Textfarbe",
+		"style": "Stil",
+		"styles": {
+			"classic": "Klassisch",
+			"bold": "Fett",
+			"minimal": "Minimal",
+			"light": "Hell"
+		},
+		"customize": "Anpassen",
+		"turnOn": "Untertitel anzeigen"
 	},
 	"panes": {
 		"help": "Hilfe"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Trim-Bereich löschen"
+	},
+	"textPlate": {
+		"none": "Keine",
+		"dark": "Dunkel",
+		"light": "Hell",
+		"custom": "Eigene"
 	}
 }

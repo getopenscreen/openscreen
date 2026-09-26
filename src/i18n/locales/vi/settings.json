@@ -240,7 +240,16 @@
 		"font": "Phông chữ",
 		"translating": "Đang dịch…",
 		"show": "Hiện phụ đề",
-		"textColor": "Màu chữ"
+		"textColor": "Màu chữ",
+		"style": "Kiểu",
+		"styles": {
+			"classic": "Cổ điển",
+			"bold": "Đậm",
+			"minimal": "Tối giản",
+			"light": "Sáng"
+		},
+		"customize": "Tùy chỉnh",
+		"turnOn": "Hiện phụ đề"
 	},
 	"panes": {
 		"help": "Trợ giúp"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Xóa vùng cắt"
+	},
+	"textPlate": {
+		"none": "Không",
+		"dark": "Tối",
+		"light": "Sáng",
+		"custom": "Tùy chỉnh"
 	}
 }

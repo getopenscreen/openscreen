@@ -12,10 +12,21 @@
 import { Captions as CaptionsIcon, Languages, Loader2, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
-import type { CaptionAnchorH, CaptionAnchorV } from "@/lib/ai-edition/captions";
+import type {
+	CaptionAnchorH,
+	CaptionAnchorV,
+	CaptionPlate,
+	CaptionStyleId,
+} from "@/lib/ai-edition/captions";
 import {
 	CAPTION_INSET_X_MAX,
 	CAPTION_INSET_Y_MAX,
+	CAPTION_PLATE_OPACITY_MAX,
+	CAPTION_PLATE_OPACITY_MIN,
+	CAPTION_STYLES,
+	captionPlateOf,
+	captionPlatePatch,
+	captionStyleOf,
 	DEFAULT_CAPTION_SETTINGS,
 	untranslatedUnits,
 } from "@/lib/ai-edition/captions";
@@ -32,9 +43,9 @@ import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
 import { TEXT_FONT_FAMILIES } from "@/lib/textFonts";
 import { nativeBridgeClient } from "@/native";
-import { ColorField } from "./ColorField";
 import styles from "./NewEditorShell.module.css";
-import { SliderCell, Toggle } from "./RightPanes";
+import { ChoiceRow, SliderCell, Toggle } from "./RightPanes";
+import { TextColorField } from "./TextColorField";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
 
@@ -113,6 +124,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 	);
 
 	const disabled = !hasDocument;
+	const plate = captionPlateOf(settings);
 	const languageOptions = useMemo(() => Object.values(translations), [translations]);
 
 	const handleTranslate = async () => {
@@ -323,6 +335,26 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 					</div>
 				) : null}
 
+				{/* ── Style ──────────────────────────────────────────────── */}
+				{/* Named looks first: each sets font, size, colour and plate together, and is a
+				    readable pair by construction. Tuning anything below leaves none selected. */}
+				<div className={styles.sectionLabel}>{t("captions.style")}</div>
+				<div style={{ margin: "0 var(--sp-4) 12px" }}>
+					<ChoiceRow<CaptionStyleId | "custom">
+						label={t("captions.style")}
+						disabled={disabled}
+						columns={2}
+						options={CAPTION_STYLE_IDS.map((id) => ({
+							value: id,
+							label: t(`captions.styles.${id}`),
+						}))}
+						value={captionStyleOf(settings) ?? "custom"}
+						onChange={(id) => {
+							if (id !== "custom") void set(CAPTION_STYLES[id]);
+						}}
+					/>
+				</div>
+
 				{/* ── Language ───────────────────────────────────────────── */}
 				<div className={styles.sectionLabel}>{t("captions.language")}</div>
 				<div className={styles.paneRow}>
@@ -407,94 +439,103 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 					{t("captions.translationIsNonDestructive")}
 				</p>
 
-				{/* ── Text ───────────────────────────────────────────────── */}
-				<div className={styles.sectionLabel}>{t("captions.text")}</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.font")}</span>
-					<select
-						value={settings.fontFamily}
-						disabled={disabled}
-						onChange={(e) => void set({ fontFamily: e.target.value })}
-						style={selectStyle}
-					>
-						{/* Only the families the compositor ships: it never reads the machine's
+				{/* ── Customise ─────────────────────────────────────────── */}
+				{/* The detailed look controls, folded behind the named styles above: still one
+				    click away, never the first thing to read. */}
+				<details>
+					<summary className={styles.sectionLabel} style={{ cursor: "pointer" }}>
+						{t("captions.customize")}
+					</summary>
+					<div className={styles.sectionLabel}>{t("captions.text")}</div>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{t("captions.font")}</span>
+						<select
+							value={settings.fontFamily}
+							disabled={disabled}
+							onChange={(e) => void set({ fontFamily: e.target.value })}
+							style={selectStyle}
+						>
+							{/* Only the families the compositor ships: it never reads the machine's
 						    installed fonts, so any other name would draw a fallback. */}
-						{TEXT_FONT_FAMILIES.map((font) => (
-							<option key={font} value={font} style={{ fontFamily: font }}>
-								{font}
-							</option>
-						))}
-					</select>
-				</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.bold")}</span>
-					<Toggle
-						checked={settings.fontWeight === "bold"}
-						disabled={disabled}
-						onChange={(next) => void set({ fontWeight: next ? "bold" : "normal" })}
-					/>
-				</div>
-				<div className={styles.sliderGrid}>
-					<SliderCell
-						label={t("captions.fontSize")}
-						value={settings.fontSize}
-						min={16}
-						max={140}
-						defaultValue={DEFAULT_CAPTION_SETTINGS.fontSize}
-						suffix="px"
-						disabled={disabled}
-						onChange={(v) => setLive({ fontSize: v })}
-						onCommit={() => void commit()}
-					/>
-				</div>
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.textColor")}</span>
-					<ColorField
-						label={t("captions.textColor")}
-						value={settings.color}
-						disabled={disabled}
-						onChange={(color) => setLive({ color })}
-						onCommit={() => void commit()}
-					/>
-				</div>
-
-				{/* ── Background ─────────────────────────────────────────── */}
-				<div className={styles.sectionLabel}>{t("captions.background")}</div>
-				{/* Colour + switch on one row, exactly like the annotation pane's text
-				    background: the swatch keeps showing the remembered colour while the
-				    plate is off, because that is what turning it back on will draw. */}
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{t("captions.background")}</span>
-					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-						<ColorField
-							label={t("captions.backgroundColor")}
-							value={settings.backgroundColor}
-							disabled={disabled}
-							onChange={(backgroundColor) => setLive({ backgroundColor })}
-							onCommit={() => void commit()}
-						/>
+							{TEXT_FONT_FAMILIES.map((font) => (
+								<option key={font} value={font} style={{ fontFamily: font }}>
+									{font}
+								</option>
+							))}
+						</select>
+					</div>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{t("captions.bold")}</span>
 						<Toggle
-							checked={settings.backgroundEnabled}
+							checked={settings.fontWeight === "bold"}
 							disabled={disabled}
-							onChange={(next) => void set({ backgroundEnabled: next })}
+							onChange={(next) => void set({ fontWeight: next ? "bold" : "normal" })}
 						/>
 					</div>
-				</div>
-				{settings.backgroundEnabled ? (
 					<div className={styles.sliderGrid}>
 						<SliderCell
-							label={t("captions.backgroundOpacity")}
-							value={Math.round(settings.backgroundOpacity * 100)}
-							min={0}
-							max={100}
-							defaultValue={Math.round(DEFAULT_CAPTION_SETTINGS.backgroundOpacity * 100)}
-							suffix="%"
+							label={t("captions.fontSize")}
+							value={settings.fontSize}
+							min={16}
+							max={140}
+							defaultValue={DEFAULT_CAPTION_SETTINGS.fontSize}
+							suffix="px"
 							disabled={disabled}
-							onChange={(v) => setLive({ backgroundOpacity: v / 100 })}
+							onChange={(v) => setLive({ fontSize: v })}
 							onCommit={() => void commit()}
 						/>
 					</div>
-				) : null}
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{t("captions.textColor")}</span>
+						<TextColorField
+							label={t("captions.textColor")}
+							value={settings.color}
+							plate={settings.backgroundEnabled ? settings.backgroundColor : "transparent"}
+							disabled={disabled}
+							onChange={(color) => setLive({ color })}
+							onCommit={() => void commit()}
+						/>
+					</div>
+
+					{/* ── Background ─────────────────────────────────────────── */}
+					{/* Named plates, like the annotation pane's: the plate choice alone turns it on
+				    or off, and choosing one moves text that would vanish on it. An older free
+				    colour stays shown while the project carries it. */}
+					<div className={styles.sectionLabel}>{t("captions.background")}</div>
+					<div style={{ margin: "0 var(--sp-4) 10px" }}>
+						<ChoiceRow<CaptionPlate | "custom">
+							label={t("captions.background")}
+							disabled={disabled}
+							options={[
+								{ value: "none", label: t("textPlate.none") },
+								{ value: "dark", label: t("textPlate.dark") },
+								{ value: "light", label: t("textPlate.light") },
+								...(plate === "custom"
+									? [{ value: "custom" as const, label: t("textPlate.custom") }]
+									: []),
+							]}
+							value={plate}
+							onChange={(next) => {
+								if (next !== "custom") void set(captionPlatePatch(settings, next));
+							}}
+						/>
+					</div>
+					{settings.backgroundEnabled ? (
+						<div className={styles.sliderGrid}>
+							<SliderCell
+								label={t("captions.backgroundOpacity")}
+								value={Math.round(settings.backgroundOpacity * 100)}
+								min={CAPTION_PLATE_OPACITY_MIN * 100}
+								max={CAPTION_PLATE_OPACITY_MAX * 100}
+								defaultValue={Math.round(DEFAULT_CAPTION_SETTINGS.backgroundOpacity * 100)}
+								suffix="%"
+								disabled={disabled}
+								onChange={(v) => setLive({ backgroundOpacity: v / 100 })}
+								onCommit={() => void commit()}
+							/>
+						</div>
+					) : null}
+				</details>
 
 				{/* ── Placement ──────────────────────────────────────────── */}
 				{/* One control per axis, each naming the edge it measures from. The old pane
@@ -619,6 +660,8 @@ const WORD_COUNTS = Array.from(
 	{ length: CAPTION_WORDS_PER_LINE_MAX - CAPTION_WORDS_PER_LINE_MIN + 1 },
 	(_, i) => i + CAPTION_WORDS_PER_LINE_MIN,
 );
+
+const CAPTION_STYLE_IDS = Object.keys(CAPTION_STYLES) as CaptionStyleId[];
 
 const selectStyle: React.CSSProperties = {
 	height: 32,

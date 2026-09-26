@@ -2714,9 +2714,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let mut zoom_orbit = [0.5f32; 2];
         let (mut zoom_aim_prev, mut zoom_orbit_prev) = ([0.5f32; 2], [0.5f32; 2]);
         // Curseur masqué → pas de piste pour ce qui anime le plan (parallaxe, impact, caméra
-        // `follow-cursor`) : l'export ne charge la piste que si le curseur est affiché
-        // (`timeline_walk`), la preview toujours. Sans cette porte, la preview pencherait un
-        // plan que l'export laisse immobile.
+        // `follow-cursor`) : un plan ne bouge que sous un pointeur qu'on voit. Preview et export
+        // chargent la piste dans tous les cas (le focus auto la suit), cette porte fait le reste.
         let parallax_track = cursor_for_zoom.filter(|_| scene.is_some_and(|s| s.cursor.show));
         let active_crop = scene.and_then(|scene| {
             scene.crop_by_clip.get(scene.active_clip_index).copied().flatten()
@@ -2812,21 +2811,25 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             let (brx, bry) = (dst[0] + dst[2], dst[1] + dst[3]);
             [brx - nw, bry - nh, nw, nh]
         };
-        // Variantes ancrées au CENTRE (au lieu du coin bas-droite) de `dst`, pour le cas où
-        // `dst` vient de `app_webcam_rect` : ce rect est déjà la position que l'utilisateur a
-        // choisie/déplacée (résolue côté app via `computeCompositeLayout`, même convention
-        // centre-fraction que `cx`/`cy` dans `compositeLayout.ts`) — l'ancrer au coin bas-droite
-        // comme le fait `fit_cam_aspect` (pensé pour le placement par DÉFAUT, ancré à ce coin
-        // avec une marge fixe) réancre silencieusement la webcam glissée n'importe où d'autre à
-        // ce coin, ignorant la position réelle choisie par l'utilisateur — le bug rapporté
-        // (webcam glissée au coin bas-gauche, DOM/JSON envoyé au natif confirmant une position
-        // flush, mais rendu natif visiblement décalé). Le centre est le point fixe qui a un sens
-        // pour un rect DÉJÀ positionné par l'app ; le coin bas-droite n'a de sens que pour le
-        // placement par défaut, qui grandit depuis ce coin faute de position explicite.
-        let scale_center = |dst: [f32; 4], s: f32| -> [f32; 4] {
-            let (cx, cy) = (dst[0] + dst[2] * 0.5, dst[1] + dst[3] * 0.5);
+        // Variante ancrée à l'ANCRE de la caméra (au lieu du coin bas-droite) de `dst`, pour le cas
+        // où `dst` vient de `app_webcam_rect` : ce rect est déjà la position que l'utilisateur a
+        // choisie (résolue côté app via `computeCompositeLayout`) — l'ancrer au coin bas-droite
+        // comme le fait `fit_cam_aspect` (pensé pour le placement par DÉFAUT) réancrerait la
+        // webcam posée n'importe où d'autre à ce coin (bug rapporté : webcam au coin bas-gauche,
+        // rendu natif décalé).
+        //
+        // L'app pose la caméra à marge constante de son ancre (un coin ou un milieu de bord) :
+        // `x = marge + fx·(W − 2·marge − w)`, donc le point de la boîte à la fraction `fx` vaut
+        // `marge + fx·(W − 2·marge)` quelle que soit sa largeur. Rétrécir autour de ce point-là,
+        // c'est exactement la mise en page de l'app à la taille réduite : une caméra de coin garde
+        // sa marge aux deux bords, une caméra de milieu de bord reste centrée sur lui. Rétrécir
+        // vers son propre centre l'arrachait de son coin pendant chaque zoom. Sans ancre (vieux
+        // payload), le centre.
+        let anchor = scene.map(|s| s.layout.webcam_anchor_fractions()).unwrap_or([0.5, 0.5]);
+        let scale_anchored = |dst: [f32; 4], s: f32| -> [f32; 4] {
+            let (ax, ay) = (dst[0] + dst[2] * anchor[0], dst[1] + dst[3] * anchor[1]);
             let (nw, nh) = (dst[2] * s, dst[3] * s);
-            [cx - nw * 0.5, cy - nh * 0.5, nw, nh]
+            [ax - nw * anchor[0], ay - nh * anchor[1], nw, nh]
         };
         // Le ratio de sortie réel (peut différer du canvas interne 16:9 fixe) et le facteur
         // d'étirement non uniforme que `blit_resized` appliquera en fin de pipeline — nécessaires
@@ -3013,17 +3016,17 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // (`OUT_W`×`OUT_H`), une référence différente du vrai output dès que la sortie n'est pas
         // 16:9 (rapport utilisateur : webcam glissée au coin bas-gauche en 9:16, JSON envoyé au
         // natif confirmant une position flush, mais rendu native visiblement décalé ET trop
-        // petit). On garde seulement `scale_center` (zoom réactif, préserve position+aspect) puis
-        // on pré-compense par `inverse_undistort` pour annuler le `undistort()` générique
+        // petit). On garde seulement `scale_anchored` (zoom réactif, préserve l'ancre et l'aspect)
+        // puis on pré-compense par `inverse_undistort` pour annuler le `undistort()` générique
         // appliqué plus bas à tous les calques (écran compris) — sans quoi ce rect déjà correct
         // se ferait déformer une seconde fois par cet undistort partagé.
         let mut w_dst = if app_webcam_rect.is_some() {
-            scale_center(p.webcam.dst, webcam_size_scale)
+            scale_anchored(p.webcam.dst, webcam_size_scale)
         } else {
             fit_cam_aspect(scale_corner_br(p.webcam.dst, webcam_size_scale))
         };
         let mut w_dst_prev = if app_webcam_rect.is_some() {
-            scale_center(pp.webcam.dst, webcam_size_scale_prev)
+            scale_anchored(pp.webcam.dst, webcam_size_scale_prev)
         } else {
             fit_cam_aspect(scale_corner_br(pp.webcam.dst, webcam_size_scale_prev))
         };
@@ -3291,8 +3294,8 @@ pub fn cursor_plane_point(cut: [f32; 4], uv_max: [f32; 2], p: (f32, f32)) -> Opt
 /// multiplier encore par le poids des régions (`ZoomState::click_impact`) ; la porte du préset
 /// vient ensuite, dans `dynamic_tilt`.
 ///
-/// - curseur visible (`cursor_alpha`) : `cursor.show` explicite, parce que l'export ne charge la
-///   piste que si le curseur est affiché alors que la preview la charge toujours ;
+/// - curseur visible (`cursor_alpha`) : `cursor.show` explicite, la piste étant chargée même
+///   curseur masqué (le focus auto la suit) ;
 /// - clics dans la fenêtre source du clip actif seulement (cf. `click_impact`) ;
 /// - vitesse : poids `clamp(2 − vitesse, 0, 1)`. À 100× une frame couvre 3,3 s de source, la
 ///   courbe serait échantillonnée une fois, au hasard : une secousse d'une frame ;
@@ -5886,6 +5889,35 @@ mod tests {
         // Sans mouvement, les deux quads coïncident au bit près.
         let still = cb(None, Some(TiltTrail { corners: quad.corners, mb: [6.0, 0.35] }));
         assert_eq!((still.trail_a, still.trail_b), (still.fx, still.src_prev));
+    }
+
+    /// Le zoom réactif rétrécit la caméra vers son ANCRE : une caméra de coin garde sa marge aux
+    /// deux bords, une caméra de milieu de bord reste centrée sur lui. Sans ancre, le centre.
+    #[test]
+    fn the_reactive_zoom_shrinks_the_camera_toward_its_anchor() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        // Caméra de 0,2 de côté posée par l'app, marge 0,03 ; zoom ×2 à 1,5 s → échelle 0,5.
+        let camera_at = |anchor: Option<&str>, x: f32, y: f32| {
+            let anchor = anchor.map(|a| format!(r#","webcamAnchor":"{a}""#)).unwrap_or_default();
+            let layout = format!(
+                r#""webcamReactiveZoom":true{anchor},"webcamRect":{{"x":{x},"y":{y},"width":0.2,"height":0.2}}}}"#
+            );
+            let json = zoomed_golden_scene_json().replace(r#""webcamReactiveZoom":false}"#, &layout);
+            let scene = Scene::from_json(&json).expect("scène");
+            plan_frame(&golden_input(&scene, &cfg)).w_dst
+        };
+        for (anchor, x, y, want) in [
+            (Some("bottom-right"), 0.77, 0.77, [0.87, 0.87]),
+            (Some("top-left"), 0.03, 0.03, [0.03, 0.03]),
+            (Some("bottom"), 0.4, 0.77, [0.45, 0.87]),
+            (Some("left"), 0.03, 0.4, [0.03, 0.45]),
+            (None, 0.77, 0.77, [0.82, 0.82]),
+        ] {
+            let w = camera_at(anchor, x, y);
+            let got = [w[0], w[1], w[2], w[3]];
+            let want = [want[0], want[1], 0.1, 0.1];
+            assert!(got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-5), "{anchor:?} : {got:?} au lieu de {want:?}");
+        }
     }
 
     /// La vitesse se mesure dans la coupe VISIBLE, zoom compris : sous un x2, le même geste

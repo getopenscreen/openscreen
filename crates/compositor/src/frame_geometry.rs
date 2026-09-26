@@ -1586,7 +1586,12 @@ pub fn gradient_layer(stops: &[String], offsets: &[f32], fallback: [f32; 4]) -> 
         };
         let at = if raw.is_finite() { raw.clamp(0.0, 1.0) } else { floor }.max(floor);
         floor = at;
-        knots.push([c[0], c[1], c[2], at]);
+        // Un stop translucide (le preset v1.5 `rgba(235,230,44,0.55)` vit dans des projets
+        // enregistrés) est prémultiplié : le fond est la couche du dessous, posée sur le clear
+        // noir, donc honorer son alpha revient exactement à `rgb · a`. CSS interpole aussi en
+        // prémultiplié, d'où la rampe juste entre deux stops d'alphas différents. Le nœud n'a
+        // pas de place pour l'alpha (w = position), et le shader rend le mode 5 opaque.
+        knots.push([c[0] * c[3], c[1] * c[3], c[2] * c[3], at]);
     }
     if knots.is_empty() {
         knots.push([fallback[0], fallback[1], fallback[2], 0.0]);
@@ -6254,6 +6259,18 @@ mod tests {
         assert_eq!(k[1], [0.0, 1.0, 0.0, 0.5]);
         assert_eq!(k[2], [0.0, 0.0, 1.0, 1.0]);
         assert_eq!(k[3], [0.0, 0.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn gradient_layer_premultiplies_a_translucent_stop() {
+        // Un stop à alpha 0 ne peint rien : le noir du dessous, pas un rouge opaque.
+        let stops = ["rgba(255, 0, 0, 0)", "rgba(0, 0, 255, 0.5)"].map(String::from);
+        let k = knots(&gradient_layer(&stops, &[0.0, 1.0], BLACK_TEST));
+        assert_eq!(k[0], [0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(k[1], [0.0, 0.0, 0.5, 1.0]);
+        // Opaque : inchangé.
+        let k = knots(&gradient_layer(&["#ff0000".into()], &[0.0], BLACK_TEST));
+        assert_eq!(k[0], [1.0, 0.0, 0.0, 0.0]);
     }
 
     #[test]

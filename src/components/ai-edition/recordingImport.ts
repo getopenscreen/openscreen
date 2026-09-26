@@ -75,6 +75,8 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
 	saveTimeoutMs?: number;
 	/** Deadline for waiting on writes somebody else started. Tests shorten it. */
 	waitTimeoutMs?: number;
+	/** Deadline for the auto-zoom preference read. Tests shorten it. */
+	prefsTimeoutMs?: number;
 };
 
 /**
@@ -84,11 +86,23 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
  *
  * An unreachable or throwing bridge reads as ON, which is what every installation did
  * before the preference existed — a failed IPC call must not silently turn a feature off.
+ *
+ * Bounded for the same reason the write below is: this runs inside
+ * `freshRecordingAutoZoomSaveChain`, which `runLoadedMetadataWrite` awaits, so a main
+ * process that accepts the invoke and never answers would hold that queue slot — and
+ * every metadata write behind it — for the life of the renderer. `invoke` rejects on a
+ * throwing handler but never on a silent one, so the `catch` above cannot cover this.
+ * A deadline that expires says only "no answer yet", which reads as ON like every other
+ * unreadable answer.
  */
-async function readAutoZoomPref(): Promise<boolean> {
+async function readAutoZoomPref(timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS): Promise<boolean> {
 	try {
-		const prefs = await window.electronAPI?.getRecordingPrefs?.();
-		return prefs?.autoZoomEnabled !== false;
+		const read = (async () => {
+			const prefs = await window.electronAPI?.getRecordingPrefs?.();
+			return prefs?.autoZoomEnabled !== false;
+		})();
+		const settled = await saveWithDeadline(read, timeoutMs);
+		return settled === "timeout" ? true : settled;
 	} catch {
 		return true;
 	}
@@ -160,7 +174,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 		clearFreshRecordingAutoZoomPending();
 		return document;
 	}
-	const enabled = deps.enabled ?? (await readAutoZoomPref());
+	const enabled = deps.enabled ?? (await readAutoZoomPref(deps.prefsTimeoutMs));
 	if (!enabled) {
 		clearFreshRecordingAutoZoomPending();
 		return liveDocument(document);

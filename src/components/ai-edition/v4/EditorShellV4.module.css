@@ -956,6 +956,19 @@
 	   dropdown can't push the On/Off toggle off the panel edge (issue #624). */
 	min-width: 0;
 }
+/* A row that has to explain itself wraps its reason onto a second line. Only the
+   auto-zoom row does this today, and only while the system cursor is selected. */
+.recRowWithHint {
+	flex-wrap: wrap;
+	row-gap: 6px;
+}
+.recRowHint {
+	flex-basis: 100%;
+	margin: 0;
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.4;
+}
 .recRowMuted {
 	display: inline-flex;
 	align-items: center;

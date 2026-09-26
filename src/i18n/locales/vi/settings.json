@@ -267,7 +267,7 @@
 		"remove": "Xóa bản nhạc",
 		"loop": "Lặp",
 		"slipHint": "Giữ Alt và kéo để trượt âm thanh bên trong",
-		"help": "Âm lượng, fade và lặp của rãnh âm thanh này. Nó được trộn lên trên bản ghi trong xem trước và khi xuất. Kéo rãnh trên dòng thời gian để di chuyển hoặc đổi kích thước, hoặc giữ Alt và kéo để trượt âm thanh bên trong.",
+		"help": "Âm lượng, fade và lặp của rãnh âm thanh này. Nó được trộn lên trên bản ghi trong xem trước và khi xuất. Rãnh nhạc tự động nhỏ lại khi có người nói. Kéo rãnh trên dòng thời gian để di chuyển hoặc đổi kích thước, hoặc giữ Alt và kéo để trượt âm thanh bên trong.",
 		"add": "Thêm bản âm thanh",
 		"mute": "Tắt tiếng"
 	},

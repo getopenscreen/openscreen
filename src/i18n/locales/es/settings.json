@@ -267,7 +267,7 @@
 		"remove": "Eliminar pista",
 		"loop": "Bucle",
 		"slipHint": "Alt + arrastrar para desplazar el audio dentro",
-		"help": "Volumen, fundidos y bucle de esta pista de audio. Se mezcla sobre la grabación en la vista previa y en la exportación. Arrastra la pista en la línea de tiempo para moverla o redimensionarla, o mantén Alt y arrastra para desplazar el audio dentro.",
+		"help": "Volumen, fundidos y bucle de esta pista de audio. Se mezcla sobre la grabación en la vista previa y en la exportación. Una pista de música baja sola mientras alguien habla. Arrastra la pista en la línea de tiempo para moverla o redimensionarla, o mantén Alt y arrastra para desplazar el audio dentro.",
 		"add": "Añadir pista de audio",
 		"mute": "Silenciar"
 	},

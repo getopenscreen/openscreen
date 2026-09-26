@@ -64,7 +64,7 @@ describe("AudioTrackPane reset button", () => {
 		expect(setAudioTrackGain).toHaveBeenCalledWith("audio_track_1", -24);
 	});
 
-	it("resets all track parameters (gain, fades, mute, loop) on reset click", () => {
+	it("resets a music bed to the level a new bed starts at, under the voice", () => {
 		const updateAudioTrack = vi.fn();
 		const mockTrack: AxcutAudioTrack = {
 			id: "audio_track_1",
@@ -122,11 +122,13 @@ describe("AudioTrackPane reset button", () => {
 		const resetBtn = screen.getByRole("button", { name: /reset/i });
 		fireEvent.click(resetBtn);
 
+		// Not 0 dB: a bed reset to unity buries the narration, which is the state the
+		// defaults exist to avoid.
 		expect(updateAudioTrack).toHaveBeenCalledTimes(1);
 		expect(updateAudioTrack).toHaveBeenCalledWith("audio_track_1", {
-			gainDb: 0,
-			fadeInMs: 0,
-			fadeOutMs: 0,
+			gainDb: -18,
+			fadeInMs: 1000,
+			fadeOutMs: 1000,
 			muted: false,
 			loop: false,
 		});
@@ -136,12 +138,12 @@ describe("AudioTrackPane reset button", () => {
 		expect(fadeInSlider).not.toHaveValue("1500");
 		expect(fadeOutSlider).not.toHaveValue("2000");
 
-		// When re-rendered with the reset track state, sliders show zeroed defaults
+		// When re-rendered with the reset track state, sliders show the bed defaults
 		const resetTrack: AxcutAudioTrack = {
 			...mockTrack,
-			gainDb: 0,
-			fadeInMs: 0,
-			fadeOutMs: 0,
+			gainDb: -18,
+			fadeInMs: 1000,
+			fadeOutMs: 1000,
 			muted: false,
 			loop: false,
 		};
@@ -151,9 +153,53 @@ describe("AudioTrackPane reset button", () => {
 			</I18nProvider>,
 		);
 
-		expect(gainSlider).toHaveValue("0");
-		expect(fadeInSlider).toHaveValue("0");
-		expect(fadeOutSlider).toHaveValue("0");
+		expect(gainSlider).toHaveValue("-18");
+		expect(fadeInSlider).toHaveValue("1000");
+		expect(fadeOutSlider).toHaveValue("1000");
+	});
+
+	it("resets a voiceover flat: it is voice, levelled by the export", () => {
+		const updateAudioTrack = vi.fn();
+		const voiceover: AxcutAudioTrack = {
+			id: "audio_track_1",
+			clipId: "clip_1",
+			assetId: "asset_audio_1",
+			trackId: "audio_track_1",
+			startMs: 1000,
+			endMs: 5000,
+			durationSec: 10,
+			offsetMs: 0,
+			gainDb: -9,
+			fadeInMs: 200,
+			fadeOutMs: 300,
+			muted: true,
+			loop: false,
+			kind: "voiceover",
+			label: "take-1.webm",
+			origin: "user",
+		};
+		render(
+			<I18nProvider>
+				<AudioTrackPane
+					tl={
+						{
+							selectedAudioTrackId: "audio_track_1",
+							audioTracks: [voiceover],
+							assets: [],
+							updateAudioTrack,
+						} as unknown as TimelineApi
+					}
+				/>
+			</I18nProvider>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: /reset/i }));
+		expect(updateAudioTrack).toHaveBeenCalledWith("audio_track_1", {
+			gainDb: 0,
+			fadeInMs: 0,
+			fadeOutMs: 0,
+			muted: false,
+			loop: false,
+		});
 	});
 
 	it("resets all track parameters under French locale", () => {
@@ -217,9 +263,9 @@ describe("AudioTrackPane reset button", () => {
 
 		expect(updateAudioTrack).toHaveBeenCalledTimes(1);
 		expect(updateAudioTrack).toHaveBeenCalledWith("audio_track_1", {
-			gainDb: 0,
-			fadeInMs: 0,
-			fadeOutMs: 0,
+			gainDb: -18,
+			fadeInMs: 1000,
+			fadeOutMs: 1000,
 			muted: false,
 			loop: false,
 		});
@@ -230,9 +276,9 @@ describe("AudioTrackPane reset button", () => {
 
 		const resetTrack: AxcutAudioTrack = {
 			...mockTrack,
-			gainDb: 0,
-			fadeInMs: 0,
-			fadeOutMs: 0,
+			gainDb: -18,
+			fadeInMs: 1000,
+			fadeOutMs: 1000,
 			muted: false,
 			loop: false,
 		};
@@ -242,9 +288,9 @@ describe("AudioTrackPane reset button", () => {
 			</I18nProvider>,
 		);
 
-		expect(gainSlider).toHaveValue("0");
-		expect(fadeInSlider).toHaveValue("0");
-		expect(fadeOutSlider).toHaveValue("0");
+		expect(gainSlider).toHaveValue("-18");
+		expect(fadeInSlider).toHaveValue("1000");
+		expect(fadeOutSlider).toHaveValue("1000");
 	});
 
 	it("retains slider value on release while async commit is in flight without jumping back", async () => {

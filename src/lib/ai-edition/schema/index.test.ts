@@ -1076,6 +1076,33 @@ describe("audio tracks (issue #350)", () => {
 		expect(track.endMs).toBeGreaterThan(track.startMs);
 	});
 
+	it("lays a new music bed down under the voice, eased in and out", () => {
+		// Imported music at 0 dB with hard edges is what buried the narration; a new bed
+		// starts at -18 dB with one-second ramps.
+		const bed = createAudioTrack({ assetId: "asset_1", durationSec: 60 });
+		expect(bed.kind).toBe("music");
+		expect([bed.gainDb, bed.fadeInMs, bed.fadeOutMs]).toEqual([-18, 1000, 1000]);
+		// A voiceover is voice: the export levels it, so it starts flat.
+		const take = createAudioTrack({ assetId: "asset_1", durationSec: 5, kind: "voiceover" });
+		expect([take.gainDb, take.fadeInMs, take.fadeOutMs]).toEqual([0, 0, 0]);
+	});
+
+	it("leaves a stored bed at the level its author set", () => {
+		// The new defaults are for NEW tracks. A track saved before them, even one that
+		// omits the fields, parses exactly as it did.
+		const {
+			gainDb: _gain,
+			fadeInMs: _in,
+			fadeOutMs: _out,
+			...stored
+		} = createAudioTrack({
+			assetId: "asset_1",
+			durationSec: 60,
+		});
+		expect(audioTrackSchema.parse(stored)).toMatchObject({ gainDb: 0, fadeInMs: 0, fadeOutMs: 0 });
+		expect(audioTrackSchema.parse({ ...stored, gainDb: -3 }).gainDb).toBe(-3);
+	});
+
 	it("defaults audioTracks to [] when a stored document omits the key", () => {
 		// A document written before issue #350 has no `audioTracks`; the defaulted
 		// array must fill in so older files load unchanged (no schemaVersion bump).

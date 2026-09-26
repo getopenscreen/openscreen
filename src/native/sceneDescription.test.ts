@@ -1842,6 +1842,32 @@ describe("buildSceneDescription.annotations", () => {
 		});
 	});
 
+	it("bottom-anchors caption annotations and leaves every other annotation centred", () => {
+		// `openscreen captions` writes these into the editor's caption box; pinned by the bottom
+		// edge, a caption that wraps grows upward from the inset instead of off the frame.
+		const text = (id: string, extra: object) => ({
+			id,
+			startMs: 0,
+			endMs: 1000,
+			type: "text" as const,
+			content: id,
+			position: { x: 0, y: 0 },
+			size: { width: 10, height: 10 },
+			style,
+			zIndex: 0,
+			...extra,
+		});
+		const scene = buildSceneDescription(
+			docWithAnnotations([
+				text("caption", { annotationSource: "auto-caption" }),
+				text("plain", {}),
+			]),
+		);
+		const byId = Object.fromEntries(scene.annotations.map((a) => [a.id, a.text]));
+		expect(byId.caption?.verticalAlign).toBe("bottom");
+		expect(byId.plain).not.toHaveProperty("verticalAlign");
+	});
+
 	it("falls back to textContent when content is empty", () => {
 		// Le cas qui casse avec `??` : `content` vaut "" (ni null ni undefined), donc seul un
 		// `||` retombe sur l'autre champ.

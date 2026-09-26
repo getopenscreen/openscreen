@@ -1163,8 +1163,13 @@ export function buildSceneDescription(
 				// Only captions carry a space; annotations must keep emitting the exact same keys
 				// they always have, so the field is omitted rather than sent as null/undefined.
 				const space = (region as { space?: "frame" }).space;
-				// Same treatment, same reason: only captions pin an edge.
-				const verticalAlign = (region as { verticalAlign?: "top" | "bottom" }).verticalAlign;
+				// Same treatment, same reason: only captions pin an edge. That includes the
+				// caption annotations `openscreen captions` writes, whose box is the editor's
+				// caption box: bottom-anchored, a caption that wraps grows upward from the inset
+				// instead of past the frame's edge.
+				const verticalAlign =
+					(region as { verticalAlign?: "top" | "bottom" }).verticalAlign ??
+					(region.annotationSource === "auto-caption" ? "bottom" : undefined);
 				const base = {
 					id: region.id,
 					startSec: region.startMs / 1000,

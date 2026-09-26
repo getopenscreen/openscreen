@@ -57,7 +57,7 @@ import {
 	type WebcamCompositeLayout,
 } from "@/lib/compositeLayout";
 import { webcamAnchorAt } from "@/lib/projectDefaults";
-import { classifyWallpaper, resolveImageWallpaperUrl } from "@/lib/wallpaper";
+import { wallpaperStyle } from "@/lib/wallpaper";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
 import { computeCameraFullscreenProgress } from "@/lib/zoomMath/cameraFullscreenUtils";
 import { AnnotationLayer } from "./AnnotationLayer";
@@ -321,7 +321,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 	// The stage hosting the interactive overlays is the CONTENT rect, and a frame never changes
 	// it: the compositor keeps the footage the same size with or without a frame and grows the
 	// frame outward, so every handle (annotations, privacy blur, zoom focus) sits on `layout`.
-	const frameStyle = useMemo(() => buildFrameStyle(settings), [settings]);
+	const frameStyle = useMemo(() => wallpaperStyle(settings.wallpaper), [settings.wallpaper]);
 	const screenStyle = useMemo(
 		() => buildScreenStyle(layout, settings, frameSize),
 		[layout, settings, frameSize],
@@ -507,38 +507,6 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			) : null}
 		</div>
 	);
-}
-
-// ponytail: resolve `settings.wallpaper` to an actual CSS background. Image
-// wallpapers must go through resolveImageWallpaperUrl (→ getAssetPath): in the
-// packaged Electron app the renderer loads over file://, where a bare
-// `/wallpapers/foo.jpg` points at the filesystem root and 404s, so the custom
-// background silently failed to paint (worked in the http dev server only).
-// classifyWallpaper also handles color-function (rgb/hsl/…) and every gradient
-// variant, which the old ad-hoc startsWith checks missed.
-function resolveWallpaperImageUrl(imagePath: string): string | null {
-	try {
-		return resolveImageWallpaperUrl(imagePath);
-	} catch {
-		return null;
-	}
-}
-
-// Canvas: wallpaper only — no padding, no shadow.
-function buildFrameStyle(
-	settings: ReturnType<typeof useEditorSettings>["settings"],
-): React.CSSProperties {
-	const w = classifyWallpaper(settings.wallpaper);
-	if (w.kind === "color") return { backgroundColor: w.value };
-	if (w.kind === "gradient") return { backgroundImage: w.value, backgroundSize: "cover" };
-	const url = resolveWallpaperImageUrl(w.path);
-	if (!url) return {};
-	return {
-		backgroundImage: `url(${url})`,
-		backgroundSize: "cover",
-		backgroundPosition: "center",
-		backgroundRepeat: "no-repeat",
-	};
 }
 
 // Screen stage: rectangle from the composite layout, converted to percentages

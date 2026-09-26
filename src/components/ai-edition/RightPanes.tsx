@@ -45,7 +45,11 @@ import { toast } from "sonner";
 import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
-import { WALLPAPER_MOTIONS, type WallpaperMotion } from "@/components/video-editor/types";
+import {
+	WALLPAPER_MOTIONS,
+	type WallpaperMotion,
+	type WebcamBackgroundMode,
+} from "@/components/video-editor/types";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
@@ -122,8 +126,14 @@ import {
 	resolveImageWallpaperUrl,
 	WALLPAPER_PATHS,
 	WALLPAPER_THUMB_PATHS,
+	wallpaperStyle,
 } from "@/lib/wallpaper";
 import { isNativeCompositorActive, setNativeParam } from "@/native";
+import {
+	SEGMENTATION_HEIGHT,
+	SEGMENTATION_WIDTH,
+	segmentCameraFrame,
+} from "@/native/compositorViewClient";
 import { ROUNDNESS_SLIDER_MAX_PX } from "@/native/paramUnits";
 import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
 import {
@@ -3228,6 +3238,15 @@ export function LayoutPane() {
 				src={cameraSrc}
 				crop={webcamCrop}
 				pan={cropPan}
+				background={
+					canSegmentCamera && settings.webcamBackgroundMode !== "none"
+						? {
+								mode: settings.webcamBackgroundMode,
+								blurIntensity: settings.webcamBlurIntensity,
+								wallpaper: settings.webcamWallpaper,
+							}
+						: null
+				}
 				disabled={layoutControlsDisabled}
 				hint={ts("layout.webcamFramingDrag")}
 				onFrameLive={setCropFrame}
@@ -3241,6 +3260,35 @@ export function LayoutPane() {
 const MIN_CROP_SIZE = 1 / 3;
 const FRAME_CORNERS = ["nw", "ne", "sw", "se"] as const;
 type FrameCorner = (typeof FRAME_CORNERS)[number];
+
+/** The thumbnail's frame, cut out once: a subject mask to lay over the video, and a small copy
+ *  of the frame for the blur mode to blur. `null` when this machine cannot segment. */
+async function cutOutSubject(
+	video: HTMLVideoElement,
+): Promise<{ mask: string; backdrop: string } | null> {
+	const canvas = document.createElement("canvas");
+	const ctx = canvas.getContext("2d");
+	if (!ctx || video.videoWidth === 0) return null;
+	// Blurred, a small copy is as good as the full frame. It keeps the camera's shape.
+	canvas.width = SEGMENTATION_WIDTH;
+	canvas.height = Math.round((SEGMENTATION_WIDTH * video.videoHeight) / video.videoWidth);
+	ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+	const backdrop = canvas.toDataURL("image/jpeg");
+	// The model sees the whole frame squeezed to its input size, as the compositor feeds it.
+	canvas.width = SEGMENTATION_WIDTH;
+	canvas.height = SEGMENTATION_HEIGHT;
+	ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+	const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+	const mask = await segmentCameraFrame(new Uint8Array(pixels.buffer));
+	if (!mask) return null;
+	// Stretched back over the video by `mask-size: 100% 100%`, as the shader samples it.
+	const alpha = ctx.createImageData(canvas.width, canvas.height);
+	mask.forEach((value, i) => {
+		alpha.data[i * 4 + 3] = value;
+	});
+	ctx.putImageData(alpha, 0, 0);
+	return { mask: canvas.toDataURL(), backdrop };
+}
 
 /** Où la webcam cadre, réglé à la main : une vignette de la caméra, le cadre gardé posé dessus.
  *  Le cadre EST le réglage : on le glisse pour choisir ce qu'il montre, on tire un coin pour
@@ -3257,6 +3305,7 @@ function WebcamFraming({
 	src,
 	crop,
 	pan,
+	background,
 	disabled,
 	hint,
 	onFrameLive,
@@ -3267,12 +3316,45 @@ function WebcamFraming({
 	src: string | null;
 	crop: { x: number; y: number; width: number; height: number };
 	pan: { x: number; y: number };
+	/** The camera background to show on the thumbnail, `null` for the raw camera. */
+	background: {
+		mode: Exclude<WebcamBackgroundMode, "none">;
+		blurIntensity: number;
+		wallpaper: string;
+	} | null;
 	disabled: boolean;
 	hint: string;
 	onFrameLive: (size: number, pan: { x: number; y: number }) => void;
 	onCommit: () => void;
 }) {
 	const boxRef = useRef<HTMLDivElement | null>(null);
+	const videoRef = useRef<HTMLVideoElement | null>(null);
+	// The source whose chosen frame is on screen, the one the cutout is taken from.
+	const [seekedSrc, setSeekedSrc] = useState<string | null>(null);
+	// Segmented once per source: the mask depends on the picture alone, so changing the mode,
+	// the blur or the wallpaper afterwards is plain CSS over it. Nothing runs while the
+	// background is "none".
+	const [cutout, setCutout] = useState<{ src: string; mask: string; backdrop: string } | null>(
+		null,
+	);
+	const wantsCutout = background !== null;
+	useEffect(() => {
+		const video = videoRef.current;
+		if (!wantsCutout || !video || src === null || seekedSrc !== src) return;
+		let current = true;
+		cutOutSubject(video)
+			.then((result) => {
+				if (current && result) setCutout({ src, ...result });
+			})
+			.catch((err) => console.warn("[webcam-framing] segmentation failed:", err));
+		return () => {
+			current = false;
+		};
+	}, [wantsCutout, src, seekedSrc]);
+	const shown = background && cutout?.src === src ? cutout : null;
+	// The shader's blur radius (`blur_webcam_bg`) as a CSS deviation, at the scale of a typical
+	// PiP bubble: the thumbnail cannot know the real one, so this is close, not exact.
+	const blurPx = background ? (background.blurIntensity * 22 + 1.5) / 4 : 0;
 	const gestureRef = useRef<
 		| { kind: "move"; x: number; y: number; pan: { x: number; y: number } }
 		| { kind: "resize"; anchor: { x: number; y: number }; corner: FrameCorner }
@@ -3345,11 +3427,32 @@ function WebcamFraming({
 	return (
 		<div className={styles.framing}>
 			<div ref={boxRef} className={styles.framingBox} style={{ aspectRatio: aspect }}>
+				{shown && background?.mode === "blur" ? (
+					// Oversized by the blur's reach, so its faded edge falls outside the box.
+					<div
+						aria-hidden="true"
+						style={{
+							position: "absolute",
+							inset: -2 * blurPx,
+							background: `center / cover no-repeat url(${shown.backdrop})`,
+							filter: `blur(${blurPx}px)`,
+						}}
+					/>
+				) : shown && background?.mode === "custom" ? (
+					<div
+						aria-hidden="true"
+						style={{ position: "absolute", inset: 0, ...wallpaperStyle(background.wallpaper) }}
+					/>
+				) : null}
 				{src ? (
 					<video
+						ref={videoRef}
 						className={styles.framingVideo}
 						src={src}
-						style={{ visibility: ready ? "visible" : "hidden" }}
+						style={{
+							visibility: ready ? "visible" : "hidden",
+							...(shown ? { maskImage: `url(${shown.mask})`, maskSize: "100% 100%" } : {}),
+						}}
 						muted
 						playsInline
 						preload="metadata"
@@ -3362,6 +3465,7 @@ function WebcamFraming({
 							// A frame from the take rather than its first one, which is often black.
 							video.currentTime = Math.min(1, (video.duration || 0) / 2);
 						}}
+						onSeeked={() => setSeekedSrc(src)}
 					/>
 				) : null}
 				<div

@@ -80,6 +80,11 @@ describe("Roundness at zero padding", () => {
 		expect(roundness()).not.toBeInTheDocument();
 	});
 
+	it("stays under a frame, whose footage keeps its corners at 0%", () => {
+		mount({ padding: 0, borderRadius: 20, frame: "laptop" });
+		expect(roundness()).toBeInTheDocument();
+	});
+
 	it("leaves on a cancelled touch as on a release", () => {
 		mount({ padding: 30, borderRadius: 20 });
 		fireEvent.change(padding(), { target: { value: "0" } });

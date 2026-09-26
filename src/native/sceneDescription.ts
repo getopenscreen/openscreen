@@ -1231,9 +1231,16 @@ export function buildSceneDescription(
 			blur: settings.showBlur,
 			shadow: settings.shadowIntensity,
 			// The slider is in pixels of a 1080 reference, whatever the source resolution —
-			// see `roundnessFrac`. No padding, no background to round against: the corners go
-			// square, and the stored value waits for the padding to come back.
-			roundnessFrac: settings.padding > 0 ? settings.borderRadius / ROUNDNESS_REFERENCE_PX : 0,
+			// see `roundnessFrac`. No padding and no frame: the footage meets the scene's edges,
+			// with no background to round against, so the corners go square and the stored value
+			// waits for the padding to come back. Under a frame the frame meets the edges, and
+			// the footage keeps its corners. A block layout's screen carries its own radius
+			// (`screenRadiusFrac`), so this only ever squares Picture in Picture and camera-less
+			// clips.
+			roundnessFrac:
+				settings.padding > 0 || settings.frame !== "none"
+					? settings.borderRadius / ROUNDNESS_REFERENCE_PX
+					: 0,
 			motionBlur: settings.motionBlurAmount,
 			// Omitted at their defaults, like `webcamEffect`: the Rust side defaults both fields,
 			// so a project with no frame serializes exactly as it did before they existed.

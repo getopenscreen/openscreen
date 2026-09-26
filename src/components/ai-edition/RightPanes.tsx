@@ -2393,10 +2393,10 @@ export function VideoEffectsPane() {
 		>
 			<BackgroundSection />
 			{/* #84, "how do I turn the background off", has no button of its own: Padding at 0
-			    under Auto or an Original format frames the recording alone, and the corners go
-			    square with it (see `roundnessFrac`). A "Fit" action did the same in one click,
-			    but it rewrote four settings while naming none, and its menu repeated the
-			    Original row. */}
+			    under Auto or an Original format frames the recording alone, and without a frame
+			    the corners go square with it (see `roundnessFrac`). A "Fit" action did the same
+			    in one click, but it rewrote four settings while naming none, and its menu
+			    repeated the Original row. */}
 			<div className={styles.sectionLabel}>{ts("effects.frame")}</div>
 			{/* The output shape moved here from the timeline toolbar. It is the one setting the
 			    other three depend on — padding, roundness and shadow only mean anything against
@@ -2566,7 +2566,9 @@ export function VideoEffectsPane() {
 						void commit();
 					}}
 				/>
-				{(scrubStartPadding ?? settings.padding) > 0 ? (
+				{/* At 0% padding the corners only go square without a frame (`roundnessFrac`): under
+				    one, the frame meets the edges and the footage keeps the corners this sets. */}
+				{(scrubStartPadding ?? settings.padding) > 0 || framed ? (
 					<>
 						{/* Under a frame the slider spans 0 → the most that frame wears well (the native
 				    `frame_roundness_cap`), so its travel reads as a share of that range, not as

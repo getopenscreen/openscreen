@@ -167,10 +167,14 @@ lointain.
 - **`swing-clicks`** : à refaire sur `camera.rs`, l'orbite en donne la mécanique.
 - **`dolly`** (vertigo) : la distance de l'œil par frame, que `TiltedQuad::perspective` sait
   déjà transporter.
-- **Flou de mouvement de la visée** : le mode 8 a le flou du mode 0, borné à une frame, sur le plan
-  d'une frame plus tôt (boîte du zoom, rotation de base, caméra réelle d'avant ;
-  `FrameGeometry::tilt_trail`, `LayerCB::trail_*`). La parallaxe et l'impact n'y entrent pas,
-  comme le focus au mode 0. Un masque de confidentialité couvre alors le secret aux deux frames.
+- **Flou de mouvement de la visée** : l'écran incliné a le flou de l'écran droit, borné à une frame,
+  vers le plan d'une frame plus tôt (boîte du zoom, rotation de base, caméra réelle d'avant ;
+  `FrameGeometry::tilt_trail`). Comme à plat, l'écran CADRÉ file en bloc : ombre, cadre, métrage et
+  appareil passent par le rendu isolé du mode 18, qui interpole les coins du plan et suit son warp,
+  bilinéaire ou projectif comme au mode 8 (`screen_trail_cb`). Seul un masque de bloc garde le flou
+  par pixel du mode 8
+  (`tilt_pixel_trail`, `LayerCB::trail_*`). La parallaxe et l'impact n'y entrent pas, comme le
+  focus au mode 0. Un masque de confidentialité couvre alors le secret aux deux frames.
 - **Lumière du curseur modélisé** : elle reste fixée à la caméra ; l'œil en orbite la déplace avec
   lui. À fixer au monde avec le propriétaire du mode 15.
 

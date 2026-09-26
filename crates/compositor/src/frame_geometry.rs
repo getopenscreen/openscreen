@@ -1820,14 +1820,13 @@ impl FrameGeometry {
     /// suivent le flou de mouvement. Le quad s'étend alors à la trace (`dst_prev`) et la
     /// couverture des coins est moyennée sur les taps comme l'image : sans ça, sur un zoom avec
     /// padding, le contenu file dans un cadre aux bords nets. Pas sous un masque de bloc (la case
-    /// ne bouge pas, seul le métrage bouge dedans) ni sous le chrome de fenêtre, qui est un calque
-    /// à part et resterait net.
+    /// ne bouge pas, seul le métrage bouge dedans) ni sous un cadre : le chrome de fenêtre
+    /// resterait net, et un appareil ne rogne pas l'écran, la traînée sortirait de sa coque.
     pub fn screen_mb_w(&self) -> f32 {
-        let square_top = self.screen_square_top();
-        if square_top > 0.0 || self.screen_mask.is_some() {
-            square_top
-        } else {
+        if self.window_frame.is_none() && self.screen_mask.is_none() {
             -1.0
+        } else {
+            self.screen_square_top()
         }
     }
 
@@ -4026,6 +4025,16 @@ mod tests {
                 // Et il ne déborde que de sa marge d'un pixel.
                 assert!((m.dst[1] - drawn[1]).abs() * RENDER[1] < 1.01);
             }
+        }
+    }
+
+    /// Un appareil ne rogne pas l'écran : si ses bords suivaient le flou de mouvement, la traînée
+    /// sortirait de la coque (constaté au rendu D3D11, téléphone sous un zoom 3,5x, #794).
+    #[test]
+    fn a_device_frame_keeps_the_screen_edges_out_of_the_motion_blur() {
+        for frame in [r#","frame":"laptop""#, r#","frame":"phone""#, r#","frame":"monitor""#] {
+            let g = framed_plan(&framed_scene(frame, "null", 3.5, false));
+            assert_eq!(g.screen_mb_w(), 0.0, "{frame}");
         }
     }
 

@@ -38,6 +38,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(wgc-capture
   src/audio_sample_utils.cpp
   src/audio_sample_utils.h
+  src/desktop_icon_cover.cpp
+  src/desktop_icon_cover.h
   src/dpi_awareness.h
   src/dshow_webcam_capture.cpp
   src/dshow_webcam_capture.h

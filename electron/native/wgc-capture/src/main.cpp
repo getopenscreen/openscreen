@@ -1,4 +1,5 @@
 #include "audio_sample_utils.h"
+#include "desktop_icon_cover.h"
 #include "dpi_awareness.h"
 #include "mf_encoder.h"
 #include "monitor_utils.h"
@@ -45,6 +46,7 @@ struct CaptureConfig {
     bool captureCursor = false;
     bool webcamEnabled = false;
     bool preferSoftwareEncoder = false;
+    bool hideDesktopIcons = false;
     std::string microphoneDeviceId;
     std::string microphoneDeviceName;
     double microphoneGain = 1.0;
@@ -598,6 +600,7 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.captureCursor = findBool(json, "captureCursor", false);
     config.webcamEnabled = findBool(json, "webcamEnabled", false);
     config.preferSoftwareEncoder = findBool(json, "preferSoftwareEncoder", false);
+    config.hideDesktopIcons = findBool(json, "hideDesktopIcons", false);
     config.microphoneDeviceId = findString(json, "microphoneDeviceId");
     config.microphoneDeviceName = findString(json, "microphoneDeviceName");
     config.microphoneGain = findDouble(json, "microphoneGain", 1.0);
@@ -718,6 +721,9 @@ int wmain(int argc, wchar_t* argv[]) {
 
     std::cout << "{\"event\":\"ready\",\"schemaVersion\":2}" << std::endl;
 
+    // Declared before the session so it outlives it: the icons come back only
+    // once nothing is recording any more.
+    DesktopIconCover desktopIconCover;
     WgcSession session;
     HMONITOR capturedMonitor = nullptr;
     if (config.sourceType == "display") {
@@ -732,6 +738,11 @@ int wmain(int argc, wchar_t* argv[]) {
         if (!session.initialize(monitor, config.fps, config.captureCursor)) {
             std::cerr << "ERROR: Failed to initialize WGC display session" << std::endl;
             return 1;
+        }
+        // Before `recording-started`, so the first frame is already clean. A cover
+        // that cannot be placed costs the option, never the recording.
+        if (config.hideDesktopIcons && !desktopIconCover.show(monitor)) {
+            std::cerr << "WARNING: Desktop icons stay visible in this recording" << std::endl;
         }
     } else if (config.sourceType == "window") {
         HWND window = parseWindowHandle(config.windowHandle);

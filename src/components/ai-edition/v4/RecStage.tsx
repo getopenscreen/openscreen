@@ -2,6 +2,7 @@ import {
 	Camera,
 	CameraOff,
 	ChevronDown,
+	LayoutGrid,
 	Loader2,
 	MicOff,
 	Mic as MicOn,
@@ -18,6 +19,7 @@ import { useCameraDevices } from "@/hooks/useCameraDevices";
 import { useCameraPreviewStream } from "@/hooks/useCameraPreviewStream";
 import { useMicrophoneDevices } from "@/hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "@/hooks/usePortalOwnsSource";
+import { getPlatform } from "@/utils/platformUtils";
 import styles from "./EditorShellV4.module.css";
 
 interface RecordingPrefsState {
@@ -29,6 +31,7 @@ interface RecordingPrefsState {
 	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
+	hideDesktopIcons: boolean;
 }
 
 const DEFAULT_PREFS: RecordingPrefsState = {
@@ -40,6 +43,7 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	hideDesktopIcons: false,
 };
 
 function normalizedRecordingPrefs(prefs: Partial<RecordingPrefsState>): RecordingPrefsState {
@@ -220,6 +224,15 @@ export function RecStage({
 	const visibleSources = sourceTab === "screen" ? screenSources : windowSources;
 
 	const cursorHighlight = prefs.cursorCaptureMode === "editable-overlay";
+	// macOS leaves the icons out of the capture; Windows covers them for the take. Linux
+	// records through the portal, which offers neither, so the row would do nothing there.
+	const platform = getPlatform();
+	const desktopIconsHint =
+		platform === "darwin"
+			? t("rec.hideDesktopIconsHintMac")
+			: platform === "win32"
+				? t("rec.hideDesktopIconsHintWindows")
+				: null;
 	// Same answer as the HUD, from the same place. This stage used to decide for
 	// itself and always showed a picker, so the same build hid the choice on the
 	// HUD and demanded it here.
@@ -443,6 +456,24 @@ export function RecStage({
 							{cursorHighlight ? t("rec.on") : t("rec.off")}
 						</button>
 					</div>
+
+					{desktopIconsHint ? (
+						<div className={styles.recRow}>
+							<div className={styles.recRowLabel} title={desktopIconsHint}>
+								<LayoutGrid size={15} />
+								{t("rec.hideDesktopIcons")}
+							</div>
+							<button
+								type="button"
+								className={`${styles.recToggleBtn}${prefs.hideDesktopIcons ? ` ${styles.on}` : ""}`}
+								aria-pressed={prefs.hideDesktopIcons}
+								title={desktopIconsHint}
+								onClick={() => updatePrefs({ hideDesktopIcons: !prefs.hideDesktopIcons })}
+							>
+								{prefs.hideDesktopIcons ? t("rec.on") : t("rec.off")}
+							</button>
+						</div>
+					) : null}
 				</div>
 			</div>
 

@@ -140,6 +140,7 @@ describe("RecStage controls", () => {
 		const { getRecordingPrefs } = stubRecordingPrefs({
 			micEnabled: false,
 			cursorCaptureMode: "editable-overlay",
+			hideDesktopIcons: false,
 		});
 		renderRecStage();
 		await waitFor(() => {
@@ -213,6 +214,25 @@ describe("RecStage controls", () => {
 		);
 	});
 
+	it("offers Hide desktop icons where a helper honours it, and persists the toggle", async () => {
+		const { setRecordingPrefs } = stubRecordingPrefs({});
+		Object.assign(window.electronAPI as object, { getPlatform: () => "win32" });
+		renderRecStage();
+		const label = await screen.findByText("rec.hideDesktopIcons");
+		expect(label).toHaveAttribute("title", "rec.hideDesktopIconsHintWindows");
+		if (!label.parentElement) throw new Error("desktop icons row is missing");
+		fireEvent.click(within(label.parentElement).getByRole("button", { name: "rec.off" }));
+		await waitFor(() => expect(setRecordingPrefs).toHaveBeenCalledWith({ hideDesktopIcons: true }));
+		cleanup();
+
+		// The portal records Linux: nothing there could hide the icons.
+		stubRecordingPrefs({});
+		Object.assign(window.electronAPI as object, { getPlatform: () => "linux" });
+		renderRecStage();
+		await screen.findByText("rec.cursorHighlight");
+		expect(screen.queryByText("rec.hideDesktopIcons")).toBeNull();
+	});
+
 	it("applies pushed preference events and ignores older initial preference and source reads", async () => {
 		let resolvePrefs: ((value: RecordingPrefs) => void) | undefined;
 		let resolveSource: ((value: SelectedSource) => void) | undefined;
@@ -258,6 +278,7 @@ describe("RecStage controls", () => {
 			camDeviceName: null,
 			systemAudioEnabled: false,
 			cursorCaptureMode: "editable-overlay",
+			hideDesktopIcons: false,
 		};
 		act(() => {
 			recordingPrefsListeners.forEach((listener) => listener(resetPrefs));

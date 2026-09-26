@@ -270,7 +270,10 @@ export class MacPickerSession {
 	 * Shows Apple's picker. Resolves with what the user picked, or null when they cancelled
 	 * or the picker could not open. No timeout: a person is choosing.
 	 */
-	async present(excludedWindowIds: number[]): Promise<MacPickerSelection | null> {
+	async present(
+		excludedWindowIds: number[],
+		hideDesktopIcons = false,
+	): Promise<MacPickerSelection | null> {
 		if (!(await this.start())) {
 			return null;
 		}
@@ -283,7 +286,12 @@ export class MacPickerSession {
 				resolve(selection);
 			};
 		});
-		this.send({ command: "present", excludedWindowIds, modes: ["display", "window"] });
+		this.send({
+			command: "present",
+			excludedWindowIds,
+			modes: ["display", "window"],
+			hideDesktopIcons,
+		});
 		return answer;
 	}
 

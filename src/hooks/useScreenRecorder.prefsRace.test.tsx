@@ -27,6 +27,7 @@ function prefs(micEnabled: boolean): RecordingPrefs {
 		camDeviceName: null,
 		systemAudioEnabled: false,
 		cursorCaptureMode: "editable-overlay",
+		hideDesktopIcons: false,
 	};
 }
 

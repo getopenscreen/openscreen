@@ -1691,7 +1691,8 @@ pub struct FrameGeometry {
     /// La rotation de base une frame d'écran plus tôt : avec `s_dst_prev` et `camera_prev`, le
     /// zoom d'AVANT, que le mode 8 floute (`tilt_trail`).
     pub zoom_rotation_prev: [f32; 3],
-    /// La caméra réelle une frame plus tôt : son poids et son zoom d'avant, sa visée d'à présent.
+    /// La caméra réelle une frame plus tôt (poids, visée, orbite, zoom), `None` si elle n'y était
+    /// pas active — même quand elle l'est à cette frame-ci, ou l'inverse.
     pub camera_prev: Option<crate::camera::CameraPose>,
     pub padding_scale: f32,
     /// Coupe source de l'écran en UV texture (crop utilisateur + zoom).
@@ -1843,9 +1844,9 @@ impl FrameGeometry {
     /// floute (`tilted_screen_cb`). `None` quand l'écran est droit ou le flou coupé.
     ///
     /// La frame d'avant est celle du mode 0 : la boîte au zoom d'avant (`s_dst_prev`), et ici la
-    /// rotation de base d'avant (un angle fixe entre avec le zoom) ou le poids de la caméra réelle.
-    /// Parallaxe, impact et visée restent ceux de la frame, comme le focus du mode 0 : le flou suit
-    /// le zoom, borné à une frame.
+    /// rotation de base d'avant (un angle fixe entre avec le zoom) ou la caméra réelle d'avant
+    /// (`camera_prev`). Parallaxe et impact restent ceux de la frame, comme le focus du mode 0 : le
+    /// flou suit le zoom et la caméra, borné à une frame.
     pub fn tilt_trail(&self, render_px: [f32; 2]) -> Option<TiltTrail> {
         if !self.tilted() || self.mb_taps < 2.0 || self.mb_amount <= 0.001 {
             return None;
@@ -2390,8 +2391,7 @@ impl FrameGeometry {
             return Some(mask);
         }
 
-        // Écran incliné (le mode 8 n'a pas de flou de mouvement : pas de trace à couvrir).
-        // Même quad et même centre que le dessin de l'écran et que `plan_cursor`.
+        // Écran incliné. Même quad et même centre que le dessin de l'écran et que `plan_cursor`.
         let s_px = [self.s_dst[2] * rw, self.s_dst[3] * rh];
         let quad = self.screen_tilt(s_px)?;
         let centre = [
@@ -2411,6 +2411,42 @@ impl FrameGeometry {
             [centre[0] + px, centre[1] + py]
         };
         let pts = [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)];
+        // Le mode 8 étale aussi chaque pixel vers là où le plan était une frame plus tôt
+        // (`tilt_trail`) : une copie traînée du secret sort du quad courant. Le masque couvre alors
+        // la boîte englobante du secret aux deux frames, en rect droit, comme le chemin droit.
+        // Même warp que le shader sur les coins d'avant (le drapeau projectif est celui du plan).
+        // La perspective grossit localement le côté proche : la force suit l'arête la plus
+        // agrandie par rapport au rect droit zoomé, pour que nulle part le masque ne soit plus
+        // fin, rapporté au contenu, qu'au repos.
+        let (ew, eh) = ((x1 - x0) * s_px[0], (y1 - y0) * s_px[1]);
+        let len = |a: [f32; 2], b: [f32; 2]| (b[0] - a[0]).hypot(b[1] - a[1]);
+        let tilt_k = (len(pts[0], pts[1]) / ew)
+            .max(len(pts[3], pts[2]) / ew)
+            .max(len(pts[0], pts[3]) / eh)
+            .max(len(pts[1], pts[2]) / eh);
+        let strength = (zoom_k * tilt_k).max(1.0);
+        // Sans mouvement, la traînée EST le quad (au bit près) : rien de plus à couvrir.
+        if let Some(trail) = self.tilt_trail(render_px).filter(|t| t.corners != quad.corners) {
+            let before = crate::regions::TiltedQuad { corners: trail.corners, ..quad };
+            let then = |fx: f32, fy: f32| {
+                let (px, py) = before.point_px(fx, fy);
+                [centre[0] + px, centre[1] + py]
+            };
+            let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+            for [px, py] in pts.into_iter().chain([then(x0, y0), then(x1, y0), then(x1, y1), then(x0, y1)]) {
+                (lo, hi) = ([lo[0].min(px), lo[1].min(py)], [hi[0].max(px), hi[1].max(py)]);
+            }
+            let rect =
+                [lo[0] / rw, lo[1] / rh, (hi[0] - lo[0]).max(1.0) / rw, (hi[1] - lo[1]).max(1.0) / rh];
+            let rect = match self.screen_mask {
+                Some(m) => m.clip(rect)?,
+                None => rect,
+            };
+            let mut mask = PrivacyMask::upright(rect, render_px, strength);
+            // Un ovale inscrit dans la boîte élargie ne couvrirait plus l'ovale courant.
+            mask.oval_ok = false;
+            return Some(mask);
+        }
         let (mut min_x, mut min_y) = (f32::MAX, f32::MAX);
         let (mut max_x, mut max_y) = (f32::MIN, f32::MIN);
         for [px, py] in pts {
@@ -2432,21 +2468,12 @@ impl FrameGeometry {
             quad_px = [c[2] * rw, c[3] * rh];
             dst = c;
         }
-        // La perspective grossit localement le côté proche : la force suit l'arête la plus
-        // agrandie par rapport au rect droit zoomé, pour que nulle part le masque ne soit plus
-        // fin, rapporté au contenu, qu'au repos.
-        let (ew, eh) = ((x1 - x0) * s_px[0], (y1 - y0) * s_px[1]);
-        let len = |a: [f32; 2], b: [f32; 2]| (b[0] - a[0]).hypot(b[1] - a[1]);
-        let tilt_k = (len(pts[0], pts[1]) / ew)
-            .max(len(pts[3], pts[2]) / ew)
-            .max(len(pts[0], pts[3]) / eh)
-            .max(len(pts[1], pts[2]) / eh);
         Some(PrivacyMask {
             dst,
             quad_px,
             warp: Some(local),
             projective: quad.projective,
-            strength: (zoom_k * tilt_k).max(1.0),
+            strength,
             oval_ok: true,
         })
     }
@@ -2620,6 +2647,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let mut zoom_camera_prev = 0.0f32;
         let mut zoom_aim = [0.5f32; 2];
         let mut zoom_orbit = [0.5f32; 2];
+        let (mut zoom_aim_prev, mut zoom_orbit_prev) = ([0.5f32; 2], [0.5f32; 2]);
         // Curseur masqué → pas de piste pour ce qui anime le plan (parallaxe, impact, caméra
         // `follow-cursor`) : l'export ne charge la piste que si le curseur est affiché
         // (`timeline_walk`), la preview toujours. Sans cette porte, la preview pencherait un
@@ -2649,17 +2677,21 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             zoom_camera = zs.camera;
             zoom_aim = zs.aim;
             zoom_orbit = zs.orbit;
+            // Même `CameraFrame` qu'à la frame courante : la caméra réelle d'avant (poids, visée,
+            // orbite) sert au flou du mode 8. Échelle et focus n'en dépendent pas.
             let zs_p = crate::regions::zoom_state_in(
                 zoom_regions,
                 source_t_prev,
                 cursor_for_zoom,
-                &crate::regions::CameraFrame::NONE,
+                &camera,
                 &clock,
             );
             pp.zoom = zs_p.scale;
             pp.focus = zs_p.focus;
             zoom_rotation_prev = zs_p.rotation;
             zoom_camera_prev = zs_p.camera;
+            zoom_aim_prev = zs_p.aim;
+            zoom_orbit_prev = zs_p.orbit;
         }
         // Full Camera ignore le rétrécissement réactif de la webcam (design web : mélanger
         // "rétrécit pour le zoom" et "grandit en plein cadre" dans la même frame n'a pas de sens).
@@ -2872,10 +2904,15 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             zoom: p.zoom,
             press,
         });
-        let camera_prev = camera.map(|pose| crate::camera::CameraPose {
+        // La caméra réelle de la frame d'avant, dès qu'elle y était active — y compris quand elle
+        // ne l'est plus à celle-ci (fin de sa moitié d'une transition vers un angle fixe) ; `None`
+        // quand elle ne l'était pas, et le mode 8 reprend alors la rotation d'avant.
+        let camera_prev = (zoom_camera_prev > 0.0).then(|| crate::camera::CameraPose {
             weight: zoom_camera_prev,
+            aim: focus_in_cut(u_max, v_max, active_crop, zoom_aim_prev, cut),
+            orbit: focus_in_cut(u_max, v_max, active_crop, zoom_orbit_prev, cut),
             zoom: pp.zoom,
-            ..pose
+            press,
         });
         let focus_plane = match camera {
             Some(pose) => pose.orbit,
@@ -5712,6 +5749,45 @@ mod tests {
         assert_ne!(off, tilted, "la substitution doit couper le flou");
         assert_eq!(at(&off, 1.6).tilt_trail(render), None);
         assert_eq!(at(&ramp(zoomed_golden_scene_json()), 1.6).tilt_trail(render), None);
+    }
+
+    /// Transition chaînée caméra réelle → angle fixe : la frame d'avant peut encore être dans la
+    /// moitié `follow-cursor` quand celle-ci est dans la moitié fixe. La traînée doit alors partir
+    /// du plan vu par la caméra d'AVANT, pas d'un plan droit.
+    #[test]
+    fn the_trail_keeps_the_previous_camera_across_a_follow_to_fixed_handover() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let render = [1170.0, 658.0];
+        let track: &'static crate::cursor::CursorTrack = Box::leak(Box::new(
+            crate::cursor::CursorTrack::new((0..=300).map(|i| (i as f32 / 30.0, 0.8, 0.3)).collect(), vec![], vec![]),
+        ));
+        let json = zoomed_golden_scene_json().replace(
+            r#"[{"clipIndex":0,"startSec":0.0,"endSec":5.0,"scale":2.0,"focusX":0.5,"focusY":0.3,"rotation":"none"}]"#,
+            r#"[{"clipIndex":0,"startSec":1.0,"endSec":4.0,"scale":2.0,"focusX":0.5,"focusY":0.5,"rotation":"follow-cursor"},
+                {"clipIndex":0,"startSec":4.5,"endSec":8.0,"scale":2.0,"focusX":0.5,"focusY":0.5,"rotation":"iso"}]"#,
+        );
+        assert_ne!(json, zoomed_golden_scene_json(), "la substitution doit poser les deux régions");
+        let scene = Scene::from_json(&json).expect("scène");
+        let mut handover = None;
+        for k in 0..=600 {
+            let t = 4.0 + k as f32 / 600.0;
+            let g = plan_frame(&FrameGeometryInput { cursor: Some(track), timeline_t_override: Some(t), ..golden_input(&scene, &cfg) });
+            assert_eq!(g.camera_prev.is_some(), g.camera_prev.is_some_and(|p| p.weight > 0.0));
+            if g.camera.is_none() && g.camera_prev.is_some() {
+                handover = Some(g);
+                break;
+            }
+        }
+        let g = handover.expect("une frame où seule la frame d'avant a la caméra");
+        let trail = g.tilt_trail(render).expect("traînée");
+        let d = g.s_dst_prev;
+        let px = [d[2] * render[0], d[3] * render[1]];
+        let seen = crate::camera::View::new(px, g.camera_prev.unwrap()).quad(px);
+        let upright = crate::regions::rotated_quad_corners_px(px[0], px[1], g.zoom_rotation_prev, g.zoom_rotation_dyn);
+        let shape = |c: [(f32, f32); 4]| c.map(|(x, y)| (x - c[0].0, y - c[0].1));
+        let close = |a: [(f32, f32); 4], b: [(f32, f32); 4]| a.iter().zip(b).all(|(p, q)| (p.0 - q.0).abs() < 1e-3 && (p.1 - q.1).abs() < 1e-3);
+        assert!(close(shape(trail.corners), shape(seen.corners)), "la traînée n'est pas le plan de la caméra d'avant");
+        assert!(!close(shape(trail.corners), shape(upright.corners)), "la traînée est retombée sur un plan droit");
     }
 
     /// Le calque du mode 8 porte la traînée dans le repère de ses propres coins, y compris

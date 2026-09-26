@@ -223,6 +223,11 @@ fn aperture(json: &str, out: (u32, u32)) -> ([(f32, f32); 4], [f32; 4]) {
 
 /// Le plan de la scène, par le même chemin que les backends.
 fn plan(json: &str, out: (u32, u32), src: (u32, u32)) -> FrameGeometry {
+    plan_at(json, out, src, T)
+}
+
+/// `plan` à l'instant `t` de la timeline.
+fn plan_at(json: &str, out: (u32, u32), src: (u32, u32), t: f32) -> FrameGeometry {
     let scene = Scene::from_json(json).expect("scène valide");
     let cfg = cfg();
     let mut live = live_params_from_scene(&scene);
@@ -240,7 +245,7 @@ fn plan(json: &str, out: (u32, u32), src: (u32, u32)) -> FrameGeometry {
         live,
         scene: Some(&scene),
         cursor: None,
-        timeline_t_override: Some(T),
+        timeline_t_override: Some(t),
         programme_time: None,
     })
 }
@@ -263,7 +268,12 @@ struct Geo {
 
 impl Geo {
     fn new(json: &str, out: (u32, u32), src: (u32, u32)) -> Geo {
-        let g = plan(json, out, src);
+        Geo::at(json, out, src, T)
+    }
+
+    /// `Geo::new` à l'instant `t` : pendant une rampe de zoom, le plan d'une autre frame.
+    fn at(json: &str, out: (u32, u32), src: (u32, u32), t: f32) -> Geo {
+        let g = plan_at(json, out, src, t);
         let (rw, rh) = (out.0 as f32, out.1 as f32);
         let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
         let center = [(g.s_dst[0] + g.s_dst[2] * 0.5) * rw, (g.s_dst[1] + g.s_dst[3] * 0.5) * rh];
@@ -575,7 +585,7 @@ fn the_device_follows_the_tilt_and_the_orbit_camera() {
 }
 
 /// Le flou de mouvement prend l'écran CADRÉ en bloc, à plat comme sous une caméra 3D : pendant la
-/// rampe du zoom, l'appareil et son ombre filent avec le métrage, donc des pixels HORS du métrage
+/// rampe du zoom, le corps du cadre (lunette, barre de titre) file avec le métrage, donc ses pixels
 /// changent avec le flou. Au palier, le rendu flou est le rendu net, à l'octet. Sous un angle fixe
 /// ou la caméra en orbite, seul le métrage était flouté : l'appareil restait net autour de lui.
 #[test]
@@ -583,7 +593,6 @@ fn the_device_trails_with_the_screen_under_motion_blur() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
     let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
-    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
     // Zoom ×1,6 de 2 à 6 s : sa rampe d'entrée court de 1,14 à 2 s, vitesse au plus fort vers 1,26 s.
     // Le petit rect garde l'appareil dans l'image pendant la rampe.
     let json = |device: &str, rotation: &str, blur: f32| {
@@ -600,23 +609,37 @@ fn the_device_trails_with_the_screen_under_motion_blur() {
             assert!(still(0.0) == still(1.0), "{case} : immobile, le flou ne doit rien changer");
             let t = 1.3;
             let sharp = render(&comp, &blue, &json(device, rotation, 0.0), None, t);
-            let tint = render(&comp, &orange, &json(device, rotation, 0.0), None, t);
             let blurred = render(&comp, &blue, &json(device, rotation, 1.0), None, t);
-            // Hors du métrage (le pixel net ne dépend pas de la teinte de la source) : ce qui change
-            // avec le flou est l'appareil, son ombre, ou le fond qu'ils découvrent en filant.
-            let smeared = (0..(W * H) as usize)
-                .filter(|&i| {
-                    let p = |b: &[u8]| [b[i * 4], b[i * 4 + 1], b[i * 4 + 2]];
-                    p(&sharp) == p(&tint) && p(&sharp).iter().zip(p(&blurred)).any(|(a, b)| a.abs_diff(b) > 8)
-                })
-                .count();
-            println!("{case:<24} {smeared:>7} px hors du métrage changent avec le flou");
+            // Le corps du cadre à CET instant, sondé tous les 4 px du plan : hors du métrage et dans
+            // le corps, loin de leurs deux franges. Ni l'ombre ni le fond n'y entrent.
+            let g = Geo::at(&json(device, rotation, 0.0), (W, H), SRC, t);
+            let [l, top, r, b] = g.body;
+            let (mut probes, mut smeared) = (0usize, 0usize);
+            let mut y = -top;
+            while y <= g.s_px[1] + b {
+                let mut x = -l;
+                while x <= g.s_px[0] + r {
+                    if g.footage_sd([x, y]) > 3.5 && g.body_sd([x, y]) < -2.0 {
+                        let (ox, oy) = g.to_out([x, y]);
+                        if let (Some(a), Some(c)) = (px(&sharp, (W, H), ox, oy), px(&blurred, (W, H), ox, oy)) {
+                            probes += 1;
+                            smeared += a.iter().zip(c).any(|(p, q)| p.abs_diff(q) > 8) as usize;
+                        }
+                    }
+                    x += 4.0;
+                }
+                y += 4.0;
+            }
+            println!("{case:<24} {smeared:>5} / {probes:>5} sondes du cadre changent avec le flou");
             if let Some(dir) = out_dir("OPENSCREEN_DEVICE_OUT") {
                 let name = format!("trail-{device}-{}", rotation.trim_matches('"'));
                 save(&dir, &format!("{name}-sharp"), &sharp, (W, H));
                 save(&dir, &format!("{name}-blurred"), &blurred, (W, H));
             }
-            assert!(smeared > (W * H) as usize / 200, "{case} : le cadre reste net pendant le zoom ({smeared} px)");
+            assert!(probes > 50, "{case} : trop peu de sondes du cadre ({probes})");
+            // Le milieu d'un aplat (la barre de titre) file dans lui-même : seules ses franges
+            // changent. Net, le cadre ne change en AUCUNE sonde.
+            assert!(smeared * 50 > probes, "{case} : le cadre reste net pendant le zoom ({smeared} / {probes})");
         }
     }
 }

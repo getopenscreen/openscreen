@@ -7,7 +7,7 @@
 // réversible sans donner un second sens à `backgroundColor`.
 
 import type { AxcutAnnotationRegion } from "@/lib/ai-edition/schema";
-import { textForPlate } from "@/lib/ai-edition/textContrast";
+import { textForPlate } from "../textContrast";
 
 type AnnotationStyle = AxcutAnnotationRegion["style"];
 

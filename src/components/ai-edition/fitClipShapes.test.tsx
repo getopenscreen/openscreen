@@ -217,9 +217,11 @@ describe("fitting a clip is an action, and a choice only when there is one", () 
 	});
 });
 
-describe("the frame menu persists the pick", () => {
+describe("the frame row persists the pick", () => {
 	const stored = (key: string) =>
 		(useProjectStore.getState().document?.legacyEditor as Record<string, unknown>)?.[key];
+	const pick = (row: string, label: string) =>
+		within(screen.getByRole("group", { name: row })).getByRole("button", { name: label });
 
 	it("writes each frame to the document, with no option withheld", async () => {
 		mount(documentWithShapes([[1920, 1080]]));
@@ -232,23 +234,81 @@ describe("the frame menu persists the pick", () => {
 			["Screen", "monitor"],
 			["None", "none"],
 		] as const) {
-			fireEvent.click(screen.getByRole("button", { name: "Style" }));
-			const item = within(screen.getByRole("menu")).getByRole("menuitem", { name: label });
-			expect(item).not.toBeDisabled();
-			fireEvent.click(item);
+			const tile = pick("Style", label);
+			expect(tile).not.toBeDisabled();
+			fireEvent.click(tile);
 			await waitFor(() => expect(stored("frame")).toBe(frame));
+			expect(tile).toHaveAttribute("aria-pressed", "true");
 		}
 	});
 
 	it("offers the theme once a frame is on, and writes it", async () => {
 		mount(documentWithShapes([[1920, 1080]]));
 		// No frame, no theme row: it would recolour nothing.
-		expect(screen.queryByRole("button", { name: "Theme" })).not.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Style" }));
-		fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Laptop" }));
+		expect(screen.queryByRole("group", { name: "Theme" })).not.toBeInTheDocument();
+		fireEvent.click(pick("Style", "Laptop"));
 		await waitFor(() => expect(stored("frame")).toBe("laptop"));
-		fireEvent.click(screen.getByRole("button", { name: "Theme" }));
-		fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Dark" }));
+		fireEvent.click(pick("Theme", "Dark"));
 		await waitFor(() => expect(stored("frameTheme")).toBe("dark"));
+	});
+});
+
+describe("the format row", () => {
+	const pressed = () =>
+		within(screen.getByRole("group", { name: "Format" }))
+			.getAllByRole("button")
+			.filter((b) => b.getAttribute("aria-pressed") === "true")
+			.map((b) => b.textContent);
+
+	it("shows every preset at once and writes the one clicked", async () => {
+		mount(documentWithShapes([[1920, 1080]]));
+		// Auto leads, then the presets in menu order: all of them on screen, no menu to open.
+		expect(
+			within(screen.getByRole("group", { name: "Format" }))
+				.getAllByRole("button")
+				.map((b) => b.textContent),
+		).toEqual(["Auto", "16:9", "9:16", "1:1", "4:3", "4:5", "16:10", "10:16"]);
+		expect(pressed()).toEqual(["1:1"]);
+		fireEvent.click(
+			within(screen.getByRole("group", { name: "Format" })).getByRole("button", { name: "4:5" }),
+		);
+		await waitFor(() => expect(frameSettings().aspectRatio).toBe("4:5"));
+		expect(pressed()).toEqual(["4:5"]);
+	});
+
+	it("lists the footage's own shape under Original, with its pixel size", async () => {
+		mount(documentWithShapes([[1366, 768]]));
+		const original = screen.getByRole("group", { name: "Original" });
+		fireEvent.click(within(original).getByRole("button", { name: "683:384 · 1366×768" }));
+		await waitFor(() => expect(frameSettings().aspectRatio).toBe("683:384"));
+	});
+
+	it("keeps Auto listed but dead while it is the format of a mixed timeline, and says why", () => {
+		const doc = documentWithShapes([
+			[1920, 1080],
+			[1080, 1920],
+		]);
+		(doc.legacyEditor as Record<string, unknown>).aspectRatio = "auto";
+		mount(doc);
+		const auto = within(screen.getByRole("group", { name: "Format" })).getByRole("button", {
+			name: "Auto",
+		});
+		expect(auto).toBeDisabled();
+		expect(auto).toHaveAttribute("aria-pressed", "true");
+		expect(screen.getByRole("group", { name: "Format" })).toHaveAccessibleDescription(
+			"Clips differ",
+		);
+	});
+
+	it("does not offer Auto on a mixed timeline that is on another format", () => {
+		mount(
+			documentWithShapes([
+				[1920, 1080],
+				[1080, 1920],
+			]),
+		);
+		expect(
+			within(screen.getByRole("group", { name: "Format" })).queryByRole("button", { name: "Auto" }),
+		).not.toBeInTheDocument();
 	});
 });

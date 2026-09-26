@@ -122,11 +122,6 @@ export function getAspectRatioDimensions(
 	};
 }
 
-export function getAspectRatioLabel(aspectRatio: AspectRatio): string {
-	if (aspectRatio === "native") return "Original";
-	return aspectRatio;
-}
-
 export function isPortraitAspectRatio(aspectRatio: AspectRatio): boolean {
 	return getAspectRatioValue(aspectRatio) < 1;
 }

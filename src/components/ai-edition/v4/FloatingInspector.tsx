@@ -26,13 +26,12 @@ import {
 	ZoomIn,
 } from "lucide-react";
 import type { ComponentProps } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { parseCustomPlaybackSpeedInput } from "@/components/video-editor/customPlaybackSpeed";
 import {
 	effectiveZoomScale,
 	FIXED_ROTATION_3D_PRESETS,
-	isRotation3DPreset,
 	MAX_PLAYBACK_SPEED,
 	MAX_ZOOM_SCALE,
 	MIN_ZOOM_SCALE,
@@ -328,11 +327,15 @@ function paneRow(label: string, control: React.ReactNode) {
 }
 
 /** Un libellé au-dessus de son contrôle, pour ceux qui prennent toute la largeur du panneau
- *  (une `ChoiceRow`) : à côté d'un libellé, ils n'auraient plus la place de montrer leurs choix. */
-function paneStack(label: string, control: React.ReactNode) {
+ *  (une `ChoiceRow`) : à côté d'un libellé, ils n'auraient plus la place de montrer leurs choix.
+ *  `value` nomme le choix courant quand les boutons ne font que le dessiner. */
+function paneStack(label: string, control: React.ReactNode, value?: string) {
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-			<span style={{ fontSize: 13, color: "var(--fg-2)", fontWeight: 500 }}>{label}</span>
+			<span style={{ fontSize: 13, color: "var(--fg-2)", fontWeight: 500 }}>
+				{label}
+				{value ? <span className={shell.sectionLabelValue}>{value}</span> : null}
+			</span>
 			{control}
 		</div>
 	);
@@ -343,6 +346,21 @@ const CAMERA_KEYS: Record<Rotation3DPreset, string> = {
 	left: "left",
 	right: "right",
 	"follow-cursor": "followCursor",
+};
+
+/** What each camera does to the screen (viewBox 0 0 32 22, as the camera layout tiles). A fixed
+ *  angle is the outline of its pose: `ROTATION_3D_PRESETS` projected with the shipped
+ *  perspective and centred. The moving camera leaves the screen flat and circles it. */
+const CAMERA_ICONS: Record<Rotation3DPreset | "off", React.ReactNode> = {
+	off: <rect x="6.5" y="5.5" width="19" height="11" rx="1.5" />,
+	left: <polygon points="5.6,4.5 26.4,5.3 22.9,17.5 7,12.9" />,
+	right: <polygon points="5.6,5.3 26.4,4.5 25,12.9 9.1,17.5" />,
+	"follow-cursor": (
+		<>
+			<rect x="10.5" y="7.5" width="11" height="7" rx="1" />
+			<ellipse cx="16" cy="11" rx="14" ry="7.5" strokeDasharray="2 2.5" />
+		</>
+	),
 };
 
 type AnnotationKind = AxcutAnnotationRegion["type"];
@@ -699,6 +717,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	// toggle that writes it lives in the timeline toolbar, not on this component's path.
 	const { settings } = useEditorSettings();
 	const autoFocusAll = settings.autoFocusAll;
+	const focusHintId = useId();
 	const doc = useProjectStore((s) => s.document);
 	const zoomId = tl.selection?.kind === "zoom" ? tl.selection.id : null;
 	const zoomMaxScale = useMemo(
@@ -755,52 +774,57 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	if (selection.kind === "zoom") {
 		const region = tl.zoomRegions.find((z) => z.id === selection.id);
 		if (!region) return null;
+		const cameraLabel = (preset: Rotation3DPreset | "off") =>
+			ts(preset === "off" ? "zoom.camera.off" : `zoom.camera.preset.${CAMERA_KEYS[preset]}`);
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 				{paneHeader(<ZoomIn size={16} />, tt("labels.zoom"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
 					<ZoomLevelControl key={region.id} region={region} tl={tl} maxScale={zoomMaxScale} />
 					<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-						{paneRow(
+						{paneStack(
 							ts("zoom.camera.title"),
 							// ONE control for the whole 3D camera: a fixed angle and a moving camera are
-							// alternatives, not two settings to combine.
-							<select
-								aria-label={ts("zoom.camera.title")}
-								value={region.rotationPreset ?? "off"}
-								onChange={(e) =>
-									void tl.updateZoomRotation(
-										region.id,
-										// "off" is the absence of a preset — the schema field is optional and
-										// `migrate.ts` drops it when falsy.
-										isRotation3DPreset(e.target.value) ? e.target.value : undefined,
-									)
-								}
-								className={shell.control}
-							>
-								<option value="off">{ts("zoom.camera.off")}</option>
-								<optgroup label={ts("zoom.camera.fixed")}>
-									{FIXED_ROTATION_3D_PRESETS.map((preset) => (
-										<option key={preset} value={preset}>
-											{ts(`zoom.camera.preset.${CAMERA_KEYS[preset]}`)}
-										</option>
-									))}
-								</optgroup>
-								{
+							// alternatives, not two settings to combine. Each tile draws what it does to
+							// the screen, so the label names the one picked.
+							<ChoiceRow<Rotation3DPreset | "off">
+								label={ts("zoom.camera.title")}
+								tiles
+								options={[
+									"off" as const,
+									...FIXED_ROTATION_3D_PRESETS,
 									// A moving camera reads the cursor track, which the export only loads while
 									// the cursor is shown: not offered then, rather than a camera that silently
-									// holds still. Still listed once picked, so the select can show it.
-									settings.cursorShow || region.rotationPreset === "follow-cursor" ? (
-										<optgroup label={ts("zoom.camera.moving")}>
-											{MOVING_ROTATION_3D_PRESETS.map((preset) => (
-												<option key={preset} value={preset}>
-													{ts(`zoom.camera.preset.${CAMERA_KEYS[preset]}`)}
-												</option>
-											))}
-										</optgroup>
-									) : null
+									// holds still. Still listed once picked, so the row can show it.
+									...(settings.cursorShow || region.rotationPreset === "follow-cursor"
+										? MOVING_ROTATION_3D_PRESETS
+										: []),
+								].map((preset) => ({
+									value: preset,
+									label: cameraLabel(preset),
+									icon: (
+										<svg
+											viewBox="0 0 32 22"
+											width={32}
+											height={22}
+											fill="none"
+											stroke="currentColor"
+											strokeWidth="1.75"
+											strokeLinejoin="round"
+											aria-hidden="true"
+										>
+											{CAMERA_ICONS[preset]}
+										</svg>
+									),
+								}))}
+								value={region.rotationPreset ?? "off"}
+								// "off" is the absence of a preset — the schema field is optional and
+								// `migrate.ts` drops it when falsy.
+								onChange={(preset) =>
+									void tl.updateZoomRotation(region.id, preset === "off" ? undefined : preset)
 								}
-							</select>,
+							/>,
+							cameraLabel(region.rotationPreset ?? "off"),
 						)}
 					</div>
 					{
@@ -817,36 +841,36 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								)
 							: null
 					}
-					{paneRow(
+					{paneStack(
 						ts("zoom.focusMode.title"),
 						// While the global toggle is on it OVERRIDES every region, so the control shows
 						// the effective mode ("auto") and goes read-only rather than lying about a
 						// per-region value that currently has no effect. The region's own `focusMode` is
 						// never written by the toggle — that is what makes each zoom snap back to its
 						// previous value the moment the toggle goes off.
-						<select
+						<ChoiceRow<"manual" | "auto">
+							label={ts("zoom.focusMode.title")}
+							options={[
+								{ value: "manual", label: ts("zoom.focusMode.manual") },
+								{ value: "auto", label: ts("zoom.focusMode.auto") },
+							]}
 							value={autoFocusAll ? "auto" : (region.focusMode ?? "manual")}
 							disabled={autoFocusAll}
-							onChange={(e) =>
-								void tl.updateZoomFocusMode(region.id, e.target.value as "manual" | "auto")
-							}
-							className={shell.control}
-						>
-							<option value="manual">{ts("zoom.focusMode.manual")}</option>
-							<option value="auto">{ts("zoom.focusMode.auto")}</option>
-						</select>,
+							describedBy={autoFocusAll ? focusHintId : undefined}
+							onChange={(mode) => void tl.updateZoomFocusMode(region.id, mode)}
+						/>,
 					)}
-					{paneRow(
+					{paneStack(
 						ts("zoom.cursor.title"),
-						<select
-							aria-label={ts("zoom.cursor.title")}
+						<ChoiceRow<"show" | "hide">
+							label={ts("zoom.cursor.title")}
+							options={[
+								{ value: "show", label: ts("zoom.cursor.show") },
+								{ value: "hide", label: ts("zoom.cursor.hide") },
+							]}
 							value={region.hideCursor ? "hide" : "show"}
-							onChange={(e) => void tl.updateZoomHideCursor(region.id, e.target.value === "hide")}
-							className={shell.control}
-						>
-							<option value="show">{ts("zoom.cursor.show")}</option>
-							<option value="hide">{ts("zoom.cursor.hide")}</option>
-						</select>,
+							onChange={(v) => void tl.updateZoomHideCursor(region.id, v === "hide")}
+						/>,
 					)}
 					{autoFocusAll || region.focusMode === "auto" ? (
 						// Auto resamples the focus from cursor telemetry every frame, so there is no fixed
@@ -854,7 +878,9 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 						// reset button would be a no-op. When the global toggle is what forced auto, say
 						// where to turn it off.
 						autoFocusAll ? (
-							<p className={shell.hint}>{ts("zoom.focusMode.lockedDisclaimer")}</p>
+							<p id={focusHintId} className={shell.hint}>
+								{ts("zoom.focusMode.lockedDisclaimer")}
+							</p>
 						) : null
 					) : (
 						<button

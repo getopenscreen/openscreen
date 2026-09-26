@@ -366,8 +366,6 @@
 		"camera": {
 			"title": "3D kamera",
 			"off": "Vypnuto",
-			"fixed": "Pevný úhel",
-			"moving": "Pohyblivá kamera",
 			"preset": {
 				"left": "Obrazovka natočená doleva",
 				"right": "Obrazovka natočená doprava",

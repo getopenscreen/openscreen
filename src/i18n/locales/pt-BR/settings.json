@@ -366,8 +366,6 @@
 		"camera": {
 			"title": "Câmera 3D",
 			"off": "Desativada",
-			"fixed": "Ângulo fixo",
-			"moving": "Câmera em movimento",
 			"preset": {
 				"left": "Tela virada para a esquerda",
 				"right": "Tela virada para a direita",

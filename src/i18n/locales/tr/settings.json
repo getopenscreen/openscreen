@@ -366,8 +366,6 @@
 		"camera": {
 			"title": "3D kamera",
 			"off": "Kapalı",
-			"fixed": "Sabit açı",
-			"moving": "Hareketli kamera",
 			"preset": {
 				"left": "Ekran sola dönük",
 				"right": "Ekran sağa dönük",

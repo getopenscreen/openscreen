@@ -366,8 +366,6 @@
 		"camera": {
 			"title": "3D 鏡頭",
 			"off": "關閉",
-			"fixed": "固定角度",
-			"moving": "運動鏡頭",
 			"preset": {
 				"left": "畫面向左轉",
 				"right": "畫面向右轉",

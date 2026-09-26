@@ -381,7 +381,6 @@
 		"previewHold": "Hold to preview zoom effect",
 		"customScale": "Custom zoom",
 		"customScaleRange": "Zoom goes from {{min}}× to {{max}}×",
-		"levelBlurs": "Past {{max}}×, this recording would be enlarged more than 2× and blur.",
 		"selectRegion": "Select a zoom region to adjust",
 		"cursor": {
 			"title": "Cursor",

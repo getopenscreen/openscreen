@@ -123,7 +123,7 @@ describe("ZoomLevelControl", () => {
 		expect(updateZoomDepth).not.toHaveBeenCalled();
 	});
 
-	it("greys out the levels that would blur this clip, with the reason, and refuses them typed", () => {
+	it("hides the levels that would blur this clip, and refuses them typed", () => {
 		const updateZoomDepth = vi.fn(async (_id: string, _depth: ZoomDepth) => true);
 		render(
 			<ZoomLevelControl
@@ -132,17 +132,7 @@ describe("ZoomLevelControl", () => {
 				maxScale={2.5}
 			/>,
 		);
-		const buttons = screen.getAllByRole("button") as HTMLButtonElement[];
-		expect(buttons.map((b) => b.disabled)).toEqual([false, false, false, true]);
-		expect(buttons[3]).toHaveAttribute("title", "zoom.levelBlurs:2.5");
-		// The reason is visible text the row points at, not only a title on a button that a
-		// keyboard can never focus.
-		const hint = screen.getByText("zoom.levelBlurs:2.5");
-		expect(screen.getByRole("group", { name: "zoom.level" })).toHaveAttribute(
-			"aria-describedby",
-			hint.id,
-		);
-		expect(hint.id).not.toBe("");
+		expect(screen.getAllByRole("button")).toHaveLength(3);
 
 		const field = screen.getByRole("textbox", { name: "zoom.customScale" });
 		fireEvent.change(field, { target: { value: "3" } });
@@ -152,12 +142,9 @@ describe("ZoomLevelControl", () => {
 		expect(updateZoomDepth).not.toHaveBeenCalled();
 	});
 
-	it("says nothing when every level is within reach", () => {
+	it("offers every level when all are within reach", () => {
 		renderControl(3);
-		expect(screen.queryByText(/zoom\.levelBlurs/)).not.toBeInTheDocument();
-		expect(screen.getByRole("group", { name: "zoom.level" })).not.toHaveAttribute(
-			"aria-describedby",
-		);
+		expect(screen.getAllByRole("button")).toHaveLength(4);
 	});
 
 	it("ignores an unparseable draft without touching the region", () => {

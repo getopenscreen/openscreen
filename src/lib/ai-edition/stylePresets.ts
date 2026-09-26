@@ -78,6 +78,8 @@ export interface StylePreset {
 	/** ISO timestamp of the file's last modification. */
 	updatedAt: string;
 	appearance: StylePresetAppearance;
+	/** Set by `list` on the preset a new project starts from. */
+	forNewProjects?: boolean;
 }
 
 export interface StylePresetFile {
@@ -363,6 +365,69 @@ export function serializeStylePresetFile(input: {
 		appearance: parseStylePresetAppearance(input.appearance),
 	};
 	return `${JSON.stringify(file, null, 2)}\n`;
+}
+
+// ---- The look a new project starts from ---------------------------------------------
+// Written by the main process straight into `document.legacyEditor`, so these use the
+// legacy key names `nextLegacy` (store/editorSettings.ts) writes. `aspectRatio` is never
+// one of them: the format belongs to the project, and a new project keeps Auto.
+
+/** The `legacyEditor` keys that make up a project's look: the preset fields, renamed. */
+export const LOOK_LEGACY_EDITOR_KEYS = [
+	"wallpaper",
+	"wallpaperMotion",
+	"frame",
+	"frameTheme",
+	"shadowIntensity",
+	"showBlur",
+	"motionBlurAmount",
+	"depthOfField",
+	"borderRadius",
+	"padding",
+	"webcamLayoutPreset",
+	"webcamMaskShape",
+	"webcamRoundness",
+	"webcamMirrored",
+	"webcamReactiveZoom",
+	"webcamSizePreset",
+	"webcamBackgroundMode",
+	"webcamWallpaper",
+	"webcamBlurIntensity",
+	"cursorSize",
+	"cursorSmoothing",
+	"cursorMotionBlur",
+	"cursorClickBounce",
+	"cursorModel3d",
+	"cursorAlwaysArrow",
+	"cursorShow",
+	"cursorAutoHide",
+	"cursorTheme",
+] as const;
+
+/** A preset's appearance as `legacyEditor` fields, format left out. */
+export function stylePresetLegacyEditor(appearance: StylePresetAppearance): Fields {
+	const { aspectRatio: _format, cursor, ...rest } = appearance;
+	return {
+		...rest,
+		cursorSize: cursor.size,
+		cursorSmoothing: cursor.smoothing,
+		cursorMotionBlur: cursor.motionBlur,
+		cursorClickBounce: cursor.clickBounce,
+		cursorModel3d: cursor.model3d,
+		cursorAlwaysArrow: cursor.alwaysArrow,
+	};
+}
+
+/** The look out of another project's `legacyEditor`: crop, camera framing and position,
+ *  audio, format and everything else that belongs to that footage stay behind. */
+export function lookFromLegacyEditor(legacyEditor: unknown): Fields {
+	if (!isRecord(legacyEditor)) return {};
+	return Object.fromEntries(
+		LOOK_LEGACY_EDITOR_KEYS.filter((key) => legacyEditor[key] !== undefined).map((key) => [
+			key,
+			legacyEditor[key],
+		]),
+	);
 }
 
 /** Validates a parsed preset file (the JSON value, not the text). */

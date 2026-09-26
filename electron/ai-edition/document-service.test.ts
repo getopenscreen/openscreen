@@ -4,6 +4,15 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AxcutAsset, AxcutDocument } from "../../src/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "../../src/lib/ai-edition/schema";
+import {
+	DEFAULT_EDITOR_SETTINGS,
+	getEditorSettings,
+	patchEditorSettings,
+} from "../../src/lib/ai-edition/store/editorSettings";
+import {
+	factoryStylePresetAppearance,
+	stylePresetAppearanceFromSettings,
+} from "../../src/lib/ai-edition/stylePresetsEditor";
 import { registerMediaLinks } from "../media/mediaLinksRegistry";
 import { DocumentNotFoundError, DocumentService, ProjectFileError } from "./document-service";
 
@@ -47,6 +56,72 @@ describe("DocumentService", () => {
 		it("falls back to 'Untitled Project' for empty titles", async () => {
 			const doc = await service.createProject("   ");
 			expect(doc.project.title).toBe("Untitled Project");
+		});
+
+		describe("the look a new project starts from", () => {
+			const PRESET = {
+				...factoryStylePresetAppearance(),
+				aspectRatio: "9:16" as const,
+				padding: 7,
+				wallpaper: "#112233",
+			};
+
+			/** Saves a project whose look (and footage state) was edited, at a given time. */
+			async function editedProject(padding: number, updatedAt: string): Promise<void> {
+				const created = await service.createProject(`P${padding}`);
+				const edited = patchEditorSettings(created, {
+					padding,
+					aspectRatio: "1:1",
+					cropRegion: { x: 0.2, y: 0.2, width: 0.5, height: 0.5 },
+					audioGainDb: 4,
+				});
+				// saveProject stamps "now"; write the chosen instant straight to disk instead.
+				const filePath = path.join(tempDir, `${created.project.id}.openscreen`);
+				await fs.writeFile(
+					filePath,
+					JSON.stringify({ ...edited, project: { ...edited.project, updatedAt } }),
+				);
+			}
+
+			it("starts from the factory look when there is nothing to inherit", async () => {
+				const doc = await service.createProject("First");
+				expect(doc.legacyEditor).toBeNull();
+			});
+
+			it("takes the most recently edited project's look, never its format or footage", async () => {
+				await editedProject(11, "2026-01-01T00:00:00.000Z");
+				await editedProject(22, "2026-03-01T00:00:00.000Z");
+				await editedProject(33, "2026-02-01T00:00:00.000Z");
+				const settings = getEditorSettings(await service.createProject("Next"));
+				expect(settings.padding).toBe(22);
+				expect(settings.aspectRatio).toBe(DEFAULT_EDITOR_SETTINGS.aspectRatio);
+				expect(settings.cropRegion).toEqual(DEFAULT_EDITOR_SETTINGS.cropRegion);
+				expect(settings.audioGainDb).toBe(0);
+			});
+
+			it("prefers the preset marked for new projects, format left out", async () => {
+				await editedProject(22, "2026-03-01T00:00:00.000Z");
+				const withPreset = new DocumentService(tempDir, mediaDir, undefined, async () => PRESET);
+				const settings = getEditorSettings(await withPreset.createProject("Next"));
+				expect(stylePresetAppearanceFromSettings(settings)).toEqual({
+					...PRESET,
+					aspectRatio: DEFAULT_EDITOR_SETTINGS.aspectRatio,
+				});
+			});
+
+			it("falls back to the last project when the marked preset is gone or unreadable", async () => {
+				await editedProject(22, "2026-03-01T00:00:00.000Z");
+				vi.spyOn(console, "warn").mockImplementation(() => undefined);
+				for (const provider of [
+					async () => null,
+					async () => {
+						throw new Error("disk gone");
+					},
+				]) {
+					const next = new DocumentService(tempDir, mediaDir, undefined, provider);
+					expect(getEditorSettings(await next.createProject("Next")).padding).toBe(22);
+				}
+			});
 		});
 	});
 

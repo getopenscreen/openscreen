@@ -709,6 +709,9 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 						case "delete":
 							await presets.delete(request.payload.id);
 							return createSuccessResponse(requestId, { success: true });
+						case "setForNewProjects":
+							await presets.setForNewProjects(request.payload.id);
+							return createSuccessResponse(requestId, { success: true });
 						case "reveal": {
 							// The path is built here from the id, never taken from the renderer.
 							const target = await presets.revealTarget(request.payload.id);

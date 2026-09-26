@@ -26,7 +26,7 @@ import {
 	ZoomIn,
 } from "lucide-react";
 import type { ComponentProps } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { parseCustomPlaybackSpeedInput } from "@/components/video-editor/customPlaybackSpeed";
 import {
@@ -432,7 +432,7 @@ export function ZoomLevelControl({
 	region: { id: string; depth: ZoomDepth; customScale?: number };
 	tl: Pick<TimelineApi, "updateZoomDepth" | "updateZoomCustomScale">;
 	/** The deepest level this region's clip takes before its recording blurs
-	 *  (`zoomScaleLimit`). Deeper presets are greyed out with the reason. */
+	 *  (`zoomScaleLimit`). Deeper presets are not offered. */
 	maxScale?: number;
 }) {
 	const ts = useScopedT("settings");
@@ -511,12 +511,7 @@ export function ZoomLevelControl({
 		setScale(scale);
 	};
 
-	const tooDeep = ts("zoom.levelBlurs", { max: maxScale });
-	const tooDeepId = useId();
-	const limited = maxScale < MAX_ZOOM_SCALE;
-	const presets = ZOOM_PRESETS.map((preset) =>
-		preset.value > maxScale ? { ...preset, disabled: true, title: tooDeep } : preset,
-	);
+	const presets = ZOOM_PRESETS.filter((preset) => preset.value <= maxScale);
 
 	return (
 		<>
@@ -528,15 +523,8 @@ export function ZoomLevelControl({
 					options={presets}
 					value={requested}
 					onChange={setScale}
-					describedBy={limited ? tooDeepId : undefined}
 				/>,
 			)}
-			{/* Visible, not only a `title`: a disabled preset cannot take keyboard focus. */}
-			{limited ? (
-				<p id={tooDeepId} className={shell.hint}>
-					{tooDeep}
-				</p>
-			) : null}
 			{paneRow(
 				ts("zoom.customScale"),
 				<input

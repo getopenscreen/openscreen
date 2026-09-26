@@ -381,7 +381,6 @@
 		"previewHold": "Podržte pro náhled efektu přiblížení",
 		"customScale": "Vlastní přiblížení",
 		"customScaleRange": "Přiblížení může být od {{min}}× do {{max}}×",
-		"levelBlurs": "Nad {{max}}× by se tento záznam zvětšil víc než 2× a rozmazal se.",
 		"selectRegion": "Vyberte oblast přiblížení pro úpravu",
 		"cursor": {
 			"title": "Kurzor",

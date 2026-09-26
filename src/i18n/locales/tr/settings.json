@@ -381,7 +381,6 @@
 		"previewHold": "Yakınlaştırma efektini önizlemek için basılı tutun",
 		"customScale": "Özel Yakınlaştırma",
 		"customScaleRange": "Yakınlaştırma {{min}}× ile {{max}}× arasında olabilir",
-		"levelBlurs": "{{max}}× üzerinde bu kayıt 2 kattan fazla büyür ve bulanıklaşır.",
 		"selectRegion": "Ayarlamak için bir yakınlaştırma bölgesi seçin",
 		"cursor": {
 			"title": "İmleç",

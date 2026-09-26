@@ -6476,7 +6476,7 @@ mod tests {
     #[test]
     fn sprite_hotspot_stays_on_target_at_any_size() {
         let center = [0.4, 0.6];
-        let hotspot = [0.119, 0.0874]; // flèche intégrée : la pointe, près du coin haut-gauche
+        let hotspot = [0.1205, 0.0881]; // flèche intégrée : la pointe, près du coin haut-gauche
 
         for (w, h) in [(0.02, 0.04), (0.08, 0.16)] {
             let dst = cursor_sprite_dst(center, w, h, hotspot);
@@ -7091,17 +7091,17 @@ mod tests {
     /// Les seize états du thème par défaut et leurs hotspots (`DEFAULT_CURSOR_SPRITES`,
     /// `src/lib/cursor/cursorThemes.ts`).
     const DEFAULT_SPRITES: [(&str, [f32; 2]); 16] = [
-        ("arrow", [0.119, 0.0874]),
-        ("text", [0.4375, 0.5333]),
-        ("pointer", [0.3893, 0.0032]),
+        ("arrow", [0.1205, 0.0881]),
+        ("text", [0.4355, 0.5369]),
+        ("pointer", [0.3874, 0.0032]),
         ("crosshair", [0.4667, 0.4667]),
-        ("open-hand", [0.4375, 0.1781]),
-        ("closed-hand", [0.3889, 0.451]),
-        ("resize-ew", [0.4881, 0.4706]),
+        ("open-hand", [0.4375, 0.1724]),
+        ("closed-hand", [0.3889, 0.4455]),
+        ("resize-ew", [0.485, 0.4706]),
         ("resize-ns", [0.5, 0.5]),
         ("resize-nesw", [0.5, 0.5]),
         ("resize-nwse", [0.5, 0.5]),
-        ("move", [0.4444, 0.4444]),
+        ("move", [0.4437, 0.4437]),
         ("not-allowed", [0.5, 0.5]),
         ("wait", [0.5, 0.5]),
         ("app-starting", [0.05, 0.0537]),

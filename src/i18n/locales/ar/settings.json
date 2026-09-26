@@ -418,9 +418,6 @@
 		"motionBlur": "ضبابية الحركة",
 		"theme": "نمط المؤشر",
 		"autoHide": "إخفاء عند عدم النشاط",
-		"sizeNormal": "عادي",
-		"sizeLarge": "كبير",
-		"sizeExtraLarge": "كبير جدًا",
 		"bounceNone": "بلا",
 		"bounceLight": "خفيف",
 		"bounceStrong": "قوي"

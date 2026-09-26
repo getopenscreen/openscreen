@@ -458,11 +458,11 @@ mod tests {
     fn the_shipped_arrow_loads() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../public/cursors/default/arrow.png");
         let sdf = CursorSdf::load(path).expect("arrow.png");
-        assert_eq!((sdf.width, sdf.height), (42 * 4, 70 * 4));
-        assert_eq!(sdf.shape.size, [0.6, 1.0]);
+        assert_eq!((sdf.width, sdf.height), (83 * 4, 139 * 4));
+        assert_eq!(sdf.shape.size, [83.0 / 139.0, 1.0]);
         assert!(sdf.shape.top < 0.02, "haut de la silhouette : {}", sdf.shape.top);
-        // Le hotspot (0.119, 0.0874) est la pointe de l'incrustation, dans la silhouette.
-        assert!(sdf.sample([0.119, 0.0874]) < 0.0);
+        // Le hotspot (0.1205, 0.0881) est la pointe de l'incrustation, dans la silhouette.
+        assert!(sdf.sample([0.1205, 0.0881]) < 0.0);
         assert!(sdf.sample([0.9, 0.1]) > 0.0);
         assert_eq!(sdf.f16_bytes().len(), sdf.texels.len() * 2);
     }

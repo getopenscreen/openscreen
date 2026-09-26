@@ -418,9 +418,6 @@
 		"motionBlur": "モーションブラー",
 		"theme": "カーソルのスタイル",
 		"autoHide": "非アクティブ時に非表示",
-		"sizeNormal": "標準",
-		"sizeLarge": "大",
-		"sizeExtraLarge": "特大",
 		"bounceNone": "なし",
 		"bounceLight": "弱",
 		"bounceStrong": "強"

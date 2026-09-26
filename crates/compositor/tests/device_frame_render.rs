@@ -1041,7 +1041,7 @@ fn orbit_clip_frames() {
     std::fs::write(&path, format!(r#"{{"samples":[{}]}}"#, samples.join(","))).expect("sidecar");
     let track = CursorTrack::load(path.to_str().unwrap(), 0.0, 10.0).expect("piste curseur");
     let cursor = format!(
-        r#"{{"show":true,"size":4,"smoothing":0.2,"motionBlur":0,"clickBounce":2.5,"model3d":true,"clipToBounds":false,"theme":"default","cursorSprites":{{"arrow":{{"path":"{}/arrow.png","hotspotX":0.119,"hotspotY":0.0874}}}}}}"#,
+        r#"{{"show":true,"size":4,"smoothing":0.2,"motionBlur":0,"clickBounce":2.5,"model3d":true,"clipToBounds":false,"theme":"default","cursorSprites":{{"arrow":{{"path":"{}/arrow.png","hotspotX":0.1205,"hotspotY":0.0881}}}}}}"#,
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../public/cursors/default")
             .to_string_lossy()

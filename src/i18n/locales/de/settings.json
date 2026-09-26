@@ -418,9 +418,6 @@
 		"motionBlur": "Bewegungsunschärfe",
 		"theme": "Cursor-Stil",
 		"autoHide": "Bei Inaktivität ausblenden",
-		"sizeNormal": "Normal",
-		"sizeLarge": "Groß",
-		"sizeExtraLarge": "Sehr groß",
 		"bounceNone": "Keiner",
 		"bounceLight": "Leicht",
 		"bounceStrong": "Stark"

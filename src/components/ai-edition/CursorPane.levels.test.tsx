@@ -43,15 +43,22 @@ const pressed = (group: string) =>
 	screen.getByRole("group", { name: group }).querySelectorAll('button[aria-pressed="true"]');
 
 describe("CursorPane named levels", () => {
-	it("names the size and the click bounce instead of showing a number", () => {
-		renderWithCursor({ cursorSize: 2, cursorClickBounce: 0 });
-		expect([...pressed("Size")].map((b) => b.textContent)).toEqual(["Large"]);
+	it("names the click bounce instead of showing a number", () => {
+		renderWithCursor({ cursorClickBounce: 0 });
 		expect([...pressed("Click bounce")].map((b) => b.textContent)).toEqual(["None"]);
-		expect(screen.queryByRole("slider", { name: "Size" })).toBeNull();
 	});
 
 	it("presses nothing for a stored value between two levels", () => {
-		renderWithCursor({ cursorSize: 2.4 });
-		expect(pressed("Size")).toHaveLength(0);
+		renderWithCursor({ cursorClickBounce: 1.5 });
+		expect(pressed("Click bounce")).toHaveLength(0);
+	});
+});
+
+describe("CursorPane size", () => {
+	// Named steps stopped at 2.75; people asked for at least twice that.
+	it("is a slider from the default up to four times it", () => {
+		renderWithCursor({ cursorSize: 4.5 });
+		const slider = screen.getByRole("slider", { name: "Size" }) as HTMLInputElement;
+		expect([slider.min, slider.max, slider.value]).toEqual(["1.5", "6", "4.5"]);
 	});
 });

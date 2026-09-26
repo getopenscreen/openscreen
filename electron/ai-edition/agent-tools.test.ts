@@ -2430,3 +2430,59 @@ describe("setWordText", () => {
 		expect(result.document).toBeUndefined();
 	});
 });
+
+describe("addTrim shapes the cut like the transcript pane", () => {
+	// A 1.0-1.5, B 2.0-2.4, C 3.0-3.5: the production shape, one word per segment.
+	function withWords(): AxcutDocument {
+		const doc = fixtureDocument();
+		const words = [
+			{ id: "w_a", segmentId: "seg_1", startSec: 1, endSec: 1.5, text: "A" },
+			{ id: "w_b", segmentId: "seg_1", startSec: 2, endSec: 2.4, text: "B" },
+			{ id: "w_c", segmentId: "seg_1", startSec: 3, endSec: 3.5, text: "C" },
+		];
+		return { ...doc, transcripts: [{ ...doc.transcripts[0], words }] };
+	}
+	const lastTrim = (doc: AxcutDocument | undefined) => doc?.timeline.trimRanges.at(-1);
+
+	it("keeps breath next to the kept words when a word goes with both its silences", () => {
+		const result = executeAgentTool(
+			withWords(),
+			"addTrim",
+			JSON.stringify({ startSec: 1.5, endSec: 3 }),
+		);
+		expect(result.ok).toBe(true);
+		expect(lastTrim(result.document)?.startSec).toBeCloseTo(1.57);
+		expect(lastTrim(result.document)?.endSec).toBeCloseTo(2.93);
+	});
+
+	it("does not breathe next to a word an earlier cut already took (addTrims)", () => {
+		const doc = withWords();
+		doc.timeline.trimRanges.push({
+			id: "trim_a",
+			assetId: "asset_1",
+			clipId: "clip_1",
+			startSec: 1,
+			endSec: 1.5,
+			reason: "",
+			origin: "agent",
+		});
+		const result = executeAgentTool(
+			doc,
+			"addTrims",
+			JSON.stringify({ ranges: [{ startSec: 1.5, endSec: 2 }] }),
+		);
+		expect(lastTrim(result.document)?.startSec).toBe(1.5);
+		expect(lastTrim(result.document)?.endSec).toBeCloseTo(1.93);
+	});
+
+	it("closes a gap under two frames against a cut already on the clip", () => {
+		// trim_1 covers 10-12 on asset_1; 50 ms of picture would flash between the two.
+		const result = executeAgentTool(
+			fixtureDocument(),
+			"addTrim",
+			JSON.stringify({ startSec: 12.05, endSec: 15 }),
+		);
+		expect(lastTrim(result.document)?.startSec).toBe(12);
+		expect(lastTrim(result.document)?.endSec).toBe(15);
+	});
+});

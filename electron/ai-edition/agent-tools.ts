@@ -40,6 +40,7 @@ import {
 	buildCursorTrack,
 	type CursorTrackSample,
 } from "../../src/lib/ai-edition/timeline/cursor-track";
+import { breatheCut, mergeCloseCuts } from "../../src/lib/ai-edition/timeline/cut-breath";
 import {
 	anchorRegionsWithDerivedMs,
 	coalesceRegionsForRuler,
@@ -1423,8 +1424,8 @@ export function executeAgentTool(
 			if (!document.assets.some((a) => a.id === assetId)) {
 				return failure(`Unknown asset: ${assetId}`);
 			}
-			const startSec = Math.min(parsed.data.startSec, parsed.data.endSec);
-			const endSec = Math.max(parsed.data.startSec, parsed.data.endSec);
+			let startSec = Math.min(parsed.data.startSec, parsed.data.endSec);
+			let endSec = Math.max(parsed.data.startSec, parsed.data.endSec);
 
 			// Which clip the cut sits on. Named explicitly when the model says so; otherwise
 			// inferred from the source range — but only when the answer is unique. Two clips
@@ -1452,6 +1453,30 @@ export function executeAgentTool(
 					)} (${covering.map((c) => c.id).join(", ")}). Pass clipId to say which one to trim.`,
 				);
 			}
+
+			// Breath next to the speech that stays, and no one-frame flash against a cut
+			// already on the same clip — the same shaping the transcript pane applies.
+			const clip = document.timeline.clips.find((c) => c.id === clipId);
+			const siblings = document.timeline.trimRanges.filter((t) =>
+				clip ? trimAppliesToClip(t, clip) : t.assetId === assetId,
+			);
+			const transcript =
+				document.transcripts.find((t) => t.assetId === assetId) ??
+				(document.transcript?.assetId === assetId ? document.transcript : null);
+			const words = (transcript?.words ?? [])
+				.filter((w) => w.source !== "synth")
+				.map((w) => {
+					const mid = (w.startSec + w.endSec) / 2;
+					const inClip =
+						!clip || (mid >= clip.sourceStartSec && mid < (clip.sourceEndSec ?? Infinity));
+					const cut = siblings.some((t) => mid >= t.startSec && mid < t.endSec);
+					return { startSec: w.startSec, endSec: w.endSec, kept: inClip && !cut };
+				});
+			({ startSec, endSec } = mergeCloseCuts(
+				breatheCut({ startSec, endSec }, words),
+				siblings,
+				document.assets.find((a) => a.id === assetId)?.video?.fps,
+			));
 
 			const trim = {
 				id: createId("trim"),

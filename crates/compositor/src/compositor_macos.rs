@@ -1077,22 +1077,17 @@ impl Compositor {
                 self.draw_solid(enc, &solid(parse_hex(color).unwrap_or(BLACK)));
             }
             // Le mouvement ne vaut que pour le fond d'écran : la bulle garde son dégradé immobile.
-            Some(SceneBackground::Gradient { angle_deg, stops, .. }) => {
-                let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(BLACK);
-                let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+            Some(SceneBackground::Gradient { angle_deg, stops, offsets, .. }) => {
                 // angle CSS → direction unitaire, même convention que le fond d'écran.
                 let a = angle_deg.to_radians();
                 self.draw_solid(
                     enc,
                     &LayerCB {
                         dst,
-                        src: [c1[0], c1[1], c1[2], c1[3]],
                         quad_px,
                         radius_px,
-                        mode: 5.0,
-                        color: c0,
                         fx: [a.sin(), -a.cos(), 0.0, 0.0],
-                        ..Default::default()
+                        ..crate::frame_geometry::gradient_layer(stops, offsets, BLACK)
                     },
                 );
             }
@@ -2145,9 +2140,7 @@ impl Compositor {
                     &LayerCB { dst: [0.0, 0.0, 1.0, 1.0], mode: 1.0, color: c, ..Default::default() },
                 );
             }
-            Some(SceneBackground::Gradient { angle_deg, stops, motion }) => {
-                let c0 = stops.first().and_then(|s| parse_hex(s)).unwrap_or(lp.bg_color);
-                let c1 = stops.last().and_then(|s| parse_hex(s)).unwrap_or(c0);
+            Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
                 let a = angle_deg.to_radians();
                 let (anim, mb) =
                     crate::frame_geometry::gradient_motion_slots(motion, g.programme_t, rw / rh);
@@ -2155,12 +2148,9 @@ impl Compositor {
                     enc,
                     &LayerCB {
                         dst: [0.0, 0.0, 1.0, 1.0],
-                        src: [c1[0], c1[1], c1[2], c1[3]],
-                        mode: 5.0,
-                        color: c0,
                         fx: [a.sin(), -a.cos(), anim[0], anim[1]],
                         mb,
-                        ..Default::default()
+                        ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
                     },
                 );
             }

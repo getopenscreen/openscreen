@@ -258,6 +258,10 @@ pub enum SceneBackground {
         #[serde(rename = "angleDeg")]
         angle_deg: f32,
         stops: Vec<String>,
+        /// Position 0..1 de chaque stop le long du dégradé, telle que CSS la résout. Absente d'une
+        /// scène plus ancienne : les stops se répartissent alors à égale distance, comme en CSS.
+        #[serde(default)]
+        offsets: Vec<f32>,
         /// Absent pour un fond immobile : l'app n'émet la clé que si un mouvement est choisi,
         /// donc la scène d'un projet sans animation ne bouge pas d'un octet.
         #[serde(default)]
@@ -785,9 +789,10 @@ mod tests {
         assert!(scene.layout.webcam_mirror);
         assert!((scene.effects.roundness_frac - 0.0222).abs() < 1e-6);
         match scene.background {
-            SceneBackground::Gradient { angle_deg, ref stops, motion } => {
+            SceneBackground::Gradient { angle_deg, ref stops, ref offsets, motion } => {
                 assert_eq!(angle_deg, 135.0);
                 assert_eq!(stops.len(), 2);
+                assert!(offsets.is_empty(), "une scène sans offsets reste lisible");
                 assert_eq!(motion, GradientMotion::None);
             }
             _ => panic!("expected gradient"),

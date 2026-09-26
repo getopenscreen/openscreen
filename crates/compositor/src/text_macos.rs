@@ -142,8 +142,6 @@ const K_CT_PARAGRAPH_STYLE_SPECIFIER_ALIGNMENT: u32 = 0;
 /// `CTFontSymbolicTraits` : italique / gras.
 const K_CT_FONT_TRAIT_ITALIC: u32 = 1 << 0;
 const K_CT_FONT_TRAIT_BOLD: u32 = 1 << 1;
-/// `kCTFontManagerScopeProcess` : la police n'existe que pour ce processus, rien n'est installé.
-const K_CT_FONT_MANAGER_SCOPE_PROCESS: u32 = 1;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -183,6 +181,15 @@ extern "C" {
         buf_len: CFIndex,
         is_directory: u8,
     ) -> CFTypeRef;
+    fn CFRetain(cf: CFTypeRef) -> CFTypeRef;
+    fn CFArrayGetCount(array: CFTypeRef) -> CFIndex;
+    fn CFArrayGetValueAtIndex(array: CFTypeRef, index: CFIndex) -> CFTypeRef;
+    fn CFStringGetCString(
+        string: CFTypeRef,
+        buffer: *mut std::ffi::c_char,
+        buffer_size: CFIndex,
+        encoding: u32,
+    ) -> u8;
     static kCFTypeDictionaryKeyCallBacks: c_void;
     static kCFTypeDictionaryValueCallBacks: c_void;
 }
@@ -240,11 +247,14 @@ extern "C" {
         frame_attributes: CFTypeRef,
     ) -> CFTypeRef;
     fn CTFrameDraw(frame: CFTypeRef, context: CFTypeRef);
-    fn CTFontManagerRegisterFontsForURL(
-        font_url: CFTypeRef,
-        scope: u32,
-        error: *mut CFTypeRef,
-    ) -> bool;
+    fn CTFontManagerCreateFontDescriptorsFromURL(file_url: CFTypeRef) -> CFTypeRef;
+    fn CTFontCreateWithFontDescriptor(
+        descriptor: CFTypeRef,
+        size: CGFloat,
+        matrix: *const c_void,
+    ) -> CFTypeRef;
+    fn CTFontCopyFamilyName(font: CFTypeRef) -> CFTypeRef;
+    fn CTFontGetSymbolicTraits(font: CFTypeRef) -> u32;
 
     static kCTFontAttributeName: CFTypeRef;
     static kCTForegroundColorAttributeName: CFTypeRef;
@@ -420,47 +430,94 @@ unsafe fn cf_string(s: &str) -> Option<CFOwned> {
     ))
 }
 
-/// Rend `files` (`crate::text_fonts`) visibles de CoreText pour CE processus seulement :
-/// `CTFontCreateWithName` les trouve ensuite par leur nom de famille, sans que rien ne soit
-/// installé sur la machine.
+/// Une police embarquée : sa famille, sa graisse, et le descripteur tiré DE SON FICHIER.
+struct ShippedFace {
+    family: String,
+    bold: bool,
+    descriptor: CFOwned,
+}
+
+// SAFETY : un `CTFontDescriptor` est immuable, et CoreText le déclare utilisable depuis
+// n'importe quel thread. Rien d'autre dans la structure.
+unsafe impl Send for ShippedFace {}
+unsafe impl Sync for ShippedFace {}
+
+/// Le texte d'une `CFString`, ou une chaîne vide.
+unsafe fn cf_string_text(string: CFTypeRef) -> String {
+    let mut buf = [0 as std::ffi::c_char; 256];
+    let len = buf.len() as CFIndex;
+    if CFStringGetCString(string, buf.as_mut_ptr(), len, K_CF_STRING_ENCODING_UTF8) == 0 {
+        return String::new();
+    }
+    std::ffi::CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()
+}
+
+/// Les faces de `files` (`crate::text_fonts`), chacune tenue par un descripteur de SON fichier.
 ///
-/// Un fichier refusé ne coûte que sa police : le texte retombe sur celles du système. Un
-/// fichier déjà enregistré est refusé aussi, et reste utilisable.
-unsafe fn register_fonts(files: &[PathBuf]) {
+/// Pas de résolution par nom, et c'est tout l'objet : une police installée qui porte le même
+/// nom de famille passerait devant la nôtre (un enregistrement `CTFontManager` en double est
+/// même refusé), et le rendu dépendrait à nouveau de la machine. Un descripteur tiré de l'URL
+/// désigne ce fichier et aucun autre. Rien n'est enregistré ni installé.
+///
+/// Un fichier illisible ne coûte que sa police : sa famille retombe sur `CTFontCreateWithName`.
+unsafe fn load_faces(files: &[PathBuf]) -> Vec<ShippedFace> {
     use std::os::unix::ffi::OsStrExt;
+    let mut faces = Vec::new();
     for path in files {
         let bytes = path.as_os_str().as_bytes();
-        let Some(url) = CFOwned::new(CFURLCreateFromFileSystemRepresentation(
+        let url = CFOwned::new(CFURLCreateFromFileSystemRepresentation(
             std::ptr::null(),
             bytes.as_ptr(),
             bytes.len() as CFIndex,
             0,
-        )) else {
+        ));
+        let Some(descriptors) =
+            url.and_then(|url| CFOwned::new(CTFontManagerCreateFontDescriptorsFromURL(url.get())))
+        else {
+            eprintln!("[text] police non chargée : {}", path.display());
             continue;
         };
-        let registered = CTFontManagerRegisterFontsForURL(
-            url.get(),
-            K_CT_FONT_MANAGER_SCOPE_PROCESS,
-            std::ptr::null_mut(),
-        );
-        if !registered {
-            eprintln!("[text] police non enregistrée (ou déjà) : {}", path.display());
+        for i in 0..CFArrayGetCount(descriptors.get()) {
+            let descriptor = CFArrayGetValueAtIndex(descriptors.get(), i);
+            let Some(probe) =
+                CFOwned::new(CTFontCreateWithFontDescriptor(descriptor, 12.0, std::ptr::null()))
+            else {
+                continue;
+            };
+            let Some(family) = CFOwned::new(CTFontCopyFamilyName(probe.get())) else {
+                continue;
+            };
+            faces.push(ShippedFace {
+                family: cf_string_text(family.get()),
+                bold: CTFontGetSymbolicTraits(probe.get()) & K_CT_FONT_TRAIT_BOLD != 0,
+                // Le tableau ne fait que prêter ses éléments : on en prend une référence.
+                descriptor: CFOwned(CFRetain(descriptor)),
+            });
         }
     }
+    faces
 }
 
-/// Rastériseur de texte macOS. Pas d'état persistant : CoreText et CoreGraphics sont
-/// prêts dès le link des frameworks (côté Windows, `TextRasterizer::new` alloue les
-/// factories DirectWrite/Direct2D — d'où le `Result` conservé pour la symétrie).
-pub struct TextRasterizer;
+/// Rastériseur de texte macOS. Pas d'état propre : CoreText et CoreGraphics sont prêts dès
+/// le link des frameworks. Il ne tient que les polices embarquées, chargées une fois par
+/// processus (chaque compositeur, preview comme export, crée son rastériseur).
+pub struct TextRasterizer {
+    faces: &'static [ShippedFace],
+}
 
 impl TextRasterizer {
     pub fn new() -> Result<TextRasterizer> {
-        // Une fois par processus : l'enregistrement vaut pour tout CoreText, alors que chaque
-        // compositeur (preview, export) crée son rastériseur.
-        static REGISTER: std::sync::Once = std::sync::Once::new();
-        REGISTER.call_once(|| unsafe { register_fonts(&crate::text_fonts::embedded_font_files()) });
-        Ok(TextRasterizer)
+        static FACES: std::sync::OnceLock<Vec<ShippedFace>> = std::sync::OnceLock::new();
+        let faces = FACES
+            .get_or_init(|| unsafe { load_faces(&crate::text_fonts::embedded_font_files()) });
+        Ok(TextRasterizer { faces })
+    }
+
+    /// La police de `family` à cette taille, tirée du fichier embarqué qui a la graisse
+    /// demandée. `None` pour une famille qui ne vient pas de l'app.
+    unsafe fn shipped_font(&self, family: &str, bold: bool, size: CGFloat) -> Option<CFOwned> {
+        let face = self.faces.iter().find(|f| f.family == family && f.bold == bold)?;
+        CFOwned::new(CTFontCreateWithFontDescriptor(face.descriptor.get(), size, std::ptr::null()))
     }
 
     /// Rastérise `spec` dans une `MTLTexture` BGRA8Unorm neuve (alpha prémultiplié).
@@ -548,18 +605,28 @@ impl TextRasterizer {
             cf_string(&spec.content).ok_or_else(|| anyhow!("CFStringCreateWithBytes NULL"))?;
 
         // --- police ---
-        let family = cf_string(&spec.font_family);
-        let base_font = CFOwned::new(CTFontCreateWithName(
-            family.as_ref().map(|f| f.get()).unwrap_or(std::ptr::null()),
-            spec.font_size_px.max(1.0) as CGFloat,
-            std::ptr::null(),
-        ))
-        .ok_or_else(|| anyhow!("CTFontCreateWithName a renvoyé NULL"))?;
+        // Une famille embarquée vient de SON fichier, graisse comprise. Les autres, par nom.
+        let size = spec.font_size_px.max(1.0) as CGFloat;
+        let shipped = self.shipped_font(&spec.font_family, spec.bold, size);
+        let base_font = match shipped {
+            Some(font) => font,
+            None => {
+                let family = cf_string(&spec.font_family);
+                CFOwned::new(CTFontCreateWithName(
+                    family.as_ref().map(|f| f.get()).unwrap_or(std::ptr::null()),
+                    size,
+                    std::ptr::null(),
+                ))
+                .ok_or_else(|| anyhow!("CTFontCreateWithName a renvoyé NULL"))?
+            }
+        };
+        let shipped = self.faces.iter().any(|f| f.family == spec.font_family);
         // Gras/italique : une variante symbolique de la même famille. Si la famille n'a
         // pas la variante, CoreText renvoie NULL — on garde alors la police de base
-        // plutôt que d'échouer sur un détail de style.
+        // plutôt que d'échouer sur un détail de style. Le gras d'une famille embarquée est
+        // déjà son fichier gras.
         let mut traits = 0u32;
-        if spec.bold {
+        if spec.bold && !shipped {
             traits |= K_CT_FONT_TRAIT_BOLD;
         }
         if spec.italic {
@@ -571,7 +638,13 @@ impl TextRasterizer {
                 0.0, // 0 = conserver la taille de la police source
                 std::ptr::null(),
                 traits,
-                K_CT_FONT_TRAIT_BOLD | K_CT_FONT_TRAIT_ITALIC,
+                // Le masque ne touche que ce qu'on demande : l'italique d'une famille
+                // embarquée ne doit pas lui retirer son gras.
+                if shipped {
+                    K_CT_FONT_TRAIT_ITALIC
+                } else {
+                    K_CT_FONT_TRAIT_BOLD | K_CT_FONT_TRAIT_ITALIC
+                },
             ))
         } else {
             None
@@ -745,11 +818,17 @@ mod tests {
 
     /// Rastérise et rend les octets BGRA, ou `None` si la machine n'a pas de device Metal.
     fn raster_bgra(spec: &TextSpec) -> Option<(Vec<u8>, usize, usize)> {
+        raster_bgra_with(&TextRasterizer::new().expect("TextRasterizer::new"), spec)
+    }
+
+    fn raster_bgra_with(
+        raster: &TextRasterizer,
+        spec: &TextSpec,
+    ) -> Option<(Vec<u8>, usize, usize)> {
         let Ok(gpu) = crate::d3d::Gpu::create(false) else {
             eprintln!("pas de device Metal — test sauté");
             return None;
         };
-        let raster = TextRasterizer::new().expect("TextRasterizer::new");
         let tex = unsafe { raster.rasterize(&gpu, spec) }.expect("rasterize");
         let (w, h) = (spec.box_px[0] as usize, spec.box_px[1] as usize);
         let mut px = vec![0u8; w * h * 4];
@@ -788,59 +867,80 @@ mod tests {
 
     #[link(name = "CoreText", kind = "framework")]
     extern "C" {
-        fn CTFontCopyFamilyName(font: CFTypeRef) -> CFTypeRef;
-        fn CTFontGetSymbolicTraits(font: CFTypeRef) -> u32;
+        fn CTFontManagerRegisterFontsForURL(
+            font_url: CFTypeRef,
+            scope: u32,
+            error: *mut CFTypeRef,
+        ) -> bool;
+        fn CTFontCopyAttribute(font: CFTypeRef, attribute: CFTypeRef) -> CFTypeRef;
+        static kCTFontURLAttribute: CFTypeRef;
     }
 
     #[link(name = "CoreFoundation", kind = "framework")]
     extern "C" {
-        fn CFStringGetCString(
-            string: CFTypeRef,
-            buffer: *mut std::ffi::c_char,
-            buffer_size: CFIndex,
-            encoding: u32,
+        fn CFURLGetFileSystemRepresentation(
+            url: CFTypeRef,
+            resolve_against_base: u8,
+            buffer: *mut u8,
+            max_buf_len: CFIndex,
         ) -> u8;
     }
 
-    /// Le nom de famille que CoreText a réellement résolu pour `font`.
-    unsafe fn family_of(font: CFTypeRef) -> String {
-        let name = CFOwned::new(CTFontCopyFamilyName(font)).expect("CTFontCopyFamilyName");
-        let mut buf = [0 as std::ffi::c_char; 256];
-        let ok = CFStringGetCString(
-            name.get(),
-            buf.as_mut_ptr(),
-            buf.len() as CFIndex,
-            K_CF_STRING_ENCODING_UTF8,
-        );
-        assert_ne!(ok, 0, "CFStringGetCString");
-        std::ffi::CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()
+    /// Le fichier d'où CoreText tire réellement `font`.
+    unsafe fn file_of(font: CFTypeRef) -> PathBuf {
+        use std::os::unix::ffi::OsStrExt;
+        let url = CFOwned::new(CTFontCopyAttribute(font, kCTFontURLAttribute)).expect("URL");
+        let mut buf = [0u8; 1024];
+        let ok = CFURLGetFileSystemRepresentation(url.get(), 1, buf.as_mut_ptr(), 1024);
+        assert_ne!(ok, 0, "CFURLGetFileSystemRepresentation");
+        let len = buf.iter().position(|b| *b == 0).unwrap();
+        let path = PathBuf::from(std::ffi::OsStr::from_bytes(&buf[..len]));
+        std::fs::canonicalize(&path).unwrap_or(path)
     }
 
-    /// Chaque famille embarquée est celle que CoreText dessine. `CTFontCreateWithName` ne
-    /// renvoie jamais NULL pour un nom inconnu : il retombe en silence sur une autre police,
-    /// donc seul le nom de famille RÉSOLU dit si la bonne a été prise.
+    /// Chaque famille embarquée est dessinée depuis SON fichier, même quand une police du
+    /// même nom est disponible par ailleurs. La collision est fabriquée : des copies de nos
+    /// fichiers, enregistrées pour le processus AVANT, portent exactement les mêmes noms.
+    /// Seul le chemin du fichier distingue le gagnant ; famille et graisse n'y suffisent pas.
     #[test]
     fn every_shipped_family_draws_from_its_own_files() {
-        unsafe {
-            register_fonts(&crate::text_fonts::font_files_in(&crate::text_fonts::repo_fonts_dir()));
-            for family in crate::text_fonts::SHIPPED_FAMILIES {
-                let name = cf_string(family).unwrap();
-                let font = CFOwned::new(CTFontCreateWithName(name.get(), 40.0, std::ptr::null()))
-                    .unwrap();
-                assert_eq!(family_of(font.get()), family);
-                let traits = CTFontGetSymbolicTraits(font.get());
-                assert_eq!(traits & K_CT_FONT_TRAIT_BOLD, 0, "{family} : le régulier sort gras");
-                // Le réglage Gras prend un vrai fichier gras de la MÊME famille.
-                let bold = CFOwned::new(CTFontCreateCopyWithSymbolicTraits(
-                    font.get(),
-                    0.0,
+        use std::os::unix::ffi::OsStrExt;
+        let repo = std::fs::canonicalize(crate::text_fonts::repo_fonts_dir()).unwrap();
+        let files = crate::text_fonts::font_files_in(&repo);
+        let elsewhere =
+            std::env::temp_dir().join(format!("openscreen-sysfonts-{}", std::process::id()));
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let raster = unsafe {
+            for file in &files {
+                let copy = elsewhere.join(file.file_name().unwrap());
+                std::fs::copy(file, &copy).unwrap();
+                let bytes = copy.as_os_str().as_bytes();
+                let url = CFOwned::new(CFURLCreateFromFileSystemRepresentation(
                     std::ptr::null(),
-                    K_CT_FONT_TRAIT_BOLD,
-                    K_CT_FONT_TRAIT_BOLD | K_CT_FONT_TRAIT_ITALIC,
+                    bytes.as_ptr(),
+                    bytes.len() as CFIndex,
+                    0,
                 ))
-                .unwrap_or_else(|| panic!("{family} : pas de gras"));
-                assert_eq!(family_of(bold.get()), family);
-                assert_ne!(CTFontGetSymbolicTraits(bold.get()) & K_CT_FONT_TRAIT_BOLD, 0);
+                .unwrap();
+                // 1 = kCTFontManagerScopeProcess.
+                CTFontManagerRegisterFontsForURL(url.get(), 1, std::ptr::null_mut());
+            }
+            TextRasterizer { faces: Box::leak(load_faces(&files).into_boxed_slice()) }
+        };
+
+        for family in crate::text_fonts::SHIPPED_FAMILIES {
+            for bold in [false, true] {
+                let font = unsafe { raster.shipped_font(family, bold, 40.0) }
+                    .unwrap_or_else(|| panic!("{family} (gras={bold}) non embarquée"));
+                unsafe {
+                    let name = CFOwned::new(CTFontCopyFamilyName(font.get())).unwrap();
+                    assert_eq!(cf_string_text(name.get()), family);
+                    let traits = CTFontGetSymbolicTraits(font.get());
+                    assert_eq!(traits & K_CT_FONT_TRAIT_BOLD != 0, bold, "{family} : graisse");
+                    let file = file_of(font.get());
+                    let from = file.display();
+                    assert!(file.starts_with(&repo), "{family} (gras={bold}) tirée de {from}");
+                }
             }
         }
 
@@ -851,7 +951,7 @@ mod tests {
             s.font_family = family.into();
             s.font_size_px = 100.0;
             s.box_px = [1600, 200];
-            let Some((px, w, h)) = raster_bgra(&s) else {
+            let Some((px, w, h)) = raster_bgra_with(&raster, &s) else {
                 return;
             };
             let (x0, y0, x1, y1) = ink_bounds(&px, w, h);

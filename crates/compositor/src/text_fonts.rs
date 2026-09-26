@@ -7,10 +7,10 @@
 //!
 //! Les fichiers vivent dans `public/fonts`. L'app pose `OPENSCREEN_FONTS_DIR` sur leur dossier
 //! avant de charger l'addon (`compositorViewService.ts`, même contrat que `ORT_DYLIB_PATH`), et
-//! chaque backend les enregistre pour ce processus seulement, sans rien installer : collection
-//! privée pour DirectWrite, portée processus pour CoreText, base `fontdb` pour cosmic-text.
-//! Sur macOS et Linux, une police installée qui porte le même nom peut passer devant la nôtre :
-//! c'est alors la même famille dans une autre version, jamais un repli.
+//! chaque backend les charge pour ce processus seulement, sans rien installer. Et nos fichiers
+//! gagnent toujours contre une police installée du même nom, sinon le rendu dépendrait encore
+//! de la machine : collection privée pour DirectWrite, descripteurs tirés des fichiers pour
+//! CoreText, faces homonymes du système retirées de la base `fontdb` pour cosmic-text.
 //!
 //! Sans la variable (POC, addon chargé hors de l'app), la liste est vide et le texte se dessine
 //! avec les polices du système, comme avant.

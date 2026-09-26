@@ -75,8 +75,8 @@
 		"keepDefault": "الاحتفاظ باللغة الحالية"
 	},
 	"cursor": {
-		"useEditableCursor": "استخدام مؤشر قابل للتحرير",
-		"useSystemCursor": "استخدام مؤشر النظام"
+		"useEditableCursorHint": "استخدام مؤشر قابل للتحرير: يعيد تشغيل التكبير التلقائي وتأثيرات المؤشر",
+		"useSystemCursorHint": "استخدام مؤشر النظام: يوقف التكبير التلقائي وتأثيرات المؤشر"
 	},
 	"softwareEncoderFallback": {
 		"title": "تم التبديل إلى الترميز البرمجي",

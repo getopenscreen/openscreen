@@ -53,8 +53,8 @@
 		"cameraDevice": "Dispositivo fotocamera"
 	},
 	"cursor": {
-		"useEditableCursor": "Usa cursore modificabile",
-		"useSystemCursor": "Usa cursore di sistema"
+		"useEditableCursorHint": "Usa cursore modificabile: riattiva lo zoom automatico e gli effetti del cursore",
+		"useSystemCursorHint": "Usa cursore di sistema: disattiva lo zoom automatico e gli effetti del cursore"
 	},
 	"sourceSelector": {
 		"loading": "Caricamento sorgenti...",

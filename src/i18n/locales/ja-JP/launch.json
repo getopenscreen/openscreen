@@ -53,8 +53,8 @@
 		"cameraDevice": "カメラデバイス"
 	},
 	"cursor": {
-		"useEditableCursor": "編集可能なカーソルを使う",
-		"useSystemCursor": "システムカーソルを使う"
+		"useEditableCursorHint": "編集可能なカーソルを使う：自動ズームとカーソル効果が再びオンになります",
+		"useSystemCursorHint": "システムカーソルを使う：自動ズームとカーソル効果がオフになります"
 	},
 	"sourceSelector": {
 		"loading": "ソースを読み込み中...",

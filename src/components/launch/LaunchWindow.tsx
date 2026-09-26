@@ -1163,8 +1163,8 @@ export function LaunchWindow() {
 							disabled={controlsLocked}
 							label={
 								cursorCaptureMode === "editable-overlay"
-									? t("cursor.useSystemCursor")
-									: t("cursor.useEditableCursor")
+									? t("cursor.useSystemCursorHint")
+									: t("cursor.useEditableCursorHint")
 							}
 							onClick={toggleCursorMode}
 						/>

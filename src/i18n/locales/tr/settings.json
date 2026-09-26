@@ -112,10 +112,6 @@
 		"formatFill": "Kayıt",
 		"formatFillFit": "Tamamı",
 		"formatFillFollow": "İmleci takip et",
-		"formatFillHelp": "Formatı, imleci takip eden bir kayıt penceresiyle doldurur.",
-		"formatFillMixed": "Kullanılamaz: klipler farklı biçimlerde.",
-		"formatFillLayout": "Kullanılamaz: yan yana ve üst üste düzenler zaten kendi alanlarını dolduruyor.",
-		"formatFillFrame": "Cihaz çerçevesiyle kullanılamaz.",
 		"formatOriginal": "Orijinal",
 		"fitClipMany": "{{count}} klip",
 		"frame": "Çerçeve",
@@ -125,8 +121,6 @@
 		"fitClip": "Sığdır",
 		"motionBlur": "Hareket Bulanıklığı",
 		"depthOfField": "Alan derinliği",
-		"depthOfFieldHint": "3D yakınlaştırmalar",
-		"depthOfFieldNoTilt": "Bu projede 3D yakınlaştırma yok",
 		"roundness": "Yuvarlaklık",
 		"frameStyle": "Stil",
 		"windowNone": "Yok",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "Zaman çizelgesindeki genel Otomatik Odak anahtarı tarafından kontrol edilir. Odak modunu yakınlaştırma başına ayarlamak için kapatın.",
 			"auto": "Otomatik",
 			"manual": "Manuel",
-			"autoDescription": "Kamera kaydedilen imleç konumunu takip eder",
 			"title": "Odak Modu"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "Ekran sola dönük",
 				"right": "Ekran sağa dönük",
 				"followCursor": "İmleçle birlikte döner"
-			},
-			"description": {
-				"off": "Ekran düz kalır.",
-				"left": "Tek bir pozda kalır: sola dönük ve yukarıdan görünür.",
-				"right": "Tek bir pozda kalır: sağa dönük ve yukarıdan görünür.",
-				"followCursor": "Ekran sabit kalır; kamera etrafında imlecin olduğu tarafa döner ve imleçle birlikte yükselip alçalır."
-			},
-			"needsCursor": "İmleç gizli: bu kameranın izleyecek bir şeyi yok ve başlangıç açısında kalır."
+			}
 		},
 		"clickImpact": {
-			"title": "Tıklama etkisi",
-			"description": "Her tıklama eğik ekranı bastırır: tıklanan taraf çöker, sonra geri döner.",
-			"needsRotation": "Önce bir 3D kamera seçin: yalnızca eğik bir ekran bastırılabilir.",
-			"needsCursor": "İmleç gizli: ekran yalnızca görünen tıklamalara tepki verir.",
-			"descriptionCamera": "Her tıklama kamerayı biraz geri iter, ardından kamera geri gelir."
+			"title": "Tıklama etkisi"
 		},
 		"level": "Yakınlaştırma Seviyesi",
 		"previewHold": "Yakınlaştırma efektini önizlemek için basılı tutun",
@@ -438,15 +420,12 @@
 		"smoothing": "Yumuşatma",
 		"clickBounce": "Tıklama Sıçraması",
 		"model3d": "3B imleç",
-		"model3dHint": "Her imleç stili, tasarımına uygun bir 3B şekil kullanır.",
-		"model3dNeedsCursor": "3B imleci kullanmak için «İmleci Göster»i açın.",
 		"help": "Kaydedilen telemetriden imleç çizimi: tema, boyut, yumuşatma, hareket bulanıklığı ve tıklama sıçraması.",
 		"size": "Boyut",
 		"title": "İmleç",
 		"show": "İmleci Göster",
 		"themeDefault": "Varsayılan",
 		"alwaysArrow": "Her zaman ok imlecini kullan",
-		"alwaysArrowHint": "Metin veya bağlantı üzerinde bile her imleç durumu için oku gösterir.",
 		"motionBlur": "Hareket Bulanıklığı",
 		"theme": "İmleç Stili",
 		"autoHide": "Hareketsizken gizle",

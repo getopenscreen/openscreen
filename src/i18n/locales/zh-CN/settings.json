@@ -112,10 +112,6 @@
 		"formatFill": "录制内容",
 		"formatFillFit": "完整",
 		"formatFillFollow": "跟随光标",
-		"formatFillHelp": "用跟随光标的录制窗口填满画面比例。",
-		"formatFillMixed": "不可用：片段形状不一致。",
-		"formatFillLayout": "不可用：并排和上下布局已填满各自的位置。",
-		"formatFillFrame": "使用设备边框时不可用。",
 		"formatOriginal": "原始",
 		"fitClipMany": "{{count}} 个片段",
 		"frame": "画框",
@@ -125,8 +121,6 @@
 		"fitClip": "适配",
 		"motionBlur": "运动模糊",
 		"depthOfField": "景深",
-		"depthOfFieldHint": "3D 缩放",
-		"depthOfFieldNoTilt": "此项目没有 3D 缩放",
 		"roundness": "圆角",
 		"frameStyle": "样式",
 		"windowNone": "无",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "由时间线中的全局自动对焦开关控制。关闭后可为每个缩放单独设置对焦模式。",
 			"auto": "自动",
 			"manual": "手动",
-			"autoDescription": "摄像头跟随录制时的光标位置",
 			"title": "对焦模式"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "画面向左转",
 				"right": "画面向右转",
 				"followCursor": "随光标环绕"
-			},
-			"description": {
-				"off": "画面保持平整。",
-				"left": "保持单一姿态：向左转，并从上方俯视。",
-				"right": "保持单一姿态：向右转，并从上方俯视。",
-				"followCursor": "屏幕保持不动，镜头绕着屏幕转到光标所在的一侧，并随光标升降。"
-			},
-			"needsCursor": "光标已隐藏：此镜头没有可跟随的对象，保持初始角度。"
+			}
 		},
 		"clickImpact": {
-			"title": "点击按压",
-			"description": "每次点击都会按压倾斜的画面：被点击的一侧下沉，然后弹回。",
-			"needsRotation": "请先选择 3D 镜头：只有倾斜的画面才能被按压。",
-			"needsCursor": "光标已隐藏：画面只对可见的点击做出反应。",
-			"descriptionCamera": "每次点击，镜头都会稍稍后退，然后回位。"
+			"title": "点击按压"
 		},
 		"level": "缩放级别",
 		"previewHold": "按住预览放大效果",
@@ -438,15 +420,12 @@
 		"smoothing": "平滑",
 		"clickBounce": "点击弹跳",
 		"model3d": "3D 光标",
-		"model3dHint": "每种光标样式都会采用与其设计相符的 3D 形态。",
-		"model3dNeedsCursor": "开启“显示光标”后才能使用 3D 光标。",
 		"help": "基于录制遥测数据的光标渲染：主题、大小、平滑、运动模糊和点击回弹。",
 		"size": "大小",
 		"title": "光标",
 		"show": "显示光标",
 		"themeDefault": "默认",
 		"alwaysArrow": "始终使用箭头光标",
-		"alwaysArrowHint": "在任何光标状态下都显示箭头，即使位于文本或链接上方。",
 		"motionBlur": "运动模糊",
 		"theme": "光标样式",
 		"autoHide": "闲置时隐藏",

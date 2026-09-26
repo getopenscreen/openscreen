@@ -224,7 +224,6 @@
 		"generateCaptions": "Generovat titulky",
 		"cropDescription": "Přeformátujte nahrávku: vyberte poměr stran a přibližte oblast, kterou chcete zachovat.",
 		"openCrop": "Otevřít oříznutí…",
-		"cameraFullscreenDescription": "Během přehrávání této oblasti kamera zabírá celý snímek (bez okraje, bez zaoblení, bez pozadí) a na konci se vrátí. Přetáhněte okraje oblasti na časové ose pro změnu začátku a délky trvání.",
 		"deleteRegion": "Smazat oblast",
 		"freehandRendersAsBox": "Při exportu je volně kreslený tvar pokryt svým ohraničujícím rámečkem: vždy překrytý, nikdy nepokrytý."
 	},

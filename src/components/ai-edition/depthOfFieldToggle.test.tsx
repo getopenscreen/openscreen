@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// The depth-of-field switch only moves something on a 3D-tilted zoom. Without one it must be
-// disabled and say why; with one it must write the project setting the compositor reads.
+// The depth-of-field switch only moves something on a 3D-tilted zoom. Without one it is not
+// offered; with one it must write the project setting the compositor reads.
 
 import "@testing-library/jest-dom";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -37,7 +37,7 @@ function mount(doc: AxcutDocument) {
 			<VideoEffectsPane />
 		</I18nProvider>,
 	);
-	return screen.getByRole("button", { name: "Depth of field" });
+	return screen.queryByRole("button", { name: "Depth of field" });
 }
 
 const stored = () =>
@@ -54,17 +54,14 @@ afterEach(() => {
 });
 
 describe("depth of field toggle", () => {
-	it("is disabled and says why when no zoom is tilted", () => {
-		const toggle = mount(documentWithZoom());
-		expect(toggle).toBeDisabled();
-		expect(screen.getByText("No 3D zoom in this project")).toBeInTheDocument();
+	it("is not offered when no zoom is tilted", () => {
+		expect(mount(documentWithZoom())).toBeNull();
 	});
 
 	it("is on by default with a tilted zoom, and turns off then on again", async () => {
-		const toggle = mount(documentWithZoom("left"));
+		const toggle = mount(documentWithZoom("left")) as HTMLElement;
 		expect(toggle).toBeEnabled();
 		expect(toggle).toHaveAttribute("aria-pressed", "true");
-		expect(screen.getByText("3D zooms")).toBeInTheDocument();
 
 		fireEvent.click(toggle);
 		await waitFor(() => expect(stored()).toBe(false));

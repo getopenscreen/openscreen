@@ -224,7 +224,6 @@
 		"generateCaptions": "Untertitel erzeugen",
 		"cropDescription": "Rahme die Aufnahme neu — wähle ein Seitenverhältnis und zoome auf den Bereich, den du behalten willst.",
 		"openCrop": "Zuschneiden öffnen…",
-		"cameraFullscreenDescription": "Während dieser Bereich läuft, füllt die Kamera das ganze Bild — ohne Rahmen, ohne Rundung, ohne Hintergrund — und fährt am Ende sanft zurück. Zieh die Ränder des Bereichs auf der Timeline, um Start und Dauer zu ändern.",
 		"deleteRegion": "Bereich löschen",
 		"freehandRendersAsBox": "Im Export wird eine Freihandform von ihrem umschließenden Rechteck abgedeckt — eher zu viel als zu wenig."
 	},

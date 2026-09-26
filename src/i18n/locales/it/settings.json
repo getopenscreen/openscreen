@@ -112,10 +112,6 @@
 		"formatFill": "Registrazione",
 		"formatFillFit": "Intera",
 		"formatFillFollow": "Segui il cursore",
-		"formatFillHelp": "Riempie il formato con una finestra della registrazione che segue il cursore.",
-		"formatFillMixed": "Non disponibile: le clip hanno forme diverse.",
-		"formatFillLayout": "Non disponibile: i layout affiancato e impilato riempiono già il loro spazio.",
-		"formatFillFrame": "Non disponibile con una cornice dispositivo.",
 		"formatOriginal": "Originale",
 		"fitClipMany": "{{count}} clip",
 		"frame": "Cornice",
@@ -125,8 +121,6 @@
 		"fitClip": "Adatta",
 		"motionBlur": "Sfocatura movimento",
 		"depthOfField": "Profondità di campo",
-		"depthOfFieldHint": "Zoom 3D",
-		"depthOfFieldNoTilt": "Nessuno zoom 3D in questo progetto",
 		"roundness": "Arrotondamento",
 		"frameStyle": "Stile",
 		"windowNone": "Nessuna",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "Controllato dall'interruttore globale di messa a fuoco automatica nella timeline. Disattivalo per impostare la modalità di messa a fuoco per ogni zoom.",
 			"auto": "Automatico",
 			"manual": "Manuale",
-			"autoDescription": "La fotocamera segue la posizione del cursore registrato",
 			"title": "Modalità messa a fuoco"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "Schermo ruotato a sinistra",
 				"right": "Schermo ruotato a destra",
 				"followCursor": "Ruota con il cursore"
-			},
-			"description": {
-				"off": "Lo schermo resta piatto.",
-				"left": "Mantiene una sola posa: ruotato a sinistra e visto dall'alto.",
-				"right": "Mantiene una sola posa: ruotato a destra e visto dall'alto.",
-				"followCursor": "Lo schermo resta fermo; la telecamera gli gira intorno dal lato del cursore e sale o scende con esso."
-			},
-			"needsCursor": "Il cursore è nascosto: questa telecamera non ha nulla da seguire e mantiene l'angolo iniziale."
+			}
 		},
 		"clickImpact": {
-			"title": "Impatto del clic",
-			"description": "Ogni clic preme lo schermo inclinato: il lato cliccato si abbassa, poi torna.",
-			"needsRotation": "Scegli prima una camera 3D: si può premere solo uno schermo inclinato.",
-			"needsCursor": "Il cursore è nascosto: lo schermo reagisce solo ai clic visibili.",
-			"descriptionCamera": "Ogni clic fa arretrare un po' la telecamera, che poi torna avanti."
+			"title": "Impatto del clic"
 		},
 		"level": "Livello zoom",
 		"previewHold": "Tieni premuto per vedere l'anteprima dell'effetto zoom",
@@ -438,15 +420,12 @@
 		"smoothing": "Smussatura",
 		"clickBounce": "Rimbalzo clic",
 		"model3d": "Cursore 3D",
-		"model3dHint": "Ogni stile di cursore assume una forma 3D adatta al suo design.",
-		"model3dNeedsCursor": "Attiva «Mostra cursore» per usare il cursore 3D.",
 		"help": "Resa del cursore dalla telemetria registrata: tema, dimensione, smussatura, sfocatura di movimento e rimbalzo al clic.",
 		"size": "Dimensione",
 		"title": "Cursore",
 		"show": "Mostra cursore",
 		"themeDefault": "Predefinito",
 		"alwaysArrow": "Usa sempre il cursore a freccia",
-		"alwaysArrowHint": "Mostra la freccia per ogni stato del cursore, anche sopra testo o link.",
 		"motionBlur": "Sfocatura movimento",
 		"theme": "Stile del cursore",
 		"autoHide": "Nascondi se inattivo",

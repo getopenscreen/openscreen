@@ -112,10 +112,6 @@
 		"formatFill": "Enregistrement",
 		"formatFillFit": "En entier",
 		"formatFillFollow": "Suivre le curseur",
-		"formatFillHelp": "Remplit le format avec une fenêtre de l'enregistrement qui suit le curseur.",
-		"formatFillMixed": "Indisponible : les clips n'ont pas la même forme.",
-		"formatFillLayout": "Indisponible : les dispositions côte à côte et empilée remplissent déjà leur emplacement.",
-		"formatFillFrame": "Indisponible avec un cadre d'appareil.",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clips",
 		"frame": "Cadre",
@@ -125,8 +121,6 @@
 		"fitClip": "Ajuster",
 		"motionBlur": "Flou de mouvement",
 		"depthOfField": "Profondeur de champ",
-		"depthOfFieldHint": "Zooms 3D",
-		"depthOfFieldNoTilt": "Aucun zoom 3D dans ce projet",
 		"roundness": "Arrondi",
 		"frameStyle": "Style",
 		"windowNone": "Aucune",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "Contrôlé par le bouton global de mise au point automatique dans la timeline. Désactivez-le pour régler le mode de mise au point par zoom.",
 			"auto": "Auto",
 			"manual": "Manuel",
-			"autoDescription": "La caméra suit la position du curseur enregistré",
 			"title": "Mode focus"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "Écran tourné à gauche",
 				"right": "Écran tourné à droite",
 				"followCursor": "Tourne avec le curseur"
-			},
-			"description": {
-				"off": "L'écran reste à plat.",
-				"left": "Garde une seule pose : tourné vers la gauche et vu d'en haut.",
-				"right": "Garde une seule pose : tourné vers la droite et vu d'en haut.",
-				"followCursor": "L'écran reste immobile ; la caméra tourne autour, du côté du curseur, et monte ou descend avec lui."
-			},
-			"needsCursor": "Le curseur est masqué : cette caméra n'a rien à suivre et garde son angle de départ."
+			}
 		},
 		"clickImpact": {
-			"title": "Impact du clic",
-			"description": "Chaque clic enfonce l'écran incliné : le côté cliqué s'abaisse, puis revient.",
-			"needsRotation": "Choisissez d'abord une caméra 3D : seul un écran incliné peut être enfoncé.",
-			"needsCursor": "Le curseur est masqué : l'écran ne réagit qu'aux clics visibles.",
-			"descriptionCamera": "Chaque clic fait reculer un peu la caméra, puis elle revient."
+			"title": "Impact du clic"
 		},
 		"level": "Niveau de zoom",
 		"previewHold": "Maintenir pour prévisualiser l'effet de zoom",
@@ -438,15 +420,12 @@
 		"smoothing": "Lissage",
 		"clickBounce": "Rebond au clic",
 		"model3d": "Curseur 3D",
-		"model3dHint": "Chaque style de curseur adopte un volume 3D adapté à son design.",
-		"model3dNeedsCursor": "Activez « Afficher le curseur » pour utiliser le curseur 3D.",
 		"help": "Rendu du curseur à partir de la télémétrie enregistrée : thème, taille, lissage, flou de mouvement et rebond au clic.",
 		"size": "Taille",
 		"title": "Curseur",
 		"show": "Afficher le curseur",
 		"themeDefault": "Par défaut",
 		"alwaysArrow": "Toujours utiliser la flèche",
-		"alwaysArrowHint": "Affiche la flèche pour tous les états du curseur, même sur du texte ou des liens.",
 		"motionBlur": "Flou de mouvement",
 		"theme": "Style du curseur",
 		"autoHide": "Masquer si inactif",

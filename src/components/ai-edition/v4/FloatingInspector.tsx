@@ -338,39 +338,12 @@ function paneStack(label: string, control: React.ReactNode) {
 	);
 }
 
-/** Clé i18n (`zoom.camera.preset.*` / `zoom.camera.description.*`) de chaque caméra 3D. */
+/** Clé i18n (`zoom.camera.preset.*`) de chaque caméra 3D. */
 const CAMERA_KEYS: Record<Rotation3DPreset, string> = {
 	left: "left",
 	right: "right",
 	"follow-cursor": "followCursor",
 };
-
-/** « Click impact » : la bascule des panneaux, et dessous ce qu'elle fait — ou pourquoi elle ne
- *  peut rien faire ici. */
-function ClickImpactToggle({
-	checked,
-	blocker,
-	label,
-	description,
-	onChange,
-}: {
-	checked: boolean;
-	blocker: string | null;
-	label: string;
-	description: string;
-	onChange: (on: boolean) => void;
-}) {
-	const disabled = blocker !== null;
-	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-			{paneRow(
-				label,
-				<Toggle checked={checked} disabled={disabled} ariaLabel={label} onChange={onChange} />,
-			)}
-			<p className={shell.hint}>{blocker ?? description}</p>
-		</div>
-	);
-}
 
 type AnnotationKind = AxcutAnnotationRegion["type"];
 type ArrowDirectionKind = NonNullable<AxcutAnnotationRegion["figureData"]>["arrowDirection"];
@@ -821,47 +794,37 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 										</option>
 									))}
 								</optgroup>
-								<optgroup label={ts("zoom.camera.moving")}>
-									{MOVING_ROTATION_3D_PRESETS.map((preset) => (
-										<option key={preset} value={preset}>
-											{ts(`zoom.camera.preset.${CAMERA_KEYS[preset]}`)}
-										</option>
-									))}
-								</optgroup>
+								{
+									// A moving camera reads the cursor track, which the export only loads while
+									// the cursor is shown: not offered then, rather than a camera that silently
+									// holds still. Still listed once picked, so the select can show it.
+									settings.cursorShow || region.rotationPreset === "follow-cursor" ? (
+										<optgroup label={ts("zoom.camera.moving")}>
+											{MOVING_ROTATION_3D_PRESETS.map((preset) => (
+												<option key={preset} value={preset}>
+													{ts(`zoom.camera.preset.${CAMERA_KEYS[preset]}`)}
+												</option>
+											))}
+										</optgroup>
+									) : null
+								}
 							</select>,
 						)}
-						<p className={shell.hint}>
-							{
-								// A moving camera reads the cursor track, which the export only loads while the
-								// cursor is shown: say so rather than offer a camera that silently holds still.
-								!settings.cursorShow && region.rotationPreset === "follow-cursor"
-									? ts("zoom.camera.needsCursor")
-									: ts(
-											`zoom.camera.description.${region.rotationPreset ? CAMERA_KEYS[region.rotationPreset] : "off"}`,
-										)
-							}
-						</p>
 					</div>
-					<ClickImpactToggle
-						checked={region.clickImpact === true}
+					{
 						// The click follows the visible pointer: without a preset, or with the cursor
-						// hidden, the checkbox would move nothing. A fixed angle presses the tilted
-						// screen; the orbiting camera keeps the screen still and recoils instead.
-						blocker={
-							!region.rotationPreset
-								? ts("zoom.clickImpact.needsRotation")
-								: !settings.cursorShow || region.hideCursor
-									? ts("zoom.clickImpact.needsCursor")
-									: null
-						}
-						label={ts("zoom.clickImpact.title")}
-						description={ts(
-							region.rotationPreset === "follow-cursor"
-								? "zoom.clickImpact.descriptionCamera"
-								: "zoom.clickImpact.description",
-						)}
-						onChange={(on) => void tl.updateZoomClickImpact(region.id, on)}
-					/>
+						// hidden, the switch would move nothing, so it is not offered.
+						region.rotationPreset && settings.cursorShow && !region.hideCursor
+							? paneRow(
+									ts("zoom.clickImpact.title"),
+									<Toggle
+										checked={region.clickImpact === true}
+										ariaLabel={ts("zoom.clickImpact.title")}
+										onChange={(on) => void tl.updateZoomClickImpact(region.id, on)}
+									/>,
+								)
+							: null
+					}
 					{paneRow(
 						ts("zoom.focusMode.title"),
 						// While the global toggle is on it OVERRIDES every region, so the control shows
@@ -897,12 +860,10 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 						// Auto resamples the focus from cursor telemetry every frame, so there is no fixed
 						// point to reset and no gimbal on the canvas (ZoomFocusOverlay bows out) — the
 						// reset button would be a no-op. When the global toggle is what forced auto, say
-						// so, and say where to turn it off.
-						<p className={shell.hint}>
-							{ts(
-								autoFocusAll ? "zoom.focusMode.lockedDisclaimer" : "zoom.focusMode.autoDescription",
-							)}
-						</p>
+						// where to turn it off.
+						autoFocusAll ? (
+							<p className={shell.hint}>{ts("zoom.focusMode.lockedDisclaimer")}</p>
+						) : null
 					) : (
 						<button
 							type="button"
@@ -1251,7 +1212,6 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					tc("actions.close"),
 				)}
 				<div style={bodyStyle}>
-					<p className={shell.hint}>{te("inspector.cameraFullscreenDescription")}</p>
 					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
 						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{te("inspector.deleteRegion")}

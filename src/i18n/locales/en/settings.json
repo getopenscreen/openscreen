@@ -112,10 +112,6 @@
 		"formatFill": "Recording",
 		"formatFillFit": "Whole",
 		"formatFillFollow": "Follow cursor",
-		"formatFillHelp": "Fills the format with a window of the recording that follows the cursor.",
-		"formatFillMixed": "Unavailable: the clips have different shapes.",
-		"formatFillLayout": "Unavailable: the side-by-side and stacked layouts already fill their slot.",
-		"formatFillFrame": "Unavailable with a device frame.",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clips",
 		"frame": "Frame",
@@ -125,8 +121,6 @@
 		"fitClip": "Fit",
 		"motionBlur": "Motion blur",
 		"depthOfField": "Depth of field",
-		"depthOfFieldHint": "3D zooms",
-		"depthOfFieldNoTilt": "No 3D zoom in this project",
 		"roundness": "Roundness",
 		"frameStyle": "Style",
 		"windowNone": "None",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "Set by the Auto-Focus button in the timeline. Turn it off to choose the focus mode of each zoom.",
 			"auto": "Auto",
 			"manual": "Manual",
-			"autoDescription": "Camera follows the recorded cursor position",
 			"title": "Focus mode"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "Screen turned left",
 				"right": "Screen turned right",
 				"followCursor": "Orbits with the cursor"
-			},
-			"description": {
-				"off": "The screen stays flat.",
-				"left": "Holds one pose: turned left and seen from above.",
-				"right": "Holds one pose: turned right and seen from above.",
-				"followCursor": "The screen stays still; the camera circles it, swinging to the cursor's side and rising or dipping with it."
-			},
-			"needsCursor": "The cursor is hidden: this camera has nothing to follow and holds its starting angle."
+			}
 		},
 		"clickImpact": {
-			"title": "Click impact",
-			"description": "Each click presses the tilted screen: the clicked side dips, then springs back.",
-			"needsRotation": "Pick a 3D camera first: only a tilted screen can be pressed.",
-			"needsCursor": "The cursor is hidden: the screen only reacts to clicks you can see.",
-			"descriptionCamera": "Each click pushes the camera back a little, then it springs forward."
+			"title": "Click impact"
 		},
 		"level": "Zoom level",
 		"previewHold": "Hold to preview zoom effect",
@@ -438,15 +420,12 @@
 		"smoothing": "Smoothing",
 		"clickBounce": "Click bounce",
 		"model3d": "3D cursor",
-		"model3dHint": "Every cursor style uses a 3D shape suited to its design.",
-		"model3dNeedsCursor": "Turn on “Show cursor” to use the 3D cursor.",
 		"help": "How the recorded cursor is drawn: style, size, smoothing, motion blur and click bounce.",
 		"size": "Size",
 		"title": "Cursor",
 		"show": "Show cursor",
 		"themeDefault": "Default",
 		"alwaysArrow": "Always use arrow cursor",
-		"alwaysArrowHint": "Shows the arrow for every cursor state, even over text or links.",
 		"motionBlur": "Motion blur",
 		"theme": "Cursor style",
 		"autoHide": "Auto-hide when inactive",

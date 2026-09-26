@@ -112,10 +112,6 @@
 		"formatFill": "Záznam",
 		"formatFillFit": "Celý",
 		"formatFillFollow": "Sledovat kurzor",
-		"formatFillHelp": "Vyplní formát výřezem záznamu, který sleduje kurzor.",
-		"formatFillMixed": "Nedostupné: klipy mají různé tvary.",
-		"formatFillLayout": "Nedostupné: rozložení vedle sebe a nad sebou už své místo vyplňují.",
-		"formatFillFrame": "Nedostupné s rámečkem zařízení.",
 		"formatOriginal": "Původní",
 		"fitClipMany": "{{count}} klipů",
 		"frame": "Rám",
@@ -125,8 +121,6 @@
 		"fitClip": "Přizpůsobit",
 		"motionBlur": "Pohybové rozmazání",
 		"depthOfField": "Hloubka ostrosti",
-		"depthOfFieldHint": "3D přiblížení",
-		"depthOfFieldNoTilt": "Projekt nemá žádné 3D přiblížení",
 		"roundness": "Zaoblení",
 		"frameStyle": "Styl",
 		"windowNone": "Žádné",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "Řízeno globálním přepínačem Automatického zaostření na časové ose. Vypněte ho pro nastavení režimu zaostření pro každé přiblížení.",
 			"auto": "Automatický",
 			"manual": "Ruční",
-			"autoDescription": "Kamera sleduje zaznamenanou pozici kurzoru",
 			"title": "Režim zaostření"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "Obrazovka natočená doleva",
 				"right": "Obrazovka natočená doprava",
 				"followCursor": "Obíhá s kurzorem"
-			},
-			"description": {
-				"off": "Obrazovka zůstane rovná.",
-				"left": "Drží jednu pózu: natočená doleva a viděná shora.",
-				"right": "Drží jednu pózu: natočená doprava a viděná shora.",
-				"followCursor": "Obrazovka zůstává v klidu; kamera kolem ní krouží na stranu kurzoru a stoupá či klesá s ním."
-			},
-			"needsCursor": "Kurzor je skrytý: tato kamera nemá co sledovat a drží svůj výchozí úhel."
+			}
 		},
 		"clickImpact": {
-			"title": "Odezva kliknutí",
-			"description": "Každé kliknutí zatlačí nakloněnou obrazovku: kliknutá strana se prohne a vrátí zpět.",
-			"needsRotation": "Nejprve zvolte 3D kameru: zatlačit lze jen nakloněnou obrazovku.",
-			"needsCursor": "Kurzor je skrytý: obrazovka reaguje jen na viditelná kliknutí.",
-			"descriptionCamera": "Každé kliknutí kameru trochu oddálí, pak se vrátí."
+			"title": "Odezva kliknutí"
 		},
 		"level": "Úroveň přiblížení",
 		"previewHold": "Podržte pro náhled efektu přiblížení",
@@ -438,15 +420,12 @@
 		"smoothing": "Vyhlazení",
 		"clickBounce": "Odraz při kliknutí",
 		"model3d": "3D kurzor",
-		"model3dHint": "Každý styl kurzoru získá 3D tvar odpovídající svému designu.",
-		"model3dNeedsCursor": "Zapněte „Zobrazit kurzor“, abyste mohli použít 3D kurzor.",
 		"help": "Renderování kurzoru ze zaznamenané telemetrie: motiv, velikost, vyhlazení, pohybové rozmazání a zdůraznění odrazu při kliknutí.",
 		"size": "Velikost",
 		"title": "Kurzor",
 		"show": "Zobrazit kurzor",
 		"themeDefault": "Výchozí",
 		"alwaysArrow": "Vždy používat kurzor šipky",
-		"alwaysArrowHint": "Zobrazí šipku pro každý stav kurzoru, i nad textem nebo odkazy.",
 		"motionBlur": "Pohybové rozmazání",
 		"theme": "Styl kurzoru",
 		"autoHide": "Automaticky skrýt, když je neaktivní",

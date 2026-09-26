@@ -137,55 +137,37 @@ describe("FloatingInspector", () => {
 			return { tl, updateZoomClickImpact };
 		};
 
-		it("is off by default and disabled with its reason when there is no 3D preset", () => {
+		const toggle = () => screen.queryByRole("button", { name: "settings.zoom.clickImpact.title" });
+
+		it("is not offered without a 3D preset", () => {
 			const { tl } = zoomTl({});
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const box = screen.getByRole("button", { name: "settings.zoom.clickImpact.title" });
-			expect(box).toHaveAttribute("aria-pressed", "false");
-			expect(box).toBeDisabled();
-			expect(screen.getByText("settings.zoom.clickImpact.needsRotation")).toBeInTheDocument();
+			expect(toggle()).toBeNull();
 		});
 
-		it("is disabled with its reason when the region hides the cursor", () => {
+		it("is not offered when the region hides the cursor", () => {
 			const { tl } = zoomTl({ rotationPreset: "left", hideCursor: true });
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			expect(
-				screen.getByRole("button", { name: "settings.zoom.clickImpact.title" }),
-			).toBeDisabled();
-			expect(screen.getByText("settings.zoom.clickImpact.needsCursor")).toBeInTheDocument();
+			expect(toggle()).toBeNull();
 		});
 
-		it("says the orbiting camera recoils on a click, since its screen stays still", () => {
-			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "follow-cursor" });
-			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const box = screen.getByRole("button", { name: "settings.zoom.clickImpact.title" });
-			expect(box).toBeEnabled();
-			expect(screen.getByText("settings.zoom.clickImpact.descriptionCamera")).toBeInTheDocument();
-			fireEvent.click(box);
-			expect(updateZoomClickImpact).toHaveBeenCalledWith("z", true);
-		});
-
-		it("is disabled with its reason when the cursor is hidden globally", () => {
+		it("is not offered when the cursor is hidden globally", () => {
 			editorSettings.cursorShow = false;
 			try {
 				const { tl } = zoomTl({ rotationPreset: "left" });
 				render(<FloatingInspector {...defaultProps} tl={tl} />);
-				expect(
-					screen.getByRole("button", { name: "settings.zoom.clickImpact.title" }),
-				).toBeDisabled();
-				expect(screen.getByText("settings.zoom.clickImpact.needsCursor")).toBeInTheDocument();
+				expect(toggle()).toBeNull();
 			} finally {
 				editorSettings.cursorShow = true;
 			}
 		});
 
-		it("toggles the region's clickImpact under a 3D preset", () => {
-			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "left" });
+		it("toggles the region's clickImpact under a 3D preset, off by default", () => {
+			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "follow-cursor" });
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const box = screen.getByRole("button", { name: "settings.zoom.clickImpact.title" });
-			expect(box).toBeEnabled();
-			expect(screen.getByText("settings.zoom.clickImpact.description")).toBeInTheDocument();
-			fireEvent.click(box);
+			const box = toggle();
+			expect(box).toHaveAttribute("aria-pressed", "false");
+			fireEvent.click(box as HTMLElement);
 			expect(updateZoomClickImpact).toHaveBeenCalledWith("z", true);
 		});
 	});
@@ -208,12 +190,11 @@ describe("FloatingInspector", () => {
 			useProjectStore.setState({ document: null });
 		});
 
-		it("is the only 3D select, off by default, and says what off does", () => {
+		it("is the only 3D select, off by default", () => {
 			const { tl } = zoomTl({});
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
 			const select = screen.getByRole("combobox", { name: "settings.zoom.camera.title" });
 			expect(select).toHaveValue("off");
-			expect(screen.getByText("settings.zoom.camera.description.off")).toBeInTheDocument();
 			expect(screen.queryByRole("combobox", { name: /cameraMotion|threeD/ })).toBeNull();
 		});
 
@@ -236,19 +217,28 @@ describe("FloatingInspector", () => {
 			render(<FloatingInspector {...defaultProps} tl={tl} />);
 			const select = screen.getByRole("combobox", { name: "settings.zoom.camera.title" });
 			expect(select).toHaveValue("follow-cursor");
-			expect(screen.getByText("settings.zoom.camera.description.followCursor")).toBeInTheDocument();
 			fireEvent.change(select, { target: { value: "left" } });
 			expect(updateZoomRotation).toHaveBeenCalledWith("z", "left");
 			fireEvent.change(select, { target: { value: "off" } });
 			expect(updateZoomRotation).toHaveBeenLastCalledWith("z", undefined);
 		});
 
-		it("says a cursor-driven camera has nothing to follow while the cursor is hidden", () => {
+		it("offers no cursor-driven camera while the cursor is hidden, unless already picked", () => {
 			editorSettings.cursorShow = false;
 			try {
-				const { tl } = zoomTl({ rotationPreset: "follow-cursor" });
-				render(<FloatingInspector {...defaultProps} tl={tl} />);
-				expect(screen.getByText("settings.zoom.camera.needsCursor")).toBeInTheDocument();
+				const moving = () =>
+					screen.queryByRole("option", { name: "settings.zoom.camera.preset.followCursor" });
+				const { tl } = zoomTl({});
+				const { unmount } = render(<FloatingInspector {...defaultProps} tl={tl} />);
+				expect(moving()).toBeNull();
+				unmount();
+				render(
+					<FloatingInspector
+						{...defaultProps}
+						tl={zoomTl({ rotationPreset: "follow-cursor" }).tl}
+					/>,
+				);
+				expect(moving()).not.toBeNull();
 			} finally {
 				editorSettings.cursorShow = true;
 			}

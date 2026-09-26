@@ -112,10 +112,6 @@
 		"formatFill": "錄製內容",
 		"formatFillFit": "完整",
 		"formatFillFollow": "跟隨游標",
-		"formatFillHelp": "以跟隨游標的錄製視窗填滿畫面比例。",
-		"formatFillMixed": "無法使用：片段形狀不一致。",
-		"formatFillLayout": "無法使用：並排與上下版面已填滿各自的位置。",
-		"formatFillFrame": "使用裝置邊框時無法使用。",
 		"formatOriginal": "原始",
 		"fitClipMany": "{{count}} 個片段",
 		"frame": "外框",
@@ -125,8 +121,6 @@
 		"fitClip": "符合",
 		"motionBlur": "動態模糊",
 		"depthOfField": "景深",
-		"depthOfFieldHint": "3D 縮放",
-		"depthOfFieldNoTilt": "此專案沒有 3D 縮放",
 		"roundness": "圓角",
 		"frameStyle": "樣式",
 		"windowNone": "無",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "由時間軸中的全域自動對焦開關控制。關閉後可為每個縮放個別設定對焦模式。",
 			"auto": "自動",
 			"manual": "手動",
-			"autoDescription": "攝影機跟隨錄製時的游標位置",
 			"title": "對焦模式"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "畫面向左轉",
 				"right": "畫面向右轉",
 				"followCursor": "隨游標環繞"
-			},
-			"description": {
-				"off": "畫面保持平整。",
-				"left": "保持單一姿態：向左轉，並從上方俯視。",
-				"right": "保持單一姿態：向右轉，並從上方俯視。",
-				"followCursor": "螢幕保持不動，鏡頭繞著螢幕轉到游標所在的一側，並隨游標升降。"
-			},
-			"needsCursor": "游標已隱藏：此鏡頭沒有可跟隨的對象，維持初始角度。"
+			}
 		},
 		"clickImpact": {
-			"title": "點擊按壓",
-			"description": "每次點擊都會按壓傾斜的畫面：被點擊的一側下沉，然後彈回。",
-			"needsRotation": "請先選擇 3D 鏡頭：只有傾斜的畫面才能被按壓。",
-			"needsCursor": "游標已隱藏：畫面只對看得見的點擊做出反應。",
-			"descriptionCamera": "每次點擊，鏡頭都會稍微後退，然後回位。"
+			"title": "點擊按壓"
 		},
 		"level": "縮放級別",
 		"previewHold": "按住預覽放大效果",
@@ -438,15 +420,12 @@
 		"smoothing": "平滑",
 		"clickBounce": "點擊彈跳",
 		"model3d": "3D 游標",
-		"model3dHint": "每種游標樣式都會採用符合其設計的 3D 外型。",
-		"model3dNeedsCursor": "開啟「顯示游標」後才能使用 3D 游標。",
 		"help": "根據錄製的遙測資料繪製游標：主題、大小、平滑、動態模糊與點擊回彈。",
 		"size": "大小",
 		"title": "游標",
 		"show": "顯示游標",
 		"themeDefault": "預設",
 		"alwaysArrow": "一律使用箭頭游標",
-		"alwaysArrowHint": "在任何游標狀態下都顯示箭頭，即使位於文字或連結上方。",
 		"motionBlur": "動態模糊",
 		"theme": "游標樣式",
 		"autoHide": "閒置時隱藏",

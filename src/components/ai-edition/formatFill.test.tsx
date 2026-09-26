@@ -102,9 +102,8 @@ describe("format fill", () => {
 		expect(stored()).toBe(false);
 	});
 
-	it("is greyed out with the reason under a device frame", () => {
+	it("is not offered under a device frame", () => {
 		mount(hdTake({ aspectRatio: "9:16", frame: "laptop", formatFollowCursor: true }));
-		expect(screen.getByRole("button", { name: "Follow cursor" })).toBeDisabled();
-		expect(screen.getByText("Unavailable with a device frame.")).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Follow cursor" })).toBeNull();
 	});
 });

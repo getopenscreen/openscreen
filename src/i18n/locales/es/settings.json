@@ -112,10 +112,6 @@
 		"formatFill": "Grabación",
 		"formatFillFit": "Completa",
 		"formatFillFollow": "Seguir el cursor",
-		"formatFillHelp": "Llena el formato con una ventana de la grabación que sigue al cursor.",
-		"formatFillMixed": "No disponible: los clips tienen formas distintas.",
-		"formatFillLayout": "No disponible: los diseños lado a lado y apilado ya llenan su espacio.",
-		"formatFillFrame": "No disponible con un marco de dispositivo.",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clips",
 		"frame": "Marco",
@@ -125,8 +121,6 @@
 		"fitClip": "Ajustar",
 		"motionBlur": "Desenfoque de movimiento",
 		"depthOfField": "Profundidad de campo",
-		"depthOfFieldHint": "Zooms 3D",
-		"depthOfFieldNoTilt": "No hay zoom 3D en este proyecto",
 		"roundness": "Redondez",
 		"frameStyle": "Estilo",
 		"windowNone": "Ninguna",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "Controlado por el interruptor global de enfoque automático en la línea de tiempo. Desactívalo para configurar el modo de enfoque por cada zoom.",
 			"auto": "Auto",
 			"manual": "Manual",
-			"autoDescription": "La cámara sigue la posición del cursor grabado",
 			"title": "Modo de enfoque"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "Pantalla girada a la izquierda",
 				"right": "Pantalla girada a la derecha",
 				"followCursor": "Gira con el cursor"
-			},
-			"description": {
-				"off": "La pantalla se queda plana.",
-				"left": "Mantiene una sola pose: girada a la izquierda y vista desde arriba.",
-				"right": "Mantiene una sola pose: girada a la derecha y vista desde arriba.",
-				"followCursor": "La pantalla no se mueve; la cámara la rodea hacia el lado del cursor y sube o baja con él."
-			},
-			"needsCursor": "El cursor está oculto: esta cámara no tiene nada que seguir y mantiene su ángulo inicial."
+			}
 		},
 		"clickImpact": {
-			"title": "Impacto del clic",
-			"description": "Cada clic presiona la pantalla inclinada: el lado pulsado se hunde y luego vuelve.",
-			"needsRotation": "Elige primero una cámara 3D: solo se puede presionar una pantalla inclinada.",
-			"needsCursor": "El cursor está oculto: la pantalla solo reacciona a los clics visibles.",
-			"descriptionCamera": "Cada clic hace retroceder un poco la cámara, que luego vuelve."
+			"title": "Impacto del clic"
 		},
 		"level": "Nivel de zoom",
 		"previewHold": "Mantener para previsualizar el efecto de zoom",
@@ -438,15 +420,12 @@
 		"smoothing": "Suavizado",
 		"clickBounce": "Rebote al clic",
 		"model3d": "Cursor 3D",
-		"model3dHint": "Cada estilo de cursor adopta una forma 3D acorde con su diseño.",
-		"model3dNeedsCursor": "Activa «Mostrar cursor» para usar el cursor 3D.",
 		"help": "Representación del cursor a partir de la telemetría grabada: tema, tamaño, suavizado, desenfoque de movimiento y rebote al hacer clic.",
 		"size": "Tamaño",
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Predeterminado",
 		"alwaysArrow": "Usar siempre el cursor de flecha",
-		"alwaysArrowHint": "Muestra la flecha en todos los estados del cursor, incluso sobre texto o enlaces.",
 		"motionBlur": "Desenfoque de movimiento",
 		"theme": "Estilo del cursor",
 		"autoHide": "Ocultar si está inactivo",

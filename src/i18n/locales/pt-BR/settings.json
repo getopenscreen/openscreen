@@ -112,10 +112,6 @@
 		"formatFill": "Gravação",
 		"formatFillFit": "Inteira",
 		"formatFillFollow": "Seguir o cursor",
-		"formatFillHelp": "Preenche o formato com uma janela da gravação que segue o cursor.",
-		"formatFillMixed": "Indisponível: os clipes têm formatos diferentes.",
-		"formatFillLayout": "Indisponível: os layouts lado a lado e empilhado já preenchem seu espaço.",
-		"formatFillFrame": "Indisponível com uma moldura de dispositivo.",
 		"formatOriginal": "Original",
 		"fitClipMany": "{{count}} clipes",
 		"frame": "Moldura",
@@ -125,8 +121,6 @@
 		"fitClip": "Ajustar",
 		"motionBlur": "Desfoque de Movimento",
 		"depthOfField": "Profundidade de campo",
-		"depthOfFieldHint": "Zooms 3D",
-		"depthOfFieldNoTilt": "Nenhum zoom 3D neste projeto",
 		"roundness": "Arredondamento",
 		"frameStyle": "Estilo",
 		"windowNone": "Nenhuma",
@@ -375,7 +369,6 @@
 			"lockedDisclaimer": "Controlado pelo interruptor global de Foco Automático na linha do tempo. Desative-o para definir o modo de foco por zoom.",
 			"auto": "Automático",
 			"manual": "Manual",
-			"autoDescription": "A câmera segue a posição do cursor gravado",
 			"title": "Modo de Foco"
 		},
 		"camera": {
@@ -387,21 +380,10 @@
 				"left": "Tela virada para a esquerda",
 				"right": "Tela virada para a direita",
 				"followCursor": "Gira com o cursor"
-			},
-			"description": {
-				"off": "A tela fica plana.",
-				"left": "Mantém uma única pose: virada para a esquerda e vista de cima.",
-				"right": "Mantém uma única pose: virada para a direita e vista de cima.",
-				"followCursor": "A tela fica parada; a câmera gira ao redor dela, para o lado do cursor, e sobe ou desce com ele."
-			},
-			"needsCursor": "O cursor está oculto: esta câmera não tem o que seguir e mantém seu ângulo inicial."
+			}
 		},
 		"clickImpact": {
-			"title": "Impacto do clique",
-			"description": "Cada clique pressiona a tela inclinada: o lado clicado afunda e depois volta.",
-			"needsRotation": "Escolha primeiro uma câmera 3D: só uma tela inclinada pode ser pressionada.",
-			"needsCursor": "O cursor está oculto: a tela só reage a cliques visíveis.",
-			"descriptionCamera": "Cada clique faz a câmera recuar um pouco e depois voltar."
+			"title": "Impacto do clique"
 		},
 		"level": "Nível de Zoom",
 		"previewHold": "Mantenha pressionado para pré-visualizar o efeito de zoom",
@@ -438,15 +420,12 @@
 		"smoothing": "Suavização",
 		"clickBounce": "Rebote ao clicar",
 		"model3d": "Cursor 3D",
-		"model3dHint": "Cada estilo de cursor ganha uma forma 3D adequada ao seu design.",
-		"model3dNeedsCursor": "Ative “Mostrar cursor” para usar o cursor 3D.",
 		"help": "Renderização do cursor a partir da telemetria gravada: tema, tamanho, suavização, desfoque de movimento e salto ao clicar.",
 		"size": "Tamanho",
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Padrão",
 		"alwaysArrow": "Sempre usar o cursor de seta",
-		"alwaysArrowHint": "Mostra a seta em todos os estados do cursor, mesmo sobre texto ou links.",
 		"motionBlur": "Desfoque de movimento",
 		"theme": "Estilo do cursor",
 		"autoHide": "Ocultar quando inativo",

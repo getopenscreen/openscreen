@@ -111,7 +111,10 @@ describe("caption placement controls", () => {
 		show({});
 		expect(button("Bottom")).toHaveAttribute("aria-pressed", "true");
 		expect(button("Top")).toHaveAttribute("aria-pressed", "false");
-		expect(button("Center")).toHaveAttribute("aria-pressed", "true");
+		// Six anchors, like the camera grid without its middle row.
+		expect(screen.getAllByRole("button", { name: /^(Top|Bottom)( left| right)?$/ })).toHaveLength(
+			6,
+		);
 		expect(sliderFor("Distance from bottom")).toBeInTheDocument();
 	});
 
@@ -130,7 +133,7 @@ describe("caption placement controls", () => {
 	it("never offers a negative distance", () => {
 		show({});
 		expect(Number(sliderFor("Distance from bottom").min)).toBe(0);
-		fireEvent.click(button("Left"));
+		fireEvent.click(button("Bottom left"));
 		expect(Number(sliderFor("Distance from left").min)).toBe(0);
 	});
 
@@ -149,13 +152,13 @@ describe("caption placement controls", () => {
 		expect(screen.queryByText("Distance from left")).not.toBeInTheDocument();
 		expect(screen.queryByText("Distance from right")).not.toBeInTheDocument();
 
-		fireEvent.click(button("Right"));
+		fireEvent.click(button("Bottom right"));
 		expect(sliderFor("Distance from right")).toBeEnabled();
 	});
 
 	it("leaves no control disabled once a document is open", () => {
 		show({});
-		for (const name of ["Bottom", "Top", "Left", "Center", "Right"]) {
+		for (const name of ["Top left", "Top", "Top right", "Bottom left", "Bottom", "Bottom right"]) {
 			expect(button(name)).toBeEnabled();
 		}
 		expect(sliderFor("Distance from bottom")).toBeEnabled();
@@ -179,13 +182,6 @@ describe("caption placement controls", () => {
 		expect(screen.queryByText("Vertical offset")).not.toBeInTheDocument();
 		expect(screen.queryByText("Horizontal offset")).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Middle" })).not.toBeInTheDocument();
-	});
-
-	it("explains which way a long caption grows", () => {
-		show({ anchorV: "bottom" });
-		expect(screen.getByText(/grow upward/i)).toBeInTheDocument();
-		fireEvent.click(button("Top"));
-		expect(screen.getByText(/grow downward/i)).toBeInTheDocument();
 	});
 });
 

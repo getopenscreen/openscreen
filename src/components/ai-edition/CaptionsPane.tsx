@@ -68,6 +68,46 @@ const TRANSLATION_LANGUAGES: ReadonlyArray<{ code: string; label: string }> = [
 	{ code: "zh", label: "中文" },
 ];
 
+const CAPTION_ANCHORS = (["top", "bottom"] as const).flatMap((v) =>
+	(["left", "center", "right"] as const).map((h) => [v, h] as const),
+);
+
+const CAPTION_ANCHOR_KEYS: Record<string, string> = {
+	"top-left": "layout.anchors.topLeft",
+	"top-center": "layout.anchors.top",
+	"top-right": "layout.anchors.topRight",
+	"bottom-left": "layout.anchors.bottomLeft",
+	"bottom-center": "layout.anchors.bottom",
+	"bottom-right": "layout.anchors.bottomRight",
+};
+
+/** The frame with a caption line where this anchor puts it (same viewBox as the camera icons). */
+function captionAnchorIcon(v: CaptionAnchorV, h: CaptionAnchorH) {
+	const fx = h === "left" ? 0 : h === "center" ? 0.5 : 1;
+	return (
+		<svg
+			viewBox="0 0 32 22"
+			width={32}
+			height={22}
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.75"
+			aria-hidden="true"
+		>
+			<rect x="1.5" y="1.5" width="29" height="19" rx="3" />
+			<rect
+				x={5 + fx * 10}
+				y={v === "top" ? 5 : 14}
+				width="12"
+				height="3"
+				rx="1.5"
+				fill="currentColor"
+				stroke="none"
+			/>
+		</svg>
+	);
+}
+
 export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 	const t = useScopedT("settings");
 	const te = useScopedT("editor");
@@ -542,28 +582,25 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 				    against that invisible band, and a text alignment fighting the offset for
 				    the same visual outcome. */}
 				<div className={styles.sectionLabel}>{t("captions.position")}</div>
-				<Segmented<CaptionAnchorV>
-					value={settings.anchorV}
-					disabled={disabled}
-					options={[
-						{ value: "bottom", label: t("captions.anchorBottom") },
-						{ value: "top", label: t("captions.anchorTop") },
-					]}
-					// No offset to reset: the inset means the same thing on both anchors, so
-					// flipping mirrors the caption to the same distance from the opposite edge.
-					onChange={(anchorV) => void set({ anchorV })}
-				/>
-				<p
-					style={{
-						margin: "6px var(--sp-4) 10px",
-						font: "400 11px/1.5 var(--font-body)",
-						color: "var(--muted)",
-					}}
-				>
-					{settings.anchorV === "bottom"
-						? t("captions.anchorHintBottom")
-						: t("captions.anchorHintTop")}
-				</p>
+				{/* Same 3-column picker as the camera position, minus the middle row: a
+				    caption is anchored to the top or bottom edge, never the centre. */}
+				<div style={{ padding: "0 var(--sp-4) 12px" }}>
+					<ChoiceRow<string>
+						label={t("captions.position")}
+						columns={3}
+						options={CAPTION_ANCHORS.map(([v, h]) => ({
+							value: `${v}-${h}`,
+							label: t(CAPTION_ANCHOR_KEYS[`${v}-${h}`]),
+							icon: captionAnchorIcon(v, h),
+						}))}
+						value={`${settings.anchorV}-${settings.anchorH}`}
+						disabled={disabled}
+						onChange={(key) => {
+							const [anchorV, anchorH] = key.split("-") as [CaptionAnchorV, CaptionAnchorH];
+							void set({ anchorV, anchorH });
+						}}
+					/>
+				</div>
 				<div className={styles.sliderGrid}>
 					<SliderCell
 						label={
@@ -584,16 +621,6 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 					/>
 				</div>
 
-				<Segmented<CaptionAnchorH>
-					value={settings.anchorH}
-					disabled={disabled}
-					options={[
-						{ value: "left", label: t("captions.alignLeft") },
-						{ value: "center", label: t("captions.alignCenter") },
-						{ value: "right", label: t("captions.alignRight") },
-					]}
-					onChange={(anchorH) => void set({ anchorH })}
-				/>
 				{/* Centre has no edge to measure from, so the control is ABSENT rather than
 				    disabled — a dead slider reads as a bug. */}
 				{settings.anchorH === "center" ? null : (
@@ -673,41 +700,3 @@ const selectStyle: React.CSSProperties = {
 	minWidth: 120,
 	cursor: "pointer",
 };
-
-/**
- * One "label + swatch" row that opens the app's standard `ColorPicker` (wheel /
- * palette / hex) in a popover.
- *
- * The pane used to carry its own hard-coded caption swatches. That was a third
- * private palette in the app, and it meant the caption colours behaved unlike
- * every other colour surface — so it's gone: this defers to the shared
- * `COLOR_PALETTE` and the shared picker instead.
- */
-function Segmented<T extends string>({
-	value,
-	options,
-	disabled,
-	onChange,
-}: {
-	value: T;
-	options: ReadonlyArray<{ value: T; label: string }>;
-	disabled?: boolean;
-	onChange: (next: T) => void;
-}) {
-	return (
-		<div className={styles.paneTabs}>
-			{options.map((option) => (
-				<button
-					type="button"
-					key={option.value}
-					className={value === option.value ? styles.isActive : ""}
-					aria-pressed={value === option.value}
-					disabled={disabled}
-					onClick={() => onChange(option.value)}
-				>
-					{option.label}
-				</button>
-			))}
-		</div>
-	);
-}

@@ -703,8 +703,9 @@ export function zoomScaleLimit(document: AxcutDocument, regionId: string): numbe
 /**
  * Where the footage under the annotation `annotationId` sits in the output frame, as fractions
  * of it: the layout of the clip the annotation is on, exactly as the scene lays it out. What the
- * inspector converts through when an annotation changes box (`annotations/placement.ts`). The
- * first clip's when the annotation is on none; `null` when there is no clip at all.
+ * inspector converts through when an annotation changes box (`annotations/placement.ts`). `null`
+ * when the annotation is on no clip (its own clip trimmed away, say): another clip's layout may
+ * differ, and converting through it would move the annotation.
  */
 export function annotationFootageRect(
 	document: AxcutDocument,
@@ -712,17 +713,16 @@ export function annotationFootageRect(
 ): SceneRect | null {
 	const region = (document.annotations ?? []).find((a) => a.id === annotationId);
 	if (!region) return null;
-	const scene = buildSceneDescription(document);
 	const [piece] = projectRegionsToSource(
 		[region],
 		resolveVisibleClips(document),
 		document.timeline.clips,
 		() => "",
 	);
+	if (piece?.clipIndex === undefined) return null;
+	const scene = buildSceneDescription(document);
 	return (
-		scene.layout.layoutByClip?.[piece?.clipIndex ?? 0]?.screenRect ??
-		scene.layout.screenRect ??
-		null
+		scene.layout.layoutByClip?.[piece.clipIndex]?.screenRect ?? scene.layout.screenRect ?? null
 	);
 }
 

@@ -219,7 +219,7 @@ export function fitTextBox(
  * sans bouger à l'image, à travers `footage`, le rect du footage dans le cadre. Une boîte de texte
  * épouse ses mots, bien trop petite pour une image, une flèche ou un flou : ceux-là repartent de la
  * taille par défaut, centrés au même endroit. `footage` inconnu (aucun clip sous l'annotation) :
- * les nombres restent tels quels.
+ * les nombres restent tels quels, et un flou quitte le cadre quand même.
  */
 export function convertAnnotationKind(
 	region: Region,
@@ -251,7 +251,8 @@ export function convertAnnotationKind(
 			: usable
 				? footageToFrame(rectOf(region), usable)
 				: null;
-	if (!onFrame || !usable) return content;
+	// Sans footage par où convertir, les nombres restent ; mais un flou ne vit jamais dans le cadre.
+	if (!onFrame || !usable) return belongsInFrame(next) ? content : { ...content, space: undefined };
 	const center = centerOf(onFrame);
 	const fromText = region.type === "text";
 
@@ -292,7 +293,8 @@ export function convertAnnotationKind(
  * sur hauteur). Chacune garde son centre, et sa forme à l'image : sa largeur est mesurée, comme
  * la police, sur la hauteur du cadre. Sans ça, un texte taillé en 16:9 garde en 9:16 le même
  * pourcentage d'une largeur trois fois plus petite en pixels, et le compositeur le renvoie à la
- * ligne ; une flèche penche. Le reste ne bouge pas : un flou suit le footage, qui garde son ratio.
+ * ligne ; une flèche penche. Celle qui ne tiendrait plus en largeur est réduite pour y tenir. Le
+ * reste ne bouge pas : un flou suit le footage, qui garde son ratio.
  */
 export function refitFrameAnnotations<T extends Region>(
 	annotations: T[],
@@ -306,6 +308,21 @@ export function refitFrameAnnotations<T extends Region>(
 	return annotations.map((annotation) => {
 		if (annotation.space !== "frame") return annotation;
 		const rect = rectOf(annotation);
-		return { ...annotation, ...around(centerOf(rect), rect.width * scale, rect.height) };
+		const width = rect.width * scale;
+		// Plus large que le nouveau cadre : réduite d'un bloc, son texte avec elle, pour rester à
+		// l'image au lieu d'en déborder.
+		const shrink = Math.min(1, 100 / width);
+		const refit = {
+			...annotation,
+			...around(centerOf(rect), width * shrink, rect.height * shrink),
+		};
+		if (shrink === 1 || annotation.type !== "text") return refit;
+		// Arrondie vers le bas : un texte plus grand d'un cheveu que sa boîte réduite passerait à la
+		// ligne.
+		const fontSize = clampToBound(
+			Math.floor(annotation.style.fontSize * shrink),
+			"annotationFontSize",
+		);
+		return { ...refit, style: { ...annotation.style, fontSize } };
 	});
 }

@@ -184,6 +184,14 @@ describe("convertAnnotationKind", () => {
 		const patch = convertAnnotationKind(region(), "figure", { ...context, footage: null });
 		expect(patch).toEqual({ textContent: "Hello", type: "figure", content: "" });
 	});
+
+	it("takes a blur off the frame even when no footage is known", () => {
+		const text = region({ space: "frame" });
+		const patch = convertAnnotationKind(text, "blur", { ...context, footage: null });
+		expect(patch.type).toBe("blur");
+		expect("space" in patch && patch.space === undefined).toBe(true);
+		expect(patch.position).toBeUndefined();
+	});
 });
 
 describe("refitFrameAnnotations", () => {
@@ -200,6 +208,26 @@ describe("refitFrameAnnotations", () => {
 		expect(after.size.height).toBe(6);
 		expect(center(after).x).toBeCloseTo(50, 6);
 		expect(after.position.y).toBe(40);
+	});
+
+	it("shrinks one that no longer fits the frame's width, its text with it", () => {
+		const banner = region({
+			space: "frame",
+			position: { x: 30, y: 40 },
+			size: { width: 40, height: 6 },
+		});
+		const [after] = refitFrameAnnotations([banner], WIDE, 9 / 16);
+		// 40 % of a 16:9 frame is 126 % of a 9:16 one: brought back to the full width, around the
+		// same centre, and shrunk as a whole.
+		const shrink = 100 / (40 * (WIDE / (9 / 16)));
+		expect(after.size.width).toBeCloseTo(100, 6);
+		expect(after.position.x).toBe(0);
+		expect(after.size.height).toBeCloseTo(6 * shrink, 6);
+		expect(center(after).y).toBeCloseTo(43, 6);
+		// Rounded down, so the words still fit the shrunk box.
+		expect(after.style.fontSize).toBe(Math.floor(32 * shrink));
+		const image = region({ type: "image", space: "frame", size: { width: 40, height: 6 } });
+		expect(refitFrameAnnotations([image], WIDE, 9 / 16)[0].style).toBe(image.style);
 	});
 
 	it("leaves the footage's annotations, and an unchanged format, alone", () => {

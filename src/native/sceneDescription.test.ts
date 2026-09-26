@@ -2431,6 +2431,13 @@ describe("buildSceneDescription.captions", () => {
 		expect(rect?.width).toBeLessThan(1);
 		expect(rect?.x).toBeCloseTo((1 - (rect?.width ?? 0)) / 2, 6);
 		expect(annotationFootageRect(doc, "nope")).toBeNull();
+		// Anchored to a clip that is no longer on the timeline: no footage of its own, and no
+		// other clip's layout borrowed in its place.
+		const orphan = {
+			...doc,
+			annotations: [{ ...doc.annotations[0], clipId: "gone", sourceStartSec: 0, sourceEndSec: 1 }],
+		} as AxcutDocument;
+		expect(annotationFootageRect(orphan, "ann1")).toBeNull();
 	});
 
 	it("leaves the space key off an annotation still on the footage", () => {

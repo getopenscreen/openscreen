@@ -2491,6 +2491,7 @@ impl Compositor {
                     let anim = crate::text_anim::text_animation_state(
                         text.animation.as_deref(),
                         (t - annotation.start_sec as f32) * 1000.0,
+                        ((annotation.end_sec - annotation.start_sec) * 1000.0) as f32,
                     );
                     // Les décalages sont donnés à la hauteur de référence : on les ramène à la
                     // sortie, comme la taille de police, pour que l'animation ait la même

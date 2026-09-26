@@ -158,7 +158,7 @@ openscreen captions demo.openscreen --min-words 2 --max-words 7
 openscreen export demo.openscreen -o demo.mp4   # captions are burned into the video
 ```
 
-- `--min-words` und `--max-words` legen die Wörter pro Untertitel fest. Standard: 2 und 7.
+- `--min-words` und `--max-words` legen die Wörter pro Untertitel fest. Erlaubt sind jeweils 1 bis 12, wie im Editor. Standard: 2 und 7.
 - Ein erneuter Lauf ersetzt die Untertitel, die der Befehl vorher hinzugefügt hat. Annotationen, die du selbst hinzugefügt hast, bleiben erhalten.
 - Das Bildschirmvideo des Projekts muss eine Audiospur haben, zum Beispiel aus `record --mic`.
 - Untertitel werden in den Export eingebrannt. Eine Ausgabe als Untertiteldatei gibt es nicht. Siehe [Untertitel](./captions.md).

@@ -1284,8 +1284,9 @@ float4 ps_main(VSOut i) : SV_Target
     // (`FrameGeometry::screen_trail`). t2 = son rendu isolé, prémultiplié, à la taille de la
     // sortie ; sa boîte va de `dst_prev` (frame précédente) à `fx` (courante), fractions de sortie.
     // Chaque tap relit, dans le rendu courant, le point de l'objet qui couvrait ce pixel plus tôt
-    // sur la trajectoire. Un point hors de la sortie n'a pas été rendu : dans l'écran, on relit le
-    // métrage (`src` = la coupe) ; hors de l'écran (un bout de cadre hors champ), le tap est écarté.
+    // sur la trajectoire. Un point hors de la sortie n'a pas été rendu : dans l'ouverture arrondie
+    // de l'écran (`quad_px`, `radius_px`, 2 px en retrait : la lunette mord dessus), on relit le
+    // métrage (`src` = la coupe) ; ailleurs (un bout de cadre hors champ), le tap est écarté.
     if (mode > 17.5)
     {
         int taps = (int) mb.x;
@@ -1303,7 +1304,7 @@ float4 ps_main(VSOut i) : SV_Target
                 acc += texImg.SampleLevel(samp, q, 0.0);
                 n += 1.0;
             }
-            else if (all(f >= 0.0) && all(f <= 1.0))
+            else if (sd_round_rect(f * quad_px - quad_px * 0.5, quad_px * 0.5, radius_px) < -2.0)
             {
                 acc += float4(sample_yuv(lerp(src.xy, src.zw, f)), 1.0);
                 n += 1.0;

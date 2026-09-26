@@ -103,8 +103,9 @@ fn sample_yuv_level(uv: vec2<f32>) -> vec3<f32> {
 // (`FrameGeometry::screen_trail`), port 1:1 du HLSL. Binding 4 = son rendu isole, premultiplie,
 // a la taille de la sortie ; sa boite va de `dst_prev` (frame precedente) a `fx` (courante).
 // Chaque tap relit, dans le rendu courant, le point de l'objet qui couvrait ce pixel plus tot sur
-// la trajectoire. Hors de la sortie rien n'a ete rendu : dans l'ecran on relit le metrage
-// (`src` = la coupe), hors de l'ecran (un bout de cadre hors champ) le tap est ecarte.
+// la trajectoire. Hors de la sortie rien n'a ete rendu : dans l'ouverture arrondie de l'ecran
+// (`quad_px`, `radius_px`, 2 px en retrait) on relit le metrage (`src` = la coupe), ailleurs le
+// tap est ecarte.
 fn screen_trail(pout: vec2<f32>) -> vec4<f32> {
     let taps = i32(layer.mb.x);
     var acc = vec4<f32>(0.0);
@@ -116,7 +117,8 @@ fn screen_trail(pout: vec2<f32>) -> vec4<f32> {
         let f = (pout - r.xy) / r.zw;
         let q = layer.fx.xy + f * layer.fx.zw;
         let rendered = all(q >= vec2<f32>(0.0)) && all(q <= vec2<f32>(1.0));
-        let in_screen = all(f >= vec2<f32>(0.0)) && all(f <= vec2<f32>(1.0));
+        let hs = layer.quad_px * 0.5;
+        let in_screen = sd_round_rect(f * layer.quad_px - hs, hs, layer.radius_px) < -2.0;
         let group = textureSampleLevel(texMask, samp, q, 0.0);
         let footage = vec4<f32>(sample_yuv_level(mix(layer.src.xy, layer.src.zw, f)), 1.0);
         acc = acc + select(select(vec4<f32>(0.0), footage, in_screen), group, rendered);

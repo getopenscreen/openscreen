@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CAPTION_SETTINGS } from "@/lib/ai-edition/captions/settings";
 import type { CaptionSegment } from "@/lib/captioning/transcribe";
-import { captionSegmentsToAnnotationRegions } from "./captionAnnotations";
+import { CAPTION_PLATE_HEIGHT, captionSegmentsToAnnotationRegions } from "./captionAnnotations";
 
 const words = (...texts: string[]): CaptionSegment[] =>
 	texts.map((text, i) => ({ text, startSec: i * 0.5, endSec: i * 0.5 + 0.4 }));
@@ -42,9 +42,13 @@ describe("captionSegmentsToAnnotationRegions", () => {
 			color: DEFAULT_CAPTION_SETTINGS.color,
 			backgroundColor: "rgba(0, 0, 0, 0.55)",
 		});
-		// Inside the 16:9 safe column, bottom edge 1.5% off the frame's.
+		// Inside the 16:9 safe column.
 		expect(region.position.x).toBe(16);
 		expect(region.size.width).toBe(68);
-		expect(region.position.y + region.size.height).toBeCloseTo(98.5);
+		// The PLATE, centred in the region, ends 1.5% off the frame's bottom edge, like the
+		// editor's inset. The region itself extends below it.
+		const plateBottom = region.position.y + region.size.height / 2 + CAPTION_PLATE_HEIGHT / 2;
+		expect(plateBottom).toBeCloseTo(98.5);
+		expect(region.position.y + region.size.height).toBeGreaterThan(98.5);
 	});
 });

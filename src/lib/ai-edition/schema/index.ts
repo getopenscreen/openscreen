@@ -1041,6 +1041,21 @@ export function migrateRawDocumentToCurrent(raw: unknown): unknown {
 // single `z.literal(8)` + shape check.
 export const documentSchema = documentSchemaShape;
 
+/**
+ * Whether a parsed `.openscreen` file is an AxcutDocument — what the editor saves, at any
+ * `schemaVersion` — rather than a legacy v2 `{ version, media, editor }` project, which must go
+ * through `migrateProjectDataToAxcutDocument` instead (it reads `.media` / `.editor` and would
+ * yield an empty document from a current one).
+ */
+export function isAxcutDocumentFile(raw: unknown): raw is Record<string, unknown> {
+	return typeof raw === "object" && raw !== null && "schemaVersion" in raw && "timeline" in raw;
+}
+
+/** A document read from a file, at any supported `schemaVersion`: upgraded, then validated. */
+export function parseDocumentFile(raw: unknown): AxcutDocument {
+	return documentSchema.parse(migrateRawDocumentToCurrent(raw));
+}
+
 export const createProjectInputSchema = z.object({
 	title: z.string().trim().min(1).default("Untitled Project"),
 });

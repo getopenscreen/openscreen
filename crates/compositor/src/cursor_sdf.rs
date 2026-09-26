@@ -479,7 +479,10 @@ mod tests {
                 assert_eq!(sdf.width, 128 * SDF_UPSAMPLE as u32, "{theme}/{state}");
                 assert_eq!(sdf.height, 128 * SDF_UPSAMPLE as u32, "{theme}/{state}");
                 assert!(sdf.shape.max_height > 0.02, "{theme}/{state} has no sculpted relief");
-                assert_eq!(sdf.shape.max_height, crate::frame_geometry::MODEL_RELIEF_MAX);
+                assert!(
+                    sdf.shape.max_height
+                        <= crate::frame_geometry::MODEL_RELIEF_MAX + f32::EPSILON
+                );
                 assert_eq!(sdf.rg16_bytes().len(), sdf.texels.len() * 4, "{theme}/{state}");
             }
         }

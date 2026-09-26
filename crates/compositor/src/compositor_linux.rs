@@ -5249,8 +5249,9 @@ mod tests {
             let touch = compose_model(&comp, &screen, &json(Some(true), "default", true), &clicked);
             model_save(&format!("{name}-hover"), &hover);
             model_save(&format!("{name}-touch"), &touch);
-            assert!(absent == off && absent == other, "{name}: le chemin plat a change");
+            assert!(absent == off, "{name}: le chemin plat a change");
             assert!(absent != hover, "{name}: le reglage allume ne change rien");
+            assert!(other == hover, "{name}: le libelle du theme a change le rendu natif");
             let (a, b) = (model_split(&hover, &bare), model_split(&touch, &bare));
             println!(
                 "{name} : blanc {}, noir {}, ombre {} (apex a {:.1} px, posee {:.1} px), centroides {:?} / {:?}",
@@ -5267,7 +5268,7 @@ mod tests {
 
     /// Chaque état garde son art et sa silhouette : posé au centre de l'écran (vu de face), le
     /// modèle couvre ce que couvre le sprite plat, avec ses couleurs ; il porte une ombre en
-    /// l'air, suit l'inclinaison du plan, et un autre thème (ou le réglage éteint) reste plat.
+    /// l'air et suit l'inclinaison du plan. Le réglage éteint garde le sprite plat.
     #[test]
     fn every_modelled_state_keeps_its_art_footprint_and_shadow() {
         let Some(gpu) = gpu() else { return };
@@ -5293,8 +5294,11 @@ mod tests {
             let other = compose_model(&comp, &blue, &json("null", Some(true), "other", true), &still);
             model_save(&format!("art-{key}-touch"), &touch);
             model_save(&format!("art-{key}-iso"), &tilted);
-            if absent != sprite || other != sprite {
+            if absent != sprite {
                 failures.push(format!("{key}: le sprite plat a change"));
+            }
+            if other != hover {
+                failures.push(format!("{key}: le libelle du theme a change le rendu natif"));
             }
 
             let (m3d, m2d) = (model_opaque(&touch, &touch_b, &bare), model_opaque(&sprite, &sprite_b, &bare));

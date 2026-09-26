@@ -611,8 +611,8 @@ fn the_tilt_turns_every_state_with_the_screen() {
     }
 }
 
-/// Réglage éteint : la frame est celle du sprite plat, quelle que soit la façon de le dire (clé
-/// absente, `false`, ou allumé sur un autre thème), et quel que soit l'état.
+/// Le réglage éteint garde le sprite plat. Activé, le mode 3D dépend du sprite fourni au natif,
+/// pas du libellé du thème.
 #[test]
 fn without_the_model_the_cursor_renders_the_flat_sprite() {
     let Some(gpu) = gpu() else { return };
@@ -641,13 +641,13 @@ fn without_the_model_the_cursor_renders_the_flat_sprite() {
             }
         }
         assert!(absent == off, "{rotation}: model3d=false a changé la frame");
-        assert!(absent == other, "{rotation}: un thème sans modèle a changé la frame");
+        assert!(other == on, "{rotation}: le libellé du thème a changé le rendu natif");
         assert!(absent != on, "{rotation}: le réglage allumé ne change rien");
         let text_off = render(&comp, &screen, &scene_json(rotation, Some(false), "default", 0.0, 3.0), &text).0;
         let text_other = render(&comp, &screen, &scene_json(rotation, Some(true), "other", 0.0, 3.0), &text).0;
         let text_on = render(&comp, &screen, &scene_json(rotation, Some(true), "default", 0.0, 3.0), &text).0;
-        assert!(text_off == text_other, "{rotation}: le I d'un autre thème n'est plus plat");
-        assert!(text_off != text_on, "{rotation}: le I du thème par défaut reste plat");
+        assert!(text_other == text_on, "{rotation}: le libellé du thème a changé le rendu natif du I");
+        assert!(text_off != text_on, "{rotation}: le I ne passe pas en 3D");
         assert!(text_off != off, "{rotation}: l'état n'a pas changé le sprite");
     }
 }

@@ -19,9 +19,16 @@
 export const NATIVE_SCREEN_BASE_RADIUS_PX = 24;
 
 /**
- * The end of the Roundness slider, in output pixels. Without a frame the slider is
+ * The frame size the Roundness slider's pixels are measured on: 24 means 24 px on a 1080p
+ * export, and the same share of the screen at any source resolution or output format.
+ * Must match `SHADOW_TUNING_REF_PX` in crates/compositor/src/frame_geometry.rs.
+ */
+export const ROUNDNESS_REFERENCE_PX = 1080;
+
+/**
+ * The end of the Roundness slider, in reference pixels. Without a frame the slider is
  * that many pixels of corner; under a frame the native side reads its POSITION
- * (`roundnessFrac` × the output's short side ÷ this) and maps it onto the range
+ * (`roundnessFrac` × `ROUNDNESS_REFERENCE_PX` ÷ this) and maps it onto the range
  * that frame wears well (`frame_roundness_cap`). Must match
  * `ROUNDNESS_SLIDER_MAX_PX` in crates/compositor/src/frame_geometry.rs.
  */

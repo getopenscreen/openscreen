@@ -1047,20 +1047,19 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(buildSceneDescription(doc).effects.padding).toBe(0.5);
 	});
 
-	it("roundnessFrac is the slider divided by the frame's short side, not raw pixels", () => {
+	it("roundnessFrac is the slider divided by the 1080 reference, not raw pixels", () => {
 		// The contract carries no pixel counts: the compositor rasterises the preview
 		// smaller than the export, so a pixel means two different things across the
 		// boundary. Absolute values crossing it is what drew the PiP circle as a blob.
 		const doc = makeDoc({ legacyEditor: { borderRadius: 12 } });
 		const scene = buildSceneDescription(doc);
-		const shortSide = Math.min(scene.output.width, scene.output.height);
-		expect(scene.effects.roundnessFrac).toBeCloseTo(12 / shortSide, 10);
+		expect(scene.effects.roundnessFrac).toBeCloseTo(12 / 1080, 10);
 	});
 
-	it("round-trips the authored pixel value at output size, whatever the resolution", () => {
-		// The slider keeps meaning "N pixels of the finished video" — the fraction only
-		// exists so the native side can rebuild it against whatever it is rasterising
-		// into. Multiplying back by the output's short side must return exactly N.
+	it("gives a 4K take the same roundness as a 1080p one", () => {
+		// The fraction used to be taken off the output's short side, which follows the
+		// source: a 2160p take got half the corner of a 1080p one. The native side scales
+		// the fixed reference by the screen, so the same fraction is the same look.
 		const at = (w: number, h: number) => {
 			const doc = makeDoc({
 				assets: [
@@ -1081,11 +1080,10 @@ describe("buildSceneDescription.settings mapping", () => {
 				],
 				legacyEditor: { borderRadius: 24 },
 			});
-			const scene = buildSceneDescription(doc);
-			return scene.effects.roundnessFrac * Math.min(scene.output.width, scene.output.height);
+			return buildSceneDescription(doc).effects.roundnessFrac;
 		};
-		expect(at(1920, 1080)).toBeCloseTo(24, 6);
-		expect(at(3840, 2160)).toBeCloseTo(24, 6);
+		expect(at(3840, 2160)).toBe(at(1920, 1080));
+		expect(at(1920, 1080) * 1080).toBeCloseTo(24, 6);
 	});
 
 	it("webcamSize is webcamSizeToFraction(webcamSizePreset) — clamp(preset,10,50)/100", () => {

@@ -476,13 +476,32 @@ pub(crate) fn concentric_radius(r: f32, bx: f32, by: f32) -> f32 {
 }
 
 /// Position du slider Roundness sur sa course, 0..1, lue dans la scène : `roundnessFrac` est la
-/// valeur du slider (px de sortie) sur le petit côté de la sortie (`sceneDescription.ts`).
-/// `ROUNDNESS_SLIDER_MAX_PX` est le miroir du maximum du slider (`paramUnits.ts`).
+/// valeur du slider (px) sur la référence FIXE de 1080 px (`sceneDescription.ts`), et non plus
+/// sur le petit côté de la sortie — qui suit la source, si bien qu'une prise 4K recevait des
+/// coins deux fois moins ronds qu'une prise 1080p. `ROUNDNESS_SLIDER_MAX_PX` est le miroir du
+/// maximum du slider (`paramUnits.ts`).
 pub(crate) const ROUNDNESS_SLIDER_MAX_PX: f32 = 64.0;
 
 pub(crate) fn roundness_slider_position(scene: &crate::scene::Scene) -> f32 {
-    let out_min = scene.output.width.min(scene.output.height).max(1) as f32;
-    (scene.effects.roundness_frac * out_min / ROUNDNESS_SLIDER_MAX_PX).clamp(0.0, 1.0)
+    (scene.effects.roundness_frac * SHADOW_TUNING_REF_PX / ROUNDNESS_SLIDER_MAX_PX).clamp(0.0, 1.0)
+}
+
+/// L'UNITÉ DE L'ÉCRAN, px : le petit côté du cadre qu'aurait cet écran dans une sortie à SON ratio.
+///
+/// `content_px` est l'enregistrement affiché au repos (crop compris, zoom exclu, en entier même
+/// quand un slot en `cover` en rogne une partie). Divisé par `padding_scale`, il vaut exactement le
+/// petit côté du cadre (`frame_min_px`) quand la sortie a le ratio de l'enregistrement — Auto, ou
+/// un format fixe qui lui correspond : le rendu y est inchangé. Quand le format diffère (un clip
+/// 16:9 dans une sortie 9:16), l'écran n'occupe plus qu'une bande du cadre et l'unité rétrécit
+/// avec lui : le curseur, l'ombre et les coins gardent leur proportion À L'ÉCRAN au lieu de
+/// grossir de 1,8× à côté de lui.
+///
+/// Ce n'est pas `frame_unit_px` : celle-ci est faite pour qu'un cadre d'appareil ait la même
+/// épaisseur autour de n'importe quel clip d'une sortie, donc elle vaut `frame_min_px ×
+/// padding_scale` pour tout clip contenu dans la zone paddée — y compris la bande 16:9 d'une
+/// sortie 9:16, où elle ne corrigerait rien.
+pub(crate) fn screen_unit_px(content_px: [f32; 2], padding_scale: f32) -> f32 {
+    content_px[0].min(content_px[1]) / padding_scale.max(1e-3)
 }
 
 /// Le rayon des coins du métrage au BOUT de la course de Roundness sous chaque cadre, en unités
@@ -1664,6 +1683,9 @@ pub struct FrameGeometry {
     pub s_ann: [f32; 4],
     pub s_radius: f32,
     pub frame_min_px: f32,
+    /// L'unité de l'ÉCRAN (`screen_unit_px`) : ce que mesurent le curseur, l'ombre de l'écran et
+    /// ses coins sans cadre.
+    pub screen_unit_px: f32,
     pub w_dst: [f32; 4],
     pub w_dst_prev: [f32; 4],
     pub w_px: [f32; 2],
@@ -2006,7 +2028,7 @@ impl FrameGeometry {
     /// direction glisse avec le poids de la caméra : aucun saut à l'entrée du zoom. Sous le masque
     /// d'un layout en bloc, l'ombre est celle du slot, que la caméra ne fait pas tourner.
     pub fn screen_shadow_offset(&self) -> [f32; 2] {
-        let off = SCREEN_SHADOW_OFFSET_FRAC * self.frame_min_px;
+        let off = SCREEN_SHADOW_OFFSET_FRAC * self.screen_unit_px;
         if self.screen_mask.is_some() {
             return [0.0, off];
         }
@@ -2742,7 +2764,13 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // Le focus courant reste volontairement utilisé pour la frame précédente, comme avant.
         let cut_ref = cover(screen_source_rect(u_max, v_max, active_crop, p.zoom, p.focus));
         let cut_ref_prev = cover(screen_source_rect(u_max, v_max, active_crop, pp.zoom, p.focus));
-        let cut = cover(screen_source_rect(u_max, v_max, active_crop, 1.0, p.focus));
+        let crop_cut = screen_source_rect(u_max, v_max, active_crop, 1.0, p.focus);
+        let cut = cover(crop_cut);
+        // L'enregistrement affiché au repos, en entier : le `cover` d'un slot en rogne une partie,
+        // on la rajoute (même échelle px/UV que la boîte).
+        let shown = |i: usize| (crop_cut[i + 2] - crop_cut[i]) / (cut[i + 2] - cut[i]).max(1e-6);
+        let screen_unit_px =
+            screen_unit_px([s_base[2] * rw * shown(0), s_base[3] * rh * shown(1)], padding_scale);
         // Impact du clic : mêmes piste, coupe, porte et budget que la parallaxe sous un angle fixe ;
         // sous la caméra réelle, les mêmes clics font reculer l'œil.
         let (impact, press) = match (scene, parallax_track) {
@@ -2880,8 +2908,9 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             }
             // Preset en bloc : le rayon appartient à la boîte écran (parité exacte avec la caméra).
             (true, Some(f), _) => f * s_px[0].min(s_px[1]),
-            // Scène sans rayon imposé : slider Roundness, relatif au cadre.
-            (true, None, Some(f)) => f * frame_min_px,
+            // Scène sans rayon imposé : slider Roundness, en px d'une référence 1080 rapportée à
+            // l'écran (`screen_unit_px`) — ni à la source, ni au cadre.
+            (true, None, Some(f)) => f * screen_unit_px,
             // Fixture/bench (pas de scène) : chemin inspector historique, inchangé.
             (true, None, None) => p.screen.radius * lp.radius_scale,
         };
@@ -2965,6 +2994,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         s_ann: s_base,
         s_radius,
         frame_min_px,
+        screen_unit_px,
         w_dst,
         w_dst_prev,
         w_px,
@@ -3181,7 +3211,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         (1.0 + (input.track.bounce(input.t) - 1.0) * lp.cursor_bounce_scale).max(0.0)
     };
     let size_px =
-        CURSOR_BASE_SIZE_FRAC * g.frame_min_px * lp.cursor_size_scale * bounce * g.padding_scale;
+        CURSOR_BASE_SIZE_FRAC * g.screen_unit_px * lp.cursor_size_scale * bounce * g.padding_scale;
     // Taille nulle = rien à dessiner, et surtout rien à projeter : sur un plan incliné les quatre
     // coins du sprite se confondent, et le warp inverse du mode 13 résout alors 0/0. Son rejet
     // ne tiendrait qu'à des comparaisons avec NaN, que Metal (fast-math) ne garantit pas.
@@ -4032,8 +4062,70 @@ mod tests {
             let want: [f32; 4] = [0.1, 0.1, 0.8, 0.8];
             assert_eq!(rest.s_dst.map(f32::to_bits), want.map(f32::to_bits));
             assert_eq!(rest.s_ann.map(f32::to_bits), want.map(f32::to_bits));
-            assert_eq!(rest.s_radius.to_bits(), (0.03f32 * 1080.0).to_bits());
+            assert_eq!(rest.s_radius.to_bits(), (0.03f32 * rest.screen_unit_px).to_bits());
         }
+    }
+
+    /// Une scène sans cadre, écran 16:9 (texture 1920×1080) posé par l'app dans `rect`, rendue
+    /// dans `render` au padding 50 % (`padding_scale` 0,8) avec un Roundness de 24 px.
+    fn unit_plan(rect: [f32; 4], render: [f32; 2]) -> FrameGeometry {
+        let scene = Scene::from_json(&format!(
+            r##"{{
+            "clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+            "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,
+                      "webcamReactiveZoom":false,"screenRect":{{"x":{},"y":{},"width":{},"height":{}}},"screenCover":false}},
+            "effects":{{"padding":0.5,"blur":false,"shadow":0.5,"roundnessFrac":{},"motionBlur":0}},
+            "background":{{"kind":"color","color":"#1e1e2e"}},
+            "zoomRegions":[],
+            "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":1,"clipToBounds":false,"theme":"default"}},
+            "cropByClip":[null],
+            "output":{{"width":{},"height":{},"fps":60}}
+        }}"##,
+            rect[0], rect[1], rect[2], rect[3], 24.0 / 1080.0, render[0], render[1]
+        ))
+        .expect("scène");
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let mut input = golden_input(&scene, &cfg);
+        input.render_px = render;
+        input.u_max = 1.0;
+        input.v_max = 1.0;
+        input.screen_tex_px = [1920.0, 1080.0];
+        input.screen_visible_px = [1920.0, 1080.0];
+        plan_frame(&input)
+    }
+
+    /// Le curseur, l'ombre et les coins se mesurent sur l'ÉCRAN (`screen_unit_px`), plus sur le
+    /// cadre ni sur la source.
+    ///
+    /// * sortie au ratio du clip : l'unité est le petit côté du cadre, le rendu d'avant ;
+    /// * clip 16:9 dans une sortie 9:16 : l'écran est une bande de 864×486, et l'unité rétrécit
+    ///   avec lui (× 9/16) au lieu de rester à 1080 — la proportion curseur / écran est celle
+    ///   du 16:9 ;
+    /// * sortie 4K (prise 2160p) : l'unité double avec l'écran, et 24 px de Roundness font
+    ///   48 px, la même part de l'écran qu'en 1080p.
+    #[test]
+    fn style_lengths_follow_the_screen_not_the_frame_or_the_source() {
+        let (w, h) = (1920.0f32, 1080.0f32);
+        let landscape = unit_plan([0.1, 0.1, 0.8, 0.8], [w, h]);
+        assert!((landscape.screen_unit_px - 1080.0).abs() < 0.01, "{}", landscape.screen_unit_px);
+        assert!((landscape.s_radius - 24.0).abs() < 0.01, "{}", landscape.s_radius);
+
+        let band_h = 0.8 * h * 9.0 / 16.0 / w; // 486 px sur 1920
+        let portrait = unit_plan([0.1, 0.5 - band_h / 2.0, 0.8, band_h], [h, w]);
+        assert!(
+            (portrait.screen_unit_px - 1080.0 * 9.0 / 16.0).abs() < 0.01,
+            "{}",
+            portrait.screen_unit_px
+        );
+        // Même part de l'écran : rayon / petit côté de l'écran.
+        let share = |g: &FrameGeometry, px: [f32; 2]| {
+            g.s_radius / (g.s_dst[2] * px[0]).min(g.s_dst[3] * px[1])
+        };
+        assert!((share(&portrait, [h, w]) - share(&landscape, [w, h])).abs() < 1e-4);
+
+        let uhd = unit_plan([0.1, 0.1, 0.8, 0.8], [2.0 * w, 2.0 * h]);
+        assert!((uhd.s_radius - 48.0).abs() < 0.02, "{}", uhd.s_radius);
+        assert!((share(&uhd, [2.0 * w, 2.0 * h]) - share(&landscape, [w, h])).abs() < 1e-4);
     }
 
     /// Sous un cadre, le masque de confidentialité couvre le rect que l'overlay web montre à
@@ -4660,7 +4752,7 @@ mod tests {
         use crate::scene::SceneFrame as F;
         // Sans cadre : rien ne change, 0,03 × 1080 px.
         let bare = framed_plan_round("", 0.03);
-        assert_eq!(bare.s_radius.to_bits(), (0.03f32 * 1080.0).to_bits());
+        assert_eq!(bare.s_radius.to_bits(), (0.03f32 * bare.screen_unit_px).to_bits());
         // Les trois points de la course : 0, la moitié (32 px de slider), le bout (64 px) et au-delà.
         let half = 32.0 / 1080.0;
         for (frame, kind) in [("window", F::Window), ("laptop", F::Laptop), ("phone", F::Phone), ("monitor", F::Monitor)] {
@@ -6267,6 +6359,7 @@ mod tests {
             s_ann: [0.0, 0.0, 1.0, 1.0],
             s_radius: 0.0,
             frame_min_px: 1080.0,
+            screen_unit_px: 1080.0,
             w_dst: [0.0, 0.0, 0.0, 0.0],
             w_dst_prev: [0.0, 0.0, 0.0, 0.0],
             w_px: [0.0, 0.0],

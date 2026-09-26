@@ -1897,7 +1897,7 @@ impl Compositor {
             self.ctx.ClearRenderTargetView(&self.trail_rtv, &[0.0, 0.0, 0.0, 0.0]);
         }
         if cfg.shadow {
-            let spread = SCREEN_SHADOW_SPREAD_FRAC * frame_min_px;
+            let spread = SCREEN_SHADOW_SPREAD_FRAC * g.screen_unit_px;
             let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
             // Un appareil porte l'ombre de sa silhouette 3D (mode 17), pas celle d'un quad.

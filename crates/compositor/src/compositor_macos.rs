@@ -320,6 +320,10 @@ pub struct Compositor {
     /// le RT reviendrait à AJOUTER du blanc à ce qui est déjà dessous : sur un fond clair,
     /// le curseur disparaît. Même raisonnement que côté D3D11.
     accum: metal::Texture,
+    /// Rendu isolé de l'écran cadré (ombre, cadre, métrage, appareil), transparent autour, que le
+    /// mode 18 recompose le long de sa trajectoire (`FrameGeometry::screen_trail`). Distinct
+    /// d'`accum`, que le curseur remplit dans la même frame.
+    trail: metal::Texture,
     /// Pyramide dual-Kawase du flou de fond : demi, quart, huitième de la taille de rendu.
     /// Dérivée de la taille de rendu et non d'une constante — sinon le rayon effectif du
     /// flou changerait avec la résolution de sortie.
@@ -573,6 +577,14 @@ impl Compositor {
             metal::MTLStorageMode::Private,
             rt_usage,
         );
+        let trail = make_texture(
+            device,
+            metal::MTLPixelFormat::RGBA8Unorm,
+            rw,
+            rh,
+            metal::MTLStorageMode::Private,
+            rt_usage,
+        );
         let mut pyramid = [2u32, 4, 8].map(|d| {
             make_texture(
                 device,
@@ -643,6 +655,7 @@ impl Compositor {
             pipeline_fs_tex,
             pipeline_add,
             accum,
+            trail,
             blur_half,
             blur_quarter,
             blur_eighth,
@@ -2181,15 +2194,27 @@ impl Compositor {
         if scene_ref.as_ref().map(|s| s.effects.blur).unwrap_or(false) {
             self.blur_bg(cmd_buf)?;
         }
-        let enc = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
-        enc.set_fragment_texture(0, Some(&sy));
-        enc.set_fragment_texture(1, Some(&suv));
-
         // --- écran : ombre puis vidéo ---
         let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
         // Géométrie du tilt calculée UNE fois : l'ombre et l'écran doivent porter exactement
         // le même quadrilatère, sinon l'ombre se décolle dès que l'un des deux change.
         let tilt = g.screen_tilt(s_px);
+        // Flou de mouvement de l'écran CADRÉ (`FrameGeometry::screen_trail`) : ombre, cadre,
+        // métrage et appareil se dessinent dans un rendu isolé et transparent, que le mode 18
+        // recompose ensuite sur le fond le long de la trajectoire de la boîte.
+        let trail = tilt.is_none() && g.screen_trail();
+        let mut enc = if trail {
+            self.begin_pass(
+                cmd_buf,
+                &self.trail,
+                Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 0.0)),
+                &self.pipeline_main,
+            )?
+        } else {
+            self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?
+        };
+        enc.set_fragment_texture(0, Some(&sy));
+        enc.set_fragment_texture(1, Some(&suv));
         let quad_center_px = [
             (g.s_dst[0] + g.s_dst[2] * 0.5) * rw,
             (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
@@ -2220,6 +2245,7 @@ impl Compositor {
         if let Some(cb) = g.window_frame_cb([rw, rh]) {
             self.draw_solid(enc, &cb);
         }
+        let square_top = g.screen_square_top();
         let top_lift = g.screen_top_lift_px([rw, rh]);
         let [su0, sv0, su1, sv1] = g.cut;
         // Sous le masque d'un layout en bloc, rogné au slot (`FrameGeometry::mask_flat_screen`).
@@ -2237,7 +2263,7 @@ impl Compositor {
                     color: [0.0, 0.0, 0.0, 1.0],
                     src_prev: [su0, sv0, su1, sv1],
                     dst_prev: g.s_dst_prev,
-                    mb: [g.mb_taps, g.mb_amount, top_lift, g.screen_mb_w()],
+                    mb: [g.screen_pixel_taps(), g.mb_amount, top_lift, square_top],
                     ..Default::default()
                 },
                 &sy,
@@ -2263,6 +2289,12 @@ impl Compositor {
         // au plan du métrage dans l'ouverture, donc il ne recouvre jamais l'image.
         if let Some(cb) = g.device_frame_cb([rw, rh]) {
             self.draw_solid(enc, &cb);
+        }
+        if trail {
+            enc.end_encoding();
+            enc = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
+            enc.set_fragment_texture(2, Some(&self.trail));
+            self.draw_video(enc, &g.screen_trail_cb([rw, rh]), &sy, &suv);
         }
 
         enc.end_encoding();

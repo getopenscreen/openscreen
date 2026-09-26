@@ -55,30 +55,11 @@ struct VsOut {
     @location(2) pout: vec2<f32>,   // position 0..1 sortie
 };
 
-// Mode 0, mb.w = -1 (`FrameGeometry::screen_mb_w`) : les bords du cadre suivent le flou de mouvement.
-fn edges_trail() -> bool {
-    return layer.mode < 0.5 && layer.mb.w < -0.5 && layer.mb.x > 1.5 && layer.mb.y > 0.001
-        && layer.dst_prev.z > 0.0 && layer.dst_prev.w > 0.0;
-}
-
-// Couverture du quad arrondi en `local` (px du quad courant), feather ~1.5 px.
-fn quad_cov(local: vec2<f32>) -> f32 {
-    let h = layer.quad_px * 0.5;
-    return 1.0 - smoothstep(0.0, 1.5, sd_round_rect(local - h, h, layer.radius_px));
-}
-
 @vertex
 fn vs_main(@builtin(vertex_index) vid: u32) -> VsOut {
     // strip 4 vertices : (0,0)(1,0)(0,1)(1,1)
-    var c = vec2<f32>(f32(vid & 1u), f32((vid >> 1u) & 1u));
-    var p = layer.dst.xy + c * layer.dst.zw;
-    if edges_trail() {
-        // Le quad couvre aussi la position précédente (parité HLSL `vs_main`).
-        let lo = min(layer.dst.xy, layer.dst_prev.xy);
-        let hi = max(layer.dst.xy + layer.dst.zw, layer.dst_prev.xy + layer.dst_prev.zw);
-        p = lo + c * (hi - lo);
-        c = (p - layer.dst.xy) / layer.dst.zw;
-    }
+    let c = vec2<f32>(f32(vid & 1u), f32((vid >> 1u) & 1u));
+    let p = layer.dst.xy + c * layer.dst.zw;
     let ndc = vec2<f32>(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0);
     var o: VsOut;
     o.pos = vec4<f32>(ndc, 0.0, 1.0);
@@ -106,6 +87,42 @@ fn sample_yuv(uv: vec2<f32>) -> vec3<f32> {
         textureSample(texV, samp, uv).r,
     );
     return yuv709_limited(y, cbcr);
+}
+
+// `sample_yuv` à LOD explicite : utilisable hors du flot uniforme (mode 18).
+fn sample_yuv_level(uv: vec2<f32>) -> vec3<f32> {
+    let y = textureSampleLevel(texY, samp, uv, 0.0).r;
+    let cbcr = vec2<f32>(
+        textureSampleLevel(texU, samp, uv, 0.0).r,
+        textureSampleLevel(texV, samp, uv, 0.0).r,
+    );
+    return yuv709_limited(y, cbcr);
+}
+
+// Mode 18 -- l'ecran CADRE (ombre, cadre, metrage, appareil) floute comme UN objet rigide
+// (`FrameGeometry::screen_trail`), port 1:1 du HLSL. Binding 4 = son rendu isole, premultiplie,
+// a la taille de la sortie ; sa boite va de `dst_prev` (frame precedente) a `fx` (courante).
+// Chaque tap relit, dans le rendu courant, le point de l'objet qui couvrait ce pixel plus tot sur
+// la trajectoire. Hors de la sortie rien n'a ete rendu : dans l'ecran on relit le metrage
+// (`src` = la coupe), hors de l'ecran (un bout de cadre hors champ) le tap est ecarte.
+fn screen_trail(pout: vec2<f32>) -> vec4<f32> {
+    let taps = i32(layer.mb.x);
+    var acc = vec4<f32>(0.0);
+    var n = 0.0;
+    for (var k: i32 = 0; k < 16; k = k + 1) {
+        if k >= taps { break; }
+        let a = clamp(layer.mb.y, 0.0, 1.0) * (1.0 - f32(k) / f32(taps - 1));
+        let r = mix(layer.fx, layer.dst_prev, a);
+        let f = (pout - r.xy) / r.zw;
+        let q = layer.fx.xy + f * layer.fx.zw;
+        let rendered = all(q >= vec2<f32>(0.0)) && all(q <= vec2<f32>(1.0));
+        let in_screen = all(f >= vec2<f32>(0.0)) && all(f <= vec2<f32>(1.0));
+        let group = textureSampleLevel(texMask, samp, q, 0.0);
+        let footage = vec4<f32>(sample_yuv_level(mix(layer.src.xy, layer.src.zw, f)), 1.0);
+        acc = acc + select(select(vec4<f32>(0.0), footage, in_screen), group, rendered);
+        n = n + select(select(0.0, 1.0, in_screen), 1.0, rendered);
+    }
+    return acc / max(n, 1.0);
 }
 
 // SDF rectangle à coins arrondis (< 0 dedans). Identique au HLSL.
@@ -1160,29 +1177,20 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
             let uv_prev = layer.src_prev.xy + localp * (layer.src_prev.zw - layer.src_prev.xy);
             let duv = i.uv - uv_prev;
             let duv_blur = duv * mb_scale;
-            // Bords qui suivent : couverture du cadre moyennée sur les taps (parité HLSL).
-            let trail = edges_trail();
-            let duv_to_px = layer.quad_px / (layer.src.zw - layer.src.xy);
             if dot(duv_blur, duv_blur) < 1e-9 {
                 rgb = sample_yuv(i.uv);
-                if trail { alpha_mask = quad_cov(i.local); }
             } else {
                 // Borne 16 en dur, identique au HLSL et au MSL : `taps` vient d'un
                 // uniform et une boucle sans borne statique ne se déroule pas.
                 // L'échelle de l'inspector s'arrête pile à 16 (1 + 15·blur), donc
                 // c'est `taps` qui coupe, jamais la borne.
                 var acc = vec3<f32>(0.0);
-                var cov = 0.0;
                 let step = 1.0 / f32(taps - 1);
                 for (var k: i32 = 0; k < 16; k = k + 1) {
                     if k >= taps { break; }
-                    let d = duv_blur * (1.0 - f32(k) * step);
-                    let w = select(1.0, quad_cov(i.local - d * duv_to_px), trail);
-                    acc = acc + sample_yuv(i.uv - d) * w;
-                    cov = cov + w;
+                    acc = acc + sample_yuv(i.uv - duv_blur * (1.0 - f32(k) * step));
                 }
-                rgb = acc / max(cov, 1e-6);
-                if trail { alpha_mask = cov / f32(taps); }
+                rgb = acc / f32(taps);
             }
         }
 
@@ -1509,6 +1517,9 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
     } else if layer.mode > 16.5 && layer.mode < 17.5 {
         // Mode 17 -- cadre d'appareil modelise (`device_frame`).
         return device_frame(i.local);
+    } else if layer.mode > 17.5 {
+        // Mode 18 -- ecran cadre floute en bloc (`screen_trail`).
+        return screen_trail(i.pout);
     } else {
         // Mode 2 — ombre portée (SDF d'un quad arrondi élargi de `fx.x`).
         let spread = layer.fx.x;
@@ -1521,7 +1532,7 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
 
     alpha = layer.color.a * alpha_mask;
 
-    if layer.radius_px > 0.0 && !edges_trail() { // sinon déjà dans alpha_mask
+    if layer.radius_px > 0.0 {
         // Feather ~1.5 px sur le bord du quad — parité exacte avec le HLSL
         // (`smoothstep(0.0, 1.5, d)`). Le shader HLSL inclut `quad_px` en px de
         // SORTIE ; on reproduit la même chose ici.

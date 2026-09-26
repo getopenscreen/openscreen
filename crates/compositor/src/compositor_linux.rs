@@ -278,6 +278,10 @@ pub struct Compositor {
     blur_half: wgpu::TextureView,
     blur_qtr: wgpu::TextureView,
     blur_oct: wgpu::TextureView,
+    /// Rendu isole de l'ecran cadre (ombre, cadre, metrage, appareil), transparent autour, que
+    /// le mode 18 recompose le long de sa trajectoire (`FrameGeometry::screen_trail`). Taille et
+    /// format du RT : il est dessine par le meme pipeline.
+    trail_view: wgpu::TextureView,
 
     // Render target offscreen + ring de staging de la relecture (recrees au resize).
     rt: wgpu::Texture,
@@ -646,6 +650,7 @@ impl Compositor {
         let blur_half = mk_pyr(w / 2, h / 2, "blur-half");
         let blur_qtr = mk_pyr(w / 4, h / 4, "blur-qtr");
         let blur_oct = mk_pyr(w / 8, h / 8, "blur-oct");
+        let trail_view = mk_pyr(w, h, "screen-trail");
 
         let (rt, rt_view, accum, accum_view, readback_bpr) = Self::make_targets(&gpu, w, h);
         let (ann_copy, ann_copy_view, ann_copy_mips) = Self::make_ann_copy(&gpu, w, h);
@@ -680,6 +685,7 @@ impl Compositor {
             blur_half,
             blur_qtr,
             blur_oct,
+            trail_view,
             rt,
             rt_view,
             _accum: accum,
@@ -1172,6 +1178,32 @@ impl Compositor {
             // Le spread vit ici et NON dans `fx.x` : `fx` porte deja les coins.
             mb: [0.0, spread, 1.0, mask_radius],
             ..Default::default()
+        }
+    }
+
+    /// L'ecran cadre, dans son ordre : ombre, cadre de fenetre (sous l'ecran), ecran, appareil
+    /// (devant lui). Dans la passe d'avant-plan, ou dans le rendu isole du mode 18.
+    fn draw_screen_group(
+        &self,
+        rpass: &mut wgpu::RenderPass<'_>,
+        shadow: &Option<(wgpu::Buffer, wgpu::BindGroup)>,
+        window_frame: &Option<(wgpu::Buffer, wgpu::BindGroup)>,
+        screen: &wgpu::BindGroup,
+        device_frame: &Option<(wgpu::Buffer, wgpu::BindGroup)>,
+    ) {
+        if let Some((_buf, bind)) = shadow {
+            rpass.set_bind_group(0, bind, &[]);
+            rpass.draw(0..4, 0..1);
+        }
+        if let Some((_buf, bind)) = window_frame {
+            rpass.set_bind_group(0, bind, &[]);
+            rpass.draw(0..4, 0..1);
+        }
+        rpass.set_bind_group(0, screen, &[]);
+        rpass.draw(0..4, 0..1);
+        if let Some((_buf, bind)) = device_frame {
+            rpass.set_bind_group(0, bind, &[]);
+            rpass.draw(0..4, 0..1);
         }
     }
 
@@ -2069,7 +2101,10 @@ impl Compositor {
         // `plane_px` dans `dst_prev`). Les deux sens ne peuvent pas cohabiter dans
         // un meme draw. macOS et Windows sautent egalement le flou sur le chemin
         // incline, pour la meme raison.
-        // La remontee du contour interieur du chrome au-dessus de l'ecran (`mb.z` au mode 0,
+        // Sous un cadre de fenetre, l'ecran garde ses coins HAUTS carres (`mb.w` au mode 0,
+        // `dst_prev.z` au mode 8) ; 0 sans cadre, soit le rendu d'avant.
+        let square_top = g.screen_square_top();
+        // Et la remontee du contour interieur du chrome au-dessus de l'ecran (`mb.z` au mode 0,
         // `color.z` au mode 8) : l'arrondi du haut se fait par le cadre. 0 sans fenetre.
         let top_lift = g.screen_top_lift_px([rw, rh]);
         let screen_layer = match tilt.as_ref() {
@@ -2086,7 +2121,7 @@ impl Compositor {
                     color: [1.0, 1.0, 1.0, 1.0],
                     src_prev: g.cut,
                     dst_prev: g.s_dst_prev,
-                    mb: [g.mb_taps, g.mb_amount, top_lift, g.screen_mb_w()],
+                    mb: [g.screen_pixel_taps(), g.mb_amount, top_lift, square_top],
                     ..Default::default()
                 }
             }
@@ -2170,6 +2205,17 @@ impl Compositor {
         // du metrage et sa lunette mord dessus. Le shader s'arrete au plan du metrage dans
         // l'ouverture, donc il ne recouvre jamais l'image.
         let device_frame = g.device_frame_cb([rw, rh]).map(|cb| self.make_bind(&cb, None, &dummy));
+        // Flou de mouvement de l'ecran CADRE (`FrameGeometry::screen_trail`) : l'ombre, le cadre,
+        // le metrage et l'appareil ci-dessus passent dans un rendu isole (`trail_view`), que le
+        // mode 18 recompose sur le fond ; binding 4 = ce rendu, les plans = le metrage.
+        let trail = (tilt.is_none() && g.screen_trail()).then(|| {
+            self.make_bind_b4(
+                &g.screen_trail_cb([rw, rh]),
+                Some((&sy, &su, &sv)),
+                &dummy,
+                Some(&self.trail_view),
+            )
+        });
 
         // Fond (gradient mode 5 OU image mode 6), dessine dans la passe de fond.
         let bg_draw = bg_layer.and_then(|bl| match bl {
@@ -2898,6 +2944,25 @@ impl Compositor {
             }
             self.generate_mips(&mut encoder, &p.mips);
         }
+        // Passe 0 bis : l'ecran cadre, isole sur transparent, quand il est floute en bloc.
+        if trail.is_some() {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("screen-trail-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.trail_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            rpass.set_pipeline(&self.pipeline);
+            self.draw_screen_group(&mut rpass, &screen_shadow, &window_frame, &screen_bind, &device_frame);
+        }
         // Passe 1 : fond (clear a `bg_clear` + gradient mode 5 eventuel).
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -2951,19 +3016,18 @@ impl Compositor {
             // Chaque ombre est dessinee JUSTE AVANT le calque qu'elle porte :
             // elle doit passer sous lui mais au-dessus du fond (et, pour la
             // camera, au-dessus de l'ecran).
-            if let Some((_buf, bind)) = &screen_shadow {
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
-            }
-            if let Some((_buf, bind)) = &window_frame {
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
-            }
-            rpass.set_bind_group(0, &screen_bind, &[]);
-            rpass.draw(0..4, 0..1);
-            if let Some((_buf, bind)) = &device_frame {
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
+            match &trail {
+                Some((_buf, bind)) => {
+                    rpass.set_bind_group(0, bind, &[]);
+                    rpass.draw(0..4, 0..1);
+                }
+                None => self.draw_screen_group(
+                    &mut rpass,
+                    &screen_shadow,
+                    &window_frame,
+                    &screen_bind,
+                    &device_frame,
+                ),
             }
             if let Some((_buf, bind)) = &webcam_shadow {
                 rpass.set_bind_group(0, bind, &[]);
@@ -4758,6 +4822,89 @@ mod tests {
             let (_, _, rgba) = comp.readback_direct().expect("readback_direct");
             rgba
         }
+    }
+
+    /// Ecran sous chrome de fenetre clair, zoome x1,3 de 1 s a 6 s, a l'instant `t` de la
+    /// timeline, avec le flou de mouvement `blur` (0..1).
+    fn compose_zooming_window(comp: &Compositor, gpu: &Gpu, t: f32, blur: f32) -> Vec<u8> {
+        let json = format!(
+            r##"{{"clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+                "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded",
+                           "webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false,
+                           "screenRect":{{"x":0.1,"y":0.1,"width":0.8,"height":0.8}}}},
+                "effects":{{"padding":0.3,"blur":false,"shadow":0.6,"roundnessFrac":0.03,"motionBlur":{blur},"frame":"window-light"}},
+                "background":{{"kind":"color","color":"#6070a0"}},
+                "zoomRegions":[{{"clipIndex":0,"startSec":1,"endSec":6,"scale":1.3,"focusX":0.5,"focusY":0.5}}],
+                "annotations":[],
+                "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,
+                           "clipToBounds":false,"theme":"default"}},
+                "cropByClip":[null],
+                "output":{{"width":1280,"height":720,"fps":30}}}}"##
+        );
+        let scene = Scene::from_json(&json).expect("scene json");
+        comp.set_live_params(live_params_from_scene(&scene));
+        comp.set_has_webcam(false);
+        comp.set_scene(Some(scene));
+        let screen = FakeFrame::new(gpu, 640, 360, |_, _| 60);
+        let webcam = FakeFrame::new(gpu, 64, 64, |_, _| 60);
+        let mut cfg = Cfg::c8();
+        cfg.bg_blur = false;
+        cfg.cursor = false;
+        cfg.mblur_n = 1;
+        cfg.shadow = true;
+        unsafe {
+            comp.set_timeline_time(Some(t));
+            comp.compose_frame(screen.as_ptr(), webcam.as_ptr(), 0.0, &cfg)
+                .expect("compose_frame");
+            let (_, _, rgba) = comp.readback_direct().expect("readback_direct");
+            rgba
+        }
+    }
+
+    /// Le flou de mouvement prend l'ecran CADRE en bloc : pendant la rampe du zoom, la barre de
+    /// titre claire file avec le metrage au lieu de rester nette (elle perd des pixels francs,
+    /// etales sur le fond et l'ecran). Immobile, le rendu flou est celui du rendu net, a l'octet.
+    #[test]
+    fn the_window_frame_trails_with_the_screen_under_motion_blur() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let bright = |rgba: &[u8]| {
+            rgba.chunks_exact(4).filter(|p| p[0] > 215 && p[1] > 215 && p[2] > 215).count()
+        };
+        let still = 9.0;
+        assert!(
+            compose_zooming_window(&comp, &gpu, still, 0.0)
+                == compose_zooming_window(&comp, &gpu, still, 1.0),
+            "immobile, le flou ne doit rien changer"
+        );
+        let out_dir = std::env::var("OPENSCREEN_FRAME_OUT").ok();
+        let mut best = (0.0f32, 0.0f32);
+        // La rampe de sortie du zoom, ~6,0 s -> 6,8 s.
+        for k in 0..=9 {
+            let t = 5.9 + k as f32 * 0.1;
+            let sharp = compose_zooming_window(&comp, &gpu, t, 0.0);
+            let blurred = compose_zooming_window(&comp, &gpu, t, 1.0);
+            // Encore zoome, la barre est hors champ : rien a mesurer a cet instant.
+            if bright(&sharp) < 1000 {
+                continue;
+            }
+            let drop = 1.0 - bright(&blurred) as f32 / bright(&sharp) as f32;
+            if drop > best.0 {
+                best = (drop, t);
+                if let Some(dir) = &out_dir {
+                    for (name, rgba) in [("sharp", sharp), ("blurred", blurred)] {
+                        let path = format!("{dir}/linux-trail-{name}.png");
+                        image::RgbaImage::from_raw(1280, 720, rgba)
+                            .expect("dimensions du readback")
+                            .save(&path)
+                            .unwrap_or_else(|e| panic!("ecriture {path} : {e}"));
+                    }
+                }
+            }
+        }
+        eprintln!("barre de titre : -{:.1} % de pixels francs a t={}", best.0 * 100.0, best.1);
+        let best = best.0;
+        assert!(best > 0.05, "la barre de titre reste nette pendant le zoom (au mieux {best:.3})");
     }
 
     /// Le cadre de fenetre (mode 14) se dessine sur Linux comme ailleurs : `"none"` rend

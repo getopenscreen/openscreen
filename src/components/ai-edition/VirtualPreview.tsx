@@ -405,9 +405,25 @@ export function VirtualPreview({
 	]
 		.filter((path): path is string => Boolean(path))
 		.join("\n");
+	const activeVoicePath = activeSource?.filePath;
+	const measuredForRetryRef = useRef(retryToken);
 	useEffect(() => {
 		const getLoudnessGain = window.electronAPI?.getLoudnessGain;
 		if (!getLoudnessGain) return;
+		// Retry reloads the file after it was unavailable, and its first measurement may have
+		// failed with it. Forget that answer and ask again; it plays at 0 dB until the new one.
+		if (retryToken !== measuredForRetryRef.current) {
+			measuredForRetryRef.current = retryToken;
+			if (activeVoicePath) {
+				requestedLoudnessRef.current.delete(activeVoicePath);
+				setLoudnessGainDbByPath((previous) => {
+					if (!previous.has(activeVoicePath)) return previous;
+					const next = new Map(previous);
+					next.delete(activeVoicePath);
+					return next;
+				});
+			}
+		}
 		for (const path of voicePathsKey.split("\n")) {
 			if (!path || requestedLoudnessRef.current.has(path)) continue;
 			requestedLoudnessRef.current.add(path);
@@ -419,7 +435,7 @@ export function VirtualPreview({
 				() => undefined,
 			);
 		}
-	}, [voicePathsKey]);
+	}, [voicePathsKey, retryToken, activeVoicePath]);
 	const voiceGainDb = activeSource?.filePath
 		? (loudnessGainDbByPath.get(activeSource.filePath) ?? 0)
 		: 0;

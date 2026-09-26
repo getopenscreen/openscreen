@@ -805,6 +805,7 @@ fn export_linux_mp4() {
         height: 360,
         fps: Some(30),
         codec: ExportCodec::H264,
+        bit_rate: None,
     };
 
     let mut last = 0u64;

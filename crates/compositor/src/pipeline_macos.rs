@@ -720,12 +720,13 @@ pub struct EncoderCandidate {
     pub pix_fmt: crate::ffi::AVPixelFormat::Type,
 }
 
-/// Paramètres d'export. Identiques à `pipeline_windows::ExportParams`.
+/// Paramètres d'export. Identiques à `pipeline_windows::ExportParams`, `bit_rate` compris.
 pub struct ExportParams {
     pub width: u32,
     pub height: u32,
     pub fps: Option<u32>,
     pub codec: ExportCodec,
+    pub bit_rate: Option<i64>,
 }
 
 impl Default for ExportParams {
@@ -735,6 +736,7 @@ impl Default for ExportParams {
             height: 1080,
             fps: None,
             codec: ExportCodec::H264,
+            bit_rate: None,
         }
     }
 }
@@ -1128,8 +1130,11 @@ pub fn run_composited_multi(
 
     // fps : explicite > dérivé du premier clip.
     let out_fps = params.fps.unwrap_or(30) as i32;
-    // bitrate proportionnel à la surface de sortie (référence : 8Mbps @ 1920x1080).
-    let bit_rate = ((out_w as i64 * out_h as i64 * 8_000_000) / (1920 * 1080)).max(2_000_000);
+    // Débit fourni par l'app (taille ET cadence). Repli pour le banc et les tests seulement,
+    // le même que `pipeline_windows` : 8Mbps @ 1920x1080 quelle que soit la cadence.
+    let bit_rate = params.bit_rate.unwrap_or_else(|| {
+        ((out_w as i64 * out_h as i64 * 8_000_000) / (1920 * 1080)).max(2_000_000)
+    });
 
     // ---- decodeurs : un par chemin, réutilisés entre clips (screen ≠ webcam → 2 maps) ----
     let mut screen_decs: std::collections::HashMap<String, Decoder> =

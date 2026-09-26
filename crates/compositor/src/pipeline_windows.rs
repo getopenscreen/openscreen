@@ -1596,16 +1596,20 @@ unsafe fn nv12_to_yuv420p(src: *mut AVFrame, dst: *mut AVFrame) {
 
 /// Résolution/cadence/codec de sortie. `fps: None` = dérivé du 1er clip (comportement
 /// historique) ; `width`/`height` doivent être pairs (NV12 4:2:0) — l'appelant napi arrondit.
+/// `bit_rate` (bits/s) : celui que l'app calcule d'après la taille ET la cadence
+/// (`calculateMp4ExportSettings`) ; `None` = le repli à la surface seule de `run_multi_inner`,
+/// que seuls le banc et les tests empruntent encore.
 pub struct ExportParams {
     pub width: u32,
     pub height: u32,
     pub fps: Option<u32>,
     pub codec: ExportCodec,
+    pub bit_rate: Option<i64>,
 }
 
 impl Default for ExportParams {
     fn default() -> Self {
-        Self { width: OUT_W, height: OUT_H, fps: None, codec: ExportCodec::H264 }
+        Self { width: OUT_W, height: OUT_H, fps: None, codec: ExportCodec::H264, bit_rate: None }
     }
 }
 
@@ -1657,9 +1661,12 @@ unsafe fn run_multi_inner(
     } else {
         make_enc_frames(gpu, out_w as i32, out_h as i32)?
     };
-    // débit proportionnel à la surface de sortie (référence : 8Mbps @ 1920x1080), plancher
-    // 2Mbps pour rester regardable sur les petites tailles.
-    let bit_rate = ((out_w as i64 * out_h as i64 * 8_000_000) / (1920 * 1080)).max(2_000_000);
+    // Le débit vient de l'app, qui le calcule d'après la taille ET la cadence. Le repli
+    // (8Mbps @ 1920x1080 quelle que soit la cadence, plancher 2Mbps) ne sert plus qu'au banc et
+    // aux tests : c'est lui qui affamait un export 1080p60, deux fois plus d'images au même débit.
+    let bit_rate = params.bit_rate.unwrap_or_else(|| {
+        ((out_w as i64 * out_h as i64 * 8_000_000) / (1920 * 1080)).max(2_000_000)
+    });
     let mut enc = VideoEncoder::open(
         &params.codec,
         out_w as i32,

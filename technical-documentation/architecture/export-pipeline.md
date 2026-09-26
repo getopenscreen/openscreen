@@ -129,8 +129,11 @@ and **one** encoder + muxer pair:
   drift from the compositor). `ExportDialog`'s `tierOutputDims` feeds the
   crop-aware **smallest** clip on the timeline to
   [`calculateMp4ExportSettings`](../../src/lib/exporter/mp4ExportSettings.ts),
-  which maps quality + source dims + aspect ratio to the encoder
-  width / height / bitrate, and passes `width` / `height` to `exportMulti`.
+  which maps quality + source dims + aspect ratio + frame rate to the encoder
+  width / height / bitrate, and passes all three to `exportMulti`. The bitrate
+  is 0.15 bit per pixel per frame (18.7 Mb/s at 1080p60, 9.3 at 1080p30):
+  before it was passed, every export ran at the pipeline's own 8 Mb/s at
+  1080p, whatever its frame rate.
   Only "Source" quality targets those source dims; 720p / 1080p target a
   fixed short side regardless.
   **Auto** resolves in that same function: the first clip's cropped screen,
@@ -147,14 +150,16 @@ and **one** encoder + muxer pair:
 
 ## Output formats and codecs
 
-The native MP4 export takes `width`, `height`, `frameRate`, and `codec` as
+The native MP4 export takes `width`, `height`, `fps`, `codec` and `bitrate` as
 parameters on `exportMulti` and writes H.264 (AMF) by default. The
 user-facing codec choice crosses as the plain `ExportVideoCodec` string
 (`"h264"` / `"h265"` / `"vp9"`) in those params; VP9
 falls back to the same H.264 path on machines without a hardware VP9
 encoder (software VP9 was measured too slow and removed — see
-[native-compositor.md](native-compositor.md#known-gaps)). GIF is a
-separate path through `GifExporter` and does not use the native addon.
+[native-compositor.md](native-compositor.md#known-gaps)). GIF goes through
+the same addon (`exportGif`, `gif_export.rs`): a median-cut palette per frame,
+mapped with Floyd-Steinberg dithering by default so a gradient wallpaper does
+not break into flat bands.
 
 ## Licensing
 

@@ -17,7 +17,7 @@ keywords:
 
 Klicke in der oberen Leiste auf **Export**, um den Exportdialog zu öffnen.
 
-Wähle zuerst ein **Ziel**: **Web / YouTube** (MP4, 1080p, 60 fps), **Social Media** (dasselbe mit 30 fps, halb so große Datei), **Studio** (MP4 in der Auflösung der Aufnahme, 60 fps) oder **README-GIF** (ein 480p-GIF mit 15 fps). Ein Ziel ändert nie das Seitenverhältnis des Projekts. Alles Folgende liegt unter **Erweitert**.
+Wähle zuerst ein **Ziel**: **Web / YouTube** (MP4, 1080p, 60 fps), **Social Media** (dasselbe mit 30 fps und niedrigerer Bitrate), **Studio** (MP4 in der Auflösung des kleinsten Clips, an das Seitenverhältnis des Projekts angepasst, 60 fps) oder **README-GIF** (ein 480p-GIF mit 15 fps). Ein Ziel ändert nie das Seitenverhältnis des Projekts. Alles Folgende liegt unter **Erweitert**.
 
 ## Formate {#formats}
 

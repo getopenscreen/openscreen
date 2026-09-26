@@ -17,7 +17,7 @@ keywords:
 
 Click **Export** in the top bar to open the export dialog.
 
-Pick a **destination** first: **Web / YouTube** (MP4, 1080p, 60 fps), **Social** (the same at 30 fps, half the file size), **Studio** (MP4 at the recording's own resolution, 60 fps) or **README GIF** (a 480p GIF at 15 fps). A destination never changes the project's aspect ratio. Everything below sits under **Advanced**.
+Pick a **destination** first: **Web / YouTube** (MP4, 1080p, 60 fps), **Social** (the same at 30 fps, at a lower bitrate), **Studio** (MP4 at the smallest clip's own resolution, fitted to the project's aspect ratio, 60 fps) or **README GIF** (a 480p GIF at 15 fps). A destination never changes the project's aspect ratio. Everything below sits under **Advanced**.
 
 ## Formats
 

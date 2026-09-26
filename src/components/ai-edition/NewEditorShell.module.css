@@ -1328,6 +1328,22 @@ textarea.control {
 .bgDisclosure:hover { color: var(--fg); }
 .bgDisclosure svg { transition: transform var(--motion-fast) var(--ease); }
 .bgDisclosure[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* The export dialog's "Advanced" disclosure. Its own class: it must not ride on a pane's. */
+.exportAdvanced {
+	display: inline-flex;
+	align-self: flex-start;
+	align-items: center;
+	gap: 4px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--fg-2);
+	font: 500 13px/1.2 var(--font-body);
+	cursor: pointer;
+}
+.exportAdvanced:hover { color: var(--fg); }
+.exportAdvanced svg { transition: transform var(--motion-fast) var(--ease); }
+.exportAdvanced[aria-expanded="true"] svg { transform: rotate(180deg); }
 .bgThumb:hover { transform: translateY(-1px); }
 .bgThumb.isActive {
 	border-color: var(--brand);

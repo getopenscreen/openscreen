@@ -161,7 +161,7 @@ interface ExportChoice {
  *  picked while the settings still match it. */
 const DESTINATIONS: Array<{ labelKey: string; set: Partial<ExportChoice> }> = [
 	{ labelKey: "destinationWeb", set: { format: "mp4", quality: "good", fps: 60, codec: "h264" } },
-	// Half the frames at the same bits per frame: half the file.
+	// Half the frames at the same bits per frame: half the bitrate.
 	{
 		labelKey: "destinationSocial",
 		set: { format: "mp4", quality: "good", fps: 30, codec: "h264" },
@@ -594,8 +594,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 
 				<button
 					type="button"
-					className={styles.bgDisclosure}
-					style={{ margin: 0, alignSelf: "flex-start" }}
+					className={styles.exportAdvanced}
 					aria-expanded={advancedOpen}
 					onClick={() => setAdvancedOpen((open) => !open)}
 				>

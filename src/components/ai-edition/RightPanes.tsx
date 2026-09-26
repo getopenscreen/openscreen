@@ -3966,8 +3966,15 @@ export function ChoiceRow<T extends string | number>({
 	display,
 }: {
 	label: string;
-	/** `null` leaves a hole in the grid: the middle of the camera's position grid. */
-	options: ReadonlyArray<{ value: T; label: string; icon?: ReactNode } | null>;
+	/** `null` leaves a hole in the grid: the middle of the camera's position grid. An option
+	 *  can be `disabled` on its own, with the reason as its `title`. */
+	options: ReadonlyArray<{
+		value: T;
+		label: string;
+		icon?: ReactNode;
+		disabled?: boolean;
+		title?: string;
+	} | null>;
 	value: T;
 	onChange: (next: T) => void;
 	disabled?: boolean;
@@ -4006,7 +4013,7 @@ export function ChoiceRow<T extends string | number>({
 				// A hole is stepped over, not landed on.
 				const to = options[from + step] === null ? from + 2 * step : from + step;
 				const next = options[to];
-				if (!next) return;
+				if (!next || next.disabled) return;
 				buttonsRef.current[to]?.focus();
 				if (next.value !== value) onChange(next.value);
 			}}
@@ -4025,8 +4032,8 @@ export function ChoiceRow<T extends string | number>({
 						aria-pressed={pressed}
 						aria-label={mode === "icon" ? option.label : undefined}
 						// Always: a label cut short by a narrow pane still reads in full on hover.
-						title={option.label}
-						disabled={disabled}
+						title={option.title ?? option.label}
+						disabled={disabled || option.disabled}
 						// Re-choisir la valeur en place n'est pas une modification : ni sauvegarde ni
 						// entrée d'annulation.
 						onClick={() => {

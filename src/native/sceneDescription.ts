@@ -47,6 +47,11 @@ import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import { takeProgramme } from "@/lib/ai-edition/timeline/take-programme";
 import { projectRegionsToSource } from "@/lib/ai-edition/timeline/timelineMap";
 import {
+	MAGNIFICATION_REFERENCE_PX,
+	MAX_ZOOM_SCALE,
+	maxZoomScaleFor,
+} from "@/lib/ai-edition/timeline/zoom-scale";
+import {
 	computeCompositeLayout,
 	paddedContentSize,
 	type RenderRect,
@@ -608,6 +613,63 @@ export function resolveVisibleClips(document: AxcutDocument): PlaybackSegment[] 
 		.filter((clip) => clipAssetIsResolvable(clip, assetById));
 }
 
+/** A clip's screen source size in pixels: its recording × its crop (see `screenSourceSizeOf`). */
+function screenSourceSize(
+	video: { width?: number; height?: number } | null | undefined,
+	crop: { width: number; height: number } | null | undefined,
+) {
+	return {
+		width: Math.max(1, Math.round((video?.width || 1920) * (crop?.width ?? 1))),
+		height: Math.max(1, Math.round((video?.height || 1080) * (crop?.height ?? 1))),
+	};
+}
+
+/**
+ * The deepest zoom a clip takes before its recording blurs: `maxZoomScaleFor` its
+ * magnification at rest, frame pixels per source pixel, read on its screen box. The larger
+ * axis, so a slot that covers its box (block layouts) counts the pixels it really blows up.
+ *
+ * Measured on the default export, a frame with a 1080 px short side
+ * (`MAGNIFICATION_REFERENCE_PX`), not on `output`: `output` follows the largest clip, crop
+ * included, so a cropped take would look small there and be upscaled at export. A 1080p take
+ * at 50 % padding sits at 0.8 (limit 2.5×), a 2160p take at 0.4 (5×), half of a 1080p take
+ * at 1.6 (1.25×).
+ */
+function zoomScaleLimitOf(
+	rect: SceneRect | null,
+	output: { width: number; height: number },
+	source: { width: number; height: number },
+): number {
+	if (!rect) return MAX_ZOOM_SCALE;
+	const toReference =
+		MAGNIFICATION_REFERENCE_PX / Math.max(1, Math.min(output.width, output.height));
+	const rest =
+		toReference *
+		Math.max(
+			(rect.width * output.width) / source.width,
+			(rect.height * output.height) / source.height,
+		);
+	return maxZoomScaleFor(rest);
+}
+
+/**
+ * The deepest zoom the region `regionId` can take, for the inspector: the same bound the
+ * scene applies, read on the clip the region belongs to. `MAX_ZOOM_SCALE` when the region
+ * is not on screen.
+ */
+export function zoomScaleLimit(document: AxcutDocument, regionId: string): number {
+	const scene = buildSceneDescription(document);
+	const clipIndex = scene.zoomRegions.find((z) => z.id === regionId)?.clipIndex ?? 0;
+	const clip = resolveVisibleClips(document)[clipIndex];
+	if (!clip) return MAX_ZOOM_SCALE;
+	const video = document.assets.find((a) => a.id === clip.assetId)?.video;
+	return zoomScaleLimitOf(
+		scene.layout.layoutByClip?.[clipIndex]?.screenRect ?? scene.layout.screenRect ?? null,
+		scene.output,
+		screenSourceSize(video, scene.cropByClip[clipIndex]),
+	);
+}
+
 /** Serialize a document into a {@link SceneDescription}. Pure — no per-frame math. */
 export function buildSceneDescription(
 	document: AxcutDocument,
@@ -937,14 +999,9 @@ export function buildSceneDescription(
 	 * was already wrong for a document mixing recording resolutions — the crop only
 	 * made the existing defect visible, by letting one document hold two shapes.
 	 */
-	const screenSourceSizeOf = (clip: AxcutClip, index: number) => {
-		const video = assetById.get(clip.assetId)?.video;
-		const crop = cropByClip[index]; // index-aligned; null = identity crop
-		return {
-			width: Math.max(1, Math.round((video?.width || 1920) * (crop?.width ?? 1))),
-			height: Math.max(1, Math.round((video?.height || 1080) * (crop?.height ?? 1))),
-		};
-	};
+	const screenSourceSizeOf = (clip: AxcutClip, index: number) =>
+		// index-aligned; null = identity crop
+		screenSourceSize(assetById.get(clip.assetId)?.video, cropByClip[index]);
 	/** Does THIS clip have a camera to lay out? Same expression as the `webcamPath` sent
 	 *  with the clip above, so the layout and the decoder can never disagree about it.
 	 *  Note this is NOT `hasAnyClipWithCamera` (which gates the Layout panel): that one
@@ -1053,6 +1110,14 @@ export function buildSceneDescription(
 		? toFrameFractions(computedLayout.webcamRect)
 		: null;
 	const screenRect = computedLayout ? toFrameFractions(computedLayout.screenRect) : null;
+	// The deepest zoom each clip takes before its recording blurs (`zoomScaleLimitOf`).
+	const zoomLimitByClip = visibleClips.map((clip, index) =>
+		zoomScaleLimitOf(
+			layoutByClip[index]?.screenRect ?? screenRect,
+			outputDims,
+			screenSourceSizeOf(clip, index),
+		),
+	);
 
 	return {
 		clips,
@@ -1143,7 +1208,14 @@ export function buildSceneDescription(
 			// [1.0, 5.0] que l'UI applique. Or `zoomRegionSchema` n'exige de `customScale`
 			// que d'être positif : un document portant `customScale: 12` est valide, rendait
 			// 5× dans l'aperçu web et 12× ici. Même désaccord que ci-dessus, un cran plus bas.
-			scale: getZoomScale(region),
+			//
+			// Bounded per clip: crop and zoom multiply, and past `MAX_SOURCE_MAGNIFICATION` the
+			// recording blurs. The inspector greys those levels out; this catches a level set
+			// before a crop or a format change made it too deep.
+			scale: Math.min(
+				getZoomScale(region),
+				zoomLimitByClip[region.clipIndex ?? 0] ?? MAX_ZOOM_SCALE,
+			),
 			focusX: region.focus.cx,
 			focusY: region.focus.cy,
 			// The global Auto-Focus toggle OVERRIDES each region's own mode rather than merely

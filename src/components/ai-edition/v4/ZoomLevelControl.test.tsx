@@ -123,6 +123,33 @@ describe("ZoomLevelControl", () => {
 		expect(updateZoomDepth).not.toHaveBeenCalled();
 	});
 
+	it("greys out the levels that would blur this clip, with the reason, and refuses them typed", () => {
+		const updateZoomDepth = vi.fn(async (_id: string, _depth: ZoomDepth) => true);
+		render(
+			<ZoomLevelControl
+				region={{ id: "z1", depth: 3 }}
+				tl={{ updateZoomDepth, updateZoomCustomScale }}
+				maxScale={2.5}
+			/>,
+		);
+		const buttons = screen.getAllByRole("button") as HTMLButtonElement[];
+		expect(buttons.map((b) => b.disabled)).toEqual([false, false, false, true]);
+		expect(buttons[3]).toHaveAttribute("title", "zoom.levelBlurs:2.5");
+		expect(screen.getByText("zoom.levelBlurs:2.5")).toBeInTheDocument();
+
+		const field = screen.getByRole("textbox", { name: "zoom.customScale" });
+		fireEvent.change(field, { target: { value: "3" } });
+		fireEvent.blur(field);
+		expect(toastError).toHaveBeenCalledWith("zoom.customScaleRange:1,2.5");
+		expect(updateZoomCustomScale).not.toHaveBeenCalled();
+		expect(updateZoomDepth).not.toHaveBeenCalled();
+	});
+
+	it("says nothing when every level is within reach", () => {
+		renderControl(3);
+		expect(screen.queryByText(/zoom\.levelBlurs/)).not.toBeInTheDocument();
+	});
+
 	it("ignores an unparseable draft without touching the region", () => {
 		const { updateZoomDepth, field } = renderControl(3);
 		fireEvent.change(field, { target: { value: "abc" } });

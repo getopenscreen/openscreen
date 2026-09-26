@@ -387,6 +387,7 @@
 		"previewHold": "Giữ để xem trước hiệu ứng phóng to",
 		"customScale": "Thu phóng tùy chỉnh",
 		"customScaleRange": "Mức thu phóng từ {{min}}× đến {{max}}×",
+		"levelBlurs": "Vượt quá {{max}}×, bản ghi này sẽ bị phóng to hơn 2× và bị mờ.",
 		"selectRegion": "Chọn vùng thu phóng để điều chỉnh",
 		"cursor": {
 			"title": "Con trỏ",

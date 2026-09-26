@@ -53,12 +53,14 @@ import {
 	TEXT_ANIMATION_VALUES,
 } from "@/lib/ai-edition/annotations/textAnimation";
 import type { AxcutAnnotationRegion, AxcutClip } from "@/lib/ai-edition/schema";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { rafCoalesce } from "@/lib/ai-edition/store/rafCoalesce";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
 import { clampToBound } from "@/lib/projectDefaults";
+import { zoomScaleLimit } from "@/native/sceneDescription";
 import { ColorField } from "../ColorField";
 import shell from "../NewEditorShell.module.css";
 import {
@@ -457,9 +459,13 @@ const ZOOM_PRESETS = ([2, 3, 4, 5] as const).map((depth) => ({
 export function ZoomLevelControl({
 	region,
 	tl,
+	maxScale = MAX_ZOOM_SCALE,
 }: {
 	region: { id: string; depth: ZoomDepth; customScale?: number };
 	tl: Pick<TimelineApi, "updateZoomDepth" | "updateZoomCustomScale">;
+	/** The deepest level this region's clip takes before its recording blurs
+	 *  (`zoomScaleLimit`). Deeper presets are greyed out with the reason. */
+	maxScale?: number;
 }) {
 	const ts = useScopedT("settings");
 	const current = effectiveZoomScale(region);
@@ -530,12 +536,17 @@ export function ZoomLevelControl({
 		// Empty or unparseable reverts to the live level rather than guessing at an intent.
 		if (text === "" || !Number.isFinite(Number(text))) return;
 		const scale = Math.round(Number(text) * 100) / 100;
-		if (scale < MIN_ZOOM_SCALE || scale > MAX_ZOOM_SCALE) {
-			toast.error(ts("zoom.customScaleRange", { min: MIN_ZOOM_SCALE, max: MAX_ZOOM_SCALE }));
+		if (scale < MIN_ZOOM_SCALE || scale > maxScale) {
+			toast.error(ts("zoom.customScaleRange", { min: MIN_ZOOM_SCALE, max: maxScale }));
 			return;
 		}
 		setScale(scale);
 	};
+
+	const tooDeep = ts("zoom.levelBlurs", { max: maxScale });
+	const presets = ZOOM_PRESETS.map((preset) =>
+		preset.value > maxScale ? { ...preset, disabled: true, title: tooDeep } : preset,
+	);
 
 	return (
 		<>
@@ -544,11 +555,12 @@ export function ZoomLevelControl({
 				ts("zoom.level"),
 				<ChoiceRow<number>
 					label={ts("zoom.level")}
-					options={ZOOM_PRESETS}
+					options={presets}
 					value={requested}
 					onChange={setScale}
 				/>,
 			)}
+			{maxScale < MAX_ZOOM_SCALE ? <p className={shell.hint}>{tooDeep}</p> : null}
 			{paneRow(
 				ts("zoom.customScale"),
 				<input
@@ -719,6 +731,12 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	// toggle that writes it lives in the timeline toolbar, not on this component's path.
 	const { settings } = useEditorSettings();
 	const autoFocusAll = settings.autoFocusAll;
+	const doc = useProjectStore((s) => s.document);
+	const zoomId = tl.selection?.kind === "zoom" ? tl.selection.id : null;
+	const zoomMaxScale = useMemo(
+		() => (doc && zoomId ? zoomScaleLimit(doc, zoomId) : MAX_ZOOM_SCALE),
+		[doc, zoomId],
+	);
 	// Mise à jour en direct regroupée à une par frame. `updateAnnotationLive` remplace le document
 	// dans le store, donc chaque appel fait reconstruire et re-sérialiser toute la scène avant de
 	// la pousser au natif : c'est le juste prix une fois par image, mais un `<input type="color">`
@@ -773,7 +791,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 				{paneHeader(<ZoomIn size={16} />, tt("labels.zoom"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
-					<ZoomLevelControl key={region.id} region={region} tl={tl} />
+					<ZoomLevelControl key={region.id} region={region} tl={tl} maxScale={zoomMaxScale} />
 					<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 						{paneRow(
 							ts("zoom.camera.title"),

@@ -135,3 +135,47 @@ fn a_privacy_mask_keeps_covering_its_content_under_zoom_and_tilt() {
     }
     assert!(leaks.is_empty(), "le masque laisse voir le secret :\n{}", leaks.join("\n"));
 }
+
+/// Pendant la rampe d'un zoom, le flou de mouvement étale chaque pixel vers là où il était une
+/// frame plus tôt : une copie traînée du secret sort de la position courante. Le masque doit la
+/// couvrir aussi, sur l'écran droit (mode 0) comme incliné (mode 8). Cas rapporté en revue : un
+/// `iso` ×2 de 2 à 4 s visant (0,3 ; 0,3), flou au maximum, à 1,1 s en pleine montée.
+#[test]
+fn a_privacy_mask_covers_the_motion_blur_trail_of_a_zoom() {
+    let Ok(secret) = std::env::var("OPENSCREEN_PRIVACY_SECRET") else {
+        println!("SKIP: definir OPENSCREEN_PRIVACY_SECRET (voir l'en-tete du fichier).");
+        return;
+    };
+    let gpu = Gpu::create(false).expect("device d3d11");
+    let render_at = |masked: bool, rotation: &str, blur: f32, t: f64| {
+        let json = scene_json(&secret, masked, Some((2.0, 0.3, 0.3, rotation)))
+            .replace(r#""startSec":0,"endSec":6,"scale""#, r#""startSec":2,"endSec":4,"scale""#)
+            .replace(r#""motionBlur":0.0}"#, &format!(r#""motionBlur":{blur}}}"#));
+        let mut cfg = config::all().pop().expect("au moins une config");
+        cfg.zoom = false;
+        cfg.layout_anim = false;
+        let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
+        let scene = Scene::from_json(&json).expect("scene valide");
+        comp.set_live_params(live_params_from_scene(&scene));
+        comp.set_scene(Some(scene));
+        comp.clear_cursor();
+        unsafe {
+            let mut player = Player::open(&secret, "", &gpu).expect("ouvrir la source");
+            player.present_frame(&comp, &cfg, t).expect("composer la frame");
+            comp.readback_resized(W, H).expect("readback")
+        }
+    };
+    let mut leaks = Vec::new();
+    for rotation in [r#""iso""#, "null"] {
+        for t in [1.1, 1.3, 1.6, 4.3] {
+            let clear = red_pixels(&render_at(false, rotation, 1.0, t));
+            let exposed = red_pixels(&render_at(true, rotation, 1.0, t));
+            println!("{rotation:<6} t={t:<4} flou 1 : rouge sans masque {clear:>6}  avec masque {exposed:>4}");
+            assert!(clear > 500, "{rotation} t={t} : le pave rouge n'est pas visible ({clear} px)");
+            if exposed > 0 {
+                leaks.push(format!("{rotation} t={t} : {exposed} px rouges visibles"));
+            }
+        }
+    }
+    assert!(leaks.is_empty(), "la traînée du flou sort du masque :\n{}", leaks.join("\n"));
+}

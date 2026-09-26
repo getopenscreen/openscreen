@@ -42,12 +42,7 @@ import {
 	type ZoomDepth,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
-import {
-	hasTextBackground,
-	setTextBackgroundColor,
-	textBackgroundColor,
-	toggleTextBackground,
-} from "@/lib/ai-edition/annotations/background";
+import { setTextPlate, type TextPlate, textPlateOf } from "@/lib/ai-edition/annotations/background";
 import {
 	type AnnotationTextAnimation,
 	TEXT_ANIMATION_VALUES,
@@ -74,6 +69,7 @@ import {
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
+import { TextColorField } from "../TextColorField";
 import styles from "./EditorShellV4.module.css";
 
 type TimelineApi = ReturnType<typeof useTimeline>;
@@ -948,7 +944,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	if (selection.kind === "annotation") {
 		const region = tl.annotationRegions.find((a) => a.id === selection.id);
 		if (!region) return null;
-		const hasBackground = hasTextBackground(region.style);
+		const plate = textPlateOf(region.style);
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 				{paneHeader(
@@ -1168,34 +1164,47 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							)
 						: null}
 					{region.type === "text"
-						? paneRow(
+						? paneStack(
 								ts("annotation.background"),
-								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-									{/* La pastille montre la couleur mémorisée même fond éteint : c'est celle que
-									    le rallumage rendra, et un noir affiché à la place mentirait. Choisir une
-									    couleur allume le fond, sinon le sélecteur n'aurait aucun effet visible. */}
-									<ColorField
-										label={ts("annotation.background")}
-										value={textBackgroundColor(region.style)}
-										onChange={(next) =>
-											liveUpdate(region.id, {
-												style: setTextBackgroundColor(region.style, next),
-											})
-										}
-										onCommit={commitAnnotation}
-									/>
-									{/* Une bascule plutôt qu'un bouton « effacer » : avoir un fond ou non est un
-									    état, pas une action. La pilule des panneaux, pas une case système. */}
-									<Toggle
-										checked={hasBackground}
-										onChange={(next) => {
-											tl.updateAnnotationLive(region.id, {
-												style: toggleTextBackground(region.style, next),
-											});
-											void tl.commitAnnotationChange();
-										}}
-									/>
-								</div>,
+								// Trois plaques nommées : la plaque porte seule l'état allumé/éteint, et en
+								// choisir une ajuste un texte qui y deviendrait illisible. Une couleur libre
+								// d'un projet plus ancien reste montrée tant qu'elle est là, comme le tracé
+								// libre du flou.
+								<ChoiceRow<TextPlate | "custom">
+									label={ts("annotation.background")}
+									options={[
+										{ value: "none", label: ts("textPlate.none") },
+										{ value: "dark", label: ts("textPlate.dark") },
+										{ value: "light", label: ts("textPlate.light") },
+										...(plate === "custom"
+											? [{ value: "custom" as const, label: ts("textPlate.custom") }]
+											: []),
+									]}
+									value={plate}
+									onChange={(next) => {
+										if (next === "custom") return;
+										tl.updateAnnotationLive(region.id, {
+											style: setTextPlate(region.style, next),
+										});
+										void tl.commitAnnotationChange();
+									}}
+								/>,
+							)
+						: null}
+					{region.type === "text"
+						? paneStack(
+								ts("annotation.color"),
+								<TextColorField
+									label={ts("annotation.color")}
+									value={region.style?.color ?? "#ffffff"}
+									plate={region.style?.backgroundColor ?? "transparent"}
+									onChange={(next) =>
+										liveUpdate(region.id, {
+											style: { ...region.style, color: next },
+										})
+									}
+									onCommit={commitAnnotation}
+								/>,
 							)
 						: null}
 					{region.type === "text"
@@ -1218,21 +1227,6 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 										});
 										void tl.commitAnnotationChange();
 									}}
-								/>,
-							)
-						: null}
-					{region.type === "text"
-						? paneRow(
-								ts("annotation.color"),
-								<ColorField
-									label={ts("annotation.color")}
-									value={region.style?.color ?? "#ffffff"}
-									onChange={(next) =>
-										liveUpdate(region.id, {
-											style: { ...region.style, color: next },
-										})
-									}
-									onCommit={commitAnnotation}
 								/>,
 							)
 						: null}

@@ -240,7 +240,16 @@
 		"font": "Fonte",
 		"translating": "Traduzindo…",
 		"show": "Mostrar legendas",
-		"textColor": "Cor do texto"
+		"textColor": "Cor do texto",
+		"style": "Estilo",
+		"styles": {
+			"classic": "Clássico",
+			"bold": "Negrito",
+			"minimal": "Minimalista",
+			"light": "Claro"
+		},
+		"customize": "Personalizar",
+		"turnOn": "Mostrar legendas"
 	},
 	"panes": {
 		"help": "Ajuda"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Excluir Região de Recorte"
+	},
+	"textPlate": {
+		"none": "Nenhuma",
+		"dark": "Escura",
+		"light": "Clara",
+		"custom": "Personalizada"
 	}
 }

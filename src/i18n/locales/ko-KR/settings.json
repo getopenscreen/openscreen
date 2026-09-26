@@ -240,7 +240,16 @@
 		"font": "글꼴",
 		"translating": "번역 중…",
 		"show": "자막 표시",
-		"textColor": "글자 색"
+		"textColor": "글자 색",
+		"style": "스타일",
+		"styles": {
+			"classic": "클래식",
+			"bold": "굵게",
+			"minimal": "미니멀",
+			"light": "밝게"
+		},
+		"customize": "사용자 지정",
+		"turnOn": "자막 표시"
 	},
 	"panes": {
 		"help": "도움말"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "트림 구간 삭제"
+	},
+	"textPlate": {
+		"none": "없음",
+		"dark": "어둡게",
+		"light": "밝게",
+		"custom": "사용자 지정"
 	}
 }

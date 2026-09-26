@@ -240,7 +240,16 @@
 		"font": "Yazı tipi",
 		"translating": "Çevriliyor…",
 		"show": "Altyazıları göster",
-		"textColor": "Metin rengi"
+		"textColor": "Metin rengi",
+		"style": "Stil",
+		"styles": {
+			"classic": "Klasik",
+			"bold": "Kalın",
+			"minimal": "Minimal",
+			"light": "Açık"
+		},
+		"customize": "Özelleştir",
+		"turnOn": "Altyazıları göster"
 	},
 	"panes": {
 		"help": "Yardım"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "Kırpma Bölgesini Sil"
+	},
+	"textPlate": {
+		"none": "Yok",
+		"dark": "Koyu",
+		"light": "Açık",
+		"custom": "Özel"
 	}
 }

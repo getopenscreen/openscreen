@@ -240,7 +240,16 @@
 		"font": "字体",
 		"translating": "翻译中…",
 		"show": "显示字幕",
-		"textColor": "文字颜色"
+		"textColor": "文字颜色",
+		"style": "样式",
+		"styles": {
+			"classic": "经典",
+			"bold": "粗体",
+			"minimal": "简约",
+			"light": "浅色"
+		},
+		"customize": "自定义",
+		"turnOn": "显示字幕"
 	},
 	"panes": {
 		"help": "帮助"
@@ -438,5 +447,11 @@
 	},
 	"trim": {
 		"deleteRegion": "删除剪辑区域"
+	},
+	"textPlate": {
+		"none": "无",
+		"dark": "深色",
+		"light": "浅色",
+		"custom": "自定义"
 	}
 }

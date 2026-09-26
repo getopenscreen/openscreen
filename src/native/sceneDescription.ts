@@ -658,16 +658,28 @@ function zoomScaleLimitOf(
  * is not on screen.
  */
 export function zoomScaleLimit(document: AxcutDocument, regionId: string): number {
+	const region = (document.zoomRanges ?? []).find((z) => z.id === regionId);
+	if (!region) return MAX_ZOOM_SCALE;
 	const scene = buildSceneDescription(document);
-	const clipIndex = scene.zoomRegions.find((z) => z.id === regionId)?.clipIndex ?? 0;
-	const clip = resolveVisibleClips(document)[clipIndex];
-	if (!clip) return MAX_ZOOM_SCALE;
-	const video = document.assets.find((a) => a.id === clip.assetId)?.video;
-	return zoomScaleLimitOf(
-		scene.layout.layoutByClip?.[clipIndex]?.screenRect ?? scene.layout.screenRect ?? null,
-		scene.output,
-		screenSourceSize(video, scene.cropByClip[clipIndex]),
-	);
+	const visibleClips = resolveVisibleClips(document);
+	// A region straddling a cut becomes one piece per clip, each with its own id: the same
+	// projection as the scene, and the tightest of their limits.
+	const pieces = projectRegionsToSource([region], visibleClips, document.timeline.clips, () => "");
+	let limit = MAX_ZOOM_SCALE;
+	for (const { clipIndex = 0 } of pieces) {
+		const clip = visibleClips[clipIndex];
+		if (!clip) continue;
+		const video = document.assets.find((a) => a.id === clip.assetId)?.video;
+		limit = Math.min(
+			limit,
+			zoomScaleLimitOf(
+				scene.layout.layoutByClip?.[clipIndex]?.screenRect ?? scene.layout.screenRect ?? null,
+				scene.output,
+				screenSourceSize(video, scene.cropByClip[clipIndex]),
+			),
+		);
+	}
+	return limit;
 }
 
 /** Serialize a document into a {@link SceneDescription}. Pure — no per-frame math. */

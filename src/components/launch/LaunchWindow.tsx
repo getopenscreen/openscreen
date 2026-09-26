@@ -132,6 +132,7 @@ export function LaunchWindow() {
 	);
 	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
 	const [isLinuxHud, setIsLinuxHud] = useState(false);
+	const [browserForcesSystemCursor, setBrowserForcesSystemCursor] = useState(false);
 	// The running version, and whether this copy may offer an update check at all — a
 	// Store/Flathub/Snap/Nix install is kept current by its package manager and is offered
 	// nothing (electron/install-channel.ts). Asked once: neither answer changes while the app
@@ -238,6 +239,22 @@ export function LaunchWindow() {
 						platform === "win32" || platform === "darwin" || platform === "linux",
 					);
 					setIsLinuxHud(platform === "linux");
+					// Without its native helper, macOS or Linux records through the browser, which
+					// always bakes in the system cursor (`effectiveBrowserCursorMode`). Switching
+					// to the editable cursor then restores nothing, so the hint must not say so.
+					const probe =
+						platform === "darwin"
+							? window.electronAPI?.isNativeMacCaptureAvailable
+							: platform === "linux"
+								? window.electronAPI?.isNativeLinuxCaptureAvailable
+								: undefined;
+					probe?.()
+						.then((result) => {
+							if (!cancelled) setBrowserForcesSystemCursor(!result.success || !result.available);
+						})
+						.catch(() => {
+							if (!cancelled) setBrowserForcesSystemCursor(true);
+						});
 				}
 			})
 			.catch(() => {
@@ -1162,7 +1179,7 @@ export function LaunchWindow() {
 							editableOverlay={cursorCaptureMode === "editable-overlay"}
 							disabled={controlsLocked}
 							label={
-								cursorCaptureMode === "editable-overlay"
+								cursorCaptureMode === "editable-overlay" || browserForcesSystemCursor
 									? t("cursor.useSystemCursorHint")
 									: t("cursor.useEditableCursorHint")
 							}

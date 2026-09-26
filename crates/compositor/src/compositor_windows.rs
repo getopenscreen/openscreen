@@ -194,23 +194,26 @@ pub struct Compositor {
     /// Historiquement c'était la constante `OUT_W`×`OUT_H` : un canvas 16:9 figé,
     /// étiré en fin de pipeline vers la vraie sortie. Cette constante produisait
     /// deux défauts distincts, tous deux issus d'elle seule :
-    ///   - une **forme** fausse dès que la sortie n'est pas 16:9 → rattrapée en
-    ///     aval par `apply_undistort` (9 correctifs successifs sur l'écran, la
-    ///     webcam, le curseur, les ombres, les coins, le crop, le fond) ;
+    ///   - une **forme** fausse dès que la sortie n'est pas 16:9 → rattrapée à
+    ///     l'époque en aval par `apply_undistort` (9 correctifs successifs sur
+    ///     l'écran, la webcam, le curseur, les ombres, les coins, le crop, le fond) ;
     ///   - une **résolution** plafonnée → jamais rattrapée, parce qu'aucun
     ///     correctif au niveau du calque ne peut recréer des pixels qui n'ont pas
     ///     été rastérisés (un export 4K était du 1080p agrandi).
     ///
-    /// Rendre cette taille variable retire la cause commune. `OUT_W`/`OUT_H` ne
-    /// sont plus qu'une valeur par défaut, jamais une référence géométrique.
+    /// Rendre cette taille variable a retiré la cause commune, et `apply_undistort`
+    /// avec elle : le RT porte la géométrie de sortie. L'export le crée à la taille de
+    /// sortie, la preview à cette géométrie ramenée au panneau (`preview_render_size`).
+    /// `OUT_W`/`OUT_H` ne sont plus qu'une valeur par défaut, jamais une référence
+    /// géométrique.
     render_size: Cell<(u32, u32)>,
-    /// Ressources de resize export (allouées paresseusement à la 1re taille de sortie ≠
-    /// OUT_W×OUT_H — le live et les exports "Source"/1080p restent sur `rgb_to_nv12` inchangé,
-    /// zéro coût). Voir `rgb_to_nv12_scaled`.
+    /// Ressources de resize, allouées paresseusement à la première cible qui diffère de la
+    /// taille de rendu. Le RT suivant la sortie, le cas nominal n'y passe pas et ne paie rien.
+    /// Voir `rgb_to_nv12_scaled`.
     resize_target: RefCell<Option<ResizeTarget>>,
-    /// Cache de la staging texture de readback live, dimensionnée à la dernière taille
-    /// de prévisualisation demandée (variable, contrairement au `staging` fixe à
-    /// OUT_W×OUT_H). Recréée quand la taille change — voir `readback_resized`.
+    /// Cache de la staging texture de `readback_resized`, dimensionnée à la dernière taille
+    /// demandée (le `staging` principal, lui, suit la taille de rendu). Recréée quand la taille
+    /// change. La preview n'y passe plus : elle relit le RT tel quel (`readback_direct`).
     live_readback_staging: RefCell<Option<(u32, u32, ID3D11Texture2D)>>,
     /// Cible + staging pour extraire la frame webcam à la résolution du modèle de
     /// segmentation. Créée à la première capture, jamais redimensionnée : le modèle a une
@@ -243,10 +246,9 @@ pub struct Compositor {
     cpu_backend: bool,
 }
 
-/// Ressources d'un resize export à une taille cible : RGBA intermédiaire (résultat du
-/// redimensionnement bilinéaire du RT composé, toujours rendu en interne à OUT_W×OUT_H) +
-/// sa propre texture NV12 à cette même taille cible (le NV12 principal du `Compositor` reste
-/// fixé à OUT_W×OUT_H, partagé par le live).
+/// Ressources d'un resize à une taille cible : RGBA intermédiaire (le RT composé, rendu à la
+/// taille de rendu, redimensionné en bilinéaire) + sa propre texture NV12 à cette même taille
+/// cible (le NV12 principal du `Compositor` reste à la taille de rendu).
 struct ResizeTarget {
     w: u32,
     h: u32,
@@ -1113,12 +1115,9 @@ impl Compositor {
     ) -> Result<()> {
         let (srv, iw, ih) = self.cached_image(path)?;
         let ai = iw as f32 / ih as f32;
-        // Le fond remplit TOUJOURS le cadre (dst=[0,0,1,1], jamais rétréci par `undistort`),
-        // mais le canvas interne est un 16:9 fixe étiré ensuite vers le VRAI ratio de sortie
-        // (`blit_resized`, non uniforme) : le crop "cover" doit donc être calculé contre ce vrai
-        // ratio de sortie (`output_aspect`, = final_out_w/final_out_h), pas contre le ratio fixe
-        // du canvas — sinon l'image, déjà cover-fittée pour du 16:9, se retrouve re-déformée par
-        // l'étirement final vers un ratio différent (ex. 9:16, cf. rapport utilisateur).
+        // Crop « cover » contre le ratio de la zone remplie (`output_aspect`) : l'image garde ses
+        // proportions, rognée sur l'axe en trop. Le RT porte la géométrie de sortie, donc rien ne
+        // la ré-étire ensuite.
         let ao = output_aspect;
         let (u0, v0, u1, v1) = if ai > ao {
             let vis = ao / ai; // rogne horizontalement
@@ -1753,17 +1752,11 @@ impl Compositor {
     }
 
     /// Ombre portée (§7 E4) sous un quad `dst` (normalisé) de taille `size_px`.
-    /// Le quad d'ombre est élargi de `spread` px et décalé de `offset_px`.
-    /// `spread`/`offset_px` sont des px RÉELS de la sortie finale (même convention que
-    /// `radius_px` pour l'arrondi normal, cf. `compose_frame`) — PAS des px du canvas fixe
-    /// 16:9. Convertis ici en marge/décalage CANVAS (avant l'étirement final anisotrope de
-    /// `blit_resized`), par axe (`/stretch_x`, `/stretch_y`), pour que ce halo redevienne un
-    /// vrai halo isotrope une fois cet étirement appliqué — sans ça (ancien calcul : marge
-    /// identique en fraction canvas quel que soit l'axe) l'ombre ressort visiblement elliptique
-    /// dès que la sortie n'est pas 16:9 (rapport utilisateur, ex. export vertical 9:16).
-    /// `stretch_x`/`stretch_y` sont aussi transmis au shader (`mb.yz`) pour pré-déformer la SDF
-    /// elle-même — même technique que l'arrondi normal (mode 0) — sinon la COURBURE des coins
-    /// de l'ombre reste elliptique même une fois sa taille globale corrigée.
+    /// Le quad d'ombre est élargi de `spread` px et décalé de `offset_px`, des px de SORTIE
+    /// (même convention que `radius_px` pour l'arrondi normal, cf. `compose_frame`), convertis
+    /// ici en fractions du render target, axe par axe. Le RT porte la géométrie de sortie : le
+    /// halo reste isotrope sans correction. `mb.yz` reste à 1 et le shader ne le lit plus : du
+    /// temps du canvas figé en 16:9, il portait l'étirement de sortie que la SDF devait annuler.
     pub unsafe fn draw_shadow(
         &self,
         dst: [f32; 4],
@@ -2745,17 +2738,14 @@ impl Compositor {
         Ok(())
     }
 
-    /// Redimensionne (bilinéaire) le RT composé (OUT_W×OUT_H) vers `resize_target.rgba`, avant
-    /// la conversion NV12 dans `rgb_to_nv12_scaled`.
+    /// Redimensionne (bilinéaire) le RT composé, à sa taille de rendu, vers `resize_target.rgba`
+    /// (`target_w`×`target_h`), avant la conversion NV12 dans `rgb_to_nv12_scaled`.
     ///
-    /// Étirement PLEIN CADRE volontaire, y compris non uniforme quand `target_w`×`target_h`
-    /// n'a pas le ratio de OUT_W×OUT_H : le fond (wallpaper) doit remplir tout le cadre de
-    /// sortie quel que soit le ratio choisi — ce n'est PAS lui qu'il faut préserver en "fit".
-    /// L'écran et la webcam, eux, sont protégés de cet étirement en amont, dans
-    /// `compose_frame` (rétrécissement inverse de leur rect de destination AVANT ce blit —
-    /// voir le commentaire sur `undistort` juste avant leur dessin) : ils gardent leur ratio
-    /// d'origine (letterboxé/pillarboxé sur le fond, qui lui reste plein cadre) sans qu'il
-    /// faille toucher au viewport ici.
+    /// Plein cadre, sans viewport ni bandes. Le RT porte déjà la géométrie de sortie (l'export
+    /// le crée à la taille de sortie) et les appelants demandent cette géométrie : l'échelle est
+    /// donc la même sur les deux axes, à l'arrondi au pair de `normalize_render_size` près. Rien
+    /// n'est pré-compensé en amont : la passe `undistort`, qui rétrécissait l'écran et la webcam
+    /// avant un étirement non uniforme, a disparu avec le canvas figé en 16:9.
     unsafe fn blit_resized(&self, target_w: u32, target_h: u32) -> Result<()> {
         self.ensure_resize_target(target_w, target_h)?;
         let cache = self.resize_target.borrow();
@@ -2916,12 +2906,11 @@ impl Compositor {
         Ok((rw, rh, out))
     }
 
-    /// Comme `rgb_to_nv12`, mais redimensionne d'abord (bilinéaire, `ps_tex`/`sampler` déjà
-    /// utilisés partout ailleurs dans le fichier) le RT composé — toujours rendu en interne à
-    /// OUT_W×OUT_H, quelle que soit la taille de sortie demandée — vers `target_w`×`target_h`
-    /// avant la conversion NV12. Identique à `rgb_to_nv12` (donc coût inchangé) quand la cible
-    /// égale la résolution interne : le live et les exports "Source"/1080p ne paient rien pour
-    /// cette fonctionnalité.
+    /// Comme `rgb_to_nv12`, mais vers `target_w`×`target_h` : si la cible diffère de la taille
+    /// de rendu, le RT composé est d'abord redimensionné (bilinéaire, `ps_tex`/`sampler` déjà
+    /// utilisés partout ailleurs dans le fichier, cf. `blit_resized`). Le RT suivant la sortie,
+    /// c'est l'exception : dans le cas nominal la cible est la taille de rendu, et le coût est
+    /// celui de `rgb_to_nv12`.
     pub unsafe fn rgb_to_nv12_scaled(
         &self,
         target_w: u32,

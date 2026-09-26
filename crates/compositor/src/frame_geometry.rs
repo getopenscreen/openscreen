@@ -2984,13 +2984,6 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             let (nw, nh) = (dst[2] * s, dst[3] * s);
             [ax - nw * anchor[0], ay - nh * anchor[1], nw, nh]
         };
-        // Le ratio de sortie réel (peut différer du canvas interne 16:9 fixe) et le facteur
-        // d'étirement non uniforme que `blit_resized` appliquera en fin de pipeline — nécessaires
-        // ici (avant `undistort`, plus bas) pour que le fit ci-dessous cible le ratio de boîte tel
-        // qu'il apparaîtra APRÈS cet étirement, pas tel qu'il est dans l'espace canvas pré-étirement
-        // (sinon le fit et l'undistort composent deux corrections indépendantes et sur-rétrécissent
-        // le contenu — cf. rapport utilisateur : crop 9:16 + sortie 9:16 + padding 0% laissait
-        // quand même une grosse marge, alors que le crop correspond déjà exactement au cadre).
         // Le crop de l'utilisateur (dialogue "Edit clip") a son PROPRE ratio (ex. une bande
         // verticale 9:16 recadrée dans une source 16:9) — le zoom appliqué ensuite (§
         // `screen_source_rect`) le préserve (mêmes facteurs sur les deux axes), donc c'est bien
@@ -3006,13 +2999,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             _ => scw / sch.max(0.0001),
         };
         // Contain (parité `centerRectInBounds`) : rétrécit `dst` (centré) pour que son ratio
-        // devienne `aspect`, sans jamais dépasser sa boîte d'origine — mais la boîte de référence
-        // doit être mesurée telle qu'elle apparaîtra APRÈS l'étirement de sortie (`dst` * ratio de
-        // sortie), pas dans l'espace canvas 16:9 pré-étirement : sinon le fit cible le mauvais
-        // ratio de boîte dès que la sortie n'est pas 16:9. `undistort` (plus bas) annule ensuite
-        // exactement ce même facteur, donc convertir le résultat en fraction canvas se fait par
-        // `/ uniform_stretch` (propriété de `undistort` : le ratio final ne dépend que de la
-        // taille de `dst` en PIXELS CANVAS, jamais du ratio de sortie choisi).
+        // devienne `aspect`, sans jamais dépasser sa boîte d'origine. La boîte se mesure en px du
+        // render target, qui porte la géométrie de sortie : son ratio est celui qu'on verra.
         let fit_dst_to_aspect = |dst: [f32; 4], aspect: f32| -> [f32; 4] {
             let box_w_px = dst[2] * rw;
             let box_h_px = dst[3] * rh;
@@ -3188,18 +3176,14 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // le padding n'affecte QUE l'écran (la quantité de fond révélée). La webcam reste ancrée
         // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame)
         // — SAUF quand l'app a résolu un placement explicite (`app_webcam_rect`, drag-to-reposition
-        // compris). Ce rect est déjà exprimé en fraction du VRAI output (calculé côté web par
+        // compris). Ce rect est déjà exprimé en fraction de la sortie (calculé côté web par
         // `computeCompositeLayout` avec les vraies dimensions de sortie), position ET aspect déjà
-        // corrects — `fit_cam_aspect`/`scale_corner_br` (chemin preset par défaut) sont donc
-        // doublement inadaptés ici : ils réancrent au coin bas-droite (ignorant la position
-        // choisie par l'utilisateur) ET recalculent l'aspect en pixels du canvas fixe 16:9
-        // (`OUT_W`×`OUT_H`), une référence différente du vrai output dès que la sortie n'est pas
-        // 16:9 (rapport utilisateur : webcam glissée au coin bas-gauche en 9:16, JSON envoyé au
-        // natif confirmant une position flush, mais rendu native visiblement décalé ET trop
-        // petit). On garde seulement `scale_anchored` (zoom réactif, préserve l'ancre et l'aspect)
-        // puis on pré-compense par `inverse_undistort` pour annuler le `undistort()` générique
-        // appliqué plus bas à tous les calques (écran compris) — sans quoi ce rect déjà correct
-        // se ferait déformer une seconde fois par cet undistort partagé.
+        // corrects. `fit_cam_aspect`/`scale_corner_br` (chemin preset par défaut) y sont donc
+        // inadaptés : ils le réancreraient au coin bas-droite, en ignorant la position choisie par
+        // l'utilisateur (rapport : webcam glissée au coin bas-gauche, rendue ailleurs), et
+        // recalculeraient un aspect déjà juste. On garde seulement `scale_anchored` (zoom réactif,
+        // préserve l'ancre et l'aspect), et le rect est dessiné tel quel : le render target porte
+        // la géométrie de sortie, rien ne le déforme après coup.
         let mut w_dst = if app_webcam_rect.is_some() {
             scale_anchored(p.webcam.dst, webcam_size_scale)
         } else {
@@ -3231,16 +3215,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         w_dst = fullscreen_dst(w_dst, cam_progress);
         w_dst_prev = fullscreen_dst(w_dst_prev, cam_progress_prev);
 
-        // Contre-étirement "fit" : le canvas interne compose TOUJOURS en OUT_W×OUT_H (16:9),
-        // puis `blit_resized` étire tout, de façon non uniforme si besoin, vers la résolution
-        // de sortie demandée — voulu pour que le FOND (dessiné plus bas en dst=[0,0,1,1])
-        // remplisse tout le cadre quel que soit le ratio choisi. Mais l'écran et la webcam ne
-        // doivent PAS être déformés par cet étirement : on rétrécit ici leur rect de
-        // destination (centré, dans cet espace 16:9 PRÉ-étirement) par l'inverse du plus fort
-        // des deux facteurs d'étirement, pour qu'après l'étirement final leur ratio d'origine
-        // reste préservé (letterboxé/pillarboxé sur le fond, qui lui reste plein cadre) — mode
-        // "fit"/contain. Si l'utilisateur veut un rendu "fill" (remplir sans bandes), il ajuste
-        // le crop lui-même ; le natif ne fait plus ce choix à sa place en étirant l'image.
+        // Aucun contre-étirement ici : le render target porte la géométrie de sortie, rien n'est
+        // étiré après coup, donc aucun rect n'est rétréci pour compenser.
         // Le dessin du coin (SDF, shaders.hlsl) compare le rayon à `quad_px`, exprimé en px du
         // RENDER TARGET : c'est donc dans cet espace-là qu'il faut le lui donner.
         //

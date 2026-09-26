@@ -2222,7 +2222,7 @@ impl Compositor {
             (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
         ];
         if cfg.shadow {
-            let spread = SCREEN_SHADOW_SPREAD_FRAC * g.frame_min_px;
+            let spread = SCREEN_SHADOW_SPREAD_FRAC * g.screen_unit_px;
             let offset = g.screen_shadow_offset();
             let opacity = 0.45 * lp.shadow_scale;
             // L'ombre suit la silhouette réellement affichée : rect arrondi quand l'écran est

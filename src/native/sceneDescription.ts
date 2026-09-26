@@ -57,6 +57,7 @@ import {
 import { parseCssGradient, resolveLinearGradientAngle } from "@/lib/exporter/gradientParser";
 import type { FrameTheme, RecordingFrame } from "@/lib/projectDefaults";
 import type { CompositorClipInput } from "./contracts";
+import { ROUNDNESS_REFERENCE_PX } from "./paramUnits";
 
 /** Background behind the screen. Parsed from `settings.wallpaper`. */
 export type SceneBackground =
@@ -361,7 +362,13 @@ export interface SceneEffects {
 	/** 0..1 drop-shadow strength. */
 	shadow: number;
 	/**
-	 * Roundness slider, as a fraction of the output frame's SHORT SIDE.
+	 * Roundness slider, as a fraction of a fixed 1080 px reference (`ROUNDNESS_REFERENCE_PX`).
+	 *
+	 * The native side multiplies it by the SCREEN's unit: the short side of the frame the
+	 * screen would have in an output of its own ratio (`screen_unit_px`). So 24 means 24 px
+	 * on a 1080p export whose format matches the recording, and the same share of the screen
+	 * everywhere else. It used to be divided by the output's short side, which follows the
+	 * source: a 4K take got corners half as round as a 1080p one.
 	 *
 	 * Every length crossing this contract is a fraction, never a pixel count, and that is
 	 * load-bearing rather than stylistic: the native compositor rasterises the preview
@@ -375,7 +382,7 @@ export interface SceneEffects {
 	 * The slider itself stays in pixels for the user — the division happens here, once.
 	 *
 	 * Under a frame, the native side reads the slider's POSITION back from it (× the
-	 * output's short side ÷ `ROUNDNESS_SLIDER_MAX_PX`) and maps it onto the range that
+	 * reference ÷ `ROUNDNESS_SLIDER_MAX_PX`) and maps it onto the range that
 	 * frame wears well, in the frame's own unit — the same corner on every clip ratio.
 	 */
 	roundnessFrac: number;
@@ -1087,10 +1094,9 @@ export function buildSceneDescription(
 			padding: settings.padding / 100,
 			blur: settings.showBlur,
 			shadow: settings.shadowIntensity,
-			// The slider is in output pixels; the contract is in fractions of the frame's
-			// short side. This division is the whole conversion — see `roundnessFrac`.
-			roundnessFrac:
-				settings.borderRadius / Math.max(1, Math.min(outputDims.width, outputDims.height)),
+			// The slider is in pixels of a 1080 reference, whatever the source resolution —
+			// see `roundnessFrac`.
+			roundnessFrac: settings.borderRadius / ROUNDNESS_REFERENCE_PX,
 			motionBlur: settings.motionBlurAmount,
 			// Omitted at their defaults, like `webcamEffect`: the Rust side defaults both fields,
 			// so a project with no frame serializes exactly as it did before they existed.

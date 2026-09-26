@@ -2,6 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+	normalizeProjectEditor,
+	PROJECT_VERSION,
+} from "../../src/components/video-editor/projectPersistence";
+import { migrateProjectDataToAxcutDocument } from "../../src/lib/ai-edition/document/migrate";
 import { type PackedProjectData, runInfoCommand, runPackCommand } from "./projectCommands";
 
 let root = "";
@@ -16,6 +21,27 @@ async function make(relative: string, contents = "video-bytes"): Promise<string>
 
 async function writeProject(relative: string, data: PackedProjectData): Promise<string> {
 	return make(relative, JSON.stringify(data));
+}
+
+/**
+ * A project file as the editor saves it: the AxcutDocument itself, one zoom on the timeline, an
+ * export format a migrated v2 project left in `legacyEditor`, and a speed region where the editor
+ * keeps them (`legacyEditor.speedRegions`).
+ */
+async function writeDocument(relative: string, screenVideoPath: string): Promise<string> {
+	const doc = migrateProjectDataToAxcutDocument({
+		version: PROJECT_VERSION,
+		media: { screenVideoPath },
+		editor: normalizeProjectEditor({
+			exportFormat: "gif",
+			zoomRegions: [{ id: "z1", startMs: 0, endMs: 1000, depth: 3, focus: { cx: 0.5, cy: 0.5 } }],
+		}),
+	});
+	const speedRegions = [{ id: "s1", startMs: 0, endMs: 500, speed: 2 }];
+	return make(
+		relative,
+		JSON.stringify({ ...doc, legacyEditor: { ...doc.legacyEditor, speedRegions } }),
+	);
 }
 
 const readProject = async (file: string): Promise<PackedProjectData> =>
@@ -135,5 +161,40 @@ describe("runInfoCommand", () => {
 			exportFormat: "mp4",
 			screenVideoExists: true,
 		});
+	});
+});
+
+describe("a project the editor saved", () => {
+	it("is described by info from its primary asset", async () => {
+		const screen = await make("rec/clip.mp4");
+		const project = await writeDocument("saved.openscreen", screen);
+
+		const out = recorder();
+		expect(await runInfoCommand(project, true, out.write)).toBe(0);
+		expect(JSON.parse(out.text())).toMatchObject({
+			version: 8,
+			screenVideoPath: screen,
+			screenVideoExists: true,
+			exportFormat: "gif",
+			zoomRegions: 1,
+			trimRegions: 0,
+			speedRegions: 1,
+		});
+	});
+
+	it("is reported MISSING by info when its media is gone", async () => {
+		const project = await writeDocument("saved.openscreen", path.join(root, "gone", "clip.mp4"));
+
+		const out = recorder();
+		expect(await runInfoCommand(project, false, out.write)).toBe(1);
+		expect(out.text()).toContain("[MISSING]");
+	});
+
+	it("is refused by pack with a reason, not as a project without video", async () => {
+		const project = await writeDocument("saved.openscreen", await make("rec/clip.mp4"));
+
+		await expect(
+			runPackCommand(project, path.join(root, "packed"), false, recorder().write),
+		).rejects.toThrow("pack does not support projects saved by the editor yet");
 	});
 });

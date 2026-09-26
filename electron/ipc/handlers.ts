@@ -16,7 +16,11 @@ import {
 	shell,
 	systemPreferences,
 } from "electron";
-import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
+import {
+	type AxcutDocument,
+	isAxcutDocumentFile,
+	parseDocumentFile,
+} from "../../src/lib/ai-edition/schema";
 import {
 	type NativeLinuxRecordingRequest,
 	portalCursorMode,
@@ -4489,6 +4493,17 @@ export function registerIpcHandlers(
 			const content = await fs.readFile(filePath, "utf-8");
 			const project = await relinkProjectMedia(JSON.parse(content), RECORDINGS_DIR);
 			currentProjectPath = filePath;
+			// A document the editor saved grants the media it declares, as when the editor opens
+			// it (`approveDocumentMedia`, through `DocumentService.getProject`): this is how the
+			// CLI export reads one. A legacy v2 project's media is approved below instead, within
+			// the trusted dirs.
+			if (isAxcutDocumentFile(project)) {
+				try {
+					approveDocumentMedia(parseDocumentFile(project));
+				} catch {
+					// Not a valid document: nothing is granted, and the caller reports the parse error.
+				}
+			}
 
 			// Approve session paths but tolerate failures (e.g. video moved outside trusted
 			// dirs) so the project still loads and the renderer can show "video not found".

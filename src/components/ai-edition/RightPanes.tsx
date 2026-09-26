@@ -441,6 +441,7 @@ function useMemoCustomWallpapers(current: string): string[] {
 
 /** The seed the one-colour gradient starts from when the wallpaper is not one of its own. */
 const GRADIENT_SEED_FALLBACK = "#3b82f6";
+const FULL_HEX = /^#[0-9a-f]{6}$/i;
 
 /**
  * The free choice, folded behind the curated set: a "Custom" row under the swatches whose
@@ -471,7 +472,12 @@ function CustomBackgroundRow({
 				value={value}
 				swatch={swatch}
 				disabled={!hasDocument}
-				onChange={onChange}
+				// Only a complete #rrggbb goes out. ColorField also emits "#abc" while the hex is
+				// being typed; forwarding it wrote a value that came back normalised and replaced
+				// the draft under the user's fingers.
+				onChange={(hex) => {
+					if (FULL_HEX.test(hex)) onChange(hex.toLowerCase());
+				}}
 				onCommit={onCommit}
 			/>
 		</div>
@@ -565,7 +571,14 @@ export function WallpaperPicker({
 	const live = onLiveChange ?? onChange;
 	const commit = () => void onCommit?.();
 	const customUrls = useMemoCustomWallpapers(value);
-	const seed = gradientSeedColor(value) ?? GRADIENT_SEED_FALLBACK;
+	// The colour the user picked, kept as picked: the gradient's first stop is that colour held
+	// inside 35–85% lightness, so reading it back would move a dark pick under the user. It only
+	// stands while the wallpaper is still the gradient it made; a preset or undo replaces it.
+	const [picked, setPicked] = useState<string | null>(null);
+	const seed =
+		picked && oneColorGradient(picked) === value
+			? picked
+			: (gradientSeedColor(value) ?? GRADIENT_SEED_FALLBACK);
 
 	const isSelected = (candidate: string) => value === candidate;
 	const tabs = [
@@ -662,7 +675,10 @@ export function WallpaperPicker({
 						value={seed}
 						swatch={oneColorGradient(seed)}
 						hasDocument={hasDocument}
-						onChange={(hex) => live(oneColorGradient(hex))}
+						onChange={(hex) => {
+							setPicked(hex);
+							live(oneColorGradient(hex));
+						}}
 						onCommit={commit}
 					/>
 				</>

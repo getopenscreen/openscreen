@@ -5,6 +5,7 @@
 
 import "@testing-library/jest-dom";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { LOCALE_STORAGE_KEY } from "@/i18n/config";
@@ -79,6 +80,67 @@ describe("gradient tab", () => {
 		expect(stops).toHaveLength(2);
 		expect(stops?.[0]).toBe("#ec4899");
 		expect(onCommit).toHaveBeenCalled();
+	});
+});
+
+/** The picker wired like the pane: a live change comes back as the new value. */
+function Stateful({ initial, onLive }: { initial: string; onLive: (v: string) => void }) {
+	const [value, setValue] = useState(initial);
+	return (
+		<WallpaperPicker
+			value={value}
+			hasDocument
+			onChange={setValue}
+			onLiveChange={(v) => {
+				onLive(v);
+				setValue(v);
+			}}
+			onCommit={() => undefined}
+			onPickFile={() => undefined}
+			updateNativeBackground={false}
+		/>
+	);
+}
+
+describe("typing a hex in a Custom row", () => {
+	function typeHex(button: string, initial: string, text: string) {
+		const onLive = vi.fn();
+		render(
+			<I18nProvider>
+				<Stateful initial={initial} onLive={onLive} />
+			</I18nProvider>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: button }));
+		const input = screen.getByRole("textbox", { name: "Color wheel" }) as HTMLInputElement;
+		fireEvent.change(input, { target: { value: text } });
+		return { onLive, input };
+	}
+
+	it("keeps a 3-digit draft on the gradient row instead of replacing it", () => {
+		const { onLive, input } = typeHex(
+			"Gradient from one color",
+			"linear-gradient(135deg, #3b82f6, #8b5cf6)",
+			"#abc",
+		);
+		expect(onLive).not.toHaveBeenCalled();
+		expect(input.value).toBe("#abc");
+	});
+
+	it("keeps a 3-digit draft on the colour row instead of replacing it", () => {
+		const { onLive, input } = typeHex("Custom color", "#16171d", "#abc");
+		expect(onLive).not.toHaveBeenCalled();
+		expect(input.value).toBe("#abc");
+	});
+
+	it("keeps a dark pick as typed, though the gradient lifts its lightness", () => {
+		const { onLive, input } = typeHex(
+			"Gradient from one color",
+			"linear-gradient(135deg, #3b82f6, #8b5cf6)",
+			"#000000",
+		);
+		expect(onLive).toHaveBeenCalledTimes(1);
+		expect(parseCssGradient(onLive.mock.calls[0][0])?.stops[0].color).not.toBe("#000000");
+		expect(input.value).toBe("#000000");
 	});
 });
 

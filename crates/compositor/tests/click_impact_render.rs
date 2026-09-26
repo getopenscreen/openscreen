@@ -1,5 +1,6 @@
-//! Sous un préset 3D avec « Click impact », un clic fait basculer le plan du côté cliqué puis le
-//! laisse revenir (`regions::click_impact`). Rend de vraies frames par le compositeur D3D11.
+//! Avec « Click impact » (réglage du curseur), un clic fait basculer le plan d'un préset 3D du
+//! côté cliqué puis le laisse revenir (`regions::click_impact`) ; sans préset, il fait reculer
+//! l'écran droit. Rend de vraies frames par le compositeur D3D11.
 //!
 //! Même harnais que `tilt_parallax_render.rs`, mêmes variables d'environnement : une source
 //! 1920×1080 de 6 s, de préférence quadrillée. La piste curseur (immobile, un clic) est écrite
@@ -40,9 +41,9 @@ fn write_sidecar(path: &std::path::Path) {
     std::fs::write(path, format!(r#"{{"samples":[{}]}}"#, samples.join(","))).expect("sidecar");
 }
 
-fn scene_json(source: &str, click_impact: bool) -> String {
+fn scene_json(source: &str, rotation: &str, click_impact: bool) -> String {
     let s = source.replace('\\', "/");
-    let flag = if click_impact { r#","clickImpact":true"# } else { "" };
+    let flag = if click_impact { r#""clickImpact":true,"# } else { "" };
     format!(
         r##"{{
         "clips": [{{"screenPath":"{s}","webcamPath":"","sourceStartSec":0,"sourceEndSec":6,"webcamOffsetSec":0,"hasAudio":false}}],
@@ -50,10 +51,10 @@ fn scene_json(source: &str, click_impact: bool) -> String {
                     "screenRect":{{"x":0.15,"y":0.15,"width":0.7,"height":0.7}}}},
         "effects": {{"padding":0.1,"blur":false,"shadow":0.5,"roundnessFrac":0.02,"motionBlur":0.0}},
         "background": {{"kind":"color","color":"#2060d0"}},
-        "zoomRegions": [{{"id":"z","startSec":0,"endSec":6,"scale":1.15,"focusX":0.5,"focusY":0.5,"focusMode":"manual","rotation":"iso"{flag}}}],
+        "zoomRegions": [{{"id":"z","startSec":0,"endSec":6,"scale":1.15,"focusX":0.5,"focusY":0.5,"focusMode":"manual","rotation":"{rotation}"}}],
         "annotations": [],
         "speedRegions": [],
-        "cursor": {{"show":true,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"}},
+        "cursor": {{{flag}"show":true,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"}},
         "cropByClip": [null],
         "output": {{"width":{W},"height":{H},"fps":null}}
     }}"##
@@ -116,8 +117,8 @@ fn a_click_presses_the_clicked_side_of_the_tilted_plane() {
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
     comp.set_cursor(track.smoothed(0.0));
 
-    let render = |click_impact: bool, t: f64| -> Vec<u8> {
-        let scene = Scene::from_json(&scene_json(&source, click_impact)).expect("scene valide");
+    let render = |rotation: &str, click_impact: bool, t: f64| -> Vec<u8> {
+        let scene = Scene::from_json(&scene_json(&source, rotation, click_impact)).expect("scene valide");
         comp.set_live_params(live_params_from_scene(&scene));
         comp.set_scene(Some(scene));
         unsafe {
@@ -141,7 +142,7 @@ fn a_click_presses_the_clicked_side_of_the_tilted_plane() {
     };
     let mut frames = Vec::new();
     for (name, t) in instants {
-        let rgba = render(true, t);
+        let rgba = render("iso", true, t);
         if let Some(dir) = &out_dir {
             write_ppm(&dir.join(format!("click-{name}.ppm")), &rgba);
         }
@@ -149,7 +150,7 @@ fn a_click_presses_the_clicked_side_of_the_tilted_plane() {
         println!("{name:<12} t={t:<6} bords {l:>4}..{r:>4}  hauteur droite {hr:>4}  gauche {hl:>4}");
         frames.push((rgba, (l, r, hr, hl)));
     }
-    let off = render(false, CLICK_S + 0.0495);
+    let off = render("iso", false, CLICK_S + 0.0495);
     if let Some(dir) = &out_dir {
         write_ppm(&dir.join("click-off-at-contact.ppm"), &off);
     }
@@ -172,4 +173,17 @@ fn a_click_presses_the_clicked_side_of_the_tilted_plane() {
     assert!(contact.0 < rest.0, "bord gauche {} au repos {}", contact.0, rest.0);
     assert!(contact.2 < rest.2, "hauteur droite {} au repos {}", contact.2, rest.2);
     assert!(contact.3 > rest.3, "hauteur gauche {} au repos {}", contact.3, rest.3);
+
+    // Sans préset, rien ne bascule : l'écran droit recule au contact, les quatre bords rentrent.
+    let flat_rest = render("none", true, CLICK_S - 0.5);
+    let flat_contact = render("none", true, CLICK_S + 0.0495);
+    let flat_off = render("none", false, CLICK_S + 0.0495);
+    if let Some(dir) = &out_dir {
+        write_ppm(&dir.join("click-flat-contact.ppm"), &flat_contact);
+    }
+    let (rest, contact) = (probe(&flat_rest), probe(&flat_contact));
+    println!("écran droit : repos {rest:?}, contact {contact:?}");
+    assert_eq!(silhouette_diff(&flat_off, &flat_rest), 0, "sans l'option, le clic ne doit rien changer");
+    assert!(contact.0 > rest.0 && contact.1 < rest.1, "bords {contact:?} au repos {rest:?}");
+    assert!(contact.2 < rest.2 && contact.3 < rest.3, "hauteurs {contact:?} au repos {rest:?}");
 }

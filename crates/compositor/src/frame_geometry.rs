@@ -2859,7 +2859,6 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let mut zoom_rotation = [0.0f32; 3];
         let mut zoom_rotation_prev = [0.0f32; 3];
         let mut zoom_tilt = 0.0f32;
-        let mut zoom_click_impact = 0.0f32;
         let mut zoom_camera = 0.0f32;
         let mut zoom_camera_prev = 0.0f32;
         let mut zoom_aim = [0.5f32; 2];
@@ -2889,7 +2888,6 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             p.focus = zs.focus;
             zoom_rotation = zs.rotation;
             zoom_tilt = zs.tilt;
-            zoom_click_impact = zs.click_impact;
             zoom_camera = zs.camera;
             zoom_aim = zs.aim;
             zoom_orbit = zs.orbit;
@@ -3120,14 +3118,25 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let shown = |i: usize| (crop_cut[i + 2] - crop_cut[i]) / (window[i + 2] - window[i]).max(1e-6);
         let screen_unit_px =
             screen_unit_px([s_base[2] * rw * shown(0), s_base[3] * rh * shown(1)], padding_scale);
-        // Impact du clic : mêmes piste, coupe, porte et budget que la parallaxe sous un angle fixe ;
-        // sous la caméra réelle, les mêmes clics font reculer l'œil.
+        // Impact du clic, un réglage du curseur qui vaut sous toutes les caméras : sous un angle
+        // fixe, mêmes piste, coupe, porte et budget que la parallaxe ; sous la caméra réelle, les
+        // mêmes clics font reculer l'œil ; sur un écran droit, l'écran lui-même (`pressed`).
         let (impact, press) = match (scene, parallax_track) {
-            (Some(s), Some(track)) if zoom_click_impact > 0.0 => {
-                let (tilt, press) = click_impact_at(s, cfg, &lp, track, source_t, cut, [u_max, v_max]);
-                (tilt.map(|d| d * zoom_click_impact), press * zoom_click_impact)
+            (Some(s), Some(track)) if s.cursor.click_impact => {
+                click_impact_at(s, cfg, &lp, track, source_t, cut, [u_max, v_max])
             }
             _ => ([0.0; 3], 0.0),
+        };
+        // Sur un écran droit, le clic fait reculer l'écran comme l'œil recule sous la caméra réelle
+        // (`camera::PRESS`) : la boîte rapetisse autour de son centre, puis revient. Le faire
+        // basculer depuis l'écran droit amènerait des arêtes sur les axes (la règle des 2°). Là où
+        // un angle fixe est installé, la bascule prend le relais (`tilt_gate`) ; sous la caméra
+        // réelle, l'œil (son poids). Même recul aux deux frames : comme la bascule, l'impact
+        // n'entre pas dans le flou de mouvement.
+        let flat_press = press * (1.0 - crate::regions::tilt_gate(zoom_tilt)) * (1.0 - zoom_camera);
+        let pressed = |b: [f32; 4]| -> [f32; 4] {
+            let k = 1.0 / (1.0 - crate::camera::PRESS * flat_press);
+            [b[0] + b[2] * (1.0 - k) * 0.5, b[1] + b[3] * (1.0 - k) * 0.5, b[2] * k, b[3] * k]
         };
         // Sous la caméra réelle, la visée et l'orbite vivent dans le recadrage, comme le focus :
         // même report dans la coupe (un cover la rogne). La mise au point suit le pointeur lissé
@@ -3154,7 +3163,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             Some(pose) => pose.orbit,
             None => focus_in_cut(u_max, v_max, active_crop, p.focus, cut),
         };
-        let s_dst = remap_box(s_base, cut_ref, cut);
+        let s_dst = pressed(remap_box(s_base, cut_ref, cut));
         // Parallaxe : calculée ici, une fois la coupe connue — elle mesure la vitesse du curseur
         // en coupes VISIBLES par seconde. La coupe visible est `cut_ref`, zoom compris : `cut`
         // ne porte plus que le crop depuis #179, et sous un x2 le même geste traverse deux fois
@@ -3172,7 +3181,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             zoom_tilt,
             impact,
         );
-        let s_dst_prev = remap_box(s_base_prev, cut_ref_prev, cut);
+        let s_dst_prev = pressed(remap_box(s_base_prev, cut_ref_prev, cut));
         // le padding n'affecte QUE l'écran (la quantité de fond révélée). La webcam reste ancrée
         // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame)
         // — SAUF quand l'app a résolu un placement explicite (`app_webcam_rect`, drag-to-reposition
@@ -3464,9 +3473,9 @@ pub fn cursor_plane_point(cut: [f32; 4], uv_max: [f32; 2], p: (f32, f32)) -> Opt
     ((0.0..=1.0).contains(&fx) && (0.0..=1.0).contains(&fy)).then_some([fx, fy])
 }
 
-/// L'impact des clics (`regions::click_impact`) avec les portes qui dépendent de la scène, à
-/// multiplier encore par le poids des régions (`ZoomState::click_impact`) ; la porte du préset
-/// vient ensuite, dans `dynamic_tilt`.
+/// L'impact des clics (la bascule `regions::click_impact`, le recul `regions::click_press`) avec
+/// les portes qui dépendent de la scène ; la porte du préset vient ensuite, dans `dynamic_tilt`
+/// pour la bascule, dans `plan_frame` pour le recul.
 ///
 /// - curseur visible (`cursor_alpha`) : `cursor.show` explicite, la piste étant chargée même
 ///   curseur masqué (le focus auto la suit) ;
@@ -6399,9 +6408,10 @@ mod tests {
         assert!(zoomed > flat * 1.4, "zoom x2 : {zoomed} devrait dépasser {flat} nettement");
     }
 
-    /// L'impact du clic passe par `plan_frame` et chacune de ses portes l'éteint : région sans
-    /// l'option ou sans préset, curseur masqué (réglage ou région), clic hors du clip actif ou
-    /// de la coupe, vitesse ≥ 2×, masque de flou visible.
+    /// L'impact du clic passe par `plan_frame` et chacune de ses portes l'éteint : réglage absent,
+    /// curseur masqué (réglage ou région), clic hors du clip actif ou de la coupe, vitesse ≥ 2×,
+    /// masque de flou visible. Sous un angle fixe il fait basculer le plan ; sans préset, il fait
+    /// reculer l'écran droit, par les mêmes portes.
     #[test]
     fn every_gate_cancels_the_click_impact() {
         let cfg = crate::config::all().pop().expect("au moins une config");
@@ -6416,30 +6426,48 @@ mod tests {
         };
         let on_edge = track_at(0.6);
         let impact_json = zoomed_golden_scene_json()
-            .replace(r#""rotation":"none""#, r#""rotation":"iso","clickImpact":true"#);
-        let dyn_of = |edit: &dyn Fn(String) -> String, track| {
+            .replace(r#""rotation":"none""#, r#""rotation":"iso""#)
+            .replace(r#""cursor":{"#, r#""cursor":{"clickImpact":true,"#);
+        let plan_of = |edit: &dyn Fn(String) -> String, track| {
             let scene = Scene::from_json(&edit(impact_json.clone())).expect("scène");
             plan_frame(&FrameGeometryInput { cursor: Some(track), ..golden_input(&scene, &cfg) })
-                .zoom_rotation_dyn
         };
+        let dyn_of = |edit: &dyn Fn(String) -> String, track| plan_of(edit, track).zoom_rotation_dyn;
         let same = |s: String| s;
         let on = dyn_of(&same, on_edge);
         assert!(on[1] > 0.75 * crate::regions::CLICK_IMPACT_DEG, "clic à droite → +Y : {on:?}");
 
+        // Sans préset, rien ne bascule : l'écran droit recule, puis revient.
+        let flat = |s: String| s.replace(r#""rotation":"iso""#, r#""rotation":"none""#);
+        let off = |s: String| s.replace(r#""clickImpact":true,"#, "");
+        assert_eq!(plan_of(&same, on_edge).s_dst, plan_of(&off, on_edge).s_dst, "le plan bascule, il ne recule pas");
+        let box_of = |edit: &dyn Fn(String) -> String, track| plan_of(&|s| flat(edit(s)), track).s_dst;
+        let rest = box_of(&off, on_edge);
+        let pushed = plan_of(&flat, on_edge);
+        assert_eq!(pushed.zoom_rotation_dyn, [0.0; 3]);
+        let shrink = [pushed.s_dst[2] / rest[2], pushed.s_dst[3] / rest[3]];
+        assert!(shrink[0] < 0.97 && (shrink[0] - shrink[1]).abs() < 1e-5, "{shrink:?}");
+        let centre = |b: [f32; 4]| [b[0] + b[2] * 0.5, b[1] + b[3] * 0.5];
+        let (a, b) = (centre(pushed.s_dst), centre(rest));
+        assert!((a[0] - b[0]).abs() < 1e-5 && (a[1] - b[1]).abs() < 1e-5, "autour du centre : {a:?} {b:?}");
+        let prev = pushed.s_dst_prev[2] / plan_of(&|s| flat(off(s)), on_edge).s_dst_prev[2];
+        assert!((prev - shrink[0]).abs() < 1e-6, "hors du flou de mouvement : {prev} {shrink:?}");
+        assert_eq!(box_of(&same, track_at(0.9)), box_of(&off, track_at(0.9)), "clic hors du crop");
+
         let insert = |field: &'static str| {
             move |s: String| s.replace(r#""cursor":"#, &format!(r#"{field},"cursor":"#))
         };
-        let cases: [(&str, Box<dyn Fn(String) -> String>); 7] = [
-            ("option absente", Box::new(|s: String| s.replace(r#","clickImpact":true"#, ""))),
-            ("sans préset", Box::new(|s: String| s.replace(r#""rotation":"iso""#, r#""rotation":"none""#))),
+        let cases: [(&str, Box<dyn Fn(String) -> String>); 6] = [
+            ("option absente", Box::new(off)),
             ("curseur masqué", Box::new(|s: String| s.replace(r#""show":true"#, r#""show":false"#))),
-            ("région hideCursor", Box::new(|s: String| s.replace(r#""clickImpact":true"#, r#""clickImpact":true,"hideCursor":true"#))),
+            ("région hideCursor", Box::new(|s: String| s.replace(r#""rotation":"iso""#, r#""rotation":"iso","hideCursor":true"#))),
             ("clic avant le clip", Box::new(|s: String| s.replace(r#""sourceStartSec":0"#, r#""sourceStartSec":1.46"#))),
             ("vitesse 2x", Box::new(insert(r#""speedRegions":[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"speed":2.0}]"#))),
             ("flou visible", Box::new(insert(r#""annotations":[{"id":"b","startSec":1.0,"endSec":2.0,"kind":"blur","x":0.1,"y":0.1,"w":0.2,"h":0.2,"blur":{"style":"mosaic","shape":"rectangle","color":"black","intensity":8,"blockSize":16}}]"#))),
         ];
         for (name, edit) in &cases {
             assert_eq!(dyn_of(edit.as_ref(), on_edge), [0.0; 3], "{name}");
+            assert_eq!(box_of(edit.as_ref(), on_edge), box_of(&|s| off(edit(s)), on_edge), "{name}, écran droit");
         }
         assert_eq!(dyn_of(&same, track_at(0.9)), [0.0; 3], "clic hors du crop");
 
@@ -6491,7 +6519,8 @@ mod tests {
     fn the_follow_camera_aims_at_the_pointer_in_the_crop() {
         let cfg = crate::config::all().pop().expect("au moins une config");
         let json = zoomed_golden_scene_json()
-            .replace(r#""rotation":"none""#, r#""rotation":"follow-cursor","clickImpact":true"#);
+            .replace(r#""rotation":"none""#, r#""rotation":"follow-cursor""#)
+            .replace(r#""cursor":{"#, r#""cursor":{"clickImpact":true,"#);
         let scene = Scene::from_json(&json).expect("scène");
         let parked = |x: f32, clicks: Vec<f32>| -> &'static crate::cursor::CursorTrack {
             Box::leak(Box::new(crate::cursor::CursorTrack::new(
@@ -6542,9 +6571,10 @@ mod tests {
         assert_eq!((clicked.zoom_rotation, clicked.zoom_rotation_dyn), ([0.0; 3], [0.0; 3]));
         let pose = clicked.camera.expect("caméra");
         assert!(pose.press < -0.9, "{pose:?}");
+        assert_eq!(clicked.s_dst, right.s_dst, "la boîte ne recule pas, l'œil si");
         let pushed = clicked.screen_tilt(s_px).expect("caméra");
         assert!(pushed.half_extents_px().0 < 0.98 * qr.half_extents_px().0);
-        let off = Scene::from_json(&json.replace(r#","clickImpact":true"#, "")).expect("scène");
+        let off = Scene::from_json(&json.replace(r#""clickImpact":true,"#, "")).expect("scène");
         assert_eq!(plan(&off, parked(0.55, vec![1.45])).camera.expect("caméra").press, 0.0);
 
         let hidden = Scene::from_json(&json.replace(r#""show":true"#, r#""show":false"#)).expect("scène");
@@ -7908,6 +7938,7 @@ mod tests {
     /// `plan_cursor`, scène dorée (recadrée, zoomée) sous `rotation`.
     fn model_frame(
         rotation: &str,
+        click_impact: bool,
         blur: f32,
         track: &'static crate::cursor::CursorTrack,
         t: f32,
@@ -7915,6 +7946,7 @@ mod tests {
         let cfg = crate::config::all().pop().expect("cfg");
         let json = zoomed_golden_scene_json().replace(r#""rotation":"none""#, rotation);
         let mut scene = Scene::from_json(&json).expect("scène");
+        scene.cursor.click_impact = click_impact;
         scene.cursor.theme = "default".into();
         scene.cursor.cursor_sprites = model_scene().cursor.cursor_sprites;
         let live = LiveParams {
@@ -7963,21 +7995,23 @@ mod tests {
 
     /// Au contact, la pointe du curseur modélisé tombe sur le pixel du clic BRUT, à 0,5 px près :
     /// quel que soit le lissage (le ressort traîne derrière la souris), la vitesse d'arrivée, un
-    /// départ immédiat, l'angle fixe (impact du plan compris), la caméra réelle, et la traînée de
-    /// flou (repliée sur la tête pendant le contact).
+    /// départ immédiat, la caméra (impact du clic compris : l'écran droit recule, l'angle fixe
+    /// bascule, l'œil de la caméra réelle recule), et la traînée de flou (repliée sur la tête
+    /// pendant le contact).
     #[test]
     fn the_modelled_tip_touches_the_raw_click_pixel() {
         const TC: f32 = 1.5;
         let presets = [
-            ("flat", r#""rotation":"none""#),
-            ("iso", r#""rotation":"iso","clickImpact":true"#),
-            ("left", r#""rotation":"left","clickImpact":true"#),
-            ("right", r#""rotation":"right","clickImpact":true"#),
-            ("follow", r#""rotation":"follow-cursor""#),
+            ("flat", r#""rotation":"none""#, false),
+            ("flat+impact", r#""rotation":"none""#, true),
+            ("iso", r#""rotation":"iso""#, true),
+            ("left", r#""rotation":"left""#, true),
+            ("right", r#""rotation":"right""#, true),
+            ("follow", r#""rotation":"follow-cursor""#, true),
         ];
         let (to, from, away) = ([0.3, 0.18], [0.08, 0.05], [0.45, 0.32]);
         let mut worst = 0.0f32;
-        for (name, rotation) in presets {
+        for (name, rotation, impact) in presets {
             for smoothing in [0.0, 0.25, 0.5, 1.0] {
                 for speed in [0.5, 2.0] {
                     for dwell in [0.0, 0.15] {
@@ -7990,7 +8024,7 @@ mod tests {
                             let shape = SpriteShape { hotspot: hotspot_of(key), ..shape };
                             for k in 0..=15 {
                                 let t = TC + 0.02 + k as f32 * 0.004;
-                                let (g, plan) = model_frame(rotation, 1.0, track, t);
+                                let (g, plan) = model_frame(rotation, impact, 1.0, track, t);
                                 let plan = plan.expect("curseur visible au contact");
                                 let pose = plan.model.expect("modèle");
                                 if pose.clearance > 0.0 {
@@ -8027,12 +8061,12 @@ mod tests {
         let quiet: &'static crate::cursor::CursorTrack =
             Box::leak(Box::new(crate::cursor::CursorTrack::new(vec![(0.0, 0.3, 0.18), (4.0, 0.3, 0.18)], vec![], vec![])));
         for rotation in [r#""rotation":"none""#, r#""rotation":"iso""#, r#""rotation":"follow-cursor""#] {
-            let impacts = |track, t| model_frame(rotation, 0.0, track, t).1.expect("curseur").impacts;
+            let impacts = |track, t| model_frame(rotation, false, 0.0, track, t).1.expect("curseur").impacts;
             assert!(impacts(quiet, TC + 0.1).is_empty(), "{rotation}: pas de clic, pas d'impact");
             assert!(impacts(track, TC + 0.04).is_empty(), "{rotation}: avant le contact");
             assert!(impacts(track, TC + IMPACT_DELAY_S + IMPACT_S + 0.001).is_empty(), "{rotation}: après");
             for age in [0.06, 0.1, 0.2, 0.4] {
-                let (g, plan) = model_frame(rotation, 0.0, track, TC + age);
+                let (g, plan) = model_frame(rotation, false, 0.0, track, TC + age);
                 let cb = &plan.expect("curseur").impacts;
                 assert_eq!(cb.len(), 1, "{rotation} +{age}");
                 let cb = cb[0];

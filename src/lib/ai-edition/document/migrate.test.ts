@@ -114,7 +114,6 @@ describe("migrateProjectDataToAxcutDocument", () => {
 							customScale: 2.5,
 							source: "manual",
 							hideCursor: true,
-							clickImpact: true,
 						},
 					],
 				},
@@ -131,7 +130,6 @@ describe("migrateProjectDataToAxcutDocument", () => {
 		// `iso`, retired, reads as Left: the angle that kept its look.
 		expect(z.rotationPreset).toBe("left");
 		expect(z.hideCursor).toBe(true);
-		expect(z.clickImpact).toBe(true);
 	});
 
 	it("converts annotationRegions to seconds with type and content preserved", () => {
@@ -373,7 +371,6 @@ describe("migrateAxcutDocumentToProjectData", () => {
 						depth: 4,
 						focus: { cx: 0.5, cy: 0.5 },
 						hideCursor: true,
-						clickImpact: true,
 					},
 					{ id: "z_2", startMs: 3000, endMs: 4000, depth: 2, focus: { cx: 0.5, cy: 0.5 } },
 				],
@@ -406,9 +403,6 @@ describe("migrateAxcutDocumentToProjectData", () => {
 		expect(back.editor.zoomRegions[0].startMs).toBe(0);
 		expect(back.editor.zoomRegions[0].endMs).toBe(2000);
 		expect(back.editor.zoomRegions[0].hideCursor).toBe(true);
-		expect(back.editor.zoomRegions[0].clickImpact).toBe(true);
-		expect("clickImpact" in back.editor.zoomRegions[1]).toBe(false);
-		expect("clickImpact" in doc.zoomRanges[1]).toBe(false);
 		expect(back.editor.annotationRegions[0].startMs).toBe(1000);
 		expect(back.editor.annotationRegions[0].endMs).toBe(3000);
 	});

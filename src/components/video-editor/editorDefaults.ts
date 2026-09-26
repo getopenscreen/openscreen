@@ -83,6 +83,7 @@ export const DEFAULT_CURSOR_SETTINGS: CursorVisualSettings & { show: boolean; th
 	clickBounce: DEFAULT_CURSOR_CLICK_BOUNCE,
 	model3d: DEFAULT_CURSOR_MODEL3D,
 	alwaysArrow: false,
+	clickImpact: false,
 	theme: DEFAULT_CURSOR_THEME_ID,
 };
 

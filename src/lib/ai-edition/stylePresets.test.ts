@@ -41,6 +41,7 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 			clickBounce: 1,
 			model3d: false,
 			alwaysArrow: false,
+			clickImpact: false,
 		},
 		cursorShow: true,
 		cursorAutoHide: false,
@@ -153,6 +154,15 @@ describe("parseStylePresetAppearance", () => {
 				cursor: { ...appearance().cursor, model3d: 1 },
 			}),
 		).toThrow(/cursor\.model3d/);
+	});
+
+	it("reads a preset written before the click impact as without one, and type-checks it", () => {
+		const { clickImpact: _clickImpact, ...older } = appearance().cursor;
+		const read = (cursor: unknown) =>
+			parseStylePresetAppearance({ ...appearance(), cursor }).cursor;
+		expect(read(older).clickImpact).toBe(false);
+		expect(read({ ...older, clickImpact: true }).clickImpact).toBe(true);
+		expect(() => read({ ...older, clickImpact: "yes" })).toThrow(/cursor\.clickImpact/);
 	});
 
 	it("reads a preset saved before the frame existed as frameless, and rejects an unknown frame", () => {

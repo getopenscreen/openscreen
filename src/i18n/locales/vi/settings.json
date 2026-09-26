@@ -371,9 +371,6 @@
 				"followCursor": "Xoay quanh theo con trỏ"
 			}
 		},
-		"clickImpact": {
-			"title": "Hiệu ứng nhấp"
-		},
 		"level": "Mức độ thu phóng",
 		"previewHold": "Giữ để xem trước hiệu ứng phóng to",
 		"customScale": "Thu phóng tùy chỉnh",
@@ -408,6 +405,7 @@
 		"smoothing": "Làm mượt",
 		"clickBounce": "Nảy khi nhấp",
 		"model3d": "Con trỏ 3D",
+		"clickImpact": "Hiệu ứng nhấp",
 		"help": "Cách vẽ con trỏ từ dữ liệu đã ghi: chủ đề, kích thước, làm mượt, mờ chuyển động và hiệu ứng nảy khi nhấp.",
 		"size": "Kích thước",
 		"title": "Con trỏ",

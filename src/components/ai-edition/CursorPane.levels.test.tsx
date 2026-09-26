@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { LOCALE_STORAGE_KEY } from "@/i18n/config";
@@ -60,5 +60,24 @@ describe("CursorPane size", () => {
 		renderWithCursor({ cursorSize: 4.5 });
 		const slider = screen.getByRole("slider", { name: "Size" }) as HTMLInputElement;
 		expect([slider.min, slider.max, slider.value]).toEqual(["1.5", "6", "4.5"]);
+	});
+});
+
+describe("CursorPane click impact", () => {
+	const toggle = () => screen.queryByRole("button", { name: "Click impact" });
+
+	it("is a project-wide switch, off by default", () => {
+		renderWithCursor({});
+		expect(toggle()?.getAttribute("aria-pressed")).toBe("false");
+		fireEvent.click(toggle() as HTMLElement);
+		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
+			cursorClickImpact: true,
+		});
+	});
+
+	// The impact follows the pointer you see: with the cursor hidden it has nothing to show.
+	it("is not offered while the cursor is hidden", () => {
+		renderWithCursor({ cursorShow: false });
+		expect(toggle()).toBeNull();
 	});
 });

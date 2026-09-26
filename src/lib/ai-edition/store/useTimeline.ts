@@ -655,7 +655,7 @@ export function useTimeline() {
 	});
 
 	// Every whole-document write to one zoom goes through this chain: the pane's one-field
-	// writes (level, 3D tilt, focus mode, cursor, click impact), a pill's span, and the focus
+	// writes (level, 3D tilt, focus mode, cursor), a pill's span, and the focus
 	// commit. `write` runs INSIDE the chain, on the document the previous zoom write left, and
 	// returns its `saveDocument`. The level buttons step while the previous save is still out,
 	// and 3 -> 4 -> 5 built both saves from the render's depth-3 document: the main process does
@@ -913,16 +913,6 @@ export function useTimeline() {
 	const updateZoomHideCursor = useCallback(
 		(id: string, hideCursor: boolean | undefined) =>
 			saveZoomPatch(id, { hideCursor: hideCursor ? true : undefined }),
-		[saveZoomPatch],
-	);
-
-	// Per-region, like the preset it animates. `undefined` rather than `false` so the document
-	// keeps omitting the key when the option is off. Shares `saveZoomPatch` with the pane's
-	// other one-field writes: a toggle arriving while a level write is still pending must not
-	// rebuild the pill from the stale pre-level document and drop the level on the floor.
-	const updateZoomClickImpact = useCallback(
-		(id: string, clickImpact: boolean) =>
-			saveZoomPatch(id, { clickImpact: clickImpact ? true : undefined }),
 		[saveZoomPatch],
 	);
 
@@ -1671,7 +1661,6 @@ export function useTimeline() {
 		updateZoomRotation,
 		updateZoomFocusMode,
 		updateZoomHideCursor,
-		updateZoomClickImpact,
 		updateAnnotationSpan,
 		updateAnnotationLive,
 		commitAnnotationChange,

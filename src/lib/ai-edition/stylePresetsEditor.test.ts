@@ -57,6 +57,7 @@ function styledSettings(): EditorSettingsSnapshot {
 			clickBounce: 1.5,
 			model3d: true,
 			alwaysArrow: false,
+			clickImpact: true,
 		},
 		cursorShow: false,
 		cursorAutoHide: true,

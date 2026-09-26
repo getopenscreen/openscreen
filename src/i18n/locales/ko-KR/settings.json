@@ -371,9 +371,6 @@
 				"followCursor": "커서를 따라 회전"
 			}
 		},
-		"clickImpact": {
-			"title": "클릭 눌림"
-		},
 		"level": "줌 레벨",
 		"previewHold": "누르고 있으면 줌 효과 미리보기",
 		"customScale": "커스텀 줌",
@@ -408,6 +405,7 @@
 		"smoothing": "부드러움",
 		"clickBounce": "클릭 바운스",
 		"model3d": "3D 커서",
+		"clickImpact": "클릭 눌림",
 		"help": "기록된 텔레메트리를 기반으로 한 커서 렌더링: 테마, 크기, 스무딩, 모션 블러, 클릭 바운스.",
 		"size": "크기",
 		"title": "커서",

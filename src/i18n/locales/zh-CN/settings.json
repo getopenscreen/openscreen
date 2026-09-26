@@ -371,9 +371,6 @@
 				"followCursor": "随光标环绕"
 			}
 		},
-		"clickImpact": {
-			"title": "点击按压"
-		},
 		"level": "缩放级别",
 		"previewHold": "按住预览放大效果",
 		"customScale": "自定义缩放",
@@ -408,6 +405,7 @@
 		"smoothing": "平滑",
 		"clickBounce": "点击弹跳",
 		"model3d": "3D 光标",
+		"clickImpact": "点击按压",
 		"help": "基于录制遥测数据的光标渲染：主题、大小、平滑、运动模糊和点击回弹。",
 		"size": "大小",
 		"title": "光标",

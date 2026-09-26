@@ -176,6 +176,14 @@ describe("patchEditorSettings", () => {
 		expect(on.cursor.size).toBe(2);
 	});
 
+	it("switches the click impact without clobbering its siblings, off by default", () => {
+		expect(getEditorSettings(baseDoc).cursor.clickImpact).toBe(false);
+		const seed = patchEditorSettings(baseDoc, { cursor: { size: 2 } });
+		const next = patchEditorSettings(seed, { cursor: { clickImpact: true } });
+		expect(next.legacyEditor).toMatchObject({ cursorClickImpact: true, cursorSize: 2 });
+		expect(getEditorSettings(next).cursor.clickImpact).toBe(true);
+	});
+
 	it("toggles cursorAutoHide on and off via patch", () => {
 		const enabled = patchEditorSettings(baseDoc, { cursorAutoHide: true });
 		expect(getEditorSettings(enabled).cursorAutoHide).toBe(true);

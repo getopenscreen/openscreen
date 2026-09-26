@@ -114,9 +114,6 @@ export interface SceneZoomRegion {
 	underTrim?: boolean;
 	/** When true, cursor is hidden during this zoom region. */
 	hideCursor?: boolean;
-	/** Each click presses the tilted plane toward the clicked side (`regions::click_impact`).
-	 *  Native ignores it without a `rotation`. Omitted (not `false`) when off. */
-	clickImpact?: true;
 }
 
 /** A "Full Camera" timeline region (from `legacyEditor.cameraFullscreenRegions`). Times in seconds. */
@@ -445,6 +442,9 @@ export interface SceneCursor {
 	model3d: boolean;
 	/** Every cursor state drawn with the arrow sprite (resolved app-side, see compositorViewService). */
 	alwaysArrow: boolean;
+	/** Each click gives the screen an impact, under every camera (`scene.rs`
+	 *  `SceneCursor::click_impact`). Omitted (not `false`) when off. */
+	clickImpact?: true;
 	clipToBounds: boolean;
 	/** Cursor theme id (sprite set). */
 	theme: string;
@@ -1243,6 +1243,7 @@ export function buildSceneDescription(
 			clickBounce: settings.cursor.clickBounce,
 			model3d: settings.cursor.model3d,
 			alwaysArrow: settings.cursor.alwaysArrow,
+			...(settings.cursor.clickImpact ? { clickImpact: true as const } : {}),
 			// The "Keep inside frame" option is gone: the cursor always overflows into the
 			// background. The field stays because the compositor's scene requires it.
 			clipToBounds: false,
@@ -1290,7 +1291,6 @@ export function buildSceneDescription(
 			clipIndex: region.clipIndex,
 			...(region.underTrim ? { underTrim: true } : {}),
 			...(region.hideCursor ? { hideCursor: true } : {}),
-			...(region.clickImpact ? { clickImpact: true as const } : {}),
 		})),
 		annotations: projectedAnnotations
 			.map((region) => {

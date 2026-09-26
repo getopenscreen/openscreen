@@ -371,9 +371,6 @@
 				"followCursor": "Kreist mit dem Cursor"
 			}
 		},
-		"clickImpact": {
-			"title": "Klick-Impuls"
-		},
 		"level": "Zoomstufe",
 		"previewHold": "Gedrückt halten für die Zoom-Vorschau",
 		"customScale": "Eigener Zoom",
@@ -408,6 +405,7 @@
 		"smoothing": "Glättung",
 		"clickBounce": "Klick-Federung",
 		"model3d": "3D-Cursor",
+		"clickImpact": "Klick-Impuls",
 		"help": "Cursor-Darstellung aus der aufgezeichneten Telemetrie: Stil, Größe, Glättung, Bewegungsunschärfe und Klick-Federung.",
 		"size": "Größe",
 		"title": "Cursor",

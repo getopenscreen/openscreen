@@ -25,6 +25,17 @@ deux effets qui partagent un unique budget d'angle dynamique (`DYNAMIC_TILT_BUDG
 `rotated_quad_corners_px(w, h, base, dyn)` projette les coins ; l'échelle de containment est
 calculée sur la **base seule** (« échelle gelée »), la part dynamique ne fait que reprojeter.
 
+**L'impact du clic est un réglage du curseur** (`cursor.clickImpact`, « Click impact » dans le
+panneau du curseur, éteint par défaut), pas une option de zoom : il vaut sous **toutes** les
+caméras, dans une région de zoom ou hors d'elle. Chaque caméra le rend à sa façon : l'angle fixe
+bascule du côté cliqué (ci-dessus), la caméra mobile recule l'œil (A.3), et l'écran droit
+**recule** : sa boîte rapetisse autour de son centre de `camera::PRESS` au contact (−3,8 %), sur la
+même courbe `tap()`, puis revient (`frame_geometry::plan_frame`). Pas de bascule depuis l'écran
+droit : elle mettrait des arêtes sur les axes (règle des 2°). Le recul prend le complément de la
+porte des angles fixes (`regions::tilt_gate`) et du poids de la caméra mobile, donc les trois se
+relaient sans saut pendant les transitions. Un document qui portait `clickImpact` sur un zoom
+allume le réglage du curseur à son ouverture (`liftZoomClickImpact`).
+
 ### A.2 Le modèle : une seule liste « caméra 3D »
 
 **Révisé trois fois après test produit.** La première version séparait l'attitude
@@ -121,8 +132,8 @@ d'azimut (`CAMERA_LIGHT_GAIN`, 0,5 donnait ±10 % avec l'œil en orbite).
 **Impact du clic** : l'écran reste immobile, c'est **l'œil qui recule** de 4 % de sa distance au
 contact, sur la courbe `tap()` de l'impact des angles fixes (mêmes clics, mêmes portes : fenêtre du
 clip, clic visible, masque, vitesse, opacité du curseur), puis revient avec un léger rebond. Sur la
-vidéo, l'écran perd 2 à 3 % de taille pendant deux images : un tapotement, pas un saut. Le panneau
-l'active sous cette caméra, avec sa propre description.
+vidéo, l'écran perd 2 à 3 % de taille pendant deux images : un tapotement, pas un saut. C'est le
+réglage « Click impact » du curseur, le même sous toutes les caméras (A.1).
 
 Chaînée à un angle fixe, une région `follow-cursor` ne mélange jamais les deux modèles : la
 transition passe par l'écran droit à mi-course. Entre deux régions `follow-cursor`, le cadreur ne

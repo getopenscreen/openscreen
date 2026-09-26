@@ -841,19 +841,6 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 		expect(useProjectStore.getState().document?.zoomRanges[0].hideCursor).toBeUndefined();
 	});
 
-	it("updates clickImpact on a zoom region and drops the key when off", async () => {
-		const { result } = renderTimeline();
-		await act(async () => {
-			await result.current.updateZoomClickImpact("zoom_a", true);
-		});
-		expect(useProjectStore.getState().document?.zoomRanges[0].clickImpact).toBe(true);
-
-		await act(async () => {
-			await result.current.updateZoomClickImpact("zoom_a", false);
-		});
-		expect(useProjectStore.getState().document?.zoomRanges[0].clickImpact).toBeUndefined();
-	});
-
 	it("rolls a live focus edit back when its commit cannot be saved", async () => {
 		bridgeMocks.save.mockResolvedValueOnce({ success: false, error: "project file locked" });
 		const { result } = renderTimeline();
@@ -1285,31 +1272,6 @@ describe("useTimeline undo history", () => {
 		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
 			depth: 4,
 			rotationPreset: "left",
-		});
-	});
-
-	// Rebase compatibility (#694 × current main): `updateZoomClickImpact` joined the zoom pane
-	// after this PR was authored, as one more one-field whole-document writer. While a level
-	// write is still pending, a click-impact toggle built from the render's document would
-	// rebuild the pill from the stale pre-level document — and whichever save landed last won,
-	// so the pending level could come back off. Click impact must share the zoom chain so both
-	// values survive.
-	it("keeps a pending zoom level when click impact toggles before it lands", async () => {
-		seed(docWithZoom);
-		const gate = gateFirstSave();
-		const { result } = renderTimeline();
-
-		const pDepth = result.current.updateZoomDepth("zoom_a", 4);
-		const pImpact = result.current.updateZoomClickImpact("zoom_a", true);
-		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
-		await act(async () => {
-			gate.release?.();
-			await Promise.all([pDepth, pImpact]);
-		});
-
-		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
-			depth: 4,
-			clickImpact: true,
 		});
 	});
 

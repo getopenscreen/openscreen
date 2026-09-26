@@ -371,9 +371,6 @@
 				"followCursor": "隨游標環繞"
 			}
 		},
-		"clickImpact": {
-			"title": "點擊按壓"
-		},
 		"level": "縮放級別",
 		"previewHold": "按住預覽放大效果",
 		"customScale": "自訂縮放",
@@ -408,6 +405,7 @@
 		"smoothing": "平滑",
 		"clickBounce": "點擊彈跳",
 		"model3d": "3D 游標",
+		"clickImpact": "點擊按壓",
 		"help": "根據錄製的遙測資料繪製游標：主題、大小、平滑、動態模糊與點擊回彈。",
 		"size": "大小",
 		"title": "游標",

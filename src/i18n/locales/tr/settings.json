@@ -371,9 +371,6 @@
 				"followCursor": "İmleçle birlikte döner"
 			}
 		},
-		"clickImpact": {
-			"title": "Tıklama etkisi"
-		},
 		"level": "Yakınlaştırma Seviyesi",
 		"previewHold": "Yakınlaştırma efektini önizlemek için basılı tutun",
 		"customScale": "Özel Yakınlaştırma",
@@ -408,6 +405,7 @@
 		"smoothing": "Yumuşatma",
 		"clickBounce": "Tıklama Sıçraması",
 		"model3d": "3B imleç",
+		"clickImpact": "Tıklama etkisi",
 		"help": "Kaydedilen telemetriden imleç çizimi: tema, boyut, yumuşatma, hareket bulanıklığı ve tıklama sıçraması.",
 		"size": "Boyut",
 		"title": "İmleç",

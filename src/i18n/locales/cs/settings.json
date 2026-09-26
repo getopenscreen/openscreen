@@ -371,9 +371,6 @@
 				"followCursor": "Obíhá s kurzorem"
 			}
 		},
-		"clickImpact": {
-			"title": "Odezva kliknutí"
-		},
 		"level": "Úroveň přiblížení",
 		"previewHold": "Podržte pro náhled efektu přiblížení",
 		"customScale": "Vlastní přiblížení",
@@ -408,6 +405,7 @@
 		"smoothing": "Vyhlazení",
 		"clickBounce": "Odraz při kliknutí",
 		"model3d": "3D kurzor",
+		"clickImpact": "Odezva kliknutí",
 		"help": "Renderování kurzoru ze zaznamenané telemetrie: motiv, velikost, vyhlazení, pohybové rozmazání a zdůraznění odrazu při kliknutí.",
 		"size": "Velikost",
 		"title": "Kurzor",

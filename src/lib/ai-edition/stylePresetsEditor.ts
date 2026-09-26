@@ -41,6 +41,7 @@ export function stylePresetAppearanceFromSettings(
 			clickBounce: settings.cursor.clickBounce,
 			model3d: settings.cursor.model3d,
 			alwaysArrow: settings.cursor.alwaysArrow,
+			clickImpact: settings.cursor.clickImpact,
 		},
 		cursorShow: settings.cursorShow,
 		cursorAutoHide: settings.cursorAutoHide,

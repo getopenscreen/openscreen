@@ -371,9 +371,6 @@
 				"followCursor": "Orbits with the cursor"
 			}
 		},
-		"clickImpact": {
-			"title": "Click impact"
-		},
 		"level": "Zoom level",
 		"previewHold": "Hold to preview zoom effect",
 		"customScale": "Custom zoom",
@@ -408,6 +405,7 @@
 		"smoothing": "Smoothing",
 		"clickBounce": "Click bounce",
 		"model3d": "3D cursor",
+		"clickImpact": "Click impact",
 		"help": "How the recorded cursor is drawn: style, size, smoothing, motion blur and click bounce.",
 		"size": "Size",
 		"title": "Cursor",

@@ -161,8 +161,6 @@ export interface ZoomRegion {
 	source?: ZoomRegionSource;
 	/** When true, cursor is hidden during this zoom region. */
 	hideCursor?: boolean;
-	/** When true, each click presses the tilted plane, or recoils the `follow-cursor` camera (needs a `rotationPreset`). Omitted when off. */
-	clickImpact?: true;
 }
 
 export function getRotation3D(region: Pick<ZoomRegion, "rotationPreset">): Rotation3D {
@@ -289,6 +287,12 @@ export interface CursorVisualSettings {
 	model3d: boolean;
 	/** Draws every cursor state (text, hand, resize…) with the theme's arrow sprite. */
 	alwaysArrow: boolean;
+	/**
+	 * Each click gives the screen an impact, whatever the zoom's camera: a fixed angle rocks the
+	 * tilted screen toward the clicked side, the moving camera recoils, a flat screen is pushed
+	 * back (`frame_geometry::plan_frame`).
+	 */
+	clickImpact: boolean;
 	autoHide?: boolean;
 }
 

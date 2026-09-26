@@ -293,7 +293,6 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						focusMode: region.focusMode === "auto" ? "auto" : "manual",
 						source: region.source === "auto" ? "auto" : "manual",
 						...(validPreset ? { rotationPreset: validPreset } : {}),
-						...(region.clickImpact === true ? { clickImpact: true as const } : {}),
 					};
 				})
 		: [];

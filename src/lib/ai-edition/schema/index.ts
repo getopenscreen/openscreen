@@ -515,10 +515,6 @@ export const zoomRegionSchema = endGteStart(
 		customScale: z.number().positive().optional(),
 		source: z.enum(["auto", "manual"]).optional(),
 		hideCursor: z.boolean().optional(),
-		/** Each click gives an impact: a fixed-angle `rotationPreset` presses the tilted plane
-		 *  toward the clicked side, `follow-cursor` recoils the camera. Needs a `rotationPreset`;
-		 *  omitted (never `false`) when off. */
-		clickImpact: z.literal(true).optional(),
 	}),
 	"endMs",
 	"startMs",
@@ -1026,12 +1022,43 @@ function raiseInvertedTranscriptEnds(raw: unknown): unknown {
 	return repaired ? { ...doc, transcript, transcripts } : raw;
 }
 
+/**
+ * Carry a zoom's click impact over to the cursor setting it became.
+ *
+ * Builds up to v1.13.0 stored `clickImpact` on each zoom range, and only a 3D camera used it.
+ * It is now a cursor setting (`legacyEditor.cursorClickImpact`) that acts under every camera,
+ * and the zoom range schema no longer has the key, so the parse would drop it silently. A
+ * document that turned it on for any zoom keeps it on, now for the whole project; one that
+ * never did, or already stores the cursor setting, comes back untouched.
+ *
+ * No `schemaVersion` bump, like `dropAudioAnchoredTrims`. Runs on RAW, untrusted input, so
+ * every read is guarded.
+ */
+function liftZoomClickImpact(raw: unknown): unknown {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+	const doc = raw as Record<string, unknown>;
+	const zooms = Array.isArray(doc.zoomRanges) ? doc.zoomRanges : [];
+	const on = zooms.some(
+		(zoom) =>
+			zoom && typeof zoom === "object" && (zoom as Record<string, unknown>).clickImpact === true,
+	);
+	if (!on) return raw;
+	const legacy =
+		doc.legacyEditor && typeof doc.legacyEditor === "object" && !Array.isArray(doc.legacyEditor)
+			? (doc.legacyEditor as Record<string, unknown>)
+			: null;
+	if (typeof legacy?.cursorClickImpact === "boolean") return raw;
+	return { ...doc, legacyEditor: { ...legacy, cursorClickImpact: true } };
+}
+
 export function migrateRawDocumentToCurrent(raw: unknown): unknown {
 	return raiseInvertedTranscriptEnds(
 		dropAudioAnchoredTrims(
-			upgradeV7DocumentToV8(
-				upgradeV6DocumentToV7(
-					upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+			liftZoomClickImpact(
+				upgradeV7DocumentToV8(
+					upgradeV6DocumentToV7(
+						upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+					),
 				),
 			),
 		),

@@ -490,11 +490,6 @@ pub struct SceneZoomRegion {
     /// Masque le curseur pendant cette région de zoom.
     #[serde(default)]
     pub hide_cursor: bool,
-    /// Chaque clic enfonce le plan incliné (`regions::click_impact`). Sans effet hors préset
-    /// 3D : c'est le préset qui installe le plan que le clic fait basculer.
-    /// `#[serde(default)]` : l'app omet la clé quand elle est fausse.
-    #[serde(default)]
-    pub click_impact: bool,
 }
 
 /// Une zone de vitesse portée par le temps source d'un clip.
@@ -540,6 +535,12 @@ pub struct SceneCursor {
     /// projets et des JSON écrits avant le réglage, qui gardent donc le curseur plat.
     #[serde(default)]
     pub model3d: bool,
+    /// Chaque clic donne un impact à l'écran, quelle que soit la caméra : sous un angle fixe le
+    /// plan bascule du côté cliqué (`regions::click_impact`), sous la caméra réelle l'œil recule,
+    /// sur un écran droit l'écran recule (`frame_geometry::plan_frame`).
+    /// `#[serde(default)]` : l'app omet la clé quand elle est fausse.
+    #[serde(default)]
+    pub click_impact: bool,
     pub clip_to_bounds: bool,
     /// id du thème (jeu de sprites) — informatif ici : le natif consomme `cursor_sprites`.
     pub theme: String,

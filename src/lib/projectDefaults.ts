@@ -195,6 +195,7 @@ export interface ProjectAppearanceDefaults {
 		clickBounce: number;
 		model3d: boolean;
 		alwaysArrow: boolean;
+		clickImpact: boolean;
 		autoHide: boolean;
 	};
 	cursorShow: boolean;
@@ -241,6 +242,7 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 		clickBounce: 1,
 		model3d: false,
 		alwaysArrow: false,
+		clickImpact: false,
 		autoHide: false,
 	},
 	cursorShow: true,

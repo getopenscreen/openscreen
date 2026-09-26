@@ -70,7 +70,6 @@ import {
 	CursorPane,
 	LayoutPane,
 	SliderCell,
-	Toggle,
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
@@ -858,20 +857,6 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							cameraLabel(region.rotationPreset ?? "off"),
 						)}
 					</div>
-					{
-						// The click follows the visible pointer: without a preset, or with the cursor
-						// hidden, the switch would move nothing, so it is not offered.
-						region.rotationPreset && settings.cursorShow && !region.hideCursor
-							? paneRow(
-									ts("zoom.clickImpact.title"),
-									<Toggle
-										checked={region.clickImpact === true}
-										ariaLabel={ts("zoom.clickImpact.title")}
-										onChange={(on) => void tl.updateZoomClickImpact(region.id, on)}
-									/>,
-								)
-							: null
-					}
 					{paneStack(
 						ts("zoom.focusMode.title"),
 						// While the global toggle is on it OVERRIDES every region, so the control shows

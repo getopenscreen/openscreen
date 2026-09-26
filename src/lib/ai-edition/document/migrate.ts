@@ -221,7 +221,6 @@ export function migrateProjectDataToAxcutDocument(
 			...(typeof region.customScale === "number" ? { customScale: region.customScale } : {}),
 			...(region.source === "auto" || region.source === "manual" ? { source: region.source } : {}),
 			...(region.hideCursor ? { hideCursor: true } : {}),
-			...(region.clickImpact === true ? { clickImpact: true as const } : {}),
 		}));
 
 	const migratedAnnotations: AxcutAnnotationRegion[] = annotationRegions
@@ -360,7 +359,6 @@ export function migrateAxcutDocumentToProjectData(input: AxcutDocument): EditorP
 		...(typeof region.customScale === "number" ? { customScale: region.customScale } : {}),
 		...(region.source ? { source: region.source } : {}),
 		...(region.hideCursor ? { hideCursor: true } : {}),
-		...(region.clickImpact ? { clickImpact: true as const } : {}),
 	}));
 	editor.zoomRegions = reverseZoomRegions;
 

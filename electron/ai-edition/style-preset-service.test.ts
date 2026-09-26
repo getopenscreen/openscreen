@@ -33,6 +33,7 @@ const APPEARANCE: StylePresetAppearance = {
 		clickBounce: 1,
 		model3d: false,
 		alwaysArrow: false,
+		clickImpact: false,
 	},
 	cursorShow: true,
 	cursorAutoHide: false,

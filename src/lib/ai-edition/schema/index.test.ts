@@ -1156,3 +1156,37 @@ describe("v7 -> v8 default ratio pin", () => {
 		expect(fresh.legacyEditor).toBeNull();
 	});
 });
+
+describe("zoom click impact lifted to the cursor setting", () => {
+	const doc = (zoomRanges: unknown[], legacyEditor: Record<string, unknown> | null = null) => ({
+		...createEmptyDocument({ projectId: "p", title: "t" }),
+		zoomRanges,
+		legacyEditor,
+	});
+	const zoom = (extra: Record<string, unknown> = {}) => ({
+		id: "z",
+		startMs: 0,
+		endMs: 1000,
+		depth: 3,
+		focus: { cx: 0.5, cy: 0.5 },
+		rotationPreset: "left",
+		...extra,
+	});
+	const load = (raw: unknown) => documentSchema.parse(migrateRawDocumentToCurrent(raw));
+
+	it("turns the cursor setting on when any zoom had it, and drops the zoom's key", () => {
+		const out = load(doc([zoom(), zoom({ id: "y", clickImpact: true })], { padding: 20 }));
+		expect(out.legacyEditor).toEqual({ padding: 20, cursorClickImpact: true });
+		expect(out.zoomRanges.every((z) => !("clickImpact" in z))).toBe(true);
+	});
+
+	it("keeps a cursor setting the document already states", () => {
+		const out = load(doc([zoom({ clickImpact: true })], { cursorClickImpact: false }));
+		expect(out.legacyEditor).toEqual({ cursorClickImpact: false });
+	});
+
+	it("leaves a document without it untouched", () => {
+		const raw = doc([zoom()]);
+		expect(migrateRawDocumentToCurrent(raw)).toBe(raw);
+	});
+});

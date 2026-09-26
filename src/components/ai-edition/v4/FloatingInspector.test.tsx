@@ -25,27 +25,6 @@ vi.mock("../RightPanes", async (importOriginal) => ({
 	CursorPane: () => <div data-testid="cursor-pane">CursorPane</div>,
 	LayoutPane: () => <div data-testid="layout-pane">LayoutPane</div>,
 	SliderCell: () => <div data-testid="slider-cell">SliderCell</div>,
-	// The real switch contract (a button carrying aria-pressed), so the click-impact tests below
-	// can find, read and press it.
-	Toggle: ({
-		checked,
-		disabled,
-		ariaLabel,
-		onChange,
-	}: {
-		checked: boolean;
-		disabled?: boolean;
-		ariaLabel?: string;
-		onChange: (next: boolean) => void;
-	}) => (
-		<button
-			type="button"
-			aria-pressed={checked}
-			aria-label={ariaLabel}
-			disabled={disabled}
-			onClick={() => onChange(!checked)}
-		/>
-	),
 	TranscriptPane: () => <div data-testid="transcript-pane">TranscriptPane</div>,
 	VideoEffectsPane: () => <div data-testid="effects-pane">VideoEffectsPane</div>,
 }));
@@ -122,55 +101,6 @@ describe("FloatingInspector", () => {
 		const closeBtn = screen.getByRole("button", { name: "common.actions.close" });
 		fireEvent.click(closeBtn);
 		expect(clearSelection).toHaveBeenCalledTimes(1);
-	});
-
-	describe("click impact toggle", () => {
-		const zoomTl = (region: Record<string, unknown>) => {
-			const updateZoomClickImpact = vi.fn();
-			const tl = {
-				...defaultProps.tl,
-				selection: { kind: "zoom", id: "z" },
-				zoomRegions: [
-					{ id: "z", startMs: 0, endMs: 1000, depth: 3, focus: { cx: 0.5, cy: 0.5 }, ...region },
-				],
-				updateZoomClickImpact,
-			} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"];
-			return { tl, updateZoomClickImpact };
-		};
-
-		const toggle = () => screen.queryByRole("button", { name: "settings.zoom.clickImpact.title" });
-
-		it("is not offered without a 3D preset", () => {
-			const { tl } = zoomTl({});
-			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			expect(toggle()).toBeNull();
-		});
-
-		it("is not offered when the region hides the cursor", () => {
-			const { tl } = zoomTl({ rotationPreset: "left", hideCursor: true });
-			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			expect(toggle()).toBeNull();
-		});
-
-		it("is not offered when the cursor is hidden globally", () => {
-			editorSettings.cursorShow = false;
-			try {
-				const { tl } = zoomTl({ rotationPreset: "left" });
-				render(<FloatingInspector {...defaultProps} tl={tl} />);
-				expect(toggle()).toBeNull();
-			} finally {
-				editorSettings.cursorShow = true;
-			}
-		});
-
-		it("toggles the region's clickImpact under a 3D preset, off by default", () => {
-			const { tl, updateZoomClickImpact } = zoomTl({ rotationPreset: "follow-cursor" });
-			render(<FloatingInspector {...defaultProps} tl={tl} />);
-			const box = toggle();
-			expect(box).toHaveAttribute("aria-pressed", "false");
-			fireEvent.click(box as HTMLElement);
-			expect(updateZoomClickImpact).toHaveBeenCalledWith("z", true);
-		});
 	});
 
 	describe("annotation pane", () => {

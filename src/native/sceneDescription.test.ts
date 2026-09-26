@@ -731,26 +731,6 @@ describe("buildSceneDescription.zoomRegions", () => {
 		expect(zoomRegions[0].hideCursor).toBe(true);
 	});
 
-	it("emits clickImpact only when it is on", () => {
-		const base = {
-			startMs: 0,
-			endMs: 1000,
-			depth: 3 as const,
-			focus: { cx: 0.5, cy: 0.5 },
-			rotationPreset: "left" as const,
-		};
-		const doc = makeDoc({
-			zoomRanges: [
-				makeZoom({ ...base, id: "on", clickImpact: true }),
-				makeZoom({ ...base, id: "off" }),
-			],
-		});
-		const { zoomRegions } = buildSceneDescription(doc);
-		expect(zoomRegions[0].clickImpact).toBe(true);
-		// Omitted, not `false`: scene payloads without the option stay byte-identical.
-		expect("clickImpact" in zoomRegions[1]).toBe(false);
-	});
-
 	it("converts ms→sec for start/end", () => {
 		const z = makeZoom({
 			id: "z",
@@ -1284,6 +1264,14 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(buildSceneDescription(makeDoc({ legacyEditor: {} })).cursor.model3d).toBe(false);
 		const on = makeDoc({ legacyEditor: { cursorModel3d: true } });
 		expect(buildSceneDescription(on).cursor.model3d).toBe(true);
+	});
+
+	it("carries the click impact switch, omitted when off", () => {
+		const on = makeDoc({ legacyEditor: { cursorClickImpact: true } });
+		expect(buildSceneDescription(on).cursor.clickImpact).toBe(true);
+		// Omitted, not `false`: scene payloads without the option stay byte-identical.
+		const off = buildSceneDescription(makeDoc({ legacyEditor: {} })).cursor;
+		expect("clickImpact" in off).toBe(false);
 	});
 
 	it("carries depth of field: on by default, off when the project turns it off", () => {

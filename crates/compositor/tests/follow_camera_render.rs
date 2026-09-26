@@ -380,7 +380,7 @@ fn orbit_scene(source: &str, regions: &str, (w, h): (u32, u32)) -> Scene {
             "background":{{"kind":"gradient","angleDeg":135,"stops":["#3b4fd1","#c86fa6"]}},
             "zoomRegions":[{regions}],
             "annotations":[],
-            "cursor":{{"show":true,"size":2.2,"smoothing":0,"motionBlur":0,"clickBounce":2.5,"model3d":true,"clipToBounds":false,"theme":"default",
+            "cursor":{{"show":true,"size":2.2,"smoothing":0,"motionBlur":0,"clickBounce":2.5,"model3d":true,"clickImpact":true,"clipToBounds":false,"theme":"default",
                        "cursorSprites":{{"arrow":{{"path":"{arrow}","hotspotX":0.1205,"hotspotY":0.0881}}}}}},
             "cropByClip":[null],
             "output":{{"width":{w},"height":{h},"fps":30}}}}"##
@@ -390,7 +390,7 @@ fn orbit_scene(source: &str, regions: &str, (w, h): (u32, u32)) -> Scene {
 
 fn orbit_region(start: f32, end: f32, scale: f32) -> String {
     format!(
-        r#"{{"clipIndex":0,"startSec":{start},"endSec":{end},"scale":{scale},"focusX":0.5,"focusY":0.5,"focusMode":"manual","rotation":"follow-cursor","clickImpact":true}}"#
+        r#"{{"clipIndex":0,"startSec":{start},"endSec":{end},"scale":{scale},"focusX":0.5,"focusY":0.5,"focusMode":"manual","rotation":"follow-cursor"}}"#
     )
 }
 

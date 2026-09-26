@@ -307,6 +307,9 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 			// Presets written before the option existed kept every cursor state.
 			alwaysArrow:
 				cursor.alwaysArrow === undefined ? false : readBoolean(cursor, "alwaysArrow", "cursor."),
+			// Presets written before the option existed gave clicks no impact.
+			clickImpact:
+				cursor.clickImpact === undefined ? false : readBoolean(cursor, "clickImpact", "cursor."),
 		},
 		cursorShow: readBoolean(value, "cursorShow"),
 		cursorAutoHide: readBoolean(value, "cursorAutoHide"),
@@ -399,6 +402,7 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	"cursorClickBounce",
 	"cursorModel3d",
 	"cursorAlwaysArrow",
+	"cursorClickImpact",
 	"cursorShow",
 	"cursorAutoHide",
 	"cursorTheme",
@@ -415,6 +419,7 @@ export function stylePresetLegacyEditor(appearance: StylePresetAppearance): Fiel
 		cursorClickBounce: cursor.clickBounce,
 		cursorModel3d: cursor.model3d,
 		cursorAlwaysArrow: cursor.alwaysArrow,
+		cursorClickImpact: cursor.clickImpact,
 	};
 }
 

@@ -3702,7 +3702,8 @@ export function CursorPane() {
 					}}
 				/>
 			</div>
-			{/* A hidden cursor has nothing to model or restyle, so these rows are not offered then. */}
+			{/* A hidden cursor has nothing to model, restyle or click with, so these rows are not
+			    offered then. */}
 			{settings.cursorShow ? (
 				<>
 					<div className={styles.paneRow}>
@@ -3726,6 +3727,15 @@ export function CursorPane() {
 							checked={settings.cursor.alwaysArrow}
 							disabled={!hasDocument}
 							onChange={(v) => void set({ cursor: { alwaysArrow: v } })}
+						/>
+					</div>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("cursor.clickImpact")}</span>
+						<Toggle
+							ariaLabel={ts("cursor.clickImpact")}
+							checked={settings.cursor.clickImpact}
+							disabled={!hasDocument}
+							onChange={(v) => void set({ cursor: { clickImpact: v } })}
 						/>
 					</div>
 				</>

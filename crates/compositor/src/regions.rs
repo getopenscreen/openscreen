@@ -466,13 +466,8 @@ pub struct ZoomState {
     pub rotation: [f32; 3],
     /// À quel point un préset 3D est installé (0..1) : la force de la région quand elle en porte
     /// un, 0 sinon ; interpolé entre deux régions chaînées, et refermé en milieu de course
-    /// quand leurs présets diffèrent. C'est la porte de `dynamic_tilt`.
+    /// quand leurs présets diffèrent. C'est la porte de `dynamic_tilt` (`tilt_gate`).
     pub tilt: f32,
-    /// Poids de l'impact du clic (0..1) : 1 sur une région qui l'active (`click_impact`),
-    /// interpolé entre deux régions chaînées. Ne suffit pas seul : sous un angle fixe, l'impact
-    /// passe aussi par la porte de `tilt` (`dynamic_tilt`) ; sous la caméra réelle, par son poids
-    /// (l'œil recule, `camera::PRESS`).
-    pub click_impact: f32,
     /// Poids de la caméra réelle (`camera.rs`, 0..1) : la force de la région `follow-cursor`, 0
     /// sinon. Jamais non nul en même temps que `rotation` (cf. la transition chaînée).
     pub camera: f32,
@@ -487,7 +482,6 @@ const IDENTITY_ZOOM: ZoomState = ZoomState {
     focus: [0.5, 0.5],
     rotation: [0.0, 0.0, 0.0],
     tilt: 0.0,
-    click_impact: 0.0,
     camera: 0.0,
     aim: [0.5, 0.5],
     orbit: [0.5, 0.5],
@@ -571,16 +565,6 @@ fn follow_at(region: &SceneZoomRegion, t: f32, frame: &CameraFrame) -> Follow {
 /// Un point 0..1 pondéré par le poids de la caméra : le centre à 0.
 fn weighted(p: [f32; 2], camera: f32) -> [f32; 2] {
     p.map(|a| 0.5 + (a - 0.5) * camera)
-}
-
-/// 1 si la région active l'impact du clic, 0 sinon. Sous un angle fixe, le clic presse l'écran ;
-/// sous la caméra réelle, l'écran reste immobile et c'est l'œil qui recule.
-fn impact_flag(region: &SceneZoomRegion) -> f32 {
-    if region.click_impact {
-        1.0
-    } else {
-        0.0
-    }
 }
 
 /// Port de `easeConnectedPan` (TS) : cubic-bezier(0.1, 0, 0.2, 1).
@@ -883,7 +867,6 @@ pub fn zoom_state_in(
             ],
             rotation,
             tilt: lerp(fixed_flag(cur), fixed_flag(next), progress) * crossing,
-            click_impact: lerp(impact_flag(cur), impact_flag(next), progress),
             camera,
             aim: weighted(mix(a.aim, b.aim), camera),
             orbit: weighted(mix(a.orbit, b.orbit), camera),
@@ -902,7 +885,6 @@ pub fn zoom_state_in(
                 focus: resolve_focus(next, t, cursor, clock),
                 rotation: fixed_rotation(next),
                 tilt: fixed_flag(next),
-                click_impact: impact_flag(next),
                 camera,
                 aim: weighted(seen.aim, camera),
                 orbit: weighted(seen.orbit, camera),
@@ -956,7 +938,6 @@ pub fn zoom_state_in(
                 focus: [ease(focus[0]), ease(focus[1])],
                 rotation: lerp_rotation3d([0.0, 0.0, 0.0], fixed_rotation(r), strength),
                 tilt: fixed_flag(r) * strength,
-                click_impact: impact_flag(r),
                 camera,
                 aim: weighted(seen.aim, camera),
                 orbit: weighted(seen.orbit, camera),
@@ -1389,7 +1370,7 @@ pub fn dynamic_tilt(
     strength: f32,
     impact: [f32; 3],
 ) -> [f32; 3] {
-    let gate = smoothstep(PARALLAX_GATE_START, 1.0, strength);
+    let gate = tilt_gate(strength);
     if gate <= 0.0 {
         return [0.0; 3];
     }
@@ -1412,6 +1393,13 @@ pub fn dynamic_tilt(
         parallax[2] + impact[2],
     ];
     clamp_dynamic_tilt(sum).map(|d| d * gate)
+}
+
+/// La porte de `dynamic_tilt` : 0 tant qu'un angle fixe n'est pas installé, 1 une fois en place.
+/// Sur l'écran qu'elle laisse droit, l'impact du clic fait reculer l'écran à la place
+/// (`frame_geometry::plan_frame`) : aucune bascule ne part de l'écran droit.
+pub fn tilt_gate(strength: f32) -> f32 {
+    smoothstep(PARALLAX_GATE_START, 1.0, strength)
 }
 
 /// Durée de l'impact du clic : la fenêtre de `CursorTrack::bounce`, pour que le plan et le
@@ -1488,9 +1476,9 @@ pub fn click_impact(
     ]
 }
 
-/// Le recul de la caméra réelle au temps `t` : la somme des `tap` des mêmes clics que
-/// `click_impact` (dans la fenêtre du clip, visibles), bornée à [−1, 1], −1 au contact. Sans leur
-/// position : l'écran ne bascule pas, l'œil recule tout droit.
+/// Le recul au temps `t`, celui de l'œil sous la caméra réelle ou celui de l'écran droit : la somme
+/// des `tap` des mêmes clics que `click_impact` (dans la fenêtre du clip, visibles), bornée à
+/// [−1, 1], −1 au contact. Sans leur position : rien ne bascule, tout recule droit.
 pub fn click_press(
     t: f32,
     track: &CursorTrack,
@@ -1615,7 +1603,6 @@ mod zoom_focus_tests {
             rotation: None,
             under_trim: false,
             hide_cursor: false,
-            click_impact: false,
         }
     }
 
@@ -2494,7 +2481,6 @@ mod tilt_tests {
             rotation: rotation.map(Into::into),
             under_trim: false,
             hide_cursor: false,
-            click_impact: false,
         };
         // `follow-cursor` n'incline pas l'écran (caméra réelle, `camera.rs`) : chaînée à un angle
         // fixe, la transition passe par l'écran droit, que ce balayage couvre aussi.
@@ -2902,31 +2888,6 @@ mod tilt_tests {
         }
     }
 
-    #[test]
-    fn the_click_impact_weight_follows_the_region_flag() {
-        let region = |click_impact: bool| SceneZoomRegion {
-            id: "z".into(),
-            clip_index: None,
-            start_sec: 2.0,
-            end_sec: 8.0,
-            scale: 2.0,
-            focus_x: 0.5,
-            focus_y: 0.5,
-            focus_mode: None,
-            rotation: Some("left".into()),
-            under_trim: false,
-            hide_cursor: false,
-            click_impact,
-        };
-        assert_eq!(zoom_state_at(&[region(true)], 5.0, None).click_impact, 1.0);
-        assert_eq!(zoom_state_at(&[region(false)], 5.0, None).click_impact, 0.0);
-        assert_eq!(
-            zoom_state_at(&[region(true)], 0.0, None).click_impact,
-            0.0,
-            "hors région"
-        );
-    }
-
     /// `ZoomState::tilt` : la force pour une région à préset, 0 sans préset.
     #[test]
     fn the_tilt_gate_follows_the_region_strength_only_with_a_preset() {
@@ -2942,7 +2903,6 @@ mod tilt_tests {
             rotation: rotation.map(Into::into),
             under_trim: false,
             hide_cursor: false,
-            click_impact: false,
         };
         assert_eq!(zoom_state_at(&[region(Some("left"))], 5.0, None).tilt, 1.0);
         assert_eq!(zoom_state_at(&[region(None)], 5.0, None).tilt, 0.0);
@@ -3249,7 +3209,6 @@ mod follow_camera_tests {
             rotation: Some(rotation.into()),
             under_trim: false,
             hide_cursor: false,
-            click_impact: true,
         }
     }
 
@@ -3278,8 +3237,7 @@ mod follow_camera_tests {
 
     /// Sous `follow-cursor`, l'écran n'est pas incliné et ne glisse pas (focus au centre, quel que
     /// soit le réglage de la région) : seule la caméra, de poids la force de la région, vise et
-    /// tourne avec le pointeur. L'impact du clic passe (l'œil recule). Hors région, l'état plat
-    /// exact.
+    /// tourne avec le pointeur. Hors région, l'état plat exact.
     #[test]
     fn follow_cursor_rides_the_zoom_envelope() {
         let tr = track(|_| (0.85, 0.5));
@@ -3287,8 +3245,8 @@ mod follow_camera_tests {
         let r = [region("follow-cursor", 2.0, 8.0)];
         let full = zoom_state_in(&r, 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!(
-            (full.rotation, full.tilt, full.click_impact, full.camera),
-            ([0.0; 3], 0.0, 1.0, 1.0)
+            (full.rotation, full.tilt, full.camera),
+            ([0.0; 3], 0.0, 1.0)
         );
         assert_eq!((full.scale, full.focus), (2.0, [0.5, 0.5]));
         assert!(
@@ -3326,7 +3284,7 @@ mod follow_camera_tests {
         assert_eq!((blind.aim, blind.orbit), ([0.5, 0.5], [0.5, 0.5]));
         // Un angle fixe garde exactement son état.
         let left = zoom_state_in(&[region("left", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
-        assert_eq!((left.rotation, left.camera, left.click_impact), ([-12.0, -18.0, -2.0], 0.0, 1.0));
+        assert_eq!((left.rotation, left.camera), ([-12.0, -18.0, -2.0], 0.0));
         let unknown = zoom_state_in(&[region("orbit", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
         assert_eq!((unknown.rotation, unknown.tilt, unknown.camera), ([0.0; 3], 0.0, 0.0));
     }

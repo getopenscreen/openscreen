@@ -371,9 +371,6 @@
 				"followCursor": "Gira com o cursor"
 			}
 		},
-		"clickImpact": {
-			"title": "Impacto do clique"
-		},
 		"level": "Nível de Zoom",
 		"previewHold": "Mantenha pressionado para pré-visualizar o efeito de zoom",
 		"customScale": "Zoom Personalizado",
@@ -408,6 +405,7 @@
 		"smoothing": "Suavização",
 		"clickBounce": "Rebote ao clicar",
 		"model3d": "Cursor 3D",
+		"clickImpact": "Impacto do clique",
 		"help": "Renderização do cursor a partir da telemetria gravada: tema, tamanho, suavização, desfoque de movimento e salto ao clicar.",
 		"size": "Tamanho",
 		"title": "Cursor",

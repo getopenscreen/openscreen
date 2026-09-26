@@ -90,6 +90,7 @@ import {
 	voiceoverPlacements,
 } from "@/lib/ai-edition/timeline/aggregated-transcript";
 import { assetCameraSource, hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
+import { breatheCut } from "@/lib/ai-edition/timeline/cut-breath";
 import { formatMs } from "@/lib/ai-edition/timeline/format";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import type {
@@ -1174,12 +1175,19 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 			pendingCaretWordIdRef.current = keptRange[0].id;
 			const startSec = Math.min(...keptRange.map((w) => w.word.startSec));
 			const endSec = Math.max(...keptRange.map((w) => w.word.endSec));
+			// Breath next to the speech that stays, so a cut silence does not glue two words.
+			const breathed = breatheCut(
+				{ startSec, endSec },
+				words
+					.filter((cw) => !isSilenceWord(cw.word) && !isInsertedWord(cw.word))
+					.map((cw) => ({ startSec: cw.word.startSec, endSec: cw.word.endSec, kept: cw.kept })),
+			);
 			onTrimTimelineSpan(
-				...toRawSpan(startSec, endSec),
+				...toRawSpan(breathed.startSec, breathed.endSec),
 				`Skip ${formatMs(startSec * 1000)}-${formatMs(endSec * 1000)} from ${clip.assetId}.`,
 			);
 		},
-		[busy, clip.assetId, toRawSpan, onTrimTimelineSpan, onRemoveWords],
+		[busy, clip.assetId, words, toRawSpan, onTrimTimelineSpan, onRemoveWords],
 	);
 
 	const removeTrimRun = useCallback(

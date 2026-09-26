@@ -96,7 +96,7 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 		// the HUD and the notes window belong to Electron. Measured: a window owned by the
 		// parent app shows in the capture unless it is listed here.
 		configuration.excludedWindowIDs =
-			excludedWindowIDs + Self.desktopIconWindowIDs(hideDesktopIcons: hideDesktopIcons)
+			excludedWindowIDs + Self.finderDesktopIconWindowIDs(hideDesktopIcons: hideDesktopIcons)
 		// By app, not by window: a banner is a window created after the pick, so no id
 		// list taken now could name it.
 		configuration.excludedBundleIDs = [notificationCenterBundleID]
@@ -174,7 +174,9 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 	/// need the Screen Recording grant the picker exists to avoid. Owner and level are
 	/// readable without it. The icons stay put for the whole session, so ids taken at pick
 	/// time hold -- unless Finder relaunches, which gives them new ones.
-	private static func desktopIconWindowIDs(hideDesktopIcons: Bool) -> [Int] {
+	/// Not named `desktopIconWindowIDs`: inside this class that name would shadow the
+	/// OpenScreenCaptureCore function it calls.
+	private static func finderDesktopIconWindowIDs(hideDesktopIcons: Bool) -> [Int] {
 		guard hideDesktopIcons,
 			let entries = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
 				as? [[String: Any]]
@@ -193,7 +195,7 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 				layer: entry[kCGWindowLayer as String] as? Int ?? 0
 			)
 		}
-		return desktopIconWindowIDs(candidates).map { Int($0) }
+		return OpenScreenCaptureCore.desktopIconWindowIDs(candidates).map { Int($0) }
 	}
 
 	private static func display(containing frame: CGRect) -> CGDirectDisplayID? {

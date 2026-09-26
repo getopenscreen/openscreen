@@ -149,6 +149,20 @@ float quad_round_alpha(float2 local, float2 quad_px, float radius_px)
     return 1.0 - smoothstep(0.0, 1.5, d); // même feather ~1.5px que la queue
 }
 
+// Le slot d'un layout en bloc, qui rogne le plan incliné (mode 8, `r` = `color.w`, rayon de ses
+// coins en px, 0 sans slot). Négatif : coins HAUTS carrés, à ras de la barre de la fenêtre qui
+// le contient (`ScreenMask::square_top`), coins bas arrondis de `-r`.
+float slot_alpha(float2 local, float2 quad_px, float r)
+{
+    if (r >= 0.0)
+    {
+        return quad_round_alpha(local, quad_px, r);
+    }
+    float2 halfsz = quad_px * 0.5;
+    float2 p = local - halfsz;
+    return 1.0 - smoothstep(0.0, 1.5, sd_round_rect(p, halfsz, (p.y < 0.0) ? 0.0 : -r));
+}
+
 // Intersection de deux droites données par (normale, offset) : n·x = d. Cramer.
 float2 line_cross(float2 n1, float d1, float2 n2, float d2)
 {
@@ -2405,8 +2419,8 @@ float4 ps_main(VSOut i) : SV_Target
         float tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
         // Slot d'un layout en bloc (`color.w` = rayon de ses coins, px ; 0 ailleurs, sans effet) :
         // `dst` EST le slot, dont le rect arrondi rogne le plan. Le conteneur masque, le métrage
-        // penche dedans (`ScreenMask`).
-        tilt_a *= quad_round_alpha(i.local, quad_px, color.w);
+        // penche dedans (`ScreenMask`). Négatif sous une fenêtre : coins hauts carrés.
+        tilt_a *= slot_alpha(i.local, quad_px, color.w);
         // Profondeur de champ : cercle de confusion en texels source, nul au focus du zoom.
         // Sous un demi-texel, l'échantillon net d'avant, à l'octet : le texte net ne passe
         // jamais par le RGBA de la pyramide, et `k = 0` (réglage coupé) ne quitte jamais cette

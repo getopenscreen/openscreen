@@ -198,6 +198,17 @@ fn quad_round_alpha(local: vec2<f32>, quad_px: vec2<f32>, radius_px: f32) -> f32
     return 1.0 - smoothstep(0.0, 1.5, d); // meme feather ~1.5px que la queue
 }
 
+// Le slot d'un layout en bloc, qui rogne le plan incline (mode 8, cf. HLSL). Negatif : coins
+// HAUTS carres, sous la barre de la fenetre qui le contient.
+fn slot_alpha(local: vec2<f32>, quad_px: vec2<f32>, r: f32) -> f32 {
+    if r >= 0.0 {
+        return quad_round_alpha(local, quad_px, r);
+    }
+    let halfsz = quad_px * 0.5;
+    let p = local - halfsz;
+    return 1.0 - smoothstep(0.0, 1.5, sd_round_rect(p, halfsz, select(-r, 0.0, p.y < 0.0)));
+}
+
 // ---- Primitives du tilt 3D (modes 8 et 12), portees de `shaders.metal` ----
 
 // SDF segment a bouts ronds.
@@ -2032,7 +2043,7 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Slot d'un layout en bloc (`color.w` = rayon de ses coins, px ; 0 ailleurs, sans effet) :
         // `dst` EST le slot, dont le rect arrondi rogne le plan (`ScreenMask`, cf. HLSL).
         let tilt_a = (1.0 - smoothstep(0.0, 1.5, d))
-            * quad_round_alpha(i.local, layer.quad_px, layer.color.w);
+            * slot_alpha(i.local, layer.quad_px, layer.color.w);
         // Profondeur de champ (cf. HLSL) : net sous un demi-texel de flou, l'echantillon
         // d'avant a l'octet ; au-dela, fondu vers la pyramide demi-resolution liee en binding 4
         // (a la place du masque webcam, que ce mode ne lit pas), au niveau `log2(coc) - 1`,

@@ -750,6 +750,20 @@ pub(crate) fn device_kind_id(kind: crate::scene::SceneFrame) -> f32 {
     }
 }
 
+/// Le verre noir de la face avant, tel que le mode 17 le rend de face : l'albédo `DEV_GLASS_*`
+/// des shaders sous leur lampe (`MODEL_AMBIENT + MODEL_DIFFUSE · n·l`, n = +z au repos). Le verre
+/// posé sous le métrage d'un bloc (`FrameGeometry::window_frame_cb`) prolonge ainsi la lunette
+/// sans couture. Miroir des trois shaders : teintes et coefficients.
+pub(crate) fn device_glass_rgba(dark: bool) -> [f32; 4] {
+    const GLASS_LIGHT: [f32; 3] = [0.031, 0.034, 0.040];
+    const GLASS_GRAPHITE: [f32; 3] = [0.043, 0.047, 0.055];
+    const MODEL_AMBIENT: f32 = 0.36;
+    const MODEL_DIFFUSE: f32 = 0.75;
+    let lit = MODEL_AMBIENT + MODEL_DIFFUSE * MODEL_LIGHT[2];
+    let [r, g, b] = if dark { GLASS_GRAPHITE } else { GLASS_LIGHT };
+    [r * lit, g * lit, b * lit, 1.0]
+}
+
 /// Les huit coins d'une boîte alignée.
 fn box_corners(lo: [f32; 3], hi: [f32; 3]) -> [[f32; 3]; 8] {
     std::array::from_fn(|i| {
@@ -1284,7 +1298,8 @@ pub fn tilted_screen_cb(
     }
     if let Some(mask) = mask {
         reframe_warped(&mut cb, mask.rect, render_px);
-        cb.color[3] = mask.radius_px;
+        // Négatif : coins hauts carrés, sous la barre de la fenêtre (`slot_alpha`, shaders).
+        cb.color[3] = if mask.square_top { -mask.radius_px } else { mask.radius_px };
     }
     cb
 }
@@ -1829,12 +1844,20 @@ pub struct FrameGeometry {
 /// métrage — et seul son DESSIN est rogné au slot. Sans lui, la boîte zoomée débordait sur la
 /// caméra et dans l'espace qui les sépare, et le bloc ne tenait plus. Le masque, lui, ne zoome
 /// ni ne penche jamais : le layout garde son rect et ses coins, et son ombre est la sienne.
+///
+/// Sous un cadre, le cadre EST ce conteneur : fenêtre ou appareil, il reste au repos autour du
+/// slot, à plat, et le slot est son ouverture. Le métrage zoome et penche dedans. C'est l'inverse
+/// des autres layouts, où l'appareil zoome et penche avec l'écran (`FrameGeometry::frame_box`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScreenMask {
     /// Le slot, en fractions de la sortie : `layout.screenRect`, que le zoom ne touche pas.
     pub rect: [f32; 4],
     /// Le rayon de ses coins, en px du render target : celui de l'écran au repos.
     pub radius_px: f32,
+    /// Coins HAUTS carrés : le slot est sous la barre de la fenêtre qui le contient. À plat, le
+    /// mode 0 le sait déjà (`screen_square_top`) ; incliné, le mode 8 le lit dans le signe de son
+    /// rayon (`tilted_screen_cb`).
+    pub square_top: bool,
 }
 
 impl ScreenMask {
@@ -1916,8 +1939,12 @@ impl FrameGeometry {
             // bilinéaire s'en écarte de ~8 % de la largeur au milieu des bords (mesuré par
             // `the_device_screen_face_lands_on_the_footage_plane`), soit une lunette à cent pixels
             // du bord de l'image. Les quatre coins sont les mêmes des deux côtés, donc
-            // l'homographie qu'ils définissent EST cette projection exacte.
-            if self.window_frame.as_ref().is_some_and(|f| f.kind.is_device()) {
+            // l'homographie qu'ils définissent EST cette projection exacte. Pas sous le masque d'un
+            // bloc : l'appareil y reste au repos, le métrage penche seul dans son ouverture, au
+            // warp de l'écran sans cadre.
+            if self.window_frame.as_ref().is_some_and(|f| f.kind.is_device())
+                && self.screen_mask.is_none()
+            {
                 quad.projective = true;
             }
             quad
@@ -2093,14 +2120,47 @@ impl FrameGeometry {
     /// sortirait. Le shader rogne alors ses coins hauts par ce même arc, pris au contour
     /// intérieur du filet (`sd_screen_under_bar`) — l'écran suit le cadre, il ne s'arrondit pas
     /// de son côté. Le mode 0 le lit dans `mb.z`, le mode 8 dans `color.z` (px du plan).
+    ///
+    /// Sous le masque d'un bloc, la fenêtre reste au repos autour du slot : la remontée est la
+    /// sienne, et le métrage droit, rogné au slot, épouse son contour. Incliné, il penche DANS la
+    /// fenêtre, arrondi de partout comme sans cadre : 0.
     pub fn screen_top_lift_px(&self, render_px: [f32; 2]) -> f32 {
         match self.window_frame.as_ref() {
+            Some(_) if self.screen_mask.is_some() && self.tilted() => 0.0,
             Some(f) if f.kind == crate::scene::SceneFrame::Window => {
-                let (s_w, s_h) = (self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]);
+                let b = self.frame_box();
+                let (s_w, s_h) = (b[2] * render_px[0], b[3] * render_px[1]);
                 (f.margins[1] * s_h - f.margins[0] * s_w).max(0.0)
             }
             _ => 0.0,
         }
+    }
+
+    /// La boîte autour de laquelle le cadre se construit. Sous le masque d'un bloc, le cadre EST
+    /// le conteneur (`ScreenMask`) : le slot au repos, ni zoomé ni incliné. Ailleurs, la boîte
+    /// écran : le cadre zoome avec elle (#179).
+    fn frame_box(&self) -> [f32; 4] {
+        self.screen_mask.map_or(self.s_dst, |m| m.rect)
+    }
+
+    /// Le plan du cadre : celui de l'écran, sauf sous le masque d'un bloc, où le cadre reste à
+    /// plat pendant que le métrage penche dedans.
+    fn frame_tilt(&self, render_px: [f32; 2]) -> Option<crate::regions::TiltedQuad> {
+        if self.screen_mask.is_some() {
+            return None;
+        }
+        self.screen_tilt_in(render_px)
+    }
+
+    /// Le rayon des coins du métrage autour duquel le cadre s'arrondit : celui du slot au repos
+    /// sous le masque d'un bloc, celui de la boîte écran ailleurs.
+    fn frame_screen_radius(&self) -> f32 {
+        self.screen_mask.map_or(self.s_radius, |m| m.radius_px)
+    }
+
+    fn frame_center_px(&self, render_px: [f32; 2]) -> [f32; 2] {
+        let b = self.frame_box();
+        [(b[0] + b[2] * 0.5) * render_px[0], (b[1] + b[3] * 0.5) * render_px[1]]
     }
 
     /// Le plan incliné de l'écran, `None` quand il est droit. Même appel que les backends : un
@@ -2121,15 +2181,18 @@ impl FrameGeometry {
     /// 0..1 : un warp bilinéaire est entièrement fixé par ses quatre coins, donc le prolonger
     /// donne exactement le plan que le mode 8 dessine, et le cadre penche avec l'écran sans
     /// aucune trigonométrie de plus. Sous la caméra réelle, le prolongement est celui de
-    /// l'homographie, et le drapeau rendu (`TiltedQuad::warp_flag`) le dit au mode 14.
+    /// l'homographie, et le drapeau rendu (`TiltedQuad::warp_flag`) le dit au mode 14. Sous le
+    /// masque d'un bloc, le cadre est droit autour du slot (`frame_box`), coins relatifs au centre
+    /// de celui-ci.
     fn window_frame_corners(
         &self,
         margins: [f32; 4],
         render_px: [f32; 2],
     ) -> ([(f32, f32); 4], f32, f32) {
         let [ml, mt, mr, mb] = margins;
-        let quad = self.screen_tilt_in(render_px).unwrap_or_else(|| {
-            let (hw, hh) = (self.s_dst[2] * render_px[0] * 0.5, self.s_dst[3] * render_px[1] * 0.5);
+        let quad = self.frame_tilt(render_px).unwrap_or_else(|| {
+            let b = self.frame_box();
+            let (hw, hh) = (b[2] * render_px[0] * 0.5, b[3] * render_px[1] * 0.5);
             crate::regions::TiltedQuad {
                 corners: [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)],
                 scale: 1.0,
@@ -2156,47 +2219,55 @@ impl FrameGeometry {
     /// APPAREIL ne passe pas par ici : son ombre suit la silhouette du modèle (`device_shadow_cb`),
     /// qu'un quad plat ne sait pas porter.
     pub fn shadow_caster(&self, render_px: [f32; 2]) -> ShadowCaster {
-        let center_px = self.screen_center_px(render_px);
-        let tilt = self.screen_tilt_in(render_px);
+        // Le cadre porte l'ombre, là où il est : au repos autour du slot sous le masque d'un bloc.
+        if let Some(frame) = &self.window_frame {
+            return match self.frame_tilt(render_px) {
+                None => {
+                    let [ml, mt, mr, mb] = frame.margins;
+                    let d = self.frame_box();
+                    let dst = [
+                        d[0] - ml * d[2],
+                        d[1] - mt * d[3],
+                        d[2] * (1.0 + ml + mr),
+                        d[3] * (1.0 + mt + mb),
+                    ];
+                    ShadowCaster::Upright {
+                        dst,
+                        size_px: [dst[2] * render_px[0], dst[3] * render_px[1]],
+                        radius: frame.radius[0],
+                    }
+                }
+                Some(_) => {
+                    let (corners, scale, _) = self.window_frame_corners(frame.margins, render_px);
+                    ShadowCaster::Tilted {
+                        corners,
+                        center_px: self.frame_center_px(render_px),
+                        radius: frame.radius[0] * scale,
+                        mask: None,
+                    }
+                }
+            };
+        }
         // Sous le masque d'un layout en bloc, l'ombre est celle de ce qu'on voit. Droite, la boîte
         // zoomée couvre tout le slot : c'est le slot, qui ne zoome pas. Inclinée, le plan rogné
-        // par le slot (`mask` du quad, plus bas).
-        if let (Some(mask), None) = (self.screen_mask, &tilt) {
-            let dst = mask.rect;
-            let size_px = [dst[2] * render_px[0], dst[3] * render_px[1]];
-            return ShadowCaster::Upright { dst, size_px, radius: mask.radius_px };
-        }
-        match (&self.window_frame, tilt) {
+        // par le slot (`mask` du quad).
+        match (self.screen_mask, self.screen_tilt_in(render_px)) {
+            (Some(mask), None) => ShadowCaster::Upright {
+                dst: mask.rect,
+                size_px: [mask.rect[2] * render_px[0], mask.rect[3] * render_px[1]],
+                radius: mask.radius_px,
+            },
             (None, None) => ShadowCaster::Upright {
                 dst: self.s_dst,
                 size_px: [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]],
                 radius: self.s_radius,
             },
-            (None, Some(quad)) => ShadowCaster::Tilted {
+            (mask, Some(quad)) => ShadowCaster::Tilted {
                 corners: quad.corners,
-                center_px,
+                center_px: self.screen_center_px(render_px),
                 radius: self.s_radius * quad.scale,
-                mask: self.screen_mask,
+                mask,
             },
-            (Some(frame), None) => {
-                let [ml, mt, mr, mb] = frame.margins;
-                let d = self.s_dst;
-                let dst = [
-                    d[0] - ml * d[2],
-                    d[1] - mt * d[3],
-                    d[2] * (1.0 + ml + mr),
-                    d[3] * (1.0 + mt + mb),
-                ];
-                ShadowCaster::Upright {
-                    dst,
-                    size_px: [dst[2] * render_px[0], dst[3] * render_px[1]],
-                    radius: frame.radius[0],
-                }
-            }
-            (Some(frame), Some(_)) => {
-                let (corners, scale, _) = self.window_frame_corners(frame.margins, render_px);
-                ShadowCaster::Tilted { corners, center_px, radius: frame.radius[0] * scale, mask: None }
-            }
         }
     }
 
@@ -2244,16 +2315,32 @@ impl FrameGeometry {
         [off * dir[0] / len, off * dir[1] / len]
     }
 
-    /// Le calque du cadre (mode 14), à dessiner après l'ombre et AVANT l'écran. `None` sans cadre.
+    /// Le calque du cadre qui passe SOUS l'écran, à dessiner après l'ombre et AVANT lui : le
+    /// chrome de fenêtre (mode 14). `None` sans cadre.
     ///
     /// Une seule forme pour le cas droit et le cas incliné : le mode 14 fait toujours le warp
     /// inverse du mode 8, et sur un rect ce warp est l'identité exacte (le terme quadratique est
     /// nul). Le calque se construit donc ici, une fois, pour les trois backends.
+    ///
+    /// Sous le masque d'un bloc, un APPAREIL y pose le verre de son écran (mode 1, le slot et ses
+    /// coins) : là où le métrage incliné ne couvre plus l'ouverture, on voit l'écran éteint, pas
+    /// un trou vers le fond d'écran. Ailleurs, l'appareil n'a rien sous l'écran.
     pub fn window_frame_cb(&self, render_px: [f32; 2]) -> Option<LayerCB> {
-        let frame = self.window_frame.as_ref().filter(|f| !f.kind.is_device())?;
+        let frame = self.window_frame.as_ref()?;
         let [rw, rh] = render_px;
+        if frame.kind.is_device() {
+            let mask = self.screen_mask?;
+            return Some(LayerCB {
+                dst: mask.rect,
+                quad_px: [mask.rect[2] * rw, mask.rect[3] * rh],
+                radius_px: mask.radius_px,
+                mode: 1.0,
+                color: device_glass_rgba(frame.dark),
+                ..Default::default()
+            });
+        }
         let (corners, scale, warp) = self.window_frame_corners(frame.margins, render_px);
-        let center = self.screen_center_px(render_px);
+        let center = self.frame_center_px(render_px);
         let (min_x, max_x) =
             corners.iter().fold((f32::MAX, f32::MIN), |(mn, mx), &(x, _)| (mn.min(x), mx.max(x)));
         let (min_y, max_y) =
@@ -2262,7 +2349,8 @@ impl FrameGeometry {
         let local = |(x, y): (f32, f32)| [x - min_x, y - min_y];
         let [tl, tr, br, bl] = corners.map(local);
         let [ml, mt, mr, mb] = frame.margins;
-        let (s_w, s_h) = (self.s_dst[2] * rw, self.s_dst[3] * rh);
+        let b = self.frame_box();
+        let (s_w, s_h) = (b[2] * rw, b[3] * rh);
         // Dimensions dans le repère du plan, avant projection, comme `plane_px` au mode 8.
         let plane_px = [s_w * (1.0 + ml + mr) * scale, s_h * (1.0 + mt + mb) * scale];
         let (bar_px, line_px) = (mt * s_h * scale, ml * s_w * scale);
@@ -2290,14 +2378,16 @@ impl FrameGeometry {
     /// La caméra qui voit le plan de l'écran, reconstruite pour les calques lancés de rayons
     /// (mode 17). Sous un angle fixe ou la caméra réelle c'est celle du plan ; à plat, l'identité
     /// avec la MÊME distance de fuite que les présets. Le relief du modèle, lui, est vu d'un œil
-    /// reculé sur la même droite (`DEV_EYE_MIN`, `DeviceView::project`).
+    /// reculé sur la même droite (`DEV_EYE_MIN`, `DeviceView::project`). Sous le masque d'un bloc,
+    /// l'appareil au repos autour du slot (`frame_box`).
     fn device_view(&self, render_px: [f32; 2]) -> Option<DeviceView> {
         let [rw, rh] = render_px;
-        let (s_w, s_h) = (self.s_dst[2] * rw, self.s_dst[3] * rh);
+        let b = self.frame_box();
+        let (s_w, s_h) = (b[2] * rw, b[3] * rh);
         if !(s_w > 1.0) || !(s_h > 1.0) {
             return None;
         }
-        let quad = self.screen_tilt_in(render_px);
+        let quad = self.frame_tilt(render_px);
         let perspective = quad
             .as_ref()
             .map(|q| q.perspective)
@@ -2314,15 +2404,17 @@ impl FrameGeometry {
             perspective,
             offset: quad.as_ref().map(|q| q.offset).unwrap_or([0.0; 2]),
             unit,
-            center: self.screen_center_px(render_px),
+            center: self.frame_center_px(render_px),
             half: [0.5 * s_w / u, 0.5 * s_h / u],
         })
     }
 
-    /// L'unité du cadre (`frame_unit_px`) de CETTE boîte écran, zoom compris, en px de la boîte
+    /// L'unité du cadre (`frame_unit_px`) de la boîte autour de laquelle il se construit — la boîte
+    /// écran, zoom compris, ou le slot au repos sous le masque d'un bloc —, en px de la boîte
     /// droite : ce que mesurent les marges, les rayons et le modèle d'un appareil.
     pub fn frame_unit_px(&self, render_px: [f32; 2]) -> f32 {
-        frame_unit_px([self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]], render_px)
+        let b = self.frame_box();
+        frame_unit_px([b[2] * render_px[0], b[3] * render_px[1]], render_px)
     }
 
     /// Le calque de l'appareil modelé (mode 17), à dessiner APRÈS l'écran. `None` sans cadre ou
@@ -2370,8 +2462,9 @@ impl FrameGeometry {
         // shader lit l'angle dans `dst_prev.x`, jamais une constante.
         let deck_angle = device_deck_angle(view.half, bb, thick);
         let u = self.frame_unit_px(render_px);
-        // UNE forme de coin pour le métrage et l'ouverture : le rayon du métrage, en unités.
-        let aperture_radius = self.s_radius / u;
+        // UNE forme de coin pour le métrage et l'ouverture : le rayon du métrage, en unités (celui
+        // du slot au repos sous le masque d'un bloc, qui rogne le métrage à cette ouverture).
+        let aperture_radius = self.frame_screen_radius() / u;
         // Le recouvrement se compte en PIXELS : exprimé en unités, il fondait à 1,2 px sur un petit
         // écran, sous la somme des deux antialiasings (celui du métrage, celui de la lunette).
         let overlap = DEV_OVERLAP_PX / view.unit.max(1.0);
@@ -3183,30 +3276,36 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let s_radius = screen_corner_radius_px(outer_radius_of(s_px), s_px);
         // Layouts en bloc : le slot masque l'écran (`ScreenMask`), avec les coins de l'écran AU
         // REPOS — la boîte, elle, grandit avec le zoom. `screen_cover` est le drapeau du slot :
-        // l'app ne le lève que pour ces deux layouts, et seulement sur un clip qui a une caméra.
-        // Pas sous un cadre : il déborde du slot au repos, le masque le couperait.
-        let screen_mask = (scene.is_some_and(|s| s.layout.screen_cover)
-            && frame_kind == crate::scene::SceneFrame::None)
-            .then(|| {
-                let slot_px = [s_base[2] * rw, s_base[3] * rh];
-                ScreenMask {
-                    rect: s_base,
-                    radius_px: screen_corner_radius_px(outer_radius_of(slot_px), slot_px),
-                }
-            });
+        // l'app le lève pour ces deux layouts, sur un clip qui a une caméra, et pour le
+        // remplissage du format, qui exclut les cadres (`formatFillAvailability`). Un cadre sous
+        // un slot est donc toujours dans un bloc : il y devient le conteneur, au repos autour.
+        let screen_mask = scene.is_some_and(|s| s.layout.screen_cover).then(|| {
+            let slot_px = [s_base[2] * rw, s_base[3] * rh];
+            ScreenMask {
+                rect: s_base,
+                radius_px: screen_corner_radius_px(outer_radius_of(slot_px), slot_px),
+                square_top: frame_kind == crate::scene::SceneFrame::Window,
+            }
+        });
+        // Le cadre se construit autour de la boîte écran, zoom compris ; sous le masque d'un bloc,
+        // autour du slot au repos et de ses coins, qui ne zooment pas.
+        let (f_px, f_radius) = match screen_mask {
+            Some(m) => ([m.rect[2] * rw, m.rect[3] * rh], m.radius_px),
+            None => (s_px, s_radius),
+        };
         let window_frame = frame_margins.map(|margins| {
-            let (l, t, b) = (margins[0] * s_px[0], margins[1] * s_px[1], margins[3] * s_px[1]);
+            let (l, t, b) = (margins[0] * f_px[0], margins[1] * f_px[1], margins[3] * f_px[1]);
             // La fenêtre n'a qu'un rayon (mode 14) : celui de ses coins BAS, où le métrage s'arrondit
             // sous le filet. En haut, le contour intérieur du chrome a le rayon du métrage, remonté
             // sous la barre (`sd_screen_under_bar`) : le même arc, rentré du filet.
             let top = match frame_kind {
-                crate::scene::SceneFrame::Window => concentric_radius(s_radius, l, b),
-                _ => concentric_radius(s_radius, l, t),
+                crate::scene::SceneFrame::Window => concentric_radius(f_radius, l, b),
+                _ => concentric_radius(f_radius, l, t),
             };
             // Portable et moniteur : la coque garde ses rayons, seule l'ouverture suit le slider.
             let radius = match device_shell_radius(frame_kind) {
-                Some(shell) => shell.map(|r| r * frame_unit_px(s_px, [rw, rh])),
-                None => [top, concentric_radius(s_radius, l, b)],
+                Some(shell) => shell.map(|r| r * frame_unit_px(f_px, [rw, rh])),
+                None => [top, concentric_radius(f_radius, l, b)],
             };
             WindowFrame { kind: frame_kind, dark: frame_dark, margins, radius }
         });
@@ -4462,7 +4561,7 @@ mod tests {
             g.mb_amount = 0.0;
             assert!(!g.screen_trail(RENDER), "{frame}: flou coupé");
             g.mb_amount = 1.0;
-            g.screen_mask = Some(ScreenMask { rect: [0.0, 0.0, 0.5, 1.0], radius_px: 0.0 });
+            g.screen_mask = Some(ScreenMask { rect: [0.0, 0.0, 0.5, 1.0], radius_px: 0.0, square_top: false });
             assert!(!g.screen_trail(RENDER), "{frame}: la case d'un bloc ne bouge pas");
             assert_eq!(g.screen_pixel_taps(RENDER), 16.0);
         }
@@ -4517,7 +4616,7 @@ mod tests {
 
                 // Sous un masque de bloc, la case ne bouge pas : retour au flou par pixel.
                 let mut masked = g;
-                masked.screen_mask = Some(ScreenMask { rect: [0.0, 0.0, 0.5, 1.0], radius_px: 0.0 });
+                masked.screen_mask = Some(ScreenMask { rect: [0.0, 0.0, 0.5, 1.0], radius_px: 0.0, square_top: false });
                 assert!(!masked.screen_trail(RENDER), "{case}: la case d'un bloc ne bouge pas");
                 assert_eq!(masked.tilt_pixel_trail(RENDER), Some(trail));
             }
@@ -4843,6 +4942,38 @@ mod tests {
         // La fenêtre garde son ombre de quad.
         let w = framed_plan(&framed_scene(r#","frame":"window""#, "null", 1.0, false));
         assert!(w.device_shadow_cb(RENDER, 40.0, [0.0, 16.0], 0.3).is_none());
+    }
+
+    /// L'emprise d'un appareil AU REPOS, en unités du cadre autour d'un écran 16:9 dans une sortie
+    /// 16:9 : gauche, haut, droite, bas, socle et pied compris. `src/lib/frameFootprint.ts` en est
+    /// le miroir — le layout en bloc écarte la caméra de cette emprise — et son test épingle les
+    /// MÊMES nombres : un modèle qui change doit changer des deux côtés.
+    #[test]
+    fn the_device_footprint_at_rest_is_pinned_for_the_block_layout() {
+        for (name, want) in [
+            ("laptop", [0.18596f32, 0.0409, 0.18596, 0.09983]),
+            ("phone", [0.0193; 4]),
+            ("monitor", [0.0231, 0.0231, 0.0231, 0.2446]),
+        ] {
+            let g = device_plan(name, "null", 1.0);
+            let frame = g.window_frame.expect("un cadre");
+            let view = g.device_view(RENDER).expect("caméra");
+            let (c, h) = view.body_rect(frame.margins);
+            let thick = device_thickness(frame.kind);
+            let deck = device_deck_angle(view.half, view.body_margins(frame.margins)[3], thick);
+            let mut b = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+            for p in view.model_points(frame.kind, c, h, thick, deck) {
+                let q = view.project(p).expect("point projeté");
+                b = [b[0].min(q[0]), b[1].min(q[1]), b[2].max(q[0]), b[3].max(q[1])];
+            }
+            let (o, u) = (g.screen_center_px(RENDER), g.frame_unit_px(RENDER));
+            let half = [g.s_dst[2] * RENDER[0] * 0.5, g.s_dst[3] * RENDER[1] * 0.5];
+            let got = [o[0] - b[0] - half[0], o[1] - b[1] - half[1], b[2] - o[0] - half[0], b[3] - o[1] - half[1]]
+                .map(|v| v / u);
+            for k in 0..4 {
+                assert!((got[k] - want[k]).abs() < 1e-4, "{name}: emprise {got:?} au lieu de {want:?}");
+            }
+        }
     }
 
     /// Le métrage a EXACTEMENT la même boîte et la même coupe sans cadre, sous la fenêtre et sous
@@ -5664,6 +5795,11 @@ mod tests {
     /// au ratio de la capture, la caméra à côté, `screenCover`. Zoom `zoom` sous `rotation`, focus
     /// décentré (0.3, 0.6). `cover: false` rend le même bloc sans slot, comme les autres layouts.
     fn slot_scene(rotation: &str, zoom: f32, cover: bool) -> Scene {
+        slot_scene_with(rotation, zoom, cover, "")
+    }
+
+    /// `slot_scene`, `effects_extra` inséré tel quel dans `effects` (un cadre, par exemple).
+    fn slot_scene_with(rotation: &str, zoom: f32, cover: bool, effects_extra: &str) -> Scene {
         Scene::from_json(&format!(
             r##"{{
             "clips":[{{"screenPath":"/s.mp4","webcamPath":"/w.mp4","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
@@ -5671,7 +5807,7 @@ mod tests {
                       "webcamReactiveZoom":false,"screenRect":{{"x":0.1,"y":0.25,"width":0.55,"height":0.55}},
                       "webcamRect":{{"x":0.666,"y":0.25,"width":0.234,"height":0.55}},
                       "screenRadiusFrac":0.04,"webcamRadiusFrac":0.04,"screenCover":{cover}}},
-            "effects":{{"padding":0.5,"blur":false,"shadow":0.5,"roundnessFrac":0.03,"motionBlur":0}},
+            "effects":{{"padding":0.5,"blur":false,"shadow":0.5,"roundnessFrac":0.03,"motionBlur":0{effects_extra}}},
             "background":{{"kind":"color","color":"#1e1e2e"}},
             "zoomRegions":[{{"clipIndex":0,"startSec":0.0,"endSec":5.0,"scale":{zoom},"focusX":0.3,"focusY":0.6,"rotation":{rotation}}}],
             "cursor":{{"show":true,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":1,"clipToBounds":false,"theme":"default"}},
@@ -5853,7 +5989,7 @@ mod tests {
             }
         }
         // Le slot passé à l'ombre, en px locaux à sa boîte : décalé de l'origine de celle-ci.
-        let mask = ScreenMask { rect: SLOT, radius_px: 12.0 };
+        let mask = ScreenMask { rect: SLOT, radius_px: 12.0, square_top: false };
         let (rect, r) = shadow_mask_fields(Some(mask), [100.0, 50.0], RENDER);
         let want = [0.1 * 1920.0 - 100.0, 0.25 * 1080.0 - 50.0, 0.65 * 1920.0 - 100.0, 0.8 * 1080.0 - 50.0];
         for k in 0..4 {
@@ -5861,6 +5997,110 @@ mod tests {
         }
         assert_eq!(r, 12.0);
         assert_eq!(shadow_mask_fields(None, [100.0, 50.0], RENDER), ([0.0; 4], 0.0));
+    }
+
+    /// Un calque au bit près : `LayerCB` n'a pas de `PartialEq`, et c'est l'octet qu'on compare.
+    fn cb_bits(cb: Option<LayerCB>) -> Option<Vec<u32>> {
+        cb.map(|c| {
+            [c.dst, c.src, c.color, c.fx, c.src_prev, c.dst_prev, c.mb, c.trail_a, c.trail_b, c.trail_mb]
+                .concat()
+                .into_iter()
+                .chain(c.quad_px)
+                .chain([c.radius_px, c.mode])
+                .map(f32::to_bits)
+                .collect()
+        })
+    }
+
+    /// Sous un cadre, dans un bloc, le cadre EST le conteneur : fenêtre ou appareil reste au repos
+    /// autour du slot — mêmes calques et même ombre qu'au repos, sous un zoom à plat, un angle fixe
+    /// ou la caméra en orbite —, et le métrage zoome et penche dedans, rogné au slot, avec la
+    /// géométrie qu'il aurait sans cadre. C'est l'inverse des autres layouts, où l'appareil zoome
+    /// et penche avec l'écran.
+    #[test]
+    fn a_block_frame_stays_at_rest_while_the_footage_zooms_inside() {
+        let pointer = Some((0.8, 0.3));
+        for frame in ["window", "laptop", "phone", "monitor"] {
+            let extra = format!(r#","frame":"{frame}""#);
+            let rest = slot_plan(&slot_scene_with("null", 1.0, true, &extra), pointer);
+            let rest_mask = rest.screen_mask.expect("un bloc masque son écran, sous un cadre aussi");
+            let rest_off = rest.screen_shadow_offset();
+            for rotation in ["null", r#""iso""#, r#""follow-cursor""#] {
+                let case = format!("{frame} {rotation}");
+                let g = slot_plan(&slot_scene_with(rotation, 2.0, true, &extra), pointer);
+                let bare = slot_plan(&slot_scene(rotation, 2.0, true), pointer);
+                let mask = g.screen_mask.expect("masque");
+                assert_eq!(mask, rest_mask, "{case}: le slot a bougé");
+                assert_eq!(mask.rect, SLOT, "{case}");
+
+                // Le métrage : la géométrie du même bloc sans cadre, zoom et plan compris.
+                assert_eq!(g.s_dst.map(f32::to_bits), bare.s_dst.map(f32::to_bits), "{case}: boîte");
+                assert!(!contains(SLOT, g.s_dst, 1e-3), "{case}: garde, la boîte zoomée déborde");
+                assert_eq!(g.tilted(), rotation != "null", "{case}");
+                let s_px = [g.s_dst[2] * RENDER[0], g.s_dst[3] * RENDER[1]];
+                let plane = |g: &FrameGeometry| g.screen_tilt(s_px).map(|q| (q.corners, q.projective));
+                assert_eq!(plane(&g), plane(&bare), "{case}: le métrage ne penche pas comme sans cadre");
+
+                // Le cadre : au repos, à l'octet — calque sous l'écran, appareil, ombre.
+                assert_eq!(g.window_frame, rest.window_frame, "{case}: corps du cadre");
+                assert_eq!(cb_bits(g.window_frame_cb(RENDER)), cb_bits(rest.window_frame_cb(RENDER)), "{case}: sous l'écran");
+                assert_eq!(cb_bits(g.device_frame_cb(RENDER)), cb_bits(rest.device_frame_cb(RENDER)), "{case}: appareil");
+                assert_eq!(g.shadow_caster(RENDER), rest.shadow_caster(RENDER), "{case}: ombre");
+                assert_eq!(g.screen_shadow_offset(), rest_off, "{case}: décalage de l'ombre");
+                assert_eq!(
+                    cb_bits(g.device_shadow_cb(RENDER, 40.0, rest_off, 0.3)),
+                    cb_bits(rest.device_shadow_cb(RENDER, 40.0, rest_off, 0.3)),
+                    "{case}: ombre de l'appareil"
+                );
+                if let Some(cb) = g.device_frame_cb(RENDER) {
+                    assert_eq!(&cb.fx[..3], &[0.0; 3], "{case}: l'appareil penche");
+                    let u = g.frame_unit_px(RENDER);
+                    assert!((cb.dst_prev[1] * u - mask.radius_px).abs() < 1e-3, "{case}: ouverture ≠ coins du slot");
+                }
+
+                // Le métrage est dessiné dans le slot, à plat comme incliné.
+                match g.screen_tilt(s_px) {
+                    None => {
+                        let (dst, ..) = g.mask_flat_screen(g.s_dst, g.cut, s_px, g.s_radius, RENDER);
+                        assert_eq!(dst, SLOT, "{case}");
+                        assert_eq!(g.screen_top_lift_px(RENDER), rest.screen_top_lift_px(RENDER), "{case}: remontée");
+                    }
+                    Some(quad) => {
+                        let centre = g.screen_center_px(RENDER);
+                        let lift = g.screen_top_lift_px(RENDER);
+                        assert_eq!(lift, 0.0, "{case}: le plan incliné n'est pas sous la barre");
+                        let cb = tilted_screen_cb(&quad, s_px, centre, g.cut, g.focus_plane, g.s_radius, lift, false, RENDER, g.screen_mask, None);
+                        assert_eq!(cb.dst, SLOT, "{case}");
+                        // Sous la barre de la fenêtre, le slot garde ses coins hauts carrés : le
+                        // mode 8 le lit dans le signe du rayon (`slot_alpha`).
+                        assert_eq!(mask.square_top, frame == "window", "{case}");
+                        assert!(mask.radius_px > 0.0, "{case}: garde, un rayon à signer");
+                        let want = if mask.square_top { -mask.radius_px } else { mask.radius_px };
+                        assert_eq!(cb.color[3], want, "{case}: coins du slot");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Sous un appareil, dans un bloc, le verre de son écran passe SOUS le métrage, au slot et à
+    /// ses coins, de la teinte que le mode 17 rend de face : ce que le plan incliné découvre est
+    /// l'écran éteint, pas le fond d'écran. Hors d'un bloc, rien sous l'écran, comme avant.
+    #[test]
+    fn a_block_device_puts_its_glass_under_the_footage() {
+        for (name, _) in DEVICES {
+            for (theme, dark) in [("", false), (r#","frameTheme":"dark""#, true)] {
+                let g = slot_plan(&slot_scene_with(r#""iso""#, 2.0, true, &format!(r#","frame":"{name}"{theme}"#)), None);
+                let mask = g.screen_mask.expect("masque");
+                let cb = g.window_frame_cb(RENDER).expect("verre");
+                assert_eq!((cb.mode, cb.dst, cb.radius_px), (1.0, SLOT, mask.radius_px), "{name}");
+                assert_eq!(cb.quad_px, [SLOT[2] * RENDER[0], SLOT[3] * RENDER[1]], "{name}");
+                assert_eq!(cb.color, device_glass_rgba(dark), "{name} {dark}");
+                assert!(cb.color[3] == 1.0 && cb.color[..3].iter().all(|c| *c < 0.06), "{name}: pas du verre noir");
+            }
+            assert!(device_plan(name, r#""iso""#, 2.0).window_frame_cb(RENDER).is_none(), "{name}: hors bloc");
+        }
+        assert_ne!(device_glass_rgba(true), device_glass_rgba(false), "deux thèmes, deux verres");
     }
 
     /// Le flou de confidentialité suit le métrage comme ailleurs, et le slot le rogne : ce qui en
@@ -6080,7 +6320,7 @@ mod tests {
     fn the_tilted_screen_cb_carries_its_trail_in_its_own_frame() {
         let quad = crate::regions::rotated_quad_corners_px(800.0, 450.0, [-12.0, -18.0, -2.0], [0.0; 3]);
         let moved = TiltTrail { corners: quad.corners.map(|(x, y)| (x * 0.9 + 3.0, y * 0.9 - 2.0)), mb: [6.0, 0.35] };
-        let mask = ScreenMask { rect: [0.1, 0.1, 0.6, 0.6], radius_px: 8.0 };
+        let mask = ScreenMask { rect: [0.1, 0.1, 0.6, 0.6], radius_px: 8.0, square_top: false };
         let cb = |mask, trail| {
             tilted_screen_cb(&quad, [800.0, 450.0], [600.0, 400.0], [0.0, 0.0, 1.0, 1.0], [0.5, 0.5], 12.0, 0.0, false, [1200.0, 800.0], mask, trail)
         };

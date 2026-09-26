@@ -212,6 +212,19 @@ inline float quad_round_alpha(float2 local, float2 quad_px, float radius_px)
     return 1.0 - smoothstep(0.0, 1.5, d); // même feather ~1.5px que la queue
 }
 
+// Le slot d'un layout en bloc, qui rogne le plan incliné (mode 8, cf. HLSL). Négatif : coins
+// HAUTS carrés, sous la barre de la fenêtre qui le contient.
+inline float slot_alpha(float2 local, float2 quad_px, float r)
+{
+    if (r >= 0.0)
+    {
+        return quad_round_alpha(local, quad_px, r);
+    }
+    float2 halfsz = quad_px * 0.5;
+    float2 p = local - halfsz;
+    return 1.0 - smoothstep(0.0, 1.5, sd_round_rect(p, halfsz, (p.y < 0.0) ? 0.0 : -r));
+}
+
 // Intersection de deux droites données par (normale, offset) : n·x = d. Cramer.
 inline float2 line_cross(float2 n1, float d1, float2 n2, float d2)
 {
@@ -2177,7 +2190,7 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         float tilt_a = 1.0 - smoothstep(0.0, 1.5, d);
         // Slot d'un layout en bloc (`color.w` = rayon de ses coins, px ; 0 ailleurs, sans effet) :
         // `dst` EST le slot, dont le rect arrondi rogne le plan (`ScreenMask`, cf. HLSL).
-        tilt_a *= quad_round_alpha(i.local, layer.quad_px, layer.color.w);
+        tilt_a *= slot_alpha(i.local, layer.quad_px, layer.color.w);
         // Profondeur de champ : net sous un demi-texel de flou (l'échantillon d'avant, à
         // l'octet), fondu au-delà vers la pyramide au niveau `log2(coc) - 1`, plafonné.
         // `level(lod)` exige `mip_filter::linear` sur `samp` : sans lui, niveau 0 partout.

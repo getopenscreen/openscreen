@@ -1,5 +1,7 @@
+import { frameFootprint, frameUnit } from "@/lib/frameFootprint";
 import {
 	DEFAULT_WEBCAM_ROUNDNESS,
+	type RecordingFrame,
 	WEBCAM_SIZE_MAX,
 	WEBCAM_SIZE_MIN,
 	type WebcamAnchor,
@@ -291,15 +293,15 @@ export function getWebcamLayoutCssBoxShadow(
 }
 
 /**
- * A block's footprint in UNIT space, where the screen is exactly 1 wide: the screen, the
- * gap, and a camera `cameraAlong` long on the split axis. One definition for the layout
- * below and for the resting shape Auto frames, so the two cannot disagree on it.
+ * A block's footprint in UNIT space, where the screen is exactly 1 wide: the screen's element
+ * (the screen, or the frame around it), the gap, and a camera `cameraAlong` long on the split
+ * axis. One definition for the layout below and for the resting shape Auto frames, so the two
+ * cannot disagree on it.
  */
-function blockUnitSize(screenAspect: number, block: BlockTransform, cameraAlong: number): Size {
-	const unitScreenHeight = 1 / screenAspect;
+function blockUnitSize(element: Size, block: BlockTransform, cameraAlong: number): Size {
 	return block.direction === "row"
-		? { width: 1 + block.gapFraction + cameraAlong, height: unitScreenHeight }
-		: { width: 1, height: unitScreenHeight + block.gapFraction + cameraAlong };
+		? { width: element.width + block.gapFraction + cameraAlong, height: element.height }
+		: { width: element.width, height: element.height + block.gapFraction + cameraAlong };
 }
 
 /**
@@ -313,7 +315,7 @@ export function restingCompositionAspect(screenSize: Size, preset: WebcamLayoutP
 	const transform = getWebcamLayoutPresetDefinition(preset).transform;
 	if (transform.type !== "block") return screenAspect;
 	const cameraCross = transform.direction === "row" ? 1 / screenAspect : 1;
-	const block = blockUnitSize(screenAspect, transform, cameraCross);
+	const block = blockUnitSize({ width: 1, height: 1 / screenAspect }, transform, cameraCross);
 	return block.width / block.height;
 }
 
@@ -368,6 +370,11 @@ export function computeCompositeLayout(params: {
 	webcamMaskShape?: import("@/components/video-editor/types").WebcamMaskShape;
 	/** Picture-in-picture only: 0 square corners to 1 fully round. */
 	webcamRoundness?: number;
+	/**
+	 * Block layouts only: the frame around the screen. There it is the screen's fixed container,
+	 * so the block makes room for it; everywhere else it grows into the padding.
+	 */
+	frame?: RecordingFrame;
 }): WebcamCompositeLayout | null {
 	const {
 		canvasSize,
@@ -379,6 +386,7 @@ export function computeCompositeLayout(params: {
 		webcamAnchor = "bottom-right",
 		webcamMaskShape = "rectangle",
 		webcamRoundness = DEFAULT_WEBCAM_ROUNDNESS,
+		frame = "none",
 	} = params;
 	const { width: canvasWidth, height: canvasHeight } = canvasSize;
 	const { width: screenWidth, height: screenHeight } = screenSize;
@@ -429,10 +437,22 @@ export function computeCompositeLayout(params: {
 		const gap = block.gapFraction;
 		const isRow = block.direction === "row";
 
+		// The frame, at rest, in the same unit space. Here it is the screen's container: it
+		// neither zooms nor tilts (the footage does, inside it), so the block lays it out like
+		// the screen itself. Its BODY is what the camera lines up with; what sticks out of the
+		// body (a laptop's deck, a monitor's stand) keeps the gap to the camera. Without a frame
+		// every inset is 0 and the arithmetic below is the frameless one, term for term.
+		const unitScreen = { width: 1, height: unitScreenHeight };
+		const { body, outer } = frameFootprint(frame, unitScreen, frameUnit(unitScreen, canvasSize));
+		const element = {
+			width: outer[0] + 1 + outer[2],
+			height: outer[1] + unitScreenHeight + outer[3],
+		};
+
 		// The camera shares the screen's cross-edge (same height beside it, same
 		// width under it — the aligned edge that makes them one solid block), so its
-		// size ALONG the split axis is the one free dimension. Three constraints fix
-		// it, in order:
+		// size ALONG the split axis is the one free dimension. Under a frame, the cross-edge
+		// is the frame's body. Three constraints fix it, in order:
 		//   1. screen keeps its own aspect ratio      → screen is 1 × h, untouched;
 		//   2. the block contain-fits the padded area → pick `along` so the block's
 		//      aspect equals that area's (fills it, no bars) — see `alongForFill`;
@@ -447,23 +467,19 @@ export function computeCompositeLayout(params: {
 		// the block at rest, so the camera comes out square there by construction.
 		const contentWidth = Math.min(canvasWidth, Math.max(1, maxContentSize.width));
 		const contentHeight = Math.min(canvasHeight, Math.max(1, maxContentSize.height));
-		const cameraCross = isRow ? unitScreenHeight : 1;
+		const cameraCross = isRow ? body[1] + unitScreenHeight + body[3] : body[0] + 1 + body[2];
 		const contentAspect = contentWidth / contentHeight;
 		const alongForFill = isRow
-			? contentAspect * unitScreenHeight - 1 - gap // block width  = 1 + gap + along
-			: 1 / contentAspect - unitScreenHeight - gap; // block height = h + gap + along
+			? contentAspect * element.height - element.width - gap // block width  = w + gap + along
+			: element.width / contentAspect - element.height - gap; // block height = h + gap + along
 		const cameraAlong = Math.min(
 			cameraCross * BLOCK_CAMERA_ASPECT_TOLERANCE,
 			Math.max(cameraCross / BLOCK_CAMERA_ASPECT_TOLERANCE, alongForFill),
 		);
 
-		const unitCameraWidth = isRow ? cameraAlong : 1;
-		const unitCameraHeight = isRow ? unitScreenHeight : cameraAlong;
-		const { width: blockWidth, height: blockHeight } = blockUnitSize(
-			screenAspect,
-			block,
-			cameraAlong,
-		);
+		const unitCameraWidth = isRow ? cameraAlong : cameraCross;
+		const unitCameraHeight = isRow ? cameraCross : cameraAlong;
+		const { width: blockWidth, height: blockHeight } = blockUnitSize(element, block, cameraAlong);
 
 		// Contain-fit the whole block into the padded content area, so padding
 		// shrinks the BLOCK (not just the screen) and padding 0 leaves it flush
@@ -474,10 +490,16 @@ export function computeCompositeLayout(params: {
 		const originX = (canvasWidth - blockWidth * scale) / 2;
 		const originY = (canvasHeight - blockHeight * scale) / 2;
 
-		const screenRect = snapRect(originX, originY, scale, unitScreenHeight * scale);
+		const screenRect = snapRect(
+			originX + outer[0] * scale,
+			originY + outer[1] * scale,
+			scale,
+			unitScreenHeight * scale,
+		);
+		// Beside or under the whole frame, lined up with its body.
 		const cameraRect = snapRect(
-			isRow ? originX + (1 + gap) * scale : originX,
-			isRow ? originY : originY + (unitScreenHeight + gap) * scale,
+			isRow ? originX + (element.width + gap) * scale : originX + (outer[0] - body[0]) * scale,
+			isRow ? originY + (outer[1] - body[1]) * scale : originY + (element.height + gap) * scale,
 			unitCameraWidth * scale,
 			unitCameraHeight * scale,
 		);

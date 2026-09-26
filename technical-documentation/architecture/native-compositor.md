@@ -97,6 +97,13 @@ what `shaders.hlsl` actually implements:
    [`compositor.rs:1950`](../../crates/compositor/src/compositor_windows.rs)). Motion blur
    uses the previous frame's UV delta as a per-pixel velocity vector and samples
    along it (the "blur by velocity" optimisation — early-outs on still frames).
+   In the block layouts (Side by side, Top / bottom) the screen's slot is a fixed
+   container that masks it (`ScreenMask` in
+   [`frame_geometry.rs`](../../crates/compositor/src/frame_geometry.rs)): the zoom
+   and the 3D tilt act on the footage and are cropped to the slot. Under a window
+   or device frame, the frame is that container, drawn at rest around the slot and
+   never zoomed or tilted, and `computeCompositeLayout` makes room for it beside the
+   camera. Everywhere else the frame zooms and tilts with the screen.
 4. **Cursor.** A sprite picked from `cursor.cursorSprites` by the OS cursor state
    recorded in the `.cursor.json` track (`arrow`, `text`, `pointer`, the resize
    handles…), anchored so the sprite's hotspot — a 0..1 fraction of its own image,

@@ -204,8 +204,10 @@ pub struct Compositor {
     /// Rendre cette taille variable a retiré la cause commune, et `apply_undistort`
     /// avec elle : le RT porte la géométrie de sortie. L'export le crée à la taille de
     /// sortie, la preview à cette géométrie ramenée au panneau (`preview_render_size`).
-    /// `OUT_W`/`OUT_H` ne sont plus qu'une valeur par défaut, jamais une référence
-    /// géométrique.
+    /// `OUT_W`/`OUT_H` ne sont plus qu'une valeur par défaut : la taille du RT de
+    /// `Compositor::new`, et la référence en px des placements de repli
+    /// (`preset_placements`, la fixture `timeline`) quand la scène n'apporte pas ses
+    /// rects. Une scène de l'app, qui fournit ses rects, ne s'y réfère pas.
     render_size: Cell<(u32, u32)>,
     /// Ressources de resize, allouées paresseusement à la première cible qui diffère de la
     /// taille de rendu. Le RT suivant la sortie, le cas nominal n'y passe pas et ne paie rien.

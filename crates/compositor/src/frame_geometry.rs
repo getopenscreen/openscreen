@@ -3756,8 +3756,10 @@ const MODEL_CONTACT_GAIN: f32 = 1.25;
 /// Tangage au repos (queue relevée, pointe vers le bas) et supplément au creux de la pression.
 const MODEL_PITCH_IDLE_DEG: f32 = 18.0;
 const MODEL_PITCH_PRESS_DEG: f32 = 10.0;
-/// Le supplément de tangage suit `clickBounce` rapporté à sa valeur par défaut, borné à 2×.
-const MODEL_CLICK_BOUNCE_REF: f32 = 2.5;
+/// Le supplément de tangage suit `clickBounce` rapporté à sa valeur par défaut, borné à 2× : 1,
+/// « Light » (`DEFAULT_PROJECT_APPEARANCE`), donc « Strong » (2) en est le double. Restée à 2,5,
+/// l'ancien défaut, elle ne donnait plus que 40 % de la pression à « Light » et 80 % à « Strong ».
+const MODEL_CLICK_BOUNCE_REF: f32 = 1.0;
 /// Lacet maximal, et la vitesse (largeurs de l'écran par seconde) qui en donne 76 % (`tanh 1`).
 const MODEL_YAW_MAX_DEG: f32 = 25.0;
 const MODEL_YAW_SPEED: f32 = 0.8;
@@ -3852,8 +3854,8 @@ pub struct CursorPose {
     pub squash: f32,
 }
 
-/// La pose à `t`. `click_bounce` est le réglage brut (0..5, 2,5 par défaut), `pointing` la part
-/// « pointeur » du sprite (`pointing_factor`).
+/// La pose à `t`. `click_bounce` est le réglage brut (0 à 2 : None, Light, Strong ; 1 par défaut),
+/// `pointing` la part « pointeur » du sprite (`pointing_factor`).
 ///
 /// - Hauteur : `MODEL_HOVER` au repos ; chaque clic le fait descendre TOUCHER le plan au creux de
 ///   `regions::tap`, la courbe de l'impact du clic, dont le creux (49,5 ms) est celui de la
@@ -7687,7 +7689,7 @@ mod tests {
                 cfg: &cfg,
                 live: LiveParams {
                     cursor_model3d: model3d,
-                    cursor_bounce_scale: 2.5,
+                    cursor_bounce_scale: MODEL_CLICK_BOUNCE_REF,
                     ..LiveParams::default()
                 },
                 scene: Some(scene),
@@ -7718,14 +7720,14 @@ mod tests {
             vec![],
         );
         let times: Vec<f32> = (0..400).map(|k| k as f32 * 0.00731).collect();
-        let forward: Vec<CursorPose> = times.iter().map(|&t| cursor_pose(&track, t, 2.5, 1.0)).collect();
+        let forward: Vec<CursorPose> = times.iter().map(|&t| cursor_pose(&track, t, MODEL_CLICK_BOUNCE_REF, 1.0)).collect();
         let backward: Vec<CursorPose> =
-            times.iter().rev().map(|&t| cursor_pose(&track.clone(), t, 2.5, 1.0)).collect();
+            times.iter().rev().map(|&t| cursor_pose(&track.clone(), t, MODEL_CLICK_BOUNCE_REF, 1.0)).collect();
         assert!(forward.iter().eq(backward.iter().rev()), "l'ordre d'évaluation change la pose");
         // Continue : pas de saut d'une milliseconde à l'autre, même autour des clics.
         for k in 0..2999 {
             let (a, b) = (k as f32 * 0.001, (k + 1) as f32 * 0.001);
-            let (p, q) = (cursor_pose(&track, a, 2.5, 1.0), cursor_pose(&track, b, 2.5, 1.0));
+            let (p, q) = (cursor_pose(&track, a, MODEL_CLICK_BOUNCE_REF, 1.0), cursor_pose(&track, b, MODEL_CLICK_BOUNCE_REF, 1.0));
             assert!((p.yaw - q.yaw).abs() < 0.02, "lacet discontinu en {a} : {} -> {}", p.yaw, q.yaw);
             assert!((p.clearance - q.clearance).abs() < 0.03, "hauteur discontinue en {a}");
         }
@@ -7734,26 +7736,26 @@ mod tests {
     #[test]
     fn the_model_touches_the_plane_on_the_click_contact() {
         let track = still_track(vec![0.5]);
-        let rest = cursor_pose(&track, 0.45, 2.5, 1.0);
+        let rest = cursor_pose(&track, 0.45, MODEL_CLICK_BOUNCE_REF, 1.0);
         assert_eq!(rest.clearance, MODEL_HOVER);
         assert!((rest.pitch - MODEL_PITCH_IDLE_DEG.to_radians()).abs() < 1e-6);
         assert_eq!(rest.yaw, 0.0, "immobile : pas de lacet");
         // Au clic même, rien n'a encore bougé ; au creux, le modèle est posé, plus penché.
-        assert_eq!(cursor_pose(&track, 0.5, 2.5, 1.0).clearance, MODEL_HOVER);
-        let down = cursor_pose(&track, 0.5 + CONTACT_S, 2.5, 1.0);
+        assert_eq!(cursor_pose(&track, 0.5, MODEL_CLICK_BOUNCE_REF, 1.0).clearance, MODEL_HOVER);
+        let down = cursor_pose(&track, 0.5 + CONTACT_S, MODEL_CLICK_BOUNCE_REF, 1.0);
         assert_eq!(down.clearance, 0.0, "au creux du contact, le modèle touche le plan");
         assert!(down.pitch > rest.pitch + 5f32.to_radians(), "la pression penche le modèle");
         // Posé assez longtemps pour qu'au moins une image le montre, même à 24 i/s…
         for ms in 30..=70 {
-            assert_eq!(cursor_pose(&track, 0.5 + ms as f32 / 1000.0, 2.5, 1.0).clearance, 0.0, "{ms} ms");
+            assert_eq!(cursor_pose(&track, 0.5 + ms as f32 / 1000.0, MODEL_CLICK_BOUNCE_REF, 1.0).clearance, 0.0, "{ms} ms");
         }
         // …au même instant que la pression du rebond d'échelle, et relevé à la fin de la fenêtre.
         let press = (0..260).min_by(|&a, &b| {
             track.bounce(0.5 + a as f32 / 1000.0).total_cmp(&track.bounce(0.5 + b as f32 / 1000.0))
         });
         let press_ms = press.expect("un creux") as f32;
-        assert_eq!(cursor_pose(&track, 0.5 + press_ms / 1000.0, 2.5, 1.0).clearance, 0.0);
-        assert_eq!(cursor_pose(&track, 0.5 + crate::regions::CLICK_IMPACT_WINDOW_S, 2.5, 1.0), rest);
+        assert_eq!(cursor_pose(&track, 0.5 + press_ms / 1000.0, MODEL_CLICK_BOUNCE_REF, 1.0).clearance, 0.0);
+        assert_eq!(cursor_pose(&track, 0.5 + crate::regions::CLICK_IMPACT_WINDOW_S, MODEL_CLICK_BOUNCE_REF, 1.0), rest);
         // clickBounce règle la pression, pas le contact.
         let soft = cursor_pose(&track, 0.5 + CONTACT_S, 0.0, 1.0);
         assert_eq!(soft.clearance, 0.0);
@@ -7784,13 +7786,13 @@ mod tests {
     #[test]
     fn the_model_leans_towards_its_motion_and_its_click_target() {
         let still = still_track(vec![]);
-        assert_eq!(cursor_pose(&still, 1.0, 2.5, 1.0).yaw, 0.0);
+        assert_eq!(cursor_pose(&still, 1.0, MODEL_CLICK_BOUNCE_REF, 1.0).yaw, 0.0);
         let right = crate::cursor::CursorTrack::new(vec![(0.0, 0.1, 0.5), (2.0, 0.9, 0.5)], vec![], vec![]);
         let left = crate::cursor::CursorTrack::new(vec![(0.0, 0.9, 0.5), (2.0, 0.1, 0.5)], vec![], vec![]);
-        let (r, l) = (cursor_pose(&right, 1.0, 2.5, 1.0).yaw, cursor_pose(&left, 1.0, 2.5, 1.0).yaw);
+        let (r, l) = (cursor_pose(&right, 1.0, MODEL_CLICK_BOUNCE_REF, 1.0).yaw, cursor_pose(&left, 1.0, MODEL_CLICK_BOUNCE_REF, 1.0).yaw);
         assert!(r > 5f32.to_radians() && (r + l).abs() < 1e-5, "droite {r}, gauche {l}");
         let fast = crate::cursor::CursorTrack::new(vec![(0.0, 0.0, 0.5), (0.2, 1.0, 0.5)], vec![], vec![]);
-        let y = cursor_pose(&fast, 0.1, 2.5, 1.0).yaw;
+        let y = cursor_pose(&fast, 0.1, MODEL_CLICK_BOUNCE_REF, 1.0).yaw;
         assert!(y <= MODEL_YAW_MAX_DEG.to_radians() + 1e-6 && y > 20f32.to_radians(), "{y}");
         // Arrivée sur une cible à droite puis clic : juste avant, le modèle se tourne vers elle
         // plus que la même arrivée sans clic ; au repos, longtemps après, le lacet revient à 0.
@@ -7804,8 +7806,8 @@ mod tests {
             .collect();
         let clicked = crate::cursor::CursorTrack::new(samples.clone(), vec![1.1], vec![]);
         let quiet = crate::cursor::CursorTrack::new(samples, vec![], vec![]);
-        assert!(cursor_pose(&clicked, 1.05, 2.5, 1.0).yaw > cursor_pose(&quiet, 1.05, 2.5, 1.0).yaw + 1e-3);
-        assert!(cursor_pose(&clicked, 3.5, 2.5, 1.0).yaw.abs() < 1e-3);
+        assert!(cursor_pose(&clicked, 1.05, MODEL_CLICK_BOUNCE_REF, 1.0).yaw > cursor_pose(&quiet, 1.05, MODEL_CLICK_BOUNCE_REF, 1.0).yaw + 1e-3);
+        assert!(cursor_pose(&clicked, 3.5, MODEL_CLICK_BOUNCE_REF, 1.0).yaw.abs() < 1e-3);
     }
 
     /// Les pointeurs penchent et tournent comme la flèche ; les curseurs centrés restent à plat et
@@ -7825,11 +7827,11 @@ mod tests {
             vec![1.0 - CONTACT_S],
             vec![],
         );
-        let (full, level) = (cursor_pose(&moving, 1.0, 2.5, 1.0), cursor_pose(&moving, 1.0, 2.5, 0.0));
+        let (full, level) = (cursor_pose(&moving, 1.0, MODEL_CLICK_BOUNCE_REF, 1.0), cursor_pose(&moving, 1.0, MODEL_CLICK_BOUNCE_REF, 0.0));
         assert!(full.pitch > 0.3 && full.yaw > 0.05, "{full:?}");
         assert_eq!((level.pitch, level.yaw), (0.0, 0.0));
         assert_eq!(level.clearance, full.clearance);
-        let half = cursor_pose(&moving, 1.0, 2.5, 0.5);
+        let half = cursor_pose(&moving, 1.0, MODEL_CLICK_BOUNCE_REF, 0.5);
         assert!((half.pitch - full.pitch * 0.5).abs() < 1e-6 && (half.yaw - full.yaw * 0.5).abs() < 1e-6);
         // À plat, le lift est l'épaisseur : toute la face du dessous est au sol.
         let (_, text) = sprite_model("text");
@@ -7844,7 +7846,7 @@ mod tests {
         assert!(off.model.is_none());
         assert!(matches!(off.placement, CursorPlacement::Upright { .. }), "réglage éteint : mode 7");
         let on = model_plan([0.0; 3], &scene, &track, 0.3, true).expect("plan");
-        assert_eq!(on.model, Some(cursor_pose(&track, 0.3, 2.5, 1.0)));
+        assert_eq!(on.model, Some(cursor_pose(&track, 0.3, MODEL_CLICK_BOUNCE_REF, 1.0)));
         let CursorPlacement::Tilted { quad, .. } = on.placement else { panic!("écran droit : plan identité") };
         assert_eq!((quad.scale, quad.rot), (1.0, [0.0; 3]));
         // Pas de rebond d'échelle en 3D : la taille au creux du clic est celle du repos.
@@ -7857,14 +7859,14 @@ mod tests {
         for (key, hotspot) in DEFAULT_SPRITES {
             let typed = still_track_as(Some(key), vec![]);
             let plan = model_plan([0.0; 3], &scene, &typed, 0.3, true).expect("plan");
-            assert_eq!(plan.model, Some(cursor_pose(&typed, 0.3, 2.5, pointing_factor(hotspot))), "{key}");
+            assert_eq!(plan.model, Some(cursor_pose(&typed, 0.3, MODEL_CLICK_BOUNCE_REF, pointing_factor(hotspot))), "{key}");
             assert_eq!(plan.cursor_type.as_deref(), Some(key));
         }
         // Un état sans sprite retombe sur la flèche, donc sur sa pose.
         let unknown = still_track_as(Some("zoom-in"), vec![]);
         assert_eq!(
             model_plan([0.0; 3], &scene, &unknown, 0.3, true).expect("plan").model,
-            Some(cursor_pose(&unknown, 0.3, 2.5, 1.0))
+            Some(cursor_pose(&unknown, 0.3, MODEL_CLICK_BOUNCE_REF, 1.0))
         );
         // Un thème d'origine passe sa flèche sculptée : c'est elle que le mode 3D pose, le sprite
         // plat restant l'art en 2D.
@@ -8004,7 +8006,7 @@ mod tests {
         scene.cursor.cursor_sprites = model_scene().cursor.cursor_sprites;
         let live = LiveParams {
             cursor_model3d: true,
-            cursor_bounce_scale: 2.5,
+            cursor_bounce_scale: MODEL_CLICK_BOUNCE_REF,
             cursor_motion_blur: blur,
             ..live_params_from_scene(&scene)
         };
@@ -8170,7 +8172,7 @@ mod tests {
             .impacts
             .len()
         };
-        assert_eq!((plan(true, 2.5), plan(false, 2.5), plan(true, 0.0)), (1, 0, 0));
+        assert_eq!((plan(true, MODEL_CLICK_BOUNCE_REF), plan(false, MODEL_CLICK_BOUNCE_REF), plan(true, 0.0)), (1, 0, 0));
     }
 
     /// L'écrasement suit le contact : neutre au repos, l'épaisseur au plus bas au creux, un léger
@@ -8178,10 +8180,10 @@ mod tests {
     #[test]
     fn the_model_squashes_on_the_click() {
         let track = still_track(vec![0.5]);
-        assert_eq!(cursor_pose(&track, 0.45, 2.5, 1.0).squash, 1.0);
-        let down = cursor_pose(&track, 0.5 + CONTACT_S, 2.5, 1.0);
+        assert_eq!(cursor_pose(&track, 0.45, MODEL_CLICK_BOUNCE_REF, 1.0).squash, 1.0);
+        let down = cursor_pose(&track, 0.5 + CONTACT_S, MODEL_CLICK_BOUNCE_REF, 1.0);
         assert!((down.squash - (1.0 - MODEL_SQUASH)).abs() < 1e-3, "{down:?}");
-        let rebound = cursor_pose(&track, 0.5 + 0.165, 2.5, 1.0);
+        let rebound = cursor_pose(&track, 0.5 + 0.165, MODEL_CLICK_BOUNCE_REF, 1.0);
         assert!(rebound.squash > 1.0 && rebound.squash < 1.06, "{rebound:?}");
         assert_eq!(cursor_pose(&track, 0.5 + CONTACT_S, 0.0, 1.0).squash, 1.0);
         assert!(cursor_pose(&track, 0.5 + CONTACT_S, 5.0, 1.0).squash >= MODEL_SQUASH_MIN);

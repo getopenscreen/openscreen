@@ -326,7 +326,7 @@ Deux décisions :
   `bounce()`. Gain 1,25 : posé de 27 à 74 ms, donc au moins une image au contact jusqu'à
   21 i/s. Tous les états.
 - **Tangage** : queue relevée, pointe vers le bas, 18° au repos, jusqu'à +10° au creux de la
-  pression, fois `clickBounce / 2,5`.
+  pression, fois `clickBounce` (« Light » = 1, le défaut ; « Strong » = 2).
 - **Lacet** : vers la vitesse horizontale lissée (`follow_at`, différence centrée sur ±100 ms),
   et vers la cible d'un clic dans les 300 ms qui le précèdent. Borné en douceur à ±25°
   (`tanh`), nul au repos, continu en `t`.
@@ -345,7 +345,7 @@ Deux décisions :
   arrondit le coin qui touche), sous le seuil testé de 2 %.
 - **Pas de rebond d'échelle** en 3D : le contact le remplace.
 - **Écrasement** : sur la même courbe `tap()`, l'épaisseur descend à 70 % au creux, puis le
-  rebond l'épaissit un instant (104,8 % à 165 ms). Fois `clickBounce / 2,5`, jamais sous 55 %
+  rebond l'épaissit un instant (104,8 % à 165 ms). Fois `clickBounce`, jamais sous 55 %
   (deux chanfreins et un peu de flanc). Le dessus descend, le point le plus bas reste posé, le
   hotspot reste sur son pixel. L'empreinte, elle, ne change pas : un étalement de 5 % défaisait
   l'égalité « curseur centré posé = son sprite » de B.3.
@@ -398,7 +398,7 @@ cliqué brut :
 `tap()`, `bounce()` et de l'impact du plan) et dure 400 ms. À 30 i/s, la première image du
 contact (33 ms) montre le curseur posé, la suivante (67 ms) l'anneau naissant.
 **Taille** : le carré a un demi-côté de 0,7 taille de curseur (l'anneau finit donc à 0,56
-taille, ~40 px pour un curseur de taille 4 en 720p). **Réglage** : `clickBounce / 2,5`
+taille, ~40 px pour un curseur de taille 4 en 720p). **Réglage** : `clickBounce`
 multiplie les opacités (plafond 1) et règle la taille (`0,75 + 0,25 × force`) ; 0 = rien.
 Seulement quand `model3d` est allumé (un curseur sans modèle n'a pas de contact).
 

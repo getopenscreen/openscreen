@@ -101,7 +101,6 @@ import {
 } from "@/lib/ai-edition/transcription/status";
 import { getAssetPath } from "@/lib/assetPath";
 import { resolveWebcamLayoutPreset, supportsWebcamReactiveZoom } from "@/lib/compositeLayout";
-import { supportsCursorClickEffects } from "@/lib/cursor/cursorCapabilities";
 import {
 	CURSOR_THEMES,
 	DEFAULT_CURSOR_THEME_ID,
@@ -3934,18 +3933,16 @@ export function CursorPane() {
 					onCommit={() => void commit()}
 				/>
 			</div>
-			{supportsCursorClickEffects()
-				? namedLevelRow(
-						ts("cursor.clickBounce"),
-						CLICK_BOUNCE_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
-						settings.cursor.clickBounce,
-						!hasDocument,
-						(clickBounce) => {
-							void set({ cursor: { clickBounce } });
-							if (isNativeCompositorActive()) setNativeParam("cursorClickBounce", clickBounce);
-						},
-					)
-				: null}
+			{namedLevelRow(
+				ts("cursor.clickBounce"),
+				CLICK_BOUNCE_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
+				settings.cursor.clickBounce,
+				!hasDocument,
+				(clickBounce) => {
+					void set({ cursor: { clickBounce } });
+					if (isNativeCompositorActive()) setNativeParam("cursorClickBounce", clickBounce);
+				},
+			)}
 		</Pane>
 	);
 }

@@ -27,6 +27,13 @@ const PLATFORM = process.platform;
 contextBridge.exposeInMainWorld("electronAPI", {
 	assetBaseUrl,
 
+	// The renderer's navigator.clipboard.writeText is denied by Electron's
+	// permission gate (clipboard-sanitized-write), which left chat's Copy
+	// message permanently on its error toast (issue #738). Main's clipboard
+	// module has no such gate, so the write crosses here.
+	copyToClipboard: (text: string) =>
+		ipcRenderer.invoke("clipboard:write-text", text) as Promise<void>,
+
 	// --- Native export encoder -------------------------------------------------
 	// The renderer composites and extracts frames but cannot spawn ffmpeg (it is
 	// sandboxed, deliberately), so frames cross to main and it feeds ffmpeg's

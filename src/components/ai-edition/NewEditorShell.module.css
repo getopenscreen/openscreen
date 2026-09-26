@@ -1614,6 +1614,12 @@ textarea.control {
 	font-size: var(--fs-app);
 	color: var(--fg-2);
 	line-height: 1.5;
+	/* Selectable: the message body exists to be read and copied, and without
+	 * this it inherits the shell's user-select: none — drag selection and
+	 * Ctrl+C silently do nothing (issue #739). Scoped to the bubble so
+	 * buttons, the timeline, and the inspector keep their non-selectable
+	 * behavior. */
+	user-select: text;
 }
 /* The user's own turns carry the accent, so the conversation reads at a glance. */
 .msgBubble.msgBubbleUser { background: var(--accent-soft); }

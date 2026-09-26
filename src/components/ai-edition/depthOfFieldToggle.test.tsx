@@ -13,7 +13,7 @@ import { VideoEffectsPane } from "./RightPanes";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 
-function documentWithZoom(rotationPreset?: "iso"): AxcutDocument {
+function documentWithZoom(rotationPreset?: "left"): AxcutDocument {
 	const base = createEmptyDocument({ title: "T", projectId: "p1" });
 	return {
 		...base,
@@ -61,7 +61,7 @@ describe("depth of field toggle", () => {
 	});
 
 	it("is on by default with a tilted zoom, and turns off then on again", async () => {
-		const toggle = mount(documentWithZoom("iso"));
+		const toggle = mount(documentWithZoom("left"));
 		expect(toggle).toBeEnabled();
 		expect(toggle).toHaveAttribute("aria-pressed", "true");
 		expect(screen.getByText("3D zooms")).toBeInTheDocument();

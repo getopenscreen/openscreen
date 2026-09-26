@@ -362,16 +362,14 @@
 			"fixed": "Fixed angle",
 			"moving": "Moving camera",
 			"preset": {
-				"iso": "Angled from above",
 				"left": "Screen turned left",
 				"right": "Screen turned right",
 				"followCursor": "Orbits with the cursor"
 			},
 			"description": {
 				"off": "The screen stays flat.",
-				"iso": "Holds one pose: turned left and seen from above.",
-				"left": "Holds one pose: the screen faces left, its right edge comes forward.",
-				"right": "Holds one pose: the screen faces right, its left edge comes forward.",
+				"left": "Holds one pose: turned left and seen from above.",
+				"right": "Holds one pose: turned right and seen from above.",
 				"followCursor": "The screen stays still; the camera circles it, swinging to the cursor's side and rising or dipping with it."
 			},
 			"needsCursor": "The cursor is hidden: this camera has nothing to follow and holds its starting angle."

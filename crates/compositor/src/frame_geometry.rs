@@ -3767,7 +3767,10 @@ impl ModelView {
             ])
         });
         let top = corners.iter().fold(0.0f32, |m, p| m.max(p[2])) / self.unit;
-        let penumbra = (top / lz / MODEL_SOFTNESS).min(MODEL_SHADOW_PAD);
+        // La marche du shader court jusqu'à la sortie de la boîte ÉLARGIE de `MODEL_SHADOW_PAD` :
+        // sous une lumière rasante (`right`, `lz` ≈ 0,2), le rayon y va bien au-delà de `top / lz`,
+        // et la pénombre avec lui.
+        let penumbra = ((top + MODEL_SHADOW_PAD) / lz / MODEL_SOFTNESS).min(MODEL_SHADOW_PAD);
         let reach = (penumbra / lz + MODEL_CONTACT_RADIUS) * self.unit;
         let mut b = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
         let mut add = |p: [f32; 2]| {
@@ -6743,7 +6746,7 @@ mod tests {
     }
 
     const ISO: [f32; 3] = [-23.0, -25.0, 0.0];
-    const LEFT: [f32; 3] = [-6.5, -17.0, 0.0];
+    const LEFT: [f32; 3] = [-23.0, -25.0, 0.0];
 
     /// Le `LayerCB` du sprite incliné est, octet pour octet, celui que chaque backend construisait
     /// avant de le partager. La référence est le corps d'origine de `draw_cursor_sprite`.
@@ -6801,7 +6804,7 @@ mod tests {
             let len = std::mem::size_of::<LayerCB>();
             unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, len) }.to_vec()
         };
-        for rot in [ISO, LEFT, [-6.5, 17.0, 0.0]] {
+        for rot in [ISO, LEFT, [-23.0, 25.0, 0.0]] {
             let plan = plan_with(rot);
             let clip = [0.1, 0.2, 0.7, 0.6];
             let got = cursor_sprite_cb(
@@ -7182,7 +7185,7 @@ mod tests {
         assert!(model_plan([0.0; 3], &bare, &track, 0.3, true).expect("plan").model.is_none());
     }
 
-    const LEFT_ROT: [f32; 3] = [-6.5, -17.0, 0.0];
+    const LEFT_ROT: [f32; 3] = [-23.0, -25.0, 0.0];
     const ISO_ROT: [f32; 3] = [-23.0, -25.0, 0.0];
 
     /// Les poses d'essai, pour chaque état de `MODEL_STATES` : au repos, posé, tourné.
@@ -7196,7 +7199,7 @@ mod tests {
                 vec![],
                 vec![(0.0, key.to_string())],
             );
-            for (name, rot) in [("flat", [0.0; 3]), ("iso", ISO_ROT), ("left", LEFT_ROT), ("right", [-6.5, 17.0, 0.0])] {
+            for (name, rot) in [("flat", [0.0; 3]), ("iso", ISO_ROT), ("left", LEFT_ROT), ("right", [-23.0, 25.0, 0.0])] {
                 for (pose, track, t) in [("hover", &clicked, 0.3), ("touch", &clicked, 0.5 + CONTACT_S), ("yaw", &moving, 1.0)] {
                     let plan = model_plan(rot, &scene, track, t, true).expect("plan");
                     let (sdf, shape) = sprite_model(key);

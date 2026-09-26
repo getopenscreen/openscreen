@@ -362,16 +362,14 @@
 			"fixed": "Pevný úhel",
 			"moving": "Pohyblivá kamera",
 			"preset": {
-				"iso": "Šikmo shora",
 				"left": "Obrazovka natočená doleva",
 				"right": "Obrazovka natočená doprava",
 				"followCursor": "Obíhá s kurzorem"
 			},
 			"description": {
 				"off": "Obrazovka zůstane rovná.",
-				"iso": "Drží jednu pózu: natočená doleva a viděná shora.",
-				"left": "Drží jednu pózu: obrazovka hledí doleva, její pravý okraj vystupuje dopředu.",
-				"right": "Drží jednu pózu: obrazovka hledí doprava, její levý okraj vystupuje dopředu.",
+				"left": "Drží jednu pózu: natočená doleva a viděná shora.",
+				"right": "Drží jednu pózu: natočená doprava a viděná shora.",
 				"followCursor": "Obrazovka zůstává v klidu; kamera kolem ní krouží na stranu kurzoru a stoupá či klesá s ním."
 			},
 			"needsCursor": "Kurzor je skrytý: tato kamera nemá co sledovat a drží svůj výchozí úhel."

@@ -764,11 +764,11 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 	it("sets a 3D rotation preset on the region", async () => {
 		const { result } = renderTimeline();
 		await act(async () => {
-			await result.current.updateZoomRotation("zoom_a", "iso");
+			await result.current.updateZoomRotation("zoom_a", "left");
 		});
 		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
 			id: "zoom_a",
-			rotationPreset: "iso",
+			rotationPreset: "left",
 		});
 	});
 
@@ -777,7 +777,7 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 		// optional and the native side treats anything unrecognised as zero rotation.
 		const { result } = renderTimeline();
 		await act(async () => {
-			await result.current.updateZoomRotation("zoom_a", "iso");
+			await result.current.updateZoomRotation("zoom_a", "left");
 		});
 		await act(async () => {
 			await result.current.updateZoomRotation("zoom_a", undefined);
@@ -803,7 +803,7 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 		// One control, one field: a moving camera replaces a fixed angle instead of stacking on it.
 		const { result } = renderTimeline();
 		await act(async () => {
-			await result.current.updateZoomRotation("zoom_a", "iso");
+			await result.current.updateZoomRotation("zoom_a", "left");
 		});
 		await act(async () => {
 			await result.current.updateZoomRotation("zoom_a", "follow-cursor");
@@ -1258,7 +1258,7 @@ describe("useTimeline undo history", () => {
 		const { result } = renderTimeline();
 
 		const pDepth = result.current.updateZoomDepth("zoom_a", 4);
-		const pRotation = result.current.updateZoomRotation("zoom_a", "iso");
+		const pRotation = result.current.updateZoomRotation("zoom_a", "left");
 		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
 		await act(async () => {
 			gate.release?.();
@@ -1267,7 +1267,7 @@ describe("useTimeline undo history", () => {
 
 		expect(useProjectStore.getState().document?.zoomRanges[0]).toMatchObject({
 			depth: 4,
-			rotationPreset: "iso",
+			rotationPreset: "left",
 		});
 	});
 
@@ -1418,7 +1418,7 @@ describe("useTimeline undo history", () => {
 		expect(useProjectStore.getState().document?.zoomRanges[0]?.depth).toBe(4);
 
 		const gate = gateFirstSave();
-		const pRotation = result.current.updateZoomRotation("zoom_a", "iso");
+		const pRotation = result.current.updateZoomRotation("zoom_a", "left");
 		const pCursor = result.current.updateZoomHideCursor("zoom_a", true);
 		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
 		let undid = false;
@@ -1452,7 +1452,7 @@ describe("useTimeline undo history", () => {
 		};
 
 		const gate = gateFirstSave();
-		const pRotation = result.current.updateZoomRotation("zoom_a", "iso");
+		const pRotation = result.current.updateZoomRotation("zoom_a", "left");
 		const pCursor = result.current.updateZoomHideCursor("zoom_a", true);
 		await waitFor(() => expect(gate.release).toEqual(expect.any(Function)));
 		bridgeMocks.get.mockResolvedValue({ success: true, document: projectB });
@@ -1518,7 +1518,7 @@ describe("useTimeline undo history", () => {
 			// A later zoom write is refused while that save is still unknown.
 			let rotationOk: boolean | undefined;
 			await act(async () => {
-				rotationOk = await result.current.updateZoomRotation("zoom_a", "iso");
+				rotationOk = await result.current.updateZoomRotation("zoom_a", "left");
 			});
 			expect(rotationOk).toBe(false);
 			expect(useProjectStore.getState().document?.zoomRanges[0]?.rotationPreset).toBeUndefined();

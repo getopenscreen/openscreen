@@ -11,6 +11,7 @@ import {
 	type FrameTheme,
 	isFrameTheme,
 	type RecordingFrame,
+	readBackgroundBlur,
 	readRecordingFrame,
 	WEBCAM_SIZE_MAX,
 	WEBCAM_SIZE_MIN,
@@ -84,7 +85,7 @@ export interface ProjectEditorState {
 	wallpaper: string;
 	wallpaperMotion: WallpaperMotion;
 	shadowIntensity: number;
-	showBlur: boolean;
+	backgroundBlur: number;
 	motionBlurAmount: number;
 	depthOfField: boolean;
 	borderRadius: number;
@@ -533,10 +534,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			typeof editor.shadowIntensity === "number"
 				? editor.shadowIntensity
 				: DEFAULT_EDITOR_APPEARANCE_SETTINGS.shadowIntensity,
-		showBlur:
-			typeof editor.showBlur === "boolean"
-				? editor.showBlur
-				: DEFAULT_EDITOR_APPEARANCE_SETTINGS.showBlur,
+		backgroundBlur: readBackgroundBlur(editor, DEFAULT_EDITOR_APPEARANCE_SETTINGS.backgroundBlur),
 		motionBlurAmount: isFiniteNumber(editor.motionBlurAmount)
 			? clamp(editor.motionBlurAmount, 0, 1)
 			: typeof (editor as { motionBlurEnabled?: unknown }).motionBlurEnabled === "boolean"

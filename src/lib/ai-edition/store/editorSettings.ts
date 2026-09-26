@@ -27,6 +27,7 @@ import {
 	type FrameTheme,
 	isFrameTheme,
 	type RecordingFrame,
+	readBackgroundBlur,
 	readBounded,
 	readRecordingFrame,
 	readWebcamAnchor,
@@ -101,7 +102,7 @@ export interface EditorSettingsSnapshot {
 	 */
 	formatFollowCursor: boolean | null;
 	shadowIntensity: number;
-	showBlur: boolean;
+	backgroundBlur: number;
 	motionBlurAmount: number;
 	depthOfField: boolean;
 	borderRadius: number;
@@ -155,6 +156,8 @@ interface LegacyShape {
 	aspectRatio?: AspectRatio;
 	formatFollowCursor?: boolean;
 	shadowIntensity?: number;
+	backgroundBlur?: number;
+	/** Before the amount: an on/off switch. Read by `readBackgroundBlur`, never written. */
 	showBlur?: boolean;
 	motionBlurAmount?: number;
 	depthOfField?: boolean;
@@ -275,7 +278,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			"shadowIntensity",
 			defaults.shadowIntensity,
 		),
-		showBlur: bool(legacy?.showBlur, DEFAULT_EDITOR_SETTINGS.showBlur),
+		backgroundBlur: readBackgroundBlur(legacy, defaults.backgroundBlur),
 		motionBlurAmount: readBounded(
 			legacy?.motionBlurAmount,
 			"motionBlurAmount",
@@ -337,7 +340,7 @@ export interface EditorSettingsPatch {
 	aspectRatio?: AspectRatio;
 	formatFollowCursor?: boolean;
 	shadowIntensity?: number;
-	showBlur?: boolean;
+	backgroundBlur?: number;
 	motionBlurAmount?: number;
 	depthOfField?: boolean;
 	borderRadius?: number;

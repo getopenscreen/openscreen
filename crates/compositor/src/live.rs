@@ -639,7 +639,7 @@ pub(crate) fn consume_acc(acc: f64, before: f64, after: f64) -> f64 {
 /// booléens/taps → reconstruits dans le `Cfg` ; valeurs continues → `set_live_params`.
 #[derive(Clone, Copy, PartialEq)]
 struct InspectorParams {
-    bg_blur: bool,
+    bg_blur: f32,
     bg_color: [f32; 4],
     shadow_scale: f32,
     radius_scale: f32,
@@ -665,7 +665,7 @@ struct InspectorParams {
 impl Default for InspectorParams {
     fn default() -> Self {
         Self {
-            bg_blur: false,
+            bg_blur: 0.0,
             bg_color: [0.10, 0.11, 0.14, 1.0],
             shadow_scale: 1.0,
             radius_scale: 1.0,
@@ -933,7 +933,6 @@ impl LiveView {
     pub fn set_param_bool(&self, key: &str, value: bool) {
         if let Ok(mut p) = self.shared.inspector.lock() {
             match key {
-                "backgroundBlur" => p.bg_blur = value,
                 "webcamMirror" => p.webcam_mirror = value,
                 "cursorShow" => p.cursor_show = value,
                 "cursorAutoHide" => p.cursor_auto_hide = value,
@@ -945,6 +944,7 @@ impl LiveView {
 
     /// Slider inspector (numérique). Conventions : `shadow`/`roundness`/`webcamSize`/
     /// `cursorSize`/`cursorClickBounce` = échelle (1 = défaut) ; `padding` = 0..1 ;
+    /// `backgroundBlur` = force 0..1 du flou du fond (0 = net) ;
     /// `motionBlur` = 0..1 mappé sur 1..16 taps.
     pub fn set_param_num(&self, key: &str, value: f64) {
         if let Ok(mut p) = self.shared.inspector.lock() {
@@ -954,6 +954,7 @@ impl LiveView {
                 "roundness" => p.radius_scale = v.max(0.0),
                 "motionBlur" => p.mblur_taps = (1.0 + value.clamp(0.0, 1.0) * 15.0).round() as u32,
                 "padding" => p.padding = v.clamp(0.0, 1.0),
+                "backgroundBlur" => p.bg_blur = v.clamp(0.0, 1.0),
                 "webcamSize" => p.webcam_size_scale = v.max(0.05),
                 "cursorSize" => p.cursor_size_scale = v.max(0.0),
                 "cursorClickBounce" => p.cursor_bounce_scale = v.max(0.0),
@@ -1927,7 +1928,7 @@ pub fn run_standalone(screen: &str, webcam: &str, cursor_json: &str) -> Result<(
                         0x42 => {
                             // 'B' : bascule le fond flouté via set_param — chemin param → D3D
                             blur = !blur;
-                            view.set_param_bool("backgroundBlur", blur);
+                            view.set_param_num("backgroundBlur", if blur { 0.5 } else { 0.0 });
                             set_title(blur, playing);
                         }
                         0x20 => {

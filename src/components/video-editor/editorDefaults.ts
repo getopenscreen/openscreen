@@ -34,7 +34,7 @@ export const DEFAULT_GIF_OUTPUT_DIMENSIONS = {
 
 export const DEFAULT_EDITOR_APPEARANCE_SETTINGS: {
 	shadowIntensity: number;
-	showBlur: boolean;
+	backgroundBlur: number;
 	motionBlurAmount: number;
 	borderRadius: number;
 } = {
@@ -42,7 +42,7 @@ export const DEFAULT_EDITOR_APPEARANCE_SETTINGS: {
 	// this is what the CLI and a v2 project file fall back to, and a copy kept "in sync" by hand
 	// was one change away from rendering a different look there.
 	shadowIntensity: DEFAULT_PROJECT_APPEARANCE.shadowIntensity,
-	showBlur: DEFAULT_PROJECT_APPEARANCE.showBlur,
+	backgroundBlur: DEFAULT_PROJECT_APPEARANCE.backgroundBlur,
 	motionBlurAmount: DEFAULT_PROJECT_APPEARANCE.motionBlurAmount,
 	borderRadius: DEFAULT_PROJECT_APPEARANCE.borderRadius,
 };

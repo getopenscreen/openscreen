@@ -39,7 +39,7 @@ export interface EditorState {
 	cropRegion: CropRegion;
 	wallpaper: string;
 	shadowIntensity: number;
-	showBlur: boolean;
+	backgroundBlur: number;
 	motionBlurAmount: number;
 	borderRadius: number;
 	padding: number;
@@ -63,7 +63,7 @@ export const INITIAL_EDITOR_STATE: EditorState = {
 	cropRegion: DEFAULT_CROP_REGION,
 	wallpaper: DEFAULT_EDITOR_LAYOUT_SETTINGS.wallpaper,
 	shadowIntensity: DEFAULT_EDITOR_APPEARANCE_SETTINGS.shadowIntensity,
-	showBlur: DEFAULT_EDITOR_APPEARANCE_SETTINGS.showBlur,
+	backgroundBlur: DEFAULT_EDITOR_APPEARANCE_SETTINGS.backgroundBlur,
 	motionBlurAmount: DEFAULT_EDITOR_APPEARANCE_SETTINGS.motionBlurAmount,
 	borderRadius: DEFAULT_EDITOR_APPEARANCE_SETTINGS.borderRadius,
 	padding: DEFAULT_EDITOR_LAYOUT_SETTINGS.padding,

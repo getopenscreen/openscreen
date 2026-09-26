@@ -16,7 +16,7 @@ function makeV2Project(overrides: Partial<EditorProjectData> = {}): EditorProjec
 			wallpaper: "/wallpapers/wallpaper1.jpg",
 			wallpaperMotion: "none",
 			shadowIntensity: 0,
-			showBlur: false,
+			backgroundBlur: 0,
 			motionBlurAmount: 0,
 			depthOfField: true,
 			borderRadius: 0,

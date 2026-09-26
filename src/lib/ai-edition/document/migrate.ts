@@ -318,7 +318,7 @@ export function migrateAxcutDocumentToProjectData(input: AxcutDocument): EditorP
 		wallpaper: "",
 		wallpaperMotion: "none",
 		shadowIntensity: 0,
-		showBlur: false,
+		backgroundBlur: 0,
 		motionBlurAmount: 0,
 		depthOfField: true,
 		borderRadius: 0,

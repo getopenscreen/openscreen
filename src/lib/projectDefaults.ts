@@ -173,7 +173,8 @@ export interface ProjectAppearanceDefaults {
 	frameTheme: FrameTheme;
 	aspectRatio: `${number}:${number}` | "auto" | "native";
 	shadowIntensity: number;
-	showBlur: boolean;
+	/** 0 sharp to 1, how much the wallpaper behind the recording is blurred. */
+	backgroundBlur: number;
 	motionBlurAmount: number;
 	/** Defocus a 3D-tilted screen by its depth; inert on flat zooms. */
 	depthOfField: boolean;
@@ -219,7 +220,7 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	// 0.2 peaked at 9% opacity: a shadow nobody could see. 0.6 is 27%, the card lifts off the
 	// wallpaper without a halo.
 	shadowIntensity: 0.6,
-	showBlur: false,
+	backgroundBlur: 0,
 	motionBlurAmount: 0.2,
 	// On: it only acts on tilted zooms, where the blur already scales with the real angle.
 	depthOfField: true,
@@ -267,6 +268,7 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
  */
 export const SETTING_BOUNDS = {
 	shadowIntensity: [0, 1],
+	backgroundBlur: [0, 1],
 	motionBlurAmount: [0, 1],
 	// `ROUNDNESS_SLIDER_MAX_PX` (src/native/paramUnits.ts); a test holds the two together.
 	borderRadius: [0, 64],
@@ -294,6 +296,23 @@ export type SettingBound = keyof typeof SETTING_BOUNDS;
 export function clampToBound(value: number, bound: SettingBound): number {
 	const [min, max] = SETTING_BOUNDS[bound];
 	return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * The background blur was an on/off switch (`showBlur`) before it was an amount. On reads as the
+ * one amount it had: the compositor draws exactly the old blur at this value.
+ */
+export const LEGACY_BACKGROUND_BLUR_ON = 0.5;
+
+/** `backgroundBlur`, or the old `showBlur` switch it replaced when only that one is stored. */
+export function readBackgroundBlur(
+	stored: { backgroundBlur?: unknown; showBlur?: unknown } | null | undefined,
+	fallback: number,
+): number {
+	if (stored?.backgroundBlur === undefined && typeof stored?.showBlur === "boolean") {
+		return stored.showBlur ? LEGACY_BACKGROUND_BLUR_ON : 0;
+	}
+	return readBounded(stored?.backgroundBlur, "backgroundBlur", fallback);
 }
 
 /** A stored value read into its bound: anything but a finite number reads as `fallback`. */

@@ -22,7 +22,7 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 		frameTheme: "dark",
 		aspectRatio: "16:9",
 		shadowIntensity: 0.2,
-		showBlur: false,
+		backgroundBlur: 0,
 		motionBlurAmount: 0.2,
 		depthOfField: true,
 		borderRadius: 40,
@@ -110,12 +110,18 @@ describe("parseStylePresetAppearance", () => {
 		expect([cursor.size, cursor.clickBounce]).toEqual([6, 2]);
 	});
 
+	it("reads a preset saved with the old background blur switch", () => {
+		const { backgroundBlur: _amount, ...rest } = appearance();
+		expect(parseStylePresetAppearance({ ...rest, showBlur: true }).backgroundBlur).toBe(0.5);
+		expect(parseStylePresetAppearance({ ...rest, showBlur: false }).backgroundBlur).toBe(0);
+	});
+
 	it("rejects non-numbers, wrong types and unknown enum values", () => {
 		expect(() =>
 			parseStylePresetAppearance({ ...appearance(), shadowIntensity: Number.NaN }),
 		).toThrow(/shadowIntensity/);
-		expect(() => parseStylePresetAppearance({ ...appearance(), showBlur: "yes" })).toThrow(
-			/showBlur/,
+		expect(() => parseStylePresetAppearance({ ...appearance(), backgroundBlur: "yes" })).toThrow(
+			/backgroundBlur/,
 		);
 		expect(() => parseStylePresetAppearance({ ...appearance(), webcamMaskShape: "star" })).toThrow(
 			/webcamMaskShape/,

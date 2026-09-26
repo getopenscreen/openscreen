@@ -38,7 +38,7 @@ describe("projectPersistence media compatibility", () => {
 				wallpaper: "/wallpapers/wallpaper1.jpg",
 				wallpaperMotion: "none",
 				shadowIntensity: 0,
-				showBlur: false,
+				backgroundBlur: 0,
 				motionBlurAmount: 0,
 				depthOfField: true,
 				borderRadius: 0,
@@ -250,7 +250,7 @@ it("creates stable snapshots for identical project state", () => {
 	const editor = normalizeProjectEditor({
 		wallpaper: "/wallpapers/wallpaper1.jpg",
 		shadowIntensity: 0,
-		showBlur: false,
+		backgroundBlur: 0,
 		motionBlurAmount: 0,
 		depthOfField: true,
 		borderRadius: 0,

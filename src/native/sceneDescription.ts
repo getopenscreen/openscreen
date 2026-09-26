@@ -379,8 +379,8 @@ export interface ResolvedClipLayout {
 export interface SceneEffects {
 	/** 0..1 extra inset of the screen (padding). */
 	padding: number;
-	/** Blur the background (screen used as bg). */
-	blur: boolean;
+	/** 0..1 blur of the wallpaper, 0 = sharp (`background_blur_steps` in frame_geometry.rs). */
+	blur: number;
 	/** 0..1 drop-shadow strength. */
 	shadow: number;
 	/**
@@ -1228,7 +1228,7 @@ export function buildSceneDescription(
 		},
 		effects: {
 			padding: settings.padding / 100,
-			blur: settings.showBlur,
+			blur: settings.backgroundBlur,
 			shadow: settings.shadowIntensity,
 			// The slider is in pixels of a 1080 reference, whatever the source resolution —
 			// see `roundnessFrac`. No padding, no background to round against: the corners go

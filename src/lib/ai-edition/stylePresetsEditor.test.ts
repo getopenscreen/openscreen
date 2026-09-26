@@ -38,7 +38,7 @@ function styledSettings(): EditorSettingsSnapshot {
 		frameTheme: "light",
 		aspectRatio: "9:16",
 		shadowIntensity: 0.8,
-		showBlur: true,
+		backgroundBlur: 0.5,
 		motionBlurAmount: 0.6,
 		borderRadius: 12,
 		padding: 20,

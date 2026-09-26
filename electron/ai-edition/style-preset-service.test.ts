@@ -12,7 +12,7 @@ const APPEARANCE: StylePresetAppearance = {
 	frameTheme: "light",
 	aspectRatio: "16:9",
 	shadowIntensity: 0.2,
-	showBlur: false,
+	backgroundBlur: 0,
 	motionBlurAmount: 0.2,
 	depthOfField: true,
 	borderRadius: 40,

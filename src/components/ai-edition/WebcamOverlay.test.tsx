@@ -96,7 +96,7 @@ const baseLegacyEditor = {
 	shadowIntensity: 0,
 	borderRadius: 0,
 	padding: 0,
-	showBlur: false,
+	backgroundBlur: 0,
 	motionBlurAmount: 0,
 	webcamSizePreset: 25,
 	webcamMaskShape: "rectangle",

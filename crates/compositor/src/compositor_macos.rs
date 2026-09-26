@@ -1228,21 +1228,31 @@ impl Compositor {
         Ok(())
     }
 
-    /// Dual-Kawase sur le contenu courant du RT : trois passes DOWN puis trois UP, la
-    /// dernière réécrivant le RT. Port des six `fs_pass` de `compositor_windows::blur_bg`,
-    /// mêmes tailles et mêmes texels.
-    unsafe fn blur_bg(&self, cmd: &metal::CommandBufferRef) -> Result<()> {
-        let off = 2.2; // spread par passe
+    /// Dual-Kawase sur le contenu courant du RT : `levels` passes DOWN puis autant d'UP, la
+    /// dernière réécrivant le RT. Port de `compositor_windows::blur_bg`, mêmes tailles, mêmes
+    /// texels, même force → niveaux (`background_blur_steps`).
+    unsafe fn blur_bg(&self, cmd: &metal::CommandBufferRef, amount: f32) -> Result<()> {
+        let Some((levels, off)) = crate::frame_geometry::background_blur_steps(amount) else {
+            return Ok(());
+        };
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
-        let (hw, hh) = (rw * 0.5, rh * 0.5);
-        // DOWN : texel = 1/(dims de la SOURCE échantillonnée)
-        self.fs_pass(cmd, &self.blur_half, &self.rt, &self.pipeline_kdown, [1.0 / rw, 1.0 / rh, off, 0.0])?;
-        self.fs_pass(cmd, &self.blur_quarter, &self.blur_half, &self.pipeline_kdown, [1.0 / hw, 1.0 / hh, off, 0.0])?;
-        self.fs_pass(cmd, &self.blur_eighth, &self.blur_quarter, &self.pipeline_kdown, [2.0 / hw, 2.0 / hh, off, 0.0])?;
-        // UP
-        self.fs_pass(cmd, &self.blur_quarter, &self.blur_eighth, &self.pipeline_kup, [4.0 / hw, 4.0 / hh, off, 0.0])?;
-        self.fs_pass(cmd, &self.blur_half, &self.blur_quarter, &self.pipeline_kup, [2.0 / hw, 2.0 / hh, off, 0.0])?;
-        self.fs_pass(cmd, &self.rt, &self.blur_half, &self.pipeline_kup, [1.0 / hw, 1.0 / hh, off, 0.0])?;
+        let pyramid = [
+            (&self.rt, rw, rh),
+            (&self.blur_half, rw * 0.5, rh * 0.5),
+            (&self.blur_quarter, rw * 0.25, rh * 0.25),
+            (&self.blur_eighth, rw * 0.125, rh * 0.125),
+        ];
+        // texel = 1/(dims de la SOURCE échantillonnée)
+        for i in 0..levels {
+            let (src, sw, sh) = pyramid[i];
+            let (dst, ..) = pyramid[i + 1];
+            self.fs_pass(cmd, dst, src, &self.pipeline_kdown, [1.0 / sw, 1.0 / sh, off, 0.0])?;
+        }
+        for i in (0..levels).rev() {
+            let (src, sw, sh) = pyramid[i + 1];
+            let (dst, ..) = pyramid[i];
+            self.fs_pass(cmd, dst, src, &self.pipeline_kup, [1.0 / sw, 1.0 / sh, off, 0.0])?;
+        }
         Ok(())
     }
 
@@ -2278,8 +2288,8 @@ impl Compositor {
         // de dessiner, pas la vidéo. No-op visuel sur une couleur plate, effet réel sur un
         // gradient ou une image. Il lui faut ses propres passes, d'où la coupure ici.
         enc.end_encoding();
-        if scene_ref.as_ref().map(|s| s.effects.blur).unwrap_or(false) {
-            self.blur_bg(cmd_buf)?;
+        if let Some(blur) = scene_ref.as_ref().map(|s| s.effects.blur) {
+            self.blur_bg(cmd_buf, blur)?;
         }
         // --- écran : ombre puis vidéo ---
         let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
@@ -3242,7 +3252,7 @@ mod tests {
         let screen = FakeFrame::new(128, 128, |_, _| 126);
         let webcam = FakeFrame::new(64, 64, |_, _| Y_WHITE);
         let mut cfg = crate::config::Cfg::c8();
-        cfg.bg_blur = false;
+        cfg.bg_blur = 0.0;
         cfg.zoom = false;
         cfg.layout_anim = false;
         cfg.cursor = false;
@@ -3863,7 +3873,7 @@ mod tests {
         comp.set_cursor_time(Some(2.0));
         comp.set_timeline_time(Some(2.0));
         let mut cfg = crate::config::Cfg::c8();
-        cfg.bg_blur = false;
+        cfg.bg_blur = 0.0;
         cfg.zoom = false;
         cfg.layout_anim = false;
         cfg.cursor = true;

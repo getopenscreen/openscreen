@@ -993,13 +993,14 @@ impl Compositor {
         src: &wgpu::TextureView,
         dst: &wgpu::TextureView,
         src_px: [f32; 2],
+        off: f32,
     ) {
         let cb = LayerCB {
             mode: -1.0,
             color: [1.0, 1.0, 1.0, 1.0],
             // Convention HLSL/Metal (`compositor_windows::blur_bg`) : texel de la
-            // SOURCE en .xy, offset 2.2 en .z. Parite des trois backends.
-            fx: [1.0 / src_px[0], 1.0 / src_px[1], 2.2, 0.0],
+            // SOURCE en .xy, offset en .z. Parite des trois backends.
+            fx: [1.0 / src_px[0], 1.0 / src_px[1], off, 0.0],
             ..Default::default()
         };
         let uniform = self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1044,28 +1045,30 @@ impl Compositor {
         rpass.draw(0..3, 0..1);
     }
 
-    /// Floute le RT (le fond deja dessine) : dual-Kawase 3 down (RT -> 1/2 ->
-    /// 1/4 -> 1/8) + 3 up (1/8 -> 1/4 -> 1/2 -> RT). ~gaussien a cout constant.
-    fn blur_bg(&self, encoder: &mut wgpu::CommandEncoder) {
-        let (rw, rh) = (self.render_w as f32, self.render_h as f32);
-        let (hw, hh) = (
-            (self.render_w / 2).max(1) as f32,
-            (self.render_h / 2).max(1) as f32,
-        );
-        let (qw, qh) = (
-            (self.render_w / 4).max(1) as f32,
-            (self.render_h / 4).max(1) as f32,
-        );
-        let (ow, oh) = (
-            (self.render_w / 8).max(1) as f32,
-            (self.render_h / 8).max(1) as f32,
-        );
-        self.blur_pass(encoder, &self.blur_down, &self.rt_view, &self.blur_half, [rw, rh]);
-        self.blur_pass(encoder, &self.blur_down, &self.blur_half, &self.blur_qtr, [hw, hh]);
-        self.blur_pass(encoder, &self.blur_down, &self.blur_qtr, &self.blur_oct, [qw, qh]);
-        self.blur_pass(encoder, &self.blur_up, &self.blur_oct, &self.blur_qtr, [ow, oh]);
-        self.blur_pass(encoder, &self.blur_up, &self.blur_qtr, &self.blur_half, [qw, qh]);
-        self.blur_pass(encoder, &self.blur_up, &self.blur_half, &self.rt_view, [hw, hh]);
+    /// Floute le RT (le fond deja dessine) : dual-Kawase, `levels` down (RT -> 1/2 ->
+    /// 1/4 -> 1/8) puis autant d'up, niveaux et ecart tires de la force
+    /// (`background_blur_steps`, partage avec D3D/Metal). ~gaussien a cout borne.
+    fn blur_bg(&self, encoder: &mut wgpu::CommandEncoder, amount: f32) {
+        let Some((levels, off)) = crate::frame_geometry::background_blur_steps(amount) else {
+            return;
+        };
+        let dims = |d: u32| {
+            [(self.render_w / d).max(1) as f32, (self.render_h / d).max(1) as f32]
+        };
+        let pyramid = [
+            (&self.rt_view, dims(1)),
+            (&self.blur_half, dims(2)),
+            (&self.blur_qtr, dims(4)),
+            (&self.blur_oct, dims(8)),
+        ];
+        for i in 0..levels {
+            let (src, src_px) = pyramid[i];
+            self.blur_pass(encoder, &self.blur_down, src, pyramid[i + 1].0, src_px, off);
+        }
+        for i in (0..levels).rev() {
+            let (src, src_px) = pyramid[i + 1];
+            self.blur_pass(encoder, &self.blur_up, src, pyramid[i].0, src_px, off);
+        }
     }
 
     /// Dimensions paires (NV12 4:2:0), min 2x2. Symetrie avec les autres backends.
@@ -3054,9 +3057,7 @@ impl Compositor {
             }
         }
         // Blur du fond (avant l'ecran), si active par la scene/l'inspector.
-        if cfg.bg_blur {
-            self.blur_bg(&mut encoder);
-        }
+        self.blur_bg(&mut encoder, cfg.bg_blur);
         // Passe 2 : avant-plan (ecran + webcam), compose par-dessus le fond
         // (eventuellement floute) avec `LoadOp::Load`. Les annotations sont dans
         // une passe a part, cf. plus bas.
@@ -4170,8 +4171,9 @@ mod tests {
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test-blur") });
-        comp.blur_pass(&mut encoder, &comp.pipeline_copy, &src_view, &comp.rt_view, [w as f32, h as f32]);
-        comp.blur_bg(&mut encoder);
+        comp.blur_pass(&mut encoder, &comp.pipeline_copy, &src_view, &comp.rt_view, [w as f32, h as f32], 0.0);
+        // 0,5 = l'ancien interrupteur : trois niveaux, ecart 2,2 (`HP` ci-dessous).
+        comp.blur_bg(&mut encoder, 0.5);
         gpu.context.submit(std::iter::once(encoder.finish()));
         let (_, _, px) = unsafe { comp.readback_direct().expect("readback_direct") };
 
@@ -4549,7 +4551,7 @@ mod tests {
         let screen = FakeFrame::new(gpu, 128, 128, |_, _| 126);
         let webcam = FakeFrame::new(gpu, 64, 64, |_, _| Y_WHITE);
         let mut cfg = Cfg::c8();
-        cfg.bg_blur = false;
+        cfg.bg_blur = 0.0;
         cfg.zoom = false;
         cfg.layout_anim = false;
         cfg.cursor = false;
@@ -4895,7 +4897,7 @@ mod tests {
         let screen = FakeFrame::new(gpu, 640, 360, |_, _| 60);
         let webcam = FakeFrame::new(gpu, 64, 64, |_, _| 60);
         let mut cfg = Cfg::c8();
-        cfg.bg_blur = false;
+        cfg.bg_blur = 0.0;
         cfg.zoom = false;
         cfg.layout_anim = false;
         cfg.cursor = false;
@@ -4934,7 +4936,7 @@ mod tests {
         let screen = FakeFrame::new(gpu, 640, 360, |_, _| 60);
         let webcam = FakeFrame::new(gpu, 64, 64, |_, _| 60);
         let mut cfg = Cfg::c8();
-        cfg.bg_blur = false;
+        cfg.bg_blur = 0.0;
         cfg.cursor = false;
         cfg.mblur_n = 1;
         cfg.shadow = true;
@@ -5026,7 +5028,7 @@ mod tests {
         let screen = FakeFrame::new(&gpu, 640, 360, |_, _| 60);
         let webcam = FakeFrame::new(&gpu, 64, 64, |_, _| 60);
         let mut cfg = Cfg::c8();
-        cfg.bg_blur = false;
+        cfg.bg_blur = 0.0;
         cfg.zoom = false;
         cfg.layout_anim = false;
         cfg.cursor = false;
@@ -5236,7 +5238,7 @@ mod tests {
 
     fn model_cfg() -> crate::config::Cfg {
         let mut cfg = crate::config::Cfg::c8();
-        cfg.bg_blur = false;
+        cfg.bg_blur = 0.0;
         cfg.zoom = false;
         cfg.layout_anim = false;
         cfg.cursor = true;

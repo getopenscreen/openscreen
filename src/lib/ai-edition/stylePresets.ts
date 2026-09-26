@@ -30,6 +30,7 @@ import {
 	DEFAULT_PROJECT_APPEARANCE,
 	type FrameTheme,
 	isFrameTheme,
+	LEGACY_BACKGROUND_BLUR_ON,
 	type RecordingFrame,
 	readRecordingFrame,
 	readWebcamMask,
@@ -56,7 +57,7 @@ export interface StylePresetAppearance {
 	frameTheme: FrameTheme;
 	aspectRatio: AspectRatio;
 	shadowIntensity: number;
-	showBlur: boolean;
+	backgroundBlur: number;
 	motionBlurAmount: number;
 	depthOfField: boolean;
 	borderRadius: number;
@@ -310,7 +311,13 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		...readFrame(value),
 		aspectRatio: value.aspectRatio,
 		shadowIntensity: readNumber(value, "shadowIntensity", "shadowIntensity"),
-		showBlur: readBoolean(value, "showBlur"),
+		// Presets saved before the amount carry the old `showBlur` switch instead.
+		backgroundBlur:
+			value.backgroundBlur === undefined && value.showBlur !== undefined
+				? readBoolean(value, "showBlur")
+					? LEGACY_BACKGROUND_BLUR_ON
+					: 0
+				: readNumber(value, "backgroundBlur", "backgroundBlur"),
 		motionBlurAmount: readNumber(value, "motionBlurAmount", "motionBlurAmount"),
 		depthOfField: value.depthOfField === undefined ? true : readBoolean(value, "depthOfField"),
 		borderRadius: readNumber(value, "borderRadius", "borderRadius"),
@@ -406,7 +413,7 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	"frame",
 	"frameTheme",
 	"shadowIntensity",
-	"showBlur",
+	"backgroundBlur",
 	"motionBlurAmount",
 	"depthOfField",
 	"borderRadius",

@@ -422,17 +422,22 @@ function BackgroundSection() {
 			{/* Reads in the order it acts: pick a background, then blur it. Lived under
 			    "Effects" while that was a separate facet, which is how a control named
 			    "Blur BG" ended up in the tab that doesn't say background. */}
-			<div className={styles.paneRow}>
-				<span className={styles.label}>{ts("effects.blurBg")}</span>
-				<Toggle
-					checked={settings.showBlur}
+			<div className={styles.sliderGrid}>
+				<SliderCell
+					label={ts("effects.blurBg")}
+					value={settings.backgroundBlur * 100}
+					min={0}
+					max={100}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.backgroundBlur * 100}
+					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
-						void set({ showBlur: v });
+						setLive({ backgroundBlur: v / 100 });
 						if (isNativeCompositorActive()) {
-							setNativeParam("backgroundBlur", v);
+							setNativeParam("backgroundBlur", v / 100);
 						}
 					}}
+					onCommit={() => void commit()}
 				/>
 			</div>
 		</>

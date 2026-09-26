@@ -168,13 +168,29 @@ pub struct SceneRect {
     pub height: f32,
 }
 
+fn blur_amount<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f32, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Blur {
+        Switch(bool),
+        Amount(f32),
+    }
+    Ok(match Blur::deserialize(d)? {
+        Blur::Switch(on) => if on { 0.5 } else { 0.0 },
+        Blur::Amount(a) => a.clamp(0.0, 1.0),
+    })
+}
+
 /// Effets de cadre (padding, blur, ombre, coins, motion blur).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneEffects {
     /// 0..1 inset supplémentaire de l'écran.
     pub padding: f32,
-    pub blur: bool,
+    /// 0..1 force du flou du fond, 0 = net (`background_blur_steps`). Un booléen se lit encore :
+    /// `true` était l'unique force de l'ancien interrupteur, 0,5 aujourd'hui.
+    #[serde(deserialize_with = "blur_amount")]
+    pub blur: f32,
     /// 0..1 force de l'ombre.
     pub shadow: f32,
     /// Slider Roundness, en FRACTION du petit côté du cadre de sortie.
@@ -820,6 +836,13 @@ mod tests {
         assert_eq!(scene.layout.preset, "picture-in-picture");
         assert!(scene.layout.webcam_mirror);
         assert!((scene.effects.roundness_frac - 0.0222).abs() < 1e-6);
+        // L'ancien interrupteur `true` se lit comme la force qu'il dessinait.
+        assert_eq!(scene.effects.blur, 0.5);
+        let amount: SceneEffects = serde_json::from_str(
+            r#"{"padding":0,"blur":0.3,"shadow":0,"roundnessFrac":0,"motionBlur":0}"#,
+        )
+        .unwrap();
+        assert_eq!(amount.blur, 0.3);
         match scene.background {
             SceneBackground::Gradient { angle_deg, ref stops, ref offsets, motion } => {
                 assert_eq!(angle_deg, 135.0);

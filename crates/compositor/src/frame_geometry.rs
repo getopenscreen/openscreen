@@ -405,6 +405,26 @@ pub fn dof_pyramid_levels(w: u32, h: u32) -> u32 {
     const DOF_PYRAMID_LEVELS: u32 = 5;
     DOF_PYRAMID_LEVELS.min(32 - w.max(h).max(1).leading_zeros())
 }
+/// Flou du fond : force 0..1 → (niveaux de la pyramide dual-Kawase, écart par passe), `None`
+/// à 0. Le rayon d'un dual-Kawase croît comme `2^niveaux × écart` : on vise un rayon
+/// proportionnel à la force et on prend le moins de niveaux qui l'atteint sans écarter les taps
+/// au point de dédoubler l'image. 0,5 retombe exactement sur l'ancien interrupteur « Blur BG »
+/// (3 niveaux, écart 2,2). Les trois backends lisent ceci, ils floutent donc pareil.
+pub fn background_blur_steps(amount: f32) -> Option<(usize, f32)> {
+    const RADIUS_AT_FULL: f32 = 2.0 * 8.0 * 2.2;
+    if !(amount > 0.001) {
+        return None;
+    }
+    let radius = amount.min(1.0) * RADIUS_AT_FULL;
+    let levels: usize = if radius <= 4.0 {
+        1
+    } else if radius <= 12.0 {
+        2
+    } else {
+        3
+    };
+    Some((levels, radius / (1 << levels) as f32))
+}
 /// Longueurs de style exprimées en FRACTION du petit côté du cadre, et non en pixels.
 ///
 /// Elles étaient écrites en px bruts au point d'appel, ce qui voulait dire « px du render
@@ -4251,6 +4271,24 @@ pub fn lru_evictions(entries: &[(String, u64, u64)], budget: u64, protect_from: 
 #[cfg(test)]
 mod tests {
     use super::lru_evictions;
+
+    #[test]
+    fn background_blur_steps_off_at_zero_and_old_switch_at_half() {
+        use super::background_blur_steps;
+        assert_eq!(background_blur_steps(0.0), None);
+        let (levels, off) = background_blur_steps(0.5).unwrap();
+        assert_eq!(levels, 3);
+        assert!((off - 2.2).abs() < 1e-5);
+        // Le rayon (2^niveaux × écart) croît avec la force, sans saut en arrière d'un niveau à
+        // l'autre.
+        let radius = |a: f32| background_blur_steps(a).map_or(0.0, |(l, o)| (1 << l) as f32 * o);
+        let mut prev = 0.0;
+        for i in 1..=100 {
+            let r = radius(i as f32 / 100.0);
+            assert!(r > prev, "rayon non croissant à {i}%");
+            prev = r;
+        }
+    }
 
     /// `(clé, octets, tick)` — le tick croît avec l'usage, donc le plus petit est le plus ancien.
     fn e(key: &str, mb: u64, tick: u64) -> (String, u64, u64) {

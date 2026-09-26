@@ -127,7 +127,7 @@ export function subscribeNativeCompositor(listener: () => void): () => void {
  * value from here would scale the whole preview by 10 or 100 on load.
  */
 export function pushAllNativeParams(settings: EditorSettingsSnapshot): void {
-	setNativeParam("backgroundBlur", settings.showBlur);
+	setNativeParam("backgroundBlur", settings.backgroundBlur);
 	setNativeParam("motionBlur", settings.motionBlurAmount);
 	setNativeParam("shadow", settings.shadowIntensity);
 	setNativeParam("roundness", settings.borderRadius / NATIVE_SCREEN_BASE_RADIUS_PX);

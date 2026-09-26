@@ -248,7 +248,7 @@ pub fn read_frame(id: i32, since_gen: f64) -> Result<Option<FramePacket>> {
 }
 
 /// Param live (inspector). Le type de valeur route vers le bon setter :
-/// bool = switch (backgroundBlur…), number = slider (shadow/roundness/motionBlur),
+/// bool = switch (webcamMirror…), number = slider (shadow/roundness/motionBlur/backgroundBlur),
 /// string = sélection (backgroundColor "#rrggbb").
 #[napi]
 pub fn set_param(id: i32, key: String, value: Either3<bool, f64, String>) {

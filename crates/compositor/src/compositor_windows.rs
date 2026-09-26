@@ -900,32 +900,37 @@ impl Compositor {
     }
 
     /// Fond flouté (§7), dual-Kawase : suppose le screen déjà dessiné plein écran dans le RT.
-    /// Chaîne down (RT→960→480→240) puis up (240→480→960→RT). ~6 passes de 5-8 taps
-    /// à résolution décroissante, vs 2 passes gaussiennes 49-tap. Le RT devient le fond.
-    pub unsafe fn blur_bg(&self, _sigma: f32) {
-        let off = 2.2; // spread par passe
+    /// Chaîne down (RT→960→480→240) puis up (240→480→960→RT), tronquée au nombre de niveaux
+    /// que demande la force (`background_blur_steps`). ~5-8 taps par passe à résolution
+    /// décroissante, vs 2 passes gaussiennes 49-tap. Le RT devient le fond.
+    pub unsafe fn blur_bg(&self, amount: f32) {
+        let Some((levels, off)) = crate::frame_geometry::background_blur_steps(amount) else {
+            return;
+        };
         // La pyramide se dérive de la taille de rendu, pas d'une constante : sinon
         // le rayon effectif du flou changerait avec la résolution de sortie (un
         // demi de 1080 n'est pas un demi de 2160), et le fond flouté ne serait plus
         // le même effet d'un format à l'autre.
         let (rw_i, rh_i) = self.render_dims();
         let (half_w, half_h) = (rw_i / 2, rh_i / 2);
-        let hw = half_w as f32;
-        let hh = half_h as f32;
-        // DOWN : texel = 1/(dims de la SOURCE échantillonnée)
-        self.fs_pass(&self.half_a_rtv, &self.rt_srv, &self.ps_kdown, half_w, half_h,
-            [1.0 / self.rw(), 1.0 / self.rh(), off, 0.0]);
-        self.fs_pass(&self.q_rtv, &self.half_a_srv, &self.ps_kdown, half_w / 2, half_h / 2,
-            [1.0 / hw, 1.0 / hh, off, 0.0]);
-        self.fs_pass(&self.e_rtv, &self.q_srv, &self.ps_kdown, half_w / 4, half_h / 4,
-            [2.0 / hw, 2.0 / hh, off, 0.0]);
-        // UP
-        self.fs_pass(&self.q_rtv, &self.e_srv, &self.ps_kup, half_w / 2, half_h / 2,
-            [4.0 / hw, 4.0 / hh, off, 0.0]);
-        self.fs_pass(&self.half_a_rtv, &self.q_srv, &self.ps_kup, half_w, half_h,
-            [2.0 / hw, 2.0 / hh, off, 0.0]);
-        self.fs_pass(&self.rtv, &self.half_a_srv, &self.ps_kup, rw_i, rh_i,
-            [1.0 / hw, 1.0 / hh, off, 0.0]);
+        let pyramid = [
+            (&self.rtv, &self.rt_srv, rw_i, rh_i),
+            (&self.half_a_rtv, &self.half_a_srv, half_w, half_h),
+            (&self.q_rtv, &self.q_srv, half_w / 2, half_h / 2),
+            (&self.e_rtv, &self.e_srv, half_w / 4, half_h / 4),
+        ];
+        // texel = 1/(dims de la SOURCE échantillonnée)
+        let fx = |(w, h): (u32, u32)| [1.0 / w.max(1) as f32, 1.0 / h.max(1) as f32, off, 0.0];
+        for i in 0..levels {
+            let (_, src, sw, sh) = pyramid[i];
+            let (dst, _, dw, dh) = pyramid[i + 1];
+            self.fs_pass(dst, src, &self.ps_kdown, dw, dh, fx((sw, sh)));
+        }
+        for i in (0..levels).rev() {
+            let (_, src, sw, sh) = pyramid[i + 1];
+            let (dst, _, dw, dh) = pyramid[i];
+            self.fs_pass(dst, src, &self.ps_kup, dw, dh, fx((sw, sh)));
+        }
     }
 
     /// Remplit la pyramide de profondeur de champ depuis la frame écran et rend sa SRV.
@@ -1966,11 +1971,11 @@ impl Compositor {
             // « Blur BG » (parité web blurredBackgroundLayer) : floute CE wallpaper qu'on vient
             // de dessiner (dual-Kawase, déjà utilisé pour le fond fixture ci-dessous). No-op
             // visuel sur une couleur plate, effet réel sur gradient/image.
-            if blur_wallpaper {
-                self.blur_bg(18.0);
+            if blur_wallpaper > 0.0 {
+                self.blur_bg(blur_wallpaper);
                 self.bind_compose_state();
             }
-        } else if cfg.bg_blur {
+        } else if cfg.bg_blur > 0.0 {
             let over = 0.06;
             self.draw_video(
                 &LayerCB {
@@ -1984,7 +1989,7 @@ impl Compositor {
                 &sy,
                 &suv,
             );
-            self.blur_bg(18.0);
+            self.blur_bg(cfg.bg_blur);
             self.bind_compose_state();
             self.draw_solid(&LayerCB {
                 dst: [0.0, 0.0, 1.0, 1.0],

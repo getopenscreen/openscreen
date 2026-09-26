@@ -45,7 +45,7 @@ describe("getEditorSettings", () => {
 		// A new project stores no ratio and reads Auto; older documents had 16:9 pinned by v8.
 		expect(snap.aspectRatio).toBe("auto");
 		expect(snap.shadowIntensity).toBe(DEFAULT_EDITOR_SETTINGS.shadowIntensity);
-		expect(snap.showBlur).toBe(false);
+		expect(snap.backgroundBlur).toBe(0);
 		expect(snap.webcamLayoutPreset).toBe(DEFAULT_WEBCAM_LAYOUT_PRESET);
 		expect(snap.webcamMaskShape).toBe(DEFAULT_WEBCAM_MASK_SHAPE);
 		expect(snap.cursor.size).toBe(DEFAULT_CURSOR_SIZE);
@@ -85,7 +85,7 @@ describe("getEditorSettings", () => {
 				wallpaper: "linear-gradient(red, blue)",
 				aspectRatio: "9:16",
 				shadowIntensity: 0.5,
-				showBlur: true,
+				backgroundBlur: 0.5,
 				webcamLayoutPreset: "side-by-side",
 				webcamMaskShape: "circle",
 				cursorSize: 2.5,
@@ -96,7 +96,7 @@ describe("getEditorSettings", () => {
 		expect(snap.wallpaper).toBe("linear-gradient(red, blue)");
 		expect(snap.aspectRatio).toBe("9:16");
 		expect(snap.shadowIntensity).toBe(0.5);
-		expect(snap.showBlur).toBe(true);
+		expect(snap.backgroundBlur).toBe(0.5);
 		expect(snap.webcamLayoutPreset).toBe("side-by-side");
 		// An old circle: a square camera, fully round.
 		expect(snap.webcamMaskShape).toBe("square");
@@ -108,10 +108,22 @@ describe("getEditorSettings", () => {
 	it("falls back to defaults for unknown or wrong-type values", () => {
 		const doc: AxcutDocument = {
 			...baseDoc,
-			legacyEditor: { showBlur: "not-a-bool" as unknown as boolean },
+			legacyEditor: { backgroundBlur: "not-a-number" as unknown as number },
 		};
 		const snap = getEditorSettings(doc);
-		expect(snap.showBlur).toBe(false);
+		expect(snap.backgroundBlur).toBe(0);
+	});
+
+	it("reads the old background blur switch as the amount it drew", () => {
+		const legacy = (showBlur: boolean): AxcutDocument => ({
+			...baseDoc,
+			legacyEditor: { showBlur },
+		});
+		expect(getEditorSettings(legacy(true)).backgroundBlur).toBe(0.5);
+		expect(getEditorSettings(legacy(false)).backgroundBlur).toBe(0);
+		// Once the amount is written, the stale switch no longer speaks.
+		const moved = patchEditorSettings(legacy(true), { backgroundBlur: 0.2 });
+		expect(getEditorSettings(moved).backgroundBlur).toBe(0.2);
 	});
 
 	it("keeps depth of field on unless the project stored a boolean off", () => {
@@ -136,26 +148,26 @@ describe("getEditorSettings", () => {
 
 describe("patchEditorSettings", () => {
 	it("writes a single field and leaves others intact", () => {
-		const next = patchEditorSettings(baseDoc, { showBlur: true });
+		const next = patchEditorSettings(baseDoc, { backgroundBlur: 0.5 });
 		const snap = getEditorSettings(next);
-		expect(snap.showBlur).toBe(true);
+		expect(snap.backgroundBlur).toBe(0.5);
 		expect(snap.shadowIntensity).toBe(DEFAULT_EDITOR_SETTINGS.shadowIntensity);
 		expect(snap.cropRegion).toEqual(DEFAULT_CROP_REGION);
 	});
 
 	it("merges into an existing legacyEditor envelope", () => {
-		const seed = patchEditorSettings(baseDoc, { showBlur: true });
+		const seed = patchEditorSettings(baseDoc, { backgroundBlur: 0.5 });
 		const next = patchEditorSettings(seed, { shadowIntensity: 0.7 });
 		const snap = getEditorSettings(next);
-		expect(snap.showBlur).toBe(true);
+		expect(snap.backgroundBlur).toBe(0.5);
 		expect(snap.shadowIntensity).toBe(0.7);
 	});
 
 	it("treats an explicitly undefined key as absent, not as a clear", () => {
-		const seed = patchEditorSettings(baseDoc, { showBlur: true, shadowIntensity: 0.7 });
-		const next = patchEditorSettings(seed, { showBlur: undefined, padding: 12 });
+		const seed = patchEditorSettings(baseDoc, { backgroundBlur: 0.5, shadowIntensity: 0.7 });
+		const next = patchEditorSettings(seed, { backgroundBlur: undefined, padding: 12 });
 		const snap = getEditorSettings(next);
-		expect(snap.showBlur).toBe(true);
+		expect(snap.backgroundBlur).toBe(0.5);
 		expect(snap.shadowIntensity).toBe(0.7);
 		expect(snap.padding).toBe(12);
 	});
@@ -213,7 +225,7 @@ describe("patchEditorSettings", () => {
 
 	it("does not mutate the source document", () => {
 		const before = getEditorSettings(baseDoc);
-		patchEditorSettings(baseDoc, { showBlur: true });
+		patchEditorSettings(baseDoc, { backgroundBlur: 0.5 });
 		const after = getEditorSettings(baseDoc);
 		expect(after).toEqual(before);
 	});

@@ -69,11 +69,14 @@ import { ROUNDNESS_REFERENCE_PX } from "./paramUnits";
 export type SceneBackground =
 	| { kind: "color"; color: string } // "#rrggbb"
 	// linear-gradient(deg, c1, c2, …). `motion` is omitted when still, so a project without
-	// animation sends the same payload as before the setting existed.
+	// animation sends the same payload as before the setting existed. `offsets` (0..1, one per
+	// stop) place the stops where CSS puts them: the thumbnail draws a middle stop at its
+	// offset, and so must the compositor.
 	| {
 			kind: "gradient";
 			angleDeg: number;
 			stops: string[];
+			offsets: number[];
 			motion?: Exclude<WallpaperMotion, "none">;
 	  }
 	| { kind: "image"; path: string }; // "/wallpapers/…" or a data: URL
@@ -561,6 +564,7 @@ function parseWallpaper(wallpaper: string) {
 			kind: "gradient",
 			angleDeg: resolveLinearGradientAngle(parsed?.descriptor ?? null),
 			stops: parsed?.stops.map((stop) => stop.color) ?? [],
+			offsets: parsed?.stops.map((stop) => stop.offset) ?? [],
 		} as const;
 	}
 	return { kind: "image", path: wallpaper } as const;

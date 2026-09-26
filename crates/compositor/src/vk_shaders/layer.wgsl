@@ -375,10 +375,19 @@ fn value_noise(q: vec2<f32>) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// Rampe du mode 5 a quatre noeuds. Miroir de `ramp4` cote HLSL (commentaires complets la-bas).
+fn ramp4(t: f32, k0: vec4<f32>, k1: vec4<f32>, k2: vec4<f32>, k3: vec4<f32>) -> vec3<f32> {
+    var c = k0.rgb;
+    c = mix(c, k1.rgb, clamp((t - k0.w) / max(k1.w - k0.w, 1e-5), 0.0, 1.0));
+    c = mix(c, k2.rgb, clamp((t - k1.w) / max(k2.w - k1.w, 1e-5), 0.0, 1.0));
+    c = mix(c, k3.rgb, clamp((t - k2.w) / max(k3.w - k2.w, 1e-5), 0.0, 1.0));
+    return c;
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
 // `gradient_motion` cote HLSL (commentaires complets la-bas).
-fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, c0: vec3<f32>, c1: vec3<f32>,
-                   time: f32, motion: f32, aspect: f32) -> vec3<f32> {
+fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, k0: vec4<f32>, k1: vec4<f32>,
+                   k2: vec4<f32>, k3: vec4<f32>, time: f32, motion: f32, aspect: f32) -> vec3<f32> {
     let TAU = 6.2831853;
     let u = dot(gp - vec2<f32>(0.5), dir) / denom; // position le long de l'axe, -0.5..0.5
     if motion < 2.5 {
@@ -386,19 +395,19 @@ fn gradient_motion(gp: vec2<f32>, dir: vec2<f32>, denom: f32, c0: vec3<f32>, c1:
         let p = vec2<f32>((gp.x - 0.5) * aspect, gp.y - 0.5);
         let ph = TAU * time / 120.0;
         let n = value_noise(p * 2.5 + 1.5 * vec2<f32>(cos(ph), sin(ph)));
-        var g = mix(c0, c1, clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0));
+        var g = ramp4(clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
         let b0 = vec2<f32>(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
         let b1 = vec2<f32>(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
         let b2 = vec2<f32>(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
-        g = mix(g, c1, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
-        g = mix(g, c0, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
-        g = mix(g, c1, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        g = mix(g, k3.rgb, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
+        g = mix(g, k0.rgb, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
+        g = mix(g, k3.rgb, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
         return g;
     }
     // Vagues : trois bandes sinus perpendiculaires a l'axe (12 s), ondulees (20 s).
     let v = dot(gp - vec2<f32>(0.5), vec2<f32>(-dir.y, dir.x)) / denom;
     let w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
-    return mix(c0, c1, clamp(0.5 + u + 0.07 * w, 0.0, 1.0));
+    return ramp4(clamp(0.5 + u + 0.07 * w, 0.0, 1.0), k0, k1, k2, k3);
 }
 
 // Couverture d'une pastille (disque) adoucie sur ~1.5 px, pour la barre de titre du mode 14.
@@ -1248,8 +1257,9 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // Mode 1 — couleur pleine.
         rgb = layer.color.rgb;
     } else if layer.mode > 4.5 && layer.mode < 5.5 {
-        // Mode 5 -- gradient lineaire : color (c0) -> src.rgb (c1) le long de
-        // la direction fx.xy (sin, -cos de l'angle). Parite avec le HLSL/MSL.
+        // Mode 5 -- gradient lineaire jusqu'a 4 stops : noeuds `rgb + position` dans color,
+        // src_prev, dst_prev, src (cf. `ramp4`), le long de la direction fx.xy (sin, -cos de
+        // l'angle). Parite avec le HLSL/MSL.
         // `denom` : HLSL et MSL normalisent coin-a-coin (|dx|+|dy|) pour couvrir toute la
         // diagonale. Il manquait ici, donc le meme degrade ne rendait pas pareil sur Linux.
         // Fond anime : fx.z = temps programme (s, replie sur 120), fx.w = mouvement (0 immobile,
@@ -1271,10 +1281,10 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
             gp = i.local / layer.quad_px;
         }
         let t = clamp(0.5 + dot(gp - vec2<f32>(0.5), dir) / denom, 0.0, 1.0);
-        rgb = mix(layer.color.rgb, layer.src.rgb, t);
+        rgb = ramp4(t, layer.color, layer.src_prev, layer.dst_prev, layer.src);
         if layer.fx.w > 1.5 {
-            rgb = gradient_motion(gp, dir, denom, layer.color.rgb, layer.src.rgb, layer.fx.z,
-                                  layer.fx.w, layer.mb.x);
+            rgb = gradient_motion(gp, dir, denom, layer.color, layer.src_prev, layer.dst_prev,
+                                  layer.src, layer.fx.z, layer.fx.w, layer.mb.x);
         }
     } else if layer.mode > 10.5 && layer.mode < 11.5 {
         // Mode 11 : texte. texY est l'atlas R8 (couverture alpha au canal .r,

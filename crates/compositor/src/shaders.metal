@@ -420,10 +420,20 @@ inline float value_noise(float2 q)
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// Rampe du mode 5 à quatre nœuds. Miroir de `ramp4` côté HLSL (commentaires complets là-bas).
+inline float3 ramp4(float t, float4 k0, float4 k1, float4 k2, float4 k3)
+{
+    float3 c = k0.rgb;
+    c = mix(c, k1.rgb, clamp((t - k0.w) / max(k1.w - k0.w, 1e-5), 0.0, 1.0));
+    c = mix(c, k2.rgb, clamp((t - k1.w) / max(k2.w - k1.w, 1e-5), 0.0, 1.0));
+    c = mix(c, k3.rgb, clamp((t - k2.w) / max(k3.w - k2.w, 1e-5), 0.0, 1.0));
+    return c;
+}
+
 // Mouvements 2 (aurore) et 3 (vagues) du mode 5. Miroir ligne pour ligne de
 // `gradient_motion` côté HLSL (commentaires complets là-bas).
-inline float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, float3 c1,
-                              float time, float motion, float aspect)
+inline float3 gradient_motion(float2 gp, float2 dir, float denom, float4 k0, float4 k1,
+                              float4 k2, float4 k3, float time, float motion, float aspect)
 {
     const float TAU = 6.2831853;
     float u = dot(gp - 0.5, dir) / denom; // position le long de l'axe, -0.5..0.5
@@ -433,19 +443,19 @@ inline float3 gradient_motion(float2 gp, float2 dir, float denom, float3 c0, flo
         float2 p = float2((gp.x - 0.5) * aspect, gp.y - 0.5);
         float ph = TAU * time / 120.0;
         float n = value_noise(p * 2.5 + 1.5 * float2(cos(ph), sin(ph)));
-        float3 g = mix(c0, c1, clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0));
+        float3 g = ramp4(clamp(0.5 + u + 0.3 * (n - 0.5), 0.0, 1.0), k0, k1, k2, k3);
         float2 b0 = float2(0.35 * aspect * sin(TAU * time / 20.0), 0.25 * sin(TAU * time / 30.0 + 1.0));
         float2 b1 = float2(0.30 * aspect * sin(TAU * time / 24.0 + 2.0), 0.22 * cos(TAU * time / 40.0));
         float2 b2 = float2(0.25 * aspect * cos(TAU * time / 30.0 + 4.0), 0.28 * sin(TAU * time / 24.0 + 3.0));
-        g = mix(g, c1, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
-        g = mix(g, c0, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
-        g = mix(g, c1, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
+        g = mix(g, k3.rgb, 0.45 * exp(-dot(p - b0, p - b0) / 0.08));
+        g = mix(g, k0.rgb, 0.45 * exp(-dot(p - b1, p - b1) / 0.06));
+        g = mix(g, k3.rgb, 0.35 * exp(-dot(p - b2, p - b2) / 0.05));
         return g;
     }
     // Vagues : trois bandes sinus perpendiculaires à l'axe (12 s), ondulées (20 s).
     float v = dot(gp - 0.5, float2(-dir.y, dir.x)) / denom;
     float w = sin(TAU * (3.0 * u + 0.04 * sin(TAU * (1.5 * v + time / 20.0)) - time / 12.0));
-    return mix(c0, c1, clamp(0.5 + u + 0.07 * w, 0.0, 1.0));
+    return ramp4(clamp(0.5 + u + 0.07 * w, 0.0, 1.0), k0, k1, k2, k3);
 }
 
 // ============ Curseur MODÉLISÉ (mode 15) ============
@@ -1566,8 +1576,8 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         return float4(texImg.sample(samp, i.uv).rgb * a, a); // prémultiplié
     }
 
-    // mode 5 : gradient linéaire 2 stops (parité web wallpaper dégradé). color = stop0,
-    // src.xyz = stop1, fx.xy = direction unitaire (espace sortie, y vers le bas). t est
+    // mode 5 : gradient linéaire jusqu'à 4 stops (parité web wallpaper dégradé). Nœuds
+    // `rgb + position` dans color, src_prev, dst_prev, src (cf. `ramp4`), fx.xy = direction unitaire (espace sortie, y vers le bas). t est
     // normalisé coin-à-coin (dénominateur = |dx|+|dy|) pour couvrir toute la diagonale.
     //
     // Le port avait remplacé tout ce calcul par une couleur plate : un dégradé s'affichait
@@ -1595,11 +1605,11 @@ fragment float4 ps_main(VSOut i [[stage_in]],
             ? (i.local / layer.quad_px)
             : i.pout;
         float t = clamp(0.5 + dot(gp - 0.5, dir) / denom, 0.0, 1.0);
-        float3 g = mix(layer.color.rgb, layer.src.xyz, t);
+        float3 g = ramp4(t, layer.color, layer.src_prev, layer.dst_prev, layer.src);
         if (layer.fx.w > 1.5)
         {
-            g = gradient_motion(gp, dir, denom, layer.color.rgb, layer.src.xyz, layer.fx.z,
-                                layer.fx.w, layer.mb.x);
+            g = gradient_motion(gp, dir, denom, layer.color, layer.src_prev, layer.dst_prev,
+                                layer.src, layer.fx.z, layer.fx.w, layer.mb.x);
         }
         float a = quad_round_alpha(i.local, layer.quad_px, layer.radius_px);
         return float4(g * a, a); // prémultiplié

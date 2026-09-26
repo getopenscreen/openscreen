@@ -1561,6 +1561,66 @@ pub fn gradient_motion_slots(
     )
 }
 
+/// Un dégradé linéaire en calque du mode 5, stops compris : quatre nœuds `[r, g, b, position]`
+/// dans `color`, `src_prev`, `dst_prev` puis `src`, dans l'ordre du dégradé. Le shader va de nœud
+/// en nœud comme CSS, donc un stop du milieu est peint là où la vignette le montre. Avant, seuls
+/// le premier et le dernier stop arrivaient au shader, et le milieu d'un dégradé à trois stops
+/// (celui de l'ancien éditeur) disparaissait du rendu.
+///
+/// Positions : celles de l'app quand il y en a une par stop, sinon réparties à égale distance
+/// (scène plus ancienne). Bornées à 0..1 et jamais en recul sur la précédente, comme en CSS. Un
+/// stop illisible est sauté ; sans aucun stop lisible, `fallback` remplit tout. Moins de quatre
+/// stops : le dernier se répète, en segments de longueur nulle qui ne peignent rien. Deux stops
+/// à 0 et 1 rendent donc exactement l'ancien `lerp(c0, c1, t)`.
+pub fn gradient_layer(stops: &[String], offsets: &[f32], fallback: [f32; 4]) -> LayerCB {
+    let mut knots: Vec<[f32; 4]> = Vec::with_capacity(stops.len().max(4));
+    let mut floor = 0.0f32;
+    for (i, stop) in stops.iter().enumerate() {
+        let Some(c) = parse_hex(stop) else { continue };
+        let raw = if offsets.len() == stops.len() {
+            offsets[i]
+        } else if stops.len() > 1 {
+            i as f32 / (stops.len() - 1) as f32
+        } else {
+            0.0
+        };
+        let at = if raw.is_finite() { raw.clamp(0.0, 1.0) } else { floor }.max(floor);
+        floor = at;
+        knots.push([c[0], c[1], c[2], at]);
+    }
+    if knots.is_empty() {
+        knots.push([fallback[0], fallback[1], fallback[2], 0.0]);
+    }
+    // ponytail: quatre nœuds, les emplacements libres du mode 5. Au-delà (les presets v1.5 en
+    // avaient jusqu'à sept), on retire tour à tour le stop intérieur que ses voisins reproduisent
+    // le mieux. Une rampe en texture lèverait la limite si un dégradé plus riche devenait courant.
+    while knots.len() > 4 {
+        let miss = |i: usize| {
+            let (p, k, n) = (knots[i - 1], knots[i], knots[i + 1]);
+            let span = n[3] - p[3];
+            if span <= 1e-6 {
+                return 0.0; // stop de largeur nulle : il ne peint rien
+            }
+            let f = (k[3] - p[3]) / span;
+            (0..3).map(|c| (k[c] - (p[c] + (n[c] - p[c]) * f)).abs()).sum::<f32>()
+        };
+        let drop = (1..knots.len() - 1).min_by(|&a, &b| miss(a).total_cmp(&miss(b))).unwrap_or(1);
+        knots.remove(drop);
+    }
+    while knots.len() < 4 {
+        let last = knots[knots.len() - 1];
+        knots.push(last);
+    }
+    LayerCB {
+        mode: 5.0,
+        color: knots[0],
+        src_prev: knots[1],
+        dst_prev: knots[2],
+        src: knots[3],
+        ..Default::default()
+    }
+}
+
 /// True when this clip really has a camera to draw.
 ///
 /// TWO ways the app says "no camera", and both must be caught here, because the
@@ -6175,6 +6235,67 @@ mod tests {
         for p in [20.0, 24.0, 30.0, 40.0, 12.0, 120.0] {
             assert_eq!(GRADIENT_MOTION_PERIOD_S % p, 0.0, "période {p}");
         }
+    }
+
+    const BLACK_TEST: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
+    fn knots(cb: &LayerCB) -> [[f32; 4]; 4] {
+        [cb.color, cb.src_prev, cb.dst_prev, cb.src]
+    }
+
+    #[test]
+    fn gradient_layer_keeps_the_middle_stop_where_css_puts_it() {
+        // Le dégradé de l'ancien éditeur : trois stops rgb(), le milieu à 50 %.
+        let stops = ["rgb(255, 0, 0)", "rgb(0, 255, 0)", "rgb(0, 0, 255)"].map(String::from);
+        let cb = gradient_layer(&stops, &[0.0, 0.5, 1.0], BLACK_TEST);
+        assert_eq!(cb.mode, 5.0);
+        let k = knots(&cb);
+        assert_eq!(k[0], [1.0, 0.0, 0.0, 0.0]);
+        assert_eq!(k[1], [0.0, 1.0, 0.0, 0.5]);
+        assert_eq!(k[2], [0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(k[3], [0.0, 0.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn gradient_layer_two_stops_render_the_old_ramp() {
+        // Scène d'avant les offsets : les stops se répartissent à 0 et 1, le reste répète la fin.
+        let cb = gradient_layer(&["#000000".into(), "#ffffff".into()], &[], BLACK_TEST);
+        let k = knots(&cb);
+        assert_eq!(k[0], [0.0, 0.0, 0.0, 0.0]);
+        for knot in &k[1..] {
+            assert_eq!(*knot, [1.0, 1.0, 1.0, 1.0]);
+        }
+    }
+
+    #[test]
+    fn gradient_layer_bounds_and_orders_offsets_and_skips_bad_stops() {
+        let stops = ["#ff0000", "nope", "#00ff00", "#0000ff"].map(String::from);
+        let cb = gradient_layer(&stops, &[-0.2, 0.3, 0.6, 0.4], BLACK_TEST);
+        let at: Vec<f32> = knots(&cb).iter().map(|k| k[3]).collect();
+        // -0.2 borné à 0 ; 0.4 derrière 0.6 ramené à 0.6 ; "nope" sauté.
+        assert_eq!(at, vec![0.0, 0.6, 0.6, 0.6]);
+        assert_eq!(knots(&cb)[1][1], 1.0, "le vert suit le rouge, le stop illisible est sauté");
+        let empty = gradient_layer(&[], &[], [0.2, 0.3, 0.4, 1.0]);
+        assert!(knots(&empty).iter().all(|k| *k == [0.2, 0.3, 0.4, 0.0]));
+    }
+
+    #[test]
+    fn gradient_layer_folds_a_long_preset_into_four_knots() {
+        // Un preset v1.5 à sept stops : les extrémités restent, les positions restent en ordre,
+        // et le stop retiré est celui que ses voisins reproduisaient déjà.
+        let stops = ["#fcc5e4", "#fda34b", "#ff7882", "#c8699e", "#7046aa", "#0c1db8", "#020f75"]
+            .map(String::from);
+        let offsets = [0.0, 0.15, 0.35, 0.52, 0.71, 0.87, 1.0];
+        let k = knots(&gradient_layer(&stops, &offsets, BLACK_TEST));
+        assert_eq!(k[0][3], 0.0);
+        assert_eq!(k[3][3], 1.0);
+        assert_eq!(&k[0][..3], &parse_hex("#fcc5e4").unwrap()[..3]);
+        assert_eq!(&k[3][..3], &parse_hex("#020f75").unwrap()[..3]);
+        assert!(k.windows(2).all(|w| w[0][3] <= w[1][3]));
+        // Un stop parfaitement sur la droite de ses voisins part en premier.
+        let straight = ["#000000", "#404040", "#808080", "#ff0000", "#ffffff"].map(String::from);
+        let k = knots(&gradient_layer(&straight, &[0.0, 0.25, 0.5, 0.75, 1.0], BLACK_TEST));
+        assert_eq!(k.iter().map(|k| k[3]).collect::<Vec<_>>(), vec![0.0, 0.5, 0.75, 1.0]);
     }
 
     /// Le contrat cross-backend, verrouillé octet par octet. Un shader qui lit un champ

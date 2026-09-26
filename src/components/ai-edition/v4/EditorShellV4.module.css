@@ -1920,8 +1920,9 @@
 		border-color var(--motion-fast) var(--ease);
 }
 .tlClipEdit:hover {
-	border-color: var(--accent-border);
-	background: var(--accent-soft);
+	/* The clip is accent-filled: an accent-tinted hover vanishes into it. */
+	border-color: #fff;
+	background: #fff;
 	color: var(--accent);
 }
 .tlClipDuration {

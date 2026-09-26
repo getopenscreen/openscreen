@@ -253,8 +253,7 @@
 			"minimal": "Minimal",
 			"light": "Clair"
 		},
-		"customize": "Personnaliser",
-		"turnOn": "Afficher les sous-titres"
+		"customize": "Personnaliser"
 	},
 	"panes": {
 		"help": "Aide"

@@ -253,8 +253,7 @@
 			"minimal": "Minimal",
 			"light": "Açık"
 		},
-		"customize": "Özelleştir",
-		"turnOn": "Altyazıları göster"
+		"customize": "Özelleştir"
 	},
 	"panes": {
 		"help": "Yardım"

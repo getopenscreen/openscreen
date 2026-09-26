@@ -96,7 +96,6 @@ import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import {
 	type AssetTranscriptionView,
 	type TranscriptGateReason,
-	transcriptHasSpeech,
 } from "@/lib/ai-edition/transcription/status";
 import { getAssetPath } from "@/lib/assetPath";
 import { resolveWebcamLayoutPreset, supportsWebcamReactiveZoom } from "@/lib/compositeLayout";
@@ -767,51 +766,17 @@ function TranscriptLaneSwitch({
 }
 
 /**
- * Caption settings, reached from the transcript tab (issue #560).
- *
- * The pane is reused VERBATIM rather than rebuilt into a popover body: it is ~600
- * lines of settings that already work, and "make it a popover" is a question about
- * where it is mounted, not about what it contains. Rebuilding it would have been the
- * one reliable way to arrive at a popover that is not at parity with the tab it
- * replaces.
- *
- * Safe inside a Popover specifically because nothing in it takes focus away — no file
- * input, no OS dialog. That is the trap `useWallpaperFileInput` documents above, and
- * it is worth re-checking if a picker is ever added to captions.
+ * Caption settings, reached from the transcript tab (issue #560). Opening them swaps
+ * the transcript pane for `CaptionsPane` in the same inspector card, so the settings
+ * take the transcript's place and size instead of floating beside it.
  */
-function CaptionSettingsButton({ onShowCaptions }: { onShowCaptions?: () => void }) {
+function CaptionSettingsButton({ onOpen }: { onOpen: () => void }) {
 	const ts = useScopedT("settings");
-	const [open, setOpen] = useState(false);
 	return (
-		<>
-			{/* Captions are off by default: once there is speech to caption, offer them where
-			    the transcript is, rather than leaving them behind the settings popover. */}
-			{onShowCaptions ? (
-				<button type="button" className={styles.paneHeadBtn} onClick={onShowCaptions}>
-					{ts("captions.turnOn")}
-				</button>
-			) : null}
-			<Popover open={open} onOpenChange={setOpen}>
-				<PopoverTrigger asChild>
-					<button type="button" className={styles.paneHeadBtn} aria-expanded={open}>
-						<CaptionsIcon size={14} />
-						{ts("facets.captions")}
-					</button>
-				</PopoverTrigger>
-				<PopoverContent
-					align="end"
-					side="bottom"
-					sideOffset={8}
-					collisionPadding={16}
-					animated={false}
-					className="w-auto border-0 bg-transparent p-0 shadow-none z-50"
-				>
-					<div className={styles.captionsPopover}>
-						<CaptionsPane onClose={() => setOpen(false)} />
-					</div>
-				</PopoverContent>
-			</Popover>
-		</>
+		<button type="button" className={styles.paneHeadBtn} onClick={onOpen}>
+			<CaptionsIcon size={14} />
+			{ts("facets.captions")}
+		</button>
 	);
 }
 
@@ -936,6 +901,7 @@ export function TranscriptPane({
 	// engine, nothing attempted) leaves the button worth pressing.
 	const silentMedia = blocked?.reason === "no-audio";
 	const transcriptionLabel = useTranscriptionLabel();
+	const [captionsOpen, setCaptionsOpen] = useState(false);
 	const paneBusyLabel = transcriptionBusyLabel(
 		busyView ??
 			(isTranscribing ? { assetId: "", status: "running", phase: "loading-model" } : undefined),
@@ -949,13 +915,15 @@ export function TranscriptPane({
 		insertionsEnabled() ? "transcript.editingHintDev" : "transcript.editingHint",
 	);
 
+	if (captionsOpen) return <CaptionsPane onClose={() => setCaptionsOpen(false)} />;
+
 	if (placements.length === 0 || !hasAnyTranscript) {
 		return (
 			<Pane
 				title={ts("transcript.title")}
 				icon={<FileText size={16} />}
 				helpText={helpText}
-				actions={<CaptionSettingsButton />}
+				actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
 			>
 				{laneSwitch}
 				<div
@@ -1001,22 +969,12 @@ export function TranscriptPane({
 		);
 	}
 
-	// Speech, not just segments: a silence-only transcript has nothing to caption.
-	const hasSpeech = sections.some((section) => transcriptHasSpeech(section.transcript ?? null));
 	return (
 		<Pane
 			title={ts("transcript.title")}
 			icon={<FileText size={16} />}
 			helpText={helpText}
-			actions={
-				<CaptionSettingsButton
-					onShowCaptions={
-						hasSpeech && !captionSettings.enabled
-							? () => void setCaptionSettings({ enabled: true })
-							: undefined
-					}
-				/>
-			}
+			actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
 		>
 			{laneSwitch}
 			{/* The gestures are invisible until tried: nothing on a plain word stream says

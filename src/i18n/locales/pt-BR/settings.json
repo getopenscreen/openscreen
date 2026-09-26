@@ -253,8 +253,7 @@
 			"minimal": "Minimalista",
 			"light": "Claro"
 		},
-		"customize": "Personalizar",
-		"turnOn": "Mostrar legendas"
+		"customize": "Personalizar"
 	},
 	"panes": {
 		"help": "Ajuda"

@@ -253,8 +253,7 @@
 			"minimal": "Minimal",
 			"light": "Light"
 		},
-		"customize": "Customize",
-		"turnOn": "Show captions"
+		"customize": "Customize"
 	},
 	"panes": {
 		"help": "Help"

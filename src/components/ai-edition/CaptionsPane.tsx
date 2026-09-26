@@ -198,7 +198,6 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 				className={styles.paneHead}
 				style={{
 					position: "relative",
-					paddingRight: "var(--sp-4)",
 					flexShrink: 0,
 				}}
 			>

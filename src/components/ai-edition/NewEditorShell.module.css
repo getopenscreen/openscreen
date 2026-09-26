@@ -1335,20 +1335,6 @@ textarea.control {
 	box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand), transparent 70%);
 }
 
-.captionsPopover {
-	width: 310px;
-	display: flex;
-	flex-direction: column;
-	border: 1px solid var(--border);
-	border-radius: 14px;
-	background: var(--surface-1);
-	box-shadow: var(--elev-pop);
-	backdrop-filter: blur(18px);
-	-webkit-backdrop-filter: blur(18px);
-	max-height: min(var(--radix-popover-content-available-height, 80vh), 560px);
-	overflow: hidden;
-}
-
 /* ─── toggle (switch) ──────────────────────────────────────────── */
 .toggle {
 	width: 40px;

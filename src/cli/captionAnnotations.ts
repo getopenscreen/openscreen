@@ -28,9 +28,21 @@ const LANDSCAPE = 16 / 9;
 const CAPTION_HEIGHT = 12;
 const CAPTION_COLUMN = captionSafeColumn(LANDSCAPE);
 
+// The inset measures to the PLATE's bottom edge, as the editor's does, not to the region's.
+// An annotation centres its text block (and the plate that hugs it) in its region, so the
+// region is placed to put a one-line plate's bottom there. The region stays 12% tall for
+// headroom: a line that wraps grows its plate both ways instead of being clipped.
+const ANNOTATION_REFERENCE_HEIGHT = 1080;
+/** One line plus the plate's vertical padding (`text_plate.rs::PAD_Y_EM` twice), in em.
+ *  1.3 em is DirectWrite's line box for bold Inter: a Windows export measured the plate at
+ *  1.51 em. Other rasterizers differ slightly; cosmic-text (Linux) lays out 1.4 em. */
+const PLATE_HEIGHT_EM = 1.3 + 2 * 0.1;
+export const CAPTION_PLATE_HEIGHT =
+	((DEFAULT_CAPTION_SETTINGS.fontSize * PLATE_HEIGHT_EM) / ANNOTATION_REFERENCE_HEIGHT) * 100;
+
 const CAPTION_POSITION = {
 	x: CAPTION_COLUMN.x,
-	y: 100 - CAPTION_HEIGHT - defaultCaptionInsetY(LANDSCAPE),
+	y: 100 - defaultCaptionInsetY(LANDSCAPE) - (CAPTION_HEIGHT + CAPTION_PLATE_HEIGHT) / 2,
 };
 
 const CAPTION_SIZE = { width: CAPTION_COLUMN.width, height: CAPTION_HEIGHT };

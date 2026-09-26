@@ -44,9 +44,11 @@ import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { useSequentialTimelineOps } from "@/lib/ai-edition/store/useSequentialTimelineOps";
 import { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { isGeneratedAssetId } from "@/lib/ai-edition/timeline/clip-parts";
+import { mergeCloseCuts } from "@/lib/ai-edition/timeline/cut-breath";
 import { newRegionDurationSec } from "@/lib/ai-edition/timeline/newRegionDuration";
 import {
 	dropTrimPillsByIds,
+	trimAppliesToClip,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
@@ -729,15 +731,24 @@ export function NewEditorShell() {
 					toast.error(te("errors.trimNoFilm"));
 					return;
 				}
-				const rows = ranges.map((range) => ({
-					id: createId("trim"),
-					assetId: range.assetId,
-					clipId: range.clipId,
-					startSec: range.sourceStartSec,
-					endSec: range.sourceEndSec,
-					reason,
-					origin: "user" as const,
-				}));
+				const rows = ranges.map((range) => {
+					// No one-frame flash between this cut and one already on the same clip.
+					const merged = mergeCloseCuts(
+						{ startSec: range.sourceStartSec, endSec: range.sourceEndSec },
+						doc.timeline.trimRanges.filter((t) =>
+							trimAppliesToClip(t, { id: range.clipId, assetId: range.assetId }),
+						),
+						doc.assets.find((a) => a.id === range.assetId)?.video?.fps,
+					);
+					return {
+						id: createId("trim"),
+						assetId: range.assetId,
+						clipId: range.clipId,
+						...merged,
+						reason,
+						origin: "user" as const,
+					};
+				});
 				await saveDocument(
 					{
 						...doc,

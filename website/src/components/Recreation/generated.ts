@@ -608,21 +608,21 @@ export const CURSORS = {
 		{
 			id: "default",
 			name: "Default",
-			hotspotX: 0.119,
-			hotspotY: 0.0874,
+			hotspotX: 0.1205,
+			hotspotY: 0.0881,
 			src: "/img/cursors/00-arrow.png",
 		},
 	],
 	pointer: {
 		name: "Default",
-		hotspotX: 0.3893,
+		hotspotX: 0.3874,
 		hotspotY: 0.0032,
 		src: "/img/cursors/mac-pointer.png",
 	},
 	text: {
 		name: "Default",
-		hotspotX: 0.4375,
-		hotspotY: 0.5333,
+		hotspotX: 0.4355,
+		hotspotY: 0.5369,
 		src: "/img/cursors/mac-text.png",
 	},
 } as const;

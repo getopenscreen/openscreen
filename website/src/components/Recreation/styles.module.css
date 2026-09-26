@@ -207,15 +207,15 @@
 	--shot-bounce: 1;
 	/* The default arrow's hotspot, CURSORS.themes[0] as a percentage: the
 	   recorded pointer wears no other pack. */
-	--shot-hx: 11.9;
-	--shot-hy: 8.74;
+	--shot-hx: 12.05;
+	--shot-hy: 8.81;
 	--page-y: -8;
 	--ui-x: 20;
 	--ui-y: 45;
 	--ui-bounce: 1;
 	--ui-on: 0;
-	--ui-hx: 11.9;
-	--ui-hy: 8.74;
+	--ui-hx: 12.05;
+	--ui-hy: 8.81;
 	--zooms-placed: 3;
 	--speed-placed: 1;
 	--panel: 1;

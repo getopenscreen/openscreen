@@ -48,7 +48,6 @@ import {
 	useState,
 } from "react";
 import { toast } from "sonner";
-import defaultCursorPreviewUrl from "@/assets/cursors/Cursor=Default.svg";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import {
 	WALLPAPER_MOTIONS,
@@ -112,6 +111,7 @@ import {
 	CURSOR_KINDS,
 	CURSOR_THEMES,
 	type CursorKind,
+	DEFAULT_CURSOR_SPRITES,
 	DEFAULT_CURSOR_THEME_ID,
 	resolveCursorSprites,
 	themePickerPreviewAssets,
@@ -3653,23 +3653,18 @@ export function CursorPane() {
 	// handlers below push diffs live. Sizes are sent as direct scales (1 = fixture default).
 	// Synchro initiale : cf. NativeCompositorOverlay (`pushAllNativeParams`).
 
-	// Built-in "Default" plus each bundled theme, previewed by its main arrow only.
+	// Built-in "Default" plus each bundled theme, previewed by its main arrow only: the sprite the
+	// compositor draws, centred on its art. The default's SVG drew its arrow in the lower-right
+	// corner of an empty square, off the centre of its cell.
 	const cursorThemeOptions = useMemo(
-		() => [
-			{
-				id: DEFAULT_CURSOR_THEME_ID,
-				name: ts("cursor.themeDefault"),
-				previewUrl: defaultCursorPreviewUrl,
-			},
-			...CURSOR_THEMES.map((theme) => {
-				const { arrow } = themePickerPreviewAssets(theme);
-				return {
-					id: theme.id,
-					name: theme.name,
-					previewUrl: arrow ? safeAssetUrl(arrow) : defaultCursorPreviewUrl,
-				};
-			}),
-		],
+		() =>
+			[null, ...CURSOR_THEMES].map((theme) => ({
+				id: theme?.id ?? DEFAULT_CURSOR_THEME_ID,
+				name: theme?.name ?? ts("cursor.themeDefault"),
+				previewUrl: safeAssetUrl(
+					themePickerPreviewAssets(theme).arrow || DEFAULT_CURSOR_SPRITES.arrow.assetPath,
+				),
+			})),
 		[ts],
 	);
 
@@ -3764,10 +3759,8 @@ export function CursorPane() {
 									<img
 										src={option.previewUrl}
 										alt=""
-										width={20}
-										height={20}
+										className={styles.cursorSprite}
 										draggable={false}
-										style={{ objectFit: "contain", pointerEvents: "none" }}
 									/>
 								</button>
 							);
@@ -3816,10 +3809,8 @@ export function CursorPane() {
 									<img
 										src={safeAssetUrl(cursorSprites.arrow.assetPath)}
 										alt=""
-										width={20}
-										height={20}
+										className={styles.cursorSprite}
 										draggable={false}
-										style={{ objectFit: "contain", pointerEvents: "none" }}
 									/>
 								</span>
 								{recordedKinds.map(({ kind, type }) => {
@@ -3847,10 +3838,8 @@ export function CursorPane() {
 											<img
 												src={safeAssetUrl(cursorSprites[type].assetPath)}
 												alt=""
-												width={20}
-												height={20}
+												className={styles.cursorSprite}
 												draggable={false}
-												style={{ objectFit: "contain", pointerEvents: "none" }}
 											/>
 										</button>
 									);

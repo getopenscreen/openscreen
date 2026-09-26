@@ -1446,6 +1446,15 @@ textarea.control {
 	background: var(--accent-soft);
 	color: var(--fg);
 }
+/* A cursor pictured in its cell (style and type pickers), sized by the cell rather than in
+   pixels: the art keeps the same share of it at any pane width. */
+.cursorSprite {
+	width: 60%;
+	height: auto;
+	aspect-ratio: 1;
+	object-fit: contain;
+	pointer-events: none;
+}
 /* The cursor types (CursorPane): a dimmed type is drawn as the arrow. The arrow's own cell is not
    a control, it is what the others become. */
 .cursorCellOff img { opacity: 0.35; transition: opacity 150ms ease; }

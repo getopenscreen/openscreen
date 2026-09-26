@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CURSOR_KIND_IDS } from "../cursor/cursorThemes";
+import { DEFAULT_PROJECT_APPEARANCE } from "../projectDefaults";
 import {
 	parseStylePresetAppearance,
 	parseStylePresetFile,
@@ -176,13 +177,15 @@ describe("parseStylePresetAppearance", () => {
 		expect(() => read({ asArrow: [1] })).toThrow(/cursor\.asArrow/);
 	});
 
-	// Before the kinds, one switch drew every cursor as the arrow; before that, nothing did.
+	// Before the kinds, one switch drew every cursor as the arrow. Off was its default, so a preset
+	// with it off chose nothing and gets today's default: the arrow and the hand.
 	it("reads a preset saved before the cursor kinds from its always-arrow switch", () => {
 		const { asArrow: _asArrow, ...older } = appearance().cursor;
 		const read = (cursor: Record<string, unknown>) =>
 			parseStylePresetAppearance({ ...appearance(), cursor }).cursor.asArrow;
-		expect(read(older)).toEqual([]);
-		expect(read({ ...older, alwaysArrow: false })).toEqual([]);
+		const byDefault = DEFAULT_PROJECT_APPEARANCE.cursor.asArrow;
+		expect(read(older)).toEqual(byDefault);
+		expect(read({ ...older, alwaysArrow: false })).toEqual(byDefault);
 		expect(read({ ...older, alwaysArrow: true })).toEqual(CURSOR_KIND_IDS);
 		expect(() => read({ ...older, alwaysArrow: "yes" })).toThrow(/cursor\.alwaysArrow/);
 	});

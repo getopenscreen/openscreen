@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_PROJECT_APPEARANCE } from "../projectDefaults";
 import {
 	CURSOR_KIND_IDS,
 	CURSOR_KINDS,
@@ -112,20 +113,31 @@ describe("cursor kinds", () => {
 });
 
 describe("readCursorAsArrow", () => {
+	const fallback = ["busy"] as const;
+
 	it("keeps the known kinds, once each, in the order of CURSOR_KINDS", () => {
-		expect(readCursorAsArrow(["text", "sparkles", "pointer", "text", 7])).toEqual([
-			"pointer",
-			"text",
-		]);
-		expect(readCursorAsArrow("text")).toEqual([]);
+		expect(
+			readCursorAsArrow(["text", "sparkles", "pointer", "text", 7], undefined, fallback),
+		).toEqual(["pointer", "text"]);
+		expect(readCursorAsArrow([], undefined, fallback)).toEqual([]);
+		expect(readCursorAsArrow("text", undefined, fallback)).toEqual(["busy"]);
 	});
 
-	// The single switch the kinds replaced: on meant every one of them, off or absent none.
+	// The single switch the kinds replaced: on meant every one of them. Off was its default, so it
+	// says no more than an absent list does.
 	it("reads the old always-arrow switch when there is no list", () => {
-		expect(readCursorAsArrow(undefined, true)).toEqual(CURSOR_KIND_IDS);
-		expect(readCursorAsArrow(undefined, false)).toEqual([]);
-		expect(readCursorAsArrow(undefined)).toEqual([]);
-		expect(readCursorAsArrow(["busy"], true)).toEqual(["busy"]);
+		expect(readCursorAsArrow(undefined, true, fallback)).toEqual(CURSOR_KIND_IDS);
+		expect(readCursorAsArrow(undefined, false, fallback)).toEqual(["busy"]);
+		expect(readCursorAsArrow(undefined, undefined, fallback)).toEqual(["busy"]);
+		expect(readCursorAsArrow(["text"], true, fallback)).toEqual(["text"]);
+	});
+
+	// Out of the box a project shows the arrow and the hand, and nothing else: a kind added to
+	// CURSOR_KINDS has to join the default too, or new projects would start drawing it.
+	it("defaults to every kind but the hand", () => {
+		expect(DEFAULT_PROJECT_APPEARANCE.cursor.asArrow).toEqual(
+			CURSOR_KIND_IDS.filter((kind) => kind !== "pointer"),
+		);
 	});
 });
 

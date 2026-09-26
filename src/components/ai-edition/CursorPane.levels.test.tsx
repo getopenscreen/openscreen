@@ -118,8 +118,22 @@ describe("CursorPane cursor types", () => {
 		expect(within(group).getByRole("img", { name: "Arrow" }).tagName).toBe("SPAN");
 	});
 
+	// Out of the box only the two cursors a viewer follows keep their own art.
+	it("lights only the arrow and the hand by default", async () => {
+		renderWithRecording({}, ["arrow", "pointer", "text", "resize-ew"]);
+		const group = await screen.findByRole("group", { name: "Cursor types" });
+		const buttons = [...group.querySelectorAll("button")];
+		expect(
+			buttons.map((b) => [b.getAttribute("aria-label"), b.getAttribute("aria-pressed")]),
+		).toEqual([
+			["Hand", "true"],
+			["Text", "false"],
+			["Resize", "false"],
+		]);
+	});
+
 	it("draws a type as the arrow on a click, and as recorded on the next", async () => {
-		renderWithRecording({}, ["arrow", "resize-ns", "pointer"]);
+		renderWithRecording({ cursorAsArrow: [] }, ["arrow", "resize-ns", "pointer"]);
 		const resize = await screen.findByRole("button", { name: "Resize" });
 		fireEvent.click(resize);
 		const asArrow = () => useProjectStore.getState().document?.legacyEditor?.cursorAsArrow;

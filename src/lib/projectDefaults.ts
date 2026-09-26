@@ -243,8 +243,9 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.
 		clickBounce: 1,
 		model3d: false,
-		// Every cursor as recorded.
-		asArrow: [],
+		// The arrow and the hand, the two cursors a viewer follows; every other one is drawn as the
+		// arrow until picked (`CURSOR_KINDS`). A test holds this to every kind but the hand.
+		asArrow: ["text", "grab", "resize", "busy", "crosshair", "not-allowed", "help", "up-arrow"],
 		clickImpact: false,
 		autoHide: false,
 	},

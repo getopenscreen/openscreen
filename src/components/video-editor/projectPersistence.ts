@@ -509,8 +509,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		...(isFiniteNumber(editor.cursorClickBounce)
 			? { cursorClickBounce: editor.cursorClickBounce }
 			: {}),
-		...(editor.cursorAsArrow !== undefined
-			? { cursorAsArrow: readCursorAsArrow(editor.cursorAsArrow) }
+		...(Array.isArray(editor.cursorAsArrow)
+			? { cursorAsArrow: readCursorAsArrow(editor.cursorAsArrow, undefined, []) }
 			: {}),
 		...(typeof editor.cursorAlwaysArrow === "boolean"
 			? { cursorAlwaysArrow: editor.cursorAlwaysArrow }

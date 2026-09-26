@@ -229,7 +229,11 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		),
 		// Absent in every project saved before the setting existed: those keep the flat cursor.
 		model3d: bool(legacy?.cursorModel3d, DEFAULT_EDITOR_SETTINGS.cursor.model3d),
-		asArrow: readCursorAsArrow(legacy?.cursorAsArrow, legacy?.cursorAlwaysArrow),
+		asArrow: readCursorAsArrow(
+			legacy?.cursorAsArrow,
+			legacy?.cursorAlwaysArrow,
+			defaults.cursor.asArrow,
+		),
 		clickImpact: bool(legacy?.cursorClickImpact, DEFAULT_EDITOR_SETTINGS.cursor.clickImpact),
 		autoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
 	};

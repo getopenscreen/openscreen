@@ -185,7 +185,9 @@ describe("patchEditorSettings", () => {
 	});
 
 	it("stores the cursor kinds drawn as the arrow, and drops the switch they replace", () => {
-		expect(getEditorSettings(baseDoc).cursor.asArrow).toEqual([]);
+		expect(getEditorSettings(baseDoc).cursor.asArrow).toEqual(
+			DEFAULT_EDITOR_SETTINGS.cursor.asArrow,
+		);
 		const old = patchEditorSettings(baseDoc, {});
 		old.legacyEditor = { ...old.legacyEditor, cursorAlwaysArrow: true };
 		expect(getEditorSettings(old).cursor.asArrow).toHaveLength(9);

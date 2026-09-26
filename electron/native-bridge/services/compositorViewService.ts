@@ -176,7 +176,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 		if (scene.cursor && typeof scene.cursor.theme === "string") {
 			scene.cursor.cursorSprites = resolveCursorSpritePaths(
 				scene.cursor.theme,
-				readCursorAsArrow(scene.cursor.asArrow),
+				readCursorAsArrow(scene.cursor.asArrow, undefined, []),
 				scene.cursor.model3d === true,
 			);
 			changed = true;

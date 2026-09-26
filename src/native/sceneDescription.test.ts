@@ -1301,11 +1301,14 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(cursor.asArrow).toEqual(["pointer", "text"]);
 	});
 
-	// The single switch that came before the kinds: on drew every one of them as the arrow.
+	// The single switch that came before the kinds: on drew every one of them as the arrow. With
+	// neither, only the hand keeps its own sprite.
 	it("reads the old always-arrow switch as every cursor kind", () => {
 		const on = makeDoc({ legacyEditor: { cursorAlwaysArrow: true } });
 		expect(buildSceneDescription(on).cursor.asArrow).toEqual(CURSOR_KIND_IDS);
-		expect(buildSceneDescription(makeDoc({})).cursor.asArrow).toEqual([]);
+		expect(buildSceneDescription(makeDoc({})).cursor.asArrow).toEqual(
+			CURSOR_KIND_IDS.filter((kind) => kind !== "pointer"),
+		);
 	});
 
 	it("maps show / theme / shape / mirror through to layout+cursor", () => {

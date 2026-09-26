@@ -114,12 +114,17 @@ export const CURSOR_KIND_IDS = Object.keys(CURSOR_KINDS) as CursorKind[];
 
 /**
  * The kinds a project draws as the arrow, from what it stored: known ids only, once each, in
- * `CURSOR_KINDS` order. `alwaysArrow` is the single switch that came before the kinds could be
- * picked: on meant all of them.
+ * `CURSOR_KINDS` order, and `fallback` (the project default) when it stored no list.
+ * `alwaysArrow` is the single switch that came before the kinds could be picked: on meant all of
+ * them, off was its default and says nothing more than an absent list.
  */
-export function readCursorAsArrow(asArrow: unknown, alwaysArrow?: unknown): CursorKind[] {
-	if (asArrow === undefined) return alwaysArrow === true ? [...CURSOR_KIND_IDS] : [];
-	return Array.isArray(asArrow) ? CURSOR_KIND_IDS.filter((kind) => asArrow.includes(kind)) : [];
+export function readCursorAsArrow(
+	asArrow: unknown,
+	alwaysArrow: unknown,
+	fallback: readonly CursorKind[],
+): CursorKind[] {
+	if (Array.isArray(asArrow)) return CURSOR_KIND_IDS.filter((kind) => asArrow.includes(kind));
+	return alwaysArrow === true ? [...CURSOR_KIND_IDS] : [...fallback];
 }
 
 /**

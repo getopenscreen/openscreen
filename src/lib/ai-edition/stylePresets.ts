@@ -27,6 +27,7 @@ import {
 } from "../cursor/cursorThemes";
 import {
 	clampToBound,
+	DEFAULT_PROJECT_APPEARANCE,
 	type FrameTheme,
 	isFrameTheme,
 	type RecordingFrame,
@@ -205,19 +206,20 @@ function readFrame(source: Fields): { frame: RecordingFrame; frameTheme: FrameTh
 /**
  * The cursor kinds drawn as the arrow. A kind this build does not know (a newer build's) is
  * dropped, the way an unknown theme falls back to the default. A preset written before the kinds
- * could be picked carries the one switch there was, or nothing: every cursor as recorded.
+ * could be picked carries the one switch there was, or nothing: the project default then.
  */
 function readAsArrow(cursor: Fields): CursorKind[] {
 	const value = cursor.asArrow;
+	const fallback = DEFAULT_PROJECT_APPEARANCE.cursor.asArrow;
 	if (value === undefined) {
 		const always =
 			cursor.alwaysArrow === undefined ? false : readBoolean(cursor, "alwaysArrow", "cursor.");
-		return readCursorAsArrow(undefined, always);
+		return readCursorAsArrow(undefined, always, fallback);
 	}
 	if (!Array.isArray(value) || value.some((kind) => typeof kind !== "string")) {
 		throw new TypeError("Style preset cursor.asArrow must be a list of cursor kinds.");
 	}
-	return readCursorAsArrow(value);
+	return readCursorAsArrow(value, undefined, fallback);
 }
 
 const HEX_COLOR_RE = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -280,7 +282,7 @@ export function parseStylePresetWallpaper(value: unknown, key = "wallpaper"): st
  * otherwise sound (the editor does the same when it renders one). The others postdate the
  * first version-1 files, so a preset saved before one of them existed carries no choice about
  * it and gets the value that means "unchanged": `cursor.model3d` may be absent (the flat
- * cursor), `cursor.asArrow` too (every cursor as recorded, see `readAsArrow`),
+ * cursor), `cursor.asArrow` too (the project default, see `readAsArrow`),
  * `wallpaperMotion` too (a still wallpaper, which is exactly what "none" means),
  * `frame` as well (no frame, see `readFrame`), and `depthOfField` keeps the factory
  * value (on). A present but ill-typed value is still refused. Unknown extra keys are dropped.

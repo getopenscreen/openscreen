@@ -158,7 +158,7 @@ openscreen captions demo.openscreen --min-words 2 --max-words 7
 openscreen export demo.openscreen -o demo.mp4   # captions are burned into the video
 ```
 
-- `--min-words` 和 `--max-words` 设置每条字幕的词数。默认值分别为 2 和 7。
+- `--min-words` 和 `--max-words` 设置每条字幕的词数。取值范围均为 1 到 12，与编辑器一致。默认值分别为 2 和 7。
 - 再次运行会替换它之前添加的字幕。你自己添加的标注会保留。
 - 项目的屏幕视频必须带有音轨，例如由 `record --mic` 录制的视频。
 - 字幕会烧录进导出的视频中，不会输出字幕文件。请参阅[字幕](./captions.md)。

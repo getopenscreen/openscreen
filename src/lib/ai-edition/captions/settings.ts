@@ -12,6 +12,7 @@
 import { clamp } from "@/utils/math";
 import type { AxcutDocument } from "../schema";
 import { type TranscriptLane, voiceoverPlacements } from "../timeline/aggregated-transcript";
+import { CAPTION_WORDS_PER_LINE_MAX, CAPTION_WORDS_PER_LINE_MIN } from "./wordsPerLine";
 
 /**
  * Which frame edge the caption block is pinned to. The block grows AWAY from it:
@@ -434,8 +435,22 @@ export function getCaptionSettings(
 	const defaultInsetY = defaultCaptionInsetY(aspectValue);
 	if (!raw) return { ...d, insetY: defaultInsetY, insetX: defaultCaptionInsetX(aspectValue) };
 
-	const minWords = Math.round(readNumber(raw.minWordsPerLine, d.minWordsPerLine, 1, 12));
-	const maxWords = Math.round(readNumber(raw.maxWordsPerLine, d.maxWordsPerLine, 1, 12));
+	const minWords = Math.round(
+		readNumber(
+			raw.minWordsPerLine,
+			d.minWordsPerLine,
+			CAPTION_WORDS_PER_LINE_MIN,
+			CAPTION_WORDS_PER_LINE_MAX,
+		),
+	);
+	const maxWords = Math.round(
+		readNumber(
+			raw.maxWordsPerLine,
+			d.maxWordsPerLine,
+			CAPTION_WORDS_PER_LINE_MIN,
+			CAPTION_WORDS_PER_LINE_MAX,
+		),
+	);
 	const fontSize = readNumber(raw.fontSize, d.fontSize, 12, 200);
 	const backgroundEnabled = readBoolean(raw.backgroundEnabled, d.backgroundEnabled);
 

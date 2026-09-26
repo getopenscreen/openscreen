@@ -158,7 +158,7 @@ openscreen captions demo.openscreen --min-words 2 --max-words 7
 openscreen export demo.openscreen -o demo.mp4   # captions are burned into the video
 ```
 
-- `--min-words` et `--max-words` fixent le nombre de mots par sous-titre. Par défaut : 2 et 7.
+- `--min-words` et `--max-words` fixent le nombre de mots par sous-titre. Chacun accepte de 1 à 12, la plage de l’éditeur. Par défaut : 2 et 7.
 - La relancer remplace les sous-titres qu'elle avait ajoutés. Les annotations que vous avez ajoutées vous-même sont conservées.
 - La vidéo d'écran du projet doit avoir une piste audio, par exemple issue de `record --mic`.
 - Les sous-titres sont incrustés dans l'export. Aucun fichier de sous-titres n'est produit. Voir [Sous-titres et transcription](./captions.md).

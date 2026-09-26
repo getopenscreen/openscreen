@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_CAPTION_SETTINGS } from "@/lib/ai-edition/captions/settings";
 import type { CaptionSegment } from "@/lib/captioning/transcribe";
 import { captionSegmentsToAnnotationRegions } from "./captionAnnotations";
 
@@ -31,5 +32,19 @@ describe("captionSegmentsToAnnotationRegions", () => {
 		);
 
 		expect(regions.map((r) => r.content)).toEqual(["hello there", "second line"]);
+	});
+
+	it("looks like the editor's captions, not a faint annotation", () => {
+		const [region] = captionSegmentsToAnnotationRegions(words("one", "two"), 1, 1);
+		expect(region.style).toMatchObject({
+			fontSize: DEFAULT_CAPTION_SETTINGS.fontSize,
+			fontWeight: DEFAULT_CAPTION_SETTINGS.fontWeight,
+			color: DEFAULT_CAPTION_SETTINGS.color,
+			backgroundColor: "rgba(0, 0, 0, 0.55)",
+		});
+		// Inside the 16:9 safe column, bottom edge 1.5% off the frame's.
+		expect(region.position.x).toBe(16);
+		expect(region.size.width).toBe(68);
+		expect(region.position.y + region.size.height).toBeCloseTo(98.5);
 	});
 });

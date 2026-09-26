@@ -19,6 +19,10 @@ import {
 	DEFAULT_CAPTION_SETTINGS,
 	untranslatedUnits,
 } from "@/lib/ai-edition/captions";
+import {
+	CAPTION_WORDS_PER_LINE_MAX,
+	CAPTION_WORDS_PER_LINE_MIN,
+} from "@/lib/ai-edition/captions/wordsPerLine";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
@@ -630,7 +634,10 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 	);
 }
 
-const WORD_COUNTS = Array.from({ length: 12 }, (_, i) => i + 1);
+const WORD_COUNTS = Array.from(
+	{ length: CAPTION_WORDS_PER_LINE_MAX - CAPTION_WORDS_PER_LINE_MIN + 1 },
+	(_, i) => i + CAPTION_WORDS_PER_LINE_MIN,
+);
 
 const selectStyle: React.CSSProperties = {
 	height: 32,

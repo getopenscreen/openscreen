@@ -158,7 +158,7 @@ openscreen captions demo.openscreen --min-words 2 --max-words 7
 openscreen export demo.openscreen -o demo.mp4   # captions are burned into the video
 ```
 
-- `--min-words` e `--max-words` definem a quantidade de palavras por legenda. Padrões: 2 e 7.
+- `--min-words` e `--max-words` definem a quantidade de palavras por legenda. Cada um aceita de 1 a 12, o intervalo do editor. Padrões: 2 e 7.
 - Rodar o comando de novo substitui as legendas que ele adicionou antes. As anotações que você mesmo adicionou são mantidas.
 - O vídeo de tela do projeto precisa ter uma faixa de áudio, por exemplo de `record --mic`.
 - As legendas são embutidas na exportação. Não há saída em arquivo de legenda. Veja [Legendas](./captions.md).

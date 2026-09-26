@@ -49,9 +49,9 @@ Texture2D<float4> texImg : register(t2); // wallpaper image RGBA (fond, mode 6) 
 // resolution du modele (256x144) ; l'upscale vers la resolution webcam est fait par le sampler
 // lineaire, ce qui est exactement le filtrage qu'on veut sur un masque.
 Texture2D<float> texMask : register(t3);
-// Champ signé et hauteur du sprite de curseur (mode 15 seulement), RG16F, cf. `cursor_sdf.rs`.
+// Champ de distance signé du sprite de curseur (mode 15 seulement), R16F, cf. `cursor_sdf.rs`.
 // Le sprite lui-même est en t2 (texImg), comme aux modes 7 et 13.
-Texture2D<float2> texSdf : register(t4);
+Texture2D<float> texSdf : register(t4);
 SamplerState samp : register(s0);
 
 // Plafond de la profondeur de champ du mode 8, en niveau de la pyramide demi-résolution (1.5 =
@@ -410,24 +410,26 @@ float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px)
 }
 
 // ============ Curseur MODÉLISÉ (mode 15) ============
-// Le sprite de l'état courant en objet 3D : sa silhouette (champ de distance signé tiré de son
-// alpha par `cursor_sdf.rs`), extrudée avec un chanfrein, lancé de rayons par pixel. Le dessus
-// porte l'art du sprite ; le chanfrein et les flancs, la couleur de son bord. Ce qui touche le
-// modèle est éclairé ; ce qui le rate tombe sur le plan de l'écran, où l'on mesure l'ombre portée
-// (marche vers la lumière, pénombre douce) et l'ombre de contact. La caméra est reconstruite à
-// l'identique de `regions::rotate_point` + perspective P / (P - z) ; la pose, la caméra et la
-// boîte de dessin viennent de `frame_geometry::cursor_model_cb`, qui documente les emplacements
-// du cbuffer.
+// L'état courant en objet 3D, lancé de rayons par pixel. Deux sortes d'objets :
+// - un curseur SCULPTÉ (`trail_a.x` > 0) : la flèche ou la main d'un des cinq thèmes d'origine,
+//   modelée en volumes (capsules et unions lissées, extrusions arrondies, voxels, polyèdres
+//   taillés), chacune avec ses matières ;
+// - sinon le sprite de l'état : sa silhouette (champ de distance signé tiré de son alpha par
+//   `cursor_sdf.rs`), extrudée avec un chanfrein. Le dessus porte l'art du sprite ; le chanfrein
+//   et les flancs, la couleur de son bord.
+// Ce qui touche le modèle est éclairé par une LAMPE proche (un dégradé et un reflet même sur une
+// face plane), avec ombres propres, occlusion et reflets d'un studio ; ce qui le rate tombe sur le
+// plan de l'écran, où l'on mesure l'ombre portée (marche vers la lumière, pénombre douce) et
+// l'ombre de contact. La caméra est reconstruite à l'identique de `regions::rotate_point` +
+// perspective P / (P - z) ; la pose, la caméra et la boîte de dessin viennent de
+// `frame_geometry::cursor_model_cb`, qui documente les emplacements du cbuffer.
 //
-// Repère du MODÈLE : unité = plus grand côté du sprite, origine au hotspot de la face du dessus,
-// x à droite, y vers le bas, z vers la caméra ; le dessous reste à -MODEL_THICK, le dessus peut
-// monter jusqu'à MODEL_RELIEF_MAX. Le rect du sprite y commence en `color.rg` et mesure
+// Repère du MODÈLE : unité = plus grand côté du sprite, origine au hotspot, x à droite, y vers le
+// bas, z vers la caméra ; le dessous est à -`model_thick()`, le dessus monte jusqu'à `trail_a.z`.
+// Le rect du sprite (ou la boîte du modèle sculpté) y commence en `color.rg` et mesure
 // `sprite_size()` (rapport w/h dans `radius_px`). Textures : t2 (texImg) = le sprite, RGBA ;
-// t4 (texSdf) = champ signé en R et relief en G, RG16F, en
-// unités du modèle, négatif dedans, sur le même rect.
-// Constantes : miroir exact de `frame_geometry.rs` (MODEL_*).
-static const float MODEL_THICK = 0.19;
-static const float MODEL_RELIEF_MAX = 0.12;
+// t4 (texSdf) = son champ, R16F, en unités du modèle, négatif dedans, sur le même rect.
+// Constantes : miroir exact de `frame_geometry.rs` (MODEL_*) et de `sculpt.rs` (SCULPT_*).
 
 // Taille du sprite, repère du modèle : son plus grand côté vaut 1, `radius_px` porte w/h.
 float2 sprite_size()
@@ -445,17 +447,25 @@ float sprite_texel()
     return CURSOR_SDF_UPSAMPLE / (float)max(w, h);
 }
 
-// Épaisseur du modèle, écrasé au clic de `color.b` (`CursorPose::squash`).
+// Épaisseur sous z = 0 (`SpriteShape::thick`), écrasée au clic de `color.b` (`CursorPose::squash`).
 float model_thick()
 {
-    return MODEL_THICK * color.b;
+    return trail_a.y * color.b;
+}
+
+// Le curseur sculpté de ce dessin (`SpriteShape::sculpt`), 0 = le sprite extrudé.
+int sculpt_id()
+{
+    return (int)(trail_a.x + 0.5);
 }
 static const float MODEL_BEVEL = 0.045;
-// Direction VERS la lumière, repère caméra : haut-gauche, devant.
+// Direction VERS la lumière, repère caméra : haut-gauche, devant. La lumière d'appoint, repère
+// caméra aussi : à droite, un peu en bas, devant.
 static const float3 MODEL_LIGHT = float3(-0.4194, -0.5792, 0.6990);
+static const float3 MODEL_FILL = float3(0.7557, 0.2519, 0.6046);
+// Ambiance et diffus de l'appareil modelé (mode 17), qui garde son éclairage d'origine.
 static const float MODEL_AMBIENT = 0.36;
 static const float MODEL_DIFFUSE = 0.75;
-static const float MODEL_SPECULAR = 0.45;
 // Profondeur (texels du sprite) à laquelle on lit la couleur du bord : assez loin de la frange
 // antialiasée, assez près pour rester dans le filet de l'art (~4 texels).
 static const float MODEL_RIM_INSET = 1.5;
@@ -469,48 +479,476 @@ static const float MODEL_SHADOW_ALPHA = 0.5;
 static const float MODEL_CONTACT_RADIUS = 0.12;
 static const float MODEL_CONTACT_ALPHA = 0.5;
 
-// Distance signée à la silhouette (plan xy du modèle). Dans le rect du sprite, le champ ; hors de
-// lui, une borne inférieure exacte le long de la normale au rect : le sprite tient dans son rect,
-// qui est convexe, donc |p - s|² >= |p - c|² + |c - s|² pour tout point s du sprite (c = p ramené
-// dans le rect). Échantillonné au niveau 0 : la marche est une boucle à sortie anticipée.
+// ---- Curseurs sculptés ----
+// Les formes sont écrites dans le repère du PROTOTYPE où elles ont été dessinées : hauteur du
+// curseur 1, x à droite, y VERS LE HAUT, z vers la caméra, l'écran en z = 0 et le modèle posé à
+// SCULPT_HOVER au-dessus. `sculpt_point` y amène un point du repère du modèle. Identifiant :
+// 1 + 2 × thème + forme ; thèmes 0 Studio Ink, 1 Prism Glow, 2 Pop Coral, 3 Pixel Candy,
+// 4 Star Sprout ; formes 0 flèche, 1 main. Id des matières : 1 corps, 2 liseré ou manchette,
+// 3 étoile, 4 feuilles, 5 yeux, 6 face des voxels, 7 couche violette, 8 cristal.
+static const float SCULPT_SCALE = 0.85;
+static const float SCULPT_HOVER = 0.05;
+static const float SCULPT_VOX = 0.0625;
+static const float SCULPT_AR_ROUND = 0.03;
+static const float SCULPT_HAND_ZC = 0.185;
+// Hauteur, dans le prototype, du z = 0 du modèle : le dessus de la pointe de la flèche, l'axe du
+// bout de l'index.
+static const float SCULPT_ZREF_ARROW = 0.2;
+static const float SCULPT_ZREF_HAND = 0.185;
+// La lampe, à cette distance du centre du modèle (unités du modèle) dans la direction de la lumière.
+static const float SCULPT_LAMP_DIST = 1.9;
+// L'écran vu depuis le modèle (sa couleur n'est pas connue ici), linéaire : un gris moyen.
+static const float3 SCULPT_SCREEN = float3(0.32, 0.32, 0.32);
+
+float3 s_lin(float r, float g, float b)
+{
+    return pow(float3(r, g, b), 2.2);
+}
+
+float s_smin(float a, float b, float k)
+{
+    float h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * k * 0.25;
+}
+
+float2 s_opu(float2 a, float2 b)
+{
+    return a.x < b.x ? a : b;
+}
+
+float s_capsule(float3 p, float3 a, float3 b, float r)
+{
+    float3 pa = p - a, ba = b - a;
+    float h = saturate(dot(pa, ba) / dot(ba, ba));
+    return length(pa - ba * h) - r;
+}
+
+float s_round_box(float3 p, float3 b, float r)
+{
+    float3 q = abs(p) - b + r;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}
+
+float s_ellipsoid(float3 p, float3 r)
+{
+    float k0 = length(p / r);
+    float k1 = length(p / (r * r));
+    return k0 * (k0 - 1.0) / k1;
+}
+
+// Extrusion d'une distance 2D à arêtes arrondies : demi-hauteur h, rayon r.
+float s_extrude(float d2, float z, float h, float r)
+{
+    float2 w = float2(d2 + r, abs(z) - h + r);
+    return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - r;
+}
+
+float2 s_rot(float2 v, float a)
+{
+    float c = cos(a), s = sin(a);
+    return float2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+// La flèche : polygone à sept sommets, pointe à l'origine.
+static const float2 SCULPT_ARROW[7] = {
+    float2(0.0, 0.0), float2(0.0, -0.86), float2(0.215, -0.665), float2(0.37, -1.0),
+    float2(0.53, -0.93), float2(0.38, -0.60), float2(0.64, -0.60)
+};
+
+float s_arrow2(float2 p)
+{
+    float d = dot(p - SCULPT_ARROW[0], p - SCULPT_ARROW[0]);
+    float s = 1.0;
+    int j = 6;
+    [loop] for (int i = 0; i < 7; i++)
+    {
+        float2 e = SCULPT_ARROW[j] - SCULPT_ARROW[i];
+        float2 w = p - SCULPT_ARROW[i];
+        float2 b = w - e * saturate(dot(w, e) / dot(e, e));
+        d = min(d, dot(b, b));
+        bool c0 = p.y >= SCULPT_ARROW[i].y;
+        bool c1 = p.y < SCULPT_ARROW[j].y;
+        bool c2 = e.x * w.y > e.y * w.x;
+        if ((c0 && c1 && c2) || (!c0 && !c1 && !c2))
+        {
+            s = -s;
+        }
+        j = i;
+    }
+    return s * sqrt(d);
+}
+
+float s_star5(float2 p, float r, float rf)
+{
+    const float2 k1 = float2(0.809016994375, -0.587785252292);
+    const float2 k2 = float2(-0.809016994375, -0.587785252292);
+    p.x = abs(p.x);
+    p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+    p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+    p.x = abs(p.x);
+    p.y -= r;
+    float2 ba = rf * float2(-k1.y, k1.x) - float2(0.0, 1.0);
+    float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+    return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+
+// La flèche en volume : extrusion arrondie, bombée d'un dôme qui plafonne avant l'axe médian de
+// la silhouette (un dôme qui monterait encore y plierait le dessus).
+float s_arrow_solid(float3 p, float h, float re, float dome)
+{
+    float d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
+    float hh = h + dome * smoothstep(0.0, 0.07, -d2);
+    return s_extrude(d2, p.z - (SCULPT_HOVER + h + dome), hh, re);
+}
+
+// Le liseré de Studio Ink : un jonc posé sur le dessus, en retrait du bord.
+float s_piping(float3 p, float ztop)
+{
+    float d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
+    return length(float2(d2 + 0.075, p.z - ztop)) - 0.017;
+}
+
+// Le gant : l'index levé, trois doigts repliés, le pouce, fondus dans la paume.
+float s_glove(float3 p, float zc)
+{
+    float index = s_capsule(p, float3(0.0, -0.10, zc), float3(0.0, -0.52, zc), 0.098);
+    float palm = s_round_box(p - float3(0.185, -0.70, zc), float3(0.255, 0.19, 0.105), 0.1);
+    float f1 = s_capsule(p, float3(0.17, -0.57, zc + 0.012), float3(0.17, -0.41, zc + 0.045), 0.086);
+    float f2 = s_capsule(p, float3(0.31, -0.59, zc + 0.01), float3(0.31, -0.45, zc + 0.04), 0.08);
+    float f3 = s_capsule(p, float3(0.435, -0.625, zc + 0.005), float3(0.435, -0.52, zc + 0.03), 0.07);
+    float thumb = s_capsule(p, float3(0.03, -0.77, zc + 0.03), float3(-0.165, -0.60, zc + 0.065), 0.082);
+    float d = s_smin(palm, min(f1, min(f2, f3)), 0.035);
+    d = s_smin(d, index, 0.05);
+    return s_smin(d, thumb, 0.05);
+}
+
+// La manchette, ronde autour du poignet (elliptique en xz) : le gant y entre.
+float s_cuff(float3 p, float zc)
+{
+    float3 q = p - float3(0.185, -0.925, zc);
+    float2 ab = float2(0.272, 0.12);
+    float e = (length(q.xz / ab) - 1.0) * min(ab.x, ab.y);
+    return s_extrude(e, q.y, 0.07, 0.06);
+}
+
+// L'étoile de Star Sprout, face à la caméra, centrée en c : son visage et ses deux feuilles.
+float2 s_sprout(float3 p, float3 c)
+{
+    float3 q = p - c;
+    float st2 = s_star5(q.xy, 0.125, 0.52) - 0.022;
+    float2 r = float2(s_extrude(st2, q.z, 0.038, 0.034), 3.0);
+    float3 e = float3(abs(q.x) - 0.032, q.y + 0.005, q.z - 0.036);
+    r = s_opu(r, float2(length(e) - 0.0135, 5.0));
+    float3 l1 = q - float3(-0.04, 0.15, 0.0);
+    l1.xy = s_rot(l1.xy, -0.6);
+    float3 l2 = q - float3(0.045, 0.155, 0.0);
+    l2.xy = s_rot(l2.xy, 0.7);
+    float leaves = min(s_ellipsoid(l1, float3(0.03, 0.058, 0.02)), s_ellipsoid(l2, float3(0.03, 0.058, 0.02)));
+    return s_opu(r, float2(leaves, 4.0));
+}
+
+// Pixel Candy : une ligne par entier, bit c = colonne c, ligne 0 juste sous la pointe. La flèche
+// est le polygone échantillonné à 16 cellules par unité (`sculpt.rs` dit comment la régénérer) ;
+// la main est dessinée à la main, un gant échantillonné fondant ses doigts. Les tables *BACK
+// portent la couche violette, la face dilatée d'une cellule, décalée d'une ligne et d'une colonne.
+static const int SCULPT_ARROWPIX[16] = { 0, 1, 3, 7, 31, 63, 127, 255, 511, 63, 55, 115, 113, 224, 224, 64 };
+static const int SCULPT_ARROWBACK[18] = {
+    3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 4095, 255, 511, 511, 999, 995, 960, 192
+};
+static const int SCULPT_HANDPIX[15] = { 4, 14, 14, 14, 110, 878, 7022, 7022, 8190, 8191, 8191, 8191, 8190, 4092, 4092 };
+static const int SCULPT_HANDBACK[17] = {
+    28, 62, 62, 62, 510, 4094, 32766, 32766, 32766, 32767, 32767, 32767, 32767, 32767, 32766, 16380, 16380
+};
+// La couche violette de la main, une plage de colonnes par ligne (toutes pleines) : la distance
+// exacte à son contour, pour l'ombre portée.
+static const float2 SCULPT_HANDSPAN[17] = {
+    float2(2.0, 4.0), float2(1.0, 5.0), float2(1.0, 5.0), float2(1.0, 5.0), float2(1.0, 8.0),
+    float2(1.0, 11.0), float2(1.0, 14.0), float2(1.0, 14.0), float2(1.0, 14.0), float2(0.0, 14.0),
+    float2(0.0, 14.0), float2(0.0, 14.0), float2(0.0, 14.0), float2(0.0, 14.0), float2(1.0, 14.0),
+    float2(2.0, 13.0), float2(2.0, 13.0)
+};
+
+// Origine de la grille : la flèche part de sa pointe, la main de 2,5 cellules à sa gauche.
+float2 s_grid_origin(int shape)
+{
+    return shape == 0 ? float2(0.0, 0.0) : float2(-2.5 * SCULPT_VOX, 0.0);
+}
+
+// Le bit `c` de la ligne `r` d'une table de `rows` lignes et `cols` colonnes. FXC évalue les deux
+// côtés d'un `&&` : l'index est ramené dans la table avant la lecture, le test fait le reste.
+bool s_bit(int row, int r, int c, int rows, int cols)
+{
+    return r >= 0 && r < rows && c >= 0 && c < cols && ((row >> clamp(c, 0, 31)) & 1) == 1;
+}
+
+// La cellule `id` (colonne, ligne, y vers le haut) porte-t-elle un voxel de la face ?
+bool s_occ(float2 id, int shape)
+{
+    int c = (int)id.x;
+    int r = -(int)id.y - 1;
+    if (shape == 0)
+    {
+        return s_bit(SCULPT_ARROWPIX[clamp(r, 0, 15)], r, c, 16, 16);
+    }
+    return s_bit(SCULPT_HANDPIX[clamp(r, 0, 14)], r, c, 15, 13);
+}
+
+// … et un bloc de la couche violette.
+bool s_occ_back(float2 id, int shape)
+{
+    int c = (int)id.x + 1;
+    int r = -(int)id.y;
+    if (shape == 0)
+    {
+        return s_bit(SCULPT_ARROWBACK[clamp(r, 0, 17)], r, c, 18, 17);
+    }
+    return s_bit(SCULPT_HANDBACK[clamp(r, 0, 16)], r, c, 17, 15);
+}
+
+// Chaque cellule pleine est un cube biseauté ; la couche violette est un étage plus bas. Hors du
+// voisinage 3×3, une borne : une cellule au moins, et jamais plus près que la boîte de la forme.
+float2 s_voxels(float3 p, int shape)
+{
+    float2 o = s_grid_origin(shape);
+    float2 cell = floor((p.xy - o) / SCULPT_VOX);
+    float2 bc = shape == 0 ? float2(0.33, -0.5) : float2(0.25, -0.47);
+    float2 bh = shape == 0 ? float2(0.44, 0.61) : float2(0.48, 0.55);
+    float2 bq = max(abs(p.xy - bc) - bh, 0.0);
+    float bz = max(abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07, 0.0);
+    float far = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
+    float dF = far;
+    float dB = far;
+    const float3 half_cell = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.04);
+    [loop] for (int j = -1; j <= 1; j++)
+    {
+        [loop] for (int i = -1; i <= 1; i++)
+        {
+            float2 id = cell + float2(i, j);
+            float3 q = float3(p.xy - (o + (id + 0.5) * SCULPT_VOX), p.z);
+            if (s_occ(id, shape))
+            {
+                dF = min(dF, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.1), half_cell, 0.009));
+            }
+            if (s_occ_back(id, shape))
+            {
+                dB = min(dB, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.04), half_cell, 0.009));
+            }
+        }
+    }
+    return dF < dB ? float2(dF, 6.0) : float2(dB, 7.0);
+}
+
+// Distance, dans le plan de l'écran, au contour de la couche violette de la main.
+float s_pixel_hand_dist(float2 p)
+{
+    float d = 1e9;
+    [loop] for (int r = 0; r < 17; r++)
+    {
+        float2 x = (SCULPT_HANDSPAN[r] + float2(-3.5, -2.5)) * SCULPT_VOX;
+        float2 y = float2(-r, 1.0 - r) * SCULPT_VOX;
+        float2 q = max(max(float2(x.x, y.x) - p, p - float2(x.y, y.y)), 0.0);
+        d = min(d, length(q));
+    }
+    return d;
+}
+
+// Prism Glow est taillé, pas peint : chaque pièce est un polyèdre convexe (le max de ses plans),
+// les facettes sont planes et la silhouette polygonale.
+
+// Une arête d'un contour convexe de gemme (a -> b, sens trigonométrique) : sa paroi, une facette
+// de rondiste raide, et deux facettes de couronne qui se rejoignent au milieu de l'arête. Les
+// couronnes de toutes les arêtes se rejoignent en arêtes vives au-dessus du centre.
+float s_gem_edge(float3 p, float2 a, float2 b, float z0)
+{
+    float2 e = b - a;
+    float len = length(e);
+    float2 d = e / len;
+    float2 q = p.xy - a;
+    float dist = dot(q, float2(-d.y, d.x));
+    float along = abs(dot(q, d) - 0.5 * len);
+    float z = p.z - z0;
+    float girdle = (z - 0.035 - 2.2 * dist) * 0.4138;
+    float crown = (z - 0.07 - 0.6 * dist + 0.18 * along) * 0.8438;
+    return max(-dist, max(girdle, crown));
+}
+
+float s_gem_arrow(float3 p)
+{
+    float z0 = SCULPT_HOVER + 0.03;
+    float slab = max(p.z - z0 - 0.2, z0 - 0.03 - p.z);
+    float head = max(slab, max(s_gem_edge(p, float2(-0.02, 0.03), float2(-0.02, -0.88), z0),
+                           max(s_gem_edge(p, float2(-0.02, -0.88), float2(0.66, -0.61), z0),
+                               s_gem_edge(p, float2(0.66, -0.61), float2(-0.02, 0.03), z0))));
+    float tail = max(slab, max(max(s_gem_edge(p, float2(0.215, -0.665), float2(0.37, -1.0), z0),
+                                   s_gem_edge(p, float2(0.37, -1.0), float2(0.53, -0.93), z0)),
+                               max(s_gem_edge(p, float2(0.53, -0.93), float2(0.38, -0.60), z0),
+                                   s_gem_edge(p, float2(0.38, -0.60), float2(0.215, -0.665), z0))));
+    return min(head, tail);
+}
+
+// Capsule taillée a -> b : un prisme hexagonal coiffé en b de deux couronnes de facettes
+// décalées et d'une facette sommitale, tous les plans tangents à la sphère du bout.
+float s_facet_capsule(float3 p, float3 a, float3 b, float r, float spin)
+{
+    float3 u = normalize(b - a);
+    float3 v = normalize(cross(u, float3(0.0, 0.0, 1.0)));
+    float3 w = cross(u, v);
+    float3 q = p - b;
+    float h = dot(q, u);
+    float2 rad = float2(dot(q, v), dot(q, w));
+    float d = max(h - r, -dot(p - a, u) - r);
+    [loop] for (int k = 0; k < 6; k++)
+    {
+        float an = spin + k * 1.0471976;
+        float s = dot(rad, float2(cos(an), sin(an)));
+        d = max(d, s - r);
+        d = max(d, dot(rad, float2(cos(an + 0.5236), sin(an + 0.5236))) * 0.8660 + h * 0.5 - r);
+        d = max(d, s * 0.5 + h * 0.8660 - r);
+    }
+    return d;
+}
+
+// Ellipsoïde taillé : les plans tangents dans dix directions du premier octant, reportées dans
+// les huit. Une pierre aux facettes de taille égale.
+static const float3 SCULPT_FACETS[10] = {
+    float3(1.0, 0.0, 0.0), float3(0.0, 1.0, 0.0), float3(0.0, 0.0, 1.0),
+    float3(0.7071, 0.7071, 0.0), float3(0.7071, 0.0, 0.7071), float3(0.0, 0.7071, 0.7071),
+    float3(0.5774, 0.5774, 0.5774), float3(0.4472, 0.0, 0.8944), float3(0.0, 0.4472, 0.8944),
+    float3(0.3015, 0.3015, 0.9045)
+};
+
+float s_facet_ellipsoid(float3 p, float3 r)
+{
+    float3 q = abs(p);
+    float d = -1e9;
+    [loop] for (int i = 0; i < 10; i++)
+    {
+        d = max(d, dot(q, SCULPT_FACETS[i]) - length(r * SCULPT_FACETS[i]));
+    }
+    return d;
+}
+
+// Le gant des autres thèmes, mêmes os, taillé en facettes.
+float s_crystal_hand(float3 p)
+{
+    float zc = SCULPT_HAND_ZC;
+    float d = s_facet_ellipsoid(p - float3(0.185, -0.70, zc), float3(0.3, 0.235, 0.125));
+    d = min(d, s_facet_capsule(p, float3(0.0, -0.52, zc), float3(0.0, -0.10, zc), 0.098, 0.3));
+    d = min(d, s_facet_capsule(p, float3(0.17, -0.57, zc + 0.012), float3(0.17, -0.41, zc + 0.045), 0.086, 0.1));
+    d = min(d, s_facet_capsule(p, float3(0.31, -0.59, zc + 0.01), float3(0.31, -0.45, zc + 0.04), 0.08, 0.5));
+    d = min(d, s_facet_capsule(p, float3(0.435, -0.625, zc + 0.005), float3(0.435, -0.52, zc + 0.03), 0.07, 0.2));
+    return min(d, s_facet_capsule(p, float3(0.03, -0.77, zc + 0.03), float3(-0.165, -0.60, zc + 0.065), 0.082, 0.7));
+}
+
+// Le modèle `shape` du thème `theme`, repère du prototype : (distance, id de matière).
+float2 sculpt_proto(float3 p, int theme, int shape)
+{
+    if (theme == 3)
+    {
+        return s_voxels(p, shape);
+    }
+    if (theme == 1)
+    {
+        return float2(shape == 0 ? s_gem_arrow(p) : s_crystal_hand(p), 8.0);
+    }
+    float2 body;
+    float3 star;
+    if (shape == 0)
+    {
+        float h = 0.075, re = 0.03, dome = 0.0;
+        if (theme == 2)
+        {
+            h = 0.07;
+            re = 0.06;
+            dome = 0.035;
+        }
+        if (theme == 4)
+        {
+            h = 0.07;
+            re = 0.055;
+            dome = 0.025;
+        }
+        float2 r = float2(s_arrow_solid(p, h, re, dome), 1.0);
+        if (theme == 0)
+        {
+            r = s_opu(r, float2(s_piping(p, SCULPT_HOVER + 2.0 * h - 0.004), 2.0));
+        }
+        body = r;
+        star = float3(0.57, -0.86, SCULPT_HOVER + 2.0 * h + dome);
+    }
+    else
+    {
+        body = s_opu(float2(s_glove(p, SCULPT_HAND_ZC), 1.0), float2(s_cuff(p, SCULPT_HAND_ZC), 2.0));
+        star = float3(0.185, -0.93, SCULPT_HAND_ZC + 0.15);
+    }
+    // L'étoile de Star Sprout : un seul appel pour les deux formes (FXC recopie chaque appel).
+    return theme == 4 ? s_opu(body, s_sprout(p, star)) : body;
+}
+
+// Repère du modèle -> prototype. L'écrasement du clic ne raccourcit que z, autour du hotspot.
+float3 sculpt_point(float3 q)
+{
+    float zref = (sculpt_id() - 1) % 2 == 0 ? SCULPT_ZREF_ARROW : SCULPT_ZREF_HAND;
+    return float3(q.x, -q.y, q.z / max(color.b, 1e-3)) / SCULPT_SCALE + float3(0.0, 0.0, zref);
+}
+
+// Une distance du prototype en unités du modèle : écrasé, z raccourcit, d'où le min (une borne
+// inférieure reste une borne inférieure).
+float sculpt_units()
+{
+    return SCULPT_SCALE * min(color.b, 1.0);
+}
+
+// Le curseur sculpté en `q` (repère du modèle) : distance et id de matière. `occ` : ce qui porte
+// l'ombre sur l'écran. La borne des plans d'une gemme et le champ des voxels sont de mauvaises
+// distances loin de la surface : la pénombre s'y strie, ou s'arrête net au bord de la boîte des
+// voxels. Le cristal porte donc l'ombre de la forme lisse de Pop Coral, les voxels celle de leur
+// contour extrudé sur toute leur hauteur.
+float2 sculpt_eval(float3 q, bool occ)
+{
+    int id = sculpt_id() - 1;
+    int theme = id / 2, shape = id % 2;
+    float3 p = sculpt_point(q);
+    float2 r;
+    if (occ && theme == 3)
+    {
+        float d2 = shape == 0 ? s_arrow2(p.xy) - 1.2 * SCULPT_VOX : s_pixel_hand_dist(p.xy);
+        float dz = abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07;
+        r = float2(length(max(float2(d2, dz), 0.0)) + min(max(d2, dz), 0.0), 7.0);
+    }
+    else
+    {
+        r = sculpt_proto(p, occ && theme == 1 ? 2 : theme, shape);
+    }
+    return float2(r.x * sculpt_units(), r.y);
+}
+
+// Distance signée à la silhouette du sprite (plan xy du modèle). Dans le rect du sprite, le champ ;
+// hors de lui, une borne inférieure exacte le long de la normale au rect : le sprite tient dans son
+// rect, qui est convexe, donc |p - s|² >= |p - c|² + |c - s|² pour tout point s du sprite (c = p
+// ramené dans le rect). Échantillonné au niveau 0 : la marche est une boucle à sortie anticipée.
 float sd_sprite2(float2 p)
 {
     float2 c = clamp(p, color.rg, color.rg + sprite_size());
-    float d = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0).r;
+    float d = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0);
     float2 o = p - c;
     float out2 = dot(o, o);
     float e = max(d, 0.0);
     return out2 > 0.0 ? sqrt(out2 + e * e) : d;
 }
 
-// Hauteur du dessus : zéro pour un sprite sans carte, model-specific pour un modèle sculpté.
-float model_top_height(float2 p)
+// Le modèle en `p` : distance signée et id de matière (0 pour un sprite). Sculpté, sa forme
+// (`sculpt_eval`, dont `occ`) ; sinon le contour rentré du chanfrein, épaisseur rentrée du
+// chanfrein, puis regonflé : les arêtes du dessus et du dessous sont arrondies de MODEL_BEVEL.
+float2 model_eval(float3 p, bool occ)
 {
-    float2 c = clamp(p, color.rg, color.rg + sprite_size());
-    float relief = texSdf.SampleLevel(samp, (c - color.rg) / sprite_size(), 0.0).g;
-    return clamp(relief * color.b, 0.0, MODEL_RELIEF_MAX);
-}
-
-// Distance signée au modèle : le contour rentré du chanfrein, épaisseur rentrée du chanfrein, puis
-// regonflé : les arêtes du dessus et du dessous sont arrondies de MODEL_BEVEL.
-float sd_model(float3 p)
-{
-    float top = model_top_height(p.xy);
-    float thick = model_thick();
-    float half_t = (top + thick) * 0.5;
-    float center_z = (top - thick) * 0.5;
-    float2 w = float2(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z - center_z) - (half_t - MODEL_BEVEL));
-    return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - MODEL_BEVEL;
-}
-
-// Normale par le gradient du champ (tétraèdre, quatre évaluations).
-float3 model_normal(float3 p)
-{
-    const float e = 0.002;
-    return normalize(float3(1, -1, -1) * sd_model(p + float3(1, -1, -1) * e) +
-                     float3(-1, -1, 1) * sd_model(p + float3(-1, -1, 1) * e) +
-                     float3(-1, 1, -1) * sd_model(p + float3(-1, 1, -1) * e) +
-                     float3(1, 1, 1) * sd_model(p + float3(1, 1, 1) * e));
+    if (sculpt_id() > 0)
+    {
+        return sculpt_eval(p, occ);
+    }
+    float half_t = model_thick() * 0.5;
+    float2 w = float2(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z + half_t) - (half_t - MODEL_BEVEL));
+    return float2(min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - MODEL_BEVEL, 0.0);
 }
 
 // Entrée/sortie d'un rayon dans une boîte alignée (x = entrée, y = sortie ; x >= y : raté).
@@ -562,30 +1000,6 @@ float3 plane_to_model(float3 v, ModelFrame f)
     return float3(x, y * f.cp + v.z * f.sp, -y * f.sp + v.z * f.cp);
 }
 
-// Pénombre vers la lumière depuis `o` (1 = éclairé, 0 = dans l'ombre). Marche bornée à la boîte
-// du modèle élargie de la portée de la pénombre, pas bornés, sortie dès que l'ombre est pleine.
-float model_soft_shadow(float3 o, float3 l, float3 lo, float3 hi)
-{
-    float2 tb = ray_box(o, l, lo - MODEL_SHADOW_PAD, hi + MODEL_SHADOW_PAD);
-    if (tb.x >= tb.y || tb.y <= 0.0)
-    {
-        return 1.0;
-    }
-    float res = 1.0;
-    float t = max(tb.x, 0.004);
-    [loop] for (int k = 0; k < 32; k++)
-    {
-        float d = sd_model(o + l * t);
-        res = min(res, MODEL_SOFTNESS * d / t);
-        if (res < 0.002 || t > tb.y)
-        {
-            break;
-        }
-        t += clamp(d, 0.01, 0.2);
-    }
-    res = saturate(res);
-    return res * res * (3.0 - 2.0 * res);
-}
 
 // Couleur de la matière au point `p` du plan xy (alpha droit) : l'art du sprite, lu au plus à
 // MODEL_RIM_INSET texels du bord vers l'intérieur. Le dessus garde donc son art, et le chanfrein,
@@ -601,17 +1015,200 @@ float3 model_albedo(float2 p)
     return texImg.SampleLevel(samp, (q - color.rg) / sprite_size(), 0.0).rgb;
 }
 
-// Couleur (alpha droit) d'un point de la surface vu le long de `rd`.
-float3 model_shade(float3 q, float3 rd, float3 l)
+struct SculptMat
 {
-    float3 n = model_normal(q);
-    float3 albedo = model_albedo(q.xy);
-    float diffuse = saturate(dot(n, l));
-    // Reflet sur les arrondis seulement : une face plane l'allumerait d'un bloc (la lumière est
-    // directionnelle), et le dessus sombre d'un sprite virerait au gris à chaque clic.
-    float gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
-    float spec = gloss * pow(saturate(dot(n, normalize(l - rd))), 110.0);
-    return albedo * (MODEL_AMBIENT + MODEL_DIFFUSE * diffuse) + MODEL_SPECULAR * spec;
+    float3 alb; // albédo, linéaire
+    float rough;
+    float spec;
+    float sss; // enveloppe du diffus (matières tendres : caoutchouc, céramique)
+    float refl;
+};
+
+SculptMat s_mat(float3 alb, float rough, float spec, float sss, float refl)
+{
+    SculptMat m;
+    m.alb = alb;
+    m.rough = rough;
+    m.spec = spec;
+    m.sss = sss;
+    m.refl = refl;
+    return m;
+}
+
+// Couleur de face du voxel qui porte `p` (prototype) : menthe où le bord regarde en bas à gauche,
+// rose pâle où il regarde en haut à droite, rose dedans.
+float3 s_pixel_colour(float3 p, int shape)
+{
+    float2 id = floor((p.xy - s_grid_origin(shape)) / SCULPT_VOX);
+    if (!s_occ(id + float2(-1.0, 0.0), shape) || !s_occ(id + float2(0.0, -1.0), shape))
+    {
+        return s_lin(0.52, 0.91, 0.77);
+    }
+    if (!s_occ(id + float2(1.0, 0.0), shape) || !s_occ(id + float2(0.0, 1.0), shape))
+    {
+        return s_lin(1.0, 0.78, 0.87);
+    }
+    return s_lin(1.0, 0.50, 0.71);
+}
+
+// La matière `mat` (id de `sculpt_proto`) au point `p` du prototype.
+SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
+{
+    bool primary = mat < 1.5;
+    if (theme == 0)
+    {
+        if (shape == 0 && primary) return s_mat(s_lin(0.10, 0.10, 0.115), 0.3, 0.2, 0.0, 0.9);
+        if (shape == 0) return s_mat(s_lin(0.94, 0.91, 0.84), 0.45, 0.4, 0.2, 0.3);
+        if (primary) return s_mat(s_lin(0.95, 0.92, 0.85), 0.55, 0.35, 0.35, 0.25);
+        return s_mat(s_lin(0.17, 0.18, 0.22), 0.35, 0.6, 0.0, 0.6);
+    }
+    if (theme == 2)
+    {
+        if (shape == 0) return s_mat(s_lin(1.0, 0.40, 0.30), 0.5, 0.45, 0.4, 0.25);
+        if (primary) return s_mat(s_lin(1.0, 0.79, 0.16), 0.5, 0.45, 0.4, 0.25);
+        return s_mat(s_lin(0.18, 0.20, 0.29), 0.4, 0.5, 0.0, 0.4);
+    }
+    if (theme == 4)
+    {
+        if (primary && shape == 0) return s_mat(s_lin(0.62, 0.91, 0.78), 0.22, 0.8, 0.25, 0.6);
+        if (primary) return s_mat(s_lin(0.96, 0.94, 0.88), 0.5, 0.35, 0.35, 0.25);
+        if (mat < 2.5) return s_mat(s_lin(0.62, 0.91, 0.78), 0.25, 0.7, 0.25, 0.5);
+        if (mat < 3.5) return s_mat(s_lin(1.0, 0.80, 0.20), 0.3, 0.6, 0.3, 0.4);
+        if (mat < 4.5) return s_mat(s_lin(0.38, 0.80, 0.55), 0.35, 0.5, 0.35, 0.3);
+        return s_mat(s_lin(0.16, 0.12, 0.10), 0.2, 0.8, 0.0, 0.5);
+    }
+    if (mat < 6.5) return s_mat(s_pixel_colour(p, shape), 0.45, 0.35, 0.15, 0.2);
+    return s_mat(s_lin(0.36, 0.18, 0.54), 0.45, 0.35, 0.1, 0.2);
+}
+
+// L'environnement du studio vu du modèle : l'écran dessous, la pièce au-dessus (z du modèle), une
+// boîte à lumière dans la direction de la lampe et une bande dans celle de l'appoint. Un matériau
+// rugueux les voit plus larges et plus ternes.
+float3 model_env(float3 d, float rough, float3 l, float3 fill)
+{
+    float3 col = lerp(SCULPT_SCREEN * 0.9, s_lin(0.82, 0.85, 0.92) * 0.55, smoothstep(-0.15, 0.35, d.z));
+    float w = rough * 0.3;
+    float k = 1.0 - rough * 0.6;
+    col += s_lin(1.0, 0.97, 0.92) * 5.0 * k * smoothstep(0.90 - w, 0.97, dot(d, l));
+    col += s_lin(0.85, 0.9, 1.0) * 1.6 * k * smoothstep(0.93 - w, 0.98, dot(d, fill));
+    return col;
+}
+
+// Cyan, bleu, violet, orchidée.
+float3 s_gem(float k)
+{
+    k = saturate(k) * 3.0;
+    float3 a = s_lin(0.20, 0.95, 1.0);
+    float3 b = s_lin(0.15, 0.42, 1.0);
+    float3 c = s_lin(0.45, 0.25, 0.95);
+    float3 d = s_lin(0.88, 0.50, 1.0);
+    if (k < 1.0) return lerp(a, b, k);
+    if (k < 2.0) return lerp(b, c, k - 1.0);
+    return lerp(c, d, k - 2.0);
+}
+
+// Le cristal : la teinte vient d'où la facette regarde et d'où elle plie la vue (lues y vers le
+// haut, comme au prototype) ; la dispersion sépare le décalage par canal. Les facettes tournées
+// vers la lampe sont cyan, les autres violettes.
+float3 model_shade_crystal(float3 n, float3 rd, float3 L, float fall, float3 l, float3 fill)
+{
+    float cosi = saturate(dot(-rd, n));
+    float F = 0.04 + 0.96 * pow(1.0 - cosi, 5.0);
+    float3 t = refract(rd, n, 1.0 / 1.6);
+    float k = 0.42 + 0.9 * dot(float2(n.x, -n.y), float2(0.7557, -0.6549))
+            + 0.6 * dot(float2(t.x, -t.y), float2(0.6, -0.8));
+    float3 body = float3(s_gem(k - 0.08).r, s_gem(k).g, s_gem(k + 0.08).b);
+    float3 col = body * (0.1 + 1.8 * fall * pow(max(dot(n, L), 0.0), 2.5));
+    // Éclat : la vue rebondit sur le dos plat et allume la facette quand elle trouve la lampe.
+    col += body * model_env(reflect(t, float3(0.0, 0.0, 1.0)) * float3(1.0, 1.0, -1.0), 0.15, l, fill) * 0.5;
+    col += pow(max(dot(reflect(rd, n), L), 0.0), 30.0) * 2.0;
+    col += model_env(reflect(rd, n), 0.05, l, fill) * F;
+    col += s_lin(0.5, 0.9, 1.0) * pow(1.0 - cosi, 4.0) * 0.6;
+    return col;
+}
+
+// Khronos PBR Neutral : garde les teintes, ne comprime que les hautes lumières ; puis sRGB.
+float3 model_tonemap(float3 c)
+{
+    const float start = 0.76;
+    float x = min(c.r, min(c.g, c.b));
+    c -= x < 0.08 ? x - 6.25 * x * x : 0.04;
+    float peak = max(c.r, max(c.g, c.b));
+    if (peak >= start)
+    {
+        const float d = 1.0 - start;
+        float np = 1.0 - d * d / (peak + d - start);
+        c *= np / peak;
+        float g = 1.0 - 1.0 / (0.15 * (peak - np) + 1.0);
+        c = lerp(c, float3(np, np, np), g);
+    }
+    return pow(saturate(c), 1.0 / 2.2);
+}
+
+
+// Couleur (alpha droit, sRGB) du point `q` du modèle, de normale `n`, vu le long de `rd`. La
+// lumière est une LAMPE (direction `L`, intensité `fall` rapportée au centre du modèle), pas un
+// soleil : un dégradé et un reflet même sur une face plane. `sh` : pénombre du modèle sur
+// lui-même ; `ao` : occlusion ; `mat` : id de matière d'un sculpté ; `l` et `fill` : directions de
+// la lumière et de l'appoint. Peu d'ambiance : le côté à l'abri de la lampe tombe dans l'ombre,
+// dans un ton plus profond de la matière elle-même (l'albédo compté deux fois), pas dans un voile
+// gris.
+float3 model_shade(float3 q, float3 n, float3 rd, float3 L, float fall, float sh, float ao, float mat,
+                   float3 l, float3 fill)
+{
+    int id = sculpt_id();
+    if (id > 0 && (id - 1) / 2 == 1)
+    {
+        return model_tonemap(model_shade_crystal(n, rd, L, fall, l, fill));
+    }
+    SculptMat m;
+    // Sur un sprite, reflets et brillance sur les arrondis seulement : le dessus plat d'un sprite
+    // sombre virerait au gris sous la lampe.
+    float gloss = 1.0;
+    if (id > 0)
+    {
+        // La matière d'un voxel se lit juste sous la surface : son flanc lit sa propre cellule.
+        float3 p = sculpt_point(q) - float3(n.x, -n.y, n.z) * 0.01;
+        m = sculpt_material(mat, p, (id - 1) / 2, (id - 1) % 2);
+    }
+    else
+    {
+        m = s_mat(pow(model_albedo(q.xy), 2.2), 0.45, 0.35, 0.2, 0.3);
+        gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
+    }
+    float3 key = s_lin(1.0, 0.97, 0.93) * 2.1 * fall;
+    float ndl = dot(n, L);
+    float wrap = 0.5 * m.sss;
+    float dif = saturate((ndl + wrap) / (1.0 + wrap)) * lerp(sh, 1.0, 0.15 * m.sss);
+    float ndh = saturate(dot(n, normalize(L - rd)));
+    float shin = exp2(10.0 * (1.0 - m.rough) + 1.0);
+    // Un lobe net selon la rugosité, plus un lustre large : les formes arrondies se lisent sous
+    // tous les angles.
+    float spe = (pow(ndh, shin) * (shin + 8.0) / 25.0 + 0.15 * pow(ndh, 8.0)) * sh * saturate(ndl * 4.0);
+    float fre = pow(1.0 - saturate(dot(n, -rd)), 5.0);
+    float3 amb = lerp(SCULPT_SCREEN * 0.12, s_lin(0.88, 0.92, 1.0) * 0.22, 0.5 + 0.5 * n.z);
+    float3 fl = s_lin(0.85, 0.9, 1.0) * saturate(dot(n, fill)) * 0.12;
+    float3 col = m.alb * (key * dif + (amb + fl) * ao * lerp(float3(1.0, 1.0, 1.0), m.alb, 0.5));
+    col += key * spe * m.spec * gloss;
+    col += model_env(reflect(rd, n), m.rough, l, fill) * m.refl * (0.04 + 0.96 * fre) * ao * gloss;
+    col += s_lin(0.9, 0.95, 1.0) * fre * 0.08 * ao * sh;
+    return model_tonemap(col);
+}
+
+// Les passes de la boucle unique de `cursor_model`, dans l'ordre. Chaque tour n'évalue le modèle
+// QU'UNE fois (`model_eval`) : FXC recopie une fonction à chaque appel, et un curseur sculpté est
+// assez gros pour qu'un appel par passe multiplie par neuf le temps de compilation de ps_main.
+static const int STAGE_MARCH = 0; // le rayon de vue jusqu'au modèle (96 pas au plus)
+static const int STAGE_NORMAL = 1; // quatre sondes en tétraèdre autour du point touché
+static const int STAGE_AO = 2; // cinq sondes le long de la normale, jusqu'à 0,08 du prototype
+static const int STAGE_SELF = 3; // pénombre du modèle sur lui-même, vers la lampe (32 pas)
+static const int STAGE_PLANE = 4; // le point du plan : son contact, puis sa pénombre (32 pas)
+static const int STAGE_DONE = 5;
+
+// Sonde `k` de la normale, sommet d'un tétraèdre.
+float3 model_tetra(int k)
+{
+    return 0.5773 * (2.0 * float3((((k + 3) >> 1) & 1), ((k >> 1) & 1), (k & 1)) - 1.0);
 }
 
 float4 cursor_model(float2 local)
@@ -628,7 +1225,7 @@ float4 cursor_model(float2 local)
     float3 tip = src_prev.xyz;
     // La boîte du modèle : le rect du sprite, sur toute l'épaisseur.
     float3 lo = float3(color.rg, -model_thick());
-    float3 hi = float3(color.rg + sprite_size(), MODEL_RELIEF_MAX);
+    float3 hi = float3(color.rg + sprite_size(), trail_a.z);
 
     // Le rayon de ce pixel : de la caméra (0, 0, P) à travers le pixel sur le plan image z = 0.
     // Le plan est translaté de mb.zw dans le repère caméra (caméra réelle, 0 sous un angle fixe).
@@ -637,66 +1234,198 @@ float4 cursor_model(float2 local)
     float3 ro = plane_to_model((world_to_plane(float3(-mb.z, -mb.w, persp), f) - tip) / unit, f);
     float3 rd = plane_to_model(world_to_plane(dw / dlen, f), f);
     float3 l = plane_to_model(world_to_plane(MODEL_LIGHT, f), f);
+    float3 fill = plane_to_model(world_to_plane(MODEL_FILL, f), f);
     // Le plan de l'écran dans le repère du modèle : dot(p, nz) = hz.
     float3 nz = plane_to_model(float3(0.0, 0.0, 1.0), f);
     float hz = -tip.z / unit;
+    // Un sculpté n'est pas une borne exacte partout (dôme, ellipsoïdes) : pas raccourcis.
+    float stride = sculpt_id() > 0 ? 0.85 : 1.0;
+    // La lampe, à SCULPT_LAMP_DIST du centre du modèle dans la direction de la lumière.
+    float3 lamp = float3(color.rg + sprite_size() * 0.5, 0.0) + l * SCULPT_LAMP_DIST;
 
-    // Le modèle. Silhouette antialiasée : un rayon qui la frôle à moins d'un pixel la couvre en
-    // partie (`best`, la plus petite distance rencontrée, en pixels).
-    float cov = 0.0;
-    float3 rgb = 0.0;
+    // Silhouette antialiasée : un rayon qui frôle le modèle à moins d'un pixel le couvre en partie
+    // (`best`, la plus petite distance rencontrée, en pixels).
     float2 tb = ray_box(ro, rd, lo - 0.02, hi + 0.02);
-    if (tb.x < tb.y && tb.y > 0.0)
+    int stage = tb.x < tb.y && tb.y > 0.0 ? STAGE_MARCH : STAGE_DONE;
+    // Le point du plan derrière le pixel est à régler avant le prochain tour.
+    bool plane_next = stage == STAGE_DONE;
+    int k = 0;
+    float t = max(tb.x, 0.0);
+    float best = 1e9;
+    float t_best = t;
+    float mat = 0.0;
+    float cov = 0.0;
+    float3 q = 0.0;
+    float3 n = 0.0;
+    float3 L = 0.0;
+    float ao = 1.0;
+    float sh = 1.0;
+    // Marche d'une ombre : x = distance parcourue, y = sortie de la boîte élargie ; `res` sa
+    // pénombre.
+    float2 ts = 0.0;
+    float res = 1.0;
+    float3 g = 0.0;
+    float inside = 0.0;
+    float contact = 0.0;
+    float dropped = 0.0;
+    [loop] for (int it = 0; it < 180; it++)
     {
-        float t = max(tb.x, 0.0);
-        float best = 1e9;
-        float t_best = t;
-        bool hit = false;
-        [loop] for (int k = 0; k < 64; k++)
+        if (plane_next)
         {
-            float d = sd_model(ro + rd * t);
+            // Le plan, là où le modèle ne couvre pas tout le pixel : ombre portée et ombre de
+            // contact, seulement à l'intérieur de l'écran (`mb.xy` = sa demi-taille, px du plan).
+            plane_next = false;
+            stage = STAGE_DONE;
+            float denom = dot(rd, nz);
+            if (cov < 1.0 && denom < -1e-4)
+            {
+                g = ro + rd * ((hz - dot(ro, nz)) / denom);
+                float3 gp = tip + unit * model_to_plane(g, f);
+                inside = saturate(min(mb.x - abs(gp.x), mb.y - abs(gp.y)) + 0.5);
+                if (inside > 0.0)
+                {
+                    stage = STAGE_PLANE;
+                    k = 0;
+                    ts = 0.0;
+                }
+            }
+        }
+        float3 pos;
+        if (stage == STAGE_MARCH)
+        {
+            pos = ro + rd * t;
+        }
+        else if (stage == STAGE_NORMAL)
+        {
+            pos = q + 0.002 * model_tetra(k);
+        }
+        else if (stage == STAGE_AO)
+        {
+            pos = q + (0.01 + 0.0175 * k) * SCULPT_SCALE * n;
+        }
+        else if (stage == STAGE_SELF)
+        {
+            pos = q + n * 0.003 + L * ts.x;
+        }
+        else if (stage == STAGE_PLANE)
+        {
+            pos = g + l * ts.x;
+        }
+        else
+        {
+            break;
+        }
+        float2 m = model_eval(pos, stage == STAGE_PLANE);
+        float d = m.x;
+        if (stage == STAGE_MARCH)
+        {
             float fp = t / dlen;
-            if (d < 0.1 * fp)
+            bool hit = d < 0.1 * fp;
+            if (hit || d / fp < best)
             {
-                hit = true;
+                best = hit ? 0.0 : d / fp;
                 t_best = t;
-                break;
+                mat = m.y;
             }
-            if (d / fp < best)
+            t += d * stride;
+            k++;
+            if (hit || t > tb.y || k == 96)
             {
-                best = d / fp;
-                t_best = t;
-            }
-            t += d;
-            if (t > tb.y)
-            {
-                break;
+                cov = saturate(1.0 - best);
+                if (cov > 0.0)
+                {
+                    q = ro + rd * t_best;
+                    stage = STAGE_NORMAL;
+                    k = 0;
+                }
+                else
+                {
+                    plane_next = true;
+                }
             }
         }
-        cov = hit ? 1.0 : saturate(1.0 - best);
-        if (cov > 0.0)
+        else if (stage == STAGE_NORMAL)
         {
-            rgb = model_shade(ro + rd * t_best, rd, l);
+            n += model_tetra(k) * d;
+            k++;
+            if (k == 4)
+            {
+                n = normalize(n);
+                stage = STAGE_AO;
+                k = 0;
+                ao = 0.0;
+            }
+        }
+        else if (stage == STAGE_AO)
+        {
+            ao += ((0.01 + 0.0175 * k) * SCULPT_SCALE - d) * pow(0.85, k);
+            k++;
+            if (k == 5)
+            {
+                ao = saturate(1.0 - 3.5 * ao / SCULPT_SCALE);
+                L = normalize(lamp - q);
+                float2 tbs = ray_box(q + n * 0.003, L, lo - MODEL_SHADOW_PAD, hi + MODEL_SHADOW_PAD);
+                if (tbs.x < tbs.y && tbs.y > 0.0)
+                {
+                    stage = STAGE_SELF;
+                    k = 0;
+                    ts = float2(max(tbs.x, 0.004), tbs.y);
+                    res = 1.0;
+                }
+                else
+                {
+                    plane_next = true;
+                }
+            }
+        }
+        else if (stage == STAGE_SELF)
+        {
+            res = min(res, MODEL_SOFTNESS * d / ts.x);
+            ts.x += clamp(d, 0.01, 0.2);
+            k++;
+            if (res < 0.002 || ts.x > ts.y || k == 32)
+            {
+                res = saturate(res);
+                sh = res * res * (3.0 - 2.0 * res);
+                plane_next = true;
+            }
+        }
+        else if (k == 0)
+        {
+            // Premier tour du plan : le contact, au point même. Ensuite la pénombre vers la
+            // lumière, marche bornée à la boîte du modèle élargie de sa portée.
+            contact = 1.0 - smoothstep(0.0, MODEL_CONTACT_RADIUS, d);
+            float2 tbp = ray_box(g, l, lo - MODEL_SHADOW_PAD, hi + MODEL_SHADOW_PAD);
+            ts = float2(max(tbp.x, 0.004), tbp.y);
+            res = 1.0;
+            k = 1;
+            if (!(tbp.x < tbp.y && tbp.y > 0.0))
+            {
+                stage = STAGE_DONE;
+            }
+        }
+        else
+        {
+            res = min(res, MODEL_SOFTNESS * d / ts.x);
+            ts.x += clamp(d, 0.01, 0.2);
+            k++;
+            if (res < 0.002 || ts.x > ts.y || k == 33)
+            {
+                res = saturate(res);
+                dropped = 1.0 - res * res * (3.0 - 2.0 * res);
+                stage = STAGE_DONE;
+            }
         }
     }
 
-    // Le plan, là où le modèle ne couvre pas tout le pixel : ombre portée et ombre de contact,
-    // seulement à l'intérieur de l'écran (`mb.xy` = sa demi-taille, px du plan).
-    float shadow = 0.0;
-    float denom = dot(rd, nz);
-    if (cov < 1.0 && denom < -1e-4)
+    float3 rgb = 0.0;
+    if (cov > 0.0)
     {
-        float3 g = ro + rd * ((hz - dot(ro, nz)) / denom);
-        float3 gp = tip + unit * model_to_plane(g, f);
-        float inside = saturate(min(mb.x - abs(gp.x), mb.y - abs(gp.y)) + 0.5);
-        if (inside > 0.0)
-        {
-            float dropped = 1.0 - model_soft_shadow(g, l, lo, hi);
-            float contact = 1.0 - smoothstep(0.0, MODEL_CONTACT_RADIUS, sd_model(g));
-            shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
-        }
+        float3 tl = lamp - q;
+        float fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
+        rgb = model_shade(q, n, rd, normalize(tl), fall, sh, ao, mat, l, fill);
     }
-
+    float shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
     float a = cov * color.a;
     return float4(rgb * a, a + (1.0 - a) * shadow * color.a); // prémultiplié, ombre noire
 }

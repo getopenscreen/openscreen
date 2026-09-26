@@ -35,7 +35,7 @@ struct Layer {
 
 @group(0) @binding(0) var<uniform> layer: Layer;
 @group(0) @binding(1) var texY:  texture_2d<f32>;   // R8Unorm, sample .r ; modes 7, 13 et 15 : le sprite RGBA
-@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r ; mode 15 : distance + relief RG16F
+@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r ; mode 15 : le champ R16F du sprite
 @group(0) @binding(3) var samp:  sampler;
 // Masque de segmentation du sujet webcam, R8. Une vue 1x1 est liee quand aucun masque
 // n'existe : la branche n'est de toute facon prise que si layer.fx.z > 0.5.
@@ -467,21 +467,21 @@ fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<
 }
 
 // ---- Curseur MODELISE (mode 15) ----
-// Port ligne pour ligne de `cursor_model` (HLSL), dont les commentaires font foi : le sprite de
-// l'etat courant en objet 3D, sa silhouette (champ de distance signe tire de son alpha) extrudee,
-// lancee de rayons par pixel, eclairee, et qui porte une ombre douce et une ombre de contact sur
-// le plan de l'ecran. Constantes : miroir exact de `frame_geometry.rs` (MODEL_*), emplacements du
-// cbuffer : `cursor_model_cb`.
+// Port ligne pour ligne de `cursor_model` (HLSL), dont les commentaires font foi : un curseur
+// SCULPTE (`trail_a.x` > 0, la fleche ou la main d'un des cinq themes d'origine modelee en
+// volumes), sinon le sprite de l'etat courant extrude ; eclaire par une lampe proche, avec ombres
+// propres et occlusion, et qui porte une ombre douce et une ombre de contact sur le plan de
+// l'ecran. Constantes : miroir exact de `frame_geometry.rs` (MODEL_*) et de `sculpt.rs`
+// (SCULPT_*), emplacements du cbuffer : `cursor_model_cb`.
 // Textures : le sprite RGBA (alpha droit) au binding 1 (`texY`, comme aux modes 7 et 13), son
-// champ RG16F au binding 2 (`texU`), sur le meme rect ; `color.rg` = coin du sprite dans le repere
+// champ R16F au binding 2 (`texU`), sur le meme rect ; `color.rg` = coin du sprite dans le repere
 // du modele, `sprite_size()` = sa taille (w/h dans `radius_px`), `color.b` = l'ecrasement au clic.
-const MODEL_THICK: f32 = 0.19;
-const MODEL_RELIEF_MAX: f32 = 0.12;
 const MODEL_BEVEL: f32 = 0.045;
 const MODEL_LIGHT = vec3<f32>(-0.4194, -0.5792, 0.6990);
+const MODEL_FILL = vec3<f32>(0.7557, 0.2519, 0.6046);
+// Ambiance et diffus de l'appareil modele (mode 17), qui garde son eclairage d'origine.
 const MODEL_AMBIENT: f32 = 0.36;
 const MODEL_DIFFUSE: f32 = 0.75;
-const MODEL_SPECULAR: f32 = 0.45;
 const MODEL_RIM_INSET: f32 = 1.5;
 const MODEL_SOFTNESS: f32 = 6.0;
 const MODEL_SHADOW_PAD: f32 = 0.45;
@@ -501,9 +501,360 @@ fn sprite_texel() -> f32 {
     return CURSOR_SDF_UPSAMPLE / max(d.x, d.y);
 }
 
-// Epaisseur du modele, ecrase au clic de `color.b`.
+// Epaisseur sous z = 0 (`SpriteShape::thick`), ecrasee au clic de `color.b`.
 fn model_thick() -> f32 {
-    return MODEL_THICK * layer.color.b;
+    return layer.trail_a.y * layer.color.b;
+}
+
+// Le curseur sculpte de ce dessin (`SpriteShape::sculpt`), 0 = le sprite extrude.
+fn sculpt_id() -> i32 {
+    return i32(layer.trail_a.x + 0.5);
+}
+
+// ---- Curseurs sculptes ---- (repere du PROTOTYPE : hauteur 1, y vers le haut, ecran en z = 0)
+const SCULPT_SCALE: f32 = 0.85;
+const SCULPT_HOVER: f32 = 0.05;
+const SCULPT_VOX: f32 = 0.0625;
+const SCULPT_AR_ROUND: f32 = 0.03;
+const SCULPT_HAND_ZC: f32 = 0.185;
+const SCULPT_ZREF_ARROW: f32 = 0.2;
+const SCULPT_ZREF_HAND: f32 = 0.185;
+const SCULPT_LAMP_DIST: f32 = 1.9;
+const SCULPT_SCREEN = vec3<f32>(0.32, 0.32, 0.32);
+
+fn s_lin(r: f32, g: f32, b: f32) -> vec3<f32> {
+    return pow(vec3<f32>(r, g, b), vec3<f32>(2.2));
+}
+
+fn s_smin(a: f32, b: f32, k: f32) -> f32 {
+    let h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * k * 0.25;
+}
+
+fn s_opu(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
+    return select(b, a, a.x < b.x);
+}
+
+fn s_capsule(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, r: f32) -> f32 {
+    let pa = p - a;
+    let ba = b - a;
+    let h = saturate(dot(pa, ba) / dot(ba, ba));
+    return length(pa - ba * h) - r;
+}
+
+fn s_round_box(p: vec3<f32>, b: vec3<f32>, r: f32) -> f32 {
+    let q = abs(p) - b + vec3<f32>(r);
+    return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}
+
+fn s_ellipsoid(p: vec3<f32>, r: vec3<f32>) -> f32 {
+    let k0 = length(p / r);
+    let k1 = length(p / (r * r));
+    return k0 * (k0 - 1.0) / k1;
+}
+
+// Extrusion d'une distance 2D a aretes arrondies : demi-hauteur h, rayon r.
+fn s_extrude(d2: f32, z: f32, h: f32, r: f32) -> f32 {
+    let w = vec2<f32>(d2 + r, abs(z) - h + r);
+    return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0))) - r;
+}
+
+fn s_rot(v: vec2<f32>, a: f32) -> vec2<f32> {
+    let c = cos(a);
+    let s = sin(a);
+    return vec2<f32>(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+const SCULPT_ARROW = array<vec2<f32>, 7>(
+    vec2<f32>(0.0, 0.0), vec2<f32>(0.0, -0.86), vec2<f32>(0.215, -0.665), vec2<f32>(0.37, -1.0),
+    vec2<f32>(0.53, -0.93), vec2<f32>(0.38, -0.60), vec2<f32>(0.64, -0.60)
+);
+
+fn s_arrow2(p: vec2<f32>) -> f32 {
+    var d = dot(p - SCULPT_ARROW[0], p - SCULPT_ARROW[0]);
+    var s = 1.0;
+    var j = 6;
+    for (var i = 0; i < 7; i++) {
+        let e = SCULPT_ARROW[j] - SCULPT_ARROW[i];
+        let w = p - SCULPT_ARROW[i];
+        let b = w - e * saturate(dot(w, e) / dot(e, e));
+        d = min(d, dot(b, b));
+        let c0 = p.y >= SCULPT_ARROW[i].y;
+        let c1 = p.y < SCULPT_ARROW[j].y;
+        let c2 = e.x * w.y > e.y * w.x;
+        if (c0 && c1 && c2) || (!c0 && !c1 && !c2) {
+            s = -s;
+        }
+        j = i;
+    }
+    return s * sqrt(d);
+}
+
+fn s_star5(p0: vec2<f32>, r: f32, rf: f32) -> f32 {
+    let k1 = vec2<f32>(0.809016994375, -0.587785252292);
+    let k2 = vec2<f32>(-0.809016994375, -0.587785252292);
+    var p = vec2<f32>(abs(p0.x), p0.y);
+    p = p - 2.0 * max(dot(k1, p), 0.0) * k1;
+    p = p - 2.0 * max(dot(k2, p), 0.0) * k2;
+    p.x = abs(p.x);
+    p.y = p.y - r;
+    let ba = rf * vec2<f32>(-k1.y, k1.x) - vec2<f32>(0.0, 1.0);
+    let h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+    return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+
+fn s_arrow_solid(p: vec3<f32>, h: f32, re: f32, dome: f32) -> f32 {
+    let d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
+    let hh = h + dome * smoothstep(0.0, 0.07, -d2);
+    return s_extrude(d2, p.z - (SCULPT_HOVER + h + dome), hh, re);
+}
+
+fn s_piping(p: vec3<f32>, ztop: f32) -> f32 {
+    let d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
+    return length(vec2<f32>(d2 + 0.075, p.z - ztop)) - 0.017;
+}
+
+fn s_glove(p: vec3<f32>, zc: f32) -> f32 {
+    let index = s_capsule(p, vec3<f32>(0.0, -0.10, zc), vec3<f32>(0.0, -0.52, zc), 0.098);
+    let palm = s_round_box(p - vec3<f32>(0.185, -0.70, zc), vec3<f32>(0.255, 0.19, 0.105), 0.1);
+    let f1 = s_capsule(p, vec3<f32>(0.17, -0.57, zc + 0.012), vec3<f32>(0.17, -0.41, zc + 0.045), 0.086);
+    let f2 = s_capsule(p, vec3<f32>(0.31, -0.59, zc + 0.01), vec3<f32>(0.31, -0.45, zc + 0.04), 0.08);
+    let f3 = s_capsule(p, vec3<f32>(0.435, -0.625, zc + 0.005), vec3<f32>(0.435, -0.52, zc + 0.03), 0.07);
+    let thumb = s_capsule(p, vec3<f32>(0.03, -0.77, zc + 0.03), vec3<f32>(-0.165, -0.60, zc + 0.065), 0.082);
+    var d = s_smin(palm, min(f1, min(f2, f3)), 0.035);
+    d = s_smin(d, index, 0.05);
+    return s_smin(d, thumb, 0.05);
+}
+
+fn s_cuff(p: vec3<f32>, zc: f32) -> f32 {
+    let q = p - vec3<f32>(0.185, -0.925, zc);
+    let ab = vec2<f32>(0.272, 0.12);
+    let e = (length(q.xz / ab) - 1.0) * min(ab.x, ab.y);
+    return s_extrude(e, q.y, 0.07, 0.06);
+}
+
+fn s_sprout(p: vec3<f32>, c: vec3<f32>) -> vec2<f32> {
+    let q = p - c;
+    let st2 = s_star5(q.xy, 0.125, 0.52) - 0.022;
+    var r = vec2<f32>(s_extrude(st2, q.z, 0.038, 0.034), 3.0);
+    let e = vec3<f32>(abs(q.x) - 0.032, q.y + 0.005, q.z - 0.036);
+    r = s_opu(r, vec2<f32>(length(e) - 0.0135, 5.0));
+    let l1 = vec3<f32>(s_rot(q.xy - vec2<f32>(-0.04, 0.15), -0.6), q.z);
+    let l2 = vec3<f32>(s_rot(q.xy - vec2<f32>(0.045, 0.155), 0.7), q.z);
+    let leaves = min(s_ellipsoid(l1, vec3<f32>(0.03, 0.058, 0.02)), s_ellipsoid(l2, vec3<f32>(0.03, 0.058, 0.02)));
+    return s_opu(r, vec2<f32>(leaves, 4.0));
+}
+
+// Pixel Candy : une ligne par entier, bit c = colonne c (cf. HLSL et `sculpt.rs`).
+const SCULPT_ARROWPIX = array<i32, 16>(0, 1, 3, 7, 31, 63, 127, 255, 511, 63, 55, 115, 113, 224, 224, 64);
+const SCULPT_ARROWBACK = array<i32, 18>(
+    3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 4095, 255, 511, 511, 999, 995, 960, 192
+);
+const SCULPT_HANDPIX = array<i32, 15>(4, 14, 14, 14, 110, 878, 7022, 7022, 8190, 8191, 8191, 8191, 8190, 4092, 4092);
+const SCULPT_HANDBACK = array<i32, 17>(
+    28, 62, 62, 62, 510, 4094, 32766, 32766, 32766, 32767, 32767, 32767, 32767, 32767, 32766, 16380, 16380
+);
+const SCULPT_HANDSPAN = array<vec2<f32>, 17>(
+    vec2<f32>(2.0, 4.0), vec2<f32>(1.0, 5.0), vec2<f32>(1.0, 5.0), vec2<f32>(1.0, 5.0), vec2<f32>(1.0, 8.0),
+    vec2<f32>(1.0, 11.0), vec2<f32>(1.0, 14.0), vec2<f32>(1.0, 14.0), vec2<f32>(1.0, 14.0), vec2<f32>(0.0, 14.0),
+    vec2<f32>(0.0, 14.0), vec2<f32>(0.0, 14.0), vec2<f32>(0.0, 14.0), vec2<f32>(0.0, 14.0), vec2<f32>(1.0, 14.0),
+    vec2<f32>(2.0, 13.0), vec2<f32>(2.0, 13.0)
+);
+
+fn s_grid_origin(shape: i32) -> vec2<f32> {
+    return select(vec2<f32>(-2.5 * SCULPT_VOX, 0.0), vec2<f32>(0.0), shape == 0);
+}
+
+fn s_bit(row: i32, r: i32, c: i32, rows: i32, cols: i32) -> bool {
+    return r >= 0 && r < rows && c >= 0 && c < cols && ((row >> u32(clamp(c, 0, 31))) & 1) == 1;
+}
+
+fn s_occ(id: vec2<f32>, shape: i32) -> bool {
+    let c = i32(id.x);
+    let r = -i32(id.y) - 1;
+    if shape == 0 {
+        return s_bit(SCULPT_ARROWPIX[clamp(r, 0, 15)], r, c, 16, 16);
+    }
+    return s_bit(SCULPT_HANDPIX[clamp(r, 0, 14)], r, c, 15, 13);
+}
+
+fn s_occ_back(id: vec2<f32>, shape: i32) -> bool {
+    let c = i32(id.x) + 1;
+    let r = -i32(id.y);
+    if shape == 0 {
+        return s_bit(SCULPT_ARROWBACK[clamp(r, 0, 17)], r, c, 18, 17);
+    }
+    return s_bit(SCULPT_HANDBACK[clamp(r, 0, 16)], r, c, 17, 15);
+}
+
+fn s_voxels(p: vec3<f32>, shape: i32) -> vec2<f32> {
+    let o = s_grid_origin(shape);
+    let cell = floor((p.xy - o) / SCULPT_VOX);
+    let bc = select(vec2<f32>(0.25, -0.47), vec2<f32>(0.33, -0.5), shape == 0);
+    let bh = select(vec2<f32>(0.48, 0.55), vec2<f32>(0.44, 0.61), shape == 0);
+    let bq = max(abs(p.xy - bc) - bh, vec2<f32>(0.0));
+    let bz = max(abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07, 0.0);
+    let far = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
+    var dF = far;
+    var dB = far;
+    let half_cell = vec3<f32>(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.04);
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let id = cell + vec2<f32>(f32(i), f32(j));
+            let q = vec3<f32>(p.xy - (o + (id + vec2<f32>(0.5)) * SCULPT_VOX), p.z);
+            if s_occ(id, shape) {
+                dF = min(dF, s_round_box(q - vec3<f32>(0.0, 0.0, SCULPT_HOVER + 0.1), half_cell, 0.009));
+            }
+            if s_occ_back(id, shape) {
+                dB = min(dB, s_round_box(q - vec3<f32>(0.0, 0.0, SCULPT_HOVER + 0.04), half_cell, 0.009));
+            }
+        }
+    }
+    return select(vec2<f32>(dB, 7.0), vec2<f32>(dF, 6.0), dF < dB);
+}
+
+fn s_pixel_hand_dist(p: vec2<f32>) -> f32 {
+    var d = 1e9;
+    for (var r = 0; r < 17; r++) {
+        let x = (SCULPT_HANDSPAN[r] + vec2<f32>(-3.5, -2.5)) * SCULPT_VOX;
+        let y = vec2<f32>(-f32(r), 1.0 - f32(r)) * SCULPT_VOX;
+        let q = max(max(vec2<f32>(x.x, y.x) - p, p - vec2<f32>(x.y, y.y)), vec2<f32>(0.0));
+        d = min(d, length(q));
+    }
+    return d;
+}
+
+fn s_gem_edge(p: vec3<f32>, a: vec2<f32>, b: vec2<f32>, z0: f32) -> f32 {
+    let e = b - a;
+    let len = length(e);
+    let d = e / len;
+    let q = p.xy - a;
+    let dist = dot(q, vec2<f32>(-d.y, d.x));
+    let along = abs(dot(q, d) - 0.5 * len);
+    let z = p.z - z0;
+    let girdle = (z - 0.035 - 2.2 * dist) * 0.4138;
+    let crown = (z - 0.07 - 0.6 * dist + 0.18 * along) * 0.8438;
+    return max(-dist, max(girdle, crown));
+}
+
+fn s_gem_arrow(p: vec3<f32>) -> f32 {
+    let z0 = SCULPT_HOVER + 0.03;
+    let slab = max(p.z - z0 - 0.2, z0 - 0.03 - p.z);
+    let head = max(slab, max(s_gem_edge(p, vec2<f32>(-0.02, 0.03), vec2<f32>(-0.02, -0.88), z0),
+                         max(s_gem_edge(p, vec2<f32>(-0.02, -0.88), vec2<f32>(0.66, -0.61), z0),
+                             s_gem_edge(p, vec2<f32>(0.66, -0.61), vec2<f32>(-0.02, 0.03), z0))));
+    let tail = max(slab, max(max(s_gem_edge(p, vec2<f32>(0.215, -0.665), vec2<f32>(0.37, -1.0), z0),
+                                 s_gem_edge(p, vec2<f32>(0.37, -1.0), vec2<f32>(0.53, -0.93), z0)),
+                             max(s_gem_edge(p, vec2<f32>(0.53, -0.93), vec2<f32>(0.38, -0.60), z0),
+                                 s_gem_edge(p, vec2<f32>(0.38, -0.60), vec2<f32>(0.215, -0.665), z0))));
+    return min(head, tail);
+}
+
+fn s_facet_capsule(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, r: f32, spin: f32) -> f32 {
+    let u = normalize(b - a);
+    let v = normalize(cross(u, vec3<f32>(0.0, 0.0, 1.0)));
+    let w = cross(u, v);
+    let q = p - b;
+    let h = dot(q, u);
+    let rad = vec2<f32>(dot(q, v), dot(q, w));
+    var d = max(h - r, -dot(p - a, u) - r);
+    for (var k = 0; k < 6; k++) {
+        let an = spin + f32(k) * 1.0471976;
+        let s = dot(rad, vec2<f32>(cos(an), sin(an)));
+        d = max(d, s - r);
+        d = max(d, dot(rad, vec2<f32>(cos(an + 0.5236), sin(an + 0.5236))) * 0.8660 + h * 0.5 - r);
+        d = max(d, s * 0.5 + h * 0.8660 - r);
+    }
+    return d;
+}
+
+const SCULPT_FACETS = array<vec3<f32>, 10>(
+    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 0.0, 1.0),
+    vec3<f32>(0.7071, 0.7071, 0.0), vec3<f32>(0.7071, 0.0, 0.7071), vec3<f32>(0.0, 0.7071, 0.7071),
+    vec3<f32>(0.5774, 0.5774, 0.5774), vec3<f32>(0.4472, 0.0, 0.8944), vec3<f32>(0.0, 0.4472, 0.8944),
+    vec3<f32>(0.3015, 0.3015, 0.9045)
+);
+
+fn s_facet_ellipsoid(p: vec3<f32>, r: vec3<f32>) -> f32 {
+    let q = abs(p);
+    var d = -1e9;
+    for (var i = 0; i < 10; i++) {
+        d = max(d, dot(q, SCULPT_FACETS[i]) - length(r * SCULPT_FACETS[i]));
+    }
+    return d;
+}
+
+fn s_crystal_hand(p: vec3<f32>) -> f32 {
+    let zc = SCULPT_HAND_ZC;
+    var d = s_facet_ellipsoid(p - vec3<f32>(0.185, -0.70, zc), vec3<f32>(0.3, 0.235, 0.125));
+    d = min(d, s_facet_capsule(p, vec3<f32>(0.0, -0.52, zc), vec3<f32>(0.0, -0.10, zc), 0.098, 0.3));
+    d = min(d, s_facet_capsule(p, vec3<f32>(0.17, -0.57, zc + 0.012), vec3<f32>(0.17, -0.41, zc + 0.045), 0.086, 0.1));
+    d = min(d, s_facet_capsule(p, vec3<f32>(0.31, -0.59, zc + 0.01), vec3<f32>(0.31, -0.45, zc + 0.04), 0.08, 0.5));
+    d = min(d, s_facet_capsule(p, vec3<f32>(0.435, -0.625, zc + 0.005), vec3<f32>(0.435, -0.52, zc + 0.03), 0.07, 0.2));
+    return min(d, s_facet_capsule(p, vec3<f32>(0.03, -0.77, zc + 0.03), vec3<f32>(-0.165, -0.60, zc + 0.065), 0.082, 0.7));
+}
+
+fn sculpt_proto(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
+    if theme == 3 {
+        return s_voxels(p, shape);
+    }
+    if theme == 1 {
+        return vec2<f32>(select(s_crystal_hand(p), s_gem_arrow(p), shape == 0), 8.0);
+    }
+    var body: vec2<f32>;
+    var star: vec3<f32>;
+    if shape == 0 {
+        var h = 0.075;
+        var re = 0.03;
+        var dome = 0.0;
+        if theme == 2 {
+            h = 0.07;
+            re = 0.06;
+            dome = 0.035;
+        }
+        if theme == 4 {
+            h = 0.07;
+            re = 0.055;
+            dome = 0.025;
+        }
+        body = vec2<f32>(s_arrow_solid(p, h, re, dome), 1.0);
+        if theme == 0 {
+            body = s_opu(body, vec2<f32>(s_piping(p, SCULPT_HOVER + 2.0 * h - 0.004), 2.0));
+        }
+        star = vec3<f32>(0.57, -0.86, SCULPT_HOVER + 2.0 * h + dome);
+    } else {
+        body = s_opu(vec2<f32>(s_glove(p, SCULPT_HAND_ZC), 1.0), vec2<f32>(s_cuff(p, SCULPT_HAND_ZC), 2.0));
+        star = vec3<f32>(0.185, -0.93, SCULPT_HAND_ZC + 0.15);
+    }
+    if theme == 4 {
+        return s_opu(body, s_sprout(p, star));
+    }
+    return body;
+}
+
+fn sculpt_point(q: vec3<f32>) -> vec3<f32> {
+    let zref = select(SCULPT_ZREF_HAND, SCULPT_ZREF_ARROW, (sculpt_id() - 1) % 2 == 0);
+    return vec3<f32>(q.x, -q.y, q.z / max(layer.color.b, 1e-3)) / SCULPT_SCALE + vec3<f32>(0.0, 0.0, zref);
+}
+
+fn sculpt_units() -> f32 {
+    return SCULPT_SCALE * min(layer.color.b, 1.0);
+}
+
+fn sculpt_eval(q: vec3<f32>, occ: bool) -> vec2<f32> {
+    let id = sculpt_id() - 1;
+    let theme = id / 2;
+    let shape = id % 2;
+    let p = sculpt_point(q);
+    var r: vec2<f32>;
+    if occ && theme == 3 {
+        let d2 = select(s_pixel_hand_dist(p.xy), s_arrow2(p.xy) - 1.2 * SCULPT_VOX, shape == 0);
+        let dz = abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07;
+        r = vec2<f32>(length(max(vec2<f32>(d2, dz), vec2<f32>(0.0))) + min(max(d2, dz), 0.0), 7.0);
+    } else {
+        r = sculpt_proto(p, select(theme, 2, occ && theme == 1), shape);
+    }
+    return vec2<f32>(r.x * sculpt_units(), r.y);
 }
 
 fn sd_sprite2(p: vec2<f32>) -> f32 {
@@ -517,30 +868,13 @@ fn sd_sprite2(p: vec2<f32>) -> f32 {
     return select(d, sqrt(out2 + e * e), out2 > 0.0);
 }
 
-fn model_top_height(p: vec2<f32>) -> f32 {
-    let lo = layer.color.rg;
-    let c = clamp(p, lo, lo + sprite_size());
-    let relief = textureSampleLevel(texU, samp, (c - lo) / sprite_size(), 0.0).g;
-    return clamp(relief * layer.color.b, 0.0, MODEL_RELIEF_MAX);
-}
-
-fn sd_model(p: vec3<f32>) -> f32 {
-    let top = model_top_height(p.xy);
-    let thick = model_thick();
-    let half_t = (top + thick) * 0.5;
-    let center_z = (top - thick) * 0.5;
-    let w = vec2<f32>(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z - center_z) - (half_t - MODEL_BEVEL));
-    return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0))) - MODEL_BEVEL;
-}
-
-fn model_normal(p: vec3<f32>) -> vec3<f32> {
-    let e = 0.002;
-    let ka = vec3<f32>(1.0, -1.0, -1.0);
-    let kb = vec3<f32>(-1.0, -1.0, 1.0);
-    let kc = vec3<f32>(-1.0, 1.0, -1.0);
-    let kd = vec3<f32>(1.0, 1.0, 1.0);
-    return normalize(ka * sd_model(p + ka * e) + kb * sd_model(p + kb * e) +
-                     kc * sd_model(p + kc * e) + kd * sd_model(p + kd * e));
+fn model_eval(p: vec3<f32>, occ: bool) -> vec2<f32> {
+    if sculpt_id() > 0 {
+        return sculpt_eval(p, occ);
+    }
+    let half_t = model_thick() * 0.5;
+    let w = vec2<f32>(sd_sprite2(p.xy) + MODEL_BEVEL, abs(p.z + half_t) - (half_t - MODEL_BEVEL));
+    return vec2<f32>(min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0))) - MODEL_BEVEL, 0.0);
 }
 
 fn ray_box(o: vec3<f32>, d: vec3<f32>, lo: vec3<f32>, hi: vec3<f32>) -> vec2<f32> {
@@ -581,25 +915,6 @@ fn plane_to_model(v: vec3<f32>, f: ModelFrame) -> vec3<f32> {
     return vec3<f32>(x, y * f.cp + v.z * f.sp, -y * f.sp + v.z * f.cp);
 }
 
-fn model_soft_shadow(o: vec3<f32>, l: vec3<f32>, lo: vec3<f32>, hi: vec3<f32>) -> f32 {
-    let tb = ray_box(o, l, lo - vec3<f32>(MODEL_SHADOW_PAD), hi + vec3<f32>(MODEL_SHADOW_PAD));
-    if tb.x >= tb.y || tb.y <= 0.0 {
-        return 1.0;
-    }
-    var res = 1.0;
-    var t = max(tb.x, 0.004);
-    for (var k = 0; k < 32; k = k + 1) {
-        let d = sd_model(o + l * t);
-        res = min(res, MODEL_SOFTNESS * d / t);
-        if res < 0.002 || t > tb.y {
-            break;
-        }
-        t = t + clamp(d, 0.01, 0.2);
-    }
-    res = clamp(res, 0.0, 1.0);
-    return res * res * (3.0 - 2.0 * res);
-}
-
 fn model_albedo(p: vec2<f32>) -> vec3<f32> {
     let texel = sprite_texel();
     let e = 0.25 * texel;
@@ -609,13 +924,169 @@ fn model_albedo(p: vec2<f32>) -> vec3<f32> {
     return textureSampleLevel(texY, samp, (q - layer.color.rg) / sprite_size(), 0.0).rgb;
 }
 
-fn model_shade(q: vec3<f32>, rd: vec3<f32>, l: vec3<f32>) -> vec3<f32> {
-    let n = model_normal(q);
-    let albedo = model_albedo(q.xy);
-    let diffuse = clamp(dot(n, l), 0.0, 1.0);
-    let gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
-    let spec = gloss * pow(clamp(dot(n, normalize(l - rd)), 0.0, 1.0), 110.0);
-    return albedo * (MODEL_AMBIENT + MODEL_DIFFUSE * diffuse) + MODEL_SPECULAR * spec;
+struct SculptMat {
+    alb: vec3<f32>,
+    rough: f32,
+    spec: f32,
+    sss: f32,
+    refl: f32,
+}
+
+fn s_pixel_colour(p: vec3<f32>, shape: i32) -> vec3<f32> {
+    let id = floor((p.xy - s_grid_origin(shape)) / SCULPT_VOX);
+    if !s_occ(id + vec2<f32>(-1.0, 0.0), shape) || !s_occ(id + vec2<f32>(0.0, -1.0), shape) {
+        return s_lin(0.52, 0.91, 0.77);
+    }
+    if !s_occ(id + vec2<f32>(1.0, 0.0), shape) || !s_occ(id + vec2<f32>(0.0, 1.0), shape) {
+        return s_lin(1.0, 0.78, 0.87);
+    }
+    return s_lin(1.0, 0.50, 0.71);
+}
+
+fn sculpt_material(mat: f32, p: vec3<f32>, theme: i32, shape: i32) -> SculptMat {
+    let primary = mat < 1.5;
+    if theme == 0 {
+        if shape == 0 && primary {
+            return SculptMat(s_lin(0.10, 0.10, 0.115), 0.3, 0.2, 0.0, 0.9);
+        }
+        if shape == 0 {
+            return SculptMat(s_lin(0.94, 0.91, 0.84), 0.45, 0.4, 0.2, 0.3);
+        }
+        if primary {
+            return SculptMat(s_lin(0.95, 0.92, 0.85), 0.55, 0.35, 0.35, 0.25);
+        }
+        return SculptMat(s_lin(0.17, 0.18, 0.22), 0.35, 0.6, 0.0, 0.6);
+    }
+    if theme == 2 {
+        if shape == 0 {
+            return SculptMat(s_lin(1.0, 0.40, 0.30), 0.5, 0.45, 0.4, 0.25);
+        }
+        if primary {
+            return SculptMat(s_lin(1.0, 0.79, 0.16), 0.5, 0.45, 0.4, 0.25);
+        }
+        return SculptMat(s_lin(0.18, 0.20, 0.29), 0.4, 0.5, 0.0, 0.4);
+    }
+    if theme == 4 {
+        if primary && shape == 0 {
+            return SculptMat(s_lin(0.62, 0.91, 0.78), 0.22, 0.8, 0.25, 0.6);
+        }
+        if primary {
+            return SculptMat(s_lin(0.96, 0.94, 0.88), 0.5, 0.35, 0.35, 0.25);
+        }
+        if mat < 2.5 {
+            return SculptMat(s_lin(0.62, 0.91, 0.78), 0.25, 0.7, 0.25, 0.5);
+        }
+        if mat < 3.5 {
+            return SculptMat(s_lin(1.0, 0.80, 0.20), 0.3, 0.6, 0.3, 0.4);
+        }
+        if mat < 4.5 {
+            return SculptMat(s_lin(0.38, 0.80, 0.55), 0.35, 0.5, 0.35, 0.3);
+        }
+        return SculptMat(s_lin(0.16, 0.12, 0.10), 0.2, 0.8, 0.0, 0.5);
+    }
+    if mat < 6.5 {
+        return SculptMat(s_pixel_colour(p, shape), 0.45, 0.35, 0.15, 0.2);
+    }
+    return SculptMat(s_lin(0.36, 0.18, 0.54), 0.45, 0.35, 0.1, 0.2);
+}
+
+fn model_env(d: vec3<f32>, rough: f32, l: vec3<f32>, fill: vec3<f32>) -> vec3<f32> {
+    var col = mix(SCULPT_SCREEN * 0.9, s_lin(0.82, 0.85, 0.92) * 0.55, smoothstep(-0.15, 0.35, d.z));
+    let w = rough * 0.3;
+    let k = 1.0 - rough * 0.6;
+    col = col + s_lin(1.0, 0.97, 0.92) * 5.0 * k * smoothstep(0.90 - w, 0.97, dot(d, l));
+    col = col + s_lin(0.85, 0.9, 1.0) * 1.6 * k * smoothstep(0.93 - w, 0.98, dot(d, fill));
+    return col;
+}
+
+fn s_gem(k0: f32) -> vec3<f32> {
+    let k = saturate(k0) * 3.0;
+    let a = s_lin(0.20, 0.95, 1.0);
+    let b = s_lin(0.15, 0.42, 1.0);
+    let c = s_lin(0.45, 0.25, 0.95);
+    let d = s_lin(0.88, 0.50, 1.0);
+    if k < 1.0 {
+        return mix(a, b, k);
+    }
+    if k < 2.0 {
+        return mix(b, c, k - 1.0);
+    }
+    return mix(c, d, k - 2.0);
+}
+
+fn model_shade_crystal(n: vec3<f32>, rd: vec3<f32>, L: vec3<f32>, fall: f32, l: vec3<f32>, fill: vec3<f32>) -> vec3<f32> {
+    let cosi = saturate(dot(-rd, n));
+    let F = 0.04 + 0.96 * pow(1.0 - cosi, 5.0);
+    let t = refract(rd, n, 1.0 / 1.6);
+    let k = 0.42 + 0.9 * dot(vec2<f32>(n.x, -n.y), vec2<f32>(0.7557, -0.6549))
+          + 0.6 * dot(vec2<f32>(t.x, -t.y), vec2<f32>(0.6, -0.8));
+    let body = vec3<f32>(s_gem(k - 0.08).r, s_gem(k).g, s_gem(k + 0.08).b);
+    var col = body * (0.1 + 1.8 * fall * pow(max(dot(n, L), 0.0), 2.5));
+    col = col + body * model_env(reflect(t, vec3<f32>(0.0, 0.0, 1.0)) * vec3<f32>(1.0, 1.0, -1.0), 0.15, l, fill) * 0.5;
+    col = col + vec3<f32>(pow(max(dot(reflect(rd, n), L), 0.0), 30.0) * 2.0);
+    col = col + model_env(reflect(rd, n), 0.05, l, fill) * F;
+    col = col + s_lin(0.5, 0.9, 1.0) * pow(1.0 - cosi, 4.0) * 0.6;
+    return col;
+}
+
+fn model_tonemap(c0: vec3<f32>) -> vec3<f32> {
+    let start = 0.76;
+    let x = min(c0.r, min(c0.g, c0.b));
+    var c = c0 - vec3<f32>(select(0.04, x - 6.25 * x * x, x < 0.08));
+    let peak = max(c.r, max(c.g, c.b));
+    if peak >= start {
+        let d = 1.0 - start;
+        let np = 1.0 - d * d / (peak + d - start);
+        c = c * (np / peak);
+        let g = 1.0 - 1.0 / (0.15 * (peak - np) + 1.0);
+        c = mix(c, vec3<f32>(np), g);
+    }
+    return pow(saturate(c), vec3<f32>(1.0 / 2.2));
+}
+
+fn model_shade(q: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, L: vec3<f32>, fall: f32, sh: f32, ao: f32, mat: f32,
+               l: vec3<f32>, fill: vec3<f32>) -> vec3<f32> {
+    let id = sculpt_id();
+    if id > 0 && (id - 1) / 2 == 1 {
+        return model_tonemap(model_shade_crystal(n, rd, L, fall, l, fill));
+    }
+    var m: SculptMat;
+    var gloss = 1.0;
+    if id > 0 {
+        let p = sculpt_point(q) - vec3<f32>(n.x, -n.y, n.z) * 0.01;
+        m = sculpt_material(mat, p, (id - 1) / 2, (id - 1) % 2);
+    } else {
+        m = SculptMat(pow(model_albedo(q.xy), vec3<f32>(2.2)), 0.45, 0.35, 0.2, 0.3);
+        gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
+    }
+    let key = s_lin(1.0, 0.97, 0.93) * 2.1 * fall;
+    let ndl = dot(n, L);
+    let wrap = 0.5 * m.sss;
+    let dif = saturate((ndl + wrap) / (1.0 + wrap)) * mix(sh, 1.0, 0.15 * m.sss);
+    let ndh = saturate(dot(n, normalize(L - rd)));
+    let shin = exp2(10.0 * (1.0 - m.rough) + 1.0);
+    let spe = (pow(ndh, shin) * (shin + 8.0) / 25.0 + 0.15 * pow(ndh, 8.0)) * sh * saturate(ndl * 4.0);
+    let fre = pow(1.0 - saturate(dot(n, -rd)), 5.0);
+    let amb = mix(SCULPT_SCREEN * 0.12, s_lin(0.88, 0.92, 1.0) * 0.22, 0.5 + 0.5 * n.z);
+    let fl = s_lin(0.85, 0.9, 1.0) * saturate(dot(n, fill)) * 0.12;
+    var col = m.alb * (key * dif + (amb + fl) * ao * mix(vec3<f32>(1.0), m.alb, 0.5));
+    col = col + key * spe * m.spec * gloss;
+    col = col + model_env(reflect(rd, n), m.rough, l, fill) * m.refl * (0.04 + 0.96 * fre) * ao * gloss;
+    col = col + s_lin(0.9, 0.95, 1.0) * fre * 0.08 * ao * sh;
+    return model_tonemap(col);
+}
+
+// Les passes de la boucle unique de `cursor_model` (cf. HLSL : un seul appel de `model_eval`).
+const STAGE_MARCH: i32 = 0;
+const STAGE_NORMAL: i32 = 1;
+const STAGE_AO: i32 = 2;
+const STAGE_SELF: i32 = 3;
+const STAGE_PLANE: i32 = 4;
+const STAGE_DONE: i32 = 5;
+
+fn model_tetra(k: i32) -> vec3<f32> {
+    let b = vec3<f32>(f32(((k + 3) >> 1u) & 1), f32((k >> 1u) & 1), f32(k & 1));
+    return 0.5773 * (2.0 * b - vec3<f32>(1.0));
 }
 
 fn cursor_model(local: vec2<f32>) -> vec4<f32> {
@@ -630,7 +1101,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     let unit = layer.src.w;
     let tip = layer.src_prev.xyz;
     let lo = vec3<f32>(layer.color.rg, -model_thick());
-    let hi = vec3<f32>(layer.color.rg + sprite_size(), MODEL_RELIEF_MAX);
+    let hi = vec3<f32>(layer.color.rg + sprite_size(), layer.trail_a.z);
 
     let dw = vec3<f32>(local + layer.src.xy, -persp);
     let dlen = length(dw);
@@ -638,53 +1109,146 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     let ro = plane_to_model((world_to_plane(vec3<f32>(-layer.mb.z, -layer.mb.w, persp), f) - tip) / unit, f);
     let rd = plane_to_model(world_to_plane(dw / dlen, f), f);
     let l = plane_to_model(world_to_plane(MODEL_LIGHT, f), f);
+    let fill = plane_to_model(world_to_plane(MODEL_FILL, f), f);
     let nz = plane_to_model(vec3<f32>(0.0, 0.0, 1.0), f);
     let hz = -tip.z / unit;
+    let stride = select(1.0, 0.85, sculpt_id() > 0);
+    let lamp = vec3<f32>(layer.color.rg + sprite_size() * 0.5, 0.0) + l * SCULPT_LAMP_DIST;
 
-    var cov = 0.0;
-    var rgb = vec3<f32>(0.0);
     let tb = ray_box(ro, rd, lo - vec3<f32>(0.02), hi + vec3<f32>(0.02));
-    if tb.x < tb.y && tb.y > 0.0 {
-        var t = max(tb.x, 0.0);
-        var best = 1e9;
-        var t_best = t;
-        var hit = false;
-        for (var k = 0; k < 64; k = k + 1) {
-            let d = sd_model(ro + rd * t);
+    var stage = select(STAGE_DONE, STAGE_MARCH, tb.x < tb.y && tb.y > 0.0);
+    var plane_next = stage == STAGE_DONE;
+    var k = 0;
+    var t = max(tb.x, 0.0);
+    var best = 1e9;
+    var t_best = t;
+    var mat = 0.0;
+    var cov = 0.0;
+    var q = vec3<f32>(0.0);
+    var n = vec3<f32>(0.0);
+    var L = vec3<f32>(0.0);
+    var ao = 1.0;
+    var sh = 1.0;
+    var ts = vec2<f32>(0.0);
+    var res = 1.0;
+    var g = vec3<f32>(0.0);
+    var inside = 0.0;
+    var contact = 0.0;
+    var dropped = 0.0;
+    for (var it = 0; it < 180; it++) {
+        if plane_next {
+            plane_next = false;
+            stage = STAGE_DONE;
+            let denom = dot(rd, nz);
+            if cov < 1.0 && denom < -1e-4 {
+                g = ro + rd * ((hz - dot(ro, nz)) / denom);
+                let gp = tip + unit * model_to_plane(g, f);
+                inside = saturate(min(layer.mb.x - abs(gp.x), layer.mb.y - abs(gp.y)) + 0.5);
+                if inside > 0.0 {
+                    stage = STAGE_PLANE;
+                    k = 0;
+                    ts = vec2<f32>(0.0);
+                }
+            }
+        }
+        var pos: vec3<f32>;
+        if stage == STAGE_MARCH {
+            pos = ro + rd * t;
+        } else if stage == STAGE_NORMAL {
+            pos = q + 0.002 * model_tetra(k);
+        } else if stage == STAGE_AO {
+            pos = q + (0.01 + 0.0175 * f32(k)) * SCULPT_SCALE * n;
+        } else if stage == STAGE_SELF {
+            pos = q + n * 0.003 + L * ts.x;
+        } else if stage == STAGE_PLANE {
+            pos = g + l * ts.x;
+        } else {
+            break;
+        }
+        let m = model_eval(pos, stage == STAGE_PLANE);
+        let d = m.x;
+        if stage == STAGE_MARCH {
             let fp = t / dlen;
-            if d < 0.1 * fp {
-                hit = true;
+            let hit = d < 0.1 * fp;
+            if hit || d / fp < best {
+                best = select(d / fp, 0.0, hit);
                 t_best = t;
-                break;
+                mat = m.y;
             }
-            if d / fp < best {
-                best = d / fp;
-                t_best = t;
+            t = t + d * stride;
+            k++;
+            if hit || t > tb.y || k == 96 {
+                cov = saturate(1.0 - best);
+                if cov > 0.0 {
+                    q = ro + rd * t_best;
+                    stage = STAGE_NORMAL;
+                    k = 0;
+                } else {
+                    plane_next = true;
+                }
             }
-            t = t + d;
-            if t > tb.y {
-                break;
+        } else if stage == STAGE_NORMAL {
+            n = n + model_tetra(k) * d;
+            k++;
+            if k == 4 {
+                n = normalize(n);
+                stage = STAGE_AO;
+                k = 0;
+                ao = 0.0;
             }
-        }
-        cov = select(clamp(1.0 - best, 0.0, 1.0), 1.0, hit);
-        if cov > 0.0 {
-            rgb = model_shade(ro + rd * t_best, rd, l);
+        } else if stage == STAGE_AO {
+            ao = ao + ((0.01 + 0.0175 * f32(k)) * SCULPT_SCALE - d) * pow(0.85, f32(k));
+            k++;
+            if k == 5 {
+                ao = saturate(1.0 - 3.5 * ao / SCULPT_SCALE);
+                L = normalize(lamp - q);
+                let tbs = ray_box(q + n * 0.003, L, lo - vec3<f32>(MODEL_SHADOW_PAD), hi + vec3<f32>(MODEL_SHADOW_PAD));
+                if tbs.x < tbs.y && tbs.y > 0.0 {
+                    stage = STAGE_SELF;
+                    k = 0;
+                    ts = vec2<f32>(max(tbs.x, 0.004), tbs.y);
+                    res = 1.0;
+                } else {
+                    plane_next = true;
+                }
+            }
+        } else if stage == STAGE_SELF {
+            res = min(res, MODEL_SOFTNESS * d / ts.x);
+            ts.x = ts.x + clamp(d, 0.01, 0.2);
+            k++;
+            if res < 0.002 || ts.x > ts.y || k == 32 {
+                res = saturate(res);
+                sh = res * res * (3.0 - 2.0 * res);
+                plane_next = true;
+            }
+        } else if k == 0 {
+            contact = 1.0 - smoothstep(0.0, MODEL_CONTACT_RADIUS, d);
+            let tbp = ray_box(g, l, lo - vec3<f32>(MODEL_SHADOW_PAD), hi + vec3<f32>(MODEL_SHADOW_PAD));
+            ts = vec2<f32>(max(tbp.x, 0.004), tbp.y);
+            res = 1.0;
+            k = 1;
+            if !(tbp.x < tbp.y && tbp.y > 0.0) {
+                stage = STAGE_DONE;
+            }
+        } else {
+            res = min(res, MODEL_SOFTNESS * d / ts.x);
+            ts.x = ts.x + clamp(d, 0.01, 0.2);
+            k++;
+            if res < 0.002 || ts.x > ts.y || k == 33 {
+                res = saturate(res);
+                dropped = 1.0 - res * res * (3.0 - 2.0 * res);
+                stage = STAGE_DONE;
+            }
         }
     }
 
-    var shadow = 0.0;
-    let denom = dot(rd, nz);
-    if cov < 1.0 && denom < -1e-4 {
-        let g = ro + rd * ((hz - dot(ro, nz)) / denom);
-        let gp = tip + unit * model_to_plane(g, f);
-        let inside = clamp(min(layer.mb.x - abs(gp.x), layer.mb.y - abs(gp.y)) + 0.5, 0.0, 1.0);
-        if inside > 0.0 {
-            let dropped = 1.0 - model_soft_shadow(g, l, lo, hi);
-            let contact = 1.0 - smoothstep(0.0, MODEL_CONTACT_RADIUS, sd_model(g));
-            shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
-        }
+    var rgb = vec3<f32>(0.0);
+    if cov > 0.0 {
+        let tl = lamp - q;
+        let fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
+        rgb = model_shade(q, n, rd, normalize(tl), fall, sh, ao, mat, l, fill);
     }
-
+    let shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
     let a = cov * layer.color.a;
     return vec4<f32>(rgb * a, a + (1.0 - a) * shadow * layer.color.a); // premultiplie, ombre noire
 }

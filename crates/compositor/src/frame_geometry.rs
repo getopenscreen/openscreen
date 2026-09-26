@@ -3539,15 +3539,16 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
 
 // ============ Curseur modélisé (mode 15) ============
 //
-// Le sprite de l'état courant devient un OBJET : sa silhouette et son relief rasterisé sont lancés
-// de rayons par pixel dans le shader, éclairés, et portent une vraie ombre sur l'écran. Le champ de
-// distance vient de l'alpha ; le second canal porte la hauteur de face propre au modèle. Le dessus
-// garde son art, et les flancs prennent sa matière de bord. Rust calcule la pose, la caméra et la
-// boîte de dessin ; les trois shaders font le reste avec les MÊMES constantes.
+// Le curseur devient un OBJET, lancé de rayons par pixel dans le shader, éclairé, et qui porte une
+// vraie ombre sur l'écran : la flèche ou la main d'un thème d'origine SCULPTÉE en volumes
+// (`sculpt.rs`), sinon le sprite de l'état courant extrudé, sa silhouette tirée de l'alpha
+// (`cursor_sdf`), son dessus portant l'art du sprite et ses flancs la couleur de son bord. Rust
+// calcule la pose, la caméra et la boîte de dessin ; les trois shaders font le reste avec les
+// MÊMES constantes.
 //
 // Repère du MODÈLE : unité = plus grand côté du sprite (`size_px`, la taille du curseur), origine
-// au hotspot de la face du dessus, x à droite, y vers le bas, z vers la caméra ; le dessous reste
-// en z = -MODEL_THICK, l'arête est en z = 0 et le relief monte jusqu'à MODEL_RELIEF_MAX.
+// au hotspot, x à droite, y vers le bas, z vers la caméra ; le modèle occupe z de
+// -`SpriteShape::thick` à `SpriteShape::max_height`.
 //
 // Emplacements du `LayerCB` au mode 15 (128 octets, inchangés) :
 //   dst           rect de dessin (sortie 0..1) : boîte du modèle ET de son ombre
@@ -3567,14 +3568,14 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
 //   mb.zw         translation du plan dans le repère caméra (px, `TiltedQuad::offset`) : le
 //                 plan vaut `R·p + (mb.zw, 0)`, œil en (0, 0, P). Nulle sous un angle fixe.
 //   radius_px     rapport w/h du sprite : sa taille (unités) en découle, plus grand côté = 1
-// Textures : le sprite RGBA (alpha droit) et le champ RG16F (`cursor_sdf`, distance + hauteur), sur le même rect.
+//   trail_a       le curseur sculpté (0 = le sprite extrudé), l'épaisseur sous z = 0 avant
+//                 écrasement, la hauteur au-dessus de z = 0 (`SpriteShape`), 0
+// Textures : le sprite RGBA (alpha droit) et son champ R16F (`cursor_sdf`), sur le même rect.
 //   Windows et macOS : sprite en t2/texture(2) (`texImg`), champ en t4/texture(4) (`texSdf`).
 //   Linux : sprite au binding 1 (`texY`), champ au binding 2 (`texU`).
 
-/// Épaisseur du modèle : l'arête est à z = 0, celle du dessous à z = -épaisseur.
+/// Épaisseur du sprite extrudé : son dessus est en z = 0, son dessous en z = -épaisseur.
 pub const MODEL_THICK: f32 = 0.19;
-/// Relief maximal des faces sculptées, en unités du modèle.
-pub const MODEL_RELIEF_MAX: f32 = 0.12;
 /// Rayon du chanfrein arrondi des arêtes du dessus et du dessous.
 pub const MODEL_BEVEL: f32 = 0.045;
 /// Direction VERS la lumière, repère caméra (x droite, y bas, z vers le spectateur) : en haut à
@@ -3624,8 +3625,13 @@ pub struct SpriteShape {
     pub hotspot: [f32; 2],
     /// Haut de la silhouette (alpha 0,5), fraction de la hauteur du sprite.
     pub top: f32,
-    /// Hauteur maximale de la face au-dessus de l'arête du sprite, en unités du modèle.
+    /// Hauteur du modèle au-dessus de z = 0, en unités du modèle : 0 pour un sprite extrudé.
     pub max_height: f32,
+    /// Épaisseur sous z = 0, avant écrasement : `MODEL_THICK` pour un sprite extrudé, celle du
+    /// modèle pour un curseur sculpté (`sculpt::sculpted_shape`).
+    pub thick: f32,
+    /// Le curseur sculpté que dessine le shader (`sculpt`), 0 pour le sprite extrudé.
+    pub sculpt: u32,
 }
 
 impl SpriteShape {
@@ -3638,7 +3644,7 @@ impl SpriteShape {
     fn model_box(&self, squash: f32) -> ([f32; 3], [f32; 3]) {
         let [x, y] = self.origin();
         (
-            [x, y, -MODEL_THICK * squash],
+            [x, y, -self.thick * squash],
             [x + self.size[0], y + self.size[1], self.max_height],
         )
     }
@@ -3649,7 +3655,7 @@ impl SpriteShape {
     /// basculé, un jour d'au plus ~1 % de l'unité, invisible sous l'ombre de contact.
     fn contact_lift(&self, pitch: f32, squash: f32) -> f32 {
         let y_top = (self.top - self.hotspot[1]) * self.size[1];
-        MODEL_THICK * squash * pitch.cos() - y_top * pitch.sin()
+        self.thick * squash * pitch.cos() - y_top * pitch.sin()
     }
 }
 
@@ -3732,6 +3738,17 @@ pub fn cursor_pose(
     }
     let yaw = pointing * MODEL_YAW_MAX_DEG.to_radians() * (v / MODEL_YAW_SPEED).tanh();
     CursorPose { clearance, pitch, yaw, squash }
+}
+
+/// La forme que le mode 15 donne à `sprite` : son curseur sculpté s'il en a un
+/// (`sculpt::sculpted_shape`), sinon le sprite extrudé (`sdf_shape`, du champ de son PNG) au
+/// hotspot de la scène. Commun aux trois backends.
+pub fn model_shape(sprite: &crate::scene::SceneCursorSprite, sdf_shape: SpriteShape) -> SpriteShape {
+    sprite
+        .sculpt
+        .as_deref()
+        .and_then(crate::sculpt::sculpted_shape)
+        .unwrap_or(SpriteShape { hotspot: [sprite.hotspot_x, sprite.hotspot_y], ..sdf_shape })
 }
 
 /// Le sprite que les backends résoudraient pour `cursor_type` : c'est lui que le mode 15 modèle.
@@ -3924,6 +3941,7 @@ pub fn cursor_model_cb(
         dst_prev: clip,
         mb: [view.half[0], view.half[1], view.offset[0], view.offset[1]],
         radius_px: shape.size[0] / shape.size[1],
+        trail_a: [shape.sculpt as f32, shape.thick, shape.max_height, 0.0],
         ..Default::default()
     })
 }
@@ -7140,7 +7158,7 @@ mod tests {
 
     /// Miroir CPU de `sd_model`, écrasé à `squash`.
     fn sd_model(sdf: &crate::cursor_sdf::CursorSdf, shape: SpriteShape, squash: f32, p: [f32; 3]) -> f32 {
-        let half_t = MODEL_THICK * squash * 0.5;
+        let half_t = shape.thick * squash * 0.5;
         let w = [sd2(sdf, shape, [p[0], p[1]]) + MODEL_BEVEL, (p[2] + half_t).abs() - (half_t - MODEL_BEVEL)];
         w[0].max(w[1]).min(0.0) + w[0].max(0.0).hypot(w[1].max(0.0)) - MODEL_BEVEL
     }
@@ -7204,7 +7222,7 @@ mod tests {
                     continue;
                 }
                 let wx = (s + MODEL_BEVEL).max(0.0);
-                let z = -MODEL_THICK * view.pose.squash + MODEL_BEVEL - (MODEL_BEVEL * MODEL_BEVEL - wx * wx).sqrt();
+                let z = -shape.thick * view.pose.squash + MODEL_BEVEL - (MODEL_BEVEL * MODEL_BEVEL - wx * wx).sqrt();
                 lowest = lowest.min(view.model_to_plane([x, y, z])[2]);
             }
         }
@@ -7222,7 +7240,7 @@ mod tests {
                     path: sprite_path(key),
                     hotspot_x: hx,
                     hotspot_y: hy,
-                    model_depth_path: None,
+                    sculpt: None,
                 },
             );
         }
@@ -7426,23 +7444,20 @@ mod tests {
             model_plan([0.0; 3], &scene, &unknown, 0.3, true).expect("plan").model,
             Some(cursor_pose(&unknown, 0.3, 2.5, 1.0))
         );
-        // Les faces propres à un thème autre que `default` ont aussi accès au mode 3D.
+        // Un thème d'origine passe sa flèche sculptée : c'est elle que le mode 3D pose, le sprite
+        // plat restant l'art en 2D.
         let mut themed = model_scene();
         themed.cursor.theme = "studio-ink".into();
         let themed_arrow = crate::scene::SceneCursorSprite {
-            path: "studio-ink/model-arrow.png".into(),
-            hotspot_x: 0.1977,
-            hotspot_y: 0.0635,
-            model_depth_path: Some("studio-ink/model-arrow-depth.png".into()),
+            path: "studio-ink/arrow.png".into(),
+            hotspot_x: 0.1947,
+            hotspot_y: 0.0656,
+            sculpt: Some("studio-ink/arrow".into()),
         };
         themed.cursor.cursor_sprites.insert("arrow".into(), themed_arrow.clone());
         assert_eq!(
-            modelled_sprite(Some(&themed), None).map(|sprite| sprite.path.as_str()),
-            Some("studio-ink/model-arrow.png")
-        );
-        assert_eq!(
-            modelled_sprite(Some(&themed), None).and_then(|sprite| sprite.model_depth_path.as_deref()),
-            Some("studio-ink/model-arrow-depth.png")
+            modelled_sprite(Some(&themed), None).and_then(|sprite| sprite.sculpt.as_deref()),
+            Some("studio-ink/arrow")
         );
         assert!(model_plan([0.0; 3], &themed, &track, 0.3, true).expect("plan").model.is_some());
 

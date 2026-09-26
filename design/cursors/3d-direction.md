@@ -1,36 +1,30 @@
 # Modelled cursor themes
 
-`3d-concept.png` is a visual reference, not a render from OpenScreen. Mode 15
-now ray-marches each cursor silhouette with an authored grayscale height map
-for its top surface. This changes the surface normals, lighting and shadow as
-the cursor tilts; it is still a raster height-field model rather than an
-individually rigged mesh.
+`3d-concept.png` is a visual reference, not a render from OpenScreen.
 
-The five original packs have separate PNG faces and relief maps for their
-arrow and pointing hand. Their model hotspots are authored independently from
-the 2D hotspots. Text, resize, move and other OS cursor states keep their own
-built-in shapes and use the compositor's beveled extrusion while 3D is on.
-Themes without a dedicated model face use the same state-specific fallback.
-
-The face PNG supplies color only. Its alpha defines the silhouette and its
-separate grayscale PNG defines height (black at the edge, brighter at the
-raised face). The height scale is 0.12 model units. Pop Coral's decorative
-offset and rays are omitted from the sculpted face; Pixel Candy uses stepped
-height bands; Prism Glow varies its facets; Studio Ink recesses the ivory
-inlay and removes the glove outline; Star Sprout raises the star and leaves.
-Regenerate both faces and relief maps with
-`node scripts/generate-original-cursor-themes.mjs`.
+With the 3D option on, mode 15 ray-marches each original theme's arrow and hand
+as a sculpted model: signed distance functions written in the compositor's three
+shaders (HLSL, Metal, WGSL), not a PNG face or a height map.
+`crates/compositor/src/sculpt.rs` names the ten models and holds their bounding
+boxes and hotspots. The scene names the model (`"<theme>/<state>"`); text,
+resize, move and the other OS states keep their built-in art and the
+compositor's beveled extrusion.
 
 | Theme | Arrow model | Hand model |
 | --- | --- | --- |
-| Studio Ink | Matte black body; ivory line becomes an inset groove, not an outer stroke. | Ivory glove with convex palm and separate rounded fingers; no dark silhouette outline. |
-| Prism Glow | Solid transparent crystal with its own faceted edges; no navy ink stroke. | Individually faceted crystal fingers and palm; no navy ink stroke. |
-| Pop Coral | Soft coral rubber body with a gently rounded tip and no fake yellow offset or navy rim. | Plump yellow rubber fingers and palm; no navy outline, with any accent placed on a physical cuff. |
-| Pixel Candy | Pink and mint face voxels; purple is visible side/back blocks, not a painted line. | Distinct finger voxels and small bevels; purple stays as real side/back blocks. |
-| Star Sprout | Mint ceramic body without a heavy blue border; star and leaves are attached raised pieces. | Ivory glove without blue border; mint cuff and tiny star/leaves are separate parts. |
+| Studio Ink | Matte black body with an ivory piping set in from the edge. | Ivory glove with a dark cuff. |
+| Prism Glow | Cut crystal: flat facets, a polygonal silhouette, cyan to violet dispersion. | The same glove cut into faceted fingers and palm. |
+| Pop Coral | Soft coral rubber with rounded edges and a gentle dome. | Plump yellow rubber glove with a navy cuff. |
+| Pixel Candy | Beveled voxels: a pink face with mint and pale pink edges, purple blocks one step behind. | Voxel glove with the same colours and purple back layer. |
+| Star Sprout | Glossy mint ceramic carrying a star with a face and two leaves. | Ivory glove with a mint cuff and the same star. |
 
-The model keeps the compositor's contact shadows and stable hotspot during
-yaw, pitch, click and size changes. A future mesh pipeline could give fingers
-more undercut and independent articulation; the current height field already
-provides a style-specific convex palm, raised finger ridges and sculpted arrow
-faces while remaining compatible with the shared ray-march renderer.
+All models share one close lamp: a gradient and a highlight even on flat faces,
+soft self shadows, ambient occlusion and a studio environment in the
+reflections, plus the compositor's cast and contact shadows on the screen. The
+hotspot stays on the arrow tip and the index fingertip through hover, tilt, yaw,
+click and size changes.
+
+To change a model, edit it in all three shaders (`sculpt_proto`,
+`sculpt_material`) and keep `sculpt.rs` in step: its boxes must contain the
+shapes, and a test checks that the shaders mirror its constants. Pixel Candy's
+arrow voxels are sampled from the arrow polygon; `sculpt.rs` says how.

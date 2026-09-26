@@ -341,8 +341,8 @@ pub struct Compositor {
     /// touche depuis appartient au jeu actif et ne peut pas etre evince -- voir
     /// `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
-    /// Champs et reliefs des sprites de curseur (mode 15), RG16F, par chemin, avec leur forme.
-    /// Pas d'eviction : l'ensemble des cartes livrees reste inferieur a quelques dizaines de Mo.
+    /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
+    /// Pas d'eviction : seuls les sprites du theme en cours y passent (~2,6 Mo pour les seize).
     sdf_cache: RefCell<std::collections::HashMap<String, (wgpu::Texture, SpriteShape)>>,
 
     /// Copie mipmappee de la frame composee, lue par les annotations « flou »
@@ -1321,19 +1321,14 @@ impl Compositor {
         Ok((tex, w, h))
     }
 
-    /// Champ et relief du sprite `path` (binding 2 du mode 15) et sa forme, calcules au
+    /// Champ de distance du sprite `path` (binding 2 du mode 15) et sa forme, calcules au
     /// premier appel. Parite `compositor_windows::cursor_sdf`.
-    fn cursor_sdf(
-        &self,
-        path: &str,
-        depth_path: Option<&str>,
-    ) -> Result<(wgpu::Texture, SpriteShape)> {
-        let cache_key = format!("{path}\0{}", depth_path.unwrap_or_default());
-        if let Some(hit) = self.sdf_cache.borrow().get(&cache_key) {
+    fn cursor_sdf(&self, path: &str) -> Result<(wgpu::Texture, SpriteShape)> {
+        if let Some(hit) = self.sdf_cache.borrow().get(path) {
             return Ok(hit.clone());
         }
-        let sdf = crate::cursor_sdf::CursorSdf::load_with_depth(path, depth_path)?;
-        let texels = sdf.rg16_bytes();
+        let sdf = crate::cursor_sdf::CursorSdf::load(path)?;
+        let texels = sdf.f16_bytes();
         let size = wgpu::Extent3d { width: sdf.width, height: sdf.height, depth_or_array_layers: 1 };
         let tex = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("cursor-sdf"),
@@ -1341,7 +1336,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rg16Float,
+            format: wgpu::TextureFormat::R16Float,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -1355,13 +1350,13 @@ impl Compositor {
             &texels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(sdf.width * 4),
+                bytes_per_row: Some(sdf.width * 2),
                 rows_per_image: Some(sdf.height),
             },
             size,
         );
         let entry = (tex, sdf.shape);
-        self.sdf_cache.borrow_mut().insert(cache_key, entry.clone());
+        self.sdf_cache.borrow_mut().insert(path.to_string(), entry.clone());
         Ok(entry)
     }
 
@@ -2832,9 +2827,9 @@ impl Compositor {
             // Curseur modelise (mode 15) : ce meme sprite extrude, `plan_cursor` en a tire la
             // pose. Sprite au binding 1 (texY), champ au binding 2 (texU). Parite Windows/macOS.
             if let Some(pose) = plan.model {
-                match self.cursor_sdf(&sprite.path, sprite.model_depth_path.as_deref()) {
+                match self.cursor_sdf(&sprite.path) {
                     Ok((sdf, shape)) => {
-                        let shape = SpriteShape { hotspot, ..shape };
+                        let shape = crate::frame_geometry::model_shape(sprite, shape);
                         let sdf_view = sdf.create_view(&wgpu::TextureViewDescriptor::default());
                         for placement in placements {
                             let Some(cb) = cursor_model_cb(
@@ -5137,6 +5132,14 @@ mod tests {
         comp.set_cursor(track.clone());
         comp.set_cursor_time(Some(2.0));
         comp.set_timeline_time(Some(2.0));
+        let cfg = model_cfg();
+        unsafe {
+            comp.compose_frame(screen.as_ptr(), screen.as_ptr(), 0.0, &cfg).expect("compose_frame");
+            comp.readback_direct().expect("readback_direct").2
+        }
+    }
+
+    fn model_cfg() -> crate::config::Cfg {
         let mut cfg = crate::config::Cfg::c8();
         cfg.bg_blur = false;
         cfg.zoom = false;
@@ -5144,9 +5147,37 @@ mod tests {
         cfg.cursor = true;
         cfg.mblur_n = 1;
         cfg.shadow = false;
-        unsafe {
-            comp.compose_frame(screen.as_ptr(), screen.as_ptr(), 0.0, &cfg).expect("compose_frame");
-            comp.readback_direct().expect("readback_direct").2
+        cfg
+    }
+
+    /// Le pixel du hotspot et l'unité du modèle (px) que `plan_cursor` donne à la scène que
+    /// `compose_model` rend.
+    fn model_tip(json: &str, track: &crate::cursor::CursorTrack) -> ([f32; 2], f32) {
+        let scene = crate::scene::Scene::from_json(json).expect("scene json");
+        let (cfg, live, render_px, src) = (model_cfg(), live_params_from_scene(&scene), [1280.0, 720.0], [640.0, 360.0]);
+        let g = plan_frame(&FrameGeometryInput {
+            render_px,
+            screen_tex_px: src,
+            screen_visible_px: src,
+            webcam_visible_px: src,
+            u_max: 1.0,
+            v_max: 1.0,
+            frame: 0.0,
+            cfg: &cfg,
+            live,
+            scene: Some(&scene),
+            cursor: Some(track),
+            timeline_t_override: Some(2.0),
+            programme_time: None,
+        });
+        let input = CursorPlanInput { render_px, u_max: 1.0, v_max: 1.0, cfg: &cfg, live, scene: Some(&scene), track, t: 2.0 };
+        let plan = plan_cursor(&g, &input).expect("un curseur a dessiner");
+        match plan.placement {
+            CursorPlacement::Tilted { plane_pt, quad, center_px, .. } => {
+                let (x, y) = quad.point_px(plane_pt[0], plane_pt[1]);
+                ([center_px[0] + x, center_px[1] + y], plan.size_px * quad.scale)
+            }
+            CursorPlacement::Upright { center } => ([center[0] * render_px[0], center[1] * render_px[1]], plan.size_px),
         }
     }
 
@@ -5379,6 +5410,67 @@ mod tests {
             // Le préset iso réduit le plan (unité 51,5 contre 62,6 px) et incline le modèle.
             if !(tilted_body < 0.9 * flat_body && tilted_body > 0.3 * flat_body) {
                 failures.push(format!("{key}: le modele ne suit pas le plan ({tilted_body} / {flat_body})"));
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    /// Pendant de `the_sculpted_cursors_stand_at_the_hotspot` (Windows) : la flèche et la main
+    /// sculptées des thèmes d'origine (`sculpt.rs`) passent par le WGSL, tiennent au hotspot, en
+    /// bas à droite de lui, et portent leur ombre en l'air.
+    #[test]
+    fn the_sculpted_cursors_stand_at_the_hotspot() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let (y, uv) = model_screen_planes(false);
+        let blue = FakeFrame::from_planes(&gpu, 640, 360, &y, &uv);
+        let (y, uv) = model_screen_planes(true);
+        let orange = FakeFrame::from_planes(&gpu, 640, 360, &y, &uv);
+        let extruded = model_scene_json("null", Some(true), "default", true, 5.0);
+        let hidden = model_scene_json("null", Some(true), "default", false, 5.0);
+        let bare = compose_model(&comp, &blue, &hidden, &model_track("arrow", false, 0.5));
+        let mut failures = Vec::new();
+        for state in ["arrow", "pointer"] {
+            let still = model_track(state, false, 0.5);
+            let sprite = compose_model(&comp, &blue, &extruded, &still);
+            for theme in ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"] {
+                // Le sprite reste celui du theme par defaut : seul le nom pose le modele.
+                let json = extruded
+                    .replace(&format!(r#"/{state}.png","#), &format!(r#"/{state}.png","sculpt":"{theme}/{state}","#));
+                let (hover, hover_b) = (compose_model(&comp, &blue, &json, &still), compose_model(&comp, &orange, &json, &still));
+                model_save(&format!("sculpt-{theme}-{state}"), &hover);
+                if hover == sprite {
+                    failures.push(format!("{theme}/{state}: le sprite extrude au lieu du modele"));
+                }
+                let (tip, u) = model_tip(&json, &still);
+                let mask = model_opaque(&hover, &hover_b, &bare);
+                let (mut body, mut c, mut near) = (0usize, [0.0f32; 2], f32::MAX);
+                for (i, _) in mask.iter().enumerate().filter(|(_, m)| **m) {
+                    let (x, y) = ((i % 1280) as f32, (i / 1280) as f32);
+                    body += 1;
+                    c = [c[0] + x, c[1] + y];
+                    near = near.min((x - tip[0]).hypot(y - tip[1]));
+                }
+                let c = [c[0] / body.max(1) as f32, c[1] / body.max(1) as f32];
+                let shadow = (0..1280 * 720)
+                    .filter(|&i| {
+                        let (a, b) = (&hover[i * 4..i * 4 + 3], &bare[i * 4..i * 4 + 3]);
+                        !mask[i] && a != b && model_luma(a) < model_luma(b) - 6.0
+                    })
+                    .count();
+                println!("{theme}/{state} : unite {u:.1} px, corps {body} px, a {near:.1} px du hotspot {tip:?}, centroide {c:?}, ombre {shadow} px");
+                if (body as f32) < 0.12 * u * u {
+                    failures.push(format!("{theme}/{state}: {body} px de corps pour {u:.0} px d'unite"));
+                }
+                if near > 0.08 * u {
+                    failures.push(format!("{theme}/{state}: le modele est a {near:.1} px du hotspot"));
+                }
+                if !(c[0] > tip[0] && c[1] > tip[1] + 0.2 * u) {
+                    failures.push(format!("{theme}/{state}: corps en {c:?}, pas en bas a droite de {tip:?}"));
+                }
+                if shadow * 10 < body * 3 {
+                    failures.push(format!("{theme}/{state}: pas d'ombre en l'air ({shadow} px)"));
+                }
             }
         }
         assert!(failures.is_empty(), "{failures:#?}");

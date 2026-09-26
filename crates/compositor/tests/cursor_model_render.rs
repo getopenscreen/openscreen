@@ -150,21 +150,65 @@ impl FakeFrame {
 
 /// Les seize sprites livrés, au format `cursorSprites` de la scène.
 fn sprites_json() -> String {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../public/cursors/default")
+    sprites_json_with(None)
+}
+
+/// Le dossier des curseurs livrés, `public/cursors`.
+fn cursors_dir() -> String {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../public/cursors")
         .to_string_lossy()
-        .replace('\\', "/");
+        .replace('\\', "/")
+}
+
+/// Les cinq thèmes d'origine et les hotspots de leur flèche et de leur main plates
+/// (`CURSOR_THEMES`, `src/lib/cursor/cursorThemes.ts`, sur 32).
+const SCULPTED: [(&str, [f32; 2], [f32; 2]); 5] = [
+    ("studio-ink", [6.2304, 2.0992], [12.848, 2.0704]),
+    ("prism-glow", [6.3456, 2.0672], [11.968, 2.0352]),
+    ("pop-coral", [10.4768, 2.1792], [12.3456, 2.0]),
+    ("pixel-candy", [7.3664, 2.0], [13.376, 1.9264]),
+    ("star-sprout", [4.7232, 2.1152], [13.1712, 2.0384]),
+];
+
+/// `sprites_json`, avec la flèche et la main plates du thème d'origine `sculpted` et leur curseur
+/// sculpté, comme les passe `resolveCursorSprites` en 3D.
+fn sprites_json_with(sculpted: Option<&str>) -> String {
+    let dir = cursors_dir();
+    let theme = sculpted.map(|name| *SCULPTED.iter().find(|(t, ..)| *t == name).expect("thème d'origine"));
     let entries: Vec<String> = STATES
         .iter()
-        .map(|(key, [hx, hy])| format!(r#""{key}":{{"path":"{dir}/{key}.png","hotspotX":{hx},"hotspotY":{hy}}}"#))
+        .map(|(key, [hx, hy])| match (theme, *key) {
+            (Some((name, [ax, ay], _)), "arrow") | (Some((name, _, [ax, ay])), "pointer") => format!(
+                r#""{key}":{{"path":"{dir}/{name}/{key}.png","hotspotX":{},"hotspotY":{},"sculpt":"{name}/{key}"}}"#,
+                ax / 32.0,
+                ay / 32.0
+            ),
+            _ => format!(r#""{key}":{{"path":"{dir}/default/{key}.png","hotspotX":{hx},"hotspotY":{hy}}}"#),
+        })
         .collect();
     format!("{{{}}}", entries.join(","))
 }
 
 /// `model3d` : `None` = clé absente (payload d'avant le réglage).
 fn scene_json(rotation: &str, model3d: Option<bool>, theme: &str, motion_blur: f32, size: f32) -> String {
+    scene_json_with(rotation, model3d, theme, motion_blur, size, &sprites_json())
+}
+
+/// Un thème d'origine en 3D : sa flèche et sa main sculptées.
+fn sculpted_scene_json(rotation: &str, theme: &str, size: f32) -> String {
+    scene_json_with(rotation, Some(true), theme, 0.0, size, &sprites_json_with(Some(theme)))
+}
+
+fn scene_json_with(
+    rotation: &str,
+    model3d: Option<bool>,
+    theme: &str,
+    motion_blur: f32,
+    size: f32,
+    sprites: &str,
+) -> String {
     let model3d = model3d.map(|m| format!(r#","model3d":{m}"#)).unwrap_or_default();
-    let sprites = sprites_json();
     format!(
         r##"{{"clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
             "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false,
@@ -710,6 +754,65 @@ fn the_motion_blur_trail_draws_modelled_copies() {
     assert!(rgba != flat, "la traînée 3D est celle du sprite plat");
 }
 
+/// Les dix curseurs sculptés (cinq thèmes, flèche et main), dessinés par le shader et non
+/// extrudés d'un PNG : chacun est là, sa pointe sur le hotspot, son corps en bas à droite de
+/// celle-ci (y vers le bas : un modèle retourné finirait au-dessus), et il porte son ombre en
+/// l'air.
+#[test]
+fn the_sculpted_cursors_stand_at_the_hotspot() {
+    let Some(gpu) = gpu() else { return };
+    let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
+    let (blue, orange) = (FakeFrame::new(&gpu, Tint::Blue), FakeFrame::new(&gpu, Tint::Orange));
+    let bare = render_any(&comp, &blue, &hidden_json("null"), &resting("sculpt-bare", false)).0;
+    let mut failures = Vec::new();
+    for (theme, ..) in SCULPTED {
+        for state in ["arrow", "pointer"] {
+            let json = sculpted_scene_json("null", theme, 5.0);
+            let still = resting_at(&format!("sculpt-{theme}-{state}"), Some(state), false, 0.5);
+            let (hover, p) = render(&comp, &blue, &json, &still);
+            let hover_b = render(&comp, &orange, &json, &still).0;
+            save(&format!("sculpt-{theme}-{state}"), &hover);
+            let mask = opaque_mask(&hover, &hover_b, &bare);
+            let (mut body, mut c, mut near) = (0usize, [0.0f32; 2], f32::MAX);
+            for y in 0..720 {
+                for x in 0..1280 {
+                    if mask[y * 1280 + x] {
+                        body += 1;
+                        c = [c[0] + x as f32, c[1] + y as f32];
+                        near = near.min((x as f32 - p.tip[0]).hypot(y as f32 - p.tip[1]));
+                    }
+                }
+            }
+            let c = [c[0] / body.max(1) as f32, c[1] / body.max(1) as f32];
+            let shadow = (0..1280 * 720)
+                .filter(|&i| {
+                    let (a, b) = (&hover[i * 4..i * 4 + 4], &bare[i * 4..i * 4 + 4]);
+                    !mask[i] && a != b && luma([a[0], a[1], a[2], 255]) < luma([b[0], b[1], b[2], 255]) - 6.0
+                })
+                .count();
+            let u = p.unit;
+            println!(
+                "{theme}/{state} : unité {u:.1} px, corps {body} px, pointe à {near:.1} px du hotspot, \
+                 centroïde {c:?} pour la pointe {:?}, ombre {shadow} px",
+                p.tip
+            );
+            if (body as f32) < 0.12 * u * u {
+                failures.push(format!("{theme}/{state} : {body} px de corps pour {u:.0} px d'unité"));
+            }
+            if near > 0.08 * u {
+                failures.push(format!("{theme}/{state} : le modèle est à {near:.1} px du hotspot"));
+            }
+            if !(c[0] > p.tip[0] && c[1] > p.tip[1] + 0.2 * u) {
+                failures.push(format!("{theme}/{state} : corps en {c:?}, pas en bas à droite de {:?}", p.tip));
+            }
+            if shadow * 10 < body * 3 {
+                failures.push(format!("{theme}/{state} : pas d'ombre en l'air ({shadow} px)"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
 /// Planches à regarder (opt-in, `OPENSCREEN_CURSOR3D_OUT`) : les seize états en l'air sur un
 /// écran à plat, chacun à côté de son sprite plat ; la flèche, la main et le I posés sur un écran
 /// incliné ; et les grandes flèches (taille 8) qui servent à la comparaison avec le modèle
@@ -750,6 +853,19 @@ fn contact_sheets() {
         }
     }
     tilted.save(format!("{dir}/states-touch-flat-and-iso.png")).expect("planche");
+
+    // Les dix curseurs sculptés : un thème par ligne, flèche et main en l'air sur l'écran à plat,
+    // puis posées sur l'écran incliné.
+    let cases = [("arrow", "null", false), ("pointer", "null", false), ("arrow", r#""iso""#, true), ("pointer", r#""iso""#, true)];
+    let mut sculpted = image::RgbaImage::new(4 * CELL, SCULPTED.len() as u32 * CELL);
+    for (row, (theme, ..)) in SCULPTED.iter().enumerate() {
+        for (col, (state, rotation, click)) in cases.iter().enumerate() {
+            let track = resting_as(&format!("sheet-{theme}-{col}"), Some(state), *click);
+            let (rgba, p) = render(&comp, &screen, &sculpted_scene_json(rotation, theme, 5.0), &track);
+            image::imageops::overlay(&mut sculpted, &crop(&rgba, p), (col as u32 * CELL) as i64, (row as u32 * CELL) as i64);
+        }
+    }
+    sculpted.save(format!("{dir}/sculpted.png")).expect("planche");
 
     let (still, clicked) = (resting("big-still", false), resting("big-clicked", true));
     for (name, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {

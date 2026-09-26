@@ -2280,9 +2280,10 @@ textarea.control {
 	border-radius: 9999px;
 	overflow: hidden;
 }
+/* The playhead's violet, not mint: this bar IS the playhead, seen from afar. */
 .scrubProgress {
 	height: 100%;
-	background: var(--accent);
+	background: var(--playhead);
 	border-radius: 9999px;
 }
 .scrubInput {

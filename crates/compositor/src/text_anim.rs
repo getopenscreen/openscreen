@@ -66,12 +66,17 @@ pub fn text_animation_state(
         return TextAnimationState::IDLE;
     }
     let region_ms = region_ms.max(0.0);
-    let share = (region_ms / (TEXT_ANIMATION_DURATION_MS + TEXT_EXIT_DURATION_MS)).min(1.0);
     let ramp = |t: f32, len: f32| if len > 0.0 { clamp01(t / len) } else { 1.0 };
-    let enter = ramp(elapsed_ms.max(0.0), TEXT_ANIMATION_DURATION_MS * share);
-    let exit = ramp(region_ms - elapsed_ms, TEXT_EXIT_DURATION_MS * share);
-    // Les deux rampes valent 1 à la jonction : prendre la plus petite suffit à les enchaîner.
-    let progress = if name == "pulse" { enter } else { enter.min(exit) };
+    let progress = if name == "pulse" {
+        // Pas de sortie à qui céder du temps : le pulse garde sa durée pleine, comme avant.
+        ramp(elapsed_ms.max(0.0), TEXT_ANIMATION_DURATION_MS)
+    } else {
+        let share = (region_ms / (TEXT_ANIMATION_DURATION_MS + TEXT_EXIT_DURATION_MS)).min(1.0);
+        let enter = ramp(elapsed_ms.max(0.0), TEXT_ANIMATION_DURATION_MS * share);
+        let exit = ramp(region_ms - elapsed_ms, TEXT_EXIT_DURATION_MS * share);
+        // Les deux rampes valent 1 à la jonction : prendre la plus petite suffit à les enchaîner.
+        enter.min(exit)
+    };
     let eased = ease_out_cubic(progress);
     match name {
         "fade" => TextAnimationState { opacity: eased, ..TextAnimationState::IDLE },
@@ -226,6 +231,14 @@ mod tests {
     fn pulse_has_no_exit() {
         let s = text_animation_state(Some("pulse"), LONG - 10.0, LONG);
         assert_eq!(s, TextAnimationState::IDLE);
+    }
+
+    #[test]
+    fn a_short_region_does_not_speed_up_pulse() {
+        // Sans sortie, rien à partager : dans 500 ms, le pulse culmine toujours à 350 ms
+        // (mi-course de ses 700 ms) au lieu de s'achever là.
+        let mid = text_animation_state(Some("pulse"), TEXT_ANIMATION_DURATION_MS * 0.5, 500.0);
+        assert!((mid.scale - 1.06).abs() < 1e-3, "échelle {}", mid.scale);
     }
 
     #[test]

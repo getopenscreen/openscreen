@@ -1522,14 +1522,15 @@ unsafe fn render_thread(
                                 cursor_path,
                             ),
                         }
+                        // Sans relecture, rien à reposer : un changement de taille garde le
+                        // curseur (`Compositor::resized`), et le relisser parcourt tout
+                        // l'enregistrement à chaque bascule d'un scrub.
+                        match &raw_cursor {
+                            Some(track) => comp.set_cursor(track.smoothed(0.0)),
+                            None => comp.clear_cursor(),
+                        }
+                        last_smoothing = -1.0;
                     }
-                    // Appliqué à chaque fois, y compris sans relecture : le compositeur peut
-                    // avoir été reconstruit (changement de taille) et perdu son curseur.
-                    match &raw_cursor {
-                        Some(track) => comp.set_cursor(track.smoothed(0.0)),
-                        None => comp.clear_cursor(),
-                    }
-                    last_smoothing = -1.0;
                     clip_changed = true;
                 }
                 Err(e) => eprintln!("[live] set_active_clip: {e:#}"),
@@ -1617,19 +1618,14 @@ unsafe fn render_thread(
         last_preview_size = (pw, ph);
 
         // Le compositeur rastérise à la géométrie de SORTIE (ramenée à la taille du
-        // canvas) et non plus dans un canvas 16:9 figé. Quand cette géométrie change
-        // — l'utilisateur change de ratio, ou redimensionne le panneau — on
-        // reconstruit le compositeur. Voir `Compositor::new_sized` pour le choix
-        // "reconstruire" plutôt que "redimensionner à chaud".
+        // canvas) et non plus dans un canvas 16:9 figé. Cette géométrie change quand
+        // l'utilisateur change de ratio, redimensionne le panneau, ou bouge le padding
+        // d'un format Auto, dont la forme suit chaque cran. Seules les cibles du
+        // compositeur sont alors réallouées (`Compositor::resized`) : scène, params,
+        // curseur et segmentation webcam restent posés, donc rien à réappliquer.
         let want = preview_render_size(full_scene.as_ref(), pw, ph);
         if want != comp.render_size() {
-            comp = Compositor::new_sized(&gpu, want.0, want.1)?;
-            // Le compositeur neuf est vierge : on repasse par les mécanismes
-            // d'invalidation existants plutôt que de recopier l'état à la main —
-            // une seule façon d'appliquer la scène, les params et le curseur.
-            shared.scene_dirty.store(true, Ordering::Relaxed);
-            last_ip = None;
-            last_smoothing = -1.0;
+            comp = comp.resized(want.0, want.1)?;
             first = true;
             continue;
         }

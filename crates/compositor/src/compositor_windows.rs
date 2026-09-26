@@ -257,6 +257,33 @@ struct ResizeTarget {
     nv12_rtv_uv: ID3D11RenderTargetView,
 }
 
+/// Tout ce qui a la taille du rendu, et rien d'autre : ce que `new_inner` alloue et que
+/// `resized` réalloue. Le reste du compositeur ne dépend pas de la taille et la traverse.
+struct Targets {
+    rt: ID3D11Texture2D,
+    rtv: ID3D11RenderTargetView,
+    rt_srv: ID3D11ShaderResourceView,
+    staging: ID3D11Texture2D,
+    nv12: ID3D11Texture2D,
+    rtv_y: ID3D11RenderTargetView,
+    rtv_uv: ID3D11RenderTargetView,
+    half_a_rtv: ID3D11RenderTargetView,
+    half_a_srv: ID3D11ShaderResourceView,
+    half_b_rtv: ID3D11RenderTargetView,
+    half_b_srv: ID3D11ShaderResourceView,
+    q_rtv: ID3D11RenderTargetView,
+    q_srv: ID3D11ShaderResourceView,
+    e_rtv: ID3D11RenderTargetView,
+    e_srv: ID3D11ShaderResourceView,
+    ann_copy: ID3D11Texture2D,
+    ann_copy_srv: ID3D11ShaderResourceView,
+    accum: ID3D11Texture2D,
+    accum_rtv: ID3D11RenderTargetView,
+    accum_srv: ID3D11ShaderResourceView,
+    trail_rtv: ID3D11RenderTargetView,
+    trail_srv: ID3D11ShaderResourceView,
+}
+
 
 
 
@@ -288,10 +315,8 @@ impl Compositor {
     /// La taille de rendu est fixée à la construction plutôt que mutable à chaud :
     /// la rendre variable imposerait de passer le RT, la NV12, la staging et toute
     /// la pyramide de flou en `RefCell`, donc d'ajouter de la mutabilité intérieure
-    /// sur le chemin GPU chaud — pour un événement qui n'arrive quasiment jamais
-    /// (l'utilisateur change de ratio, ou on bascule preview↔export). L'appelant
-    /// reconstruit le compositeur quand la sortie change ; c'est quelques dizaines
-    /// de ms, sur un changement rare.
+    /// sur le chemin GPU chaud. Pour changer de taille, `resized` rend un
+    /// compositeur dont seules les cibles sont neuves.
     ///
     /// Les dimensions passées sont arrondies via `normalize_render_size` (pair,
     /// ≥2 — contrainte NV12). L'appelant qui décide de reconstruire DOIT comparer
@@ -315,10 +340,72 @@ impl Compositor {
         (((w.max(2) + 1) & !1), ((h.max(2) + 1) & !1))
     }
 
-    unsafe fn new_inner(gpu: &Gpu, out_w: u32, out_h: u32) -> Result<Compositor> {
-        let dev = gpu.device.clone();
-        let ctx = gpu.context.clone();
+    /// Le même compositeur, rastérisant à `w`×`h` : seules les cibles (`Targets`) sont
+    /// réallouées. Scène, paramètres, curseur, caches d'images et segmentation webcam restent en
+    /// place.
+    ///
+    /// Reconstruire le compositeur entier, comme le faisait la preview, rechargeait le modèle de
+    /// segmentation et repartait sans masque : l'effet webcam s'éteignait jusqu'à la première
+    /// inférence. Un format Auto change de forme à chaque cran de padding, donc à chaque cran.
+    pub fn resized(self, w: u32, h: u32) -> Result<Compositor> {
+        let (w, h) = Self::normalize_render_size(w, h);
+        let Targets {
+            rt,
+            rtv,
+            rt_srv,
+            staging,
+            nv12,
+            rtv_y,
+            rtv_uv,
+            half_a_rtv,
+            half_a_srv,
+            half_b_rtv,
+            half_b_srv,
+            q_rtv,
+            q_srv,
+            e_rtv,
+            e_srv,
+            ann_copy,
+            ann_copy_srv,
+            accum,
+            accum_rtv,
+            accum_srv,
+            trail_rtv,
+            trail_srv,
+        } = unsafe { Self::make_targets(&self.dev, w, h)? };
+        Ok(Compositor {
+            rt,
+            rtv,
+            rt_srv,
+            staging,
+            nv12,
+            rtv_y,
+            rtv_uv,
+            half_a_rtv,
+            half_a_srv,
+            half_b_rtv,
+            half_b_srv,
+            q_rtv,
+            q_srv,
+            e_rtv,
+            e_srv,
+            ann_copy,
+            ann_copy_srv,
+            accum,
+            accum_rtv,
+            accum_srv,
+            trail_rtv,
+            trail_srv,
+            render_size: Cell::new((w, h)),
+            // Caches dimensionnés à l'ancienne taille : recréés à la demande.
+            resize_target: RefCell::new(None),
+            live_readback_staging: RefCell::new(None),
+            nv12_readback_staging: RefCell::new(None),
+            ..self
+        })
+    }
 
+    unsafe fn make_targets(dev: &ID3D11Device, out_w: u32, out_h: u32) -> Result<Targets> {
         // --- render target RGBA8 (gamma natif de la vidéo ; voir note couleur docs) ---
         let mut td = D3D11_TEXTURE2D_DESC {
             Width: out_w,
@@ -346,6 +433,162 @@ impl Compositor {
         td.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as u32;
         let mut staging: Option<ID3D11Texture2D> = None;
         dev.CreateTexture2D(&td, None, Some(&mut staging))?;
+
+        // notre texture NV12 simple (ArraySize=1) : NV12+RT n'est autorisé qu'en non-array
+        // sur cet iGPU. On y rend la conversion, puis copie GPU->GPU vers le pool encodeur.
+        let nvd = D3D11_TEXTURE2D_DESC {
+            Width: out_w,
+            Height: out_h,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_NV12,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+        let mut nv12: Option<ID3D11Texture2D> = None;
+        dev.CreateTexture2D(&nvd, None, Some(&mut nv12))?;
+        let nv12 = nv12.unwrap();
+        let mk_rtv = |fmt: DXGI_FORMAT| -> Result<ID3D11RenderTargetView> {
+            let d = D3D11_RENDER_TARGET_VIEW_DESC {
+                Format: fmt,
+                ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
+                Anonymous: D3D11_RENDER_TARGET_VIEW_DESC_0 {
+                    Texture2D: D3D11_TEX2D_RTV { MipSlice: 0 },
+                },
+            };
+            let mut rtv: Option<ID3D11RenderTargetView> = None;
+            dev.CreateRenderTargetView(&nv12, Some(&d), Some(&mut rtv))?;
+            Ok(rtv.unwrap())
+        };
+        let rtv_y = mk_rtv(DXGI_FORMAT_R8_UNORM)?;
+        let rtv_uv = mk_rtv(DXGI_FORMAT_R8G8_UNORM)?;
+
+        // textures RGBA RT+SRV à une taille donnée (chaîne de flou)
+        let mk_rgba = |w: u32, h: u32| -> Result<(ID3D11RenderTargetView, ID3D11ShaderResourceView)> {
+            let hd = D3D11_TEXTURE2D_DESC {
+                Width: w,
+                Height: h,
+                MipLevels: 1,
+                ArraySize: 1,
+                Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Usage: D3D11_USAGE_DEFAULT,
+                BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+                CPUAccessFlags: 0,
+                MiscFlags: 0,
+            };
+            let mut t: Option<ID3D11Texture2D> = None;
+            dev.CreateTexture2D(&hd, None, Some(&mut t))?;
+            let t = t.unwrap();
+            let mut rtv: Option<ID3D11RenderTargetView> = None;
+            dev.CreateRenderTargetView(&t, None, Some(&mut rtv))?;
+            let mut srv: Option<ID3D11ShaderResourceView> = None;
+            dev.CreateShaderResourceView(&t, None, Some(&mut srv))?;
+            Ok((rtv.unwrap(), srv.unwrap()))
+        };
+        // Pyramide dual-Kawase derivee de la taille de rendu (et non d'un demi de
+        // 1080 fige) : sinon le rayon effectif du flou de fond changerait d'un format
+        // a l'autre. `.max(1)` protege les tres petites tailles de preview.
+        let (half_w, half_h) = ((out_w / 2).max(1), (out_h / 2).max(1));
+        let (half_a_rtv, half_a_srv) = mk_rgba(half_w, half_h)?;
+        let (half_b_rtv, half_b_srv) = mk_rgba(half_w, half_h)?;
+        let (q_rtv, q_srv) = mk_rgba((half_w / 2).max(1), (half_h / 2).max(1))?;
+        let (e_rtv, e_srv) = mk_rgba((half_w / 4).max(1), (half_h / 4).max(1))?;
+        let (trail_rtv, trail_srv) = mk_rgba(out_w, out_h)?;
+
+        // accumulateur pleine réso (RGBA)
+        let ad = D3D11_TEXTURE2D_DESC {
+            Width: out_w,
+            Height: out_h,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+        let mut accum: Option<ID3D11Texture2D> = None;
+        dev.CreateTexture2D(&ad, None, Some(&mut accum))?;
+        let accum = accum.unwrap();
+        let mut accum_rtv: Option<ID3D11RenderTargetView> = None;
+        dev.CreateRenderTargetView(&accum, None, Some(&mut accum_rtv))?;
+        let mut accum_srv: Option<ID3D11ShaderResourceView> = None;
+        dev.CreateShaderResourceView(&accum, None, Some(&mut accum_srv))?;
+
+        // Copie de travail des annotations flou. Chaîne de mips COMPLÈTE (`MipLevels: 0`) : c'est
+        // elle qui fournit le flou. Échantillonner un niveau plus bas donne un vrai lissage pour
+        // n'importe quel rayon à coût constant, là où un noyau de quelques taps espacés produit
+        // des copies fantômes au lieu d'un flou.
+        let ann_desc = D3D11_TEXTURE2D_DESC {
+            MipLevels: 0,
+            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            MiscFlags: D3D11_RESOURCE_MISC_GENERATE_MIPS.0 as u32,
+            ..ad
+        };
+        let mut ann_copy: Option<ID3D11Texture2D> = None;
+        dev.CreateTexture2D(&ann_desc, None, Some(&mut ann_copy))?;
+        let ann_copy = ann_copy.unwrap();
+        let mut ann_copy_srv: Option<ID3D11ShaderResourceView> = None;
+        dev.CreateShaderResourceView(&ann_copy, None, Some(&mut ann_copy_srv))?;
+
+        Ok(Targets {
+            rt,
+            rtv: rtv.unwrap(),
+            rt_srv: rt_srv.unwrap(),
+            staging: staging.unwrap(),
+            nv12,
+            rtv_y,
+            rtv_uv,
+            half_a_rtv,
+            half_a_srv,
+            half_b_rtv,
+            half_b_srv,
+            q_rtv,
+            q_srv,
+            e_rtv,
+            e_srv,
+            ann_copy,
+            ann_copy_srv: ann_copy_srv.unwrap(),
+            accum,
+            accum_rtv: accum_rtv.unwrap(),
+            accum_srv: accum_srv.unwrap(),
+            trail_rtv,
+            trail_srv,
+        })
+    }
+
+    unsafe fn new_inner(gpu: &Gpu, out_w: u32, out_h: u32) -> Result<Compositor> {
+        let dev = gpu.device.clone();
+        let ctx = gpu.context.clone();
+        let Targets {
+            rt,
+            rtv,
+            rt_srv,
+            staging,
+            nv12,
+            rtv_y,
+            rtv_uv,
+            half_a_rtv,
+            half_a_srv,
+            half_b_rtv,
+            half_b_srv,
+            q_rtv,
+            q_srv,
+            e_rtv,
+            e_srv,
+            ann_copy,
+            ann_copy_srv,
+            accum,
+            accum_rtv,
+            accum_srv,
+            trail_rtv,
+            trail_srv,
+        } = Self::make_targets(&dev, out_w, out_h)?;
 
         // --- shaders ---
         let mut vs: Option<ID3D11VertexShader> = None;
@@ -406,38 +649,6 @@ impl Compositor {
         let mut blend_none: Option<ID3D11BlendState> = None;
         dev.CreateBlendState(&bl_none, Some(&mut blend_none))?;
 
-        // notre texture NV12 simple (ArraySize=1) : NV12+RT n'est autorisé qu'en non-array
-        // sur cet iGPU. On y rend la conversion, puis copie GPU->GPU vers le pool encodeur.
-        let nvd = D3D11_TEXTURE2D_DESC {
-            Width: out_w,
-            Height: out_h,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_NV12,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Usage: D3D11_USAGE_DEFAULT,
-            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
-            CPUAccessFlags: 0,
-            MiscFlags: 0,
-        };
-        let mut nv12: Option<ID3D11Texture2D> = None;
-        dev.CreateTexture2D(&nvd, None, Some(&mut nv12))?;
-        let nv12 = nv12.unwrap();
-        let mk_rtv = |fmt: DXGI_FORMAT| -> Result<ID3D11RenderTargetView> {
-            let d = D3D11_RENDER_TARGET_VIEW_DESC {
-                Format: fmt,
-                ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
-                Anonymous: D3D11_RENDER_TARGET_VIEW_DESC_0 {
-                    Texture2D: D3D11_TEX2D_RTV { MipSlice: 0 },
-                },
-            };
-            let mut rtv: Option<ID3D11RenderTargetView> = None;
-            dev.CreateRenderTargetView(&nv12, Some(&d), Some(&mut rtv))?;
-            Ok(rtv.unwrap())
-        };
-        let rtv_y = mk_rtv(DXGI_FORMAT_R8_UNORM)?;
-        let rtv_uv = mk_rtv(DXGI_FORMAT_R8G8_UNORM)?;
-
         // shaders de flou + copie
         let mut ps_blur: Option<ID3D11PixelShader> = None;
         dev.CreatePixelShader(shader!("ps_blur"), None, Some(&mut ps_blur))?;
@@ -450,76 +661,7 @@ impl Compositor {
         let mut ps_kup: Option<ID3D11PixelShader> = None;
         dev.CreatePixelShader(shader!("ps_kawase_up"), None, Some(&mut ps_kup))?;
 
-        // textures RGBA RT+SRV à une taille donnée (chaîne de flou)
-        let mk_rgba = |w: u32, h: u32| -> Result<(ID3D11RenderTargetView, ID3D11ShaderResourceView)> {
-            let hd = D3D11_TEXTURE2D_DESC {
-                Width: w,
-                Height: h,
-                MipLevels: 1,
-                ArraySize: 1,
-                Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-                Usage: D3D11_USAGE_DEFAULT,
-                BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
-                CPUAccessFlags: 0,
-                MiscFlags: 0,
-            };
-            let mut t: Option<ID3D11Texture2D> = None;
-            dev.CreateTexture2D(&hd, None, Some(&mut t))?;
-            let t = t.unwrap();
-            let mut rtv: Option<ID3D11RenderTargetView> = None;
-            dev.CreateRenderTargetView(&t, None, Some(&mut rtv))?;
-            let mut srv: Option<ID3D11ShaderResourceView> = None;
-            dev.CreateShaderResourceView(&t, None, Some(&mut srv))?;
-            Ok((rtv.unwrap(), srv.unwrap()))
-        };
-        // Pyramide dual-Kawase derivee de la taille de rendu (et non d'un demi de
-        // 1080 fige) : sinon le rayon effectif du flou de fond changerait d'un format
-        // a l'autre. `.max(1)` protege les tres petites tailles de preview.
-        let (half_w, half_h) = ((out_w / 2).max(1), (out_h / 2).max(1));
-        let (half_a_rtv, half_a_srv) = mk_rgba(half_w, half_h)?;
-        let (half_b_rtv, half_b_srv) = mk_rgba(half_w, half_h)?;
-        let (q_rtv, q_srv) = mk_rgba((half_w / 2).max(1), (half_h / 2).max(1))?;
-        let (e_rtv, e_srv) = mk_rgba((half_w / 4).max(1), (half_h / 4).max(1))?;
-        let (trail_rtv, trail_srv) = mk_rgba(out_w, out_h)?;
-
-        // accumulateur pleine réso (RGBA) + blend additif pondéré (facteur = 1/N)
-        let ad = D3D11_TEXTURE2D_DESC {
-            Width: out_w,
-            Height: out_h,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Usage: D3D11_USAGE_DEFAULT,
-            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
-            CPUAccessFlags: 0,
-            MiscFlags: 0,
-        };
-        let mut accum: Option<ID3D11Texture2D> = None;
-        dev.CreateTexture2D(&ad, None, Some(&mut accum))?;
-        let accum = accum.unwrap();
-        let mut accum_rtv: Option<ID3D11RenderTargetView> = None;
-        dev.CreateRenderTargetView(&accum, None, Some(&mut accum_rtv))?;
-        let mut accum_srv: Option<ID3D11ShaderResourceView> = None;
-        dev.CreateShaderResourceView(&accum, None, Some(&mut accum_srv))?;
-
-        // Copie de travail des annotations flou. Chaîne de mips COMPLÈTE (`MipLevels: 0`) : c'est
-        // elle qui fournit le flou. Échantillonner un niveau plus bas donne un vrai lissage pour
-        // n'importe quel rayon à coût constant, là où un noyau de quelques taps espacés produit
-        // des copies fantômes au lieu d'un flou.
-        let ann_desc = D3D11_TEXTURE2D_DESC {
-            MipLevels: 0,
-            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
-            MiscFlags: D3D11_RESOURCE_MISC_GENERATE_MIPS.0 as u32,
-            ..ad
-        };
-        let mut ann_copy: Option<ID3D11Texture2D> = None;
-        dev.CreateTexture2D(&ann_desc, None, Some(&mut ann_copy))?;
-        let ann_copy = ann_copy.unwrap();
-        let mut ann_copy_srv: Option<ID3D11ShaderResourceView> = None;
-        dev.CreateShaderResourceView(&ann_copy, None, Some(&mut ann_copy_srv))?;
-
+        // blend additif pondéré (facteur = 1/N) de l'accumulateur
         let mut bla = D3D11_BLEND_DESC::default();
         bla.RenderTarget[0] = D3D11_RENDER_TARGET_BLEND_DESC {
             BlendEnable: true.into(),
@@ -538,9 +680,9 @@ impl Compositor {
             dev,
             ctx,
             rt,
-            rtv: rtv.unwrap(),
-            rt_srv: rt_srv.unwrap(),
-            staging: staging.unwrap(),
+            rtv,
+            rt_srv,
+            staging,
             vs: vs.unwrap(),
             ps: ps.unwrap(),
             vs_fs: vs_fs.unwrap(),
@@ -566,10 +708,10 @@ impl Compositor {
             e_rtv,
             e_srv,
             ann_copy,
-            ann_copy_srv: ann_copy_srv.unwrap(),
+            ann_copy_srv,
             accum,
-            accum_rtv: accum_rtv.unwrap(),
-            accum_srv: accum_srv.unwrap(),
+            accum_rtv,
+            accum_srv,
             blend_add: blend_add.unwrap(),
             trail_rtv,
             trail_srv,
@@ -3093,5 +3235,31 @@ mod tests {
             "sans éviction le total ({} Mo) doit dépasser le budget, sinon le test ne prouve rien",
             cumule / 1048576
         );
+    }
+
+    /// Un cran de padding en format Auto change la taille de rendu de la preview. `resized`
+    /// réalloue les cibles et garde le reste : le masque webcam, et la boîte aux lettres où le
+    /// worker de segmentation dépose les suivants.
+    #[test]
+    fn resizing_keeps_the_segmentation_and_reads_back_at_the_new_size() {
+        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+            eprintln!("pas de device D3D11 — test sauté");
+            return;
+        };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+        let (w, h) = (crate::segmentation::MODEL_WIDTH, crate::segmentation::MODEL_HEIGHT);
+        comp.set_webcam_mask(&vec![255u8; (w * h) as usize], w, h).expect("masque");
+        let inbox = std::sync::Arc::clone(&comp.seg_inbox);
+
+        let comp = comp.resized(181, 321).expect("resized");
+
+        assert_eq!(comp.render_size(), (182, 322), "arrondi au pair, comme new_sized");
+        assert!(comp.webcam_mask.borrow().is_some(), "le masque webcam s'est perdu");
+        assert!(
+            std::sync::Arc::ptr_eq(&inbox, &comp.seg_inbox),
+            "le worker déposerait ses masques dans une boîte que plus personne ne lit",
+        );
+        let (rw, rh, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+        assert_eq!((rw, rh, rgba.len()), (182, 322, 182 * 322 * 4));
     }
 }

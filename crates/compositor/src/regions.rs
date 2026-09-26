@@ -84,7 +84,10 @@ pub fn speed_segments_for_window(
 /// région seulement si `clip_index` est absent (vieux payload) OU vaut `active_clip_index`.
 pub fn speed_at(regions: &[SceneSpeedRegion], active_clip_index: usize, t: f64) -> f64 {
     for region in regions {
-        let belongs = region.clip_index.map(|i| i == active_clip_index).unwrap_or(true);
+        let belongs = region
+            .clip_index
+            .map(|i| i == active_clip_index)
+            .unwrap_or(true);
         if belongs && t >= region.start_sec && t < region.end_sec {
             if region.speed.is_finite() && region.speed > 0.0 {
                 return region.speed;
@@ -140,7 +143,11 @@ impl ProgrammeClock {
             .flat_map(&segments_of)
             .map(|s| s.frame_count)
             .sum();
-        Some(Self { frames_before, segments: segments_of(clip_index), fps })
+        Some(Self {
+            frames_before,
+            segments: segments_of(clip_index),
+            fps,
+        })
     }
 
     /// Temps programme au temps source `source_sec` du clip. Borné à la fenêtre du clip :
@@ -182,7 +189,11 @@ impl ScreenClock {
             .iter()
             .filter(|r| r.clip_index.map(|i| i == clip_index).unwrap_or(true))
             .map(|r| {
-                let speed = if r.speed.is_finite() && r.speed > 0.0 { r.speed } else { 1.0 };
+                let speed = if r.speed.is_finite() && r.speed > 0.0 {
+                    r.speed
+                } else {
+                    1.0
+                };
                 (r.start_sec, r.end_sec, speed)
             })
             .collect();
@@ -247,7 +258,12 @@ fn push_speed_segment(
     let frames = (((duration - SPEED_FRAME_EPSILON_SEC) / speed) * fps)
         .ceil()
         .max(0.0) as u64;
-    spans.push(SpeedSegment { start_sec, end_sec, speed, frame_count: frames });
+    spans.push(SpeedSegment {
+        start_sec,
+        end_sec,
+        speed,
+        frame_count: frames,
+    });
 }
 
 // mêmes fenêtres de transition que le web (TRANSITION_WINDOW_MS etc., converties en secondes).
@@ -408,10 +424,12 @@ pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32, clock: &ScreenCloc
     // chaîné ci-dessus.
     let mut best: Option<(usize, f32)> = None;
     for (i, r) in regions.iter().enumerate() {
-        let outgoing_past_end =
-            pairs.iter().any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
-        let incoming_before_transition_end =
-            pairs.iter().any(|&(_, ni, _, t_end)| ni == i && screen_t < t_end);
+        let outgoing_past_end = pairs
+            .iter()
+            .any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
+        let incoming_before_transition_end = pairs
+            .iter()
+            .any(|&(_, ni, _, t_end)| ni == i && screen_t < t_end);
         if outgoing_past_end || incoming_before_transition_end {
             continue;
         }
@@ -526,12 +544,20 @@ fn fixed_rotation(region: &SceneZoomRegion) -> [f32; 3] {
 
 /// 1 si la région porte un angle fixe, 0 sinon : la porte de la parallaxe et de l'impact.
 fn fixed_flag(region: &SceneZoomRegion) -> f32 {
-    if matches!(camera_for(&region.rotation), Camera::Fixed(_)) { 1.0 } else { 0.0 }
+    if matches!(camera_for(&region.rotation), Camera::Fixed(_)) {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// 1 si la région porte la caméra réelle, 0 sinon.
 fn follow_flag(region: &SceneZoomRegion) -> f32 {
-    if camera_for(&region.rotation) == Camera::Follow { 1.0 } else { 0.0 }
+    if camera_for(&region.rotation) == Camera::Follow {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// Ce que la caméra d'une région lit à `t` (le centre hors `follow-cursor`), non pondéré.
@@ -550,7 +576,11 @@ fn weighted(p: [f32; 2], camera: f32) -> [f32; 2] {
 /// 1 si la région active l'impact du clic, 0 sinon. Sous un angle fixe, le clic presse l'écran ;
 /// sous la caméra réelle, l'écran reste immobile et c'est l'œil qui recule.
 fn impact_flag(region: &SceneZoomRegion) -> f32 {
-    if region.click_impact { 1.0 } else { 0.0 }
+    if region.click_impact {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// Port de `easeConnectedPan` (TS) : cubic-bezier(0.1, 0, 0.2, 1).
@@ -585,7 +615,11 @@ fn rotation3d_for(rotation: &Option<String>) -> [f32; 3] {
 }
 
 fn lerp_rotation3d(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
-    [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)]
+    [
+        lerp(a[0], b[0], t),
+        lerp(a[1], b[1], t),
+        lerp(a[2], b[2], t),
+    ]
 }
 
 /// Les trois segments d'une flèche d'annotation, en unités du viewBox SVG (0..100), repris
@@ -594,19 +628,47 @@ fn lerp_rotation3d(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
 /// flèche — inutile de réinventer une géométrie « équivalente ».
 pub fn arrow_segments_viewbox(direction: &str) -> [[f32; 4]; 3] {
     match direction {
-        "up" => [[50.0, 20.0, 50.0, 80.0], [50.0, 20.0, 35.0, 35.0], [50.0, 20.0, 65.0, 35.0]],
-        "down" => [[50.0, 20.0, 50.0, 80.0], [50.0, 80.0, 35.0, 65.0], [50.0, 80.0, 65.0, 65.0]],
-        "left" => [[80.0, 50.0, 20.0, 50.0], [20.0, 50.0, 35.0, 35.0], [20.0, 50.0, 35.0, 65.0]],
-        "up-right" => [[25.0, 75.0, 75.0, 25.0], [75.0, 25.0, 53.8, 25.0], [75.0, 25.0, 75.0, 46.2]],
-        "up-left" => [[75.0, 75.0, 25.0, 25.0], [25.0, 25.0, 25.0, 46.2], [25.0, 25.0, 46.2, 25.0]],
-        "down-right" => {
-            [[25.0, 25.0, 75.0, 75.0], [75.0, 75.0, 75.0, 53.8], [75.0, 75.0, 53.8, 75.0]]
-        }
-        "down-left" => {
-            [[75.0, 25.0, 25.0, 75.0], [25.0, 75.0, 46.2, 75.0], [25.0, 75.0, 25.0, 53.8]]
-        }
+        "up" => [
+            [50.0, 20.0, 50.0, 80.0],
+            [50.0, 20.0, 35.0, 35.0],
+            [50.0, 20.0, 65.0, 35.0],
+        ],
+        "down" => [
+            [50.0, 20.0, 50.0, 80.0],
+            [50.0, 80.0, 35.0, 65.0],
+            [50.0, 80.0, 65.0, 65.0],
+        ],
+        "left" => [
+            [80.0, 50.0, 20.0, 50.0],
+            [20.0, 50.0, 35.0, 35.0],
+            [20.0, 50.0, 35.0, 65.0],
+        ],
+        "up-right" => [
+            [25.0, 75.0, 75.0, 25.0],
+            [75.0, 25.0, 53.8, 25.0],
+            [75.0, 25.0, 75.0, 46.2],
+        ],
+        "up-left" => [
+            [75.0, 75.0, 25.0, 25.0],
+            [25.0, 25.0, 25.0, 46.2],
+            [25.0, 25.0, 46.2, 25.0],
+        ],
+        "down-right" => [
+            [25.0, 25.0, 75.0, 75.0],
+            [75.0, 75.0, 75.0, 53.8],
+            [75.0, 75.0, 53.8, 75.0],
+        ],
+        "down-left" => [
+            [75.0, 25.0, 25.0, 75.0],
+            [25.0, 75.0, 46.2, 75.0],
+            [25.0, 75.0, 25.0, 53.8],
+        ],
         // "right" et tout ce qui n'est pas reconnu — même défaut que le schéma côté app.
-        _ => [[20.0, 50.0, 80.0, 50.0], [80.0, 50.0, 65.0, 35.0], [80.0, 50.0, 65.0, 65.0]],
+        _ => [
+            [20.0, 50.0, 80.0, 50.0],
+            [80.0, 50.0, 65.0, 35.0],
+            [80.0, 50.0, 65.0, 65.0],
+        ],
     }
 }
 
@@ -623,7 +685,10 @@ pub fn arrow_local_geometry(
     quad_px: [f32; 2],
 ) -> ([[f32; 4]; 3], f32) {
     let scale = quad_px[0].min(quad_px[1]) / 100.0;
-    let off = [(quad_px[0] - 100.0 * scale) * 0.5, (quad_px[1] - 100.0 * scale) * 0.5];
+    let off = [
+        (quad_px[0] - 100.0 * scale) * 0.5,
+        (quad_px[1] - 100.0 * scale) * 0.5,
+    ];
     let to_local = |v: [f32; 4]| {
         [
             off[0] + v[0] * scale,
@@ -634,13 +699,25 @@ pub fn arrow_local_geometry(
     };
     let segments = arrow_segments_viewbox(direction);
     let half_stroke = (stroke_width_viewbox.max(0.0) * scale) * 0.5;
-    ([to_local(segments[0]), to_local(segments[1]), to_local(segments[2])], half_stroke)
+    (
+        [
+            to_local(segments[0]),
+            to_local(segments[1]),
+            to_local(segments[2]),
+        ],
+        half_stroke,
+    )
 }
 
 /// Focus effectif d'une région à `t` : sa position fixe, sauf en mode "auto" où elle suit la
 /// télémétrie curseur (port de `getResolvedFocus`, sans le clamp — le crop-window de
 /// `compositor.rs` clampe déjà après coup, cf. `su0.clamp(...)`, donc redondant ici).
-fn resolve_focus(region: &SceneZoomRegion, t: f32, cursor: Option<&CursorTrack>) -> [f32; 2] {
+fn resolve_focus(
+    region: &SceneZoomRegion,
+    t: f32,
+    cursor: Option<&CursorTrack>,
+    clock: &ScreenClock,
+) -> [f32; 2] {
     // Sous la caméra réelle, le cadrage vient de son pivot : la boîte zoome sur son centre, sans
     // glissement 2D. Chaînée à une région plate, la transition glisse donc vers le focus de
     // celle-ci sans saut.
@@ -652,8 +729,10 @@ fn resolve_focus(region: &SceneZoomRegion, t: f32, cursor: Option<&CursorTrack>)
             // La piste LISSÉE, avec une zone morte au centre de la vue zoomée (`follow_in_view`) :
             // la vue ne bouge que quand le pointeur en sort. Suivre la télémétrie brute, ou chaque
             // petit geste, donne un pan nerveux. Le filtre part du début de l'ease-in de la région,
-            // un instant fixe : preview et export rejouent la même chose.
-            let t0 = region.start_sec as f32 - zoom_transition_s(region.scale);
+            // un instant fixe : preview et export rejouent la même chose. L'ease-in se mesure à
+            // l'écran (`zoom_region_strength`), son début se ramène donc à la source par l'horloge.
+            let window = zoom_transition_s(region.scale);
+            let t0 = clock.source_at(clock.at(region.start_sec as f32) - window);
             if let Some((cx, cy)) = track.follow_in_view(t0, t, region.scale) {
                 return [cx, cy];
             }
@@ -673,16 +752,31 @@ fn resolve_focus(region: &SceneZoomRegion, t: f32, cursor: Option<&CursorTrack>)
 /// rendu, donc un pan lissé vers (ou depuis) l'une d'elles ferait bouger des frames gardées au
 /// nom d'une région que l'export ne joue pas. Elles restent des régions dominantes indépendantes,
 /// sèches sur leur propre span (cf. `zoom_region_strength`).
-fn connected_pairs(regions: &[SceneZoomRegion], clock: &ScreenClock) -> Vec<(usize, usize, f32, f32)> {
-    let mut order: Vec<usize> = (0..regions.len()).filter(|&i| !regions[i].under_trim).collect();
-    order.sort_by(|&a, &b| regions[a].start_sec.partial_cmp(&regions[b].start_sec).unwrap());
+fn connected_pairs(
+    regions: &[SceneZoomRegion],
+    clock: &ScreenClock,
+) -> Vec<(usize, usize, f32, f32)> {
+    let mut order: Vec<usize> = (0..regions.len())
+        .filter(|&i| !regions[i].under_trim)
+        .collect();
+    order.sort_by(|&a, &b| {
+        regions[a]
+            .start_sec
+            .partial_cmp(&regions[b].start_sec)
+            .unwrap()
+    });
     let mut pairs = Vec::new();
     for w in order.windows(2) {
         let (ci, ni) = (w[0], w[1]);
         let transition_start = clock.at(regions[ci].end_sec as f32);
         let gap = clock.at(regions[ni].start_sec as f32) - transition_start;
         if gap <= CHAINED_ZOOM_PAN_GAP_S {
-            pairs.push((ci, ni, transition_start, transition_start + CONNECTED_ZOOM_PAN_DURATION_S));
+            pairs.push((
+                ci,
+                ni,
+                transition_start,
+                transition_start + CONNECTED_ZOOM_PAN_DURATION_S,
+            ));
         }
     }
     pairs
@@ -690,8 +784,18 @@ fn connected_pairs(regions: &[SceneZoomRegion], clock: &ScreenClock) -> Vec<(usi
 
 /// `zoom_state_in` sans speed region ni caméra `follow-cursor` : ce que les tests comparent.
 #[cfg(test)]
-pub fn zoom_state_at(regions: &[SceneZoomRegion], t: f32, cursor: Option<&CursorTrack>) -> ZoomState {
-    zoom_state_in(regions, t, cursor, &CameraFrame::NONE, &ScreenClock::default())
+pub fn zoom_state_at(
+    regions: &[SceneZoomRegion],
+    t: f32,
+    cursor: Option<&CursorTrack>,
+) -> ZoomState {
+    zoom_state_in(
+        regions,
+        t,
+        cursor,
+        &CameraFrame::NONE,
+        &ScreenClock::default(),
+    )
 }
 
 /// État de zoom au temps `t` (secondes source du clip actif). Port de
@@ -722,16 +826,19 @@ pub fn zoom_state_in(
         let progress =
             ease_connected_pan(clamp01((screen_t - t_start) / (t_end - t_start).max(1e-3)));
         let (cur, next) = (&regions[ci], &regions[ni]);
-        let cur_focus = resolve_focus(cur, t, cursor);
-        let next_focus = resolve_focus(next, t, cursor);
+        let cur_focus = resolve_focus(cur, t, cursor, clock);
+        let next_focus = resolve_focus(next, t, cursor, clock);
         // Entre deux présets DIFFÉRENTS, la base traverse des poses qu'aucun préset ne valide
         // (left→right passe par Y = 0) : la marge que l'échelle gelée laissait au budget n'y est
         // plus. La porte se ferme donc en milieu de course et ne se rouvre qu'au ras des bouts —
         // 1 − 4p(1−p) vaut 1 en p = 0 et p = 1, donc aucun saut avec la région d'avant ni avec
         // le palier d'après. Cf. `the_chained_sweep_keeps_every_edge_off_axis_and_inside`.
         let (cur_cam, next_cam) = (camera_for(&cur.rotation), camera_for(&next.rotation));
-        let crossing =
-            if cur_cam == next_cam { 1.0 } else { 1.0 - 4.0 * progress * (1.0 - progress) };
+        let crossing = if cur_cam == next_cam {
+            1.0
+        } else {
+            1.0 - 4.0 * progress * (1.0 - progress)
+        };
         // Un angle fixe incline l'écran, la caméra réelle le laisse immobile : les deux modèles ne
         // se mélangent pas. Entre eux, la transition passe par l'écran droit à mi-course, l'un
         // s'éteignant sur la première moitié, l'autre s'allumant sur la seconde.
@@ -740,9 +847,16 @@ pub fn zoom_state_in(
             (Camera::Follow, Camera::Fixed(_)) | (Camera::Fixed(_), Camera::Follow)
         );
         let (rotation, camera) = if split {
-            let (out, into) = ((1.0 - 2.0 * progress).max(0.0), (2.0 * progress - 1.0).max(0.0));
+            let (out, into) = (
+                (1.0 - 2.0 * progress).max(0.0),
+                (2.0 * progress - 1.0).max(0.0),
+            );
             let r = fixed_rotation(cur).map(|a| a * out);
-            let r = if r == [0.0; 3] { fixed_rotation(next).map(|a| a * into) } else { r };
+            let r = if r == [0.0; 3] {
+                fixed_rotation(next).map(|a| a * into)
+            } else {
+                r
+            };
             (r, follow_flag(cur) * out + follow_flag(next) * into)
         } else {
             (
@@ -751,10 +865,14 @@ pub fn zoom_state_in(
             )
         };
         let (a, b) = (follow_at(cur, t, frame), follow_at(next, t, frame));
-        let mix = |p: [f32; 2], q: [f32; 2]| [lerp(p[0], q[0], progress), lerp(p[1], q[1], progress)];
+        let mix =
+            |p: [f32; 2], q: [f32; 2]| [lerp(p[0], q[0], progress), lerp(p[1], q[1], progress)];
         return ZoomState {
             scale: scale_lerp(cur.scale, next.scale, progress),
-            focus: [lerp(cur_focus[0], next_focus[0], progress), lerp(cur_focus[1], next_focus[1], progress)],
+            focus: [
+                lerp(cur_focus[0], next_focus[0], progress),
+                lerp(cur_focus[1], next_focus[1], progress),
+            ],
             rotation,
             tilt: lerp(fixed_flag(cur), fixed_flag(next), progress) * crossing,
             click_impact: lerp(impact_flag(cur), impact_flag(next), progress),
@@ -773,7 +891,7 @@ pub fn zoom_state_in(
             let seen = follow_at(next, t, frame);
             return ZoomState {
                 scale: next.scale,
-                focus: resolve_focus(next, t, cursor),
+                focus: resolve_focus(next, t, cursor, clock),
                 rotation: fixed_rotation(next),
                 tilt: fixed_flag(next),
                 click_impact: impact_flag(next),
@@ -788,10 +906,12 @@ pub fn zoom_state_in(
     // chaîné ci-dessus (sinon leur propre ease-in/out "percerait" à travers la fenêtre chaînée).
     let mut best: Option<(usize, f32)> = None;
     for (i, r) in regions.iter().enumerate() {
-        let outgoing_past_end =
-            pairs.iter().any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
-        let incoming_before_transition_end =
-            pairs.iter().any(|&(_, ni, _, t_end)| ni == i && screen_t < t_end);
+        let outgoing_past_end = pairs
+            .iter()
+            .any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
+        let incoming_before_transition_end = pairs
+            .iter()
+            .any(|&(_, ni, _, t_end)| ni == i && screen_t < t_end);
         if outgoing_past_end || incoming_before_transition_end {
             continue;
         }
@@ -810,7 +930,7 @@ pub fn zoom_state_in(
     match best {
         Some((i, strength)) => {
             let r = &regions[i];
-            let focus = resolve_focus(r, t, cursor);
+            let focus = resolve_focus(r, t, cursor, clock);
             let scale = scale_lerp(1.0, r.scale, strength);
             // La référence (`zoomTransform.ts`) fait converger le point de focus vers le centre
             // de l'écran LINÉAIREMENT : screen(f) = 0.5 + (f - 0.5)(1 - strength). Passer
@@ -860,13 +980,21 @@ fn camera_fullscreen_region_strength(
     let lead_in_end = start + lead_in;
     let lead_out_start = end - lead_out;
     if t < lead_in_end {
-        let progress = if lead_in > 0.0 { (t - start) / lead_in } else { 1.0 };
+        let progress = if lead_in > 0.0 {
+            (t - start) / lead_in
+        } else {
+            1.0
+        };
         return ease_out_screen_studio(progress);
     }
     if t <= lead_out_start {
         return 1.0;
     }
-    let progress = if lead_out > 0.0 { (end - t) / lead_out } else { 0.0 };
+    let progress = if lead_out > 0.0 {
+        (end - t) / lead_out
+    } else {
+        0.0
+    };
     ease_out_screen_studio(progress)
 }
 
@@ -928,7 +1056,11 @@ fn rotate_corner(x0: f32, y0: f32, rot: [f32; 3]) -> (f32, f32, f32) {
 /// caméra) : Z, puis Y, puis X, en degrés. Le curseur modélisé (mode 15) a besoin de points
 /// hors du plan, et doit tourner exactement comme lui.
 pub(crate) fn rotate_point(p: [f32; 3], rot: [f32; 3]) -> [f32; 3] {
-    let (a, b, g) = (rot[0].to_radians(), rot[1].to_radians(), rot[2].to_radians());
+    let (a, b, g) = (
+        rot[0].to_radians(),
+        rot[1].to_radians(),
+        rot[2].to_radians(),
+    );
     let (ca, sa) = (a.cos(), a.sin());
     let (cb, sb) = (b.cos(), b.sin());
     let (cg, sg) = (g.cos(), g.sin());
@@ -951,7 +1083,11 @@ pub(crate) fn rotate_point(p: [f32; 3], rot: [f32; 3]) -> [f32; 3] {
 /// L'inverse de `rotate_point` : du repère caméra vers celui du plan (X, puis Y, puis Z, chacun
 /// transposé). Une rotation est orthonormée, sa transposée est son inverse.
 pub(crate) fn rotate_point_inv(p: [f32; 3], rot: [f32; 3]) -> [f32; 3] {
-    let (a, b, g) = (rot[0].to_radians(), rot[1].to_radians(), rot[2].to_radians());
+    let (a, b, g) = (
+        rot[0].to_radians(),
+        rot[1].to_radians(),
+        rot[2].to_radians(),
+    );
     let (ca, sa) = (a.cos(), a.sin());
     let (cb, sb) = (b.cos(), b.sin());
     let (cg, sg) = (g.cos(), g.sin());
@@ -975,7 +1111,11 @@ pub(crate) fn rotate_point_inv(p: [f32; 3], rot: [f32; 3]) -> [f32; 3] {
 /// rotateZ. En développant x1 = x0·cg − y0·sg et y1 = x0·sg + y0·cg, `pz` est linéaire en
 /// (x0, y0) — d'où ces deux coefficients, sans rien de plus à calculer par pixel.
 pub(crate) fn depth_coefficients(rot: [f32; 3]) -> (f32, f32) {
-    let (a, b, g) = (rot[0].to_radians(), rot[1].to_radians(), rot[2].to_radians());
+    let (a, b, g) = (
+        rot[0].to_radians(),
+        rot[1].to_radians(),
+        rot[2].to_radians(),
+    );
     let (ca, sa) = (a.cos(), a.sin());
     let sb = b.sin();
     let (cg, sg) = (g.cos(), g.sin());
@@ -1020,7 +1160,9 @@ fn project_scaled_corners(
 
 /// Demi-étendue des coins projetés sur chaque axe.
 fn projected_extents(corners: &[(f32, f32); 4]) -> (f32, f32) {
-    corners.iter().fold((0.0f32, 0.0f32), |(mx, my), &(x, y)| (mx.max(x.abs()), my.max(y.abs())))
+    corners.iter().fold((0.0f32, 0.0f32), |(mx, my), &(x, y)| {
+        (mx.max(x.abs()), my.max(y.abs()))
+    })
 }
 
 /// Un écran incliné : ses 4 coins projetés, et la réduction qu'il a fallu pour qu'ils tiennent.
@@ -1084,7 +1226,12 @@ pub fn rotated_quad_corners_px(
         // Un coin derrière le plan de fuite : on rend le quad non tourné plutôt qu'une projection
         // absurde (même repli qu'avant).
         return TiltedQuad {
-            corners: [(-half_w, -half_h), (half_w, -half_h), (half_w, half_h), (-half_w, half_h)],
+            corners: [
+                (-half_w, -half_h),
+                (half_w, -half_h),
+                (half_w, half_h),
+                (-half_w, half_h),
+            ],
             scale: 1.0,
             depth_k: (0.0, 0.0),
             rot: [0.0; 3],
@@ -1098,7 +1245,11 @@ pub fn rotated_quad_corners_px(
     // décollerait du plan pendant la parallaxe.
     let mut drawn = rot;
     if rot_dyn != [0.0; 3] {
-        let full = [rot[0] + rot_dyn[0], rot[1] + rot_dyn[1], rot[2] + rot_dyn[2]];
+        let full = [
+            rot[0] + rot_dyn[0],
+            rot[1] + rot_dyn[1],
+            rot[2] + rot_dyn[2],
+        ];
         // Un coin qui passerait derrière le plan de fuite : on garde la pose de base.
         if let Some(c) = project_scaled_corners(width, height, scale, full, perspective) {
             corners = c;
@@ -1174,7 +1325,11 @@ pub const DYNAMIC_TILT_BUDGET: [f32; 3] = [1.9, 3.0, 0.0];
 /// Borne une part dynamique au budget, axe par axe.
 pub fn clamp_dynamic_tilt(rot: [f32; 3]) -> [f32; 3] {
     let b = DYNAMIC_TILT_BUDGET;
-    [rot[0].clamp(-b[0], b[0]), rot[1].clamp(-b[1], b[1]), rot[2].clamp(-b[2], b[2])]
+    [
+        rot[0].clamp(-b[0], b[0]),
+        rot[1].clamp(-b[1], b[1]),
+        rot[2].clamp(-b[2], b[2]),
+    ]
 }
 
 /// Force du préset sous laquelle la part dynamique est nulle ; elle s'installe en smoothstep
@@ -1240,7 +1395,11 @@ pub fn dynamic_tilt(
         }
         _ => [0.0; 3],
     };
-    let sum = [parallax[0] + impact[0], parallax[1] + impact[1], parallax[2] + impact[2]];
+    let sum = [
+        parallax[0] + impact[0],
+        parallax[1] + impact[1],
+        parallax[2] + impact[2],
+    ];
     clamp_dynamic_tilt(sum).map(|d| d * gate)
 }
 
@@ -1300,8 +1459,13 @@ pub fn click_impact(
         if tc < window[0] || tc >= window[1] {
             continue;
         }
-        let Some([fx, fy]) = track.at(tc).and_then(&aim) else { continue };
-        let (dx, dy) = ((2.0 * fx - 1.0).clamp(-1.0, 1.0), (2.0 * fy - 1.0).clamp(-1.0, 1.0));
+        let Some([fx, fy]) = track.at(tc).and_then(&aim) else {
+            continue;
+        };
+        let (dx, dy) = (
+            (2.0 * fx - 1.0).clamp(-1.0, 1.0),
+            (2.0 * fy - 1.0).clamp(-1.0, 1.0),
+        );
         let k = tap((t - tc) / CLICK_IMPACT_WINDOW_S);
         sum[0] += k * dy;
         sum[1] -= k * dx;
@@ -1375,7 +1539,10 @@ impl TiltedQuad {
         let [tl, tr, br, bl] = self.corners;
         let top = (tl.0 + (tr.0 - tl.0) * fx, tl.1 + (tr.1 - tl.1) * fx);
         let bottom = (bl.0 + (br.0 - bl.0) * fx, bl.1 + (br.1 - bl.1) * fx);
-        (top.0 + (bottom.0 - top.0) * fy, top.1 + (bottom.1 - top.1) * fy)
+        (
+            top.0 + (bottom.0 - top.0) * fy,
+            top.1 + (bottom.1 - top.1) * fy,
+        )
     }
 
     /// Le `mb` du draw mode 8 : `[gx, gy, z_focus, k]`.
@@ -1396,13 +1563,21 @@ impl TiltedQuad {
         let gy = screen_px[1] * self.scale * self.depth_k.1;
         let z_focus = (focus_plane[0] - 0.5) * gx + (focus_plane[1] - 0.5) * gy;
         let perspective = self.perspective;
-        let k = if dof && perspective > 0.0 { DOF_COC_PER_DEPTH / perspective } else { 0.0 };
+        let k = if dof && perspective > 0.0 {
+            DOF_COC_PER_DEPTH / perspective
+        } else {
+            0.0
+        };
         [gx, gy, z_focus, k]
     }
 
     /// Le drapeau « warp projectif » des shaders (1) ou bilinéaire (0).
     pub fn warp_flag(&self) -> f32 {
-        if self.projective { 1.0 } else { 0.0 }
+        if self.projective {
+            1.0
+        } else {
+            0.0
+        }
     }
 
     /// Demi-largeur / demi-hauteur de la bounding box des coins projetés, en px.
@@ -1437,18 +1612,59 @@ mod zoom_focus_tests {
     /// dernière (ou la première) position suivie au lieu de retomber sur le point statique de la
     /// région. Sans ça, le plan net sauterait d'un bout de l'écran à l'autre à la fin de la
     /// télémétrie — et la netteté avec lui, maintenant que `z_focus` en dépend.
+    /// Le suivi auto part du début de l'ease-in MESURÉ À L'ÉCRAN : sous un ralenti avant la
+    /// région, ce début tombe plus tard en source que `start − fenêtre`.
+    #[test]
+    fn auto_focus_starts_its_dead_zone_at_the_on_screen_ease_in() {
+        let track = CursorTrack::new(
+            (0..=240)
+                .map(|i| (i as f32 / 30.0, 0.5 + 0.35 * (i as f32 / 15.0).sin(), 0.5))
+                .collect(),
+            vec![],
+            vec![],
+        );
+        let mut r = region(2.0, 0.5);
+        r.focus_mode = Some("auto".into());
+        let slow = crate::scene::SceneSpeedRegion {
+            clip_index: None,
+            start_sec: 0.0,
+            end_sec: 2.0,
+            speed: 0.5,
+        };
+        let clock = ScreenClock::new(&[slow], 0);
+        let window = zoom_transition_s(r.scale);
+        let t0 = clock.source_at(clock.at(r.start_sec as f32) - window);
+        assert!(
+            t0 > r.start_sec as f32 - window + 0.1,
+            "garde : le ralenti doit déplacer le départ ({t0})"
+        );
+        let (x, y) = track.follow_in_view(t0, 3.0, r.scale).unwrap();
+        assert_eq!(resolve_focus(&r, 3.0, Some(&track), &clock), [x, y]);
+    }
+
     #[test]
     fn auto_focus_holds_the_last_tracked_point_past_the_track() {
-        let track = CursorTrack::new(vec![(3.0, 0.8, 0.2), (4.0, 0.9, 0.1)], Vec::new(), Vec::new());
+        let track = CursorTrack::new(
+            vec![(3.0, 0.8, 0.2), (4.0, 0.9, 0.1)],
+            Vec::new(),
+            Vec::new(),
+        );
         let mut r = region(1.5, 0.1);
         r.focus_mode = Some("auto".into());
         let t0 = r.start_sec as f32 - zoom_transition_s(r.scale);
         let last = track.follow_in_view(t0, 4.0, r.scale).unwrap();
         for t in [4.5f32, 6.0, 7.9] {
-            assert_eq!(resolve_focus(&r, t, Some(&track)), [last.0, last.1], "t = {t}");
+            assert_eq!(
+                resolve_focus(&r, t, Some(&track), &ScreenClock::default()),
+                [last.0, last.1],
+                "t = {t}"
+            );
         }
         let first = track.follow_in_view(t0, 2.1, r.scale).unwrap();
-        assert_eq!(resolve_focus(&r, 2.1, Some(&track)), [first.0, first.1]);
+        assert_eq!(
+            resolve_focus(&r, 2.1, Some(&track), &ScreenClock::default()),
+            [first.0, first.1]
+        );
     }
 
     #[test]
@@ -1461,13 +1677,22 @@ mod zoom_focus_tests {
         let regions = vec![r];
 
         // Bien avant le zoom (t=0.0) -> pleine opacité
-        assert_eq!(zoom_cursor_alpha(&regions, 0.0, &ScreenClock::default()), 1.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 0.0, &ScreenClock::default()),
+            1.0
+        );
 
         // Plein milieu du zoom (t=4.5) -> complètement masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 4.5, &ScreenClock::default()), 0.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 4.5, &ScreenClock::default()),
+            0.0
+        );
 
         // Bien après le zoom (t=10.0) -> pleine opacité
-        assert_eq!(zoom_cursor_alpha(&regions, 10.0, &ScreenClock::default()), 1.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 10.0, &ScreenClock::default()),
+            1.0
+        );
     }
 
     #[test]
@@ -1485,13 +1710,25 @@ mod zoom_focus_tests {
         let regions = vec![r1, r2];
 
         // Pendant la région 1 (t=3.0) -> masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 3.0, &ScreenClock::default()), 0.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 3.0, &ScreenClock::default()),
+            0.0
+        );
         // Pendant la transition chaînée (connected pan entre t=4.0 et t=4.3) -> reste masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 4.15, &ScreenClock::default()), 0.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 4.15, &ScreenClock::default()),
+            0.0
+        );
         // Pendant le palier chaîné (t=4.4) -> reste masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 4.4, &ScreenClock::default()), 0.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 4.4, &ScreenClock::default()),
+            0.0
+        );
         // Pendant la région 2 (t=5.5) -> masqué
-        assert_eq!(zoom_cursor_alpha(&regions, 5.5, &ScreenClock::default()), 0.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 5.5, &ScreenClock::default()),
+            0.0
+        );
     }
 
     #[test]
@@ -1509,9 +1746,15 @@ mod zoom_focus_tests {
         let regions = vec![r1, r2];
 
         // Avant la transition (r1 actif) -> 0.0
-        assert_eq!(zoom_cursor_alpha(&regions, 3.0, &ScreenClock::default()), 0.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 3.0, &ScreenClock::default()),
+            0.0
+        );
         // Après la transition (r2 actif avec hide_cursor=false) -> 1.0
-        assert_eq!(zoom_cursor_alpha(&regions, 5.5, &ScreenClock::default()), 1.0);
+        assert_eq!(
+            zoom_cursor_alpha(&regions, 5.5, &ScreenClock::default()),
+            1.0
+        );
     }
 
     /// Où le point source `f` atterrit à l'écran (0..1) : le crop est centré sur `focus` et
@@ -1561,9 +1804,21 @@ mod zoom_focus_tests {
                 .map(|i| speed(lead_in + i as f32 * dt))
                 .fold(0.0f32, f32::max);
             assert!(peak < 3.0, "{scale}× : pic à {peak}/s");
-            assert!(speed(lead_in) < 0.1 * peak, "{scale}× : départ à {}/s", speed(lead_in));
-            assert!(speed(8.0) < 0.1 * peak, "{scale}× : retour à {}/s", speed(8.0));
-            assert_eq!(zoom_state_at(&r, 2.0, None).scale, scale, "{scale}× en place au début");
+            assert!(
+                speed(lead_in) < 0.1 * peak,
+                "{scale}× : départ à {}/s",
+                speed(lead_in)
+            );
+            assert!(
+                speed(8.0) < 0.1 * peak,
+                "{scale}× : retour à {}/s",
+                speed(8.0)
+            );
+            assert_eq!(
+                zoom_state_at(&r, 2.0, None).scale,
+                scale,
+                "{scale}× en place au début"
+            );
         }
     }
 
@@ -1572,7 +1827,11 @@ mod zoom_focus_tests {
         let f = 0.8;
         let regions = [region(2.5, f)];
         let state = zoom_state_at(&regions, 5.0, None);
-        assert!((state.scale - 2.5).abs() < 1e-4, "plein régime attendu, scale={}", state.scale);
+        assert!(
+            (state.scale - 2.5).abs() < 1e-4,
+            "plein régime attendu, scale={}",
+            state.scale
+        );
         assert!((screen_x(&state, f) - 0.5).abs() < 1e-4);
         assert!((state.focus[0] - f).abs() < 1e-4);
     }
@@ -1612,8 +1871,18 @@ mod zoom_focus_tests {
         assert!(connected_pairs(&[region(2.0, 0.5), cut], &ScreenClock::default()).is_empty());
     }
 
-    fn speed(clip_index: Option<usize>, start_sec: f64, end_sec: f64, speed: f64) -> SceneSpeedRegion {
-        SceneSpeedRegion { clip_index, start_sec, end_sec, speed }
+    fn speed(
+        clip_index: Option<usize>,
+        start_sec: f64,
+        end_sec: f64,
+        speed: f64,
+    ) -> SceneSpeedRegion {
+        SceneSpeedRegion {
+            clip_index,
+            start_sec,
+            end_sec,
+            speed,
+        }
     }
 
     #[test]
@@ -1623,16 +1892,31 @@ mod zoom_focus_tests {
         assert_eq!(clock.at(4.0), 2.5);
         assert_eq!(clock.at(8.0), 5.0);
         for t in [0.5f32, 2.0, 3.3, 6.0, 7.25] {
-            assert!((clock.source_at(clock.at(t)) - t).abs() < 1e-5, "aller-retour à t = {t}");
+            assert!(
+                (clock.source_at(clock.at(t)) - t).abs() < 1e-5,
+                "aller-retour à t = {t}"
+            );
         }
         // Une frame d'écran en arrière depuis une frontière : le pas est celui du span d'AVANT.
         let back = |t: f32| clock.source_at(clock.at(t) - 1.0 / 60.0);
-        assert!((back(2.0) - (2.0 - 1.0 / 60.0)).abs() < 1e-5, "entrée du 4× : {}", back(2.0));
-        assert!((back(6.0) - (6.0 - 4.0 / 60.0)).abs() < 1e-5, "sortie du 4× : {}", back(6.0));
+        assert!(
+            (back(2.0) - (2.0 - 1.0 / 60.0)).abs() < 1e-5,
+            "entrée du 4× : {}",
+            back(2.0)
+        );
+        assert!(
+            (back(6.0) - (6.0 - 4.0 / 60.0)).abs() < 1e-5,
+            "sortie du 4× : {}",
+            back(6.0)
+        );
         // Autre clip ignoré ; recouvrement : la première région garde [4, 6), la seconde ne
         // compte que sur [6, 8). 2 + 1 + 1 à t = 8.
         let clock = ScreenClock::new(
-            &[speed(Some(1), 0.0, 10.0, 2.0), speed(Some(0), 2.0, 6.0, 4.0), speed(Some(0), 4.0, 8.0, 2.0)],
+            &[
+                speed(Some(1), 0.0, 10.0, 2.0),
+                speed(Some(0), 2.0, 6.0, 4.0),
+                speed(Some(0), 4.0, 8.0, 2.0),
+            ],
             0,
         );
         assert_eq!(clock.at(8.0), 4.0);
@@ -1646,21 +1930,37 @@ mod zoom_focus_tests {
         let clock = ScreenClock::new(&[speed(None, 0.0, 1000.0, 4.0)], 0);
         let zooms = |k: f64| {
             let (mut a, mut b) = (region(2.5, 0.8), region(1.8, 0.3));
-            (a.start_sec, a.end_sec, b.start_sec, b.end_sec) = (5.0 * k, 10.0 * k, 11.0 * k, 15.0 * k);
+            (a.start_sec, a.end_sec, b.start_sec, b.end_sec) =
+                (5.0 * k, 10.0 * k, 11.0 * k, 15.0 * k);
             [a, b]
         };
-        let full_camera =
-            |k: f64| [SceneCameraFullscreenRegion { clip_index: None, start_sec: 18.0 * k, end_sec: 22.0 * k }];
+        let full_camera = |k: f64| {
+            [SceneCameraFullscreenRegion {
+                clip_index: None,
+                start_sec: 18.0 * k,
+                end_sec: 22.0 * k,
+            }]
+        };
         let (sped, plain) = (zooms(4.0), zooms(1.0));
-        assert_eq!(connected_pairs(&sped, &clock).len(), 1, "la paire doit se chaîner");
+        assert_eq!(
+            connected_pairs(&sped, &clock).len(),
+            1,
+            "la paire doit se chaîner"
+        );
         for step in 0..=1000 {
             let t = step as f32 * 0.1;
             let a = zoom_state_in(&sped, t, None, &CameraFrame::NONE, &clock);
             let b = zoom_state_at(&plain, t / 4.0, None);
-            assert!((a.scale - b.scale).abs() < 1e-4, "t={t} : {} vs {}", a.scale, b.scale);
+            assert!(
+                (a.scale - b.scale).abs() < 1e-4,
+                "t={t} : {} vs {}",
+                a.scale,
+                b.scale
+            );
             assert!((a.focus[0] - b.focus[0]).abs() < 1e-4, "t={t}");
             let a = camera_fullscreen_progress_at(&full_camera(4.0), t, &clock);
-            let b = camera_fullscreen_progress_at(&full_camera(1.0), t / 4.0, &ScreenClock::default());
+            let b =
+                camera_fullscreen_progress_at(&full_camera(1.0), t / 4.0, &ScreenClock::default());
             assert!((a - b).abs() < 1e-4, "Full Camera t={t} : {a} vs {b}");
         }
     }
@@ -1678,7 +1978,8 @@ mod zoom_focus_tests {
             for seg in speed_segments_for_window(speeds, 0.0, 20.0, 60.0) {
                 for k in 0..seg.frame_count {
                     let t = (seg.start_sec + k as f64 * seg.speed / 60.0) as f32;
-                    let scale = zoom_state_in(&[r.clone()], t, None, &CameraFrame::NONE, &clock).scale;
+                    let scale =
+                        zoom_state_in(&[r.clone()], t, None, &CameraFrame::NONE, &clock).scale;
                     if scale > 1.0 && scale < 2.0 {
                         frames += 1;
                     }
@@ -1690,8 +1991,14 @@ mod zoom_focus_tests {
         };
         let (plain_frames, plain_step) = walk(&[]);
         let (sped_frames, sped_step) = walk(&[speed(None, 9.5, 11.0, 8.0)]);
-        assert!(plain_frames.abs_diff(sped_frames) <= 2, "{plain_frames} vs {sped_frames} frames");
-        assert!(sped_step <= plain_step + 0.01, "saut de {sped_step} (1× : {plain_step})");
+        assert!(
+            plain_frames.abs_diff(sped_frames) <= 2,
+            "{plain_frames} vs {sped_frames} frames"
+        );
+        assert!(
+            sped_step <= plain_step + 0.01,
+            "saut de {sped_step} (1× : {plain_step})"
+        );
     }
 }
 
@@ -1724,8 +2031,16 @@ mod arrow_tests {
         // ~25° du fût quand les cardinales ouvrent à 45°, ce qui donnait une pointe étroite,
         // avalée par le fût dès que le trait épaississait. Corriger la longueur seule ne suffisait
         // pas — ce test verrouille l'angle, qui est le paramètre réellement visible.
-        for dir in ["up", "down", "left", "right", "up-right", "up-left", "down-right", "down-left"]
-        {
+        for dir in [
+            "up",
+            "down",
+            "left",
+            "right",
+            "up-right",
+            "up-left",
+            "down-right",
+            "down-left",
+        ] {
             for barb in 1..=2 {
                 let deg = barb_opening_deg(dir, barb);
                 assert!(
@@ -1741,7 +2056,8 @@ mod arrow_tests {
         // Les barbes diagonales faisaient 15,8 unités contre 21,2 pour les cardinales : une
         // flèche en diagonale avait une tête ~25 % plus petite que sa voisine horizontale, ce
         // qui se lisait comme une déformation. Ce test interdit la divergence de revenir.
-        let barb_len = |seg: [f32; 4]| ((seg[2] - seg[0]).powi(2) + (seg[3] - seg[1]).powi(2)).sqrt();
+        let barb_len =
+            |seg: [f32; 4]| ((seg[2] - seg[0]).powi(2) + (seg[3] - seg[1]).powi(2)).sqrt();
         let cardinal = barb_len(arrow_segments_viewbox("up")[1]);
         for dir in ["up-right", "up-left", "down-right", "down-left"] {
             for barb in 1..=2 {
@@ -1760,11 +2076,19 @@ mod arrow_tests {
         // dessinent deux flèches différentes.
         assert_eq!(
             arrow_segments_viewbox("right"),
-            [[20.0, 50.0, 80.0, 50.0], [80.0, 50.0, 65.0, 35.0], [80.0, 50.0, 65.0, 65.0]]
+            [
+                [20.0, 50.0, 80.0, 50.0],
+                [80.0, 50.0, 65.0, 35.0],
+                [80.0, 50.0, 65.0, 65.0]
+            ]
         );
         assert_eq!(
             arrow_segments_viewbox("up"),
-            [[50.0, 20.0, 50.0, 80.0], [50.0, 20.0, 35.0, 35.0], [50.0, 20.0, 65.0, 35.0]]
+            [
+                [50.0, 20.0, 50.0, 80.0],
+                [50.0, 20.0, 35.0, 35.0],
+                [50.0, 20.0, 65.0, 35.0]
+            ]
         );
     }
 
@@ -1772,7 +2096,10 @@ mod arrow_tests {
     fn an_unknown_direction_falls_back_to_right() {
         // Même défaut que le schéma côté app, pour qu'une donnée abîmée dessine quelque chose
         // de sensé plutôt que rien.
-        assert_eq!(arrow_segments_viewbox("sideways"), arrow_segments_viewbox("right"));
+        assert_eq!(
+            arrow_segments_viewbox("sideways"),
+            arrow_segments_viewbox("right")
+        );
     }
 
     #[test]
@@ -1818,11 +2145,16 @@ mod tilt_tests {
     #[test]
     fn the_plane_corners_map_to_the_projected_corners() {
         let quad = rotated_quad_corners_px(1920.0, 1080.0, preset("iso"), [0.0; 3]);
-        for (i, (fx, fy)) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].into_iter().enumerate()
+        for (i, (fx, fy)) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            .into_iter()
+            .enumerate()
         {
             let (x, y) = quad.point_px(fx, fy);
             let (ex, ey) = quad.corners[i];
-            assert!((x - ex).abs() < 1e-3 && (y - ey).abs() < 1e-3, "coin {i}: {x},{y} != {ex},{ey}");
+            assert!(
+                (x - ex).abs() < 1e-3 && (y - ey).abs() < 1e-3,
+                "coin {i}: {x},{y} != {ex},{ey}"
+            );
         }
     }
 
@@ -1851,7 +2183,10 @@ mod tilt_tests {
             let (ux, uy) = ((fx - 0.5) * w, (fy - 0.5) * h);
             worst = worst.max((x - ux).hypot(y - uy));
         }
-        assert!(worst > 20.0, "ecart max au rect droit trop faible: {worst}px");
+        assert!(
+            worst > 20.0,
+            "ecart max au rect droit trop faible: {worst}px"
+        );
     }
 
     /// Le contrat du containment : après projection, aucun coin ne sort du rect d'origine.
@@ -1928,13 +2263,18 @@ mod tilt_tests {
                 let quad = rotated_quad_corners_px(w, h, rot, [0.0; 3]);
                 let mb = quad.depth_mb([w, h], [0.5, 0.5], false);
                 let perspective = w.min(h) * PERSPECTIVE_FACTOR;
-                for (i, (s, t)) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].into_iter().enumerate()
+                for (i, (s, t)) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+                    .into_iter()
+                    .enumerate()
                 {
                     let (x0, y0) = ((s - 0.5) * w * quad.scale, (t - 0.5) * h * quad.scale);
                     // Même repère que les coins : projeter ce point redonne le coin rendu.
                     let (px, py) = project_corner(x0, y0, rot, perspective).unwrap();
                     let (cx, cy) = quad.corners[i];
-                    assert!((px - cx).abs() < 1e-2 && (py - cy).abs() < 1e-2, "{name} coin {i}");
+                    assert!(
+                        (px - cx).abs() < 1e-2 && (py - cy).abs() < 1e-2,
+                        "{name} coin {i}"
+                    );
                 }
                 for i in 0..=8 {
                     for j in 0..=8 {
@@ -1970,7 +2310,10 @@ mod tilt_tests {
             quad.corners[i].0.hypot(quad.corners[i].1) / rx.hypot(ry)
         };
         let (m_tr, m_bl) = (magnification(1, 1.0, 0.0), magnification(3, 0.0, 1.0));
-        assert!(m_tr > m_bl * 1.2, "TR x{m_tr} devrait être nettement plus grossi que BL x{m_bl}");
+        assert!(
+            m_tr > m_bl * 1.2,
+            "TR x{m_tr} devrait être nettement plus grossi que BL x{m_bl}"
+        );
     }
 
     /// Le focus au centre du plan est à la profondeur du centre (0), et `k` reste nul réglage
@@ -2028,7 +2371,10 @@ mod tilt_tests {
         // d'un quad incliné ne peuvent pas rester alignés deux à deux comme un rectangle droit.
         let corners = rotated_quad_corners_px(1920.0, 1080.0, preset("iso"), [0.0; 3]).corners;
         let top_edge_slope = (corners[1].1 - corners[0].1).abs();
-        assert!(top_edge_slope > 1.0, "arête supérieure horizontale : le tilt a disparu");
+        assert!(
+            top_edge_slope > 1.0,
+            "arête supérieure horizontale : le tilt a disparu"
+        );
     }
 
     fn preset(name: &str) -> [f32; 3] {
@@ -2039,7 +2385,10 @@ mod tilt_tests {
     pub(super) fn min_edge_angle(c: &[(f32, f32); 4]) -> f32 {
         let h = |p: (f32, f32), q: (f32, f32)| (q.1 - p.1).atan2(q.0 - p.0).to_degrees().abs();
         let v = |p: (f32, f32), q: (f32, f32)| (q.0 - p.0).atan2(q.1 - p.1).to_degrees().abs();
-        h(c[0], c[1]).min(h(c[3], c[2])).min(v(c[0], c[3])).min(v(c[1], c[2]))
+        h(c[0], c[1])
+            .min(h(c[3], c[2]))
+            .min(v(c[0], c[3]))
+            .min(v(c[1], c[2]))
     }
 
     /// Débordement relatif du quad hors du rect d'origine (> 0 = déborde).
@@ -2055,7 +2404,11 @@ mod tilt_tests {
         let b = DYNAMIC_TILT_BUDGET;
         (-n..=n).flat_map(move |i| {
             (-n..=n).map(move |j| {
-                [b[0] * g * i as f32 / n as f32, b[1] * g * j as f32 / n as f32, 0.0]
+                [
+                    b[0] * g * i as f32 / n as f32,
+                    b[1] * g * j as f32 / n as f32,
+                    0.0,
+                ]
             })
         })
     }
@@ -2097,8 +2450,14 @@ mod tilt_tests {
             min_edge_angle(&c) < 2.0 || overflow(&c, w, h) > 0.0
         };
         let b = DYNAMIC_TILT_BUDGET;
-        assert!(breaks([b[0] * 1.15, 0.0, 0.0]) || breaks([-b[0] * 1.15, 0.0, 0.0]), "X");
-        assert!(breaks([0.0, b[1] * 1.15, 0.0]) || breaks([0.0, -b[1] * 1.15, 0.0]), "Y");
+        assert!(
+            breaks([b[0] * 1.15, 0.0, 0.0]) || breaks([-b[0] * 1.15, 0.0, 0.0]),
+            "X"
+        );
+        assert!(
+            breaks([0.0, b[1] * 1.15, 0.0]) || breaks([0.0, -b[1] * 1.15, 0.0]),
+            "Y"
+        );
         assert!(breaks([0.0, 0.0, 1.2]) && breaks([0.0, 0.0, -1.2]), "Z");
         assert_eq!(b[2], 0.0, "Z n'a pas de budget");
     }
@@ -2149,7 +2508,13 @@ mod tilt_tests {
         };
         // `follow-cursor` n'incline pas l'écran (caméra réelle, `camera.rs`) : chaînée à un angle
         // fixe, la transition passe par l'écran droit, que ce balayage couvre aussi.
-        let presets = [None, Some("iso"), Some("left"), Some("right"), Some("follow-cursor")];
+        let presets = [
+            None,
+            Some("iso"),
+            Some("left"),
+            Some("right"),
+            Some("follow-cursor"),
+        ];
         for a in presets {
             for b in presets {
                 // Transition chaînée sur [4, 5] s.
@@ -2159,7 +2524,10 @@ mod tilt_tests {
                     let state = zoom_state_at(&regions, t, None);
                     let base = state.rotation;
                     // Jamais les deux modèles à la fois.
-                    assert!(state.camera == 0.0 || is_identity_rotation(base), "{a:?}→{b:?} t {t}");
+                    assert!(
+                        state.camera == 0.0 || is_identity_rotation(base),
+                        "{a:?}→{b:?} t {t}"
+                    );
                     let gate = smoothstep(PARALLAX_GATE_START, 1.0, state.tilt);
                     for (w, h) in [(1920.0f32, 1080.0f32), (1080.0, 1920.0), (800.0, 800.0)] {
                         let still = rotated_quad_corners_px(w, h, base, [0.0; 3]).corners;
@@ -2191,7 +2559,11 @@ mod tilt_tests {
                 // entre deux caméras réelles, la caméra aussi.
                 if a.is_some() && a == b {
                     let mid = zoom_state_at(&regions, 4.5, None);
-                    let open = if a == Some("follow-cursor") { mid.camera } else { mid.tilt };
+                    let open = if a == Some("follow-cursor") {
+                        mid.camera
+                    } else {
+                        mid.tilt
+                    };
                     assert_eq!(open, 1.0, "{a:?}");
                 }
             }
@@ -2249,7 +2621,10 @@ mod tilt_tests {
                 "force {strength}"
             );
         }
-        assert_ne!(dynamic_tilt(1.0, Some(&track), FULL_CUT, 0.95, [0.0; 3]), [0.0; 3]);
+        assert_ne!(
+            dynamic_tilt(1.0, Some(&track), FULL_CUT, 0.95, [0.0; 3]),
+            [0.0; 3]
+        );
     }
 
     /// Le geste penche le plan dans son sens, puis le plan revient à la pose du préset au repos.
@@ -2264,7 +2639,9 @@ mod tilt_tests {
         assert!(rest[1].abs() < 0.05, "au repos : {rest:?}");
         // Vers le bas → le bord bas recule (−X).
         let down = CursorTrack::new(
-            (0..=60).map(|i| (i as f32 / 30.0, 0.5, 0.1 + 0.4 * i as f32 / 30.0)).collect(),
+            (0..=60)
+                .map(|i| (i as f32 / 30.0, 0.5, 0.1 + 0.4 * i as f32 / 30.0))
+                .collect(),
             vec![],
             vec![],
         );
@@ -2280,7 +2657,10 @@ mod tilt_tests {
             let track = swipe(speed, 9.0);
             for cut in [FULL_CUT, [0.4, 0.4, 0.45, 0.45]] {
                 let d = dynamic_tilt(1.0, Some(&track), cut, 1.0, [0.0; 3]);
-                assert!(d[0].abs() <= b[0] && d[1].abs() <= b[1] && d[2] == 0.0, "{speed} {d:?}");
+                assert!(
+                    d[0].abs() <= b[0] && d[1].abs() <= b[1] && d[2] == 0.0,
+                    "{speed} {d:?}"
+                );
             }
         }
         let fast = dynamic_tilt(1.0, Some(&swipe(1000.0, 9.0)), FULL_CUT, 1.0, [0.0; 3]);
@@ -2318,8 +2698,14 @@ mod tilt_tests {
                 (hi, hi_ms) = (v, ms);
             }
         }
-        assert!((lo + 1.0).abs() < 1e-3 && (lo_ms - 49.5).abs() < 0.3, "creux {lo} à {lo_ms} ms");
-        assert!((hi - 0.164).abs() < 1e-3 && (hi_ms - 165.3).abs() < 0.5, "rebond {hi} à {hi_ms} ms");
+        assert!(
+            (lo + 1.0).abs() < 1e-3 && (lo_ms - 49.5).abs() < 0.3,
+            "creux {lo} à {lo_ms} ms"
+        );
+        assert!(
+            (hi - 0.164).abs() < 1e-3 && (hi_ms - 165.3).abs() < 0.5,
+            "rebond {hi} à {hi_ms} ms"
+        );
         assert_eq!(tap(1.0), 0.0);
         assert_eq!(tap(-1e-4), 0.0);
         assert_eq!(tap(0.0), 0.0);
@@ -2328,13 +2714,21 @@ mod tilt_tests {
         // Pas de cassure de pente (celle de `bounce` à 98,8 ms) : dérivée seconde bornée partout.
         let d2 = |e: f32| (tap(e + 1e-3) - 2.0 * tap(e) + tap(e - 1e-3)) / 1e-6;
         for i in 2..998 {
-            assert!(d2(i as f32 / 1000.0).abs() < 60.0, "cassure à e = {}", i as f32 / 1000.0);
+            assert!(
+                d2(i as f32 / 1000.0).abs() < 60.0,
+                "cassure à e = {}",
+                i as f32 / 1000.0
+            );
         }
     }
 
     /// Une piste immobile au point `(x, y)`, avec des clics.
     fn still(x: f32, y: f32, clicks: Vec<f32>) -> CursorTrack {
-        CursorTrack::new((0..=90).map(|i| (i as f32 / 30.0, x, y)).collect(), clicks, vec![])
+        CursorTrack::new(
+            (0..=90).map(|i| (i as f32 / 30.0, x, y)).collect(),
+            clicks,
+            vec![],
+        )
     }
 
     /// La coupe entière, sans restriction : le point de la piste EST le point du plan.
@@ -2349,22 +2743,43 @@ mod tilt_tests {
     fn the_clicked_side_recedes() {
         let t = 1.0 + 49.5 / 1000.0;
         let right = click_impact(t, &still(1.0, 0.5, vec![1.0]), WHOLE, full_aim);
-        assert!((right[1] - CLICK_IMPACT_DEG).abs() < 1e-2 && right[0].abs() < 1e-6, "{right:?}");
+        assert!(
+            (right[1] - CLICK_IMPACT_DEG).abs() < 1e-2 && right[0].abs() < 1e-6,
+            "{right:?}"
+        );
         let bottom = click_impact(t, &still(0.5, 1.0, vec![1.0]), WHOLE, full_aim);
-        assert!((bottom[0] + CLICK_IMPACT_DEG).abs() < 1e-2 && bottom[1].abs() < 1e-6, "{bottom:?}");
+        assert!(
+            (bottom[0] + CLICK_IMPACT_DEG).abs() < 1e-2 && bottom[1].abs() < 1e-6,
+            "{bottom:?}"
+        );
 
         let z = |x: f32, y: f32, rot: [f32; 3]| rotate_corner(x, y, rot).2;
         for name in ["iso", "left", "right"] {
             let base = preset(name);
             let with = |d: [f32; 3]| [base[0] + d[0], base[1] + d[1], base[2] + d[2]];
             // Milieu du bord droit / du bord bas, et le bord opposé qui avance.
-            assert!(z(960.0, 0.0, with(right)) < z(960.0, 0.0, base), "{name} droite");
-            assert!(z(-960.0, 0.0, with(right)) > z(-960.0, 0.0, base), "{name} gauche");
-            assert!(z(0.0, 540.0, with(bottom)) < z(0.0, 540.0, base), "{name} bas");
-            assert!(z(0.0, -540.0, with(bottom)) > z(0.0, -540.0, base), "{name} haut");
+            assert!(
+                z(960.0, 0.0, with(right)) < z(960.0, 0.0, base),
+                "{name} droite"
+            );
+            assert!(
+                z(-960.0, 0.0, with(right)) > z(-960.0, 0.0, base),
+                "{name} gauche"
+            );
+            assert!(
+                z(0.0, 540.0, with(bottom)) < z(0.0, 540.0, base),
+                "{name} bas"
+            );
+            assert!(
+                z(0.0, -540.0, with(bottom)) > z(0.0, -540.0, base),
+                "{name} haut"
+            );
         }
         // Au centre : pas d'axe, rien ne bouge.
-        assert_eq!(click_impact(t, &still(0.5, 0.5, vec![1.0]), WHOLE, full_aim), [0.0; 3]);
+        assert_eq!(
+            click_impact(t, &still(0.5, 0.5, vec![1.0]), WHOLE, full_aim),
+            [0.0; 3]
+        );
     }
 
     /// Double clic : la somme est bornée — à 33 ms d'écart elle atteindrait 1,81.
@@ -2374,23 +2789,53 @@ mod tilt_tests {
         let mut peak = 0.0f32;
         for i in 0..400 {
             let d = click_impact(1.0 + i as f32 / 1000.0, &track, WHOLE, full_aim);
-            assert!(d[0].abs() <= CLICK_IMPACT_DEG && d[1].abs() <= CLICK_IMPACT_DEG, "{d:?}");
+            assert!(
+                d[0].abs() <= CLICK_IMPACT_DEG && d[1].abs() <= CLICK_IMPACT_DEG,
+                "{d:?}"
+            );
             peak = peak.max(d[1]);
         }
-        assert_eq!(peak, CLICK_IMPACT_DEG, "la somme brute dépasse 1 et se fait borner");
+        assert_eq!(
+            peak, CLICK_IMPACT_DEG,
+            "la somme brute dépasse 1 et se fait borner"
+        );
     }
 
     /// Rien hors de la fenêtre du clic, du clip actif ou de la coupe visible.
     #[test]
     fn clicks_outside_the_window_the_clip_or_the_crop_do_nothing() {
         let track = still(1.0, 0.5, vec![1.0]);
-        assert_eq!(click_impact(0.99, &track, WHOLE, full_aim), [0.0; 3], "avant le clic");
-        assert_eq!(click_impact(1.26, &track, WHOLE, full_aim), [0.0; 3], "après 260 ms");
+        assert_eq!(
+            click_impact(0.99, &track, WHOLE, full_aim),
+            [0.0; 3],
+            "avant le clic"
+        );
+        assert_eq!(
+            click_impact(1.26, &track, WHOLE, full_aim),
+            [0.0; 3],
+            "après 260 ms"
+        );
         let t = 1.05;
-        assert_eq!(click_impact(t, &track, [1.01, 9.0], full_aim), [0.0; 3], "clic coupé avant");
-        assert_eq!(click_impact(t, &track, [0.0, 1.0], full_aim), [0.0; 3], "fin exclusive");
-        assert_ne!(click_impact(t, &track, [1.0, 9.0], full_aim), [0.0; 3], "début inclus");
-        assert_eq!(click_impact(t, &track, WHOLE, |_| None), [0.0; 3], "hors coupe");
+        assert_eq!(
+            click_impact(t, &track, [1.01, 9.0], full_aim),
+            [0.0; 3],
+            "clic coupé avant"
+        );
+        assert_eq!(
+            click_impact(t, &track, [0.0, 1.0], full_aim),
+            [0.0; 3],
+            "fin exclusive"
+        );
+        assert_ne!(
+            click_impact(t, &track, [1.0, 9.0], full_aim),
+            [0.0; 3],
+            "début inclus"
+        );
+        assert_eq!(
+            click_impact(t, &track, WHOLE, |_| None),
+            [0.0; 3],
+            "hors coupe"
+        );
         assert_eq!(dynamic_tilt(t, None, FULL_CUT, 1.0, [0.0; 3]), [0.0; 3]);
     }
 
@@ -2401,7 +2846,15 @@ mod tilt_tests {
             (0..=90)
                 .map(|i| {
                     let t = i as f32 / 30.0;
-                    (t, if t <= 1.0 { 1.0 } else { (1.0 - 3.0 * (t - 1.0)).max(0.0) }, 0.5)
+                    (
+                        t,
+                        if t <= 1.0 {
+                            1.0
+                        } else {
+                            (1.0 - 3.0 * (t - 1.0)).max(0.0)
+                        },
+                        0.5,
+                    )
                 })
                 .collect(),
             vec![1.0],
@@ -2425,7 +2878,10 @@ mod tilt_tests {
         let impact = [-CLICK_IMPACT_DEG, CLICK_IMPACT_DEG, 0.0];
         for k in 0..=85 {
             let strength = k as f32 / 100.0;
-            assert_eq!(dynamic_tilt(1.0, None, FULL_CUT, strength, impact), [0.0; 3]);
+            assert_eq!(
+                dynamic_tilt(1.0, None, FULL_CUT, strength, impact),
+                [0.0; 3]
+            );
         }
         assert_eq!(dynamic_tilt(1.0, None, FULL_CUT, 1.0, impact), impact);
         let b = DYNAMIC_TILT_BUDGET;
@@ -2436,7 +2892,10 @@ mod tilt_tests {
         assert!(d[1] <= b[1] && d[1] > b[1] - 1e-3, "{d:?}");
         let d = dynamic_tilt(1.0, Some(&fast), FULL_CUT, 0.95, impact);
         let gate = smoothstep(PARALLAX_GATE_START, 1.0, 0.95);
-        assert!(d[1] <= b[1] * gate + 1e-5 && d[0].abs() <= b[0] * gate + 1e-5, "{d:?}");
+        assert!(
+            d[1] <= b[1] * gate + 1e-5 && d[0].abs() <= b[0] * gate + 1e-5,
+            "{d:?}"
+        );
     }
 
     /// Échelle gelée pendant l'impact : seuls les coins bougent, et assez pour se voir.
@@ -2477,7 +2936,11 @@ mod tilt_tests {
         };
         assert_eq!(zoom_state_at(&[region(true)], 5.0, None).click_impact, 1.0);
         assert_eq!(zoom_state_at(&[region(false)], 5.0, None).click_impact, 0.0);
-        assert_eq!(zoom_state_at(&[region(true)], 0.0, None).click_impact, 0.0, "hors région");
+        assert_eq!(
+            zoom_state_at(&[region(true)], 0.0, None).click_impact,
+            0.0,
+            "hors région"
+        );
     }
 
     /// `ZoomState::tilt` : la force pour une région à préset, 0 sans préset.
@@ -2525,7 +2988,10 @@ mod tilt_tests {
         let e = sub(c10, c00);
         let f = sub(c01, c00);
         let g = (c00.0 - c10.0 - c01.0 + c11.0, c00.1 - c10.1 - c01.1 + c11.1);
-        (c00.0 + e.0 * s + f.0 * t + g.0 * s * t, c00.1 + e.1 * s + f.1 * t + g.1 * s * t)
+        (
+            c00.0 + e.0 * s + f.0 * t + g.0 * s * t,
+            c00.1 + e.1 * s + f.1 * t + g.1 * s * t,
+        )
     }
 
     /// `None` = le shader rend ce pixel TRANSPARENT (donc un trou dans l'écran incliné).
@@ -2624,7 +3090,12 @@ mod exporter_frame_totals {
     use crate::scene::SceneSpeedRegion;
 
     fn region(start_sec: f64, end_sec: f64, speed: f64) -> SceneSpeedRegion {
-        SceneSpeedRegion { clip_index: None, start_sec, end_sec, speed }
+        SceneSpeedRegion {
+            clip_index: None,
+            start_sec,
+            end_sec,
+            speed,
+        }
     }
 
     fn frames(start_sec: f64, end_sec: f64, regions: &[SceneSpeedRegion], fps: f64) -> u64 {
@@ -2652,7 +3123,11 @@ mod exporter_frame_totals {
             240,
             "1,25× : 80 % de 300, exactement le symptôme"
         );
-        assert_eq!(frames(0.0, 10.0, &[region(0.0, 10.0, 0.5)], FPS), 600, "0,5×");
+        assert_eq!(
+            frames(0.0, 10.0, &[region(0.0, 10.0, 0.5)], FPS),
+            600,
+            "0,5×"
+        );
         assert_eq!(
             frames(0.0, 10.0, &[region(2.0, 4.0, 2.0)], FPS),
             60 + 30 + 180,
@@ -2664,7 +3139,12 @@ mod exporter_frame_totals {
             "région débordant la fenêtre gardée"
         );
         assert_eq!(
-            frames(0.0, 10.0, &[region(2.0, 6.0, 2.0), region(4.0, 8.0, 4.0)], FPS),
+            frames(
+                0.0,
+                10.0,
+                &[region(2.0, 6.0, 2.0), region(4.0, 8.0, 4.0)],
+                FPS
+            ),
             60 + 60 + 15 + 60,
             "recouvrement : la première région garde la portion déjà couverte"
         );
@@ -2806,7 +3286,11 @@ mod follow_camera_tests {
     }
 
     fn whole(track: &CursorTrack) -> CameraFrame<'_> {
-        CameraFrame { track: Some(track), crop: [0.0, 0.0, 1.0, 1.0], window: [0.0, 100.0] }
+        CameraFrame {
+            track: Some(track),
+            crop: [0.0, 0.0, 1.0, 1.0],
+            window: [0.0, 100.0],
+        }
     }
 
     /// Sous `follow-cursor`, l'écran n'est pas incliné et ne glisse pas (focus au centre, quel que
@@ -2819,25 +3303,67 @@ mod follow_camera_tests {
         let f = whole(&tr);
         let r = [region("follow-cursor", 2.0, 8.0)];
         let full = zoom_state_in(&r, 5.0, Some(&tr), &f, &ScreenClock::default());
-        assert_eq!((full.rotation, full.tilt, full.click_impact, full.camera), ([0.0; 3], 0.0, 1.0, 1.0));
+        assert_eq!(
+            (full.rotation, full.tilt, full.click_impact, full.camera),
+            ([0.0; 3], 0.0, 1.0, 1.0)
+        );
         assert_eq!((full.scale, full.focus), (2.0, [0.5, 0.5]));
-        assert!(full.aim[0] > 0.7 && (full.aim[1] - 0.5).abs() < 1e-3, "{:?}", full.aim);
-        assert!((full.orbit[0] - 0.85).abs() < 1e-3 && (full.orbit[1] - 0.5).abs() < 1e-3, "{:?}", full.orbit);
+        assert!(
+            full.aim[0] > 0.7 && (full.aim[1] - 0.5).abs() < 1e-3,
+            "{:?}",
+            full.aim
+        );
+        assert!(
+            (full.orbit[0] - 0.85).abs() < 1e-3 && (full.orbit[1] - 0.5).abs() < 1e-3,
+            "{:?}",
+            full.orbit
+        );
         let easing = zoom_state_in(&r, 1.5, Some(&tr), &f, &ScreenClock::default());
-        assert!(easing.camera > 0.0 && easing.camera < 1.0, "{}", easing.camera);
+        assert!(
+            easing.camera > 0.0 && easing.camera < 1.0,
+            "{}",
+            easing.camera
+        );
         let raw = follow_at(&r[0], 1.5, &f);
-        assert_eq!((easing.aim, easing.orbit), (weighted(raw.aim, easing.camera), weighted(raw.orbit, easing.camera)));
+        assert_eq!(
+            (easing.aim, easing.orbit),
+            (
+                weighted(raw.aim, easing.camera),
+                weighted(raw.orbit, easing.camera)
+            )
+        );
         assert_eq!(easing.focus, [0.5, 0.5]);
         let out = zoom_state_in(&r, 0.0, Some(&tr), &f, &ScreenClock::default());
-        assert_eq!((out.scale, out.rotation, out.camera, out.aim, out.orbit), (1.0, [0.0; 3], 0.0, [0.5; 2], [0.5; 2]));
+        assert_eq!(
+            (out.scale, out.rotation, out.camera, out.aim, out.orbit),
+            (1.0, [0.0; 3], 0.0, [0.5; 2], [0.5; 2])
+        );
         // Sans piste, la caméra vise le centre, au repos.
         let blind = zoom_state_at(&r, 5.0, None);
         assert_eq!((blind.aim, blind.orbit), ([0.5, 0.5], [0.5, 0.5]));
         // Un angle fixe garde exactement son état.
-        let iso = zoom_state_in(&[region("iso", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
-        assert_eq!((iso.rotation, iso.camera, iso.click_impact), ([-12.0, -18.0, -2.0], 0.0, 1.0));
-        let unknown = zoom_state_in(&[region("orbit", 2.0, 8.0)], 5.0, Some(&tr), &f, &ScreenClock::default());
-        assert_eq!((unknown.rotation, unknown.tilt, unknown.camera), ([0.0; 3], 0.0, 0.0));
+        let iso = zoom_state_in(
+            &[region("iso", 2.0, 8.0)],
+            5.0,
+            Some(&tr),
+            &f,
+            &ScreenClock::default(),
+        );
+        assert_eq!(
+            (iso.rotation, iso.camera, iso.click_impact),
+            ([-12.0, -18.0, -2.0], 0.0, 1.0)
+        );
+        let unknown = zoom_state_in(
+            &[region("orbit", 2.0, 8.0)],
+            5.0,
+            Some(&tr),
+            &f,
+            &ScreenClock::default(),
+        );
+        assert_eq!(
+            (unknown.rotation, unknown.tilt, unknown.camera),
+            ([0.0; 3], 0.0, 0.0)
+        );
     }
 
     /// Focus auto ou manuel, même visée : elle se lit dans l'image source, pas dans la coupe.
@@ -2847,8 +3373,20 @@ mod follow_camera_tests {
         let mut auto = region("follow-cursor", 2.0, 8.0);
         auto.focus_mode = Some("auto".into());
         let manual = region("follow-cursor", 2.0, 8.0);
-        let a = zoom_state_in(&[auto], 5.0, Some(&tr), &whole(&tr), &ScreenClock::default());
-        let m = zoom_state_in(&[manual], 5.0, Some(&tr), &whole(&tr), &ScreenClock::default());
+        let a = zoom_state_in(
+            &[auto],
+            5.0,
+            Some(&tr),
+            &whole(&tr),
+            &ScreenClock::default(),
+        );
+        let m = zoom_state_in(
+            &[manual],
+            5.0,
+            Some(&tr),
+            &whole(&tr),
+            &ScreenClock::default(),
+        );
         assert_eq!((a.aim, a.focus), (m.aim, m.focus));
         assert!(a.aim[0] > 0.7 && a.aim[1] < 0.35, "{:?}", a.aim);
     }
@@ -2862,7 +3400,10 @@ mod follow_camera_tests {
         for regions in [
             [region("iso", 1.0, 4.0), region("follow-cursor", 4.5, 8.0)],
             [region("follow-cursor", 1.0, 4.0), region("right", 4.5, 8.0)],
-            [region("follow-cursor", 1.0, 4.0), region("follow-cursor", 4.5, 8.0)],
+            [
+                region("follow-cursor", 1.0, 4.0),
+                region("follow-cursor", 4.5, 8.0),
+            ],
         ] {
             let both = regions[0].rotation == regions[1].rotation;
             let mut last: Option<ZoomState> = None;
@@ -2870,14 +3411,22 @@ mod follow_camera_tests {
                 // La transition chaînée couvre [4, 5] s, le palier la suit jusqu'à 4,5 s.
                 let t = 3.9 + k as f32 * 1.3 / 400.0;
                 let s = zoom_state_in(&regions, t, Some(&tr), &f, &ScreenClock::default());
-                assert!(s.camera == 0.0 || is_identity_rotation(s.rotation), "t {t} : {s:?}", s = (s.camera, s.rotation));
+                assert!(
+                    s.camera == 0.0 || is_identity_rotation(s.rotation),
+                    "t {t} : {s:?}",
+                    s = (s.camera, s.rotation)
+                );
                 if both {
                     assert_eq!(s.camera, 1.0, "t {t}");
                 }
                 if let Some(p) = &last {
                     let jump = (s.camera - p.camera).abs()
-                        + (0..3).map(|i| (s.rotation[i] - p.rotation[i]).abs() / 20.0).sum::<f32>()
-                        + (0..2).map(|i| (s.aim[i] - p.aim[i]).abs() + (s.orbit[i] - p.orbit[i]).abs()).sum::<f32>();
+                        + (0..3)
+                            .map(|i| (s.rotation[i] - p.rotation[i]).abs() / 20.0)
+                            .sum::<f32>()
+                        + (0..2)
+                            .map(|i| (s.aim[i] - p.aim[i]).abs() + (s.orbit[i] - p.orbit[i]).abs())
+                            .sum::<f32>();
                     assert!(jump < 0.05, "saut à t {t} : {jump}");
                 }
                 last = Some(s);
@@ -2892,7 +3441,13 @@ mod follow_camera_tests {
         let f = whole(&tr);
         let r = [region("follow-cursor", 2.0, 8.0)];
         let at = |i: usize| {
-            let s = zoom_state_in(&r, 1.0 + i as f32 / 30.0, Some(&tr), &f, &ScreenClock::default());
+            let s = zoom_state_in(
+                &r,
+                1.0 + i as f32 / 30.0,
+                Some(&tr),
+                &f,
+                &ScreenClock::default(),
+            );
             (s.camera, s.aim, s.orbit, s.scale)
         };
         let forward: Vec<_> = (0..240).map(at).collect();

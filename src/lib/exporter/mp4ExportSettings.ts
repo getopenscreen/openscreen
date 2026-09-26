@@ -113,18 +113,25 @@ function calculateSourceDimensions(
 	};
 }
 
-function calculateBitrate(width: number, height: number, quality: ExportQuality) {
-	const totalPixels = width * height;
+/**
+ * Bits the encoder may spend per pixel of each frame. Measured with NVENC on scrolled text under
+ * animated zooms, against the same export with no cap: at 1080p60 the quality climbs steeply up
+ * to 16-20 Mb/s and flattens after, and 0.15 sits on that knee (18.7 Mb/s; 9.3 at 1080p30).
+ * Equal quality took 1.6-1.9x the bits at 60 fps as at 30, so scaling linearly with the frame
+ * rate is right, if a little generous. It is a ceiling more than a spend: NVENC and AMF run VBR
+ * and a still screen costs far less.
+ */
+const BITS_PER_PIXEL = 0.15;
+/** Floor for tiny outputs, the native pipeline's own. */
+const MIN_BITRATE = 2_000_000;
 
-	if (quality === "source") {
-		if (totalPixels > 2560 * 1440) return 80_000_000;
-		if (totalPixels > 1920 * 1080) return 50_000_000;
-		return 30_000_000;
-	}
-
-	if (totalPixels <= 1280 * 720) return 10_000_000;
-	if (totalPixels <= 1920 * 1080) return 20_000_000;
-	return 30_000_000;
+/**
+ * The bitrate the native encoder is asked for: per pixel AND per frame. The frame rate is the
+ * half that used to be missing. The pipeline encoded 8 Mb/s at 1080p whatever the rate, so a
+ * 60 fps export spread the same bits over twice the frames.
+ */
+function calculateBitrate(width: number, height: number, frameRate: number) {
+	return Math.max(MIN_BITRATE, Math.round(width * height * frameRate * BITS_PER_PIXEL));
 }
 
 export function calculateMp4ExportSettings({
@@ -132,17 +139,19 @@ export function calculateMp4ExportSettings({
 	sourceWidth,
 	sourceHeight,
 	aspectRatioValue,
+	frameRate,
 }: {
 	quality: ExportQuality;
 	sourceWidth: number;
 	sourceHeight: number;
 	aspectRatioValue: number;
+	frameRate: number;
 }): Mp4ExportSettings {
 	if (quality === "medium") {
 		const dimensions = calculateDimensionsForShortSide(MEDIUM_SHORT_SIDE, aspectRatioValue);
 		return {
 			...dimensions,
-			bitrate: calculateBitrate(dimensions.width, dimensions.height, quality),
+			bitrate: calculateBitrate(dimensions.width, dimensions.height, frameRate),
 		};
 	}
 
@@ -150,13 +159,13 @@ export function calculateMp4ExportSettings({
 		const dimensions = calculateDimensionsForShortSide(HIGH_SHORT_SIDE, aspectRatioValue);
 		return {
 			...dimensions,
-			bitrate: calculateBitrate(dimensions.width, dimensions.height, quality),
+			bitrate: calculateBitrate(dimensions.width, dimensions.height, frameRate),
 		};
 	}
 
 	const sourceDimensions = calculateSourceDimensions(sourceWidth, sourceHeight, aspectRatioValue);
 	return {
 		...sourceDimensions,
-		bitrate: calculateBitrate(sourceDimensions.width, sourceDimensions.height, quality),
+		bitrate: calculateBitrate(sourceDimensions.width, sourceDimensions.height, frameRate),
 	};
 }

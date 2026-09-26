@@ -271,6 +271,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					sourceWidth: smallestSource.width,
 					sourceHeight: smallestSource.height,
 					aspectRatioValue: EXPORT_ASPECT,
+					frameRate: fps,
 				})
 			: null;
 
@@ -434,6 +435,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								height: outDims?.height,
 								fps,
 								codec,
+								bitrate: outDims?.bitrate,
 							});
 				if (activeExport.current !== job) return;
 				setSavedPath(pickedPath);

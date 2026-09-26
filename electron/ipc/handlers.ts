@@ -429,12 +429,21 @@ function readableApprovedPath(filePath?: string | null): string | null {
 
 /** Grant the media a loaded project declares. The document is the app's own file, and this
  *  is what the picker's approval decays into once the app restarts. */
-function approveDocumentMedia(document: AxcutDocument): void {
+/**
+ * `trustedDirs`, when given, confines the grant to media inside them: a project file read from
+ * an arbitrary path gets the same rule as a v2 project (`getApprovedProjectSession`). Without
+ * it, as for the editor's own projects, every declared path is granted.
+ */
+function approveDocumentMedia(document: AxcutDocument, trustedDirs?: string[]): void {
+	const trusted = (filePath: string) =>
+		!trustedDirs || trustedDirs.some((dir) => isPathWithinDir(filePath, dir));
 	for (const asset of document.assets ?? []) {
 		const media = normalizeVideoSourcePath(asset.originalPath);
-		if (media && hasAllowedImportMediaExtension(media)) approveFilePath(media);
+		if (media && hasAllowedImportMediaExtension(media) && trusted(media)) approveFilePath(media);
 		const camera = normalizeVideoSourcePath(asset.cameraTrack?.sourcePath);
-		if (camera && hasAllowedImportMediaExtension(camera)) approveFilePath(camera);
+		if (camera && hasAllowedImportMediaExtension(camera) && trusted(camera)) {
+			approveFilePath(camera);
+		}
 	}
 }
 
@@ -4493,13 +4502,15 @@ export function registerIpcHandlers(
 			const content = await fs.readFile(filePath, "utf-8");
 			const project = await relinkProjectMedia(JSON.parse(content), RECORDINGS_DIR);
 			currentProjectPath = filePath;
-			// A document the editor saved grants the media it declares, as when the editor opens
-			// it (`approveDocumentMedia`, through `DocumentService.getProject`): this is how the
-			// CLI export reads one. A legacy v2 project's media is approved below instead, within
-			// the trusted dirs.
+			// A document the editor saved grants the media it declares, within the same trusted
+			// dirs as a legacy v2 project below: the recordings dir and the project's own dir.
+			// This file came from an arbitrary path, not from the editor's projects dir.
 			if (isAxcutDocumentFile(project)) {
 				try {
-					approveDocumentMedia(parseDocumentFile(project));
+					approveDocumentMedia(parseDocumentFile(project), [
+						RECORDINGS_DIR,
+						path.dirname(path.resolve(filePath)),
+					]);
 				} catch {
 					// Not a valid document: nothing is granted, and the caller reports the parse error.
 				}

@@ -649,6 +649,8 @@ export interface RecordingPrefs {
 	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: CursorCaptureMode;
+	/** Whether a fresh take gets cursor-dwell zooms on import. Persisted; defaults on. */
+	autoZoomEnabled: boolean;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -659,6 +661,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	autoZoomEnabled: true,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.

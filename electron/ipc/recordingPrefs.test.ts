@@ -21,6 +21,7 @@ const defaults: RecordingPrefs = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	autoZoomEnabled: true,
 };
 let dir: string;
 beforeEach(() => {

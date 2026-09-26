@@ -75,7 +75,38 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
 	saveTimeoutMs?: number;
 	/** Deadline for waiting on writes somebody else started. Tests shorten it. */
 	waitTimeoutMs?: number;
+	/** Deadline for the auto-zoom preference read. Tests shorten it. */
+	prefsTimeoutMs?: number;
 };
+
+/**
+ * The user's standing answer, read fresh rather than cached: the toggle lives in the
+ * editor's rec panel and the HUD publishes prefs changes across windows, so the value
+ * can change between one take and the next within a single renderer.
+ *
+ * An unreachable or throwing bridge reads as ON, which is what every installation did
+ * before the preference existed — a failed IPC call must not silently turn a feature off.
+ *
+ * Bounded for the same reason the write below is: this runs inside
+ * `freshRecordingAutoZoomSaveChain`, which `runLoadedMetadataWrite` awaits, so a main
+ * process that accepts the invoke and never answers would hold that queue slot — and
+ * every metadata write behind it — for the life of the renderer. `invoke` rejects on a
+ * throwing handler but never on a silent one, so the `catch` above cannot cover this.
+ * A deadline that expires says only "no answer yet", which reads as ON like every other
+ * unreadable answer.
+ */
+async function readAutoZoomPref(timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS): Promise<boolean> {
+	try {
+		const read = (async () => {
+			const prefs = await window.electronAPI?.getRecordingPrefs?.();
+			return prefs?.autoZoomEnabled !== false;
+		})();
+		const settled = await saveWithDeadline(read, timeoutMs);
+		return settled === "timeout" ? true : settled;
+	} catch {
+		return true;
+	}
+}
 
 function isPendingFreshRecordingAsset(asset: { originalPath?: string | null }): boolean {
 	return asset.originalPath === pendingFreshRecordingAutoZoomPath;
@@ -143,7 +174,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 		clearFreshRecordingAutoZoomPending();
 		return document;
 	}
-	const enabled = deps.enabled ?? true;
+	const enabled = deps.enabled ?? (await readAutoZoomPref(deps.prefsTimeoutMs));
 	if (!enabled) {
 		clearFreshRecordingAutoZoomPending();
 		return liveDocument(document);

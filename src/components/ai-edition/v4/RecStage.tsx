@@ -9,6 +9,7 @@ import {
 	MousePointer2,
 	Volume2,
 	VolumeX,
+	ZoomIn,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AudioLevelMeter } from "@/components/ui/audio-level-meter";
@@ -29,6 +30,7 @@ interface RecordingPrefsState {
 	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
+	autoZoomEnabled: boolean;
 }
 
 const DEFAULT_PREFS: RecordingPrefsState = {
@@ -40,7 +42,11 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	autoZoomEnabled: true,
 };
+
+/** Ties the disabled toggle to the line that explains why it is disabled. */
+const AUTO_ZOOM_HINT_ID = "rec-auto-zoom-hint";
 
 function normalizedRecordingPrefs(prefs: Partial<RecordingPrefsState>): RecordingPrefsState {
 	return {
@@ -96,12 +102,24 @@ export function RecStage({
 		};
 	}, []);
 	const updatePrefs = (patch: Partial<RecordingPrefsState>) => {
-		setPrefsState((prev) => {
-			const next = { ...prev, ...patch };
-			void window.electronAPI?.setRecordingPrefs?.(patch).catch((err) => {
-				console.warn("[rec-stage] failed to persist the recording prefs:", err);
-			});
-			return next;
+		// The write is fired beside the optimistic patch rather than inside the updater:
+		// an updater is expected to be pure, and React re-invokes it under StrictMode,
+		// which sent every preference change twice.
+		setPrefsState((prev) => ({ ...prev, ...patch }));
+		void window.electronAPI?.setRecordingPrefs?.(patch).catch(async (err) => {
+			console.warn("[rec-stage] failed to persist the recording prefs:", err);
+			// Optimistic, then reconciled. The durable value is what the fresh-recording
+			// import reads back when it decides whether to place zooms, so a rejected
+			// write that left the patch on screen would have the user looking at Off
+			// while the next take still gets decorated. Re-read rather than invert the
+			// patch: a snapshot pushed while the write was in flight is newer than
+			// anything a rollback could restore.
+			try {
+				const current = await window.electronAPI?.getRecordingPrefs?.();
+				if (current) setPrefsState(normalizedRecordingPrefs(current));
+			} catch (readErr) {
+				console.warn("[rec-stage] failed to re-read the recording prefs:", readErr);
+			}
 		});
 	};
 
@@ -220,6 +238,7 @@ export function RecStage({
 	const visibleSources = sourceTab === "screen" ? screenSources : windowSources;
 
 	const cursorHighlight = prefs.cursorCaptureMode === "editable-overlay";
+	const autoZoom = prefs.autoZoomEnabled && cursorHighlight;
 	// Same answer as the HUD, from the same place. This stage used to decide for
 	// itself and always showed a picker, so the same build hid the choice on the
 	// HUD and demanded it here.
@@ -442,6 +461,36 @@ export function RecStage({
 						>
 							{cursorHighlight ? t("rec.on") : t("rec.off")}
 						</button>
+					</div>
+
+					{/* Auto-zoom rides on the cursor telemetry the editable-overlay mode writes,
+					    so the system cursor leaves nothing to place zooms from — the row reads
+					    Off and is inert there rather than promising a choice that cannot apply.
+					    Why it is inert is a second line in the row, not a title on the button:
+					    a disabled button takes no focus and shows no tooltip to a keyboard or
+					    screen-reader user, so a title would be the one explanation they cannot
+					    reach. */}
+					<div className={`${styles.recRow}${cursorHighlight ? "" : ` ${styles.recRowWithHint}`}`}>
+						<div className={styles.recRowLabel}>
+							<ZoomIn size={15} />
+							{t("rec.autoZoom")}
+						</div>
+						<button
+							type="button"
+							data-testid="rec-auto-zoom-button"
+							className={`${styles.recToggleBtn}${autoZoom ? ` ${styles.on}` : ""}`}
+							aria-pressed={autoZoom}
+							disabled={!cursorHighlight}
+							aria-describedby={cursorHighlight ? undefined : AUTO_ZOOM_HINT_ID}
+							onClick={() => updatePrefs({ autoZoomEnabled: !prefs.autoZoomEnabled })}
+						>
+							{autoZoom ? t("rec.on") : t("rec.off")}
+						</button>
+						{cursorHighlight ? null : (
+							<p id={AUTO_ZOOM_HINT_ID} className={styles.recRowHint}>
+								{t("rec.autoZoomNeedsEditableCursor")}
+							</p>
+						)}
 					</div>
 				</div>
 			</div>

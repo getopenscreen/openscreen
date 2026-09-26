@@ -112,6 +112,8 @@
 		"microphone": "Mikrofon",
 		"camera": "Kamera",
 		"cursorHighlight": "Zvýraznění kurzoru",
+		"autoZoom": "Automatické přiblížení po nahrávání",
+		"autoZoomNeedsEditableCursor": "Automatické přiblížení vyžaduje editovatelný kurzor. Přepněte režim kurzoru.",
 		"on": "Zapnuto",
 		"off": "Vypnuto",
 		"loading": "Načítání…",

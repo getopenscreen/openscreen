@@ -76,6 +76,19 @@ function stubElectronApi(
 	return api;
 }
 
+type PrefsBridge = { getRecordingPrefs?: () => Promise<unknown> };
+
+/** Points the prefs bridge at one getter, leaving the rest of the stub alone.
+ *  `undefined` stands for a surface that does not expose the method at all. */
+function stubRecordingPrefsBridge(getRecordingPrefs: PrefsBridge["getRecordingPrefs"]) {
+	const host = window as unknown as { electronAPI?: PrefsBridge };
+	host.electronAPI = { ...(host.electronAPI ?? {}), getRecordingPrefs };
+}
+
+function stubRecordingPrefs(prefs: Record<string, unknown>) {
+	stubRecordingPrefsBridge(vi.fn(async () => prefs));
+}
+
 describe("importPendingRecording", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -300,6 +313,9 @@ describe("fresh-recording auto-zoom", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		consumeFreshRecordingAutoZoomPending();
+		// Each test starts from the default answer; the ones about the preference set
+		// their own. Without this a stubbed "off" leaks into whatever runs next.
+		stubRecordingPrefs({ autoZoomEnabled: true });
 		useProjectStore.setState({
 			document: null,
 			createProject,
@@ -358,6 +374,54 @@ describe("fresh-recording auto-zoom", () => {
 			createId: (prefix) => `${prefix}_test`,
 		});
 		expect(next.zoomRanges).toHaveLength(1);
+	});
+
+	// getopenscreen/openscreen#723 — the recording preference is the whole point of the
+	// toggle: a take imported with it off must arrive undecorated, and the hand-off must
+	// be spent rather than left armed for the next document loaded in this window.
+	it("skips the take when the recording preference is off", async () => {
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		stubRecordingPrefs({ autoZoomEnabled: false });
+		const document = documentWithClip();
+		const next = await applyPendingFreshRecordingAutoZooms(document, {
+			getTelemetry: async () => dwell(4000, 0.5, 0.5),
+		});
+		expect(next.zoomRanges).toEqual([]);
+		expect(consumeFreshRecordingAutoZoomPending()).toBe(false);
+	});
+
+	// The invoke is accepted and never answered — the shape `catch` cannot see. Left
+	// unbounded this held `freshRecordingAutoZoomSaveChain`, and therefore the metadata
+	// write queue awaiting it, for the life of the renderer.
+	it("gives up on a prefs read that never settles and applies zooms anyway", async () => {
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		// Never resolves, never rejects — the invoke the main process simply does not answer.
+		stubRecordingPrefsBridge(() => new Promise(() => undefined));
+		const next = await applyPendingFreshRecordingAutoZooms(documentWithClip(), {
+			prefsTimeoutMs: 10,
+			getTelemetry: async () => dwell(4000, 0.5, 0.5),
+			createId: (prefix) => `${prefix}_test`,
+		});
+		expect(next.zoomRanges).toHaveLength(1);
+	});
+
+	// A bridge that is missing or throwing says nothing about what the user chose, and
+	// the answer every installation had before the preference existed is "on".
+	it("treats an unreadable prefs bridge as on", async () => {
+		const broken: Array<PrefsBridge["getRecordingPrefs"]> = [
+			undefined,
+			() => Promise.reject(new Error("no bridge")),
+		];
+		for (const getRecordingPrefs of broken) {
+			consumeFreshRecordingAutoZoomPending();
+			markFreshRecordingAutoZoomPending(RECORDING_PATH);
+			stubRecordingPrefsBridge(getRecordingPrefs);
+			const next = await applyPendingFreshRecordingAutoZooms(documentWithClip(), {
+				getTelemetry: async () => dwell(4000, 0.5, 0.5),
+				createId: (prefix) => `${prefix}_test`,
+			});
+			expect(next.zoomRanges).toHaveLength(1);
+		}
 	});
 
 	// The stop handler awaits `writePendingCursorTelemetry` before it publishes the

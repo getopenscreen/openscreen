@@ -112,6 +112,8 @@
 		"microphone": "Mikrofon",
 		"camera": "Kamera",
 		"cursorHighlight": "Cursor hervorheben",
+		"autoZoom": "Auto-Zoom nach der Aufnahme",
+		"autoZoomNeedsEditableCursor": "Auto-Zoom benötigt den bearbeitbaren Cursor. Wechseln Sie den Cursor-Modus.",
 		"on": "An",
 		"off": "Aus",
 		"loading": "Wird geladen…",

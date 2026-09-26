@@ -136,16 +136,83 @@ describe("RecStage controls", () => {
 		expect(getSources).not.toHaveBeenCalled();
 	});
 
-	it("does not render an auto-zoom toggle button (auto-zoom is systematic)", async () => {
+	it("writes autoZoomEnabled through setRecordingPrefs on click", async () => {
+		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({
+			micEnabled: false,
+			cursorCaptureMode: "editable-overlay",
+			autoZoomEnabled: true,
+		});
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		const button = screen.getByTestId("rec-auto-zoom-button");
+		await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
+		await act(async () => {
+			button.click();
+		});
+		expect(setRecordingPrefs).toHaveBeenCalledWith({ autoZoomEnabled: false });
+		expect(button).toHaveAttribute("aria-pressed", "false");
+	});
+
+	// A settings file written before the preference existed has no key, and every such
+	// installation has been getting auto-zoom — so absent must read as on, not off.
+	it("defaults on when a stored prefs blob has no autoZoomEnabled key", async () => {
 		const { getRecordingPrefs } = stubRecordingPrefs({
 			micEnabled: false,
 			cursorCaptureMode: "editable-overlay",
 		});
 		renderRecStage();
-		await waitFor(() => {
-			expect(getRecordingPrefs).toHaveBeenCalled();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+		expect(screen.getByTestId("rec-auto-zoom-button")).toHaveAttribute("aria-pressed", "true");
+	});
+
+	// The system cursor writes no telemetry sidecar, so there is no dwell to place a
+	// zoom from. The row says Off and cannot be clicked rather than offering a choice
+	// that would silently do nothing.
+	it("reads off and stays inert while the system cursor is capturing", async () => {
+		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({
+			micEnabled: false,
+			cursorCaptureMode: "system",
+			autoZoomEnabled: true,
 		});
-		expect(screen.queryByTestId("rec-auto-zoom-button")).toBeNull();
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		const button = screen.getByTestId("rec-auto-zoom-button");
+		await waitFor(() => expect(button).toBeDisabled());
+		expect(button).toHaveAttribute("aria-pressed", "false");
+		// A disabled button takes no focus and shows no tooltip, so the reason is a line
+		// in the row, tied to the button, rather than a title nobody on a keyboard reaches.
+		const hint = screen.getByText("rec.autoZoomNeedsEditableCursor");
+		expect(button).toHaveAttribute("aria-describedby", hint.id);
+		await act(async () => {
+			button.click();
+		});
+		expect(setRecordingPrefs).not.toHaveBeenCalled();
+	});
+
+	// The durable value is what the import path reads back, so a panel left showing Off
+	// after a rejected write would promise something the next take does not honour.
+	it("falls back to the stored value when the preference write is rejected", async () => {
+		const { getRecordingPrefs } = stubRecordingPrefs({
+			micEnabled: false,
+			cursorCaptureMode: "editable-overlay",
+			autoZoomEnabled: true,
+		});
+		const api = window.electronAPI as unknown as Record<string, unknown>;
+		const setRecordingPrefs = vi.fn(async () => {
+			throw new Error("write failed");
+		});
+		Object.assign(api, { setRecordingPrefs });
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		const button = screen.getByTestId("rec-auto-zoom-button");
+		await act(async () => {
+			button.click();
+		});
+		expect(setRecordingPrefs).toHaveBeenCalledWith({ autoZoomEnabled: false });
+		await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
 	});
 
 	it("waits for microphone discovery before starting the meter and normalizes default", async () => {
@@ -258,6 +325,7 @@ describe("RecStage controls", () => {
 			camDeviceName: null,
 			systemAudioEnabled: false,
 			cursorCaptureMode: "editable-overlay",
+			autoZoomEnabled: true,
 		};
 		act(() => {
 			recordingPrefsListeners.forEach((listener) => listener(resetPrefs));

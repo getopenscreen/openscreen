@@ -51,9 +51,9 @@
 		"errorReading": "读取文件时出错。"
 	},
 	"annotation": {
-		"supportedFormats": "支持的格式：JPG、PNG、GIF、WebP",
 		"blurShapeRectangle": "矩形",
 		"size": "大小",
+		"customSize": "自定义大小",
 		"tipShiftTabCycle": "使用 Shift+Tab 反向循环切换。",
 		"clearBackground": "清除背景",
 		"colorPalette": "颜色调色板",

@@ -51,9 +51,9 @@
 		"errorReading": "파일을 읽는 중 오류가 발생했습니다."
 	},
 	"annotation": {
-		"supportedFormats": "지원 형식: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "사각형",
 		"size": "크기",
+		"customSize": "사용자 지정 크기",
 		"tipShiftTabCycle": "Shift+Tab으로 역방향 순환할 수 있습니다.",
 		"clearBackground": "배경 지우기",
 		"colorPalette": "색상 팔레트",

@@ -164,10 +164,11 @@ export interface SceneSpeedRegion {
  *  selection outline in the editor overlay still sits on the unzoomed rect.
  *
  *  `space: "frame"` opts an entry out of that and measures it against the output frame instead.
- *  Only captions set it: an annotation is authored on top of the visible video, so it must track
- *  the screen rect, whereas a subtitle belongs to the frame the viewer sees and has to hold still
- *  when padding resizes the footage under it (issue #396). The key is omitted entirely for
- *  annotations, so their payload — and the older binaries that read it — are unchanged. */
+ *  Captions set it, since a subtitle belongs to the frame the viewer sees and has to hold still
+ *  when padding resizes the footage under it (issue #396), and so do text, image and arrow
+ *  annotations, which are placed anywhere on the frame for the same reason. A blur never does,
+ *  and neither does an annotation saved before frame placement: the key is omitted entirely
+ *  there, so their payload is unchanged (see `annotations/placement.ts`). */
 export interface SceneAnnotation {
 	id: string;
 	startSec: number;
@@ -179,7 +180,7 @@ export interface SceneAnnotation {
 	underTrim?: boolean;
 	kind: "text" | "image" | "figure" | "blur";
 	/** Which box `x`/`y`/`w`/`h` — and `text.fontSizeRel` — are fractions of. Absent means
-	 *  `"screen"`, the historical behaviour and the only one annotations ever use. */
+	 *  `"screen"`: a blur, or an annotation saved before frame placement. */
 	space?: "frame";
 	/** Rect as fractions of the box named by `space` (x, y top-left). */
 	x: number;
@@ -699,6 +700,32 @@ export function zoomScaleLimit(document: AxcutDocument, regionId: string): numbe
 	return limit;
 }
 
+/**
+ * Where the footage under the annotation `annotationId` sits in the output frame, as fractions
+ * of it: the layout of the clip the annotation is on, exactly as the scene lays it out. What the
+ * inspector converts through when an annotation changes box (`annotations/placement.ts`). The
+ * first clip's when the annotation is on none; `null` when there is no clip at all.
+ */
+export function annotationFootageRect(
+	document: AxcutDocument,
+	annotationId: string,
+): SceneRect | null {
+	const region = (document.annotations ?? []).find((a) => a.id === annotationId);
+	if (!region) return null;
+	const scene = buildSceneDescription(document);
+	const [piece] = projectRegionsToSource(
+		[region],
+		resolveVisibleClips(document),
+		document.timeline.clips,
+		() => "",
+	);
+	return (
+		scene.layout.layoutByClip?.[piece?.clipIndex ?? 0]?.screenRect ??
+		scene.layout.screenRect ??
+		null
+	);
+}
+
 /** Serialize a document into a {@link SceneDescription}. Pure — no per-frame math. */
 export function buildSceneDescription(
 	document: AxcutDocument,
@@ -940,10 +967,11 @@ export function buildSceneDescription(
 	// overlay and absent from the composited pixels — the exact preview/render gap the annotation
 	// work above closed. They are derived on the fly and never stored (see lib/ai-edition/captions).
 	//
-	// What they do NOT share is the reference box: each caption region carries `space: "frame"`,
-	// so the compositor measures it against the output frame while annotations stay on the screen
-	// rect. Subtitles have to sit where the viewer's frame ends, not where the footage does, or
-	// they slide inward the moment padding shrinks the screen rect (issue #396).
+	// The reference box travels with each region: every caption carries `space: "frame"`, so the
+	// compositor measures it against the output frame. Subtitles have to sit where the viewer's
+	// frame ends, not where the footage does, or they slide inward the moment padding shrinks the
+	// screen rect (issue #396). Text, image and arrow annotations carry the same key for the same
+	// reason; a privacy blur never does (see `annotations/placement.ts`).
 	//
 	// The output aspect is what decides the caption column and the default inset (a
 	// caption 5% off the bottom of a 16:9 export sits under the platform's own chrome
@@ -1265,9 +1293,9 @@ export function buildSceneDescription(
 		annotations: projectedAnnotations
 			.map((region) => {
 				const style = region.style;
-				// Only captions carry a space; annotations must keep emitting the exact same keys
-				// they always have, so the field is omitted rather than sent as null/undefined.
-				const space = (region as { space?: "frame" }).space;
+				// Omitted rather than sent as null/undefined when absent: an annotation still on the
+				// footage keeps emitting the exact keys it always has.
+				const space = region.space;
 				// Same treatment, same reason: only captions pin an edge. That includes the
 				// caption annotations `openscreen captions` writes, whose box is the editor's
 				// caption box: bottom-anchored, a caption that wraps grows upward from the inset

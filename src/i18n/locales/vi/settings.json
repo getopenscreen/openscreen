@@ -51,9 +51,9 @@
 		"errorReading": "Đã xảy ra lỗi khi đọc tệp."
 	},
 	"annotation": {
-		"supportedFormats": "Định dạng hỗ trợ: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "Chữ nhật",
 		"size": "Kích thước",
+		"customSize": "Kích thước tùy chỉnh",
 		"tipShiftTabCycle": "Sử dụng Shift+Tab để chuyển ngược lại.",
 		"clearBackground": "Xóa nền",
 		"invalidImageType": "Loại tệp không hợp lệ",

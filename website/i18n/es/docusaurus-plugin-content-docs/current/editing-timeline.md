@@ -80,12 +80,14 @@ Un tramo en el que la cámara web llena el cuadro en lugar de ocupar su recuadro
 
 ### Anotaciones {#annotations}
 
-Cuatro tipos, que se cambian desde el menú desplegable **Tipo** del inspector. Cambiar de tipo conserva el tramo y el recuadro de la región, así que equivocarse al elegir cuesta un clic y no volver a dibujarla.
+Cuatro tipos, que se eligen en la fila **Tipo** del inspector. Cambiar de tipo conserva el tramo de la región y su lugar en la imagen.
 
-- **Texto**: contenido, tamaño, color de fondo con un interruptor para activarlo, color del texto y una animación de aparición (Ninguna / Desvanecimiento / Ascender / Aparecer / Deslizar izquierda / Máquina de escribir / Pulso).
+Los textos, las imágenes y las flechas se colocan sobre el cuadro: arrástralos a donde quieras, también sobre el relleno. Ni el relleno ni el tamaño de la grabación los mueven, y un cambio de formato conserva su forma. Un desenfoque se queda sobre la grabación, encima de lo que oculta.
+
+- **Texto**: contenido, tamaño (24, 32, 48 o 72, o cualquier tamaño escrito al lado), fondo (Ninguna / Oscura / Clara), color del texto y una animación de aparición (Ninguna / Desvanecimiento / Ascender / Aparecer / Deslizar izquierda / Máquina de escribir / Pulso). El recuadro de selección es el propio texto: arrastra una esquina para cambiar su tamaño.
 - **Imagen**: sube un JPG, PNG, GIF o WebP.
 - **Flecha**: ocho direcciones, grosor del trazo (1–20) y color.
-- **Desenfoque**: una máscara de privacidad. Gaussiano o Mosaico, rectángulo u óvalo, con intensidad (o tamaño del bloque de mosaico). Arrástrala y cambia su tamaño sobre la vista previa como cualquier otra anotación.
+- **Desenfoque**: una máscara de privacidad. Gaussiano o Mosaico, rectángulo u óvalo. Arrástrala y cambia su tamaño sobre la grabación como cualquier otra anotación.
 
 :::note
 Ya no se pueden dibujar formas de desenfoque a mano alzada. Las que ya existen se siguen renderizando, pero como su rectángulo delimitador: cubren de más a propósito en lugar de dejar visible en la exportación algo que marcaste como privado. El inspector lo indica cuando detecta una.

@@ -51,9 +51,9 @@
 		"errorReading": "حدث خطأ أثناء قراءة الملف."
 	},
 	"annotation": {
-		"supportedFormats": "الصيغ المدعومة: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "مستطيل",
 		"size": "الحجم",
+		"customSize": "حجم مخصص",
 		"tipShiftTabCycle": "استخدم Shift+Tab للتنقل للخلف.",
 		"clearBackground": "مسح الخلفية",
 		"colorPalette": "لوحة الألوان",

@@ -51,9 +51,9 @@
 		"errorReading": "Beim Lesen der Datei ist ein Fehler aufgetreten."
 	},
 	"annotation": {
-		"supportedFormats": "Unterstützte Formate: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "Rechteck",
 		"size": "Größe",
+		"customSize": "Eigene Größe",
 		"tipShiftTabCycle": "Mit Shift+Tab rückwärts durchlaufen.",
 		"clearBackground": "Hintergrund entfernen",
 		"colorPalette": "Farbpalette",

@@ -51,9 +51,9 @@
 		"errorReading": "There was an error reading the file."
 	},
 	"annotation": {
-		"supportedFormats": "Supported formats: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "Rectangle",
 		"size": "Size",
+		"customSize": "Custom size",
 		"tipShiftTabCycle": "Use Shift+Tab to cycle backwards.",
 		"clearBackground": "Clear Background",
 		"colorPalette": "Color palette",

@@ -51,9 +51,9 @@
 		"errorReading": "Při čtení souboru došlo k chybě."
 	},
 	"annotation": {
-		"supportedFormats": "Podporované formáty: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "Obdélník",
 		"size": "Velikost",
+		"customSize": "Vlastní velikost",
 		"tipShiftTabCycle": "Použijte Shift+Tab pro cyklování dozadu.",
 		"clearBackground": "Vymazat pozadí",
 		"colorPalette": "Paleta barev",

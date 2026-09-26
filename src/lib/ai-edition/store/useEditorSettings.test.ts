@@ -174,6 +174,45 @@ describe("useEditorSettings drag snapshots", () => {
 		expect(radiusOf(useProjectStore.getState().document)).toBe(10);
 	});
 
+	it("refits the frame's annotations with a new format, in the same undo step", async () => {
+		const text: AxcutDocument["annotations"][number] = {
+			id: "ann1",
+			startMs: 0,
+			endMs: 1000,
+			type: "text",
+			content: "hi",
+			space: "frame",
+			position: { x: 45, y: 40 },
+			size: { width: 10, height: 6 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "center",
+			},
+			zIndex: 1,
+		};
+		useProjectStore.setState({
+			document: { ...docA, annotations: [text], legacyEditor: { aspectRatio: "16:9" } },
+		});
+		const { result } = renderHook(() => useEditorSettings());
+		await act(async () => {
+			await result.current.set({ aspectRatio: "9:16" });
+		});
+
+		const after = useProjectStore.getState().document?.annotations[0];
+		// Its width is a share of a frame now 3.16 times narrower in pixels: the share grows by
+		// as much, around the same centre, so the text keeps its line and its place.
+		expect(after?.size.width).toBeCloseTo((10 * (16 / 9)) / (9 / 16), 6);
+		expect((after?.position.x ?? 0) + (after?.size.width ?? 0) / 2).toBeCloseTo(50, 6);
+		expect(undo()).toBe(true);
+		expect(useProjectStore.getState().document?.annotations[0]).toEqual(text);
+	});
+
 	it("still records the pre-drag document when the drag does reach its commit", async () => {
 		// The guards above must not cost the feature they are guarding: a drag that
 		// ends the way a drag normally ends is still ONE undo step, back to before it.

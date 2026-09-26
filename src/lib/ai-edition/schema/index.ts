@@ -460,6 +460,12 @@ export const annotationRegionSchema = endGteStart(
 		content: z.string().default(""),
 		textContent: z.string().optional(),
 		imageContent: z.string().optional(),
+		// The box `position`, `size` and the text size are measured against. `"frame"`, the output
+		// frame: where text, images and arrows are placed, so padding and the footage's size never
+		// move them. Absent, the footage (screen rect): a privacy blur always, since it must stay on
+		// what it hides, and every annotation saved before frame placement existed. See
+		// `annotations/placement.ts`.
+		space: z.literal("frame").optional(),
 		position: z.object({
 			x: z.number().min(0).max(100),
 			y: z.number().min(0).max(100),

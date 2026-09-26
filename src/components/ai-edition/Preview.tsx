@@ -46,8 +46,7 @@ interface PreviewProps {
 	annotationRegions?: AxcutAnnotationRegion[];
 	selectedAnnotationId?: string | null;
 	onSelectAnnotation?: (id: string) => void;
-	onAnnotationPositionChange?: (id: string, position: { x: number; y: number }) => void;
-	onAnnotationSizeChange?: (id: string, size: { width: number; height: number }) => void;
+	onAnnotationChange?: (id: string, patch: Partial<AxcutAnnotationRegion>) => void;
 	onAnnotationBlurDataChange?: (id: string, blurData: BlurData) => void;
 	onAnnotationCommit?: () => void;
 	seekTarget: { timeSec: number; requestId: number } | null;
@@ -82,8 +81,7 @@ export function Preview({
 	annotationRegions,
 	selectedAnnotationId,
 	onSelectAnnotation,
-	onAnnotationPositionChange,
-	onAnnotationSizeChange,
+	onAnnotationChange,
 	onAnnotationBlurDataChange,
 	onAnnotationCommit,
 	seekTarget,
@@ -226,8 +224,7 @@ export function Preview({
 						annotationRegions={annotationRegions}
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={onSelectAnnotation}
-						onAnnotationPositionChange={onAnnotationPositionChange}
-						onAnnotationSizeChange={onAnnotationSizeChange}
+						onAnnotationChange={onAnnotationChange}
 						onAnnotationBlurDataChange={onAnnotationBlurDataChange}
 						onAnnotationCommit={onAnnotationCommit}
 						seekTarget={seekTarget}

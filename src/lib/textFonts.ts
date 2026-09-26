@@ -34,8 +34,10 @@ export function textFontFile(family: TextFontFamily, weight: "normal" | "bold"):
 
 /**
  * Makes the shipped files the renderer's faces too, so the picker shows each family exactly as
- * the compositor will draw it, offline included. Faces load lazily, on first use. Cosmetic, so
- * it never throws: a picker without specimens still picks.
+ * the compositor will draw it, offline included. Faces load right away, not on first use: a text
+ * annotation's box is measured in them (`annotations/placement.ts`), and a measure taken before
+ * its face arrived would size the box for a fallback font. Never throws: a picker without
+ * specimens still picks.
  */
 export function registerTextFontFaces(): void {
 	if (typeof FontFace === "undefined" || typeof document === "undefined" || !document.fonts) {
@@ -45,7 +47,9 @@ export function registerTextFontFaces(): void {
 		for (const family of TEXT_FONT_FAMILIES) {
 			for (const weight of ["normal", "bold"] as const) {
 				const url = getAssetPath(textFontFile(family, weight));
-				document.fonts.add(new FontFace(family, `url("${url}")`, { weight }));
+				const face = new FontFace(family, `url("${url}")`, { weight });
+				document.fonts.add(face);
+				face.load().catch((error) => console.warn(`[fonts] ${family} ${weight}:`, error));
 			}
 		}
 	} catch (error) {

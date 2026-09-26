@@ -80,12 +80,14 @@ A span where the webcam fills the frame instead of sitting in its layout box —
 
 ### Annotations
 
-Four types, switchable from the **Type** dropdown in the inspector. Switching type keeps the region's span and box, so a mis-pick costs one click rather than a redraw.
+Four types, picked from the **Type** row in the inspector. Switching type keeps the region's span and its place in the picture.
 
-- **Text** — content, size, background color with an on/off toggle, text color, and an appearance animation (None / Fade / Rise / Pop / Slide Left / Typewriter / Pulse).
+Text, images and arrows sit on the frame: drag them anywhere, over the padding too. Padding and the recording's size never move them, and a format change keeps their shape. A blur stays on the recording, over what it hides.
+
+- **Text** — content, size (24, 32, 48 or 72, or any size typed next to them), background (None / Dark / Light), text color, and an appearance animation (None / Fade / Rise / Pop / Slide Left / Typewriter / Pulse). The selection box is the text itself: drag a corner to resize it.
 - **Image** — upload a JPG, PNG, GIF, or WebP.
 - **Arrow** — eight directions, stroke width (1–20), and color.
-- **Blur** — a privacy mask. Smooth or Mosaic, rectangle or oval, with intensity (or mosaic block size). Drag and resize it over the preview like any other annotation.
+- **Blur** — a privacy mask. Smooth or Mosaic, rectangle or oval. Drag and resize it over the recording like any other annotation.
 
 :::note
 Freehand blur shapes can no longer be drawn. Existing ones still render, but as their bounding box — deliberately over-covering rather than leaving something you marked private visible in the export. The inspector says so when it sees one.

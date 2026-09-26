@@ -13,6 +13,7 @@ import type {
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
+import { fitTextBox } from "../annotations/placement";
 import {
 	collapseTracksToPills,
 	patchAudioTrack,
@@ -21,6 +22,7 @@ import {
 	trackGroupId,
 } from "../document/audioTracks";
 import { createId } from "../document/ids";
+import { resolveAspectRatioValue } from "../document/outputFormat";
 import {
 	duplicateClip as duplicateClipInDocument,
 	moveClip as moveClipInDocument,
@@ -46,6 +48,7 @@ import {
 import { dropTrimPillsByIds, resolveTimelineSpanToTrim } from "../timeline/trim-mapping";
 import { MAX_ZOOM_SCALE, MIN_ZOOM_SCALE } from "../timeline/zoom-scale";
 import type { AutoZoomSuggestion } from "../timeline/zoom-suggestions";
+import { getEditorSettings } from "./editorSettings";
 import { saveWithDeadline, useProjectStore, waitForDocumentSaves } from "./projectStore";
 import { currentWriteEpoch } from "./undoStack";
 import { useSequentialTimelineOps } from "./useSequentialTimelineOps";
@@ -436,7 +439,7 @@ export function useTimeline() {
 		async (durationSec = DEFAULT_NEW_REGION_SEC) => {
 			if (!document) return;
 			const timeMs = Math.round(playheadSec() * 1000);
-			const ann: AnnotationRegion = {
+			const draft: AnnotationRegion = {
 				id: createId("ann"),
 				startMs: timeMs,
 				endMs: timeMs + Math.round(durationSec * 1000),
@@ -449,10 +452,11 @@ export function useTimeline() {
 				// `content || textContent` and seeding both would just duplicate it.
 				content: ts("annotation.defaultText"),
 				textContent: "",
-				// Centred: the position is the box's top-left corner, so {50, 50} dropped the text
-				// into the bottom-right quarter.
-				position: { x: 35, y: 40 },
-				size: { width: 30, height: 20 },
+				// On the frame, free of the footage: padding never moves it.
+				space: "frame",
+				// A point at the centre of the frame; `fitTextBox` below grows the box around it.
+				position: { x: 50, y: 50 },
+				size: { width: 0, height: 0 },
 				style: {
 					color: "#ffffff",
 					backgroundColor: DEFAULT_TEXT_PLATE,
@@ -466,6 +470,11 @@ export function useTimeline() {
 				},
 				zIndex: document.annotations.length + 1,
 			};
+			const frameAspect = resolveAspectRatioValue(
+				document,
+				getEditorSettings(document).aspectRatio,
+			);
+			const ann: AnnotationRegion = { ...draft, ...fitTextBox(draft, frameAspect) };
 			const created = anchorRegionsWithDerivedMs([ann], document.timeline.clips, () =>
 				createId("ann"),
 			);

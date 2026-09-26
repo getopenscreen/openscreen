@@ -80,12 +80,14 @@ Um trecho em que a webcam preenche o quadro em vez de ficar na caixa do layout �
 
 ### Anotações {#annotations}
 
-Quatro tipos, alternados pela lista **Tipo** no inspetor. Trocar o tipo mantém o trecho e a caixa da região, então uma escolha errada custa um clique, e não um redesenho.
+Quatro tipos, escolhidos na linha **Tipo** do inspetor. Trocar o tipo mantém o trecho da região e o lugar dela na imagem.
 
-- **Texto** — conteúdo, tamanho, cor de fundo com botão para ativar/desativar, cor do texto e uma animação de entrada (Nenhuma / Esmaecer / Subir / Aparecer / Deslizar à Esquerda / Máquina de Escrever / Pulsar).
+Textos, imagens e setas ficam sobre o quadro: arraste-os para onde quiser, inclusive sobre o espaçamento. Nem o espaçamento nem o tamanho da gravação os movem, e uma troca de formato mantém a forma deles. Um desfoque fica sobre a gravação, em cima do que ele esconde.
+
+- **Texto** — conteúdo, tamanho (24, 32, 48 ou 72, ou qualquer tamanho digitado ao lado), fundo (Nenhuma / Escura / Clara), cor do texto e uma animação de entrada (Nenhuma / Esmaecer / Subir / Aparecer / Deslizar à Esquerda / Máquina de Escrever / Pulsar). A caixa de seleção é o próprio texto: arraste um canto para redimensioná-lo.
 - **Imagem** — envie um JPG, PNG, GIF ou WebP.
 - **Seta** — oito direções, largura do traço (1–20) e cor.
-- **Desfoque** — uma máscara de privacidade. Gaussiano ou Mosaico, retângulo ou oval, com intensidade (ou tamanho do bloco do mosaico). Arraste e redimensione sobre a pré-visualização, como qualquer outra anotação.
+- **Desfoque** — uma máscara de privacidade. Gaussiano ou Mosaico, retângulo ou oval. Arraste e redimensione sobre a gravação, como qualquer outra anotação.
 
 :::note
 Não é mais possível desenhar formas de desfoque à mão livre. As que já existem continuam sendo renderizadas, mas como a caixa delimitadora delas — cobrindo mais do que o necessário, de propósito, em vez de deixar visível na exportação algo que você marcou como privado. O inspetor avisa quando encontra uma.

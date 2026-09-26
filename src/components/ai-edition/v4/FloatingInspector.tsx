@@ -43,9 +43,15 @@ import {
 import { useScopedT } from "@/contexts/I18nContext";
 import { setTextPlate, type TextPlate, textPlateOf } from "@/lib/ai-edition/annotations/background";
 import {
+	convertAnnotationKind,
+	fitTextBox,
+	toFrameSpace,
+} from "@/lib/ai-edition/annotations/placement";
+import {
 	type AnnotationTextAnimation,
 	TEXT_ANIMATION_VALUES,
 } from "@/lib/ai-edition/annotations/textAnimation";
+import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat";
 import type { AxcutAnnotationRegion, AxcutClip } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { rafCoalesce } from "@/lib/ai-edition/store/rafCoalesce";
@@ -54,7 +60,7 @@ import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
 import { clampToBound } from "@/lib/projectDefaults";
-import { zoomScaleLimit } from "@/native/sceneDescription";
+import { annotationFootageRect, zoomScaleLimit } from "@/native/sceneDescription";
 import { ColorField } from "../ColorField";
 import shell from "../NewEditorShell.module.css";
 import {
@@ -390,37 +396,6 @@ const BLUR_DEFAULTS = {
 	blockSize: 12,
 } as const;
 
-/**
- * Patch à appliquer quand l'utilisateur change le type d'une annotation.
- *
- * `content` est un slot UNIQUE partagé par le texte et l'image : la zone de saisie y écrit, et le
- * rendu d'image y lit une data URL. Changer de type sans déplacer la valeur déversait donc le
- * base64 de l'image, souvent plusieurs mégaoctets, dans le champ texte. Chaque contenu est rangé
- * dans son slot typé (`textContent` / `imageContent`) en sortant et restauré en entrant, si bien
- * qu'un aller-retour entre deux types ne perd rien.
- */
-function convertAnnotationKind(
-	region: AxcutAnnotationRegion,
-	next: AnnotationKind,
-): Partial<AxcutAnnotationRegion> {
-	if (region.type === next) return {};
-	const parked: Partial<AxcutAnnotationRegion> =
-		region.type === "text"
-			? { textContent: region.content ?? "" }
-			: region.type === "image"
-				? { imageContent: region.content ?? "" }
-				: {};
-	// Flèche et flou n'ont pas de contenu : on vide `content` plutôt que d'y laisser traîner le
-	// texte ou le base64 du type précédent.
-	const restored =
-		next === "text"
-			? (region.textContent ?? "")
-			: next === "image"
-				? (region.imageContent ?? "")
-				: "";
-	return { ...parked, type: next, content: restored };
-}
-
 const ZOOM_DEPTHS: readonly ZoomDepth[] = [1, 2, 3, 4, 5, 6];
 
 // The row: the default and one step either side, plus a strong close-up. The two ends of the
@@ -647,10 +622,41 @@ export function SpeedControl({
 	);
 }
 
+// The sizes a text reaches for, in pixels at 1080 (`annotationScale.ts`): a caption-sized note,
+// the default, a heading and a title. Anything else, down to 8 and up to 200, is typed in the
+// field at the end of the row, the zoom level's pair.
+const TEXT_SIZE_PRESETS = [24, 32, 48, 72];
+
+/** The text size as a row of presets plus a free field, like the zoom level. */
+export function AnnotationSizeControl({
+	size,
+	onChange,
+}: {
+	size: number;
+	onChange: (size: number) => void;
+}) {
+	const ts = useScopedT("settings");
+	// A size outside the row presses no button; the field beside it shows it.
+	return paneStack(
+		ts("annotation.size"),
+		<div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+			<div style={{ flex: 1, minWidth: 0 }}>
+				<ChoiceRow<number>
+					label={ts("annotation.size")}
+					options={TEXT_SIZE_PRESETS.map((value) => ({ value, label: String(value) }))}
+					value={size}
+					onChange={onChange}
+				/>
+			</div>
+			<AnnotationSizeField label={ts("annotation.customSize")} size={size} onCommit={onChange} />
+		</div>,
+	);
+}
+
 /**
- * The text size as a free field, committed on blur like the speed and zoom fields above it and
- * read into `SETTING_BOUNDS.annotationFontSize`. It used to write every keystroke as typed, so an
- * emptied field stored a size of 0 and the text vanished.
+ * The text size as a free field, committed on blur like the speed and zoom fields and read into
+ * `SETTING_BOUNDS.annotationFontSize`. It used to write every keystroke as typed, so an emptied
+ * field stored a size of 0 and the text vanished.
  */
 export function AnnotationSizeField({
 	label,
@@ -703,7 +709,7 @@ export function AnnotationSizeField({
 				if (e.key === "Enter") e.currentTarget.blur();
 			}}
 			className={shell.control}
-			style={{ width: 84, textAlign: "right" }}
+			style={{ width: 56, textAlign: "right" }}
 		/>
 	);
 }
@@ -744,6 +750,31 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	const commitAnnotation = () => {
 		liveUpdate.flush();
 		void tl.commitAnnotationChange();
+	};
+	// Largeur sur hauteur du cadre de sortie : ce sur quoi une boîte de texte est taillée.
+	const frameAspect = useMemo(
+		() => (doc ? resolveAspectRatioValue(doc, settings.aspectRatio) : 16 / 9),
+		[doc, settings.aspectRatio],
+	);
+	/** Le footage sous l'annotation, lu au moment du geste : la scène entière le calcule. */
+	const footageOf = (id: string) => {
+		const current = useProjectStore.getState().document;
+		return current ? annotationFootageRect(current, id) : null;
+	};
+	/**
+	 * Une édition du texte (mots, taille), la boîte retaillée sur le résultat, centre conservé.
+	 * Un texte encore rangé sur le footage passe d'abord dans le cadre, comme à son premier
+	 * déplacement dans l'aperçu : c'est là que sa boîte veut dire quelque chose.
+	 */
+	const textEdit = (
+		region: AxcutAnnotationRegion,
+		patch: Partial<AxcutAnnotationRegion>,
+	): Partial<AxcutAnnotationRegion> => {
+		const footage = region.space === "frame" ? null : footageOf(region.id);
+		const toFrame = footage ? toFrameSpace(region, footage) : null;
+		const next = { ...region, ...toFrame, ...patch };
+		if (next.space !== "frame") return patch;
+		return { ...toFrame, ...patch, ...fitTextBox(next, frameAspect) };
 	};
 	const selection = tl.selection;
 	if (!selection) return null;
@@ -959,7 +990,13 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							]}
 							value={region.type}
 							onChange={(kind) => {
-								tl.updateAnnotationLive(region.id, convertAnnotationKind(region, kind));
+								tl.updateAnnotationLive(
+									region.id,
+									convertAnnotationKind(region, kind, {
+										footage: footageOf(region.id),
+										frameAspect,
+									}),
+								);
 								void tl.commitAnnotationChange();
 							}}
 						/>,
@@ -972,7 +1009,9 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							<textarea
 								value={region.content ?? ""}
 								placeholder={ts("annotation.textPlaceholder")}
-								onChange={(e) => tl.updateAnnotationLive(region.id, { content: e.target.value })}
+								onChange={(e) =>
+									tl.updateAnnotationLive(region.id, textEdit(region, { content: e.target.value }))
+								}
 								onBlur={commitAnnotation}
 								rows={2}
 								className={shell.control}
@@ -1008,7 +1047,6 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 									reader.readAsDataURL(file);
 								}}
 							/>
-							<span className={shell.hint}>{ts("annotation.supportedFormats")}</span>
 						</div>
 					) : null}
 					{region.type === "figure" ? (
@@ -1126,22 +1164,21 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							) : null}
 						</>
 					) : null}
-					{region.type === "text"
-						? paneRow(
-								ts("annotation.size"),
-								// Le nombre saisi vaut « pixels à 1080 » (cf. annotationScale.ts) : preview et
-								// rendu le multiplient tous deux par la hauteur de leur boîte, donc ce champ
-								// veut dire la même chose des deux côtés.
-								<AnnotationSizeField
-									label={ts("annotation.size")}
-									size={region.style?.fontSize ?? 32}
-									onCommit={(fontSize) => {
-										tl.updateAnnotationLive(region.id, { style: { ...region.style, fontSize } });
-										commitAnnotation();
-									}}
-								/>,
-							)
-						: null}
+					{region.type === "text" ? (
+						// Le nombre vaut « pixels à 1080 » (cf. annotationScale.ts) : aperçu et rendu le
+						// multiplient tous deux par la hauteur du cadre, donc il veut dire la même chose
+						// des deux côtés. La boîte suit : elle reste taillée sur le texte.
+						<AnnotationSizeControl
+							size={region.style?.fontSize ?? 32}
+							onChange={(fontSize) => {
+								tl.updateAnnotationLive(
+									region.id,
+									textEdit(region, { style: { ...region.style, fontSize } }),
+								);
+								commitAnnotation();
+							}}
+						/>
+					) : null}
 					{region.type === "text"
 						? paneStack(
 								ts("annotation.background"),
@@ -1151,6 +1188,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								// libre du flou.
 								<ChoiceRow<TextPlate | "custom">
 									label={ts("annotation.background")}
+									// Quatre libellés ne tiennent pas sur une rangée : « Personnalisé » était rogné.
+									columns={plate === "custom" ? 2 : undefined}
 									options={[
 										{ value: "none", label: ts("textPlate.none") },
 										{ value: "dark", label: ts("textPlate.dark") },

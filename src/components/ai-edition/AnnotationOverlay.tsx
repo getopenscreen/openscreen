@@ -12,15 +12,34 @@
 import { useEffect, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
 import type { AxcutAnnotationRegion } from "@/lib/ai-edition/schema";
+import { clampToBound } from "@/lib/projectDefaults";
 import { cn } from "@/lib/utils";
 
+type Region = AxcutAnnotationRegion;
+
+export interface PxRect {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
 interface AnnotationOverlayProps {
-	annotation: AxcutAnnotationRegion;
+	annotation: Region;
 	isSelected: boolean;
+	/** Taille, en px, de l'élément où la boîte se déplace : le cadre, ou le footage pour un flou.
+	 *  Chaque écriture est un pourcentage de cet élément. */
 	containerWidth: number;
 	containerHeight: number;
-	onPositionChange: (id: string, position: { x: number; y: number }) => void;
-	onSizeChange: (id: string, size: { width: number; height: number }) => void;
+	/** D'où se lit le rect enregistré, en px dans cet élément : l'élément lui-même, ou le rect du
+	 *  footage pour une annotation encore rangée sur lui mais qui se déplace dans le cadre. */
+	box: PxRect;
+	/** Le patch qui range l'annotation dans le cadre, appliqué avant son premier geste ; `null`
+	 *  quand elle y est déjà (ou qu'elle n'en sort jamais, comme un flou). */
+	toFrame: Partial<Region> | null;
+	/** Texte seulement : la boîte taillée sur le texte, centre conservé. */
+	fitText?: (region: Region) => Pick<Region, "position" | "size">;
+	onChange: (id: string, patch: Partial<Region>) => void;
 	/** Écriture disque, appelée une fois en fin de geste — le drag/resize ne fait que du live. */
 	onCommit?: () => void;
 	onClick: (id: string) => void;
@@ -28,24 +47,44 @@ interface AnnotationOverlayProps {
 	isSelectedBoost: boolean;
 }
 
+const CORNERS_ONLY = {
+	top: false,
+	right: false,
+	bottom: false,
+	left: false,
+	topLeft: true,
+	topRight: true,
+	bottomLeft: true,
+	bottomRight: true,
+} as const;
+
 export function AnnotationOverlay({
 	annotation,
 	isSelected,
 	containerWidth,
 	containerHeight,
-	onPositionChange,
-	onSizeChange,
+	box,
+	toFrame,
+	fitText,
+	onChange,
 	onCommit,
 	onClick,
 	zIndex,
 	isSelectedBoost,
 }: AnnotationOverlayProps) {
-	const committedX = (annotation.position.x / 100) * containerWidth;
-	const committedY = (annotation.position.y / 100) * containerHeight;
-	const committedWidth = (annotation.size.width / 100) * containerWidth;
-	const committedHeight = (annotation.size.height / 100) * containerHeight;
+	const committedX = box.x + (annotation.position.x / 100) * box.width;
+	const committedY = box.y + (annotation.position.y / 100) * box.height;
+	const committedWidth = (annotation.size.width / 100) * box.width;
+	const committedHeight = (annotation.size.height / 100) * box.height;
 	const blurShape = annotation.type === "blur" ? (annotation.blurData?.shape ?? "rectangle") : null;
+	const isText = annotation.type === "text";
 	const isDraggingRef = useRef(false);
+	// Le geste en cours a-t-il bougé quelque chose ? Un clic sur une annotation sélectionnée passe
+	// aussi par le début et la fin d'un glissement : sans mouvement, il n'écrit rien.
+	const movedRef = useRef(false);
+	// Taille de police et hauteur de boîte au début d'un redimensionnement de texte : les poignées
+	// d'un texte agrandissent ses lettres, dans le rapport de la hauteur tirée à la hauteur de départ.
+	const resizeStartRef = useRef<{ fontSize: number; height: number } | null>(null);
 	const [liveRect, setLiveRect] = useState({
 		x: committedX,
 		y: committedY,
@@ -64,70 +103,107 @@ export function AnnotationOverlay({
 
 	const { x, y, width, height } = liveRect;
 
+	/** Un rect en px de l'élément, en pourcentages de lui : ce que le document range. */
+	const toPct = (rect: PxRect): Pick<Region, "position" | "size"> => ({
+		position: { x: (rect.x / containerWidth) * 100, y: (rect.y / containerHeight) * 100 },
+		size: {
+			width: (rect.width / containerWidth) * 100,
+			height: (rect.height / containerHeight) * 100,
+		},
+	});
+
+	// Une annotation encore sur le footage passe dans le cadre à son premier mouvement, au pixel
+	// près : les écritures qui suivent sont des pourcentages du cadre.
+	const firstMove = () => {
+		if (movedRef.current) return;
+		movedRef.current = true;
+		if (toFrame) onChange(annotation.id, toFrame);
+	};
+
+	/** La taille de police qu'une hauteur de boîte tirée donne à un texte ; rien pour les autres. */
+	const scaledText = (nextHeight: number): Partial<Region> => {
+		const start = resizeStartRef.current;
+		if (!isText || !start) return {};
+		const fontSize = Math.round(
+			clampToBound((start.fontSize * nextHeight) / start.height, "annotationFontSize"),
+		);
+		return { style: { ...(toFrame?.style ?? annotation.style), fontSize } };
+	};
+
+	// Un texte finit chaque geste taillé sur ses mots, au cas où sa boîte ne l'était pas encore
+	// (une annotation d'avant, ou une poignée lâchée entre deux tailles).
+	const settle = (patch: Partial<Region>) => {
+		const next = { ...annotation, ...toFrame, ...patch } as Region;
+		onChange(annotation.id, isText && fitText ? { ...patch, ...fitText(next) } : patch);
+		onCommit?.();
+	};
+
 	return (
 		<Rnd
 			position={{ x, y }}
 			size={{ width, height }}
 			onDragStart={() => {
 				isDraggingRef.current = true;
+				movedRef.current = false;
 			}}
 			onDrag={(_e, d) => {
+				firstMove();
 				setLiveRect((prev) => ({ ...prev, x: d.x, y: d.y }));
 				// Pousse la position PENDANT le geste : c'est le natif qui peint, il doit donc suivre
-				// le curseur. `onPositionChange` ne met à jour qu'en mémoire ; l'écriture disque se
-				// fait une seule fois, au relâchement (`onCommit`).
-				onPositionChange(annotation.id, {
-					x: (d.x / containerWidth) * 100,
-					y: (d.y / containerHeight) * 100,
+				// le curseur. `onChange` ne met à jour qu'en mémoire ; l'écriture disque se fait une
+				// seule fois, au relâchement (`onCommit`).
+				onChange(annotation.id, {
+					position: toPct({ x: d.x, y: d.y, width, height }).position,
 				});
 			}}
 			onDragStop={(_e, d) => {
-				setLiveRect((prev) => ({ ...prev, x: d.x, y: d.y }));
-				const xPercent = (d.x / containerWidth) * 100;
-				const yPercent = (d.y / containerHeight) * 100;
-				onPositionChange(annotation.id, { x: xPercent, y: yPercent });
-				onCommit?.();
+				if (movedRef.current) {
+					setLiveRect((prev) => ({ ...prev, x: d.x, y: d.y }));
+					settle({ position: toPct({ x: d.x, y: d.y, width, height }).position });
+				}
+				movedRef.current = false;
 				setTimeout(() => {
 					isDraggingRef.current = false;
 				}, 100);
 			}}
+			onResizeStart={() => {
+				movedRef.current = false;
+				const fontSize = (toFrame?.style ?? annotation.style).fontSize;
+				resizeStartRef.current = { fontSize, height: Math.max(1, height) };
+			}}
 			onResize={(_e, _direction, ref, _delta, position) => {
-				setLiveRect({
+				const rect = {
 					x: position.x,
 					y: position.y,
 					width: ref.offsetWidth,
 					height: ref.offsetHeight,
-				});
+				};
+				firstMove();
+				setLiveRect(rect);
 				// Même raison que le drag : le natif doit suivre la poignée en direct.
-				onPositionChange(annotation.id, {
-					x: (position.x / containerWidth) * 100,
-					y: (position.y / containerHeight) * 100,
-				});
-				onSizeChange(annotation.id, {
-					width: (ref.offsetWidth / containerWidth) * 100,
-					height: (ref.offsetHeight / containerHeight) * 100,
-				});
+				onChange(annotation.id, { ...toPct(rect), ...scaledText(rect.height) });
 			}}
 			onResizeStop={(_e, _direction, ref, _delta, position) => {
-				setLiveRect({
+				const rect = {
 					x: position.x,
 					y: position.y,
 					width: ref.offsetWidth,
 					height: ref.offsetHeight,
-				});
-				const xPercent = (position.x / containerWidth) * 100;
-				const yPercent = (position.y / containerHeight) * 100;
-				const widthPercent = (ref.offsetWidth / containerWidth) * 100;
-				const heightPercent = (ref.offsetHeight / containerHeight) * 100;
-				onPositionChange(annotation.id, { x: xPercent, y: yPercent });
-				onSizeChange(annotation.id, { width: widthPercent, height: heightPercent });
-				onCommit?.();
+				};
+				if (movedRef.current) {
+					setLiveRect(rect);
+					settle({ ...toPct(rect), ...scaledText(rect.height) });
+				}
+				movedRef.current = false;
+				resizeStartRef.current = null;
 			}}
 			onClick={() => {
 				if (isDraggingRef.current) return;
 				onClick(annotation.id);
 			}}
 			bounds="parent"
+			// Un texte garde sa forme : sa boîte est celle de ses mots, seule la taille change.
+			lockAspectRatio={isText}
 			className={cn(
 				"cursor-move",
 				isSelected &&
@@ -146,8 +222,8 @@ export function AnnotationOverlay({
 			}}
 			// Un flou en tracé libre se déplace et se redimensionne comme les autres : ce qui le
 			// bloquait, c'était la zone de saisie du tracé qui capturait le pointeur — et elle est
-			// partie avec l'outil.
-			enableResizing={isSelected}
+			// partie avec l'outil. Un texte ne se tire que par ses coins, qui agrandissent ses lettres.
+			enableResizing={isSelected ? (isText ? CORNERS_ONLY : true) : false}
 			disableDragging={!isSelected}
 			resizeHandleStyles={{
 				topLeft: {

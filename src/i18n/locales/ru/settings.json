@@ -51,9 +51,9 @@
 		"errorReading": "Произошла ошибка при чтении файла."
 	},
 	"annotation": {
-		"supportedFormats": "Поддерживаемые форматы: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "Прямоугольник",
 		"size": "Размер",
+		"customSize": "Свой размер",
 		"tipShiftTabCycle": "Используйте Shift+Tab для циклического переключения в обратном направлении.",
 		"clearBackground": "Очистить фон",
 		"colorPalette": "Палитра цветов",

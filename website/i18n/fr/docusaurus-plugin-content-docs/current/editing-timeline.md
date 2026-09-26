@@ -80,12 +80,14 @@ Un passage où la webcam remplit le cadre au lieu de rester dans l'emplacement q
 
 ### Annotations {#annotations}
 
-Quatre types, que l'on change avec la liste déroulante **Type** de l'inspecteur. Changer de type conserve la plage et le cadre de la région : une erreur de choix coûte un clic, pas un nouveau tracé.
+Quatre types, à choisir dans la rangée **Type** de l'inspecteur. Changer de type conserve la plage de la région et sa place à l'image.
 
-- **Texte** : contenu, taille, couleur de fond avec interrupteur, couleur du texte et animation d'apparition (Aucune / Fondu / Monter / Apparition / Glisser à gauche / Machine à écrire / Pulsation).
-- **Image** : importez un JPG, PNG, GIF ou WebP.
-- **Flèche** : huit directions, épaisseur du trait (1–20) et couleur.
-- **Flou** : un masque de confidentialité. Gaussien ou Mosaïque, rectangle ou ovale, avec une intensité (ou une taille de blocs pour la mosaïque). Faites-le glisser et redimensionnez-le sur l'aperçu comme toute autre annotation.
+Textes, images et flèches se posent sur le cadre : faites-les glisser où vous voulez, marge comprise. Ni la marge ni la taille de l'enregistrement ne les déplacent, et un changement de format garde leur forme. Un flou reste sur l'enregistrement, sur ce qu'il cache.
+
+- **Texte** : contenu, taille (24, 32, 48 ou 72, ou toute taille saisie à côté), arrière-plan (Aucune / Sombre / Claire), couleur du texte et animation d'apparition (Aucune / Fondu / Monter / Apparition / Glisser à gauche / Machine à écrire / Pulsation). Le cadre de sélection est le texte lui-même : tirez un coin pour le redimensionner.
+- **Image** : importez un JPG, PNG, GIF ou WebP.
+- **Flèche** : huit directions, épaisseur du trait (1–20) et couleur.
+- **Flou** : un masque de confidentialité. Gaussien ou Mosaïque, rectangle ou ovale. Faites-le glisser et redimensionnez-le sur l'enregistrement comme toute autre annotation.
 
 :::note
 Il n'est plus possible de dessiner des formes de flou à main levée. Celles qui existent s'affichent encore, mais sous la forme de leur boîte englobante : elles couvrent volontairement trop, plutôt que de laisser visible dans l'export quelque chose que vous aviez marqué comme privé. L'inspecteur le signale quand il en rencontre une.

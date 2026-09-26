@@ -80,12 +80,14 @@ Ein Abschnitt, in dem die Webcam das Bild füllt, statt in ihrem Layout-Rahmen z
 
 ### Annotationen {#annotations}
 
-Vier Arten, umschaltbar über die Liste **Type** im Inspektor. Beim Umschalten bleiben Zeitspanne und Rahmen des Bereichs erhalten, ein falsch gewählter Typ kostet also einen Klick statt einer neuen Zeichnung.
+Vier Arten, wählbar in der Zeile **Type** im Inspektor. Beim Umschalten bleiben die Zeitspanne des Bereichs und seine Stelle im Bild erhalten.
 
-- **Text**: Inhalt, Größe, Hintergrundfarbe mit Ein/Aus-Schalter, Textfarbe und eine Einblendanimation (None / Fade / Rise / Pop / Slide Left / Typewriter / Pulse).
+Texte, Bilder und Pfeile liegen auf dem Bildrahmen: Zieh sie, wohin du willst, auch über den Abstand. Weder der Abstand noch die Größe der Aufnahme verschieben sie, und ein Formatwechsel behält ihre Form bei. Eine Unschärfe bleibt auf der Aufnahme, über dem, was sie verdeckt.
+
+- **Text**: Inhalt, Größe (24, 32, 48 oder 72, oder jede daneben eingetippte Größe), Hintergrund (Keine / Dunkel / Hell), Textfarbe und eine Einblendanimation (None / Fade / Rise / Pop / Slide Left / Typewriter / Pulse). Der Auswahlrahmen ist der Text selbst: Zieh an einer Ecke, um ihn zu skalieren.
 - **Image**: ein JPG, PNG, GIF oder WebP hochladen.
 - **Arrow**: acht Richtungen, Strichstärke (1–20) und Farbe.
-- **Blur**: eine Maske für den Datenschutz. Gaussian oder Mosaic, Rechteck oder Oval, mit Stärke (oder Blockgröße beim Mosaik). Zieh und skaliere sie über der Vorschau wie jede andere Annotation.
+- **Blur**: eine Maske für den Datenschutz. Gaussian oder Mosaic, Rechteck oder Oval. Zieh und skaliere sie über der Aufnahme wie jede andere Annotation.
 
 :::note
 Freihand-Unschärfeformen lassen sich nicht mehr zeichnen. Vorhandene werden weiterhin gerendert, aber als ihr umschließendes Rechteck. Das deckt absichtlich zu viel ab, statt etwas, das du als privat markiert hast, im Export sichtbar zu lassen. Der Inspektor weist darauf hin, wenn er eine solche Form findet.

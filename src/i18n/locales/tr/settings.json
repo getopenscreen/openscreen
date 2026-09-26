@@ -51,9 +51,9 @@
 		"errorReading": "Dosya okunurken bir hata oluştu."
 	},
 	"annotation": {
-		"supportedFormats": "Desteklenen biçimler: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "Dikdörtgen",
 		"size": "Boyut",
+		"customSize": "Özel boyut",
 		"tipShiftTabCycle": "Geriye doğru geçiş yapmak için Shift+Tab kullanın.",
 		"clearBackground": "Arka Planı Temizle",
 		"colorPalette": "Renk paleti",

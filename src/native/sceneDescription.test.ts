@@ -21,7 +21,12 @@ import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
 import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
-import { buildSceneDescription, wallpaperAcceptsMotion, zoomScaleLimit } from "./sceneDescription";
+import {
+	annotationFootageRect,
+	buildSceneDescription,
+	wallpaperAcceptsMotion,
+	zoomScaleLimit,
+} from "./sceneDescription";
 
 // --- Fixture helpers --------------------------------------------------------
 // Keep fixtures minimal & deterministic — every field the serializer consults is filled in;
@@ -2334,7 +2339,101 @@ describe("buildSceneDescription.captions", () => {
 		expect(rects[2].fontSizeRel).toBe(rects[0].fontSizeRel);
 	});
 
-	it("leaves the space key off a real annotation entirely", () => {
+	it("holds an annotation placed on the frame still while padding shrinks the footage", () => {
+		// The annotation twin of the caption test above: a text on the frame goes wherever the
+		// user put it, and the padding slider sizes the footage, not it.
+		const text = (padding: number) => {
+			const base = docWithCaptions(false);
+			const scene = buildSceneDescription({
+				...base,
+				annotations: [
+					{
+						id: "ann1",
+						startMs: 0,
+						endMs: 1000,
+						type: "text",
+						content: "hi",
+						space: "frame",
+						position: { x: 2, y: 3 },
+						size: { width: 12, height: 6 },
+						style: {
+							color: "#fff",
+							backgroundColor: "transparent",
+							fontSize: 48,
+							fontFamily: "Inter",
+							fontWeight: "bold",
+							fontStyle: "normal",
+							textDecoration: "none",
+							textAlign: "center",
+							textAnimation: "none",
+						},
+						zIndex: 1,
+					},
+				],
+				legacyEditor: {
+					...(base.legacyEditor as Record<string, unknown>),
+					padding,
+					aspectRatio: "16:9",
+				},
+			} as AxcutDocument);
+			const annotation = scene.annotations.find((a) => a.id.startsWith("ann1"));
+			if (!annotation) throw new Error("annotation absente");
+			return {
+				screenWidth: scene.layout.screenRect?.width,
+				space: annotation.space,
+				rect: [annotation.x, annotation.y, annotation.w, annotation.h],
+				fontSizeRel: annotation.text?.fontSizeRel,
+			};
+		};
+		const [flush, padded] = [text(0), text(100)];
+		expect(padded.screenWidth).not.toBe(flush.screenWidth);
+		expect(flush.space).toBe("frame");
+		// Over the padding, where the footage is not: 2 % from the frame's left edge.
+		expect(padded.rect).toEqual([0.02, 0.03, 0.12, 0.06]);
+		expect(padded).toEqual({ ...flush, screenWidth: padded.screenWidth });
+	});
+
+	it("names the footage an annotation sits on, in fractions of the frame", () => {
+		const base = docWithCaptions(false);
+		const doc = {
+			...base,
+			annotations: [
+				{
+					id: "ann1",
+					startMs: 0,
+					endMs: 1000,
+					type: "blur",
+					content: "",
+					position: { x: 10, y: 10 },
+					size: { width: 20, height: 10 },
+					style: {
+						color: "#fff",
+						backgroundColor: "transparent",
+						fontSize: 32,
+						fontFamily: "Inter",
+						fontWeight: "normal",
+						fontStyle: "normal",
+						textDecoration: "none",
+						textAlign: "center",
+					},
+					zIndex: 1,
+				},
+			],
+			legacyEditor: {
+				...(base.legacyEditor as Record<string, unknown>),
+				padding: 50,
+				aspectRatio: "16:9",
+			},
+		} as AxcutDocument;
+		const rect = annotationFootageRect(doc, "ann1");
+		expect(rect).toEqual(buildSceneDescription(doc).layout.screenRect);
+		// Padded in: the footage is smaller than the frame and centred in it.
+		expect(rect?.width).toBeLessThan(1);
+		expect(rect?.x).toBeCloseTo((1 - (rect?.width ?? 0)) / 2, 6);
+		expect(annotationFootageRect(doc, "nope")).toBeNull();
+	});
+
+	it("leaves the space key off an annotation still on the footage", () => {
 		// Not `space: undefined` — an explicit key would change the annotation payload that
 		// shipped binaries already parse. `in` is the only check that tells them apart.
 		const doc = makeDoc({

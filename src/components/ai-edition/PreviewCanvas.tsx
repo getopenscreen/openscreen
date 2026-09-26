@@ -9,12 +9,14 @@
 // the actual pixels come from the native canvas, not from this layout):
 //   .previewFrame           → canvas (wallpaper bg; never receives padding
 //                             from the slider directly).
-//   .screenStage            → sizes/positions the zoom/annotation overlays by
-//                             the composite-layout math (PiP/dual/stack/no-cam);
+//   .screenStage            → sizes/positions the zoom overlay by the
+//                             composite-layout math (PiP/dual/stack/no-cam);
 //                             its own <video> is CSS-hidden (decode/clock only).
 //   .webcamSlot             → drag-to-reposition hitbox for the webcam PiP,
 //                             positioned by the same math; its <video> is
 //                             CSS-hidden too.
+//   AnnotationLayer         → the whole frame: annotations are placed on it,
+//                             a blur on the footage rect inside it.
 //
 // The composite layout is computed from `.previewFrame`'s actual rendered
 // size (via ResizeObserver), so the camera + screen both resize correctly
@@ -88,8 +90,8 @@ interface PreviewCanvasProps {
 	annotationRegions?: AxcutAnnotationRegion[];
 	selectedAnnotationId?: string | null;
 	onSelectAnnotation?: (id: string) => void;
-	onAnnotationPositionChange?: (id: string, position: { x: number; y: number }) => void;
-	onAnnotationSizeChange?: (id: string, size: { width: number; height: number }) => void;
+	/** Live edit of an annotation's geometry (and, for a text, its size) during a gesture. */
+	onAnnotationChange?: (id: string, patch: Partial<AxcutAnnotationRegion>) => void;
 	onAnnotationBlurDataChange?: (id: string, blurData: BlurData) => void;
 	onAnnotationCommit?: () => void;
 	seekTarget: { timeSec: number; requestId: number } | null;
@@ -460,23 +462,6 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 							onFocusCommit={props.onZoomFocusCommit}
 						/>
 					) : null}
-					{props.annotationRegions &&
-					props.onSelectAnnotation &&
-					props.onAnnotationPositionChange &&
-					props.onAnnotationSizeChange &&
-					props.onAnnotationCommit ? (
-						<AnnotationLayer
-							annotations={props.annotationRegions}
-							selectedAnnotationId={props.selectedAnnotationId ?? null}
-							currentTimeSec={props.currentTimeSec}
-							containerWidth={layout.screenRect.width}
-							containerHeight={layout.screenRect.height}
-							onSelectAnnotation={props.onSelectAnnotation}
-							onPositionChange={props.onAnnotationPositionChange}
-							onSizeChange={props.onAnnotationSizeChange}
-							onCommit={props.onAnnotationCommit}
-						/>
-					) : null}
 				</div>
 			) : null}
 			{layout?.webcamRect && showWebcamSlot ? (
@@ -505,14 +490,33 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 					/>
 				</div>
 			) : null}
+			{/* Last, so a selected annotation over the camera takes the pointer before the
+			    camera's drag hitbox does. It spans the frame: text, images and arrows move
+			    anywhere in it, over the padding too. */}
+			{layout?.screenRect &&
+			props.annotationRegions &&
+			props.onSelectAnnotation &&
+			props.onAnnotationChange &&
+			props.onAnnotationCommit ? (
+				<AnnotationLayer
+					annotations={props.annotationRegions}
+					selectedAnnotationId={props.selectedAnnotationId ?? null}
+					currentTimeSec={props.currentTimeSec}
+					frameWidth={frameSize.width}
+					frameHeight={frameSize.height}
+					footage={layout.screenRect}
+					onSelectAnnotation={props.onSelectAnnotation}
+					onChange={props.onAnnotationChange}
+					onCommit={props.onAnnotationCommit}
+				/>
+			) : null}
 		</div>
 	);
 }
 
 // Screen stage: rectangle from the composite layout, converted to percentages
-// of the canvas. Positions/sizes the interactive overlays (ZoomFocusOverlay,
-// AnnotationLayer) hosted inside it and the CSS-hidden <video> (decode/clock
-// only) — no borderRadius/boxShadow here: the native canvas already draws its
+// of the canvas. Positions/sizes the zoom overlay hosted inside it and the
+// CSS-hidden <video> (decode/clock only) — no borderRadius/boxShadow here: the native canvas already draws its
 // own rounded corners + shadow for this exact rect, and this container sits
 // on TOP of it (z-index for the interactive layers). Duplicating the same
 // decoration in CSS produced a visible "double rounded corner" — two

@@ -51,9 +51,9 @@
 		"errorReading": "ファイルの読み取り中にエラーが発生しました。"
 	},
 	"annotation": {
-		"supportedFormats": "サポートされている形式: JPG, PNG, GIF, WebP",
 		"blurShapeRectangle": "長方形",
 		"size": "サイズ",
+		"customSize": "カスタムサイズ",
 		"tipShiftTabCycle": "Shift+Tabキーを使用して逆順に切り替えます。",
 		"clearBackground": "背景をクリア",
 		"colorPalette": "カラーパレット",

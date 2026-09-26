@@ -68,7 +68,7 @@ vi.mock("../CaptionsPane", () => ({
 	CaptionsPane: () => <div data-testid="captions-pane">CaptionsPane</div>,
 }));
 
-import { AnnotationSizeField, FloatingInspector } from "./FloatingInspector";
+import { AnnotationSizeControl, AnnotationSizeField, FloatingInspector } from "./FloatingInspector";
 
 describe("FloatingInspector", () => {
 	const defaultProps: React.ComponentProps<typeof FloatingInspector> = {
@@ -170,6 +170,65 @@ describe("FloatingInspector", () => {
 			expect(box).toHaveAttribute("aria-pressed", "false");
 			fireEvent.click(box as HTMLElement);
 			expect(updateZoomClickImpact).toHaveBeenCalledWith("z", true);
+		});
+	});
+
+	describe("annotation pane", () => {
+		const text = {
+			id: "a",
+			startMs: 0,
+			endMs: 1000,
+			type: "text",
+			content: "Hi",
+			space: "frame",
+			position: { x: 45, y: 45 },
+			size: { width: 10, height: 10 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "center",
+			},
+			zIndex: 1,
+		};
+		const annotationTl = () => {
+			const updateAnnotationLive = vi.fn();
+			const tl = {
+				...defaultProps.tl,
+				selection: { kind: "annotation", id: "a" },
+				annotationRegions: [text],
+				updateAnnotationLive,
+				commitAnnotationChange: vi.fn(),
+			} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"];
+			return { tl, updateAnnotationLive };
+		};
+		const centreOf = (patch: { position: { x: number }; size: { width: number } }) =>
+			patch.position.x + patch.size.width / 2;
+
+		it("refits the box to the words as they are typed, around the same centre", () => {
+			const { tl, updateAnnotationLive } = annotationTl();
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			fireEvent.change(screen.getByPlaceholderText("settings.annotation.textPlaceholder"), {
+				target: { value: "A much longer line" },
+			});
+			const patch = updateAnnotationLive.mock.calls[0][1];
+			expect(patch.content).toBe("A much longer line");
+			expect(patch.size.width).toBeGreaterThan(text.size.width);
+			expect(centreOf(patch)).toBeCloseTo(50, 6);
+		});
+
+		it("resizes the text from the preset row and refits its box", () => {
+			const { tl, updateAnnotationLive } = annotationTl();
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			const row = screen.getByRole("group", { name: "settings.annotation.size" });
+			fireEvent.click(within(row).getByRole("button", { name: "72" }));
+			const patch = updateAnnotationLive.mock.calls[0][1];
+			expect(patch.style.fontSize).toBe(72);
+			expect(centreOf(patch)).toBeCloseTo(50, 6);
 		});
 	});
 
@@ -313,5 +372,31 @@ describe("AnnotationSizeField", () => {
 		expect(commitTyped("0")).toHaveBeenCalledWith(8);
 		expect(commitTyped("48")).toHaveBeenCalledWith(48);
 		expect(commitTyped("900")).toHaveBeenCalledWith(200);
+	});
+});
+
+describe("AnnotationSizeControl", () => {
+	const row = () => screen.getByRole("group", { name: "settings.annotation.size" });
+
+	it("presses the preset the size is, and picks another in one click", () => {
+		const onChange = vi.fn();
+		render(<AnnotationSizeControl size={32} onChange={onChange} />);
+		expect(within(row()).getByRole("button", { name: "32" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		fireEvent.click(within(row()).getByRole("button", { name: "48" }));
+		expect(onChange).toHaveBeenCalledWith(48);
+	});
+
+	it("shows a size off the row in its free field, pressing no preset", () => {
+		render(<AnnotationSizeControl size={40} onChange={vi.fn()} />);
+		for (const button of within(row()).getAllByRole("button")) {
+			expect(button).toHaveAttribute("aria-pressed", "false");
+		}
+		expect(screen.getByRole("textbox", { name: "settings.annotation.customSize" })).toHaveAttribute(
+			"placeholder",
+			"40",
+		);
 	});
 });

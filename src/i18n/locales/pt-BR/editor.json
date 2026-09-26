@@ -112,6 +112,8 @@
 		"microphone": "Microfone",
 		"camera": "Câmera",
 		"cursorHighlight": "Destaque do cursor",
+		"autoZoom": "Zoom automático após a gravação",
+		"autoZoomNeedsEditableCursor": "O zoom automático precisa do cursor editável. Alterne o modo do cursor para ativar.",
 		"hideDesktopIcons": "Ocultar ícones da área de trabalho",
 		"hideDesktopIconsHintMac": "Deixa os ícones da área de trabalho fora das gravações de tela. Eles continuam na sua área de trabalho.",
 		"hideDesktopIconsHintWindows": "Cobre os ícones da área de trabalho com o seu papel de parede enquanto uma tela é gravada. Eles voltam quando a gravação termina.",

@@ -112,6 +112,8 @@
 		"microphone": "麦克风",
 		"camera": "摄像头",
 		"cursorHighlight": "光标高亮",
+		"autoZoom": "录制后自动缩放",
+		"autoZoomNeedsEditableCursor": "自动缩放需要可编辑光标。请先切换光标模式。",
 		"hideDesktopIcons": "隐藏桌面图标",
 		"hideDesktopIconsHintMac": "在屏幕录制中去掉桌面图标。它们仍保留在你的桌面上。",
 		"hideDesktopIconsHintWindows": "录制屏幕时用壁纸遮住桌面图标。停止录制后会恢复。",

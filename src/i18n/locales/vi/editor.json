@@ -112,6 +112,8 @@
 		"microphone": "Micro",
 		"camera": "Máy ảnh",
 		"cursorHighlight": "Làm nổi bật con trỏ",
+		"autoZoom": "Tự động phóng to sau khi ghi",
+		"autoZoomNeedsEditableCursor": "Tự động phóng to cần con trỏ chỉnh sửa được. Hãy đổi chế độ con trỏ.",
 		"hideDesktopIcons": "Ẩn biểu tượng màn hình nền",
 		"hideDesktopIconsHintMac": "Loại các biểu tượng màn hình nền khỏi bản ghi màn hình. Chúng vẫn ở trên màn hình nền của bạn.",
 		"hideDesktopIconsHintWindows": "Che các biểu tượng màn hình nền bằng hình nền trong khi ghi màn hình. Chúng sẽ trở lại khi dừng ghi.",

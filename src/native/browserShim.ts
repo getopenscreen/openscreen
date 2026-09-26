@@ -58,6 +58,7 @@ type ShimRecordingPrefs = {
 	camDeviceName: string | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
+	autoZoomEnabled: boolean;
 };
 const recordingPrefsStorageKey = "browser-shim-recording-prefs";
 let shimRecordingPrefs: ShimRecordingPrefs = {
@@ -69,6 +70,7 @@ let shimRecordingPrefs: ShimRecordingPrefs = {
 	camDeviceName: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
+	autoZoomEnabled: true,
 };
 const shimRecordingPrefsListeners = new Set<(prefs: ShimRecordingPrefs) => void>();
 const shimSelectedSourceListeners = new Set<(source: ShimDesktopSource | null) => void>();

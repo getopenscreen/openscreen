@@ -13,6 +13,14 @@ export interface RecordingPreferences {
 	cursorCaptureMode: CursorCaptureMode;
 	/** Display captures on macOS and Windows. Opt-in: on Windows the icons also leave the real desktop while recording. */
 	hideDesktopIcons: boolean;
+	/**
+	 * Whether the editor decorates a fresh take with cursor-dwell zooms when it imports it.
+	 *
+	 * Absent from a settings file written before this preference existed, which is why
+	 * `parseRecording` reads a missing key as the default rather than as "off": the
+	 * behaviour it gates has been on for every such installation.
+	 */
+	autoZoomEnabled: boolean;
 }
 
 export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
@@ -25,6 +33,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
+	autoZoomEnabled: true,
 };
 
 export interface RecordingSourceDescriptor {
@@ -100,6 +109,7 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 				? raw.cursorCaptureMode
 				: DEFAULT_RECORDING_PREFERENCES.cursorCaptureMode,
 		hideDesktopIcons: bool(raw.hideDesktopIcons, DEFAULT_RECORDING_PREFERENCES.hideDesktopIcons),
+		autoZoomEnabled: bool(raw.autoZoomEnabled, DEFAULT_RECORDING_PREFERENCES.autoZoomEnabled),
 	};
 }
 

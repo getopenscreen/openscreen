@@ -112,6 +112,8 @@
 		"microphone": "Microphone",
 		"camera": "Caméra",
 		"cursorHighlight": "Curseur en surbrillance",
+		"autoZoom": "Zoom automatique après l'enregistrement",
+		"autoZoomNeedsEditableCursor": "Le zoom automatique nécessite le curseur modifiable. Changez le mode du curseur pour l'activer.",
 		"hideDesktopIcons": "Masquer les icônes du bureau",
 		"hideDesktopIconsHintMac": "Retire les icônes du bureau des enregistrements d'écran. Elles restent sur votre bureau.",
 		"hideDesktopIconsHintWindows": "Recouvre les icônes du bureau avec votre fond d'écran pendant l'enregistrement d'un écran. Elles reviennent à la fin de l'enregistrement.",

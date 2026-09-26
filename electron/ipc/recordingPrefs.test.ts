@@ -22,6 +22,7 @@ const defaults: RecordingPrefs = {
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
+	autoZoomEnabled: true,
 };
 let dir: string;
 beforeEach(() => {

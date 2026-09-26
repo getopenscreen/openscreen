@@ -267,7 +267,7 @@
 		"remove": "Parçayı sil",
 		"loop": "Döngü",
 		"slipHint": "İçindeki sesi kaydırmak için Alt ile sürükleyin",
-		"help": "Bu ses kanalının seviyesi, geçişleri ve döngüsü. Önizlemede ve dışa aktarımda kaydın üzerine miksleniyor. Kanalı taşımak veya yeniden boyutlandırmak için zaman çizelgesinde sürükleyin; içindeki sesi kaydırmak için Alt tuşunu basılı tutarak sürükleyin.",
+		"help": "Bu ses kanalının seviyesi, geçişleri ve döngüsü. Önizlemede ve dışa aktarımda kaydın üzerine miksleniyor. Müzik kanalı, biri konuşurken kendiliğinden kısılır. Kanalı taşımak veya yeniden boyutlandırmak için zaman çizelgesinde sürükleyin; içindeki sesi kaydırmak için Alt tuşunu basılı tutarak sürükleyin.",
 		"add": "Ses parçası ekle",
 		"mute": "Sessiz"
 	},

@@ -3,6 +3,8 @@ import { projectRawTimelineSecToPlayback } from "@/lib/ai-edition/document/timel
 import type { AxcutAudioTrack, AxcutClip, AxcutTrimRange } from "@/lib/ai-edition/schema";
 import {
 	applyPreviewAudioSettings,
+	MUSIC_DUCK,
+	nextMusicDuckDb,
 	type PreviewAudioGraph,
 	resolveAudioTrackPlayback,
 	resolveTimelineAudioPlayback,
@@ -15,8 +17,38 @@ function fakeGraph(): PreviewAudioGraph {
 		context: {} as AudioContext,
 		gain: { gain: { value: Number.NaN } } as GainNode,
 		voice: { gain: { value: Number.NaN } } as GainNode,
+		analyser: {} as AnalyserNode,
 	};
 }
+
+describe("nextMusicDuckDb", () => {
+	// The preview's side of the export's ducker (`duck_curve`): same depth, hold and
+	// release, stepped one frame at a time.
+	const frame = 1 / 60;
+	function run(fromDb: number, sinceVoiceAt: (t: number) => number, seconds: number) {
+		let db = fromDb;
+		for (let t = 0; t < seconds; t += frame) db = nextMusicDuckDb(db, sinceVoiceAt(t), frame);
+		return db;
+	}
+
+	it("dips to the export's depth over one attack once the voice is heard", () => {
+		expect(run(0, () => 0, MUSIC_DUCK.attackSec / 2)).toBeCloseTo(MUSIC_DUCK.depthDb / 2, 0);
+		expect(run(0, () => 0, MUSIC_DUCK.attackSec + frame)).toBe(MUSIC_DUCK.depthDb);
+		// And never deeper, however long the voice goes on.
+		expect(run(0, () => 0, 10)).toBe(MUSIC_DUCK.depthDb);
+	});
+
+	it("stays down through a pause shorter than the hold", () => {
+		expect(run(MUSIC_DUCK.depthDb, (t) => t, MUSIC_DUCK.holdSec - 0.05)).toBe(MUSIC_DUCK.depthDb);
+	});
+
+	it("comes back up over the release once the pause outlasts the hold", () => {
+		const pause = MUSIC_DUCK.holdSec + MUSIC_DUCK.releaseSec + 2 * frame;
+		expect(run(MUSIC_DUCK.depthDb, (t) => t, pause)).toBe(0);
+		// And never above the level the user set.
+		expect(run(0, () => 10, 1)).toBe(0);
+	});
+});
 
 describe("resolveAudioTrackPlayback", () => {
 	it("mirrors the video's time", () => {

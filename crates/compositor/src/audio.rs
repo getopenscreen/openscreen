@@ -1654,63 +1654,167 @@ pub fn assemble_concatenated_pcm(
 ///
 /// A track whose file has no decodable audio is skipped — the same degradation a
 /// stream-less clip gets.
+///
+/// Voiceovers go in first, because they are part of what the music ducks under: once they
+/// are summed, the programme IS the voice — the recording's own audio plus every take — and
+/// `duck_curve` reads it to lower each music bed while someone speaks.
 pub fn mix_external_tracks(mut programme: PlanarPcm, tracks: &[SceneAudioTrack]) -> PlanarPcm {
-    let programme_len = programme.first().map(Vec::len).unwrap_or(0);
-    if programme_len == 0 {
+    if programme.first().map_or(true, Vec::is_empty) {
         return programme;
     }
-    for track in tracks {
-        let offset = (track.start_sec.max(0.0) * AUDIO_OUTPUT_SAMPLE_RATE as f64).round() as usize;
-        // A track that starts at or past the programme end contributes nothing —
-        // skip it before decoding anything.
-        if offset >= programme_len {
-            continue;
+    let (voice, music): (Vec<&SceneAudioTrack>, Vec<&SceneAudioTrack>) = tracks
+        .iter()
+        .partition(|track| track.kind == SceneAudioTrackKind::Voiceover);
+    for track in voice {
+        overlay_external_track(&mut programme, track, &[]);
+    }
+    if !music.is_empty() {
+        let duck = duck_curve(&programme);
+        for track in music {
+            overlay_external_track(&mut programme, track, &duck);
         }
-        let trim_start = track.trim_start_sec.max(0.0);
-        let Some(trim_end_full) = track.trim_end_sec else {
-            // Without a concrete end there is no safe window to decode (see the doc
-            // comment); the renderer always resolves one, so this only guards a
-            // hand-written scene.
-            continue;
-        };
-        // Cap the decode window at the room left in the programme. Everything past
-        // `offset` that overflows is discarded by `overlay_track_pcm` anyway, so
-        // decoding it only wastes time and memory — a three-hour track placed at
-        // second 9 of a ten-second export must not buffer three hours of PCM.
-        let remaining_sec = (programme_len - offset) as f64 / AUDIO_OUTPUT_SAMPLE_RATE as f64;
-        let trim_end = trim_end_full.min(trim_start + remaining_sec);
-        // The track's own length, before that cap. The fades belong to the track, not to
-        // whatever the programme had room for — capping first and measuring after is what
-        // made a fade-out ramp down at the truncation point instead of at the real end.
-        let full_len =
-            ((trim_end_full - trim_start).max(0.0) * AUDIO_OUTPUT_SAMPLE_RATE as f64) as usize;
-        if trim_end <= trim_start {
-            continue;
-        }
-        let decoded = match decode_clip_audio(&track.path, trim_start, trim_end) {
-            Ok(Some(pcm)) => pcm,
-            _ => continue,
-        };
-        // The app's own range is -60..+12 dB (the inspector slider); clamping at
-        // -12 here floored every quiet bed at a tenth of the attenuation asked for.
-        // A voiceover is voice, levelled like the recording (see `loudness_gain_db`); its
-        // own gain then trims from there, exactly as the preview applies it.
-        let normalisation = match track.kind {
-            SceneAudioTrackKind::Voiceover => loudness_gain_db(&track.path),
-            SceneAudioTrackKind::Music => 0.0,
-        };
-        let gain = 10.0f32.powf((track.gain_db.clamp(-60.0, 12.0) + normalisation) / 20.0);
-        overlay_track_pcm(
-            &mut programme,
-            &decoded,
-            offset,
-            gain,
-            track.fade_in_sec.max(0.0),
-            track.fade_out_sec.max(0.0),
-            full_len,
-        );
     }
     programme
+}
+
+/// One entry of `mix_external_tracks`: decode its window, level it, sum it in under `duck`.
+fn overlay_external_track(programme: &mut PlanarPcm, track: &SceneAudioTrack, duck: &[f32]) {
+    let programme_len = programme.first().map(Vec::len).unwrap_or(0);
+    let offset = (track.start_sec.max(0.0) * AUDIO_OUTPUT_SAMPLE_RATE as f64).round() as usize;
+    // A track that starts at or past the programme end contributes nothing —
+    // skip it before decoding anything.
+    if offset >= programme_len {
+        return;
+    }
+    let trim_start = track.trim_start_sec.max(0.0);
+    let Some(trim_end_full) = track.trim_end_sec else {
+        // Without a concrete end there is no safe window to decode (see the doc
+        // comment); the renderer always resolves one, so this only guards a
+        // hand-written scene.
+        return;
+    };
+    // Cap the decode window at the room left in the programme. Everything past
+    // `offset` that overflows is discarded by `overlay_track_pcm` anyway, so
+    // decoding it only wastes time and memory — a three-hour track placed at
+    // second 9 of a ten-second export must not buffer three hours of PCM.
+    let remaining_sec = (programme_len - offset) as f64 / AUDIO_OUTPUT_SAMPLE_RATE as f64;
+    let trim_end = trim_end_full.min(trim_start + remaining_sec);
+    // The track's own length, before that cap. The fades belong to the track, not to
+    // whatever the programme had room for — capping first and measuring after is what
+    // made a fade-out ramp down at the truncation point instead of at the real end.
+    let full_len =
+        ((trim_end_full - trim_start).max(0.0) * AUDIO_OUTPUT_SAMPLE_RATE as f64) as usize;
+    if trim_end <= trim_start {
+        return;
+    }
+    let decoded = match decode_clip_audio(&track.path, trim_start, trim_end) {
+        Ok(Some(pcm)) => pcm,
+        _ => return,
+    };
+    // The app's own range is -60..+12 dB (the inspector slider); clamping at
+    // -12 here floored every quiet bed at a tenth of the attenuation asked for.
+    // A voiceover is voice, levelled like the recording (see `loudness_gain_db`); its
+    // own gain then trims from there, exactly as the preview applies it.
+    let normalisation = match track.kind {
+        SceneAudioTrackKind::Voiceover => loudness_gain_db(&track.path),
+        SceneAudioTrackKind::Music => 0.0,
+    };
+    let gain = 10.0f32.powf((track.gain_db.clamp(-60.0, 12.0) + normalisation) / 20.0);
+    overlay_track_pcm(
+        programme,
+        &decoded,
+        offset,
+        gain,
+        track.fade_in_sec.max(0.0),
+        track.fade_out_sec.max(0.0),
+        full_len,
+        duck,
+    );
+}
+
+/// How far a music bed dips while someone speaks.
+pub const DUCK_DEPTH_DB: f32 = -10.0;
+/// A 10 ms stretch of the voice counts as speech above this RMS level. The voice is already
+/// loudness-normalised here, so speech sits well above it, and a room's noise floor — even
+/// raised by the normalisation's full boost — well below.
+const DUCK_THRESHOLD_DBFS: f32 = -35.0;
+/// Pauses shorter than this keep the music down: the gaps between words and phrases.
+const DUCK_HOLD_SEC: f64 = 0.5;
+/// The dip starts this long before the voice does, so the first syllable is already clear.
+const DUCK_ATTACK_SEC: f64 = 0.25;
+/// And takes this long to come back up once a pause outlasts the hold.
+const DUCK_RELEASE_SEC: f64 = 0.6;
+/// Resolution of the envelope: 10 ms.
+const DUCK_BLOCK: usize = AUDIO_OUTPUT_SAMPLE_RATE as usize / 100;
+
+/// The gain a music bed takes under `voice`, one linear value per `DUCK_BLOCK` of the
+/// programme: 1 in the clear, `DUCK_DEPTH_DB` while someone speaks, with straight ramps in dB
+/// between. The export holds the whole voice, so it looks ahead: the dip is already complete
+/// when the first word starts.
+fn duck_curve(voice: &PlanarPcm) -> Vec<f32> {
+    let len = voice.first().map(Vec::len).unwrap_or(0);
+    let blocks = len.div_ceil(DUCK_BLOCK);
+    let threshold = 10.0f32.powf(DUCK_THRESHOLD_DBFS / 10.0);
+    let speaking: Vec<bool> = (0..blocks)
+        .map(|block| {
+            let range = block * DUCK_BLOCK..((block + 1) * DUCK_BLOCK).min(len);
+            let samples = (range.len() * voice.len()) as f32;
+            let energy: f32 = voice
+                .iter()
+                .map(|channel| channel[range.clone()].iter().map(|s| s * s).sum::<f32>())
+                .sum();
+            energy / samples > threshold
+        })
+        .collect();
+    let blocks_of = |sec: f64| (sec * 100.0).round() as usize;
+    let (attack, hold, release) = (
+        blocks_of(DUCK_ATTACK_SEC),
+        blocks_of(DUCK_HOLD_SEC),
+        blocks_of(DUCK_RELEASE_SEC),
+    );
+    // Down from `attack` blocks before any speech until `hold` blocks after it.
+    let mut ducked = vec![false; blocks];
+    let mut last = None;
+    for block in 0..blocks {
+        if speaking[block] {
+            last = Some(block);
+        }
+        ducked[block] = last.is_some_and(|spoken| block - spoken <= hold);
+    }
+    let mut next = None;
+    for block in (0..blocks).rev() {
+        if speaking[block] {
+            next = Some(block);
+        }
+        ducked[block] |= next.is_some_and(|spoken| spoken - block <= attack);
+    }
+    let (down, up) = (
+        DUCK_DEPTH_DB / attack as f32,
+        -DUCK_DEPTH_DB / release as f32,
+    );
+    let mut db = 0.0f32;
+    ducked
+        .into_iter()
+        .map(|down_here| {
+            db = if down_here {
+                (db + down).max(DUCK_DEPTH_DB)
+            } else {
+                (db + up).min(0.0)
+            };
+            10.0f32.powf(db / 20.0)
+        })
+        .collect()
+}
+
+/// `duck_curve` at one programme sample, interpolated between its blocks so the level never
+/// steps. An empty curve is no ducking at all.
+fn duck_gain_at(curve: &[f32], sample: usize) -> f32 {
+    let block = sample / DUCK_BLOCK;
+    let Some(&from) = curve.get(block).or(curve.last()) else {
+        return 1.0;
+    };
+    let to = curve.get(block + 1).copied().unwrap_or(from);
+    from + (to - from) * (sample % DUCK_BLOCK) as f32 / DUCK_BLOCK as f32
 }
 
 /// Sum one decoded track into the programme at `offset` samples, scaled by `gain`,
@@ -1728,6 +1832,8 @@ fn overlay_track_pcm(
     // `decoded` may be shorter because the decode window was capped at the room left in the
     // programme; the ramps belong to the track, not to the room.
     full_len: usize,
+    // `duck_curve` over the programme for a music bed, empty for a voiceover.
+    duck: &[f32],
 ) {
     let programme_len = programme.first().map(Vec::len).unwrap_or(0);
     if offset >= programme_len {
@@ -1747,7 +1853,10 @@ fn overlay_track_pcm(
         let count = source.len().min(room);
         let dst = &mut programme[channel];
         for k in 0..count {
-            dst[offset + k] += source[k] * gain * fade_envelope(k, envelope_len, fade_in, fade_out);
+            dst[offset + k] += source[k]
+                * gain
+                * fade_envelope(k, envelope_len, fade_in, fade_out)
+                * duck_gain_at(duck, offset + k);
         }
     }
 }
@@ -2139,7 +2248,7 @@ mod tests {
     fn overlay_sums_at_offset_with_gain() {
         let mut programme = planar(&[0.1, 0.1, 0.1, 0.1]);
         // ×2 gain, placed at sample offset 1.
-        overlay_track_pcm(&mut programme, &planar(&[0.2, 0.2]), 1, 2.0, 0.0, 0.0, 0);
+        overlay_track_pcm(&mut programme, &planar(&[0.2, 0.2]), 1, 2.0, 0.0, 0.0, 0, &[]);
         assert_eq!(programme[0], vec![0.1, 0.5, 0.5, 0.1]);
         assert_eq!(programme[1], vec![0.1, 0.5, 0.5, 0.1]);
     }
@@ -2148,14 +2257,14 @@ mod tests {
     fn overlay_truncates_a_track_that_runs_past_the_programme() {
         let mut programme = planar(&[0.0, 0.0, 0.0]);
         // A 4-sample track placed at offset 2 has room for only 1 sample.
-        overlay_track_pcm(&mut programme, &planar(&[1.0, 1.0, 1.0, 1.0]), 2, 1.0, 0.0, 0.0, 0);
+        overlay_track_pcm(&mut programme, &planar(&[1.0, 1.0, 1.0, 1.0]), 2, 1.0, 0.0, 0.0, 0, &[]);
         assert_eq!(programme[0], vec![0.0, 0.0, 1.0]);
     }
 
     #[test]
     fn overlay_past_the_end_is_a_no_op() {
         let mut programme = planar(&[0.3, 0.3]);
-        overlay_track_pcm(&mut programme, &planar(&[1.0]), 5, 1.0, 0.0, 0.0, 0);
+        overlay_track_pcm(&mut programme, &planar(&[1.0]), 5, 1.0, 0.0, 0.0, 0, &[]);
         assert_eq!(programme[0], vec![0.3, 0.3]);
     }
 
@@ -2339,7 +2448,7 @@ mod tests {
         // A 4-sample fade-in at 48 kHz is far below one sample of real time, so
         // ask for the whole decoded length in seconds.
         let four = 4.0 / AUDIO_OUTPUT_SAMPLE_RATE as f64;
-        overlay_track_pcm(&mut programme, &decoded, 0, 1.0, four, 0.0, 0);
+        overlay_track_pcm(&mut programme, &decoded, 0, 1.0, four, 0.0, 0, &[]);
         assert_eq!(programme[0][0], 0.0);
         assert!(programme[0][1] > 0.0 && programme[0][1] < 1.0);
         assert!(programme[0][3] > programme[0][1]);
@@ -2355,7 +2464,7 @@ mod tests {
         let decoded = planar(&[1.0, 1.0, 1.0, 1.0]);
         let four = 4.0 / AUDIO_OUTPUT_SAMPLE_RATE as f64;
         // The track really runs eight samples; the programme had room for four.
-        overlay_track_pcm(&mut programme, &decoded, 0, 1.0, 0.0, four, 8);
+        overlay_track_pcm(&mut programme, &decoded, 0, 1.0, 0.0, four, 8, &[]);
         // Nothing audible has started to ramp: the fade belongs to samples 4..8, which the
         // programme never reaches.
         for k in 0..4 {
@@ -2371,7 +2480,7 @@ mod tests {
         let mut programme = planar(&[0.0]);
         let decoded = planar(&[1.0]);
         let gain = 10.0f32.powf(-40.0 / 20.0);
-        overlay_track_pcm(&mut programme, &decoded, 0, gain, 0.0, 0.0, 0);
+        overlay_track_pcm(&mut programme, &decoded, 0, gain, 0.0, 0.0, 0, &[]);
         assert!((programme[0][0] - gain).abs() < 1e-9);
         assert!(programme[0][0] < 10.0f32.powf(-12.0 / 20.0));
     }
@@ -2580,5 +2689,70 @@ mod tests {
         pcm[0][2_400] = 2.0;
         limit_peaks(&mut pcm);
         assert!((pcm[1][2_400] - 0.5 * LIMITER_CEILING / 2.0).abs() < 1e-6);
+    }
+
+    /// The music's level under a voice, in dB, at `sec` into the programme.
+    fn duck_db_at(curve: &[f32], sec: f64) -> f32 {
+        20.0 * duck_gain_at(curve, (sec * AUDIO_OUTPUT_SAMPLE_RATE as f64) as usize).log10()
+    }
+
+    #[test]
+    fn music_dips_under_the_voice_and_comes_back_up() {
+        // 2 s of room tone, 2 s of speech-level signal, 3 s of room tone.
+        let voice = tone_segments(&[(-120.0, 2.0), (-20.0, 2.0), (-120.0, 3.0)]);
+        let curve = duck_curve(&voice);
+        assert_eq!(duck_db_at(&curve, 0.5), 0.0, "in the clear");
+        // Looking ahead: already down when the first word starts, half way down half an
+        // attack earlier.
+        assert!((duck_db_at(&curve, 2.0) - DUCK_DEPTH_DB).abs() < 0.01);
+        assert!((duck_db_at(&curve, 2.0 - DUCK_ATTACK_SEC / 2.0) - DUCK_DEPTH_DB / 2.0).abs() < 0.5);
+        assert!((duck_db_at(&curve, 3.0) - DUCK_DEPTH_DB).abs() < 0.01);
+        // Held through the hold after the last word, then released over the release.
+        assert!((duck_db_at(&curve, 4.0 + DUCK_HOLD_SEC - 0.05) - DUCK_DEPTH_DB).abs() < 0.01);
+        let back = 4.0 + DUCK_HOLD_SEC + DUCK_RELEASE_SEC + 0.05;
+        assert_eq!(duck_db_at(&curve, back), 0.0, "back up once the pause is long enough");
+        // Never a step: from one 10 ms block to the next, the level moves by at most one
+        // attack increment.
+        let steepest = curve
+            .windows(2)
+            .map(|pair| (20.0 * (pair[1] / pair[0]).log10()).abs())
+            .fold(0.0f32, f32::max);
+        let attack_step = -DUCK_DEPTH_DB / (DUCK_ATTACK_SEC * 100.0) as f32;
+        assert!(steepest <= attack_step + 1e-3, "a {steepest} dB step in the envelope");
+    }
+
+    #[test]
+    fn a_breath_between_words_keeps_the_music_down() {
+        // Releasing in every gap between words is the pumping a ducker must not do.
+        let voice = tone_segments(&[(-20.0, 1.0), (-120.0, 0.3), (-20.0, 1.0)]);
+        let curve = duck_curve(&voice);
+        for sec in [1.05, 1.15, 1.25] {
+            assert!((duck_db_at(&curve, sec) - DUCK_DEPTH_DB).abs() < 0.01, "released at {sec} s");
+        }
+    }
+
+    #[test]
+    fn no_voice_leaves_the_music_alone() {
+        // Silence, and a noise floor raised by the normalisation's full boost: neither is
+        // someone speaking.
+        let floor = -50.0 + LOUDNESS_MAX_BOOST_DB as f32;
+        for voice in [tone_segments(&[(-120.0, 2.0)]), tone_segments(&[(floor, 2.0)])] {
+            assert!(duck_curve(&voice).iter().all(|&gain| gain == 1.0));
+        }
+    }
+
+    #[test]
+    fn a_music_bed_is_summed_under_the_duck_curve_and_a_voiceover_is_not() {
+        let voice = tone_segments(&[(-120.0, 1.0), (-20.0, 1.0)]);
+        let curve = duck_curve(&voice);
+        let bed = vec![vec![0.5f32; 96_000]; 2];
+        let mut ducked = vec![vec![0.0f32; 96_000]; 2];
+        overlay_track_pcm(&mut ducked, &bed, 0, 1.0, 0.0, 0.0, 0, &curve);
+        let mut flat = vec![vec![0.0f32; 96_000]; 2];
+        overlay_track_pcm(&mut flat, &bed, 0, 1.0, 0.0, 0.0, 0, &[]);
+        assert_eq!(flat[0][72_000], 0.5, "no curve, no dip");
+        assert!((ducked[0][24_000] - 0.5).abs() < 1e-6, "in the clear");
+        let under = 0.5 * 10.0f32.powf(DUCK_DEPTH_DB / 20.0);
+        assert!((ducked[0][72_000] - under).abs() < 1e-4, "under the voice: {}", ducked[0][72_000]);
     }
 }

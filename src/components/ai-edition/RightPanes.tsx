@@ -56,13 +56,14 @@ import {
 	pickOutputDims,
 } from "@/lib/ai-edition/document/outputFormat";
 import type { InsertSide } from "@/lib/ai-edition/document/transcript";
-import type {
-	AxcutAsset,
-	AxcutAudioTrack,
-	AxcutClip,
-	AxcutTranscript,
-	AxcutTrimRange,
-	AxcutWord,
+import {
+	type AxcutAsset,
+	type AxcutAudioTrack,
+	type AxcutClip,
+	type AxcutTranscript,
+	type AxcutTrimRange,
+	type AxcutWord,
+	audioTrackDefaults,
 } from "@/lib/ai-edition/schema";
 import {
 	AUDIO_GAIN_DB_LIMIT,
@@ -3662,10 +3663,10 @@ export function AudioTrackPane({ tl, onClose }: { tl: TimelineApi; onClose?: () 
 					setLiveGain(null);
 					setLiveFadeIn(null);
 					setLiveFadeOut(null);
+					// Back to what a new track of this kind starts at: a bed returns UNDER the
+					// voice, not to a 0 dB level that buries it.
 					void tl.updateAudioTrack(track.id, {
-						gainDb: 0,
-						fadeInMs: 0,
-						fadeOutMs: 0,
+						...audioTrackDefaults(track.kind),
 						muted: false,
 						loop: false,
 					});

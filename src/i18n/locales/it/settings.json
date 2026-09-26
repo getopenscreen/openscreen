@@ -267,7 +267,7 @@
 		"remove": "Elimina traccia",
 		"loop": "Ripeti",
 		"slipHint": "Alt + trascina per far scorrere l’audio all’interno",
-		"help": "Volume, dissolvenze e loop di questa traccia audio. Viene mixata sopra la registrazione nell’anteprima e nell’esportazione. Trascina la traccia sulla timeline per spostarla o ridimensionarla, oppure tieni premuto Alt e trascina per far scorrere l’audio all’interno.",
+		"help": "Volume, dissolvenze e loop di questa traccia audio. Viene mixata sopra la registrazione nell’anteprima e nell’esportazione. Una traccia musicale si abbassa da sola mentre qualcuno parla. Trascina la traccia sulla timeline per spostarla o ridimensionarla, oppure tieni premuto Alt e trascina per far scorrere l’audio all’interno.",
 		"add": "Aggiungi traccia audio",
 		"mute": "Muto"
 	},

@@ -324,6 +324,10 @@ class FakeAudioContext {
 		createdGains.push(node);
 		return node;
 	});
+	// The music ducker listens to the voice; silence here, so nothing ducks.
+	createAnalyser = vi.fn(() =>
+		Object.assign(new FakeAudioNode(), { fftSize: 2048, getFloatTimeDomainData: vi.fn() }),
+	);
 }
 
 describe("VirtualPreview imported audio track boost", () => {

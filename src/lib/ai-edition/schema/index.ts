@@ -1230,13 +1230,31 @@ export function ensureDocument(value: unknown): AxcutDocument {
 }
 
 /**
+ * The level and ramps a track starts with. A music bed sits UNDER the voice, at −18 dB,
+ * and eases in and out over a second instead of cutting in; a voiceover is voice, levelled
+ * by the export like the recording itself, so it starts flat.
+ *
+ * Applied when a track is created, and by the inspector's reset. Deliberately NOT the
+ * schema's parse defaults above: a track saved before these existed keeps the level its
+ * author set.
+ */
+export function audioTrackDefaults(
+	kind: AxcutAudioTrack["kind"],
+): Pick<AxcutAudioTrack, "gainDb" | "fadeInMs" | "fadeOutMs"> {
+	return kind === "music"
+		? { gainDb: -18, fadeInMs: 1000, fadeOutMs: 1000 }
+		: { gainDb: 0, fadeInMs: 0, fadeOutMs: 0 };
+}
+
+/**
  * Build a timeline audio track for an imported or recorded audio asset
  * (issue #350). The head is placed at `timelineStartSec` (RAW/document timeline
  * seconds — the same clock the ruler, playhead and clip `timelineStartSec` use,
  * NOT the trim-compressed output programme; the export projects it with
  * `projectRawTimelineSecToPlayback`) and the track spans the whole source file
- * unless the caller asks for a shorter `spanSec`. Parsed through the schema so
- * every default (gain, fades, loop) is applied in one place.
+ * unless the caller asks for a shorter `spanSec`. Starts at its kind's
+ * `audioTrackDefaults`, then parsed through the schema so every other default
+ * (loop, mute) is applied in one place.
  *
  * The result is UNANCHORED — `clipId` is absent. Callers place it through
  * `anchorAudioTrackFragments`, which ventilates it across the clips it covers.
@@ -1255,10 +1273,12 @@ export function createAudioTrack(input: {
 	// A track with no measurable source still needs a visible span, or the pill
 	// is zero-width and cannot be grabbed to fix.
 	const spanMs = Math.max(1, Math.round((input.spanSec ?? input.durationSec) * 1000));
+	const kind = input.kind ?? "music";
 	return audioTrackSchema.parse({
 		id: createId("audio"),
 		assetId: input.assetId,
-		kind: input.kind ?? "music",
+		kind,
+		...audioTrackDefaults(kind),
 		durationSec: input.durationSec,
 		startMs,
 		endMs: startMs + spanMs,

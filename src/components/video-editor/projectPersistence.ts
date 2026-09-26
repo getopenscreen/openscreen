@@ -8,6 +8,8 @@ import {
 	isFrameTheme,
 	type RecordingFrame,
 	readRecordingFrame,
+	WEBCAM_SIZE_MAX,
+	WEBCAM_SIZE_MIN,
 } from "@/lib/projectDefaults";
 import type { ProjectMedia } from "@/lib/recordingSession";
 import { normalizeProjectMedia } from "@/lib/recordingSession";
@@ -576,7 +578,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				: DEFAULT_WEBCAM_REACTIVE_ZOOM,
 		webcamSizePreset:
 			typeof editor.webcamSizePreset === "number" && isFiniteNumber(editor.webcamSizePreset)
-				? Math.max(10, Math.min(50, editor.webcamSizePreset))
+				? Math.max(WEBCAM_SIZE_MIN, Math.min(WEBCAM_SIZE_MAX, editor.webcamSizePreset))
 				: DEFAULT_WEBCAM_SETTINGS.sizePreset,
 		webcamPosition: normalizedWebcamPosition,
 		exportQuality:

@@ -2913,11 +2913,13 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             crate::regions::camera_fullscreen_progress_at(cam_regions, source_t, &clock);
         let cam_progress_prev =
             crate::regions::camera_fullscreen_progress_at(cam_regions, source_t_prev, &clock);
-        // rétrécissement réactif : la webcam rétrécit pendant un zoom actif (1/zoom, plancher
-        // 0.35 — parité `reactiveWebcamScale`, TS). Ignoré pendant Full Camera (voir ci-dessus).
+        // rétrécissement réactif : la webcam rétrécit pendant un zoom actif, de la MOITIÉ de ce
+        // que prendrait 1/zoom : ×0,78 au zoom par défaut (1,8), ×0,6 au zoom maximal (5). En
+        // 1/zoom elle tombait à ×0,56 au zoom par défaut et un visage ne se lisait plus. Ignoré
+        // pendant Full Camera (voir ci-dessus).
         let reactive_scale = |zoom: f32, progress: f32| -> f32 {
             if webcam_reactive && progress <= 0.0 && zoom.is_finite() && zoom > 0.0 {
-                (1.0 / zoom).clamp(0.35, 1.0)
+                ((1.0 + 1.0 / zoom) / 2.0).min(1.0)
             } else {
                 1.0
             }
@@ -6362,7 +6364,7 @@ mod tests {
     #[test]
     fn the_reactive_zoom_shrinks_the_camera_toward_its_anchor() {
         let cfg = crate::config::all().pop().expect("au moins une config");
-        // Caméra de 0,2 de côté posée par l'app, marge 0,03 ; zoom ×2 à 1,5 s → échelle 0,5.
+        // Caméra de 0,2 de côté posée par l'app, marge 0,03 ; zoom ×2 à 1,5 s → échelle 0,75.
         let camera_at = |anchor: Option<&str>, x: f32, y: f32| {
             let anchor = anchor.map(|a| format!(r#","webcamAnchor":"{a}""#)).unwrap_or_default();
             let layout = format!(
@@ -6373,15 +6375,15 @@ mod tests {
             plan_frame(&golden_input(&scene, &cfg)).w_dst
         };
         for (anchor, x, y, want) in [
-            (Some("bottom-right"), 0.77, 0.77, [0.87, 0.87]),
+            (Some("bottom-right"), 0.77, 0.77, [0.82, 0.82]),
             (Some("top-left"), 0.03, 0.03, [0.03, 0.03]),
-            (Some("bottom"), 0.4, 0.77, [0.45, 0.87]),
-            (Some("left"), 0.03, 0.4, [0.03, 0.45]),
-            (None, 0.77, 0.77, [0.82, 0.82]),
+            (Some("bottom"), 0.4, 0.77, [0.425, 0.82]),
+            (Some("left"), 0.03, 0.4, [0.03, 0.425]),
+            (None, 0.77, 0.77, [0.795, 0.795]),
         ] {
             let w = camera_at(anchor, x, y);
             let got = [w[0], w[1], w[2], w[3]];
-            let want = [want[0], want[1], 0.1, 0.1];
+            let want = [want[0], want[1], 0.15, 0.15];
             assert!(got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-5), "{anchor:?} : {got:?} au lieu de {want:?}");
         }
     }

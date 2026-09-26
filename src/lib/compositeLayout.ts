@@ -16,20 +16,6 @@ export interface RenderRect {
 	height: number;
 }
 
-/** Floor for the reactive webcam multiplier so the camera never shrinks below ~35% at deep zoom. */
-export const WEBCAM_REACTIVE_ZOOM_MIN_SCALE = 0.35;
-
-/**
- * Maps the live zoom scale to a webcam size multiplier, inversely (2x zoom, half size; 3x, a
- * third) so the camera stays out of the way while zoomed and returns to full size as zoom eases
- * back. Clamped to a floor so it never disappears. appliedScale is already eased per frame, so
- * the camera animates in sync for free.
- */
-export function reactiveWebcamScale(zoomScale: number): number {
-	const safe = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
-	return Math.max(WEBCAM_REACTIVE_ZOOM_MIN_SCALE, Math.min(1, 1 / safe));
-}
-
 export interface StyledRenderRect extends RenderRect {
 	borderRadius: number;
 	maskShape?: import("@/components/video-editor/types").WebcamMaskShape;
@@ -82,7 +68,7 @@ export type WebcamLayoutPreset =
 	| "vertical-stack"
 	| "dual-frame"
 	| "no-webcam";
-/** Webcam size as a percentage of the canvas reference dimension (10–50). */
+/** Webcam size as a percentage of the canvas reference dimension (15–50). */
 export type WebcamSizePreset = number;
 
 export interface WebcamLayoutShadow {
@@ -184,7 +170,7 @@ export interface WebcamCompositeLayout {
 	screenCover?: boolean;
 }
 
-/** Convert a webcam size percentage (10–35) to a fraction (0..1) of the reference dimension. */
+/** Convert a webcam size percentage (15–50) to a fraction (0..1) of the reference dimension. */
 export function webcamSizeToFraction(percent: number): number {
 	const safe = Number.isFinite(percent) ? percent : 25;
 	const clamped = Math.max(WEBCAM_SIZE_MIN, Math.min(WEBCAM_SIZE_MAX, safe));

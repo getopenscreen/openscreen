@@ -237,9 +237,12 @@ describe("patchEditorSettings", () => {
 		expect(read({ webcamRoundness: 4 })).toEqual(["rectangle", 1]);
 	});
 
-	it("reads a camera size past the slider's 35% as 35%", () => {
-		const doc: AxcutDocument = { ...baseDoc, legacyEditor: { webcamSizePreset: 50 } };
-		expect(getEditorSettings(doc).webcamSizePreset).toBe(35);
+	it("reads a camera size outside the slider's 15–50% into it", () => {
+		const read = (webcamSizePreset: number) =>
+			getEditorSettings({ ...baseDoc, legacyEditor: { webcamSizePreset } }).webcamSizePreset;
+		// An older build allowed 10%.
+		expect(read(10)).toBe(15);
+		expect(read(80)).toBe(50);
 	});
 
 	it("preserves a non-zero crop at the bottom-right edge", () => {

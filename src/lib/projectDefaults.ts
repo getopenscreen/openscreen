@@ -137,11 +137,12 @@ export type WebcamMask = "rectangle" | "square";
 export const DEFAULT_WEBCAM_ROUNDNESS = 0.3;
 
 /**
- * The picture-in-picture camera's size, in percent of the frame's short side. Past 35 it
- * covers the screen it is there to accompany; older builds allowed 50, read back as 35.
+ * The picture-in-picture camera's size, in percent of the frame's short side: the camera's
+ * long side, so a 16:9 camera at 50 is 28% of a 1080p frame's height. Below 15 a face no
+ * longer reads, and less still once a zoom shrinks it; older builds allowed 10, read back as 15.
  */
-export const WEBCAM_SIZE_MIN = 10;
-export const WEBCAM_SIZE_MAX = 35;
+export const WEBCAM_SIZE_MIN = 15;
+export const WEBCAM_SIZE_MAX = 50;
 
 /**
  * Reads a stored camera shape and roundness. `circle` and `rounded` were a proportion and a

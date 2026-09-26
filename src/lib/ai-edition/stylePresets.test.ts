@@ -102,7 +102,7 @@ describe("parseStylePresetAppearance", () => {
 			parseStylePresetAppearance({ ...appearance(), ...patch });
 		expect(read({ padding: 101 }).padding).toBe(100);
 		expect(read({ borderRadius: -1 }).borderRadius).toBe(0);
-		expect(read({ webcamSizePreset: 50 }).webcamSizePreset).toBe(35);
+		expect(read({ webcamSizePreset: 10 }).webcamSizePreset).toBe(15);
 		// Every preset saved with the old defaults carries a 2.5 bounce: it still applies.
 		const cursor = read({ cursor: { ...appearance().cursor, size: 10, clickBounce: 2.5 } }).cursor;
 		expect([cursor.size, cursor.clickBounce]).toEqual([6, 2]);

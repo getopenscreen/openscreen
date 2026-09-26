@@ -14,7 +14,7 @@ import {
 	type WebcamLayoutPreset,
 } from "./compositeLayout";
 import { frameFootprint, frameUnit, type Insets } from "./frameFootprint";
-import type { WebcamAnchor } from "./projectDefaults";
+import { WEBCAM_SIZE_MAX, WEBCAM_SIZE_MIN, type WebcamAnchor } from "./projectDefaults";
 
 describe("resolveWebcamReactiveZoom", () => {
 	it("honours the stored setting for picture-in-picture", () => {
@@ -156,7 +156,7 @@ describe("computeCompositeLayout", () => {
 		expect(medium!.webcamRect!.height).toBeLessThan(large!.webcamRect!.height);
 	});
 
-	it("clamps webcamSizePreset to the valid range (10–50)", () => {
+	it("clamps webcamSizePreset to the slider's range", () => {
 		const canvasSize = { width: 1920, height: 1080 };
 		const screenSize = { width: 1920, height: 1080 };
 		const webcamSize = { width: 1280, height: 720 };
@@ -165,7 +165,7 @@ describe("computeCompositeLayout", () => {
 			canvasSize,
 			screenSize,
 			webcamSize,
-			webcamSizePreset: 10,
+			webcamSizePreset: WEBCAM_SIZE_MIN,
 		});
 		const belowMin = computeCompositeLayout({
 			canvasSize,
@@ -177,7 +177,7 @@ describe("computeCompositeLayout", () => {
 			canvasSize,
 			screenSize,
 			webcamSize,
-			webcamSizePreset: 50,
+			webcamSizePreset: WEBCAM_SIZE_MAX,
 		});
 		const aboveMax = computeCompositeLayout({
 			canvasSize,
@@ -575,7 +575,7 @@ describe("computeCompositeLayout", () => {
 	// keeps the same distance from the border, whatever the camera's size.
 	it("keeps the same margin from the border at every anchor", () => {
 		const margin = Math.round(1080 * 0.02);
-		for (const size of [10, 35]) {
+		for (const size of [WEBCAM_SIZE_MIN, WEBCAM_SIZE_MAX]) {
 			const at = (webcamAnchor: WebcamAnchor) => pipAt({ webcamAnchor, webcamSizePreset: size });
 			expect(at("top-left")).toMatchObject({ x: margin, y: margin });
 			const br = at("bottom-right");
@@ -592,8 +592,10 @@ describe("computeCompositeLayout", () => {
 		}
 	});
 
-	it("caps the camera at 35% of the short side", () => {
-		expect(pipAt({ webcamSizePreset: 50 }).height).toBe(pipAt({ webcamSizePreset: 35 }).height);
+	// The size is the camera's long side: a 16:9 camera at the 50% cap is 540 x 304 in 1080p.
+	it("caps the camera at 50% of the short side", () => {
+		expect(pipAt({ webcamSizePreset: WEBCAM_SIZE_MAX })).toMatchObject({ width: 540, height: 304 });
+		expect(pipAt({ webcamSizePreset: 80 }).height).toBe(304);
 	});
 });
 

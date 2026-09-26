@@ -515,16 +515,19 @@ export function ZoomLevelControl({
 
 	return (
 		<>
-			{/* A level outside the row presses no button; the field below shows it. */}
-			{paneStack(
-				ts("zoom.level"),
-				<ChoiceRow<number>
-					label={ts("zoom.level")}
-					options={presets}
-					value={requested}
-					onChange={setScale}
-				/>,
-			)}
+			{/* A level outside the row presses no button; the field below shows it. With no
+			    preset within reach, the row goes and the field alone remains. */}
+			{presets.length > 0
+				? paneStack(
+						ts("zoom.level"),
+						<ChoiceRow<number>
+							label={ts("zoom.level")}
+							options={presets}
+							value={requested}
+							onChange={setScale}
+						/>,
+					)
+				: null}
 			{paneRow(
 				ts("zoom.customScale"),
 				<input

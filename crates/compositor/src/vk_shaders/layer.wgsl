@@ -1593,7 +1593,14 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         return vec4<f32>(layer.color.rgb * a, a);
     }
 
-    alpha = layer.color.a * alpha_mask;
+    // Le mode 5 range la POSITION de son premier stop dans color.a (`gradient_layer`), pas une
+    // opacite : un degrade est opaque, comme dans le HLSL et le MSL, qui ne lisent pas color.a.
+    // Le lire ici rendait transparent tout degrade dont le premier stop est a 0.
+    var base_alpha = layer.color.a;
+    if layer.mode > 4.5 && layer.mode < 5.5 {
+        base_alpha = 1.0;
+    }
+    alpha = base_alpha * alpha_mask;
 
     if layer.radius_px > 0.0 {
         // Feather ~1.5 px sur le bord du quad — parité exacte avec le HLSL

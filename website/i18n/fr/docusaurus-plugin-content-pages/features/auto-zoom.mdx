@@ -36,7 +36,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Screen St
 Dans son mode par défaut, Curseur éditable, OpenScreen enregistre le pointeur séparément des pixels. Il garde le curseur système hors de la vidéo et enregistre le mouvement et les clics du pointeur dans un fichier `.cursor.json` à côté d'elle. Les zooms automatiques sont construits à partir des clics de ce fichier.
 
 1. **Regrouper les clics.** Les clics espacés de moins de 3 secondes partagent un même zoom, tant qu'ils y tiennent ensemble.
-2. **Minuter chaque zoom.** Il est entièrement en place une demi-seconde avant son premier clic et se maintient 1,5 seconde après le dernier, pour que le résultat du clic reste visible. Il se maintient toujours au moins 1,8 seconde.
+2. **Minuter chaque zoom.** Il est entièrement en place une demi-seconde avant son premier clic et se maintient 1,5 seconde après le dernier, pour que le résultat du clic reste visible. Il se maintient toujours au moins 1,8 seconde. Près du début ou de la fin d'un clip, son minutage se décale pour y tenir, et il est écarté quand il ne le peut plus.
 3. **Choisir sa profondeur.** La plus profonde parmi 1,25×, 1,5× et 1,8× qui garde tous ses clics visibles, avec une marge autour d'eux.
 4. **Garder une vidéo calme.** Entre deux zooms, l'écran entier s'affiche pendant au moins 1,5 seconde. Deux zooms plus rapprochés que cela n'en font plus qu'un quand leurs clics y tiennent ensemble ; sinon, celui qui a le moins de clics est écarté. Les 2,5 premières secondes et la dernière seconde de la vidéo restent en plan large, et le clic qui a arrêté l'enregistrement est ignoré.
 

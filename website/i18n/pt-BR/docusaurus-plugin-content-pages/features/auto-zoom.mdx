@@ -36,7 +36,7 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre Screen Studio,
 No modo padrão de cursor editável, o OpenScreen grava o ponteiro separado dos pixels. Ele mantém o cursor do sistema fora do vídeo e salva o movimento e os cliques do ponteiro em um arquivo `.cursor.json` ao lado. Os zooms automáticos são construídos a partir dos cliques desse arquivo.
 
 1. **Agrupar os cliques.** Cliques com menos de 3 segundos de intervalo compartilham o mesmo zoom, desde que caibam juntos nele.
-2. **Definir o tempo de cada zoom.** Ele já está totalmente aplicado meio segundo antes do primeiro clique e se mantém por 1,5 segundo depois do último, para que o resultado do clique continue visível. Ele sempre se mantém por pelo menos 1,8 segundo.
+2. **Definir o tempo de cada zoom.** Ele já está totalmente aplicado meio segundo antes do primeiro clique e se mantém por 1,5 segundo depois do último, para que o resultado do clique continue visível. Ele sempre se mantém por pelo menos 1,8 segundo. Perto do início ou do fim de um clipe, o tempo dele se desloca para caber, e ele é descartado quando já não cabe.
 3. **Escolher a profundidade.** A maior entre 1,25×, 1,5× e 1,8× que mantém todos os cliques dele visíveis, com uma margem ao redor deles.
 4. **Manter o vídeo calmo.** Entre dois zooms, a tela inteira aparece por pelo menos 1,5 segundo. Dois zooms mais próximos que isso viram um só quando os cliques deles cabem juntos; caso contrário, o que tem menos cliques é descartado. Os primeiros 2,5 segundos e o último segundo do vídeo ficam sem zoom, e o clique que parou a gravação é ignorado.
 

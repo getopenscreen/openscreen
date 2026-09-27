@@ -32,7 +32,8 @@ const Toaster = ({ className, style, ...props }: ToasterProps) => {
 			// against the reader: an error with a long description is dismissed before it is
 			// finished, and a stack of them hides the editor with no way to clear it. The
 			// cross is placed on the END side by `src/index.css` — sonner puts it on the
-			// start side, which is not where anything else in this app closes.
+			// start side, which is not where anything else in this app closes. Its colours live
+			// there too: from `classNames` they lose to sonner's own rule.
 			closeButton
 			toastOptions={{
 				// Sonner's default is the untranslated "Close toast"; the rest of the app
@@ -46,8 +47,6 @@ const Toaster = ({ className, style, ...props }: ToasterProps) => {
 						"!h-7 !rounded-[8px] !bg-[var(--accent)] !px-2.5 !text-[13px] !text-[var(--accent-on)]",
 					cancelButton:
 						"!h-7 !rounded-[8px] !bg-[var(--surface-3)] !px-2.5 !text-[13px] !text-[var(--fg)]",
-					// The button's placement lives in src/index.css; only its colours follow the tokens.
-					closeButton: "!text-[var(--muted)] hover:!text-[var(--fg)]",
 				},
 			}}
 			{...props}

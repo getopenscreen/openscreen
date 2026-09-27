@@ -375,14 +375,20 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
 
 /* Inside the box, the chrome sonner gives the button stops making sense: a bordered,
    opaque chip reads as a badge stuck on the corner when it is overhanging, and as a second
-   surface floating on the toast when it is not. Plain icon, weight on hover only. */
+   surface floating on the toast when it is not. Plain icon, weight on hover only.
+
+   The colours are here and not in the Toaster's `classNames`: sonner sets the button's
+   colour at (0,4,0), which a Tailwind utility at (0,3,0) cannot beat, while the leading
+   `html` puts this rule at (0,4,1). Tokens, so the cross follows the toast's theme. */
 html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button] {
 	top: 8px;
 	border-color: transparent;
 	background: transparent;
+	color: var(--muted);
 	transition: background 0.12s ease-out, color 0.12s ease-out;
 }
 
 html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button]:hover {
-	background: rgb(255 255 255 / 10%);
+	background: color-mix(in oklab, var(--fg) 10%, transparent);
+	color: var(--fg);
 }

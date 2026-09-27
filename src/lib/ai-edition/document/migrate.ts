@@ -21,6 +21,7 @@ import type {
 	TrimRegion,
 	ZoomRegion,
 } from "@/components/video-editor/types";
+import { readBackgroundBlur } from "@/lib/projectDefaults";
 import type { ProjectMedia } from "@/lib/recordingSession";
 import {
 	type AxcutAnnotationRegion,
@@ -349,6 +350,9 @@ export function migrateAxcutDocumentToProjectData(input: AxcutDocument): EditorP
 	const legacy = document.legacyEditor;
 	if (legacy && typeof legacy === "object") {
 		Object.assign(editor, legacy);
+		// A document from before the amount holds only the `showBlur` switch; the default 0
+		// above would otherwise win over it once the project is read back.
+		editor.backgroundBlur = readBackgroundBlur(legacy, 0);
 	}
 
 	const reverseZoomRegions: ZoomRegion[] = (document.zoomRanges ?? []).map((region) => ({

@@ -354,6 +354,16 @@ describe("migrateAxcutDocumentToProjectData", () => {
 		expect(back.editor.webcamMaskShape).toBe("circle");
 	});
 
+	it("reads a legacyEditor blur switch as the amount it drew", () => {
+		const doc = migrateProjectDataToAxcutDocument(makeV2Project());
+		const { backgroundBlur: _amount, ...legacy } = doc.legacyEditor as Record<string, unknown>;
+		const back = migrateAxcutDocumentToProjectData({
+			...doc,
+			legacyEditor: { ...legacy, showBlur: true },
+		});
+		expect(back.editor.backgroundBlur).toBe(0.5);
+	});
+
 	it("defaults wallpaperMotion to none when legacyEditor lacks it", () => {
 		const doc = migrateProjectDataToAxcutDocument(makeV2Project());
 		const { wallpaperMotion: _omitted, ...legacy } = doc.legacyEditor as Record<string, unknown>;

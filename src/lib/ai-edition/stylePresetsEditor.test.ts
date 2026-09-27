@@ -169,6 +169,12 @@ describe("new-project look (main-process side)", () => {
 		expect(lookFromLegacyEditor(null)).toEqual({});
 	});
 
+	it("carries the old background blur switch as the amount it drew", () => {
+		expect(lookFromLegacyEditor({ showBlur: true }).backgroundBlur).toBe(0.5);
+		expect(lookFromLegacyEditor({ showBlur: false }).backgroundBlur).toBe(0);
+		expect(lookFromLegacyEditor({ showBlur: true, backgroundBlur: 0.2 }).backgroundBlur).toBe(0.2);
+	});
+
 	it("carries the old always-arrow switch of a project saved before the cursor kinds", () => {
 		const look = lookFromLegacyEditor({ cursorAlwaysArrow: true, cropRegion: { x: 0.2 } });
 		expect(getEditorSettings(docWith(look)).cursor.asArrow).toEqual(CURSOR_KIND_IDS);

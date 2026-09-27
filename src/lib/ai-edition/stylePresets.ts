@@ -460,12 +460,17 @@ export function stylePresetLegacyEditor(appearance: StylePresetAppearance): Fiel
  *  audio, format and everything else that belongs to that footage stay behind. */
 export function lookFromLegacyEditor(legacyEditor: unknown): Fields {
 	if (!isRecord(legacyEditor)) return {};
-	return Object.fromEntries(
+	const look: Fields = Object.fromEntries(
 		LOOK_LEGACY_EDITOR_KEYS.filter((key) => legacyEditor[key] !== undefined).map((key) => [
 			key,
 			legacyEditor[key],
 		]),
 	);
+	// A project from before the amount holds only the old switch, under a key the list drops.
+	if (look.backgroundBlur === undefined && typeof legacyEditor.showBlur === "boolean") {
+		look.backgroundBlur = legacyEditor.showBlur ? LEGACY_BACKGROUND_BLUR_ON : 0;
+	}
+	return look;
 }
 
 /** Validates a parsed preset file (the JSON value, not the text). */

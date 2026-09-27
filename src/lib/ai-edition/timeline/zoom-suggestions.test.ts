@@ -715,5 +715,28 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 			});
 			expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.3, cy: 0.3 }]);
 		});
+
+		it("ignores the pointer resting on Stop before that click", () => {
+			// Hover-then-Stop: the pointer sits on the button from 18.8 s, clicks at 19.8 s,
+			// and the telemetry ends at 19.9 s. That still run is a dwell, and it goes with its click.
+			const hover = Array.from({ length: 34 }, (_, i) => ({
+				timeMs: 18800 + i * 33,
+				cx: 0.5,
+				cy: 0.92,
+			}));
+			const suggestions = buildAutoZoomSuggestionsForClips({
+				cursorTelemetry: [
+					click(6000, 0.3, 0.3),
+					...hover,
+					click(19800, 0.5, 0.92),
+					{ timeMs: 19900, cx: 0.5, cy: 0.92 },
+				],
+				assetId: "a1",
+				clips: [clip("clip_1", "a1", 0, 20, 0), clip("clip_2", "a2", 0, 20, 20)],
+				existingRegions: [],
+				defaultDurationMs: 2000,
+			});
+			expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.3, cy: 0.3 }]);
+		});
 	});
 });

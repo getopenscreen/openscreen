@@ -232,9 +232,19 @@ export function buildAutoZoomSuggestions(options: {
 	}
 
 	const ignoreClicksFromMs = options.ignoreClicksFromMs ?? Infinity;
-	const dwellCandidates = detectZoomDwellCandidates(normalizedSamples);
-	const clickCandidates = detectZoomClickCandidates(normalizedSamples).filter(
+	const allClicks = detectZoomClickCandidates(normalizedSamples);
+	const clickCandidates = allClicks.filter(
 		(candidate) => candidate.centerTimeMs < ignoreClicksFromMs,
+	);
+	const ignoredClicks = allClicks.filter(
+		(candidate) => candidate.centerTimeMs >= ignoreClicksFromMs,
+	);
+	// The pointer usually rests on Stop before the click: that dwell goes with the click.
+	const dwellCandidates = detectZoomDwellCandidates(normalizedSamples).filter(
+		(dwell) =>
+			!ignoredClicks.some(
+				(click) => Math.abs(click.centerTimeMs - dwell.centerTimeMs) <= dwell.strength / 2,
+			),
 	);
 	if (dwellCandidates.length === 0 && clickCandidates.length === 0) {
 		return [];

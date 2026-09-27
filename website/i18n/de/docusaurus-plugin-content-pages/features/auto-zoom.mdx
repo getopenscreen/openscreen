@@ -36,7 +36,7 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu Screen S
 Im standardmäßigen bearbeitbaren Cursormodus zeichnet OpenScreen den Zeiger getrennt von den Pixeln auf. Es hält den Systemcursor aus dem Video heraus und speichert die Bewegung und die Klicks des Zeigers in einer `.cursor.json`-Datei daneben. Automatische Zooms werden aus den Klicks in dieser Datei gebaut.
 
 1. **Klicks gruppieren.** Klicks, die weniger als 3 Sekunden auseinanderliegen, teilen sich einen Zoom, solange sie zusammen hineinpassen.
-2. **Jeden Zoom zeitlich festlegen.** Er ist eine halbe Sekunde vor seinem ersten Klick vollständig eingezoomt und hält nach seinem letzten 1,5 Sekunden lang, damit im Bild bleibt, was der Klick bewirkt hat. Er hält immer mindestens 1,8 Sekunden lang.
+2. **Jeden Zoom zeitlich festlegen.** Er ist eine halbe Sekunde vor seinem ersten Klick vollständig eingezoomt und hält nach seinem letzten 1,5 Sekunden lang, damit im Bild bleibt, was der Klick bewirkt hat. Er hält immer mindestens 1,8 Sekunden lang. Nahe am Anfang oder Ende eines Clips verschiebt sich sein Timing, damit er hineinpasst, und er fällt weg, wenn das nicht mehr geht.
 3. **Seine Tiefe wählen.** Die tiefste von 1,25×, 1,5× und 1,8×, bei der alle seine Klicks im Bild bleiben, mit einem Rand um sie herum.
 4. **Das Video ruhig halten.** Zwischen zwei Zooms ist mindestens 1,5 Sekunden lang der ganze Bildschirm zu sehen. Zwei Zooms mit kürzerem Abstand werden zu einem, wenn ihre Klicks zusammen hineinpassen; andernfalls fällt der mit weniger Klicks weg. Die ersten 2,5 Sekunden und die letzte Sekunde des Videos bleiben in der Totalen, und der Klick, der die Aufnahme beendet hat, wird ignoriert.
 

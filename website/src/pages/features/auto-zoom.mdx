@@ -36,7 +36,7 @@ This page is published by the OpenScreen project. The Screen Studio, Cap and Cam
 In its default editable cursor mode, OpenScreen records the pointer apart from the pixels. It keeps the system cursor out of the video and saves the pointer's movement and clicks in a `.cursor.json` file next to it. Automatic zooms are built from the clicks in that file.
 
 1. **Group the clicks.** Clicks less than 3 seconds apart share one zoom, as long as they fit in it together.
-2. **Time each zoom.** It is fully in half a second before its first click and holds for 1.5 seconds after its last one, so what the click did stays in view. It always holds for at least 1.8 seconds.
+2. **Time each zoom.** It is fully in half a second before its first click and holds for 1.5 seconds after its last one, so what the click did stays in view. It always holds for at least 1.8 seconds. Near either end of a clip, its timing shifts to fit, and it is dropped when it no longer can.
 3. **Pick its depth.** The deepest of 1.25×, 1.5× and 1.8× that keeps all its clicks in view, with a margin around them.
 4. **Keep the video calm.** Between two zooms, the whole screen shows for at least 1.5 seconds. Two zooms closer than that become one when their clicks fit together; otherwise the one with fewer clicks goes. The first 2.5 seconds and the last second of the video stay wide, and the click that stopped the recording is ignored.
 

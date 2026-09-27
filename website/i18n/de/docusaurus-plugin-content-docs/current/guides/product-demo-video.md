@@ -40,7 +40,7 @@ Unter Windows hält OpenScreen das HUD und das Notizfenster aus der Aufnahme her
 
 OpenScreen nimmt mit angestrebten 60 fps auf, unter Windows und macOS bis 3840×2160. Unter Linux entspricht die Größe dem, was der Compositor liefert. Während der Aufnahme kannst du pausieren, den Take neu starten, ihn abbrechen oder stoppen.
 
-**Tempo für die Zooms.** Klicke dort, wo das Geschehen ist, und lass das Ergebnis sichtbar werden, bevor du weitermachst. Die automatischen Zooms aus Schritt 4 folgen deinen Klicks: Nah beieinanderliegende Klicks teilen sich einen Zoom, der nach dem letzten 1,5 Sekunden lang hält. Die ersten 2,5 Sekunden des Videos bleiben in der Totalen, gib dem Take also einen Moment vor dem ersten Klick.
+**Tempo für die Zooms.** Klicke dort, wo das Geschehen ist, und lass das Ergebnis sichtbar werden, bevor du weitermachst. Die automatischen Zooms aus Schritt 4 folgen deinen Klicks: Nah beieinanderliegende Klicks teilen sich einen Zoom, wenn sie zusammen hineinpassen, und er hält nach dem letzten 1,5 Sekunden lang. Die ersten 2,5 Sekunden des Videos bleiben in der Totalen, gib dem Take also einen Moment vor dem ersten Klick.
 
 **Lange Demos unter Linux.** Linux schreibt ein normales MP4, das erst beim Stoppen abgeschlossen wird. Ein Absturz mitten im Take hinterlässt also eine unlesbare Datei. Nimm stattdessen mehrere kürzere Takes auf; Schritt 5 zeigt, wie du sie zusammenfügst.
 
@@ -61,7 +61,7 @@ Der Tab **Composition** gestaltet das Bild. Sein Hintergrundabschnitt bietet 18 
 
 ## 4. Automatische Zooms hinzufügen {#4-add-automatic-zooms}
 
-OpenScreen setzt sie, sobald sich die Aufnahme im Editor öffnet: Es liest die aufgezeichneten Klicks und zoomt auf sie, ohne Netzwerk und ohne Modell. Hat sich die Aufnahme ohne sie geöffnet, öffne in der Werkzeugleiste der Zeitleiste **Auto-enhance** und wähle **Automatic zooms**. Setzt der Durchlauf nichts, sagt OpenScreen dir das. Die üblichen Ursachen sind eine Aufnahme ohne aufgezeichnete Klicks, Klicks nur in ihren ersten oder letzten Sekunden oder vorhandene Zooms, die sie schon abdecken.
+OpenScreen setzt sie, sobald sich die Aufnahme im Editor öffnet: Es liest die aufgezeichneten Klicks und zoomt auf sie, ohne Netzwerk und ohne Modell. Hat sich die Aufnahme ohne sie geöffnet, öffne in der Werkzeugleiste der Zeitleiste **Auto-enhance** und wähle **Automatic zooms**. Setzt der Durchlauf nichts, sagt OpenScreen dir das. Die üblichen Ursachen sind eine Aufnahme ohne aufgezeichnete Klicks, Klicks nur in ihren ersten oder letzten Sekunden oder vorhandene Zooms, die sie schon abdecken oder zu nah an ihnen liegen.
 
 Prüfe die Zooms anschließend. Klicke auf einen Zoom, um seine Stufe (von 1.25× bis 5×), seinen Fokusmodus (Auto folgt dem Cursor, Manual hält einen festen Punkt) und eine optionale 3D-Kamera einzustellen. Mit `Z` fügst du einen Zoom von Hand hinzu, mit `Ctrl/Cmd+D` löschst du einen, den du nicht willst.
 

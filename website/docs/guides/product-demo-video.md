@@ -40,7 +40,7 @@ On Windows, OpenScreen keeps the HUD and the Notes window out of the capture. On
 
 OpenScreen captures at a 60 fps target, up to 3840×2160 on Windows and macOS. On Linux the size is whatever the compositor hands over. While recording you can pause, restart the take, cancel it, or stop.
 
-**Pace for the zooms.** Click where the action is, and let the result show before you move on. The automatic zooms in step 4 follow your clicks: clicks close together share one zoom, which holds for 1.5 seconds after the last one. The first 2.5 seconds of the video stay wide, so give the take a moment before the first click.
+**Pace for the zooms.** Click where the action is, and let the result show before you move on. The automatic zooms in step 4 follow your clicks: clicks close together share one zoom when they fit in it together, and it holds for 1.5 seconds after the last one. The first 2.5 seconds of the video stay wide, so give the take a moment before the first click.
 
 **Long demos on Linux.** Linux writes a regular MP4 that is only finalized when you stop, so a crash mid-take leaves an unreadable file. Record several shorter takes instead; step 5 shows how to join them.
 
@@ -61,7 +61,7 @@ The **Composition** facet styles the frame. Its background section offers 18 bui
 
 ## 4. Add automatic zooms
 
-OpenScreen adds them when the take opens in the editor: it reads the recorded clicks and zooms in on them, with no network and no model. If the take opened without them, open **Auto-enhance** in the timeline toolbar and choose **Automatic zooms**. If it places nothing, it tells you so. The usual causes are a recording without recorded clicks, clicks only in its first or last seconds, or existing zooms that already cover them.
+OpenScreen adds them when the take opens in the editor: it reads the recorded clicks and zooms in on them, with no network and no model. If the take opened without them, open **Auto-enhance** in the timeline toolbar and choose **Automatic zooms**. If it places nothing, it tells you so. The usual causes are a recording without recorded clicks, clicks only in its first or last seconds, or existing zooms that already cover them or sit too close to them.
 
 Then review them. Click a zoom to set its level (from 1.25× to 5×), its focus mode (Auto follows the cursor, Manual holds a fixed point) and an optional 3D camera. Press `Z` to add a zoom by hand, and `Ctrl/Cmd+D` to delete one you do not want.
 

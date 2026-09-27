@@ -40,7 +40,7 @@ En Windows, OpenScreen deja el HUD y la ventana de notas fuera de la captura. En
 
 OpenScreen captura con un objetivo de 60 fps, hasta 3840×2160 en Windows y macOS. En Linux, el tamaño es el que entregue el compositor. Mientras grabas puedes pausar, reiniciar la toma, cancelarla o detener la grabación.
 
-**Ritmo pensado para los zooms.** Haz clic donde ocurre la acción y deja que se vea el resultado antes de seguir. Los zooms automáticos del paso 4 siguen tus clics: los clics cercanos entre sí comparten un mismo zoom, que se mantiene 1.5 segundos después del último. Los primeros 2.5 segundos del video se mantienen sin zoom, así que deja correr la toma un momento antes del primer clic.
+**Ritmo pensado para los zooms.** Haz clic donde ocurre la acción y deja que se vea el resultado antes de seguir. Los zooms automáticos del paso 4 siguen tus clics: los clics cercanos entre sí comparten un mismo zoom cuando caben juntos en él, y el zoom se mantiene 1.5 segundos después del último. Los primeros 2.5 segundos del video se mantienen sin zoom, así que deja correr la toma un momento antes del primer clic.
 
 **Demos largas en Linux.** Linux escribe un MP4 normal que solo se finaliza cuando detienes la grabación, así que un cierre inesperado a mitad de la toma deja un archivo ilegible. Mejor graba varias tomas más cortas; el paso 5 muestra cómo unirlas.
 
@@ -61,7 +61,7 @@ El panel **Composición** da estilo al cuadro. Su sección de fondo ofrece 18 fo
 
 ## 4. Agrega zooms automáticos {#4-add-automatic-zooms}
 
-OpenScreen los agrega cuando la toma se abre en el editor: lee los clics grabados y hace zoom en ellos, sin red y sin modelo. Si la toma se abrió sin ellos, abre **Mejora automática** en la barra de herramientas de la línea de tiempo y elige **Zooms automáticos**. Si no coloca nada, te lo indica. Las causas habituales son una grabación sin clics registrados, clics solo en sus primeros o últimos segundos, o zooms existentes que ya los cubren.
+OpenScreen los agrega cuando la toma se abre en el editor: lee los clics grabados y hace zoom en ellos, sin red y sin modelo. Si la toma se abrió sin ellos, abre **Mejora automática** en la barra de herramientas de la línea de tiempo y elige **Zooms automáticos**. Si no coloca nada, te lo indica. Las causas habituales son una grabación sin clics registrados, clics solo en sus primeros o últimos segundos, o zooms existentes que ya los cubren o están demasiado cerca de ellos.
 
 Luego revísalos. Haz clic en un zoom para definir su nivel (de 1.25× a 5×), su modo de enfoque (Auto sigue al cursor, Manual mantiene un punto fijo) y una cámara 3D opcional. Presiona `Z` para agregar un zoom a mano, y `Ctrl/Cmd+D` para eliminar uno que no quieras.
 

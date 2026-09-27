@@ -424,6 +424,24 @@ describe("fresh-recording auto-zoom", () => {
 		}
 	});
 
+	// The prefs read yields, and the user can open another project before it answers.
+	// That project is not the take's: nothing is written to it and the hand-off survives.
+	it("leaves a project opened during the prefs read alone, and keeps the hand-off", async () => {
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		const opened = documentWithClip();
+		const other = { ...opened, project: { ...opened.project, id: "p_other" } };
+		stubRecordingPrefsBridge(async () => {
+			useProjectStore.setState({ document: other });
+			return { autoZoomEnabled: true };
+		});
+		const next = await applyPendingFreshRecordingAutoZooms(documentWithClip(), {
+			getTelemetry: async () => dwell(4000, 0.5, 0.5),
+			createId: (prefix) => `${prefix}_test`,
+		});
+		expect(next).toBe(other);
+		expect(consumeFreshRecordingAutoZoomPending()).toBe(true);
+	});
+
 	// The stop handler awaits `writePendingCursorTelemetry` before it publishes the
 	// session, so the sidecar is on disk by the time a take can be imported. An empty
 	// read is therefore the take's real answer, not a mid-flush one, and leaving the

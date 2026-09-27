@@ -175,11 +175,14 @@ export async function applyPendingFreshRecordingAutoZooms(
 		return document;
 	}
 	const enabled = deps.enabled ?? (await readAutoZoomPref(deps.prefsTimeoutMs));
+	const start = liveDocument(document);
+	// The read yields. A project opened meanwhile is not this take's to decorate, and
+	// not the place to spend its hand-off either: the pass that comes back with it will.
+	if (start.project.id !== document.project.id) return start;
 	if (!enabled) {
 		clearFreshRecordingAutoZoomPending();
-		return liveDocument(document);
+		return start;
 	}
-	const start = liveDocument(document);
 	if (markDecoratedIfZoomed(start)) return start;
 	if (!canApplyFreshRecordingAutoZooms(start)) return start;
 

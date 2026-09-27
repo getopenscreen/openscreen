@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "Automatisch verbessern",
 		"automaticZooms": "Automatische Zooms",
-		"automaticZoomsHint": "Aus der aufgezeichneten Cursorbewegung",
+		"automaticZoomsHint": "Aus den aufgezeichneten Klicks",
 		"smartZoomsAndCuts": "Smarte Schnitte",
 		"smartZoomsAndCutsHint": "Mit KI",
 		"timelineTools": "Timeline-Werkzeuge",
@@ -76,7 +76,7 @@
 		"dropToAdd": "Ablegen, um zur Timeline hinzuzufügen",
 		"importRecordingFirst": "Importiere zuerst eine Aufnahme",
 		"noAutoZoomMoments": "Keine Auto-Zoom-Momente gefunden",
-		"noAutoZoomMomentsDescription": "Diese Aufnahme enthält keine Cursordaten, oder bestehende Zooms decken die aktiven Momente bereits ab.",
+		"noAutoZoomMomentsDescription": "Diese Aufnahme enthält keine aufgezeichneten Klicks oder keinen, der Platz für einen Zoom lässt.",
 		"addedAutoZoom": "{{count}} automatischer Zoom hinzugefügt",
 		"addedAutoZoomPlural": "{{count}} automatische Zooms hinzugefügt",
 		"autoZoomFailed": "Auto-Zoom fehlgeschlagen",

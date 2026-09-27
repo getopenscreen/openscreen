@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "Automatické vylepšení",
 		"automaticZooms": "Automatická přiblížení",
-		"automaticZoomsHint": "Z zaznamenaného pohybu kurzoru",
+		"automaticZoomsHint": "Ze zaznamenaných kliknutí",
 		"smartZoomsAndCuts": "Chytré střihy",
 		"smartZoomsAndCutsHint": "S AI",
 		"timelineTools": "Nástroje časové osy",
@@ -76,7 +76,7 @@
 		"dropToAdd": "Přetáhněte pro přidání na časovou osu",
 		"importRecordingFirst": "Nejprve importujte nahrávku",
 		"noAutoZoomMoments": "Žádné momenty pro automatické přiblížení nenalezeny",
-		"noAutoZoomMomentsDescription": "Tato nahrávka nemá data o pohybu kurzoru nebo existující přiblížení již pokrývají aktivní momenty.",
+		"noAutoZoomMomentsDescription": "Tato nahrávka neobsahuje žádná zaznamenaná kliknutí, nebo žádné, u kterého je místo pro přiblížení.",
 		"addedAutoZoom": "Přidáno {{count}} automatické přiblížení",
 		"addedAutoZoomPlural": "Přidáno {{count}} automatických přiblížení",
 		"autoZoomFailed": "Automatické přiblížení selhalo",

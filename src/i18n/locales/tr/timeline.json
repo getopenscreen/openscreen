@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "Otomatik iyileştirme",
 		"automaticZooms": "Otomatik yakınlaştırmalar",
-		"automaticZoomsHint": "Kaydedilen imleç hareketinden",
+		"automaticZoomsHint": "Kaydedilen tıklamalardan",
 		"smartZoomsAndCuts": "Akıllı kırpma",
 		"smartZoomsAndCutsHint": "Yapay zeka ile",
 		"timelineTools": "Zaman çizelgesi araçları",
@@ -76,7 +76,7 @@
 		"dropToAdd": "Zaman çizelgesine eklemek için bırakın",
 		"importRecordingFirst": "Önce bir kayıt içe aktarın",
 		"noAutoZoomMoments": "Otomatik yakınlaştırma anı bulunamadı",
-		"noAutoZoomMomentsDescription": "Bu kayıtta imleç hareket verisi yok veya mevcut yakınlaştırmalar zaten yoğun anları kapsıyor.",
+		"noAutoZoomMomentsDescription": "Bu kayıtta kaydedilmiş tıklama yok ya da hiçbiri için yakınlaştırmaya yer yok.",
 		"addedAutoZoom": "{{count}} otomatik yakınlaştırma eklendi",
 		"addedAutoZoomPlural": "{{count}} otomatik yakınlaştırma eklendi",
 		"autoZoomFailed": "Otomatik yakınlaştırma başarısız oldu",

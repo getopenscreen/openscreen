@@ -6,9 +6,8 @@ import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "../document/ids";
 import type { AxcutAsset, AxcutDocument } from "../schema";
 import { anchorRegionsWithDerivedMs } from "./timelineMap";
+import { effectiveZoomScale } from "./zoom-scale";
 import { type AutoZoomSuggestion, buildAutoZoomSuggestionsForClips } from "./zoom-suggestions";
-
-export const AUTO_ZOOM_DEFAULT_DURATION_MS = 2000;
 
 /** Which assets to read telemetry for. The wand takes every video on the document;
  *  the fresh-recording import narrows it to the take it is pending on, so a project
@@ -20,10 +19,6 @@ export async function collectAutoZoomSuggestionsForDocument(
 	getTelemetry: (videoPath: string) => Promise<CursorTelemetryPoint[] | null | undefined>,
 	includeAsset: AutoZoomAssetFilter = () => true,
 ): Promise<AutoZoomSuggestion[]> {
-	const existingRegions = document.zoomRanges.map((region) => ({
-		startMs: region.startMs,
-		endMs: region.endMs,
-	}));
 	const assetsWithClips = document.assets.filter(
 		(asset) =>
 			asset.kind === "video" &&
@@ -31,19 +26,23 @@ export async function collectAutoZoomSuggestionsForDocument(
 			includeAsset(asset) &&
 			document.timeline.clips.some((clip) => clip.assetId === asset.id),
 	);
-	const perSource = await Promise.all(
-		assetsWithClips.map(async (asset) => {
-			const telemetry = (await getTelemetry(asset.originalPath)) ?? [];
-			return buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: telemetry,
-				assetId: asset.id,
-				clips: document.timeline.clips,
-				existingRegions,
-				defaultDurationMs: AUTO_ZOOM_DEFAULT_DURATION_MS,
-			});
-		}),
+	// Read in parallel, planned in one pass: two recordings' zooms must keep clear of each other too.
+	const telemetryByAssetId = new Map(
+		await Promise.all(
+			assetsWithClips.map(
+				async (asset) => [asset.id, (await getTelemetry(asset.originalPath)) ?? []] as const,
+			),
+		),
 	);
-	return perSource.flat();
+	return buildAutoZoomSuggestionsForClips({
+		telemetryByAssetId,
+		clips: document.timeline.clips,
+		existingRegions: document.zoomRanges.map((region) => ({
+			startMs: region.startMs,
+			endMs: region.endMs,
+			scale: effectiveZoomScale(region),
+		})),
+	});
 }
 
 /**
@@ -110,7 +109,7 @@ export function appendAutoZoomSuggestions(
 					id: makeId("zoom"),
 					startMs: Math.round(suggestion.span.start),
 					endMs: Math.round(suggestion.span.end),
-					depth: 3 as const,
+					depth: suggestion.depth,
 					focus: { cx: suggestion.focus.cx, cy: suggestion.focus.cy },
 					focusMode: "auto" as const,
 				},

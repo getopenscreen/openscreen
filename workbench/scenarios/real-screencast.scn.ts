@@ -30,7 +30,7 @@
 //     single uninterrupted block from 23.41 to 30.99.
 //   • the pointer is not still there either. It sweeps: cx 0.32 → 0.63 at a
 //     constant cy ≈ 0.50 between 24.1 and 29.2 s. A stillness detector — the
-//     one the magic wand uses — is blind to it BY CONSTRUCTION, and the
+//     one the magic wand used before clicks — is blind to it BY CONSTRUCTION, and the
 //     measurement in `cursor-track.ts` says so: 8 false positives out of 16
 //     dwells, and this zone fragmented into two one-second blips.
 //

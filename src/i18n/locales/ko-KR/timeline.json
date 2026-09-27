@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "자동 향상",
 		"automaticZooms": "자동 줌",
-		"automaticZoomsHint": "녹화된 커서 움직임 기반",
+		"automaticZoomsHint": "녹화된 클릭 기반",
 		"smartZoomsAndCuts": "스마트 컷",
 		"smartZoomsAndCutsHint": "AI 사용",
 		"timelineTools": "타임라인 도구",
@@ -76,7 +76,7 @@
 		"dropToAdd": "타임라인에 추가하려면 놓으세요",
 		"importRecordingFirst": "먼저 녹화 파일을 가져오세요",
 		"noAutoZoomMoments": "자동 줌 순간을 찾을 수 없음",
-		"noAutoZoomMomentsDescription": "이 녹화에는 커서 이동 데이터가 없거나 기존 줌이 이미 주요 순간을 다루고 있습니다.",
+		"noAutoZoomMomentsDescription": "이 녹화에는 기록된 클릭이 없거나, 줌을 넣을 여유가 있는 클릭이 없습니다.",
 		"addedAutoZoom": "자동 줌 {{count}}개가 추가되었습니다",
 		"addedAutoZoomPlural": "자동 줌 {{count}}개가 추가되었습니다",
 		"autoZoomFailed": "자동 줌 실패",

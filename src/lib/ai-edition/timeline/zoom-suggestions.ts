@@ -1,22 +1,21 @@
-// Cursor-telemetry-driven auto-zoom suggestions. Pure, no DOM/IPC.
+// Cursor-telemetry-driven auto-zoom. Pure, no DOM/IPC.
 //
-// Ported from main's `src/components/video-editor/timeline/zoomSuggestionUtils.ts`
-// (the legacy editor's "magic wand" auto-zoom) into the ai-edition timeline
-// module. This is NOT an AI feature — it's a deterministic detector over
-// recorded cursor movement: stretches where the cursor sits still become
-// zoom-in candidates, focused on the average cursor position during the dwell,
-// and so do recorded clicks, focused on the click itself (issue #699).
+// Ported from main's `src/components/video-editor/timeline/zoomSuggestionUtils.ts` (the legacy
+// editor's "magic wand"), since rewritten as a planner. This is NOT an AI feature: it is a
+// deterministic pass over the clicks recorded with a take, which thinks in shots the way an
+// editor would. The video opens on the whole screen. Clicks close in time and in space share one
+// zoom, which holds while the camera follows the cursor. A zoom never comes straight back after
+// leaving. The video ends on the whole screen.
+//
+// A still pointer is no reason to zoom: at rest it sits far from where the viewer looks, and
+// Screen Studio, Cap and Tella all zoom on clicks alone. A take recorded without clicks gets no
+// automatic zoom.
 
 import type { CursorTelemetryPoint, ZoomFocus } from "@/components/video-editor/types";
 import { zoomTransitionMs } from "@/lib/zoomMath/constants";
 import type { AxcutClip } from "../schema";
-import { DEFAULT_ZOOM_DEPTH, ZOOM_DEPTH_SCALES } from "./zoom-scale";
+import { DEFAULT_ZOOM_DEPTH, ZOOM_DEPTH_SCALES, type ZoomDepth } from "./zoom-scale";
 
-export const MIN_DWELL_DURATION_MS = 450;
-export const MAX_DWELL_DURATION_MS = 2600;
-export const DWELL_MOVE_THRESHOLD = 0.02;
-/** Minimum spacing between two accepted suggestion centres. */
-export const SUGGESTION_SPACING_MS = 1800;
 /** The video opens on the whole screen: no zoom starts moving in before this. */
 export const OPENING_WIDE_MS = 2500;
 /** And it ends on it: the last zoom is fully back out this long before the end. */
@@ -27,11 +26,33 @@ export const CLOSING_WIDE_MS = 1000;
  * never shows either.
  */
 export const STOP_CLICK_GUARD_MS = 1000;
+/** Clicks closer than this in time share one zoom, when they fit in it together. */
+export const SHOT_MERGE_GAP_MS = 3000;
+/** A zoom is fully in this long before its first click... */
+export const SHOT_LEAD_MS = 500;
+/** ...and holds this long after its last one, to show what the click did. */
+export const SHOT_TAIL_MS = 1500;
+/** The shortest time a zoom holds, fully in. */
+export const MIN_SHOT_HOLD_MS = 1800;
+/** The shortest wide shot between two zooms, ramps excluded. Less reads as a yo-yo. */
+export const MIN_WIDE_BETWEEN_MS = 1500;
+/** The margin kept around the clicks a zoom frames, as a fraction of the frame. */
+export const SHOT_FIT_MARGIN = 0.12;
+/** The depths a zoom may take, shallowest first: 1.25×, 1.5×, 1.8×. */
+const SHOT_DEPTHS: readonly ZoomDepth[] = [1, 2, 3];
 
-export interface ZoomDwellCandidate {
-	centerTimeMs: number;
+export interface AutoZoomSuggestion {
+	span: { start: number; end: number };
 	focus: ZoomFocus;
-	strength: number;
+	depth: ZoomDepth;
+}
+
+/** A zoom already on the timeline: the plan keeps clear of it and never moves it. */
+export interface ReservedZoom {
+	startMs: number;
+	endMs: number;
+	/** Its effective scale, which sets how long its ramps last. The default depth's if omitted. */
+	scale?: number;
 }
 
 function normalizeTelemetrySample(
@@ -60,70 +81,9 @@ export function normalizeCursorTelemetry(
 		.map((sample) => normalizeTelemetrySample(sample, totalMs));
 }
 
-/**
- * `maxDwellDurationMs` exists for ONE caller and defaults to the magic wand's
- * own ceiling so that caller is untouched.
- *
- * ponytail: the ceiling REJECTS a run outright rather than splitting it, so a
- * cursor parked for eight seconds while the user reads the screen produces no
- * candidate at all. That is a defensible auto-zoom policy — a nine-second zoom
- * is not a zoom — and an indefensible reporting policy: the moments it drops are
- * precisely the ones a human would name first if asked "where did the pointer
- * sit?". The digest passes `Infinity`; nothing else does.
- */
-export function detectZoomDwellCandidates(
-	samples: CursorTelemetryPoint[],
-	maxDwellDurationMs: number = MAX_DWELL_DURATION_MS,
-): ZoomDwellCandidate[] {
-	if (samples.length < 2) {
-		return [];
-	}
-
-	const dwellCandidates: ZoomDwellCandidate[] = [];
-	let runStart = 0;
-
-	const pushRunIfDwell = (startIndex: number, endIndexExclusive: number) => {
-		if (endIndexExclusive - startIndex < 2) {
-			return;
-		}
-
-		const start = samples[startIndex];
-		const end = samples[endIndexExclusive - 1];
-		const runDuration = end.timeMs - start.timeMs;
-		if (runDuration < MIN_DWELL_DURATION_MS || runDuration > maxDwellDurationMs) {
-			return;
-		}
-
-		const runSamples = samples.slice(startIndex, endIndexExclusive);
-		const avgCx = runSamples.reduce((sum, sample) => sum + sample.cx, 0) / runSamples.length;
-		const avgCy = runSamples.reduce((sum, sample) => sum + sample.cy, 0) / runSamples.length;
-
-		dwellCandidates.push({
-			centerTimeMs: Math.round((start.timeMs + end.timeMs) / 2),
-			focus: { cx: avgCx, cy: avgCy },
-			strength: runDuration,
-		});
-	};
-
-	for (let index = 0; index < samples.length; index += 1) {
-		if (samples[index].visible === false) {
-			pushRunIfDwell(runStart, index);
-			runStart = index + 1;
-			continue;
-		}
-		if (index <= runStart) continue;
-		const prev = samples[index - 1];
-		const curr = samples[index];
-		const distance = Math.hypot(curr.cx - prev.cx, curr.cy - prev.cy);
-
-		if (distance > DWELL_MOVE_THRESHOLD) {
-			pushRunIfDwell(runStart, index);
-			runStart = index;
-		}
-	}
-	pushRunIfDwell(runStart, samples.length);
-
-	return dwellCandidates;
+interface RecordedClick {
+	timeMs: number;
+	focus: ZoomFocus;
 }
 
 /** The recorded interactions that count as a click; `move` and `mouseup` do not. */
@@ -131,14 +91,11 @@ const CLICK_INTERACTION_TYPES: ReadonlySet<NonNullable<CursorTelemetryPoint["int
 	new Set(["click", "double-click", "right-click", "middle-click"]);
 
 /**
- * Clicks are zoom candidates in their own right (issue #699): a click made while the
- * pointer is still moving forms no dwell, yet it is exactly the moment a viewer wants
- * magnified. The candidate is the click sample itself — its time, its position — and
- * `strength` is 0 because a click has no duration to rank by; that only ever breaks
- * ties between two clicks, where the stable sort keeps the earlier one.
+ * The clicks a viewer sees (issue #699), at the click's own time and position. A press the
+ * cursor hides during is a drag the app took over, a slider or a scrubbed field, not a click.
  */
-function detectZoomClickCandidates(samples: CursorTelemetryPoint[]): ZoomDwellCandidate[] {
-	const candidates: ZoomDwellCandidate[] = [];
+function detectClicks(samples: CursorTelemetryPoint[]): RecordedClick[] {
+	const clicks: RecordedClick[] = [];
 	// A press without its own mouse-up sample has no known release: PipeWire and older sidecars
 	// record none, and the Windows and macOS samplers fold a release into the press sample when both
 	// land in one tick. A hidden sample on the next sampler tick still identifies a slider press; a
@@ -153,10 +110,9 @@ function detectZoomClickCandidates(samples: CursorTelemetryPoint[]): ZoomDwellCa
 			hiddenAtMs !== null &&
 			(released || hiddenAtMs - pendingClick.timeMs <= UNRELEASED_PRESS_GRACE_MS);
 		if (!hiddenDuringPress) {
-			candidates.push({
-				centerTimeMs: pendingClick.timeMs,
+			clicks.push({
+				timeMs: pendingClick.timeMs,
 				focus: { cx: pendingClick.cx, cy: pendingClick.cy },
-				strength: 0,
 			});
 		}
 		pendingClick = null;
@@ -175,216 +131,292 @@ function detectZoomClickCandidates(samples: CursorTelemetryPoint[]): ZoomDwellCa
 		}
 	}
 	finishPress(false);
-	return candidates;
+	return clicks;
 }
 
-export interface AutoZoomSuggestion {
-	span: { start: number; end: number };
-	focus: ZoomFocus;
+function visibleClicks(
+	samples: CursorTelemetryPoint[],
+	totalMs: number,
+	ignoreFromMs: number,
+): RecordedClick[] {
+	return detectClicks(normalizeCursorTelemetry(samples, totalMs)).filter(
+		(click) => click.timeMs < ignoreFromMs,
+	);
+}
+
+/** When the recording stopped: its telemetry runs until the take ends. */
+function lastSampleMs(samples: CursorTelemetryPoint[]): number {
+	let last = 0;
+	for (const sample of samples) {
+		if (Number.isFinite(sample.timeMs)) last = Math.max(last, sample.timeMs);
+	}
+	return last;
+}
+
+interface Box {
+	minX: number;
+	maxX: number;
+	minY: number;
+	maxY: number;
+}
+
+interface Shot {
+	start: number;
+	end: number;
+	depth: ZoomDepth;
+	/** Where its clicks fall, and how many: the weight when two shots compete. */
+	box: Box;
+	clicks: number;
+	/** Two shots merge only on one clip: a zoom does not hold across a cut. */
+	clip?: string;
+}
+
+function boxAround(focus: ZoomFocus): Box {
+	return { minX: focus.cx, maxX: focus.cx, minY: focus.cy, maxY: focus.cy };
+}
+
+function union(a: Box, b: Box): Box {
+	return {
+		minX: Math.min(a.minX, b.minX),
+		maxX: Math.max(a.maxX, b.maxX),
+		minY: Math.min(a.minY, b.minY),
+		maxY: Math.max(a.maxY, b.maxY),
+	};
+}
+
+/** The deepest of `SHOT_DEPTHS` that shows the whole box with its margin, or null. */
+function fitDepth(box: Box): ZoomDepth | null {
+	const size = Math.max(box.maxX - box.minX, box.maxY - box.minY) + 2 * SHOT_FIT_MARGIN;
+	let fit: ZoomDepth | null = null;
+	for (const depth of SHOT_DEPTHS) {
+		if (ZOOM_DEPTH_SCALES[depth] * size <= 1) fit = depth;
+	}
+	return fit;
 }
 
 /**
- * Build non-overlapping zoom suggestions from cursor telemetry: detect dwell moments
- * and recorded clicks, space by SUGGESTION_SPACING_MS, drop any overlapping an
- * existing region. Clicks are honoured FIRST, so only an ACCEPTED click folds the
- * dwells within suggestion spacing of it — the acceptance loop rejects those dwells
- * against the accepted click's centre — while a click that spacing or an existing
- * region rejects leaves its nearby dwells standing as the fallback. One recorded
- * click still yields ONE zoom anchored on the click's own time and position
- * (issue #699). Pure, shared by the magic-wand toggle and the on-load auto-suggest pass.
+ * One axis's clicks as timed shots. `wideUntilMs` and `wideFromMs` keep the ends of the video
+ * on the whole screen: a zoom starts moving in no earlier than the first and is back out by the
+ * second, ramps included. A shot the bounds leave too short a hold, or none of its clicks, is
+ * dropped: a zoom arriving after the fact shows nothing.
+ */
+function planShots(
+	clicks: RecordedClick[],
+	totalMs: number,
+	wideUntilMs: number,
+	wideFromMs: number,
+): Shot[] {
+	const groups: { times: number[]; box: Box }[] = [];
+	for (const click of clicks) {
+		const group = groups[groups.length - 1];
+		if (group && click.timeMs - group.times[group.times.length - 1] <= SHOT_MERGE_GAP_MS) {
+			const box = union(group.box, boxAround(click.focus));
+			if (fitDepth(box) !== null) {
+				group.times.push(click.timeMs);
+				group.box = box;
+				continue;
+			}
+		}
+		groups.push({ times: [click.timeMs], box: boxAround(click.focus) });
+	}
+
+	const shots: Shot[] = [];
+	for (const { times, box } of groups) {
+		// A group only grows while it fits, so it always has a depth.
+		const depth = fitDepth(box) ?? SHOT_DEPTHS[0];
+		const ramp = zoomTransitionMs(ZOOM_DEPTH_SCALES[depth]);
+		const earliest = Math.max(0, Math.ceil(wideUntilMs + ramp));
+		const latest = Math.min(totalMs, Math.floor(wideFromMs - ramp));
+		const first = times[0];
+		const last = times[times.length - 1];
+		// Near the end of the axis, the zoom arrives earlier rather than holding too briefly.
+		const start = Math.max(
+			Math.min(Math.round(first - SHOT_LEAD_MS), latest - MIN_SHOT_HOLD_MS),
+			earliest,
+		);
+		const end = Math.min(
+			Math.max(Math.round(last + SHOT_TAIL_MS), start + MIN_SHOT_HOLD_MS),
+			latest,
+		);
+		if (end - start < MIN_SHOT_HOLD_MS) continue;
+		if (!times.some((time) => time >= start && time <= end)) continue;
+		shots.push({ start, end, depth, box, clicks: times.length });
+	}
+	return shots;
+}
+
+/**
+ * No yo-yo: between two zooms, a real wide shot or none at all. Two shots too close merge when
+ * they share a clip and fit in one zoom together; otherwise the one with fewer clicks goes, the
+ * later one on a tie. A zoom already on the timeline never moves: a shot too close to it goes.
  *
- * `wideUntilMs` and `wideFromMs` keep the ends of the video on the whole screen: a zoom
- * starts moving in no earlier than the first and is back out by the second, ramps
- * included. A zoom those bounds push off its own moment is dropped rather than shown
- * after the fact. `ignoreClicksFromMs` drops the click that stopped the recording.
- * All three are on the telemetry's axis, and default to no bound.
+ * ponytail: the gap is measured in timeline ms, while the renderer plays ramps on the screen
+ * clock, so inside a speed region the real wide shot differs. Map through `screenTimeMs` if a
+ * take with speed regions ever shows a yo-yo.
+ */
+function resolveShots(shots: Shot[], reserved: ReservedZoom[]): Shot[] {
+	const plan = [...shots];
+	const fixed = reserved.map((zoom) => ({
+		start: zoom.startMs,
+		end: zoom.endMs,
+		scale: zoom.scale ?? ZOOM_DEPTH_SCALES[DEFAULT_ZOOM_DEPTH],
+		shot: null,
+	}));
+	for (;;) {
+		const spans = [
+			...plan.map((shot) => ({
+				start: shot.start,
+				end: shot.end,
+				scale: ZOOM_DEPTH_SCALES[shot.depth],
+				shot,
+			})),
+			...fixed,
+		].sort((a, b) => a.start - b.start);
+		// Each span against the one before it that ends latest, ramp included: a long zoom
+		// reaches past its neighbours, and two placed zooms may even overlap each other.
+		const outOf = (span: (typeof spans)[number]) => span.end + zoomTransitionMs(span.scale);
+		let reach: (typeof spans)[number] | undefined;
+		let clash: [(typeof spans)[number], (typeof spans)[number]] | undefined;
+		for (const span of spans) {
+			if (reach && (reach.shot || span.shot)) {
+				const wide = span.start - outOf(reach) - zoomTransitionMs(span.scale);
+				if (wide < MIN_WIDE_BETWEEN_MS) {
+					clash = [reach, span];
+					break;
+				}
+			}
+			if (!reach || outOf(span) > outOf(reach)) reach = span;
+		}
+		if (!clash) return plan;
+
+		const a = clash[0].shot;
+		const b = clash[1].shot;
+		if (a && b) {
+			const box = union(a.box, b.box);
+			const depth = a.clip === b.clip ? fitDepth(box) : null;
+			if (depth !== null) {
+				const merged: Shot = {
+					start: a.start,
+					end: Math.max(a.end, b.end),
+					depth,
+					box,
+					clicks: a.clicks + b.clicks,
+					clip: a.clip,
+				};
+				plan.splice(plan.indexOf(a), 1, merged);
+				plan.splice(plan.indexOf(b), 1);
+			} else {
+				plan.splice(plan.indexOf(a.clicks >= b.clicks ? b : a), 1);
+			}
+			continue;
+		}
+		const shot = a ?? b;
+		if (!shot) return plan; // unreachable: a clash always involves a shot
+		plan.splice(plan.indexOf(shot), 1);
+	}
+}
+
+function toSuggestion(shot: Shot): AutoZoomSuggestion {
+	return {
+		span: { start: shot.start, end: shot.end },
+		focus: { cx: (shot.box.minX + shot.box.maxX) / 2, cy: (shot.box.minY + shot.box.maxY) / 2 },
+		depth: shot.depth,
+	};
+}
+
+const byStart = (a: Shot, b: Shot) => a.start - b.start;
+
+/**
+ * Plan the zooms of one recording laid on the timeline from 0, straight from its telemetry.
+ * `wideUntilMs` and `wideFromMs` are the video's opening and ending, `ignoreClicksFromMs` drops
+ * the stop click; all three are on the telemetry's axis and default to no bound. A caller
+ * holding an `AxcutDocument` wants `buildAutoZoomSuggestionsForClips`.
  */
 export function buildAutoZoomSuggestions(options: {
 	cursorTelemetry: CursorTelemetryPoint[];
 	totalMs: number;
-	existingRegions: { startMs: number; endMs: number }[];
-	defaultDurationMs: number;
+	existingRegions: ReservedZoom[];
 	wideUntilMs?: number;
 	wideFromMs?: number;
 	ignoreClicksFromMs?: number;
 }): AutoZoomSuggestion[] {
-	const { cursorTelemetry, totalMs, existingRegions, defaultDurationMs } = options;
-	if (totalMs <= 0 || cursorTelemetry.length === 0) {
-		return [];
-	}
-
-	const defaultDuration = Math.min(defaultDurationMs, totalMs);
-	if (defaultDuration <= 0) {
-		return [];
-	}
-
-	// The ramps play outside the region, so the region itself keeps one ramp clear of each bound.
-	const ramp = zoomTransitionMs(ZOOM_DEPTH_SCALES[DEFAULT_ZOOM_DEPTH]);
-	const earliestStart = Math.max(0, Math.ceil((options.wideUntilMs ?? -Infinity) + ramp));
-	const latestEnd = Math.min(totalMs, Math.floor((options.wideFromMs ?? Infinity) - ramp));
-	if (latestEnd - earliestStart < defaultDuration) {
-		return [];
-	}
-
-	const normalizedSamples = normalizeCursorTelemetry(cursorTelemetry, totalMs);
-	if (normalizedSamples.length === 0) {
-		return [];
-	}
-
-	const ignoreClicksFromMs = options.ignoreClicksFromMs ?? Infinity;
-	const allClicks = detectZoomClickCandidates(normalizedSamples);
-	const clickCandidates = allClicks.filter(
-		(candidate) => candidate.centerTimeMs < ignoreClicksFromMs,
+	const { cursorTelemetry, totalMs, existingRegions } = options;
+	if (totalMs <= 0 || cursorTelemetry.length === 0) return [];
+	const clicks = visibleClicks(cursorTelemetry, totalMs, options.ignoreClicksFromMs ?? Infinity);
+	const shots = planShots(
+		clicks,
+		totalMs,
+		options.wideUntilMs ?? -Infinity,
+		options.wideFromMs ?? Infinity,
 	);
-	const ignoredClicks = allClicks.filter(
-		(candidate) => candidate.centerTimeMs >= ignoreClicksFromMs,
-	);
-	// The pointer usually rests on Stop before the click: that dwell goes with the click.
-	const dwellCandidates = detectZoomDwellCandidates(normalizedSamples).filter(
-		(dwell) =>
-			!ignoredClicks.some(
-				(click) => Math.abs(click.centerTimeMs - dwell.centerTimeMs) <= dwell.strength / 2,
-			),
-	);
-	if (dwellCandidates.length === 0 && clickCandidates.length === 0) {
-		return [];
-	}
-
-	// Clicks are honoured FIRST so that only an accepted click folds its nearby dwells:
-	// the acceptance loop below rejects any dwell within SUGGESTION_SPACING_MS of an
-	// accepted click's centre, while a click that spacing or an existing region rejects
-	// leaves the dwells around it standing. Telemetry without click metadata runs the
-	// unchanged dwell-only ranking. Within each kind the order is the old one — clicks
-	// chronological, dwells by duration.
-	const dwellByDuration = [...dwellCandidates].sort((a, b) => b.strength - a.strength);
-	const sortedCandidates = [...clickCandidates, ...dwellByDuration];
-
-	const reservedSpans = existingRegions
-		.map((region) => ({ start: region.startMs, end: region.endMs }))
-		.sort((a, b) => a.start - b.start);
-
-	const acceptedCenters: number[] = [];
-	const suggestions: AutoZoomSuggestion[] = [];
-
-	for (const candidate of sortedCandidates) {
-		const tooCloseToAccepted = acceptedCenters.some(
-			(center) => Math.abs(center - candidate.centerTimeMs) < SUGGESTION_SPACING_MS,
-		);
-		if (tooCloseToAccepted) {
-			continue;
-		}
-
-		const centeredStart = Math.round(candidate.centerTimeMs - defaultDuration / 2);
-		const candidateStart = Math.max(
-			earliestStart,
-			Math.min(centeredStart, latestEnd - defaultDuration),
-		);
-		const candidateEnd = candidateStart + defaultDuration;
-		if (candidate.centerTimeMs < candidateStart || candidate.centerTimeMs > candidateEnd) {
-			continue;
-		}
-		const hasOverlap = reservedSpans.some(
-			(span) => candidateEnd > span.start && candidateStart < span.end,
-		);
-		if (hasOverlap) {
-			continue;
-		}
-
-		reservedSpans.push({ start: candidateStart, end: candidateEnd });
-		acceptedCenters.push(candidate.centerTimeMs);
-		suggestions.push({
-			span: { start: candidateStart, end: candidateEnd },
-			focus: candidate.focus,
-		});
-	}
-
-	return suggestions;
+	return resolveShots(shots, existingRegions).sort(byStart).map(toSuggestion);
 }
 
 /**
- * The same detector, run over a TIMELINE instead of over a bare media file — and the
- * only entry point a caller holding an `AxcutDocument` should use.
+ * The same planner, run over a TIMELINE instead of over a bare media file — and the only entry
+ * point a caller holding an `AxcutDocument` should use.
  *
- * Cursor telemetry is recorded against the ORIGINAL media file, so `timeMs` is the
- * asset's SOURCE time (the same axis `cursor-track.ts` maps through
- * `locateSourcePosition`, and the same one trims are stored in). Zoom regions are
- * authored in RAW TIMELINE ms — that is what `anchorRegionsWithDerivedMs` ventilates
- * across the clips. The two axes coincide for exactly one layout: a single clip,
- * starting at 0, covering the whole recording. Any other timeline made the detector's
- * output land wherever `[0, assetDuration]` happens to fall on the ruler, which is the
- * first clip's span — hence "auto-zoom only decorates the first clip". Two clips over
- * ONE recording make it plainer still: the second clip replays source time the first
- * already used, so no amount of arithmetic on a single asset-wide span can say which of
- * them a dwell belongs to. It belongs to BOTH, and gets one zoom on each.
+ * Cursor telemetry is recorded against the ORIGINAL media file, so `timeMs` is the asset's
+ * SOURCE time (the same axis `cursor-track.ts` maps through `locateSourcePosition`, and the same
+ * one trims are stored in). Zoom regions are authored in RAW TIMELINE ms — that is what
+ * `anchorRegionsWithDerivedMs` ventilates across the clips. The two axes coincide for exactly
+ * one layout: a single clip, starting at 0, covering the whole recording. Two clips over ONE
+ * recording make it plain: the second replays source time the first already used, so a click
+ * belongs to BOTH, and gets a zoom on each.
  *
- * So the projection is per clip, and it is a plain shift: a raw clip is identity between
- * its source time and its raw-virtual time (see timeline/timelineMap.ts), so a dwell or
- * click at source `t` on a clip covering `[sourceStartSec, sourceEndSec]` sits at
- * `timelineStartSec + (t - sourceStartSec)`. Each clip is handed only the samples inside
- * its own source window, so a dwell that a cut split across two clips is no longer one
- * dwell — which is right: the cursor did not sit still across the cut on the timeline the
- * user is watching. `existingRegions` is in RAW TIMELINE ms (what the store holds), so it
- * reserves the right stretch of ruler on every clip instead of only on the first.
- *
- * Clips of other assets are skipped, as are clips with no probed source window.
- * `buildAutoZoomSuggestions` is reused verbatim per clip — spacing, ranking and the
- * reserve rule keep their single definition.
+ * So each clip reads only the samples inside its own source window, shifted onto the ruler: a
+ * raw clip is identity between its source time and its raw-virtual time (see
+ * timeline/timelineMap.ts). Shots are planned per clip, since a zoom does not hold across a cut,
+ * then settled over the whole timeline at once, every recording included, against the zooms
+ * already on it (`existingRegions`, RAW TIMELINE ms). Clips with no telemetry or no probed
+ * source window get nothing.
  *
  * The wide opening and ending belong to the whole edit, not to each clip: a cut may land
- * straight on a zoom, but the video's first and last seconds show the whole screen. The
- * stop click belongs to the recording: its last second, read off the telemetry, which runs
- * until the take stops.
+ * straight on a zoom, but the video's first and last seconds show the whole screen. The stop
+ * click belongs to its recording: that recording's last second.
  */
 export function buildAutoZoomSuggestionsForClips(options: {
-	/** Samples in the asset's own SOURCE time. */
-	cursorTelemetry: CursorTelemetryPoint[];
-	assetId: string;
+	/** Each recording's samples, in its own SOURCE time, by asset id. */
+	telemetryByAssetId: ReadonlyMap<string, CursorTelemetryPoint[]>;
 	clips: AxcutClip[];
-	/** Already-placed zoom spans, in RAW TIMELINE ms. */
-	existingRegions: { startMs: number; endMs: number }[];
-	defaultDurationMs: number;
+	existingRegions: ReservedZoom[];
 }): AutoZoomSuggestion[] {
-	const { cursorTelemetry, assetId, clips, existingRegions, defaultDurationMs } = options;
+	const { telemetryByAssetId, clips, existingRegions } = options;
+	if (clips.length === 0) return [];
 	const editStartMs = Math.min(...clips.map((clip) => clip.timelineStartSec)) * 1000;
 	const editEndMs = Math.max(...clips.map((clip) => clip.timelineEndSec)) * 1000;
-	let recordingEndMs = 0;
-	for (const sample of cursorTelemetry) {
-		if (Number.isFinite(sample.timeMs)) recordingEndMs = Math.max(recordingEndMs, sample.timeMs);
-	}
-	const suggestions: AutoZoomSuggestion[] = [];
+	const shots: Shot[] = [];
 	for (const clip of clips) {
-		if (clip.assetId !== assetId) continue;
+		const telemetry = telemetryByAssetId.get(clip.assetId);
 		const sourceEndSec = clip.sourceEndSec ?? clip.sourceStartSec;
 		const windowMs = (sourceEndSec - clip.sourceStartSec) * 1000;
-		if (windowMs <= 0) continue;
+		if (!telemetry?.length || windowMs <= 0) continue;
 		const sourceOffsetMs = clip.sourceStartSec * 1000;
 		const timelineOffsetMs = clip.timelineStartSec * 1000;
-		const clipTelemetry = cursorTelemetry
+		const clipTelemetry = telemetry
 			.filter(
 				(sample) => sample.timeMs >= sourceOffsetMs && sample.timeMs <= sourceOffsetMs + windowMs,
 			)
 			.map((sample) => ({ ...sample, timeMs: sample.timeMs - sourceOffsetMs }));
-		const clipSuggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: clipTelemetry,
-			totalMs: windowMs,
-			existingRegions: existingRegions.map((region) => ({
-				startMs: region.startMs - timelineOffsetMs,
-				endMs: region.endMs - timelineOffsetMs,
-			})),
-			defaultDurationMs,
-			wideUntilMs: editStartMs + OPENING_WIDE_MS - timelineOffsetMs,
-			wideFromMs: editEndMs - CLOSING_WIDE_MS - timelineOffsetMs,
-			ignoreClicksFromMs: recordingEndMs - STOP_CLICK_GUARD_MS - sourceOffsetMs,
-		});
-		suggestions.push(
-			...clipSuggestions.map((suggestion) => ({
-				focus: suggestion.focus,
-				span: {
-					start: suggestion.span.start + timelineOffsetMs,
-					end: suggestion.span.end + timelineOffsetMs,
-				},
-			})),
+		const clicks = visibleClicks(
+			clipTelemetry,
+			windowMs,
+			lastSampleMs(telemetry) - STOP_CLICK_GUARD_MS - sourceOffsetMs,
 		);
+		const clipShots = planShots(
+			clicks,
+			windowMs,
+			editStartMs + OPENING_WIDE_MS - timelineOffsetMs,
+			editEndMs - CLOSING_WIDE_MS - timelineOffsetMs,
+		);
+		for (const shot of clipShots) {
+			shots.push({
+				...shot,
+				start: shot.start + timelineOffsetMs,
+				end: shot.end + timelineOffsetMs,
+				clip: clip.id,
+			});
+		}
 	}
-	return suggestions;
+	return resolveShots(shots, existingRegions).sort(byStart).map(toSuggestion);
 }

@@ -52,8 +52,8 @@ const ASK =
 	"What cursor or pointer tracking data does this project contain? " +
 	"Answer from what you can actually see.";
 
-/** Three parks, one of them 6 s — past `MAX_DWELL_DURATION_MS`, so it exists in
- *  the digest only because the digest lifts the magic wand's ceiling. */
+/** Three parks, one of them 6 s: longer than the 2.6 s the magic wand's old
+ *  stillness detector kept, so only a reader of the raw track sees it. */
 const DWELLS = [
 	{ atSec: 3, holdSec: 1.2, cx: 0.3, cy: 0.4 },
 	{ atSec: 9, holdSec: 6, cx: 0.72, cy: 0.55 },

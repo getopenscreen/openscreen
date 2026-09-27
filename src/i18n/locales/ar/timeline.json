@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "تحسين تلقائي",
 		"automaticZooms": "تكبيرات تلقائية",
-		"automaticZoomsHint": "من حركة المؤشر المسجلة",
+		"automaticZoomsHint": "من النقرات المسجلة",
 		"smartZoomsAndCuts": "قصات ذكية",
 		"smartZoomsAndCutsHint": "باستخدام الذكاء الاصطناعي",
 		"timelineTools": "أدوات المخطط الزمني",
@@ -76,7 +76,7 @@
 		"dropToAdd": "أفلت للإضافة إلى المخطط الزمني",
 		"importRecordingFirst": "استورد تسجيلاً أولاً",
 		"noAutoZoomMoments": "لم يتم العثور على لحظات تكبير تلقائي",
-		"noAutoZoomMomentsDescription": "لا يحتوي هذا التسجيل على بيانات حركة مؤشر، أو أن التكبيرات الحالية تغطي بالفعل اللحظات المزدحمة.",
+		"noAutoZoomMomentsDescription": "لا يحتوي هذا التسجيل على نقرات مسجلة، أو لا توجد نقرة تتسع لتكبير.",
 		"addedAutoZoom": "تمت إضافة {{count}} تكبير تلقائي",
 		"addedAutoZoomPlural": "تمت إضافة {{count}} تكبيرات تلقائية",
 		"autoZoomFailed": "فشل التكبير التلقائي",

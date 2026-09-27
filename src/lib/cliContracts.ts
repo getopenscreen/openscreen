@@ -24,8 +24,8 @@ export interface CliExportRequest {
 	 * into this box, mirroring the editor layout. Defaults to 1280x720.
 	 */
 	/**
-	 * Add automatic zoom regions derived from cursor-dwell telemetry (same
-	 * suggestion engine as the editor's magic wand) before rendering. Existing
+	 * Add automatic zoom regions planned from the clicks in the cursor telemetry
+	 * (same planner as the editor's magic wand) before rendering. Existing
 	 * zoom regions are preserved; suggestions never overlap them.
 	 */
 	autoZoom: boolean;

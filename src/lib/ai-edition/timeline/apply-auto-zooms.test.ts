@@ -7,19 +7,14 @@ import {
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "./apply-auto-zooms";
 
-function dwell(
-	centerMs: number,
-	cx: number,
-	cy: number,
-	count = 6,
-	spanMs = 900,
-): CursorTelemetryPoint[] {
-	const step = spanMs / (count - 1);
-	return Array.from({ length: count }, (_, i) => ({
-		timeMs: centerMs - spanMs / 2 + i * step,
-		cx,
-		cy,
-	}));
+// A click at `atMs`, in a take whose pointer moves on until 9.5 s: the click is not its last.
+function clickAt(atMs: number, cx: number, cy: number): CursorTelemetryPoint[] {
+	return [
+		{ timeMs: atMs - 300, cx, cy },
+		{ timeMs: atMs, cx, cy, interactionType: "click" },
+		{ timeMs: atMs + 300, cx, cy, interactionType: "mouseup" },
+		{ timeMs: 9500, cx: 0.5, cy: 0.5 },
+	];
 }
 
 function documentWithClip(durationSec = 10): AxcutDocument {
@@ -60,13 +55,11 @@ describe("collectAutoZoomSuggestionsForDocument", () => {
 	it("builds suggestions from the asset's cursor sidecar", async () => {
 		const document = documentWithClip();
 		const suggestions = await collectAutoZoomSuggestionsForDocument(document, async () =>
-			dwell(4000, 0.4, 0.6),
+			clickAt(4000, 0.4, 0.6),
 		);
-		expect(suggestions).toHaveLength(1);
-		// Centred on the dwell would be 3000..5000; the wide opening holds it to 3424.
-		expect(suggestions[0].span.start).toBe(3424);
-		expect(suggestions[0].span.end).toBe(5424);
-		expect(suggestions[0].focus.cx).toBeCloseTo(0.4, 5);
+		expect(suggestions).toEqual([
+			{ span: { start: 3500, end: 5500 }, focus: { cx: 0.4, cy: 0.6 }, depth: 3 },
+		]);
 	});
 
 	it("asks for telemetry on the asset path, not a file URL", async () => {
@@ -82,7 +75,48 @@ describe("collectAutoZoomSuggestionsForDocument", () => {
 	it("returns nothing without a clip window", async () => {
 		const document = createEmptyDocument({ projectId: "p1", title: "Empty" });
 		const suggestions = await collectAutoZoomSuggestionsForDocument(document, async () =>
-			dwell(1000, 0.5, 0.5),
+			clickAt(4000, 0.5, 0.5),
+		);
+		expect(suggestions).toEqual([]);
+	});
+
+	it("plans every take on the timeline in one pass, so their zooms keep clear of each other", async () => {
+		// Two takes back to back: each click's zoom is fine alone, but the pair would zoom out
+		// at the cut and straight back in. Planned per take, both would stay.
+		const first = documentWithClip();
+		const document: AxcutDocument = {
+			...first,
+			assets: [
+				...first.assets,
+				{ ...first.assets[0], id: "asset_2", originalPath: "C:\\recordings\\second.mp4" },
+			],
+			timeline: {
+				...first.timeline,
+				clips: [
+					...first.timeline.clips,
+					{
+						...first.timeline.clips[0],
+						id: "clip_2",
+						assetId: "asset_2",
+						timelineStartSec: 10,
+						timelineEndSec: 20,
+					},
+				],
+			},
+		};
+		const suggestions = await collectAutoZoomSuggestionsForDocument(document, async (videoPath) =>
+			videoPath.endsWith("second.mp4") ? clickAt(1000, 0.5, 0.5) : clickAt(7000, 0.5, 0.5),
+		);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 6500, end: 8500 }]);
+	});
+
+	it("keeps clear of the zooms already on the timeline", async () => {
+		const document: AxcutDocument = {
+			...documentWithClip(),
+			zoomRanges: [{ id: "z1", startMs: 3000, endMs: 5000, depth: 3, focus: { cx: 0.5, cy: 0.5 } }],
+		};
+		const suggestions = await collectAutoZoomSuggestionsForDocument(document, async () =>
+			clickAt(6500, 0.4, 0.6),
 		);
 		expect(suggestions).toEqual([]);
 	});
@@ -98,7 +132,7 @@ describe("appendAutoZoomSuggestions", () => {
 		const document = documentWithClip();
 		const next = appendAutoZoomSuggestions(
 			document,
-			[{ span: { start: 3000, end: 5000 }, focus: { cx: 0.4, cy: 0.6 } }],
+			[{ span: { start: 3000, end: 5000 }, focus: { cx: 0.4, cy: 0.6 }, depth: 2 }],
 			(prefix) => `${prefix}_fixed`,
 		);
 		expect(next).not.toBe(document);
@@ -106,7 +140,7 @@ describe("appendAutoZoomSuggestions", () => {
 		expect(next.zoomRanges[0]).toMatchObject({
 			startMs: 3000,
 			endMs: 5000,
-			depth: 3,
+			depth: 2,
 			focusMode: "auto",
 			clipId: "clip_1",
 		});

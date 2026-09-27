@@ -34,7 +34,7 @@ import { nativeBridgeClient } from "@/native/client";
 // `autoZoomEnabled`, default on). The ai-edition import only seeded a clip, so
 // the wand still worked but a new take landed un-zoomed. This flag is the
 // one-shot hand-off: set as soon as the asset is on the document, then taken on
-// the first pass that can give a real answer -- zooms written, no dwell in the
+// the first pass that can give a real answer -- zooms written, no click in the
 // sidecar, or the toggle is off. What keeps it set is only ever "not enough of
 // the document yet" (no clips, still the placeholder duration), and the
 // `loadedmetadata` write is what comes back when that resolves.
@@ -194,7 +194,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 			return await inner(videoPath);
 		} catch {
 			// An unreadable sidecar is NOT the same answer as an empty one: it says
-			// nothing about whether this take has a dwell, so pending survives it and a
+			// nothing about whether this take has a click, so pending survives it and a
 			// later `loadedmetadata` for the same take gets another go.
 			telemetryFailed = true;
 			return [];
@@ -222,7 +222,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 	if (collected.suggestions.length === 0) {
 		// A real answer, not a race: the stop handler awaits `writePendingCursorTelemetry`
 		// BEFORE it publishes the session, so by the time the editor can import the take
-		// its sidecar is on disk. An empty read therefore means this take has no dwell to
+		// its sidecar is on disk. An empty read therefore means this take has no click to
 		// zoom, and no amount of retrying changes that -- consume the hand-off rather than
 		// leaving it armed for the next document loaded in this window.
 		if (!telemetryFailed) clearFreshRecordingAutoZoomPending();
@@ -265,7 +265,7 @@ export async function maybeSaveFreshRecordingAutoZooms(
 			// after `waitForDocumentSaves` has seen that writer finish.
 			if (current !== latest) return "contended";
 			// Nothing to write: the pass returned the document it was given, because a
-			// guard refused it or the take has no dwell.
+			// guard refused it or the take has no click.
 			if (next === latest) return false;
 			const saved = await saveWithDeadline(
 				useProjectStore.getState().saveDocument(next, { history: true }),
@@ -349,7 +349,7 @@ export async function importPendingRecording(
 	// Except for a system-cursor take, which writes no `.cursor.json` at all: the
 	// toggle stays on in prefs (it is only disabled in the UI while that mode is
 	// picked), so without this the flag is set for a recording that can never produce
-	// a dwell. What governs is the mode THIS take was recorded in, not the current
+	// a click. What governs is the mode THIS take was recorded in, not the current
 	// preference.
 	if (cursorCaptureMode !== "system") {
 		markFreshRecordingAutoZoomPending(screenPath);

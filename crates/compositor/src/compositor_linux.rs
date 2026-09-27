@@ -2239,7 +2239,8 @@ impl Compositor {
         });
 
         // Webcam PiP (mode 0) -- placee par plan_frame (`g.w_dst`, coins
-        // `g.w_radius`), gardee par `g.shape_fade > 0` (webcam visible).
+        // `g.w_radius`). `g.shape_fade` ne regit que la bulle (coins, ombre) : il
+        // vaut 0 pendant un palier Full Camera, ou la webcam remplit le cadre.
         // `webcam_planes` garde les vues en vie pendant le pass.
         // `lp.has_webcam` is the gate Windows (`compositor_windows.rs`) and macOS
         // (`compositor_macos.rs`) both apply and this backend did not. It is false
@@ -2247,7 +2248,7 @@ impl Compositor {
         // the SCREEN video, because `open_and_seek_clip` falls back to it rather
         // than leave the pair half-open. Without this check a recording with no
         // camera drew its own screen picture inside the PiP box.
-        let webcam_planes = if lp.has_webcam && g.shape_fade > 0.0 && !webcam.is_null() {
+        let webcam_planes = if lp.has_webcam && !webcam.is_null() {
             self.nv12_srvs(webcam).ok()
         } else {
             None
@@ -4456,6 +4457,11 @@ mod tests {
         shadow: bool,
     ) -> Vec<u8> {
         let scene = Scene::from_json(&pip_scene_json(effect)).expect("scene json");
+        compose_pip_scene(comp, gpu, scene, shadow)
+    }
+
+    /// `compose_pip` sur une scene deja construite, pour les tests qui la retouchent.
+    fn compose_pip_scene(comp: &Compositor, gpu: &Gpu, scene: Scene, shadow: bool) -> Vec<u8> {
         comp.set_live_params(live_params_from_scene(&scene));
         comp.set_has_webcam(true);
         comp.set_scene(Some(scene));
@@ -4560,6 +4566,30 @@ mod tests {
             compose_pip(&comp, &gpu, CUTOUT, true),
             compose_pip(&comp, &gpu, CUTOUT, false),
             "en detourage, l'ombre est encore dessinee"
+        );
+    }
+
+    /// Pendant le palier d'une region Full Camera, la camera remplit le cadre.
+    /// `shape_fade` y vaut 0, ce qui ne doit retirer que la bulle (coins, ombre) :
+    /// le gate de `webcam_planes` le lisait aussi et ne dessinait plus la webcam
+    /// du tout, si bien que le plein cadre montrait le fond et l'ecran.
+    #[test]
+    fn a_full_camera_hold_fills_the_frame_with_the_camera() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("Compositor::new_sized");
+        let mut scene = Scene::from_json(&pip_scene_json(NO_EFFECT)).expect("scene json");
+        scene.camera_fullscreen_regions.push(crate::scene::SceneCameraFullscreenRegion {
+            clip_index: None,
+            start_sec: 2.0,
+            end_sec: 8.0,
+        });
+        // 5 s : la montee (~1 s) est finie, le retour (~1,5 s) n'a pas commence.
+        comp.set_timeline_time(Some(5.0));
+        let camera = camera_pixels(&compose_pip_scene(&comp, &gpu, scene, true));
+        let frame = 320 * 180;
+        assert!(
+            camera > frame * 95 / 100,
+            "palier Full Camera : {camera} pixels de camera sur {frame}"
         );
     }
 

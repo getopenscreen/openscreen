@@ -337,8 +337,8 @@ Deux décisions :
 - **Tangage** : queue relevée, pointe vers le bas, 18° au repos, +10° pendant l'appui, fois le
   niveau.
 - **Lacet** : vers la vitesse horizontale lissée (`follow_at`, différence centrée sur ±100 ms),
-  et vers la cible d'un clic dans les 300 ms qui le précèdent. Borné en douceur à ±25°
-  (`tanh`), nul au repos, continu en `t`.
+  et vers la cible d'un clic dans les 300 ms qui le précèdent (pas à « None », où le clic ne
+  fait rien bouger). Borné en douceur à ±25° (`tanh`), nul au repos, continu en `t`.
 - **Part « pointeur »** (`pointing_factor`), tirée du seul hotspot, sans table par état :
   distance du hotspot au centre du sprite rapportée au demi-côté (norme max), `smoothstep` de
   0,3 à 0,75. Tangage et lacet en sont multipliés. Flèche (0,83), main qui pointe, aide,

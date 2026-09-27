@@ -426,6 +426,9 @@ fn cursor_press_levels() {
             .args(["-c:v", "h264_mf", "-b:v", "8M", "-pix_fmt", "nv12"])
             .arg(format!("{dir}/{name}"))
             .status();
+        // Un échec garde les images, pour relancer ou comprendre.
+        let status = status.expect("lancement de ffmpeg");
+        assert!(status.success(), "ffmpeg a échoué pour {name} : {status}");
         println!("ffmpeg : {status:?} -> {dir}/{name}");
         for k in 0..n {
             let _ = std::fs::remove_file(format!("{frames}/{k:03}.png"));

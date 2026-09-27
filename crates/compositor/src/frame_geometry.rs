@@ -3849,7 +3849,7 @@ pub struct CursorPose {
 /// - Lacet : vers la vitesse horizontale lissée (`follow_at`, différence centrée), et vers la
 ///   cible d'un clic dans les 300 ms qui le précèdent ; borné à ±25° en douceur (`tanh`), nul au
 ///   repos. Les contributions des clics montent avant eux et retombent sur la fenêtre de l'impact,
-///   donc la pose reste continue en `t`.
+///   donc la pose reste continue en `t` ; à « None », seule la vitesse compte.
 /// - Tangage et lacet sont multipliés par `pointing` : entiers pour la flèche, nuls pour un
 ///   curseur centré.
 /// - Écrasement : pendant l'appui, l'épaisseur descend à 1 − `MODEL_SQUASH`, puis le rebond
@@ -3881,6 +3881,8 @@ pub fn cursor_pose(
         (Some(a), Some(b)) => (b.0 - a.0) / (2.0 * h),
         _ => 0.0,
     };
+    // La visée d'un clic fait partie de son geste : absente à « None », entière dès « Light ».
+    let aim = strength.min(1.0);
     if let Some(here) = track.follow_at(t) {
         for (tc, target) in track.clicks_with_points(t - CLICK_IMPACT_WINDOW_S, t + MODEL_AIM_S) {
             let w = if tc > t {
@@ -3888,7 +3890,7 @@ pub fn cursor_pose(
             } else {
                 1.0 - smooth((t - tc) / CLICK_IMPACT_WINDOW_S)
             };
-            v += w * (target.0 - here.0) / MODEL_AIM_S;
+            v += aim * w * (target.0 - here.0) / MODEL_AIM_S;
         }
     }
     let yaw = pointing * MODEL_YAW_MAX_DEG.to_radians() * (v / MODEL_YAW_SPEED).tanh();
@@ -7803,6 +7805,8 @@ mod tests {
         let quiet = crate::cursor::CursorTrack::new(samples, vec![], vec![]);
         assert!(cursor_pose(&clicked, 1.05, MODEL_CLICK_BOUNCE_REF, 1.0).yaw > cursor_pose(&quiet, 1.05, MODEL_CLICK_BOUNCE_REF, 1.0).yaw + 1e-3);
         assert!(cursor_pose(&clicked, 3.5, MODEL_CLICK_BOUNCE_REF, 1.0).yaw.abs() < 1e-3);
+        // À « None », le clic ne fait rien tourner : seul le mouvement compte.
+        assert_eq!(cursor_pose(&clicked, 1.05, 0.0, 1.0).yaw, cursor_pose(&quiet, 1.05, 0.0, 1.0).yaw);
     }
 
     /// Les pointeurs penchent et tournent comme la flèche ; les curseurs centrés restent à plat et

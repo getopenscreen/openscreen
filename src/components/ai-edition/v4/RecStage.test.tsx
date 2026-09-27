@@ -214,6 +214,55 @@ describe("RecStage controls", () => {
 		await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
 	});
 
+	// Another window can land a change while this panel's write is failing. Its pushed
+	// snapshot is newer than the re-read that the failure starts, so the push must win.
+	it("keeps a snapshot pushed after a rejected write over the re-read", async () => {
+		const stored: RecordingPrefs = {
+			micEnabled: false,
+			micDeviceId: null,
+			micDeviceName: null,
+			camEnabled: false,
+			camDeviceId: null,
+			camDeviceName: null,
+			systemAudioEnabled: false,
+			cursorCaptureMode: "editable-overlay",
+			hideDesktopIcons: false,
+			autoZoomEnabled: true,
+		};
+		stubRecordingPrefs();
+		let answerReread: ((prefs: RecordingPrefs) => void) | undefined;
+		const getRecordingPrefs = vi
+			.fn<() => Promise<RecordingPrefs>>()
+			.mockResolvedValueOnce(stored)
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						answerReread = resolve;
+					}),
+			);
+		const setRecordingPrefs = vi.fn(async () => {
+			throw new Error("write failed");
+		});
+		Object.assign(window.electronAPI as object, { getRecordingPrefs, setRecordingPrefs });
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalledTimes(1));
+
+		const button = screen.getByTestId("rec-auto-zoom-button");
+		await act(async () => {
+			button.click();
+		});
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalledTimes(2));
+		act(() => {
+			recordingPrefsListeners.forEach((listener) =>
+				listener({ ...stored, autoZoomEnabled: false }),
+			);
+		});
+		await act(async () => {
+			answerReread?.(stored);
+		});
+		expect(button).toHaveAttribute("aria-pressed", "false");
+	});
+
 	it("waits for microphone discovery before starting the meter and normalizes default", async () => {
 		stubRecordingPrefs({
 			micEnabled: true,

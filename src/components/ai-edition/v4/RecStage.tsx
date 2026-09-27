@@ -78,11 +78,15 @@ export function RecStage({
 }) {
 	const t = useScopedT("editor");
 	const [prefs, setPrefsState] = useState<RecordingPrefsState>(DEFAULT_PREFS);
+	// Bumped by every local change and every pushed snapshot, so the re-read after a
+	// failed write can tell that something newer has landed since.
+	const prefsRevision = useRef(0);
 	useEffect(() => {
 		let cancelled = false;
 		let receivedNewerSnapshot = false;
 		const unsubscribe = window.electronAPI?.onRecordingPrefsChanged?.((next) => {
 			receivedNewerSnapshot = true;
+			prefsRevision.current += 1;
 			if (!cancelled) setPrefsState(normalizedRecordingPrefs(next));
 		});
 		void window.electronAPI
@@ -103,6 +107,7 @@ export function RecStage({
 		};
 	}, []);
 	const updatePrefs = (patch: Partial<RecordingPrefsState>) => {
+		const revision = ++prefsRevision.current;
 		// The write is fired beside the optimistic patch rather than inside the updater:
 		// an updater is expected to be pure, and React re-invokes it under StrictMode,
 		// which sent every preference change twice.
@@ -113,11 +118,13 @@ export function RecStage({
 			// import reads back when it decides whether to place zooms, so a rejected
 			// write that left the patch on screen would have the user looking at Off
 			// while the next take still gets decorated. Re-read rather than invert the
-			// patch: a snapshot pushed while the write was in flight is newer than
-			// anything a rollback could restore.
+			// patch, and drop the answer if a pushed snapshot or a later change landed
+			// meanwhile: either is newer than what this re-read can say.
 			try {
 				const current = await window.electronAPI?.getRecordingPrefs?.();
-				if (current) setPrefsState(normalizedRecordingPrefs(current));
+				if (current && revision === prefsRevision.current) {
+					setPrefsState(normalizedRecordingPrefs(current));
+				}
 			} catch (readErr) {
 				console.warn("[rec-stage] failed to re-read the recording prefs:", readErr);
 			}

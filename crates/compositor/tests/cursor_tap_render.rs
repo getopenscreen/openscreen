@@ -395,7 +395,7 @@ fn cursor_press_levels() {
         let (x, y) = ((tip[0] - CELL as f32 * 0.35) as u32, (tip[1] - CELL as f32 * 0.3) as u32);
         image::imageops::crop_imm(&img(rgba), x, y, CELL, CELL).to_image()
     };
-    let offsets = [-0.1, 0.0, 0.017, 0.033, 0.05, 0.083, 0.117, 0.15, 0.2, 0.27];
+    let offsets = [-0.3, -0.2, -0.12, -0.08, -0.04, 0.0, 0.05, 0.1, 0.16, 0.25, 0.42];
     let mut sheet = image::RgbaImage::new(offsets.len() as u32 * 2 * CELL, levels.len() as u32 * 2 * CELL);
     for (row, level) in levels.iter().enumerate() {
         for (col, dt) in offsets.iter().enumerate() {
@@ -407,9 +407,9 @@ fn cursor_press_levels() {
     sheet.save(format!("{dir}/press-levels.png")).expect("planche");
     println!("planche des niveaux : lignes {levels:?}, colonnes {offsets:?} s après le clic");
     for (speed, name) in [(1.0, "press-levels.mp4"), (0.25, "press-levels-slow.mp4")] {
-        let n = (0.6 / speed * 30.0) as u32;
+        let n = (0.9 / speed * 30.0) as u32;
         for k in 0..n {
-            let t = tc - 0.2 + k as f32 / 30.0 * speed;
+            let t = tc - 0.4 + k as f32 / 30.0 * speed;
             let mut row = image::RgbaImage::new(levels.len() as u32 * 2 * CELL, 2 * CELL);
             for (i, level) in levels.iter().enumerate() {
                 let (rgba, _) = render(&comp, &screen, &scene_json("null", false, *level), &track, t);

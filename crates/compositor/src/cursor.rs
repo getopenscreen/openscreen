@@ -17,8 +17,8 @@ const AUTO_FOLLOW_REFERENCE_MS: f32 = 1000.0 / 40.0;
 /// cette zone. Sans elle, la vue suivait chaque petit geste et le cadrage paraissait nerveux.
 const FOLLOW_DEAD_ZONE: f32 = 0.5;
 
-// Convergence du curseur dessiné sur le point cliqué (`pinned_at`). La tenue couvre le contact du
-// curseur modélisé : de 27 à 74 ms après le clic à « Light », de 12 à 100 ms à « Strong ».
+// Convergence du curseur dessiné sur le point cliqué (`pinned_at`). L'approche accompagne la
+// plongée du curseur modélisé, et la tenue couvre son appui (du clic à 80 ms après).
 const PIN_APPROACH_S: f32 = 0.25;
 const PIN_HOLD_S: f32 = 0.1;
 const PIN_RELEASE_S: f32 = 0.25;

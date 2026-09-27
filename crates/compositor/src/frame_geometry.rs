@@ -3718,7 +3718,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
 //   src.xy        décalage px : `local + src.xy` = pixel relatif à l'axe de la caméra, ancrage ôté
 //   src.z         P, distance caméra–plan (px) ; src.w = U, l'unité du modèle (px du plan)
 //   color.rg      coin haut-gauche du sprite, repère du modèle (unités)
-//   color.b       écrasement : l'épaisseur vaut MODEL_THICK × color.b (`CursorPose::squash`).
+//   color.b       facteur d'épaisseur des shaders, toujours 1 : le clic n'écrase plus le volume.
 //                 Un texel du sprite se tire de la taille du champ (`SDF_UPSAMPLE` / plus grand côté)
 //   color.a       opacité (auto-hide, zoom)
 //   fx.xyz        rotation dessinée du plan (rad, X/Y/Z, ordre de `regions::rotate_point`)
@@ -3746,17 +3746,26 @@ pub const MODEL_LIGHT: [f32; 3] = [-0.4194, -0.5792, 0.6990];
 
 /// Garde au sol au repos, en unités du modèle.
 const MODEL_HOVER: f32 = 0.35;
-/// Gain sur `tap` pour la descente, fois le niveau de `clickBounce` : à « Light » (1) le modèle
-/// reste posé de 27 à 74 ms après le clic, assez pour qu'au moins une image le montre au contact
-/// jusqu'à 21 i/s ; à « Strong » (2), il touche dès 12 ms et appuie jusqu'à 100 ms (la tenue de
-/// `CursorTrack::pinned_at`) ; à « None », il ne descend pas.
-const MODEL_CONTACT_GAIN: f32 = 1.25;
-/// Rebond au-dessus du survol, sur la remontée de `tap` (+0,164 à 165 ms), fois le niveau : il
-/// remonte de 41 % de sa hauteur de survol à « Light », de 82 % à « Strong ».
-const MODEL_REBOUND_GAIN: f32 = 2.5;
-/// Tangage au repos (queue relevée, pointe vers le bas) et supplément au creux de la pression.
+/// Le geste du clic (`click_height`), à « Light » (1) : il prend son élan `MODEL_LIFT` au-dessus
+/// du survol dès `MODEL_LEAD_S` avant le clic, plonge en `MODEL_DIVE_S` jusqu'à toucher le plan au
+/// clic même, appuie `MODEL_HOLD_S` (dans la tenue de `CursorTrack::pinned_at`), remonte
+/// `MODEL_OVERSHOOT` au-dessus du survol en `MODEL_RELEASE_S` et s'y repose en `MODEL_SETTLE_S` :
+/// 720 ms, une vingtaine d'images à 30 i/s. « Strong » (2) prend moitié plus d'élan, plonge en
+/// 96 ms, penche et rebondit deux fois plus. L'ancienne descente tenait entre deux images.
+const MODEL_LEAD_S: f32 = 0.3;
+const MODEL_LIFT: f32 = 0.4;
+const MODEL_DIVE_S: f32 = 0.12;
+const MODEL_HOLD_S: f32 = 0.08;
+const MODEL_RELEASE_S: f32 = 0.14;
+const MODEL_OVERSHOOT: f32 = 0.15;
+const MODEL_SETTLE_S: f32 = 0.2;
+/// Tangage au repos (queue relevée, pointe vers le bas). Il suit la hauteur, pour que pivot et
+/// plongée ne fassent qu'un geste : la pointe se relève pendant l'élan (jusqu'à `LIFT_DEG` par
+/// `MODEL_LIFT` d'élan) et plonge vers la cible en descendant (jusqu'à `DIVE_DEG` par niveau au
+/// contact).
 const MODEL_PITCH_IDLE_DEG: f32 = 18.0;
-const MODEL_PITCH_PRESS_DEG: f32 = 10.0;
+const MODEL_PITCH_DIVE_DEG: f32 = 8.0;
+const MODEL_PITCH_LIFT_DEG: f32 = 5.0;
 /// Le supplément de tangage suit `clickBounce` rapporté à sa valeur par défaut, borné à 2× : 1,
 /// « Light » (`DEFAULT_PROJECT_APPEARANCE`), donc « Strong » (2) en est le double. Restée à 2,5,
 /// l'ancien défaut, elle ne donnait plus que 40 % de la pression à « Light » et 80 % à « Strong ».
@@ -3768,10 +3777,6 @@ const MODEL_YAW_SPEED: f32 = 0.8;
 const MODEL_YAW_HALF_WINDOW_S: f32 = 0.1;
 /// Combien de temps avant un clic le modèle se tourne vers sa cible.
 const MODEL_AIM_S: f32 = 0.3;
-/// Écrasement au creux du clic (part de l'épaisseur perdue), à `clickBounce` par défaut.
-/// L'épaisseur ne descend jamais sous `MODEL_SQUASH_MIN` (deux chanfreins, plus un peu de flanc).
-const MODEL_SQUASH: f32 = 0.3;
-const MODEL_SQUASH_MIN: f32 = 0.55;
 /// Hotspot → part « pointeur » (cf. `pointing_factor`) : sous `LO` (distance au centre rapportée
 /// au demi-côté), un curseur centré ; au-delà de `HI`, un pointeur. La flèche est à 0,83.
 const MODEL_POINTING_LO: f32 = 0.3;
@@ -3796,8 +3801,8 @@ pub struct SpriteShape {
     pub top: f32,
     /// Hauteur du modèle au-dessus de z = 0, en unités du modèle : 0 pour un sprite extrudé.
     pub max_height: f32,
-    /// Épaisseur sous z = 0, avant écrasement : `MODEL_THICK` pour un sprite extrudé, celle du
-    /// modèle pour un curseur sculpté (`sculpt::sculpted_shape`).
+    /// Épaisseur sous z = 0 : `MODEL_THICK` pour un sprite extrudé, celle du modèle pour un
+    /// curseur sculpté (`sculpt::sculpted_shape`).
     pub thick: f32,
     /// Le curseur sculpté que dessine le shader (`sculpt`), 0 pour le sprite extrudé.
     pub sculpt: u32,
@@ -3809,22 +3814,22 @@ impl SpriteShape {
         [-self.hotspot[0] * self.size[0], -self.hotspot[1] * self.size[1]]
     }
 
-    /// La boîte englobante du modèle écrasé à `squash` : le rect du sprite, sur toute l'épaisseur.
-    fn model_box(&self, squash: f32) -> ([f32; 3], [f32; 3]) {
+    /// La boîte englobante du modèle : le rect du sprite, sur toute l'épaisseur.
+    fn model_box(&self) -> ([f32; 3], [f32; 3]) {
         let [x, y] = self.origin();
         (
-            [x, y, -self.thick * squash],
+            [x, y, -self.thick],
             [x + self.size[0], y + self.size[1], self.max_height],
         )
     }
 
-    /// Hauteur du hotspot du dessus quand le point le plus bas du modèle basculé de `pitch` (≥ 0)
-    /// et écrasé à `squash` affleure le plan : le bas du haut de la silhouette (y minimal, face du
-    /// dessous) ; à plat, toute la face du dessous. Le chanfrein arrondit ce coin et laisse,
+    /// Hauteur du hotspot du dessus quand le point le plus bas du modèle basculé de `pitch`
+    /// affleure le plan : le bas du haut de la silhouette (y minimal, face du dessous) si la
+    /// pointe plonge, toute la face du dessous à plat. Le chanfrein arrondit ce coin et laisse,
     /// basculé, un jour d'au plus ~1 % de l'unité, invisible sous l'ombre de contact.
-    fn contact_lift(&self, pitch: f32, squash: f32) -> f32 {
+    fn contact_lift(&self, pitch: f32) -> f32 {
         let y_top = (self.top - self.hotspot[1]) * self.size[1];
-        self.thick * squash * pitch.cos() - y_top * pitch.sin()
+        self.thick * pitch.cos() - y_top * pitch.sin()
     }
 }
 
@@ -3851,51 +3856,85 @@ pub struct CursorPose {
     /// Lacet (rad) autour de la normale du plan, appliqué après le tangage : positif = sens
     /// horaire à l'écran (y vers le bas), la pointe part vers la droite.
     pub yaw: f32,
-    /// Épaisseur du modèle rapportée à `MODEL_THICK` : moins de 1 quand le clic l'écrase.
-    pub squash: f32,
+}
+
+fn smoothstep01(x: f32) -> f32 {
+    let u = x.clamp(0.0, 1.0);
+    u * u * (3.0 - 2.0 * u)
+}
+
+/// La hauteur du point le plus bas `tau` secondes après un clic (avant lui si négatif), au
+/// niveau `s` de `clickBounce` (0 à 2) : élan au-dessus du survol, plongée qui accélère jusqu'au
+/// contact au clic même, appui, remontée qui freine au-delà du survol, puis repos. Sous « Light »,
+/// le geste est réduit d'autant : à 0, le modèle ne bouge pas.
+fn click_height(tau: f32, s: f32) -> f32 {
+    let top = MODEL_HOVER + MODEL_LIFT * (1.0 + s) * 0.5;
+    let over = MODEL_HOVER + MODEL_OVERSHOOT * s;
+    let dive = MODEL_DIVE_S * (1.2 - 0.2 * s.max(1.0));
+    let release = MODEL_HOLD_S + MODEL_RELEASE_S;
+    let full = if tau < -dive {
+        MODEL_HOVER + (top - MODEL_HOVER) * smoothstep01((tau + MODEL_LEAD_S) / (MODEL_LEAD_S - dive))
+    } else if tau < 0.0 {
+        let u = (tau + dive) / dive;
+        top * (1.0 - u * u)
+    } else if tau < MODEL_HOLD_S {
+        0.0
+    } else if tau < release {
+        let u = 1.0 - (tau - MODEL_HOLD_S) / MODEL_RELEASE_S;
+        over * (1.0 - u * u)
+    } else {
+        over + (MODEL_HOVER - over) * smoothstep01((tau - release) / MODEL_SETTLE_S)
+    };
+    MODEL_HOVER + (full - MODEL_HOVER) * s.min(1.0)
 }
 
 /// La pose à `t`. `click_bounce` est le réglage brut (0 à 2 : None, Light, Strong ; 1 par défaut),
 /// `pointing` la part « pointeur » du sprite (`pointing_factor`).
 ///
-/// - Hauteur : `MODEL_HOVER` au repos ; chaque clic le fait descendre TOUCHER le plan autour du
-///   creux de `regions::tap`, la courbe de l'impact du clic, dont le creux (49,5 ms) est celui de
-///   la pression de `CursorTrack::bounce` : le modèle, le plan et le rebond d'échelle lisent le
-///   même contact à la même image. Puis il rebondit au-dessus du survol et s'y repose. Le niveau
-///   règle tout le geste, comme le rebond d'échelle en 2D : plus fort, il touche plus tôt, appuie
-///   plus longtemps et rebondit plus haut (`MODEL_CONTACT_GAIN`, `MODEL_REBOUND_GAIN`) ; à 0, il
-///   ne bouge pas. Dernier clic avant `t`, comme `bounce`. Tous les états.
-/// - Tangage : 18° au repos, +10° pendant l'appui, fois `clickBounce`.
+/// - Hauteur : `MODEL_HOVER` au repos. Chaque clic est un geste en vraie profondeur
+///   (`click_height`) : élan, plongée jusqu'à toucher le plan au clic même, appui, remontée,
+///   repos. Il enjambe l'instant où le plan, le rebond d'échelle et l'impact lisent le contact
+///   (49,5 ms). Le niveau règle le geste, comme le rebond d'échelle en 2D : « Strong » monte plus
+///   haut, plonge plus vite et rebondit deux fois plus ; « None » ne bouge pas. Deux clics proches
+///   se partagent le geste, l'appui l'emportant sur l'élan : un double clic ne remonte pas entre
+///   eux. Tous les états.
+/// - Tangage : 18° au repos, et il suit la hauteur : relevé pendant l'élan, plongé vers la cible
+///   en descendant, jusqu'à +8° par niveau au contact.
 /// - Lacet : vers la vitesse horizontale lissée (`follow_at`, différence centrée), et vers la
 ///   cible d'un clic dans les 300 ms qui le précèdent ; borné à ±25° en douceur (`tanh`), nul au
 ///   repos. Les contributions des clics montent avant eux et retombent sur la fenêtre de l'impact,
 ///   donc la pose reste continue en `t` ; à « None », seule la vitesse compte.
 /// - Tangage et lacet sont multipliés par `pointing` : entiers pour la flèche, nuls pour un
 ///   curseur centré.
-/// - Écrasement : pendant l'appui, l'épaisseur descend à 1 − `MODEL_SQUASH`, puis le rebond
-///   l'épaissit un instant. Fois `clickBounce`, comme le tangage ; tous les états.
-///   L'empreinte ne change pas : pas de rebond d'échelle en 3D, le mouvement le remplace.
+/// - Ni écrasement ni rebond d'échelle : le volume reste entier, le mouvement dit le clic.
 pub fn cursor_pose(
     track: &crate::cursor::CursorTrack,
     t: f32,
     click_bounce: f32,
     pointing: f32,
 ) -> CursorPose {
-    use crate::regions::{tap, CLICK_IMPACT_WINDOW_S};
-    let k = track.last_click_at(t).map(|tc| tap((t - tc) / CLICK_IMPACT_WINDOW_S)).unwrap_or(0.0);
+    use crate::regions::CLICK_IMPACT_WINDOW_S;
     let strength = (click_bounce / MODEL_CLICK_BOUNCE_REF).clamp(0.0, 2.0);
-    // L'appui, de 0 au survol à 1 posé, et le rebond au-dessus du survol.
-    let press = (-k * MODEL_CONTACT_GAIN * strength).clamp(0.0, 1.0);
-    let rebound = k.max(0.0) * strength;
-    let clearance = MODEL_HOVER * (1.0 - press + MODEL_REBOUND_GAIN * rebound);
-    let pitch =
-        pointing * (MODEL_PITCH_IDLE_DEG + MODEL_PITCH_PRESS_DEG * strength * press).to_radians();
-    let squash = (1.0 + MODEL_SQUASH * (rebound - strength * press)).max(MODEL_SQUASH_MIN);
-
-    let smooth = |x: f32| {
-        let u = x.clamp(0.0, 1.0);
-        u * u * (3.0 - 2.0 * u)
+    // Le dernier clic et le suivant : l'élan le plus haut, l'appui le plus profond, et l'appui
+    // l'emporte. Un clic seul garde exactement sa courbe ; un double clic reste posé entre les deux.
+    let near = track.last_click_at(t).into_iter();
+    let near = near.chain(track.clicks_between(t, t + MODEL_LEAD_S).first().copied());
+    let (mut lift, mut press) = (0.0f32, 0.0f32);
+    for tc in near {
+        let dh = click_height(t - tc, strength) - MODEL_HOVER;
+        lift = lift.max(dh);
+        press = press.max(-dh / MODEL_HOVER);
+    }
+    let clearance = (MODEL_HOVER + lift) * (1.0 - press);
+    let dh = clearance - MODEL_HOVER;
+    let tilt = if dh < 0.0 {
+        -dh / MODEL_HOVER * MODEL_PITCH_DIVE_DEG * strength
+    } else {
+        -dh / MODEL_LIFT * MODEL_PITCH_LIFT_DEG
     };
+    let pitch = pointing * (MODEL_PITCH_IDLE_DEG + tilt).to_radians();
+
+    let smooth = smoothstep01;
     let h = MODEL_YAW_HALF_WINDOW_S;
     let mut v = match (track.follow_at(t - h), track.follow_at(t + h)) {
         (Some(a), Some(b)) => (b.0 - a.0) / (2.0 * h),
@@ -3914,7 +3953,7 @@ pub fn cursor_pose(
         }
     }
     let yaw = pointing * MODEL_YAW_MAX_DEG.to_radians() * (v / MODEL_YAW_SPEED).tanh();
-    CursorPose { clearance, pitch, yaw, squash }
+    CursorPose { clearance, pitch, yaw }
 }
 
 /// La forme que le mode 15 donne à `sprite` : son curseur sculpté s'il en a un
@@ -3995,7 +4034,7 @@ impl ModelView {
         }
         let ground =
             [(plane_pt[0] - 0.5) * 2.0 * half[0], (plane_pt[1] - 0.5) * 2.0 * half[1], 0.0];
-        let height = unit * (pose.clearance + shape.contact_lift(pose.pitch, pose.squash));
+        let height = unit * (pose.clearance + shape.contact_lift(pose.pitch));
         let k = height / eye[2];
         let tip =
             [ground[0] + (eye[0] - ground[0]) * k, ground[1] + (eye[1] - ground[1]) * k, height];
@@ -4051,7 +4090,7 @@ impl ModelView {
     /// plus `d / lz` de son ombre géométrique (`lz` = élévation de la lumière au-dessus du plan),
     /// et la pénombre s'arrête à `d = min(t / MODEL_SOFTNESS, MODEL_SHADOW_PAD)`.
     pub(crate) fn footprint(&self) -> Option<[f32; 4]> {
-        let (lo, hi) = self.shape.model_box(self.pose.squash);
+        let (lo, hi) = self.shape.model_box();
         let light = self.light();
         let lz = light[2].max(0.2);
         let corners: [[f32; 3]; 8] = std::array::from_fn(|i| {
@@ -4112,7 +4151,8 @@ pub fn cursor_model_cb(
         ],
         quad_px: [bw, bh],
         mode: 15.0,
-        color: [shape.origin()[0], shape.origin()[1], pose.squash, alpha],
+        // Les shaders multiplient encore l'épaisseur par `color.b` : plus rien ne l'écrase.
+        color: [shape.origin()[0], shape.origin()[1], 1.0, alpha],
         fx: [r[0], r[1], r[2], pose.pitch],
         src_prev: [view.tip[0], view.tip[1], view.tip[2], pose.yaw],
         dst_prev: clip,
@@ -7607,9 +7647,9 @@ mod tests {
         if o > 0.0 { o.hypot(d.max(0.0)) } else { d }
     }
 
-    /// Miroir CPU de `sd_model`, écrasé à `squash`.
-    fn sd_model(sdf: &crate::cursor_sdf::CursorSdf, shape: SpriteShape, squash: f32, p: [f32; 3]) -> f32 {
-        let half_t = shape.thick * squash * 0.5;
+    /// Miroir CPU de `sd_model`.
+    fn sd_model(sdf: &crate::cursor_sdf::CursorSdf, shape: SpriteShape, p: [f32; 3]) -> f32 {
+        let half_t = shape.thick * 0.5;
         let w = [sd2(sdf, shape, [p[0], p[1]]) + MODEL_BEVEL, (p[2] + half_t).abs() - (half_t - MODEL_BEVEL)];
         w[0].max(w[1]).min(0.0) + w[0].max(0.0).hypot(w[1].max(0.0)) - MODEL_BEVEL
     }
@@ -7630,7 +7670,7 @@ mod tests {
             pose,
         );
         let l = plane_to_model(view.light(), pose);
-        let (lo, hi) = shape.model_box(pose.squash);
+        let (lo, hi) = shape.model_box();
         let (mut t0, mut t1) = (f32::MIN, f32::MAX);
         for k in 0..3 {
             let inv = 1.0 / if l[k].abs() > 1e-6 { l[k] } else { 1e-6 };
@@ -7642,7 +7682,7 @@ mod tests {
         if t0 < t1 && t1 > 0.0 {
             let mut t = t0.max(0.004);
             for _ in 0..32 {
-                let d = sd_model(sdf, shape, pose.squash, [q[0] + l[0] * t, q[1] + l[1] * t, q[2] + l[2] * t]);
+                let d = sd_model(sdf, shape, [q[0] + l[0] * t, q[1] + l[1] * t, q[2] + l[2] * t]);
                 lit = lit.min(MODEL_SOFTNESS * d / t);
                 if lit < 0.002 || t > t1 {
                     break;
@@ -7652,7 +7692,7 @@ mod tests {
             let r = lit.clamp(0.0, 1.0);
             lit = r * r * (3.0 - 2.0 * r);
         }
-        let u = (sd_model(sdf, shape, pose.squash, q) / MODEL_CONTACT_RADIUS).clamp(0.0, 1.0);
+        let u = (sd_model(sdf, shape, q) / MODEL_CONTACT_RADIUS).clamp(0.0, 1.0);
         let contact = 1.0 - u * u * (3.0 - 2.0 * u);
         ((1.0 - lit) * 0.5).max(contact * 0.5)
     }
@@ -7673,7 +7713,7 @@ mod tests {
                     continue;
                 }
                 let wx = (s + MODEL_BEVEL).max(0.0);
-                let z = -shape.thick * view.pose.squash + MODEL_BEVEL - (MODEL_BEVEL * MODEL_BEVEL - wx * wx).sqrt();
+                let z = -shape.thick + MODEL_BEVEL - (MODEL_BEVEL * MODEL_BEVEL - wx * wx).sqrt();
                 lowest = lowest.min(view.model_to_plane([x, y, z])[2]);
             }
         }
@@ -7760,41 +7800,50 @@ mod tests {
         }
     }
 
+    /// Le geste du clic, en vraie profondeur : élan au-dessus du survol pointe relevée, plongée
+    /// pointe la première jusqu'à toucher le plan AU clic, appui sur l'instant du contact que lisent
+    /// le plan et le rebond d'échelle, remontée au-delà du survol, repos. Animé sur une vingtaine
+    /// d'images à 30 i/s ; le niveau le règle, et « None » ne bouge pas.
     #[test]
-    fn the_model_touches_the_plane_on_the_click_contact() {
+    fn the_model_dives_onto_the_click() {
         let track = still_track(vec![0.5]);
-        let rest = cursor_pose(&track, 0.45, MODEL_CLICK_BOUNCE_REF, 1.0);
+        let at = |ms: f32, level: f32| cursor_pose(&track, 0.5 + ms / 1000.0, level, 1.0);
+        let rest = at(-400.0, 1.0);
         assert_eq!(rest.clearance, MODEL_HOVER);
         assert!((rest.pitch - MODEL_PITCH_IDLE_DEG.to_radians()).abs() < 1e-6);
         assert_eq!(rest.yaw, 0.0, "immobile : pas de lacet");
-        // Au clic même, rien n'a encore bougé ; au creux, le modèle est posé, plus penché.
-        assert_eq!(cursor_pose(&track, 0.5, MODEL_CLICK_BOUNCE_REF, 1.0).clearance, MODEL_HOVER);
-        let down = cursor_pose(&track, 0.5 + CONTACT_S, MODEL_CLICK_BOUNCE_REF, 1.0);
-        assert_eq!(down.clearance, 0.0, "au creux du contact, le modèle touche le plan");
-        assert!(down.pitch > rest.pitch + 5f32.to_radians(), "la pression penche le modèle");
-        // Posé assez longtemps pour qu'au moins une image le montre, même à 24 i/s…
-        for ms in 30..=70 {
-            assert_eq!(cursor_pose(&track, 0.5 + ms as f32 / 1000.0, MODEL_CLICK_BOUNCE_REF, 1.0).clearance, 0.0, "{ms} ms");
+        let peak = at(-120.0, 1.0);
+        assert!(peak.clearance > 1.8 * MODEL_HOVER && peak.pitch < rest.pitch, "élan : {peak:?}");
+        let down = at(0.0, 1.0);
+        assert_eq!(down.clearance, 0.0, "au clic, le modèle touche le plan");
+        assert!(down.pitch > rest.pitch + 5f32.to_radians(), "il plonge la pointe la première");
+        for ms in 0..=75 {
+            assert_eq!(at(ms as f32, 1.0).clearance, 0.0, "posé à {ms} ms");
         }
-        // …au même instant que la pression du rebond d'échelle, et relevé à la fin de la fenêtre.
         let press = (0..260).min_by(|&a, &b| {
             track.bounce(0.5 + a as f32 / 1000.0).total_cmp(&track.bounce(0.5 + b as f32 / 1000.0))
         });
-        let press_ms = press.expect("un creux") as f32;
-        assert_eq!(cursor_pose(&track, 0.5 + press_ms / 1000.0, MODEL_CLICK_BOUNCE_REF, 1.0).clearance, 0.0);
-        assert_eq!(cursor_pose(&track, 0.5 + crate::regions::CLICK_IMPACT_WINDOW_S, MODEL_CLICK_BOUNCE_REF, 1.0), rest);
-        // Le niveau règle tout le geste. « None » : le modèle ne bouge pas au clic.
-        for ms in 0..260 {
-            assert_eq!(cursor_pose(&track, 0.5 + ms as f32 / 1000.0, 0.0, 1.0), rest, "{ms} ms");
+        assert_eq!(at(press.expect("un creux") as f32, 1.0).clearance, 0.0, "au creux du rebond 2D");
+        assert!(at(200.0, 1.0).clearance > MODEL_HOVER, "il remonte au-delà du survol");
+        assert_eq!(at(450.0, 1.0), rest);
+        // Animé : à 30 i/s, une vingtaine d'images différentes, dont trois pendant la plongée.
+        let frames: Vec<f32> = (0..24).map(|k| at(-300.0 + k as f32 * 1000.0 / 30.0, 1.0).clearance).collect();
+        assert!(frames.windows(2).filter(|w| w[0] != w[1]).count() >= 18, "{frames:?}");
+        assert!((1..4).all(|k| { let c = at(-k as f32 * 1000.0 / 30.0, 1.0).clearance; c > 0.0 && c < peak.clearance }));
+        // « None » ne bouge pas ; « Strong » monte et rebondit plus haut, plonge plus vite et plus penché.
+        for ms in -350..450 {
+            assert_eq!(at(ms as f32, 0.0), rest, "None, {ms} ms");
         }
-        // « Strong » : il touche plus tôt, appuie plus longtemps et plus penché, rebondit plus haut.
-        let at = |ms: f32, level: f32| cursor_pose(&track, 0.5 + ms / 1000.0, level, 1.0);
-        let posed = |level: f32| (0..260).filter(|&ms| at(ms as f32, level).clearance == 0.0).count();
-        assert!(at(15.0, 2.0).clearance == 0.0 && at(15.0, 1.0).clearance > 0.0, "plus tôt");
-        assert!(posed(2.0) > posed(1.0) + 30, "plus longtemps : {} ms / {} ms", posed(2.0), posed(1.0));
-        assert!(at(CONTACT_S * 1000.0, 2.0).pitch > down.pitch + 5f32.to_radians(), "plus penché");
-        let peak = |level: f32| (100..260).map(|ms| at(ms as f32, level).clearance).fold(0.0, f32::max);
-        assert!(peak(1.0) > MODEL_HOVER * 1.3 && peak(2.0) > peak(1.0) + 0.3 * MODEL_HOVER, "plus haut");
+        let top = |level: f32, from: i32, to: i32| (from..to).map(|ms| at(ms as f32, level).clearance).fold(0.0, f32::max);
+        assert!(top(2.0, -300, 0) > top(1.0, -300, 0) + 0.15, "élan plus haut");
+        assert!(top(2.0, 80, 450) > top(1.0, 80, 450) + 0.1, "rebond plus haut");
+        assert!(at(0.0, 2.0).pitch > down.pitch + 5f32.to_radians(), "plus penché au contact");
+        assert!(at(-90.0, 2.0).clearance > at(-90.0, 1.0).clearance, "plongée plus tardive, donc plus vive");
+        // Un double clic ne remonte pas entre les deux : le geste le plus bas l'emporte.
+        let double = still_track(vec![0.5, 0.62]);
+        for ms in 0..200 {
+            assert!(cursor_pose(&double, 0.5 + ms as f32 / 1000.0, 1.0, 1.0).clearance <= MODEL_HOVER, "{ms} ms");
+        }
     }
 
     /// « Posé » veut dire posé, pour chaque état : au repos le point le plus bas du modèle est à
@@ -7806,7 +7855,8 @@ mod tests {
             let (sdf, shape) = sprite_model(key);
             for rot in [[0.0; 3], LEFT] {
                 let track = still_track_as(Some(key), vec![0.5]);
-                for (t, want) in [(0.3, MODEL_HOVER), (0.5 + CONTACT_S, 0.0)] {
+                // Au repos avant l'élan du clic, puis au contact.
+                for (t, want) in [(0.1, MODEL_HOVER), (0.5 + CONTACT_S, 0.0)] {
                     let plan = model_plan(rot, &scene, &track, t, true).expect("plan");
                     let pose = plan.model.expect("modèle");
                     let view = ModelView::new(plan.placement, plan.size_px, pose, shape).expect("vue");
@@ -7872,7 +7922,7 @@ mod tests {
         assert!((half.pitch - full.pitch * 0.5).abs() < 1e-6 && (half.yaw - full.yaw * 0.5).abs() < 1e-6);
         // À plat, le lift est l'épaisseur : toute la face du dessous est au sol.
         let (_, text) = sprite_model("text");
-        assert_eq!(text.contact_lift(0.0, 1.0), MODEL_THICK);
+        assert_eq!(text.contact_lift(0.0), MODEL_THICK);
     }
 
     #[test]
@@ -7989,7 +8039,7 @@ mod tests {
             let hotspot = [-x0 / size[0], -y0 / size[1]];
             assert!((hotspot[0] - shape.hotspot[0]).abs() < 1e-6 && (hotspot[1] - shape.hotspot[1]).abs() < 1e-6);
             assert!((size[0] - shape.size[0]).abs() < 1e-6 && (size[1] - shape.size[1]).abs() < 1e-6);
-            assert_eq!(cb.color[2], pose.squash, "{name}: écrasement");
+            assert_eq!(cb.color[2], 1.0, "{name}: jamais d'écrasement");
             assert_eq!([cb.mb[2], cb.mb[3]], view.offset, "{name}: translation du plan");
             assert!(shape.size[0].max(shape.size[1]) == 1.0, "{name}: {:?}", shape.size);
         }
@@ -8212,20 +8262,6 @@ mod tests {
         assert_eq!((plan(true, MODEL_CLICK_BOUNCE_REF), plan(false, MODEL_CLICK_BOUNCE_REF), plan(true, 0.0)), (1, 0, 0));
     }
 
-    /// L'écrasement suit le contact : neutre au repos, l'épaisseur au plus bas au creux, un léger
-    /// rebond ensuite, et rien à `clickBounce` nul.
-    #[test]
-    fn the_model_squashes_on_the_click() {
-        let track = still_track(vec![0.5]);
-        assert_eq!(cursor_pose(&track, 0.45, MODEL_CLICK_BOUNCE_REF, 1.0).squash, 1.0);
-        let down = cursor_pose(&track, 0.5 + CONTACT_S, MODEL_CLICK_BOUNCE_REF, 1.0);
-        assert!((down.squash - (1.0 - MODEL_SQUASH)).abs() < 1e-3, "{down:?}");
-        let rebound = cursor_pose(&track, 0.5 + 0.165, MODEL_CLICK_BOUNCE_REF, 1.0);
-        assert!(rebound.squash > 1.0 && rebound.squash < 1.06, "{rebound:?}");
-        assert_eq!(cursor_pose(&track, 0.5 + CONTACT_S, 0.0, 1.0).squash, 1.0);
-        assert!(cursor_pose(&track, 0.5 + CONTACT_S, 5.0, 1.0).squash >= MODEL_SQUASH_MIN);
-    }
-
     #[test]
     fn the_model_box_holds_the_model_and_its_shadow() {
         for (name, plan, shape, sdf) in model_cases() {
@@ -8235,7 +8271,7 @@ mod tests {
             let (x0, y0) = (cb.dst[0] * 1920.0, cb.dst[1] * 1080.0);
             let (x1, y1) = (x0 + cb.quad_px[0], y0 + cb.quad_px[1]);
             let inside = |p: [f32; 2]| p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1;
-            let (lo, hi) = shape.model_box(pose.squash);
+            let (lo, hi) = shape.model_box();
             let mut solid = 0;
             for i in 0..=20 {
                 for j in 0..=30 {
@@ -8245,7 +8281,7 @@ mod tests {
                             lo[1] + (hi[1] - lo[1]) * j as f32 / 30.0,
                             lo[2] + (hi[2] - lo[2]) * k as f32 / 6.0,
                         ];
-                        if sd_model(&sdf, shape, pose.squash, q) > 0.0 {
+                        if sd_model(&sdf, shape, q) > 0.0 {
                             continue;
                         }
                         solid += 1;

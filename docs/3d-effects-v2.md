@@ -327,17 +327,22 @@ Deux décisions :
 
 `cursor_pose`, puis la part « pointeur » du sprite :
 
-- **Hauteur** : 0,35 unité de garde au repos. Chaque clic le pose **au contact** avec la courbe
-  `tap()`, celle de l'impact du clic, dont le creux (49,5 ms) est celui de la pression de
-  `bounce()`, puis il **rebondit** au-dessus de sa garde et s'y repose. Tous les états.
-- **Le niveau `clickBounce` règle tout le geste**, comme le rebond d'échelle en 2D : l'appui est
-  `tap()` × 1,25 × niveau, borné à 1, le rebond la remontée de `tap()` × 2,5 × niveau.
-  « Light » (1, le défaut) : posé de 27 à 74 ms, donc au moins une image au contact jusqu'à
-  21 i/s, rebond à +41 % de la garde. « Strong » (2) : posé de 12 à 100 ms, rebond à +82 %.
-  « None » : le modèle ne bouge pas au clic. Auparavant, contact et rebond ne dépendaient pas du
-  niveau : de face, les trois se ressemblaient (retour produit du 27/09/2026).
-- **Tangage** : queue relevée, pointe vers le bas, 18° au repos, +10° pendant l'appui, fois le
-  niveau.
+- **Hauteur** : 0,35 unité de garde au repos. Chaque clic est une **plongée** en vraie
+  profondeur (`click_height`), sur 720 ms, une vingtaine d'images à 30 i/s : **élan** de 0,4
+  unité au-dessus de la garde dès 300 ms avant le clic, **plongée** qui accélère en 120 ms
+  jusqu'à toucher le plan **au clic même**, **appui** 80 ms (il enjambe l'instant du contact
+  que lisent le plan, `bounce()` et l'impact : 49,5 ms), **remontée** 0,15 au-dessus de la
+  garde, puis repos. L'ombre s'écarte pendant l'élan et revient sous la pointe au contact ; la
+  perspective grossit un peu la flèche en haut. Tous les états.
+- **Le niveau `clickBounce` règle le geste**, comme le rebond d'échelle en 2D. « Light » (1, le
+  défaut) : ci-dessus. « Strong » (2) : moitié plus d'élan, plongée en 96 ms, deux fois plus de
+  tangage et de rebond. « None » : le modèle ne bouge pas au clic. Deux clics proches se
+  partagent le geste, l'appui l'emportant sur l'élan : un double clic reste posé entre les deux.
+  Retour produit du 27/09/2026 : l'ancienne descente, en `tap()`, tenait entre deux images et
+  ne faisait que pivoter.
+- **Tangage** : queue relevée, pointe vers le bas, 18° au repos. Il suit la hauteur : relevé
+  pendant l'élan (−5° par 0,4 d'élan), plongé vers la cible en descendant, jusqu'à +8° par
+  niveau au contact.
 - **Lacet** : vers la vitesse horizontale lissée (`follow_at`, différence centrée sur ±100 ms),
   et vers la cible d'un clic dans les 300 ms qui le précèdent (pas à « None », où le clic ne
   fait rien bouger). Borné en douceur à ±25° (`tanh`), nul au repos, continu en `t`.
@@ -354,12 +359,10 @@ Deux décisions :
   repos, au plan au contact, jamais dessous. Mesuré sur huit états, à plat et iso : 0 pour les
   états centrés (face du dessous au sol), +1,6 à +1,8 % d'unité pour les pointeurs (le chanfrein
   arrondit le coin qui touche), sous le seuil testé de 2 %.
-- **Pas de rebond d'échelle** en 3D : le geste le remplace, en vrai relief.
-- **Écrasement** : pendant l'appui, l'épaisseur descend à 70 %, puis le
-  rebond l'épaissit un instant (104,8 % à 165 ms). Fois `clickBounce`, jamais sous 55 %
-  (deux chanfreins et un peu de flanc). Le dessus descend, le point le plus bas reste posé, le
-  hotspot reste sur son pixel. L'empreinte, elle, ne change pas : un étalement de 5 % défaisait
-  l'égalité « curseur centré posé = son sprite » de B.3.
+- **Ni rebond d'échelle ni écrasement** en 3D : la plongée les remplace, en vrai relief.
+  L'écrasement de l'épaisseur au contact a été retiré le 27/09/2026 : il aplatissait le volume
+  (les shaders reçoivent toujours 1 en `color.b`). L'empreinte ne change pas, d'où l'égalité
+  « curseur centré posé = son sprite » de B.3.
 
 ### B.5.1 Le contact tombe sur le pixel cliqué
 

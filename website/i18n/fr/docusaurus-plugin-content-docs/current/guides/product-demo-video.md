@@ -73,7 +73,7 @@ Pour en savoir plus sur le placement des zooms : [Zoom automatique](/features/a
 
 **Coupez par le texte.** Dans la transcription, sélectionnez des mots et appuyez sur `Delete` : ce passage est retiré de la lecture et de l'export. Les silences apparaissent dans le texte sous forme de repères : cliquez sur l'un d'eux pour le couper, et cliquez de nouveau pour le rétablir. Survolez un mot coupé pour le rétablir. Vous pouvez aussi appuyer sur `T` pour ajouter une région de coupe sur la timeline.
 
-**Accélérez ce que vous ne pouvez pas couper**, comme les chargements de page ou la saisie. Appuyez sur `S` pour ajouter une région de vitesse, choisissez un préréglage de 0.25× à 5×, ou saisissez une valeur de 0.1× à 100×. L'audio est étiré dans le temps en conséquence.
+**Accélérez ce que vous ne pouvez pas couper**, comme les chargements de page ou la saisie. Appuyez sur `S` pour ajouter une région de vitesse, choisissez un préréglage (0.5×, 1×, 1.5×, 2× ou 4×), ou saisissez une valeur de 0.25× à 16×. L'audio est étiré dans le temps en conséquence.
 
 **Assemblez plusieurs prises.** Passez en mode **Médias**, utilisez **Importer un média** si une prise n'est pas encore listée, puis faites glisser sa carte sur la rangée de clips. Si vous la déposez sur un clip existant, OpenScreen propose **Ajouter avant**, **Ajouter après** ou **Diviser ici et insérer**. Voir [Médiathèque et clips](../media-library.md).
 

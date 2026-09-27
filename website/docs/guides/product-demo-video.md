@@ -73,7 +73,7 @@ More on how the zooms are placed: [Auto-zoom](/features/auto-zoom/).
 
 **Cut by text.** In the transcript, select words and press `Delete`: that span is cut from playback and from the export. Silences show up inline as markers: click one to cut it, and click it again to restore it. Hover a cut word to restore it. You can also press `T` to add a trim region on the timeline.
 
-**Speed up what you cannot cut**, such as page loads or typing. Press `S` to add a speed region, pick a preset from 0.25× to 5×, or type any value from 0.1× to 100×. The audio is time-stretched to match.
+**Speed up what you cannot cut**, such as page loads or typing. Press `S` to add a speed region, pick a preset (0.5×, 1×, 1.5×, 2× or 4×), or type any value from 0.25× to 16×. The audio is time-stretched to match.
 
 **Join several takes.** Switch to **Media**, use **Import media** if a take is not listed yet, then drag its card onto the clip row. Dropped on an existing clip, it offers **Add before**, **Add after** or **Split here and insert**. See [Media library](../media-library.md).
 

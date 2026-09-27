@@ -73,7 +73,7 @@ Mehr dazu, wie die Zooms gesetzt werden: [Auto-zoom](/features/auto-zoom/).
 
 **Über den Text schneiden.** Markiere im Transkript Wörter und drücke `Delete`: Dieser Abschnitt fällt aus Wiedergabe und Export heraus. Pausen erscheinen als Markierungen im Text: Klicke auf eine, um sie zu schneiden, und noch einmal, um sie wiederherzustellen. Fahr mit der Maus über ein geschnittenes Wort, um es wiederherzustellen. Du kannst auch `T` drücken, um auf der Zeitleiste einen Schnittbereich hinzuzufügen.
 
-**Beschleunige, was du nicht schneiden kannst**, etwa Ladezeiten oder Tipparbeit. Drücke `S`, um einen Geschwindigkeitsbereich hinzuzufügen, wähle eine Vorgabe von 0.25× bis 5× oder gib einen beliebigen Wert von 0.1× bis 100× ein. Der Ton wird passend zeitgestreckt.
+**Beschleunige, was du nicht schneiden kannst**, etwa Ladezeiten oder Tipparbeit. Drücke `S`, um einen Geschwindigkeitsbereich hinzuzufügen, wähle eine Vorgabe (0.5×, 1×, 1.5×, 2× oder 4×) oder gib einen beliebigen Wert von 0.25× bis 16× ein. Der Ton wird passend zeitgestreckt.
 
 **Mehrere Takes zusammenfügen.** Wechsle zu **Media**, nutze **Import media**, falls ein Take noch nicht aufgeführt ist, und zieh seine Karte dann in die Clipzeile. Legst du die Karte auf einem vorhandenen Clip ab, bietet OpenScreen **Add before**, **Add after** oder **Split here and insert** an. Siehe [Mediathek](../media-library.md).
 

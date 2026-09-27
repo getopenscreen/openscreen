@@ -73,7 +73,7 @@ Mais sobre como os zooms são posicionados: [Zoom automático](/features/auto-zo
 
 **Corte pelo texto.** Na transcrição, selecione palavras e pressione `Delete`: esse trecho é cortado da reprodução e da exportação. Os silêncios aparecem no texto como marcadores: clique em um para cortá-lo e clique de novo para restaurá-lo. Passe o mouse sobre uma palavra cortada para restaurá-la. Você também pode pressionar `T` para adicionar uma região de recorte na linha do tempo.
 
-**Acelere o que não dá para cortar**, como carregamentos de página ou digitação. Pressione `S` para adicionar uma região de velocidade e escolha uma predefinição de 0.25× a 5× ou digite qualquer valor de 0.1× a 100×. O áudio é esticado no tempo para acompanhar.
+**Acelere o que não dá para cortar**, como carregamentos de página ou digitação. Pressione `S` para adicionar uma região de velocidade e escolha uma predefinição (0.5×, 1×, 1.5×, 2× ou 4×) ou digite qualquer valor de 0.25× a 16×. O áudio é esticado no tempo para acompanhar.
 
 **Junte várias tomadas.** Mude para **Mídia**, use **Importar mídia** se uma tomada ainda não estiver na lista e arraste o cartão dela para a fileira de clipes. Se você soltar o cartão sobre um clipe existente, o app oferece **Adicionar antes**, **Adicionar depois** ou **Dividir aqui e inserir**. Veja [Biblioteca de mídia](../media-library.md).
 

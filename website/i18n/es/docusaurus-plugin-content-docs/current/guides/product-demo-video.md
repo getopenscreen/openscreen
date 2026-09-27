@@ -73,7 +73,7 @@ Más información sobre cómo se colocan los zooms: [Zoom automático](/features
 
 **Corta desde el texto.** En la transcripción, selecciona palabras y presiona `Delete`: ese tramo se elimina de la reproducción y de la exportación. Los silencios aparecen en el texto como marcadores: haz clic en uno para cortarlo, y vuelve a hacer clic para restaurarlo. Pasa el mouse sobre una palabra cortada para restaurarla. También puedes presionar `T` para agregar una región de recorte en la línea de tiempo.
 
-**Acelera lo que no puedas cortar**, como las cargas de página o el tecleo. Presiona `S` para agregar una región de velocidad, elige un valor predefinido de 0.25× a 5× o escribe cualquier valor de 0.1× a 100×. El audio se estira en el tiempo para acompañar la nueva velocidad.
+**Acelera lo que no puedas cortar**, como las cargas de página o el tecleo. Presiona `S` para agregar una región de velocidad, elige un valor predefinido (0.5×, 1×, 1.5×, 2× o 4×) o escribe cualquier valor de 0.25× a 16×. El audio se estira en el tiempo para acompañar la nueva velocidad.
 
 **Une varias tomas.** Cambia a **Multimedia**, usa **Importar contenido** si una toma todavía no aparece y luego arrastra su tarjeta a la fila de clips. Si la sueltas sobre un clip existente, se ofrecen **Añadir antes**, **Añadir después** o **Dividir aquí e insertar**. Consulta [Biblioteca multimedia](../media-library.md).
 

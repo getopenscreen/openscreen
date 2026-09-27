@@ -84,6 +84,16 @@
 	--ost-speed-border: #b45309;
 	--ost-playhead: #6c55ff;
 	--ost-playhead-glow: rgba(108, 85, 255, 0.68);
+	/* The timeline's candy (design/tokens/v4.css): solid cards in the object's
+	   colour with dark ink on them. The clip wears the brand's green, zooms a
+	   blue so the two never read as one. Fills, not text, so they keep the app's
+	   own values in both themes; only the glow under them changes. */
+	--ost-clip: #10b981;
+	--ost-zoom: #3b82f6;
+	--ost-trim: #f87171;
+	--ost-ramp: #fb923c;
+	--ost-ink: #0b1220;
+	--ost-candy-glow: 35%;
 	--ost-elev-pop: 0 24px 70px -28px rgba(0, 0, 0, 0.75);
 	--ost-font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
 	--ease: cubic-bezier(0.2, 0, 0, 1);
@@ -161,6 +171,9 @@
 	   declared once, in the light root, and the dark theme keeps it. */
 	--ost-playhead: #6c55ff;
 	--ost-playhead-glow: rgba(108, 85, 255, 0.3);
+	--ost-trim: #ef4444;
+	--ost-ramp: #f97316;
+	--ost-candy-glow: 12%;
 	--ost-elev-pop: 0 24px 70px -28px rgba(15, 23, 42, 0.28);
 	--ost-groove: #dfe4ea;
 	--ost-thumb: #ffffff;
@@ -190,8 +203,8 @@
 	--fit: 0.88;
 	--pad-pct: 30;
 	--frame-scale: 1;
-	--size-pct: 66;
-	--cur-size: 63.2;
+	--size-pct: 77.78;
+	--cur-size: 5;
 	--size-u: 1;
 	--zoom: 1;
 	--zoom-origin: 52% 58%;
@@ -467,11 +480,11 @@
 
 .tabs {
 	display: flex;
-	gap: 4px;
-	padding: 4px;
-	margin-bottom: 12px;
-	border-radius: 10px;
-	background: color-mix(in srgb, var(--ost-surface-2) 60%, transparent);
+	gap: 2px;
+	padding: 3px;
+	margin-bottom: 10px;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--ost-fg) 6%, transparent);
 }
 
 .tab,
@@ -479,42 +492,54 @@
 	flex: 1;
 	text-align: center;
 	padding: 6px 0;
-	border-radius: 7px;
+	border-radius: 9px;
 	font-size: 12px;
 	font-weight: 500;
 	color: var(--ost-muted);
 }
 
 .tabOn {
-	background: var(--ost-accent);
-	/* The page's ground, not a literal near-black: the accent under it changes
-	   with the theme, and a fixed foreground would sit on two different greens.
-	   Same fix as the site's own primary button. */
-	color: var(--ost-bg);
+	/* Raised above its track, as the app draws it: the choice is a surface, and
+	   green stays for what is picked in the grid below. */
+	background: var(--ost-surface-2);
+	color: var(--ost-fg);
 	font-weight: 600;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.upload {
-	display: inline-flex;
-	padding: 8px 14px;
-	margin-bottom: 12px;
-	border: 1.5px dashed var(--ost-border-hi);
-	border-radius: 10px;
-	font-size: 12px;
+.section {
+	display: block;
+	margin: 2px 0 8px;
+	font-size: 13px;
 	font-weight: 600;
-	color: var(--ost-fg);
+	color: var(--ost-fg-2);
+}
+
+.section ~ .section {
+	margin-top: 12px;
 }
 
 .swatches {
 	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 8px;
+	grid-template-columns: repeat(6, 1fr);
+	gap: 6px;
+	margin-bottom: 4px;
+}
+
+.swatchAdd {
+	display: grid;
+	place-items: center;
+	aspect-ratio: 1;
+	border: 1px dashed var(--ost-border-hi);
+	border-radius: 8px;
+	font-size: 16px;
+	color: var(--ost-muted);
 }
 
 .swatch {
 	position: relative;
 	aspect-ratio: 1;
-	border-radius: 10px;
+	border-radius: 8px;
 	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 	transition:
 		box-shadow 0.25s var(--ease),
@@ -526,7 +551,7 @@
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
-	border-radius: 10px;
+	border-radius: 8px;
 }
 
 /* Selection is a `data-bg` on the stage matched against the swatch's own index.
@@ -538,7 +563,7 @@
 	content: "";
 	position: absolute;
 	inset: -3px;
-	border-radius: 13px;
+	border-radius: 11px;
 	border: 2px solid var(--ost-accent);
 	opacity: 0;
 	transition: opacity 0.25s var(--ease);
@@ -554,12 +579,46 @@
 /* ── shared controls ── */
 
 .control {
+	/* Free rows, the way the app sets its settings now: label, value and track on
+	   the pane itself, grouped by section labels and space, no card around each. */
 	display: block;
-	margin-bottom: 9px;
-	padding: 10px 13px 14px;
-	border: 1px solid var(--ost-border);
-	border-radius: 11px;
-	background: color-mix(in srgb, var(--ost-surface-2) 40%, transparent);
+	padding: 9px 0 11px;
+}
+
+/* A row of named choices: the app's ChoiceRow. */
+.field {
+	display: block;
+	padding: 6px 0 8px;
+	font-size: 12.5px;
+}
+
+.choices {
+	display: grid;
+	grid-auto-columns: minmax(0, 1fr);
+	grid-auto-flow: column;
+	gap: 4px;
+	margin-top: 7px;
+}
+
+.choice,
+.choiceOn {
+	display: grid;
+	place-items: center;
+	min-height: 28px;
+	overflow: hidden;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--ost-fg) 6%, transparent);
+	color: var(--ost-muted);
+	font-size: 11.5px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.choiceOn {
+	border-color: var(--ost-accent);
+	background: var(--ost-accent-soft);
+	color: var(--ost-fg);
 }
 
 .controlRow {
@@ -567,12 +626,13 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 11px 13px;
+	padding: 8px 0;
+	font-size: 12.5px;
 }
 
 .controlLive {
-	border-color: var(--ost-accent);
-	border-width: 1.5px;
+	/* The slider being dragged: its knob carries the ring (.knobPad, .knobSize),
+	   the row itself stays a free row like the others. */
 }
 
 .controlHead {
@@ -587,9 +647,8 @@
 }
 
 .controlValue {
-	font-family: var(--ost-font-mono);
-	font-weight: 600;
-	color: var(--ost-accent);
+	font-weight: 500;
+	color: var(--ost-muted);
 	font-variant-numeric: tabular-nums;
 }
 
@@ -1458,8 +1517,8 @@
 	   8.27:1 over a mid-tone wallpaper. Literals, and deliberately not tokens —
 	   a HUD over footage does not follow the reader's theme. */
 	background: rgba(8, 10, 13, 0.78);
-	border: 1px solid rgba(16, 185, 129, 0.75);
-	color: #34d399;
+	border: 1px solid rgba(59, 130, 246, 0.75);
+	color: #60a5fa;
 	font-family: var(--ost-font-mono);
 	font-size: 10px;
 	font-weight: 600;
@@ -1570,21 +1629,34 @@
 	position: absolute;
 	top: 150px;
 	height: 50px;
-	border-radius: 10px;
-	background: color-mix(in srgb, var(--ost-surface-2) 72%, transparent);
-	border: 1px solid var(--ost-border-hi);
-	box-shadow: inset 0 1px 8px rgba(255, 255, 255, 0.07);
+	overflow: hidden;
+	border-radius: 12px;
+	border: 1px solid transparent;
+	/* The app's clip card (.tlClip): a solid candy gradient in the brand's green. */
+	background: linear-gradient(180deg, color-mix(in oklab, var(--ost-clip) 78%, white), var(--ost-clip))
+		border-box;
+	box-shadow: 0 3px 10px color-mix(in oklab, var(--ost-clip) var(--ost-candy-glow), transparent);
 	box-sizing: border-box;
 }
 
 .clipWave {
 	position: absolute;
-	left: 13px;
-	right: 13px;
-	top: 28px;
-	height: 9px;
-	background: repeating-linear-gradient(90deg, var(--ost-accent) 0 2px, transparent 2px 7px);
-	opacity: 0.75;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	height: 70%;
+}
+
+.clipWaveArea {
+	fill: rgb(11 18 32 / 0.16);
+}
+
+.clipWaveLine {
+	fill: none;
+	stroke: rgb(11 18 32 / 0.5);
+	stroke-width: 1.25;
+	vector-effect: non-scaling-stroke;
 }
 
 .pillZoom,
@@ -1597,10 +1669,15 @@
 	align-items: center;
 	gap: 5px;
 	padding: 0 8px;
-	border-radius: 7px;
+	/* Candy, as .lanePill draws it: a gradient in the lane's colour (--_c), a glow
+	   under it, dark ink on every colour. */
+	border-radius: 8px;
+	border: 1px solid transparent;
+	background: linear-gradient(180deg, color-mix(in oklab, var(--_c) 72%, white), var(--_c)) border-box;
+	box-shadow: 0 2px 6px color-mix(in oklab, var(--_c) var(--ost-candy-glow), transparent);
+	color: var(--ost-ink);
 	overflow: hidden;
-	font-family: var(--ost-font-mono);
-	font-size: 10.5px;
+	font-size: 11.5px;
 	font-weight: 600;
 	white-space: nowrap;
 	transition:
@@ -1610,9 +1687,7 @@
 
 .pillZoom {
 	top: 118px;
-	background: var(--ost-accent-soft);
-	border: 1.5px solid var(--ost-accent);
-	color: var(--ost-accent);
+	--_c: var(--ost-zoom);
 	--on: clamp(0, calc(var(--zooms-placed) - var(--i)), 1);
 	opacity: var(--on);
 	transform: translateY(calc((1 - var(--on)) * -8px));
@@ -1620,18 +1695,14 @@
 
 .pillSpeed {
 	top: 66px;
-	background: var(--ost-speed-soft);
-	border: 1.5px solid var(--ost-speed-border);
-	color: var(--ost-speed);
+	--_c: var(--ost-ramp);
 	opacity: var(--speed-placed);
 	transform: translateY(calc((1 - var(--speed-placed)) * -8px));
 }
 
 .pillTrim {
 	top: 92px;
-	background: var(--ost-danger-soft);
-	border: 1px solid var(--ost-danger);
-	color: var(--ost-danger);
+	--_c: var(--ost-trim);
 }
 
 /* Each trim's opacity is written straight onto the element by the driver, over

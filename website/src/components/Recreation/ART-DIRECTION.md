@@ -58,9 +58,15 @@ travel between two controls.
 
 - **The panels** are the app's, by locale key: `PANELS` for the titles,
   `CONTROLS` for every slider at this document's own setting, scaled and
-  suffixed the way `RightPanes.tsx` does it. Cursor size is `size * 10` over
-  5–100 with one decimal and no unit — a hand-written panel gets that wrong in a
-  way that looks entirely plausible.
+  suffixed the way `RightPanes.tsx` does it, and the rows of named levels
+  (shadow, click bounce) lifted out of that file. Cursor size shows no number at
+  all, because the app shows none — a hand-written panel gets that wrong in a
+  way that looks entirely plausible. The document predates the level rows: its
+  shadow sits between two levels, and the page presses the nearest one.
+- **The drawing follows the app's current direction**: Background is a section
+  of the Composition pane, settings are free rows under section labels, a fixed
+  choice is a row of buttons, and the timeline wears candy cards — the clip in
+  the brand's green with the app's own waveform paths, zooms in blue.
 - **The padding slider** moves the composite through `PreviewCanvas.tsx`'s own
   `clamp(1 - (padding/100) * 0.4, 0.4, 1)`, evaluated per frame.
 - **The wallpapers** are the app's own — twelve of the eighteen it ships, in the

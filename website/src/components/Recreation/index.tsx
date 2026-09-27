@@ -50,7 +50,7 @@ import {
 import { useEffect, useRef } from "react";
 
 import { attachDriver, SCENE_QUERIES } from "./driver";
-import { CONTROLS, CURSORS, INSPECTOR, PANELS } from "./generated";
+import { CONTROLS, CURSORS, INSPECTOR, PANELS, WAVEFORM } from "./generated";
 import {
 	BEATS,
 	type BeatId,
@@ -101,7 +101,7 @@ function Slider({ label, display, pct }: { label: string; display: string; pct: 
 		<span className={styles.control}>
 			<span className={styles.controlHead}>
 				<span className={styles.controlLabel}>{label}</span>
-				<span className={styles.controlValue}>{display}</span>
+				{display ? <span className={styles.controlValue}>{display}</span> : null}
 			</span>
 			<span className={styles.track}>
 				<span className={styles.trackFill} style={{ width: `${pct}%` }} />
@@ -119,6 +119,34 @@ function Toggle({ label, on }: { label: string; on: boolean }) {
 		</span>
 	);
 }
+
+/** A row of named choices, one pressed: the app's `ChoiceRow`, which replaced
+ *  its selects and the sliders whose number meant nothing to a user. */
+function Choices({
+	label,
+	options,
+	pressed,
+}: {
+	label: string;
+	options: readonly string[];
+	pressed: number;
+}) {
+	return (
+		<span className={styles.field}>
+			<span className={styles.controlLabel}>{label}</span>
+			<span className={styles.choices}>
+				{options.map((o, i) => (
+					<span key={o} className={i === pressed ? styles.choiceOn : styles.choice}>
+						{o}
+					</span>
+				))}
+			</span>
+		</span>
+	);
+}
+
+const levelIndex = (c: { levels: readonly { value: number }[]; value: number }) =>
+	c.levels.findIndex((l) => l.value === c.value);
 
 const pctOf = (c: { value: number; min: number; max: number }) =>
 	((c.value - c.min) / (c.max - c.min)) * 100;
@@ -187,7 +215,6 @@ export default function Recreation() {
 	const root = useRef<HTMLDivElement | null>(null);
 	const cam = useRef<HTMLVideoElement | null>(null);
 	const padValue = useRef<HTMLSpanElement | null>(null);
-	const sizeValue = useRef<HTMLSpanElement | null>(null);
 	const flow = useRef<HTMLParagraphElement | null>(null);
 
 	useEffect(() => {
@@ -196,7 +223,6 @@ export default function Recreation() {
 			root: root.current,
 			cam: cam.current,
 			padValue: padValue.current,
-			sizeValue: sizeValue.current,
 			flow: flow.current,
 		};
 		if (Object.values(refs).some((el) => el === null)) return;
@@ -277,8 +303,9 @@ export default function Recreation() {
 					    translated captions beside them must not. */}
 					<div className={styles.panel} aria-hidden="true" lang="en">
 						<header className={styles.panelHead}>
+							{/* One pane in the app: Background is a section of Composition. */}
 							<h4 className={styles.panelTitle} data-pane="style">
-								{PANELS.background.title}
+								{PANELS.effects.title}
 							</h4>
 							<h4 className={styles.panelTitle} data-pane="effects">
 								{PANELS.effects.title}
@@ -294,6 +321,7 @@ export default function Recreation() {
 						<div className={styles.panelBody}>
 							{/* ── Background ── */}
 							<div className={styles.pane} data-pane="style">
+								<span className={styles.section}>{PANELS.background.title}</span>
 								<span className={styles.tabs}>
 									{PANELS.background.tabs.map((tab, i) => (
 										<span key={tab} className={i === 0 ? styles.tabOn : styles.tab}>
@@ -301,7 +329,6 @@ export default function Recreation() {
 										</span>
 									))}
 								</span>
-								<span className={styles.upload}>{PANELS.background.uploadCustom}</span>
 								<span className={styles.swatches} data-strip="">
 									{WALLPAPERS.slice(0, WALLPAPER_COUNT_SHOWN).map((n, i) => (
 										<span
@@ -330,11 +357,29 @@ export default function Recreation() {
 											/>
 										</span>
 									))}
+									{/* The upload is a tile in the grid now, not a button above it. */}
+									<span className={styles.swatchAdd}>+</span>
 								</span>
+								<Choices
+									label={PANELS.background.motion}
+									options={PANELS.background.motions}
+									pressed={0}
+								/>
+								<Slider
+									label={CONTROLS.blurBg.label}
+									display={CONTROLS.blurBg.display}
+									pct={pctOf(CONTROLS.blurBg)}
+								/>
 							</div>
 
 							{/* ── Video Effects ── */}
 							<div className={styles.pane} data-pane="effects">
+								<span className={styles.section}>{PANELS.effects.frame}</span>
+								<Choices
+									label={CONTROLS.shadow.label}
+									options={CONTROLS.shadow.levels.map((l) => l.label)}
+									pressed={levelIndex(CONTROLS.shadow)}
+								/>
 								<span className={`${styles.control} ${styles.controlLive}`}>
 									<span className={styles.controlHead}>
 										<span className={styles.controlLabel}>{CONTROLS.padding.label}</span>
@@ -347,21 +392,16 @@ export default function Recreation() {
 										<span className={`${styles.knob} ${styles.knobPad}`} />
 									</span>
 								</span>
-								<Toggle label={CONTROLS.blurBg.label} on={CONTROLS.blurBg.on} />
-								<Slider
-									label={CONTROLS.motionBlur.label}
-									display={CONTROLS.motionBlur.display}
-									pct={pctOf(CONTROLS.motionBlur)}
-								/>
-								<Slider
-									label={CONTROLS.shadow.label}
-									display={CONTROLS.shadow.display}
-									pct={pctOf(CONTROLS.shadow)}
-								/>
 								<Slider
 									label={CONTROLS.roundness.label}
 									display={CONTROLS.roundness.display}
 									pct={pctOf(CONTROLS.roundness)}
+								/>
+								<span className={styles.section}>{PANELS.effects.motion}</span>
+								<Slider
+									label={CONTROLS.motionBlur.label}
+									display={CONTROLS.motionBlur.display}
+									pct={pctOf(CONTROLS.motionBlur)}
 								/>
 							</div>
 
@@ -371,9 +411,6 @@ export default function Recreation() {
 								<span className={`${styles.control} ${styles.controlLive}`}>
 									<span className={styles.controlHead}>
 										<span className={styles.controlLabel}>{CONTROLS.cursorSize.label}</span>
-										<span className={styles.controlValue} ref={sizeValue}>
-											{CONTROLS.cursorSize.display}
-										</span>
 									</span>
 									<span className={styles.track} data-t="sztrk">
 										<span className={`${styles.trackFill} ${styles.trackFillSize}`} />
@@ -384,6 +421,11 @@ export default function Recreation() {
 									label={CONTROLS.smoothing.label}
 									display={CONTROLS.smoothing.display}
 									pct={pctOf(CONTROLS.smoothing)}
+								/>
+								<Choices
+									label={CONTROLS.clickBounce.label}
+									options={CONTROLS.clickBounce.levels.map((l) => l.label)}
+									pressed={levelIndex(CONTROLS.clickBounce)}
 								/>
 							</div>
 
@@ -698,7 +740,16 @@ export default function Recreation() {
 										className={styles.clip}
 										style={{ left: x(c.from), width: x(c.to - c.from) }}
 									>
-										<span className={styles.clipWave} />
+										{/* The app's clip card: its own waveform paths, in dark ink on
+										    the brand's green. */}
+										<svg
+											className={styles.clipWave}
+											viewBox={WAVEFORM.viewBox}
+											preserveAspectRatio="none"
+										>
+											<path className={styles.clipWaveArea} d={WAVEFORM.area} />
+											<path className={styles.clipWaveLine} d={WAVEFORM.line} />
+										</svg>
 									</div>
 								))}
 

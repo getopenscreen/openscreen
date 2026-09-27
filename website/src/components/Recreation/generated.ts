@@ -489,8 +489,15 @@ export const PANELS = {
 		title: "Background",
 		tabs: [
 			"Image",
-			"Color",
 			"Gradient",
+			"Color",
+		],
+		motion: "Animation",
+		motions: [
+			"None",
+			"Drift",
+			"Aurora",
+			"Waves",
 		],
 		uploadCustom: "Upload image",
 		wallpaperCount: 18,
@@ -517,6 +524,8 @@ export const PANELS = {
 	},
 	effects: {
 		title: "Composition",
+		frame: "Frame",
+		motion: "Motion",
 		padding: "Padding",
 		blurBg: "Blur background",
 		motionBlur: "Motion blur",
@@ -528,6 +537,7 @@ export const PANELS = {
 		show: "Show cursor",
 		size: "Size",
 		smoothing: "Smoothing",
+		clickBounce: "Click bounce",
 	},
 } as const;
 
@@ -543,6 +553,36 @@ export const EFFECTS = {
 /** Every slider and toggle on those panels, at this document's settings, scaled
  *  and suffixed the way RightPanes.tsx scales and suffixes it. */
 export const CONTROLS = {
+	blurBg: {
+		label: "Blur background",
+		value: 50,
+		min: 0,
+		max: 100,
+		suffix: "%",
+		display: "50%",
+	},
+	shadow: {
+		label: "Shadow",
+		levels: [
+			{
+				value: 0,
+				label: "None",
+			},
+			{
+				value: 0.3,
+				label: "Light",
+			},
+			{
+				value: 0.6,
+				label: "Medium",
+			},
+			{
+				value: 0.9,
+				label: "Strong",
+			},
+		],
+		value: 0.3,
+	},
 	padding: {
 		label: "Padding",
 		value: 55,
@@ -551,10 +591,6 @@ export const CONTROLS = {
 		suffix: "%",
 		display: "55%",
 	},
-	blurBg: {
-		label: "Blur background",
-		on: true,
-	},
 	motionBlur: {
 		label: "Motion blur",
 		value: 30,
@@ -562,14 +598,6 @@ export const CONTROLS = {
 		max: 100,
 		suffix: "%",
 		display: "30%",
-	},
-	shadow: {
-		label: "Shadow",
-		value: 35,
-		min: 0,
-		max: 100,
-		suffix: "%",
-		display: "35%",
 	},
 	roundness: {
 		label: "Roundness",
@@ -585,11 +613,11 @@ export const CONTROLS = {
 	},
 	cursorSize: {
 		label: "Size",
-		value: 45,
-		min: 5,
-		max: 100,
+		value: 4.5,
+		min: 1.5,
+		max: 6,
 		suffix: "",
-		display: "45.0",
+		display: "",
 	},
 	smoothing: {
 		label: "Smoothing",
@@ -598,6 +626,24 @@ export const CONTROLS = {
 		max: 100,
 		suffix: "%",
 		display: "35%",
+	},
+	clickBounce: {
+		label: "Click bounce",
+		levels: [
+			{
+				value: 0,
+				label: "None",
+			},
+			{
+				value: 1,
+				label: "Light",
+			},
+			{
+				value: 2,
+				label: "Strong",
+			},
+		],
+		value: 1,
 	},
 } as const;
 
@@ -696,8 +742,8 @@ export const PROVENANCE: ProvenanceEntry[] = [
 	{ shown: "Bellrock — docs walkthrough", source: "fixture assets[0].label, as the clip card's own label" },
 	{ shown: "Background", source: "src/i18n/locales/en/settings.json → background.title" },
 	{ shown: "Image", source: "src/i18n/locales/en/settings.json → background.image" },
-	{ shown: "Color", source: "src/i18n/locales/en/settings.json → background.color" },
 	{ shown: "Gradient", source: "src/i18n/locales/en/settings.json → background.gradient" },
+	{ shown: "Color", source: "src/i18n/locales/en/settings.json → background.color" },
 	{ shown: "Upload image", source: "src/i18n/locales/en/settings.json → background.uploadCustom" },
 	{ shown: "Background 1", source: "computed: settings.json background.imageLabel over the 18 wallpapers WALLPAPER_COUNT declares in src/lib/wallpaper.ts" },
 	{ shown: "Composition", source: "src/i18n/locales/en/settings.json → effects.title" },
@@ -710,6 +756,21 @@ export const PROVENANCE: ProvenanceEntry[] = [
 	{ shown: "Show cursor", source: "src/i18n/locales/en/settings.json → cursor.show" },
 	{ shown: "Size", source: "src/i18n/locales/en/settings.json → cursor.size" },
 	{ shown: "Smoothing", source: "src/i18n/locales/en/settings.json → cursor.smoothing" },
+	{ shown: "Click bounce", source: "src/i18n/locales/en/settings.json → cursor.clickBounce" },
+	{ shown: "Animation", source: "src/i18n/locales/en/settings.json → background.motion" },
+	{ shown: "None", source: "src/i18n/locales/en/settings.json → background.motion{None,Drift,Aurora,Waves}" },
+	{ shown: "Drift", source: "src/i18n/locales/en/settings.json → background.motion{None,Drift,Aurora,Waves}" },
+	{ shown: "Aurora", source: "src/i18n/locales/en/settings.json → background.motion{None,Drift,Aurora,Waves}" },
+	{ shown: "Waves", source: "src/i18n/locales/en/settings.json → background.motion{None,Drift,Aurora,Waves}" },
+	{ shown: "Frame", source: "src/i18n/locales/en/settings.json → effects.frame" },
+	{ shown: "Motion", source: "src/i18n/locales/en/settings.json → effects.motion" },
+	{ shown: "None", source: "lifted: SHADOW_LEVELS / CLICK_BOUNCE_LEVELS in RightPanes.tsx, labels from settings.json" },
+	{ shown: "Light", source: "lifted: SHADOW_LEVELS / CLICK_BOUNCE_LEVELS in RightPanes.tsx, labels from settings.json" },
+	{ shown: "Medium", source: "lifted: SHADOW_LEVELS / CLICK_BOUNCE_LEVELS in RightPanes.tsx, labels from settings.json" },
+	{ shown: "Strong", source: "lifted: SHADOW_LEVELS / CLICK_BOUNCE_LEVELS in RightPanes.tsx, labels from settings.json" },
+	{ shown: "None", source: "lifted: SHADOW_LEVELS / CLICK_BOUNCE_LEVELS in RightPanes.tsx, labels from settings.json" },
+	{ shown: "Light", source: "lifted: SHADOW_LEVELS / CLICK_BOUNCE_LEVELS in RightPanes.tsx, labels from settings.json" },
+	{ shown: "Strong", source: "lifted: SHADOW_LEVELS / CLICK_BOUNCE_LEVELS in RightPanes.tsx, labels from settings.json" },
 ];
 
 /** What check-recreation.mjs asserts against. */

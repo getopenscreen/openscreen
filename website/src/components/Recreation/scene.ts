@@ -429,7 +429,7 @@ const ease = (v: number) => {
  *  only the default one, so the recorded pointer wears it for the whole take. */
 const BG_PICKS = [2.0, 3.95, 5.8];
 
-export const WALLPAPER_COUNT_SHOWN = 12;
+export const WALLPAPER_COUNT_SHOWN = 11;
 
 /* ── the frame ────────────────────────────────────────────────────────────── */
 
@@ -513,7 +513,8 @@ export function frameAt(p: number): Frame {
 	);
 
 	const sizeU = clamp01((t - 12.7) / 0.5);
-	const cursorSize = 40 + sizeU * 23.2;
+	// In the app's own units, over SETTING_BOUNDS (1.5–6): a drag from 3 to 5.
+	const cursorSize = 3 + sizeU * 2;
 
 	const live = ZOOMS.slice(1).find((z) => t >= z.from && t <= z.to);
 	const zoomsPlaced = ZOOMS.filter((z) => t >= z.placedAt).length;

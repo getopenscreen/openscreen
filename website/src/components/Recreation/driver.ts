@@ -40,7 +40,6 @@ export interface DriverRefs {
 	root: HTMLElement;
 	cam: HTMLVideoElement;
 	padValue: HTMLElement;
-	sizeValue: HTMLElement;
 	flow: HTMLElement;
 }
 
@@ -172,7 +171,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		};
 	}
 
-	const { band, root, cam, padValue, sizeValue, flow } = refs;
+	const { band, root, cam, padValue, flow } = refs;
 	let raf = 0;
 
 	/* ── the target cache ─────────────────────────────────────────────────── */
@@ -551,7 +550,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	let lastBeat: string | null | undefined;
 	let lastPad = "";
-	let lastSize = "";
 	let lastArt = "";
 	const struck = new Set<number>();
 	let trimEls: HTMLElement[] = [];
@@ -629,10 +627,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 		const pad = `${Math.round(f.padding)}%`;
 		if (pad !== lastPad) padValue.textContent = lastPad = pad;
-		// One decimal and no suffix: RightPanes gives this one slider `decimals={1}`
-		// and no unit, unlike every other slider on the panel.
-		const size = f.cursorSize.toFixed(1);
-		if (size !== lastSize) sizeValue.textContent = lastSize = size;
 		// Only the five removable entries can ever change, so the other forty
 		// nodes in the transcript are never touched.
 		for (const i of CUT_INDEX) {

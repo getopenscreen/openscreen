@@ -158,14 +158,50 @@ fn envelope_fit(unit: [f32; 2], w: f32) -> f32 {
     if fit < 1.0 { fit * FIT_MARGIN } else { 1.0 }
 }
 
+/// Le point à viser pour que la caméra cadre la fenêtre du zoom (le rectangle de demi-côtés
+/// `half` autour de `aim`, ce que montre un zoom à plat) comme un zoom à plat la cadre, vue sous
+/// `angles` à `dist`. Sur chaque axe, `u` place la visée dans sa portée : à 0, la fenêtre touche le
+/// bord gauche (ou haut) de l'écran, et c'est son bord à elle qui tombe au bord de l'image ; à 1,
+/// le bord droit (ou bas) ; entre les deux, un mélange linéaire qui la centre à mi-course. Vu de
+/// biais, le côté proche grandit : viser le centre de la fenêtre pousserait son bord proche hors de
+/// l'image, et le coin de l'écran avec lui. Au zoom 1, la fenêtre est l'écran entier et `u` vaut
+/// 0,5 : c'est `centring`. Quatre passes.
+fn frame_window(
+    aim: [f32; 2],
+    half: [f32; 2],
+    u: [f32; 2],
+    dist: f32,
+    angles: [f32; 2],
+    fit: f32,
+) -> [f32; 2] {
+    let edge = half.map(|h| h * fit);
+    let mut target = aim;
+    for _ in 0..4 {
+        let v = orbit_view(target, dist, angles, dist * fit);
+        let [tl, tr, br, bl] = corners(2.0 * half[0], 2.0 * half[1])
+            .map(|[x, y]| v.project([aim[0] + x, aim[1] + y, 0.0]).unwrap_or([x, y]));
+        let (left, right) = (tl[0].min(bl[0]), tr[0].max(br[0]));
+        let (top, bottom) = (tl[1].min(tr[1]), bl[1].max(br[1]));
+        let err = [
+            (left + edge[0]) + ((right - edge[0]) - (left + edge[0])) * u[0],
+            (top + edge[1]) + ((bottom - edge[1]) - (top + edge[1])) * u[1],
+        ];
+        // Déplacer la visée de `d` fait glisser l'image de `d × fit` : on la déplace de l'écart.
+        target = [target[0] + err[0] / fit, target[1] + err[1] / fit];
+    }
+    target
+}
+
 impl View {
     /// La caméra qui filme une boîte écran de `box_px` px (zoom compris) sous `pose`.
     ///
     /// - L'œil est sur l'orbite de `pose.orbit`, à `DISTANCE × min(boîte) × zoom^(−DOLLY)` du point
     ///   visé : la vue se resserre moitié par travelling, moitié par focale.
-    /// - Au zoom 1, le point visé est décalé pour centrer l'écran (`centring`) et la focale réduite
-    ///   pour qu'il tienne dans sa boîte depuis toute l'orbite (`envelope_fit`). Dès le zoom
-    ///   `FULL_VIEW_ZOOM`, le point visé tombe au centre de l'image, grossi du zoom.
+    /// - La fenêtre du zoom autour de `pose.aim` est cadrée comme sous un zoom à plat
+    ///   (`frame_window`) : centrée à mi-course, son bord au bord de l'image quand elle touche celui
+    ///   de l'écran, coin de l'écran compris. Au zoom 1, c'est l'écran entier, et la focale est
+    ///   réduite pour qu'il tienne dans sa boîte depuis toute l'orbite (`envelope_fit`). Dès le zoom
+    ///   `FULL_VIEW_ZOOM`, l'écran est grossi exactement du zoom.
     pub fn new(box_px: [f32; 2], pose: CameraPose) -> View {
         let w = pose.weight.clamp(0.0, 1.0);
         let [bw, bh] = box_px;
@@ -176,9 +212,11 @@ impl View {
         let fit = envelope_fit(unit, w);
         let fit = fit + (1.0 - fit) * fade;
         let angles = orbit_angles(pose.orbit, w);
-        let shift = centring(unit, angles).map(|c| c * m * (1.0 - fade));
         let dist = DISTANCE * m * zoom.powf(-DOLLY);
-        let target = [(pose.aim[0] - 0.5) * bw + shift[0], (pose.aim[1] - 0.5) * bh + shift[1]];
+        let aim = [(pose.aim[0] - 0.5) * bw, (pose.aim[1] - 0.5) * bh];
+        let r = reach(zoom);
+        let u = pose.aim.map(|a| if r > 1e-4 { ((a - (0.5 - r)) / (2.0 * r)).clamp(0.0, 1.0) } else { 0.5 });
+        let target = frame_window(aim, [0.5 * bw / zoom, 0.5 * bh / zoom], u, dist, angles, fit);
         orbit_view(target, dist * (1.0 - PRESS * pose.press * w), angles, dist * fit)
     }
 
@@ -261,9 +299,8 @@ impl Follow {
 
 /// Portée du point visé au zoom `zoom` : il reste dans `0,5 ± reach`, la portée du focus d'un
 /// zoom à plat (le gimbal de l'aperçu). Comme sous les autres caméras, la vue va jusqu'au bord de
-/// l'écran et le padding montre ce qu'il y a au-delà. Visé en butée sur un coin, le coin de l'écran
-/// tombe à moins de 5 % de la boîte de celui d'un zoom à plat : la perspective agrandit le côté
-/// proche. Au zoom 1, le centre.
+/// l'écran : visé en butée, `frame_window` pose le bord de l'écran au bord de l'image, et le
+/// padding montre ce qu'il y a au-delà. Au zoom 1, le centre.
 fn reach(zoom: f32) -> f32 {
     (0.5 - 0.5 / zoom.max(1.0)).max(0.0)
 }
@@ -405,16 +442,27 @@ mod tests {
         assert!(0.0 < a && a < b && b < c, "{a} {b} {c}");
     }
 
-    /// Dès `FULL_VIEW_ZOOM`, le point visé tombe au point principal.
+    /// Dès `FULL_VIEW_ZOOM`, la fenêtre du zoom (ce que montre un zoom à plat autour du point visé)
+    /// est cadrée comme par un zoom à plat, à 1 px près : centrée quand la visée est à mi-course,
+    /// son bord au bord de l'image quand la visée est en butée.
     #[test]
-    fn the_camera_looks_at_its_aim() {
-        for zoom in [2.0f32, 3.5] {
-            let p = pose([0.62, 0.41], zoom);
+    fn the_camera_frames_the_zoom_window_like_a_flat_zoom() {
+        let (hw, hh) = (BOX[0] * 0.5, BOX[1] * 0.5);
+        for zoom in [2.0f32, 2.2, 3.5, 5.0] {
             let bx = BOX.map(|b| b * zoom);
-            let v = View::new(bx, p);
-            let aim = [(p.aim[0] - 0.5) * bx[0], (p.aim[1] - 0.5) * bx[1], 0.0];
-            let q = v.project(aim).unwrap();
-            assert!(q[0].abs() < 1e-2 && q[1].abs() < 1e-2, "{q:?}");
+            let window = |p: [f32; 2]| {
+                let v = View::new(bx, CameraPose { weight: 1.0, aim: p, orbit: p, zoom, press: 0.0 });
+                let aim = [(p[0] - 0.5) * bx[0], (p[1] - 0.5) * bx[1]];
+                let [tl, tr, br, bl] = corners(BOX[0], BOX[1])
+                    .map(|[x, y]| v.project([aim[0] + x, aim[1] + y, 0.0]).unwrap());
+                [tl[0].min(bl[0]), tr[0].max(br[0]), tl[1].min(tr[1]), bl[1].max(br[1])]
+            };
+            let (r, c) = (reach(zoom), window([0.5, 0.5]));
+            assert!((c[0] + c[1]).abs() < 1.0 && (c[2] + c[3]).abs() < 1.0, "zoom {zoom} centre : {c:?}");
+            let lo = window([0.5 - r, 0.5 - r]);
+            assert!((lo[0] + hw).abs() < 1.0 && (lo[2] + hh).abs() < 1.0, "zoom {zoom} haut-gauche : {lo:?}");
+            let hi = window([0.5 + r, 0.5 + r]);
+            assert!((hi[1] - hw).abs() < 1.0 && (hi[3] - hh).abs() < 1.0, "zoom {zoom} bas-droite : {hi:?}");
         }
     }
 
@@ -645,11 +693,10 @@ mod tests {
         assert!((posed.orbit[0] - 0.8).abs() < 1e-3);
     }
 
-    /// Visé en butée sur un coin, comme un zoom à plat au bord du gimbal, la vue cadre le coin de
-    /// l'écran : il tombe à moins de 5 % de la boîte de là où le zoom à plat le met, sur les deux
-    /// axes, et le padding montre ce qu'il y a derrière. Plus loin dehors, le coin resterait hors
-    /// champ (près de 10 % avec l'ancienne marge) ; plus loin dedans, la vue montrerait plus que le
-    /// zoom à plat.
+    /// Visé en butée sur un coin, comme un zoom à plat au bord du gimbal, la vue montre le coin de
+    /// l'écran en entier : dès le zoom 2, il tombe au coin de l'image, là où le zoom à plat le met ;
+    /// en deçà, un peu dedans, la focale y étant encore réduite. Même sans padding, il n'est jamais
+    /// coupé (il l'était de près de 10 % avec l'ancienne marge, de 4 % avec la visée seule).
     #[test]
     fn at_its_limit_the_view_frames_the_screen_corner() {
         for zoom in [1.5f32, 1.8, 2.2, 3.5, 5.0] {
@@ -660,7 +707,7 @@ mod tests {
             // Au-delà du coin bas-gauche de la boîte, en boîtes : positif = hors de la boîte.
             let past = [(-BOX[0] * 0.5 - x) / BOX[0], (y - BOX[1] * 0.5) / BOX[1]];
             println!("zoom {zoom} : coin de l'écran à {past:.3?} boîte de celui d'un zoom à plat");
-            assert!(past.iter().all(|p| p.abs() < 0.05), "zoom {zoom} : {past:?}");
+            assert!(past.iter().all(|p| (-0.06..0.001).contains(p)), "zoom {zoom} : {past:?}");
         }
     }
 

@@ -109,13 +109,15 @@ ne se lit que si l'œil se déplace autour de l'écran.
   la boîte et du poids : un par région, l'écran ne respire pas. 16:9 : 0,83 (centré) au lieu de 0,77
   (sans centrage) ; au plus près, l'écran passe à 0,7 px du bord de sa boîte. Au repos, il en occupe
   85 % × 83 %.
-- **Cadrage au zoom** : le centrage et le containment s'effacent linéairement jusqu'au zoom 2. Au
-  delà, le point visé tombe au centre de l'image, grossi exactement du zoom. Le point visé va aussi
-  loin que le focus d'un zoom à plat (le gimbal) : `0,5 ± max(0, 0,5 − 0,5/max(zoom, 1))`, au centre
-  au zoom 1. La vue atteint donc le bord de l'écran et le padding montre ce qu'il y a au-delà, comme
-  sous les autres caméras. En butée sur un coin, la perspective agrandit le côté proche : le coin
-  tombe à moins de 5 % de la boîte de celui d'un zoom à plat (27/09 ; avant, une marge de 10 %
-  gardait la vue dans l'écran et cachait ses coins).
+- **Cadrage au zoom** : le containment s'efface linéairement jusqu'au zoom 2 ; au-delà, l'écran est
+  grossi exactement du zoom. Le point visé va aussi loin que le focus d'un zoom à plat (le
+  gimbal) : `0,5 ± max(0, 0,5 − 0,5/max(zoom, 1))`, au centre au zoom 1. La vue atteint donc le bord
+  de l'écran et le padding montre ce qu'il y a au-delà, comme sous les autres caméras. La caméra
+  cadre la fenêtre du zoom (le centrage du zoom 1 appliqué à elle) comme un zoom à plat
+  (`camera::frame_window`) : centrée à mi-course, et en butée son bord au bord de l'image, car vu
+  de biais le côté proche grandit et viser le centre de la fenêtre le pousserait dehors. Dès le
+  zoom 2, le coin de l'écran tombe au coin de l'image, même sans padding (27/09 ; avant, une marge
+  de 10 % gardait la vue dans l'écran et cachait ses coins).
 - **Force 0** = le rendu plat, par le même chemin (mode 0).
 
 **Le cadreur** (`camera::follow`), pure fonction de `t`, sans zone morte : le pointeur, lu dans

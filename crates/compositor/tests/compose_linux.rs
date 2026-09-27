@@ -65,7 +65,7 @@ fn compose_linux_rend_une_frame() {
     let (w, h, rgba) = unsafe {
         let sf = dec.seek_to(1.0).expect("Decoder::seek_to");
         let mut cfg = Cfg::c8();
-        cfg.bg_blur = true;
+        cfg.bg_blur = 1.0;
         // webcam = screen (mon compose coeur ne dessine que l'ecran).
         comp.compose_frame(sf, sf, 0.0, &cfg).expect("compose_frame");
         comp.readback_direct().expect("readback_direct")

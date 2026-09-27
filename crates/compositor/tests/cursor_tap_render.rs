@@ -222,7 +222,7 @@ fn gesture(name: &str) -> CursorTrack {
 
 fn cfg() -> Cfg {
     let mut cfg = Cfg::c8();
-    cfg.bg_blur = false;
+    cfg.bg_blur = 0.0;
     cfg.zoom = false;
     cfg.layout_anim = false;
     cfg.cursor = true;

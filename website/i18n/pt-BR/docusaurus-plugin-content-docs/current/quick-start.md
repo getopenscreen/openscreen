@@ -49,7 +49,7 @@ Clique em **Abrir Studio** (ou ele abre sozinho quando você encerra a gravaçã
 ## 6. Recorte e exporte {#6-trim-and-export}
 
 - Posicione o cursor de reprodução onde quer um corte e pressione `T` (ou o botão de tesoura) — uma região de recorte de dois segundos aparece ali. Arraste as bordas dela para ajustar o que será removido.
-- Clique em **Exportar** na barra superior, escolha **MP4** ou **GIF**, selecione uma qualidade e clique em **Exportar**.
+- Clique em **Exportar** na barra superior, escolha um destino (**Web / YouTube**, **Redes sociais**, **Estúdio** ou **GIF para README**) e clique em **Exportar**. Formato e qualidade ficam em **Avançado**, se você precisar.
 - Quando terminar, clique em **Mostrar na pasta** para encontrar o arquivo.
 
 Esse é o ciclo básico. Para o conjunto completo de ferramentas de edição — zooms, mudanças de velocidade, anotações, estilo do cursor, layout da webcam —, veja [Edição e linha do tempo](./editing-timeline.md). Para juntar várias tomadas em um só vídeo, veja [Biblioteca de mídia](./media-library.md).

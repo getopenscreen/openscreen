@@ -25,7 +25,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Screen St
 | IA, réseau ou clé | Aucun |
 | Profondeurs de zoom manuel | 1,25×, 1,5×, 1,8×, 2,2×, 3,5× ou 5× |
 | Focus | Un point que vous placez, ou le curseur enregistré |
-| Inclinaison 3D | Aucune, Iso, Gauche ou Droite |
+| Caméra 3D | Désactivée, écran tourné à gauche ou à droite, ou Orbite 3D |
 | Ligne de commande | L'option `--auto-zoom` de la commande `export` |
 | Plateformes | Windows 10 (1903 ou ultérieur) et 11, x64. macOS 13 ou ultérieur, Apple Silicon et Intel. Linux, x64 |
 | Prix | Gratuit, y compris pour un usage commercial. Licence MIT |
@@ -61,14 +61,14 @@ Les zooms automatiques sont un point de départ. Les mêmes régions de zoom peu
 - **Six profondeurs.** 1,25×, 1,5×, 1,8×, 2,2×, 3,5× et 5×.
 - **Deux modes de focus.** Manuel tient un point : faites glisser le repère de focus dans l'aperçu, ou réinitialisez-le au centre. Auto suit le curseur enregistré.
 - **Un interrupteur pour tous les zooms.** Le viseur de mise au point automatique dans la barre d'outils fait suivre le curseur par tous les zooms. Désactivez-le et chaque zoom retrouve son propre réglage.
-- **Inclinaison 3D.** Chaque zoom peut rester plat, ou s'incliner Iso, Gauche ou Droite.
+- **Caméra 3D.** Chaque zoom peut rester plat, tourner l'écran à gauche ou à droite, ou faire voler une caméra Orbite 3D qui suit le focus du zoom.
 - **La webcam pendant un zoom.** Dans la disposition en incrustation d'image, **Réduire au zoom** rend la caméra plus petite pendant que l'écran est zoomé. C'est activé par défaut.
 
 Un zoom manuel avec un focus manuel n'a besoin d'aucune donnée de curseur, donc il fonctionne aussi sur une vidéo importée d'un autre outil. Voir [Régions de zoom](/docs/editing-timeline/#zoom-regions) pour l'inspecteur de zoom.
 
 ## Le curseur après la prise {#the-cursor-after-the-take}
 
-Le même mouvement enregistré pilote le curseur dans l'export. L'onglet Curseur l'affiche ou le masque et règle sa taille, son lissage, son flou de mouvement et son rebond au clic. Le tracé du curseur est lissé de la même façon pour l'aperçu et pour l'export, donc l'aperçu correspond au fichier.
+Le même mouvement enregistré pilote le curseur dans l'export. L'onglet Curseur l'affiche ou le masque et règle sa taille, son lissage, son flou de mouvement, son rebond au clic et son impact du clic. Le tracé du curseur est lissé de la même façon pour l'aperçu et pour l'export, donc l'aperçu correspond au fichier.
 
 Le rebond au clic a besoin de clics enregistrés. Sous macOS, cela nécessite l'autorisation Accessibilité, et sous Linux, votre utilisateur doit être dans le groupe `input`. [Enregistrement](/docs/recording/) liste ce que chaque plateforme capture.
 

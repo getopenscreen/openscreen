@@ -49,7 +49,7 @@ Klicke auf **Open Studio** (oder warte, bis es sich nach dem Stoppen von selbst 
 ## 6. Kürzen und exportieren {#6-trim-and-export}
 
 - Setze den Abspielkopf an die Stelle, an der du schneiden willst, und drücke `T` (oder klicke auf die Scheren-Schaltfläche): Dort entsteht ein zwei Sekunden langer Schnittbereich. Ziehe an seinen Rändern, um anzupassen, was entfernt wird.
-- Klicke in der oberen Leiste auf **Export**, wähle **MP4** oder **GIF**, lege eine Qualität fest und klicke auf **Export**.
+- Klicke in der oberen Leiste auf **Export**, wähle ein Ziel (**Web / YouTube**, **Social**, **Studio** oder **README GIF**) und klicke auf **Export**. Format und Qualität liegen bei Bedarf unter **Advanced**.
 - Wenn der Export fertig ist, findest du deine Datei über **Show in folder**.
 
 Das ist der grundlegende Ablauf. Die vollständigen Bearbeitungswerkzeuge (Zooms, Geschwindigkeitsänderungen, Annotationen, Cursorgestaltung, Webcam-Layout) findest du unter [Bearbeitung & Zeitleiste](./editing-timeline.md). Wie du mehrere Takes zu einem Video zusammensetzt, steht unter [Mediathek](./media-library.md).

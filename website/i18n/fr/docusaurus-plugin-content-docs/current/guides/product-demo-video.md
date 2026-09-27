@@ -57,13 +57,13 @@ La webcam est enregistrée dans son propre fichier : son placement est donc une
 
 Pour une introduction ou une conclusion, appuyez sur `C` pour ajouter un segment **Caméra plein écran** : la caméra remplit tout le cadre pendant ce passage.
 
-L'onglet **Composition** met en forme le cadre. Sa section d'arrière-plan propose 18 fonds d'écran intégrés, une couleur unie, un dégradé ou votre propre image, ainsi qu'un flou d'arrière-plan. En dessous se trouvent l'ombre, l'arrondi, la marge et le flou de mouvement.
+L'onglet **Composition** met en forme le cadre. Sa section d'arrière-plan propose 18 fonds d'écran intégrés, une couleur unie, un dégradé ou votre propre image, une animation qui anime aussi bien les dégradés que les images, ainsi qu'un flou d'arrière-plan. En dessous se trouvent l'ombre, la marge, l'arrondi et le flou de mouvement.
 
 ## 4. Ajouter des zooms automatiques {#4-add-automatic-zooms}
 
 Dans la barre d'outils de la timeline, ouvrez **Amélioration auto** et choisissez **Zooms automatiques**. OpenScreen lit le mouvement enregistré du curseur et place des régions de zoom sur ces pauses, sans réseau ni modèle. S'il ne place rien, il vous le signale. Les causes habituelles sont un enregistrement sans données de curseur, aucune pause sur cette plage, ou des zooms existants qui couvrent déjà ces moments.
 
-Vérifiez-les ensuite. Cliquez sur un zoom pour régler son niveau (de 1.25× à 5×), son mode de focus (Auto suit le curseur, Manuel garde un point fixe) et une éventuelle rotation 3D. Appuyez sur `Z` pour ajouter un zoom à la main, et sur `Ctrl/Cmd+D` pour supprimer un zoom dont vous ne voulez pas.
+Vérifiez-les ensuite. Cliquez sur un zoom pour régler son niveau (de 1.25× à 5×), son mode de focus (Auto suit le curseur, Manuel garde un point fixe) et une éventuelle caméra 3D. Appuyez sur `Z` pour ajouter un zoom à la main, et sur `Ctrl/Cmd+D` pour supprimer un zoom dont vous ne voulez pas.
 
 Pour en savoir plus sur le placement des zooms : [Zoom automatique](/features/auto-zoom/).
 

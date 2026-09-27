@@ -57,13 +57,13 @@ A webcam é gravada em um arquivo próprio, então a posição dela é uma decis
 
 Para uma introdução ou um encerramento, pressione `C` para adicionar um segmento de **Câmera em Tela Cheia**: a câmera preenche o quadro inteiro nesse trecho.
 
-A aba **Composição** define o estilo do quadro. A seção de fundo oferece 18 papéis de parede integrados, uma cor sólida, um gradiente ou a sua própria imagem, além de um desfoque do fundo. Abaixo dela ficam sombra, arredondamento, espaçamento e desfoque de movimento.
+A aba **Composição** define o estilo do quadro. A seção de fundo oferece 18 papéis de parede integrados, uma cor sólida, um gradiente ou a sua própria imagem, uma animação que movimenta tanto gradientes quanto imagens, além de um desfoque do fundo. Abaixo dela ficam sombra, espaçamento, arredondamento e desfoque de movimento.
 
 ## 4. Adicione zooms automáticos {#4-add-automatic-zooms}
 
 Na barra de ferramentas da linha do tempo, abra **Melhoria automática** e escolha **Zooms automáticos**. O OpenScreen lê o movimento gravado do cursor e coloca regiões de zoom nessas pausas, sem rede e sem modelo. Se não colocar nenhuma, ele avisa. As causas mais comuns são uma gravação sem dados de cursor, nenhuma pausa naquele intervalo ou zooms existentes que já cobrem esses momentos.
 
-Depois, revise os zooms. Clique em um zoom para definir o nível (de 1.25× a 5×), o modo de foco (Automático segue o cursor, Manual mantém um ponto fixo) e uma rotação 3D opcional. Pressione `Z` para adicionar um zoom manualmente e `Ctrl/Cmd+D` para excluir um que você não quiser.
+Depois, revise os zooms. Clique em um zoom para definir o nível (de 1.25× a 5×), o modo de foco (Automático segue o cursor, Manual mantém um ponto fixo) e uma câmera 3D opcional. Pressione `Z` para adicionar um zoom manualmente e `Ctrl/Cmd+D` para excluir um que você não quiser.
 
 Mais sobre como os zooms são posicionados: [Zoom automático](/features/auto-zoom/).
 

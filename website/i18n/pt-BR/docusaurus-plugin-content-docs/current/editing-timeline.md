@@ -30,10 +30,10 @@ Uma barra flutuante de ícones fica sobre a pré-visualização. São cinco abas
 
 | Aba | O que controla |
 |---|---|
-| **Composição** | Uma seção de fundo (imagem, cor sólida ou gradiente atrás da gravação; envie sua própria imagem ou escolha uma predefinição), depois desfoque do fundo, sombra, desfoque de movimento, arredondamento dos cantos e espaçamento. A linha **Formato** define a proporção de saída da pré-visualização e da exportação: **Auto** (o padrão para projetos novos), que ajusta o quadro em volta da gravação e do layout da câmera com uma borda de espaçamento uniforme, as proporções dos seus clipes em **Original**, além de 16:9, 9:16, 1:1, 4:3, 4:5, 16:10 e 10:16. |
+| **Composição** | Uma seção de fundo (imagem, cor sólida ou gradiente atrás da gravação; envie sua própria imagem ou escolha uma predefinição), com uma linha **Animação** (Nenhum, Deriva, Aurora, Ondas) que movimenta tanto gradientes quanto imagens, e um desfoque do fundo de 0 a 100%. Depois, o quadro: sombra (Nenhuma, Leve, Média, Forte), espaçamento, arredondamento dos cantos e desfoque de movimento. A linha **Formato** define a proporção de saída da pré-visualização e da exportação: **Auto** (o padrão para projetos novos), que ajusta o quadro em volta da gravação e do layout da câmera com uma borda de espaçamento uniforme, as proporções dos seus clipes em **Original**, além de 16:9, 9:16, 1:1, 4:3, 4:5, 16:10 e 10:16. |
 | **Layout da câmera** | Composição da webcam: picture-in-picture, empilhamento vertical, quadro duplo ou sem webcam. Espelhamento e "encolher ao ampliar". No picture-in-picture: formato da câmera (retângulo ou quadrado), arredondamento (toda arredondada, uma câmera quadrada vira um círculo), tamanho e posição: um de oito pontos junto à borda, sempre à mesma distância dela. Arraste a webcam no canvas e ela se encaixa no ponto mais próximo. |
 | **Áudio** | O nível de saída, aplicado da mesma forma na pré-visualização e na exportação. |
-| **Cursor** | Só faz sentido para gravações feitas no modo de cursor editável, no Windows, no macOS ou no Linux. Mostrar/ocultar, recortar à tela e controles deslizantes de tamanho, suavização, desfoque de movimento e rebote ao clicar. |
+| **Cursor** | Só faz sentido para gravações feitas no modo de cursor editável, no Windows, no macOS ou no Linux. Mostrar/ocultar e ocultar automaticamente, o estilo do cursor com a chave **Cursor 3D**, os tipos de cursor (cada tipo que o vídeo mostra, desenhado como foi gravado ou como a seta), controles deslizantes de tamanho (até quatro vezes o padrão), suavização e desfoque de movimento, o rebote ao clicar (Nenhum, Leve, Forte) e **Impacto do clique**, que empurra a tela para trás a cada clique, com qualquer câmera. |
 | **Transcrição** | A transcrição agregada de todos os clipes, editável — veja [Edição da transcrição](./captions.md#transcript-editing). O botão **Legendas** ativa as legendas, define o estilo delas e as traduz — veja [Legendas e transcrição](./captions.md#captions). |
 
 O botão de **lápis** na mesma barra abre a janela **Editar clipe** para o clipe selecionado: um retângulo de corte arrastável com campos numéricos X/Y/L/A e proporções predefinidas, além dos pontos de entrada/saída do clipe. O corte da imagem é por clipe, não por projeto.
@@ -54,13 +54,13 @@ Selecionar uma região na linha do tempo (um bloco de zoom, recorte, anotação,
 
 Arraste as bordas de uma região para redimensioná-la, ou arraste o bloco para movê-lo. As regiões se alinham ao cursor de reprodução, às bordas de outras regiões e ao início/fim da linha do tempo. `Ctrl/Cmd + C` / `Ctrl/Cmd + V` copia os atributos de uma região selecionada para outra região do mesmo tipo.
 
-`Shift` + rolagem desloca a linha do tempo; `Ctrl`/`Cmd` + rolagem aproxima e afasta. Os dois aparecem como dicas abaixo da barra de reprodução.
+`Shift` + rolagem desloca a linha do tempo; `Ctrl`/`Cmd` + rolagem aproxima e afasta. Os dois aparecem como dicas ao lado dos controles de reprodução.
 
 ### Regiões de zoom {#zoom-regions}
 
 Clique em um bloco de zoom para abrir o inspetor dele:
 - Seis níveis de profundidade predefinidos — 1.25× / 1.5× / 1.8× / 2.2× / 3.5× / 5×.
-- **Rotação 3D** — Nenhuma, Iso, Esquerda ou Direita.
+- **Câmera 3D** — Desativada, Tela virada para a esquerda, Tela virada para a direita ou Órbita 3D (uma câmera que se move com o zoom e segue o modo de foco dele).
 - **Modo de Foco** — Manual (arraste o marcador de foco na pré-visualização) ou Automático (segue o cursor gravado). Fica travado em Automático quando o botão Foco automático da barra de ferramentas está ativado.
 - **Posição do Foco** — porcentagem X/Y numérica no modo manual.
 
@@ -72,7 +72,7 @@ Um trecho recortado é removido da reprodução e da exportação. O inspetor te
 
 ### Regiões de velocidade {#speed-regions}
 
-Uma lista de predefinições (de 0.25× a 5×, mais 1× para voltar ao normal) e um campo numérico livre que aceita qualquer valor até 100×. A exportação renderiza a velocidade real nos dois casos.
+Uma fileira de botões de predefinição (0.5×, 1×, 1.5×, 2×, 4×) e um campo numérico livre para qualquer outra velocidade de 0.25× a 16×. A exportação renderiza a velocidade real nos dois casos.
 
 ### Regiões de Câmera em Tela Cheia {#full-camera-regions}
 
@@ -95,7 +95,7 @@ Não é mais possível desenhar formas de desfoque à mão livre. As que já exi
 
 ## Estilo do cursor {#cursor-styling}
 
-Se a gravação tem dados de cursor editável (captura nativa no modo de cursor editável, no Windows, no macOS ou no Linux; [Modo do cursor](./recording.md#cursor-mode) lista o que cada plataforma grava), a aba Cursor permite ajustar tamanho, suavização, desfoque de movimento e rebote ao clicar independentemente da captura bruta — o trajeto do cursor é suavizado de forma determinística, então o que você vê na pré-visualização corresponde à exportação final.
+Se a gravação tem dados de cursor editável (captura nativa no modo de cursor editável, no Windows, no macOS ou no Linux; [Modo do cursor](./recording.md#cursor-mode) lista o que cada plataforma grava), a aba Cursor permite ajustar estilo, tamanho, suavização, desfoque de movimento, rebote ao clicar e impacto do clique independentemente da captura bruta — o trajeto do cursor é suavizado de forma determinística, então o que você vê na pré-visualização corresponde à exportação final.
 
 ## Atalhos de teclado {#keyboard-shortcuts}
 

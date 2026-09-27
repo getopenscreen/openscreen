@@ -49,7 +49,7 @@ Click **Open Studio** (or it opens automatically after stopping) to load your re
 ## 6. Trim and export
 
 - Park the playhead where you want a cut and press `T` (or the scissors button) — a two-second trim region drops there. Drag its edges to adjust what gets removed.
-- Click **Export** in the top bar, choose **MP4** or **GIF**, pick a quality, and hit **Export**.
+- Click **Export** in the top bar, pick a destination (**Web / YouTube**, **Social**, **Studio** or **README GIF**), and hit **Export**. Format and quality sit under **Advanced** if you need them.
 - When it finishes, click **Show in folder** to find your file.
 
 That's the core loop. For the full editing toolset — zooms, speed changes, annotations, cursor styling, webcam layout — see [Editing & timeline](./editing-timeline.md). To assemble several takes into one video, see [Media library](./media-library.md).

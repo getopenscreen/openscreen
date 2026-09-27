@@ -25,7 +25,7 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre Screen Studio,
 | IA, rede ou chave | Nenhuma |
 | Profundidades de zoom manual | 1,25×, 1,5×, 1,8×, 2,2×, 3,5× ou 5× |
 | Foco | Um ponto que você posiciona, ou o cursor gravado |
-| Inclinação 3D | Nenhuma, Iso, Esquerda ou Direita |
+| Câmera 3D | Desativada, tela virada para a esquerda ou para a direita, ou Órbita 3D |
 | Linha de comando | A opção `--auto-zoom` do comando `export` |
 | Plataformas | Windows 10 (1903 ou posterior) e 11, x64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 |
 | Preço | Grátis, inclusive para uso comercial. Licença MIT |
@@ -61,14 +61,14 @@ Os zooms automáticos são um ponto de partida. As mesmas regiões de zoom podem
 - **Seis profundidades.** 1,25×, 1,5×, 1,8×, 2,2×, 3,5× e 5×.
 - **Dois modos de foco.** Manual mantém um ponto: arraste o marcador de foco na pré-visualização, ou redefina-o para o centro. Automático segue o cursor gravado.
 - **Um botão para todos os zooms.** A mira de Foco automático na barra de ferramentas faz todos os zooms seguirem o cursor. Desative-a e cada zoom volta para a própria configuração.
-- **Inclinação 3D.** Cada zoom pode ficar plano, ou inclinar Iso, Esquerda ou Direita.
+- **Câmera 3D.** Cada zoom pode ficar plano, virar a tela para a esquerda ou para a direita, ou voar com uma câmera Órbita 3D que segue o foco do zoom.
 - **A webcam durante um zoom.** No layout picture-in-picture, **Encolher ao ampliar** deixa a câmera menor enquanto a tela está com zoom. Fica ativado por padrão.
 
 Um zoom manual com foco manual não precisa de dados de cursor, então também funciona em um vídeo importado de outra ferramenta. Veja [Regiões de zoom](/docs/editing-timeline/#zoom-regions) para o inspetor de zoom.
 
 ## O cursor depois da gravação {#the-cursor-after-the-take}
 
-O mesmo movimento gravado conduz o cursor na exportação. A aba Cursor mostra ou oculta o cursor e define tamanho, suavização, desfoque de movimento e rebote de clique. O caminho do cursor é suavizado da mesma forma na pré-visualização e na exportação, então a pré-visualização corresponde ao arquivo.
+O mesmo movimento gravado conduz o cursor na exportação. A aba Cursor mostra ou oculta o cursor e define tamanho, suavização, desfoque de movimento, rebote de clique e impacto do clique. O caminho do cursor é suavizado da mesma forma na pré-visualização e na exportação, então a pré-visualização corresponde ao arquivo.
 
 O rebote de clique precisa de cliques gravados. No macOS isso exige a permissão de Acessibilidade, e no Linux seu usuário precisa estar no grupo `input`. [Gravação](/docs/recording/) lista o que cada plataforma captura.
 

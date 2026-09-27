@@ -444,15 +444,21 @@
 	font-weight: 600;
 }
 
+/* A row of one-click choices, the app's ChoiceRow: equal cells, one pressed. */
 .pills {
-	display: flex;
-	gap: 7px;
-	flex-wrap: wrap;
+	display: grid;
+	grid-auto-columns: minmax(0, 1fr);
+	grid-auto-flow: column;
+	gap: 4px;
 }
 
 .pill {
-	padding: 5px 12px;
-	border-radius: 999px;
+	padding: 6px 4px;
+	overflow: hidden;
+	border-radius: 8px;
+	text-align: center;
+	white-space: nowrap;
+	text-overflow: ellipsis;
 	border: 1px solid var(--os-border);
 	font-size: 11.5px;
 	font-weight: 500;
@@ -679,6 +685,18 @@
 	border-radius: 12px;
 	border: 1px solid var(--os-border);
 	background: var(--os-surface-1);
+}
+
+.capPills {
+	grid-template-columns: 1.7fr 1fr;
+}
+
+.expAdvanced {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 11.5px;
+	color: var(--os-muted);
 }
 
 .capSelectLabel {

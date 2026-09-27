@@ -25,7 +25,7 @@ This page is published by the OpenScreen project. The Screen Studio, Cap and Cam
 | AI, network or key | None |
 | Manual zoom depths | 1.25×, 1.5×, 1.8×, 2.2×, 3.5× or 5× |
 | Focus | A point you place, or the recorded cursor |
-| 3D tilt | None, Iso, Left or Right |
+| 3D camera | Off, screen turned left or right, or 3D Orbit |
 | Command line | The `export` command's `--auto-zoom` flag |
 | Platforms | Windows 10 (1903 or later) and 11, x64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 |
 | Price | Free, including commercial use. MIT license |
@@ -61,14 +61,14 @@ Automatic zooms are a starting point. The same zoom regions can be placed and tu
 - **Six depths.** 1.25×, 1.5×, 1.8×, 2.2×, 3.5× and 5×.
 - **Two focus modes.** Manual holds a point: drag the focus marker in the preview, or reset it to the center. Auto follows the recorded cursor.
 - **One toggle for every zoom.** The Auto focus crosshair in the toolbar makes all zooms follow the cursor. Turn it off and each zoom goes back to its own setting.
-- **3D tilt.** Each zoom can stay flat, or tilt Iso, Left or Right.
-- **The webcam during a zoom.** In the picture-in-picture layout, **Shrink on Zoom** makes the camera smaller while the screen is zoomed in. It is on by default.
+- **3D camera.** Each zoom can stay flat, turn the screen left or right, or fly a 3D Orbit camera that follows the zoom's focus.
+- **The webcam during a zoom.** In the picture-in-picture layout, **Shrink on zoom** makes the camera smaller while the screen is zoomed in. It is on by default.
 
 A manual zoom with a manual focus needs no cursor data, so it also works on a video imported from another tool. See [Zoom regions](/docs/editing-timeline/#zoom-regions) for the zoom inspector.
 
 ## The cursor after the take
 
-The same recorded movement drives the cursor in the export. The Cursor facet shows or hides it and sets its size, smoothing, motion blur and click bounce. The cursor path is smoothed the same way for the preview and the export, so the preview matches the file.
+The same recorded movement drives the cursor in the export. The Cursor facet shows or hides it and sets its size, smoothing, motion blur, click bounce and click impact. The cursor path is smoothed the same way for the preview and the export, so the preview matches the file.
 
 Click bounce needs recorded clicks. On macOS that takes the Accessibility permission, and on Linux your user must be in the `input` group. [Recording](/docs/recording/) lists what each platform captures.
 

@@ -315,7 +315,7 @@
     "message": "Doku zum Videoexport"
   },
   "showcase.export.label": {
-    "message": "Eine Zeichnung des Exportbereichs: recording-1783066227227.mp4 wird als MP4 exportiert. Ausgewählt ist H.265, daneben stehen H.264, 1080p, 60 fps und GIF. Ein Fortschrittsbalken bei 62 Prozent zeigt Frame 1 488 von 2 400; die Datei wird in den Ordner Movies geschrieben.",
+    "message": "Eine Zeichnung des Exportbereichs: recording-1783066227227.mp4 wird als MP4 an das Ziel Web / YouTube exportiert, neben Social, Studio und README GIF, die detaillierten Einstellungen unter Advanced eingeklappt. Ein Fortschrittsbalken bei 62 Prozent zeigt Frame 1 488 von 2 400; die Datei wird in den Ordner Movies geschrieben.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {
@@ -338,7 +338,7 @@
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
-    "message": "Eine Zeichnung des Untertitelbereichs: die Zeile „amber day on the validator, and it“ groß über dem Video, daneben eingeschaltete Untertitel, ein Hinweis, dass sieben Untertitelzeilen live aus dem Transkript abgeleitet werden, und eine Sprachzeile mit English, Français, einer Schaltfläche Translate und der Option, eine Übersetzung zu löschen.",
+    "message": "Eine Zeichnung des Untertitelbereichs: die Zeile „amber day on the validator, and it“ groß über dem Video, daneben eingeschaltete Untertitel, ein Hinweis, dass sieben Untertitelzeilen live aus dem Transkript abgeleitet werden, und eine Sprachzeile mit dem Originaltranskript und Français als Schaltflächen, einer Schaltfläche Translate und der Option, eine Übersetzung zu löschen.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.agent.kicker": {

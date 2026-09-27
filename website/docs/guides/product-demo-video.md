@@ -57,13 +57,13 @@ The webcam is recorded to its own file, so its placement is an editing decision 
 
 For an intro or outro, press `C` to add a **Full Camera** segment: the camera fills the whole frame for that span.
 
-The **Composition** facet styles the frame. Its background section offers 18 built-in wallpapers, a solid color, a gradient or your own image, and a background blur. Below it are shadow, roundness, padding and motion blur.
+The **Composition** facet styles the frame. Its background section offers 18 built-in wallpapers, a solid color, a gradient or your own image, an animation that moves gradients and images alike, and a background blur. Below it are shadow, padding, roundness and motion blur.
 
 ## 4. Add automatic zooms
 
 In the timeline toolbar, open **Auto-enhance** and choose **Automatic zooms**. OpenScreen reads the recorded cursor movement and places zoom regions on those pauses, with no network and no model. If it places nothing, it tells you so. The usual causes are a recording without cursor data, no pause in that range, or existing zooms that already cover those moments.
 
-Then review them. Click a zoom to set its level (from 1.25× to 5×), its focus mode (Auto follows the cursor, Manual holds a fixed point) and an optional 3D rotation. Press `Z` to add a zoom by hand, and `Ctrl/Cmd+D` to delete one you do not want.
+Then review them. Click a zoom to set its level (from 1.25× to 5×), its focus mode (Auto follows the cursor, Manual holds a fixed point) and an optional 3D camera. Press `Z` to add a zoom by hand, and `Ctrl/Cmd+D` to delete one you do not want.
 
 More on how the zooms are placed: [Auto-zoom](/features/auto-zoom/).
 

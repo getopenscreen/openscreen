@@ -25,7 +25,7 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu Screen S
 | KI, Netzwerk oder Schlüssel | Keine |
 | Manuelle Zoom-Tiefen | 1,25×, 1,5×, 1,8×, 2,2×, 3,5× oder 5× |
 | Fokus | Ein Punkt, den du platzierst, oder der aufgezeichnete Cursor |
-| 3D-Neigung | None, Iso, Left oder Right |
+| 3D-Kamera | Off, Bildschirm nach links oder rechts gedreht, oder 3D Orbit |
 | Kommandozeile | Das Flag `--auto-zoom` des Befehls `export` |
 | Plattformen | Windows 10 (ab 1903) und 11, x64. macOS ab 13, Apple Silicon und Intel. Linux, x64 |
 | Preis | Kostenlos, auch für kommerzielle Nutzung. MIT-Lizenz |
@@ -61,14 +61,14 @@ Automatische Zooms sind ein Ausgangspunkt. Dieselben Zoombereiche lassen sich au
 - **Sechs Tiefen.** 1,25×, 1,5×, 1,8×, 2,2×, 3,5× und 5×.
 - **Zwei Fokusmodi.** Manual hält einen Punkt: Zieh die Fokusmarke in der Vorschau oder setz sie auf die Mitte zurück. Auto folgt dem aufgezeichneten Cursor.
 - **Ein Schalter für alle Zooms.** Das Fadenkreuz **Auto-Focus** in der Werkzeugleiste lässt alle Zooms dem Cursor folgen. Schaltest du es aus, gilt wieder die eigene Einstellung jedes Zooms.
-- **3D-Neigung.** Jeder Zoom kann flach bleiben oder auf Iso, Left oder Right gekippt werden.
-- **Die Webcam während eines Zooms.** Im Bild-im-Bild-Layout macht **Shrink on Zoom** die Kamera kleiner, während auf den Bildschirm gezoomt ist. Das ist standardmäßig eingeschaltet.
+- **3D-Kamera.** Jeder Zoom kann flach bleiben, den Bildschirm nach links oder rechts drehen oder mit einer 3D-Orbit-Kamera fliegen, die dem Fokus des Zooms folgt.
+- **Die Webcam während eines Zooms.** Im Bild-im-Bild-Layout macht **Shrink on zoom** die Kamera kleiner, während auf den Bildschirm gezoomt ist. Das ist standardmäßig eingeschaltet.
 
 Ein manueller Zoom mit manuellem Fokus braucht keine Cursordaten, funktioniert also auch bei einem Video, das aus einem anderen Tool importiert wurde. Siehe [Zoombereiche](/docs/editing-timeline/#zoom-regions) für den Zoom-Inspektor.
 
 ## Der Cursor nach der Aufnahme {#the-cursor-after-the-take}
 
-Dieselbe aufgezeichnete Bewegung steuert den Cursor im Export. Der Bereich **Cursor** zeigt oder verbirgt ihn und legt Größe, Glättung, Bewegungsunschärfe und Klick-Bounce fest. Der Cursorpfad wird für Vorschau und Export gleich geglättet, sodass die Vorschau der Datei entspricht.
+Dieselbe aufgezeichnete Bewegung steuert den Cursor im Export. Der Bereich **Cursor** zeigt oder verbirgt ihn und legt Größe, Glättung, Bewegungsunschärfe, Klick-Bounce und Klick-Impact fest. Der Cursorpfad wird für Vorschau und Export gleich geglättet, sodass die Vorschau der Datei entspricht.
 
 Klick-Bounce braucht aufgezeichnete Klicks. Unter macOS braucht das die Berechtigung „Bedienungshilfen“, unter Linux muss dein Nutzer in der Gruppe `input` sein. [Aufnahme](/docs/recording/) listet, was jede Plattform erfasst.
 

@@ -302,7 +302,7 @@
     "message": "Documentation de l'export vidéo"
   },
   "showcase.export.label": {
-    "message": "Dessin du panneau d'export : recording-1783066227227.mp4 exporté en MP4, avec H.265 choisi à côté de H.264, 1080p, 60 fps et GIF, et une barre de progression à 62 % qui indique l'image 1 488 sur 2 400, avec écriture dans le dossier Movies.",
+    "message": "Dessin du panneau d'export : recording-1783066227227.mp4 exporté en MP4 vers la destination Web / YouTube, à côté de Social, Studio et README GIF, avec les réglages détaillés repliés sous Advanced, et une barre de progression à 62 % qui indique l'image 1 488 sur 2 400, avec écriture dans le dossier Movies.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {
@@ -325,7 +325,7 @@
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
-    "message": "Dessin du panneau des sous-titres : la ligne « amber day on the validator, and it » en grand sur la vidéo, et à côté les sous-titres activés, une note indiquant que sept lignes de sous-titres sont dérivées en direct de la transcription, et une ligne de langues qui propose English, Français, un bouton Translate et l'option de supprimer une traduction.",
+    "message": "Dessin du panneau des sous-titres : la ligne « amber day on the validator, and it » en grand sur la vidéo, et à côté les sous-titres activés, une note indiquant que sept lignes de sous-titres sont dérivées en direct de la transcription, et une ligne de langues qui affiche la transcription d'origine et Français sous forme de boutons, un bouton Translate et l'option de supprimer une traduction.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.agent.kicker": {

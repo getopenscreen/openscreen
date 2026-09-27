@@ -57,13 +57,13 @@ La cámara web se graba en su propio archivo, así que su ubicación es una deci
 
 Para una introducción o un cierre, presiona `C` para agregar un segmento de **Cámara a pantalla completa**: la cámara llena todo el cuadro durante ese tramo.
 
-El panel **Composición** da estilo al cuadro. Su sección de fondo ofrece 18 fondos de pantalla incluidos, un color sólido, un degradado o tu propia imagen, y un desenfoque de fondo. Debajo están la sombra, la redondez, el relleno y el desenfoque de movimiento.
+El panel **Composición** da estilo al cuadro. Su sección de fondo ofrece 18 fondos de pantalla incluidos, un color sólido, un degradado o tu propia imagen, una animación que mueve por igual degradados e imágenes, y un desenfoque de fondo. Debajo están la sombra, el relleno, la redondez y el desenfoque de movimiento.
 
 ## 4. Agrega zooms automáticos {#4-add-automatic-zooms}
 
 En la barra de herramientas de la línea de tiempo, abre **Mejora automática** y elige **Zooms automáticos**. OpenScreen lee el movimiento grabado del cursor y coloca regiones de zoom en esas pausas, sin red y sin modelo. Si no coloca nada, te lo indica. Las causas habituales son una grabación sin datos del cursor, la ausencia de pausas en ese rango o zooms existentes que ya cubren esos momentos.
 
-Luego revísalos. Haz clic en un zoom para definir su nivel (de 1.25× a 5×), su modo de enfoque (Auto sigue al cursor, Manual mantiene un punto fijo) y una rotación 3D opcional. Presiona `Z` para agregar un zoom a mano, y `Ctrl/Cmd+D` para eliminar uno que no quieras.
+Luego revísalos. Haz clic en un zoom para definir su nivel (de 1.25× a 5×), su modo de enfoque (Auto sigue al cursor, Manual mantiene un punto fijo) y una cámara 3D opcional. Presiona `Z` para agregar un zoom a mano, y `Ctrl/Cmd+D` para eliminar uno que no quieras.
 
 Más información sobre cómo se colocan los zooms: [Zoom automático](/features/auto-zoom/).
 

@@ -257,7 +257,7 @@
     "message": "Documentação da exportação de vídeo"
   },
   "showcase.export.label": {
-    "message": "Um desenho do painel de exportação: recording-1783066227227.mp4 sendo exportado como MP4, com H.265 escolhido ao lado de H.264, 1080p, 60 fps e GIF, e uma barra de progresso em 62 por cento, indicando o quadro 1 488 de 2 400, gravando na pasta Movies.",
+    "message": "Um desenho do painel de exportação: recording-1783066227227.mp4 sendo exportado como MP4 para o destino Web / YouTube, ao lado de Social, Studio e README GIF, com as configurações detalhadas recolhidas em Advanced, e uma barra de progresso em 62 por cento, indicando o quadro 1 488 de 2 400, gravando na pasta Movies.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {
@@ -280,7 +280,7 @@
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
-    "message": "Um desenho do painel de legendas: a frase “amber day on the validator, and it” em letras grandes sobre o vídeo e, ao lado, as legendas ativadas, uma nota de que sete linhas de legenda são derivadas ao vivo a partir da transcrição e uma linha de idiomas com English, Français, um botão Translate e a opção de excluir uma tradução.",
+    "message": "Um desenho do painel de legendas: a frase “amber day on the validator, and it” em letras grandes sobre o vídeo e, ao lado, as legendas ativadas, uma nota de que sete linhas de legenda são derivadas ao vivo a partir da transcrição e uma linha de idiomas que mostra a transcrição original e Français como botões, um botão Translate e a opção de excluir uma tradução.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.agent.kicker": {

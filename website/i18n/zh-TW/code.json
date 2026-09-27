@@ -270,7 +270,7 @@
     "message": "影片匯出說明文件"
   },
   "showcase.export.label": {
-    "message": "匯出面板的示意圖：recording-1783066227227.mp4 正以 MP4 匯出，已選取 H.265，旁邊是 H.264、1080p、60 fps 與 GIF；進度條走到 62%，顯示 frame 1 488 of 2 400，正在寫入 Movies 資料夾。",
+    "message": "匯出面板的示意圖：recording-1783066227227.mp4 正以 MP4 匯出到 Web / YouTube 目的地，旁邊是 Social、Studio 與 README GIF，詳細設定收合在 Advanced 之下；進度條走到 62%，顯示 frame 1 488 of 2 400，正在寫入 Movies 資料夾。",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {
@@ -293,7 +293,7 @@
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
-    "message": "字幕面板的示意圖：影片上以大字顯示「amber day on the validator, and it」這一行；旁邊的字幕已開啟，註明有七行字幕是從逐字稿即時產生，還有一列語言選項，提供 English、Français、Translate 按鈕，以及刪除翻譯的選項。",
+    "message": "字幕面板的示意圖：影片上以大字顯示「amber day on the validator, and it」這一行；旁邊的字幕已開啟，註明有七行字幕是從逐字稿即時產生，還有一列語言選項，以按鈕顯示原始逐字稿與 Français，還有 Translate 按鈕，以及刪除翻譯的選項。",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.agent.kicker": {

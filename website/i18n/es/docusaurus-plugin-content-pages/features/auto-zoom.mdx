@@ -25,7 +25,7 @@ Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio, C
 | IA, red o clave | Ninguna |
 | Profundidades de zoom manual | 1,25×, 1,5×, 1,8×, 2,2×, 3,5× o 5× |
 | Enfoque | Un punto que colocas tú, o el cursor grabado |
-| Inclinación 3D | Ninguna, Iso, Izquierda o Derecha |
+| Cámara 3D | Desactivada, pantalla girada a la izquierda o a la derecha, u Órbita 3D |
 | Línea de comandos | El indicador `--auto-zoom` del comando `export` |
 | Plataformas | Windows 10 (1903 o posterior) y 11, x64. macOS 13 o posterior, Apple Silicon e Intel. Linux, x64 |
 | Precio | Gratis, incluido el uso comercial. Licencia MIT |
@@ -61,14 +61,14 @@ Los zooms automáticos son un punto de partida. Las mismas regiones de zoom se p
 - **Seis profundidades.** 1,25×, 1,5×, 1,8×, 2,2×, 3,5× y 5×.
 - **Dos modos de enfoque.** Manual mantiene un punto: arrastra el marcador de enfoque en la vista previa, o restáuralo al centro. Auto sigue al cursor grabado.
 - **Un solo interruptor para todos los zooms.** El punto de mira de Enfoque automático en la barra de herramientas hace que todos los zooms sigan al cursor. Desactívalo y cada zoom vuelve a su propio ajuste.
-- **Inclinación 3D.** Cada zoom puede quedarse plano, o inclinarse Iso, Izquierda o Derecha.
+- **Cámara 3D.** Cada zoom puede quedarse plano, girar la pantalla a la izquierda o a la derecha, o volar una cámara Órbita 3D que sigue el enfoque del zoom.
 - **La cámara web durante un zoom.** En la disposición de imagen en imagen, **Reducir al ampliar** achica la cámara mientras la pantalla está en zoom. Está activado por defecto.
 
 Un zoom manual con enfoque manual no necesita datos de cursor, así que también funciona en un video importado de otra herramienta. Consulta [Regiones de zoom](/docs/editing-timeline/#zoom-regions) para el inspector de zoom.
 
 ## El cursor después de la toma {#the-cursor-after-the-take}
 
-El mismo movimiento grabado maneja el cursor en la exportación. El panel Cursor lo muestra u oculta y define su tamaño, suavizado, desenfoque de movimiento y rebote al clic. La trayectoria del cursor se suaviza de la misma forma para la vista previa y la exportación, así que la vista previa coincide con el archivo.
+El mismo movimiento grabado maneja el cursor en la exportación. El panel Cursor lo muestra u oculta y define su tamaño, suavizado, desenfoque de movimiento, rebote al clic e impacto del clic. La trayectoria del cursor se suaviza de la misma forma para la vista previa y la exportación, así que la vista previa coincide con el archivo.
 
 El rebote al clic necesita clics grabados. En macOS eso requiere el permiso de Accesibilidad, y en Linux tu usuario debe estar en el grupo `input`. [Grabación](/docs/recording/) enumera lo que captura cada plataforma.
 

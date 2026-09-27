@@ -104,7 +104,7 @@ export function getFeatures(): Feature[] {
 				id: "showcase.export.label",
 				description: DRAWING,
 				message:
-					"A drawing of the export panel: recording-1783066227227.mp4 going out as MP4, with H.265 chosen beside H.264, 1080p, 60 fps and GIF, and a progress bar 62 percent along reading frame 1 488 of 2 400, writing to the Movies folder.",
+					"A drawing of the export panel: recording-1783066227227.mp4 going out as MP4 to the Web / YouTube destination, beside Social, Studio and README GIF, with the detailed settings folded under Advanced, and a progress bar 62 percent along reading frame 1 488 of 2 400, writing to the Movies folder.",
 			}),
 			flip: true,
 		},
@@ -147,7 +147,7 @@ export function getFeatures(): Feature[] {
 				id: "showcase.captions.label",
 				description: DRAWING,
 				message:
-					"A drawing of the captions panel: the line “amber day on the validator, and it” set large over the video, and beside it captions switched on, a note that seven caption lines are derived live from the transcript, and a language row offering English, Français, a Translate button and the option to delete a translation.",
+					"A drawing of the captions panel: the line “amber day on the validator, and it” set large over the video, and beside it captions switched on, a note that seven caption lines are derived live from the transcript, and a language row showing the original transcript and Français as buttons, a Translate button and the option to delete a translation.",
 			}),
 		},
 		{

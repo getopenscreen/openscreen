@@ -49,7 +49,7 @@ Cliquez sur **Ouvrir le Studio** (ou attendez qu'il s'ouvre automatiquement apr�
 ## 6. Couper et exporter {#6-trim-and-export}
 
 - Placez la tête de lecture là où vous voulez couper et appuyez sur `T` (ou sur le bouton ciseaux) : une région de coupe de deux secondes est ajoutée à cet endroit. Faites glisser ses bords pour ajuster ce qui est retiré.
-- Cliquez sur **Exporter** dans la barre supérieure, choisissez **MP4** ou **GIF**, sélectionnez une qualité, puis cliquez sur **Exporter**.
+- Cliquez sur **Exporter** dans la barre supérieure, choisissez une destination (**Web / YouTube**, **Réseaux sociaux**, **Studio** ou **GIF pour README**), puis cliquez sur **Exporter**. Le format et la qualité se trouvent sous **Avancé** si vous en avez besoin.
 - Une fois l'export terminé, cliquez sur **Afficher dans le dossier** pour retrouver votre fichier.
 
 Voilà l'essentiel. Pour tous les outils de montage (zooms, changements de vitesse, annotations, style du curseur, disposition de la webcam), consultez [Montage et timeline](./editing-timeline.md). Pour assembler plusieurs prises en une seule vidéo, consultez [Médiathèque et clips](./media-library.md).

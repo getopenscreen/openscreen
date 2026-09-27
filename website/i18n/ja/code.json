@@ -257,7 +257,7 @@
     "message": "動画エクスポートのドキュメント"
   },
   "showcase.export.label": {
-    "message": "エクスポートパネルのイラスト：recording-1783066227227.mp4 を MP4 としてエクスポートしています。H.264、1080p、60 fps、GIF と並んで H.265 が選択され、進行状況バーは 62% の位置で frame 1 488 of 2 400 と表示し、Movies フォルダーに書き込んでいます。",
+    "message": "エクスポートパネルのイラスト：recording-1783066227227.mp4 を MP4 として Web / YouTube の出力先へエクスポートしています。Social、Studio、README GIF が並び、詳細な設定は Advanced の下に折りたたまれています。進行状況バーは 62% の位置で frame 1 488 of 2 400 と表示し、Movies フォルダーに書き込んでいます。",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {
@@ -280,7 +280,7 @@
     "description": "Link label under the panel."
   },
   "showcase.captions.label": {
-    "message": "字幕パネルのイラスト：動画の上に「amber day on the validator, and it」という一行が大きく表示されています。その横では字幕がオンになっていて、7 行の字幕が文字起こしからリアルタイムに生成されているという注記と、English、Français、Translate ボタン、翻訳を削除するオプションが並ぶ言語の行があります。",
+    "message": "字幕パネルのイラスト：動画の上に「amber day on the validator, and it」という一行が大きく表示されています。その横では字幕がオンになっていて、7 行の字幕が文字起こしからリアルタイムに生成されているという注記と、元の文字起こしと Français のボタン、Translate ボタン、翻訳を削除するオプションが並ぶ言語の行があります。",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.agent.kicker": {

@@ -3,7 +3,7 @@
  *
  * Every string in here is a string the application shows, and every one of them
  * is either in the fixture the editor above is driven from or in the repository
- * — the format list is the export dialog's, the capture chips are what macOS
+ * — the destinations are the export dialog's, the capture chips are what macOS
  * reports for the take, the agent's timecodes are the ones it answered with.
  * The panels are illustrations and are labelled as such by their `role="img"`,
  * which is also why the placeholder bars and window controls are drawn rather
@@ -125,13 +125,17 @@ function ExportPanel() {
 					<span className={styles.expContainer}>MP4</span>
 				</div>
 
+				{/* The dialog's named destinations; codec, size and rate sit under Advanced. */}
 				<div className={styles.pills}>
-					<span className={`${styles.pill} ${styles.pillOn}`}>H.265</span>
-					<span className={styles.pill}>H.264</span>
-					<span className={styles.pill}>1080p</span>
-					<span className={styles.pill}>60 fps</span>
-					<span className={styles.pill}>GIF</span>
+					<span className={`${styles.pill} ${styles.pillOn}`}>Web / YouTube</span>
+					<span className={styles.pill}>Social</span>
+					<span className={styles.pill}>Studio</span>
+					<span className={styles.pill}>README GIF</span>
 				</div>
+				<span className={styles.expAdvanced}>
+					<ChevronRight size={12} />
+					Advanced
+				</span>
 
 				<div>
 					<div className={styles.track}>
@@ -196,12 +200,11 @@ function CaptionsPanel() {
 
 				<div className={styles.capGroup}>Language</div>
 
-				<div className={styles.capSelectRow}>
-					<span className={styles.capSelectLabel}>Display</span>
-					<span className={styles.capSelect}>
-						English
-						<ChevronDown className={styles.capChevron} size={10} />
-					</span>
+				{/* A row of buttons, as the app draws it: every language on show, one click. */}
+				<div className={styles.capSelectLabel}>Display</div>
+				<div className={`${styles.pills} ${styles.capPills}`}>
+					<span className={`${styles.pill} ${styles.pillOn}`}>Original (transcript)</span>
+					<span className={styles.pill}>Français</span>
 				</div>
 
 				<div className={styles.capActions}>

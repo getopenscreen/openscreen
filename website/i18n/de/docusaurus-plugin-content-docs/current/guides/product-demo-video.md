@@ -57,13 +57,13 @@ Die Webcam wird in eine eigene Datei aufgenommen. Ihre Platzierung ist also eine
 
 Für ein Intro oder Outro drückst du `C`, um ein **Full Camera**-Segment hinzuzufügen: Die Kamera füllt in diesem Abschnitt das ganze Bild.
 
-Der Tab **Composition** gestaltet das Bild. Sein Hintergrundabschnitt bietet 18 mitgelieferte Hintergrundbilder, eine Volltonfarbe, einen Verlauf oder dein eigenes Bild sowie eine Hintergrundunschärfe. Darunter folgen Schatten, Rundung, Innenabstand und Bewegungsunschärfe.
+Der Tab **Composition** gestaltet das Bild. Sein Hintergrundabschnitt bietet 18 mitgelieferte Hintergrundbilder, eine Volltonfarbe, einen Verlauf oder dein eigenes Bild, eine Animation, die Verläufe und Bilder gleichermaßen bewegt, sowie eine Hintergrundunschärfe. Darunter folgen Schatten, Innenabstand, Rundung und Bewegungsunschärfe.
 
 ## 4. Automatische Zooms hinzufügen {#4-add-automatic-zooms}
 
 Öffne in der Werkzeugleiste der Zeitleiste **Auto-enhance** und wähle **Automatic zooms**. OpenScreen liest die aufgezeichnete Cursorbewegung und setzt Zoombereiche auf diese Pausen, ohne Netzwerk und ohne Modell. Setzt der Durchlauf nichts, sagt OpenScreen dir das. Die üblichen Ursachen sind eine Aufnahme ohne Cursordaten, keine Pause in diesem Abschnitt oder vorhandene Zooms, die diese Momente schon abdecken.
 
-Prüfe die Zooms anschließend. Klicke auf einen Zoom, um seine Stufe (von 1.25× bis 5×), seinen Fokusmodus (Auto folgt dem Cursor, Manual hält einen festen Punkt) und eine optionale 3D-Drehung einzustellen. Mit `Z` fügst du einen Zoom von Hand hinzu, mit `Ctrl/Cmd+D` löschst du einen, den du nicht willst.
+Prüfe die Zooms anschließend. Klicke auf einen Zoom, um seine Stufe (von 1.25× bis 5×), seinen Fokusmodus (Auto folgt dem Cursor, Manual hält einen festen Punkt) und eine optionale 3D-Kamera einzustellen. Mit `Z` fügst du einen Zoom von Hand hinzu, mit `Ctrl/Cmd+D` löschst du einen, den du nicht willst.
 
 Mehr dazu, wie die Zooms gesetzt werden: [Auto-zoom](/features/auto-zoom/).
 

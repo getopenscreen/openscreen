@@ -506,7 +506,7 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 			defaultDurationMs: 2000,
 		});
 		expect(suggestions.map((s) => s.span)).toEqual([
-			{ start: 3000, end: 5000 }, // clip_1: source 4s sits at ruler 4s
+			{ start: 3424, end: 5424 }, // clip_1: source 4s sits at ruler 4s, after the wide opening
 			{ start: 13000, end: 15000 }, // clip_2: the SAME source 4s sits at ruler 14s
 		]);
 		for (const suggestion of suggestions) {
@@ -525,7 +525,7 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 			existingRegions: [],
 			defaultDurationMs: 2000,
 		});
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3000, end: 5000 }]);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5424 }]);
 	});
 
 	it("ignores a dwell that falls outside every clip's source window", () => {
@@ -594,7 +594,7 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 			existingRegions: [],
 			defaultDurationMs: 2000,
 		});
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3000, end: 5000 }]);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5424 }]);
 		expect(suggestions[0].focus).toEqual({ cx: 0.5, cy: 0.5 });
 	});
 
@@ -608,7 +608,7 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 			defaultDurationMs: 2000,
 		});
 		expect(suggestions.map((s) => s.span)).toEqual([
-			{ start: 3000, end: 5000 },
+			{ start: 3424, end: 5424 },
 			{ start: 13000, end: 15000 },
 		]);
 		for (const suggestion of suggestions) {
@@ -619,18 +619,101 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 
 	it("zooms a clip whose source window trims the telemetry down to a single click", () => {
 		// A clip covering 30..40s of the recording; the take's telemetry holds one move
-		// long before the window and one click inside it. The per-clip filter hands the
-		// detector a SINGLE sample — still a zoom, correctly projected (source 34s is
-		// ruler 4s).
+		// long before the window, one click inside it and one move long after. The per-clip
+		// filter hands the detector a SINGLE sample — still a zoom, correctly projected
+		// (source 34s is ruler 4s).
 		const clips = [clip("clip_1", "a1", 30, 40, 0)];
 		const suggestions = buildAutoZoomSuggestionsForClips({
-			cursorTelemetry: [{ timeMs: 5000, cx: 0.1, cy: 0.9 }, click(34000, 0.5, 0.5)],
+			cursorTelemetry: [
+				{ timeMs: 5000, cx: 0.1, cy: 0.9 },
+				click(34000, 0.5, 0.5),
+				{ timeMs: 60000, cx: 0.1, cy: 0.9 },
+			],
 			assetId: "a1",
 			clips,
 			existingRegions: [],
 			defaultDurationMs: 2000,
 		});
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3000, end: 5000 }]);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5424 }]);
 		expect(suggestions[0].focus).toEqual({ cx: 0.5, cy: 0.5 });
+	});
+
+	// The video opens and closes on the whole screen. At depth 3 a ramp lasts 923 ms, so a
+	// zoom is fully in at 2500 + 923 → 3424 ms at the earliest, and on a 10 s edit it must be
+	// fully in by 10000 − 1000 − 923 → 8076 ms at the latest, to be back out a second early.
+	describe("wide opening and ending", () => {
+		const restOfTake = { timeMs: 30000, cx: 0.5, cy: 0.5 };
+
+		it("keeps the first seconds of the edit wide: an early click gets no zoom", () => {
+			const suggestions = buildAutoZoomSuggestionsForClips({
+				cursorTelemetry: [click(1000, 0.3, 0.3), restOfTake],
+				assetId: "a1",
+				clips: [clip("clip_1", "a1", 0, 10, 0)],
+				existingRegions: [],
+				defaultDurationMs: 2000,
+			});
+			expect(suggestions).toEqual([]);
+		});
+
+		it("holds a zoom back until the opening is over when it still covers its click", () => {
+			const suggestions = buildAutoZoomSuggestionsForClips({
+				cursorTelemetry: [click(4000, 0.3, 0.3), restOfTake],
+				assetId: "a1",
+				clips: [clip("clip_1", "a1", 0, 10, 0)],
+				existingRegions: [],
+				defaultDurationMs: 2000,
+			});
+			expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5424 }]);
+		});
+
+		it("brings the last zoom back out a second before the end of the edit", () => {
+			// The recording goes on to 30 s, so this is the edit's end at work, not the stop click.
+			const zoomed = buildAutoZoomSuggestionsForClips({
+				cursorTelemetry: [click(7500, 0.3, 0.3), restOfTake],
+				assetId: "a1",
+				clips: [clip("clip_1", "a1", 0, 10, 0)],
+				existingRegions: [],
+				defaultDurationMs: 2000,
+			});
+			expect(zoomed.map((s) => s.span)).toEqual([{ start: 6076, end: 8076 }]);
+			const tooLate = buildAutoZoomSuggestionsForClips({
+				cursorTelemetry: [click(8500, 0.3, 0.3), restOfTake],
+				assetId: "a1",
+				clips: [clip("clip_1", "a1", 0, 10, 0)],
+				existingRegions: [],
+				defaultDurationMs: 2000,
+			});
+			expect(tooLate).toEqual([]);
+		});
+
+		it("lets a clip after a cut open on a zoom: the bounds belong to the edit", () => {
+			// One recording laid down twice: the click at source 1 s is inside the opening
+			// on the first clip, and at ruler 11 s, clear of it, on the second.
+			const suggestions = buildAutoZoomSuggestionsForClips({
+				cursorTelemetry: [click(1000, 0.3, 0.3), { timeMs: 9500, cx: 0.5, cy: 0.5 }],
+				assetId: "a1",
+				clips: [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a1", 0, 10, 10)],
+				existingRegions: [],
+				defaultDurationMs: 2000,
+			});
+			expect(suggestions.map((s) => s.span)).toEqual([{ start: 10000, end: 12000 }]);
+		});
+
+		it("ignores the click that stopped the recording", () => {
+			// The take's last click, 100 ms before its telemetry ends: the HUD's Stop button.
+			// Another clip follows on the ruler, so the edit's own ending does not reach it.
+			const suggestions = buildAutoZoomSuggestionsForClips({
+				cursorTelemetry: [
+					click(6000, 0.3, 0.3),
+					click(19800, 0.5, 0.92),
+					{ timeMs: 19900, cx: 0.5, cy: 0.92 },
+				],
+				assetId: "a1",
+				clips: [clip("clip_1", "a1", 0, 20, 0), clip("clip_2", "a2", 0, 20, 20)],
+				existingRegions: [],
+				defaultDurationMs: 2000,
+			});
+			expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.3, cy: 0.3 }]);
+		});
 	});
 });

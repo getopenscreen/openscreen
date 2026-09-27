@@ -359,8 +359,8 @@ describe("fresh-recording auto-zoom", () => {
 		});
 		expect(next.zoomRanges).toHaveLength(1);
 		expect(next.zoomRanges[0]).toMatchObject({
-			startMs: 3000,
-			endMs: 5000,
+			startMs: 3424,
+			endMs: 5424,
 			focusMode: "auto",
 		});
 		expect(await applyPendingFreshRecordingAutoZooms(next)).toBe(next);

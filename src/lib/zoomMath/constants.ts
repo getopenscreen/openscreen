@@ -6,6 +6,10 @@ export const TRANSITION_WINDOW_MS = 1015.05;
 // default 1.8×, ~1.5 s at 5×. Mirror of `zoom_transition_s` (crates/compositor/src/regions.rs).
 export const ZOOM_TRANSITION_BASE_MS = 600;
 export const ZOOM_TRANSITION_PER_LN_MS = 550;
+
+export function zoomTransitionMs(scale: number): number {
+	return ZOOM_TRANSITION_BASE_MS + ZOOM_TRANSITION_PER_LN_MS * Math.log(Math.max(1, scale));
+}
 export const SMOOTHING_FACTOR = 0.12;
 export const ZOOM_TRANSLATION_DEADZONE_PX = 1.25;
 export const ZOOM_SCALE_DEADZONE = 0.002;

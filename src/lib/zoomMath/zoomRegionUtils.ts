@@ -12,7 +12,7 @@ import {
 } from "@/components/video-editor/types";
 import { type SpeedRegion, screenTimeMs } from "@/lib/ai-edition/timeline/speed";
 import { clamp01 } from "@/utils/math";
-import { ZOOM_TRANSITION_BASE_MS, ZOOM_TRANSITION_PER_LN_MS } from "./constants";
+import { zoomTransitionMs } from "./constants";
 import { interpolateCursorAt } from "./cursorFollowUtils";
 import { clampFocusToScale } from "./focusUtils";
 import { cubicBezier, easeSpring, scaleLerp } from "./mathUtils";
@@ -69,9 +69,7 @@ export function computeRegionStrength(
 	const start = toScreen(region.startMs);
 	const end = toScreen(region.endMs);
 	const t = toScreen(timeMs);
-	const window =
-		ZOOM_TRANSITION_BASE_MS +
-		ZOOM_TRANSITION_PER_LN_MS * Math.log(Math.max(1, getZoomScale(region)));
+	const window = zoomTransitionMs(getZoomScale(region));
 
 	if (t < start - window || t > end + window) {
 		return 0;

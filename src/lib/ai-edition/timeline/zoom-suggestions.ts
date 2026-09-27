@@ -8,13 +8,25 @@
 // and so do recorded clicks, focused on the click itself (issue #699).
 
 import type { CursorTelemetryPoint, ZoomFocus } from "@/components/video-editor/types";
+import { zoomTransitionMs } from "@/lib/zoomMath/constants";
 import type { AxcutClip } from "../schema";
+import { DEFAULT_ZOOM_DEPTH, ZOOM_DEPTH_SCALES } from "./zoom-scale";
 
 export const MIN_DWELL_DURATION_MS = 450;
 export const MAX_DWELL_DURATION_MS = 2600;
 export const DWELL_MOVE_THRESHOLD = 0.02;
 /** Minimum spacing between two accepted suggestion centres. */
 export const SUGGESTION_SPACING_MS = 1800;
+/** The video opens on the whole screen: no zoom starts moving in before this. */
+export const OPENING_WIDE_MS = 2500;
+/** And it ends on it: the last zoom is fully back out this long before the end. */
+export const CLOSING_WIDE_MS = 1000;
+/**
+ * A click this close to the end of the recording is the one that stopped it, on the HUD's
+ * Stop button, which the video never shows. Any other click there has a result the video
+ * never shows either.
+ */
+export const STOP_CLICK_GUARD_MS = 1000;
 
 export interface ZoomDwellCandidate {
 	centerTimeMs: number;
@@ -180,12 +192,21 @@ export interface AutoZoomSuggestion {
  * region rejects leaves its nearby dwells standing as the fallback. One recorded
  * click still yields ONE zoom anchored on the click's own time and position
  * (issue #699). Pure, shared by the magic-wand toggle and the on-load auto-suggest pass.
+ *
+ * `wideUntilMs` and `wideFromMs` keep the ends of the video on the whole screen: a zoom
+ * starts moving in no earlier than the first and is back out by the second, ramps
+ * included. A zoom those bounds push off its own moment is dropped rather than shown
+ * after the fact. `ignoreClicksFromMs` drops the click that stopped the recording.
+ * All three are on the telemetry's axis, and default to no bound.
  */
 export function buildAutoZoomSuggestions(options: {
 	cursorTelemetry: CursorTelemetryPoint[];
 	totalMs: number;
 	existingRegions: { startMs: number; endMs: number }[];
 	defaultDurationMs: number;
+	wideUntilMs?: number;
+	wideFromMs?: number;
+	ignoreClicksFromMs?: number;
 }): AutoZoomSuggestion[] {
 	const { cursorTelemetry, totalMs, existingRegions, defaultDurationMs } = options;
 	if (totalMs <= 0 || cursorTelemetry.length === 0) {
@@ -197,13 +218,24 @@ export function buildAutoZoomSuggestions(options: {
 		return [];
 	}
 
+	// The ramps play outside the region, so the region itself keeps one ramp clear of each bound.
+	const ramp = zoomTransitionMs(ZOOM_DEPTH_SCALES[DEFAULT_ZOOM_DEPTH]);
+	const earliestStart = Math.max(0, Math.ceil((options.wideUntilMs ?? -Infinity) + ramp));
+	const latestEnd = Math.min(totalMs, Math.floor((options.wideFromMs ?? Infinity) - ramp));
+	if (latestEnd - earliestStart < defaultDuration) {
+		return [];
+	}
+
 	const normalizedSamples = normalizeCursorTelemetry(cursorTelemetry, totalMs);
 	if (normalizedSamples.length === 0) {
 		return [];
 	}
 
+	const ignoreClicksFromMs = options.ignoreClicksFromMs ?? Infinity;
 	const dwellCandidates = detectZoomDwellCandidates(normalizedSamples);
-	const clickCandidates = detectZoomClickCandidates(normalizedSamples);
+	const clickCandidates = detectZoomClickCandidates(normalizedSamples).filter(
+		(candidate) => candidate.centerTimeMs < ignoreClicksFromMs,
+	);
 	if (dwellCandidates.length === 0 && clickCandidates.length === 0) {
 		return [];
 	}
@@ -233,8 +265,14 @@ export function buildAutoZoomSuggestions(options: {
 		}
 
 		const centeredStart = Math.round(candidate.centerTimeMs - defaultDuration / 2);
-		const candidateStart = Math.max(0, Math.min(centeredStart, totalMs - defaultDuration));
+		const candidateStart = Math.max(
+			earliestStart,
+			Math.min(centeredStart, latestEnd - defaultDuration),
+		);
 		const candidateEnd = candidateStart + defaultDuration;
+		if (candidate.centerTimeMs < candidateStart || candidate.centerTimeMs > candidateEnd) {
+			continue;
+		}
 		const hasOverlap = reservedSpans.some(
 			(span) => candidateEnd > span.start && candidateStart < span.end,
 		);
@@ -281,6 +319,11 @@ export function buildAutoZoomSuggestions(options: {
  * Clips of other assets are skipped, as are clips with no probed source window.
  * `buildAutoZoomSuggestions` is reused verbatim per clip — spacing, ranking and the
  * reserve rule keep their single definition.
+ *
+ * The wide opening and ending belong to the whole edit, not to each clip: a cut may land
+ * straight on a zoom, but the video's first and last seconds show the whole screen. The
+ * stop click belongs to the recording: its last second, read off the telemetry, which runs
+ * until the take stops.
  */
 export function buildAutoZoomSuggestionsForClips(options: {
 	/** Samples in the asset's own SOURCE time. */
@@ -292,6 +335,12 @@ export function buildAutoZoomSuggestionsForClips(options: {
 	defaultDurationMs: number;
 }): AutoZoomSuggestion[] {
 	const { cursorTelemetry, assetId, clips, existingRegions, defaultDurationMs } = options;
+	const editStartMs = Math.min(...clips.map((clip) => clip.timelineStartSec)) * 1000;
+	const editEndMs = Math.max(...clips.map((clip) => clip.timelineEndSec)) * 1000;
+	let recordingEndMs = 0;
+	for (const sample of cursorTelemetry) {
+		if (Number.isFinite(sample.timeMs)) recordingEndMs = Math.max(recordingEndMs, sample.timeMs);
+	}
 	const suggestions: AutoZoomSuggestion[] = [];
 	for (const clip of clips) {
 		if (clip.assetId !== assetId) continue;
@@ -313,6 +362,9 @@ export function buildAutoZoomSuggestionsForClips(options: {
 				endMs: region.endMs - timelineOffsetMs,
 			})),
 			defaultDurationMs,
+			wideUntilMs: editStartMs + OPENING_WIDE_MS - timelineOffsetMs,
+			wideFromMs: editEndMs - CLOSING_WIDE_MS - timelineOffsetMs,
+			ignoreClicksFromMs: recordingEndMs - STOP_CLICK_GUARD_MS - sourceOffsetMs,
 		});
 		suggestions.push(
 			...clipSuggestions.map((suggestion) => ({

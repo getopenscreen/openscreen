@@ -63,8 +63,9 @@ describe("collectAutoZoomSuggestionsForDocument", () => {
 			dwell(4000, 0.4, 0.6),
 		);
 		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].span.start).toBe(3000);
-		expect(suggestions[0].span.end).toBe(5000);
+		// Centred on the dwell would be 3000..5000; the wide opening holds it to 3424.
+		expect(suggestions[0].span.start).toBe(3424);
+		expect(suggestions[0].span.end).toBe(5424);
 		expect(suggestions[0].focus.cx).toBeCloseTo(0.4, 5);
 	});
 

@@ -3726,9 +3726,14 @@ pub const MODEL_LIGHT: [f32; 3] = [-0.4194, -0.5792, 0.6990];
 
 /// Garde au sol au repos, en unités du modèle.
 const MODEL_HOVER: f32 = 0.35;
-/// Gain sur `tap` pour la descente : à 1,25 le modèle reste posé de 27 à 74 ms après le clic,
-/// assez pour qu'au moins une image le montre au contact jusqu'à 21 i/s.
+/// Gain sur `tap` pour la descente, fois le niveau de `clickBounce` : à « Light » (1) le modèle
+/// reste posé de 27 à 74 ms après le clic, assez pour qu'au moins une image le montre au contact
+/// jusqu'à 21 i/s ; à « Strong » (2), il touche dès 12 ms et appuie jusqu'à 100 ms (la tenue de
+/// `CursorTrack::pinned_at`) ; à « None », il ne descend pas.
 const MODEL_CONTACT_GAIN: f32 = 1.25;
+/// Rebond au-dessus du survol, sur la remontée de `tap` (+0,164 à 165 ms), fois le niveau : il
+/// remonte de 41 % de sa hauteur de survol à « Light », de 82 % à « Strong ».
+const MODEL_REBOUND_GAIN: f32 = 2.5;
 /// Tangage au repos (queue relevée, pointe vers le bas) et supplément au creux de la pression.
 const MODEL_PITCH_IDLE_DEG: f32 = 18.0;
 const MODEL_PITCH_PRESS_DEG: f32 = 10.0;
@@ -3833,20 +3838,23 @@ pub struct CursorPose {
 /// La pose à `t`. `click_bounce` est le réglage brut (0 à 2 : None, Light, Strong ; 1 par défaut),
 /// `pointing` la part « pointeur » du sprite (`pointing_factor`).
 ///
-/// - Hauteur : `MODEL_HOVER` au repos ; chaque clic le fait descendre TOUCHER le plan au creux de
-///   `regions::tap`, la courbe de l'impact du clic, dont le creux (49,5 ms) est celui de la
-///   pression de `CursorTrack::bounce` : le modèle, le plan et le rebond d'échelle lisent le même
-///   contact à la même image. Dernier clic avant `t`, comme `bounce`. Tous les états.
-/// - Tangage : 18° au repos, jusqu'à +10° au creux de la pression, fois `clickBounce`.
+/// - Hauteur : `MODEL_HOVER` au repos ; chaque clic le fait descendre TOUCHER le plan autour du
+///   creux de `regions::tap`, la courbe de l'impact du clic, dont le creux (49,5 ms) est celui de
+///   la pression de `CursorTrack::bounce` : le modèle, le plan et le rebond d'échelle lisent le
+///   même contact à la même image. Puis il rebondit au-dessus du survol et s'y repose. Le niveau
+///   règle tout le geste, comme le rebond d'échelle en 2D : plus fort, il touche plus tôt, appuie
+///   plus longtemps et rebondit plus haut (`MODEL_CONTACT_GAIN`, `MODEL_REBOUND_GAIN`) ; à 0, il
+///   ne bouge pas. Dernier clic avant `t`, comme `bounce`. Tous les états.
+/// - Tangage : 18° au repos, +10° pendant l'appui, fois `clickBounce`.
 /// - Lacet : vers la vitesse horizontale lissée (`follow_at`, différence centrée), et vers la
 ///   cible d'un clic dans les 300 ms qui le précèdent ; borné à ±25° en douceur (`tanh`), nul au
 ///   repos. Les contributions des clics montent avant eux et retombent sur la fenêtre de l'impact,
 ///   donc la pose reste continue en `t`.
 /// - Tangage et lacet sont multipliés par `pointing` : entiers pour la flèche, nuls pour un
 ///   curseur centré.
-/// - Écrasement : sur la même courbe `tap`, l'épaisseur descend à 1 − `MODEL_SQUASH` au creux,
-///   puis le rebond l'épaissit un instant. Fois `clickBounce`, comme le tangage ; tous les états.
-///   L'empreinte ne change pas : pas de rebond d'échelle en 3D.
+/// - Écrasement : pendant l'appui, l'épaisseur descend à 1 − `MODEL_SQUASH`, puis le rebond
+///   l'épaissit un instant. Fois `clickBounce`, comme le tangage ; tous les états.
+///   L'empreinte ne change pas : pas de rebond d'échelle en 3D, le mouvement le remplace.
 pub fn cursor_pose(
     track: &crate::cursor::CursorTrack,
     t: f32,
@@ -3855,11 +3863,14 @@ pub fn cursor_pose(
 ) -> CursorPose {
     use crate::regions::{tap, CLICK_IMPACT_WINDOW_S};
     let k = track.last_click_at(t).map(|tc| tap((t - tc) / CLICK_IMPACT_WINDOW_S)).unwrap_or(0.0);
-    let clearance = MODEL_HOVER * (1.0 + MODEL_CONTACT_GAIN * k).max(0.0);
     let strength = (click_bounce / MODEL_CLICK_BOUNCE_REF).clamp(0.0, 2.0);
-    let press = (-k).max(0.0) * strength;
-    let pitch = pointing * (MODEL_PITCH_IDLE_DEG + MODEL_PITCH_PRESS_DEG * press).to_radians();
-    let squash = (1.0 + MODEL_SQUASH * k * strength).max(MODEL_SQUASH_MIN);
+    // L'appui, de 0 au survol à 1 posé, et le rebond au-dessus du survol.
+    let press = (-k * MODEL_CONTACT_GAIN * strength).clamp(0.0, 1.0);
+    let rebound = k.max(0.0) * strength;
+    let clearance = MODEL_HOVER * (1.0 - press + MODEL_REBOUND_GAIN * rebound);
+    let pitch =
+        pointing * (MODEL_PITCH_IDLE_DEG + MODEL_PITCH_PRESS_DEG * strength * press).to_radians();
+    let squash = (1.0 + MODEL_SQUASH * (rebound - strength * press)).max(MODEL_SQUASH_MIN);
 
     let smooth = |x: f32| {
         let u = x.clamp(0.0, 1.0);
@@ -7732,10 +7743,18 @@ mod tests {
         let press_ms = press.expect("un creux") as f32;
         assert_eq!(cursor_pose(&track, 0.5 + press_ms / 1000.0, MODEL_CLICK_BOUNCE_REF, 1.0).clearance, 0.0);
         assert_eq!(cursor_pose(&track, 0.5 + crate::regions::CLICK_IMPACT_WINDOW_S, MODEL_CLICK_BOUNCE_REF, 1.0), rest);
-        // clickBounce règle la pression, pas le contact.
-        let soft = cursor_pose(&track, 0.5 + CONTACT_S, 0.0, 1.0);
-        assert_eq!(soft.clearance, 0.0);
-        assert!((soft.pitch - rest.pitch).abs() < 1e-6);
+        // Le niveau règle tout le geste. « None » : le modèle ne bouge pas au clic.
+        for ms in 0..260 {
+            assert_eq!(cursor_pose(&track, 0.5 + ms as f32 / 1000.0, 0.0, 1.0), rest, "{ms} ms");
+        }
+        // « Strong » : il touche plus tôt, appuie plus longtemps et plus penché, rebondit plus haut.
+        let at = |ms: f32, level: f32| cursor_pose(&track, 0.5 + ms / 1000.0, level, 1.0);
+        let posed = |level: f32| (0..260).filter(|&ms| at(ms as f32, level).clearance == 0.0).count();
+        assert!(at(15.0, 2.0).clearance == 0.0 && at(15.0, 1.0).clearance > 0.0, "plus tôt");
+        assert!(posed(2.0) > posed(1.0) + 30, "plus longtemps : {} ms / {} ms", posed(2.0), posed(1.0));
+        assert!(at(CONTACT_S * 1000.0, 2.0).pitch > down.pitch + 5f32.to_radians(), "plus penché");
+        let peak = |level: f32| (100..260).map(|ms| at(ms as f32, level).clearance).fold(0.0, f32::max);
+        assert!(peak(1.0) > MODEL_HOVER * 1.3 && peak(2.0) > peak(1.0) + 0.3 * MODEL_HOVER, "plus haut");
     }
 
     /// « Posé » veut dire posé, pour chaque état : au repos le point le plus bas du modèle est à

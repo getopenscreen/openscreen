@@ -327,10 +327,15 @@ Deux décisions :
 
 - **Hauteur** : 0,35 unité de garde au repos. Chaque clic le pose **au contact** avec la courbe
   `tap()`, celle de l'impact du clic, dont le creux (49,5 ms) est celui de la pression de
-  `bounce()`. Gain 1,25 : posé de 27 à 74 ms, donc au moins une image au contact jusqu'à
-  21 i/s. Tous les états.
-- **Tangage** : queue relevée, pointe vers le bas, 18° au repos, jusqu'à +10° au creux de la
-  pression, fois `clickBounce` (« Light » = 1, le défaut ; « Strong » = 2).
+  `bounce()`, puis il **rebondit** au-dessus de sa garde et s'y repose. Tous les états.
+- **Le niveau `clickBounce` règle tout le geste**, comme le rebond d'échelle en 2D : l'appui est
+  `tap()` × 1,25 × niveau, borné à 1, le rebond la remontée de `tap()` × 2,5 × niveau.
+  « Light » (1, le défaut) : posé de 27 à 74 ms, donc au moins une image au contact jusqu'à
+  21 i/s, rebond à +41 % de la garde. « Strong » (2) : posé de 12 à 100 ms, rebond à +82 %.
+  « None » : le modèle ne bouge pas au clic. Auparavant, contact et rebond ne dépendaient pas du
+  niveau : de face, les trois se ressemblaient (retour produit du 27/09/2026).
+- **Tangage** : queue relevée, pointe vers le bas, 18° au repos, +10° pendant l'appui, fois le
+  niveau.
 - **Lacet** : vers la vitesse horizontale lissée (`follow_at`, différence centrée sur ±100 ms),
   et vers la cible d'un clic dans les 300 ms qui le précèdent. Borné en douceur à ±25°
   (`tanh`), nul au repos, continu en `t`.
@@ -347,8 +352,8 @@ Deux décisions :
   repos, au plan au contact, jamais dessous. Mesuré sur huit états, à plat et iso : 0 pour les
   états centrés (face du dessous au sol), +1,6 à +1,8 % d'unité pour les pointeurs (le chanfrein
   arrondit le coin qui touche), sous le seuil testé de 2 %.
-- **Pas de rebond d'échelle** en 3D : le contact le remplace.
-- **Écrasement** : sur la même courbe `tap()`, l'épaisseur descend à 70 % au creux, puis le
+- **Pas de rebond d'échelle** en 3D : le geste le remplace, en vrai relief.
+- **Écrasement** : pendant l'appui, l'épaisseur descend à 70 %, puis le
   rebond l'épaissit un instant (104,8 % à 165 ms). Fois `clickBounce`, jamais sous 55 %
   (deux chanfreins et un peu de flanc). Le dessus descend, le point le plus bas reste posé, le
   hotspot reste sur son pixel. L'empreinte, elle, ne change pas : un étalement de 5 % défaisait

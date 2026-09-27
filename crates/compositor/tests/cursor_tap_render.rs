@@ -370,6 +370,69 @@ fn the_impact_ring_is_centred_on_the_click() {
     assert!(late == late_quiet, "l'anneau survit à sa fenêtre");
 }
 
+/// Planche des niveaux du clic (opt-in, `OPENSCREEN_CURSOR_TAP_OUT`) : None, Light et Strong en
+/// lignes, des instants autour du clic de la flèche en colonnes, agrandis ×2 autour de la pointe.
+/// Et la même chose en mouvement, les trois niveaux côte à côte, à 30 i/s puis ralentie ×4.
+#[test]
+fn cursor_press_levels() {
+    let Ok(dir) = std::env::var("OPENSCREEN_CURSOR_TAP_OUT") else {
+        eprintln!("OPENSCREEN_CURSOR_TAP_OUT absent — saute");
+        return;
+    };
+    let Some(gpu) = gpu() else { return };
+    let comp = Compositor::new_sized(&gpu, OUT.0, OUT.1).expect("compositor");
+    let screen = MockFrame::new(&gpu);
+    let track = gesture("levels");
+    let frames = format!("{dir}/levels");
+    std::fs::create_dir_all(&frames).expect("dossier des frames");
+    let ([_, _], tc) = TARGETS[0];
+    let levels = [0.0, 1.0, 2.0];
+    let img = |rgba: Vec<u8>| image::RgbaImage::from_raw(OUT.0, OUT.1, rgba).expect("readback");
+    let (_, tip) = render(&comp, &screen, &scene_json("null", false, 1.0), &track, tc + CONTACT_S);
+    let tip = tip.expect("curseur");
+    const CELL: u32 = 180;
+    let cell = |rgba: Vec<u8>| {
+        let (x, y) = ((tip[0] - CELL as f32 * 0.35) as u32, (tip[1] - CELL as f32 * 0.3) as u32);
+        image::imageops::crop_imm(&img(rgba), x, y, CELL, CELL).to_image()
+    };
+    let offsets = [-0.1, 0.0, 0.017, 0.033, 0.05, 0.083, 0.117, 0.15, 0.2, 0.27];
+    let mut sheet = image::RgbaImage::new(offsets.len() as u32 * 2 * CELL, levels.len() as u32 * 2 * CELL);
+    for (row, level) in levels.iter().enumerate() {
+        for (col, dt) in offsets.iter().enumerate() {
+            let (rgba, _) = render(&comp, &screen, &scene_json("null", false, *level), &track, tc + dt);
+            let big = image::imageops::resize(&cell(rgba), 2 * CELL, 2 * CELL, image::imageops::FilterType::Nearest);
+            image::imageops::overlay(&mut sheet, &big, (col as u32 * 2 * CELL) as i64, (row as u32 * 2 * CELL) as i64);
+        }
+    }
+    sheet.save(format!("{dir}/press-levels.png")).expect("planche");
+    println!("planche des niveaux : lignes {levels:?}, colonnes {offsets:?} s après le clic");
+    for (speed, name) in [(1.0, "press-levels.mp4"), (0.25, "press-levels-slow.mp4")] {
+        let n = (0.6 / speed * 30.0) as u32;
+        for k in 0..n {
+            let t = tc - 0.2 + k as f32 / 30.0 * speed;
+            let mut row = image::RgbaImage::new(levels.len() as u32 * 2 * CELL, 2 * CELL);
+            for (i, level) in levels.iter().enumerate() {
+                let (rgba, _) = render(&comp, &screen, &scene_json("null", false, *level), &track, t);
+                let big = image::imageops::resize(&cell(rgba), 2 * CELL, 2 * CELL, image::imageops::FilterType::Triangle);
+                image::imageops::overlay(&mut row, &big, (i as u32 * 2 * CELL) as i64, 0);
+            }
+            row.save(format!("{frames}/{k:03}.png")).expect("frame");
+        }
+        let ffmpeg = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../thirdparty/ffmpeg-n8.1.2-win64-lgpl-shared/bin/ffmpeg.exe");
+        let status = std::process::Command::new(ffmpeg)
+            .args(["-y", "-loglevel", "error", "-framerate", "30", "-i"])
+            .arg(format!("{frames}/%03d.png"))
+            .args(["-c:v", "h264_mf", "-b:v", "8M", "-pix_fmt", "nv12"])
+            .arg(format!("{dir}/{name}"))
+            .status();
+        println!("ffmpeg : {status:?} -> {dir}/{name}");
+        for k in 0..n {
+            let _ = std::fs::remove_file(format!("{frames}/{k:03}.png"));
+        }
+    }
+}
+
 /// Vidéo et planche à regarder (opt-in, `OPENSCREEN_CURSOR_TAP_OUT`).
 #[test]
 fn cursor_tap_video() {

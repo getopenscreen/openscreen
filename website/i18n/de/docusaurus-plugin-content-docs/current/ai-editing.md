@@ -53,7 +53,7 @@ Der Bereich drumherum:
 
 `Ctrl/Cmd + Z` macht eine Änderung des Agenten genauso rückgängig wie eine manuelle.
 
-Der Eintrag **Smart cuts** (mit *With AI* markiert) im Menü **Auto-enhance** der Zeitleiste ist derselbe Agent mit einer einmaligen Anweisung. (Der andere Eintrag, **Automatic zooms**, liest die aufgezeichnete Cursorbewegung und braucht überhaupt keinen Anbieter.)
+Der Eintrag **Smart cuts** (mit *With AI* markiert) im Menü **Auto-enhance** der Zeitleiste ist derselbe Agent mit einer einmaligen Anweisung. (Der andere Eintrag, **Automatic zooms**, liest die aufgezeichneten Klicks und braucht überhaupt keinen Anbieter.)
 
 ## Was deinen Anbieter sonst noch nutzt {#what-else-uses-your-provider}
 

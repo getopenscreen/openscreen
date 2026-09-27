@@ -43,7 +43,7 @@ Wählst du auf der Zeitleiste einen Bereich aus (einen Zoom-, Schnitt-, Annotati
 ## Werkzeugleiste der Zeitleiste {#timeline-toolbar}
 
 - **Auto-enhance** (Zauberstab-Symbol): ein Menü mit zwei einmaligen Durchläufen:
-  - **Automatic zooms**: liest die aufgezeichnete Cursorbewegung und setzt Zoombereiche an die Stellen, an denen der Cursor verweilt. Kein Netzwerk, kein Modell. Wie diese Stellen gewählt werden, erklärt [Auto zoom](/features/auto-zoom/).
+  - **Automatic zooms**: liest die aufgezeichneten Klicks und zoomt auf sie. Kein Netzwerk, kein Modell. Wie die Zooms gesetzt werden, erklärt [Auto zoom](/features/auto-zoom/).
   - **Smart cuts** (mit *With AI* markiert): übergibt die Aufgabe stattdessen dem KI-Agenten, der einen [verbundenen Anbieter](./ai-editing.md) braucht.
 - **Speed** (`S`): fügt am Abspielkopf einen Geschwindigkeitsbereich ein.
 - **Comment** (`A`): fügt am Abspielkopf eine Annotation ein.

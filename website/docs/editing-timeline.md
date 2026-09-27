@@ -43,7 +43,7 @@ Selecting a region on the timeline (a zoom, trim, annotation, speed, or Full Cam
 ## Timeline toolbar
 
 - **Auto-enhance** (wand icon) — a menu with two one-shot passes:
-  - **Automatic zooms** — reads the recorded cursor movement and drops zoom regions on the moments where the cursor dwells. No network, no model. [Auto zoom](/features/auto-zoom/) explains how the moments are picked.
+  - **Automatic zooms** — reads the recorded clicks and zooms in on them. No network, no model. [Auto zoom](/features/auto-zoom/) explains how the zooms are placed.
   - **Smart cuts** (marked *With AI*) — hands the job to the AI agent instead, which needs a [connected provider](./ai-editing.md).
 - **Speed** (`S`) — adds a speed-change region at the playhead.
 - **Annotation** (`A`) — adds an annotation at the playhead.

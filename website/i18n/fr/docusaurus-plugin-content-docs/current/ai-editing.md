@@ -53,7 +53,7 @@ Le panneau qui l'entoure :
 
 `Ctrl/Cmd + Z` annule une modification de l'agent exactement comme une modification manuelle.
 
-L'entrée **Coupes intelligentes** (marquée *Avec l'IA*) du menu Amélioration auto de la timeline est le même agent, avec une consigne unique. (L'autre entrée, **Zooms automatiques**, lit le mouvement enregistré du curseur et n'a besoin d'aucun fournisseur.)
+L'entrée **Coupes intelligentes** (marquée *Avec l'IA*) du menu Amélioration auto de la timeline est le même agent, avec une consigne unique. (L'autre entrée, **Zooms automatiques**, lit les clics enregistrés et n'a besoin d'aucun fournisseur.)
 
 ## Ce qui utilise aussi votre fournisseur {#what-else-uses-your-provider}
 

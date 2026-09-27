@@ -43,7 +43,7 @@ Selecionar uma região na linha do tempo (um bloco de zoom, recorte, anotação,
 ## Barra de ferramentas da linha do tempo {#timeline-toolbar}
 
 - **Melhoria automática** (ícone de varinha) — um menu com duas ações pontuais:
-  - **Zooms automáticos** — lê o movimento gravado do cursor e coloca regiões de zoom nos momentos em que o cursor se detém. Sem rede, sem modelo. [Zoom automático](/features/auto-zoom/) explica como os momentos são escolhidos.
+  - **Zooms automáticos** — lê os cliques gravados e dá zoom neles. Sem rede, sem modelo. [Zoom automático](/features/auto-zoom/) explica como os zooms são posicionados.
   - **Cortes inteligentes** (marcado *Com IA*) — em vez disso, passa o trabalho para o agente de IA, que precisa de um [provedor conectado](./ai-editing.md).
 - **Velocidade** (`S`) — adiciona uma região de mudança de velocidade no cursor de reprodução.
 - **Comentário** (`A`) — adiciona uma anotação no cursor de reprodução.

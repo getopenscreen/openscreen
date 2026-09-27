@@ -1,6 +1,6 @@
 ---
 title: Grabador de pantalla gratis con zoom automático
-description: "OpenScreen es un grabador de pantalla gratis y de código abierto con zoom automático para Windows, macOS y Linux. Hace zoom donde se detuvo tu cursor."
+description: "OpenScreen es un grabador de pantalla gratis y de código abierto con zoom automático para Windows, macOS y Linux. Hace zoom en los clics que grabó."
 keywords:
   - grabador de pantalla con zoom automático
   - grabador de pantalla gratis con zoom automático de código abierto
@@ -10,7 +10,7 @@ keywords:
 
 # Un grabador de pantalla gratis con zoom automático
 
-OpenScreen es un grabador de pantalla con zoom automático para Windows, macOS y Linux, gratis y con licencia MIT. Después de cada toma, lee el movimiento del cursor que grabó y agrega un zoom donde se detuvo el puntero, sin llamadas de red ni modelo de IA. Screen Studio, Cap y Camtasia también hacen zoom automáticamente; OpenScreen lo hace gratis, en los tres sistemas.
+OpenScreen es un grabador de pantalla con zoom automático para Windows, macOS y Linux, gratis y con licencia MIT. Después de cada toma, lee los clics que grabó y hace zoom en ellos, sin llamadas de red ni modelo de IA. Screen Studio, Cap y Camtasia también hacen zoom automáticamente; OpenScreen lo hace gratis, en los tres sistemas.
 
 Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio, Cap y Camtasia vienen de screen.studio, cap.so y techsmith.com, y se verificaron en septiembre de 2026. Las fuentes están al final.
 
@@ -19,9 +19,10 @@ Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio, C
 | | |
 | --- | --- |
 | Dónde encontrarlo | Mejora automática → Zooms automáticos, en la barra de herramientas de la línea de tiempo del editor |
-| Qué lee | El movimiento del cursor que OpenScreen guarda junto a una grabación |
-| Dónde caen los zooms | Donde el puntero se mantiene casi quieto entre medio segundo y 2,6 segundos |
-| Cada zoom automático | 1,8×, con el enfoque siguiendo al cursor. Dos segundos de duración al agregarse en el editor |
+| Qué lee | Los clics que OpenScreen guarda junto a una grabación |
+| Dónde caen los zooms | En tus clics. Los clics cercanos entre sí comparten un mismo zoom |
+| Cada zoom automático | 1,25×, 1,5× o 1,8×, el más profundo que mantiene sus clics a la vista, con el enfoque siguiendo al cursor |
+| Inicio y fin | Los primeros 2,5 segundos y el último segundo del video se mantienen sin zoom |
 | IA, red o clave | Ninguna |
 | Profundidades de zoom manual | 1,25×, 1,5×, 1,8×, 2,2×, 3,5× o 5× |
 | Enfoque | Un punto que colocas tú, o el cursor grabado |
@@ -32,24 +33,25 @@ Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio, C
 
 ## Cómo funcionan los zooms automáticos {#how-automatic-zooms-work}
 
-En su modo de cursor editable predeterminado, OpenScreen graba el puntero aparte de los píxeles. Mantiene el cursor del sistema fuera del video y guarda el movimiento del puntero en un archivo `.cursor.json` junto a él. Los zooms automáticos se construyen a partir de ese archivo.
+En su modo de cursor editable predeterminado, OpenScreen graba el puntero aparte de los píxeles. Mantiene el cursor del sistema fuera del video y guarda el movimiento y los clics del puntero en un archivo `.cursor.json` junto a él. Los zooms automáticos se construyen a partir de los clics de ese archivo.
 
-1. **Encontrar las pausas.** OpenScreen escanea las posiciones grabadas en busca de tramos donde el puntero se mantiene casi quieto entre medio segundo y 2,6 segundos. Cada pausa se convierte en candidata, centrada en el lugar donde se detuvo el puntero.
-2. **Ordenar y espaciar.** Las pausas más largas van primero. Un candidato a menos de 1,8 segundos de uno ya conservado se descarta, y lo mismo pasa con uno que se solaparía con un zoom ya presente en la línea de tiempo.
-3. **Agregar los zooms.** En el editor, cada pausa conservada se vuelve un zoom de dos segundos a 1,8×, centrado en la pausa, con su enfoque configurado para seguir al cursor.
+1. **Agrupar los clics.** Los clics separados por menos de 3 segundos comparten un mismo zoom, siempre que quepan juntos en él.
+2. **Fijar los tiempos de cada zoom.** Alcanza su zoom completo medio segundo antes de su primer clic y se mantiene 1,5 segundos después del último, para que lo que hizo el clic siga a la vista. Siempre se mantiene al menos 1,8 segundos.
+3. **Elegir su profundidad.** La más profunda de 1,25×, 1,5× y 1,8× que mantiene todos sus clics a la vista, con un margen a su alrededor.
+4. **Mantener el video tranquilo.** Entre dos zooms, se ve toda la pantalla durante al menos 1,5 segundos. Dos zooms más cercanos que eso se convierten en uno cuando sus clics caben juntos; si no, se descarta el que tiene menos clics. Los primeros 2,5 segundos y el último segundo del video se mantienen sin zoom, y se ignora el clic que detuvo la grabación.
 
-El proceso es una regla determinista sobre posiciones grabadas, no una función de IA. No hace ninguna llamada de red ni carga ningún modelo, y funciona igual en Windows, macOS y Linux.
+El proceso es una regla determinista sobre clics grabados, no una función de IA. No hace ninguna llamada de red ni carga ningún modelo, y funciona igual en Windows, macOS y Linux.
 
 Algunos detalles importan en la práctica:
 
-- **Tus propios zooms se conservan.** Los zooms que colocaste a mano se mantienen, y los nuevos nunca se solapan con ellos.
-- **Cada clip tiene sus propios zooms.** En una línea de tiempo con varios clips, cada clip se relaciona con su propio tramo de la grabación, incluso cuando dos clips vienen de la misma toma.
+- **Tus propios zooms se conservan.** Los zooms que colocaste a mano se mantienen, y los nuevos quedan apartados de ellos, con toda la pantalla visible en medio.
+- **Cada clip tiene sus propios zooms.** En una línea de tiempo con varios clips, cada clip se relaciona con su propio tramo de la grabación, incluso cuando dos clips vienen de la misma toma. Un zoom nunca cruza un corte.
 - **Un solo deshacer quita todo el lote.** Todo el proceso es una única edición.
 - **Los resultados son zooms comunes.** Haz clic en uno para cambiar su profundidad, cámara 3D o enfoque, arrastra sus bordes para mover su inicio y fin, o elimínalo.
 - **Se ejecuta después de cada toma.** Cada grabación nueva recibe sus zooms al abrirse en el editor. Para evitarlo, desactiva **Zoom automático tras grabar** en el modo **Grabar** del editor. Para ejecutarlo cuando quieras, elige **Zooms automáticos** en el editor, o pasa `--auto-zoom` en la línea de comandos.
 - **Te avisa cuando no encuentra ningún momento válido.** El editor reporta que no se encontraron momentos para zoom automático.
-- **No necesita datos de clics.** Una toma grabada sin clics, como una toma de Linux cuando tu usuario no está en el grupo `input`, sigue obteniendo zooms automáticos.
-- **Las pausas largas las encuadras tú.** Un puntero detenido por más de 2,6 segundos, por ejemplo mientras hablas sobre una diapositiva, se deja tal cual. Agrega un zoom a mano con `Z`.
+- **Funciona a partir de los clics grabados.** En Windows se graban los clics. En macOS necesitan el permiso de Accesibilidad, y en Linux tu usuario debe estar en el grupo `input`.
+- **Señalar no es hacer clic.** Un puntero que mantienes quieto mientras hablas sobre algo no recibe zoom. Agrega uno a mano con `Z`.
 
 El mismo menú tiene un segundo elemento, **Cortes inteligentes**, marcado *Con IA*. Es una función distinta: le pide al agente de chat opcional que corte el tiempo muerto. Espera la transcripción de la grabación, y solo funciona una vez que conectas un proveedor de IA con tu propia clave. Consulta [Edición con IA](/docs/ai-editing/).
 
@@ -74,7 +76,7 @@ El rebote al clic necesita clics grabados. En macOS eso requiere el permiso de A
 
 ## Desde la línea de comandos {#from-the-command-line}
 
-El comando `export` de la [CLI](/docs/cli/) acepta `--auto-zoom`. Antes de renderizar, ejecuta el mismo detector de pausas sobre los datos de cursor de la grabación y agrega zooms que nunca se solapan con los propios del proyecto. Cada uno de esos zooms dura dos segundos, como en el editor. Un video sin datos de cursor de OpenScreen no le da nada con qué trabajar.
+El comando `export` de la [CLI](/docs/cli/) acepta `--auto-zoom`. Antes de renderizar, planifica zooms a partir de los clics de la grabación, igual que el editor, y los mantiene apartados de los propios del proyecto. Un video sin datos de cursor de OpenScreen no le da nada con qué trabajar.
 
 ## Otras herramientas que hacen zoom automáticamente {#other-tools-that-zoom-automatically}
 
@@ -84,7 +86,7 @@ Los zooms automáticos son comunes en esta categoría, y OpenScreen es una de va
 - **Cap.** Su modo Studio genera segmentos de zoom alrededor de los clics grabados, a partir de los datos de cursor y clic que graba Cap. Su documentación dice que los MP4 importados no obtienen datos de clic durante la importación.
 - **Camtasia.** SmartFocus identifica acciones como el desplazamiento y los clics, y luego agrega animaciones de paneo y zoom. Necesita un archivo `.trec` de Camtasia Recorder.
 
-Igual que OpenScreen, Cap y Camtasia necesitan datos que capturó su propio grabador. Screen Studio y Cap se activan con los clics, la IA de Camtasia elige acciones como el desplazamiento y los clics, y OpenScreen sigue las pausas en el movimiento del puntero, lo que funciona incluso cuando no se grabó ningún clic. Para comparaciones lado a lado, consulta la [alternativa a Screen Studio](/alternatives/screen-studio/), [OpenScreen frente a Cap](/compare/openscreen-vs-cap/) y la [alternativa a Camtasia](/alternatives/camtasia/).
+Igual que OpenScreen, Cap y Camtasia necesitan datos que capturó su propio grabador. OpenScreen, Screen Studio y Cap hacen zoom en los clics, y la IA de Camtasia elige acciones como el desplazamiento y los clics. Para comparaciones lado a lado, consulta la [alternativa a Screen Studio](/alternatives/screen-studio/), [OpenScreen frente a Cap](/compare/openscreen-vs-cap/) y la [alternativa a Camtasia](/alternatives/camtasia/).
 
 ## Cuándo OpenScreen no es la herramienta adecuada {#when-openscreen-is-not-the-right-tool}
 

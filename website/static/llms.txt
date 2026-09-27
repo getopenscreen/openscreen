@@ -34,7 +34,7 @@ OpenScreen is not the same product as Open Screen at openscreen.io.
 - [Screen recorder for Windows](https://getopenscreen.com/screen-recorder-windows/): Windows 10 and 11, Windows Graphics Capture, Microsoft Store
 - [Screen recorder for Mac](https://getopenscreen.com/screen-recorder-mac/): macOS 13 or later on Apple Silicon and Intel, ScreenCaptureKit
 - [Screen recorder for Linux](https://getopenscreen.com/screen-recorder-linux/): PipeWire and the ScreenCast portal, so it records on Wayland
-- [Auto zoom](https://getopenscreen.com/features/auto-zoom/): how automatic zooms are placed from the recorded cursor movement
+- [Auto zoom](https://getopenscreen.com/features/auto-zoom/): how automatic zooms are placed on the recorded clicks
 - [Local captions](https://getopenscreen.com/features/captions/): Whisper transcription on your machine, and where other recorders differ
 
 ## Comparisons

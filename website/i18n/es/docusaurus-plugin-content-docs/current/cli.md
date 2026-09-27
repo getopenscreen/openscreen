@@ -135,7 +135,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--quality <medium\|good\|source>` | Tamaño de salida: `medium` es 720p, `good` es 1080p y `source` sigue al clip más pequeño una vez recortado, así que nunca amplía. Un GIF también parte de este tamaño |
 | `--gif-fps <15\|20\|25\|30>` | Fotogramas por segundo del GIF |
 | `--gif-size <medium\|large\|original>` | Límite de altura del GIF que se aplica a ese tamaño: 720, 1080 o ninguno |
-| `--auto-zoom` | Antes de renderizar, agrega zooms donde el puntero grabado se detuvo, con el mismo motor que los [zooms automáticos](/features/auto-zoom/) del editor. Los zooms existentes se conservan, y los nuevos nunca se superponen con ellos |
+| `--auto-zoom` | Antes de renderizar, agrega zooms en los clics grabados, con el mismo motor que los [zooms automáticos](/features/auto-zoom/) del editor. Los zooms existentes se conservan, y los nuevos quedan apartados de ellos |
 | `--audio <file>` | Mezcla un archivo de voz en off (mp3, wav o m4a) en el MP4. Solo MP4 |
 | `--audio-mode <mix\|replace>` | `mix` (predeterminado) mantiene el audio de la grabación debajo de la voz en off, con una ganancia del 40 %; `replace` lo elimina |
 | `--audio-offset <seconds>` | Retraso antes de que empiece la voz en off (predeterminado: 0) |
@@ -247,7 +247,7 @@ node -e '
   fs.writeFileSync("demo.openscreen", JSON.stringify(p, null, 2));
 '
 
-# 4. Render, with automatic zooms added where the pointer paused
+# 4. Render, with automatic zooms added on the recorded clicks
 openscreen export demo.openscreen -o demo.mp4 --auto-zoom --json
 ```
 

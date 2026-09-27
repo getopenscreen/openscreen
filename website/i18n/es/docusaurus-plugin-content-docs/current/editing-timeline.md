@@ -43,7 +43,7 @@ Al seleccionar una región en la línea de tiempo (un bloque de zoom, recorte, a
 ## Barra de herramientas de la línea de tiempo {#timeline-toolbar}
 
 - **Mejora automática** (ícono de varita): un menú con dos pasadas que se ejecutan una sola vez:
-  - **Zooms automáticos**: lee el movimiento grabado del cursor y coloca regiones de zoom en los momentos en que el cursor se detiene. Sin red ni modelo. [Zoom automático](/features/auto-zoom/) explica cómo se eligen esos momentos.
+  - **Zooms automáticos**: lee los clics grabados y hace zoom en ellos. Sin red ni modelo. [Zoom automático](/features/auto-zoom/) explica cómo se colocan los zooms.
   - **Cortes inteligentes** (marcado *Con IA*): en su lugar, le encarga el trabajo al agente de IA, que necesita un [proveedor conectado](./ai-editing.md).
 - **Velocidad** (`S`): agrega una región de cambio de velocidad en el cabezal de reproducción.
 - **Comentario** (`A`): agrega una anotación en el cabezal de reproducción.

@@ -53,7 +53,7 @@ El panel que lo rodea:
 
 `Ctrl/Cmd + Z` deshace una edición del agente exactamente igual que una manual.
 
-La opción **Cortes inteligentes** (marcada *Con IA*) del menú de mejora automática de la línea de tiempo es el mismo agente con una única instrucción. (La otra opción, **Zooms automáticos**, lee el movimiento grabado del cursor y no necesita ningún proveedor).
+La opción **Cortes inteligentes** (marcada *Con IA*) del menú de mejora automática de la línea de tiempo es el mismo agente con una única instrucción. (La otra opción, **Zooms automáticos**, lee los clics grabados y no necesita ningún proveedor).
 
 ## Qué más usa tu proveedor {#what-else-uses-your-provider}
 

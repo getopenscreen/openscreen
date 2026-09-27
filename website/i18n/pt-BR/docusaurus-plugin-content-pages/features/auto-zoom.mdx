@@ -1,6 +1,6 @@
 ---
 title: Gravador de tela grátis com zoom automático
-description: "O OpenScreen é um gravador de tela grátis e open source com zoom automático para Windows, macOS e Linux. Dá zoom onde o cursor gravado faz uma pausa."
+description: "O OpenScreen é um gravador de tela grátis e open source com zoom automático para Windows, macOS e Linux. Dá zoom nos cliques que gravou."
 keywords:
   - gravador de tela com zoom automático
   - gravador de tela grátis zoom automático open source
@@ -10,7 +10,7 @@ keywords:
 
 # Um gravador de tela grátis com zoom automático
 
-O OpenScreen é um gravador de tela gratuito, com licença MIT, com zoom automático para Windows, macOS e Linux. Depois de cada gravação, ele lê o movimento de cursor que gravou e adiciona um zoom onde o ponteiro pausou, sem chamada de rede e sem modelo de IA. Screen Studio, Cap e Camtasia também dão zoom automaticamente; o OpenScreen faz isso de graça, nos três sistemas.
+O OpenScreen é um gravador de tela gratuito, com licença MIT, com zoom automático para Windows, macOS e Linux. Depois de cada gravação, ele lê os cliques que gravou e dá zoom neles, sem chamada de rede e sem modelo de IA. Screen Studio, Cap e Camtasia também dão zoom automaticamente; o OpenScreen faz isso de graça, nos três sistemas.
 
 Esta página é publicada pelo projeto OpenScreen. Os dados sobre Screen Studio, Cap e Camtasia vêm de screen.studio, cap.so e techsmith.com e foram verificados em setembro de 2026. As fontes estão listadas no final.
 
@@ -19,9 +19,10 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre Screen Studio,
 | | |
 | --- | --- |
 | Onde encontrar | Melhoria automática → Zooms automáticos, na barra de ferramentas da linha do tempo do editor |
-| O que ele lê | O movimento de cursor que o OpenScreen salva com uma gravação |
-| Onde os zooms entram | Onde o ponteiro fica quase parado por cerca de meio segundo a 2,6 segundos |
-| Cada zoom automático | 1,8×, com o foco seguindo o cursor. Dois segundos de duração quando adicionado no editor |
+| O que ele lê | Os cliques que o OpenScreen salva com uma gravação |
+| Onde os zooms entram | Nos seus cliques. Cliques próximos entre si compartilham o mesmo zoom |
+| Cada zoom automático | 1,25×, 1,5× ou 1,8×, a maior profundidade que mantém os cliques dele visíveis, com o foco seguindo o cursor |
+| Início e fim | Os primeiros 2,5 segundos e o último segundo do vídeo ficam sem zoom |
 | IA, rede ou chave | Nenhuma |
 | Profundidades de zoom manual | 1,25×, 1,5×, 1,8×, 2,2×, 3,5× ou 5× |
 | Foco | Um ponto que você posiciona, ou o cursor gravado |
@@ -32,24 +33,25 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre Screen Studio,
 
 ## Como os zooms automáticos funcionam {#how-automatic-zooms-work}
 
-No modo padrão de cursor editável, o OpenScreen grava o ponteiro separado dos pixels. Ele mantém o cursor do sistema fora do vídeo e salva o movimento do ponteiro em um arquivo `.cursor.json` ao lado. Os zooms automáticos são construídos a partir desse arquivo.
+No modo padrão de cursor editável, o OpenScreen grava o ponteiro separado dos pixels. Ele mantém o cursor do sistema fora do vídeo e salva o movimento e os cliques do ponteiro em um arquivo `.cursor.json` ao lado. Os zooms automáticos são construídos a partir dos cliques desse arquivo.
 
-1. **Encontrar as pausas.** O OpenScreen varre as posições gravadas em busca de trechos em que o ponteiro fica quase parado por cerca de meio segundo a 2,6 segundos. Cada pausa vira uma candidata, mirando o ponto onde o ponteiro ficou.
-2. **Classificar e espaçar.** Pausas mais longas vêm primeiro. Uma candidata a menos de 1,8 segundo de outra já mantida é descartada, assim como uma que se sobreporia a um zoom já na linha do tempo.
-3. **Adicionar os zooms.** No editor, cada pausa mantida vira um zoom de dois segundos em 1,8×, centrado na pausa, com o foco definido para seguir o cursor.
+1. **Agrupar os cliques.** Cliques com menos de 3 segundos de intervalo compartilham o mesmo zoom, desde que caibam juntos nele.
+2. **Definir o tempo de cada zoom.** Ele já está totalmente aplicado meio segundo antes do primeiro clique e se mantém por 1,5 segundo depois do último, para que o resultado do clique continue visível. Ele sempre se mantém por pelo menos 1,8 segundo.
+3. **Escolher a profundidade.** A maior entre 1,25×, 1,5× e 1,8× que mantém todos os cliques dele visíveis, com uma margem ao redor deles.
+4. **Manter o vídeo calmo.** Entre dois zooms, a tela inteira aparece por pelo menos 1,5 segundo. Dois zooms mais próximos que isso viram um só quando os cliques deles cabem juntos; caso contrário, o que tem menos cliques é descartado. Os primeiros 2,5 segundos e o último segundo do vídeo ficam sem zoom, e o clique que parou a gravação é ignorado.
 
-O processo é uma regra determinística sobre posições gravadas, não um recurso de IA. Não faz chamada de rede nem carrega modelo, e funciona da mesma forma no Windows, no macOS e no Linux.
+O processo é uma regra determinística sobre cliques gravados, não um recurso de IA. Não faz chamada de rede nem carrega modelo, e funciona da mesma forma no Windows, no macOS e no Linux.
 
 Alguns detalhes importam na prática:
 
-- **Seus próprios zooms permanecem.** Zooms que você posicionou manualmente são mantidos, e os novos nunca se sobrepõem a eles.
-- **Cada clipe recebe seus próprios zooms.** Em uma linha do tempo com vários clipes, cada clipe é associado ao próprio trecho da gravação, mesmo quando dois clipes vêm da mesma gravação.
+- **Seus próprios zooms permanecem.** Zooms que você posicionou manualmente são mantidos, e os novos ficam afastados deles, com a tela inteira aparecendo no intervalo.
+- **Cada clipe recebe seus próprios zooms.** Em uma linha do tempo com vários clipes, cada clipe é associado ao próprio trecho da gravação, mesmo quando dois clipes vêm da mesma gravação. Um zoom nunca atravessa um corte.
 - **Um único desfazer remove o lote.** Todo o processo é uma única edição.
 - **Os resultados são zooms comuns.** Clique em um para mudar sua profundidade, câmera 3D ou foco, arraste as bordas para mover o início e o fim, ou apague-o.
 - **Ele roda depois de cada gravação.** Cada nova gravação recebe seus zooms ao abrir no editor. Para evitar isso, desative **Zoom automático após a gravação** no modo **Gravar** do editor. Para rodá-lo quando quiser, escolha **Zooms automáticos** no editor, ou passe `--auto-zoom` na linha de comando.
 - **Ele avisa quando nada se qualifica.** O editor informa que nenhum momento de zoom automático foi encontrado.
-- **Não precisa de dados de clique.** Uma gravação feita sem cliques, como uma gravação no Linux quando seu usuário não está no grupo `input`, ainda recebe zooms automáticos.
-- **Pausas longas ficam a seu critério.** Um ponteiro parado por mais de 2,6 segundos, por exemplo enquanto você fala sobre um slide, é deixado como está. Adicione um zoom manualmente com `Z`.
+- **Ele funciona a partir de cliques gravados.** Os cliques são gravados no Windows. No macOS, eles exigem a permissão de Acessibilidade, e no Linux seu usuário precisa estar no grupo `input`.
+- **Apontar não é clicar.** Um ponteiro mantido parado enquanto você fala sobre algo não recebe zoom. Adicione um manualmente com `Z`.
 
 O mesmo menu tem um segundo item, **Cortes inteligentes**, marcado *Com IA*. É um recurso diferente: ele pede ao agente de chat opcional para cortar tempo morto. Ele espera a transcrição da gravação, e só funciona depois que você conecta um provedor de IA com sua própria chave. Veja [Edição com IA](/docs/ai-editing/).
 
@@ -74,7 +76,7 @@ O rebote de clique precisa de cliques gravados. No macOS isso exige a permissão
 
 ## Pela linha de comando {#from-the-command-line}
 
-O comando `export` da [CLI](/docs/cli/) aceita `--auto-zoom`. Antes de renderizar, ele roda o mesmo detector de pausas sobre os dados de cursor da gravação e adiciona zooms que nunca se sobrepõem aos do próprio projeto. Cada um desses zooms dura dois segundos, como no editor. Um vídeo sem dados de cursor do OpenScreen não lhe dá nada com que trabalhar.
+O comando `export` da [CLI](/docs/cli/) aceita `--auto-zoom`. Antes de renderizar, ele planeja zooms a partir dos cliques da gravação, da mesma forma que o editor, e os mantém afastados dos zooms do próprio projeto. Um vídeo sem dados de cursor do OpenScreen não lhe dá nada com que trabalhar.
 
 ## Outras ferramentas que dão zoom automaticamente {#other-tools-that-zoom-automatically}
 
@@ -84,7 +86,7 @@ Zooms automáticos são comuns nessa categoria, e o OpenScreen é uma de várias
 - **Cap.** O Studio Mode dele gera segmentos de zoom ao redor de cliques gravados, a partir dos dados de cursor e clique que o Cap grava. A documentação dele diz que MP4s importados não ganham dados de clique durante a importação.
 - **Camtasia.** O SmartFocus identifica ações como rolagem e cliques, depois adiciona animações de panorâmica e zoom. Ele precisa de um arquivo `.trec` do Camtasia Recorder.
 
-Assim como o OpenScreen, o Cap e o Camtasia precisam de dados capturados pelo próprio gravador deles. Screen Studio e Cap são acionados por cliques, a IA do Camtasia escolhe ações como rolagem e cliques, e o OpenScreen segue as pausas no movimento do ponteiro, o que funciona mesmo quando nenhum clique foi gravado. Para comparações lado a lado, veja a [alternativa ao Screen Studio](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) e a [alternativa ao Camtasia](/alternatives/camtasia/).
+Assim como o OpenScreen, o Cap e o Camtasia precisam de dados capturados pelo próprio gravador deles. OpenScreen, Screen Studio e Cap dão zoom nos cliques, e a IA do Camtasia escolhe ações como rolagem e cliques. Para comparações lado a lado, veja a [alternativa ao Screen Studio](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) e a [alternativa ao Camtasia](/alternatives/camtasia/).
 
 ## Quando o OpenScreen não é a ferramenta certa {#when-openscreen-is-not-the-right-tool}
 

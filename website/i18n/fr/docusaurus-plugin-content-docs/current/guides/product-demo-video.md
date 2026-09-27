@@ -40,7 +40,7 @@ Sous Windows, OpenScreen exclut le HUD et la fenêtre Notes de la capture. Sous 
 
 OpenScreen vise 60 fps à la capture, jusqu'à 3840×2160 sous Windows et macOS. Sous Linux, la taille est celle que fournit le compositeur. Pendant l'enregistrement, vous pouvez mettre en pause, recommencer la prise, l'annuler ou l'arrêter.
 
-**Calez votre rythme sur les zooms.** Amenez le pointeur sur l'élément que vous allez expliquer, puis immobilisez-le. Les zooms automatiques de l'étape 4 cherchent ces pauses : un pointeur immobile pendant une durée allant d'environ une demi-seconde à 2,6 secondes. Un pointeur qui reste immobile plus longtemps n'obtient pas de zoom.
+**Calez votre rythme sur les zooms.** Cliquez là où se passe l'action, et laissez le résultat s'afficher avant de passer à la suite. Les zooms automatiques de l'étape 4 suivent vos clics : des clics rapprochés partagent un même zoom, qui se maintient 1,5 seconde après le dernier. Les 2,5 premières secondes de la vidéo restent en plan large ; laissez donc tourner la prise un moment avant le premier clic.
 
 **Longues démos sous Linux.** Linux écrit un MP4 classique qui n'est finalisé qu'à l'arrêt : un plantage en pleine prise laisse donc un fichier illisible. Enregistrez plutôt plusieurs prises plus courtes ; l'étape 5 montre comment les assembler.
 
@@ -61,7 +61,7 @@ L'onglet **Composition** met en forme le cadre. Sa section d'arrière-plan propo
 
 ## 4. Ajouter des zooms automatiques {#4-add-automatic-zooms}
 
-OpenScreen les ajoute à l'ouverture de la prise dans l'éditeur : il lit le mouvement enregistré du curseur et place des régions de zoom sur ces pauses, sans réseau ni modèle. Si la prise s'est ouverte sans eux, ouvrez **Amélioration auto** dans la barre d'outils de la timeline et choisissez **Zooms automatiques**. S'il ne place rien, il vous le signale. Les causes habituelles sont un enregistrement sans données de curseur, aucune pause sur cette plage, ou des zooms existants qui couvrent déjà ces moments.
+OpenScreen les ajoute à l'ouverture de la prise dans l'éditeur : il lit les clics enregistrés et zoome dessus, sans réseau ni modèle. Si la prise s'est ouverte sans eux, ouvrez **Amélioration auto** dans la barre d'outils de la timeline et choisissez **Zooms automatiques**. S'il ne place rien, il vous le signale. Les causes habituelles sont un enregistrement sans clics enregistrés, des clics uniquement dans ses premières ou dernières secondes, ou des zooms existants qui les couvrent déjà.
 
 Vérifiez-les ensuite. Cliquez sur un zoom pour régler son niveau (de 1.25× à 5×), son mode de focus (Auto suit le curseur, Manuel garde un point fixe) et une éventuelle caméra 3D. Appuyez sur `Z` pour ajouter un zoom à la main, et sur `Ctrl/Cmd+D` pour supprimer un zoom dont vous ne voulez pas.
 

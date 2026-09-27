@@ -1,6 +1,6 @@
 ---
 title: Free screen recorder with auto zoom
-description: OpenScreen is a free, open-source screen recorder with auto zoom for Windows, macOS and Linux. It places zooms where your recorded cursor pauses.
+description: OpenScreen is a free, open-source screen recorder with auto zoom for Windows, macOS and Linux. It zooms in on the clicks it recorded.
 keywords:
   - screen recorder with auto zoom
   - free auto zoom screen recorder open source
@@ -10,7 +10,7 @@ keywords:
 
 # A free screen recorder with auto zoom
 
-OpenScreen is a free, MIT-licensed screen recorder with auto zoom for Windows, macOS and Linux. After each take, it reads the cursor movement it recorded and adds a zoom wherever the pointer paused, with no network call and no AI model. Screen Studio, Cap and Camtasia also zoom automatically; OpenScreen does it for free, on all three systems.
+OpenScreen is a free, MIT-licensed screen recorder with auto zoom for Windows, macOS and Linux. After each take, it reads the clicks it recorded and zooms in on them, with no network call and no AI model. Screen Studio, Cap and Camtasia also zoom automatically; OpenScreen does it for free, on all three systems.
 
 This page is published by the OpenScreen project. The Screen Studio, Cap and Camtasia details come from screen.studio, cap.so and techsmith.com and were checked in September 2026. The sources are listed at the end.
 
@@ -19,9 +19,10 @@ This page is published by the OpenScreen project. The Screen Studio, Cap and Cam
 | | |
 | --- | --- |
 | Where to find it | Auto-enhance → Automatic zooms, in the editor's timeline toolbar |
-| What it reads | The cursor movement OpenScreen saves with a recording |
-| Where zooms land | Where the pointer holds nearly still for about half a second to 2.6 seconds |
-| Each automatic zoom | 1.8×, with the focus following the cursor. Two seconds long when added in the editor |
+| What it reads | The clicks OpenScreen saves with a recording |
+| Where zooms land | On your clicks. Clicks close together share one zoom |
+| Each automatic zoom | 1.25×, 1.5× or 1.8×, the deepest that keeps its clicks in view, with the focus following the cursor |
+| Start and end | The first 2.5 seconds and the last second of the video stay wide |
 | AI, network or key | None |
 | Manual zoom depths | 1.25×, 1.5×, 1.8×, 2.2×, 3.5× or 5× |
 | Focus | A point you place, or the recorded cursor |
@@ -32,24 +33,25 @@ This page is published by the OpenScreen project. The Screen Studio, Cap and Cam
 
 ## How automatic zooms work
 
-In its default editable cursor mode, OpenScreen records the pointer apart from the pixels. It keeps the system cursor out of the video and saves the pointer's movement in a `.cursor.json` file next to it. Automatic zooms are built from that file.
+In its default editable cursor mode, OpenScreen records the pointer apart from the pixels. It keeps the system cursor out of the video and saves the pointer's movement and clicks in a `.cursor.json` file next to it. Automatic zooms are built from the clicks in that file.
 
-1. **Find the pauses.** OpenScreen scans the recorded positions for stretches where the pointer holds nearly still for about half a second to 2.6 seconds. Each pause becomes a candidate, aimed at the spot where the pointer rested.
-2. **Rank and space them.** Longer pauses come first. A candidate less than 1.8 seconds from one already kept is dropped, and so is one that would overlap a zoom already on the timeline.
-3. **Add the zooms.** In the editor, each kept pause becomes a two-second zoom at 1.8×, centered on the pause, with its focus set to follow the cursor.
+1. **Group the clicks.** Clicks less than 3 seconds apart share one zoom, as long as they fit in it together.
+2. **Time each zoom.** It is fully in half a second before its first click and holds for 1.5 seconds after its last one, so what the click did stays in view. It always holds for at least 1.8 seconds.
+3. **Pick its depth.** The deepest of 1.25×, 1.5× and 1.8× that keeps all its clicks in view, with a margin around them.
+4. **Keep the video calm.** Between two zooms, the whole screen shows for at least 1.5 seconds. Two zooms closer than that become one when their clicks fit together; otherwise the one with fewer clicks goes. The first 2.5 seconds and the last second of the video stay wide, and the click that stopped the recording is ignored.
 
-The pass is a deterministic rule over recorded positions, not an AI feature. It makes no network call and loads no model, and it works the same way on Windows, macOS and Linux.
+The pass is a deterministic rule over recorded clicks, not an AI feature. It makes no network call and loads no model, and it works the same way on Windows, macOS and Linux.
 
 A few details matter in practice:
 
-- **Your own zooms stay.** Zooms you placed by hand are kept, and the new ones never overlap them.
-- **Every clip gets its own zooms.** On a multi-clip timeline, each clip is matched to its own stretch of the recording, even when two clips come from the same take.
+- **Your own zooms stay.** Zooms you placed by hand are kept, and the new ones keep clear of them, with the whole screen showing in between.
+- **Every clip gets its own zooms.** On a multi-clip timeline, each clip is matched to its own stretch of the recording, even when two clips come from the same take. A zoom never spans a cut.
 - **One undo removes the batch.** The whole pass is a single edit.
 - **The results are ordinary zooms.** Click one to change its depth, 3D camera or focus, drag its edges to move its start and end, or delete it.
 - **It runs after every take.** Each new recording gets its zooms as it opens in the editor. To stop it, turn off **Auto-zoom after recording** in the editor's **Record** mode. To run it on demand, choose **Automatic zooms** in the editor, or pass `--auto-zoom` on the command line.
 - **It tells you when nothing qualifies.** The editor reports that no auto-zoom moments were found.
-- **It needs no click data.** A take recorded without clicks, such as a Linux take when your user is not in the `input` group, still gets automatic zooms.
-- **Long pauses are yours to frame.** A pointer parked for more than 2.6 seconds, for example while you talk over a slide, is left alone. Add a zoom by hand with `Z`.
+- **It works from recorded clicks.** Clicks are recorded on Windows. On macOS they need the Accessibility permission, and on Linux your user must be in the `input` group.
+- **Pointing is not clicking.** A pointer held still while you talk over something gets no zoom. Add one by hand with `Z`.
 
 The same menu has a second item, **Smart cuts**, marked *With AI*. It is a different feature: it asks the optional chat agent to cut dead time. It waits for the recording's transcript, and it only works once you connect an AI provider with your own key. See [AI editing](/docs/ai-editing/).
 
@@ -74,7 +76,7 @@ Click bounce needs recorded clicks. On macOS that takes the Accessibility permis
 
 ## From the command line
 
-The `export` command of the [CLI](/docs/cli/) accepts `--auto-zoom`. Before rendering, it runs the same pause detector over the recording's cursor data and adds zooms that never overlap the project's own. Each of those zooms lasts two seconds, as in the editor. A video with no OpenScreen cursor data gives it nothing to work from.
+The `export` command of the [CLI](/docs/cli/) accepts `--auto-zoom`. Before rendering, it plans zooms from the recording's clicks, the same way the editor does, and keeps them clear of the project's own. A video with no OpenScreen cursor data gives it nothing to work from.
 
 ## Other tools that zoom automatically
 
@@ -84,7 +86,7 @@ Automatic zooms are common in this category, and OpenScreen is one of several to
 - **Cap.** Its Studio Mode generates zoom segments around recorded clicks, from the cursor and click data Cap records. Its docs say imported MP4s do not gain click data during import.
 - **Camtasia.** SmartFocus identifies actions such as scrolling and clicks, then adds pan and zoom animations. It needs a `.trec` file from Camtasia Recorder.
 
-Like OpenScreen, Cap and Camtasia need data their own recorder captured. Screen Studio and Cap trigger on clicks, Camtasia's AI picks actions such as scrolling and clicks, and OpenScreen follows the pauses in the pointer's movement, which works even when no clicks were recorded. For side-by-side comparisons, see the [Screen Studio alternative](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) and the [Camtasia alternative](/alternatives/camtasia/).
+Like OpenScreen, Cap and Camtasia need data their own recorder captured. OpenScreen, Screen Studio and Cap zoom on clicks, and Camtasia's AI picks actions such as scrolling and clicks. For side-by-side comparisons, see the [Screen Studio alternative](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/) and the [Camtasia alternative](/alternatives/camtasia/).
 
 ## When OpenScreen is not the right tool
 

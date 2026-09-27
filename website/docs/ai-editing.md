@@ -53,7 +53,7 @@ The panel around it:
 
 `Ctrl/Cmd + Z` undoes an agent edit exactly like a manual one.
 
-The **Smart cuts** entry (marked *With AI*) in the timeline's auto-enhance menu is the same agent on a one-shot prompt. (The other entry, **Automatic zooms**, reads recorded cursor movement and needs no provider at all.)
+The **Smart cuts** entry (marked *With AI*) in the timeline's auto-enhance menu is the same agent on a one-shot prompt. (The other entry, **Automatic zooms**, reads the recorded clicks and needs no provider at all.)
 
 ## What else uses your provider
 

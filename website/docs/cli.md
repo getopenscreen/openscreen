@@ -135,7 +135,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--quality <medium\|good\|source>` | Output size: `medium` is 720p, `good` is 1080p, `source` follows the smallest clip after cropping, so it never upscales. A GIF starts from this size too |
 | `--gif-fps <15\|20\|25\|30>` | GIF frame rate |
 | `--gif-size <medium\|large\|original>` | GIF height cap applied to that size: 720, 1080, or none |
-| `--auto-zoom` | Before rendering, add zooms where the recorded pointer paused, with the same engine as the editor's [automatic zooms](/features/auto-zoom/). Existing zooms are kept, and new ones never overlap them |
+| `--auto-zoom` | Before rendering, add zooms on the recorded clicks, with the same engine as the editor's [automatic zooms](/features/auto-zoom/). Existing zooms are kept, and new ones keep clear of them |
 | `--audio <file>` | Mix a voiceover file (mp3, wav or m4a) into the MP4. MP4 only |
 | `--audio-mode <mix\|replace>` | `mix` (default) keeps the recording's audio under the voiceover at 40% gain; `replace` drops it |
 | `--audio-offset <seconds>` | Delay before the voiceover starts (default 0) |
@@ -247,7 +247,7 @@ node -e '
   fs.writeFileSync("demo.openscreen", JSON.stringify(p, null, 2));
 '
 
-# 4. Render, with automatic zooms added where the pointer paused
+# 4. Render, with automatic zooms added on the recorded clicks
 openscreen export demo.openscreen -o demo.mp4 --auto-zoom --json
 ```
 

@@ -53,7 +53,7 @@ O painel em volta dele:
 
 `Ctrl/Cmd + Z` desfaz uma edição do agente exatamente como uma edição manual.
 
-A opção **Cortes inteligentes** (marcada *Com IA*) no menu de melhoria automática da linha do tempo é o mesmo agente com um prompt único. (A outra opção, **Zooms automáticos**, lê o movimento gravado do cursor e não precisa de nenhum provedor.)
+A opção **Cortes inteligentes** (marcada *Com IA*) no menu de melhoria automática da linha do tempo é o mesmo agente com um prompt único. (A outra opção, **Zooms automáticos**, lê os cliques gravados e não precisa de nenhum provedor.)
 
 ## O que mais usa o seu provedor {#what-else-uses-your-provider}
 

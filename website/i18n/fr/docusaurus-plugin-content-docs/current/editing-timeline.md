@@ -43,7 +43,7 @@ Sélectionner une région sur la timeline (un bloc de zoom, de coupe, d'annotati
 ## Barre d'outils de la timeline {#timeline-toolbar}
 
 - **Amélioration auto** (icône baguette) : un menu qui propose deux traitements à lancer ponctuellement :
-  - **Zooms automatiques** : lit le mouvement enregistré du curseur et place des régions de zoom aux moments où le curseur s'attarde. Pas de réseau, pas de modèle. [Zoom automatique](/features/auto-zoom/) explique comment ces moments sont choisis.
+  - **Zooms automatiques** : lit les clics enregistrés et zoome dessus. Pas de réseau, pas de modèle. [Zoom automatique](/features/auto-zoom/) explique comment les zooms sont placés.
   - **Coupes intelligentes** (avec la mention *Avec l'IA*) : confie plutôt la tâche à l'agent IA, qui a besoin d'un [fournisseur connecté](./ai-editing.md).
 - **Vitesse** (`S`) : ajoute une région de changement de vitesse à la tête de lecture.
 - **Commentaire** (`A`) : ajoute une annotation à la tête de lecture.

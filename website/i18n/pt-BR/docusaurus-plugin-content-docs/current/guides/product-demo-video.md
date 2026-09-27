@@ -40,7 +40,7 @@ No Windows, o OpenScreen mantém o HUD e a janela de notas fora da captura. No m
 
 O OpenScreen captura com uma meta de 60 fps, até 3840×2160 no Windows e no macOS. No Linux, o tamanho é o que o compositor entregar. Durante a gravação, você pode pausar, reiniciar a tomada, cancelá-la ou parar.
 
-**Ritmo para os zooms.** Leve o ponteiro até o que você vai explicar e deixe-o parado. Os zooms automáticos do passo 4 procuram essas pausas: um ponteiro parado por cerca de meio segundo até 2,6 segundos. Um ponteiro que fica parado por mais tempo que isso não recebe zoom.
+**Ritmo para os zooms.** Clique onde está a ação e deixe o resultado aparecer antes de seguir em frente. Os zooms automáticos do passo 4 seguem seus cliques: cliques próximos entre si compartilham o mesmo zoom, que se mantém por 1,5 segundo depois do último. Os primeiros 2,5 segundos do vídeo ficam sem zoom, então deixe a tomada correr um momento antes do primeiro clique.
 
 **Demos longas no Linux.** O Linux grava um MP4 comum, que só é finalizado quando você para, então um travamento no meio da tomada deixa um arquivo ilegível. Em vez disso, grave várias tomadas mais curtas; o passo 5 mostra como juntá-las.
 
@@ -61,7 +61,7 @@ A aba **Composição** define o estilo do quadro. A seção de fundo oferece 18 
 
 ## 4. Adicione zooms automáticos {#4-add-automatic-zooms}
 
-O OpenScreen os adiciona quando a gravação abre no editor: ele lê o movimento gravado do cursor e coloca regiões de zoom nessas pausas, sem rede e sem modelo. Se a gravação abriu sem eles, abra **Melhoria automática** na barra de ferramentas da linha do tempo e escolha **Zooms automáticos**. Se não colocar nenhuma, ele avisa. As causas mais comuns são uma gravação sem dados de cursor, nenhuma pausa naquele intervalo ou zooms existentes que já cobrem esses momentos.
+O OpenScreen os adiciona quando a gravação abre no editor: ele lê os cliques gravados e dá zoom neles, sem rede e sem modelo. Se a gravação abriu sem eles, abra **Melhoria automática** na barra de ferramentas da linha do tempo e escolha **Zooms automáticos**. Se não colocar nenhum, ele avisa. As causas mais comuns são uma gravação sem cliques registrados, cliques só nos primeiros ou nos últimos segundos dela ou zooms existentes que já os cobrem.
 
 Depois, revise os zooms. Clique em um zoom para definir o nível (de 1.25× a 5×), o modo de foco (Automático segue o cursor, Manual mantém um ponto fixo) e uma câmera 3D opcional. Pressione `Z` para adicionar um zoom manualmente e `Ctrl/Cmd+D` para excluir um que você não quiser.
 

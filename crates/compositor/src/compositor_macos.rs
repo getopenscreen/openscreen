@@ -4205,11 +4205,12 @@ mod tests {
             let touch = compose_model(&comp, &screen, &json, &contact);
             model_save(&format!("tap-{}", if rotation == "null" { "flat" } else { "iso" }), &touch);
             assert!(!is_red(px(&touch, m[0] as i32, (m[1] + 2.0) as i32)), "{rotation}: la pointe manque la pastille");
+            // Au-delà du bord de la pointe, que le geste du clic déplace (`quiet` reste au repos).
             // L'écart dû à l'impact, le long de deux demi-droites (haut, gauche) : même rayon, à la
             // perspective près sous `iso` (l'anneau y est une ellipse).
             let (on, off) = (compose_model(&comp, &screen, &json, &ring), compose_model(&comp, &screen, &quiet, &ring));
             let peak = |dx: i32, dy: i32| {
-                (4..45)
+                (8..45)
                     .map(|r| {
                         let (a, b) = (px(&on, m[0] as i32 + dx * r, m[1] as i32 + dy * r), px(&off, m[0] as i32 + dx * r, m[1] as i32 + dy * r));
                         ((0..3).map(|c| (a[c] - b[c]).abs()).sum::<i32>(), r)

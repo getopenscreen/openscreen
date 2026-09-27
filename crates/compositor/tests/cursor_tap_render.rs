@@ -350,9 +350,11 @@ fn the_impact_ring_is_centred_on_the_click() {
     let (ring, tip) = render(&comp, &screen, &scene_json("null", false, 2.5), &track, t);
     let (quiet, _) = render(&comp, &screen, &scene_json("null", false, 0.0), &track, t);
     let m = marker(&bare, tip.expect("curseur"));
-    // Le profil de l'écart dû à l'impact le long d'une demi-droite partant du clic.
+    // Le profil de l'écart dû à l'impact le long d'une demi-droite partant du clic, au-delà du
+    // bord de la pointe : le geste du clic y déplace le curseur, que `quiet` (« None ») laisse au
+    // repos.
     let peak = |dx: i32, dy: i32| -> (i32, i32) {
-        (4..45)
+        (8..45)
             .map(|r| {
                 let (x, y) = (m[0] as i32 + dx * r, m[1] as i32 + dy * r);
                 let (a, b) = (px(&ring, x, y), px(&quiet, x, y));

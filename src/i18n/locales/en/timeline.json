@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "Auto-enhance",
 		"automaticZooms": "Automatic zooms",
-		"automaticZoomsHint": "From recorded cursor movement",
+		"automaticZoomsHint": "From recorded clicks",
 		"smartZoomsAndCuts": "Smart cuts",
 		"smartZoomsAndCutsHint": "With AI",
 		"timelineTools": "Timeline tools",
@@ -76,7 +76,7 @@
 		"dropToAdd": "Drop to add to timeline",
 		"importRecordingFirst": "Import a recording first",
 		"noAutoZoomMoments": "No auto-zoom moments found",
-		"noAutoZoomMomentsDescription": "This recording has no cursor movement data, or existing zooms already cover the busy moments.",
+		"noAutoZoomMomentsDescription": "This recording has no recorded clicks, or none with room for a zoom.",
 		"addedAutoZoom": "Added {{count}} automatic zoom",
 		"addedAutoZoomPlural": "Added {{count}} automatic zooms",
 		"autoZoomFailed": "Auto-zoom failed",

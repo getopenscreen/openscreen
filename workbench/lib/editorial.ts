@@ -407,8 +407,8 @@ export interface ZoomIssue {
 }
 
 /**
- * Shortest zoom that is not a flash: the app's own floor for a cursor dwell
- * worth zooming on (`zoom-suggestions.ts:11`, 450 ms). Below it the transition
+ * Shortest zoom that is not a flash: 450 ms, the floor the app's old stillness
+ * detector set for a dwell worth zooming on. Below it the transition
  * has not finished before the region ends.
  */
 export const MIN_ZOOM_SEC = 0.45;

@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "Mejora automática",
 		"automaticZooms": "Zooms automáticos",
-		"automaticZoomsHint": "Del movimiento del cursor grabado",
+		"automaticZoomsHint": "De los clics grabados",
 		"smartZoomsAndCuts": "Cortes inteligentes",
 		"smartZoomsAndCutsHint": "Con IA",
 		"timelineTools": "Herramientas de la línea de tiempo",
@@ -76,7 +76,7 @@
 		"dropToAdd": "Suelta para añadir a la línea de tiempo",
 		"importRecordingFirst": "Importa una grabación primero",
 		"noAutoZoomMoments": "No se encontraron momentos para zoom automático",
-		"noAutoZoomMomentsDescription": "Esta grabación no tiene datos de movimiento del cursor, o los zooms existentes ya cubren los momentos con actividad.",
+		"noAutoZoomMomentsDescription": "Esta grabación no tiene clics registrados, o ninguno deja espacio para un zoom.",
 		"addedAutoZoom": "Se añadió {{count}} zoom automático",
 		"addedAutoZoomPlural": "Se añadieron {{count}} zooms automáticos",
 		"autoZoomFailed": "Error en el zoom automático",

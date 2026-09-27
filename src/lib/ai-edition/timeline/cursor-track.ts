@@ -3,14 +3,14 @@
 //
 // ponytail: this is an OBSERVATION, not an interpretation, and the distinction
 // is the whole point of the module. Its predecessor handed the model a list of
-// "dwell moments" computed by the same stillness detector that drives the magic
+// "dwell moments" computed by the same stillness detector that then drove the magic
 // wand. That reads as helpful and is not: it caps the model at the detector's
 // recall. Measured on a real 66s screencast, the detector reports 6 of 6
 // annotated interest zones but 8 false positives out of 16 — and it is blind by
 // construction to the one zone where the user traced slowly across an image
 // while narrating, because the cursor genuinely travelled 30% of the frame. A
-// model fed that digest can never zoom there, however good it is. So the wand
-// keeps its detector, the model gets the track, and the bench compares them.
+// model fed that digest can never zoom there, however good it is. So the model
+// gets the track, and the bench compares the two. (The wand has since moved to clicks.)
 //
 // Downsampling is resolution, not interpretation: every kept point is a real
 // sample, nothing is summarised, and every pointer-shape change survives the

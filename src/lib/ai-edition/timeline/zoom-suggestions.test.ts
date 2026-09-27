@@ -1,27 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import type { AxcutClip } from "../schema";
-import {
-	buildAutoZoomSuggestions,
-	buildAutoZoomSuggestionsForClips,
-	detectZoomDwellCandidates,
-} from "./zoom-suggestions";
-
-// A dwell = many samples clustered in time at (nearly) the same position.
-function dwell(
-	centerMs: number,
-	cx: number,
-	cy: number,
-	count = 6,
-	spanMs = 900,
-): CursorTelemetryPoint[] {
-	const step = spanMs / (count - 1);
-	return Array.from({ length: count }, (_, i) => ({
-		timeMs: centerMs - spanMs / 2 + i * step,
-		cx,
-		cy,
-	}));
-}
+import { buildAutoZoomSuggestions, buildAutoZoomSuggestionsForClips } from "./zoom-suggestions";
 
 // A click = a single sample carrying recorded interaction metadata (issue #699).
 function click(
@@ -33,122 +13,90 @@ function click(
 	return { timeMs, cx, cy, interactionType };
 }
 
-describe("detectZoomDwellCandidates", () => {
-	it("finds a dwell where the cursor sits still", () => {
-		const candidates = detectZoomDwellCandidates(dwell(1000, 0.4, 0.6));
-		expect(candidates).toHaveLength(1);
-		expect(candidates[0].focus.cx).toBeCloseTo(0.4, 5);
-		expect(candidates[0].focus.cy).toBeCloseTo(0.6, 5);
-	});
+// The pointer parked in one place, with no click.
+function park(centerMs: number, cx: number, cy: number, count = 6, spanMs = 900) {
+	const step = spanMs / (count - 1);
+	return Array.from({ length: count }, (_, i) => ({
+		timeMs: centerMs - spanMs / 2 + i * step,
+		cx,
+		cy,
+	}));
+}
 
-	it("ignores a fast sweep across the screen (no dwell)", () => {
-		const samples: CursorTelemetryPoint[] = Array.from({ length: 10 }, (_, i) => ({
-			timeMs: i * 100,
-			cx: i / 10,
-			cy: i / 10,
-		}));
-		expect(detectZoomDwellCandidates(samples)).toHaveLength(0);
-	});
-});
+const plan = (cursorTelemetry: CursorTelemetryPoint[], totalMs = 5000) =>
+	buildAutoZoomSuggestions({ cursorTelemetry, totalMs, existingRegions: [] });
 
-describe("buildAutoZoomSuggestions", () => {
+describe("buildAutoZoomSuggestions: which clicks count", () => {
 	it("ignores a click made while the cursor is hidden", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [{ ...click(2000, 0.5, 0.5), visible: false }],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toEqual([]);
+		expect(plan([{ ...click(2000, 0.5, 0.5), visible: false }])).toEqual([]);
 	});
 
 	it("ignores a visible mouse-down when the cursor hides during that drag", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
-				{ ...click(1000, 0.5, 0.5), visible: true },
-				{ timeMs: 1016, cx: 0.5, cy: 0.5, visible: false, interactionType: "move" },
-				{ timeMs: 1600, cx: 0.7, cy: 0.5, visible: false, interactionType: "mouseup" },
-			],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
+		const suggestions = plan([
+			{ ...click(1000, 0.5, 0.5), visible: true },
+			{ timeMs: 1016, cx: 0.5, cy: 0.5, visible: false, interactionType: "move" },
+			{ timeMs: 1600, cx: 0.7, cy: 0.5, visible: false, interactionType: "mouseup" },
+		]);
 		expect(suggestions).toEqual([]);
 	});
 
 	it("keeps a click released before the cursor later hides", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
-				{ ...click(1000, 0.5, 0.5), visible: true },
-				{ timeMs: 1050, cx: 0.5, cy: 0.5, visible: true, interactionType: "mouseup" },
-				{ timeMs: 1400, cx: 0.5, cy: 0.5, visible: false, interactionType: "move" },
-			],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.5, cy: 0.5 });
+		const suggestions = plan([
+			{ ...click(1000, 0.5, 0.5), visible: true },
+			{ timeMs: 1050, cx: 0.5, cy: 0.5, visible: true, interactionType: "mouseup" },
+			{ timeMs: 1400, cx: 0.5, cy: 0.5, visible: false, interactionType: "move" },
+		]);
+		expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.5, cy: 0.5 }]);
 	});
 
 	it("keeps a later visible click after a hidden drag", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
+		const suggestions = plan(
+			[
 				{ ...click(1000, 0.5, 0.5), visible: true },
 				{ timeMs: 1100, cx: 0.6, cy: 0.5, visible: false, interactionType: "move" },
 				{ timeMs: 1600, cx: 0.7, cy: 0.5, visible: true, interactionType: "mouseup" },
 				{ ...click(4000, 0.2, 0.8), visible: true },
 			],
-			totalMs: 6000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.2, cy: 0.8 });
+			6000,
+		);
+		expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.2, cy: 0.8 }]);
 	});
 
 	it("keeps a legacy click without mouseup when the cursor hides much later", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
+		const suggestions = plan(
+			[
 				{ ...click(1000, 0.2, 0.8), visible: true },
 				{ timeMs: 1050, cx: 0.3, cy: 0.7, visible: true, interactionType: "move" },
 				{ timeMs: 2000, cx: 0.7, cy: 0.3, visible: false, interactionType: "move" },
 			],
-			totalMs: 4000,
-			existingRegions: [],
-			defaultDurationMs: 1000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.2, cy: 0.8 });
+			4000,
+		);
+		expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.2, cy: 0.8 }]);
 	});
 
 	it("rejects a legacy click when the cursor hides on the next sampler tick", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
+		const suggestions = plan(
+			[
 				{ ...click(1000, 0.2, 0.8), visible: true },
 				{ timeMs: 1033, cx: 0.25, cy: 0.75, visible: false, interactionType: "move" },
 			],
-			totalMs: 4000,
-			existingRegions: [],
-			defaultDurationMs: 1000,
-		});
+			4000,
+		);
 		expect(suggestions).toEqual([]);
 	});
 
 	it("keeps a tap whose release shares its press sample when the cursor hides later", () => {
 		// The take records mouse-ups, but the second tap was released within one sampler tick.
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
+		const suggestions = plan(
+			[
 				{ ...click(500, 0.8, 0.2), visible: true },
 				{ timeMs: 600, cx: 0.8, cy: 0.2, visible: true, interactionType: "mouseup" },
-				{ ...click(3000, 0.2, 0.8), visible: true },
-				{ timeMs: 3500, cx: 0.2, cy: 0.8, visible: false, interactionType: "move" },
+				{ ...click(9000, 0.2, 0.8), visible: true },
+				{ timeMs: 9500, cx: 0.2, cy: 0.8, visible: false, interactionType: "move" },
 			],
-			totalMs: 6000,
-			existingRegions: [],
-			defaultDurationMs: 1000,
-		});
-		expect(suggestions.map((suggestion) => suggestion.focus)).toEqual([
+			12000,
+		);
+		expect(suggestions.map((s) => s.focus)).toEqual([
 			{ cx: 0.8, cy: 0.2 },
 			{ cx: 0.2, cy: 0.8 },
 		]);
@@ -156,320 +104,163 @@ describe("buildAutoZoomSuggestions", () => {
 
 	it("keeps a click whose mouse-up sample is already hidden", () => {
 		// Released, then typing hid the pointer before the next sampler tick.
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
+		const suggestions = plan(
+			[
 				{ ...click(1000, 0.5, 0.5), visible: true },
 				{ timeMs: 1033, cx: 0.5, cy: 0.5, visible: false, interactionType: "mouseup" },
 			],
-			totalMs: 4000,
-			existingRegions: [],
-			defaultDurationMs: 1000,
-		});
-		expect(suggestions.map((suggestion) => suggestion.focus)).toEqual([{ cx: 0.5, cy: 0.5 }]);
-	});
-
-	it("does not join visible samples across a hidden interval into a dwell", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
-				{ timeMs: 1000, cx: 0.5, cy: 0.5, visible: true },
-				{ timeMs: 1200, cx: 0.5, cy: 0.5, visible: true },
-				{ timeMs: 1400, cx: 0.5, cy: 0.5, visible: false },
-				{ timeMs: 1800, cx: 0.5, cy: 0.5, visible: true },
-				{ timeMs: 2000, cx: 0.5, cy: 0.5, visible: true },
-			],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toEqual([]);
-	});
-
-	it("ignores a dwell recorded while the cursor is hidden", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: dwell(2000, 0.5, 0.5).map((sample) => ({
-				...sample,
-				visible: false,
-			})),
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toEqual([]);
-	});
-
-	it("keeps a visible dwell beside hidden cursor samples", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
-				...dwell(1000, 0.2, 0.8),
-				{ timeMs: 2000, cx: 0.2, cy: 0.8, visible: false },
-			],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus.cx).toBeCloseTo(0.2);
-		expect(suggestions[0].focus.cy).toBeCloseTo(0.8);
-	});
-
-	it("returns a centered span around each accepted dwell", () => {
-		const telemetry = dwell(2000, 0.5, 0.5);
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: telemetry,
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		// centred on ~2000ms with a 2000ms default → ~1000..3000
-		expect(suggestions[0].span.start).toBe(1000);
-		expect(suggestions[0].span.end).toBe(3000);
-	});
-
-	it("drops candidates overlapping an existing zoom region", () => {
-		const telemetry = dwell(2000, 0.5, 0.5);
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: telemetry,
-			totalMs: 5000,
-			existingRegions: [{ startMs: 1500, endMs: 2500 }],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(0);
-	});
-
-	it("spaces two dwells and returns both when far apart", () => {
-		const telemetry = [...dwell(1500, 0.2, 0.2), ...dwell(6000, 0.8, 0.8)];
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: telemetry,
-			totalMs: 9000,
-			existingRegions: [],
-			defaultDurationMs: 1500,
-		});
-		expect(suggestions.length).toBe(2);
-	});
-
-	it("returns nothing without telemetry", () => {
-		expect(
-			buildAutoZoomSuggestions({
-				cursorTelemetry: [],
-				totalMs: 5000,
-				existingRegions: [],
-				defaultDurationMs: 2000,
-			}),
-		).toEqual([]);
-	});
-});
-
-describe("recorded clicks (issue #699)", () => {
-	// A fast sweep forms no dwell; before #699 this take produced no suggestion at all.
-	const sweepWithClickAt = (clickIndex: number): CursorTelemetryPoint[] =>
-		Array.from({ length: 10 }, (_, i) => ({
-			timeMs: i * 500,
-			cx: i / 10,
-			cy: i / 10,
-			interactionType: i === clickIndex ? "click" : "move",
-		}));
-
-	it("zooms on a click made while the pointer is still moving", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: sweepWithClickAt(4),
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.4, cy: 0.4 });
-		expect(suggestions[0].span).toEqual({ start: 1000, end: 3000 });
-	});
-
-	it("focuses the zoom on the click sample, not the pointer's average position", () => {
-		// The pointer flew to a toolbar button, clicked, flew back.
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [
-				{ timeMs: 1000, cx: 0.1, cy: 0.9 },
-				click(1200, 0.8, 0.2),
-				{ timeMs: 1400, cx: 0.12, cy: 0.88 },
-			],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.8, cy: 0.2 });
-		expect(suggestions[0].span).toEqual({ start: 200, end: 2200 });
+			4000,
+		);
+		expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.5, cy: 0.5 }]);
 	});
 
 	it("accepts every click kind the telemetry records", () => {
 		for (const kind of ["click", "double-click", "right-click", "middle-click"] as const) {
-			const suggestions = buildAutoZoomSuggestions({
-				cursorTelemetry: [click(2000, 0.3, 0.7, kind), { timeMs: 4000, cx: 0.4, cy: 0.6 }],
-				totalMs: 5000,
-				existingRegions: [],
-				defaultDurationMs: 2000,
-			});
-			expect(suggestions, kind).toHaveLength(1);
-			expect(suggestions[0].focus).toEqual({ cx: 0.3, cy: 0.7 });
+			const suggestions = plan([click(2000, 0.3, 0.7, kind), { timeMs: 4000, cx: 0.4, cy: 0.6 }]);
+			expect(
+				suggestions.map((s) => s.focus),
+				kind,
+			).toEqual([{ cx: 0.3, cy: 0.7 }]);
 		}
 	});
 
-	it("ignores move and mouseup — they are not clicks", () => {
+	it("ignores move and mouseup: they are not clicks", () => {
 		const telemetry: CursorTelemetryPoint[] = Array.from({ length: 10 }, (_, i) => ({
 			timeMs: i * 500,
 			cx: i / 10,
 			cy: i / 10,
 			interactionType: i === 4 ? "mouseup" : "move",
 		}));
-		expect(
-			buildAutoZoomSuggestions({
-				cursorTelemetry: telemetry,
-				totalMs: 5000,
-				existingRegions: [],
-				defaultDurationMs: 2000,
-			}),
-		).toEqual([]);
+		expect(plan(telemetry)).toEqual([]);
 	});
 
-	it("folds a nearby dwell into the click so one moment yields ONE zoom", () => {
-		// The dwell run 1550..2270ms centres on 1910ms — 490ms from the click at 2400ms,
-		// inside SUGGESTION_SPACING_MS. The click's own time and position anchor the zoom.
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [...dwell(2000, 0.2, 0.8), click(2400, 0.3, 0.75)],
-			totalMs: 6000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.3, cy: 0.75 });
-		expect(suggestions[0].span).toEqual({ start: 1400, end: 3400 });
+	it("places no zoom where the pointer only sits still", () => {
+		expect(plan(park(2000, 0.5, 0.5))).toEqual([]);
 	});
 
-	it("keeps a dwell that sits clear of the click, and both survive", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [...dwell(2000, 0.2, 0.8), click(6000, 0.9, 0.1)],
-			totalMs: 9000,
-			existingRegions: [],
-			defaultDurationMs: 1500,
-		});
-		// Nobody conflicts here, so the output order is an acceptance-order detail;
-		// compare the SET of spans and the click-anchored focus.
-		const spans = suggestions.map((s) => s.span).sort((a, b) => a.start - b.start);
-		expect(spans).toEqual([
-			{ start: 1250, end: 2750 },
-			{ start: 5250, end: 6750 },
-		]);
-		expect(suggestions.find((s) => s.span.start === 5250)?.focus).toEqual({ cx: 0.9, cy: 0.1 });
-		expect(suggestions.find((s) => s.span.start === 1250)?.focus.cx).toBeCloseTo(0.2, 5);
-	});
-
-	it("collapses a rapid burst of clicks into the first click's zoom", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [click(1000, 0.2, 0.2), click(1500, 0.25, 0.25)],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.2, cy: 0.2 });
-		expect(suggestions[0].span).toEqual({ start: 0, end: 2000 });
-	});
-
-	it("still drops a click that overlaps an existing zoom region", () => {
-		expect(
-			buildAutoZoomSuggestions({
-				cursorTelemetry: [click(2000, 0.5, 0.5), { timeMs: 4000, cx: 0.6, cy: 0.4 }],
-				totalMs: 5000,
-				existingRegions: [{ startMs: 1500, endMs: 2500 }],
-				defaultDurationMs: 2000,
-			}),
-		).toEqual([]);
-	});
-
-	it("keeps the dwell-only behaviour when the take records no clicks", () => {
-		// A dwell annotated only with move/mouseup: no click candidate, exactly the
-		// pre-#699 result — and the mouseup does not break the still run either.
-		const dwellRun = dwell(2000, 0.5, 0.5).map((sample, i) => ({
-			...sample,
-			interactionType: (i === 3 ? "mouseup" : "move") as "mouseup" | "move",
-		}));
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: dwellRun,
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].span).toEqual({ start: 1000, end: 3000 });
-	});
-
-	it("clamps a click near the start or end of the take to the ruler", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [click(100, 0.1, 0.1), click(4800, 0.9, 0.9)],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions.map((s) => s.span)).toEqual([
-			{ start: 0, end: 2000 },
-			{ start: 3000, end: 5000 },
-		]);
-	});
-
-	it("keeps the dwell fallback when an existing region rejects only the nearby click", () => {
-		// The click at 2700ms sits inside SUGGESTION_SPACING_MS of the dwell at 1000ms,
-		// but the existing region 2300..2400 overlaps only the CLICK's span. The click
-		// is rejected, and a rejected click must leave the dwell standing: one zoom at
-		// the dwell, not zero. (The first cut of this PR removed the dwell up front and
-		// returned nothing here.)
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [...dwell(1000, 0.2, 0.8), click(2700, 0.6, 0.4)],
-			totalMs: 5000,
-			existingRegions: [{ startMs: 2300, endMs: 2400 }],
-			defaultDurationMs: 1000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].span).toEqual({ start: 500, end: 1500 });
-		expect(suggestions[0].focus.cx).toBeCloseTo(0.2, 5);
-		expect(suggestions[0].focus.cy).toBeCloseTo(0.8, 5);
-	});
-
-	it("lets a second click survive the first being rejected by an existing region", () => {
-		// Two clicks within spacing of each other; only the first's span overlaps the
-		// existing region. The rejected first click must not suppress the second.
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [click(1000, 0.2, 0.2), click(2400, 0.8, 0.8)],
-			totalMs: 5000,
-			existingRegions: [{ startMs: 700, endMs: 1300 }],
-			defaultDurationMs: 1000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.8, cy: 0.8 });
-		expect(suggestions[0].span).toEqual({ start: 1900, end: 2900 });
-	});
-
-	it("zooms a take whose telemetry is a single recorded click", () => {
-		const suggestions = buildAutoZoomSuggestions({
-			cursorTelemetry: [click(2000, 0.3, 0.7)],
-			totalMs: 5000,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus).toEqual({ cx: 0.3, cy: 0.7 });
-		expect(suggestions[0].span).toEqual({ start: 1000, end: 3000 });
-	});
-
-	it("returns nothing for a single move or mouseup sample", () => {
+	it("returns nothing without telemetry, or for a lone move or mouseup", () => {
+		expect(plan([])).toEqual([]);
 		for (const kind of ["move", "mouseup"] as const) {
-			expect(
-				buildAutoZoomSuggestions({
-					cursorTelemetry: [{ timeMs: 2000, cx: 0.3, cy: 0.7, interactionType: kind }],
-					totalMs: 5000,
-					existingRegions: [],
-					defaultDurationMs: 2000,
-				}),
-				kind,
-			).toEqual([]);
+			expect(plan([{ timeMs: 2000, cx: 0.3, cy: 0.7, interactionType: kind }]), kind).toEqual([]);
 		}
+	});
+});
+
+describe("buildAutoZoomSuggestions: shots", () => {
+	it("is fully in half a second before the click and holds 1.5 s after it", () => {
+		// A fast sweep: the click is made while the pointer is still moving.
+		const telemetry: CursorTelemetryPoint[] = Array.from({ length: 10 }, (_, i) => ({
+			timeMs: i * 500,
+			cx: i / 10,
+			cy: i / 10,
+			interactionType: i === 4 ? "click" : "move",
+		}));
+		expect(plan(telemetry)).toEqual([
+			{ span: { start: 1500, end: 3500 }, focus: { cx: 0.4, cy: 0.4 }, depth: 3 },
+		]);
+	});
+
+	it("focuses the zoom on the click, not on the pointer's path", () => {
+		// The pointer flew to a toolbar button, clicked, flew back.
+		const suggestions = plan([
+			{ timeMs: 1000, cx: 0.1, cy: 0.9 },
+			click(1200, 0.8, 0.2),
+			{ timeMs: 1400, cx: 0.12, cy: 0.88 },
+		]);
+		expect(suggestions.map((s) => [s.span, s.focus])).toEqual([
+			[
+				{ start: 700, end: 2700 },
+				{ cx: 0.8, cy: 0.2 },
+			],
+		]);
+	});
+
+	it("frames a burst of nearby clicks with one zoom that holds through it", () => {
+		const suggestions = plan(
+			[click(2000, 0.3, 0.3), click(3500, 0.36, 0.33), click(5000, 0.4, 0.35)],
+			9000,
+		);
+		expect(suggestions).toHaveLength(1);
+		expect(suggestions[0].span).toEqual({ start: 1500, end: 6500 });
+		expect(suggestions[0].depth).toBe(3);
+		expect(suggestions[0].focus.cx).toBeCloseTo(0.35, 5);
+		expect(suggestions[0].focus.cy).toBeCloseTo(0.325, 5);
+	});
+
+	it("zooms in less when the clicks it frames spread wider", () => {
+		// With a 12% margin each side, 0.35 of the frame fits at 1.5× and 0.5 only at 1.25×.
+		const wider = plan([click(2000, 0.2, 0.5), click(3000, 0.55, 0.5)], 9000);
+		expect(wider.map((s) => [s.span, s.depth])).toEqual([[{ start: 1500, end: 4500 }, 2]]);
+		const widest = plan([click(2000, 0.2, 0.5), click(3000, 0.7, 0.5)], 9000);
+		expect(widest.map((s) => s.depth)).toEqual([1]);
+	});
+
+	it("never zooms straight back: of two clashing zooms, the one with more clicks stays", () => {
+		// Too far apart to share a zoom, too close in time for a wide shot between them.
+		const suggestions = plan(
+			[click(2000, 0.1, 0.1), click(2600, 0.12, 0.12), click(3200, 0.9, 0.9)],
+			9000,
+		);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 1500, end: 4100 }]);
+	});
+
+	it("holds one zoom through a gap too short for a wide shot, when its clicks fit together", () => {
+		// 4 s apart: two groups, but coming back out and in within 2 s would read as a yo-yo.
+		const suggestions = plan([click(2000, 0.3, 0.3), click(6000, 0.34, 0.3)], 9000);
+		expect(suggestions.map((s) => [s.span, s.depth])).toEqual([[{ start: 1500, end: 7500 }, 3]]);
+	});
+
+	it("leaves a real wide shot between two zooms", () => {
+		const suggestions = plan([click(2000, 0.1, 0.1), click(9000, 0.9, 0.9)], 12000);
+		expect(suggestions.map((s) => s.span)).toEqual([
+			{ start: 1500, end: 3500 },
+			{ start: 8500, end: 10500 },
+		]);
+	});
+
+	it("keeps clear of a zoom already on the timeline, its ramps and a wide shot included", () => {
+		const existingRegions = [{ startMs: 3000, endMs: 5000 }];
+		const near = buildAutoZoomSuggestions({
+			cursorTelemetry: [click(7000, 0.5, 0.5)],
+			totalMs: 12000,
+			existingRegions,
+		});
+		expect(near).toEqual([]);
+		const clear = buildAutoZoomSuggestions({
+			cursorTelemetry: [click(9000, 0.5, 0.5)],
+			totalMs: 12000,
+			existingRegions,
+		});
+		expect(clear.map((s) => s.span)).toEqual([{ start: 8500, end: 10500 }]);
+	});
+
+	it("keeps clear of a placed zoom that reaches past the next one", () => {
+		// Two placed zooms overlap: the long one still covers the click after the short one ends.
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [click(12000, 0.5, 0.5)],
+			totalMs: 30000,
+			existingRegions: [
+				{ startMs: 0, endMs: 20000 },
+				{ startMs: 5000, endMs: 8000 },
+			],
+		});
+		expect(suggestions).toEqual([]);
+	});
+
+	it("measures an existing zoom's ramps at its own depth", () => {
+		// A 5× zoom takes 1.5 s to come back out, so the wide shot after it starts later.
+		const suggestions = buildAutoZoomSuggestions({
+			cursorTelemetry: [click(9000, 0.5, 0.5)],
+			totalMs: 12000,
+			existingRegions: [{ startMs: 3000, endMs: 5000, scale: 5 }],
+		});
+		expect(suggestions).toEqual([]);
+	});
+
+	it("keeps a zoom for a click at either end of the axis", () => {
+		expect(plan([click(100, 0.1, 0.1)]).map((s) => s.span)).toEqual([{ start: 0, end: 1800 }]);
+		// Near the end, the zoom arrives earlier rather than holding too briefly.
+		expect(plan([click(4800, 0.9, 0.9)]).map((s) => s.span)).toEqual([{ start: 3200, end: 5000 }]);
 	});
 });
 
@@ -491,151 +282,119 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 		origin: "user",
 		reason: "",
 	});
+	const telemetryOf = (samples: CursorTelemetryPoint[], assetId = "a1") =>
+		new Map([[assetId, samples]]);
 
 	// The bug this covers: telemetry is in the recording's SOURCE time, zoom regions are
 	// authored in RAW TIMELINE ms, and the two only coincide for a single clip starting at
 	// 0. Every other layout put all the zooms on the first clip's stretch of ruler.
-	it("gives a dwell to EVERY clip that replays it, not just the first", () => {
+	it("gives a click to EVERY clip that replays it, not just the first", () => {
 		// One recording, laid down twice: source 0-10 at ruler 0-10, then again at 10-20.
-		const clips = [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a1", 0, 10, 10)];
 		const suggestions = buildAutoZoomSuggestionsForClips({
-			cursorTelemetry: dwell(4000, 0.3, 0.7),
-			assetId: "a1",
-			clips,
+			telemetryByAssetId: telemetryOf([click(4000, 0.3, 0.7), { timeMs: 9500, cx: 0.4, cy: 0.6 }]),
+			clips: [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a1", 0, 10, 10)],
 			existingRegions: [],
-			defaultDurationMs: 2000,
 		});
 		expect(suggestions.map((s) => s.span)).toEqual([
-			{ start: 3424, end: 5424 }, // clip_1: source 4s sits at ruler 4s, after the wide opening
-			{ start: 13000, end: 15000 }, // clip_2: the SAME source 4s sits at ruler 14s
+			{ start: 3500, end: 5500 }, // clip_1: source 4s sits at ruler 4s
+			{ start: 13500, end: 15500 }, // clip_2: the SAME source 4s sits at ruler 14s
 		]);
 		for (const suggestion of suggestions) {
-			expect(suggestion.focus.cx).toBeCloseTo(0.3, 5);
-			expect(suggestion.focus.cy).toBeCloseTo(0.7, 5);
+			expect(suggestion.focus).toEqual({ cx: 0.3, cy: 0.7 });
 		}
 	});
 
-	it("shifts a dwell by the clip's own source in-point", () => {
+	it("shifts a click by the clip's own source in-point", () => {
 		// A clip that starts 30s into the recording: source 34s is ruler 4s.
-		const clips = [clip("clip_1", "a1", 30, 40, 0)];
 		const suggestions = buildAutoZoomSuggestionsForClips({
-			cursorTelemetry: dwell(34000, 0.5, 0.5),
-			assetId: "a1",
-			clips,
+			telemetryByAssetId: telemetryOf([
+				click(34000, 0.5, 0.5),
+				{ timeMs: 60000, cx: 0.6, cy: 0.4 },
+			]),
+			clips: [clip("clip_1", "a1", 30, 40, 0)],
 			existingRegions: [],
-			defaultDurationMs: 2000,
 		});
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5424 }]);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3500, end: 5500 }]);
 	});
 
-	it("ignores a dwell that falls outside every clip's source window", () => {
+	it("ignores a click that falls outside every clip's source window", () => {
 		// The recording is long; the timeline keeps only its first 10s.
-		const clips = [clip("clip_1", "a1", 0, 10, 0)];
-		expect(
-			buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: dwell(45000, 0.5, 0.5),
-				assetId: "a1",
-				clips,
-				existingRegions: [],
-				defaultDurationMs: 2000,
-			}),
-		).toEqual([]);
+		const suggestions = buildAutoZoomSuggestionsForClips({
+			telemetryByAssetId: telemetryOf([
+				click(45000, 0.5, 0.5),
+				{ timeMs: 60000, cx: 0.6, cy: 0.4 },
+			]),
+			clips: [clip("clip_1", "a1", 0, 10, 0)],
+			existingRegions: [],
+		});
+		expect(suggestions).toEqual([]);
 	});
 
 	it("reserves an existing zoom on the clip it actually sits on, and only there", () => {
-		// A zoom already covers the dwell on clip_1's ruler span. clip_1 yields; clip_2
-		// replays the same source moment on a free stretch of ruler, so it still gets one.
-		// Compared in source ms — the frame the caller used to hand down — that one region
-		// suppressed the whole recording's worth of suggestions.
-		const clips = [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a1", 0, 10, 10)];
+		// A zoom already covers the click on clip_1's ruler span. clip_1 yields; clip_2 replays
+		// the same source moment on a free stretch of ruler, so it still gets one.
 		const suggestions = buildAutoZoomSuggestionsForClips({
-			cursorTelemetry: dwell(4000, 0.5, 0.5),
-			assetId: "a1",
-			clips,
+			telemetryByAssetId: telemetryOf([click(4000, 0.5, 0.5), { timeMs: 9500, cx: 0.6, cy: 0.4 }]),
+			clips: [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a1", 0, 10, 10)],
 			existingRegions: [{ startMs: 3500, endMs: 4500 }],
-			defaultDurationMs: 2000,
 		});
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 13000, end: 15000 }]);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 13500, end: 15500 }]);
 	});
 
-	it("only reads the clips of the asset the telemetry belongs to", () => {
-		const clips = [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a2", 0, 10, 10)];
+	it("only reads the clips of the recordings it has telemetry for", () => {
 		const suggestions = buildAutoZoomSuggestionsForClips({
-			cursorTelemetry: dwell(4000, 0.5, 0.5),
-			assetId: "a2",
-			clips,
+			telemetryByAssetId: telemetryOf(
+				[click(4000, 0.5, 0.5), { timeMs: 9500, cx: 0.6, cy: 0.4 }],
+				"a2",
+			),
+			clips: [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a2", 0, 10, 10)],
 			existingRegions: [],
-			defaultDurationMs: 2000,
 		});
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 13000, end: 15000 }]);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 13500, end: 15500 }]);
 	});
 
 	it("skips a clip whose duration has not been probed yet", () => {
-		const clips = [clip("clip_1", "a1", 0, 0, 0)];
-		expect(
-			buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: dwell(4000, 0.5, 0.5),
-				assetId: "a1",
-				clips,
-				existingRegions: [],
-				defaultDurationMs: 2000,
-			}),
-		).toEqual([]);
-	});
-
-	// Clicks ride the same per-clip projection dwells do (issue #699).
-	it("gives a recorded click the same per-clip projection a dwell gets", () => {
-		// A clip that starts 30s into the recording: a click at source 34s is ruler 4s.
-		const clips = [clip("clip_1", "a1", 30, 40, 0)];
 		const suggestions = buildAutoZoomSuggestionsForClips({
-			cursorTelemetry: [click(34000, 0.5, 0.5), { timeMs: 36000, cx: 0.6, cy: 0.4 }],
-			assetId: "a1",
-			clips,
+			telemetryByAssetId: telemetryOf([click(4000, 0.5, 0.5), { timeMs: 9500, cx: 0.6, cy: 0.4 }]),
+			clips: [clip("clip_1", "a1", 0, 0, 0)],
 			existingRegions: [],
-			defaultDurationMs: 2000,
 		});
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5424 }]);
-		expect(suggestions[0].focus).toEqual({ cx: 0.5, cy: 0.5 });
-	});
-
-	it("gives a click to EVERY clip that replays it, one shifted span each", () => {
-		const clips = [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a1", 0, 10, 10)];
-		const suggestions = buildAutoZoomSuggestionsForClips({
-			cursorTelemetry: [click(4000, 0.3, 0.7), { timeMs: 6000, cx: 0.4, cy: 0.6 }],
-			assetId: "a1",
-			clips,
-			existingRegions: [],
-			defaultDurationMs: 2000,
-		});
-		expect(suggestions.map((s) => s.span)).toEqual([
-			{ start: 3424, end: 5424 },
-			{ start: 13000, end: 15000 },
-		]);
-		for (const suggestion of suggestions) {
-			expect(suggestion.focus.cx).toBeCloseTo(0.3, 5);
-			expect(suggestion.focus.cy).toBeCloseTo(0.7, 5);
-		}
+		expect(suggestions).toEqual([]);
 	});
 
 	it("zooms a clip whose source window trims the telemetry down to a single click", () => {
-		// A clip covering 30..40s of the recording; the take's telemetry holds one move
-		// long before the window, one click inside it and one move long after. The per-clip
-		// filter hands the detector a SINGLE sample — still a zoom, correctly projected
-		// (source 34s is ruler 4s).
-		const clips = [clip("clip_1", "a1", 30, 40, 0)];
+		// A clip covering 30..40s of the recording; the take's telemetry holds one move long
+		// before the window, one click inside it and one move long after. The per-clip filter
+		// hands the planner a SINGLE sample, still a zoom, correctly projected.
 		const suggestions = buildAutoZoomSuggestionsForClips({
-			cursorTelemetry: [
+			telemetryByAssetId: telemetryOf([
 				{ timeMs: 5000, cx: 0.1, cy: 0.9 },
 				click(34000, 0.5, 0.5),
 				{ timeMs: 60000, cx: 0.1, cy: 0.9 },
-			],
-			assetId: "a1",
-			clips,
+			]),
+			clips: [clip("clip_1", "a1", 30, 40, 0)],
 			existingRegions: [],
-			defaultDurationMs: 2000,
 		});
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5424 }]);
-		expect(suggestions[0].focus).toEqual({ cx: 0.5, cy: 0.5 });
+		expect(suggestions.map((s) => [s.span, s.focus])).toEqual([
+			[
+				{ start: 3500, end: 5500 },
+				{ cx: 0.5, cy: 0.5 },
+			],
+		]);
+	});
+
+	it("does not hold a zoom across a cut: of two clips' clashing zooms, one stays", () => {
+		// Two recordings back to back. Each clip's zoom is fine alone, but together they would
+		// zoom out at the cut and straight back in, and a zoom does not merge across a cut.
+		const suggestions = buildAutoZoomSuggestionsForClips({
+			telemetryByAssetId: new Map([
+				["a1", [click(7000, 0.5, 0.5), { timeMs: 9900, cx: 0.5, cy: 0.5 }]],
+				["a2", [click(1000, 0.5, 0.5), { timeMs: 9900, cx: 0.5, cy: 0.5 }]],
+			]),
+			clips: [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a2", 0, 10, 10)],
+			existingRegions: [],
+		});
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 6500, end: 8500 }]);
 	});
 
 	// The video opens and closes on the whole screen. At depth 3 a ramp lasts 923 ms, so a
@@ -646,42 +405,34 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 
 		it("keeps the first seconds of the edit wide: an early click gets no zoom", () => {
 			const suggestions = buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: [click(1000, 0.3, 0.3), restOfTake],
-				assetId: "a1",
+				telemetryByAssetId: telemetryOf([click(1000, 0.3, 0.3), restOfTake]),
 				clips: [clip("clip_1", "a1", 0, 10, 0)],
 				existingRegions: [],
-				defaultDurationMs: 2000,
 			});
 			expect(suggestions).toEqual([]);
 		});
 
 		it("holds a zoom back until the opening is over when it still covers its click", () => {
 			const suggestions = buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: [click(4000, 0.3, 0.3), restOfTake],
-				assetId: "a1",
+				telemetryByAssetId: telemetryOf([click(3600, 0.3, 0.3), restOfTake]),
 				clips: [clip("clip_1", "a1", 0, 10, 0)],
 				existingRegions: [],
-				defaultDurationMs: 2000,
 			});
-			expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5424 }]);
+			expect(suggestions.map((s) => s.span)).toEqual([{ start: 3424, end: 5224 }]);
 		});
 
 		it("brings the last zoom back out a second before the end of the edit", () => {
 			// The recording goes on to 30 s, so this is the edit's end at work, not the stop click.
 			const zoomed = buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: [click(7500, 0.3, 0.3), restOfTake],
-				assetId: "a1",
+				telemetryByAssetId: telemetryOf([click(7500, 0.3, 0.3), restOfTake]),
 				clips: [clip("clip_1", "a1", 0, 10, 0)],
 				existingRegions: [],
-				defaultDurationMs: 2000,
 			});
-			expect(zoomed.map((s) => s.span)).toEqual([{ start: 6076, end: 8076 }]);
+			expect(zoomed.map((s) => s.span)).toEqual([{ start: 6276, end: 8076 }]);
 			const tooLate = buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: [click(8500, 0.3, 0.3), restOfTake],
-				assetId: "a1",
+				telemetryByAssetId: telemetryOf([click(8500, 0.3, 0.3), restOfTake]),
 				clips: [clip("clip_1", "a1", 0, 10, 0)],
 				existingRegions: [],
-				defaultDurationMs: 2000,
 			});
 			expect(tooLate).toEqual([]);
 		});
@@ -690,51 +441,48 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 			// One recording laid down twice: the click at source 1 s is inside the opening
 			// on the first clip, and at ruler 11 s, clear of it, on the second.
 			const suggestions = buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: [click(1000, 0.3, 0.3), { timeMs: 9500, cx: 0.5, cy: 0.5 }],
-				assetId: "a1",
+				telemetryByAssetId: telemetryOf([
+					click(1000, 0.3, 0.3),
+					{ timeMs: 9500, cx: 0.5, cy: 0.5 },
+				]),
 				clips: [clip("clip_1", "a1", 0, 10, 0), clip("clip_2", "a1", 0, 10, 10)],
 				existingRegions: [],
-				defaultDurationMs: 2000,
 			});
-			expect(suggestions.map((s) => s.span)).toEqual([{ start: 10000, end: 12000 }]);
+			expect(suggestions.map((s) => s.span)).toEqual([{ start: 10500, end: 12500 }]);
 		});
 
 		it("ignores the click that stopped the recording", () => {
 			// The take's last click, 100 ms before its telemetry ends: the HUD's Stop button.
 			// Another clip follows on the ruler, so the edit's own ending does not reach it.
 			const suggestions = buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: [
+				telemetryByAssetId: telemetryOf([
 					click(6000, 0.3, 0.3),
 					click(19800, 0.5, 0.92),
 					{ timeMs: 19900, cx: 0.5, cy: 0.92 },
-				],
-				assetId: "a1",
+				]),
 				clips: [clip("clip_1", "a1", 0, 20, 0), clip("clip_2", "a2", 0, 20, 20)],
 				existingRegions: [],
-				defaultDurationMs: 2000,
 			});
 			expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.3, cy: 0.3 }]);
 		});
 
 		it("ignores the pointer resting on Stop before that click", () => {
 			// Hover-then-Stop: the pointer sits on the button from 18.8 s, clicks at 19.8 s,
-			// and the telemetry ends at 19.9 s. That still run is a dwell, and it goes with its click.
+			// and the telemetry ends at 19.9 s. Neither the rest nor the click zooms.
 			const hover = Array.from({ length: 34 }, (_, i) => ({
 				timeMs: 18800 + i * 33,
 				cx: 0.5,
 				cy: 0.92,
 			}));
 			const suggestions = buildAutoZoomSuggestionsForClips({
-				cursorTelemetry: [
+				telemetryByAssetId: telemetryOf([
 					click(6000, 0.3, 0.3),
 					...hover,
 					click(19800, 0.5, 0.92),
 					{ timeMs: 19900, cx: 0.5, cy: 0.92 },
-				],
-				assetId: "a1",
+				]),
 				clips: [clip("clip_1", "a1", 0, 20, 0), clip("clip_2", "a2", 0, 20, 20)],
 				existingRegions: [],
-				defaultDurationMs: 2000,
 			});
 			expect(suggestions.map((s) => s.focus)).toEqual([{ cx: 0.3, cy: 0.3 }]);
 		});

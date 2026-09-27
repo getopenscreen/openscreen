@@ -652,7 +652,7 @@ export interface RecordingPrefs {
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: CursorCaptureMode;
 	hideDesktopIcons: boolean;
-	/** Whether a fresh take gets cursor-dwell zooms on import. Persisted; defaults on. */
+	/** Whether a fresh take gets automatic zooms on import. Persisted; defaults on. */
 	autoZoomEnabled: boolean;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
@@ -3870,7 +3870,7 @@ export function registerIpcHandlers(
 		// do it. Publishing first opens a window where `getCurrentRecordingSession` hands
 		// the editor a take whose `.cursor.json` is not on disk yet, and the editor's
 		// fresh-take auto-zoom reads that file the moment it imports -- an empty read there
-		// is indistinguishable from a take with no dwell, so the zooms are silently
+		// is indistinguishable from a take with no click, so the zooms are silently
 		// skipped.
 		await writePendingCursorTelemetry(screenVideoPath);
 		setCurrentRecordingSessionState(session);

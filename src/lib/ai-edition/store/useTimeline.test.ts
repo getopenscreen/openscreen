@@ -1066,7 +1066,7 @@ describe("useTimeline save failures", () => {
 		let added: number | undefined;
 		await act(async () => {
 			added = await result.current.addZoomsBulk([
-				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 } },
+				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 }, depth: 3 },
 			]);
 		});
 
@@ -2252,7 +2252,7 @@ describe("useTimeline.addZoomsBulk reads the document at write time", () => {
 		let added: number | undefined;
 		await act(async () => {
 			added = await addZoomsBulk([
-				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 } },
+				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 }, depth: 3 },
 			]);
 		});
 
@@ -2286,7 +2286,7 @@ describe("useTimeline.addZoomsBulk reads the document at write time", () => {
 		let added: number | undefined;
 		await act(async () => {
 			added = await addZoomsBulk([
-				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 } },
+				{ span: { start: 1000, end: 2000 }, focus: { cx: 0.5, cy: 0.5 }, depth: 3 },
 			]);
 		});
 

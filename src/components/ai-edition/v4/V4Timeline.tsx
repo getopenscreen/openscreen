@@ -1533,8 +1533,8 @@ export function V4Timeline({
 	];
 
 	// Auto-enhance option 1 — the deterministic cursor-telemetry auto-zoom
-	// (ported from main; NOT AI). Reads the recorded cursor movement and drops
-	// zoom-ins on the dwell moments.
+	// (ported from main; NOT AI). Reads the clicks recorded with each take and
+	// plans zooms around them.
 	//
 	// Telemetry belongs to a RECORDING, not to a clip: it is fetched per asset and read in
 	// that asset's source time. Projecting it onto the ruler is `buildAutoZoomSuggestionsForClips`'

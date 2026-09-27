@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "自动增强",
 		"automaticZooms": "自动缩放",
-		"automaticZoomsHint": "基于录制的光标移动",
+		"automaticZoomsHint": "基于录制的点击",
 		"smartZoomsAndCuts": "智能剪切",
 		"smartZoomsAndCutsHint": "使用 AI",
 		"timelineTools": "时间轴工具",
@@ -76,7 +76,7 @@
 		"dropToAdd": "拖放以添加到时间轴",
 		"importRecordingFirst": "请先导入录制内容",
 		"noAutoZoomMoments": "未找到自动缩放时刻",
-		"noAutoZoomMomentsDescription": "此录制没有光标移动数据，或现有缩放已覆盖繁忙时刻。",
+		"noAutoZoomMomentsDescription": "此录制没有记录到点击，或没有点击留有缩放的空间。",
 		"addedAutoZoom": "已添加 {{count}} 个自动缩放",
 		"addedAutoZoomPlural": "已添加 {{count}} 个自动缩放",
 		"autoZoomFailed": "自动缩放失败",

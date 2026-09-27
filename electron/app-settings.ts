@@ -14,7 +14,7 @@ export interface RecordingPreferences {
 	/** Display captures on macOS and Windows. Opt-in: on Windows the icons also leave the real desktop while recording. */
 	hideDesktopIcons: boolean;
 	/**
-	 * Whether the editor decorates a fresh take with cursor-dwell zooms when it imports it.
+	 * Whether the editor decorates a fresh take with automatic zooms when it imports it.
 	 *
 	 * Absent from a settings file written before this preference existed, which is why
 	 * `parseRecording` reads a missing key as the default rather than as "off": the

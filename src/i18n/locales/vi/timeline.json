@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "Tự động nâng cao",
 		"automaticZooms": "Thu phóng tự động",
-		"automaticZoomsHint": "Từ chuyển động con trỏ đã ghi",
+		"automaticZoomsHint": "Từ các cú nhấp đã ghi",
 		"smartZoomsAndCuts": "Cắt thông minh",
 		"smartZoomsAndCutsHint": "Với AI",
 		"timelineTools": "Công cụ dòng thời gian",
@@ -76,7 +76,7 @@
 		"dropToAdd": "Thả để thêm vào dòng thời gian",
 		"importRecordingFirst": "Hãy nhập một bản ghi trước",
 		"noAutoZoomMoments": "Không tìm thấy khoảnh khắc thu phóng tự động",
-		"noAutoZoomMomentsDescription": "Bản ghi này không có dữ liệu chuyển động con trỏ, hoặc các thu phóng hiện có đã bao phủ các khoảnh khắc bận rộn.",
+		"noAutoZoomMomentsDescription": "Bản ghi này không có cú nhấp nào được ghi lại, hoặc không có cú nhấp nào còn chỗ cho thu phóng.",
 		"addedAutoZoom": "Đã thêm {{count}} thu phóng tự động",
 		"addedAutoZoomPlural": "Đã thêm {{count}} thu phóng tự động",
 		"autoZoomFailed": "Thu phóng tự động thất bại",

@@ -552,8 +552,8 @@ describe("cursor telemetry on the wire", () => {
 				.filter((p: { kind?: string }) => p.kind === "click")
 				.map((p: { atSec: number }) => p.atSec),
 		).toEqual([3, 9.01, 17.03]);
-		// The 6 s hold at 9 s is past MAX_DWELL_DURATION_MS — the magic wand's
-		// detector would drop it. The track has no such ceiling: it is simply
+		// The 6 s hold at 9 s is longer than any the magic wand's old stillness
+		// detector kept (2.6 s). The track has no such ceiling: it is simply
 		// there, as points, for the model to read.
 		const held = track.points.filter((p: { atSec: number }) => p.atSec >= 6 && p.atSec <= 12);
 		expect(held.length).toBeGreaterThan(2);

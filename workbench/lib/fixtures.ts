@@ -422,8 +422,8 @@ export const DEMO_SPEECH_SPANS: Array<[number, number]> = [
 ];
 
 /** Moments this take is about. A real pass would derive them from the cursor
- * telemetry digest (`timeline/zoom-suggestions.ts` already computes dwell
- * moments); these are hand-declared and say so. */
+ * telemetry (`timeline/zoom-suggestions.ts` plans zooms from its clicks); these
+ * are hand-declared and say so. */
 export const DEMO_INTEREST_POINTS: InterestPoint[] = [
 	{ atSec: 14.2, label: "ouverture du panneau d'export", toleranceSec: 1.5 },
 	{ atSec: 38.9, label: "clic sur Rendre", toleranceSec: 1.5 },
@@ -484,11 +484,10 @@ export function withCameraTrack(options?: { projectId?: string }): AxcutDocument
  * Synthetic pointer telemetry: 30 Hz movement with the cursor parked at declared
  * moments, plus a click at the centre of each park.
  *
- * ponytail: written as MOVEMENT and let through the real dwell detector, not
- * handed to the digest as pre-made moments. A fixture that fabricates the answer
- * measures nothing — the whole question is whether
- * `detectZoomDwellCandidates` finds the holds, including the long ones the magic
- * wand's ceiling throws away, and it can only be asked with samples.
+ * ponytail: written as MOVEMENT, not handed over as pre-made moments. A fixture
+ * that fabricates the answer measures nothing — the whole question is whether
+ * the reader finds the holds, including the long ones the magic wand's old
+ * stillness detector threw away, and it can only be asked with samples.
  */
 export function cursorTelemetry(options: {
 	/** `{ atSec, holdSec, cx, cy }` — where the pointer stopped and for how long. */
@@ -504,8 +503,8 @@ export function cursorTelemetry(options: {
 	const endMs = options.durationSec * 1000;
 
 	const travelTo = (targetMs: number) => {
-		// A visible move between parks: >DWELL_MOVE_THRESHOLD per step, so the
-		// detector closes the previous run instead of merging the two.
+		// A visible move between parks, 5% of the frame per step, so two parks
+		// never read as one.
 		while (timeMs < targetMs) {
 			cursor = {
 				cx: Math.min(1, cursor.cx + 0.05) % 1,

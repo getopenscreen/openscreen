@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "自動強化",
 		"automaticZooms": "自動ズーム",
-		"automaticZoomsHint": "記録されたカーソルの動きから",
+		"automaticZoomsHint": "記録されたクリックから",
 		"smartZoomsAndCuts": "スマートカット",
 		"smartZoomsAndCutsHint": "AIを使用",
 		"timelineTools": "タイムラインツール",
@@ -76,7 +76,7 @@
 		"dropToAdd": "ドロップしてタイムラインに追加",
 		"importRecordingFirst": "先に録画をインポートしてください",
 		"noAutoZoomMoments": "自動ズームの瞬間が見つかりません",
-		"noAutoZoomMomentsDescription": "この録画にはカーソルの動きのデータがないか、既存のズームがすでに重要な瞬間をカバーしています。",
+		"noAutoZoomMomentsDescription": "この録画には記録されたクリックがないか、ズームを入れる余地のあるクリックがありません。",
 		"addedAutoZoom": "自動ズームを {{count}} 件追加しました",
 		"addedAutoZoomPlural": "自動ズームを {{count}} 件追加しました",
 		"autoZoomFailed": "自動ズームに失敗しました",

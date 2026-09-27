@@ -63,7 +63,7 @@
 	"toolbar": {
 		"autoEnhance": "Авто-улучшение",
 		"automaticZooms": "Автоматические зумы",
-		"automaticZoomsHint": "На основе записанного движения курсора",
+		"automaticZoomsHint": "На основе записанных кликов",
 		"smartZoomsAndCuts": "Умные вырезки",
 		"smartZoomsAndCutsHint": "С помощью ИИ",
 		"timelineTools": "Инструменты таймлайна",
@@ -76,7 +76,7 @@
 		"dropToAdd": "Отпустите, чтобы добавить на таймлайн",
 		"importRecordingFirst": "Сначала импортируйте запись",
 		"noAutoZoomMoments": "Моменты для автозума не найдены",
-		"noAutoZoomMomentsDescription": "В этой записи нет данных о движении курсора, либо существующие зумы уже покрывают активные моменты.",
+		"noAutoZoomMomentsDescription": "В этой записи нет записанных кликов, или ни для одного из них нет места для зума.",
 		"addedAutoZoom": "Добавлен {{count}} автоматический зум",
 		"addedAutoZoomPlural": "Добавлено {{count}} автоматических зумов",
 		"autoZoomFailed": "Не удалось выполнить автозум",

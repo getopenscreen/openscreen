@@ -113,7 +113,6 @@
 		"camera": "Fotocamera",
 		"cursorHighlight": "Evidenzia cursore",
 		"autoZoom": "Zoom automatico dopo la registrazione",
-		"autoZoomNeedsEditableCursor": "Lo zoom automatico richiede il cursore modificabile. Cambia la modalità del cursore per attivarlo.",
 		"hideDesktopIcons": "Nascondi icone della scrivania",
 		"hideDesktopIconsHintMac": "Esclude le icone della scrivania dalle registrazioni dello schermo. Restano sulla tua scrivania.",
 		"hideDesktopIconsHintWindows": "Copre le icone del desktop con lo sfondo durante la registrazione di uno schermo. Tornano al termine della registrazione.",

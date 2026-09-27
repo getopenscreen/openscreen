@@ -113,7 +113,6 @@
 		"camera": "Kamera",
 		"cursorHighlight": "Cursor hervorheben",
 		"autoZoom": "Auto-Zoom nach der Aufnahme",
-		"autoZoomNeedsEditableCursor": "Auto-Zoom benötigt den bearbeitbaren Cursor. Wechseln Sie den Cursor-Modus.",
 		"hideDesktopIcons": "Schreibtischsymbole ausblenden",
 		"hideDesktopIconsHintMac": "Lässt die Schreibtischsymbole in Bildschirmaufnahmen weg. Auf deinem Schreibtisch bleiben sie.",
 		"hideDesktopIconsHintWindows": "Deckt die Desktopsymbole während einer Bildschirmaufnahme mit deinem Hintergrundbild ab. Nach der Aufnahme sind sie wieder da.",

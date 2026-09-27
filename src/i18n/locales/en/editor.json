@@ -113,7 +113,6 @@
 		"camera": "Camera",
 		"cursorHighlight": "Cursor highlight",
 		"autoZoom": "Auto-zoom after recording",
-		"autoZoomNeedsEditableCursor": "Auto-zoom needs the editable cursor. Switch cursor mode to enable.",
 		"hideDesktopIcons": "Hide desktop icons",
 		"hideDesktopIconsHintMac": "Leaves the desktop icons out of screen recordings. They stay on your desktop.",
 		"hideDesktopIconsHintWindows": "Covers the desktop icons with your wallpaper while a screen is recording. They come back when recording stops.",

@@ -168,28 +168,26 @@ describe("RecStage controls", () => {
 	});
 
 	// The system cursor writes no telemetry sidecar, so there is no dwell to place a
-	// zoom from. The row says Off and cannot be clicked rather than offering a choice
-	// that would silently do nothing.
-	it("reads off and stays inert while the system cursor is capturing", async () => {
-		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({
+	// zoom from: the row is not offered at all, and the stored choice is left alone.
+	it("hides the auto-zoom row while the system cursor is capturing", async () => {
+		const { setRecordingPrefs } = stubRecordingPrefs({
 			micEnabled: false,
 			cursorCaptureMode: "system",
 			autoZoomEnabled: true,
 		});
 		renderRecStage();
-		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+		await waitFor(() => expect(screen.queryByTestId("rec-auto-zoom-button")).toBeNull());
+		expect(screen.queryByText("rec.autoZoom")).toBeNull();
 
-		const button = screen.getByTestId("rec-auto-zoom-button");
-		await waitFor(() => expect(button).toBeDisabled());
-		expect(button).toHaveAttribute("aria-pressed", "false");
-		// A disabled button takes no focus and shows no tooltip, so the reason is a line
-		// in the row, tied to the button, rather than a title nobody on a keyboard reaches.
-		const hint = screen.getByText("rec.autoZoomNeedsEditableCursor");
-		expect(button).toHaveAttribute("aria-describedby", hint.id);
-		await act(async () => {
-			button.click();
-		});
-		expect(setRecordingPrefs).not.toHaveBeenCalled();
+		const cursorLabel = screen.getByText("rec.cursorHighlight");
+		if (!cursorLabel.parentElement) throw new Error("cursor highlight row is missing");
+		fireEvent.click(within(cursorLabel.parentElement).getByRole("button", { name: "rec.off" }));
+		expect(await screen.findByTestId("rec-auto-zoom-button")).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		expect(setRecordingPrefs).toHaveBeenCalledTimes(1);
+		expect(setRecordingPrefs).toHaveBeenCalledWith({ cursorCaptureMode: "editable-overlay" });
 	});
 
 	// The durable value is what the import path reads back, so a panel left showing Off

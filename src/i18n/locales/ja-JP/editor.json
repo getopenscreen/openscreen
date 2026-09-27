@@ -113,7 +113,6 @@
 		"camera": "カメラ",
 		"cursorHighlight": "カーソルの強調表示",
 		"autoZoom": "録画後に自動ズーム",
-		"autoZoomNeedsEditableCursor": "自動ズームには編集可能なカーソルが必要です。カーソルモードを切り替えてください。",
 		"hideDesktopIcons": "デスクトップアイコンを隠す",
 		"hideDesktopIconsHintMac": "画面収録からデスクトップアイコンを除外します。デスクトップ上には残ります。",
 		"hideDesktopIconsHintWindows": "画面の収録中、デスクトップアイコンを壁紙で覆います。収録を止めると元に戻ります。",

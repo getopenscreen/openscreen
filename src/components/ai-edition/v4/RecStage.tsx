@@ -49,9 +49,6 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	autoZoomEnabled: true,
 };
 
-/** Ties the disabled toggle to the line that explains why it is disabled. */
-const AUTO_ZOOM_HINT_ID = "rec-auto-zoom-hint";
-
 function normalizedRecordingPrefs(prefs: Partial<RecordingPrefsState>): RecordingPrefsState {
 	return {
 		...DEFAULT_PREFS,
@@ -242,7 +239,6 @@ export function RecStage({
 	const visibleSources = sourceTab === "screen" ? screenSources : windowSources;
 
 	const cursorHighlight = prefs.cursorCaptureMode === "editable-overlay";
-	const autoZoom = prefs.autoZoomEnabled && cursorHighlight;
 	// macOS leaves the icons out of the capture; Windows covers them for the take. Linux
 	// records through the portal, which offers neither, so the row would do nothing there.
 	const platform = getPlatform();
@@ -476,35 +472,25 @@ export function RecStage({
 						</button>
 					</div>
 
-					{/* Auto-zoom rides on the cursor telemetry the editable-overlay mode writes,
-					    so the system cursor leaves nothing to place zooms from — the row reads
-					    Off and is inert there rather than promising a choice that cannot apply.
-					    Why it is inert is a second line in the row, not a title on the button:
-					    a disabled button takes no focus and shows no tooltip to a keyboard or
-					    screen-reader user, so a title would be the one explanation they cannot
-					    reach. */}
-					<div className={`${styles.recRow}${cursorHighlight ? "" : ` ${styles.recRowWithHint}`}`}>
-						<div className={styles.recRowLabel}>
-							<ZoomIn size={15} />
-							{t("rec.autoZoom")}
+					{/* Auto-zoom places zooms from the cursor telemetry the editable-overlay mode
+					    writes. The system cursor writes none, so the row is not offered there. */}
+					{cursorHighlight ? (
+						<div className={styles.recRow}>
+							<div className={styles.recRowLabel}>
+								<ZoomIn size={15} />
+								{t("rec.autoZoom")}
+							</div>
+							<button
+								type="button"
+								data-testid="rec-auto-zoom-button"
+								className={`${styles.recToggleBtn}${prefs.autoZoomEnabled ? ` ${styles.on}` : ""}`}
+								aria-pressed={prefs.autoZoomEnabled}
+								onClick={() => updatePrefs({ autoZoomEnabled: !prefs.autoZoomEnabled })}
+							>
+								{prefs.autoZoomEnabled ? t("rec.on") : t("rec.off")}
+							</button>
 						</div>
-						<button
-							type="button"
-							data-testid="rec-auto-zoom-button"
-							className={`${styles.recToggleBtn}${autoZoom ? ` ${styles.on}` : ""}`}
-							aria-pressed={autoZoom}
-							disabled={!cursorHighlight}
-							aria-describedby={cursorHighlight ? undefined : AUTO_ZOOM_HINT_ID}
-							onClick={() => updatePrefs({ autoZoomEnabled: !prefs.autoZoomEnabled })}
-						>
-							{autoZoom ? t("rec.on") : t("rec.off")}
-						</button>
-						{cursorHighlight ? null : (
-							<p id={AUTO_ZOOM_HINT_ID} className={styles.recRowHint}>
-								{t("rec.autoZoomNeedsEditableCursor")}
-							</p>
-						)}
-					</div>
+					) : null}
 
 					{desktopIconsHint ? (
 						<div className={styles.recRow}>
